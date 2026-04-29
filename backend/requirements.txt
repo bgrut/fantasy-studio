@@ -1,0 +1,51 @@
+# Fantasy Studio backend — canonical dependency manifest
+# =======================================================
+# Single source of truth for the backend Python environment. Install
+# with:
+#
+#     python -m venv venv
+#     .\venv\Scripts\Activate.ps1     # Windows
+#     # source venv/bin/activate      # macOS/Linux
+#     pip install -r requirements.txt
+#
+# Or run the repo-root setup script:
+#
+#     .\setup.ps1
+#
+# Versions are pinned to a known-working set (Brandon's V1.4.5 install)
+# with compatible-release ranges so patch updates flow automatically
+# but major version jumps require an explicit bump here.
+#
+# Note on Blender-side imports: render_scripts/render_from_manifest.py
+# imports `bpy`, `bpy_extras`, and `mathutils`. These are provided by
+# Blender itself when the script runs as a Blender subprocess, NOT
+# from this environment. Do not add them here.
+
+# ── Web framework ─────────────────────────────────────────────────
+fastapi>=0.110,<1.0
+uvicorn[standard]>=0.27,<1.0
+python-multipart>=0.0.9
+starlette>=0.40,<2.0  # FastAPI dep, pinned for explicitness
+
+# ── Environment / config ──────────────────────────────────────────
+python-dotenv>=1.0,<2.0
+
+# ── Data validation ───────────────────────────────────────────────
+pydantic>=2.5,<3.0
+
+# ── HTTP client ───────────────────────────────────────────────────
+requests>=2.31,<3.0
+
+# ── Asset fetching fallbacks ──────────────────────────────────────
+# Objaverse: open-source 3D model dataset
+objaverse>=0.1.7
+# Hugging Face Spaces client (used by hybrid asset pipeline)
+gradio_client>=0.10.0
+
+# ── Template registry validation (optional but recommended) ───────
+# When missing, registry logs a warning and skips schema validation.
+jsonschema>=4.20
+
+# ── Image processing (lazy-imported by user_asset_ingestor) ───────
+# Used to generate / verify thumbnails outside the Blender subprocess.
+Pillow>=10.0

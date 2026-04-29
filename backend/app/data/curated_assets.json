@@ -1,0 +1,39 @@
+{
+  "_meta": {
+    "description": "Tested models for common subjects. Curated first, Objaverse fallback.",
+    "notes": "Add new entries by testing renders and recording working UIDs"
+  },
+  "vehicles": {
+    "sportscar": { "use_local": true, "local_key": "ferrari_01" },
+    "sports car": { "use_local": true, "local_key": "ferrari_01" },
+    "supercar": { "use_local": true, "local_key": "ferrari_01" },
+    "car": { "use_local": true, "local_key": "ferrari_01" },
+    "ferrari": { "use_local": true, "local_key": "ferrari_01" },
+    "bmw": { "use_local": true, "local_key": "ferrari_01" },
+    "race car": { "use_local": true, "local_key": "ferrari_01" },
+    "racing car": { "use_local": true, "local_key": "ferrari_01" },
+    "luxury car": { "use_local": true, "local_key": "ferrari_01" },
+    "exotic car": { "use_local": true, "local_key": "ferrari_01" },
+    "sedan": { "use_local": true, "local_key": "ferrari_01" },
+    "coupe": { "use_local": true, "local_key": "ferrari_01" },
+    "convertible": { "use_local": true, "local_key": "ferrari_01" },
+    "roadster": { "use_local": true, "local_key": "ferrari_01" },
+    "hypercar": { "use_local": true, "local_key": "ferrari_01" },
+    "automobile": { "use_local": true, "local_key": "ferrari_01" }
+  },
+  "characters": {
+    "monkey": { "use_sketchfab": true, "sketchfab_uid": "3ba199e0a78546598f868e86d78495a0" },
+    "robot": { "use_sketchfab": true, "sketchfab_uid": "623e3f52b7da4116a4576f38479eaaaf" },
+    "dolphin": { "use_sketchfab": true, "sketchfab_uid": "2ec20f15b08c4c2fb16e4df5d837b893" }
+  },
+  "objects": {},
+  "needs_curation": {
+    "horse": { "fallback": "objaverse_search", "notes": "Top result is lying down" },
+    "eagle": { "fallback": "objaverse_search", "notes": "Top results are heads/placeholders" },
+    "pelican": { "fallback": "objaverse_search", "notes": "Top result is just a head" },
+    "lizard": { "fallback": "objaverse_search", "notes": "Model was invisible in render" },
+    "tulip": { "fallback": "objaverse_search", "notes": "Gets confused with watch/product" },
+    "cat": { "fallback": "objaverse_search" },
+    "dog": { "fallback": "objaverse_search" }
+  }
+}

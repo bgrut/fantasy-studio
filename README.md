@@ -200,25 +200,20 @@ The tier choice is a render-time decision; the same scene file produces all four
 Full guide: **[INSTALL.md](INSTALL.md)**. The 5-step happy path:
 
 ```powershell
-# 1. Clone the monorepo
+# 1. Clone
 git clone https://github.com/bgrut/fantasy-studio
 cd fantasy-studio
 
-# 2. Install Blender 5.1+, Ollama, Python 3.11+, Node 20+
-#    See INSTALL.md for download links
+# 2. Install prereqs: Blender 5.1+, Ollama, Python 3.11+, Node 20+
+#    See INSTALL.md for download links and one-time PowerShell ExecutionPolicy fix
 
-# 3. Backend
-cd backend
-python -m venv venv && .\venv\Scripts\Activate.ps1
-pip install -r requirements-hybrid-assets.txt
+# 3. One-command setup (creates venv, installs all deps, scaffolds .env files)
+.\setup.ps1
+
+# 4. Pull the LLM model (~7 GB, first-time only)
 ollama pull gemma3:12b
 
-# 4. Frontend
-cd ..\frontend
-npm install
-
-# 5. Single-command launch (from fantasy-studio repo root)
-cd ..
+# 5. Launch
 .\launch.ps1
 # Opens backend (:8789) + frontend (:3000) in two windows.
 # Open http://localhost:3000 in your browser.

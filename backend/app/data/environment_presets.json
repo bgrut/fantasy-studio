@@ -1,0 +1,394 @@
+{
+  "_meta": {
+    "version": "1.0",
+    "description": "20 cinematic environment presets for Fantasy Studio",
+    "usage": "Matched by prompt keywords, applied on top of base template"
+  },
+  "presets": {
+    "mountain_valley": {
+      "keywords": ["mountain", "mountains", "valley", "alpine", "peak", "summit", "highlands"],
+      "base_template": "scenic_landscape",
+      "ground": {
+        "material": "terrain",
+        "color": [0.35, 0.38, 0.30],
+        "roughness": 0.9,
+        "texture_scale": 15.0
+      },
+      "sky": {
+        "hdri_keywords": ["mountain", "alpine", "valley", "clear sky"],
+        "polyhaven_fallback": "kloofendal_48d_partly_cloudy_puresky",
+        "rotation": 0.0,
+        "strength": 1.0
+      },
+      "lighting": {
+        "key_energy": 4.0,
+        "key_color": [1.0, 0.95, 0.85],
+        "fill_energy": 1.5,
+        "fill_color": [0.7, 0.8, 1.0],
+        "rim_energy": 2.5,
+        "rim_color": [1.0, 0.9, 0.7],
+        "sun_angle": 45
+      },
+      "atmosphere": {
+        "fog_density": 0.004,
+        "fog_color": [0.75, 0.82, 0.95],
+        "fog_height": 20.0,
+        "mist_enabled": true
+      },
+      "background_geo": [
+        {"type": "mountain_ring", "count": 12, "distance": 80, "height_range": [15, 35]},
+        {"type": "hillock", "count": 5, "distance": 15, "height_range": [1, 3]}
+      ],
+      "camera": {
+        "default_height": 1.6,
+        "min_distance": 4.0,
+        "distance_multiplier": 3.5,
+        "lens_mm": 50
+      },
+      "color_grade": {
+        "contrast": 1.1,
+        "saturation": 1.05,
+        "warmth": 0.02
+      }
+    },
+
+    "desert_dunes": {
+      "keywords": ["desert", "sand", "dune", "dunes", "sahara", "arid", "mesa"],
+      "base_template": "scenic_landscape",
+      "ground": {
+        "material": "sand",
+        "color": [0.76, 0.60, 0.38],
+        "roughness": 0.95,
+        "texture_scale": 25.0
+      },
+      "sky": {
+        "hdri_keywords": ["desert", "dry", "sand", "clear"],
+        "polyhaven_fallback": "goegap_road_puresky",
+        "strength": 1.3
+      },
+      "lighting": {
+        "key_energy": 6.0,
+        "key_color": [1.0, 0.88, 0.65],
+        "fill_energy": 1.0,
+        "fill_color": [0.9, 0.85, 0.7],
+        "rim_energy": 3.0,
+        "rim_color": [1.0, 0.80, 0.50],
+        "sun_angle": 60
+      },
+      "atmosphere": {
+        "fog_density": 0.002,
+        "fog_color": [0.85, 0.78, 0.60],
+        "fog_height": 10.0
+      },
+      "background_geo": [
+        {"type": "dune", "count": 8, "distance": 40, "height_range": [3, 10]},
+        {"type": "mesa", "count": 2, "distance": 100, "height_range": [20, 40]}
+      ],
+      "camera": {"default_height": 1.4, "min_distance": 5.0, "distance_multiplier": 3.5, "lens_mm": 50}
+    },
+
+    "forest_clearing": {
+      "keywords": ["forest", "woods", "woodland", "trees", "clearing", "grove"],
+      "base_template": "scenic_landscape",
+      "ground": {"material": "grass", "color": [0.20, 0.35, 0.12], "roughness": 0.85},
+      "sky": {"hdri_keywords": ["forest", "trees", "overcast"], "polyhaven_fallback": "lilienstein_puresky"},
+      "lighting": {
+        "key_energy": 3.0, "key_color": [0.95, 1.0, 0.85],
+        "fill_energy": 2.0, "fill_color": [0.6, 0.8, 0.5],
+        "rim_energy": 1.5, "rim_color": [1.0, 0.95, 0.7]
+      },
+      "atmosphere": {"fog_density": 0.008, "fog_color": [0.65, 0.75, 0.60], "fog_height": 8.0, "mist_enabled": true},
+      "background_geo": [
+        {"type": "tree_trunk", "count": 15, "distance": 20, "height_range": [5, 12]},
+        {"type": "hillock", "count": 3, "distance": 10, "height_range": [0.5, 1.5]}
+      ],
+      "camera": {"default_height": 1.6, "min_distance": 3.5, "distance_multiplier": 3.0, "lens_mm": 50}
+    },
+
+    "jungle_canopy": {
+      "keywords": ["jungle", "tropical", "rainforest", "canopy"],
+      "base_template": "scenic_landscape",
+      "ground": {"material": "mud", "color": [0.25, 0.20, 0.12], "roughness": 0.9},
+      "sky": {"hdri_keywords": ["tropical", "overcast", "humid"], "polyhaven_fallback": "satara_night_no_lamps_puresky"},
+      "lighting": {
+        "key_energy": 2.5, "key_color": [0.85, 1.0, 0.80],
+        "fill_energy": 2.5, "fill_color": [0.5, 0.7, 0.4],
+        "rim_energy": 1.0, "rim_color": [0.9, 1.0, 0.8]
+      },
+      "atmosphere": {"fog_density": 0.015, "fog_color": [0.55, 0.70, 0.50], "fog_height": 6.0, "mist_enabled": true},
+      "background_geo": [
+        {"type": "tree_trunk", "count": 20, "distance": 12, "height_range": [8, 18]},
+        {"type": "vine_wall", "count": 4, "distance": 15}
+      ],
+      "camera": {"default_height": 1.4, "min_distance": 3.0, "distance_multiplier": 2.5, "lens_mm": 45}
+    },
+
+    "ocean_tropical": {
+      "keywords": ["ocean", "sea", "water", "underwater", "coral", "tropical ocean"],
+      "base_template": "ocean_scene",
+      "ground": {"material": "water", "color": [0.05, 0.25, 0.45], "roughness": 0.1},
+      "sky": {"hdri_keywords": ["ocean", "sea", "tropical", "coast"], "polyhaven_fallback": "cape_hill_puresky", "strength": 1.2},
+      "lighting": {
+        "key_energy": 5.0, "key_color": [1.0, 0.97, 0.92],
+        "fill_energy": 2.0, "fill_color": [0.6, 0.8, 1.0],
+        "rim_energy": 2.0, "rim_color": [1.0, 0.95, 0.85]
+      },
+      "atmosphere": {"fog_density": 0.003, "fog_color": [0.60, 0.78, 0.95], "fog_height": 15.0},
+      "camera": {"default_height": 2.0, "min_distance": 5.0, "distance_multiplier": 4.0, "lens_mm": 40}
+    },
+
+    "arctic_tundra": {
+      "keywords": ["arctic", "snow", "ice", "tundra", "frozen", "winter", "blizzard"],
+      "base_template": "scenic_landscape",
+      "ground": {"material": "snow", "color": [0.90, 0.92, 0.95], "roughness": 0.7},
+      "sky": {"hdri_keywords": ["snow", "winter", "overcast", "cold"], "polyhaven_fallback": "snowy_park_01_puresky"},
+      "lighting": {
+        "key_energy": 4.0, "key_color": [0.85, 0.90, 1.0],
+        "fill_energy": 2.5, "fill_color": [0.75, 0.82, 1.0],
+        "rim_energy": 2.0, "rim_color": [0.90, 0.95, 1.0]
+      },
+      "atmosphere": {"fog_density": 0.006, "fog_color": [0.85, 0.88, 0.95], "fog_height": 12.0, "mist_enabled": true},
+      "background_geo": [
+        {"type": "mountain_ring", "count": 8, "distance": 60, "height_range": [10, 25]},
+        {"type": "ice_formation", "count": 4, "distance": 20, "height_range": [2, 6]}
+      ],
+      "camera": {"default_height": 1.5, "min_distance": 5.0, "distance_multiplier": 3.5, "lens_mm": 50}
+    },
+
+    "beach_sunset": {
+      "keywords": ["beach", "shore", "coast", "seaside", "sunset beach", "surf"],
+      "base_template": "ocean_scene",
+      "ground": {"material": "sand", "color": [0.80, 0.70, 0.50], "roughness": 0.9},
+      "sky": {"hdri_keywords": ["sunset", "beach", "golden", "coast"], "polyhaven_fallback": "the_sky_is_on_fire_puresky", "strength": 1.0},
+      "lighting": {
+        "key_energy": 3.5, "key_color": [1.0, 0.70, 0.35],
+        "fill_energy": 1.5, "fill_color": [0.9, 0.75, 0.55],
+        "rim_energy": 3.0, "rim_color": [1.0, 0.65, 0.25]
+      },
+      "atmosphere": {"fog_density": 0.003, "fog_color": [0.90, 0.75, 0.55], "fog_height": 10.0},
+      "camera": {"default_height": 1.5, "min_distance": 4.0, "distance_multiplier": 3.5, "lens_mm": 50}
+    },
+
+    "city_night": {
+      "keywords": ["city", "urban", "neon", "cyberpunk", "downtown", "metropolis", "night city"],
+      "base_template": "street_scene",
+      "ground": {"material": "wet_asphalt", "color": [0.08, 0.08, 0.10], "roughness": 0.3},
+      "sky": {"hdri_keywords": ["city", "night", "urban", "neon"], "polyhaven_fallback": "city_night_01"},
+      "lighting": {
+        "key_energy": 2.0, "key_color": [0.4, 0.6, 1.0],
+        "fill_energy": 1.5, "fill_color": [1.0, 0.3, 0.5],
+        "rim_energy": 2.5, "rim_color": [0.3, 0.8, 1.0]
+      },
+      "atmosphere": {"fog_density": 0.010, "fog_color": [0.15, 0.12, 0.20], "fog_height": 15.0, "mist_enabled": true},
+      "background_geo": [
+        {"type": "building", "count": 8, "distance": 30, "height_range": [10, 40]},
+        {"type": "street_light", "count": 6, "distance": 8}
+      ],
+      "camera": {"default_height": 1.6, "min_distance": 4.0, "distance_multiplier": 2.5, "lens_mm": 35}
+    },
+
+    "city_rooftop": {
+      "keywords": ["rooftop", "skyline", "roof", "penthouse"],
+      "base_template": "street_scene",
+      "ground": {"material": "concrete", "color": [0.35, 0.33, 0.30], "roughness": 0.85},
+      "sky": {"hdri_keywords": ["city", "sunset", "skyline"], "polyhaven_fallback": "the_sky_is_on_fire_puresky"},
+      "lighting": {
+        "key_energy": 3.5, "key_color": [1.0, 0.80, 0.55],
+        "fill_energy": 1.5, "fill_color": [0.6, 0.7, 1.0],
+        "rim_energy": 2.5, "rim_color": [1.0, 0.70, 0.30]
+      },
+      "atmosphere": {"fog_density": 0.003, "fog_color": [0.7, 0.65, 0.55]},
+      "background_geo": [
+        {"type": "building", "count": 12, "distance": 50, "height_range": [15, 60]}
+      ],
+      "camera": {"default_height": 1.6, "min_distance": 4.0, "distance_multiplier": 3.0, "lens_mm": 35}
+    },
+
+    "stadium": {
+      "keywords": ["stadium", "arena", "field", "baseball", "football", "soccer", "sports"],
+      "base_template": "character_stage",
+      "ground": {"material": "grass", "color": [0.15, 0.40, 0.10], "roughness": 0.85},
+      "sky": {"hdri_keywords": ["stadium", "outdoor", "sunny", "sports"], "polyhaven_fallback": "kloofendal_48d_partly_cloudy_puresky", "strength": 1.3},
+      "lighting": {
+        "key_energy": 6.0, "key_color": [1.0, 0.98, 0.95],
+        "fill_energy": 3.0, "fill_color": [0.9, 0.95, 1.0],
+        "rim_energy": 2.0, "rim_color": [1.0, 0.95, 0.90]
+      },
+      "atmosphere": {"fog_density": 0.001, "fog_color": [0.8, 0.85, 0.9]},
+      "background_geo": [
+        {"type": "stadium_stands", "count": 4, "distance": 30, "height_range": [8, 15]}
+      ],
+      "camera": {"default_height": 1.2, "min_distance": 4.0, "distance_multiplier": 3.0, "lens_mm": 50}
+    },
+
+    "studio_product": {
+      "keywords": ["product", "studio", "commercial", "advertisement", "showcase", "closeup"],
+      "base_template": "product_scene",
+      "ground": {"material": "studio", "color": [0.85, 0.85, 0.85], "roughness": 0.4},
+      "sky": {"hdri_keywords": ["studio", "clean", "neutral"], "polyhaven_fallback": "studio_small_03"},
+      "lighting": {
+        "key_energy": 4.0, "key_color": [1.0, 0.98, 0.96],
+        "fill_energy": 2.5, "fill_color": [0.95, 0.95, 1.0],
+        "rim_energy": 3.0, "rim_color": [1.0, 1.0, 1.0]
+      },
+      "atmosphere": {"fog_density": 0.001},
+      "camera": {"default_height": 0.8, "min_distance": 2.0, "distance_multiplier": 2.0, "lens_mm": 85}
+    },
+
+    "living_room": {
+      "keywords": ["living room", "house", "home", "interior", "cozy", "apartment", "room"],
+      "base_template": "character_stage",
+      "ground": {"material": "wood_floor", "color": [0.45, 0.30, 0.18], "roughness": 0.5},
+      "sky": {"hdri_keywords": ["interior", "room", "window"], "polyhaven_fallback": "studio_small_03", "strength": 0.5},
+      "lighting": {
+        "key_energy": 2.5, "key_color": [1.0, 0.90, 0.75],
+        "fill_energy": 1.5, "fill_color": [0.85, 0.80, 0.70],
+        "rim_energy": 1.0, "rim_color": [1.0, 0.92, 0.80]
+      },
+      "atmosphere": {"fog_density": 0.002, "fog_color": [0.8, 0.75, 0.65]},
+      "background_geo": [
+        {"type": "wall", "count": 3, "distance": 6, "height_range": [3, 3]},
+        {"type": "window", "count": 1, "distance": 6}
+      ],
+      "camera": {"default_height": 1.4, "min_distance": 3.0, "distance_multiplier": 2.5, "lens_mm": 50}
+    },
+
+    "restaurant": {
+      "keywords": ["restaurant", "dining", "bar", "cafe", "kitchen", "cooking"],
+      "base_template": "character_stage",
+      "ground": {"material": "tile", "color": [0.20, 0.18, 0.15], "roughness": 0.4},
+      "sky": {"hdri_keywords": ["interior", "warm"], "polyhaven_fallback": "studio_small_03", "strength": 0.3},
+      "lighting": {
+        "key_energy": 2.0, "key_color": [1.0, 0.82, 0.55],
+        "fill_energy": 0.8, "fill_color": [0.9, 0.70, 0.45],
+        "rim_energy": 1.5, "rim_color": [1.0, 0.85, 0.60]
+      },
+      "atmosphere": {"fog_density": 0.005, "fog_color": [0.5, 0.40, 0.30], "mist_enabled": true},
+      "background_geo": [
+        {"type": "wall", "count": 3, "distance": 5, "height_range": [3, 3]}
+      ],
+      "camera": {"default_height": 1.4, "min_distance": 2.5, "distance_multiplier": 2.5, "lens_mm": 50}
+    },
+
+    "castle_hall": {
+      "keywords": ["castle", "medieval", "throne", "dungeon", "fortress", "kingdom"],
+      "base_template": "character_stage",
+      "ground": {"material": "stone", "color": [0.30, 0.28, 0.25], "roughness": 0.9},
+      "sky": {"hdri_keywords": ["dark", "interior", "stone"], "polyhaven_fallback": "studio_small_03", "strength": 0.3},
+      "lighting": {
+        "key_energy": 2.0, "key_color": [1.0, 0.75, 0.40],
+        "fill_energy": 0.5, "fill_color": [0.7, 0.55, 0.35],
+        "rim_energy": 1.5, "rim_color": [1.0, 0.80, 0.45]
+      },
+      "atmosphere": {"fog_density": 0.008, "fog_color": [0.35, 0.30, 0.25], "mist_enabled": true},
+      "background_geo": [
+        {"type": "column", "count": 6, "distance": 8, "height_range": [6, 8]},
+        {"type": "wall", "count": 3, "distance": 10, "height_range": [8, 8]},
+        {"type": "arch", "count": 3, "distance": 10}
+      ],
+      "camera": {"default_height": 1.5, "min_distance": 4.0, "distance_multiplier": 3.0, "lens_mm": 35}
+    },
+
+    "fantasy_magical": {
+      "keywords": ["fantasy", "magical", "enchanted", "fairy", "mystical", "wizard", "spell"],
+      "base_template": "scenic_landscape",
+      "ground": {"material": "moss", "color": [0.15, 0.30, 0.20], "roughness": 0.85},
+      "sky": {"hdri_keywords": ["fantasy", "dramatic", "sunset"], "polyhaven_fallback": "the_sky_is_on_fire_puresky"},
+      "lighting": {
+        "key_energy": 3.0, "key_color": [0.7, 0.5, 1.0],
+        "fill_energy": 2.0, "fill_color": [0.3, 0.7, 0.9],
+        "rim_energy": 2.5, "rim_color": [0.9, 0.6, 1.0]
+      },
+      "atmosphere": {"fog_density": 0.012, "fog_color": [0.30, 0.25, 0.45], "mist_enabled": true},
+      "background_geo": [
+        {"type": "tree_trunk", "count": 8, "distance": 15, "height_range": [6, 14]},
+        {"type": "crystal", "count": 4, "distance": 10, "height_range": [1, 3]}
+      ],
+      "camera": {"default_height": 1.4, "min_distance": 4.0, "distance_multiplier": 3.0, "lens_mm": 45}
+    },
+
+    "space_station": {
+      "keywords": ["space", "spaceship", "sci-fi", "station", "galaxy", "futuristic", "starship"],
+      "base_template": "character_stage",
+      "ground": {"material": "metal", "color": [0.20, 0.22, 0.25], "roughness": 0.3},
+      "sky": {"hdri_keywords": ["space", "stars", "dark"], "polyhaven_fallback": "moonless_golf_4k", "strength": 0.4},
+      "lighting": {
+        "key_energy": 3.0, "key_color": [0.7, 0.85, 1.0],
+        "fill_energy": 1.0, "fill_color": [0.3, 0.5, 0.8],
+        "rim_energy": 2.5, "rim_color": [0.5, 0.7, 1.0]
+      },
+      "atmosphere": {"fog_density": 0.002, "fog_color": [0.10, 0.12, 0.20]},
+      "background_geo": [
+        {"type": "panel", "count": 6, "distance": 8, "height_range": [3, 5]},
+        {"type": "viewport", "count": 1, "distance": 10}
+      ],
+      "camera": {"default_height": 1.5, "min_distance": 3.5, "distance_multiplier": 2.5, "lens_mm": 35}
+    },
+
+    "pixar_stage": {
+      "keywords": ["pixar", "cartoon", "animated", "colorful", "playful", "kids", "toy"],
+      "base_template": "character_stage",
+      "ground": {"material": "matte", "color": [0.60, 0.75, 0.90], "roughness": 0.8},
+      "sky": {"hdri_keywords": ["studio", "bright"], "polyhaven_fallback": "studio_small_03", "strength": 1.5},
+      "lighting": {
+        "key_energy": 5.0, "key_color": [1.0, 0.98, 0.95],
+        "fill_energy": 3.5, "fill_color": [0.85, 0.90, 1.0],
+        "rim_energy": 2.0, "rim_color": [1.0, 0.95, 0.90]
+      },
+      "atmosphere": {"fog_density": 0.001},
+      "background_geo": [],
+      "camera": {"default_height": 1.2, "min_distance": 3.0, "distance_multiplier": 2.5, "lens_mm": 50},
+      "color_grade": {"contrast": 1.15, "saturation": 1.2, "warmth": 0.03}
+    },
+
+    "parking_night": {
+      "keywords": ["parking", "garage", "lot", "underground"],
+      "base_template": "street_scene",
+      "ground": {"material": "concrete", "color": [0.25, 0.25, 0.25], "roughness": 0.8},
+      "sky": {"hdri_keywords": ["night", "urban"], "polyhaven_fallback": "city_night_01", "strength": 0.3},
+      "lighting": {
+        "key_energy": 2.5, "key_color": [0.9, 0.95, 1.0],
+        "fill_energy": 0.5, "fill_color": [0.6, 0.6, 0.7],
+        "rim_energy": 1.5, "rim_color": [0.8, 0.85, 1.0]
+      },
+      "atmosphere": {"fog_density": 0.004, "fog_color": [0.3, 0.3, 0.35]},
+      "camera": {"default_height": 1.4, "min_distance": 5.0, "distance_multiplier": 2.0, "lens_mm": 35}
+    },
+
+    "suburban_park": {
+      "keywords": ["park", "garden", "lawn", "playground", "suburban", "backyard"],
+      "base_template": "scenic_landscape",
+      "ground": {"material": "grass", "color": [0.22, 0.40, 0.15], "roughness": 0.85},
+      "sky": {"hdri_keywords": ["park", "sunny", "blue sky"], "polyhaven_fallback": "kloofendal_48d_partly_cloudy_puresky"},
+      "lighting": {
+        "key_energy": 4.5, "key_color": [1.0, 0.97, 0.90],
+        "fill_energy": 2.0, "fill_color": [0.8, 0.85, 1.0],
+        "rim_energy": 2.0, "rim_color": [1.0, 0.95, 0.85]
+      },
+      "atmosphere": {"fog_density": 0.002, "fog_color": [0.8, 0.85, 0.9]},
+      "background_geo": [
+        {"type": "tree_trunk", "count": 6, "distance": 20, "height_range": [4, 8]},
+        {"type": "hillock", "count": 3, "distance": 15, "height_range": [0.5, 1.0]}
+      ],
+      "camera": {"default_height": 1.5, "min_distance": 4.0, "distance_multiplier": 3.0, "lens_mm": 50}
+    },
+
+    "game_arena": {
+      "keywords": ["game", "video game", "arena", "battle", "combat", "rpg"],
+      "base_template": "character_stage",
+      "ground": {"material": "stone", "color": [0.25, 0.22, 0.20], "roughness": 0.85},
+      "sky": {"hdri_keywords": ["dramatic", "dark", "storm"], "polyhaven_fallback": "the_sky_is_on_fire_puresky"},
+      "lighting": {
+        "key_energy": 3.5, "key_color": [0.9, 0.7, 0.4],
+        "fill_energy": 1.0, "fill_color": [0.4, 0.5, 0.8],
+        "rim_energy": 3.0, "rim_color": [1.0, 0.6, 0.2]
+      },
+      "atmosphere": {"fog_density": 0.008, "fog_color": [0.25, 0.20, 0.15], "mist_enabled": true},
+      "background_geo": [
+        {"type": "column", "count": 4, "distance": 12, "height_range": [5, 8]},
+        {"type": "wall", "count": 2, "distance": 15, "height_range": [6, 6]}
+      ],
+      "camera": {"default_height": 1.3, "min_distance": 4.0, "distance_multiplier": 3.0, "lens_mm": 40}
+    }
+  }
+}

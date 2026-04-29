@@ -108,6 +108,18 @@ If you skip this step, asset fetching will only use Objaverse and your local cur
 
 Open PowerShell. We'll work in `C:\Users\<you>\Desktop\FantasyAI\` — feel free to substitute another path.
 
+### 0. Windows: Enable PowerShell scripts (one-time setup)
+
+Required before running `setup.ps1`, `launch.ps1`, or any Python venv `Activate.ps1`.
+
+Open PowerShell **as Administrator** and run:
+
+```powershell
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+```
+
+Confirm with `Y`. This is a Windows default-restrictive setting; setting it once for `CurrentUser` is the standard fix and doesn't lower system-wide security.
+
 ### 1. Clone the monorepo
 
 ```powershell
@@ -120,23 +132,21 @@ cd fantasy-studio
 
 The repo has two subdirectories: `backend/` (Python API + render pipeline) and `frontend/` (React/Vite UI).
 
-### 2. Backend setup
+### 2. One-command setup
 
 ```powershell
-cd backend
-
-# Create + activate virtual environment
-python -m venv venv
-.\venv\Scripts\Activate.ps1
-
-# Install Python dependencies
-pip install -r requirements-hybrid-assets.txt
+.\setup.ps1
 ```
 
-If `Activate.ps1` is blocked, run PowerShell as admin once:
-```powershell
-Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
-```
+This script:
+
+- Verifies Python 3.11+ and Node 20+ are on PATH
+- Checks Ollama reachability (warns and continues if not running)
+- Creates `backend/venv` and installs `backend/requirements.txt`
+- Runs `npm install` in `frontend/`
+- Scaffolds `backend/.env` and `frontend/.env.local` from their respective `.env.example` files (idempotent — won't overwrite existing files)
+
+Total time: 2–4 minutes depending on network. Re-run anytime; passing `-ForceVenvRecreate` rebuilds the Python venv from scratch.
 
 ### 3. Pull the LLM model
 
@@ -144,16 +154,40 @@ Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
 ollama pull gemma3:12b
 ```
 
-This downloads ~7 GB. First-time only.
+Downloads ~7 GB. First-time only.
 
-### 4. Frontend setup
+### 4. (Optional) Add your tokens
 
-```powershell
-cd ..\frontend
-npm install
+If you have a Sketchfab API token (recommended — see [Sketchfab API key setup](#3-sketchfab-api-key-optional-but-recommended) above), edit `backend/.env`:
+
+```
+SKETCHFAB_API_TOKEN=your-token-here
 ```
 
-Takes 1–3 minutes depending on disk. The first `npm install` populates `node_modules/` with React, Vite, base-ui, R3F, Tailwind, and the rest of the stack.
+Without it, fallback asset fetch only uses Objaverse + your local curated library.
+
+### Manual setup (advanced)
+
+Prefer to run each step yourself? `setup.ps1` is a thin orchestrator over these:
+
+```powershell
+# Backend
+cd backend
+python -m venv venv
+.\venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+deactivate
+cd ..
+
+# Frontend
+cd frontend
+npm install
+cd ..
+
+# Env files (only if missing)
+Copy-Item backend\.env.example backend\.env
+Copy-Item frontend\.env.example frontend\.env.local
+```
 
 ---
 

@@ -42,16 +42,19 @@ Common issues and fixes, organized by category. If your issue isn't here, open a
 
 ---
 
-### Python venv won't activate
+### "Running scripts is disabled on this system" (PowerShell)
 
-**Symptom**: `.\venv\Scripts\Activate.ps1` errors with "running scripts is disabled on this system".
+**Symptom**: Any of `setup.ps1`, `launch.ps1`, or `.\venv\Scripts\Activate.ps1` errors with `File ... cannot be loaded because running scripts is disabled on this system`.
 
-**Likely cause**: PowerShell ExecutionPolicy is set to Restricted (Windows default).
+**Likely cause**: PowerShell ExecutionPolicy is set to `Restricted` (Windows default for users who haven't opted in).
 
-**Fix** (run PowerShell as admin once):
+**Fix** (run PowerShell as Administrator, one time):
 ```powershell
-Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
 ```
+Confirm with `Y`. `RemoteSigned` lets locally-authored scripts run; downloaded scripts still need to be unblocked. This scope (`CurrentUser`) doesn't change system-wide policy.
+
+**If that doesn't work**: confirm you ran PowerShell as Administrator. Reopen your terminal after setting the policy.
 
 ---
 

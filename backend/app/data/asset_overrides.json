@@ -1,0 +1,19 @@
+{
+  "_schema": {
+    "description": "Per-asset overrides applied by app/scene/import_normalize.py _apply_asset_overrides. Runs AFTER heuristics so these values win. Brandon adds entries here when an asset needs a non-default treatment. No code changes required.",
+    "fields": {
+      "rotation_euler":       "[x, y, z] degrees — replaces runtime rotation",
+      "scale_override":       "float meters — forces max-dimension to this, ignoring heuristic",
+      "material_tint_hint":   "color keyword (red/blue/black/white/orange/...) — forces unlinked Base Color to this color",
+      "quality":              "'rejected' to exclude from resolver (library-level); the resolver should skip these before import",
+      "notes":                "free-text description for humans"
+    },
+    "example": {
+      "lib_vehicle_bugatti_veyron": {
+        "scale_override": 4.8,
+        "material_tint_hint": "blue",
+        "notes": "imports at 0.3m; force blue body tint"
+      }
+    }
+  }
+}

@@ -1,8 +1,17 @@
 .env
 *.pyc
 __pycache__/
-data/
 outputs/
 logs/
 *.bak_*
 .claude/
+
+# V1.4.5: removed blanket `data/` exclude. The `app/data/` tree carries
+# library.json (the core asset catalog) and other runtime-required JSON.
+# Only regenerable / runtime-state artifacts are excluded below.
+app/data/blender_lane.db
+app/data/downloads_processed.json
+app/data/library.json.bak_*
+
+# Legacy top-level data/ holds runtime SQLite — not for commit.
+data/

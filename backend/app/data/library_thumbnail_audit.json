@@ -1,0 +1,39 @@
+{
+  "generated_at": "2026-04-29 14:44:15",
+  "total_entries": 317,
+  "thumbnails_present": 298,
+  "thumbnails_missing_with_asset_file": 5,
+  "thumbnails_missing_no_asset_file": 14,
+  "malformed_thumbnail_urls": 0,
+  "action_items": {
+    "regenerate_thumbnails_for": [
+      "lib_mountain_mountain_sunset_4k",
+      "lib_hdri_city_night_neon",
+      "lib_environment_polyhaven_pine_fir_forest",
+      "cached_rhino_1777408125",
+      "cached_lion_1777478969"
+    ],
+    "broken_path_entries": [
+      "lib_curated_sketchfab_dolphin_2ec20f15",
+      "lib_curated_sketchfab_monkey_3ba199e0",
+      "lib_curated_sketchfab_robot_623e3f52",
+      "lib_elephant_african_elephant",
+      "lib_eagle_bald_eagle_flying",
+      "lib_cat_black_shorthair",
+      "lib_cat_orange_tabby_walking",
+      "lib_cat_russian_blue",
+      "lib_bmw_bmw_bmw_m3_competition",
+      "lib_ferrari_ferrari_ferrari_f40_red",
+      "lib_porsche_porsche_porsche_911_gt3",
+      "cached_eagle_1776804858",
+      "cached_cat_1776805248",
+      "cached_porsche_1776902655"
+    ],
+    "malformed_urls": []
+  },
+  "notes": [
+    "thumbnails_present: thumbnail PNG exists at backend/assets/thumbnails/<id>.png.",
+    "thumbnails_missing_with_asset_file: asset file is on disk but no thumbnail \u2014 run `python backend/scripts/generate_thumbnails.py` to backfill.",
+    "thumbnails_missing_no_asset_file: dead curation entries (V1.4.1 triage cases). Will not get thumbnails because the source asset file is gone."
+  ]
+}
