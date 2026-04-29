@@ -85,6 +85,50 @@ Fantasy Studio takes the opposite bet: **AI directs real tools, it doesn't repla
 
 ---
 
+## Inside the app
+
+A guided tour of the studio. Type a prompt, AI directs, Blender renders — all local, all yours.
+
+### The studio
+
+<img src=".github/assets/guide-first-render.png" alt="Fantasy Studio main interface" width="900"/>
+
+The main canvas. Type any scene you can imagine. The director plans casting, lighting, and camera. Blender renders locally on your machine. The `.blend` export is yours forever.
+
+### Pick your render quality
+
+<img src=".github/assets/guide-tier-selector.png" alt="Render tier selector" width="900"/>
+
+Four tiers, from Quick Preview (~30 s, Eevee) to Final Cinematic (production-ready, 512-sample Cycles). Iterate fast, then commit to a hero render when you're ready.
+
+### Cast your scene
+
+<img src=".github/assets/guide-cast-panel.png" alt="Cast panel" width="900"/>
+
+The director auto-picks a hero and environment that match your prompt. Don't like the choice? Browse the full library and pick your own. Every asset is orientation-corrected and ground-aligned through the V1.2 healing pipeline.
+
+### Direct every detail
+
+<img src=".github/assets/guide-scene-controls.png" alt="Scene controls" width="900"/>
+
+Override the AI's choices when you want fine control. Lighting presets, camera modes, duration, brand color, template selection — every control flows directly into the render manifest.
+
+### Refine with words
+
+<img src=".github/assets/guide-refine-panel.png" alt="Refine panel" width="900"/>
+
+After the first render, refine in natural language. *"Make it more dramatic."* *"Lower the camera."* *"Switch to golden hour."* The director iterates on the existing scene without starting over.
+
+### Generate variations
+
+<img src=".github/assets/guide-sweep.png" alt="Variations sweep" width="900"/>
+
+Render multiple variations of a scene with one click. Pick the one that lands and promote it to your main render. Useful for hero shots where you want options.
+
+For the full walkthrough — prompt patterns, tier guidance, Blender export workflow — see **[docs/USER_GUIDE.md](docs/USER_GUIDE.md)**.
+
+---
+
 ## What works well right now (constraint-sprint honesty)
 
 Fantasy Studio is **best at single-subject cinematic shots** — one animal, one vehicle, or one character placed in an environment, performing a simple action (running, standing, flying, racing).
