@@ -13,5 +13,7 @@ app/data/blender_lane.db
 app/data/downloads_processed.json
 app/data/library.json.bak_*
 
-# Legacy top-level data/ holds runtime SQLite — not for commit.
-data/
+# Legacy top-level backend/data/ holds runtime SQLite — not for commit.
+# Leading slash anchors this to the backend root so `app/data/` is NOT
+# accidentally caught.
+/data/
