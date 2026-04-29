@@ -97,6 +97,15 @@ def _load_all_entries() -> list[dict]:
             rec = dict(a)
             rec["_absolute_path"] = str(full)
             out.append(rec)
+        # V1.4.6: overlay runtime stats from gitignored library_stats.json
+        # so use_count-based sorts (browse pagination, match scoring)
+        # reflect actual usage even though library.json itself stays
+        # static.
+        try:
+            from ..services import library_stats as _ls
+            _ls.merge_stats_into(out)
+        except Exception:
+            pass
         return out
     except Exception:
         return []

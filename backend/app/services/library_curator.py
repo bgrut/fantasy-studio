@@ -64,10 +64,26 @@ _AUTO_TEST_THRESHOLD = 2  # use_count >= N → tested=True
 # ═══════════════════════════════════════════════════════════════════════════
 
 def _load_library() -> dict:
+    """Load library.json and overlay V1.4.6 runtime stats from
+    ``library_stats.json``. Callers see a unified view: each entry's
+    ``use_count`` / ``last_rendered_ts`` / ``last_used_at`` fields are
+    populated from the gitignored stats file, not from library.json
+    itself (which is now static and never mutated at render time).
+    """
     try:
         if _LIBRARY_PATH.exists():
             data = json.loads(_LIBRARY_PATH.read_text(encoding="utf-8"))
             if isinstance(data, dict) and "assets" in data:
+                # V1.4.6: merge runtime stats overlay
+                try:
+                    from . import library_stats as _ls
+                    _ls.merge_stats_into(data["assets"])
+                except Exception as _e:
+                    print(
+                        f"[LIBRARY] stats merge skipped ({_e}); "
+                        f"reads will see use_count=0 across the board",
+                        flush=True,
+                    )
                 return data
     except Exception as e:
         print(f"[LIBRARY] load failed ({e}) — starting fresh", flush=True)
@@ -246,22 +262,46 @@ def promote_to_curated(
             break
 
     if existing is not None:
-        existing["use_count"] = int(existing.get("use_count", 0)) + 1
-        existing["last_rendered_ts"] = now
-        if (
-            not existing.get("tested", False)
-            and existing["use_count"] >= _AUTO_TEST_THRESHOLD
-        ):
-            existing["tested"] = True
+        # V1.4.6: route runtime stats to gitignored library_stats.json
+        # so library.json stays static (no per-render diff noise).
+        try:
+            from . import library_stats as _ls
+            new_count = _ls.bump_use_count(str(existing["id"]), ts=now)
+        except Exception as _e:
+            # Fall back to legacy in-place bump if stats module fails
+            # (keeps the pipeline working; render still completes).
             print(
-                f"[LIBRARY] id={existing['id']!r} promoted to tested=True "
-                f"(use_count={existing['use_count']})",
+                f"[LIBRARY] stats bump failed ({_e}); falling back to "
+                f"legacy in-library write",
                 flush=True,
             )
-        _save_library(lib)
+            existing["use_count"] = int(existing.get("use_count", 0)) + 1
+            existing["last_rendered_ts"] = now
+            new_count = existing["use_count"]
+            _save_library(lib)
+        else:
+            # Mirror onto the in-memory entry so callers reading the
+            # return value see the bumped values, but DO NOT write the
+            # library file back — those fields now live in stats.
+            existing["use_count"] = new_count
+            existing["last_rendered_ts"] = now
+
+        # Tested promotion is a one-time structural change — that DOES
+        # belong in library.json (it's not per-render drift).
+        if (
+            not existing.get("tested", False)
+            and new_count >= _AUTO_TEST_THRESHOLD
+        ):
+            existing["tested"] = True
+            _save_library(lib)
+            print(
+                f"[LIBRARY] id={existing['id']!r} promoted to tested=True "
+                f"(use_count={new_count})",
+                flush=True,
+            )
         print(
             f"[LIBRARY] updated use_count for id={existing['id']!r} "
-            f"-> {existing['use_count']}",
+            f"-> {new_count} (stats.json)",
             flush=True,
         )
         return existing
@@ -290,9 +330,9 @@ def promote_to_curated(
         },
         "quality_flags":     rm.get("quality_flags", {}),
         "tested":            False,
-        "use_count":         1,
-        "first_rendered_ts": now,
-        "last_rendered_ts":  now,
+        # V1.4.6: use_count / *_rendered_ts no longer ride in library.json.
+        # The bump_use_count call below populates library_stats.json
+        # immediately after this entry is created.
         "bounds_meters":     rm.get("bounds_meters"),
     }
 
@@ -323,6 +363,22 @@ def promote_to_curated(
 
     assets.append(new_entry)
     _save_library(lib)
+    # V1.4.6: kick off the stats counter at 1 in the gitignored
+    # stats file so reads see use_count=1 immediately. Mirror onto
+    # the returned dict so callers don't have to re-load.
+    try:
+        from . import library_stats as _ls
+        _new_count = _ls.bump_use_count(new_id, ts=now)
+        new_entry["use_count"] = _new_count
+        new_entry["first_rendered_ts"] = now
+        new_entry["last_rendered_ts"] = now
+    except Exception as _stats_err:
+        print(
+            f"[LIBRARY] initial stats bump failed for {new_id!r} "
+            f"(non-fatal): {_stats_err}",
+            flush=True,
+        )
+        new_entry["use_count"] = 1
     print(
         f"[LIBRARY] promoted id={new_id!r} subject={subject!r} "
         f"source={src} tags={new_entry['subject_tags'][:5]}",

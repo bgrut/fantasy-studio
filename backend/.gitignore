@@ -13,6 +13,20 @@ app/data/blender_lane.db
 app/data/downloads_processed.json
 app/data/library.json.bak_*
 
+# V1.4.6: per-user runtime usage stats. Split out of library.json so
+# the catalog stays static (no per-render diff drift). Each install
+# gets its own.
+app/data/library_stats.json
+app/data/library_stats.json.bak_*
+
+# V1.4.6: asset_library.json is an auto-grown ledger of every fetched
+# asset (see app/services/asset_logger.py). It mutates on every fetch,
+# carries personal usage stats, and isn't curated content. Gitignore
+# the whole thing — Brandon's local copy stays useful, new users get
+# a fresh empty file on first fetch.
+app/data/asset_library.json
+app/data/asset_library.json.bak_*
+
 # Legacy top-level backend/data/ holds runtime SQLite — not for commit.
 # Leading slash anchors this to the backend root so `app/data/` is NOT
 # accidentally caught.

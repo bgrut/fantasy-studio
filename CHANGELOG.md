@@ -20,6 +20,25 @@ Pre-1.0 versions are internal milestones during the constraint sprint leading to
 
 ---
 
+## [1.4.6] - 2026-04-30
+
+### Fixed
+- **Runtime usage stats no longer drift into tracked `library.json`.** Pre-V1.4.6, every render bumped `use_count` and `last_rendered_ts` on the live `library.json`, producing a meaningless per-render git diff and leaking personal usage stats into the public repo
+- New `backend/app/services/library_stats.py` module owns the gitignored `backend/app/data/library_stats.json` per-user counters file. Atomic writes (tmp + replace), thread-safe bumps, idempotent merge-back-onto-entries on read
+- `library_curator.promote_asset` now routes use_count bumps to `library_stats.bump_use_count` instead of mutating the library file. New-entry creation initializes stats at 1 in the stats file rather than baking it into library.json
+- `library_curator._load_library` and `app/api/library.py::_load_all_entries` overlay stats onto returned entries automatically — readers (browse pagination, match scoring, asset_agent diversity rotation) keep working with no surface changes
+- One-shot migration script `backend/scripts/migrate_stats.py` extracts existing counters out of library.json into stats.json. Idempotent. Backs up library.json before mutating
+
+### Changed
+- `backend/app/data/asset_library.json` is now gitignored. It's an auto-grown ledger of every fetched asset (`asset_logger.log_asset`) — runtime ledger by design, not curated content. New users get a fresh empty file on first fetch; Brandon's local copy stays useful
+- `backend/.gitignore` extended for `library_stats.json`, `library_stats.json.bak_*`, `asset_library.json`, `asset_library.json.bak_*`
+
+### Migration notes
+- Run `python backend/scripts/migrate_stats.py` once on existing installs to split historical counters out of library.json. The script writes a `library.json.bak_v146_premigration_<ts>` backup automatically
+- Re-running is a no-op once the migration completes (no runtime fields left to strip)
+
+---
+
 ## [1.4.3] - 2026-04
 
 ### Fixed
@@ -190,7 +209,8 @@ Pre-1.0 versions are internal milestones during the constraint sprint leading to
 - Public docs at github.com/bgrut/fantasy-studio
 - Marketing site at fantasylab.ai
 
-[Unreleased]: https://github.com/bgrut/fantasy-studio/compare/v1.4.3...HEAD
+[Unreleased]: https://github.com/bgrut/fantasy-studio/compare/v1.4.6...HEAD
+[1.4.6]: https://github.com/bgrut/fantasy-studio/releases/tag/v1.4.6
 [1.4.3]: https://github.com/bgrut/fantasy-studio/releases/tag/v1.4.3
 [1.4.2]: https://github.com/bgrut/fantasy-studio/releases/tag/v1.4.2
 [1.4.1.1]: https://github.com/bgrut/fantasy-studio/releases/tag/v1.4.1.1
