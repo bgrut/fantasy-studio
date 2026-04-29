@@ -1,0 +1,22 @@
+{
+  "name": "high_key_bright",
+  "kind": "lighting",
+  "version": 1,
+  "description": "Even, bright, almost shadowless setup. Soft large key, large fill, mild rim — reads as daylight or commercial product. Good fallback when the brief is 'clean', 'editorial', or 'bright'.",
+  "inputs_required": [],
+  "outputs_produced": ["lighting_preset"],
+  "applies": {
+    "preset_name": "studio_five_point",
+    "hdri_keywords": ["studio", "clear", "sunny", "bright", "overcast_soft"],
+    "time_of_day_hint": "midday",
+    "key_energy_multiplier": 1.05,
+    "rim_light": true,
+    "ambient_intensity": 0.5
+  },
+  "metadata": {
+    "author": "team",
+    "inspiration": "Apple product films; Wes Anderson symmetrical daylight",
+    "quality_tier": "hero"
+  },
+  "renderer_support": {"blender_eevee": "native", "blender_cycles": "native", "unreal": "pending"}
+}

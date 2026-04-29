@@ -1,0 +1,15 @@
+{
+  "name": "standard_tier",
+  "kind": "base",
+  "version": 1,
+  "description": "Publishable-quality render. 512 samples, 1080p, 240 frames (~10s at 24fps). This is the default delivery tier for social-first content and directorial demos.",
+  "inputs_required": [],
+  "outputs_produced": ["render_tier_hint"],
+  "applies": {
+    "render_tier": "standard",
+    "duration_frames": 240,
+    "resolution_hint": "1080p"
+  },
+  "metadata": {"author": "team", "quality_tier": "standard"},
+  "renderer_support": {"blender_eevee": "native", "blender_cycles": "native", "unreal": "pending"}
+}

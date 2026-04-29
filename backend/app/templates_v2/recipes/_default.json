@@ -1,0 +1,19 @@
+{
+  "name": "_default",
+  "version": 1,
+  "description": "Fallback recipe when the dispatcher can't confidently pick a specialized one. Safe, restrained defaults that won't regress a V1.1-working render. Dispatcher returns this only when every other recipe scores below MIN_SCORE_FOR_DISPATCH.",
+  "applies_when": {},
+  "layers": {
+    "base": "preview_tier"
+  },
+  "overrides": {},
+  "metadata": {
+    "author": "team",
+    "quality_tier": "draft",
+    "renderer_hints": {
+      "blender_eevee":  "native",
+      "blender_cycles": "native",
+      "unreal":         "pending"
+    }
+  }
+}

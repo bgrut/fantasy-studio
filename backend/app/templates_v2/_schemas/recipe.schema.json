@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "fantasylab/v1.3/recipe.schema.json",
+  "title": "Template V2 Recipe",
+  "description": "A recipe is a directorial 'shot vocabulary entry' — it combines layers into a complete cinematographic style for a scene archetype. Dispatcher scores recipes against the scene context; best match wins; executor runs layers in order.",
+  "type": "object",
+  "required": ["name", "version", "description", "layers"],
+  "additionalProperties": false,
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Unique recipe id across the registry. Must match the filename stem.",
+      "pattern": "^[a-z_][a-z0-9_]*$"
+    },
+    "version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "template": {
+      "type": "string",
+      "description": "V1.3 batch-2: force the V1.1 template builder for this recipe, overriding whatever the LLM family classifier chose. Omit entirely when any template is acceptable (e.g. _default). Use `in` membership on the executor side, never .get() — absent must mean absent, not null/empty.",
+      "pattern": "^[a-z][a-z0-9_]*$"
+    },
+    "description": {
+      "type": "string",
+      "minLength": 10
+    },
+    "applies_when": {
+      "type": "object",
+      "description": "Matching rules scored by the dispatcher. All fields are optional; missing = any.",
+      "additionalProperties": false,
+      "properties": {
+        "scene_family":        {"type": "array", "items": {"type": "string"}},
+        "env_subject":         {"type": "array", "items": {"type": "string"}},
+        "env_subject_tags":    {"type": "array", "items": {"type": "string"}},
+        "env_biome_hints":     {"type": "array", "items": {"type": "string"}},
+        "hero_category":       {"type": "array", "items": {"type": "string"}},
+        "hero_shape_class":    {"type": "array", "items": {"type": "string"}},
+        "keywords_any":        {"type": "array", "items": {"type": "string"}},
+        "keywords_all":        {"type": "array", "items": {"type": "string"}},
+        "llm_camera_style":    {"type": "array", "items": {"type": "string"}},
+        "llm_shot_type":       {"type": "array", "items": {"type": "string"}},
+        "has_forced_env":      {"type": "boolean"}
+      }
+    },
+    "layers": {
+      "type": "object",
+      "description": "Named layer references, keyed by slot. Slots run in canonical order: base, environment, composition, lighting, animation, ambient, post.",
+      "additionalProperties": false,
+      "properties": {
+        "base":        {"type": "string"},
+        "environment": {"type": "string"},
+        "composition": {"type": "string"},
+        "lighting":    {"type": "string"},
+        "animation":   {"type": "string"},
+        "ambient":     {"type": ["string", "array"], "items": {"type": "string"}, "description": "Single or list of ambient layers (dust + fog + birds together)."},
+        "post":        {"type": "string"}
+      }
+    },
+    "overrides": {
+      "type": "object",
+      "description": "Per-slot override dicts applied on top of the referenced layer's `applies`. Same structure as each layer's `applies`.",
+      "additionalProperties": true
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "author":               {"type": "string"},
+        "tested_with_heroes":   {"type": "array", "items": {"type": "string"}},
+        "tested_with_envs":     {"type": "array", "items": {"type": "string"}},
+        "quality_tier":         {"type": "string", "enum": ["draft", "standard", "hero", "cinematic"]},
+        "renderer_hints":       {"type": "object", "additionalProperties": true}
+      }
+    }
+  }
+}

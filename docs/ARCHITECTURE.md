@@ -8,7 +8,7 @@ Engineering deep-dive on how Fantasy Studio turns a prompt into a Blender render
 
 ```mermaid
 flowchart LR
-    UI["Frontend (React/Vite)<br/>blender-studio"] -->|HTTP| API["Backend API (FastAPI)<br/>blender-studio-backend/app"]
+    UI["Frontend (React/Vite)<br/>frontend/"] -->|HTTP| API["Backend API (FastAPI)<br/>backend/app/"]
     API --> PIPE["Render Pipeline<br/>render_scripts/render_from_manifest.py"]
     PIPE -->|spawns| BLEND["Blender 5.1<br/>(headless)"]
     BLEND --> OUT["outputs/<br/>MP4 + .blend + GIF + PNG seq + trace"]
@@ -20,7 +20,7 @@ flowchart LR
 
 Three processes:
 
-1. **Frontend** — React + Vite + Tailwind + base-ui + R3F. Vite dev server on `:5173`, talks to backend via `@tanstack/react-query`
+1. **Frontend** — React + Vite + Tailwind + base-ui + R3F. Vite dev server on `:3000`, talks to backend via `@tanstack/react-query`
 2. **Backend** — FastAPI server on `:8000`. Routes in `app/api/` (`pipeline.py`, `library.py`, `assets.py`, `templates.py`, `exports.py`, `curation.py`, `catalog.py`, `render_extras.py`, `llm_diag.py`)
 3. **Blender subprocess** — spawned per render via `app/blender_runner.py`, executes `render_scripts/render_from_manifest.py` against a JSON manifest
 
@@ -30,7 +30,7 @@ The Blender subprocess is the only thing that imports `bpy`. Everything else is 
 
 ## Frontend architecture
 
-`blender-studio/`:
+`frontend/`:
 
 - **Vite + React 18 + TypeScript** — dev server, type checking via `tsc --noEmit`
 - **Routing**: `@tanstack/react-router` (file-based)
@@ -279,65 +279,68 @@ LLM director + scene assembly stay local. The prepared `.blend` file uploads to 
 ## File map (key paths)
 
 ```
-blender-studio-backend/
-├── app/
-│   ├── api/                       # FastAPI routers (10 files)
-│   ├── data/library.json          # 316-asset library
-│   ├── data/library_refresh_report.json
-│   ├── data/library_triage_report.json
-│   ├── data/vehicle_lod_audit.json
-│   ├── scene/
-│   │   ├── glb_import.py          # .glb importer + dedup
-│   │   ├── blender_asset_ops.py   # .blend importer + dedup
-│   │   └── import_normalize.py    # V1.2 healer apply + scale
-│   ├── services/
-│   │   ├── asset_agent.py         # LLM director + fallbacks
-│   │   ├── asset_healer.py        # V1.2 healer
-│   │   ├── camera_director.py     # V1.3.2 single-source-of-truth camera
-│   │   ├── library_matcher.py
-│   │   ├── variant_pool.py        # V1.3.7 alias map + scoring
-│   │   ├── objaverse_fetcher.py
-│   │   └── template_v2/
-│   │       ├── dispatcher.py      # Weighted recipe scoring
-│   │       └── executor.py        # JSON → bpy ops
-│   ├── templates_v2/
-│   │   ├── recipes/               # 15 named recipes + _default
-│   │   ├── base/                  # Render tier presets
-│   │   ├── environments/
-│   │   ├── compositions/
-│   │   ├── lighting/
-│   │   ├── animations/
-│   │   ├── ambient/
-│   │   └── post/
-│   ├── blender_runner.py          # Spawns Blender subprocess
-│   └── main.py                    # FastAPI app
-├── render_scripts/
-│   ├── render_from_manifest.py    # The big one (~6700 lines)
-│   ├── _thumb_render_subprocess.py
-│   └── normalize_asset_to_blend.py
-├── tools/
-│   ├── downloads_ingestor.py      # Watches Downloads/ for new assets
-│   ├── _triage_blender_worker.py
-│   └── classify_library_assets.py
-├── scripts/
-│   ├── generate_thumbnails.py
-│   ├── ingest_assets.py
-│   └── sort_downloads_and_ingest.py
-└── requirements-hybrid-assets.txt
-
-blender-studio/
-├── src/
-│   ├── routes/                    # tanstack-router file-based routes
-│   ├── components/                # base-ui + custom
-│   ├── api/                       # react-query hooks
-│   └── ...
-├── package.json                   # vite + react + r3f + tanstack
-└── vite.config.ts
-
-fantasy-studio/                    # this repo — public docs only
-├── README.md
-├── docs/
-└── ...
+fantasy-studio/                    # the monorepo
+├── README.md                      # Public-launch docs
+├── INSTALL.md
+├── LICENSE                        # BSL 1.1
+├── launch.ps1                     # Single-command launcher (Windows)
+├── docs/                          # ARCHITECTURE, GALLERY, USER_GUIDE, ...
+├── .github/                       # Issue + PR templates, image assets
+│
+├── backend/                       # Python pipeline (FastAPI + Blender)
+│   ├── app/
+│   │   ├── api/                       # FastAPI routers (10 files)
+│   │   ├── data/library.json          # 316-asset library
+│   │   ├── data/library_refresh_report.json
+│   │   ├── data/library_triage_report.json
+│   │   ├── data/vehicle_lod_audit.json
+│   │   ├── scene/
+│   │   │   ├── glb_import.py          # .glb importer + dedup
+│   │   │   ├── blender_asset_ops.py   # .blend importer + dedup
+│   │   │   └── import_normalize.py    # V1.2 healer apply + scale
+│   │   ├── services/
+│   │   │   ├── asset_agent.py         # LLM director + fallbacks
+│   │   │   ├── asset_healer.py        # V1.2 healer
+│   │   │   ├── camera_director.py     # V1.3.2 single-source-of-truth camera
+│   │   │   ├── library_matcher.py
+│   │   │   ├── variant_pool.py        # V1.3.7 alias map + scoring
+│   │   │   ├── objaverse_fetcher.py
+│   │   │   └── template_v2/
+│   │   │       ├── dispatcher.py      # Weighted recipe scoring
+│   │   │       └── executor.py        # JSON → bpy ops
+│   │   ├── templates_v2/
+│   │   │   ├── recipes/               # 15 named recipes + _default
+│   │   │   ├── base/                  # Render tier presets
+│   │   │   ├── environments/
+│   │   │   ├── compositions/
+│   │   │   ├── lighting/
+│   │   │   ├── animations/
+│   │   │   ├── ambient/
+│   │   │   └── post/
+│   │   ├── blender_runner.py          # Spawns Blender subprocess
+│   │   └── main.py                    # FastAPI app
+│   ├── render_scripts/
+│   │   ├── render_from_manifest.py    # The big one (~6700 lines)
+│   │   ├── _thumb_render_subprocess.py
+│   │   └── normalize_asset_to_blend.py
+│   ├── tools/
+│   │   ├── downloads_ingestor.py      # Watches Downloads/ for new assets
+│   │   ├── _triage_blender_worker.py
+│   │   └── classify_library_assets.py
+│   ├── scripts/
+│   │   ├── generate_thumbnails.py
+│   │   ├── ingest_assets.py
+│   │   └── sort_downloads_and_ingest.py
+│   └── requirements-hybrid-assets.txt
+│
+└── frontend/                      # React UI (Vite + base-ui + R3F)
+    ├── src/
+    │   ├── routes/                    # tanstack-router file-based routes
+    │   ├── components/                # base-ui + custom
+    │   ├── api/                       # react-query hooks
+    │   └── ...
+    ├── package.json                   # vite + react + r3f + tanstack
+    └── vite.config.ts
 ```
 
 ---

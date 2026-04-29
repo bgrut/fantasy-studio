@@ -1,0 +1,57 @@
+{
+  "name": "cat_canyon_cinematic",
+  "version": 1,
+  "template": "scenic_landscape",
+  "description": "Meme-cat (or any small hero) dropped into a cinematic canyon. Low, wide, slightly heroic framing; golden-hour rim; dust motes; restrained grade. The shot that takes an internet-famous asset and makes it feel like a Malick opener.",
+  "applies_when": {
+    "env_subject": [
+      "canyon"
+    ],
+    "env_subject_tags": [
+      "canyon",
+      "desert"
+    ],
+    "env_biome_hints": [
+      "canyon",
+      "desert"
+    ],
+    "hero_category": [
+      "character",
+      "animal",
+      "creature"
+    ],
+    "keywords_any": [
+      "canyon",
+      "gorge",
+      "mesa",
+      "cinematic",
+      "epic"
+    ],
+    "has_forced_env": true
+  },
+  "layers": {
+    "base": "preview_tier",
+    "environment": "canyon_floor",
+    "composition": "low_wide_dramatic",
+    "lighting": "golden_hour_warm",
+    "animation": "hero_idle_subtle",
+    "ambient": "dust_motes",
+    "post": "cinematic_graded"
+  },
+  "overrides": {
+    "composition": {
+      "lens_mm": 28,
+      "distance_multiplier": 4.0
+    }
+  },
+  "metadata": {
+    "author": "team",
+    "tested_with_heroes": [
+      "lib_cat_cat_box_meme"
+    ],
+    "tested_with_envs": [
+      "lib_canyon_canyon_landscape"
+    ],
+    "quality_tier": "cinematic"
+  }
+}

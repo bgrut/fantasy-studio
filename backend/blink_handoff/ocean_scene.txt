@@ -1,0 +1,29 @@
+from __future__ import annotations
+
+import bpy
+
+from ..scene.animation_ops import apply_animation_instructions
+from ..scene.blender_asset_ops import import_asset
+
+
+def build_ocean_scene(bpy, manifest, scene):
+    resolved = manifest.get("resolved_assets", {})
+    instructions = manifest.get("animation_instructions", [])
+
+    models = resolved.get("models", {})
+    fish = models.get("characters", [])
+
+    # Ocean plane
+    bpy.ops.mesh.primitive_plane_add(location=(0, 0, 0))
+    ocean = bpy.context.object
+    ocean.scale = (100, 100, 1)
+
+    # Import fish
+    for path in fish[:5]:
+        import_asset(bpy, path)
+
+    # Camera
+    bpy.ops.object.camera_add(location=(0, -10, 3), rotation=(1.3, 0, 0))
+    scene.camera = bpy.context.object
+
+    apply_animation_instructions(instructions)

@@ -1,0 +1,21 @@
+{
+  "name": "birds_distant",
+  "kind": "ambient",
+  "version": 1,
+  "description": "A handful of birds silhouetted against the sky in the far distance, wings beating slowly. Adds life to otherwise static skies. Intended for outdoor scenes; never placed indoors.",
+  "inputs_required": [],
+  "outputs_produced": ["ambient_effects[+1]"],
+  "applies": {
+    "effect_name": "birds_distant",
+    "count": 5,
+    "altitude_m": 40.0,
+    "spread_radius_m": 120.0,
+    "wing_hz": 1.8
+  },
+  "metadata": {
+    "author": "team",
+    "inspiration": "Malick sky beats; Bond pre-titles establishing",
+    "quality_tier": "standard"
+  },
+  "renderer_support": {"blender_eevee": "native", "blender_cycles": "native", "unreal": "pending"}
+}

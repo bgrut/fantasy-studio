@@ -43,8 +43,8 @@ Please don't disclose publicly until a fix has shipped or 90 days have passed (w
 
 ### In scope
 - Code in this repository
-- Code in `blender-studio-backend` (the Python pipeline)
-- Code in `blender-studio` (the React frontend)
+- Code in `backend/` (the Python pipeline)
+- Code in `frontend/` (the React UI)
 - The render pipeline's handling of user-provided prompts and assets
 - The local API server (`localhost:8000`) endpoints
 - The `tools/downloads_ingestor.py` watcher and its archive extraction (zip-slip etc.)

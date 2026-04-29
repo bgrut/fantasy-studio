@@ -68,9 +68,9 @@ Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
 
 ---
 
-### Port 8000 (or 5173) already in use
+### Port 8789 (or 3000) already in use
 
-**Symptom**: `[Errno 48] Address already in use` on backend startup, or `Port 5173 is in use, trying another one...` on frontend.
+**Symptom**: `[Errno 48] Address already in use` on backend startup, or `Error: Port 3000 is already in use` on frontend (frontend uses `strictPort: true` so it fails rather than picking an alternate).
 
 **Likely cause**: A previous instance is still running, or another app grabbed the port.
 
@@ -430,7 +430,7 @@ This is the same pattern V1.3.6 used for the BMW orientations.
 **Likely cause**: Missing or incorrect Sketchfab API token.
 
 **Fix:**
-1. Verify `.env` file exists in `blender-studio-backend/`
+1. Verify `.env` file exists in `backend/`
 2. Verify it contains `SKETCHFAB_API_TOKEN=` followed by your token (no quotes, no spaces around `=`)
 3. Restart the backend after creating/editing `.env`
 4. Confirm the token is valid at <https://sketchfab.com/settings/password> (check API token section)

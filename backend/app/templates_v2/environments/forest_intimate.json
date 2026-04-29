@@ -1,0 +1,19 @@
+{
+  "name": "forest_intimate",
+  "kind": "environment",
+  "version": 1,
+  "description": "Close forest clearing. Tall trunks bracket the frame; mossy forest floor; dappled god-rays filtering through canopy. Intended for character heroes shot at eye level with shallow depth so the background softens to texture.",
+  "inputs_required": ["forced_environment_entry"],
+  "outputs_produced": ["environment_preset"],
+  "applies": {
+    "preset_name": "terrain_blend",
+    "ground_material": "moss_loam",
+    "horizon_treatment": "trunks_bracket_frame"
+  },
+  "metadata": {
+    "author": "team",
+    "inspiration": "The Witch (2015); Annihilation forest interiors; Miyazaki forest spirits",
+    "quality_tier": "hero"
+  },
+  "renderer_support": {"blender_eevee": "native", "blender_cycles": "native", "unreal": "pending"}
+}

@@ -1,0 +1,16 @@
+# Round 4 — Hybrid Asset Pipeline dependencies.
+#
+# These power the Objaverse fetcher and the AI 3D generator. Both are
+# OPTIONAL: app/services/asset_fetcher.py wraps its imports in try/except,
+# so the rest of the pipeline (curated + Sketchfab) keeps working even if
+# none of the below are installed.
+#
+# Install with:
+#     pip install -r requirements-hybrid-assets.txt
+#
+# If you use pip-compile-managed requirements, paste these three lines
+# into your requirements.in and re-compile.
+
+objaverse>=0.1.7
+gradio_client>=0.10.0
+requests>=2.31.0

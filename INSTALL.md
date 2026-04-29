@@ -2,7 +2,7 @@
 
 This guide gets Fantasy Studio running on **Windows 10/11** end-to-end. macOS and Linux are untested for V1; community contributions welcome — see [CONTRIBUTING.md](CONTRIBUTING.md).
 
-> **Pre-launch note:** Until the public V1.0 launch (Mid-May 2026), Fantasy Studio ships as **two sibling repositories** — `blender-studio-backend` (Python/Flask) and `blender-studio` (React/Vite frontend). The unified `fantasy-studio` repo you're reading is the public docs hub. At launch the install flow will simplify; for now you'll clone three repos.
+> **Pre-launch note:** Fantasy Studio is a single monorepo with `backend/` (Python/FastAPI) and `frontend/` (React/Vite) subdirectories. One clone, one install path. (Pre-V0.1.1 the project was split across three sibling repos — that's now collapsed.)
 
 ---
 
@@ -60,7 +60,7 @@ Fantasy Studio uses Sketchfab as a fallback asset source when the curated librar
 1. Sign up at <https://sketchfab.com> (free account)
 2. Go to **Settings → Password & API**
 3. Copy your API token
-4. Create a `.env` file in `blender-studio-backend/` with:
+4. Create a `.env` file in `backend/` with:
    ```env
    SKETCHFAB_API_TOKEN=your-token-here
    ```
@@ -108,23 +108,22 @@ If you skip this step, asset fetching will only use Objaverse and your local cur
 
 Open PowerShell. We'll work in `C:\Users\<you>\Desktop\FantasyAI\` — feel free to substitute another path.
 
-### 1. Clone the three repos
+### 1. Clone the monorepo
 
 ```powershell
 mkdir C:\Users\$env:USERNAME\Desktop\FantasyAI
 cd C:\Users\$env:USERNAME\Desktop\FantasyAI
 
 git clone https://github.com/bgrut/fantasy-studio
-git clone https://github.com/bgrut/blender-studio-backend
-git clone https://github.com/bgrut/blender-studio
+cd fantasy-studio
 ```
 
-You should now have three sibling directories: `fantasy-studio` (docs), `blender-studio-backend` (Python API + render pipeline), `blender-studio` (frontend).
+The repo has two subdirectories: `backend/` (Python API + render pipeline) and `frontend/` (React/Vite UI).
 
 ### 2. Backend setup
 
 ```powershell
-cd blender-studio-backend
+cd backend
 
 # Create + activate virtual environment
 python -m venv venv
@@ -150,7 +149,7 @@ This downloads ~7 GB. First-time only.
 ### 4. Frontend setup
 
 ```powershell
-cd ..\blender-studio
+cd ..\frontend
 npm install
 ```
 
@@ -167,32 +166,32 @@ cd C:\Users\$env:USERNAME\Desktop\FantasyAI\fantasy-studio
 .\launch.ps1
 ```
 
-The launcher opens two PowerShell windows — one for the backend (FastAPI on `:8789`) and one for the frontend (Vite on `:5173`) — and starts them in sequence with a small delay so the backend binds its port before the frontend tries to connect. The launcher verifies the venv exists, the frontend `package.json` is present, and prints clear errors if either is missing.
+The launcher opens two PowerShell windows — one for the backend (FastAPI on `:8789`) and one for the frontend (Vite on `:3000`) — and starts them in sequence with a small delay so the backend binds its port before the frontend tries to connect. The launcher verifies the venv exists, the frontend `package.json` is present, and prints clear errors if either is missing.
 
 You should see in the launcher's parent window:
 
 ```
 Fantasy Studio launching...
-  Backend dir:  C:\Users\<you>\Desktop\FantasyAI\blender-studio-backend
-  Frontend dir: C:\Users\<you>\Desktop\FantasyAI\blender-studio
+  Backend dir:  C:\Users\<you>\Desktop\FantasyAI\fantasy-studio\backend
+  Frontend dir: C:\Users\<you>\Desktop\FantasyAI\fantasy-studio\frontend
   Backend port: 8789
 Two PowerShell windows opened.
   Backend:  http://localhost:8789  (and /api/health for liveness)
-  Frontend: http://localhost:5173  (Vite picks the next free port if 5173 is busy)
+  Frontend: http://localhost:3000  (Vite is configured with strictPort=true)
 ```
 
-Open <http://localhost:5173> in your browser. To stop, close both PowerShell windows.
+Open <http://localhost:3000> in your browser. To stop, close both PowerShell windows.
 
 If you have repos in non-default locations, override:
 ```powershell
-.\launch.ps1 -BackendDir "D:\code\blender-studio-backend" -FrontendDir "D:\code\blender-studio" -BackendPort 8800
+.\launch.ps1 -BackendDir "D:\code\fantasy-studio\backend" -FrontendDir "D:\code\fantasy-studio\frontend" -BackendPort 8800
 ```
 
 ### Manual launch (advanced / debugging)
 
 If you want manual control over each process — to attach a debugger, capture logs, or pin specific flags — run them in two terminals yourself:
 
-**Terminal 1 — Backend** (in `blender-studio-backend`):
+**Terminal 1 — Backend** (in `fantasy-studio/backend`):
 ```powershell
 .\venv\Scripts\Activate.ps1
 python -m uvicorn app.main:app --port 8789 --reload
@@ -200,12 +199,12 @@ python -m uvicorn app.main:app --port 8789 --reload
 
 You should see `[LLM] Ollama reachable at http://localhost:11434 (model=gemma3:12b)` and `Uvicorn running on http://127.0.0.1:8789`.
 
-**Terminal 2 — Frontend** (in `blender-studio`):
+**Terminal 2 — Frontend** (in `fantasy-studio/frontend`):
 ```powershell
 npm run dev
 ```
 
-You should see `Local: http://localhost:5173/`. Open it in your browser.
+You should see `Local: http://localhost:3000/`. Open it in your browser.
 
 > macOS / Linux: a `launch.sh` equivalent is on the V1.1 backlog. For now, run the manual two-terminal flow above; substitute `source venv/bin/activate` for the `Activate.ps1` line.
 

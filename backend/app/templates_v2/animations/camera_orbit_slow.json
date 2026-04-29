@@ -1,0 +1,21 @@
+{
+  "name": "camera_orbit_slow",
+  "kind": "animation",
+  "version": 1,
+  "description": "Slow arcing orbit of the camera around the hero, ~30 degrees of arc over the full shot length. Camera-driven motion (hero stays static unless combined with another animation layer). Requires Phase 5 to ship the `camera_orbit_slow` motion profile — until then the animation layer is a no-op and compositional framing still plays.",
+  "inputs_required": ["hero_root"],
+  "outputs_produced": ["animation_style"],
+  "applies": {
+    "style": "camera_orbit_slow",
+    "camera_motion": "orbit",
+    "speed": 0.3,
+    "arc_degrees": 30,
+    "duration_frames": 240
+  },
+  "metadata": {
+    "author": "team",
+    "quality_tier": "standard",
+    "wraps": "app.scene.directorial_motion._camera_orbit_slow"
+  },
+  "renderer_support": {"blender_eevee": "native", "blender_cycles": "native", "unreal": "pending"}
+}

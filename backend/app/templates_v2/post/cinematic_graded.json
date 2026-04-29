@@ -1,0 +1,26 @@
+{
+  "name": "cinematic_graded",
+  "kind": "post",
+  "version": 1,
+  "description": "Restrained cinematic grade: gentle s-curve contrast, slight teal-and-orange split, subtle bloom on highlights, soft vignette, faint grain to kill digital cleanliness. Designed to feel like a real camera sensor, not a game engine.",
+  "inputs_required": [],
+  "outputs_produced": ["post_preset"],
+  "applies": {
+    "preset_name": "cinematic_graded",
+    "grade": "teal_orange_subtle",
+    "bloom_intensity": 0.25,
+    "vignette": 0.15,
+    "grain": 0.04,
+    "contrast": "medium_high"
+  },
+  "metadata": {
+    "author": "team",
+    "inspiration": "Roger Deakins, Emmanuel Lubezki digital grades",
+    "quality_tier": "hero"
+  },
+  "renderer_support": {
+    "blender_eevee": "compatible",
+    "blender_cycles": "compatible",
+    "unreal": "pending"
+  }
+}

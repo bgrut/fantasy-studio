@@ -1,0 +1,951 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap');
+/* v1.4 close-out — display face for the hero H1 + key callouts.
+   Cabinet Grotesk: geometric, wide, futuristic — closest free analogue to
+   Surgena's rounded geometric character. Drops onto the same Fontshare CDN
+   we're already using (single round-trip).
+   UPGRADE PATH to Surgena (paid, envato): drop the .woff2 files into
+   public/fonts/, replace this @import with a @font-face block, and update
+   the Tailwind `display` family to ['Surgena', ...]. ~5 lines, no other
+   surface needs to change. */
+@import url('https://api.fontshare.com/v2/css?f[]=cabinet-grotesk@500,600,700,800&f[]=general-sans@500,600,700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* GameCube palette */
+    --background: 240 33% 2%;        /* #050508 */
+    --foreground: 249 28% 91%;       /* #e4e2f0 */
+
+    --card: 240 22% 7%;              /* rgba(14,14,22,0.7) mapped */
+    --card-foreground: 249 28% 91%;
+
+    --popover: 240 22% 7%;
+    --popover-foreground: 249 28% 91%;
+
+    --primary: 253 100% 68%;         /* #7c5cff */
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 240 22% 9%;
+    --secondary-foreground: 249 28% 91%;
+
+    --muted: 240 22% 9%;
+    --muted-foreground: 252 13% 55%; /* #807d99 */
+
+    --accent: 342 100% 68%;          /* #ff5c8a */
+    --accent-foreground: 0 0% 100%;
+
+    --teal: 168 62% 53%;             /* #38d9c4 */
+    --gold: 40 100% 67%;             /* #ffc857 */
+
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 0 0% 100% / 0.05;
+    --input: 0 0% 100% / 0.05;
+    --ring: 253 100% 68%;
+
+    --radius: 1rem;
+
+    --glow: rgba(124,92,255,0.35);
+    --glow-pink: rgba(255,92,138,0.2);
+  }
+}
+
+@layer base {
+  * {
+    border-color: hsl(var(--border));
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: 'Outfit', sans-serif;
+    background-color: #050508;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Outfit', sans-serif;
+    @apply tracking-tight;
+  }
+  code, pre, .font-mono {
+    font-family: 'JetBrains Mono', monospace;
+  }
+}
+
+/* ── Glassmorphic Cards ──────────────────────────────── */
+
+.glass {
+  background: rgba(14,14,22,0.7);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255,255,255,0.05);
+}
+
+.glass-dark {
+  background: rgba(5,5,8,0.8);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255,255,255,0.03);
+}
+
+.glass-morphism {
+  background: linear-gradient(135deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.01) 100%);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255,255,255,0.05);
+}
+
+/* ── Glow Effects ────────────────────────────────────── */
+
+.neon-glow-primary {
+  box-shadow: 0 0 25px -5px var(--glow);
+}
+
+.neon-glow-accent {
+  box-shadow: 0 0 25px -5px var(--glow-pink);
+}
+
+.glow-border {
+  box-shadow: 0 0 0 1px rgba(124,92,255,0.3), 0 0 30px -5px rgba(124,92,255,0.2);
+}
+
+/* ── Gradient Text ───────────────────────────────────── */
+
+.text-gradient {
+  @apply bg-clip-text text-transparent;
+  background-image: linear-gradient(135deg, #a78bfa, #ff5c8a, #38d9c4);
+  background-size: 200% 200%;
+  animation: gradient-shift 6s ease-in-out infinite;
+}
+
+.text-gradient-primary {
+  @apply bg-clip-text text-transparent;
+  background-image: linear-gradient(135deg, #7c5cff, #ff5c8a);
+}
+
+@keyframes gradient-shift {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+
+/* ── Grid Overlay ────────────────────────────────────── */
+
+.grid-overlay {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  background-image:
+    linear-gradient(rgba(124,92,255,0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(124,92,255,0.03) 1px, transparent 1px);
+  background-size: 60px 60px;
+  mask-image: radial-gradient(ellipse at 50% 50%, black 20%, transparent 70%);
+  -webkit-mask-image: radial-gradient(ellipse at 50% 50%, black 20%, transparent 70%);
+}
+
+/* ── Scanlines ───────────────────────────────────────── */
+
+.scanlines {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0,0,0,0.03) 2px,
+    rgba(0,0,0,0.03) 4px
+  );
+}
+
+/* ── Spinning Cube Logo ──────────────────────────────── */
+
+.spinning-cube {
+  width: 28px;
+  height: 28px;
+  border: 2px solid #7c5cff;
+  border-radius: 4px;
+  animation: cube-spin 8s linear infinite;
+  transform-style: preserve-3d;
+}
+
+@keyframes cube-spin {
+  from { transform: rotateY(0deg) rotateX(0deg); }
+  to   { transform: rotateY(360deg) rotateX(360deg); }
+}
+
+/* ── Section Tags ────────────────────────────────────── */
+
+.section-tag {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  color: #807d99;
+  /* v1.3.7 — debug-y `// section_name` ribbons fade unless hovered.
+     Engineers can still read them; non-technical users see clean copy. */
+  opacity: 0.55;
+  transition: opacity 220ms ease;
+}
+.section-tag:hover,
+*:hover > .section-tag,
+h1:hover ~ .section-tag,
+.section-tag:focus-visible {
+  opacity: 1;
+}
+
+.section-tag--primary {
+  color: #7c5cff;
+  background: rgba(124,92,255,0.08);
+  border: 1px solid rgba(124,92,255,0.15);
+  padding: 2px 10px;
+  border-radius: 999px;
+}
+
+.section-tag--pink {
+  color: #ff5c8a;
+  background: rgba(255,92,138,0.08);
+  border: 1px solid rgba(255,92,138,0.15);
+  padding: 2px 10px;
+  border-radius: 999px;
+}
+
+.section-tag--teal {
+  color: #38d9c4;
+  background: rgba(56,217,196,0.08);
+  border: 1px solid rgba(56,217,196,0.15);
+  padding: 2px 10px;
+  border-radius: 999px;
+}
+
+/* ── Card Hover (3D tilt + accent line) ──────────────── */
+
+.card-hover {
+  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.4s ease;
+  position: relative;
+}
+.card-hover::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, #7c5cff, #ff5c8a, #38d9c4);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  border-radius: 9999px 9999px 0 0;
+}
+.card-hover:hover {
+  transform: translateY(-6px) perspective(500px) rotateX(2deg);
+  box-shadow: 0 20px 50px -20px rgba(124,92,255,0.15);
+}
+.card-hover:hover::before {
+  opacity: 1;
+}
+
+/* ── Scroll Reveal ───────────────────────────────────── */
+
+.animate-reveal {
+  animation: reveal 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes reveal {
+  from {
+    opacity: 0;
+    transform: translateY(20px) scale(0.98);
+    filter: blur(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0);
+  }
+}
+
+/* ── Pulsing Status Dot ──────────────────────────────── */
+
+.pulse-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #38d9c4;
+  box-shadow: 0 0 10px #38d9c4;
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 6px rgba(56,217,196,0.4); }
+  50% { box-shadow: 0 0 16px rgba(56,217,196,0.8); }
+}
+
+/* ── Render Progress Bar ─────────────────────────────── */
+
+.progress-gradient {
+  background: linear-gradient(90deg, #7c5cff, #ff5c8a, #38d9c4, #7c5cff);
+  background-size: 300% 100%;
+  animation: progress-flow 2s linear infinite;
+}
+
+@keyframes progress-flow {
+  from { background-position: 0% 50%; }
+  to { background-position: 300% 50%; }
+}
+
+/* ── Skeleton Shimmer ────────────────────────────────── */
+
+.skeleton-shimmer {
+  background: linear-gradient(90deg, rgba(255,255,255,0.02) 25%, rgba(255,255,255,0.06) 50%, rgba(255,255,255,0.02) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
+
+/* ── Custom Scrollbar ────────────────────────────────── */
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,0.08);
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255,255,255,0.15);
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(124,92,255,0.2);
+}
+
+/* ── Staggered Reveal (children cascade) ────────────── */
+
+.stagger-reveal > * {
+  opacity: 0;
+  transform: translateY(16px);
+  animation: stagger-in 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+.stagger-reveal > *:nth-child(1) { animation-delay: 0.05s; }
+.stagger-reveal > *:nth-child(2) { animation-delay: 0.1s; }
+.stagger-reveal > *:nth-child(3) { animation-delay: 0.15s; }
+.stagger-reveal > *:nth-child(4) { animation-delay: 0.2s; }
+.stagger-reveal > *:nth-child(5) { animation-delay: 0.25s; }
+.stagger-reveal > *:nth-child(6) { animation-delay: 0.3s; }
+.stagger-reveal > *:nth-child(7) { animation-delay: 0.35s; }
+.stagger-reveal > *:nth-child(8) { animation-delay: 0.4s; }
+.stagger-reveal > *:nth-child(9) { animation-delay: 0.45s; }
+.stagger-reveal > *:nth-child(10) { animation-delay: 0.5s; }
+.stagger-reveal > *:nth-child(11) { animation-delay: 0.55s; }
+.stagger-reveal > *:nth-child(12) { animation-delay: 0.6s; }
+
+@keyframes stagger-in {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ── Focus Glow (inputs) ────────────────────────────── */
+
+.focus-glow:focus {
+  border-color: rgba(124,92,255,0.5);
+  box-shadow: 0 0 0 3px rgba(124,92,255,0.1), 0 0 20px -5px rgba(124,92,255,0.2);
+  outline: none;
+}
+
+.focus-glow-pink:focus {
+  border-color: rgba(255,92,138,0.5);
+  box-shadow: 0 0 0 3px rgba(255,92,138,0.1), 0 0 20px -5px rgba(255,92,138,0.2);
+  outline: none;
+}
+
+/* ── Button Press State ─────────────────────────────── */
+
+.btn-hover:active {
+  transform: translateY(0) scale(0.97);
+}
+
+/* ── Icon Bounce (nav hover) ────────────────────────── */
+/* v1.4.1 audit (Impeccable bounce-easing) — replaced cubic-bezier(0.34, 1.56,
+   0.64, 1) which overshoots target by 56% and reads as dated/tacky. Using
+   ease-out-quart (cubic-bezier(0.22, 1, 0.36, 1)) for these specific
+   micro-interactions: tactile front-load + clean settle, no overshoot.
+   Deliberately distinct from EASE_OUT_SOFT (ease-out-expo) since these are
+   tiny scale deltas (1.0→1.15) where expo reads as too aggressive. */
+
+.icon-bounce {
+  transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.group:hover .icon-bounce,
+.icon-bounce:hover {
+  transform: scale(1.15) rotate(-8deg);
+}
+
+/* ── Badge Pop ──────────────────────────────────────── */
+/* v1.4.1 audit — same easing fix as .icon-bounce. */
+
+.badge-pop {
+  transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.2s ease;
+}
+.badge-pop:hover {
+  transform: scale(1.08);
+}
+
+/* ── Custom Range Input ─────────────────────────────── */
+
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  cursor: pointer;
+  height: 20px;
+}
+
+input[type="range"]::-webkit-slider-track {
+  height: 2px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.05);
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #7c5cff;
+  border: 2px solid rgba(255,255,255,0.1);
+  margin-top: -6px;
+  box-shadow: 0 0 8px rgba(124,92,255,0.4);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+input[type="range"]::-webkit-slider-thumb:hover {
+  transform: scale(1.2);
+  box-shadow: 0 0 14px rgba(124,92,255,0.6);
+}
+
+input[type="range"]::-moz-range-track {
+  height: 2px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.05);
+  border: none;
+}
+
+input[type="range"]::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #7c5cff;
+  border: 2px solid rgba(255,255,255,0.1);
+  box-shadow: 0 0 8px rgba(124,92,255,0.4);
+}
+
+/* ── Select Dropdown ────────────────────────────────── */
+
+select {
+  -webkit-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%234a4764' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  padding-right: 28px;
+}
+
+select option {
+  background: #0e0e16;
+  color: #e4e2f0;
+}
+
+/* ── Button Hover ────────────────────────────────────── */
+
+.btn-hover {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.btn-hover:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px -5px var(--glow);
+}
+
+/* ── Generate Button Gradient ────────────────────────── */
+
+.btn-generate {
+  background: linear-gradient(135deg, #7c5cff, #ff5c8a);
+  color: white;
+  border: none;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease;
+}
+.btn-generate:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 30px -5px rgba(124,92,255,0.4);
+}
+.btn-generate:active:not(:disabled) {
+  transform: translateY(0) scale(0.97);
+  box-shadow: 0 2px 10px -3px rgba(124,92,255,0.3);
+}
+.btn-generate:disabled {
+  opacity: 0.5;
+  transform: none;
+  box-shadow: none;
+}
+
+/* ── Floating CSS Shapes (Three.js alternative) ──────── */
+
+.floating-shapes {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  overflow: hidden;
+}
+
+.shape {
+  position: absolute;
+  border-radius: 12px;
+  opacity: 0.06;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+
+.shape-1 {
+  width: 120px;
+  height: 120px;
+  border: 2px solid #7c5cff;
+  top: 10%;
+  left: 5%;
+  animation: float-rotate-1 25s infinite;
+}
+.shape-2 {
+  width: 80px;
+  height: 80px;
+  background: #ff5c8a;
+  border-radius: 50%;
+  top: 60%;
+  right: 8%;
+  animation: float-rotate-2 30s infinite;
+}
+.shape-3 {
+  width: 60px;
+  height: 60px;
+  border: 2px solid #38d9c4;
+  border-radius: 50% 0;
+  top: 30%;
+  right: 20%;
+  animation: float-rotate-3 20s infinite;
+}
+.shape-4 {
+  width: 100px;
+  height: 100px;
+  border: 1px solid #a78bfa;
+  border-radius: 8px;
+  bottom: 15%;
+  left: 15%;
+  animation: float-rotate-1 35s infinite reverse;
+}
+.shape-5 {
+  width: 50px;
+  height: 50px;
+  background: #7c5cff;
+  border-radius: 50%;
+  top: 75%;
+  left: 60%;
+  animation: float-rotate-2 22s infinite;
+}
+.shape-6 {
+  width: 90px;
+  height: 90px;
+  border: 1px solid #ff5c8a;
+  border-radius: 0 50%;
+  top: 5%;
+  right: 35%;
+  animation: float-rotate-3 28s infinite;
+}
+
+@keyframes float-rotate-1 {
+  0%   { transform: translateY(0) rotate(0deg); }
+  25%  { transform: translateY(-30px) rotate(90deg); }
+  50%  { transform: translateY(0) rotate(180deg); }
+  75%  { transform: translateY(30px) rotate(270deg); }
+  100% { transform: translateY(0) rotate(360deg); }
+}
+
+@keyframes float-rotate-2 {
+  0%   { transform: translate(0, 0) rotate(0deg) scale(1); }
+  33%  { transform: translate(20px, -25px) rotate(120deg) scale(1.1); }
+  66%  { transform: translate(-15px, 15px) rotate(240deg) scale(0.9); }
+  100% { transform: translate(0, 0) rotate(360deg) scale(1); }
+}
+
+@keyframes float-rotate-3 {
+  0%   { transform: translate(0, 0) rotate(0deg); }
+  50%  { transform: translate(-20px, -20px) rotate(180deg); }
+  100% { transform: translate(0, 0) rotate(360deg); }
+}
+
+/* ── Responsive: Mobile Adjustments ─────────────────── */
+
+@media (max-width: 640px) {
+  .floating-shapes { display: none; }
+  .grid-overlay { opacity: 0.3; }
+  .scanlines { opacity: 0.3; }
+  .card-hover:hover {
+    transform: translateY(-3px);
+  }
+}
+
+/* Reduce motion for a11y */
+@media (prefers-reduced-motion: reduce) {
+  .floating-shapes,
+  .spinning-cube,
+  .text-gradient,
+  .progress-gradient,
+  .pulse-dot,
+  .skeleton-shimmer,
+  .stagger-reveal > * {
+    animation: none !important;
+  }
+  .stagger-reveal > * {
+    opacity: 1;
+    transform: none;
+  }
+  .card-hover:hover {
+    transform: translateY(-3px);
+  }
+  .animate-reveal {
+    animation: none;
+    opacity: 1;
+    transform: none;
+    filter: none;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   v1.4 polish — motion language, elevation, gradient borders, brand echoes
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* Motion tokens — three durations × three curves. Use these everywhere.
+     CSS values mirror src/lib/motion.ts so framer-motion + plain CSS stay in sync. */
+  --motion-fast: 150ms;
+  --motion-std: 280ms;
+  --motion-dramatic: 600ms;
+  --ease-out-soft: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out-snap: cubic-bezier(0.83, 0, 0.17, 1);
+}
+
+/* ── Display font utility ─────────────────────────────── */
+
+.font-display {
+  /* Surgena (paid, envato) → Cabinet Grotesk (free, Fontshare) for v1.4.
+     If user licenses Surgena later, change this stack to:
+       'Surgena', 'Cabinet Grotesk', 'General Sans', 'Outfit', sans-serif
+     and add a @font-face for Surgena above. */
+  font-family: 'Cabinet Grotesk', 'General Sans', 'Outfit', sans-serif;
+  font-feature-settings: 'ss01', 'cv11';
+  /* Slightly tighter tracking + heavier weight reads as a cinematic poster
+     at hero-size. Cabinet Grotesk's wide geometric forms benefit from the
+     compression. */
+  letter-spacing: -0.02em;
+  font-weight: 700;
+}
+
+/* ── Elevation tokens ─────────────────────────────────── */
+
+.elevation-1 {
+  background: rgba(14, 14, 22, 0.6);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 1px 2px rgba(0, 0, 0, 0.25);
+}
+
+.elevation-2 {
+  background: rgba(14, 14, 22, 0.7);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 8px 30px -8px rgba(0, 0, 0, 0.5),
+    0 0 24px -8px rgba(124, 92, 255, 0.15);
+}
+
+.elevation-3 {
+  background: rgba(14, 14, 22, 0.78);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 25px 60px -15px rgba(0, 0, 0, 0.6),
+    0 0 40px -10px rgba(255, 92, 138, 0.2),
+    0 0 60px -15px rgba(124, 92, 255, 0.18);
+}
+
+/* ── Animated gradient border (conic rotation) ────────── */
+
+.gradient-border-rotate {
+  position: relative;
+  border-radius: inherit;
+  isolation: isolate;
+}
+.gradient-border-rotate::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  padding: 1.5px;
+  background: conic-gradient(
+    from var(--gbr-angle, 0deg),
+    rgba(124, 92, 255, 0.95),
+    rgba(255, 92, 138, 0.9),
+    rgba(56, 217, 196, 0.6),
+    rgba(124, 92, 255, 0.95)
+  );
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  animation: gbr-spin 6s linear infinite;
+  pointer-events: none;
+  z-index: 0;
+}
+@keyframes gbr-spin {
+  to {
+    --gbr-angle: 360deg;
+  }
+}
+@property --gbr-angle {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
+
+/* ── Video frame: brand-tinted asymmetric drop shadow ── */
+
+.video-brand-frame {
+  /* Asymmetric — pink lower-right, purple upper-left, soft black underneath. */
+  box-shadow:
+    -16px -10px 50px -20px rgba(124, 92, 255, 0.35),
+    20px 18px 60px -18px rgba(255, 92, 138, 0.32),
+    0 30px 60px -25px rgba(0, 0, 0, 0.7),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+
+/* ── Generate button: rendering shimmer state ─────────── */
+/* Sweeps a brighter band horizontally across the existing gradient. */
+
+.btn-generate-rendering {
+  background:
+    linear-gradient(120deg,
+      rgba(255, 255, 255, 0) 0%,
+      rgba(255, 255, 255, 0) 35%,
+      rgba(255, 255, 255, 0.45) 50%,
+      rgba(255, 255, 255, 0) 65%,
+      rgba(255, 255, 255, 0) 100%
+    ),
+    linear-gradient(135deg, #7c5cff, #ff5c8a);
+  background-size: 200% 100%, 100% 100%;
+  animation: btn-shimmer-sweep 1.4s linear infinite;
+}
+@keyframes btn-shimmer-sweep {
+  0% { background-position: 200% 0, 0 0; }
+  100% { background-position: -100% 0, 0 0; }
+}
+
+/* ── Render-completion celebration: one-shot brand pulse ring ── */
+
+.completion-pulse {
+  position: relative;
+  /* v1.4 follow-up — clip the ring strictly within the video frame. The
+     ::after sat at inset:-2px which extends outside the parent's rounded
+     border, breaking past the video tile in some browsers when paired with
+     a backdrop-filtered ancestor. Inset:0 keeps the ring inside the
+     bounding box and lets overflow:hidden on the parent guard the rest. */
+  overflow: hidden;
+}
+.completion-pulse::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: conic-gradient(
+    from 0deg,
+    rgba(124, 92, 255, 0),
+    rgba(255, 92, 138, 0.7),
+    rgba(124, 92, 255, 0.7),
+    rgba(56, 217, 196, 0.5),
+    rgba(124, 92, 255, 0)
+  );
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  padding: 2px;
+  opacity: 0;
+  animation: completion-pulse-anim 900ms var(--ease-out-soft) 1;
+}
+@keyframes completion-pulse-anim {
+  /* Stay within the bounding box: scale never exceeds 1.0 so the ring
+     can't visually escape the parent. Opacity does the announcing instead. */
+  0% { opacity: 0; }
+  20% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+/* ── Page-load entrance choreography ─────────────────── */
+/* Fade-in-and-rise on direct children with 80ms stagger; standard duration,
+   ease-out-soft. Use on the SceneStudio root container. */
+
+.entrance-stagger > * {
+  opacity: 0;
+  transform: translateY(14px) scale(0.995);
+  filter: blur(2px);
+  animation: entrance-rise var(--motion-std) var(--ease-out-soft) forwards;
+}
+.entrance-stagger > *:nth-child(1) { animation-delay: 0ms; }
+.entrance-stagger > *:nth-child(2) { animation-delay: 80ms; }
+.entrance-stagger > *:nth-child(3) { animation-delay: 160ms; }
+.entrance-stagger > *:nth-child(4) { animation-delay: 240ms; }
+.entrance-stagger > *:nth-child(5) { animation-delay: 320ms; }
+.entrance-stagger > *:nth-child(6) { animation-delay: 400ms; }
+.entrance-stagger > *:nth-child(7) { animation-delay: 480ms; }
+.entrance-stagger > *:nth-child(8) { animation-delay: 560ms; }
+@keyframes entrance-rise {
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0);
+  }
+}
+
+/* ── Cluster status dot pulse ─────────────────────────── */
+
+.cluster-dot-pulse {
+  position: relative;
+}
+.cluster-dot-pulse::before {
+  content: "";
+  position: absolute;
+  inset: -3px;
+  border-radius: 999px;
+  background: currentColor;
+  opacity: 0.35;
+  animation: cluster-dot-ring 2.4s var(--ease-out-soft) infinite;
+}
+@keyframes cluster-dot-ring {
+  0% { transform: scale(0.6); opacity: 0.55; }
+  70% { transform: scale(1.6); opacity: 0; }
+  100% { transform: scale(1.6); opacity: 0; }
+}
+
+/* ── Honour reduced-motion ───────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  .entrance-stagger > * {
+    animation: none;
+    opacity: 1;
+    transform: none;
+    filter: none;
+  }
+  .gradient-border-rotate::before { animation-duration: 0s; }
+  .btn-generate-rendering { animation: none; }
+  .completion-pulse::after { animation: none; }
+  .cluster-dot-pulse::before { animation: none; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   v1.4 close-out — seamless click + navigation polish
+   Universal press feedback, smooth-scroll baseline, link tap polish.
+   Doesn't override any existing component-level transitions; just sets a
+   sane floor for anything that didn't get individually polished.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+html {
+  scroll-behavior: smooth;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+}
+
+/* Universal press feedback. Anything that's a button or link AND not
+   already disabled gets a subtle tactile press scale. Component-level
+   scale-* classes (e.g. on btn-generate, motion buttons) take precedence
+   because Tailwind's transform utilities have higher specificity. */
+button:not(:disabled):not([data-no-press]):active,
+a:not([data-no-press]):active {
+  transition: transform 80ms cubic-bezier(0.83, 0, 0.17, 1);
+}
+
+/* Standard transition baseline for state-flips. v1.4 follow-up — tightened:
+     • Excluded `transform` so framer-motion's own transforms don't get
+       double-eased, which felt sticky.
+     • Excluded `[data-state]` selector so Base UI primitives' own
+       slide-in/out animations don't fight a global transition rule.
+   Genuinely lightweight properties only — color, bg, border, opacity. */
+button,
+a,
+input,
+select,
+textarea,
+[role="button"],
+[role="switch"],
+[role="tab"] {
+  transition-property: background-color, border-color, color, opacity, box-shadow;
+  transition-duration: var(--motion-fast, 150ms);
+  transition-timing-function: var(--ease-out-soft, cubic-bezier(0.16, 1, 0.3, 1));
+}
+
+/* Disable that transition on rapid drag-style interactions (sliders), so
+   the thumb doesn't lag behind the cursor. */
+input[type="range"]::-webkit-slider-thumb,
+input[type="range"]::-moz-range-thumb {
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+/* Ensure keyboard tab focus is visible app-wide (currently inconsistent).
+   Brand-purple ring matches the existing focus-glow utility. */
+:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px #050508,
+    0 0 0 4px rgba(124, 92, 255, 0.5);
+  border-radius: 6px;
+  transition: box-shadow var(--motion-fast, 150ms) var(--ease-out-soft, cubic-bezier(0.16, 1, 0.3, 1));
+}
+/* But don't double-up on inputs that already paint their own focus ring. */
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+[data-no-focus-ring]:focus-visible {
+  box-shadow: none;
+}
+
+/* Page transition wrapper — fade + small Y shift on route change. Used by
+   App.tsx's <PageTransitionShell> wrapping <Outlet>. */
+.page-transition-enter {
+  opacity: 0;
+  transform: translateY(8px);
+}
+.page-transition-enter-active {
+  opacity: 1;
+  transform: translateY(0);
+  transition:
+    opacity var(--motion-std, 280ms) var(--ease-out-soft, cubic-bezier(0.16, 1, 0.3, 1)),
+    transform var(--motion-std, 280ms) var(--ease-out-soft, cubic-bezier(0.16, 1, 0.3, 1));
+}

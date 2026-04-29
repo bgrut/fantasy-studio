@@ -1,0 +1,34 @@
+{
+  "name": "multi_character_stage",
+  "version": 1,
+  "template": "character_stage",
+  "description": "Character(s) on a neutral studio stage. Clean high-key lighting, intimate three-quarter framing, no environment drama. The fallback for any character-stage prompt without a forced environment.",
+  "applies_when": {
+    "scene_family": [
+      "character_stage"
+    ],
+    "hero_category": [
+      "character",
+      "creature"
+    ],
+    "keywords_any": [
+      "portrait",
+      "studio",
+      "headshot",
+      "hero"
+    ],
+    "has_forced_env": false
+  },
+  "layers": {
+    "base": "preview_tier",
+    "composition": "intimate_three_quarter",
+    "lighting": "high_key_bright",
+    "animation": "hero_idle_subtle",
+    "post": "clean_realistic"
+  },
+  "overrides": {},
+  "metadata": {
+    "author": "team",
+    "quality_tier": "standard"
+  }
+}

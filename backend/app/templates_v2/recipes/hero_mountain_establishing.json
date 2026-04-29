@@ -1,0 +1,76 @@
+{
+  "name": "hero_mountain_establishing",
+  "version": 1,
+  "template": "scenic_landscape",
+  "description": "Hero (character / animal) placed on a real mountain environment. Epic wide establishing shot, cool alpine palette, soft atmospheric haze. The shot the spec's Test 1.3.3 asks for.",
+  "applies_when": {
+    "scene_family": [
+      "scenic_landscape"
+    ],
+    "env_subject": [
+      "mountain",
+      "mountains"
+    ],
+    "env_subject_tags": [
+      "mountain",
+      "alpine",
+      "landscape"
+    ],
+    "env_biome_hints": [
+      "mountain",
+      "outdoor"
+    ],
+    "hero_category": [
+      "character",
+      "animal",
+      "creature"
+    ],
+    "keywords_any": [
+      "mountain",
+      "mountains",
+      "alpine",
+      "ridge",
+      "peak",
+      "epic",
+      "establishing",
+      "vista"
+    ],
+    "has_forced_env": true
+  },
+  "layers": {
+    "base": "preview_tier",
+    "environment": "mountain_vista",
+    "composition": "establishing_wide",
+    "lighting": "alpine_cool_daylight",
+    "animation": "hero_idle_subtle",
+    "ambient": "fog_atmospheric",
+    "post": "cinematic_graded"
+  },
+  "overrides": {
+    "composition": {
+      "lens_mm": 35,
+      "distance_multiplier": 12.0
+    },
+    "lighting": {
+      "key_energy_multiplier": 1.4
+    }
+  },
+  "metadata": {
+    "author": "team",
+    "tested_with_heroes": [
+      "lib_cat_cat_box_meme",
+      "lib_horse_*",
+      "lib_deer_*"
+    ],
+    "tested_with_envs": [
+      "lib_mountain_italy_mountain_castle_landscape",
+      "lib_mountain_mountain_road"
+    ],
+    "quality_tier": "cinematic",
+    "renderer_hints": {
+      "blender_eevee": "compatible",
+      "blender_cycles": "compatible",
+      "unreal": "pending"
+    }
+  }
+}

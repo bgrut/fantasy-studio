@@ -1,6 +1,6 @@
 # Fantasy Studio launcher
 # =======================
-# Starts backend (FastAPI on :8789) and frontend (Vite on :5173) in
+# Starts backend (FastAPI on :8789) and frontend (Vite on :3000) in
 # two separate PowerShell windows. Each window stays open after the
 # command exits so you can read errors. Close both to stop.
 #
@@ -19,12 +19,12 @@ param(
 $ErrorActionPreference = "Stop"
 $repoRoot = $PSScriptRoot
 
-# Default to sibling repos: ../blender-studio-backend, ../blender-studio
+# Default to monorepo subdirectories: ./backend, ./frontend
 if (-not $BackendDir) {
-    $BackendDir = Join-Path (Split-Path $repoRoot -Parent) "blender-studio-backend"
+    $BackendDir = Join-Path $repoRoot "backend"
 }
 if (-not $FrontendDir) {
-    $FrontendDir = Join-Path (Split-Path $repoRoot -Parent) "blender-studio"
+    $FrontendDir = Join-Path $repoRoot "frontend"
 }
 
 # Verify directories exist
@@ -74,7 +74,7 @@ Start-Process powershell -ArgumentList "-NoExit", "-Command", $frontendCmd
 Write-Host "Two PowerShell windows opened." -ForegroundColor Green
 Write-Host ""
 Write-Host "  Backend:  http://localhost:$BackendPort  (and /api/health for liveness)"
-Write-Host "  Frontend: http://localhost:5173  (Vite picks the next free port if 5173 is busy)"
+Write-Host "  Frontend: http://localhost:3000  (Vite is configured with strictPort=true)"
 Write-Host ""
-Write-Host "Open http://localhost:5173 in your browser to use the studio."
+Write-Host "Open http://localhost:3000 in your browser to use the studio."
 Write-Host "Close both PowerShell windows to stop the services."

@@ -1,0 +1,22 @@
+{
+  "name": "golden_hour_warm",
+  "kind": "lighting",
+  "version": 1,
+  "description": "Low-angle warm sun rim-lighting the hero; long raked shadows across the ground; soft amber fill. The light a DP chases for 30 minutes at the end of every outdoor shoot day.",
+  "inputs_required": [],
+  "outputs_produced": ["lighting_preset"],
+  "applies": {
+    "preset_name": "sunset_landscape",
+    "hdri_keywords": ["sunset", "golden", "warm", "evening", "dusk"],
+    "time_of_day_hint": "sunset",
+    "key_energy_multiplier": 1.35,
+    "rim_light": true,
+    "ambient_intensity": 0.25
+  },
+  "metadata": {
+    "author": "team",
+    "inspiration": "Days of Heaven; Lubezki magic-hour exteriors",
+    "quality_tier": "hero"
+  },
+  "renderer_support": {"blender_eevee": "native", "blender_cycles": "native", "unreal": "pending"}
+}

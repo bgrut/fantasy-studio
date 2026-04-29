@@ -1,0 +1,23 @@
+{
+  "name": "camera_epic_pullback",
+  "kind": "animation",
+  "version": 1,
+  "description": "Scale-revealing pullback. Camera starts near-and-low, pulls back along its current axis and rises so the hero becomes small in frame by the final beat. Ship closes on a wide. Pairs naturally with the `epic_pullback` composition; can also be dropped onto any other composition for a variant ending.",
+  "inputs_required": ["hero_root"],
+  "outputs_produced": ["animation_style"],
+  "applies": {
+    "style": "camera_epic_pullback",
+    "camera_motion": "pullback",
+    "start_distance_multiplier": 3.0,
+    "end_distance_multiplier": 15.0,
+    "height_rise": 4.0,
+    "duration_frames": 240
+  },
+  "metadata": {
+    "author": "team",
+    "inspiration": "Empire Strikes Back Hoth open; Contact closing shot",
+    "quality_tier": "hero",
+    "wraps": "app.scene.directorial_motion._camera_epic_pullback"
+  },
+  "renderer_support": {"blender_eevee": "native", "blender_cycles": "native", "unreal": "pending"}
+}

@@ -1,0 +1,62 @@
+from __future__ import annotations
+
+import bpy
+
+
+def apply_animation_instructions(instructions: list[dict]):
+    for inst in instructions:
+        subject = inst.get("subject")
+        action = inst.get("action")
+        mode = inst.get("mode")
+
+        print(f"[ANIM] subject={subject} action={action} mode={mode}", flush=True)
+
+        if action == "rotate" and mode == "turntable":
+            _apply_turntable()
+
+        elif action == "dance":
+            _apply_dance_loop()
+
+        elif action == "swim":
+            _apply_swim_motion()
+
+        elif action == "glide":
+            _apply_glide_motion()
+
+
+def _apply_turntable():
+    for obj in bpy.data.objects:
+        if obj.type == "MESH":
+            obj.rotation_euler.z = 0
+            obj.keyframe_insert("rotation_euler", frame=1)
+            obj.rotation_euler.z = 6.28
+            obj.keyframe_insert("rotation_euler", frame=120)
+
+
+def _apply_dance_loop():
+    for obj in bpy.data.objects:
+        if obj.type == "ARMATURE":
+            obj.location.x += 0.5
+            obj.keyframe_insert("location", frame=1)
+            obj.location.x -= 0.5
+            obj.keyframe_insert("location", frame=30)
+            obj.location.x += 0.5
+            obj.keyframe_insert("location", frame=60)
+
+
+def _apply_swim_motion():
+    for obj in bpy.data.objects:
+        if obj.type == "MESH":
+            obj.location.y += 2
+            obj.keyframe_insert("location", frame=1)
+            obj.location.y -= 2
+            obj.keyframe_insert("location", frame=120)
+
+
+def _apply_glide_motion():
+    for obj in bpy.data.objects:
+        if obj.type == "MESH":
+            obj.location.x += 10
+            obj.keyframe_insert("location", frame=1)
+            obj.location.x -= 10
+            obj.keyframe_insert("location", frame=120)

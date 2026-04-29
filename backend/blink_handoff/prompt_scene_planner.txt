@@ -1,0 +1,173 @@
+from __future__ import annotations
+
+from app.planning.scene_plan import (
+    AssetRequirement,
+    AnimationInstruction,
+    GenerationInput,
+    ScenePlan,
+)
+
+
+def _text_blob(inp: GenerationInput) -> str:
+    return " ".join([
+        inp.raw_prompt or "",
+        inp.template_bias or "",
+        inp.sonic_frequency or "",
+        inp.technical_style_constraints or "",
+    ]).lower()
+
+
+def _has_any(text: str, words: list[str]) -> bool:
+    return any(w in text for w in words)
+
+
+def build_scene_plan(inp: GenerationInput) -> ScenePlan:
+    text = _text_blob(inp)
+
+    scene_family = "city_scene"
+    template_name = "city_loop"
+    environment = "urban_city"
+    subject_type = "environment"
+    focal_subject = "city"
+    camera_mode = "drone_push"
+    lighting_mode = "cinematic_night"
+    animation_mode = "ambient"
+    mood = "cinematic"
+    style_tags: list[str] = []
+    asset_requirements: list[AssetRequirement] = []
+    animation_instructions: list[AnimationInstruction] = []
+    debug_notes: list[str] = []
+
+    if _has_any(text, ["watch", "perfume", "bottle", "product", "jewelry", "ring"]):
+        scene_family = "product_stage"
+        template_name = "product_scene"
+        environment = "studio"
+        subject_type = "product"
+        focal_subject = "product"
+        camera_mode = "orbit_macro"
+        lighting_mode = "luxury_studio"
+        animation_mode = "product_turntable"
+        mood = "luxury"
+        style_tags += ["product", "commercial", "clean"]
+        asset_requirements += [
+            AssetRequirement("product", True, 1, ["hero", "premium"]),
+            AssetRequirement("hdri", True, 1, ["studio", "clean"]),
+            AssetRequirement("texture", True, 1, ["studio", "matte", "luxury"]),
+        ]
+        animation_instructions += [
+            AnimationInstruction("product", "rotate", "turntable", "low", "continuous", "Slow luxury rotation"),
+        ]
+        debug_notes.append("Matched product-stage family")
+
+    elif _has_any(text, ["cat", "cats", "dog", "bear", "yeti", "character", "dancing", "dance", "talking", "singing", "human", "person"]):
+        scene_family = "street_scene"
+        template_name = "street_scene"
+        environment = "urban_street"
+        subject_type = "character_group"
+        focal_subject = "characters"
+        camera_mode = "music_video_wide"
+        lighting_mode = "street_night"
+        animation_mode = "character_performance"
+        mood = "energetic"
+        style_tags += ["performance", "character", "street"]
+        asset_requirements += [
+            AssetRequirement("character", True, 3 if _has_any(text, ["three", "3"]) else 1, ["hero", "performer"]),
+            AssetRequirement("prop", False, 2, ["street"]),
+            AssetRequirement("building", True, 1, ["urban", "street"]),
+            AssetRequirement("texture", True, 1, ["road", "street"]),
+            AssetRequirement("hdri", True, 1, ["city", "night"]),
+        ]
+        if _has_any(text, ["dance", "dancing"]):
+            animation_instructions += [
+                AnimationInstruction("characters", "dance", "loop", "high", "continuous", "Stagger offsets between performers"),
+            ]
+        if _has_any(text, ["talk", "talking", "speak", "speaking"]):
+            animation_instructions += [
+                AnimationInstruction("characters", "talk", "lip_sync_placeholder", "medium", "beat_based", "Use placeholder talk gestures until facial system is ready"),
+            ]
+        debug_notes.append("Matched street-scene family")
+
+    elif _has_any(text, ["fish", "ocean", "underwater", "swimming", "sea", "whale", "shark"]):
+        scene_family = "ocean_scene"
+        template_name = "ocean_scene"
+        environment = "underwater"
+        subject_type = "creatures"
+        focal_subject = "fish_school"
+        camera_mode = "underwater_drift"
+        lighting_mode = "ocean_caustic"
+        animation_mode = "swim_school"
+        mood = "dreamy"
+        style_tags += ["ocean", "fluid", "underwater"]
+        asset_requirements += [
+            AssetRequirement("character", True, 5, ["fish", "creature"]),
+            AssetRequirement("prop", False, 4, ["coral", "reef"]),
+            AssetRequirement("texture", True, 1, ["ocean", "sand"]),
+            AssetRequirement("hdri", False, 1, ["blue", "ambient"]),
+        ]
+        animation_instructions += [
+            AnimationInstruction("fish_school", "swim", "spline_follow", "medium", "continuous", "Fish should move in offset schooling arcs"),
+        ]
+        debug_notes.append("Matched ocean-scene family")
+
+    elif _has_any(text, ["car", "supercar", "mclaren", "lamborghini", "porsche", "automotive"]):
+        scene_family = "car_hero"
+        template_name = "car_hero"
+        environment = "city_road"
+        subject_type = "vehicle"
+        focal_subject = "car"
+        camera_mode = "tracking_low"
+        lighting_mode = "automotive_night"
+        animation_mode = "vehicle_hero_motion"
+        mood = "premium"
+        style_tags += ["automotive", "hero", "cinematic"]
+        asset_requirements += [
+            AssetRequirement("car", True, 1, ["vehicle", "hero"]),
+            AssetRequirement("building", False, 1, ["city"]),
+            AssetRequirement("texture", True, 1, ["road", "wet"]),
+            AssetRequirement("hdri", True, 1, ["city", "night"]),
+        ]
+        animation_instructions += [
+            AnimationInstruction("car", "glide", "tracking_motion", "medium", "continuous", "Subtle hero movement rather than racing"),
+        ]
+        debug_notes.append("Matched car-hero family")
+
+    else:
+        style_tags += ["city", "cinematic"]
+        asset_requirements += [
+            AssetRequirement("building", True, 1, ["city", "urban"]),
+            AssetRequirement("texture", True, 1, ["road", "wet"]),
+            AssetRequirement("hdri", True, 1, ["city", "night"]),
+            AssetRequirement("car", False, 1, ["vehicle"]),
+        ]
+        animation_instructions += [
+            AnimationInstruction("environment", "ambient_motion", "camera_only", "low", "continuous", "Drone push through city district"),
+        ]
+        debug_notes.append("Matched default city-scene family")
+
+    if _has_any(text, ["cyberpunk", "neon"]):
+        style_tags += ["cyberpunk", "neon"]
+        lighting_mode = "cyberpunk_night"
+
+    if _has_any(text, ["hyper realistic", "hyper-realistic", "photoreal"]):
+        style_tags += ["hyper_realistic"]
+
+    reference_influence = "present" if inp.references else "none"
+
+    return ScenePlan(
+        scene_family=scene_family,
+        template_name=template_name,
+        environment=environment,
+        subject_type=subject_type,
+        focal_subject=focal_subject,
+        style_tags=sorted(set(style_tags)),
+        camera_mode=camera_mode,
+        lighting_mode=lighting_mode,
+        animation_mode=animation_mode,
+        mood=mood,
+        duration_seconds=inp.duration_seconds,
+        asset_requirements=asset_requirements,
+        animation_instructions=animation_instructions,
+        reference_influence=reference_influence,
+        debug_notes=debug_notes,
+    )
+

@@ -1,0 +1,21 @@
+{
+  "name": "traffic_distant",
+  "kind": "ambient",
+  "version": 1,
+  "description": "Distant pedestrian and vehicle movement streaked through the frame at long exposure — implying life outside the shot. Reserved for city and street recipes.",
+  "inputs_required": [],
+  "outputs_produced": ["ambient_effects[+1]"],
+  "applies": {
+    "effect_name": "traffic_distant",
+    "density": "medium",
+    "lane_count": 2,
+    "direction_split": [0.6, 0.4],
+    "speed_mps": 6.0
+  },
+  "metadata": {
+    "author": "team",
+    "inspiration": "Collateral; Mann's downtown night sequences",
+    "quality_tier": "standard"
+  },
+  "renderer_support": {"blender_eevee": "compatible", "blender_cycles": "compatible", "unreal": "pending"}
+}

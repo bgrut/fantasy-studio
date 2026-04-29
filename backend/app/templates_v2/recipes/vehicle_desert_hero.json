@@ -1,0 +1,58 @@
+{
+  "name": "vehicle_desert_hero",
+  "version": 1,
+  "template": "car_hero",
+  "description": "A car \u2014 supercar, rally, classic \u2014 in a desert at golden hour. Low three-quarter wide, warm raking light, dust kicked up behind the wheels. Top Gear opener archetype.",
+  "applies_when": {
+    "scene_family": [
+      "car_hero"
+    ],
+    "env_subject": [
+      "desert",
+      "canyon"
+    ],
+    "env_subject_tags": [
+      "desert",
+      "sand",
+      "dune"
+    ],
+    "env_biome_hints": [
+      "desert",
+      "arid"
+    ],
+    "hero_category": [
+      "vehicle"
+    ],
+    "keywords_any": [
+      "desert",
+      "dune",
+      "race",
+      "drive",
+      "chase",
+      "rally"
+    ],
+    "has_forced_env": true
+  },
+  "layers": {
+    "base": "preview_tier",
+    "environment": "desert_dune",
+    "composition": "low_wide_dramatic",
+    "lighting": "golden_hour_warm",
+    "animation": "hero_idle_subtle",
+    "ambient": "dust_motes",
+    "post": "cinematic_graded"
+  },
+  "overrides": {
+    "animation": {
+      "style": "vehicle_drive",
+      "speed": 1.0
+    }
+  },
+  "metadata": {
+    "author": "team",
+    "tested_with_heroes": [
+      "lib_car_ferrari_ferrari_f1_formula_car_high_quality_f1"
+    ],
+    "quality_tier": "cinematic"
+  }
+}

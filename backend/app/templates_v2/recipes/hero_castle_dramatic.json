@@ -1,0 +1,54 @@
+{
+  "name": "hero_castle_dramatic",
+  "version": 1,
+  "template": "scenic_landscape",
+  "description": "Character in front of a castle wall or courtyard. Low dramatic angle, cool moody palette, atmospheric fog. The Ridley Scott / Last Duel archetype.",
+  "applies_when": {
+    "env_subject": [
+      "castle"
+    ],
+    "env_subject_tags": [
+      "castle",
+      "medieval",
+      "fortress",
+      "keep"
+    ],
+    "env_biome_hints": [
+      "castle",
+      "medieval",
+      "fantasy"
+    ],
+    "hero_category": [
+      "character",
+      "animal",
+      "creature"
+    ],
+    "keywords_any": [
+      "castle",
+      "fortress",
+      "keep",
+      "citadel",
+      "medieval"
+    ],
+    "has_forced_env": true
+  },
+  "layers": {
+    "base": "preview_tier",
+    "environment": "castle_courtyard",
+    "composition": "low_wide_dramatic",
+    "lighting": "cinematic_moody",
+    "animation": "hero_idle_subtle",
+    "ambient": "fog_atmospheric",
+    "post": "cinematic_graded"
+  },
+  "overrides": {
+    "ambient": {
+      "density": 0.025,
+      "color_warmth": 0.35
+    }
+  },
+  "metadata": {
+    "author": "team",
+    "quality_tier": "hero"
+  }
+}

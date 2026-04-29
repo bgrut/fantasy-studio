@@ -1,8 +1,8 @@
 # ───────────────────────────────────────────────────────────────────
-# Fantasy Studio — public docs repo .gitignore
-# Sibling repos (blender-studio-backend, blender-studio) ship their
-# own .gitignore. This one mirrors common patterns so contributors
-# who clone all three side-by-side don't accidentally stage junk.
+# Fantasy Studio monorepo .gitignore
+# Covers root docs + backend/ (Python) + frontend/ (Node) + Blender
+# render artifacts. Per-subdir .gitignore files in backend/ and
+# frontend/ still apply; this is the defense-in-depth root.
 # ───────────────────────────────────────────────────────────────────
 
 # ── Python ────────────────────────────────────────────────────────
@@ -61,15 +61,59 @@ desktop.ini
 *.lnk
 
 # ── Project-specific (Fantasy Studio) ─────────────────────────────
-# Render outputs and large per-render artifacts
-outputs/
+# Render outputs and large per-render artifacts (per-subdir paths
+# explicit so a contributor's quick `git status` doesn't trip on a
+# 100GB outputs/ tree)
+backend/outputs/
 **/blender_render_*/
 *.mp4
 
-# Asset cache (heavy, regenerable)
-assets/cache/
-assets/_ingest_staging/
-assets/thumbnails/*.tmp
+# Asset cache (heavy, regenerable / re-fetchable)
+backend/assets/cache/
+backend/assets/_ingest_staging/
+backend/assets/incoming/
+backend/assets/inbox/
+backend/assets/raw/
+backend/assets/thumbnails/*.tmp
+backend/graphify-out/
+backend/graphify-out/cache/
+
+# Blenderkit add-on bundle (huge; bundled per-asset, regenerable)
+backend/assets/blenderkit-v3.18.1.251219/
+backend/assets/blenderkit-v*.zip
+
+# Top-level PolyHaven download zips (regenerable; the .blend itself
+# is what runtime needs, not the original archive)
+backend/assets/*.blend.zip
+
+# Top-level EXR staging files (not in the hdri/ search paths used
+# by render_from_manifest.py, so safe to exclude — keep curated
+# HDRIs in backend/assets/hdri/ committed)
+backend/assets/*.exr
+!backend/assets/hdri/
+!backend/assets/hdri/**
+
+# Large bundled .blend asset directories
+backend/assets/concrete_layers_02_4k.blend/
+backend/assets/corrugated_iron_03_4k.blend/
+
+# Per-asset HDRIs are large; comment if you decide to commit a
+# curated subset. Today: regenerable from polyhaven, so excluded.
+backend/assets/hdris/
+# Note: backend/assets/hdri/ (the spelling used at runtime in
+# render_from_manifest.py) is the active path — keep that COMMITTED
+# unless it gets too big. Comment out the next line to unignore.
+# backend/assets/hdri/
+
+# Render manifests (regenerated every render)
+backend/outputs/manifests/
+
+# Frontend build outputs
+frontend/dist/
+frontend/.vite/
+
+# Top-level outputs/ if a user runs the backend from repo root
+outputs/
 
 # Backup files (project convention: *.bak_<tag>)
 *.bak

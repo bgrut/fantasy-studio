@@ -1,0 +1,61 @@
+{
+  "name": "animal_forest_intimate",
+  "version": 1,
+  "template": "scenic_landscape",
+  "description": "Animal in a forest clearing \u2014 deer, wolf, bear, fox. Three-quarter portrait at eye level, dappled daylight, leaves drifting. Nature documentary intimacy.",
+  "applies_when": {
+    "env_subject": [
+      "forest"
+    ],
+    "env_subject_tags": [
+      "forest",
+      "woods",
+      "tree"
+    ],
+    "env_biome_hints": [
+      "forest",
+      "outdoor"
+    ],
+    "hero_category": [
+      "animal",
+      "creature"
+    ],
+    "keywords_any": [
+      "forest",
+      "woods",
+      "grove",
+      "wild",
+      "deer",
+      "wolf",
+      "bear",
+      "fox",
+      "rabbit",
+      "boar"
+    ],
+    "has_forced_env": true
+  },
+  "layers": {
+    "base": "preview_tier",
+    "environment": "forest_intimate",
+    "composition": "intimate_three_quarter",
+    "lighting": "high_key_bright",
+    "animation": "hero_walk_forward",
+    "ambient": "leaves_drift",
+    "post": "cinematic_graded"
+  },
+  "overrides": {
+    "animation": {
+      "speed": 0.6,
+      "intensity": "gentle"
+    }
+  },
+  "metadata": {
+    "author": "team",
+    "tested_with_heroes": [
+      "lib_deer_*",
+      "lib_wolf_*",
+      "lib_fox_*"
+    ],
+    "quality_tier": "hero"
+  }
+}

@@ -1,0 +1,54 @@
+{
+  "name": "hero_desert_epic",
+  "version": 1,
+  "template": "scenic_landscape",
+  "description": "Lone figure on a dune ridge, camera pulling back to reveal the desert's scale. The Lawrence of Arabia archetype.",
+  "applies_when": {
+    "env_subject": [
+      "desert"
+    ],
+    "env_subject_tags": [
+      "desert",
+      "sand",
+      "dune",
+      "arid"
+    ],
+    "env_biome_hints": [
+      "desert",
+      "arid"
+    ],
+    "hero_category": [
+      "character",
+      "animal",
+      "creature"
+    ],
+    "keywords_any": [
+      "desert",
+      "sahara",
+      "dune",
+      "epic",
+      "vast",
+      "lone"
+    ],
+    "has_forced_env": true
+  },
+  "layers": {
+    "base": "preview_tier",
+    "environment": "desert_dune",
+    "composition": "epic_pullback",
+    "lighting": "golden_hour_warm",
+    "animation": "hero_idle_subtle",
+    "ambient": "fog_atmospheric",
+    "post": "cinematic_graded"
+  },
+  "overrides": {
+    "ambient": {
+      "density": 0.014,
+      "distance_end_m": 600.0
+    }
+  },
+  "metadata": {
+    "author": "team",
+    "quality_tier": "cinematic"
+  }
+}

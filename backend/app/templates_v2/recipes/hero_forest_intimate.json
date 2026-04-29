@@ -1,0 +1,55 @@
+{
+  "name": "hero_forest_intimate",
+  "version": 1,
+  "template": "scenic_landscape",
+  "description": "Character in a forest clearing, shot at eye level with soft dappled light, leaves drifting through frame. Evokes Miyazaki forest encounters and The Witch interiors.",
+  "applies_when": {
+    "env_subject": [
+      "forest"
+    ],
+    "env_subject_tags": [
+      "forest",
+      "woods",
+      "tree"
+    ],
+    "env_biome_hints": [
+      "forest",
+      "outdoor"
+    ],
+    "hero_category": [
+      "character",
+      "creature"
+    ],
+    "keywords_any": [
+      "forest",
+      "woods",
+      "grove",
+      "jungle",
+      "clearing"
+    ],
+    "has_forced_env": true
+  },
+  "layers": {
+    "base": "preview_tier",
+    "environment": "forest_intimate",
+    "composition": "intimate_three_quarter",
+    "lighting": "high_key_bright",
+    "animation": "hero_idle_subtle",
+    "ambient": "leaves_drift",
+    "post": "cinematic_graded"
+  },
+  "overrides": {
+    "lighting": {
+      "hdri_keywords": [
+        "forest",
+        "dappled",
+        "canopy",
+        "morning"
+      ]
+    }
+  },
+  "metadata": {
+    "author": "team",
+    "quality_tier": "hero"
+  }
+}

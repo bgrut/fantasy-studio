@@ -1,0 +1,55 @@
+{
+  "name": "vehicle_mountain_road",
+  "version": 1,
+  "template": "car_hero",
+  "description": "Vehicle on an alpine pass. Epic pullback revealing the valley below; cool daylight; atmospheric haze receding to the ridge. Grand Tour / Top Gear location shot.",
+  "applies_when": {
+    "scene_family": [
+      "car_hero",
+      "scenic_landscape"
+    ],
+    "env_subject": [
+      "mountain",
+      "mountains"
+    ],
+    "env_subject_tags": [
+      "mountain",
+      "alpine",
+      "road"
+    ],
+    "env_biome_hints": [
+      "mountain",
+      "outdoor"
+    ],
+    "hero_category": [
+      "vehicle"
+    ],
+    "keywords_any": [
+      "mountain",
+      "alpine",
+      "pass",
+      "road",
+      "highway"
+    ],
+    "has_forced_env": true
+  },
+  "layers": {
+    "base": "preview_tier",
+    "environment": "mountain_vista",
+    "composition": "epic_pullback",
+    "lighting": "alpine_cool_daylight",
+    "animation": "hero_idle_subtle",
+    "ambient": "fog_atmospheric",
+    "post": "cinematic_graded"
+  },
+  "overrides": {
+    "animation": {
+      "style": "vehicle_drive",
+      "speed": 0.8
+    }
+  },
+  "metadata": {
+    "author": "team",
+    "quality_tier": "cinematic"
+  }
+}

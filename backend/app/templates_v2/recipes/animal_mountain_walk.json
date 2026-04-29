@@ -1,0 +1,56 @@
+{
+  "name": "animal_mountain_walk",
+  "version": 1,
+  "template": "scenic_landscape",
+  "description": "Animal hero walking across a mountain vista. The regression fix for the 'horse galloping through mountains' test case \u2014 now properly scaled, oriented, and framed.",
+  "applies_when": {
+    "env_subject": [
+      "mountain",
+      "mountains"
+    ],
+    "env_subject_tags": [
+      "mountain",
+      "alpine"
+    ],
+    "env_biome_hints": [
+      "mountain",
+      "outdoor"
+    ],
+    "hero_category": [
+      "animal",
+      "creature"
+    ],
+    "keywords_any": [
+      "walk",
+      "walking",
+      "gallop",
+      "galloping",
+      "run",
+      "running",
+      "mountain"
+    ],
+    "has_forced_env": true
+  },
+  "layers": {
+    "base": "preview_tier",
+    "environment": "mountain_vista",
+    "composition": "establishing_wide",
+    "lighting": "alpine_cool_daylight",
+    "animation": "hero_walk_forward",
+    "ambient": "fog_atmospheric",
+    "post": "cinematic_graded"
+  },
+  "overrides": {},
+  "metadata": {
+    "author": "team",
+    "tested_with_heroes": [
+      "lib_horse_*",
+      "lib_deer_*",
+      "lib_wolf_*"
+    ],
+    "tested_with_envs": [
+      "lib_mountain_italy_mountain_castle_landscape"
+    ],
+    "quality_tier": "cinematic"
+  }
+}

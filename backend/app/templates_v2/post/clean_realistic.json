@@ -1,0 +1,22 @@
+{
+  "name": "clean_realistic",
+  "kind": "post",
+  "version": 1,
+  "description": "Neutral post pass. No colour grade, mild bloom on true highlights, no vignette, no grain. Used when the prompt requests photographic realism or when the brand wants unstylised delivery.",
+  "inputs_required": [],
+  "outputs_produced": ["post_preset"],
+  "applies": {
+    "preset_name": "clean_realistic",
+    "grade": "neutral",
+    "bloom_intensity": 0.1,
+    "vignette": 0.0,
+    "grain": 0.0,
+    "contrast": "medium"
+  },
+  "metadata": {
+    "author": "team",
+    "inspiration": "Architectural visualisation reference films; Apple product demos",
+    "quality_tier": "standard"
+  },
+  "renderer_support": {"blender_eevee": "native", "blender_cycles": "native", "unreal": "pending"}
+}

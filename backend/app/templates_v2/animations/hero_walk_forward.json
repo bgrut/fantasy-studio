@@ -1,0 +1,21 @@
+{
+  "name": "hero_walk_forward",
+  "kind": "animation",
+  "version": 1,
+  "description": "Hero walks forward along -Y at natural pace. Wires to the existing directorial_motion `character_walk` profile — works for rigged armatures (baked NLA when available) and unrigged meshes (procedural walk cycle fallback).",
+  "inputs_required": ["hero_root"],
+  "outputs_produced": ["animation_style"],
+  "applies": {
+    "style": "character_walk",
+    "speed": 1.0,
+    "intensity": "natural",
+    "duration_frames": 240,
+    "stagger_frames": 0
+  },
+  "metadata": {
+    "author": "team",
+    "quality_tier": "standard",
+    "wraps": "app.scene.directorial_motion._character_walk"
+  },
+  "renderer_support": {"blender_eevee": "native", "blender_cycles": "native", "unreal": "pending"}
+}

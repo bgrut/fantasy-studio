@@ -1,0 +1,25 @@
+{
+  "name": "hero_idle_subtle",
+  "kind": "animation",
+  "version": 1,
+  "description": "Gentle breathing / sway for an idle hero. Wires to the existing directorial_motion `idle_breathe` profile — works for both rigged armatures and unrigged mesh heroes (like the meme cat).",
+  "inputs_required": ["hero_root"],
+  "outputs_produced": ["animation_style"],
+  "applies": {
+    "style": "idle_breathe",
+    "speed": 0.5,
+    "intensity": "subtle",
+    "duration_frames": 96,
+    "stagger_frames": 0
+  },
+  "metadata": {
+    "author": "team",
+    "quality_tier": "standard",
+    "wraps": "app.scene.directorial_motion._idle_breathe"
+  },
+  "renderer_support": {
+    "blender_eevee": "native",
+    "blender_cycles": "native",
+    "unreal": "pending"
+  }
+}

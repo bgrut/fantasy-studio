@@ -1,0 +1,59 @@
+{
+  "name": "hero_city_day",
+  "version": 1,
+  "template": "street_scene",
+  "description": "Character on a daytime city rooftop or street. Clean, warm, high-key; intimate three-quarter; no night bias. The Marvel / Mission Impossible daylight establishing shot.",
+  "applies_when": {
+    "env_subject": [
+      "city",
+      "cityscape",
+      "rooftop"
+    ],
+    "env_subject_tags": [
+      "city",
+      "urban",
+      "rooftop"
+    ],
+    "env_biome_hints": [
+      "city",
+      "urban",
+      "outdoor"
+    ],
+    "hero_category": [
+      "character",
+      "animal",
+      "creature"
+    ],
+    "keywords_any": [
+      "city",
+      "urban",
+      "rooftop",
+      "skyline",
+      "day",
+      "daylight"
+    ],
+    "has_forced_env": true
+  },
+  "layers": {
+    "base": "preview_tier",
+    "environment": "city_street",
+    "composition": "intimate_three_quarter",
+    "lighting": "golden_hour_warm",
+    "animation": "hero_idle_subtle",
+    "post": "clean_realistic"
+  },
+  "overrides": {
+    "lighting": {
+      "time_of_day_hint": "midday",
+      "hdri_keywords": [
+        "city",
+        "sunny",
+        "clear"
+      ]
+    }
+  },
+  "metadata": {
+    "author": "team",
+    "quality_tier": "standard"
+  }
+}

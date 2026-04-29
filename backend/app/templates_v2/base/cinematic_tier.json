@@ -1,0 +1,15 @@
+{
+  "name": "cinematic_tier",
+  "kind": "base",
+  "version": 1,
+  "description": "Final-pixel cinematic pass. 1024 samples, 1440p, 360 frames (~15s at 24fps). Used for portfolio pieces and brand-delivery renders. Slow to render; only chosen when the user commits.",
+  "inputs_required": [],
+  "outputs_produced": ["render_tier_hint"],
+  "applies": {
+    "render_tier": "cinematic",
+    "duration_frames": 360,
+    "resolution_hint": "1440p"
+  },
+  "metadata": {"author": "team", "quality_tier": "hero"},
+  "renderer_support": {"blender_eevee": "compatible", "blender_cycles": "native", "unreal": "pending"}
+}

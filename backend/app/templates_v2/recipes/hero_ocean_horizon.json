@@ -1,0 +1,69 @@
+{
+  "name": "hero_ocean_horizon",
+  "version": 1,
+  "template": "ocean_scene",
+  "description": "Lone hero against an ocean horizon. Wide epic pullback, warm magic-hour light, birds in the distance and soft haze across the water. The Moonlight / Life of Pi archetype.",
+  "applies_when": {
+    "scene_family": [
+      "ocean_scene",
+      "scenic_landscape"
+    ],
+    "env_subject": [
+      "ocean",
+      "sea",
+      "coast",
+      "beach"
+    ],
+    "env_subject_tags": [
+      "ocean",
+      "water",
+      "coast"
+    ],
+    "env_biome_hints": [
+      "ocean",
+      "coast",
+      "outdoor"
+    ],
+    "hero_category": [
+      "character",
+      "animal",
+      "creature"
+    ],
+    "keywords_any": [
+      "ocean",
+      "sea",
+      "beach",
+      "coast",
+      "horizon",
+      "shore"
+    ],
+    "has_forced_env": true
+  },
+  "layers": {
+    "base": "preview_tier",
+    "environment": "mountain_vista",
+    "composition": "epic_pullback",
+    "lighting": "golden_hour_warm",
+    "animation": "hero_idle_subtle",
+    "ambient": [
+      "fog_atmospheric",
+      "birds_distant"
+    ],
+    "post": "cinematic_graded"
+  },
+  "overrides": {
+    "environment": {
+      "ground_material": "wet_sand",
+      "horizon_treatment": "ocean_horizon_line"
+    },
+    "ambient": {
+      "density": 0.015,
+      "color_warmth": 0.6
+    }
+  },
+  "metadata": {
+    "author": "team",
+    "quality_tier": "hero",
+    "notes": "Reuses mountain_vista env temporarily \u2014 a dedicated ocean_horizon env is a V1.3.1 follow-up."
+  }
+}

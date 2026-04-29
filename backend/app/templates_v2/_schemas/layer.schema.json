@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "fantasylab/v1.3/layer.schema.json",
+  "title": "Template V2 Layer",
+  "description": "A composable scene-intelligence unit. One layer = one directorial decision (how the env looks, how the camera is placed, how the hero moves, etc.). Layers are pure data; the executor translates them into scene_plan fields that the existing V1.1 preset system consumes.",
+  "type": "object",
+  "required": ["name", "kind", "version", "description", "applies"],
+  "additionalProperties": false,
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Unique layer id within its kind. Must match the filename stem.",
+      "pattern": "^[a-z][a-z0-9_]*$"
+    },
+    "kind": {
+      "type": "string",
+      "description": "Which slot this layer fills in a recipe.",
+      "enum": ["base", "environment", "composition", "lighting", "animation", "ambient", "post"]
+    },
+    "version": {
+      "type": "integer",
+      "description": "Schema version of THIS layer file. Bumped on breaking changes.",
+      "minimum": 1
+    },
+    "description": {
+      "type": "string",
+      "description": "Human-readable explanation of what this layer expresses cinematically.",
+      "minLength": 10
+    },
+    "inputs_required": {
+      "type": "array",
+      "description": "Context keys this layer needs to run. Executor fails loudly if missing.",
+      "items": {"type": "string"},
+      "default": []
+    },
+    "outputs_produced": {
+      "type": "array",
+      "description": "Context keys this layer guarantees to set when it succeeds.",
+      "items": {"type": "string"},
+      "default": []
+    },
+    "applies": {
+      "type": "object",
+      "description": "Kind-specific payload. See per-kind sub-schemas. The executor dispatches on `kind`.",
+      "additionalProperties": true
+    },
+    "metadata": {
+      "type": "object",
+      "description": "Non-semantic author notes (quality, provenance, references, etc.).",
+      "additionalProperties": true,
+      "properties": {
+        "author": {"type": "string"},
+        "inspiration": {"type": "string"},
+        "quality_tier": {"type": "string", "enum": ["draft", "standard", "hero"]}
+      }
+    },
+    "renderer_support": {
+      "type": "object",
+      "description": "Which renderer backends have an implementation for this layer.",
+      "additionalProperties": true,
+      "properties": {
+        "blender_eevee":  {"type": "string", "enum": ["native", "compatible", "pending", "unsupported"]},
+        "blender_cycles": {"type": "string", "enum": ["native", "compatible", "pending", "unsupported"]},
+        "unreal":         {"type": "string", "enum": ["native", "compatible", "pending", "unsupported"]}
+      }
+    }
+  }
+}

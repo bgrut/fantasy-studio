@@ -1,0 +1,25 @@
+{
+  "name": "low_wide_dramatic",
+  "kind": "composition",
+  "version": 1,
+  "description": "Hero-elevating low-angle wide shot. Camera sits at ~0.4m off the ground looking slightly up, 28-35mm wide lens so the hero towers against the sky/backdrop. The shot film directors reach for when a subject needs to feel mythic.",
+  "inputs_required": ["hero_root"],
+  "outputs_produced": ["camera_preset"],
+  "applies": {
+    "preset_name": "low_orbit",
+    "shot_type": "low_hero",
+    "lens_mm": 28,
+    "distance_multiplier": 4.5,
+    "angle_pitch_deg": 8,
+    "angle_yaw_deg": -12,
+    "height_above_hero_m": -0.3,
+    "target_offset": [0.0, 0.0, 0.6],
+    "subject_screen_position": "center_low"
+  },
+  "metadata": {
+    "author": "team",
+    "inspiration": "There Will Be Blood opener; Nolan vehicle reveals",
+    "quality_tier": "hero"
+  },
+  "renderer_support": {"blender_eevee": "native", "blender_cycles": "native", "unreal": "pending"}
+}

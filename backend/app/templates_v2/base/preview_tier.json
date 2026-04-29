@@ -1,0 +1,22 @@
+{
+  "name": "preview_tier",
+  "kind": "base",
+  "version": 1,
+  "description": "Fast Eevee preview pass. 128 samples, 720p hint, 96-frame default. Used when the user hits the green Preview button; never for final delivery.",
+  "inputs_required": [],
+  "outputs_produced": ["render_tier_hint"],
+  "applies": {
+    "render_tier": "preview",
+    "duration_frames": 96,
+    "resolution_hint": "720p"
+  },
+  "metadata": {
+    "author": "team",
+    "quality_tier": "draft"
+  },
+  "renderer_support": {
+    "blender_eevee": "native",
+    "blender_cycles": "compatible",
+    "unreal": "pending"
+  }
+}

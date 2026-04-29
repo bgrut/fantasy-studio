@@ -1,0 +1,60 @@
+{
+  "name": "hero_city_street_night",
+  "version": 1,
+  "template": "street_scene",
+  "description": "Character hero on a night city street. Wet asphalt, neon bloom, traffic streaking in the background, slow push toward the subject. Blade Runner archetype applied to any character asset.",
+  "applies_when": {
+    "scene_family": [
+      "street_scene",
+      "city_scene"
+    ],
+    "env_subject": [
+      "city",
+      "cityscape",
+      "street",
+      "rooftop"
+    ],
+    "env_subject_tags": [
+      "city",
+      "urban",
+      "street",
+      "rooftop"
+    ],
+    "env_biome_hints": [
+      "city_night",
+      "city",
+      "urban"
+    ],
+    "hero_category": [
+      "character",
+      "creature"
+    ],
+    "keywords_any": [
+      "night",
+      "city",
+      "street",
+      "neon",
+      "noir",
+      "downtown"
+    ],
+    "has_forced_env": true
+  },
+  "layers": {
+    "base": "preview_tier",
+    "environment": "city_street",
+    "composition": "push_in_hero",
+    "lighting": "cinematic_moody",
+    "animation": "hero_idle_subtle",
+    "ambient": "traffic_distant",
+    "post": "cinematic_graded"
+  },
+  "overrides": {
+    "lighting": {
+      "key_energy_multiplier": 0.85
+    }
+  },
+  "metadata": {
+    "author": "team",
+    "quality_tier": "cinematic"
+  }
+}

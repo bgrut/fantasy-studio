@@ -1,0 +1,23 @@
+{
+  "name": "mountain_vista",
+  "kind": "environment",
+  "version": 1,
+  "description": "3D mountain terrain placed as distant backdrop. Hero sits on the raycast-surface contact point at the scene origin. Camera gets a wide framing hint so the ridge line is readable behind the subject.",
+  "inputs_required": ["forced_environment_entry"],
+  "outputs_produced": ["environment_preset"],
+  "applies": {
+    "preset_name": "terrain_blend",
+    "ground_material": "rocky_grass",
+    "horizon_treatment": "atmospheric_falloff"
+  },
+  "metadata": {
+    "author": "team",
+    "inspiration": "Revenant wide shots; Lord of the Rings establishing plates",
+    "quality_tier": "hero"
+  },
+  "renderer_support": {
+    "blender_eevee": "native",
+    "blender_cycles": "native",
+    "unreal": "pending"
+  }
+}

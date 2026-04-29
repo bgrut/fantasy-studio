@@ -1,0 +1,119 @@
+from __future__ import annotations
+
+from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parents[2]
+
+
+def _resolve_asset_path(asset: dict) -> Path:
+    path = asset.get("path")
+    if not path:
+        raise ValueError("Asset is missing path")
+    p = Path(path)
+    if not p.is_absolute():
+        p = ROOT / p
+    return p.resolve()
+
+
+def _append_collection(bpy, blend_path: Path, collection_name: str) -> bool:
+    directory = str(blend_path) + "\\Collection\\"
+    filepath = directory + collection_name
+    try:
+        bpy.ops.wm.append(
+            filepath=filepath,
+            filename=collection_name,
+            directory=directory,
+        )
+        return True
+    except Exception as e:
+        print(f"DEBUG append collection failed: {blend_path} :: {collection_name} :: {e}", flush=True)
+        return False
+
+
+def _append_object(bpy, blend_path: Path, object_name: str) -> bool:
+    directory = str(blend_path) + "\\Object\\"
+    filepath = directory + object_name
+    try:
+        bpy.ops.wm.append(
+            filepath=filepath,
+            filename=object_name,
+            directory=directory,
+        )
+        return True
+    except Exception as e:
+        print(f"DEBUG append object failed: {blend_path} :: {object_name} :: {e}", flush=True)
+        return False
+
+
+def _inspect_blend_catalog(bpy, blend_path: Path) -> tuple[list[str], list[str]]:
+    try:
+        with bpy.data.libraries.load(str(blend_path), link=False) as (data_from, data_to):
+            collections = list(data_from.collections)
+            objects = list(data_from.objects)
+        return collections, objects
+    except Exception as e:
+        print(f"DEBUG inspect blend catalog failed: {blend_path} :: {e}", flush=True)
+        return [], []
+
+
+def import_asset(bpy, asset: dict) -> bool:
+    resolved_path = _resolve_asset_path(asset)
+    if not resolved_path.exists():
+        print(f"DEBUG import_asset missing path: {resolved_path}", flush=True)
+        return False
+
+    print(f"DEBUG import_asset resolved_path={resolved_path}", flush=True)
+
+    suffix = resolved_path.suffix.lower()
+
+    if suffix == ".blend":
+        preferred_kind = str(asset.get("blend_kind", "collection")).lower()
+        preferred_name = str(asset.get("blend_name", "")).strip()
+
+        collections, objects = _inspect_blend_catalog(bpy, resolved_path)
+        print(f"DEBUG blend catalog collections={collections} objects_sample={objects[:10]}", flush=True)
+
+        # 1) preferred collection
+        if preferred_kind == "collection" and preferred_name and preferred_name in collections:
+            if _append_collection(bpy, resolved_path, preferred_name):
+                return True
+
+        # 2) first available collection
+        for name in collections:
+            if _append_collection(bpy, resolved_path, name):
+                return True
+
+        # 3) preferred object
+        if preferred_name and preferred_name in objects:
+            if _append_object(bpy, resolved_path, preferred_name):
+                return True
+
+        # 4) first few objects
+        for name in objects[:25]:
+            if _append_object(bpy, resolved_path, name):
+                return True
+
+        print(f"DEBUG import_asset failed for blend: {resolved_path}", flush=True)
+        return False
+
+    try:
+        if suffix in (".glb", ".gltf"):
+            bpy.ops.import_scene.gltf(filepath=str(resolved_path))
+            return True
+        elif suffix == ".fbx":
+            bpy.ops.import_scene.fbx(filepath=str(resolved_path))
+            return True
+        elif suffix == ".obj":
+            try:
+                bpy.ops.wm.obj_import(filepath=str(resolved_path))
+            except Exception:
+                bpy.ops.import_scene.obj(filepath=str(resolved_path))
+            return True
+    except Exception as e:
+        print(f"DEBUG import_asset generic import failed: {resolved_path} :: {e}", flush=True)
+        return False
+
+    print(f"DEBUG unsupported asset format: {resolved_path}", flush=True)
+    return False
+

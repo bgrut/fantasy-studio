@@ -200,29 +200,28 @@ The tier choice is a render-time decision; the same scene file produces all four
 Full guide: **[INSTALL.md](INSTALL.md)**. The 5-step happy path:
 
 ```powershell
-# 1. Clone all three sibling repos
+# 1. Clone the monorepo
 git clone https://github.com/bgrut/fantasy-studio
-git clone https://github.com/bgrut/blender-studio-backend
-git clone https://github.com/bgrut/blender-studio
+cd fantasy-studio
 
 # 2. Install Blender 5.1+, Ollama, Python 3.11+, Node 20+
 #    See INSTALL.md for download links
 
 # 3. Backend
-cd blender-studio-backend
+cd backend
 python -m venv venv && .\venv\Scripts\Activate.ps1
 pip install -r requirements-hybrid-assets.txt
 ollama pull gemma3:12b
 
 # 4. Frontend
-cd ..\blender-studio
+cd ..\frontend
 npm install
 
 # 5. Single-command launch (from fantasy-studio repo root)
-cd ..\fantasy-studio
+cd ..
 .\launch.ps1
-# Opens backend (:8789) + frontend (:5173) in two windows.
-# Open http://localhost:5173 in your browser.
+# Opens backend (:8789) + frontend (:3000) in two windows.
+# Open http://localhost:3000 in your browser.
 ```
 
 ## First render walkthrough

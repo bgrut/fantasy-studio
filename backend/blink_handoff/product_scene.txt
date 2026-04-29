@@ -1,0 +1,29 @@
+from __future__ import annotations
+
+import bpy
+
+from ..scene.animation_ops import apply_animation_instructions
+from ..scene.blender_asset_ops import import_asset
+
+
+def build_product_scene(bpy, manifest, scene):
+    resolved = manifest.get("resolved_assets", {})
+    instructions = manifest.get("animation_instructions", [])
+
+    models = resolved.get("models", {})
+    products = models.get("products", [])
+
+    # Pedestal
+    bpy.ops.mesh.primitive_cylinder_add(location=(0, 0, 0))
+    pedestal = bpy.context.object
+    pedestal.scale = (2, 2, 0.5)
+
+    # Product
+    if products:
+        import_asset(bpy, products[0])
+
+    # Camera
+    bpy.ops.object.camera_add(location=(0, -5, 2), rotation=(1.2, 0, 0))
+    scene.camera = bpy.context.object
+
+    apply_animation_instructions(instructions)

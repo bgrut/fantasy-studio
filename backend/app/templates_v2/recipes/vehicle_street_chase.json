@@ -1,0 +1,57 @@
+{
+  "name": "vehicle_street_chase",
+  "version": 1,
+  "template": "car_hero",
+  "description": "Car on a wet neon-lit street. Tracking camera, city fog, distant traffic streaking past \u2014 the language of Michael Mann and Nicolas Winding Refn.",
+  "applies_when": {
+    "scene_family": [
+      "car_hero",
+      "street_scene"
+    ],
+    "env_subject": [
+      "city",
+      "cityscape",
+      "street"
+    ],
+    "env_subject_tags": [
+      "city",
+      "urban",
+      "street"
+    ],
+    "env_biome_hints": [
+      "city_night",
+      "city",
+      "urban"
+    ],
+    "hero_category": [
+      "vehicle"
+    ],
+    "keywords_any": [
+      "city",
+      "street",
+      "night",
+      "chase",
+      "drive"
+    ],
+    "has_forced_env": true
+  },
+  "layers": {
+    "base": "preview_tier",
+    "environment": "city_street",
+    "composition": "push_in_hero",
+    "lighting": "cinematic_moody",
+    "animation": "hero_idle_subtle",
+    "ambient": "traffic_distant",
+    "post": "cinematic_graded"
+  },
+  "overrides": {
+    "animation": {
+      "style": "vehicle_drive",
+      "speed": 1.2
+    }
+  },
+  "metadata": {
+    "author": "team",
+    "quality_tier": "cinematic"
+  }
+}

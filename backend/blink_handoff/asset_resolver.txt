@@ -1,0 +1,145 @@
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[2]
+REGISTRY_PATH = ROOT / "assets" / "manifests" / "asset_registry.json"
+
+
+def _load_registry() -> dict:
+    if not REGISTRY_PATH.exists():
+        raise FileNotFoundError(f"Asset registry not found: {REGISTRY_PATH}")
+    return json.loads(REGISTRY_PATH.read_text(encoding="utf-8-sig"))
+
+
+def _tag_overlap_score(asset_tags: list[str], wanted_tags: list[str]) -> int:
+    a = {str(x).lower() for x in asset_tags or []}
+    b = {str(x).lower() for x in wanted_tags or []}
+    return len(a.intersection(b))
+
+
+def _context_bonus(asset: dict, manifest: dict) -> int:
+    text = " ".join([
+        str(manifest.get("topic", "")),
+        str(manifest.get("core_objective_prompt", "")),
+        json.dumps(manifest.get("scene_plan", {})),
+    ]).lower()
+
+    tags = {str(x).lower() for x in asset.get("tags", []) or []}
+    bonus = 0
+
+    if "cat" in text and "cat" in tags:
+        bonus += 50
+    if "fish" in text and "fish" in tags:
+        bonus += 50
+    if "watch" in text and "watch" in tags:
+        bonus += 50
+    if "car" in text and ("car" in tags or "vehicle" in tags):
+        bonus += 50
+
+    if "cat" in text and "fish" in tags:
+        bonus -= 40
+    if "fish" in text and "cat" in tags:
+        bonus -= 40
+    if "watch" in text and "fish" in tags:
+        bonus -= 40
+
+    return bonus
+
+
+def _select_best_models(models: list[dict], asset_type: str, wanted_tags: list[str], count: int, manifest: dict) -> list[dict]:
+    candidates = [m for m in models if str(m.get("type", "")).lower() == asset_type.lower()]
+
+    scored = []
+    for item in candidates:
+        score = _tag_overlap_score(item.get("tags", []), wanted_tags)
+        score += _context_bonus(item, manifest)
+        scored.append((score, item))
+
+    scored.sort(key=lambda x: x[0], reverse=True)
+    return [item for _, item in scored[:count]]
+
+
+def _select_best_hdri(hdris: list[dict], wanted_tags: list[str], count: int = 1) -> list[dict]:
+    scored = []
+    for item in hdris:
+        score = _tag_overlap_score(item.get("tags", []), wanted_tags)
+        scored.append((score, item))
+    scored.sort(key=lambda x: x[0], reverse=True)
+    return [item for _, item in scored[:count]]
+
+
+def _select_best_textures(textures: list[dict], wanted_tags: list[str], count: int = 1) -> list[dict]:
+    scored = []
+    for item in textures:
+        score = _tag_overlap_score(item.get("tags", []), wanted_tags)
+        scored.append((score, item))
+    scored.sort(key=lambda x: x[0], reverse=True)
+    return [item for _, item in scored[:count]]
+
+
+def _bucket_model(asset: dict, resolved_models: dict):
+    t = str(asset.get("type", "")).lower()
+
+    if t == "building":
+        resolved_models["buildings"].append(asset)
+    elif t == "character":
+        resolved_models["characters"].append(asset)
+    elif t == "car":
+        resolved_models["cars"].append(asset)
+    elif t == "prop":
+        resolved_models["props"].append(asset)
+    elif t == "product":
+        resolved_models["products"].append(asset)
+    elif t == "sign":
+        resolved_models["signs"].append(asset)
+    else:
+        resolved_models["props"].append(asset)
+
+
+def resolve_scene_assets(manifest: dict) -> dict:
+    registry = _load_registry()
+
+    hdris = registry.get("hdris", []) or []
+    textures = registry.get("textures", []) or []
+    models = registry.get("models", []) or []
+
+    scene_plan = manifest.get("scene_plan", {}) or {}
+    requirements = scene_plan.get("asset_requirements", []) or []
+
+    resolved = {
+        "hdris": [],
+        "textures": [],
+        "models": {
+            "buildings": [],
+            "characters": [],
+            "cars": [],
+            "props": [],
+            "products": [],
+            "signs": [],
+        }
+    }
+
+    for req in requirements:
+        asset_type = str(req.get("asset_type", "")).lower()
+        count = int(req.get("count", 1))
+        wanted_tags = req.get("tags", []) or []
+
+        if asset_type == "hdri":
+            resolved["hdris"].extend(_select_best_hdri(hdris, wanted_tags, count))
+        elif asset_type == "texture":
+            resolved["textures"].extend(_select_best_textures(textures, wanted_tags, count))
+        else:
+            selected = _select_best_models(models, asset_type, wanted_tags, count, manifest)
+            for item in selected:
+                _bucket_model(item, resolved["models"])
+
+    if not resolved["hdris"] and hdris:
+        resolved["hdris"].append(hdris[0])
+
+    if not resolved["textures"] and textures:
+        resolved["textures"].append(textures[0])
+
+    return resolved
+

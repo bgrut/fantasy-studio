@@ -1,0 +1,21 @@
+{
+  "name": "dust_motes",
+  "kind": "ambient",
+  "version": 1,
+  "description": "Slow-drifting dust particles catching rim light in foreground and mid-ground. Adds texture and a sense of scale to otherwise clean air. Keep density low — invisible until a light beam crosses them.",
+  "inputs_required": [],
+  "outputs_produced": ["ambient_effects[+1]"],
+  "applies": {
+    "effect_name": "dust_motes",
+    "density": 0.012,
+    "size_range_mm": [0.4, 2.2],
+    "drift_speed_mps": 0.08,
+    "volume_radius_m": 6.0
+  },
+  "metadata": {
+    "author": "team",
+    "inspiration": "Saving Private Ryan interior beams; Blade Runner god-rays",
+    "quality_tier": "standard"
+  },
+  "renderer_support": {"blender_eevee": "native", "blender_cycles": "native", "unreal": "pending"}
+}

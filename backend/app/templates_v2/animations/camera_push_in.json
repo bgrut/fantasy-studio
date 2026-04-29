@@ -1,0 +1,22 @@
+{
+  "name": "camera_push_in",
+  "kind": "animation",
+  "version": 1,
+  "description": "Dolly push from medium to close over the full shot. Decoupled from the composition layer's `push_in_hero` preset so it can be paired with OTHER compositions too (e.g. start at establishing-wide and push to three-quarter). Phase 5 ships the motion profile; V1.1 has a hardwired tracking cam that partially covers this — until Phase 5 lands, the layer sets the style hint and existing code handles the push.",
+  "inputs_required": ["hero_root"],
+  "outputs_produced": ["animation_style"],
+  "applies": {
+    "style": "camera_push_in",
+    "camera_motion": "push_in",
+    "speed": 0.6,
+    "start_distance_multiplier": 5.0,
+    "end_distance_multiplier": 2.0,
+    "duration_frames": 240
+  },
+  "metadata": {
+    "author": "team",
+    "quality_tier": "standard",
+    "wraps": "app.scene.directorial_motion._camera_push_in_cinema"
+  },
+  "renderer_support": {"blender_eevee": "native", "blender_cycles": "native", "unreal": "pending"}
+}

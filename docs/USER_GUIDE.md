@@ -12,7 +12,7 @@ Everything you need to go from "just installed" to "shipping cinematic shots reg
 
 > *Screenshot: prompt entry with cast panel populated — `.github/assets/guide-first-render.png`*
 
-1. Open the app at <http://localhost:5173>
+1. Open the app at <http://localhost:3000>
 2. In the prompt box, type: **`a polar bear in the arctic at sunset`**
 3. The cast panel auto-populates: hero (polar bear), environment (arctic), and a derived recipe (`hero_ocean_horizon` or similar)
 4. Pick **Quick Preview** for your first render — fastest feedback (~30 seconds)

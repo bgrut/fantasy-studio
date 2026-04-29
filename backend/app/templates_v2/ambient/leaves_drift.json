@@ -1,0 +1,21 @@
+{
+  "name": "leaves_drift",
+  "kind": "ambient",
+  "version": 1,
+  "description": "Occasional leaves falling through mid-ground at a gentle diagonal. Sparse — think 3-5 visible at any one time. Used for forest and castle recipes to add organic motion without drawing focus.",
+  "inputs_required": [],
+  "outputs_produced": ["ambient_effects[+1]"],
+  "applies": {
+    "effect_name": "leaves_drift",
+    "count_onscreen_typical": 4,
+    "fall_speed_mps": 0.5,
+    "drift_angle_deg": 22,
+    "leaf_size_cm_range": [4, 9]
+  },
+  "metadata": {
+    "author": "team",
+    "inspiration": "American Beauty plastic bag; Miyazaki forest scenes",
+    "quality_tier": "standard"
+  },
+  "renderer_support": {"blender_eevee": "native", "blender_cycles": "native", "unreal": "pending"}
+}

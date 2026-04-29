@@ -1,0 +1,26 @@
+{
+  "name": "epic_pullback",
+  "kind": "composition",
+  "version": 1,
+  "description": "Hero starts dominant in frame; camera pulls back over the shot to reveal scale of the environment. 50mm lens, start at 3x hero diagonal, end at 15x. Shot type 'pullback' triggers the motion profile in Phase 5.",
+  "inputs_required": ["hero_root", "env_framing_extent"],
+  "outputs_produced": ["camera_preset"],
+  "applies": {
+    "preset_name": "wide_establishing",
+    "shot_type": "pullback",
+    "lens_mm": 50,
+    "distance_multiplier": 3.0,
+    "distance_multiplier_end": 15.0,
+    "angle_pitch_deg": -3,
+    "angle_yaw_deg": 0,
+    "height_above_hero_m": 1.2,
+    "target_offset": [0.0, 0.0, 0.3],
+    "subject_screen_position": "center"
+  },
+  "metadata": {
+    "author": "team",
+    "inspiration": "Empire Strikes Back Hoth opener; Contact closing pullback",
+    "quality_tier": "hero"
+  },
+  "renderer_support": {"blender_eevee": "compatible", "blender_cycles": "compatible", "unreal": "pending"}
+}

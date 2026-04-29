@@ -1,0 +1,26 @@
+{
+  "name": "alpine_cool_daylight",
+  "kind": "lighting",
+  "version": 1,
+  "description": "High-altitude daylight: cool blue-white sun, soft ambient bounce from snow/sky, rim-light on hero so it separates from the mountain value range.",
+  "inputs_required": [],
+  "outputs_produced": ["lighting_preset"],
+  "applies": {
+    "preset_name": "sunset_landscape",
+    "hdri_keywords": ["alpine", "mountain", "clear", "morning"],
+    "time_of_day_hint": "morning",
+    "key_energy_multiplier": 1.2,
+    "rim_light": true,
+    "ambient_intensity": 0.35
+  },
+  "metadata": {
+    "author": "team",
+    "inspiration": "The Revenant mountain exteriors; Planet Earth alpine segments",
+    "quality_tier": "hero"
+  },
+  "renderer_support": {
+    "blender_eevee": "native",
+    "blender_cycles": "native",
+    "unreal": "pending"
+  }
+}

@@ -147,7 +147,7 @@ Tag PRs that affect rendering with a render log delta in the PR body.
 
 ## Pull request process
 
-1. **Fork** the relevant repo (`fantasy-studio`, `blender-studio-backend`, or `blender-studio`)
+1. **Fork** the `fantasy-studio` monorepo
 2. **Branch** off `main`: `git checkout -b feat/your-thing`
 3. **Make the change** with tests where applicable
 4. **Run lint + tests** locally before pushing
