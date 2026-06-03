@@ -27,6 +27,7 @@ import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import {
   renderPreview,
+  submitOrchestrate,
   renderIterate,
   renderVariations,
   type IterationStep,
@@ -62,7 +63,9 @@ import {
   TRANSITION_STD,
 } from '@/lib/motion'
 
-type Tier = RenderTier
+// Phase 8: extend the locally-visible tier set with 'ai_compose' which routes
+// to the orchestrator (POST /api/orchestrate) instead of the legacy preview pipeline.
+type Tier = RenderTier | 'ai_compose'
 
 // v1.4 polish — Phase 7 tier cards. Each tier carries a friendly label, a
 // short descriptor, an estimated time, and a 1-4 dot quality indicator.
@@ -82,6 +85,10 @@ const TIERS: {
   { id: 'fast', label: 'Polished', spp: 'Cycles · 32 spp', time: '~2 min', descriptor: 'Evaluate variations', dots: 2, color: '#7c5cff', hint: 'Cycles 32 samples. ~2 min render. Clean enough to evaluate variations.' },
   { id: 'standard', label: 'High Quality', spp: 'Cycles · 128 spp', time: '~5 min', descriptor: 'Production-ready', dots: 3, color: '#a78bfa', hint: 'Cycles 128 samples. ~5 min render. Sharp, low noise — production-ready.' },
   { id: 'cinematic', label: 'Final Cinematic', spp: 'Cycles · 512 spp', time: '~15 min', descriptor: 'Flagship hero shots', dots: 4, color: '#ff5c8a', badge: 'max quality', hint: 'Cycles 512 samples. ~15 min render. Flagship quality for hero shots.' },
+  // Phase 8: local-LLM orchestrator. Composes the scene from English using
+  // Ollama + the tool registry instead of running a template recipe. Status
+  // visible in the bottom Pipeline panel — same render_jobs table.
+  { id: 'ai_compose', label: 'AI Compose', spp: 'Ollama · Llama 3.1', time: '~2-3 min', descriptor: 'Compose from prompt', dots: 3, color: '#4de1ff', badge: 'experimental', hint: 'Local LLM (Ollama) composes the scene step-by-step using 30+ tools. No templates — pure prompt-driven generation.' },
 ]
 
 // V1.4.2 launch-frame — prompt suggestions now read from the curated,
@@ -360,6 +367,28 @@ export default function SceneStudio() {
       setForcedHeroId(heroId)
       setForcedEnvId(envId)
       lastRenderRef.current = { heroId, envId }
+
+      // Phase 8 — AI Compose tier routes to the local-LLM orchestrator.
+      // Returns immediately with a job_id; progress shows in PipelineStatus.
+      if (tier === 'ai_compose') {
+        try {
+          const res = await submitOrchestrate({
+            prompt: topic.trim(),
+            duration_seconds: duration,
+            fps: 24,
+            render_tier: 'standard',
+          })
+          addToast('success', `Orchestrator submitted (job #${res.job_id}). Watch progress in the Pipeline panel below.`)
+        } catch (e: any) {
+          const msg = e?.message || 'Orchestrate submit failed'
+          setError(msg)
+          addToast('error', `Orchestrator submission failed: ${msg.slice(0, 120)}`)
+        } finally {
+          setBusy('idle')
+        }
+        return
+      }
+
       const { sceneOverride, directorialControls } = buildSceneOverrides()
       try {
         const res = await renderPreview({
@@ -367,7 +396,7 @@ export default function SceneStudio() {
           template_name: template || 'auto',
           start_session: true,
           // v1.3.7 — Scene Controls now flow through main Generate.
-          render_tier: tier,
+          render_tier: tier as RenderTier,
           ...(directorialControls ? { directorial_controls: directorialControls } : {}),
           ...(Object.keys(sceneOverride).length > 0 ? { scene_params_override: sceneOverride } : {}),
           ...(duration ? { duration_seconds: duration } : {}),

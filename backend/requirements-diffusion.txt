@@ -1,0 +1,75 @@
+# Fantasy Studio — Diffusion refinement layer (Phase 16)
+# ========================================================
+# Local SDXL img2img + ControlNet-depth for refining Blender procedural renders
+# into photoreal/stylized outputs. Install AFTER requirements.txt:
+#
+#     # NVIDIA GPU (recommended) — use CUDA 12.4 wheels. Required for RTX 50-series
+# (Blackwell sm_120). For older cards (RTX 30-40), cu121 also works but cu124
+# is safer cross-generation.
+#
+#     pip install torch torchvision --index-url https://download.pytorch.org/whl/cu124
+#     pip install -r requirements-diffusion.txt
+#
+# CPU-only (very slow, ~5 min per frame — not recommended for production):
+#     pip install -r requirements-diffusion.txt
+#
+# After install, download the models:
+#     python scripts/download_diffusion_models.py
+#
+# Total disk usage: ~12 GB
+#   SDXL Base 1.0          ~6.6 GB
+#   ControlNet-Depth SDXL  ~2.5 GB
+#   VAE fp16 fix           ~0.3 GB
+#   misc tokenizers        ~0.1 GB
+#   torch wheels           ~2.5 GB
+#
+# NOTE: xformers intentionally NOT listed. PyTorch 2.2+ has built-in
+# scaled_dot_product_attention which does the same job and supports newer
+# GPUs (Blackwell, etc) that xformers doesn't yet.
+
+# ── PyTorch (install separately from CUDA index — see header) ────
+# Listed here for version-range tracking only. Real install comes from
+# the pytorch.org cu124 index.
+torch>=2.5,<3.0
+torchvision>=0.20,<1.0
+
+# ── HuggingFace stack ───────────────────────────────────────────
+diffusers>=0.27,<1.0
+transformers>=4.40,<5.0
+accelerate>=0.30,<2.0
+safetensors>=0.4,<1.0
+huggingface-hub>=0.23,<1.0
+
+# ── ControlNet-aux (depth/canny preprocessors) ──────────────────
+controlnet-aux>=0.0.7
+opencv-python-headless>=4.9,<5.0
+
+# ── Image I/O (already in core requirements but pinned here) ────
+Pillow>=10.0
+numpy>=1.26,<3.0
+
+# xformers intentionally omitted (see header). PyTorch 2.2+ ships native
+# scaled_dot_product_attention which diffusers uses automatically — same
+# speed, no separate wheel to wrangle, works on Blackwell.
+
+# ── Phase 17: image-to-3D ──────────────────────────────────────
+# Background removal — both TripoSR and InstantMesh want a clean cutout
+rembg>=2.0,<3.0
+# Mesh export / processing
+trimesh>=4.0,<5.0
+# OmegaConf — TripoSR config loading
+omegaconf>=2.3,<3.0
+# einops — used by both mesh engines
+einops>=0.7,<1.0
+
+# TripoSR (single-view image-to-3D, ~3-5s/asset on RTX 5070 Ti)
+# Installed from source — official pip package lags.
+# Install AFTER torch+torchvision:
+#     pip install git+https://github.com/VAST-AI-Research/TripoSR
+
+# InstantMesh (multi-view image-to-3D, ~15-25s/asset, higher quality)
+# Cinematic-tier engine. Install AFTER torch+torchvision:
+#     pip install git+https://github.com/TencentARC/InstantMesh
+
+# ── Phase 17: Blender .blend export ─────────────────────────────
+# (handled inside Blender via bpy — no extra Python package needed)

@@ -21,6 +21,7 @@ from .api.catalog import router as catalog_router
 from .api.curation import router as curation_router
 from .api.pipeline import router as pipeline_router
 from .api.library import router as library_router
+from .api.orchestrate import router as orchestrate_router  # Phase 8: local-LLM orchestrator
 
 app = FastAPI(title="FantasyLab Blender Lane Backend")
 app.include_router(assets_router)
@@ -33,6 +34,7 @@ app.include_router(catalog_router)
 app.include_router(curation_router)
 app.include_router(pipeline_router)
 app.include_router(library_router)
+app.include_router(orchestrate_router)
 
 app.add_middleware(
     CORSMiddleware,

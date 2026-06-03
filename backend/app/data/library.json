@@ -79,7 +79,11 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -0.03313836082816124,
-      "quality_score": 90
+      "quality_score": 90,
+      "use_count": 43,
+      "last_rendered_ts": 1777495266.1482418,
+      "last_used_at": "2026-04-29 15:41:06",
+      "first_rendered_ts": 1776724469.8003943
     },
     {
       "id": "cached_black_cat_1776793818",
@@ -161,7 +165,11 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -0.0454435758292675,
-      "quality_score": 90
+      "quality_score": 90,
+      "use_count": 14,
+      "last_rendered_ts": 1777046500.7280374,
+      "last_used_at": 1776797451.1615174,
+      "first_rendered_ts": 1776793818.3533702
     },
     {
       "id": "sketchfab_cat_1776779529",
@@ -234,7 +242,11 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -1.0145702362060547,
-      "quality_score": 90
+      "quality_score": 90,
+      "use_count": 4,
+      "last_rendered_ts": 1776793230.2386067,
+      "last_used_at": 1776793230.2386067,
+      "first_rendered_ts": 1776779529.588363
     },
     {
       "id": "cached_bmw_1776736475",
@@ -307,7 +319,11 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -0.04334636777639389,
-      "quality_score": 90
+      "quality_score": 90,
+      "use_count": 13,
+      "last_rendered_ts": 1777404452.2289996,
+      "last_used_at": 1776789331.4026084,
+      "first_rendered_ts": 1776736475.9930644
     },
     {
       "id": "lib_registry_bmw_01",
@@ -379,7 +395,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -0.04334636777639389,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_curated_ferrari_01_sportscar",
@@ -452,7 +469,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -0.03313836082816124,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_registry_cat_02",
@@ -528,7 +546,8 @@
         0.0
       ],
       "ground_offset_z": -0.0454435758292675,
-      "quality_score": 90
+      "quality_score": 90,
+      "use_count": 0
     },
     {
       "id": "lib_registry_cat_03",
@@ -604,7 +623,8 @@
         0.0
       ],
       "ground_offset_z": -0.011010946705937386,
-      "quality_score": 90
+      "quality_score": 90,
+      "use_count": 0
     },
     {
       "id": "lib_registry_cat_04",
@@ -675,7 +695,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -0.9578277468681335,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_registry_cat_05",
@@ -751,7 +772,8 @@
         0.0
       ],
       "ground_offset_z": -0.1933402270078659,
-      "quality_score": 90
+      "quality_score": 90,
+      "use_count": 0
     },
     {
       "id": "lib_registry_city_03",
@@ -818,7 +840,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -2.0260424613952637,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_registry_city_01",
@@ -887,7 +910,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -1.1876341104507446,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_registry_ferrari_01",
@@ -958,7 +982,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -0.03313836082816124,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_registry_glacial_lake_01",
@@ -1026,7 +1051,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -0.15710237622261047,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_registry_mountain_01",
@@ -1094,7 +1120,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -0.00015147317026276141,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_registry_ocean_character_01",
@@ -1170,7 +1197,8 @@
         0.0
       ],
       "ground_offset_z": -163.26870727539062,
-      "quality_score": 90
+      "quality_score": 90,
+      "use_count": 0
     },
     {
       "id": "lib_registry_ocean_01",
@@ -1237,7 +1265,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -0.002367795677855611,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_registry_ocean_character_03",
@@ -1313,7 +1342,8 @@
         0.0
       ],
       "ground_offset_z": -1.4271998405456543,
-      "quality_score": 90
+      "quality_score": 90,
+      "use_count": 0
     },
     {
       "id": "lib_registry_product_01",
@@ -1379,7 +1409,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -0.035034000873565674,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_registry_sketchfab_2ec65917ad7f4568850260567172cf10",
@@ -1455,7 +1486,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -5.284708023071289,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_registry_sketchfab_60b257e448df4cb0b55d4670026d4e6a",
@@ -1534,7 +1566,8 @@
         0.0
       ],
       "ground_offset_z": -1.0,
-      "quality_score": 90
+      "quality_score": 90,
+      "use_count": 0
     },
     {
       "id": "lib_registry_sketchfab_01b0d48490d24e2d868f96660e4be671",
@@ -1612,7 +1645,8 @@
         0.0
       ],
       "ground_offset_z": -1.0,
-      "quality_score": 90
+      "quality_score": 90,
+      "use_count": 0
     },
     {
       "id": "lib_registry_sketchfab_f3e0a67b9ca243b09119177649f21e17",
@@ -1693,7 +1727,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -0.624190628528595,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_registry_sketchfab_1ab9bf841df04c07b1819be596327629",
@@ -1805,7 +1840,8 @@
         0.0
       ],
       "ground_offset_z": -0.521784245967865,
-      "quality_score": 90
+      "quality_score": 90,
+      "use_count": 0
     },
     {
       "id": "lib_registry_sketchfab_5849c107ecb7472bb1eef028f5b97f0d",
@@ -1908,7 +1944,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -51.38594436645508,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_registry_sketchfab_26f01d69ac8c49b2a4c34e21b68c656f",
@@ -1992,7 +2029,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -1.4480985403060913,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_registry_sketchfab_9abfce885a834399b2c3ccaed51cd474",
@@ -2070,7 +2108,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -1.0,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_registry_sketchfab_53f12d5df3914567a0fb08ded8cfc8e8",
@@ -2135,7 +2174,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -1.524983286857605,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_registry_sketchfab_fafc2fa22e1c400da9a32e6f9359fa53",
@@ -2205,7 +2245,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -1.0145702362060547,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_registry_sketchfab_a710eb3eaeab4200a2ff83abc9b0c4db",
@@ -2271,7 +2312,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -1.0,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_registry_sketchfab_c2208f5ccc004f1681d27de67fe75799",
@@ -2353,7 +2395,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -0.7826642990112305,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_registry_sketchfab_2c142062440f4d5fbe3316c0b4d2dfde",
@@ -2425,7 +2468,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -2.018895387649536,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_registry_sketchfab_310c806355814c3794f5e3022b38db85",
@@ -2521,7 +2565,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -0.05885545164346695,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_registry_sketchfab_018a67de11e1432eb0288e776f6a63d9",
@@ -2613,7 +2658,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -1.3532509803771973,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_registry_sketchfab_0adf522a14634f4fab0252233ab5f48a",
@@ -2698,7 +2744,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -0.4997861385345459,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_registry_sketchfab_623e3f52b7da4116a4576f38479eaaaf",
@@ -2790,7 +2837,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -1.0,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_registry_sketchfab_3c5f224733a94789b4f8aabf215d38bb",
@@ -2854,7 +2902,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -1.204643964767456,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_registry_sketchfab_4373130bc33c442eb5ed4a0bca818eaf",
@@ -2931,7 +2980,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -0.6324173212051392,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_registry_sketchfab_2ec20f15b08c4c2fb16e4df5d837b893",
@@ -3003,7 +3053,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -1.0,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_registry_sketchfab_87eb060fe9b74b9a9deb174a654a9e7d",
@@ -3090,7 +3141,8 @@
         0.0
       ],
       "ground_offset_z": -24.0000057220459,
-      "quality_score": 90
+      "quality_score": 90,
+      "use_count": 0
     },
     {
       "id": "lib_registry_sketchfab_ff8ca0691d004a13a89963a3b36defb4",
@@ -3183,7 +3235,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -1.0,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_registry_sketchfab_fc6eeed56f6e44048be4e6051a77c072",
@@ -3253,7 +3306,8 @@
         0.0
       ],
       "ground_offset_z": -1.0,
-      "quality_score": 90
+      "quality_score": 90,
+      "use_count": 0
     },
     {
       "id": "lib_registry_sketchfab_925d73037f56443e9e521ed90efd4fa8",
@@ -3326,7 +3380,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -201.08187866210938,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_registry_sketchfab_dfc827b428dd4ba2a74fc6d3e9800103",
@@ -3404,7 +3459,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -12.18615436553955,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_registry_sketchfab_9dd099d283e54f99b7cbd40b531b1a29",
@@ -3481,7 +3537,8 @@
         0.0
       ],
       "ground_offset_z": -1.0,
-      "quality_score": 90
+      "quality_score": 90,
+      "use_count": 0
     },
     {
       "id": "lib_registry_sketchfab_13808771eec14bf7961b84b0d9c2517c",
@@ -3557,7 +3614,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -0.23929113149642944,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_registry_sketchfab_7864e64376f0489d9ed48137dafd630e",
@@ -3624,7 +3682,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -0.9802118539810181,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_registry_sketchfab_93b53ddcec414592842753d1819f3133",
@@ -3708,7 +3767,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -0.033481355756521225,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_registry_sketchfab_c0dc6b0d6233478889e07b8ad3c72df8",
@@ -3786,7 +3846,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -0.0020237925928086042,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_registry_sketchfab_00c4468f1bca48509d7d2bd66b564cbc",
@@ -3868,7 +3929,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -0.7826642990112305,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_registry_sketchfab_c81469186c6f442e88dc8a29fedcd082",
@@ -3972,7 +4034,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -0.18049176037311554,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_registry_sketchfab_fab087c62fc3459a8b7664757d980c28",
@@ -4060,7 +4123,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -1.6000003814697266,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_registry_sketchfab_83c81e116e3e42ae9731430602a9e371",
@@ -4133,7 +4197,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -0.1337968111038208,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_registry_sketchfab_064acd866664472496b99205b64cfea8",
@@ -4201,7 +4266,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -75.82713317871094,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_registry_sketchfab_e22ac8251af84ed38aa18ac46ebb0cbf",
@@ -4295,7 +4361,8 @@
         0.0
       ],
       "ground_offset_z": -0.0953606367111206,
-      "quality_score": 90
+      "quality_score": 90,
+      "use_count": 0
     },
     {
       "id": "lib_registry_sketchfab_92c4964fe678416daaacc7d0e7f92432",
@@ -4377,7 +4444,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -0.24211157858371735,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_registry_sketchfab_cacfc7474a604ed4b0275b8a3293eff6",
@@ -4444,7 +4512,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -0.2857222259044647,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_registry_sketchfab_334462df58b942759122567fa0b81113",
@@ -4526,7 +4595,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": 0.013511459343135357,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_registry_sketchfab_801d2a245e4a4405a0c2152b35b5e486",
@@ -4594,7 +4664,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -4.343867778778076,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_registry_sketchfab_3ba199e0a78546598f868e86d78495a0",
@@ -4673,7 +4744,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -1.0,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_registry_sketchfab_a9cf781b92424ee4b531a07c708eae32",
@@ -4741,7 +4813,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -0.7248576879501343,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_registry_sketchfab_ce81c3ee5c45471ea75fb6222fd64f9e",
@@ -4826,7 +4899,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -4.726079940795898,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_registry_sketchfab_37fdd54adb234339befa45cd6308252d",
@@ -4903,7 +4977,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -177.65890502929688,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_registry_sketchfab_88b918e66b3f4cbb89a2463adb18b8d8",
@@ -4970,7 +5045,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -0.06424014270305634,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_registry_sketchfab_4f74901a8df84d929f05835a92c990c4",
@@ -5039,7 +5115,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -1.0,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_registry_sketchfab_16941307b02a4a6da205d365b99a601d",
@@ -5105,7 +5182,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -1.0,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_registry_sketchfab_39d2111d3ef040cb918d31023ad14bab",
@@ -5187,7 +5265,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -1.1161046028137207,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_registry_sketchfab_8874cfcf83a54575ba8068376f8a63a8",
@@ -5250,7 +5329,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -32.63985061645508,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_registry_sketchfab_867a96940b5b448c9f47db3ece1117b9",
@@ -5331,7 +5411,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -68.19778442382812,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_registry_sketchfab_c964dca11de14f81b559943ef5f863a9",
@@ -5407,7 +5488,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": 8.622635841369629,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_registry_sketchfab_cfeb1162ec5b47828ab8fd306786fd48",
@@ -5491,7 +5573,8 @@
         0.0
       ],
       "ground_offset_z": -16.970741271972656,
-      "quality_score": 90
+      "quality_score": 90,
+      "use_count": 0
     },
     {
       "id": "lib_registry_sketchfab_9b6fd8ff4dc347e0ba21efe47cfe0580",
@@ -5596,7 +5679,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -45.64558029174805,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_registry_sketchfab_mJUa0nux6YAp3LqHPWmxHuBgVRr",
@@ -5663,7 +5747,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -3.3717000484466553,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_registry_sketchfab_6a07131b52b34d8992861d3c3ba82a29",
@@ -5728,7 +5813,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -1.000000238418579,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_registry_sketchfab_4de96f97ca814709a7664b1831a7c9c9",
@@ -5812,7 +5898,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": 3.090219020843506,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_registry_sketchfab_3cf2b0e0d285408f97e2a33d6f19ee1c",
@@ -5886,7 +5973,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -0.0001323712058365345,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_registry_sketchfab_091c781e2d1941d68bf67d9ab2b6019f",
@@ -5961,7 +6049,8 @@
         0.0
       ],
       "ground_offset_z": -300.3247375488281,
-      "quality_score": 90
+      "quality_score": 90,
+      "use_count": 0
     },
     {
       "id": "lib_registry_sketchfab_d82bec21fecb424d9682c5951b634545",
@@ -6033,7 +6122,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -77.47825622558594,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_registry_sketchfab_0cb1afca0bbd474ba152861e3ca2af30",
@@ -6109,7 +6199,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -0.9591412544250488,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_registry_sketchfab_cade8ed798604d60bfe239e209ff17d8",
@@ -6178,7 +6269,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -0.03540068492293358,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_registry_sketchfab_c0f6db44b20b4ed1843e92d1a583879c",
@@ -6259,7 +6351,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -3.3134757160269146e-08,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_registry_sketchfab_d2ed14b765d742a18f05e75c231f0e5b",
@@ -6327,7 +6420,8 @@
         0.0
       ],
       "ground_offset_z": -18.407915115356445,
-      "quality_score": 90
+      "quality_score": 90,
+      "use_count": 0
     },
     {
       "id": "lib_registry_sketchfab_e7d6988c9e0743a6b831611ec1ffede6",
@@ -6416,7 +6510,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -0.1749792993068695,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_registry_sketchfab_dab3f156b5dd498490c20bf21a0ded6b",
@@ -6481,7 +6576,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -1.0,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_registry_sketchfab_47373f47dfcc49fd8c632bb3e1c9c504",
@@ -6549,7 +6645,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -9.746659479503705e-09,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_registry_sketchfab_f84013f4d4754381979429b5cffb5f17",
@@ -6619,7 +6716,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -1.0,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_registry_sketchfab_e8377f4d4bb5431bad2310d66727b179",
@@ -6694,7 +6792,8 @@
         0.0
       ],
       "ground_offset_z": 0.02367006614804268,
-      "quality_score": 90
+      "quality_score": 90,
+      "use_count": 0
     },
     {
       "id": "lib_registry_sketchfab_eb8a5652059648aeb73256d5c173b82a",
@@ -6764,7 +6863,8 @@
         0.0
       ],
       "ground_offset_z": -1.0,
-      "quality_score": 90
+      "quality_score": 90,
+      "use_count": 0
     },
     {
       "id": "lib_registry_sketchfab_a7f8fba0bf4b41acb3bf77b8f9c8cd9e",
@@ -6846,7 +6946,8 @@
         0.0
       ],
       "ground_offset_z": -8.179722785949707,
-      "quality_score": 90
+      "quality_score": 90,
+      "use_count": 0
     },
     {
       "id": "lib_registry_sketchfab_5920f55f90984994b76697992d4596f7",
@@ -6914,7 +7015,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -211.68470764160156,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_registry_sketchfab_8302020c03a9463b97c3ea56ec202faa",
@@ -6993,7 +7095,8 @@
         0.0
       ],
       "ground_offset_z": 0.02953118458390236,
-      "quality_score": 90
+      "quality_score": 90,
+      "use_count": 0
     },
     {
       "id": "lib_registry_sketchfab_4d2271f8bf7f400e9a5c8f10812a32de",
@@ -7084,7 +7187,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -0.49213707447052,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_registry_sketchfab_3251932626ff424889c2a1c9479e1e13",
@@ -7154,7 +7258,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -0.50201815366745,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_registry_sketchfab_8c6973bbe6c44eb98588cc77fe6bdcaf",
@@ -7238,7 +7343,8 @@
         0.0
       ],
       "ground_offset_z": -1.0016002655029297,
-      "quality_score": 90
+      "quality_score": 90,
+      "use_count": 0
     },
     {
       "id": "lib_registry_sketchfab_836da8349e3b451e996567df8a90fae1",
@@ -7327,7 +7433,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": 0.09087841957807541,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_registry_sketchfab_28cf446dd629404c920df2ba64e22dde",
@@ -7392,7 +7499,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": 0.10913532972335815,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_registry_sketchfab_21f5e948cd384aae8baf2573b9cbaa79",
@@ -7463,7 +7571,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -1.95439875125885,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_registry_sketchfab_843361ad169040fba19fe8758f5bd396",
@@ -7541,7 +7650,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -7.677499525016174e-06,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_registry_sketchfab_d9f04e526d9642d7be8d2bdbc85f2675",
@@ -7605,7 +7715,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -1.0000003576278687,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_registry_sketchfab_851f78fc9a994cd5a1c392ce28c9e414",
@@ -7679,7 +7790,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -4.923268193124386e-07,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_registry_sketchfab_e01a6a0f9ed843279adfac2427c99679",
@@ -7761,7 +7873,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -0.4854278564453125,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_registry_sketchfab_f61d98fe3a1c4cdf99b12f96315d76d8",
@@ -7837,7 +7950,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -0.5249085426330566,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_registry_sketchfab_06d5a80a04fc4c5ab552759e9a97d91a",
@@ -7919,7 +8033,8 @@
         0.0
       ],
       "ground_offset_z": -23.202974319458008,
-      "quality_score": 90
+      "quality_score": 90,
+      "use_count": 0
     },
     {
       "id": "lib_registry_sketchfab_fdb78f4805df4414a4da339015d00c6f",
@@ -8018,7 +8133,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -1.5334142446517944,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_registry_sketchfab_3f116a7e0c464f2798fe25c7dae4fabb",
@@ -8091,7 +8207,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -0.0647159144282341,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_registry_sketchfab_ef9507a8e6a745a796a2279b3cf164b6",
@@ -8154,7 +8271,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -198.39703369140625,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_registry_sketchfab_71c55eb118ea427da9a30699d01941b6",
@@ -8232,7 +8350,8 @@
         0.0
       ],
       "ground_offset_z": -1.7702609300613403,
-      "quality_score": 90
+      "quality_score": 90,
+      "use_count": 0
     },
     {
       "id": "lib_registry_sketchfab_1b4a6dbdb99e46169b3a7d4aaab577fb",
@@ -8323,7 +8442,8 @@
         0.0
       ],
       "ground_offset_z": -0.04567654803395271,
-      "quality_score": 90
+      "quality_score": 90,
+      "use_count": 0
     },
     {
       "id": "objaverse_airplane_1776785288",
@@ -8392,7 +8512,11 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -0.09829631447792053,
-      "quality_score": 90
+      "quality_score": 90,
+      "use_count": 1,
+      "last_rendered_ts": 1776785288.3757837,
+      "last_used_at": 1776785288.3757837,
+      "first_rendered_ts": 1776785288.3757837
     },
     {
       "id": "objaverse_airplane_1776785298",
@@ -8462,7 +8586,11 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -37.87809753417969,
-      "quality_score": 90
+      "quality_score": 90,
+      "use_count": 1,
+      "last_rendered_ts": 1776785298.379511,
+      "last_used_at": 1776785298.379511,
+      "first_rendered_ts": 1776785298.379511
     },
     {
       "id": "objaverse_bugatti_1776790398",
@@ -8532,7 +8660,11 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -5.28057171322871e-06,
-      "quality_score": 90
+      "quality_score": 90,
+      "use_count": 2,
+      "last_rendered_ts": 1776806109.892424,
+      "last_used_at": 1776790398.9391682,
+      "first_rendered_ts": 1776790398.9391682
     },
     {
       "id": "sketchfab_chef_1776786144",
@@ -8601,7 +8733,11 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -300.3247375488281,
-      "quality_score": 90
+      "quality_score": 90,
+      "use_count": 1,
+      "last_rendered_ts": 1776786144.1722143,
+      "last_used_at": 1776786144.1722143,
+      "first_rendered_ts": 1776786144.1722143
     },
     {
       "id": "objaverse_cow_1776787651",
@@ -8669,7 +8805,11 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -0.6588425636291504,
-      "quality_score": 90
+      "quality_score": 90,
+      "use_count": 9,
+      "last_rendered_ts": 1777311831.3335824,
+      "last_used_at": 1776787651.1192772,
+      "first_rendered_ts": 1776787651.1192772
     },
     {
       "id": "objaverse_dragon_1776783063",
@@ -8738,7 +8878,11 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -1.0,
-      "quality_score": 90
+      "quality_score": 90,
+      "use_count": 1,
+      "last_rendered_ts": 1776783063.065338,
+      "last_used_at": 1776783063.065338,
+      "first_rendered_ts": 1776783063.065338
     },
     {
       "id": "objaverse_eagle_1776781724",
@@ -8810,7 +8954,11 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -4.44536018371582,
-      "quality_score": 90
+      "quality_score": 90,
+      "use_count": 2,
+      "last_rendered_ts": 1776800620.097608,
+      "last_used_at": 1776781724.2329004,
+      "first_rendered_ts": 1776781724.2329004
     },
     {
       "id": "objaverse_elephant_1776793626",
@@ -8882,7 +9030,11 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -2.0325114727020264,
-      "quality_score": 90
+      "quality_score": 90,
+      "use_count": 1,
+      "last_rendered_ts": 1776793626.6457582,
+      "last_used_at": 1776793626.6457582,
+      "first_rendered_ts": 1776793626.6457582
     },
     {
       "id": "objaverse_farmer_1776788825",
@@ -8950,7 +9102,11 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -1.0,
-      "quality_score": 90
+      "quality_score": 90,
+      "use_count": 6,
+      "last_rendered_ts": 1776907996.2881393,
+      "last_used_at": 1776788825.5792792,
+      "first_rendered_ts": 1776788825.5792792
     },
     {
       "id": "objaverse_horse_1776781480",
@@ -9023,7 +9179,11 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -1.9765686988830566,
-      "quality_score": 90
+      "quality_score": 90,
+      "use_count": 5,
+      "last_rendered_ts": 1777312479.560206,
+      "last_used_at": 1776781480.0391412,
+      "first_rendered_ts": 1776781480.0391412
     },
     {
       "id": "sketchfab_monkey_1776782720",
@@ -9092,7 +9252,11 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -1.0,
-      "quality_score": 90
+      "quality_score": 90,
+      "use_count": 1,
+      "last_rendered_ts": 1776782720.062612,
+      "last_used_at": 1776782720.062612,
+      "first_rendered_ts": 1776782720.062612
     },
     {
       "id": "objaverse_pig_1776786273",
@@ -9161,7 +9325,11 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": 0.00609619589522481,
-      "quality_score": 90
+      "quality_score": 90,
+      "use_count": 1,
+      "last_rendered_ts": 1776786273.780572,
+      "last_used_at": 1776786273.780572,
+      "first_rendered_ts": 1776786273.780572
     },
     {
       "id": "objaverse_spaceship_1776785410",
@@ -9230,7 +9398,11 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -1.1788253784179688,
-      "quality_score": 90
+      "quality_score": 90,
+      "use_count": 1,
+      "last_rendered_ts": 1776785410.5283473,
+      "last_used_at": 1776785410.5283473,
+      "first_rendered_ts": 1776785410.5283473
     },
     {
       "id": "objaverse_spaceship_1776785527",
@@ -9300,7 +9472,11 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": 0.004647980444133282,
-      "quality_score": 90
+      "quality_score": 90,
+      "use_count": 1,
+      "last_rendered_ts": 1776785527.1497705,
+      "last_used_at": 1776785527.1497705,
+      "first_rendered_ts": 1776785527.1497705
     },
     {
       "id": "objaverse_toyota_camry_1776789789",
@@ -9372,7 +9548,11 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -0.37415045499801636,
-      "quality_score": 90
+      "quality_score": 90,
+      "use_count": 1,
+      "last_rendered_ts": 1776789789.408323,
+      "last_used_at": 1776789789.408323,
+      "first_rendered_ts": 1776789789.408323
     },
     {
       "id": "lib_curated_sketchfab_dolphin_2ec20f15",
@@ -9400,7 +9580,8 @@
       "quarantined_v13_batch2": true,
       "heal_notes": [
         "v13_batch2: zero-byte file quarantined"
-      ]
+      ],
+      "use_count": 0
     },
     {
       "id": "lib_curated_sketchfab_monkey_3ba199e0",
@@ -9427,7 +9608,8 @@
       "quarantined_v13_batch2": true,
       "heal_notes": [
         "v13_batch2: zero-byte file quarantined"
-      ]
+      ],
+      "use_count": 0
     },
     {
       "id": "lib_curated_sketchfab_robot_623e3f52",
@@ -9454,7 +9636,8 @@
       "quarantined_v13_batch2": true,
       "heal_notes": [
         "v13_batch2: zero-byte file quarantined"
-      ]
+      ],
+      "use_count": 0
     },
     {
       "id": "lib_elephant_african_elephant",
@@ -9482,7 +9665,8 @@
         "v13_batch2: zero-byte .blend file quarantined to assets/cache/_quarantine/"
       ],
       "tested": false,
-      "quarantined_v13_batch2": true
+      "quarantined_v13_batch2": true,
+      "use_count": 0
     },
     {
       "id": "lib_eagle_bald_eagle_flying",
@@ -9511,7 +9695,8 @@
         "v13_batch2: zero-byte .blend file quarantined to assets/cache/_quarantine/"
       ],
       "tested": false,
-      "quarantined_v13_batch2": true
+      "quarantined_v13_batch2": true,
+      "use_count": 0
     },
     {
       "id": "lib_cat_black_shorthair",
@@ -9545,7 +9730,8 @@
         "v13_batch2: zero-byte .blend file quarantined to assets/cache/_quarantine/"
       ],
       "tested": false,
-      "quarantined_v13_batch2": true
+      "quarantined_v13_batch2": true,
+      "use_count": 0
     },
     {
       "id": "lib_cat_orange_tabby_walking",
@@ -9581,7 +9767,8 @@
         "v13_batch2: zero-byte .blend file quarantined to assets/cache/_quarantine/"
       ],
       "tested": false,
-      "quarantined_v13_batch2": true
+      "quarantined_v13_batch2": true,
+      "use_count": 0
     },
     {
       "id": "lib_cat_russian_blue",
@@ -9615,7 +9802,8 @@
         "v13_batch2: zero-byte .blend file quarantined to assets/cache/_quarantine/"
       ],
       "tested": false,
-      "quarantined_v13_batch2": true
+      "quarantined_v13_batch2": true,
+      "use_count": 0
     },
     {
       "id": "lib_bmw_bmw_bmw_m3_competition",
@@ -9645,7 +9833,8 @@
         "v13_batch2: zero-byte .blend file quarantined to assets/cache/_quarantine/"
       ],
       "tested": false,
-      "quarantined_v13_batch2": true
+      "quarantined_v13_batch2": true,
+      "use_count": 0
     },
     {
       "id": "lib_ferrari_ferrari_ferrari_f40_red",
@@ -9677,7 +9866,8 @@
         "v13_batch2: zero-byte .blend file quarantined to assets/cache/_quarantine/"
       ],
       "tested": false,
-      "quarantined_v13_batch2": true
+      "quarantined_v13_batch2": true,
+      "use_count": 0
     },
     {
       "id": "lib_porsche_porsche_porsche_911_gt3",
@@ -9707,7 +9897,8 @@
         "v13_batch2: zero-byte .blend file quarantined to assets/cache/_quarantine/"
       ],
       "tested": false,
-      "quarantined_v13_batch2": true
+      "quarantined_v13_batch2": true,
+      "use_count": 0
     },
     {
       "id": "lib_mountain_mountain_sunset_4k",
@@ -9732,7 +9923,8 @@
       "provisional_ready": false,
       "heal_notes": [
         "unsupported format: .exr"
-      ]
+      ],
+      "use_count": 0
     },
     {
       "id": "lib_hdri_city_night_neon",
@@ -9758,7 +9950,8 @@
       "provisional_ready": false,
       "heal_notes": [
         "unsupported format: .hdr"
-      ]
+      ],
+      "use_count": 0
     },
     {
       "id": "lib_rhinoceros_3d_animated_rhinoceros",
@@ -9829,7 +10022,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -3.820472002029419,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_whale_animated_sperm_whale",
@@ -9900,7 +10094,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -17.952556610107422,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_crocodile_crocodile_high_quality",
@@ -9976,7 +10171,8 @@
         0.0
       ],
       "ground_offset_z": -0.06557610630989075,
-      "quality_score": 90
+      "quality_score": 90,
+      "use_count": 0
     },
     {
       "id": "lib_eagle_eagle",
@@ -10050,7 +10246,8 @@
         0.0
       ],
       "ground_offset_z": -1.0,
-      "quality_score": 90
+      "quality_score": 90,
+      "use_count": 0
     },
     {
       "id": "lib_eagle_free_eagle",
@@ -10125,7 +10322,8 @@
         0.0
       ],
       "ground_offset_z": -335.23291015625,
-      "quality_score": 90
+      "quality_score": 90,
+      "use_count": 0
     },
     {
       "id": "lib_rooster_ga_ani_004_majestic_rooster",
@@ -10198,7 +10396,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": 0.0,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_eagle_golden_eagle",
@@ -10270,7 +10469,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -0.09500209242105484,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_horse_1__horse_1",
@@ -10339,7 +10539,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -1.0,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_horse_horse",
@@ -10408,7 +10609,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -1.0,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_hyena_hyena_demo_free_download",
@@ -10485,7 +10687,8 @@
         0.0
       ],
       "ground_offset_z": -18.191251754760742,
-      "quality_score": 90
+      "quality_score": 90,
+      "use_count": 0
     },
     {
       "id": "lib_dragon_komodo_dragon_lizard",
@@ -10561,7 +10764,8 @@
         0.0
       ],
       "ground_offset_z": -0.03138874098658562,
-      "quality_score": 90
+      "quality_score": 90,
+      "use_count": 0
     },
     {
       "id": "lib_lizard_lizard",
@@ -10630,7 +10834,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -13696.900390625,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_mountain_mountain_goat_demo_free_download",
@@ -10711,7 +10916,8 @@
         0.0
       ],
       "ground_offset_z": -23.2685604095459,
-      "quality_score": 90
+      "quality_score": 90,
+      "use_count": 0
     },
     {
       "id": "lib_polar_polar_bear_1",
@@ -10786,7 +10992,8 @@
         0.0
       ],
       "ground_offset_z": -1.0,
-      "quality_score": 90
+      "quality_score": 90,
+      "use_count": 0
     },
     {
       "id": "lib_bear_polar_bear",
@@ -10856,7 +11063,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -13718.400390625,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_rabbit_rabbit_demo_free_download",
@@ -10933,7 +11141,8 @@
         0.0
       ],
       "ground_offset_z": -7.289741039276123,
-      "quality_score": 90
+      "quality_score": 90,
+      "use_count": 0
     },
     {
       "id": "lib_bear_realistic_bear_3d_model_2_0_demo_free_download_1",
@@ -11016,7 +11225,8 @@
         0.0
       ],
       "ground_offset_z": -3.128465414047241,
-      "quality_score": 90
+      "quality_score": 90,
+      "use_count": 0
     },
     {
       "id": "lib_deer_realistic_deer_3d_model_2_0_demo_free_download",
@@ -11099,7 +11309,8 @@
         0.0
       ],
       "ground_offset_z": -23.174175262451172,
-      "quality_score": 90
+      "quality_score": 90,
+      "use_count": 0
     },
     {
       "id": "lib_wolf_realistic_wolf_3d_model_2_0_demo_free_download",
@@ -11182,7 +11393,8 @@
         0.0
       ],
       "ground_offset_z": -18.151086807250977,
-      "quality_score": 90
+      "quality_score": 90,
+      "use_count": 0
     },
     {
       "id": "lib_cat_3d_modelling_my_cat_fripouille",
@@ -11263,7 +11475,8 @@
         0.0
       ],
       "ground_offset_z": -37232.10546875,
-      "quality_score": 90
+      "quality_score": 90,
+      "use_count": 0
     },
     {
       "id": "lib_tiger_animated_tiger",
@@ -11342,7 +11555,8 @@
         0.0
       ],
       "ground_offset_z": -1.0,
-      "quality_score": 90
+      "quality_score": 90,
+      "use_count": 0
     },
     {
       "id": "lib_tiger_animated_white_tiger",
@@ -11424,7 +11638,8 @@
         0.0
       ],
       "ground_offset_z": -1.0,
-      "quality_score": 90
+      "quality_score": 90,
+      "use_count": 0
     },
     {
       "id": "lib_cat_bicolor_cat",
@@ -11497,7 +11712,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -1.0,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_cat_black_cat_psx",
@@ -11573,7 +11789,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -23.042837142944336,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_cat_cat",
@@ -11650,7 +11867,8 @@
         0.0
       ],
       "ground_offset_z": -48.32835006713867,
-      "quality_score": 90
+      "quality_score": 90,
+      "use_count": 0
     },
     {
       "id": "lib_cat_cat_box_meme",
@@ -11724,7 +11942,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": 0.8679011464118958,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_cat_cat_murdered_soul_suspect",
@@ -11804,7 +12023,8 @@
         0.0
       ],
       "ground_offset_z": -1.0,
-      "quality_score": 90
+      "quality_score": 90,
+      "use_count": 0
     },
     {
       "id": "lib_cat_cute_cartoon_cat_low_poly_game_ready",
@@ -11884,7 +12104,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -0.5004884004592896,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_lion_lion_neutral_standing_pose",
@@ -11965,7 +12186,8 @@
         0.0
       ],
       "ground_offset_z": -0.28582772612571716,
-      "quality_score": 90
+      "quality_score": 90,
+      "use_count": 0
     },
     {
       "id": "lib_cat_miniature_cat",
@@ -12038,7 +12260,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": 0.0045460923574864864,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_cat_oiiaioooooiai_cat_1",
@@ -12117,7 +12340,8 @@
         0.0
       ],
       "ground_offset_z": -0.011010946705937386,
-      "quality_score": 90
+      "quality_score": 90,
+      "use_count": 0
     },
     {
       "id": "lib_dog_baby_dog",
@@ -12190,7 +12414,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -1.0,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_dog_dog_1",
@@ -12263,7 +12488,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -1.0,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_dog_dog",
@@ -12340,7 +12566,8 @@
         0.0
       ],
       "ground_offset_z": -0.2560000717639923,
-      "quality_score": 90
+      "quality_score": 90,
+      "use_count": 0
     },
     {
       "id": "lib_cityscape_belgorod_region_cityscape_landscape_terrain",
@@ -12420,7 +12647,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": 0.18815350532531738,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_canyon_canyon_landscape",
@@ -12496,7 +12724,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": 0.1634795069694519,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_city_city_at_night",
@@ -12567,7 +12796,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -7.544243999291211e-05,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_rooftop_city_rooftop_day_skybox",
@@ -12643,7 +12873,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -30.000003814697266,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_desert_desert_landscape",
@@ -12718,7 +12949,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -0.09566763043403625,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_landscape_fantasy_landscape_2",
@@ -12791,7 +13023,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -0.12400001287460327,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_castle_hrusov_castle",
@@ -12865,7 +13098,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -0.3364083170890808,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_landscape_hyperspace_winter_landscape_ii",
@@ -12943,7 +13177,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": 6.300948143005371,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_iceland_iceland_landscape",
@@ -13019,7 +13254,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": 0.006411351263523102,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_houses_italy_houses_roofs",
@@ -13094,7 +13330,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": 7.607322692871094,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_mountain_italy_mountain_castle_landscape",
@@ -13173,7 +13410,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -19.074750900268555,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_landscape_mossygrassy_landscape",
@@ -13246,7 +13484,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": 0.015061259269714355,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_mountain_mountain_road_1",
@@ -13319,7 +13558,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -31.63191032409668,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_mountain_mountain_road",
@@ -13392,7 +13632,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -1.7036900520324707,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_glacier_rocky_glacier_snowy_landscape_terrain",
@@ -13471,7 +13712,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": 0.18726900219917297,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_thunderstorm_thunderstorm",
@@ -13540,7 +13782,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -52696.73828125,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_landscape_winter_landscape",
@@ -13616,7 +13859,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": 6.300949573516846,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_flower_dry_flower",
@@ -13690,7 +13934,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": 0.034676000475883484,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_flower_1__flower_1",
@@ -13759,7 +14004,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": 0.09936479479074478,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_flower_flower",
@@ -13832,7 +14078,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -0.005603902041912079,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_flowers_flowers",
@@ -13905,7 +14152,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": 70.17235565185547,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_flower_lowpoly_flower_bushes",
@@ -13983,7 +14231,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -0.6899832487106323,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_flower_margarita_flower",
@@ -14057,7 +14306,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": 0.008931797929108143,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_sunflower_sunflower",
@@ -14129,7 +14379,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -1.1673024892807007,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_car_audi_audi_rs7_sportback_realistic_car_3d_model",
@@ -14206,7 +14457,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -2.137748424502206e-06,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_bmw_bmw_bmw_m_motorsport_gt_racing",
@@ -14284,7 +14536,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -0.012188740074634552,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_car_bugatti_bugatti_veyron_racing_car_unityunreal",
@@ -14357,7 +14610,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -0.007346058264374733,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_car_car_free_model_by_oscar_creativo",
@@ -14431,7 +14685,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -1.0,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_car_ferrari_ferrari_f1_formula_car_high_quality_f1",
@@ -14505,7 +14760,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -0.8430485129356384,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_car_ford_ford_gt_xrs_turbo_racing_car_3d_model",
@@ -14581,7 +14837,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -0.02729174494743347,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "lib_toyota_toyota_toyota_gr_gt",
@@ -14653,7 +14910,8 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": 0.0041145384311676025,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 0
     },
     {
       "id": "sketchfab_vehicle_1776804129",
@@ -14751,7 +15009,10 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -0.05885545164346695,
-      "quality_score": 90
+      "quality_score": 90,
+      "use_count": 2,
+      "last_rendered_ts": 1776806208.4943125,
+      "first_rendered_ts": 1776804129.35056
     },
     {
       "id": "cached_eagle_1776804701",
@@ -14822,7 +15083,10 @@
         0.0
       ],
       "ground_offset_z": -335.23291015625,
-      "quality_score": 80
+      "quality_score": 80,
+      "use_count": 2,
+      "last_rendered_ts": 1776866509.83417,
+      "first_rendered_ts": 1776804701.5271266
     },
     {
       "id": "cached_eagle_1776804858",
@@ -14858,7 +15122,10 @@
         "file too small (0 bytes) - likely corrupt",
         "v13_batch2: zero-byte .blend file quarantined to assets/cache/_quarantine/"
       ],
-      "quarantined_v13_batch2": true
+      "quarantined_v13_batch2": true,
+      "use_count": 2,
+      "last_rendered_ts": 1776902447.4036455,
+      "first_rendered_ts": 1776804858.4810297
     },
     {
       "id": "cached_cat_1776805080",
@@ -14934,7 +15201,10 @@
         0.0
       ],
       "ground_offset_z": -0.011010946705937386,
-      "quality_score": 80
+      "quality_score": 80,
+      "use_count": 2,
+      "last_rendered_ts": 1776805352.5745049,
+      "first_rendered_ts": 1776805080.7164366
     },
     {
       "id": "cached_cat_1776805248",
@@ -14975,7 +15245,10 @@
         "file too small (0 bytes) - likely corrupt",
         "v13_batch2: zero-byte .blend file quarantined to assets/cache/_quarantine/"
       ],
-      "quarantined_v13_batch2": true
+      "quarantined_v13_batch2": true,
+      "use_count": 2,
+      "last_rendered_ts": 1777044043.2617853,
+      "first_rendered_ts": 1776805248.3090925
     },
     {
       "id": "objaverse_polar_bear_1776805537",
@@ -15043,7 +15316,10 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -13718.400390625,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 8,
+      "last_rendered_ts": 1777158165.5646744,
+      "first_rendered_ts": 1776805537.503215
     },
     {
       "id": "cached_polar_bear_1776805760",
@@ -15111,7 +15387,10 @@
       "orientation_issue": null,
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -13718.400390625,
-      "quality_score": 100
+      "quality_score": 100,
+      "use_count": 14,
+      "last_rendered_ts": 1777409793.106969,
+      "first_rendered_ts": 1776805760.91939
     },
     {
       "id": "cached_deer_1776806320",
@@ -15189,7 +15468,10 @@
         0.0
       ],
       "ground_offset_z": -23.174175262451172,
-      "quality_score": 90
+      "quality_score": 90,
+      "use_count": 11,
+      "last_rendered_ts": 1777389949.1032262,
+      "first_rendered_ts": 1776806320.7143016
     },
     {
       "id": "cached_car_1776870834",
@@ -15260,7 +15542,10 @@
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -2.137748424502206e-06,
       "quality_score": 90,
-      "thumbnail_path": "assets/thumbnails/cached_car_1776870834.png"
+      "thumbnail_path": "assets/thumbnails/cached_car_1776870834.png",
+      "use_count": 1,
+      "last_rendered_ts": 1776870834.8206725,
+      "first_rendered_ts": 1776870834.8206725
     },
     {
       "id": "cached_horse_1776871144",
@@ -15326,7 +15611,10 @@
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -1.0,
       "quality_score": 100,
-      "thumbnail_path": "assets/thumbnails/cached_horse_1776871144.png"
+      "thumbnail_path": "assets/thumbnails/cached_horse_1776871144.png",
+      "use_count": 9,
+      "last_rendered_ts": 1777303975.7677922,
+      "first_rendered_ts": 1776871144.5855699
     },
     {
       "id": "cached_cat_1776874468",
@@ -15394,7 +15682,10 @@
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": 0.8679011464118958,
       "quality_score": 90,
-      "thumbnail_path": "assets/thumbnails/cached_cat_1776874468.png"
+      "thumbnail_path": "assets/thumbnails/cached_cat_1776874468.png",
+      "use_count": 32,
+      "last_rendered_ts": 1777396332.0681005,
+      "first_rendered_ts": 1776874468.2045279
     },
     {
       "id": "cached_horse_1776875584",
@@ -15462,7 +15753,11 @@
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -1.0,
       "quality_score": 100,
-      "thumbnail_path": "assets/thumbnails/cached_horse_1776875584.png"
+      "thumbnail_path": "assets/thumbnails/cached_horse_1776875584.png",
+      "use_count": 13,
+      "last_rendered_ts": 1777909109.8084357,
+      "first_rendered_ts": 1776875584.108678,
+      "last_used_at": "2026-05-04 10:38:29"
     },
     {
       "id": "cached_eagle_1776875924",
@@ -15532,7 +15827,10 @@
       ],
       "ground_offset_z": -1.0,
       "quality_score": 90,
-      "thumbnail_path": "assets/thumbnails/cached_eagle_1776875924.png"
+      "thumbnail_path": "assets/thumbnails/cached_eagle_1776875924.png",
+      "use_count": 4,
+      "last_rendered_ts": 1777391529.212111,
+      "first_rendered_ts": 1776875924.323835
     },
     {
       "id": "sketchfab_lion_1776876142",
@@ -15604,7 +15902,10 @@
       ],
       "ground_offset_z": -1.0,
       "quality_score": 90,
-      "thumbnail_path": "assets/thumbnails/sketchfab_lion_1776876142.png"
+      "thumbnail_path": "assets/thumbnails/sketchfab_lion_1776876142.png",
+      "use_count": 2,
+      "last_rendered_ts": 1776876248.234919,
+      "first_rendered_ts": 1776876142.938118
     },
     {
       "id": "objaverse_lion_1776876231",
@@ -15670,7 +15971,10 @@
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -132.8385009765625,
       "quality_score": 100,
-      "thumbnail_path": "assets/thumbnails/objaverse_lion_1776876231.png"
+      "thumbnail_path": "assets/thumbnails/objaverse_lion_1776876231.png",
+      "use_count": 5,
+      "last_rendered_ts": 1777479728.795986,
+      "first_rendered_ts": 1776876231.0434165
     },
     {
       "id": "sketchfab_tiger_1776876323",
@@ -15753,7 +16057,10 @@
       ],
       "ground_offset_z": -1.0,
       "quality_score": 90,
-      "thumbnail_path": "assets/thumbnails/sketchfab_tiger_1776876323.png"
+      "thumbnail_path": "assets/thumbnails/sketchfab_tiger_1776876323.png",
+      "use_count": 1,
+      "last_rendered_ts": 1776876323.0774157,
+      "first_rendered_ts": 1776876323.0774157
     },
     {
       "id": "cached_cat_1776877470",
@@ -15820,7 +16127,10 @@
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": 0.0045460923574864864,
       "quality_score": 90,
-      "thumbnail_path": "assets/thumbnails/cached_cat_1776877470.png"
+      "thumbnail_path": "assets/thumbnails/cached_cat_1776877470.png",
+      "use_count": 4,
+      "last_rendered_ts": 1776892993.7101228,
+      "first_rendered_ts": 1776877470.3648598
     },
     {
       "id": "cached_flower_1776877991",
@@ -15888,7 +16198,10 @@
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": 0.008931797929108143,
       "quality_score": 90,
-      "thumbnail_path": "assets/thumbnails/cached_flower_1776877991.png"
+      "thumbnail_path": "assets/thumbnails/cached_flower_1776877991.png",
+      "use_count": 1,
+      "last_rendered_ts": 1776877991.1484637,
+      "first_rendered_ts": 1776877991.1484637
     },
     {
       "id": "cached_whale_1776878122",
@@ -15965,7 +16278,10 @@
       ],
       "ground_offset_z": -163.26870727539062,
       "quality_score": 90,
-      "thumbnail_path": "assets/thumbnails/cached_whale_1776878122.png"
+      "thumbnail_path": "assets/thumbnails/cached_whale_1776878122.png",
+      "use_count": 1,
+      "last_rendered_ts": 1776878122.9888177,
+      "first_rendered_ts": 1776878122.9888177
     },
     {
       "id": "cached_whale_1776880328",
@@ -16034,7 +16350,10 @@
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -17.952556610107422,
       "quality_score": 100,
-      "thumbnail_path": "assets/thumbnails/cached_whale_1776880328.png"
+      "thumbnail_path": "assets/thumbnails/cached_whale_1776880328.png",
+      "use_count": 1,
+      "last_rendered_ts": 1776880328.800082,
+      "first_rendered_ts": 1776880328.800082
     },
     {
       "id": "cached_car_1776880680",
@@ -16102,7 +16421,10 @@
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -1.0,
       "quality_score": 100,
-      "thumbnail_path": "assets/thumbnails/cached_car_1776880680.png"
+      "thumbnail_path": "assets/thumbnails/cached_car_1776880680.png",
+      "use_count": 7,
+      "last_rendered_ts": 1777391910.3023202,
+      "first_rendered_ts": 1776880680.0954053
     },
     {
       "id": "cached_car_1776880818",
@@ -16172,7 +16494,10 @@
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -0.02729174494743347,
       "quality_score": 90,
-      "thumbnail_path": "assets/thumbnails/cached_car_1776880818.png"
+      "thumbnail_path": "assets/thumbnails/cached_car_1776880818.png",
+      "use_count": 3,
+      "last_rendered_ts": 1777056335.9616406,
+      "first_rendered_ts": 1776880818.8417969
     },
     {
       "id": "cached_polar_bear_1776881429",
@@ -16246,7 +16571,10 @@
       ],
       "ground_offset_z": -1.0,
       "quality_score": 90,
-      "thumbnail_path": "assets/thumbnails/cached_polar_bear_1776881429.png"
+      "thumbnail_path": "assets/thumbnails/cached_polar_bear_1776881429.png",
+      "use_count": 1,
+      "last_rendered_ts": 1776881429.1733866,
+      "first_rendered_ts": 1776881429.1733866
     },
     {
       "id": "cached_mountain_1776881538",
@@ -16318,7 +16646,10 @@
       ],
       "ground_offset_z": -23.2685604095459,
       "quality_score": 90,
-      "thumbnail_path": "assets/thumbnails/cached_mountain_1776881538.png"
+      "thumbnail_path": "assets/thumbnails/cached_mountain_1776881538.png",
+      "use_count": 4,
+      "last_rendered_ts": 1777305912.3013504,
+      "first_rendered_ts": 1776881538.1055186
     },
     {
       "id": "cached_rhinoceros_1776881644",
@@ -16383,7 +16714,10 @@
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -3.820472002029419,
       "quality_score": 100,
-      "thumbnail_path": "assets/thumbnails/cached_rhinoceros_1776881644.png"
+      "thumbnail_path": "assets/thumbnails/cached_rhinoceros_1776881644.png",
+      "use_count": 5,
+      "last_rendered_ts": 1777418855.657296,
+      "first_rendered_ts": 1776881644.6590533
     },
     {
       "id": "cached_eagle_1776882123",
@@ -16451,7 +16785,10 @@
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -0.09500209242105484,
       "quality_score": 90,
-      "thumbnail_path": "assets/thumbnails/cached_eagle_1776882123.png"
+      "thumbnail_path": "assets/thumbnails/cached_eagle_1776882123.png",
+      "use_count": 1,
+      "last_rendered_ts": 1776882123.8036978,
+      "first_rendered_ts": 1776882123.8036978
     },
     {
       "id": "cached_wolf_1776882366",
@@ -16531,7 +16868,10 @@
       ],
       "ground_offset_z": -18.151086807250977,
       "quality_score": 90,
-      "thumbnail_path": "assets/thumbnails/cached_wolf_1776882366.png"
+      "thumbnail_path": "assets/thumbnails/cached_wolf_1776882366.png",
+      "use_count": 2,
+      "last_rendered_ts": 1776882473.8505948,
+      "first_rendered_ts": 1776882366.8784292
     },
     {
       "id": "cached_cat_1776882601",
@@ -16605,7 +16945,10 @@
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -0.5004884004592896,
       "quality_score": 90,
-      "thumbnail_path": "assets/thumbnails/cached_cat_1776882601.png"
+      "thumbnail_path": "assets/thumbnails/cached_cat_1776882601.png",
+      "use_count": 1,
+      "last_rendered_ts": 1776882601.7219565,
+      "first_rendered_ts": 1776882601.7219565
     },
     {
       "id": "cached_toyota_1776893198",
@@ -16670,7 +17013,10 @@
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": 0.0041145384311676025,
       "quality_score": 90,
-      "thumbnail_path": "assets/thumbnails/cached_toyota_1776893198.png"
+      "thumbnail_path": "assets/thumbnails/cached_toyota_1776893198.png",
+      "use_count": 3,
+      "last_rendered_ts": 1777056201.6855807,
+      "first_rendered_ts": 1776893198.466609
     },
     {
       "id": "cached_porsche_1776902655",
@@ -16707,7 +17053,10 @@
         "file too small (0 bytes) - likely corrupt",
         "v13_batch2: zero-byte .blend file quarantined to assets/cache/_quarantine/"
       ],
-      "quarantined_v13_batch2": true
+      "quarantined_v13_batch2": true,
+      "use_count": 1,
+      "last_rendered_ts": 1776902655.83409,
+      "first_rendered_ts": 1776902655.83409
     },
     {
       "id": "cached_bmw_1776902767",
@@ -16775,7 +17124,10 @@
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -0.012188740074634552,
       "quality_score": 90,
-      "thumbnail_path": "assets/thumbnails/cached_bmw_1776902767.png"
+      "thumbnail_path": "assets/thumbnails/cached_bmw_1776902767.png",
+      "use_count": 9,
+      "last_rendered_ts": 1777400149.45742,
+      "first_rendered_ts": 1776902767.6665106
     },
     {
       "id": "cached_car_1776902955",
@@ -16841,7 +17193,10 @@
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -0.007346058264374733,
       "quality_score": 90,
-      "thumbnail_path": "assets/thumbnails/cached_car_1776902955.png"
+      "thumbnail_path": "assets/thumbnails/cached_car_1776902955.png",
+      "use_count": 1,
+      "last_rendered_ts": 1776902955.9361832,
+      "first_rendered_ts": 1776902955.9361832
     },
     {
       "id": "cached_farmer_1776907841",
@@ -16917,7 +17272,10 @@
       ],
       "ground_offset_z": -0.1933402270078659,
       "quality_score": 80,
-      "thumbnail_path": "assets/thumbnails/cached_farmer_1776907841.png"
+      "thumbnail_path": "assets/thumbnails/cached_farmer_1776907841.png",
+      "use_count": 2,
+      "last_rendered_ts": 1777397609.3423064,
+      "first_rendered_ts": 1776907841.6618853
     },
     {
       "id": "cached_cat_1776969789",
@@ -16983,7 +17341,10 @@
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -1.0,
       "quality_score": 100,
-      "thumbnail_path": "assets/thumbnails/cached_cat_1776969789.png"
+      "thumbnail_path": "assets/thumbnails/cached_cat_1776969789.png",
+      "use_count": 1,
+      "last_rendered_ts": 1776969789.7071316,
+      "first_rendered_ts": 1776969789.7071316
     },
     {
       "id": "objaverse_deer_1776997869",
@@ -17046,7 +17407,10 @@
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -3.4605460166931152,
       "quality_score": 90,
-      "thumbnail_path": "assets/thumbnails/objaverse_deer_1776997869.png"
+      "thumbnail_path": "assets/thumbnails/objaverse_deer_1776997869.png",
+      "use_count": 1,
+      "last_rendered_ts": 1776997869.4981,
+      "first_rendered_ts": 1776997869.4981
     },
     {
       "id": "objaverse_deer_1777046838",
@@ -17109,7 +17473,10 @@
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -2.911310911178589,
       "quality_score": 90,
-      "thumbnail_path": "assets/thumbnails/objaverse_deer_1777046838.png"
+      "thumbnail_path": "assets/thumbnails/objaverse_deer_1777046838.png",
+      "use_count": 1,
+      "last_rendered_ts": 1777046838.4582324,
+      "first_rendered_ts": 1777046838.4582324
     },
     {
       "id": "objaverse_person_1777047015",
@@ -17170,7 +17537,10 @@
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -0.7369807958602905,
       "quality_score": 100,
-      "thumbnail_path": "assets/thumbnails/objaverse_person_1777047015.png"
+      "thumbnail_path": "assets/thumbnails/objaverse_person_1777047015.png",
+      "use_count": 2,
+      "last_rendered_ts": 1777049339.8525367,
+      "first_rendered_ts": 1777047015.0776887
     },
     {
       "id": "sketchfab_porsche_1777055943",
@@ -17268,7 +17638,10 @@
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -1.3532509803771973,
       "quality_score": 90,
-      "thumbnail_path": "assets/thumbnails/sketchfab_porsche_1777055943.png"
+      "thumbnail_path": "assets/thumbnails/sketchfab_porsche_1777055943.png",
+      "use_count": 3,
+      "last_rendered_ts": 1777312789.679324,
+      "first_rendered_ts": 1777055943.6055853
     },
     {
       "id": "cached_cat_and_cow_1777306366",
@@ -17340,7 +17713,10 @@
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -23.042837142944336,
       "quality_score": 90,
-      "thumbnail_path": "assets/thumbnails/cached_cat_and_cow_1777306366.png"
+      "thumbnail_path": "assets/thumbnails/cached_cat_and_cow_1777306366.png",
+      "use_count": 2,
+      "last_rendered_ts": 1777388624.5474637,
+      "first_rendered_ts": 1777306366.178539
     },
     {
       "id": "cached_city_1777315483",
@@ -17420,7 +17796,10 @@
       ],
       "ground_offset_z": -1.1876341104507446,
       "quality_score": 90,
-      "thumbnail_path": "assets/thumbnails/cached_city_1777315483.png"
+      "thumbnail_path": "assets/thumbnails/cached_city_1777315483.png",
+      "use_count": 1,
+      "last_rendered_ts": 1777315483.2577448,
+      "first_rendered_ts": 1777315483.2577448
     },
     {
       "id": "cached_cat_1777315636",
@@ -17489,7 +17868,10 @@
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -37232.10546875,
       "quality_score": 90,
-      "thumbnail_path": "assets/thumbnails/cached_cat_1777315636.png"
+      "thumbnail_path": "assets/thumbnails/cached_cat_1777315636.png",
+      "use_count": 2,
+      "last_rendered_ts": 1777385870.4668245,
+      "first_rendered_ts": 1777315636.0294828
     },
     {
       "id": "lib_vehicle_2025_mclaren_w1",
@@ -17538,7 +17920,8 @@
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -1.0,
       "quality_score": 100,
-      "thumbnail_path": "assets/thumbnails/lib_vehicle_2025_mclaren_w1.png"
+      "thumbnail_path": "assets/thumbnails/lib_vehicle_2025_mclaren_w1.png",
+      "use_count": 0
     },
     {
       "id": "lib_vehicle_bmw_m4_widebody__www_vecarz_com",
@@ -17587,7 +17970,8 @@
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -0.04334636777639389,
       "quality_score": 100,
-      "thumbnail_path": "assets/thumbnails/lib_vehicle_bmw_m4_widebody__www_vecarz_com.png"
+      "thumbnail_path": "assets/thumbnails/lib_vehicle_bmw_m4_widebody__www_vecarz_com.png",
+      "use_count": 0
     },
     {
       "id": "lib_environment_catalina_island_california_pacific_ocean",
@@ -17636,7 +18020,8 @@
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -0.002367795677855611,
       "quality_score": 100,
-      "thumbnail_path": "assets/thumbnails/lib_environment_catalina_island_california_pacific_ocean.png"
+      "thumbnail_path": "assets/thumbnails/lib_environment_catalina_island_california_pacific_ocean.png",
+      "use_count": 0
     },
     {
       "id": "lib_environment_city_pack_8",
@@ -17685,7 +18070,8 @@
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -3.550942897796631,
       "quality_score": 100,
-      "thumbnail_path": "assets/thumbnails/lib_environment_city_pack_8.png"
+      "thumbnail_path": "assets/thumbnails/lib_environment_city_pack_8.png",
+      "use_count": 0
     },
     {
       "id": "lib_environment_city_test",
@@ -17734,7 +18120,8 @@
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -54271.63671875,
       "quality_score": 100,
-      "thumbnail_path": "assets/thumbnails/lib_environment_city_test.png"
+      "thumbnail_path": "assets/thumbnails/lib_environment_city_test.png",
+      "use_count": 0
     },
     {
       "id": "lib_vehicle_ferrari_p80c_2019__www_vecarz_com",
@@ -17783,7 +18170,8 @@
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -0.03313836082816124,
       "quality_score": 100,
-      "thumbnail_path": "assets/thumbnails/lib_vehicle_ferrari_p80c_2019__www_vecarz_com.png"
+      "thumbnail_path": "assets/thumbnails/lib_vehicle_ferrari_p80c_2019__www_vecarz_com.png",
+      "use_count": 0
     },
     {
       "id": "lib_unknown_glacial_lake",
@@ -17832,7 +18220,8 @@
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -0.15710237622261047,
       "quality_score": 90,
-      "thumbnail_path": "assets/thumbnails/lib_unknown_glacial_lake.png"
+      "thumbnail_path": "assets/thumbnails/lib_unknown_glacial_lake.png",
+      "use_count": 0
     },
     {
       "id": "lib_environment_golden_horizon___sunrise_sky_environment",
@@ -17881,7 +18270,8 @@
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -2.1620283126831055,
       "quality_score": 100,
-      "thumbnail_path": "assets/thumbnails/lib_environment_golden_horizon___sunrise_sky_environment.png"
+      "thumbnail_path": "assets/thumbnails/lib_environment_golden_horizon___sunrise_sky_environment.png",
+      "use_count": 0
     },
     {
       "id": "lib_vehicle_lamborghini_fenomeno_2025__www_vecarz_com",
@@ -17930,7 +18320,8 @@
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -0.001056423643603921,
       "quality_score": 100,
-      "thumbnail_path": "assets/thumbnails/lib_vehicle_lamborghini_fenomeno_2025__www_vecarz_com.png"
+      "thumbnail_path": "assets/thumbnails/lib_vehicle_lamborghini_fenomeno_2025__www_vecarz_com.png",
+      "use_count": 0
     },
     {
       "id": "lib_vehicle_mclaren_f1_1993_by_alex_ka",
@@ -17979,7 +18370,8 @@
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -0.00242576259188354,
       "quality_score": 100,
-      "thumbnail_path": "assets/thumbnails/lib_vehicle_mclaren_f1_1993_by_alex_ka.png"
+      "thumbnail_path": "assets/thumbnails/lib_vehicle_mclaren_f1_1993_by_alex_ka.png",
+      "use_count": 0
     },
     {
       "id": "lib_environment_mountain_2",
@@ -18028,7 +18420,8 @@
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -0.00015147317026276141,
       "quality_score": 100,
-      "thumbnail_path": "assets/thumbnails/lib_environment_mountain_2.png"
+      "thumbnail_path": "assets/thumbnails/lib_environment_mountain_2.png",
+      "use_count": 0
     },
     {
       "id": "lib_character_oiiaioooooiai_cat",
@@ -18082,7 +18475,8 @@
       ],
       "ground_offset_z": -0.011010946705937386,
       "quality_score": 90,
-      "thumbnail_path": "assets/thumbnails/lib_character_oiiaioooooiai_cat.png"
+      "thumbnail_path": "assets/thumbnails/lib_character_oiiaioooooiai_cat.png",
+      "use_count": 0
     },
     {
       "id": "lib_character_realistic_bear_3d_model_2_0_demo_free_download",
@@ -18136,7 +18530,8 @@
       ],
       "ground_offset_z": -3.128465414047241,
       "quality_score": 90,
-      "thumbnail_path": "assets/thumbnails/lib_character_realistic_bear_3d_model_2_0_demo_free_download.png"
+      "thumbnail_path": "assets/thumbnails/lib_character_realistic_bear_3d_model_2_0_demo_free_download.png",
+      "use_count": 0
     },
     {
       "id": "lib_vehicle_rimac_nevera_r_2025__www_vecarz_com",
@@ -18185,7 +18580,8 @@
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -3.613577064243145e-05,
       "quality_score": 100,
-      "thumbnail_path": "assets/thumbnails/lib_vehicle_rimac_nevera_r_2025__www_vecarz_com.png"
+      "thumbnail_path": "assets/thumbnails/lib_vehicle_rimac_nevera_r_2025__www_vecarz_com.png",
+      "use_count": 0
     },
     {
       "id": "lib_character_sleeping_cat_on_the_bed_1___3d_scan",
@@ -18239,7 +18635,8 @@
       ],
       "ground_offset_z": -0.0454435758292675,
       "quality_score": 90,
-      "thumbnail_path": "assets/thumbnails/lib_character_sleeping_cat_on_the_bed_1___3d_scan.png"
+      "thumbnail_path": "assets/thumbnails/lib_character_sleeping_cat_on_the_bed_1___3d_scan.png",
+      "use_count": 0
     },
     {
       "id": "lib_environment_fantasy_landscape",
@@ -18288,7 +18685,8 @@
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -0.7377071976661682,
       "quality_score": 100,
-      "thumbnail_path": "assets/thumbnails/lib_environment_fantasy_landscape.png"
+      "thumbnail_path": "assets/thumbnails/lib_environment_fantasy_landscape.png",
+      "use_count": 0
     },
     {
       "id": "lib_environment_grassy_landscape_with_snow",
@@ -18337,7 +18735,8 @@
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -0.20702916383743286,
       "quality_score": 100,
-      "thumbnail_path": "assets/thumbnails/lib_environment_grassy_landscape_with_snow.png"
+      "thumbnail_path": "assets/thumbnails/lib_environment_grassy_landscape_with_snow.png",
+      "use_count": 0
     },
     {
       "id": "lib_unknown_isometric_world",
@@ -18386,7 +18785,8 @@
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -0.388710081577301,
       "quality_score": 90,
-      "thumbnail_path": "assets/thumbnails/lib_unknown_isometric_world.png"
+      "thumbnail_path": "assets/thumbnails/lib_unknown_isometric_world.png",
+      "use_count": 0
     },
     {
       "id": "lib_environment_large_scale_landscape_low_poly",
@@ -18435,7 +18835,8 @@
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": 0.05777250975370407,
       "quality_score": 100,
-      "thumbnail_path": "assets/thumbnails/lib_environment_large_scale_landscape_low_poly.png"
+      "thumbnail_path": "assets/thumbnails/lib_environment_large_scale_landscape_low_poly.png",
+      "use_count": 0
     },
     {
       "id": "lib_environment_mars_landscape",
@@ -18484,7 +18885,8 @@
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -0.0016998702194541693,
       "quality_score": 100,
-      "thumbnail_path": "assets/thumbnails/lib_environment_mars_landscape.png"
+      "thumbnail_path": "assets/thumbnails/lib_environment_mars_landscape.png",
+      "use_count": 0
     },
     {
       "id": "lib_environment_scifi_landscape",
@@ -18533,7 +18935,8 @@
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -31.81808090209961,
       "quality_score": 100,
-      "thumbnail_path": "assets/thumbnails/lib_environment_scifi_landscape.png"
+      "thumbnail_path": "assets/thumbnails/lib_environment_scifi_landscape.png",
+      "use_count": 0
     },
     {
       "id": "lib_unknown_thunderstorm",
@@ -18582,7 +18985,8 @@
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -52696.73828125,
       "quality_score": 90,
-      "thumbnail_path": "assets/thumbnails/lib_unknown_thunderstorm.png"
+      "thumbnail_path": "assets/thumbnails/lib_unknown_thunderstorm.png",
+      "use_count": 0
     },
     {
       "id": "lib_environment_forest_landscape",
@@ -18631,7 +19035,8 @@
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -0.11286739259958267,
       "quality_score": 100,
-      "thumbnail_path": "assets/thumbnails/lib_environment_forest_landscape.png"
+      "thumbnail_path": "assets/thumbnails/lib_environment_forest_landscape.png",
+      "use_count": 0
     },
     {
       "id": "lib_unknown_wanderers",
@@ -18680,7 +19085,8 @@
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -13.801990509033203,
       "quality_score": 90,
-      "thumbnail_path": "assets/thumbnails/lib_unknown_wanderers.png"
+      "thumbnail_path": "assets/thumbnails/lib_unknown_wanderers.png",
+      "use_count": 0
     },
     {
       "id": "lib_environment_city_3d_model",
@@ -18729,7 +19135,8 @@
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": 0.8826913237571716,
       "quality_score": 100,
-      "thumbnail_path": "assets/thumbnails/lib_environment_city_3d_model.png"
+      "thumbnail_path": "assets/thumbnails/lib_environment_city_3d_model.png",
+      "use_count": 0
     },
     {
       "id": "lib_environment_drone_topography___city_dem_by_fae_drones",
@@ -18778,7 +19185,8 @@
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": 85.365966796875,
       "quality_score": 100,
-      "thumbnail_path": "assets/thumbnails/lib_environment_drone_topography___city_dem_by_fae_drones.png"
+      "thumbnail_path": "assets/thumbnails/lib_environment_drone_topography___city_dem_by_fae_drones.png",
+      "use_count": 0
     },
     {
       "id": "lib_environment_auckland_city",
@@ -18827,7 +19235,8 @@
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -1.2814797401006217e-07,
       "quality_score": 100,
-      "thumbnail_path": "assets/thumbnails/lib_environment_auckland_city.png"
+      "thumbnail_path": "assets/thumbnails/lib_environment_auckland_city.png",
+      "use_count": 0
     },
     {
       "id": "lib_environment_birmingham_city",
@@ -18876,7 +19285,8 @@
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": 2.699584378262898e-08,
       "quality_score": 100,
-      "thumbnail_path": "assets/thumbnails/lib_environment_birmingham_city.png"
+      "thumbnail_path": "assets/thumbnails/lib_environment_birmingham_city.png",
+      "use_count": 0
     },
     {
       "id": "lib_environment_procedural_city_3",
@@ -18925,7 +19335,8 @@
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -0.10000002384185791,
       "quality_score": 100,
-      "thumbnail_path": "assets/thumbnails/lib_environment_procedural_city_3.png"
+      "thumbnail_path": "assets/thumbnails/lib_environment_procedural_city_3.png",
+      "use_count": 0
     },
     {
       "id": "lib_environment_cyberpunk_city",
@@ -18974,7 +19385,8 @@
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": 0.0004091113805770874,
       "quality_score": 100,
-      "thumbnail_path": "assets/thumbnails/lib_environment_cyberpunk_city.png"
+      "thumbnail_path": "assets/thumbnails/lib_environment_cyberpunk_city.png",
+      "use_count": 0
     },
     {
       "id": "lib_environment_city_pack_7",
@@ -19023,7 +19435,8 @@
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -129.1393280029297,
       "quality_score": 100,
-      "thumbnail_path": "assets/thumbnails/lib_environment_city_pack_7.png"
+      "thumbnail_path": "assets/thumbnails/lib_environment_city_pack_7.png",
+      "use_count": 0
     },
     {
       "id": "lib_unknown_dirty_street",
@@ -19072,7 +19485,8 @@
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -1.9592256546020508,
       "quality_score": 90,
-      "thumbnail_path": "assets/thumbnails/lib_unknown_dirty_street.png"
+      "thumbnail_path": "assets/thumbnails/lib_unknown_dirty_street.png",
+      "use_count": 0
     },
     {
       "id": "lib_environment_city_scene",
@@ -19121,7 +19535,8 @@
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -0.5745155811309814,
       "quality_score": 100,
-      "thumbnail_path": "assets/thumbnails/lib_environment_city_scene.png"
+      "thumbnail_path": "assets/thumbnails/lib_environment_city_scene.png",
+      "use_count": 0
     },
     {
       "id": "lib_unknown_brooklyn_street_row_buildings_low_poly",
@@ -19170,7 +19585,8 @@
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -0.8995670676231384,
       "quality_score": 90,
-      "thumbnail_path": "assets/thumbnails/lib_unknown_brooklyn_street_row_buildings_low_poly.png"
+      "thumbnail_path": "assets/thumbnails/lib_unknown_brooklyn_street_row_buildings_low_poly.png",
+      "use_count": 0
     },
     {
       "id": "lib_unknown_model_66a___atlantic_sturgeon",
@@ -19219,7 +19635,8 @@
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -1.0,
       "quality_score": 90,
-      "thumbnail_path": "assets/thumbnails/lib_unknown_model_66a___atlantic_sturgeon.png"
+      "thumbnail_path": "assets/thumbnails/lib_unknown_model_66a___atlantic_sturgeon.png",
+      "use_count": 0
     },
     {
       "id": "lib_character_realistic_animals_small_pack",
@@ -19273,7 +19690,8 @@
       ],
       "ground_offset_z": -0.25463923811912537,
       "quality_score": 90,
-      "thumbnail_path": "assets/thumbnails/lib_character_realistic_animals_small_pack.png"
+      "thumbnail_path": "assets/thumbnails/lib_character_realistic_animals_small_pack.png",
+      "use_count": 0
     },
     {
       "id": "lib_unknown_model_47a___loggerhead_sea_turtle",
@@ -19322,7 +19740,8 @@
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -62.31202697753906,
       "quality_score": 90,
-      "thumbnail_path": "assets/thumbnails/lib_unknown_model_47a___loggerhead_sea_turtle.png"
+      "thumbnail_path": "assets/thumbnails/lib_unknown_model_47a___loggerhead_sea_turtle.png",
+      "use_count": 0
     },
     {
       "id": "lib_character_titmouse___animals",
@@ -19376,7 +19795,8 @@
       ],
       "ground_offset_z": -6.459182262420654,
       "quality_score": 90,
-      "thumbnail_path": "assets/thumbnails/lib_character_titmouse___animals.png"
+      "thumbnail_path": "assets/thumbnails/lib_character_titmouse___animals.png",
+      "use_count": 0
     },
     {
       "id": "lib_unknown_realistic_holstein_cow___game_ready_asset",
@@ -19425,7 +19845,8 @@
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -0.527159571647644,
       "quality_score": 90,
-      "thumbnail_path": "assets/thumbnails/lib_unknown_realistic_holstein_cow___game_ready_asset.png"
+      "thumbnail_path": "assets/thumbnails/lib_unknown_realistic_holstein_cow___game_ready_asset.png",
+      "use_count": 0
     },
     {
       "id": "lib_unknown_realistic_mallard_duck___game_ready_asset",
@@ -19474,7 +19895,8 @@
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -0.34857186675071716,
       "quality_score": 90,
-      "thumbnail_path": "assets/thumbnails/lib_unknown_realistic_mallard_duck___game_ready_asset.png"
+      "thumbnail_path": "assets/thumbnails/lib_unknown_realistic_mallard_duck___game_ready_asset.png",
+      "use_count": 0
     },
     {
       "id": "lib_unknown_brown_cow_3d_model",
@@ -19523,7 +19945,8 @@
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -0.5527852177619934,
       "quality_score": 90,
-      "thumbnail_path": "assets/thumbnails/lib_unknown_brown_cow_3d_model.png"
+      "thumbnail_path": "assets/thumbnails/lib_unknown_brown_cow_3d_model.png",
+      "use_count": 0
     },
     {
       "id": "lib_character_animated_rhinoceros_walking_animal_loop",
@@ -19572,7 +19995,8 @@
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -1.0,
       "quality_score": 100,
-      "thumbnail_path": "assets/thumbnails/lib_character_animated_rhinoceros_walking_animal_loop.png"
+      "thumbnail_path": "assets/thumbnails/lib_character_animated_rhinoceros_walking_animal_loop.png",
+      "use_count": 0
     },
     {
       "id": "lib_character_realistic_animals_pack",
@@ -19626,7 +20050,8 @@
       ],
       "ground_offset_z": -0.01739059016108513,
       "quality_score": 90,
-      "thumbnail_path": "assets/thumbnails/lib_character_realistic_animals_pack.png"
+      "thumbnail_path": "assets/thumbnails/lib_character_realistic_animals_pack.png",
+      "use_count": 0
     },
     {
       "id": "lib_character_tiger_animal_pets_cat",
@@ -19675,7 +20100,8 @@
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -0.6616953015327454,
       "quality_score": 100,
-      "thumbnail_path": "assets/thumbnails/lib_character_tiger_animal_pets_cat.png"
+      "thumbnail_path": "assets/thumbnails/lib_character_tiger_animal_pets_cat.png",
+      "use_count": 0
     },
     {
       "id": "lib_character_cyberpunk_character",
@@ -19724,7 +20150,8 @@
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -1.0,
       "quality_score": 100,
-      "thumbnail_path": "assets/thumbnails/lib_character_cyberpunk_character.png"
+      "thumbnail_path": "assets/thumbnails/lib_character_cyberpunk_character.png",
+      "use_count": 0
     },
     {
       "id": "lib_vehicle_mclaren_f1_1993_by_alex_ka_1",
@@ -19773,7 +20200,8 @@
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -0.00242576259188354,
       "quality_score": 100,
-      "thumbnail_path": "assets/thumbnails/lib_vehicle_mclaren_f1_1993_by_alex_ka_1.png"
+      "thumbnail_path": "assets/thumbnails/lib_vehicle_mclaren_f1_1993_by_alex_ka_1.png",
+      "use_count": 0
     },
     {
       "id": "lib_vehicle_mclaren_f1_gtr_longtail__www_vecarz_com",
@@ -19822,7 +20250,8 @@
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -0.0680997371673584,
       "quality_score": 100,
-      "thumbnail_path": "assets/thumbnails/lib_vehicle_mclaren_f1_gtr_longtail__www_vecarz_com.png"
+      "thumbnail_path": "assets/thumbnails/lib_vehicle_mclaren_f1_gtr_longtail__www_vecarz_com.png",
+      "use_count": 0
     },
     {
       "id": "lib_vehicle_redbull_rb19_oracle__www_vecarz_com",
@@ -19871,7 +20300,8 @@
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": 0.027967408299446106,
       "quality_score": 100,
-      "thumbnail_path": "assets/thumbnails/lib_vehicle_redbull_rb19_oracle__www_vecarz_com.png"
+      "thumbnail_path": "assets/thumbnails/lib_vehicle_redbull_rb19_oracle__www_vecarz_com.png",
+      "use_count": 0
     },
     {
       "id": "lib_vehicle_mercedes_amg_gt3__www_vecarz_com",
@@ -19920,7 +20350,8 @@
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -2.140105607395526e-06,
       "quality_score": 100,
-      "thumbnail_path": "assets/thumbnails/lib_vehicle_mercedes_amg_gt3__www_vecarz_com.png"
+      "thumbnail_path": "assets/thumbnails/lib_vehicle_mercedes_amg_gt3__www_vecarz_com.png",
+      "use_count": 0
     },
     {
       "id": "lib_vehicle_porsche_992_gt3_rs_2024__www_vecarz_com",
@@ -19969,7 +20400,8 @@
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -1.4428800568566658e-05,
       "quality_score": 100,
-      "thumbnail_path": "assets/thumbnails/lib_vehicle_porsche_992_gt3_rs_2024__www_vecarz_com.png"
+      "thumbnail_path": "assets/thumbnails/lib_vehicle_porsche_992_gt3_rs_2024__www_vecarz_com.png",
+      "use_count": 0
     },
     {
       "id": "lib_vehicle_porsche_992_gt3_r__www_vecarz_com",
@@ -20018,7 +20450,8 @@
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": 0.00020001688972115517,
       "quality_score": 100,
-      "thumbnail_path": "assets/thumbnails/lib_vehicle_porsche_992_gt3_r__www_vecarz_com.png"
+      "thumbnail_path": "assets/thumbnails/lib_vehicle_porsche_992_gt3_r__www_vecarz_com.png",
+      "use_count": 0
     },
     {
       "id": "lib_vehicle_rimac_nevera_r_2025__www_vecarz_com_1",
@@ -20067,7 +20500,8 @@
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -3.613577064243145e-05,
       "quality_score": 100,
-      "thumbnail_path": "assets/thumbnails/lib_vehicle_rimac_nevera_r_2025__www_vecarz_com_1.png"
+      "thumbnail_path": "assets/thumbnails/lib_vehicle_rimac_nevera_r_2025__www_vecarz_com_1.png",
+      "use_count": 0
     },
     {
       "id": "lib_vehicle_1993_honda_civic_coupe_vis_racing_fast__furious",
@@ -20116,7 +20550,8 @@
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -1.0,
       "quality_score": 100,
-      "thumbnail_path": "assets/thumbnails/lib_vehicle_1993_honda_civic_coupe_vis_racing_fast__furious.png"
+      "thumbnail_path": "assets/thumbnails/lib_vehicle_1993_honda_civic_coupe_vis_racing_fast__furious.png",
+      "use_count": 0
     },
     {
       "id": "lib_unknown_koi_fish",
@@ -20165,7 +20600,8 @@
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -1.1786811351776123,
       "quality_score": 90,
-      "thumbnail_path": "assets/thumbnails/lib_unknown_koi_fish.png"
+      "thumbnail_path": "assets/thumbnails/lib_unknown_koi_fish.png",
+      "use_count": 0
     },
     {
       "id": "lib_unknown_nile_crocodile_swimming",
@@ -20214,7 +20650,8 @@
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -1.0,
       "quality_score": 90,
-      "thumbnail_path": "assets/thumbnails/lib_unknown_nile_crocodile_swimming.png"
+      "thumbnail_path": "assets/thumbnails/lib_unknown_nile_crocodile_swimming.png",
+      "use_count": 0
     },
     {
       "id": "lib_character_pop_cat",
@@ -20263,7 +20700,8 @@
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -1.913496494293213,
       "quality_score": 100,
-      "thumbnail_path": "assets/thumbnails/lib_character_pop_cat.png"
+      "thumbnail_path": "assets/thumbnails/lib_character_pop_cat.png",
+      "use_count": 0
     },
     {
       "id": "lib_unknown_2021_lexus_bev_sport_concept",
@@ -20312,7 +20750,8 @@
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": 6.710000889142975e-06,
       "quality_score": 90,
-      "thumbnail_path": "assets/thumbnails/lib_unknown_2021_lexus_bev_sport_concept.png"
+      "thumbnail_path": "assets/thumbnails/lib_unknown_2021_lexus_bev_sport_concept.png",
+      "use_count": 0
     },
     {
       "id": "lib_vehicle_toyota_gr_gt3",
@@ -20361,7 +20800,8 @@
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -0.005869194399565458,
       "quality_score": 100,
-      "thumbnail_path": "assets/thumbnails/lib_vehicle_toyota_gr_gt3.png"
+      "thumbnail_path": "assets/thumbnails/lib_vehicle_toyota_gr_gt3.png",
+      "use_count": 0
     },
     {
       "id": "lib_unknown_2024_bugatti_mistral",
@@ -20410,7 +20850,8 @@
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -0.12765979766845703,
       "quality_score": 90,
-      "thumbnail_path": "assets/thumbnails/lib_unknown_2024_bugatti_mistral.png"
+      "thumbnail_path": "assets/thumbnails/lib_unknown_2024_bugatti_mistral.png",
+      "use_count": 0
     },
     {
       "id": "lib_vehicle_airplane_exterior",
@@ -20466,7 +20907,8 @@
       "quality_score": 90,
       "thumbnail_path": "assets/thumbnails/lib_vehicle_airplane_exterior.png",
       "source_path": "airplane-interior.zip",
-      "extracted_from_archive": true
+      "extracted_from_archive": true,
+      "use_count": 0
     },
     {
       "id": "lib_unknown_audi_rs6gt_avant",
@@ -20517,7 +20959,8 @@
       "quality_score": 90,
       "thumbnail_path": "assets/thumbnails/lib_unknown_audi_rs6gt_avant.png",
       "source_path": "audi-rs6-gt-avant-wwwvecarzcom.zip",
-      "extracted_from_archive": true
+      "extracted_from_archive": true,
+      "use_count": 0
     },
     {
       "id": "lib_environment_scene",
@@ -20568,7 +21011,8 @@
       "quality_score": 100,
       "thumbnail_path": "assets/thumbnails/lib_environment_scene.png",
       "source_path": "cyberpunk-city.zip",
-      "extracted_from_archive": true
+      "extracted_from_archive": true,
+      "use_count": 0
     },
     {
       "id": "lib_vehicle_honda_civic_si",
@@ -20619,7 +21063,8 @@
       "quality_score": 100,
       "thumbnail_path": "assets/thumbnails/lib_vehicle_honda_civic_si.png",
       "source_path": "honda-civic-si-wwwvecarzcom.zip",
-      "extracted_from_archive": true
+      "extracted_from_archive": true,
+      "use_count": 0
     },
     {
       "id": "lib_unknown_auto_blend",
@@ -20670,7 +21115,8 @@
       "quality_score": 90,
       "thumbnail_path": "assets/thumbnails/lib_unknown_auto_blend.png",
       "source_path": "isometric-world.zip",
-      "extracted_from_archive": true
+      "extracted_from_archive": true,
+      "use_count": 0
     },
     {
       "id": "lib_unknown_jeep_wrangler_adventure_rubicon001",
@@ -20721,7 +21167,8 @@
       "quality_score": 90,
       "thumbnail_path": "assets/thumbnails/lib_unknown_jeep_wrangler_adventure_rubicon001.png",
       "source_path": "jeep-wrangler-adventure-rubicon-wwwvecarzcom.zip",
-      "extracted_from_archive": true
+      "extracted_from_archive": true,
+      "use_count": 0
     },
     {
       "id": "lib_environment_polyhaven_pine_fir_forest",
@@ -20783,7 +21230,8 @@
       "quality_score": 85,
       "thumbnail_path": null,
       "source_path": "pine_forest.zip",
-      "extracted_from_archive": true
+      "extracted_from_archive": true,
+      "use_count": 0
     },
     {
       "id": "lib_character_cat",
@@ -20836,7 +21284,8 @@
       "quality_score": 85,
       "thumbnail_path": "assets/thumbnails/lib_character_cat.png",
       "source_path": "pop-cat.zip",
-      "extracted_from_archive": true
+      "extracted_from_archive": true,
+      "use_count": 0
     },
     {
       "id": "lib_character_white_tiger",
@@ -20894,7 +21343,8 @@
       "quality_score": 75,
       "thumbnail_path": "assets/thumbnails/lib_character_white_tiger.png",
       "source_path": "white-tiger-rigged-animated.zip",
-      "extracted_from_archive": true
+      "extracted_from_archive": true,
+      "use_count": 0
     },
     {
       "id": "cached_bear_1777390355",
@@ -20968,7 +21418,10 @@
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -3.128465414047241,
       "quality_score": 90,
-      "thumbnail_path": "assets/thumbnails/cached_bear_1777390355.png"
+      "thumbnail_path": "assets/thumbnails/cached_bear_1777390355.png",
+      "use_count": 1,
+      "last_rendered_ts": 1777390355.4128573,
+      "first_rendered_ts": 1777390355.4128573
     },
     {
       "id": "cached_tiger_1777397158",
@@ -21040,7 +21493,10 @@
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -1.0,
       "quality_score": 90,
-      "thumbnail_path": "assets/thumbnails/cached_tiger_1777397158.png"
+      "thumbnail_path": "assets/thumbnails/cached_tiger_1777397158.png",
+      "use_count": 2,
+      "last_rendered_ts": 1777399616.9088745,
+      "first_rendered_ts": 1777397158.4010882
     },
     {
       "id": "cached_cat_1777398130",
@@ -21107,7 +21563,10 @@
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -1.913496494293213,
       "quality_score": 100,
-      "thumbnail_path": "assets/thumbnails/cached_cat_1777398130.png"
+      "thumbnail_path": "assets/thumbnails/cached_cat_1777398130.png",
+      "use_count": 7,
+      "last_rendered_ts": 1777410244.6553621,
+      "first_rendered_ts": 1777398130.0040596
     },
     {
       "id": "cached_ferrari_1777401391",
@@ -21172,7 +21631,10 @@
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -0.03313836082816124,
       "quality_score": 100,
-      "thumbnail_path": "assets/thumbnails/cached_ferrari_1777401391.png"
+      "thumbnail_path": "assets/thumbnails/cached_ferrari_1777401391.png",
+      "use_count": 1,
+      "last_rendered_ts": 1777401391.6377184,
+      "first_rendered_ts": 1777401391.6377184
     },
     {
       "id": "cached_rhino_1777408125",
@@ -21235,7 +21697,10 @@
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -1.0,
       "quality_score": 100,
-      "thumbnail_path": null
+      "thumbnail_path": null,
+      "use_count": 2,
+      "last_rendered_ts": 1777408386.3649719,
+      "first_rendered_ts": 1777408125.1619663
     },
     {
       "id": "lib_unknown_blender_render_20260428_160140_198181",
@@ -21288,7 +21753,8 @@
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -25.0,
       "quality_score": 75,
-      "thumbnail_path": null
+      "thumbnail_path": null,
+      "use_count": 0
     },
     {
       "id": "cached_lion_1777478969",
@@ -21359,7 +21825,10 @@
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -0.28582772612571716,
       "quality_score": 90,
-      "thumbnail_path": null
+      "thumbnail_path": null,
+      "use_count": 2,
+      "last_rendered_ts": 1777479288.0146463,
+      "first_rendered_ts": 1777478969.2442968
     },
     {
       "id": "cached_polar_bear_1777492808",
@@ -21426,7 +21895,791 @@
       "orientation_fix_rotation_euler": null,
       "ground_offset_z": -13718.400390625,
       "quality_score": 90,
-      "thumbnail_path": null
+      "thumbnail_path": null,
+      "use_count": 1,
+      "last_rendered_ts": 1777492808.9494295,
+      "first_rendered_ts": 1777492808.9494295
+    },
+    {
+      "id": "cached_car_1777496161",
+      "subject": "car",
+      "subject_tags": [
+        "by",
+        "car",
+        "creativo",
+        "free",
+        "model",
+        "oscar",
+        "vehicle"
+      ],
+      "visual_descriptors": [],
+      "path": "C:\\Users\\bgrut\\Desktop\\FantasyAI\\fantasy-studio\\backend\\assets\\cache\\models\\vehicles\\car_free_model_by_oscar_creativo.glb",
+      "type": "vehicle",
+      "scale_class": "medium",
+      "source": "cached",
+      "source_metadata": {
+        "original_name": "car",
+        "uid": null,
+        "original_score": 100,
+        "url": null,
+        "license": null,
+        "fetched_ts": 1777496161.6384826
+      },
+      "quality_flags": {},
+      "tested": false,
+      "bounds_meters": null,
+      "healer_version": "1.0",
+      "launch_ready": false,
+      "provisional_ready": true,
+      "heal_notes": [
+        "passed all auto-checks -> provisional_ready=True (awaits human launch_ready confirmation)"
+      ],
+      "bbox_min": [
+        -1.1016860008239746,
+        -2.4271514415740967,
+        -1.0
+      ],
+      "bbox_max": [
+        1.1016860008239746,
+        2.7124032974243164,
+        1.4278851747512817
+      ],
+      "bbox_dims": [
+        2.203372001647949,
+        5.139554738998413,
+        2.4278851747512817
+      ],
+      "centroid": [
+        0.023363050346481073,
+        0.2719145701321688,
+        0.6958204080108513
+      ],
+      "mesh_count": 59,
+      "vertex_count": 314758,
+      "has_armature": true,
+      "material_issues": [],
+      "real_world_size_m": 5.139554738998413,
+      "shape_class": "vehicle_generic",
+      "inferred_category": "vehicle",
+      "orientation_issue": null,
+      "orientation_fix_rotation_euler": null,
+      "ground_offset_z": -1.0,
+      "quality_score": 100,
+      "thumbnail_path": null,
+      "use_count": 1,
+      "last_rendered_ts": 1777496161.6384826,
+      "last_used_at": "2026-04-29 15:56:01",
+      "first_rendered_ts": 1777496161.6384826
+    },
+    {
+      "id": "cached_ferrari_1777511290",
+      "subject": "ferrari",
+      "subject_tags": [
+        "automotive",
+        "car",
+        "commercial",
+        "ferrari",
+        "hero",
+        "luxury",
+        "premium",
+        "sports",
+        "sports_car",
+        "sportscar",
+        "vehicle"
+      ],
+      "visual_descriptors": [],
+      "path": "C:\\Users\\bgrut\\Desktop\\FantasyAI\\fantasy-studio\\backend\\assets\\cache\\models\\vehicles\\ferrari_01.blend",
+      "type": "vehicle",
+      "scale_class": "medium",
+      "source": "cached",
+      "source_metadata": {
+        "original_name": "ferrari",
+        "uid": null,
+        "original_score": 100,
+        "url": null,
+        "license": null,
+        "fetched_ts": 1777511290.3645024
+      },
+      "quality_flags": {},
+      "tested": true,
+      "bounds_meters": null,
+      "healer_version": "1.0",
+      "launch_ready": false,
+      "provisional_ready": true,
+      "heal_notes": [
+        "passed all auto-checks -> provisional_ready=True (awaits human launch_ready confirmation)"
+      ],
+      "bbox_min": [
+        -34.87725830078125,
+        -77.41523742675781,
+        -0.03313836082816124
+      ],
+      "bbox_max": [
+        34.865867614746094,
+        75.10658264160156,
+        36.9566535949707
+      ],
+      "bbox_dims": [
+        69.74312591552734,
+        152.52182006835938,
+        36.989791955798864
+      ],
+      "centroid": [
+        1.6466063360282412,
+        -2.523155005521485,
+        17.054847441903178
+      ],
+      "mesh_count": 185,
+      "vertex_count": 2664352,
+      "has_armature": false,
+      "material_issues": [],
+      "real_world_size_m": 152.52182006835938,
+      "shape_class": "vehicle_generic",
+      "inferred_category": "vehicle",
+      "orientation_issue": null,
+      "orientation_fix_rotation_euler": null,
+      "ground_offset_z": -0.03313836082816124,
+      "quality_score": 100,
+      "thumbnail_path": null,
+      "use_count": 2,
+      "last_rendered_ts": 1777511418.4150667,
+      "last_used_at": "2026-04-29 20:10:18",
+      "first_rendered_ts": 1777511290.3645024
+    },
+    {
+      "id": "cached_cat_1777511683",
+      "subject": "cat",
+      "subject_tags": [
+        "animal",
+        "cat",
+        "feline",
+        "mammal",
+        "miniature",
+        "pet"
+      ],
+      "visual_descriptors": [],
+      "path": "C:\\Users\\bgrut\\Desktop\\FantasyAI\\fantasy-studio\\backend\\assets\\cache\\models\\characters\\miniature_cat.glb",
+      "type": "animal",
+      "scale_class": "small",
+      "source": "cached",
+      "source_metadata": {
+        "original_name": "cat",
+        "uid": null,
+        "original_score": 100,
+        "url": null,
+        "license": null,
+        "fetched_ts": 1777511683.8386316
+      },
+      "quality_flags": {},
+      "tested": false,
+      "bounds_meters": null,
+      "healer_version": "1.0",
+      "launch_ready": false,
+      "provisional_ready": true,
+      "heal_notes": [
+        "passed all auto-checks -> provisional_ready=True (awaits human launch_ready confirmation)"
+      ],
+      "bbox_min": [
+        -0.25747400522232056,
+        -1.284005045890808,
+        0.0045460923574864864
+      ],
+      "bbox_max": [
+        0.3941589891910553,
+        1.1929494142532349,
+        2.1325550079345703
+      ],
+      "bbox_dims": [
+        0.6516329944133759,
+        2.476954460144043,
+        2.128008915577084
+      ],
+      "centroid": [
+        0.06136604388327683,
+        -0.0909665552204975,
+        0.8498471498335655
+      ],
+      "mesh_count": 1,
+      "vertex_count": 42463,
+      "has_armature": false,
+      "material_issues": [],
+      "real_world_size_m": 2.476954460144043,
+      "shape_class": "unclassified",
+      "inferred_category": "animal",
+      "orientation_issue": null,
+      "orientation_fix_rotation_euler": null,
+      "ground_offset_z": 0.0045460923574864864,
+      "quality_score": 90,
+      "thumbnail_path": null,
+      "use_count": 1,
+      "last_rendered_ts": 1777511683.8386316,
+      "last_used_at": "2026-04-29 20:14:43",
+      "first_rendered_ts": 1777511683.8386316
+    },
+    {
+      "id": "cached_rhino_1777511917",
+      "subject": "rhino",
+      "subject_tags": [
+        "3d",
+        "animal",
+        "animated",
+        "rhino",
+        "rhinoceros"
+      ],
+      "visual_descriptors": [],
+      "path": "C:\\Users\\bgrut\\Desktop\\FantasyAI\\fantasy-studio\\backend\\assets\\cache\\models\\characters\\3d_animated_rhinoceros.glb",
+      "type": "animal",
+      "scale_class": "medium",
+      "source": "cached",
+      "source_metadata": {
+        "original_name": "rhinoceros",
+        "uid": null,
+        "original_score": 100,
+        "url": null,
+        "license": null,
+        "fetched_ts": 1777511917.4568024
+      },
+      "quality_flags": {},
+      "tested": false,
+      "bounds_meters": null,
+      "healer_version": "1.0",
+      "launch_ready": false,
+      "provisional_ready": true,
+      "heal_notes": [
+        "passed all auto-checks -> provisional_ready=True (awaits human launch_ready confirmation)"
+      ],
+      "bbox_min": [
+        -1.7223249673843384,
+        -0.9999999403953552,
+        -3.820472002029419
+      ],
+      "bbox_max": [
+        1.7223249673843384,
+        4.883048057556152,
+        5.679699897766113
+      ],
+      "bbox_dims": [
+        3.4446499347686768,
+        5.883047997951508,
+        9.500171899795532
+      ],
+      "centroid": [
+        0.00028428209352159147,
+        2.574665419296952,
+        0.5604551414225258
+      ],
+      "mesh_count": 2,
+      "vertex_count": 32328,
+      "has_armature": true,
+      "material_issues": [],
+      "real_world_size_m": 9.500171899795532,
+      "shape_class": "unclassified",
+      "inferred_category": "animal",
+      "orientation_issue": null,
+      "orientation_fix_rotation_euler": null,
+      "ground_offset_z": -3.820472002029419,
+      "quality_score": 90,
+      "thumbnail_path": null,
+      "use_count": 1,
+      "last_rendered_ts": 1777511917.4568024,
+      "last_used_at": "2026-04-29 20:18:37",
+      "first_rendered_ts": 1777511917.4568024
+    },
+    {
+      "id": "sketchfab_knight_1777513935",
+      "subject": "knight",
+      "subject_tags": [
+        "3d",
+        "a-frame",
+        "book",
+        "bull",
+        "castle",
+        "character",
+        "fantasy",
+        "farm",
+        "humanoid",
+        "knight",
+        "low-poly",
+        "medieval",
+        "medievalfantasyscene",
+        "mill",
+        "mozilla",
+        "scene",
+        "sheep",
+        "tree"
+      ],
+      "visual_descriptors": [
+        "low_poly"
+      ],
+      "path": "C:\\Users\\bgrut\\Desktop\\FantasyAI\\blender-studio-backend\\assets\\cache\\models\\sketchfab\\06d5a80a04fc4c5ab552759e9a97d91a\\scene.gltf",
+      "type": "character",
+      "scale_class": "medium",
+      "source": "sketchfab",
+      "source_metadata": {
+        "original_name": "Medieval Fantasy Book",
+        "uid": null,
+        "original_score": null,
+        "url": null,
+        "license": "unknown",
+        "fetched_ts": 1777513935.8275566
+      },
+      "quality_flags": {},
+      "tested": false,
+      "bounds_meters": null,
+      "healer_version": "1.0",
+      "launch_ready": false,
+      "provisional_ready": true,
+      "heal_notes": [
+        "orientation: character_on_side_x -> auto-fix rotation [0.0, 1.5707963, 0.0]",
+        "passed all auto-checks -> provisional_ready=True (awaits human launch_ready confirmation)"
+      ],
+      "bbox_min": [
+        -56.32653045654297,
+        -36.43650436401367,
+        -23.202974319458008
+      ],
+      "bbox_max": [
+        46.73908233642578,
+        35.880577087402344,
+        23.202978134155273
+      ],
+      "bbox_dims": [
+        103.06561279296875,
+        72.31708145141602,
+        46.40595245361328
+      ],
+      "centroid": [
+        -6.338519006378926,
+        4.602535635589208,
+        1.6081958618098748
+      ],
+      "mesh_count": 10,
+      "vertex_count": 93009,
+      "has_armature": false,
+      "material_issues": [],
+      "real_world_size_m": 103.06561279296875,
+      "shape_class": "character_generic",
+      "inferred_category": "character",
+      "orientation_issue": "character_on_side_x",
+      "orientation_fix_rotation_euler": [
+        0.0,
+        1.5707963,
+        0.0
+      ],
+      "ground_offset_z": -23.202974319458008,
+      "quality_score": 90,
+      "thumbnail_path": null,
+      "use_count": 1,
+      "last_rendered_ts": 1777513935.8275566,
+      "last_used_at": "2026-04-29 20:52:15",
+      "first_rendered_ts": 1777513935.8275566
+    },
+    {
+      "id": "cached_char_1777566044",
+      "subject": "char",
+      "subject_tags": [
+        "animal",
+        "cat",
+        "char",
+        "character",
+        "dance",
+        "feline",
+        "hero",
+        "performer",
+        "quadruped",
+        "studio"
+      ],
+      "visual_descriptors": [],
+      "path": "C:\\Users\\bgrut\\Desktop\\FantasyAI\\fantasy-studio\\backend\\assets\\cache\\models\\characters\\char_2.blend",
+      "type": "animal",
+      "scale_class": "small",
+      "source": "cached",
+      "source_metadata": {
+        "original_name": "char",
+        "uid": null,
+        "original_score": 100,
+        "url": null,
+        "license": null,
+        "fetched_ts": 1777566044.8355124
+      },
+      "quality_flags": {},
+      "tested": true,
+      "bounds_meters": null,
+      "healer_version": "1.0",
+      "launch_ready": false,
+      "provisional_ready": true,
+      "heal_notes": [
+        "passed all auto-checks -> provisional_ready=True (awaits human launch_ready confirmation)"
+      ],
+      "bbox_min": [
+        -0.08884671330451965,
+        -0.3029167056083679,
+        -0.1933402270078659
+      ],
+      "bbox_max": [
+        0.1114857867360115,
+        0.4148407280445099,
+        0.21195456385612488
+      ],
+      "bbox_dims": [
+        0.20033250004053116,
+        0.7177574336528778,
+        0.4052947908639908
+      ],
+      "centroid": [
+        0.0069885694674637925,
+        -0.03255378911926512,
+        -0.005024581793420238
+      ],
+      "mesh_count": 2,
+      "vertex_count": 9282,
+      "has_armature": false,
+      "material_issues": [],
+      "real_world_size_m": 0.7177574336528778,
+      "shape_class": "unclassified",
+      "inferred_category": "animal",
+      "orientation_issue": null,
+      "orientation_fix_rotation_euler": null,
+      "ground_offset_z": -0.1933402270078659,
+      "quality_score": 90,
+      "thumbnail_path": null,
+      "use_count": 3,
+      "last_rendered_ts": 1777571933.816282,
+      "last_used_at": "2026-04-30 12:58:53",
+      "first_rendered_ts": 1777566044.8355124
+    },
+    {
+      "id": "sketchfab_goat_1777588748",
+      "subject": "goat",
+      "subject_tags": [
+        "3d",
+        "3dsmax",
+        "advertisement",
+        "architecture",
+        "art",
+        "asset",
+        "bar",
+        "cafe",
+        "content",
+        "cyberpunk",
+        "designer",
+        "electronics-gadgets",
+        "emissive",
+        "exterior",
+        "game",
+        "gamedev",
+        "glow",
+        "goat",
+        "indie",
+        "japan",
+        "lamp",
+        "lowpoly",
+        "maya",
+        "model",
+        "modeling",
+        "neon",
+        "night",
+        "optimized",
+        "pack",
+        "painter",
+        "pbr",
+        "prop",
+        "pub",
+        "reatime",
+        "scene",
+        "sign",
+        "street",
+        "substance",
+        "textured",
+        "texturing",
+        "toolbag",
+        "unwrapped"
+      ],
+      "visual_descriptors": [],
+      "path": "C:\\Users\\bgrut\\Desktop\\FantasyAI\\blender-studio-backend\\assets\\cache\\models\\sketchfab\\5849c107ecb7472bb1eef028f5b97f0d\\scene.gltf",
+      "type": "animal",
+      "scale_class": "small",
+      "source": "sketchfab",
+      "source_metadata": {
+        "original_name": "scene",
+        "uid": null,
+        "original_score": 100,
+        "url": null,
+        "license": null,
+        "fetched_ts": 1777588748.2547443
+      },
+      "quality_flags": {},
+      "tested": false,
+      "bounds_meters": null,
+      "healer_version": "1.0",
+      "launch_ready": false,
+      "provisional_ready": true,
+      "heal_notes": [
+        "passed all auto-checks -> provisional_ready=True (awaits human launch_ready confirmation)"
+      ],
+      "bbox_min": [
+        -6.843818664550781,
+        -2.3271188735961914,
+        -51.38594436645508
+      ],
+      "bbox_max": [
+        6.843818187713623,
+        43.29497528076172,
+        51.385929107666016
+      ],
+      "bbox_dims": [
+        13.687636852264404,
+        45.62209415435791,
+        102.7718734741211
+      ],
+      "centroid": [
+        -0.0022588013019479614,
+        25.27215593714293,
+        4.448188359697477
+      ],
+      "mesh_count": 2,
+      "vertex_count": 8358,
+      "has_armature": false,
+      "material_issues": [],
+      "real_world_size_m": 102.7718734741211,
+      "shape_class": "unclassified",
+      "inferred_category": "animal",
+      "orientation_issue": null,
+      "orientation_fix_rotation_euler": null,
+      "ground_offset_z": -51.38594436645508,
+      "quality_score": 90,
+      "thumbnail_path": null,
+      "use_count": 1,
+      "last_rendered_ts": 1777588748.2547443,
+      "last_used_at": "2026-04-30 17:39:08",
+      "first_rendered_ts": 1777588748.2547443
+    },
+    {
+      "id": "cached_horse_1777913254",
+      "subject": "horse",
+      "subject_tags": [
+        "(1)",
+        "animal",
+        "equine",
+        "horse",
+        "horse (1)",
+        "large",
+        "mammal"
+      ],
+      "visual_descriptors": [],
+      "path": "C:\\Users\\bgrut\\Desktop\\FantasyAI\\fantasy-studio\\backend\\assets\\cache\\models\\characters\\horse_1_.glb",
+      "type": "animal",
+      "scale_class": "medium",
+      "source": "cached",
+      "source_metadata": {
+        "original_name": "horse (1)",
+        "uid": null,
+        "original_score": 100,
+        "url": null,
+        "license": null,
+        "fetched_ts": 1777913254.177272
+      },
+      "quality_flags": {},
+      "tested": false,
+      "bounds_meters": null,
+      "healer_version": "1.0",
+      "launch_ready": false,
+      "provisional_ready": true,
+      "heal_notes": [
+        "passed all auto-checks -> provisional_ready=True (awaits human launch_ready confirmation)"
+      ],
+      "bbox_min": [
+        -31.233823776245117,
+        -187.91050720214844,
+        -1.0
+      ],
+      "bbox_max": [
+        31.233821868896484,
+        69.14816284179688,
+        205.02272033691406
+      ],
+      "bbox_dims": [
+        62.4676456451416,
+        257.0586700439453,
+        206.02272033691406
+      ],
+      "centroid": [
+        -0.6167043061414846,
+        -59.527536580553225,
+        109.6520099286122
+      ],
+      "mesh_count": 3,
+      "vertex_count": 8563,
+      "has_armature": true,
+      "material_issues": [],
+      "real_world_size_m": 257.0586700439453,
+      "shape_class": "unclassified",
+      "inferred_category": "animal",
+      "orientation_issue": null,
+      "orientation_fix_rotation_euler": null,
+      "ground_offset_z": -1.0,
+      "quality_score": 90,
+      "thumbnail_path": null,
+      "use_count": 1,
+      "last_rendered_ts": 1777913254.177272,
+      "last_used_at": "2026-05-04 11:47:34",
+      "first_rendered_ts": 1777913254.177272
+    },
+    {
+      "id": "sketchfab_dog_1777916231",
+      "subject": "dog",
+      "subject_tags": [
+        "anim",
+        "animal",
+        "animals-pets",
+        "animate",
+        "animation",
+        "canine",
+        "dog",
+        "family",
+        "hund",
+        "inu",
+        "mammal",
+        "mesh",
+        "movement",
+        "nature-plants",
+        "partner",
+        "pet",
+        "pets",
+        "play",
+        "scene",
+        "shiba"
+      ],
+      "visual_descriptors": [],
+      "path": "C:\\Users\\bgrut\\Desktop\\FantasyAI\\blender-studio-backend\\assets\\cache\\models\\sketchfab\\9abfce885a834399b2c3ccaed51cd474\\scene.gltf",
+      "type": "character",
+      "scale_class": "medium",
+      "source": "sketchfab",
+      "source_metadata": {
+        "original_name": "scene",
+        "uid": null,
+        "original_score": 100,
+        "url": null,
+        "license": null,
+        "fetched_ts": 1777916231.8233347
+      },
+      "quality_flags": {},
+      "tested": false,
+      "bounds_meters": null,
+      "healer_version": "1.0",
+      "launch_ready": false,
+      "provisional_ready": true,
+      "heal_notes": [
+        "passed all auto-checks -> provisional_ready=True (awaits human launch_ready confirmation)"
+      ],
+      "bbox_min": [
+        -17.21122932434082,
+        -62.02365493774414,
+        -1.0
+      ],
+      "bbox_max": [
+        17.211334228515625,
+        52.77756881713867,
+        83.01609802246094
+      ],
+      "bbox_dims": [
+        34.422563552856445,
+        114.80122375488281,
+        84.01609802246094
+      ],
+      "centroid": [
+        0.00048025842288906866,
+        -33.46234823290028,
+        46.40063448562772
+      ],
+      "mesh_count": 2,
+      "vertex_count": 19309,
+      "has_armature": true,
+      "material_issues": [],
+      "real_world_size_m": 114.80122375488281,
+      "shape_class": "character_generic",
+      "inferred_category": "character",
+      "orientation_issue": null,
+      "orientation_fix_rotation_euler": null,
+      "ground_offset_z": -1.0,
+      "quality_score": 100,
+      "thumbnail_path": null,
+      "use_count": 1,
+      "last_rendered_ts": 1777916231.8233347,
+      "last_used_at": "2026-05-04 12:37:11",
+      "first_rendered_ts": 1777916231.8233347
+    },
+    {
+      "id": "cached_cat_1777917805",
+      "subject": "cat",
+      "subject_tags": [
+        "animal",
+        "cat",
+        "feline",
+        "mammal",
+        "murdered",
+        "pet",
+        "soul",
+        "suspect"
+      ],
+      "visual_descriptors": [],
+      "path": "C:\\Users\\bgrut\\Desktop\\FantasyAI\\fantasy-studio\\backend\\assets\\cache\\models\\characters\\cat_murdered_soul_suspect.glb",
+      "type": "animal",
+      "scale_class": "small",
+      "source": "cached",
+      "source_metadata": {
+        "original_name": "cat",
+        "uid": null,
+        "original_score": 100,
+        "url": null,
+        "license": null,
+        "fetched_ts": 1777917805.0925395
+      },
+      "quality_flags": {},
+      "tested": true,
+      "bounds_meters": null,
+      "healer_version": "1.0",
+      "launch_ready": false,
+      "provisional_ready": true,
+      "heal_notes": [
+        "passed all auto-checks -> provisional_ready=True (awaits human launch_ready confirmation)"
+      ],
+      "bbox_min": [
+        -29.12151527404785,
+        -3.8728525638580322,
+        -1.0
+      ],
+      "bbox_max": [
+        14.325106620788574,
+        3.8728528022766113,
+        20.90530776977539
+      ],
+      "bbox_dims": [
+        43.446621894836426,
+        7.7457053661346436,
+        21.90530776977539
+      ],
+      "centroid": [
+        6.603172804945494,
+        -0.006613174492291709,
+        12.857079318173994
+      ],
+      "mesh_count": 4,
+      "vertex_count": 4943,
+      "has_armature": true,
+      "material_issues": [],
+      "real_world_size_m": 43.446621894836426,
+      "shape_class": "unclassified",
+      "inferred_category": "animal",
+      "orientation_issue": null,
+      "orientation_fix_rotation_euler": null,
+      "ground_offset_z": -1.0,
+      "quality_score": 90,
+      "thumbnail_path": null,
+      "use_count": 2,
+      "last_rendered_ts": 1777920226.5838308,
+      "last_used_at": "2026-05-04 13:03:25",
+      "first_rendered_ts": 1777917805.0925395
     }
   ]
 }
