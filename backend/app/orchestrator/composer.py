@@ -875,6 +875,109 @@ else:
         return False
 
 
+def _build_realistic_environment(runner, setting: str, mood: str, hero_name: str,
+                                 verbose: bool = True):
+    """Phase 19.5: real-world backdrop for terrain settings (desert/mountain/snow)
+    via SRTM/DEM elevation, with the hero placed ON the terrain. Returns the env
+    type string on success, else None so the caller falls back to the procedural
+    environment. Keeps the hero the subject — the existing camera frames it and
+    the real terrain recedes behind. No world volumes (those black-render EEVEE).
+    """
+    cfg = {
+        "desert": ("namib_desert", "sand"),
+        "mountain": ("mountains_alps", "rock"),
+        "snow": ("mountains_alps", "snow"),
+    }
+    if setting not in cfg:
+        return None
+    preset, kind = cfg[setting]
+    from pathlib import Path as _P
+    try:
+        from . import dem_terrain
+    except Exception as e:
+        if verbose:
+            print(f"[composer] realistic_env: dem_terrain import failed ({e})")
+        return None
+    lat, lon = dem_terrain.TERRAIN_PRESETS[preset]
+    cache = _P(__file__).resolve().parents[2] / "renders" / "_realistic_cache"
+    ext = dem_terrain.build_terrain(runner, lat, lon, cache, z=12, crop=90,
+                                    target_span_m=500.0, verbose=verbose)
+    if not ext:
+        return None
+
+    # mood → sun + sky
+    m = (mood or "").lower()
+    if any(k in m for k in ("golden", "sunset", "sunrise", "dusk", "dawn")):
+        sun_e, sun_col, elev, azim = 4.0, (1.0, 0.78, 0.5), 64, 118
+        sky_lo, sky_hi = (0.97, 0.74, 0.45), (0.5, 0.62, 0.85)
+    elif any(k in m for k in ("night", "moon", "dark")):
+        sun_e, sun_col, elev, azim = 1.2, (0.6, 0.7, 1.0), 50, 200
+        sky_lo, sky_hi = (0.10, 0.12, 0.2), (0.02, 0.03, 0.07)
+    else:  # noon / daylight
+        sun_e, sun_col, elev, azim = 4.5, (1.0, 0.96, 0.9), 80, 135
+        sky_lo, sky_hi = (0.8, 0.85, 0.92), (0.4, 0.55, 0.85)
+    mats = {
+        "sand": ((0.6, 0.42, 0.25), (0.86, 0.71, 0.47), 0.96),
+        "rock": ((0.28, 0.25, 0.22), (0.52, 0.46, 0.4), 0.95),
+        "snow": ((0.7, 0.74, 0.82), (0.95, 0.96, 1.0), 0.45),
+    }
+    c0, c1, rough = mats[kind]
+
+    code = (
+        "import bpy, math\n"
+        "from mathutils import Vector\n"
+        "ob=bpy.data.objects.get('Terrain'); o=bpy.data.objects.get('" + str(hero_name) + "')\n"
+        "if ob and o:\n"
+        "    m=bpy.data.materials.new('Terrain'); m.use_nodes=True; nt=m.node_tree\n"
+        "    bsdf=nt.nodes.get('Principled BSDF'); bsdf.inputs['Roughness'].default_value=" + repr(rough) + "\n"
+        "    ns=nt.nodes.new('ShaderNodeTexNoise'); ns.inputs['Scale'].default_value=20.0\n"
+        "    rp=nt.nodes.new('ShaderNodeValToRGB')\n"
+        "    rp.color_ramp.elements[0].color=(" + f"{c0[0]},{c0[1]},{c0[2]},1)\n"
+        "    rp.color_ramp.elements[1].color=(" + f"{c1[0]},{c1[1]},{c1[2]},1)\n"
+        "    nt.links.new(ns.outputs['Fac'],rp.inputs['Fac']); nt.links.new(rp.outputs['Color'],bsdf.inputs['Base Color'])\n"
+        "    ob.data.materials.clear(); ob.data.materials.append(m)\n"
+        "    # sit the hero ON the terrain: move hero aside, raycast terrain at its XY\n"
+        "    hx,hy=o.location.x,o.location.y; o.location.z+=1000.0; bpy.context.view_layer.update()\n"
+        "    dg=bpy.context.view_layer.depsgraph\n"
+        "    hit,loc,nrm,idx,obj,mw=bpy.context.scene.ray_cast(dg,Vector((hx,hy,400.0)),Vector((0,0,-1)))\n"
+        "    tz=loc.z if hit else 0.0; o.location.z-=1000.0; bpy.context.view_layer.update()\n"
+        "    zs=[(o.matrix_world@Vector(c)).z for c in o.bound_box]; o.location.z+=(tz-min(zs)+0.02); bpy.context.view_layer.update()\n"
+        "    # sky gradient world\n"
+        "    w=bpy.context.scene.world or bpy.data.worlds.new('W'); bpy.context.scene.world=w; w.use_nodes=True; wn=w.node_tree\n"
+        "    for n in list(wn.nodes): wn.nodes.remove(n)\n"
+        "    wo=wn.nodes.new('ShaderNodeOutputWorld'); wb=wn.nodes.new('ShaderNodeBackground')\n"
+        "    gd=wn.nodes.new('ShaderNodeTexGradient'); rr=wn.nodes.new('ShaderNodeValToRGB')\n"
+        "    mp=wn.nodes.new('ShaderNodeMapping'); tc=wn.nodes.new('ShaderNodeTexCoord')\n"
+        "    rr.color_ramp.elements[0].position=0.45; rr.color_ramp.elements[0].color=(" + f"{sky_lo[0]},{sky_lo[1]},{sky_lo[2]},1)\n"
+        "    rr.color_ramp.elements[1].position=0.62; rr.color_ramp.elements[1].color=(" + f"{sky_hi[0]},{sky_hi[1]},{sky_hi[2]},1)\n"
+        "    mp.inputs['Rotation'].default_value=(math.radians(90),0,0)\n"
+        "    wn.links.new(tc.outputs['Generated'],mp.inputs['Vector']); wn.links.new(mp.outputs['Vector'],gd.inputs['Vector'])\n"
+        "    wn.links.new(gd.outputs['Fac'],rr.inputs['Fac']); wn.links.new(rr.outputs['Color'],wb.inputs['Color'])\n"
+        "    wb.inputs['Strength'].default_value=1.0; wn.links.new(wb.outputs['Background'],wo.inputs['Surface'])\n"
+        "    # key sun\n"
+        "    for nm in ('EnvSun',):\n"
+        "        eo=bpy.data.objects.get(nm)\n"
+        "        if eo: bpy.data.objects.remove(eo,do_unlink=True)\n"
+        "    sd=bpy.data.lights.new('EnvSun',type='SUN'); sd.energy=" + repr(sun_e) + "; sd.color=(" + f"{sun_col[0]},{sun_col[1]},{sun_col[2]}); sd.angle=math.radians(1.0)\n"
+        "    sl=bpy.data.objects.new('EnvSun',sd); bpy.context.scene.collection.objects.link(sl)\n"
+        "    sl.rotation_euler=(math.radians(" + f"{elev}),0,math.radians({azim}))\n"
+        "    try: bpy.context.scene.eevee.use_gtao=True\n"
+        "    except Exception: pass\n"
+        "    __result__='realistic:" + setting + "'\n"
+        "else:\n    __result__='no terrain/hero'\n"
+    )
+    try:
+        runner.run("realistic_env", "execute_python", {"code": code}, critical=False)
+        if verbose:
+            print(f"[composer] realistic_env: {setting} → DEM '{preset}' ({kind}), "
+                  f"hero placed on terrain")
+        return "dem"
+    except Exception as e:
+        if verbose:
+            print(f"[composer] realistic_env failed ({type(e).__name__}: {e})")
+        return None
+
+
 def _build_environment(runner, env_spec: Dict[str, Any], verbose: bool = True) -> bool:
     """Realize a resolved environment spec (see patterns.environment.resolve_environment)
     entirely via execute_python: gradient sky world, sun, textured procedural
@@ -2057,7 +2160,20 @@ def compose_scene(
     # legacy mood-only environment if no setting is present.
     setting = scene.get("setting")
     used_phase19_env = False
-    if setting:
+    realistic_env = None
+    # Phase 19.5: real-world DEM terrain for desert/mountain/snow (hero placed ON
+    # real elevation). Falls back to the procedural environment on any miss.
+    if setting and os.environ.get("FS_REALISTIC_ENV", "1") == "1" and hero_name:
+        try:
+            realistic_env = _build_realistic_environment(
+                runner, setting, scene.get("mood", "neutral"), hero_name, verbose=verbose)
+        except Exception as e:
+            if verbose:
+                print(f"[composer] realistic_env errored ({type(e).__name__}: {e}) → procedural")
+            realistic_env = None
+    if realistic_env:
+        used_phase19_env = True  # real terrain + hero-on-it + sky + sun all set
+    elif setting:
         try:
             _, env_style = _resolve_tier_style(scene, subj, slots)
         except Exception:
