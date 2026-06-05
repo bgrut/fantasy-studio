@@ -200,6 +200,63 @@ def unload():
         pass
 
 
+def _controlnet_subprocess_paths():
+    """Return (venv_triposg python, refine_subprocess.py) if both exist, else None.
+    Reuses the isolated venv_triposg (diffusers 0.38, which HAS the SDXL ControlNet
+    Img2Img class) so the depth-locked refiner never touches the main venv's
+    pinned diffusers 0.20.2."""
+    backend = Path(__file__).resolve().parents[2]
+    py = backend / "venv_triposg" / "Scripts" / "python.exe"
+    script = backend / "scripts" / "refine_subprocess.py"
+    return (py, script) if (py.exists() and script.exists()) else None
+
+
+def is_controlnet_available() -> bool:
+    return _controlnet_subprocess_paths() is not None
+
+
+def refine_frames_controlnet(
+    jobs,
+    slots: Dict[str, Any],
+    style: str = "photoreal",
+    strength: float = 0.72,
+    steps: int = 28,
+    seed: int = 42,
+    controlnet_scale: float = 0.45,
+    timeout: int = 600,
+):
+    """Depth-locked SDXL ControlNet img2img via the isolated venv_triposg
+    subprocess. Sharper fur + features aligned to geometry (de-clay). BATCHED:
+    one subprocess refines all jobs (loads the ~10 GB pipeline once).
+
+    jobs: list of (input_image_path, output_path). Raises on failure so the
+    caller can fall back to the in-process plain refiner.
+    """
+    import subprocess
+    import json
+    import tempfile
+    paths = _controlnet_subprocess_paths()
+    if paths is None:
+        raise RuntimeError("controlnet subprocess unavailable (venv_triposg/script missing)")
+    py, script = paths
+    positive, negative = _build_prompts(slots, style)
+    manifest = {
+        "prompt": positive, "negative": negative, "strength": strength,
+        "steps": steps, "seed": seed, "controlnet_scale": controlnet_scale,
+        "jobs": [{"image": str(i), "output": str(o)} for i, o in jobs],
+    }
+    mf = Path(tempfile.gettempdir()) / "fs_refine_manifest.json"
+    mf.write_text(json.dumps(manifest), encoding="utf-8")
+    proc = subprocess.run([str(py), str(script), "--manifest", str(mf)],
+                          capture_output=True, text=True, timeout=timeout)
+    missing = [o for _, o in jobs if not Path(o).exists()]
+    if proc.returncode != 0 or missing:
+        tail = (proc.stderr or proc.stdout or "")[-700:]
+        raise RuntimeError(f"controlnet refine failed (exit {proc.returncode}, "
+                           f"missing {len(missing)}):\n{tail}")
+    return [Path(o) for _, o in jobs]
+
+
 def _build_prompts(slots: Dict[str, Any], style: str) -> tuple[str, str]:
     """Compose positive + negative prompts from slot semantics + style."""
     preset = STYLE_PRESETS.get(style, STYLE_PRESETS["photoreal"])

@@ -653,13 +653,45 @@ def _apply_multiview_texture(runner, hero_name: str, side_ref_png: str,
         renders[view] = {"raw": raw_png, "framing": framing}
 
     # ── 2b. img2img-refine each rendered view (host GPU) ─────────────────────
+    # Prefer depth-locked SDXL ControlNet img2img (isolated venv_triposg subprocess)
+    # — keeps detail aligned to geometry (de-clay, sharper fur/face). Fall back to
+    # the main-venv plain img2img if the subprocess path is unavailable.
+    use_cn = False
+    try:
+        use_cn = _refiner.is_controlnet_available()
+    except Exception:
+        use_cn = False
+    if verbose:
+        print(f"[composer] multiview: refiner = "
+              f"{'controlnet-depth (venv_triposg)' if use_cn else 'plain img2img'}")
     views = {}
-    for view, info in renders.items():
+    out_map = {view: work_dir / f"selfview_{view}_{run_id}.refined.png"
+               for view in renders}
+
+    refined_ok = set()
+    if use_cn:
+        # Depth-locked ControlNet img2img, BATCHED in one subprocess (loads the
+        # ~10 GB pipeline once). Higher strength for real fur/face detail; the
+        # depth ControlNet at a moderate scale holds the geometry so the strength
+        # can't drift the shape or add limbs (tuned: 0.72 / 0.45).
+        jobs = [(str(renders[v]["raw"]), str(out_map[v])) for v in renders]
         try:
-            ref_out = work_dir / f"selfview_{view}_{run_id}.refined.png"
-            _refiner.refine_frame(str(info["raw"]), slots, style=style,
-                                  strength=0.55, steps=22, seed=42,
-                                  output_path=str(ref_out))
+            _refiner.refine_frames_controlnet(jobs, slots, style=style,
+                                              strength=0.72, steps=28, seed=42,
+                                              controlnet_scale=0.45)
+            refined_ok = {v for v in renders if out_map[v].exists()}
+        except Exception as e:
+            if verbose:
+                print(f"[composer] multiview: controlnet batch failed "
+                      f"({type(e).__name__}: {e}) → falling back to plain img2img")
+
+    for view, info in renders.items():
+        ref_out = out_map[view]
+        try:
+            if view not in refined_ok:  # plain fallback (or non-CN path)
+                _refiner.refine_frame(str(info["raw"]), slots, style=style,
+                                      strength=0.55, steps=22, seed=42,
+                                      output_path=str(ref_out))
             views[view] = {"png": str(ref_out.as_posix()), **info["framing"]}
             if verbose:
                 print(f"[composer] multiview: {view} refined → {ref_out.name}")
