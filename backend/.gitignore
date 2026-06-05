@@ -46,3 +46,5 @@ assets/hdri/*.hdr
 vendor/TripoSG/
 venv_triposg/
 *.png.bak
+
+vendor/blosm/
