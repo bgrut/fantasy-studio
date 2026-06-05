@@ -34,7 +34,17 @@ from typing import Any, Dict, List, Optional, Tuple
 # Tunables
 # ─────────────────────────────────────────────────────────────────────────────
 
-MAX_ITERATIONS = 3
+# Phase 18 was paused — gemma3:12b's vision reasoning isn't strong enough for
+# reliable 3D pose correction, and TRELLIS install hit a blocker (missing
+# vox2seq source in upstream repo). Until a stronger vision model or
+# canonical-mesh model is feasible (Claude API, Hunyuan3D-2, etc.), the agent
+# runs a SINGLE diagnostic pass and logs whether the subject is oriented
+# correctly. It does NOT apply rotations, because experiments showed the model
+# suggests wrong axes ~half the time and chasing the wrong fix makes the mesh
+# worse, not better. Once a stronger model is wired in, bump MAX_ITERATIONS
+# back to 3 and remove the early return in correct_orientation().
+MAX_ITERATIONS = 1
+APPLY_ROTATIONS = False  # Set True when we trust the verdicts again.
 # Three orthographic-ish views composited horizontally. Front shows whether
 # the subject is upright or flat; Side shows body axis (horizontal=lying);
 # Top shows whether feet are spread (lying) or stacked under body (standing).
@@ -420,6 +430,19 @@ def correct_orientation(runner, hero_name: str, base_pattern: str,
             return {
                 "iterations": i + 1, "final_verdict": verdict,
                 "rotations_applied": rotations_applied, "status": status,
+            }
+
+        # Phase 18 paused — log the verdict for visibility but DO NOT apply
+        # rotations. Vision model suggestions were unreliable; chasing them
+        # makes the mesh worse, not better. Continue with raw orientation.
+        if not APPLY_ROTATIONS:
+            if verbose:
+                print(f"[orient-agent] WARNING: subject not standing (Phase 18 known limit). "
+                      f"Reason: {verdict['reason']}. Suggested fix (NOT applied): "
+                      f"{verdict['fix_xyz_deg']}. Continuing with raw orientation.")
+            return {
+                "iterations": i + 1, "final_verdict": verdict,
+                "rotations_applied": rotations_applied, "status": "warned_continued",
             }
 
         fix = tuple(verdict["fix_xyz_deg"])

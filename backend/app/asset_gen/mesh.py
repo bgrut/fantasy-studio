@@ -27,7 +27,7 @@ import time
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-MESH_ENGINES = ("triposr", "instantmesh")
+MESH_ENGINES = ("triposg", "triposr", "instantmesh")
 
 # ---------------------------------------------------------------------------
 # Vendor path setup — TripoSR and InstantMesh aren't pip-installable packages,
@@ -82,11 +82,77 @@ def is_mesh_gen_available(engine: str = "triposr") -> bool:
         import torch  # noqa: F401
     except Exception:
         return False
+    if engine == "triposg":
+        return _is_triposg_available()
     if engine == "triposr":
         return _is_triposr_available()
     if engine == "instantmesh":
         return _is_instantmesh_available()
     return False
+
+
+# ── TripoSG (isolated venv + subprocess) ────────────────────────────────────
+# MIT-licensed, higher-fidelity image-to-3D than TripoSR. Runs in its OWN venv
+# (venv_triposg) to avoid the numpy/transformers/diffusers conflicts that would
+# break SDXL + TripoSR in the main venv. We call it as a subprocess that takes
+# an image and returns a GLB.
+_TRIPOSG_DIR = _VENDOR_DIR / "TripoSG"
+_TRIPOSG_VENV_PY = _BACKEND_ROOT / "venv_triposg" / "Scripts" / "python.exe"
+
+
+def _is_triposg_available(verbose: bool = False) -> bool:
+    ok = _TRIPOSG_DIR.exists() and _TRIPOSG_VENV_PY.exists() and \
+        (_TRIPOSG_DIR / "scripts" / "inference_triposg.py").exists()
+    if not ok and verbose:
+        print(f"[triposg] not available — dir={_TRIPOSG_DIR.exists()} "
+              f"venv={_TRIPOSG_VENV_PY.exists()}")
+    return ok
+
+
+def _gen_triposg(pil_image, output_path: Path, faces: int = 60000,
+                 seed: int = 42) -> Path:
+    """Generate a mesh with TripoSG via its isolated venv subprocess.
+
+    Writes the input image to a temp PNG, runs TripoSG inference (which emits a
+    GLB directly), then returns the path. TripoSG meshes are already smooth +
+    high-detail, so we apply only a light color repair (no aggressive Taubin).
+    """
+    import subprocess
+    import tempfile
+
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    tmp_png = Path(tempfile.gettempdir()) / f"triposg_in_{output_path.stem}.png"
+    pil_image.convert("RGB").save(tmp_png)
+
+    cmd = [
+        str(_TRIPOSG_VENV_PY), "-m", "scripts.inference_triposg",
+        "--image-input", str(tmp_png),
+        "--output-path", str(output_path),
+        "--seed", str(seed),
+    ]
+    if faces and faces > 0:
+        cmd += ["--faces", str(faces)]
+
+    print(f"[triposg] running subprocess (isolated venv)…")
+    proc = subprocess.run(cmd, cwd=str(_TRIPOSG_DIR), capture_output=True, text=True,
+                          timeout=600)
+    if proc.returncode != 0 or not output_path.exists():
+        tail = (proc.stderr or proc.stdout or "")[-800:]
+        raise RuntimeError(f"TripoSG failed (exit {proc.returncode}):\n{tail}")
+
+    # Light cleanup: TripoSG has no vertex colors by default (geometry only), so
+    # color-repair is a no-op; we keep the call for any future colored output.
+    try:
+        import trimesh
+        mesh = trimesh.load(str(output_path), force="mesh")
+        mesh = _cleanup_triposr_mesh(mesh)  # color-repair is conditional inside
+        mesh.export(str(output_path), file_type="glb")
+    except Exception as e:
+        print(f"[triposg] post-load cleanup skipped ({type(e).__name__}: {e})")
+
+    return output_path
 
 
 def _is_triposr_available(verbose: bool = True) -> bool:
@@ -491,7 +557,10 @@ def generate_mesh(
     src = Image.open(image_path).convert("RGB")
 
     t0 = time.time()
-    if chosen == "triposr":
+    if chosen == "triposg":
+        # MIT-licensed, higher-fidelity. Runs in its own venv via subprocess.
+        out = _gen_triposg(src, output_path)
+    elif chosen == "triposr":
         out = _gen_triposr(src, output_path, foreground_ratio=foreground_ratio,
                            base_pattern=base_pattern,
                            force_flip_vertical=force_flip_vertical)
@@ -504,6 +573,48 @@ def generate_mesh(
     return out
 
 
+def _cleanup_triposr_mesh(mesh):
+    """Phase 19 mesh-quality: de-blob the surface + fix dead-gray color patches.
+
+    1. Taubin smoothing — melts marching-cubes lumps WITHOUT the shrinkage that
+       plain Laplacian causes (preserves the silhouette).
+    2. Gray-splotch repair — TripoSR leaves desaturated/gray patches where it
+       couldn't infer color; blend those toward the subject's dominant color so
+       there are no dead-gray blotches.
+    """
+    import numpy as np
+
+    # 1. Taubin smoothing (in place; safe-guarded)
+    try:
+        import trimesh
+        trimesh.smoothing.filter_taubin(mesh, lamb=0.5, nu=-0.53, iterations=12)
+    except Exception as e:
+        print(f"[triposr] smoothing skipped ({type(e).__name__}: {e})")
+
+    # 2. Gray-splotch color repair
+    try:
+        if hasattr(mesh.visual, "vertex_colors") and mesh.visual.vertex_colors is not None:
+            vc = np.asarray(mesh.visual.vertex_colors).astype(np.float64)
+            rgb = vc[:, :3]
+            mx = rgb.max(axis=1)
+            mn = rgb.min(axis=1)
+            sat = np.where(mx > 1, (mx - mn) / np.maximum(mx, 1.0), 0.0)
+            saturated = sat > 0.12          # vertices with real hue
+            gray = ~saturated               # dead/gray patches
+            if saturated.sum() > 200 and gray.sum() > 0:
+                dominant = np.median(rgb[saturated], axis=0)
+                # blend gray vertices 60% toward the dominant subject color
+                rgb[gray] = 0.4 * rgb[gray] + 0.6 * dominant
+                vc[:, :3] = np.clip(rgb, 0, 255)
+                mesh.visual.vertex_colors = vc.astype(np.uint8)
+                print(f"[triposr] color repair: blended {int(gray.sum())} gray verts "
+                      f"toward dominant {tuple(int(c) for c in dominant)}")
+    except Exception as e:
+        print(f"[triposr] color repair skipped ({type(e).__name__}: {e})")
+
+    return mesh
+
+
 def _gen_triposr(pil_image, output_path: Path, foreground_ratio: float = 0.85,
                   base_pattern: Optional[str] = None,
                   force_flip_vertical: bool = False) -> Path:
@@ -514,10 +625,15 @@ def _gen_triposr(pil_image, output_path: Path, foreground_ratio: float = 0.85,
 
     prepped = _prep_image(pil_image, size=512, foreground_ratio=foreground_ratio)
     scene_codes = model([prepped], device=device)
-    meshes = model.extract_mesh(scene_codes, has_vertex_color=True, resolution=256, threshold=25.0)
+    # Phase 19 mesh-quality: bump marching-cubes resolution 256→320 for finer
+    # geometry (less blobby). threshold 25 keeps the surface tight.
+    meshes = model.extract_mesh(scene_codes, has_vertex_color=True, resolution=320, threshold=25.0)
     if not meshes:
         raise RuntimeError("TripoSR returned no meshes")
     mesh = meshes[0]
+
+    # ── Phase 19 mesh-quality cleanup (before orientation/export) ───────────
+    mesh = _cleanup_triposr_mesh(mesh)
 
     # Deterministic per-pattern orientation. TripoSR's output frame relative to
     # the input image is fixed (camera looks from +Z; image-up = mesh +Y), and
@@ -533,11 +649,36 @@ def _gen_triposr(pil_image, output_path: Path, foreground_ratio: float = 0.85,
 # Rotation applied (in trimesh/glTF space, BEFORE Blender import) to land the
 # subject upright. Tuned empirically against TripoSR + Blender's glTF import.
 # Each entry is (axis, degrees). Set to None to skip rotation.
+# TripoSR native frame: image-bottom pixels (subject's feet/base) land in
+# mesh +Y. After glTF export + Blender import (+Y → Blender +Z, +Z → Blender
+# -Y), that puts feet in Blender +Z = upside-down. The previous -90° X took
+# us from upside-down to lying-on-side, which is the wrong direction.
+#
+# Correct fix: 180° around X in trimesh space, so feet land in trimesh -Y,
+# which becomes Blender -Z (on the ground) after import. Same rotation works
+# for every pattern because TripoSR's frame is deterministic.
+# Phase 18 FINAL — deterministic orientation, calibrated via the 24-orientation
+# contact sheet (scripts/orient_contact_sheet.py). Because the TripoSR mesh is
+# byte-deterministic (CUDA determinism enabled in reference.py), the correct
+# standing rotation is a CONSTANT per pattern. To (re)calibrate a pattern:
+#   1. Generate one asset of that pattern.
+#   2. Run: python scripts/orient_contact_sheet.py
+#   3. Find the cell where the subject stands; read its rotation label.
+#   4. Paste (axis, degrees) here.
+# The trimesh→GLB export and Blender's glTF import conventions cancel, so the
+# rotation that looks standing in the (Z-up) contact sheet is the same one that
+# stands the mesh in Blender.
+#
+# DEPRECATED — orientation is now applied in BLENDER (composer), not here in
+# trimesh. The trimesh↔glTF↔matplotlib frame conventions were the source of
+# every failed calibration. Keeping this None so the mesh imports raw; the
+# composer applies the calibrated per-pattern Blender Euler from
+# composer._BLENDER_PATTERN_EULER (calibrated via scripts/orient_audit_blender.py).
 _PATTERN_ORIENTATION = {
-    "quadruped": ("x", -90.0),
-    "biped":     ("x", -90.0),
-    "vehicle":   ("x", -90.0),
-    "tree":      ("x", -90.0),
+    "quadruped": None,
+    "biped":     None,
+    "vehicle":   None,
+    "tree":      None,
     "celestial": None,
 }
 

@@ -175,6 +175,31 @@ def _load_pipeline(use_controlnet: bool = True):
     return pipe
 
 
+def unload():
+    """Free the cached SDXL pipeline's GPU VRAM.
+
+    Critical when interleaving with the Blender bridge: a resident SDXL pipeline
+    holds ~6-8 GB, which starves the bridge's EEVEE renderer and yields BLACK
+    frames. Call this once the img2img passes are done, before more EEVEE renders.
+    """
+    global _PIPELINE, _PIPELINE_KIND
+    if _PIPELINE is None:
+        return
+    # Drop the reference outright (moving an fp16 pipe to CPU just warns); the
+    # GPU allocation is freed by empty_cache once the Python ref is gone.
+    _PIPELINE = None
+    _PIPELINE_KIND = None
+    try:
+        import gc
+        import torch
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            torch.cuda.synchronize()
+    except Exception:
+        pass
+
+
 def _build_prompts(slots: Dict[str, Any], style: str) -> tuple[str, str]:
     """Compose positive + negative prompts from slot semantics + style."""
     preset = STYLE_PRESETS.get(style, STYLE_PRESETS["photoreal"])

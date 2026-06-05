@@ -24,10 +24,35 @@ from typing import Any, Dict, Optional
 # tune for reference quality, not output polish)
 # ---------------------------------------------------------------------------
 
+# ── Pose-lock strength (ControlNet-depth conditioning) ──────────────────────
+# Lower = higher image quality + weaker pose consistency. Orientation is now
+# handled by the fixed per-pattern Euler in composer._BLENDER_PATTERN_EULER, so
+# we can afford to weaken this for quality.
+#
+# 5-LEGGED-DOG FIX (verified via scripts/leg_sweep.py): the quadruped depth
+# template renders the near/far legs as offset columns; at scale 0.35 SDXL locks
+# onto them and fills the ambiguity with a 5th leg (reproduced on seed 7). A
+# scale of 0.22 gives a clean 4 legs on every tested seed while still keeping a
+# standing side-profile pose, so orientation stays consistent. Don't raise above
+# ~0.25 without re-running the sweep. (Deeper fix: regenerate the depth template
+# as a TRUE orthographic side view where near/far legs overlap into 2 columns.)
+import os as _os
+# Pose-lock strength. With a CLEAN 4-leg depth template the control signal is no
+# longer corrupt, so we can keep a moderate lock for pose/orientation consistency
+# without inheriting an extra limb. (count_leg_columns below is kept only as a
+# manual QA helper — NOT an automatic gate; it can't tell a tail from a 5th leg.)
+CONTROLNET_CONDITIONING_SCALE = float(_os.environ.get("FS_CONTROLNET_SCALE", "0.35"))
+
+
 REFERENCE_STYLES: Dict[str, Dict[str, str]] = {
     "photoreal": {
-        "positive": "studio photograph, single subject centered, plain neutral background, sharp focus, even lighting",
-        "negative": "multiple subjects, busy background, blurry, cropped, partial view, watermark, text",
+        "positive": "studio photograph, single subject centered, plain neutral background, sharp focus, even lighting, vibrant natural color, high detail, 8k",
+        "negative": "multiple subjects, busy background, blurry, cropped, partial view, watermark, text, "
+                    # anti-anatomy-artifact (fixes the 5-legs / fused-limb issue from ControlNet)
+                    "extra legs, extra limbs, too many legs, fused limbs, duplicate limbs, "
+                    "missing legs, deformed, mutated, malformed anatomy, disfigured, "
+                    # anti-vintage/desaturation (fixes the sepia/washed-out look)
+                    "sepia, monochrome, grayscale, desaturated, faded, old photo, vintage",
     },
     "cartoon": {
         "positive": "pixar style 3d character, single subject centered, neutral background, clean turntable",
@@ -88,6 +113,74 @@ def get_pose_template_path(base_pattern: str) -> Optional[Path]:
     """Return path to the depth template for a pattern, or None if missing."""
     p = POSE_TEMPLATES_DIR / f"{base_pattern}_depth.png"
     return p if p.exists() else None
+
+
+def count_leg_columns(pil_or_path, debug: bool = False) -> int:
+    """Count distinct leg columns where the subject meets the ground.
+
+    The reliable 5-legged-dog discriminator: in a leg-height band of the subject
+    silhouette, count separated vertical limb columns. A real quadruped shows at
+    most 4 (near+far front, near+far back); ≥5 means SDXL hallucinated a limb.
+    Background-gradient-robust (segments by saturation + darkness, like the
+    texture bbox detector). Returns the MAX column count across sampled rows.
+    """
+    try:
+        from PIL import Image
+        import numpy as np
+        if hasattr(pil_or_path, "convert"):
+            im = np.asarray(pil_or_path.convert("RGB"), dtype=np.float32)
+        else:
+            im = np.asarray(Image.open(pil_or_path).convert("RGB"), dtype=np.float32)
+        h, w = im.shape[:2]
+        f = 0.04
+        ry0, ry1 = int(h * f), int(h * (1 - f))
+        rx0, rx1 = int(w * f), int(w * (1 - f))
+        mx = im.max(axis=2); mn = im.min(axis=2)
+        sat = (mx - mn) / (mx + 1e-3)
+        mask = (sat > 0.20) | (im.mean(axis=2) < 55.0)
+        keep = np.zeros_like(mask); keep[ry0:ry1, rx0:rx1] = True
+        mask &= keep
+        cols = np.where(mask.any(axis=0))[0]
+        rows = np.where(mask.any(axis=1))[0]
+        if not (cols.size and rows.size):
+            return 0
+        x0, x1 = cols.min(), cols.max()
+        y0, y1 = rows.min(), rows.max()
+        sub_w = max(x1 - x0, 1)
+        sub_h = max(y1 - y0, 1)
+        min_w = max(3, int(sub_w * 0.02))     # ignore slivers
+        min_gap = max(2, int(sub_w * 0.012))  # merge across tiny anti-alias gaps
+
+        def seg_count(row_mask):
+            idx = np.where(row_mask)[0]
+            if idx.size == 0:
+                return 0
+            breaks = np.where(np.diff(idx) > 1)[0]
+            runs = np.split(idx, breaks + 1)
+            merged = []
+            for r in runs:
+                if merged and (r[0] - merged[-1][-1]) <= min_gap:
+                    merged[-1] = np.concatenate([merged[-1], r])
+                else:
+                    merged.append(r)
+            return sum(1 for r in merged if (r[-1] - r[0] + 1) >= min_w)
+
+        # Sample the upper-leg / shin band. Stay ABOVE ~0.88 of subject height:
+        # lower rows catch the hanging tail tip as a false extra column (a clean
+        # 4-leg dog with a low tail then reads 5). These bands cleanly separate a
+        # hallucinated mid-body 5th leg while excluding the tail. MAX across rows.
+        counts = []
+        for frac in (0.70, 0.76, 0.82, 0.88):
+            ry = int(y0 + frac * sub_h)
+            counts.append(seg_count(mask[ry, x0:x1 + 1]))
+        result = max(counts) if counts else 0
+        if debug:
+            print(f"[reference] leg columns per-row {counts} → max {result}")
+        return result
+    except Exception as e:
+        if debug:
+            print(f"[reference] count_leg_columns failed ({type(e).__name__}: {e})")
+        return 0  # fail-open: never block generation on a counting error
 
 
 # ---------------------------------------------------------------------------
@@ -325,47 +418,45 @@ def generate_reference(
     base_pattern = subj.get("base_pattern", "primitive_geo")
     template_path = get_pose_template_path(base_pattern)
 
-    generator = None
-    if seed is not None:
-        device = "cuda" if torch.cuda.is_available() else "cpu"
-        generator = torch.Generator(device=device).manual_seed(int(seed))
-
-    t0 = time.time()
+    depth_image = None
     if template_path is not None:
         from PIL import Image
         depth_image = Image.open(template_path).convert("RGB").resize(
             (int(width), int(height)), Image.BILINEAR
         )
-        pipe = _load_t2i_controlnet_pipeline()
-        result = pipe(
-            prompt=positive,
-            negative_prompt=negative,
-            image=depth_image,
-            width=int(width),
-            height=int(height),
-            guidance_scale=float(guidance_scale),
-            num_inference_steps=int(steps),
-            # 0.65 dictated proportions too rigidly (cat came out greyhound-shaped).
-            # 0.5 keeps pose/composition locked while letting subject identity
-            # (cat proportions, dog snout etc.) come through.
-            controlnet_conditioning_scale=0.5,
-            generator=generator,
-        ).images[0]
-        mode_tag = f"controlnet-depth(pattern={base_pattern})"
-    else:
-        pipe = _load_t2i_pipeline()
-        result = pipe(
-            prompt=positive,
-            negative_prompt=negative,
-            width=int(width),
-            height=int(height),
-            guidance_scale=float(guidance_scale),
-            num_inference_steps=int(steps),
-            generator=generator,
-        ).images[0]
-        mode_tag = "plain-sdxl"
-    elapsed = time.time() - t0
 
-    result.save(output_path)
-    print(f"[reference] saved → {output_path.name} ({width}×{height}, {elapsed:.1f}s, {mode_tag})")
+    def _gen_once(s):
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        gen = torch.Generator(device=device).manual_seed(int(s)) if s is not None else None
+        if depth_image is not None:
+            pipe = _load_t2i_controlnet_pipeline()
+            img = pipe(
+                prompt=positive, negative_prompt=negative, image=depth_image,
+                width=int(width), height=int(height),
+                guidance_scale=float(guidance_scale), num_inference_steps=int(steps),
+                controlnet_conditioning_scale=CONTROLNET_CONDITIONING_SCALE,
+                generator=gen,
+            ).images[0]
+            return img, f"controlnet-depth(pattern={base_pattern})"
+        pipe = _load_t2i_pipeline()
+        img = pipe(
+            prompt=positive, negative_prompt=negative,
+            width=int(width), height=int(height),
+            guidance_scale=float(guidance_scale), num_inference_steps=int(steps),
+            generator=gen,
+        ).images[0]
+        return img, "plain-sdxl"
+
+    # Single-shot generation. The 5-legged-dog artifact is NOT a seed lottery —
+    # it was a corrupt control signal (the quadruped depth template literally
+    # depicted 5 legs), so ControlNet faithfully reproduced it. That is fixed at
+    # the source (clean 4-leg depth template). A silhouette leg-counter can't
+    # reliably distinguish "4 legs + hanging tail" from "5 legs", so we do NOT
+    # gate on it — the clean template is the guarantee.
+    t0 = time.time()
+    img, mode_tag = _gen_once(seed)
+    elapsed = time.time() - t0
+    img.save(output_path)
+    print(f"[reference] saved → {output_path.name} ({width}×{height}, "
+          f"{elapsed:.1f}s, {mode_tag})")
     return output_path

@@ -23,6 +23,7 @@ Composition order (single hero v1):
 
 import json
 import math
+import os
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -31,6 +32,47 @@ from typing import Any, Dict, List, Optional, Tuple
 from ..mcp import registry, bridge
 from .scene_inference import COLOR_MAP, MATERIAL_VIBES, LIGHTING_MOOD
 from . import patterns as pattern_lib
+
+
+# ───────────────────────────────────────────────────────────────────────
+# Phase 18 FINAL — per-pattern standing orientation, in BLENDER's frame.
+#
+# Calibrated once per pattern with scripts/orient_audit_blender.py, which
+# renders all 24 axis-aligned orientations from a true side view using the real
+# Blender renderer. You pick the cell where the subject stands; paste its Euler
+# (degrees, Blender XYZ) here. Applied + baked + re-grounded after mesh import.
+# None = not yet calibrated (mesh imports in raw orientation).
+# ───────────────────────────────────────────────────────────────────────
+_BLENDER_PATTERN_EULER = {
+    # CALIBRATION MODE: None → mesh imports RAW (no rotation baked). Open the
+    # composer-produced .blend, set the Hero's rotation mode to XYZ Euler,
+    # rotate it standing with the gizmo, read the three Rotation values, and
+    # paste them here as (rx, ry, rz). Because the mesh is raw (no hidden
+    # offset) and we apply in the same Blender frame you measured in, the value
+    # is guaranteed to reproduce your standing pose.
+    # quadruped: orthographic audit cell #13 "y270" — true-ortho front view
+    # shows a clean standing side profile (head up, four feet on the ground).
+    # Ortho removes the perspective distortion that made earlier picks (#17
+    # x90) look standing when they were actually lying flat.
+    # TripoSR frame: cell #13 "y270" stands every pattern upright (ControlNet
+    # pose-lock makes all subjects share one frame).
+    "quadruped": (0.0, 270.0, 0.0),
+    "biped":     (0.0, 270.0, 0.0),
+    "vehicle":   (0.0, 270.0, 0.0),
+    "tree":      (0.0, 270.0, 0.0),
+    "celestial": None,   # spheres — orientation doesn't matter
+}
+
+# TripoSG outputs UPRIGHT by default (verified via audit_triposg2 — identity is
+# already standing). We add a z90 spin for a flattering side-profile start.
+# Engine-aware: applied only when the mesh came from TripoSG.
+_TRIPOSG_PATTERN_EULER = {
+    "quadruped": (0.0, 0.0, 90.0),
+    "biped":     (0.0, 0.0, 90.0),
+    "vehicle":   (0.0, 0.0, 90.0),
+    "tree":      (0.0, 0.0, 90.0),
+    "celestial": None,
+}
 
 
 # ───────────────────────────────────────────────────────────────────────
@@ -121,6 +163,832 @@ def _lighting_params_from_mood(mood: str) -> Dict[str, Any]:
         "color_temp": "neutral",
         "key_energy": 2500, "fill_energy": 900, "rim_energy": 1200,
     }).copy()
+
+
+def _setup_mesh_relative_orbit(
+    runner, hero_name: str, duration_frames: int, revolutions: float,
+    lens: float = 50.0, verbose: bool = True,
+) -> bool:
+    """Set up a camera + orbit animation in the Hero's PCA frame.
+
+    Why: TripoSR meshes arrive in arbitrary world orientations (sometimes flat,
+    sometimes tilted). World-axis cameras then produce weird angles. Instead,
+    we compute the mesh's three principal axes via PCA and:
+
+      - longest axis  → "body length" (subject's longest dimension)
+      - medium axis   → "up" (used as orbit axis, so the camera circles like
+                              a turntable in the mesh's local frame)
+      - shortest axis → "depth" (camera approaches from this direction so the
+                                 longest axis appears horizontal in the frame)
+
+    The camera always sees a flattering side-profile-ish shot regardless of
+    which world axis the mesh's longest dim happens to point along.
+
+    Returns True on success, False if PCA setup failed (caller falls back to
+    world-axis camera).
+    """
+    # All math + Blender ops happen inside a single execute_python so we can
+    # use numpy and don't have to round-trip vertex data through the bridge.
+    code = f"""
+import bpy, math, json
+from mathutils import Vector, Matrix
+import numpy as np
+
+hero = bpy.data.objects.get('{hero_name}')
+if hero is None or hero.type != 'MESH':
+    __result__ = json.dumps({{'ok': False, 'why': 'hero_not_mesh'}})
+else:
+    # Vertices in WORLD space (include hero's location/rotation/scale).
+    mw = hero.matrix_world
+    verts = np.array([list(mw @ v.co) for v in hero.data.vertices], dtype=np.float64)
+    if verts.shape[0] < 10:
+        __result__ = json.dumps({{'ok': False, 'why': 'too_few_verts'}})
+    else:
+        # Center + PCA via covariance eigendecomposition.
+        centroid = verts.mean(axis=0)
+        centered = verts - centroid
+        cov = np.cov(centered.T)
+        evals, evecs = np.linalg.eigh(cov)
+        # eigh returns ascending eigenvalues. Reorder to: PC1 (longest) first.
+        order = np.argsort(evals)[::-1]
+        evals = evals[order]
+        evecs = evecs[:, order]
+        # Extents along each PC.
+        proj = centered @ evecs
+        spans = proj.max(axis=0) - proj.min(axis=0)
+        pc1 = evecs[:, 0]   # mesh's longest axis (body length, usually)
+
+        # ─── Hybrid framing ────────────────────────────────────────────────
+        # Lesson from previous PCA attempt: using a non-vertical PCA axis as
+        # "up" puts the camera looking down at the mesh, which makes the
+        # subject appear head-down even when geometry is correct.
+        #
+        # Better: ALWAYS use world +Z as camera up; ALWAYS orbit around world
+        # Z. PCA only determines WHICH horizontal angle to view from — we
+        # project PC1 (body length) onto the world XY plane and place the
+        # camera PERPENDICULAR to that projection. That gives a clean
+        # broadside view regardless of which world axis the body happens to
+        # lie along.
+        # ────────────────────────────────────────────────────────────────────
+        # Project PC1 onto world XY plane (remove Z component, renormalize).
+        pc1_xy = np.array([pc1[0], pc1[1], 0.0])
+        norm = np.linalg.norm(pc1_xy)
+        if norm < 1e-4:
+            # PC1 is nearly vertical (mesh is tall/thin). Default to -Y view.
+            length_xy = np.array([0.0, 1.0, 0.0])
+        else:
+            length_xy = pc1_xy / norm
+        # Perpendicular to length_xy in the XY plane (rotate 90° around Z).
+        broadside_xy = np.array([-length_xy[1], length_xy[0], 0.0])
+
+        # Distance: enough to fit longest in-XY extent at ~55% of frame for a
+        # 50mm lens. Use the larger of (PC1 span, world-bbox max dim) so we
+        # don't crop tall meshes.
+        bbox_max = float(max(spans[0], spans[1], spans[2]))
+        base_dist = max(bbox_max * 1.7, 2.5)
+        # 3/4 elevation: ~20° above horizontal.
+        height_offset = bbox_max * 0.35
+
+        # Camera offset from centroid (world space).
+        cam_offset = broadside_xy * base_dist + np.array([0.0, 0.0, height_offset])
+        cam_start = centroid + cam_offset
+
+        # Create or reuse 'Cam'.
+        cam = bpy.data.objects.get('Cam')
+        if cam is None:
+            cam_data = bpy.data.cameras.new('Cam')
+            cam = bpy.data.objects.new('Cam', cam_data)
+            bpy.context.scene.collection.objects.link(cam)
+        cam.data.lens = {lens}
+        cam.location = Vector(cam_start.tolist())
+
+        # Aim at centroid using WORLD +Z as up (camera roll stays stable).
+        # to_track_quat picks the rotation so -Z (camera forward) points along
+        # look_dir, and Y (camera up) aligns with world +Z. This keeps the
+        # horizon level no matter where the camera orbits to.
+        look_dir = Vector(centroid.tolist()) - cam.location
+        rot_quat = look_dir.to_track_quat('-Z', 'Y')
+        cam.rotation_mode = 'QUATERNION'
+        cam.rotation_quaternion = rot_quat
+        bpy.context.scene.camera = cam
+
+        # Animate: orbit around the WORLD Z axis through the centroid. We use
+        # world Z (not a PCA axis) because mesh principal axes don't generally
+        # align with vertical, and orbiting around non-vertical axes makes the
+        # video appear to tumble. Rodrigues rotation around world +Z:
+        total_angle = 2.0 * math.pi * {revolutions}
+        n_keys = max(8, int({duration_frames} / 4))   # keyframe every ~4 frames
+        k = np.array([0.0, 0.0, 1.0])
+        v0 = cam_offset.copy()
+        # Clear any existing animation data on cam
+        cam.animation_data_clear()
+        for i in range(n_keys + 1):
+            frac = i / n_keys
+            angle = total_angle * frac
+            cos_a, sin_a = math.cos(angle), math.sin(angle)
+            v_rot = (
+                v0 * cos_a
+                + np.cross(k, v0) * sin_a
+                + k * (k @ v0) * (1.0 - cos_a)
+            )
+            pos = centroid + v_rot
+            frame = 1 + int(frac * ({duration_frames} - 1))
+            cam.location = Vector(pos.tolist())
+            # Re-aim
+            look_dir = Vector(centroid.tolist()) - cam.location
+            cam.rotation_quaternion = look_dir.to_track_quat('-Z', 'Y')
+            cam.keyframe_insert(data_path='location', frame=frame)
+            cam.keyframe_insert(data_path='rotation_quaternion', frame=frame)
+
+        # Set interpolation to LINEAR so the orbit reads as smooth circular motion
+        # (default BEZIER eases in/out and looks like a wobble).
+        if cam.animation_data and cam.animation_data.action:
+            for fc in cam.animation_data.action.fcurves:
+                for kp in fc.keyframe_points:
+                    kp.interpolation = 'LINEAR'
+
+        __result__ = json.dumps({{
+            'ok': True,
+            'centroid': centroid.tolist(),
+            'pc1_span': float(spans[0]),
+            'pc2_span': float(spans[1]),
+            'pc3_span': float(spans[2]),
+            'n_keyframes': n_keys + 1,
+        }})
+"""
+    try:
+        result = runner.run("mesh_relative_orbit", "execute_python", {"code": code}, critical=False)
+    except Exception as e:
+        if verbose:
+            print(f"[composer] mesh_relative_orbit failed: {type(e).__name__}: {e}")
+        return False
+
+    payload = (result or {}).get("result") if isinstance(result, dict) else None
+    try:
+        import json as _json
+        parsed = _json.loads(payload) if isinstance(payload, str) else {}
+    except Exception:
+        parsed = {}
+    if not parsed.get("ok"):
+        if verbose:
+            print(f"[composer] mesh_relative_orbit no-op: {parsed.get('why', 'unknown')}")
+        return False
+    if verbose:
+        print(f"[composer]   PC spans: PC1={parsed.get('pc1_span', 0):.2f} "
+              f"PC2={parsed.get('pc2_span', 0):.2f} "
+              f"PC3={parsed.get('pc3_span', 0):.2f}, "
+              f"keyframes={parsed.get('n_keyframes', 0)}")
+    return True
+
+
+def _detect_subject_bbox(ref_png: str, verbose: bool = True):
+    """Return the subject's content bbox in a reference image as normalized
+    (x0, y0, x1, y1) with a top-left origin. SDXL backgrounds are a neutral gray
+    gradient; the subject is warmer/saturated, so we segment by saturation (plus
+    a dark-pixel catch) inside a frame-skipped region. Falls back to a sane inset.
+    """
+    x0, y0, x1, y1 = 0.08, 0.06, 0.92, 0.96
+    try:
+        from PIL import Image
+        import numpy as _np
+        im = _np.asarray(Image.open(ref_png).convert("RGB"), dtype=_np.float32)
+        h, w = im.shape[:2]
+        f = 0.05
+        ry0, ry1 = int(h * f), int(h * (1 - f))
+        rx0, rx1 = int(w * f), int(w * (1 - f))
+        mx = im.max(axis=2); mn = im.min(axis=2)
+        sat = (mx - mn) / (mx + 1e-3)
+        mask = sat > 0.20
+        lum = im.mean(axis=2)
+        mask |= lum < 55.0
+        keep = _np.zeros_like(mask)
+        keep[ry0:ry1, rx0:rx1] = True
+        mask &= keep
+        cols = _np.where(mask.any(axis=0))[0]
+        rows = _np.where(mask.any(axis=1))[0]
+        if cols.size and rows.size:
+            pad = 0.01
+            x0 = max(0.0, cols.min() / w - pad); x1 = min(1.0, cols.max() / w + pad)
+            y0 = max(0.0, rows.min() / h - pad); y1 = min(1.0, rows.max() / h + pad)
+            if verbose:
+                frac = float(mask.sum()) / float(mask.size)
+                print(f"[composer] subject bbox x=[{x0:.2f},{x1:.2f}] "
+                      f"y=[{y0:.2f},{y1:.2f}] of {w}x{h} (fg {frac*100:.0f}%)")
+    except Exception as _e:
+        if verbose:
+            print(f"[composer] bbox detect fell back ({type(_e).__name__}: {_e})")
+    return x0, y0, x1, y1
+
+
+def _apply_reference_texture(runner, hero_name: str, ref_png: str,
+                             flip_u: bool = False, flip_v: bool = False,
+                             verbose: bool = True) -> bool:
+    """Phase 19 texturing (projection half): project the SDXL reference photo
+    onto the TripoSG mesh as a texture, giving it real color + facial features
+    (eyes/nose/fur come straight from the photo).
+
+    Headless-safe: computes per-vertex UVs by orthographic projection along the
+    mesh's WIDTH axis (X) — u = length (Y), v = height (Z) — since the reference
+    is a side profile. Both flanks receive the (mirrored) photo, which reads
+    correctly for roughly-symmetric subjects. The img2img pass (later) unifies
+    the far side. No viewport needed, no fiddly angle-matching.
+
+    Key trick: SDXL references put the subject in the center over a near-uniform
+    background, so a raw [0,1] UV map would paint the body with background gray.
+    We detect the subject's CONTENT bounding box in the photo (foreground pixels
+    vs. the border background color) and map the mesh extent onto exactly that
+    box, so the dog's silhouette lands on the dog's pixels.
+    """
+    ref_png_posix = str(Path(ref_png).as_posix())
+
+    # Detect subject content bbox so the mesh maps onto the dog's pixels, not the
+    # background margin (else the body samples gray).
+    x0, y0, x1, y1 = _detect_subject_bbox(ref_png, verbose=verbose)
+
+    # Blender image V is bottom-up; numpy rows are top-down → invert.
+    # mesh v=0 (feet) → photo bottom (row y1) ; mesh v=1 (head) → photo top (row y0)
+    tv_lo = 1.0 - y1   # texture V at mesh v=0
+    tv_hi = 1.0 - y0   # texture V at mesh v=1
+
+    code = (
+        "import bpy\n"
+        "import numpy as np\n"
+        f"o = bpy.data.objects.get('{hero_name}')\n"
+        "if o and o.type == 'MESH':\n"
+        "    me = o.data\n"
+        "    nv = len(me.vertices)\n"
+        "    # VECTORIZED: pull all local coords at once, apply world matrix via numpy.\n"
+        "    co_local = np.empty(nv * 3, dtype=np.float64)\n"
+        "    me.vertices.foreach_get('co', co_local)\n"
+        "    co_local = co_local.reshape(nv, 3)\n"
+        "    mw = np.array(o.matrix_world)\n"
+        "    co = co_local @ mw[:3, :3].T + mw[:3, 3]\n"
+        "    # project along X (width): u from Y (length), v from Z (height)\n"
+        "    u = co[:, 1]; v = co[:, 2]\n"
+        "    u = (u - u.min()) / max(u.max() - u.min(), 1e-6)\n"
+        "    v = (v - v.min()) / max(v.max() - v.min(), 1e-6)\n"
+        f"    if {flip_u}: u = 1.0 - u\n"
+        f"    if {flip_v}: v = 1.0 - v\n"
+        "    # Map normalized mesh extent onto the subject's content box in the photo.\n"
+        f"    u = {x0!r} + u * ({x1!r} - {x0!r})\n"
+        f"    v = {tv_lo!r} + v * ({tv_hi!r} - {tv_lo!r})\n"
+        "    uvl = me.uv_layers.get('RefProj') or me.uv_layers.new(name='RefProj')\n"
+        "    me.uv_layers.active = uvl\n"
+        "    # VECTORIZED loop UVs: gather per-loop vertex indices, build flat (u,v)\n"
+        "    # interleaved array, write in one foreach_set call (microseconds vs minutes).\n"
+        "    nl = len(me.loops)\n"
+        "    lvi = np.empty(nl, dtype=np.int32)\n"
+        "    me.loops.foreach_get('vertex_index', lvi)\n"
+        "    uvflat = np.empty(nl * 2, dtype=np.float64)\n"
+        "    uvflat[0::2] = u[lvi]\n"
+        "    uvflat[1::2] = v[lvi]\n"
+        "    uvl.data.foreach_set('uv', uvflat)\n"
+        "    img = bpy.data.images.load(r'" + ref_png_posix + "', check_existing=True)\n"
+        "    mat = bpy.data.materials.new('RefTex')\n"
+        "    mat.use_nodes = True\n"
+        "    nt = mat.node_tree\n"
+        "    bsdf = nt.nodes.get('Principled BSDF')\n"
+        "    bsdf.inputs['Roughness'].default_value = 0.6\n"
+        "    tex = nt.nodes.new('ShaderNodeTexImage')\n"
+        "    tex.image = img\n"
+        "    tex.extension = 'EXTEND'\n"
+        "    nt.links.new(tex.outputs['Color'], bsdf.inputs['Base Color'])\n"
+        "    o.data.materials.clear()\n"
+        "    o.data.materials.append(mat)\n"
+        "    __result__ = 'textured'\n"
+        "else:\n"
+        "    __result__ = 'no hero'\n"
+    )
+    try:
+        runner.run("ref_texture", "execute_python", {"code": code}, critical=False)
+        if verbose:
+            print(f"[composer] ref_texture: projected reference photo onto hero "
+                  f"(flip_u={flip_u} flip_v={flip_v})")
+        return True
+    except Exception as e:
+        if verbose:
+            print(f"[composer] ref_texture failed ({type(e).__name__}: {e})")
+        return False
+
+
+def _render_self_view(runner, hero_name: str, out_png: str, view: str,
+                      verbose: bool = True):
+    """Render the hero from a tight orthographic camera along one axis into
+    out_png. Returns framing {hmin,hmax,vmin,vmax,haxis} where the image's
+    horizontal world axis is haxis ('X' or 'Y') and vertical is always Z, so
+    back-projection maps exactly. Self-renders align to the mesh silhouette, so
+    projecting them back never bleeds onto background (unlike the raw photo).
+
+    view='xpos': camera on +X looking -X  (covers the flanks; horizontal=Y)
+    view='ypos': camera on +Y looking -Y  (covers +Y faces; horizontal=X)
+    view='yneg': camera on -Y looking +Y  (covers -Y faces; horizontal=X)
+    """
+    # (camera-offset expr, in-plane horizontal extent expr, horizontal axis,
+    #  hmin/hmax centre coord)
+    cfg = {
+        "xpos": ("Vector((cx+dist, cy, cz))", "max(ymax-ymin,1e-4)", "Y", "cy"),
+        "ypos": ("Vector((cx, cy+dist, cz))", "max(xmax-xmin,1e-4)", "X", "cx"),
+        "yneg": ("Vector((cx, cy-dist, cz))", "max(xmax-xmin,1e-4)", "X", "cx"),
+    }
+    cam_loc, hext_expr, haxis, hcen = cfg[view]
+    code = f"""
+import bpy, math, json
+from mathutils import Vector
+o = bpy.data.objects.get('{hero_name}')
+for nm in ('SelfCam','SelfLight','SelfFill'):
+    ob = bpy.data.objects.get(nm)
+    if ob: bpy.data.objects.remove(ob, do_unlink=True)
+xs=[(o.matrix_world@Vector(c)).x for c in o.bound_box]
+ys=[(o.matrix_world@Vector(c)).y for c in o.bound_box]
+zz=[(o.matrix_world@Vector(c)).z for c in o.bound_box]
+xmin,xmax=min(xs),max(xs); zmin,zmax=min(zz),max(zz); ymin,ymax=min(ys),max(ys)
+xext=max(xmax-xmin,1e-4); yext=max(ymax-ymin,1e-4); zext=max(zmax-zmin,1e-4)
+cx=(xmin+xmax)/2.0; cz=(zmin+zmax)/2.0; cy=(ymin+ymax)/2.0
+m=1.06
+hext={hext_expr}
+half=max(hext,zext)/2.0*m   # SQUARE frame on the larger in-plane dimension
+cd=bpy.data.cameras.new('SelfCam'); cd.type='ORTHO'
+cd.sensor_fit='AUTO'; cd.ortho_scale=2.0*half
+cam=bpy.data.objects.new('SelfCam',cd); bpy.context.scene.collection.objects.link(cam)
+dist=max(xext,yext,zext)*3.0
+cam.location={cam_loc}
+look=Vector((cx,cy,cz))-cam.location
+cam.rotation_euler=look.to_track_quat('-Z','Y').to_euler()
+world=bpy.context.scene.world or bpy.data.worlds.new('SelfWorld')
+bpy.context.scene.world=world; world.use_nodes=True
+bg=world.node_tree.nodes.get('Background')
+if bg: bg.inputs[0].default_value=(0.5,0.5,0.5,1.0); bg.inputs[1].default_value=0.9
+ll=bpy.data.lights.new('SelfLight',type='SUN'); ll.energy=3.0
+lo=bpy.data.objects.new('SelfLight',ll); bpy.context.scene.collection.objects.link(lo)
+lo.rotation_euler=(cam.location-Vector((cx,cy,cz))).to_track_quat('Z','Y').to_euler()
+bpy.context.scene.camera=cam
+sc=bpy.context.scene
+sc.render.engine='BLENDER_EEVEE'
+res=768
+sc.render.resolution_x=res; sc.render.resolution_y=res
+sc.render.film_transparent=False
+try: sc.view_settings.view_transform='Standard'
+except Exception: pass
+sc.render.filepath=r'{out_png}'
+bpy.ops.render.render(write_still=True)
+bpy.data.objects.remove(cam, do_unlink=True)
+bpy.data.objects.remove(lo, do_unlink=True)
+hc={hcen}
+__result__=json.dumps({{'hmin':hc-half,'hmax':hc+half,'vmin':cz-half,'vmax':cz+half,'haxis':'{haxis}'}})
+"""
+    res = runner.run("self_view", "execute_python", {"code": code}, critical=False)
+    framing = None
+    try:
+        import json as _json
+        raw = res.get("result") if isinstance(res, dict) else None
+        framing = _json.loads(raw) if isinstance(raw, str) else raw
+    except Exception:
+        framing = None
+    if verbose:
+        print(f"[composer] self_view[{view}] -> {Path(out_png).name} framing={framing}")
+    return framing
+
+
+def _apply_multiview_texture(runner, hero_name: str, side_ref_png: str,
+                             slots: Dict[str, Any], work_dir, run_id,
+                             style: str = "photoreal", verbose: bool = True) -> bool:
+    """Phase 19 texturing (full hybrid): cover ALL sides of the gray TripoSG mesh.
+
+    1. Side reference photo → flanks (X projection, content-bbox aligned).
+    2. Render the mesh's +Y and -Y self-views, img2img-refine each (reuses the
+       Phase 16 refiner) into a coherent dog from that angle — this fills the
+       gray feet / smear with real fur that respects the silhouette + depth.
+    3. Back-project all three onto the mesh and blend in the shader weighted by
+       each surface's world normal, so every point samples its best-facing view.
+
+    Falls back to side-only projection if the refiner is unavailable.
+    """
+    from pathlib import Path as _P
+    side_ref_png = str(_P(side_ref_png).as_posix())
+    work_dir = _P(work_dir)
+
+    # FLAT-BROWN SEED: paint the mesh a uniform subject-average color before the
+    # self-renders. img2img then KEEPS that base color (no white-marking invention
+    # the way a gray/patchy seed caused) while still adding fur + facial detail
+    # (eyes/nose/mouth) from the depth/silhouette. Faces come from img2img of the
+    # front self-view, projected back onto the actual face (self-render = aligned).
+    seed_rgb = [0.32, 0.20, 0.11]
+    try:
+        from PIL import Image as _PI
+        import numpy as _np
+        _im = _np.asarray(_PI.open(side_ref_png).convert("RGB"), dtype=_np.float32)
+        _mx = _im.max(axis=2); _mn = _im.min(axis=2)
+        _fg = ((_mx - _mn) / (_mx + 1e-3) > 0.20) | (_im.mean(axis=2) < 55.0)
+        if _fg.any():
+            _s = _im[_fg].mean(axis=0) / 255.0
+            seed_rgb = [float(((c + 0.055) / 1.055) ** 2.4 if c > 0.04045 else c / 12.92)
+                        for c in _s]
+    except Exception:
+        pass
+    runner.run("seed_flat", "execute_python", {"code": (
+        "import bpy\n"
+        f"o=bpy.data.objects.get('{hero_name}')\n"
+        "if o and o.type=='MESH':\n"
+        "    m=bpy.data.materials.new('SeedFlat'); m.use_nodes=True\n"
+        "    b=m.node_tree.nodes.get('Principled BSDF')\n"
+        f"    b.inputs['Base Color'].default_value=({seed_rgb[0]},{seed_rgb[1]},{seed_rgb[2]},1.0)\n"
+        "    b.inputs['Roughness'].default_value=0.7\n"
+        "    o.data.materials.clear(); o.data.materials.append(m)\n"
+        "    __result__='seeded'\n"
+        "else:\n    __result__='no hero'\n"
+    )}, critical=False)
+
+    # Refiner availability gate.
+    try:
+        from ..refinement import refiner as _refiner
+        refiner_ok = _refiner.is_available()
+    except Exception as e:
+        refiner_ok = False
+        if verbose:
+            print(f"[composer] multiview: refiner import failed ({type(e).__name__}: {e})")
+    if not refiner_ok:
+        if verbose:
+            print("[composer] multiview: refiner unavailable → side-only texture")
+        return True
+
+    # FREE THE REFERENCE SDXL PIPELINE BEFORE ANY EEVEE RENDER. A resident SDXL
+    # pipeline (~8 GB) starves the bridge's EEVEE renderer → the self-views come
+    # back BLACK → the ±Y texture fill is black (the two-tone/bare-rear bug). The
+    # reference image is already generated by now, so this is safe + frees VRAM
+    # for both the self-view renders AND the upcoming refiner load.
+    try:
+        from ..asset_gen.reference import unload_reference_pipeline
+        unload_reference_pipeline()
+        if verbose:
+            print("[composer] multiview: reference VRAM released (pre-render)")
+    except Exception:
+        pass
+
+    # ── 2a. Render BOTH self-views FIRST (bridge EEVEE) ──────────────────────
+    # Order matters: every bridge render must finish before the first img2img
+    # loads the refiner pipeline (same VRAM-starvation reason).
+    renders = {}
+    for view in ("xpos", "ypos", "yneg"):
+        raw_png = work_dir / f"selfview_{view}_{run_id}.png"
+        framing = _render_self_view(runner, hero_name, str(raw_png.as_posix()),
+                                    view, verbose=verbose)
+        if not (raw_png.exists() and framing is not None):
+            if verbose:
+                print(f"[composer] multiview: {view} render missing → skip")
+            continue
+        # Black-frame guard: never project a black render onto the mesh. If the
+        # render came back dark (EEVEE GPU/VRAM hiccup), drop this view so the
+        # blend falls back to the other views instead of painting it black.
+        try:
+            from PIL import Image as _PILImg
+            import numpy as _np
+            mean_lum = float(_np.asarray(_PILImg.open(raw_png).convert("L")).mean())
+        except Exception:
+            mean_lum = 255.0
+        if mean_lum < 6.0:
+            if verbose:
+                print(f"[composer] multiview: {view} render is BLACK "
+                      f"(lum={mean_lum:.1f}) → dropping view")
+            continue
+        renders[view] = {"raw": raw_png, "framing": framing}
+
+    # ── 2b. img2img-refine each rendered view (host GPU) ─────────────────────
+    views = {}
+    for view, info in renders.items():
+        try:
+            ref_out = work_dir / f"selfview_{view}_{run_id}.refined.png"
+            _refiner.refine_frame(str(info["raw"]), slots, style=style,
+                                  strength=0.55, steps=22, seed=42,
+                                  output_path=str(ref_out))
+            views[view] = {"png": str(ref_out.as_posix()), **info["framing"]}
+            if verbose:
+                print(f"[composer] multiview: {view} refined → {ref_out.name}")
+        except Exception as e:
+            if verbose:
+                print(f"[composer] multiview: {view} refine failed ({type(e).__name__}: {e})")
+
+    # ── 2c. Free SDXL VRAM so the FINAL video render isn't black ─────────────
+    try:
+        _refiner.unload()
+        if verbose:
+            print("[composer] multiview: refiner VRAM released")
+    except Exception:
+        pass
+
+    if not views:
+        if verbose:
+            print("[composer] multiview: no refined views → side-only texture")
+        return True
+
+    # ── 3. Build the blended material from the (up-to-3) self-renders ─────────
+    ok = _build_multiview_material(runner, hero_name, side_ref_png, views,
+                                   verbose=verbose)
+    return ok
+
+
+def _build_multiview_material(runner, hero_name, side_ref_png, views,
+                              verbose=True) -> bool:
+    """Assemble a material that samples the per-axis self-renders (xpos=flanks,
+    ypos/yneg=front/back) via projective UV layers and blends them by world
+    normal, with an average-color fallback so nothing is ever bare/gray.
+
+    All inputs are SELF-RENDERS (rendered from the mesh, then img2img-colored),
+    so each projects back onto its own silhouette exactly — no background bleed
+    and no proportional drift (the old raw-photo side projection's failure mode).
+    """
+    import json as _json
+    # Average subject color (from the reference photo) → fallback base so any
+    # low-coverage spot reads dog-colored, never gray. sRGB→linear to match.
+    avg = [0.35, 0.22, 0.12]
+    try:
+        from PIL import Image
+        import numpy as _np
+        im = _np.asarray(Image.open(side_ref_png).convert("RGB"), dtype=_np.float32)
+        mx = im.max(axis=2); mn = im.min(axis=2)
+        fg = ((mx - mn) / (mx + 1e-3) > 0.20) | (im.mean(axis=2) < 55.0)
+        if fg.any():
+            srgb = (im[fg].mean(axis=0) / 255.0)
+            avg = [float(((c + 0.055) / 1.055) ** 2.4 if c > 0.04045 else c / 12.92)
+                   for c in srgb]
+    except Exception:
+        pass
+    # Per-view config: (uv name, world horizontal-axis attr from framing, weight
+    # spec, flip_u). Weight spec: 'absx' = |nx|, 'posy' = max(ny,0), 'negy' = max(-ny,0).
+    spec = {
+        "xpos": ("RefProjX", "absx", False),
+        "ypos": ("RefProjYp", "posy", True),
+        "yneg": ("RefProjYn", "negy", False),
+    }
+    vlist = []
+    for name, v in views.items():
+        if name in spec and v:
+            uvn, wt, flip = spec[name]
+            vlist.append({"uv": uvn, "wt": wt, "flip": flip, "png": v["png"],
+                          "hmin": v["hmin"], "hmax": v["hmax"],
+                          "vmin": v["vmin"], "vmax": v["vmax"], "haxis": v["haxis"]})
+    payload = {"hero": hero_name, "avg": avg, "views": vlist}
+    code = '''
+import bpy, numpy as np, json
+P = json.loads(%r)
+o = bpy.data.objects.get(P["hero"])
+if not (o and o.type == "MESH"):
+    __result__ = "no hero"
+else:
+    me = o.data
+    nv = len(me.vertices)
+    co_local = np.empty(nv*3, dtype=np.float64); me.vertices.foreach_get("co", co_local)
+    co = co_local.reshape(nv,3) @ np.array(o.matrix_world)[:3,:3].T + np.array(o.matrix_world)[:3,3]
+    X, Y, Z = co[:,0], co[:,1], co[:,2]
+    nl = len(me.loops)
+    lvi = np.empty(nl, dtype=np.int32); me.loops.foreach_get("vertex_index", lvi)
+    def set_uv(name, u, v):
+        uvl = me.uv_layers.get(name) or me.uv_layers.new(name=name)
+        flat = np.empty(nl*2, dtype=np.float64)
+        flat[0::2] = u[lvi]; flat[1::2] = v[lvi]
+        uvl.data.foreach_set("uv", flat)
+    for vw in P["views"]:
+        H = Y if vw["haxis"] == "Y" else X
+        u = (H - vw["hmin"]) / max(vw["hmax"]-vw["hmin"], 1e-6)
+        v = (Z - vw["vmin"]) / max(vw["vmax"]-vw["vmin"], 1e-6)
+        if vw["flip"]: u = 1.0 - u
+        set_uv(vw["uv"], u, v)
+
+    mat = bpy.data.materials.new("RefTexMV"); mat.use_nodes = True
+    nt = mat.node_tree
+    for n in list(nt.nodes):
+        nt.nodes.remove(n)
+    out = nt.nodes.new("ShaderNodeOutputMaterial")
+    bsdf = nt.nodes.new("ShaderNodeBsdfPrincipled")
+    bsdf.inputs["Roughness"].default_value = 0.6
+    nt.links.new(bsdf.outputs["BSDF"], out.inputs["Surface"])
+    geo = nt.nodes.new("ShaderNodeNewGeometry")
+    sep = nt.nodes.new("ShaderNodeSeparateXYZ")
+    nt.links.new(geo.outputs["Normal"], sep.inputs["Vector"])
+    def img_node(path, uvname):
+        t = nt.nodes.new("ShaderNodeTexImage")
+        t.image = bpy.data.images.load(path, check_existing=True)
+        t.extension = "EXTEND"
+        uvm = nt.nodes.new("ShaderNodeUVMap"); uvm.uv_map = uvname
+        nt.links.new(uvm.outputs["UV"], t.inputs["Vector"])
+        return t
+    def mathn(op, a=None, b=None):
+        n = nt.nodes.new("ShaderNodeMath"); n.operation = op
+        if a is not None and not hasattr(a, "outputs"): n.inputs[0].default_value = a
+        if b is not None and not hasattr(b, "outputs"): n.inputs[1].default_value = b
+        return n
+    def link(a, sock_out, n, idx):
+        nt.links.new(a.outputs[sock_out], n.inputs[idx])
+    def weight(wt):
+        if wt == "absx":
+            w = mathn("ABSOLUTE"); link(sep,"X",w,0); return w
+        if wt == "posy":
+            w = mathn("MAXIMUM", b=0.0); link(sep,"Y",w,0); return w
+        negy = mathn("MULTIPLY", b=-1.0); link(sep,"Y",negy,0)
+        w = mathn("MAXIMUM", b=0.0); nt.links.new(negy.outputs["Value"], w.inputs[0]); return w
+    contribs = []  # (color_node, weight_node)
+    for vw in P["views"]:
+        contribs.append((img_node(vw["png"], vw["uv"]), weight(vw["wt"])))
+    # Fallback base: average subject color at a small CONSTANT weight so any
+    # surface no view covers still reads dog-colored (never bare/gray/black).
+    base_rgb = nt.nodes.new("ShaderNodeRGB")
+    base_rgb.outputs[0].default_value = (P["avg"][0], P["avg"][1], P["avg"][2], 1.0)
+    base_w = nt.nodes.new("ShaderNodeValue"); base_w.outputs[0].default_value = 0.18
+    contribs.append((base_rgb, base_w))
+    # total weight (+eps)
+    total = None
+    for _, w in contribs:
+        if total is None:
+            total = w
+        else:
+            a = mathn("ADD"); nt.links.new(total.outputs["Value"], a.inputs[0]); nt.links.new(w.outputs["Value"], a.inputs[1]); total = a
+    teps = mathn("ADD", b=1e-4); nt.links.new(total.outputs["Value"], teps.inputs[0])
+    # weighted sum of colors: sum(C_i * w_i) / total
+    acc = None
+    for tex, w in contribs:
+        sc = nt.nodes.new("ShaderNodeVectorMath"); sc.operation = "SCALE"
+        nt.links.new(tex.outputs["Color"], sc.inputs[0])
+        nt.links.new(w.outputs["Value"], sc.inputs["Scale"])
+        if acc is None:
+            acc = sc
+        else:
+            ad = nt.nodes.new("ShaderNodeVectorMath"); ad.operation = "ADD"
+            nt.links.new(acc.outputs["Vector"], ad.inputs[0]); nt.links.new(sc.outputs["Vector"], ad.inputs[1]); acc = ad
+    invt = mathn("DIVIDE", a=1.0); nt.links.new(teps.outputs["Value"], invt.inputs[1])
+    fin = nt.nodes.new("ShaderNodeVectorMath"); fin.operation = "SCALE"
+    nt.links.new(acc.outputs["Vector"], fin.inputs[0]); nt.links.new(invt.outputs["Value"], fin.inputs["Scale"])
+    nt.links.new(fin.outputs["Vector"], bsdf.inputs["Base Color"])
+    o.data.materials.clear(); o.data.materials.append(mat)
+    __result__ = "multiview:%%d" %% len(contribs)
+''' % (_json.dumps(payload),)
+    try:
+        runner.run("multiview_mat", "execute_python", {"code": code}, critical=False)
+        if verbose:
+            print(f"[composer] multiview material: blended {len(vlist)} self-render "
+                  f"projections ({', '.join(views.keys())}) by normal")
+        return True
+    except Exception as e:
+        if verbose:
+            print(f"[composer] multiview material failed ({type(e).__name__}: {e})")
+        return False
+
+
+def _build_environment(runner, env_spec: Dict[str, Any], verbose: bool = True) -> bool:
+    """Realize a resolved environment spec (see patterns.environment.resolve_environment)
+    entirely via execute_python: gradient sky world, sun, textured procedural
+    ground, volumetric fog, and color management. No addon changes required.
+    """
+    import json
+    spec_json = json.dumps(env_spec)
+    # NOTE: %r embeds the JSON safely as a Python string literal — avoids
+    # f-string brace collisions with all the bpy node code below.
+    code = '''
+import bpy, json, math
+from mathutils import Vector
+
+S = json.loads(%r)
+g = S["ground"]; sky = S["sky"]; sun = S["sun"]; fog = S["fog"]; post = S.get("post", {})
+
+# ── 1. WORLD: vertical gradient sky (+ optional fog volume) ───────────────
+world = bpy.context.scene.world or bpy.data.worlds.new("World")
+bpy.context.scene.world = world
+world.use_nodes = True
+nt = world.node_tree
+for n in list(nt.nodes):
+    nt.nodes.remove(n)
+out = nt.nodes.new("ShaderNodeOutputWorld")
+bg = nt.nodes.new("ShaderNodeBackground")
+bg.inputs["Strength"].default_value = float(sky["strength"])
+texco = nt.nodes.new("ShaderNodeTexCoord")
+sep = nt.nodes.new("ShaderNodeSeparateXYZ")
+mr = nt.nodes.new("ShaderNodeMapRange")
+mr.inputs["From Min"].default_value = -0.3
+mr.inputs["From Max"].default_value = 0.7
+ramp = nt.nodes.new("ShaderNodeValToRGB")
+ramp.color_ramp.elements[0].position = 0.0
+ramp.color_ramp.elements[0].color = (sky["horizon"][0], sky["horizon"][1], sky["horizon"][2], 1.0)
+ramp.color_ramp.elements[1].position = 1.0
+ramp.color_ramp.elements[1].color = (sky["zenith"][0], sky["zenith"][1], sky["zenith"][2], 1.0)
+nt.links.new(texco.outputs["Generated"], sep.inputs["Vector"])
+nt.links.new(sep.outputs["Z"], mr.inputs["Value"])
+nt.links.new(mr.outputs["Result"], ramp.inputs["Fac"])
+nt.links.new(ramp.outputs["Color"], bg.inputs["Color"])
+nt.links.new(bg.outputs["Background"], out.inputs["Surface"])
+
+# optional fog as a world volume (cinematic atmospheric depth)
+if float(fog.get("density", 0.0)) > 0.0005:
+    vol = nt.nodes.new("ShaderNodeVolumePrincipled")
+    vol.inputs["Density"].default_value = float(fog["density"])
+    fc = fog["color"]
+    try:
+        vol.inputs["Color"].default_value = (fc[0], fc[1], fc[2], 1.0)
+    except Exception:
+        pass
+    nt.links.new(vol.outputs["Volume"], out.inputs["Volume"])
+    try:
+        bpy.context.scene.eevee.use_volumetric_lights = True
+    except Exception:
+        pass
+
+# ── 2. SUN light from elevation/azimuth ──────────────────────────────────
+for o in [o for o in bpy.context.scene.objects if o.type == "LIGHT" and o.name.startswith("EnvSun")]:
+    bpy.data.objects.remove(o, do_unlink=True)
+sd = bpy.data.lights.new("EnvSun", type="SUN")
+sd.energy = float(sun["energy"])
+sc = sun["color"]; sd.color = (sc[0], sc[1], sc[2])
+try:
+    sd.angle = math.radians(2.0)   # soft-ish sun for nicer shadows
+except Exception:
+    pass
+so = bpy.data.objects.new("EnvSun", sd)
+bpy.context.scene.collection.objects.link(so)
+elev = math.radians(float(sun["elevation"]))
+azim = math.radians(float(sun["azimuth"]))
+# point the sun: rotate so -Z aims along the chosen elevation/azimuth
+so.rotation_euler = (math.radians(90.0) - elev, 0.0, azim)
+
+# ── 3. GROUND: large plane + procedural material per kind ────────────────
+kind = g["kind"]
+if kind != "void":
+    # remove old env ground
+    old = bpy.data.objects.get("EnvGround")
+    if old:
+        bpy.data.objects.remove(old, do_unlink=True)
+    bpy.ops.mesh.primitive_plane_add(size=80.0, location=(0, 0, 0))
+    ground = bpy.context.active_object
+    ground.name = "EnvGround"
+    mat = bpy.data.materials.new("EnvGroundMat")
+    mat.use_nodes = True
+    mnt = mat.node_tree
+    for n in list(mnt.nodes):
+        mnt.nodes.remove(n)
+    mout = mnt.nodes.new("ShaderNodeOutputMaterial")
+    bsdf = mnt.nodes.new("ShaderNodeBsdfPrincipled")
+    col = g["color"]
+    bsdf.inputs["Base Color"].default_value = (col[0], col[1], col[2], 1.0)
+    bsdf.inputs["Roughness"].default_value = float(g["roughness"])
+    # surface relief via noise->bump for natural kinds
+    if kind in ("grass", "sand", "concrete", "rock", "snow", "wood"):
+        noise = mnt.nodes.new("ShaderNodeTexNoise")
+        noise.inputs["Scale"].default_value = {"grass": 120.0, "sand": 60.0, "concrete": 30.0, "rock": 18.0, "snow": 40.0, "wood": 8.0}.get(kind, 30.0)
+        noise.inputs["Detail"].default_value = 6.0
+        bump = mnt.nodes.new("ShaderNodeBump")
+        bump.inputs["Strength"].default_value = {"grass": 0.5, "sand": 0.3, "concrete": 0.25, "rock": 0.7, "snow": 0.15, "wood": 0.2}.get(kind, 0.3)
+        mnt.links.new(noise.outputs["Fac"], bump.inputs["Height"])
+        mnt.links.new(bump.outputs["Normal"], bsdf.inputs["Normal"])
+        # two-tone color variation for organic kinds
+        if kind in ("grass", "sand", "rock"):
+            cramp = mnt.nodes.new("ShaderNodeValToRGB")
+            darker = (col[0]*0.7, col[1]*0.7, col[2]*0.7, 1.0)
+            cramp.color_ramp.elements[0].color = darker
+            cramp.color_ramp.elements[1].color = (col[0], col[1], col[2], 1.0)
+            cnoise = mnt.nodes.new("ShaderNodeTexNoise")
+            cnoise.inputs["Scale"].default_value = 8.0
+            mnt.links.new(cnoise.outputs["Fac"], cramp.inputs["Fac"])
+            mnt.links.new(cramp.outputs["Color"], bsdf.inputs["Base Color"])
+    if kind == "water":
+        bsdf.inputs["Roughness"].default_value = 0.05
+        try:
+            bsdf.inputs["Transmission Weight"].default_value = 0.3
+        except Exception:
+            pass
+        wave = mnt.nodes.new("ShaderNodeTexNoise")
+        wave.inputs["Scale"].default_value = 6.0
+        bump = mnt.nodes.new("ShaderNodeBump")
+        bump.inputs["Strength"].default_value = 0.15
+        mnt.links.new(wave.outputs["Fac"], bump.inputs["Height"])
+        mnt.links.new(bump.outputs["Normal"], bsdf.inputs["Normal"])
+    mnt.links.new(bsdf.outputs["BSDF"], mout.inputs["Surface"])
+    ground.data.materials.clear()
+    ground.data.materials.append(mat)
+
+# ── 4. Color management (exposure + cinematic look) ──────────────────────
+vs = bpy.context.scene.view_settings
+try:
+    vs.exposure = float(post.get("exposure", 0.0))
+except Exception:
+    pass
+try:
+    sat = float(post.get("saturation", 1.0))
+    vs.look = "AgX - Punchy" if sat > 1.2 else "AgX - Base"
+except Exception:
+    try:
+        vs.look = "Medium High Contrast"
+    except Exception:
+        pass
+
+__result__ = {"setting": S.get("_setting"), "mood": S.get("_mood"), "ground_kind": kind, "fog": float(fog.get("density", 0.0))}
+''' % spec_json
+    try:
+        runner.run("environment", "execute_python", {"code": code}, critical=False)
+        if verbose:
+            print(f"[composer] environment: setting={env_spec.get('_setting')} "
+                  f"mood={env_spec.get('_mood')} style={env_spec.get('_style')} "
+                  f"ground={env_spec['ground']['kind']} fog={env_spec['fog'].get('density')}")
+        return True
+    except Exception as e:
+        if verbose:
+            print(f"[composer] environment build failed ({type(e).__name__}: {e})")
+        return False
 
 
 def _camera_position_for_framing(framing: str, angle: str, hero_loc: List[float], hero_scale: float) -> Tuple[List[float], List[float]]:
@@ -261,6 +1129,8 @@ def _run_asset_gen(slots: Dict[str, Any], scene: Dict[str, Any], subj: Dict[str,
     from ..asset_gen import is_mesh_gen_available
     if subj.get("mesh_engine"):
         engine = subj["mesh_engine"]
+    elif is_mesh_gen_available("triposg"):
+        engine = "triposg"   # MIT, higher-fidelity, isolated venv
     elif is_mesh_gen_available("triposr"):
         engine = "triposr"
     else:
@@ -289,12 +1159,24 @@ def _run_asset_gen(slots: Dict[str, Any], scene: Dict[str, Any], subj: Dict[str,
                 print(f"[composer] asset-gen FAILED on fallback ({type(e2).__name__}: {e2})")
             return None
 
-    # 3. Import mesh into Blender as hero
+    # 3. Import mesh into Blender as hero.
+    # Phase 19.7 — real-world scale per pattern (normalize the LONGEST axis to a
+    # plausible real size) so trees tower, cars are car-sized, etc. The camera
+    # frames off the actual bbox so larger heroes still fill frame correctly.
+    _PATTERN_SIZE_M = {
+        "quadruped": 1.1,   # dog/cat nose-to-tail ~1m
+        "biped":     1.8,   # human/robot height
+        "vehicle":   4.5,   # car length
+        "tree":      6.0,   # a real tree towers
+        "celestial": 2.0,   # arbitrary — it's a sphere
+        "primitive_geo": 1.5,
+    }
+    _norm_size = _PATTERN_SIZE_M.get(subj.get("base_pattern"), 1.5)
     try:
         import_result = runner.run("asset_import", "import_mesh_file", {
             "filepath": str(mesh_glb),
             "name": "Hero",
-            "normalize_size": 1.5,  # was 2m — feels too big for the standard noon framing
+            "normalize_size": _norm_size,
             "ground_to_z0": True,
             "join": True,
             # GLB is already canonically oriented at the trimesh level — no Blender rotation needed
@@ -304,33 +1186,128 @@ def _run_asset_gen(slots: Dict[str, Any], scene: Dict[str, Any], subj: Dict[str,
             return None
         hero_name = import_result.get("name", "Hero")
 
-        # Phase 18 — vision-driven orientation agent. Replaces the brittle
-        # per-pattern Euler table. Renders a preview, asks Ollama gemma3:12b
-        # whether the subject is standing, applies suggested rotation, iterates.
-        # If anything fails (Ollama down, garbage response, etc.) the agent
-        # gracefully no-ops and the pipeline continues with the raw orientation.
-        try:
-            from ..orientation_agent import correct_orientation
-            base_pattern = subj.get("base_pattern", "primitive_geo")
-            agent_result = correct_orientation(
-                runner=runner,
-                hero_name=hero_name,
-                base_pattern=base_pattern,
-                work_dir=work_dir,
-                verbose=verbose,
+        # Phase 18 FINAL — deterministic Blender-frame orientation. Calibrated
+        # ONCE per pattern via scripts/orient_audit_blender.py (renders all 24
+        # orientations from a true side view in Blender; you pick the standing
+        # cell). Because both the audit and this application run in Blender's
+        # own coordinate frame, the picked rotation is guaranteed correct — no
+        # trimesh/glTF/matplotlib convention mismatches.
+        base_pattern = subj.get("base_pattern", "primitive_geo")
+        # Engine-aware orientation: TripoSG and TripoSR emit in different frames.
+        _euler_map = _TRIPOSG_PATTERN_EULER if engine == "triposg" else _BLENDER_PATTERN_EULER
+        euler = _euler_map.get(base_pattern)
+        if euler is not None:
+            rx, ry, rz = euler
+            # DIAGNOSTIC + robust apply: print the import baseline (which the
+            # glTF importer leaves as a quaternion +90X conversion), then bake
+            # that baseline to zero so our measured Euler — which the user read
+            # as an ABSOLUTE rotation in the .blend — reproduces their pose
+            # exactly from the same zeroed baseline.
+            # CRITICAL: do NOT transform_apply/bake. The mesh has a non-identity
+            # scale from normalize_size, and transform_apply(rotation=True) on a
+            # scaled object bakes the rotation incorrectly (the orient audit,
+            # which leaves rotation as object rotation and never bakes, renders
+            # the SAME mesh+rotation correctly standing). So we set rotation_euler
+            # and leave it live — exactly matching the audit. Ground via the
+            # rotation-aware world bbox.
+            _check_png = str((Path(work_dir) / "orient_check.png").as_posix())
+            rot_code = (
+                "import bpy, math\n"
+                "from mathutils import Vector\n"
+                f"o = bpy.data.objects.get('{hero_name}')\n"
+                "if o:\n"
+                "    o.rotation_mode = 'XYZ'\n"
+                f"    o.rotation_euler = (math.radians({rx}), math.radians({ry}), math.radians({rz}))\n"
+                "    bpy.context.view_layer.update()\n"
+                "    zs = [(o.matrix_world @ Vector(c)).z for c in o.bound_box]\n"
+                "    o.location.z -= min(zs)\n"
+                "    bpy.context.view_layer.update()\n"
+                "    # AZIMUTH-NORMALIZE: make the LONG horizontal axis run along Y\n"
+                "    # (flanks face ±X). The mesh engine's output azimuth varies per\n"
+                "    # subject; this guarantees the side texture projection (which\n"
+                "    # projects along X onto the flanks) is always axis-correct.\n"
+                "    xs0=[(o.matrix_world@Vector(c)).x for c in o.bound_box]\n"
+                "    ys0=[(o.matrix_world@Vector(c)).y for c in o.bound_box]\n"
+                "    if (max(xs0)-min(xs0)) > (max(ys0)-min(ys0)):\n"
+                "        o.rotation_euler.z += math.radians(90.0)\n"
+                "        bpy.context.view_layer.update()\n"
+                "        zs2=[(o.matrix_world@Vector(c)).z for c in o.bound_box]\n"
+                "        o.location.z -= min(zs2)\n"
+                "        bpy.context.view_layer.update()\n"
+                "    post_dims = tuple(round(d,3) for d in o.dimensions)\n"
+                "    center_z = sum(((o.matrix_world @ Vector(c)).z for c in o.bound_box)) / 8.0\n"
+                "    # IMMEDIATE front-ortho proof render — before any other step runs\n"
+                "    xs=[(o.matrix_world@Vector(c)).x for c in o.bound_box]\n"
+                "    ys=[(o.matrix_world@Vector(c)).y for c in o.bound_box]\n"
+                "    zz=[(o.matrix_world@Vector(c)).z for c in o.bound_box]\n"
+                "    span=max(max(xs)-min(xs),max(ys)-min(ys),max(zz)-min(zz),1.0)\n"
+                "    midz=(min(zz)+max(zz))/2.0\n"
+                "    cd=bpy.data.cameras.new('ChkCam'); cd.type='ORTHO'; cd.ortho_scale=span*1.6\n"
+                "    co=bpy.data.objects.new('ChkCam',cd); bpy.context.scene.collection.objects.link(co)\n"
+                "    co.location=Vector((0.0,-span*4.0,midz)); ld=(Vector((0,0,midz))-co.location); co.rotation_euler=ld.to_track_quat('-Z','Y').to_euler()\n"
+                "    ll=bpy.data.lights.new('ChkL',type='SUN'); ll.energy=3.5; lo=bpy.data.objects.new('ChkL',ll); bpy.context.scene.collection.objects.link(lo); lo.rotation_euler=(math.radians(55),0,math.radians(40))\n"
+                "    pc=bpy.context.scene.camera; pe=bpy.context.scene.render.engine; px=bpy.context.scene.render.resolution_x; py=bpy.context.scene.render.resolution_y; pf=bpy.context.scene.render.filepath\n"
+                "    bpy.context.scene.camera=co; bpy.context.scene.render.engine='BLENDER_EEVEE'; bpy.context.scene.render.resolution_x=500; bpy.context.scene.render.resolution_y=500\n"
+                f"    bpy.context.scene.render.filepath=r'{_check_png}'\n"
+                "    bpy.ops.render.render(write_still=True)\n"
+                "    bpy.data.objects.remove(co,do_unlink=True); bpy.data.cameras.remove(cd); bpy.data.objects.remove(lo,do_unlink=True); bpy.data.lights.remove(ll)\n"
+                "    bpy.context.scene.camera=pc; bpy.context.scene.render.engine=pe; bpy.context.scene.render.resolution_x=px; bpy.context.scene.render.resolution_y=py; bpy.context.scene.render.filepath=pf\n"
+                "    __result__ = {'post_dims': post_dims, 'center_z': round(center_z,3), 'check_png': r'" + _check_png + "'}\n"
+                "else:\n"
+                "    __result__ = 'no hero'\n"
             )
+            runner.run("orient_hero", "execute_python", {"code": rot_code}, critical=False)
             if verbose:
-                status = agent_result.get("status", "unknown")
-                iters = agent_result.get("iterations", 0)
-                applied = agent_result.get("rotations_applied", [])
-                print(f"[composer] orient_agent: status={status} iters={iters} "
-                      f"rotations_applied={len(applied)}")
-                for j, rot in enumerate(applied):
-                    print(f"[composer]   step {j}: rotated by {rot}")
-        except Exception as e:
+                print(f"[composer] orient_hero: pattern='{base_pattern}' "
+                      f"Blender Euler=({rx}, {ry}, {rz}) applied + baked + grounded")
+        elif verbose:
+            print(f"[composer] orient_hero: no calibration for pattern='{base_pattern}' "
+                  f"— run scripts/orient_audit_blender.py to calibrate")
+
+        # Phase 19 mesh-quality: smooth-shade + a Corrective Smooth modifier to
+        # melt the remaining blobby TripoSR micro-noise while preserving the
+        # silhouette. Big visual de-blob with near-zero render cost.
+        smooth_code = (
+            "import bpy\n"
+            f"o = bpy.data.objects.get('{hero_name}')\n"
+            "if o and o.type == 'MESH':\n"
+            "    for p in o.data.polygons:\n"
+            "        p.use_smooth = True\n"
+            "    m = o.modifiers.get('HeroSmooth') or o.modifiers.new('HeroSmooth', 'CORRECTIVE_SMOOTH')\n"
+            "    m.iterations = 12\n"
+            "    m.factor = 0.6\n"
+            "    try:\n"
+            "        m.use_only_smooth = True\n"
+            "    except Exception:\n"
+            "        pass\n"
+            "    __result__ = 'smoothed'\n"
+            "else:\n"
+            "    __result__ = 'no hero'\n"
+        )
+        runner.run("smooth_hero", "execute_python", {"code": smooth_code}, critical=False)
+        if verbose:
+            print(f"[composer] smooth_hero: corrective-smooth + shade-smooth applied")
+
+        # Phase 19 texturing (projection half): paint the SDXL reference photo
+        # onto the gray TripoSG geometry so it gets real color + facial features.
+        # TripoSG meshes import as uniform gray [102,102,102]; this is what gives
+        # the hero its actual appearance. The img2img polish pass refines the far
+        # side later. flip_u/flip_v env hooks let us correct the facing in one shot.
+        try:
+            if os.environ.get("FS_REFTEX", "1") == "1" and ref_png.exists():
+                if os.environ.get("FS_REFTEX_MULTIVIEW", "1") == "1":
+                    # Full hybrid: side photo + img2img-refined ±Y views, blended.
+                    _apply_multiview_texture(runner, hero_name, str(ref_png),
+                                             slots, work_dir, run_id, style=style,
+                                             verbose=verbose)
+                else:
+                    _flip_u = os.environ.get("FS_REFTEX_FLIP_U", "0") == "1"
+                    _flip_v = os.environ.get("FS_REFTEX_FLIP_V", "0") == "1"
+                    _apply_reference_texture(runner, hero_name, str(ref_png),
+                                             flip_u=_flip_u, flip_v=_flip_v, verbose=verbose)
+        except Exception as _te:
             if verbose:
-                print(f"[composer] orient_agent crashed, continuing with raw orientation "
-                      f"({type(e).__name__}: {e})")
+                print(f"[composer] ref_texture skipped ({type(_te).__name__}: {_te})")
 
         return hero_name
     except Exception as e:
@@ -1031,43 +2008,50 @@ def compose_scene(
         except Exception:
             pass  # fall back to slot values
 
-    # ── ENVIRONMENT (mood-driven, replaces the dumb gray ground from before)
-    env = env_module.env_for_mood(scene.get("mood", "neutral"))
+    # ── ENVIRONMENT ──────────────────────────────────────────────────────
+    # Phase 19: setting-driven cinematic environment (place + mood + style →
+    # gradient sky, sun, textured ground, fog, color grade). Falls back to the
+    # legacy mood-only environment if no setting is present.
+    setting = scene.get("setting")
+    used_phase19_env = False
+    if setting:
+        try:
+            _, env_style = _resolve_tier_style(scene, subj, slots)
+        except Exception:
+            env_style = "photoreal"
+        env_spec = env_module.resolve_environment(setting, scene.get("mood", "neutral"), env_style)
+        used_phase19_env = _build_environment(runner, env_spec, verbose=verbose)
 
-    # Try HDRI first (photoreal lighting + reflections). Fall back to flat sky if no file.
-    from pathlib import Path as _Path
-    backend_root = _Path(__file__).resolve().parents[2]
-    hdri_dir = backend_root / "assets" / "hdri"
-    hdri_path = env_module.hdri_for_mood(scene.get("mood", "neutral"), hdri_dir)
-    if hdri_path is not None:
-        # Phase 17: asset-gen meshes carry vertex colors that already encode
-        # the SDXL reference's lighting. A 2.0 HDRI on top blows them out.
-        # Drop strength by ~40% in asset-gen mode so the surface colors read.
-        hdri_strength = env.get("sky_strength", 1.0)
-        if asset_gen_hero_name:
-            hdri_strength = min(hdri_strength, 1.2)
-        runner.run("world_hdri", "set_hdri_environment", {
-            "hdri_path": str(hdri_path),
-            "strength": hdri_strength,
-        })
-    else:
-        runner.run("world_bg", "set_world_background", {
-            "color": env["sky_color"], "strength": env["sky_strength"],
-        })
-
-    # Ground plane — always create one if user mentioned ground, OR if mood is outdoor
-    outdoor_moods = {"sunset", "sunrise", "golden hour", "dawn", "dusk", "noon", "daylight", "night", "moonlight", "bright"}
-    needs_ground = scene.get("ground") or scene.get("mood") in outdoor_moods
-    if needs_ground:
-        ground_mat_name = f"GroundMat_{run_id}"
-        runner.run("ground", "create_primitive", {
-            "type": "plane", "name": "Ground", "location": [0, 0, 0], "size": 40.0,
-        })
-        runner.run("ground_material", "create_material", {
-            "name": ground_mat_name, "color": env["ground_color"],
-            "metallic": env["ground_metallic"], "roughness": env["ground_roughness"],
-        })
-        runner.run("ground_apply", "apply_material", {"object": "Ground", "material": ground_mat_name})
+    if not used_phase19_env:
+        # Legacy mood-only path (kept for safety / primitives).
+        env = env_module.env_for_mood(scene.get("mood", "neutral"))
+        from pathlib import Path as _Path
+        backend_root = _Path(__file__).resolve().parents[2]
+        hdri_dir = backend_root / "assets" / "hdri"
+        hdri_path = env_module.hdri_for_mood(scene.get("mood", "neutral"), hdri_dir)
+        if hdri_path is not None:
+            hdri_strength = env.get("sky_strength", 1.0)
+            if asset_gen_hero_name:
+                hdri_strength = min(hdri_strength, 1.2)
+            runner.run("world_hdri", "set_hdri_environment", {
+                "hdri_path": str(hdri_path), "strength": hdri_strength,
+            })
+        else:
+            runner.run("world_bg", "set_world_background", {
+                "color": env["sky_color"], "strength": env["sky_strength"],
+            })
+        outdoor_moods = {"sunset", "sunrise", "golden hour", "dawn", "dusk", "noon", "daylight", "night", "moonlight", "bright"}
+        needs_ground = scene.get("ground") or scene.get("mood") in outdoor_moods
+        if needs_ground:
+            ground_mat_name = f"GroundMat_{run_id}"
+            runner.run("ground", "create_primitive", {
+                "type": "plane", "name": "Ground", "location": [0, 0, 0], "size": 40.0,
+            })
+            runner.run("ground_material", "create_material", {
+                "name": ground_mat_name, "color": env["ground_color"],
+                "metallic": env["ground_metallic"], "roughness": env["ground_roughness"],
+            })
+            runner.run("ground_apply", "apply_material", {"object": "Ground", "material": ground_mat_name})
 
     # Shade-smooth all organic parts so subdivision actually softens the silhouette
     organic_names = [p["name"] for p in parts if p.get("primitive") in ("sphere", "icosphere") and p.get("role") in ("body", "head", "limb", "detail")]
@@ -1079,11 +2063,14 @@ def compose_scene(
         ])
         runner.run("shade_smooth", "execute_python", {"code": smooth_code + "; __result__ = 'smoothed'"})
 
-    # 8. Lighting (mood-driven). For asset-gen meshes, halve the energies —
-    # the SDXL reference already baked lighting into vertex colors, so the
-    # 3-point rig is just for shape definition/contact shadows, not exposure.
+    # 8. Lighting. For asset-gen meshes, halve the energies (vertex colors
+    # already encode the SDXL reference lighting). When the Phase 19 env is
+    # active it provides the KEY sun, so the 3-point rig drops to a gentle fill
+    # (×0.35) — just shape definition + soft shadow fill, not the main light.
     light_params = _lighting_params_from_mood(scene.get("mood", "neutral"))
     light_scale = 0.5 if asset_gen_hero_name else 1.0
+    if used_phase19_env:
+        light_scale *= 0.35
     runner.run("lighting", "apply_three_point_lighting", {
         "target": hero_loc,
         "color_temp": light_params.get("color_temp", "neutral"),
@@ -1093,16 +2080,52 @@ def compose_scene(
     })
 
     # 9. Camera (framing + angle)
-    cam_xyz, look_target = _camera_position_for_framing(
-        cam_slots.get("framing", "medium"),
-        cam_slots.get("angle", "three-quarter"),
-        hero_loc, hero_scale,
-    )
-    runner.run("camera", "create_camera", {"name": "Cam", "location": cam_xyz, "lens": 50.0, "set_active": True})
-    runner.run("look_at", "look_at", {"object": "Cam", "target": look_target})
+    #
+    # Phase 18 final: for asset-gen heroes (TripoSR/InstantMesh meshes that may
+    # arrive in arbitrary world orientation), use MESH-RELATIVE framing instead
+    # of world-axis framing. PCA on the mesh finds its natural long/medium/short
+    # axes; camera orbits perpendicular to the longest axis around the medium
+    # axis. Net effect: the camera always shows a nice side profile no matter
+    # which world axis the mesh happens to be oriented along.
+    # DISABLED — the PCA mesh-relative orbit was the wrong approach and also
+    # hit a Blender 5.1 API change (Action.fcurves removed). Replaced by the
+    # deterministic orientation-audit workflow: render all 24 axis-aligned
+    # orientations once, hardcode the correct per-pattern rotation in
+    # mesh._PATTERN_ORIENTATION. Set _USE_PCA_ORBIT = True only to experiment.
+    _USE_PCA_ORBIT = False
+    used_mesh_relative_orbit = False
+    if _USE_PCA_ORBIT and asset_gen_hero_name and is_animation:
+        m_type = motion.get("type", "static")
+        speed = motion.get("speed", "medium")
+        # Only override for orbit-style motion (the default for static prompts).
+        # Translate/bounce/rotate_self stay world-aligned since they move the hero.
+        if m_type in ("ambient_orbit", "orbit", "static"):
+            revs = 0.25 if m_type == "ambient_orbit" else _revolutions_for_speed(speed) if m_type == "orbit" else 0.25
+            ok = _setup_mesh_relative_orbit(
+                runner=runner,
+                hero_name=asset_gen_hero_name,
+                duration_frames=total_frames,
+                revolutions=revs,
+                lens=50.0,
+                verbose=verbose,
+            )
+            if ok:
+                used_mesh_relative_orbit = True
+                if verbose:
+                    print(f"[composer] camera: mesh-relative orbit (PCA-based) "
+                          f"frames={total_frames} revolutions={revs:.2f}")
+
+    if not used_mesh_relative_orbit:
+        cam_xyz, look_target = _camera_position_for_framing(
+            cam_slots.get("framing", "medium"),
+            cam_slots.get("angle", "three-quarter"),
+            hero_loc, hero_scale,
+        )
+        runner.run("camera", "create_camera", {"name": "Cam", "location": cam_xyz, "lens": 50.0, "set_active": True})
+        runner.run("look_at", "look_at", {"object": "Cam", "target": look_target})
 
     # 10. Motion (always — every render is a video)
-    if is_animation:
+    if is_animation and not used_mesh_relative_orbit:
         m_type = motion.get("type", "static")
         speed = motion.get("speed", "medium")
 

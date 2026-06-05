@@ -29,6 +29,9 @@ from .scene_inference import COLOR_MAP, MATERIAL_VIBES, LIGHTING_MOOD
 VALID_SHAPES = ["cube", "sphere", "icosphere", "cylinder", "cone", "torus", "plane", "monkey", "library"]
 VALID_MATERIALS = ["matte", "metallic", "polished", "brushed", "glass", "glossy", "ceramic", "plastic", "rubber", "fuzzy", "wood", "stone", "fabric"]
 VALID_MOODS     = ["neutral", "sunset", "sunrise", "golden hour", "dawn", "dusk", "noon", "daylight", "night", "moonlight", "studio", "dramatic", "moody", "dark", "bright"]
+# Phase 19 — WHERE the scene takes place (the physical environment). Distinct
+# from mood (which is lighting/time). "studio" is the safe neutral default.
+VALID_SETTINGS  = ["studio", "grassland", "forest", "beach", "desert", "snow", "street", "interior", "mountain", "space", "underwater", "night_city"]
 VALID_MOTIONS   = ["static", "orbit", "rotate_self", "translate", "bounce", "drift"]
 VALID_SPEEDS    = ["slow", "medium", "fast"]
 VALID_FRAMINGS  = ["close", "medium", "wide", "ultrawide"]
@@ -61,7 +64,8 @@ SLOT_SCHEMA_TEXT = """{
   },
   "scene": {
     "mood":             // one of: neutral, sunset, sunrise, golden hour, dawn, dusk, noon, daylight, night, moonlight, studio, dramatic, moody, dark, bright
-    "ground":           // true if there's a floor/ground/plane/surface mentioned, else false
+    "setting":          // WHERE it is: one of studio, grassland, forest, beach, desert, snow, street, interior, mountain, space, underwater, night_city. Default "studio" if no place is described. ("a field"→grassland, "the woods"→forest, "the city"→street, "a room/house"→interior, "outer space"→space)
+    "ground":           // true if there's a floor/ground/plane/surface mentioned OR setting is outdoor, else false
   },
   "motion": {
     "type":             // one of: static, orbit, rotate_self, translate, bounce, drift
@@ -121,7 +125,7 @@ FEW_SHOT_EXAMPLES = [
         "prompt": "a brown dog standing in golden hour light",
         "slots": {
             "subject": {"name": "dog", "base_pattern": "quadruped", "shape": None, "library_query": "dog", "pose": "standing", "color_name": "brown", "material": "fuzzy", "emissive": False, "scale": 1.0, "location": [0, 0, 0]},
-            "scene":   {"mood": "golden hour", "ground": True},
+            "scene":   {"mood": "golden hour", "setting": "grassland", "ground": True},
             "motion":  {"type": "static", "speed": "medium"},
             "camera":  {"framing": "medium", "angle": "three-quarter"},
             "output":  {"is_animation": False, "duration_seconds": 0, "resolution": "720p"},
@@ -141,7 +145,7 @@ FEW_SHOT_EXAMPLES = [
         "prompt": "a tall pine tree at sunset",
         "slots": {
             "subject": {"name": "pine tree", "base_pattern": "tree", "shape": None, "library_query": "pine", "pose": None, "color_name": "green", "material": "matte", "emissive": False, "scale": 1.0, "location": [0, 0, 0]},
-            "scene":   {"mood": "sunset", "ground": True},
+            "scene":   {"mood": "sunset", "setting": "forest", "ground": True},
             "motion":  {"type": "static", "speed": "medium"},
             "camera":  {"framing": "wide", "angle": "three-quarter"},
             "output":  {"is_animation": False, "duration_seconds": 0, "resolution": "720p"},
@@ -327,7 +331,12 @@ def _validate_and_fill(slots: Dict[str, Any], user_prompt: str) -> tuple[Dict[st
     # Scene
     scene = slots.setdefault("scene", {})
     scene["mood"] = _coerce(scene.get("mood", "neutral"), VALID_MOODS, "neutral", "scene.mood")
+    scene["setting"] = _coerce(scene.get("setting", "studio"), VALID_SETTINGS, "studio", "scene.setting")
+    # Outdoor settings imply a ground plane even if the user didn't say "floor".
+    _OUTDOOR = {"grassland", "forest", "beach", "desert", "snow", "street", "mountain", "night_city"}
     scene.setdefault("ground", False)
+    if scene["setting"] in _OUTDOOR or scene["setting"] == "interior":
+        scene["ground"] = True
 
     # Motion
     motion = slots.setdefault("motion", {})
@@ -380,6 +389,27 @@ def _keyword_fallback(prompt: str) -> Dict[str, Any]:
     for m in VALID_MOODS:
         if re.search(rf"\b{re.escape(m)}\b", p):
             mood = m
+            break
+
+    # Phase 19 — setting (place) detection by keyword. Order matters: more
+    # specific phrases first. Default studio when no place is described.
+    setting = "studio"
+    _SETTING_KEYWORDS = [
+        ("night_city", ["night city", "neon city", "cyberpunk"]),
+        ("street",     ["street", "city", "road", "urban", "sidewalk", "alley"]),
+        ("grassland",  ["field", "meadow", "grass", "prairie", "savanna", "lawn"]),
+        ("forest",     ["forest", "woods", "jungle", "woodland"]),
+        ("beach",      ["beach", "shore", "coast", "ocean", "seaside"]),
+        ("desert",     ["desert", "dunes", "sand"]),
+        ("snow",       ["snow", "snowy", "arctic", "tundra", "winter"]),
+        ("mountain",   ["mountain", "cliff", "peak", "hills", "valley"]),
+        ("space",      ["space", "outer space", "cosmos", "galaxy", "stars", "nebula"]),
+        ("underwater", ["underwater", "ocean floor", "sea floor", "reef", "submerged"]),
+        ("interior",   ["room", "indoor", "inside", "house", "office", "kitchen", "studio apartment", "living room"]),
+    ]
+    for canonical, words in _SETTING_KEYWORDS:
+        if any(w in p for w in words):
+            setting = canonical
             break
 
     motion = "static"
@@ -449,7 +479,8 @@ def _keyword_fallback(prompt: str) -> Dict[str, Any]:
         "subject": {"name": "", "base_pattern": pattern, "shape": shape, "library_query": library_query, "pose": pose,
                     "color_name": color, "material": material,
                     "emissive": emissive, "scale": 1.0, "location": [0, 0, 1]},
-        "scene":   {"mood": mood, "ground": "ground" in p or "floor" in p or "street" in p},
+        "scene":   {"mood": mood, "setting": setting,
+                    "ground": setting != "studio" or "ground" in p or "floor" in p},
         "motion":  {"type": motion, "speed": "slow" if "slow" in p else ("fast" if "fast" in p else "medium")},
         "camera":  {"framing": "medium", "angle": "three-quarter"},
         "output":  {"is_animation": is_animation, "duration_seconds": 5 if is_animation else 0, "resolution": "720p"},
