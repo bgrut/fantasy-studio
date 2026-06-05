@@ -524,7 +524,7 @@ lo.rotation_euler=(cam.location-Vector((cx,cy,cz))).to_track_quat('Z','Y').to_eu
 bpy.context.scene.camera=cam
 sc=bpy.context.scene
 sc.render.engine='BLENDER_EEVEE'
-res=768
+res=1024
 sc.render.resolution_x=res; sc.render.resolution_y=res
 sc.render.film_transparent=False
 try: sc.view_settings.view_transform='Standard'
@@ -712,20 +712,22 @@ def _build_multiview_material(runner, hero_name, side_ref_png, views,
                    for c in srgb]
     except Exception:
         pass
-    # Per-view config: (uv name, world horizontal-axis attr from framing, weight
-    # spec, flip_u). Weight spec: 'absx' = |nx|, 'posy' = max(ny,0), 'negy' = max(-ny,0).
+    # Per-view config: (uv name, flip_u, depth axis, depth sign, vcolor channel).
+    # The depth axis/sign give the view's camera direction for the occlusion test;
+    # the channel packs that view's per-vertex weight into R/G/B of a color attr.
     spec = {
-        "xpos": ("RefProjX", "absx", False),
-        "ypos": ("RefProjYp", "posy", True),
-        "yneg": ("RefProjYn", "negy", False),
+        "xpos": ("RefProjX",  False, "X",  1.0, 0),
+        "ypos": ("RefProjYp", True,  "Y",  1.0, 1),
+        "yneg": ("RefProjYn", False, "Y", -1.0, 2),
     }
     vlist = []
     for name, v in views.items():
         if name in spec and v:
-            uvn, wt, flip = spec[name]
-            vlist.append({"uv": uvn, "wt": wt, "flip": flip, "png": v["png"],
+            uvn, flip, dax, dsign, ch = spec[name]
+            vlist.append({"uv": uvn, "flip": flip, "png": v["png"],
                           "hmin": v["hmin"], "hmax": v["hmax"],
-                          "vmin": v["vmin"], "vmax": v["vmax"], "haxis": v["haxis"]})
+                          "vmin": v["vmin"], "vmax": v["vmax"], "haxis": v["haxis"],
+                          "dax": dax, "dsign": dsign, "ch": ch})
     payload = {"hero": hero_name, "avg": avg, "views": vlist}
     code = '''
 import bpy, numpy as np, json
@@ -736,8 +738,12 @@ if not (o and o.type == "MESH"):
 else:
     me = o.data
     nv = len(me.vertices)
+    M = np.array(o.matrix_world)
     co_local = np.empty(nv*3, dtype=np.float64); me.vertices.foreach_get("co", co_local)
-    co = co_local.reshape(nv,3) @ np.array(o.matrix_world)[:3,:3].T + np.array(o.matrix_world)[:3,3]
+    co = co_local.reshape(nv,3) @ M[:3,:3].T + M[:3,3]
+    nrm = np.empty(nv*3, dtype=np.float64); me.vertices.foreach_get("normal", nrm)
+    wn = nrm.reshape(nv,3) @ M[:3,:3].T
+    wn /= (np.linalg.norm(wn, axis=1, keepdims=True) + 1e-9)
     X, Y, Z = co[:,0], co[:,1], co[:,2]
     nl = len(me.loops)
     lvi = np.empty(nl, dtype=np.int32); me.loops.foreach_get("vertex_index", lvi)
@@ -746,12 +752,30 @@ else:
         flat = np.empty(nl*2, dtype=np.float64)
         flat[0::2] = u[lvi]; flat[1::2] = v[lvi]
         uvl.data.foreach_set("uv", flat)
+    RES = 256
+    vcol = np.zeros((nv,3), dtype=np.float64)
     for vw in P["views"]:
         H = Y if vw["haxis"] == "Y" else X
         u = (H - vw["hmin"]) / max(vw["hmax"]-vw["hmin"], 1e-6)
-        v = (Z - vw["vmin"]) / max(vw["vmax"]-vw["vmin"], 1e-6)
-        if vw["flip"]: u = 1.0 - u
-        set_uv(vw["uv"], u, v)
+        vv = (Z - vw["vmin"]) / max(vw["vmax"]-vw["vmin"], 1e-6)
+        set_uv(vw["uv"], (1.0 - u) if vw["flip"] else u, vv)
+        # OCCLUSION (z-buffer): a vertex only gets this view if it is the FRONTMOST
+        # surface toward the view camera at its projected pixel. Kills the bleed of
+        # face features onto the neck/chest hidden behind the head.
+        D = (X if vw["dax"] == "X" else Y) * vw["dsign"]
+        ncomp = (wn[:,0] if vw["dax"] == "X" else wn[:,1]) * vw["dsign"]
+        ui = np.clip((u*RES).astype(np.int64), 0, RES-1)
+        vi = np.clip((vv*RES).astype(np.int64), 0, RES-1)
+        idx = vi*RES + ui
+        maxd = np.full(RES*RES, -1e18); np.maximum.at(maxd, idx, D)
+        span = float(D.max() - D.min()) + 1e-6
+        vis = (D >= maxd[idx] - 0.04*span).astype(np.float64)
+        vcol[:, vw["ch"]] = np.clip(ncomp, 0.0, None)**2 * vis
+    ca = me.color_attributes.get("ProjW")
+    if ca is None:
+        ca = me.color_attributes.new(name="ProjW", type="FLOAT_COLOR", domain="POINT")
+    rgba = np.zeros((nv,4), dtype=np.float64); rgba[:,:3] = vcol; rgba[:,3] = 1.0
+    ca.data.foreach_set("color", rgba.ravel())
 
     mat = bpy.data.materials.new("RefTexMV"); mat.use_nodes = True
     nt = mat.node_tree
@@ -761,9 +785,12 @@ else:
     bsdf = nt.nodes.new("ShaderNodeBsdfPrincipled")
     bsdf.inputs["Roughness"].default_value = 0.6
     nt.links.new(bsdf.outputs["BSDF"], out.inputs["Surface"])
-    geo = nt.nodes.new("ShaderNodeNewGeometry")
-    sep = nt.nodes.new("ShaderNodeSeparateXYZ")
-    nt.links.new(geo.outputs["Normal"], sep.inputs["Vector"])
+    attr = nt.nodes.new("ShaderNodeAttribute"); attr.attribute_name = "ProjW"
+    try: attr.attribute_type = "GEOMETRY"
+    except Exception: pass
+    sepc = nt.nodes.new("ShaderNodeSeparateColor")
+    nt.links.new(attr.outputs["Color"], sepc.inputs["Color"])
+    chan = {0: "Red", 1: "Green", 2: "Blue"}
     def img_node(path, uvname):
         t = nt.nodes.new("ShaderNodeTexImage")
         t.image = bpy.data.images.load(path, check_existing=True)
@@ -771,54 +798,38 @@ else:
         uvm = nt.nodes.new("ShaderNodeUVMap"); uvm.uv_map = uvname
         nt.links.new(uvm.outputs["UV"], t.inputs["Vector"])
         return t
-    def mathn(op, a=None, b=None):
-        n = nt.nodes.new("ShaderNodeMath"); n.operation = op
-        if a is not None and not hasattr(a, "outputs"): n.inputs[0].default_value = a
-        if b is not None and not hasattr(b, "outputs"): n.inputs[1].default_value = b
-        return n
-    def link(a, sock_out, n, idx):
-        nt.links.new(a.outputs[sock_out], n.inputs[idx])
-    def weight(wt):
-        if wt == "absx":
-            w = mathn("ABSOLUTE"); link(sep,"X",w,0); return w
-        if wt == "posy":
-            w = mathn("MAXIMUM", b=0.0); link(sep,"Y",w,0); return w
-        negy = mathn("MULTIPLY", b=-1.0); link(sep,"Y",negy,0)
-        w = mathn("MAXIMUM", b=0.0); nt.links.new(negy.outputs["Value"], w.inputs[0]); return w
-    contribs = []  # (color_node, weight_node)
+    contribs = []  # (color_socket, weight_socket)
     for vw in P["views"]:
-        contribs.append((img_node(vw["png"], vw["uv"]), weight(vw["wt"])))
-    # Fallback base: average subject color at a small CONSTANT weight so any
-    # surface no view covers still reads dog-colored (never bare/gray/black).
+        t = img_node(vw["png"], vw["uv"])
+        contribs.append((t.outputs["Color"], sepc.outputs[chan[vw["ch"]]]))
     base_rgb = nt.nodes.new("ShaderNodeRGB")
     base_rgb.outputs[0].default_value = (P["avg"][0], P["avg"][1], P["avg"][2], 1.0)
-    base_w = nt.nodes.new("ShaderNodeValue"); base_w.outputs[0].default_value = 0.18
-    contribs.append((base_rgb, base_w))
-    # total weight (+eps)
+    base_w = nt.nodes.new("ShaderNodeValue"); base_w.outputs[0].default_value = 0.10
+    contribs.append((base_rgb.outputs["Color"], base_w.outputs["Value"]))
+    def addv(a, b):
+        n = nt.nodes.new("ShaderNodeMath"); n.operation = "ADD"
+        nt.links.new(a, n.inputs[0]); nt.links.new(b, n.inputs[1]); return n.outputs["Value"]
     total = None
     for _, w in contribs:
-        if total is None:
-            total = w
-        else:
-            a = mathn("ADD"); nt.links.new(total.outputs["Value"], a.inputs[0]); nt.links.new(w.outputs["Value"], a.inputs[1]); total = a
-    teps = mathn("ADD", b=1e-4); nt.links.new(total.outputs["Value"], teps.inputs[0])
-    # weighted sum of colors: sum(C_i * w_i) / total
+        total = w if total is None else addv(total, w)
+    teps = nt.nodes.new("ShaderNodeMath"); teps.operation = "ADD"; teps.inputs[1].default_value = 1e-4
+    nt.links.new(total, teps.inputs[0])
     acc = None
-    for tex, w in contribs:
+    for c, w in contribs:
         sc = nt.nodes.new("ShaderNodeVectorMath"); sc.operation = "SCALE"
-        nt.links.new(tex.outputs["Color"], sc.inputs[0])
-        nt.links.new(w.outputs["Value"], sc.inputs["Scale"])
+        nt.links.new(c, sc.inputs[0]); nt.links.new(w, sc.inputs["Scale"])
         if acc is None:
-            acc = sc
+            acc = sc.outputs["Vector"]
         else:
             ad = nt.nodes.new("ShaderNodeVectorMath"); ad.operation = "ADD"
-            nt.links.new(acc.outputs["Vector"], ad.inputs[0]); nt.links.new(sc.outputs["Vector"], ad.inputs[1]); acc = ad
-    invt = mathn("DIVIDE", a=1.0); nt.links.new(teps.outputs["Value"], invt.inputs[1])
+            nt.links.new(acc, ad.inputs[0]); nt.links.new(sc.outputs["Vector"], ad.inputs[1]); acc = ad.outputs["Vector"]
+    invt = nt.nodes.new("ShaderNodeMath"); invt.operation = "DIVIDE"; invt.inputs[0].default_value = 1.0
+    nt.links.new(teps.outputs["Value"], invt.inputs[1])
     fin = nt.nodes.new("ShaderNodeVectorMath"); fin.operation = "SCALE"
-    nt.links.new(acc.outputs["Vector"], fin.inputs[0]); nt.links.new(invt.outputs["Value"], fin.inputs["Scale"])
+    nt.links.new(acc, fin.inputs[0]); nt.links.new(invt.outputs["Value"], fin.inputs["Scale"])
     nt.links.new(fin.outputs["Vector"], bsdf.inputs["Base Color"])
     o.data.materials.clear(); o.data.materials.append(mat)
-    __result__ = "multiview:%%d" %% len(contribs)
+    __result__ = "mv-occlusion:%%d" %% len(contribs)
 ''' % (_json.dumps(payload),)
     try:
         runner.run("multiview_mat", "execute_python", {"code": code}, critical=False)
