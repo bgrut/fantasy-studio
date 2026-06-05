@@ -128,11 +128,49 @@ def make_bbox(center_lat, center_lon, radius_m=350.0):
     return (center_lat - dlat, center_lon - dlon, center_lat + dlat, center_lon + dlon)
 
 
-def build_city(runner, osm_data: Dict, work_dir, name="OsmCity", verbose=True):
-    """Create the extruded-building city mesh in Blender from parsed OSM data.
-    Returns the city extent {span, cx, cy, max_h} for camera/placement, or None.
-    Building footprints + heights are written to a temp JSON the bridge reads
-    (avoids a giant code string). Self-contained — no Blosm, no modal ops."""
+def _facade_material_code(night: bool) -> str:
+    """Procedural building-facade shader (window grid via a Brick texture in OBJECT
+    space → windows + frames + floor lines). Day = dark glass windows; night =
+    emissive lit/unlit windows (the Brick's alternating rows scatter which are
+    lit) → a glowing skyline. Reads as a real city, not gray blocks."""
+    if night:
+        w1, w2, mortar = "(1.0,0.82,0.42,1)", "(0.05,0.05,0.07,1)", "(0.05,0.05,0.06,1)"
+        emit = ("nt.links.new(brick.outputs['Color'], bsdf.inputs['Emission Color'])\n"
+                "bsdf.inputs['Emission Strength'].default_value=3.0\n"
+                "bsdf.inputs['Base Color'].default_value=(0.06,0.06,0.08,1)\n"
+                "bsdf.inputs['Roughness'].default_value=0.6\n")
+    else:
+        w1, w2, mortar = "(0.10,0.13,0.18,1)", "(0.14,0.17,0.23,1)", "(0.55,0.55,0.57,1)"
+        emit = ("nt.links.new(brick.outputs['Color'], bsdf.inputs['Base Color'])\n"
+                "bsdf.inputs['Roughness'].default_value=0.45\n"
+                "bsdf.inputs['Metallic'].default_value=0.2\n")
+    return (
+        "m=bpy.data.materials.new('Facade'); m.use_nodes=True; nt=m.node_tree\n"
+        "for _n in list(nt.nodes): nt.nodes.remove(_n)\n"
+        "out=nt.nodes.new('ShaderNodeOutputMaterial'); bsdf=nt.nodes.new('ShaderNodeBsdfPrincipled')\n"
+        "nt.links.new(bsdf.outputs['BSDF'], out.inputs['Surface'])\n"
+        "tc=nt.nodes.new('ShaderNodeTexCoord'); sep=nt.nodes.new('ShaderNodeSeparateXYZ')\n"
+        "nt.links.new(tc.outputs['Object'], sep.inputs['Vector'])\n"
+        "cb=nt.nodes.new('ShaderNodeCombineXYZ')\n"
+        "nt.links.new(sep.outputs['X'], cb.inputs['X']); nt.links.new(sep.outputs['Z'], cb.inputs['Y'])\n"
+        "brick=nt.nodes.new('ShaderNodeTexBrick')\n"
+        "brick.inputs['Scale'].default_value=0.34\n"   # ~3 m window cells in metres
+        "brick.inputs['Mortar Size'].default_value=0.018\n"
+        "try: brick.inputs['Brick Width'].default_value=0.55; brick.inputs['Row Height'].default_value=0.42\n"
+        "except Exception: pass\n"
+        "brick.inputs['Color1'].default_value=" + w1 + "\n"
+        "brick.inputs['Color2'].default_value=" + w2 + "\n"
+        "brick.inputs['Mortar'].default_value=" + mortar + "\n"
+        "nt.links.new(cb.outputs['Vector'], brick.inputs['Vector'])\n"
+        + emit +
+        "ob.data.materials.append(m)\n"
+    )
+
+
+def build_city(runner, osm_data: Dict, work_dir, name="OsmCity", night=False, verbose=True):
+    """Create the extruded-building city mesh in Blender from parsed OSM data, with
+    a procedural window-grid facade (day glass / night emissive windows).
+    Returns the city extent {span, cx, cy, max_h} for camera/placement, or None."""
     import json
     work_dir = Path(work_dir)
     buildings = osm_data.get("buildings", [])
@@ -157,10 +195,7 @@ def build_city(runner, osm_data: Dict, work_dir, name="OsmCity", verbose=True):
         "    faces.append(tuple(base+N+i for i in range(N)))\n"
         "me=bpy.data.meshes.new('" + name + "Mesh'); me.from_pydata(verts,[],faces); me.update()\n"
         "ob=bpy.data.objects.new('" + name + "',me); bpy.context.scene.collection.objects.link(ob)\n"
-        "m=bpy.data.materials.new('Concrete'); m.use_nodes=True\n"
-        "bs=m.node_tree.nodes.get('Principled BSDF')\n"
-        "bs.inputs['Base Color'].default_value=(0.45,0.45,0.47,1); bs.inputs['Roughness'].default_value=0.85\n"
-        "ob.data.materials.append(m)\n"
+        + _facade_material_code(night) +
         "xs=[v[0] for v in verts]; ys=[v[1] for v in verts]; zs=[v[2] for v in verts]\n"
         "import json as _j\n"
         "__result__=_j.dumps({'cx':(min(xs)+max(xs))/2,'cy':(min(ys)+max(ys))/2,"
