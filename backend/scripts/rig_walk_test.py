@@ -132,18 +132,21 @@ __result__={"skinned":skinned,"legs":list(legs.keys()),"bones":len(pb)}
 
 def main():
     hero = Path(sys.argv[1]).resolve()
-    prefix = sys.argv[2] if len(sys.argv) > 2 else str(BACKEND / "renders" / "_rig")
-    cyc = 16
+    mp4 = Path(sys.argv[2]).resolve() if len(sys.argv) > 2 else (BACKEND / "renders" / "showcase" / "walk.mp4")
+    cyc = 24  # smoother loop
     bridge.connect(timeout=5)
     registry.call("reset_scene", {})
     registry.call("import_mesh_file", {"filepath": str(hero), "name": "Hero", "orientation_fix": None})
     print(registry.call("execute_python", {"code": RIG_CODE.replace("__CYC__", str(cyc))}), flush=True)
-    # render a few frames across the cycle (forward-slash paths for the bridge)
-    for fr in (1, cyc // 4 + 1, cyc // 2 + 1, 3 * cyc // 4 + 1):
-        out = (f"{prefix}_f{fr:02d}.png").replace("\\", "/")
-        registry.call("execute_python", {"code":
-            f"import bpy\nbpy.context.scene.frame_set({fr})\nbpy.context.scene.render.filepath=r'{out}'\nbpy.ops.render.render(write_still=True)\n__result__=r'{out}'"})
-        print("rendered frame", fr, "->", out)
+    # Render the full gait loop to a frame dir, then encode an MP4.
+    out_dir = (BACKEND / "renders" / "_rig_anim")
+    out_dir.mkdir(parents=True, exist_ok=True)
+    mp4.parent.mkdir(parents=True, exist_ok=True)
+    registry.call("render_animation", {"output_dir": str(out_dir.as_posix()),
+                                       "frame_start": 1, "frame_end": cyc, "fps": 24})
+    registry.call("encode_video", {"frame_dir": str(out_dir.as_posix()),
+                                   "mp4_path": str(mp4.as_posix()), "fps": 24})
+    print("video ->", mp4, "exists:", mp4.exists())
     return 0
 
 
