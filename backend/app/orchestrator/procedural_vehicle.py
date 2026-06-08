@@ -112,6 +112,90 @@ __result__=json.dumps({"ok": True, "hero": body.name, "wheels": list(wheel_names
 '''
 
 
+_ATTACH_WHEELS_CODE = r'''
+import bpy, math, json
+import numpy as np
+from mathutils import Vector
+
+HERO="__HERO__"
+o=bpy.data.objects.get(HERO)
+out={"ok":False,"reason":""}
+try:
+    if o is None or o.type!="MESH":
+        raise RuntimeError("no hero mesh")
+    mw=o.matrix_world
+    V=np.array([list(mw@v.co) for v in o.data.vertices], dtype=np.float64)
+    X,Y,Z=V[:,0],V[:,1],V[:,2]
+    xmin,xmax=X.min(),X.max(); ymin,ymax=Y.min(),Y.max(); zmin,zmax=Z.min(),Z.max()
+    cx=(xmin+xmax)/2; cy=(ymin+ymax)/2; W=xmax-xmin; L=ymax-ymin; H=zmax-zmin
+    # car wheel ≈ 0.11 of length; clamp to sane metres
+    wheel_r=float(min(max(0.11*L, 0.06*max(W,L), 1e-3), 0.5*H if H>0 else 0.4))
+    wheel_w=max(W*0.16, wheel_r*0.55)
+
+    rubber=bpy.data.materials.get("HybTire") or bpy.data.materials.new("HybTire")
+    rubber.use_nodes=True; rb=rubber.node_tree.nodes.get("Principled BSDF")
+    rb.inputs["Base Color"].default_value=(0.025,0.025,0.03,1); rb.inputs["Roughness"].default_value=0.85
+    hubm=bpy.data.materials.get("HybHub") or bpy.data.materials.new("HybHub")
+    hubm.use_nodes=True; hb=hubm.node_tree.nodes.get("Principled BSDF")
+    hb.inputs["Base Color"].default_value=(0.62,0.62,0.64,1); hb.inputs["Metallic"].default_value=0.9; hb.inputs["Roughness"].default_value=0.25
+
+    low = Z < (zmin + 0.40*H)
+    names=[]
+    for fb, ysel in (("F", Y>cy), ("B", Y<=cy)):
+        for lr, xsel in (("L", X<=cx), ("R", X>cx)):
+            m=low & ysel & xsel
+            if int(m.sum())>6:
+                wx=float(X[m].mean()); wy=float(Y[m].mean())
+            else:
+                wx=cx+(W*0.40 if lr=="R" else -W*0.40); wy=cy+(L*0.33 if fb=="F" else -L*0.33)
+            wx=cx+max(min(wx-cx, W*0.50), -W*0.50)        # clamp inside the footprint
+            wz=zmin+wheel_r                                # wheel bottom on the ground
+            bpy.ops.mesh.primitive_cylinder_add(radius=wheel_r, depth=wheel_w, location=(wx,wy,wz))
+            wob=bpy.context.active_object; wob.name="Wheel_"+fb+lr
+            wob.rotation_euler=(0,math.radians(90),0); bpy.ops.object.transform_apply(rotation=True)
+            wob.data.materials.append(rubber); bpy.ops.object.shade_smooth()
+            bpy.ops.mesh.primitive_cylinder_add(radius=wheel_r*0.34, depth=wheel_w*1.05, location=(wx,wy,wz))
+            hob=bpy.context.active_object
+            hob.rotation_euler=(0,math.radians(90),0); bpy.ops.object.transform_apply(rotation=True)
+            hob.data.materials.append(hubm); bpy.ops.object.shade_smooth()
+            bpy.ops.object.select_all(action='DESELECT'); hob.select_set(True); wob.select_set(True)
+            bpy.context.view_layer.objects.active=wob; bpy.ops.object.join()
+            bpy.ops.object.select_all(action='DESELECT'); wob.select_set(True); bpy.context.view_layer.objects.active=wob
+            bpy.ops.object.origin_set(type='ORIGIN_GEOMETRY', center='MEDIAN')   # spin in place
+            names.append(wob.name)
+    out={"ok":len(names)==4,"wheels":names,"wheel_r":round(wheel_r,3)}
+    if len(names)!=4: out["reason"]="only %d wheels"%len(names)
+    __result__=json.dumps(out)
+except Exception as e:
+    __result__=json.dumps({"ok":False,"reason":"{}: {}".format(type(e).__name__,e)})
+'''
+
+
+def attach_wheels(runner, hero_name: str, color_rgb: Optional[List[float]] = None,
+                  verbose: bool = True) -> Dict[str, Any]:
+    """HYBRID: detect the 4 wheel positions on a (TripoSG) car body and attach crisp
+    procedural wheels there (independent objects named Wheel_FL/FR/BL/BR, origin at
+    centre so they spin in place). Lets the reference-matching body keep its shape +
+    texture while gaining real, spinnable wheels. Returns {"ok","wheels"}."""
+    import json as _json
+    code = _ATTACH_WHEELS_CODE.replace("__HERO__", hero_name)
+    try:
+        res = runner.run("attach_wheels", "execute_python", {"code": code}, critical=False)
+        raw = res.get("result") if isinstance(res, dict) else None
+        info = _json.loads(raw) if isinstance(raw, str) else (raw if isinstance(raw, dict) else None)
+        if info and info.get("ok"):
+            if verbose:
+                print(f"[composer] hybrid vehicle: attached 4 crisp wheels (r={info.get('wheel_r')}) to '{hero_name}'")
+            return info
+        if verbose:
+            print(f"[composer] hybrid vehicle: wheel attach failed ({info.get('reason') if info else 'no result'})")
+        return {"ok": False}
+    except Exception as e:
+        if verbose:
+            print(f"[composer] hybrid vehicle: wheel attach error ({type(e).__name__}: {e})")
+        return {"ok": False}
+
+
 def build_vehicle(runner, color_rgb: List[float], dims: Optional[Dict[str, float]] = None,
                   verbose: bool = True) -> Dict[str, Any]:
     """Build a crisp parametric car (Hero body + parented wheels) in the current

@@ -2113,14 +2113,18 @@ def compose_scene(
     # separate wheels) instead, so the geometry is sharp and the wheels can spin.
     # Treated like an asset-gen hero (skip metaball/fur/material). Gated by
     # FS_PROCEDURAL_VEHICLE; any failure falls through to the asset-gen path.
+    # Phase 20 vehicle modes (FS_PROCEDURAL_VEHICLE): "0"=off (TripoSG only, no
+    # wheels), "pure"=parametric box car, "1"(default)=HYBRID — keep TripoSG's
+    # reference-matching body + texture, then attach crisp spinning wheels.
     used_proc_vehicle = False
-    if base_pattern == "vehicle" and os.environ.get("FS_PROCEDURAL_VEHICLE", "1") != "0":
+    _veh_mode = os.environ.get("FS_PROCEDURAL_VEHICLE", "1")
+    vehicle_hybrid = (base_pattern == "vehicle" and _veh_mode == "1")
+    if base_pattern == "vehicle" and _veh_mode == "pure":
         _cname = subj.get("color_name", "") or ""
         _rgb = _resolve_color(_cname) if _cname not in ("", "neutral") else [0.55, 0.05, 0.06]
         _veh = procedural_vehicle.build_vehicle(runner, list(_rgb)[:3], verbose=verbose)
         if _veh.get("ok"):
-            asset_gen_hero_name = _veh.get("hero", "Hero")
-            used_proc_vehicle = True
+            asset_gen_hero_name = _veh.get("hero", "Hero"); used_proc_vehicle = True
     use_asset_gen = (not used_proc_vehicle) and _should_use_asset_gen(scene, subj, slots)
     if use_asset_gen:
         if verbose:
@@ -2128,6 +2132,13 @@ def compose_scene(
         asset_gen_hero_name = _run_asset_gen(slots, scene, subj, runner, paths, run_id, verbose=verbose)
         if asset_gen_hero_name is None and verbose:
             print(f"[composer] asset-gen unsuccessful → falling back to procedural")
+    # Hybrid fallback: if the vehicle's TripoSG body failed, use the pure box car.
+    if vehicle_hybrid and not asset_gen_hero_name:
+        _cname = subj.get("color_name", "") or ""
+        _rgb = _resolve_color(_cname) if _cname not in ("", "neutral") else [0.55, 0.05, 0.06]
+        _veh = procedural_vehicle.build_vehicle(runner, list(_rgb)[:3], verbose=verbose)
+        if _veh.get("ok"):
+            asset_gen_hero_name = _veh.get("hero", "Hero"); used_proc_vehicle = True; vehicle_hybrid = False
 
     if asset_gen_hero_name:
         # Real mesh imported; skip procedural pattern parts entirely.
@@ -2435,6 +2446,14 @@ def compose_scene(
         )
         runner.run("ground_character", "execute_python", {"code": ground_code})
 
+    # ── Phase 20 HYBRID vehicle: the TripoSG body is now grounded + textured;
+    # detect its wheel positions and attach crisp spinning wheels (best of both —
+    # reference-matching body + real wheels). Pure-procedural cars already have wheels.
+    vehicle_wheels_attached = False
+    if vehicle_hybrid and asset_gen_hero_name and not used_proc_vehicle:
+        _wr = procedural_vehicle.attach_wheels(runner, asset_gen_hero_name, verbose=verbose)
+        vehicle_wheels_attached = bool(_wr.get("ok"))
+
     # ── FUR for quadrupeds (Phase 15). Real strand particles → reads as actual
     # fur instead of a smooth painted ball. Tier-scaled so previews stay fast.
     FURRY_SPECIES = {"cat", "dog", "fox", "rabbit", "sheep", "horse", "lion", "bear", "wolf"}
@@ -2622,8 +2641,8 @@ def compose_scene(
     # Gated by FS_SKELETAL_MOTION (default on); any failure falls back silently.
     skeletal_done = False
     if is_animation and hero_name and os.environ.get("FS_SKELETAL_MOTION", "1") != "0":
-        if used_proc_vehicle:
-            # Wheeled drive: body translates, wheels spin, camera tracks.
+        if used_proc_vehicle or vehicle_wheels_attached:
+            # Wheeled drive: body + wheels translate, wheels spin, driving camera.
             skeletal_done = motion_rig.build_wheeled_drive(
                 runner, hero_name, total_frames, fps, verbose=verbose)
         elif base_pattern in motion_rig.SKELETAL_PATTERNS:
