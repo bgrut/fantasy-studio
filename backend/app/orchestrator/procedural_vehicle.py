@@ -163,30 +163,36 @@ try:
     spokem.use_nodes=True; sb=spokem.node_tree.nodes.get("Principled BSDF")
     sb.inputs["Base Color"].default_value=(0.72,0.73,0.76,1); sb.inputs["Metallic"].default_value=0.95; sb.inputs["Roughness"].default_value=0.22
 
-    def cyl(r,d,loc,material):
-        bpy.ops.mesh.primitive_cylinder_add(radius=r, depth=d, location=loc)
+    # NOTE: in this environment primitive_add(location=L) leaves the object ORIGIN at
+    # (0,0,0) with geometry offset to L — so transform_apply(rotation) would rotate
+    # about the world origin and fling parts away. We therefore build every part AT
+    # THE ORIGIN, rotate there (correct), join, then move the finished wheel to its
+    # spot. Origin stays at the wheel's geometric centre => clean in-place spin.
+    def cyl0(r,d,material):
+        bpy.ops.mesh.primitive_cylinder_add(radius=r, depth=d, location=(0,0,0))
         c=bpy.context.active_object; c.rotation_euler=(0,math.radians(90),0)
         bpy.ops.object.transform_apply(rotation=True); c.data.materials.append(material)
         bpy.ops.object.shade_smooth(); return c
 
+    spoke_half=wheel_r*0.66          # spokes stay well INSIDE the tyre radius
     names=[]
     for key,(wx,wy) in POS.items():
         wz=zmin+wheel_r
-        wob=cyl(wheel_r, wheel_w, (wx,wy,wz), rubber); wob.name="Wheel_"+key
+        wob=cyl0(wheel_r, wheel_w, rubber); wob.name="Wheel_"+key
         parts=[wob]
-        # spoke star (3 bars -> 6 spokes), span the wheel width so visible from both sides
-        for ang in (0,60,120):
-            bpy.ops.mesh.primitive_cube_add(size=1.0, location=(wx,wy,wz))
-            sp=bpy.context.active_object; sp.scale=(wheel_w*0.9, wheel_r*1.55, 0.06)
+        for ang in (0,90):           # spoke star (2 bars -> 4 spokes), built at origin
+            bpy.ops.mesh.primitive_cube_add(size=1.0, location=(0,0,0))
+            sp=bpy.context.active_object
+            sp.scale=(wheel_w*0.9, spoke_half*2.0, wheel_r*0.10)   # X=width, Y=radial, Z=thin
             bpy.ops.object.transform_apply(scale=True)
             sp.rotation_euler=(math.radians(ang),0,0); bpy.ops.object.transform_apply(rotation=True)
             sp.data.materials.append(spokem); parts.append(sp)
-        hub=cyl(wheel_r*0.26, wheel_w*1.06, (wx,wy,wz), spokem); parts.append(hub)
+        hub=cyl0(wheel_r*0.26, wheel_w*1.06, spokem); parts.append(hub)
         bpy.ops.object.select_all(action='DESELECT')
         for p in parts: p.select_set(True)
         bpy.context.view_layer.objects.active=wob; bpy.ops.object.join()
-        bpy.ops.object.select_all(action='DESELECT'); wob.select_set(True); bpy.context.view_layer.objects.active=wob
-        bpy.ops.object.origin_set(type='ORIGIN_GEOMETRY', center='MEDIAN')   # spin in place
+        wob.location=(wx,wy,wz)      # move finished wheel into place (origin == centre)
+        bpy.context.view_layer.update()
         names.append(wob.name)
     out={"ok":len(names)==4,"wheels":names,"wheel_r":round(wheel_r,3)}
     if len(names)!=4: out["reason"]="only %d wheels"%len(names)
