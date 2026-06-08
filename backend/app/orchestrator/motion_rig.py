@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Any
 
 # base_pattern → which builder handles it
-SKELETAL_PATTERNS = {"quadruped"}   # biped added after quadruped is validated end-to-end
+SKELETAL_PATTERNS = {"quadruped", "biped"}
 
 
 _QUADRUPED_GAIT = r'''
@@ -125,6 +125,124 @@ else:
 '''
 
 
+_BIPED_GAIT = r'''
+import bpy, math, json
+import numpy as np
+from mathutils import Vector
+
+HERO = "__HERO__"; TOTAL = __TOTAL__; STRIDE = __STRIDE__
+o = bpy.data.objects.get(HERO)
+if o is None or o.type != "MESH":
+    __result__ = json.dumps({"ok": False, "reason": "no hero mesh"})
+else:
+    # WORLD-space verts (hero arrives oriented up=Z by the silhouette gate; do NOT bake).
+    mw = o.matrix_world
+    V = np.array([list(mw @ v.co) for v in o.data.vertices], dtype=np.float64)
+    X, Y, Z = V[:, 0], V[:, 1], V[:, 2]
+    xmin, xmax = X.min(), X.max(); ymin, ymax = Y.min(), Y.max(); zmin, zmax = Z.min(), Z.max()
+    cx = (xmin + xmax) / 2.0; cy = (ymin + ymax) / 2.0; H = zmax - zmin
+    xspan = xmax - xmin; yspan = ymax - ymin
+
+    # The composer azimuth-normalizes the LONG horizontal axis to Y. For a biped the
+    # wider horizontal is the shoulder/hip (L-R) axis; the narrower is the facing.
+    # SIDE = L-R axis (split legs/arms here); legs swing along FORWARD. A down-pointing
+    # bone swings along world Y on euler index 0 and world X on euler index 2 (matches
+    # the validated quadruped). So forward=Y→idx0, forward=X→idx2.
+    if yspan >= xspan:
+        SA = Y; side_mid = cy; SWING = 2          # side=Y, forward=X
+    else:
+        SA = X; side_mid = cx; SWING = 0          # side=X, forward=Y
+
+    hip_z = zmin + 0.50 * H; chest_z = zmin + 0.72 * H; knee_z = zmin + 0.26 * H
+    foot_z = zmin + 0.02 * H; neck_z = zmin + 0.82 * H; elbow_z = zmin + 0.62 * H; hand_z = zmin + 0.46 * H
+
+    def lr(mask, fallback_off):
+        out = {}
+        for s, sel in (("L", SA <= side_mid), ("R", SA > side_mid)):
+            m = mask & sel
+            if int(m.sum()) > 4:
+                out[s] = (float(X[m].mean()), float(Y[m].mean()))
+            else:
+                off = fallback_off if s == "R" else -fallback_off
+                out[s] = (cx + (off if SA is X else 0.0), cy + (off if SA is Y else 0.0))
+        return out
+    feet = lr(Z < (zmin + 0.18 * H), 0.18 * max(xspan, yspan))
+    shoulders = lr((Z > (zmin + 0.72 * H)) & (Z < (zmin + 0.90 * H)), 0.30 * max(xspan, yspan))
+
+    # ── Armature at world origin (identity) so edit-bone coords == world coords.
+    arm = bpy.data.armatures.new("HeroRig"); rig = bpy.data.objects.new("HeroRig", arm)
+    bpy.context.scene.collection.objects.link(rig)
+    bpy.context.view_layer.objects.active = rig; rig.select_set(True)
+    bpy.ops.object.mode_set(mode="EDIT")
+    eb = arm.edit_bones; segs = []
+    def mk(name, h, t, parent=None, deform=True):
+        b = eb.new(name); b.head = Vector(h); b.tail = Vector(t)
+        if parent: b.parent = parent
+        if deform: segs.append((name, np.array(h, dtype=np.float64), np.array(t, dtype=np.float64)))
+        return b
+    root = mk("root", (cx, cy, hip_z), (cx, cy + 0.04 * max(H, 1e-3), hip_z), deform=False)
+    spine = mk("spine", (cx, cy, hip_z), (cx, cy, chest_z), root)
+    neck = mk("neck", (cx, cy, chest_z), (cx, cy, neck_z), spine)
+    mk("head", (cx, cy, neck_z), (cx, cy, zmax), neck)
+    legs = {}; arms = {}
+    for s, (fx, fy) in feet.items():
+        th = mk("thigh_" + s, (fx, fy, hip_z), (fx, fy, knee_z), root)
+        sh = mk("shin_" + s, (fx, fy, knee_z), (fx, fy, foot_z), th, True)
+        legs[s] = (th.name, sh.name)
+    for s, (sx, sy) in shoulders.items():
+        ua = mk("uarm_" + s, (sx, sy, neck_z), (sx, sy, elbow_z), spine)
+        fa = mk("farm_" + s, (sx, sy, elbow_z), (sx, sy, hand_z), ua, True)
+        arms[s] = (ua.name, fa.name)
+    bpy.ops.object.mode_set(mode="OBJECT")
+
+    # ── Manual NEAREST-BONE skin.
+    names = [s[0] for s in segs]
+    dmat = np.empty((len(V), len(segs)), dtype=np.float64)
+    for bi, (nm, h, t) in enumerate(segs):
+        seg = t - h; L2 = max(float(seg @ seg), 1e-9)
+        u = np.clip(((V - h) @ seg) / L2, 0.0, 1.0)
+        proj = h[None, :] + u[:, None] * seg[None, :]
+        dmat[:, bi] = np.linalg.norm(V - proj, axis=1)
+    nearest = dmat.argmin(axis=1)
+    amod = o.modifiers.new("HeroArmature", "ARMATURE"); amod.object = rig
+    for bi, nm in enumerate(names):
+        vg = o.vertex_groups.get(nm) or o.vertex_groups.new(name=nm)
+        idx = np.where(nearest == bi)[0].tolist()
+        if idx: vg.add(idx, 1.0, "REPLACE")
+
+    # ── Walk gait (legs alternate, arms counter-swing); swings along FORWARD.
+    sc = bpy.context.scene; sc.frame_start = 1; sc.frame_end = TOTAL
+    bpy.context.view_layer.objects.active = rig; bpy.ops.object.mode_set(mode="POSE")
+    try: bpy.context.preferences.edit.keyframe_new_interpolation_type = "LINEAR"
+    except Exception: pass
+    pb = rig.pose.bones
+    for b in pb: b.rotation_mode = "XYZ"
+    legph = {"L": 0.0, "R": math.pi}
+    A_LEG = 0.42; A_ARM = 0.36
+    def rot(v):
+        e = [0.0, 0.0, 0.0]; e[SWING] = v; return tuple(e)
+    for f in range(1, TOTAL + 1):
+        t = 2 * math.pi * (f - 1) / STRIDE
+        for s, (thn, shn) in legs.items():
+            ph = legph[s]
+            pb[thn].rotation_euler = rot(A_LEG * math.sin(t + ph)); pb[thn].keyframe_insert("rotation_euler", frame=f)
+            pb[shn].rotation_euler = rot(-0.55 * A_LEG * (1 + math.cos(t + ph))); pb[shn].keyframe_insert("rotation_euler", frame=f)
+        for s, (uan, fan) in arms.items():
+            ph = legph["R" if s == "L" else "L"]   # arm opposes same-side leg
+            pb[uan].rotation_euler = rot(A_ARM * math.sin(t + ph)); pb[uan].keyframe_insert("rotation_euler", frame=f)
+            pb[fan].rotation_euler = rot(-0.3 * A_ARM * (1 + math.cos(t + ph))); pb[fan].keyframe_insert("rotation_euler", frame=f)
+        pb["root"].location = (0, 0, 0.03 * H * abs(math.sin(t))); pb["root"].keyframe_insert("location", frame=f)
+    bpy.ops.object.mode_set(mode="OBJECT")
+    __result__ = json.dumps({"ok": True, "legs": list(legs.keys()), "arms": list(arms.keys()),
+                             "bones": len(pb), "verts": int(len(V)), "total": TOTAL,
+                             "stride": STRIDE, "swing_idx": SWING})
+'''
+
+
+_GAIT_CODE = {"quadruped": _QUADRUPED_GAIT, "biped": _BIPED_GAIT}
+_GAIT_STRIDE = {"quadruped": 20, "biped": 28}
+
+
 def build_skeletal_gait(runner, hero_name: str, base_pattern: str,
                         total_frames: int, fps: int = 24, verbose: bool = False) -> bool:
     """Rig the (already oriented + textured) hero and bake a procedural gait that
@@ -133,8 +251,8 @@ def build_skeletal_gait(runner, hero_name: str, base_pattern: str,
     returns False and the composer falls back to the legacy motion path."""
     if base_pattern not in SKELETAL_PATTERNS:
         return False
-    stride = 20  # frames per trot cycle (~0.83 s at 24 fps)
-    code = (_QUADRUPED_GAIT
+    stride = _GAIT_STRIDE.get(base_pattern, 24)
+    code = (_GAIT_CODE[base_pattern]
             .replace("__HERO__", hero_name)
             .replace("__TOTAL__", str(int(total_frames)))
             .replace("__STRIDE__", str(stride)))
