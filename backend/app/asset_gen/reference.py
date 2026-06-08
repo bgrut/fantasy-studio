@@ -366,17 +366,46 @@ def _build_reference_prompt(slots: Dict[str, Any], style: str) -> tuple[str, str
         "sports": "sports car, low aggressive styling",
     }
     species = ""
+    vehicle_neg = ""
     for key, hint in species_hints.items():
         if key in library_query or key in name:
             species = hint
             break
+
+    # ── VEHICLE-TYPE shape descriptor — the silhouette must match the type the
+    # user asked for (a sports car must NOT come out an SUV). These strong shape
+    # phrases, combined with a LOWER depth-lock for vehicles, let SDXL render the
+    # right body. Priority order: exotic > sports > suv > truck > van > sedan.
+    if base_pattern == "vehicle":
+        vq = (library_query + " " + name)
+        _LOWNEG = "SUV, crossover, minivan, van, pickup truck, station wagon, tall body, high roofline, raised ride height, boxy"
+        _VT = [
+            (("ferrari", "lamborghini", "mclaren", "supercar", "exotic"),
+             "exotic supercar, very low-slung sleek aerodynamic body, long hood, extremely low roofline, two-door", _LOWNEG),
+            (("porsche", "corvette", "sports", "coupe", "convertible", "roadster", "racing"),
+             "sleek low-slung two-door sports car, long hood, low roofline, short rear deck, aggressive aerodynamic styling, wide stance", _LOWNEG),
+            (("suv", "jeep", "crossover", "wagon", "land rover", "range rover"),
+             "tall boxy SUV, high ground clearance, upright blocky body, large greenhouse", "low sports car, sports coupe"),
+            (("pickup", "truck"),
+             "pickup truck, tall cabin, open cargo bed, high stance", "sports car, sedan"),
+            (("van", "minivan", "bus"),
+             "boxy van, tall slab-sided body", "sports car"),
+            (("sedan", "saloon"),
+             "four-door sedan, classic three-box silhouette", "SUV, van"),
+        ]
+        species = "modern car, clean glossy paint, polished bodywork"
+        vehicle_neg = ""
+        for keys, desc, neg in _VT:
+            if any(k in vq for k in keys):
+                species = desc; vehicle_neg = neg
+                break
 
     positive_parts = [preset["positive"], f"a {subject_phrase}", species, framing]
     positive = ", ".join(p for p in positive_parts if p)
 
     # Append pattern-specific negative directives so SDXL avoids action poses
     pattern_neg = PATTERN_NEGATIVE.get(base_pattern, "")
-    negative_parts = [preset["negative"], pattern_neg]
+    negative_parts = [preset["negative"], pattern_neg, vehicle_neg]
     negative = ", ".join(p for p in negative_parts if p)
     return positive, negative
 
@@ -425,6 +454,15 @@ def generate_reference(
             (int(width), int(height)), Image.BILINEAR
         )
 
+    # Vehicles: the generic boxy vehicle_depth template forced an SUV/van
+    # silhouette regardless of "sports car" — even at low conditioning. SKIP the
+    # depth template for vehicles so the strong type descriptor + anti-SUV
+    # negatives drive the body (orientation is handled later by the silhouette
+    # gate). Set FS_VEHICLE_DEPTH=1 to restore depth-locked vehicle references.
+    _cscale = CONTROLNET_CONDITIONING_SCALE
+    if base_pattern == "vehicle" and _os.environ.get("FS_VEHICLE_DEPTH", "0") != "1":
+        depth_image = None
+
     def _gen_once(s):
         device = "cuda" if torch.cuda.is_available() else "cpu"
         gen = torch.Generator(device=device).manual_seed(int(s)) if s is not None else None
@@ -434,7 +472,7 @@ def generate_reference(
                 prompt=positive, negative_prompt=negative, image=depth_image,
                 width=int(width), height=int(height),
                 guidance_scale=float(guidance_scale), num_inference_steps=int(steps),
-                controlnet_conditioning_scale=CONTROLNET_CONDITIONING_SCALE,
+                controlnet_conditioning_scale=_cscale,
                 generator=gen,
             ).images[0]
             return img, f"controlnet-depth(pattern={base_pattern})"
