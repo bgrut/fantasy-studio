@@ -33,6 +33,7 @@ from ..mcp import registry, bridge
 from .scene_inference import COLOR_MAP, MATERIAL_VIBES, LIGHTING_MOOD
 from . import patterns as pattern_lib
 from . import motion_rig
+from . import procedural_vehicle
 
 
 # ───────────────────────────────────────────────────────────────────────
@@ -2107,7 +2108,20 @@ def compose_scene(
     # If reference→mesh→import succeeds we get a real mesh hero. If anything fails
     # we fall back to procedural pattern instantiation (the rest of the flow is unchanged).
     asset_gen_hero_name: Optional[str] = None
-    use_asset_gen = _should_use_asset_gen(scene, subj, slots)
+    # Phase 20 — PROCEDURAL hard-surface vehicle. Image-to-3D blobs cars and fuses
+    # the wheels; for vehicles we build a crisp parametric car (body=Hero + 4
+    # separate wheels) instead, so the geometry is sharp and the wheels can spin.
+    # Treated like an asset-gen hero (skip metaball/fur/material). Gated by
+    # FS_PROCEDURAL_VEHICLE; any failure falls through to the asset-gen path.
+    used_proc_vehicle = False
+    if base_pattern == "vehicle" and os.environ.get("FS_PROCEDURAL_VEHICLE", "1") != "0":
+        _cname = subj.get("color_name", "") or ""
+        _rgb = _resolve_color(_cname) if _cname not in ("", "neutral") else [0.55, 0.05, 0.06]
+        _veh = procedural_vehicle.build_vehicle(runner, list(_rgb)[:3], verbose=verbose)
+        if _veh.get("ok"):
+            asset_gen_hero_name = _veh.get("hero", "Hero")
+            used_proc_vehicle = True
+    use_asset_gen = (not used_proc_vehicle) and _should_use_asset_gen(scene, subj, slots)
     if use_asset_gen:
         if verbose:
             print(f"[composer] Phase 17 asset-driven path engaged for base_pattern='{base_pattern}'")
@@ -2393,7 +2407,9 @@ def compose_scene(
     # Fix: compute the lowest world-space Z across all placed parts and lift them so
     # the lowest point sits at z=0 (on the ground plane). Skip celestial — those float.
     GROUNDED_PATTERNS = {"quadruped", "biped", "vehicle"}
-    if base_pattern in GROUNDED_PATTERNS and placed_part_names:
+    # The procedural car is pre-grounded (wheels on z=0); re-grounding by the
+    # BODY bbox alone would sink the wheels, so skip it for that path.
+    if base_pattern in GROUNDED_PATTERNS and placed_part_names and not used_proc_vehicle:
         names_repr = repr(placed_part_names)
         ground_code = (
             "import bpy\n"
@@ -2605,10 +2621,14 @@ def compose_scene(
     # the legacy object-translate locomotion AND idle breathing for this hero.
     # Gated by FS_SKELETAL_MOTION (default on); any failure falls back silently.
     skeletal_done = False
-    if (is_animation and hero_name and base_pattern in motion_rig.SKELETAL_PATTERNS
-            and os.environ.get("FS_SKELETAL_MOTION", "1") != "0"):
-        skeletal_done = motion_rig.build_skeletal_gait(
-            runner, hero_name, base_pattern, total_frames, fps, verbose=verbose)
+    if is_animation and hero_name and os.environ.get("FS_SKELETAL_MOTION", "1") != "0":
+        if used_proc_vehicle:
+            # Wheeled drive: body translates, wheels spin, camera tracks.
+            skeletal_done = motion_rig.build_wheeled_drive(
+                runner, hero_name, total_frames, fps, verbose=verbose)
+        elif base_pattern in motion_rig.SKELETAL_PATTERNS:
+            skeletal_done = motion_rig.build_skeletal_gait(
+                runner, hero_name, base_pattern, total_frames, fps, verbose=verbose)
 
     if is_animation and not used_mesh_relative_orbit and not skeletal_done:
         m_type = motion.get("type", "static")

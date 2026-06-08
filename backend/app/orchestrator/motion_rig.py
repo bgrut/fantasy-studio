@@ -243,6 +243,86 @@ _GAIT_CODE = {"quadruped": _QUADRUPED_GAIT, "biped": _BIPED_GAIT}
 _GAIT_STRIDE = {"quadruped": 20, "biped": 28}
 
 
+# Wheeled drive for the PROCEDURAL vehicle (body=Hero, wheels=Wheel_* parented).
+# The body drives +Y, each wheel spins about its axle ∝ distance (no slip), a
+# suspension bob, and the scene camera tracks the car so it stays framed while the
+# ground streams past. Rigid — no skinning.
+_WHEELED_DRIVE = r'''
+import bpy, math, json
+from mathutils import Vector
+
+HERO="__HERO__"; TOTAL=__TOTAL__
+o=bpy.data.objects.get(HERO)
+if o is None:
+    __result__=json.dumps({"ok": False, "reason": "no hero"})
+else:
+    wheels=[w for w in bpy.data.objects if w.name.startswith("Wheel_") and w.type=="MESH"]
+    # car length along Y to scale the drive + wheel radius for the spin rate
+    ys=[(o.matrix_world@Vector(c)).y for c in o.bound_box]
+    car_len=max(max(ys)-min(ys), 1.0)
+    wheel_r=0.44
+    if wheels:
+        zs=[(wheels[0].matrix_world@Vector(c)).z for c in wheels[0].bound_box]
+        wheel_r=max((max(zs)-min(zs))/2.0, 0.1)
+    sc=bpy.context.scene; sc.frame_start=1; sc.frame_end=TOTAL
+    try: bpy.context.preferences.edit.keyframe_new_interpolation_type="LINEAR"
+    except Exception: pass
+    travel=car_len*1.5
+    base=o.location.copy()
+    o.rotation_mode="XYZ"
+    for w in wheels: w.rotation_mode="XYZ"
+    wrest={w.name: w.location.copy() for w in wheels}   # wheels are independent objects
+    for f in range(1,TOTAL+1):
+        frac=(f-1)/max(TOTAL-1,1); dist=travel*(frac-0.5)   # -travel/2 .. +travel/2
+        bob=0.01*math.sin(2*math.pi*frac*9)
+        o.location=(base.x, base.y+dist, base.z+bob)
+        o.keyframe_insert("location", frame=f)
+        spin=-dist/wheel_r
+        for w in wheels:
+            r=wrest[w.name]
+            w.location=(r.x, r.y+dist, r.z+bob); w.keyframe_insert("location", frame=f)
+            w.rotation_euler=(spin,0,0); w.keyframe_insert("rotation_euler", frame=f)
+    # Dedicated STATIC driving camera framing the whole sweep. The composer's
+    # default portrait framing sits low/close (fine for a still hero) and shows
+    # the car's underside as it drives, so we override it with a side-3/4 shot
+    # set back far enough to keep the entire -travel/2..+travel/2 path in frame.
+    spanY=travel+car_len
+    side=max(spanY*0.85, car_len*1.6)
+    dc=bpy.data.cameras.new("DriveCam"); dc.lens=42
+    dco=bpy.data.objects.new("DriveCam", dc); bpy.context.scene.collection.objects.link(dco)
+    dco.location=Vector((base.x+side, base.y-side*0.35, base.z+side*0.45))
+    look=Vector((base.x, base.y, base.z+0.2))-dco.location
+    dco.rotation_euler=look.to_track_quat('-Z','Y').to_euler()
+    sc.camera=dco
+    __result__=json.dumps({"ok": True, "wheels": len(wheels), "travel": round(travel,2),
+                           "wheel_r": round(wheel_r,3), "cam": "DriveCam"})
+'''
+
+
+def build_wheeled_drive(runner, hero_name: str, total_frames: int, fps: int = 24,
+                        verbose: bool = False) -> bool:
+    """Drive the procedural vehicle: translate the body, spin the wheels, track
+    with the camera. Returns True if applied. Never raises."""
+    code = _WHEELED_DRIVE.replace("__HERO__", hero_name).replace("__TOTAL__", str(int(total_frames)))
+    try:
+        res = runner.run("wheeled_drive", "execute_python", {"code": code}, critical=False)
+        raw = res.get("result") if isinstance(res, dict) else None
+        import json as _json
+        info = _json.loads(raw) if isinstance(raw, str) else (raw if isinstance(raw, dict) else None)
+        if info and info.get("ok"):
+            if verbose:
+                print(f"[composer] wheeled drive: {info.get('wheels')} wheels spinning, "
+                      f"travel {info.get('travel')}m")
+            return True
+        if verbose:
+            print(f"[composer] wheeled drive: not applied ({info.get('reason') if info else 'no result'})")
+        return False
+    except Exception as e:
+        if verbose:
+            print(f"[composer] wheeled drive: failed ({type(e).__name__}: {e})")
+        return False
+
+
 def build_skeletal_gait(runner, hero_name: str, base_pattern: str,
                         total_frames: int, fps: int = 24, verbose: bool = False) -> bool:
     """Rig the (already oriented + textured) hero and bake a procedural gait that
