@@ -128,41 +128,66 @@ try:
     X,Y,Z=V[:,0],V[:,1],V[:,2]
     xmin,xmax=X.min(),X.max(); ymin,ymax=Y.min(),Y.max(); zmin,zmax=Z.min(),Z.max()
     cx=(xmin+xmax)/2; cy=(ymin+ymax)/2; W=xmax-xmin; L=ymax-ymin; H=zmax-zmin
-    # car wheel ≈ 0.11 of length; clamp to sane metres
-    wheel_r=float(min(max(0.11*L, 0.06*max(W,L), 1e-3), 0.5*H if H>0 else 0.4))
-    wheel_w=max(W*0.16, wheel_r*0.55)
+
+    # ── DE-CLAY the body: add a glossy clear-coat car-paint finish so highlights /
+    # reflections define the form (matte = clay). Keep base colour from the texture.
+    for mat in list(o.data.materials):
+        if not mat or not mat.use_nodes: continue
+        b=next((n for n in mat.node_tree.nodes if n.type=='BSDF_PRINCIPLED'), None)
+        if b is None: continue
+        try: b.inputs["Roughness"].default_value=0.33
+        except Exception: pass
+        try: b.inputs["Metallic"].default_value=0.15
+        except Exception: pass
+        for cn in ("Coat Weight","Coat"):
+            if cn in b.inputs:
+                try: b.inputs[cn].default_value=0.7
+                except Exception: pass
+                break
+        if "Coat Roughness" in b.inputs:
+            try: b.inputs["Coat Roughness"].default_value=0.12
+            except Exception: pass
+
+    # ── 4 wheels at SYMMETRIC positions (identical size — fixes back≠front), each
+    # with a contrasting SPOKE star so the spin is actually visible (a smooth tyre
+    # is a surface of revolution and shows no rotation).
+    wheel_r=float(min(max(0.095*L, 0.05*max(W,L), 1e-3), 0.5*H if H>0 else 0.4))
+    wheel_w=max(W*0.14, wheel_r*0.55)
+    wbx=W*0.44; fwy=cy+L*0.32; bwy=cy-L*0.32
+    POS={"FL":(cx-wbx,fwy),"FR":(cx+wbx,fwy),"BL":(cx-wbx,bwy),"BR":(cx+wbx,bwy)}
 
     rubber=bpy.data.materials.get("HybTire") or bpy.data.materials.new("HybTire")
     rubber.use_nodes=True; rb=rubber.node_tree.nodes.get("Principled BSDF")
-    rb.inputs["Base Color"].default_value=(0.025,0.025,0.03,1); rb.inputs["Roughness"].default_value=0.85
-    hubm=bpy.data.materials.get("HybHub") or bpy.data.materials.new("HybHub")
-    hubm.use_nodes=True; hb=hubm.node_tree.nodes.get("Principled BSDF")
-    hb.inputs["Base Color"].default_value=(0.62,0.62,0.64,1); hb.inputs["Metallic"].default_value=0.9; hb.inputs["Roughness"].default_value=0.25
+    rb.inputs["Base Color"].default_value=(0.022,0.022,0.026,1); rb.inputs["Roughness"].default_value=0.85
+    spokem=bpy.data.materials.get("HybSpoke") or bpy.data.materials.new("HybSpoke")
+    spokem.use_nodes=True; sb=spokem.node_tree.nodes.get("Principled BSDF")
+    sb.inputs["Base Color"].default_value=(0.72,0.73,0.76,1); sb.inputs["Metallic"].default_value=0.95; sb.inputs["Roughness"].default_value=0.22
 
-    low = Z < (zmin + 0.40*H)
+    def cyl(r,d,loc,material):
+        bpy.ops.mesh.primitive_cylinder_add(radius=r, depth=d, location=loc)
+        c=bpy.context.active_object; c.rotation_euler=(0,math.radians(90),0)
+        bpy.ops.object.transform_apply(rotation=True); c.data.materials.append(material)
+        bpy.ops.object.shade_smooth(); return c
+
     names=[]
-    for fb, ysel in (("F", Y>cy), ("B", Y<=cy)):
-        for lr, xsel in (("L", X<=cx), ("R", X>cx)):
-            m=low & ysel & xsel
-            if int(m.sum())>6:
-                wx=float(X[m].mean()); wy=float(Y[m].mean())
-            else:
-                wx=cx+(W*0.40 if lr=="R" else -W*0.40); wy=cy+(L*0.33 if fb=="F" else -L*0.33)
-            wx=cx+max(min(wx-cx, W*0.50), -W*0.50)        # clamp inside the footprint
-            wz=zmin+wheel_r                                # wheel bottom on the ground
-            bpy.ops.mesh.primitive_cylinder_add(radius=wheel_r, depth=wheel_w, location=(wx,wy,wz))
-            wob=bpy.context.active_object; wob.name="Wheel_"+fb+lr
-            wob.rotation_euler=(0,math.radians(90),0); bpy.ops.object.transform_apply(rotation=True)
-            wob.data.materials.append(rubber); bpy.ops.object.shade_smooth()
-            bpy.ops.mesh.primitive_cylinder_add(radius=wheel_r*0.34, depth=wheel_w*1.05, location=(wx,wy,wz))
-            hob=bpy.context.active_object
-            hob.rotation_euler=(0,math.radians(90),0); bpy.ops.object.transform_apply(rotation=True)
-            hob.data.materials.append(hubm); bpy.ops.object.shade_smooth()
-            bpy.ops.object.select_all(action='DESELECT'); hob.select_set(True); wob.select_set(True)
-            bpy.context.view_layer.objects.active=wob; bpy.ops.object.join()
-            bpy.ops.object.select_all(action='DESELECT'); wob.select_set(True); bpy.context.view_layer.objects.active=wob
-            bpy.ops.object.origin_set(type='ORIGIN_GEOMETRY', center='MEDIAN')   # spin in place
-            names.append(wob.name)
+    for key,(wx,wy) in POS.items():
+        wz=zmin+wheel_r
+        wob=cyl(wheel_r, wheel_w, (wx,wy,wz), rubber); wob.name="Wheel_"+key
+        parts=[wob]
+        # spoke star (3 bars -> 6 spokes), span the wheel width so visible from both sides
+        for ang in (0,60,120):
+            bpy.ops.mesh.primitive_cube_add(size=1.0, location=(wx,wy,wz))
+            sp=bpy.context.active_object; sp.scale=(wheel_w*0.9, wheel_r*1.55, 0.06)
+            bpy.ops.object.transform_apply(scale=True)
+            sp.rotation_euler=(math.radians(ang),0,0); bpy.ops.object.transform_apply(rotation=True)
+            sp.data.materials.append(spokem); parts.append(sp)
+        hub=cyl(wheel_r*0.26, wheel_w*1.06, (wx,wy,wz), spokem); parts.append(hub)
+        bpy.ops.object.select_all(action='DESELECT')
+        for p in parts: p.select_set(True)
+        bpy.context.view_layer.objects.active=wob; bpy.ops.object.join()
+        bpy.ops.object.select_all(action='DESELECT'); wob.select_set(True); bpy.context.view_layer.objects.active=wob
+        bpy.ops.object.origin_set(type='ORIGIN_GEOMETRY', center='MEDIAN')   # spin in place
+        names.append(wob.name)
     out={"ok":len(names)==4,"wheels":names,"wheel_r":round(wheel_r,3)}
     if len(names)!=4: out["reason"]="only %d wheels"%len(names)
     __result__=json.dumps(out)
