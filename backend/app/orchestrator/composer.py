@@ -32,6 +32,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from ..mcp import registry, bridge
 from .scene_inference import COLOR_MAP, MATERIAL_VIBES, LIGHTING_MOOD
 from . import patterns as pattern_lib
+from . import motion_rig
 
 
 # ───────────────────────────────────────────────────────────────────────
@@ -2284,7 +2285,18 @@ def compose_scene(
         runner.run("look_at", "look_at", {"object": "Cam", "target": look_target})
 
     # 10. Motion (always — every render is a video)
-    if is_animation and not used_mesh_relative_orbit:
+    #
+    # Phase 20: real skeletal gait for legged heroes. Runs on the already-oriented
+    # + textured hero (world-space rig, texture-safe). If a gait is applied we skip
+    # the legacy object-translate locomotion AND idle breathing for this hero.
+    # Gated by FS_SKELETAL_MOTION (default on); any failure falls back silently.
+    skeletal_done = False
+    if (is_animation and hero_name and base_pattern in motion_rig.SKELETAL_PATTERNS
+            and os.environ.get("FS_SKELETAL_MOTION", "1") != "0"):
+        skeletal_done = motion_rig.build_skeletal_gait(
+            runner, hero_name, base_pattern, total_frames, fps, verbose=verbose)
+
+    if is_animation and not used_mesh_relative_orbit and not skeletal_done:
         m_type = motion.get("type", "static")
         speed = motion.get("speed", "medium")
 
@@ -2362,8 +2374,9 @@ def compose_scene(
     # These layer ON TOP of the motion patterns so subjects feel alive whether
     # they're static or moving.
     if is_animation and hero_name:
-        # Breathing for creatures during ambient_orbit (static prompt → camera-moves only)
-        if base_pattern in ORGANIC_PATTERNS and motion.get("type") == "ambient_orbit":
+        # Breathing for creatures during ambient_orbit (static prompt → camera-moves only).
+        # Skipped when a skeletal gait is already driving the hero (Phase 20).
+        if base_pattern in ORGANIC_PATTERNS and motion.get("type") == "ambient_orbit" and not skeletal_done:
             breath_code = (
                 "import bpy\n"
                 f"o = bpy.data.objects.get('{hero_name}')\n"
