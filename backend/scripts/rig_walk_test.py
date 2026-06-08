@@ -21,13 +21,29 @@ import numpy as np
 from mathutils import Vector
 
 o = bpy.data.objects.get("Hero")
-o.rotation_mode = "XYZ"; o.rotation_euler = (0, 0, math.radians(90)); bpy.context.view_layer.update()
-xs0=[(o.matrix_world@Vector(c)).x for c in o.bound_box]; ys0=[(o.matrix_world@Vector(c)).y for c in o.bound_box]
-if (max(xs0)-min(xs0)) > (max(ys0)-min(ys0)):
-    o.rotation_euler.z += math.radians(90); bpy.context.view_layer.update()
+o.rotation_mode = "XYZ"
+bpy.context.view_layer.objects.active=o; o.select_set(True); bpy.context.view_layer.update()
+def _bake():
+    bpy.ops.object.transform_apply(location=False, rotation=True, scale=False); bpy.context.view_layer.update()
+# ── ROBUST quadruped orientation (raw TripoSG meshes import in arbitrary poses;
+#    the naive "assume upright" version exploded the dog / nose-dived the cat /
+#    laid the fox flat). A standing quadruped has: length(longest)=Y, height=Z,
+#    width(smallest)=X. Bake each 90° step so eulers compose in world space. ──
+d=o.dimensions
+# 1) longest extent → Y (body length, nose-to-tail)
+longest=max(range(3), key=lambda i:(d.x,d.y,d.z)[i])
+if longest==0: o.rotation_euler.z=math.radians(90); _bake()      # X→Y
+elif longest==2: o.rotation_euler.x=math.radians(90); _bake()    # Z→Y
+# 2) of the two remaining axes, the TALLER (height) → Z, smaller (width) → X
+if o.dimensions.x > o.dimensions.z: o.rotation_euler.y=math.radians(90); _bake()  # X→Z
+# 3) FEET-DOWN: body+head carry far more surface area than four thin legs, so the
+#    vertex centroid sits in the UPPER half when upright. If it's in the lower
+#    half the animal is belly-up → flip 180° about Y (keeps the length axis).
+_Zc=np.array([(o.matrix_world@v.co).z for v in o.data.vertices], dtype=np.float64)
+if float(_Zc.mean()) < (_Zc.min()+_Zc.max())/2.0:
+    o.rotation_euler.y=math.radians(180); _bake()
 dz=o.dimensions.z or 1.0; s=1.0/dz; o.scale=(s,s,s); bpy.context.view_layer.update()
 zs=[(o.matrix_world@Vector(c)).z for c in o.bound_box]; o.location=(0,0,-min(zs)); bpy.context.view_layer.update()
-bpy.context.view_layer.objects.active=o; o.select_set(True)
 bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
 bpy.context.view_layer.update()
 
@@ -94,14 +110,16 @@ for bi,nm in enumerate(names):
     if idx: vg.add(idx, 1.0, "REPLACE")
 
 # ── Animate a TROT cycle (diagonal pairs) ────────────────────────────────
-sc=bpy.context.scene; CYC=__CYC__; sc.frame_start=1; sc.frame_end=CYC
+sc=bpy.context.scene; TOTAL=__TOTAL__; STRIDE=__STRIDE__; sc.frame_start=1; sc.frame_end=TOTAL
 bpy.context.view_layer.objects.active=rig; bpy.ops.object.mode_set(mode="POSE")
+try: bpy.context.preferences.edit.keyframe_new_interpolation_type="LINEAR"
+except Exception: pass
 pb=rig.pose.bones
 for b in pb: b.rotation_mode="XYZ"
 phase={"FL":0.0,"BR":0.0,"FR":math.pi,"BL":math.pi}   # trot: FL+BR vs FR+BL
 A=0.55  # thigh swing amplitude (rad)
-for f in range(1,CYC+1):
-    t=2*math.pi*(f-1)/CYC
+for f in range(1,TOTAL+1):
+    t=2*math.pi*(f-1)/STRIDE   # STRIDE-frame period => keeps trotting for the whole clip
     for leg,(thn,shn) in legs.items():
         ph=phase[leg]
         swing=A*math.sin(t+ph)
@@ -113,10 +131,11 @@ for f in range(1,CYC+1):
     pb["spine"].rotation_euler=(0,0,0.05*math.sin(t)); pb["spine"].keyframe_insert("rotation_euler",frame=f)
 bpy.ops.object.mode_set(mode="OBJECT")
 
-# brown material so we can see deformation
-mat=bpy.data.materials.new("H"); mat.use_nodes=True
-mat.node_tree.nodes.get("Principled BSDF").inputs["Base Color"].default_value=(0.4,0.28,0.16,1)
-o.data.materials.clear(); o.data.materials.append(mat)
+# TEXTURE-SAFE: keep the hero's existing material; brown fallback only if none
+if len(o.data.materials)==0:
+    mat=bpy.data.materials.new("H"); mat.use_nodes=True
+    mat.node_tree.nodes.get("Principled BSDF").inputs["Base Color"].default_value=(0.4,0.28,0.16,1)
+    o.data.materials.append(mat)
 # ground + sun + side camera
 bpy.ops.mesh.primitive_plane_add(size=20, location=(cx,(ymin+ymax)/2,foot_z))
 sun=bpy.data.lights.new("S",type="SUN"); sun.energy=3.5; so=bpy.data.objects.new("S",sun)
@@ -133,20 +152,24 @@ __result__={"skinned":skinned,"legs":list(legs.keys()),"bones":len(pb)}
 def main():
     hero = Path(sys.argv[1]).resolve()
     mp4 = Path(sys.argv[2]).resolve() if len(sys.argv) > 2 else (BACKEND / "renders" / "showcase" / "walk.mp4")
-    cyc = 24  # smoother loop
+    seconds = float(sys.argv[3]) if len(sys.argv) > 3 else 4.0
+    fps = 24
+    total = int(round(seconds * fps))
+    stride = 20  # frames per trot cycle (~0.83 s) -> brisk, keeps trotting all clip
     bridge.connect(timeout=5)
     registry.call("reset_scene", {})
     registry.call("import_mesh_file", {"filepath": str(hero), "name": "Hero", "orientation_fix": None})
-    print(registry.call("execute_python", {"code": RIG_CODE.replace("__CYC__", str(cyc))}), flush=True)
+    code = RIG_CODE.replace("__TOTAL__", str(total)).replace("__STRIDE__", str(stride))
+    print(registry.call("execute_python", {"code": code}), flush=True)
     # Render the full gait loop to a frame dir, then encode an MP4.
     out_dir = (BACKEND / "renders" / "_rig_anim")
     out_dir.mkdir(parents=True, exist_ok=True)
     mp4.parent.mkdir(parents=True, exist_ok=True)
     registry.call("render_animation", {"output_dir": str(out_dir.as_posix()),
-                                       "frame_start": 1, "frame_end": cyc, "fps": 24})
+                                       "frame_start": 1, "frame_end": total, "fps": fps})
     registry.call("encode_video", {"frame_dir": str(out_dir.as_posix()),
-                                   "mp4_path": str(mp4.as_posix()), "fps": 24})
-    print("video ->", mp4, "exists:", mp4.exists())
+                                   "mp4_path": str(mp4.as_posix()), "fps": fps})
+    print(f"video -> {mp4}  exists: {mp4.exists()}  ({seconds}s, {total} frames)")
     return 0
 
 

@@ -166,7 +166,10 @@ if not had_mat:
     mat.node_tree.nodes.get("Principled BSDF").inputs["Base Color"].default_value=(0.6,0.5,0.42,1)
     o.data.materials.append(mat)
 
-# ── Stage: ground + sun + 3/4 camera ───────────────────────────────────────
+# ── Stage: ground + sun + 3/4 PROFILE camera ───────────────────────────────
+# The biped faces ±Y (front-back is the thinner horizontal axis), so its legs
+# swing in the Y direction. To read the forward stride the camera must view from
+# the X SIDE (a front camera makes the same swing look like side-to-side).
 bpy.ops.mesh.primitive_plane_add(size=24, location=(cx,cy,foot_z))
 gp=bpy.context.active_object; gm=bpy.data.materials.new("G"); gm.use_nodes=True
 gm.node_tree.nodes.get("Principled BSDF").inputs["Base Color"].default_value=(0.22,0.22,0.24,1); gp.data.materials.append(gm)
@@ -174,7 +177,7 @@ sun=bpy.data.lights.new("S",type="SUN"); sun.energy=3.6; so=bpy.data.objects.new
 bpy.context.scene.collection.objects.link(so); so.rotation_euler=(math.radians(52),0,math.radians(35))
 cam=bpy.data.cameras.new("C"); cam.lens=50; co=bpy.data.objects.new("C",cam); bpy.context.scene.collection.objects.link(co)
 span=max(H,W,Lf); midz=(zmin+zmax)/2
-co.location=Vector((span*1.6, -span*2.4, midz+span*0.35))
+co.location=Vector((span*3.0, -span*0.8, midz+span*0.30))   # side-on (+X) with a slight ¾ angle
 look=Vector((cx,cy,midz))-co.location; co.rotation_euler=look.to_track_quat("-Z","Y").to_euler()
 sc.camera=co; sc.render.engine="BLENDER_EEVEE"; sc.render.resolution_x=540; sc.render.resolution_y=720
 try: sc.view_settings.view_transform="AgX"
