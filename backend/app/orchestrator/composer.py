@@ -539,6 +539,148 @@ except Exception as e:
 '''
 
 
+def _apply_texture_color_fidelity(runner, hero_name: str, ref_png: str, work_dir,
+                                  verbose: bool = True):
+    """Texture-fidelity gate (Phase 20, gate #2): make the textured hero's colors
+    match the reference image. Renders the textured hero, measures its subject
+    saturation/value, compares to the reference subject, and inserts a
+    Hue/Saturation/Value correction into the hero material(s). Focuses on
+    SATURATION (the 'dull / colors-off' fix) — value is clamped tight because the
+    measurement render's lighting differs from the final scene. Reference-anchored
+    and universal: same correction for animals, characters, vehicles. Returns
+    {"ok", "sat_gain", "val_gain"} (never raises)."""
+    tmp_png = str((Path(work_dir) / "_texfid_tmp.png").as_posix())
+    code = _TEXFIDELITY_CODE
+    for k, v in (("__HERO__", hero_name), ("__REF__", str(Path(ref_png).as_posix())),
+                 ("__TMP__", tmp_png), ("__RES__", "256")):
+        code = code.replace(k, v)
+    try:
+        res = runner.run("tex_fidelity", "execute_python", {"code": code}, critical=False)
+        raw = res.get("result") if isinstance(res, dict) else None
+        info = json.loads(raw) if isinstance(raw, str) else (raw if isinstance(raw, dict) else None)
+        if info and info.get("ok"):
+            if verbose:
+                print(f"[composer] texture-fidelity: sat×{info.get('sat_gain')} val×{info.get('val_gain')} "
+                      f"(ref S/V={info.get('ref_sv')} → hero S/V={info.get('hero_sv')})")
+            return info
+        if verbose:
+            print(f"[composer] texture-fidelity: skipped ({info.get('reason') if info else 'no result'})")
+        return {"ok": False}
+    except Exception as e:
+        if verbose:
+            print(f"[composer] texture-fidelity: failed ({type(e).__name__}: {e})")
+        return {"ok": False}
+
+
+# Runs in Blender: render textured hero → mean subject S/V vs reference subject →
+# insert a Hue/Saturation/Value node before each material's Base Color.
+_TEXFIDELITY_CODE = r'''
+import bpy, math, json
+import numpy as np
+from mathutils import Vector
+
+HERO="__HERO__"; REF=r"__REF__"; TMP=r"__TMP__"; RES=__RES__
+o=bpy.data.objects.get(HERO)
+out={"ok":False,"reason":""}
+try:
+    if o is None or o.type!="MESH":
+        raise RuntimeError("no hero mesh")
+
+    def sv_of(rgb, mask):
+        if int(mask.sum())<30: return None
+        r=rgb[:,:,0][mask]; g=rgb[:,:,1][mask]; b=rgb[:,:,2][mask]
+        mxx=np.maximum(np.maximum(r,g),b); mnn=np.minimum(np.minimum(r,g),b)
+        S=((mxx-mnn)/np.maximum(mxx,1e-4))
+        return float(S.mean()), float(mxx.mean())
+
+    # ── render the textured hero (front-ish ortho, transparent film) ──
+    cam=bpy.data.cameras.new("FCam"); cam.type='ORTHO'
+    co=bpy.data.objects.new("FCam",cam); bpy.context.scene.collection.objects.link(co)
+    sun=bpy.data.lights.new("FSun",type='SUN'); sun.energy=3.0
+    so=bpy.data.objects.new("FSun",sun); bpy.context.scene.collection.objects.link(so)
+    so.rotation_euler=(math.radians(55),0,math.radians(35))
+    sc=bpy.context.scene
+    prev=(sc.camera,sc.render.engine,sc.render.resolution_x,sc.render.resolution_y,
+          sc.render.filepath,sc.render.film_transparent,sc.view_settings.view_transform,sc.world)
+    sc.render.engine='BLENDER_EEVEE'; sc.render.resolution_x=RES; sc.render.resolution_y=RES
+    sc.render.film_transparent=True
+    try: sc.view_settings.view_transform='Standard'   # measure raw colors, not tone-mapped
+    except Exception: pass
+    # Flat, bright, EVEN lighting so measured S/V reflects the true albedo (not
+    # shadow). Without this the hero renders near-black and the gain maxes out.
+    fw=bpy.data.worlds.new("FidWorld"); fw.use_nodes=True
+    _bg=fw.node_tree.nodes.get("Background")
+    if _bg: _bg.inputs["Color"].default_value=(1,1,1,1); _bg.inputs["Strength"].default_value=1.3
+    sc.world=fw
+    sun.energy=2.2
+    ws=[o.matrix_world@Vector(c) for c in o.bound_box]
+    xs=[p.x for p in ws]; ys=[p.y for p in ws]; zs=[p.z for p in ws]
+    cxw=(min(xs)+max(xs))/2; cyw=(min(ys)+max(ys))/2; czw=(min(zs)+max(zs))/2
+    span=max(max(xs)-min(xs),max(ys)-min(ys),max(zs)-min(zs),1e-3)
+    cam.ortho_scale=span*1.25
+    co.location=Vector((cxw+span*0.6, cyw-span*4.0, czw+span*0.2))
+    ld=Vector((cxw,cyw,czw))-co.location; co.rotation_euler=ld.to_track_quat('-Z','Y').to_euler()
+    sc.camera=co; sc.render.filepath=TMP; bpy.ops.render.render(write_still=True)
+    ri=bpy.data.images.load(TMP, check_existing=False)
+    rw,rh=ri.size; arr=np.array(ri.pixels[:],dtype=np.float32).reshape(rh,rw,4)[::-1]
+    bpy.data.images.remove(ri)
+    hero_mask=arr[:,:,3]>0.5
+    hsv_hero=sv_of(arr[:,:,:3], hero_mask)
+
+    # restore render settings + world; drop temp cam/sun/world
+    sc.camera,sc.render.engine,sc.render.resolution_x,sc.render.resolution_y,sc.render.filepath,sc.render.film_transparent,sc.view_settings.view_transform,sc.world=prev
+    bpy.data.objects.remove(co,do_unlink=True); bpy.data.cameras.remove(cam)
+    bpy.data.objects.remove(so,do_unlink=True); bpy.data.lights.remove(sun)
+    try: bpy.data.worlds.remove(fw)
+    except Exception: pass
+    if hsv_hero is None: raise RuntimeError("empty hero mask")
+
+    # ── reference subject S/V ──
+    rimg=bpy.data.images.load(REF, check_existing=True)
+    rW,rH=rimg.size; rp=np.array(rimg.pixels[:],dtype=np.float32).reshape(rH,rW,4)[::-1,:,:3]
+    mx2=rp.max(2); mn2=rp.min(2); sat2=(mx2-mn2)/(mx2+1e-6)
+    rmask=((sat2>0.18)|(mx2<0.32))
+    by=int(rH*0.05); bx=int(rW*0.05); mm=np.zeros_like(rmask); mm[by:rH-by,bx:rW-bx]=rmask[by:rH-by,bx:rW-bx]; rmask=mm
+    hsv_ref=sv_of(rp, rmask)
+    if hsv_ref is None: raise RuntimeError("empty reference mask")
+
+    rS,rV=hsv_ref; hS,hV=hsv_hero
+    # Conservative caps: the measurement render under-reads saturation (projection
+    # coverage shows grey fallback), so the raw ratio over-shoots. Cap the boost so
+    # dull assets are enriched without over-cooking already-vivid ones.
+    sat_gain=float(np.clip(rS/max(hS,1e-3), 0.85, 1.7))
+    val_gain=float(np.clip(rV/max(hV,1e-3), 0.92, 1.15))
+
+    # ── insert Hue/Saturation/Value correction before each Base Color ──
+    applied=0
+    for mat in list(o.data.materials):
+        if not mat or not mat.use_nodes: continue
+        nt=mat.node_tree
+        bsdf=next((n for n in nt.nodes if n.type=='BSDF_PRINCIPLED'), None)
+        if bsdf is None: continue
+        bc=bsdf.inputs.get('Base Color')
+        if bc is None: continue
+        hsv=nt.nodes.new('ShaderNodeHueSaturation')
+        hsv.inputs['Saturation'].default_value=sat_gain
+        hsv.inputs['Value'].default_value=val_gain
+        if bc.is_linked:
+            src=bc.links[0].from_socket
+            nt.links.new(src, hsv.inputs['Color'])
+        else:
+            hsv.inputs['Color'].default_value=tuple(bc.default_value)
+        nt.links.new(hsv.outputs['Color'], bc)
+        applied+=1
+
+    out={"ok":applied>0,"sat_gain":round(sat_gain,3),"val_gain":round(val_gain,3),
+         "ref_sv":[round(rS,3),round(rV,3)],"hero_sv":[round(hS,3),round(hV,3)],
+         "materials":applied}
+    if applied==0: out["reason"]="no principled material"
+    __result__=json.dumps(out)
+except Exception as e:
+    __result__=json.dumps({"ok":False,"reason":"{}: {}".format(type(e).__name__,e)})
+'''
+
+
 def _apply_reference_texture(runner, hero_name: str, ref_png: str,
                              flip_u: bool = False, flip_v: bool = False,
                              verbose: bool = True) -> bool:
@@ -1620,6 +1762,10 @@ def _run_asset_gen(slots: Dict[str, Any], scene: Dict[str, Any], subj: Dict[str,
                     _flip_v = os.environ.get("FS_REFTEX_FLIP_V", "0") == "1"
                     _apply_reference_texture(runner, hero_name, str(ref_png),
                                              flip_u=_flip_u, flip_v=_flip_v, verbose=verbose)
+                # Texture-fidelity gate (#2): match the textured hero's colors to
+                # the reference (saturation-led). Universal 'colors off' fix.
+                if os.environ.get("FS_TEXFIDELITY", "1") != "0":
+                    _apply_texture_color_fidelity(runner, hero_name, str(ref_png), work_dir, verbose=verbose)
         except Exception as _te:
             if verbose:
                 print(f"[composer] ref_texture skipped ({type(_te).__name__}: {_te})")
