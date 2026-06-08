@@ -381,6 +381,164 @@ def _detect_subject_bbox(ref_png: str, verbose: bool = True):
     return x0, y0, x1, y1
 
 
+def _orient_hero_by_reference(runner, hero_name: str, ref_png: str, work_dir,
+                              min_iou: float = 0.30, verbose: bool = True):
+    """Reference-anchored orientation gate (Phase 20, scalable).
+
+    The reference image is the source of truth for which way the subject faces /
+    stands. We render the freshly-imported mesh at each of the 24 axis-aligned
+    orientations, mask each silhouette, and pick the rotation whose silhouette
+    (aspect-preserved, so upright vs sideways is distinguishable) best matches the
+    reference subject's silhouette (IoU). This replaces the fragile per-pattern
+    hardcoded Euler and works for ANY subject — the same loop fixes the cat,
+    fox, robot, etc. After choosing, it azimuth-normalizes (long horizontal → Y,
+    for the side texture projection) and grounds to z=0.
+
+    Returns {"ok": bool, "euler": (x,y,z), "iou": float} — ok=False (low score or
+    error) means the caller should fall back to the legacy per-pattern Euler.
+    """
+    check_png = str((Path(work_dir) / "orient_silhouette_check.png").as_posix())
+    tmp_png = str((Path(work_dir) / "_orient_tmp.png").as_posix())
+    code = _ORIENT_SILHOUETTE_CODE
+    for k, v in (("__HERO__", hero_name), ("__REF__", str(Path(ref_png).as_posix())),
+                 ("__TMP__", tmp_png), ("__CHECK__", check_png), ("__RES__", "160"),
+                 ("__MINIOU__", str(min_iou))):
+        code = code.replace(k, v)
+    try:
+        res = runner.run("orient_silhouette", "execute_python", {"code": code}, critical=False)
+        raw = res.get("result") if isinstance(res, dict) else None
+        info = json.loads(raw) if isinstance(raw, str) else (raw if isinstance(raw, dict) else None)
+        if info and info.get("ok"):
+            if verbose:
+                print(f"[composer] orient(silhouette): euler={info.get('euler')} "
+                      f"IoU={info.get('iou')} (chose best of {info.get('tried')} orientations)")
+            return info
+        if verbose:
+            print(f"[composer] orient(silhouette): low/again "
+                  f"({info.get('reason') if info else 'no result'}, iou={info.get('iou') if info else '?'}) "
+                  f"→ falling back to per-pattern Euler")
+        return {"ok": False}
+    except Exception as e:
+        if verbose:
+            print(f"[composer] orient(silhouette): failed ({type(e).__name__}: {e}) → per-pattern Euler")
+        return {"ok": False}
+
+
+# Runs fully inside Blender: builds the reference silhouette, renders the mesh at
+# the 24 axis-aligned orientations, scores each by IoU, applies the best, then
+# azimuth-normalizes + grounds. numpy + bpy available in the bridge process.
+_ORIENT_SILHOUETTE_CODE = r'''
+import bpy, math, json
+import numpy as np
+from mathutils import Vector, Matrix
+
+HERO="__HERO__"; REF=r"__REF__"; TMP=r"__TMP__"; CHECK=r"__CHECK__"
+RES=__RES__; MIN_IOU=__MINIOU__
+o=bpy.data.objects.get(HERO)
+out={"ok":False,"reason":""}
+try:
+    if o is None or o.type!="MESH":
+        raise RuntimeError("no hero mesh")
+    o.rotation_mode="XYZ"
+
+    def canvas(mask):
+        ys,xs=np.where(mask)
+        if len(xs)<20: return None
+        y0,y1,x0,x1=ys.min(),ys.max(),xs.min(),xs.max()
+        crop=mask[y0:y1+1,x0:x1+1].astype(np.float32)
+        ch,cw=crop.shape; s=(RES-2)/max(ch,cw,1)
+        nh=max(1,int(round(ch*s))); nw=max(1,int(round(cw*s)))
+        yi=np.clip((np.arange(nh)/s).astype(int),0,ch-1)
+        xi=np.clip((np.arange(nw)/s).astype(int),0,cw-1)
+        small=crop[yi][:,xi]>0.5
+        cv=np.zeros((RES,RES),bool); oy=(RES-nh)//2; ox=(RES-nw)//2
+        cv[oy:oy+nh,ox:ox+nw]=small
+        return cv
+
+    # ── reference subject silhouette (saturated OR dark, border trimmed) ──
+    rimg=bpy.data.images.load(REF, check_existing=True)
+    rw,rh=rimg.size
+    rp=np.array(rimg.pixels[:],dtype=np.float32).reshape(rh,rw,4)[::-1,:,:3]
+    mx=rp.max(2); mn=rp.min(2); sat=(mx-mn)/(mx+1e-6)
+    rm=((sat>0.18)|(mx<0.32))
+    by=int(rh*0.04); bx=int(rw*0.04)
+    tmpm=np.zeros_like(rm); tmpm[by:rh-by,bx:rw-bx]=rm[by:rh-by,bx:rw-bx]; rm=tmpm
+    refc=canvas(rm)
+    if refc is None: raise RuntimeError("empty reference mask")
+
+    # ── temp ortho cam (looks -Y) + sun; render with transparent film for alpha ──
+    cam=bpy.data.cameras.new("OCam"); cam.type='ORTHO'
+    co=bpy.data.objects.new("OCam",cam); bpy.context.scene.collection.objects.link(co)
+    sun=bpy.data.lights.new("OSun",type='SUN'); sun.energy=3.0
+    so=bpy.data.objects.new("OSun",sun); bpy.context.scene.collection.objects.link(so)
+    so.rotation_euler=(math.radians(60),0,math.radians(30))
+    sc=bpy.context.scene
+    prev=(sc.camera,sc.render.engine,sc.render.resolution_x,sc.render.resolution_y,
+          sc.render.filepath,sc.render.film_transparent)
+    sc.render.engine='BLENDER_EEVEE'; sc.render.resolution_x=RES; sc.render.resolution_y=RES
+    sc.render.film_transparent=True; sc.camera=co
+
+    # 24 axis-aligned orientations (dedupe by basis matrix)
+    seen={}
+    for rx in (0,90,180,270):
+        for ry in (0,90,180,270):
+            for rz in (0,90,180,270):
+                M=(Matrix.Rotation(math.radians(rz),4,'Z')@Matrix.Rotation(math.radians(ry),4,'Y')@Matrix.Rotation(math.radians(rx),4,'X')).to_3x3()
+                key=tuple(int(round(M[i][j])) for i in range(3) for j in range(3))
+                if key not in seen: seen[key]=(rx,ry,rz)
+    cands=list(seen.values())
+
+    def render_mask(eu):
+        o.rotation_euler=(math.radians(eu[0]),math.radians(eu[1]),math.radians(eu[2]))
+        bpy.context.view_layer.update()
+        ws=[o.matrix_world@Vector(c) for c in o.bound_box]
+        xs=[p.x for p in ws]; ys=[p.y for p in ws]; zs=[p.z for p in ws]
+        cxw=(min(xs)+max(xs))/2; cyw=(min(ys)+max(ys))/2; czw=(min(zs)+max(zs))/2
+        span=max(max(xs)-min(xs),max(zs)-min(zs),1e-3)
+        cam.ortho_scale=span*1.18
+        co.location=Vector((cxw, cyw-span*4.0, czw))
+        ld=Vector((cxw,cyw,czw))-co.location; co.rotation_euler=ld.to_track_quat('-Z','Y').to_euler()
+        sc.render.filepath=TMP; bpy.ops.render.render(write_still=True)
+        ri=bpy.data.images.load(TMP, check_existing=False)
+        rw2,rh2=ri.size
+        a=np.array(ri.pixels[:],dtype=np.float32).reshape(rh2,rw2,4)[::-1,:,3]
+        bpy.data.images.remove(ri)
+        return canvas(a>0.5)
+
+    best_eu=None; best_iou=-1.0
+    for eu in cands:
+        cm=render_mask(eu)
+        if cm is None: continue
+        inter=int(np.logical_and(cm,refc).sum()); uni=int(np.logical_or(cm,refc).sum())
+        iou=inter/max(uni,1)
+        if iou>best_iou: best_iou=iou; best_eu=eu
+
+    # restore render settings; drop temp cam/sun
+    sc.camera,sc.render.engine,sc.render.resolution_x,sc.render.resolution_y,sc.render.filepath,sc.render.film_transparent=prev
+    bpy.data.objects.remove(co,do_unlink=True); bpy.data.cameras.remove(cam)
+    bpy.data.objects.remove(so,do_unlink=True); bpy.data.lights.remove(sun)
+
+    if best_eu is None or best_iou < MIN_IOU:
+        out={"ok":False,"reason":"low_iou","iou":round(max(best_iou,0),3),"tried":len(cands)}
+    else:
+        # apply best, then azimuth-normalize (long horizontal -> Y) + ground
+        o.rotation_euler=(math.radians(best_eu[0]),math.radians(best_eu[1]),math.radians(best_eu[2]))
+        bpy.context.view_layer.update()
+        zs=[(o.matrix_world@Vector(c)).z for c in o.bound_box]; o.location.z-=min(zs)
+        bpy.context.view_layer.update()
+        xs0=[(o.matrix_world@Vector(c)).x for c in o.bound_box]; ys0=[(o.matrix_world@Vector(c)).y for c in o.bound_box]
+        if (max(xs0)-min(xs0)) > (max(ys0)-min(ys0)):
+            o.rotation_euler.z+=math.radians(90.0); bpy.context.view_layer.update()
+            zs2=[(o.matrix_world@Vector(c)).z for c in o.bound_box]; o.location.z-=min(zs2)
+            bpy.context.view_layer.update()
+        out={"ok":True,"euler":list(best_eu),"iou":round(best_iou,3),"tried":len(cands),
+             "post_dims":[round(d,3) for d in o.dimensions]}
+    __result__=json.dumps(out)
+except Exception as e:
+    __result__=json.dumps({"ok":False,"reason":"{}: {}".format(type(e).__name__,e)})
+'''
+
+
 def _apply_reference_texture(runner, hero_name: str, ref_png: str,
                              flip_u: bool = False, flip_v: bool = False,
                              verbose: bool = True) -> bool:
@@ -1340,10 +1498,18 @@ def _run_asset_gen(slots: Dict[str, Any], scene: Dict[str, Any], subj: Dict[str,
         # own coordinate frame, the picked rotation is guaranteed correct — no
         # trimesh/glTF/matplotlib convention mismatches.
         base_pattern = subj.get("base_pattern", "primitive_geo")
+        # Phase 20 — reference-anchored orientation gate (scalable, per-asset).
+        # Picks the rotation whose silhouette best matches the reference image, so
+        # we don't depend on a per-pattern hardcoded Euler that breaks on subjects
+        # TripoSG happens to emit at a different azimuth (cat/fox/etc). Falls back
+        # to the per-pattern Euler below when it can't get a confident match.
+        silo = None
+        if os.environ.get("FS_ORIENT_SILHOUETTE", "1") != "0" and ref_png.exists():
+            silo = _orient_hero_by_reference(runner, hero_name, str(ref_png), work_dir, verbose=verbose)
         # Engine-aware orientation: TripoSG and TripoSR emit in different frames.
         _euler_map = _TRIPOSG_PATTERN_EULER if engine == "triposg" else _BLENDER_PATTERN_EULER
         euler = _euler_map.get(base_pattern)
-        if euler is not None:
+        if (not silo or not silo.get("ok")) and euler is not None:
             rx, ry, rz = euler
             # DIAGNOSTIC + robust apply: print the import baseline (which the
             # glTF importer leaves as a quaternion +90X conversion), then bake
@@ -1407,6 +1573,8 @@ def _run_asset_gen(slots: Dict[str, Any], scene: Dict[str, Any], subj: Dict[str,
             if verbose:
                 print(f"[composer] orient_hero: pattern='{base_pattern}' "
                       f"Blender Euler=({rx}, {ry}, {rz}) applied + baked + grounded")
+        elif silo and silo.get("ok"):
+            pass  # oriented by the reference-silhouette gate already
         elif verbose:
             print(f"[composer] orient_hero: no calibration for pattern='{base_pattern}' "
                   f"— run scripts/orient_audit_blender.py to calibrate")
