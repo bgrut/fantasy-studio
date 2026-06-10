@@ -384,7 +384,7 @@ def _detect_subject_bbox(ref_png: str, verbose: bool = True):
 
 def _orient_hero_by_reference(runner, hero_name: str, ref_png: str, work_dir,
                               min_iou: float = 0.30, wheels_down: bool = False,
-                              verbose: bool = True):
+                              candidates=None, verbose: bool = True):
     """Reference-anchored orientation gate (Phase 20, scalable).
 
     The reference image is the source of truth for which way the subject faces /
@@ -404,7 +404,8 @@ def _orient_hero_by_reference(runner, hero_name: str, ref_png: str, work_dir,
     code = _ORIENT_SILHOUETTE_CODE
     for k, v in (("__HERO__", hero_name), ("__REF__", str(Path(ref_png).as_posix())),
                  ("__TMP__", tmp_png), ("__CHECK__", check_png), ("__RES__", "160"),
-                 ("__MINIOU__", str(min_iou)), ("__WHEELSDOWN__", "1" if wheels_down else "0")):
+                 ("__MINIOU__", str(min_iou)), ("__WHEELSDOWN__", "1" if wheels_down else "0"),
+                 ("__CANDS__", repr([list(c) for c in candidates]) if candidates else "None")):
         code = code.replace(k, v)
     try:
         res = runner.run("orient_silhouette", "execute_python", {"code": code}, critical=False)
@@ -480,15 +481,19 @@ try:
     sc.render.engine='BLENDER_EEVEE'; sc.render.resolution_x=RES; sc.render.resolution_y=RES
     sc.render.film_transparent=True; sc.camera=co
 
-    # 24 axis-aligned orientations (dedupe by basis matrix)
-    seen={}
-    for rx in (0,90,180,270):
-        for ry in (0,90,180,270):
-            for rz in (0,90,180,270):
-                M=(Matrix.Rotation(math.radians(rz),4,'Z')@Matrix.Rotation(math.radians(ry),4,'Y')@Matrix.Rotation(math.radians(rx),4,'X')).to_3x3()
-                key=tuple(int(round(M[i][j])) for i in range(3) for j in range(3))
-                if key not in seen: seen[key]=(rx,ry,rz)
-    cands=list(seen.values())
+    # Candidate orientations: explicit list, or all 24 axis-aligned (dedupe by basis)
+    CANDS=__CANDS__
+    if CANDS:
+        cands=[tuple(c) for c in CANDS]
+    else:
+        seen={}
+        for rx in (0,90,180,270):
+            for ry in (0,90,180,270):
+                for rz in (0,90,180,270):
+                    M=(Matrix.Rotation(math.radians(rz),4,'Z')@Matrix.Rotation(math.radians(ry),4,'Y')@Matrix.Rotation(math.radians(rx),4,'X')).to_3x3()
+                    key=tuple(int(round(M[i][j])) for i in range(3) for j in range(3))
+                    if key not in seen: seen[key]=(rx,ry,rz)
+        cands=list(seen.values())
 
     def render_mask(eu):
         o.rotation_euler=(math.radians(eu[0]),math.radians(eu[1]),math.radians(eu[2]))
@@ -1689,7 +1694,7 @@ def _run_asset_gen(slots: Dict[str, Any], scene: Dict[str, Any], subj: Dict[str,
                 "# 3D spot get unioned too (mesh/texture untouched).\n"
                 "co=np.empty(nv*3, dtype=np.float64); me.vertices.foreach_get('co', co)\n"
                 "co=co.reshape(-1,3)\n"
-                "q=np.round(co/1e-5).astype(np.int64)\n"
+                "q=np.round(co/1e-4).astype(np.int64)\n"
                 "_, inv=np.unique(q, axis=0, return_inverse=True)\n"
                 "order=np.argsort(inv, kind='stable')\n"
                 "welds=[]\n"
@@ -1744,35 +1749,35 @@ def _run_asset_gen(slots: Dict[str, Any], scene: Dict[str, Any], subj: Dict[str,
         # to the per-pattern Euler below when it can't get a confident match.
         silo = None
         if engine == "trellis2":
-            # TRELLIS.2 meshes arrive canonically upright — the 24-way gate only
-            # mis-rotates them (e2e regression: euler [0,90,270] put the car on
-            # its nose). Do just azimuth-normalize (long horizontal -> Y),
-            # wheels-down check for vehicles, and grounding.
+            # TRELLIS.2 meshes are USUALLY canonical but the up/down varies run
+            # to run (one e2e came out roof-down). Step 1: azimuth-normalize the
+            # long horizontal to Y and BAKE it. Step 2: silhouette-IoU gate
+            # restricted to the 4 flips that preserve that axis — picks the one
+            # matching the reference. Robust to string remnants, cheap (4 renders).
             _t2o = (
                 "import bpy, math, json\n"
-                "import numpy as np\n"
                 "from mathutils import Vector\n"
                 f"o=bpy.data.objects.get('{hero_name}')\n"
                 "o.rotation_mode='XYZ'; bpy.context.view_layer.update()\n"
                 "xs=[(o.matrix_world@Vector(c)).x for c in o.bound_box]; ys=[(o.matrix_world@Vector(c)).y for c in o.bound_box]\n"
                 "if (max(xs)-min(xs))>(max(ys)-min(ys)):\n"
-                "    o.rotation_euler.z+=math.radians(90.0); bpy.context.view_layer.update()\n"
-                "flipped=0\n"
-                f"if {'True' if base_pattern == 'vehicle' else 'False'}:\n"
-                "    W=np.array([list(o.matrix_world@v.co) for v in o.data.vertices])\n"
-                "    Z=W[:,2]; X=W[:,0]; z0,z1=Z.min(),Z.max(); H=max(z1-z0,1e-6)\n"
-                "    def xw(sel):\n"
-                "        return float(X[sel].max()-X[sel].min()) if int(sel.sum())>6 else 0.0\n"
-                "    if xw(Z>z1-0.15*H) > xw(Z<z0+0.15*H):\n"
-                "        o.rotation_euler.y+=math.radians(180.0); bpy.context.view_layer.update(); flipped=1\n"
+                "    o.rotation_euler.z+=math.radians(90.0)\n"
+                "    bpy.context.view_layer.objects.active=o; o.select_set(True)\n"
+                "    bpy.ops.object.transform_apply(location=False, rotation=True, scale=False)\n"
+                "bpy.context.view_layer.update()\n"
                 "zs=[(o.matrix_world@Vector(c)).z for c in o.bound_box]\n"
                 "o.location.z+=-min(zs); bpy.context.view_layer.update()\n"
-                "__result__=json.dumps({'ok':True,'wheels_flip':flipped})\n"
+                "__result__=json.dumps({'ok':True})\n"
             )
-            _t2r = runner.run("trellis2_orient", "execute_python", {"code": _t2o}, critical=False)
-            if verbose and isinstance(_t2r, dict):
-                print(f"[composer] orient(trellis2-canonical): {_t2r.get('result')}")
-            silo = {"ok": True}
+            runner.run("trellis2_azimuth", "execute_python", {"code": _t2o}, critical=False)
+            if ref_png.exists():
+                silo = _orient_hero_by_reference(
+                    runner, hero_name, str(ref_png), work_dir, min_iou=0.0,
+                    wheels_down=(base_pattern == "vehicle"),
+                    candidates=[(0, 0, 0), (180, 0, 0), (0, 180, 0), (0, 0, 180)],
+                    verbose=verbose)
+            else:
+                silo = {"ok": True}
         elif os.environ.get("FS_ORIENT_SILHOUETTE", "1") != "0" and ref_png.exists():
             silo = _orient_hero_by_reference(runner, hero_name, str(ref_png), work_dir,
                                              wheels_down=(base_pattern == "vehicle"), verbose=verbose)
