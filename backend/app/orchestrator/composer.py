@@ -1621,6 +1621,7 @@ def _run_asset_gen(slots: Dict[str, Any], scene: Dict[str, Any], subj: Dict[str,
         generate_mesh(ref_png, output_path=mesh_glb, engine=engine, tier=tier,
                       base_pattern=subj.get("base_pattern"),
                       force_flip_vertical=bool(subj.get("force_flip_vertical", False)))
+        os.environ["FS_LAST_MESH_ENGINE"] = engine  # read by the motion/wheels steps
         if verbose:
             print(f"[composer] asset-gen: mesh done in {time.time() - t0:.1f}s → {mesh_glb.name}")
     except Exception as e:
@@ -1670,25 +1671,60 @@ def _run_asset_gen(slots: Dict[str, Any], scene: Dict[str, Any], subj: Dict[str,
         # faces containing any edge > 6% of the bbox span, then loose verts, then
         # re-ground (the strings extended below the wheels and skewed grounding).
         if engine == "trellis2":
+            # The string shards are their own small connected components. Find
+            # components with a numpy union-find over the edge list (NO bpy.ops
+            # — separate(LOOSE) on 390k verts deadlocked the bridge), then bmesh-
+            # delete verts of every island < max(2000, 0.5%) verts. Re-ground.
             _clean_code = (
                 "import bpy, bmesh, json\n"
+                "import numpy as np\n"
                 "from mathutils import Vector\n"
                 f"o=bpy.data.objects.get('{hero_name}')\n"
-                "bpy.context.view_layer.update()\n"
-                "span=max(o.dimensions.x,o.dimensions.y,o.dimensions.z,1e-6)\n"
-                "th=span*0.06\n"
-                "bm=bmesh.new(); bm.from_mesh(o.data)\n"
-                "bad=[f for f in bm.faces if any(e.calc_length()>th for e in f.edges)]\n"
-                "n_bad=len(bad)\n"
-                "bmesh.ops.delete(bm, geom=bad, context='FACES')\n"
-                "loose=[v for v in bm.verts if not v.link_faces]\n"
-                "bmesh.ops.delete(bm, geom=loose, context='VERTS')\n"
-                "bm.to_mesh(o.data); bm.free(); o.data.update()\n"
+                "me=o.data; nv=len(me.vertices)\n"
+                "ne=len(me.edges)\n"
+                "ed=np.empty(ne*2, dtype=np.int64); me.edges.foreach_get('vertices', ed)\n"
+                "ed=ed.reshape(-1,2)\n"
+                "# glTF splits verts at UV seams -> edge connectivity alone sees 1000s of\n"
+                "# fake islands. Virtually weld by QUANTIZED POSITION: verts at the same\n"
+                "# 3D spot get unioned too (mesh/texture untouched).\n"
+                "co=np.empty(nv*3, dtype=np.float64); me.vertices.foreach_get('co', co)\n"
+                "co=co.reshape(-1,3)\n"
+                "q=np.round(co/1e-5).astype(np.int64)\n"
+                "_, inv=np.unique(q, axis=0, return_inverse=True)\n"
+                "order=np.argsort(inv, kind='stable')\n"
+                "welds=[]\n"
+                "i=0\n"
+                "while i < nv:\n"
+                "    j=i\n"
+                "    while j+1<nv and inv[order[j+1]]==inv[order[i]]: j+=1\n"
+                "    if j>i:\n"
+                "        for k in range(i+1, j+1): welds.append((order[i], order[k]))\n"
+                "    i=j+1\n"
+                "if welds: ed=np.vstack([ed, np.array(welds, dtype=np.int64)])\n"
+                "parent=np.arange(nv, dtype=np.int64)\n"
+                "def find(a):\n"
+                "    root=a\n"
+                "    while parent[root]!=root: root=parent[root]\n"
+                "    while parent[a]!=root: parent[a],a=root,parent[a]\n"
+                "    return root\n"
+                "for a,b in ed:\n"
+                "    ra,rb=find(a),find(b)\n"
+                "    if ra!=rb: parent[rb]=ra\n"
+                "roots=np.array([find(i) for i in range(nv)])\n"
+                "uniq,counts=np.unique(roots, return_counts=True)\n"
+                "floor=max(2000, int(nv*0.005))\n"
+                "small=set(uniq[counts<floor].tolist())\n"
+                "if len(small)==len(uniq): small=set()\n"
+                "kill=np.where(np.isin(roots, list(small)))[0] if small else np.array([],dtype=np.int64)\n"
+                "if len(kill):\n"
+                "    bm=bmesh.new(); bm.from_mesh(me); bm.verts.ensure_lookup_table()\n"
+                "    bmesh.ops.delete(bm, geom=[bm.verts[i] for i in kill.tolist()], context='VERTS')\n"
+                "    bm.to_mesh(me); bm.free(); me.update()\n"
                 "bpy.context.view_layer.update()\n"
                 "ws=[o.matrix_world@Vector(c) for c in o.bound_box]\n"
                 "o.location.z += -min(p.z for p in ws)\n"
                 "bpy.context.view_layer.update()\n"
-                "__result__=json.dumps({'removed_faces':n_bad,'verts':len(o.data.vertices)})\n"
+                "__result__=json.dumps({'islands':int(len(uniq)),'dropped_verts':int(len(kill)),'verts':len(me.vertices)})\n"
             )
             _cl = runner.run("trellis2_clean", "execute_python", {"code": _clean_code}, critical=False)
             if verbose and isinstance(_cl, dict):
@@ -1707,7 +1743,37 @@ def _run_asset_gen(slots: Dict[str, Any], scene: Dict[str, Any], subj: Dict[str,
         # TripoSG happens to emit at a different azimuth (cat/fox/etc). Falls back
         # to the per-pattern Euler below when it can't get a confident match.
         silo = None
-        if os.environ.get("FS_ORIENT_SILHOUETTE", "1") != "0" and ref_png.exists():
+        if engine == "trellis2":
+            # TRELLIS.2 meshes arrive canonically upright — the 24-way gate only
+            # mis-rotates them (e2e regression: euler [0,90,270] put the car on
+            # its nose). Do just azimuth-normalize (long horizontal -> Y),
+            # wheels-down check for vehicles, and grounding.
+            _t2o = (
+                "import bpy, math, json\n"
+                "import numpy as np\n"
+                "from mathutils import Vector\n"
+                f"o=bpy.data.objects.get('{hero_name}')\n"
+                "o.rotation_mode='XYZ'; bpy.context.view_layer.update()\n"
+                "xs=[(o.matrix_world@Vector(c)).x for c in o.bound_box]; ys=[(o.matrix_world@Vector(c)).y for c in o.bound_box]\n"
+                "if (max(xs)-min(xs))>(max(ys)-min(ys)):\n"
+                "    o.rotation_euler.z+=math.radians(90.0); bpy.context.view_layer.update()\n"
+                "flipped=0\n"
+                f"if {'True' if base_pattern == 'vehicle' else 'False'}:\n"
+                "    W=np.array([list(o.matrix_world@v.co) for v in o.data.vertices])\n"
+                "    Z=W[:,2]; X=W[:,0]; z0,z1=Z.min(),Z.max(); H=max(z1-z0,1e-6)\n"
+                "    def xw(sel):\n"
+                "        return float(X[sel].max()-X[sel].min()) if int(sel.sum())>6 else 0.0\n"
+                "    if xw(Z>z1-0.15*H) > xw(Z<z0+0.15*H):\n"
+                "        o.rotation_euler.y+=math.radians(180.0); bpy.context.view_layer.update(); flipped=1\n"
+                "zs=[(o.matrix_world@Vector(c)).z for c in o.bound_box]\n"
+                "o.location.z+=-min(zs); bpy.context.view_layer.update()\n"
+                "__result__=json.dumps({'ok':True,'wheels_flip':flipped})\n"
+            )
+            _t2r = runner.run("trellis2_orient", "execute_python", {"code": _t2o}, critical=False)
+            if verbose and isinstance(_t2r, dict):
+                print(f"[composer] orient(trellis2-canonical): {_t2r.get('result')}")
+            silo = {"ok": True}
+        elif os.environ.get("FS_ORIENT_SILHOUETTE", "1") != "0" and ref_png.exists():
             silo = _orient_hero_by_reference(runner, hero_name, str(ref_png), work_dir,
                                              wheels_down=(base_pattern == "vehicle"), verbose=verbose)
         # Engine-aware orientation: TripoSG and TripoSR emit in different frames.
@@ -2516,7 +2582,11 @@ def compose_scene(
     # detect its wheel positions and attach crisp spinning wheels (best of both —
     # reference-matching body + real wheels). Pure-procedural cars already have wheels.
     vehicle_wheels_attached = False
-    if vehicle_hybrid and asset_gen_hero_name and not used_proc_vehicle:
+    _trellis_vehicle = (base_pattern == "vehicle" and
+                        os.environ.get("FS_LAST_MESH_ENGINE") == "trellis2")
+    if vehicle_hybrid and asset_gen_hero_name and not used_proc_vehicle and not _trellis_vehicle:
+        # TripoSG bodies have blobby fused wheels -> cover with crisp ones.
+        # TRELLIS.2 bodies have GOOD baked wheels -> keep them, rigid drive.
         _wr = procedural_vehicle.attach_wheels(runner, asset_gen_hero_name, verbose=verbose)
         vehicle_wheels_attached = bool(_wr.get("ok"))
 
@@ -2707,10 +2777,33 @@ def compose_scene(
     # Gated by FS_SKELETAL_MOTION (default on); any failure falls back silently.
     skeletal_done = False
     if is_animation and hero_name and os.environ.get("FS_SKELETAL_MOTION", "1") != "0":
-        if used_proc_vehicle or vehicle_wheels_attached:
-            # Wheeled drive: body + wheels translate, wheels spin, driving camera.
+        if used_proc_vehicle or vehicle_wheels_attached or _trellis_vehicle:
+            # Wheeled drive: body (+ wheels if any) translate, wheels spin,
+            # driving camera. TRELLIS.2 bodies drive rigid (baked wheels kept).
             skeletal_done = motion_rig.build_wheeled_drive(
                 runner, hero_name, total_frames, fps, verbose=verbose)
+            # TRELLIS.2 PBR textures read near-black under the dim mood rig —
+            # guarantee a real key light + ambient floor for these scenes.
+            if os.environ.get("FS_LAST_MESH_ENGINE") == "trellis2":
+                runner.run("trellis2_light", "execute_python", {"code": (
+                    "import bpy, math\n"
+                    "suns=[o for o in bpy.data.objects if o.type=='LIGHT' and o.data.type=='SUN']\n"
+                    "if suns:\n"
+                    "    for s in suns: s.data.energy=max(s.data.energy, 4.0)\n"
+                    "else:\n"
+                    "    sd=bpy.data.lights.new('T2Sun', type='SUN'); sd.energy=4.0\n"
+                    "    so=bpy.data.objects.new('T2Sun', sd); bpy.context.scene.collection.objects.link(so)\n"
+                    "    so.rotation_euler=(math.radians(55),0,math.radians(35))\n"
+                    "w=bpy.context.scene.world\n"
+                    "if w and w.use_nodes:\n"
+                    "    bg=w.node_tree.nodes.get('Background')\n"
+                    "    if bg: bg.inputs['Strength'].default_value=max(bg.inputs['Strength'].default_value, 0.6)\n"
+                    "for s in suns:\n"
+                    "    s.data.energy=max(s.data.energy, 5.0)\n"
+                    "try: bpy.context.scene.view_settings.exposure=1.2\n"
+                    "except Exception: pass\n"
+                    "__result__='lit'\n"
+                )}, critical=False)
         elif base_pattern in motion_rig.SKELETAL_PATTERNS:
             skeletal_done = motion_rig.build_skeletal_gait(
                 runner, hero_name, base_pattern, total_frames, fps, verbose=verbose)
