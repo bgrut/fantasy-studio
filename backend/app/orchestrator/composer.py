@@ -383,7 +383,8 @@ def _detect_subject_bbox(ref_png: str, verbose: bool = True):
 
 
 def _orient_hero_by_reference(runner, hero_name: str, ref_png: str, work_dir,
-                              min_iou: float = 0.30, verbose: bool = True):
+                              min_iou: float = 0.30, wheels_down: bool = False,
+                              verbose: bool = True):
     """Reference-anchored orientation gate (Phase 20, scalable).
 
     The reference image is the source of truth for which way the subject faces /
@@ -403,7 +404,7 @@ def _orient_hero_by_reference(runner, hero_name: str, ref_png: str, work_dir,
     code = _ORIENT_SILHOUETTE_CODE
     for k, v in (("__HERO__", hero_name), ("__REF__", str(Path(ref_png).as_posix())),
                  ("__TMP__", tmp_png), ("__CHECK__", check_png), ("__RES__", "160"),
-                 ("__MINIOU__", str(min_iou))):
+                 ("__MINIOU__", str(min_iou)), ("__WHEELSDOWN__", "1" if wheels_down else "0")):
         code = code.replace(k, v)
     try:
         res = runner.run("orient_silhouette", "execute_python", {"code": code}, critical=False)
@@ -532,8 +533,21 @@ try:
             o.rotation_euler.z+=math.radians(90.0); bpy.context.view_layer.update()
             zs2=[(o.matrix_world@Vector(c)).z for c in o.bound_box]; o.location.z-=min(zs2)
             bpy.context.view_layer.update()
+        flipped=0
+        if __WHEELSDOWN__:
+            # Vehicles: side silhouette is up/down-ambiguous to IoU, so tiebreak by
+            # geometry — the wheeled UNDERSIDE is wider (in X) than the roof. If the
+            # narrow band is at the bottom, the car is inverted → flip 180 about Y.
+            Wv=np.array([list(o.matrix_world@v.co) for v in o.data.vertices], dtype=np.float64)
+            Zv=Wv[:,2]; Xv=Wv[:,0]; z0,z1=Zv.min(),Zv.max(); Hh=max(z1-z0,1e-6)
+            def xw(sel):
+                return float(Xv[sel].max()-Xv[sel].min()) if int(sel.sum())>6 else 0.0
+            if xw(Zv>z1-0.15*Hh) > xw(Zv<z0+0.15*Hh):   # wide roof, narrow bottom => inverted
+                o.rotation_euler.y+=math.radians(180.0); bpy.context.view_layer.update()
+                zs3=[(o.matrix_world@Vector(c)).z for c in o.bound_box]; o.location.z-=min(zs3)
+                bpy.context.view_layer.update(); flipped=1
         out={"ok":True,"euler":list(best_eu),"iou":round(best_iou,3),"tried":len(cands),
-             "post_dims":[round(d,3) for d in o.dimensions]}
+             "wheels_flip":flipped,"post_dims":[round(d,3) for d in o.dimensions]}
     __result__=json.dumps(out)
 except Exception as e:
     __result__=json.dumps({"ok":False,"reason":"{}: {}".format(type(e).__name__,e)})
@@ -1662,7 +1676,8 @@ def _run_asset_gen(slots: Dict[str, Any], scene: Dict[str, Any], subj: Dict[str,
         # to the per-pattern Euler below when it can't get a confident match.
         silo = None
         if os.environ.get("FS_ORIENT_SILHOUETTE", "1") != "0" and ref_png.exists():
-            silo = _orient_hero_by_reference(runner, hero_name, str(ref_png), work_dir, verbose=verbose)
+            silo = _orient_hero_by_reference(runner, hero_name, str(ref_png), work_dir,
+                                             wheels_down=(base_pattern == "vehicle"), verbose=verbose)
         # Engine-aware orientation: TripoSG and TripoSR emit in different frames.
         _euler_map = _TRIPOSG_PATTERN_EULER if engine == "triposg" else _BLENDER_PATTERN_EULER
         euler = _euler_map.get(base_pattern)
