@@ -1852,7 +1852,9 @@ def _run_asset_gen(slots: Dict[str, Any], scene: Dict[str, Any], subj: Dict[str,
         # Phase 19 mesh-quality: smooth-shade + a Corrective Smooth modifier to
         # melt the remaining blobby TripoSR micro-noise while preserving the
         # silhouette. Big visual de-blob with near-zero render cost.
-        smooth_code = (
+        # SKIP for TRELLIS.2: its meshes are already crisp, and Corrective Smooth
+        # moves verts under the baked UVs -> blotchy smeared texture.
+        smooth_code = "" if engine == "trellis2" else (
             "import bpy\n"
             f"o = bpy.data.objects.get('{hero_name}')\n"
             "if o and o.type == 'MESH':\n"
@@ -1869,9 +1871,12 @@ def _run_asset_gen(slots: Dict[str, Any], scene: Dict[str, Any], subj: Dict[str,
             "else:\n"
             "    __result__ = 'no hero'\n"
         )
-        runner.run("smooth_hero", "execute_python", {"code": smooth_code}, critical=False)
-        if verbose:
-            print(f"[composer] smooth_hero: corrective-smooth + shade-smooth applied")
+        if smooth_code:
+            runner.run("smooth_hero", "execute_python", {"code": smooth_code}, critical=False)
+            if verbose:
+                print(f"[composer] smooth_hero: corrective-smooth + shade-smooth applied")
+        elif verbose:
+            print(f"[composer] smooth_hero: skipped (trellis2 mesh is already crisp)")
 
         # Phase 19 texturing (projection half): paint the SDXL reference photo
         # onto the gray TripoSG geometry so it gets real color + facial features.
