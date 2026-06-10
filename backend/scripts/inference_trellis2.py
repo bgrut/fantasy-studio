@@ -39,6 +39,27 @@ def main():
 
     import torch  # noqa: E402
     from PIL import Image  # noqa: E402
+
+    # ── LICENSE GUARD: TRELLIS.2's bundled background-remover is briaai/RMBG-2.0,
+    # which is NON-COMMERCIAL for free users (violates our commercial-safe rule)
+    # and gated. The pipeline skips it entirely when given an RGBA input with a
+    # real alpha channel, so we (a) stub the BiRefNet wrapper so RMBG never
+    # downloads/loads, and (b) cut out the subject ourselves with rembg (MIT,
+    # u2net weights Apache-2.0) before calling the pipeline.
+    from trellis2.pipelines import rembg as _t2_rembg  # noqa: E402
+
+    class _NoRMBG:  # pragma: no cover - trivial stub
+        def __init__(self, *a, **kw):
+            pass
+        def to(self, *a, **kw):
+            return self
+        def cpu(self):
+            return self
+        def __call__(self, img):
+            raise RuntimeError("RMBG stubbed out (non-commercial license); "
+                               "input must be RGBA so preprocess skips rembg")
+    _t2_rembg.BiRefNet = _NoRMBG
+
     from trellis2.pipelines import Trellis2ImageTo3DPipeline  # noqa: E402
     import o_voxel  # noqa: E402
 
@@ -48,7 +69,15 @@ def main():
     pipeline.cuda()
     print(f"[trellis2] pipeline ready in {time.time()-t0:.1f}s", flush=True)
 
+    import numpy as np  # noqa: E402
     image = Image.open(args.image_input)
+    _needs_cutout = image.mode != "RGBA" or bool((np.array(image)[:, :, 3] == 255).all())
+    if _needs_cutout:
+        # Cut out the subject with MIT-licensed rembg so the pipeline's RGBA
+        # fast-path engages (and the stubbed RMBG is never invoked).
+        from rembg import remove as _rembg_remove  # noqa: E402
+        image = _rembg_remove(image.convert("RGB"))
+        print("[trellis2] background removed via rembg (MIT)", flush=True)
     torch.manual_seed(args.seed)
     t1 = time.time()
     mesh = pipeline.run(image)[0]
@@ -69,7 +98,7 @@ def main():
     out = Path(args.output_path)
     out.parent.mkdir(parents=True, exist_ok=True)
     glb.export(str(out), extension_webp=False)   # keep PNG textures (Blender-safe)
-    print(f"[trellis2] GLB exported in {time.time()-t2:.1f}s → {out} "
+    print(f"[trellis2] GLB exported in {time.time()-t2:.1f}s -> {out} "
           f"({out.stat().st_size/1e6:.1f} MB, total {time.time()-t0:.1f}s)", flush=True)
     return 0
 

@@ -1665,6 +1665,35 @@ def _run_asset_gen(slots: Dict[str, Any], scene: Dict[str, Any], subj: Dict[str,
             return None
         hero_name = import_result.get("name", "Hero")
 
+        # Phase 22 — TRELLIS.2 mesh hygiene: its remesh leaves hair-thin "string"
+        # shards (faces with edges ~100x longer than real surface edges). Delete
+        # faces containing any edge > 6% of the bbox span, then loose verts, then
+        # re-ground (the strings extended below the wheels and skewed grounding).
+        if engine == "trellis2":
+            _clean_code = (
+                "import bpy, bmesh, json\n"
+                "from mathutils import Vector\n"
+                f"o=bpy.data.objects.get('{hero_name}')\n"
+                "bpy.context.view_layer.update()\n"
+                "span=max(o.dimensions.x,o.dimensions.y,o.dimensions.z,1e-6)\n"
+                "th=span*0.06\n"
+                "bm=bmesh.new(); bm.from_mesh(o.data)\n"
+                "bad=[f for f in bm.faces if any(e.calc_length()>th for e in f.edges)]\n"
+                "n_bad=len(bad)\n"
+                "bmesh.ops.delete(bm, geom=bad, context='FACES')\n"
+                "loose=[v for v in bm.verts if not v.link_faces]\n"
+                "bmesh.ops.delete(bm, geom=loose, context='VERTS')\n"
+                "bm.to_mesh(o.data); bm.free(); o.data.update()\n"
+                "bpy.context.view_layer.update()\n"
+                "ws=[o.matrix_world@Vector(c) for c in o.bound_box]\n"
+                "o.location.z += -min(p.z for p in ws)\n"
+                "bpy.context.view_layer.update()\n"
+                "__result__=json.dumps({'removed_faces':n_bad,'verts':len(o.data.vertices)})\n"
+            )
+            _cl = runner.run("trellis2_clean", "execute_python", {"code": _clean_code}, critical=False)
+            if verbose and isinstance(_cl, dict):
+                print(f"[composer] trellis2 cleanup: {_cl.get('result')}")
+
         # Phase 18 FINAL — deterministic Blender-frame orientation. Calibrated
         # ONCE per pattern via scripts/orient_audit_blender.py (renders all 24
         # orientations from a true side view in Blender; you pick the standing
