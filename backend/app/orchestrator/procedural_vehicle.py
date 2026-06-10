@@ -148,12 +148,30 @@ try:
             try: b.inputs["Coat Roughness"].default_value=0.12
             except Exception: pass
 
-    # ── 4 wheels at SYMMETRIC positions (identical size — fixes back≠front), each
-    # with a contrasting SPOKE star so the spin is actually visible (a smooth tyre
-    # is a surface of revolution and shows no rotation).
-    wheel_r=float(min(max(0.095*L, 0.05*max(W,L), 1e-3), 0.5*H if H>0 else 0.4))
-    wheel_w=max(W*0.14, wheel_r*0.55)
-    wbx=W*0.44; fwy=cy+L*0.32; bwy=cy-L*0.32
+    # ── DETECT the mesh's ACTUAL wheel positions (low-vert clusters per corner), then
+    # SYMMETRIZE per axle (avg L/R |x|, avg per-axle y) so the four wheels stay
+    # matched, and size the crisp wheel ~15% LARGER than the detected one so it fully
+    # ENVELOPS the blobby fused original — one seamless wheel visible, exactly where
+    # the car's wheel is. (Fixed-fraction placement sat beside the original → double
+    # wheels, one not spinning.)
+    low = Z < (zmin + 0.32*H)
+    det={}
+    for fb, ysel in (("F", Y>cy), ("B", Y<=cy)):
+        for lr, xsel in (("L", X<=cx), ("R", X>cx)):
+            m=low & ysel & xsel
+            if int(m.sum())>10:
+                det[fb+lr]={"x":float(X[m].mean()),"y":float(Y[m].mean()),
+                            "r":float(max((Z[m].max()-Z[m].min())*0.62,1e-3)),
+                            "w":float(max(X[m].max()-X[m].min(),1e-3))}
+    def _avg(keys,field,default):
+        vals=[det[k][field] for k in keys if k in det]
+        return (sum(vals)/len(vals)) if vals else default
+    wheel_r=_avg(list(det.keys()),"r",0.095*L)
+    wheel_r=float(min(max(wheel_r*1.15, 0.06*L), 0.55*H if H>0 else 0.4))   # envelop original
+    wheel_w=float(min(max(_avg(list(det.keys()),"w",W*0.14)*1.25, wheel_r*0.55), W*0.45))
+    wbx=(sum(abs(det[k]["x"]-cx) for k in det)/len(det)) if det else W*0.40
+    fwy=_avg([k for k in det if k.startswith("F")],"y",cy+L*0.32)
+    bwy=_avg([k for k in det if k.startswith("B")],"y",cy-L*0.32)
     POS={"FL":(cx-wbx,fwy),"FR":(cx+wbx,fwy),"BL":(cx-wbx,bwy),"BR":(cx+wbx,bwy)}
 
     rubber=bpy.data.materials.get("HybTire") or bpy.data.materials.new("HybTire")
