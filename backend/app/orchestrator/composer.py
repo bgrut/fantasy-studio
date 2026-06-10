@@ -1603,8 +1603,11 @@ def _run_asset_gen(slots: Dict[str, Any], scene: Dict[str, Any], subj: Dict[str,
     # InstantMesh stays available as a fallback / explicit opt-in via
     # subj.mesh_engine="instantmesh".
     from ..asset_gen import is_mesh_gen_available
+    _env_engine = os.environ.get("FS_MESH_ENGINE", "").strip()
     if subj.get("mesh_engine"):
         engine = subj["mesh_engine"]
+    elif _env_engine and is_mesh_gen_available(_env_engine):
+        engine = _env_engine     # explicit override (e.g. FS_MESH_ENGINE=trellis2)
     elif is_mesh_gen_available("triposg"):
         engine = "triposg"   # MIT, higher-fidelity, isolated venv
     elif is_mesh_gen_available("triposr"):
@@ -1781,7 +1784,12 @@ def _run_asset_gen(slots: Dict[str, Any], scene: Dict[str, Any], subj: Dict[str,
         # the hero its actual appearance. The img2img polish pass refines the far
         # side later. flip_u/flip_v env hooks let us correct the facing in one shot.
         try:
-            if os.environ.get("FS_REFTEX", "1") == "1" and ref_png.exists():
+            if engine == "trellis2":
+                # TRELLIS.2 GLBs arrive ALREADY textured (PBR baked from the
+                # reference) — projecting over them would smear the real texture.
+                if verbose:
+                    print("[composer] reftex skipped: trellis2 mesh is natively textured")
+            elif os.environ.get("FS_REFTEX", "1") == "1" and ref_png.exists():
                 if os.environ.get("FS_REFTEX_MULTIVIEW", "1") == "1":
                     # Full hybrid: side photo + img2img-refined ±Y views, blended.
                     _apply_multiview_texture(runner, hero_name, str(ref_png),

@@ -27,7 +27,7 @@ import time
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-MESH_ENGINES = ("triposg", "triposr", "instantmesh")
+MESH_ENGINES = ("trellis2", "triposg", "triposr", "instantmesh")
 
 # ---------------------------------------------------------------------------
 # Vendor path setup — TripoSR and InstantMesh aren't pip-installable packages,
@@ -82,6 +82,8 @@ def is_mesh_gen_available(engine: str = "triposr") -> bool:
         import torch  # noqa: F401
     except Exception:
         return False
+    if engine == "trellis2":
+        return _is_trellis2_available()
     if engine == "triposg":
         return _is_triposg_available()
     if engine == "triposr":
@@ -89,6 +91,47 @@ def is_mesh_gen_available(engine: str = "triposr") -> bool:
     if engine == "instantmesh":
         return _is_instantmesh_available()
     return False
+
+
+# ── TRELLIS.2 (isolated venv + subprocess) ──────────────────────────────────
+# MIT-licensed (model + code; image encoder is Meta DINOv3 — commercial use
+# permitted, gated download, attribution "Built with DINOv3"). Outputs a
+# TEXTURED GLB (PBR baked from the reference) — much crisper hard-surface
+# geometry than TripoSG and kills the clay look natively.
+_TRELLIS2_DIR = _VENDOR_DIR / "TRELLIS.2"
+_TRELLIS2_VENV_PY = _BACKEND_ROOT / "venv_trellis" / "Scripts" / "python.exe"
+_TRELLIS2_SCRIPT = _BACKEND_ROOT / "scripts" / "inference_trellis2.py"
+
+
+def _is_trellis2_available(verbose: bool = False) -> bool:
+    ok = _TRELLIS2_DIR.exists() and _TRELLIS2_VENV_PY.exists() and _TRELLIS2_SCRIPT.exists()
+    if not ok and verbose:
+        print(f"[trellis2] not available — dir={_TRELLIS2_DIR.exists()} "
+              f"venv={_TRELLIS2_VENV_PY.exists()} script={_TRELLIS2_SCRIPT.exists()}")
+    return ok
+
+
+def _gen_trellis2(pil_image, output_path: Path, seed: int = 42) -> Path:
+    """Generate a TEXTURED mesh with TRELLIS.2 via its isolated venv subprocess."""
+    import subprocess
+    import tempfile
+
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_png = Path(tempfile.gettempdir()) / f"trellis2_in_{output_path.stem}.png"
+    pil_image.convert("RGB").save(tmp_png)
+
+    cmd = [str(_TRELLIS2_VENV_PY), str(_TRELLIS2_SCRIPT),
+           "--image-input", str(tmp_png),
+           "--output-path", str(output_path),
+           "--seed", str(seed)]
+    print(f"[trellis2] running subprocess (isolated venv)…")
+    proc = subprocess.run(cmd, cwd=str(_BACKEND_ROOT), capture_output=True, text=True,
+                          timeout=900)
+    if proc.returncode != 0 or not output_path.exists():
+        tail = (proc.stderr or proc.stdout or "")[-800:]
+        raise RuntimeError(f"TRELLIS.2 failed (exit {proc.returncode}):\n{tail}")
+    return output_path
 
 
 # ── TripoSG (isolated venv + subprocess) ────────────────────────────────────
@@ -557,7 +600,10 @@ def generate_mesh(
     src = Image.open(image_path).convert("RGB")
 
     t0 = time.time()
-    if chosen == "triposg":
+    if chosen == "trellis2":
+        # MIT-licensed, TEXTURED output, crispest hard-surface geometry.
+        out = _gen_trellis2(src, output_path)
+    elif chosen == "triposg":
         # MIT-licensed, higher-fidelity. Runs in its own venv via subprocess.
         out = _gen_triposg(src, output_path)
     elif chosen == "triposr":
