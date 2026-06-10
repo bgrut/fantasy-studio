@@ -1565,6 +1565,20 @@ def _run_asset_gen(slots: Dict[str, Any], scene: Dict[str, Any], subj: Dict[str,
         generate_reference(slots, output_path=ref_png, style=style, seed=42)
         if verbose:
             print(f"[composer] asset-gen: reference done in {time.time() - t0:.1f}s → {ref_png.name}")
+        # Free the SDXL reference pipeline VRAM BEFORE mesh generation — a resident
+        # ~8GB pipeline starves the TripoSG subprocess and caused 600s timeouts
+        # (the same starvation pattern as the multiview self-render fix).
+        try:
+            from ..asset_gen.reference import unload_reference_pipeline
+            unload_reference_pipeline()
+            import torch as _torch
+            if _torch.cuda.is_available():
+                _torch.cuda.empty_cache(); _torch.cuda.synchronize()
+            if verbose:
+                print("[composer] asset-gen: reference VRAM released before mesh gen")
+        except Exception as _ue:
+            if verbose:
+                print(f"[composer] asset-gen: VRAM release skipped ({type(_ue).__name__})")
     except Exception as e:
         if verbose:
             print(f"[composer] asset-gen FAILED at reference step ({type(e).__name__}: {e})")
