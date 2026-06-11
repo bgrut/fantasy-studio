@@ -38,8 +38,19 @@ if o is None or o.type != "MESH":
     __result__ = json.dumps({"ok": False, "reason": "no hero mesh"})
 else:
     # WORLD-space vertices (hero keeps its live rotation+scale — do NOT bake).
-    mw = o.matrix_world
-    V = np.array([list(mw @ v.co) for v in o.data.vertices], dtype=np.float64)
+    def _readV():
+        mw = o.matrix_world
+        return np.array([list(mw @ v.co) for v in o.data.vertices], dtype=np.float64)
+    V = _readV()
+    # HEAD-END check: the head/neck mass sits HIGH; if the high-vert centroid is
+    # at -Y the mesh faces backward -> spin 180 about Z so it walks toward +Y
+    # (and the face camera). World-Z spin; object-space texture unaffected.
+    _Z = V[:, 2]; _Y = V[:, 1]
+    _z0, _z1 = _Z.min(), _Z.max(); _hi = _Z > _z0 + 0.62 * (_z1 - _z0)
+    if int(_hi.sum()) > 20 and float(_Y[_hi].mean()) < float((_Y.min() + _Y.max()) / 2.0):
+        o.rotation_euler.z += math.pi
+        bpy.context.view_layer.update()
+        V = _readV()
     X, Y, Z = V[:, 0], V[:, 1], V[:, 2]
     xmin, xmax = X.min(), X.max(); ymin, ymax = Y.min(), Y.max(); zmin, zmax = Z.min(), Z.max()
     cx = (xmin + xmax) / 2.0; ymid = (ymin + ymax) / 2.0
@@ -130,7 +141,7 @@ else:
     # past. WIDE widens the shot for city scenes so buildings read.
     WIDE = __WIDE__
     L_body = ymax - ymin
-    travel = L_body * 0.55 * (TOTAL / float(STRIDE))
+    travel = L_body * 0.9 * (TOTAL / float(STRIDE))
     base = rig.location.copy()
     base_o = o.location.copy()
     cam = sc.camera
@@ -145,8 +156,12 @@ else:
         o.location = (base_o.x, base_o.y + travel * frac, base_o.z)
         o.keyframe_insert("location", frame=f)
         if cam is not None:
+            # FIXED camera position near the path's 3/4 point; rotation-only
+            # tracking. The subject visibly approaches + grows in frame, which
+            # reads as real motion even over featureless ground.
             hy = ymid + travel * frac
-            cam.location = (cx + span * 1.5 * WIDE, hy + span * 2.3 * WIDE, (zmin + zmax) / 2 + span * 0.55 * WIDE)
+            cam.location = (cx + span * 1.6 * WIDE, ymid + travel * 0.75 + span * 2.0 * WIDE,
+                            (zmin + zmax) / 2 + span * 0.6 * WIDE)
             look = Vector((cx, hy, (zmin + zmax) / 2)) - cam.location
             cam.rotation_euler = look.to_track_quat("-Z", "Y").to_euler()
             cam.keyframe_insert("location", frame=f)
