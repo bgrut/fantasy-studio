@@ -39,7 +39,9 @@
 
 **Fantasy Studio is a desktop app that turns one-line prompts into directed 3D cinematic video using Blender, locally, on your hardware.** You type *"a polar bear walking through the arctic at sunset"* and 90 seconds later you have a 12-second MP4 — plus the underlying `.blend` file you can re-light, re-frame, and re-render in Blender forever.
 
-There is no diffusion model anywhere in the pipeline. A local LLM (Gemma 3 12B via Ollama) reads your prompt and **directs** the scene: it picks the recipe, casts assets from a curated library, sets the camera move, chooses lighting, blocks the action. Then Blender renders it for real, with Cycles or Eevee, on your GPU.
+No video diffusion anywhere in the pipeline — every frame is rendered, not hallucinated. A local LLM (Gemma 3 via Ollama) reads your prompt and **directs** the scene; local image-AI builds the cast: SDXL paints an identity-faithful reference of your subject, and **Microsoft TRELLIS.2** (MIT) turns it into a photoreal, textured 3D mesh — which gets auto-rigged, animated, lit, and rendered for real by Blender (Cycles or Eevee) on your GPU.
+
+> **🚀 Engine V2 (current):** the full prompt → photoreal-3D → animated-MP4 pipeline, quality gates, A/B results, and licensing table are documented in **[docs/PIPELINE_V2.md](docs/PIPELINE_V2.md)**. The V1.x recipe/template system described below remains as the procedural fallback path.
 
 This is a deliberate counter-bet to text-to-video diffusion. Where Sora-class tools generate pixels and ask you to accept whatever comes out, Fantasy Studio generates **a Blender scene** and gives you the directorial controls to refine it. Your output is deterministic, editable, ownable, and — because nothing leaves your machine — cost-zero per render after install.
 
