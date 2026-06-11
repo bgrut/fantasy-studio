@@ -1612,7 +1612,10 @@ def _run_asset_gen(slots: Dict[str, Any], scene: Dict[str, Any], subj: Dict[str,
     if subj.get("mesh_engine"):
         engine = subj["mesh_engine"]
     elif _env_engine and is_mesh_gen_available(_env_engine):
-        engine = _env_engine     # explicit override (e.g. FS_MESH_ENGINE=trellis2)
+        engine = _env_engine     # explicit override (e.g. FS_MESH_ENGINE=triposg)
+    elif is_mesh_gen_available("trellis2"):
+        engine = "trellis2"  # DEFAULT since the 2026-06 A/B sweep (4/4 wins):
+        #                      MIT, crisper geometry, natively textured output
     elif is_mesh_gen_available("triposg"):
         engine = "triposg"   # MIT, higher-fidelity, isolated venv
     elif is_mesh_gen_available("triposr"):
