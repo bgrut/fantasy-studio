@@ -1724,6 +1724,16 @@ def _run_asset_gen(slots: Dict[str, Any], scene: Dict[str, Any], subj: Dict[str,
                 "small=set(uniq[counts<floor].tolist())\n"
                 "if len(small)==len(uniq): small=set()\n"
                 "kill=np.where(np.isin(roots, list(small)))[0] if small else np.array([],dtype=np.int64)\n"
+                "# DENSITY PRUNE: strings connected to the body survive the island filter.\n"
+                "# Body surface is dense; strings are sparse 1D chains -> bucket verts on a\n"
+                "# 1.5%-span grid and kill verts in near-empty buckets (capped at 8% of verts).\n"
+                "span=float(max(np.ptp(co[:,0]), np.ptp(co[:,1]), np.ptp(co[:,2]), 1e-6))\n"
+                "cell=span*0.015\n"
+                "qb=np.floor(co/cell).astype(np.int64)\n"
+                "_, binv, bcounts=np.unique(qb, axis=0, return_inverse=True, return_counts=True)\n"
+                "sparse=np.where(bcounts[binv]<=4)[0]\n"
+                "if 0 < len(sparse) <= int(nv*0.08):\n"
+                "    kill=np.unique(np.concatenate([kill, sparse]))\n"
                 "if len(kill):\n"
                 "    bm=bmesh.new(); bm.from_mesh(me); bm.verts.ensure_lookup_table()\n"
                 "    bmesh.ops.delete(bm, geom=[bm.verts[i] for i in kill.tolist()], context='VERTS')\n"
@@ -1781,6 +1791,61 @@ def _run_asset_gen(slots: Dict[str, Any], scene: Dict[str, Any], subj: Dict[str,
                     verbose=verbose)
             else:
                 silo = {"ok": True}
+            if base_pattern == "vehicle":
+                # PAINT-SIDE-UP check: silhouettes can't tell a flipped car (and
+                # shard remnants fool width heuristics), but TEXTURE can — the
+                # roof is saturated paint, the underside is dark chassis. Render
+                # ortho top + bottom, compare subject-pixel saturation, flip if
+                # the painted side faces down.
+                _ps = (
+                    "import bpy, math, json\n"
+                    "import numpy as np\n"
+                    "from mathutils import Vector\n"
+                    f"o=bpy.data.objects.get('{hero_name}')\n"
+                    "sc=bpy.context.scene\n"
+                    "cam=bpy.data.cameras.new('PSCam'); cam.type='ORTHO'\n"
+                    "co=bpy.data.objects.new('PSCam',cam); sc.collection.objects.link(co)\n"
+                    "sun=bpy.data.lights.new('PSSun',type='SUN'); sun.energy=3.0\n"
+                    "so=bpy.data.objects.new('PSSun',sun); sc.collection.objects.link(so)\n"
+                    "prev=(sc.camera,sc.render.engine,sc.render.resolution_x,sc.render.resolution_y,sc.render.filepath,sc.render.film_transparent)\n"
+                    "sc.render.engine='BLENDER_EEVEE'; sc.render.resolution_x=128; sc.render.resolution_y=128\n"
+                    "sc.render.film_transparent=True; sc.camera=co\n"
+                    "try: sc.render.image_settings.color_mode='RGBA'\n"
+                    "except Exception: pass\n"
+                    "ws=[o.matrix_world@Vector(c) for c in o.bound_box]\n"
+                    "cx=(min(p.x for p in ws)+max(p.x for p in ws))/2; cy=(min(p.y for p in ws)+max(p.y for p in ws))/2\n"
+                    "cz=(min(p.z for p in ws)+max(p.z for p in ws))/2\n"
+                    "span=max(max(p.x for p in ws)-min(p.x for p in ws), max(p.y for p in ws)-min(p.y for p in ws))\n"
+                    "cam.ortho_scale=span*1.15\n"
+                    "def shoot(zoff, rx, path):\n"
+                    "    co.location=Vector((cx,cy,cz+zoff)); co.rotation_euler=(rx,0,0)\n"
+                    "    so.rotation_euler=(rx,0,0)\n"
+                    "    sc.render.filepath=path; bpy.ops.render.render(write_still=True)\n"
+                    "    im=bpy.data.images.load(path, check_existing=False)\n"
+                    "    w,h=im.size; a=np.array(im.pixels[:],dtype=np.float32).reshape(h,w,4)\n"
+                    "    bpy.data.images.remove(im)\n"
+                    "    m=a[:,:,3]>0.5\n"
+                    "    if m.sum()<20: m=a[:,:,:3].max(axis=2)>0.03   # alpha empty -> luminance mask\n"
+                    "    if m.sum()<20: return 0.0\n"
+                    "    rgb=a[m][:,:3]; mx=rgb.max(1); mn=rgb.min(1)\n"
+                    "    return float(((mx-mn)/(mx+1e-4)).mean())\n"
+                    f"tp=r'{str((Path(work_dir) / '_ps_top.png').as_posix())}'\n"
+                    f"bp=r'{str((Path(work_dir) / '_ps_bot.png').as_posix())}'\n"
+                    "sat_top=shoot(span*3.0, 0.0, tp)                      # camera above, looking down\n"
+                    "sat_bot=shoot(-span*3.0, math.pi, bp)                 # camera below, looking up\n"
+                    "flipped=0\n"
+                    "if sat_bot > sat_top*1.15:\n"
+                    "    o.rotation_euler.y+=math.pi; bpy.context.view_layer.update()\n"
+                    "    zs=[(o.matrix_world@Vector(c)).z for c in o.bound_box]\n"
+                    "    o.location.z+=-min(zs); bpy.context.view_layer.update(); flipped=1\n"
+                    "sc.camera,sc.render.engine,sc.render.resolution_x,sc.render.resolution_y,sc.render.filepath,sc.render.film_transparent=prev\n"
+                    "bpy.data.objects.remove(co,do_unlink=True); bpy.data.cameras.remove(cam)\n"
+                    "bpy.data.objects.remove(so,do_unlink=True); bpy.data.lights.remove(sun)\n"
+                    "__result__=json.dumps({'sat_top':round(sat_top,3),'sat_bot':round(sat_bot,3),'flipped':flipped})\n"
+                )
+                _pr = runner.run("paint_side_up", "execute_python", {"code": _ps}, critical=False)
+                if verbose and isinstance(_pr, dict):
+                    print(f"[composer] paint-side-up: {_pr.get('result')}")
         elif os.environ.get("FS_ORIENT_SILHOUETTE", "1") != "0" and ref_png.exists():
             silo = _orient_hero_by_reference(runner, hero_name, str(ref_png), work_dir,
                                              wheels_down=(base_pattern == "vehicle"), verbose=verbose)
@@ -2813,6 +2878,14 @@ def compose_scene(
                     "    if bg: bg.inputs['Strength'].default_value=max(bg.inputs['Strength'].default_value, 0.6)\n"
                     "for s in suns:\n"
                     "    s.data.energy=max(s.data.energy, 5.0)\n"
+                    "# Align the key sun with the camera so the camera views the LIT side\n"
+                    "# (subjects were rendering shadow-side-to-camera = too dark).\n"
+                    "cam=bpy.context.scene.camera\n"
+                    "hero=bpy.data.objects.get('Hero')\n"
+                    "if cam is not None and suns:\n"
+                    "    hx,hy=(hero.location.x,hero.location.y) if hero else (0.0,0.0)\n"
+                    "    theta=math.atan2(cam.location.y-hy, cam.location.x-hx)\n"
+                    "    suns[0].rotation_euler=(math.radians(50),0.0,theta+math.pi/2)\n"
                     "try: bpy.context.scene.view_settings.exposure=1.2\n"
                     "except Exception: pass\n"
                     "__result__='lit'\n"
