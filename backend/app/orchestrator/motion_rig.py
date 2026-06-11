@@ -18,6 +18,7 @@ the same convention the standalone cheetah test validated: body length along Y
 """
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any
 
@@ -120,8 +121,39 @@ else:
         pb["spine"].rotation_euler = (0, 0, 0.05 * math.sin(t))
         pb["spine"].keyframe_insert("rotation_euler", frame=f)
     bpy.ops.object.mode_set(mode="OBJECT")
+
+    # ── FORWARD LOCOMOTION + FACE-SIDE TRACKING CAMERA ─────────────────────
+    # The rig's head is at +Y by construction, so the creature walks toward +Y;
+    # ~0.55 body-lengths per stride cycle reads as a natural ground-covering
+    # walk. The scene camera is keyframed AHEAD at a 3/4 angle looking back, so
+    # the FACE is visible and the subject stays framed while the world streams
+    # past. WIDE widens the shot for city scenes so buildings read.
+    WIDE = __WIDE__
+    L_body = ymax - ymin
+    travel = L_body * 0.55 * (TOTAL / float(STRIDE))
+    base = rig.location.copy()
+    base_o = o.location.copy()
+    cam = sc.camera
+    span = max(L_body, H)
+    for f in range(1, TOTAL + 1):
+        frac = (f - 1) / max(TOTAL - 1, 1)
+        # Move hero AND rig together: the rig-to-hero relative transform stays
+        # constant, so the deform is identical to in-place (no smearing) while
+        # the whole assembly covers ground.
+        rig.location = (base.x, base.y + travel * frac, base.z)
+        rig.keyframe_insert("location", frame=f)
+        o.location = (base_o.x, base_o.y + travel * frac, base_o.z)
+        o.keyframe_insert("location", frame=f)
+        if cam is not None:
+            hy = ymid + travel * frac
+            cam.location = (cx + span * 1.5 * WIDE, hy + span * 2.3 * WIDE, (zmin + zmax) / 2 + span * 0.55 * WIDE)
+            look = Vector((cx, hy, (zmin + zmax) / 2)) - cam.location
+            cam.rotation_euler = look.to_track_quat("-Z", "Y").to_euler()
+            cam.keyframe_insert("location", frame=f)
+            cam.keyframe_insert("rotation_euler", frame=f)
     __result__ = json.dumps({"ok": True, "legs": list(legs.keys()), "bones": len(pb),
-                             "verts": int(len(V)), "total": TOTAL, "stride": STRIDE})
+                             "verts": int(len(V)), "total": TOTAL, "stride": STRIDE,
+                             "travel": round(travel, 2), "wide": WIDE})
 '''
 
 
@@ -332,10 +364,12 @@ def build_skeletal_gait(runner, hero_name: str, base_pattern: str,
     if base_pattern not in SKELETAL_PATTERNS:
         return False
     stride = _GAIT_STRIDE.get(base_pattern, 24)
+    wide = 1.9 if os.environ.get("FS_SCENE_SETTING", "") in ("street", "night_city") else 1.0
     code = (_GAIT_CODE[base_pattern]
             .replace("__HERO__", hero_name)
             .replace("__TOTAL__", str(int(total_frames)))
-            .replace("__STRIDE__", str(stride)))
+            .replace("__STRIDE__", str(stride))
+            .replace("__WIDE__", str(wide)))
     try:
         res = runner.run("skeletal_gait", "execute_python", {"code": code}, critical=False)
         raw = res.get("result") if isinstance(res, dict) else None

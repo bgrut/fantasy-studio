@@ -2803,6 +2803,7 @@ def compose_scene(
     # gradient sky, sun, textured ground, fog, color grade). Falls back to the
     # legacy mood-only environment if no setting is present.
     setting = scene.get("setting")
+    os.environ["FS_SCENE_SETTING"] = setting or ""   # read by motion_rig camera framing
     used_phase19_env = False
     realistic_env = None
     # Phase 19.5: real-world DEM terrain for desert/mountain/snow (hero placed ON
