@@ -1204,6 +1204,74 @@ def _build_realistic_environment(runner, setting: str, mood: str, hero_name: str
     environment. Keeps the hero the subject — the existing camera frames it and
     the real terrain recedes behind. No world volumes (those black-render EEVEE).
     """
+    # ── Phase 19.5 #104: HERO-IN-CITY — real OSM buildings around the hero ──
+    if setting in ("street", "night_city"):
+        from pathlib import Path as _P
+        import math as _m
+        try:
+            from . import osm_city
+        except Exception as e:
+            if verbose:
+                print(f"[composer] city_env: osm_city import failed ({e})")
+            return None
+        cache_osm = _P(__file__).resolve().parents[2] / "renders" / "_blosm_cache" / "osm" / "map.osm"
+        try:
+            if not cache_osm.exists():
+                bb = osm_city.make_bbox(*osm_city.CITY_CENTERS["new_york"], radius_m=350)
+                osm_city.fetch_osm(*bb, cache_osm)
+            data = osm_city.parse_osm(cache_osm)
+        except Exception as e:
+            if verbose:
+                print(f"[composer] city_env: OSM unavailable ({type(e).__name__}) → procedural")
+            return None
+
+        def _ctr(b):
+            xs = [p[0] for p in b["footprint"]]; ys = [p[1] for p in b["footprint"]]
+            return (sum(xs) / len(xs), sum(ys) / len(ys))
+        # Clear a ~18m plaza around the hero (origin) and trim the far fringe.
+        data["buildings"] = [b for b in data.get("buildings", [])
+                             if 18.0 < _m.hypot(*_ctr(b)) < 320.0]
+        night = (setting == "night_city") or any(
+            k in (mood or "").lower() for k in ("night", "moon", "dark"))
+        ext = osm_city.build_city(runner, data, cache_osm.parent, night=night, verbose=verbose)
+        if not ext:
+            return None
+        # Street ground + sky + sun (no world volumes — they black-render EEVEE).
+        if night:
+            c_sun_e, c_sun_col, c_elev, c_azim = 0.8, (0.55, 0.62, 0.95), 35, 200
+            c_lo, c_hi = (0.07, 0.08, 0.14), (0.01, 0.01, 0.04)
+        else:
+            c_sun_e, c_sun_col, c_elev, c_azim = 3.8, (1.0, 0.85, 0.62), 55, 130
+            c_lo, c_hi = (0.85, 0.72, 0.55), (0.35, 0.5, 0.75)
+        city_code = (
+            "import bpy, math\n"
+            "bpy.ops.mesh.primitive_plane_add(size=900, location=(0,0,-0.02))\n"
+            "gp=bpy.context.active_object; gm=bpy.data.materials.new('Asphalt'); gm.use_nodes=True\n"
+            "gb=gm.node_tree.nodes.get('Principled BSDF')\n"
+            "gb.inputs['Base Color'].default_value=(0.07,0.07,0.08,1); gb.inputs['Roughness'].default_value=0.9\n"
+            "gp.data.materials.append(gm)\n"
+            f"sun=bpy.data.lights.new('CitySun',type='SUN'); sun.energy={c_sun_e}; sun.color=({c_sun_col[0]},{c_sun_col[1]},{c_sun_col[2]}); sun.angle=math.radians(1.5)\n"
+            "so=bpy.data.objects.new('CitySun',sun); bpy.context.scene.collection.objects.link(so)\n"
+            f"so.rotation_euler=(math.radians({c_elev}),0,math.radians({c_azim}))\n"
+            "w=bpy.context.scene.world or bpy.data.worlds.new('W'); bpy.context.scene.world=w; w.use_nodes=True; wn=w.node_tree\n"
+            "for n in list(wn.nodes): wn.nodes.remove(n)\n"
+            "out=wn.nodes.new('ShaderNodeOutputWorld'); bgn=wn.nodes.new('ShaderNodeBackground')\n"
+            "grad=wn.nodes.new('ShaderNodeTexGradient'); ramp=wn.nodes.new('ShaderNodeValToRGB')\n"
+            "mapp=wn.nodes.new('ShaderNodeMapping'); texco=wn.nodes.new('ShaderNodeTexCoord')\n"
+            f"ramp.color_ramp.elements[0].position=0.38; ramp.color_ramp.elements[0].color=({c_lo[0]},{c_lo[1]},{c_lo[2]},1)\n"
+            f"ramp.color_ramp.elements[1].position=0.62; ramp.color_ramp.elements[1].color=({c_hi[0]},{c_hi[1]},{c_hi[2]},1)\n"
+            "mapp.inputs['Rotation'].default_value=(math.radians(90),0,0)\n"
+            "wn.links.new(texco.outputs['Generated'],mapp.inputs['Vector']); wn.links.new(mapp.outputs['Vector'],grad.inputs['Vector'])\n"
+            "wn.links.new(grad.outputs['Fac'],ramp.inputs['Fac']); wn.links.new(ramp.outputs['Color'],bgn.inputs['Color'])\n"
+            "bgn.inputs['Strength'].default_value=0.7; wn.links.new(bgn.outputs['Background'],out.inputs['Surface'])\n"
+            "__result__='city_dressed'\n"
+        )
+        runner.run("city_env", "execute_python", {"code": city_code}, critical=False)
+        if verbose:
+            print(f"[composer] city_env: hero-in-city ({'night' if night else 'day'}, "
+                  f"{len(data['buildings'])} buildings, plaza cleared)")
+        return "city"
+
     cfg = {
         "desert": ("namib_desert", "sand"),
         "mountain": ("mountains_alps", "rock"),
@@ -1635,16 +1703,24 @@ def _run_asset_gen(slots: Dict[str, Any], scene: Dict[str, Any], subj: Dict[str,
     except Exception as e:
         if verbose:
             print(f"[composer] asset-gen FAILED at mesh step ({type(e).__name__}: {e})")
-        # Fall back to other engine before giving up
-        fallback = "triposr" if engine == "instantmesh" else "instantmesh"
-        try:
-            if verbose:
-                print(f"[composer] asset-gen: retrying with {fallback}")
-            generate_mesh(ref_png, output_path=mesh_glb, engine=fallback, tier=tier,
-                          base_pattern=subj.get("base_pattern"))
-        except Exception as e2:
-            if verbose:
-                print(f"[composer] asset-gen FAILED on fallback ({type(e2).__name__}: {e2})")
+        # Resilient fallback chain: retry the SAME engine once (transient HF/network
+        # 404s happen), then descend by quality. InstantMesh is last (known flaky).
+        _chain = [engine] + [x for x in ("trellis2", "triposg", "triposr", "instantmesh")
+                             if x != engine and is_mesh_gen_available(x)]
+        ok = False
+        for _fb in _chain:
+            try:
+                if verbose:
+                    print(f"[composer] asset-gen: retrying with {_fb}")
+                generate_mesh(ref_png, output_path=mesh_glb, engine=_fb, tier=tier,
+                              base_pattern=subj.get("base_pattern"))
+                os.environ["FS_LAST_MESH_ENGINE"] = _fb
+                ok = True
+                break
+            except Exception as e2:
+                if verbose:
+                    print(f"[composer] asset-gen: {_fb} failed ({type(e2).__name__}: {e2})")
+        if not ok:
             return None
 
     # 3. Import mesh into Blender as hero.
