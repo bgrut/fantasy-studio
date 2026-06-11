@@ -55,6 +55,9 @@ SLOT_SCHEMA_TEXT = """{
                         //   primitive_geo → simple shape requested (cube, sphere, cone, etc.)
     "shape":            // for primitive_geo only: one of cube, sphere, icosphere, cylinder, cone, torus, plane, monkey, library
     "library_query":    // optional alternate name (e.g. "sports car" → "sports", "tabby cat" → "cat"). null if no extra.
+    "identity_phrase":  // the subject EXACTLY as the user phrased it, keeping specific names/brands/roles/styles
+                        //   ("a red ferrari driving" → "red ferrari", "a samurai warrior standing" → "samurai warrior",
+                        //    "a fantasy wizard with a staff" → "fantasy wizard with a staff"). NEVER genericize.
     "pose":             // for quadruped: standing | sitting | lying. else null.
     "color_name":       // one color word from: red, blue, green, gold, silver, etc. ("neutral" if not mentioned)
     "material":         // one of: matte, metallic, polished, brushed, glass, glossy, ceramic, plastic, rubber, fuzzy, wood, stone, fabric
@@ -298,6 +301,29 @@ def _parse_slot_json(text: str) -> Optional[Dict[str, Any]]:
     return None
 
 
+def _derive_identity_phrase(prompt: str) -> Optional[str]:
+    """Deterministically pull the subject phrase out of the raw prompt: cut at
+    the first setting/motion clause, drop the leading article. Keeps specific
+    identities ("red ferrari", "samurai warrior", "fantasy wizard with a staff")
+    that the LLM extraction tends to genericize."""
+    import re
+    p = (prompt or "").strip().lower()
+    if not p:
+        return None
+    # Cut at clauses describing place/time/motion — keep the subject head.
+    cut_words = (r"\b(driving|walking|running|standing|sitting|flying|swimming|jumping|"
+                 r"riding|galloping|sailing|floating|dancing|sprinting|crawling|"
+                 r"in |on |at |through |across |under |over |during |while |near |inside )")
+    m = re.search(cut_words, p)
+    head = p[:m.start()] if m else p
+    head = re.sub(r"^(a|an|the)\s+", "", head).strip(" ,.")
+    # Guard: too long means we failed to find a clause boundary — clamp.
+    words = head.split()
+    if not words:
+        return None
+    return " ".join(words[:8])
+
+
 def _validate_and_fill(slots: Dict[str, Any], user_prompt: str) -> tuple[Dict[str, Any], List[str]]:
     """Ensure all required fields exist; clamp invalid enum values to nearest valid."""
     notes: List[str] = []
@@ -319,6 +345,11 @@ def _validate_and_fill(slots: Dict[str, Any], user_prompt: str) -> tuple[Dict[st
     subj["base_pattern"] = _coerce(subj.get("base_pattern", "primitive_geo"), VALID_PATTERNS, "primitive_geo", "subject.base_pattern")
     subj["shape"] = _coerce(subj.get("shape") or "cube", VALID_SHAPES, "cube", "subject.shape")
     subj.setdefault("library_query", None)
+    # identity_phrase: keep the user's exact subject wording (brands/roles/styles)
+    # so the reference image is SPECIFIC ("samurai warrior", not "character").
+    # Deterministic fallback derives it from the raw prompt when the LLM omits it.
+    if not subj.get("identity_phrase"):
+        subj["identity_phrase"] = _derive_identity_phrase(user_prompt)
     if subj.get("pose") is not None:
         subj["pose"] = _coerce(subj["pose"], VALID_POSES, "standing", "subject.pose")
     subj.setdefault("color_name", "neutral")
@@ -477,6 +508,7 @@ def _keyword_fallback(prompt: str) -> Dict[str, Any]:
 
     return {
         "subject": {"name": "", "base_pattern": pattern, "shape": shape, "library_query": library_query, "pose": pose,
+                    "identity_phrase": _derive_identity_phrase(prompt),
                     "color_name": color, "material": material,
                     "emissive": emissive, "scale": 1.0, "location": [0, 0, 1]},
         "scene":   {"mood": mood, "setting": setting,

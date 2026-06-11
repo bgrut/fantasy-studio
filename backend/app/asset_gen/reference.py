@@ -334,16 +334,20 @@ def _build_reference_prompt(slots: Dict[str, Any], style: str) -> tuple[str, str
     base_pattern = subj.get("base_pattern", "primitive_geo")
     library_query = (subj.get("library_query") or "").lower()
     name = (subj.get("name") or "").lower()
+    identity = (subj.get("identity_phrase") or "").lower()
     color = subj.get("color_name") or ""
     material = subj.get("material") or ""
 
-    # Build subject descriptor — keep tight, ≤25 tokens
+    # Build subject descriptor — keep tight, ≤25 tokens. PREFER the user's exact
+    # identity phrase ("samurai warrior", "red ferrari") over the genericized
+    # library_query/name so the reference depicts THE thing they asked for.
     descriptor_bits = []
-    if color and color not in ("neutral", ""):
+    core = identity or library_query or name or "subject"
+    if color and color not in ("neutral", "") and color not in core:
         descriptor_bits.append(color)
-    if material and material not in ("matte", "plastic"):
+    if material and material not in ("matte", "plastic") and material not in core:
         descriptor_bits.append(material)
-    descriptor_bits.append(library_query or name or "subject")
+    descriptor_bits.append(core)
     subject_phrase = " ".join(descriptor_bits)
 
     framing = PATTERN_REFERENCE_FRAMING.get(base_pattern, "")
@@ -368,7 +372,7 @@ def _build_reference_prompt(slots: Dict[str, Any], style: str) -> tuple[str, str
     species = ""
     vehicle_neg = ""
     for key, hint in species_hints.items():
-        if key in library_query or key in name:
+        if key in library_query or key in name or key in identity:
             species = hint
             break
 
@@ -377,7 +381,7 @@ def _build_reference_prompt(slots: Dict[str, Any], style: str) -> tuple[str, str
     # phrases, combined with a LOWER depth-lock for vehicles, let SDXL render the
     # right body. Priority order: exotic > sports > suv > truck > van > sedan.
     if base_pattern == "vehicle":
-        vq = (library_query + " " + name)
+        vq = (library_query + " " + name + " " + identity)
         _LOWNEG = "SUV, crossover, minivan, van, pickup truck, station wagon, tall body, high roofline, raised ride height, boxy"
         _VT = [
             (("ferrari", "lamborghini", "mclaren", "supercar", "exotic"),
