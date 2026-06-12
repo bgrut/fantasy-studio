@@ -343,6 +343,7 @@ else:
     fsign = 1.0 if (int(low.sum()) > 10 and float(FA[low].mean()) > fmid) else -1.0
     travel = 1.25 * TOTAL / float(FPSV) * fsign   # unified 1.25 m/s walk
     base = rig.location.copy()
+    base_o = o.location.copy()
     cam = sc.camera
     span = max(H, xspan, yspan)
     midz = (zmin + zmax) / 2.0
@@ -351,6 +352,12 @@ else:
         d = travel * frac
         rig.location = (base.x + (0 if fwd_is_y else d), base.y + (d if fwd_is_y else 0), base.z)
         rig.keyframe_insert("location", frame=f)
+        # CRITICAL: hero must translate WITH the rig — armature-object motion does
+        # NOT move a non-parented mesh, and pose pivots walking away from an
+        # anchored mesh is exactly the distance-growing distortion. (Same fix the
+        # quadruped got in the smear-fix round; the biped block predated it.)
+        o.location = (base_o.x + (0 if fwd_is_y else d), base_o.y + (d if fwd_is_y else 0), base_o.z)
+        o.keyframe_insert("location", frame=f)
         if TRACK and cam is not None:
             hx = cx + (0 if fwd_is_y else d); hy = cy + (d if fwd_is_y else 0)
             ahead = travel / max(abs(travel), 1e-9)  # unit sign
