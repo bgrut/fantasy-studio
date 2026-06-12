@@ -31,7 +31,7 @@ import bpy, math, json
 import numpy as np
 from mathutils import Vector
 
-HERO = "__HERO__"; TOTAL = __TOTAL__; STRIDE = __STRIDE__
+HERO = "__HERO__"; TOTAL = __TOTAL__; STRIDE = __STRIDE__; TRACK = __TRACK__; FPSV = __FPSV__
 o = bpy.data.objects.get(HERO)
 status = {"ok": False, "reason": ""}
 if o is None or o.type != "MESH":
@@ -71,7 +71,7 @@ else:
                                    front_y if fb == "F" else back_y)
 
     # ── Armature at world origin (identity) so edit-bone coords == world coords.
-    arm = bpy.data.armatures.new("HeroRig"); rig = bpy.data.objects.new("HeroRig", arm)
+    arm = bpy.data.armatures.new(HERO+"Rig"); rig = bpy.data.objects.new(HERO+"Rig", arm)
     bpy.context.scene.collection.objects.link(rig)
     bpy.context.view_layer.objects.active = rig; rig.select_set(True)
     bpy.ops.object.mode_set(mode="EDIT")
@@ -157,7 +157,7 @@ else:
     # past. WIDE widens the shot for city scenes so buildings read.
     WIDE = __WIDE__
     L_body = ymax - ymin
-    travel = L_body * 0.9 * (TOTAL / float(STRIDE))
+    travel = 1.25 * TOTAL / float(FPSV)   # unified 1.25 m/s walk: multi-actor stays together
     base = rig.location.copy()
     base_o = o.location.copy()
     cam = sc.camera
@@ -171,7 +171,7 @@ else:
         rig.keyframe_insert("location", frame=f)
         o.location = (base_o.x, base_o.y + travel * frac, base_o.z)
         o.keyframe_insert("location", frame=f)
-        if cam is not None:
+        if TRACK and cam is not None:
             # FIXED camera position near the path's 3/4 point; rotation-only
             # tracking. The subject visibly approaches + grows in frame, which
             # reads as real motion even over featureless ground.
@@ -193,7 +193,7 @@ import bpy, math, json
 import numpy as np
 from mathutils import Vector
 
-HERO = "__HERO__"; TOTAL = __TOTAL__; STRIDE = __STRIDE__
+HERO = "__HERO__"; TOTAL = __TOTAL__; STRIDE = __STRIDE__; TRACK = __TRACK__; FPSV = __FPSV__
 o = bpy.data.objects.get(HERO)
 if o is None or o.type != "MESH":
     __result__ = json.dumps({"ok": False, "reason": "no hero mesh"})
@@ -233,7 +233,7 @@ else:
     shoulders = lr((Z > (zmin + 0.72 * H)) & (Z < (zmin + 0.90 * H)), 0.30 * max(xspan, yspan))
 
     # ── Armature at world origin (identity) so edit-bone coords == world coords.
-    arm = bpy.data.armatures.new("HeroRig"); rig = bpy.data.objects.new("HeroRig", arm)
+    arm = bpy.data.armatures.new(HERO+"Rig"); rig = bpy.data.objects.new(HERO+"Rig", arm)
     bpy.context.scene.collection.objects.link(rig)
     bpy.context.view_layer.objects.active = rig; rig.select_set(True)
     bpy.ops.object.mode_set(mode="EDIT")
@@ -268,12 +268,12 @@ else:
         dmat[:, bi] = np.linalg.norm(V - proj, axis=1)
     # SOFT SKINNING — blend across 3 nearest bones (1/d^3 falloff) so joints
     # bend instead of tearing limbs off (see quadruped template for rationale).
-    K = min(3, dmat.shape[1])
+    K = min(2, dmat.shape[1])
     idxK = np.argsort(dmat, axis=1)[:, :K]
     dK = np.take_along_axis(dmat, idxK, 1)
     wK = 1.0 / np.maximum(dK, 1e-6) ** 3
     wK /= wK.sum(1, keepdims=True)
-    wK[wK < 0.12] = 0.0
+    wK[wK < 0.22] = 0.0
     wK /= np.maximum(wK.sum(1, keepdims=True), 1e-9)
     amod = o.modifiers.new("HeroArmature", "ARMATURE"); amod.object = rig
     for bi, nm in enumerate(names):
@@ -294,7 +294,7 @@ else:
     pb = rig.pose.bones
     for b in pb: b.rotation_mode = "XYZ"
     legph = {"L": 0.0, "R": math.pi}
-    A_LEG = 0.42; A_ARM = 0.36
+    A_LEG = 0.30; A_ARM = 0.18   # calm, natural walk — large swings shear thin limbs
     def rot(v):
         e = [0.0, 0.0, 0.0]; e[SWING] = v; return tuple(e)
     for f in range(1, TOTAL + 1):
@@ -321,7 +321,7 @@ else:
     fmid = cy if fwd_is_y else cx
     low = Z < (zmin + 0.10 * H)
     fsign = 1.0 if (int(low.sum()) > 10 and float(FA[low].mean()) > fmid) else -1.0
-    travel = H * 0.30 * (TOTAL / float(STRIDE)) * fsign   # ~0.3 heights per stride
+    travel = 1.25 * TOTAL / float(FPSV) * fsign   # unified 1.25 m/s walk
     base = rig.location.copy()
     cam = sc.camera
     span = max(H, xspan, yspan)
@@ -331,7 +331,7 @@ else:
         d = travel * frac
         rig.location = (base.x + (0 if fwd_is_y else d), base.y + (d if fwd_is_y else 0), base.z)
         rig.keyframe_insert("location", frame=f)
-        if cam is not None:
+        if TRACK and cam is not None:
             hx = cx + (0 if fwd_is_y else d); hy = cy + (d if fwd_is_y else 0)
             ahead = travel / max(abs(travel), 1e-9)  # unit sign
             if fwd_is_y:
@@ -468,7 +468,8 @@ def build_wheeled_drive(runner, hero_name: str, total_frames: int, fps: int = 24
 
 
 def build_skeletal_gait(runner, hero_name: str, base_pattern: str,
-                        total_frames: int, fps: int = 24, verbose: bool = False) -> bool:
+                        total_frames: int, fps: int = 24, track_camera: bool = True,
+                        wide=None, verbose: bool = False) -> bool:
     """Rig the (already oriented + textured) hero and bake a procedural gait that
     loops for the whole clip. Returns True if a gait was applied (so the composer
     skips its crude object-translate locomotion). Never raises — on any failure it
@@ -476,11 +477,14 @@ def build_skeletal_gait(runner, hero_name: str, base_pattern: str,
     if base_pattern not in SKELETAL_PATTERNS:
         return False
     stride = _GAIT_STRIDE.get(base_pattern, 24)
-    wide = 1.9 if os.environ.get("FS_SCENE_SETTING", "") in ("street", "night_city") else 1.0
+    _env_wide = 1.9 if os.environ.get("FS_SCENE_SETTING", "") in ("street", "night_city") else 1.0
+    wide = float(wide) if wide else _env_wide
     code = (_GAIT_CODE[base_pattern]
             .replace("__HERO__", hero_name)
             .replace("__TOTAL__", str(int(total_frames)))
             .replace("__STRIDE__", str(stride))
+            .replace("__TRACK__", "True" if track_camera else "False")
+            .replace("__FPSV__", str(int(fps)))
             .replace("__WIDE__", str(wide)))
     try:
         res = runner.run("skeletal_gait", "execute_python", {"code": code}, critical=False)

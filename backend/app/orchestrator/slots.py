@@ -230,7 +230,7 @@ def extract_slots(
     except Exception as e:
         if verbose:
             print(f"[slots] LLM error: {e} — falling back to keyword defaults")
-        _fb = _keyword_fallback(user_prompt); _fb["_user_prompt"] = user_prompt
+        _fb = _keyword_fallback(user_prompt); _fb["_user_prompt"] = user_prompt; _fb.setdefault("extra_subjects", _derive_extra_subjects(user_prompt, "") or None)
         return SlotExtractionResult(
             slots=_fb,
             raw_response="",
@@ -244,7 +244,7 @@ def extract_slots(
         if verbose:
             print(f"[slots] could not parse JSON from LLM, using keyword fallback")
             print(f"[slots] raw: {raw[:300]}")
-        _fb = _keyword_fallback(user_prompt); _fb["_user_prompt"] = user_prompt
+        _fb = _keyword_fallback(user_prompt); _fb["_user_prompt"] = user_prompt; _fb.setdefault("extra_subjects", _derive_extra_subjects(user_prompt, "") or None)
         return SlotExtractionResult(
             slots=_fb,
             raw_response=raw,
@@ -255,6 +255,10 @@ def extract_slots(
     # Validate + fill missing fields with defaults
     slots, validation_notes = _validate_and_fill(slots, user_prompt)
     slots["_user_prompt"] = user_prompt   # raw wording for downstream mode detection
+    if not slots.get("extra_subjects"):
+        _ex = _derive_extra_subjects(user_prompt, (slots.get("subject") or {}).get("identity_phrase") or "")
+        if _ex:
+            slots["extra_subjects"] = _ex
     result = SlotExtractionResult(slots=slots, raw_response=raw, used_defaults=False, notes=validation_notes)
 
     if verbose:
@@ -401,6 +405,47 @@ def _validate_and_fill(slots: Dict[str, Any], user_prompt: str) -> tuple[Dict[st
 # ───────────────────────────────────────────────────────────────────────
 # Keyword-based fallback if LLM fails entirely
 # ───────────────────────────────────────────────────────────────────────
+
+# Pattern guess for extra actors (deterministic, no LLM dependency).
+_EXTRA_QUADRUPED = ("dog","cat","fox","horse","wolf","rabbit","sheep","cow","lion","tiger","bear","deer","pig","goat","cheetah","puppy","kitten")
+_EXTRA_BIPED = ("man","woman","person","human","boy","girl","kid","child","warrior","samurai","ninja","wizard","knight","robot","soldier","character","alien")
+_EXTRA_VEHICLE = ("car","truck","ferrari","lamborghini","motorcycle","bike","jeep","van","bus")
+
+
+def _guess_pattern(phrase: str) -> str:
+    w = phrase.lower()
+    if any(k in w for k in _EXTRA_QUADRUPED): return "quadruped"
+    if any(k in w for k in _EXTRA_BIPED): return "biped"
+    if any(k in w for k in _EXTRA_VEHICLE): return "vehicle"
+    return "biped"
+
+
+def _derive_extra_subjects(prompt: str, primary: str) -> list:
+    """Detect companion actors: 'a man walking his dog', 'a knight and a dragon',
+    'a woman with her cat'. Returns [{identity_phrase, base_pattern}] (max 2)."""
+    import re
+    p = (prompt or "").lower()
+    out, seen = [], set()
+    pats = [
+        r"(?<=\s)(?:and|with)\s+(?:a|an|his|her|their|the)\s+([a-z][a-z ]{2,30}?)(?=\s+(?:in|on|at|through|across|while|during|walking|running|standing)|[,.]|$)",
+        r"(?<=\s)walking\s+(?:his|her|their|the)\s+([a-z][a-z ]{2,30}?)(?=\s+(?:in|on|at|through|across)|[,.]|$)",
+    ]
+    for rx in pats:
+        for m in re.finditer(rx, p):
+            ph = m.group(1).strip(" ,.")
+            # trim trailing action verbs the lookahead didn't cover
+            ph = __import__("re").sub(r"\s+(fighting|running|walking|standing|sitting|jumping|dancing|sparring|playing|racing|driving)$", "", ph)
+            if not ph or ph in seen or ph in (primary or ""):
+                continue
+            # must contain a known actor noun — avoids "with a staff" props
+            if not any(k in ph for k in _EXTRA_QUADRUPED + _EXTRA_BIPED + _EXTRA_VEHICLE):
+                continue
+            seen.add(ph)
+            out.append({"identity_phrase": ph, "base_pattern": _guess_pattern(ph)})
+            if len(out) >= 2:
+                return out
+    return out
+
 
 def _keyword_fallback(prompt: str) -> Dict[str, Any]:
     """When the LLM fails, extract slots from keywords directly. Less rich, but never crashes."""

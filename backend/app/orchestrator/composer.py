@@ -2403,6 +2403,100 @@ class _StepRunner:
 # Main composer
 # ───────────────────────────────────────────────────────────────────────
 
+_ACTOR_STAGE_CODE = r"""
+import bpy, math, json
+from mathutils import Vector
+h=bpy.data.objects.get('__HERO__'); a=bpy.data.objects.get('__ACTOR__')
+a.rotation_mode='XYZ'; bpy.context.view_layer.update()
+xs=[(a.matrix_world@Vector(c)).x for c in a.bound_box]; ys=[(a.matrix_world@Vector(c)).y for c in a.bound_box]
+if (max(xs)-min(xs))>(max(ys)-min(ys)):
+    a.rotation_euler.z+=math.radians(90.0); bpy.context.view_layer.update()
+hx=[(h.matrix_world@Vector(c)).x for c in h.bound_box]
+ax=[(a.matrix_world@Vector(c)).x for c in a.bound_box]
+gap=(max(hx)-min(hx))*0.5+(max(ax)-min(ax))*0.5+0.35
+a.location.x=h.location.x+gap; a.location.y=h.location.y
+bpy.context.view_layer.update()
+zs=[(a.matrix_world@Vector(c)).z for c in a.bound_box]
+a.location.z+=-min(zs); bpy.context.view_layer.update()
+__result__=json.dumps({'gap':round(gap,2)})
+"""
+
+
+def _spawn_extra_actor(runner, slots, ex, idx, hero_name, total_frames, fps,
+                       run_id, paths, verbose=True):
+    """Phase 23 T1: generate + place + animate a companion actor beside the hero.
+
+    v1 scope (intentionally lean): reference->mesh (cached by identity so "two
+    dogs" costs one generation), import as Actor<idx>, ground + offset to the
+    hero's side, gait without camera tracking. Heavy gates (orientation IoU,
+    shard cleanup) are skipped in v1 — logged as the known gap."""
+    import copy
+    import hashlib
+    from pathlib import Path as _P
+    from ..asset_gen import generate_reference, generate_mesh
+    from ..asset_gen.reference import unload_reference_pipeline
+    from . import motion_rig
+
+    ident = (ex.get("identity_phrase") or "companion").strip()
+    pattern = ex.get("base_pattern") or "biped"
+    actor = f"Actor{idx}"
+    cache_dir = _P(__file__).resolve().parents[2] / "renders" / "_actor_cache"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    key = hashlib.md5(ident.encode("utf-8")).hexdigest()[:12]
+    glb = cache_dir / f"{key}.glb"
+
+    if not glb.exists():
+        slots2 = copy.deepcopy(slots)
+        slots2["subject"] = {
+            "name": ident, "base_pattern": pattern, "shape": None,
+            "library_query": None, "identity_phrase": ident, "pose": "standing",
+            "color_name": "neutral", "material": "matte", "emissive": False,
+            "scale": 1.0, "location": [0, 0, 0],
+        }
+        slots2.pop("extra_subjects", None)
+        ref2 = cache_dir / f"{key}_ref.png"
+        if verbose:
+            print(f"[composer] extra actor: generating '{ident}' ({pattern})")
+        generate_reference(slots2, output_path=ref2, style="photoreal", seed=42)
+        try:
+            unload_reference_pipeline()
+            import torch as _t
+            if _t.cuda.is_available():
+                _t.cuda.empty_cache()
+        except Exception:
+            pass
+        try:
+            generate_mesh(ref2, output_path=glb, engine="trellis2", tier="fast",
+                          base_pattern=pattern)
+        except Exception as _ge:
+            if verbose:
+                print(f"[composer] extra actor: trellis2 failed ({type(_ge).__name__}) -> triposg")
+            generate_mesh(ref2, output_path=glb, engine="triposg", tier="fast",
+                          base_pattern=pattern)
+    elif verbose:
+        print(f"[composer] extra actor: cache hit for '{ident}'")
+
+    size_m = {"quadruped": 1.0, "biped": 1.75, "vehicle": 4.4}.get(pattern, 1.5)
+    imp = runner.run("actor_import", "import_mesh_file", {
+        "filepath": str(glb), "name": actor, "normalize_size": size_m,
+        "ground_to_z0": True, "join": True, "orientation_fix": None,
+    }, critical=False)
+    if not isinstance(imp, dict) or not imp.get("ok"):
+        raise RuntimeError("actor import failed")
+    actor = imp.get("name", actor)
+
+    stage = _ACTOR_STAGE_CODE.replace("__HERO__", hero_name).replace("__ACTOR__", actor)
+    st = runner.run("actor_stage", "execute_python", {"code": stage}, critical=False)
+    if verbose and isinstance(st, dict):
+        print(f"[composer] extra actor staged: {st.get('result')}")
+
+    if pattern in motion_rig.SKELETAL_PATTERNS:
+        ok = motion_rig.build_skeletal_gait(runner, actor, pattern, total_frames,
+                                            fps, track_camera=False, verbose=verbose)
+        if verbose:
+            print(f"[composer] extra actor gait: {'ok' if ok else 'skipped'}")
+
+
 def compose_scene(
     slots: Dict[str, Any],
     paths: Dict[str, str],
@@ -3059,6 +3153,23 @@ def compose_scene(
     # + textured hero (world-space rig, texture-safe). If a gait is applied we skip
     # the legacy object-translate locomotion AND idle breathing for this hero.
     # Gated by FS_SKELETAL_MOTION (default on); any failure falls back silently.
+    # ── Phase 23 T1: EXTRA ACTORS — "a man walking his dog". Each companion gets
+    # its own reference→mesh (cached by identity), import beside the hero, and a
+    # gait WITHOUT camera tracking (the primary owns the camera). Fully gated:
+    # any failure leaves the single-actor scene untouched.
+    _extras = (slots.get("extra_subjects") or [])[:1]
+    _spawned_extras = 0
+    if is_animation and hero_name and _extras and os.environ.get("FS_MULTI_ACTOR", "1") != "0":
+        for _ai, _ex in enumerate(_extras, start=2):
+            try:
+                _spawn_extra_actor(runner, slots, _ex, _ai, hero_name,
+                                   total_frames, fps, run_id, paths, verbose=verbose)
+                _spawned_extras += 1
+            except Exception as _ee:
+                if verbose:
+                    print(f"[composer] extra actor {_ai} failed ({type(_ee).__name__}: {_ee}) — single-actor scene kept")
+
+
     skeletal_done = False
     if is_animation and hero_name and os.environ.get("FS_SKELETAL_MOTION", "1") != "0":
         if used_proc_vehicle or vehicle_wheels_attached or _trellis_vehicle:
@@ -3108,7 +3219,8 @@ def compose_scene(
                 )}, critical=False)
         elif base_pattern in motion_rig.SKELETAL_PATTERNS:
             skeletal_done = motion_rig.build_skeletal_gait(
-                runner, hero_name, base_pattern, total_frames, fps, verbose=verbose)
+                runner, hero_name, base_pattern, total_frames, fps,
+                wide=(1.7 if _spawned_extras else None), verbose=verbose)
 
     if is_animation and not used_mesh_relative_orbit and not skeletal_done:
         m_type = motion.get("type", "static")
