@@ -1891,6 +1891,47 @@ def _run_asset_gen(slots: Dict[str, Any], scene: Dict[str, Any], subj: Dict[str,
                 finally:
                     os.environ.pop("FS_TRELLIS_SEED", None)
 
+            # ── TEXTURE DESPECKLE: flaky gens bake floating micro-shards INTO the
+            # albedo as isolated dark dots — geometry pruning can't touch paint.
+            # Heal pixels far darker than a BRIGHT 8x8 neighborhood (panel lines /
+            # windows are larger structures with dark neighborhoods → untouched).
+            _despeckle = (
+                "import bpy, json\n"
+                "import numpy as np\n"
+                f"o=bpy.data.objects.get('{hero_name}')\n"
+                "healed=0; imgs=0\n"
+                "seen=set()\n"
+                "for mt in (o.data.materials if o else []):\n"
+                "    if not (mt and mt.use_nodes): continue\n"
+                "    for nd in mt.node_tree.nodes:\n"
+                "        if nd.type!='TEX_IMAGE' or not nd.image or nd.image.name in seen: continue\n"
+                "        img=nd.image; seen.add(img.name)\n"
+                "        w,h=img.size\n"
+                "        if w*h==0 or w<64 or h<64: continue\n"
+                "        px=np.empty(w*h*4, dtype=np.float32)\n"
+                "        img.pixels.foreach_get(px)\n"
+                "        px=px.reshape(h,w,4)\n"
+                "        lum=px[:,:,:3].mean(2)\n"
+                "        H8,W8=(h//8)*8,(w//8)*8\n"
+                "        blk=lum[:H8,:W8].reshape(H8//8,8,W8//8,8).mean((1,3))\n"
+                "        nb=np.repeat(np.repeat(blk,8,0),8,1)\n"
+                "        m=(lum[:H8,:W8] < 0.45*nb) & (nb > 0.18)\n"
+                "        n=int(m.sum())\n"
+                "        if n==0 or n > 0.10*H8*W8: continue   # nothing / too much (not speckle)\n"
+                "        blkc=px[:H8,:W8,:3].reshape(H8//8,8,W8//8,8,3).mean((1,3))\n"
+                "        nbc=np.repeat(np.repeat(blkc,8,axis=0),8,axis=1)\n"
+                "        sub=px[:H8,:W8,:3]\n"
+                "        sub[m]=nbc[m]\n"
+                "        px[:H8,:W8,:3]=sub\n"
+                "        img.pixels.foreach_set(px.ravel())\n"
+                "        img.update()\n"
+                "        healed+=n; imgs+=1\n"
+                "__result__=json.dumps({'healed_px':healed,'images':imgs})\n"
+            )
+            _ds = runner.run("trellis2_despeckle", "execute_python", {"code": _despeckle}, critical=False)
+            if verbose and isinstance(_ds, dict):
+                print(f"[composer] despeckle: {_ds.get('result')}")
+
         # Phase 18 FINAL — deterministic Blender-frame orientation. Calibrated
         # ONCE per pattern via scripts/orient_audit_blender.py (renders all 24
         # orientations from a true side view in Blender; you pick the standing
