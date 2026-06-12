@@ -206,16 +206,18 @@ else:
     cx = (xmin + xmax) / 2.0; cy = (ymin + ymax) / 2.0; H = zmax - zmin
     xspan = xmax - xmin; yspan = ymax - ymin
 
-    # T-POSE FIX: TRELLIS humans arrive arms-out, so the FULL bbox's widest axis
-    # is the ARM SPAN — useless for facing. Decide side(L-R)/forward from the
-    # LEGS-ONLY band: hips+legs are wider along true L-R than along facing.
-    _legband = Z < (zmin + 0.45 * H)
-    if int(_legband.sum()) > 20:
-        _lx = float(X[_legband].max() - X[_legband].min())
-        _ly = float(Y[_legband].max() - Y[_legband].min())
+    # T-POSE SIDE AXIS — decide from the ARM BAND: in a T/A-pose the arms are
+    # unambiguously the WIDEST geometry at shoulder height, so the axis with
+    # the larger spread in z∈[0.68H, 0.95H] IS the left-right axis. This is
+    # self-correcting no matter how upstream steps rotated the body (the
+    # legs-band heuristic broke whenever the mesh arrived 90° off).
+    _armband = (Z > (zmin + 0.68 * H)) & (Z < (zmin + 0.95 * H))
+    if int(_armband.sum()) > 20:
+        _ax = float(X[_armband].max() - X[_armband].min())
+        _ay = float(Y[_armband].max() - Y[_armband].min())
     else:
-        _lx, _ly = xspan, yspan
-    if _ly >= _lx:
+        _ax, _ay = xspan, yspan
+    if _ay >= _ax:
         SA = Y; side_mid = cy; SWING = 2          # side=Y, forward=X
     else:
         SA = X; side_mid = cx; SWING = 0          # side=X, forward=Y
@@ -363,6 +365,7 @@ else:
     __result__ = json.dumps({"ok": True, "legs": list(legs.keys()), "arms": list(arms.keys()),
                              "bones": len(pb), "verts": int(len(V)), "total": TOTAL,
                              "stride": STRIDE, "swing_idx": SWING,
+                             "armband_xy": [round(_ax, 2), round(_ay, 2)],
                              "travel": round(travel, 2), "wide": WIDE})
 '''
 
