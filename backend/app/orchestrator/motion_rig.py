@@ -101,14 +101,30 @@ else:
         u = np.clip(((V - h) @ seg) / L2, 0.0, 1.0)
         proj = h[None, :] + u[:, None] * seg[None, :]
         dmat[:, bi] = np.linalg.norm(V - proj, axis=1)
-    nearest = dmat.argmin(axis=1)
+    # SOFT SKINNING (#119/#125): hard nearest-bone (weight 1.0) tears limbs off at
+    # joints — neighboring verts snap to different bones. Blend each vert across
+    # its 3 nearest bones with steep distance falloff (1/d^3), drop sub-12%
+    # contributions, renormalize. Weights quantized to 64 levels so vg.add stays
+    # batched (fast) instead of per-vert calls.
+    K = min(3, dmat.shape[1])
+    idxK = np.argsort(dmat, axis=1)[:, :K]
+    dK = np.take_along_axis(dmat, idxK, 1)
+    wK = 1.0 / np.maximum(dK, 1e-6) ** 3
+    wK /= wK.sum(1, keepdims=True)
+    wK[wK < 0.12] = 0.0
+    wK /= np.maximum(wK.sum(1, keepdims=True), 1e-9)
     # Armature modifier ONLY (no parenting — the hero keeps its own transform;
     # Blender maps world↔armature space via the object matrices automatically).
     amod = o.modifiers.new("HeroArmature", "ARMATURE"); amod.object = rig
     for bi, nm in enumerate(names):
+        wv = (wK * (idxK == bi)).sum(1)
+        lv = np.where(wv > 1e-4)[0]
+        if not len(lv): continue
         vg = o.vertex_groups.get(nm) or o.vertex_groups.new(name=nm)
-        idx = np.where(nearest == bi)[0].tolist()
-        if idx: vg.add(idx, 1.0, "REPLACE")
+        q = np.round(wv[lv] * 63).astype(np.int64)
+        for level in np.unique(q):
+            if level == 0: continue
+            vg.add(lv[q == level].tolist(), float(level) / 63.0, "REPLACE")
 
     # ── Trot gait (diagonal pairs); loops for the whole clip via STRIDE period.
     sc = bpy.context.scene; sc.frame_start = 1; sc.frame_end = TOTAL
@@ -250,12 +266,25 @@ else:
         u = np.clip(((V - h) @ seg) / L2, 0.0, 1.0)
         proj = h[None, :] + u[:, None] * seg[None, :]
         dmat[:, bi] = np.linalg.norm(V - proj, axis=1)
-    nearest = dmat.argmin(axis=1)
+    # SOFT SKINNING — blend across 3 nearest bones (1/d^3 falloff) so joints
+    # bend instead of tearing limbs off (see quadruped template for rationale).
+    K = min(3, dmat.shape[1])
+    idxK = np.argsort(dmat, axis=1)[:, :K]
+    dK = np.take_along_axis(dmat, idxK, 1)
+    wK = 1.0 / np.maximum(dK, 1e-6) ** 3
+    wK /= wK.sum(1, keepdims=True)
+    wK[wK < 0.12] = 0.0
+    wK /= np.maximum(wK.sum(1, keepdims=True), 1e-9)
     amod = o.modifiers.new("HeroArmature", "ARMATURE"); amod.object = rig
     for bi, nm in enumerate(names):
+        wv = (wK * (idxK == bi)).sum(1)
+        lv = np.where(wv > 1e-4)[0]
+        if not len(lv): continue
         vg = o.vertex_groups.get(nm) or o.vertex_groups.new(name=nm)
-        idx = np.where(nearest == bi)[0].tolist()
-        if idx: vg.add(idx, 1.0, "REPLACE")
+        q = np.round(wv[lv] * 63).astype(np.int64)
+        for level in np.unique(q):
+            if level == 0: continue
+            vg.add(lv[q == level].tolist(), float(level) / 63.0, "REPLACE")
 
     # ── Walk gait (legs alternate, arms counter-swing); swings along FORWARD.
     sc = bpy.context.scene; sc.frame_start = 1; sc.frame_end = TOTAL
