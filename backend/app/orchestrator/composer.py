@@ -512,13 +512,22 @@ try:
         bpy.data.images.remove(ri)
         return canvas(a>0.5)
 
-    best_eu=None; best_iou=-1.0
+    # Score = IoU + vertical centre-of-mass match. CoM is the up/down
+    # discriminator IoU alone misses: an upright quadruped's mass sits in the
+    # UPPER half (body above thin legs); flipped, it sits low — and the
+    # reference shows the correct distribution.
+    def cmy(mask):
+        ys,_=np.where(mask)
+        return float(ys.mean())/mask.shape[0] if len(ys) else 0.5
+    ref_cmy=cmy(refc)
+    best_eu=None; best_iou=-1.0; best_score=-9.0
     for eu in cands:
         cm=render_mask(eu)
         if cm is None: continue
         inter=int(np.logical_and(cm,refc).sum()); uni=int(np.logical_or(cm,refc).sum())
         iou=inter/max(uni,1)
-        if iou>best_iou: best_iou=iou; best_eu=eu
+        score=iou - 2.0*abs(cmy(cm)-ref_cmy)
+        if score>best_score: best_score=score; best_iou=iou; best_eu=eu
 
     # restore render settings; drop temp cam/sun
     sc.camera,sc.render.engine,sc.render.resolution_x,sc.render.resolution_y,sc.render.filepath,sc.render.film_transparent=prev
@@ -1918,29 +1927,6 @@ def _run_asset_gen(slots: Dict[str, Any], scene: Dict[str, Any], subj: Dict[str,
                     verbose=verbose)
             else:
                 silo = {"ok": True}
-            if base_pattern in ("quadruped", "biped"):
-                # LEGS-DOWN check: upright, the bottom height-band holds only thin
-                # legs (few verts) while the top holds the back/torso (many).
-                # Inverted reverses that ratio — geometric, render-free, robust to
-                # fur cards that fool the silhouette gate.
-                _ld = (
-                    "import bpy, math, json\n"
-                    "import numpy as np\n"
-                    "from mathutils import Vector\n"
-                    f"o=bpy.data.objects.get('{hero_name}')\n"
-                    "W=np.array([list(o.matrix_world@v.co) for v in o.data.vertices], dtype=np.float64)\n"
-                    "Z=W[:,2]; z0,z1=Z.min(),Z.max(); H=max(z1-z0,1e-6)\n"
-                    "bot=float((Z<z0+0.15*H).mean()); top=float((Z>z1-0.15*H).mean())\n"
-                    "flipped=0\n"
-                    "if bot > top*1.2:\n"
-                    "    o.rotation_euler.y+=math.pi; bpy.context.view_layer.update()\n"
-                    "    zs=[(o.matrix_world@Vector(c)).z for c in o.bound_box]\n"
-                    "    o.location.z+=-min(zs); bpy.context.view_layer.update(); flipped=1\n"
-                    "__result__=json.dumps({'bot':round(bot,3),'top':round(top,3),'flipped':flipped})\n"
-                )
-                _lr = runner.run("legs_down", "execute_python", {"code": _ld}, critical=False)
-                if verbose and isinstance(_lr, dict):
-                    print(f"[composer] legs-down: {_lr.get('result')}")
             if base_pattern == "vehicle":
                 # PAINT-SIDE-UP check: silhouettes can't tell a flipped car (and
                 # shard remnants fool width heuristics), but TEXTURE can — the
