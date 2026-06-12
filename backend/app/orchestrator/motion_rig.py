@@ -280,9 +280,43 @@ else:
             pb[fan].rotation_euler = rot(-0.3 * A_ARM * (1 + math.cos(t + ph))); pb[fan].keyframe_insert("rotation_euler", frame=f)
         pb["root"].location = (0, 0, 0.03 * H * abs(math.sin(t))); pb["root"].keyframe_insert("location", frame=f)
     bpy.ops.object.mode_set(mode="OBJECT")
+
+    # ── FORWARD LOCOMOTION + FACE-SIDE TRACKING CAMERA (same engine as the
+    # quadruped: rig translates, armature carries the hero; camera sits AHEAD
+    # at a 3/4 angle looking back so the face is visible). Forward axis is the
+    # NARROW horizontal (legs swing along it); forward SIGN from the toes —
+    # feet extend toward the facing, so the low-band centroid is biased forward.
+    WIDE = __WIDE__
+    fwd_is_y = (SWING == 0)
+    FA = Y if fwd_is_y else X
+    fmid = cy if fwd_is_y else cx
+    low = Z < (zmin + 0.10 * H)
+    fsign = 1.0 if (int(low.sum()) > 10 and float(FA[low].mean()) > fmid) else -1.0
+    travel = H * 0.30 * (TOTAL / float(STRIDE)) * fsign   # ~0.3 heights per stride
+    base = rig.location.copy()
+    cam = sc.camera
+    span = max(H, xspan, yspan)
+    midz = (zmin + zmax) / 2.0
+    for f in range(1, TOTAL + 1):
+        frac = (f - 1) / max(TOTAL - 1, 1)
+        d = travel * frac
+        rig.location = (base.x + (0 if fwd_is_y else d), base.y + (d if fwd_is_y else 0), base.z)
+        rig.keyframe_insert("location", frame=f)
+        if cam is not None:
+            hx = cx + (0 if fwd_is_y else d); hy = cy + (d if fwd_is_y else 0)
+            ahead = travel / max(abs(travel), 1e-9)  # unit sign
+            if fwd_is_y:
+                cam.location = (hx + span * 1.4 * WIDE, hy + ahead * span * 2.2 * WIDE, midz + span * 0.5 * WIDE)
+            else:
+                cam.location = (hx + ahead * span * 2.2 * WIDE, hy + span * 1.4 * WIDE, midz + span * 0.5 * WIDE)
+            look = Vector((hx, hy, midz)) - Vector(cam.location)
+            cam.rotation_euler = look.to_track_quat("-Z", "Y").to_euler()
+            cam.keyframe_insert("location", frame=f)
+            cam.keyframe_insert("rotation_euler", frame=f)
     __result__ = json.dumps({"ok": True, "legs": list(legs.keys()), "arms": list(arms.keys()),
                              "bones": len(pb), "verts": int(len(V)), "total": TOTAL,
-                             "stride": STRIDE, "swing_idx": SWING})
+                             "stride": STRIDE, "swing_idx": SWING,
+                             "travel": round(travel, 2), "wide": WIDE})
 '''
 
 

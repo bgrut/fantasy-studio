@@ -1810,6 +1810,13 @@ def _run_asset_gen(slots: Dict[str, Any], scene: Dict[str, Any], subj: Dict[str,
                 # full recipe (verified: ferrari needed it, retriever was harmed).
                 f"floor={'300' if subj.get('base_pattern') in ('quadruped', 'biped') else 'max(2000, int(nv*0.005))'}\n"
                 "small=set(uniq[counts<floor].tolist())\n"
+                "# ROPE filter (safe for fur): strings are 1-D islands — one huge extent,\n"
+                "# two tiny. Fur cards are FLAT (two big extents) and survive untouched.\n"
+                "for _r in uniq[(counts>=floor)&(counts<12000)]:\n"
+                "    _sel=roots==_r; _pc=co[_sel]\n"
+                "    _ext=np.sort(_pc.max(0)-_pc.min(0))\n"
+                "    if _ext[2] > 8.0*max(_ext[1],1e-9):\n"
+                "        small.add(int(_r))\n"
                 "if len(small)==len(uniq): small=set()\n"
                 "kill=np.where(np.isin(roots, list(small)))[0] if small else np.array([],dtype=np.int64)\n"
                 "# DENSITY PRUNE: strings connected to the body survive the island filter.\n"

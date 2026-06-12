@@ -34,7 +34,7 @@ def main():
     ap.add_argument("--output-path", required=True)
     ap.add_argument("--seed", type=int, default=42)
     ap.add_argument("--texture-size", type=int,
-                    default=int(os.environ.get("FS_TRELLIS_TEXSIZE", "2048")))
+                    default=int(os.environ.get("FS_TRELLIS_TEXSIZE", "4096")))
     args = ap.parse_args()
 
     import torch  # noqa: E402
