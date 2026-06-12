@@ -77,7 +77,7 @@ REFERENCE_STYLES: Dict[str, Dict[str, str]] = {
 PATTERN_REFERENCE_FRAMING: Dict[str, str] = {
     # Strong directives: NO action poses, NO motion blur, full body grounded.
     # These framings are what TripoSR/InstantMesh need for clean upright meshes.
-    "quadruped": "perfect side profile, standing still on all four legs, motionless, full body in frame, vertical posture, feet flat on ground",
+    "quadruped": "perfect side profile, standing still on all four legs, motionless, full body in frame, vertical posture, feet flat on ground, short smooth well-groomed coat, clean silhouette",
     "biped":     "standing upright, arms at sides, neutral pose, full body in frame, feet flat on ground, A-pose",
     "vehicle":   "parked stationary, three-quarter front view, all four wheels on ground, vertical orientation",
     "tree":      "vertical trunk centered, full tree from roots to top, upright",
@@ -87,7 +87,7 @@ PATTERN_REFERENCE_FRAMING: Dict[str, str] = {
 
 # Negative-prompt additions per pattern — explicitly veto problematic poses
 PATTERN_NEGATIVE: Dict[str, str] = {
-    "quadruped": "running, jumping, leaping, mid-action, motion blur, dynamic pose, legs in the air, tilted, perspective distortion",
+    "quadruped": "running, jumping, leaping, mid-action, motion blur, dynamic pose, legs in the air, tilted, perspective distortion, wispy fur strands, flyaway hair, shaggy fuzzy silhouette, long unkempt fur",
     "biped":     "dynamic pose, motion blur, running, jumping, tilted, perspective distortion, cropped",
     "vehicle":   "moving, motion blur, tilted, perspective distortion",
 }

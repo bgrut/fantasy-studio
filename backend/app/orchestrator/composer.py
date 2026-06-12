@@ -1796,7 +1796,10 @@ def _run_asset_gen(slots: Dict[str, Any], scene: Dict[str, Any], subj: Dict[str,
                 "    if ra!=rb: parent[rb]=ra\n"
                 "roots=np.array([find(i) for i in range(nv)])\n"
                 "uniq,counts=np.unique(roots, return_counts=True)\n"
-                "floor=max(2000, int(nv*0.005))\n"
+                # Organic meshes (fur tufts ARE small islands/cards): debris-only
+                # floor; aggressive floor mangles the coat. Hard-surface keeps the
+                # full recipe (verified: ferrari needed it, retriever was harmed).
+                f"floor={'300' if subj.get('base_pattern') in ('quadruped', 'biped') else 'max(2000, int(nv*0.005))'}\n"
                 "small=set(uniq[counts<floor].tolist())\n"
                 "if len(small)==len(uniq): small=set()\n"
                 "kill=np.where(np.isin(roots, list(small)))[0] if small else np.array([],dtype=np.int64)\n"
@@ -1811,7 +1814,9 @@ def _run_asset_gen(slots: Dict[str, Any], scene: Dict[str, Any], subj: Dict[str,
                 "# Without it the prune punched holes in smooth low-tessellation panels.\n"
                 "nl=len(me.loops); lv=np.empty(nl, dtype=np.int64); me.loops.foreach_get('vertex_index', lv)\n"
                 "val=np.bincount(lv, minlength=nv)\n"
-                "sparse=np.where((bcounts[binv]<=4) & (val<=4))[0]  # <=4 catches ribbon strips; body panels sit at ~6\n"
+                # Density prune is hard-surface only: on organics it shreds fur cards.
+                f"ORGANIC={1 if subj.get('base_pattern') in ('quadruped', 'biped') else 0}\n"
+                "sparse=np.where((bcounts[binv]<=4) & (val<=4))[0] if not ORGANIC else np.array([],dtype=np.int64)\n"
                 "if 0 < len(sparse) <= int(nv*0.08):\n"
                 "    kill=np.unique(np.concatenate([kill, sparse]))\n"
                 "if len(kill):\n"
@@ -1822,11 +1827,53 @@ def _run_asset_gen(slots: Dict[str, Any], scene: Dict[str, Any], subj: Dict[str,
                 "ws=[o.matrix_world@Vector(c) for c in o.bound_box]\n"
                 "o.location.z += -min(p.z for p in ws)\n"
                 "bpy.context.view_layer.update()\n"
+                "# tear-off edges expose interior faces as dark patches -> cull them\n"
+                "for _mt in me.materials:\n"
+                "    if _mt: _mt.use_backface_culling=True\n"
                 "__result__=json.dumps({'islands':int(len(uniq)),'dropped_verts':int(len(kill)),'verts':len(me.vertices)})\n"
             )
             _cl = runner.run("trellis2_clean", "execute_python", {"code": _clean_code}, critical=False)
             if verbose and isinstance(_cl, dict):
                 print(f"[composer] trellis2 cleanup: {_cl.get('result')}")
+            # ── QUALITY RE-ROLL GATE: flaky TRELLIS generations (torn flaps,
+            # speckled texture) show up as MANY shard islands. Clean gens run
+            # 38-65 islands / <2% dropped verts; flaky ones 100+ / 3%+.
+            # Regenerate ONCE with a different seed — ~3 min, saves the render.
+            try:
+                _ci = json.loads(_cl.get("result")) if isinstance(_cl, dict) and isinstance(_cl.get("result"), str) else {}
+            except Exception:
+                _ci = {}
+            _isl = int(_ci.get("islands", 0)); _drp = int(_ci.get("dropped_verts", 0))
+            _tot = max(int(_ci.get("verts", 1)), 1)
+            # Organics naturally carry many small fur-card islands — only truly
+            # extreme counts indicate a flaky generation there.
+            _organic = subj.get("base_pattern") in ("quadruped", "biped")
+            _isl_lim, _shard_lim = (400, 0.10) if _organic else (100, 0.025)
+            if _isl >= _isl_lim or _drp / _tot >= _shard_lim:
+                if verbose:
+                    print(f"[composer] quality gate: flaky gen (islands={_isl}, "
+                          f"shard={_drp/_tot:.1%}) → re-rolling with new seed")
+                try:
+                    os.environ["FS_TRELLIS_SEED"] = "1337"
+                    generate_mesh(ref_png, output_path=mesh_glb, engine="trellis2", tier=tier,
+                                  base_pattern=subj.get("base_pattern"))
+                    runner.run("reroll_clear", "execute_python", {"code": (
+                        f"import bpy\no=bpy.data.objects.get('{hero_name}')\n"
+                        "if o: bpy.data.objects.remove(o, do_unlink=True)\n__result__='cleared'")},
+                        critical=False)
+                    import_result = runner.run("asset_import", "import_mesh_file", {
+                        "filepath": str(mesh_glb), "name": "Hero",
+                        "normalize_size": _norm_size, "ground_to_z0": True,
+                        "join": True, "orientation_fix": None}, critical=False)
+                    hero_name = import_result.get("name", "Hero") if isinstance(import_result, dict) else "Hero"
+                    _cl2 = runner.run("trellis2_clean", "execute_python", {"code": _clean_code}, critical=False)
+                    if verbose and isinstance(_cl2, dict):
+                        print(f"[composer] re-roll cleanup: {_cl2.get('result')}")
+                except Exception as _re:
+                    if verbose:
+                        print(f"[composer] re-roll failed ({type(_re).__name__}: {_re}) — keeping first gen")
+                finally:
+                    os.environ.pop("FS_TRELLIS_SEED", None)
 
         # Phase 18 FINAL — deterministic Blender-frame orientation. Calibrated
         # ONCE per pattern via scripts/orient_audit_blender.py (renders all 24
@@ -1871,6 +1918,29 @@ def _run_asset_gen(slots: Dict[str, Any], scene: Dict[str, Any], subj: Dict[str,
                     verbose=verbose)
             else:
                 silo = {"ok": True}
+            if base_pattern in ("quadruped", "biped"):
+                # LEGS-DOWN check: upright, the bottom height-band holds only thin
+                # legs (few verts) while the top holds the back/torso (many).
+                # Inverted reverses that ratio — geometric, render-free, robust to
+                # fur cards that fool the silhouette gate.
+                _ld = (
+                    "import bpy, math, json\n"
+                    "import numpy as np\n"
+                    "from mathutils import Vector\n"
+                    f"o=bpy.data.objects.get('{hero_name}')\n"
+                    "W=np.array([list(o.matrix_world@v.co) for v in o.data.vertices], dtype=np.float64)\n"
+                    "Z=W[:,2]; z0,z1=Z.min(),Z.max(); H=max(z1-z0,1e-6)\n"
+                    "bot=float((Z<z0+0.15*H).mean()); top=float((Z>z1-0.15*H).mean())\n"
+                    "flipped=0\n"
+                    "if bot > top*1.2:\n"
+                    "    o.rotation_euler.y+=math.pi; bpy.context.view_layer.update()\n"
+                    "    zs=[(o.matrix_world@Vector(c)).z for c in o.bound_box]\n"
+                    "    o.location.z+=-min(zs); bpy.context.view_layer.update(); flipped=1\n"
+                    "__result__=json.dumps({'bot':round(bot,3),'top':round(top,3),'flipped':flipped})\n"
+                )
+                _lr = runner.run("legs_down", "execute_python", {"code": _ld}, critical=False)
+                if verbose and isinstance(_lr, dict):
+                    print(f"[composer] legs-down: {_lr.get('result')}")
             if base_pattern == "vehicle":
                 # PAINT-SIDE-UP check: silhouettes can't tell a flipped car (and
                 # shard remnants fool width heuristics), but TEXTURE can — the

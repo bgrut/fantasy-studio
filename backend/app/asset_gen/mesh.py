@@ -113,8 +113,13 @@ def _is_trellis2_available(verbose: bool = False) -> bool:
 
 def _gen_trellis2(pil_image, output_path: Path, seed: int = 42) -> Path:
     """Generate a TEXTURED mesh with TRELLIS.2 via its isolated venv subprocess."""
+    import os as _os
     import subprocess
     import tempfile
+
+    # The composer's quality re-roll gate retries flaky generations with a
+    # different seed via this env var.
+    seed = int(_os.environ.get("FS_TRELLIS_SEED", seed))
 
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)

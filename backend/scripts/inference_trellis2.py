@@ -78,9 +78,10 @@ def main():
         from rembg import remove as _rembg_remove  # noqa: E402
         image = _rembg_remove(image.convert("RGB"))
         print("[trellis2] background removed via rembg (MIT)", flush=True)
-    torch.manual_seed(args.seed)
     t1 = time.time()
-    mesh = pipeline.run(image)[0]
+    # NOTE: run() calls torch.manual_seed(seed) internally with its OWN default,
+    # so the seed MUST be passed here — seeding beforehand is silently ignored.
+    mesh = pipeline.run(image, seed=args.seed)[0]
     mesh.simplify(16777216)  # nvdiffrast limit
     print(f"[trellis2] mesh generated in {time.time()-t1:.1f}s", flush=True)
 
