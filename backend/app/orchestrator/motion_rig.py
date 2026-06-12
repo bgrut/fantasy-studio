@@ -362,6 +362,7 @@ import bpy, math, json
 from mathutils import Vector
 
 HERO="__HERO__"; TOTAL=__TOTAL__
+MODE="__MODE__"; SPEED=__SPEED__
 o=bpy.data.objects.get(HERO)
 if o is None:
     __result__=json.dumps({"ok": False, "reason": "no hero"})
@@ -370,6 +371,8 @@ else:
     # car length along Y to scale the drive + wheel radius for the spin rate
     ys=[(o.matrix_world@Vector(c)).y for c in o.bound_box]
     car_len=max(max(ys)-min(ys), 1.0)
+    zs0=[(o.matrix_world@Vector(c)).z for c in o.bound_box]
+    car_h=max(max(zs0)-min(zs0), 0.5)
     wheel_r=0.44
     if wheels:
         zs=[(wheels[0].matrix_world@Vector(c)).z for c in wheels[0].bound_box]
@@ -377,14 +380,18 @@ else:
     sc=bpy.context.scene; sc.frame_start=1; sc.frame_end=TOTAL
     try: bpy.context.preferences.edit.keyframe_new_interpolation_type="LINEAR"
     except Exception: pass
-    travel=car_len*1.5
+    # MODE: drive (default sweep) | race (fast + low chase cam) | showcase (static
+    # car, 360-degree orbiting turntable camera — the social-media beauty shot).
+    if MODE=="showcase": travel=0.0
+    elif MODE=="race":   travel=car_len*4.5*SPEED
+    else:                travel=car_len*1.5*SPEED
     base=o.location.copy()
     o.rotation_mode="XYZ"
     for w in wheels: w.rotation_mode="XYZ"
     wrest={w.name: w.location.copy() for w in wheels}   # wheels are independent objects
     for f in range(1,TOTAL+1):
         frac=(f-1)/max(TOTAL-1,1); dist=travel*(frac-0.5)   # -travel/2 .. +travel/2
-        bob=0.01*math.sin(2*math.pi*frac*9)
+        bob=(0.016 if MODE=="race" else 0.01)*math.sin(2*math.pi*frac*9)*(0.0 if MODE=="showcase" else 1.0)
         o.location=(base.x, base.y+dist, base.z+bob)
         o.keyframe_insert("location", frame=f)
         spin=-dist/wheel_r
@@ -392,28 +399,55 @@ else:
             r=wrest[w.name]
             w.location=(r.x, r.y+dist, r.z+bob); w.keyframe_insert("location", frame=f)
             w.rotation_euler=(spin,0,0); w.keyframe_insert("rotation_euler", frame=f)
-    # Dedicated STATIC driving camera framing the whole sweep. The composer's
-    # default portrait framing sits low/close (fine for a still hero) and shows
-    # the car's underside as it drives, so we override it with a side-3/4 shot
-    # set back far enough to keep the entire -travel/2..+travel/2 path in frame.
-    spanY=travel+car_len
-    side=max(spanY*0.85, car_len*1.6)
     dc=bpy.data.cameras.new("DriveCam"); dc.lens=42
     dco=bpy.data.objects.new("DriveCam", dc); bpy.context.scene.collection.objects.link(dco)
-    dco.location=Vector((base.x+side, base.y-side*0.35, base.z+side*0.45))
-    look=Vector((base.x, base.y, base.z+0.2))-dco.location
-    dco.rotation_euler=look.to_track_quat('-Z','Y').to_euler()
+    if MODE=="showcase":
+        # Orbit 360 degrees around the static car at 3/4 height. lens 55 for a
+        # tighter, more flattering beauty framing.
+        dc.lens=55
+        R=car_len*2.0
+        for f in range(1,TOTAL+1):
+            frac=(f-1)/max(TOTAL-1,1); ang=2*math.pi*frac
+            dco.location=Vector((base.x+R*math.cos(ang), base.y+R*math.sin(ang), base.z+car_h*1.15))
+            look=Vector((base.x, base.y, base.z+car_h*0.45))-dco.location
+            dco.rotation_euler=look.to_track_quat('-Z','Y').to_euler()
+            dco.keyframe_insert("location", frame=f); dco.keyframe_insert("rotation_euler", frame=f)
+    elif MODE=="race":
+        # LOW chase camera tracking the car — speed reads from the ground rushing
+        # past close to the lens.
+        dc.lens=35
+        offx=car_len*1.15; offy=-car_len*1.45; offz=car_h*0.45
+        for f in range(1,TOTAL+1):
+            frac=(f-1)/max(TOTAL-1,1); dist=travel*(frac-0.5)
+            dco.location=Vector((base.x+offx, base.y+dist+offy, base.z+offz))
+            look=Vector((base.x, base.y+dist+car_len*0.2, base.z+car_h*0.35))-dco.location
+            dco.rotation_euler=look.to_track_quat('-Z','Y').to_euler()
+            dco.keyframe_insert("location", frame=f); dco.keyframe_insert("rotation_euler", frame=f)
+    else:
+        # Static side-3/4 wide enough to keep the whole sweep in frame.
+        spanY=travel+car_len
+        side=max(spanY*0.85, car_len*1.6)
+        dco.location=Vector((base.x+side, base.y-side*0.35, base.z+side*0.45))
+        look=Vector((base.x, base.y, base.z+0.2))-dco.location
+        dco.rotation_euler=look.to_track_quat('-Z','Y').to_euler()
     sc.camera=dco
     __result__=json.dumps({"ok": True, "wheels": len(wheels), "travel": round(travel,2),
-                           "wheel_r": round(wheel_r,3), "cam": "DriveCam"})
+                           "mode": MODE, "speed": SPEED, "cam": "DriveCam"})
 '''
 
 
 def build_wheeled_drive(runner, hero_name: str, total_frames: int, fps: int = 24,
+                        mode: str = "drive", speed: float = 1.0,
                         verbose: bool = False) -> bool:
     """Drive the procedural vehicle: translate the body, spin the wheels, track
-    with the camera. Returns True if applied. Never raises."""
-    code = _WHEELED_DRIVE.replace("__HERO__", hero_name).replace("__TOTAL__", str(int(total_frames)))
+    with the camera. mode: drive | race (fast + low chase cam) | showcase
+    (static turntable orbit). speed scales travel. Returns True if applied."""
+    if mode not in ("drive", "race", "showcase"):
+        mode = "drive"
+    code = (_WHEELED_DRIVE.replace("__HERO__", hero_name)
+            .replace("__TOTAL__", str(int(total_frames)))
+            .replace("__MODE__", mode)
+            .replace("__SPEED__", f"{float(speed):.2f}"))
     try:
         res = runner.run("wheeled_drive", "execute_python", {"code": code}, critical=False)
         raw = res.get("result") if isinstance(res, dict) else None

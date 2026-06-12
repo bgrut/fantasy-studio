@@ -3063,9 +3063,19 @@ def compose_scene(
     if is_animation and hero_name and os.environ.get("FS_SKELETAL_MOTION", "1") != "0":
         if used_proc_vehicle or vehicle_wheels_attached or _trellis_vehicle:
             # Wheeled drive: body (+ wheels if any) translate, wheels spin,
-            # driving camera. TRELLIS.2 bodies drive rigid (baked wheels kept).
+            # driving camera. Mode from the user's wording (race / showcase are
+            # the social-media staples); speed from the motion slot.
+            _ptxt = (slots.get("_user_prompt") or "").lower()
+            if any(k in _ptxt for k in ("showcase", "turntable", "show off", "showroom", "display")):
+                _vmode = "showcase"
+            elif any(k in _ptxt for k in ("racing", " race", "racetrack", "drag strip", "speeding")):
+                _vmode = "race"
+            else:
+                _vmode = "drive"
+            _vspeed = {"slow": 0.5, "medium": 1.0, "fast": 2.0}.get(motion.get("speed", "medium"), 1.0)
             skeletal_done = motion_rig.build_wheeled_drive(
-                runner, hero_name, total_frames, fps, verbose=verbose)
+                runner, hero_name, total_frames, fps,
+                mode=_vmode, speed=_vspeed, verbose=verbose)
             # TRELLIS.2 PBR textures read near-black under the dim mood rig —
             # guarantee a real key light + ambient floor for these scenes.
             if os.environ.get("FS_LAST_MESH_ENGINE") == "trellis2":

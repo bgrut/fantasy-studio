@@ -230,8 +230,9 @@ def extract_slots(
     except Exception as e:
         if verbose:
             print(f"[slots] LLM error: {e} — falling back to keyword defaults")
+        _fb = _keyword_fallback(user_prompt); _fb["_user_prompt"] = user_prompt
         return SlotExtractionResult(
-            slots=_keyword_fallback(user_prompt),
+            slots=_fb,
             raw_response="",
             used_defaults=True,
             notes=[f"LLM error: {e}"],
@@ -243,8 +244,9 @@ def extract_slots(
         if verbose:
             print(f"[slots] could not parse JSON from LLM, using keyword fallback")
             print(f"[slots] raw: {raw[:300]}")
+        _fb = _keyword_fallback(user_prompt); _fb["_user_prompt"] = user_prompt
         return SlotExtractionResult(
-            slots=_keyword_fallback(user_prompt),
+            slots=_fb,
             raw_response=raw,
             used_defaults=True,
             notes=["LLM returned unparseable JSON"],
@@ -252,6 +254,7 @@ def extract_slots(
 
     # Validate + fill missing fields with defaults
     slots, validation_notes = _validate_and_fill(slots, user_prompt)
+    slots["_user_prompt"] = user_prompt   # raw wording for downstream mode detection
     result = SlotExtractionResult(slots=slots, raw_response=raw, used_defaults=False, notes=validation_notes)
 
     if verbose:
@@ -310,6 +313,11 @@ def _derive_identity_phrase(prompt: str) -> Optional[str]:
     p = (prompt or "").strip().lower()
     if not p:
         return None
+    # Strip PRESENTATION wrappers — "a showcase video of a red ferrari" is about
+    # a ferrari, not a video. Leaving these in poisons the reference image.
+    p = re.sub(r"^(a|an|the)?\s*(cinematic\s+)?(showcase|show case|turntable|display|promo(tional)?|beauty)?\s*"
+               r"(video|clip|shot|render|scene|footage|film)\s+(of|showing|featuring)\s+", "", p).strip()
+    p = re.sub(r"^(a\s+)?(showcase|turntable)\s+(of\s+)?", "", p).strip()
     # Cut at clauses describing place/time/motion — keep the subject head.
     cut_words = (r"\b(driving|walking|running|standing|sitting|flying|swimming|jumping|"
                  r"riding|galloping|sailing|floating|dancing|sprinting|crawling|"
