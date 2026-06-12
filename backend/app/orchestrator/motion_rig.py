@@ -206,12 +206,16 @@ else:
     cx = (xmin + xmax) / 2.0; cy = (ymin + ymax) / 2.0; H = zmax - zmin
     xspan = xmax - xmin; yspan = ymax - ymin
 
-    # The composer azimuth-normalizes the LONG horizontal axis to Y. For a biped the
-    # wider horizontal is the shoulder/hip (L-R) axis; the narrower is the facing.
-    # SIDE = L-R axis (split legs/arms here); legs swing along FORWARD. A down-pointing
-    # bone swings along world Y on euler index 0 and world X on euler index 2 (matches
-    # the validated quadruped). So forward=Y→idx0, forward=X→idx2.
-    if yspan >= xspan:
+    # T-POSE FIX: TRELLIS humans arrive arms-out, so the FULL bbox's widest axis
+    # is the ARM SPAN — useless for facing. Decide side(L-R)/forward from the
+    # LEGS-ONLY band: hips+legs are wider along true L-R than along facing.
+    _legband = Z < (zmin + 0.45 * H)
+    if int(_legband.sum()) > 20:
+        _lx = float(X[_legband].max() - X[_legband].min())
+        _ly = float(Y[_legband].max() - Y[_legband].min())
+    else:
+        _lx, _ly = xspan, yspan
+    if _ly >= _lx:
         SA = Y; side_mid = cy; SWING = 2          # side=Y, forward=X
     else:
         SA = X; side_mid = cx; SWING = 0          # side=X, forward=Y
@@ -252,9 +256,20 @@ else:
         th = mk("thigh_" + s, (fx, fy, hip_z), (fx, fy, knee_z), root)
         sh = mk("shin_" + s, (fx, fy, knee_z), (fx, fy, foot_z), th, True)
         legs[s] = (th.name, sh.name)
-    for s, (sx, sy) in shoulders.items():
-        ua = mk("uarm_" + s, (sx, sy, neck_z), (sx, sy, elbow_z), spine)
-        fa = mk("farm_" + s, (sx, sy, elbow_z), (sx, sy, hand_z), ua, True)
+    # Arms lie ALONG the side axis (T-pose). Bones follow the actual arm from
+    # an inner shoulder point out to the arm tip — verts bind to bones that
+    # match the geometry, so swings rotate the arm instead of shearing it.
+    arm_z = zmin + 0.80 * H
+    _amax = float(SA.max()); _amin = float(SA.min())
+    for s in ("L", "R"):
+        if s == "L":
+            sh_a, el_a, tip_a = side_mid + (_amin - side_mid) * 0.25, side_mid + (_amin - side_mid) * 0.62, _amin
+        else:
+            sh_a, el_a, tip_a = side_mid + (_amax - side_mid) * 0.25, side_mid + (_amax - side_mid) * 0.62, _amax
+        def _pt(a):
+            return (a, cy, arm_z) if SA is X else (cx, a, arm_z)
+        ua = mk("uarm_" + s, _pt(sh_a), _pt(el_a), spine)
+        fa = mk("farm_" + s, _pt(el_a), _pt(tip_a), ua, True)
         arms[s] = (ua.name, fa.name)
     bpy.ops.object.mode_set(mode="OBJECT")
 
@@ -305,8 +320,11 @@ else:
             pb[shn].rotation_euler = rot(-0.55 * A_LEG * (1 + math.cos(t + ph))); pb[shn].keyframe_insert("rotation_euler", frame=f)
         for s, (uan, fan) in arms.items():
             ph = legph["R" if s == "L" else "L"]   # arm opposes same-side leg
-            pb[uan].rotation_euler = rot(A_ARM * math.sin(t + ph)); pb[uan].keyframe_insert("rotation_euler", frame=f)
-            pb[fan].rotation_euler = rot(-0.3 * A_ARM * (1 + math.cos(t + ph))); pb[fan].keyframe_insert("rotation_euler", frame=f)
+            _sgn = 1.0 if s == "R" else -1.0
+            pb[uan].rotation_euler = (0, 0, _sgn * A_ARM * math.sin(t + ph))
+            pb[uan].keyframe_insert("rotation_euler", frame=f)
+            pb[fan].rotation_euler = (0, 0, _sgn * 0.4 * A_ARM * math.sin(t + ph))
+            pb[fan].keyframe_insert("rotation_euler", frame=f)
         pb["root"].location = (0, 0, 0.03 * H * abs(math.sin(t))); pb["root"].keyframe_insert("location", frame=f)
     bpy.ops.object.mode_set(mode="OBJECT")
 
