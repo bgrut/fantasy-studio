@@ -230,7 +230,7 @@ def extract_slots(
     except Exception as e:
         if verbose:
             print(f"[slots] LLM error: {e} — falling back to keyword defaults")
-        _fb = _keyword_fallback(user_prompt); _fb["_user_prompt"] = user_prompt; _fb.setdefault("extra_subjects", _derive_extra_subjects(user_prompt, "") or None)
+        _fb = _keyword_fallback(user_prompt); _fb["_user_prompt"] = user_prompt; _fb.setdefault("extra_subjects", _derive_extra_subjects(user_prompt, "") or None); _fb.setdefault("mount", _derive_mount(user_prompt))
         return SlotExtractionResult(
             slots=_fb,
             raw_response="",
@@ -244,7 +244,7 @@ def extract_slots(
         if verbose:
             print(f"[slots] could not parse JSON from LLM, using keyword fallback")
             print(f"[slots] raw: {raw[:300]}")
-        _fb = _keyword_fallback(user_prompt); _fb["_user_prompt"] = user_prompt; _fb.setdefault("extra_subjects", _derive_extra_subjects(user_prompt, "") or None)
+        _fb = _keyword_fallback(user_prompt); _fb["_user_prompt"] = user_prompt; _fb.setdefault("extra_subjects", _derive_extra_subjects(user_prompt, "") or None); _fb.setdefault("mount", _derive_mount(user_prompt))
         return SlotExtractionResult(
             slots=_fb,
             raw_response=raw,
@@ -259,6 +259,10 @@ def extract_slots(
         _ex = _derive_extra_subjects(user_prompt, (slots.get("subject") or {}).get("identity_phrase") or "")
         if _ex:
             slots["extra_subjects"] = _ex
+    if not slots.get("mount"):
+        _mt = _derive_mount(user_prompt)
+        if _mt:
+            slots["mount"] = _mt
     result = SlotExtractionResult(slots=slots, raw_response=raw, used_defaults=False, notes=validation_notes)
 
     if verbose:
@@ -322,9 +326,18 @@ def _derive_identity_phrase(prompt: str) -> Optional[str]:
     p = re.sub(r"^(a|an|the)?\s*(cinematic\s+)?(showcase|show case|turntable|display|promo(tional)?|beauty)?\s*"
                r"(video|clip|shot|render|scene|footage|film)\s+(of|showing|featuring)\s+", "", p).strip()
     p = re.sub(r"^(a\s+)?(showcase|turntable)\s+(of\s+)?", "", p).strip()
+    # "two samurai warriors fighting" is ONE subject generated twice (the scene
+    # graph duplicates it) — strip the count word and depluralize so the SDXL
+    # reference draws a SINGLE character, not two fused into one mesh.
+    _plural = False
+    _m2 = re.match(r"^(two|three|four|a pair of|a couple of)\s+(.+)$", p)
+    if _m2:
+        p = _m2.group(2)
+        _plural = True
     # Cut at clauses describing place/time/motion — keep the subject head.
     cut_words = (r"\b(driving|walking|running|standing|sitting|flying|swimming|jumping|"
                  r"riding|galloping|sailing|floating|dancing|sprinting|crawling|"
+                 r"fighting|sparring|dueling|battling|eating|drinking|skateboarding|"
                  r"in |on |at |through |across |under |over |during |while |near |inside )")
     m = re.search(cut_words, p)
     head = p[:m.start()] if m else p
@@ -333,7 +346,22 @@ def _derive_identity_phrase(prompt: str) -> Optional[str]:
     words = head.split()
     if not words:
         return None
+    if _plural:
+        words = [_singular(w) for w in words]
     return " ".join(words[:8])
+
+
+_IRREGULAR_SINGULAR = {"men": "man", "women": "woman", "children": "child",
+                       "people": "person", "wolves": "wolf", "knives": "knife"}
+
+
+def _singular(w: str) -> str:
+    """Crude depluralizer for count-word subjects ('warriors'->'warrior')."""
+    if w in _IRREGULAR_SINGULAR:
+        return _IRREGULAR_SINGULAR[w]
+    if len(w) > 3 and w.endswith("s") and not w.endswith(("ss", "us", "is")):
+        return w[:-1]
+    return w
 
 
 def _validate_and_fill(slots: Dict[str, Any], user_prompt: str) -> tuple[Dict[str, Any], List[str]]:
@@ -420,12 +448,32 @@ def _guess_pattern(phrase: str) -> str:
     return "biped"
 
 
+def _derive_mount(prompt: str):
+    """Phase 23 T3: rideable prop — 'a cat riding a skateboard'. The mount is a
+    second generated asset scaled and staged UNDER the hero; the pair translate
+    together instead of the hero gait."""
+    import re
+    p = (prompt or "").lower()
+    m = re.search(r"(?:riding|rides|standing on|on)\s+(?:a|an|his|her|the)\s+"
+                  r"(skateboard|surfboard|snowboard|sled|hoverboard)", p)
+    return {"identity_phrase": m.group(1)} if m else None
+
+
 def _derive_extra_subjects(prompt: str, primary: str) -> list:
     """Detect companion actors: 'a man walking his dog', 'a knight and a dragon',
     'a woman with her cat'. Returns [{identity_phrase, base_pattern}] (max 2)."""
     import re
     p = (prompt or "").lower()
     out, seen = [], set()
+    # "two samurai warriors fighting" — the companion is a SECOND COPY of the
+    # primary subject (cache hit = free). primary is already singularized.
+    m2 = re.match(r"\s*two\s+([a-z][a-z ]{2,40}?)(?=\s+(?:fighting|sparring|dueling|battling|"
+                  r"walking|running|standing|dancing|racing|facing|in|on|at)\b|[,.]|$)", p)
+    if m2:
+        ph2 = m2.group(1).strip(" ,.")
+        if any(k in ph2 for k in _EXTRA_QUADRUPED + _EXTRA_BIPED + _EXTRA_VEHICLE):
+            ident2 = (primary or " ".join(_singular(w) for w in ph2.split())).strip()
+            out.append({"identity_phrase": ident2, "base_pattern": _guess_pattern(ph2)})
     pats = [
         r"(?<=\s)(?:and|with)\s+(?:a|an|his|her|their|the)\s+([a-z][a-z ]{2,30}?)(?=\s+(?:in|on|at|through|across|while|during|walking|running|standing)|[,.]|$)",
         r"(?<=\s)walking\s+(?:his|her|their|the)\s+([a-z][a-z ]{2,30}?)(?=\s+(?:in|on|at|through|across)|[,.]|$)",

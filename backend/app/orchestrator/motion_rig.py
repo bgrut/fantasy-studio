@@ -194,6 +194,7 @@ import numpy as np
 from mathutils import Vector
 
 HERO = "__HERO__"; TOTAL = __TOTAL__; STRIDE = __STRIDE__; TRACK = __TRACK__; FPSV = __FPSV__
+ACTION = "__ACTION__"; PHV = __PHASE__; FACE = __FACE__
 o = bpy.data.objects.get(HERO)
 if o is None or o.type != "MESH":
     __result__ = json.dumps({"ok": False, "reason": "no hero mesh"})
@@ -221,6 +222,27 @@ else:
         SA = Y; side_mid = cy; SWING = 2          # side=Y, forward=X
     else:
         SA = X; side_mid = cx; SWING = 0          # side=X, forward=Y
+
+    # ── FIGHT MODE: face the opponent BEFORE rigging. FACE is the desired
+    # forward sign along the face-off axis (+1 hero, -1 the staged opponent);
+    # if the toe-bias says the mesh faces the other way, spin it 180° about Z
+    # around its own bbox center (world-space rig is built after, so bones land
+    # on the rotated geometry — same trick as the quadruped head-end flip).
+    if ACTION == "fight":
+        import mathutils
+        FAx0 = X if SWING == 2 else Y
+        fmid0 = cx if SWING == 2 else cy
+        low0 = Z < (zmin + 0.10 * H)
+        _fs0 = 1.0 if (int(low0.sum()) > 10 and float(FAx0[low0].mean()) > fmid0) else -1.0
+        if _fs0 != FACE:
+            piv = mathutils.Matrix.Translation(Vector((cx, cy, 0.0)))
+            rotz = mathutils.Matrix.Rotation(math.pi, 4, 'Z')
+            o.matrix_world = piv @ rotz @ piv.inverted() @ o.matrix_world
+            bpy.context.view_layer.update()
+            mw = o.matrix_world
+            V = np.array([list(mw @ v.co) for v in o.data.vertices], dtype=np.float64)
+            X, Y, Z = V[:, 0], V[:, 1], V[:, 2]
+            SA = Y if SWING == 2 else X
 
     hip_z = zmin + 0.50 * H; chest_z = zmin + 0.72 * H; knee_z = zmin + 0.26 * H
     foot_z = zmin + 0.02 * H; neck_z = zmin + 0.82 * H; elbow_z = zmin + 0.62 * H; hand_z = zmin + 0.46 * H
@@ -314,20 +336,44 @@ else:
     A_LEG = 0.30; A_ARM = 0.18   # calm, natural walk — large swings shear thin limbs
     def rot(v):
         e = [0.0, 0.0, 0.0]; e[SWING] = v; return tuple(e)
-    for f in range(1, TOTAL + 1):
-        t = 2 * math.pi * (f - 1) / STRIDE
-        for s, (thn, shn) in legs.items():
-            ph = legph[s]
-            pb[thn].rotation_euler = rot(A_LEG * math.sin(t + ph)); pb[thn].keyframe_insert("rotation_euler", frame=f)
-            pb[shn].rotation_euler = rot(-0.55 * A_LEG * (1 + math.cos(t + ph))); pb[shn].keyframe_insert("rotation_euler", frame=f)
-        for s, (uan, fan) in arms.items():
-            ph = legph["R" if s == "L" else "L"]   # arm opposes same-side leg
-            _sgn = 1.0 if s == "R" else -1.0
-            pb[uan].rotation_euler = (0, 0, _sgn * A_ARM * math.sin(t + ph))
-            pb[uan].keyframe_insert("rotation_euler", frame=f)
-            pb[fan].rotation_euler = (0, 0, _sgn * 0.4 * A_ARM * math.sin(t + ph))
-            pb[fan].keyframe_insert("rotation_euler", frame=f)
-        pb["root"].location = (0, 0, 0.03 * H * abs(math.sin(t))); pb["root"].keyframe_insert("location", frame=f)
+    if ACTION == "fight":
+        # ── Combat cycle: bent-knee stance with a slow weight shift, sharp
+        # alternating arm strikes (squared sine = fast cut, slow recover), and a
+        # breathing root bob. PHV offsets the two fighters half a cycle so the
+        # attacks alternate instead of mirroring.
+        for f in range(1, TOTAL + 1):
+            t = 2 * math.pi * (f - 1) / STRIDE + PHV
+            for s, (thn, shn) in legs.items():
+                ph = legph[s]
+                pb[thn].rotation_euler = rot(0.12 + 0.08 * math.sin(0.5 * t + ph))
+                pb[thn].keyframe_insert("rotation_euler", frame=f)
+                pb[shn].rotation_euler = rot(-0.18 - 0.08 * math.sin(0.5 * t + ph))
+                pb[shn].keyframe_insert("rotation_euler", frame=f)
+            for s, (uan, fan) in arms.items():
+                ph = legph[s]
+                _sgn = 1.0 if s == "R" else -1.0
+                strike = max(0.0, math.sin(t + ph)) ** 2
+                pb[uan].rotation_euler = (0, 0, _sgn * (0.22 + 0.55 * strike))
+                pb[uan].keyframe_insert("rotation_euler", frame=f)
+                pb[fan].rotation_euler = (0, 0, _sgn * 0.45 * strike)
+                pb[fan].keyframe_insert("rotation_euler", frame=f)
+            pb["root"].location = (0, 0, 0.02 * H * math.sin(0.5 * t))
+            pb["root"].keyframe_insert("location", frame=f)
+    else:
+        for f in range(1, TOTAL + 1):
+            t = 2 * math.pi * (f - 1) / STRIDE
+            for s, (thn, shn) in legs.items():
+                ph = legph[s]
+                pb[thn].rotation_euler = rot(A_LEG * math.sin(t + ph)); pb[thn].keyframe_insert("rotation_euler", frame=f)
+                pb[shn].rotation_euler = rot(-0.55 * A_LEG * (1 + math.cos(t + ph))); pb[shn].keyframe_insert("rotation_euler", frame=f)
+            for s, (uan, fan) in arms.items():
+                ph = legph["R" if s == "L" else "L"]   # arm opposes same-side leg
+                _sgn = 1.0 if s == "R" else -1.0
+                pb[uan].rotation_euler = (0, 0, _sgn * A_ARM * math.sin(t + ph))
+                pb[uan].keyframe_insert("rotation_euler", frame=f)
+                pb[fan].rotation_euler = (0, 0, _sgn * 0.4 * A_ARM * math.sin(t + ph))
+                pb[fan].keyframe_insert("rotation_euler", frame=f)
+            pb["root"].location = (0, 0, 0.03 * H * abs(math.sin(t))); pb["root"].keyframe_insert("location", frame=f)
     bpy.ops.object.mode_set(mode="OBJECT")
 
     # ── FORWARD LOCOMOTION + FACE-SIDE TRACKING CAMERA (same engine as the
@@ -340,16 +386,31 @@ else:
     FA = Y if fwd_is_y else X
     fmid = cy if fwd_is_y else cx
     low = Z < (zmin + 0.10 * H)
-    fsign = 1.0 if (int(low.sum()) > 10 and float(FA[low].mean()) > fmid) else -1.0
-    travel = 1.25 * TOTAL / float(FPSV) * fsign   # unified 1.25 m/s walk
+    fsign = FACE if ACTION == "fight" else (1.0 if (int(low.sum()) > 10 and float(FA[low].mean()) > fmid) else -1.0)
+    travel = 0.0 if ACTION == "fight" else 1.25 * TOTAL / float(FPSV) * fsign   # unified 1.25 m/s walk
     base = rig.location.copy()
     base_o = o.location.copy()
     cam = sc.camera
     span = max(H, xspan, yspan)
     midz = (zmin + zmax) / 2.0
+    if ACTION == "fight" and TRACK and cam is not None:
+        # Static duel framing: aim at the midpoint between the fighters (the
+        # opponent stands ~1.6m ahead along the facing), camera off to the side.
+        if fwd_is_y:
+            aim = Vector((cx, cy + fsign * 0.8, midz))
+            cam.location = (cx + span * 2.4, cy + fsign * 0.8, midz + span * 0.45)
+        else:
+            aim = Vector((cx + fsign * 0.8, cy, midz))
+            cam.location = (cx + fsign * 0.8, cy + span * 2.4, midz + span * 0.45)
+        look = aim - Vector(cam.location)
+        cam.rotation_euler = look.to_track_quat("-Z", "Y").to_euler()
     for f in range(1, TOTAL + 1):
         frac = (f - 1) / max(TOTAL - 1, 1)
-        d = travel * frac
+        if ACTION == "fight":
+            # Lunge toward the opponent and recover — alternating via PHV.
+            d = 0.16 * fsign * max(0.0, math.sin(2 * math.pi * (f - 1) / (2 * STRIDE) + PHV))
+        else:
+            d = travel * frac
         rig.location = (base.x + (0 if fwd_is_y else d), base.y + (d if fwd_is_y else 0), base.z)
         rig.keyframe_insert("location", frame=f)
         # CRITICAL: hero must translate WITH the rig — armature-object motion does
@@ -358,7 +419,7 @@ else:
         # quadruped got in the smear-fix round; the biped block predated it.)
         o.location = (base_o.x + (0 if fwd_is_y else d), base_o.y + (d if fwd_is_y else 0), base_o.z)
         o.keyframe_insert("location", frame=f)
-        if TRACK and cam is not None:
+        if ACTION != "fight" and TRACK and cam is not None:
             hx = cx + (0 if fwd_is_y else d); hy = cy + (d if fwd_is_y else 0)
             ahead = travel / max(abs(travel), 1e-9)  # unit sign
             if fwd_is_y:
@@ -371,7 +432,7 @@ else:
             cam.keyframe_insert("rotation_euler", frame=f)
     __result__ = json.dumps({"ok": True, "legs": list(legs.keys()), "arms": list(arms.keys()),
                              "bones": len(pb), "verts": int(len(V)), "total": TOTAL,
-                             "stride": STRIDE, "swing_idx": SWING,
+                             "stride": STRIDE, "swing_idx": SWING, "action": ACTION,
                              "armband_xy": [round(_ax, 2), round(_ay, 2)],
                              "travel": round(travel, 2), "wide": WIDE})
 '''
@@ -497,7 +558,8 @@ def build_wheeled_drive(runner, hero_name: str, total_frames: int, fps: int = 24
 
 def build_skeletal_gait(runner, hero_name: str, base_pattern: str,
                         total_frames: int, fps: int = 24, track_camera: bool = True,
-                        wide=None, verbose: bool = False) -> bool:
+                        wide=None, action: str = "walk", phase: float = 0.0,
+                        face: float = 1.0, verbose: bool = False) -> bool:
     """Rig the (already oriented + textured) hero and bake a procedural gait that
     loops for the whole clip. Returns True if a gait was applied (so the composer
     skips its crude object-translate locomotion). Never raises — on any failure it
@@ -513,7 +575,10 @@ def build_skeletal_gait(runner, hero_name: str, base_pattern: str,
             .replace("__STRIDE__", str(stride))
             .replace("__TRACK__", "True" if track_camera else "False")
             .replace("__FPSV__", str(int(fps)))
-            .replace("__WIDE__", str(wide)))
+            .replace("__WIDE__", str(wide))
+            .replace("__ACTION__", action if action in ("walk", "fight") else "walk")
+            .replace("__PHASE__", f"{float(phase):.4f}")
+            .replace("__FACE__", f"{float(face):.1f}"))
     try:
         res = runner.run("skeletal_gait", "execute_python", {"code": code}, critical=False)
         raw = res.get("result") if isinstance(res, dict) else None

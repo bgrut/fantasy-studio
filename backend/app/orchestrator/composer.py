@@ -2413,7 +2413,7 @@ if (max(xs)-min(xs))>(max(ys)-min(ys)):
     a.rotation_euler.z+=math.radians(90.0); bpy.context.view_layer.update()
 hx=[(h.matrix_world@Vector(c)).x for c in h.bound_box]
 ax=[(a.matrix_world@Vector(c)).x for c in a.bound_box]
-gap=(max(hx)-min(hx))*0.5+(max(ax)-min(ax))*0.5+0.35
+gap=(max(hx)-min(hx))*0.5+(max(ax)-min(ax))*0.5+__PAD__
 a.location.x=h.location.x+gap; a.location.y=h.location.y
 bpy.context.view_layer.update()
 zs=[(a.matrix_world@Vector(c)).z for c in a.bound_box]
@@ -2423,7 +2423,7 @@ __result__=json.dumps({'gap':round(gap,2)})
 
 
 def _spawn_extra_actor(runner, slots, ex, idx, hero_name, total_frames, fps,
-                       run_id, paths, verbose=True):
+                       run_id, paths, action="walk", verbose=True):
     """Phase 23 T1: generate + place + animate a companion actor beside the hero.
 
     v1 scope (intentionally lean): reference->mesh (cached by identity so "two
@@ -2485,16 +2485,148 @@ def _spawn_extra_actor(runner, slots, ex, idx, hero_name, total_frames, fps,
         raise RuntimeError("actor import failed")
     actor = imp.get("name", actor)
 
-    stage = _ACTOR_STAGE_CODE.replace("__HERO__", hero_name).replace("__ACTOR__", actor)
+    # Face-off (fight) puts the opponent AHEAD along the duel axis at sword
+    # distance; companions (walk) stand close beside the hero.
+    _pad = "1.10" if action == "fight" else "0.35"
+    stage = (_ACTOR_STAGE_CODE.replace("__HERO__", hero_name)
+             .replace("__ACTOR__", actor).replace("__PAD__", _pad))
     st = runner.run("actor_stage", "execute_python", {"code": stage}, critical=False)
     if verbose and isinstance(st, dict):
         print(f"[composer] extra actor staged: {st.get('result')}")
 
     if pattern in motion_rig.SKELETAL_PATTERNS:
-        ok = motion_rig.build_skeletal_gait(runner, actor, pattern, total_frames,
-                                            fps, track_camera=False, verbose=verbose)
+        import math as _m
+        ok = motion_rig.build_skeletal_gait(
+            runner, actor, pattern, total_frames, fps, track_camera=False,
+            action=action, phase=(_m.pi if action == "fight" else 0.0),
+            face=-1.0, verbose=verbose)
         if verbose:
-            print(f"[composer] extra actor gait: {'ok' if ok else 'skipped'}")
+            print(f"[composer] extra actor gait: {'ok' if ok else 'skipped'} (action={action})")
+
+
+# Phase 23 T3: MOUNT — stage a rideable prop (skateboard) under the hero, then
+# translate hero+board together with a bob + carve sway; tracking camera. The
+# hero keeps its standing pose (no gait) — riding, not walking.
+_MOUNT_RIDE_CODE = r"""
+import bpy, math, json
+from mathutils import Vector
+h=bpy.data.objects.get('__HERO__'); b=bpy.data.objects.get('__MOUNT__')
+TOTAL=__TOTAL__; FPSV=__FPSV__
+if h is None or b is None:
+    __result__=json.dumps({'ok': False, 'reason': 'missing hero or mount'})
+else:
+    b.rotation_mode='XYZ'; bpy.context.view_layer.update()
+    bx=[(b.matrix_world@Vector(c)).x for c in b.bound_box]; by=[(b.matrix_world@Vector(c)).y for c in b.bound_box]
+    if (max(bx)-min(bx))>(max(by)-min(by)):
+        b.rotation_euler.z+=math.radians(90.0); bpy.context.view_layer.update()
+    hb=[h.matrix_world@Vector(c) for c in h.bound_box]
+    hcx=sum(v.x for v in hb)/8.0; hcy=sum(v.y for v in hb)/8.0
+    bb=[b.matrix_world@Vector(c) for c in b.bound_box]
+    bcx=sum(v.x for v in bb)/8.0; bcy=sum(v.y for v in bb)/8.0
+    b.location.x+=hcx-bcx; b.location.y+=hcy-bcy
+    bpy.context.view_layer.update()
+    bz=[(b.matrix_world@Vector(c)).z for c in b.bound_box]
+    b.location.z+=-min(bz); bpy.context.view_layer.update()
+    deck=max((b.matrix_world@Vector(c)).z for c in b.bound_box)
+    hz=[v.z for v in hb]
+    h.location.z+=deck-min(hz)
+    bpy.context.view_layer.update()
+    sc=bpy.context.scene; sc.frame_start=1; sc.frame_end=TOTAL
+    try: bpy.context.preferences.edit.keyframe_new_interpolation_type='LINEAR'
+    except Exception: pass
+    travel=2.0*TOTAL/float(FPSV)
+    hbase=h.location.copy(); bbase=b.location.copy()
+    cam=sc.camera
+    span=max(max(hz)-min(hz), max(v.x for v in hb)-min(v.x for v in hb),
+             max(v.y for v in hb)-min(v.y for v in hb), 0.6)
+    midz=(min(hz)+max(hz))/2.0+(deck-min(hz))
+    for f in range(1,TOTAL+1):
+        frac=(f-1)/max(TOTAL-1,1); d=travel*frac
+        bob=0.008*math.sin(2*math.pi*frac*7)
+        for ob, base in ((h,hbase),(b,bbase)):
+            ob.location=(base.x, base.y+d, base.z+bob)
+            ob.keyframe_insert('location', frame=f)
+        if cam is not None:
+            cam.location=(hcx+span*2.0, hcy+d+span*2.4, midz+span*0.6)
+            look=Vector((hcx, hcy+d, midz))-Vector(cam.location)
+            cam.rotation_euler=look.to_track_quat('-Z','Y').to_euler()
+            cam.keyframe_insert('location', frame=f); cam.keyframe_insert('rotation_euler', frame=f)
+    __result__=json.dumps({'ok': True, 'deck': round(deck,3), 'travel': round(travel,2)})
+"""
+
+# Real-world long-axis sizes for rideable props (meters).
+_MOUNT_SIZE_M = {"skateboard": 0.82, "surfboard": 1.9, "snowboard": 1.5,
+                 "sled": 1.2, "hoverboard": 0.7}
+
+
+def _spawn_mount(runner, slots, mount, hero_name, total_frames, fps, verbose=True):
+    """Generate + stage a rideable prop under the hero and bake the ride motion.
+    Returns True if the ride animation was applied (composer then skips the
+    hero gait — the board carries the rider)."""
+    import copy
+    import hashlib
+    from pathlib import Path as _P
+    from ..asset_gen import generate_reference, generate_mesh
+    from ..asset_gen.reference import unload_reference_pipeline
+
+    ident = (mount.get("identity_phrase") or "skateboard").strip()
+    cache_dir = _P(__file__).resolve().parents[2] / "renders" / "_actor_cache"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    key = hashlib.md5(ident.encode("utf-8")).hexdigest()[:12]
+    glb = cache_dir / f"{key}.glb"
+
+    if not glb.exists():
+        slots2 = copy.deepcopy(slots)
+        slots2["subject"] = {
+            "name": ident, "base_pattern": "primitive_geo", "shape": None,
+            "library_query": None, "identity_phrase": ident, "pose": None,
+            "color_name": "neutral", "material": "matte", "emissive": False,
+            "scale": 1.0, "location": [0, 0, 0],
+        }
+        slots2.pop("extra_subjects", None); slots2.pop("mount", None)
+        ref2 = cache_dir / f"{key}_ref.png"
+        if verbose:
+            print(f"[composer] mount: generating '{ident}'")
+        generate_reference(slots2, output_path=ref2, style="photoreal", seed=42)
+        try:
+            unload_reference_pipeline()
+            import torch as _t
+            if _t.cuda.is_available():
+                _t.cuda.empty_cache()
+        except Exception:
+            pass
+        try:
+            generate_mesh(ref2, output_path=glb, engine="trellis2", tier="fast",
+                          base_pattern="primitive_geo")
+        except Exception as _ge:
+            if verbose:
+                print(f"[composer] mount: trellis2 failed ({type(_ge).__name__}) -> triposg")
+            generate_mesh(ref2, output_path=glb, engine="triposg", tier="fast",
+                          base_pattern="primitive_geo")
+    elif verbose:
+        print(f"[composer] mount: cache hit for '{ident}'")
+
+    size_m = _MOUNT_SIZE_M.get(ident, 1.0)
+    imp = runner.run("mount_import", "import_mesh_file", {
+        "filepath": str(glb), "name": "Mount", "normalize_size": size_m,
+        "ground_to_z0": True, "join": True, "orientation_fix": None,
+    }, critical=False)
+    if not isinstance(imp, dict) or not imp.get("ok"):
+        raise RuntimeError("mount import failed")
+    mname = imp.get("name", "Mount")
+
+    code = (_MOUNT_RIDE_CODE.replace("__HERO__", hero_name)
+            .replace("__MOUNT__", mname)
+            .replace("__TOTAL__", str(int(total_frames)))
+            .replace("__FPSV__", str(int(fps))))
+    res = runner.run("mount_ride", "execute_python", {"code": code}, critical=False)
+    raw = res.get("result") if isinstance(res, dict) else None
+    import json as _json
+    info = _json.loads(raw) if isinstance(raw, str) else (raw if isinstance(raw, dict) else None)
+    ok = bool(info and info.get("ok"))
+    if verbose:
+        print(f"[composer] mount ride: {'ok' if ok else 'failed'} ({info})")
+    return ok
 
 
 def compose_scene(
@@ -3159,11 +3291,18 @@ def compose_scene(
     # any failure leaves the single-actor scene untouched.
     _extras = (slots.get("extra_subjects") or [])[:1]
     _spawned_extras = 0
+    # Phase 23 T2: ACTION from the prompt — "two samurai warriors fighting"
+    # switches bipeds from the walk gait to the combat cycle (stance + strikes
+    # + lunges, opponents face-off and alternate attacks).
+    _ptxt_a = (slots.get("_user_prompt") or "").lower()
+    _action = "fight" if (base_pattern == "biped" and any(
+        k in _ptxt_a for k in ("fighting", "fight", " duel", "dueling", "sparring", " spar", "battling", " battle"))) else "walk"
     if is_animation and hero_name and _extras and os.environ.get("FS_MULTI_ACTOR", "1") != "0":
         for _ai, _ex in enumerate(_extras, start=2):
             try:
                 _spawn_extra_actor(runner, slots, _ex, _ai, hero_name,
-                                   total_frames, fps, run_id, paths, verbose=verbose)
+                                   total_frames, fps, run_id, paths,
+                                   action=_action, verbose=verbose)
                 _spawned_extras += 1
             except Exception as _ee:
                 if verbose:
@@ -3171,7 +3310,21 @@ def compose_scene(
 
 
     skeletal_done = False
-    if is_animation and hero_name and os.environ.get("FS_SKELETAL_MOTION", "1") != "0":
+    # Phase 23 T3: MOUNT — "a cat riding a skateboard". The board is staged
+    # under the hero and the pair ride together; the gait is skipped (the hero
+    # keeps its standing pose). Failure-gated: any error falls through to the
+    # normal gait path so the scene still works without the prop.
+    _mount = slots.get("mount") if isinstance(slots.get("mount"), dict) else None
+    if is_animation and hero_name and _mount and os.environ.get("FS_MOUNTS", "1") != "0":
+        try:
+            skeletal_done = _spawn_mount(runner, slots, _mount, hero_name,
+                                         total_frames, fps, verbose=verbose)
+        except Exception as _me:
+            if verbose:
+                print(f"[composer] mount failed ({type(_me).__name__}: {_me}) — falling back to gait")
+    if skeletal_done:
+        pass
+    elif is_animation and hero_name and os.environ.get("FS_SKELETAL_MOTION", "1") != "0":
         if used_proc_vehicle or vehicle_wheels_attached or _trellis_vehicle:
             # Wheeled drive: body (+ wheels if any) translate, wheels spin,
             # driving camera. Mode from the user's wording (race / showcase are
@@ -3220,7 +3373,8 @@ def compose_scene(
         elif base_pattern in motion_rig.SKELETAL_PATTERNS:
             skeletal_done = motion_rig.build_skeletal_gait(
                 runner, hero_name, base_pattern, total_frames, fps,
-                wide=(1.7 if _spawned_extras else None), verbose=verbose)
+                wide=(1.7 if _spawned_extras else None),
+                action=_action, phase=0.0, face=1.0, verbose=verbose)
 
     if is_animation and not used_mesh_relative_orbit and not skeletal_done:
         m_type = motion.get("type", "static")
