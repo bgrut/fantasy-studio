@@ -1709,6 +1709,41 @@ def _run_asset_gen(slots: Dict[str, Any], scene: Dict[str, Any], subj: Dict[str,
         os.environ["FS_LAST_MESH_ENGINE"] = engine  # read by the motion/wheels steps
         if verbose:
             print(f"[composer] asset-gen: mesh done in {time.time() - t0:.1f}s → {mesh_glb.name}")
+        # ── SCORED SPIKE RE-ROLL (#125, hard-surface only). Thick cylindrical
+        # spikes resist every in-mesh filter, but they're pure TRELLIS gen
+        # variance (the reference is clean), so re-roll the seed and keep the
+        # cleanest of up to 3 gens. Most gens score 0 → no cost; only spiky ones
+        # pay. Gated to vehicles/hard-surface (organics would false-flag on fur).
+        if engine == "trellis2" and subj.get("base_pattern") not in ("quadruped", "biped"):
+            import shutil as _shutil
+            _best_glb = mesh_glb
+            _best = _spike_score(mesh_glb, subj.get("base_pattern"))
+            _att = 0
+            while _best >= 0.01 and _att < 2:
+                _att += 1
+                _seed = 1000 + _att * 777
+                if verbose:
+                    print(f"[composer] spike re-roll {_att}: score {_best:.1%} → re-gen seed {_seed}")
+                try:
+                    os.environ["FS_TRELLIS_SEED"] = str(_seed)
+                    _cand = work_dir / f"asset_{run_id}_r{_att}.glb"
+                    generate_mesh(ref_png, output_path=_cand, engine="trellis2", tier=tier,
+                                  base_pattern=subj.get("base_pattern"))
+                    _cs = _spike_score(_cand, subj.get("base_pattern"))
+                    if verbose:
+                        print(f"[composer] spike re-roll {_att}: new score {_cs:.1%}")
+                    if _cs < _best:
+                        _best, _best_glb = _cs, _cand
+                except Exception as _re:
+                    if verbose:
+                        print(f"[composer] spike re-roll {_att} failed ({type(_re).__name__}: {_re})")
+                    break
+                finally:
+                    os.environ.pop("FS_TRELLIS_SEED", None)
+            if _best_glb != mesh_glb:
+                _shutil.copy(str(_best_glb), str(mesh_glb))
+            if verbose and _att:
+                print(f"[composer] spike re-roll: kept score {_best:.1%} after {_att} re-roll(s)")
     except Exception as e:
         if verbose:
             print(f"[composer] asset-gen FAILED at mesh step ({type(e).__name__}: {e})")
@@ -2700,6 +2735,68 @@ def _spawn_mount(runner, slots, mount, hero_name, total_frames, fps, verbose=Tru
     if verbose:
         print(f"[composer] mount ride: {'ok' if ok else 'failed'} ({info})")
     return ok
+
+
+def _spike_score(glb_path, base_pattern) -> float:
+    """Multi-scale fused-spike score for HARD-SURFACE meshes (vehicles): the
+    fraction of verts in long, thin needle components (0..1). Used to re-roll
+    spiky TRELLIS gens — the in-Blender filter clears the thin-spike forest, but
+    THICK cylindrical spikes resist removal, so a spiky raw gen is better re-
+    rolled than partly-cleaned. Organics return 0 (fur/tails would false-flag).
+    Validated: spiky ferrari ~2.9%, clean ferrari 0.0% at every scale."""
+    if base_pattern in ("quadruped", "biped"):
+        return 0.0
+    try:
+        import trimesh
+        import numpy as _np
+        m = trimesh.load(str(glb_path), force="mesh")
+        co = _np.asarray(m.vertices, dtype=_np.float64); nv = len(co)
+        if nv < 100:
+            return 0.0
+        span = float(max(_np.ptp(co[:, 0]), _np.ptp(co[:, 1]), _np.ptp(co[:, 2]), 1e-6))
+        offs = [(dx, dy, dz) for dx in (-1, 0, 1) for dy in (-1, 0, 1)
+                for dz in (-1, 0, 1) if (dx, dy, dz) != (0, 0, 0)]
+        worst = 0.0
+        for cellf in (0.02, 0.035, 0.05):     # fine catches thin, coarse catches thick
+            cell = span * cellf
+            gc = _np.floor(co / cell).astype(_np.int64)
+            cells, vcell = _np.unique(gc, axis=0, return_inverse=True)
+            vcell = _np.asarray(vcell).reshape(-1); cl = cells.tolist()
+            cmap = {(c[0], c[1], c[2]): k for k, c in enumerate(cl)}
+            ncc = _np.zeros(len(cl), dtype=_np.int32)
+            for k, c in enumerate(cl):
+                ncc[k] = sum(1 for dx, dy, dz in offs if (c[0] + dx, c[1] + dy, c[2] + dz) in cmap)
+            tend = _np.where(ncc <= 6)[0]
+            if not (0 < len(tend) < int(len(cl) * 0.6)):
+                continue
+            tset = set(tend.tolist()); par = _np.arange(len(cl))
+
+            def _f(a):
+                r = a
+                while par[r] != r:
+                    r = par[r]
+                while par[a] != r:
+                    par[a], a = r, par[a]
+                return r
+            for k in tend.tolist():
+                c = cl[k]
+                for dx, dy, dz in offs:
+                    nb = cmap.get((c[0] + dx, c[1] + dy, c[2] + dz))
+                    if nb is not None and nb in tset:
+                        ra, rb = _f(k), _f(nb)
+                        if ra != rb:
+                            par[rb] = ra
+            roots = _np.array([_f(k) for k in tend]); vk = set()
+            for r in _np.unique(roots):
+                grp = tend[roots == r]; pts = cells[grp].astype(_np.float64) * cell
+                e = _np.sort(pts.max(0) - pts.min(0))
+                if e[2] >= 0.10 * span and e[1] <= 0.06 * span:
+                    vk |= set(grp.tolist())
+            if vk:
+                worst = max(worst, float(_np.isin(vcell, list(vk)).sum()) / nv)
+        return worst
+    except Exception:
+        return 0.0
 
 
 def compose_scene(
