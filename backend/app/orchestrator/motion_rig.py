@@ -337,28 +337,132 @@ else:
     def rot(v):
         e = [0.0, 0.0, 0.0]; e[SWING] = v; return tuple(e)
     if ACTION == "fight":
-        # ── Combat cycle: bent-knee stance with a slow weight shift, sharp
-        # alternating arm strikes (squared sine = fast cut, slow recover), and a
-        # breathing root bob. PHV offsets the two fighters half a cycle so the
-        # attacks alternate instead of mirroring.
+        from mathutils import Matrix
+        # ── SWORD DUEL. Strike direction is FACE*+X (hero faces +X toward the
+        # opponent; the opponent mesh is flipped so it faces -X toward the hero).
+        # Arms are driven in WORLD space (pb.matrix) so the katana traces a real
+        # diagonal kesa cut instead of a small euler wobble. A procedural katana
+        # is bone-parented into the right hand. PHV offsets the two fighters so
+        # one cuts while the other guards, and the blades meet near the midline.
+        fdir = 1.0 if FACE >= 0 else -1.0
+        # AXIS-AWARE forward/side: forward is the narrow horizontal the fighters
+        # are separated along (X when SWING==2, Y when SWING==0); FWD points at
+        # the opponent (×fdir). The hands sweep a centred sword cut in the
+        # forward–vertical plane, so this works regardless of mesh orientation.
+        if SWING == 2:
+            FWD = Vector((fdir, 0.0, 0.0)); SIDEv = Vector((0.0, 1.0, 0.0))
+        else:
+            FWD = Vector((0.0, fdir, 0.0)); SIDEv = Vector((1.0, 0.0, 0.0))
+        UP = Vector((0.0, 0.0, 1.0))
+        uan_R, fan_R = arms.get("R", (None, None))
+        uan_L, fan_L = arms.get("L", (None, None))
+        have_arms = uan_R and fan_R and uan_L and fan_L
+        if have_arms:
+            S_R = Vector(pb[uan_R].bone.head_local)
+            el_R = Vector(pb[uan_R].bone.tail_local)
+            hand_R = Vector(pb[fan_R].bone.tail_local)
+            up_lenR = (el_R - S_R).length or 1e-3
+            reach = ((el_R - S_R).length + (hand_R - el_R).length) or 1e-3
+            S_L = Vector(pb[uan_L].bone.head_local)
+            el_L = Vector(pb[uan_L].bone.tail_local)
+            up_lenL = (el_L - S_L).length or 1e-3
+            for nm in (uan_R, fan_R, uan_L, fan_L):
+                pb[nm].rotation_mode = "QUATERNION"
+            # grip point: both hands clasp the hilt in FRONT of the sternum.
+            chest = Vector((cx, cy, zmin + 0.60 * H))
+
+            def aim(name, head, dirv, frame):
+                p = pb[name]; rest = p.bone.matrix_local
+                d0 = (rest.to_3x3() @ Vector((0, 1, 0))).normalized()
+                dv = dirv.normalized()
+                basis = (d0.rotation_difference(dv).to_matrix() @ rest.to_3x3())
+                p.matrix = Matrix.Translation(head) @ basis.to_4x4()
+                p.keyframe_insert("rotation_quaternion", frame=frame)
+                p.keyframe_insert("location", frame=frame)
+
+            def hand_target(strike):
+                # 0 = sword raised overhead (jodan), 1 = cut driven down+forward.
+                hi = chest + UP * (0.42 * H) + FWD * (0.10 * reach)
+                lo = chest + UP * (-0.12 * H) + FWD * (0.62 * reach)
+                return hi.lerp(lo, strike)
+
+            # ── Procedural katana (steel blade + dark guard + wrapped grip),
+            # built along +Y (the right forearm's rest axis) with the grip at the
+            # hand, then bone-parented so it rigidly tracks the cutting arm.
+            blade_l = max(0.68, 0.95 * reach)   # full katana blade (~0.7 m)
+            def _box(name, sx, sy, sz, cy_off, mat):
+                me = bpy.data.meshes.new(name); ob = bpy.data.objects.new(name, me)
+                bpy.context.scene.collection.objects.link(ob)
+                vs = [(x * sx, y * sy + cy_off, z * sz) for x in (-0.5, 0.5)
+                      for y in (-0.5, 0.5) for z in (-0.5, 0.5)]
+                fs = [(0, 1, 3, 2), (4, 6, 7, 5), (0, 2, 6, 4),
+                      (1, 5, 7, 3), (0, 4, 5, 1), (2, 3, 7, 6)]
+                me.from_pydata(vs, [], fs); me.update()
+                ob.data.materials.append(mat); return ob
+            steel = bpy.data.materials.new("KatanaSteel"); steel.use_nodes = True
+            bsdf = steel.node_tree.nodes.get("Principled BSDF")
+            if bsdf:
+                bsdf.inputs["Base Color"].default_value = (0.62, 0.64, 0.68, 1.0)
+                bsdf.inputs["Metallic"].default_value = 1.0
+                bsdf.inputs["Roughness"].default_value = 0.22
+            dark = bpy.data.materials.new("KatanaGrip"); dark.use_nodes = True
+            db = dark.node_tree.nodes.get("Principled BSDF")
+            if db:
+                db.inputs["Base Color"].default_value = (0.04, 0.04, 0.05, 1.0)
+                db.inputs["Roughness"].default_value = 0.6
+            blade = _box("Katana_blade", 0.016, blade_l, 0.045, blade_l * 0.5 + 0.02, steel)
+            guard = _box("Katana_guard", 0.10, 0.018, 0.10, 0.01, dark)
+            grip = _box("Katana_grip", 0.034, 0.22, 0.034, -0.11, dark)
+            # join + bone-parent need OBJECT mode (we're in POSE for rigging).
+            bpy.ops.object.mode_set(mode="OBJECT")
+            # deselect EVERYTHING first — a stray selection (e.g. the freshly
+            # imported hero) would otherwise be swallowed by the join.
+            bpy.ops.object.select_all(action="DESELECT")
+            bpy.context.view_layer.objects.active = blade
+            blade.select_set(True); guard.select_set(True); grip.select_set(True)
+            bpy.ops.object.join()
+            katana = blade; katana.name = "Katana"
+            bpy.context.view_layer.update()
+            katana.matrix_world = Matrix.Translation(hand_R)
+            katana.parent = rig; katana.parent_type = "BONE"; katana.parent_bone = fan_R
+            bpy.context.view_layer.update()
+            katana.matrix_world = Matrix.Translation(hand_R)
+            bpy.context.view_layer.objects.active = rig; bpy.ops.object.mode_set(mode="POSE")
+
+        STR_CYC = max(int(STRIDE * 1.5), 24)   # frames per attack
         for f in range(1, TOTAL + 1):
-            t = 2 * math.pi * (f - 1) / STRIDE + PHV
+            # cycle phase 0..1; PHV (0 or pi) offsets the two fighters by half
+            u = (((f - 1) / STR_CYC) + (PHV / (2 * math.pi))) % 1.0
+            # wind up slow (0->0.55), cut FAST (0.55->0.78), recover to guard.
+            if u < 0.55:
+                strike = 0.12 * (u / 0.55)
+            elif u < 0.78:
+                strike = 0.12 + 0.88 * ((u - 0.55) / 0.23)
+            else:
+                strike = 1.0 - 0.78 * ((u - 0.78) / 0.22)
+            # Planted fighting stance: a constant forward/back split of the feet
+            # (front foot leads toward the opponent) — NOT animated, so the
+            # world-aimed arms stay attached to a fixed-rest torso. Footwork reads
+            # from the lunge translation below.
             for s, (thn, shn) in legs.items():
-                ph = legph[s]
-                pb[thn].rotation_euler = rot(0.12 + 0.08 * math.sin(0.5 * t + ph))
+                lead = 1.0 if s == "R" else -1.0
+                pb[thn].rotation_euler = rot(lead * 0.20)
                 pb[thn].keyframe_insert("rotation_euler", frame=f)
-                pb[shn].rotation_euler = rot(-0.18 - 0.08 * math.sin(0.5 * t + ph))
+                pb[shn].rotation_euler = rot(-0.16)
                 pb[shn].keyframe_insert("rotation_euler", frame=f)
-            for s, (uan, fan) in arms.items():
-                ph = legph[s]
-                _sgn = 1.0 if s == "R" else -1.0
-                strike = max(0.0, math.sin(t + ph)) ** 2
-                pb[uan].rotation_euler = (0, 0, _sgn * (0.22 + 0.55 * strike))
-                pb[uan].keyframe_insert("rotation_euler", frame=f)
-                pb[fan].rotation_euler = (0, 0, _sgn * 0.45 * strike)
-                pb[fan].keyframe_insert("rotation_euler", frame=f)
-            pb["root"].location = (0, 0, 0.02 * H * math.sin(0.5 * t))
-            pb["root"].keyframe_insert("location", frame=f)
+            if have_arms:
+                ht = hand_target(strike)
+                d = (ht - S_R); d = d / (d.length or 1e-6)
+                elbow = S_R + d * up_lenR
+                aim(uan_R, S_R, d, f)
+                aim(fan_R, elbow, d, f)
+                # left hand supports the hilt (two-handed grip near the right hand)
+                lt = ht - SIDEv * (0.06 * reach) - FWD * (0.04 * reach)
+                dl = (lt - S_L); dl = dl / (dl.length or 1e-6)
+                elbL = S_L + dl * up_lenL
+                aim(uan_L, S_L, dl, f)
+                aim(fan_L, elbL, dl, f)
+        _STRIKE_CYC = STR_CYC
     else:
         for f in range(1, TOTAL + 1):
             t = 2 * math.pi * (f - 1) / STRIDE
@@ -407,8 +511,16 @@ else:
     for f in range(1, TOTAL + 1):
         frac = (f - 1) / max(TOTAL - 1, 1)
         if ACTION == "fight":
-            # Lunge toward the opponent and recover — alternating via PHV.
-            d = 0.16 * fsign * max(0.0, math.sin(2 * math.pi * (f - 1) / (2 * STRIDE) + PHV))
+            # Drive in on the cut, recover on the guard — synced to the strike
+            # envelope (same cycle) so the step lands with the blow.
+            u = (((f - 1) / _STRIKE_CYC) + (PHV / (2 * math.pi))) % 1.0
+            if u < 0.55:
+                _st = 0.12 * (u / 0.55)
+            elif u < 0.78:
+                _st = 0.12 + 0.88 * ((u - 0.55) / 0.23)
+            else:
+                _st = 1.0 - 0.78 * ((u - 0.78) / 0.22)
+            d = 0.22 * fsign * _st
         else:
             d = travel * frac
         rig.location = (base.x + (0 if fwd_is_y else d), base.y + (d if fwd_is_y else 0), base.z)

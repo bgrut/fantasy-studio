@@ -2408,9 +2408,17 @@ import bpy, math, json
 from mathutils import Vector
 h=bpy.data.objects.get('__HERO__'); a=bpy.data.objects.get('__ACTOR__')
 a.rotation_mode='XYZ'; bpy.context.view_layer.update()
-xs=[(a.matrix_world@Vector(c)).x for c in a.bound_box]; ys=[(a.matrix_world@Vector(c)).y for c in a.bound_box]
-if (max(xs)-min(xs))>(max(ys)-min(ys)):
-    a.rotation_euler.z+=math.radians(90.0); bpy.context.view_layer.update()
+if __FIGHT__:
+    # FACE-OFF: the opponent is the SAME cached asset as the hero, so inherit the
+    # hero's EXACT (silhouette-gate-solved) orientation. The fight gate then flips
+    # exactly one of the two 180 deg (via FACE), guaranteeing they square up
+    # antiparallel instead of the unrelated bbox-aspect guess used for companions.
+    h.rotation_mode='XYZ'
+    a.rotation_euler=h.rotation_euler.copy(); bpy.context.view_layer.update()
+else:
+    xs=[(a.matrix_world@Vector(c)).x for c in a.bound_box]; ys=[(a.matrix_world@Vector(c)).y for c in a.bound_box]
+    if (max(xs)-min(xs))>(max(ys)-min(ys)):
+        a.rotation_euler.z+=math.radians(90.0); bpy.context.view_layer.update()
 hx=[(h.matrix_world@Vector(c)).x for c in h.bound_box]
 ax=[(a.matrix_world@Vector(c)).x for c in a.bound_box]
 gap=(max(hx)-min(hx))*0.5+(max(ax)-min(ax))*0.5+__PAD__
@@ -2489,7 +2497,8 @@ def _spawn_extra_actor(runner, slots, ex, idx, hero_name, total_frames, fps,
     # distance; companions (walk) stand close beside the hero.
     _pad = "1.10" if action == "fight" else "0.35"
     stage = (_ACTOR_STAGE_CODE.replace("__HERO__", hero_name)
-             .replace("__ACTOR__", actor).replace("__PAD__", _pad))
+             .replace("__ACTOR__", actor).replace("__PAD__", _pad)
+             .replace("__FIGHT__", "True" if action == "fight" else "False"))
     st = runner.run("actor_stage", "execute_python", {"code": stage}, critical=False)
     if verbose and isinstance(st, dict):
         print(f"[composer] extra actor staged: {st.get('result')}")
