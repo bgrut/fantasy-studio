@@ -1856,6 +1856,64 @@ def _run_asset_gen(slots: Dict[str, Any], scene: Dict[str, Any], subj: Dict[str,
                 "n_barn=len(barn)\n"
                 "if 0 < n_barn <= int(nv*0.05):\n"
                 "    kill=np.unique(np.concatenate([kill, barn]))\n"
+                "# FUSED-SPIKE filter (#125, hard-surface only): long thin NEEDLES welded\n"
+                "# to the body (the ferrari 'strings'). Fused -> not islands; tube-valenced\n"
+                "# -> density/valence prune misses them; their own 3% cell has <20 verts ->\n"
+                "# the barnacle normal test skips them. Detect verts in very sparse fine\n"
+                "# cells, connect them through the mesh edges, and kill components that are\n"
+                "# LONG in one axis and tiny in the other two (a needle). Organics keep\n"
+                "# thin features (fur, tails, ears) -> vehicles/hard-surface only.\n"
+                "# Signal is cell-occupancy TOPOLOGY, not vertex density: a spike tube\n"
+                "# carries rings of verts (dense cells), so it hides from a per-vertex\n"
+                "# count. But a spike is a 1-D CHAIN OF CELLS (each cell ~2 occupied\n"
+                "# neighbours) while the body surface is 2-D (many neighbours). Mark\n"
+                "# low-neighbour 'tendril' cells, connect them, and kill chains that run\n"
+                "# long in one axis. Validated: spiky ferrari -3.1%% verts, clean ferrari 0%%.\n"
+                "n_spike=0\n"
+                "if not ORGANIC:\n"
+                "    cellS=span*0.02\n"
+                "    gc=np.floor(co/cellS).astype(np.int64)\n"
+                "    cells,vcell=np.unique(gc, axis=0, return_inverse=True)\n"
+                "    vcell=np.asarray(vcell).reshape(-1)\n"
+                "    cl=cells.tolist()\n"
+                "    cmap={(c[0],c[1],c[2]):k for k,c in enumerate(cl)}\n"
+                "    offs=[(dx,dy,dz) for dx in(-1,0,1) for dy in(-1,0,1) for dz in(-1,0,1) if (dx,dy,dz)!=(0,0,0)]\n"
+                "    ncc=np.zeros(len(cl), dtype=np.int32)\n"
+                "    for _k,_c in enumerate(cl):\n"
+                "        _cnt=0\n"
+                "        for dx,dy,dz in offs:\n"
+                "            if (_c[0]+dx,_c[1]+dy,_c[2]+dz) in cmap: _cnt+=1\n"
+                "        ncc[_k]=_cnt\n"
+                # nthr<=6 doubles spike coverage vs <=3 while clean meshes stay at
+                # 0%% FP; >=8 starts eating the body shell (swept: 7.7%% spiky / 0%% clean).
+                "    tend=np.where(ncc<=6)[0]\n"
+                "    if 0 < len(tend) < int(len(cl)*0.6):\n"
+                "        tset=set(tend.tolist())\n"
+                "        cpar=np.arange(len(cl), dtype=np.int64)\n"
+                "        def _cf(a):\n"
+                "            r=a\n"
+                "            while cpar[r]!=r: r=cpar[r]\n"
+                "            while cpar[a]!=r: cpar[a],a=r,cpar[a]\n"
+                "            return r\n"
+                "        for _k in tend.tolist():\n"
+                "            _c=cl[_k]\n"
+                "            for dx,dy,dz in offs:\n"
+                "                _nb=cmap.get((_c[0]+dx,_c[1]+dy,_c[2]+dz))\n"
+                "                if _nb is not None and _nb in tset:\n"
+                "                    _ra,_rb=_cf(_k),_cf(_nb)\n"
+                "                    if _ra!=_rb: cpar[_rb]=_ra\n"
+                "        sroots=np.array([_cf(_k) for _k in tend])\n"
+                "        scell=[]\n"
+                "        for _r in np.unique(sroots):\n"
+                "            _grp=tend[sroots==_r]\n"
+                "            _pts=cells[_grp].astype(np.float64)*cellS\n"
+                "            _e=np.sort(_pts.max(0)-_pts.min(0))\n"
+                "            if _e[2]>=0.08*span: scell.extend(_grp.tolist())\n"
+                "        if scell:\n"
+                "            spk=np.where(np.isin(vcell, scell))[0]\n"
+                "            if 0 < len(spk) <= int(nv*0.12):\n"
+                "                n_spike=int(len(spk))\n"
+                "                kill=np.unique(np.concatenate([kill, spk.astype(np.int64)]))\n"
                 "if len(kill):\n"
                 "    bm=bmesh.new(); bm.from_mesh(me); bm.verts.ensure_lookup_table()\n"
                 "    bmesh.ops.delete(bm, geom=[bm.verts[i] for i in kill.tolist()], context='VERTS')\n"
@@ -1867,7 +1925,7 @@ def _run_asset_gen(slots: Dict[str, Any], scene: Dict[str, Any], subj: Dict[str,
                 "# tear-off edges expose interior faces as dark patches -> cull them\n"
                 "for _mt in me.materials:\n"
                 "    if _mt: _mt.use_backface_culling=True\n"
-                "__result__=json.dumps({'islands':int(len(uniq)),'dropped_verts':int(len(kill)),'verts':len(me.vertices)})\n"
+                "__result__=json.dumps({'islands':int(len(uniq)),'dropped_verts':int(len(kill)),'verts':len(me.vertices),'spikes':int(n_spike)})\n"
             )
             _cl = runner.run("trellis2_clean", "execute_python", {"code": _clean_code}, critical=False)
             if verbose and isinstance(_cl, dict):
@@ -1881,15 +1939,21 @@ def _run_asset_gen(slots: Dict[str, Any], scene: Dict[str, Any], subj: Dict[str,
             except Exception:
                 _ci = {}
             _isl = int(_ci.get("islands", 0)); _drp = int(_ci.get("dropped_verts", 0))
+            _spk = int(_ci.get("spikes", 0))
             _tot = max(int(_ci.get("verts", 1)), 1)
             # Organics naturally carry many small fur-card islands — only truly
             # extreme counts indicate a flaky generation there.
             _organic = subj.get("base_pattern") in ("quadruped", "biped")
             _isl_lim, _shard_lim = (400, 0.10) if _organic else (100, 0.025)
-            if _isl >= _isl_lim or _drp / _tot >= _shard_lim:
+            # The fused-spike filter (#125) clears the thin/clustered 'strings', but
+            # a few THICK cylindrical spikes are locally 2-D and resist any grid
+            # filter — so a heavily-spiked gen (>=1.5%% spike verts) is a bad roll:
+            # re-roll for a fresh, clean mesh rather than ship a partly-cleaned one.
+            _spiky = (not _organic) and (_spk / _tot >= 0.015)
+            if _isl >= _isl_lim or _drp / _tot >= _shard_lim or _spiky:
                 if verbose:
                     print(f"[composer] quality gate: flaky gen (islands={_isl}, "
-                          f"shard={_drp/_tot:.1%}) → re-rolling with new seed")
+                          f"shard={_drp/_tot:.1%}, spikes={_spk/_tot:.1%}) → re-rolling with new seed")
                 try:
                     os.environ["FS_TRELLIS_SEED"] = "1337"
                     generate_mesh(ref_png, output_path=mesh_glb, engine="trellis2", tier=tier,
