@@ -336,9 +336,9 @@ def _derive_identity_phrase(prompt: str) -> Optional[str]:
         _plural = True
     # Cut at clauses describing place/time/motion — keep the subject head.
     cut_words = (r"\b(driving|walking|running|standing|sitting|flying|swimming|jumping|"
-                 r"riding|galloping|sailing|floating|dancing|sprinting|crawling|"
-                 r"fighting|sparring|dueling|battling|eating|drinking|skateboarding|"
-                 r"in |on |at |through |across |under |over |during |while |near |inside )")
+                 r"riding|galloping|sailing|floating|dancing|sprinting|crawling|racing|"
+                 r"cooking|fighting|sparring|dueling|battling|eating|drinking|skateboarding|"
+                 r"in |on |at |through |across |under |over |during |while |near |inside |down |along )")
     m = re.search(cut_words, p)
     head = p[:m.start()] if m else p
     head = re.sub(r"^(a|an|the)\s+", "", head).strip(" ,.")
@@ -436,7 +436,8 @@ def _validate_and_fill(slots: Dict[str, Any], user_prompt: str) -> tuple[Dict[st
 
 # Pattern guess for extra actors (deterministic, no LLM dependency).
 _EXTRA_QUADRUPED = ("dog","cat","fox","horse","wolf","rabbit","sheep","cow","lion","tiger","bear","deer","pig","goat","cheetah","puppy","kitten")
-_EXTRA_BIPED = ("man","woman","person","human","boy","girl","kid","child","warrior","samurai","ninja","wizard","knight","robot","soldier","character","alien")
+_EXTRA_BIPED = ("man","woman","person","human","boy","girl","kid","child","warrior","samurai","ninja","wizard","knight","robot","soldier","character","alien",
+                "viking","gladiator","pirate","barbarian","monk","fighter","boxer","skeleton","zombie","spartan","king","queen","guard","mage","sorcerer","witch","hero","villain")
 _EXTRA_VEHICLE = ("car","truck","ferrari","lamborghini","motorcycle","bike","jeep","van","bus")
 
 
@@ -467,7 +468,7 @@ def _derive_extra_subjects(prompt: str, primary: str) -> list:
     out, seen = [], set()
     # "two samurai warriors fighting" — the companion is a SECOND COPY of the
     # primary subject (cache hit = free). primary is already singularized.
-    m2 = re.match(r"\s*two\s+([a-z][a-z ]{2,40}?)(?=\s+(?:fighting|sparring|dueling|battling|"
+    m2 = re.match(r"\s*(?:two|a pair of|a couple of)\s+([a-z][a-z ]{2,40}?)(?=\s+(?:fighting|sparring|dueling|battling|"
                   r"walking|running|standing|dancing|racing|facing|in|on|at)\b|[,.]|$)", p)
     if m2:
         ph2 = m2.group(1).strip(" ,.")
