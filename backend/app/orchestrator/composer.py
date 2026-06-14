@@ -2011,6 +2011,13 @@ def _run_asset_gen(slots: Dict[str, Any], scene: Dict[str, Any], subj: Dict[str,
                 finally:
                     os.environ.pop("FS_TRELLIS_SEED", None)
 
+            # ── SILHOUETTE DE-SPIKE (#125, vehicles): kill the thick cylindrical
+            # spikes ('strings') the geometry filters can't — render the mesh from
+            # 6 axis views and remove verts that project into thin-protrusion
+            # pixels in >=2 views. Validated: clears a spiky ferrari, leaves a
+            # clean one untouched. Vehicles only (trees have legit thin branches).
+            _despike_silhouette(runner, hero_name, subj.get("base_pattern"), verbose=verbose)
+
             # ── TEXTURE DESPECKLE: flaky gens bake floating micro-shards INTO the
             # albedo as isolated dark dots — geometry pruning can't touch paint.
             # Heal pixels far darker than a BRIGHT 8x8 neighborhood (panel lines /
@@ -2797,6 +2804,79 @@ def _spike_score(glb_path, base_pattern) -> float:
         return worst
     except Exception:
         return 0.0
+
+
+# Silhouette de-spike (#125, VEHICLES only): the geometry filters clear thin
+# spikes but thick cylindrical ones are locally 2-D and resist removal. A spike
+# is, however, always a thin PROTRUSION in the rendered silhouette — so render
+# the mesh from the 6 axis views, morphological-open each mask (erase thin
+# protrusions), and any vertex projecting into the (mask − opened) spike pixels
+# in >=2 views is a spike. Robust to 3D ambiguity; matches how spikes look.
+# Trees/organics are excluded (their thin features are legitimate).
+_SIL_DESPIKE_CODE = r'''
+import bpy, bmesh, json
+import numpy as np
+from mathutils import Vector
+o=bpy.data.objects.get("__HERO__"); me=o.data; nv=len(me.vertices)
+V=np.array([list(o.matrix_world@v.co) for v in me.vertices], dtype=np.float64)
+ctr=V.mean(0); mx=float((V.max(0)-V.min(0)).max())
+RES=512; OS=mx*1.15; sc=bpy.context.scene
+prev=(sc.camera,sc.render.engine,sc.render.resolution_x,sc.render.resolution_y,
+      sc.render.filepath,sc.render.film_transparent,sc.render.image_settings.color_mode)
+cam=bpy.data.cameras.new("SilCam"); cam.type="ORTHO"; cam.ortho_scale=OS
+co=bpy.data.objects.new("SilCam",cam); sc.collection.objects.link(co)
+sc.camera=co; sc.render.engine="BLENDER_EEVEE"; sc.render.resolution_x=RES; sc.render.resolution_y=RES
+sc.render.film_transparent=True; sc.render.image_settings.color_mode="RGBA"
+TMP=bpy.app.tempdir+"/_sil_despike.png"
+def er(m,r):
+    for _ in range(r): m=m&np.roll(m,1,0)&np.roll(m,-1,0)&np.roll(m,1,1)&np.roll(m,-1,1)
+    return m
+def di(m,r):
+    for _ in range(r): m=m|np.roll(m,1,0)|np.roll(m,-1,0)|np.roll(m,1,1)|np.roll(m,-1,1)
+    return m
+RAD=4; votes=np.zeros(nv, np.int32)
+try:
+    for dv in [(1,0,0),(-1,0,0),(0,1,0),(0,-1,0),(0,0,1),(0,0,-1)]:
+        d=Vector(dv); co.location=Vector(ctr)-d*mx*2.5
+        co.rotation_euler=d.to_track_quat('-Z','Y').to_euler(); bpy.context.view_layer.update()
+        sc.render.filepath=TMP; bpy.ops.render.render(write_still=True)
+        ri=bpy.data.images.load(TMP, check_existing=False); w,h=ri.size
+        a=np.array(ri.pixels[:],dtype=np.float32).reshape(h,w,4)[::-1,:,3]; bpy.data.images.remove(ri)
+        mask=a>0.5; spike=mask&(~di(er(mask,RAD),RAD))
+        view=np.array(co.matrix_world.inverted()); Vh=np.column_stack([V,np.ones(nv)])
+        cs=(view@Vh.T).T[:,:3]
+        px=(((cs[:,0]/(OS*0.5))*0.5+0.5)*w).astype(int)
+        py=((1-((cs[:,1]/(OS*0.5))*0.5+0.5))*h).astype(int)
+        ok=(px>=0)&(px<w)&(py>=0)&(py<h)
+        votes+=ok & spike[np.clip(py,0,h-1),np.clip(px,0,w-1)]
+finally:
+    (sc.camera,sc.render.engine,sc.render.resolution_x,sc.render.resolution_y,
+     sc.render.filepath,sc.render.film_transparent,sc.render.image_settings.color_mode)=prev
+    bpy.data.objects.remove(co,do_unlink=True); bpy.data.cameras.remove(cam)
+kill=np.where(votes>=2)[0]; nrem=int(len(kill))
+if 0<nrem<=int(nv*0.12):
+    bm=bmesh.new(); bm.from_mesh(me); bm.verts.ensure_lookup_table()
+    bmesh.ops.delete(bm, geom=[bm.verts[i] for i in kill.tolist()], context="VERTS")
+    bm.to_mesh(me); bm.free(); me.update(); bpy.context.view_layer.update()
+    ws=[o.matrix_world@Vector(c) for c in o.bound_box]; o.location.z+=-min(p.z for p in ws)
+    bpy.context.view_layer.update()
+__result__=json.dumps({"removed":nrem,"verts":len(me.vertices)})
+'''
+
+
+def _despike_silhouette(runner, hero_name: str, base_pattern: str, verbose: bool = False):
+    """Render-based spike removal for vehicles (the thick spikes geometry filters
+    miss). Never raises — any failure leaves the mesh untouched."""
+    if base_pattern != "vehicle":
+        return
+    try:
+        res = runner.run("sil_despike", "execute_python",
+                         {"code": _SIL_DESPIKE_CODE.replace("__HERO__", hero_name)}, critical=False)
+        if verbose and isinstance(res, dict):
+            print(f"[composer] silhouette despike: {res.get('result')}")
+    except Exception as e:
+        if verbose:
+            print(f"[composer] silhouette despike skipped ({type(e).__name__}: {e})")
 
 
 def compose_scene(
