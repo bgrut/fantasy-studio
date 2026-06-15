@@ -376,6 +376,44 @@ def _build_reference_prompt(slots: Dict[str, Any], style: str) -> tuple[str, str
             species = hint
             break
 
+    # ── CHARACTER ARCHETYPE enrichment (bipeds). A bare identity like "wizard"
+    # renders as a generic person under the photoreal/A-pose framing — SDXL needs
+    # the COSTUME spelled out (the prior good wizards only worked because the user
+    # typed "fantasy wizard with a staff"). Same idea as the animal/vehicle hints.
+    # Only fires when the identity doesn't already describe the costume, so
+    # "fantasy wizard with a staff" is left untouched.
+    if base_pattern == "biped":
+        char_hints = {
+            "wizard":    "elderly wizard, long flowing robe, tall pointed hat, long white beard, holding a wooden staff, fantasy character",
+            "sorcerer":  "sorcerer, ornate robe, arcane staff, fantasy character",
+            "witch":     "witch, flowing dress, pointed hat, fantasy character",
+            "mage":      "mage, hooded robe, glowing staff, fantasy character",
+            "knight":    "knight in full plate armor, helmet, tabard, medieval",
+            "viking":    "viking warrior, fur and leather armor, round shield, braided beard",
+            "samurai":   "samurai warrior, layered lamellar armor, kabuto helmet, katana at the hip",
+            "ninja":     "ninja, black hooded outfit, face mask, fantasy",
+            "gladiator": "gladiator, roman segmented armor, helmet, shield",
+            "barbarian": "barbarian warrior, fur clothing, leather straps, muscular",
+            "pirate":    "pirate, tricorn hat, long coat, sash, fantasy",
+            "king":      "king, royal robe with fur trim, golden crown",
+            "queen":     "queen, elegant royal gown, crown",
+            "monk":      "monk, simple hooded robe, rope belt",
+            "soldier":   "soldier, military uniform, tactical gear",
+            "robot":     "humanoid robot, sleek metallic armor plating, mechanical joints",
+            "alien":     "humanoid alien, otherworldly features, sci-fi",
+            "angel":     "angel, white robe, large feathered wings",
+            "demon":     "demon, horns, dark menacing armor, fantasy",
+            "astronaut": "astronaut, white space suit, helmet with visor",
+        }
+        cq = " ".join((identity, name, library_query))
+        # skip if the user already described the outfit (robe/armor/etc. present)
+        _has_costume = any(w in cq for w in ("robe", "armor", "armour", "staff", "hat", "cloak", "helmet", "suit", "uniform", "wings"))
+        if not _has_costume:
+            for key, hint in char_hints.items():
+                if key in cq:
+                    species = hint
+                    break
+
     # ── VEHICLE-TYPE shape descriptor — the silhouette must match the type the
     # user asked for (a sports car must NOT come out an SUV). These strong shape
     # phrases, combined with a LOWER depth-lock for vehicles, let SDXL render the

@@ -120,9 +120,8 @@ else:
     samp=[]
     for i in range(TOTAL):
         sc.frame_set(1+(i*step)%max(1,bvh_len-1)); bpy.context.view_layer.update()
-        hwm=swm("Hips")
         dirs={c:((swm(b).to_3x3()@Vector((0,1,0))).normalized() if swm(b) else None) for c,b in MAP.items()}
-        samp.append((dirs, hwm.translation.copy(), hwm.to_3x3()))
+        samp.append((dirs, swm("Hips").translation.copy()))
     hip0=samp[0][1]
     slu=swm("LeftUpLeg"); slf=swm("LeftFoot")
     sleg=(Vector(slu.translation)-Vector(slf.translation)).length or 1.0
@@ -134,11 +133,20 @@ else:
     if sl.length>1e-4 and hl.length>1e-4:
         sl.normalize(); hl.normalize()
         yaw=math.atan2(sl.cross(hl).z, sl.dot(hl)); Rz=Matrix.Rotation(yaw,3,'Z')
-        samp=[({c:(Rz@v if v else None) for c,v in dd.items()}, hip0+Rz@(hp-hip0), Rz@hr) for dd,hp,hr in samp]
-    # ROOT FACING: retarget the hips orientation so the WHOLE body (torso/head/
-    # arms) faces the walk direction — without this the legs walk one way while
-    # the upper body keeps the rest facing (the 'torso facing backward' bug).
-    offh=RB["hips"]@samp[0][2].inverted()
+        samp=[({c:(Rz@v if v else None) for c,v in dd.items()}, hip0+Rz@(hp-hip0)) for dd,hp in samp]
+    # ROOT FACING (robust): yaw the WHOLE body to face the TRAVEL direction (where
+    # the legs actually carry it). Travel is an unambiguous DIRECTION (not a
+    # symmetric axis), so there's no 180-deg flip problem and torso/head/legs/feet
+    # all agree by construction — fixes the 'torso facing backward' bug on any
+    # gate-oriented character. (My earlier hips offset cancelled the yaw and
+    # anchored the torso to the rest facing, which is why it still faced wrong.)
+    hero_fwd=(RB["foot_L"]@Vector((0,1,0))); hero_fwd.z=0
+    travel=(samp[-1][1]-samp[0][1]).copy(); travel.z=0
+    hips_target=RB["hips"]
+    if hero_fwd.length>1e-3 and travel.length>1e-3:
+        hero_fwd.normalize(); travel.normalize()
+        th=math.atan2(hero_fwd.cross(travel).z, hero_fwd.dot(travel))
+        hips_target=Matrix.Rotation(th,3,'Z')@RB["hips"]
     for pb in rig.pose.bones: pb.rotation_mode="QUATERNION"
     sc.frame_start=1; sc.frame_end=TOTAL
     try: bpy.context.preferences.edit.keyframe_new_interpolation_type="LINEAR"
@@ -155,12 +163,12 @@ else:
         pb.keyframe_insert("rotation_quaternion",frame=frame)
     path=[]
     for i in range(TOTAL):
-        f=1+i; dirs,hp,hr=samp[i]
+        f=1+i; dirs,hp=samp[i]
         dx=(hp.x-hip0.x)*scale; dy=(hp.y-hip0.y)*scale; dz=(hp.z-hip0.z)*scale*0.5
         rig.location=(base.x+dx,base.y+dy,base.z+dz); rig.keyframe_insert("location",frame=f)
         o.location=(baseo.x+dx,baseo.y+dy,baseo.z+dz); o.keyframe_insert("location",frame=f)
         bpy.context.view_layer.update()
-        aim_full("hips", offh@hr, f)   # root faces the walk direction
+        aim_full("hips", hips_target, f)   # whole body faces the travel direction
         for c in ORDER:
             d=dirs.get(c)
             if d is None: continue
