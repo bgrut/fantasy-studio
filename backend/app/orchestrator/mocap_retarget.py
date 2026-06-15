@@ -76,6 +76,16 @@ names=[s[0] for s in segs]; dmat=np.empty((len(V),len(segs)))
 for bi,(nm,h,t) in enumerate(segs):
     seg=t-h; L2=max(float(seg@seg),1e-9); u=np.clip(((V-h)@seg)/L2,0,1)
     proj=h[None,:]+u[:,None]*seg[None,:]; dmat[:,bi]=np.linalg.norm(V-proj,axis=1)
+# SAME-SIDE limb constraint: a vertex clearly on one side of the centreline must
+# NOT bind to the opposite side's leg/arm bones. Without this, thin close-set
+# legs (e.g. a lanky wizard) bind to BOTH legs and merge into a blob when the
+# stride pulls them apart. Spine/chest/neck/head/hips stay central (unconstrained).
+_mar=0.05*H
+for bi,nm in enumerate(names):
+    if nm.endswith("_L"):       # _L limbs sit on the SA<smid side
+        dmat[SA>smid+_mar, bi]=1e9
+    elif nm.endswith("_R"):
+        dmat[SA<smid-_mar, bi]=1e9
 K=min(4,dmat.shape[1]); idxK=np.argsort(dmat,axis=1)[:,:K]; dK=np.take_along_axis(dmat,idxK,1)
 wK=1.0/np.maximum(dK,1e-6)**2; wK/=wK.sum(1,keepdims=True); wK[wK<0.03]=0; wK/=np.maximum(wK.sum(1,keepdims=True),1e-9)
 amod=o.modifiers.new("HeroArmature","ARMATURE"); amod.object=rig
@@ -127,26 +137,18 @@ else:
     sleg=(Vector(slu.translation)-Vector(slf.translation)).length or 1.0
     hleg=(Vector(rig.pose.bones["upleg_L"].head)-Vector(rig.pose.bones["foot_L"].head)).length or 1.0
     scale=hleg/sleg
-    # frame-align: yaw about Z so source left-right axis matches the hero's
-    sl=(samp[0][0]["uparm_L"]-samp[0][0]["uparm_R"]).copy(); sl.z=0
-    hl=((RB["uparm_L"]@Vector((0,1,0)))-(RB["uparm_R"]@Vector((0,1,0)))); hl.z=0
-    if sl.length>1e-4 and hl.length>1e-4:
-        sl.normalize(); hl.normalize()
-        yaw=math.atan2(sl.cross(hl).z, sl.dot(hl)); Rz=Matrix.Rotation(yaw,3,'Z')
-        samp=[({c:(Rz@v if v else None) for c,v in dd.items()}, hip0+Rz@(hp-hip0)) for dd,hp in samp]
-    # ROOT FACING (robust): yaw the WHOLE body to face the TRAVEL direction (where
-    # the legs actually carry it). Travel is an unambiguous DIRECTION (not a
-    # symmetric axis), so there's no 180-deg flip problem and torso/head/legs/feet
-    # all agree by construction — fixes the 'torso facing backward' bug on any
-    # gate-oriented character. (My earlier hips offset cancelled the yaw and
-    # anchored the torso to the rest facing, which is why it still faced wrong.)
+    # FRAME-ALIGN by FORWARD — keep the body at the REFERENCE orientation (like
+    # the procedural gait / animals / cars) and rotate the MOCAP so the clip's
+    # travel maps to the hero's reference forward (the foot-bone direction). The
+    # character then walks in the direction it already FACES; we do NOT re-orient
+    # the torso (re-orienting it was what flipped the torso vs the legs/feet).
+    Rz=Matrix.Identity(3)
     hero_fwd=(RB["foot_L"]@Vector((0,1,0))); hero_fwd.z=0
-    travel=(samp[-1][1]-samp[0][1]).copy(); travel.z=0
-    hips_target=RB["hips"]
-    if hero_fwd.length>1e-3 and travel.length>1e-3:
-        hero_fwd.normalize(); travel.normalize()
-        th=math.atan2(hero_fwd.cross(travel).z, hero_fwd.dot(travel))
-        hips_target=Matrix.Rotation(th,3,'Z')@RB["hips"]
+    src_tr=(samp[-1][1]-samp[0][1]).copy(); src_tr.z=0
+    if hero_fwd.length>1e-3 and src_tr.length>1e-3:
+        hero_fwd.normalize(); src_tr.normalize()
+        yaw=math.atan2(src_tr.cross(hero_fwd).z, src_tr.dot(hero_fwd)); Rz=Matrix.Rotation(yaw,3,'Z')
+        samp=[({c:(Rz@v if v else None) for c,v in dd.items()}, hip0+Rz@(hp-hip0)) for dd,hp in samp]
     for pb in rig.pose.bones: pb.rotation_mode="QUATERNION"
     sc.frame_start=1; sc.frame_end=TOTAL
     try: bpy.context.preferences.edit.keyframe_new_interpolation_type="LINEAR"
@@ -168,7 +170,8 @@ else:
         rig.location=(base.x+dx,base.y+dy,base.z+dz); rig.keyframe_insert("location",frame=f)
         o.location=(baseo.x+dx,baseo.y+dy,baseo.z+dz); o.keyframe_insert("location",frame=f)
         bpy.context.view_layer.update()
-        aim_full("hips", hips_target, f)   # whole body faces the travel direction
+        # hips stays at REST orientation (= reference facing); we do NOT retarget
+        # the root rotation, so the torso never flips away from the reference.
         for c in ORDER:
             d=dirs.get(c)
             if d is None: continue
