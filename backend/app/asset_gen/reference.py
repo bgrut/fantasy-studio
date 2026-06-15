@@ -88,7 +88,7 @@ PATTERN_REFERENCE_FRAMING: Dict[str, str] = {
 # Negative-prompt additions per pattern — explicitly veto problematic poses
 PATTERN_NEGATIVE: Dict[str, str] = {
     "quadruped": "running, jumping, leaping, mid-action, motion blur, dynamic pose, legs in the air, tilted, perspective distortion, wispy fur strands, flyaway hair, shaggy fuzzy silhouette, long unkempt fur",
-    "biped":     "dynamic pose, motion blur, running, jumping, tilted, perspective distortion, cropped",
+    "biped":     "dynamic pose, motion blur, running, jumping, tilted, perspective distortion, cropped, anatomy figure, ecorche, flayed, skinless, exposed muscle, muscle suit, x-ray, medical illustration, red and blue veins, nude, naked",
     "vehicle":   "moving, motion blur, tilted, perspective distortion",
 }
 
@@ -404,6 +404,16 @@ def _build_reference_prompt(slots: Dict[str, Any], style: str) -> tuple[str, str
             "angel":     "angel, white robe, large feathered wings",
             "demon":     "demon, horns, dark menacing armor, fantasy",
             "astronaut": "astronaut, white space suit, helmet with visor",
+            # generic humans need CLOTHES spelled out or SDXL renders a shirtless
+            # anatomy/muscle-suit figure. Order: woman/person before "man" (which
+            # is a substring of "woman") so the right one matches first.
+            "woman":     "a woman wearing a casual t-shirt and jeans, fully clothed, everyday outfit",
+            "girl":      "a girl wearing casual everyday clothes, fully clothed",
+            "boy":       "a boy wearing casual everyday clothes, fully clothed",
+            "person":    "a person wearing a casual t-shirt and jeans, fully clothed, everyday outfit",
+            "human":     "a person wearing a casual t-shirt and jeans, fully clothed, everyday outfit",
+            "man":       "a man wearing a casual t-shirt and jeans, fully clothed, everyday outfit",
+            "guy":       "a man wearing casual everyday clothes, fully clothed",
         }
         cq = " ".join((identity, name, library_query))
         # skip if the user already described the outfit (robe/armor/etc. present)
