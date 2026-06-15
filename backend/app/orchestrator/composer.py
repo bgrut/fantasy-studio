@@ -3763,6 +3763,15 @@ def compose_scene(
             )
             runner.run("tree_sway", "execute_python", {"code": sway_code})
 
+    # 10b. Phase 25 CINEMATOGRAPHY — replace the flat side-track with a cinematic
+    # camera move (3/4-front tracking push-in for a solo walking character, which
+    # also shows the face/costume). Solo bipeds only for now; vehicles, animals,
+    # fights and multi-actor scenes keep their tuned cameras. Failure-safe.
+    if (is_animation and hero_name and base_pattern == "biped" and skeletal_done
+            and not _spawned_extras and _action != "fight"):
+        from . import cinematography
+        cinematography.build_cinematic_camera(runner, hero_name, "walk", total_frames, verbose=verbose)
+
     # 11. Verify (informational — we don't abort on failure)
     verify_result = runner.run("verify", "hero_verify", {})
     if verbose and isinstance(verify_result, dict):
