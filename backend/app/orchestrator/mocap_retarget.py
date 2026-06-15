@@ -174,9 +174,56 @@ else:
         # the root rotation, so the torso never flips away from the reference.
         for c in ORDER:
             d=dirs.get(c)
+            # ARM STRAIGHTEN: the T-pose->arms-down retarget over-bends the elbow
+            # into a stubby 'T-rex' pose. Bias the forearm/hand toward the UPPER
+            # arm direction so the arm swings as a natural near-straight line.
+            if c in ("lowarm_L","hand_L") and dirs.get("uparm_L") is not None and d is not None:
+                d=(dirs["uparm_L"]*0.7+d*0.3).normalized()
+            elif c in ("lowarm_R","hand_R") and dirs.get("uparm_R") is not None and d is not None:
+                d=(dirs["uparm_R"]*0.7+d*0.3).normalized()
             if d is None: continue
             aim(c,d); rig.pose.bones[c].keyframe_insert("rotation_quaternion",frame=f)
         path.append((base.x+dx, base.y+dy, baseo.z))
+    # DE-CHOPPER: gaussian-smooth the baked bone curves to kill the small
+    # frame-to-frame twist jitter the per-bone aim introduces, so the motion
+    # reads smooth/continuous instead of choppy. (Keyframes are continuous
+    # quaternions from pb.matrix, so component-wise smoothing is safe.)
+    act=rig.animation_data.action if rig.animation_data else None
+    if act:
+        fcs=[]
+        if hasattr(act,"fcurves") and len(getattr(act,"fcurves",[])):
+            fcs=list(act.fcurves)
+        else:   # Blender 4.4+ slotted actions
+            for lay in getattr(act,"layers",[]):
+                for st in lay.strips:
+                    for cb in getattr(st,"channelbags",[]):
+                        fcs+=list(cb.fcurves)
+        # group quaternion components per bone so we can fix SIGN CONTINUITY (q and
+        # -q are the same rotation; smoothing components across a sign flip would
+        # corrupt the pose — this is what threw the arms up). Flip negatives first.
+        from collections import defaultdict as _dd
+        qgrp=_dd(dict); flat=[]
+        for fc in fcs:
+            if fc.data_path.endswith("rotation_quaternion"):
+                qgrp[fc.data_path][fc.array_index]=fc
+            else:
+                flat.append(fc)
+        for dp,comp in qgrp.items():
+            if len(comp)==4:
+                f=[comp[0],comp[1],comp[2],comp[3]]; n=len(f[0].keyframe_points)
+                for i in range(1,n):
+                    dot=sum(f[k].keyframe_points[i].co[1]*f[k].keyframe_points[i-1].co[1] for k in range(4))
+                    if dot<0:
+                        for k in range(4): f[k].keyframe_points[i].co[1]=-f[k].keyframe_points[i].co[1]
+            flat.extend(comp.values())
+        ker=(0.06,0.24,0.40,0.24,0.06)
+        for fc in flat:
+            kp=fc.keyframe_points; n=len(kp)
+            if n<5: continue
+            v=[p.co[1] for p in kp]
+            for i in range(2,n-2):
+                kp[i].co[1]=ker[0]*v[i-2]+ker[1]*v[i-1]+ker[2]*v[i]+ker[3]*v[i+1]+ker[4]*v[i+2]
+            fc.update()
     bpy.data.objects.remove(src, do_unlink=True)
     # ── side-tracking camera following the walk
     cam=sc.camera
