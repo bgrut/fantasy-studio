@@ -3620,6 +3620,22 @@ def compose_scene(
                     "except Exception: pass\n"
                     "__result__='lit'\n"
                 )}, critical=False)
+        elif base_pattern == "biped" and not _spawned_extras and _action != "fight":
+            # Phase 24: a SOLO biped walking/running uses real CMU mocap
+            # (retargeted) instead of the procedural gait — far more lifelike.
+            # Fight (paired duel) + multi-actor stay on the procedural path for
+            # now; any mocap failure falls back to the procedural gait.
+            from . import mocap_retarget
+            _mact = "run" if any(k in _ptxt_a for k in ("running", "sprint", "jog", "runs ")) else "walk"
+            import hashlib as _hl
+            _seed = int(_hl.md5((_ptxt_a or "x").encode()).hexdigest(), 16)
+            skeletal_done = mocap_retarget.build_mocap_motion(
+                runner, hero_name, _mact, total_frames, fps,
+                track_camera=True, wide=1.0, seed=_seed, verbose=verbose)
+            if not skeletal_done:
+                skeletal_done = motion_rig.build_skeletal_gait(
+                    runner, hero_name, base_pattern, total_frames, fps,
+                    action=_action, phase=0.0, face=1.0, verbose=verbose)
         elif base_pattern in motion_rig.SKELETAL_PATTERNS:
             skeletal_done = motion_rig.build_skeletal_gait(
                 runner, hero_name, base_pattern, total_frames, fps,
