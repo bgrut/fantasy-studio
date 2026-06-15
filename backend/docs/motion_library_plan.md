@@ -134,6 +134,39 @@ These are **mesh-quality** problems, independent of the motion library:
 Recommendation: run the motion-library build and a small mesh-quality pass in
 parallel, since they touch different code.
 
+## 7b. P1 retargeter — VALIDATED (2026-06-15)
+
+The retargeter works: a CMU walk (02_01.bvh) retargeted onto the auto-rigged
+TRELLIS man produces a natural walk cycle (real leg swing / weight shift / foot
+timing) that clearly beats the procedural walk. **Validation gate PASSED.**
+
+Working recipe (proven in renders/_ab/verify_retarget.py):
+1. Auto-rig: canonical 19-bone skeleton (landmark-placed) + MANUAL nearest-bone
+   skin (K=2, 1/d^3, thresh 0.22). **Do NOT `o.parent=rig`** — the armature
+   modifier alone deforms; parenting double-applies translation → shards.
+2. Import BVH (`import_anim.bvh`, axis_forward='-Z', axis_up='Y' → Spine +Z up,
+   LeftUpLeg -Z down, correct).
+3. **Frame-align (critical):** the BVH skeleton faces the opposite way from the
+   hero, so its "left" bones sit on the hero's RIGHT in world → aiming crossed
+   the limbs → shards. Fix: compute a yaw about Z that maps source left-right
+   axis (LeftArm−RightArm) to hero left-right, apply to every source dir + the
+   hip displacement.
+4. Retarget per frame, parents-before-children, by `pb.matrix` world aim (the
+   fight-mode method): aim each canonical bone along its mapped source bone's
+   world direction, `view_layer.update()` between bones, keyframe rotation.
+   Hips stays at rest orientation; forward translation = scaled source-hip
+   horizontal displacement (scale = hero_leg/src_leg), co-translate rig + mesh.
+5. Sample BVH at 24fps (every 5th frame; CMU is 120fps).
+
+Two bugs that caused the early "exploding shards": (a) limb-crossing from the
+missing frame-align yaw; (b) double-transform from `o.parent=rig` + armature
+modifier + setting both locations.
+
+OPEN polish: a thin shard at one shoulder (clavicle/upper-arm skin smear where
+the arm meets the torso). Next: leave clav at rest OR smooth shoulder weights;
+then formalize into app/orchestrator/{autorig,mocap_retarget}.py, build the
+named/random catalog, wire to the scene-graph `action` slot.
+
 ## 8. Vision check
 
 "Anything a user types should come out correctly," everything moves seamlessly,
