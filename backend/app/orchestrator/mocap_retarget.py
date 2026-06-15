@@ -64,39 +64,94 @@ def mk(n,h,t,p=None):
 hips=mk("hips",pt(0,0.50),pt(0,0.55)); spine=mk("spine",pt(0,0.55),pt(0,0.62),hips)
 chest=mk("chest",pt(0,0.62),pt(0,0.72),spine); neck=mk("neck",pt(0,0.78),pt(0,0.86),chest)
 mk("head",pt(0,0.86),pt(0,1.0),neck)
+# ADAPTIVE ARM PLACEMENT — lay the arm bones along the REAL arm line
+# (shoulder->hand), DETECTED from the mesh, instead of a flat horizontal T.
+# TRELLIS bipeds come in an arms-out/down A-pose (hands sit ~0.18H BELOW the
+# shoulders); a flat-T skeleton bound to drooping arms is exactly what sheared
+# the geometry into "string arms". zf=height frac, latS=signed lateral offset.
+_zf=(Z-zmin)/H; _latS=(SA-smid)
+_sb=(_zf>=0.76)&(_zf<0.82)
+_shoff=float(np.percentile(np.abs(_latS[_sb]),85)) if int(_sb.sum())>5 else 0.12*H
+_shoff=max(_shoff,0.06*H)
 for s in ("L","R"):
-    a=(amax-smid) if s=="R" else (amin-smid); lg=(0.10*H) if s=="R" else (-0.10*H)
-    cl=mk("clav_"+s,pt(0,0.80),pt(a*0.30,0.80),chest)
-    ua=mk("uparm_"+s,pt(a*0.30,0.80),pt(a*0.62,0.80),cl)
-    fa=mk("lowarm_"+s,pt(a*0.62,0.80),pt(a*0.92,0.80),ua); mk("hand_"+s,pt(a*0.92,0.80),pt(a*1.0,0.80),fa)
+    sgn=-1.0 if s=="L" else 1.0; lg=sgn*0.10*H
+    sh_lat=sgn*_shoff
+    # detect the hand: lowest vertex that is clearly OUTBOARD on this side
+    _side=(np.sign(_latS)==sgn)&(np.abs(_latS)>0.55*_shoff)&(_zf<0.80)&(_zf>0.28)
+    if int(_side.sum())>8:
+        _zz=Z[_side]; _jl=int(np.argmin(_zz))
+        hand_lat=float(_latS[_side][_jl]); hand_zf=float((_zz[_jl]-zmin)/H)
+        if abs(hand_lat)<0.5*_shoff or hand_zf>0.78 or hand_zf<0.30:
+            hand_lat=sgn*0.40*H; hand_zf=0.52     # detection unreliable -> A-pose default
+    else:
+        hand_lat=sgn*0.40*H; hand_zf=0.52
+    _al=lambda t: sh_lat+(hand_lat-sh_lat)*t      # lateral along shoulder->hand
+    _az=lambda t: 0.80+(hand_zf-0.80)*t           # height  along shoulder->hand
+    cl=mk("clav_"+s,pt(0,0.80),pt(sh_lat,0.80),chest)
+    ua=mk("uparm_"+s,pt(_al(0.0),_az(0.0)),pt(_al(0.45),_az(0.45)),cl)
+    fa=mk("lowarm_"+s,pt(_al(0.45),_az(0.45)),pt(_al(0.85),_az(0.85)),ua)
+    mk("hand_"+s,pt(_al(0.85),_az(0.85)),pt(_al(1.0),_az(1.0)),fa)
     th=mk("upleg_"+s,pt(lg,0.50),pt(lg,0.28),hips); sh=mk("lowleg_"+s,pt(lg,0.28),pt(lg,0.05),th)
     mk("foot_"+s,pt(lg,0.05),pt(lg,0.0,0.12),sh)
 bpy.ops.object.mode_set(mode="OBJECT")
-names=[s[0] for s in segs]; dmat=np.empty((len(V),len(segs)))
-for bi,(nm,h,t) in enumerate(segs):
-    seg=t-h; L2=max(float(seg@seg),1e-9); u=np.clip(((V-h)@seg)/L2,0,1)
-    proj=h[None,:]+u[:,None]*seg[None,:]; dmat[:,bi]=np.linalg.norm(V-proj,axis=1)
-# SAME-SIDE limb constraint: a vertex clearly on one side of the centreline must
-# NOT bind to the opposite side's leg/arm bones. Without this, thin close-set
-# legs (e.g. a lanky wizard) bind to BOTH legs and merge into a blob when the
-# stride pulls them apart. Spine/chest/neck/head/hips stay central (unconstrained).
-_mar=0.05*H
-for bi,nm in enumerate(names):
-    if nm.endswith("_L"):       # _L limbs sit on the SA<smid side
-        dmat[SA>smid+_mar, bi]=1e9
-    elif nm.endswith("_R"):
-        dmat[SA<smid-_mar, bi]=1e9
-K=min(4,dmat.shape[1]); idxK=np.argsort(dmat,axis=1)[:,:K]; dK=np.take_along_axis(dmat,idxK,1)
-wK=1.0/np.maximum(dK,1e-6)**2; wK/=wK.sum(1,keepdims=True); wK[wK<0.03]=0; wK/=np.maximum(wK.sum(1,keepdims=True),1e-9)
-amod=o.modifiers.new("HeroArmature","ARMATURE"); amod.object=rig
-for bi,nm in enumerate(names):
-    wv=(wK*(idxK==bi)).sum(1); lv=np.where(wv>1e-4)[0]
-    if not len(lv): continue
-    vg=o.vertex_groups.get(nm) or o.vertex_groups.new(name=nm)
-    q=np.round(wv[lv]*63).astype(np.int64)
-    for L in np.unique(q):
-        if L: vg.add(lv[q==L].tolist(),float(L)/63.0,"REPLACE")
-__result__=json.dumps({"ok":True,"H":round(float(H),3),"side":"X" if sx else "Y","bones":len(arm.bones)})
+amod=o.modifiers.get("HeroArmature") or o.modifiers.new("HeroArmature","ARMATURE"); amod.object=rig
+# ── SMOOTH SKIN via a watertight VOXEL PROXY + bone-heat, weights transferred to
+# the detail mesh. Bone-heat fails on raw TRELLIS shells (non-watertight -> empty
+# weights), but a voxel remesh is closed/manifold so it succeeds, giving smooth
+# deltoid/shoulder/elbow falloff instead of crude nearest-bone steps. Weights come
+# back via data_transfer (nearest-interpolated). Falls back to manual nearest-bone
+# on ANY problem, so this can never bind worse than before.
+skin_mode="manual"
+try:
+    bpy.ops.object.select_all(action='DESELECT')
+    proxy=o.copy(); proxy.data=o.data.copy(); proxy.name="HeroProxy"
+    for _m in list(proxy.modifiers): proxy.modifiers.remove(_m)
+    bpy.context.scene.collection.objects.link(proxy)
+    _rm=proxy.modifiers.new("rm","REMESH"); _rm.mode='VOXEL'; _rm.voxel_size=max(0.012,H/110.0)
+    bpy.context.view_layer.objects.active=proxy; proxy.select_set(True)
+    bpy.ops.object.modifier_apply(modifier="rm")
+    bpy.ops.object.select_all(action='DESELECT')
+    proxy.select_set(True); rig.select_set(True); bpy.context.view_layer.objects.active=rig
+    bpy.ops.object.parent_set(type='ARMATURE_AUTO')   # bone-heat onto the watertight proxy
+    proxy.parent=None
+    _cov=sum(1 for v in proxy.data.vertices if len(v.groups))
+    if not len(proxy.vertex_groups) or _cov < 0.6*len(proxy.data.vertices):
+        raise RuntimeError("boneheat_sparse")
+    for vg in proxy.vertex_groups:
+        if vg.name not in o.vertex_groups: o.vertex_groups.new(name=vg.name)
+    bpy.ops.object.select_all(action='DESELECT')
+    o.select_set(True); proxy.select_set(True); bpy.context.view_layer.objects.active=proxy
+    bpy.ops.object.data_transfer(data_type='VGROUP_WEIGHTS', vert_mapping='POLYINTERP_NEAREST',
+                                 layers_select_src='ALL', layers_select_dst='NAME')
+    skin_mode="voxel_proxy"
+except Exception as _e:
+    skin_mode="manual("+type(_e).__name__+")"
+finally:
+    _p=bpy.data.objects.get("HeroProxy")
+    if _p: bpy.data.objects.remove(_p, do_unlink=True)
+    bpy.ops.object.select_all(action='DESELECT')
+if not skin_mode.startswith("voxel"):
+    # ── MANUAL nearest-bone fallback (proven). SAME-SIDE limb constraint: a vertex
+    # clearly on one side of the centreline must NOT bind to the opposite side's
+    # leg/arm bones (else thin close-set legs merge into a blob under stride).
+    names=[s[0] for s in segs]; dmat=np.empty((len(V),len(segs)))
+    for bi,(nm,h,t) in enumerate(segs):
+        seg=t-h; L2=max(float(seg@seg),1e-9); u=np.clip(((V-h)@seg)/L2,0,1)
+        proj=h[None,:]+u[:,None]*seg[None,:]; dmat[:,bi]=np.linalg.norm(V-proj,axis=1)
+    _mar=0.05*H
+    for bi,nm in enumerate(names):
+        if nm.endswith("_L"):       dmat[SA>smid+_mar, bi]=1e9
+        elif nm.endswith("_R"):     dmat[SA<smid-_mar, bi]=1e9
+    K=min(4,dmat.shape[1]); idxK=np.argsort(dmat,axis=1)[:,:K]; dK=np.take_along_axis(dmat,idxK,1)
+    wK=1.0/np.maximum(dK,1e-6)**2; wK/=wK.sum(1,keepdims=True); wK[wK<0.03]=0; wK/=np.maximum(wK.sum(1,keepdims=True),1e-9)
+    for bi,nm in enumerate(names):
+        wv=(wK*(idxK==bi)).sum(1); lv=np.where(wv>1e-4)[0]
+        if not len(lv): continue
+        vg=o.vertex_groups.get(nm) or o.vertex_groups.new(name=nm)
+        q=np.round(wv[lv]*63).astype(np.int64)
+        for L in np.unique(q):
+            if L: vg.add(lv[q==L].tolist(),float(L)/63.0,"REPLACE")
+__result__=json.dumps({"ok":True,"H":round(float(H),3),"side":"X" if sx else "Y","bones":len(arm.bones),"skin":skin_mode})
 '''
 
 
@@ -126,10 +181,18 @@ else:
     RB={b.name:b.matrix_local.to_3x3() for b in rig.data.bones}
     def swm(n):
         pb=src.pose.bones.get(n); return (src.matrix_world@pb.matrix) if pb else None
-    # sample source (loop clip to fill TOTAL output frames)
+    # CLEAN WALK WINDOW: CMU clips open with a calibration/settle pose (feet
+    # together, arms out — a near-T-pose) before the walk establishes. Looping
+    # the whole clip to fill TOTAL frames re-samples that startup pose and the
+    # character goes airborne/legs-together mid-shot. Trim leading calibration +
+    # trailing settle and forward-loop ONLY within the clean window.
+    lo=max(1,int(0.06*bvh_len)); hi=max(lo+2, bvh_len-int(0.02*bvh_len)); win=max(1,hi-lo)
+    # net forward travel over the clean window (robust frame-align, immune to the loop)
+    sc.frame_set(lo); bpy.context.view_layer.update(); hip_lo=swm("Hips").translation.copy()
+    sc.frame_set(hi); bpy.context.view_layer.update(); hip_hi=swm("Hips").translation.copy()
     samp=[]
     for i in range(TOTAL):
-        sc.frame_set(1+(i*step)%max(1,bvh_len-1)); bpy.context.view_layer.update()
+        sc.frame_set(lo+(i*step)%win); bpy.context.view_layer.update()
         dirs={c:((swm(b).to_3x3()@Vector((0,1,0))).normalized() if swm(b) else None) for c,b in MAP.items()}
         samp.append((dirs, swm("Hips").translation.copy()))
     hip0=samp[0][1]
@@ -144,11 +207,13 @@ else:
     # the torso (re-orienting it was what flipped the torso vs the legs/feet).
     Rz=Matrix.Identity(3)
     hero_fwd=(RB["foot_L"]@Vector((0,1,0))); hero_fwd.z=0
-    src_tr=(samp[-1][1]-samp[0][1]).copy(); src_tr.z=0
+    src_tr=(hip_hi-hip_lo).copy(); src_tr.z=0
     if hero_fwd.length>1e-3 and src_tr.length>1e-3:
         hero_fwd.normalize(); src_tr.normalize()
         yaw=math.atan2(src_tr.cross(hero_fwd).z, src_tr.dot(hero_fwd)); Rz=Matrix.Rotation(yaw,3,'Z')
         samp=[({c:(Rz@v if v else None) for c,v in dd.items()}, hip0+Rz@(hp-hip0)) for dd,hp in samp]
+    net=Rz@(hip_hi-hip_lo)   # per-cycle forward travel (in aligned space) — keeps
+                             # world translation CONTINUOUS across the loop wrap.
     for pb in rig.pose.bones: pb.rotation_mode="QUATERNION"
     sc.frame_start=1; sc.frame_end=TOTAL
     try: bpy.context.preferences.edit.keyframe_new_interpolation_type="LINEAR"
@@ -166,7 +231,8 @@ else:
     path=[]
     for i in range(TOTAL):
         f=1+i; dirs,hp=samp[i]
-        dx=(hp.x-hip0.x)*scale; dy=(hp.y-hip0.y)*scale; dz=(hp.z-hip0.z)*scale*0.5
+        cyc=(i*step)//win   # completed loop cycles -> add net travel so we keep walking forward
+        dx=(hp.x-hip0.x+cyc*net.x)*scale; dy=(hp.y-hip0.y+cyc*net.y)*scale; dz=(hp.z-hip0.z)*scale*0.5
         rig.location=(base.x+dx,base.y+dy,base.z+dz); rig.keyframe_insert("location",frame=f)
         o.location=(baseo.x+dx,baseo.y+dy,baseo.z+dz); o.keyframe_insert("location",frame=f)
         bpy.context.view_layer.update()
@@ -224,6 +290,30 @@ else:
             for i in range(2,n-2):
                 kp[i].co[1]=ker[0]*v[i-2]+ker[1]*v[i-1]+ker[2]*v[i]+ker[3]*v[i+1]+ker[4]*v[i+2]
             fc.update()
+        # REST EASE-IN: frame 1 starts at the mesh's natural REST pose (identity
+        # rotation = the clean A-pose the rig was built in) and eases into the
+        # mocap over EASE frames via smoothstep. Kills the frame-1 "pop" into a
+        # mid-stride/broken-arm pose. Quaternions only (root translation already
+        # starts at base, so the body just accelerates forward as the pose eases).
+        from mathutils import Quaternion as _Q
+        EASE=min(8, max(2, TOTAL//6))
+        def _ss(x): return x*x*(3-2*x)
+        _qg={}
+        for fc in flat:
+            if fc.data_path.endswith("rotation_quaternion"):
+                _qg.setdefault(fc.data_path,{})[fc.array_index]=fc
+        for dp,comp in _qg.items():
+            if len(comp)!=4: continue
+            f0,f1,f2,f3=comp[0],comp[1],comp[2],comp[3]; n=len(f0.keyframe_points)
+            for i in range(min(EASE,n)):
+                w=_ss(i/max(EASE-1,1))
+                q=_Q((f0.keyframe_points[i].co[1],f1.keyframe_points[i].co[1],
+                      f2.keyframe_points[i].co[1],f3.keyframe_points[i].co[1]))
+                q.normalize()
+                qb=_Q().slerp(q,w)
+                f0.keyframe_points[i].co[1]=qb.w; f1.keyframe_points[i].co[1]=qb.x
+                f2.keyframe_points[i].co[1]=qb.y; f3.keyframe_points[i].co[1]=qb.z
+            for fc in comp.values(): fc.update()
     bpy.data.objects.remove(src, do_unlink=True)
     # ── side-tracking camera following the walk
     cam=sc.camera
