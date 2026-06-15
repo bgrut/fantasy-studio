@@ -120,8 +120,9 @@ else:
     samp=[]
     for i in range(TOTAL):
         sc.frame_set(1+(i*step)%max(1,bvh_len-1)); bpy.context.view_layer.update()
+        hwm=swm("Hips")
         dirs={c:((swm(b).to_3x3()@Vector((0,1,0))).normalized() if swm(b) else None) for c,b in MAP.items()}
-        samp.append((dirs, swm("Hips").translation.copy()))
+        samp.append((dirs, hwm.translation.copy(), hwm.to_3x3()))
     hip0=samp[0][1]
     slu=swm("LeftUpLeg"); slf=swm("LeftFoot")
     sleg=(Vector(slu.translation)-Vector(slf.translation)).length or 1.0
@@ -133,7 +134,11 @@ else:
     if sl.length>1e-4 and hl.length>1e-4:
         sl.normalize(); hl.normalize()
         yaw=math.atan2(sl.cross(hl).z, sl.dot(hl)); Rz=Matrix.Rotation(yaw,3,'Z')
-        samp=[({c:(Rz@v if v else None) for c,v in dd.items()}, hip0+Rz@(hp-hip0)) for dd,hp in samp]
+        samp=[({c:(Rz@v if v else None) for c,v in dd.items()}, hip0+Rz@(hp-hip0), Rz@hr) for dd,hp,hr in samp]
+    # ROOT FACING: retarget the hips orientation so the WHOLE body (torso/head/
+    # arms) faces the walk direction — without this the legs walk one way while
+    # the upper body keeps the rest facing (the 'torso facing backward' bug).
+    offh=RB["hips"]@samp[0][2].inverted()
     for pb in rig.pose.bones: pb.rotation_mode="QUATERNION"
     sc.frame_start=1; sc.frame_end=TOTAL
     try: bpy.context.preferences.edit.keyframe_new_interpolation_type="LINEAR"
@@ -144,13 +149,18 @@ else:
         d0=(rest.to_3x3()@Vector((0,1,0))).normalized()
         basis=(d0.rotation_difference(dirv).to_matrix()@rest.to_3x3())
         pb.matrix=Matrix.Translation(head)@basis.to_4x4(); bpy.context.view_layer.update()
+    def aim_full(name, R3, frame):
+        pb=rig.pose.bones[name]; head=pb.matrix.translation.copy()
+        pb.matrix=Matrix.Translation(head)@R3.to_4x4(); bpy.context.view_layer.update()
+        pb.keyframe_insert("rotation_quaternion",frame=frame)
     path=[]
     for i in range(TOTAL):
-        f=1+i; dirs,hp=samp[i]
+        f=1+i; dirs,hp,hr=samp[i]
         dx=(hp.x-hip0.x)*scale; dy=(hp.y-hip0.y)*scale; dz=(hp.z-hip0.z)*scale*0.5
         rig.location=(base.x+dx,base.y+dy,base.z+dz); rig.keyframe_insert("location",frame=f)
         o.location=(baseo.x+dx,baseo.y+dy,baseo.z+dz); o.keyframe_insert("location",frame=f)
         bpy.context.view_layer.update()
+        aim_full("hips", offh@hr, f)   # root faces the walk direction
         for c in ORDER:
             d=dirs.get(c)
             if d is None: continue
