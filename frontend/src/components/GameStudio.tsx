@@ -160,13 +160,18 @@ export default function GameStudio() {
               {job!.checks != null && (
                 <span className="text-[10px] font-mono text-[#5cffc9]">{job!.checks} checks passed</span>
               )}
+              {(job as GameJob & { seed?: number }).seed != null && (
+                <span className="text-[10px] font-mono text-[#807d99]">
+                  level #{(job as GameJob & { seed?: number }).seed}
+                </span>
+              )}
             </div>
             <div className="flex items-center gap-2">
               <button
                 onClick={build}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs border border-white/[0.08] text-[#807d99] hover:text-white transition-colors"
               >
-                <RotateCcw className="w-3 h-3" /> Rebuild
+                <RotateCcw className="w-3 h-3" /> New level
               </button>
               <a
                 href={job!.play_url}

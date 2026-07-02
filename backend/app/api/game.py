@@ -30,6 +30,7 @@ class GameExportRequest(BaseModel):
     prompt: str = Field(min_length=3, max_length=4000)
     player: str = "man"          # library kind for the controllable character
     godot: bool = False          # also emit a Godot 4 project
+    seed: int | None = None      # world-layout seed; None = fresh random level
 
 
 def _run_job(job_id: int, req: GameExportRequest) -> None:
@@ -50,6 +51,13 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         stage("extracting")
         spec = extract_game_spec(req.prompt, verbose=False)
         job["title"] = spec.title
+
+        # LEVEL VARIETY: every build gets a fresh world layout (scatter,
+        # collectible ring, NPC spawns all derive from this seed). Rebuild =
+        # a NEW level; pass an explicit seed to reproduce a favorite one.
+        import random as _random
+        spec.seed = req.seed if req.seed is not None else _random.randint(1, 999_999)
+        job["seed"] = spec.seed
 
         stage("resolving assets")
         player_glb = library.resolve(req.player) or library.resolve("man")

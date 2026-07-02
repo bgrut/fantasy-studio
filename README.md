@@ -76,6 +76,26 @@ Fantasy Studio takes the opposite bet: **AI directs real tools, it doesn't repla
 - 🌐 **100% local execution** — no API keys, no cloud, no per-render fee, no rate limits, no creative work leaving your machine
 - 📜 **Full pipeline trace logging** — every render writes a `pipeline_trace.log` next to the video so you can debug exactly what the AI directed and why
 
+## Get started
+
+```powershell
+git clone https://github.com/bgrut/fantasy-studio && cd fantasy-studio
+.\setup.ps1                 # one-command install (Python venv + npm + env files)
+.\desktop\launch.ps1        # opens the native Fantasy Studio desktop app
+```
+
+Full prerequisites and troubleshooting: **[INSTALL.md](INSTALL.md)**. Key facts:
+- 🕹️ **Game mode needs no GPU** — build and play from prompts on any laptop
+- 🎬 Video mode wants an NVIDIA GPU (8 GB+) for Cycles renders and new-asset generation
+- Every game build is a **different level** (world seed shown in-app; "New level" rerolls, reuse a seed to reproduce a favorite)
+
+## Ship the games you make
+
+Each build is a **self-contained folder** (vendored MIT/Apache libs, zero CDN):
+zip `dist/` for itch.io or any static host, or add `--godot` for a **Godot 4
+project** you can open in the free editor and export to Windows/macOS/Linux/mobile —
+no royalties. Details: [INSTALL.md → Deploying](INSTALL.md#deploying-the-games-you-make).
+
 ## See it in action
 
 <div align="center">

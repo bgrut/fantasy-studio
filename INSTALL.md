@@ -2,6 +2,16 @@
 
 This guide gets Fantasy Studio running on **Windows 10/11** end-to-end. macOS and Linux are untested for V1; community contributions welcome — see [CONTRIBUTING.md](CONTRIBUTING.md).
 
+> **TL;DR — desktop app in 3 steps:** install the [prerequisites](#prerequisites)
+> (Python, Node, Ollama; Blender + GPU only needed for video), clone, then run
+> `desktop\launch.ps1` — it starts the backend, the UI, and opens the native
+> **Fantasy Studio** window. Full walkthrough: [Running the desktop app](#running-the-desktop-app).
+
+> **No GPU? You can still play.** 🕹️ **Game mode** (build playable games from
+> prompts) runs entirely on CPU + integrated graphics — Ollama extraction, asset
+> library, physics, everything. A CUDA GPU is only needed to *generate brand-new
+> characters/props* and for 🎬 Video renders.
+
 > **Pre-launch note:** Fantasy Studio is a single monorepo with `backend/` (Python/FastAPI) and `frontend/` (React/Vite) subdirectories. One clone, one install path. (Pre-V0.1.1 the project was split across three sibling repos — that's now collapsed.)
 
 ---
@@ -308,3 +318,61 @@ A bundled `tools/healthcheck.py` script does not yet exist — it's on the post-
 - 🧠 **[docs/PROMPTING.md](docs/PROMPTING.md)** — prompt engineering deep-dive
 - 🏛️ **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** — how the pipeline works under the hood
 - 💬 **Discord** — coming soon for launch
+
+---
+
+## Running the desktop app
+
+Fantasy Studio ships as a native desktop window (Tauri 2) that wraps the studio
+UI and manages the backend for you.
+
+### Prerequisites (beyond the ones above)
+- **Rust toolchain** (dev builds only): `winget install Rustlang.Rustup` then
+  `rustup default stable`. Verify: `cargo --version`
+- **WebView2** — preinstalled on Windows 11 / current Windows 10
+
+### Run it
+```powershell
+cd fantasy-studio\desktop
+npm install          # first time only (Tauri CLI)
+..\desktop\launch.ps1
+```
+`launch.ps1` starts, in one terminal:
+1. the FastAPI backend on `127.0.0.1:8789` (from `backend\venv`)
+2. the Vite frontend on `localhost:3000`
+3. the native **Fantasy Studio** window (first run compiles the Rust shell,
+   ~5-10 min; instant afterward)
+
+Closing the window shuts everything down. Installer builds (`.msi`/`.exe`, no
+dev tools needed) are on the roadmap via `build_installer.ps1`.
+
+### Choose your mode
+The Studio opens with a **🎬 Video / 🕹️ Game** switch under the title:
+- **Video** — cinematic Blender renders (the classic flow; GPU recommended)
+- **Game** — type an idea, get a *playable* game embedded in the app in
+  ~30-60s. **Every build is a different level** (world seed shown as
+  `level #12345`; hit **New level** to reroll). No GPU needed.
+
+---
+
+## Deploying the games you make
+
+Every game build is a **self-contained folder** — no server, no accounts, no
+CDN (three.js MIT + Rapier Apache-2.0 are vendored inside):
+
+- Builds from the app land in `backend\renders\game_jobs\job_<n>\dist\`
+- CLI builds: `python scripts\export_game.py --prompt "..." --player-glb ... --out my_game`
+
+**Ship it:**
+- **Zip + send** — the `dist\` folder runs from any static file server
+  (`python -m http.server` locally; browsers block `file://` module loads)
+- **itch.io** — zip `dist\`, upload as an HTML5 game, done
+- **Any static host** — GitHub Pages, Netlify, your own nginx
+- **Desktop/console-grade**: pass `--godot` to also emit a **Godot 4 project**
+  (`godot\` beside `dist\`) — open in the free Godot editor, press F5 to play,
+  or use its export templates for Windows/macOS/Linux/mobile builds. Godot is
+  MIT: no royalties, no strings.
+
+Assets you generate are yours. CMU mocap requires one credit line (included in
+`ATTRIBUTION.md`): "The motion data used in this product was obtained from
+mocap.cs.cmu.edu."
