@@ -27,6 +27,17 @@ Pre-1.0 versions are internal milestones during the constraint sprint leading to
   NPC assets (494k → 40k tris).
 - Docs: `backend/docs/game_engine_plan.md` (Godot adapter next; Unreal opt-in later).
 
+### Added — Phase 30: Studio game mode + desktop app (2026-07-02)
+- **Game/Video mode chooser** in the Studio: game mode = prompt → Ollama GameSpec →
+  built + verified + **embedded playable** in the app (~30-60s, no GPU needed).
+- Backend: `POST /api/game/export` (background job), `GET /api/game/jobs/{id}`,
+  `GET /api/game/health`, `/games` static mount serving built games.
+- **Tauri 2 desktop shell** (`desktop/`, Aurora pattern): native Fantasy Studio
+  window, `launch.ps1` single-terminal dev launcher (backend + vite + window).
+  Installer bundling (PyInstaller sidecar) on the roadmap.
+- Also: Phase 28 Godot 4 export adapter (headless-validated) and Phase 27
+  on-demand asset generation glue (GPU-gated, first live run when GPU returns).
+
 ### Planned for V1.0.0 launch (Mid-May 2026)
 - Public source release under BSL 1.1
 - Marketing website live at [fantasylab.ai](https://fantasylab.ai)
