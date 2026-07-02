@@ -1,5 +1,11 @@
 {
   "dog": "assets/library/dog.glb",
-  "cat": "renders/anim_20260615_143133_a_cat_running_across_a_field/asset_1431337835.glb",
-  "man": "renders/game_park/player_anim.glb"
+  "cat": "assets/library/cat.glb",
+  "man": "renders/game_park/player_anim.glb",
+  "car": "assets/library/car.glb",
+  "fox": "assets/library/fox.glb",
+  "horse": "assets/library/horse.glb",
+  "samurai": "assets/library/samurai.glb",
+  "truck": "assets/library/truck.glb",
+  "wizard": "assets/library/wizard.glb"
 }

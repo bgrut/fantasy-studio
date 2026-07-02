@@ -126,6 +126,30 @@ def list_game_jobs():
     return {"ok": True, "jobs": sorted(_jobs.values(), key=lambda j: -j["id"])[:50]}
 
 
+@router.get("/api/game/library")
+def get_library():
+    """The generated-asset catalog (the user's creations ARE the marketplace).
+    Raw entries are generations awaiting first-use optimization."""
+    import json as _json
+    from app.game_export import library as lib
+    out = []
+    try:
+        data = _json.loads(lib.LIBRARY_JSON.read_text(encoding="utf-8"))
+    except Exception:
+        data = {}
+    for kind, entry in sorted(data.items()):
+        rel = entry if isinstance(entry, str) else entry.get("raw", "")
+        p = lib.BACKEND_ROOT / rel
+        out.append({
+            "kind": kind,
+            "ready": isinstance(entry, str),
+            "path": rel,
+            "size_mb": round(p.stat().st_size / 1e6, 1) if p.exists() else None,
+            "source": "generated",
+        })
+    return {"ok": True, "assets": out, "count": len(out)}
+
+
 @router.get("/api/game/health")
 def game_health():
     """Game mode works without a GPU — report what's available."""

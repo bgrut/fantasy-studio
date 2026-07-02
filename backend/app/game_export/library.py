@@ -28,16 +28,62 @@ def _load() -> dict:
         return {}
 
 
+def _save(lib: dict) -> None:
+    import json as _json
+    LIBRARY_JSON.write_text(_json.dumps(lib, indent=2) + "\n", encoding="utf-8")
+
+
+def register(kind: str, glb_path: str | Path, ready: bool = False) -> None:
+    """Record a GENERATED asset in the library — the user's own creations ARE
+    the marketplace; curated packs demote to fallback. `ready=False` stores it
+    as a raw entry that gets decimated to game budget lazily on first use."""
+    k = (kind or "").strip().lower()
+    if not k:
+        return
+    p = Path(glb_path)
+    try:
+        rel = str(p.relative_to(BACKEND_ROOT)).replace("\\", "/")
+    except ValueError:
+        rel = str(p).replace("\\", "/")
+    lib = _load()
+    cur = lib.get(k)
+    if ready:
+        lib[k] = rel
+    elif isinstance(cur, str):
+        return                      # a ready optimized asset already wins
+    else:
+        lib[k] = {"raw": rel}
+    _save(lib)
+
+
 def resolve(kind: str) -> str | None:
-    """Return an absolute path to a GLB for `kind`, or None."""
+    """Return an absolute path to a game-ready GLB for `kind`, or None.
+    Raw (unoptimized) generated entries are decimated to game budget on first
+    use via the CPU-Blender optimizer, then cached as ready."""
     k = (kind or "").strip().lower()
     lib = _load()
     for key in (k, _SYNONYMS.get(k, ""), *(w for w in k.split() if w in lib)):
-        rel = lib.get(key)
-        if rel:
-            p = BACKEND_ROOT / rel
+        entry = lib.get(key)
+        if not entry:
+            continue
+        if isinstance(entry, str):
+            p = BACKEND_ROOT / entry
             if p.exists():
                 return str(p)
+            continue
+        raw = BACKEND_ROOT / entry.get("raw", "")
+        if not raw.exists():
+            continue
+        out = BACKEND_ROOT / "assets" / "library" / f"{key.replace(' ', '_')}.glb"
+        try:
+            from .bake import optimize_asset
+            optimize_asset(raw, out, target_tris=45000,
+                           height_m=default_height(key), verbose=False)
+            lib[key] = str(out.relative_to(BACKEND_ROOT)).replace("\\", "/")
+            _save(lib)
+            return str(out)
+        except Exception:
+            return str(raw)          # bridge down etc. — raw beats nothing
     return None
 
 

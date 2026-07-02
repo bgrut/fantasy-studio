@@ -2318,6 +2318,21 @@ def _run_asset_gen(slots: Dict[str, Any], scene: Dict[str, Any], subj: Dict[str,
             if verbose:
                 print(f"[composer] ref_texture skipped ({type(_te).__name__}: {_te})")
 
+        # LIBRARY INGEST (Phase 31): every asset the user GENERATES feeds the
+        # shared library/marketplace — their creations are the catalog, curated
+        # packs demote to fallback. Raw entry; game side decimates lazily.
+        if os.environ.get("FS_LIBRARY_INGEST", "1") == "1":
+            try:
+                from ..game_export import library as _gl
+                _kind = (subj.get("name") or subj.get("identity_phrase") or "").strip().lower()
+                if _kind and mesh_glb.exists():
+                    _gl.register(_kind, mesh_glb, ready=False)
+                    if verbose:
+                        print(f"[composer] library ingest: '{_kind}' registered")
+            except Exception as _le:
+                if verbose:
+                    print(f"[composer] library ingest skipped ({type(_le).__name__}: {_le})")
+
         return hero_name
     except Exception as e:
         if verbose:
