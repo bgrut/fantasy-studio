@@ -48,3 +48,4 @@ venv_triposg/
 *.png.bak
 
 vendor/blosm/
+tools/

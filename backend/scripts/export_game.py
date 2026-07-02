@@ -33,6 +33,8 @@ def main():
     ap.add_argument("--no-verify", action="store_true")
     ap.add_argument("--generate", action="store_true",
                     help="generate missing entity assets via SDXL+TRELLIS (needs GPU)")
+    ap.add_argument("--godot", action="store_true",
+                    help="ALSO emit a Godot 4 project beside the web build")
     args = ap.parse_args()
 
     if args.spec:
@@ -92,6 +94,10 @@ def main():
         else:
             print(f"[game] verify: FAIL — {v['errors']}")
             sys.exit(2)
+
+    if args.godot:
+        from app.game_export.godot_exporter import export_godot_game
+        export_godot_game(spec, args.out)
 
     print(f"serve it:  python -m http.server 8770 --directory \"{dist}\"")
 
