@@ -3484,6 +3484,19 @@ def compose_scene(
             })
             runner.run("ground_apply", "apply_material", {"object": "Ground", "material": ground_mat_name})
 
+    # Phase 26 SHARED WORLD-DRESSING: scatter the shared prop library (trees/
+    # rocks/lamps — the same assets/props/*.glb the game exporter uses) in a
+    # background ring for nature-y settings, so video scenes stop being a bare
+    # plane. Gated FS_DRESS; isolated module; never raises.
+    if os.environ.get("FS_DRESS", "1") == "1":
+        try:
+            from ..game_export import dressing as _dressing
+            _dressing.build_video_dressing(
+                runner, setting or scene.get("mood", ""), seed_key=str(run_id), verbose=verbose)
+        except Exception as _de:
+            if verbose:
+                print(f"[composer] dressing skipped ({type(_de).__name__}: {_de})")
+
     # Shade-smooth all organic parts so subdivision actually softens the silhouette
     organic_names = [p["name"] for p in parts if p.get("primitive") in ("sphere", "icosphere") and p.get("role") in ("body", "head", "limb", "detail")]
     if organic_names:

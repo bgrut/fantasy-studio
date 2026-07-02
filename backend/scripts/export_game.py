@@ -18,6 +18,7 @@ if str(BACKEND_ROOT) not in sys.path:
 
 from app.game_export.spec import GameSpec, spec_from_dict          # noqa: E402
 from app.game_export.web_exporter import export_web_game          # noqa: E402
+from app.game_export.dressing import game_scatter                 # noqa: E402
 
 
 def main():
@@ -38,6 +39,11 @@ def main():
         spec.title = args.title
     if not spec.player.asset:
         ap.error("need --player-glb or a spec with player.asset")
+
+    # shared world-dressing: default scatter recipe for the world's setting
+    if not spec.world.scatter:
+        from app.game_export.spec import ScatterSpec
+        spec.world.scatter = [ScatterSpec(**s) for s in game_scatter(spec.world.name)]
 
     dist = export_web_game(spec, args.out)
     print(f"serve it:  python -m http.server 8770 --directory \"{dist}\"")
