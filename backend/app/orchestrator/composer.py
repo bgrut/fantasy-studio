@@ -3492,7 +3492,8 @@ def compose_scene(
         try:
             from ..game_export import dressing as _dressing
             _dressing.build_video_dressing(
-                runner, setting or scene.get("mood", ""), seed_key=str(run_id), verbose=verbose)
+                runner, setting or scene.get("mood", ""), seed_key=str(run_id),
+                mood=scene.get("mood", ""), verbose=verbose)
         except Exception as _de:
             if verbose:
                 print(f"[composer] dressing skipped ({type(_de).__name__}: {_de})")

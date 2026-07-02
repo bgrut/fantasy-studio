@@ -141,6 +141,42 @@ async function main() {
     } catch (e) { fail(e.message); }
   }
 
+  // ── objectives: glowing collectibles + counter + win state ───────────────
+  const collectibles = [];
+  let collected = 0, winTotal = 0, objLabel = '';
+  const objEl = document.getElementById('obj');
+  const obj = (SPEC.objectives || []).find(o => o.kind === 'collect');
+  if (obj) {
+    winTotal = obj.count; objLabel = obj.label || 'items';
+    const rngC = mulberry32(SPEC.seed + 77);
+    const geo = new THREE.SphereGeometry(0.11, 12, 10);
+    for (let i = 0; i < winTotal; i++) {
+      const m = new THREE.MeshStandardMaterial({
+        color: 0xfff2b0, emissive: 0xffd54a, emissiveIntensity: 2.6, roughness: 0.4 });
+      const s = new THREE.Mesh(geo, m);
+      const ang = rngC() * Math.PI * 2;
+      const dist = 5 + rngC() * gsize * 0.32;
+      const baseY = 1.0 + rngC() * 0.8;
+      s.position.set(Math.cos(ang) * dist, baseY, Math.sin(ang) * dist);
+      const halo = new THREE.PointLight(0xffd54a, 2.2, 6.0);
+      s.add(halo);
+      scene.add(s);
+      collectibles.push({ mesh: s, baseY, phase: rngC() * Math.PI * 2 });
+    }
+    objEl.style.display = 'block';
+    objEl.textContent = `${objLabel}: 0 / ${winTotal}`;
+  }
+  function onCollect() {
+    collected++;
+    objEl.textContent = `${objLabel}: ${collected} / ${winTotal}`;
+    if (collected >= winTotal) {
+      document.getElementById('wintext').textContent =
+        `All ${winTotal} ${objLabel} collected.`;
+      document.getElementById('win').style.display = 'flex';
+      console.log('[game] WIN — all objectives complete');
+    }
+  }
+
   // ── player: animated GLB + kinematic capsule ─────────────────────────────
   let mixer = null, actions = {}, current = null;
   const P = SPEC.player;
@@ -230,8 +266,13 @@ async function main() {
     return { x, z, run, mag: Math.min(m, 1) };
   }
 
-  // exposed for the verify harness (synthetic input + position probes)
-  window.__game = { pos: () => playerObj.position.toArray(), keys, ready: true };
+  // exposed for the verify harness (synthetic input, position probes, dev teleport)
+  window.__game = {
+    pos: () => playerObj.position.toArray(), keys, ready: true,
+    tp: (x, z) => body.setTranslation({ x, y: P.height_m / 2 + 0.1, z }, true),
+    objectives: () => ({ collected, total: winTotal,
+                         left: collectibles.filter(c => c.mesh.parent).map(c => c.mesh.position.toArray()) }),
+  };
 
   // ── main loop ────────────────────────────────────────────────────────────
   const clock = new THREE.Clock();
@@ -277,6 +318,18 @@ async function main() {
         current.timeScale = speed > 0.1 ? Math.max(speed / base, 0.5) : 1.0;
       }
       mixer.update(dt);
+    }
+
+    // collectibles: bob + spin + proximity pickup
+    if (collectibles.length) {
+      const t = performance.now() / 1000;
+      for (const c of collectibles) {
+        if (!c.mesh.parent) continue;
+        c.mesh.position.y = c.baseY + Math.sin(t * 2.2 + c.phase) * 0.22;
+        c.mesh.rotation.y += dt * 2;
+        const dx = c.mesh.position.x - nt.x, dz = c.mesh.position.z - nt.z;
+        if (dx * dx + dz * dz < 1.4 * 1.4) { scene.remove(c.mesh); onCollect(); }
+      }
     }
 
     // third-person follow camera

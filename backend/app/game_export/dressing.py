@@ -56,9 +56,25 @@ def game_scatter(setting: str | None) -> list[dict]:
 
 _VIDEO_DRESS_CODE = r'''
 import bpy, json, math, random
-RECIPE=__RECIPE__; SEED=__SEED__
+RECIPE=__RECIPE__; SEED=__SEED__; FIREFLIES=__FIREFLIES__
 random.seed(SEED)
 placed=0; kinds=[]
+# night-scene atmosphere: tiny emissive motes hovering in the mid-ground —
+# the video sibling of the game's glowing collectibles (shared-enhancement rule)
+if FIREFLIES:
+    fm=bpy.data.materials.new("FireflyMat"); fm.use_nodes=True
+    _b=fm.node_tree.nodes.get("Principled BSDF")
+    try:
+        _b.inputs["Emission Color"].default_value=(1.0,0.85,0.35,1.0)
+        _b.inputs["Emission Strength"].default_value=30.0
+    except Exception: pass
+    for i in range(FIREFLIES):
+        ang=random.uniform(0,2*math.pi); dist=random.uniform(3.0,14.0)
+        bpy.ops.mesh.primitive_ico_sphere_add(subdivisions=1, radius=0.03,
+            location=(math.cos(ang)*dist, math.sin(ang)*dist, random.uniform(0.8,2.4)))
+        bpy.context.object.data.materials.append(fm)
+        placed+=1
+    kinds.append("fireflies:%d"%FIREFLIES)
 for glb, count in RECIPE:
     pre=set(bpy.data.objects.keys())
     try:
@@ -77,10 +93,15 @@ for glb, count in RECIPE:
         obj.location=(math.cos(ang)*dist, math.sin(ang)*dist, 0.0)
         obj.rotation_euler=(0,0,random.uniform(0,6.283))
         obj.scale=(s,s,s)
+    # TALL props (trees/lamps) go to a FAR ring (11-20m): tracking cameras sit
+    # 4-8m from the hero, so nothing tall can end up at/behind the lens. LOW
+    # props (rocks) may come closer (8-16m) — they can't block the frame.
+    tall=("tree" in glb) or ("lamp" in glb)
+    lo_d, hi_d = (11.0, 20.0) if tall else (8.0, 16.0)
     for i in range(count):
         ang=random.uniform(0,2*math.pi)
-        dist=random.uniform(8.0,18.0)          # background ring: never between
-        s=random.uniform(0.8,1.35)             # camera (~5-8m) and the hero
+        dist=random.uniform(lo_d, hi_d)
+        s=random.uniform(0.8,1.35)
         if i==0:
             place(root, ang, dist, s)
         else:
@@ -98,9 +119,10 @@ __result__=json.dumps({"ok":True,"placed":placed,"kinds":kinds})
 
 
 def build_video_dressing(runner, setting: str | None, seed_key: str = "0",
-                         verbose: bool = False) -> bool:
+                         mood: str = "", verbose: bool = False) -> bool:
     """Scatter the shared props into the CURRENT Blender scene (video side).
-    Returns True if anything was placed; never raises."""
+    Night moods over nature settings also get ambient fireflies. Returns True
+    if anything was placed; never raises."""
     import os
     if os.environ.get("FS_DRESS", "1") == "0":
         return False
@@ -114,11 +136,14 @@ def build_video_dressing(runner, setting: str | None, seed_key: str = "0",
             pairs.append([str(glb).replace("\\", "/"), video_n])
     if not pairs:
         return False
+    m = (mood or "").lower() + " " + (setting or "").lower()
+    fireflies = 14 if any(w in m for w in ("night", "moonlight", "dusk", "twilight")) else 0
     seed = zlib.crc32(str(seed_key).encode()) % 100000
     try:
         code = (_VIDEO_DRESS_CODE
                 .replace("__RECIPE__", json.dumps(pairs))
-                .replace("__SEED__", str(seed)))
+                .replace("__SEED__", str(seed))
+                .replace("__FIREFLIES__", str(fireflies)))
         res = runner.run("dressing", "execute_python", {"code": code}, critical=False)
         raw = res.get("result") if isinstance(res, dict) else None
         info = json.loads(raw) if isinstance(raw, str) else (raw if isinstance(raw, dict) else None)
