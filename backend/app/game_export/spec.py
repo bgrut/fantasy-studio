@@ -61,11 +61,12 @@ class WorldSpec(BaseModel):
 
 class EntitySpec(BaseModel):
     """Non-player entity. MVP behaviors are deterministic template AI."""
-    asset: str
+    asset: str = ""                       # resolved from the asset library by name
     name: str = "entity"
-    behavior: Literal["static", "wander", "follow"] = "static"
+    behavior: Literal["static", "wander", "follow"] = "wander"
     count: int = Field(1, ge=1, le=64)
     speed: float = Field(1.5, ge=0.0, le=40.0)
+    height_m: float = Field(1.0, gt=0.1, le=10.0)
 
 
 class ObjectiveSpec(BaseModel):

@@ -88,6 +88,44 @@ __result__=json.dumps({"ok":True,"out":r"__OUT__","tracks":tracks})
 '''
 
 
+_OPTIMIZE_CODE = r'''
+import bpy, json
+o=bpy.data.objects.get("Hero")
+TARGET=__TARGET__
+tris0=sum(len(p.vertices)-2 for p in o.data.polygons)
+if tris0>TARGET:
+    m=o.modifiers.new("dec","DECIMATE"); m.ratio=max(TARGET/float(tris0),0.02)
+    bpy.context.view_layer.objects.active=o; o.select_set(True)
+    bpy.ops.object.modifier_apply(modifier="dec")
+tris1=sum(len(p.vertices)-2 for p in o.data.polygons)
+bpy.ops.object.select_all(action='DESELECT'); o.select_set(True)
+bpy.ops.export_scene.gltf(filepath=r"__OUT__", use_selection=True, export_yup=True)
+__result__=json.dumps({"ok":True,"tris":[tris0,tris1]})
+'''
+
+
+def optimize_asset(src_glb: str | Path, out_glb: str | Path, target_tris: int = 45000,
+                   height_m: float = 1.0, verbose: bool = True) -> dict:
+    """Decimate a raw TRELLIS GLB into a game-budget asset (NPCs/props). Raw
+    heroes run ~400k tris; two of those wedge an iGPU. CPU-only via bridge."""
+    from app.mcp import registry, bridge
+    out_glb = Path(out_glb); out_glb.parent.mkdir(parents=True, exist_ok=True)
+    bridge.connect(timeout=8)
+    registry.call("reset_scene", {})
+    registry.call("import_mesh_file", {
+        "filepath": str(src_glb), "name": "Hero", "normalize_size": height_m,
+        "ground_to_z0": True, "join": True, "orientation_fix": None})
+    r = _call(registry, "optimize",
+              _OPTIMIZE_CODE.replace("__TARGET__", str(int(target_tris)))
+                            .replace("__OUT__", str(out_glb).replace("\\", "/")))
+    if not (r and r.get("ok")):
+        raise RuntimeError(f"optimize failed: {r}")
+    if verbose:
+        mb = out_glb.stat().st_size / 1e6
+        print(f"[bake] optimized {Path(src_glb).name}: {r['tris'][0]:,} -> {r['tris'][1]:,} tris, {mb:.1f} MB")
+    return r
+
+
 def bake_anim_set(hero_glb: str | Path, out_glb: str | Path,
                   clips: dict | None = None, height_m: float = 1.75,
                   fps: int = 24, verbose: bool = True) -> dict:

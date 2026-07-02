@@ -24,9 +24,12 @@ Output ONLY the JSON object, no markdown, no commentary. Schema (all fields opti
            "ground_color": [r,g,b] floats 0..1},
  "player": {"name": str, "height_m": float 0.5..3, "walk_speed": float 1..4, "run_speed": float 4..10},
  "camera": {"mode": one of "third_person","first_person","orbit", "distance_m": float 2..12, "fov_deg": float 30..90},
- "objectives": [{"kind":"collect","label":str,"count":int 1..50}]
+ "objectives": [{"kind":"collect","label":str,"count":int 1..50}],
+ "entities": [{"name": simple noun like "dog","cat","horse", "behavior": one of "wander","follow","static",
+               "count": int 1..8, "speed": float 0.5..8}]
 }
-Map the text's setting to the CLOSEST world.name keyword. Do not invent fields not in the schema."""
+Map the text's setting to the CLOSEST world.name keyword. entities = OTHER creatures/characters in the
+scene besides the player (a companion pet -> behavior "follow"). Do not invent fields not in the schema."""
 
 _JSON_RE = re.compile(r"\{.*\}", re.DOTALL)
 

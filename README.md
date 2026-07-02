@@ -71,6 +71,7 @@ Fantasy Studio takes the opposite bet: **AI directs real tools, it doesn't repla
 - 📦 **Real exports** — MP4 video, animated GIF, PNG sequence, **and the `.blend` source file** so the scene is yours to re-edit forever
 - 🛡️ **HERO_VERIFY render gate** — every render passes seven structural checks (bbox sanity, frustum, framing, primitive detection, orientation, grounding) before frames hit disk
 - 🔧 **Non-destructive asset healing** — orientation, ground offset, shape classification computed once on ingest and stored as metadata; original `.glb` / `.blend` files never touched
+- 🕹️ **NEW: Playable game export (Phase 26)** — the same prompt that makes a video can make a *game*: `python scripts/export_game.py --prompt "a lone wanderer in a misty forest at night, collect 7 fireflies"` emits a self-contained three.js web build (WASD/gamepad/touch, real mocap walk/run, physics, NPCs that wander or follow, collectible objectives with a win screen). Runs offline in any browser — vendored three.js (MIT) + Rapier physics (Apache-2.0), zero CDN
 - 🌐 **100% local execution** — no API keys, no cloud, no per-render fee, no rate limits, no creative work leaving your machine
 - 📜 **Full pipeline trace logging** — every render writes a `pipeline_trace.log` next to the video so you can debug exactly what the AI directed and why
 

@@ -141,6 +141,60 @@ async function main() {
     } catch (e) { fail(e.message); }
   }
 
+  // ── NPC entities: wander / follow template AI ────────────────────────────
+  const npcs = [];
+  const rngN = mulberry32(SPEC.seed + 31);
+  for (const ent of SPEC.entities || []) {
+    try {
+      const gltf = await loadGLB(ent.asset);
+      for (let i = 0; i < (ent.count || 1); i++) {
+        const inst = i === 0 ? gltf.scene : gltf.scene.clone(true);
+        inst.traverse(o => { if (o.isMesh) { o.castShadow = true; o.frustumCulled = false; } });
+        const box = new THREE.Box3().setFromObject(inst);
+        const h = Math.max(box.max.y - box.min.y, 1e-3);
+        inst.scale.multiplyScalar((ent.height_m || 1.0) / h);
+        const b2 = new THREE.Box3().setFromObject(inst);
+        const holder = new THREE.Group();
+        inst.position.y = -b2.min.y;
+        holder.add(inst);
+        holder.position.set((rngN() - 0.5) * gsize * 0.3, 0, (rngN() - 0.5) * gsize * 0.3);
+        scene.add(holder);
+        npcs.push({ obj: holder, speed: ent.speed || 1.5, behavior: ent.behavior || 'wander',
+                    target: null, yaw: rngN() * Math.PI * 2, phase: rngN() * Math.PI * 2 });
+      }
+    } catch (e) { fail(e.message); }
+  }
+  function stepNPCs(dt, playerPos, t) {
+    for (const n of npcs) {
+      let tx = null, tz = null;
+      if (n.behavior === 'follow') {
+        const d = Math.hypot(playerPos.x - n.obj.position.x, playerPos.z - n.obj.position.z);
+        if (d > 2.6) { tx = playerPos.x; tz = playerPos.z; }
+      } else if (n.behavior === 'wander') {
+        if (!n.target || Math.hypot(n.target[0] - n.obj.position.x, n.target[1] - n.obj.position.z) < 0.6) {
+          n.target = [(rngN() - 0.5) * gsize * 0.6, (rngN() - 0.5) * gsize * 0.6];
+        }
+        tx = n.target[0]; tz = n.target[1];
+      }
+      if (tx !== null) {
+        const dx = tx - n.obj.position.x, dz = tz - n.obj.position.z;
+        const want = Math.atan2(dx, dz);
+        n.yaw = THREE.MathUtils.damp(n.yaw, want, 6, dt);
+        n.obj.rotation.y = n.yaw;
+        const sp = n.speed * dt;
+        n.obj.position.x += Math.sin(n.yaw) * sp;
+        n.obj.position.z += Math.cos(n.yaw) * sp;
+        n.obj.position.y = Math.abs(Math.sin(t * 7 + n.phase)) * 0.045;  // gait bob
+      } else {
+        n.obj.position.y = Math.sin(t * 2 + n.phase) * 0.01 + 0.01;      // idle breath
+      }
+      // stay inside the walls
+      const lim = gsize * 0.47;
+      n.obj.position.x = THREE.MathUtils.clamp(n.obj.position.x, -lim, lim);
+      n.obj.position.z = THREE.MathUtils.clamp(n.obj.position.z, -lim, lim);
+    }
+  }
+
   // ── objectives: glowing collectibles + counter + win state ───────────────
   const collectibles = [];
   let collected = 0, winTotal = 0, objLabel = '';
@@ -272,6 +326,7 @@ async function main() {
     tp: (x, z) => body.setTranslation({ x, y: P.height_m / 2 + 0.1, z }, true),
     objectives: () => ({ collected, total: winTotal,
                          left: collectibles.filter(c => c.mesh.parent).map(c => c.mesh.position.toArray()) }),
+    npcs: () => npcs.map(n => ({ behavior: n.behavior, pos: n.obj.position.toArray() })),
   };
 
   // ── main loop ────────────────────────────────────────────────────────────
@@ -319,6 +374,8 @@ async function main() {
       }
       mixer.update(dt);
     }
+
+    stepNPCs(dt, nt, performance.now() / 1000);
 
     // collectibles: bob + spin + proximity pickup
     if (collectibles.length) {

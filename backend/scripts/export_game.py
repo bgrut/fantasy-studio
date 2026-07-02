@@ -53,6 +53,24 @@ def main():
         from app.game_export.spec import ScatterSpec
         spec.world.scatter = [ScatterSpec(**s) for s in game_scatter(spec.world.name)]
 
+    # resolve entity assets from the local library (Phase 27 will generate
+    # missing ones on demand); unresolvable entities are dropped LOUDLY
+    from app.game_export import library
+    kept = []
+    for ent in spec.entities:
+        if not ent.asset:
+            glb = library.resolve(ent.name)
+            if glb:
+                ent.asset = glb
+                if ent.height_m == 1.0:
+                    ent.height_m = library.default_height(ent.name)
+            else:
+                print(f"[game] entity '{ent.name}' has no library asset yet — dropped "
+                      f"(Phase 27 will generate it)")
+                continue
+        kept.append(ent)
+    spec.entities = kept
+
     dist = export_web_game(spec, args.out)
 
     if not args.no_verify:
