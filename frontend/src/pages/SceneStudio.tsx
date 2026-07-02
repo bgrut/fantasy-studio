@@ -38,6 +38,7 @@ import {
 } from '@/lib/api'
 import { motion, AnimatePresence } from 'framer-motion'
 import VideoPlayer from '@/components/VideoPlayer'
+import GameStudio from '@/components/GameStudio'
 import CastPanel, { type CastChoice } from '@/components/CastPanel'
 import InlineCastStrip, { type InlineCastSlot } from '@/components/InlineCastStrip'
 import LibraryBrowser, { type LibraryBrowserChoice } from '@/components/LibraryBrowser'
@@ -131,6 +132,21 @@ export default function SceneStudio() {
   const [topic, setTopic] = useState('')
   const [template, setTemplate] = useState('auto')
   const [tier, setTier] = useState<Tier>('preview')
+
+  // Phase 30 — studio MODE: video (Blender render) or game (playable export).
+  // Persisted so the app reopens where the user works.
+  const [mode, setMode] = useState<'video' | 'game'>(() => {
+    try {
+      return localStorage.getItem('fs.mode') === 'game' ? 'game' : 'video'
+    } catch {
+      return 'video'
+    }
+  })
+  useEffect(() => {
+    try {
+      localStorage.setItem('fs.mode', mode)
+    } catch {}
+  }, [mode])
 
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [previewResult, setPreviewResult] = useState<RenderExtrasResult | null>(null)
@@ -582,10 +598,44 @@ export default function SceneStudio() {
           What do you Imagine?
         </h1>
         <p className="text-sm sm:text-base text-[#807d99] max-w-lg mx-auto">
-          Type a prompt. AI directs. Blender renders.
+          {mode === 'game'
+            ? 'Type a prompt. AI directs. You play.'
+            : 'Type a prompt. AI directs. Blender renders.'}
         </p>
       </div>
 
+      {/* Phase 30 — Video / Game mode chooser */}
+      <div className="flex justify-center">
+        <div className="inline-flex items-center p-1 rounded-2xl border border-white/[0.06] bg-[rgba(14,14,22,0.7)] backdrop-blur-xl">
+          {(
+            [
+              { id: 'video' as const, label: '🎬 Video', hint: 'Cinematic render' },
+              { id: 'game' as const, label: '🕹️ Game', hint: 'Playable world' },
+            ]
+          ).map((m) => (
+            <button
+              key={m.id}
+              type="button"
+              onClick={() => setMode(m.id)}
+              className={cn(
+                'px-5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 flex flex-col items-center leading-tight',
+                mode === m.id
+                  ? m.id === 'game'
+                    ? 'bg-[#5cffc9]/15 text-[#5cffc9] shadow-[0_0_18px_-6px_rgba(92,255,201,0.5)]'
+                    : 'bg-[#7c5cff]/20 text-[#a78bfa] shadow-[0_0_18px_-6px_rgba(124,92,255,0.5)]'
+                  : 'text-[#4a4764] hover:text-[#807d99]'
+              )}
+            >
+              <span>{m.label}</span>
+              <span className="text-[9px] font-normal opacity-70">{m.hint}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {mode === 'game' && <GameStudio />}
+
+      <div className={mode === 'game' ? 'hidden' : 'space-y-8'}>
       {/* Prompt input */}
       <div className="max-w-2xl mx-auto space-y-3">
         <div className="relative group">
@@ -1582,6 +1632,7 @@ export default function SceneStudio() {
           </div>
         </div>
       )}
+      </div>{/* end video-mode wrapper (Phase 30) */}
     </div>
   )
 }
