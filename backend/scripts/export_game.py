@@ -1,8 +1,9 @@
-"""CLI: export a playable three.js web game from a GameSpec JSON file or from
-flags. MVP entry point (the prompt/PRD extractor lands in Phase 26.5).
+"""CLI: export a playable three.js web game from a prompt/PRD, a GameSpec
+JSON file, or flags. Every export is auto-verified (verify_game gate).
 
 Usage:
-    python scripts/export_game.py --player-glb renders/.../hero.glb --out renders/game_park
+    python scripts/export_game.py --prompt "a knight in a foggy forest at night" --player-glb hero.glb
+    python scripts/export_game.py --prd my_game_prd.md --player-glb hero.glb
     python scripts/export_game.py --spec my_game.json --out renders/game_park
 """
 from __future__ import annotations
@@ -23,14 +24,21 @@ from app.game_export.dressing import game_scatter                 # noqa: E402
 
 def main():
     ap = argparse.ArgumentParser()
+    ap.add_argument("--prompt", help="game idea as text (Ollama → GameSpec)")
+    ap.add_argument("--prd", help="path to a PRD document (Ollama → GameSpec)")
     ap.add_argument("--spec", help="GameSpec JSON file")
     ap.add_argument("--player-glb", help="player .glb (overrides spec)")
     ap.add_argument("--title", default=None)
     ap.add_argument("--out", default=str(BACKEND_ROOT / "renders" / "game_out"))
+    ap.add_argument("--no-verify", action="store_true")
     args = ap.parse_args()
 
     if args.spec:
         spec = spec_from_dict(json.loads(Path(args.spec).read_text(encoding="utf-8")))
+    elif args.prompt or args.prd:
+        from app.game_export.extractor import extract_game_spec
+        text = args.prompt or Path(args.prd).read_text(encoding="utf-8")
+        spec = extract_game_spec(text)
     else:
         spec = GameSpec()
     if args.player_glb:
@@ -46,6 +54,16 @@ def main():
         spec.world.scatter = [ScatterSpec(**s) for s in game_scatter(spec.world.name)]
 
     dist = export_web_game(spec, args.out)
+
+    if not args.no_verify:
+        from app.game_export.verify_game import verify_dist
+        v = verify_dist(dist)
+        if v["ok"]:
+            print(f"[game] verify: PASS ({len(v['checks'])} checks)")
+        else:
+            print(f"[game] verify: FAIL — {v['errors']}")
+            sys.exit(2)
+
     print(f"serve it:  python -m http.server 8770 --directory \"{dist}\"")
 
 

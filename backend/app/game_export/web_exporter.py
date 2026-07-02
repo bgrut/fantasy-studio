@@ -61,6 +61,8 @@ def export_web_game(spec: GameSpec, out_dir: str | Path, verbose: bool = True) -
     js = (RUNTIME / "main.js.tpl").read_text(encoding="utf-8")
     (dist / "game.js").write_text(
         js.replace("__GAME_SPEC__", json.dumps(rt)), encoding="utf-8")
+    # machine-readable copy of the injected spec — read by verify_game + debugging
+    (dist / "spec.json").write_text(json.dumps(rt, indent=2), encoding="utf-8")
 
     if verbose:
         n = sum(1 for _ in dist.rglob("*") if _.is_file())
