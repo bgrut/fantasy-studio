@@ -31,6 +31,8 @@ def main():
     ap.add_argument("--title", default=None)
     ap.add_argument("--out", default=str(BACKEND_ROOT / "renders" / "game_out"))
     ap.add_argument("--no-verify", action="store_true")
+    ap.add_argument("--generate", action="store_true",
+                    help="generate missing entity assets via SDXL+TRELLIS (needs GPU)")
     args = ap.parse_args()
 
     if args.spec:
@@ -60,13 +62,22 @@ def main():
     for ent in spec.entities:
         if not ent.asset:
             glb = library.resolve(ent.name)
+            if not glb and args.generate:
+                from app.game_export.generate import ensure_asset, GPUUnavailable
+                try:
+                    glb = ensure_asset(ent.name)
+                except GPUUnavailable as e:
+                    print(f"[game] {e}")
+                except Exception as e:
+                    print(f"[game] generation of '{ent.name}' failed "
+                          f"({type(e).__name__}: {e}) — dropped")
             if glb:
                 ent.asset = glb
                 if ent.height_m == 1.0:
                     ent.height_m = library.default_height(ent.name)
             else:
-                print(f"[game] entity '{ent.name}' has no library asset yet — dropped "
-                      f"(Phase 27 will generate it)")
+                print(f"[game] entity '{ent.name}' has no library asset — dropped"
+                      + ("" if args.generate else " (use --generate once GPU is back)"))
                 continue
         kept.append(ent)
     spec.entities = kept
