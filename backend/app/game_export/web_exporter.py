@@ -22,6 +22,8 @@ def export_web_game(spec: GameSpec, out_dir: str | Path, verbose: bool = True) -
     out = Path(out_dir)
     dist = out / "dist"
     assets = dist / "assets"
+    if assets.exists():          # purge stale assets from prior exports
+        shutil.rmtree(assets)
     assets.mkdir(parents=True, exist_ok=True)
 
     # ── vendored runtime libs ────────────────────────────────────────────────

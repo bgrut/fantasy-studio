@@ -158,6 +158,10 @@ __result__=json.dumps({"ok":True,"H":round(float(H),3),"side":"X" if sx else "Y"
 # ── BLOCK 2: import BVH, frame-align, retarget (loop to TOTAL), camera, bake.
 _RETARGET_CODE = r'''
 BVHPATH=r"__BVH__"; TOTAL=__TOTAL__; FPS=__FPS__; TRACK=__TRACK__; WIDE=__WIDE__
+# INPLACE: game-export mode — no root/object translation keyframes (the game's
+# physics controller moves the character) and no rest ease-in (clips must loop
+# cleanly). False for the video pipeline = behavior unchanged.
+INPLACE=__INPLACE__
 import bpy, json, math
 import numpy as np
 from mathutils import Vector, Matrix
@@ -233,8 +237,9 @@ else:
         f=1+i; dirs,hp=samp[i]
         cyc=(i*step)//win   # completed loop cycles -> add net travel so we keep walking forward
         dx=(hp.x-hip0.x+cyc*net.x)*scale; dy=(hp.y-hip0.y+cyc*net.y)*scale; dz=(hp.z-hip0.z)*scale*0.5
-        rig.location=(base.x+dx,base.y+dy,base.z+dz); rig.keyframe_insert("location",frame=f)
-        o.location=(baseo.x+dx,baseo.y+dy,baseo.z+dz); o.keyframe_insert("location",frame=f)
+        if not INPLACE:
+            rig.location=(base.x+dx,base.y+dy,base.z+dz); rig.keyframe_insert("location",frame=f)
+            o.location=(baseo.x+dx,baseo.y+dy,baseo.z+dz); o.keyframe_insert("location",frame=f)
         bpy.context.view_layer.update()
         # hips stays at REST orientation (= reference facing); we do NOT retarget
         # the root rotation, so the torso never flips away from the reference.
@@ -296,7 +301,7 @@ else:
         # mid-stride/broken-arm pose. Quaternions only (root translation already
         # starts at base, so the body just accelerates forward as the pose eases).
         from mathutils import Quaternion as _Q
-        EASE=min(8, max(2, TOTAL//6))
+        EASE=0 if INPLACE else min(8, max(2, TOTAL//6))   # looping game clips: no ease
         def _ss(x): return x*x*(3-2*x)
         _qg={}
         for fc in flat:
@@ -369,7 +374,8 @@ def build_mocap_motion(runner, hero_name, action, total_frames, fps=24,
                 .replace("__TOTAL__", str(int(total_frames)))
                 .replace("__FPS__", str(int(fps)))
                 .replace("__TRACK__", "True" if track_camera else "False")
-                .replace("__WIDE__", f"{float(wide):.2f}"))
+                .replace("__WIDE__", f"{float(wide):.2f}")
+                .replace("__INPLACE__", "False"))   # video path: always False
         r = _run(runner, "mocap_retarget", code, verbose)
         if r and r.get("ok"):
             if verbose:

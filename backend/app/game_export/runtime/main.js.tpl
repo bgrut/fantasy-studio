@@ -88,6 +88,12 @@ async function main() {
   scene.add(ground);
   world.createCollider(RAPIER.ColliderDesc.cuboid(gsize / 2, 0.05, gsize / 2)
     .setTranslation(0, -0.05, 0));
+  // invisible boundary walls — the park has edges; you can't run off the world
+  const wh = 4, ext = gsize / 2;
+  for (const [wx, wz, hx, hz] of [[ext, 0, 0.5, ext], [-ext, 0, 0.5, ext],
+                                  [0, ext, ext, 0.5], [0, -ext, ext, 0.5]]) {
+    world.createCollider(RAPIER.ColliderDesc.cuboid(hx, wh, hz).setTranslation(wx, wh, wz));
+  }
 
   // ── asset loading ────────────────────────────────────────────────────────
   const loader = new GLTFLoader();
@@ -254,7 +260,12 @@ async function main() {
     body.setNextKinematicTranslation({ x: t.x + cm.x, y: t.y + cm.y, z: t.z + cm.z });
     world.step();
 
-    const nt = body.translation();
+    let nt = body.translation();
+    if (nt.y < -10) {   // fall-recovery safety net: respawn at origin
+      body.setNextKinematicTranslation({ x: 0, y: P.height_m / 2 + 0.1, z: 0 });
+      vy = 0; nt = { x: 0, y: P.height_m / 2 + 0.1, z: 0 };
+      console.warn('[game] fell out of world — respawned');
+    }
     playerObj.position.set(nt.x, nt.y - (capHalf + capR), nt.z);
     holder.rotation.y = modelYaw + THREE.MathUtils.degToRad(P.yaw_offset_deg || 0);
 
@@ -271,8 +282,8 @@ async function main() {
     // third-person follow camera
     camTarget.set(nt.x, nt.y + SPEC.camera.height_m * 0.5, nt.z);
     const cd = SPEC.camera.distance_m;
-    const cx = nt.x - Math.sin(yaw) * Math.cos(pitch) * cd;
-    const cz = nt.z - Math.cos(yaw) * Math.cos(pitch) * cd;
+    const cx = nt.x + Math.sin(yaw) * Math.cos(pitch) * cd;   // camera BEHIND
+    const cz = nt.z + Math.cos(yaw) * Math.cos(pitch) * cd;   // (W walks away)
     const cy = nt.y + Math.sin(pitch) * cd + SPEC.camera.height_m * 0.4;
     camera.position.lerp(new THREE.Vector3(cx, cy, cz), 1 - Math.exp(-8 * dt));
     camera.lookAt(camTarget);
