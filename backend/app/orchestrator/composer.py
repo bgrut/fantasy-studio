@@ -384,6 +384,7 @@ def _detect_subject_bbox(ref_png: str, verbose: bool = True):
 
 def _orient_hero_by_reference(runner, hero_name: str, ref_png: str, work_dir,
                               min_iou: float = 0.30, wheels_down: bool = False,
+                              upright_biped: bool = False,
                               candidates=None, verbose: bool = True):
     """Reference-anchored orientation gate (Phase 20, scalable).
 
@@ -405,6 +406,7 @@ def _orient_hero_by_reference(runner, hero_name: str, ref_png: str, work_dir,
     for k, v in (("__HERO__", hero_name), ("__REF__", str(Path(ref_png).as_posix())),
                  ("__TMP__", tmp_png), ("__CHECK__", check_png), ("__RES__", "160"),
                  ("__MINIOU__", str(min_iou)), ("__WHEELSDOWN__", "1" if wheels_down else "0"),
+                 ("__UPRIGHTBIPED__", "1" if upright_biped else "0"),
                  ("__CANDS__", repr([list(c) for c in candidates]) if candidates else "None")):
         code = code.replace(k, v)
     try:
@@ -560,6 +562,28 @@ try:
                 o.rotation_euler.y+=math.radians(180.0); bpy.context.view_layer.update()
                 zs3=[(o.matrix_world@Vector(c)).z for c in o.bound_box]; o.location.z-=min(zs3)
                 bpy.context.view_layer.update(); flipped=1
+        if __UPRIGHTBIPED__:
+            # Bipeds MUST end up head-up. IoU is unreliable for a near-symmetric
+            # standing figure (it accepted a 180 flip at IoU 0.19), so use a
+            # geometric prior: the FEET end has a left-right GAP between two legs,
+            # the head end is a solid blob. If the gap is at the TOP the figure is
+            # inverted -> flip 180 about X (front/back facing preserved, head -> up).
+            Wb=np.array([list(o.matrix_world@v.co) for v in o.data.vertices], dtype=np.float64)
+            Zb=Wb[:,2]; z0b=Zb.min(); z1b=Zb.max(); Hb=max(z1b-z0b,1e-6)
+            def _gap(zlo,zhi):
+                sel=(Zb>=z0b+zlo*Hb)&(Zb<z0b+zhi*Hb)
+                if int(sel.sum())<30: return 0.0
+                best=0.0
+                for ax in (0,1):   # test both horizontal axes for the leg split
+                    a=Wb[sel,ax]; c=float(np.median(a)); hw=max((a.max()-a.min())/2,1e-6)
+                    fill=float((np.abs(a-c)<0.25*hw).mean())  # solid centre=head; gap=legs
+                    best=max(best,1.0-fill)
+                return best
+            bot=_gap(0.0,0.40); top=_gap(0.60,1.0)
+            if top > bot+0.05:                 # leg-gap at the top => inverted
+                o.rotation_euler.x+=math.radians(180.0); bpy.context.view_layer.update()
+                zsb=[(o.matrix_world@Vector(c)).z for c in o.bound_box]; o.location.z-=min(zsb)
+                bpy.context.view_layer.update(); flipped=3
         out={"ok":True,"euler":list(best_eu),"iou":round(best_iou,3),"tried":len(cands),
              "wheels_flip":flipped,"post_dims":[round(d,3) for d in o.dimensions]}
     __result__=json.dumps(out)
@@ -2098,6 +2122,7 @@ def _run_asset_gen(slots: Dict[str, Any], scene: Dict[str, Any], subj: Dict[str,
                 silo = _orient_hero_by_reference(
                     runner, hero_name, str(ref_png), work_dir, min_iou=0.0,
                     wheels_down=(base_pattern == "vehicle"),
+                    upright_biped=(base_pattern == "biped"),
                     candidates=[(0, 0, 0), (180, 0, 0), (0, 180, 0), (0, 0, 180)],
                     verbose=verbose)
             else:
@@ -2159,7 +2184,8 @@ def _run_asset_gen(slots: Dict[str, Any], scene: Dict[str, Any], subj: Dict[str,
                     print(f"[composer] paint-side-up: {_pr.get('result')}")
         elif os.environ.get("FS_ORIENT_SILHOUETTE", "1") != "0" and ref_png.exists():
             silo = _orient_hero_by_reference(runner, hero_name, str(ref_png), work_dir,
-                                             wheels_down=(base_pattern == "vehicle"), verbose=verbose)
+                                             wheels_down=(base_pattern == "vehicle"),
+                                             upright_biped=(base_pattern == "biped"), verbose=verbose)
         # Engine-aware orientation: TripoSG and TripoSR emit in different frames.
         _euler_map = _TRIPOSG_PATTERN_EULER if engine == "triposg" else _BLENDER_PATTERN_EULER
         euler = _euler_map.get(base_pattern)
