@@ -22,6 +22,7 @@ from .api.curation import router as curation_router
 from .api.pipeline import router as pipeline_router
 from .api.library import router as library_router
 from .api.orchestrate import router as orchestrate_router  # Phase 8: local-LLM orchestrator
+from .api.game import router as game_router, GAME_JOBS_DIR  # Phase 30: game mode
 
 app = FastAPI(title="FantasyLab Blender Lane Backend")
 app.include_router(assets_router)
@@ -35,6 +36,7 @@ app.include_router(curation_router)
 app.include_router(pipeline_router)
 app.include_router(library_router)
 app.include_router(orchestrate_router)
+app.include_router(game_router)
 
 app.add_middleware(
     CORSMiddleware,
@@ -45,6 +47,8 @@ app.add_middleware(
 )
 
 app.mount("/outputs", StaticFiles(directory=str(OUTPUT_DIR)), name="outputs")
+GAME_JOBS_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/games", StaticFiles(directory=str(GAME_JOBS_DIR), html=True), name="games")
 
 
 def row_to_dict(row):
