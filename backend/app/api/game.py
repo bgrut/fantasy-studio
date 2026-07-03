@@ -79,6 +79,11 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                     f"entity '{ent.name}' not in library yet — skipped")
         spec.entities = kept
 
+        stage("designing level")
+        from app.game_export.level import build_level
+        n_obj = sum(o.count for o in spec.objectives if o.kind == "collect")
+        spec.world.level = build_level(spec.seed, spec.world.size_m, n_objectives=n_obj)
+
         stage("building")
         out_dir = GAME_JOBS_DIR / f"job_{job_id}"
         dist = export_web_game(spec, out_dir, verbose=False)

@@ -80,14 +80,76 @@ async function main() {
   gtex.wrapS = gtex.wrapT = THREE.RepeatWrapping;
   gtex.repeat.set(gsize / 8, gsize / 8);
   gtex.colorSpace = THREE.SRGBColorSpace;
-  const ground = new THREE.Mesh(
-    new THREE.PlaneGeometry(gsize, gsize),
-    new THREE.MeshStandardMaterial({ map: gtex, roughness: 1.0 }));
-  ground.rotation.x = -Math.PI / 2;
-  ground.receiveShadow = true;
-  scene.add(ground);
-  world.createCollider(RAPIER.ColliderDesc.cuboid(gsize / 2, 0.05, gsize / 2)
-    .setTranslation(0, -0.05, 0));
+  // Phase 32 LEVEL: terrain heightfield (hills, flattened path corridor) when
+  // the LevelPlan is present; flat plane otherwise. hAt(x,z) is THE ground
+  // sampler — scatter, objectives, NPCs and landmarks all sit on it.
+  const LVL = SPEC.world.level || null;
+  let hAt = () => 0;
+  const gmat = new THREE.MeshStandardMaterial({ map: gtex, roughness: 1.0 });
+  if (LVL && LVL.heights && LVL.heights.length === LVL.grid_n * LVL.grid_n) {
+    const n = LVL.grid_n, hs = LVL.heights;
+    hAt = (x, z) => {
+      const fx = (x / gsize + 0.5) * (n - 1), fz = (z / gsize + 0.5) * (n - 1);
+      const j0 = Math.max(0, Math.min(n - 2, Math.floor(fx)));
+      const i0 = Math.max(0, Math.min(n - 2, Math.floor(fz)));
+      const tx = Math.max(0, Math.min(1, fx - j0)), tz = Math.max(0, Math.min(1, fz - i0));
+      return hs[i0 * n + j0] * (1 - tx) * (1 - tz) + hs[i0 * n + j0 + 1] * tx * (1 - tz)
+           + hs[(i0 + 1) * n + j0] * (1 - tx) * tz + hs[(i0 + 1) * n + j0 + 1] * tx * tz;
+    };
+    // world-space grid mesh + EXACT-match trimesh collider (same vertices)
+    const verts = new Float32Array(n * n * 3);
+    const uvs = new Float32Array(n * n * 2);
+    for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
+      const k = i * n + j;
+      verts[k * 3] = (j / (n - 1) - 0.5) * gsize;
+      verts[k * 3 + 1] = hs[k];
+      verts[k * 3 + 2] = (i / (n - 1) - 0.5) * gsize;
+      uvs[k * 2] = j / (n - 1) * gsize / 8; uvs[k * 2 + 1] = i / (n - 1) * gsize / 8;
+    }
+    const idx = new Uint32Array((n - 1) * (n - 1) * 6);
+    let p = 0;
+    for (let i = 0; i < n - 1; i++) for (let j = 0; j < n - 1; j++) {
+      const a = i * n + j, b = a + 1, c = a + n, d = c + 1;
+      idx[p++] = a; idx[p++] = c; idx[p++] = b;
+      idx[p++] = b; idx[p++] = c; idx[p++] = d;
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(verts, 3));
+    geo.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+    geo.setIndex(new THREE.BufferAttribute(idx, 1));
+    geo.computeVertexNormals();
+    const terrain = new THREE.Mesh(geo, gmat);
+    terrain.receiveShadow = true;
+    scene.add(terrain);
+    world.createCollider(RAPIER.ColliderDesc.trimesh(verts, idx));
+  } else {
+    const ground = new THREE.Mesh(new THREE.PlaneGeometry(gsize, gsize), gmat);
+    ground.rotation.x = -Math.PI / 2;
+    ground.receiveShadow = true;
+    scene.add(ground);
+    world.createCollider(RAPIER.ColliderDesc.cuboid(gsize / 2, 0.05, gsize / 2)
+      .setTranslation(0, -0.05, 0));
+  }
+
+  // goal beacon: glowing pillar at the level's goal zone — reaching it (with
+  // all objectives collected) wins the level
+  let goalPos = null, goalMesh = null;
+  if (LVL && LVL.goal) {
+    goalPos = new THREE.Vector3(LVL.goal[0], hAt(LVL.goal[0], LVL.goal[1]), LVL.goal[1]);
+    const pil = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.9, 0.9, 22, 20, 1, true),
+      new THREE.MeshBasicMaterial({ color: 0x9f7bff, transparent: true, opacity: 0.16,
+                                    side: THREE.DoubleSide, depthWrite: false }));
+    pil.position.set(goalPos.x, goalPos.y + 11, goalPos.z);
+    scene.add(pil);
+    const ring = new THREE.Mesh(
+      new THREE.TorusGeometry(1.5, 0.09, 10, 40),
+      new THREE.MeshStandardMaterial({ color: 0xb9a0ff, emissive: 0x7c5cff, emissiveIntensity: 2.2 }));
+    ring.rotation.x = Math.PI / 2;
+    ring.position.set(goalPos.x, goalPos.y + 0.25, goalPos.z);
+    scene.add(ring);
+    goalMesh = ring;
+  }
   // invisible boundary walls — the park has edges; you can't run off the world
   const wh = 4, ext = gsize / 2;
   for (const [wx, wz, hx, hz] of [[ext, 0, 0.5, ext], [-ext, 0, 0.5, ext],
@@ -115,30 +177,58 @@ async function main() {
   }
 
   // ── scatter props (shared world-dressing manifest — video side reuses it) ─
+  // Path-aware: props keep clear of the level's walking corridor and sit ON
+  // the terrain. Landmarks = oversized instances of the first prop at the
+  // LevelPlan's scenic points.
+  const PATH = (LVL && LVL.path) || null;
+  const CORR = (LVL && LVL.corridor_m || 5.5) + 1.5;
+  function pathDist(x, z) {
+    if (!PATH) return Infinity;
+    let best = Infinity;
+    for (let k = 0; k < PATH.length - 1; k++) {
+      const [ax, az] = PATH[k], [bx, bz] = PATH[k + 1];
+      const dx = bx - ax, dz = bz - az, L2 = dx * dx + dz * dz;
+      const t = L2 < 1e-9 ? 0 : Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / L2));
+      best = Math.min(best, Math.hypot(x - (ax + t * dx), z - (az + t * dz)));
+    }
+    return best;
+  }
   const rng = mulberry32(SPEC.seed);
+  let landmarkAsset = null;
+  function placeProp(inst, x, z, scale, collide) {
+    inst.scale.multiplyScalar(scale);
+    inst.rotation.y = rng() * Math.PI * 2;
+    const bb = new THREE.Box3().setFromObject(inst);
+    const gy = hAt(x, z);
+    inst.position.set(x, gy - bb.min.y, z);
+    scene.add(inst);
+    if (collide) {
+      const r = Math.max(bb.max.x - bb.min.x, bb.max.z - bb.min.z) * 0.25;
+      world.createCollider(RAPIER.ColliderDesc.cylinder((bb.max.y - bb.min.y) / 2, Math.max(r, 0.1))
+        .setTranslation(x, gy + (bb.max.y - bb.min.y) / 2, z));
+    }
+  }
   for (const sct of SPEC.world.scatter || []) {
     try {
       const gltf = await loadGLB(sct.asset);
+      if (!landmarkAsset) landmarkAsset = gltf;
       for (let i = 0; i < sct.count; i++) {
         const inst = gltf.scene.clone(true);
         inst.traverse(o => { if (o.isMesh) o.castShadow = true; });
         let x, z, tries = 0;
         do {
           x = (rng() - 0.5) * gsize * 0.85; z = (rng() - 0.5) * gsize * 0.85; tries++;
-        } while (Math.hypot(x, z) < sct.min_dist_m && tries < 20);
-        const jitter = 1 + (rng() - 0.5) * 2 * sct.scale_jitter;
-        inst.scale.multiplyScalar(jitter);
-        inst.rotation.y = rng() * Math.PI * 2;
-        const bb = new THREE.Box3().setFromObject(inst);
-        inst.position.set(x, -bb.min.y, z);
-        scene.add(inst);
-        if (sct.collide) {
-          const r = Math.max(bb.max.x - bb.min.x, bb.max.z - bb.min.z) * 0.25;
-          world.createCollider(RAPIER.ColliderDesc.cylinder((bb.max.y - bb.min.y) / 2, Math.max(r, 0.1))
-            .setTranslation(x, (bb.max.y - bb.min.y) / 2, z));
-        }
+        } while ((Math.hypot(x, z) < sct.min_dist_m || pathDist(x, z) < CORR) && tries < 30);
+        placeProp(inst, x, z, 1 + (rng() - 0.5) * 2 * sct.scale_jitter, sct.collide);
       }
     } catch (e) { fail(e.message); }
+  }
+  if (LVL && LVL.landmarks && landmarkAsset) {
+    for (const [lx, lz, ls] of LVL.landmarks) {
+      const inst = landmarkAsset.scene.clone(true);
+      inst.traverse(o => { if (o.isMesh) o.castShadow = true; });
+      placeProp(inst, lx, lz, ls, true);
+    }
   }
 
   // ── NPC entities: wander / follow template AI ────────────────────────────
@@ -184,9 +274,11 @@ async function main() {
         const sp = n.speed * dt;
         n.obj.position.x += Math.sin(n.yaw) * sp;
         n.obj.position.z += Math.cos(n.yaw) * sp;
-        n.obj.position.y = Math.abs(Math.sin(t * 7 + n.phase)) * 0.045;  // gait bob
+        n.obj.position.y = hAt(n.obj.position.x, n.obj.position.z)
+                         + Math.abs(Math.sin(t * 7 + n.phase)) * 0.045;  // terrain + gait bob
       } else {
-        n.obj.position.y = Math.sin(t * 2 + n.phase) * 0.01 + 0.01;      // idle breath
+        n.obj.position.y = hAt(n.obj.position.x, n.obj.position.z)
+                         + Math.sin(t * 2 + n.phase) * 0.01 + 0.01;      // terrain + idle breath
       }
       // stay inside the walls
       const lim = gsize * 0.47;
@@ -204,14 +296,21 @@ async function main() {
     winTotal = obj.count; objLabel = obj.label || 'items';
     const rngC = mulberry32(SPEC.seed + 77);
     const geo = new THREE.SphereGeometry(0.11, 12, 10);
+    const pts = (LVL && LVL.collect_points && LVL.collect_points.length >= winTotal)
+      ? LVL.collect_points : null;             // Phase 32: along the route
     for (let i = 0; i < winTotal; i++) {
       const m = new THREE.MeshStandardMaterial({
         color: 0xfff2b0, emissive: 0xffd54a, emissiveIntensity: 2.6, roughness: 0.4 });
       const s = new THREE.Mesh(geo, m);
-      const ang = rngC() * Math.PI * 2;
-      const dist = 5 + rngC() * gsize * 0.32;
-      const baseY = 1.0 + rngC() * 0.8;
-      s.position.set(Math.cos(ang) * dist, baseY, Math.sin(ang) * dist);
+      let cx, cz;
+      if (pts) { cx = pts[i][0]; cz = pts[i][1]; }
+      else {
+        const ang = rngC() * Math.PI * 2;
+        const dist = 5 + rngC() * gsize * 0.32;
+        cx = Math.cos(ang) * dist; cz = Math.sin(ang) * dist;
+      }
+      const baseY = hAt(cx, cz) + 1.0 + rngC() * 0.6;
+      s.position.set(cx, baseY, cz);
       const halo = new THREE.PointLight(0xffd54a, 2.2, 6.0);
       s.add(halo);
       scene.add(s);
@@ -220,16 +319,26 @@ async function main() {
     objEl.style.display = 'block';
     objEl.textContent = `${objLabel}: 0 / ${winTotal}`;
   }
+  let won = false;
+  function doWin(text) {
+    if (won) return;
+    won = true;
+    document.getElementById('wintext').textContent = text;
+    document.getElementById('win').style.display = 'flex';
+    console.log('[game] WIN — ' + text);
+  }
   function onCollect() {
     collected++;
-    objEl.textContent = `${objLabel}: ${collected} / ${winTotal}`;
-    if (collected >= winTotal) {
-      document.getElementById('wintext').textContent =
-        `All ${winTotal} ${objLabel} collected.`;
-      document.getElementById('win').style.display = 'flex';
-      console.log('[game] WIN — all objectives complete');
+    if (collected >= winTotal && goalPos) {
+      objEl.textContent = `${objLabel}: ${collected} / ${winTotal} — reach the beacon!`;
+    } else {
+      objEl.textContent = `${objLabel}: ${collected} / ${winTotal}`;
+    }
+    if (collected >= winTotal && !goalPos) {
+      doWin(`All ${winTotal} ${objLabel} collected.`);
     }
   }
+  if (goalPos && !obj) { objEl.style.display = 'block'; objEl.textContent = 'reach the beacon'; }
 
   // ── player: animated GLB + kinematic capsule ─────────────────────────────
   let mixer = null, actions = {}, current = null;
@@ -376,6 +485,17 @@ async function main() {
     }
 
     stepNPCs(dt, nt, performance.now() / 1000);
+
+    // goal beacon: pulse + win when reached (with objectives complete)
+    if (goalPos && !won) {
+      if (goalMesh) goalMesh.rotation.z += dt * 0.8;
+      const gd = Math.hypot(goalPos.x - nt.x, goalPos.z - nt.z);
+      if (gd < 2.2 && collected >= winTotal) {
+        doWin(winTotal > 0
+          ? `All ${winTotal} ${objLabel} collected — beacon reached!`
+          : 'Beacon reached!');
+      }
+    }
 
     // collectibles: bob + spin + proximity pickup
     if (collectibles.length) {

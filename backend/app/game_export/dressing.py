@@ -113,6 +113,20 @@ for glb, count in RECIPE:
             place(dup, ang, dist, s)
         placed+=1
     kinds.append(glb.split("/")[-1])
+# Phase 32 flow-back: ONE oversized LANDMARK of the first prop kind — the
+# video sibling of the game's scenic landmarks (same design language).
+if RECIPE:
+    glb0=RECIPE[0][0]
+    root0=[o for o in bpy.data.objects if o.name.startswith("PropRoot")]
+    if root0:
+        lm=root0[0].copy(); bpy.context.scene.collection.objects.link(lm)
+        for ch in root0[0].children:
+            c=ch.copy(); c.parent=lm; bpy.context.scene.collection.objects.link(c)
+        ang=random.uniform(0,2*math.pi); dist=random.uniform(14.0,18.0)
+        s=random.uniform(2.2,2.8)
+        lm.location=(math.cos(ang)*dist, math.sin(ang)*dist, 0.0)
+        lm.scale=(s,s,s); lm.rotation_euler=(0,0,random.uniform(0,6.283))
+        placed+=1; kinds.append("landmark")
 bpy.context.view_layer.update()
 __result__=json.dumps({"ok":True,"placed":placed,"kinds":kinds})
 '''

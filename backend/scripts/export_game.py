@@ -84,6 +84,12 @@ def main():
         kept.append(ent)
     spec.entities = kept
 
+    # Phase 32: seeded level design (terrain, path, goal, objective placement)
+    if spec.world.level is None:
+        from app.game_export.level import build_level
+        n_obj = sum(o.count for o in spec.objectives if o.kind == "collect")
+        spec.world.level = build_level(spec.seed, spec.world.size_m, n_objectives=n_obj)
+
     dist = export_web_game(spec, args.out)
 
     if not args.no_verify:

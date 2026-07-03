@@ -50,6 +50,7 @@ class WorldSpec(BaseModel):
     sky: Literal["day", "sunset", "night", "overcast"] = "day"
     fog: bool = True
     scatter: List[ScatterSpec] = Field(default_factory=list)
+    level: Optional[dict] = None    # Phase 32 LevelPlan (terrain/path/goal), injected by the exporter
 
     @field_validator("ground_color")
     @classmethod
