@@ -6,20 +6,9 @@
 
 ### *What do you imagine?*
 
-**Local AI that directs real 3D cinematic video. No diffusion models. You own every frame.**
+**Local AI that directs real 3D cinematic video — and builds playable games. No diffusion models. You own every frame.**
 
-[![License: BSL 1.1](https://img.shields.io/badge/License-BSL%201.1-blue.svg)](LICENSE)
-[![Discord — coming soon](https://img.shields.io/badge/Discord-coming%20soon-5865F2?logo=discord&logoColor=white)](#)
-[![Patreon — coming soon](https://img.shields.io/badge/Patreon-coming%20soon-FF424D?logo=patreon&logoColor=white)](#)
-[![TikTok](https://img.shields.io/badge/TikTok-%40Fantasylab.ai-000000?logo=tiktok&logoColor=white)](https://www.tiktok.com/@fantasylab.ai)
-[![YouTube](https://img.shields.io/badge/YouTube-%40Fantasy__lab__ai-FF0000?logo=youtube&logoColor=white)](https://youtube.com/@Fantasy_lab_ai)
-[![GitHub stars](https://img.shields.io/github/stars/bgrut/fantasy-studio?style=social)](https://github.com/bgrut/fantasy-studio)
-
-[Watch demo](https://youtube.com/@Fantasy_lab_ai) · [Try a render](INSTALL.md) · [Roadmap](ROADMAP.md) · [Discord (soon)](#) · [Waitlist](https://fantasylab.ai)
-
-<br/>
-
-### ⬇️ Install with one command
+### ⬇️ Get it — one command, installs everything
 
 </div>
 
@@ -29,8 +18,18 @@ irm https://raw.githubusercontent.com/bgrut/fantasy-studio/main/bootstrap.ps1 | 
 
 <div align="center">
 
-*Checks prerequisites → clones → installs everything → pulls the local AI model — then `.\desktop\launch.ps1` opens the app.*
-*Prereqs: [Git](https://git-scm.com), [Python 3.11+](https://python.org), [Node 20+](https://nodejs.org), [Ollama](https://ollama.com) (the script tells you if any are missing). 🕹️ Game mode runs with **no GPU**; 🎬 video renders want an NVIDIA card. Details: [INSTALL.md](INSTALL.md).*
+*Then `.\desktop\launch.ps1` opens the app. 🕹️ Game mode needs **no GPU** · prereqs auto-checked ([details](INSTALL.md))*
+
+<br/>
+
+[![License: BSL 1.1](https://img.shields.io/badge/License-BSL%201.1-blue.svg)](LICENSE)
+[![Discord — coming soon](https://img.shields.io/badge/Discord-coming%20soon-5865F2?logo=discord&logoColor=white)](#)
+[![Patreon — coming soon](https://img.shields.io/badge/Patreon-coming%20soon-FF424D?logo=patreon&logoColor=white)](#)
+[![TikTok](https://img.shields.io/badge/TikTok-%40Fantasylab.ai-000000?logo=tiktok&logoColor=white)](https://www.tiktok.com/@fantasylab.ai)
+[![YouTube](https://img.shields.io/badge/YouTube-%40Fantasy__lab__ai-FF0000?logo=youtube&logoColor=white)](https://youtube.com/@Fantasy_lab_ai)
+[![GitHub stars](https://img.shields.io/github/stars/bgrut/fantasy-studio?style=social)](https://github.com/bgrut/fantasy-studio)
+
+[Watch demo](https://youtube.com/@Fantasy_lab_ai) · [Install](INSTALL.md) · [Roadmap](ROADMAP.md) · [Discord (soon)](#) · [Waitlist](https://fantasylab.ai)
 
 </div>
 
