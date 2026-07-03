@@ -23,7 +23,8 @@ Output ONLY the JSON object, no markdown, no commentary. Schema (all fields opti
            "size_m": float 30..500, "sky": one of "day","sunset","night","overcast", "fog": bool,
            "weather": one of "none","rain","snow", "wind": float 0..1,
            "ground_color": [r,g,b] floats 0..1},
- "player": {"name": str, "height_m": float 0.5..3, "walk_speed": float 1..4, "run_speed": float 4..10},
+ "player": {"name": THE CONTROLLABLE SUBJECT of the prompt as a simple noun ("fox","samurai","man","horse","wizard"...),
+            "height_m": float 0.5..3, "walk_speed": float 1..4, "run_speed": float 4..10},
  "camera": {"mode": one of "third_person","first_person","orbit", "distance_m": float 2..12, "fov_deg": float 30..90},
  "objectives": [{"kind":"collect","label":str,"count":int 1..50}],
  "entities": [{"name": simple noun like "dog","cat","horse", "behavior": one of "wander","follow","static",
@@ -35,10 +36,18 @@ scene besides the player (a companion pet -> behavior "follow"). Do not invent f
 _JSON_RE = re.compile(r"\{.*\}", re.DOTALL)
 
 
+_PLAYER_KINDS = ("samurai", "wizard", "knight", "viking", "fox", "dog", "cat",
+                 "horse", "wolf", "bear", "woman", "man")
+
+
 def _keyword_fallback(text: str) -> dict:
     """No-LLM extraction: setting keywords + sky words. Always succeeds."""
     t = text.lower()
     out: dict = {"title": text.strip()[:60] or "Fantasy Studio Game", "world": {}}
+    for k in _PLAYER_KINDS:              # first named subject = the player
+        if k in t:
+            out["player"] = {"name": k}
+            break
     for w in ("park", "garden", "forest", "meadow", "countryside", "field", "backyard", "grass"):
         if w in t:
             out["world"]["name"] = w

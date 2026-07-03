@@ -37,7 +37,9 @@ export async function exportGame(prompt: string, opts?: { godot?: boolean; playe
   const res = await fetch('/api/game/export', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ prompt, godot: opts?.godot ?? false, player: opts?.player ?? 'man' }),
+    // player omitted by default — the backend CASTS it from the prompt subject
+    body: JSON.stringify({ prompt, godot: opts?.godot ?? false,
+                           ...(opts?.player ? { player: opts.player } : {}) }),
   })
   return j<{ ok: boolean; job_id: number }>(res)
 }

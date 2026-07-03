@@ -28,7 +28,7 @@ _lock = threading.Lock()
 
 class GameExportRequest(BaseModel):
     prompt: str = Field(min_length=3, max_length=4000)
-    player: str = "man"          # library kind for the controllable character
+    player: str | None = None    # override; None = cast from the prompt (extractor)
     godot: bool = False          # also emit a Godot 4 project
     seed: int | None = None      # world-layout seed; None = fresh random level
 
@@ -60,10 +60,32 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         job["seed"] = spec.seed
 
         stage("resolving assets")
-        player_glb = library.resolve(req.player) or library.resolve("man")
+        # PLAYER CASTING (accuracy-first, like the video hero): explicit
+        # override > the prompt's extracted subject > man. Falls through the
+        # ladder with a visible note whenever the cast changes.
+        want = (req.player or spec.player.name or "man").strip().lower()
+        from app.game_export.bake import ensure_playable
+        player_glb = ensure_playable(want, verbose=False)   # rig+animate on first use
+        cast = want
+        if not player_glb:
+            try:
+                from app.game_export.generate import ensure_asset
+                ensure_asset(want)                # generates when GPU present
+                player_glb = ensure_playable(want, verbose=False)
+            except Exception as ge:
+                job.setdefault("notes", []).append(
+                    f"player '{want}' unavailable ({type(ge).__name__}) — cast as man")
+        if not player_glb:
+            job.setdefault("notes", []).append(f"cast fell back: {want} -> man")
+            player_glb = library.resolve("man")
+            cast = "man"
         if not player_glb:
             raise RuntimeError("no player asset in library (assets/library.json)")
         spec.player.asset = player_glb
+        spec.player.name = cast
+        if abs(spec.player.height_m - 1.75) < 1e-6:      # untouched default -> species height
+            spec.player.height_m = library.default_height(cast)
+        job["player"] = cast
         if not spec.world.scatter:
             spec.world.scatter = [ScatterSpec(**s) for s in game_scatter(spec.world.name)]
         kept = []
