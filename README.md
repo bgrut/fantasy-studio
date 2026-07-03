@@ -17,6 +17,21 @@
 
 [Watch demo](https://youtube.com/@Fantasy_lab_ai) · [Try a render](INSTALL.md) · [Roadmap](ROADMAP.md) · [Discord (soon)](#) · [Waitlist](https://fantasylab.ai)
 
+<br/>
+
+### ⬇️ Install with one command
+
+</div>
+
+```powershell
+irm https://raw.githubusercontent.com/bgrut/fantasy-studio/main/bootstrap.ps1 | iex
+```
+
+<div align="center">
+
+*Checks prerequisites → clones → installs everything → pulls the local AI model — then `.\desktop\launch.ps1` opens the app.*
+*Prereqs: [Git](https://git-scm.com), [Python 3.11+](https://python.org), [Node 20+](https://nodejs.org), [Ollama](https://ollama.com) (the script tells you if any are missing). 🕹️ Game mode runs with **no GPU**; 🎬 video renders want an NVIDIA card. Details: [INSTALL.md](INSTALL.md).*
+
 </div>
 
 ---
