@@ -10,6 +10,34 @@ Pre-1.0 versions are internal milestones during the constraint sprint leading to
 
 ## [Unreleased]
 
+### Added — Phase 26/26.5: playable game export (2026-07-02)
+- **New output backend**: `backend/app/game_export/` turns a prompt or PRD into a
+  playable, self-contained three.js web game (offline; vendored three.js r170 MIT +
+  Rapier 0.14 Apache-2.0). CLI: `python scripts/export_game.py --prompt "..."`.
+- Ollama GameSpec extractor (shared LLM client with the video slot extractor) with
+  keyword + default fallbacks; every export runs a static verify gate (structure,
+  libs, JS syntax, GLB skins/animation clips).
+- CPU-Blender animation-set bake: idle/walk/run CMU mocap retargeted IN-PLACE onto
+  named glTF animations (reuses the Tier A+B auto-rig + voxel-proxy skinning).
+- NPC entities (wander/follow AI), collectible objectives with HUD + win screen,
+  physics character controller, boundary walls, third-person camera.
+- SHARED world-dressing: procedural tree/rock/lamp prop library scattered in games
+  AND in Blender video scenes (background ring; night scenes get firefly motes).
+- Asset library manifest (`assets/library.json`) + GLB decimation for game-budget
+  NPC assets (494k → 40k tris).
+- Docs: `backend/docs/game_engine_plan.md` (Godot adapter next; Unreal opt-in later).
+
+### Added — Phase 30: Studio game mode + desktop app (2026-07-02)
+- **Game/Video mode chooser** in the Studio: game mode = prompt → Ollama GameSpec →
+  built + verified + **embedded playable** in the app (~30-60s, no GPU needed).
+- Backend: `POST /api/game/export` (background job), `GET /api/game/jobs/{id}`,
+  `GET /api/game/health`, `/games` static mount serving built games.
+- **Tauri 2 desktop shell** (`desktop/`, Aurora pattern): native Fantasy Studio
+  window, `launch.ps1` single-terminal dev launcher (backend + vite + window).
+  Installer bundling (PyInstaller sidecar) on the roadmap.
+- Also: Phase 28 Godot 4 export adapter (headless-validated) and Phase 27
+  on-demand asset generation glue (GPU-gated, first live run when GPU returns).
+
 ### Planned for V1.0.0 launch (Mid-May 2026)
 - Public source release under BSL 1.1
 - Marketing website live at [fantasylab.ai](https://fantasylab.ai)

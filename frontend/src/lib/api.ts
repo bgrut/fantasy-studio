@@ -404,6 +404,53 @@ export async function renderPreview(payload: {
   return r.json();
 }
 
+// ═════════════════════════════════════════════════════════════════════
+// Phase 8 — Local-LLM orchestrator submission
+// ═════════════════════════════════════════════════════════════════════
+
+export interface OrchestrateResponse {
+  job_id: number;
+  status: string;
+  prompt: string;
+  template_name: string;
+}
+
+export interface OrchestrateHealth {
+  ollama: boolean;
+  bridge: boolean;
+  ready: boolean;
+  errors: string[];
+}
+
+/**
+ * Submit a prompt to the local Ollama-driven orchestrator. The job lands in
+ * the same render_jobs table as legacy renders, so PipelineStatus polling
+ * picks it up automatically. Poll /api/render-jobs/{job_id} for status.
+ */
+export async function submitOrchestrate(payload: {
+  prompt: string;
+  project_name?: string;
+  duration_seconds?: number;
+  fps?: number;
+  render_tier?: RenderTier;
+  model?: string;
+}): Promise<OrchestrateResponse> {
+  const r = await fetch(`${API_BASE}/api/orchestrate`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!r.ok) throw new Error("Failed to submit orchestrate job");
+  return r.json();
+}
+
+/** Check whether Ollama + Blender bridge are reachable from the backend. */
+export async function getOrchestrateHealth(): Promise<OrchestrateHealth> {
+  const r = await fetch(`${API_BASE}/api/orchestrate/health`);
+  if (!r.ok) throw new Error("Failed to check orchestrator health");
+  return r.json();
+}
+
 export async function renderIterate(payload: {
   session_id: string;
   instruction: string;

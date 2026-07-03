@@ -17,6 +17,21 @@
 
 [Watch demo](https://youtube.com/@Fantasy_lab_ai) · [Try a render](INSTALL.md) · [Roadmap](ROADMAP.md) · [Discord (soon)](#) · [Waitlist](https://fantasylab.ai)
 
+<br/>
+
+### ⬇️ Install with one command
+
+</div>
+
+```powershell
+irm https://raw.githubusercontent.com/bgrut/fantasy-studio/main/bootstrap.ps1 | iex
+```
+
+<div align="center">
+
+*Checks prerequisites → clones → installs everything → pulls the local AI model — then `.\desktop\launch.ps1` opens the app.*
+*Prereqs: [Git](https://git-scm.com), [Python 3.11+](https://python.org), [Node 20+](https://nodejs.org), [Ollama](https://ollama.com) (the script tells you if any are missing). 🕹️ Game mode runs with **no GPU**; 🎬 video renders want an NVIDIA card. Details: [INSTALL.md](INSTALL.md).*
+
 </div>
 
 ---
@@ -39,7 +54,9 @@
 
 **Fantasy Studio is a desktop app that turns one-line prompts into directed 3D cinematic video using Blender, locally, on your hardware.** You type *"a polar bear walking through the arctic at sunset"* and 90 seconds later you have a 12-second MP4 — plus the underlying `.blend` file you can re-light, re-frame, and re-render in Blender forever.
 
-There is no diffusion model anywhere in the pipeline. A local LLM (Gemma 3 12B via Ollama) reads your prompt and **directs** the scene: it picks the recipe, casts assets from a curated library, sets the camera move, chooses lighting, blocks the action. Then Blender renders it for real, with Cycles or Eevee, on your GPU.
+No video diffusion anywhere in the pipeline — every frame is rendered, not hallucinated. A local LLM (Gemma 3 via Ollama) reads your prompt and **directs** the scene; local image-AI builds the cast: SDXL paints an identity-faithful reference of your subject, and **Microsoft TRELLIS.2** (MIT) turns it into a photoreal, textured 3D mesh — which gets auto-rigged, animated, lit, and rendered for real by Blender (Cycles or Eevee) on your GPU.
+
+> **🚀 Engine V2 (current):** the full prompt → photoreal-3D → animated-MP4 pipeline, quality gates, A/B results, and licensing table are documented in **[docs/PIPELINE_V2.md](docs/PIPELINE_V2.md)**. The V1.x recipe/template system described below remains as the procedural fallback path.
 
 This is a deliberate counter-bet to text-to-video diffusion. Where Sora-class tools generate pixels and ask you to accept whatever comes out, Fantasy Studio generates **a Blender scene** and gives you the directorial controls to refine it. Your output is deterministic, editable, ownable, and — because nothing leaves your machine — cost-zero per render after install.
 
@@ -69,8 +86,30 @@ Fantasy Studio takes the opposite bet: **AI directs real tools, it doesn't repla
 - 📦 **Real exports** — MP4 video, animated GIF, PNG sequence, **and the `.blend` source file** so the scene is yours to re-edit forever
 - 🛡️ **HERO_VERIFY render gate** — every render passes seven structural checks (bbox sanity, frustum, framing, primitive detection, orientation, grounding) before frames hit disk
 - 🔧 **Non-destructive asset healing** — orientation, ground offset, shape classification computed once on ingest and stored as metadata; original `.glb` / `.blend` files never touched
+- 🕹️ **NEW: Playable game export (Phase 26)** — the same prompt that makes a video can make a *game*: `python scripts/export_game.py --prompt "a lone wanderer in a misty forest at night, collect 7 fireflies"` emits a self-contained three.js web build (WASD/gamepad/touch, real mocap walk/run, physics, NPCs that wander or follow, collectible objectives with a win screen). Runs offline in any browser — vendored three.js (MIT) + Rapier physics (Apache-2.0), zero CDN. A Godot 4 project export (`--godot`, MIT engine) ships beside it
+- 🖥️ **NEW: Studio modes + desktop app (Phase 30)** — a 🎬 Video / 🕹️ Game chooser right in the Studio: game mode extracts your idea via local Ollama, builds the game in ~30-60s **with no GPU**, and embeds it playable in the app (Rebuild / Fullscreen). Ships as a native desktop window via Tauri 2 (`desktop/launch.ps1`)
 - 🌐 **100% local execution** — no API keys, no cloud, no per-render fee, no rate limits, no creative work leaving your machine
 - 📜 **Full pipeline trace logging** — every render writes a `pipeline_trace.log` next to the video so you can debug exactly what the AI directed and why
+
+## Get started
+
+```powershell
+git clone https://github.com/bgrut/fantasy-studio && cd fantasy-studio
+.\setup.ps1                 # one-command install (Python venv + npm + env files)
+.\desktop\launch.ps1        # opens the native Fantasy Studio desktop app
+```
+
+Full prerequisites and troubleshooting: **[INSTALL.md](INSTALL.md)**. Key facts:
+- 🕹️ **Game mode needs no GPU** — build and play from prompts on any laptop
+- 🎬 Video mode wants an NVIDIA GPU (8 GB+) for Cycles renders and new-asset generation
+- Every game build is a **different level** (world seed shown in-app; "New level" rerolls, reuse a seed to reproduce a favorite)
+
+## Ship the games you make
+
+Each build is a **self-contained folder** (vendored MIT/Apache libs, zero CDN):
+zip `dist/` for itch.io or any static host, or add `--godot` for a **Godot 4
+project** you can open in the free editor and export to Windows/macOS/Linux/mobile —
+no royalties. Details: [INSTALL.md → Deploying](INSTALL.md#deploying-the-games-you-make).
 
 ## See it in action
 

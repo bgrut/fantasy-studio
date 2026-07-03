@@ -17,6 +17,7 @@ export default defineConfig({
     proxy: {
       '/api': 'http://127.0.0.1:8789',
       '/outputs': 'http://127.0.0.1:8789',
+      '/games': 'http://127.0.0.1:8789',   // Phase 30: built games served by backend
     },
   }
 });

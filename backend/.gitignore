@@ -31,3 +31,21 @@ app/data/asset_library.json.bak_*
 # Leading slash anchors this to the backend root so `app/data/` is NOT
 # accidentally caught.
 /data/
+
+# Phase 19 backup: keep large external trees + run artifacts out of git.
+# These are reproducible via install scripts; no value in versioning.
+vendor/TripoSR/
+vendor/InstantMesh/
+vendor/_models/
+renders/
+traces/
+scripts/smoke_test_output/
+assets/hdri/*.hdr
+
+# Phase 19: TripoSG external clone + its isolated venv (reproducible via install)
+vendor/TripoSG/
+venv_triposg/
+*.png.bak
+
+vendor/blosm/
+tools/
