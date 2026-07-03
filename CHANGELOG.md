@@ -27,6 +27,15 @@ Pre-1.0 versions are internal milestones during the constraint sprint leading to
   NPC assets (494k → 40k tris).
 - Docs: `backend/docs/game_engine_plan.md` (Godot adapter next; Unreal opt-in later).
 
+### Added — Phase 34: Game Projects (2026-07-03)
+- **Build a whole game, not just levels**: 'Add to my game' collects finished
+  builds into a named project; **Export game** emits ONE self-contained build —
+  hub menu (level select), per-level next-level progression on win, back-to-menu
+  link — playable in-app instantly and downloadable as a zip for itch.io/static
+  hosting. Levels re-export from their RESOLVED specs (exact, no LLM re-roll).
+- Player casting accuracy: prompts star the RIGHT character — species-correct
+  rig+animations bake on first use (quadruped trot gait / biped mocap set).
+
 ### Added — Phase 30: Studio game mode + desktop app (2026-07-02)
 - **Game/Video mode chooser** in the Studio: game mode = prompt → Ollama GameSpec →
   built + verified + **embedded playable** in the app (~30-60s, no GPU needed).

@@ -375,6 +375,16 @@ async function main() {
     won = true;
     document.getElementById('wintext').textContent = text;
     document.getElementById('win').style.display = 'flex';
+    // Game Projects: hub passes ?next=<url> for level progression
+    const nxt = new URLSearchParams(location.search).get('next');
+    if (nxt && /^[\w./?=-]+$/.test(nxt)) {
+      const a = document.getElementById('nextlvl');
+      a.href = nxt; a.style.display = 'inline-block';
+    }
+    if (location.pathname.includes('/levels/')) {
+      const b = document.getElementById('backhub');
+      b.href = '../../../'; b.style.display = 'inline-block';
+    }
     console.log('[game] WIN — ' + text);
   }
   function onCollect() {

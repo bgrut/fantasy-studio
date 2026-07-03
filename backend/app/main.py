@@ -23,6 +23,7 @@ from .api.pipeline import router as pipeline_router
 from .api.library import router as library_router
 from .api.orchestrate import router as orchestrate_router  # Phase 8: local-LLM orchestrator
 from .api.game import router as game_router, GAME_JOBS_DIR  # Phase 30: game mode
+from .api.game_projects import router as game_projects_router  # Phase 34: level collections
 
 app = FastAPI(title="FantasyLab Blender Lane Backend")
 app.include_router(assets_router)
@@ -37,6 +38,7 @@ app.include_router(pipeline_router)
 app.include_router(library_router)
 app.include_router(orchestrate_router)
 app.include_router(game_router)
+app.include_router(game_projects_router)
 
 app.add_middleware(
     CORSMiddleware,

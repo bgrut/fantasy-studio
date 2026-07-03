@@ -107,6 +107,9 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         spec.world.level = build_level(spec.seed, spec.world.size_m, n_objectives=n_obj)
 
         stage("building")
+        # RESOLVED spec (absolute asset paths) — lets Game Projects re-export
+        # this exact level later without re-running extraction
+        job["spec_resolved"] = spec.model_dump()
         out_dir = GAME_JOBS_DIR / f"job_{job_id}"
         dist = export_web_game(spec, out_dir, verbose=False)
 

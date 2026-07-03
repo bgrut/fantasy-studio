@@ -37,7 +37,10 @@
 <div id="fps"></div>
 <div id="err"></div>
 <div id="obj"></div>
-<div id="win"><div class="card"><h2>You win!</h2><div id="wintext"></div></div></div>
+<div id="win"><div class="card"><h2>You win!</h2><div id="wintext"></div>
+<a id="nextlvl" style="display:none;margin-top:14px;padding:8px 22px;border-radius:10px;
+background:#7c5cff;color:#fff;text-decoration:none;font-weight:600;display:none">Next level →</a>
+<a id="backhub" style="display:none;margin-top:8px;color:#a78bfa;font-size:12px;text-decoration:none">↩ level select</a></div></div>
 <div id="stick"><div id="nub"></div></div>
 <script type="importmap">
 { "imports": { "three": "./vendor/three.module.js" } }

@@ -3,9 +3,12 @@
 // then embedded right here so the user plays what they typed.
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Gamepad2, Loader2, Maximize2, RotateCcw } from 'lucide-react'
+import { Download, FolderPlus, Gamepad2, Loader2, Maximize2, RotateCcw } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { exportGame, gameHealth, getGameJob, type GameHealth, type GameJob } from '@/lib/gameApi'
+import {
+  addLevelToProject, createProject, exportGame, exportProject, gameHealth,
+  getGameJob, listProjects, type GameHealth, type GameJob, type GameProject,
+} from '@/lib/gameApi'
 
 const GAME_PROMPTS = [
   'A man walking his loyal dog through a sunny park',
@@ -29,14 +32,50 @@ export default function GameStudio() {
   const [building, setBuilding] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [health, setHealth] = useState<GameHealth | null>(null)
+  const [project, setProject] = useState<GameProject | null>(null)
+  const [addedJob, setAddedJob] = useState<number | null>(null)
+  const [exporting, setExporting] = useState(false)
+  const [exported, setExported] = useState<{ play_url: string; zip: string; zip_mb: number } | null>(null)
   const pollRef = useRef<number | null>(null)
 
   useEffect(() => {
     gameHealth().then(setHealth).catch(() => setHealth(null))
+    listProjects().then(({ projects }) => setProject(projects[projects.length - 1] ?? null)).catch(() => {})
     return () => {
       if (pollRef.current) window.clearInterval(pollRef.current)
     }
   }, [])
+
+  const addToGame = useCallback(async () => {
+    if (!job || job.status !== 'complete') return
+    try {
+      let p = project
+      if (!p) {
+        const { project: np } = await createProject('My Game')
+        p = { id: np.id, name: 'My Game', level_count: 0, level_titles: [] }
+      }
+      const { level_count } = await addLevelToProject(p.id, job.id)
+      setProject({ ...p, level_count })
+      setAddedJob(job.id)
+      setExported(null)                    // stale export after adding a level
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    }
+  }, [job, project])
+
+  const doExport = useCallback(async () => {
+    if (!project || exporting) return
+    setExporting(true)
+    setError(null)
+    try {
+      const r = await exportProject(project.id)
+      setExported({ play_url: r.play_url, zip: r.zip, zip_mb: r.zip_mb })
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setExporting(false)
+    }
+  }, [project, exporting])
 
   const build = useCallback(async () => {
     const p = prompt.trim()
@@ -125,6 +164,31 @@ export default function GameStudio() {
             {health.library_kinds.length} characters in library
           </p>
         )}
+
+        {/* MY GAME: collected levels + one-click export (Phase 34) */}
+        {project && project.level_count > 0 && (
+          <div className="flex items-center justify-center gap-3 text-xs">
+            <span className="font-mono text-[#a78bfa]">
+              🎮 {project.name}: {project.level_count} level{project.level_count !== 1 ? 's' : ''}
+            </span>
+            <button
+              onClick={doExport}
+              disabled={exporting}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#7c5cff]/15 text-[#a78bfa] hover:bg-[#7c5cff]/25 transition-colors disabled:opacity-50"
+            >
+              {exporting ? <Loader2 className="w-3 h-3 animate-spin" /> : <Download className="w-3 h-3" />}
+              {exporting ? 'Exporting…' : 'Export game'}
+            </button>
+            {exported && (
+              <>
+                <a href={exported.play_url} target="_blank" rel="noreferrer"
+                   className="text-[#5cffc9] hover:underline">▶ Play it</a>
+                <a href={exported.zip}
+                   className="text-[#5cffc9] hover:underline">⬇ Download zip ({exported.zip_mb} MB)</a>
+              </>
+            )}
+          </div>
+        )}
       </div>
 
       {/* build progress */}
@@ -167,6 +231,19 @@ export default function GameStudio() {
               )}
             </div>
             <div className="flex items-center gap-2">
+              <button
+                onClick={addToGame}
+                disabled={addedJob === job!.id}
+                className={cn(
+                  'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-colors',
+                  addedJob === job!.id
+                    ? 'bg-[#7c5cff]/10 text-[#a78bfa] cursor-default'
+                    : 'bg-[#7c5cff]/15 text-[#a78bfa] hover:bg-[#7c5cff]/25'
+                )}
+              >
+                <FolderPlus className="w-3 h-3" />
+                {addedJob === job!.id ? 'In your game ✓' : 'Add to my game'}
+              </button>
               <button
                 onClick={build}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs border border-white/[0.08] text-[#807d99] hover:text-white transition-colors"

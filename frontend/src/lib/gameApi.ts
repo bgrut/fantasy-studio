@@ -51,3 +51,34 @@ export async function getGameJob(id: number) {
 export async function listGameJobs() {
   return j<{ ok: boolean; jobs: GameJob[] }>(await fetch('/api/game/jobs'))
 }
+
+// ── Phase 34: Game Projects (collect levels -> one exported game) ──────────
+export interface GameProject {
+  id: number
+  name: string
+  level_count: number
+  level_titles: (string | null)[]
+}
+
+export async function listProjects() {
+  return j<{ ok: boolean; projects: GameProject[] }>(await fetch('/api/game/projects'))
+}
+
+export async function createProject(name: string) {
+  return j<{ ok: boolean; project: { id: number } }>(await fetch('/api/game/projects', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name }),
+  }))
+}
+
+export async function addLevelToProject(projectId: number, jobId: number) {
+  return j<{ ok: boolean; level_count: number }>(await fetch(`/api/game/projects/${projectId}/levels`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ job_id: jobId }),
+  }))
+}
+
+export async function exportProject(projectId: number) {
+  return j<{ ok: boolean; levels: number; play_url: string; zip: string; zip_mb: number }>(
+    await fetch(`/api/game/projects/${projectId}/export`, { method: 'POST' }))
+}
