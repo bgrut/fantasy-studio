@@ -195,6 +195,7 @@ async function main() {
   }
   const rng = mulberry32(SPEC.seed);
   let landmarkAsset = null;
+  const swayProps = [];             // Phase 33: wind-swayed prop roots
   function placeProp(inst, x, z, scale, collide) {
     inst.scale.multiplyScalar(scale);
     inst.rotation.y = rng() * Math.PI * 2;
@@ -202,6 +203,7 @@ async function main() {
     const gy = hAt(x, z);
     inst.position.set(x, gy - bb.min.y, z);
     scene.add(inst);
+    if ((bb.max.y - bb.min.y) > 1.2) swayProps.push({ o: inst, ph: rng() * Math.PI * 2 });
     if (collide) {
       const r = Math.max(bb.max.x - bb.min.x, bb.max.z - bb.min.z) * 0.25;
       world.createCollider(RAPIER.ColliderDesc.cylinder((bb.max.y - bb.min.y) / 2, Math.max(r, 0.1))
@@ -228,6 +230,54 @@ async function main() {
       const inst = landmarkAsset.scene.clone(true);
       inst.traverse(o => { if (o.isMesh) o.castShadow = true; });
       placeProp(inst, lx, lz, ls, true);
+    }
+  }
+
+  // ── Phase 33 dynamics: precipitation + wind ──────────────────────────────
+  const WEATHER = SPEC.world.weather || 'none';
+  const WIND = SPEC.world.wind ?? 0.5;
+  let precip = null, precipVel = 0, precipBox = 46;
+  if (WEATHER === 'rain' || WEATHER === 'snow') {
+    const N = WEATHER === 'rain' ? 2200 : 1400;
+    precipVel = WEATHER === 'rain' ? 20 : 1.6;
+    const pos = new Float32Array(N * 3);
+    const rngW = mulberry32(SPEC.seed + 913);
+    for (let i = 0; i < N; i++) {
+      pos[i * 3] = (rngW() - 0.5) * precipBox;
+      pos[i * 3 + 1] = rngW() * 26;
+      pos[i * 3 + 2] = (rngW() - 0.5) * precipBox;
+    }
+    const pg = new THREE.BufferGeometry();
+    pg.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    const pm = new THREE.PointsMaterial({
+      color: WEATHER === 'rain' ? 0x9db8d8 : 0xffffff,
+      size: WEATHER === 'rain' ? 0.055 : 0.12,
+      transparent: true, opacity: WEATHER === 'rain' ? 0.55 : 0.85,
+      sizeAttenuation: true, depthWrite: false });
+    precip = new THREE.Points(pg, pm);
+    precip.frustumCulled = false;
+    scene.add(precip);
+  }
+  function stepDynamics(dt, playerPos, t) {
+    if (precip) {
+      const a = precip.geometry.attributes.position, arr = a.array, N = arr.length / 3;
+      const drift = WIND * (WEATHER === 'snow' ? 1.6 : 0.7);
+      for (let i = 0; i < N; i++) {
+        arr[i * 3 + 1] -= precipVel * dt * (0.8 + (i % 5) * 0.1);
+        arr[i * 3] += Math.sin(t * 1.3 + i) * drift * dt;
+        if (arr[i * 3 + 1] < 0) {
+          arr[i * 3 + 1] = 24 + (i % 7);
+          arr[i * 3] = playerPos.x + (Math.random() - 0.5) * precipBox;
+          arr[i * 3 + 2] = playerPos.z + (Math.random() - 0.5) * precipBox;
+        }
+      }
+      a.needsUpdate = true;
+    }
+    if (WIND > 0.05) {
+      for (const s of swayProps) {
+        s.o.rotation.z = Math.sin(t * 1.1 + s.ph) * 0.018 * WIND
+                       + Math.sin(t * 2.7 + s.ph * 2) * 0.008 * WIND;
+      }
     }
   }
 
@@ -485,6 +535,7 @@ async function main() {
     }
 
     stepNPCs(dt, nt, performance.now() / 1000);
+    stepDynamics(dt, nt, performance.now() / 1000);
 
     // goal beacon: pulse + win when reached (with objectives complete)
     if (goalPos && !won) {

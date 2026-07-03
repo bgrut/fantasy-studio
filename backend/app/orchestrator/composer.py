@@ -3513,6 +3513,20 @@ def compose_scene(
             if verbose:
                 print(f"[composer] dressing skipped ({type(_de).__name__}: {_de})")
 
+    # Phase 33 SCENE DYNAMICS — weather particles, golden-hour sun drift, wind
+    # sway on the dressing props. Same vocabulary as the game runtime. Gated
+    # FS_DYNAMICS; isolated; never raises.
+    if is_animation and os.environ.get("FS_DYNAMICS", "1") == "1":
+        try:
+            from . import dynamics as _dyn
+            _dyn.build_dynamics(runner, mood=scene.get("mood", ""),
+                                setting=setting or "", wind=0.5,
+                                total_frames=total_frames,
+                                seed_key=str(run_id), verbose=verbose)
+        except Exception as _dye:
+            if verbose:
+                print(f"[composer] dynamics skipped ({type(_dye).__name__}: {_dye})")
+
     # Shade-smooth all organic parts so subdivision actually softens the silhouette
     organic_names = [p["name"] for p in parts if p.get("primitive") in ("sphere", "icosphere") and p.get("role") in ("body", "head", "limb", "detail")]
     if organic_names:

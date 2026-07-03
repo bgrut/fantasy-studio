@@ -35,6 +35,8 @@ def main():
                     help="generate missing entity assets via SDXL+TRELLIS (needs GPU)")
     ap.add_argument("--godot", action="store_true",
                     help="ALSO emit a Godot 4 project beside the web build")
+    ap.add_argument("--seed", type=int, default=None,
+                    help="world/level seed (default: random — every build is a new level)")
     args = ap.parse_args()
 
     if args.spec:
@@ -83,6 +85,10 @@ def main():
                 continue
         kept.append(ent)
     spec.entities = kept
+
+    # level variety: CLI matches the API — random seed unless pinned
+    import random as _random
+    spec.seed = args.seed if args.seed is not None else _random.randint(1, 999_999)
 
     # Phase 32: seeded level design (terrain, path, goal, objective placement)
     if spec.world.level is None:

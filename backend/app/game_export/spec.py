@@ -48,6 +48,8 @@ class WorldSpec(BaseModel):
     size_m: float = Field(120.0, gt=10.0, le=2000.0)   # square ground extent
     ground_color: List[float] = Field(default_factory=lambda: [0.35, 0.52, 0.28])
     sky: Literal["day", "sunset", "night", "overcast"] = "day"
+    weather: Literal["none", "rain", "snow"] = "none"     # Phase 33 dynamics
+    wind: float = Field(0.5, ge=0.0, le=1.0)              # prop sway strength
     fog: bool = True
     scatter: List[ScatterSpec] = Field(default_factory=list)
     level: Optional[dict] = None    # Phase 32 LevelPlan (terrain/path/goal), injected by the exporter

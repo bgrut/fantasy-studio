@@ -21,6 +21,7 @@ Output ONLY the JSON object, no markdown, no commentary. Schema (all fields opti
  "title": str,
  "world": {"name": one of "park","garden","forest","meadow","countryside","field","grass","backyard","plain",
            "size_m": float 30..500, "sky": one of "day","sunset","night","overcast", "fog": bool,
+           "weather": one of "none","rain","snow", "wind": float 0..1,
            "ground_color": [r,g,b] floats 0..1},
  "player": {"name": str, "height_m": float 0.5..3, "walk_speed": float 1..4, "run_speed": float 4..10},
  "camera": {"mode": one of "third_person","first_person","orbit", "distance_m": float 2..12, "fov_deg": float 30..90},
@@ -49,6 +50,12 @@ def _keyword_fallback(text: str) -> dict:
             break
     if "fog" in t or "mist" in t:
         out["world"]["fog"] = True
+    if any(w in t for w in ("rain", "storm", "drizzl", "downpour")):
+        out["world"]["weather"] = "rain"
+    elif any(w in t for w in ("snow", "blizzard", "wintry", "winter")):
+        out["world"]["weather"] = "snow"
+    if any(w in t for w in ("windy", "gale", "breez", "storm")):
+        out["world"]["wind"] = 0.9
     return out
 
 
