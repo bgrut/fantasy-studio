@@ -1,7 +1,7 @@
 {
   "dog": "assets/library/dog.glb",
   "cat": "assets/library/cat.glb",
-  "man": "renders/game_park/player_anim.glb",
+  "man": "assets/library/man.glb",
   "car": "assets/library/car.glb",
   "fox": "assets/library/fox.glb",
   "horse": "assets/library/horse.glb",
