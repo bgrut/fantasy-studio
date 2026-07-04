@@ -19,6 +19,23 @@
        font:12px monospace;white-space:pre-wrap;z-index:9}
   #obj{position:fixed;left:50%;top:10px;transform:translateX(-50%);color:#ffe9a8;
        font:600 14px system-ui;text-shadow:0 1px 4px rgba(0,0,0,.8);z-index:5;display:none}
+  #quest{position:fixed;left:12px;top:64px;z-index:5;font:12px system-ui;color:#cfcbe8;
+       text-shadow:0 1px 3px rgba(0,0,0,.8);display:none;max-width:260px}
+  #quest .qs{margin:2px 0;opacity:.45}
+  #quest .qs.active{opacity:1;color:#ffe9a8;font-weight:600}
+  #quest .qs.done{opacity:.55;text-decoration:line-through;color:#8fdc9f}
+  #hearts{position:fixed;left:50%;top:34px;transform:translateX(-50%);z-index:5;
+       font:16px system-ui;letter-spacing:2px;display:none;text-shadow:0 1px 4px rgba(0,0,0,.8)}
+  #dmg{position:fixed;inset:0;pointer-events:none;z-index:7;opacity:0;
+       background:radial-gradient(ellipse at center, transparent 55%, rgba(255,30,50,.55) 100%);
+       transition:opacity .12s}
+  #lose{position:fixed;inset:0;display:none;align-items:center;justify-content:center;
+       background:rgba(20,4,8,.6);z-index:8}
+  #lose .card{background:#1a0f14;border:1px solid #a33;border-radius:14px;padding:28px 40px;
+       color:#ffe3e3;text-align:center;font-family:system-ui}
+  #lose h2{margin:0 0 6px;font-size:26px;color:#ff8a9a}
+  #lose button{margin-top:14px;padding:8px 26px;border-radius:10px;border:0;cursor:pointer;
+       background:#ff5c8a;color:#fff;font-weight:600;font-size:14px}
   #win{position:fixed;inset:0;display:none;align-items:center;justify-content:center;
        background:rgba(4,8,14,.55);z-index:8}
   #win .card{background:#101826;border:1px solid #3a5;border-radius:14px;padding:28px 40px;
@@ -37,6 +54,11 @@
 <div id="fps"></div>
 <div id="err"></div>
 <div id="obj"></div>
+<div id="quest"></div>
+<div id="hearts"></div>
+<div id="dmg"></div>
+<div id="lose"><div class="card"><h2>You were defeated</h2><div id="losetext"></div>
+<button onclick="location.reload()">↻ Retry</button></div></div>
 <div id="win"><div class="card"><h2>You win!</h2><div id="wintext"></div>
 <a id="nextlvl" style="display:none;margin-top:14px;padding:8px 22px;border-radius:10px;
 background:#7c5cff;color:#fff;text-decoration:none;font-weight:600;display:none">Next level →</a>

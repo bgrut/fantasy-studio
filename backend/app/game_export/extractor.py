@@ -26,12 +26,17 @@ Output ONLY the JSON object, no markdown, no commentary. Schema (all fields opti
  "player": {"name": THE CONTROLLABLE SUBJECT of the prompt as a simple noun ("fox","samurai","man","horse","wizard"...),
             "height_m": float 0.5..3, "walk_speed": float 1..4, "run_speed": float 4..10},
  "camera": {"mode": one of "third_person","first_person","orbit", "distance_m": float 2..12, "fov_deg": float 30..90},
- "objectives": [{"kind":"collect","label":str,"count":int 1..50}],
- "entities": [{"name": simple noun like "dog","cat","horse", "behavior": one of "wander","follow","static",
-               "count": int 1..8, "speed": float 0.5..8}]
+ "player": also may include "attack": one of "none","melee","ranged" ("with a sword/fighting" -> melee,
+           "with a gun/bow/blaster" -> ranged),
+ "objectives": ORDERED mission steps, each {"kind": one of "collect","defeat","reach",
+               "label": str, "count": int 1..50} — e.g. a mission prompt becomes
+               [collect the keys] -> [defeat the guards] -> [reach the tower],
+ "entities": [{"name": simple noun like "dog","cat","horse","wolf", "behavior": one of
+               "wander","follow","static","hostile", "count": int 1..8, "speed": float 0.5..8}]
 }
-Map the text's setting to the CLOSEST world.name keyword. entities = OTHER creatures/characters in the
-scene besides the player (a companion pet -> behavior "follow"). Do not invent fields not in the schema."""
+Map the text's setting to the CLOSEST world.name keyword. entities = OTHER creatures/characters besides
+the player (companion pet -> "follow"; enemies/monsters/guards the player fights -> "hostile").
+"defeat" objectives need hostile entities. Do not invent fields not in the schema."""
 
 _JSON_RE = re.compile(r"\{.*\}", re.DOTALL)
 
@@ -65,6 +70,11 @@ def _keyword_fallback(text: str) -> dict:
         out["world"]["weather"] = "snow"
     if any(w in t for w in ("windy", "gale", "breez", "storm")):
         out["world"]["wind"] = 0.9
+    # combat verbs
+    if any(w in t for w in ("gun", "rifle", "blaster", "bow", "shoot", "sniper")):
+        out.setdefault("player", {})["attack"] = "ranged"
+    elif any(w in t for w in ("sword", "fight", "battle", "slay", "defeat", "katana")):
+        out.setdefault("player", {})["attack"] = "melee"
     return out
 
 

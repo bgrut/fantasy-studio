@@ -132,6 +132,20 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                     f"entity '{ent.name}' not in library yet — skipped")
         spec.entities = kept
 
+        # MISSION SANITY: defeat steps need hostiles that actually resolved.
+        # Clamp counts to what exists; drop unwinnable steps with a note.
+        total_hostiles = sum(e.count for e in spec.entities if e.behavior == "hostile")
+        sane = []
+        for ob in spec.objectives:
+            if ob.kind == "defeat":
+                if total_hostiles <= 0:
+                    job.setdefault("notes", []).append(
+                        f"'defeat {ob.label}' dropped — no enemies could be cast")
+                    continue
+                ob.count = min(ob.count, total_hostiles)
+            sane.append(ob)
+        spec.objectives = sane
+
         stage("designing level")
         from app.game_export.level import build_level
         n_obj = sum(o.count for o in spec.objectives if o.kind == "collect")

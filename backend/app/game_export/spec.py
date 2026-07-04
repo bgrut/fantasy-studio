@@ -23,6 +23,8 @@ class PlayerSpec(BaseModel):
     turn_speed: float = Field(10.0, gt=0.0, le=40.0)   # rad/s smoothing
     jump: bool = False                   # off until foot-plant/land anims exist
     yaw_offset_deg: float = 0.0          # asset facing correction (glTF axes vary)
+    attack: Literal["none", "melee", "ranged"] = "none"   # combat verb (Phase 36)
+    hp: int = Field(5, ge=1, le=20)
     anims: dict = Field(default_factory=lambda: {
         "idle": "idle", "walk": "walk", "run": "run"})  # state -> glTF clip name
 
@@ -63,18 +65,20 @@ class WorldSpec(BaseModel):
 
 
 class EntitySpec(BaseModel):
-    """Non-player entity. MVP behaviors are deterministic template AI."""
+    """Non-player entity. hostile = chases and attacks the player (combat)."""
     asset: str = ""                       # resolved from the asset library by name
     name: str = "entity"
-    behavior: Literal["static", "wander", "follow"] = "wander"
+    behavior: Literal["static", "wander", "follow", "hostile"] = "wander"
     count: int = Field(1, ge=1, le=64)
     speed: float = Field(1.5, ge=0.0, le=40.0)
     height_m: float = Field(1.0, gt=0.1, le=10.0)
+    hp: int = Field(3, ge=1, le=50)       # hostile only
 
 
 class ObjectiveSpec(BaseModel):
-    """MVP objective: collect N of a thing. More types in Phase 27."""
-    kind: Literal["collect"] = "collect"
+    """A MISSION STEP. Objectives are an ordered sequence (quest log):
+    collect N -> defeat N -> reach the beacon. Genres compose from these."""
+    kind: Literal["collect", "defeat", "reach"] = "collect"
     label: str = "stars"
     count: int = Field(5, ge=1, le=100)
 

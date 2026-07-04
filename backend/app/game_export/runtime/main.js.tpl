@@ -287,9 +287,20 @@ async function main() {
   for (const ent of SPEC.entities || []) {
     try {
       const gltf = await loadGLB(ent.asset);
+      const hostile = ent.behavior === 'hostile';
       for (let i = 0; i < (ent.count || 1); i++) {
         const inst = i === 0 ? gltf.scene : gltf.scene.clone(true);
-        inst.traverse(o => { if (o.isMesh) { o.castShadow = true; o.frustumCulled = false; } });
+        const mats = [];
+        inst.traverse(o => {
+          if (o.isMesh) {
+            o.castShadow = true; o.frustumCulled = false;
+            if (hostile) {          // own materials so the red tint/flash is per-enemy
+              o.material = o.material.clone();
+              if (o.material.emissive) o.material.emissive.setHex(0x550000);
+              mats.push(o.material);
+            }
+          }
+        });
         const box = new THREE.Box3().setFromObject(inst);
         const h = Math.max(box.max.y - box.min.y, 1e-3);
         inst.scale.multiplyScalar((ent.height_m || 1.0) / h);
@@ -297,17 +308,40 @@ async function main() {
         const holder = new THREE.Group();
         inst.position.y = -b2.min.y;
         holder.add(inst);
-        holder.position.set((rngN() - 0.5) * gsize * 0.3, 0, (rngN() - 0.5) * gsize * 0.3);
+        // hostiles spawn FAR (out along the path, guarding the objectives)
+        const spread = hostile ? 0.6 : 0.3;
+        holder.position.set((rngN() - 0.5) * gsize * spread, 0, (rngN() - 0.5) * gsize * spread);
+        if (hostile && Math.hypot(holder.position.x, holder.position.z) < 14) {
+          holder.position.x += Math.sign(holder.position.x || 1) * 16;
+        }
         scene.add(holder);
         npcs.push({ obj: holder, speed: ent.speed || 1.5, behavior: ent.behavior || 'wander',
-                    target: null, yaw: rngN() * Math.PI * 2, phase: rngN() * Math.PI * 2 });
+                    target: null, yaw: rngN() * Math.PI * 2, phase: rngN() * Math.PI * 2,
+                    hp: ent.hp || 3, cd: 0, dead: false, dieT: 0, mats });
       }
     } catch (e) { fail(e.message); }
   }
   function stepNPCs(dt, playerPos, t) {
     for (const n of npcs) {
+      // death animation: keel over + sink, then remove
+      if (n.dead) {
+        n.dieT += dt;
+        n.obj.rotation.x = Math.min(n.dieT * 4, Math.PI / 2);
+        if (n.dieT > 1.4) { scene.remove(n.obj); n.gone = true; }
+        continue;
+      }
       let tx = null, tz = null;
-      if (n.behavior === 'follow') {
+      if (n.behavior === 'hostile' && !won && !lost) {
+        const d = Math.hypot(playerPos.x - n.obj.position.x, playerPos.z - n.obj.position.z);
+        if (d < 14 && d > 1.7) { tx = playerPos.x; tz = playerPos.z; }        // chase
+        else if (d <= 1.7) {                                                  // attack
+          n.cd -= dt;
+          if (n.cd <= 0) { n.cd = 1.2; playerHit(1); }
+        } else if (!n.target || Math.hypot(n.target[0] - n.obj.position.x, n.target[1] - n.obj.position.z) < 0.6) {
+          n.target = [(rngN() - 0.5) * gsize * 0.6, (rngN() - 0.5) * gsize * 0.6];
+          tx = n.target[0]; tz = n.target[1];
+        } else { tx = n.target[0]; tz = n.target[1]; }
+      } else if (n.behavior === 'follow') {
         const d = Math.hypot(playerPos.x - n.obj.position.x, playerPos.z - n.obj.position.z);
         if (d > 2.6) { tx = playerPos.x; tz = playerPos.z; }
       } else if (n.behavior === 'wander') {
@@ -337,27 +371,31 @@ async function main() {
     }
   }
 
-  // ── objectives: glowing collectibles + counter + win state ───────────────
-  const collectibles = [];
-  let collected = 0, winTotal = 0, objLabel = '';
+  // ── MISSIONS: ordered objective steps (collect / defeat / reach) with a
+  // quest-log HUD. Genres compose from these verbs (Phase 36).
   const objEl = document.getElementById('obj');
-  const obj = (SPEC.objectives || []).find(o => o.kind === 'collect');
-  if (obj) {
-    winTotal = obj.count; objLabel = obj.label || 'items';
-    const rngC = mulberry32(SPEC.seed + 77);
-    const geo = new THREE.SphereGeometry(0.11, 12, 10);
-    const pts = (LVL && LVL.collect_points && LVL.collect_points.length >= winTotal)
-      ? LVL.collect_points : null;             // Phase 32: along the route
-    for (let i = 0; i < winTotal; i++) {
+  const questEl = document.getElementById('quest');
+  let steps = (SPEC.objectives || []).map(o => ({ ...o }));
+  if (!steps.length && goalPos) steps = [{ kind: 'reach', label: 'the beacon', count: 1 }];
+  else if (goalPos && steps.length && steps[steps.length - 1].kind !== 'reach')
+    steps.push({ kind: 'reach', label: 'the beacon', count: 1 });
+  let stepIdx = -1, kills = 0, won = false, lost = false;
+  const collectibles = [];
+  const rngC = mulberry32(SPEC.seed + 77);
+  const cgeo = new THREE.SphereGeometry(0.11, 12, 10);
+  let cpUsed = 0;                        // LVL.collect_points consumed so far
+  function spawnCollectibles(step) {
+    const pts = LVL && LVL.collect_points;
+    for (let i = 0; i < step.count; i++) {
       const m = new THREE.MeshStandardMaterial({
         color: 0xfff2b0, emissive: 0xffd54a, emissiveIntensity: 2.6, roughness: 0.4 });
-      const s = new THREE.Mesh(geo, m);
+      const s = new THREE.Mesh(cgeo, m);
       let cx, cz;
-      if (pts) { cx = pts[i][0]; cz = pts[i][1]; }
+      if (pts && cpUsed < pts.length) { cx = pts[cpUsed][0]; cz = pts[cpUsed][1]; cpUsed++; }
       else {
         const ang = rngC() * Math.PI * 2;
-        const dist = 5 + rngC() * gsize * 0.32;
-        cx = Math.cos(ang) * dist; cz = Math.sin(ang) * dist;
+        const d = 5 + rngC() * gsize * 0.32;
+        cx = Math.cos(ang) * d; cz = Math.sin(ang) * d;
       }
       const baseY = hAt(cx, cz) + 1.0 + rngC() * 0.6;
       s.position.set(cx, baseY, cz);
@@ -366,13 +404,45 @@ async function main() {
       scene.add(s);
       collectibles.push({ mesh: s, baseY, phase: rngC() * Math.PI * 2 });
     }
-    objEl.style.display = 'block';
-    objEl.textContent = `${objLabel}: 0 / ${winTotal}`;
   }
-  let won = false;
+  function stepLabel(st) {
+    if (st.kind === 'collect') return `Collect ${st.count} ${st.label || 'items'}`;
+    if (st.kind === 'defeat') return `Defeat ${st.count} ${st.label || 'enemies'}`;
+    return `Reach ${st.label || 'the beacon'}`;
+  }
+  function stepProgress(st) {
+    if (st.kind === 'collect') return `${st._got || 0}/${st.count}`;
+    if (st.kind === 'defeat') return `${Math.min(kills - (st._k0 || 0), st.count)}/${st.count}`;
+    return '';
+  }
+  function renderQuest() {
+    if (!steps.length) return;
+    questEl.style.display = 'block';
+    questEl.innerHTML = steps.map((st, i) => {
+      const cls = i < stepIdx ? 'qs done' : (i === stepIdx ? 'qs active' : 'qs');
+      const mark = i < stepIdx ? '✓' : (i === stepIdx ? '▸' : '·');
+      const prog = i === stepIdx ? ' ' + stepProgress(st) : '';
+      return `<div class="${cls}">${mark} ${stepLabel(st)}${prog}</div>`;
+    }).join('');
+    const st = steps[stepIdx];
+    if (st) {
+      objEl.style.display = 'block';
+      const p = stepProgress(st);
+      objEl.textContent = stepLabel(st) + (p ? ` — ${p}` : '');
+    }
+  }
+  function advanceStep() {
+    stepIdx++;
+    const st = steps[stepIdx];
+    if (!st) { doWin('Mission complete!'); return; }
+    if (st.kind === 'collect') { st._got = 0; spawnCollectibles(st); }
+    if (st.kind === 'defeat') { st._k0 = kills; }
+    renderQuest();
+  }
+  let won_ = false;   // guard alias kept for clarity in doWin
   function doWin(text) {
-    if (won) return;
-    won = true;
+    if (won || lost) return;
+    won = true; won_ = true;
     document.getElementById('wintext').textContent = text;
     document.getElementById('win').style.display = 'flex';
     // Game Projects: hub passes ?next=<url> for level progression
@@ -387,18 +457,35 @@ async function main() {
     }
     console.log('[game] WIN — ' + text);
   }
-  function onCollect() {
-    collected++;
-    if (collected >= winTotal && goalPos) {
-      objEl.textContent = `${objLabel}: ${collected} / ${winTotal} — reach the beacon!`;
-    } else {
-      objEl.textContent = `${objLabel}: ${collected} / ${winTotal}`;
-    }
-    if (collected >= winTotal && !goalPos) {
-      doWin(`All ${winTotal} ${objLabel} collected.`);
-    }
+
+  // ── COMBAT: player health + hearts, damage vignette, lose state ──────────
+  let php = SPEC.player.hp || 5;
+  const maxHp = php;
+  const heartsEl = document.getElementById('hearts');
+  const hostilesExist = (SPEC.entities || []).some(e => e.behavior === 'hostile');
+  function renderHearts() {
+    if (!hostilesExist) return;
+    heartsEl.style.display = 'block';
+    heartsEl.textContent = '♥'.repeat(php) + '♡'.repeat(Math.max(0, maxHp - php));
+    heartsEl.style.color = php <= 1 ? '#ff5c6a' : '#ff8fa0';
   }
-  if (goalPos && !obj) { objEl.style.display = 'block'; objEl.textContent = 'reach the beacon'; }
+  renderHearts();
+  function doLose(text) {
+    if (won || lost) return;
+    lost = true;
+    document.getElementById('losetext').textContent = text;
+    document.getElementById('lose').style.display = 'flex';
+    console.log('[game] LOSE — ' + text);
+  }
+  const dmgEl = document.getElementById('dmg');
+  function playerHit(dmg) {
+    if (won || lost) return;
+    php = Math.max(0, php - dmg);
+    renderHearts();
+    dmgEl.style.opacity = '1';
+    setTimeout(() => { dmgEl.style.opacity = '0'; }, 160);
+    if (php <= 0) doLose('Overwhelmed by enemies.');
+  }
 
   // ── player: animated GLB + kinematic capsule ─────────────────────────────
   let mixer = null, actions = {}, current = null;
@@ -489,14 +576,82 @@ async function main() {
     return { x, z, run, mag: Math.min(m, 1) };
   }
 
+  // ── player ATTACK: melee arc (sword and claws) or ranged projectiles ──────
+  const ATTACK = SPEC.player.attack && SPEC.player.attack !== 'none'
+    ? SPEC.player.attack : (hostilesExist ? 'melee' : 'none');
+  if (ATTACK !== 'none') {
+    const hint = document.querySelector('#hud .hint');
+    if (hint) hint.textContent += ` · F / Space to ${ATTACK === 'ranged' ? 'shoot' : 'attack'}`;
+  }
+  const projectiles = [];
+  let atkCd = 0;
+  function dmgEnemy(n, dmg) {
+    if (n.dead) return;
+    n.hp -= dmg;
+    for (const m of n.mats) { if (m.emissive) m.emissive.setHex(0xff4444); }
+    setTimeout(() => { for (const m of n.mats) { if (m.emissive) m.emissive.setHex(0x550000); } }, 120);
+    if (n.hp <= 0) {
+      n.dead = true; kills++;
+      const st = steps[stepIdx];
+      if (st && st.kind === 'defeat') {
+        renderQuest();
+        if (kills - (st._k0 || 0) >= st.count) advanceStep();
+      }
+    }
+  }
+  function doAttack() {
+    if (ATTACK === 'none' || atkCd > 0 || won || lost) return;
+    atkCd = ATTACK === 'ranged' ? 0.35 : 0.5;
+    const dir = new THREE.Vector3(Math.sin(modelYaw), 0, Math.cos(modelYaw));
+    if (ATTACK === 'ranged') {
+      const m = new THREE.Mesh(
+        new THREE.SphereGeometry(0.09, 8, 6),
+        new THREE.MeshBasicMaterial({ color: 0xaef4ff }));
+      m.position.copy(playerObj.position).add(new THREE.Vector3(0, P.height_m * 0.6, 0))
+        .add(dir.clone().multiplyScalar(0.5));
+      const glow = new THREE.PointLight(0x9fe8ff, 1.6, 4);
+      m.add(glow);
+      scene.add(m);
+      projectiles.push({ mesh: m, vel: dir.clone().multiplyScalar(24), life: 2 });
+    } else {
+      // melee: 120° arc, 2.3m reach, with a quick slash flash
+      const flash = new THREE.PointLight(0xffffff, 3.5, 5);
+      flash.position.copy(playerObj.position).add(dir.clone().multiplyScalar(1.2))
+        .add(new THREE.Vector3(0, P.height_m * 0.5, 0));
+      scene.add(flash);
+      setTimeout(() => scene.remove(flash), 110);
+      for (const n of npcs) {
+        if (n.behavior !== 'hostile' || n.dead) continue;
+        const dx = n.obj.position.x - playerObj.position.x;
+        const dz = n.obj.position.z - playerObj.position.z;
+        const d = Math.hypot(dx, dz);
+        if (d > 2.3) continue;
+        let a = Math.atan2(dx, dz) - modelYaw;
+        while (a > Math.PI) a -= 2 * Math.PI;
+        while (a < -Math.PI) a += 2 * Math.PI;
+        if (Math.abs(a) < 1.05) dmgEnemy(n, 1);
+      }
+    }
+  }
+  addEventListener('keydown', e => {
+    if (e.code === 'KeyF' || e.code === 'Space') { e.preventDefault(); doAttack(); }
+  });
+
   // exposed for the verify harness (synthetic input, position probes, dev teleport)
   window.__game = {
     pos: () => playerObj.position.toArray(), keys, ready: true,
     tp: (x, z) => body.setTranslation({ x, y: P.height_m / 2 + 0.1, z }, true),
-    objectives: () => ({ collected, total: winTotal,
+    attack: doAttack,
+    combat: () => ({ hp: php, kills, mode: ATTACK, lost,
+                     hostiles: npcs.filter(n => n.behavior === 'hostile' && !n.dead).length }),
+    quest: () => ({ step: stepIdx, total: steps.length,
+                    active: steps[stepIdx] ? stepLabel(steps[stepIdx]) : null, won }),
+    objectives: () => ({ collected: steps.filter(s => s.kind === 'collect').reduce((a, s) => a + (s._got || 0), 0),
                          left: collectibles.filter(c => c.mesh.parent).map(c => c.mesh.position.toArray()) }),
-    npcs: () => npcs.map(n => ({ behavior: n.behavior, pos: n.obj.position.toArray() })),
+    npcs: () => npcs.filter(n => !n.gone).map(n => ({ behavior: n.behavior, dead: !!n.dead, pos: n.obj.position.toArray() })),
   };
+
+  advanceStep();                          // mission begins: activate step 1
 
   // ── main loop ────────────────────────────────────────────────────────────
   const clock = new THREE.Clock();
@@ -547,14 +702,31 @@ async function main() {
     stepNPCs(dt, nt, performance.now() / 1000);
     stepDynamics(dt, nt, performance.now() / 1000);
 
-    // goal beacon: pulse + win when reached (with objectives complete)
-    if (goalPos && !won) {
+    // goal beacon: pulse; completes the mission's active REACH step
+    if (goalPos && !won && !lost) {
       if (goalMesh) goalMesh.rotation.z += dt * 0.8;
-      const gd = Math.hypot(goalPos.x - nt.x, goalPos.z - nt.z);
-      if (gd < 2.2 && collected >= winTotal) {
-        doWin(winTotal > 0
-          ? `All ${winTotal} ${objLabel} collected — beacon reached!`
-          : 'Beacon reached!');
+      const st = steps[stepIdx];
+      if (st && st.kind === 'reach') {
+        const gd = Math.hypot(goalPos.x - nt.x, goalPos.z - nt.z);
+        if (gd < 2.2) advanceStep();
+      }
+    }
+
+    // combat: attack cooldown + projectiles
+    if (atkCd > 0) atkCd -= dt;
+    for (let i = projectiles.length - 1; i >= 0; i--) {
+      const pr = projectiles[i];
+      pr.mesh.position.addScaledVector(pr.vel, dt);
+      pr.life -= dt;
+      let hit = false;
+      for (const n of npcs) {
+        if (n.behavior !== 'hostile' || n.dead) continue;
+        const dd = pr.mesh.position.distanceTo(n.obj.position.clone().add(new THREE.Vector3(0, 0.5, 0)));
+        if (dd < 0.9) { dmgEnemy(n, 1); hit = true; break; }
+      }
+      if (hit || pr.life <= 0 || pr.mesh.position.y < hAt(pr.mesh.position.x, pr.mesh.position.z) - 0.2) {
+        scene.remove(pr.mesh);
+        projectiles.splice(i, 1);
       }
     }
 
@@ -566,7 +738,15 @@ async function main() {
         c.mesh.position.y = c.baseY + Math.sin(t * 2.2 + c.phase) * 0.22;
         c.mesh.rotation.y += dt * 2;
         const dx = c.mesh.position.x - nt.x, dz = c.mesh.position.z - nt.z;
-        if (dx * dx + dz * dz < 1.4 * 1.4) { scene.remove(c.mesh); onCollect(); }
+        if (dx * dx + dz * dz < 1.4 * 1.4) {
+          scene.remove(c.mesh);
+          const st = steps[stepIdx];
+          if (st && st.kind === 'collect') {
+            st._got = (st._got || 0) + 1;
+            renderQuest();
+            if (st._got >= st.count) advanceStep();
+          }
+        }
       }
     }
 
