@@ -38,6 +38,7 @@ import {
 } from '@/lib/api'
 import { motion, AnimatePresence } from 'framer-motion'
 import VideoPlayer from '@/components/VideoPlayer'
+import VideoProjectBar from '@/components/VideoProjectBar'
 import GameStudio from '@/components/GameStudio'
 import CastPanel, { type CastChoice } from '@/components/CastPanel'
 import InlineCastStrip, { type InlineCastSlot } from '@/components/InlineCastStrip'
@@ -866,6 +867,8 @@ export default function SceneStudio() {
                 <Film className="w-4 h-4 text-[#7c5cff]" />
                 <span className="text-sm font-semibold">Output</span>
               </div>
+              {/* Phase 35: collect scenes -> one exported film */}
+              <VideoProjectBar outputUrl={previewResult?.output_url ?? null} prompt={topic} />
             </div>
 
             {previewResult?.output_url ? (
