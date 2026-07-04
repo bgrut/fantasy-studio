@@ -19,15 +19,17 @@ from pathlib import Path
 PROPS_DIR = Path(__file__).resolve().parents[2] / "assets" / "props"
 
 # setting keyword -> [(prop, game_count, video_count), ...]
+# Game counts are DENSE (quality pack: the runtime instances them — hundreds
+# of props at 60fps); video counts stay Blender-shot-sized.
 _RECIPES = {
-    "park":        [("tree", 16, 7), ("rock", 6, 3), ("lamp", 6, 2)],
-    "garden":      [("tree", 10, 5), ("rock", 8, 4)],
-    "forest":      [("tree", 40, 12), ("rock", 10, 4)],
-    "meadow":      [("tree", 6, 3), ("rock", 8, 4)],
-    "countryside": [("tree", 10, 5), ("rock", 8, 3)],
-    "field":       [("tree", 5, 3), ("rock", 6, 3)],
-    "grass":       [("tree", 8, 4), ("rock", 5, 3)],
-    "backyard":    [("tree", 4, 2), ("rock", 4, 2), ("lamp", 2, 1)],
+    "park":        [("tree", 110, 10), ("rock", 30, 4), ("lamp", 10, 2)],
+    "garden":      [("tree", 60, 7), ("rock", 30, 5)],
+    "forest":      [("tree", 260, 16), ("rock", 40, 5)],
+    "meadow":      [("tree", 30, 4), ("rock", 35, 5)],
+    "countryside": [("tree", 70, 7), ("rock", 30, 4)],
+    "field":       [("tree", 25, 4), ("rock", 25, 4)],
+    "grass":       [("tree", 45, 5), ("rock", 25, 4)],
+    "backyard":    [("tree", 18, 3), ("rock", 12, 3), ("lamp", 4, 1)],
 }
 
 

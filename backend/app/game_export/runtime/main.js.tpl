@@ -4,6 +4,12 @@
 import * as THREE from 'three';
 import { GLTFLoader } from './vendor/jsm/loaders/GLTFLoader.js';
 import { clone as skClone } from './vendor/jsm/utils/SkeletonUtils.js';
+import { Sky } from './vendor/jsm/objects/Sky.js';
+import { EffectComposer } from './vendor/jsm/postprocessing/EffectComposer.js';
+import { RenderPass } from './vendor/jsm/postprocessing/RenderPass.js';
+import { ShaderPass } from './vendor/jsm/postprocessing/ShaderPass.js';
+import { UnrealBloomPass } from './vendor/jsm/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from './vendor/jsm/postprocessing/OutputPass.js';
 import RAPIER from './vendor/rapier.es.js';
 
 const SPEC = __GAME_SPEC__;
@@ -43,11 +49,51 @@ async function main() {
   renderer.setSize(innerWidth, innerHeight);
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;   // filmic response for the Sky
+  renderer.toneMappingExposure = 0.75;
   document.getElementById('app').appendChild(renderer.domElement);
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(pal.sky);
   if (SPEC.world.fog) scene.fog = new THREE.Fog(pal.fog, SPEC.world.size_m * 0.25, SPEC.world.size_m * 0.9);
+
+  // QUALITY PACK — real atmospheric sky (day/sunset/overcast) or a starfield
+  // dome (night): kills the flat-color backdrop everywhere at once.
+  if (SPEC.world.sky !== 'night') {
+    const sky = new Sky();
+    sky.scale.setScalar(4000);
+    scene.add(sky);
+    const su = sky.material.uniforms;
+    const cfg = {
+      day:      { turbidity: 6,  rayleigh: 1.2, elev: 35 },
+      sunset:   { turbidity: 8,  rayleigh: 2.6, elev: 6 },
+      overcast: { turbidity: 20, rayleigh: 0.6, elev: 25 },
+    }[SPEC.world.sky] || { turbidity: 6, rayleigh: 1.2, elev: 35 };
+    su.turbidity.value = cfg.turbidity;
+    su.rayleigh.value = cfg.rayleigh;
+    su.mieCoefficient.value = 0.004;
+    su.mieDirectionalG.value = 0.85;
+    const phi = THREE.MathUtils.degToRad(90 - cfg.elev);
+    const theta = THREE.MathUtils.degToRad(38);
+    su.sunPosition.value.setFromSphericalCoords(1, phi, theta);
+    scene.background = null;              // the sky IS the background now
+  } else {
+    const sN = 1400, sPos = new Float32Array(sN * 3);
+    const sRng = mulberry32(SPEC.seed + 5);
+    for (let i = 0; i < sN; i++) {
+      const a = sRng() * Math.PI * 2, e = Math.asin(sRng() * 0.95 + 0.05), r = 900;
+      sPos[i * 3] = r * Math.cos(e) * Math.cos(a);
+      sPos[i * 3 + 1] = r * Math.sin(e);
+      sPos[i * 3 + 2] = r * Math.cos(e) * Math.sin(a);
+    }
+    const sg = new THREE.BufferGeometry();
+    sg.setAttribute('position', new THREE.BufferAttribute(sPos, 3));
+    const stars = new THREE.Points(sg, new THREE.PointsMaterial({
+      color: 0xcdd6ff, size: 1.6, sizeAttenuation: false, fog: false,
+      transparent: true, opacity: 0.9 }));
+    stars.frustumCulled = false;
+    scene.add(stars);
+  }
 
   const camera = new THREE.PerspectiveCamera(SPEC.camera.fov_deg, innerWidth / innerHeight, 0.1, 1000);
 
@@ -228,20 +274,82 @@ async function main() {
         .setTranslation(x, gy + (bb.max.y - bb.min.y) / 2, z));
     }
   }
+  // QUALITY PACK: props render as INSTANCED sub-meshes — hundreds of trees at
+  // 60fps instead of a sparse dozen of cloned groups.
   for (const sct of SPEC.world.scatter || []) {
     try {
       const gltf = await loadGLB(sct.asset);
       if (!landmarkAsset) landmarkAsset = gltf;
-      for (let i = 0; i < sct.count; i++) {
-        const inst = gltf.scene.clone(true);
-        inst.traverse(o => { if (o.isMesh) o.castShadow = true; });
+      gltf.scene.updateMatrixWorld(true);
+      const parts = [];
+      gltf.scene.traverse(o => {
+        if (o.isMesh) parts.push({ geo: o.geometry, mat: o.material, local: o.matrixWorld.clone() });
+      });
+      const N = sct.count;
+      const places = [];
+      for (let i = 0; i < N; i++) {
         let x, z, tries = 0;
         do {
-          x = (rng() - 0.5) * gsize * 0.85; z = (rng() - 0.5) * gsize * 0.85; tries++;
+          x = (rng() - 0.5) * gsize * 0.9; z = (rng() - 0.5) * gsize * 0.9; tries++;
         } while ((Math.hypot(x, z) < sct.min_dist_m || pathDist(x, z) < CORR) && tries < 30);
-        placeProp(inst, x, z, 1 + (rng() - 0.5) * 2 * sct.scale_jitter, sct.collide);
+        places.push({ x, z, s: 1 + (rng() - 0.5) * 2 * sct.scale_jitter, rot: rng() * Math.PI * 2 });
+      }
+      const M = new THREE.Matrix4(), T = new THREE.Matrix4(), SV = new THREE.Vector3();
+      for (const p of parts) {
+        const im = new THREE.InstancedMesh(p.geo, p.mat, N);
+        im.castShadow = true;
+        im.frustumCulled = false;
+        for (let i = 0; i < N; i++) {
+          const pl = places[i];
+          T.makeRotationY(pl.rot).scale(SV.set(pl.s, pl.s, pl.s));
+          T.setPosition(pl.x, hAt(pl.x, pl.z), pl.z);
+          M.multiplyMatrices(T, p.local);
+          im.setMatrixAt(i, M);
+        }
+        im.instanceMatrix.needsUpdate = true;
+        scene.add(im);
+      }
+      if (sct.collide) {
+        for (let i = 0; i < Math.min(N, 260); i++) {
+          const pl = places[i];
+          world.createCollider(RAPIER.ColliderDesc.cylinder(1.6 * pl.s, 0.22 * pl.s)
+            .setTranslation(pl.x, hAt(pl.x, pl.z) + 1.6 * pl.s, pl.z));
+        }
       }
     } catch (e) { fail(e.message); }
+  }
+
+  // GRASS: instanced cross-blades on the terrain, thinned along the walking
+  // path — the "flat green plane" is gone.
+  if ((SPEC.world.scatter || []).length) {
+    const gcolA = new THREE.Color(...SPEC.world.ground_color).offsetHSL(0, 0.08, 0.06);
+    const gcolB = gcolA.clone().offsetHSL(0.02, 0.05, -0.07);
+    const blade = new THREE.PlaneGeometry(0.11, 0.32);
+    blade.translate(0, 0.16, 0);
+    const bmat = new THREE.MeshStandardMaterial({ side: THREE.DoubleSide, roughness: 1.0 });
+    const GR = Math.min(gsize * 0.48, 70);
+    const GN = Math.min(13000, Math.floor(GR * GR * 2.2));
+    const rngG = mulberry32(SPEC.seed + 21);
+    for (const baseRot of [0, Math.PI / 2]) {
+      const im = new THREE.InstancedMesh(blade, bmat, GN);
+      im.frustumCulled = false;
+      const M = new THREE.Matrix4(), SV = new THREE.Vector3(), C = new THREE.Color();
+      let placed = 0;
+      for (let i = 0; i < GN * 2 && placed < GN; i++) {
+        const x = (rngG() - 0.5) * 2 * GR, z = (rngG() - 0.5) * 2 * GR;
+        if (pathDist(x, z) < CORR * 0.5 && rngG() < 0.7) continue;   // trodden path
+        const s = 0.7 + rngG() * 0.8;
+        M.makeRotationY(baseRot + rngG() * 0.9).scale(SV.set(s, s * (0.8 + rngG() * 0.5), s));
+        M.setPosition(x, hAt(x, z), z);
+        im.setMatrixAt(placed, M);
+        im.setColorAt(placed, C.lerpColors(gcolA, gcolB, rngG()));
+        placed++;
+      }
+      im.count = placed;
+      im.instanceMatrix.needsUpdate = true;
+      if (im.instanceColor) im.instanceColor.needsUpdate = true;
+      scene.add(im);
+    }
   }
   if (LVL && LVL.landmarks && landmarkAsset) {
     for (const [lx, lz, ls] of LVL.landmarks) {
@@ -776,6 +884,27 @@ async function main() {
     npcs: () => npcs.filter(n => !n.gone).map(n => ({ behavior: n.behavior, dead: !!n.dead, pos: n.obj.position.toArray() })),
   };
 
+  // QUALITY PACK — cinematic post chain: subtle bloom + vignette + filmic out
+  const composer = new EffectComposer(renderer);
+  composer.addPass(new RenderPass(scene, camera));
+  const bloom = new UnrealBloomPass(
+    new THREE.Vector2(innerWidth, innerHeight), 0.25, 0.65, 0.85);
+  composer.addPass(bloom);
+  const vignette = new ShaderPass({
+    uniforms: { tDiffuse: { value: null }, strength: { value: 0.42 } },
+    vertexShader: `varying vec2 vUv;
+      void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
+    fragmentShader: `uniform sampler2D tDiffuse; uniform float strength; varying vec2 vUv;
+      void main(){
+        vec4 c = texture2D(tDiffuse, vUv);
+        float d = distance(vUv, vec2(0.5));
+        c.rgb *= smoothstep(0.92, 0.35, d * strength * 2.0) * 0.25 + 0.75;
+        gl_FragColor = c;
+      }`,
+  });
+  composer.addPass(vignette);
+  composer.addPass(new OutputPass());
+
   advanceStep();                          // mission begins: activate step 1
 
   // ── main loop ────────────────────────────────────────────────────────────
@@ -885,7 +1014,7 @@ async function main() {
     camera.position.lerp(new THREE.Vector3(cx, cy, cz), 1 - Math.exp(-8 * dt));
     camera.lookAt(camTarget);
 
-    renderer.render(scene, camera);
+    composer.render();
     fCount++; fTime += dt;
     if (fTime >= 0.5) { fpsEl.textContent = Math.round(fCount / fTime) + ' fps'; fCount = 0; fTime = 0; }
   });
@@ -894,6 +1023,7 @@ async function main() {
     camera.aspect = innerWidth / innerHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(innerWidth, innerHeight);
+    composer.setSize(innerWidth, innerHeight);
   });
   console.log('[game] ready:', SPEC.title);
 }
