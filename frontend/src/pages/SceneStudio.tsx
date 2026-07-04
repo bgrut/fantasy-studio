@@ -640,11 +640,17 @@ export default function SceneStudio() {
       {/* Prompt input */}
       <div className="max-w-2xl mx-auto space-y-3">
         <div className="relative group">
-          <input
+          <textarea
             data-prompt-input
             data-tour-id="prompt-input"
             value={topic}
-            onChange={(e) => setTopic(e.target.value)}
+            rows={1}
+            onChange={(e) => {
+              setTopic(e.target.value)
+              // auto-grow DOWNWARD so long prompts never hide behind Generate
+              e.target.style.height = 'auto'
+              e.target.style.height = `${Math.min(e.target.scrollHeight, 160)}px`
+            }}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault()
@@ -653,7 +659,7 @@ export default function SceneStudio() {
             }}
             placeholder="A cheetah in the desert..."
             className={cn(
-              'w-full rounded-2xl bg-[rgba(14,14,22,0.7)] backdrop-blur-xl border px-4 sm:px-6 py-3 sm:py-4 text-base sm:text-lg text-white',
+              'w-full resize-none overflow-hidden rounded-2xl bg-[rgba(14,14,22,0.7)] backdrop-blur-xl border pl-4 sm:pl-6 pr-36 py-3 sm:py-4 text-base sm:text-lg text-white',
               'placeholder:text-[#4a4764] focus:outline-none transition-all duration-300 focus-glow',
               isRendering
                 ? 'border-[#ff5c8a]/40 glow-border'
@@ -673,7 +679,7 @@ export default function SceneStudio() {
                   // shape so flexbox centering is consistent. Icon swaps
                   // Sparkles ↔ Loader2; label swaps Generate ↔ Rendering.
                   className={cn(
-                    'absolute right-2 top-1/2 -translate-y-1/2 px-5 py-2.5 rounded-xl font-semibold text-sm',
+                    'absolute right-2 top-3 px-5 py-2.5 rounded-xl font-semibold text-sm',
                     'inline-flex items-center justify-center gap-2 leading-none',
                     'transition-transform duration-200 active:scale-[0.97] hover:scale-[1.02]',
                     busy === 'preview'

@@ -113,9 +113,15 @@ export default function GameStudio() {
       {/* Prompt input — mirrors the video-mode hero input */}
       <div className="max-w-2xl mx-auto space-y-3">
         <div className="relative group">
-          <input
+          <textarea
             value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
+            rows={1}
+            onChange={(e) => {
+              setPrompt(e.target.value)
+              // auto-grow DOWNWARD so long prompts never hide behind the button
+              e.target.style.height = 'auto'
+              e.target.style.height = `${Math.min(e.target.scrollHeight, 160)}px`
+            }}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault()
@@ -124,7 +130,7 @@ export default function GameStudio() {
             }}
             placeholder="A knight exploring a foggy forest…"
             className={cn(
-              'w-full rounded-2xl bg-[rgba(14,14,22,0.7)] backdrop-blur-xl border px-4 sm:px-6 py-3 sm:py-4 text-base sm:text-lg text-white',
+              'w-full resize-none overflow-hidden rounded-2xl bg-[rgba(14,14,22,0.7)] backdrop-blur-xl border pl-4 sm:pl-6 pr-36 py-3 sm:py-4 text-base sm:text-lg text-white',
               'placeholder:text-[#4a4764] focus:outline-none transition-all duration-300 focus-glow',
               building ? 'border-[#5cffc9]/40' : 'border-white/[0.05]'
             )}
@@ -133,7 +139,7 @@ export default function GameStudio() {
             onClick={build}
             disabled={building || !prompt.trim()}
             className={cn(
-              'absolute right-2 top-1/2 -translate-y-1/2 px-5 py-2.5 rounded-xl font-semibold text-sm',
+              'absolute right-2 top-3 px-5 py-2.5 rounded-xl font-semibold text-sm',
               'inline-flex items-center justify-center gap-2 leading-none',
               'transition-transform duration-200 active:scale-[0.97] hover:scale-[1.02]',
               building
@@ -159,12 +165,30 @@ export default function GameStudio() {
           ))}
         </div>
 
-        {/* health strip: game mode works with no GPU */}
+        {/* health strip + the CASTABLE CHARACTER LIBRARY (your generations) */}
         {health && (
-          <p className="text-center text-[11px] text-[#4a4764] font-mono">
-            no GPU needed · ollama {health.ollama ? 'online' : 'offline (keyword fallback)'} ·{' '}
-            {health.library_kinds.length} characters in library
-          </p>
+          <>
+            <p className="text-center text-[11px] text-[#4a4764] font-mono">
+              no GPU needed · ollama {health.ollama ? 'online' : 'offline (keyword fallback)'} ·{' '}
+              {health.library_kinds.length} characters in library
+            </p>
+            <div className="flex flex-wrap justify-center gap-1.5">
+              <span className="text-[10px] font-mono text-[#4a4764] self-center">cast today:</span>
+              {health.library_kinds.map((k) => (
+                <button
+                  key={k}
+                  onClick={() => setPrompt((p) => (p.trim() ? p : `A ${k} `))}
+                  title={`"${k}" is in your generated library — star it in a prompt`}
+                  className="px-2 py-0.5 rounded-full text-[10px] font-mono border border-[#5cffc9]/20 bg-[#5cffc9]/5 text-[#5cffc9]/80 hover:bg-[#5cffc9]/15 transition-colors"
+                >
+                  {k}
+                </button>
+              ))}
+              <span className="text-[10px] font-mono text-[#4a4764] self-center">
+                · anything else casts as man until GPU generation
+              </span>
+            </div>
+          </>
         )}
 
         {/* MY GAME: collected levels + one-click export (Phase 34) */}

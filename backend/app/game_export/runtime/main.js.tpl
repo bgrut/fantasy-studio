@@ -171,7 +171,7 @@ async function main() {
       const ms = Array.isArray(o.material) ? o.material : [o.material];
       for (const m of ms) {
         if (m && (m.transparent || m.alphaTest > 0) && m.map) {
-          m.alphaTest = Math.max(m.alphaTest || 0, 0.4);
+          m.alphaTest = Math.max(m.alphaTest || 0, 0.55);
           m.transparent = false;      // MASK semantics: opaque + discard
           m.depthWrite = true;
           m.needsUpdate = true;
@@ -575,6 +575,46 @@ async function main() {
     }, dur * 1000);
     return dur;
   }
+
+  // WEAPON IN HAND (bipeds): a real katana / bow parented to the hand bone —
+  // it moves with the swing. Procedural, so every melee/ranged prompt gets one.
+  (() => {
+    const atkMode = (SPEC.player.attack && SPEC.player.attack !== 'none')
+      ? SPEC.player.attack
+      : ((SPEC.entities || []).some(e => e.behavior === 'hostile') ? 'melee' : 'none');
+    if (atkMode === 'none') return;
+    let handBone = null;
+    pg.scene.traverse(o => { if (!handBone && o.isBone && /hand_R/i.test(o.name)) handBone = o; });
+    if (!handBone) return;
+    const w = new THREE.Group();
+    if (atkMode === 'ranged') {
+      const bow = new THREE.Mesh(
+        new THREE.TorusGeometry(0.30, 0.013, 8, 24, Math.PI),
+        new THREE.MeshStandardMaterial({ color: 0x6b4a2a, roughness: 0.8 }));
+      bow.rotation.z = -Math.PI / 2;
+      const str = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.003, 0.003, 0.60, 4),
+        new THREE.MeshBasicMaterial({ color: 0xded8c4 }));
+      w.add(bow, str);
+    } else {
+      const blade = new THREE.Mesh(
+        new THREE.BoxGeometry(0.028, 0.62, 0.009),
+        new THREE.MeshStandardMaterial({ color: 0xd9dfe8, metalness: 0.95, roughness: 0.22 }));
+      blade.position.y = 0.37;
+      const guard = new THREE.Mesh(
+        new THREE.BoxGeometry(0.095, 0.018, 0.034),
+        new THREE.MeshStandardMaterial({ color: 0x7a6428, metalness: 0.7, roughness: 0.45 }));
+      guard.position.y = 0.055;
+      const grip = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.015, 0.015, 0.17, 8),
+        new THREE.MeshStandardMaterial({ color: 0x241d2b, roughness: 0.9 }));
+      grip.position.y = -0.04;
+      w.add(blade, guard, grip);
+    }
+    w.traverse(o => { if (o.isMesh) o.castShadow = true; });
+    w.rotation.x = Math.PI / 2;          // lie along the hand's forward
+    handBone.add(w);
+  })();
 
   const capR = Math.min(Math.max(radius * 0.6, 0.22), 0.6);
   const capHalf = Math.max(P.height_m / 2 - capR, 0.1);
