@@ -121,7 +121,8 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             spec.world.scatter = [ScatterSpec(**s) for s in game_scatter(spec.world.name)]
         kept = []
         for ent in spec.entities:
-            glb = library.resolve(ent.name)
+            # prefer the ANIMATED variant (real gait — no gliding); static fallback
+            glb = ensure_playable(ent.name, verbose=False) or library.resolve(ent.name)
             if glb:
                 ent.asset = glb
                 if ent.height_m == 1.0:

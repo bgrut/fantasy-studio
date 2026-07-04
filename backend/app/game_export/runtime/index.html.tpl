@@ -45,6 +45,10 @@
          border:2px solid rgba(255,255,255,.35);display:none;z-index:6;touch-action:none}
   #nub{position:absolute;left:32px;top:32px;width:40px;height:40px;border-radius:50%;
        background:rgba(255,255,255,.45)}
+  #atkbtn{position:fixed;right:22px;bottom:30px;width:76px;height:76px;border-radius:50%;
+         border:2px solid rgba(255,92,138,.6);background:rgba(255,92,138,.22);color:#ffd9e4;
+         font:700 13px system-ui;display:none;z-index:6;touch-action:none;
+         align-items:center;justify-content:center;user-select:none}
   @media (pointer:coarse){ #stick{display:block} }
 </style>
 </head>
@@ -64,6 +68,7 @@
 background:#7c5cff;color:#fff;text-decoration:none;font-weight:600;display:none">Next level →</a>
 <a id="backhub" style="display:none;margin-top:8px;color:#a78bfa;font-size:12px;text-decoration:none">↩ level select</a></div></div>
 <div id="stick"><div id="nub"></div></div>
+<div id="atkbtn">ATTACK</div>
 <script type="importmap">
 { "imports": { "three": "./vendor/three.module.js" } }
 </script>

@@ -240,17 +240,130 @@ __result__=json.dumps({"ok":True,"frames":TOTAL})
 
 _OPTIMIZE_CODE = r'''
 import bpy, json
+import numpy as np
 o=bpy.data.objects.get("Hero")
 TARGET=__TARGET__
+me=o.data
+# SHARD CLEANUP (video-side trellis2_clean port): TRELLIS meshes carry small
+# disconnected islands ("strings"/floaters). Rigging them binds junk to bones
+# and they smear in motion. Union-find on edges; keep only components >= 1.5%
+# of verts (the body + large parts), drop the debris.
+nv=len(me.vertices)
+if nv>1000:
+    par=np.arange(nv, dtype=np.int64)
+    def _f(a):
+        r=a
+        while par[r]!=r: r=par[r]
+        while par[a]!=r: par[a],a=r,par[a]
+        return r
+    ecount=len(me.edges)
+    ev=np.empty(ecount*2, dtype=np.int64)
+    me.edges.foreach_get("vertices", ev)
+    ev=ev.reshape(-1,2)
+    for a,b in ev:
+        ra,rb=_f(a),_f(b)
+        if ra!=rb: par[rb]=ra
+    roots=np.array([_f(i) for i in range(nv)])
+    uniq,counts=np.unique(roots, return_counts=True)
+    keep=set(uniq[counts>=max(int(nv*0.015),50)].tolist())
+    kill=np.where(~np.isin(roots, list(keep)))[0]
+    if 0 < len(kill) < nv*0.4:
+        import bmesh
+        bm=bmesh.new(); bm.from_mesh(me); bm.verts.ensure_lookup_table()
+        bmesh.ops.delete(bm, geom=[bm.verts[i] for i in kill.tolist()], context='VERTS')
+        bm.to_mesh(me); bm.free(); me.update()
+dropped=nv-len(me.vertices)
+# FUSED-SPIKE (needle) filter — the #125 'strings', ported from the video
+# pipeline but WITHOUT the organic skip: game characters can't wear needles.
+# A needle is a CHAIN of sparse occupancy cells, long in one axis and tiny in
+# the others; ears/tails/fur are dense cells and survive. (Validated on the
+# samurai: vertical hair-thin strands through the body.)
+nv2=len(me.vertices)
+if nv2>1000:
+    co=np.empty(nv2*3); me.vertices.foreach_get("co", co); co=co.reshape(-1,3)
+    span=float(max(co.max(0)-co.min(0)))
+    cellS=span*0.02
+    gc=np.floor(co/cellS).astype(np.int64)
+    cells,vcell=np.unique(gc, axis=0, return_inverse=True)
+    vcell=np.asarray(vcell).reshape(-1)
+    cl=cells.tolist()
+    cmap={(c[0],c[1],c[2]):k for k,c in enumerate(cl)}
+    offs=[(dx,dy,dz) for dx in(-1,0,1) for dy in(-1,0,1) for dz in(-1,0,1) if (dx,dy,dz)!=(0,0,0)]
+    ncc=np.zeros(len(cl), dtype=np.int32)
+    for _k,_c in enumerate(cl):
+        _cnt=0
+        for dx,dy,dz in offs:
+            if (_c[0]+dx,_c[1]+dy,_c[2]+dz) in cmap: _cnt+=1
+        ncc[_k]=_cnt
+    tend=np.where(ncc<=6)[0]
+    n_spike=0
+    if 0 < len(tend) < int(len(cl)*0.6):
+        tset=set(tend.tolist())
+        cpar=np.arange(len(cl), dtype=np.int64)
+        def _cf(a):
+            r=a
+            while cpar[r]!=r: r=cpar[r]
+            while cpar[a]!=r: cpar[a],a=r,cpar[a]
+            return r
+        for _k in tend.tolist():
+            _c=cl[_k]
+            for dx,dy,dz in offs:
+                _nb=cmap.get((_c[0]+dx,_c[1]+dy,_c[2]+dz))
+                if _nb is not None and _nb in tset:
+                    _ra,_rb=_cf(_k),_cf(_nb)
+                    if _ra!=_rb: cpar[_rb]=_ra
+        sroots=np.array([_cf(_k) for _k in tend])
+        scell=[]
+        for _r in np.unique(sroots):
+            _grp=tend[sroots==_r]
+            _pts=cells[_grp].astype(np.float64)*cellS
+            _e=np.sort(_pts.max(0)-_pts.min(0))
+            # needle: long (>=8% span) in ONE axis, hair-thin (<2.5 cells) in
+            # the other two — ears/tails are thicker and keep their cells
+            if _e[2]>=0.08*span and _e[1]<=cellS*2.5:
+                scell.extend(_grp.tolist())
+        if scell:
+            spk=np.where(np.isin(vcell, scell))[0]
+            if 0 < len(spk) <= int(nv2*0.12):
+                n_spike=int(len(spk))
+                import bmesh
+                bm=bmesh.new(); bm.from_mesh(me); bm.verts.ensure_lookup_table()
+                bmesh.ops.delete(bm, geom=[bm.verts[i] for i in spk.tolist()], context='VERTS')
+                bm.to_mesh(me); bm.free(); me.update()
+    dropped+=n_spike
 tris0=sum(len(p.vertices)-2 for p in o.data.polygons)
 if tris0>TARGET:
     m=o.modifiers.new("dec","DECIMATE"); m.ratio=max(TARGET/float(tris0),0.02)
     bpy.context.view_layer.objects.active=o; o.select_set(True)
     bpy.ops.object.modifier_apply(modifier="dec")
 tris1=sum(len(p.vertices)-2 for p in o.data.polygons)
+# ALPHA REWIRE: TRELLIS hair/fringe strips rely on texture transparency; the
+# import/export round-trip can drop the image->Alpha link, rendering the
+# transparent strips as solid black "strands". If the base-color image carries
+# an alpha channel, wire it to Principled Alpha and keep an alpha-aware blend.
+alpha_wired=0
+for _mt in me.materials:
+    if not (_mt and _mt.use_nodes): continue
+    _b=_mt.node_tree.nodes.get("Principled BSDF")
+    if not _b: continue
+    _ain=_b.inputs.get("Alpha")
+    if _ain is None or _ain.is_linked: continue
+    _base=_b.inputs.get("Base Color")
+    _img=None
+    if _base and _base.is_linked:
+        _src=_base.links[0].from_node
+        if _src.type=="TEX_IMAGE" and _src.image and _src.image.depth==32:
+            _img=_src
+    if _img is not None:
+        _mt.node_tree.links.new(_img.outputs["Alpha"], _ain)
+        _mt.blend_method='HASHED'
+        alpha_wired+=1
+for _mt in me.materials:
+    if _mt: _mt.use_backface_culling=True
 bpy.ops.object.select_all(action='DESELECT'); o.select_set(True)
 bpy.ops.export_scene.gltf(filepath=r"__OUT__", use_selection=True, export_yup=True)
-__result__=json.dumps({"ok":True,"tris":[tris0,tris1]})
+__result__=json.dumps({"ok":True,"tris":[tris0,tris1],"shard_verts_dropped":int(dropped),
+                       "alpha_wired":alpha_wired})
 '''
 
 

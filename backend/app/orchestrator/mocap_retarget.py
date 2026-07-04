@@ -144,8 +144,34 @@ if not skin_mode.startswith("voxel"):
         elif nm.endswith("_R"):     dmat[SA<smid-_mar, bi]=1e9
     K=min(4,dmat.shape[1]); idxK=np.argsort(dmat,axis=1)[:,:K]; dK=np.take_along_axis(dmat,idxK,1)
     wK=1.0/np.maximum(dK,1e-6)**2; wK/=wK.sum(1,keepdims=True); wK[wK<0.03]=0; wK/=np.maximum(wK.sum(1,keepdims=True),1e-9)
+    # densify: W (nv x nbones)
+    W=np.zeros((len(V), len(segs)), dtype=np.float64)
+    np.put_along_axis(W, idxK, wK, axis=1)
+    # LAPLACIAN WEIGHT SMOOTHING: hard nearest-bone steps tear thin strands in
+    # motion (the 'strings'). Diffuse weights over mesh adjacency so joints get
+    # bone-heat-like smooth falloff; re-assert the same-side mask each pass so
+    # L/R never bleed across the centreline.
+    ecount=len(me.edges)
+    ev=np.empty(ecount*2, dtype=np.int64); me.edges.foreach_get("vertices", ev)
+    ev=ev.reshape(-1,2)
+    nb_acc=np.zeros_like(W); nb_cnt=np.zeros(len(V))
+    np.add.at(nb_cnt, ev[:,0], 1); np.add.at(nb_cnt, ev[:,1], 1)
+    nb_cnt=np.maximum(nb_cnt,1)[:,None]
+    side_mask=np.ones_like(W)
     for bi,nm in enumerate(names):
-        wv=(wK*(idxK==bi)).sum(1); lv=np.where(wv>1e-4)[0]
+        if nm.endswith("_L"):   side_mask[SA>smid+_mar, bi]=0.0
+        elif nm.endswith("_R"): side_mask[SA<smid-_mar, bi]=0.0
+    for _it in range(8):
+        nb_acc[:]=0.0
+        np.add.at(nb_acc, ev[:,0], W[ev[:,1]])
+        np.add.at(nb_acc, ev[:,1], W[ev[:,0]])
+        W=0.55*W+0.45*(nb_acc/nb_cnt)
+        W*=side_mask
+        W/=np.maximum(W.sum(1,keepdims=True),1e-9)
+    W[W<0.05]=0.0
+    W/=np.maximum(W.sum(1,keepdims=True),1e-9)
+    for bi,nm in enumerate(names):
+        wv=W[:,bi]; lv=np.where(wv>1e-4)[0]
         if not len(lv): continue
         vg=o.vertex_groups.get(nm) or o.vertex_groups.new(name=nm)
         q=np.round(wv[lv]*63).astype(np.int64)

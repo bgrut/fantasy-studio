@@ -3,6 +3,7 @@
 // Rapier 0.14 (Apache-2.0), all vendored locally: works fully offline.
 import * as THREE from 'three';
 import { GLTFLoader } from './vendor/jsm/loaders/GLTFLoader.js';
+import { clone as skClone } from './vendor/jsm/utils/SkeletonUtils.js';
 import RAPIER from './vendor/rapier.es.js';
 
 const SPEC = __GAME_SPEC__;
@@ -288,8 +289,10 @@ async function main() {
     try {
       const gltf = await loadGLB(ent.asset);
       const hostile = ent.behavior === 'hostile';
+      const hasAnims = !!(gltf.animations && gltf.animations.length);
       for (let i = 0; i < (ent.count || 1); i++) {
-        const inst = i === 0 ? gltf.scene : gltf.scene.clone(true);
+        // SkeletonUtils.clone — plain clone() breaks skinned meshes (gliding)
+        const inst = skClone(gltf.scene);
         const mats = [];
         inst.traverse(o => {
           if (o.isMesh) {
@@ -315,9 +318,19 @@ async function main() {
           holder.position.x += Math.sign(holder.position.x || 1) * 16;
         }
         scene.add(holder);
+        // per-instance animation: idle/walk/run clips crossfade with movement
+        let anim = null;
+        if (hasAnims) {
+          const mixer = new THREE.AnimationMixer(inst);
+          const acts = {};
+          for (const c of gltf.animations) acts[c.name] = mixer.clipAction(c);
+          const pick = w => acts[w] || acts[Object.keys(acts)[0]];
+          anim = { mixer, idle: pick('idle'), walk: pick('walk'), run: pick('run'), cur: null };
+          anim.cur = anim.idle; anim.cur.play();
+        }
         npcs.push({ obj: holder, speed: ent.speed || 1.5, behavior: ent.behavior || 'wander',
                     target: null, yaw: rngN() * Math.PI * 2, phase: rngN() * Math.PI * 2,
-                    hp: ent.hp || 3, cd: 0, dead: false, dieT: 0, mats });
+                    hp: ent.hp || 3, cd: 0, dead: false, dieT: 0, mats, anim });
       }
     } catch (e) { fail(e.message); }
   }
@@ -350,7 +363,8 @@ async function main() {
         }
         tx = n.target[0]; tz = n.target[1];
       }
-      if (tx !== null) {
+      const moving = tx !== null;
+      if (moving) {
         const dx = tx - n.obj.position.x, dz = tz - n.obj.position.z;
         const want = Math.atan2(dx, dz);
         n.yaw = THREE.MathUtils.damp(n.yaw, want, 6, dt);
@@ -359,10 +373,20 @@ async function main() {
         n.obj.position.x += Math.sin(n.yaw) * sp;
         n.obj.position.z += Math.cos(n.yaw) * sp;
         n.obj.position.y = hAt(n.obj.position.x, n.obj.position.z)
-                         + Math.abs(Math.sin(t * 7 + n.phase)) * 0.045;  // terrain + gait bob
+                         + (n.anim ? 0 : Math.abs(Math.sin(t * 7 + n.phase)) * 0.045);
       } else {
         n.obj.position.y = hAt(n.obj.position.x, n.obj.position.z)
-                         + Math.sin(t * 2 + n.phase) * 0.01 + 0.01;      // terrain + idle breath
+                         + (n.anim ? 0 : Math.sin(t * 2 + n.phase) * 0.01 + 0.01);
+      }
+      // real gait: crossfade idle/walk/run with movement state (no more gliding)
+      if (n.anim) {
+        const want = moving ? (n.behavior === 'hostile' && n.speed > 2.2 ? n.anim.run : n.anim.walk)
+                            : n.anim.idle;
+        if (want && want !== n.anim.cur) {
+          want.reset(); want.crossFadeFrom(n.anim.cur, 0.2, true); want.play();
+          n.anim.cur = want;
+        }
+        n.anim.mixer.update(dt);
       }
       // stay inside the walls
       const lim = gsize * 0.47;
@@ -633,9 +657,27 @@ async function main() {
       }
     }
   }
+  // controls per device: keyboard F/Space · touch ATTACK button · gamepad A/X or RT
   addEventListener('keydown', e => {
     if (e.code === 'KeyF' || e.code === 'Space') { e.preventDefault(); doAttack(); }
   });
+  const atkBtn = document.getElementById('atkbtn');
+  if (atkBtn && ATTACK !== 'none') {
+    atkBtn.style.display = matchMedia('(pointer:coarse)').matches ? 'flex' : 'none';
+    atkBtn.textContent = ATTACK === 'ranged' ? 'SHOOT' : 'ATTACK';
+    atkBtn.addEventListener('pointerdown', e => { e.preventDefault(); doAttack(); });
+  }
+  let gpAtkHeld = false;
+  function pollGamepadAttack() {
+    const gps = navigator.getGamepads ? navigator.getGamepads() : [];
+    for (const gp of gps) {
+      if (!gp) continue;
+      const pressed = (gp.buttons[0] && gp.buttons[0].pressed) ||   // A / Cross
+                      (gp.buttons[7] && gp.buttons[7].pressed);     // RT / R2
+      if (pressed && !gpAtkHeld) doAttack();
+      gpAtkHeld = pressed;
+    }
+  }
 
   // exposed for the verify harness (synthetic input, position probes, dev teleport)
   window.__game = {
@@ -712,7 +754,8 @@ async function main() {
       }
     }
 
-    // combat: attack cooldown + projectiles
+    // combat: attack cooldown + projectiles + gamepad attack edge
+    pollGamepadAttack();
     if (atkCd > 0) atkCd -= dt;
     for (let i = projectiles.length - 1; i >= 0; i--) {
       const pr = projectiles[i];
