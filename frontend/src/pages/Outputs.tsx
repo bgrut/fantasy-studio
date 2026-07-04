@@ -195,9 +195,14 @@ export default function Outputs() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 stagger-reveal">
           {filteredOutputs.map((output) => (
             <div key={output.id} className="glass rounded-2xl overflow-hidden card-hover group flex flex-col">
-              {/* Video preview */}
+              {/* Video preview — or a game tile for __game__ builds (Phase 30+) */}
               <div className="aspect-video md:aspect-[9/16] relative overflow-hidden bg-[#0a0a10]">
-                {output.output_url ? (
+                {output.template_name === '__game__' ? (
+                  <div className="w-full h-full flex flex-col items-center justify-center gap-3 bg-gradient-to-br from-[#101826] to-[#0a0a12]">
+                    <span className="text-5xl">🕹️</span>
+                    <span className="text-[10px] font-mono text-[#5cffc9] tracking-widest">PLAYABLE GAME</span>
+                  </div>
+                ) : output.output_url ? (
                   <video
                     src={output.output_url}
                     className="w-full h-full object-cover opacity-60 group-hover:opacity-100 group-hover:scale-105 transition-all duration-700"

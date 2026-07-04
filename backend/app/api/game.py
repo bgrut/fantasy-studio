@@ -26,6 +26,36 @@ _next_id = 1
 _lock = threading.Lock()
 
 
+def _record_start(prompt: str) -> int | None:
+    """Insert a render_jobs row so game builds show up LIVE in the pipeline
+    bar and land in Gallery/Insights like every video run. Never raises."""
+    try:
+        from app.db import get_conn
+        with get_conn() as conn:
+            cur = conn.execute(
+                "INSERT INTO render_jobs(project_name, topic, template_name, status, provider_name) "
+                "VALUES ('game', ?, '__game__', 'rendering', 'GameExport')",
+                (prompt,))
+            return cur.lastrowid
+    except Exception:
+        return None
+
+
+def _record_finish(row_id: int | None, ok: bool, play_url: str | None,
+                   error: str | None) -> None:
+    if row_id is None:
+        return
+    try:
+        from app.db import get_conn
+        with get_conn() as conn:
+            conn.execute(
+                "UPDATE render_jobs SET status=?, output_url=?, error_text=?, "
+                "updated_at=datetime('now') WHERE id=?",
+                ("complete" if ok else "failed", play_url, error, row_id))
+    except Exception:
+        pass
+
+
 class GameExportRequest(BaseModel):
     prompt: str = Field(min_length=3, max_length=4000)
     player: str | None = None    # override; None = cast from the prompt (extractor)
@@ -35,6 +65,7 @@ class GameExportRequest(BaseModel):
 
 def _run_job(job_id: int, req: GameExportRequest) -> None:
     job = _jobs[job_id]
+    row_id = _record_start(req.prompt)     # metrics: live row in the pipeline bar
 
     def stage(s: str) -> None:
         job["stage"] = s
@@ -128,11 +159,13 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         job["play_url"] = f"/games/job_{job_id}/dist/"
         job["checks"] = len(v["checks"])
         stage("done")
+        _record_finish(row_id, True, job["play_url"], None)
     except Exception as e:
         job["status"] = "failed"
         job["error"] = f"{type(e).__name__}: {e}"
         job["trace"] = traceback.format_exc()[-1500:]
         stage("failed")
+        _record_finish(row_id, False, None, job["error"])
 
 
 @router.post("/api/game/export")
