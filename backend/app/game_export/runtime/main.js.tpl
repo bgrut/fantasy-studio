@@ -163,8 +163,25 @@ async function main() {
   const loadGLB = url => new Promise((res, rej) =>
     loader.load(url, res, undefined, () => rej(new Error('failed to load ' + url))));
 
+  // belt-and-suspenders vs "string" strips: any alpha-aware material gets a
+  // hard alphaTest so low-alpha fringe fragments DISCARD in three.js too
+  function hardenAlpha(root) {
+    root.traverse(o => {
+      if (!o.isMesh) return;
+      const ms = Array.isArray(o.material) ? o.material : [o.material];
+      for (const m of ms) {
+        if (m && (m.transparent || m.alphaTest > 0) && m.map) {
+          m.alphaTest = Math.max(m.alphaTest || 0, 0.4);
+          m.transparent = false;      // MASK semantics: opaque + discard
+          m.depthWrite = true;
+          m.needsUpdate = true;
+        }
+      }
+    });
+  }
   function prepModel(gltf, targetH) {
     const root = gltf.scene;
+    hardenAlpha(root);
     root.traverse(o => { if (o.isMesh) { o.castShadow = true; o.frustumCulled = false; } });
     const box = new THREE.Box3().setFromObject(root);
     const h = Math.max(box.max.y - box.min.y, 1e-3);
@@ -293,6 +310,7 @@ async function main() {
       for (let i = 0; i < (ent.count || 1); i++) {
         // SkeletonUtils.clone — plain clone() breaks skinned meshes (gliding)
         const inst = skClone(gltf.scene);
+        hardenAlpha(inst);
         const mats = [];
         inst.traverse(o => {
           if (o.isMesh) {
@@ -527,14 +545,35 @@ async function main() {
     const pick = want => actions[P.anims[want]] || actions[want] ||
                          actions[Object.keys(actions)[0]];
     actions.__idle = pick('idle'); actions.__walk = pick('walk'); actions.__run = pick('run');
+    actions.__attack = actions['attack'] || null;    // one-shot swing overlay
+    if (actions.__attack) {
+      actions.__attack.setLoop(THREE.LoopOnce, 1);
+      actions.__attack.clampWhenFinished = false;
+    }
     current = actions.__idle; current.play();
   } else {
     console.warn('[game] player GLB has no animations — static fallback');
   }
+  let attackUntil = 0;                 // swing overlay suppresses the locomotion FSM
   function setAnim(next) {
     if (!mixer || !next || next === current) return;
+    if (performance.now() < attackUntil) return;
     next.reset(); next.crossFadeFrom(current, 0.22, true); next.play();
     current = next;
+  }
+  function playAttackAnim() {
+    if (!mixer || !actions.__attack) return 0;
+    const a = actions.__attack;
+    const dur = Math.min(a.getClip().duration, 0.7);
+    a.reset(); a.setEffectiveWeight(1); a.crossFadeFrom(current, 0.08, true); a.play();
+    current = a;
+    attackUntil = performance.now() + dur * 1000;
+    setTimeout(() => {                 // return to locomotion after the swing
+      attackUntil = 0;
+      const back = actions.__idle;
+      if (back) { back.reset(); back.crossFadeFrom(a, 0.15, true); back.play(); current = back; }
+    }, dur * 1000);
+    return dur;
   }
 
   const capR = Math.min(Math.max(radius * 0.6, 0.22), 0.6);
@@ -625,7 +664,8 @@ async function main() {
   }
   function doAttack() {
     if (ATTACK === 'none' || atkCd > 0 || won || lost) return;
-    atkCd = ATTACK === 'ranged' ? 0.35 : 0.5;
+    atkCd = ATTACK === 'ranged' ? 0.35 : 0.55;
+    playAttackAnim();                          // the actual katana/claw motion
     const dir = new THREE.Vector3(Math.sin(modelYaw), 0, Math.cos(modelYaw));
     if (ATTACK === 'ranged') {
       const m = new THREE.Mesh(
@@ -638,23 +678,26 @@ async function main() {
       scene.add(m);
       projectiles.push({ mesh: m, vel: dir.clone().multiplyScalar(24), life: 2 });
     } else {
-      // melee: 120° arc, 2.3m reach, with a quick slash flash
-      const flash = new THREE.PointLight(0xffffff, 3.5, 5);
-      flash.position.copy(playerObj.position).add(dir.clone().multiplyScalar(1.2))
-        .add(new THREE.Vector3(0, P.height_m * 0.5, 0));
-      scene.add(flash);
-      setTimeout(() => scene.remove(flash), 110);
-      for (const n of npcs) {
-        if (n.behavior !== 'hostile' || n.dead) continue;
-        const dx = n.obj.position.x - playerObj.position.x;
-        const dz = n.obj.position.z - playerObj.position.z;
-        const d = Math.hypot(dx, dz);
-        if (d > 2.3) continue;
-        let a = Math.atan2(dx, dz) - modelYaw;
-        while (a > Math.PI) a -= 2 * Math.PI;
-        while (a < -Math.PI) a += 2 * Math.PI;
-        if (Math.abs(a) < 1.05) dmgEnemy(n, 1);
-      }
+      // melee: damage lands MID-SWING (180ms in) so the hit matches the motion
+      setTimeout(() => {
+        if (won || lost) return;
+        const flash = new THREE.PointLight(0xffffff, 3.5, 5);
+        flash.position.copy(playerObj.position).add(dir.clone().multiplyScalar(1.2))
+          .add(new THREE.Vector3(0, P.height_m * 0.5, 0));
+        scene.add(flash);
+        setTimeout(() => scene.remove(flash), 110);
+        for (const n of npcs) {
+          if (n.behavior !== 'hostile' || n.dead) continue;
+          const dx = n.obj.position.x - playerObj.position.x;
+          const dz = n.obj.position.z - playerObj.position.z;
+          const d = Math.hypot(dx, dz);
+          if (d > 2.3) continue;
+          let a = Math.atan2(dx, dz) - modelYaw;
+          while (a > Math.PI) a -= 2 * Math.PI;
+          while (a < -Math.PI) a += 2 * Math.PI;
+          if (Math.abs(a) < 1.05) dmgEnemy(n, 1);
+        }
+      }, 180);
     }
   }
   // controls per device: keyboard F/Space · touch ATTACK button · gamepad A/X or RT

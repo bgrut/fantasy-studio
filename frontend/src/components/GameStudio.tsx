@@ -11,10 +11,12 @@ import {
 } from '@/lib/gameApi'
 
 const GAME_PROMPTS = [
-  'A man walking his loyal dog through a sunny park',
-  'A lone wanderer in a misty forest at night, collect 7 fireflies',
-  'Explore a quiet meadow at sunset, collect 5 glowing orbs',
-  'A stroll through a garden with a curious cat',
+  'A samurai with a katana fights hostile dogs in a stormy forest — defeat 3, then reach the ancient shrine',
+  'A fox on a snowy night quest: collect 6 fireflies, then race to the glowing beacon before dawn',
+  'A wizard defends a windswept meadow — defeat 4 wild wolves with magic bolts, collect 3 lost runes',
+  'A knight escorts his loyal dog across rainy highlands to a distant watchtower, collect 5 relics on the way',
+  'A horse galloping free across golden-hour countryside, reach the far hilltop',
+  'A man with a bow hunts through a foggy forest — defeat 2 hostile cats, collect 4 arrows, reach camp',
 ]
 
 const BUILD_STAGES: Record<string, string> = {

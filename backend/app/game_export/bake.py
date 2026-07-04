@@ -19,6 +19,7 @@ BACKEND_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CLIPS = {
     "walk": ("02_01.bvh", 40),
     "run":  ("02_03.bvh", 28),
+    "attack": ("02_05.bvh", 16),   # fight-clip strike slice — the swing
 }
 IDLE_FRAMES = 72
 
@@ -356,7 +357,12 @@ for _mt in me.materials:
             _img=_src
     if _img is not None:
         _mt.node_tree.links.new(_img.outputs["Alpha"], _ain)
-        _mt.blend_method='HASHED'
+        # CLIP -> glTF alphaMode MASK: hard fragment discard, deterministic in
+        # EVERY engine (three.js alphaTest, Godot, Unreal). BLEND left fringe
+        # strips visible in three.js despite correct alpha.
+        _mt.blend_method='CLIP'
+        try: _mt.alpha_threshold=0.5
+        except Exception: pass
         alpha_wired+=1
 for _mt in me.materials:
     if _mt: _mt.use_backface_culling=True
@@ -410,6 +416,30 @@ def bake_quadruped_anim_set(hero_glb: str | Path, out_glb: str | Path,
     if not (r and r.get("ok")):
         raise RuntimeError(f"quad idle failed: {r}")
     _call(registry, "push", _PUSH_NLA.replace("__NAME__", "idle"))
+    # attack: one-shot POUNCE (pitch down + rebound) — quadruped strike
+    r = _call(registry, "pounce", r'''
+import bpy, math, json
+rig=bpy.data.objects.get("HeroRig")
+bpy.context.view_layer.objects.active=rig
+bpy.ops.object.mode_set(mode="POSE")
+pb=rig.pose.bones
+for b in pb: b.rotation_mode="XYZ"
+T=14
+for f in range(1, T+1):
+    t=(f-1)/(T-1)
+    a=math.sin(t*math.pi)          # 0 -> peak -> 0
+    pb["spine"].rotation_euler=(0.55*a,0,0)
+    pb["spine"].keyframe_insert("rotation_euler",frame=f)
+    if "neck" in pb:
+        pb["neck"].rotation_euler=(-0.35*a,0,0)
+        pb["neck"].keyframe_insert("rotation_euler",frame=f)
+    pb["root"].location=(0,0.10*a,-0.02*a)
+    pb["root"].keyframe_insert("location",frame=f)
+bpy.ops.object.mode_set(mode="OBJECT")
+__result__=json.dumps({"ok":True,"frames":T})
+''')
+    if r and r.get("ok"):
+        _call(registry, "push", _PUSH_NLA.replace("__NAME__", "attack"))
     # walk: 2 cycles @ stride 20; run: 3 cycles @ stride 12, bigger swing
     for name, total, stride, amp in (("walk", 40, 20, 0.50), ("run", 36, 12, 0.72)):
         r = _call(registry, name, (_QUAD_CLIP_CODE
