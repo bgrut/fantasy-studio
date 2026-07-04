@@ -96,8 +96,18 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         # ladder with a visible note whenever the cast changes.
         want = (req.player or spec.player.name or "man").strip().lower()
         from app.game_export.bake import ensure_playable
-        player_glb = ensure_playable(want, verbose=False)   # rig+animate on first use
+        from app.game_export.generate import guess_pattern
         cast = want
+        if guess_pattern(want) == "vehicle":                 # cars DRIVE, no rig needed
+            player_glb = library.resolve(want)
+            if player_glb:
+                spec.player.mode = "drive"
+                if abs(spec.player.walk_speed - 2.0) < 1e-6:
+                    spec.player.walk_speed = 9.0             # cruise
+                if abs(spec.player.run_speed - 5.0) < 1e-6:
+                    spec.player.run_speed = 19.0             # boost
+        else:
+            player_glb = ensure_playable(want, verbose=False)  # rig+animate on first use
         if not player_glb:
             try:
                 from app.game_export.generate import ensure_asset
@@ -132,6 +142,23 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                 job.setdefault("notes", []).append(
                     f"entity '{ent.name}' not in library yet — skipped")
         spec.entities = kept
+
+        # RACE SANITY: a race step needs opponent VEHICLES — synthesize them
+        # from the player's own kind when the extractor didn't cast any.
+        from app.game_export.spec import EntitySpec
+        for ob in spec.objectives:
+            if ob.kind == "race" and not any(e.behavior == "vehicle" for e in spec.entities):
+                okind = cast if guess_pattern(cast) == "vehicle" else "car"
+                oglb = library.resolve(okind)
+                if oglb:
+                    spec.entities.append(EntitySpec(
+                        name=okind, asset=oglb, behavior="vehicle",
+                        count=min(ob.count, 8), speed=6.5,
+                        height_m=library.default_height(okind)))
+
+        # grass: off for cities and snow (quality-pack gate)
+        from app.game_export.dressing import wants_grass
+        spec.world.grass = wants_grass(spec.world.name, spec.world.weather)
 
         # MISSION SANITY: defeat steps need hostiles that actually resolved.
         # Clamp counts to what exists; drop unwinnable steps with a note.

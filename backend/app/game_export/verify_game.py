@@ -79,19 +79,24 @@ def verify_dist(dist: str | Path) -> dict:
         finally:
             tmp.unlink(missing_ok=True)
 
-    # ── player GLB: skinned + carries the expected animation clips ───────────
+    # ── player GLB: skinned + animated for WALK mode; DRIVE players are rigid
+    # bodies (cars) — mesh validity only.
     if spec:
         glb = dist / spec["player"]["asset"].lstrip("./")
         if glb.exists():
             try:
                 g = _glb_json(glb)
-                anims = [a.get("name", "") for a in g.get("animations", [])]
-                check("player skinned", bool(g.get("skins")), f"skins={len(g.get('skins', []))}")
-                want = set(spec["player"].get("anims", {}).values())
-                have = want & set(anims)
-                check("player animations", bool(anims), f"clips={anims}")
-                if anims and want and not have:
-                    check("anim names match spec", False, f"want {sorted(want)}, have {anims}")
+                if spec["player"].get("mode") == "drive":
+                    check("player mesh (drive mode)", bool(g.get("meshes")),
+                          f"meshes={len(g.get('meshes', []))}")
+                else:
+                    anims = [a.get("name", "") for a in g.get("animations", [])]
+                    check("player skinned", bool(g.get("skins")), f"skins={len(g.get('skins', []))}")
+                    want = set(spec["player"].get("anims", {}).values())
+                    have = want & set(anims)
+                    check("player animations", bool(anims), f"clips={anims}")
+                    if anims and want and not have:
+                        check("anim names match spec", False, f"want {sorted(want)}, have {anims}")
             except Exception as e:
                 check("player GLB parses", False, f"{type(e).__name__}: {e}")
 

@@ -30,7 +30,19 @@ _RECIPES = {
     "field":       [("tree", 25, 4), ("rock", 25, 4)],
     "grass":       [("tree", 45, 5), ("rock", 25, 4)],
     "backyard":    [("tree", 18, 3), ("rock", 12, 3), ("lamp", 4, 1)],
+    "city":        [("building", 70, 8), ("lamp", 26, 4), ("tree", 14, 2)],
+    "street":      [("building", 70, 8), ("lamp", 26, 4), ("tree", 14, 2)],
+    "town":        [("building", 40, 6), ("lamp", 16, 3), ("tree", 18, 3)],
 }
+
+_NO_GRASS = {"city", "street", "town"}
+
+
+def wants_grass(setting: str | None, weather: str = "none") -> bool:
+    s = (setting or "").lower()
+    if weather == "snow":
+        return False
+    return not any(k in s for k in _NO_GRASS)
 
 
 def recipe_for(setting: str | None):

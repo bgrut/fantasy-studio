@@ -320,8 +320,8 @@ async function main() {
   }
 
   // GRASS: instanced cross-blades on the terrain, thinned along the walking
-  // path — the "flat green plane" is gone.
-  if ((SPEC.world.scatter || []).length) {
+  // path — the "flat green plane" is gone. (Gated off for cities/snow.)
+  if ((SPEC.world.scatter || []).length && SPEC.world.grass !== false) {
     const gcolA = new THREE.Color(...SPEC.world.ground_color).offsetHSL(0, 0.08, 0.06);
     const gcolB = gcolA.clone().offsetHSL(0.02, 0.05, -0.07);
     const blade = new THREE.PlaneGeometry(0.11, 0.32);
@@ -480,6 +480,19 @@ async function main() {
           n.target = [(rngN() - 0.5) * gsize * 0.6, (rngN() - 0.5) * gsize * 0.6];
           tx = n.target[0]; tz = n.target[1];
         } else { tx = n.target[0]; tz = n.target[1]; }
+      } else if (n.behavior === 'vehicle') {
+        // RACE AI: drive the level path toward the goal, record finish order
+        if (!n.finished) {
+          if (n.wp === undefined) { n.wp = 1; n.vjit = 0.85 + rngN() * 0.35; }
+          const P2 = PATH || [[0, 0], [goalPos ? goalPos.x : 40, goalPos ? goalPos.z : 40]];
+          const wpt = P2[Math.min(n.wp, P2.length - 1)];
+          const dW = Math.hypot(wpt[0] - n.obj.position.x, wpt[1] - n.obj.position.z);
+          if (dW < 3 && n.wp < P2.length - 1) n.wp++;
+          else if (goalPos && Math.hypot(goalPos.x - n.obj.position.x, goalPos.z - n.obj.position.z) < 2.5) {
+            n.finished = true; raceFinishers++;
+          }
+          tx = wpt[0]; tz = wpt[1];
+        }
       } else if (n.behavior === 'follow') {
         const d = Math.hypot(playerPos.x - n.obj.position.x, playerPos.z - n.obj.position.z);
         if (d > 2.6) { tx = playerPos.x; tz = playerPos.z; }
@@ -493,9 +506,10 @@ async function main() {
       if (moving) {
         const dx = tx - n.obj.position.x, dz = tz - n.obj.position.z;
         const want = Math.atan2(dx, dz);
-        n.yaw = THREE.MathUtils.damp(n.yaw, want, 6, dt);
+        // vehicles steer smoothly (no pivot-in-place), creatures turn quicker
+        n.yaw = THREE.MathUtils.damp(n.yaw, want, n.behavior === 'vehicle' ? 2.2 : 6, dt);
         n.obj.rotation.y = n.yaw;
-        const sp = n.speed * dt;
+        const sp = n.speed * (n.vjit || 1) * dt;
         n.obj.position.x += Math.sin(n.yaw) * sp;
         n.obj.position.z += Math.cos(n.yaw) * sp;
         n.obj.position.y = hAt(n.obj.position.x, n.obj.position.z)
@@ -529,7 +543,7 @@ async function main() {
   if (!steps.length && goalPos) steps = [{ kind: 'reach', label: 'the beacon', count: 1 }];
   else if (goalPos && steps.length && steps[steps.length - 1].kind !== 'reach')
     steps.push({ kind: 'reach', label: 'the beacon', count: 1 });
-  let stepIdx = -1, kills = 0, won = false, lost = false;
+  let stepIdx = -1, kills = 0, won = false, lost = false, raceFinishers = 0;
   const collectibles = [];
   const rngC = mulberry32(SPEC.seed + 77);
   const cgeo = new THREE.SphereGeometry(0.11, 12, 10);
@@ -558,6 +572,7 @@ async function main() {
   function stepLabel(st) {
     if (st.kind === 'collect') return `Collect ${st.count} ${st.label || 'items'}`;
     if (st.kind === 'defeat') return `Defeat ${st.count} ${st.label || 'enemies'}`;
+    if (st.kind === 'race') return `Win the race (${st.count} ${st.label || 'rivals'})`;
     return `Reach ${st.label || 'the beacon'}`;
   }
   function stepProgress(st) {
@@ -911,22 +926,41 @@ async function main() {
   const clock = new THREE.Clock();
   const fpsEl = document.getElementById('fps');
   let fCount = 0, fTime = 0, modelYaw = 0;
+  const DRIVE = SPEC.player.mode === 'drive';    // arcade car physics
+  let vSpeed = 0, hudTick = 0;
   const camTarget = new THREE.Vector3();
 
   renderer.setAnimationLoop(() => {
     const dt = Math.min(clock.getDelta(), 0.05);
     const mv = readMove();
-    const speed = (mv.run ? P.run_speed : P.walk_speed) * mv.mag;
-
-    // camera-relative movement direction
-    const dir = new THREE.Vector3(mv.x, 0, mv.z);
-    if (dir.lengthSq() > 1e-4) {
-      dir.normalize().applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
-      modelYaw = THREE.MathUtils.damp(modelYaw, Math.atan2(dir.x, dir.z),
-        P.turn_speed, dt);
+    let speed;
+    const dir = new THREE.Vector3();
+    if (DRIVE) {
+      // CAR PHYSICS: throttle/brake + speed-scaled steering — no crab-walking
+      const throttle = -mv.z;                       // W/up = forward
+      const steer = mv.x;
+      const maxV = mv.run ? P.run_speed : P.walk_speed;
+      if (throttle > 0.05) vSpeed += 11 * throttle * dt;
+      else if (throttle < -0.05) vSpeed -= 14 * -throttle * dt;   // brake/reverse
+      else vSpeed *= Math.max(0, 1 - 1.6 * dt);                   // coast friction
+      vSpeed = THREE.MathUtils.clamp(vSpeed, -maxV * 0.35, maxV);
+      const grip = Math.min(Math.abs(vSpeed) / 5, 1);
+      modelYaw -= steer * 1.9 * grip * Math.sign(vSpeed || 1) * dt;
+      dir.set(Math.sin(modelYaw), 0, Math.cos(modelYaw));
+      speed = Math.abs(vSpeed);
+      vy = Math.max(vy - 9.81 * dt, -25);
+      var desired = { x: dir.x * vSpeed * dt, y: vy * dt, z: dir.z * vSpeed * dt };
+    } else {
+      speed = (mv.run ? P.run_speed : P.walk_speed) * mv.mag;
+      dir.set(mv.x, 0, mv.z);
+      if (dir.lengthSq() > 1e-4) {
+        dir.normalize().applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
+        modelYaw = THREE.MathUtils.damp(modelYaw, Math.atan2(dir.x, dir.z),
+          P.turn_speed, dt);
+      }
+      vy = Math.max(vy - 9.81 * dt, -25);
+      var desired = { x: dir.x * speed * dt, y: vy * dt, z: dir.z * speed * dt };
     }
-    vy = Math.max(vy - 9.81 * dt, -25);
-    const desired = { x: dir.x * speed * dt, y: vy * dt, z: dir.z * speed * dt };
     kcc.computeColliderMovement(collider, desired);
     const cm = kcc.computedMovement();
     if (kcc.computedGrounded()) vy = 0;
@@ -956,13 +990,28 @@ async function main() {
     stepNPCs(dt, nt, performance.now() / 1000);
     stepDynamics(dt, nt, performance.now() / 1000);
 
-    // goal beacon: pulse; completes the mission's active REACH step
+    // goal beacon: pulse; completes REACH steps, decides RACE steps
     if (goalPos && !won && !lost) {
       if (goalMesh) goalMesh.rotation.z += dt * 0.8;
       const st = steps[stepIdx];
-      if (st && st.kind === 'reach') {
-        const gd = Math.hypot(goalPos.x - nt.x, goalPos.z - nt.z);
-        if (gd < 2.2) advanceStep();
+      const gd = Math.hypot(goalPos.x - nt.x, goalPos.z - nt.z);
+      if (st && st.kind === 'reach' && gd < 2.2) advanceStep();
+      else if (st && st.kind === 'race') {
+        // live standings: position = cars already finished + cars closer to goal
+        hudTick += dt;
+        const rivals = npcs.filter(n => n.behavior === 'vehicle');
+        if (hudTick > 0.25) {
+          hudTick = 0;
+          const ahead = raceFinishers + rivals.filter(n => !n.finished &&
+            Math.hypot(goalPos.x - n.obj.position.x, goalPos.z - n.obj.position.z) < gd).length;
+          objEl.style.display = 'block';
+          objEl.textContent = `Race to the beacon — position ${ahead + 1} / ${rivals.length + 1}`;
+        }
+        if (gd < 2.6) {
+          const rank = raceFinishers + 1;
+          if (rank === 1) advanceStep();
+          else doLose(`Finished #${rank} — the ${st.label || 'cars'} beat you. Try again!`);
+        }
       }
     }
 

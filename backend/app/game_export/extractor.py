@@ -19,7 +19,7 @@ _SYSTEM = """You turn a game idea (a short prompt OR a long PRD document) into O
 Output ONLY the JSON object, no markdown, no commentary. Schema (all fields optional — omit anything the text doesn't justify):
 {
  "title": str,
- "world": {"name": one of "park","garden","forest","meadow","countryside","field","grass","backyard","plain",
+ "world": {"name": one of "park","garden","forest","meadow","countryside","field","grass","backyard","city","street","plain",
            "size_m": float 30..500, "sky": one of "day","sunset","night","overcast", "fog": bool,
            "weather": one of "none","rain","snow", "wind": float 0..1,
            "ground_color": [r,g,b] floats 0..1},
@@ -28,11 +28,13 @@ Output ONLY the JSON object, no markdown, no commentary. Schema (all fields opti
  "camera": {"mode": one of "third_person","first_person","orbit", "distance_m": float 2..12, "fov_deg": float 30..90},
  "player": also may include "attack": one of "none","melee","ranged" ("with a sword/fighting" -> melee,
            "with a gun/bow/blaster" -> ranged),
- "objectives": ORDERED mission steps, each {"kind": one of "collect","defeat","reach",
-               "label": str, "count": int 1..50} — e.g. a mission prompt becomes
-               [collect the keys] -> [defeat the guards] -> [reach the tower],
- "entities": [{"name": simple noun like "dog","cat","horse","wolf", "behavior": one of
-               "wander","follow","static","hostile", "count": int 1..8, "speed": float 0.5..8}]
+ "objectives": ORDERED mission steps, each {"kind": one of "collect","defeat","reach","race",
+               "label": str, "count": int 1..50} — a mission prompt becomes
+               [collect the keys] -> [defeat the guards] -> [reach the tower];
+               racing/catching/passing N cars -> {"kind":"race","label":"cars","count":N},
+ "entities": [{"name": simple noun like "dog","cat","horse","wolf","car", "behavior": one of
+               "wander","follow","static","hostile","vehicle" (cars/trucks -> "vehicle"),
+               "count": int 1..8, "speed": float 0.5..8}]
 }
 Map the text's setting to the CLOSEST world.name keyword. entities = OTHER creatures/characters besides
 the player (companion pet -> "follow"; enemies/monsters/guards the player fights -> "hostile").
@@ -53,10 +55,16 @@ def _keyword_fallback(text: str) -> dict:
         if k in t:
             out["player"] = {"name": k}
             break
-    for w in ("park", "garden", "forest", "meadow", "countryside", "field", "backyard", "grass"):
+    for w in ("city", "street", "downtown", "park", "garden", "forest", "meadow",
+              "countryside", "field", "backyard", "grass"):
         if w in t:
-            out["world"]["name"] = w
+            out["world"]["name"] = "city" if w in ("street", "downtown") else w
             break
+    if any(w in t for w in ("race", "racing", "catch and pass", "overtake", "finish line")):
+        import re as _re
+        m = _re.search(r"(\d+)\s+(car|truck|racer|opponent)", t)
+        out["objectives"] = [{"kind": "race", "label": "cars",
+                              "count": int(m.group(1)) if m else 3}]
     for sky, words in (("night", ("night", "moon", "dark")), ("sunset", ("sunset", "dusk", "golden")),
                        ("overcast", ("overcast", "cloudy", "foggy", "gloomy"))):
         if any(w in t for w in words):

@@ -25,6 +25,7 @@ class PlayerSpec(BaseModel):
     yaw_offset_deg: float = 0.0          # asset facing correction (glTF axes vary)
     attack: Literal["none", "melee", "ranged"] = "none"   # combat verb (Phase 36)
     hp: int = Field(5, ge=1, le=20)
+    mode: Literal["walk", "drive"] = "walk"               # vehicles DRIVE (arcade physics)
     anims: dict = Field(default_factory=lambda: {
         "idle": "idle", "walk": "walk", "run": "run"})  # state -> glTF clip name
 
@@ -52,6 +53,7 @@ class WorldSpec(BaseModel):
     sky: Literal["day", "sunset", "night", "overcast"] = "day"
     weather: Literal["none", "rain", "snow"] = "none"     # Phase 33 dynamics
     wind: float = Field(0.5, ge=0.0, le=1.0)              # prop sway strength
+    grass: bool = True                                    # off for cities/snow
     fog: bool = True
     scatter: List[ScatterSpec] = Field(default_factory=list)
     level: Optional[dict] = None    # Phase 32 LevelPlan (terrain/path/goal), injected by the exporter
@@ -68,7 +70,7 @@ class EntitySpec(BaseModel):
     """Non-player entity. hostile = chases and attacks the player (combat)."""
     asset: str = ""                       # resolved from the asset library by name
     name: str = "entity"
-    behavior: Literal["static", "wander", "follow", "hostile"] = "wander"
+    behavior: Literal["static", "wander", "follow", "hostile", "vehicle"] = "wander"
     count: int = Field(1, ge=1, le=64)
     speed: float = Field(1.5, ge=0.0, le=40.0)
     height_m: float = Field(1.0, gt=0.1, le=10.0)
@@ -78,7 +80,7 @@ class EntitySpec(BaseModel):
 class ObjectiveSpec(BaseModel):
     """A MISSION STEP. Objectives are an ordered sequence (quest log):
     collect N -> defeat N -> reach the beacon. Genres compose from these."""
-    kind: Literal["collect", "defeat", "reach"] = "collect"
+    kind: Literal["collect", "defeat", "reach", "race"] = "collect"
     label: str = "stars"
     count: int = Field(5, ge=1, le=100)
 
