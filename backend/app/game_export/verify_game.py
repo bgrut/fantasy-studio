@@ -86,7 +86,7 @@ def verify_dist(dist: str | Path) -> dict:
         if glb.exists():
             try:
                 g = _glb_json(glb)
-                if spec["player"].get("mode") in ("drive", "fly"):
+                if spec["player"].get("mode") in ("drive", "fly", "swim"):
                     check(f"player mesh ({spec['player']['mode']} mode)", bool(g.get("meshes")),
                           f"meshes={len(g.get('meshes', []))}")
                 else:
