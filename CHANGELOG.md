@@ -10,6 +10,24 @@ Pre-1.0 versions are internal milestones during the constraint sprint leading to
 
 ## [Unreleased]
 
+### Added — Phase 37: real-city maps + world detail pack (2026-07-05)
+- **REAL CITIES in games**: prompts naming a city (New York, London, Tokyo, Paris,
+  Chicago, San Francisco) now build the actual district from OpenStreetMap — the
+  same OSM fetch/parse the video pipeline has used since Phase 19.5, now shared.
+  Real building footprints extrude into a single merged mesh (per-building tint,
+  box colliders); real streets are painted as asphalt into the ground texture.
+  World grows to 360 m to hold a real district; buildings never block the mission
+  path, spawn, or goal. Attribution: © OpenStreetMap contributors (ODbL).
+- **World detail pack (all prompts)**: 1024px painted ground (soft tonal blotches,
+  bare-dirt patches, fine speckle) with a worn trail drawn along the level path;
+  tree SPECIES variants (oak / pine / birch + bush understory) built procedurally
+  and mixed per setting recipe — shared with the video dressing pass; undergrowth
+  tufts stay plant-green on brown forest floors.
+- **Vehicles drive nose-first**: long-axis auto-alignment for drive-mode players
+  and rival vehicle NPCs (generated car GLBs lie along X; runtime forward is +Z) —
+  fixes the "car hovers sideways" bug. Suspension feel: pitch under accel/brake,
+  roll into turns. (Wheel spin needs separable wheel meshes — queued for GPU day.)
+
 ### Added — Phase 26/26.5: playable game export (2026-07-02)
 - **New output backend**: `backend/app/game_export/` turns a prompt or PRD into a
   playable, self-contained three.js web game (offline; vendored three.js r170 MIT +

@@ -22,17 +22,24 @@ PROPS_DIR = Path(__file__).resolve().parents[2] / "assets" / "props"
 # Game counts are DENSE (quality pack: the runtime instances them — hundreds
 # of props at 60fps); video counts stay Blender-shot-sized.
 _RECIPES = {
-    "park":        [("tree", 110, 10), ("rock", 30, 4), ("lamp", 10, 2)],
-    "garden":      [("tree", 60, 7), ("rock", 30, 5)],
-    "forest":      [("tree", 260, 16), ("rock", 40, 5)],
-    "meadow":      [("tree", 30, 4), ("rock", 35, 5)],
-    "countryside": [("tree", 70, 7), ("rock", 30, 4)],
-    "field":       [("tree", 25, 4), ("rock", 25, 4)],
-    "grass":       [("tree", 45, 5), ("rock", 25, 4)],
-    "backyard":    [("tree", 18, 3), ("rock", 12, 3), ("lamp", 4, 1)],
-    "city":        [("building", 70, 8), ("lamp", 26, 4), ("tree", 14, 2)],
-    "street":      [("building", 70, 8), ("lamp", 26, 4), ("tree", 14, 2)],
-    "town":        [("building", 40, 6), ("lamp", 16, 3), ("tree", 18, 3)],
+    # QUALITY PACK 2: mixed tree SPECIES (oak/pine/birch + bush understory) —
+    # a forest is no longer 260 copies of one tree.
+    "park":        [("tree_oak", 60, 6), ("tree_birch", 35, 3), ("bush", 30, 3),
+                    ("rock", 25, 3), ("lamp", 10, 2)],
+    "garden":      [("tree_birch", 30, 4), ("bush", 36, 4), ("rock", 20, 3)],
+    "forest":      [("tree_pine", 110, 8), ("tree_oak", 90, 5), ("tree_birch", 55, 3),
+                    ("bush", 50, 3), ("rock", 40, 4)],
+    "meadow":      [("tree_oak", 14, 2), ("tree_birch", 14, 2), ("bush", 26, 3),
+                    ("rock", 30, 4)],
+    "countryside": [("tree_oak", 40, 4), ("tree_pine", 20, 2), ("bush", 26, 3),
+                    ("rock", 26, 3)],
+    "field":       [("tree_oak", 14, 2), ("bush", 20, 3), ("rock", 22, 3)],
+    "grass":       [("tree_oak", 26, 3), ("tree_birch", 14, 2), ("bush", 20, 2),
+                    ("rock", 22, 3)],
+    "backyard":    [("tree_oak", 10, 2), ("bush", 12, 2), ("rock", 8, 2), ("lamp", 4, 1)],
+    "city":        [("building", 70, 8), ("lamp", 26, 4), ("tree_oak", 12, 2), ("bush", 10, 1)],
+    "street":      [("building", 70, 8), ("lamp", 26, 4), ("tree_oak", 12, 2), ("bush", 10, 1)],
+    "town":        [("building", 40, 6), ("lamp", 16, 3), ("tree_oak", 16, 3), ("bush", 12, 2)],
 }
 
 _NO_GRASS = {"city", "street", "town"}

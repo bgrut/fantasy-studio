@@ -124,3 +124,61 @@ def build_level(seed: int, size_m: float, n_objectives: int = 0,
 def landmark_spots(seed: int, size_m: float) -> list[list[float]]:
     """Video-side flow-back: the SAME landmark placement for set dressing."""
     return build_level(seed, size_m)["landmarks"]
+
+
+# ── REAL CITIES (shared with the video pipeline's OSM system) ────────────────
+_CITY_ALIASES = {
+    "new york": "new_york", "manhattan": "new_york", "nyc": "new_york",
+    "london": "london", "tokyo": "tokyo", "paris": "paris",
+    "chicago": "chicago", "san francisco": "san_francisco", "sf ": "san_francisco",
+}
+
+
+def detect_place(prompt: str) -> str | None:
+    t = (prompt or "").lower()
+    for alias, key in _CITY_ALIASES.items():
+        if alias in t:
+            return key
+    return None
+
+
+def build_osm_city(place: str, size_m: float, max_buildings: int = 320) -> dict | None:
+    """Real building footprints + roads for `place` (video pipeline's OSM
+    fetch/parse, shared cache). Returns None on any failure — the procedural
+    city recipe stays the fallback."""
+    try:
+        from pathlib import Path
+        from app.orchestrator import osm_city
+        center = osm_city.CITY_CENTERS.get(place)
+        if not center:
+            return None
+        cache = Path(__file__).resolve().parents[2] / "renders" / "_osm_cache" / f"{place}_{int(size_m)}.osm"
+        cache.parent.mkdir(parents=True, exist_ok=True)
+        bb = osm_city.make_bbox(*center, radius_m=size_m / 2.0)
+        osm_city.fetch_osm(*bb, cache_path=cache)
+        data = osm_city.parse_osm(cache)
+        half = size_m / 2.0
+        blds = []
+        for b in data.get("buildings", []):
+            pts = [(round(float(x), 1), round(float(y), 1)) for x, y in b["footprint"]]
+            if not pts:
+                continue
+            cx = sum(p[0] for p in pts) / len(pts)
+            cz = sum(p[1] for p in pts) / len(pts)
+            if abs(cx) > half or abs(cz) > half:
+                continue
+            blds.append({"pts": pts, "h": round(float(b.get("height", 9.0)), 1),
+                         "d": cx * cx + cz * cz})
+        blds.sort(key=lambda b: b["d"])
+        for b in blds:
+            b.pop("d", None)
+        roads = []
+        for r in data.get("roads", [])[:80]:
+            pts = [(round(float(x), 1), round(float(y), 1)) for x, y in r.get("path", [])]
+            if len(pts) >= 2:
+                roads.append({"pts": pts, "w": round(float(r.get("width", 7.0)), 1)})
+        if len(blds) < 10:
+            return None
+        return {"place": place, "buildings": blds[:max_buildings], "roads": roads}
+    except Exception:
+        return None

@@ -4,6 +4,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from './vendor/jsm/loaders/GLTFLoader.js';
 import { clone as skClone } from './vendor/jsm/utils/SkeletonUtils.js';
+import { mergeGeometries } from './vendor/jsm/utils/BufferGeometryUtils.js';
 import { Sky } from './vendor/jsm/objects/Sky.js';
 import { EffectComposer } from './vendor/jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from './vendor/jsm/postprocessing/RenderPass.js';
@@ -110,27 +111,67 @@ async function main() {
   // ── physics world ────────────────────────────────────────────────────────
   const world = new RAPIER.World({ x: 0, y: -9.81, z: 0 });
 
-  // ── ground (subtle procedural variation so it isn't a flat cartoon plane) ─
+  // ── ground (QUALITY PACK 2: hand-painted-style ground — soft tonal
+  // blotches, bare-dirt patches, fine speckle, a WORN TRAIL painted along the
+  // level path, and real asphalt roads when the level carries OSM data) ─────
   const gsize = SPEC.world.size_m;
+  const LVL = SPEC.world.level || null;
+  const OSM = (LVL && LVL.osm) || null;
   const gcol = new THREE.Color(...SPEC.world.ground_color);
-  const cnv = document.createElement('canvas'); cnv.width = cnv.height = 256;
+  const TEXN = LVL ? 1024 : 256;        // level ground is painted 1:1 (no tiling)
+  const cnv = document.createElement('canvas'); cnv.width = cnv.height = TEXN;
   const ctx = cnv.getContext('2d');
   const rngTex = mulberry32(SPEC.seed + 1);
-  ctx.fillStyle = '#' + gcol.getHexString(); ctx.fillRect(0, 0, 256, 256);
-  for (let i = 0; i < 2600; i++) {
+  ctx.fillStyle = '#' + gcol.getHexString(); ctx.fillRect(0, 0, TEXN, TEXN);
+  // large soft blotches: patchy meadow / mottled concrete, not one flat tone
+  for (let i = 0; i < TEXN / 12; i++) {
+    const r = TEXN * (0.04 + rngTex() * 0.14), x = rngTex() * TEXN, y = rngTex() * TEXN;
+    const c2 = gcol.clone().offsetHSL((rngTex() - 0.5) * 0.02, (rngTex() - 0.5) * 0.10, (rngTex() - 0.5) * 0.09);
+    const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+    g.addColorStop(0, '#' + c2.getHexString() + '99'); g.addColorStop(1, '#' + c2.getHexString() + '00');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.fill();
+  }
+  // bare-dirt patches showing through
+  const dirt = gcol.clone().lerp(new THREE.Color(0x6b5334), 0.65);
+  for (let i = 0; i < TEXN / 36; i++) {
+    const r = TEXN * (0.012 + rngTex() * 0.045), x = rngTex() * TEXN, y = rngTex() * TEXN;
+    const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+    g.addColorStop(0, '#' + dirt.getHexString() + '66'); g.addColorStop(1, '#' + dirt.getHexString() + '00');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.fill();
+  }
+  // fine speckle (pebbles / grass tufts)
+  for (let i = 0; i < TEXN * 26; i++) {
     const sh = (rngTex() - 0.5) * 0.22;
     const c2 = gcol.clone().offsetHSL(0, (rngTex() - 0.5) * 0.06, sh * 0.5);
     ctx.fillStyle = '#' + c2.getHexString();
-    ctx.fillRect(rngTex() * 256, rngTex() * 256, 1 + rngTex() * 3, 1 + rngTex() * 3);
+    ctx.fillRect(rngTex() * TEXN, rngTex() * TEXN, 1 + rngTex() * 2, 1 + rngTex() * 2);
+  }
+  const W2T = v => (v / gsize + 0.5) * TEXN;         // world (x,z) -> texel
+  function drawTrail(pts, widthM, col, alpha) {
+    ctx.strokeStyle = col; ctx.globalAlpha = alpha;
+    ctx.lineCap = ctx.lineJoin = 'round';
+    ctx.lineWidth = Math.max(2, widthM / gsize * TEXN);
+    ctx.beginPath();
+    pts.forEach(([x, z], i) => i ? ctx.lineTo(W2T(x), W2T(z)) : ctx.moveTo(W2T(x), W2T(z)));
+    ctx.stroke(); ctx.globalAlpha = 1;
+  }
+  if (OSM) {                                   // real streets: asphalt + wear
+    for (const r of OSM.roads) drawTrail(r.pts, (r.w || 7) + 2, '#26262b', 0.92);
+    for (const r of OSM.roads) drawTrail(r.pts, (r.w || 7) * 0.55, '#3a3a41', 0.85);
+  } else if (LVL && LVL.path) {                // worn trail along the mission route
+    const c = LVL.corridor_m || 5.5;
+    drawTrail(LVL.path, c * 1.15, '#' + dirt.getHexString(), 0.5);
+    drawTrail(LVL.path, c * 0.60, '#7a6140', 0.65);
+    drawTrail(LVL.path, c * 0.22, '#8a7048', 0.75);
   }
   const gtex = new THREE.CanvasTexture(cnv);
   gtex.wrapS = gtex.wrapT = THREE.RepeatWrapping;
-  gtex.repeat.set(gsize / 8, gsize / 8);
+  gtex.repeat.set(LVL ? 1 : gsize / 8, LVL ? 1 : gsize / 8);
+  gtex.anisotropy = 8;
   gtex.colorSpace = THREE.SRGBColorSpace;
   // Phase 32 LEVEL: terrain heightfield (hills, flattened path corridor) when
   // the LevelPlan is present; flat plane otherwise. hAt(x,z) is THE ground
   // sampler — scatter, objectives, NPCs and landmarks all sit on it.
-  const LVL = SPEC.world.level || null;
   let hAt = () => 0;
   const gmat = new THREE.MeshStandardMaterial({ map: gtex, roughness: 1.0 });
   if (LVL && LVL.heights && LVL.heights.length === LVL.grid_n * LVL.grid_n) {
@@ -151,7 +192,8 @@ async function main() {
       verts[k * 3] = (j / (n - 1) - 0.5) * gsize;
       verts[k * 3 + 1] = hs[k];
       verts[k * 3 + 2] = (i / (n - 1) - 0.5) * gsize;
-      uvs[k * 2] = j / (n - 1) * gsize / 8; uvs[k * 2 + 1] = i / (n - 1) * gsize / 8;
+      // 1:1 painted map; v inverted (canvas y is top-down, texture v is not)
+      uvs[k * 2] = j / (n - 1); uvs[k * 2 + 1] = 1 - i / (n - 1);
     }
     const idx = new Uint32Array((n - 1) * (n - 1) * 6);
     let p = 0;
@@ -239,6 +281,17 @@ async function main() {
     holder.add(root);
     return { holder, root, radius: Math.max((box2.max.x - box2.min.x), (box2.max.z - box2.min.z)) * 0.5 };
   }
+  // rotate a model so its LONG horizontal axis points down +Z (the runtime's
+  // travel direction) — cars/boats read sideways without this
+  function alignLongAxis(root, enabled) {
+    if (!enabled) return false;
+    const bb = new THREE.Box3().setFromObject(root);
+    if ((bb.max.x - bb.min.x) > (bb.max.z - bb.min.z) * 1.15) {
+      root.rotation.y += Math.PI / 2;          // long axis -> +Z, nose forward
+      return true;
+    }
+    return false;
+  }
 
   // ── scatter props (shared world-dressing manifest — video side reuses it) ─
   // Path-aware: props keep clear of the level's walking corridor and sit ON
@@ -256,6 +309,62 @@ async function main() {
       best = Math.min(best, Math.hypot(x - (ax + t * dx), z - (az + t * dz)));
     }
     return best;
+  }
+
+  // ── REAL-CITY BLOCKS (OSM footprints — © OpenStreetMap contributors) ─────
+  // The video pipeline's city system, now shared: every named-city prompt gets
+  // the actual street grid. Footprints extrude into one merged mesh (single
+  // draw call) with per-building tint; each gets a box collider. Buildings
+  // that would sit on the mission path / spawn / goal are skipped.
+  const bldBoxes = [];                  // [minx, minz, maxx, maxz] per building
+  function inBldg(x, z, pad = 1.5) {
+    for (const b of bldBoxes) {
+      if (x > b[0] - pad && x < b[2] + pad && z > b[1] - pad && z < b[3] + pad) return true;
+    }
+    return false;
+  }
+  if (OSM && OSM.buildings && OSM.buildings.length) {
+    const geos = [];
+    const tintA = new THREE.Color(0x8d8a84), tintB = new THREE.Color(0x5f6b78);
+    const rngB = mulberry32(SPEC.seed + 77);
+    for (const b of OSM.buildings) {
+      let mnx = 1e9, mnz = 1e9, mxx = -1e9, mxz = -1e9;
+      for (const [px, pz] of b.pts) {
+        mnx = Math.min(mnx, px); mxx = Math.max(mxx, px);
+        mnz = Math.min(mnz, pz); mxz = Math.max(mxz, pz);
+      }
+      const cx = (mnx + mxx) / 2, cz = (mnz + mxz) / 2;
+      if (Math.hypot(cx, cz) < 9) continue;                       // spawn stays open
+      if (goalPos && Math.hypot(cx - goalPos.x, cz - goalPos.z) < 8) continue;
+      if (pathDist(cx, cz) < CORR + Math.max(mxx - mnx, mxz - mnz) / 2) continue;
+      try {
+        const shape = new THREE.Shape();
+        b.pts.forEach(([px, pz], i) => i ? shape.lineTo(px, -pz) : shape.moveTo(px, -pz));
+        const h = Math.max(b.h || 9, 4);
+        const geo = new THREE.ExtrudeGeometry(shape, { depth: h, bevelEnabled: false });
+        geo.rotateX(-Math.PI / 2);                                // extrude up
+        const gy = hAt(cx, cz);
+        geo.translate(0, gy, 0);
+        const tint = tintA.clone().lerp(tintB, rngB()).offsetHSL(0, 0, (rngB() - 0.5) * 0.12);
+        const nv = geo.attributes.position.count, cols = new Float32Array(nv * 3);
+        for (let i = 0; i < nv; i++) { cols[i * 3] = tint.r; cols[i * 3 + 1] = tint.g; cols[i * 3 + 2] = tint.b; }
+        geo.setAttribute('color', new THREE.BufferAttribute(cols, 3));
+        geos.push(geo);
+        bldBoxes.push([mnx, mnz, mxx, mxz]);
+        world.createCollider(RAPIER.ColliderDesc
+          .cuboid((mxx - mnx) / 2, h / 2, (mxz - mnz) / 2)
+          .setTranslation(cx, gy + h / 2, cz));
+      } catch (e) { /* one bad footprint never kills the city */ }
+    }
+    if (geos.length) {
+      const merged = mergeGeometries(geos, false);
+      const city = new THREE.Mesh(merged, new THREE.MeshStandardMaterial({
+        vertexColors: true, roughness: 0.92, metalness: 0.05 }));
+      city.castShadow = true; city.receiveShadow = true;
+      scene.add(city);
+      console.log('[game] OSM city "' + (OSM.place || '?') + '": ' + geos.length +
+                  ' buildings, ' + (OSM.roads || []).length + ' roads');
+    }
   }
   const rng = mulberry32(SPEC.seed);
   let landmarkAsset = null;
@@ -291,7 +400,8 @@ async function main() {
         let x, z, tries = 0;
         do {
           x = (rng() - 0.5) * gsize * 0.9; z = (rng() - 0.5) * gsize * 0.9; tries++;
-        } while ((Math.hypot(x, z) < sct.min_dist_m || pathDist(x, z) < CORR) && tries < 30);
+        } while ((Math.hypot(x, z) < sct.min_dist_m || pathDist(x, z) < CORR
+                  || inBldg(x, z)) && tries < 30);
         places.push({ x, z, s: 1 + (rng() - 0.5) * 2 * sct.scale_jitter, rot: rng() * Math.PI * 2 });
       }
       const M = new THREE.Matrix4(), T = new THREE.Matrix4(), SV = new THREE.Vector3();
@@ -322,7 +432,10 @@ async function main() {
   // GRASS: instanced cross-blades on the terrain, thinned along the walking
   // path — the "flat green plane" is gone. (Gated off for cities/snow.)
   if ((SPEC.world.scatter || []).length && SPEC.world.grass !== false) {
-    const gcolA = new THREE.Color(...SPEC.world.ground_color).offsetHSL(0, 0.08, 0.06);
+    // undergrowth stays PLANT-colored: pull toward green so brown forest
+    // floors get living tufts, not floating tan cards
+    const gcolA = new THREE.Color(...SPEC.world.ground_color)
+      .lerp(new THREE.Color(0x3f6b2a), 0.55).offsetHSL(0, 0.08, 0.06);
     const gcolB = gcolA.clone().offsetHSL(0.02, 0.05, -0.07);
     const blade = new THREE.PlaneGeometry(0.11, 0.32);
     blade.translate(0, 0.16, 0);
@@ -433,6 +546,7 @@ async function main() {
         const box = new THREE.Box3().setFromObject(inst);
         const h = Math.max(box.max.y - box.min.y, 1e-3);
         inst.scale.multiplyScalar((ent.height_m || 1.0) / h);
+        alignLongAxis(inst, ent.behavior === 'vehicle');   // rivals drive nose-first too
         const b2 = new THREE.Box3().setFromObject(inst);
         const holder = new THREE.Group();
         inst.position.y = -b2.min.y;
@@ -656,7 +770,11 @@ async function main() {
   let mixer = null, actions = {}, current = null;
   const P = SPEC.player;
   const pg = await loadGLB(P.asset);            // hard fail = visible error
-  const { holder, radius } = prepModel(pg, P.height_m);
+  const { holder, root: pRoot, radius } = prepModel(pg, P.height_m);
+  // VEHICLES: generated car GLBs lie along X (side-profile reference), but the
+  // runtime's forward is +Z — auto-align the LONG axis so the car drives
+  // nose-first instead of sliding sideways. yaw_offset_deg still flips 180.
+  alignLongAxis(pRoot, (P.mode || 'walk') === 'drive');
   holder.rotation.y = THREE.MathUtils.degToRad(P.yaw_offset_deg || 0);
   const playerObj = new THREE.Group();
   playerObj.add(holder);
@@ -927,7 +1045,7 @@ async function main() {
   const fpsEl = document.getElementById('fps');
   let fCount = 0, fTime = 0, modelYaw = 0;
   const DRIVE = SPEC.player.mode === 'drive';    // arcade car physics
-  let vSpeed = 0, hudTick = 0;
+  let vSpeed = 0, hudTick = 0, prevV = 0, leanP = 0, leanR = 0;
   const camTarget = new THREE.Vector3();
 
   renderer.setAnimationLoop(() => {
@@ -976,6 +1094,15 @@ async function main() {
     }
     playerObj.position.set(nt.x, nt.y - (capHalf + capR), nt.z);
     holder.rotation.y = modelYaw + THREE.MathUtils.degToRad(P.yaw_offset_deg || 0);
+    if (DRIVE) {
+      // suspension feel: pitch under accel/brake, roll into turns
+      const accel = (vSpeed - prevV) / Math.max(dt, 1e-3); prevV = vSpeed;
+      leanP = THREE.MathUtils.damp(leanP,
+        THREE.MathUtils.clamp(-accel * 0.012, -0.06, 0.06), 6, dt);
+      leanR = THREE.MathUtils.damp(leanR,
+        THREE.MathUtils.clamp(mv.x * Math.min(Math.abs(vSpeed) / 8, 1) * 0.07, -0.08, 0.08), 6, dt);
+      holder.rotation.x = leanP; holder.rotation.z = leanR;
+    }
 
     // animation state machine
     if (mixer) {

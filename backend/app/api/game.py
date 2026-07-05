@@ -175,9 +175,31 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         spec.objectives = sane
 
         stage("designing level")
-        from app.game_export.level import build_level
+        from app.game_export.level import build_level, build_osm_city, detect_place
         n_obj = sum(o.count for o in spec.objectives if o.kind == "collect")
-        spec.world.level = build_level(spec.seed, spec.world.size_m, n_objectives=n_obj)
+        is_city = any(k in (spec.world.name or "").lower() for k in ("city", "street", "town"))
+        # REAL CITIES (shared with video's OSM system): a named place in the
+        # prompt swaps procedural building scatter for actual OSM footprints.
+        # Real blocks are ~100-250m — the world grows to hold a real district.
+        place = detect_place(req.prompt) if is_city else None
+        if place:
+            spec.world.size_m = max(spec.world.size_m, 360.0)
+        spec.world.level = build_level(
+            spec.seed, spec.world.size_m, n_objectives=n_obj,
+            amplitude_m=0.35 if is_city else 2.4)   # cities are near-flat
+        if place:
+            stage(f"fetching {place} map (OpenStreetMap)")
+            osm = build_osm_city(place, spec.world.size_m)
+            if osm:
+                spec.world.level["osm"] = osm
+                spec.world.scatter = [s for s in spec.world.scatter
+                                      if "building" not in Path(s.asset).name]
+                job.setdefault("notes", []).append(
+                    f"real-city map: {place} ({len(osm['buildings'])} buildings, "
+                    f"{len(osm['roads'])} roads, © OpenStreetMap contributors)")
+            else:
+                job.setdefault("notes", []).append(
+                    f"OSM fetch for '{place}' unavailable — procedural city used")
 
         stage("building")
         # RESOLVED spec (absolute asset paths) — lets Game Projects re-export
