@@ -1661,6 +1661,60 @@ def _should_use_asset_gen(scene: Dict[str, Any], subj: Dict[str, Any], slots: Op
     return True
 
 
+def _cuda_available() -> bool:
+    try:
+        import torch
+        return bool(torch.cuda.is_available())
+    except Exception:
+        return False
+
+
+def _try_library_hero(subj: Dict[str, Any], runner, verbose: bool = False) -> Optional[str]:
+    """Cast the hero from the SHARED asset library (assets/library — the same
+    textured, decimated GLBs the game side plays). Used whenever generation is
+    unavailable or failed, so a known species NEVER falls back to the
+    procedural pattern + fur. Returns the imported object name or None."""
+    import re as _re
+    try:
+        from ..game_export import library as gl
+        text = " ".join(str(subj.get(k) or "")
+                        for k in ("name", "library_query", "identity_phrase")).lower()
+        words = set(_re.findall(r"[a-z]+", text))
+        if not words:
+            return None
+        try:
+            kinds = list(json.loads(gl.LIBRARY_JSON.read_text(encoding="utf-8")).keys())
+        except Exception:
+            return None
+        kind = next((k for k in kinds if k.lower() in words), None)
+        if not kind:
+            syn = getattr(gl, "_SYNONYMS", {}) or {}
+            kind = next((v for a, v in syn.items() if a.lower() in words), None)
+        if not kind:
+            return None
+        glb = gl.resolve(kind)
+        if not glb:
+            return None
+        _sizes = {"quadruped": 1.1, "biped": 1.8, "vehicle": 4.5}
+        res = runner.run("library_cast", "import_mesh_file", {
+            "filepath": str(glb).replace("\\", "/"),
+            "name": "Hero",
+            "normalize_size": _sizes.get(subj.get("base_pattern"), 1.5),
+            "ground_to_z0": True,
+            "join": True,
+            "orientation_fix": None,   # library GLBs are canonically oriented
+        }, critical=False)
+        if isinstance(res, dict) and res.get("ok"):
+            if verbose:
+                print(f"[composer] LIBRARY CAST: '{kind}' from assets/library "
+                      f"(textured mesh hero — pattern/fur skipped)")
+            return res.get("name", "Hero")
+    except Exception as e:
+        if verbose:
+            print(f"[composer] library cast skipped ({type(e).__name__}: {e})")
+    return None
+
+
 def _run_asset_gen(slots: Dict[str, Any], scene: Dict[str, Any], subj: Dict[str, Any],
                    runner, paths: Dict[str, Any], run_id: str, verbose: bool = True) -> Optional[str]:
     """Generate reference image → mesh → import into Blender.
@@ -3058,6 +3112,18 @@ def compose_scene(
         if _veh.get("ok"):
             asset_gen_hero_name = _veh.get("hero", "Hero"); used_proc_vehicle = True
     use_asset_gen = (not used_proc_vehicle) and _should_use_asset_gen(scene, subj, slots)
+    # CPU-FIRST CASTING (2026-07-05): without CUDA, "generation available"
+    # means ~45 min of CPU diffusion for a worse hero than the library's
+    # textured assets. Known subjects cast from the SHARED library instantly;
+    # with a GPU, generation keeps priority (prompt-exact heroes) and the
+    # library remains the post-failure fallback below.
+    if use_asset_gen and subj.get("asset_gen") is not False and not _cuda_available():
+        _lib_hero = _try_library_hero(subj, runner, verbose=verbose)
+        if _lib_hero:
+            asset_gen_hero_name = _lib_hero
+            use_asset_gen = False
+            if verbose:
+                print("[composer] CPU-first: library hero cast — skipping CPU generation")
     if use_asset_gen:
         if verbose:
             print(f"[composer] Phase 17 asset-driven path engaged for base_pattern='{base_pattern}'")
@@ -3071,6 +3137,18 @@ def compose_scene(
         _veh = procedural_vehicle.build_vehicle(runner, list(_rgb)[:3], verbose=verbose)
         if _veh.get("ok"):
             asset_gen_hero_name = _veh.get("hero", "Hero"); used_proc_vehicle = True; vehicle_hybrid = False
+
+    # SHARED-LIBRARY CAST (2026-07-05 — video follows the game side): when
+    # generation is unavailable/failed, cast the hero from assets/library
+    # (the same textured decimated assets the game plays) BEFORE any
+    # procedural pattern. The library hero rides the imported-mesh path,
+    # which skips metaball/procedural-material/FUR — the "fur explosion over
+    # the hero" videos were the procedural quadruped + fur firing for
+    # subjects that already existed in the library. Explicit
+    # subj.asset_gen=False still means "procedural on purpose".
+    if (not asset_gen_hero_name and not used_proc_vehicle
+            and subj.get("asset_gen") is not False):
+        asset_gen_hero_name = _try_library_hero(subj, runner, verbose=verbose)
 
     if asset_gen_hero_name:
         # Real mesh imported; skip procedural pattern parts entirely.
