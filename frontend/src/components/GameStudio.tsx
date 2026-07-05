@@ -206,7 +206,7 @@ export default function GameStudio() {
                 </button>
               ))}
               <span className="text-[10px] font-mono text-[#4a4764] self-center">
-                · anything else casts as man until GPU generation
+                · new characters are CREATED on first use (image → 3D; slower without a GPU)
               </span>
             </div>
           </>
@@ -329,7 +329,7 @@ export default function GameStudio() {
           </div>
           {job!.notes?.length ? (
             <p className="text-[11px] font-mono text-[#4a4764]">
-              {job!.notes.join(' · ')} — new characters unlock with GPU generation
+              {job!.notes.join(' · ')}
             </p>
           ) : null}
         </motion.div>

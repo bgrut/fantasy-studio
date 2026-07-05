@@ -20,6 +20,7 @@ Output ONLY the JSON object, no markdown, no commentary. Schema (all fields opti
 {
  "title": str,
  "world": {"name": one of "park","garden","forest","meadow","countryside","field","grass","backyard","city","street","plain",
+           "mountains","canyon","desert","beach","swamp","volcano","arctic","hills",
            "size_m": float 30..500, "sky": one of "day","sunset","night","overcast", "fog": bool,
            "weather": one of "none","rain","snow", "wind": float 0..1,
            "ground_color": [r,g,b] floats 0..1},
@@ -43,8 +44,9 @@ the player (companion pet -> "follow"; enemies/monsters/guards the player fights
 _JSON_RE = re.compile(r"\{.*\}", re.DOTALL)
 
 
-_PLAYER_KINDS = ("samurai", "wizard", "knight", "viking", "fox", "dog", "cat",
-                 "horse", "wolf", "bear", "woman", "man")
+_PLAYER_KINDS = ("samurai", "wizard", "knight", "viking", "dragon", "eagle",
+                 "bird", "fox", "dog", "cat", "horse", "wolf", "bear",
+                 "woman", "man")
 
 
 def _keyword_fallback(text: str) -> dict:
@@ -55,10 +57,15 @@ def _keyword_fallback(text: str) -> dict:
         if k in t:
             out["player"] = {"name": k}
             break
-    for w in ("city", "street", "downtown", "park", "garden", "forest", "meadow",
+    for w in ("city", "street", "downtown", "mountain", "canyon", "desert",
+              "beach", "swamp", "volcano", "arctic", "tundra", "hill",
+              "park", "garden", "forest", "meadow",
               "countryside", "field", "backyard", "grass"):
         if w in t:
-            out["world"]["name"] = "city" if w in ("street", "downtown") else w
+            out["world"]["name"] = ("city" if w in ("street", "downtown")
+                                    else "mountains" if w == "mountain"
+                                    else "arctic" if w == "tundra"
+                                    else "hills" if w == "hill" else w)
             break
     if any(w in t for w in ("race", "racing", "catch and pass", "overtake", "finish line")):
         import re as _re

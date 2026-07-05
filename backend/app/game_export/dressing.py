@@ -40,9 +40,21 @@ _RECIPES = {
     "city":        [("building", 70, 8), ("lamp", 26, 4), ("tree_oak", 12, 2), ("bush", 10, 1)],
     "street":      [("building", 70, 8), ("lamp", 26, 4), ("tree_oak", 12, 2), ("bush", 10, 1)],
     "town":        [("building", 40, 6), ("lamp", 16, 3), ("tree_oak", 16, 3), ("bush", 12, 2)],
+    # setting classes beyond the park family (2026-07-05): every world word the
+    # extractor knows gets a recipe — no more empty sand planes
+    "mountain":    [("rock", 90, 6), ("tree_pine", 80, 5), ("bush", 18, 2)],
+    "alpine":      [("rock", 90, 6), ("tree_pine", 80, 5), ("bush", 18, 2)],
+    "canyon":      [("rock", 110, 8), ("bush", 16, 2)],
+    "desert":      [("rock", 55, 5), ("bush", 14, 2)],
+    "beach":       [("rock", 30, 4), ("bush", 10, 2)],
+    "swamp":       [("tree_oak", 60, 5), ("bush", 50, 4), ("rock", 20, 3)],
+    "volcano":     [("rock", 120, 8)],
+    "arctic":      [("rock", 60, 5), ("tree_pine", 30, 3)],
+    "hills":       [("tree_oak", 40, 4), ("tree_birch", 20, 2), ("bush", 26, 3), ("rock", 30, 3)],
 }
 
-_NO_GRASS = {"city", "street", "town"}
+_NO_GRASS = {"city", "street", "town", "desert", "dune", "beach", "volcano",
+             "arctic", "canyon"}
 
 
 def wants_grass(setting: str | None, weather: str = "none") -> bool:

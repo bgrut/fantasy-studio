@@ -30,10 +30,16 @@ class GPUUnavailable(RuntimeError):
 _QUADRUPED = ("dog", "cat", "horse", "cow", "wolf", "fox", "deer", "lion",
               "tiger", "bear", "pig", "sheep", "goat", "rabbit")
 _VEHICLE = ("car", "truck", "bus", "van", "jeep", "tank", "motorcycle")
+_FLYING = ("dragon", "bird", "eagle", "hawk", "owl", "phoenix", "griffin",
+           "pegasus", "bat", "butterfly", "bee", "plane", "airplane", "jet",
+           "helicopter", "spaceship", "rocket", "drone", "ufo")
 
 
 def guess_pattern(kind: str) -> str:
     k = (kind or "").lower()
+    if any(w in k for w in _FLYING):
+        return "flying"                   # fly mode; static mesh + hover (wing
+        #                                   flap rig is the Phase 20 flying module)
     if any(w in k for w in _QUADRUPED):
         return "quadruped"
     if any(w in k for w in _VEHICLE):
@@ -82,10 +88,20 @@ def ensure_asset(kind: str, pattern: str | None = None, target_tris: int = 45000
     hit = library.resolve(kind)
     if hit:
         return hit
-    if not gpu_available():
+    # THE VISION GATE, UNLOCKED (2026-07-05): generation used to hard-require
+    # CUDA, so every new character fell back to "man". SDXL + TripoSR both run
+    # on CPU — slowly (~30-60 min) but ONCE: the result registers in the
+    # library and is instant for every later prompt. FS_CPU_CHARGEN=0 restores
+    # the old library-only behavior.
+    import os as _os
+    cpu_gen = not gpu_available()
+    if cpu_gen and _os.environ.get("FS_CPU_CHARGEN", "1") == "0":
         raise GPUUnavailable(
-            f"'{kind}' is not in the asset library and no CUDA GPU is available "
-            f"to generate it (Phase 27 path — retry once the GPU is back)")
+            f"'{kind}' is not in the asset library; CPU generation is disabled "
+            f"(FS_CPU_CHARGEN=0) and no CUDA GPU is available")
+    if cpu_gen and verbose:
+        print(f"[game] no GPU — generating '{kind}' on CPU (first time only; "
+              f"~30-60 min, then cached in the library)")
 
     from app.asset_gen import generate_reference, generate_mesh
     from app.asset_gen.reference import unload_reference_pipeline
@@ -108,14 +124,22 @@ def ensure_asset(kind: str, pattern: str | None = None, target_tris: int = 45000
                 _t.cuda.empty_cache()
         except Exception:
             pass
-        try:
-            generate_mesh(ref_png, output_path=raw_glb, engine="trellis2",
-                          tier="fast", base_pattern=pattern)
-        except Exception as ge:
-            if verbose:
-                print(f"[game] trellis2 failed ({type(ge).__name__}) -> triposg")
-            generate_mesh(ref_png, output_path=raw_glb, engine="triposg",
-                          tier="fast", base_pattern=pattern)
+        # engine order: CUDA gets the quality chain; CPU goes straight to
+        # TripoSR (the only CPU-capable engine — TRELLIS.2/TripoSG need CUDA)
+        _chain = ["triposr"] if cpu_gen else ["trellis2", "triposg", "triposr"]
+        _last: Exception | None = None
+        for _eng in _chain:
+            try:
+                generate_mesh(ref_png, output_path=raw_glb, engine=_eng,
+                              tier="fast", base_pattern=pattern)
+                _last = None
+                break
+            except Exception as ge:
+                _last = ge
+                if verbose:
+                    print(f"[game] {_eng} failed ({type(ge).__name__}: {ge})")
+        if _last is not None:
+            raise _last
     elif verbose:
         print(f"[game] actor-cache hit for '{kind}'")
 

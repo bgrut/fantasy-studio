@@ -98,24 +98,42 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         from app.game_export.bake import ensure_playable
         from app.game_export.generate import guess_pattern
         cast = want
-        if guess_pattern(want) == "vehicle":                 # cars DRIVE, no rig needed
+        pattern = guess_pattern(want)
+        # vehicles DRIVE and flyers FLY — both play as static meshes (no rig);
+        # everything else needs the rigged+animated playable bake
+        if pattern in ("vehicle", "flying"):
             player_glb = library.resolve(want)
-            if player_glb:
-                spec.player.mode = "drive"
-                if abs(spec.player.walk_speed - 2.0) < 1e-6:
-                    spec.player.walk_speed = 9.0             # cruise
-                if abs(spec.player.run_speed - 5.0) < 1e-6:
-                    spec.player.run_speed = 19.0             # boost
         else:
-            player_glb = ensure_playable(want, verbose=False)  # rig+animate on first use
+            player_glb = ensure_playable(want, verbose=False)
         if not player_glb:
+            # THE VISION PATH: unknown character → SDXL image → 3D mesh →
+            # library → playable. Works on CPU too (slow, once — then cached
+            # for every future prompt).
             try:
                 from app.game_export.generate import ensure_asset
-                ensure_asset(want)                # generates when GPU present
-                player_glb = ensure_playable(want, verbose=False)
+                stage(f"creating '{want}' — image → 3D mesh "
+                      f"(first time only; ~30-60 min without a GPU)")
+                ensure_asset(want, verbose=False)
+                player_glb = (library.resolve(want) if pattern in ("vehicle", "flying")
+                              else ensure_playable(want, verbose=False))
+                if player_glb:
+                    job.setdefault("notes", []).append(
+                        f"'{want}' was CREATED for this game and saved to your library")
             except Exception as ge:
                 job.setdefault("notes", []).append(
-                    f"player '{want}' unavailable ({type(ge).__name__}) — cast as man")
+                    f"player '{want}' generation failed ({type(ge).__name__}) — cast as man")
+        if player_glb and pattern == "vehicle":
+            spec.player.mode = "drive"
+            if abs(spec.player.walk_speed - 2.0) < 1e-6:
+                spec.player.walk_speed = 9.0                 # cruise
+            if abs(spec.player.run_speed - 5.0) < 1e-6:
+                spec.player.run_speed = 19.0                 # boost
+        if player_glb and pattern == "flying":
+            spec.player.mode = "fly"
+            if abs(spec.player.walk_speed - 2.0) < 1e-6:
+                spec.player.walk_speed = 6.0                 # glide
+            if abs(spec.player.run_speed - 5.0) < 1e-6:
+                spec.player.run_speed = 15.0                 # dive/boost
         if not player_glb:
             job.setdefault("notes", []).append(f"cast fell back: {want} -> man")
             player_glb = library.resolve("man")
@@ -184,9 +202,20 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         place = detect_place(req.prompt) if is_city else None
         if place:
             spec.world.size_m = max(spec.world.size_m, 360.0)
+        # SETTING-DRIVEN TERRAIN (2026-07-05): "mountains" means PEAKS, not a
+        # flat plane — amplitude scales with the world class, scalably.
+        _TERRAIN_AMP = {"mountain": 16.0, "alpine": 16.0, "volcano": 14.0,
+                        "canyon": 11.0, "cliff": 11.0, "hill": 6.5,
+                        "desert": 3.4, "dune": 3.4, "arctic": 4.5,
+                        "swamp": 0.9, "beach": 1.4, "plain": 1.5}
+        _wname = (spec.world.name or "").lower()
+        amp = next((v for k, v in _TERRAIN_AMP.items() if k in _wname), 2.4)
+        if is_city:
+            amp = 0.35                              # cities are near-flat
+        if spec.player.mode == "fly":
+            amp = max(amp, 8.0)                     # flyers deserve relief to soar over
         spec.world.level = build_level(
-            spec.seed, spec.world.size_m, n_objectives=n_obj,
-            amplitude_m=0.35 if is_city else 2.4)   # cities are near-flat
+            spec.seed, spec.world.size_m, n_objectives=n_obj, amplitude_m=amp)
         if place:
             stage(f"fetching {place} map (OpenStreetMap)")
             osm = build_osm_city(place, spec.world.size_m)

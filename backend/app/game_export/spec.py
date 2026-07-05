@@ -25,7 +25,7 @@ class PlayerSpec(BaseModel):
     yaw_offset_deg: float = 0.0          # asset facing correction (glTF axes vary)
     attack: Literal["none", "melee", "ranged"] = "none"   # combat verb (Phase 36)
     hp: int = Field(5, ge=1, le=20)
-    mode: Literal["walk", "drive"] = "walk"               # vehicles DRIVE (arcade physics)
+    mode: Literal["walk", "drive", "fly"] = "walk"        # vehicles DRIVE; dragons/birds FLY
     anims: dict = Field(default_factory=lambda: {
         "idle": "idle", "walk": "walk", "run": "run"})  # state -> glTF clip name
 

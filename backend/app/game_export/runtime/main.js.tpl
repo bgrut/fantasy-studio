@@ -933,7 +933,7 @@ async function main() {
   // VEHICLES: generated car GLBs lie along X (side-profile reference), but the
   // runtime's forward is +Z — auto-align the LONG axis so the car drives
   // nose-first instead of sliding sideways. yaw_offset_deg still flips 180.
-  alignLongAxis(pRoot, (P.mode || 'walk') === 'drive');
+  alignLongAxis(pRoot, ['drive', 'fly'].includes(P.mode || 'walk'));   // nose forward
   polishVehiclePaint(pRoot, (P.mode || 'walk') === 'drive');
   holder.rotation.y = THREE.MathUtils.degToRad(P.yaw_offset_deg || 0);
   const playerObj = new THREE.Group();
@@ -1055,6 +1055,7 @@ async function main() {
   const keys = {};
   addEventListener('keydown', e => { keys[e.code] = true; });
   addEventListener('keyup', e => { keys[e.code] = false; });
+  const FLY = SPEC.player.mode === 'fly';   // dragons/birds/aircraft — flight loop below
   let yaw = 0, pitch = 0.35, dragging = false, px = 0, py = 0;
   renderer.domElement.addEventListener('pointerdown', e => {
     if (e.target.closest('#stick')) return;
@@ -1108,7 +1109,7 @@ async function main() {
     ? SPEC.player.attack : (hostilesExist ? 'melee' : 'none');
   if (ATTACK !== 'none') {
     const hint = document.querySelector('#hud .hint');
-    if (hint) hint.textContent += ` · F / Space to ${ATTACK === 'ranged' ? 'shoot' : 'attack'}`;
+    if (hint) hint.textContent += ` · ${FLY ? 'F' : 'F / Space'} to ${ATTACK === 'ranged' ? 'shoot' : 'attack'}`;
   }
   const projectiles = [];
   let atkCd = 0;
@@ -1166,7 +1167,8 @@ async function main() {
   }
   // controls per device: keyboard F/Space · touch ATTACK button · gamepad A/X or RT
   addEventListener('keydown', e => {
-    if (e.code === 'KeyF' || e.code === 'Space') { e.preventDefault(); doAttack(); }
+    // in FLIGHT, Space means ASCEND — attack stays on F
+    if (e.code === 'KeyF' || (!FLY && e.code === 'Space')) { e.preventDefault(); doAttack(); }
   });
   const atkBtn = document.getElementById('atkbtn');
   if (atkBtn && ATTACK !== 'none') {
@@ -1239,6 +1241,10 @@ async function main() {
            ? ' — follow the orange gates to the checkered finish' : '');
     }
   }
+  if (FLY) {                                     // flight instructions in the HUD
+    const hint = document.querySelector('#hud .hint');
+    if (hint) hint.textContent = 'WASD glide · Space rise · C dive · Shift boost · drag to look';
+  }
   let vSpeed = 0, hudTick = 0, prevV = 0, leanP = 0, leanR = 0;
   const camTarget = new THREE.Vector3();
 
@@ -1262,6 +1268,27 @@ async function main() {
       speed = Math.abs(vSpeed);
       vy = Math.max(vy - 9.81 * dt, -25);
       var desired = { x: dir.x * vSpeed * dt, y: vy * dt, z: dir.z * vSpeed * dt };
+    } else if (FLY) {
+      // FLIGHT: camera-relative glide, Space to rise, C to dive. The kinematic
+      // body still collides with terrain/buildings, so landing just works.
+      speed = (mv.run ? P.run_speed : P.walk_speed);
+      dir.set(mv.x, 0, mv.z);
+      let horiz = 0;
+      if (dir.lengthSq() > 1e-4) {
+        dir.normalize().applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
+        modelYaw = THREE.MathUtils.damp(modelYaw, Math.atan2(dir.x, dir.z), P.turn_speed, dt);
+        horiz = speed * mv.mag;
+      }
+      let vv = 0;
+      if (keys.Space) vv = speed * 0.75;
+      else if (keys.KeyC || keys.ControlLeft) vv = -speed * 0.75;
+      const bob = Math.sin(performance.now() / 480) * 0.3;   // hover breathing
+      vy = 0;                                                // no gravity aloft
+      var desired = { x: dir.x * horiz * dt, y: (vv + bob) * dt, z: dir.z * horiz * dt };
+      // glide feel: pitch into climbs/dives, bank into turns
+      leanP = THREE.MathUtils.damp(leanP, THREE.MathUtils.clamp(-vv * 0.045, -0.4, 0.4), 4, dt);
+      leanR = THREE.MathUtils.damp(leanR, THREE.MathUtils.clamp(-mv.x * 0.32, -0.45, 0.45), 4, dt);
+      holder.rotation.x = leanP; holder.rotation.z = leanR;
     } else {
       speed = (mv.run ? P.run_speed : P.walk_speed) * mv.mag;
       dir.set(mv.x, 0, mv.z);
@@ -1281,6 +1308,10 @@ async function main() {
     world.step();
 
     let nt = body.translation();
+    if (FLY && nt.y > 60) {   // flight ceiling — the world stays in view
+      body.setNextKinematicTranslation({ x: nt.x, y: 60, z: nt.z });
+      nt = { x: nt.x, y: 60, z: nt.z };
+    }
     if (nt.y < -10) {   // fall-recovery safety net: respawn at origin
       body.setNextKinematicTranslation({ x: 0, y: P.height_m / 2 + 0.1, z: 0 });
       vy = 0; nt = { x: 0, y: P.height_m / 2 + 0.1, z: 0 };
