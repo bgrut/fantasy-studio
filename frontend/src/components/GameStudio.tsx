@@ -39,6 +39,7 @@ export default function GameStudio() {
   const [exporting, setExporting] = useState(false)
   const [exported, setExported] = useState<{ play_url: string; zip: string; zip_mb: number } | null>(null)
   const pollRef = useRef<number | null>(null)
+  const gameFrameRef = useRef<HTMLIFrameElement | null>(null)
 
   useEffect(() => {
     gameHealth().then(setHealth).catch(() => setHealth(null))
@@ -107,6 +108,26 @@ export default function GameStudio() {
   }, [prompt, building])
 
   const playing = job?.status === 'complete' && job.play_url
+
+  // While a game is playable, arrows/space must DRIVE THE GAME, not scroll
+  // the studio page out from under the recording. Keys that reach the parent
+  // (iframe unfocused) get their default scroll behavior suppressed.
+  useEffect(() => {
+    if (!playing) return
+    const KEYS = new Set(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '])
+    const swallow = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null
+      if (t && (t.tagName === 'TEXTAREA' || t.tagName === 'INPUT' || t.isContentEditable)) {
+        return                          // typing a prompt keeps its arrow keys
+      }
+      if (KEYS.has(e.key)) {
+        e.preventDefault()
+        gameFrameRef.current?.focus()   // hand the keys back to the game
+      }
+    }
+    window.addEventListener('keydown', swallow, { capture: true })
+    return () => window.removeEventListener('keydown', swallow, { capture: true })
+  }, [playing])
 
   return (
     <div className="space-y-8">
@@ -276,22 +297,34 @@ export default function GameStudio() {
               >
                 <RotateCcw className="w-3 h-3" /> New level
               </button>
-              <a
-                href={job!.play_url}
-                target="_blank"
-                rel="noreferrer"
+              <button
+                onClick={() => {
+                  // REAL fullscreen (the old target="_blank" link did nothing
+                  // in the desktop shell). Focus first so WASD/arrows keep
+                  // driving the game while recording.
+                  const f = gameFrameRef.current
+                  if (!f) return
+                  f.requestFullscreen?.().catch(() => {})
+                  f.focus()
+                }}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-[#5cffc9]/15 text-[#5cffc9] hover:bg-[#5cffc9]/25 transition-colors"
               >
                 <Maximize2 className="w-3 h-3" /> Fullscreen
-              </a>
+              </button>
             </div>
           </div>
-          <div className="rounded-2xl overflow-hidden border border-white/[0.06] bg-black aspect-video">
+          <div
+            className="rounded-2xl overflow-hidden border border-white/[0.06] bg-black aspect-video"
+            onClick={() => gameFrameRef.current?.focus()}
+          >
             <iframe
+              ref={gameFrameRef}
               src={job!.play_url}
               title={job!.title ?? 'game'}
               className="w-full h-full"
               allow="fullscreen; gamepad; pointer-lock"
+              allowFullScreen
+              onLoad={() => gameFrameRef.current?.focus()}
             />
           </div>
           {job!.notes?.length ? (
