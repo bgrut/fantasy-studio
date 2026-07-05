@@ -124,21 +124,27 @@ def _handle_connection(conn: socket.socket, addr) -> None:
             result_q: queue.Queue = queue.Queue(maxsize=1)
             _op_queue.put(({"id": req_id, "op": op, "params": params}, result_q))
             try:
-                # Long-running ops (render_animation, render_frame at high samples)
-                # need much more than 120s. Cap at 30 min — anything longer is a bug.
-                op_timeout = 1800.0 if op in ("render_animation", "render_frame") else 300.0
+                # Timeouts sized for the WORST supported hardware, not the
+                # best: a 100-frame scene takes 25-45 min on a CPU-only box,
+                # and heavy execute_python compose steps can pass 5 min
+                # (2026-07-05 story-film hang). The CLIENT owns the shorter
+                # per-op deadline; the server is just a backstop.
+                op_timeout = 5400.0 if op in ("render_animation", "render_frame") else 1800.0
                 result = result_q.get(timeout=op_timeout)
             except queue.Empty:
-                _send_frame(conn, {
-                    "id": req_id,
-                    "ok": False,
-                    "error": f"timeout waiting for main-thread dispatch (op '{op}' took >{op_timeout}s)",
-                })
+                try:
+                    _send_frame(conn, {
+                        "id": req_id,
+                        "ok": False,
+                        "error": f"timeout waiting for main-thread dispatch (op '{op}' took >{op_timeout}s)",
+                    })
+                except OSError:
+                    break      # peer already gone — never crash the handler
                 continue
 
             try:
                 _send_frame(conn, result)
-            except (ConnectionResetError, BrokenPipeError):
+            except OSError:    # incl. ConnectionAborted — peer timed out first
                 break
     finally:
         try:
