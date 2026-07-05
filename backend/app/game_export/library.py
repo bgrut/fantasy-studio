@@ -95,6 +95,10 @@ def default_height(kind: str) -> float:
                      (("dragon", "griffin", "pegasus"), 3.2),
                      (("bird", "eagle", "hawk", "owl", "bat"), 0.5),
                      (("plane", "jet", "helicopter", "spaceship"), 3.0),
+                     (("whale", "orca"), 8.0),
+                     (("shark", "dolphin"), 2.6),
+                     (("fish", "turtle", "seal", "stingray"), 0.8),
+                     (("boat", "ship", "submarine"), 6.0),
                      (("man", "woman", "person", "human", "knight", "wizard"), 1.75)):
         if any(w in k for w in words):
             return h

@@ -296,12 +296,16 @@ async function main() {
       }
     });
   }
-  function prepModel(gltf, targetH) {
+  function prepModel(gltf, targetH, byMaxDim) {
     const root = gltf.scene;
     hardenAlpha(root);
     root.traverse(o => { if (o.isMesh) { o.castShadow = true; o.frustumCulled = false; } });
     const box = new THREE.Box3().setFromObject(root);
-    const h = Math.max(box.max.y - box.min.y, 1e-3);
+    // flyers/swimmers normalize by their LONGEST dimension (wingspan / body
+    // length) — height normalization blew a wings-out dragon up to kaiju size
+    const h = byMaxDim
+      ? Math.max(box.max.x - box.min.x, box.max.y - box.min.y, box.max.z - box.min.z, 1e-3)
+      : Math.max(box.max.y - box.min.y, 1e-3);
     const s = targetH / h;
     root.scale.setScalar(s);
     const box2 = new THREE.Box3().setFromObject(root);
@@ -945,11 +949,20 @@ async function main() {
   let mixer = null, actions = {}, current = null;
   const P = SPEC.player;
   const pg = await loadGLB(P.asset);            // hard fail = visible error
-  const { holder, root: pRoot, radius } = prepModel(pg, P.height_m);
-  // VEHICLES: generated car GLBs lie along X (side-profile reference), but the
-  // runtime's forward is +Z — auto-align the LONG axis so the car drives
-  // nose-first instead of sliding sideways. yaw_offset_deg still flips 180.
-  alignLongAxis(pRoot, ['drive', 'fly'].includes(P.mode || 'walk'));   // nose forward
+  const { holder, root: pRoot, radius } =
+    prepModel(pg, P.height_m, ['fly', 'swim'].includes(P.mode || 'walk'));
+  // ORIENTATION by mode: drive/swim travel along their LONG axis (car nose,
+  // whale body) → long axis to +Z. FLYERS travel along their SHORT horizontal
+  // axis — the long one is the WINGSPAN, which must stay lateral or the
+  // dragon flies sideways. yaw_offset_deg still handles per-asset 180s.
+  if ((P.mode || 'walk') === 'fly') {
+    const bb = new THREE.Box3().setFromObject(pRoot);
+    if ((bb.max.z - bb.min.z) > (bb.max.x - bb.min.x) * 1.15) {
+      pRoot.rotation.y -= Math.PI / 2;         // wingspan was on Z → put on X
+    }
+  } else {
+    alignLongAxis(pRoot, ['drive', 'swim'].includes(P.mode || 'walk'));
+  }
   polishVehiclePaint(pRoot, (P.mode || 'walk') === 'drive');
   holder.rotation.y = THREE.MathUtils.degToRad(P.yaw_offset_deg || 0);
   const playerObj = new THREE.Group();

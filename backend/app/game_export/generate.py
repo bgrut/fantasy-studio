@@ -194,10 +194,14 @@ def ensure_asset(kind: str, pattern: str | None = None, target_tris: int = 45000
     elif verbose:
         print(f"[game] actor-cache hit for '{kind}'")
 
-    # decimate to game budget + register (CPU Blender — works today)
+    # decimate to game budget + register (CPU Blender — works today).
+    # ref_png: untextured gens (TripoSR CPU) get the reference photo PROJECTED
+    # onto them so the library asset ships real colors, not ghost-white.
     out = LIB_DIR / f"{kind.lower().replace(' ', '_')}.glb"
+    ref_png = CACHE_DIR / f"{key}_ref.png"
     optimize_asset(raw_glb, out, target_tris=target_tris,
-                   height_m=library.default_height(kind), verbose=verbose)
+                   height_m=library.default_height(kind), verbose=verbose,
+                   ref_png=ref_png if ref_png.exists() else None)
     _register(kind, str(out.relative_to(BACKEND_ROOT)).replace("\\", "/"))
     if verbose:
         print(f"[game] '{kind}' registered in library -> {out.name}")

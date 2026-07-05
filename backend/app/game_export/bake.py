@@ -373,10 +373,37 @@ __result__=json.dumps({"ok":True,"tris":[tris0,tris1],"shard_verts_dropped":int(
 '''
 
 
+class _RegistryRunner:
+    """Adapter: composer texture helpers expect runner.run(name, op, params)."""
+    def __init__(self, registry):
+        self._r = registry
+
+    def run(self, name, op, params, critical=False):
+        return self._r.call(op, params)
+
+
+def _glb_has_images(glb: str | Path) -> bool:
+    import struct as _st
+    try:
+        with open(glb, "rb") as f:
+            f.read(12)
+            clen, _ = _st.unpack("<II", f.read(8))
+            return bool(json.loads(f.read(clen)).get("images"))
+    except Exception:
+        return True                      # unsure → don't touch the materials
+
+
 def optimize_asset(src_glb: str | Path, out_glb: str | Path, target_tris: int = 45000,
-                   height_m: float = 1.0, verbose: bool = True) -> dict:
+                   height_m: float = 1.0, verbose: bool = True,
+                   ref_png: str | Path | None = None) -> dict:
     """Decimate a raw TRELLIS GLB into a game-budget asset (NPCs/props). Raw
-    heroes run ~400k tris; two of those wedge an iGPU. CPU-only via bridge."""
+    heroes run ~400k tris; two of those wedge an iGPU. CPU-only via bridge.
+
+    ref_png (2026-07-05 quality round): when the mesh carries NO baked texture
+    (TripoSR CPU generations arrive with washed-out vertex colors → ghosts),
+    project the SDXL reference photo onto it — the video pipeline's Phase 19
+    projection, REUSED — so the exported GLB ships real colors. TRELLIS gens
+    already have textures and are left untouched."""
     from app.mcp import registry, bridge
     out_glb = Path(out_glb); out_glb.parent.mkdir(parents=True, exist_ok=True)
     bridge.connect(timeout=8)
@@ -384,6 +411,16 @@ def optimize_asset(src_glb: str | Path, out_glb: str | Path, target_tris: int = 
     registry.call("import_mesh_file", {
         "filepath": str(src_glb), "name": "Hero", "normalize_size": height_m,
         "ground_to_z0": True, "join": True, "orientation_fix": None})
+    if ref_png and Path(ref_png).exists() and not _glb_has_images(src_glb):
+        try:
+            from app.orchestrator.composer import _apply_reference_texture
+            _apply_reference_texture(_RegistryRunner(registry), "Hero",
+                                     str(ref_png), verbose=verbose)
+            if verbose:
+                print(f"[bake] projected reference texture onto {Path(src_glb).name}")
+        except Exception as _te:
+            if verbose:
+                print(f"[bake] ref projection skipped ({type(_te).__name__}: {_te})")
     r = _call(registry, "optimize",
               _OPTIMIZE_CODE.replace("__TARGET__", str(int(target_tris)))
                             .replace("__OUT__", str(out_glb).replace("\\", "/")))
