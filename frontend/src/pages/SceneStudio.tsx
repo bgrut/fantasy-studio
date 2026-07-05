@@ -28,6 +28,7 @@ import { cn } from '@/lib/utils'
 import {
   renderPreview,
   submitOrchestrate,
+  submitStory,
   renderIterate,
   renderVariations,
   type IterationStep,
@@ -67,7 +68,7 @@ import {
 
 // Phase 8: extend the locally-visible tier set with 'ai_compose' which routes
 // to the orchestrator (POST /api/orchestrate) instead of the legacy preview pipeline.
-type Tier = RenderTier | 'ai_compose'
+type Tier = RenderTier | 'ai_compose' | 'story'
 
 // v1.4 polish — Phase 7 tier cards. Each tier carries a friendly label, a
 // short descriptor, an estimated time, and a 1-4 dot quality indicator.
@@ -91,6 +92,10 @@ const TIERS: {
   // Ollama + the tool registry instead of running a template recipe. Status
   // visible in the bottom Pipeline panel — same render_jobs table.
   { id: 'ai_compose', label: 'AI Compose', spp: 'Ollama · Llama 3.1', time: '~2-3 min', descriptor: 'Compose from prompt', dots: 3, color: '#4de1ff', badge: 'experimental', hint: 'Local LLM (Ollama) composes the scene step-by-step using 30+ tools. No templates — pure prompt-driven generation.' },
+  // Phase 38: Story Director — one prompt becomes a multi-scene FILM: a 3-act
+  // beat sheet (Ollama), each scene rendered with the same hero (asset-cache
+  // continuity), auto-assembled as a Video Project.
+  { id: 'story', label: 'Story Film', spp: 'Director · 3 scenes', time: '~5-15 min', descriptor: 'Prompt → 3-act film', dots: 4, color: '#ffb84d', badge: 'new', hint: 'Story Director plans a beat sheet from your prompt, renders every scene with the same hero, and assembles the finished film as a Video Project you can re-order and extend.' },
 ]
 
 // V1.4.2 launch-frame — prompt suggestions now read from the curated,
@@ -385,6 +390,23 @@ export default function SceneStudio() {
       setForcedEnvId(envId)
       lastRenderRef.current = { heroId, envId }
 
+      // Phase 38 — Story Film: one prompt → beat sheet → multi-scene film.
+      // Progress rides the pipeline bar ('__story__' rows); the finished film
+      // lands in Video Projects AND the Gallery.
+      if (tier === 'story') {
+        try {
+          const res = await submitStory({ prompt: topic.trim(), scenes: 3 })
+          addToast('success', `Story Director rolling (job #${res.job_id}) — planning the beat sheet, then rendering each scene. Watch the Pipeline panel; the film lands in Video Projects.`)
+        } catch (e: any) {
+          const msg = e?.message || 'Story submit failed'
+          setError(msg)
+          addToast('error', `Story Director failed to start: ${msg.slice(0, 120)}`)
+        } finally {
+          setBusy('idle')
+        }
+        return
+      }
+
       // Phase 8 — AI Compose tier routes to the local-LLM orchestrator.
       // Returns immediately with a job_id; progress shows in PipelineStatus.
       if (tier === 'ai_compose') {
@@ -541,7 +563,8 @@ export default function SceneStudio() {
         session_id: sessionId,
         instruction: userText,
         render: true,
-        render_tier: tier,
+        // orchestrator tiers have no direct render_tier — iterate falls back
+        render_tier: (tier === 'ai_compose' || tier === 'story' ? 'fast' : tier) as RenderTier,
       })
       setChat((prev) => [...prev, { kind: 'system', step: res.step, render: res.render_result }])
       if (res.render_result?.output_url) {

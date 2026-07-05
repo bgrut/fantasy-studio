@@ -444,6 +444,38 @@ export async function submitOrchestrate(payload: {
   return r.json();
 }
 
+/**
+ * Phase 38 — Story Director: one prompt → beat sheet → per-scene renders →
+ * auto-assembled film (a Video Project). Poll /api/story/jobs/{job_id}.
+ */
+export async function submitStory(payload: {
+  prompt: string;
+  scenes?: number;
+  model?: string;
+}): Promise<{ ok: boolean; job_id: number }> {
+  const r = await fetch(`${API_BASE}/api/story`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!r.ok) throw new Error("Failed to submit story job");
+  return r.json();
+}
+
+export async function getStoryJob(jobId: number): Promise<{
+  ok: boolean;
+  job: {
+    id: number; status: string; stage: string; prompt: string;
+    scenes_done?: number; project_id?: number; play_url?: string;
+    download?: string; error?: string; notes?: string[];
+    plan?: { title: string; scenes: { title: string; prompt: string }[] };
+  };
+}> {
+  const r = await fetch(`${API_BASE}/api/story/jobs/${jobId}`);
+  if (!r.ok) throw new Error("Failed to fetch story job");
+  return r.json();
+}
+
 /** Check whether Ollama + Blender bridge are reachable from the backend. */
 export async function getOrchestrateHealth(): Promise<OrchestrateHealth> {
   const r = await fetch(`${API_BASE}/api/orchestrate/health`);

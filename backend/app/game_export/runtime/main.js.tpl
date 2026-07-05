@@ -78,6 +78,19 @@ async function main() {
     const theta = THREE.MathUtils.degToRad(38);
     su.sunPosition.value.setFromSphericalCoords(1, phi, theta);
     scene.background = null;              // the sky IS the background now
+    try {
+      // ENVIRONMENT REFLECTIONS baked from this same sky: glossy materials
+      // (car paint, windows) pick up real reflections instead of reading
+      // flat and blotchy under pure direct light.
+      const pmrem = new THREE.PMREMGenerator(renderer);
+      const envScene = new THREE.Scene();
+      const sky2 = new Sky();
+      sky2.scale.setScalar(1000);
+      for (const k in su) sky2.material.uniforms[k].value = su[k].value;
+      envScene.add(sky2);
+      scene.environment = pmrem.fromScene(envScene, 0.02).texture;
+      pmrem.dispose();
+    } catch (e) { console.warn('[game] env reflections skipped: ' + e.message); }
   } else {
     const sN = 1400, sPos = new Float32Array(sN * 3);
     const sRng = mulberry32(SPEC.seed + 5);
@@ -556,6 +569,51 @@ async function main() {
     }
   }
 
+  // RACE COURSE FURNITURE (scalable: derived entirely from the level path, so
+  // ANY race in ANY world gets it): glowing gates mark the route, a checkered
+  // banner marks the finish — players can SEE where the race goes.
+  if ((SPEC.objectives || []).some(o => o.kind === 'race') && PATH && PATH.length > 2 && goalPos) {
+    const gateMat = new THREE.MeshStandardMaterial({
+      color: 0xffa227, emissive: 0xff7a00, emissiveIntensity: 1.6, roughness: 0.5 });
+    const poleMat = new THREE.MeshStandardMaterial({ color: 0x222228, roughness: 0.6 });
+    const step = Math.max(2, Math.floor(PATH.length / 6));
+    for (let k = step; k < PATH.length - 1; k += step) {
+      const [x, z] = PATH[k];
+      const hd = Math.atan2(PATH[k + 1][0] - PATH[k][0], PATH[k + 1][1] - PATH[k][1]);
+      const gate = new THREE.Group();
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(3.4, 0.15, 8, 28), gateMat);
+      ring.position.y = 3.7;
+      gate.add(ring);
+      const arrow = new THREE.Mesh(new THREE.ConeGeometry(0.45, 1.0, 4), gateMat);
+      arrow.rotation.x = Math.PI / 2;                 // cone points down-route
+      arrow.position.y = 3.7;
+      gate.add(arrow);
+      gate.position.set(x, hAt(x, z), z);
+      gate.rotation.y = hd;
+      scene.add(gate);
+    }
+    const fin = new THREE.Group();                    // checkered finish banner
+    const chk = document.createElement('canvas'); chk.width = 64; chk.height = 16;
+    const cx2 = chk.getContext('2d');
+    for (let i = 0; i < 8; i++) for (let j = 0; j < 2; j++) {
+      cx2.fillStyle = (i + j) % 2 ? '#101014' : '#f2f2ee';
+      cx2.fillRect(i * 8, j * 8, 8, 8);
+    }
+    const banner = new THREE.Mesh(new THREE.PlaneGeometry(9.5, 1.5),
+      new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(chk), side: THREE.DoubleSide }));
+    banner.position.y = 4.7;
+    fin.add(banner);
+    for (const sx of [-4.75, 4.75]) {
+      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 5.3, 8), poleMat);
+      pole.position.set(sx, 2.65, 0);
+      fin.add(pole);
+    }
+    fin.position.set(goalPos.x, goalPos.y, goalPos.z);
+    fin.rotation.y = Math.atan2(goalPos.x - PATH[PATH.length - 2][0],
+                                goalPos.z - PATH[PATH.length - 2][1]);
+    scene.add(fin);
+  }
+
   // ── Phase 33 dynamics: precipitation + wind ──────────────────────────────
   const WEATHER = SPEC.world.weather || 'none';
   const WIND = SPEC.world.wind ?? 0.5;
@@ -882,6 +940,29 @@ async function main() {
   playerObj.add(holder);
   scene.add(playerObj);
 
+  // NIGHT READABILITY: dark palettes get a soft moonlit fill parented to the
+  // CAMERA — it always lights the side of the hero the player is looking at,
+  // for any orbit angle. The atmosphere stays; the character never vanishes.
+  if (pal.sun < 1.0) {
+    scene.add(camera);                       // camera needs to be in the graph
+    const fill = new THREE.PointLight(0xc3d6ff, pal.sun < 0.5 ? 120 : 40, 30, 1.9);
+    fill.position.set(0, 0.6, 0.4);          // just above/behind the lens
+    camera.add(fill);
+    hemi.intensity = Math.max(hemi.intensity, 0.34);
+    // "moonlit hero" grade: the player's own texture doubles as a faint
+    // emissive map, so a dark-furred/dark-armored hero still reads at night
+    holder.traverse(o => {
+      if (!o.isMesh) return;
+      for (const m of Array.isArray(o.material) ? o.material : [o.material]) {
+        if (m && m.emissive !== undefined && m.map) {
+          m.emissiveMap = m.map; m.emissive.setScalar(0.34); m.needsUpdate = true;
+        } else if (m && m.emissive) {
+          m.emissive.setScalar(0.12);
+        }
+      }
+    });
+  }
+
   if (pg.animations && pg.animations.length) {
     mixer = new THREE.AnimationMixer(pg.scene);
     for (const clip of pg.animations) actions[clip.name] = mixer.clipAction(clip);
@@ -1149,6 +1230,14 @@ async function main() {
   const DRIVE = SPEC.player.mode === 'drive';    // arcade car physics
   if (DRIVE && PATH && PATH.length > 1) {        // face down the street at spawn
     modelYaw = Math.atan2(PATH[1][0] - PATH[0][0], PATH[1][1] - PATH[0][1]);
+  }
+  if (DRIVE) {                                   // driving instructions in the HUD
+    const hint = document.querySelector('#hud .hint');
+    if (hint) {
+      hint.textContent = 'W throttle · S brake/reverse · A/D steer · Shift boost'
+        + ((SPEC.objectives || []).some(o => o.kind === 'race')
+           ? ' — follow the orange gates to the checkered finish' : '');
+    }
   }
   let vSpeed = 0, hudTick = 0, prevV = 0, leanP = 0, leanR = 0;
   const camTarget = new THREE.Vector3();

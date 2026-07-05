@@ -28,6 +28,33 @@ Pre-1.0 versions are internal milestones during the constraint sprint leading to
   fixes the "car hovers sideways" bug. Suspension feel: pitch under accel/brake,
   roll into turns. (Wheel spin needs separable wheel meshes — queued for GPU day.)
 
+### Added — Phase 38: Story Director — one prompt → a FILM (2026-07-05)
+- **Story Film tier** in Scene Studio: Ollama plans a 3-act beat sheet
+  (`story_director.py` — same subject wording in every scene for actor-cache
+  continuity; deterministic fallback plan when Ollama is down), each scene
+  renders through the SAME slot pipeline as single renders (strictly
+  sequential — iGPU-safe), scenes land in a **Video Project** as they finish
+  (partial progress survives; re-order/extend in the UI), and the finished
+  film auto-exports via the project's ffmpeg concat.
+- API: `POST /api/story` (render), `POST /api/story/plan` (beat-sheet preview,
+  no rendering), `GET /api/story/jobs/{id}`. Progress rides the render_jobs
+  table (`__story__` rows) → pipeline bar, Gallery, Insights.
+
+### Fixed — game polish round (2026-07-05, same commit)
+- **Night scenes: the hero is always readable** — camera-parented moonlit
+  fill (lights whatever you look at, any orbit angle) + "moonlit hero" grade
+  (the player's own texture doubles as a faint emissive map, so dark-furred /
+  dark-armored characters don't vanish). Verified on the snowy-night fox.
+- **Environment reflections everywhere**: an irradiance map baked from the
+  same procedural sky (PMREM) — car paint finally reads as paint (the
+  blotchiness was flat lighting as much as the texture; full texture regen
+  still queued for GPU day).
+- **Race rules are visible**: glowing orange gates every ~6 waypoints along
+  the route, a checkered finish banner at the goal, and drive-mode HUD
+  instructions ("W throttle · S brake/reverse · A/D steer · Shift boost —
+  follow the orange gates to the checkered finish"). All derived from the
+  level path — works for any race in any world.
+
 ### Fixed/Added — Phase 37.1: street-pinned racing + facades + blade grass (2026-07-05)
 - **Nose direction verified by rendering** (not eyeballed): the alignment sign
   was flipped once from an ambiguous follow-cam screenshot; now the car/truck
