@@ -83,6 +83,10 @@ PATTERN_REFERENCE_FRAMING: Dict[str, str] = {
     "tree":      "vertical trunk centered, full tree from roots to top, upright",
     "celestial": "centered sphere, fills frame",
     "primitive_geo": "centered, full object visible",
+    # flying creatures/craft (dragons, birds, planes — 2026-07-05): without
+    # this SDXL freestyles a coiled head-shot ILLUSTRATION that image-to-3D
+    # turns to soup. Same recipe as quadruped: whole body, side-ish, isolated.
+    "flying":    "perfect side profile, whole body visible in frame, wings spread wide and level, standing on the ground, motionless, plain background, single subject, clean silhouette, photorealistic",
 }
 
 # Negative-prompt additions per pattern — explicitly veto problematic poses
@@ -90,6 +94,7 @@ PATTERN_NEGATIVE: Dict[str, str] = {
     "quadruped": "running, jumping, leaping, mid-action, motion blur, dynamic pose, legs in the air, tilted, perspective distortion, wispy fur strands, flyaway hair, shaggy fuzzy silhouette, long unkempt fur",
     "biped":     "dynamic pose, motion blur, running, jumping, tilted, perspective distortion, cropped, anatomy figure, ecorche, flayed, skinless, exposed muscle, muscle suit, x-ray, medical illustration, red and blue veins, nude, naked",
     "vehicle":   "moving, motion blur, tilted, perspective distortion",
+    "flying":    "flying, mid-air, coiled, curled, head close-up, portrait, tattoo style, line art, illustration, logo, emblem, circular composition, cropped body, motion blur, dynamic pose",
 }
 
 

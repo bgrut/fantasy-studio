@@ -5,6 +5,9 @@ $ErrorActionPreference = "Stop"
 $root = Split-Path $PSScriptRoot -Parent
 
 Write-Host "[desktop] starting backend (8789)..." -ForegroundColor Cyan
+# UTF-8 mode: piped stdout otherwise falls back to cp1252 and Unicode chars
+# in progress prints crash worker threads (killed a character gen once)
+$env:PYTHONUTF8 = "1"
 $backend = Start-Process -PassThru -WindowStyle Hidden -FilePath "$root\backend\venv\Scripts\python.exe" `
     -ArgumentList "-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", "8789" `
     -WorkingDirectory "$root\backend"

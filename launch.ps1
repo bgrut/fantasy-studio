@@ -59,8 +59,12 @@ Write-Host "  Frontend dir: $FrontendDir"
 Write-Host "  Backend port: $BackendPort"
 Write-Host ""
 
-# Launch backend in a new PowerShell window
-$backendCmd = "cd '$BackendDir'; & '$venvActivate'; Write-Host 'Starting backend on port $BackendPort...' -ForegroundColor Green; python -m uvicorn app.main:app --port $BackendPort --reload"
+# Launch backend in a new PowerShell window.
+# PYTHONUTF8: with piped/redirected stdout Windows Python falls back to
+# cp1252 and any Unicode char in a progress print (arrows, em dashes) raises
+# UnicodeEncodeError INSIDE worker threads — this killed a character
+# generation once (2026-07-05). UTF-8 mode ends that failure class.
+$backendCmd = "cd '$BackendDir'; & '$venvActivate'; `$env:PYTHONUTF8='1'; Write-Host 'Starting backend on port $BackendPort...' -ForegroundColor Green; python -m uvicorn app.main:app --port $BackendPort --reload"
 Start-Process powershell -ArgumentList "-NoExit", "-Command", $backendCmd
 
 # Brief delay so the backend can bind its port before the frontend
