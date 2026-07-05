@@ -99,9 +99,9 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         from app.game_export.generate import guess_pattern
         cast = want
         pattern = guess_pattern(want)
-        # vehicles DRIVE and flyers FLY — both play as static meshes (no rig);
-        # everything else needs the rigged+animated playable bake
-        if pattern in ("vehicle", "flying"):
+        # vehicles DRIVE, flyers FLY, swimmers SWIM — all play as static
+        # meshes (no rig); everything else needs the rigged+animated bake
+        if pattern in ("vehicle", "flying", "aquatic", "static"):
             player_glb = library.resolve(want)
         else:
             player_glb = ensure_playable(want, verbose=False)
@@ -114,7 +114,8 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                 stage(f"creating '{want}' — image → 3D mesh "
                       f"(first time only; ~30-60 min without a GPU)")
                 ensure_asset(want, verbose=False)
-                player_glb = (library.resolve(want) if pattern in ("vehicle", "flying")
+                player_glb = (library.resolve(want)
+                              if pattern in ("vehicle", "flying", "aquatic", "static")
                               else ensure_playable(want, verbose=False))
                 if player_glb:
                     job.setdefault("notes", []).append(
@@ -134,6 +135,12 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                 spec.player.walk_speed = 6.0                 # glide
             if abs(spec.player.run_speed - 5.0) < 1e-6:
                 spec.player.run_speed = 15.0                 # dive/boost
+        if player_glb and pattern == "aquatic":
+            spec.player.mode = "swim"
+            if abs(spec.player.walk_speed - 2.0) < 1e-6:
+                spec.player.walk_speed = 4.0                 # cruise
+            if abs(spec.player.run_speed - 5.0) < 1e-6:
+                spec.player.run_speed = 10.0                 # burst
         if not player_glb:
             job.setdefault("notes", []).append(f"cast fell back: {want} -> man")
             player_glb = library.resolve("man")
@@ -214,6 +221,16 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             amp = 0.35                              # cities are near-flat
         if spec.player.mode == "fly":
             amp = max(amp, 8.0)                     # flyers deserve relief to soar over
+        # WATER WORLDS: rolling seabed + a water plane the runtime renders;
+        # swimmers stay beneath it, everything gets underwater fog below it
+        _water = any(k in _wname for k in ("ocean", "underwater", "lake", "river"))
+        if _water:
+            amp = max(amp, 3.0)                     # seabed dunes
+            spec.world.water_level = 8.0 if "lake" not in _wname else 4.0
+        elif spec.player.mode == "swim":
+            # aquatic player in a non-water world: give them water anyway
+            spec.world.water_level = 8.0
+            amp = max(amp, 3.0)
         spec.world.level = build_level(
             spec.seed, spec.world.size_m, n_objectives=n_obj, amplitude_m=amp)
         if place:

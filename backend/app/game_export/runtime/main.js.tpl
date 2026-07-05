@@ -233,6 +233,22 @@ async function main() {
       .setTranslation(0, -0.05, 0));
   }
 
+  // WATER (ocean/lake worlds): translucent plane at world.water_level with a
+  // gentle tide bob; the camera dipping below it switches to underwater fog
+  const WATER = (SPEC.world.water_level ?? null);
+  let waterMesh = null, underwater = false;
+  const origFog = scene.fog;
+  if (WATER !== null) {
+    waterMesh = new THREE.Mesh(
+      new THREE.PlaneGeometry(gsize * 1.3, gsize * 1.3),
+      new THREE.MeshStandardMaterial({ color: 0x1d5d8e, transparent: true, opacity: 0.7,
+                                       roughness: 0.12, metalness: 0.1, side: THREE.DoubleSide,
+                                       depthWrite: false }));
+    waterMesh.rotation.x = -Math.PI / 2;
+    waterMesh.position.y = WATER;
+    scene.add(waterMesh);
+  }
+
   // goal beacon: glowing pillar at the level's goal zone — reaching it (with
   // all objectives collected) wins the level
   let goalPos = null, goalMesh = null;
@@ -1056,6 +1072,7 @@ async function main() {
   addEventListener('keydown', e => { keys[e.code] = true; });
   addEventListener('keyup', e => { keys[e.code] = false; });
   const FLY = SPEC.player.mode === 'fly';   // dragons/birds/aircraft — flight loop below
+  const SWIM = SPEC.player.mode === 'swim'; // whales/sharks/subs — swim loop below
   let yaw = 0, pitch = 0.35, dragging = false, px = 0, py = 0;
   renderer.domElement.addEventListener('pointerdown', e => {
     if (e.target.closest('#stick')) return;
@@ -1167,8 +1184,8 @@ async function main() {
   }
   // controls per device: keyboard F/Space · touch ATTACK button · gamepad A/X or RT
   addEventListener('keydown', e => {
-    // in FLIGHT, Space means ASCEND — attack stays on F
-    if (e.code === 'KeyF' || (!FLY && e.code === 'Space')) { e.preventDefault(); doAttack(); }
+    // in FLIGHT/SWIMMING, Space means ASCEND — attack stays on F
+    if (e.code === 'KeyF' || (!FLY && !SWIM && e.code === 'Space')) { e.preventDefault(); doAttack(); }
   });
   const atkBtn = document.getElementById('atkbtn');
   if (atkBtn && ATTACK !== 'none') {
@@ -1245,6 +1262,10 @@ async function main() {
     const hint = document.querySelector('#hud .hint');
     if (hint) hint.textContent = 'WASD glide · Space rise · C dive · Shift boost · drag to look';
   }
+  if (SWIM) {                                    // swim instructions in the HUD
+    const hint = document.querySelector('#hud .hint');
+    if (hint) hint.textContent = 'WASD swim · Space surface · C dive · Shift burst · drag to look';
+  }
   let vSpeed = 0, hudTick = 0, prevV = 0, leanP = 0, leanR = 0;
   const camTarget = new THREE.Vector3();
 
@@ -1289,6 +1310,26 @@ async function main() {
       leanP = THREE.MathUtils.damp(leanP, THREE.MathUtils.clamp(-vv * 0.045, -0.4, 0.4), 4, dt);
       leanR = THREE.MathUtils.damp(leanR, THREE.MathUtils.clamp(-mv.x * 0.32, -0.45, 0.45), 4, dt);
       holder.rotation.x = leanP; holder.rotation.z = leanR;
+    } else if (SWIM) {
+      // SWIMMING: like flight but capped at the water surface, with a slower
+      // drift and a gentle roll — whales breach, they don't hover
+      speed = (mv.run ? P.run_speed : P.walk_speed);
+      dir.set(mv.x, 0, mv.z);
+      let horiz = 0;
+      if (dir.lengthSq() > 1e-4) {
+        dir.normalize().applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
+        modelYaw = THREE.MathUtils.damp(modelYaw, Math.atan2(dir.x, dir.z), P.turn_speed * 0.6, dt);
+        horiz = speed * mv.mag;
+      }
+      let vv = 0;
+      if (keys.Space) vv = speed * 0.6;
+      else if (keys.KeyC || keys.ControlLeft) vv = -speed * 0.6;
+      const bob = Math.sin(performance.now() / 640) * 0.18;
+      vy = 0;                                              // buoyant — no gravity
+      var desired = { x: dir.x * horiz * dt, y: (vv + bob) * dt, z: dir.z * horiz * dt };
+      leanP = THREE.MathUtils.damp(leanP, THREE.MathUtils.clamp(-vv * 0.05, -0.35, 0.35), 3, dt);
+      leanR = THREE.MathUtils.damp(leanR, THREE.MathUtils.clamp(-mv.x * 0.25, -0.35, 0.35), 3, dt);
+      holder.rotation.x = leanP; holder.rotation.z = leanR;
     } else {
       speed = (mv.run ? P.run_speed : P.walk_speed) * mv.mag;
       dir.set(mv.x, 0, mv.z);
@@ -1311,6 +1352,19 @@ async function main() {
     if (FLY && nt.y > 60) {   // flight ceiling — the world stays in view
       body.setNextKinematicTranslation({ x: nt.x, y: 60, z: nt.z });
       nt = { x: nt.x, y: 60, z: nt.z };
+    }
+    if (SWIM && WATER !== null && nt.y > WATER - 0.15) {   // swimmers stay wet
+      body.setNextKinematicTranslation({ x: nt.x, y: WATER - 0.15, z: nt.z });
+      nt = { x: nt.x, y: WATER - 0.15, z: nt.z };
+    }
+    if (WATER !== null) {     // tide bob + underwater fog when the camera dips
+      waterMesh.position.y = WATER + Math.sin(performance.now() / 1400) * 0.12;
+      const under = camera.position.y < waterMesh.position.y;
+      if (under !== underwater) {
+        underwater = under;
+        scene.fog = under ? new THREE.FogExp2(0x0e4a66, 0.028) : origFog;
+        hemi.intensity = under ? Math.max(hemi.intensity, 0.5) : hemi.intensity;
+      }
     }
     if (nt.y < -10) {   // fall-recovery safety net: respawn at origin
       body.setNextKinematicTranslation({ x: 0, y: P.height_m / 2 + 0.1, z: 0 });

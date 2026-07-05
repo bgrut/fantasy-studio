@@ -51,10 +51,16 @@ _RECIPES = {
     "volcano":     [("rock", 120, 8)],
     "arctic":      [("rock", 60, 5), ("tree_pine", 30, 3)],
     "hills":       [("tree_oak", 40, 4), ("tree_birch", 20, 2), ("bush", 26, 3), ("rock", 30, 3)],
+    # water worlds: rocky seabed / shoreline (the water plane itself is
+    # rendered by the runtime from world.water_level)
+    "ocean":       [("rock", 70, 5)],
+    "underwater":  [("rock", 70, 5)],
+    "lake":        [("rock", 40, 4), ("tree_pine", 30, 3), ("bush", 16, 2)],
+    "river":       [("rock", 50, 4), ("tree_oak", 30, 3), ("bush", 20, 2)],
 }
 
 _NO_GRASS = {"city", "street", "town", "desert", "dune", "beach", "volcano",
-             "arctic", "canyon"}
+             "arctic", "canyon", "ocean", "underwater"}
 
 
 def wants_grass(setting: str | None, weather: str = "none") -> bool:

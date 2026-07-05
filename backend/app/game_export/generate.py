@@ -33,6 +33,49 @@ _VEHICLE = ("car", "truck", "bus", "van", "jeep", "tank", "motorcycle")
 _FLYING = ("dragon", "bird", "eagle", "hawk", "owl", "phoenix", "griffin",
            "pegasus", "bat", "butterfly", "bee", "plane", "airplane", "jet",
            "helicopter", "spaceship", "rocket", "drone", "ufo")
+_AQUATIC = ("whale", "shark", "fish", "dolphin", "orca", "mermaid", "octopus",
+            "squid", "turtle", "seal", "stingray", "eel", "submarine", "boat",
+            "ship", "kayak")
+
+_PATTERNS = ("biped", "quadruped", "flying", "aquatic", "vehicle", "static")
+_PATTERN_CACHE = BACKEND_ROOT / "renders" / "_pattern_cache.json"
+
+
+def _classify_with_ollama(kind: str) -> str | None:
+    """SCALABLE classification for kinds no keyword list knows: one cached
+    Ollama call — 'how does this thing move?'. Deterministic after first use
+    (renders/_pattern_cache.json). Returns None when Ollama is unreachable."""
+    try:
+        cache = {}
+        try:
+            cache = json.loads(_PATTERN_CACHE.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+        if kind in cache:
+            return cache[kind]
+        from app.orchestrator.llm import OllamaClient
+        msg = OllamaClient().chat(
+            [{"role": "system", "content":
+              "Classify how a creature or thing MOVES ITS BODY. Reply with "
+              "exactly ONE word from: biped, quadruped, flying, aquatic, "
+              "vehicle, static.\n"
+              "biped = anything human or humanoid — ALL people, professions "
+              "and roles (chef, pirate, knight, dancer), robots, apes.\n"
+              "quadruped = four-legged animals. flying = birds/dragons/"
+              "aircraft. aquatic = swimmers (whales, fish, boats). "
+              "vehicle = wheeled/driven machines. static = ONLY inanimate "
+              "objects that truly cannot move (a castle, a toaster)."},
+             {"role": "user", "content": kind}],
+            temperature=0.0)
+        word = (msg or {}).get("content", "").strip().lower().split()[0].strip(".,")
+        if word in _PATTERNS:
+            cache[kind] = word
+            _PATTERN_CACHE.parent.mkdir(parents=True, exist_ok=True)
+            _PATTERN_CACHE.write_text(json.dumps(cache, indent=1), encoding="utf-8")
+            return word
+    except Exception:
+        pass
+    return None
 
 
 def guess_pattern(kind: str) -> str:
@@ -40,10 +83,18 @@ def guess_pattern(kind: str) -> str:
     if any(w in k for w in _FLYING):
         return "flying"                   # fly mode; static mesh + hover (wing
         #                                   flap rig is the Phase 20 flying module)
+    if any(w in k for w in _AQUATIC):
+        return "aquatic"                  # swim mode
     if any(w in k for w in _QUADRUPED):
         return "quadruped"
     if any(w in k for w in _VEHICLE):
         return "vehicle"
+    # keyword lists are the fast path; UNKNOWN kinds ask Ollama how the thing
+    # moves (cached) — a whale must never be rigged like a person again
+    if k and k not in ("man", "woman", "person", "human"):
+        llm = _classify_with_ollama(k)
+        if llm:
+            return llm
     return "biped"
 
 

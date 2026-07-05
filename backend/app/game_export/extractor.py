@@ -21,6 +21,7 @@ Output ONLY the JSON object, no markdown, no commentary. Schema (all fields opti
  "title": str,
  "world": {"name": one of "park","garden","forest","meadow","countryside","field","grass","backyard","city","street","plain",
            "mountains","canyon","desert","beach","swamp","volcano","arctic","hills",
+           "ocean","lake","river","underwater",
            "size_m": float 30..500, "sky": one of "day","sunset","night","overcast", "fog": bool,
            "weather": one of "none","rain","snow", "wind": float 0..1,
            "ground_color": [r,g,b] floats 0..1},
@@ -58,6 +59,7 @@ def _keyword_fallback(text: str) -> dict:
             out["player"] = {"name": k}
             break
     for w in ("city", "street", "downtown", "mountain", "canyon", "desert",
+              "underwater", "ocean", "sea", "lake", "river", "reef",
               "beach", "swamp", "volcano", "arctic", "tundra", "hill",
               "park", "garden", "forest", "meadow",
               "countryside", "field", "backyard", "grass"):
@@ -65,6 +67,7 @@ def _keyword_fallback(text: str) -> dict:
             out["world"]["name"] = ("city" if w in ("street", "downtown")
                                     else "mountains" if w == "mountain"
                                     else "arctic" if w == "tundra"
+                                    else "ocean" if w in ("sea", "reef")
                                     else "hills" if w == "hill" else w)
             break
     if any(w in t for w in ("race", "racing", "catch and pass", "overtake", "finish line")):

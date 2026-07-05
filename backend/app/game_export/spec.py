@@ -25,7 +25,7 @@ class PlayerSpec(BaseModel):
     yaw_offset_deg: float = 0.0          # asset facing correction (glTF axes vary)
     attack: Literal["none", "melee", "ranged"] = "none"   # combat verb (Phase 36)
     hp: int = Field(5, ge=1, le=20)
-    mode: Literal["walk", "drive", "fly"] = "walk"        # vehicles DRIVE; dragons/birds FLY
+    mode: Literal["walk", "drive", "fly", "swim"] = "walk"  # drive/fly/swim per species
     anims: dict = Field(default_factory=lambda: {
         "idle": "idle", "walk": "walk", "run": "run"})  # state -> glTF clip name
 
@@ -55,6 +55,7 @@ class WorldSpec(BaseModel):
     wind: float = Field(0.5, ge=0.0, le=1.0)              # prop sway strength
     grass: bool = True                                    # off for cities/snow
     fog: bool = True
+    water_level: Optional[float] = None   # ocean/lake worlds: water plane height (m)
     scatter: List[ScatterSpec] = Field(default_factory=list)
     level: Optional[dict] = None    # Phase 32 LevelPlan (terrain/path/goal), injected by the exporter
 
