@@ -77,8 +77,10 @@ def render_frame(params: dict) -> dict:
     category="render",
 )
 def render_animation(params: dict) -> dict:
-    # Long timeout — multi-frame renders can take 5-15 minutes on consumer GPUs.
-    return bridge.call("render_animation", params, timeout=1800.0)
+    # CPU/iGPU-realistic timeout: a 100-frame scene took 25+ min on the
+    # GPU-less box and the old 1800s window expired ~60s before the frames
+    # finished (then the reconnect deadlock froze the job — both fixed).
+    return bridge.call("render_animation", params, timeout=5400.0)
 
 
 @register_fn(

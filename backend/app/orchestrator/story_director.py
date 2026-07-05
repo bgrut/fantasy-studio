@@ -23,9 +23,12 @@ _PLAN_SYS = """You are a film director. Break the user's story idea into %d shor
                          naming the SAME main subject with the SAME words in every scene,
                          plus time-of-day/mood>",
              "duration_s": <3-6>}]}
-Rules: keep the SAME subject wording in every scene prompt (continuity);
-each prompt must stand alone (the renderer sees one scene at a time);
-vary camera-worthy action and mood across scenes; no dialogue, no text overlays."""
+Rules: name the subject with a SHORT PLAIN phrase (2-3 words, e.g. "a horse",
+"a samurai") — no adjectives on the subject itself — and use that IDENTICAL
+phrase in every scene (continuity AND asset-cache reuse: decorated phrases
+force a full regeneration per film); each prompt must stand alone (the
+renderer sees one scene at a time); vary camera-worthy action and mood across
+scenes; no dialogue, no text overlays."""
 
 
 def _fallback_plan(prompt: str, n_scenes: int) -> dict:

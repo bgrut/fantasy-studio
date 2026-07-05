@@ -63,25 +63,36 @@ def configure(host: str = DEFAULT_HOST, port: int = DEFAULT_PORT) -> None:
     _port = port
 
 
+def _connect_locked(host: Optional[str] = None, port: Optional[int] = None,
+                    timeout: float = 5.0) -> None:
+    """Connect WITHOUT taking _lock — caller must already hold it.
+
+    Split out because call() reconnects while holding _lock; the old code
+    called connect() there, re-acquiring the same non-reentrant lock =
+    SELF-DEADLOCK (the 2026-07-05 story-render hang: a render outlived the
+    socket timeout, the reconnect path froze the thread forever)."""
+    global _sock
+    if _sock is not None:
+        return
+    h = host or _host
+    p = port or _port
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.settimeout(timeout)
+        s.connect((h, p))
+        s.settimeout(None)  # blocking after connect
+        _sock = s
+    except (ConnectionRefusedError, socket.timeout, OSError) as e:
+        raise BridgeConnectionError(
+            f"can't reach Blender addon at {h}:{p} — {e}. "
+            f"Is Blender running with the fantasy_studio_bridge addon enabled?"
+        )
+
+
 def connect(host: Optional[str] = None, port: Optional[int] = None, timeout: float = 5.0) -> None:
     """Open the socket connection to the Blender addon. Raises BridgeConnectionError on failure."""
-    global _sock
     with _lock:
-        if _sock is not None:
-            return
-        h = host or _host
-        p = port or _port
-        try:
-            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            s.settimeout(timeout)
-            s.connect((h, p))
-            s.settimeout(None)  # blocking after connect
-            _sock = s
-        except (ConnectionRefusedError, socket.timeout, OSError) as e:
-            raise BridgeConnectionError(
-                f"can't reach Blender addon at {h}:{p} — {e}. "
-                f"Is Blender running with the fantasy_studio_bridge addon enabled?"
-            )
+        _connect_locked(host, port, timeout)
 
 
 def disconnect() -> None:
@@ -148,7 +159,7 @@ def call(op: str, params: Optional[dict] = None, timeout: float = DEFAULT_TIMEOU
             if not auto_reconnect:
                 raise BridgeConnectionError(f"socket error on op={op}: {e}")
             try:
-                connect()
+                _connect_locked()          # we already hold _lock — see above
                 assert _sock is not None
                 _sock.settimeout(timeout)
                 _send_frame(_sock, req)
