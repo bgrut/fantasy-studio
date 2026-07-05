@@ -192,11 +192,25 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             osm = build_osm_city(place, spec.world.size_m)
             if osm:
                 spec.world.level["osm"] = osm
+                # streets are the level: the mission path FOLLOWS the road
+                # route (race rivals, collectibles and the goal pin to it) and
+                # the ground is dead flat so nothing pokes through the asphalt
+                route = osm.get("route")
+                if route:
+                    spec.world.level["path"] = route
+                    spec.world.level["goal"] = list(route[-1])
+                    n = len(route)
+                    spec.world.level["collect_points"] = [
+                        list(route[int((k + 1) / (n_obj + 1) * (n - 1))])
+                        for k in range(n_obj)]
+                    g = spec.world.level["grid_n"]
+                    spec.world.level["heights"] = [0.0] * (g * g)
                 spec.world.scatter = [s for s in spec.world.scatter
                                       if "building" not in Path(s.asset).name]
                 job.setdefault("notes", []).append(
                     f"real-city map: {place} ({len(osm['buildings'])} buildings, "
-                    f"{len(osm['roads'])} roads, © OpenStreetMap contributors)")
+                    f"{len(osm['roads'])} roads, route={'yes' if route else 'no'}, "
+                    f"© OpenStreetMap contributors)")
             else:
                 job.setdefault("notes", []).append(
                     f"OSM fetch for '{place}' unavailable — procedural city used")

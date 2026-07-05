@@ -142,10 +142,78 @@ def detect_place(prompt: str) -> str | None:
     return None
 
 
+def _road_route(roads: list[dict], half: float) -> list[list[float]] | None:
+    """Longest drivable route through the road graph, starting from the point
+    nearest the city center. Dijkstra over snapped polyline nodes; the race
+    path (and every vehicle NPC) follows REAL streets, not a random walk."""
+    key = lambda p: (round(p[0] / 3.0), round(p[1] / 3.0))
+    adj: dict = {}
+    coord: dict = {}
+    for r in roads:
+        pts = r["pts"]
+        for a, b in zip(pts, pts[1:]):
+            ka, kb = key(a), key(b)
+            if ka == kb:
+                continue
+            coord.setdefault(ka, a)
+            coord.setdefault(kb, b)
+            d = math.hypot(b[0] - a[0], b[1] - a[1])
+            adj.setdefault(ka, []).append((kb, d))
+            adj.setdefault(kb, []).append((ka, d))
+    if not adj:
+        return None
+    start = min(coord, key=lambda k: coord[k][0] ** 2 + coord[k][1] ** 2)
+    import heapq
+    dist = {start: 0.0}
+    prev: dict = {}
+    pq = [(0.0, start)]
+    while pq:
+        d, u = heapq.heappop(pq)
+        if d > dist.get(u, 1e18):
+            continue
+        for v, w in adj.get(u, []):
+            nd = d + w
+            if nd < dist.get(v, 1e18):
+                dist[v] = nd
+                prev[v] = u
+                heapq.heappush(pq, (nd, v))
+    # farthest reachable node, capped so the route fits the world
+    target_len = half * 1.5
+    end = max(dist, key=lambda k: min(dist[k], target_len))
+    chain = [end]
+    while chain[-1] != start:
+        chain.append(prev[chain[-1]])
+    chain.reverse()
+    route, acc = [list(coord[start])], 0.0
+    for k in chain[1:]:
+        p = coord[k]
+        acc += math.hypot(p[0] - route[-1][0], p[1] - route[-1][1])
+        route.append([p[0], p[1]])
+        if acc >= target_len:
+            break
+    if acc < 40.0:                       # too short to race — keep procedural path
+        return None
+    # resample to ~10m spacing (waypoint AI cuts corners on sparse polylines),
+    # capped at 40 points (runtime pathDist cost)
+    dense = [route[0]]
+    for a, b in zip(route, route[1:]):
+        seg = math.hypot(b[0] - a[0], b[1] - a[1])
+        for k in range(1, int(seg // 10) + 1):
+            t = k * 10 / seg
+            dense.append([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t])
+        dense.append(list(b))
+    step = max(1, len(dense) // 40)
+    thinned = dense[::step]
+    if thinned[-1] != dense[-1]:
+        thinned.append(dense[-1])
+    return [[round(x, 1), round(z, 1)] for x, z in thinned]
+
+
 def build_osm_city(place: str, size_m: float, max_buildings: int = 320) -> dict | None:
     """Real building footprints + roads for `place` (video pipeline's OSM
-    fetch/parse, shared cache). Returns None on any failure — the procedural
-    city recipe stays the fallback."""
+    fetch/parse, shared cache). The whole district is SHIFTED so the road
+    route starts at the player spawn (origin). Returns None on any failure —
+    the procedural city recipe stays the fallback."""
     try:
         from pathlib import Path
         from app.orchestrator import osm_city
@@ -173,12 +241,40 @@ def build_osm_city(place: str, size_m: float, max_buildings: int = 320) -> dict 
         for b in blds:
             b.pop("d", None)
         roads = []
-        for r in data.get("roads", [])[:80]:
+        for r in data.get("roads", [])[:120]:
             pts = [(round(float(x), 1), round(float(y), 1)) for x, y in r.get("path", [])]
             if len(pts) >= 2:
                 roads.append({"pts": pts, "w": round(float(r.get("width", 7.0)), 1)})
         if len(blds) < 10:
             return None
-        return {"place": place, "buildings": blds[:max_buildings], "roads": roads}
+
+        # ROUTE: longest street chain from the district center; shift the whole
+        # district so the route STARTS at the player spawn (origin).
+        route = _road_route(roads, half)
+        sx, sz = (route[0][0], route[0][1]) if route else (0.0, 0.0)
+        if sx or sz:
+            for b in blds:
+                b["pts"] = [(round(x - sx, 1), round(z - sz, 1)) for x, z in b["pts"]]
+            for r in roads:
+                r["pts"] = [(round(x - sx, 1), round(z - sz, 1)) for x, z in r["pts"]]
+            if route:
+                route = [[round(x - sx, 1), round(z - sz, 1)] for x, z in route]
+        # re-filter to world bounds after the shift
+        def _inside(pts):
+            cx = sum(p[0] for p in pts) / len(pts)
+            cz = sum(p[1] for p in pts) / len(pts)
+            return abs(cx) < half * 0.95 and abs(cz) < half * 0.95
+        blds = [b for b in blds if _inside(b["pts"])]
+        if route:                        # truncate the route at the walls
+            clipped = []
+            for p in route:
+                if abs(p[0]) >= half * 0.85 or abs(p[1]) >= half * 0.85:
+                    break
+                clipped.append(p)
+            route = clipped if len(clipped) >= 3 else None
+        out = {"place": place, "buildings": blds[:max_buildings], "roads": roads}
+        if route:
+            out["route"] = route
+        return out
     except Exception:
         return None

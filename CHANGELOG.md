@@ -28,6 +28,27 @@ Pre-1.0 versions are internal milestones during the constraint sprint leading to
   fixes the "car hovers sideways" bug. Suspension feel: pitch under accel/brake,
   roll into turns. (Wheel spin needs separable wheel meshes — queued for GPU day.)
 
+### Fixed/Added — Phase 37.1: street-pinned racing + facades + blade grass (2026-07-05)
+- **Nose direction verified by rendering** (not eyeballed): the alignment sign
+  was flipped once from an ambiguous follow-cam screenshot; now the car/truck
+  GLBs were Blender-rendered from known axes — car nose is +X (−90° align),
+  truck already lies nose-+Z (no rotation). Comment in the runtime warns
+  against re-flipping without renders.
+- **Races run on REAL streets**: Dijkstra route through the OSM road graph
+  (longest chain from the district center, resampled to ~10 m waypoints); the
+  whole district shifts so the route starts at the player spawn. Rivals line
+  up on a starting grid beside the player facing down the street and follow
+  the route (verified: all 5 rivals at 0.0 m from the street polyline through
+  the full race). Goal + collectibles pin to the route; OSM cities are dead flat.
+- **Procedural building facades on every building**: extrusions split into
+  walls/roofs; walls get a metre-scaled window-grid texture with a matching
+  emissive map (a fraction of windows glow) — no assets, works for any city.
+- **Grass is blades, not rectangles**: tapered to a tip, bowed, random lean,
+  dark-rooted vertical shading; skips building interiors.
+- **Vehicle paint**: glossier material response (roughness 0.38 / metalness
+  0.28) masks most of the CPU-era texture blotchiness; true fix is the GPU
+  texture-tier regeneration on day 1.
+
 ### Added — Phase 26/26.5: playable game export (2026-07-02)
 - **New output backend**: `backend/app/game_export/` turns a prompt or PRD into a
   playable, self-contained three.js web game (offline; vendored three.js r170 MIT +

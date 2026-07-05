@@ -287,10 +287,27 @@ async function main() {
     if (!enabled) return false;
     const bb = new THREE.Box3().setFromObject(root);
     if ((bb.max.x - bb.min.x) > (bb.max.z - bb.min.z) * 1.15) {
-      root.rotation.y += Math.PI / 2;          // long axis -> +Z, nose forward
+      // VERIFIED against Blender renders (2026-07-05): generator vehicles that
+      // lie along X carry the NOSE at +X, so -90° puts the nose on +Z.
+      // (+90° drives them backwards — do not "fix" this again without
+      // re-rendering the asset. Per-asset flips: spec yaw_offset_deg = 180.)
+      root.rotation.y -= Math.PI / 2;
       return true;
     }
     return false;
+  }
+  // generated-car paint reads flat/blotchy until the GPU texture tier lands —
+  // a glossier material response under the Sky light hides most of it
+  function polishVehiclePaint(root, enabled) {
+    if (!enabled) return;
+    root.traverse(o => {
+      if (!o.isMesh) return;
+      for (const m of Array.isArray(o.material) ? o.material : [o.material]) {
+        if (m && m.isMeshStandardMaterial) {
+          m.roughness = 0.38; m.metalness = 0.28; m.needsUpdate = true;
+        }
+      }
+    });
   }
 
   // ── scatter props (shared world-dressing manifest — video side reuses it) ─
@@ -324,9 +341,23 @@ async function main() {
     return false;
   }
   if (OSM && OSM.buildings && OSM.buildings.length) {
-    const geos = [];
+    const wallGeos = [], capGeos = [];
     const tintA = new THREE.Color(0x8d8a84), tintB = new THREE.Color(0x5f6b78);
     const rngB = mulberry32(SPEC.seed + 77);
+    // ExtrudeGeometry groups: materialIndex 0 = caps (roof/underside after the
+    // rotate), 1 = side walls. Split so walls get the facade texture and roofs
+    // stay plain — window grids on rooftops read as a bug from the follow-cam.
+    function splitGroups(geo) {
+      for (const g of geo.groups) {
+        const sub = new THREE.BufferGeometry();
+        for (const name of ['position', 'normal', 'uv', 'color']) {
+          const a = geo.attributes[name];
+          sub.setAttribute(name, new THREE.BufferAttribute(
+            a.array.slice(g.start * a.itemSize, (g.start + g.count) * a.itemSize), a.itemSize));
+        }
+        (g.materialIndex === 0 ? capGeos : wallGeos).push(sub);
+      }
+    }
     for (const b of OSM.buildings) {
       let mnx = 1e9, mnz = 1e9, mxx = -1e9, mxz = -1e9;
       for (const [px, pz] of b.pts) {
@@ -349,21 +380,54 @@ async function main() {
         const nv = geo.attributes.position.count, cols = new Float32Array(nv * 3);
         for (let i = 0; i < nv; i++) { cols[i * 3] = tint.r; cols[i * 3 + 1] = tint.g; cols[i * 3 + 2] = tint.b; }
         geo.setAttribute('color', new THREE.BufferAttribute(cols, 3));
-        geos.push(geo);
+        splitGroups(geo);
         bldBoxes.push([mnx, mnz, mxx, mxz]);
         world.createCollider(RAPIER.ColliderDesc
           .cuboid((mxx - mnx) / 2, h / 2, (mxz - mnz) / 2)
           .setTranslation(cx, gy + h / 2, cz));
       } catch (e) { /* one bad footprint never kills the city */ }
     }
-    if (geos.length) {
-      const merged = mergeGeometries(geos, false);
-      const city = new THREE.Mesh(merged, new THREE.MeshStandardMaterial({
-        vertexColors: true, roughness: 0.92, metalness: 0.05 }));
-      city.castShadow = true; city.receiveShadow = true;
-      scene.add(city);
-      console.log('[game] OSM city "' + (OSM.place || '?') + '": ' + geos.length +
-                  ' buildings, ' + (OSM.roads || []).length + ' roads');
+    if (wallGeos.length) {
+      // procedural FACADE: window grid tiled in metres over the extrude UVs
+      // (one 6m x 6m tile: 4 windows across, 2 floors) + a matching emissive
+      // map so a fraction of windows glow — detail on EVERY building, no
+      // assets, any city.
+      const fc = document.createElement('canvas'); fc.width = fc.height = 256;
+      const fx = fc.getContext('2d');
+      const ec = document.createElement('canvas'); ec.width = ec.height = 256;
+      const ex = ec.getContext('2d');
+      fx.fillStyle = '#969490'; fx.fillRect(0, 0, 256, 256);   // multiplied by tint
+      ex.fillStyle = '#000000'; ex.fillRect(0, 0, 256, 256);
+      const rngW = mulberry32(SPEC.seed + 5);
+      for (let wy = 0; wy < 2; wy++) for (let wx = 0; wx < 4; wx++) {
+        const x = 10 + wx * 64, y = 16 + wy * 128, lit = rngW() < 0.28;
+        fx.fillStyle = lit ? '#e8d9a8' : (rngW() < 0.5 ? '#2c3138' : '#3d4550');
+        fx.fillRect(x, y, 40, 76);
+        fx.strokeStyle = '#5b5b60'; fx.lineWidth = 3; fx.strokeRect(x, y, 40, 76);
+        fx.fillStyle = '#77767c'; fx.fillRect(x - 4, y + 76, 48, 6);   // sill
+        if (lit) { ex.fillStyle = '#cfa96a'; ex.fillRect(x, y, 40, 76); }
+      }
+      const facadeTex = new THREE.CanvasTexture(fc);
+      const litTex = new THREE.CanvasTexture(ec);
+      for (const t of [facadeTex, litTex]) {
+        t.wrapS = t.wrapT = THREE.RepeatWrapping;
+        t.repeat.set(1 / 6, 1 / 6);                    // extrude UVs are metres
+        t.anisotropy = 4;
+      }
+      facadeTex.colorSpace = THREE.SRGBColorSpace;
+      const walls = new THREE.Mesh(mergeGeometries(wallGeos, false),
+        new THREE.MeshStandardMaterial({ vertexColors: true, map: facadeTex,
+          emissive: 0xffc873, emissiveMap: litTex, emissiveIntensity: 0.4,
+          roughness: 0.85, metalness: 0.08 }));
+      const roofs = new THREE.Mesh(mergeGeometries(capGeos, false),
+        new THREE.MeshStandardMaterial({ vertexColors: true, color: 0x77746e,
+          roughness: 0.96, metalness: 0.02 }));
+      for (const m of [walls, roofs]) {
+        m.castShadow = true; m.receiveShadow = true;
+        scene.add(m);
+      }
+      console.log('[game] OSM city "' + (OSM.place || '?') + '": ' + bldBoxes.length +
+                  ' buildings (textured facades), ' + (OSM.roads || []).length + ' roads');
     }
   }
   const rng = mulberry32(SPEC.seed);
@@ -437,22 +501,42 @@ async function main() {
     const gcolA = new THREE.Color(...SPEC.world.ground_color)
       .lerp(new THREE.Color(0x3f6b2a), 0.55).offsetHSL(0, 0.08, 0.06);
     const gcolB = gcolA.clone().offsetHSL(0.02, 0.05, -0.07);
-    const blade = new THREE.PlaneGeometry(0.11, 0.32);
-    blade.translate(0, 0.16, 0);
-    const bmat = new THREE.MeshStandardMaterial({ side: THREE.DoubleSide, roughness: 1.0 });
+    // REAL blade shape: tapered to a tip, bowed forward, shaded dark at the
+    // root — reads as grass, not floating rectangles
+    const blade = new THREE.PlaneGeometry(0.10, 0.34, 1, 3);
+    blade.translate(0, 0.17, 0);
+    {
+      const bp = blade.attributes.position;
+      const bcol = new Float32Array(bp.count * 3);
+      for (let i = 0; i < bp.count; i++) {
+        const t = bp.getY(i) / 0.34;               // 0 root -> 1 tip
+        bp.setX(i, bp.getX(i) * (1 - 0.85 * t));   // taper to a point
+        bp.setZ(i, t * t * 0.07);                  // bow
+        const sh = 0.5 + 0.5 * t;                  // root shadow
+        bcol[i * 3] = sh; bcol[i * 3 + 1] = sh; bcol[i * 3 + 2] = sh;
+      }
+      blade.setAttribute('color', new THREE.BufferAttribute(bcol, 3));
+      blade.computeVertexNormals();
+    }
+    const bmat = new THREE.MeshStandardMaterial({ side: THREE.DoubleSide, roughness: 1.0,
+                                                  vertexColors: true });
     const GR = Math.min(gsize * 0.48, 70);
     const GN = Math.min(13000, Math.floor(GR * GR * 2.2));
     const rngG = mulberry32(SPEC.seed + 21);
     for (const baseRot of [0, Math.PI / 2]) {
       const im = new THREE.InstancedMesh(blade, bmat, GN);
       im.frustumCulled = false;
-      const M = new THREE.Matrix4(), SV = new THREE.Vector3(), C = new THREE.Color();
+      const M = new THREE.Matrix4(), RX = new THREE.Matrix4();
+      const SV = new THREE.Vector3(), C = new THREE.Color();
       let placed = 0;
       for (let i = 0; i < GN * 2 && placed < GN; i++) {
         const x = (rngG() - 0.5) * 2 * GR, z = (rngG() - 0.5) * 2 * GR;
         if (pathDist(x, z) < CORR * 0.5 && rngG() < 0.7) continue;   // trodden path
+        if (inBldg(x, z, 0.5)) continue;                             // not through floors
         const s = 0.7 + rngG() * 0.8;
-        M.makeRotationY(baseRot + rngG() * 0.9).scale(SV.set(s, s * (0.8 + rngG() * 0.5), s));
+        M.makeRotationY(baseRot + rngG() * 0.9)
+          .multiply(RX.makeRotationX((rngG() - 0.5) * 0.5))          // random lean
+          .scale(SV.set(s, s * (0.8 + rngG() * 0.5), s));
         M.setPosition(x, hAt(x, z), z);
         im.setMatrixAt(placed, M);
         im.setColorAt(placed, C.lerpColors(gcolA, gcolB, rngG()));
@@ -523,6 +607,7 @@ async function main() {
   // ── NPC entities: wander / follow template AI ────────────────────────────
   const npcs = [];
   const rngN = mulberry32(SPEC.seed + 31);
+  let vehIdx = 0;                       // starting-grid slot for vehicle rivals
   for (const ent of SPEC.entities || []) {
     try {
       const gltf = await loadGLB(ent.asset);
@@ -547,15 +632,31 @@ async function main() {
         const h = Math.max(box.max.y - box.min.y, 1e-3);
         inst.scale.multiplyScalar((ent.height_m || 1.0) / h);
         alignLongAxis(inst, ent.behavior === 'vehicle');   // rivals drive nose-first too
+        polishVehiclePaint(inst, ent.behavior === 'vehicle');
         const b2 = new THREE.Box3().setFromObject(inst);
         const holder = new THREE.Group();
         inst.position.y = -b2.min.y;
         holder.add(inst);
-        // hostiles spawn FAR (out along the path, guarding the objectives)
-        const spread = hostile ? 0.6 : 0.3;
-        holder.position.set((rngN() - 0.5) * gsize * spread, 0, (rngN() - 0.5) * gsize * spread);
-        if (hostile && Math.hypot(holder.position.x, holder.position.z) < 14) {
-          holder.position.x += Math.sign(holder.position.x || 1) * 16;
+        let startYaw = rngN() * Math.PI * 2;
+        if (ent.behavior === 'vehicle' && PATH && PATH.length > 1) {
+          // STARTING GRID: rivals line up beside the player at the route start,
+          // facing down the street — no more cars materializing inside blocks
+          const hd = Math.atan2(PATH[1][0] - PATH[0][0], PATH[1][1] - PATH[0][1]);
+          const rx = Math.cos(hd), rz = -Math.sin(hd);         // lateral (right)
+          const lane = (vehIdx % 2 ? 1 : -1) * (2.4 + Math.floor(vehIdx / 2) * 0.001);
+          const back = 5 + Math.floor(vehIdx / 2) * 5.5;
+          holder.position.set(
+            PATH[0][0] + rx * lane - Math.sin(hd) * back, 0,
+            PATH[0][1] + rz * lane - Math.cos(hd) * back);
+          startYaw = hd;
+          vehIdx++;
+        } else {
+          // hostiles spawn FAR (out along the path, guarding the objectives)
+          const spread = hostile ? 0.6 : 0.3;
+          holder.position.set((rngN() - 0.5) * gsize * spread, 0, (rngN() - 0.5) * gsize * spread);
+          if (hostile && Math.hypot(holder.position.x, holder.position.z) < 14) {
+            holder.position.x += Math.sign(holder.position.x || 1) * 16;
+          }
         }
         scene.add(holder);
         // per-instance animation: idle/walk/run clips crossfade with movement
@@ -569,7 +670,7 @@ async function main() {
           anim.cur = anim.idle; anim.cur.play();
         }
         npcs.push({ obj: holder, speed: ent.speed || 1.5, behavior: ent.behavior || 'wander',
-                    target: null, yaw: rngN() * Math.PI * 2, phase: rngN() * Math.PI * 2,
+                    target: null, yaw: startYaw, phase: rngN() * Math.PI * 2,
                     hp: ent.hp || 3, cd: 0, dead: false, dieT: 0, mats, anim });
       }
     } catch (e) { fail(e.message); }
@@ -775,6 +876,7 @@ async function main() {
   // runtime's forward is +Z — auto-align the LONG axis so the car drives
   // nose-first instead of sliding sideways. yaw_offset_deg still flips 180.
   alignLongAxis(pRoot, (P.mode || 'walk') === 'drive');
+  polishVehiclePaint(pRoot, (P.mode || 'walk') === 'drive');
   holder.rotation.y = THREE.MathUtils.degToRad(P.yaw_offset_deg || 0);
   const playerObj = new THREE.Group();
   playerObj.add(holder);
@@ -1045,6 +1147,9 @@ async function main() {
   const fpsEl = document.getElementById('fps');
   let fCount = 0, fTime = 0, modelYaw = 0;
   const DRIVE = SPEC.player.mode === 'drive';    // arcade car physics
+  if (DRIVE && PATH && PATH.length > 1) {        // face down the street at spawn
+    modelYaw = Math.atan2(PATH[1][0] - PATH[0][0], PATH[1][1] - PATH[0][1]);
+  }
   let vSpeed = 0, hudTick = 0, prevV = 0, leanP = 0, leanR = 0;
   const camTarget = new THREE.Vector3();
 
