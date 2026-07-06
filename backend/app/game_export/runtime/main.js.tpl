@@ -977,6 +977,15 @@ async function main() {
   // whale body) → long axis to +Z. FLYERS travel along their SHORT horizontal
   // axis — the long one is the WINGSPAN, which must stay lateral or the
   // dragon flies sideways. yaw_offset_deg still handles per-asset 180s.
+  if (['fly', 'swim'].includes(P.mode || 'walk')) {
+    // VERTICAL-MESH GUARD: a creature standing on its nose (mesh long axis
+    // = Y) gets laid flat before any yaw logic — no swimmer swims upright
+    const bv = new THREE.Box3().setFromObject(pRoot);
+    const ex = bv.max.x - bv.min.x, ey = bv.max.y - bv.min.y, ez = bv.max.z - bv.min.z;
+    if (ey > 1.25 * Math.max(ex, ez)) {
+      pRoot.rotation.x -= Math.PI / 2;         // pitch nose-down mesh to horizontal
+    }
+  }
   if ((P.mode || 'walk') === 'fly') {
     const bb = new THREE.Box3().setFromObject(pRoot);
     if ((bb.max.z - bb.min.z) > (bb.max.x - bb.min.x) * 1.15) {

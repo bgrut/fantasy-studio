@@ -70,6 +70,18 @@ export default function Templates() {
 
   const [detailItem, setDetailItem] = useState<AssetLibraryItem | null>(null)
 
+  // YOUR CHARACTERS (2026-07-06): the generated library — every character
+  // created from a prompt, newest first. These ARE the marketplace seed;
+  // the curated CC-BY set below is the fallback catalog.
+  type LibChar = { kind: string; ready: boolean; size_mb: number | null; thumb: string | null }
+  const [libChars, setLibChars] = useState<LibChar[]>([])
+  useEffect(() => {
+    fetch('/api/game/library')
+      .then(r => r.json())
+      .then(d => setLibChars(d.assets ?? []))
+      .catch(() => setLibChars([]))
+  }, [])
+
   // Protect against race conditions when switching categories quickly
   const requestIdRef = useRef(0)
 
@@ -166,6 +178,48 @@ export default function Templates() {
           </div>
         </div>
       </div>
+
+      {/* YOUR CHARACTERS — generated from prompts, newest first */}
+      {libChars.length > 0 && (
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <Sparkles className="w-4 h-4 text-[#5cffc9]" />
+            <h2 className="text-lg font-semibold text-white">Your characters</h2>
+            <span className="text-xs font-mono text-[#807d99]">
+              {libChars.length} created · playable in games &amp; castable in videos
+            </span>
+          </div>
+          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-3">
+            {libChars.map((c) => (
+              <button
+                key={c.kind}
+                onClick={() => {
+                  const sp = new URLSearchParams({ prompt: `a ${c.kind} in an interesting scene` })
+                  window.location.assign(`/studio?${sp.toString()}`)
+                }}
+                className="group rounded-xl overflow-hidden border border-white/[0.06] bg-white/[0.02] hover:border-[#5cffc9]/40 transition-colors text-left"
+                title={`use ${c.kind} in a new prompt`}
+              >
+                <div className="aspect-square bg-[#141220] flex items-center justify-center overflow-hidden">
+                  {c.thumb ? (
+                    <img src={c.thumb} alt={c.kind} loading="lazy"
+                         className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                  ) : (
+                    <span className="text-3xl font-bold"
+                          style={{ color: placeholderColor(c.kind) }}>
+                      {c.kind.charAt(0).toUpperCase()}
+                    </span>
+                  )}
+                </div>
+                <div className="px-2 py-1.5">
+                  <p className="text-xs font-mono text-[#c9c6dd] truncate">{c.kind}</p>
+                  <p className="text-[10px] text-[#4a4764]">generated{c.size_mb ? ` · ${c.size_mb} MB` : ''}</p>
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Category pills */}
       <div className="flex flex-wrap gap-2">

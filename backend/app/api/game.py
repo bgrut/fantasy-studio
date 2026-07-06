@@ -332,17 +332,36 @@ def get_library():
         data = _json.loads(lib.LIBRARY_JSON.read_text(encoding="utf-8"))
     except Exception:
         data = {}
-    for kind, entry in sorted(data.items()):
+    import hashlib as _hl
+    # NEWEST FIRST: library.json preserves insertion order — reverse it so
+    # freshly created characters top the Assets page
+    for kind, entry in list(data.items())[::-1]:
         rel = entry if isinstance(entry, str) else entry.get("raw", "")
         p = lib.BACKEND_ROOT / rel
+        key = _hl.md5(kind.lower().encode("utf-8")).hexdigest()[:12]
+        has_thumb = (BACKEND_ROOT / "renders" / "_actor_cache" / f"{key}_ref.png").exists()
         out.append({
             "kind": kind,
             "ready": isinstance(entry, str),
             "path": rel,
             "size_mb": round(p.stat().st_size / 1e6, 1) if p.exists() else None,
             "source": "generated",
+            "thumb": f"/api/game/library/thumb/{kind}" if has_thumb else None,
         })
     return {"ok": True, "assets": out, "count": len(out)}
+
+
+@router.get("/api/game/library/thumb/{kind}")
+def library_thumb(kind: str):
+    """Character thumbnail = its SDXL reference image (the exact picture the
+    3D mesh was built from — the most honest preview possible)."""
+    import hashlib as _hl
+    from fastapi.responses import FileResponse
+    key = _hl.md5(kind.lower().encode("utf-8")).hexdigest()[:12]
+    p = BACKEND_ROOT / "renders" / "_actor_cache" / f"{key}_ref.png"
+    if not p.exists():
+        raise HTTPException(status_code=404, detail="no thumbnail for this character")
+    return FileResponse(str(p), media_type="image/png")
 
 
 @router.get("/api/game/health")
