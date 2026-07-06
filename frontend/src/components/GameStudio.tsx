@@ -7,7 +7,8 @@ import { Download, FolderPlus, Gamepad2, Loader2, Maximize2, RotateCcw } from 'l
 import { cn } from '@/lib/utils'
 import {
   addLevelToProject, createProject, exportGame, exportProject, gameHealth,
-  getGameJob, listProjects, type GameHealth, type GameJob, type GameProject,
+  getGameJob, listProjects, removeLevelFromProject,
+  type GameHealth, type GameJob, type GameProject,
 } from '@/lib/gameApi'
 
 const GAME_PROMPTS = [
@@ -40,6 +41,7 @@ export default function GameStudio() {
   const [exported, setExported] = useState<{ play_url: string; zip: string; zip_mb: number } | null>(null)
   const pollRef = useRef<number | null>(null)
   const gameFrameRef = useRef<HTMLIFrameElement | null>(null)
+  const [showLevels, setShowLevels] = useState(false)
 
   useEffect(() => {
     gameHealth().then(setHealth).catch(() => setHealth(null))
@@ -59,6 +61,9 @@ export default function GameStudio() {
       }
       const { level_count } = await addLevelToProject(p.id, job.id)
       setProject({ ...p, level_count })
+      // pull fresh titles so the levels manager shows the new entry
+      listProjects().then(({ projects }) =>
+        setProject(projects.find(pr => pr.id === p!.id) ?? null)).catch(() => {})
       setAddedJob(job.id)
       setExported(null)                    // stale export after adding a level
     } catch (e) {
@@ -212,27 +217,58 @@ export default function GameStudio() {
           </>
         )}
 
-        {/* MY GAME: collected levels + one-click export (Phase 34) */}
+        {/* MY GAME: collected levels + manager + one-click export (Phase 34/41) */}
         {project && project.level_count > 0 && (
-          <div className="flex items-center justify-center gap-3 text-xs">
-            <span className="font-mono text-[#a78bfa]">
-              🎮 {project.name}: {project.level_count} level{project.level_count !== 1 ? 's' : ''}
-            </span>
-            <button
-              onClick={doExport}
-              disabled={exporting}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#7c5cff]/15 text-[#a78bfa] hover:bg-[#7c5cff]/25 transition-colors disabled:opacity-50"
-            >
-              {exporting ? <Loader2 className="w-3 h-3 animate-spin" /> : <Download className="w-3 h-3" />}
-              {exporting ? 'Exporting…' : 'Export game'}
-            </button>
-            {exported && (
-              <>
-                <a href={exported.play_url} target="_blank" rel="noreferrer"
-                   className="text-[#5cffc9] hover:underline">▶ Play it</a>
-                <a href={exported.zip}
-                   className="text-[#5cffc9] hover:underline">⬇ Download zip ({exported.zip_mb} MB)</a>
-              </>
+          <div className="space-y-2">
+            <div className="flex items-center justify-center gap-3 text-xs">
+              <button
+                onClick={() => setShowLevels(v => !v)}
+                className="font-mono text-[#a78bfa] hover:text-white transition-colors"
+                title="show / hide level list"
+              >
+                🎮 {project.name}: {project.level_count} level{project.level_count !== 1 ? 's' : ''} {showLevels ? '▾' : '▸'}
+              </button>
+              <button
+                onClick={doExport}
+                disabled={exporting}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#7c5cff]/15 text-[#a78bfa] hover:bg-[#7c5cff]/25 transition-colors disabled:opacity-50"
+              >
+                {exporting ? <Loader2 className="w-3 h-3 animate-spin" /> : <Download className="w-3 h-3" />}
+                {exporting ? 'Exporting…' : 'Export game'}
+              </button>
+              {exported && (
+                <>
+                  <a href={exported.play_url} target="_blank" rel="noreferrer"
+                     className="text-[#5cffc9] hover:underline">▶ Play it</a>
+                  <a href={exported.zip}
+                     className="text-[#5cffc9] hover:underline">⬇ Download zip ({exported.zip_mb} MB)</a>
+                </>
+              )}
+            </div>
+            {showLevels && (
+              <div className="max-w-md mx-auto rounded-xl border border-white/[0.06] divide-y divide-white/[0.05]">
+                {(project.level_titles ?? []).map((t, i) => (
+                  <div key={i} className="flex items-center justify-between px-3 py-1.5 text-xs">
+                    <span className="text-[#c9c6dd] font-mono truncate">
+                      {i + 1}. {t || 'untitled level'}
+                    </span>
+                    <button
+                      onClick={async () => {
+                        try {
+                          await removeLevelFromProject(project.id, i)
+                          const { projects } = await listProjects()
+                          setProject(projects.find(p => p.id === project.id) ?? null)
+                          setExported(null)
+                        } catch { /* leave list as-is */ }
+                      }}
+                      className="text-[#ff5c8a] hover:text-white transition-colors ml-3"
+                      title="remove this level"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
         )}

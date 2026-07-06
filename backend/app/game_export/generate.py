@@ -164,17 +164,23 @@ def ensure_asset(kind: str, pattern: str | None = None, target_tris: int = 45000
 
     if not raw_glb.exists():
         ref_png = CACHE_DIR / f"{key}_ref.png"
-        if verbose:
-            print(f"[game] generating '{kind}' ({pattern}) via SDXL + TRELLIS.2 ...")
-        generate_reference(copy.deepcopy(_minimal_slots(kind, pattern)),
-                           output_path=ref_png, style="photoreal", seed=42)
-        try:
-            unload_reference_pipeline()
-            import torch as _t
-            if _t.cuda.is_available():
-                _t.cuda.empty_cache()
-        except Exception:
-            pass
+        if ref_png.exists():
+            # reference-cache hit (mesh re-roll / orientation fix): skip the
+            # 20-min SDXL repaint and go straight to image→3D
+            if verbose:
+                print(f"[game] reference cache hit for '{kind}' — meshing only")
+        else:
+            if verbose:
+                print(f"[game] generating '{kind}' ({pattern}) via SDXL + TRELLIS.2 ...")
+            generate_reference(copy.deepcopy(_minimal_slots(kind, pattern)),
+                               output_path=ref_png, style="photoreal", seed=42)
+            try:
+                unload_reference_pipeline()
+                import torch as _t
+                if _t.cuda.is_available():
+                    _t.cuda.empty_cache()
+            except Exception:
+                pass
         # engine order: CUDA gets the quality chain; CPU goes straight to
         # TripoSR (the only CPU-capable engine — TRELLIS.2/TripoSG need CUDA)
         _chain = ["triposr"] if cpu_gen else ["trellis2", "triposg", "triposr"]

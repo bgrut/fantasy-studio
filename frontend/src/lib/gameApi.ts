@@ -78,6 +78,11 @@ export async function addLevelToProject(projectId: number, jobId: number) {
   }))
 }
 
+export async function removeLevelFromProject(projectId: number, index: number) {
+  return j<{ ok: boolean; removed: string | null; level_count: number }>(
+    await fetch(`/api/game/projects/${projectId}/levels/${index}`, { method: 'DELETE' }))
+}
+
 export async function exportProject(projectId: number) {
   return j<{ ok: boolean; levels: number; play_url: string; zip: string; zip_mb: number }>(
     await fetch(`/api/game/projects/${projectId}/export`, { method: 'POST' }))

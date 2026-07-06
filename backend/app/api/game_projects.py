@@ -128,6 +128,22 @@ def add_level(pid: int, req: LevelAdd):
     return {"ok": True, "level_count": len(p["levels"]), "project_id": pid}
 
 
+@router.delete("/api/game/projects/{pid}/levels/{index}")
+def remove_level(pid: int, index: int):
+    """Levels manager (2026-07-06): users can now SEE and PRUNE their game."""
+    with _plock:
+        data = _load()
+        p = data["projects"].get(str(pid))
+        if not p:
+            raise HTTPException(status_code=404, detail="project not found")
+        if not (0 <= index < len(p["levels"])):
+            raise HTTPException(status_code=400, detail="level index out of range")
+        removed = p["levels"].pop(index)
+        _save(data)
+    return {"ok": True, "removed": removed.get("title"),
+            "level_count": len(p["levels"])}
+
+
 @router.post("/api/game/projects/{pid}/export")
 def export_project(pid: int):
     from app.game_export.spec import spec_from_dict

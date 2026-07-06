@@ -683,6 +683,26 @@ async function main() {
   }
 
   // ── NPC entities: wander / follow template AI ────────────────────────────
+  // RACE COUNTDOWN (game-design pass, 2026-07-06): the grid HOLDS through a
+  // 3…2…1…GO! before anyone (player included) can launch — racing 101.
+  const IS_RACE = (SPEC.objectives || []).some(o => o.kind === 'race');
+  let raceGo = !IS_RACE;
+  if (IS_RACE) {
+    const cd = document.createElement('div');
+    cd.style.cssText = 'position:fixed;top:36%;left:50%;transform:translate(-50%,-50%);'
+      + 'font:800 96px system-ui;color:#ffd166;text-shadow:0 4px 26px rgba(0,0,0,.6);'
+      + 'z-index:30;pointer-events:none;';
+    document.body.appendChild(cd);
+    let n = 3;
+    cd.textContent = n;
+    const iv = setInterval(() => {
+      n--;
+      if (n > 0) cd.textContent = n;
+      else if (n === 0) { cd.textContent = 'GO!'; raceGo = true; }
+      else { cd.remove(); clearInterval(iv); }
+    }, 900);
+  }
+
   const npcs = [];
   const rngN = mulberry32(SPEC.seed + 31);
   let vehIdx = 0;                       // starting-grid slot for vehicle rivals
@@ -774,8 +794,10 @@ async function main() {
           tx = n.target[0]; tz = n.target[1];
         } else { tx = n.target[0]; tz = n.target[1]; }
       } else if (n.behavior === 'vehicle') {
-        // RACE AI: drive the level path toward the goal, record finish order
-        if (!n.finished) {
+        // RACE AI: drive the level path toward the goal, record finish order.
+        // The grid holds until the countdown says GO.
+        if (!raceGo) { /* engines revving */ }
+        else if (!n.finished) {
           if (n.wp === undefined) { n.wp = 1; n.vjit = 0.85 + rngN() * 0.35; }
           const P2 = PATH || [[0, 0], [goalPos ? goalPos.x : 40, goalPos ? goalPos.z : 40]];
           const wpt = P2[Math.min(n.wp, P2.length - 1)];
@@ -1289,8 +1311,8 @@ async function main() {
     const dir = new THREE.Vector3();
     if (DRIVE) {
       // CAR PHYSICS: throttle/brake + speed-scaled steering — no crab-walking
-      const throttle = -mv.z;                       // W/up = forward
-      const steer = mv.x;
+      const throttle = raceGo ? -mv.z : 0;          // W/up = forward (after GO)
+      const steer = raceGo ? mv.x : 0;
       const maxV = mv.run ? P.run_speed : P.walk_speed;
       if (throttle > 0.05) vSpeed += 11 * throttle * dt;
       else if (throttle < -0.05) vSpeed -= 14 * -throttle * dt;   // brake/reverse

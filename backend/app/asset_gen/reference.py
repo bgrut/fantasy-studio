@@ -87,6 +87,10 @@ PATTERN_REFERENCE_FRAMING: Dict[str, str] = {
     # this SDXL freestyles a coiled head-shot ILLUSTRATION that image-to-3D
     # turns to soup. Same recipe as quadruped: whole body, side-ish, isolated.
     "flying":    "perfect side profile, whole body visible in frame, wings spread wide and level, standing on the ground, motionless, plain background, single subject, clean silhouette, photorealistic",
+    # aquatic (2026-07-06): without this SDXL painted a WALLPAPER PATTERN of
+    # many small whales — image-to-3D extruded the pattern into a nonsense
+    # slab. ONE animal, whole body, side-on, photoreal.
+    "aquatic":   "exactly one single animal, perfect side profile, whole body visible in frame, horizontal swimming pose, centered, plain light background, clean silhouette, photorealistic, detailed skin texture",
 }
 
 # Negative-prompt additions per pattern — explicitly veto problematic poses
@@ -95,6 +99,7 @@ PATTERN_NEGATIVE: Dict[str, str] = {
     "biped":     "dynamic pose, motion blur, running, jumping, tilted, perspective distortion, cropped, anatomy figure, ecorche, flayed, skinless, exposed muscle, muscle suit, x-ray, medical illustration, red and blue veins, nude, naked",
     "vehicle":   "moving, motion blur, tilted, perspective distortion",
     "flying":    "flying, mid-air, coiled, curled, head close-up, portrait, tattoo style, line art, illustration, logo, emblem, circular composition, cropped body, motion blur, dynamic pose",
+    "aquatic":   "pattern, wallpaper, multiple animals, many, group, pod, school of fish, repeated, tiled, seamless pattern, illustration, cartoon, drawing, logo, fabric print, cropped body, top view",
 }
 
 

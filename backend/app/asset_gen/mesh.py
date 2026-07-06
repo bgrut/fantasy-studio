@@ -601,6 +601,13 @@ def generate_mesh(
     if chosen not in MESH_ENGINES:
         raise ValueError(f"unknown engine {chosen!r}; valid: {MESH_ENGINES}")
 
+    # NEW BODY CLASSES (2026-07-06): flying/aquatic references use the SAME
+    # side-profile framing as quadrupeds, so they take the same orientation
+    # path. Without this the canonicalizer skipped them entirely and the
+    # dragon shipped lying on its side.
+    if base_pattern in ("flying", "aquatic"):
+        base_pattern = "quadruped"
+
     from PIL import Image
     src = Image.open(image_path).convert("RGB")
 
