@@ -151,6 +151,17 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         spec.player.name = cast
         if abs(spec.player.height_m - 1.75) < 1e-6:      # untouched default -> species height
             spec.player.height_m = library.default_height(cast)
+        # per-asset heading facts (play-verified): a generated mesh's nose sign
+        # is ambiguous — side-profile refs face either way — so the correction
+        # lives as DATA in assets/library_heading.json, never a runtime guess.
+        try:
+            import json as _json
+            _headings = _json.loads((BACKEND_ROOT / "assets" / "library_heading.json")
+                                    .read_text(encoding="utf-8"))
+            if cast in _headings:
+                spec.player.yaw_offset_deg = float(_headings[cast])
+        except Exception:
+            pass
         job["player"] = cast
         if not spec.world.scatter:
             spec.world.scatter = [ScatterSpec(**s) for s in game_scatter(spec.world.name)]

@@ -1149,6 +1149,10 @@ async function main() {
   const FLY = SPEC.player.mode === 'fly';   // dragons/birds/aircraft — flight loop below
   const SWIM = SPEC.player.mode === 'swim'; // whales/sharks/subs — swim loop below
   let yaw = 0, pitch = 0.35, dragging = false, px = 0, py = 0;
+  let camZoom = 1, freeLookT = 0;   // wheel zoom · seconds of free-look after a drag
+  addEventListener('wheel', e => {
+    camZoom = THREE.MathUtils.clamp(camZoom * (1 + Math.sign(e.deltaY) * 0.09), 0.45, 2.6);
+  }, { passive: true });
   renderer.domElement.addEventListener('pointerdown', e => {
     if (e.target.closest('#stick')) return;
     dragging = true; px = e.clientX; py = e.clientY;
@@ -1158,6 +1162,7 @@ async function main() {
     if (!dragging) return;
     yaw -= (e.clientX - px) * 0.005; pitch = THREE.MathUtils.clamp(pitch + (e.clientY - py) * 0.004, 0.05, 1.2);
     px = e.clientX; py = e.clientY;
+    freeLookT = 3;
   });
   // touch joystick
   const stick = document.getElementById('stick'), nub = document.getElementById('nub');
@@ -1320,7 +1325,16 @@ async function main() {
   // ── main loop ────────────────────────────────────────────────────────────
   const clock = new THREE.Clock();
   const fpsEl = document.getElementById('fps');
-  let fCount = 0, fTime = 0, modelYaw = 0;
+  // spawn facing AWAY from the camera (camera sits at +yaw behind the player,
+  // so "away" is yaw+π) — otherwise the first W press whips the hero 180° and
+  // the controls read as inverted for the whole first turn
+  let fCount = 0, fTime = 0, modelYaw = Math.PI;
+  // angle-aware damping: always turn the SHORT way (raw damp on angles walks
+  // 270° around when the target crosses the ±π seam)
+  function dampAngle(cur, target, lambda, dt) {
+    const d = Math.atan2(Math.sin(target - cur), Math.cos(target - cur));
+    return cur + d * (1 - Math.exp(-lambda * dt));
+  }
   const DRIVE = SPEC.player.mode === 'drive';    // arcade car physics
   if (DRIVE && PATH && PATH.length > 1) {        // face down the street at spawn
     modelYaw = Math.atan2(PATH[1][0] - PATH[0][0], PATH[1][1] - PATH[0][1]);
@@ -1373,12 +1387,15 @@ async function main() {
       let horiz = 0;
       if (dir.lengthSq() > 1e-4) {
         dir.normalize().applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
-        modelYaw = THREE.MathUtils.damp(modelYaw, Math.atan2(dir.x, dir.z), P.turn_speed, dt);
+        modelYaw = dampAngle(modelYaw, Math.atan2(dir.x, dir.z), P.turn_speed, dt);
         horiz = speed * mv.mag;
       }
       let vv = 0;
       if (keys.Space) vv = speed * 0.75;
       else if (keys.KeyC || keys.ControlLeft) vv = -speed * 0.75;
+      // auto-liftoff: a flyer moving along the ground catches air — no more
+      // dragging the dragon's belly through the dirt
+      if (kcc.computedGrounded() && horiz > 0.1 && vv <= 0) vv = speed * 0.55;
       const bob = Math.sin(performance.now() / 480) * 0.3;   // hover breathing
       vy = 0;                                                // no gravity aloft
       var desired = { x: dir.x * horiz * dt, y: (vv + bob) * dt, z: dir.z * horiz * dt };
@@ -1394,7 +1411,7 @@ async function main() {
       let horiz = 0;
       if (dir.lengthSq() > 1e-4) {
         dir.normalize().applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
-        modelYaw = THREE.MathUtils.damp(modelYaw, Math.atan2(dir.x, dir.z), P.turn_speed * 0.6, dt);
+        modelYaw = dampAngle(modelYaw, Math.atan2(dir.x, dir.z), P.turn_speed * 0.6, dt);
         horiz = speed * mv.mag;
       }
       let vv = 0;
@@ -1411,8 +1428,7 @@ async function main() {
       dir.set(mv.x, 0, mv.z);
       if (dir.lengthSq() > 1e-4) {
         dir.normalize().applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
-        modelYaw = THREE.MathUtils.damp(modelYaw, Math.atan2(dir.x, dir.z),
-          P.turn_speed, dt);
+        modelYaw = dampAngle(modelYaw, Math.atan2(dir.x, dir.z), P.turn_speed, dt);
       }
       vy = Math.max(vy - 9.81 * dt, -25);
       var desired = { x: dir.x * speed * dt, y: vy * dt, z: dir.z * speed * dt };
@@ -1524,7 +1540,8 @@ async function main() {
         c.mesh.position.y = c.baseY + Math.sin(t * 2.2 + c.phase) * 0.22;
         c.mesh.rotation.y += dt * 2;
         const dx = c.mesh.position.x - nt.x, dz = c.mesh.position.z - nt.z;
-        if (dx * dx + dz * dz < 1.4 * 1.4) {
+        const pickR = Math.max(1.4, (P.height_m || 1) * 0.9);  // big heroes reach further
+        if (dx * dx + dz * dz < pickR * pickR) {
           scene.remove(c.mesh);
           const st = steps[stepIdx];
           if (st && st.kind === 'collect') {
@@ -1536,9 +1553,16 @@ async function main() {
       }
     }
 
-    // third-person follow camera
+    // third-person follow camera — auto-recenters behind the player while
+    // moving so turns stay visible; pauses 3 s after a manual drag-look
+    freeLookT = Math.max(0, freeLookT - dt);
+    if (!dragging && freeLookT <= 0 && mv.mag > 0.15) {
+      let dyaw = (modelYaw + Math.PI) - yaw;
+      dyaw = Math.atan2(Math.sin(dyaw), Math.cos(dyaw));
+      yaw += dyaw * Math.min(1, (DRIVE ? 3.0 : 1.8) * dt);
+    }
     camTarget.set(nt.x, nt.y + SPEC.camera.height_m * 0.5, nt.z);
-    const cd = SPEC.camera.distance_m;
+    const cd = SPEC.camera.distance_m * camZoom;
     const cx = nt.x + Math.sin(yaw) * Math.cos(pitch) * cd;   // camera BEHIND
     const cz = nt.z + Math.cos(yaw) * Math.cos(pitch) * cd;   // (W walks away)
     const cy = nt.y + Math.sin(pitch) * cd + SPEC.camera.height_m * 0.4;
@@ -1546,6 +1570,9 @@ async function main() {
     camera.lookAt(camTarget);
 
     composer.render();
+    // live state for the verify harness (extends the __game probe object)
+    window.__game.state = { x: nt.x, y: nt.y, z: nt.z, modelYaw, yaw, speed,
+                            started: gameStarted, go: raceGo };
     fCount++; fTime += dt;
     if (fTime >= 0.5) { fpsEl.textContent = Math.round(fCount / fTime) + ' fps'; fCount = 0; fTime = 0; }
   });

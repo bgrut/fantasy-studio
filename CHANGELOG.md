@@ -10,6 +10,25 @@ Pre-1.0 versions are internal milestones during the constraint sprint leading to
 
 ## [Unreleased]
 
+### Changed — Control feel + camera polish, self-tested headlessly (2026-07-06)
+- **"Inverted controls" root-caused and fixed**: heroes spawned facing the
+  camera (modelYaw 0), so the first input whipped them 180° and the whole
+  first turn read backwards; heroes now spawn facing away. Turn damping was
+  also linear on angles — crossing the ±π seam turned 270° the wrong way —
+  now angle-aware (always the short way). Verified with the new headless QA
+  hook (`window.__game.state`): straight-line W, short-way turns, C-dive.
+- **Pro camera**: mouse-wheel zoom (0.45×–2.6×) and auto-recenter — the camera
+  swings back behind the player while moving so you can see into turns, and
+  yields for 3 s after a manual drag-look.
+- **Dragon auto-liftoff**: a flyer moving along the ground catches air instead
+  of dragging its belly across terrain.
+- **Pickup radius scales with hero size** (an 8 m whale no longer needs to hit
+  a 1.4 m bullseye to collect a pearl).
+- **Per-asset heading facts**: `assets/library_heading.json` (data, not
+  heuristics) feeds `player.yaw_offset_deg` for meshes whose nose sign differs.
+- **Git LFS**: `backend/assets/library/*.glb` tracked via LFS going forward —
+  also the path for community-shared assets.
+
 ### Changed — Heavy audit: bake-time orientation + pre-game UX (2026-07-06)
 - **Orientation is now VERIFIED at bake time, never guessed at runtime**: every
   generated asset runs the 24-orientation silhouette gate (render each candidate,
