@@ -10,6 +10,20 @@ Pre-1.0 versions are internal milestones during the constraint sprint leading to
 
 ## [Unreleased]
 
+### Added — R-B medals + R-ITER "Edit this game" (2026-07-06)
+- **Medals**: 🥇/🥈/🥉 on the win screen, judged against a par time computed
+  from the actual level geometry (spawn → collect points → goal distance at
+  cruise speed) — the same fair formula for every game class.
+- **R-ITER — conversational game editing** (the Summer Engine answer): every
+  built game gets an "Edit this game…" bar. A follow-up prompt patches the
+  existing GameSpec via the local LLM and re-exports — SAME seed, so it's the
+  same world with your change applied; cached assets make the rebuild itself
+  take seconds. Verified end-to-end: "make it night time with snow falling"
+  on a fox meadow → sky=night, weather=snow, identical seed/world, in 120 s
+  total (~90 s of that is CPU LLM inference — GPU day makes the loop ~10 s).
+  Specs persist to disk (spec_full.json) so games stay editable across
+  restarts.
+
 ### Added — R-A juice pack + marketplace architecture (2026-07-06)
 - **Juice**: gold particle burst + floating "+1 label · n/count" on every
   pickup, red burst on kills, decaying screen shake when the player takes

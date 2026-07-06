@@ -1110,8 +1110,19 @@ async function main() {
       const prev = parseFloat(localStorage.getItem(bestKey));
       const isPB = !(prev > 0) || secs < prev;
       if (isPB) localStorage.setItem(bestKey, String(secs));
+      // MEDALS: par derives from the actual level geometry — the distance a
+      // player must cover (spawn → collect points → goal) at cruise speed,
+      // with slack for looking around. Same formula for every game class.
+      let travel = Math.hypot(goalPos.x, goalPos.z);
+      const cps = (LVL && LVL.collect_points) || [];
+      let px = 0, pz = 0;
+      for (const p of cps) { travel += Math.hypot(p[0] - px, p[1] - pz); px = p[0]; pz = p[1]; }
+      const par = Math.max(20, travel / Math.max(P.walk_speed, 1) * 1.5);
+      const medal = secs <= par ? '🥇 GOLD' : secs <= par * 1.6 ? '🥈 SILVER'
+                  : secs <= par * 2.6 ? '🥉 BRONZE' : '';
       document.getElementById('wintime').textContent =
-        `time ${fmtT(secs)}` + (isPB ? ' — new personal best!' : ` · best ${fmtT(prev)}`);
+        (medal ? medal + ' · ' : '') + `time ${fmtT(secs)}`
+        + (isPB ? ' — new personal best!' : ` · best ${fmtT(prev)}`);
     } catch (e) {}
     document.getElementById('wintext').textContent = text;
     document.getElementById('win').style.display = 'flex';

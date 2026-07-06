@@ -92,14 +92,12 @@ export default function GameStudio() {
     }
   }, [project, exporting])
 
-  const build = useCallback(async () => {
-    const p = prompt.trim()
-    if (!p || building) return
+  const startJob = useCallback(async (p: string, baseJobId?: number) => {
     setError(null)
-    setJob(null)
+    if (baseJobId == null) setJob(null)   // edits keep showing the game while rebuilding
     setBuilding(true)
     try {
-      const { job_id } = await exportGame(p)
+      const { job_id } = await exportGame(p, baseJobId != null ? { baseJobId } : undefined)
       let misses = 0
       pollRef.current = window.setInterval(async () => {
         try {
@@ -126,7 +124,22 @@ export default function GameStudio() {
       setBuilding(false)
       setError(e instanceof Error ? e.message : String(e))
     }
-  }, [prompt, building])
+  }, [])
+
+  const build = useCallback(() => {
+    const p = prompt.trim()
+    if (!p || building) return
+    void startJob(p)
+  }, [prompt, building, startJob])
+
+  // R-ITER: edit THIS game — same world, cached assets, seconds not minutes
+  const [editPrompt, setEditPrompt] = useState('')
+  const iterate = useCallback(() => {
+    const p = editPrompt.trim()
+    if (!p || building || !job) return
+    setEditPrompt('')
+    void startJob(p, job.id)
+  }, [editPrompt, building, job, startJob])
 
   const playing = job?.status === 'complete' && job.play_url
 
@@ -378,6 +391,23 @@ export default function GameStudio() {
               allowFullScreen
               onLoad={() => gameFrameRef.current?.focus()}
             />
+          </div>
+          {/* R-ITER: conversational editing — the generator becomes an engine */}
+          <div className="flex gap-2">
+            <input
+              value={editPrompt}
+              onChange={(e) => setEditPrompt(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') iterate() }}
+              placeholder="Edit this game… (e.g. make it night · add 3 wolves · winner gets a crown)"
+              className="flex-1 rounded-xl bg-[rgba(14,14,22,0.7)] border border-white/[0.06] px-4 py-2.5 text-sm text-white placeholder:text-[#4a4764] focus:outline-none focus:border-[#7c5cff]/40"
+            />
+            <button
+              onClick={iterate}
+              disabled={building || !editPrompt.trim()}
+              className="px-4 py-2 rounded-xl text-sm font-semibold bg-[#7c5cff]/20 text-[#a78bfa] hover:bg-[#7c5cff]/30 disabled:opacity-40 transition-colors"
+            >
+              {building ? 'Applying…' : 'Apply edit'}
+            </button>
           </div>
           {job!.notes?.length ? (
             <p className="text-[11px] font-mono text-[#4a4764]">

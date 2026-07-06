@@ -61,6 +61,7 @@ class GameExportRequest(BaseModel):
     player: str | None = None    # override; None = cast from the prompt (extractor)
     godot: bool = False          # also emit a Godot 4 project
     seed: int | None = None      # world-layout seed; None = fresh random level
+    base_job_id: int | None = None   # R-ITER: edit THIS game instead of generating anew
 
 
 def _run_job(job_id: int, req: GameExportRequest) -> None:
@@ -79,15 +80,35 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         from app.game_export.verify_game import verify_dist
         from app.game_export.web_exporter import export_web_game
 
-        stage("extracting")
-        spec = extract_game_spec(req.prompt, verbose=False)
-        job["title"] = spec.title
+        # R-ITER: a base_job_id means EDIT that game — patch its saved spec
+        # with the change request instead of extracting from scratch. Same
+        # seed = same world; cached assets = the edit lands in seconds.
+        base_spec = None
+        if req.base_job_id is not None:
+            import json as _json
+            base_spec = (_jobs.get(req.base_job_id) or {}).get("spec_resolved")
+            if base_spec is None:
+                p = GAME_JOBS_DIR / f"job_{req.base_job_id}" / "spec_full.json"
+                if p.exists():
+                    base_spec = _json.loads(p.read_text(encoding="utf-8"))
+            if base_spec is None:
+                raise RuntimeError(
+                    f"game #{req.base_job_id} has no saved spec to edit — rebuild it once first")
 
-        # LEVEL VARIETY: every build gets a fresh world layout (scatter,
-        # collectible ring, NPC spawns all derive from this seed). Rebuild =
-        # a NEW level; pass an explicit seed to reproduce a favorite one.
-        import random as _random
-        spec.seed = req.seed if req.seed is not None else _random.randint(1, 999_999)
+        if base_spec is not None:
+            stage("applying your edit")
+            from app.game_export.extractor import patch_game_spec
+            spec = patch_game_spec(base_spec, req.prompt, verbose=False)
+            job["title"] = spec.title
+            job["edited_from"] = req.base_job_id
+        else:
+            stage("extracting")
+            spec = extract_game_spec(req.prompt, verbose=False)
+            job["title"] = spec.title
+            # LEVEL VARIETY: every FRESH build gets a new world layout (edits
+            # keep their world). Pass an explicit seed to reproduce a level.
+            import random as _random
+            spec.seed = req.seed if req.seed is not None else _random.randint(1, 999_999)
         job["seed"] = spec.seed
 
         stage("resolving assets")
@@ -324,6 +345,10 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         job["spec_resolved"] = spec.model_dump()
         out_dir = GAME_JOBS_DIR / f"job_{job_id}"
         dist = export_web_game(spec, out_dir, verbose=False)
+        # persist the full spec so this game stays EDITABLE across restarts
+        import json as _json
+        (out_dir / "spec_full.json").write_text(
+            _json.dumps(job["spec_resolved"]), encoding="utf-8")
 
         stage("verifying")
         v = verify_dist(dist)

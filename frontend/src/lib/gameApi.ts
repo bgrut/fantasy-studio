@@ -33,13 +33,15 @@ export async function gameHealth(): Promise<GameHealth> {
   return j(await fetch('/api/game/health'))
 }
 
-export async function exportGame(prompt: string, opts?: { godot?: boolean; player?: string }) {
+export async function exportGame(prompt: string, opts?: { godot?: boolean; player?: string; baseJobId?: number }) {
   const res = await fetch('/api/game/export', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     // player omitted by default — the backend CASTS it from the prompt subject
     body: JSON.stringify({ prompt, godot: opts?.godot ?? false,
-                           ...(opts?.player ? { player: opts.player } : {}) }),
+                           ...(opts?.player ? { player: opts.player } : {}),
+                           // R-ITER: edit an existing game instead of generating anew
+                           ...(opts?.baseJobId != null ? { base_job_id: opts.baseJobId } : {}) }),
   })
   return j<{ ok: boolean; job_id: number }>(res)
 }

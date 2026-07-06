@@ -156,3 +156,56 @@ def extract_game_spec(text: str, model: str | None = None, verbose: bool = True)
         print(f"[game] spec via {src}: '{spec.title}' — world={spec.world.name}, "
               f"sky={spec.world.sky}, cam={spec.camera.mode}, objectives={len(spec.objectives)}")
     return spec
+
+
+# ── R-ITER: conversational editing of an EXISTING game ──────────────────────
+_PATCH_SYSTEM = """You EDIT an existing game. Input: the game's current JSON and a change request.
+Output ONLY the complete updated JSON object, no markdown. Rules:
+- Same schema as the input. Copy every field you are NOT changing verbatim.
+- Do not invent or modify 'asset' fields; when you add a NEW entity, omit 'asset'
+  (the pipeline resolves or generates meshes from names).
+- If the change replaces the player, update player.name (assets re-resolve).
+- objectives kinds: collect, defeat, reach, race. entity behaviors: wander,
+  follow, static, hostile, vehicle.
+- world.sky one of day,sunset,night,overcast,mars,space,dusk; weather none,rain,snow.
+- "reward": what the winner gets, or null.
+Apply exactly the requested change — nothing else."""
+
+
+def patch_game_spec(current: dict, change: str, model: str | None = None,
+                    verbose: bool = True) -> GameSpec:
+    """Apply a plain-language change to an existing (resolved) spec dict.
+    The heavy level blob never goes to the LLM; the seed is preserved so an
+    edit keeps the SAME world layout — it's an edit, not a reroll. Raises on
+    LLM failure (an edit that silently does nothing is worse than an error)."""
+    cur = json.loads(json.dumps(current))          # deep copy
+    level = (cur.get("world") or {}).pop("level", None)
+    seed = cur.get("seed")
+    client = OllamaClient(**({"model": model} if model else {}))
+    if not client.is_alive():
+        raise RuntimeError("Ollama is offline — game editing needs the local LLM")
+    msgs = [{"role": "system", "content": _PATCH_SYSTEM},
+            {"role": "user", "content": json.dumps(cur)
+             + "\n\nCHANGE REQUEST: " + change[:2000]}]
+    last_err: Exception | None = None
+    for attempt in (1, 2):
+        resp = client.chat(msgs)
+        raw = (resp.get("content") or resp.get("message", {}).get("content", "")) \
+            if isinstance(resp, dict) else str(resp)
+        m = _JSON_RE.search(raw)
+        try:
+            data = json.loads(m.group(0)) if m else None
+            if not isinstance(data, dict):
+                raise ValueError("no JSON object in reply")
+            data["seed"] = seed                     # same world layout
+            spec = spec_from_dict(data)
+            if verbose:
+                print(f"[game] patched spec: '{spec.title}' <- '{change[:60]}'")
+            return spec
+        except Exception as e:
+            last_err = e
+            if attempt == 1:
+                msgs.append({"role": "assistant", "content": raw[:2000]})
+                msgs.append({"role": "user",
+                             "content": f"That was invalid ({e}). Reply with ONLY the corrected JSON object."})
+    raise ValueError(f"could not apply the edit: {last_err}")
