@@ -100,9 +100,11 @@ export default function GameStudio() {
     setBuilding(true)
     try {
       const { job_id } = await exportGame(p)
+      let misses = 0
       pollRef.current = window.setInterval(async () => {
         try {
           const { job: jb } = await getGameJob(job_id)
+          misses = 0
           setJob(jb)
           if (jb.status !== 'running') {
             if (pollRef.current) window.clearInterval(pollRef.current)
@@ -110,7 +112,14 @@ export default function GameStudio() {
             if (jb.status === 'failed') setError(jb.error ?? 'build failed')
           }
         } catch {
-          /* transient poll miss — keep polling */
+          // a couple of misses are transient; a dead backend / vanished job is
+          // not — never leave the Building spinner wedged forever
+          misses += 1
+          if (misses >= 8) {
+            if (pollRef.current) window.clearInterval(pollRef.current)
+            setBuilding(false)
+            setError('lost contact with the build (backend restarted?) — try again')
+          }
         }
       }, 1500)
     } catch (e) {
