@@ -912,12 +912,43 @@ async function main() {
   const rngC = mulberry32(SPEC.seed + 77);
   const cgeo = new THREE.SphereGeometry(0.11, 12, 10);
   let cpUsed = 0;                        // LVL.collect_points consumed so far
+  // collectibles that LOOK like what the prompt promised: preload the
+  // generated mesh for any collect step that shipped one ("fire flames",
+  // "pearls", "moon rocks") — orbs are only the fallback
+  const collectTpl = {};
+  for (let ci = 0; ci < steps.length; ci++) {
+    const st = steps[ci];
+    if (st.kind !== 'collect' || !st.asset) continue;
+    try {
+      const g = await loadGLB(st.asset);
+      prepModel(g, 0.55, true);
+      g.scene.traverse(o => {
+        if (!o.isMesh) return;
+        for (const m of Array.isArray(o.material) ? o.material : [o.material]) {
+          if (m && m.emissive !== undefined) {     // pickups glow, even at night
+            if (m.map) m.emissiveMap = m.map;
+            m.emissive.setScalar(0.6);
+            m.needsUpdate = true;
+          }
+        }
+      });
+      collectTpl[ci] = g.scene;
+    } catch (e) {
+      console.warn('[game] collect asset fell back to orb:', e.message);
+    }
+  }
   function spawnCollectibles(step) {
     const pts = LVL && LVL.collect_points;
+    const tpl = collectTpl[steps.indexOf(step)];   // generated mesh, if the spec baked one
     for (let i = 0; i < step.count; i++) {
-      const m = new THREE.MeshStandardMaterial({
-        color: 0xfff2b0, emissive: 0xffd54a, emissiveIntensity: 2.6, roughness: 0.4 });
-      const s = new THREE.Mesh(cgeo, m);
+      let s;
+      if (tpl) {
+        s = tpl.clone(true);
+      } else {
+        const m = new THREE.MeshStandardMaterial({
+          color: 0xfff2b0, emissive: 0xffd54a, emissiveIntensity: 2.6, roughness: 0.4 });
+        s = new THREE.Mesh(cgeo, m);
+      }
       let cx, cz;
       if (pts && cpUsed < pts.length) { cx = pts[cpUsed][0]; cz = pts[cpUsed][1]; cpUsed++; }
       else {

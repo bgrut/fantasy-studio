@@ -16,6 +16,50 @@ from app.orchestrator import mocap_retarget as M
 
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
 
+
+def ensure_bridge(verbose: bool = True) -> bool:
+    """Blender bridge self-heal: the headless Blender behind the bridge dies
+    sometimes (flaky iGPU driver, crashes, restarts) and every bake after
+    that fails silently as 'generation failed'. Try to connect; if down,
+    relaunch the headless instance and wait for it. The wolf of 2026-07-06
+    took 40 CPU-minutes to generate and then vanished because of this."""
+    from app.mcp import bridge
+    try:
+        bridge.connect(timeout=8)
+        return True
+    except Exception:
+        pass
+    if verbose:
+        print("[bake] blender bridge down — relaunching headless instance")
+    import subprocess
+    import time
+    exe = r"C:\Program Files\Blender Foundation\Blender 5.1\blender.exe"
+    try:
+        from app.main import get_setting   # lazy: avoids circular import at load time
+        exe = get_setting("blender_executable_path") or exe
+    except Exception:
+        pass
+    try:
+        subprocess.Popen(
+            [exe, "--background", "--python",
+             str(BACKEND_ROOT / "scripts" / "headless_bridge_startup.py")],
+            cwd=str(BACKEND_ROOT),
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        for _ in range(12):                      # up to ~60 s for addon boot
+            time.sleep(5)
+            try:
+                bridge.connect(timeout=8)
+                if verbose:
+                    print("[bake] bridge back up")
+                return True
+            except Exception:
+                continue
+    except Exception:
+        pass
+    if verbose:
+        print("[bake] bridge relaunch FAILED — bake cannot proceed")
+    return False
+
 # default game clip set: state name -> (CMU bvh, frames at 24fps)
 DEFAULT_CLIPS = {
     "walk": ("02_01.bvh", 40),
@@ -518,9 +562,11 @@ def optimize_asset(src_glb: str | Path, out_glb: str | Path, target_tris: int = 
     project the SDXL reference photo onto it — the video pipeline's Phase 19
     projection, REUSED — so the exported GLB ships real colors. TRELLIS gens
     already have textures and are left untouched."""
-    from app.mcp import registry, bridge
+    from app.mcp import registry
     out_glb = Path(out_glb); out_glb.parent.mkdir(parents=True, exist_ok=True)
-    bridge.connect(timeout=8)
+    if not ensure_bridge(verbose):
+        raise RuntimeError("blender bridge unavailable and relaunch failed — "
+                           "asset bake cannot run")
     registry.call("reset_scene", {})
     registry.call("import_mesh_file", {
         "filepath": str(src_glb), "name": "Hero", "normalize_size": height_m,
@@ -676,6 +722,8 @@ def ensure_playable(kind: str, verbose: bool = True) -> str | None:
         pass
     pattern = guess_pattern(kind)
     h = library.default_height(kind)
+    if pattern in ("quadruped", "biped") and not ensure_bridge(verbose):
+        return static                       # honest fallback: static mesh > no mesh
     try:
         if pattern == "quadruped":
             bake_quadruped_anim_set(static, anim, height_m=h, verbose=verbose)

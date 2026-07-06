@@ -84,6 +84,7 @@ class ObjectiveSpec(BaseModel):
     kind: Literal["collect", "defeat", "reach", "race"] = "collect"
     label: str = "stars"
     count: int = Field(5, ge=1, le=100)
+    asset: Optional[str] = None   # collect steps: generated mesh spawned instead of the orb
 
 
 class GameSpec(BaseModel):

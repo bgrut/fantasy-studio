@@ -52,6 +52,9 @@ def export_web_game(spec: GameSpec, out_dir: str | Path, verbose: bool = True) -
         rt["world"]["scatter"][i]["asset"] = bring(sct.asset, f"scatter[{i}]")
     for i, ent in enumerate(spec.entities):
         rt["entities"][i]["asset"] = bring(ent.asset, f"entity[{i}]")
+    for i, ob in enumerate(spec.objectives):
+        if getattr(ob, "asset", None):       # collect steps with a generated mesh
+            rt["objectives"][i]["asset"] = bring(ob.asset, f"objective[{i}]")
 
     # ── render templates ─────────────────────────────────────────────────────
     html = (RUNTIME / "index.html.tpl").read_text(encoding="utf-8")

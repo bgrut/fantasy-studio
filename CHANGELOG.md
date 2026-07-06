@@ -10,6 +10,23 @@ Pre-1.0 versions are internal milestones during the constraint sprint leading to
 
 ## [Unreleased]
 
+### Fixed — Reliability triple: wolf autopsy findings (2026-07-06)
+- **Blender bridge self-heal**: the headless Blender behind the bridge dies
+  sometimes (flaky iGPU driver); every asset bake after that failed silently —
+  the wolf took 40 CPU-minutes to generate and then vanished because the bake
+  couldn't reach Blender. Bakes now detect a dead bridge, relaunch the headless
+  instance, and retry; animated-rig bakes fall back to the static mesh rather
+  than dropping the character. Wolf re-baked and registered (library = 14).
+- **Zombie job self-heal**: jobs left "rendering" by a crash/restart sat in the
+  pipeline monitor forever (the ghost "horse galloping across a sunny meadow"
+  was a demo-film job orphaned YESTERDAY — nothing was actually rendering).
+  On startup, any in-flight-marked job is now honestly failed with a reason.
+- **Collectibles are the real thing**: the dragon game generated a "fire flame"
+  mesh for 30 minutes and then spawned generic orbs anyway. Collect objectives
+  now carry the generated asset into the game — flames look like flames,
+  pearls like pearls (emissive-lifted so they read at night); orbs are only
+  the fallback when no mesh exists.
+
 ### Added — Breadth pass: procedural motion, alien worlds, rewards (2026-07-06)
 - **Wings flap and whales undulate — no rig needed**: fly/swim heroes deform in
   the vertex shader (wing flap grows toward the wingtips; a traveling nose→tail

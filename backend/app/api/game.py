@@ -204,6 +204,22 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                     f"entity '{ekind}' not in library yet — skipped")
         spec.entities = kept
 
+        # COLLECTIBLES LOOK LIKE THE PROMPT'S NOUN: when an entity matches a
+        # collect label ("fire flame" ↔ "fire flames"), its generated mesh
+        # BECOMES the collectible instead of the generic orb — the 30 CPU
+        # minutes spent creating it are finally visible in-game. The entity
+        # stops being an NPC.
+        def _words(s: str) -> set:
+            return {w.rstrip("s") for w in (s or "").lower().split() if w}
+        for ob in spec.objectives:
+            if ob.kind != "collect":
+                continue
+            for ent in list(spec.entities):
+                if ent.asset and _words(ent.name) & _words(ob.label):
+                    ob.asset = ent.asset
+                    spec.entities.remove(ent)
+                    break
+
         # RACE SANITY: a race needs rivals — and rivals are the PLAYER'S OWN
         # KIND, whatever that is (foxes race foxes, whales race whales). A
         # "race" verb in the prompt must never conjure phantom cars.

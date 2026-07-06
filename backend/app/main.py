@@ -196,6 +196,20 @@ def process_job(job_id: int) -> None:
 @app.on_event("startup")
 def startup():
     init_db()
+    # ZOMBIE-JOB SELF-HEAL: workers are in-process, so any job still marked
+    # rendering/planning at startup was orphaned by a crash or restart. Left
+    # alone it sits in the UI as "RENDERING" forever (the ghost horse of
+    # 2026-07-06). Mark it failed with an honest reason.
+    with get_conn() as conn:
+        orphans = conn.execute(
+            "SELECT id FROM render_jobs WHERE status IN ('rendering','planning')").fetchall()
+        if orphans:
+            conn.execute(
+                "UPDATE render_jobs SET status='failed', "
+                "error_text='orphaned by backend restart — job was in flight when the "
+                "server stopped', updated_at=datetime('now') "
+                "WHERE status IN ('rendering','planning')")
+            print(f"[startup] marked {len(orphans)} orphaned job(s) failed")
     if get_setting("blender_executable_path") is None:
         set_setting("blender_executable_path", BLENDER_EXE)
     if get_setting("ffmpeg_executable_path") is None:
