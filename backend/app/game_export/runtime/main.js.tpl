@@ -309,7 +309,13 @@ async function main() {
     const s = targetH / h;
     root.scale.setScalar(s);
     const box2 = new THREE.Box3().setFromObject(root);
-    root.position.y -= box2.min.y;             // feet on y=0
+    if (byMaxDim) {
+      // fly/swim: pivot at BODY CENTER so pitch/roll rotate the creature
+      // about itself (a whale pitching around its tail reads broken)
+      root.position.y -= (box2.min.y + box2.max.y) / 2;
+    } else {
+      root.position.y -= box2.min.y;           // feet on y=0
+    }
     const holder = new THREE.Group();
     holder.add(root);
     return { holder, root, radius: Math.max((box2.max.x - box2.min.x), (box2.max.z - box2.min.z)) * 0.5 };
@@ -683,11 +689,15 @@ async function main() {
   }
 
   // ── NPC entities: wander / follow template AI ────────────────────────────
-  // RACE COUNTDOWN (game-design pass, 2026-07-06): the grid HOLDS through a
-  // 3…2…1…GO! before anyone (player included) can launch — racing 101.
+  // START OVERLAY (game-design pass, 2026-07-06): every game opens like a
+  // real game — title, mission, controls, a START button. The world idles as
+  // a living backdrop; nothing moves until the player says go. Races then
+  // count down 3…2…1…GO! before the grid (player included) can launch.
   const IS_RACE = (SPEC.objectives || []).some(o => o.kind === 'race');
   let raceGo = !IS_RACE;
-  if (IS_RACE) {
+  let gameStarted = false;
+
+  function startCountdown() {
     const cd = document.createElement('div');
     cd.style.cssText = 'position:fixed;top:36%;left:50%;transform:translate(-50%,-50%);'
       + 'font:800 96px system-ui;color:#ffd166;text-shadow:0 4px 26px rgba(0,0,0,.6);'
@@ -701,6 +711,40 @@ async function main() {
       else if (n === 0) { cd.textContent = 'GO!'; raceGo = true; }
       else { cd.remove(); clearInterval(iv); }
     }, 900);
+  }
+
+  {
+    const objLines = (SPEC.objectives || []).map(o => {
+      if (o.kind === 'race') return `Beat ${o.count} rivals to the finish`;
+      if (o.kind === 'collect') return `Collect ${o.count} ${o.label}`;
+      if (o.kind === 'defeat') return `Defeat ${o.count} ${o.label}`;
+      return `Reach the ${o.label || 'beacon'}`;
+    });
+    if (!objLines.length) objLines.push('Reach the glowing beacon');
+    const mode = SPEC.player.mode || 'walk';
+    const controls = mode === 'drive'
+      ? 'W throttle · S brake/reverse · A/D steer · Shift boost'
+      : mode === 'fly'
+        ? 'WASD glide · Space rise · C dive · Shift boost'
+        : mode === 'swim'
+          ? 'WASD swim · Space surface · C dive · Shift burst'
+          : 'WASD / arrows move · Shift run · F attack';
+    const ov = document.createElement('div');
+    ov.style.cssText = 'position:fixed;inset:0;display:flex;align-items:center;'
+      + 'justify-content:center;background:rgba(8,7,14,.62);z-index:40;backdrop-filter:blur(3px);';
+    ov.innerHTML = '<div style="text-align:center;max-width:520px;padding:36px;">'
+      + `<h1 style="font:800 40px system-ui;color:#fff;margin:0 0 10px;">${SPEC.title || 'Your World'}</h1>`
+      + `<div style="font:500 16px system-ui;color:#cfcbe6;margin-bottom:6px;">`
+      + objLines.map(l => '• ' + l).join('<br>') + '</div>'
+      + `<div style="font:400 13px system-ui;color:#8d89a6;margin-bottom:24px;">${controls} · drag to look</div>`
+      + '<button id="startbtn" style="font:700 20px system-ui;color:#0d0b16;background:#5cffc9;'
+      + 'border:none;border-radius:14px;padding:14px 46px;cursor:pointer;">START</button></div>';
+    document.body.appendChild(ov);
+    document.getElementById('startbtn').addEventListener('click', () => {
+      ov.remove();
+      gameStarted = true;
+      if (IS_RACE) startCountdown();
+    });
   }
 
   const npcs = [];
@@ -973,27 +1017,14 @@ async function main() {
   const pg = await loadGLB(P.asset);            // hard fail = visible error
   const { holder, root: pRoot, radius } =
     prepModel(pg, P.height_m, ['fly', 'swim'].includes(P.mode || 'walk'));
-  // ORIENTATION by mode: drive/swim travel along their LONG axis (car nose,
-  // whale body) → long axis to +Z. FLYERS travel along their SHORT horizontal
-  // axis — the long one is the WINGSPAN, which must stay lateral or the
-  // dragon flies sideways. yaw_offset_deg still handles per-asset 180s.
-  if (['fly', 'swim'].includes(P.mode || 'walk')) {
-    // VERTICAL-MESH GUARD: a creature standing on its nose (mesh long axis
-    // = Y) gets laid flat before any yaw logic — no swimmer swims upright
-    const bv = new THREE.Box3().setFromObject(pRoot);
-    const ex = bv.max.x - bv.min.x, ey = bv.max.y - bv.min.y, ez = bv.max.z - bv.min.z;
-    if (ey > 1.25 * Math.max(ex, ez)) {
-      pRoot.rotation.x -= Math.PI / 2;         // pitch nose-down mesh to horizontal
-    }
-  }
-  if ((P.mode || 'walk') === 'fly') {
-    const bb = new THREE.Box3().setFromObject(pRoot);
-    if ((bb.max.z - bb.min.z) > (bb.max.x - bb.min.x) * 1.15) {
-      pRoot.rotation.y -= Math.PI / 2;         // wingspan was on Z → put on X
-    }
-  } else {
-    alignLongAxis(pRoot, ['drive', 'swim'].includes(P.mode || 'walk'));
-  }
+  // ORIENTATION (2026-07-06 rewrite — heuristics OUT, baked truth IN):
+  // generated assets now leave the bake with render-VERIFIED orientation
+  // (silhouette-matched against their reference), so the runtime stops
+  // guessing. Only two facts survive here, both render-verified:
+  //   drive/swim travel along their long axis → align long axis to +Z
+  //   (car nose is +X per the 2026-07-05 axis renders; whale body likewise).
+  //   Flyers keep their wingspan lateral — no rotation at all.
+  alignLongAxis(pRoot, ['drive', 'swim'].includes(P.mode || 'walk'));
   polishVehiclePaint(pRoot, (P.mode || 'walk') === 'drive');
   holder.rotation.y = THREE.MathUtils.degToRad(P.yaw_offset_deg || 0);
   const playerObj = new THREE.Group();
@@ -1315,7 +1346,8 @@ async function main() {
 
   renderer.setAnimationLoop(() => {
     const dt = Math.min(clock.getDelta(), 0.05);
-    const mv = readMove();
+    // pre-START: inputs are dead, world idles as the menu backdrop
+    const mv = gameStarted ? readMove() : { x: 0, z: 0, run: false, mag: 0 };
     let speed;
     const dir = new THREE.Vector3();
     if (DRIVE) {
@@ -1437,7 +1469,7 @@ async function main() {
       mixer.update(dt);
     }
 
-    stepNPCs(dt, nt, performance.now() / 1000);
+    if (gameStarted) stepNPCs(dt, nt, performance.now() / 1000);
     stepDynamics(dt, nt, performance.now() / 1000);
 
     // goal beacon: pulse; completes REACH steps, decides RACE steps

@@ -7,5 +7,9 @@
   "horse": "assets/library/horse.glb",
   "samurai": "assets/library/samurai.glb",
   "truck": "assets/library/truck.glb",
-  "wizard": "assets/library/wizard.glb"
+  "wizard": "assets/library/wizard.glb",
+  "penguin": "assets/library/penguin.glb",
+  "knight": "assets/library/knight.glb",
+  "dragon": "assets/library/dragon.glb",
+  "whale": "assets/library/whale.glb"
 }

@@ -208,7 +208,8 @@ def ensure_asset(kind: str, pattern: str | None = None, target_tris: int = 45000
     optimize_asset(raw_glb, out, target_tris=target_tris,
                    height_m=library.default_height(kind), verbose=verbose,
                    ref_png=ref_png if ref_png.exists() else None,
-                   despeckle=(pattern == "vehicle"))
+                   despeckle=(pattern == "vehicle"),
+                   pattern=pattern)
     _register(kind, str(out.relative_to(BACKEND_ROOT)).replace("\\", "/"))
     if verbose:
         print(f"[game] '{kind}' registered in library -> {out.name}")

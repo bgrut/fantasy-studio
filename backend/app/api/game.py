@@ -138,9 +138,9 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         if player_glb and pattern == "aquatic":
             spec.player.mode = "swim"
             if abs(spec.player.walk_speed - 2.0) < 1e-6:
-                spec.player.walk_speed = 4.0                 # cruise
+                spec.player.walk_speed = 6.0                 # cruise (whales MOVE)
             if abs(spec.player.run_speed - 5.0) < 1e-6:
-                spec.player.run_speed = 10.0                 # burst
+                spec.player.run_speed = 14.0                 # burst
         if not player_glb:
             job.setdefault("notes", []).append(f"cast fell back: {want} -> man")
             player_glb = library.resolve("man")

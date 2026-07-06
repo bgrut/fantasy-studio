@@ -9,6 +9,7 @@ rig (adaptive arm bones + voxel-proxy skin) from app.orchestrator.mocap_retarget
 from __future__ import annotations
 
 import json
+import shutil
 from pathlib import Path
 
 from app.orchestrator import mocap_retarget as M
@@ -507,7 +508,8 @@ def optimize_asset(src_glb: str | Path, out_glb: str | Path, target_tris: int = 
                    height_m: float = 1.0, verbose: bool = True,
                    ref_png: str | Path | None = None,
                    despeckle: bool = False,
-                   derive_normals: bool = True) -> dict:
+                   derive_normals: bool = True,
+                   pattern: str | None = None) -> dict:
     """Decimate a raw TRELLIS GLB into a game-budget asset (NPCs/props). Raw
     heroes run ~400k tris; two of those wedge an iGPU. CPU-only via bridge.
 
@@ -523,16 +525,39 @@ def optimize_asset(src_glb: str | Path, out_glb: str | Path, target_tris: int = 
     registry.call("import_mesh_file", {
         "filepath": str(src_glb), "name": "Hero", "normalize_size": height_m,
         "ground_to_z0": True, "join": True, "orientation_fix": None})
-    if ref_png and Path(ref_png).exists() and not _glb_has_images(src_glb):
+    if ref_png and Path(ref_png).exists():
+        # ORIENTATION GATE (2026-07-06, the no-more-guessing fix): render the
+        # mesh at all 24 axis-aligned orientations and BAKE the one whose
+        # silhouette best matches the reference image. The runtime stops
+        # guessing — assets arrive correct. Same verified machinery the video
+        # side has used since Phase 20.
         try:
-            from app.orchestrator.composer import _apply_reference_texture
-            _apply_reference_texture(_RegistryRunner(registry), "Hero",
-                                     str(ref_png), verbose=verbose)
+            from app.orchestrator.composer import _orient_hero_by_reference
+            _scratch = out_glb.parent / "_orient_scratch"
+            _scratch.mkdir(parents=True, exist_ok=True)
+            _og = _orient_hero_by_reference(
+                _RegistryRunner(registry), "Hero", str(ref_png), _scratch,
+                upright_biped=(pattern == "biped"),
+                wheels_down=(pattern == "vehicle"),
+                verbose=verbose)
             if verbose:
-                print(f"[bake] projected reference texture onto {Path(src_glb).name}")
-        except Exception as _te:
+                print(f"[bake] orientation gate: ok={_og.get('ok')} "
+                      f"iou={_og.get('iou', 0):.2f}")
+        except Exception as _oe:
             if verbose:
-                print(f"[bake] ref projection skipped ({type(_te).__name__}: {_te})")
+                print(f"[bake] orientation gate skipped ({type(_oe).__name__}: {_oe})")
+        finally:
+            shutil.rmtree(out_glb.parent / "_orient_scratch", ignore_errors=True)
+        if not _glb_has_images(src_glb):
+            try:
+                from app.orchestrator.composer import _apply_reference_texture
+                _apply_reference_texture(_RegistryRunner(registry), "Hero",
+                                         str(ref_png), verbose=verbose)
+                if verbose:
+                    print(f"[bake] projected reference texture onto {Path(src_glb).name}")
+            except Exception as _te:
+                if verbose:
+                    print(f"[bake] ref projection skipped ({type(_te).__name__}: {_te})")
     if despeckle:
         # heal dark speck clusters baked INTO the albedo (hood "black spots").
         # Vehicles only — organic textures have legitimate small dark features

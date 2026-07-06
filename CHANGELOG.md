@@ -10,6 +10,23 @@ Pre-1.0 versions are internal milestones during the constraint sprint leading to
 
 ## [Unreleased]
 
+### Changed — Heavy audit: bake-time orientation + pre-game UX (2026-07-06)
+- **Orientation is now VERIFIED at bake time, never guessed at runtime**: every
+  generated asset runs the 24-orientation silhouette gate (render each candidate,
+  score IoU against the SDXL reference image, bake the winner; upright-biped /
+  wheels-down constraints per pattern). All runtime orientation heuristics were
+  removed from the game runtime — they stacked and false-positived (the
+  vertical-mesh guard rolled the *correctly upright* dragon on input). The only
+  runtime transform left is the render-verified nose-forward alignment for
+  drive/swim. Dragon, whale, knight re-baked through the gate and render-verified
+  upright from fixed axes. See `backend/docs/audit_2026-07-06_orientation_gameplay.md`.
+- **Universal START overlay**: every game now opens with its title, objectives,
+  and mode-specific controls plus a START button; the world idles as a live
+  backdrop and nothing moves until Start. Race countdowns (3-2-1-GO) begin after
+  Start — rivals and player throttle both hold for GO.
+- **Whale actually swims**: max-dim-normalized heroes now pivot at their center
+  (was tail), and aquatic speeds raised to 6 m/s cruise / 14 m/s burst.
+
 ### Added — Phase 37: real-city maps + world detail pack (2026-07-05)
 - **REAL CITIES in games**: prompts naming a city (New York, London, Tokyo, Paris,
   Chicago, San Francisco) now build the actual district from OpenStreetMap — the
