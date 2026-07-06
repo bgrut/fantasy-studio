@@ -333,6 +333,11 @@ if nv2>1000:
                 bm.to_mesh(me); bm.free(); me.update()
     dropped+=n_spike
 tris0=sum(len(p.vertices)-2 for p in o.data.polygons)
+# SAFETY (2026-07-06): a mangled import once exported an 80-tri husk OVER a
+# healthy library asset (man.glb, restored from git). If the import looks
+# broken, FAIL before the export can overwrite anything.
+if tris0 < 500:
+    raise RuntimeError(f"import produced only {tris0} tris — refusing to overwrite output")
 if tris0>TARGET:
     m=o.modifiers.new("dec","DECIMATE"); m.ratio=max(TARGET/float(tris0),0.02)
     bpy.context.view_layer.objects.active=o; o.select_set(True)
