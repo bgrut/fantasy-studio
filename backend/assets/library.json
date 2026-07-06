@@ -12,5 +12,6 @@
   "dragon": "assets/library/dragon.glb",
   "whale": "assets/library/whale.glb",
   "wolf": "assets/library/wolf.glb",
-  "monkey": "assets/library/monkey.glb"
+  "monkey": "assets/library/monkey.glb",
+  "cat": "assets/library/cat.glb"
 }
