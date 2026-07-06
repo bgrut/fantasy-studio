@@ -10,6 +10,25 @@ Pre-1.0 versions are internal milestones during the constraint sprint leading to
 
 ## [Unreleased]
 
+### Fixed — Spawn-embedded-in-terrain (the REAL "doesn't move" root cause) (2026-07-06)
+- **Whale/dragon couldn't move because they spawned INSIDE the terrain**: spawn
+  height assumed flat ground, so on mountain (16 m amplitude) or seabed worlds
+  the physics capsule started embedded and the character controller blocked
+  every move — keys turned the body, camera orbited, position froze. Spawn,
+  teleport, and fall-respawn are now terrain-aware (`spawnHeight(x,z)`): flyers
+  start airborne (+6 m), swimmers start mid-water clear of the seabed.
+  Play-verified headlessly on 16 m mountain terrain (dragon: 24 m straight in
+  4 s) and 6 m seabed (whale: 18 m cruise + 3.2 m C-dive).
+- **Race rivals are the player's own kind** — foxes race foxes, whales race
+  whales; a "race" verb never conjures phantom cars again. Rival speed scales
+  to the player's for foot races.
+- **Every noun generates, not just the player**: entities and props missing
+  from the library now go through the same image→3D pipeline as the hero
+  (created once, cached forever, honest progress notes). Extractor-verified on
+  wild prompts: "cat fighting a monkey on mars" → cat (library) + monkey
+  (generates); "monkey hitting bottles in a castle" → monkey + bottle both
+  generate. Generic humans (npc/guy/guard/villager) alias to the man rig.
+
 ### Changed — Control feel + camera polish, self-tested headlessly (2026-07-06)
 - **"Inverted controls" root-caused and fixed**: heroes spawned facing the
   camera (modelYaw 0), so the first input whipped them 180° and the whole

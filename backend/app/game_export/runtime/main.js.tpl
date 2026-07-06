@@ -1133,8 +1133,21 @@ async function main() {
 
   const capR = Math.min(Math.max(radius * 0.6, 0.22), 0.6);
   const capHalf = Math.max(P.height_m / 2 - capR, 0.1);
+  // spawn ON the terrain, never at flat-world height: on hilly or seabed
+  // worlds a flat spawn embeds the capsule in the ground and the character
+  // controller blocks EVERY move (whale glued to the seabed, dragon molded
+  // into the hillside — the "keys turn but nothing moves" bug)
+  function spawnHeight(x, z) {
+    const g = hAt(x, z) + P.height_m / 2 + 0.15;
+    if (SPEC.player.mode === 'fly') return g + 6;              // airborne start
+    if (SPEC.player.mode === 'swim' && SPEC.world.water_level != null)
+      return Math.max(g + 0.4,                                  // clear of seabed,
+        Math.min((hAt(x, z) + SPEC.world.water_level) / 2,      // mid-water,
+                 SPEC.world.water_level - P.height_m / 2 - 0.2)); // under surface
+    return g;
+  }
   const body = world.createRigidBody(
-    RAPIER.RigidBodyDesc.kinematicPositionBased().setTranslation(0, P.height_m / 2 + 0.1, 0));
+    RAPIER.RigidBodyDesc.kinematicPositionBased().setTranslation(0, spawnHeight(0, 0), 0));
   const collider = world.createCollider(RAPIER.ColliderDesc.capsule(capHalf, capR), body);
   const kcc = world.createCharacterController(0.02);
   kcc.setApplyImpulsesToDynamicBodies(false);
@@ -1288,7 +1301,7 @@ async function main() {
   // exposed for the verify harness (synthetic input, position probes, dev teleport)
   window.__game = {
     pos: () => playerObj.position.toArray(), keys, ready: true,
-    tp: (x, z) => body.setTranslation({ x, y: P.height_m / 2 + 0.1, z }, true),
+    tp: (x, z) => body.setTranslation({ x, y: spawnHeight(x, z), z }, true),
     attack: doAttack,
     combat: () => ({ hp: php, kills, mode: ATTACK, lost,
                      hostiles: npcs.filter(n => n.behavior === 'hostile' && !n.dead).length }),
@@ -1459,8 +1472,9 @@ async function main() {
       }
     }
     if (nt.y < -10) {   // fall-recovery safety net: respawn at origin
-      body.setNextKinematicTranslation({ x: 0, y: P.height_m / 2 + 0.1, z: 0 });
-      vy = 0; nt = { x: 0, y: P.height_m / 2 + 0.1, z: 0 };
+      const ry = spawnHeight(0, 0);
+      body.setNextKinematicTranslation({ x: 0, y: ry, z: 0 });
+      vy = 0; nt = { x: 0, y: ry, z: 0 };
       console.warn('[game] fell out of world — respawned');
     }
     playerObj.position.set(nt.x, nt.y - (capHalf + capR), nt.z);

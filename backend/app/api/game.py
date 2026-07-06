@@ -165,31 +165,57 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         job["player"] = cast
         if not spec.world.scatter:
             spec.world.scatter = [ScatterSpec(**s) for s in game_scatter(spec.world.name)]
+        # generic-human aliases resolve to the man rig instead of generating
+        # a new "npc" species from scratch
+        _HUMAN_ALIASES = {"npc", "npcs", "guy", "person", "people", "villager",
+                          "enemy", "soldier", "guard", "human"}
         kept = []
         for ent in spec.entities:
+            ekind = "man" if ent.name.lower() in _HUMAN_ALIASES else ent.name
             # prefer the ANIMATED variant (real gait — no gliding); static fallback
-            glb = ensure_playable(ent.name, verbose=False) or library.resolve(ent.name)
+            glb = ensure_playable(ekind, verbose=False) or library.resolve(ekind)
+            if not glb:
+                # THE SAME PIPELINE FOR EVERY NOUN (2026-07-06): entities and
+                # props generate exactly like the player does — a missing
+                # monkey or bottle is created once, cached in the library
+                # forever. This is what makes "anything at scale" true.
+                try:
+                    from app.game_export.generate import ensure_asset
+                    stage(f"creating '{ekind}' — image → 3D mesh "
+                          f"(first time only; slow without a GPU)")
+                    ensure_asset(ekind, verbose=True)
+                    glb = ensure_playable(ekind, verbose=False) or library.resolve(ekind)
+                    if glb:
+                        job.setdefault("notes", []).append(
+                            f"'{ekind}' was CREATED for this game and saved to your library")
+                except Exception as ge:
+                    job.setdefault("notes", []).append(
+                        f"entity '{ekind}' generation failed ({type(ge).__name__}) — skipped")
             if glb:
+                ent.name = ekind
                 ent.asset = glb
                 if ent.height_m == 1.0:
-                    ent.height_m = library.default_height(ent.name)
+                    ent.height_m = library.default_height(ekind)
                 kept.append(ent)
             else:
                 job.setdefault("notes", []).append(
-                    f"entity '{ent.name}' not in library yet — skipped")
+                    f"entity '{ekind}' not in library yet — skipped")
         spec.entities = kept
 
-        # RACE SANITY: a race step needs opponent VEHICLES — synthesize them
-        # from the player's own kind when the extractor didn't cast any.
+        # RACE SANITY: a race needs rivals — and rivals are the PLAYER'S OWN
+        # KIND, whatever that is (foxes race foxes, whales race whales). A
+        # "race" verb in the prompt must never conjure phantom cars.
         from app.game_export.spec import EntitySpec
         for ob in spec.objectives:
             if ob.kind == "race" and not any(e.behavior == "vehicle" for e in spec.entities):
-                okind = cast if guess_pattern(cast) == "vehicle" else "car"
-                oglb = library.resolve(okind)
+                okind = cast
+                oglb = library.resolve(f"{okind}_anim") or library.resolve(okind)
+                rival_speed = (6.5 if guess_pattern(okind) == "vehicle"
+                               else max(spec.player.walk_speed * 0.85, 2.5))
                 if oglb:
                     spec.entities.append(EntitySpec(
                         name=okind, asset=oglb, behavior="vehicle",
-                        count=min(ob.count, 8), speed=6.5,
+                        count=min(ob.count, 8), speed=rival_speed,
                         height_m=library.default_height(okind)))
 
         # grass: off for cities and snow (quality-pack gate)
