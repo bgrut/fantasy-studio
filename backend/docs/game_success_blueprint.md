@@ -46,10 +46,41 @@ wildly but five properties repeat:
   facts + Git LFS already form the technical seed. What sales need: game
   thumbnails, a title screen with author credit, and the community section.
 
+- **R-ITER "Edit this game"** (benchmark response, high priority): a follow-up
+  prompt box on a built game patches the existing GameSpec via the LLM and
+  re-exports — deterministic assembly + cached assets means edits land in
+  seconds. This is the single feature that closes the gap with Summer Engine's
+  conversational loop, and our architecture is already shaped for it.
+
 Order matters: A and B make every game *feel* finished; C makes it *theirs*;
-D makes it *sellable*. Video side rides along — R-A's particle recipes and
+D makes it *sellable*; ITER makes it *craftable* — the difference between a
+generator and an engine. Video side rides along — R-A's particle recipes and
 score-overlay typography become title-card and HUD polish in film exports
 (shared-enhancement rule).
+
+## Competitive benchmark: Summer Engine (summerengine.com)
+
+The closest quality competitor on the game side: an AI-native layer over
+Godot 4 that turns a prompt into a real engine project (scene tree, GDScript,
+art, audio) and — their defining feature — lets every FOLLOW-UP prompt edit
+the SAME project conversationally. Free desktop app, cloud AI for heavy
+generation, exports everywhere with full ownership.
+
+**Where they beat us today, and the counter for each:**
+
+| Their edge | Our counter (woven into the plan) |
+|---|---|
+| Conversational iteration on one game | **R-ITER (new, jumps the queue)**: keep the GameSpec, feed follow-up prompts as SPEC DELTAS ("add a boss" → LLM patches entities; "make it night" → sky field) and re-export. Our exports are deterministic and assets are cached, so an edit rebuilds in SECONDS — we can out-iterate a cloud round-trip. |
+| Generated music + sfx | Synth sfx landed (R-A). Music: procedural WebAudio ambient loops now; local MusicGen-class model on GPU day. |
+| Real-engine project output | We already have a Godot 4 exporter (Phase 28) — promote it from adapter to first-class "own your project" story. |
+| Arbitrary mechanics via generated scripts | Their flexibility is unverified (broken scripts ship). Ours is a verified verb library — narrower but never broken. Path: grow verbs, then LLM-authored "mechanic modules" that must pass the headless play-probe before shipping. Reliability IS the quality difference users feel. |
+| 2D games | Out of scope near-term; our wedge is 3D worlds + the video twin. |
+
+**Where we beat them (press these):** 100% local generation (their AI is
+cloud); one prompt drives BOTH a game and a film from the same asset library;
+real mocap gaits; real-city OSM maps; verified asset pipeline (orientation
+gates, play-probes) so outputs work every time; browser-playable zero-install
+exports.
 
 ## Marketplace infrastructure (how sharing actually works)
 
