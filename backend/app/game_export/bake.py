@@ -406,6 +406,56 @@ def _glb_has_images(glb: str | Path) -> bool:
         return True                      # unsure → don't touch the materials
 
 
+_DERIVE_NORMALS_CODE = r'''
+import bpy, json
+import numpy as np
+o=bpy.data.objects.get('Hero')
+made=0
+seen=set()
+for mt in (o.data.materials if o else []):
+    if not (mt and mt.use_nodes): continue
+    nt=mt.node_tree
+    b=nt.nodes.get('Principled BSDF')
+    if not b or b.inputs['Normal'].is_linked: continue
+    base=b.inputs.get('Base Color')
+    if not (base and base.is_linked): continue
+    src=base.links[0].from_node
+    if src.type!='TEX_IMAGE' or not src.image or src.image.name in seen: continue
+    img=src.image; seen.add(img.name)
+    w,h=img.size
+    if w*h==0 or w<64: continue
+    px=np.empty(w*h*4, dtype=np.float32)
+    img.pixels.foreach_get(px)
+    lum=px.reshape(h,w,4)[:,:,:3].mean(2)
+    # light blur (3x3 box) so micro-noise doesn't become normal grain
+    p=np.pad(lum,1,mode='edge')
+    lum=(p[:-2,:-2]+p[:-2,1:-1]+p[:-2,2:]+p[1:-1,:-2]+p[1:-1,1:-1]+p[1:-1,2:]
+         +p[2:,:-2]+p[2:,1:-1]+p[2:,2:])/9.0
+    # sobel gradients -> tangent-space normal (albedo-as-height approximation)
+    p=np.pad(lum,1,mode='edge')
+    dx=(p[:-2,2:]+2*p[1:-1,2:]+p[2:,2:]) - (p[:-2,:-2]+2*p[1:-1,:-2]+p[2:,:-2])
+    dy=(p[2:,:-2]+2*p[2:,1:-1]+p[2:,2:]) - (p[:-2,:-2]+2*p[:-2,1:-1]+p[:-2,2:])
+    S=1.6   # strength: visible relief without embossing
+    nx=-dx*S; ny=-dy*S; nz=np.ones_like(dx)
+    ln=np.sqrt(nx*nx+ny*ny+nz*nz)
+    out=np.empty((h,w,4), dtype=np.float32)
+    out[:,:,0]=nx/ln*0.5+0.5; out[:,:,1]=ny/ln*0.5+0.5
+    out[:,:,2]=nz/ln*0.5+0.5; out[:,:,3]=1.0
+    nimg=bpy.data.images.new(img.name+'_nrm', width=w, height=h, alpha=False)
+    nimg.colorspace_settings.name='Non-Color'
+    nimg.pixels.foreach_set(out.ravel())
+    if max(w,h) > 1024:                     # relief doesn't need albedo res —
+        s=1024.0/max(w,h)                   # keeps library GLBs shippable
+        nimg.scale(int(w*s), int(h*s))
+    nimg.pack()
+    tex=nt.nodes.new('ShaderNodeTexImage'); tex.image=nimg
+    nm=nt.nodes.new('ShaderNodeNormalMap'); nm.inputs['Strength'].default_value=0.5
+    nt.links.new(tex.outputs['Color'], nm.inputs['Color'])
+    nt.links.new(nm.outputs['Normal'], b.inputs['Normal'])
+    made+=1
+__result__=json.dumps({"ok":True,"normal_maps":made})
+'''
+
 _DESPECKLE_CODE = r'''
 import bpy, json
 import numpy as np
@@ -451,7 +501,8 @@ __result__=json.dumps({"ok":True,"healed_px":healed,"images":imgs})
 def optimize_asset(src_glb: str | Path, out_glb: str | Path, target_tris: int = 45000,
                    height_m: float = 1.0, verbose: bool = True,
                    ref_png: str | Path | None = None,
-                   despeckle: bool = False) -> dict:
+                   despeckle: bool = False,
+                   derive_normals: bool = True) -> dict:
     """Decimate a raw TRELLIS GLB into a game-budget asset (NPCs/props). Raw
     heroes run ~400k tris; two of those wedge an iGPU. CPU-only via bridge.
 
@@ -485,6 +536,15 @@ def optimize_asset(src_glb: str | Path, out_glb: str | Path, target_tris: int = 
         if verbose and d:
             print(f"[bake] despeckle: healed {d.get('healed_px', 0)} px "
                   f"across {d.get('images', 0)} image(s)")
+    if derive_normals:
+        # PHOTOREAL LADDER step 4 (2026-07-06): derive a tangent-space normal
+        # map from the albedo (blur -> sobel -> normal). Approximate but
+        # transformative — flat CPU-era textures gain surface relief that
+        # responds to every light in both engines. Skipped automatically when
+        # a real normal map already exists (GPU-era assets keep theirs).
+        nr = _call(registry, "derive_normals", _DERIVE_NORMALS_CODE)
+        if verbose and nr:
+            print(f"[bake] derived {nr.get('normal_maps', 0)} normal map(s) from albedo")
     r = _call(registry, "optimize",
               _OPTIMIZE_CODE.replace("__TARGET__", str(int(target_tris)))
                             .replace("__OUT__", str(out_glb).replace("\\", "/")))
