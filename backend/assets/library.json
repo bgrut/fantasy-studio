@@ -1,6 +1,5 @@
 {
   "dog": "assets/library/dog.glb",
-  "cat": "assets/library/cat.glb",
   "man": "assets/library/man_anim.glb",
   "car": "assets/library/car.glb",
   "fox": "assets/library/fox.glb",
@@ -12,5 +11,6 @@
   "knight": "assets/library/knight.glb",
   "dragon": "assets/library/dragon.glb",
   "whale": "assets/library/whale.glb",
-  "wolf": "assets/library/wolf.glb"
+  "wolf": "assets/library/wolf.glb",
+  "monkey": "assets/library/monkey.glb"
 }

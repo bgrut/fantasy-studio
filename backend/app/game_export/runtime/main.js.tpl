@@ -49,6 +49,41 @@ async function main() {
   await RAPIER.init();
   const pal = SKY[SPEC.world.sky] || SKY.day;
 
+  // ── SOUND (game-feel pass) — synthesized in WebAudio: zero asset files,
+  // zero network, works in every export. Each player action gets an answer:
+  // pickup chime, attack whoosh, hit thud, hurt sting, countdown beeps,
+  // win fanfare, lose fall. First activated by the START click (a user
+  // gesture, so autoplay policy is satisfied by design).
+  let actx = null;
+  function sfx(kind) {
+    try {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return;
+      if (!actx) actx = new AC();
+      if (actx.state === 'suspended') actx.resume();
+      const t0 = actx.currentTime;
+      const tone = (type, f0, f1, dur, vol, at) => {
+        const o = actx.createOscillator(), g = actx.createGain();
+        o.type = type;
+        o.frequency.setValueAtTime(f0, t0 + at);
+        if (f1 !== f0) o.frequency.exponentialRampToValueAtTime(Math.max(f1, 1), t0 + at + dur);
+        g.gain.setValueAtTime(vol, t0 + at);
+        g.gain.exponentialRampToValueAtTime(0.0008, t0 + at + dur);
+        o.connect(g); g.connect(actx.destination);
+        o.start(t0 + at); o.stop(t0 + at + dur + 0.02);
+      };
+      if (kind === 'pickup')  { tone('sine', 880, 880, 0.09, 0.16, 0); tone('sine', 1318.5, 1318.5, 0.22, 0.14, 0.07); }
+      else if (kind === 'attack') { tone('sawtooth', 320, 70, 0.16, 0.10, 0); }
+      else if (kind === 'hit')  { tone('square', 150, 55, 0.13, 0.16, 0); }
+      else if (kind === 'hurt') { tone('sawtooth', 220, 90, 0.22, 0.15, 0); tone('sine', 110, 60, 0.25, 0.12, 0); }
+      else if (kind === 'beep') { tone('sine', 660, 660, 0.12, 0.14, 0); }
+      else if (kind === 'go')   { tone('sine', 990, 990, 0.30, 0.16, 0); }
+      else if (kind === 'step') { tone('sine', 523.25, 523.25, 0.1, 0.12, 0); tone('sine', 784, 784, 0.22, 0.12, 0.09); }
+      else if (kind === 'win')  { [523.25, 659.25, 784, 1046.5].forEach((f, i) => tone('triangle', f, f, 0.3, 0.14, i * 0.12)); }
+      else if (kind === 'lose') { [392, 311, 233].forEach((f, i) => tone('triangle', f, f, 0.34, 0.14, i * 0.16)); }
+    } catch (e) { /* audio is garnish — never let it break the game */ }
+  }
+
   // ── renderer / scene / camera ────────────────────────────────────────────
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
@@ -701,6 +736,9 @@ async function main() {
   const IS_RACE = (SPEC.objectives || []).some(o => o.kind === 'race');
   let raceGo = !IS_RACE;
   let gameStarted = false;
+  let runT0 = 0;                          // run clock starts at START
+  const bestKey = 'fs_best_' + (SPEC.title || 'game');
+  const fmtT = s => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
 
   function startCountdown() {
     const cd = document.createElement('div');
@@ -710,10 +748,11 @@ async function main() {
     document.body.appendChild(cd);
     let n = 3;
     cd.textContent = n;
+    sfx('beep');
     const iv = setInterval(() => {
       n--;
-      if (n > 0) cd.textContent = n;
-      else if (n === 0) { cd.textContent = 'GO!'; raceGo = true; }
+      if (n > 0) { cd.textContent = n; sfx('beep'); }
+      else if (n === 0) { cd.textContent = 'GO!'; raceGo = true; sfx('go'); }
       else { cd.remove(); clearInterval(iv); }
     }, 900);
   }
@@ -745,9 +784,22 @@ async function main() {
       + '<button id="startbtn" style="font:700 20px system-ui;color:#0d0b16;background:#5cffc9;'
       + 'border:none;border-radius:14px;padding:14px 46px;cursor:pointer;">START</button></div>';
     document.body.appendChild(ov);
+    // personal best on the start screen — "one more run" fuel
+    try {
+      const pb = parseFloat(localStorage.getItem(bestKey));
+      if (pb > 0) {
+        const el = document.createElement('div');
+        el.style.cssText = 'font:600 13px system-ui;color:#5cffc9;margin-top:10px;';
+        el.textContent = `your best: ${fmtT(pb)}`;
+        document.getElementById('startbtn').parentNode.insertBefore(
+          el, document.getElementById('startbtn'));
+      }
+    } catch (e) {}
     document.getElementById('startbtn').addEventListener('click', () => {
       ov.remove();
       gameStarted = true;
+      runT0 = performance.now();
+      sfx('step');                        // gesture unlocks WebAudio + confirms start
       if (IS_RACE) startCountdown();
     });
   }
@@ -1007,6 +1059,16 @@ async function main() {
   function doWin(text) {
     if (won || lost) return;
     won = true; won_ = true;
+    sfx('win');
+    // run time + personal best (localStorage) — every win answers "how well?"
+    try {
+      const secs = (performance.now() - runT0) / 1000;
+      const prev = parseFloat(localStorage.getItem(bestKey));
+      const isPB = !(prev > 0) || secs < prev;
+      if (isPB) localStorage.setItem(bestKey, String(secs));
+      document.getElementById('wintime').textContent =
+        `time ${fmtT(secs)}` + (isPB ? ' — new personal best!' : ` · best ${fmtT(prev)}`);
+    } catch (e) {}
     document.getElementById('wintext').textContent = text;
     document.getElementById('win').style.display = 'flex';
     // Game Projects: hub passes ?next=<url> for level progression
@@ -1037,6 +1099,7 @@ async function main() {
   function doLose(text) {
     if (won || lost) return;
     lost = true;
+    sfx('lose');
     document.getElementById('losetext').textContent = text;
     document.getElementById('lose').style.display = 'flex';
     console.log('[game] LOSE — ' + text);
@@ -1045,6 +1108,7 @@ async function main() {
   function playerHit(dmg) {
     if (won || lost) return;
     php = Math.max(0, php - dmg);
+    sfx('hurt');
     renderHearts();
     dmgEl.style.opacity = '1';
     setTimeout(() => { dmgEl.style.opacity = '0'; }, 160);
@@ -1306,7 +1370,7 @@ async function main() {
     for (const m of n.mats) { if (m.emissive) m.emissive.setHex(0xff4444); }
     setTimeout(() => { for (const m of n.mats) { if (m.emissive) m.emissive.setHex(0x550000); } }, 120);
     if (n.hp <= 0) {
-      n.dead = true; kills++;
+      n.dead = true; kills++; sfx('hit');
       const st = steps[stepIdx];
       if (st && st.kind === 'defeat') {
         renderQuest();
@@ -1317,6 +1381,7 @@ async function main() {
   function doAttack() {
     if (ATTACK === 'none' || atkCd > 0 || won || lost) return;
     atkCd = ATTACK === 'ranged' ? 0.35 : 0.55;
+    sfx('attack');
     playAttackAnim();                          // the actual katana/claw motion
     const dir = new THREE.Vector3(Math.sin(modelYaw), 0, Math.cos(modelYaw));
     if (ATTACK === 'ranged') {
@@ -1637,6 +1702,7 @@ async function main() {
           const st = steps[stepIdx];
           if (st && st.kind === 'collect') {
             st._got = (st._got || 0) + 1;
+            sfx('pickup');
             renderQuest();
             if (st._got >= st.count) advanceStep();
           }

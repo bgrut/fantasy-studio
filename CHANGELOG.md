@@ -10,6 +10,23 @@ Pre-1.0 versions are internal milestones during the constraint sprint leading to
 
 ## [Unreleased]
 
+### Added — Game-feel pass 1: sound + timers + the success blueprint (2026-07-06)
+- **Every game has SOUND**: WebAudio-synthesized (zero asset files, zero
+  network) — pickup chime, attack whoosh, kill thud, hurt sting, race
+  countdown beeps + GO, win fanfare, lose fall. Activated by the START click
+  so browser autoplay policy is satisfied by design.
+- **Every win answers "how well?"**: run timer on the win screen, personal
+  best remembered per game (localStorage), "new personal best!" callouts,
+  your best time shown on the START screen, and a Play-again button.
+- **Success blueprint**: `backend/docs/game_success_blueprint.md` maps what
+  perennial best-sellers do (legible loop, juice, progression, ownership,
+  session shape) to a concrete runtime-template roadmap (R-A juice pack →
+  R-B score/medals → R-C ownership → R-D marketplace readiness).
+- **Library-wide orientation trust**: dog, monkey, penguin, samurai re-baked
+  through the orientation gate (render-verified upright + textured); the cat
+  was a pre-pipeline Sketchfab asset with no reference to verify against —
+  retired and regenerated from scratch through the modern pipeline.
+
 ### Fixed — Reliability triple: wolf autopsy findings (2026-07-06)
 - **Blender bridge self-heal**: the headless Blender behind the bridge dies
   sometimes (flaky iGPU driver); every asset bake after that failed silently —

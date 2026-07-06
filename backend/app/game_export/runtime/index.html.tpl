@@ -64,6 +64,8 @@
 <div id="lose"><div class="card"><h2>You were defeated</h2><div id="losetext"></div>
 <button onclick="location.reload()">↻ Retry</button></div></div>
 <div id="win"><div class="card"><h2>You win!</h2><div id="wintext"></div>
+<div id="wintime" style="margin-top:8px;font-size:13px;color:#a8a4c4"></div>
+<button onclick="location.reload()" style="margin-top:12px">↻ Play again</button>
 <a id="nextlvl" style="display:none;margin-top:14px;padding:8px 22px;border-radius:10px;
 background:#7c5cff;color:#fff;text-decoration:none;font-weight:600;display:none">Next level →</a>
 <a id="backhub" style="display:none;margin-top:8px;color:#a78bfa;font-size:12px;text-decoration:none">↩ level select</a></div></div>
