@@ -3064,6 +3064,36 @@ def compose_scene(
         "samples": rconf["samples"],
         "fps": fps,
     })
+    # R1.5 CINEMATIC LOOK (realism plan, 2026-07-05): the "gritty" reads came
+    # from raw EEVEE — no motion blur, no AO, flat tone curve. One block turns
+    # on the film response every render gets: AgX/Filmic transform, motion
+    # blur, ambient occlusion, soft shadows, screen-space reflections, a
+    # whisper of bloom. Gate: FS_CINEMA_LOOK=0 reverts.
+    if os.environ.get("FS_CINEMA_LOOK", "1") != "0":
+        runner.run("cinema_look", "execute_python", {"code": (
+            "import bpy\n"
+            "sc = bpy.context.scene\n"
+            "try:\n"
+            "    sc.view_settings.view_transform = 'AgX'\n"
+            "    sc.view_settings.look = 'AgX - Base Contrast'\n"
+            "except Exception:\n"
+            "    try: sc.view_settings.view_transform = 'Filmic'\n"
+            "    except Exception: pass\n"
+            "try:\n"
+            "    sc.render.use_motion_blur = True\n"
+            "    sc.render.motion_blur_shutter = 0.5\n"
+            "except Exception: pass\n"
+            "if sc.render.engine.startswith('BLENDER_EEVEE'):\n"
+            "    ee = sc.eevee\n"
+            "    for attr, val in (('use_gtao', True), ('gtao_distance', 1.0),\n"
+            "                      ('use_bloom', True), ('bloom_intensity', 0.03),\n"
+            "                      ('use_ssr', True), ('use_soft_shadows', True),\n"
+            "                      ('use_motion_blur', True)):\n"
+            "        try: setattr(ee, attr, val)\n"
+            "        except Exception: pass\n"
+            "__result__ = 'cinema look on'\n"
+        )}, critical=False)
+
     # Enable GPU compute for Cycles when available
     if rconf["engine"] == "CYCLES":
         runner.run("cycles_gpu", "execute_python", {"code": (
@@ -3922,6 +3952,30 @@ def compose_scene(
             runner, hero_name, "walk", total_frames, verbose=verbose)
         if not _shots_ok:
             cinematography.build_cinematic_camera(runner, hero_name, "walk", total_frames, verbose=verbose)
+
+    # 10c. R1.5 — CAMERA OPTICS: real depth of field focused on the hero + a
+    # RIM light opposite the sun (3-point feel: sun=key, HDRI/sky=fill,
+    # rim=separation). Runs after every camera path so it applies to whichever
+    # camera won. Failure-safe; FS_CINEMA_LOOK=0 skips.
+    if os.environ.get("FS_CINEMA_LOOK", "1") != "0" and hero_name:
+        runner.run("camera_optics", "execute_python", {"code": (
+            "import bpy, math\n"
+            "sc = bpy.context.scene\n"
+            f"hero = bpy.data.objects.get('{hero_name}')\n"
+            "cam = sc.camera\n"
+            "if cam and cam.data and hero:\n"
+            "    d = cam.data\n"
+            "    d.dof.use_dof = True\n"
+            "    d.dof.focus_object = hero\n"
+            "    d.dof.aperture_fstop = 2.8\n"
+            "if hero:\n"
+            "    rim = bpy.data.lights.new('RimLight', type='SUN')\n"
+            "    rim.energy = 1.1\n"
+            "    ro = bpy.data.objects.new('RimLight', rim)\n"
+            "    sc.collection.objects.link(ro)\n"
+            "    ro.rotation_euler = (math.radians(55), 0, math.radians(210))\n"
+            "__result__ = 'optics set'\n"
+        )}, critical=False)
 
     # 11. Verify (informational — we don't abort on failure)
     verify_result = runner.run("verify", "hero_verify", {})

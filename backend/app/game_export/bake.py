@@ -366,6 +366,19 @@ for _mt in me.materials:
         alpha_wired+=1
 for _mt in me.materials:
     if _mt: _mt.use_backface_culling=True
+# NORMALS HYGIENE (realism plan R1.2): generated meshes carry pockets of
+# inverted faces that render BLACK under filmic tonemapping (the car-hood
+# "black spots"). Recalculate consistent outside-facing normals.
+try:
+    bpy.ops.object.select_all(action='DESELECT'); o.select_set(True)
+    bpy.context.view_layer.objects.active=o
+    bpy.ops.object.mode_set(mode='EDIT')
+    bpy.ops.mesh.select_all(action='SELECT')
+    bpy.ops.mesh.normals_make_consistent(inside=False)
+    bpy.ops.object.mode_set(mode='OBJECT')
+except Exception:
+    try: bpy.ops.object.mode_set(mode='OBJECT')
+    except Exception: pass
 bpy.ops.object.select_all(action='DESELECT'); o.select_set(True)
 bpy.ops.export_scene.gltf(filepath=r"__OUT__", use_selection=True, export_yup=True)
 __result__=json.dumps({"ok":True,"tris":[tris0,tris1],"shard_verts_dropped":int(dropped),

@@ -153,25 +153,76 @@ def export_vproject(pid: int):
         raise HTTPException(status_code=500, detail="ffmpeg not found on PATH")
     pdir = VPROJ_DIR / f"project_{pid}"
     pdir.mkdir(parents=True, exist_ok=True)
-    out_mp4 = pdir / f"{''.join(c if c.isalnum() or c in '-_ ' else '' for c in p['name']).strip() or 'video'}.mp4"
-    # concat filter with re-encode: scenes may differ in fps/size; normalize to
-    # the FIRST scene's dimensions, 24fps, yuv420p
-    inputs, filters = [], []
-    for i, s in enumerate(p["scenes"]):
+    safe_name = "".join(c if c.isalnum() or c in "-_ " else "" for c in p["name"]).strip() or "video"
+    out_mp4 = pdir / f"{safe_name}.mp4"
+    files = []
+    for s in p["scenes"]:
         f = Path(s["file"])
         if not f.exists():
             raise HTTPException(status_code=500, detail=f"scene file missing: {f.name}")
-        inputs += ["-i", str(f)]
-        filters.append(f"[{i}:v]fps=24,scale=1280:720:force_original_aspect_ratio=decrease,"
-                       f"pad=1280:720:(ow-iw)/2:(oh-ih)/2,setsar=1[v{i}]")
-    n = len(p["scenes"])
-    graph = ";".join(filters) + ";" + "".join(f"[v{i}]" for i in range(n)) + f"concat=n={n}:v=1:a=0[out]"
-    cmd = [ffmpeg, "-y", *inputs, "-filter_complex", graph, "-map", "[out]",
-           "-c:v", "libx264", "-preset", "fast", "-crf", "19", "-pix_fmt", "yuv420p",
-           str(out_mp4)]
-    r = subprocess.run(cmd, capture_output=True, text=True, timeout=1800)
-    if r.returncode != 0 or not out_mp4.exists():
-        raise HTTPException(status_code=500, detail=f"ffmpeg failed: {r.stderr[-400:]}")
+        files.append(f)
+    n = len(files)
+
+    def _norm(i: int) -> str:
+        return (f"[{i}:v]fps=24,scale=1280:720:force_original_aspect_ratio=decrease,"
+                f"pad=1280:720:(ow-iw)/2:(oh-ih)/2,setsar=1[v{i}]")
+
+    # R1.6 (realism plan): FILM export — 2s title card + 0.5s crossfades
+    # between scenes. Falls back to the plain concat on any hiccup (missing
+    # ffprobe, weird durations) so export can never regress.
+    r = None
+    try:
+        ffprobe = shutil.which("ffprobe")
+        if not ffprobe:
+            raise RuntimeError("no ffprobe")
+        durs = []
+        for f in files:
+            pr = subprocess.run([ffprobe, "-v", "error", "-show_entries",
+                                 "format=duration", "-of", "csv=p=0", str(f)],
+                                capture_output=True, text=True, timeout=30)
+            durs.append(max(float(pr.stdout.strip()), 0.6))
+        FADE = 0.5
+        title = p["name"].replace("\\", "").replace("'", "").replace(":", " ")[:48]
+        inputs = ["-f", "lavfi", "-i",
+                  f"color=c=0x0c0c14:s=1280x720:d=2.2:r=24"]
+        for f in files:
+            inputs += ["-i", str(f)]
+        filters = [
+            "[0:v]drawtext=fontfile='C\\:/Windows/Fonts/arialbd.ttf':"
+            f"text='{title}':fontcolor=0xEDEAF6:fontsize=56:"
+            "x=(w-text_w)/2:y=(h-text_h)/2,setsar=1[v0]"]
+        for i in range(n):
+            filters.append(_norm(i + 1).replace(f"[v{i + 1}]", f"[v{i + 1}]"))
+        # xfade chain: title(2.2s) -> scene1 -> scene2 ... cumulative offsets
+        seq_durs = [2.2] + durs
+        chain = "[v0]"
+        acc = 0.0
+        for i in range(1, n + 1):
+            acc += seq_durs[i - 1] - FADE
+            outl = "[out]" if i == n else f"[x{i}]"
+            filters.append(f"{chain}[v{i}]xfade=transition=fade:duration={FADE}:offset={acc:.3f}{outl}")
+            chain = f"[x{i}]"
+        graph = ";".join(filters)
+        cmd = [ffmpeg, "-y", *inputs, "-filter_complex", graph, "-map", "[out]",
+               "-c:v", "libx264", "-preset", "fast", "-crf", "19",
+               "-pix_fmt", "yuv420p", str(out_mp4)]
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=1800)
+        if r.returncode != 0 or not out_mp4.exists():
+            raise RuntimeError(f"xfade export failed: {r.stderr[-300:]}")
+    except Exception:
+        # plain concat fallback — the pre-R1.6 behavior, verbatim
+        inputs, filters = [], []
+        for i, f in enumerate(files):
+            inputs += ["-i", str(f)]
+            filters.append(_norm(i))
+        graph = (";".join(filters) + ";" + "".join(f"[v{i}]" for i in range(n))
+                 + f"concat=n={n}:v=1:a=0[out]")
+        cmd = [ffmpeg, "-y", *inputs, "-filter_complex", graph, "-map", "[out]",
+               "-c:v", "libx264", "-preset", "fast", "-crf", "19",
+               "-pix_fmt", "yuv420p", str(out_mp4)]
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=1800)
+        if r.returncode != 0 or not out_mp4.exists():
+            raise HTTPException(status_code=500, detail=f"ffmpeg failed: {r.stderr[-400:]}")
     mb = out_mp4.stat().st_size / 1e6
     rel = out_mp4.relative_to(Path(OUTPUT_DIR)).as_posix()
     return {"ok": True, "scenes": n, "mp4_mb": round(mb, 1),
