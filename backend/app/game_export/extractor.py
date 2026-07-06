@@ -22,9 +22,12 @@ Output ONLY the JSON object, no markdown, no commentary. Schema (all fields opti
  "world": {"name": one of "park","garden","forest","meadow","countryside","field","grass","backyard","city","street","plain",
            "mountains","canyon","desert","beach","swamp","volcano","arctic","hills",
            "ocean","lake","river","underwater",
-           "size_m": float 30..500, "sky": one of "day","sunset","night","overcast", "fog": bool,
+           "mars","moon","castle","jungle","ruins","cave",
+           "size_m": float 30..500, "sky": one of "day","sunset","night","overcast","mars","space","dusk", "fog": bool,
+           (mars -> sky "mars" + rust ground_color; moon/space -> sky "space" + gray ground),
            "weather": one of "none","rain","snow", "wind": float 0..1,
            "ground_color": [r,g,b] floats 0..1},
+ "reward": str or null — what the winner GETS ("winner gets a banana" -> "banana"); null if none stated,
  "player": {"name": THE CONTROLLABLE SUBJECT of the prompt as a simple noun ("fox","samurai","man","horse","wizard"...),
             "height_m": float 0.5..3, "walk_speed": float 1..4, "run_speed": float 4..10},
  "camera": {"mode": one of "third_person","first_person","orbit", "distance_m": float 2..12, "fov_deg": float 30..90},
@@ -61,6 +64,7 @@ def _keyword_fallback(text: str) -> dict:
     for w in ("city", "street", "downtown", "mountain", "canyon", "desert",
               "underwater", "ocean", "sea", "lake", "river", "reef",
               "beach", "swamp", "volcano", "arctic", "tundra", "hill",
+              "mars", "moon", "space", "castle", "jungle", "ruin", "cave",
               "park", "garden", "forest", "meadow",
               "countryside", "field", "backyard", "grass"):
         if w in t:
@@ -68,8 +72,16 @@ def _keyword_fallback(text: str) -> dict:
                                     else "mountains" if w == "mountain"
                                     else "arctic" if w == "tundra"
                                     else "ocean" if w in ("sea", "reef")
+                                    else "moon" if w == "space"
+                                    else "ruins" if w == "ruin"
                                     else "hills" if w == "hill" else w)
             break
+    if out["world"].get("name") == "mars":
+        out["world"]["sky"] = "mars"
+        out["world"].setdefault("ground_color", [0.55, 0.30, 0.18])
+    elif out["world"].get("name") == "moon":
+        out["world"]["sky"] = "space"
+        out["world"].setdefault("ground_color", [0.42, 0.42, 0.45])
     if any(w in t for w in ("race", "racing", "catch and pass", "overtake", "finish line")):
         import re as _re
         m = _re.search(r"(\d+)\s+(car|truck|racer|opponent)", t)

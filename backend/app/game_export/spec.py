@@ -50,7 +50,7 @@ class WorldSpec(BaseModel):
     name: str = "park"
     size_m: float = Field(120.0, gt=10.0, le=2000.0)   # square ground extent
     ground_color: List[float] = Field(default_factory=lambda: [0.35, 0.52, 0.28])
-    sky: Literal["day", "sunset", "night", "overcast"] = "day"
+    sky: Literal["day", "sunset", "night", "overcast", "mars", "space", "dusk"] = "day"
     weather: Literal["none", "rain", "snow"] = "none"     # Phase 33 dynamics
     wind: float = Field(0.5, ge=0.0, le=1.0)              # prop sway strength
     grass: bool = True                                    # off for cities/snow
@@ -93,6 +93,7 @@ class GameSpec(BaseModel):
     world: WorldSpec = Field(default_factory=WorldSpec)
     entities: List[EntitySpec] = Field(default_factory=list)
     objectives: List[ObjectiveSpec] = Field(default_factory=list)
+    reward: Optional[str] = None          # "winner gets a banana" → shown on the win screen
     seed: int = 7                         # deterministic scatter placement
 
     def runtime_json(self) -> dict:

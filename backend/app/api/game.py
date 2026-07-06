@@ -196,6 +196,8 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                 ent.asset = glb
                 if ent.height_m == 1.0:
                     ent.height_m = library.default_height(ekind)
+                    if ent.height_m == 1.0 and guess_pattern(ekind) == "static":
+                        ent.height_m = 0.5   # unknown props default small, not person-sized
                 kept.append(ent)
             else:
                 job.setdefault("notes", []).append(
@@ -251,7 +253,9 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         _TERRAIN_AMP = {"mountain": 16.0, "alpine": 16.0, "volcano": 14.0,
                         "canyon": 11.0, "cliff": 11.0, "hill": 6.5,
                         "desert": 3.4, "dune": 3.4, "arctic": 4.5,
-                        "swamp": 0.9, "beach": 1.4, "plain": 1.5}
+                        "swamp": 0.9, "beach": 1.4, "plain": 1.5,
+                        "mars": 8.0, "moon": 5.0, "cave": 7.0,
+                        "castle": 1.2, "ruins": 2.6, "jungle": 3.5}
         _wname = (spec.world.name or "").lower()
         amp = next((v for k, v in _TERRAIN_AMP.items() if k in _wname), 2.4)
         if is_city:

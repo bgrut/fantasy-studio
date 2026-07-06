@@ -10,6 +10,28 @@ Pre-1.0 versions are internal milestones during the constraint sprint leading to
 
 ## [Unreleased]
 
+### Added — Breadth pass: procedural motion, alien worlds, rewards (2026-07-06)
+- **Wings flap and whales undulate — no rig needed**: fly/swim heroes deform in
+  the vertex shader (wing flap grows toward the wingtips; a traveling nose→tail
+  body wave for swimmers), keyed off geometry so it works for ANY generated
+  creature. Amplitude follows speed — gentle at idle, full when moving, extra
+  on climb/dive. Verified in-browser: dragon flies mid-flap over the peaks,
+  whale swims with a live tail wave, zero shader errors. (The full bone-based
+  motion library #116/#117 still lands later for ground gaits — this makes
+  every flyer/swimmer alive TODAY.)
+- **Six new world classes**: mars (butterscotch haze, rust rock fields, no
+  grass), moon/space (airless black sky, hard sun, gray craters), castle
+  (stone yard, braziers), ruins, cave, jungle — each with terrain amplitude,
+  scatter recipe, and sky palette. Extractor maps "on mars" → mars sky + rust
+  ground automatically; new sky moods `mars`/`space`/`dusk`.
+- **Rewards**: "the winner gets a banana" → the win screen says so. New
+  `reward` field extracted from any prompt.
+- **Prop sanity**: monkeys/penguins/bottles/crates get real-world default
+  sizes; unknown static props default small instead of person-sized.
+- **Sample prompts refreshed** to show the breadth: dragons over mountains,
+  whale pearl dives, mars duels with rewards, knight-vs-knight races, a
+  penguin on the moon — plus the proven classics.
+
 ### Fixed — Spawn-embedded-in-terrain (the REAL "doesn't move" root cause) (2026-07-06)
 - **Whale/dragon couldn't move because they spawned INSIDE the terrain**: spawn
   height assumed flat ground, so on mountain (16 m amplitude) or seabed worlds

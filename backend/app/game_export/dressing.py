@@ -57,10 +57,20 @@ _RECIPES = {
     "underwater":  [("rock", 70, 5)],
     "lake":        [("rock", 40, 4), ("tree_pine", 30, 3), ("bush", 16, 2)],
     "river":       [("rock", 50, 4), ("tree_oak", 30, 3), ("bush", 20, 2)],
+    # alien + built worlds (2026-07-06 breadth pass): rocks carry mars/moon
+    # (tint comes from ground_color + sky palette); castle/ruins get a stone
+    # yard feel — lamps read as braziers at dusk
+    "mars":        [("rock", 130, 8)],
+    "moon":        [("rock", 100, 7)],
+    "castle":      [("rock", 40, 4), ("lamp", 14, 3), ("tree_oak", 10, 2), ("bush", 12, 2)],
+    "ruins":       [("rock", 80, 6), ("bush", 24, 3), ("tree_oak", 12, 2)],
+    "cave":        [("rock", 140, 9)],
+    "jungle":      [("tree_oak", 120, 7), ("bush", 90, 5), ("rock", 30, 3)],
 }
 
 _NO_GRASS = {"city", "street", "town", "desert", "dune", "beach", "volcano",
-             "arctic", "canyon", "ocean", "underwater"}
+             "arctic", "canyon", "ocean", "underwater",
+             "mars", "moon", "cave"}   # airless/barren worlds grow no grass
 
 
 def wants_grass(setting: str | None, weather: str = "none") -> bool:

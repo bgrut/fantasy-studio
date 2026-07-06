@@ -38,6 +38,11 @@ const SKY = {
   sunset:   { sky: 0xe8996a, fog: 0xd9a07a, sun: 2.2, amb: 0.40, sunPos: [80, 25, 10] },
   night:    { sky: 0x0d1626, fog: 0x0d1626, sun: 0.35, amb: 0.15, sunPos: [30, 60, -40] },
   overcast: { sky: 0x9aa4ad, fog: 0x9aa4ad, sun: 1.2, amb: 0.65, sunPos: [20, 90, 20] },
+  // alien worlds: mars = butterscotch haze over rust; space = airless black,
+  // hard sun; dusk = deep violet-blue with a low warm sun
+  mars:     { sky: 0xd99a66, fog: 0xc98a5a, sun: 2.6, amb: 0.45, sunPos: [60, 55, 20] },
+  space:    { sky: 0x05070d, fog: 0x05070d, sun: 3.8, amb: 0.10, sunPos: [50, 70, -30] },
+  dusk:     { sky: 0x3b3a5e, fog: 0x46466b, sun: 1.1, amb: 0.35, sunPos: [70, 18, 15] },
 };
 
 async function main() {
@@ -958,7 +963,11 @@ async function main() {
   function advanceStep() {
     stepIdx++;
     const st = steps[stepIdx];
-    if (!st) { doWin('Mission complete!'); return; }
+    if (!st) {
+      // "winner gets a banana" — the promised reward headlines the win screen
+      doWin(SPEC.reward ? `You won the ${SPEC.reward}!` : 'Mission complete!');
+      return;
+    }
     if (st.kind === 'collect') { st._got = 0; spawnCollectibles(st); }
     if (st.kind === 'defeat') { st._k0 = kills; }
     renderQuest();
@@ -1027,6 +1036,43 @@ async function main() {
   alignLongAxis(pRoot, ['drive', 'swim'].includes(P.mode || 'walk'));
   polishVehiclePaint(pRoot, (P.mode || 'walk') === 'drive');
   holder.rotation.y = THREE.MathUtils.degToRad(P.yaw_offset_deg || 0);
+
+  // PROCEDURAL MOTION (Phase 20 lite): no rig required — the mesh itself
+  // deforms in the vertex shader, keyed off geometry, so it works for ANY
+  // generated creature. Swimmers get a traveling nose→tail body wave (the
+  // whale finally *swims*); flyers get a wing flap that grows toward the
+  // wingtips. Amplitude follows speed: gentle at idle, full when moving.
+  const procShaders = [];
+  if (P.mode === 'fly' || P.mode === 'swim') {
+    pRoot.traverse(o => {
+      if (!o.isMesh || o.isSkinnedMesh) return;
+      o.geometry.computeBoundingBox();
+      const bb = o.geometry.boundingBox;
+      const sx = Math.max(bb.max.x - bb.min.x, 1e-3);
+      const sz = Math.max(bb.max.z - bb.min.z, 1e-3);
+      const chunk = P.mode === 'swim'
+        ? `float tf = clamp((${bb.max.z.toFixed(4)} - position.z) / ${sz.toFixed(4)}, 0.0, 1.0);
+           float wv = sin(uTime * 3.2 - position.z * ${(5.0 / sz).toFixed(4)}) * uAmp * tf * tf;
+           transformed.y += wv * ${(sz * 0.055).toFixed(4)};
+           transformed.x += wv * ${(sz * 0.02).toFixed(4)};`
+        : `float wf = smoothstep(${(0.10 * sx).toFixed(4)}, ${(0.50 * sx).toFixed(4)}, abs(position.x));
+           float fl = sin(uTime * 5.2) * uAmp * wf;
+           transformed.y += abs(position.x) * fl * 0.5;
+           transformed.z -= abs(position.x) * abs(fl) * 0.06;`;
+      for (const m of Array.isArray(o.material) ? o.material : [o.material]) {
+        if (!m) continue;
+        m.onBeforeCompile = sh => {
+          sh.uniforms.uTime = { value: 0 };
+          sh.uniforms.uAmp = { value: 0.35 };
+          sh.vertexShader = 'uniform float uTime;\nuniform float uAmp;\n'
+            + sh.vertexShader.replace('#include <begin_vertex>',
+                                      '#include <begin_vertex>\n' + chunk);
+          procShaders.push(sh);
+        };
+        m.needsUpdate = true;
+      }
+    });
+  }
   const playerObj = new THREE.Group();
   playerObj.add(holder);
   scene.add(playerObj);
@@ -1583,6 +1629,16 @@ async function main() {
     camera.position.lerp(new THREE.Vector3(cx, cy, cz), 1 - Math.exp(-8 * dt));
     camera.lookAt(camTarget);
 
+    // procedural swim/flap motion: time + speed-scaled amplitude
+    if (procShaders.length) {
+      const a = 0.35 + 0.65 * Math.min(speed / Math.max(P.walk_speed, 0.1), 1) * mv.mag
+        + (keys.Space || keys.KeyC ? 0.25 : 0);
+      const tNow = performance.now() / 1000;
+      for (const sh of procShaders) {
+        sh.uniforms.uTime.value = tNow;
+        sh.uniforms.uAmp.value += (Math.min(a, 1) - sh.uniforms.uAmp.value) * Math.min(4 * dt, 1);
+      }
+    }
     composer.render();
     // live state for the verify harness (extends the __game probe object)
     window.__game.state = { x: nt.x, y: nt.y, z: nt.z, modelYaw, yaw, speed,

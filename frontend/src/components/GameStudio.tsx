@@ -11,13 +11,20 @@ import {
   type GameHealth, type GameJob, type GameProject,
 } from '@/lib/gameApi'
 
+// Breadth showcase: classics that always work + wild ideas that exercise the
+// whole pipeline (new creatures generate on first use, worlds span earth to
+// mars, any species can race, rewards headline the win screen).
 const GAME_PROMPTS = [
-  'A samurai with a katana fights hostile dogs in a stormy forest — defeat 3, then reach the ancient shrine',
   'A fox on a snowy night quest: collect 6 fireflies, then race to the glowing beacon before dawn',
+  'A samurai with a katana fights hostile dogs in a stormy forest — defeat 3, then reach the ancient shrine',
+  'A dragon soaring over the mountains — collect 5 fire flames between the peaks',
+  'A whale in the deep ocean: dive for 5 pearls, then surface at the beacon',
+  'A red sports car races 5 rivals through New York City streets at night',
+  'A cat fighting a monkey on mars — the winner gets a banana',
   'A wizard defends a windswept meadow — defeat 4 wild wolves with magic bolts, collect 3 lost runes',
-  'A knight escorts his loyal dog across rainy highlands to a distant watchtower, collect 5 relics on the way',
-  'A horse galloping free across golden-hour countryside, reach the far hilltop',
-  'A man with a bow hunts through a foggy forest — defeat 2 hostile cats, collect 4 arrows, reach camp',
+  'A knight racing three other knights across the castle grounds at dusk',
+  'One man with a bow against 12 hostile wolves in the arctic — survive and reach the cabin',
+  'A penguin waddling across the moon, collect 6 moon rocks',
 ]
 
 const BUILD_STAGES: Record<string, string> = {
