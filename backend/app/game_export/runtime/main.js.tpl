@@ -964,6 +964,50 @@ async function main() {
   const rngC = mulberry32(SPEC.seed + 77);
   const cgeo = new THREE.SphereGeometry(0.11, 12, 10);
   let cpUsed = 0;                        // LVL.collect_points consumed so far
+
+  // ── R-A JUICE: every action answers visually too ─────────────────────────
+  // particle burst (pickups, kills), floating "+1" text, screen shake on hurt
+  const bursts = [];
+  const burstGeo = new THREE.SphereGeometry(0.05, 6, 5);
+  function burst(pos, color) {
+    const g = new THREE.Group();
+    for (let i = 0; i < 10; i++) {
+      const p = new THREE.Mesh(burstGeo,
+        new THREE.MeshBasicMaterial({ color, transparent: true }));
+      p.position.copy(pos);
+      p.userData.v = new THREE.Vector3((Math.random() - 0.5) * 6,
+                                       Math.random() * 5 + 2,
+                                       (Math.random() - 0.5) * 6);
+      g.add(p);
+    }
+    scene.add(g);
+    bursts.push({ g, t: 0 });
+  }
+  function stepBursts(dt) {
+    for (let i = bursts.length - 1; i >= 0; i--) {
+      const b = bursts[i]; b.t += dt;
+      for (const p of b.g.children) {
+        p.position.addScaledVector(p.userData.v, dt);
+        p.userData.v.y -= 12 * dt;
+        p.material.opacity = Math.max(0, 1 - b.t / 0.6);
+      }
+      if (b.t > 0.6) {
+        for (const p of b.g.children) p.material.dispose();
+        scene.remove(b.g); bursts.splice(i, 1);
+      }
+    }
+  }
+  function popText(txt, color) {
+    const d = document.createElement('div');
+    d.textContent = txt;
+    d.style.cssText = 'position:fixed;left:50%;top:42%;transform:translateX(-50%);'
+      + `font:800 26px system-ui;color:${color};text-shadow:0 2px 10px rgba(0,0,0,.5);`
+      + 'z-index:25;pointer-events:none;transition:all .7s ease-out;opacity:1;';
+    document.body.appendChild(d);
+    requestAnimationFrame(() => { d.style.top = '34%'; d.style.opacity = '0'; });
+    setTimeout(() => d.remove(), 750);
+  }
+  let shakeT = 0;                        // seconds of screen shake remaining
   // collectibles that LOOK like what the prompt promised: preload the
   // generated mesh for any collect step that shipped one ("fire flames",
   // "pearls", "moon rocks") — orbs are only the fallback
@@ -1109,6 +1153,7 @@ async function main() {
     if (won || lost) return;
     php = Math.max(0, php - dmg);
     sfx('hurt');
+    shakeT = 0.3;                        // impact you can FEEL
     renderHearts();
     dmgEl.style.opacity = '1';
     setTimeout(() => { dmgEl.style.opacity = '0'; }, 160);
@@ -1371,6 +1416,7 @@ async function main() {
     setTimeout(() => { for (const m of n.mats) { if (m.emissive) m.emissive.setHex(0x550000); } }, 120);
     if (n.hp <= 0) {
       n.dead = true; kills++; sfx('hit');
+      burst(n.obj.position.clone().add(new THREE.Vector3(0, 0.8, 0)), 0xff5c6a);
       const st = steps[stepIdx];
       if (st && st.kind === 'defeat') {
         renderQuest();
@@ -1703,6 +1749,8 @@ async function main() {
           if (st && st.kind === 'collect') {
             st._got = (st._got || 0) + 1;
             sfx('pickup');
+            burst(c.mesh.position, 0xffd54a);
+            popText(`+1 ${st.label || ''}  ·  ${st._got}/${st.count}`, '#ffd54a');
             renderQuest();
             if (st._got >= st.count) advanceStep();
           }
@@ -1725,6 +1773,12 @@ async function main() {
     const cy = nt.y + Math.sin(pitch) * cd + SPEC.camera.height_m * 0.4;
     camera.position.lerp(new THREE.Vector3(cx, cy, cz), 1 - Math.exp(-8 * dt));
     camera.lookAt(camTarget);
+    if (shakeT > 0) {                    // decaying screen shake on damage
+      shakeT = Math.max(0, shakeT - dt);
+      camera.position.x += (Math.random() - 0.5) * 0.5 * shakeT;
+      camera.position.y += (Math.random() - 0.5) * 0.4 * shakeT;
+    }
+    stepBursts(dt);
 
     // procedural swim/flap motion: time + speed-scaled amplitude
     if (procShaders.length) {

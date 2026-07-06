@@ -10,6 +10,19 @@ Pre-1.0 versions are internal milestones during the constraint sprint leading to
 
 ## [Unreleased]
 
+### Added — R-A juice pack + marketplace architecture (2026-07-06)
+- **Juice**: gold particle burst + floating "+1 label · n/count" on every
+  pickup, red burst on kills, decaying screen shake when the player takes
+  damage. Verified headlessly: full pearl run → win screen showed
+  "time 0:34 — new personal best!", zero console errors.
+- **Marketplace architecture** documented in the blueprint: (1) `.fsbundle`
+  export/import (no server — assets/games/videos as manifest-carrying zips),
+  (2) hosted community registry API (browse/search/feed; app stays fully
+  offline-capable), (3) presence/payments only after demand is proven. The
+  orientation gate + heading facts + license manifest make downloaded assets
+  drop-in — that's the moat. Parity rule recorded: every game-feel feature
+  ships a video twin.
+
 ### Added — Game-feel pass 1: sound + timers + the success blueprint (2026-07-06)
 - **Every game has SOUND**: WebAudio-synthesized (zero asset files, zero
   network) — pickup chime, attack whoosh, kill thud, hurt sting, race

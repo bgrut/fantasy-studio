@@ -51,6 +51,38 @@ D makes it *sellable*. Video side rides along — R-A's particle recipes and
 score-overlay typography become title-card and HUD polish in film exports
 (shared-enhancement rule).
 
+## Marketplace infrastructure (how sharing actually works)
+
+The product is local-first; the *community* cannot be. Sharing needs a small
+always-on service — but we get there in three honest steps, each shippable:
+
+1. **Bundles (no server, works today).** Everything shareable is already a
+   file: assets are GLB + reference PNG + heading-fact, games are
+   self-contained `dist/` zips, videos are MP4s. Step 1 is an export/import
+   bundle format (`.fsbundle` = zip + manifest.json with kind, pattern,
+   heights, license, author) and an "Import bundle" button. Users share via
+   Discord/itch/anywhere. Zero infra, and it forces us to define the manifest
+   the marketplace will need anyway.
+2. **Community registry (one small API).** A hosted FastAPI + object storage
+   (S3-compatible) service: upload bundle, browse/search, download. The
+   desktop app polls it for the "community feels alive" feed (new this week,
+   trending). The app stays fully functional offline — the registry is
+   additive, never required. Auth starts as simple accounts; payments later
+   via a storefront layer (Stripe or itch-style) once moderation exists.
+3. **Live presence (later).** Comments, ratings, creator pages, revenue
+   share. Only after 1–2 prove demand.
+
+Key principle: the local library IS the marketplace's unit of exchange. The
+orientation gate + heading facts + license manifest mean a downloaded asset
+drops into anyone's library and just works — that's the moat.
+
+## Parity rules (so no side falls behind)
+
+- Every game-feel feature maps to a video twin: juice particles → title-card
+  and collectible glints in films; score typography → film HUD/lower-thirds;
+  personal bests → per-project render history. Frontend surfaces each new
+  capability the same week it lands in the pipeline.
+
 ## What we deliberately do NOT copy
 
 Top sellers also succeed via multiplayer, live-ops, and content treadmills.
