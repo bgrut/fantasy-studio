@@ -406,9 +406,52 @@ def _glb_has_images(glb: str | Path) -> bool:
         return True                      # unsure → don't touch the materials
 
 
+_DESPECKLE_CODE = r'''
+import bpy, json
+import numpy as np
+o=bpy.data.objects.get('Hero')
+healed=0; imgs=0
+seen=set()
+for mt in (o.data.materials if o else []):
+    if not (mt and mt.use_nodes): continue
+    for nd in mt.node_tree.nodes:
+        if nd.type!='TEX_IMAGE' or not nd.image or nd.image.name in seen: continue
+        img=nd.image; seen.add(img.name)
+        w,h=img.size
+        if w*h==0 or w<64 or h<64: continue
+        px=np.empty(w*h*4, dtype=np.float32)
+        img.pixels.foreach_get(px)
+        px=px.reshape(h,w,4)
+        changed=False
+        # two healing scales: 8px kills specks; 24px kills the LARGE dark
+        # patches (hood blotches) whose 8px neighborhoods are themselves dark
+        for B in (8, 24):
+            lum=px[:,:,:3].mean(2)
+            HB,WB=(h//B)*B,(w//B)*B
+            if HB==0 or WB==0: continue
+            blk=lum[:HB,:WB].reshape(HB//B,B,WB//B,B).mean((1,3))
+            nb=np.repeat(np.repeat(blk,B,0),B,1)
+            m=(lum[:HB,:WB] < 0.45*nb) & (nb > 0.18)
+            n=int(m.sum())
+            if n==0 or n > 0.15*HB*WB: continue
+            blkc=px[:HB,:WB,:3].reshape(HB//B,B,WB//B,B,3).mean((1,3))
+            nbc=np.repeat(np.repeat(blkc,B,axis=0),B,axis=1)
+            sub=px[:HB,:WB,:3]
+            sub[m]=nbc[m]
+            px[:HB,:WB,:3]=sub
+            healed+=n; changed=True
+        if changed:
+            img.pixels.foreach_set(px.ravel())
+            img.update()
+            imgs+=1
+__result__=json.dumps({"ok":True,"healed_px":healed,"images":imgs})
+'''
+
+
 def optimize_asset(src_glb: str | Path, out_glb: str | Path, target_tris: int = 45000,
                    height_m: float = 1.0, verbose: bool = True,
-                   ref_png: str | Path | None = None) -> dict:
+                   ref_png: str | Path | None = None,
+                   despeckle: bool = False) -> dict:
     """Decimate a raw TRELLIS GLB into a game-budget asset (NPCs/props). Raw
     heroes run ~400k tris; two of those wedge an iGPU. CPU-only via bridge.
 
@@ -434,6 +477,14 @@ def optimize_asset(src_glb: str | Path, out_glb: str | Path, target_tris: int = 
         except Exception as _te:
             if verbose:
                 print(f"[bake] ref projection skipped ({type(_te).__name__}: {_te})")
+    if despeckle:
+        # heal dark speck clusters baked INTO the albedo (hood "black spots").
+        # Vehicles only — organic textures have legitimate small dark features
+        # (eyes, nostrils) this rule would eat.
+        d = _call(registry, "despeckle", _DESPECKLE_CODE)
+        if verbose and d:
+            print(f"[bake] despeckle: healed {d.get('healed_px', 0)} px "
+                  f"across {d.get('images', 0)} image(s)")
     r = _call(registry, "optimize",
               _OPTIMIZE_CODE.replace("__TARGET__", str(int(target_tris)))
                             .replace("__OUT__", str(out_glb).replace("\\", "/")))
