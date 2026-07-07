@@ -190,8 +190,19 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         # a new "npc" species from scratch
         _HUMAN_ALIASES = {"npc", "npcs", "guy", "person", "people", "villager",
                           "enemy", "soldier", "guard", "human"}
+        # ambient phenomena are ATMOSPHERE, not assets — weather/sky systems
+        # already render them; generating a "snowflake" mesh is 30 wasted
+        # CPU-minutes (caught live 2026-07-07 on the snowy-fox prompt)
+        _AMBIENT = {"snow", "snowflake", "snowflakes", "rain", "raindrop",
+                    "raindrops", "wind", "fog", "mist", "cloud", "clouds",
+                    "star", "stars", "sunlight", "moonlight", "sky", "dawn",
+                    "dusk", "sunset", "sunrise", "shadow", "shadows"}
         kept = []
         for ent in spec.entities:
+            if ent.name.lower().strip() in _AMBIENT:
+                job.setdefault("notes", []).append(
+                    f"'{ent.name}' is atmosphere — rendered by the weather/sky system")
+                continue
             ekind = "man" if ent.name.lower() in _HUMAN_ALIASES else ent.name
             # prefer the ANIMATED variant (real gait — no gliding); static fallback
             glb = ensure_playable(ekind, verbose=False) or library.resolve(ekind)
