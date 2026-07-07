@@ -80,6 +80,10 @@ def _classify_with_ollama(kind: str) -> str | None:
 
 def guess_pattern(kind: str) -> str:
     k = (kind or "").lower()
+    # flightless upright birds WADDLE on two legs — the quadruped guess gave
+    # the 2026-07-08 penguin four legs in its SDXL reference (and its mesh)
+    if any(w in k for w in ("penguin", "ostrich", "emu", "kiwi", "dodo")):
+        return "biped"
     if any(w in k for w in _FLYING):
         return "flying"                   # fly mode; static mesh + hover (wing
         #                                   flap rig is the Phase 20 flying module)

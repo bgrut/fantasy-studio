@@ -10,6 +10,24 @@ Pre-1.0 versions are internal milestones during the constraint sprint leading to
 
 ## [Unreleased]
 
+### Added + Fixed — Props tell the truth, Inspect free-fly, biped birds (2026-07-08)
+- **Placed props are real game rules**: campfires (and beacons) are SAFE
+  ZONES — hostiles fear the light: they will not enter the glow, and back
+  off to its edge while you stand inside. A sign that says "stay near the
+  fire" is now mechanically TRUE. Verified: fast hostile held 9m from the
+  fire for 9s, zero damage. (First brick of the rules engine — richer
+  honored-rule vocabularies ride the grammar roadmap.)
+- **Inspect free-fly camera**: while Inspecting, WASD/arrows pan the EDITOR
+  CAMERA across the world (hero stays put, slightly wider framing) — scout
+  any hill, click, place. No more walking the hero around to reach spots.
+  Verified: camera panned 40m, player moved 0.00m, distant pick landed.
+- **Penguins have two legs**: the body-type classifier had cached
+  penguin=quadruped, so its SDXL reference was drawn "standing on all four
+  legs" — that's where the extra legs came from. Flightless upright birds
+  (penguin/ostrich/emu/kiwi/dodo) now hard-classify as bipeds; stale cache
+  purged. Regenerating the penguin asset itself is one ~35-min CPU pass
+  (or minutes on GPU day).
+
 ### Fixed — Demo-feedback round: combat feel, inspect freeze, hero cast, placement trust (2026-07-08)
 - **Combat feel**: melee reach 2.3→3.2m, swing arc widened, and AIM ASSIST —
   the swing snaps toward the marked target. A red diamond MARKER floats over

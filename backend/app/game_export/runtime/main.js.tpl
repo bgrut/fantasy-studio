@@ -975,7 +975,16 @@ async function main() {
       let tx = null, tz = null;
       if (n.behavior === 'hostile' && !won && !lost) {
         const d = Math.hypot(playerPos.x - n.obj.position.x, playerPos.z - n.obj.position.z);
-        if (d < 14 && d > 1.7) { tx = playerPos.x; tz = playerPos.z; }        // chase
+        const pSafe = inSafeZone(playerPos.x, playerPos.z);
+        const nSafe = inSafeZone(n.obj.position.x, n.obj.position.z);
+        if (pSafe && (d < 14 || nSafe)) {
+          // the firelight holds them: back off to the edge of the glow
+          const ang = Math.atan2(n.obj.position.x - pSafe.x,
+                                 n.obj.position.z - pSafe.z);
+          tx = pSafe.x + Math.sin(ang) * (pSafe.r + 3.0);
+          tz = pSafe.z + Math.cos(ang) * (pSafe.r + 3.0);
+        }
+        else if (d < 14 && d > 1.7) { tx = playerPos.x; tz = playerPos.z; }   // chase
         else if (d <= 1.7) {                                                  // attack
           n.cd -= dt;
           if (n.cd <= 0) { n.cd = 1.2; playerHit(1); }
@@ -1323,6 +1332,19 @@ async function main() {
       placedItems.push({ obj, it });
     } catch (e) { console.warn('[game] placed item failed:', e.message); }
   }
+  // PLACED PROPS TELL THE TRUTH: campfires and beacons are SAFE ZONES —
+  // hostiles fear the light and will not enter or attack inside the glow.
+  // A sign that says "stay near the fire" is a real game rule, not decor.
+  const safeZones = placedItems
+    .filter(p => ['campfire', 'beacon'].includes((p.it.kind || '').toLowerCase()))
+    .map(p => ({ x: p.it.x, z: p.it.z, r: 6.0 }));
+  function inSafeZone(x, z) {
+    for (const s of safeZones) {
+      if (Math.hypot(x - s.x, z - s.z) < s.r) return s;
+    }
+    return null;
+  }
+
   // interact UI: proximity prompt + reading panel (books, signs, hints)
   let readable = null, reading = false;
   const intEl = document.createElement('div');
@@ -1885,13 +1907,16 @@ async function main() {
   // Inspect = SOFT FREEZE: while editing, enemies stop, damage stops, and
   // the run/survive clocks hold — dying mid-edit is not a feature. Exiting
   // inspect shifts the clocks by the frozen duration (same math as pause).
-  let inspT0 = 0;
+  let inspT0 = 0, inspF = null;        // free-cam focus point while inspecting
   function setInspectOn(on) {
     on = !!on;
     if (on === inspectOn) return;
     inspectOn = on;
     renderer.domElement.style.cursor = on ? 'crosshair' : '';
-    if (on) inspT0 = performance.now();
+    if (on) {
+      inspT0 = performance.now();
+      inspF = { x: playerObj.position.x, z: playerObj.position.z };
+    }
     else {
       const d = performance.now() - inspT0;
       runT0 += d;
@@ -2080,7 +2105,19 @@ async function main() {
   renderer.setAnimationLoop(() => {
     const dt = Math.min(clock.getDelta(), 0.05);
     // pre-START or paused: inputs are dead, world idles as the backdrop
-    const mv = (gameStarted && !paused) ? readMove() : { x: 0, z: 0, run: false, mag: 0 };
+    const mvRaw = (gameStarted && !paused) ? readMove() : { x: 0, z: 0, run: false, mag: 0 };
+    // Inspect FREE-FLY: while editing, WASD/arrows pan the EDITOR CAMERA
+    // across the world (hero stays put) — scout anywhere, click, place.
+    const mv = inspectOn ? { x: 0, z: 0, run: false, mag: 0 } : mvRaw;
+    if (inspectOn && inspF) {
+      const pf = (16 + gsize * 0.05) * dt * (mvRaw.run ? 2.2 : 1);
+      const fw = -mvRaw.z, st2 = mvRaw.x;
+      inspF.x += (-Math.sin(yaw) * fw + Math.cos(yaw) * st2) * pf;
+      inspF.z += (-Math.cos(yaw) * fw - Math.sin(yaw) * st2) * pf;
+      const ext2 = gsize / 2 - 2;
+      inspF.x = THREE.MathUtils.clamp(inspF.x, -ext2, ext2);
+      inspF.z = THREE.MathUtils.clamp(inspF.z, -ext2, ext2);
+    }
     let speed;
     const dir = new THREE.Vector3();
     if (DRIVE) {
@@ -2322,11 +2359,15 @@ async function main() {
       dyaw = Math.atan2(Math.sin(dyaw), Math.cos(dyaw));
       yaw += dyaw * Math.min(1, (DRIVE ? 3.0 : 1.8) * dt);
     }
-    camTarget.set(nt.x, nt.y + SPEC.camera.height_m * 0.5, nt.z);
-    const cd = SPEC.camera.distance_m * camZoom;
-    const cx = nt.x + Math.sin(yaw) * Math.cos(pitch) * cd;   // camera BEHIND
-    const cz = nt.z + Math.cos(yaw) * Math.cos(pitch) * cd;   // (W walks away)
-    const cy = nt.y + Math.sin(pitch) * cd + SPEC.camera.height_m * 0.4;
+    // inspect free-cam looks at the roaming focus point, slightly pulled back
+    const fX = (inspectOn && inspF) ? inspF.x : nt.x;
+    const fZ = (inspectOn && inspF) ? inspF.z : nt.z;
+    const fY = (inspectOn && inspF) ? hAt(fX, fZ) + 1.4 : nt.y;
+    camTarget.set(fX, fY + SPEC.camera.height_m * 0.5, fZ);
+    const cd = SPEC.camera.distance_m * camZoom * (inspectOn ? 1.5 : 1);
+    const cx = fX + Math.sin(yaw) * Math.cos(pitch) * cd;   // camera BEHIND
+    const cz = fZ + Math.cos(yaw) * Math.cos(pitch) * cd;   // (W walks away)
+    const cy = fY + Math.sin(pitch) * cd + SPEC.camera.height_m * 0.4;
     camera.position.lerp(new THREE.Vector3(cx, cy, cz), 1 - Math.exp(-8 * dt));
     camera.lookAt(camTarget);
     if (shakeT > 0) {                    // decaying screen shake on damage
