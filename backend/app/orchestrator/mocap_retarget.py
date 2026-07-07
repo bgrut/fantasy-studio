@@ -345,6 +345,38 @@ else:
                 f0.keyframe_points[i].co[1]=qb.w; f1.keyframe_points[i].co[1]=qb.x
                 f2.keyframe_points[i].co[1]=qb.y; f3.keyframe_points[i].co[1]=qb.z
             for fc in comp.values(): fc.update()
+    # FOOT GROUND-PLANT (#119, 2026-07-07): evaluate the baked clip and key the
+    # ROOT Z so feet neither sink below the ground nor hover. Penetration is
+    # always fully corrected; float is pulled down gently (capped at 3.5% of
+    # height) so run flight-phases survive. Root-only correction — bone curves
+    # stay untouched, so this can NEVER bend a pose (no new limb bugs by
+    # construction; the three historical retarget bugs live in bone space).
+    try:
+        zmins=[]
+        for i in range(TOTAL):
+            bpy.context.scene.frame_set(1+i)
+            m=None
+            for fb in ("foot_L","foot_R"):
+                pbf=rig.pose.bones.get(fb)
+                if pbf is None: continue
+                wz=(rig.matrix_world@pbf.tail).z
+                m=wz if m is None else min(m,wz)
+            zmins.append(0.0 if m is None else m)
+        tolf=0.02*H; capf=0.035*H; fixed=0
+        for i in range(TOTAL):
+            m=zmins[i]; dzf=0.0
+            if m<0.0: dzf=-m
+            elif m>tolf: dzf=-min(m-tolf,capf)
+            if abs(dzf)>1e-5:
+                bpy.context.scene.frame_set(1+i)
+                rig.location.z=rig.matrix_world.translation.z+dzf
+                rig.keyframe_insert("location",index=2,frame=1+i)
+                o.location.z=o.matrix_world.translation.z+dzf
+                o.keyframe_insert("location",index=2,frame=1+i)
+                fixed+=1
+        bpy.context.scene.frame_set(1)
+    except Exception:
+        pass   # grounding is polish — a failure must never kill the bake
     bpy.data.objects.remove(src, do_unlink=True)
     # ── side-tracking camera following the walk
     cam=sc.camera

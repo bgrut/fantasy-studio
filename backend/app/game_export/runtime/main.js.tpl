@@ -1778,6 +1778,12 @@ async function main() {
       // same collider (platformers unlock from this one verb)
       if (gameStarted && keys.Space && kcc.computedGrounded()) { vy = 7.2; sfx('step'); }
       vy = Math.max(vy - 9.81 * dt, -25);
+      // airborne body language: tilt back on the rise, forward into the fall —
+      // the cheap half of jump articulation until the jump clip lands
+      const airTilt = kcc.computedGrounded() ? 0
+        : THREE.MathUtils.clamp(-vy * 0.035, -0.22, 0.3);
+      leanP = THREE.MathUtils.damp(leanP, airTilt, 7, dt);
+      holder.rotation.x = leanP;
       var desired = { x: dir.x * speed * dt, y: vy * dt, z: dir.z * speed * dt };
     }
     kcc.computeColliderMovement(collider, desired);

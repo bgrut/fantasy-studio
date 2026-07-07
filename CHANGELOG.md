@@ -10,6 +10,20 @@ Pre-1.0 versions are internal milestones during the constraint sprint leading to
 
 ## [Unreleased]
 
+### Added — Motion session: foot ground-plant + airborne body language (2026-07-07)
+- **Foot ground-plant (#119)**: every mocap bake now evaluates the finished
+  clip and keys the ROOT height so feet neither sink below ground nor hover —
+  penetration always corrected, float pulled down gently (capped so run
+  flight-phases survive). Root-only correction: bone curves untouched, so it
+  cannot introduce limb bugs by construction (the three historical retarget
+  bugs live in bone space and stay fixed). Knight + fox re-baked;
+  render-verified across the walk cycle: clean stride, separate legs, feet
+  planted with contact shadows. Known polish left: faint elbow smear on
+  armor (skin falloff — GPU-day item).
+- **Airborne body language**: walking characters tilt back on a jump's rise
+  and lean into the fall — the cheap half of jump articulation until a jump
+  clip joins the CMU catalog.
+
 ### Added — Godot-for-Steam enrichment + style coherence + game shell (2026-07-07)
 - **Godot export is a real GAME now**: the emitted Godot 4.3 project carries
   the full mission system (collect/defeat/reach/survive with quest log +
