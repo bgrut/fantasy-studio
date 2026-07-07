@@ -105,10 +105,56 @@ class GameSpec(BaseModel):
         return self.model_dump()
 
 
+# NEAR-MISS NORMALIZATION (2026-07-07): the LLM says "sunrise" and the enum
+# says sunset — rejecting the whole spec over an obvious synonym silently
+# degraded races to keyword fallback. Map the synonyms, don't fail on them.
+_SKY_ALIASES = {"sunrise": "sunset", "dawn": "sunset", "evening": "sunset",
+                "golden hour": "sunset", "morning": "day", "noon": "day",
+                "midnight": "night", "dark": "night", "starry": "night",
+                "cloudy": "overcast", "stormy": "overcast", "foggy": "overcast",
+                "twilight": "dusk", "moon": "space", "alien": "mars"}
+_WEATHER_ALIASES = {"blizzard": "snow", "snowy": "snow", "snowing": "snow",
+                    "rainy": "rain", "raining": "rain", "drizzle": "rain",
+                    "storm": "rain", "clear": "none", "sunny": "none",
+                    "windy": "none", "fog": "none"}
+_BEHAVIOR_ALIASES = {"rival": "vehicle", "racer": "vehicle", "race": "vehicle",
+                     "pet": "follow", "companion": "follow", "ally": "follow",
+                     "friendly": "wander", "roam": "wander", "neutral": "wander",
+                     "enemy": "hostile", "monster": "hostile", "attack": "hostile",
+                     "aggressive": "hostile", "guard": "hostile", "idle": "static",
+                     "prop": "static", "object": "static"}
+_KIND_ALIASES = {"find": "collect", "gather": "collect", "pick": "collect",
+                 "kill": "defeat", "destroy": "defeat", "fight": "defeat",
+                 "escape": "reach", "goto": "reach", "arrive": "reach",
+                 "explore": "reach", "win": "race", "hold": "survive",
+                 "defend": "survive", "endure": "survive"}
+
+
 def spec_from_dict(data: dict) -> GameSpec:
-    """Validate an extractor/user dict into a GameSpec. Raises ValueError with
-    a readable message; callers fall back to defaults rather than emitting a
-    broken game."""
+    """Validate an extractor/user dict into a GameSpec, normalizing near-miss
+    enum values first. Raises ValueError with a readable message; callers fall
+    back to defaults rather than emitting a broken game."""
+    try:
+        w = data.get("world")
+        if isinstance(w, dict):
+            s = str(w.get("sky", "")).lower().strip()
+            if s in _SKY_ALIASES:
+                w["sky"] = _SKY_ALIASES[s]
+            we = str(w.get("weather", "")).lower().strip()
+            if we in _WEATHER_ALIASES:
+                w["weather"] = _WEATHER_ALIASES[we]
+        for e in (data.get("entities") or []):
+            if isinstance(e, dict):
+                b = str(e.get("behavior", "")).lower().strip()
+                if b in _BEHAVIOR_ALIASES:
+                    e["behavior"] = _BEHAVIOR_ALIASES[b]
+        for o in (data.get("objectives") or []):
+            if isinstance(o, dict):
+                k = str(o.get("kind", "")).lower().strip()
+                if k in _KIND_ALIASES:
+                    o["kind"] = _KIND_ALIASES[k]
+    except Exception:
+        pass                                # normalization is best-effort
     try:
         return GameSpec.model_validate(data)
     except Exception as e:  # pydantic.ValidationError

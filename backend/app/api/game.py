@@ -117,6 +117,15 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             spec.world.ground_color = [g[0] + (0.78 - g[0]) * 0.8,
                                        g[1] + (0.80 - g[1]) * 0.8,
                                        g[2] + (0.86 - g[2]) * 0.8]
+        # READABILITY FLOOR: no edit or extraction may produce a near-black
+        # ground — "make it darker" should darken the MOOD (sky palette does
+        # that), never drown the world. Applies to fresh builds AND edits.
+        g = spec.world.ground_color
+        _lum = 0.299 * g[0] + 0.587 * g[1] + 0.114 * g[2]
+        if _lum < 0.14:
+            k = 0.14 / max(_lum, 1e-3)
+            spec.world.ground_color = [min(c * k, 1.0) for c in g]
+
             # LEVEL VARIETY: every FRESH build gets a new world layout (edits
             # keep their world). Pass an explicit seed to reproduce a level.
             import random as _random
@@ -184,6 +193,13 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         spec.player.name = cast
         if abs(spec.player.height_m - 1.75) < 1e-6:      # untouched default -> species height
             spec.player.height_m = library.default_height(cast)
+        # CAMERA SCALED TO THE HERO: a 0.6 m fox filmed from person-distance
+        # is a speck on screen. Untouched camera defaults get distance/height
+        # derived from the cast's actual size (explicit values always win).
+        if abs(spec.camera.distance_m - 4.5) < 1e-6:
+            spec.camera.distance_m = max(2.4, min(3.4 * spec.player.height_m + 1.2, 12.0))
+        if abs(spec.camera.height_m - 2.0) < 1e-6:
+            spec.camera.height_m = max(0.8, min(1.5 * spec.player.height_m + 0.4, 6.0))
         # per-asset heading facts (play-verified): a generated mesh's nose sign
         # is ambiguous — side-profile refs face either way — so the correction
         # lives as DATA in assets/library_heading.json, never a runtime guess.
