@@ -1688,7 +1688,7 @@ async function main() {
   }, { passive: true });
   renderer.domElement.addEventListener('pointerdown', e => {
     if (e.target.closest('#stick')) return;
-    if (inspectOn) return;               // inspect mode: clicks PICK, not drag
+    // inspect mode keeps camera DRAG-look; a still click (no movement) picks
     dragging = true; px = e.clientX; py = e.clientY;
   });
   addEventListener('pointerup', () => dragging = false);
@@ -1876,8 +1876,17 @@ async function main() {
       }
     };
     window.__game.pick = (cx, cy) => pickAt(cx, cy, 'click');   // test harness
+    // pick on pointerUP with no movement — dragging stays camera-look, so
+    // Inspect mode never steals the ability to orbit and reposition the view
+    let pkX = 0, pkY = 0;
     renderer.domElement.addEventListener('pointerdown', e => {
-      if (inspectOn) pickAt(e.clientX, e.clientY, 'click');
+      pkX = e.clientX; pkY = e.clientY;
+    });
+    renderer.domElement.addEventListener('pointerup', e => {
+      if (!inspectOn) return;
+      if (Math.hypot(e.clientX - pkX, e.clientY - pkY) < 6) {
+        pickAt(e.clientX, e.clientY, 'click');
+      }
     });
     let hovT = 0;
     renderer.domElement.addEventListener('pointermove', e => {

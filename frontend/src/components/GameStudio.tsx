@@ -234,8 +234,10 @@ export default function GameStudio() {
       }
       if (KEYS.has(e.key)) {
         e.preventDefault()
-        // hand the keys back to whichever game is open (hub wins: it opened last)
-        ;(hubFrameRef.current ?? gameFrameRef.current)?.focus()
+        // hand the keys back to whichever game is open (hub wins: it opened
+        // last). preventScroll: plain focus() SCROLLS the page to the iframe —
+        // that was the "screen jumps upward in Inspect mode" bug.
+        ;(hubFrameRef.current ?? gameFrameRef.current)?.focus({ preventScroll: true })
       }
     }
     window.addEventListener('keydown', swallow, { capture: true })
@@ -286,13 +288,15 @@ export default function GameStudio() {
           </button>
         </div>
 
-        {/* prompt chips */}
-        <div className="flex flex-wrap justify-center gap-2">
+        {/* prompt chips — SCRUNCHED: truncated multi-column pills instead of
+            ten full-width rows (full prompt on hover + on click) */}
+        <div className="flex flex-wrap justify-center gap-1.5">
           {GAME_PROMPTS.map((p) => (
             <button
               key={p}
               onClick={() => setPrompt(p)}
-              className="px-3 py-1.5 rounded-full text-xs border border-white/[0.06] bg-white/[0.02] text-[#807d99] hover:text-white hover:border-[#5cffc9]/30 transition-all"
+              title={p}
+              className="px-3 py-1 rounded-full text-[11px] border border-white/[0.06] bg-white/[0.02] text-[#807d99] hover:text-white hover:border-[#5cffc9]/30 transition-all max-w-[240px] truncate"
             >
               {p}
             </button>
@@ -454,7 +458,7 @@ export default function GameStudio() {
           </div>
           <div
             className="rounded-2xl overflow-hidden border border-white/[0.06] bg-black aspect-video"
-            onClick={() => hubFrameRef.current?.focus()}
+            onClick={() => hubFrameRef.current?.focus({ preventScroll: true })}
           >
             <iframe
               key={hubUrl}          /* fresh iframe per export: releases the old
@@ -465,7 +469,7 @@ export default function GameStudio() {
               className="w-full h-full"
               allow="fullscreen; gamepad; pointer-lock"
               allowFullScreen
-              onLoad={() => hubFrameRef.current?.focus()}
+              onLoad={() => hubFrameRef.current?.focus({ preventScroll: true })}
             />
           </div>
         </motion.div>
@@ -581,7 +585,7 @@ export default function GameStudio() {
               'relative rounded-2xl overflow-hidden border bg-black aspect-video',
               inspect ? 'border-[#ffd88a]/40' : 'border-white/[0.06]'
             )}
-            onClick={() => gameFrameRef.current?.focus()}
+            onClick={() => gameFrameRef.current?.focus({ preventScroll: true })}
           >
             <iframe
               key={job!.play_url}   /* new game = fresh iframe: releases the old
@@ -593,7 +597,7 @@ export default function GameStudio() {
               className="w-full h-full"
               allow="fullscreen; gamepad; pointer-lock"
               allowFullScreen
-              onLoad={() => { gameFrameRef.current?.focus(); if (inspect) sendInspect(true) }}
+              onLoad={() => { gameFrameRef.current?.focus({ preventScroll: true }); if (inspect) sendInspect(true) }}
             />
             {/* hover-audit chip: what's under the cursor, live */}
             {inspect && (

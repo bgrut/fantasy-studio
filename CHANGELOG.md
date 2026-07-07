@@ -10,6 +10,19 @@ Pre-1.0 versions are internal milestones during the constraint sprint leading to
 
 ## [Unreleased]
 
+### Fixed — Inspect-mode ergonomics + prompt-chip scrunch (2026-07-07)
+- **Screen jumped upward in Inspect mode**: every arrow press refocused the
+  game iframe, and plain `focus()` scrolls the page to the element. All
+  programmatic focus now uses `preventScroll` — the studio never jumps.
+- **Camera drag restored while Inspecting**: dragging orbits the camera like
+  normal play; a STILL click (moves < 6px between down and up) is what picks.
+  You can look around freely and still select exactly what you mean.
+  (Applies to games built/opened after this change — opening a level tile
+  or applying any edit re-exports with the new runtime.)
+- **Prompt idea chips scrunched**: truncated multi-column pills (full text
+  on hover) instead of ten full-width rows — the level tiles and player sit
+  a scroll higher.
+
 ### Added — Phase 43: Level tiles + scene tiles — the Inspector methodology everywhere (2026-07-07)
 - **Level tiles (game)**: the levels dropdown is now the hub's level-select
   cards, live in the studio. Click a tile → that level re-exports in seconds
