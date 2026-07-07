@@ -194,12 +194,14 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         if abs(spec.player.height_m - 1.75) < 1e-6:      # untouched default -> species height
             spec.player.height_m = library.default_height(cast)
         # CAMERA SCALED TO THE HERO: a 0.6 m fox filmed from person-distance
-        # is a speck on screen. Untouched camera defaults get distance/height
-        # derived from the cast's actual size (explicit values always win).
-        if abs(spec.camera.distance_m - 4.5) < 1e-6:
-            spec.camera.distance_m = max(2.4, min(3.4 * spec.player.height_m + 1.2, 12.0))
-        if abs(spec.camera.height_m - 2.0) < 1e-6:
-            spec.camera.height_m = max(0.8, min(1.5 * spec.player.height_m + 0.4, 6.0))
+        # is a speck on screen. Whatever the extractor picked, CLAMP distance
+        # and height into a band derived from the cast's actual size — the
+        # LLM's choice survives inside the band, absurd framing doesn't.
+        h = spec.player.height_m
+        spec.camera.distance_m = max(2.0 * h + 0.8,
+                                     min(spec.camera.distance_m, 4.2 * h + 2.0))
+        spec.camera.height_m = max(0.9 * h,
+                                   min(spec.camera.height_m, 2.2 * h + 0.6))
         # per-asset heading facts (play-verified): a generated mesh's nose sign
         # is ambiguous — side-profile refs face either way — so the correction
         # lives as DATA in assets/library_heading.json, never a runtime guess.

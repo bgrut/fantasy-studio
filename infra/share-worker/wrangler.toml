@@ -1,0 +1,11 @@
+name = "fantasy-studio-share"
+main = "src/index.js"
+compatibility_date = "2026-06-01"
+
+# R2 bucket that stores published game files (games/<id>/<path>)
+[[r2_buckets]]
+binding = "GAMES"
+bucket_name = "fantasy-studio-games"
+
+# Set the publish token secret before deploying:
+#   wrangler secret put PUBLISH_TOKEN
