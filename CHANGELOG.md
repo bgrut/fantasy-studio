@@ -10,6 +10,20 @@ Pre-1.0 versions are internal milestones during the constraint sprint leading to
 
 ## [Unreleased]
 
+### Fixed — Export buttons did nothing in the desktop app (2026-07-07)
+- **Root cause**: both post-export actions were plain `<a>` links. The
+  desktop shell (WebView2) ignores `target="_blank"` (no new-window handler)
+  and has no browser download UI, so "Play it" and "Download zip" silently
+  no-oped. Same bug class as the old open-in-tab fullscreen link.
+- **▶ Play it** now plays the exported game (hub + level select + all
+  levels) right inside the studio in an embedded player, with Fullscreen
+  and Close — better than a new tab anyway. Verified end-to-end: export →
+  play → hub renders → level 1 launches with a live canvas.
+- **⬇ Show zip in folder** replaces the download link: a new
+  `POST /api/game/projects/{id}/reveal` opens Explorer with the exported
+  zip selected (path-guarded to the projects dir). That's the
+  desktop-native version of "download" — the file is already on disk.
+
 ### Fixed + Added — White-screen recovery, health packs, difficulty edits (2026-07-07)
 - **White-screen root cause**: NOT a build bug — WebView2 caps live WebGL
   contexts, and after many game loads the new canvas silently gets none

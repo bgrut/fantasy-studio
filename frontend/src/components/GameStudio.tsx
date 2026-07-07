@@ -7,7 +7,7 @@ import { Download, FolderPlus, Gamepad2, Loader2, Maximize2, RotateCcw } from 'l
 import { cn } from '@/lib/utils'
 import {
   addLevelToProject, createProject, exportGame, exportProject, gameHealth,
-  getGameJob, listProjects, removeLevelFromProject,
+  getGameJob, listProjects, removeLevelFromProject, revealProjectZip,
   type GameHealth, type GameJob, type GameProject,
 } from '@/lib/gameApi'
 
@@ -46,8 +46,10 @@ export default function GameStudio() {
   const [addedJob, setAddedJob] = useState<number | null>(null)
   const [exporting, setExporting] = useState(false)
   const [exported, setExported] = useState<{ play_url: string; zip: string; zip_mb: number } | null>(null)
+  const [hubUrl, setHubUrl] = useState<string | null>(null)   // exported game playing in-app
   const pollRef = useRef<number | null>(null)
   const gameFrameRef = useRef<HTMLIFrameElement | null>(null)
+  const hubFrameRef = useRef<HTMLIFrameElement | null>(null)
   const [showLevels, setShowLevels] = useState(false)
 
   useEffect(() => {
@@ -73,6 +75,7 @@ export default function GameStudio() {
         setProject(projects.find(pr => pr.id === p!.id) ?? null)).catch(() => {})
       setAddedJob(job.id)
       setExported(null)                    // stale export after adding a level
+      setHubUrl(null)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     }
@@ -85,6 +88,7 @@ export default function GameStudio() {
     try {
       const r = await exportProject(project.id)
       setExported({ play_url: r.play_url, zip: r.zip, zip_mb: r.zip_mb })
+      setHubUrl(null)                      // fresh export: don't keep playing the old one
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
@@ -147,7 +151,7 @@ export default function GameStudio() {
   // the studio page out from under the recording. Keys that reach the parent
   // (iframe unfocused) get their default scroll behavior suppressed.
   useEffect(() => {
-    if (!playing) return
+    if (!playing && !hubUrl) return
     const KEYS = new Set(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '])
     const swallow = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement | null
@@ -156,12 +160,13 @@ export default function GameStudio() {
       }
       if (KEYS.has(e.key)) {
         e.preventDefault()
-        gameFrameRef.current?.focus()   // hand the keys back to the game
+        // hand the keys back to whichever game is open (hub wins: it opened last)
+        ;(hubFrameRef.current ?? gameFrameRef.current)?.focus()
       }
     }
     window.addEventListener('keydown', swallow, { capture: true })
     return () => window.removeEventListener('keydown', swallow, { capture: true })
-  }, [playing])
+  }, [playing, hubUrl])
 
   return (
     <div className="space-y-8">
@@ -267,10 +272,21 @@ export default function GameStudio() {
               </button>
               {exported && (
                 <>
-                  <a href={exported.play_url} target="_blank" rel="noreferrer"
-                     className="text-[#5cffc9] hover:underline">▶ Play it</a>
-                  <a href={exported.zip}
-                     className="text-[#5cffc9] hover:underline">⬇ Download zip ({exported.zip_mb} MB)</a>
+                  {/* buttons, not <a>: the desktop shell (WebView2) ignores
+                      target="_blank" and has no download UI — both anchors
+                      silently did nothing. Play in-app; reveal zip in Explorer. */}
+                  <button
+                    onClick={() => setHubUrl(exported.play_url)}
+                    className="text-[#5cffc9] hover:underline"
+                  >▶ Play it</button>
+                  <button
+                    onClick={async () => {
+                      try { await revealProjectZip(project.id) }
+                      catch (e) { setError(e instanceof Error ? e.message : String(e)) }
+                    }}
+                    title="opens the folder containing the zip"
+                    className="text-[#5cffc9] hover:underline"
+                  >⬇ Show zip in folder ({exported.zip_mb} MB)</button>
                 </>
               )}
             </div>
@@ -302,6 +318,60 @@ export default function GameStudio() {
           </div>
         )}
       </div>
+
+      {/* the EXPORTED game (hub + all levels) playing in-app */}
+      {hubUrl && (
+        <motion.div
+          initial={{ opacity: 0, scale: 0.98 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="max-w-5xl mx-auto space-y-3"
+        >
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="section-tag font-mono text-xs">// your exported game</span>
+              <span className="text-sm font-semibold text-white">{project?.name ?? 'My Game'}</span>
+              <span className="text-[10px] font-mono text-[#807d99]">
+                {project?.level_count ?? 0} level{(project?.level_count ?? 0) !== 1 ? 's' : ''} · pick one to play
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => {
+                  const f = hubFrameRef.current
+                  if (!f) return
+                  f.requestFullscreen?.().catch(() => {})
+                  f.focus()
+                }}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-[#5cffc9]/15 text-[#5cffc9] hover:bg-[#5cffc9]/25 transition-colors"
+              >
+                <Maximize2 className="w-3 h-3" /> Fullscreen
+              </button>
+              <button
+                onClick={() => setHubUrl(null)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs border border-white/[0.08] text-[#807d99] hover:text-white transition-colors"
+              >
+                ✕ Close
+              </button>
+            </div>
+          </div>
+          <div
+            className="rounded-2xl overflow-hidden border border-white/[0.06] bg-black aspect-video"
+            onClick={() => hubFrameRef.current?.focus()}
+          >
+            <iframe
+              key={hubUrl}          /* fresh iframe per export: releases the old
+                                       WebGL context (WebView2 caps them) */
+              ref={hubFrameRef}
+              src={hubUrl}
+              title={project?.name ?? 'exported game'}
+              className="w-full h-full"
+              allow="fullscreen; gamepad; pointer-lock"
+              allowFullScreen
+              onLoad={() => hubFrameRef.current?.focus()}
+            />
+          </div>
+        </motion.div>
+      )}
 
       {/* build progress */}
       <AnimatePresence>

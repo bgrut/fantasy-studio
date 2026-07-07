@@ -85,6 +85,12 @@ export async function removeLevelFromProject(projectId: number, index: number) {
     await fetch(`/api/game/projects/${projectId}/levels/${index}`, { method: 'DELETE' }))
 }
 
+export async function revealProjectZip(projectId: number) {
+  // desktop shell: no browser download UI — backend opens Explorer at the zip
+  return j<{ ok: boolean; path: string }>(
+    await fetch(`/api/game/projects/${projectId}/reveal`, { method: 'POST' }))
+}
+
 export async function exportProject(projectId: number) {
   return j<{ ok: boolean; levels: number; play_url: string; zip: string; zip_mb: number }>(
     await fetch(`/api/game/projects/${projectId}/export`, { method: 'POST' }))

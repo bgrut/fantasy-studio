@@ -13,5 +13,7 @@
   "whale": "assets/library/whale.glb",
   "wolf": "assets/library/wolf.glb",
   "monkey": "assets/library/monkey.glb",
-  "cat": "assets/library/cat.glb"
+  "cat": "assets/library/cat.glb",
+  "snowflakes": "assets/library/snowflakes.glb",
+  "firefly": "assets/library/firefly.glb"
 }

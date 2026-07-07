@@ -175,6 +175,21 @@ def export_project(pid: int):
             "zip": f"/api/game/projects/{pid}/download", "zip_mb": round(mb, 1)}
 
 
+@router.post("/api/game/projects/{pid}/reveal")
+def reveal_project_zip(pid: int):
+    """Open Explorer with the exported zip selected. The desktop shell
+    (WebView2) has no download UI, so <a href=zip> silently no-ops — the
+    desktop-native answer is 'show me the file'."""
+    import subprocess
+    data = _load()
+    p = data["projects"].get(str(pid))
+    zp = (PROJECTS_DIR / f"project_{pid}.zip").resolve()
+    if not (p and zp.exists() and zp.is_relative_to(PROJECTS_DIR.resolve())):
+        raise HTTPException(status_code=404, detail="export the project first")
+    subprocess.Popen(["explorer", f"/select,{zp}"])
+    return {"ok": True, "path": str(zp)}
+
+
 @router.get("/api/game/projects/{pid}/download")
 def download_project(pid: int):
     data = _load()
