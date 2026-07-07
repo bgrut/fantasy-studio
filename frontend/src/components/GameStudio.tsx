@@ -186,6 +186,14 @@ export default function GameStudio() {
   const iterate = useCallback(() => {
     const p = editPrompt.trim()
     if (!p || building || !job) return
+    // "place a X here" without a clicked spot would leave the LLM guessing
+    // coordinates (it echoes existing ones — the sign-inside-the-campfire).
+    // Require a selection so "here" always means somewhere real.
+    if (!selPick && /^\s*(place|put|drop|spawn)\b/i.test(p) && /\b(here|there|this spot)\b/i.test(p)) {
+      setError('Where is “here”? Turn on Inspect, click a spot in the world, then apply this edit.')
+      return
+    }
+    setError(null)
     setEditPrompt('')
     // the selected point rides along: "place a book here" gets coordinates
     const at = selPick ? { x: selPick.x, z: selPick.z, target: selPick.target.name } : undefined
@@ -218,8 +226,9 @@ export default function GameStudio() {
       return !v
     })
   }, [sendInspect])
-  // a fresh build replaces the iframe — inspector state resets with it
-  useEffect(() => { setInspect(false); setHoverPick(null); setSelPick(null) }, [job?.play_url])
+  // a rebuild replaces the iframe: picks are stale, but Inspect MODE stays on
+  // (it re-arms via the iframe's onLoad) — mid-editing flow never breaks
+  useEffect(() => { setHoverPick(null); setSelPick(null) }, [job?.play_url])
 
   // While a game is playable, arrows/space must DRIVE THE GAME, not scroll
   // the studio page out from under the recording. Keys that reach the parent

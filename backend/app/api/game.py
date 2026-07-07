@@ -225,6 +225,34 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         job["seed"] = spec.seed
 
         stage("resolving assets")
+        # SUBJECT IS THE HERO (2026-07-08): the prompt's own words outrank
+        # the LLM's cast — "a wolf roaming the mountains" once played as a
+        # FOX with a wandering wolf NPC. If the extracted player noun never
+        # appears in the prompt, promote the first prompt noun that resolves
+        # in the library (and drop its duplicate non-hostile entity).
+        if base_spec is None and req.player is None and spec.player.name:
+            _pl = spec.player.name.lower()
+            _ptext = req.prompt.lower()
+            if _pl not in _ptext:
+                _skip = {"firefly", "fireflies", "snowflake", "snowflakes",
+                         "beacon", "beacons", "star", "stars"}
+                cand = None
+                for wd in _ptext.replace(",", " ").replace(".", " ").split():
+                    w = (wd[:-3] + "y") if wd.endswith("ies") else \
+                        (wd[:-1] if wd.endswith("s") and not wd.endswith("ss") else wd)
+                    if w in _skip or len(w) < 3:
+                        continue
+                    if library.resolve(w):
+                        cand = w
+                        break
+                if cand and cand != _pl:
+                    job.setdefault("notes", []).append(
+                        f"hero cast corrected: '{cand}' is your prompt's subject "
+                        f"(the AI said '{_pl}')")
+                    spec.player.name = cand
+                    spec.entities = [e for e in spec.entities
+                                     if not (e.name.lower() == cand
+                                             and e.behavior in ("wander", "follow"))]
         # PLAYER CASTING (accuracy-first, like the video hero): explicit
         # override > the prompt's extracted subject > man. Falls through the
         # ladder with a visible note whenever the cast changes.
@@ -415,6 +443,18 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             else:
                 job.setdefault("notes", []).append(
                     f"placed item '{k}' could not be resolved — skipped")
+        # PLACEMENTS NEVER STACK (2026-07-08): a new item that lands on an
+        # earlier one (LLM echoing existing coordinates) gets nudged aside —
+        # the sign must stand BESIDE the campfire, not inside it.
+        import math as _math
+        for _i, it in enumerate(kept_items):
+            for prev in kept_items[:_i]:
+                dx, dz = it.x - prev.x, it.z - prev.z
+                d = _math.hypot(dx, dz)
+                if d < 1.6:
+                    ang = _math.atan2(dz, dx) if d > 1e-6 else 0.8
+                    it.x = round(prev.x + _math.cos(ang) * 1.9, 2)
+                    it.z = round(prev.z + _math.sin(ang) * 1.9, 2)
         spec.world.placed_items = kept_items
 
         # COLLECTIBLES LOOK LIKE THE PROMPT'S NOUN: when an entity matches a

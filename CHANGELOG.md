@@ -10,6 +10,25 @@ Pre-1.0 versions are internal milestones during the constraint sprint leading to
 
 ## [Unreleased]
 
+### Fixed — Demo-feedback round: combat feel, inspect freeze, hero cast, placement trust (2026-07-08)
+- **Combat feel**: melee reach 2.3→3.2m, swing arc widened, and AIM ASSIST —
+  the swing snaps toward the marked target. A red diamond MARKER floats over
+  the nearest hostile in reach, so you always know who the hit lands on.
+  Verified headless: off-angle attack at 2.9m kills in one press.
+- **Inspect = soft freeze**: while Inspecting, enemies stop, damage stops and
+  the run/survive clocks hold (shifted on exit, same math as pause) — you
+  can't die mid-edit. Camera, player and rendering stay live. Verified:
+  adjacent hostile frozen 2.5s, zero damage.
+- **Subject is the hero**: "a wolf roaming the mountains" once cast a FOX
+  with a wandering wolf NPC. If the extracted player noun never appears in
+  the prompt, the first prompt noun that resolves in the library takes over
+  (its duplicate non-hostile entity is dropped) — with a visible note.
+- **Placement trust**: placed items never stack (a new item landing on an
+  earlier one is nudged ~2m aside — the sign-inside-the-campfire report);
+  "place a X here" without a clicked spot is now caught in the studio with
+  a helpful message instead of letting the LLM guess coordinates; Inspect
+  mode survives rebuilds (only stale picks clear).
+
 ### Fixed — Explicit words beat the AI's pick for sky/weather edits (2026-07-08)
 - "make it a starry night" once came back as `sky="space"` (airless glare +
   the grade's dark-palette lift = washed-out daylight, not night). Two-layer

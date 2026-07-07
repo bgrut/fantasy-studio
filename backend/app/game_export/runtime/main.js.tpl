@@ -944,6 +944,7 @@ async function main() {
                   + (hostile ? ` · hp ${ent.hp || 3}` : '') };
         npcs.push({ obj: holder, speed: ent.speed || 1.5, behavior: ent.behavior || 'wander',
                     target: null, yaw: startYaw, phase: rngN() * Math.PI * 2,
+                    h: ent.height_m || 1.0,
                     hp: ent.hp || 3, cd: 0, dead: false, dieT: 0, mats, anim, dormant });
       }
     } catch (e) { fail(e.message); }
@@ -1744,6 +1745,36 @@ async function main() {
   }
   const projectiles = [];
   let atkCd = 0;
+  // TARGET MARKER + reach helper: a red diamond floats over the nearest
+  // hostile you can hit — no more guessing whether the swing will land
+  // ("hard to aim without a prop", 2026-07-08)
+  const MELEE_REACH = 3.2;
+  function nearestHostile(maxD) {
+    let best = null, bd = maxD;
+    for (const n of npcs) {
+      if (n.behavior !== 'hostile' || n.dead || n.dormant) continue;
+      const d = Math.hypot(n.obj.position.x - playerObj.position.x,
+                           n.obj.position.z - playerObj.position.z);
+      if (d < bd) { bd = d; best = n; }
+    }
+    return best;
+  }
+  let tgtMark = null;
+  if (ATTACK !== 'none') {
+    const c = document.createElement('canvas');
+    c.width = c.height = 64;
+    const g2 = c.getContext('2d');
+    g2.translate(32, 32); g2.rotate(Math.PI / 4);
+    g2.fillStyle = 'rgba(255,80,90,0.95)';
+    g2.fillRect(-10, -10, 20, 20);
+    g2.strokeStyle = 'rgba(255,255,255,0.9)'; g2.lineWidth = 3;
+    g2.strokeRect(-10, -10, 20, 20);
+    tgtMark = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: new THREE.CanvasTexture(c), transparent: true, depthTest: false }));
+    tgtMark.scale.setScalar(0.45);
+    tgtMark.visible = false;
+    scene.add(tgtMark);
+  }
   function dmgEnemy(n, dmg) {
     if (n.dead || n.dormant) return;
     n.hp -= dmg;
@@ -1764,6 +1795,16 @@ async function main() {
     if (ATTACK === 'none' || atkCd > 0 || won || lost) return;
     atkCd = ATTACK === 'ranged' ? 0.35 : 0.55;
     sfx('attack');
+    // AIM ASSIST: swings snap toward the marked target — you committed to
+    // the attack, the game commits to the hit (reach was 2.3m and the angle
+    // check punished honest inputs; now 3.2m + auto-face)
+    if (ATTACK === 'melee') {
+      const tn = nearestHostile(MELEE_REACH);
+      if (tn) {
+        modelYaw = Math.atan2(tn.obj.position.x - playerObj.position.x,
+                              tn.obj.position.z - playerObj.position.z);
+      }
+    }
     playAttackAnim();                          // the actual katana/claw motion
     const dir = new THREE.Vector3(Math.sin(modelYaw), 0, Math.cos(modelYaw));
     if (ATTACK === 'ranged') {
@@ -1790,11 +1831,11 @@ async function main() {
           const dx = n.obj.position.x - playerObj.position.x;
           const dz = n.obj.position.z - playerObj.position.z;
           const d = Math.hypot(dx, dz);
-          if (d > 2.3) continue;
+          if (d > MELEE_REACH) continue;
           let a = Math.atan2(dx, dz) - modelYaw;
           while (a > Math.PI) a -= 2 * Math.PI;
           while (a < -Math.PI) a += 2 * Math.PI;
-          if (Math.abs(a) < 1.05) dmgEnemy(n, 1);
+          if (Math.abs(a) < 1.35) dmgEnemy(n, 1);
         }
       }, 180);
     }
@@ -1838,8 +1879,26 @@ async function main() {
     placed: () => placedItems.map(p => ({ kind: p.it.kind, x: p.it.x, z: p.it.z,
                                           interact: !!p.it.interact })),
     reading: () => ({ readable: readable ? readable.label : null, open: reading }),
-    inspect: on => { inspectOn = !!on; },
+    inspect: on => setInspectOn(on),
   };
+
+  // Inspect = SOFT FREEZE: while editing, enemies stop, damage stops, and
+  // the run/survive clocks hold — dying mid-edit is not a feature. Exiting
+  // inspect shifts the clocks by the frozen duration (same math as pause).
+  let inspT0 = 0;
+  function setInspectOn(on) {
+    on = !!on;
+    if (on === inspectOn) return;
+    inspectOn = on;
+    renderer.domElement.style.cursor = on ? 'crosshair' : '';
+    if (on) inspT0 = performance.now();
+    else {
+      const d = performance.now() - inspT0;
+      runT0 += d;
+      const st = steps[stepIdx];
+      if (st && st._t0 !== undefined) st._t0 += d;
+    }
+  }
 
   // ── INSPECTOR PICKING BRIDGE (Phase 42): the studio turns on inspect mode
   // via postMessage; hover/click raycasts report what's under the cursor and
@@ -1851,10 +1910,7 @@ async function main() {
     const rc = new THREE.Raycaster();
     const nv = new THREE.Vector2();
     addEventListener('message', e => {
-      if (e.data && e.data.type === 'fs-inspect') {
-        inspectOn = !!e.data.on;
-        renderer.domElement.style.cursor = inspectOn ? 'crosshair' : '';
-      }
+      if (e.data && e.data.type === 'fs-inspect') setInspectOn(e.data.on);
     });
     const pickAt = (cx, cy, kindEv) => {
       nv.set((cx / innerWidth) * 2 - 1, -(cy / innerHeight) * 2 + 1);
@@ -2158,7 +2214,19 @@ async function main() {
       mixer.update(dt);
     }
 
-    if (gameStarted && !paused) stepNPCs(dt, nt, performance.now() / 1000);
+    // Inspect mode is a SOFT FREEZE: NPCs, damage and timers hold still so
+    // you can edit in peace, but the camera, player and rendering stay live
+    if (gameStarted && !paused && !inspectOn) stepNPCs(dt, nt, performance.now() / 1000);
+    if (tgtMark) {
+      const tn = (!won && !lost && !inspectOn) ? nearestHostile(MELEE_REACH) : null;
+      tgtMark.visible = !!tn;
+      if (tn) {
+        tgtMark.position.set(tn.obj.position.x,
+                             tn.obj.position.y + tn.h + 0.35
+                               + Math.sin(performance.now() / 240) * 0.06,
+                             tn.obj.position.z);
+      }
+    }
     stepDynamics(dt, nt, performance.now() / 1000);
 
     // SURVIVE verb: hold out while escalating waves close in
