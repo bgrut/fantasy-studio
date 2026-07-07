@@ -95,6 +95,8 @@ class GameSpec(BaseModel):
     entities: List[EntitySpec] = Field(default_factory=list)
     objectives: List[ObjectiveSpec] = Field(default_factory=list)
     reward: Optional[str] = None          # "winner gets a banana" → shown on the win screen
+    intro: Optional[str] = None           # narrative layer: 1-2 line quest intro (START screen)
+    win_text: Optional[str] = None        # narrative layer: victory line (win screen)
     seed: int = 7                         # deterministic scatter placement
 
     def runtime_json(self) -> dict:

@@ -10,6 +10,21 @@ Pre-1.0 versions are internal milestones during the constraint sprint leading to
 
 ## [Unreleased]
 
+### Added — Narrative layer, adaptive performance, Made-with stamp (2026-07-07)
+- **Narrative layer**: the LLM now writes a 1-2 line quest intro (START
+  screen, set like game flavor text) and a victory line (win screen) for
+  every game — content, not code, so it can't break a build. "Collect 6
+  fireflies" becomes "The fireflies have scattered across the frozen wood…"
+- **Adaptive performance governor**: sustained sub-28fps sheds cost tiers
+  automatically — resolution first, then bloom, then frozen shadow updates —
+  instead of letting the game lag. Never oscillates back mid-run.
+- **"⚡ MADE WITH FANTASY STUDIO" stamp**: on the START screen and as a
+  persistent corner badge — it travels with every exported zip, so every
+  shared game advertises the product.
+- **Strategy locked in the blueprint** (vs Rosebud AI + Summer Engine):
+  breadth via verified grammar expansion, never free codegen; depth via the
+  Godot off-ramp; distribution before depth; sandboxed-DSL behaviors parked.
+
 ### Added — R-B medals + R-ITER "Edit this game" (2026-07-06)
 - **Medals**: 🥇/🥈/🥉 on the win screen, judged against a par time computed
   from the actual level geometry (spawn → collect points → goal distance at

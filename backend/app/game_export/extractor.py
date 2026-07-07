@@ -28,6 +28,9 @@ Output ONLY the JSON object, no markdown, no commentary. Schema (all fields opti
            "weather": one of "none","rain","snow", "wind": float 0..1,
            "ground_color": [r,g,b] floats 0..1},
  "reward": str or null — what the winner GETS ("winner gets a banana" -> "banana"); null if none stated,
+ "intro": 1-2 SHORT atmospheric sentences setting up the quest, written like a real game
+          ("The fireflies have scattered across the frozen wood. Find them before dawn."),
+ "win_text": one short triumphant victory line ("The meadow glows again."),
  "player": {"name": THE CONTROLLABLE SUBJECT of the prompt as a simple noun ("fox","samurai","man","horse","wizard"...),
             "height_m": float 0.5..3, "walk_speed": float 1..4, "run_speed": float 4..10},
  "camera": {"mode": one of "third_person","first_person","orbit", "distance_m": float 2..12, "fov_deg": float 30..90},

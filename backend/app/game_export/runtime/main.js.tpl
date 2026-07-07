@@ -776,13 +776,21 @@ async function main() {
     const ov = document.createElement('div');
     ov.style.cssText = 'position:fixed;inset:0;display:flex;align-items:center;'
       + 'justify-content:center;background:rgba(8,7,14,.62);z-index:40;backdrop-filter:blur(3px);';
+    // narrative layer: the LLM-written quest intro turns "collect 6 fireflies"
+    // into a game with a WORLD — content, not code, so it can't break a build
+    const introHtml = SPEC.intro
+      ? `<div style="font:italic 400 15px Georgia,serif;color:#b9b4d8;margin-bottom:14px;max-width:44ch;margin-left:auto;margin-right:auto;line-height:1.5;">${SPEC.intro}</div>`
+      : '';
     ov.innerHTML = '<div style="text-align:center;max-width:520px;padding:36px;">'
       + `<h1 style="font:800 40px system-ui;color:#fff;margin:0 0 10px;">${SPEC.title || 'Your World'}</h1>`
+      + introHtml
       + `<div style="font:500 16px system-ui;color:#cfcbe6;margin-bottom:6px;">`
       + objLines.map(l => '• ' + l).join('<br>') + '</div>'
       + `<div style="font:400 13px system-ui;color:#8d89a6;margin-bottom:24px;">${controls} · drag to look</div>`
       + '<button id="startbtn" style="font:700 20px system-ui;color:#0d0b16;background:#5cffc9;'
-      + 'border:none;border-radius:14px;padding:14px 46px;cursor:pointer;">START</button></div>';
+      + 'border:none;border-radius:14px;padding:14px 46px;cursor:pointer;">START</button>'
+      + '<div style="font:600 11px system-ui;color:#5cffc9;opacity:.65;margin-top:20px;letter-spacing:.6px;">'
+      + '⚡ MADE WITH FANTASY STUDIO — one sentence → a playable world</div></div>';
     document.body.appendChild(ov);
     // personal best on the start screen — "one more run" fuel
     try {
@@ -1091,8 +1099,9 @@ async function main() {
     stepIdx++;
     const st = steps[stepIdx];
     if (!st) {
-      // "winner gets a banana" — the promised reward headlines the win screen
-      doWin(SPEC.reward ? `You won the ${SPEC.reward}!` : 'Mission complete!');
+      // reward beats narrative beats generic — most specific line wins
+      doWin(SPEC.reward ? `You won the ${SPEC.reward}!`
+            : (SPEC.win_text || 'Mission complete!'));
       return;
     }
     if (st.kind === 'collect') { st._got = 0; spawnCollectibles(st); }
@@ -1540,7 +1549,7 @@ async function main() {
   // spawn facing AWAY from the camera (camera sits at +yaw behind the player,
   // so "away" is yaw+π) — otherwise the first W press whips the hero 180° and
   // the controls read as inverted for the whole first turn
-  let fCount = 0, fTime = 0, modelYaw = Math.PI;
+  let fCount = 0, fTime = 0, modelYaw = Math.PI, lowT = 0, qTier = 0;
   // angle-aware damping: always turn the SHORT way (raw damp on angles walks
   // 270° around when the target crosses the ±π seam)
   function dampAngle(cur, target, lambda, dt) {
@@ -1806,7 +1815,26 @@ async function main() {
     window.__game.state = { x: nt.x, y: nt.y, z: nt.z, modelYaw, yaw, speed,
                             started: gameStarted, go: raceGo };
     fCount++; fTime += dt;
-    if (fTime >= 0.5) { fpsEl.textContent = Math.round(fCount / fTime) + ' fps'; fCount = 0; fTime = 0; }
+    if (fTime >= 0.5) {
+      const fps = fCount / fTime;
+      fpsEl.textContent = Math.round(fps) + ' fps';
+      // ADAPTIVE QUALITY: sustained low fps sheds cost tiers instead of
+      // letting the game lag — resolution first, then bloom, then frozen
+      // shadow updates. Never steps back up mid-run (avoids oscillation).
+      lowT = fps < 28 ? lowT + 1 : 0;
+      if (lowT >= 4 && qTier === 0) {
+        qTier = 1; renderer.setPixelRatio(1);
+        composer.setPixelRatio && composer.setPixelRatio(1);
+        console.log('[game] adaptive quality: resolution tier (fps rescue)');
+      } else if (lowT >= 8 && qTier === 1) {
+        qTier = 2; bloom.enabled = false;
+        console.log('[game] adaptive quality: bloom off');
+      } else if (lowT >= 12 && qTier === 2) {
+        qTier = 3; renderer.shadowMap.autoUpdate = false;
+        console.log('[game] adaptive quality: shadows frozen');
+      }
+      fCount = 0; fTime = 0;
+    }
   });
 
   addEventListener('resize', () => {

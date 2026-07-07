@@ -114,6 +114,36 @@ drops into anyone's library and just works — that's the moat.
   personal bests → per-project render history. Frontend surfaces each new
   capability the same week it lands in the pipeline.
 
+## Depth & breadth strategy (decided 2026-07-07)
+
+Benchmarks calibrated against Rosebud AI as well as Summer Engine. Rosebud's
+model: the LLM writes arbitrary game code — maximum genre breadth, no
+verification gate, so a large share of creations are broken. Decisions:
+
+1. **Never adopt free codegen.** Our identity is "it always works." Breadth
+   comes from **grammar expansion** instead: each new deterministic element
+   (jump/platform controller, switches/doors/keys, enemy waves, checkpoints/
+   laps) multiplies the composable game space while every output still passes
+   the gates. Cadence: ~one archetype per round alongside distribution work.
+2. **Depth ceiling is the Godot off-ramp, not our engine.** Hours-long
+   complex games are Godot/Unity territory; our story is "fastest on-ramp to
+   game-making, with a real off-ramp to Godot." Target: 15–30 min games with
+   real arcs via missions + narrative + grammar, not 10-hour epics.
+3. **Perceived quality beats mechanic count.** The ladder that closes the
+   Rosebud gap: sound ✅ → juice ✅ → medals/replay hooks ✅ → **narrative
+   layer ✅ (2026-07-07: LLM-written intro + win_text — content, not code,
+   can't break a build)** → adaptive performance ✅ (fps governor sheds
+   resolution → bloom → shadow updates; no more lag on weak iGPUs) →
+   grammar expansion (next).
+4. **Distribution before depth.** "Made with Fantasy Studio" stamp ships in
+   every export (START screen + persistent corner badge — the game IS the
+   ad). Next: shareable links (bundles → registry per the marketplace
+   ladder), touch controls audit for phone players (stick + attack button
+   exist; verify on real mobile), showcase set.
+5. **Future option, parked:** LLM-authored behavior scripts in a tiny
+   sandboxed DSL, statically checked by the verify gate — Rosebud-ish
+   expressiveness inside our safety model. Revisit after the marketplace.
+
 ## What we deliberately do NOT copy
 
 Top sellers also succeed via multiplayer, live-ops, and content treadmills.

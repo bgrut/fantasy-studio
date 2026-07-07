@@ -71,6 +71,10 @@ background:#7c5cff;color:#fff;text-decoration:none;font-weight:600;display:none"
 <a id="backhub" style="display:none;margin-top:8px;color:#a78bfa;font-size:12px;text-decoration:none">↩ level select</a></div></div>
 <div id="stick"><div id="nub"></div></div>
 <div id="atkbtn">ATTACK</div>
+<!-- the stamp travels with every shared zip — the game IS the ad -->
+<div id="fsbadge" style="position:fixed;right:10px;bottom:8px;z-index:15;font:600 10px system-ui;
+letter-spacing:.5px;color:#5cffc9;opacity:.55;pointer-events:none;text-shadow:0 1px 6px rgba(0,0,0,.6)">
+⚡ MADE WITH FANTASY STUDIO</div>
 <script type="importmap">
 { "imports": { "three": "./vendor/three.module.js" } }
 </script>
