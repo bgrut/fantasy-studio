@@ -103,7 +103,14 @@ async function main() {
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(pal.sky);
-  if (SPEC.world.fog) scene.fog = new THREE.Fog(pal.fog, SPEC.world.size_m * 0.25, SPEC.world.size_m * 0.9);
+  if (SPEC.world.fog) {
+    // fog_density 0..1: 0.5 = default atmosphere, higher pulls the fog wall
+    // in close ("mistier", "thick fog"), lower pushes it out ("clear air")
+    const fd = SPEC.world.fog_density != null ? SPEC.world.fog_density : 0.5;
+    const near = SPEC.world.size_m * (0.45 - fd * 0.41);   // 0.45..0.04 of world
+    const far  = SPEC.world.size_m * (1.30 - fd * 0.85);   // 1.30..0.45 of world
+    scene.fog = new THREE.Fog(pal.fog, Math.max(near, 2), Math.max(far, near + 20));
+  }
 
   // QUALITY PACK — real atmospheric sky (day/sunset/overcast) or a starfield
   // dome (night): kills the flat-color backdrop everywhere at once.

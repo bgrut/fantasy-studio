@@ -26,6 +26,7 @@ Output ONLY the JSON object, no markdown, no commentary. Schema (all fields opti
            "size_m": float 30..500, "sky": one of "day","sunset","night","overcast","mars","space","dusk", "fog": bool,
            (mars -> sky "mars" + rust ground_color; moon/space -> sky "space" + gray ground),
            "weather": one of "none","rain","snow", "wind": float 0..1,
+           "fog_density": float 0..1 (misty/foggy scene -> 0.7-0.9; default 0.5),
            "ground_color": [r,g,b] floats 0..1},
  "reward": str or null — what the winner GETS ("winner gets a banana" -> "banana"); null if none stated,
  "intro": 1-2 SHORT atmospheric sentences setting up the quest, written like a real game
@@ -169,12 +170,21 @@ Output ONLY the complete updated JSON object, no markdown. Rules:
 - Same schema as the input. Copy every field you are NOT changing verbatim.
 - Do not invent or modify 'asset' fields; when you add a NEW entity, omit 'asset'
   (the pipeline resolves or generates meshes from names).
+- Entity "name" must be the CONCRETE creature noun from the request ("wolf",
+  "bear", "knight") — NEVER a generic word like "entity" or "creature".
+  EXAMPLE: request "add 2 wolves as enemies" -> append to "entities":
+  {"name": "wolf", "behavior": "hostile", "count": 2, "speed": 3.0}
 - If the change replaces the player, update player.name (assets re-resolve).
-- objectives kinds: collect, defeat, reach, race. entity behaviors: wander,
-  follow, static, hostile, vehicle.
+- objectives kinds: collect, defeat, reach, race, survive. entity behaviors:
+  wander, follow, static, hostile, vehicle.
 - world.sky one of day,sunset,night,overcast,mars,space,dusk; weather none,rain,snow.
+- "fog_density" 0..1 in world: misty/foggy -> 0.7-0.9, clear air -> 0.2.
 - "reward": what the winner gets, or null.
 Apply exactly the requested change — nothing else."""
+
+_GENERIC_ENTITY_NAMES = {"entity", "entities", "creature", "creatures",
+                         "character", "characters", "being", "animal",
+                         "animals", "thing", "unit"}
 
 
 def patch_game_spec(current: dict, change: str, model: str | None = None,
@@ -203,6 +213,24 @@ def patch_game_spec(current: dict, change: str, model: str | None = None,
             if not isinstance(data, dict):
                 raise ValueError("no JSON object in reply")
             data["seed"] = seed                     # same world layout
+            # SAFETY NET: the LLM sometimes names an added entity "entity".
+            # Recover the real noun from the change text (library kinds win),
+            # else drop it — a junk-named entity resolves to nothing anyway.
+            fixed_ents = []
+            for e in (data.get("entities") or []):
+                nm = str(e.get("name", "")).lower().strip() if isinstance(e, dict) else ""
+                if nm in _GENERIC_ENTITY_NAMES:
+                    from app.game_export import library as _lib
+                    words = [w.strip(".,!?").rstrip("s") for w in change.lower().split()]
+                    hit = next((w for w in words if w and _lib.resolve(w)), None)
+                    if hit:
+                        e["name"] = hit
+                        if verbose:
+                            print(f"[game] patch: renamed generic entity -> '{hit}'")
+                    else:
+                        continue                       # unrecoverable — drop
+                fixed_ents.append(e)
+            data["entities"] = fixed_ents
             spec = spec_from_dict(data)
             if verbose:
                 print(f"[game] patched spec: '{spec.title}' <- '{change[:60]}'")
