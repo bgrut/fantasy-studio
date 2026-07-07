@@ -36,13 +36,17 @@ function mulberry32(a) {
 const SKY = {
   day:      { sky: 0x87b5e0, fog: 0xa8c4dd, sun: 3.2, amb: 0.55, sunPos: [40, 80, 30] },
   sunset:   { sky: 0xe8996a, fog: 0xd9a07a, sun: 2.2, amb: 0.40, sunPos: [80, 25, 10] },
-  night:    { sky: 0x0d1626, fog: 0x0d1626, sun: 0.35, amb: 0.15, sunPos: [30, 60, -40] },
+  // night done RIGHT: blue moonlight + lifted ambient + fog slightly brighter
+  // than the sky, so shapes read at distance while the mood stays dark
+  night:    { sky: 0x0d1626, fog: 0x18263f, sun: 0.6, amb: 0.32,
+              sunCol: 0x9db8ff, sunPos: [30, 60, -40] },
   overcast: { sky: 0x9aa4ad, fog: 0x9aa4ad, sun: 1.2, amb: 0.65, sunPos: [20, 90, 20] },
   // alien worlds: mars = butterscotch haze over rust; space = airless black,
   // hard sun; dusk = deep violet-blue with a low warm sun
   mars:     { sky: 0xd99a66, fog: 0xc98a5a, sun: 2.6, amb: 0.45, sunPos: [60, 55, 20] },
-  space:    { sky: 0x05070d, fog: 0x05070d, sun: 3.8, amb: 0.10, sunPos: [50, 70, -30] },
-  dusk:     { sky: 0x3b3a5e, fog: 0x46466b, sun: 1.1, amb: 0.35, sunPos: [70, 18, 15] },
+  space:    { sky: 0x05070d, fog: 0x0a0f1c, sun: 3.8, amb: 0.20, sunPos: [50, 70, -30] },
+  dusk:     { sky: 0x3b3a5e, fog: 0x4a4a72, sun: 1.2, amb: 0.42,
+              sunCol: 0xffd9b0, sunPos: [70, 18, 15] },
 };
 
 async function main() {
@@ -155,7 +159,7 @@ async function main() {
 
   const hemi = new THREE.HemisphereLight(pal.sky, 0x3a3f35, pal.amb);
   scene.add(hemi);
-  const sun = new THREE.DirectionalLight(0xffffff, pal.sun);
+  const sun = new THREE.DirectionalLight(pal.sunCol || 0xffffff, pal.sun);
   sun.position.set(...pal.sunPos);
   sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048);
@@ -1306,7 +1310,7 @@ async function main() {
   // for any orbit angle. The atmosphere stays; the character never vanishes.
   if (pal.sun < 1.0) {
     scene.add(camera);                       // camera needs to be in the graph
-    const fill = new THREE.PointLight(0xc3d6ff, pal.sun < 0.5 ? 120 : 40, 30, 1.9);
+    const fill = new THREE.PointLight(0xc3d6ff, pal.sun < 0.7 ? 120 : 40, 30, 1.9);
     fill.position.set(0, 0.6, 0.4);          // just above/behind the lens
     camera.add(fill);
     hemi.intensity = Math.max(hemi.intensity, 0.34);
@@ -1609,6 +1613,12 @@ async function main() {
   // palette's mood. Consistency is the cheapest "looks expensive" trick in
   // games; this is the whole-frame half of it (props get tinted at load).
   const gradeTint = new THREE.Color(pal.sky).lerp(new THREE.Color(0xffffff), 0.55);
+  {
+    // luminance-normalize the tint: dark palettes (night/space) shift HUE
+    // without multiplying the whole frame darker — mood without murk
+    const l = 0.299 * gradeTint.r + 0.587 * gradeTint.g + 0.114 * gradeTint.b;
+    gradeTint.multiplyScalar(THREE.MathUtils.clamp(0.9 / Math.max(l, 0.2), 1.0, 2.4));
+  }
   const grade = new ShaderPass({
     uniforms: { tDiffuse: { value: null },
                 tint: { value: new THREE.Vector3(gradeTint.r, gradeTint.g, gradeTint.b) } },
