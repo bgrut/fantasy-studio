@@ -236,6 +236,17 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             ekind = "man" if ent.name.lower() in _HUMAN_ALIASES else ent.name
             # prefer the ANIMATED variant (real gait — no gliding); static fallback
             glb = ensure_playable(ekind, verbose=False) or library.resolve(ekind)
+            if not glb and not any(w in req.prompt.lower()
+                                   for w in ekind.lower().split()):
+                # INVITED NOUNS ONLY (2026-07-07): the LLM sometimes invents
+                # ambience entities (an owl for a night forest). Lovely when
+                # cached, but an uninvited noun must never cost 35 CPU-minutes
+                # of generation. Skip with a note; prompt-named nouns still
+                # generate like always.
+                job.setdefault("notes", []).append(
+                    f"'{ekind}' was the AI's idea, not yours — skipped "
+                    f"(add it to your prompt or an edit to create it)")
+                continue
             if not glb:
                 # THE SAME PIPELINE FOR EVERY NOUN (2026-07-06): entities and
                 # props generate exactly like the player does — a missing
