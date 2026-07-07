@@ -105,6 +105,18 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             stage("extracting")
             spec = extract_game_spec(req.prompt, verbose=False)
             job["title"] = spec.title
+        # SNOW IS BRIGHT: snowy scenes must have snow-colored ground — that's
+        # what reflects the moonlight and makes winter nights luminous. The
+        # LLM often picks a dark ground for "snowy night" and the whole scene
+        # drowns (the too-dark Foxfire Quest, 2026-07-07).
+        _snowy = (spec.world.weather == "snow"
+                  or any(w in (spec.world.name or "").lower()
+                         for w in ("arctic", "snow", "tundra", "winter")))
+        if _snowy:
+            g = spec.world.ground_color
+            spec.world.ground_color = [g[0] + (0.78 - g[0]) * 0.8,
+                                       g[1] + (0.80 - g[1]) * 0.8,
+                                       g[2] + (0.86 - g[2]) * 0.8]
             # LEVEL VARIETY: every FRESH build gets a new world layout (edits
             # keep their world). Pass an explicit seed to reproduce a level.
             import random as _random
