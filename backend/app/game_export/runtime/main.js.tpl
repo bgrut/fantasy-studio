@@ -938,6 +938,10 @@ async function main() {
           anim.cur = anim.idle; anim.cur.play();
         }
         if (dormant) holder.visible = false;
+        holder.userData.fsTag = {            // Inspector hover-audit identity
+          type: 'npc', name: ent.name || 'creature',
+          detail: `${ent.behavior || 'wander'} · speed ${ent.speed || 1.5}`
+                  + (hostile ? ` · hp ${ent.hp || 3}` : '') };
         npcs.push({ obj: holder, speed: ent.speed || 1.5, behavior: ent.behavior || 'wander',
                     target: null, yaw: startYaw, phase: rngN() * Math.PI * 2,
                     hp: ent.hp || 3, cd: 0, dead: false, dieT: 0, mats, anim, dormant });
@@ -1159,6 +1163,8 @@ async function main() {
       }
       const baseY = hAt(cx, cz) + 1.0 + rngC() * 0.6;
       s.position.set(cx, baseY, cz);
+      s.userData.fsTag = { type: 'collectible', name: step.label || 'item',
+                           detail: 'collect it' };
       s.add(makeGlow(1.7));
       scene.add(s);
       collectibles.push({ mesh: s, baseY, phase: rngC() * Math.PI * 2 });
@@ -1180,6 +1186,7 @@ async function main() {
       const hx = Math.cos(ang) * d, hz = Math.sin(ang) * d;
       const hy = hAt(hx, hz) + 0.55;
       s.position.set(hx, hy, hz);
+      s.userData.fsTag = { type: 'pickup', name: 'health pack', detail: '+1 ♥ on touch' };
       s.add(makeGlow(1.1));
       scene.add(s);
       healthPacks.push({ mesh: s, baseY: hy, phase: rngH() * Math.PI * 2 });
@@ -1203,6 +1210,170 @@ async function main() {
         popText('+1 ♥', '#ff8fa0');
       }
     }
+  }
+
+  // ── PLACED ITEMS (Phase 42 Inspector): objects at EXPLICIT coordinates —
+  // click-to-place from the studio. Procedural props draw instantly (no
+  // generation wait); any library noun arrives as a GLB like an entity.
+  // Items with `interact` text are READABLE: walk up, press E.
+  let inspectOn = false;                 // studio inspect mode (picking bridge)
+  const placedItems = [];
+  const interactables = [];
+  function procProp(kind) {
+    const g = new THREE.Group();
+    const std = (c, e, ei) => new THREE.MeshStandardMaterial({
+      color: c, emissive: e || 0x000000, emissiveIntensity: ei || 1, roughness: 0.7 });
+    const add = (geo, mat, x, y, z, rx, ry, rz) => {
+      const m = new THREE.Mesh(geo, mat);
+      m.position.set(x || 0, y || 0, z || 0);
+      if (rx) m.rotation.x = rx; if (ry) m.rotation.y = ry; if (rz) m.rotation.z = rz;
+      g.add(m); return m;
+    };
+    if (kind === 'book') {
+      add(new THREE.CylinderGeometry(0.30, 0.36, 0.5, 8), std(0x6f6a78), 0, 0.25);
+      add(new THREE.BoxGeometry(0.36, 0.05, 0.5), std(0x7a2e2e), -0.16, 0.55, 0, 0, 0, 0.28);
+      add(new THREE.BoxGeometry(0.36, 0.05, 0.5), std(0x7a2e2e), 0.16, 0.55, 0, 0, 0, -0.28);
+      add(new THREE.BoxGeometry(0.30, 0.03, 0.44), std(0xf4ecd8, 0xf4ecd8, 0.35), -0.14, 0.58, 0, 0, 0, 0.28);
+      add(new THREE.BoxGeometry(0.30, 0.03, 0.44), std(0xf4ecd8, 0xf4ecd8, 0.35), 0.14, 0.58, 0, 0, 0, -0.28);
+      return { g, h: 0.75 };
+    }
+    if (kind === 'sign') {
+      add(new THREE.CylinderGeometry(0.05, 0.07, 1.15, 8), std(0x6b4a2f), 0, 0.575);
+      add(new THREE.BoxGeometry(0.95, 0.55, 0.07), std(0xa8845c, 0x604020, 0.25), 0, 1.25);
+      return { g, h: 1.55 };
+    }
+    if (kind === 'chest') {
+      add(new THREE.BoxGeometry(0.85, 0.45, 0.55), std(0x6b4a2f), 0, 0.225);
+      add(new THREE.BoxGeometry(0.85, 0.2, 0.55), std(0x7d5636), 0, 0.5, -0.14, -0.6);
+      add(new THREE.BoxGeometry(0.87, 0.09, 0.57), std(0xd9a441, 0xa87418, 0.5), 0, 0.32);
+      return { g, h: 0.72 };
+    }
+    if (kind === 'building') {
+      add(new THREE.BoxGeometry(4.4, 3.3, 3.7), std(0x9a8f7e), 0, 1.65);
+      const roof = add(new THREE.ConeGeometry(3.35, 1.9, 4), std(0x6a4438), 0, 4.25, 0, 0, Math.PI / 4);
+      roof.castShadow = true;
+      add(new THREE.BoxGeometry(0.95, 1.7, 0.1), std(0x4c3423), 0, 0.85, 1.86);
+      for (const wx of [-1.35, 1.35]) {
+        add(new THREE.BoxGeometry(0.7, 0.7, 0.06), std(0xffd88a, 0xffc86a, 1.4), wx, 1.9, 1.87);
+      }
+      return { g, h: 5.2 };
+    }
+    if (kind === 'rock') {
+      const geo = new THREE.DodecahedronGeometry(0.7, 0);
+      const pos = geo.attributes.position;
+      const rj = mulberry32(1234);
+      for (let i = 0; i < pos.count; i++) {
+        const s = 0.8 + rj() * 0.45;
+        pos.setXYZ(i, pos.getX(i) * s, pos.getY(i) * (0.55 + rj() * 0.3), pos.getZ(i) * s);
+      }
+      geo.computeVertexNormals();
+      const m = add(geo, new THREE.MeshStandardMaterial({
+        color: 0x8b8d92, roughness: 0.95, flatShading: true }), 0, 0.45);
+      m.castShadow = true;
+      return { g, h: 1.0 };
+    }
+    if (kind === 'campfire') {
+      for (const a of [0, 1.05, 2.1]) {
+        add(new THREE.CylinderGeometry(0.07, 0.07, 0.95, 6), std(0x5b3d26),
+            0, 0.09, 0, Math.PI / 2, a);
+      }
+      add(new THREE.ConeGeometry(0.26, 0.6, 8), std(0xff7a2a, 0xff5a10, 2.6), 0, 0.42);
+      add(new THREE.ConeGeometry(0.13, 0.38, 8), std(0xffd23a, 0xffb810, 3.0), 0, 0.55);
+      return { g, h: 0.85 };
+    }
+    // default / beacon: a glowing waypoint pillar
+    add(new THREE.CylinderGeometry(0.34, 0.42, 0.3, 10), std(0x3a3550), 0, 0.15);
+    add(new THREE.CylinderGeometry(0.12, 0.19, 2.2, 10), std(0xb9a0ff, 0x7c5cff, 2.2), 0, 1.35);
+    return { g, h: 2.5 };
+  }
+  for (const it of SPEC.world.placed_items || []) {
+    try {
+      let obj, hgt = it.height_m || 0;
+      if (it.asset) {
+        const gltf = await loadGLB(it.asset);
+        obj = prepModel(gltf, hgt || 1.0, false).holder;
+      } else {
+        const pp = procProp((it.kind || 'beacon').toLowerCase());
+        obj = pp.g;
+        if (hgt > 0) obj.scale.multiplyScalar(hgt / pp.h); else hgt = pp.h;
+      }
+      const gy = hAt(it.x, it.z);
+      obj.position.set(it.x, gy, it.z);
+      obj.rotation.y = (it.yaw_deg || 0) * Math.PI / 180;
+      obj.traverse(o => { if (o.isMesh) { o.castShadow = true; o.frustumCulled = false; } });
+      obj.userData.fsTag = { type: 'placed', name: it.name || it.kind,
+                             detail: it.interact ? 'readable · walk up + press E' : it.kind };
+      scene.add(obj);
+      const bb = new THREE.Box3().setFromObject(obj);
+      if (it.collide !== false && (bb.max.y - bb.min.y) > 0.5) {
+        world.createCollider(RAPIER.ColliderDesc.cuboid(
+          Math.max((bb.max.x - bb.min.x) / 2 * 0.8, 0.1), (bb.max.y - bb.min.y) / 2,
+          Math.max((bb.max.z - bb.min.z) / 2 * 0.8, 0.1))
+          .setTranslation(it.x, gy + (bb.max.y - bb.min.y) / 2, it.z));
+      }
+      if (it.interact) {
+        const gl = makeGlow(1.5);
+        gl.position.y = Math.min(hgt * 0.6, 1.2);
+        obj.add(gl);
+        interactables.push({ x: it.x, z: it.z, label: it.name || it.kind,
+                             text: it.interact,
+                             r: Math.max(2.1, (bb.max.x - bb.min.x)) });
+      }
+      placedItems.push({ obj, it });
+    } catch (e) { console.warn('[game] placed item failed:', e.message); }
+  }
+  // interact UI: proximity prompt + reading panel (books, signs, hints)
+  let readable = null, reading = false;
+  const intEl = document.createElement('div');
+  intEl.style.cssText = 'position:fixed;left:50%;bottom:96px;transform:translateX(-50%);'
+    + 'font:600 14px system-ui;color:#eceaf6;background:rgba(10,9,18,.74);'
+    + 'border:1px solid rgba(255,255,255,.16);border-radius:10px;padding:8px 14px;'
+    + 'z-index:24;display:none;pointer-events:none;';
+  document.body.appendChild(intEl);
+  const readEl = document.createElement('div');
+  readEl.style.cssText = 'position:fixed;inset:0;display:none;align-items:center;'
+    + 'justify-content:center;background:rgba(8,7,14,.55);z-index:44;backdrop-filter:blur(2px);';
+  readEl.innerHTML = '<div style="max-width:460px;margin:20px;background:#141021;'
+    + 'border:1px solid rgba(255,255,255,.14);border-radius:16px;padding:26px 30px;">'
+    + '<div id="fs_read_t" style="font:800 18px system-ui;color:#ffd88a;margin-bottom:10px;"></div>'
+    + '<div id="fs_read_b" style="font:400 15px/1.55 Georgia,serif;color:#eceaf6;white-space:pre-wrap;"></div>'
+    + '<div style="margin-top:16px;font:600 11px system-ui;color:#807d99;">E or Esc to close</div></div>';
+  document.body.appendChild(readEl);
+  function setReading(r, item) {
+    reading = r;
+    readEl.style.display = r ? 'flex' : 'none';
+    if (r && item) {
+      document.getElementById('fs_read_t').textContent = (item.label || 'note').toUpperCase();
+      document.getElementById('fs_read_b').textContent = item.text;
+      sfx('beep');
+    }
+  }
+  readEl.addEventListener('click', () => setReading(false));
+  addEventListener('keydown', e => {
+    if (e.code === 'KeyE') {
+      if (reading) { setReading(false); return; }
+      if (readable && gameStarted) setReading(true, readable);
+    }
+  });
+  addEventListener('keydown', e => {      // Esc closes the page, not the game
+    if (e.code === 'Escape' && reading) { setReading(false); e.stopImmediatePropagation(); }
+  }, true);
+  function stepInteract(nt) {
+    if (!interactables.length) return;
+    let best = null, bd = 1e9;
+    for (const t of interactables) {
+      const d = Math.hypot(t.x - nt.x, t.z - nt.z);
+      if (d < t.r + 0.8 && d < bd) { bd = d; best = t; }
+    }
+    if (best !== readable) {
+      readable = best;
+      intEl.style.display = best ? 'block' : 'none';
+      if (best) intEl.textContent = `E — read the ${best.label}`;
+    }
+  }
+  if (interactables.length) {
+    const hint = document.querySelector('#hud .hint');
+    if (hint) hint.textContent += ' · E to read';
   }
 
   function stepLabel(st) {
@@ -1517,6 +1688,7 @@ async function main() {
   }, { passive: true });
   renderer.domElement.addEventListener('pointerdown', e => {
     if (e.target.closest('#stick')) return;
+    if (inspectOn) return;               // inspect mode: clicks PICK, not drag
     dragging = true; px = e.clientX; py = e.clientY;
   });
   addEventListener('pointerup', () => dragging = false);
@@ -1663,7 +1835,59 @@ async function main() {
     objectives: () => ({ collected: steps.filter(s => s.kind === 'collect').reduce((a, s) => a + (s._got || 0), 0),
                          left: collectibles.filter(c => c.mesh.parent).map(c => c.mesh.position.toArray()) }),
     npcs: () => npcs.filter(n => !n.gone).map(n => ({ behavior: n.behavior, dead: !!n.dead, pos: n.obj.position.toArray() })),
+    placed: () => placedItems.map(p => ({ kind: p.it.kind, x: p.it.x, z: p.it.z,
+                                          interact: !!p.it.interact })),
+    reading: () => ({ readable: readable ? readable.label : null, open: reading }),
+    inspect: on => { inspectOn = !!on; },
   };
+
+  // ── INSPECTOR PICKING BRIDGE (Phase 42): the studio turns on inspect mode
+  // via postMessage; hover/click raycasts report what's under the cursor and
+  // WHERE — so "place a building here" carries real coordinates. Standalone
+  // (itch.io, shared zip) the bridge is inert: no parent listens.
+  playerObj.userData.fsTag = { type: 'player', name: SPEC.player.name || 'player',
+                               detail: SPEC.player.mode || 'walk' };
+  {
+    const rc = new THREE.Raycaster();
+    const nv = new THREE.Vector2();
+    addEventListener('message', e => {
+      if (e.data && e.data.type === 'fs-inspect') {
+        inspectOn = !!e.data.on;
+        renderer.domElement.style.cursor = inspectOn ? 'crosshair' : '';
+      }
+    });
+    const pickAt = (cx, cy, kindEv) => {
+      nv.set((cx / innerWidth) * 2 - 1, -(cy / innerHeight) * 2 + 1);
+      rc.setFromCamera(nv, camera);
+      for (const h of rc.intersectObjects(scene.children, true)) {
+        if (h.object.isSprite) continue;         // glow halos aren't things
+        let o = h.object, tag = null;
+        while (o) {
+          if (o.userData && o.userData.fsTag) { tag = o.userData.fsTag; break; }
+          o = o.parent;
+        }
+        window.parent.postMessage({
+          type: 'fs-pick', kind: kindEv,
+          x: +h.point.x.toFixed(2), z: +h.point.z.toFixed(2), y: +h.point.y.toFixed(2),
+          target: tag || { type: 'ground', name: 'ground',
+                           detail: `terrain (${h.point.x.toFixed(1)}, ${h.point.z.toFixed(1)})` },
+        }, '*');
+        return;
+      }
+    };
+    window.__game.pick = (cx, cy) => pickAt(cx, cy, 'click');   // test harness
+    renderer.domElement.addEventListener('pointerdown', e => {
+      if (inspectOn) pickAt(e.clientX, e.clientY, 'click');
+    });
+    let hovT = 0;
+    renderer.domElement.addEventListener('pointermove', e => {
+      if (!inspectOn) return;
+      const now = performance.now();
+      if (now - hovT < 130) return;              // ~8 Hz is plenty for a chip
+      hovT = now;
+      pickAt(e.clientX, e.clientY, 'hover');
+    });
+  }
 
   // QUALITY PACK — cinematic post chain: subtle bloom + vignette + filmic out
   const composer = new EffectComposer(renderer);
@@ -2034,7 +2258,7 @@ async function main() {
       camera.position.y += (Math.random() - 0.5) * 0.4 * shakeT;
     }
     stepBursts(dt);
-    if (gameStarted && !paused) stepHealthPacks(dt, nt);
+    if (gameStarted && !paused) { stepHealthPacks(dt, nt); stepInteract(nt); }
 
     // procedural swim/flap motion: time + speed-scaled amplitude
     if (procShaders.length) {

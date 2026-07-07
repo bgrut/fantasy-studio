@@ -3,7 +3,7 @@
 // then embedded right here so the user plays what they typed.
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Download, FolderPlus, Gamepad2, Loader2, Maximize2, RotateCcw } from 'lucide-react'
+import { Crosshair, Download, FolderPlus, Gamepad2, Loader2, Maximize2, RotateCcw } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import {
   addLevelToProject, createProject, exportGame, exportProject, gameHealth,
@@ -47,6 +47,11 @@ export default function GameStudio() {
   const [exporting, setExporting] = useState(false)
   const [exported, setExported] = useState<{ play_url: string; zip: string; zip_mb: number } | null>(null)
   const [hubUrl, setHubUrl] = useState<string | null>(null)   // exported game playing in-app
+  // Inspector (Phase 42): hover-audit + click-to-select inside the running game
+  type Pick = { x: number; z: number; target: { type: string; name: string; detail?: string } }
+  const [inspect, setInspect] = useState(false)
+  const [hoverPick, setHoverPick] = useState<Pick | null>(null)
+  const [selPick, setSelPick] = useState<Pick | null>(null)
   const pollRef = useRef<number | null>(null)
   const gameFrameRef = useRef<HTMLIFrameElement | null>(null)
   const hubFrameRef = useRef<HTMLIFrameElement | null>(null)
@@ -96,12 +101,13 @@ export default function GameStudio() {
     }
   }, [project, exporting])
 
-  const startJob = useCallback(async (p: string, baseJobId?: number) => {
+  const startJob = useCallback(async (p: string, baseJobId?: number,
+                                      at?: { x: number; z: number; target?: string }) => {
     setError(null)
     if (baseJobId == null) setJob(null)   // edits keep showing the game while rebuilding
     setBuilding(true)
     try {
-      const { job_id } = await exportGame(p, baseJobId != null ? { baseJobId } : undefined)
+      const { job_id } = await exportGame(p, baseJobId != null ? { baseJobId, at } : undefined)
       let misses = 0
       pollRef.current = window.setInterval(async () => {
         try {
@@ -142,10 +148,39 @@ export default function GameStudio() {
     const p = editPrompt.trim()
     if (!p || building || !job) return
     setEditPrompt('')
-    void startJob(p, job.id)
-  }, [editPrompt, building, job, startJob])
+    // the selected point rides along: "place a book here" gets coordinates
+    const at = selPick ? { x: selPick.x, z: selPick.z, target: selPick.target.name } : undefined
+    setSelPick(null)
+    void startJob(p, job.id, at)
+  }, [editPrompt, building, job, startJob, selPick])
 
   const playing = job?.status === 'complete' && job.play_url
+
+  // Inspector bridge: the game raycasts under the cursor and reports what/where
+  useEffect(() => {
+    const onMsg = (e: MessageEvent) => {
+      const d = e.data
+      if (!d || d.type !== 'fs-pick') return
+      const p: Pick = { x: d.x, z: d.z, target: d.target ?? { type: 'ground', name: 'ground' } }
+      if (d.kind === 'hover') setHoverPick(p)
+      else setSelPick(p)
+    }
+    window.addEventListener('message', onMsg)
+    return () => window.removeEventListener('message', onMsg)
+  }, [])
+
+  const sendInspect = useCallback((on: boolean) => {
+    gameFrameRef.current?.contentWindow?.postMessage({ type: 'fs-inspect', on }, '*')
+  }, [])
+  const toggleInspect = useCallback(() => {
+    setInspect(v => {
+      sendInspect(!v)
+      if (v) { setHoverPick(null); setSelPick(null) }
+      return !v
+    })
+  }, [sendInspect])
+  // a fresh build replaces the iframe — inspector state resets with it
+  useEffect(() => { setInspect(false); setHoverPick(null); setSelPick(null) }, [job?.play_url])
 
   // While a game is playable, arrows/space must DRIVE THE GAME, not scroll
   // the studio page out from under the recording. Keys that reach the parent
@@ -427,6 +462,19 @@ export default function GameStudio() {
                 {addedJob === job!.id ? 'In your game ✓' : 'Add to my game'}
               </button>
               <button
+                onClick={toggleInspect}
+                title="hover to identify things · click to select a spot or thing, then describe your edit"
+                className={cn(
+                  'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-colors',
+                  inspect
+                    ? 'bg-[#ffd88a]/20 text-[#ffd88a]'
+                    : 'border border-white/[0.08] text-[#807d99] hover:text-white'
+                )}
+              >
+                <Crosshair className="w-3 h-3" />
+                {inspect ? 'Inspecting' : 'Inspect'}
+              </button>
+              <button
                 onClick={build}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs border border-white/[0.08] text-[#807d99] hover:text-white transition-colors"
               >
@@ -449,7 +497,10 @@ export default function GameStudio() {
             </div>
           </div>
           <div
-            className="rounded-2xl overflow-hidden border border-white/[0.06] bg-black aspect-video"
+            className={cn(
+              'relative rounded-2xl overflow-hidden border bg-black aspect-video',
+              inspect ? 'border-[#ffd88a]/40' : 'border-white/[0.06]'
+            )}
             onClick={() => gameFrameRef.current?.focus()}
           >
             <iframe
@@ -462,17 +513,56 @@ export default function GameStudio() {
               className="w-full h-full"
               allow="fullscreen; gamepad; pointer-lock"
               allowFullScreen
-              onLoad={() => gameFrameRef.current?.focus()}
+              onLoad={() => { gameFrameRef.current?.focus(); if (inspect) sendInspect(true) }}
             />
+            {/* hover-audit chip: what's under the cursor, live */}
+            {inspect && (
+              <div className="absolute top-2 left-2 pointer-events-none px-3 py-1.5 rounded-lg bg-[rgba(10,9,18,0.85)] border border-[#ffd88a]/30 text-xs font-mono">
+                {hoverPick ? (
+                  <>
+                    <span className="text-[#ffd88a]">{hoverPick.target.name}</span>
+                    {hoverPick.target.detail && (
+                      <span className="text-[#807d99]"> · {hoverPick.target.detail}</span>
+                    )}
+                    <span className="text-[#4a4764]"> — click to select</span>
+                  </>
+                ) : (
+                  <span className="text-[#807d99]">move the cursor over the world…</span>
+                )}
+              </div>
+            )}
           </div>
-          {/* R-ITER: conversational editing — the generator becomes an engine */}
+          {/* R-ITER: conversational editing — the generator becomes an engine.
+              A selected point/thing from Inspect mode rides along with the edit. */}
+          {selPick && (
+            <div className="flex items-center gap-2 text-xs">
+              <span className="px-3 py-1.5 rounded-lg bg-[#ffd88a]/10 border border-[#ffd88a]/30 text-[#ffd88a] font-mono">
+                📍 {selPick.target.name} at ({selPick.x.toFixed(1)}, {selPick.z.toFixed(1)})
+              </span>
+              <button
+                onClick={() => setSelPick(null)}
+                className="text-[#807d99] hover:text-white transition-colors"
+                title="clear selection"
+              >
+                ✕
+              </button>
+              <span className="text-[#4a4764]">
+                “here” and “this” in your edit now mean this spot
+              </span>
+            </div>
+          )}
           <div className="flex gap-2">
             <input
               value={editPrompt}
               onChange={(e) => setEditPrompt(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') iterate() }}
-              placeholder="Edit this game… (e.g. make it night · add 3 wolves · winner gets a crown)"
-              className="flex-1 rounded-xl bg-[rgba(14,14,22,0.7)] border border-white/[0.06] px-4 py-2.5 text-sm text-white placeholder:text-[#4a4764] focus:outline-none focus:border-[#7c5cff]/40"
+              placeholder={selPick
+                ? `Edit here… (e.g. place a book here that says 'follow the river' · place a building here${selPick.target.type === 'npc' ? ` · make this ${selPick.target.name} faster` : ''})`
+                : 'Edit this game… (e.g. make it night · add 3 wolves · winner gets a crown)'}
+              className={cn(
+                'flex-1 rounded-xl bg-[rgba(14,14,22,0.7)] border px-4 py-2.5 text-sm text-white placeholder:text-[#4a4764] focus:outline-none',
+                selPick ? 'border-[#ffd88a]/30 focus:border-[#ffd88a]/50' : 'border-white/[0.06] focus:border-[#7c5cff]/40'
+              )}
             />
             <button
               onClick={iterate}

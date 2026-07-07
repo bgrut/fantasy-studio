@@ -10,6 +10,29 @@ Pre-1.0 versions are internal milestones during the constraint sprint leading to
 
 ## [Unreleased]
 
+### Added — Phase 42: Inspector mode — visually build the game in real time (2026-07-07)
+- **Picking bridge**: toggle 🎯 Inspect over the running game — hover
+  identifies anything under the cursor (wolf · hostile · speed 3), click
+  selects a spot or thing. The game raycasts and reports world coordinates
+  to the studio via postMessage; standalone exports keep the bridge inert.
+- **Click-to-place**: with a selection active, "place a book here that says
+  'follow the river'" is DETERMINISTIC — no LLM round-trip, the item lands
+  at the exact clicked coordinates in seconds. Longer edits still go through
+  the LLM patcher, which now receives the selection as context ("here"/"this"
+  mean the clicked spot) with a coordinate safety net.
+- **placed_items in the spec**: procedural props render instantly (book,
+  sign, chest, building, rock, beacon, campfire + aliases like house/torch/
+  scroll); any other noun resolves through the same casting ladder as
+  entities — placed items are always user-invited, so unknown nouns may
+  generate (once, then cached).
+- **Interact verb**: placed items with text are READABLE — proximity prompt
+  ("E — read the sign"), press E, a panel shows the hint/lore. Books with
+  hints, trail signs, notes: games can now teach and tell stories.
+- Verified end-to-end: headless probes (5 props placed, E-panel text exact,
+  picks report coords + identity tags) AND the full studio loop (build →
+  Inspect → click ground → "place a sign here that says…" → sign at the
+  clicked spot with readable text, 16 checks passed).
+
 ### Fixed — Export buttons did nothing in the desktop app (2026-07-07)
 - **Root cause**: both post-export actions were plain `<a>` links. The
   desktop shell (WebView2) ignores `target="_blank"` (no new-window handler)

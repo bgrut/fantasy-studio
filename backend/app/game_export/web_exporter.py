@@ -55,6 +55,9 @@ def export_web_game(spec: GameSpec, out_dir: str | Path, verbose: bool = True) -
     for i, ob in enumerate(spec.objectives):
         if getattr(ob, "asset", None):       # collect steps with a generated mesh
             rt["objectives"][i]["asset"] = bring(ob.asset, f"objective[{i}]")
+    for i, it in enumerate(spec.world.placed_items):
+        if it.asset:                         # procedural props ship no file
+            rt["world"]["placed_items"][i]["asset"] = bring(it.asset, f"placed[{i}]")
 
     # ── render templates ─────────────────────────────────────────────────────
     html = (RUNTIME / "index.html.tpl").read_text(encoding="utf-8")

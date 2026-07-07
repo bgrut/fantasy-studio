@@ -33,7 +33,11 @@ export async function gameHealth(): Promise<GameHealth> {
   return j(await fetch('/api/game/health'))
 }
 
-export async function exportGame(prompt: string, opts?: { godot?: boolean; player?: string; baseJobId?: number }) {
+// Inspector (Phase 42): what the user clicked in the running game — edits
+// carry real world coordinates ("place a book HERE")
+export interface PickPoint { x: number; z: number; target?: string }
+
+export async function exportGame(prompt: string, opts?: { godot?: boolean; player?: string; baseJobId?: number; at?: PickPoint }) {
   const res = await fetch('/api/game/export', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -41,7 +45,9 @@ export async function exportGame(prompt: string, opts?: { godot?: boolean; playe
     body: JSON.stringify({ prompt, godot: opts?.godot ?? false,
                            ...(opts?.player ? { player: opts.player } : {}),
                            // R-ITER: edit an existing game instead of generating anew
-                           ...(opts?.baseJobId != null ? { base_job_id: opts.baseJobId } : {}) }),
+                           ...(opts?.baseJobId != null ? { base_job_id: opts.baseJobId } : {}),
+                           ...(opts?.at ? { at_x: opts.at.x, at_z: opts.at.z,
+                                            ...(opts.at.target ? { at_target: opts.at.target } : {}) } : {}) }),
   })
   return j<{ ok: boolean; job_id: number }>(res)
 }

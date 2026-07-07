@@ -46,6 +46,22 @@ class ScatterSpec(BaseModel):
     collide: bool = True
 
 
+class PlacedItemSpec(BaseModel):
+    """Phase 42 Inspector: an object placed at EXPLICIT world coordinates
+    (click-to-place). `kind` is either a built-in procedural prop the runtime
+    draws instantly (book/sign/chest/building/rock/beacon/campfire) or any
+    noun — resolved through the same casting ladder as entities."""
+    kind: str = "book"
+    name: str = ""                        # display label ("hint book")
+    asset: str = ""                       # resolved GLB for non-procedural kinds
+    x: float = 0.0
+    z: float = 0.0
+    yaw_deg: float = 0.0
+    height_m: float = Field(0.0, ge=0.0, le=60.0)   # 0 = kind default
+    interact: Optional[str] = None        # press E near it -> this text (hints/lore)
+    collide: bool = True
+
+
 class WorldSpec(BaseModel):
     name: str = "park"
     size_m: float = Field(120.0, gt=10.0, le=2000.0)   # square ground extent
@@ -58,6 +74,7 @@ class WorldSpec(BaseModel):
     fog_density: Optional[float] = Field(None, ge=0.0, le=1.0)  # 0.5=default, 0.9=thick mist
     water_level: Optional[float] = None   # ocean/lake worlds: water plane height (m)
     health_packs: int = Field(0, ge=0, le=12)   # heart pickups scattered on the ground
+    placed_items: List[PlacedItemSpec] = Field(default_factory=list)  # Inspector placements
     scatter: List[ScatterSpec] = Field(default_factory=list)
     level: Optional[dict] = None    # Phase 32 LevelPlan (terrain/path/goal), injected by the exporter
 

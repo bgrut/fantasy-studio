@@ -184,6 +184,13 @@ Output ONLY the complete updated JSON object, no markdown. Rules:
 - DIFFICULTY: "make it harder" -> raise hostile entities' speed/count/hp and/or
   lower player.hp; "make it easier" -> the inverse (and/or add health_packs).
 - "reward": what the winner gets, or null.
+- world.placed_items: objects at EXPLICIT coordinates (the request context
+  supplies x/z when the user clicked a spot). Each item:
+  {"kind": "book"|"sign"|"chest"|"building"|"rock"|"beacon"|"campfire"|<any noun>,
+   "name": "label", "x": <number>, "z": <number>, "interact": "text or null"}.
+  "place/put a X here" -> APPEND one item (copy existing items verbatim).
+  A book/sign/note that should say something -> its text goes in "interact"
+  (the player walks up and presses E to read it). Omit "asset".
 Apply exactly the requested change — nothing else."""
 
 _GENERIC_ENTITY_NAMES = {"entity", "entities", "creature", "creatures",

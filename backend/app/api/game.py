@@ -62,6 +62,11 @@ class GameExportRequest(BaseModel):
     godot: bool = False          # also emit a Godot 4 project
     seed: int | None = None      # world-layout seed; None = fresh random level
     base_job_id: int | None = None   # R-ITER: edit THIS game instead of generating anew
+    # Phase 42 Inspector: the point (and thing) the user clicked in the game —
+    # "place a book here" gets real coordinates instead of guessing
+    at_x: float | None = None
+    at_z: float | None = None
+    at_target: str | None = None     # what was clicked: "ground", "wolf", ...
 
 
 def _run_job(job_id: int, req: GameExportRequest) -> None:
@@ -97,8 +102,69 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
 
         if base_spec is not None:
             stage("applying your edit")
-            from app.game_export.extractor import patch_game_spec
-            spec = patch_game_spec(base_spec, req.prompt, verbose=False)
+            from app.game_export.spec import spec_from_dict as _sfd
+            spec = None
+            # INSPECTOR FAST PATH: "place a book here" with clicked coordinates
+            # is fully deterministic — no LLM round-trip, the edit lands in the
+            # time it takes to re-export. Longer sentences still go to the LLM.
+            if req.at_x is not None and req.at_z is not None:
+                import copy as _copy
+                import re as _re
+                m = _re.match(
+                    r"^\s*(?:please\s+)?(?:place|put|add|drop|spawn)\s+"
+                    r"(?:a|an|the|another|some)?\s*(.+)$",
+                    req.prompt.strip(), _re.IGNORECASE)
+                if m:
+                    rest = m.group(1)
+                    interact = None
+                    low = rest.lower()
+                    for sep in (" that says ", " which says ", " saying ",
+                                " that reads ", " with hint ", " with the hint ",
+                                " with text ", " that tells "):
+                        if sep in low:
+                            i = low.index(sep)
+                            interact = rest[i + len(sep):].strip().strip("\"'“”‘’.") or None
+                            rest = rest[:i]
+                            break
+                    noun = _re.sub(
+                        r"\b(right\s+)?(here|there|at (this|the selected) spot|"
+                        r"on (this|the) spot|in this spot)\b",
+                        "", rest, flags=_re.IGNORECASE).strip(" .!,\"'")
+                    if noun and len(noun.split()) <= 3:
+                        w = noun.split()[-1].lower()
+                        kind = (w[:-3] + "y") if w.endswith("ies") else \
+                               (w[:-1] if w.endswith("s") and not w.endswith("ss") else w)
+                        cur = _copy.deepcopy(base_spec)
+                        cur.setdefault("world", {}).setdefault("placed_items", []).append(
+                            {"kind": kind, "name": noun.lower(),
+                             "x": round(req.at_x, 2), "z": round(req.at_z, 2),
+                             "interact": interact})
+                        spec = _sfd(cur)
+                        job.setdefault("notes", []).append(
+                            f"placed '{noun}' at ({req.at_x:.1f}, {req.at_z:.1f})"
+                            + (" with a readable hint" if interact else ""))
+            if spec is None:
+                from app.game_export.extractor import patch_game_spec
+                change = req.prompt
+                if req.at_x is not None and req.at_z is not None:
+                    tgt = f" on the {req.at_target}" if req.at_target else ""
+                    change += (
+                        f"\n\nCONTEXT: the user clicked world position "
+                        f"x={req.at_x:.1f}, z={req.at_z:.1f}{tgt}. Words like "
+                        f"'here'/'this spot'/'this one' refer to that selection; "
+                        f"use these exact coordinates for any placed_items you add.")
+                elif req.at_target:
+                    change += (f"\n\nCONTEXT: the user clicked the {req.at_target} — "
+                               f"'this'/'it' refers to that.")
+                spec = patch_game_spec(base_spec, change, verbose=False)
+                # SAFETY NET: LLM-added placed items sometimes forget the
+                # coordinates from context — new items land where you clicked
+                if req.at_x is not None and req.at_z is not None:
+                    base_n = len(((base_spec.get("world") or {})
+                                  .get("placed_items")) or [])
+                    for it in spec.world.placed_items[base_n:]:
+                        if abs(it.x) < 1e-6 and abs(it.z) < 1e-6:
+                            it.x, it.z = round(req.at_x, 2), round(req.at_z, 2)
             job["title"] = spec.title
             job["edited_from"] = req.base_job_id
         else:
@@ -276,6 +342,54 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                 job.setdefault("notes", []).append(
                     f"entity '{ekind}' not in library yet — skipped")
         spec.entities = kept
+
+        # PLACED ITEMS (Phase 42 Inspector): explicit-coordinate objects from
+        # click-to-place edits. Procedural prop kinds render instantly in the
+        # runtime; any other noun resolves through the same casting ladder as
+        # entities. Placed items are ALWAYS user-invited (they come from an
+        # edit, never LLM invention), so unknown nouns may generate.
+        _PROC_ALIASES = {"house": "building", "hut": "building", "cabin": "building",
+                         "cottage": "building", "shack": "building", "tower": "building",
+                         "stone": "rock", "boulder": "rock", "lantern": "beacon",
+                         "torch": "campfire", "fire": "campfire", "bonfire": "campfire",
+                         "note": "book", "letter": "book", "scroll": "book",
+                         "tome": "book", "signpost": "sign", "signboard": "sign",
+                         "crate": "chest", "box": "chest", "treasure": "chest"}
+        _PROC_PROPS = {"book", "sign", "chest", "building", "rock", "beacon", "campfire"}
+        kept_items = []
+        for it in spec.world.placed_items:
+            k = _PROC_ALIASES.get((it.kind or "").lower().strip(),
+                                  (it.kind or "").lower().strip())
+            it.kind = k
+            if k in _PROC_PROPS:
+                kept_items.append(it)
+                continue
+            if it.asset:                       # re-export of a resolved spec
+                kept_items.append(it)
+                continue
+            glb = library.resolve(k) or ensure_playable(k, verbose=False)
+            if not glb:
+                try:
+                    from app.game_export.generate import ensure_asset
+                    stage(f"creating '{k}' — image → 3D mesh "
+                          f"(first time only; slow without a GPU)")
+                    ensure_asset(k, verbose=True)
+                    glb = library.resolve(k) or ensure_playable(k, verbose=False)
+                    if glb:
+                        job.setdefault("notes", []).append(
+                            f"'{k}' was CREATED for this game and saved to your library")
+                except Exception as ge:
+                    job.setdefault("notes", []).append(
+                        f"placed '{k}' generation failed ({type(ge).__name__}) — skipped")
+            if glb:
+                it.asset = glb
+                if not it.height_m:
+                    it.height_m = library.default_height(k)
+                kept_items.append(it)
+            else:
+                job.setdefault("notes", []).append(
+                    f"placed item '{k}' could not be resolved — skipped")
+        spec.world.placed_items = kept_items
 
         # COLLECTIBLES LOOK LIKE THE PROMPT'S NOUN: when an entity matches a
         # collect label ("fire flame" ↔ "fire flames"), its generated mesh
