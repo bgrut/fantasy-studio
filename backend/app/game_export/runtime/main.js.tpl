@@ -762,6 +762,7 @@ async function main() {
       if (o.kind === 'race') return `Beat ${o.count} rivals to the finish`;
       if (o.kind === 'collect') return `Collect ${o.count} ${o.label}`;
       if (o.kind === 'defeat') return `Defeat ${o.count} ${o.label}`;
+      if (o.kind === 'survive') return `Survive ${o.count} seconds of ${o.label || 'the onslaught'}`;
       return `Reach the ${o.label || 'beacon'}`;
     });
     if (!objLines.length) objLines.push('Reach the glowing beacon');
@@ -815,12 +816,23 @@ async function main() {
   const npcs = [];
   const rngN = mulberry32(SPEC.seed + 31);
   let vehIdx = 0;                       // starting-grid slot for vehicle rivals
+  // WAVE POOL (survive verb): extra hostiles are pre-built DORMANT at load
+  // time — waking one costs nothing, so waves never cause loading hitches
+  // (same no-mid-game-spikes philosophy as the collectible glow sprites)
+  const surviveSecs = (SPEC.objectives || []).filter(o => o.kind === 'survive')
+    .reduce((a, o) => a + (o.count || 0), 0);
+  let wavePoolLeft = surviveSecs > 0
+    ? Math.min(10, Math.ceil(surviveSecs / 20) * 2 + 1) : 0;
   for (const ent of SPEC.entities || []) {
     try {
       const gltf = await loadGLB(ent.asset);
       const hostile = ent.behavior === 'hostile';
       const hasAnims = !!(gltf.animations && gltf.animations.length);
-      for (let i = 0; i < (ent.count || 1); i++) {
+      const baseN = ent.count || 1;
+      let extraN = 0;
+      if (hostile && wavePoolLeft > 0) { extraN = wavePoolLeft; wavePoolLeft = 0; }
+      for (let i = 0; i < baseN + extraN; i++) {
+        const dormant = i >= baseN;      // wave-pool member: hidden until woken
         // SkeletonUtils.clone — plain clone() breaks skinned meshes (gliding)
         const inst = skClone(gltf.scene);
         hardenAlpha(inst);
@@ -876,14 +888,29 @@ async function main() {
           anim = { mixer, idle: pick('idle'), walk: pick('walk'), run: pick('run'), cur: null };
           anim.cur = anim.idle; anim.cur.play();
         }
+        if (dormant) holder.visible = false;
         npcs.push({ obj: holder, speed: ent.speed || 1.5, behavior: ent.behavior || 'wander',
                     target: null, yaw: startYaw, phase: rngN() * Math.PI * 2,
-                    hp: ent.hp || 3, cd: 0, dead: false, dieT: 0, mats, anim });
+                    hp: ent.hp || 3, cd: 0, dead: false, dieT: 0, mats, anim, dormant });
       }
     } catch (e) { fail(e.message); }
   }
+  function wakeWave(px, pz, k) {
+    // survive verb: wake k dormant hostiles in a ring around the player
+    let woke = 0;
+    for (const n of npcs) {
+      if (!n.dormant || n.dead) continue;
+      const a = rngN() * Math.PI * 2, d = 17 + rngN() * 6;
+      n.obj.position.set(px + Math.cos(a) * d, 0, pz + Math.sin(a) * d);
+      n.obj.position.y = hAt(n.obj.position.x, n.obj.position.z);
+      n.obj.visible = true; n.dormant = false;
+      if (++woke >= k) break;
+    }
+    return woke;
+  }
   function stepNPCs(dt, playerPos, t) {
     for (const n of npcs) {
+      if (n.dormant) continue;           // wave-pool members sleep until woken
       // death animation: keel over + sink, then remove
       if (n.dead) {
         n.dieT += dt;
@@ -972,6 +999,27 @@ async function main() {
   const rngC = mulberry32(SPEC.seed + 77);
   const cgeo = new THREE.SphereGeometry(0.11, 12, 10);
   let cpUsed = 0;                        // LVL.collect_points consumed so far
+  // glow SPRITE, not a PointLight: per-collectible lights caused a full
+  // shader recompile on every pickup (removing a light changes the lighting
+  // program of EVERY material → the ~1s freeze players reported). A shared
+  // additive sprite is visually identical and costs nothing to remove.
+  const glowTex = (() => {
+    const c = document.createElement('canvas'); c.width = c.height = 64;
+    const g = c.getContext('2d');
+    const grad = g.createRadialGradient(32, 32, 2, 32, 32, 30);
+    grad.addColorStop(0, 'rgba(255,225,140,0.95)');
+    grad.addColorStop(0.4, 'rgba(255,195,90,0.35)');
+    grad.addColorStop(1, 'rgba(255,195,90,0)');
+    g.fillStyle = grad; g.fillRect(0, 0, 64, 64);
+    return new THREE.CanvasTexture(c);
+  })();
+  function makeGlow(scale) {
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: glowTex, transparent: true, blending: THREE.AdditiveBlending,
+      depthWrite: false }));
+    sp.scale.setScalar(scale);
+    return sp;
+  }
 
   // ── R-A JUICE: every action answers visually too ─────────────────────────
   // particle burst (pickups, kills), floating "+1" text, screen shake on hurt
@@ -1062,8 +1110,7 @@ async function main() {
       }
       const baseY = hAt(cx, cz) + 1.0 + rngC() * 0.6;
       s.position.set(cx, baseY, cz);
-      const halo = new THREE.PointLight(0xffd54a, 2.2, 6.0);
-      s.add(halo);
+      s.add(makeGlow(1.7));
       scene.add(s);
       collectibles.push({ mesh: s, baseY, phase: rngC() * Math.PI * 2 });
     }
@@ -1072,11 +1119,17 @@ async function main() {
     if (st.kind === 'collect') return `Collect ${st.count} ${st.label || 'items'}`;
     if (st.kind === 'defeat') return `Defeat ${st.count} ${st.label || 'enemies'}`;
     if (st.kind === 'race') return `Win the race (${st.count} ${st.label || 'rivals'})`;
+    if (st.kind === 'survive') return `Survive ${st.label || 'the onslaught'}`;
     return `Reach ${st.label || 'the beacon'}`;
   }
   function stepProgress(st) {
     if (st.kind === 'collect') return `${st._got || 0}/${st.count}`;
     if (st.kind === 'defeat') return `${Math.min(kills - (st._k0 || 0), st.count)}/${st.count}`;
+    if (st.kind === 'survive') {
+      const left = st._t0 === undefined ? st.count
+        : Math.max(0, Math.ceil(st.count - (performance.now() - st._t0) / 1000));
+      return `${left}s`;
+    }
     return '';
   }
   function renderQuest() {
@@ -1430,7 +1483,7 @@ async function main() {
   const projectiles = [];
   let atkCd = 0;
   function dmgEnemy(n, dmg) {
-    if (n.dead) return;
+    if (n.dead || n.dormant) return;
     n.hp -= dmg;
     for (const m of n.mats) { if (m.emissive) m.emissive.setHex(0xff4444); }
     setTimeout(() => { for (const m of n.mats) { if (m.emissive) m.emissive.setHex(0x550000); } }, 120);
@@ -1714,6 +1767,23 @@ async function main() {
     if (gameStarted) stepNPCs(dt, nt, performance.now() / 1000);
     stepDynamics(dt, nt, performance.now() / 1000);
 
+    // SURVIVE verb: hold out while escalating waves close in
+    {
+      const st = steps[stepIdx];
+      if (st && st.kind === 'survive' && gameStarted && !won && !lost) {
+        if (st._t0 === undefined) { st._t0 = performance.now(); st._wave = 0; st._sec = -1; }
+        const elapsed = (performance.now() - st._t0) / 1000;
+        if (elapsed > (st._wave + 1) * 20) {          // a bigger wave every 20s
+          st._wave++;
+          const woke = wakeWave(nt.x, nt.z, 1 + Math.min(st._wave, 3));
+          if (woke) { popText(`Wave ${st._wave + 1}!`, '#ff8fa0'); sfx('beep'); }
+        }
+        const sec = Math.ceil(elapsed);
+        if (sec !== st._sec) { st._sec = sec; renderQuest(); }   // once a second
+        if (elapsed >= st.count) advanceStep();
+      }
+    }
+
     // goal beacon: pulse; completes REACH steps, decides RACE steps
     if (goalPos && !won && !lost) {
       if (goalMesh) goalMesh.rotation.z += dt * 0.8;
@@ -1817,7 +1887,8 @@ async function main() {
     composer.render();
     // live state for the verify harness (extends the __game probe object)
     window.__game.state = { x: nt.x, y: nt.y, z: nt.z, modelYaw, yaw, speed,
-                            started: gameStarted, go: raceGo };
+                            started: gameStarted, go: raceGo,
+                            dormant: npcs.reduce((a, n) => a + (n.dormant ? 1 : 0), 0) };
     fCount++; fTime += dt;
     if (fTime >= 0.5) {
       const fps = fCount / fTime;

@@ -36,10 +36,12 @@ Output ONLY the JSON object, no markdown, no commentary. Schema (all fields opti
  "camera": {"mode": one of "third_person","first_person","orbit", "distance_m": float 2..12, "fov_deg": float 30..90},
  "player": also may include "attack": one of "none","melee","ranged" ("with a sword/fighting" -> melee,
            "with a gun/bow/blaster" -> ranged),
- "objectives": ORDERED mission steps, each {"kind": one of "collect","defeat","reach","race",
+ "objectives": ORDERED mission steps, each {"kind": one of "collect","defeat","reach","race","survive",
                "label": str, "count": int 1..50} — a mission prompt becomes
                [collect the keys] -> [defeat the guards] -> [reach the tower];
-               racing/catching/passing N cars -> {"kind":"race","label":"cars","count":N},
+               racing/catching/passing N cars -> {"kind":"race","label":"cars","count":N};
+               "survive"/"hold out"/"last N minutes against waves" -> {"kind":"survive",
+               "label":"the wolf waves","count": SECONDS 30..300} (needs hostile entities),
  "entities": [{"name": simple noun like "dog","cat","horse","wolf","car", "behavior": one of
                "wander","follow","static","hostile","vehicle" (cars/trucks -> "vehicle"),
                "count": int 1..8, "speed": float 0.5..8}]

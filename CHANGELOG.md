@@ -10,6 +10,24 @@ Pre-1.0 versions are internal milestones during the constraint sprint leading to
 
 ## [Unreleased]
 
+### Fixed + Added — Pickup lag spike, rival gaits, SURVIVE verb (2026-07-07)
+- **Pickup lag spike KILLED (Reddit report)**: every collectible carried its
+  own PointLight, and removing a light recompiles every shader in the scene —
+  a ~1s freeze per pickup on iGPUs. Replaced with a shared additive glow
+  sprite: visually identical, free to remove.
+- **Race rivals animate**: rivals resolved the static mesh ("{kind}_anim" was
+  never a registry key) — the gliding fox. Rivals now cast through
+  ensure_playable, same as every other NPC.
+- **Collect labels generate their own mesh**: "collect 6 fireflies" produces
+  firefly meshes even when no matching entity was cast — the label is a noun
+  like any other. Ambient nouns (snow, rain, fog, stars…) never generate.
+- **Grammar verb 2 — SURVIVE**: "survive 90 seconds against the wolf waves" →
+  live countdown in the quest log, escalating waves every 20s from a DORMANT
+  pre-built hostile pool (no mid-game loading hitches — same philosophy as
+  the glow-sprite fix), "Wave N!" pops. Play-verified headlessly: timer
+  counts, waves wake on schedule (pool 7→5 at t=20s), step advances on
+  survival. Needs at least one hostile; drops honestly otherwise.
+
 ### Added — Narrative layer, adaptive performance, Made-with stamp (2026-07-07)
 - **Narrative layer**: the LLM now writes a 1-2 line quest intro (START
   screen, set like game flavor text) and a victory line (win screen) for

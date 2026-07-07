@@ -81,9 +81,9 @@ class EntitySpec(BaseModel):
 class ObjectiveSpec(BaseModel):
     """A MISSION STEP. Objectives are an ordered sequence (quest log):
     collect N -> defeat N -> reach the beacon. Genres compose from these."""
-    kind: Literal["collect", "defeat", "reach", "race"] = "collect"
+    kind: Literal["collect", "defeat", "reach", "race", "survive"] = "collect"
     label: str = "stars"
-    count: int = Field(5, ge=1, le=100)
+    count: int = Field(5, ge=1, le=600)   # survive: SECONDS to hold out (waves escalate)
     asset: Optional[str] = None   # collect steps: generated mesh spawned instead of the orb
 
 

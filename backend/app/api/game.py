@@ -243,6 +243,11 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         # stops being an NPC.
         def _words(s: str) -> set:
             return {w.rstrip("s") for w in (s or "").lower().split() if w}
+        def _singular(s: str) -> str:
+            out = []
+            for w in (s or "").lower().split():
+                out.append(w[:-3] + "y" if w.endswith("ies") else w.rstrip("s"))
+            return " ".join(out)
         for ob in spec.objectives:
             if ob.kind != "collect":
                 continue
@@ -251,6 +256,32 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                     ob.asset = ent.asset
                     spec.entities.remove(ent)
                     break
+        # COLLECTIBLE LABELS GENERATE TOO: "collect 6 fireflies" must produce
+        # firefly meshes even when the extractor casts no matching entity —
+        # the label is a noun like any other (fireflies-stayed-orbs fix).
+        for ob in spec.objectives:
+            if ob.kind != "collect" or ob.asset:
+                continue
+            sing = _singular(ob.label)
+            if not sing or sing in _AMBIENT:
+                continue
+            glb = library.resolve(sing)
+            if not glb:
+                try:
+                    from app.game_export.generate import ensure_asset
+                    stage(f"creating '{sing}' — image → 3D mesh "
+                          f"(first time only; slow without a GPU)")
+                    ensure_asset(sing, verbose=True)
+                    glb = library.resolve(sing)
+                    if glb:
+                        job.setdefault("notes", []).append(
+                            f"'{sing}' was CREATED for this game and saved to your library")
+                except Exception as ge:
+                    job.setdefault("notes", []).append(
+                        f"collectible '{sing}' generation failed "
+                        f"({type(ge).__name__}) — glowing orbs used")
+            if glb:
+                ob.asset = glb
 
         # RACE SANITY: a race needs rivals — and rivals are the PLAYER'S OWN
         # KIND, whatever that is (foxes race foxes, whales race whales). A
@@ -259,7 +290,10 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         for ob in spec.objectives:
             if ob.kind == "race" and not any(e.behavior == "vehicle" for e in spec.entities):
                 okind = cast
-                oglb = library.resolve(f"{okind}_anim") or library.resolve(okind)
+                # ensure_playable = the RIGGED variant (legs actually move);
+                # "{kind}_anim" was never a registry key, so rivals silently
+                # got the static mesh (the gliding fox of 2026-07-07)
+                oglb = ensure_playable(okind, verbose=False) or library.resolve(okind)
                 rival_speed = (6.5 if guess_pattern(okind) == "vehicle"
                                else max(spec.player.walk_speed * 0.85, 2.5))
                 if oglb:
@@ -283,6 +317,10 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                         f"'defeat {ob.label}' dropped — no enemies could be cast")
                     continue
                 ob.count = min(ob.count, total_hostiles)
+            if ob.kind == "survive" and total_hostiles <= 0:
+                job.setdefault("notes", []).append(
+                    f"'survive {ob.label}' dropped — waves need at least one hostile")
+                continue
             sane.append(ob)
         spec.objectives = sane
 
