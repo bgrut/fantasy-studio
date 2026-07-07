@@ -734,6 +734,59 @@ except Exception as e:
 '''
 
 
+def _fill_reference_background(ref_png: str, verbose: bool = True) -> str:
+    """Projection-bleed killer (2026-07-07): surfaces facing up/back sample
+    pixels near the photo's silhouette edge, where the white studio background
+    bleeds onto the body (the washed-white wolf spine). Replace background
+    pixels with their NEAREST subject color via iterative masked dilation, so
+    UV overreach samples fur/skin instead of white. Writes <stem>_fill.png
+    beside the ref; returns the original path on any failure."""
+    try:
+        import numpy as np
+        from PIL import Image
+        src = Path(ref_png)
+        out = src.with_name(src.stem + "_fill.png")
+        if out.exists() and out.stat().st_mtime >= src.stat().st_mtime:
+            return str(out)
+        img = np.asarray(Image.open(src).convert("RGB")).astype(np.float32)
+        h, w, _ = img.shape
+        # background = pixels close to the median border color
+        border = np.concatenate([img[0], img[-1], img[:, 0], img[:, -1]])
+        bg = np.median(border, axis=0)
+        dist = np.linalg.norm(img - bg[None, None, :], axis=2)
+        subject = dist > 28.0
+        if subject.mean() < 0.02 or subject.mean() > 0.98:
+            return str(ref_png)               # mask looks wrong — don't touch
+        filled = img.copy()
+        known = subject.copy()
+        for _ in range(160):                   # dilate subject colors outward
+            if known.all():
+                break
+            grown = known.copy()
+            acc = np.zeros_like(filled); cnt = np.zeros((h, w), dtype=np.float32)
+            for dy, dx in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+                shifted_k = np.zeros_like(known)
+                shifted_v = np.zeros_like(filled)
+                ys, ye = max(dy, 0), h + min(dy, 0)
+                xs, xe = max(dx, 0), w + min(dx, 0)
+                shifted_k[ys:ye, xs:xe] = known[ys - dy:ye - dy, xs - dx:xe - dx]
+                shifted_v[ys:ye, xs:xe] = filled[ys - dy:ye - dy, xs - dx:xe - dx]
+                take = shifted_k & ~known
+                acc[take] += shifted_v[take]; cnt[take] += 1
+                grown |= shifted_k
+            newly = grown & ~known & (cnt > 0)
+            filled[newly] = acc[newly] / cnt[newly][:, None]
+            known = grown
+        Image.fromarray(filled.astype(np.uint8)).save(out)
+        if verbose:
+            print(f"[composer] ref background filled -> {out.name}")
+        return str(out)
+    except Exception as e:
+        if verbose:
+            print(f"[composer] ref background fill skipped ({type(e).__name__}: {e})")
+        return str(ref_png)
+
+
 def _apply_reference_texture(runner, hero_name: str, ref_png: str,
                              flip_u: bool = False, flip_v: bool = False,
                              verbose: bool = True) -> bool:
@@ -753,11 +806,11 @@ def _apply_reference_texture(runner, hero_name: str, ref_png: str,
     vs. the border background color) and map the mesh extent onto exactly that
     box, so the dog's silhouette lands on the dog's pixels.
     """
-    ref_png_posix = str(Path(ref_png).as_posix())
-
-    # Detect subject content bbox so the mesh maps onto the dog's pixels, not the
-    # background margin (else the body samples gray).
+    # bbox from the ORIGINAL (background intact = detectable), texture from the
+    # background-FILLED copy (silhouette overreach samples fur, not white)
     x0, y0, x1, y1 = _detect_subject_bbox(ref_png, verbose=verbose)
+    ref_png = _fill_reference_background(ref_png, verbose=verbose)
+    ref_png_posix = str(Path(ref_png).as_posix())
 
     # Blender image V is bottom-up; numpy rows are top-down → invert.
     # mesh v=0 (feet) → photo bottom (row y1) ; mesh v=1 (head) → photo top (row y0)

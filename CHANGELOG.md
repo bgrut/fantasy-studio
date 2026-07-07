@@ -10,6 +10,20 @@ Pre-1.0 versions are internal milestones during the constraint sprint leading to
 
 ## [Unreleased]
 
+### Fixed — Texture polish push: white-wash + stretch on NPC bodies (2026-07-07)
+- **Root cause 1 — wrong interpreter**: the batch re-bakes ran under system
+  Python (no PIL), so subject-bbox detection silently fell back to
+  "whole image" and mapped background margins onto bodies. All library kinds
+  re-baked under the venv interpreter (correct bbox).
+- **Root cause 2 — silhouette bleed**: up/back-facing surfaces sample pixels
+  at the photo's silhouette edge where the white studio background bleeds in
+  (the washed wolf spine). New `_fill_reference_background`: background
+  pixels are replaced by their nearest subject color (iterative masked
+  dilation), so UV overreach samples fur, never white. Cached per-ref as
+  `*_fill.png`; graceful skip when PIL is absent.
+- Stale `_anim` rigs dropped for re-baked kinds — they re-rig from the
+  improved bodies (with foot ground-plant) on next use.
+
 ### Added — Motion session: foot ground-plant + airborne body language (2026-07-07)
 - **Foot ground-plant (#119)**: every mocap bake now evaluates the finished
   clip and keys the ROOT height so feet neither sink below ground nor hover —
