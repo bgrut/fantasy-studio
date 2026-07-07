@@ -157,6 +157,32 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                     change += (f"\n\nCONTEXT: the user clicked the {req.at_target} — "
                                f"'this'/'it' refers to that.")
                 spec = patch_game_spec(base_spec, change, verbose=False)
+                # THE USER'S EXPLICIT WORDS WIN (2026-07-08): when an edit
+                # literally names a sky or weather, that beats whatever the
+                # LLM picked — "make it a starry night" once came back as
+                # sky="space" (washed-out airless glare, not night).
+                import re as _re
+                _cl = req.prompt.lower()
+                for w, sky in (("starry", "night"), ("night", "night"),
+                               ("midnight", "night"), ("sunrise", "sunset"),
+                               ("dawn", "sunset"), ("sunset", "sunset"),
+                               ("dusk", "dusk"), ("twilight", "dusk"),
+                               ("noon", "day"), ("daytime", "day"), ("day", "day"),
+                               ("overcast", "overcast"), ("cloudy", "overcast"),
+                               ("mars", "mars"), ("outer space", "space")):
+                    if _re.search(rf"\b{_re.escape(w)}\b", _cl):
+                        if spec.world.sky != sky:
+                            job.setdefault("notes", []).append(
+                                f"sky set to {sky} (your words beat the AI's pick)")
+                        spec.world.sky = sky
+                        break
+                for w, wx in (("blizzard", "snow"), ("snowstorm", "snow"),
+                              ("snow", "snow"), ("rain", "rain"),
+                              ("drizzle", "rain"), ("storm", "rain"),
+                              ("clear sky", "none"), ("clear skies", "none")):
+                    if _re.search(rf"\b{_re.escape(w)}\b", _cl):
+                        spec.world.weather = wx
+                        break
                 # SAFETY NET: LLM-added placed items sometimes forget the
                 # coordinates from context — new items land where you clicked
                 if req.at_x is not None and req.at_z is not None:

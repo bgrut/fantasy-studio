@@ -130,6 +130,8 @@ class GameSpec(BaseModel):
 _SKY_ALIASES = {"sunrise": "sunset", "dawn": "sunset", "evening": "sunset",
                 "golden hour": "sunset", "morning": "day", "noon": "day",
                 "midnight": "night", "dark": "night", "starry": "night",
+                "starry night": "night", "night sky": "night", "stars": "night",
+                "moonlit": "night", "moonlight": "night",
                 "cloudy": "overcast", "stormy": "overcast", "foggy": "overcast",
                 "twilight": "dusk", "moon": "space", "alien": "mars"}
 _WEATHER_ALIASES = {"blizzard": "snow", "snowy": "snow", "snowing": "snow",
@@ -157,8 +159,19 @@ def spec_from_dict(data: dict) -> GameSpec:
         w = data.get("world")
         if isinstance(w, dict):
             s = str(w.get("sky", "")).lower().strip()
+            _VALID_SKY = {"day", "sunset", "night", "overcast", "mars", "space", "dusk"}
             if s in _SKY_ALIASES:
                 w["sky"] = _SKY_ALIASES[s]
+            elif s and s not in _VALID_SKY:
+                # multiword / creative values ("deep starry night") — take the
+                # first token that maps to something real
+                for tok in s.split():
+                    if tok in _VALID_SKY:
+                        w["sky"] = tok
+                        break
+                    if tok in _SKY_ALIASES:
+                        w["sky"] = _SKY_ALIASES[tok]
+                        break
             we = str(w.get("weather", "")).lower().strip()
             if we in _WEATHER_ALIASES:
                 w["weather"] = _WEATHER_ALIASES[we]

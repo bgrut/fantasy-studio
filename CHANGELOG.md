@@ -10,6 +10,16 @@ Pre-1.0 versions are internal milestones during the constraint sprint leading to
 
 ## [Unreleased]
 
+### Fixed — Explicit words beat the AI's pick for sky/weather edits (2026-07-08)
+- "make it a starry night" once came back as `sky="space"` (airless glare +
+  the grade's dark-palette lift = washed-out daylight, not night). Two-layer
+  class fix: (a) sky normalization handles multiword values ("starry night",
+  "night sky", "moonlit") and falls back to token scanning; (b) in the edit
+  path, when the change TEXT literally names a sky or weather (night, dusk,
+  snow, rain, …), that deterministically overrides whatever the LLM chose —
+  with a visible note ("your words beat the AI's pick"). Verified by
+  replaying the exact failing edit: sky=night, 4 health packs.
+
 ### Fixed — Inspect-mode ergonomics + prompt-chip scrunch (2026-07-07)
 - **Screen jumped upward in Inspect mode**: every arrow press refocused the
   game iframe, and plain `focus()` scrolls the page to the element. All
