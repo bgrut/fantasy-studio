@@ -10,6 +10,25 @@ Pre-1.0 versions are internal milestones during the constraint sprint leading to
 
 ## [Unreleased]
 
+### Added — Godot-for-Steam enrichment + style coherence + game shell (2026-07-07)
+- **Godot export is a real GAME now**: the emitted Godot 4.3 project carries
+  the full mission system (collect/defeat/reach/survive with quest log +
+  progress), hostile AI with player health and win/lose/retry, spawned
+  collectibles and goal beacon, survive waves, jump, the narrative intro
+  overlay, and the Made-with credit. Every export includes **STEAM_GUIDE.md**
+  — the honest step-by-step from "open in Godot" through export templates,
+  Steamworks ($100 app fee), GodotSteam, and SteamPipe upload. (Structurally
+  verified; full `godot --headless --import` validation runs wherever a Godot
+  binary exists — none on this machine.)
+- **Art-direction coherence (style system v1)**: a whole-frame color grade
+  pulls every element toward the sky palette's mood + scatter props get
+  albedo-nudged toward the same tint at load — photoreal heroes and low-poly
+  props finally share one look. Consistency is the cheapest "looks expensive"
+  trick in games.
+- **Game shell**: Esc pause menu — Resume, Sound ON/OFF, Restart. Pausing
+  freezes movement, NPCs, the run clock AND survive timers (play-verified:
+  4.5m moved → frozen at 0.00 during pause → clean resume).
+
 ### Fixed + Added — Pickup lag spike, rival gaits, SURVIVE verb (2026-07-07)
 - **Pickup lag spike KILLED (Reddit report)**: every collectible carried its
   own PointLight, and removing a light recompiles every shader in the scene —

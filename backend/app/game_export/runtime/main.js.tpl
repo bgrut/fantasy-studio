@@ -55,8 +55,10 @@ async function main() {
   // win fanfare, lose fall. First activated by the START click (a user
   // gesture, so autoplay policy is satisfied by design).
   let actx = null;
+  let sfxMuted = false;
   function sfx(kind) {
     try {
+      if (sfxMuted) return;
       const AC = window.AudioContext || window.webkitAudioContext;
       if (!AC) return;
       if (!actx) actx = new AC();
@@ -533,6 +535,15 @@ async function main() {
       const gltf = await loadGLB(sct.asset);
       if (!landmarkAsset) landmarkAsset = gltf;
       gltf.scene.updateMatrixWorld(true);
+      // ART-DIRECTION COHERENCE (prop half): nudge every prop's albedo toward
+      // the sky palette so low-poly trees and photoreal heroes share a mood
+      const propTint = new THREE.Color(pal.sky).lerp(new THREE.Color(0xffffff), 0.45);
+      gltf.scene.traverse(o => {
+        if (!o.isMesh) return;
+        for (const m of Array.isArray(o.material) ? o.material : [o.material]) {
+          if (m && m.color) m.color.lerp(propTint, 0.16);
+        }
+      });
       const parts = [];
       gltf.scene.traverse(o => {
         if (o.isMesh) parts.push({ geo: o.geometry, mat: o.material, local: o.matrixWorld.clone() });
@@ -1593,9 +1604,67 @@ async function main() {
       }`,
   });
   composer.addPass(vignette);
+  // ART-DIRECTION COHERENCE: one gentle color grade pulls every element —
+  // photoreal heroes, low-poly props, painted terrain — toward the sky
+  // palette's mood. Consistency is the cheapest "looks expensive" trick in
+  // games; this is the whole-frame half of it (props get tinted at load).
+  const gradeTint = new THREE.Color(pal.sky).lerp(new THREE.Color(0xffffff), 0.55);
+  const grade = new ShaderPass({
+    uniforms: { tDiffuse: { value: null },
+                tint: { value: new THREE.Vector3(gradeTint.r, gradeTint.g, gradeTint.b) } },
+    vertexShader: `varying vec2 vUv;
+      void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
+    fragmentShader: `uniform sampler2D tDiffuse; uniform vec3 tint; varying vec2 vUv;
+      void main(){
+        vec4 c = texture2D(tDiffuse, vUv);
+        float l = dot(c.rgb, vec3(0.299, 0.587, 0.114));
+        c.rgb = mix(c.rgb, c.rgb * tint, 0.22);          // mood tint
+        c.rgb = mix(vec3(l), c.rgb, 1.06);               // slight saturation lift
+        gl_FragColor = c;
+      }`,
+  });
+  composer.addPass(grade);
   composer.addPass(new OutputPass());
 
   advanceStep();                          // mission begins: activate step 1
+
+  // ── PAUSE / SETTINGS (Esc) — a real game shell: resume, sound, restart.
+  // Pausing also freezes the run clock and survive timers (no unfair time).
+  let paused = false, pauseT0 = 0;
+  const pauseBtnCss = 'font:600 15px system-ui;color:#eceaf6;background:rgba(255,255,255,.07);'
+    + 'border:1px solid rgba(255,255,255,.14);border-radius:10px;padding:10px 34px;cursor:pointer;';
+  const pv = document.createElement('div');
+  pv.style.cssText = 'position:fixed;inset:0;display:none;align-items:center;'
+    + 'justify-content:center;background:rgba(8,7,14,.6);z-index:45;backdrop-filter:blur(3px);';
+  pv.innerHTML = '<div style="text-align:center;padding:32px;">'
+    + '<h2 style="font:800 26px system-ui;color:#fff;margin:0 0 18px;">Paused</h2>'
+    + '<div style="display:flex;flex-direction:column;gap:10px;">'
+    + `<button id="pv_resume" style="${pauseBtnCss}">Resume</button>`
+    + `<button id="pv_sound" style="${pauseBtnCss}">Sound: ON</button>`
+    + `<button id="pv_restart" style="${pauseBtnCss}">Restart level</button>`
+    + '</div></div>';
+  document.body.appendChild(pv);
+  function setPaused(p) {
+    if (p === paused) return;
+    paused = p;
+    pv.style.display = p ? 'flex' : 'none';
+    if (p) pauseT0 = performance.now();
+    else {
+      const dtp = performance.now() - pauseT0;
+      runT0 += dtp;
+      const st = steps[stepIdx];
+      if (st && st._t0 !== undefined) st._t0 += dtp;
+    }
+  }
+  document.getElementById('pv_resume').addEventListener('click', () => setPaused(false));
+  document.getElementById('pv_restart').addEventListener('click', () => location.reload());
+  document.getElementById('pv_sound').addEventListener('click', () => {
+    sfxMuted = !sfxMuted;
+    document.getElementById('pv_sound').textContent = `Sound: ${sfxMuted ? 'OFF' : 'ON'}`;
+  });
+  addEventListener('keydown', e => {
+    if (e.code === 'Escape' && gameStarted && !won && !lost) setPaused(!paused);
+  });
 
   // ── main loop ────────────────────────────────────────────────────────────
   const clock = new THREE.Clock();
@@ -1635,8 +1704,8 @@ async function main() {
 
   renderer.setAnimationLoop(() => {
     const dt = Math.min(clock.getDelta(), 0.05);
-    // pre-START: inputs are dead, world idles as the menu backdrop
-    const mv = gameStarted ? readMove() : { x: 0, z: 0, run: false, mag: 0 };
+    // pre-START or paused: inputs are dead, world idles as the backdrop
+    const mv = (gameStarted && !paused) ? readMove() : { x: 0, z: 0, run: false, mag: 0 };
     let speed;
     const dir = new THREE.Vector3();
     if (DRIVE) {
@@ -1764,13 +1833,13 @@ async function main() {
       mixer.update(dt);
     }
 
-    if (gameStarted) stepNPCs(dt, nt, performance.now() / 1000);
+    if (gameStarted && !paused) stepNPCs(dt, nt, performance.now() / 1000);
     stepDynamics(dt, nt, performance.now() / 1000);
 
     // SURVIVE verb: hold out while escalating waves close in
     {
       const st = steps[stepIdx];
-      if (st && st.kind === 'survive' && gameStarted && !won && !lost) {
+      if (st && st.kind === 'survive' && gameStarted && !paused && !won && !lost) {
         if (st._t0 === undefined) { st._t0 = performance.now(); st._wave = 0; st._sec = -1; }
         const elapsed = (performance.now() - st._t0) / 1000;
         if (elapsed > (st._wave + 1) * 20) {          // a bigger wave every 20s
