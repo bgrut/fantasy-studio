@@ -772,7 +772,7 @@ async function main() {
         ? 'WASD glide · Space rise · C dive · Shift boost'
         : mode === 'swim'
           ? 'WASD swim · Space surface · C dive · Shift burst'
-          : 'WASD / arrows move · Shift run · F attack';
+          : 'WASD / arrows move · Space jump · Shift run · F attack';
     const ov = document.createElement('div');
     ov.style.cssText = 'position:fixed;inset:0;display:flex;align-items:center;'
       + 'justify-content:center;background:rgba(8,7,14,.62);z-index:40;backdrop-filter:blur(3px);';
@@ -1425,7 +1425,7 @@ async function main() {
     ? SPEC.player.attack : (hostilesExist ? 'melee' : 'none');
   if (ATTACK !== 'none') {
     const hint = document.querySelector('#hud .hint');
-    if (hint) hint.textContent += ` · ${FLY ? 'F' : 'F / Space'} to ${ATTACK === 'ranged' ? 'shoot' : 'attack'}`;
+    if (hint) hint.textContent += ` · F to ${ATTACK === 'ranged' ? 'shoot' : 'attack'}`;
   }
   const projectiles = [];
   let atkCd = 0;
@@ -1485,8 +1485,9 @@ async function main() {
   }
   // controls per device: keyboard F/Space · touch ATTACK button · gamepad A/X or RT
   addEventListener('keydown', e => {
-    // in FLIGHT/SWIMMING, Space means ASCEND — attack stays on F
-    if (e.code === 'KeyF' || (!FLY && !SWIM && e.code === 'Space')) { e.preventDefault(); doAttack(); }
+    // GRAMMAR: Space = JUMP on foot (fly/swim use it to ascend) — attack
+    // lives on F, matching every modern game's muscle memory
+    if (e.code === 'KeyF') { e.preventDefault(); doAttack(); }
   });
   const atkBtn = document.getElementById('atkbtn');
   if (atkBtn && ATTACK !== 'none') {
@@ -1651,6 +1652,9 @@ async function main() {
         dir.normalize().applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
         modelYaw = dampAngle(modelYaw, Math.atan2(dir.x, dir.z), P.turn_speed, dt);
       }
+      // GRAMMAR: jump — grounded Space gives a real ballistic arc through the
+      // same collider (platformers unlock from this one verb)
+      if (gameStarted && keys.Space && kcc.computedGrounded()) { vy = 7.2; sfx('step'); }
       vy = Math.max(vy - 9.81 * dt, -25);
       var desired = { x: dir.x * speed * dt, y: vy * dt, z: dir.z * speed * dt };
     }

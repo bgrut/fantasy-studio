@@ -144,6 +144,47 @@ verification gate, so a large share of creations are broken. Decisions:
    sandboxed DSL, statically checked by the verify gate — Rosebud-ish
    expressiveness inside our safety model. Revisit after the marketplace.
 
+## Grammar uplift — the decomposition plan
+
+Doubt to kill: "can this pipeline ever do tower defense / mystery / real
+physical motion?" Yes — because genres aren't atomic. Every genre decomposes
+into a small set of VERBS, each of which is a bounded, deterministic,
+headlessly-verifiable runtime element. We already have more verbs than it
+feels like; each new one multiplies the composable space.
+
+**Verb inventory today:** move (walk/drive/fly/swim), attack (melee/ranged),
+collect, defeat, reach, race (routed rivals + standings), hostile AI (aggro/
+chase), follow AI, health/lose state, ordered mission steps, rewards,
+narrative text, water/terrain classes, weather, day/night.
+
+**Genre decompositions against that inventory:**
+
+| Genre | Already have | Missing verbs (each days, not months) |
+|---|---|---|
+| Platformer | move, reach, collect | **jump** ✅ (2026-07-07), moving platforms, fall-reset |
+| Survival / horde | hostile AI, combat, health | **waves** (timed spawn escalation), survive-N-minutes objective |
+| Tower defense | ranged attack, health, hostile AI | place-object verb, path-following creeps (race routing REUSED), auto-attack towers |
+| Racing (real) | race, routes, standings | laps/checkpoints, boost pads |
+| Dungeon / puzzle | reach, collect, missions | switches/doors/keys (trigger→state verb), pushable blocks (Rapier dynamic bodies — physics is already there) |
+| Mystery / adventure | narrative layer, missions, NPCs | interact/inspect verb ("press E"), clue journal, NPC dialogue lines (LLM content — can't break builds) |
+| Boss fight | combat, health, attack anim | phased boss HP + attack patterns |
+
+**Physical motion doubt specifically:** three layers, all real — (1) Rapier
+is a full rigid-body engine we already ship, so dynamic props (pushable,
+knockable, stackable) are configuration, not research; (2) jump/climb/dash
+are controller verbs (jump landed today); (3) body articulation (limbs
+during those motions) is the motion-library session (mocap slices + the
+procedural vertex deformers already live for fly/swim).
+
+**Verification stays intact:** every verb ships with a headless play-probe
+(synthetic input → position/state asserts via window.__game) added to the
+regression pack. The extractor learns one schema line per verb. That's the
+whole recipe: verb → probe → schema line → the LLM can now compose it.
+
+**Cadence:** one verb-cluster per round, ordered by unlocked-genres-per-
+effort: jump ✅ → waves+survive → switches/doors/keys → interact/inspect →
+laps → place-object (tower defense last — it composes four other verbs).
+
 ## What we deliberately do NOT copy
 
 Top sellers also succeed via multiplayer, live-ops, and content treadmills.

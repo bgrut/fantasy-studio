@@ -54,7 +54,7 @@
 </head>
 <body>
 <div id="app"></div>
-<div id="hud"><h1>__TITLE__</h1><div class="hint">WASD / arrows to move &middot; Shift to run &middot; drag to look</div></div>
+<div id="hud"><h1>__TITLE__</h1><div class="hint">WASD / arrows to move &middot; Space to jump &middot; Shift to run &middot; drag to look</div></div>
 <div id="fps"></div>
 <div id="err"></div>
 <div id="obj"></div>
