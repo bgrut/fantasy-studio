@@ -36,10 +36,11 @@ function mulberry32(a) {
 const SKY = {
   day:      { sky: 0x87b5e0, fog: 0xa8c4dd, sun: 3.2, amb: 0.55, sunPos: [40, 80, 30] },
   sunset:   { sky: 0xe8996a, fog: 0xd9a07a, sun: 2.2, amb: 0.40, sunPos: [80, 25, 10] },
-  // night done RIGHT: blue moonlight + lifted ambient + fog slightly brighter
-  // than the sky, so shapes read at distance while the mood stays dark
-  night:    { sky: 0x0d1626, fog: 0x18263f, sun: 0.6, amb: 0.32,
-              sunCol: 0x9db8ff, sunPos: [30, 60, -40] },
+  // night done RIGHT (pass 2): full moonlit-blue treatment — strong cool sun,
+  // generous ambient, fog clearly brighter than the sky. Unmistakably night,
+  // but every shape reads on a laptop screen at recording brightness.
+  night:    { sky: 0x121c30, fog: 0x263a5e, sun: 0.95, amb: 0.5,
+              sunCol: 0xa8c2ff, sunPos: [30, 60, -40] },
   overcast: { sky: 0x9aa4ad, fog: 0x9aa4ad, sun: 1.2, amb: 0.65, sunPos: [20, 90, 20] },
   // alien worlds: mars = butterscotch haze over rust; space = airless black,
   // hard sun; dusk = deep violet-blue with a low warm sun
@@ -855,10 +856,22 @@ async function main() {
         inst.traverse(o => {
           if (o.isMesh) {
             o.castShadow = true; o.frustumCulled = false;
-            if (hostile) {          // own materials so the red tint/flash is per-enemy
-              o.material = o.material.clone();
-              if (o.material.emissive) o.material.emissive.setHex(0x550000);
-              mats.push(o.material);
+            // own materials so tint/flash is per-instance; ALL NPCs get the
+            // night self-lift (their own texture as a faint emissive) — the
+            // old flat red hostile glow rendered wolves as pink ghosts at
+            // night. Menace now comes from a subtle warm shift + hit flash.
+            const dark = pal.sun < 1.0;
+            const ms = Array.isArray(o.material) ? o.material : [o.material];
+            for (let mi = 0; mi < ms.length; mi++) {
+              const m = ms[mi].clone();
+              if (Array.isArray(o.material)) o.material[mi] = m; else o.material = m;
+              if (m.emissive !== undefined) {
+                if (dark && m.map) m.emissiveMap = m.map;
+                if (hostile) m.emissive.setRGB(dark ? 0.30 : 0.10, dark ? 0.16 : 0.02, dark ? 0.16 : 0.02);
+                else if (dark) m.emissive.setScalar(0.24);
+                m.needsUpdate = true;
+              }
+              if (hostile) mats.push(m);
             }
           }
         });
@@ -1501,7 +1514,8 @@ async function main() {
     if (n.dead || n.dormant) return;
     n.hp -= dmg;
     for (const m of n.mats) { if (m.emissive) m.emissive.setHex(0xff4444); }
-    setTimeout(() => { for (const m of n.mats) { if (m.emissive) m.emissive.setHex(0x550000); } }, 120);
+    setTimeout(() => { for (const m of n.mats) {
+      if (m.emissive) m.emissive.setRGB(0.30, 0.16, 0.16); } }, 120);
     if (n.hp <= 0) {
       n.dead = true; kills++; sfx('hit');
       burst(n.obj.position.clone().add(new THREE.Vector3(0, 0.8, 0)), 0xff5c6a);
