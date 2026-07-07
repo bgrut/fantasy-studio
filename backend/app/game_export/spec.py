@@ -57,6 +57,7 @@ class WorldSpec(BaseModel):
     fog: bool = True
     fog_density: Optional[float] = Field(None, ge=0.0, le=1.0)  # 0.5=default, 0.9=thick mist
     water_level: Optional[float] = None   # ocean/lake worlds: water plane height (m)
+    health_packs: int = Field(0, ge=0, le=12)   # heart pickups scattered on the ground
     scatter: List[ScatterSpec] = Field(default_factory=list)
     level: Optional[dict] = None    # Phase 32 LevelPlan (terrain/path/goal), injected by the exporter
 

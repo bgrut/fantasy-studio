@@ -383,6 +383,9 @@ export default function GameStudio() {
             onClick={() => gameFrameRef.current?.focus()}
           >
             <iframe
+              key={job!.play_url}   /* new game = fresh iframe: releases the old
+                                       WebGL context (WebView2 caps them; leaks
+                                       caused the silent white-canvas bug) */
               ref={gameFrameRef}
               src={job!.play_url}
               title={job!.title ?? 'game'}

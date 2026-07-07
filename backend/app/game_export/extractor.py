@@ -27,6 +27,7 @@ Output ONLY the JSON object, no markdown, no commentary. Schema (all fields opti
            (mars -> sky "mars" + rust ground_color; moon/space -> sky "space" + gray ground),
            "weather": one of "none","rain","snow", "wind": float 0..1,
            "fog_density": float 0..1 (misty/foggy scene -> 0.7-0.9; default 0.5),
+           "health_packs": int 0..12 ("health packs/potions on the ground" -> 4),
            "ground_color": [r,g,b] floats 0..1},
  "reward": str or null — what the winner GETS ("winner gets a banana" -> "banana"); null if none stated,
  "intro": 1-2 SHORT atmospheric sentences setting up the quest, written like a real game
@@ -179,6 +180,9 @@ Output ONLY the complete updated JSON object, no markdown. Rules:
   wander, follow, static, hostile, vehicle.
 - world.sky one of day,sunset,night,overcast,mars,space,dusk; weather none,rain,snow.
 - "fog_density" 0..1 in world: misty/foggy -> 0.7-0.9, clear air -> 0.2.
+- "health_packs" int in world: "add health packs/potions" -> 4-6.
+- DIFFICULTY: "make it harder" -> raise hostile entities' speed/count/hp and/or
+  lower player.hp; "make it easier" -> the inverse (and/or add health_packs).
 - "reward": what the winner gets, or null.
 Apply exactly the requested change — nothing else."""
 

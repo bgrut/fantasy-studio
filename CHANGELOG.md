@@ -10,6 +10,19 @@ Pre-1.0 versions are internal milestones during the constraint sprint leading to
 
 ## [Unreleased]
 
+### Fixed + Added — White-screen recovery, health packs, difficulty edits (2026-07-07)
+- **White-screen root cause**: NOT a build bug — WebView2 caps live WebGL
+  contexts, and after many game loads the new canvas silently gets none
+  (HTML UI keeps working, canvas shows the white page). The exact "broken"
+  build rendered perfectly when re-verified. Two-layer fix: games detect
+  `webglcontextlost` and self-reload with an honest message; the studio
+  iframe is keyed per game so old contexts release.
+- **Health packs**: `world.health_packs` — heart pickups on the ground
+  restore 1 HP (politely don't consume at full health). "add health packs"
+  works in prompts AND edits.
+- **Difficulty edits**: the edit bar understands "make it harder/easier" —
+  hostile speed/count/hp and player HP adjust through the existing schema.
+
 ### Fixed — Texture polish push: white-wash + stretch on NPC bodies (2026-07-07)
 - **Root cause 1 — wrong interpreter**: the batch re-bakes ran under system
   Python (no PIL), so subject-bbox detection silently fell back to

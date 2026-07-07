@@ -101,6 +101,20 @@ async function main() {
   renderer.toneMappingExposure = 0.75;
   document.getElementById('app').appendChild(renderer.domElement);
 
+  // WEBGL CONTEXT-LOSS RECOVERY: WebView2/browsers cap live GL contexts; an
+  // exhausted context renders a silent white canvas while the HTML UI keeps
+  // working (looks like a broken build — it isn't). Detect and self-reload.
+  renderer.domElement.addEventListener('webglcontextlost', (e) => {
+    e.preventDefault();
+    const d = document.createElement('div');
+    d.style.cssText = 'position:fixed;inset:0;display:flex;align-items:center;'
+      + 'justify-content:center;background:#0d0b16;color:#cfcbe6;z-index:99;'
+      + 'font:600 16px system-ui;';
+    d.textContent = 'Graphics context recovered — reloading…';
+    document.body.appendChild(d);
+    setTimeout(() => location.reload(), 600);
+  });
+
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(pal.sky);
   if (SPEC.world.fog) {
@@ -1150,6 +1164,47 @@ async function main() {
       collectibles.push({ mesh: s, baseY, phase: rngC() * Math.PI * 2 });
     }
   }
+  // ── HEALTH PACKS: heart pickups on the ground — restore 1 HP on touch,
+  // politely wait if you're already at full health (pro-game behavior)
+  const healthPacks = [];
+  {
+    const n = SPEC.world.health_packs || 0;
+    const rngH = mulberry32(SPEC.seed + 913);
+    for (let i = 0; i < n; i++) {
+      const geo = new THREE.OctahedronGeometry(0.16, 0);
+      const m = new THREE.MeshStandardMaterial({
+        color: 0xff5c6a, emissive: 0xff2438, emissiveIntensity: 1.6, roughness: 0.35 });
+      const s = new THREE.Mesh(geo, m);
+      const ang = rngH() * Math.PI * 2;
+      const d = 8 + rngH() * (SPEC.world.size_m * 0.35 - 8);
+      const hx = Math.cos(ang) * d, hz = Math.sin(ang) * d;
+      const hy = hAt(hx, hz) + 0.55;
+      s.position.set(hx, hy, hz);
+      s.add(makeGlow(1.1));
+      scene.add(s);
+      healthPacks.push({ mesh: s, baseY: hy, phase: rngH() * Math.PI * 2 });
+    }
+  }
+  function stepHealthPacks(dt, nt) {
+    if (!healthPacks.length) return;
+    const t = performance.now() / 1000;
+    for (const p of healthPacks) {
+      if (!p.mesh.parent) continue;
+      p.mesh.position.y = p.baseY + Math.sin(t * 2 + p.phase) * 0.12;
+      p.mesh.rotation.y += dt * 1.6;
+      if (php < (P.hp || 5)
+          && Math.hypot(p.mesh.position.x - nt.x, p.mesh.position.z - nt.z)
+             < Math.max(1.4, (P.height_m || 1) * 0.9)) {
+        scene.remove(p.mesh);
+        php = Math.min(php + 1, P.hp || 5);
+        renderHearts();
+        sfx('pickup');
+        burst(p.mesh.position, 0xff5c6a);
+        popText('+1 ♥', '#ff8fa0');
+      }
+    }
+  }
+
   function stepLabel(st) {
     if (st.kind === 'collect') return `Collect ${st.count} ${st.label || 'items'}`;
     if (st.kind === 'defeat') return `Defeat ${st.count} ${st.label || 'enemies'}`;
@@ -1979,6 +2034,7 @@ async function main() {
       camera.position.y += (Math.random() - 0.5) * 0.4 * shakeT;
     }
     stepBursts(dt);
+    if (gameStarted && !paused) stepHealthPacks(dt, nt);
 
     // procedural swim/flap motion: time + speed-scaled amplitude
     if (procShaders.length) {
