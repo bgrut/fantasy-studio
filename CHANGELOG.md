@@ -10,6 +10,23 @@ Pre-1.0 versions are internal milestones during the constraint sprint leading to
 
 ## [Unreleased]
 
+### Added — Phase 43: Level tiles + scene tiles — the Inspector methodology everywhere (2026-07-07)
+- **Level tiles (game)**: the levels dropdown is now the hub's level-select
+  cards, live in the studio. Click a tile → that level re-exports in seconds
+  and opens in the player — play it, Inspect it, edit it. A **Save to level N**
+  button writes the edited game back into the SAME tile (one evolving level,
+  not accumulating copies). New endpoints:
+  `POST /api/game/projects/{pid}/levels/{i}/open`, `PUT .../levels/{i}`.
+- **Scene tiles (video)**: 🎬 scenes panel with per-scene ▶ Watch (in-app
+  player — scenes were already served under /outputs), ✎ **Change** ("make it
+  a snowy night" → Ollama rewrites the scene prompt, the full pipeline
+  re-renders it, the mp4 swaps in place with live status on the tile), and
+  ✕ remove. `POST /api/video/projects/{pid}/scenes/{i}/edit`. A failed
+  re-render never touches the original scene.
+- **Video export buttons fixed** (same WebView2 bug class as the game side):
+  "Watch film" plays in an in-app player, "Show mp4 in folder" opens
+  Explorer at the file (`POST /api/video/projects/{pid}/reveal`).
+
 ### Added — Phase 42: Inspector mode — visually build the game in real time (2026-07-07)
 - **Picking bridge**: toggle 🎯 Inspect over the running game — hover
   identifies anything under the cursor (wolf · hostile · speed 3), click

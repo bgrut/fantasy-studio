@@ -80,6 +80,15 @@ def create_vproject(req: VProjectCreate):
     return {"ok": True, "project": data["projects"][str(pid)]}
 
 
+def _scene_url(s: dict) -> str | None:
+    """Scene files live under OUTPUT_DIR, which is mounted at /outputs —
+    every scene is directly playable in the app."""
+    try:
+        return "/outputs/" + Path(s["file"]).relative_to(Path(OUTPUT_DIR)).as_posix()
+    except Exception:
+        return None
+
+
 @router.get("/api/video/projects")
 def list_vprojects():
     data = _load()
@@ -87,7 +96,8 @@ def list_vprojects():
     for p in sorted(data["projects"].values(), key=lambda x: x["id"]):
         out.append({"id": p["id"], "name": p["name"],
                     "scene_count": len(p["scenes"]),
-                    "scenes": [{"title": s.get("title"), "prompt": s.get("prompt")}
+                    "scenes": [{"title": s.get("title"), "prompt": s.get("prompt"),
+                                "video": _scene_url(s), "edit": s.get("edit")}
                                for s in p["scenes"]]})
     return {"ok": True, "projects": out}
 
@@ -138,6 +148,120 @@ def remove_scene(pid: int, index: int):
         p["scenes"].pop(index)
         _save(data)
     return {"ok": True, "scene_count": len(p["scenes"])}
+
+
+class SceneEdit(BaseModel):
+    change: str = Field(min_length=3, max_length=2000)
+
+
+def _rewrite_prompt(original: str, change: str) -> str:
+    """R-ITER for video: apply a plain-language change to a scene prompt.
+    Ollama rewrite with a deterministic append fallback — an edit must never
+    fail just because the LLM is offline."""
+    try:
+        from app.orchestrator.ollama_client import OllamaClient
+        client = OllamaClient()
+        if client.is_alive():
+            resp = client.chat([
+                {"role": "system", "content":
+                    "Rewrite the scene prompt applying the requested change. "
+                    "Keep the SAME subject wording (asset cache continuity) unless "
+                    "the change replaces it. Output ONLY the new prompt, one line."},
+                {"role": "user", "content": f"PROMPT: {original}\nCHANGE: {change}"},
+            ])
+            raw = (resp.get("content") or resp.get("message", {}).get("content", "")) \
+                if isinstance(resp, dict) else str(resp)
+            new = " ".join(raw.strip().strip('"').split())
+            if 5 <= len(new) <= 500:
+                return new
+    except Exception:
+        pass
+    return f"{original.rstrip('. ')}. {change}"
+
+
+def _rerender_scene(pid: int, index: int, new_prompt: str) -> None:
+    """Background: render the edited prompt through the SAME pipeline that
+    made the scene, then swap the mp4 in place (new filename so players
+    never serve a stale cache)."""
+    def _mark(status: str, **kw) -> None:
+        with _vlock:
+            data = _load()
+            p = data["projects"].get(str(pid))
+            if p and 0 <= index < len(p["scenes"]):
+                p["scenes"][index]["edit"] = {"status": status,
+                                              "prompt": new_prompt, **kw}
+                _save(data)
+    try:
+        from app.orchestrator import render_from_prompt
+        result = render_from_prompt(prompt=new_prompt, mode="slots", verbose=False)
+        src = result.get("video_path") or result.get("render_path")
+        if not src or not Path(src).exists():
+            raise RuntimeError(f"no artifact: {result.get('errors')}")
+        with _vlock:
+            data = _load()
+            p = data["projects"].get(str(pid))
+            if not (p and 0 <= index < len(p["scenes"])):
+                return
+            s = p["scenes"][index]
+            pdir = VPROJ_DIR / f"project_{pid}" / "scenes"
+            pdir.mkdir(parents=True, exist_ok=True)
+            dst = pdir / f"scene_{int(time.time()*1000)}.mp4"
+            shutil.copy2(src, dst)
+            old = Path(s["file"])
+            s["file"] = str(dst)
+            s["prompt"] = new_prompt
+            s["title"] = new_prompt[:60]
+            s["edit"] = {"status": "done", "prompt": new_prompt}
+            _save(data)
+        try:
+            if old.exists() and old.parent == dst.parent:
+                old.unlink()
+        except Exception:
+            pass
+    except Exception as e:
+        _mark("failed", error=f"{type(e).__name__}: {str(e)[:300]}")
+
+
+@router.post("/api/video/projects/{pid}/scenes/{index}/edit")
+def edit_scene(pid: int, index: int, req: SceneEdit):
+    """Phase 43 — Inspector for video: 'change this scene…' re-renders the
+    scene from an edited prompt and swaps it into the film. Same-hero
+    continuity comes from the asset cache (same subject phrase = same actor)."""
+    with _vlock:
+        data = _load()
+        p = data["projects"].get(str(pid))
+        if not p:
+            raise HTTPException(status_code=404, detail="project not found")
+        if not (0 <= index < len(p["scenes"])):
+            raise HTTPException(status_code=400, detail="scene index out of range")
+        s = p["scenes"][index]
+        if not s.get("prompt"):
+            raise HTTPException(status_code=400,
+                                detail="this scene has no saved prompt to edit — re-add it from a render")
+        if (s.get("edit") or {}).get("status") == "running":
+            raise HTTPException(status_code=409, detail="this scene is already re-rendering")
+        new_prompt = _rewrite_prompt(s["prompt"], req.change)
+        s["edit"] = {"status": "running", "prompt": new_prompt,
+                     "change": req.change, "started_at": time.time()}
+        _save(data)
+    threading.Thread(target=_rerender_scene, args=(pid, index, new_prompt),
+                     daemon=True).start()
+    return {"ok": True, "new_prompt": new_prompt}
+
+
+@router.post("/api/video/projects/{pid}/reveal")
+def reveal_vproject(pid: int):
+    """Open Explorer at the exported film (the desktop shell has no download
+    UI — same fix as the game side)."""
+    data = _load()
+    p = data["projects"].get(str(pid))
+    pdir = VPROJ_DIR / f"project_{pid}"
+    mp4s = sorted(pdir.glob("*.mp4"), key=lambda f: f.stat().st_mtime,
+                  reverse=True) if (p and pdir.exists()) else []
+    if not mp4s:
+        raise HTTPException(status_code=404, detail="export the film first")
+    subprocess.Popen(["explorer", f"/select,{mp4s[0].resolve()}"])
+    return {"ok": True, "path": str(mp4s[0])}
 
 
 @router.post("/api/video/projects/{pid}/export")

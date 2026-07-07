@@ -7,7 +7,8 @@ import { Crosshair, Download, FolderPlus, Gamepad2, Loader2, Maximize2, RotateCc
 import { cn } from '@/lib/utils'
 import {
   addLevelToProject, createProject, exportGame, exportProject, gameHealth,
-  getGameJob, listProjects, removeLevelFromProject, revealProjectZip,
+  getGameJob, listProjects, openLevel, removeLevelFromProject, revealProjectZip,
+  updateLevel,
   type GameHealth, type GameJob, type GameProject,
 } from '@/lib/gameApi'
 
@@ -55,7 +56,7 @@ export default function GameStudio() {
   const pollRef = useRef<number | null>(null)
   const gameFrameRef = useRef<HTMLIFrameElement | null>(null)
   const hubFrameRef = useRef<HTMLIFrameElement | null>(null)
-  const [showLevels, setShowLevels] = useState(false)
+  const [showLevels, setShowLevels] = useState(true)   // level tiles open by default
 
   useEffect(() => {
     gameHealth().then(setHealth).catch(() => setHealth(null))
@@ -101,40 +102,78 @@ export default function GameStudio() {
     }
   }, [project, exporting])
 
+  const pollJob = useCallback((job_id: number) => {
+    if (pollRef.current) window.clearInterval(pollRef.current)
+    let misses = 0
+    pollRef.current = window.setInterval(async () => {
+      try {
+        const { job: jb } = await getGameJob(job_id)
+        misses = 0
+        setJob(jb)
+        if (jb.status !== 'running') {
+          if (pollRef.current) window.clearInterval(pollRef.current)
+          setBuilding(false)
+          if (jb.status === 'failed') setError(jb.error ?? 'build failed')
+        }
+      } catch {
+        // a couple of misses are transient; a dead backend / vanished job is
+        // not — never leave the Building spinner wedged forever
+        misses += 1
+        if (misses >= 8) {
+          if (pollRef.current) window.clearInterval(pollRef.current)
+          setBuilding(false)
+          setError('lost contact with the build (backend restarted?) — try again')
+        }
+      }
+    }, 1500)
+  }, [])
+
   const startJob = useCallback(async (p: string, baseJobId?: number,
                                       at?: { x: number; z: number; target?: string }) => {
     setError(null)
-    if (baseJobId == null) setJob(null)   // edits keep showing the game while rebuilding
+    setSavedLevel(null)                   // any rebuild invalidates "Saved ✓"
+    if (baseJobId == null) { setJob(null); setOpenedLevel(null) }  // fresh build = not a level edit
     setBuilding(true)
     try {
       const { job_id } = await exportGame(p, baseJobId != null ? { baseJobId, at } : undefined)
-      let misses = 0
-      pollRef.current = window.setInterval(async () => {
-        try {
-          const { job: jb } = await getGameJob(job_id)
-          misses = 0
-          setJob(jb)
-          if (jb.status !== 'running') {
-            if (pollRef.current) window.clearInterval(pollRef.current)
-            setBuilding(false)
-            if (jb.status === 'failed') setError(jb.error ?? 'build failed')
-          }
-        } catch {
-          // a couple of misses are transient; a dead backend / vanished job is
-          // not — never leave the Building spinner wedged forever
-          misses += 1
-          if (misses >= 8) {
-            if (pollRef.current) window.clearInterval(pollRef.current)
-            setBuilding(false)
-            setError('lost contact with the build (backend restarted?) — try again')
-          }
-        }
-      }, 1500)
+      pollJob(job_id)
     } catch (e) {
       setBuilding(false)
       setError(e instanceof Error ? e.message : String(e))
     }
-  }, [])
+  }, [pollJob])
+
+  // Phase 43 level tiles: click a level -> exact re-export opens as a live
+  // job in the player above — play it, Inspect it, edit it, save it back.
+  const [openedLevel, setOpenedLevel] = useState<number | null>(null)
+  const [savedLevel, setSavedLevel] = useState<number | null>(null)
+  const playLevel = useCallback(async (index: number) => {
+    if (!project || building) return
+    setError(null)
+    setBuilding(true)
+    setSavedLevel(null)
+    try {
+      const { job_id } = await openLevel(project.id, index)
+      setOpenedLevel(index)
+      pollJob(job_id)
+    } catch (e) {
+      setBuilding(false)
+      setError(e instanceof Error ? e.message : String(e))
+    }
+  }, [project, building, pollJob])
+  const saveLevel = useCallback(async () => {
+    if (!project || openedLevel == null || !job || job.status !== 'complete') return
+    try {
+      await updateLevel(project.id, openedLevel, job.id)
+      setSavedLevel(openedLevel)
+      setExported(null)                 // the export no longer matches the project
+      setHubUrl(null)
+      const { projects } = await listProjects()
+      setProject(projects.find(p => p.id === project.id) ?? null)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    }
+  }, [project, openedLevel, job])
 
   const build = useCallback(() => {
     const p = prompt.trim()
@@ -326,22 +365,46 @@ export default function GameStudio() {
               )}
             </div>
             {showLevels && (
-              <div className="max-w-md mx-auto rounded-xl border border-white/[0.06] divide-y divide-white/[0.05]">
-                {(project.level_titles ?? []).map((t, i) => (
-                  <div key={i} className="flex items-center justify-between px-3 py-1.5 text-xs">
-                    <span className="text-[#c9c6dd] font-mono truncate">
-                      {i + 1}. {t || 'untitled level'}
-                    </span>
+              /* Phase 43: LEVEL TILES — the hub's level-select cards, live in
+                 the studio. Click one to play + Inspect + edit that level. */
+              <div className="grid gap-2 [grid-template-columns:repeat(auto-fill,minmax(180px,1fr))]">
+                {(project.levels ?? (project.level_titles ?? []).map(t => ({ title: t, player: null, seed: null }))).map((lv, i) => (
+                  <div
+                    key={i}
+                    onClick={() => playLevel(i)}
+                    role="button"
+                    className={cn(
+                      'relative group text-left rounded-xl border p-3 cursor-pointer transition-all',
+                      'hover:-translate-y-0.5',
+                      openedLevel === i
+                        ? 'border-[#5cffc9]/40 bg-[#5cffc9]/5'
+                        : 'border-white/[0.07] bg-white/[0.02] hover:border-[#7c5cff]/40'
+                    )}
+                    title="play, inspect and edit this level"
+                  >
+                    <div className="text-[10px] font-mono text-[#7c5cff]">LEVEL {i + 1}</div>
+                    <div className="text-xs font-semibold text-[#eceaf6] truncate mt-0.5">
+                      {lv.title || 'untitled level'}
+                    </div>
+                    <div className="text-[10px] text-[#807d99] font-mono mt-0.5">
+                      {lv.seed != null ? `world #${lv.seed} · ` : ''}{lv.player || 'hero'}
+                    </div>
+                    <div className="text-[10px] text-[#5cffc9] mt-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                      ▶ {openedLevel === i ? 'playing above' : 'play + inspect'}
+                    </div>
                     <button
-                      onClick={async () => {
+                      onClick={async (e) => {
+                        e.stopPropagation()
                         try {
                           await removeLevelFromProject(project.id, i)
                           const { projects } = await listProjects()
                           setProject(projects.find(p => p.id === project.id) ?? null)
                           setExported(null)
+                          setHubUrl(null)
+                          if (openedLevel === i) setOpenedLevel(null)
                         } catch { /* leave list as-is */ }
                       }}
-                      className="text-[#ff5c8a] hover:text-white transition-colors ml-3"
+                      className="absolute top-1.5 right-2 text-[#807d99] hover:text-[#ff5c8a] transition-colors"
                       title="remove this level"
                     >
                       ✕
@@ -448,6 +511,23 @@ export default function GameStudio() {
               )}
             </div>
             <div className="flex items-center gap-2">
+              {openedLevel != null && (
+                <button
+                  onClick={saveLevel}
+                  disabled={savedLevel === openedLevel}
+                  className={cn(
+                    'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-colors',
+                    savedLevel === openedLevel
+                      ? 'bg-[#5cffc9]/10 text-[#5cffc9] cursor-default'
+                      : 'bg-[#5cffc9]/15 text-[#5cffc9] hover:bg-[#5cffc9]/25'
+                  )}
+                  title="save this (possibly edited) game back into the level tile it came from"
+                >
+                  {savedLevel === openedLevel
+                    ? `Saved to level ${openedLevel + 1} ✓`
+                    : `Save to level ${openedLevel + 1}`}
+                </button>
+              )}
               <button
                 onClick={addToGame}
                 disabled={addedJob === job!.id}

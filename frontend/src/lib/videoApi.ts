@@ -1,10 +1,17 @@
 // Phase 35 — Video Projects: collect rendered scenes into one exported film.
 
+export interface VideoScene {
+  title: string | null
+  prompt: string | null
+  video: string | null                     // /outputs/... — playable in-app
+  edit?: { status: 'running' | 'done' | 'failed'; prompt?: string; error?: string } | null
+}
+
 export interface VideoProject {
   id: number
   name: string
   scene_count: number
-  scenes: { title: string | null; prompt: string | null }[]
+  scenes: VideoScene[]
 }
 
 async function j<T>(res: Response): Promise<T> {
@@ -28,6 +35,26 @@ export async function addScene(projectId: number, video: string, opts?: { title?
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ video, title: opts?.title, prompt: opts?.prompt }),
   }))
+}
+
+export async function editScene(projectId: number, index: number, change: string) {
+  // Phase 43 — Inspector for video: "change this scene…" re-renders the scene
+  return j<{ ok: boolean; new_prompt: string }>(
+    await fetch(`/api/video/projects/${projectId}/scenes/${index}/edit`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ change }),
+    }))
+}
+
+export async function removeScene(projectId: number, index: number) {
+  return j<{ ok: boolean; scene_count: number }>(
+    await fetch(`/api/video/projects/${projectId}/scenes/${index}`, { method: 'DELETE' }))
+}
+
+export async function revealVideoProject(projectId: number) {
+  // desktop shell: no download UI — backend opens Explorer at the film
+  return j<{ ok: boolean; path: string }>(
+    await fetch(`/api/video/projects/${projectId}/reveal`, { method: 'POST' }))
 }
 
 export async function exportVideoProject(projectId: number) {

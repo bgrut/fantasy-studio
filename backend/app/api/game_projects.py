@@ -103,6 +103,8 @@ def list_projects():
         q = {k: v for k, v in p.items() if k != "levels"}
         q["level_count"] = len(p["levels"])
         q["level_titles"] = [lv.get("title") for lv in p["levels"]]
+        q["levels"] = [{"title": lv.get("title"), "player": lv.get("player"),
+                        "seed": lv.get("seed")} for lv in p["levels"]]
         out.append(q)
     return {"ok": True, "projects": out}
 
@@ -126,6 +128,52 @@ def add_level(pid: int, req: LevelAdd):
         })
         _save(data)
     return {"ok": True, "level_count": len(p["levels"]), "project_id": pid}
+
+
+@router.post("/api/game/projects/{pid}/levels/{index}/open")
+def open_level(pid: int, index: int):
+    """Phase 43 level tiles: click a level -> it opens as a live job (exact
+    re-export, seconds) so it can be PLAYED, INSPECTED and EDITED again."""
+    data = _load()
+    p = data["projects"].get(str(pid))
+    if not p:
+        raise HTTPException(status_code=404, detail="project not found")
+    if not (0 <= index < len(p["levels"])):
+        raise HTTPException(status_code=400, detail="level index out of range")
+    lv = p["levels"][index]
+    from .game import open_spec_as_job
+    job_id = open_spec_as_job(lv["spec"], title=lv.get("title") or f"Level {index + 1}",
+                              prompt=lv.get("prompt") or "", player=lv.get("player"))
+    return {"ok": True, "job_id": job_id, "title": lv.get("title")}
+
+
+class LevelUpdate(BaseModel):
+    job_id: int
+
+
+@router.put("/api/game/projects/{pid}/levels/{index}")
+def update_level(pid: int, index: int, req: LevelUpdate):
+    """Save an edited game BACK into the level it was opened from — the
+    project keeps one evolving level instead of accumulating copies."""
+    job = _jobs.get(req.job_id)
+    if not job or job.get("status") != "complete" or not job.get("spec_resolved"):
+        raise HTTPException(status_code=400, detail="job not found or not complete")
+    with _plock:
+        data = _load()
+        p = data["projects"].get(str(pid))
+        if not p:
+            raise HTTPException(status_code=404, detail="project not found")
+        if not (0 <= index < len(p["levels"])):
+            raise HTTPException(status_code=400, detail="level index out of range")
+        old = p["levels"][index]
+        p["levels"][index] = {
+            "title": job.get("title"), "prompt": job.get("prompt") or old.get("prompt"),
+            "seed": job.get("seed"), "player": job.get("player"),
+            "spec": job["spec_resolved"], "added_at": old.get("added_at"),
+            "updated_at": time.time(),
+        }
+        _save(data)
+    return {"ok": True, "updated": index, "title": job.get("title")}
 
 
 @router.delete("/api/game/projects/{pid}/levels/{index}")

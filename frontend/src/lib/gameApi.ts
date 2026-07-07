@@ -66,6 +66,7 @@ export interface GameProject {
   name: string
   level_count: number
   level_titles: (string | null)[]
+  levels?: { title: string | null; player: string | null; seed: number | null }[]
 }
 
 export async function listProjects() {
@@ -84,6 +85,21 @@ export async function addLevelToProject(projectId: number, jobId: number) {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ job_id: jobId }),
   }))
+}
+
+export async function openLevel(projectId: number, index: number) {
+  // Phase 43 level tiles: click a level -> live job (play + Inspect + edit)
+  return j<{ ok: boolean; job_id: number; title: string | null }>(
+    await fetch(`/api/game/projects/${projectId}/levels/${index}/open`, { method: 'POST' }))
+}
+
+export async function updateLevel(projectId: number, index: number, jobId: number) {
+  // save the edited game back into the level it was opened from
+  return j<{ ok: boolean; updated: number; title: string | null }>(
+    await fetch(`/api/game/projects/${projectId}/levels/${index}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ job_id: jobId }),
+    }))
 }
 
 export async function removeLevelFromProject(projectId: number, index: number) {

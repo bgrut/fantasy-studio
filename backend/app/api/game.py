@@ -578,6 +578,58 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         _record_finish(row_id, False, None, job["error"])
 
 
+def open_spec_as_job(spec_dict: dict, title: str = "", prompt: str = "",
+                     player: str | None = None) -> int:
+    """Phase 43: open a SAVED level spec as a live job — exact deterministic
+    re-export (no LLM, no re-casting), so project levels are playable,
+    Inspectable and editable again in seconds. The job carries spec_resolved,
+    which is what the edit bar and 'save back to level' need."""
+    global _next_id
+    with _lock:
+        job_id = _next_id
+        _next_id += 1
+        _jobs[job_id] = {
+            "id": job_id, "prompt": prompt, "status": "running",
+            "stage": "queued", "title": title,
+            "created_at": time.time(), "updated_at": time.time(),
+        }
+
+    def _run() -> None:
+        job = _jobs[job_id]
+        try:
+            import json as _json
+            from app.game_export.spec import spec_from_dict
+            from app.game_export.verify_game import verify_dist
+            from app.game_export.web_exporter import export_web_game
+            job["stage"] = "building"
+            spec = spec_from_dict(spec_dict)
+            job["title"] = spec.title or title
+            job["seed"] = spec.seed
+            job["player"] = player or spec.player.name
+            out_dir = GAME_JOBS_DIR / f"job_{job_id}"
+            dist = export_web_game(spec, out_dir, verbose=False)
+            job["spec_resolved"] = spec.model_dump()
+            (out_dir / "spec_full.json").write_text(
+                _json.dumps(job["spec_resolved"]), encoding="utf-8")
+            job["stage"] = "verifying"
+            v = verify_dist(dist)
+            if not v["ok"]:
+                raise RuntimeError(f"verify failed: {v['errors']}")
+            job["status"] = "complete"
+            job["play_url"] = f"/games/job_{job_id}/dist/"
+            job["checks"] = len(v["checks"])
+            job["stage"] = "done"
+        except Exception as e:
+            job["status"] = "failed"
+            job["error"] = f"{type(e).__name__}: {e}"
+            job["trace"] = traceback.format_exc()[-1500:]
+            job["stage"] = "failed"
+        job["updated_at"] = time.time()
+
+    threading.Thread(target=_run, daemon=True).start()
+    return job_id
+
+
 @router.post("/api/game/export")
 def export_game(req: GameExportRequest):
     global _next_id
