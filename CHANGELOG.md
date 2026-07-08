@@ -10,6 +10,24 @@ Pre-1.0 versions are internal milestones during the constraint sprint leading to
 
 ## [Unreleased]
 
+### Fixed — Phase 49: WebGL resilience, full-viewport canvas, mobile HUD (2026-07-08)
+- **"Error creating WebGL context" (constrained Chrome)**: the game asked for
+  a WebGL context with no fallback, so Chrome refused when its global context
+  limit was hit (many tabs) or hardware acceleration was off. Now it tries
+  three configs (high-perf → default → low-power, all with
+  `failIfMajorPerformanceCaveat:false` so software rendering is allowed); if
+  all fail it shows a helpful message ("close some tabs or enable hardware
+  acceleration") with a Retry button instead of a dead end. Verified by
+  forcing getContext to return null: the recovery UI + Retry appear.
+- **Firefox/desktop black gap**: the canvas is now pinned to fill the
+  viewport (`width/height:100%`, `setSize(...,false)` so resizes don't
+  overwrite it) plus a post-layout re-fit. Verified: canvas matches
+  innerWidth/innerHeight exactly.
+- **Mobile HUD overlap**: a `max-width:640px` breakpoint truncates the title
+  to one line and moves the objective/hearts to the bottom, so the long
+  title no longer collides with them. Verified at 375px: title one line,
+  zero overlap.
+
 ### Fixed — Shared games: "click a level, nothing loads" (2026-07-08)
 - **Root cause**: the worker served a directory URL (the hub `/g/:id`, or a
   level `/g/:id/levels/lvl_N/dist`) WITHOUT a trailing slash as a plain 200.

@@ -92,13 +92,50 @@ async function main() {
   }
 
   // ── renderer / scene / camera ────────────────────────────────────────────
-  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  // RESILIENT CONTEXT CREATION (2026-07-08): Chrome refuses new WebGL contexts
+  // when its global limit is hit (many tabs) or hardware accel is off/blocked
+  // — the "Error creating WebGL context" the shared link hit. Ask for a
+  // software fallback (failIfMajorPerformanceCaveat:false), drop antialias on
+  // retry, and if it STILL fails, show a helpful message instead of a dead end.
+  let renderer = null;
+  for (const opts of [
+    { antialias: true, powerPreference: 'high-performance', failIfMajorPerformanceCaveat: false },
+    { antialias: false, powerPreference: 'default', failIfMajorPerformanceCaveat: false },
+    { antialias: false, powerPreference: 'low-power', failIfMajorPerformanceCaveat: false },
+  ]) {
+    try {
+      renderer = new THREE.WebGLRenderer(opts);
+      if (renderer.getContext()) break;      // got a live context — done
+      renderer = null;
+    } catch (e) { renderer = null; }
+  }
+  if (!renderer) {
+    const box = document.createElement('div');
+    box.style.cssText = 'position:fixed;inset:0;display:flex;flex-direction:column;'
+      + 'align-items:center;justify-content:center;gap:14px;background:#0d0b16;'
+      + 'color:#eceaf6;z-index:99;font:600 15px system-ui;text-align:center;padding:24px;';
+    box.innerHTML = "<div style='font-size:19px'>This browser blocked 3D graphics</div>"
+      + "<div style='font-weight:400;color:#a8a4c4;max-width:420px;line-height:1.5'>"
+      + "Chrome ran out of graphics slots or has hardware acceleration off. "
+      + "Try closing a few other tabs, or enable "
+      + "<b>Settings → System → Use hardware acceleration</b>, then retry. "
+      + "It also works in Firefox and on mobile.</div>";
+    const b = document.createElement('button');
+    b.textContent = '↻ Retry';
+    b.style.cssText = 'padding:9px 28px;border-radius:10px;border:0;cursor:pointer;'
+      + 'background:#5cffc9;color:#0a0a12;font:700 14px system-ui;';
+    b.onclick = () => location.reload();
+    box.appendChild(b);
+    document.body.appendChild(box);
+    throw new Error('WebGL unavailable in this browser');
+  }
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-  renderer.setSize(innerWidth, innerHeight);
+  renderer.setSize(innerWidth, innerHeight, false);   // false: don't set inline px style — CSS fills
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;   // filmic response for the Sky
   renderer.toneMappingExposure = 0.75;
+  renderer.domElement.style.cssText = 'display:block;width:100%;height:100%';  // fill the frame
   document.getElementById('app').appendChild(renderer.domElement);
 
   // WEBGL CONTEXT-LOSS RECOVERY: WebView2/browsers cap live GL contexts; an
@@ -2848,10 +2885,15 @@ async function main() {
       camera.top = os; camera.bottom = -os;
     }
     camera.updateProjectionMatrix();
-    renderer.setSize(innerWidth, innerHeight);
+    renderer.setSize(innerWidth, innerHeight, false);   // keep CSS 100% fill; only resize the buffer
     composer.setSize(innerWidth, innerHeight);
     if (stylePass) stylePass.uniforms.res.value.set(innerWidth, innerHeight);
   });
+  // FIT AFTER LAYOUT SETTLES (2026-07-08): the first frame can capture a stale
+  // innerWidth (Firefox measured the canvas smaller than the window → black
+  // gap). Re-fit once the layout is final.
+  requestAnimationFrame(() => dispatchEvent(new Event('resize')));
+  addEventListener('load', () => dispatchEvent(new Event('resize')));
   console.log('[game] ready:', SPEC.title);
 }
 

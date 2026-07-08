@@ -9,8 +9,9 @@
             font-family:system-ui,Segoe UI,Arial,sans-serif}
   #app{position:fixed;inset:0}
   #hud{position:fixed;left:12px;top:10px;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.7);
-       user-select:none;pointer-events:none;z-index:5}
-  #hud h1{font-size:15px;margin:0 0 2px;font-weight:600;letter-spacing:.3px}
+       user-select:none;pointer-events:none;z-index:5;max-width:52vw}
+  #hud h1{font-size:15px;margin:0 0 2px;font-weight:600;letter-spacing:.3px;
+       overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   #hud .hint{font-size:11px;opacity:.75}
   #fps{position:fixed;right:12px;top:10px;color:#9f9;font:11px monospace;
        text-shadow:0 1px 3px rgba(0,0,0,.7);z-index:5}
@@ -50,6 +51,18 @@
          font:700 13px system-ui;display:none;z-index:6;touch-action:none;
          align-items:center;justify-content:center;user-select:none}
   @media (pointer:coarse){ #stick{display:block} }
+  /* MOBILE HUD (2026-07-08): on a narrow screen the long title used to wrap
+     into 3 lines and collide with the centered objective/hearts. Keep the
+     title to one truncated line, shrink type, and push the centered elements
+     clear of the top-left block. */
+  @media (max-width:640px){
+    #hud{max-width:60vw}
+    #hud h1{font-size:13px}
+    #obj{font-size:12px;top:auto;bottom:76px;max-width:92vw;text-align:center}
+    #hearts{top:auto;bottom:52px;font-size:15px}
+    #quest{top:52px;font-size:11px;max-width:56vw}
+    #fps{font-size:10px}
+  }
 </style>
 </head>
 <body>
