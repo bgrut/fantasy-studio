@@ -36,7 +36,13 @@ const WRANGLER_STEPS = [
   ['4', 'Set your publish token', 'npx wrangler secret put PUBLISH_TOKEN — paste any long random string and keep it'],
   ['5', 'Deploy', 'npx wrangler deploy — copy the https://…workers.dev URL it prints'],
   ['6', 'Paste URL + token below', 'that’s it — Publish buttons light up everywhere'],
-]
+] as const
+
+const VIEWER_NOTE =
+  'Just browsing someone else’s community? You only need their hub URL — ' +
+  'paste it below and leave the token empty. Viewing, playing and installing ' +
+  'are free and need no Cloudflare account; the 6 steps are only for RUNNING ' +
+  'a hub you can publish to.'
 
 export default function Marketplace() {
   const [tab, setTab] = useState<Tab>('community')
@@ -310,6 +316,19 @@ export default function Marketplace() {
         <div className="space-y-6">
           {!status?.configured ? (
             <NotConfigured onSetup={() => setTab('setup')} />
+          ) : !status.can_publish ? (
+            <div className="glass rounded-2xl py-14 text-center space-y-3">
+              <Upload className="w-8 h-8 text-[#4a4764] mx-auto" />
+              <p className="text-sm text-[#807d99]">
+                You're browsing <span className="text-[#c9c6dd]">{status.url}</span> as a viewer.
+              </p>
+              <p className="text-xs font-mono text-[#4a4764]">
+                // publishing needs a hub you hold the token for — run the 6 Setup steps to own one
+              </p>
+              <button onClick={() => setTab('setup')} className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold btn-generate">
+                <Rocket className="w-4 h-4" /> Set up publishing
+              </button>
+            </div>
           ) : (
             <>
               {/* the honest disclosure, once per session */}
@@ -419,6 +438,9 @@ export default function Marketplace() {
               The marketplace runs on <span className="text-[#c9c6dd]">your</span> Cloudflare
               account (free tier), so your community stays yours. Six steps, about five minutes:
             </p>
+            <p className="text-xs text-[#38d9c4] rounded-xl border border-[#38d9c4]/20 bg-[#38d9c4]/5 px-3 py-2">
+              {VIEWER_NOTE}
+            </p>
             <ol className="space-y-2.5">
               {WRANGLER_STEPS.map(([n, title, detail]) => (
                 <li key={n} className="flex gap-3">
@@ -440,9 +462,9 @@ export default function Marketplace() {
                   placeholder="https://fantasy-studio-share.YOUR-NAME.workers.dev"
                   className="mt-1 w-full rounded-xl bg-white/[0.03] border border-white/[0.05] px-4 py-2.5 text-sm text-white placeholder:text-[#4a4764] focus:outline-none focus:border-[#7c5cff]/40" />
               </label>
-              <label className="text-xs font-mono text-[#4a4764]">publish token
+              <label className="text-xs font-mono text-[#4a4764]">publish token (optional — leave empty to browse-only)
                 <input value={cfgToken} onChange={e => setCfgToken(e.target.value)} type="password"
-                  placeholder="the PUBLISH_TOKEN you set in step 4"
+                  placeholder="the PUBLISH_TOKEN you set in step 4 — or empty to just browse"
                   className="mt-1 w-full rounded-xl bg-white/[0.03] border border-white/[0.05] px-4 py-2.5 text-sm text-white placeholder:text-[#4a4764] focus:outline-none focus:border-[#7c5cff]/40" />
               </label>
               <label className="text-xs font-mono text-[#4a4764]">display name (shown as the author on everything you publish)
@@ -454,7 +476,7 @@ export default function Marketplace() {
             <div className="flex items-center gap-3">
               <button
                 onClick={saveCfg}
-                disabled={cfgSaving || !cfgUrl.trim() || !cfgToken.trim()}
+                disabled={cfgSaving || !cfgUrl.trim()}
                 className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold btn-generate disabled:opacity-40"
               >
                 {cfgSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <ShieldCheck className="w-4 h-4" />}

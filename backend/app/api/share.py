@@ -31,6 +31,13 @@ _pub_lock = threading.Lock()
 _pub_state: dict = {"status": "idle"}     # one publish at a time (big uploads)
 
 
+# THE DEFAULT COMMUNITY HUB: once a canonical worker exists, its URL goes
+# here (or in the FS_COMMUNITY_HUB env var) — every install then browses the
+# community out of the box, zero setup. Publishing always needs a token.
+import os
+DEFAULT_HUB = os.environ.get("FS_COMMUNITY_HUB", "").rstrip("/")
+
+
 def _cfg() -> dict:
     try:
         return json.loads(SHARE_CFG.read_text(encoding="utf-8"))
@@ -38,12 +45,24 @@ def _cfg() -> dict:
         return {}
 
 
+def _hub_url() -> str:
+    """Read-only hub: the user's configured worker, else the default hub.
+    Browsing/playing/installing are PUBLIC — no token, no Cloudflare account."""
+    url = (_cfg().get("url") or "").rstrip("/") or DEFAULT_HUB
+    if not url:
+        raise HTTPException(status_code=400,
+                            detail="no community hub configured — open Marketplace → Setup")
+    return url
+
+
 def _require_cfg() -> tuple[str, str]:
+    """Publishing needs BOTH a worker URL and its publish token."""
     c = _cfg()
     url, tok = (c.get("url") or "").rstrip("/"), c.get("token") or ""
     if not (url and tok):
-        raise HTTPException(status_code=400,
-                            detail="share worker not configured — open Marketplace → Setup")
+        raise HTTPException(
+            status_code=400,
+            detail="publishing needs your own worker URL + token — Marketplace → Setup")
     return url, tok
 
 
@@ -53,15 +72,18 @@ def _hdrs(tok: str) -> dict:
 
 class ShareConfig(BaseModel):
     url: str = Field(min_length=8, max_length=300)
-    token: str = Field(min_length=8, max_length=300)
+    token: str = Field(default="", max_length=300)   # optional: browse-only without it
     author: str = Field(default="anonymous", max_length=40)
 
 
 @router.get("/api/share/status")
 def share_status():
     c = _cfg()
-    return {"ok": True, "configured": bool(c.get("url") and c.get("token")),
-            "url": c.get("url"), "author": c.get("author") or "anonymous",
+    url = (c.get("url") or "").rstrip("/") or DEFAULT_HUB
+    return {"ok": True,
+            "configured": bool(url),                          # can BROWSE
+            "can_publish": bool(c.get("url") and c.get("token")),  # can PUBLISH
+            "url": url or None, "author": c.get("author") or "anonymous",
             "publish": _pub_state}
 
 
@@ -87,8 +109,9 @@ def share_config(req: ShareConfig):
 
 @router.get("/api/share/feed")
 def share_feed():
-    """Proxy the community feed (keeps the app same-origin, no CORS games)."""
-    url, _ = _require_cfg()
+    """Proxy the community feed (keeps the app same-origin, no CORS games).
+    PUBLIC — works with just a hub URL, no token."""
+    url = _hub_url()
     try:
         r = requests.get(f"{url}/api/feed", timeout=15)
         r.raise_for_status()
@@ -208,8 +231,8 @@ class InstallCharacter(BaseModel):
 @router.post("/api/share/install/character")
 def install_character(req: InstallCharacter):
     """Download a community character into the local library — it becomes a
-    castable kind like any generated one."""
-    url, _ = _require_cfg()
+    castable kind like any generated one. PUBLIC — no token needed."""
+    url = _hub_url()
     try:
         m = requests.get(f"{url}/c/{req.id}/manifest.json", timeout=15)
         m.raise_for_status()

@@ -4,7 +4,8 @@
 
 export interface ShareStatus {
   ok: boolean
-  configured: boolean
+  configured: boolean       // can BROWSE (a hub URL is known)
+  can_publish: boolean      // can PUBLISH (own worker URL + token saved)
   url?: string | null
   author: string
   publish?: { status: string; file?: string; url?: string; error?: string }
