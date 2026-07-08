@@ -10,6 +10,19 @@ Pre-1.0 versions are internal milestones during the constraint sprint leading to
 
 ## [Unreleased]
 
+### Fixed — Texture warm-fill: the gray "unwrapped" patches are gone (2026-07-08)
+- Root cause audited in a neutral-light viewer: side-projection baking
+  leaves off-axis texels (haunches, back, chest) as desaturated gray smears —
+  the "texture doesn't wrap the character" look. New
+  `scripts/warmfill_texture.py` recolors those texels toward the asset's own
+  fur palette (hue+sat transfer, luminance kept; whites/darks protected;
+  rigs and animations untouched — only the embedded texture bytes change).
+- Applied to the demo trio (cat, wolf, dog + animated variants; originals
+  in `assets/library/_pre_warmfill/`). Verified in-viewer (haunches read as
+  soft fur, not gray plastic) and in-game (wolves close-up with intact
+  detailed faces). True multi-view texture baking remains the GPU-day
+  upgrade; this closes most of the visual gap on CPU.
+
 ### Fixed — Character faces + forest depth + style/view edit protection (2026-07-08)
 - **No more half-cut-off faces**: generated character meshes are open shells,
   and single-sided rendering showed holes through heads/ears at grazing
