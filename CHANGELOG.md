@@ -10,6 +10,20 @@ Pre-1.0 versions are internal milestones during the constraint sprint leading to
 
 ## [Unreleased]
 
+### Fixed — Character faces + forest depth + style/view edit protection (2026-07-08)
+- **No more half-cut-off faces**: generated character meshes are open shells,
+  and single-sided rendering showed holes through heads/ears at grazing
+  angles. Player, NPC and placed-creature materials now render DoubleSide —
+  the CPU-tier fix until GPU-day watertight meshes.
+- **Forests stopped being plastic**: scatter props get per-instance color
+  variation (±8% tone, seeded) — every tree reads as an individual. (The
+  flat look was the low-poly asset tier by design, not a lighting bug;
+  textured photoreal props are a GPU-day upgrade.)
+- **Style + view are sacred during edits**: the base game's style/view carry
+  forward through every LLM edit; only explicit words ("make it horror",
+  "make it top-down") may change them. Verified: an edit rebuild preserved
+  style=default view=3d while adding health packs and keeping placed cats.
+
 ### Added — Phase 48: Quality uplevel — living placements, structure flavors, sky life (2026-07-08)
 - **Placed creatures are ALIVE**: placements resolve to the already-baked
   animated variant when one exists and play their idle clip — a cat placed

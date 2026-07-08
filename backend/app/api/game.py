@@ -218,6 +218,15 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                     change += (f"\n\nCONTEXT: the user clicked the {req.at_target} — "
                                f"'this'/'it' refers to that.")
                 spec = patch_game_spec(base_spec, change, verbose=False)
+                # STYLE + VIEW ARE SACRED (2026-07-08): the LLM must never
+                # drop or drift them during an edit — carry the base game's
+                # choices forward; only the explicit-word overrides below may
+                # change them
+                try:
+                    spec.style = base_spec.get("style", spec.style) or spec.style
+                    spec.view = base_spec.get("view", spec.view) or spec.view
+                except Exception:
+                    pass
                 # THE USER'S EXPLICIT WORDS WIN (2026-07-08): when an edit
                 # literally names a sky or weather, that beats whatever the
                 # LLM picked — "make it a starry night" once came back as

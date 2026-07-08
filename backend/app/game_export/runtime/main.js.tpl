@@ -567,7 +567,18 @@ async function main() {
   function prepModel(gltf, targetH, byMaxDim) {
     const root = gltf.scene;
     hardenAlpha(root);
-    root.traverse(o => { if (o.isMesh) { o.castShadow = true; o.frustumCulled = false; } });
+    root.traverse(o => {
+      if (o.isMesh) {
+        o.castShadow = true;
+        o.frustumCulled = false;
+        // generated meshes are OPEN shells — single-sided rendering shows
+        // holes through heads/ears at grazing angles ("half cut-off face",
+        // 2026-07-08). Render both sides until GPU-day watertight meshes.
+        for (const m of Array.isArray(o.material) ? o.material : [o.material]) {
+          if (m) m.side = THREE.DoubleSide;
+        }
+      }
+    });
     const box = new THREE.Box3().setFromObject(root);
     // flyers/swimmers normalize by their LONGEST dimension (wingspan / body
     // length) — height normalization blew a wings-out dragon up to kaiju size
@@ -785,6 +796,7 @@ async function main() {
         places.push({ x, z, s: 1 + (rng() - 0.5) * 2 * sct.scale_jitter, rot: rng() * Math.PI * 2 });
       }
       const M = new THREE.Matrix4(), T = new THREE.Matrix4(), SV = new THREE.Vector3();
+      const jitC = new THREE.Color();
       for (const p of parts) {
         const im = new THREE.InstancedMesh(p.geo, p.mat, N);
         im.castShadow = true;
@@ -795,8 +807,15 @@ async function main() {
           T.setPosition(pl.x, hAt(pl.x, pl.z), pl.z);
           M.multiplyMatrices(T, p.local);
           im.setMatrixAt(i, M);
+          // per-instance color variation — a forest of identical flat trees
+          // reads as plastic; ±8% tone + a hue whisper makes it ALIVE
+          const jr = mulberry32(SPEC.seed + i * 131 + 7)();
+          const jg = mulberry32(SPEC.seed + i * 131 + 8)();
+          jitC.setRGB(0.92 + jr * 0.16, 0.92 + jg * 0.16, 0.92 + jr * 0.12);
+          im.setColorAt(i, jitC);
         }
         im.instanceMatrix.needsUpdate = true;
+        if (im.instanceColor) im.instanceColor.needsUpdate = true;
         scene.add(im);
       }
       if (sct.collide) {
@@ -1086,6 +1105,7 @@ async function main() {
             for (let mi = 0; mi < ms.length; mi++) {
               const m = ms[mi].clone();
               if (Array.isArray(o.material)) o.material[mi] = m; else o.material = m;
+              m.side = THREE.DoubleSide;    // no hollow heads on NPCs either
               if (m.emissive !== undefined) {
                 if (dark && m.map) m.emissiveMap = m.map;
                 if (hostile) m.emissive.setRGB(dark ? 0.30 : 0.10, dark ? 0.16 : 0.02, dark ? 0.16 : 0.02);
