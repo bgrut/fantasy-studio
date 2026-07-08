@@ -15,6 +15,22 @@ export interface GameJob {
   error?: string
   created_at: number
   updated_at: number
+  spec_resolved?: GameSpecResolved       // full resolved spec — the Truth Table reads it
+}
+
+// the slice of the resolved spec the studio UI actually reads
+export interface GameSpecResolved {
+  style?: string
+  world?: {
+    name?: string; sky?: string; weather?: string; health_packs?: number
+    fog_density?: number | null
+    placed_items?: { kind: string; name?: string; x: number; z: number
+                     interact?: string | null; rules?: string[] }[]
+  }
+  entities?: { name: string; behavior: string; count: number; speed: number; hp: number }[]
+  objectives?: { kind: string; label: string; count: number }[]
+  player?: { name?: string; hp?: number; attack?: string }
+  reward?: string | null
 }
 
 export interface GameHealth {
@@ -37,7 +53,12 @@ export async function gameHealth(): Promise<GameHealth> {
 // carry real world coordinates ("place a book HERE")
 export interface PickPoint { x: number; z: number; target?: string }
 
-export async function exportGame(prompt: string, opts?: { godot?: boolean; player?: string; baseJobId?: number; at?: PickPoint }) {
+export async function exportGame(prompt: string, opts?: {
+  godot?: boolean; player?: string; baseJobId?: number; at?: PickPoint
+  at2?: { x: number; z: number }                     // line tool second point
+  style?: string                                     // USER-selected style preset
+  rule?: { index: number; name: string; on: boolean } // rule chip toggle
+}) {
   const res = await fetch('/api/game/export', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -47,7 +68,12 @@ export async function exportGame(prompt: string, opts?: { godot?: boolean; playe
                            // R-ITER: edit an existing game instead of generating anew
                            ...(opts?.baseJobId != null ? { base_job_id: opts.baseJobId } : {}),
                            ...(opts?.at ? { at_x: opts.at.x, at_z: opts.at.z,
-                                            ...(opts.at.target ? { at_target: opts.at.target } : {}) } : {}) }),
+                                            ...(opts.at.target ? { at_target: opts.at.target } : {}) } : {}),
+                           ...(opts?.at2 ? { at_x2: opts.at2.x, at_z2: opts.at2.z } : {}),
+                           ...(opts?.style ? { style: opts.style } : {}),
+                           ...(opts?.rule ? { rule_index: opts.rule.index,
+                                              rule_name: opts.rule.name,
+                                              rule_on: opts.rule.on } : {}) }),
   })
   return j<{ ok: boolean; job_id: number }>(res)
 }

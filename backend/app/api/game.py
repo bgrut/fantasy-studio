@@ -67,6 +67,16 @@ class GameExportRequest(BaseModel):
     at_x: float | None = None
     at_z: float | None = None
     at_target: str | None = None     # what was clicked: "ground", "wolf", ...
+    # Phase 44: LINE TOOL second point — "place a fence here" tiles segments
+    # from (at_x, at_z) to (at_x2, at_z2)
+    at_x2: float | None = None
+    at_z2: float | None = None
+    # Phase 44: STYLE PRESET — user-selected in the studio, never LLM-guessed
+    style: str | None = None
+    # Phase 44: RULE CHIP toggle — deterministic edit on one placed item
+    rule_index: int | None = None
+    rule_name: str | None = None
+    rule_on: bool | None = None
 
 
 def _run_job(job_id: int, req: GameExportRequest) -> None:
@@ -104,6 +114,24 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             stage("applying your edit")
             from app.game_export.spec import spec_from_dict as _sfd
             spec = None
+            # RULE CHIP toggle (Phase 44): fully deterministic — flip one rule
+            # on one placed item, re-export. No LLM anywhere near it.
+            if (req.rule_index is not None and req.rule_name
+                    and req.rule_on is not None):
+                import copy as _copy
+                cur = _copy.deepcopy(base_spec)
+                items = (cur.get("world") or {}).get("placed_items") or []
+                if not (0 <= req.rule_index < len(items)):
+                    raise RuntimeError("rule toggle: placed item index out of range")
+                it = items[req.rule_index]
+                rl = [r for r in (it.get("rules") or []) if r != req.rule_name]
+                if req.rule_on:
+                    rl.append(req.rule_name)
+                it["rules"] = rl
+                spec = _sfd(cur)
+                job.setdefault("notes", []).append(
+                    f"rule '{req.rule_name}' {'ON' if req.rule_on else 'OFF'} "
+                    f"for '{it.get('name') or it.get('kind')}'")
             # INSPECTOR FAST PATH: "place a book here" with clicked coordinates
             # is fully deterministic — no LLM round-trip, the edit lands in the
             # time it takes to re-export. Longer sentences still go to the LLM.
@@ -130,19 +158,50 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                         r"\b(right\s+)?(here|there|at (this|the selected) spot|"
                         r"on (this|the) spot|in this spot)\b",
                         "", rest, flags=_re.IGNORECASE).strip(" .!,\"'")
+                    # strip PURPOSE clauses — "a fence to block the dogs" is
+                    # still just a fence (the blocking comes free: colliders)
+                    for cut in (" to ", " so ", " for ", " between ",
+                                " from ", " because "):
+                        if cut in noun.lower():
+                            noun = noun[:noun.lower().index(cut)]
+                    noun = noun.strip(" .!,\"'")
                     if noun and len(noun.split()) <= 3:
                         w = noun.split()[-1].lower()
                         kind = (w[:-3] + "y") if w.endswith("ies") else \
                                (w[:-1] if w.endswith("s") and not w.endswith("ss") else w)
                         cur = _copy.deepcopy(base_spec)
-                        cur.setdefault("world", {}).setdefault("placed_items", []).append(
-                            {"kind": kind, "name": noun.lower(),
-                             "x": round(req.at_x, 2), "z": round(req.at_z, 2),
-                             "interact": interact})
+                        items = cur.setdefault("world", {}).setdefault("placed_items", [])
+                        if req.at_x2 is not None and req.at_z2 is not None:
+                            # LINE TOOL: tile segments from A to B ("place a
+                            # fence here" spans the two clicked points)
+                            import math as _m
+                            dx = req.at_x2 - req.at_x
+                            dz = req.at_z2 - req.at_z
+                            dist = _m.hypot(dx, dz)
+                            seg = 2.0
+                            # floor keeps spacing >= seg so the de-overlap
+                            # nudge never scatters a deliberate line run
+                            n = max(1, min(48, int(dist / seg)))
+                            yaw = _m.degrees(_m.atan2(-dz, dx))
+                            for i in range(n):
+                                t = (i + 0.5) / n
+                                items.append({
+                                    "kind": kind, "name": noun.lower(),
+                                    "x": round(req.at_x + dx * t, 2),
+                                    "z": round(req.at_z + dz * t, 2),
+                                    "yaw_deg": round(yaw, 1),
+                                    "interact": interact if i == n // 2 else None})
+                            job.setdefault("notes", []).append(
+                                f"placed {n} × '{noun}' along your line ({dist:.0f} m)")
+                        else:
+                            items.append(
+                                {"kind": kind, "name": noun.lower(),
+                                 "x": round(req.at_x, 2), "z": round(req.at_z, 2),
+                                 "interact": interact})
+                            job.setdefault("notes", []).append(
+                                f"placed '{noun}' at ({req.at_x:.1f}, {req.at_z:.1f})"
+                                + (" with a readable hint" if interact else ""))
                         spec = _sfd(cur)
-                        job.setdefault("notes", []).append(
-                            f"placed '{noun}' at ({req.at_x:.1f}, {req.at_z:.1f})"
-                            + (" with a readable hint" if interact else ""))
             if spec is None:
                 from app.game_export.extractor import patch_game_spec
                 change = req.prompt
@@ -183,6 +242,18 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                     if _re.search(rf"\b{_re.escape(w)}\b", _cl):
                         spec.world.weather = wx
                         break
+                # style words in edits are deterministic too ("make it horror")
+                for w, st in (("horror", "horror"), ("scary", "horror"),
+                              ("spooky", "horror"), ("anime", "anime"),
+                              ("cartoon", "cartoon"), ("toon", "cartoon"),
+                              ("cel-shaded", "cartoon"), ("pixel", "pixel"),
+                              ("retro", "pixel"), ("8-bit", "pixel"),
+                              ("low-poly", "lowpoly"), ("low poly", "lowpoly"),
+                              ("photoreal", "default"), ("realistic", "default")):
+                    if _re.search(rf"\b{_re.escape(w)}\b", _cl):
+                        spec.style = st
+                        job.setdefault("notes", []).append(f"style set to {st}")
+                        break
                 # SAFETY NET: LLM-added placed items sometimes forget the
                 # coordinates from context — new items land where you clicked
                 if req.at_x is not None and req.at_z is not None:
@@ -197,6 +268,14 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             stage("extracting")
             spec = extract_game_spec(req.prompt, verbose=False)
             job["title"] = spec.title
+        # STYLE IS THE USER'S CHOICE (Phase 44): the studio's style chips set
+        # it explicitly — the LLM never guesses it, so it's never wrong
+        if req.style:
+            try:
+                spec.style = req.style        # pydantic validates the literal
+            except Exception:
+                job.setdefault("notes", []).append(
+                    f"unknown style '{req.style}' — kept {spec.style}")
         # SNOW IS BRIGHT: snowy scenes must have snow-colored ground — that's
         # what reflects the moonlight and makes winter nights luminous. The
         # LLM often picks a dark ground for "snowy night" and the whole scene
@@ -408,8 +487,11 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                          "torch": "campfire", "fire": "campfire", "bonfire": "campfire",
                          "note": "book", "letter": "book", "scroll": "book",
                          "tome": "book", "signpost": "sign", "signboard": "sign",
-                         "crate": "chest", "box": "chest", "treasure": "chest"}
-        _PROC_PROPS = {"book", "sign", "chest", "building", "rock", "beacon", "campfire"}
+                         "crate": "chest", "box": "chest", "treasure": "chest",
+                         "wall": "fence", "railing": "fence", "barrier": "fence",
+                         "hedge": "fence", "gate": "fence", "palisade": "fence"}
+        _PROC_PROPS = {"book", "sign", "chest", "building", "rock", "beacon",
+                       "campfire", "fence"}
         kept_items = []
         for it in spec.world.placed_items:
             k = _PROC_ALIASES.get((it.kind or "").lower().strip(),
@@ -443,6 +525,13 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             else:
                 job.setdefault("notes", []).append(
                     f"placed item '{k}' could not be resolved — skipped")
+        # DEFAULT RULES (Phase 44): props ship with their honest behaviors on —
+        # firelight repels hostiles, solid things block them. Chips can toggle.
+        for it in kept_items:
+            if it.kind in ("campfire", "beacon") and "safe_zone" not in it.rules:
+                it.rules.append("safe_zone")
+            if it.collide and "blocks_enemies" not in it.rules:
+                it.rules.append("blocks_enemies")
         # PLACEMENTS NEVER STACK (2026-07-08): a new item that lands on an
         # earlier one (LLM echoing existing coordinates) gets nudged aside —
         # the sign must stand BESIDE the campfire, not inside it.

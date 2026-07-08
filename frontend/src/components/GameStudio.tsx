@@ -28,6 +28,17 @@ const GAME_PROMPTS = [
   'A penguin waddling across the moon, collect 6 moon rocks',
 ]
 
+// Phase 44 STYLE PRESETS — the user picks, the AI never guesses. One global
+// render treatment (cel shading, outlines, grain, palette) per game.
+const STYLES: { id: string; label: string; hint: string }[] = [
+  { id: 'default', label: '🎬 Photoreal', hint: 'the classic look — natural light and texture' },
+  { id: 'cartoon', label: '🖍️ Cartoon', hint: 'cel shading + ink outlines, bold and friendly' },
+  { id: 'anime', label: '🌸 Anime', hint: 'soft cel bands, dreamy bloom, vivid color' },
+  { id: 'horror', label: '🕯️ Horror', hint: 'crushing dark, thick fog, film grain' },
+  { id: 'pixel', label: '👾 Pixel', hint: 'chunky retro pixels, posterized palette' },
+  { id: 'lowpoly', label: '📐 Low-poly', hint: 'flat-shaded facets, minimalist color' },
+]
+
 const BUILD_STAGES: Record<string, string> = {
   queued: 'Queued…',
   extracting: 'Reading your idea…',
@@ -49,10 +60,16 @@ export default function GameStudio() {
   const [exported, setExported] = useState<{ play_url: string; zip: string; zip_mb: number } | null>(null)
   const [hubUrl, setHubUrl] = useState<string | null>(null)   // exported game playing in-app
   // Inspector (Phase 42): hover-audit + click-to-select inside the running game
-  type Pick = { x: number; z: number; target: { type: string; name: string; detail?: string } }
+  type Pick = { x: number; z: number; target: { type: string; name: string; detail?: string
+                                                idx?: number; kind?: string; rules?: string[] } }
   const [inspect, setInspect] = useState(false)
   const [hoverPick, setHoverPick] = useState<Pick | null>(null)
   const [selPick, setSelPick] = useState<Pick | null>(null)
+  const [style, setStyle] = useState('default')            // Phase 44 style preset
+  const [placeMode, setPlaceMode] = useState<'point' | 'line'>('point')
+  const [lineA, setLineA] = useState<Pick | null>(null)    // line tool first click
+  const [selLine, setSelLine] = useState<{ a: Pick; b: Pick } | null>(null)
+  const [showRules, setShowRules] = useState(false)        // Truth Table panel
   const pollRef = useRef<number | null>(null)
   const gameFrameRef = useRef<HTMLIFrameElement | null>(null)
   const hubFrameRef = useRef<HTMLIFrameElement | null>(null)
@@ -129,19 +146,23 @@ export default function GameStudio() {
   }, [])
 
   const startJob = useCallback(async (p: string, baseJobId?: number,
-                                      at?: { x: number; z: number; target?: string }) => {
+                                      at?: { x: number; z: number; target?: string },
+                                      at2?: { x: number; z: number }) => {
     setError(null)
     setSavedLevel(null)                   // any rebuild invalidates "Saved ✓"
     if (baseJobId == null) { setJob(null); setOpenedLevel(null) }  // fresh build = not a level edit
     setBuilding(true)
     try {
-      const { job_id } = await exportGame(p, baseJobId != null ? { baseJobId, at } : undefined)
+      const { job_id } = await exportGame(p, baseJobId != null
+        ? { baseJobId, at, at2 }
+        // fresh build: the USER-SELECTED style rides along — never guessed
+        : { style: style !== 'default' ? style : undefined })
       pollJob(job_id)
     } catch (e) {
       setBuilding(false)
       setError(e instanceof Error ? e.message : String(e))
     }
-  }, [pollJob])
+  }, [pollJob, style])
 
   // Phase 43 level tiles: click a level -> exact re-export opens as a live
   // job in the player above — play it, Inspect it, edit it, save it back.
@@ -189,17 +210,21 @@ export default function GameStudio() {
     // "place a X here" without a clicked spot would leave the LLM guessing
     // coordinates (it echoes existing ones — the sign-inside-the-campfire).
     // Require a selection so "here" always means somewhere real.
-    if (!selPick && /^\s*(place|put|drop|spawn)\b/i.test(p) && /\b(here|there|this spot)\b/i.test(p)) {
-      setError('Where is “here”? Turn on Inspect, click a spot in the world, then apply this edit.')
+    if (!selPick && !selLine && /^\s*(place|put|drop|spawn)\b/i.test(p) && /\b(here|there|this spot)\b/i.test(p)) {
+      setError('Where is “here”? Turn on Inspect, click a spot (or two, in Line mode), then apply this edit.')
       return
     }
     setError(null)
     setEditPrompt('')
-    // the selected point rides along: "place a book here" gets coordinates
-    const at = selPick ? { x: selPick.x, z: selPick.z, target: selPick.target.name } : undefined
+    // the selection rides along: a point places once, a line tiles A→B
+    const at = selLine
+      ? { x: selLine.a.x, z: selLine.a.z, target: selLine.a.target.name }
+      : selPick ? { x: selPick.x, z: selPick.z, target: selPick.target.name } : undefined
+    const at2 = selLine ? { x: selLine.b.x, z: selLine.b.z } : undefined
     setSelPick(null)
-    void startJob(p, job.id, at)
-  }, [editPrompt, building, job, startJob, selPick])
+    setSelLine(null)
+    void startJob(p, job.id, at, at2)
+  }, [editPrompt, building, job, startJob, selPick, selLine])
 
   const playing = job?.status === 'complete' && job.play_url
 
@@ -209,8 +234,22 @@ export default function GameStudio() {
       const d = e.data
       if (!d || d.type !== 'fs-pick') return
       const p: Pick = { x: d.x, z: d.z, target: d.target ?? { type: 'ground', name: 'ground' } }
-      if (d.kind === 'hover') setHoverPick(p)
-      else setSelPick(p)
+      if (d.kind === 'hover') { setHoverPick(p); return }
+      // LINE TOOL: first click anchors A, second closes the run A→B
+      setPlaceMode(mode => {
+        if (mode === 'line') {
+          setLineA(a => {
+            if (!a) return p
+            setSelLine({ a, b: p })
+            setSelPick(null)
+            return null
+          })
+        } else {
+          setSelPick(p)
+          setSelLine(null)
+        }
+        return mode
+      })
     }
     window.addEventListener('message', onMsg)
     return () => window.removeEventListener('message', onMsg)
@@ -222,13 +261,33 @@ export default function GameStudio() {
   const toggleInspect = useCallback(() => {
     setInspect(v => {
       sendInspect(!v)
-      if (v) { setHoverPick(null); setSelPick(null) }
+      if (v) { setHoverPick(null); setSelPick(null); setLineA(null); setSelLine(null) }
       return !v
     })
   }, [sendInspect])
   // a rebuild replaces the iframe: picks are stale, but Inspect MODE stays on
   // (it re-arms via the iframe's onLoad) — mid-editing flow never breaks
-  useEffect(() => { setHoverPick(null); setSelPick(null) }, [job?.play_url])
+  useEffect(() => { setHoverPick(null); setSelPick(null); setLineA(null); setSelLine(null) }, [job?.play_url])
+
+  // RULE CHIPS: flip one honored rule on the selected placed item — fully
+  // deterministic on the backend, re-exports in seconds
+  const toggleRule = useCallback(async (name: string) => {
+    if (!job || building || selPick?.target.type !== 'placed' || selPick.target.idx == null) return
+    const has = (selPick.target.rules ?? []).includes(name)
+    setError(null)
+    setSelPick(null)
+    setBuilding(true)
+    try {
+      const { job_id } = await exportGame(`toggle rule ${name}`, {
+        baseJobId: job.id,
+        rule: { index: selPick.target.idx, name, on: !has },
+      })
+      pollJob(job_id)
+    } catch (e) {
+      setBuilding(false)
+      setError(e instanceof Error ? e.message : String(e))
+    }
+  }, [job, building, selPick, pollJob])
 
   // While a game is playable, arrows/space must DRIVE THE GAME, not scroll
   // the studio page out from under the recording. Keys that reach the parent
@@ -308,6 +367,26 @@ export default function GameStudio() {
               className="px-3 py-1 rounded-full text-[11px] border border-white/[0.06] bg-white/[0.02] text-[#807d99] hover:text-white hover:border-[#5cffc9]/30 transition-all max-w-[240px] truncate"
             >
               {p}
+            </button>
+          ))}
+        </div>
+
+        {/* STYLE PRESETS: the user picks — the AI never guesses a look */}
+        <div className="flex flex-wrap justify-center items-center gap-1.5">
+          <span className="text-[10px] font-mono text-[#4a4764]">style:</span>
+          {STYLES.map((s) => (
+            <button
+              key={s.id}
+              onClick={() => setStyle(s.id)}
+              title={s.hint}
+              className={cn(
+                'px-2.5 py-1 rounded-full text-[11px] border transition-all',
+                style === s.id
+                  ? 'border-[#5cffc9]/50 bg-[#5cffc9]/10 text-[#5cffc9]'
+                  : 'border-white/[0.06] bg-white/[0.02] text-[#807d99] hover:text-white'
+              )}
+            >
+              {s.label}
             </button>
           ))}
         </div>
@@ -567,6 +646,34 @@ export default function GameStudio() {
                 <Crosshair className="w-3 h-3" />
                 {inspect ? 'Inspecting' : 'Inspect'}
               </button>
+              {inspect && (
+                <div className="inline-flex rounded-lg border border-[#ffd88a]/25 overflow-hidden text-xs">
+                  <button
+                    onClick={() => { setPlaceMode('point'); setLineA(null); setSelLine(null) }}
+                    title="one click selects one spot"
+                    className={cn('px-2.5 py-1.5 transition-colors',
+                      placeMode === 'point' ? 'bg-[#ffd88a]/20 text-[#ffd88a]' : 'text-[#807d99] hover:text-white')}
+                  >📍 Point</button>
+                  <button
+                    onClick={() => { setPlaceMode('line'); setSelPick(null) }}
+                    title="two clicks select a run — fences, walls, torch rows tile from A to B"
+                    className={cn('px-2.5 py-1.5 transition-colors',
+                      placeMode === 'line' ? 'bg-[#ffd88a]/20 text-[#ffd88a]' : 'text-[#807d99] hover:text-white')}
+                  >📏 Line</button>
+                </div>
+              )}
+              <button
+                onClick={() => setShowRules(v => !v)}
+                title="the Truth Table: every rule this game actually enforces"
+                className={cn(
+                  'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-colors',
+                  showRules
+                    ? 'bg-[#a78bfa]/20 text-[#a78bfa]'
+                    : 'border border-white/[0.08] text-[#807d99] hover:text-white'
+                )}
+              >
+                📜 Rules
+              </button>
               <button
                 onClick={build}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs border border-white/[0.08] text-[#807d99] hover:text-white transition-colors"
@@ -611,24 +718,82 @@ export default function GameStudio() {
             {/* hover-audit chip: what's under the cursor, live */}
             {inspect && (
               <div className="absolute top-2 left-2 pointer-events-none px-3 py-1.5 rounded-lg bg-[rgba(10,9,18,0.85)] border border-[#ffd88a]/30 text-xs font-mono">
-                {hoverPick ? (
+                {lineA ? (
+                  <span className="text-[#ffd88a]">
+                    📏 A set at ({lineA.x.toFixed(1)}, {lineA.z.toFixed(1)}) — click point B
+                  </span>
+                ) : hoverPick ? (
                   <>
                     <span className="text-[#ffd88a]">{hoverPick.target.name}</span>
                     {hoverPick.target.detail && (
                       <span className="text-[#807d99]"> · {hoverPick.target.detail}</span>
                     )}
-                    <span className="text-[#4a4764]"> — click to select</span>
+                    <span className="text-[#4a4764]"> — click to select{placeMode === 'line' ? ' point A' : ''}</span>
                   </>
                 ) : (
-                  <span className="text-[#807d99]">move the cursor over the world…</span>
+                  <span className="text-[#807d99]">
+                    WASD flies the camera · {placeMode === 'line' ? 'click two points for a run' : 'move the cursor over the world…'}
+                  </span>
                 )}
               </div>
             )}
           </div>
+          {/* THE TRUTH TABLE (Phase 44): every rule this game ENFORCES, derived
+              from the resolved spec — nothing listed here is decorative */}
+          {showRules && job!.spec_resolved && (() => {
+            const sp = job!.spec_resolved!
+            const rows: string[] = []
+            if (sp.style && sp.style !== 'default') rows.push(`🎨 style: ${sp.style} — global render treatment`)
+            rows.push(`🎮 ${sp.player?.name ?? 'hero'}: ${sp.player?.hp ?? 5} HP` +
+              (sp.player?.attack && sp.player.attack !== 'none' ? ` · attacks with F (${sp.player.attack}, 3.2m reach, aim-assisted)` : ''))
+            for (const [i, o] of (sp.objectives ?? []).entries()) {
+              rows.push(`🎯 step ${i + 1}: ${o.kind} ${o.count} ${o.label}` +
+                (o.kind === 'survive' ? ` (${o.count}s of escalating waves)` : ''))
+            }
+            for (const e of sp.entities ?? []) {
+              rows.push(e.behavior === 'hostile'
+                ? `🐺 ${e.count} × ${e.name}: hostile — chases within 14m, 1 dmg per hit, ${e.hp} HP each`
+                : `🐾 ${e.count} × ${e.name}: ${e.behavior}`)
+            }
+            if ((sp.world?.health_packs ?? 0) > 0) rows.push(`❤️ ${sp.world!.health_packs} health packs: +1 HP on touch`)
+            if (sp.world?.weather && sp.world.weather !== 'none') rows.push(`🌨️ weather: ${sp.world.weather}`)
+            for (const it of sp.world?.placed_items ?? []) {
+              const r: string[] = []
+              if ((it.rules ?? []).includes('safe_zone')) r.push('safe zone (hostiles kept out, 6m)')
+              if ((it.rules ?? []).includes('blocks_enemies')) r.push('blocks enemies')
+              if ((it.rules ?? []).includes('hurts_touch')) r.push('hurts on touch (1 dmg/s)')
+              if (it.interact) r.push('readable (E)')
+              rows.push(`📦 ${it.name || it.kind} at (${it.x.toFixed(0)}, ${it.z.toFixed(0)})${r.length ? ': ' + r.join(' · ') : ''}`)
+            }
+            if (sp.reward) rows.push(`🏆 winner gets: ${sp.reward}`)
+            return (
+              <div className="rounded-xl border border-[#a78bfa]/25 bg-[#a78bfa]/5 px-4 py-3">
+                <div className="text-[10px] font-mono text-[#a78bfa] mb-1.5">
+                  // THE TRUTH TABLE — every rule this game enforces
+                </div>
+                <div className="grid gap-1 [grid-template-columns:repeat(auto-fit,minmax(280px,1fr))]">
+                  {rows.map((r, i) => (
+                    <div key={i} className="text-[11px] font-mono text-[#c9c6dd]">{r}</div>
+                  ))}
+                </div>
+              </div>
+            )
+          })()}
+
           {/* R-ITER: conversational editing — the generator becomes an engine.
               A selected point/thing from Inspect mode rides along with the edit. */}
-          {selPick && (
+          {selLine && (
             <div className="flex items-center gap-2 text-xs">
+              <span className="px-3 py-1.5 rounded-lg bg-[#ffd88a]/10 border border-[#ffd88a]/30 text-[#ffd88a] font-mono">
+                📏 line ({selLine.a.x.toFixed(1)}, {selLine.a.z.toFixed(1)}) → ({selLine.b.x.toFixed(1)}, {selLine.b.z.toFixed(1)})
+                · {Math.hypot(selLine.b.x - selLine.a.x, selLine.b.z - selLine.a.z).toFixed(0)}m
+              </span>
+              <button onClick={() => setSelLine(null)} className="text-[#807d99] hover:text-white transition-colors" title="clear selection">✕</button>
+              <span className="text-[#4a4764]">“place a fence here” tiles segments along this run</span>
+            </div>
+          )}
+          {selPick && (
+            <div className="flex items-center gap-2 text-xs flex-wrap">
               <span className="px-3 py-1.5 rounded-lg bg-[#ffd88a]/10 border border-[#ffd88a]/30 text-[#ffd88a] font-mono">
                 📍 {selPick.target.name} at ({selPick.x.toFixed(1)}, {selPick.z.toFixed(1)})
               </span>
@@ -639,9 +804,34 @@ export default function GameStudio() {
               >
                 ✕
               </button>
-              <span className="text-[#4a4764]">
-                “here” and “this” in your edit now mean this spot
-              </span>
+              {selPick.target.type === 'placed' && selPick.target.idx != null ? (
+                /* RULE CHIPS: every toggle is an honored runtime behavior */
+                <span className="inline-flex items-center gap-1.5">
+                  {[['safe_zone', '🔥 safe zone'], ['blocks_enemies', '🚧 blocks enemies'],
+                    ['hurts_touch', '⚡ hurts on touch']].map(([rule, label]) => {
+                    const on = (selPick.target.rules ?? []).includes(rule)
+                    return (
+                      <button
+                        key={rule}
+                        onClick={() => toggleRule(rule)}
+                        disabled={building}
+                        title={on ? 'rule is ON — click to remove' : 'rule is OFF — click to enable'}
+                        className={cn(
+                          'px-2 py-1 rounded-full text-[10px] border transition-colors disabled:opacity-40',
+                          on ? 'border-[#5cffc9]/50 bg-[#5cffc9]/10 text-[#5cffc9]'
+                             : 'border-white/[0.08] text-[#807d99] hover:text-white'
+                        )}
+                      >
+                        {label}{on ? ' ✓' : ''}
+                      </button>
+                    )
+                  })}
+                </span>
+              ) : (
+                <span className="text-[#4a4764]">
+                  “here” and “this” in your edit now mean this spot
+                </span>
+              )}
             </div>
           )}
           <div className="flex gap-2">

@@ -10,6 +10,30 @@ Pre-1.0 versions are internal milestones during the constraint sprint leading to
 
 ## [Unreleased]
 
+### Added — Phase 44: Style presets, the Line tool, rule chips + the Truth Table (2026-07-08)
+- **Style presets (user-selected, never LLM-guessed)**: 🎬 Photoreal ·
+  🖍️ Cartoon (cel bands + ink outlines) · 🌸 Anime (soft cel + bloom) ·
+  🕯️ Horror (midtone crush + grain + closing fog) · 👾 Pixel (chunky
+  low-res + posterize) · 📐 Low-poly (flat shading). Picked as chips BEFORE
+  building; one GLOBAL post/render pack applies coherently to the whole
+  game — hero, props, terrain — unlike per-asset stylers. Edits can also
+  switch styles deterministically ("make it horror"). Verified visually:
+  cartoon (outlined fox + fence) and horror (crushed dark + grain).
+- **📏 Line tool**: Inspect gains Point/Line modes. Two clicks define a run;
+  "place a fence here" tiles 2m segments A→B with correct heading — a new
+  procedural fence prop ships (posts + rails; wall/railing/hedge/barrier
+  alias to it). Purpose clauses parse ("a fence TO BLOCK THE DOGS" = fence).
+  Verified: 6 segments along a 12m line, blocks_enemies auto-on.
+- **Rule chips**: click a placed item in Inspect → toggle 🔥 safe zone ·
+  🚧 blocks enemies · ⚡ hurts on touch. Every chip is an HONORED runtime
+  behavior (fence line held a hunting dog out — 2.76m minimum approach —
+  and it correctly flanked the open ends; cursed rock drained 1 HP/s).
+  Toggles are fully deterministic (no LLM), re-export in seconds.
+- **📜 The Truth Table**: one panel listing every rule the game actually
+  enforces — hero stats, mission steps, hostile behavior ranges, placed-item
+  rules, rewards — derived from the resolved spec, so nothing listed is
+  decorative. The "auditable game" vision, rendered.
+
 ### Added + Fixed — Props tell the truth, Inspect free-fly, biped birds (2026-07-08)
 - **Placed props are real game rules**: campfires (and beacons) are SAFE
   ZONES — hostiles fear the light: they will not enter the glow, and back

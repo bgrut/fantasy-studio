@@ -1032,6 +1032,18 @@ async function main() {
         n.obj.position.y = hAt(n.obj.position.x, n.obj.position.z)
                          + (n.anim ? 0 : Math.sin(t * 2 + n.phase) * 0.01 + 0.01);
       }
+      // blocks_enemies rule: placed solids are solid for NPCs too — a fence
+      // line actually FENCES (push out radially from each segment)
+      for (const b of npcBlockers) {
+        const bx = n.obj.position.x - b.x, bz = n.obj.position.z - b.z;
+        const bd = Math.hypot(bx, bz);
+        if (bd < b.r) {
+          const k2 = (b.r + 0.02) / Math.max(bd, 1e-4);
+          n.obj.position.x = b.x + bx * k2;
+          n.obj.position.z = b.z + bz * k2;
+          n.obj.position.y = hAt(n.obj.position.x, n.obj.position.z);
+        }
+      }
       // real gait: crossfade idle/walk/run with movement state (no more gliding)
       if (n.anim) {
         const want = moving ? (n.behavior === 'hostile' && n.speed > 2.2 ? n.anim.run : n.anim.walk)
@@ -1282,6 +1294,15 @@ async function main() {
       m.castShadow = true;
       return { g, h: 1.0 };
     }
+    if (kind === 'fence') {
+      // one 2m segment — the studio's line tool tiles these A→B
+      for (const px of [-0.95, 0.95]) {
+        add(new THREE.BoxGeometry(0.13, 1.05, 0.13), std(0x6b4a2f), px, 0.525);
+      }
+      add(new THREE.BoxGeometry(2.05, 0.11, 0.09), std(0x7d5636), 0, 0.86);
+      add(new THREE.BoxGeometry(2.05, 0.11, 0.09), std(0x7d5636), 0, 0.46);
+      return { g, h: 1.1 };
+    }
     if (kind === 'campfire') {
       for (const a of [0, 1.05, 2.1]) {
         add(new THREE.CylinderGeometry(0.07, 0.07, 0.95, 6), std(0x5b3d26),
@@ -1296,7 +1317,7 @@ async function main() {
     add(new THREE.CylinderGeometry(0.12, 0.19, 2.2, 10), std(0xb9a0ff, 0x7c5cff, 2.2), 0, 1.35);
     return { g, h: 2.5 };
   }
-  for (const it of SPEC.world.placed_items || []) {
+  for (const [pIdx, it] of (SPEC.world.placed_items || []).entries()) {
     try {
       let obj, hgt = it.height_m || 0;
       if (it.asset) {
@@ -1312,6 +1333,7 @@ async function main() {
       obj.rotation.y = (it.yaw_deg || 0) * Math.PI / 180;
       obj.traverse(o => { if (o.isMesh) { o.castShadow = true; o.frustumCulled = false; } });
       obj.userData.fsTag = { type: 'placed', name: it.name || it.kind,
+                             idx: pIdx, kind: it.kind, rules: it.rules || [],
                              detail: it.interact ? 'readable · walk up + press E' : it.kind };
       scene.add(obj);
       const bb = new THREE.Box3().setFromObject(obj);
@@ -1329,20 +1351,39 @@ async function main() {
                              text: it.interact,
                              r: Math.max(2.1, (bb.max.x - bb.min.x)) });
       }
-      placedItems.push({ obj, it });
+      placedItems.push({ obj, it,
+                         r: Math.max((bb.max.x - bb.min.x), (bb.max.z - bb.min.z)) / 2 });
     } catch (e) { console.warn('[game] placed item failed:', e.message); }
   }
-  // PLACED PROPS TELL THE TRUTH: campfires and beacons are SAFE ZONES —
-  // hostiles fear the light and will not enter or attack inside the glow.
-  // A sign that says "stay near the fire" is a real game rule, not decor.
-  const safeZones = placedItems
-    .filter(p => ['campfire', 'beacon'].includes((p.it.kind || '').toLowerCase()))
+  // PLACED PROPS TELL THE TRUTH (Phase 44: rules come from the spec's rule
+  // chips, all HONORED): safe_zone repels hostiles, blocks_enemies stops NPC
+  // movement, hurts_touch damages the player standing in it.
+  const _hasRule = (p, r) => (p.it.rules || []).includes(r)
+    || (r === 'safe_zone' && ['campfire', 'beacon'].includes((p.it.kind || '').toLowerCase())
+        && !(p.it.rules || []).length);
+  const safeZones = placedItems.filter(p => _hasRule(p, 'safe_zone'))
     .map(p => ({ x: p.it.x, z: p.it.z, r: 6.0 }));
+  const npcBlockers = placedItems.filter(p => _hasRule(p, 'blocks_enemies'))
+    .map(p => ({ x: p.it.x, z: p.it.z, r: Math.max(p.r + 0.35, 0.8) }));
+  const hurtZones = placedItems.filter(p => _hasRule(p, 'hurts_touch'))
+    .map(p => ({ x: p.it.x, z: p.it.z, r: Math.max(p.r + 0.5, 1.2) }));
   function inSafeZone(x, z) {
     for (const s of safeZones) {
       if (Math.hypot(x - s.x, z - s.z) < s.r) return s;
     }
     return null;
+  }
+  let hurtCd = 0;
+  function stepHurtZones(dt, nt) {
+    hurtCd = Math.max(0, hurtCd - dt);
+    if (hurtCd > 0) return;
+    for (const h of hurtZones) {
+      if (Math.hypot(nt.x - h.x, nt.z - h.z) < h.r) {
+        hurtCd = 1.0;
+        playerHit(1);
+        return;
+      }
+    }
   }
 
   // interact UI: proximity prompt + reading panel (books, signs, hints)
@@ -2024,6 +2065,93 @@ async function main() {
       }`,
   });
   composer.addPass(grade);
+  // ── STYLE PACKS (Phase 44): the user picked this in the studio — one
+  // GLOBAL render treatment applied coherently to the whole frame. Never
+  // guessed by an LLM, so it's never wrong.
+  const STYLE = SPEC.style || 'default';
+  const STYLE_CFG = {
+    cartoon: { bands: 5, sat: 1.35, exposure: 1.05, grain: 0, edge: 2.4, gamma: 1.0 },
+    anime:   { bands: 8, sat: 1.18, exposure: 1.08, grain: 0, edge: 1.1, gamma: 1.0 },
+    horror:  { bands: 0, sat: 0.32, exposure: 0.7, grain: 0.13, edge: 0, gamma: 1.7 },
+    pixel:   { bands: 6, sat: 1.12, exposure: 1.0, grain: 0, edge: 0, gamma: 1.0 },
+    lowpoly: { bands: 7, sat: 1.15, exposure: 1.02, grain: 0, edge: 0, gamma: 1.0 },
+  }[STYLE];
+  let stylePass = null;
+  if (STYLE_CFG) {
+    stylePass = new ShaderPass({
+      uniforms: { tDiffuse: { value: null },
+                  bands: { value: STYLE_CFG.bands },
+                  sat: { value: STYLE_CFG.sat },
+                  exposure: { value: STYLE_CFG.exposure },
+                  grain: { value: STYLE_CFG.grain },
+                  edge: { value: STYLE_CFG.edge },
+                  gamma: { value: STYLE_CFG.gamma },
+                  time: { value: 0 },
+                  res: { value: new THREE.Vector2(innerWidth, innerHeight) } },
+      vertexShader: `varying vec2 vUv;
+        void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
+      fragmentShader: `uniform sampler2D tDiffuse;
+        uniform float bands; uniform float sat; uniform float exposure;
+        uniform float grain; uniform float edge; uniform float time;
+        uniform float gamma; uniform vec2 res; varying vec2 vUv;
+        float lum(vec2 uv){ return dot(texture2D(tDiffuse, uv).rgb, vec3(.299,.587,.114)); }
+        void main(){
+          vec4 c = texture2D(tDiffuse, vUv);
+          c.rgb *= exposure;
+          if (gamma != 1.0) {                     // midtone crush (horror dark)
+            c.rgb = pow(max(c.rgb, vec3(0.0)), vec3(gamma));
+          }
+          if (edge > 0.0) {                       // ink outlines (sobel)
+            vec2 px = 1.0 / res;
+            float gx = lum(vUv + vec2(px.x, 0.)) - lum(vUv - vec2(px.x, 0.));
+            float gy = lum(vUv + vec2(0., px.y)) - lum(vUv - vec2(0., px.y));
+            float e = clamp(length(vec2(gx, gy)) * edge * 6.0, 0.0, 1.0);
+            c.rgb *= (1.0 - e * 0.8);
+          }
+          if (bands > 0.5) {                      // cel / posterize
+            c.rgb = floor(c.rgb * bands + 0.5) / bands;
+          }
+          float l = dot(c.rgb, vec3(.299,.587,.114));
+          c.rgb = mix(vec3(l), c.rgb, sat);       // saturation (or drain)
+          if (grain > 0.0) {                      // film grain (horror)
+            float g = fract(sin(dot(vUv * res + time, vec2(12.9898, 78.233))) * 43758.5453);
+            c.rgb += (g - 0.5) * grain;
+          }
+          gl_FragColor = c;
+        }`,
+    });
+    composer.addPass(stylePass);
+  }
+  // per-style scene setup beyond the post pass
+  const STYLE_PR = STYLE === 'pixel' ? 0.22 : null;   // chunky retro pixels
+  if (STYLE_PR) {
+    renderer.setPixelRatio(STYLE_PR);
+    composer.setPixelRatio && composer.setPixelRatio(STYLE_PR);
+    renderer.domElement.style.imageRendering = 'pixelated';
+  }
+  if (STYLE === 'horror') {
+    // horror must be DARK regardless of the world's sky: crush the sky and
+    // fog toward black, dim the lights, let the vignette close in
+    if (scene.fog) {
+      scene.fog.near *= 0.45;
+      scene.fog.far *= 0.55;
+      scene.fog.color.multiplyScalar(0.4);
+    }
+    if (scene.background && scene.background.isColor) scene.background.multiplyScalar(0.3);
+    scene.traverse(o => { if (o.isLight) o.intensity *= 0.5; });
+    bloom.strength = 0.12;
+    vignette.uniforms.strength.value = 0.9;
+  }
+  if (STYLE === 'anime') bloom.strength = 0.45;   // dreamy glow
+  if (STYLE === 'lowpoly') {
+    scene.traverse(o => {
+      if (o.isMesh) {
+        for (const m of Array.isArray(o.material) ? o.material : [o.material]) {
+          if (m && 'flatShading' in m) { m.flatShading = true; m.needsUpdate = true; }
+        }
+      }
+    });
+  }
   composer.addPass(new OutputPass());
 
   advanceStep();                          // mission begins: activate step 1
@@ -2376,7 +2504,11 @@ async function main() {
       camera.position.y += (Math.random() - 0.5) * 0.4 * shakeT;
     }
     stepBursts(dt);
-    if (gameStarted && !paused) { stepHealthPacks(dt, nt); stepInteract(nt); }
+    if (gameStarted && !paused) {
+      stepHealthPacks(dt, nt);
+      stepInteract(nt);
+      if (!inspectOn) stepHurtZones(dt, nt);
+    }
 
     // procedural swim/flap motion: time + speed-scaled amplitude
     if (procShaders.length) {
@@ -2388,6 +2520,7 @@ async function main() {
         sh.uniforms.uAmp.value += (Math.min(a, 1) - sh.uniforms.uAmp.value) * Math.min(4 * dt, 1);
       }
     }
+    if (stylePass) stylePass.uniforms.time.value = performance.now() / 1000;
     composer.render();
     // live state for the verify harness (extends the __game probe object)
     window.__game.state = { x: nt.x, y: nt.y, z: nt.z, modelYaw, yaw, speed,
@@ -2402,8 +2535,8 @@ async function main() {
       // shadow updates. Never steps back up mid-run (avoids oscillation).
       lowT = fps < 28 ? lowT + 1 : 0;
       if (lowT >= 4 && qTier === 0) {
-        qTier = 1; renderer.setPixelRatio(1);
-        composer.setPixelRatio && composer.setPixelRatio(1);
+        qTier = 1; renderer.setPixelRatio(STYLE_PR || 1);
+        composer.setPixelRatio && composer.setPixelRatio(STYLE_PR || 1);
         console.log('[game] adaptive quality: resolution tier (fps rescue)');
       } else if (lowT >= 8 && qTier === 1) {
         qTier = 2; bloom.enabled = false;
@@ -2421,6 +2554,7 @@ async function main() {
     camera.updateProjectionMatrix();
     renderer.setSize(innerWidth, innerHeight);
     composer.setSize(innerWidth, innerHeight);
+    if (stylePass) stylePass.uniforms.res.value.set(innerWidth, innerHeight);
   });
   console.log('[game] ready:', SPEC.title);
 }

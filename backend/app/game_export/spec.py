@@ -60,6 +60,10 @@ class PlacedItemSpec(BaseModel):
     height_m: float = Field(0.0, ge=0.0, le=60.0)   # 0 = kind default
     interact: Optional[str] = None        # press E near it -> this text (hints/lore)
     collide: bool = True
+    # RULE CHIPS (Phase 44): every rule here is HONORED by the runtime —
+    # safe_zone (hostiles fear it), blocks_enemies (NPCs can't pass),
+    # hurts_touch (damages the player standing in it). Never decorative.
+    rules: List[str] = Field(default_factory=list)
 
 
 class WorldSpec(BaseModel):
@@ -116,6 +120,9 @@ class GameSpec(BaseModel):
     reward: Optional[str] = None          # "winner gets a banana" → shown on the win screen
     intro: Optional[str] = None           # narrative layer: 1-2 line quest intro (START screen)
     win_text: Optional[str] = None        # narrative layer: victory line (win screen)
+    # STYLE PRESET (Phase 44): USER-SELECTED, never LLM-guessed — one global
+    # render/post pack applied coherently to the whole game
+    style: Literal["default", "cartoon", "anime", "horror", "pixel", "lowpoly"] = "default"
     seed: int = 7                         # deterministic scatter placement
 
     def runtime_json(self) -> dict:
@@ -187,6 +194,19 @@ def spec_from_dict(data: dict) -> GameSpec:
                     o["kind"] = _KIND_ALIASES[k]
     except Exception:
         pass                                # normalization is best-effort
+    try:
+        st = str(data.get("style", "")).lower().strip()
+        _STYLE_ALIASES = {"low-poly": "lowpoly", "low poly": "lowpoly",
+                          "flat": "lowpoly", "toon": "cartoon",
+                          "cel": "cartoon", "cel-shaded": "cartoon",
+                          "pixel art": "pixel", "retro": "pixel",
+                          "8-bit": "pixel", "8bit": "pixel",
+                          "scary": "horror", "spooky": "horror",
+                          "photoreal": "default", "realistic": "default"}
+        if st in _STYLE_ALIASES:
+            data["style"] = _STYLE_ALIASES[st]
+    except Exception:
+        pass
     try:
         return GameSpec.model_validate(data)
     except Exception as e:  # pydantic.ValidationError
