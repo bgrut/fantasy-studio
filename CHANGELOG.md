@@ -10,6 +10,32 @@ Pre-1.0 versions are internal milestones during the constraint sprint leading to
 
 ## [Unreleased]
 
+### Added — Phase 46: Community Marketplace + share worker v2 + privacy policy + Godot parity (2026-07-08)
+- **Community Marketplace** (replaces the template marketplace page): browse
+  the community feed, ▶ play shared games in-app, install shared characters
+  straight into your library (they become castable kinds), and publish your
+  own games/characters behind an explicit consent checkbox. Includes a
+  6-step in-app setup wizard for the one-time Cloudflare wiring.
+- **Share worker v2** (infra/share-worker): community feed (feed/index.json,
+  capped 500), character publishing + serving (/c/:id/), unpublish
+  (DELETE /api/items/:id), CORS. Games and characters share one
+  create→upload→publish flow.
+- **Backend share bridge** (app/api/share.py): the publish token lives
+  server-side only (renders/share_config.json, local); endpoints for
+  status/config/feed/publish game/publish character/install character.
+  Config saving verifies the worker actually answers before persisting.
+- **PRIVACY.md**: the local-first promise (no telemetry, local AI), exactly
+  what Publish uploads, CC-BY-4.0 sharing terms, content rules, removal
+  path, third-party attribution requirements.
+- **Godot export parity (Phase 46)**: placed items spawn as primitive props
+  with colliders (fence/campfire/building/sign/book/chest/rock/beacon);
+  rules are HONORED (safe zones hold hostiles at the glow's edge,
+  blocks_enemies pushes NPCs out, hurt zones drain 1 HP/s); books/signs are
+  readable with E; top-down/side orthographic views; styles map to
+  environment color grading (horror adds fog). STEAM_GUIDE updated with the
+  parity list and honest approximation notes. Verified structurally on a
+  spec with fences+rules+side view.
+
 ### Added — Phase 45: 2D view presets — top-down + side-scroller (2026-07-08)
 - **View chips** next to the style chips: 🧊 3D · 🗺️ Top-down 2D ·
   🎞️ Side-scroller. User-selected like styles, never LLM-guessed; edits can

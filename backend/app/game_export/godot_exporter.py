@@ -47,14 +47,27 @@ _PLAYER_GD = """extends CharacterBody3D
 # WASD move · Space jump · Shift run · F attack · mouse look · Esc frees mouse
 const WALK := __WALK__
 const RUN := __RUN__
+const VIEW := "__VIEW__"    # 3d / topdown / side — same presets as the web runtime
 var yaw := 0.0
 var pitch := 0.35
 
 func _ready() -> void:
-\tInput.mouse_mode = Input.MOUSE_MODE_CAPTURED
+\tif VIEW == "3d":
+\t\tInput.mouse_mode = Input.MOUSE_MODE_CAPTURED
+\telse:
+\t\t# 2D views: fixed orthographic camera, mouse stays free
+\t\tvar cam: Camera3D = $Arm/Cam
+\t\tcam.projection = Camera3D.PROJECTION_ORTHOGONAL
+\t\tcam.size = 18.0 if VIEW == "side" else 32.0
+\t\tif VIEW == "topdown":
+\t\t\t$Arm.rotation = Vector3(-1.55, 0, 0)
+\t\t\t$Arm.spring_length = 46.0
+\t\telse:
+\t\t\t$Arm.rotation = Vector3(-0.05, 0, 0)
+\t\t\t$Arm.spring_length = 42.0
 
 func _unhandled_input(event: InputEvent) -> void:
-\tif event is InputEventMouseMotion:
+\tif VIEW == "3d" and event is InputEventMouseMotion:
 \t\tyaw -= event.relative.x * 0.004
 \t\tpitch = clampf(pitch + event.relative.y * 0.003, 0.05, 1.2)
 \tif event.is_action_pressed("ui_cancel"):
@@ -73,8 +86,11 @@ func _physics_process(delta: float) -> void:
 \tvar input := Vector3.ZERO
 \tinput.x = Input.get_action_strength("ui_right") - Input.get_action_strength("ui_left")
 \tinput.z = Input.get_action_strength("ui_down") - Input.get_action_strength("ui_up")
+\tif VIEW == "side":
+\t\tinput.z = 0.0    # side-scroller: one lane, A/D run it
 \tvar speed := RUN if Input.is_key_pressed(KEY_SHIFT) else WALK
-\tvar dir := (Basis(Vector3.UP, yaw) * input).normalized()
+\tvar cam_yaw := yaw if VIEW == "3d" else 0.0
+\tvar dir := (Basis(Vector3.UP, cam_yaw) * input).normalized()
 \tif is_on_floor():
 \t\tif Input.is_key_pressed(KEY_SPACE):
 \t\t\tvelocity.y = 5.6
@@ -82,11 +98,14 @@ func _physics_process(delta: float) -> void:
 \t\tvelocity.y -= 9.81 * delta
 \tvelocity.x = dir.x * speed
 \tvelocity.z = dir.z * speed
+\tif VIEW == "side":
+\t\tvelocity.z = (0.0 - position.z) * 6.0   # hold the gameplay lane
 \tif dir.length() > 0.1:
 \t\t$Model.rotation.y = lerp_angle($Model.rotation.y, atan2(dir.x, dir.z) + PI, 10.0 * delta)
 \tmove_and_slide()
-\t# third-person camera on a yaw/pitch arm
-\t$Arm.rotation = Vector3(-pitch, yaw, 0)
+\t# third-person camera on a yaw/pitch arm (2D views keep the fixed arm)
+\tif VIEW == "3d":
+\t\t$Arm.rotation = Vector3(-pitch, yaw, 0)
 """
 
 _NPC_GD = """extends Node3D
@@ -112,10 +131,17 @@ func take_hit(dmg: int) -> void:
 func _process(delta: float) -> void:
 \tif dead: return
 \tvar player := get_tree().get_first_node_in_group("player")
+\tvar mission := get_node_or_null("/root/Main/Mission")
 \tvar tgt := Vector3.INF
 \tif behavior == "hostile" and player:
 \t\tvar d := position.distance_to(player.position)
-\t\tif d < 14.0 and d > 1.7:
+\t\tif mission and mission.is_player_safe(player.position) and (d < 14.0 or not mission.nearest_safe(position).is_empty()):
+\t\t\t# safe_zone rule: the firelight holds them at the edge of the glow
+\t\t\tvar s: Dictionary = mission.nearest_safe(player.position)
+\t\t\tif not s.is_empty():
+\t\t\t\tvar away := Vector2(position.x - s.x, position.z - s.z).normalized()
+\t\t\t\ttgt = Vector3(s.x + away.x * (s.r + 3.0), 0, s.z + away.y * (s.r + 3.0))
+\t\telif d < 14.0 and d > 1.7:
 \t\t\ttgt = player.position
 \t\telif d <= 1.7:
 \t\t\t_atk_cd -= delta
@@ -137,6 +163,7 @@ func _process(delta: float) -> void:
 \t\t\tdir = dir.normalized()
 \t\t\trotation.y = lerp_angle(rotation.y, atan2(dir.x, dir.z), 6.0 * delta)
 \t\t\tposition += dir * speed * delta
+\tif mission: mission.push_out(self)   # blocks_enemies rule: fences FENCE
 """
 
 _MISSION_GD = """extends Node
@@ -144,6 +171,7 @@ _MISSION_GD = """extends Node
 # quest log, hearts, narrative intro, win/lose overlays. UI built in code so
 # the scene file stays simple. Same verbs as the web runtime.
 @export var steps_json := "[]"
+@export var placed_json := "[]"
 @export var intro := ""
 @export var win_text := "Mission complete!"
 @export var reward := ""
@@ -164,8 +192,16 @@ var _rng := RandomNumberGenerator.new()
 var _quest: Label
 var _obj: Label
 var _hearts: Label
+var _prompt: Label
 var _overlay: Control
 var _beacon: Node3D
+# placed-item RULES — honored exactly like the web runtime
+var safe_zones: Array = []      # [{x, z, r}]
+var blockers: Array = []        # [{x, z, r}]
+var hurt_zones: Array = []      # [{x, z, r}]
+var readables: Array = []       # [{x, z, label, text}]
+var _reading := false
+var _hurt_cd := 0.0
 
 func _ready() -> void:
 \t_rng.seed = seed
@@ -173,7 +209,126 @@ func _ready() -> void:
 \tsteps = JSON.parse_string(steps_json)
 \tif steps == null: steps = []
 \t_build_ui()
+\t_spawn_placed()
 \t_show_intro()
+
+func _spawn_placed() -> void:
+\tvar items = JSON.parse_string(placed_json)
+\tif items == null: return
+\tvar root := get_tree().root.get_node("Main")
+\tfor it in items:
+\t\tvar x: float = it.get("x", 0.0)
+\t\tvar z: float = it.get("z", 0.0)
+\t\tvar kind: String = it.get("kind", "beacon")
+\t\tvar body := StaticBody3D.new()
+\t\tbody.position = Vector3(x, 0, z)
+\t\tbody.rotation.y = deg_to_rad(float(it.get("yaw_deg", 0.0)))
+\t\tvar h := _prop_mesh(kind, body)
+\t\tif bool(it.get("collide", true)):
+\t\t\tvar col := CollisionShape3D.new()
+\t\t\tvar sh := BoxShape3D.new()
+\t\t\tsh.size = Vector3(maxf(h * 0.8, 0.6), h, maxf(h * 0.8, 0.6))
+\t\t\tcol.shape = sh
+\t\t\tcol.position.y = h / 2.0
+\t\t\tbody.add_child(col)
+\t\troot.add_child(body)
+\t\tvar rules: Array = it.get("rules", [])
+\t\tif rules.has("safe_zone"):
+\t\t\tsafe_zones.append({"x": x, "z": z, "r": 6.0})
+\t\tif rules.has("blocks_enemies"):
+\t\t\tblockers.append({"x": x, "z": z, "r": maxf(h * 0.6, 0.9)})
+\t\tif rules.has("hurts_touch"):
+\t\t\thurt_zones.append({"x": x, "z": z, "r": maxf(h * 0.7, 1.2)})
+\t\tvar txt: String = str(it.get("interact", "")) if it.get("interact") != null else ""
+\t\tif txt != "":
+\t\t\treadables.append({"x": x, "z": z,
+\t\t\t\t"label": it.get("name", kind), "text": txt})
+
+func _prop_mesh(kind: String, parent: Node3D) -> float:
+\t# simplified primitives of the web runtime's procedural props
+\tvar add := func(mesh: Mesh, col: Color, pos: Vector3, emiss: float = 0.0) -> void:
+\t\tvar mi := MeshInstance3D.new()
+\t\tmi.mesh = mesh
+\t\tvar mat := StandardMaterial3D.new()
+\t\tmat.albedo_color = col
+\t\tif emiss > 0.0:
+\t\t\tmat.emission_enabled = true
+\t\t\tmat.emission = col
+\t\t\tmat.emission_energy_multiplier = emiss
+\t\tmi.material_override = mat
+\t\tmi.position = pos
+\t\tparent.add_child(mi)
+\tif kind == "fence":
+\t\tvar post := BoxMesh.new(); post.size = Vector3(0.13, 1.05, 0.13)
+\t\tadd.call(post, Color(0.42, 0.29, 0.18), Vector3(-0.95, 0.52, 0))
+\t\tadd.call(post, Color(0.42, 0.29, 0.18), Vector3(0.95, 0.52, 0))
+\t\tvar rail := BoxMesh.new(); rail.size = Vector3(2.05, 0.11, 0.09)
+\t\tadd.call(rail, Color(0.49, 0.34, 0.21), Vector3(0, 0.86, 0))
+\t\tadd.call(rail, Color(0.49, 0.34, 0.21), Vector3(0, 0.46, 0))
+\t\treturn 1.1
+\tif kind == "campfire":
+\t\tvar log := CylinderMesh.new(); log.top_radius = 0.07; log.bottom_radius = 0.07; log.height = 0.95
+\t\tadd.call(log, Color(0.36, 0.24, 0.15), Vector3(0, 0.09, 0))
+\t\tvar flame := CylinderMesh.new(); flame.top_radius = 0.0; flame.bottom_radius = 0.26; flame.height = 0.6
+\t\tadd.call(flame, Color(1.0, 0.48, 0.16), Vector3(0, 0.42, 0), 2.5)
+\t\tvar li := OmniLight3D.new(); li.light_color = Color(1.0, 0.6, 0.3)
+\t\tli.omni_range = 8.0; li.position.y = 0.8; parent.add_child(li)
+\t\treturn 0.85
+\tif kind == "building":
+\t\tvar wall := BoxMesh.new(); wall.size = Vector3(4.4, 3.3, 3.7)
+\t\tadd.call(wall, Color(0.6, 0.56, 0.49), Vector3(0, 1.65, 0))
+\t\tvar roof := PrismMesh.new(); roof.size = Vector3(4.8, 1.9, 4.0)
+\t\tadd.call(roof, Color(0.42, 0.27, 0.22), Vector3(0, 4.25, 0))
+\t\tvar win := BoxMesh.new(); win.size = Vector3(0.7, 0.7, 0.06)
+\t\tadd.call(win, Color(1.0, 0.85, 0.54), Vector3(-1.35, 1.9, 1.87), 1.4)
+\t\tadd.call(win, Color(1.0, 0.85, 0.54), Vector3(1.35, 1.9, 1.87), 1.4)
+\t\treturn 5.2
+\tif kind == "rock":
+\t\tvar r := SphereMesh.new(); r.radius = 0.7; r.height = 0.9
+\t\tadd.call(r, Color(0.55, 0.55, 0.57), Vector3(0, 0.45, 0))
+\t\treturn 1.0
+\tif kind == "sign":
+\t\tvar postm := CylinderMesh.new(); postm.top_radius = 0.05; postm.bottom_radius = 0.07; postm.height = 1.15
+\t\tadd.call(postm, Color(0.42, 0.29, 0.18), Vector3(0, 0.57, 0))
+\t\tvar board := BoxMesh.new(); board.size = Vector3(0.95, 0.55, 0.07)
+\t\tadd.call(board, Color(0.66, 0.52, 0.36), Vector3(0, 1.25, 0), 0.25)
+\t\treturn 1.55
+\tif kind == "chest":
+\t\tvar base := BoxMesh.new(); base.size = Vector3(0.85, 0.45, 0.55)
+\t\tadd.call(base, Color(0.42, 0.29, 0.18), Vector3(0, 0.22, 0))
+\t\tvar band := BoxMesh.new(); band.size = Vector3(0.87, 0.09, 0.57)
+\t\tadd.call(band, Color(0.85, 0.64, 0.25), Vector3(0, 0.32, 0), 0.5)
+\t\treturn 0.72
+\tif kind == "book":
+\t\tvar ped := CylinderMesh.new(); ped.top_radius = 0.3; ped.bottom_radius = 0.36; ped.height = 0.5
+\t\tadd.call(ped, Color(0.44, 0.42, 0.47), Vector3(0, 0.25, 0))
+\t\tvar pages := BoxMesh.new(); pages.size = Vector3(0.6, 0.06, 0.44)
+\t\tadd.call(pages, Color(0.96, 0.93, 0.85), Vector3(0, 0.56, 0), 0.35)
+\t\treturn 0.75
+\t# default / beacon: glowing pillar
+\tvar pil := CylinderMesh.new(); pil.top_radius = 0.12; pil.bottom_radius = 0.19; pil.height = 2.2
+\tadd.call(pil, Color(0.73, 0.63, 1.0), Vector3(0, 1.35, 0), 2.2)
+\treturn 2.5
+
+func is_player_safe(pos: Vector3) -> bool:
+\tfor s in safe_zones:
+\t\tif Vector2(pos.x - s.x, pos.z - s.z).length() < s.r:
+\t\t\treturn true
+\treturn false
+
+func nearest_safe(pos: Vector3) -> Dictionary:
+\tfor s in safe_zones:
+\t\tif Vector2(pos.x - s.x, pos.z - s.z).length() < s.r:
+\t\t\treturn s
+\treturn {}
+
+func push_out(n: Node3D) -> void:
+\tfor b in blockers:
+\t\tvar d := Vector2(n.position.x - b.x, n.position.z - b.z)
+\t\tif d.length() < b.r:
+\t\t\tvar k: Vector2 = d.normalized() * (b.r + 0.02) if d.length() > 0.001 else Vector2(b.r, 0)
+\t\t\tn.position.x = b.x + k.x
+\t\t\tn.position.z = b.z + k.y
 
 func _build_ui() -> void:
 \tvar cl := CanvasLayer.new(); add_child(cl)
@@ -182,7 +337,24 @@ func _build_ui() -> void:
 \t_obj.add_theme_color_override("font_color", Color(1.0, 0.85, 0.4)); cl.add_child(_obj)
 \t_hearts = Label.new(); _hearts.position = Vector2(16, 72)
 \t_hearts.add_theme_color_override("font_color", Color(1.0, 0.45, 0.5)); cl.add_child(_hearts)
+\t_prompt = Label.new(); _prompt.position = Vector2(16, 100)
+\t_prompt.add_theme_color_override("font_color", Color(0.9, 0.88, 1.0)); cl.add_child(_prompt)
 \t_overlay = Control.new(); _overlay.set_anchors_preset(Control.PRESET_FULL_RECT); cl.add_child(_overlay)
+
+func _unhandled_input(event: InputEvent) -> void:
+\tif event is InputEventKey and event.pressed and event.keycode == KEY_E:
+\t\tif _reading:
+\t\t\t_reading = false
+\t\t\t_overlay.visible = false
+\t\t\treturn
+\t\tvar player := get_tree().get_first_node_in_group("player")
+\t\tif player == null: return
+\t\tfor r in readables:
+\t\t\tif Vector2(player.position.x - r.x, player.position.z - r.z).length() < 2.4:
+\t\t\t\t_reading = true
+\t\t\t\t_center_panel([str(r.label).to_upper(), str(r.text), "E to close"],
+\t\t\t\t\t"Close", func(): _reading = false; _overlay.visible = false)
+\t\t\t\treturn
 
 func _center_panel(lines: Array, btn_text: String, on_press: Callable) -> void:
 \tfor c in _overlay.get_children(): c.queue_free()
@@ -312,7 +484,24 @@ func _wake_wave(n: int) -> void:
 \t\tget_tree().root.get_node("Main").add_child(c)
 
 func _process(_delta: float) -> void:
-\tif done or not started or idx < 0 or idx >= steps.size(): return
+\tif done or not started: return
+\tvar pl := get_tree().get_first_node_in_group("player")
+\tif pl:
+\t\t# readable prompt (books/signs placed with text)
+\t\tvar near := ""
+\t\tfor r in readables:
+\t\t\tif Vector2(pl.position.x - r.x, pl.position.z - r.z).length() < 2.4:
+\t\t\t\tnear = str(r.label); break
+\t\t_prompt.text = ("E - read the " + near) if near != "" and not _reading else ""
+\t\t# hurts_touch rule: standing in a hurt zone drains 1 HP/s
+\t\t_hurt_cd = maxf(0.0, _hurt_cd - _delta)
+\t\tif _hurt_cd <= 0.0:
+\t\t\tfor hz in hurt_zones:
+\t\t\t\tif Vector2(pl.position.x - hz.x, pl.position.z - hz.z).length() < hz.r:
+\t\t\t\t\t_hurt_cd = 1.0
+\t\t\t\t\tplayer_hit(1)
+\t\t\t\t\tbreak
+\tif idx < 0 or idx >= steps.size(): return
 \tvar st: Dictionary = steps[idx]
 \tif st.get("kind") == "reach" and _beacon:
 \t\tvar player := get_tree().get_first_node_in_group("player")
@@ -396,9 +585,22 @@ own it completely.
    Steamworks docs walk through `steamcmd` in ~15 minutes.
 5. Pass Steam's build review (usually days), press **Release**.
 
+## What carried over from Fantasy Studio (Phase 46 parity)
+- **Placed items** (campfires, fences, signs, books, buildings, rocks,
+  chests, beacons) spawn as simplified primitives with colliders.
+- **Rules are honored**: safe zones hold hostiles at the edge of the glow,
+  `blocks_enemies` items push NPCs out (fences fence), hurt zones drain
+  1 HP/s, and books/signs are readable — walk up, press **E**.
+- **Views**: top-down and side-scroller exports use a fixed orthographic
+  camera with matching controls, same as the web build.
+- **Styles** map to Godot environment color grading (brightness/saturation,
+  horror adds fog) — a close mood match, not a shader-for-shader port.
+
 ## Honest notes
 - Race objectives from Fantasy Studio become reach-the-beacon here (rival
   route AI is a web-runtime feature for now).
+- Placed props are primitive approximations of the web runtime's shapes —
+  swap in real meshes freely, the rules stay attached to the position.
 - The game has no audio files yet — drop `.ogg` files into an
   `AudioStreamPlayer` node for music/sfx (Kenney.nl has great CC0 packs).
 - A Steam-worthy game usually wants 1–2 hours of content: duplicate
@@ -422,6 +624,21 @@ def _tscn(spec: GameSpec, assets: list[tuple[str, str]]) -> str:
     for i, (res_id, fname) in enumerate(assets):
         ext.append(f'[ext_resource type="PackedScene" path="res://assets/{fname}" id="{res_id}"]')
 
+    # STYLE approximation (Phase 46): the web runtime's post pack becomes
+    # Godot environment color adjustments — same mood, engine-native means
+    _STYLE_ADJ = {
+        "cartoon": (1.05, 1.35), "anime": (1.08, 1.18), "horror": (0.45, 0.5),
+        "pixel": (1.0, 1.12), "lowpoly": (1.02, 1.15),
+    }
+    adj = _STYLE_ADJ.get(spec.style)
+    env_extra = ""
+    if adj:
+        env_extra = (f"adjustment_enabled = true\n"
+                     f"adjustment_brightness = {adj[0]}\n"
+                     f"adjustment_saturation = {adj[1]}\n")
+    if spec.style == "horror":
+        env_extra += "fog_enabled = true\nfog_density = 0.03\nfog_light_color = Color(0.08, 0.09, 0.12, 1)\n"
+
     subs = f"""[sub_resource type="ProceduralSkyMaterial" id="skym"]
 sky_top_color = Color({sky_rgb}, 1)
 sky_horizon_color = Color({sky_rgb}, 1)
@@ -432,7 +649,7 @@ sky_material = SubResource("skym")
 [sub_resource type="Environment" id="env"]
 background_mode = 2
 sky = SubResource("sky")
-
+{env_extra}
 [sub_resource type="PlaneMesh" id="gmesh"]
 size = Vector2({size}, {size})
 
@@ -455,6 +672,12 @@ radius = 0.35
     if not steps:
         steps = [{"kind": "reach", "label": "the beacon", "count": 1}]
     steps_json = json.dumps(steps).replace('"', '\\"')
+    # placed items ride along with their honored rules (Phase 46 parity)
+    placed = [{"kind": it.kind, "name": it.name or it.kind, "x": it.x, "z": it.z,
+               "yaw_deg": it.yaw_deg, "collide": it.collide,
+               "interact": it.interact, "rules": it.rules}
+              for it in spec.world.placed_items]
+    placed_json = json.dumps(placed).replace('"', '\\"')
     intro = (spec.intro or "").replace('"', "'")
     win_text = (spec.win_text or "Mission complete!").replace('"', "'")
     reward = (spec.reward or "").replace('"', "'")
@@ -472,6 +695,7 @@ radius = 0.35
              '[node name="Mission" type="Node" parent="."]',
              'script = ExtResource("mgd")',
              f'steps_json = "{steps_json}"',
+             f'placed_json = "{placed_json}"',
              f'intro = "{intro}"',
              f'win_text = "{win_text}"',
              f'reward = "{reward}"',
@@ -564,7 +788,8 @@ def export_godot_game(spec: GameSpec, out_dir: str | Path, verbose: bool = True)
         _PROJECT.replace("__TITLE__", spec.title.replace('"', "'")), encoding="utf-8")
     (proj / "player.gd").write_text(
         _PLAYER_GD.replace("__WALK__", f"{spec.player.walk_speed:.2f}")
-                  .replace("__RUN__", f"{spec.player.run_speed:.2f}"), encoding="utf-8")
+                  .replace("__RUN__", f"{spec.player.run_speed:.2f}")
+                  .replace("__VIEW__", spec.view), encoding="utf-8")
     (proj / "npc.gd").write_text(_NPC_GD, encoding="utf-8")
     (proj / "mission.gd").write_text(_MISSION_GD, encoding="utf-8")
     (proj / "STEAM_GUIDE.md").write_text(_STEAM_GUIDE, encoding="utf-8")
