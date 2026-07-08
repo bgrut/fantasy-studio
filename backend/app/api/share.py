@@ -133,6 +133,24 @@ class PublishCharacter(BaseModel):
     description: str = Field(default="", max_length=300)
 
 
+def _put_with_retry(url: str, data: bytes, tok: str, tries: int = 4) -> None:
+    """Large uploads over consumer connections hit transient TLS resets
+    (SSLV3_ALERT_BAD_RECORD_MAC mid-PUT, 2026-07-08) — retry with backoff,
+    fresh connection each attempt."""
+    last: Exception | None = None
+    for attempt in range(tries):
+        try:
+            r = requests.put(url, data=data,
+                             headers={**_hdrs(tok), "Connection": "close"},
+                             timeout=300)
+            r.raise_for_status()
+            return
+        except Exception as e:
+            last = e
+            time.sleep(1.5 * (attempt + 1))
+    raise RuntimeError(f"upload failed after {tries} tries: {last}")
+
+
 def _upload_tree(url: str, tok: str, api_kind: str, item_id: str, root: Path) -> int:
     n = 0
     for f in sorted(root.rglob("*")):
@@ -140,9 +158,8 @@ def _upload_tree(url: str, tok: str, api_kind: str, item_id: str, root: Path) ->
             continue
         rel = f.relative_to(root).as_posix()
         _pub_state.update({"status": "uploading", "file": rel, "done": n})
-        r = requests.put(f"{url}/api/{api_kind}/{item_id}/files/{rel}",
-                         data=f.read_bytes(), headers=_hdrs(tok), timeout=300)
-        r.raise_for_status()
+        _put_with_retry(f"{url}/api/{api_kind}/{item_id}/files/{rel}",
+                        f.read_bytes(), tok)
         n += 1
     return n
 
@@ -203,9 +220,8 @@ def publish_character(req: PublishCharacter):
             n = 0
             for rel, f in files.items():
                 _pub_state.update({"status": "uploading", "file": rel})
-                rr = requests.put(f"{url}/api/characters/{cid}/files/{rel}",
-                                  data=f.read_bytes(), headers=_hdrs(tok), timeout=300)
-                rr.raise_for_status()
+                _put_with_retry(f"{url}/api/characters/{cid}/files/{rel}",
+                                f.read_bytes(), tok)
                 n += 1
             author = _cfg().get("author") or "anonymous"
             r = requests.post(f"{url}/api/characters/{cid}/publish", headers=_hdrs(tok),
