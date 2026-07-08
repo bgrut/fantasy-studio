@@ -530,7 +530,12 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             if it.asset:                       # re-export of a resolved spec
                 kept_items.append(it)
                 continue
-            glb = library.resolve(k) or ensure_playable(k, verbose=False)
+            # LIVING PLACEMENTS: prefer the already-baked ANIMATED variant so
+            # a placed cat breathes its idle instead of freezing in bind pose
+            # (never triggers a bake — only uses what's cached)
+            _anim_glb = BACKEND_ROOT / "assets" / "library" / f"{k}_anim.glb"
+            glb = (str(_anim_glb) if _anim_glb.exists() else None) \
+                or library.resolve(k)
             if not glb:
                 try:
                     from app.game_export.generate import ensure_asset

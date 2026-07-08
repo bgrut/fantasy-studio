@@ -10,6 +10,19 @@ Pre-1.0 versions are internal milestones during the constraint sprint leading to
 
 ## [Unreleased]
 
+### Added — Phase 48: Quality uplevel — living placements, structure flavors, sky life (2026-07-08)
+- **Placed creatures are ALIVE**: placements resolve to the already-baked
+  animated variant when one exists and play their idle clip — a cat placed
+  at the shelter breathes instead of freezing in bind pose. Never triggers
+  a bake; uses only what's cached. `__game.placed()` reports `alive`.
+- **Goal structures have flavor**: "reach the castle" builds a stone keep
+  with four cone-capped corner towers and a parapet; "reach the lighthouse"
+  adds a striped light column with a lamp visible for miles. Everything
+  else keeps the warm cottage. All walk-in, all verified.
+- **Sky life**: day-family skies get 7 drifting soft clouds and a wheeling
+  bird flock (canvas sprites, near-zero cost, seeded per world). Horror
+  skies stay dead quiet, as they should.
+
 ### Added — Phase 47: The goal is a PLACE — walk-in buildings + creative-prompt readiness (2026-07-08)
 - **Walk-in goal structures**: when a reach objective names a structure
   ("reach the cat shelter", "the cabin", "the lighthouse" — 20 nouns), a

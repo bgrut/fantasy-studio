@@ -353,8 +353,17 @@ async function main() {
       const S = new THREE.Group();
       S.position.copy(goalPos);
       S.rotation.y = doorYaw;
-      const wallMat = new THREE.MeshStandardMaterial({ color: 0x9a8f7e, roughness: 0.9 });
-      const roofMat = new THREE.MeshStandardMaterial({ color: 0x6a4438, roughness: 0.85 });
+      // structure FLAVOR by noun (Phase 48): castles are stone keeps with
+      // corner towers, lighthouses carry a light column — not every goal
+      // is a cottage
+      const _kindWord = _structHit[1];
+      const isCastle = ['castle', 'fort', 'tower'].includes(_kindWord);
+      const isLighthouse = ['lighthouse', 'station'].includes(_kindWord);
+      const wallMat = new THREE.MeshStandardMaterial({
+        color: isCastle ? 0x7d818c : isLighthouse ? 0xe8e4da : 0x9a8f7e,
+        roughness: 0.9 });
+      const roofMat = new THREE.MeshStandardMaterial({
+        color: isCastle ? 0x5a5e6a : 0x6a4438, roughness: 0.85 });
       const warmMat = new THREE.MeshStandardMaterial({
         color: 0xffd88a, emissive: 0xffc86a, emissiveIntensity: 1.6 });
       const addBox = (w, h, d, x, y, z, mat) => {
@@ -371,11 +380,47 @@ async function main() {
       addBox(2.3, 3.1, 0.28, -2.05, 1.63, 2.55);              // front, door gap
       addBox(2.3, 3.1, 0.28, 2.05, 1.63, 2.55);
       addBox(1.8, 0.9, 0.28, 0, 2.73, 2.55);                  // lintel
-      const roof = new THREE.Mesh(new THREE.ConeGeometry(4.9, 2.2, 4), roofMat);
-      roof.rotation.y = Math.PI / 4;
-      roof.position.y = 4.28;
-      roof.castShadow = true;
-      S.add(roof);
+      if (isCastle) {
+        // corner towers with cone caps — reads "keep" from any distance
+        for (const [tx, tz] of [[-3.06, -2.55], [3.06, -2.55], [-3.06, 2.55], [3.06, 2.55]]) {
+          const tw = new THREE.Mesh(new THREE.CylinderGeometry(0.72, 0.82, 4.6, 10), wallMat);
+          tw.position.set(tx, 2.3, tz);
+          tw.castShadow = true;
+          S.add(tw);
+          const cap = new THREE.Mesh(new THREE.ConeGeometry(0.95, 1.2, 10), roofMat);
+          cap.position.set(tx, 5.2, tz);
+          S.add(cap);
+        }
+        const parapet = new THREE.Mesh(new THREE.BoxGeometry(6.6, 0.5, 5.6), roofMat);
+        parapet.position.y = 3.4;
+        S.add(parapet);
+      } else {
+        const roof = new THREE.Mesh(new THREE.ConeGeometry(4.9, 2.2, 4), roofMat);
+        roof.rotation.y = Math.PI / 4;
+        roof.position.y = 4.28;
+        roof.castShadow = true;
+        S.add(roof);
+      }
+      if (isLighthouse) {
+        // the light column: striped tower + a bright lamp visible for miles
+        const col = new THREE.Mesh(new THREE.CylinderGeometry(1.0, 1.3, 6.5, 14), wallMat);
+        col.position.y = 6.5;
+        S.add(col);
+        for (const sy of [4.6, 6.5, 8.4]) {
+          const stripe = new THREE.Mesh(new THREE.CylinderGeometry(1.12, 1.12, 0.55, 14),
+            new THREE.MeshStandardMaterial({ color: 0xc23b3b, roughness: 0.8 }));
+          stripe.position.y = sy;
+          S.add(stripe);
+        }
+        const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.8, 14, 10),
+          new THREE.MeshStandardMaterial({ color: 0xfff2c0, emissive: 0xffe9a0,
+                                           emissiveIntensity: 3.2 }));
+        lamp.position.y = 10.2;
+        S.add(lamp);
+        const beam = new THREE.PointLight(0xffe9a0, 2.4, 40);
+        beam.position.y = 10.2;
+        S.add(beam);
+      }
       for (const wx of [-2.05, 2.05]) {                       // warm windows
         const w = new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.85, 0.1), warmMat);
         w.position.set(wx, 1.8, 2.62);
@@ -441,6 +486,56 @@ async function main() {
     sp.scale.setScalar(3.2);
     return sp;
   }
+  // ── SKY LIFE (Phase 48): drifting clouds + a distant bird flock — the sky
+  // stops being an empty gradient. Day-family palettes only.
+  const clouds = [], birds = [];
+  if (['day', 'sunset', 'overcast', 'dusk'].includes(SPEC.world.sky)
+      && (SPEC.style || 'default') !== 'horror') {
+    const cc = document.createElement('canvas');
+    cc.width = 128; cc.height = 64;
+    const cg = cc.getContext('2d');
+    for (const [bx, by, br] of [[36, 40, 22], [64, 32, 26], [92, 42, 20], [58, 46, 24]]) {
+      const grad = cg.createRadialGradient(bx, by, 2, bx, by, br);
+      grad.addColorStop(0, 'rgba(255,255,255,0.85)');
+      grad.addColorStop(1, 'rgba(255,255,255,0)');
+      cg.fillStyle = grad;
+      cg.fillRect(0, 0, 128, 64);
+    }
+    const ctex = new THREE.CanvasTexture(cc);
+    const rngS = mulberry32(SPEC.seed + 77);
+    for (let i = 0; i < 7; i++) {
+      const sp = new THREE.Sprite(new THREE.SpriteMaterial({
+        map: ctex, transparent: true, opacity: 0.45 + rngS() * 0.25, depthWrite: false }));
+      sp.scale.set(26 + rngS() * 22, 9 + rngS() * 6, 1);
+      sp.position.set((rngS() - 0.5) * gsize * 1.4, 38 + rngS() * 18,
+                      (rngS() - 0.5) * gsize * 1.4);
+      scene.add(sp);
+      clouds.push({ sp, v: 0.5 + rngS() * 0.7 });
+    }
+    // birds: dark chevrons wheeling high — tiny, but the sky feels inhabited
+    const bc = document.createElement('canvas');
+    bc.width = bc.height = 32;
+    const bg2 = bc.getContext('2d');
+    bg2.strokeStyle = 'rgba(30,30,40,0.9)';
+    bg2.lineWidth = 3;
+    bg2.lineCap = 'round';
+    bg2.beginPath();
+    bg2.moveTo(4, 20);
+    bg2.quadraticCurveTo(16, 8, 16, 16);
+    bg2.quadraticCurveTo(16, 8, 28, 20);
+    bg2.stroke();
+    const btex = new THREE.CanvasTexture(bc);
+    for (let i = 0; i < 5; i++) {
+      const sp = new THREE.Sprite(new THREE.SpriteMaterial({
+        map: btex, transparent: true, depthWrite: false }));
+      sp.scale.setScalar(1.6);
+      birds.push({ sp, a: rngS() * Math.PI * 2, r: 20 + rngS() * 26,
+                   h: 26 + rngS() * 12, w: 0.05 + rngS() * 0.04,
+                   cx: (rngS() - 0.5) * gsize * 0.4, cz: (rngS() - 0.5) * gsize * 0.4 });
+      scene.add(sp);
+    }
+  }
+
   // invisible boundary walls — the park has edges; you can't run off the world
   const wh = 4, ext = gsize / 2;
   for (const [wx, wz, hx, hz] of [[ext, 0, 0.5, ext], [-ext, 0, 0.5, ext],
@@ -1429,10 +1524,17 @@ async function main() {
   }
   for (const [pIdx, it] of (SPEC.world.placed_items || []).entries()) {
     try {
-      let obj, hgt = it.height_m || 0;
+      let obj, hgt = it.height_m || 0, pAnim = null;
       if (it.asset) {
         const gltf = await loadGLB(it.asset);
         obj = prepModel(gltf, hgt || 1.0, false).holder;
+        // LIVING PLACEMENTS (Phase 48): placed creatures breathe — play the
+        // idle clip instead of freezing in bind pose (shelter cats look home)
+        if (gltf.animations && gltf.animations.length) {
+          pAnim = new THREE.AnimationMixer(obj);
+          const clip = gltf.animations.find(c => c.name === 'idle') || gltf.animations[0];
+          pAnim.clipAction(clip).play();
+        }
       } else {
         const pp = procProp((it.kind || 'beacon').toLowerCase());
         obj = pp.g;
@@ -1461,7 +1563,7 @@ async function main() {
                              text: it.interact,
                              r: Math.max(2.1, (bb.max.x - bb.min.x)) });
       }
-      placedItems.push({ obj, it,
+      placedItems.push({ obj, it, anim: pAnim,
                          r: Math.max((bb.max.x - bb.min.x), (bb.max.z - bb.min.z)) / 2 });
     } catch (e) { console.warn('[game] placed item failed:', e.message); }
   }
@@ -2051,7 +2153,7 @@ async function main() {
                          left: collectibles.filter(c => c.mesh.parent).map(c => c.mesh.position.toArray()) }),
     npcs: () => npcs.filter(n => !n.gone).map(n => ({ behavior: n.behavior, dead: !!n.dead, pos: n.obj.position.toArray() })),
     placed: () => placedItems.map(p => ({ kind: p.it.kind, x: p.it.x, z: p.it.z,
-                                          interact: !!p.it.interact })),
+                                          interact: !!p.it.interact, alive: !!p.anim })),
     reading: () => ({ readable: readable ? readable.label : null, open: reading }),
     inspect: on => setInspectOn(on),
     view: VIEW,
@@ -2660,6 +2762,21 @@ async function main() {
       stepHealthPacks(dt, nt);
       stepInteract(nt);
       if (!inspectOn) stepHurtZones(dt, nt);
+    }
+    // placed creatures idle-breathe even while paused/inspecting — life sells
+    for (const p of placedItems) {
+      if (p.anim) p.anim.update(dt);
+    }
+    // sky life drifts
+    for (const c of clouds) {
+      c.sp.position.x += c.v * dt;
+      if (c.sp.position.x > gsize * 0.75) c.sp.position.x = -gsize * 0.75;
+    }
+    for (const b of birds) {
+      b.a += b.w * dt * 8;
+      b.sp.position.set(b.cx + Math.cos(b.a) * b.r,
+                        b.h + Math.sin(b.a * 2) * 1.5,
+                        b.cz + Math.sin(b.a) * b.r);
     }
 
     // procedural swim/flap motion: time + speed-scaled amplitude
