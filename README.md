@@ -6,7 +6,7 @@
 
 ### *What do you imagine?*
 
-**Local AI that directs real 3D cinematic video — and builds playable games. No diffusion models. You own every frame.**
+**Type a sentence. Get a playable 3D game or a cinematic video — no code, running entirely on your own machine. Then reshape it in real time by pointing at the world.**
 
 ### ⬇️ Get it — one command, installs everything
 
@@ -18,162 +18,117 @@ irm https://raw.githubusercontent.com/bgrut/fantasy-studio/main/bootstrap.ps1 | 
 
 <div align="center">
 
-*Then `.\desktop\launch.ps1` opens the app. 🕹️ Game mode needs **no GPU** · prereqs auto-checked ([details](INSTALL.md))*
+*Then `.\desktop\launch.ps1` opens the app. 🕹️ **Game mode needs no GPU** · prereqs auto-checked ([details](INSTALL.md))*
 
 <br/>
 
 [![License: BSL 1.1](https://img.shields.io/badge/License-BSL%201.1-blue.svg)](LICENSE)
 [![Discord — coming soon](https://img.shields.io/badge/Discord-coming%20soon-5865F2?logo=discord&logoColor=white)](#)
-[![Patreon — coming soon](https://img.shields.io/badge/Patreon-coming%20soon-FF424D?logo=patreon&logoColor=white)](#)
 [![TikTok](https://img.shields.io/badge/TikTok-%40Fantasylab.ai-000000?logo=tiktok&logoColor=white)](https://www.tiktok.com/@fantasylab.ai)
 [![YouTube](https://img.shields.io/badge/YouTube-%40Fantasy__lab__ai-FF0000?logo=youtube&logoColor=white)](https://youtube.com/@Fantasy_lab_ai)
 [![GitHub stars](https://img.shields.io/github/stars/bgrut/fantasy-studio?style=social)](https://github.com/bgrut/fantasy-studio)
 
-[Watch demo](https://youtube.com/@Fantasy_lab_ai) · [Install](INSTALL.md) · [Roadmap](ROADMAP.md) · [Discord (soon)](#) · [Waitlist](https://fantasylab.ai)
+[Watch demo](https://youtube.com/@Fantasy_lab_ai) · [Install](INSTALL.md) · [Roadmap](ROADMAP.md) · [Waitlist](https://fantasylab.ai)
 
 </div>
 
 ---
 
 <div align="center">
-<img src=".github/assets/hero-demo.gif" alt="Prompt to cinematic 3D in under 2 minutes" width="780"/>
+<img src=".github/assets/hero-demo.gif" alt="Prompt to playable 3D in minutes" width="780"/>
 
-*From prompt to cinematic 3D video in under 2 minutes. Rendered locally. No cloud. No subscription.*
+*One sentence → a playable game or a cinematic video, in minutes. Rendered locally. No cloud. No subscription. No code.*
 </div>
-
----
-
-> ## 🚧 Pre-launch / Early access — public source release Mid-May 2026
->
-> Fantasy Studio is in private polish until launch. The repo is public so engineers can read the architecture and early adopters can join the waitlist. Installation works today; expect rough edges. Join the waitlist at **[fantasylab.ai](https://fantasylab.ai)** to get launch-day access and the first wave of curated assets.
 
 ---
 
 ## What is Fantasy Studio?
 
-**Fantasy Studio is a desktop app that turns one-line prompts into directed 3D cinematic video using Blender, locally, on your hardware.** You type *"a polar bear walking through the arctic at sunset"* and 90 seconds later you have a 12-second MP4 — plus the underlying `.blend` file you can re-light, re-frame, and re-render in Blender forever.
+**Fantasy Studio is a local-first desktop app that turns a plain-language sentence into two things: a playable 3D game, or a directed cinematic video — with no coding, no cloud, and no per-render fee.** Everything runs on your own hardware.
 
-No video diffusion anywhere in the pipeline — every frame is rendered, not hallucinated. A local LLM (Gemma 3 via Ollama) reads your prompt and **directs** the scene; local image-AI builds the cast: SDXL paints an identity-faithful reference of your subject, and **Microsoft TRELLIS.2** (MIT) turns it into a photoreal, textured 3D mesh — which gets auto-rigged, animated, lit, and rendered for real by Blender (Cycles or Eevee) on your GPU.
+- 🕹️ **Game mode** — *"a fox with 9 lives on a dangerous mountain trek: collect 6 food, avoid the hostile wolves, then reach the shelter"* → a playable third-person game in about a minute, **with no GPU**. Then **Inspect** the running game: hover to identify anything, click a spot, and type — *"place a campfire here," "place a sign that says stay near the fire," "fence off this pass."* It generates and drops it in seconds, and the rules are real (a sign that says the wolves fear the light means they actually won't enter the glow).
+- 🎬 **Video mode** — *"a polar bear walking through the arctic at sunset"* → a cinematic MP4 in ~90 seconds, plus the underlying `.blend` file you can re-light and re-render in Blender forever. Every frame is **rendered, not hallucinated** — no video diffusion anywhere in the pipeline.
 
-> **🚀 Engine V2 (current):** the full prompt → photoreal-3D → animated-MP4 pipeline, quality gates, A/B results, and licensing table are documented in **[docs/PIPELINE_V2.md](docs/PIPELINE_V2.md)**. The V1.x recipe/template system described below remains as the procedural fallback path.
+Both modes share the same brain: a **local LLM** (Gemma 3 via Ollama) reads your prompt and directs the scene, and local image-AI (SDXL → Microsoft TRELLIS.2, MIT) builds the cast — an identity-faithful 3D character generated once and cached in your library forever. No API keys. No accounts. No telemetry. Nothing you make leaves your machine unless you choose to publish it.
 
-This is a deliberate counter-bet to text-to-video diffusion. Where Sora-class tools generate pixels and ask you to accept whatever comes out, Fantasy Studio generates **a Blender scene** and gives you the directorial controls to refine it. Your output is deterministic, editable, ownable, and — because nothing leaves your machine — cost-zero per render after install.
+> The bet: **AI directs real tools instead of replacing them.** Where diffusion tools generate pixels and ask you to accept whatever comes out, Fantasy Studio generates *a game you can edit* and *a Blender scene you can re-render* — deterministic, editable, and yours to own.
 
-## Why this exists
+---
 
-In late 2025 OpenAI quietly killed Sora's consumer offering. The reason wasn't a moral failing or a lawsuit — it was math. Diffusion video at usable quality costs $0.50–$2.00 per render and produces output the user can't actually direct. You can re-roll the dice; you can't re-frame the shot. For real creative work, that's the wrong tool.
+## 🕹️ The game engine — build a game by describing it, then edit it live
 
-Fantasy Studio takes the opposite bet: **AI directs real tools, it doesn't replace them.** The model is the cinematographer and casting director; Blender is still the camera and the render farm. Cost per render is electricity. Output quality is bounded by Blender, not by training data. Iteration is parametric — change the lighting preset, hit render, get the same scene with new mood.
+This is what makes Fantasy Studio different from every other "AI game" tool: **you don't just generate a game, you keep shaping it — visually, in real time, with no code.**
 
-## Who this is for
+- **One sentence → a playable game.** Third-person controls (WASD / gamepad / touch), real motion-capture walk/run, physics, an objective grammar you can freely combine: **collect · defeat · reach · survive · race**, health & lives, win/lose, and a narrative intro.
+- **Inspect mode — point at the world and change it.** Hover any object and a live chip identifies it (`wolf · hostile · speed 3`). Click a spot to select it, then type a plain-language edit. Two placement tools: **📍 Point** (one spot) and **📏 Line** (drag a run — a fence tiles between two clicks). Placed items include instant procedural props (book, sign, chest, building, rock, beacon, campfire, fence) or any noun from your library.
+- **Rules that are actually honored.** Toggle rule chips on any placed object — 🔥 safe zone (hostiles fear it), 🚧 blocks enemies, ⚡ hurts on touch — and the runtime enforces them. Books and signs are **readable** (walk up, press E). A campfire is a real safe zone, not decoration.
+- **📜 The Truth Table.** One panel lists every rule your game actually enforces — hero stats, mission steps, enemy behavior, placed-item rules, rewards — derived from the live spec. Your game's contract, on screen.
+- **Style presets you pick, never guessed.** 🎬 Photoreal · 🖍️ Cartoon (cel + ink outlines) · 🌸 Anime · 🕯️ Horror · 👾 Pixel · 📐 Low-poly. One global look applied coherently to the whole world.
+- **View presets.** 🧊 3D third-person · 🗺️ Top-down 2D (Zelda-style) · 🎞️ Side-scroller. Same world, a different genre from one chip.
+- **Walk-in destinations.** "Reach the shelter / cabin / lighthouse / castle" builds a real structure — open door, warm windows, a lit hearth — that you win by stepping inside.
+- **Levels & projects.** Stack levels into one game via clickable level tiles (click to play, inspect, and edit any level, then save it back), and export the whole thing as a hub-menu game.
 
-- **Indie filmmakers** prototyping cinematic shots before live-action prep
-- **Marketers** making product hero videos and social cuts without a 3D team
-- **YouTubers** needing scene-specific B-roll that exact stock footage can't supply
-- **Game developers** producing cinematic trailers and pitch reels in hours, not weeks
-- **Creators on TikTok/Shorts** generating vertical 3D content at the cadence the algorithm rewards
-- **Storyboard artists** turning written beats into moving previs
-- **Anyone who wants to make 3D video** without first learning Blender
+<div align="center">
+<img src=".github/assets/showcase-bear.gif" alt="Fantasy Studio game mode" width="760"/><br/>
+<sub>Prompt → playable world → click-to-place a campfire and a readable sign → the wolves keep their distance from the firelight.</sub>
+</div>
 
-## Key features
+---
 
-- 🎬 **AI cinematographer** — Local Gemma 3 12B picks recipe, cast, camera, lighting from your prompt, with a deterministic fallback when the LLM is unavailable
-- 🎨 **15 cinematic recipes** at launch (`vehicle_desert_hero`, `hero_ocean_horizon`, `cat_canyon_cinematic`, `animal_forest_intimate`, …) plus a layered template system that composes environment / composition / lighting / animation / ambient / post into one render
-- 📚 **316-asset curated library** spanning 94 characters, 61 environments, 38 vehicles, 37 props, plus auto-fetch fallback to Objaverse and Sketchfab when the library doesn't have what you asked for
-- 🌅 **Procedural HDRI + recipe-driven lighting** — golden hour, sunset landscape, night automotive, cinematic 3-point, all dispatched per recipe
-- 🎯 **Four render tiers** — Quick Preview (Eevee, ~30s), Polished (Eevee+effects, ~1m), High Quality (Cycles, ~3m), Final Cinematic (Cycles full, ~10m)
-- 📦 **Real exports** — MP4 video, animated GIF, PNG sequence, **and the `.blend` source file** so the scene is yours to re-edit forever
-- 🛡️ **HERO_VERIFY render gate** — every render passes seven structural checks (bbox sanity, frustum, framing, primitive detection, orientation, grounding) before frames hit disk
-- 🔧 **Non-destructive asset healing** — orientation, ground offset, shape classification computed once on ingest and stored as metadata; original `.glb` / `.blend` files never touched
-- 🕹️ **NEW: Playable game export (Phase 26)** — the same prompt that makes a video can make a *game*: `python scripts/export_game.py --prompt "a lone wanderer in a misty forest at night, collect 7 fireflies"` emits a self-contained three.js web build (WASD/gamepad/touch, real mocap walk/run, physics, NPCs that wander or follow, collectible objectives with a win screen). Runs offline in any browser — vendored three.js (MIT) + Rapier physics (Apache-2.0), zero CDN. A Godot 4 project export (`--godot`, MIT engine) ships beside it
-- 🖥️ **NEW: Studio modes + desktop app (Phase 30)** — a 🎬 Video / 🕹️ Game chooser right in the Studio: game mode extracts your idea via local Ollama, builds the game in ~30-60s **with no GPU**, and embeds it playable in the app (Rebuild / Fullscreen). Ships as a native desktop window via Tauri 2 (`desktop/launch.ps1`)
-- 🌐 **100% local execution** — no API keys, no cloud, no per-render fee, no rate limits, no creative work leaving your machine
-- 📜 **Full pipeline trace logging** — every render writes a `pipeline_trace.log` next to the video so you can debug exactly what the AI directed and why
+## 🌐 Share it — a link anyone can play
 
-## Get started
+Every game you build is a **self-contained web build** (vendored three.js MIT + Rapier Apache-2.0, zero CDN, runs offline). Three ways to ship:
 
-```powershell
-git clone https://github.com/bgrut/fantasy-studio && cd fantasy-studio
-.\setup.ps1                 # one-command install (Python venv + npm + env files)
-.\desktop\launch.ps1        # opens the native Fantasy Studio desktop app
-```
+- **Community Marketplace (in-app).** Publish a full game or a generated character to your own free Cloudflare worker and it lands on a public feed — anyone gets a link they can open in Chrome, Firefox, or on their phone and play instantly. Browse the community, and install others' characters straight into your library to cast in your own prompts. Local-first: nothing uploads until you press Publish, and shared work is CC-BY-4.0. ([privacy & sharing policy](PRIVACY.md))
+- **Zip it.** Drop the `dist/` folder on itch.io or any static host.
+- **Export to Godot 4** (free, MIT). Get a real Godot project — press F5 and it plays, with your missions, rules, placed items, readable signs, styles and views carried over. From there you own it completely and can take it toward a Steam release. Every export ships a `STEAM_GUIDE.md` walking the path.
 
-Full prerequisites and troubleshooting: **[INSTALL.md](INSTALL.md)**. Key facts:
-- 🕹️ **Game mode needs no GPU** — build and play from prompts on any laptop
-- 🎬 Video mode wants an NVIDIA GPU (8 GB+) for Cycles renders and new-asset generation
-- Every game build is a **different level** (world seed shown in-app; "New level" rerolls, reuse a seed to reproduce a favorite)
+---
 
-## Ship the games you make
+## 🎬 The video engine — direct a cinematic shot, own every frame
 
-Each build is a **self-contained folder** (vendored MIT/Apache libs, zero CDN):
-zip `dist/` for itch.io or any static host, or add `--godot` for a **Godot 4
-project** you can open in the free editor and export to Windows/macOS/Linux/mobile —
-no royalties. Details: [INSTALL.md → Deploying](INSTALL.md#deploying-the-games-you-make).
+The same prompt that makes a game can make a film. Video mode renders **real Blender frames** — no diffusion, no random re-rolls.
 
-## See it in action
+- **AI cinematographer** — the local LLM picks cast, camera, lighting, and mood from your prompt; a deterministic fallback keeps renders working if the LLM is unavailable.
+- **Real 3D characters** — SDXL paints an identity-faithful reference, TRELLIS.2 turns it into a textured mesh, and Blender auto-rigs, animates (real CMU motion capture), lights, and renders it.
+- **Story Director** — one prompt → a multi-scene film, with scenes assembled into a single MP4. Edit any scene later ("make it a snowy night") and re-render just that scene.
+- **Render tiers** — Quick Preview (Eevee, ~30s) → Final Cinematic (Cycles, 4K). The same scene produces all four.
+- **Real exports** — MP4, GIF, PNG sequence, **and the `.blend` source file**, so the scene is yours to re-edit forever.
 
 <div align="center">
 
 |  |  |
 |---|---|
-| <img src=".github/assets/showcase-bear.gif" width="380"/><br/>*"a polar bear in the arctic at sunset"* — `hero_ocean_horizon` | <img src=".github/assets/showcase-ferrari.gif" width="380"/><br/>*"a ferrari racing at sunset"* — `vehicle_desert_hero` |
-| <img src=".github/assets/showcase-horse.gif" width="380"/><br/>*"a horse galloping through the mountains"* — `animal_mountain_walk` | <img src=".github/assets/showcase-rhino.gif" width="380"/><br/>*"a rhinoceros in the desert"* — `hero_desert_epic` |
+| <img src=".github/assets/showcase-ferrari.gif" width="380"/><br/>*"a ferrari racing at sunset"* | <img src=".github/assets/showcase-horse.gif" width="380"/><br/>*"a horse galloping through the mountains"* |
 
 </div>
 
 ---
 
-## Inside the app
+## Who this is for
 
-A guided tour of the studio. Type a prompt, AI directs, Blender renders — all local, all yours.
-
-### The studio
-
-<img src=".github/assets/guide-first-render.png" alt="Fantasy Studio main interface" width="900"/>
-
-The main canvas. Type any scene you can imagine. The director plans casting, lighting, and camera. Blender renders locally on your machine. The `.blend` export is yours forever.
-
-### Pick your render quality
-
-<img src=".github/assets/guide-tier-selector.png" alt="Render tier selector" width="900"/>
-
-Four tiers, from Quick Preview (~30 s, Eevee) to Final Cinematic (production-ready, 512-sample Cycles). Iterate fast, then commit to a hero render when you're ready.
-
-### Cast your scene
-
-<img src=".github/assets/guide-cast-panel.png" alt="Cast panel" width="900"/>
-
-The director auto-picks a hero and environment that match your prompt. Don't like the choice? Browse the full library and pick your own. Every asset is orientation-corrected and ground-aligned through the V1.2 healing pipeline.
-
-### Direct every detail
-
-<img src=".github/assets/guide-scene-controls.png" alt="Scene controls" width="900"/>
-
-Override the AI's choices when you want fine control. Lighting presets, camera modes, duration, brand color, template selection — every control flows directly into the render manifest.
-
-### Refine with words
-
-<img src=".github/assets/guide-refine-panel.png" alt="Refine panel" width="900"/>
-
-After the first render, refine in natural language. *"Make it more dramatic."* *"Lower the camera."* *"Switch to golden hour."* The director iterates on the existing scene without starting over.
-
-### Generate variations
-
-<img src=".github/assets/guide-sweep.png" alt="Variations sweep" width="900"/>
-
-Render multiple variations of a scene with one click. Pick the one that lands and promote it to your main render. Useful for hero shots where you want options.
-
-For the full walkthrough — prompt patterns, tier guidance, Blender export workflow — see **[docs/USER_GUIDE.md](docs/USER_GUIDE.md)**.
+- **Anyone with a game or video idea and no engine skills** — describe it, play it, tweak it, ship a link.
+- **Indie devs & hobbyists** — prototype a playable level in a minute, then graduate it to Godot for a real build.
+- **Filmmakers, marketers & YouTubers** — cinematic B-roll and hero shots without a 3D team, editable forever.
+- **Creators on TikTok/Shorts** — vertical 3D content at the cadence the algorithm rewards.
+- **Educators & tinkerers** — a no-code sandbox where "what if I add a rule here?" is one click away.
 
 ---
 
-## What works well right now (constraint-sprint honesty)
+## Get started
 
-Fantasy Studio is **best at single-subject cinematic shots** — one animal, one vehicle, or one character placed in an environment, performing a simple action (running, standing, flying, racing).
+```powershell
+# One command — installs everything (Blender, Ollama, Python venv, npm, env files)
+irm https://raw.githubusercontent.com/bgrut/fantasy-studio/main/bootstrap.ps1 | iex
 
-Multi-subject composition — a character holding a prop, two characters interacting, named-IP characters like Mickey or Elmo — is intentionally **not in V1**. We chose to ship a tool that does one thing exceptionally rather than many things poorly. V2 work on multi-subject scene composition with action verbs is on the [roadmap](ROADMAP.md).
+.\desktop\launch.ps1        # opens the native Fantasy Studio desktop app
+```
 
-This isn't a limitation we're hiding — it's a positioning we're making explicit. Single-subject cinematic shots are 80% of what indie creators, marketers, and YouTubers need, and Fantasy Studio is engineered to make them feel inevitable.
+Full prerequisites and troubleshooting: **[INSTALL.md](INSTALL.md)**. Key facts:
+
+- 🕹️ **Game mode needs no GPU** — build and play from prompts on any laptop.
+- 🎬 **Video mode** wants an NVIDIA GPU (8 GB+) for Cycles renders and first-time character generation. (Characters are generated once, then cached and reused instantly forever — including across game levels, so the same fox stays the same fox.)
+- Every fresh game build is a **new world** (seed shown in-app; reuse a seed to reproduce a favorite).
 
 ---
 
@@ -181,228 +136,97 @@ This isn't a limitation we're hiding — it's a positioning we're making explici
 
 ```mermaid
 flowchart TB
-    A["Prompt<br/>(natural language)"] --> B["Local LLM Director<br/>Gemma 3 12B via Ollama"]
-    B -->|fallback| C["Deterministic Director<br/>(rule-based)"]
-    B --> D["Recipe Dispatcher<br/>(weighted scoring across 15 recipes)"]
-    C --> D
-    D --> E["Layer Composition<br/>environment + composition + lighting<br/>+ animation + ambient + post"]
-    E --> F["Asset Resolution<br/>library matcher → Objaverse → Sketchfab"]
-    F --> G["Asset Healing (V1.2)<br/>orientation · grounding · classification"]
-    G --> H["Scene Assembly<br/>FORCED_HERO_TAG · BLEND_DEDUP · LOD_CLEANUP"]
-    H --> I["HERO_VERIFY Gate<br/>7 structural checks"]
-    I --> J["Blender Render<br/>Cycles or Eevee per tier"]
-    J --> K["Output<br/>MP4 + .blend + GIF + PNG seq + credits.txt + trace log"]
+    A["Prompt<br/>(natural language)"] --> B["Local LLM Director<br/>Gemma 3 via Ollama"]
+    B -->|fallback| C["Deterministic Director<br/>(rule-based, always plays)"]
+    B --> S{"Game or Video?"}
+    C --> S
+    S -->|🕹️ Game| G["GameSpec<br/>casting · objectives · rules · style · view"]
+    G --> GR["three.js + Rapier runtime<br/>Inspector · placed items · Truth Table"]
+    GR --> GX["Play in-app · share link · export Godot 4"]
+    S -->|🎬 Video| V["Scene plan<br/>cast · camera · lighting · mood"]
+    V --> VA["SDXL → TRELLIS.2 → Blender<br/>rig · animate · light · render"]
+    VA --> VX["MP4 + .blend + GIF + PNG"]
 ```
 
-### Local LLM director (with deterministic fallback)
+**Local, deterministic, ownable.** The LLM is the director; three.js and Blender are the engines. Same prompt → same world (games are seeded; videos are real scene files). Cost per render is electricity. Characters you generate are cached in a local library and reused instantly — the 30-minute image-to-3D generation only ever happens the first time a brand-new noun appears.
 
-Fantasy Studio runs **Google Gemma 3 12B** locally via [Ollama](https://ollama.com). The director prompt is structured: scene family, subject, environment, mood, energy, weather. The LLM emits a strict JSON manifest. When the LLM is unreachable or returns malformed JSON, a deterministic rule-based director takes over so renders never block on inference. Both paths produce the same manifest schema downstream, so the rest of the pipeline doesn't know or care which director ran.
-
-### V1.2 asset healing pipeline
-
-Most online 3D models are broken in predictable ways: rotated 90° wrong, origin floating mid-air, no shape classification, wrong scale band. Traditional pipelines either reject these assets or render them broken. Fantasy Studio's V1.2 healer **runs once on ingest** and stores its corrections as metadata in `library.json`:
-
-- `orientation_fix_rotation_euler` — 3-axis correction in radians, applied at import
-- `ground_offset_z` — vertical correction so the asset sits on z=0 ground
-- `shape_class` — `character_upright` / `vehicle_generic` / `3d_terrain` / `flat_map` etc., used by the lighting and camera systems
-- `provisional_ready` — boolean gate, blocks half-fixed assets from auto-pick
-
-The originals are never modified. Re-running the healer is idempotent. Healing is what lets a curated 316-asset library punch above its weight: each entry is render-ready by the time it reaches the matcher.
-
-### V1.3 recipe / template / layer system
-
-Fantasy Studio's renderer is **renderer-agnostic by design**. Recipes are JSON, not Python:
-
-```text
-app/templates_v2/recipes/         15 recipes (vehicle_desert_hero, hero_ocean_horizon, ...)
-app/templates_v2/base/            render-tier presets (preview / polished / hq / cinematic)
-app/templates_v2/environments/    terrain blends, ocean, city, forest, ...
-app/templates_v2/compositions/    low_orbit, push_in, tracking_low, wide_establishing
-app/templates_v2/lighting/        sunset_landscape, golden_hour_warm, automotive_night
-app/templates_v2/animations/      vehicle_drive, hero_idle_subtle, animal_walk
-app/templates_v2/ambient/         dust_motes, ocean_spray, forest_particles
-app/templates_v2/post/            cinematic_graded, vintage_film, clean_commercial
-```
-
-A weighted dispatcher reads the prompt + scene plan and scores all 15 recipes; the highest scorer drives the render. Each recipe pulls its layers by name, layers compose into a final scene config, and the executor walks the config and emits Blender ops. Adding a new recipe is editing a JSON file — no Python.
-
-### Forced-hero / forced-environment tagging
-
-When the user manually picks a hero from the library browser, the manifest gets a `forced_hero_id`. The asset agent respects it and skips its prop / curated injectors. At render time the `[FORCED_HERO_TAG]` pre-pass walks descendants of every `is_hero_root` and stamps `is_forced_hero=True` on mesh descendants within 10m of origin. Downstream cleanup, framing, and verification only touch the forced-hero set — env-placed siblings are immune.
-
-### HERO_VERIFY render gate
-
-Before any frame is rendered, every scene passes seven structural checks:
-
-1. **`has_hero_tag`** — at least one mesh is tagged
-2. **`bbox_sane`** — hero diagonal in [0.2m, 50m] (V1.4.1 floor)
-3. **`in_frustum`** — hero is inside the camera's view frustum at frame_start
-4. **`fill_ok`** — hero fills 35–70% of the frame
-5. **`not_primitive`** — hero has > 100 polys (rejects placeholder cubes)
-6. **`oriented_correctly`** — vehicles aren't on their nose; characters aren't on their side
-7. **`grounded`** — hero bottom is within 0.5m of nearest env top (warn-only)
-
-A `bbox_sane` or `oriented_correctly` failure aborts the render with a structured `[HERO_VERIFY] ABORT` line that the API formatter surfaces as a user-facing error. We'd rather fail loudly than render something broken.
-
-### V1.4.1.1 LOD twin detection
-
-Some `.blend` files (notably the BMW M4 we curated early on) ship with two complete copies of the hero geometry under sibling `Sketchfab_model` parents — an artifact of how the source was exported. Our V1.3.5 transactional dedup correctly merges the parent EMPTYs, but the matrix-restore step preserved the loser sub-tree's *world* transforms, leaving identical mesh twins at 4× scale alongside the LAYOUT-scaled keeper set. Result: dual-car render.
-
-The `[LOD_CLEANUP]` pass builds a signature index `(vert_count, face_count, rounded_world_dims_xyz)` from the `is_forced_hero` set, walks the untagged `is_hero` siblings, and `hide_render`s any with an exact signature match. False-positive rate is structurally zero — the twin must already exist in the forced set. Originals are preserved (`hide_render`, not deleted) for debugging.
-
-### Matcher confidence + alias map (V1.3.7)
-
-The library matcher normalizes both the prompt's subject and each asset's `subject` field through a 45-entry alias map (plurals → singular, `car` → `vehicle`, `animal` → `character`) and a stopword filter, then scores each candidate: 1.0 for exact subject match, 0.85 for exact tag, 0.40–0.75 for partial subject substring, 0.30–0.60 for partial tag. Threshold is 0.30. Exact matches short-circuit the diversity rotation so an *elephant* prompt never returns a *rhinoceros* (which it did, briefly, in V1.3.6 — bug fixed).
-
-Every pick logs `[MATCHER] picked=… (score=…, exact_subject) runner_up=… (score=…)` so bad picks are debuggable.
-
-### Pipeline trace logging
-
-Every render writes a `pipeline_trace.log` next to the output file. It contains every `[STAGE]` marker (MAIN_START → SCENE_CONFIGURED → TEMPLATE_DISPATCH → ENV_LAYERS → FORCED_HERO_TAG → LOD_CLEANUP → HERO_VERIFY → RENDER_START → RENDER_COMPLETE), every `[CATEGORY]` log line, and the full manifest the LLM produced. When something goes wrong, a single grep tells you which stage and why.
-
-### Renderer-agnostic templates
-
-Layers and recipes don't import `bpy`. The executor does. That separation is deliberate: the V2 roadmap includes Unreal Engine and (eventually) Godot backends, where the same recipe JSON drives a different executor. The whole template system is a thin layer above the renderer; the LLM director doesn't know or care which one is on the other end.
-
-### Four-tier render system
-
-| Tier | Engine | Samples | Resolution | Approx. time | Use case |
-|---|---|---|---|---|---|
-| Quick Preview | Eevee | 16 | 720×1280 | ~30s | Iterating on prompt / cast |
-| Polished | Eevee + effects | 32 | 1080p | ~60s | Sharing / social posting |
-| High Quality | Cycles | 128 | 1080p | ~3m | YouTube / portfolio |
-| Final Cinematic | Cycles | 512+ | 4K | ~10m+ | Hero shot for a paid project |
-
-The tier choice is a render-time decision; the same scene file produces all four.
-
----
-
-## Quick start
-
-Full guide: **[INSTALL.md](INSTALL.md)**. The 5-step happy path:
-
-```powershell
-# 1. Clone
-git clone https://github.com/bgrut/fantasy-studio
-cd fantasy-studio
-
-# 2. Install prereqs: Blender 5.1+, Ollama, Python 3.11+, Node 20+
-#    See INSTALL.md for download links and one-time PowerShell ExecutionPolicy fix
-
-# 3. One-command setup (creates venv, installs all deps, scaffolds .env files)
-.\setup.ps1
-
-# 4. Pull the LLM model (~7 GB, first-time only)
-ollama pull gemma3:12b
-
-# 5. Launch
-.\launch.ps1
-# Opens backend (:8789) + frontend (:3000) in two windows.
-# Open http://localhost:3000 in your browser.
-```
-
-## First render walkthrough
-
-1. **Type a prompt** — *"a polar bear in the arctic at sunset"*
-2. **Cast appears** — auto-picked hero + environment, with a cast panel for manual override
-3. **Click Generate** — render starts; pipeline log streams in real time
-4. **~90 seconds later** — MP4 plays in the preview pane, `.blend` ready to download
-
-Full guide: **[docs/USER_GUIDE.md](docs/USER_GUIDE.md)**.
+Deep dives: **[docs/PIPELINE_V2.md](docs/PIPELINE_V2.md)** (video pipeline) · **[docs/USER_GUIDE.md](docs/USER_GUIDE.md)** (full walkthrough) · **[CHANGELOG.md](CHANGELOG.md)** (everything that shipped).
 
 ---
 
 ## How Fantasy Studio compares
 
-| | Fantasy Studio | Sora | Runway Gen-3 | Pika 2 | Spline AI |
-|---|---|---|---|---|---|
-| Rendering tech | Real Blender (Cycles/Eevee) | Diffusion | Diffusion | Diffusion | 3D editor + AI fill |
-| Runs locally | ✅ Yes | ❌ Cloud | ❌ Cloud | ❌ Cloud | ⚠️ Hybrid |
-| Deterministic output | ✅ Same prompt → same scene | ❌ Random | ❌ Random | ❌ Random | ⚠️ Partly |
-| Re-render with new lighting | ✅ Same scene, swap preset | ❌ New roll | ❌ New roll | ❌ New roll | ⚠️ Manual |
-| Export to Blender | ✅ `.blend` included | ❌ MP4 only | ❌ MP4 only | ❌ MP4 only | ❌ |
-| You own the output | ✅ Forever, any use | ⚠️ Per ToS | ⚠️ Per ToS | ⚠️ Per ToS | ✅ |
-| Usage limits | None (your hardware) | Credits | Credits | Credits | Free tier |
-| Monthly cost | $0 (after install) | Discontinued | $15–$95/mo | $10–$70/mo | $0–$25/mo |
-| Commercial use | ✅ With attribution (BSL) | ⚠️ Plan-dependent | ⚠️ Plan-dependent | ⚠️ Plan-dependent | ⚠️ Plan-dependent |
+| | Fantasy Studio | Diffusion video (Sora/Runway/Pika) | AI game tools (cloud) |
+|---|---|---|---|
+| Makes games | ✅ Playable, editable in real time | ❌ | ✅ (varies) |
+| Makes videos | ✅ Real Blender, `.blend` included | ✅ Pixels only | ❌ |
+| Runs locally | ✅ Fully | ❌ Cloud | ⚠️ Mostly cloud |
+| Edit after generating | ✅ Point at the world, type | ❌ New roll | ⚠️ Limited |
+| Deterministic | ✅ Same prompt → same world | ❌ Random | ⚠️ Partly |
+| You own the output | ✅ Forever | ⚠️ Per ToS | ⚠️ Per ToS |
+| Export to a real engine | ✅ Godot 4 project | ❌ | ⚠️ Varies |
+| Monthly cost | $0 after install | $10–$95/mo | Credits/subscription |
 
 ---
 
-## Roadmap
+## Honest state of things (constraint-sprint transparency)
 
-**Shipped** — V1.4.1.1: dual-car LOD twin fix, scale floor at 20%, library refresh, V1.3.7 matcher tuning, V1.3.6 polish (orb cleanup, BMW orientation, env preset guards), V1.3.5 transactional dedup, V1.3.4 forced_hero descendant tagging, V1.3 template/layer system, V1.2 healer.
+Fantasy Studio is built and used solo, currently **without a working GPU on the dev machine** — so the honest edges are:
 
-**In Progress** — V1.4.2: empty-state showcase carousel, scene complexity guardrail. V1.4.3: cast panel viewport sizing, .blend surfaced in output panel.
+- **Character textures** are side-projection baked, so off-axis fur reads a little soft (a warm-fill pass smooths the worst of it); true multi-view texturing is the top GPU-day upgrade.
+- **Motion** can warp slightly on some rigs.
+- **Video mode** is best at single-subject cinematic shots today; multi-subject composition is on the roadmap.
 
-**Future** — Hero animation library (pre-baked walk/run/fly cycles), expanded camera language vocabulary, cloud render tier, voice prompt input, marketplace (V2), multi-subject composition (V2), Unreal Engine backend (V2+).
-
-Full roadmap: **[ROADMAP.md](ROADMAP.md)** · Full version history: **[CHANGELOG.md](CHANGELOG.md)**.
-
----
-
-## Built in public
-
-- **TikTok**: [@Fantasylab.ai](https://www.tiktok.com/@fantasylab.ai)
-- **YouTube**: [@Fantasy_lab_ai](https://youtube.com/@Fantasy_lab_ai)
-- **Discord**: Coming soon
-- **Patreon**: Coming soon
-- **Waitlist**: [fantasylab.ai](https://fantasylab.ai)
-
-Watch the build, send a prompt, get a render in your feed. We post weekly progress through launch.
+None of this is hidden — it's shown warts-and-all. The game side (Inspector, rules, styles, views, sharing, Godot export) is the most complete and is what's front-and-center above. Full detail and the GPU-day list live in **[ROADMAP.md](ROADMAP.md)** and **[CHANGELOG.md](CHANGELOG.md)**.
 
 ---
 
-## Contributing
+## Project status
 
-Solo dev right now. Bug reports, feature requests aligned to the roadmap, recipe contributions, and platform-support PRs (macOS / Linux) all genuinely welcome. Full guide: **[CONTRIBUTING.md](CONTRIBUTING.md)**.
+**Public early access — active daily development.** The app installs and works today (games, videos, editing, sharing, Godot export are all live). Expect rough edges and rapid iteration. Star the repo to follow along, and join the waitlist at **[fantasylab.ai](https://fantasylab.ai)** for launch-day access and curated assets.
 
 ---
 
 ## FAQ
 
-**Is it really free?** Yes — for personal and non-commercial use, forever, under BSL 1.1. After 4 years it auto-converts to Apache 2.0.
+**Do I need to know how to code?** No. You describe games and videos in plain English and edit them by pointing and typing. If you *do* code, the game exports as a Godot project and videos export as `.blend` files — both fully yours to extend.
 
-**Do I need to know Blender?** No. You can use Fantasy Studio without ever opening Blender. If you *do* know Blender, the `.blend` export gives you the whole scene to re-edit.
+**Do I need a GPU?** Game mode: no — it builds and plays on any laptop. Video mode and first-time character generation: an NVIDIA GPU (8 GB+) is strongly recommended (once generated, characters are cached and reused with no GPU).
 
-**Does it need a GPU?** Strongly recommended. Cycles renders are GPU-accelerated; Eevee runs on integrated graphics but slowly. Minimum: any RTX 20-series or equivalent. Recommended: RTX 3060+ with 8 GB VRAM.
+**Do I have to generate a new character every time?** No. Each character (a cat, a wolf, a dragon…) is generated once and cached in your library forever, then cast instantly in any future prompt or game — including across all the levels of a game.
 
-**How does this compare to Runway / Sora / Pika?** Different bet. They generate pixels with diffusion (random, uncontrollable, expensive per render). Fantasy Studio directs Blender (deterministic, editable, electricity-only after install). See the comparison table above.
+**Can I share the games I make?** Yes — publish to the in-app Community Marketplace for a public browser link (anyone can play, no install), zip the build for itch.io, or export a Godot project. Shared community content is CC-BY-4.0.
 
-**What's the catch?** It's slower than diffusion (90s vs 10s per clip). The library is curated, not infinite — for fully custom characters you'll need to add assets manually. Multi-subject scenes are V2.
+**Is it really free / local?** Yes. Free for personal and non-commercial use under BSL 1.1 (auto-converts to Apache 2.0 after 4 years). Runs entirely on your machine — no API keys, no cloud, no telemetry, no per-render fee.
 
-**Can I sell videos I make?** Yes. The license restricts re-selling Fantasy Studio itself (or hosting it as a paid service); your *output* is yours. Asset-level attribution may apply to specific Sketchfab/Poly Haven sources — see the auto-generated `credits.txt` next to each render.
+**How is this different from Sora / Runway / a cloud game maker?** Different bet: those generate pixels or run in the cloud and hand you something you can't really direct. Fantasy Studio generates *a game you keep editing* and *a Blender scene you keep rendering*, locally, deterministically, and you own the output. See the comparison table above.
 
-**What about complex prompts (multi-subject)?** V1 is single-subject by design. Multi-subject scene composition is the headline V2 feature. See [docs/PROMPTING.md](docs/PROMPTING.md) for the supported pattern.
-
-**What's the license really?** BSL 1.1 — free for non-commercial use, source visible, attribution required, auto-converts to Apache 2.0 in 4 years. Commercial licensing available from FantasyLab AI. Full text in [LICENSE](LICENSE).
-
-**When is launch?** Mid-May 2026. Pre-launch source release is live now for engineers, contributors, and waitlist signups. Public announcement campaign at launch.
-
-**Why 'Fantasy Studio' and 'FantasyLab AI'?** Fantasy Studio is the product. FantasyLab AI is the company shipping it. Same team, same author.
+**When is launch?** Public early access is live now for creators, engineers, and waitlist signups; a full public launch campaign follows. There's no gate on trying it today.
 
 ---
 
 ## License
 
-**Business Source License 1.1** — free for personal and non-commercial use, source visible, attribution required, auto-converts to Apache 2.0 four years after first commit. Full terms in **[LICENSE](LICENSE)**.
+**Business Source License 1.1** — free for personal and non-commercial use, source visible, attribution required, auto-converts to Apache 2.0 four years after first commit. Commercial licensing available from FantasyLab AI. Full terms in **[LICENSE](LICENSE)**.
 
 ## Acknowledgments
 
-Fantasy Studio stands on a giant pile of generous open work. Direct gratitude to:
+Fantasy Studio stands on a giant pile of generous open work:
 
-- [**Blender**](https://blender.org) — the renderer, the API, the foundation
-- [**Ollama**](https://ollama.com) — local LLM runtime that makes the director path possible
-- [**Google Gemma**](https://ai.google.dev/gemma) — the open-weight model the director uses
-- [**Objaverse**](https://objaverse.allenai.org) — fallback hero asset source
-- [**Poly Haven**](https://polyhaven.com) — environment HDRIs and curated terrain
-- [**Sketchfab**](https://sketchfab.com) — curated hero and prop assets
+- [**three.js**](https://threejs.org) (MIT) + [**Rapier**](https://rapier.rs) (Apache-2.0) — the game runtime
+- [**Blender**](https://blender.org) — the video renderer and the foundation
+- [**Godot**](https://godotengine.org) (MIT) — the game export target
+- [**Ollama**](https://ollama.com) + [**Google Gemma**](https://ai.google.dev/gemma) — the local director
+- [**Microsoft TRELLIS**](https://github.com/microsoft/TRELLIS) (MIT) — image-to-3D character generation
+- [**CMU Motion Capture Database**](http://mocap.cs.cmu.edu) — real character motion
+- [**OpenStreetMap**](https://www.openstreetmap.org) contributors — real-world city data
 - The broader open-source 3D + AI community
 
 ---
 
 <div align="center">
 
-⭐ **If this looks interesting, star the repo so launch shows up in your GitHub feed.**
+⭐ **If this looks interesting, star the repo to follow the build.**
 
 Built by **Brandon Grutkowski** · [FantasyLab AI](https://fantasylab.ai) · 2026
 

@@ -4,11 +4,31 @@ All notable changes to Fantasy Studio are documented here.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-Pre-1.0 versions are internal milestones during the constraint sprint leading to public V1.0 launch (Mid-May 2026). They're documented here transparently — Fantasy Studio has never been a stealth project.
+Pre-1.0 versions are internal milestones during the constraint sprint leading to public early access and the V1.0 launch. They're documented here transparently — Fantasy Studio has never been a stealth project.
 
 ---
 
 ## [Unreleased]
+
+### Docs — Phase 50: README rewrite, front-and-center game engine (2026-07-08)
+- **Rewrote `README.md` to lead with what Fantasy Studio IS today**: a
+  local-first, no-code desktop app that turns one sentence into a playable 3D
+  game OR a cinematic video. Games are now front-and-center (previously the
+  README was video-first and barely mentioned the game side).
+- **New "game engine" section** covers the full loop that shipped in Phases
+  42–49: prompt → playable game, real-time Inspector (hover to identify,
+  click-to-place with Point/Line tools), honored rules + the Truth Table,
+  user-picked style presets, 2D/3D view presets, walk-in destinations, level
+  projects, and the Community Marketplace share link. Added a "Share it"
+  section (marketplace / zip / Godot 4 export with parity).
+- **Removed every stale reference**: all "Mid-May 2026 launch" banners/FAQ
+  answers replaced with an honest "public early access, active development"
+  status; the old `python scripts/export_game.py` CLI framing and the
+  "single-subject V1 only" positioning are gone.
+- **Kept the strong positioning**: local / deterministic / you-own-it /
+  render-not-diffusion, the comparison table (now with a games row), honest
+  GPU-day constraints, acknowledgments, and BSL 1.1 license.
+- Also fixed the "Mid-May 2026" note in this changelog's own preamble.
 
 ### Fixed — Phase 49: WebGL resilience, full-viewport canvas, mobile HUD (2026-07-08)
 - **"Error creating WebGL context" (constrained Chrome)**: the game asked for
