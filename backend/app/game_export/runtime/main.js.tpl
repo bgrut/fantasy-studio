@@ -336,24 +336,110 @@ async function main() {
     scene.add(waterMesh);
   }
 
-  // goal beacon: glowing pillar at the level's goal zone — reaching it (with
-  // all objectives collected) wins the level
+  // THE GOAL IS A PLACE, NOT A LIGHT (Phase 47): when the reach objective
+  // names a structure ("reach the cat shelter", "reach the cabin"), a real
+  // WALK-IN building stands at the goal — door open, windows warm, hearth
+  // lit. You win by stepping inside. Abstract goals keep the classic beacon.
   let goalPos = null, goalMesh = null;
+  const _reachOb = (SPEC.objectives || []).find(o => o.kind === 'reach');
+  const _structHit = _reachOb && (_reachOb.label || '').toLowerCase().match(
+    /\b(shelter|cabin|house|home|hut|shrine|castle|tower|barn|cottage|inn|temple|church|fort|lodge|den|village|camp|outpost|lighthouse|station)\b/);
   if (LVL && LVL.goal) {
     goalPos = new THREE.Vector3(LVL.goal[0], hAt(LVL.goal[0], LVL.goal[1]), LVL.goal[1]);
-    const pil = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.9, 0.9, 22, 20, 1, true),
-      new THREE.MeshBasicMaterial({ color: 0x9f7bff, transparent: true, opacity: 0.16,
-                                    side: THREE.DoubleSide, depthWrite: false }));
-    pil.position.set(goalPos.x, goalPos.y + 11, goalPos.z);
-    scene.add(pil);
-    const ring = new THREE.Mesh(
-      new THREE.TorusGeometry(1.5, 0.09, 10, 40),
-      new THREE.MeshStandardMaterial({ color: 0xb9a0ff, emissive: 0x7c5cff, emissiveIntensity: 2.2 }));
-    ring.rotation.x = Math.PI / 2;
-    ring.position.set(goalPos.x, goalPos.y + 0.25, goalPos.z);
-    scene.add(ring);
-    goalMesh = ring;
+    if (_structHit) {
+      // door faces the approach: back along the mission path, else the spawn
+      const _pp = (LVL.path && LVL.path.length > 1) ? LVL.path[LVL.path.length - 2] : [0, 0];
+      const doorYaw = Math.atan2(_pp[0] - goalPos.x, _pp[1] - goalPos.z);
+      const S = new THREE.Group();
+      S.position.copy(goalPos);
+      S.rotation.y = doorYaw;
+      const wallMat = new THREE.MeshStandardMaterial({ color: 0x9a8f7e, roughness: 0.9 });
+      const roofMat = new THREE.MeshStandardMaterial({ color: 0x6a4438, roughness: 0.85 });
+      const warmMat = new THREE.MeshStandardMaterial({
+        color: 0xffd88a, emissive: 0xffc86a, emissiveIntensity: 1.6 });
+      const addBox = (w, h, d, x, y, z, mat) => {
+        const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat || wallMat);
+        m.position.set(x, y, z);
+        m.castShadow = true;
+        S.add(m);
+        return m;
+      };
+      addBox(6.4, 0.16, 5.4, 0, 0.08, 0, roofMat);            // floor slab
+      addBox(6.4, 3.1, 0.28, 0, 1.63, -2.55);                 // back wall
+      addBox(0.28, 3.1, 5.4, -3.06, 1.63, 0);                 // side walls
+      addBox(0.28, 3.1, 5.4, 3.06, 1.63, 0);
+      addBox(2.3, 3.1, 0.28, -2.05, 1.63, 2.55);              // front, door gap
+      addBox(2.3, 3.1, 0.28, 2.05, 1.63, 2.55);
+      addBox(1.8, 0.9, 0.28, 0, 2.73, 2.55);                  // lintel
+      const roof = new THREE.Mesh(new THREE.ConeGeometry(4.9, 2.2, 4), roofMat);
+      roof.rotation.y = Math.PI / 4;
+      roof.position.y = 4.28;
+      roof.castShadow = true;
+      S.add(roof);
+      for (const wx of [-2.05, 2.05]) {                       // warm windows
+        const w = new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.85, 0.1), warmMat);
+        w.position.set(wx, 1.8, 2.62);
+        S.add(w);
+      }
+      const hearth = new THREE.PointLight(0xffc27a, 1.6, 9);  // lit inside
+      hearth.position.set(0, 1.6, -0.5);
+      S.add(hearth);
+      const halo = makeGoalHalo();                            // findable from afar
+      halo.position.y = 6.2;
+      S.add(halo);
+      const mat2 = new THREE.Mesh(                            // welcome mat = win spot
+        new THREE.CircleGeometry(0.9, 24),
+        new THREE.MeshStandardMaterial({ color: 0xb9a0ff, emissive: 0x7c5cff,
+                                         emissiveIntensity: 1.2 }));
+      mat2.rotation.x = -Math.PI / 2;
+      mat2.position.set(0, 0.18, 0.4);
+      S.add(mat2);
+      scene.add(S);
+      S.updateMatrixWorld(true);
+      // colliders per wall segment — the DOORWAY stays open, you walk in
+      const _v = new THREE.Vector3();
+      const wallCols = [[6.4, 3.1, 0.28, 0, 1.63, -2.55], [0.28, 3.1, 5.4, -3.06, 1.63, 0],
+                        [0.28, 3.1, 5.4, 3.06, 1.63, 0], [2.3, 3.1, 0.28, -2.05, 1.63, 2.55],
+                        [2.3, 3.1, 0.28, 2.05, 1.63, 2.55]];
+      for (const [w, h, d, x, y, z] of wallCols) {
+        _v.set(x, y, z).applyMatrix4(S.matrixWorld);
+        world.createCollider(
+          RAPIER.ColliderDesc.cuboid(w / 2, h / 2, d / 2)
+            .setTranslation(_v.x, _v.y, _v.z)
+            .setRotation({ x: 0, y: Math.sin(doorYaw / 2), z: 0, w: Math.cos(doorYaw / 2) }));
+      }
+      S.userData.fsTag = { type: 'goal', name: _structHit[1],
+                           detail: 'step inside to finish the journey' };
+      goalMesh = mat2;
+    } else {
+      const pil = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.9, 0.9, 22, 20, 1, true),
+        new THREE.MeshBasicMaterial({ color: 0x9f7bff, transparent: true, opacity: 0.16,
+                                      side: THREE.DoubleSide, depthWrite: false }));
+      pil.position.set(goalPos.x, goalPos.y + 11, goalPos.z);
+      scene.add(pil);
+      const ring = new THREE.Mesh(
+        new THREE.TorusGeometry(1.5, 0.09, 10, 40),
+        new THREE.MeshStandardMaterial({ color: 0xb9a0ff, emissive: 0x7c5cff, emissiveIntensity: 2.2 }));
+      ring.rotation.x = Math.PI / 2;
+      ring.position.set(goalPos.x, goalPos.y + 0.25, goalPos.z);
+      scene.add(ring);
+      goalMesh = ring;
+    }
+  }
+  function makeGoalHalo() {
+    const c = document.createElement('canvas');
+    c.width = c.height = 64;
+    const g2 = c.getContext('2d');
+    const grad = g2.createRadialGradient(32, 32, 2, 32, 32, 30);
+    grad.addColorStop(0, 'rgba(255,216,138,0.95)');
+    grad.addColorStop(1, 'rgba(255,216,138,0)');
+    g2.fillStyle = grad;
+    g2.fillRect(0, 0, 64, 64);
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: new THREE.CanvasTexture(c), transparent: true, depthTest: false }));
+    sp.scale.setScalar(3.2);
+    return sp;
   }
   // invisible boundary walls — the park has edges; you can't run off the world
   const wh = 4, ext = gsize / 2;

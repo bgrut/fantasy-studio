@@ -10,6 +10,27 @@ Pre-1.0 versions are internal milestones during the constraint sprint leading to
 
 ## [Unreleased]
 
+### Added — Phase 47: The goal is a PLACE — walk-in buildings + creative-prompt readiness (2026-07-08)
+- **Walk-in goal structures**: when a reach objective names a structure
+  ("reach the cat shelter", "the cabin", "the lighthouse" — 20 nouns), a
+  real building stands at the goal instead of the abstract beacon: open
+  doorway facing the approach path, warm windows, a lit hearth inside, a
+  glowing welcome mat, wall colliders with the doorway open — you win by
+  STEPPING INSIDE. Verified: outside the wall = no win, through the door =
+  win.
+- **The keyword fallback speaks every verb**: an Ollama hiccup used to
+  degrade rich prompts to an empty stroll (the cat-with-9-lives prompt lost
+  ALL its objectives). The fallback now parses collect/defeat/survive/reach
+  + hostile mentions ("avoid the hostile wolves") deterministically — every
+  prompt yields a playable mission on both extraction paths.
+- **"9 lives" → 9 HP**: numbers the user writes are game facts.
+- **Generic collectibles never stall**: "food"/"supplies"/"treasures" render
+  as glowing pickups instantly with a note pointing at the specific-noun
+  path ("fish", "bones") — no more accidental 35-minute generation.
+- Friendlier note when the AI imagines a creature that isn't in the library.
+- Verified end-to-end on the cat demo prompt: cat cast, 9 hearts, 6 food
+  pickups, hostile wolf, GOLD win inside the shelter.
+
 ### 🚀 THE COMMUNITY IS LIVE (2026-07-08)
 - The first Fantasy Studio hub is deployed at
   `fantasy-studio-share.fantasy-labai.workers.dev` and baked in as the

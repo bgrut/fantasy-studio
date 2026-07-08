@@ -295,6 +295,13 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             except Exception:
                 job.setdefault("notes", []).append(
                     f"unknown view '{req.view}' — kept {spec.view}")
+        # "a cat with 9 lives" → 9 HP: numbers the user wrote are game facts
+        import re as _re9
+        _m9 = _re9.search(r"(\d+)\s*lives\b", req.prompt.lower())
+        if _m9:
+            spec.player.hp = max(1, min(20, int(_m9.group(1))))
+            job.setdefault("notes", []).append(
+                f"{_m9.group(1)} lives → {spec.player.hp} HP")
         # SNOW IS BRIGHT: snowy scenes must have snow-colored ground — that's
         # what reflects the moonlight and makes winter nights luminous. The
         # LLM often picks a dark ground for "snowy night" and the whole scene
@@ -462,8 +469,9 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                 # of generation. Skip with a note; prompt-named nouns still
                 # generate like always.
                 job.setdefault("notes", []).append(
-                    f"'{ekind}' was the AI's idea, not yours — skipped "
-                    f"(add it to your prompt or an edit to create it)")
+                    f"the AI imagined '{ekind}' for this world — it's not in "
+                    f"your library yet, so it was skipped. Mention '{ekind}' in "
+                    f"a prompt or edit to create it once (then it's free forever)")
                 continue
             if not glb:
                 # THE SAME PIPELINE FOR EVERY NOUN (2026-07-06): entities and
@@ -588,11 +596,23 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         # COLLECTIBLE LABELS GENERATE TOO: "collect 6 fireflies" must produce
         # firefly meshes even when the extractor casts no matching entity —
         # the label is a noun like any other (fireflies-stayed-orbs fix).
+        # GENERIC collectible labels ("food", "supplies", "treasures") never
+        # deserve a 35-minute mesh generation — they render as the glowing
+        # pickups, with a note pointing at the specific-noun path instead
+        _GENERIC_COLLECT = {"food", "meal", "supply", "supplies", "item",
+                            "thing", "treasure", "star", "coin", "point",
+                            "orb", "token", "collectible", "pickup", "loot",
+                            "resource", "goodie", "snack"}
         for ob in spec.objectives:
             if ob.kind != "collect" or ob.asset:
                 continue
             sing = _singular(ob.label)
             if not sing or sing in _AMBIENT:
+                continue
+            if sing.split()[-1] in _GENERIC_COLLECT:
+                job.setdefault("notes", []).append(
+                    f"'{ob.label}' renders as glowing pickups — name a specific "
+                    f"thing ('fish', 'bones', 'apples') to generate a real mesh for it")
                 continue
             glb = library.resolve(sing)
             if not glb:

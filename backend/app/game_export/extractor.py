@@ -94,6 +94,51 @@ def _keyword_fallback(text: str) -> dict:
         m = _re.search(r"(\d+)\s+(car|truck|racer|opponent)", t)
         out["objectives"] = [{"kind": "race", "label": "cars",
                               "count": int(m.group(1)) if m else 3}]
+    # MISSION GRAMMAR (Phase 47): the fallback speaks EVERY verb — an Ollama
+    # hiccup must degrade to a playable mission, not an empty stroll (the
+    # cat-with-9-lives prompt once lost all its objectives this way)
+    import re as _re
+    _stop = r"(?=[,.;!]|\s+(?:then|and|before|while|to|at|in|on)\b|$)"
+
+    def _sing1(w: str) -> str:
+        if w.endswith("ves"):
+            return w[:-3] + "f"          # wolves -> wolf
+        if w.endswith("ies"):
+            return w[:-3] + "y"          # ponies -> pony
+        return w[:-1] if w.endswith("s") and not w.endswith("ss") else w
+    obs = out.get("objectives") or []
+    ents = out.get("entities") or []
+    m = _re.search(r"\b(?:collect|gather|find|pick up|track(?:ing)?\s+down|"
+                   r"hunt(?:ing)?\s+for)\s+(\d+)?\s*((?:[a-z]+\s?){1,3}?)" + _stop, t)
+    if m and not any(o.get("kind") == "collect" for o in obs):
+        obs.append({"kind": "collect", "count": int(m.group(1) or 5),
+                    "label": m.group(2).strip()})
+    m = _re.search(r"\b(?:defeat|fight|beat|destroy|slay|kill)\s+(\d+)?\s*"
+                   r"(?:the\s+)?(?:hostile\s+)?((?:[a-z]+\s?){1,2}?)" + _stop, t)
+    if m and not any(o.get("kind") == "defeat" for o in obs):
+        n = int(m.group(1) or 3)
+        obs.append({"kind": "defeat", "count": n, "label": m.group(2).strip()})
+        ents.append({"name": _sing1(m.group(2).strip()), "behavior": "hostile",
+                     "count": max(n, 2), "speed": 2.6})
+    m = _re.search(r"\bsurvive\b(?:\s+for)?\s*(\d+)?\s*(minute|min|second|sec)?", t)
+    if m and "survive" in t and not any(o.get("kind") == "survive" for o in obs):
+        secs = int(m.group(1) or 60) * (60 if (m.group(2) or "").startswith("min") else 1)
+        obs.append({"kind": "survive", "count": min(secs, 600),
+                    "label": "the onslaught"})
+    m = _re.search(r"\b(?:reach|get to|arrive at|escape to|make it to|return to)\s+"
+                   r"(?:the\s+)?((?:[a-z]+\s?){1,4}?)" + _stop, t)
+    if m and not any(o.get("kind") in ("reach", "race") for o in obs):
+        obs.append({"kind": "reach", "label": m.group(1).strip(), "count": 1})
+    # hostiles named without a defeat verb ("avoid the hostile wolves")
+    m = _re.search(r"\b(?:hostile|avoid(?:ing)?\s+the|chased by|fleeing)\s+"
+                   r"(?:hostile\s+)?([a-z]+)", t)
+    if m and not any(e.get("behavior") == "hostile" for e in ents):
+        ents.append({"name": _sing1(m.group(1)), "behavior": "hostile",
+                     "count": 3, "speed": 2.6})
+    if obs:
+        out["objectives"] = obs
+    if ents:
+        out["entities"] = ents
     for sky, words in (("night", ("night", "moon", "dark")), ("sunset", ("sunset", "dusk", "golden")),
                        ("overcast", ("overcast", "cloudy", "foggy", "gloomy"))):
         if any(w in t for w in words):
