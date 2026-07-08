@@ -10,6 +10,21 @@ Pre-1.0 versions are internal milestones during the constraint sprint leading to
 
 ## [Unreleased]
 
+### Fixed — Shared games: "click a level, nothing loads" (2026-07-08)
+- **Root cause**: the worker served a directory URL (the hub `/g/:id`, or a
+  level `/g/:id/levels/lvl_N/dist`) WITHOUT a trailing slash as a plain 200.
+  With no trailing slash the browser resolves the hub's relative card links
+  one path level too high (`levels/lvl_1/dist/` → `/g/levels/lvl_1/dist/`),
+  which 404s — the published game's level cards led nowhere.
+- **Fix**: the worker now 301-redirects any extension-less directory URL to
+  add the trailing slash (standard web-server behavior), so relative links
+  always resolve against the canonical directory. Applies to game hubs,
+  nested level dirs, and character pages. Verified: `/g/:id` → 301 →
+  `/g/:id/` (200 hub), level dirs and `/c/:id` redirect too, all files and
+  the API unaffected. **Fixes already-published games server-side — no
+  re-publish needed.** The game files themselves were always byte-perfect
+  (confirmed identical to local); this was purely a navigation bug.
+
 ### Fixed — Texture warm-fill: the gray "unwrapped" patches are gone (2026-07-08)
 - Root cause audited in a neutral-light viewer: side-projection baking
   leaves off-axis texels (haunches, back, chest) as desaturated gray smears —

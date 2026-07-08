@@ -115,6 +115,18 @@ export default {
     if (req.method === "OPTIONS") return new Response(null, { headers: CORS });
 
     // ── public file serving ─────────────────────────────────────────────────
+    if (parts[0] === "g" || parts[0] === "c") {
+      // TRAILING-SLASH REDIRECT (2026-07-08): a directory URL served without a
+      // trailing slash makes the browser resolve the hub's relative links one
+      // level too high (`/g/id/levels/..` becomes `/g/levels/..` → 404, the
+      // "click a level, nothing loads" bug). Redirect directories to add the
+      // slash so relative links resolve correctly — standard web-server rule.
+      const last = parts[parts.length - 1] || "";
+      const isDir = !last.includes(".");
+      if (parts[1] && isDir && !url.pathname.endsWith("/")) {
+        return Response.redirect(url.origin + url.pathname + "/" + url.search, 301);
+      }
+    }
     if (parts[0] === "g" && parts[1]) {
       return serveFile(env, "games", parts[1], parts.slice(2).join("/") || "index.html");
     }
