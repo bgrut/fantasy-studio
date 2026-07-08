@@ -31,11 +31,13 @@ _pub_lock = threading.Lock()
 _pub_state: dict = {"status": "idle"}     # one publish at a time (big uploads)
 
 
-# THE DEFAULT COMMUNITY HUB: once a canonical worker exists, its URL goes
-# here (or in the FS_COMMUNITY_HUB env var) — every install then browses the
-# community out of the box, zero setup. Publishing always needs a token.
+# THE DEFAULT COMMUNITY HUB (live 2026-07-08): every install browses this
+# community out of the box, zero setup. FS_COMMUNITY_HUB overrides for
+# private hubs. Publishing always needs your own worker + token.
 import os
-DEFAULT_HUB = os.environ.get("FS_COMMUNITY_HUB", "").rstrip("/")
+DEFAULT_HUB = os.environ.get(
+    "FS_COMMUNITY_HUB",
+    "https://fantasy-studio-share.fantasy-labai.workers.dev").rstrip("/")
 
 
 def _cfg() -> dict:

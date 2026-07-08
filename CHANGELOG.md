@@ -10,6 +10,19 @@ Pre-1.0 versions are internal milestones during the constraint sprint leading to
 
 ## [Unreleased]
 
+### 🚀 THE COMMUNITY IS LIVE (2026-07-08)
+- The first Fantasy Studio hub is deployed at
+  `fantasy-studio-share.fantasy-labai.workers.dev` and baked in as the
+  app's DEFAULT community — every install browses it with zero setup
+  (`FS_COMMUNITY_HUB` env overrides for private hubs).
+- **First publishes, verified from the public internet**: the Winterfang
+  game (108 files, plays in a plain browser at /g/3d3b5801/) and the wolf
+  character (installable into any library). Feed, playback and per-level
+  URLs all confirmed live.
+- Fixes shaken out by the real deployment: directory-style URLs now fall
+  back to index.html in the worker (level pages 404'd); per-file upload
+  retries with backoff (large GLBs hit transient TLS resets).
+
 ### Added — Phase 46: Community Marketplace + share worker v2 + privacy policy + Godot parity (2026-07-08)
 - **Community Marketplace** (replaces the template marketplace page): browse
   the community feed, ▶ play shared games in-app, install shared characters

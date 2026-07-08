@@ -54,7 +54,12 @@ async function writeFeed(env, items) {
 }
 
 async function serveFile(env, prefix, id, rest) {
-  const obj = await env.GAMES.get(`${prefix}/${id}/${rest}`);
+  let obj = await env.GAMES.get(`${prefix}/${id}/${rest}`);
+  if (!obj && !rest.split("/").pop().includes(".")) {
+    // directory-style URL (a level's dist/) → serve its index.html
+    rest = rest.replace(/\/+$/, "") + "/index.html";
+    obj = await env.GAMES.get(`${prefix}/${id}/${rest}`);
+  }
   if (!obj) return new Response("not found", { status: 404, headers: CORS });
   return new Response(obj.body, {
     headers: {
