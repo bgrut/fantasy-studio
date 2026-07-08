@@ -177,7 +177,17 @@ async function main() {
     scene.add(stars);
   }
 
-  const camera = new THREE.PerspectiveCamera(SPEC.camera.fov_deg, innerWidth / innerHeight, 0.1, 1000);
+  // VIEW PRESET (Phase 45): 3d = perspective third-person; topdown/side use
+  // an ORTHOGRAPHIC camera — the honest "2D game" feel on the same 3D world
+  const VIEW = SPEC.view || '3d';
+  let camera;
+  if (VIEW === '3d') {
+    camera = new THREE.PerspectiveCamera(SPEC.camera.fov_deg, innerWidth / innerHeight, 0.1, 1000);
+  } else {
+    const oa = innerWidth / innerHeight;
+    const os = VIEW === 'side' ? 9 : 16;      // world units of half-height on screen
+    camera = new THREE.OrthographicCamera(-os * oa, os * oa, os, -os, 0.1, 1000);
+  }
 
   const hemi = new THREE.HemisphereLight(pal.sky, 0x3a3f35, pal.amb);
   scene.add(hemi);
@@ -197,6 +207,15 @@ async function main() {
   // level path, and real asphalt roads when the level carries OSM data) ─────
   const gsize = SPEC.world.size_m;
   const LVL = SPEC.world.level || null;
+  // SIDE-SCROLLER projection: gameplay lives on the z=0 plane — pull the
+  // mission targets onto it so everything is actually reachable
+  if (VIEW === 'side' && LVL) {
+    if (LVL.goal) LVL.goal[1] = 0;
+    for (const key of ['collect_points', 'path']) {
+      if (LVL[key]) for (const p of LVL[key]) p[1] = 0;
+    }
+    if (LVL.landmarks) for (const p of LVL.landmarks) p[1] = 0;
+  }
   const OSM = (LVL && LVL.osm) || null;
   const gcol = new THREE.Color(...SPEC.world.ground_color);
   const TEXN = LVL ? 1024 : 256;        // level ground is painted 1:1 (no tiling)
@@ -1032,6 +1051,10 @@ async function main() {
         n.obj.position.y = hAt(n.obj.position.x, n.obj.position.z)
                          + (n.anim ? 0 : Math.sin(t * 2 + n.phase) * 0.01 + 0.01);
       }
+      // side-scroller: creatures drift onto the gameplay lane too
+      if (VIEW === 'side') {
+        n.obj.position.z += (0 - n.obj.position.z) * Math.min(2.5 * dt, 1);
+      }
       // blocks_enemies rule: placed solids are solid for NPCs too — a fence
       // line actually FENCES (push out radially from each segment)
       for (const b of npcBlockers) {
@@ -1183,6 +1206,7 @@ async function main() {
         const d = 5 + rngC() * gsize * 0.32;
         cx = Math.cos(ang) * d; cz = Math.sin(ang) * d;
       }
+      if (VIEW === 'side') cz = 0;        // side-scroller: pickups on the lane
       const baseY = hAt(cx, cz) + 1.0 + rngC() * 0.6;
       s.position.set(cx, baseY, cz);
       s.userData.fsTag = { type: 'collectible', name: step.label || 'item',
@@ -1205,7 +1229,7 @@ async function main() {
       const s = new THREE.Mesh(geo, m);
       const ang = rngH() * Math.PI * 2;
       const d = 8 + rngH() * (SPEC.world.size_m * 0.35 - 8);
-      const hx = Math.cos(ang) * d, hz = Math.sin(ang) * d;
+      const hx = Math.cos(ang) * d, hz = VIEW === 'side' ? 0 : Math.sin(ang) * d;
       const hy = hAt(hx, hz) + 0.55;
       s.position.set(hx, hy, hz);
       s.userData.fsTag = { type: 'pickup', name: 'health pack', detail: '+1 ♥ on touch' };
@@ -1758,6 +1782,7 @@ async function main() {
   addEventListener('pointerup', () => dragging = false);
   addEventListener('pointermove', e => {
     if (!dragging) return;
+    if (SPEC.view && SPEC.view !== '3d') return;   // 2D views: fixed camera axis
     yaw -= (e.clientX - px) * 0.005; pitch = THREE.MathUtils.clamp(pitch + (e.clientY - py) * 0.004, 0.05, 1.2);
     px = e.clientX; py = e.clientY;
     freeLookT = 3;
@@ -1943,6 +1968,7 @@ async function main() {
                                           interact: !!p.it.interact })),
     reading: () => ({ readable: readable ? readable.label : null, open: reading }),
     inspect: on => setInspectOn(on),
+    view: VIEW,
   };
 
   // Inspect = SOFT FREEZE: while editing, enemies stop, damage stops, and
@@ -2065,6 +2091,13 @@ async function main() {
       }`,
   });
   composer.addPass(grade);
+  // 2D views: the ortho camera stands 40+m off the subject, which would put
+  // the WHOLE world inside the fog band — push fog out by the standoff
+  if (VIEW !== '3d' && scene.fog) {
+    const standoff = VIEW === 'side' ? 42 : 46;
+    scene.fog.near += standoff;
+    scene.fog.far += standoff;
+  }
   // ── STYLE PACKS (Phase 44): the user picked this in the studio — one
   // GLOBAL render treatment applied coherently to the whole frame. Never
   // guessed by an LLM, so it's never wrong.
@@ -2227,6 +2260,16 @@ async function main() {
     const hint = document.querySelector('#hud .hint');
     if (hint) hint.textContent = 'WASD swim · Space surface · C dive · Shift burst · drag to look';
   }
+  if (VIEW === 'side') {                         // side-scroller controls
+    const hint = document.querySelector('#hud .hint');
+    if (hint) hint.textContent = 'A/D or ←/→ to run · Space to jump · Shift to sprint'
+      + (ATTACK !== 'none' ? ' · F to attack' : '');
+  }
+  if (VIEW === 'topdown') {                      // top-down controls
+    const hint = document.querySelector('#hud .hint');
+    if (hint) hint.textContent = 'WASD / arrows to move · Shift to run · wheel to zoom'
+      + (ATTACK !== 'none' ? ' · F to attack' : '');
+  }
   let vSpeed = 0, hudTick = 0, prevV = 0, leanP = 0, leanR = 0;
   const camTarget = new THREE.Vector3();
 
@@ -2308,10 +2351,16 @@ async function main() {
       leanR = THREE.MathUtils.damp(leanR, THREE.MathUtils.clamp(-mv.x * 0.25, -0.35, 0.35), 3, dt);
       holder.rotation.x = leanP; holder.rotation.z = leanR;
     } else {
-      speed = (mv.run ? P.run_speed : P.walk_speed) * mv.mag;
-      dir.set(mv.x, 0, mv.z);
+      if (VIEW === 'side') {
+        // side-scroller: A/D (or ←→) run the lane, Space jumps — W/S unused
+        speed = (mv.run ? P.run_speed : P.walk_speed) * Math.min(Math.abs(mv.x), 1);
+        dir.set(Math.sign(mv.x || 0), 0, 0);
+      } else {
+        speed = (mv.run ? P.run_speed : P.walk_speed) * mv.mag;
+        dir.set(mv.x, 0, mv.z);
+      }
       if (dir.lengthSq() > 1e-4) {
-        dir.normalize().applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
+        dir.normalize().applyAxisAngle(new THREE.Vector3(0, 1, 0), VIEW === '3d' ? yaw : 0);
         modelYaw = dampAngle(modelYaw, Math.atan2(dir.x, dir.z), P.turn_speed, dt);
       }
       // GRAMMAR: jump — grounded Space gives a real ballistic arc through the
@@ -2325,6 +2374,9 @@ async function main() {
       leanP = THREE.MathUtils.damp(leanP, airTilt, 7, dt);
       holder.rotation.x = leanP;
       var desired = { x: dir.x * speed * dt, y: vy * dt, z: dir.z * speed * dt };
+      if (VIEW === 'side') {              // hold the hero on the gameplay lane
+        desired.z = (0 - body.translation().z) * Math.min(6 * dt, 1);
+      }
     }
     kcc.computeColliderMovement(collider, desired);
     const cm = kcc.computedMovement();
@@ -2491,13 +2543,27 @@ async function main() {
     const fX = (inspectOn && inspF) ? inspF.x : nt.x;
     const fZ = (inspectOn && inspF) ? inspF.z : nt.z;
     const fY = (inspectOn && inspF) ? hAt(fX, fZ) + 1.4 : nt.y;
-    camTarget.set(fX, fY + SPEC.camera.height_m * 0.5, fZ);
-    const cd = SPEC.camera.distance_m * camZoom * (inspectOn ? 1.5 : 1);
-    const cx = fX + Math.sin(yaw) * Math.cos(pitch) * cd;   // camera BEHIND
-    const cz = fZ + Math.cos(yaw) * Math.cos(pitch) * cd;   // (W walks away)
-    const cy = fY + Math.sin(pitch) * cd + SPEC.camera.height_m * 0.4;
-    camera.position.lerp(new THREE.Vector3(cx, cy, cz), 1 - Math.exp(-8 * dt));
-    camera.lookAt(camTarget);
+    if (VIEW === 'topdown') {
+      // 2D-Zelda camera: straight down, orthographic, wheel zooms the map
+      camera.position.lerp(new THREE.Vector3(fX, fY + 46, fZ + 0.01), 1 - Math.exp(-8 * dt));
+      camera.lookAt(fX, fY, fZ);
+      camera.zoom = THREE.MathUtils.damp(camera.zoom || 1, 1.15 / camZoom, 6, dt);
+      camera.updateProjectionMatrix();
+    } else if (VIEW === 'side') {
+      // side-scroller camera: fixed on the z axis, tracks the runner
+      camera.position.lerp(new THREE.Vector3(fX, fY + 2.4, 42), 1 - Math.exp(-8 * dt));
+      camera.lookAt(fX, fY + 1.1, 0);
+      camera.zoom = THREE.MathUtils.damp(camera.zoom || 1, 1.0 / camZoom, 6, dt);
+      camera.updateProjectionMatrix();
+    } else {
+      camTarget.set(fX, fY + SPEC.camera.height_m * 0.5, fZ);
+      const cd = SPEC.camera.distance_m * camZoom * (inspectOn ? 1.5 : 1);
+      const cx = fX + Math.sin(yaw) * Math.cos(pitch) * cd;   // camera BEHIND
+      const cz = fZ + Math.cos(yaw) * Math.cos(pitch) * cd;   // (W walks away)
+      const cy = fY + Math.sin(pitch) * cd + SPEC.camera.height_m * 0.4;
+      camera.position.lerp(new THREE.Vector3(cx, cy, cz), 1 - Math.exp(-8 * dt));
+      camera.lookAt(camTarget);
+    }
     if (shakeT > 0) {                    // decaying screen shake on damage
       shakeT = Math.max(0, shakeT - dt);
       camera.position.x += (Math.random() - 0.5) * 0.5 * shakeT;
@@ -2550,7 +2616,14 @@ async function main() {
   });
 
   addEventListener('resize', () => {
-    camera.aspect = innerWidth / innerHeight;
+    if (camera.isPerspectiveCamera) {
+      camera.aspect = innerWidth / innerHeight;
+    } else {
+      const oa = innerWidth / innerHeight;
+      const os = VIEW === 'side' ? 9 : 16;
+      camera.left = -os * oa; camera.right = os * oa;
+      camera.top = os; camera.bottom = -os;
+    }
     camera.updateProjectionMatrix();
     renderer.setSize(innerWidth, innerHeight);
     composer.setSize(innerWidth, innerHeight);

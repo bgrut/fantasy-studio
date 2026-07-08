@@ -123,6 +123,10 @@ class GameSpec(BaseModel):
     # STYLE PRESET (Phase 44): USER-SELECTED, never LLM-guessed — one global
     # render/post pack applied coherently to the whole game
     style: Literal["default", "cartoon", "anime", "horror", "pixel", "lowpoly"] = "default"
+    # VIEW PRESET (Phase 45): 3d = classic third person; topdown = orthographic
+    # 2D-Zelda camera; side = orthographic side-scroller (gameplay projected to
+    # the z=0 plane). User-selected, like style.
+    view: Literal["3d", "topdown", "side"] = "3d"
     seed: int = 7                         # deterministic scatter placement
 
     def runtime_json(self) -> dict:
@@ -205,6 +209,16 @@ def spec_from_dict(data: dict) -> GameSpec:
                           "photoreal": "default", "realistic": "default"}
         if st in _STYLE_ALIASES:
             data["style"] = _STYLE_ALIASES[st]
+        vw = str(data.get("view", "")).lower().strip()
+        _VIEW_ALIASES = {"top-down": "topdown", "top down": "topdown",
+                         "overhead": "topdown", "bird's eye": "topdown",
+                         "2d": "topdown", "isometric": "topdown",
+                         "side-scroller": "side", "sidescroller": "side",
+                         "side scroller": "side", "platformer": "side",
+                         "side view": "side", "third person": "3d",
+                         "third_person": "3d", "first person": "3d"}
+        if vw in _VIEW_ALIASES:
+            data["view"] = _VIEW_ALIASES[vw]
     except Exception:
         pass
     try:

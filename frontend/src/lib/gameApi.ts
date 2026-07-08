@@ -57,6 +57,7 @@ export async function exportGame(prompt: string, opts?: {
   godot?: boolean; player?: string; baseJobId?: number; at?: PickPoint
   at2?: { x: number; z: number }                     // line tool second point
   style?: string                                     // USER-selected style preset
+  view?: string                                      // 3d / topdown / side (Phase 45)
   rule?: { index: number; name: string; on: boolean } // rule chip toggle
 }) {
   const res = await fetch('/api/game/export', {
@@ -71,6 +72,7 @@ export async function exportGame(prompt: string, opts?: {
                                             ...(opts.at.target ? { at_target: opts.at.target } : {}) } : {}),
                            ...(opts?.at2 ? { at_x2: opts.at2.x, at_z2: opts.at2.z } : {}),
                            ...(opts?.style ? { style: opts.style } : {}),
+                           ...(opts?.view ? { view: opts.view } : {}),
                            ...(opts?.rule ? { rule_index: opts.rule.index,
                                               rule_name: opts.rule.name,
                                               rule_on: opts.rule.on } : {}) }),

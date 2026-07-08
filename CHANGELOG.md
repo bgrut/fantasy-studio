@@ -10,6 +10,22 @@ Pre-1.0 versions are internal milestones during the constraint sprint leading to
 
 ## [Unreleased]
 
+### Added — Phase 45: 2D view presets — top-down + side-scroller (2026-07-08)
+- **View chips** next to the style chips: 🧊 3D · 🗺️ Top-down 2D ·
+  🎞️ Side-scroller. User-selected like styles, never LLM-guessed; edits can
+  switch deterministically ("make it top-down").
+- **Top-down** = orthographic overhead camera (the 2D-Zelda feel), wheel
+  zooms the map, world-aligned WASD. Pairs beautifully with 👾 Pixel style.
+- **Side-scroller** = orthographic side camera locked to one lane: A/D run,
+  Space jumps, terrain becomes the platforming. Gameplay honestly projected
+  to the lane — goal, collectibles, health packs land on it and creatures
+  drift onto it, so every objective stays reachable. Verified: ran +3.6m on
+  the lane (z locked at 0), jumped +1.9m, fox-runs-to-cabin frame reads as
+  a real platformer.
+- Fog pushed out by the ortho camera standoff in 2D views (the whole world
+  used to sit inside the fog band). Inspect/picking/free-fly all work in
+  both views. Same world, three games.
+
 ### Added — Phase 44: Style presets, the Line tool, rule chips + the Truth Table (2026-07-08)
 - **Style presets (user-selected, never LLM-guessed)**: 🎬 Photoreal ·
   🖍️ Cartoon (cel bands + ink outlines) · 🌸 Anime (soft cel + bloom) ·

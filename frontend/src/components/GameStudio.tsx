@@ -39,6 +39,14 @@ const STYLES: { id: string; label: string; hint: string }[] = [
   { id: 'lowpoly', label: '📐 Low-poly', hint: 'flat-shaded facets, minimalist color' },
 ]
 
+// Phase 45 VIEW PRESETS — same world, different game: classic 3D, top-down
+// 2D (orthographic Zelda feel), or a side-scroller locked to one lane.
+const VIEWS: { id: string; label: string; hint: string }[] = [
+  { id: '3d', label: '🧊 3D', hint: 'classic third-person camera' },
+  { id: 'topdown', label: '🗺️ Top-down 2D', hint: 'orthographic overhead — the 2D-Zelda feel (pairs great with Pixel style)' },
+  { id: 'side', label: '🎞️ Side-scroller', hint: 'run and jump along one lane — terrain becomes the platforming' },
+]
+
 const BUILD_STAGES: Record<string, string> = {
   queued: 'Queued…',
   extracting: 'Reading your idea…',
@@ -66,6 +74,7 @@ export default function GameStudio() {
   const [hoverPick, setHoverPick] = useState<Pick | null>(null)
   const [selPick, setSelPick] = useState<Pick | null>(null)
   const [style, setStyle] = useState('default')            // Phase 44 style preset
+  const [view, setView] = useState('3d')                   // Phase 45 view preset
   const [placeMode, setPlaceMode] = useState<'point' | 'line'>('point')
   const [lineA, setLineA] = useState<Pick | null>(null)    // line tool first click
   const [selLine, setSelLine] = useState<{ a: Pick; b: Pick } | null>(null)
@@ -155,14 +164,15 @@ export default function GameStudio() {
     try {
       const { job_id } = await exportGame(p, baseJobId != null
         ? { baseJobId, at, at2 }
-        // fresh build: the USER-SELECTED style rides along — never guessed
-        : { style: style !== 'default' ? style : undefined })
+        // fresh build: USER-SELECTED style + view ride along — never guessed
+        : { style: style !== 'default' ? style : undefined,
+            view: view !== '3d' ? view : undefined })
       pollJob(job_id)
     } catch (e) {
       setBuilding(false)
       setError(e instanceof Error ? e.message : String(e))
     }
-  }, [pollJob, style])
+  }, [pollJob, style, view])
 
   // Phase 43 level tiles: click a level -> exact re-export opens as a live
   // job in the player above — play it, Inspect it, edit it, save it back.
@@ -371,7 +381,7 @@ export default function GameStudio() {
           ))}
         </div>
 
-        {/* STYLE PRESETS: the user picks — the AI never guesses a look */}
+        {/* STYLE + VIEW PRESETS: the user picks — the AI never guesses */}
         <div className="flex flex-wrap justify-center items-center gap-1.5">
           <span className="text-[10px] font-mono text-[#4a4764]">style:</span>
           {STYLES.map((s) => (
@@ -387,6 +397,22 @@ export default function GameStudio() {
               )}
             >
               {s.label}
+            </button>
+          ))}
+          <span className="text-[10px] font-mono text-[#4a4764] ml-2">view:</span>
+          {VIEWS.map((v) => (
+            <button
+              key={v.id}
+              onClick={() => setView(v.id)}
+              title={v.hint}
+              className={cn(
+                'px-2.5 py-1 rounded-full text-[11px] border transition-all',
+                view === v.id
+                  ? 'border-[#a78bfa]/50 bg-[#a78bfa]/10 text-[#a78bfa]'
+                  : 'border-white/[0.06] bg-white/[0.02] text-[#807d99] hover:text-white'
+              )}
+            >
+              {v.label}
             </button>
           ))}
         </div>

@@ -73,6 +73,8 @@ class GameExportRequest(BaseModel):
     at_z2: float | None = None
     # Phase 44: STYLE PRESET — user-selected in the studio, never LLM-guessed
     style: str | None = None
+    # Phase 45: VIEW PRESET — 3d / topdown (2D Zelda) / side (side-scroller)
+    view: str | None = None
     # Phase 44: RULE CHIP toggle — deterministic edit on one placed item
     rule_index: int | None = None
     rule_name: str | None = None
@@ -254,6 +256,17 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                         spec.style = st
                         job.setdefault("notes", []).append(f"style set to {st}")
                         break
+                # view words in edits are deterministic too ("make it top-down")
+                for w, vw in (("top-down", "topdown"), ("top down", "topdown"),
+                              ("topdown", "topdown"), ("overhead", "topdown"),
+                              ("side-scroller", "side"), ("side scroller", "side"),
+                              ("sidescroller", "side"), ("platformer", "side"),
+                              ("side view", "side"), ("2d", "topdown"),
+                              ("3d", "3d"), ("third person", "3d")):
+                    if _re.search(rf"\b{_re.escape(w)}\b", _cl):
+                        spec.view = vw
+                        job.setdefault("notes", []).append(f"view set to {vw}")
+                        break
                 # SAFETY NET: LLM-added placed items sometimes forget the
                 # coordinates from context — new items land where you clicked
                 if req.at_x is not None and req.at_z is not None:
@@ -276,6 +289,12 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             except Exception:
                 job.setdefault("notes", []).append(
                     f"unknown style '{req.style}' — kept {spec.style}")
+        if req.view:
+            try:
+                spec.view = req.view
+            except Exception:
+                job.setdefault("notes", []).append(
+                    f"unknown view '{req.view}' — kept {spec.view}")
         # SNOW IS BRIGHT: snowy scenes must have snow-colored ground — that's
         # what reflects the moonlight and makes winter nights luminous. The
         # LLM often picks a dark ground for "snowy night" and the whole scene
