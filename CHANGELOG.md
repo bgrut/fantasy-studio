@@ -10,6 +10,29 @@ Pre-1.0 versions are internal milestones during the constraint sprint leading to
 
 ## [Unreleased]
 
+### Fixed — Phase 51: hero casting never crosses species (2026-07-08)
+- **The bug**: "a polar bear that must defeat 3 knights to reach the sacred
+  igloo" spent ~30-60 min attempting to generate the bear on CPU, the attempt
+  failed, and the casting ladder silently fell back to `library.resolve("man")`
+  — a human who, in a `defeat` mission, spawns holding a sword. The player got
+  a man-with-a-sword instead of a polar bear, and nothing was saved to the
+  library. Root cause: the failure fallback degraded the hero to a completely
+  different SPECIES.
+- **Fix 1 — honest same-species stand-in**: new `library.nearest(kind, pattern)`
+  returns the closest asset of the SAME category, so an un-buildable quadruped
+  degrades to a quadruped (polar bear → wolf), a vehicle to a vehicle, an
+  aquatic to a whale — NEVER a man. Both blind `resolve("man")` fallbacks in
+  the player-casting ladder now route through it, with a loud, self-healing
+  note: "Couldn't build 'polar bear' yet — needs a GPU; cast 'wolf' as a
+  stand-in; re-run once your GPU is in to get the real one."
+- **Fix 2 — no more doomed 30-60 min CPU gamble**: the hero generation path is
+  now gated behind `gpu_available()` (or explicit `FS_CPU_CHARGEN=1`). On a
+  GPU-less machine it skips straight to the honest stand-in instead of burning
+  an hour on the unreliable CPU generate only to hand back the wrong character.
+  Self-heals: once a GPU is present, the same prompt generates the real hero.
+- Verified: `nearest()` maps polar bear/grizzly/tiger → wolf, ferrari → car,
+  dolphin → whale, cat → cat; both edited files compile clean.
+
 ### Docs — Phase 50: README rewrite, front-and-center game engine (2026-07-08)
 - **Rewrote `README.md` to lead with what Fantasy Studio IS today**: a
   local-first, no-code desktop app that turns one sentence into a playable 3D

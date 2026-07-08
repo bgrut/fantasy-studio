@@ -383,22 +383,30 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             player_glb = ensure_playable(want, verbose=False)
         if not player_glb:
             # THE VISION PATH: unknown character → SDXL image → 3D mesh →
-            # library → playable. Works on CPU too (slow, once — then cached
-            # for every future prompt).
-            try:
-                from app.game_export.generate import ensure_asset
-                stage(f"creating '{want}' — image → 3D mesh "
-                      f"(first time only; ~30-60 min without a GPU)")
-                ensure_asset(want, verbose=False)
-                player_glb = (library.resolve(want)
-                              if pattern in ("vehicle", "flying", "aquatic", "static")
-                              else ensure_playable(want, verbose=False))
-                if player_glb:
+            # library → playable. This needs a GPU. On a GPU-less machine we do
+            # NOT gamble 30-60 min on the unreliable CPU path only to hand back
+            # the WRONG character (a failed "polar bear" once fell through to a
+            # man-with-a-sword). Instead we fall through to an honest, same-
+            # species stand-in below, and self-heal on the re-run once a GPU is
+            # in. FS_CPU_CHARGEN=1 forces the slow CPU attempt anyway.
+            import os as _os
+            from app.game_export.generate import gpu_available
+            _try_gen = gpu_available() or _os.environ.get("FS_CPU_CHARGEN") == "1"
+            if _try_gen:
+                try:
+                    from app.game_export.generate import ensure_asset
+                    stage(f"creating '{want}' — image → 3D mesh "
+                          f"(first time only; ~30-60 min without a GPU)")
+                    ensure_asset(want, verbose=False)
+                    player_glb = (library.resolve(want)
+                                  if pattern in ("vehicle", "flying", "aquatic", "static")
+                                  else ensure_playable(want, verbose=False))
+                    if player_glb:
+                        job.setdefault("notes", []).append(
+                            f"'{want}' was CREATED for this game and saved to your library")
+                except Exception as ge:
                     job.setdefault("notes", []).append(
-                        f"'{want}' was CREATED for this game and saved to your library")
-            except Exception as ge:
-                job.setdefault("notes", []).append(
-                    f"player '{want}' generation failed ({type(ge).__name__}) — cast as man")
+                        f"player '{want}' generation failed ({type(ge).__name__})")
         if player_glb and pattern == "vehicle":
             spec.player.mode = "drive"
             if abs(spec.player.walk_speed - 2.0) < 1e-6:
@@ -418,9 +426,18 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             if abs(spec.player.run_speed - 5.0) < 1e-6:
                 spec.player.run_speed = 14.0                 # burst
         if not player_glb:
-            job.setdefault("notes", []).append(f"cast fell back: {want} -> man")
-            player_glb = library.resolve("man")
-            cast = "man"
+            # HONEST STAND-IN — never cross species. A hero we can't build yet
+            # degrades to the CLOSEST asset of the SAME kind: a polar bear plays
+            # as a wolf, NEVER a man-with-a-sword. Loud, self-healing note.
+            stand_in = library.nearest(want, pattern)
+            if stand_in != want:
+                job.setdefault("notes", []).append(
+                    f"Couldn't build '{want}' yet — brand-new characters need a GPU "
+                    f"(coming soon). Cast the closest match, '{stand_in}', as a "
+                    f"stand-in so your game plays now; re-run this prompt once your "
+                    f"GPU is in to get the real '{want}'.")
+            player_glb = library.resolve(stand_in)
+            cast = stand_in
         if not player_glb:
             raise RuntimeError("no player asset in library (assets/library.json)")
         spec.player.asset = player_glb

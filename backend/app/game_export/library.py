@@ -87,6 +87,38 @@ def resolve(kind: str) -> str | None:
     return None
 
 
+# Category stand-ins (2026-07-08): when a hero/prop can't be resolved AND can't
+# be generated (e.g. a brand-new species on a GPU-less machine), we degrade to
+# the CLOSEST asset of the SAME kind — a polar bear becomes a wolf, NEVER a
+# man-with-a-sword. Ordered by visual similarity; the first that resolves wins.
+_NEAREST = {
+    "quadruped": ("wolf", "dog", "fox", "horse", "cat", "monkey", "penguin", "dragon"),
+    "biped":     ("man", "knight", "samurai", "wizard"),
+    "vehicle":   ("car", "truck"),
+    "aquatic":   ("whale",),
+    "flying":    ("dragon", "firefly"),
+    "static":    ("man",),
+}
+
+
+def nearest(kind: str, pattern: str = "biped") -> str:
+    """Closest available library asset of the SAME category as `kind`.
+
+    Used as an honest stand-in when the real asset can't be built yet (a new
+    species that needs a GPU to generate). Never crosses categories, so an
+    animal hero never degrades to a human. Returns a kind name that `resolve`
+    is guaranteed to satisfy (falls back to the first playable asset)."""
+    if resolve(kind):
+        return (kind or "").strip().lower()
+    for cand in _NEAREST.get(pattern, _NEAREST["biped"]):
+        if resolve(cand):
+            return cand
+    for cand in ("man", "fox", "car"):          # last resort: anything playable
+        if resolve(cand):
+            return cand
+    return "man"
+
+
 def default_height(kind: str) -> float:
     k = (kind or "").lower()
     for words, h in ((("dog", "cat", "fox", "rabbit"), 0.6),
