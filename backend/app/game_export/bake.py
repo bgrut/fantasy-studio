@@ -709,11 +709,22 @@ def ensure_playable(kind: str, verbose: bool = True) -> str | None:
     from . import library
     from .generate import guess_pattern
     anim = BACKEND_ROOT / "assets" / "library" / f"{kind.lower().replace(' ', '_')}_anim.glb"
-    if anim.exists():
-        return str(anim)
     static = library.resolve(kind)
+    # Serve the cached rig ONLY if it is at least as new as the static mesh it was
+    # rigged from. A re-baked static (an orientation or texture fix) MUST
+    # invalidate the derived _anim.glb — otherwise the stale rig ships silently.
+    # This is exactly how a corrected polar bear kept playing UPSIDE-DOWN: the
+    # static was fixed but the older _anim.glb (rigged from the belly-up mesh)
+    # still existed, so the game used it (2026-07-08).
+    if anim.exists():
+        try:
+            fresh = bool(static) and anim.stat().st_mtime >= Path(static).stat().st_mtime
+        except OSError:
+            fresh = True
+        if fresh:
+            return str(anim)
     if not static:
-        return None
+        return str(anim) if anim.exists() else None
     try:                       # already rigged+animated (e.g. the man player)?
         from .verify_game import _glb_json
         g = _glb_json(Path(static))

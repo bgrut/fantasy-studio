@@ -10,6 +10,23 @@ Pre-1.0 versions are internal milestones during the constraint sprint leading to
 
 ## [Unreleased]
 
+### Fixed — Phase 53: rig cache invalidates when its static mesh is re-baked (2026-07-08)
+- **The bug (why the bear STILL looked upside-down after Phase 52)**: the game
+  player uses the RIGGED `<kind>_anim.glb`, not the static library mesh.
+  `ensure_playable` returned the cached `_anim.glb` whenever it merely EXISTED,
+  with no freshness check — so after Phase 52 re-baked the static polar bear
+  feet-down, the game kept loading the older `polar_bear_anim.glb` that had been
+  rigged from the belly-up mesh. Fix corrected the source, cache served the
+  stale derivative.
+- **Fix (scalable, all rigged assets)**: `ensure_playable` now serves the cached
+  rig ONLY if its mtime is ≥ the static mesh it was rigged from; otherwise it
+  re-rigs. Any future static re-bake (orientation, texture, mesh re-roll) now
+  auto-invalidates the derived animation — no more stale rigs shipping silently.
+- Regenerated `polar_bear_anim.glb` from the fixed static → verified feet-down,
+  standing (12-bone quad rig, idle/attack/walk/run). `bake.py` compiles clean.
+- NOTE: existing GAME BUILDS bundle a COPY of the rig in their dist/, so a game
+  built before this fix must be REBUILT to pick up the corrected bear.
+
 ### Fixed — Phase 52: quadruped feet-down orientation prior (2026-07-08)
 - **The bug**: the generated polar bear shipped BELLY-UP in-game (legs in the
   air) at silhouette IoU 0.34. Root cause: the 24-view silhouette orientation
