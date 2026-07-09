@@ -585,6 +585,7 @@ def optimize_asset(src_glb: str | Path, out_glb: str | Path, target_tris: int = 
                 _RegistryRunner(registry), "Hero", str(ref_png), _scratch,
                 upright_biped=(pattern == "biped"),
                 wheels_down=(pattern == "vehicle"),
+                quad_feet_down=(pattern == "quadruped"),
                 verbose=verbose)
             if verbose:
                 print(f"[bake] orientation gate: ok={_og.get('ok')} "

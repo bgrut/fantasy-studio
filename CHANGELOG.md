@@ -10,6 +10,28 @@ Pre-1.0 versions are internal milestones during the constraint sprint leading to
 
 ## [Unreleased]
 
+### Fixed — Phase 52: quadruped feet-down orientation prior (2026-07-08)
+- **The bug**: the generated polar bear shipped BELLY-UP in-game (legs in the
+  air) at silhouette IoU 0.34. Root cause: the 24-view silhouette orientation
+  gate had geometric up/down priors for BIPEDS (head-up) and VEHICLES
+  (wheels-down), but NONE for quadrupeds — and the 2D silhouette centre-of-mass
+  tiebreak can't tell a chunky animal's back from its belly (both outlines look
+  nearly identical), so a belly-up pick sailed through.
+- **Fix (scalable, all quadrupeds)**: added a `quad_feet_down` geometric prior
+  to `_orient_hero_by_reference`, mirroring the biped one. After the silhouette
+  pick + azimuth-normalize, it measures the LEG-GAP (belly clearance between the
+  front/back leg pairs along the body axis, and the left/right leg split across
+  it) in the bottom vs top Z-slabs. If the leg-gap is at the TOP, the animal is
+  belly-up → roll 180° about Y (the body long axis), preserving the heading the
+  silhouette already chose. Reference-independent; fixes bear, dog, horse,
+  tiger, etc. — not a per-asset override. Wired in `bake.py` for
+  `pattern == "quadruped"`.
+- Verified: re-baked the polar bear (raw mesh cached) → renders standing
+  feet-down, head forward. `composer.py` + `bake.py` compile clean.
+- KNOWN (GPU-day, not this fix): the fur texture is still single-view baked, so
+  off-camera faces show brown/tan patches — the real fix is multi-view texturing
+  (needs a GPU). Tracked separately.
+
 ### Fixed — Phase 51: hero casting never crosses species (2026-07-08)
 - **The bug**: "a polar bear that must defeat 3 knights to reach the sacred
   igloo" spent ~30-60 min attempting to generate the bear on CPU, the attempt

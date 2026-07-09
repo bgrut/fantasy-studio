@@ -384,7 +384,7 @@ def _detect_subject_bbox(ref_png: str, verbose: bool = True):
 
 def _orient_hero_by_reference(runner, hero_name: str, ref_png: str, work_dir,
                               min_iou: float = 0.30, wheels_down: bool = False,
-                              upright_biped: bool = False,
+                              upright_biped: bool = False, quad_feet_down: bool = False,
                               candidates=None, verbose: bool = True):
     """Reference-anchored orientation gate (Phase 20, scalable).
 
@@ -407,6 +407,7 @@ def _orient_hero_by_reference(runner, hero_name: str, ref_png: str, work_dir,
                  ("__TMP__", tmp_png), ("__CHECK__", check_png), ("__RES__", "160"),
                  ("__MINIOU__", str(min_iou)), ("__WHEELSDOWN__", "1" if wheels_down else "0"),
                  ("__UPRIGHTBIPED__", "1" if upright_biped else "0"),
+                 ("__QUADFEETDOWN__", "1" if quad_feet_down else "0"),
                  ("__CANDS__", repr([list(c) for c in candidates]) if candidates else "None")):
         code = code.replace(k, v)
     try:
@@ -584,6 +585,33 @@ try:
                 o.rotation_euler.x+=math.radians(180.0); bpy.context.view_layer.update()
                 zsb=[(o.matrix_world@Vector(c)).z for c in o.bound_box]; o.location.z-=min(zsb)
                 bpy.context.view_layer.update(); flipped=3
+        if __QUADFEETDOWN__:
+            # Quadrupeds MUST end up feet-down. IoU + the silhouette centre-of-mass
+            # can't tell a chunky animal's back from its belly (a bear standing vs
+            # belly-up have near-identical outlines — this shipped an upside-down
+            # polar bear at IoU 0.34). Geometric prior: the FEET end has a LEG-GAP
+            # — the belly clearance between the front/back leg pairs (along the
+            # body axis) and the split between the left/right legs (across it) —
+            # while the BACK end is a solid continuous spine. If the leg-gap sits
+            # at the TOP the animal is belly-up → roll 180 about Y (the body long
+            # axis after azimuth-normalize), which flips feet-down while KEEPING
+            # the heading/facing the silhouette match already chose.
+            Wq=np.array([list(o.matrix_world@v.co) for v in o.data.vertices], dtype=np.float64)
+            Zq=Wq[:,2]; z0q=Zq.min(); z1q=Zq.max(); Hq=max(z1q-z0q,1e-6)
+            def _gapq(zlo,zhi):
+                sel=(Zq>=z0q+zlo*Hq)&(Zq<z0q+zhi*Hq)
+                if int(sel.sum())<30: return 0.0
+                best=0.0
+                for ax in (0,1):   # X (left/right legs) and Y (front/back legs)
+                    a=Wq[sel,ax]; c=float(np.median(a)); hw=max((a.max()-a.min())/2,1e-6)
+                    fill=float((np.abs(a-c)<0.25*hw).mean())  # solid centre=spine; gap=legs
+                    best=max(best,1.0-fill)
+                return best
+            botq=_gapq(0.0,0.35); topq=_gapq(0.65,1.0)
+            if topq > botq+0.05:               # leg-gap at the top => belly-up
+                o.rotation_euler.y+=math.radians(180.0); bpy.context.view_layer.update()
+                zsq=[(o.matrix_world@Vector(c)).z for c in o.bound_box]; o.location.z-=min(zsq)
+                bpy.context.view_layer.update(); flipped=2
         out={"ok":True,"euler":list(best_eu),"iou":round(best_iou,3),"tried":len(cands),
              "wheels_flip":flipped,"post_dims":[round(d,3) for d in o.dimensions]}
     __result__=json.dumps(out)
