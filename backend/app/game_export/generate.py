@@ -209,12 +209,27 @@ def ensure_asset(kind: str, pattern: str | None = None, target_tris: int = 45000
     # onto them so the library asset ships real colors, not ghost-white.
     out = LIB_DIR / f"{kind.lower().replace(' ', '_')}.glb"
     ref_png = CACHE_DIR / f"{key}_ref.png"
-    optimize_asset(raw_glb, out, target_tris=target_tris,
-                   height_m=library.default_height(kind), verbose=verbose,
-                   ref_png=ref_png if ref_png.exists() else None,
-                   despeckle=(pattern == "vehicle"),
-                   pattern=pattern)
-    _register(kind, str(out.relative_to(BACKEND_ROOT)).replace("\\", "/"))
-    if verbose:
-        print(f"[game] '{kind}' registered in library -> {out.name}")
-    return str(out)
+    try:
+        optimize_asset(raw_glb, out, target_tris=target_tris,
+                       height_m=library.default_height(kind), verbose=verbose,
+                       ref_png=ref_png if ref_png.exists() else None,
+                       despeckle=(pattern == "vehicle"),
+                       pattern=pattern)
+        _register(kind, str(out.relative_to(BACKEND_ROOT)).replace("\\", "/"))
+        if verbose:
+            print(f"[game] '{kind}' registered in library -> {out.name}")
+        return str(out)
+    except Exception as oe:
+        # The MESH is already generated and cached (SDXL + TripoSR don't need
+        # Blender) — only the final "optimize to game budget" step does, via the
+        # Blender bridge. If that bridge is down/deadlocked, DON'T throw away a
+        # good 30-min mesh and let the caller fall back to a stand-in: register
+        # the RAW mesh so the CORRECT species plays now. It's stored as a raw
+        # entry, so resolve() re-optimizes it automatically (orientation, texture
+        # projection, decimation) the moment the bridge is healthy again.
+        if verbose:
+            print(f"[game] optimize step failed ({type(oe).__name__}: {oe}); "
+                  f"registering RAW mesh so '{kind}' still plays — it auto-"
+                  f"optimizes on next use once the Blender bridge is up")
+        library.register(kind, raw_glb, ready=False)
+        return str(raw_glb)

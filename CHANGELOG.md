@@ -34,6 +34,14 @@ Pre-1.0 versions are internal milestones during the constraint sprint leading to
 - Verified: `nearest()` maps polar bear/grizzly/tiger → wolf, ferrari → car,
   dolphin → whale, cat → cat; TripoSR confirmed available in the backend venv;
   both edited files compile clean.
+- **Fix 3 — a bridge hiccup no longer discards a generated mesh**: root-cause
+  of THIS report was not generation at all — the SDXL+TripoSR mesh generated
+  fine (cached), but the final "optimize to game budget" step (which needs the
+  Blender bridge) failed because the bridge was down/deadlocked, so the whole
+  build fell back to a stand-in. `ensure_asset` now catches an optimize failure
+  and registers the RAW generated mesh as a raw library entry, so the CORRECT
+  species plays immediately and `resolve()` auto-optimizes it (orientation +
+  texture projection + decimation) the moment the bridge is healthy again.
 
 ### Docs — Phase 50: README rewrite, front-and-center game engine (2026-07-08)
 - **Rewrote `README.md` to lead with what Fantasy Studio IS today**: a
