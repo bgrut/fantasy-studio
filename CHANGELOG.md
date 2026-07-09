@@ -25,13 +25,15 @@ Pre-1.0 versions are internal milestones during the constraint sprint leading to
   the player-casting ladder now route through it, with a loud, self-healing
   note: "Couldn't build 'polar bear' yet — needs a GPU; cast 'wolf' as a
   stand-in; re-run once your GPU is in to get the real one."
-- **Fix 2 — no more doomed 30-60 min CPU gamble**: the hero generation path is
-  now gated behind `gpu_available()` (or explicit `FS_CPU_CHARGEN=1`). On a
-  GPU-less machine it skips straight to the honest stand-in instead of burning
-  an hour on the unreliable CPU generate only to hand back the wrong character.
-  Self-heals: once a GPU is present, the same prompt generates the real hero.
+- **Design intent preserved**: the generate-then-place path stays PRIMARY and
+  is always attempted — CPU generation works (~25-30 min once, then cached; the
+  cat and fox were both born this way). The `nearest()` stand-in fires ONLY on
+  a genuine generation failure, so a hero is never a man-with-a-sword, but the
+  normal flow is still "not in library → generate → place." (An earlier draft
+  of this fix wrongly gated generation behind a GPU; reverted.)
 - Verified: `nearest()` maps polar bear/grizzly/tiger → wolf, ferrari → car,
-  dolphin → whale, cat → cat; both edited files compile clean.
+  dolphin → whale, cat → cat; TripoSR confirmed available in the backend venv;
+  both edited files compile clean.
 
 ### Docs — Phase 50: README rewrite, front-and-center game engine (2026-07-08)
 - **Rewrote `README.md` to lead with what Fantasy Studio IS today**: a

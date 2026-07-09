@@ -382,31 +382,28 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         else:
             player_glb = ensure_playable(want, verbose=False)
         if not player_glb:
-            # THE VISION PATH: unknown character → SDXL image → 3D mesh →
-            # library → playable. This needs a GPU. On a GPU-less machine we do
-            # NOT gamble 30-60 min on the unreliable CPU path only to hand back
-            # the WRONG character (a failed "polar bear" once fell through to a
-            # man-with-a-sword). Instead we fall through to an honest, same-
-            # species stand-in below, and self-heal on the re-run once a GPU is
-            # in. FS_CPU_CHARGEN=1 forces the slow CPU attempt anyway.
-            import os as _os
-            from app.game_export.generate import gpu_available
-            _try_gen = gpu_available() or _os.environ.get("FS_CPU_CHARGEN") == "1"
-            if _try_gen:
-                try:
-                    from app.game_export.generate import ensure_asset
-                    stage(f"creating '{want}' — image → 3D mesh "
-                          f"(first time only; ~30-60 min without a GPU)")
-                    ensure_asset(want, verbose=False)
-                    player_glb = (library.resolve(want)
-                                  if pattern in ("vehicle", "flying", "aquatic", "static")
-                                  else ensure_playable(want, verbose=False))
-                    if player_glb:
-                        job.setdefault("notes", []).append(
-                            f"'{want}' was CREATED for this game and saved to your library")
-                except Exception as ge:
+            # THE VISION PATH (primary): unknown hero → SDXL image → 3D mesh →
+            # library → playable. This is how the pipeline is MEANT to work and
+            # it runs on CPU too (~25-30 min once, then cached forever — the cat
+            # and fox were both born this way). We ALWAYS attempt it; a GPU just
+            # makes it faster/better. Only a genuine generation FAILURE falls
+            # through to the honest same-species stand-in below (never a
+            # man-with-a-sword). FS_CPU_CHARGEN=0 disables CPU generation.
+            try:
+                from app.game_export.generate import ensure_asset
+                stage(f"creating '{want}' — image → 3D mesh "
+                      f"(first time only; ~25-30 min on CPU, then cached forever)")
+                ensure_asset(want, verbose=False)
+                player_glb = (library.resolve(want)
+                              if pattern in ("vehicle", "flying", "aquatic", "static")
+                              else ensure_playable(want, verbose=False))
+                if player_glb:
                     job.setdefault("notes", []).append(
-                        f"player '{want}' generation failed ({type(ge).__name__})")
+                        f"'{want}' was CREATED for this game and saved to your library")
+            except Exception as ge:
+                job.setdefault("notes", []).append(
+                    f"player '{want}' generation failed ({type(ge).__name__}) — "
+                    f"using a stand-in for now; re-run to try again")
         if player_glb and pattern == "vehicle":
             spec.player.mode = "drive"
             if abs(spec.player.walk_speed - 2.0) < 1e-6:
