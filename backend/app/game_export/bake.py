@@ -172,6 +172,11 @@ else:
             else:
                 feet[fb + side] = (cx + (W * 0.28 if side == "R" else -W * 0.28),
                                    front_y if fb == "F" else back_y)
+    # NOTE (Phase 56, tested + rejected): anchoring leg columns at the true
+    # foot clusters (bottom-15% centroid) was measured WORSE on the morph
+    # harness (bear 0.702->0.738, cat 0.613->0.640) — it drags the thigh top
+    # away from the upper-leg mass and increases bleed. The broad bottom-40%
+    # centroid places the whole COLUMN better for binding. Keep as-is.
     arm = bpy.data.armatures.new("HeroRig"); rig = bpy.data.objects.new("HeroRig", arm)
     bpy.context.scene.collection.objects.link(rig)
     bpy.context.view_layer.objects.active = rig; rig.select_set(True)
