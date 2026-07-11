@@ -200,6 +200,15 @@ else:
         u = np.clip(((V - h) @ seg) / L2, 0.0, 1.0)
         proj = h[None, :] + u[:, None] * seg[None, :]
         dmat[:, bi] = np.linalg.norm(V - proj, axis=1)
+    # SKIN V2 (Phase 54): same-side/end constraints + geodesic leg distance.
+    # Any failure falls back to the untouched Euclidean dmat above.
+    _s2status = "off"
+    if __SKINV2__:
+        try:
+            dmat = _s2_refine_dmat(dmat, V, segs, names, o)
+            _s2status = "refined"
+        except Exception as _s2e:
+            _s2status = "refine_failed: %s: %s" % (type(_s2e).__name__, _s2e)
     K = min(3, dmat.shape[1])
     idxK = np.argsort(dmat, axis=1)[:, :K]
     dK = np.take_along_axis(dmat, idxK, 1)
@@ -207,6 +216,13 @@ else:
     wK /= wK.sum(1, keepdims=True)
     wK[wK < 0.12] = 0.0
     wK /= np.maximum(wK.sum(1, keepdims=True), 1e-9)
+    # SKIN V2 (Phase 54): Laplacian weight smoothing + max-4-influence clamp.
+    if __SKINV2__:
+        try:
+            wK, idxK = _s2_smooth(wK, idxK, len(segs), V, o)
+            _s2status += "+smoothed"
+        except Exception as _s2e:
+            _s2status += "; smooth_failed: %s: %s" % (type(_s2e).__name__, _s2e)
     amod = o.modifiers.new("HeroArmature", "ARMATURE"); amod.object = rig
     for bi, nm in enumerate(names):
         wv = (wK * (idxK == bi)).sum(1)
@@ -218,7 +234,7 @@ else:
             if level == 0: continue
             vg.add(lv[q == level].tolist(), float(level) / 63.0, "REPLACE")
     __result__ = json.dumps({"ok": True, "legs": list(LEGMAP.keys()), "bones": len(arm.bones),
-                             "H": round(float(H), 3)})
+                             "H": round(float(H), 3), "skin_v2": _s2status})
 '''
 
 # one IN-PLACE trot clip: whole sine cycles -> seamless loop. AMP/STRIDE vary
@@ -645,11 +661,13 @@ def bake_quadruped_anim_set(hero_glb: str | Path, out_glb: str | Path,
     registry.call("import_mesh_file", {
         "filepath": str(hero_glb), "name": "Hero", "normalize_size": height_m,
         "ground_to_z0": True, "join": True, "orientation_fix": None})
-    a = _call(registry, "quad_rig", _QUAD_RIG_CODE)
+    from . import skin_v2
+    a = _call(registry, "quad_rig", skin_v2.wrap(_QUAD_RIG_CODE))
     if not (a and a.get("ok")):
         raise RuntimeError(f"quad rig failed: {a}")
     if verbose:
-        print(f"[bake] quad rig: {a.get('bones')} bones, legs={a.get('legs')}")
+        print(f"[bake] quad rig: {a.get('bones')} bones, legs={a.get('legs')}, "
+              f"skin_v2={a.get('skin_v2', '?')}")
     r = _call(registry, "idle", _QUAD_IDLE_CODE.replace("__TOTAL__", "72"))
     if not (r and r.get("ok")):
         raise RuntimeError(f"quad idle failed: {r}")

@@ -10,6 +10,32 @@ Pre-1.0 versions are internal milestones during the constraint sprint leading to
 
 ## [Unreleased]
 
+### Added — Phase 53+54: quality harness + quadruped skin v2 (morphing fix, part 1) (2026-07-11)
+- **Quality harness** (`scripts/quality_harness.py`): the regression gate for all
+  character/scene quality work. `morph` mode measures p95 EDGE STRETCH on the
+  animated library rigs via headless Blender — wrong-bone skinning weights
+  stretch edges between limbs, so this is the "morphing" defect as a number.
+  `styles` mode hashes fixed-seed exports per style/view preset to catch drift.
+  Baselines live in `renders/quality_baseline/` (gitignored); `--compare`
+  fails on any regression, so every quality change is proven, not eyeballed.
+- **Quadruped skin v2** (`app/game_export/skin_v2.py`, flag `FS_SKIN_V2`,
+  default on, per-step auto-fallback to the untouched Euclidean path):
+  1. *Same-side/same-end constraints* — a left-leg bone can never claim a
+     clearly-right-side vertex (ported from the proven biped mocap skin).
+  2. *Geodesic surface distance* for leg bones — pure numpy+heapq multi-source
+     Dijkstra over the mesh edge graph (bridge Python has no scipy). Surface
+     distance makes the inner thigh "far" from the other leg even though it is
+     physically near — the root cause of cross-limb weight bleed.
+  3. *Laplacian weight smoothing* + max-4-influence clamp.
+- **Measured (harness, p95 edge stretch, lower=better):**
+  polar_bear 0.934 → 0.702 (−25%) · cat 0.737 → 0.613 (−17%) ·
+  fox 0.698 → 0.320 (−54%) · man 0.481 (untouched biped path, unchanged).
+  Visual A/B mid-run confirms: legs read as legs instead of sheared sheets.
+- Re-baked cat/fox/polar_bear rigs promoted to the library; every future
+  quadruped bake gets v2 automatically. Remaining stretch is the thin
+  triangle-soup leg geometry itself — that is the QuadriFlow retopo keystone's
+  job (next phase).
+
 ### Fixed — Phase 53: rig cache invalidates when its static mesh is re-baked (2026-07-08)
 - **The bug (why the bear STILL looked upside-down after Phase 52)**: the game
   player uses the RIGGED `<kind>_anim.glb`, not the static library mesh.

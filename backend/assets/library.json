@@ -15,5 +15,16 @@
   "monkey": "assets/library/monkey.glb",
   "cat": "assets/library/cat.glb",
   "snowflakes": "assets/library/snowflakes.glb",
-  "firefly": "assets/library/firefly.glb"
+  "firefly": "assets/library/firefly.glb",
+  "fence": "assets/library/fence.glb",
+  "food": "assets/library/food.glb",
+  "polar bear": "assets/library/polar_bear.glb",
+  "pearl": "assets/library/pearl.glb",
+  "rune": "assets/library/rune.glb",
+  "cheetah": "assets/library/cheetah.glb",
+  "viking": "assets/library/viking.glb",
+  "snake": "assets/library/snake.glb",
+  "relic": {
+    "raw": "renders/_actor_cache/b3b02c99774c.glb"
+  }
 }
