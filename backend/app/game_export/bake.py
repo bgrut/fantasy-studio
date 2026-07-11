@@ -9,6 +9,7 @@ rig (adaptive arm bones + voxel-proxy skin) from app.orchestrator.mocap_retarget
 from __future__ import annotations
 
 import json
+import os
 import shutil
 from pathlib import Path
 
@@ -569,6 +570,129 @@ __result__=json.dumps({"ok":True,"healed_px":healed,"images":imgs})
 '''
 
 
+# ── ORIENTATION GUARANTEE (Phase 57) ────────────────────────────────────────
+# The 24-view silhouette gate is best-effort (a belly-up bear once passed at
+# IoU 0.34). This closes the loop: geometric feet-down/head-up check on the
+# FINAL exported GLB — fresh import, actual verts, no renders — with
+# auto-correct + re-export + re-check when clearly inverted. An unverified
+# orientation never ships silently.
+_ORIENT_VERIFY_CODE = r'''
+import bpy, math, json
+import numpy as np
+from mathutils import Matrix
+PAT="__PATTERN__"; FIX=__FIX__; OUT=r"__OUT__"
+bpy.ops.import_scene.gltf(filepath=OUT)
+meshes=[o for o in bpy.data.objects if o.type=="MESH"]
+if not meshes:
+    __result__=json.dumps({"ok":False,"reason":"no mesh in GLB"})
+else:
+    # Force rest pose: raw v.co on a SKINNED glTF mesh is Y-up BIND space —
+    # measuring it flipped a correct bear once (2026-07-11). The EVALUATED
+    # depsgraph mesh in REST position is true world-space Z-up geometry
+    # (same method the quality harness uses).
+    for _a in bpy.data.objects:
+        if _a.type == "ARMATURE":
+            _a.data.pose_position = "REST"
+    bpy.context.view_layer.update()
+    def _verts():
+        dg = bpy.context.evaluated_depsgraph_get(); dg.update()
+        vs=[]
+        for o in meshes:
+            ev = o.evaluated_get(dg); me = ev.to_mesh()
+            mw = ev.matrix_world
+            vs += [list(mw @ v.co) for v in me.vertices]
+            ev.to_mesh_clear()
+        return np.array(vs, dtype=np.float64)
+    def _gap(V, zlo, zhi):
+        # leg-gap detector (same prior the composer gate uses): the FEET end
+        # has a left/right (and front/back) split between limbs; the back/head
+        # end is a solid blob. Gap at the TOP => the character is inverted.
+        Z=V[:,2]; z0,z1=Z.min(),Z.max(); H=max(z1-z0,1e-6)
+        sel=(Z>=z0+zlo*H)&(Z<z0+zhi*H)
+        if int(sel.sum())<30: return 0.0
+        best=0.0
+        for ax in (0,1):
+            a=V[sel,ax]; c=float(np.median(a)); hw=max((a.max()-a.min())/2,1e-6)
+            fill=float((np.abs(a-c)<0.25*hw).mean())
+            best=max(best,1.0-fill)
+        return best
+    V=_verts()
+    bot=_gap(V,0.0,0.40 if PAT=="biped" else 0.35)
+    top=_gap(V,0.60 if PAT=="biped" else 0.65,1.0)
+    upright = not (top > bot + 0.05)      # only CLEAR inversions fail
+    flipped=0
+    if not upright and FIX:
+        # quadruped: roll 180 about Y (body long axis) keeps the heading;
+        # biped: flip about X (the composer prior's proven convention).
+        ax = "X" if PAT=="biped" else "Y"
+        R=Matrix.Rotation(math.pi,4,ax)
+        for o in bpy.data.objects:
+            if o.parent is None:
+                o.matrix_world = R @ o.matrix_world
+        bpy.context.view_layer.update()
+        zmin=float(_verts()[:,2].min())
+        for o in bpy.data.objects:
+            if o.parent is None:
+                o.matrix_world = Matrix.Translation((0,0,-zmin)) @ o.matrix_world
+        bpy.context.view_layer.update()
+        V=_verts()
+        bot=_gap(V,0.0,0.40 if PAT=="biped" else 0.35)
+        top=_gap(V,0.60 if PAT=="biped" else 0.65,1.0)
+        upright = not (top > bot + 0.05)
+        flipped=1
+        for _a in bpy.data.objects:              # back to POSE before export
+            if _a.type == "ARMATURE":
+                _a.data.pose_position = "POSE"
+        bpy.context.view_layer.update()
+        bpy.ops.export_scene.gltf(filepath=OUT, export_animation_mode="NLA_TRACKS",
+                                  export_animations=True, export_skins=True,
+                                  export_yup=True, export_apply=False)
+    __result__=json.dumps({"ok":True,"upright":bool(upright),"flipped":flipped,
+                           "bottom_gap":round(bot,3),"top_gap":round(top,3)})
+'''
+
+
+def verify_glb_orientation(glb: str | Path, pattern: str | None, fix: bool = False,
+                           verbose: bool = True) -> dict:
+    """Orientation TELEMETRY on a final GLB (legged patterns only) — detection
+    only, gated off by default (FS_ORIENT_VERIFY=1 to enable).
+
+    AUTO-FIX IS REJECTED BY EVIDENCE (2026-07-11): two independent geometric
+    leg-gap detectors (raw-bind-space AND evaluated-rest-space) both produced
+    FALSE POSITIVES on known-good rigs — the first flipped a correct polar
+    bear twice; the trimesh cross-check false-flagged a correct fox. Vertex
+    statistics cannot tell a chunky animal's back from its belly reliably
+    (same lesson as the Phase 52 silhouette CoM tiebreak). Orientation is
+    guaranteed where it is provable: the 24-view silhouette gate vs the
+    REFERENCE IMAGE at bake time (composer) + the feet-down/head-up priors +
+    ensure_playable's mtime invalidation. A future render-based verifier
+    (final GLB silhouette vs reference) may flag for RE-BAKE — but must never
+    flip files in place on a statistical signal."""
+    if os.environ.get("FS_ORIENT_VERIFY", "0") != "1":
+        return {"ok": True, "skipped": "FS_ORIENT_VERIFY off"}
+    if pattern not in ("quadruped", "biped"):
+        return {"ok": True, "skipped": pattern or "unknown"}
+    from app.mcp import registry, bridge
+    try:
+        bridge.connect(timeout=8)
+        registry.call("reset_scene", {})
+        code = (_ORIENT_VERIFY_CODE
+                .replace("__PATTERN__", pattern)
+                .replace("__FIX__", "1" if fix else "0")
+                .replace("__OUT__", str(Path(glb).resolve()).replace("\\", "/")))
+        r = _call(registry, "orient_verify", code)
+    except Exception as e:  # verify must never kill a bake — but never be silent
+        r = {"ok": False, "reason": f"{type(e).__name__}: {e}"}
+    if verbose:
+        if r and r.get("ok"):
+            print(f"[bake] orientation verify: upright={r.get('upright')} "
+                  f"flipped={r.get('flipped')} (gaps bottom={r.get('bottom_gap')} "
+                  f"top={r.get('top_gap')})")
+        else:
+            print(f"[bake] orientation verify FAILED to run: {r}")
+    return r or {"ok": False}
+
+
 def optimize_asset(src_glb: str | Path, out_glb: str | Path, target_tris: int = 45000,
                    height_m: float = 1.0, verbose: bool = True,
                    ref_png: str | Path | None = None,
@@ -651,6 +775,8 @@ def optimize_asset(src_glb: str | Path, out_glb: str | Path, target_tris: int = 
     if verbose:
         mb = out_glb.stat().st_size / 1e6
         print(f"[bake] optimized {Path(src_glb).name}: {r['tris'][0]:,} -> {r['tris'][1]:,} tris, {mb:.1f} MB")
+    # ORIENTATION GUARANTEE (Phase 57): never ship an unverified orientation.
+    r["orientation"] = verify_glb_orientation(out_glb, pattern, verbose=verbose)
     return r
 
 
@@ -722,7 +848,9 @@ __result__=json.dumps({"ok":True,"frames":T})
     if verbose:
         mb = out_glb.stat().st_size / 1e6 if out_glb.exists() else 0
         print(f"[bake] exported {out_glb.name} ({mb:.1f} MB, tracks={e.get('tracks')})")
-    return {"ok": True, "tracks": e.get("tracks")}
+    # ORIENTATION GUARANTEE (Phase 57): verify the final animated artifact.
+    ov = verify_glb_orientation(out_glb, "quadruped", verbose=verbose)
+    return {"ok": True, "tracks": e.get("tracks"), "orientation": ov}
 
 
 def ensure_playable(kind: str, verbose: bool = True) -> str | None:
@@ -827,4 +955,7 @@ def bake_anim_set(hero_glb: str | Path, out_glb: str | Path,
     if verbose:
         mb = out_glb.stat().st_size / 1e6 if out_glb.exists() else 0
         print(f"[bake] exported {out_glb.name} ({mb:.1f} MB, tracks={e.get('tracks')})")
-    return {"ok": True, "tracks": e.get("tracks"), "skin": a.get("skin")}
+    # ORIENTATION GUARANTEE (Phase 57): verify the final animated artifact.
+    ov = verify_glb_orientation(out_glb, "biped", verbose=verbose)
+    return {"ok": True, "tracks": e.get("tracks"), "skin": a.get("skin"),
+            "orientation": ov}
