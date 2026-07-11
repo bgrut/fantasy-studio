@@ -10,6 +10,31 @@ Pre-1.0 versions are internal milestones during the constraint sprint leading to
 
 ## [Unreleased]
 
+### Added — Phase 57+58: orientation telemetry + gated retopo keystone (2026-07-11)
+- **Phase 57 (orientation)**: auto-fix was REJECTED BY EVIDENCE — two
+  independent geometric leg-gap detectors false-positived on known-good rigs
+  (one flipped a correct polar bear twice; caught by visual render checks,
+  file restored + re-verified). Ships as detection-only telemetry
+  (`verify_glb_orientation`, FS_ORIENT_VERIFY, off by default) + a visual QA
+  tool (`scripts/_render_pose_check.py`). Orientation stays guaranteed where
+  it is provable: the bake-time 24-view silhouette gate vs the reference +
+  feet-down/head-up priors + rig-cache mtime invalidation.
+- **Phase 58 (retopo keystone, FS_RETOPO=1 opt-in)**: `app/game_export/
+  retopo.py` — voxel remesh (manifold/watertight/shard-fusing, density-guarded)
+  + hygiene pass + largest-island filter + best-effort QuadriFlow + UV/material
+  transfer, inserted before rigging in both anim bakes; failure restores the
+  original mesh. HONEST FINDINGS: Blender 5.1's QuadriFlow rejects the
+  voxel-remeshed TRELLIS heroes ("needs manifold/consistent normals") even at
+  0 non-manifold verts / 1 island / consistent normals — probed exhaustively
+  (symmetry off, triangulated, mesh-doctor); a cube passes in the same
+  session. Voxel-only keystone measured MIXED on the harness: bear 0.702→0.668
+  (better), cat 0.613→0.749 (worse), fox 0.320→1.725 (fur is hundreds of
+  legitimate alpha-strip shells — island filter + voxel destroy them).
+  Therefore OPT-IN ONLY; library keeps the Phase 54 rigs. Upgrade path:
+  standalone instant-meshes (BSD-3) or newer Blender + per-pattern gating —
+  GPU-day. Bridge ops learned: quadriflow needs a long-timeout call (420 s);
+  never read_factory_settings through the bridge (kills the addon socket).
+
 ### Added — Phase 53+54: quality harness + quadruped skin v2 (morphing fix, part 1) (2026-07-11)
 - **Quality harness** (`scripts/quality_harness.py`): the regression gate for all
   character/scene quality work. `morph` mode measures p95 EDGE STRETCH on the

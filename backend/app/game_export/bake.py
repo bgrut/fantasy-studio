@@ -792,7 +792,14 @@ def bake_quadruped_anim_set(hero_glb: str | Path, out_glb: str | Path,
     registry.call("import_mesh_file", {
         "filepath": str(hero_glb), "name": "Hero", "normalize_size": height_m,
         "ground_to_z0": True, "join": True, "orientation_fix": None})
-    from . import skin_v2
+    from . import skin_v2, retopo
+    # KEYSTONE (Phase 58, FS_RETOPO=1): rebuild the hero as even manifold
+    # quads BEFORE rigging — clean joint loops for the skinning. Any failure
+    # leaves the original mesh untouched.
+    if retopo.enabled():
+        rr = retopo.run("Hero")            # long-timeout bridge call
+        if verbose:
+            print(f"[bake] retopo: {rr}")
     a = _call(registry, "quad_rig", skin_v2.wrap(_QUAD_RIG_CODE))
     if not (a and a.get("ok")):
         raise RuntimeError(f"quad rig failed: {a}")
@@ -917,6 +924,12 @@ def bake_anim_set(hero_glb: str | Path, out_glb: str | Path,
         "filepath": str(hero_glb), "name": "Hero", "normalize_size": height_m,
         "ground_to_z0": True, "join": True, "orientation_fix": None})
 
+    # KEYSTONE (Phase 58, FS_RETOPO=1): clean quad topology before rigging.
+    from . import retopo
+    if retopo.enabled():
+        rr = retopo.run("Hero")            # long-timeout bridge call
+        if verbose:
+            print(f"[bake] retopo: {rr}")
     a = _call(registry, "autorig", M._AUTORIG_CODE.replace("__HERO__", "Hero"))
     if not (a and a.get("ok")):
         raise RuntimeError(f"autorig failed: {a}")
