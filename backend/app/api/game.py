@@ -679,6 +679,28 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                         count=min(ob.count, 8), speed=rival_speed,
                         height_m=library.default_height(okind)))
 
+        # BATTLE ROYALE SANITY (Phase 61): an 'eliminate' step is last-one-
+        # standing — the rivals are HOSTILE copies of the player's own kind
+        # (foxes fight foxes) unless the prompt already cast hostiles. The
+        # runtime adds the shrinking storm zone.
+        for ob in spec.objectives:
+            if ob.kind == "eliminate" and not any(
+                    e.behavior == "hostile" for e in spec.entities):
+                okind = ob.label.strip().lower() if ob.label else cast
+                rglb = (ensure_playable(okind, verbose=False)
+                        or library.resolve(okind)
+                        or ensure_playable(cast, verbose=False)
+                        or library.resolve(cast))
+                if rglb:
+                    if not (library.resolve(okind)):
+                        okind = cast
+                    spec.entities.append(EntitySpec(
+                        name=okind, asset=rglb, behavior="hostile",
+                        count=min(max(ob.count, 2), 12),
+                        speed=max(spec.player.walk_speed * 0.8, 2.2),
+                        height_m=library.default_height(okind), hp=3))
+                    ob.label = okind + "s" if not ob.label else ob.label
+
         # grass: off for cities and snow (quality-pack gate)
         from app.game_export.dressing import wants_grass
         spec.world.grass = wants_grass(spec.world.name, spec.world.weather)
@@ -688,7 +710,7 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         total_hostiles = sum(e.count for e in spec.entities if e.behavior == "hostile")
         sane = []
         for ob in spec.objectives:
-            if ob.kind == "defeat":
+            if ob.kind in ("defeat", "eliminate"):
                 if total_hostiles <= 0:
                     job.setdefault("notes", []).append(
                         f"'defeat {ob.label}' dropped — no enemies could be cast")

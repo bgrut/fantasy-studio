@@ -10,6 +10,38 @@ Pre-1.0 versions are internal milestones during the constraint sprint leading to
 
 ## [Unreleased]
 
+### Added — Phase 60+61: 1:1 reference texturing + new game genres (2026-07-11)
+- **Texture v2 (`texture_v2.py`, FS_TEX_V2 default on)** — kills the
+  "half-stretched face/body" on CPU-generated heroes. The v1 flat side
+  projection mapped face/chest/rump onto a thin strip of photo pixels; v2
+  bakes a smart-UV atlas (numpy rasterizer, no Cycles), keeps the photo where
+  the surface faced the reference camera, and pyramid-inpaints the smear
+  zones (~20% of the surface on bear/cat). Verified by front-render A/B:
+  streak bands gone; flanks stay 1:1 with the reference. Companion fix:
+  skin v2's geodesic graph is now WELDED BY POSITION so atlas UV-seam vertex
+  splits can't fragment it (the harness caught a cat morph regression from
+  exactly that — fixed, all gates pass).
+- **Battle royale (`eliminate` objective)** — "battle royale / last one
+  standing / eliminate all rivals" spawns hostile rivals of the player's own
+  kind plus a SHRINKING STORM ZONE (translucent wall + ground ring, closes
+  over 150 s, 1 HP/s outside). Win = all rivals down. Verified live in
+  browser: 3 rivals, quest "Last one standing — eliminate 3 rivals 0/3",
+  zero errors.
+- **Sports (`score` objective)** — "soccer / score N goals" spawns an arcade
+  ball (gravity, bounce, rolling drag, world-bounds), walk into it to kick
+  (Shift = power), goalposts at the level goal, GOAL! burst + counter, win at
+  N. Verified live in browser: "Score 2 goals — 0/2", ball physics running
+  clean during play.
+- Both genres wired end-to-end: spec Literal, LLM grammar + keyword fallback
+  (works with Ollama down), runtime, quest log/HUD. Style/view snapshot
+  re-baselined for the intended runtime change; morph gate untouched.
+- **Godot multiplayer starting point** — every Godot export now ships
+  MULTIPLAYER_GUIDE.md: the 5-step Godot 4 high-level networking path
+  (ENetMultiplayerPeer, MultiplayerSpawner/Synchronizer, per-peer authority,
+  server-authoritative mission RPCs) mapped to this project's player.gd/
+  mission.gd structure. Honest scope: web builds stay single-player; Godot
+  is the multiplayer route.
+
 ### Added — Phase 57+58: orientation telemetry + gated retopo keystone (2026-07-11)
 - **Phase 57 (orientation)**: auto-fix was REJECTED BY EVIDENCE — two
   independent geometric leg-gap detectors false-positived on known-good rigs

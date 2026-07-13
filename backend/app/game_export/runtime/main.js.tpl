@@ -1655,6 +1655,124 @@ async function main() {
     }
   }
 
+  // ── BATTLE ROYALE storm zone (Phase 61, 'eliminate' objective) ───────────
+  // A shrinking safe circle: outside it the player takes 1 HP/s. Rivals are
+  // regular hostiles (the eliminate step counts kills), so the zone is the
+  // genre pressure that forces engagement instead of camping.
+  const HAS_BR = (SPEC.objectives || []).some(o => o.kind === 'eliminate');
+  let storm = null;
+  if (HAS_BR) {
+    const R0 = gsize * 0.48, R1 = Math.max(9, gsize * 0.06), ZONE_T = 150;
+    const wallMat = new THREE.MeshBasicMaterial({
+      color: 0x7c5cff, transparent: true, opacity: 0.16,
+      side: THREE.DoubleSide, depthWrite: false });
+    const wall = new THREE.Mesh(
+      new THREE.CylinderGeometry(1, 1, 26, 64, 1, true), wallMat);
+    wall.position.y = 13;
+    scene.add(wall);
+    const ring = new THREE.Mesh(
+      new THREE.RingGeometry(0.985, 1.0, 96),
+      new THREE.MeshBasicMaterial({ color: 0xa88bff, transparent: true,
+        opacity: 0.85, side: THREE.DoubleSide, depthWrite: false }));
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.y = 0.12;
+    scene.add(ring);
+    storm = { R0, R1, ZONE_T, t0: null, r: R0, wall, ring, hurtCd: 0 };
+  }
+  function stepStorm(dt, nt) {
+    if (!storm || won || lost) return;
+    if (storm.t0 === null) storm.t0 = performance.now();
+    const u = Math.min((performance.now() - storm.t0) / 1000 / storm.ZONE_T, 1);
+    storm.r = storm.R0 + (storm.R1 - storm.R0) * u;      // linear close
+    storm.wall.scale.set(storm.r, 1, storm.r);
+    storm.ring.scale.set(storm.r, storm.r, 1);
+    storm.wall.material.opacity = 0.16 + 0.10 * Math.sin(performance.now() / 300);
+    storm.hurtCd -= dt;
+    if (Math.hypot(nt.x, nt.z) > storm.r && storm.hurtCd <= 0) {
+      storm.hurtCd = 1.0;
+      playerHit(1);
+      popText('storm!', '#b9a4ff');
+    }
+  }
+
+  // ── SPORTS ball + goal (Phase 61, 'score' objective) ─────────────────────
+  // Arcade ball physics (velocity + gravity + ground bounce + drag); walk
+  // into the ball to kick it toward where you face. Goal mouth at the level
+  // goal position; N goals wins. Ball resets to centre after each goal.
+  const SCORE_OB = (SPEC.objectives || []).find(o => o.kind === 'score');
+  let ball = null;
+  if (SCORE_OB) {
+    const bm = new THREE.Mesh(
+      new THREE.SphereGeometry(0.42, 24, 18),
+      new THREE.MeshStandardMaterial({ color: 0xf2f0e8, roughness: 0.5 }));
+    // classic panel look: darker second hemisphere material would need UVs —
+    // a simple dark band texture via vertex colors is overkill; keep clean.
+    bm.castShadow = true;
+    scene.add(bm);
+    // goal mouth: two posts + crossbar at the goal position, facing spawn
+    const gp = goalPos ? { x: goalPos.x, z: goalPos.z } : { x: 0, z: gsize * 0.3 };
+    const yaw = Math.atan2(-gp.x, -gp.z);               // mouth faces origin
+    const postMat = new THREE.MeshStandardMaterial({ color: 0xf5f5f5, roughness: 0.35 });
+    const W = 6.4, H = 2.6;
+    const goalGrp = new THREE.Group();
+    for (const sx of [-1, 1]) {
+      const post = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, H, 10), postMat);
+      post.position.set(sx * W / 2, H / 2, 0);
+      goalGrp.add(post);
+    }
+    const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, W, 10), postMat);
+    bar.rotation.z = Math.PI / 2;
+    bar.position.y = H;
+    goalGrp.add(bar);
+    goalGrp.position.set(gp.x, 0, gp.z);
+    goalGrp.rotation.y = yaw;
+    scene.add(goalGrp);
+    ball = { m: bm, v: new THREE.Vector3(), gp, yaw, W, H,
+             reset() {
+               this.m.position.set(0, 0.42 + hAt(0, 0), 0);
+               this.v.set(0, 0, 0);
+             } };
+    ball.reset();
+  }
+  function stepBall(dt, nt) {
+    if (!ball || won || lost) return;
+    const p = ball.m.position, v = ball.v;
+    // kick: player contact sends the ball where the PLAYER faces
+    const pd = Math.hypot(p.x - nt.x, p.z - nt.z);
+    if (pd < 1.35) {
+      const dir = new THREE.Vector3(Math.sin(modelYaw), 0, Math.cos(modelYaw));
+      const power = 9 + (keys['ShiftLeft'] || keys['ShiftRight'] ? 5 : 0);
+      v.set(dir.x * power, 3.2, dir.z * power);
+      sfx('hit');
+    }
+    v.y -= 22 * dt;                                     // gravity (arcadey)
+    p.addScaledVector(v, dt);
+    const gy = hAt(p.x, p.z) + 0.42;
+    if (p.y < gy) { p.y = gy; v.y = Math.abs(v.y) * 0.45; v.x *= 0.985; v.z *= 0.985; }
+    v.x *= (1 - 0.4 * dt); v.z *= (1 - 0.4 * dt);       // rolling drag
+    const half = gsize / 2 - 1;
+    if (Math.abs(p.x) > half) { p.x = Math.sign(p.x) * half; v.x *= -0.6; }
+    if (Math.abs(p.z) > half) { p.z = Math.sign(p.z) * half; v.z *= -0.6; }
+    ball.m.rotation.x += v.z * dt * 2; ball.m.rotation.z -= v.x * dt * 2;
+    // goal test in the goal's local frame: |x| < W/2, y < H, crossing z=0 band
+    const lx = Math.cos(-ball.yaw) * (p.x - ball.gp.x) - Math.sin(-ball.yaw) * (p.z - ball.gp.z);
+    const lz = Math.sin(-ball.yaw) * (p.x - ball.gp.x) + Math.cos(-ball.yaw) * (p.z - ball.gp.z);
+    if (Math.abs(lx) < ball.W / 2 && p.y < ball.H && Math.abs(lz) < 0.55) {
+      const st = steps[stepIdx];
+      if (st && st.kind === 'score') {
+        st._goals = (st._goals || 0) + 1;
+        sfx('win');
+        burst(p.clone(), 0xffe27a);
+        popText('GOAL!', '#ffe27a');
+        renderQuest();
+        ball.reset();
+        if (st._goals >= st.count) advanceStep();
+      } else {
+        ball.reset();
+      }
+    }
+  }
+
   // interact UI: proximity prompt + reading panel (books, signs, hints)
   let readable = null, reading = false;
   const intEl = document.createElement('div');
@@ -1714,11 +1832,15 @@ async function main() {
     if (st.kind === 'defeat') return `Defeat ${st.count} ${st.label || 'enemies'}`;
     if (st.kind === 'race') return `Win the race (${st.count} ${st.label || 'rivals'})`;
     if (st.kind === 'survive') return `Survive ${st.label || 'the onslaught'}`;
+    if (st.kind === 'eliminate') return `Last one standing — eliminate ${st.count} ${st.label || 'rivals'}`;
+    if (st.kind === 'score') return `Score ${st.count} ${st.label || 'goals'}`;
     return `Reach ${st.label || 'the beacon'}`;
   }
   function stepProgress(st) {
     if (st.kind === 'collect') return `${st._got || 0}/${st.count}`;
-    if (st.kind === 'defeat') return `${Math.min(kills - (st._k0 || 0), st.count)}/${st.count}`;
+    if (st.kind === 'defeat' || st.kind === 'eliminate')
+      return `${Math.min(kills - (st._k0 || 0), st.count)}/${st.count}`;
+    if (st.kind === 'score') return `${st._goals || 0}/${st.count}`;
     if (st.kind === 'survive') {
       const left = st._t0 === undefined ? st.count
         : Math.max(0, Math.ceil(st.count - (performance.now() - st._t0) / 1000));
@@ -1752,7 +1874,8 @@ async function main() {
       return;
     }
     if (st.kind === 'collect') { st._got = 0; spawnCollectibles(st); }
-    if (st.kind === 'defeat') { st._k0 = kills; }
+    if (st.kind === 'defeat' || st.kind === 'eliminate') { st._k0 = kills; }
+    if (st.kind === 'score') { st._goals = 0; }
     renderQuest();
   }
   let won_ = false;   // guard alias kept for clarity in doWin
@@ -2118,7 +2241,7 @@ async function main() {
       n.dead = true; kills++; sfx('hit');
       burst(n.obj.position.clone().add(new THREE.Vector3(0, 0.8, 0)), 0xff5c6a);
       const st = steps[stepIdx];
-      if (st && st.kind === 'defeat') {
+      if (st && (st.kind === 'defeat' || st.kind === 'eliminate')) {
         renderQuest();
         if (kills - (st._k0 || 0) >= st.count) advanceStep();
       }
@@ -2819,6 +2942,8 @@ async function main() {
       stepHealthPacks(dt, nt);
       stepInteract(nt);
       if (!inspectOn) stepHurtZones(dt, nt);
+      if (!inspectOn) stepStorm(dt, nt);   // battle-royale zone (Phase 61)
+      if (!inspectOn) stepBall(dt, nt);    // sports ball + goal (Phase 61)
     }
     // placed creatures idle-breathe even while paused/inspecting — life sells
     for (const p of placedItems) {

@@ -548,6 +548,47 @@ func _render_quest() -> void:
 \t_hearts.text = "HP " + "#".repeat(maxi(hp, 0))
 """
 
+_MULTIPLAYER_GUIDE = """# Taking this game MULTIPLAYER in Godot — the honest starting point
+
+This export is a complete single-player Godot 4 project. Godot 4 has one of
+the best built-in high-level multiplayer APIs of any free engine, and this
+project is structured so you can layer it on:
+
+## Why this project is multiplayer-ready
+- `player.gd` is a self-contained CharacterBody3D scene — the unit you
+  replicate per connected peer.
+- `npc.gd` and `mission.gd` keep game state in plain variables — the things
+  you sync with a MultiplayerSynchronizer.
+- All assets are local files (no runtime downloads) — every client ships the
+  same world.
+
+## The 5 steps (Godot 4 high-level API)
+1. **Peer setup** — in a new `lobby.gd` autoload:
+   `var peer = ENetMultiplayerPeer.new(); peer.create_server(7777)` (host) or
+   `peer.create_client(ip, 7777)` (join); `multiplayer.multiplayer_peer = peer`.
+2. **Spawn players per peer** — add a `MultiplayerSpawner` to `main.tscn`
+   pointing at the player scene; instance one player per
+   `multiplayer.peer_connected` with `name = str(peer_id)`.
+3. **Give each player authority** —
+   `player.set_multiplayer_authority(peer_id)`; in `player.gd`, only process
+   input `if is_multiplayer_authority()`.
+4. **Sync transforms** — drop a `MultiplayerSynchronizer` in the player scene
+   replicating `position` and `rotation`. NPCs/mission state sync the same
+   way from the server.
+5. **Make mission events server-authoritative** — turn score/kill/win updates
+   in `mission.gd` into `@rpc(\"authority\", \"call_local\")` functions.
+
+## Docs worth reading (free)
+- Godot high-level multiplayer: docs.godotengine.org -> Networking
+- `MultiplayerSpawner` / `MultiplayerSynchronizer` class docs
+- For internet play beyond LAN: a cheap VPS relay or Steam sockets
+  (GodotSteam, free) once you're on Steam.
+
+Honest scope note: Fantasy Studio's web builds are single-player today —
+this Godot path is the intended route to real multiplayer, and everything
+above is free and open-source.
+"""
+
 _STEAM_GUIDE = """# From this export to Steam — the honest step-by-step
 
 This folder is a complete **Godot 4.3 project**. Godot is the free,
@@ -793,6 +834,7 @@ def export_godot_game(spec: GameSpec, out_dir: str | Path, verbose: bool = True)
     (proj / "npc.gd").write_text(_NPC_GD, encoding="utf-8")
     (proj / "mission.gd").write_text(_MISSION_GD, encoding="utf-8")
     (proj / "STEAM_GUIDE.md").write_text(_STEAM_GUIDE, encoding="utf-8")
+    (proj / "MULTIPLAYER_GUIDE.md").write_text(_MULTIPLAYER_GUIDE, encoding="utf-8")
     (proj / "main.tscn").write_text(_tscn(spec, pairs), encoding="utf-8")
     (proj / "icon.svg").write_text(
         '<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128">'

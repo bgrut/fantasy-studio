@@ -39,11 +39,14 @@ Output ONLY the JSON object, no markdown, no commentary. Schema (all fields opti
  "player": also may include "attack": one of "none","melee","ranged" ("with a sword/fighting" -> melee,
            "with a gun/bow/blaster" -> ranged),
  "objectives": ORDERED mission steps, each {"kind": one of "collect","defeat","reach","race","survive",
-               "label": str, "count": int 1..50} — a mission prompt becomes
+               "eliminate","score", "label": str, "count": int 1..50} — a mission prompt becomes
                [collect the keys] -> [defeat the guards] -> [reach the tower];
                racing/catching/passing N cars -> {"kind":"race","label":"cars","count":N};
                "survive"/"hold out"/"last N minutes against waves" -> {"kind":"survive",
-               "label":"the wolf waves","count": SECONDS 30..300} (needs hostile entities),
+               "label":"the wolf waves","count": SECONDS 30..300} (needs hostile entities);
+               "battle royale"/"last one standing"/"eliminate all N rivals" ->
+               {"kind":"eliminate","label":"rivals","count": N rivals 2..12};
+               soccer/football/"score N goals" -> {"kind":"score","label":"goals","count": N 1..10},
  "entities": [{"name": simple noun like "dog","cat","horse","wolf","car", "behavior": one of
                "wander","follow","static","hostile","vehicle" (cars/trucks -> "vehicle"),
                "count": int 1..8, "speed": float 0.5..8}]
@@ -125,6 +128,18 @@ def _keyword_fallback(text: str) -> dict:
         secs = int(m.group(1) or 60) * (60 if (m.group(2) or "").startswith("min") else 1)
         obs.append({"kind": "survive", "count": min(secs, 600),
                     "label": "the onslaught"})
+    # battle royale (Phase 61): last-one-standing + shrinking storm zone
+    m = _re.search(r"\b(?:battle\s*royale|last\s+(?:one|man|creature)\s+standing|"
+                   r"eliminate\s+(?:all\s+)?(\d+)?\s*(?:the\s+)?([a-z]+)?)", t)
+    if m and not any(o.get("kind") == "eliminate" for o in obs):
+        n = int(m.group(1) or 6)
+        obs.append({"kind": "eliminate", "count": max(2, min(n, 12)),
+                    "label": _sing1(m.group(2) or "rival") + "s"})
+    # sports (Phase 61): score N goals -> ball + goal + counter
+    m = _re.search(r"\bscore\s+(\d+)?\s*goals?\b|\b(?:soccer|football)\b", t)
+    if m and not any(o.get("kind") == "score" for o in obs):
+        obs.append({"kind": "score", "count": max(1, min(int(m.group(1) or 3), 10)),
+                    "label": "goals"})
     m = _re.search(r"\b(?:reach|get to|arrive at|escape to|make it to|return to)\s+"
                    r"(?:the\s+)?((?:[a-z]+\s?){1,4}?)" + _stop, t)
     if m and not any(o.get("kind") in ("reach", "race") for o in obs):
