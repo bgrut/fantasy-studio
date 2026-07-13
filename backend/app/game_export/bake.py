@@ -747,6 +747,18 @@ def optimize_asset(src_glb: str | Path, out_glb: str | Path, target_tris: int = 
                                          str(ref_png), verbose=verbose)
                 if verbose:
                     print(f"[bake] projected reference texture onto {Path(src_glb).name}")
+                # TEXTURE V2 (Phase 60, FS_TEX_V2): the flat projection above
+                # smears every surface not facing the reference camera (the
+                # "half-stretched face"). Re-bake into a smart-UV atlas —
+                # photo where trustworthy, pyramid-inpainted fur where not.
+                # Failure keeps the v1 texture.
+                from . import texture_v2
+                if texture_v2.enabled():
+                    _t2 = texture_v2.run(
+                        "Hero", str(ref_png),
+                        str(out_glb.with_suffix("")) + "_atlas.png")
+                    if verbose:
+                        print(f"[bake] texture v2: {_t2}")
             except Exception as _te:
                 if verbose:
                     print(f"[bake] ref projection skipped ({type(_te).__name__}: {_te})")

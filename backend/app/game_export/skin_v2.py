@@ -34,32 +34,52 @@ import numpy as _s2np
 _S2 = {}
 
 def _s2_csr(o, V):
-    """Undirected mesh edge graph in CSR arrays (python lists for loop speed)."""
+    """Undirected mesh edge graph in CSR arrays (python lists for loop speed).
+
+    WELDED BY POSITION: glTF splits vertices along UV-island borders, and the
+    atlas texturing (texture_v2) creates MANY islands — an unwelded graph is
+    fragmented at every seam and the geodesic falls apart (cat morph regressed
+    0.61->0.73 when the atlas landed). Connectivity must follow GEOMETRY, so
+    co-located verts are merged into canonical nodes for the graph; per-vertex
+    lookups map through `canon`."""
     me = o.data
+    nv = len(V)
+    # canonical node per unique (rounded) position
+    key = _s2np.round(V * 1e5).astype(_s2np.int64)
+    _, canon_first, canon = _s2np.unique(key, axis=0,
+                                         return_index=True, return_inverse=True)
+    canon = canon.astype(_s2np.int64)
+    ncan = int(canon.max()) + 1 if nv else 0
     m = len(me.edges)
     E = _s2np.empty(m * 2, dtype=_s2np.int64)
     me.edges.foreach_get("vertices", E)
-    E = E.reshape(m, 2)
-    w = _s2np.linalg.norm(V[E[:, 0]] - V[E[:, 1]], axis=1)
+    E = canon[E.reshape(m, 2)]                      # edges between canonical nodes
+    keep = E[:, 0] != E[:, 1]                       # drop degenerate self-edges
+    E = E[keep]
+    Vc = V[canon_first]                             # canonical positions
+    w = _s2np.linalg.norm(Vc[E[:, 0]] - Vc[E[:, 1]], axis=1)
     src = _s2np.concatenate([E[:, 0], E[:, 1]])
     dst = _s2np.concatenate([E[:, 1], E[:, 0]])
     ww = _s2np.concatenate([w, w])
     order = _s2np.argsort(src, kind="stable")
     src, dst, ww = src[order], dst[order], ww[order]
-    ptr = _s2np.zeros(len(V) + 1, dtype=_s2np.int64)
+    ptr = _s2np.zeros(ncan + 1, dtype=_s2np.int64)
     _s2np.add.at(ptr, src + 1, 1)
     ptr = _s2np.cumsum(ptr)
     _S2["csr"] = (dst, ww, ptr)
     _S2["csrL"] = (dst.tolist(), ww.tolist(), ptr.tolist())
+    _S2["canon"] = canon
+    _S2["ncan"] = ncan
     return _S2["csr"]
 
-def _s2_dijkstra(nv, seeds, seed_d, cap):
-    """Multi-source Dijkstra over the CSR graph; inf where unreachable/beyond cap."""
+def _s2_dijkstra(ncan, seeds_can, seed_d, cap):
+    """Multi-source Dijkstra over the CANONICAL CSR graph; inf where
+    unreachable/beyond cap. Seeds and result are canonical-node indexed."""
     import heapq
     dstL, wwL, ptrL = _S2["csrL"]
-    dist = [float("inf")] * nv
+    dist = [float("inf")] * ncan
     h = []
-    for s, d0 in zip(seeds.tolist(), seed_d.tolist()):
+    for s, d0 in zip(seeds_can.tolist(), seed_d.tolist()):
         if d0 < dist[s]:
             dist[s] = d0
             h.append((d0, s))
@@ -103,9 +123,11 @@ def _s2_refine_dmat(dmat, V, segs, names, o):
             out[Y < ymid - my, bi] = 1e9
         if "B" in key:
             out[Y > ymid + my, bi] = 1e9
-    # (2) geodesic (surface) distance for leg bones
+    # (2) geodesic (surface) distance for leg bones (canonical graph — welded
+    # by position so UV-seam vertex splits don't fragment connectivity)
     if "csr" not in _S2:
         _s2_csr(o, V)
+    canon = _S2["canon"]; ncan = _S2["ncan"]
     cap = 0.5 * diag
     for bi, nm in enumerate(names):
         if not is_leg[bi]:
@@ -118,7 +140,8 @@ def _s2_refine_dmat(dmat, V, segs, names, o):
         seeds = _s2np.where(col <= r)[0]
         if len(seeds) < 6:
             seeds = _s2np.argsort(col)[:6]
-        geo = _s2_dijkstra(nv, seeds, col[seeds], cap)
+        geo_can = _s2_dijkstra(ncan, canon[seeds], col[seeds], cap)
+        geo = geo_can[canon]                        # back to per-vertex
         ok = _s2np.isfinite(geo)
         # surface distance can only be >= straight-line; max() keeps the 1e9
         # constraints AND never lets a vert get CLOSER than Euclidean.
@@ -128,21 +151,30 @@ def _s2_refine_dmat(dmat, V, segs, names, o):
     return out
 
 def _s2_smooth(wK, idxK, nb, V, o, iters=2, lam=0.5):
-    """Laplacian-smooth the sparse weights over the mesh graph, then re-sparsify
-    to max 4 influences and renormalize."""
+    """Laplacian-smooth the sparse weights over the CANONICAL mesh graph
+    (position-welded), then re-sparsify to max 4 influences and renormalize.
+    Also guarantees co-located seam-split verts get IDENTICAL weights."""
     nv = len(V)
     Wd = _s2np.zeros((nv, nb))
     _s2np.put_along_axis(Wd, idxK, wK, axis=1)
     if "csr" not in _S2:
         _s2_csr(o, V)
     dst, ww, ptr = _S2["csr"]
+    canon = _S2["canon"]; ncan = _S2["ncan"]
+    # collapse split verts to canonical nodes (mean of duplicates)
+    Wc = _s2np.zeros((ncan, nb))
+    cnt = _s2np.zeros(ncan)
+    _s2np.add.at(Wc, canon, Wd)
+    _s2np.add.at(cnt, canon, 1.0)
+    Wc /= _s2np.maximum(cnt[:, None], 1.0)
     deg = _s2np.maximum(_s2np.diff(ptr), 1)
-    src_rep = _s2np.repeat(_s2np.arange(nv), _s2np.diff(ptr))
+    src_rep = _s2np.repeat(_s2np.arange(ncan), _s2np.diff(ptr))
     for _ in range(iters):
-        nb_sum = _s2np.zeros_like(Wd)
-        _s2np.add.at(nb_sum, src_rep, Wd[dst])
-        Wd = (1.0 - lam) * Wd + lam * (nb_sum / deg[:, None])
-        Wd /= _s2np.maximum(Wd.sum(1, keepdims=True), 1e-9)
+        nb_sum = _s2np.zeros_like(Wc)
+        _s2np.add.at(nb_sum, src_rep, Wc[dst])
+        Wc = (1.0 - lam) * Wc + lam * (nb_sum / deg[:, None])
+        Wc /= _s2np.maximum(Wc.sum(1, keepdims=True), 1e-9)
+    Wd = Wc[canon]                                  # back to per-vertex
     K2 = min(4, nb)
     idx2 = _s2np.argsort(-Wd, axis=1)[:, :K2]
     w2 = _s2np.take_along_axis(Wd, idx2, 1)
