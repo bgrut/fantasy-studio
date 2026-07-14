@@ -29,7 +29,8 @@ import os
 TEXTURE_V2_CODE = r'''
 import bpy, json, time
 import numpy as np
-HERO = "__HERO__"; REF = r"__REF__"; OUTPNG = r"__OUTPNG__"; S = __SIZE__
+HERO = "__HERO__"; REF = r"__REF__"; REFRAW = r"__REFRAW__"
+OUTPNG = r"__OUTPNG__"; S = __SIZE__
 HI = 0.50; LO = 0.28
 o = bpy.data.objects.get(HERO)
 out = {"ok": False, "reason": ""}
@@ -80,12 +81,33 @@ try:
     fl = np.linalg.norm(fn, axis=1); fl[fl < 1e-12] = 1.0
     validity = np.abs(fn[:, 0] / fl)               # |normal . X| (ref camera axis)
 
-    # ── reference image pixels ──
+    # ── reference image pixels (background-FILLED copy for color) ──
     rimg = bpy.data.images.load(REF, check_existing=True)
     rw, rh = rimg.size
     rpx = np.empty(rw * rh * 4, dtype=np.float32)
     rimg.pixels.foreach_get(rpx)
     rpx = rpx.reshape(rh, rw, 4)[:, :, :3]         # bottom-up rows (matches UV V)
+
+    # ── SILHOUETTE MASK from the RAW photo (Phase 62): geometric validity is
+    # not enough — a face-on surface whose UV overreaches the subject samples
+    # BACKGROUND and poisons the fill (the cat's blank patches). foreground =
+    # saturated OR dark, border-trimmed (same detector the orient gate uses).
+    mimg = bpy.data.images.load(REFRAW, check_existing=True)
+    mw, mh = mimg.size
+    mpx = np.empty(mw * mh * 4, dtype=np.float32)
+    mimg.pixels.foreach_get(mpx)
+    mpx = mpx.reshape(mh, mw, 4)[:, :, :3]
+    _mx = mpx.max(2); _mn = mpx.min(2)
+    _sat = (_mx - _mn) / (_mx + 1e-6)
+    fgmask = (_sat > 0.18) | (_mx < 0.32)
+    _by = int(mh * 0.04); _bx = int(mw * 0.04)
+    _t = np.zeros_like(fgmask); _t[_by:mh-_by, _bx:mw-_bx] = fgmask[_by:mh-_by, _bx:mw-_bx]
+    fgmask = _t
+
+    def fg_at(uvs):
+        x = np.clip((uvs[:, 0] * (mw - 1)).round().astype(np.int64), 0, mw - 1)
+        y = np.clip((uvs[:, 1] * (mh - 1)).round().astype(np.int64), 0, mh - 1)
+        return fgmask[y, x]
 
     def sample(uvs):
         x = np.clip(uvs[:, 0] * (rw - 1), 0, rw - 1)
@@ -96,11 +118,14 @@ try:
         return (rpx[y0, x0] * (1 - fx) * (1 - fy) + rpx[y0, x1] * fx * (1 - fy)
                 + rpx[y1, x0] * (1 - fx) * fy + rpx[y1, x1] * fx * fy)
 
-    # ── 3) rasterize the atlas ──
+    # ── 3) rasterize the atlas (color + geo validity + foreground + world pos) ──
     color = np.zeros((S, S, 3), dtype=np.float32)
     val = np.full((S, S), -1.0, dtype=np.float32)
+    fg = np.zeros((S, S), dtype=bool)
+    pos = np.zeros((S, S, 3), dtype=np.float32)     # world pos per texel (mirror fill)
     A = auv[tls] * (S - 1)                          # (ntri,3,2) atlas px coords
     SRC = suv[tls]                                  # (ntri,3,2) source UVs
+    P3 = cow[tv]                                    # (ntri,3,3) world verts
     # degenerate faces can leave NaN UVs after smart_project — skip those tris
     tri_ok = np.isfinite(A).all(axis=(1, 2)) & np.isfinite(SRC).all(axis=(1, 2))
     for t in range(ntri):
@@ -134,10 +159,48 @@ try:
         suv_t = wi @ SRC[t]
         color[gyi, gxi] = sample(suv_t)
         val[gyi, gxi] = v
+        fg[gyi, gxi] = fg_at(suv_t)                 # source pixel inside subject?
+        pos[gyi, gxi] = (wi @ P3[t]).astype(np.float32)
 
     covered = val >= 0
-    good = val >= LO
-    # ── 4) pyramid pull-push inpaint of everything below LO (and gutters) ──
+    # SILHOUETTE VALIDITY (Phase 62): trustworthy = face-on AND foreground.
+    # Background-sampling texels are never valid and never seed the fill.
+    good = (val >= LO) & fg
+
+    # ── 3.5) BILATERAL SYMMETRY FILL (Phase 62): before diffusing, each bad
+    # texel tries the texel of its MIRRORED surface point (x -> 2*cx - x) via
+    # a voxel-hash lookup — real fur pattern beats any flat fill, and it is a
+    # prior that holds for virtually every creature.
+    cxw = (float(cow[:, 0].min()) + float(cow[:, 0].max())) / 2.0
+    diagm = float(np.linalg.norm(cow.max(0) - cow.min(0)))
+    cell = max(diagm / 110.0, 1e-4)
+    def _hash(q):
+        return (q[:, 0] * 73856093) ^ (q[:, 1] * 19349663) ^ (q[:, 2] * 83492791)
+    gy_i, gx_i = np.where(good)
+    if len(gy_i) > 100:
+        gq = np.floor(pos[gy_i, gx_i] / cell).astype(np.int64)
+        gh = _hash(gq)
+        order = np.argsort(gh)
+        gh_s = gh[order]; gsrc = np.stack([gy_i, gx_i], 1)[order]
+        by_i, bx_i = np.where(covered & ~good)
+        if len(by_i):
+            bp = pos[by_i, bx_i].copy()
+            bp[:, 0] = 2.0 * cxw - bp[:, 0]         # mirror about the sagittal plane
+            bq = np.floor(bp / cell).astype(np.int64)
+            bh = _hash(bq)
+            idx = np.searchsorted(gh_s, bh)
+            idx = np.clip(idx, 0, len(gh_s) - 1)
+            hit = gh_s[idx] == bh
+            sy = gsrc[idx[hit], 0]; sx = gsrc[idx[hit], 1]
+            color[by_i[hit], bx_i[hit]] = color[sy, sx]
+            good[by_i[hit], bx_i[hit]] = True
+            mirror_filled = int(hit.sum())
+        else:
+            mirror_filled = 0
+    else:
+        mirror_filled = 0
+
+    # ── 4) pyramid pull-push inpaint of everything still bad (and gutters) ──
     levels = [(color * good[:, :, None], good.astype(np.float32))]
     size = S
     while size > 4:
@@ -154,8 +217,21 @@ try:
         c, w = levels[li]
         up = np.repeat(np.repeat(fill, 2, 0), 2, 1)[:c.shape[0], :c.shape[1]]
         fill = np.where(w[:, :, None] > 0, c, up)
-    # blend band LO..HI: photo where confident, inpaint where smeared
-    a = np.clip((val - LO) / max(HI - LO, 1e-6), 0.0, 1.0)[:, :, None]
+    # de-block the diffusion (nearest-neighbor pyramid upsampling reads as
+    # flat quads on chests/necks): a couple of 3x3 box blurs on the fill.
+    for _ in range(3):
+        f = fill.copy()
+        f[1:-1, 1:-1] = (fill[:-2, :-2] + fill[:-2, 1:-1] + fill[:-2, 2:]
+                         + fill[1:-1, :-2] + fill[1:-1, 1:-1] + fill[1:-1, 2:]
+                         + fill[2:, :-2] + fill[2:, 1:-1] + fill[2:, 2:]) / 9.0
+        fill = f
+    # blend band LO..HI on FOREGROUND texels only: photo where confident,
+    # inpaint where smeared; background samples never blend back in, and
+    # mirror-filled texels keep their copied fur at full strength.
+    amap = np.clip((val - LO) / max(HI - LO, 1e-6), 0.0, 1.0)
+    amap[~fg] = 0.0
+    amap[good & ~(fg & (val >= LO))] = 1.0          # mirror-filled -> full
+    a = amap[:, :, None]
     final = fill * (1 - a) + color * a
     final = np.clip(final, 0.0, 1.0)
 
@@ -185,8 +261,9 @@ try:
     me.uv_layers.active = atlas
 
     out = {"ok": True, "tris": int(ntri), "texels_covered": int(covered.sum()),
-           "texels_confident": int(good.sum()),
-           "smear_fixed_pct": round(100.0 * (1 - good.sum() / max(covered.sum(), 1)), 1),
+           "texels_confident": int(good.sum()), "mirror_filled": mirror_filled,
+           "bg_rejected": int((covered & (val >= LO) & ~fg).sum()),
+           "diffused_pct": round(100.0 * (1 - good.sum() / max(covered.sum(), 1)), 1),
            "secs": round(time.time() - t0, 1)}
 except Exception as e:
     out = {"ok": False, "reason": "%s: %s" % (type(e).__name__, e)}
@@ -201,13 +278,21 @@ def enabled() -> bool:
 def run(hero: str, ref_png: str, out_png: str, size: int = 1024,
         timeout: float = 600.0):
     """Bake the v2 atlas texture over the bridge (long timeout — the
-    rasterizer walks every triangle)."""
+    rasterizer walks every triangle).
+
+    Colors sample the background-FILLED reference copy when one exists
+    (silhouette-edge overreach lands on fur tone, not studio gray); the
+    foreground MASK always comes from the RAW photo (fill would defeat it)."""
     import json as _json
     from pathlib import Path as _P
     from app.mcp import blender_bridge as _bb
+    raw_p = _P(ref_png).resolve()
+    fill_p = raw_p.with_name(raw_p.stem + "_fill" + raw_p.suffix)
+    color_p = fill_p if fill_p.exists() else raw_p
     code = (TEXTURE_V2_CODE
             .replace("__HERO__", hero)
-            .replace("__REF__", str(_P(ref_png).resolve().as_posix()))
+            .replace("__REFRAW__", str(raw_p.as_posix()))
+            .replace("__REF__", str(color_p.as_posix()))
             .replace("__OUTPNG__", str(_P(out_png).resolve().as_posix()))
             .replace("__SIZE__", str(int(size))))
     res = _bb.call("execute_python", {"code": code}, timeout=timeout)
