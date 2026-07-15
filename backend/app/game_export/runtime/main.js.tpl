@@ -33,21 +33,23 @@ function mulberry32(a) {
   };
 }
 
+// exp = per-environment tone-mapping exposure (Phase 65): bright grounds
+// (snow, sand) under the old flat 0.75 read as a washed-out white void.
 const SKY = {
-  day:      { sky: 0x87b5e0, fog: 0xa8c4dd, sun: 3.2, amb: 0.55, sunPos: [40, 80, 30] },
-  sunset:   { sky: 0xe8996a, fog: 0xd9a07a, sun: 2.2, amb: 0.40, sunPos: [80, 25, 10] },
+  day:      { sky: 0x87b5e0, fog: 0xa8c4dd, sun: 3.2, amb: 0.55, sunPos: [40, 80, 30], exp: 0.66 },
+  sunset:   { sky: 0xe8996a, fog: 0xd9a07a, sun: 2.2, amb: 0.40, sunPos: [80, 25, 10], exp: 0.72 },
   // night done RIGHT (pass 2): full moonlit-blue treatment — strong cool sun,
   // generous ambient, fog clearly brighter than the sky. Unmistakably night,
   // but every shape reads on a laptop screen at recording brightness.
   night:    { sky: 0x121c30, fog: 0x263a5e, sun: 0.95, amb: 0.5,
-              sunCol: 0xa8c2ff, sunPos: [30, 60, -40] },
-  overcast: { sky: 0x9aa4ad, fog: 0x9aa4ad, sun: 1.2, amb: 0.65, sunPos: [20, 90, 20] },
+              sunCol: 0xa8c2ff, sunPos: [30, 60, -40], exp: 0.8 },
+  overcast: { sky: 0x9aa4ad, fog: 0x9aa4ad, sun: 1.2, amb: 0.65, sunPos: [20, 90, 20], exp: 0.62 },
   // alien worlds: mars = butterscotch haze over rust; space = airless black,
   // hard sun; dusk = deep violet-blue with a low warm sun
-  mars:     { sky: 0xd99a66, fog: 0xc98a5a, sun: 2.6, amb: 0.45, sunPos: [60, 55, 20] },
-  space:    { sky: 0x05070d, fog: 0x0a0f1c, sun: 3.8, amb: 0.20, sunPos: [50, 70, -30] },
+  mars:     { sky: 0xd99a66, fog: 0xc98a5a, sun: 2.6, amb: 0.45, sunPos: [60, 55, 20], exp: 0.7 },
+  space:    { sky: 0x05070d, fog: 0x0a0f1c, sun: 3.8, amb: 0.20, sunPos: [50, 70, -30], exp: 0.8 },
   dusk:     { sky: 0x3b3a5e, fog: 0x4a4a72, sun: 1.2, amb: 0.42,
-              sunCol: 0xffd9b0, sunPos: [70, 18, 15] },
+              sunCol: 0xffd9b0, sunPos: [70, 18, 15], exp: 0.75 },
 };
 
 async function main() {
@@ -134,7 +136,10 @@ async function main() {
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;   // filmic response for the Sky
-  renderer.toneMappingExposure = 0.75;
+  // Phase 65: per-environment exposure; snow is high-albedo — damp it further
+  // so arctic scenes read as LIT SNOW instead of a white void.
+  renderer.toneMappingExposure = ((SKY[SPEC.world.sky] || SKY.day).exp || 0.75)
+    * (SPEC.world.weather === 'snow' ? 0.86 : 1.0);
   renderer.domElement.style.cssText = 'display:block;width:100%;height:100%';  // fill the frame
   document.getElementById('app').appendChild(renderer.domElement);
 
@@ -310,7 +315,40 @@ async function main() {
   // the LevelPlan is present; flat plane otherwise. hAt(x,z) is THE ground
   // sampler — scatter, objectives, NPCs and landmarks all sit on it.
   let hAt = () => 0;
-  const gmat = new THREE.MeshStandardMaterial({ map: gtex, roughness: 1.0 });
+  // Phase 65: micro-detail bump — a small tiled noise canvas breaks the flat
+  // "void" read at grazing angles (snow drifts, dirt clods) for ~zero cost.
+  const bcnv = document.createElement('canvas');
+  bcnv.width = bcnv.height = 256;
+  {
+    const bctx = bcnv.getContext('2d');
+    const bimg = bctx.createImageData(256, 256);
+    const rngB = mulberry32(SPEC.seed + 77);
+    const base = new Float32Array(34 * 34);
+    for (let i = 0; i < base.length; i++) base[i] = rngB();
+    for (let y = 0; y < 256; y++) for (let x = 0; x < 256; x++) {
+      // two octaves of bilinear value noise (tileable via modulo lattice)
+      let v = 0;
+      for (const [fq, w] of [[8, 0.65], [32, 0.35]]) {
+        const gx = (x / 256) * fq, gy = (y / 256) * fq;
+        const x0 = Math.floor(gx) % fq, y0 = Math.floor(gy) % fq;
+        const x1 = (x0 + 1) % fq, y1 = (y0 + 1) % fq;
+        const tx = gx - Math.floor(gx), ty = gy - Math.floor(gy);
+        const s = (ix, iy) => base[(iy * 31 + ix * 7) % base.length];
+        v += w * (s(x0, y0) * (1 - tx) * (1 - ty) + s(x1, y0) * tx * (1 - ty)
+                + s(x0, y1) * (1 - tx) * ty + s(x1, y1) * tx * ty);
+      }
+      const g = Math.floor(110 + v * 90);
+      const k = (y * 256 + x) * 4;
+      bimg.data[k] = bimg.data[k + 1] = bimg.data[k + 2] = g;
+      bimg.data[k + 3] = 255;
+    }
+    bctx.putImageData(bimg, 0, 0);
+  }
+  const btex = new THREE.CanvasTexture(bcnv);
+  btex.wrapS = btex.wrapT = THREE.RepeatWrapping;
+  btex.repeat.set(gsize / 3, gsize / 3);
+  const gmat = new THREE.MeshStandardMaterial({ map: gtex, roughness: 0.96,
+                                                bumpMap: btex, bumpScale: 0.35 });
   if (LVL && LVL.heights && LVL.heights.length === LVL.grid_n * LVL.grid_n) {
     const n = LVL.grid_n, hs = LVL.heights;
     hAt = (x, z) => {
@@ -824,12 +862,28 @@ async function main() {
       });
       const N = sct.count;
       const places = [];
+      // Phase 65 CLUSTERING: real vegetation grows in patches, not an even
+      // sprinkle. A low-frequency seeded value noise gates placement — dense
+      // groves + open clearings from the same instance budget.
+      const cRng = mulberry32(SPEC.seed + 131);
+      const cLat = new Float32Array(144);
+      for (let i = 0; i < 144; i++) cLat[i] = cRng();
+      const clusterN = (x, z) => {
+        const f = 12 / gsize;                       // ~one cell per 8-12 m
+        const gx = (x + gsize) * f, gz = (z + gsize) * f;
+        const x0 = Math.floor(gx), z0 = Math.floor(gz);
+        const s = (ix, iz) => cLat[((iz * 13 + ix * 7) % 144 + 144) % 144];
+        const tx = gx - x0, tz = gz - z0;
+        return s(x0, z0) * (1 - tx) * (1 - tz) + s(x0 + 1, z0) * tx * (1 - tz)
+             + s(x0, z0 + 1) * (1 - tx) * tz + s(x0 + 1, z0 + 1) * tx * tz;
+      };
       for (let i = 0; i < N; i++) {
         let x, z, tries = 0;
         do {
           x = (rng() - 0.5) * gsize * 0.9; z = (rng() - 0.5) * gsize * 0.9; tries++;
         } while ((Math.hypot(x, z) < sct.min_dist_m || pathDist(x, z) < CORR
-                  || inBldg(x, z)) && tries < 30);
+                  || inBldg(x, z)
+                  || (clusterN(x, z) < 0.45 && tries < 22)) && tries < 30);
         places.push({ x, z, s: 1 + (rng() - 0.5) * 2 * sct.scale_jitter, rot: rng() * Math.PI * 2 });
       }
       const M = new THREE.Matrix4(), T = new THREE.Matrix4(), SV = new THREE.Vector3();
