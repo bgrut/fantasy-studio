@@ -390,9 +390,11 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             # through to the honest same-species stand-in below (never a
             # man-with-a-sword). FS_CPU_CHARGEN=0 disables CPU generation.
             try:
-                from app.game_export.generate import ensure_asset
+                from app.game_export.generate import ensure_asset, gpu_available
+                _eta = ("~6 min on your GPU" if gpu_available()
+                        else "~25-30 min on CPU")
                 stage(f"creating '{want}' — image → 3D mesh "
-                      f"(first time only; ~25-30 min on CPU, then cached forever)")
+                      f"(first time only; {_eta}, then cached forever)")
                 ensure_asset(want, verbose=False)
                 player_glb = (library.resolve(want)
                               if pattern in ("vehicle", "flying", "aquatic", "static")
@@ -685,7 +687,8 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         # sky/weather. Converts the mis-verbed step, ensures fleeing prey, and
         # ARMS the hunter (claws for beasts, a ranged shot for people).
         import re as _re2
-        _hm = _re2.search(r"\bhunt(?:ing)?\s+(?:down\s+)?(\d+)?\s*(?:the\s+)?"
+        # hunt(s|ed|ing) — "a wolf HUNTS 3 elk" must match, not just "hunt"
+        _hm = _re2.search(r"\bhunt(?:s|ed|ing)?\s+(?:down\s+)?(\d+)?\s*(?:the\s+)?"
                           r"([a-z]+)", req.prompt.lower())
         if _hm and _hm.group(2) not in ("for", "down"):
             from app.game_export.spec import ObjectiveSpec
@@ -1015,4 +1018,13 @@ def game_health():
         ollama = OllamaClient().is_alive()
     except Exception:
         pass
-    return {"ok": True, "gpu_free": True, "ollama": ollama, "library_kinds": kinds}
+    gpu_name = None
+    try:
+        from app.game_export.generate import gpu_available
+        if gpu_available():
+            import torch
+            gpu_name = torch.cuda.get_device_name(0)
+    except Exception:
+        pass
+    return {"ok": True, "gpu_free": True, "gpu": gpu_name, "ollama": ollama,
+            "library_kinds": kinds}

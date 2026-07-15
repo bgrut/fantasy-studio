@@ -114,7 +114,7 @@ def _keyword_fallback(text: str) -> dict:
     obs = out.get("objectives") or []
     ents = out.get("entities") or []
     m = _re.search(r"\b(?:collect|gather|find|pick up|track(?:ing)?\s+down|"
-                   r"hunt(?:ing)?\s+for)\s+(\d+)?\s*((?:[a-z]+\s?){1,3}?)" + _stop, t)
+                   r"hunt(?:s|ed|ing)?\s+for)\s+(\d+)?\s*((?:[a-z]+\s?){1,3}?)" + _stop, t)
     if m and not any(o.get("kind") == "collect" for o in obs):
         obs.append({"kind": "collect", "count": int(m.group(1) or 5),
                     "label": m.group(2).strip()})
@@ -138,7 +138,8 @@ def _keyword_fallback(text: str) -> dict:
         obs.append({"kind": "eliminate", "count": max(2, min(n, 12)),
                     "label": _sing1(m.group(2) or "rival") + "s"})
     # hunting (Phase 66): stalk fleeing prey - approach quietly, take the shot
-    m = _re.search(r"\bhunt(?:ing)?\s+(?:down\s+)?(\d+)?\s*(?:the\s+)?((?:[a-z]+\s?){1,2}?)" + _stop, t)
+    # hunt(s|ed|ing) — "a wolf HUNTS 3 elk" is the common phrasing
+    m = _re.search(r"\bhunt(?:s|ed|ing)?\s+(?:down\s+)?(\d+)?\s*(?:the\s+)?((?:[a-z]+\s?){1,2}?)" + _stop, t)
     if m and m.group(2) and m.group(2).strip() not in ("for", "down")             and not any(o.get("kind") == "hunt" for o in obs):
         n = int(m.group(1) or 3)
         prey = _sing1(m.group(2).strip())

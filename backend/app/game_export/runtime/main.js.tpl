@@ -2878,6 +2878,12 @@ async function main() {
     if (hint) hint.textContent = 'WASD / arrows to move · Shift to run · wheel to zoom'
       + (ATTACK !== 'none' ? ' · F to attack' : '');
   }
+  // default 3D view: an armed player must be TOLD the attack key — hunters
+  // stood next to elk with no idea F was the trigger (2026-07-15 feedback)
+  if (ATTACK !== 'none' && !FLY && !SWIM && VIEW !== 'side' && VIEW !== 'topdown') {
+    const hint = document.querySelector('#hud .hint');
+    if (hint) hint.textContent += ' · F to ' + (ATTACK === 'ranged' ? 'shoot' : 'attack');
+  }
   let vSpeed = 0, hudTick = 0, prevV = 0, leanP = 0, leanR = 0;
   const camTarget = new THREE.Vector3();
 

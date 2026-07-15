@@ -402,12 +402,19 @@ def _orient_hero_by_reference(runner, hero_name: str, ref_png: str, work_dir,
     """
     check_png = str((Path(work_dir) / "orient_silhouette_check.png").as_posix())
     tmp_png = str((Path(work_dir) / "_orient_tmp.png").as_posix())
+    # Phase 67 (heading guarantee): weight of the vertical COLOR-profile term.
+    # Textured meshes (TRELLIS native bakes) carry the photo's colors, so a
+    # belly-up render's top-to-bottom color layout ANTI-correlates with the
+    # reference — the up/down + facing signal silhouettes alone missed twice
+    # (polar bear @0.34, wolf @0.45). FS_ORIENT_COLOR=0 disables.
+    color_w = "0.35" if os.environ.get("FS_ORIENT_COLOR", "1") != "0" else "0.0"
     code = _ORIENT_SILHOUETTE_CODE
     for k, v in (("__HERO__", hero_name), ("__REF__", str(Path(ref_png).as_posix())),
                  ("__TMP__", tmp_png), ("__CHECK__", check_png), ("__RES__", "160"),
                  ("__MINIOU__", str(min_iou)), ("__WHEELSDOWN__", "1" if wheels_down else "0"),
                  ("__UPRIGHTBIPED__", "1" if upright_biped else "0"),
                  ("__QUADFEETDOWN__", "1" if quad_feet_down else "0"),
+                 ("__COLORW__", color_w),
                  ("__CANDS__", repr([list(c) for c in candidates]) if candidates else "None")):
         code = code.replace(k, v)
     try:
@@ -461,6 +468,31 @@ try:
         cv[oy:oy+nh,ox:ox+nw]=small
         return cv
 
+    # Phase 67: vertical color profile — 4 bands of masked mean RGB across the
+    # subject bbox, normalized to the subject's overall mean. A textured mesh
+    # rendered belly-up gets an ANTI-correlated profile vs the photo; upright
+    # + correct facing correlates. Returns None when there is no usable color.
+    def vprof(mask, rgb):
+        ys,xs=np.where(mask)
+        if len(ys)<20: return None
+        y0,y1=int(ys.min()),int(ys.max())
+        H=y1-y0+1
+        bands=[]
+        for k in range(4):
+            lo=y0+H*k//4; hi=max(lo+1, y0+H*(k+1)//4)
+            m=mask[lo:hi]; c=rgb[lo:hi]
+            if int(m.sum())<8: return None
+            bands.append(c[m].mean(0))
+        v=np.array(bands,dtype=np.float64).ravel()
+        mu=v.mean()
+        if mu<1e-4: return None
+        return v/mu
+    def prof_corr(a,b):
+        if a is None or b is None: return 0.0
+        ac=a-a.mean(); bc=b-b.mean()
+        d=(np.linalg.norm(ac)*np.linalg.norm(bc))
+        return float(ac.dot(bc)/d) if d>1e-8 else 0.0
+
     # ── reference subject silhouette (saturated OR dark, border trimmed) ──
     rimg=bpy.data.images.load(REF, check_existing=True)
     rw,rh=rimg.size
@@ -471,6 +503,7 @@ try:
     tmpm=np.zeros_like(rm); tmpm[by:rh-by,bx:rw-bx]=rm[by:rh-by,bx:rw-bx]; rm=tmpm
     refc=canvas(rm)
     if refc is None: raise RuntimeError("empty reference mask")
+    ref_prof=vprof(rm, rp)
 
     # ── temp ortho cam (looks -Y) + sun; render with transparent film for alpha ──
     cam=bpy.data.cameras.new("OCam"); cam.type='ORTHO'
@@ -511,9 +544,10 @@ try:
         sc.render.filepath=TMP; bpy.ops.render.render(write_still=True)
         ri=bpy.data.images.load(TMP, check_existing=False)
         rw2,rh2=ri.size
-        a=np.array(ri.pixels[:],dtype=np.float32).reshape(rh2,rw2,4)[::-1,:,3]
+        px=np.array(ri.pixels[:],dtype=np.float32).reshape(rh2,rw2,4)[::-1]
         bpy.data.images.remove(ri)
-        return canvas(a>0.5)
+        m=px[:,:,3]>0.5
+        return canvas(m), vprof(m, px[:,:,:3])
 
     # Score = IoU + vertical centre-of-mass match. CoM is the up/down
     # discriminator IoU alone misses: an upright quadruped's mass sits in the
@@ -523,14 +557,18 @@ try:
         ys,_=np.where(mask)
         return float(ys.mean())/mask.shape[0] if len(ys) else 0.5
     ref_cmy=cmy(refc)
-    best_eu=None; best_iou=-1.0; best_score=-9.0
+    COLOR_W=__COLORW__
+    best_eu=None; best_iou=-1.0; best_score=-9.0; best_cc=0.0
     for eu in cands:
-        cm=render_mask(eu)
+        cm,cp=render_mask(eu)
         if cm is None: continue
         inter=int(np.logical_and(cm,refc).sum()); uni=int(np.logical_or(cm,refc).sum())
         iou=inter/max(uni,1)
-        score=iou - 2.0*abs(cmy(cm)-ref_cmy)
-        if score>best_score: best_score=score; best_iou=iou; best_eu=eu
+        # Phase 67: vertical color-profile correlation vs the photo — the
+        # up/down + facing discriminator (belly-up textures anti-correlate)
+        cc=prof_corr(ref_prof,cp)
+        score=iou - 2.0*abs(cmy(cm)-ref_cmy) + COLOR_W*cc
+        if score>best_score: best_score=score; best_iou=iou; best_eu=eu; best_cc=cc
 
     # restore render settings; drop temp cam/sun
     sc.camera,sc.render.engine,sc.render.resolution_x,sc.render.resolution_y,sc.render.filepath,sc.render.film_transparent=prev
@@ -563,7 +601,13 @@ try:
                 o.rotation_euler.y+=math.radians(180.0); bpy.context.view_layer.update()
                 zs3=[(o.matrix_world@Vector(c)).z for c in o.bound_box]; o.location.z-=min(zs3)
                 bpy.context.view_layer.update(); flipped=1
-        if __UPRIGHTBIPED__:
+        # Phase 67: a STRONG color-profile match already proves up/down AND
+        # facing (measured: upright wolf cc=0.67, belly-up cc=0.04). The
+        # geometric leg-gap priors below false-positive on chunky/furred
+        # animals (they rolled a CORRECT wolf belly-up) — so they now run
+        # ONLY when the color signal is weak/absent (untextured meshes).
+        color_proven = (COLOR_W > 0 and best_cc > 0.30)
+        if __UPRIGHTBIPED__ and not color_proven:
             # Bipeds MUST end up head-up. IoU is unreliable for a near-symmetric
             # standing figure (it accepted a 180 flip at IoU 0.19), so use a
             # geometric prior: the FEET end has a left-right GAP between two legs,
@@ -585,7 +629,7 @@ try:
                 o.rotation_euler.x+=math.radians(180.0); bpy.context.view_layer.update()
                 zsb=[(o.matrix_world@Vector(c)).z for c in o.bound_box]; o.location.z-=min(zsb)
                 bpy.context.view_layer.update(); flipped=3
-        if __QUADFEETDOWN__:
+        if __QUADFEETDOWN__ and not color_proven:
             # Quadrupeds MUST end up feet-down. IoU + the silhouette centre-of-mass
             # can't tell a chunky animal's back from its belly (a bear standing vs
             # belly-up have near-identical outlines — this shipped an upside-down
@@ -613,6 +657,7 @@ try:
                 zsq=[(o.matrix_world@Vector(c)).z for c in o.bound_box]; o.location.z-=min(zsq)
                 bpy.context.view_layer.update(); flipped=2
         out={"ok":True,"euler":list(best_eu),"iou":round(best_iou,3),"tried":len(cands),
+             "color_corr":round(best_cc,3),
              "wheels_flip":flipped,"post_dims":[round(d,3) for d in o.dimensions]}
     __result__=json.dumps(out)
 except Exception as e:

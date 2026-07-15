@@ -36,6 +36,7 @@ export interface GameSpecResolved {
 export interface GameHealth {
   ok: boolean
   gpu_free: boolean
+  gpu?: string | null            // CUDA device name when generation runs on GPU
   ollama: boolean
   library_kinds: string[]
 }

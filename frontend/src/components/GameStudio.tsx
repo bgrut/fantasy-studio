@@ -421,7 +421,8 @@ export default function GameStudio() {
         {health && (
           <>
             <p className="text-center text-[11px] text-[#4a4764] font-mono">
-              no GPU needed · ollama {health.ollama ? 'online' : 'offline (keyword fallback)'} ·{' '}
+              {health.gpu ? `GPU: ${health.gpu} (~6 min characters)` : 'no GPU needed'} · ollama{' '}
+              {health.ollama ? 'online' : 'offline (keyword fallback)'} ·{' '}
               {health.library_kinds.length} characters in library
             </p>
             <div className="flex flex-wrap justify-center gap-1.5">
