@@ -26,5 +26,10 @@
   "snake": "assets/library/snake.glb",
   "relic": {
     "raw": "renders/_actor_cache/b3b02c99774c.glb"
-  }
+  },
+  "tiger": "assets/library/tiger.glb",
+  "corvette": "assets/library/corvette.glb",
+  "ford f-150": "assets/library/ford_f-150.glb",
+  "gorilla": "assets/library/gorilla.glb",
+  "moose": "assets/library/moose.glb"
 }
