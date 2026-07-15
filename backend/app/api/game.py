@@ -679,6 +679,52 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                         count=min(ob.count, 8), speed=rival_speed,
                         height_m=library.default_height(okind)))
 
+        # HUNT OVERRIDE (Phase 68): explicit hunt words in the PROMPT beat the
+        # LLM's verb pick — "hunt 3 elk" once extracted as COLLECT 3 elk, so
+        # the elk neither fled nor could be killed. Same words-beat-AI rule as
+        # sky/weather. Converts the mis-verbed step, ensures fleeing prey, and
+        # ARMS the hunter (claws for beasts, a ranged shot for people).
+        import re as _re2
+        _hm = _re2.search(r"\bhunt(?:ing)?\s+(?:down\s+)?(\d+)?\s*(?:the\s+)?"
+                          r"([a-z]+)", req.prompt.lower())
+        if _hm and _hm.group(2) not in ("for", "down"):
+            from app.game_export.spec import ObjectiveSpec
+            prey = _hm.group(2)
+            prey = (prey[:-3] + "f") if prey.endswith("ves") else                    (prey[:-3] + "y") if prey.endswith("ies") else                    (prey[:-1] if prey.endswith("s") and not prey.endswith("ss") else prey)
+            n_prey = int(_hm.group(1) or 3)
+            converted = False
+            for ob in spec.objectives:
+                if ob.kind == "hunt":
+                    converted = True
+                    break
+                if ob.kind in ("collect", "defeat") and prey in ob.label.lower():
+                    ob.kind = "hunt"
+                    ob.count = min(ob.count, 8)
+                    converted = True
+                    job.setdefault("notes", []).append(
+                        f"'{prey}' is HUNTED, not collected — your words beat the AI's pick")
+                    break
+            if not converted:
+                spec.objectives.insert(0, ObjectiveSpec(
+                    kind="hunt", label=prey, count=max(1, min(n_prey, 8))))
+            # prey must exist and FLEE (drop any duplicate wander/collect cast)
+            spec.entities = [e for e in spec.entities
+                             if not (e.name.lower() == prey and e.behavior in ("wander", "follow"))]
+            if not any(e.behavior == "flee" for e in spec.entities):
+                pglb = (ensure_playable(prey, verbose=False) or library.resolve(prey))
+                if pglb:
+                    spec.entities.append(EntitySpec(
+                        name=prey, asset=pglb, behavior="flee",
+                        count=max(n_prey, 2), speed=2.4,
+                        height_m=library.default_height(prey), hp=2))
+            # a hunter without a weapon is a spectator
+            if spec.player.attack == "none":
+                spec.player.attack = ("ranged" if guess_pattern(cast) == "biped"
+                                      else "melee")
+                job.setdefault("notes", []).append(
+                    f"hunter armed: {spec.player.attack} "
+                    f"({'rifle shot - F to shoot' if spec.player.attack == 'ranged' else 'claws/bite - F to attack'})")
+
         # BATTLE ROYALE SANITY (Phase 61): an 'eliminate' step is last-one-
         # standing — the rivals are HOSTILE copies of the player's own kind
         # (foxes fight foxes) unless the prompt already cast hostiles. The

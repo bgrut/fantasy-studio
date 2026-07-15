@@ -63,6 +63,59 @@ async function main() {
   // gesture, so autoplay policy is satisfied by design).
   let actx = null;
   let sfxMuted = false;
+  // ── AMBIENT BED (Phase 69): looping filtered-noise wind + night crickets,
+  // fully procedural (zero asset files). Started once by the same START-click
+  // gesture that unlocks sfx; volume follows weather/wind and the sky preset.
+  let ambientOn = false;
+  function startAmbient() {
+    if (ambientOn || sfxMuted || !actx) return;
+    ambientOn = true;
+    try {
+      const sky = SPEC.world.sky || 'day';
+      // wind: 4s of white noise -> looped buffer -> lowpass -> slow gain LFO
+      const n = actx.sampleRate * 4;
+      const buf = actx.createBuffer(1, n, actx.sampleRate);
+      const ch = buf.getChannelData(0);
+      let last = 0;
+      for (let i = 0; i < n; i++) {   // brown-ish noise reads as wind, not hiss
+        last = (last + (Math.random() * 2 - 1) * 0.04) * 0.985;
+        ch[i] = last * 6;
+      }
+      const src = actx.createBufferSource();
+      src.buffer = buf; src.loop = true;
+      const lp = actx.createBiquadFilter();
+      lp.type = 'lowpass';
+      lp.frequency.value = SPEC.world.weather === 'snow' ? 320 : 480;
+      const g = actx.createGain();
+      const wind = Math.max(0.15, Math.min(SPEC.world.wind ?? 0.5, 1));
+      g.gain.value = 0.05 + wind * 0.075;
+      const lfo = actx.createOscillator(), lg = actx.createGain();
+      lfo.frequency.value = 0.09; lg.gain.value = g.gain.value * 0.45;
+      lfo.connect(lg); lg.connect(g.gain); lfo.start();
+      src.connect(lp); lp.connect(g); g.connect(actx.destination);
+      src.start();
+      // night crickets: sparse randomized chirps (skip horror = dead silence sells it)
+      if ((sky === 'night' || sky === 'dusk') && SPEC.style !== 'horror') {
+        const chirp = () => {
+          if (!ambientOn || sfxMuted) return;
+          try {
+            const t0 = actx.currentTime;
+            for (let k = 0; k < 3; k++) {
+              const o = actx.createOscillator(), cg = actx.createGain();
+              o.type = 'sine'; o.frequency.value = 4200 + Math.random() * 500;
+              cg.gain.setValueAtTime(0, t0 + k * 0.07);
+              cg.gain.linearRampToValueAtTime(0.012, t0 + k * 0.07 + 0.015);
+              cg.gain.linearRampToValueAtTime(0, t0 + k * 0.07 + 0.05);
+              o.connect(cg); cg.connect(actx.destination);
+              o.start(t0 + k * 0.07); o.stop(t0 + k * 0.07 + 0.06);
+            }
+          } catch (e) {}
+          setTimeout(chirp, 1400 + Math.random() * 3200);
+        };
+        setTimeout(chirp, 1200);
+      }
+    } catch (e) { /* ambience is garnish — never break the game over it */ }
+  }
   function sfx(kind) {
     try {
       if (sfxMuted) return;
@@ -1156,6 +1209,7 @@ async function main() {
       gameStarted = true;
       runT0 = performance.now();
       sfx('step');                        // gesture unlocks WebAudio + confirms start
+      startAmbient();                     // Phase 69: wind bed (+ night crickets)
       if (IS_RACE) startCountdown();
     });
   }
@@ -1286,6 +1340,56 @@ async function main() {
       let tx = null, tz = null;
       if (n.behavior === 'hostile' && !won && !lost) {
         const d = Math.hypot(playerPos.x - n.obj.position.x, playerPos.z - n.obj.position.z);
+        // BATTLE ROYALE (Phase 70): rivals fight EACH OTHER, not just the
+        // player — each hostile hunts its nearest living rival when that
+        // rival is closer than the player. Kills by rivals still count
+        // toward last-one-standing (win = no rivals left, whoever fell them).
+        if (HAS_BR) {
+          let rv = null, rd = 1e9;
+          for (const o2 of npcs) {
+            if (o2 === n || o2.behavior !== 'hostile' || o2.dead || o2.dormant) continue;
+            const dd = Math.hypot(o2.obj.position.x - n.obj.position.x,
+                                  o2.obj.position.z - n.obj.position.z);
+            if (dd < rd) { rd = dd; rv = o2; }
+          }
+          if (rv && rd < d && rd < 18) {
+            // strike range must exceed the mutual-chase orbit radius (~3.2 m
+            // measured) or rivals circle forever without landing a blow
+            if (rd > 3.4) { tx = rv.obj.position.x; tz = rv.obj.position.z; }
+            else {
+              n.cd -= dt;
+              if (n.cd <= 0) {
+                n.cd = 1.3;
+                rv.hp -= 1;
+                for (const m of rv.mats || []) { if (m.emissive) m.emissive.setHex(0xff4444); }
+                if (rv.hp <= 0 && !rv.dead) {
+                  rv.dead = true;
+                  burst(rv.obj.position.clone().add(new THREE.Vector3(0, 0.8, 0)), 0xff8a5c);
+                  popText(`${n.name || 'rival'} eliminated ${rv.name || 'a rival'}`, '#ffb28a');
+                }
+              }
+            }
+            const moving = tx !== null;
+            if (moving) {
+              const dx = tx - n.obj.position.x, dz = tz - n.obj.position.z;
+              n.yaw = THREE.MathUtils.damp(n.yaw, Math.atan2(dx, dz), 6, dt);
+              n.obj.rotation.y = n.yaw;
+              const sp = n.speed * dt;
+              n.obj.position.x += Math.sin(n.yaw) * sp;
+              n.obj.position.z += Math.cos(n.yaw) * sp;
+              n.obj.position.y = hAt(n.obj.position.x, n.obj.position.z);
+            }
+            if (n.anim) {
+              const want = moving ? n.anim.run : n.anim.idle;
+              if (want && want !== n.anim.cur) {
+                want.reset(); want.crossFadeFrom(n.anim.cur, 0.2, true); want.play();
+                n.anim.cur = want;
+              }
+              n.anim.mixer.update(dt);
+            }
+            continue;   // this rival is busy brawling — skip player logic
+          }
+        }
         const pSafe = inSafeZone(playerPos.x, playerPos.z);
         const nSafe = inSafeZone(n.obj.position.x, n.obj.position.z);
         if (pSafe && (d < 14 || nSafe)) {
@@ -1761,15 +1865,55 @@ async function main() {
     ring.position.y = 0.12;
     scene.add(ring);
     storm = { R0, R1, ZONE_T, t0: null, r: R0, wall, ring, hurtCd: 0 };
+    // LOOT (Phase 70): supply crates — grab one for DOUBLE DAMAGE + a heart.
+    // Seeded positions inside the first zone ring; glow so they read at range.
+    const rngL = mulberry32(SPEC.seed + 404);
+    storm.crates = [];
+    for (let i = 0; i < 4; i++) {
+      const a = rngL() * Math.PI * 2, r = 10 + rngL() * (R0 * 0.7);
+      const x = Math.sin(a) * r, z = Math.cos(a) * r;
+      const crate = new THREE.Mesh(
+        new THREE.BoxGeometry(0.8, 0.8, 0.8),
+        new THREE.MeshStandardMaterial({ color: 0x9a6b2f, roughness: 0.6,
+          emissive: 0xffb347, emissiveIntensity: 0.35 }));
+      crate.position.set(x, hAt(x, z) + 0.4, z);
+      crate.rotation.y = rngL() * Math.PI;
+      scene.add(crate);
+      storm.crates.push(crate);
+    }
   }
   function stepStorm(dt, nt) {
     if (!storm || won || lost) return;
+    // LAST ONE STANDING (Phase 70): the win is standing alone — rivals felled
+    // by OTHER rivals count too, not only the player's own kills.
+    {
+      const st = steps[stepIdx];
+      if (st && st.kind === 'eliminate'
+          && !npcs.some(n => n.behavior === 'hostile' && !n.dead && !n.dormant)) {
+        advanceStep();
+        return;
+      }
+    }
     if (storm.t0 === null) storm.t0 = performance.now();
     const u = Math.min((performance.now() - storm.t0) / 1000 / storm.ZONE_T, 1);
     storm.r = storm.R0 + (storm.R1 - storm.R0) * u;      // linear close
     storm.wall.scale.set(storm.r, 1, storm.r);
     storm.ring.scale.set(storm.r, storm.r, 1);
     storm.wall.material.opacity = 0.16 + 0.10 * Math.sin(performance.now() / 300);
+    for (let i = storm.crates.length - 1; i >= 0; i--) {
+      const c = storm.crates[i];
+      c.rotation.y += dt * 0.9;
+      if (Math.hypot(c.position.x - nt.x, c.position.z - nt.z) < 1.5) {
+        scene.remove(c);
+        storm.crates.splice(i, 1);
+        atkDmg = 2;
+        php = Math.min(php + 1, P.hp);
+        renderHearts();
+        sfx('pickup');
+        burst(c.position.clone(), 0xffb347);
+        popText('SUPPLY CRATE — double damage!', '#ffd9a8');
+      }
+    }
     storm.hurtCd -= dt;
     if (Math.hypot(nt.x, nt.z) > storm.r && storm.hurtCd <= 0) {
       storm.hurtCd = 1.0;
@@ -2289,6 +2433,8 @@ async function main() {
   // hostile you can hit — no more guessing whether the swing will land
   // ("hard to aim without a prop", 2026-07-08)
   const MELEE_REACH = 3.2;
+  let atkDmg = 1;               // Phase 70: loot crates upgrade to 2
+  const RANGED_RANGE = 26;   // Phase 68: rifle/bow aim + marker range
   function nearestHostile(maxD) {
     let best = null, bd = maxD;
     for (const n of npcs) {
@@ -2345,6 +2491,14 @@ async function main() {
         modelYaw = Math.atan2(tn.obj.position.x - playerObj.position.x,
                               tn.obj.position.z - playerObj.position.z);
       }
+    } else if (ATTACK === 'ranged') {
+      // Phase 68 AIM: shots snap toward the marked target out to rifle range —
+      // hunters line up on the prey the marker shows, not pixel-perfect yaw
+      const tn = nearestHostile(RANGED_RANGE);
+      if (tn) {
+        modelYaw = Math.atan2(tn.obj.position.x - playerObj.position.x,
+                              tn.obj.position.z - playerObj.position.z);
+      }
     }
     playAttackAnim();                          // the actual katana/claw motion
     const dir = new THREE.Vector3(Math.sin(modelYaw), 0, Math.cos(modelYaw));
@@ -2368,7 +2522,8 @@ async function main() {
         scene.add(flash);
         setTimeout(() => scene.remove(flash), 110);
         for (const n of npcs) {
-          if (n.behavior !== 'hostile' || n.dead) continue;
+          // Phase 68: prey ('flee') dies to claws too — a wolf hunts with its bite
+          if (!(n.behavior === 'hostile' || n.behavior === 'flee') || n.dead) continue;
           const dx = n.obj.position.x - playerObj.position.x;
           const dz = n.obj.position.z - playerObj.position.z;
           const d = Math.hypot(dx, dz);
@@ -2376,7 +2531,7 @@ async function main() {
           let a = Math.atan2(dx, dz) - modelYaw;
           while (a > Math.PI) a -= 2 * Math.PI;
           while (a < -Math.PI) a += 2 * Math.PI;
-          if (Math.abs(a) < 1.35) dmgEnemy(n, 1);
+          if (Math.abs(a) < 1.35) dmgEnemy(n, atkDmg);
         }
       }, 180);
     }
@@ -2889,7 +3044,8 @@ async function main() {
     // you can edit in peace, but the camera, player and rendering stay live
     if (gameStarted && !paused && !inspectOn) stepNPCs(dt, nt, performance.now() / 1000);
     if (tgtMark) {
-      const tn = (!won && !lost && !inspectOn) ? nearestHostile(MELEE_REACH) : null;
+      const tn = (!won && !lost && !inspectOn)
+        ? nearestHostile(ATTACK === 'ranged' ? RANGED_RANGE : MELEE_REACH) : null;
       tgtMark.visible = !!tn;
       if (tn) {
         tgtMark.position.set(tn.obj.position.x,
@@ -2951,9 +3107,10 @@ async function main() {
       pr.life -= dt;
       let hit = false;
       for (const n of npcs) {
-        if (n.behavior !== 'hostile' || n.dead) continue;
+        // Phase 68: prey ('flee') is shootable — hunting needs a kill
+        if (!(n.behavior === 'hostile' || n.behavior === 'flee') || n.dead) continue;
         const dd = pr.mesh.position.distanceTo(n.obj.position.clone().add(new THREE.Vector3(0, 0.5, 0)));
-        if (dd < 0.9) { dmgEnemy(n, 1); hit = true; break; }
+        if (dd < 0.9) { dmgEnemy(n, atkDmg); hit = true; break; }
       }
       if (hit || pr.life <= 0 || pr.mesh.position.y < hAt(pr.mesh.position.x, pr.mesh.position.z) - 0.2) {
         scene.remove(pr.mesh);
@@ -3010,7 +3167,12 @@ async function main() {
       camera.zoom = THREE.MathUtils.damp(camera.zoom || 1, 1.0 / camZoom, 6, dt);
       camera.updateProjectionMatrix();
     } else {
-      camTarget.set(fX, fY + SPEC.camera.height_m * 0.5, fZ);
+      // Phase 69 look-ahead: the camera peeks ~0.9 m into the travel direction
+      // at speed, so fast movement reads as intent instead of chase-cam lag
+      const lookAhead = Math.min((window.__pSpeed || 0) / Math.max(P.run_speed, 1), 1) * 0.9;
+      camTarget.set(fX + Math.sin(modelYaw) * lookAhead,
+                    fY + SPEC.camera.height_m * 0.5,
+                    fZ + Math.cos(modelYaw) * lookAhead);
       const cd = SPEC.camera.distance_m * camZoom * (inspectOn ? 1.5 : 1);
       const cx = fX + Math.sin(yaw) * Math.cos(pitch) * cd;   // camera BEHIND
       const cz = fZ + Math.cos(yaw) * Math.cos(pitch) * cd;   // (W walks away)

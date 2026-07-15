@@ -55,7 +55,9 @@ for i, (rx, ry, rz) in enumerate(cands):
     bpy.context.view_layer.update()
     vs = []
     for o in meshes:
-        vs += [(o.matrix_world @ v.co)[:] for v in o.data.vertices[::7]]
+        # bpy prop collections reject step slices in Blender 5.1 — index instead
+        verts = o.data.vertices
+        vs += [(o.matrix_world @ verts[j].co)[:] for j in range(0, len(verts), 7)]
     V = np.array(vs); ctr = V.mean(0); span = float(max(V.max(0) - V.min(0)))
     cam.location = Vector((ctr[0] + span * 1.6, ctr[1] - span * 1.6, ctr[2] + span * 0.6))
     d = Vector(ctr.tolist()) - cam.location

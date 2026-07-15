@@ -11,7 +11,6 @@
   "knight": "assets/library/knight.glb",
   "dragon": "assets/library/dragon.glb",
   "whale": "assets/library/whale.glb",
-  "wolf": "assets/library/wolf.glb",
   "monkey": "assets/library/monkey.glb",
   "cat": "assets/library/cat.glb",
   "snowflakes": "assets/library/snowflakes.glb",
@@ -31,5 +30,9 @@
   "corvette": "assets/library/corvette.glb",
   "ford f-150": "assets/library/ford_f-150.glb",
   "gorilla": "assets/library/gorilla.glb",
-  "moose": "assets/library/moose.glb"
+  "moose": "assets/library/moose.glb",
+  "elk": "assets/library/elk.glb",
+  "wolf": "assets/library/wolf.glb",
+  "grizzly bear": "assets/library/grizzly_bear.glb",
+  "berry": "assets/library/berry.glb"
 }
