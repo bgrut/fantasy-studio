@@ -716,6 +716,13 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                         f"'defeat {ob.label}' dropped — no enemies could be cast")
                     continue
                 ob.count = min(ob.count, total_hostiles)
+            if ob.kind == "hunt":
+                total_prey = sum(e.count for e in spec.entities if e.behavior == "flee")
+                if total_prey <= 0:
+                    job.setdefault("notes", []).append(
+                        f"'hunt {ob.label}' dropped — no prey could be cast")
+                    continue
+                ob.count = min(ob.count, total_prey)
             if ob.kind == "survive" and total_hostiles <= 0:
                 job.setdefault("notes", []).append(
                     f"'survive {ob.label}' dropped — waves need at least one hostile")

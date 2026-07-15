@@ -94,7 +94,7 @@ class EntitySpec(BaseModel):
     """Non-player entity. hostile = chases and attacks the player (combat)."""
     asset: str = ""                       # resolved from the asset library by name
     name: str = "entity"
-    behavior: Literal["static", "wander", "follow", "hostile", "vehicle"] = "wander"
+    behavior: Literal["static", "wander", "follow", "hostile", "vehicle", "flee"] = "wander"
     count: int = Field(1, ge=1, le=64)
     speed: float = Field(1.5, ge=0.0, le=40.0)
     height_m: float = Field(1.0, gt=0.1, le=10.0)
@@ -108,7 +108,7 @@ class ObjectiveSpec(BaseModel):
     shrinking storm zone hurts anyone outside it); score = sports (drive the
     ball into the goal N times)."""
     kind: Literal["collect", "defeat", "reach", "race", "survive",
-                  "eliminate", "score"] = "collect"
+                  "eliminate", "score", "hunt"] = "collect"
     label: str = "stars"
     count: int = Field(5, ge=1, le=600)   # survive: SECONDS to hold out (waves escalate)
     asset: Optional[str] = None   # collect steps: generated mesh spawned instead of the orb

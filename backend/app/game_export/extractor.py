@@ -46,7 +46,9 @@ Output ONLY the JSON object, no markdown, no commentary. Schema (all fields opti
                "label":"the wolf waves","count": SECONDS 30..300} (needs hostile entities);
                "battle royale"/"last one standing"/"eliminate all N rivals" ->
                {"kind":"eliminate","label":"rivals","count": N rivals 2..12};
-               soccer/football/"score N goals" -> {"kind":"score","label":"goals","count": N 1..10},
+               soccer/football/"score N goals" -> {"kind":"score","label":"goals","count": N 1..10};
+               "hunt N elk/deer..." -> {"kind":"hunt","label":prey noun,"count": N 1..8}
+               (prey = entity behavior "flee" - it runs when it hears the player),
  "entities": [{"name": simple noun like "dog","cat","horse","wolf","car", "behavior": one of
                "wander","follow","static","hostile","vehicle" (cars/trucks -> "vehicle"),
                "count": int 1..8, "speed": float 0.5..8}]
@@ -135,6 +137,13 @@ def _keyword_fallback(text: str) -> dict:
         n = int(m.group(1) or 6)
         obs.append({"kind": "eliminate", "count": max(2, min(n, 12)),
                     "label": _sing1(m.group(2) or "rival") + "s"})
+    # hunting (Phase 66): stalk fleeing prey - approach quietly, take the shot
+    m = _re.search(r"\bhunt(?:ing)?\s+(?:down\s+)?(\d+)?\s*(?:the\s+)?((?:[a-z]+\s?){1,2}?)" + _stop, t)
+    if m and m.group(2) and m.group(2).strip() not in ("for", "down")             and not any(o.get("kind") == "hunt" for o in obs):
+        n = int(m.group(1) or 3)
+        prey = _sing1(m.group(2).strip())
+        obs.append({"kind": "hunt", "count": max(1, min(n, 8)), "label": prey})
+        ents.append({"name": prey, "behavior": "flee", "count": max(n, 2), "speed": 2.4})
     # sports (Phase 61): score N goals -> ball + goal + counter
     m = _re.search(r"\bscore\s+(\d+)?\s*goals?\b|\b(?:soccer|football)\b", t)
     if m and not any(o.get("kind") == "score" for o in obs):

@@ -1318,6 +1318,28 @@ async function main() {
           }
           tx = wpt[0]; tz = wpt[1];
         }
+      } else if (n.behavior === 'flee') {
+        // HUNTING PREY (Phase 66): grazes until it DETECTS the player, then
+        // bolts away. Detection radius scales with how loud the player is —
+        // standing 4 m, walking 9 m, RUNNING 22 m — so a hunt means slow,
+        // patient approaches. Spooked prey calms after 6 s out of range.
+        const d = Math.hypot(playerPos.x - n.obj.position.x, playerPos.z - n.obj.position.z);
+        const loud = window.__pSpeed || 0;
+        const hear = loud > 4 ? 22 : (loud > 0.4 ? 9 : 4);
+        n.spook = Math.max(0, (n.spook || 0) - dt);
+        if (d < hear) n.spook = 6;
+        if (n.spook > 0 && d < 40) {
+          const away = Math.atan2(n.obj.position.x - playerPos.x, n.obj.position.z - playerPos.z);
+          tx = n.obj.position.x + Math.sin(away) * 18;
+          tz = n.obj.position.z + Math.cos(away) * 18;
+          n._fleeing = true;
+        } else {
+          n._fleeing = false;
+          if (!n.target || Math.hypot(n.target[0] - n.obj.position.x, n.target[1] - n.obj.position.z) < 0.8) {
+            n.target = [(rngN() - 0.5) * gsize * 0.6, (rngN() - 0.5) * gsize * 0.6];
+          }
+          tx = n.target[0]; tz = n.target[1];
+        }
       } else if (n.behavior === 'follow') {
         const d = Math.hypot(playerPos.x - n.obj.position.x, playerPos.z - n.obj.position.z);
         if (d > 2.6) { tx = playerPos.x; tz = playerPos.z; }
@@ -1334,7 +1356,7 @@ async function main() {
         // vehicles steer smoothly (no pivot-in-place), creatures turn quicker
         n.yaw = THREE.MathUtils.damp(n.yaw, want, n.behavior === 'vehicle' ? 2.2 : 6, dt);
         n.obj.rotation.y = n.yaw;
-        const sp = n.speed * (n.vjit || 1) * dt;
+        const sp = n.speed * (n.vjit || 1) * (n._fleeing ? 1.9 : 1) * dt;  // prey bolts
         n.obj.position.x += Math.sin(n.yaw) * sp;
         n.obj.position.z += Math.cos(n.yaw) * sp;
         n.obj.position.y = hAt(n.obj.position.x, n.obj.position.z)
@@ -1361,11 +1383,18 @@ async function main() {
       }
       // real gait: crossfade idle/walk/run with movement state (no more gliding)
       if (n.anim) {
-        const want = moving ? (n.behavior === 'hostile' && n.speed > 2.2 ? n.anim.run : n.anim.walk)
+        const want = moving ? ((n.behavior === 'hostile' && n.speed > 2.2) || n._fleeing
+                               ? n.anim.run : n.anim.walk)
                             : n.anim.idle;
         if (want && want !== n.anim.cur) {
           want.reset(); want.crossFadeFrom(n.anim.cur, 0.2, true); want.play();
           n.anim.cur = want;
+        }
+        // Phase 66 anti-ice-skate: stride rate follows the NPC's ACTUAL speed
+        // (clips are authored at ~2.5 m/s walk / ~5 m/s run cadence)
+        if (moving && n.anim.cur) {
+          const base = n.anim.cur === n.anim.run ? 5.0 : 2.5;
+          n.anim.cur.timeScale = Math.min(Math.max(n.speed / base, 0.55), 1.7);
         }
         n.anim.mixer.update(dt);
       }
@@ -1887,12 +1916,13 @@ async function main() {
     if (st.kind === 'race') return `Win the race (${st.count} ${st.label || 'rivals'})`;
     if (st.kind === 'survive') return `Survive ${st.label || 'the onslaught'}`;
     if (st.kind === 'eliminate') return `Last one standing — eliminate ${st.count} ${st.label || 'rivals'}`;
+    if (st.kind === 'hunt') return `Hunt ${st.count} ${st.label || 'prey'} (approach quietly)`;
     if (st.kind === 'score') return `Score ${st.count} ${st.label || 'goals'}`;
     return `Reach ${st.label || 'the beacon'}`;
   }
   function stepProgress(st) {
     if (st.kind === 'collect') return `${st._got || 0}/${st.count}`;
-    if (st.kind === 'defeat' || st.kind === 'eliminate')
+    if (st.kind === 'defeat' || st.kind === 'eliminate' || st.kind === 'hunt')
       return `${Math.min(kills - (st._k0 || 0), st.count)}/${st.count}`;
     if (st.kind === 'score') return `${st._goals || 0}/${st.count}`;
     if (st.kind === 'survive') {
@@ -1928,7 +1958,7 @@ async function main() {
       return;
     }
     if (st.kind === 'collect') { st._got = 0; spawnCollectibles(st); }
-    if (st.kind === 'defeat' || st.kind === 'eliminate') { st._k0 = kills; }
+    if (st.kind === 'defeat' || st.kind === 'eliminate' || st.kind === 'hunt') { st._k0 = kills; }
     if (st.kind === 'score') { st._goals = 0; }
     renderQuest();
   }
@@ -2262,7 +2292,8 @@ async function main() {
   function nearestHostile(maxD) {
     let best = null, bd = maxD;
     for (const n of npcs) {
-      if (n.behavior !== 'hostile' || n.dead || n.dormant) continue;
+      // Phase 66: prey ('flee') is a legitimate attack target — hunting games
+      if (!(n.behavior === 'hostile' || n.behavior === 'flee') || n.dead || n.dormant) continue;
       const d = Math.hypot(n.obj.position.x - playerObj.position.x,
                            n.obj.position.z - playerObj.position.z);
       if (d < bd) { bd = d; best = n; }
@@ -2295,7 +2326,7 @@ async function main() {
       n.dead = true; kills++; sfx('hit');
       burst(n.obj.position.clone().add(new THREE.Vector3(0, 0.8, 0)), 0xff5c6a);
       const st = steps[stepIdx];
-      if (st && (st.kind === 'defeat' || st.kind === 'eliminate')) {
+      if (st && (st.kind === 'defeat' || st.kind === 'eliminate' || st.kind === 'hunt')) {
         renderQuest();
         if (kills - (st._k0 || 0) >= st.count) advanceStep();
       }
@@ -2844,6 +2875,7 @@ async function main() {
     }
 
     // animation state machine
+    window.__pSpeed = speed;   // Phase 66: prey hearing keys off player loudness
     if (mixer) {
       setAnim(speed < 0.1 ? actions.__idle : (mv.run && mv.mag > 0.3 ? actions.__run : actions.__walk));
       if (current && current.getClip()) {
