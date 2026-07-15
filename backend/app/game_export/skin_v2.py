@@ -189,7 +189,15 @@ def enabled() -> bool:
     return os.environ.get("FS_SKIN_V2", "1") != "0"
 
 
+def heat_enabled() -> bool:
+    """Phase 71: bone-heat weights on a voxel-remeshed proxy, DataTransferred
+    onto the hero. DEFAULT ON since 2026-07-15 — polar bear morph 0.702→0.326
+    (−54%) with clean visual gait; falls back to manual weights on failure."""
+    return os.environ.get("FS_SKIN_HEAT", "1") != "0"
+
+
 def wrap(template: str) -> str:
-    """Prepend the helper prelude and resolve the __SKINV2__ gate flag."""
+    """Prepend the helper prelude and resolve the gate flags."""
     return SKIN_V2_PRELUDE + "\n" + template.replace(
-        "__SKINV2__", "True" if enabled() else "False")
+        "__SKINV2__", "True" if enabled() else "False").replace(
+        "__SKINHEAT__", "True" if heat_enabled() else "False")

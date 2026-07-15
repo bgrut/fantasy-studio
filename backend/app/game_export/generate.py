@@ -29,6 +29,17 @@ class GPUUnavailable(RuntimeError):
 
 _QUADRUPED = ("dog", "cat", "horse", "cow", "wolf", "fox", "deer", "lion",
               "tiger", "bear", "pig", "sheep", "goat", "rabbit")
+# Human roles/professions are ALWAYS biped — never ask the LLM. Ollama once
+# classified 'hunter' as a quadruped (cached!), so the player got a
+# four-legged rig and shipped looking like a dog (2026-07-15).
+_BIPED = ("hunter", "archer", "soldier", "warrior", "ranger", "ninja",
+          "pirate", "king", "queen", "prince", "princess", "farmer",
+          "cowboy", "cowgirl", "hero", "heroine", "elf", "dwarf", "orc",
+          "goblin", "zombie", "skeleton", "vampire", "witch", "astronaut",
+          "pilot", "doctor", "police", "officer", "firefighter", "explorer",
+          "adventurer", "assassin", "thief", "rogue", "monk", "paladin",
+          "barbarian", "gladiator", "spy", "detective", "scientist", "miner",
+          "lumberjack", "fisherman", "shepherd", "guard", "sniper", "medic")
 _VEHICLE = ("car", "truck", "bus", "van", "jeep", "tank", "motorcycle")
 _FLYING = ("dragon", "bird", "eagle", "hawk", "owl", "phoenix", "griffin",
            "pegasus", "bat", "butterfly", "bee", "plane", "airplane", "jet",
@@ -83,6 +94,10 @@ def guess_pattern(kind: str) -> str:
     # flightless upright birds WADDLE on two legs — the quadruped guess gave
     # the 2026-07-08 penguin four legs in its SDXL reference (and its mesh)
     if any(w in k for w in ("penguin", "ostrich", "emu", "kiwi", "dodo")):
+        return "biped"
+    # exact-word match for human roles (substring would hit 'king' in
+    # 'viking'; split on spaces so 'zombie pirate' still works)
+    if any(w in k.split() for w in _BIPED):
         return "biped"
     if any(w in k for w in _FLYING):
         return "flying"                   # fly mode; static mesh + hover (wing
@@ -213,7 +228,10 @@ def ensure_asset(kind: str, pattern: str | None = None, target_tris: int = 45000
         optimize_asset(raw_glb, out, target_tris=target_tris,
                        height_m=library.default_height(kind), verbose=verbose,
                        ref_png=ref_png if ref_png.exists() else None,
-                       despeckle=(pattern == "vehicle"),
+                       # vehicles grow "strings"; bipeds grow rod hallucinations
+                       # (a 2m spike off a huntress fooled the orientation gate
+                       # on 2026-07-15) — both are the same de-spike class
+                       despeckle=(pattern in ("vehicle", "biped")),
                        pattern=pattern)
         _register(kind, str(out.relative_to(BACKEND_ROOT)).replace("\\", "/"))
         if verbose:

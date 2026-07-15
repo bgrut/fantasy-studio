@@ -728,6 +728,20 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                     f"hunter armed: {spec.player.attack} "
                     f"({'rifle shot - F to shoot' if spec.player.attack == 'ranged' else 'claws/bite - F to attack'})")
 
+        # CAPTURE OVERRIDE (Phase 72): same words-beat-AI rule as hunt — the
+        # player said capture/hold/control zones, so a capture step LEADS the
+        # quest whatever ladder the LLM invented.
+        _cm = _re2.search(r"\b(?:capture|hold|control|claim)\s+(?:the\s+)?(\d+)?\s*"
+                          r"(?:zones?|points?|areas?|territor(?:y|ies)|flags?|hills?)",
+                          req.prompt.lower())
+        if _cm and not any(ob.kind == "capture" for ob in spec.objectives):
+            from app.game_export.spec import ObjectiveSpec
+            _nz = int(_cm.group(1) or 3)
+            spec.objectives.insert(0, ObjectiveSpec(
+                kind="capture", label="zones", count=max(1, min(_nz, 5))))
+            job.setdefault("notes", []).append(
+                "capture-the-zone mode added — your words beat the AI's pick")
+
         # BATTLE ROYALE SANITY (Phase 61): an 'eliminate' step is last-one-
         # standing — the rivals are HOSTILE copies of the player's own kind
         # (foxes fight foxes) unless the prompt already cast hostiles. The

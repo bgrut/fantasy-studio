@@ -2054,6 +2054,54 @@ async function main() {
     if (hint) hint.textContent += ' · E to read';
   }
 
+  // CAPTURE verb (Phase 72): glowing ground rings — stand inside to raise the
+  // capture meter; a living hostile inside CONTESTS the zone (meter pauses,
+  // ring flashes red). One zone active at a time.
+  const CAP_R = 4.0, CAP_HOLD = 8.0;
+  function spawnCaptureZones(st) {
+    const rngC = mulberry32(SPEC.seed + 909);
+    st._zones = [];
+    for (let i = 0; i < st.count; i++) {
+      const a = rngC() * Math.PI * 2, d = 16 + rngC() * gsize * 0.24;
+      const x = Math.cos(a) * d, z = Math.sin(a) * d;
+      const ring = new THREE.Mesh(
+        new THREE.RingGeometry(CAP_R - 0.5, CAP_R, 40),
+        new THREE.MeshBasicMaterial({ color: 0x5cffc9, transparent: true,
+                                      opacity: 0.55, side: THREE.DoubleSide }));
+      ring.rotation.x = -Math.PI / 2;
+      ring.position.set(x, hAt(x, z) + 0.06, z);
+      const glow = new THREE.PointLight(0x5cffc9, 1.4, 12);
+      glow.position.set(x, hAt(x, z) + 1.4, z);
+      ring.visible = glow.visible = (i === 0);
+      scene.add(ring); scene.add(glow);
+      st._zones.push({ x, z, ring, glow });
+    }
+  }
+  function stepCapture(st, px, pz, dt) {
+    const zn = st._zones && st._zones[st._zi];
+    if (!zn) return;
+    const inside = Math.hypot(px - zn.x, pz - zn.z) < CAP_R;
+    const contested = inside && npcs.some(n => n.behavior === 'hostile' && !n.dead && !n.dormant
+      && Math.hypot(n.obj.position.x - zn.x, n.obj.position.z - zn.z) < CAP_R);
+    zn.ring.material.color.setHex(contested ? 0xff5c6a : (inside ? 0xaefff0 : 0x5cffc9));
+    zn.ring.material.opacity = inside ? 0.85 : 0.55;
+    if (inside && !contested) {
+      st._hold += dt;
+      if (st._hold >= CAP_HOLD) {
+        zn.ring.visible = zn.glow.visible = false;
+        st._zi++; st._hold = 0;
+        popText(`Zone ${st._zi}/${st.count} captured!`, '#5cffc9');
+        sfx('pickup');
+        const nx = st._zones[st._zi];
+        if (nx) { nx.ring.visible = nx.glow.visible = true; }
+        else { advanceStep(); return; }
+      }
+      renderQuest();
+    } else if (st._hold > 0 && !inside) {
+      st._hold = Math.max(0, st._hold - dt * 0.5);   // meter decays when you leave
+      renderQuest();
+    }
+  }
   function stepLabel(st) {
     if (st.kind === 'collect') return `Collect ${st.count} ${st.label || 'items'}`;
     if (st.kind === 'defeat') return `Defeat ${st.count} ${st.label || 'enemies'}`;
@@ -2062,6 +2110,7 @@ async function main() {
     if (st.kind === 'eliminate') return `Last one standing — eliminate ${st.count} ${st.label || 'rivals'}`;
     if (st.kind === 'hunt') return `Hunt ${st.count} ${st.label || 'prey'} (approach quietly)`;
     if (st.kind === 'score') return `Score ${st.count} ${st.label || 'goals'}`;
+    if (st.kind === 'capture') return `Capture ${st.count} zone${st.count > 1 ? 's' : ''} (hold 8s each)`;
     return `Reach ${st.label || 'the beacon'}`;
   }
   function stepProgress(st) {
@@ -2069,6 +2118,10 @@ async function main() {
     if (st.kind === 'defeat' || st.kind === 'eliminate' || st.kind === 'hunt')
       return `${Math.min(kills - (st._k0 || 0), st.count)}/${st.count}`;
     if (st.kind === 'score') return `${st._goals || 0}/${st.count}`;
+    if (st.kind === 'capture') {
+      const pct = st._hold ? ` · ${Math.min(99, Math.round(st._hold / 8 * 100))}%` : '';
+      return `${st._zi || 0}/${st.count}${pct}`;
+    }
     if (st.kind === 'survive') {
       const left = st._t0 === undefined ? st.count
         : Math.max(0, Math.ceil(st.count - (performance.now() - st._t0) / 1000));
@@ -2104,6 +2157,7 @@ async function main() {
     if (st.kind === 'collect') { st._got = 0; spawnCollectibles(st); }
     if (st.kind === 'defeat' || st.kind === 'eliminate' || st.kind === 'hunt') { st._k0 = kills; }
     if (st.kind === 'score') { st._goals = 0; }
+    if (st.kind === 'capture') { st._zi = 0; st._hold = 0; spawnCaptureZones(st); }
     renderQuest();
   }
   let won_ = false;   // guard alias kept for clarity in doWin
@@ -2878,12 +2932,6 @@ async function main() {
     if (hint) hint.textContent = 'WASD / arrows to move · Shift to run · wheel to zoom'
       + (ATTACK !== 'none' ? ' · F to attack' : '');
   }
-  // default 3D view: an armed player must be TOLD the attack key — hunters
-  // stood next to elk with no idea F was the trigger (2026-07-15 feedback)
-  if (ATTACK !== 'none' && !FLY && !SWIM && VIEW !== 'side' && VIEW !== 'topdown') {
-    const hint = document.querySelector('#hud .hint');
-    if (hint) hint.textContent += ' · F to ' + (ATTACK === 'ranged' ? 'shoot' : 'attack');
-  }
   let vSpeed = 0, hudTick = 0, prevV = 0, leanP = 0, leanR = 0;
   const camTarget = new THREE.Vector3();
 
@@ -3102,6 +3150,12 @@ async function main() {
           else doLose(`Finished #${rank} — the ${st.label || 'cars'} beat you. Try again!`);
         }
       }
+    }
+    // capture zones tick independently of the beacon — a capture game may
+    // have no reach objective at all (goalPos null)
+    {
+      const stc = steps[stepIdx];
+      if (stc && stc.kind === 'capture' && !won && !lost) stepCapture(stc, nt.x, nt.z, dt);
     }
 
     // combat: attack cooldown + projectiles + gamepad attack edge

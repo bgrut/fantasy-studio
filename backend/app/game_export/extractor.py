@@ -145,6 +145,12 @@ def _keyword_fallback(text: str) -> dict:
         prey = _sing1(m.group(2).strip())
         obs.append({"kind": "hunt", "count": max(1, min(n, 8)), "label": prey})
         ents.append({"name": prey, "behavior": "flee", "count": max(n, 2), "speed": 2.4})
+    # capture/hold (Phase 72): stand in glowing zones to take them
+    m = _re.search(r"\b(?:capture|hold|control|claim)\s+(?:the\s+)?(\d+)?\s*"
+                   r"(?:zones?|points?|areas?|territor(?:y|ies)|flags?|hills?)", t)
+    if m and not any(o.get("kind") == "capture" for o in obs):
+        n = int(m.group(1) or 3)
+        obs.append({"kind": "capture", "count": max(1, min(n, 5)), "label": "zones"})
     # sports (Phase 61): score N goals -> ball + goal + counter
     m = _re.search(r"\bscore\s+(\d+)?\s*goals?\b|\b(?:soccer|football)\b", t)
     if m and not any(o.get("kind") == "score" for o in obs):

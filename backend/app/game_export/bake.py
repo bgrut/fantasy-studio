@@ -255,8 +255,59 @@ else:
         for level in np.unique(q):
             if level == 0: continue
             vg.add(lv[q == level].tolist(), float(level) / 63.0, "REPLACE")
+    # SKIN HEAT (Phase 71 experiment, FS_SKIN_HEAT): Blender's bone-heat auto
+    # weights FAIL on raw TRELLIS topology (0 verts) but succeed on a
+    # watertight VOXEL-REMESHED proxy of the same shape. Compute heat weights
+    # on the proxy, then DataTransfer them onto the detailed hero (nearest
+    # face-interpolated) — clean-topology weights, original mesh untouched.
+    # Any failure keeps the manual weights already assigned above.
+    _heat_status = "off"
+    if __SKINHEAT__:
+        try:
+            bpy.ops.object.mode_set(mode="OBJECT")
+            bpy.ops.object.select_all(action='DESELECT')
+            o.select_set(True); bpy.context.view_layer.objects.active = o
+            bpy.ops.object.duplicate()
+            proxy = bpy.context.view_layer.objects.active
+            proxy.name = "HeroProxy"
+            proxy.modifiers.clear()
+            rm = proxy.modifiers.new("VoxRM", "REMESH")
+            rm.mode = 'VOXEL'; rm.voxel_size = max(float(H) / 64.0, 0.008)
+            bpy.ops.object.modifier_apply(modifier=rm.name)
+            for vg in list(proxy.vertex_groups):
+                proxy.vertex_groups.remove(vg)
+            bpy.ops.object.select_all(action='DESELECT')
+            proxy.select_set(True); rig.select_set(True)
+            bpy.context.view_layer.objects.active = rig
+            bpy.ops.object.parent_set(type='ARMATURE_AUTO')
+            _nw = sum(1 for v in proxy.data.vertices if v.groups)
+            if _nw < len(proxy.data.vertices) * 0.5:
+                raise RuntimeError("heat sparse: %d/%d verts weighted"
+                                   % (_nw, len(proxy.data.vertices)))
+            # replace the manual weights on the hero with the proxy's
+            for vg in list(o.vertex_groups):
+                o.vertex_groups.remove(vg)
+            bpy.ops.object.select_all(action='DESELECT')
+            o.select_set(True); bpy.context.view_layer.objects.active = o
+            dt = o.modifiers.new("WDT", "DATA_TRANSFER")
+            dt.object = proxy; dt.use_vert_data = True
+            dt.data_types_verts = {'VGROUP_WEIGHTS'}
+            dt.vert_mapping = 'POLYINTERP_NEAREST'
+            dt.layers_vgroup_select_src = 'ALL'; dt.layers_vgroup_select_dst = 'NAME'
+            bpy.ops.object.datalayout_transfer(modifier=dt.name)
+            bpy.ops.object.modifier_apply(modifier=dt.name)
+            bpy.data.objects.remove(proxy, do_unlink=True)
+            _heat_status = "heat_ok(%d verts)" % _nw
+        except Exception as _he:
+            _heat_status = "heat_failed: %s: %s" % (type(_he).__name__, _he)
+            try:
+                _pr = bpy.data.objects.get("HeroProxy")
+                if _pr: bpy.data.objects.remove(_pr, do_unlink=True)
+            except Exception:
+                pass
     __result__ = json.dumps({"ok": True, "legs": list(LEGMAP.keys()), "bones": len(arm.bones),
-                             "H": round(float(H), 3), "skin_v2": _s2status})
+                             "H": round(float(H), 3), "skin_v2": _s2status,
+                             "skin_heat": _heat_status})
 '''
 
 # one IN-PLACE trot clip: whole sine cycles -> seamless loop. AMP/STRIDE vary
@@ -833,7 +884,7 @@ def bake_quadruped_anim_set(hero_glb: str | Path, out_glb: str | Path,
         raise RuntimeError(f"quad rig failed: {a}")
     if verbose:
         print(f"[bake] quad rig: {a.get('bones')} bones, legs={a.get('legs')}, "
-              f"skin_v2={a.get('skin_v2', '?')}")
+              f"skin_v2={a.get('skin_v2', '?')}, skin_heat={a.get('skin_heat', '?')}")
     r = _call(registry, "idle", _QUAD_IDLE_CODE.replace("__TOTAL__", "72"))
     if not (r and r.get("ok")):
         raise RuntimeError(f"quad idle failed: {r}")

@@ -558,6 +558,12 @@ try:
         return float(ys.mean())/mask.shape[0] if len(ys) else 0.5
     ref_cmy=cmy(refc)
     COLOR_W=__COLORW__
+    def aspect(mask):
+        ys,xs=np.where(mask)
+        if len(ys)<20: return 1.0
+        h=float(ys.max()-ys.min()+1); w=float(xs.max()-xs.min()+1)
+        return h/max(w,1.0)
+    ref_asp=aspect(rm)
     best_eu=None; best_iou=-1.0; best_score=-9.0; best_cc=0.0
     for eu in cands:
         cm,cp=render_mask(eu)
@@ -567,7 +573,13 @@ try:
         # Phase 67: vertical color-profile correlation vs the photo — the
         # up/down + facing discriminator (belly-up textures anti-correlate)
         cc=prof_corr(ref_prof,cp)
-        score=iou - 2.0*abs(cmy(cm)-ref_cmy) + COLOR_W*cc
+        # ASPECT GUARD: the color bonus must never let a LYING candidate beat
+        # an upright one (a tall photo vs a wide render is a different POSE,
+        # not a facing ambiguity — it laid a human flat on 2026-07-15). Gross
+        # aspect mismatch is disqualifying, whatever the colors say.
+        ca=aspect(cm); ar=max(ca,ref_asp)/max(min(ca,ref_asp),1e-3)
+        asp_pen=0.6 if ar>1.6 else 0.0
+        score=iou - 2.0*abs(cmy(cm)-ref_cmy) + COLOR_W*cc - asp_pen
         if score>best_score: best_score=score; best_iou=iou; best_eu=eu; best_cc=cc
 
     # restore render settings; drop temp cam/sun

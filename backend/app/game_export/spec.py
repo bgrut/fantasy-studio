@@ -108,7 +108,7 @@ class ObjectiveSpec(BaseModel):
     shrinking storm zone hurts anyone outside it); score = sports (drive the
     ball into the goal N times)."""
     kind: Literal["collect", "defeat", "reach", "race", "survive",
-                  "eliminate", "score", "hunt"] = "collect"
+                  "eliminate", "score", "hunt", "capture"] = "collect"
     label: str = "stars"
     count: int = Field(5, ge=1, le=600)   # survive: SECONDS to hold out (waves escalate)
     asset: Optional[str] = None   # collect steps: generated mesh spawned instead of the orb

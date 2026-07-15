@@ -34,5 +34,8 @@
   "elk": "assets/library/elk.glb",
   "wolf": "assets/library/wolf.glb",
   "grizzly bear": "assets/library/grizzly_bear.glb",
-  "berry": "assets/library/berry.glb"
+  "berry": "assets/library/berry.glb",
+  "deer": "assets/library/deer.glb",
+  "hunter": "assets/library/hunter.glb",
+  "goblin": "assets/library/goblin.glb"
 }
