@@ -254,6 +254,37 @@ async function main() {
       scene.environment = pmrem.fromScene(envScene, 0.02).texture;
       pmrem.dispose();
     } catch (e) { console.warn('[game] env reflections skipped: ' + e.message); }
+    // CLOUDS (Phase 74): soft drifting billboards — an empty blue dome reads
+    // as a render, a sky with weather reads as a place. Sprite count/opacity
+    // tuned per mood; they drift slowly downwind and always face the camera.
+    {
+      const cN = SPEC.world.sky === 'overcast' ? 26 : 14;
+      const ccnv = document.createElement('canvas'); ccnv.width = 256; ccnv.height = 128;
+      const cctx = ccnv.getContext('2d');
+      const rngCl = mulberry32(SPEC.seed + 313);
+      for (let i = 0; i < 26; i++) {                 // one puffy texture, many sprites
+        const x = 40 + rngCl() * 176, y = 34 + rngCl() * 56, r = 14 + rngCl() * 30;
+        const g2 = cctx.createRadialGradient(x, y, 0, x, y, r);
+        g2.addColorStop(0, 'rgba(255,255,255,0.16)');
+        g2.addColorStop(1, 'rgba(255,255,255,0)');
+        cctx.fillStyle = g2; cctx.beginPath(); cctx.arc(x, y, r, 0, 7); cctx.fill();
+      }
+      const ctex = new THREE.CanvasTexture(ccnv);
+      const cmat = new THREE.SpriteMaterial({
+        map: ctex, transparent: true, depthWrite: false, fog: false,
+        opacity: SPEC.world.sky === 'overcast' ? 0.9 : 0.75,
+        color: SPEC.world.sky === 'sunset' ? 0xffd9c4 : 0xffffff });
+      window.__clouds = [];
+      for (let i = 0; i < cN; i++) {
+        const sp = new THREE.Sprite(cmat);
+        const a = rngCl() * Math.PI * 2, d = 180 + rngCl() * 900;
+        sp.position.set(Math.cos(a) * d, 130 + rngCl() * 160, Math.sin(a) * d);
+        const s = 220 + rngCl() * 300;
+        sp.scale.set(s, s * 0.42, 1);
+        scene.add(sp);
+        window.__clouds.push(sp);
+      }
+    }
   } else {
     const sN = 1400, sPos = new Float32Array(sN * 3);
     const sRng = mulberry32(SPEC.seed + 5);
@@ -402,6 +433,56 @@ async function main() {
   btex.repeat.set(gsize / 3, gsize / 3);
   const gmat = new THREE.MeshStandardMaterial({ map: gtex, roughness: 0.96,
                                                 bumpMap: btex, bumpScale: 0.35 });
+  // MACRO VARIATION (Phase 74): the tiled detail map repeats every 8 m, so
+  // from any distance the ground reads as one flat tone. A second LOW-FREQ
+  // canvas is sampled in WORLD coordinates (1:1 across the map, no tiling)
+  // and multiplied over the albedo — big soft meadow/soil drifts like real
+  // terrain, for one extra texture fetch.
+  {
+    const MN = 128;
+    const mcnv = document.createElement('canvas'); mcnv.width = mcnv.height = MN;
+    const mctx = mcnv.getContext('2d');
+    const mimg = mctx.createImageData(MN, MN);
+    const rngM = mulberry32(SPEC.seed + 555);
+    const lat = new Float32Array(18 * 18);
+    for (let i = 0; i < lat.length; i++) lat[i] = rngM();
+    for (let y = 0; y < MN; y++) for (let x = 0; x < MN; x++) {
+      let v = 0;
+      for (const [fq, w] of [[5, 0.7], [11, 0.3]]) {
+        const gx = (x / MN) * fq, gy = (y / MN) * fq;
+        const x0 = Math.floor(gx) % fq, y0 = Math.floor(gy) % fq;
+        const x1 = (x0 + 1) % fq, y1 = (y0 + 1) % fq;
+        const tx = gx - Math.floor(gx), ty = gy - Math.floor(gy);
+        const s = (ix, iy) => lat[(iy * 17 + ix * 5) % lat.length];
+        v += w * (s(x0, y0) * (1 - tx) * (1 - ty) + s(x1, y0) * tx * (1 - ty)
+                + s(x0, y1) * (1 - tx) * ty + s(x1, y1) * tx * ty);
+      }
+      const k = (y * MN + x) * 4;
+      // centered at 128 = neutral; warm/dark drift on one side, cool/light on the other
+      mimg.data[k]     = Math.floor(118 + v * 26);
+      mimg.data[k + 1] = Math.floor(122 + v * 16);
+      mimg.data[k + 2] = Math.floor(116 + v * 14);
+      mimg.data[k + 3] = 255;
+    }
+    mctx.putImageData(mimg, 0, 0);
+    const macroTex = new THREE.CanvasTexture(mcnv);
+    macroTex.wrapS = macroTex.wrapT = THREE.ClampToEdgeWrapping;
+    gmat.onBeforeCompile = sh => {
+      sh.uniforms.macroMap = { value: macroTex };
+      sh.uniforms.macroSize = { value: gsize };
+      sh.vertexShader = sh.vertexShader
+        .replace('#include <common>', '#include <common>\nvarying vec3 vMacroW;')
+        .replace('#include <worldpos_vertex>',
+                 '#include <worldpos_vertex>\nvMacroW = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+      sh.fragmentShader = sh.fragmentShader
+        .replace('#include <common>',
+                 '#include <common>\nuniform sampler2D macroMap; uniform float macroSize; varying vec3 vMacroW;')
+        .replace('#include <map_fragment>',
+                 `#include <map_fragment>
+                  { vec3 m = texture2D(macroMap, clamp(vMacroW.xz / macroSize + 0.5, 0.0, 1.0)).rgb;
+                    diffuseColor.rgb *= mix(vec3(1.0), m * 2.0, 0.5); }`);
+    };
+  }
   if (LVL && LVL.heights && LVL.heights.length === LVL.grid_n * LVL.grid_n) {
     const n = LVL.grid_n, hs = LVL.heights;
     hAt = (x, z) => {
@@ -2708,9 +2789,48 @@ async function main() {
     });
   }
 
-  // QUALITY PACK — cinematic post chain: subtle bloom + vignette + filmic out
-  const composer = new EffectComposer(renderer);
+  // QUALITY PACK — cinematic post chain: SSAO + subtle bloom + vignette + filmic out
+  // SSAO (Phase 73): the scene renders into a target that carries a DEPTH
+  // texture; a compact screen-space AO pass darkens creases/contact areas.
+  // Self-contained shader — no extra vendor files. Subtle by design.
+  const _ssaoDepth = new THREE.DepthTexture(innerWidth, innerHeight);
+  const _ssaoRT = new THREE.WebGLRenderTarget(innerWidth, innerHeight, {
+    depthBuffer: true, depthTexture: _ssaoDepth,
+    type: THREE.HalfFloatType });
+  const composer = new EffectComposer(renderer, _ssaoRT);
   composer.addPass(new RenderPass(scene, camera));
+  const ssao = new ShaderPass({
+    uniforms: { tDiffuse: { value: null }, tDepth: { value: _ssaoDepth },
+                camNear: { value: camera.near }, camFar: { value: camera.far },
+                res: { value: new THREE.Vector2(innerWidth, innerHeight) } },
+    vertexShader: `varying vec2 vUv;
+      void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
+    fragmentShader: `uniform sampler2D tDiffuse; uniform sampler2D tDepth;
+      uniform float camNear; uniform float camFar; uniform vec2 res;
+      varying vec2 vUv;
+      float viewZ(vec2 uv){
+        float d = texture2D(tDepth, uv).x;
+        return (camNear * camFar) / ((camFar - camNear) * d - camFar);   // negative
+      }
+      void main(){
+        vec4 c = texture2D(tDiffuse, vUv);
+        float z0 = viewZ(vUv);
+        if (z0 < -220.0) { gl_FragColor = c; return; }        // sky/far: skip
+        float px = 1.0 / res.y;
+        // screen radius shrinks with distance so AO stays world-scaled
+        float rad = clamp(26.0 / max(-z0, 1.0), 2.0, 14.0) * px;
+        float occ = 0.0;
+        for (int i = 0; i < 8; i++) {
+          float a = 0.7853982 * float(i) + (z0 * 13.7);       // per-depth spin
+          vec2 off = vec2(cos(a), sin(a)) * rad * (0.4 + 0.6 * fract(float(i) * 0.618));
+          float dz = viewZ(vUv + off) - z0;                    // >0 means closer
+          occ += clamp(dz / 0.55, 0.0, 1.0) * step(dz, 2.6);   // range-checked
+        }
+        float ao = 1.0 - 0.38 * (occ / 8.0);
+        gl_FragColor = vec4(c.rgb * ao, c.a);
+      }`,
+  });
+  composer.addPass(ssao);
   const bloom = new UnrealBloomPass(
     new THREE.Vector2(innerWidth, innerHeight), 0.25, 0.65, 0.85);
   composer.addPass(bloom);
@@ -3081,6 +3201,17 @@ async function main() {
       leanR = THREE.MathUtils.damp(leanR,
         THREE.MathUtils.clamp(mv.x * Math.min(Math.abs(vSpeed) / 8, 1) * 0.07, -0.08, 0.08), 6, dt);
       holder.rotation.x = leanP; holder.rotation.z = leanR;
+    } else if (!FLY && !SWIM) {
+      // FOOT-PLANT LITE (Phase 74): align the body to the terrain slope so
+      // feet track the ground on hills instead of the front hovering and the
+      // back sinking. Sampled fore/aft of the facing, softened + damped.
+      const ahead = Math.max(0.45 * (P.height_m || 1), 0.3);
+      const hF = hAt(nt.x + Math.sin(modelYaw) * ahead, nt.z + Math.cos(modelYaw) * ahead);
+      const hB = hAt(nt.x - Math.sin(modelYaw) * ahead, nt.z - Math.cos(modelYaw) * ahead);
+      const slopeP = Math.atan2(hB - hF, 2 * ahead) * 0.7;
+      leanP = THREE.MathUtils.damp(leanP,
+        THREE.MathUtils.clamp(slopeP, -0.35, 0.35), 5, dt);
+      holder.rotation.x = leanP;
     }
 
     // animation state machine
@@ -3156,6 +3287,12 @@ async function main() {
     {
       const stc = steps[stepIdx];
       if (stc && stc.kind === 'capture' && !won && !lost) stepCapture(stc, nt.x, nt.z, dt);
+    }
+    if (window.__clouds) {                          // slow downwind drift
+      for (const sp of window.__clouds) {
+        sp.position.x += dt * 1.6;
+        if (sp.position.x > 1100) sp.position.x = -1100;
+      }
     }
 
     // combat: attack cooldown + projectiles + gamepad attack edge
@@ -3320,6 +3457,9 @@ async function main() {
     camera.updateProjectionMatrix();
     renderer.setSize(innerWidth, innerHeight, false);   // keep CSS 100% fill; only resize the buffer
     composer.setSize(innerWidth, innerHeight);
+    _ssaoDepth.image.width = innerWidth; _ssaoDepth.image.height = innerHeight;
+    _ssaoDepth.needsUpdate = true;
+    ssao.uniforms.res.value.set(innerWidth, innerHeight);
     if (stylePass) stylePass.uniforms.res.value.set(innerWidth, innerHeight);
   });
   // FIT AFTER LAYOUT SETTLES (2026-07-08): the first frame can capture a stale
