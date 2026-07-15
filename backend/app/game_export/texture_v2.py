@@ -75,8 +75,10 @@ try:
     tls = np.empty(ntri * 3, dtype=np.int64)
     me.loop_triangles.foreach_get("loops", tls); tls = tls.reshape(ntri, 3)
 
+    diag0 = float(np.linalg.norm(cow.max(0) - cow.min(0)))
     tv = lvi[tls]                                  # (ntri,3) vertex ids
     p0, p1, p2 = cow[tv[:, 0]], cow[tv[:, 1]], cow[tv[:, 2]]
+    P3 = np.stack([p0, p1, p2], 1)                 # (ntri,3verts,3xyz)
     fn = np.cross(p1 - p0, p2 - p0)
     fl = np.linalg.norm(fn, axis=1); fl[fl < 1e-12] = 1.0
     validity = np.abs(fn[:, 0] / fl)               # |normal . X| (ref camera axis)
@@ -121,6 +123,8 @@ try:
     # ── 3) rasterize the atlas (color + geo validity + foreground + world pos) ──
     color = np.zeros((S, S, 3), dtype=np.float32)
     val = np.full((S, S), -1.0, dtype=np.float32)
+    fg = np.zeros((S, S), dtype=bool)              # source pixel inside subject?
+    pos = np.zeros((S, S, 3), dtype=np.float32)    # world pos per texel (mirror)
     fg = np.zeros((S, S), dtype=bool)
     pos = np.zeros((S, S, 3), dtype=np.float32)     # world pos per texel (mirror fill)
     A = auv[tls] * (S - 1)                          # (ntri,3,2) atlas px coords
