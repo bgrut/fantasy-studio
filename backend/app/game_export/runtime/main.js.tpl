@@ -348,6 +348,13 @@ async function main() {
   }
   const OSM = (LVL && LVL.osm) || null;
   const gcol = new THREE.Color(...SPEC.world.ground_color);
+  {
+    // SATURATION FLOOR (Phase 76): LLM ground colors trend pastel — real
+    // grass/soil is richer. Only colored grounds are lifted (snow/sand with
+    // near-zero saturation stay untouched).
+    const _h = {}; gcol.getHSL(_h);
+    if (_h.s > 0.08 && _h.s < 0.3) gcol.setHSL(_h.h, 0.34, Math.min(_h.l, 0.42));
+  }
   const TEXN = LVL ? 1024 : 256;        // level ground is painted 1:1 (no tiling)
   const cnv = document.createElement('canvas'); cnv.width = cnv.height = TEXN;
   const ctx = cnv.getContext('2d');
@@ -2792,6 +2799,100 @@ async function main() {
       pickAt(e.clientX, e.clientY, 'hover');
     });
   }
+
+  // ── MATERIAL ENRICHMENT (Phase 76): the SCALABLE realism pass ─────────────
+  // Every flat-colored material in the scene — trees, castles, buildings,
+  // rocks, fences, ANY prop in ANY game — gains a procedural detail texture
+  // classified from its material name/color: bark striations, mottled stone,
+  // shingles, leaf speckle. One traverse, cached per class+color, no
+  // per-asset artwork ever. Meshes that already carry real textures (GPU
+  // characters, terrain) are untouched.
+  {
+    const _detailCache = {};
+    function detailTex(cls, baseHex) {
+      const key = cls + baseHex;
+      if (_detailCache[key]) return _detailCache[key];
+      const N = 256, c = document.createElement('canvas');
+      c.width = c.height = N;
+      const g = c.getContext('2d');
+      const base = new THREE.Color(baseHex);
+      g.fillStyle = '#' + base.getHexString(); g.fillRect(0, 0, N, N);
+      const rngD = mulberry32(9137 + cls.length);
+      const shade = (k) => '#' + base.clone().offsetHSL(0, 0, k).getHexString();
+      if (cls === 'bark') {
+        for (let i = 0; i < 90; i++) {                       // vertical striations
+          g.strokeStyle = shade((rngD() - 0.6) * 0.10); g.lineWidth = 1 + rngD() * 3;
+          const x = rngD() * N; g.beginPath(); g.moveTo(x, 0);
+          g.bezierCurveTo(x + rngD() * 8 - 4, N / 3, x + rngD() * 8 - 4, 2 * N / 3, x + rngD() * 10 - 5, N);
+          g.stroke();
+        }
+      } else if (cls === 'stone') {
+        for (let i = 0; i < 70; i++) {                       // mottled blocks + cracks
+          g.fillStyle = shade((rngD() - 0.5) * 0.09);
+          g.fillRect(rngD() * N, rngD() * N, 14 + rngD() * 44, 10 + rngD() * 26);
+        }
+        g.strokeStyle = shade(-0.13); g.lineWidth = 1.5;
+        for (let y = 16; y < N; y += 26 + Math.floor(rngD() * 8)) {
+          g.beginPath(); g.moveTo(0, y); g.lineTo(N, y + rngD() * 6 - 3); g.stroke();
+        }
+      } else if (cls === 'roof') {
+        for (let y = 0; y < N; y += 16) {                    // shingle rows
+          g.fillStyle = shade((rngD() - 0.5) * 0.08); g.fillRect(0, y, N, 15);
+          g.strokeStyle = shade(-0.12); g.beginPath(); g.moveTo(0, y); g.lineTo(N, y); g.stroke();
+        }
+      } else if (cls === 'foliage') {
+        for (let i = 0; i < 900; i++) {                      // leaf speckle
+          g.fillStyle = shade((rngD() - 0.42) * 0.16);
+          const s = 2 + rngD() * 5;
+          g.fillRect(rngD() * N, rngD() * N, s, s * 0.6);
+        }
+      } else {                                               // generic grain
+        for (let i = 0; i < 500; i++) {
+          g.fillStyle = shade((rngD() - 0.5) * 0.06);
+          g.fillRect(rngD() * N, rngD() * N, 2 + rngD() * 6, 2 + rngD() * 6);
+        }
+      }
+      const t = new THREE.CanvasTexture(c);
+      t.wrapS = t.wrapT = THREE.RepeatWrapping;
+      t.colorSpace = THREE.SRGBColorSpace;
+      _detailCache[key] = t;
+      return t;
+    }
+    function classify(m) {
+      const n = (m.name || '').toLowerCase();
+      if (/bark|trunk|wood|fence|branch/.test(n)) return 'bark';
+      if (/stone|wall|rock|castle|brick|slit/.test(n)) return 'stone';
+      if (/roof|shingle/.test(n)) return 'roof';
+      if (/leaf|leaves|needle|bush|foliage|lit|dark|mid/.test(n)) return 'foliage';
+      const hsl = {}; m.color.getHSL(hsl);
+      if (hsl.s > 0.2 && hsl.h > 0.16 && hsl.h < 0.45) return 'foliage';
+      if (hsl.s < 0.12) return 'stone';
+      if (hsl.h < 0.12) return 'bark';
+      return 'grain';
+    }
+    const _seen = new Set();
+    scene.traverse(o => {
+      if (!o.isMesh || !o.material) return;
+      if (o.isSkinnedMesh) return;                           // characters keep real textures
+      for (const m of Array.isArray(o.material) ? o.material : [o.material]) {
+        if (!m || !m.isMeshStandardMaterial || m.map || _seen.has(m.uuid)) continue;
+        _seen.add(m.uuid);
+        if (!o.geometry.attributes.uv) continue;             // needs UVs to texture
+        const cls = classify(m);
+        const tex = detailTex(cls, '#' + m.color.getHexString());
+        m.map = tex;
+        m.color.setRGB(1, 1, 1);
+        m.bumpMap = tex; m.bumpScale = 0.06;
+        m.roughness = Math.min(1, (m.roughness || 0.9) + 0.03);
+        m.needsUpdate = true;
+      }
+    });
+  }
+  // sun shadow softening + ground-bounce tied to the actual terrain color —
+  // hard black-edged shadows are the #2 "this is CG" tell after fog
+  sun.shadow.radius = 3;
+  sun.shadow.bias = -0.0004;
+  hemi.groundColor.copy(gcol.clone().multiplyScalar(0.55));
 
   // QUALITY PACK — cinematic post chain: SSAO + subtle bloom + vignette + filmic out
   // SSAO (Phase 73 v2): a dedicated DEPTH PREPASS (RGBA-packed, half-res —
