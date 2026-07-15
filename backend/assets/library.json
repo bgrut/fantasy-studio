@@ -37,5 +37,6 @@
   "berry": "assets/library/berry.glb",
   "deer": "assets/library/deer.glb",
   "hunter": "assets/library/hunter.glb",
-  "goblin": "assets/library/goblin.glb"
+  "goblin": "assets/library/goblin.glb",
+  "fish": "assets/library/fish.glb"
 }

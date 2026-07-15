@@ -452,6 +452,15 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                                      min(spec.camera.distance_m, 4.2 * h + 2.0))
         spec.camera.height_m = max(0.9 * h,
                                    min(spec.camera.height_m, 2.2 * h + 0.6))
+        # FOG SANITY (2026-07-15): the LLM loves dramatic fog — unless the
+        # prompt actually says fog/mist/haze, cap density so photoreal scenes
+        # stay crisp (words-beat-AI, same rule as sky/hunt).
+        try:
+            if not any(w in req.prompt.lower() for w in ("fog", "mist", "haze", "smoke")):
+                if spec.world.fog_density is None or spec.world.fog_density > 0.35:
+                    spec.world.fog_density = 0.3
+        except Exception:
+            pass
         # per-asset heading facts (play-verified): a generated mesh's nose sign
         # is ambiguous — side-profile refs face either way — so the correction
         # lives as DATA in assets/library_heading.json, never a runtime guess.
