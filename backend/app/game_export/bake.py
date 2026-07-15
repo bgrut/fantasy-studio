@@ -101,11 +101,26 @@ __result__=json.dumps(out)
 # procedural idle: subtle breathing sway, exact-loop (whole sine cycles)
 _IDLE_CODE = r'''
 import bpy, json, math
-from mathutils import Quaternion
+from mathutils import Quaternion, Vector, Matrix
 rig=bpy.data.objects.get("HeroRig")
 TOTAL=__TOTAL__
 for pb in rig.pose.bones: pb.rotation_mode="QUATERNION"
 sc=bpy.context.scene; sc.frame_start=1
+# ARMS DOWN (Phase 63): generated bipeds REST in a T-pose, so an idle that
+# only sways around rest SHOWS the T-pose whenever the player stands still
+# (the Mountain Dog Duty screenshot). Aim each upper arm mostly down, kept in
+# its own outward plane so hands clear the thighs; the forearm/hand chain
+# inherits. The CMU walk/run/attack clips already pose arms correctly.
+armQ={}
+for s in ("L","R"):
+    p=rig.pose.bones.get("uparm_"+s)
+    if not p: continue
+    rest=p.bone.matrix_local
+    d0=(rest.to_3x3() @ Vector((0,1,0))).normalized()
+    dv=Vector((d0.x*0.22, d0.y*0.10, -1.0)).normalized()
+    q=d0.rotation_difference(dv)
+    p.matrix=Matrix.Translation(p.bone.head_local) @ ((q.to_matrix() @ rest.to_3x3()).to_4x4())
+    armQ["uparm_"+s]=p.rotation_quaternion.copy()
 sway={"spine":(0.020,'X'),"chest":(0.028,'X'),"head":(0.014,'X'),
       "uparm_L":(0.018,'Y'),"uparm_R":(0.018,'Y')}
 AX={'X':(1,0,0),'Y':(0,1,0)}
@@ -115,7 +130,8 @@ for i in range(TOTAL):
         pb=rig.pose.bones.get(name)
         if not pb: continue
         a=amp*math.sin(2*math.pi*t)        # one full cycle -> seamless loop
-        pb.rotation_quaternion=Quaternion(AX[ax], a)
+        qs=Quaternion(AX[ax], a)
+        pb.rotation_quaternion=(armQ[name] @ qs) if name in armQ else qs
         pb.keyframe_insert("rotation_quaternion",frame=f)
 __result__=json.dumps({"ok":True,"frames":TOTAL})
 '''
