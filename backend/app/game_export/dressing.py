@@ -62,7 +62,7 @@ _RECIPES = {
     # yard feel — lamps read as braziers at dusk
     "mars":        [("rock", 130, 8)],
     "moon":        [("rock", 100, 7)],
-    "castle":      [("rock", 40, 4), ("lamp", 14, 3), ("tree_oak", 10, 2), ("bush", 12, 2)],
+    "castle":      [("castle", 1, 0), ("rock", 30, 4), ("lamp", 14, 3), ("tree_oak", 10, 2), ("bush", 12, 2)],
     "ruins":       [("rock", 80, 6), ("bush", 24, 3), ("tree_oak", 12, 2)],
     "cave":        [("rock", 140, 9)],
     "jungle":      [("tree_oak", 120, 7), ("bush", 90, 5), ("rock", 30, 3)],

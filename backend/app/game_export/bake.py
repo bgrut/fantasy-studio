@@ -914,7 +914,12 @@ __result__=json.dumps({"ok":True,"frames":T})
     if r and r.get("ok"):
         _call(registry, "push", _PUSH_NLA.replace("__NAME__", "attack"))
     # walk: 2 cycles @ stride 20; run: 3 cycles @ stride 12, bigger swing
-    for name, total, stride, amp in (("walk", 40, 20, 0.50), ("run", 36, 12, 0.72)):
+    # GAIT-SCALE (2026-07-15): big animals lope, small ones scurry — a 1.4 m
+    # bear at cat cadence "moved kinda funny". Cycle length grows ~size^0.35.
+    _gk = min(max((height_m / 0.6) ** 0.35, 0.8), 1.6)
+    for name, total, stride, amp in (
+            ("walk", int(40 * _gk), max(int(20 * _gk), 8), 0.50),
+            ("run", int(36 * _gk), max(int(12 * _gk), 6), 0.72)):
         r = _call(registry, name, (_QUAD_CLIP_CODE
                                    .replace("__TOTAL__", str(total))
                                    .replace("__STRIDE__", str(stride))

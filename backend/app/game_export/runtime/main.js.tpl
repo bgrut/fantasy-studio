@@ -216,8 +216,12 @@ async function main() {
     // fog_density 0..1: 0.5 = default atmosphere, higher pulls the fog wall
     // in close ("mistier", "thick fog"), lower pushes it out ("clear air")
     const fd = SPEC.world.fog_density != null ? SPEC.world.fog_density : 0.5;
-    const near = SPEC.world.size_m * (0.45 - fd * 0.41);   // 0.45..0.04 of world
-    const far  = SPEC.world.size_m * (1.30 - fd * 0.85);   // 1.30..0.45 of world
+    // 2026-07-15 haze fix: the old envelope (near at 0.24 of world for the
+    // DEFAULT) milked out everything past ~22 m — battle royale foxes at 40 m
+    // were 60% fog. Default air is now CRISP (near 0.55 of world, full fog
+    // well past the far edge); prompted "thick fog" still closes right in.
+    const near = SPEC.world.size_m * (0.80 - fd * 0.72);   // 0.80..0.08 of world
+    const far  = SPEC.world.size_m * (2.20 - fd * 1.55);   // 2.20..0.65 of world
     scene.fog = new THREE.Fog(pal.fog, Math.max(near, 2), Math.max(far, near + 20));
   }
 
@@ -987,7 +991,7 @@ async function main() {
       gltf.scene.traverse(o => {
         if (!o.isMesh) return;
         for (const m of Array.isArray(o.material) ? o.material : [o.material]) {
-          if (m && m.color) m.color.lerp(propTint, 0.16);
+          if (m && m.color) m.color.lerp(propTint, 0.08);
         }
       });
       const parts = [];
