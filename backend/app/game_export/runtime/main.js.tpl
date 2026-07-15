@@ -2790,47 +2790,60 @@ async function main() {
   }
 
   // QUALITY PACK — cinematic post chain: SSAO + subtle bloom + vignette + filmic out
-  // SSAO (Phase 73): the scene renders into a target that carries a DEPTH
-  // texture; a compact screen-space AO pass darkens creases/contact areas.
-  // Self-contained shader — no extra vendor files. Subtle by design.
-  const _ssaoDepth = new THREE.DepthTexture(innerWidth, innerHeight);
-  const _ssaoRT = new THREE.WebGLRenderTarget(innerWidth, innerHeight, {
-    depthBuffer: true, depthTexture: _ssaoDepth,
-    type: THREE.HalfFloatType });
-  const composer = new EffectComposer(renderer, _ssaoRT);
+  // SSAO (Phase 73 v2): a dedicated DEPTH PREPASS (RGBA-packed, half-res —
+  // the same approach three's own AO passes use) feeds a compact 8-tap AO
+  // shader. v1 shared one depth texture with the composer's ping-pong
+  // targets, which blanked the whole frame — never bind a texture that a
+  // later pass in the same chain may write to.
+  const composer = new EffectComposer(renderer);
   composer.addPass(new RenderPass(scene, camera));
+  const _dMat = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking });
+  const _dRT = new THREE.WebGLRenderTarget(innerWidth >> 1, innerHeight >> 1);
   const ssao = new ShaderPass({
-    uniforms: { tDiffuse: { value: null }, tDepth: { value: _ssaoDepth },
+    uniforms: { tDiffuse: { value: null }, tDepth: { value: _dRT.texture },
                 camNear: { value: camera.near }, camFar: { value: camera.far },
                 res: { value: new THREE.Vector2(innerWidth, innerHeight) } },
     vertexShader: `varying vec2 vUv;
       void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
-    fragmentShader: `uniform sampler2D tDiffuse; uniform sampler2D tDepth;
+    fragmentShader: `#include <packing>
+      uniform sampler2D tDiffuse; uniform sampler2D tDepth;
       uniform float camNear; uniform float camFar; uniform vec2 res;
       varying vec2 vUv;
       float viewZ(vec2 uv){
-        float d = texture2D(tDepth, uv).x;
-        return (camNear * camFar) / ((camFar - camNear) * d - camFar);   // negative
+        float d = unpackRGBAToDepth(texture2D(tDepth, uv));    // gl_FragCoord.z
+        return perspectiveDepthToViewZ(d, camNear, camFar);    // negative view Z
       }
       void main(){
         vec4 c = texture2D(tDiffuse, vUv);
         float z0 = viewZ(vUv);
-        if (z0 < -220.0) { gl_FragColor = c; return; }        // sky/far: skip
+        if (z0 < -220.0) { gl_FragColor = c; return; }         // sky/far: skip
         float px = 1.0 / res.y;
         // screen radius shrinks with distance so AO stays world-scaled
         float rad = clamp(26.0 / max(-z0, 1.0), 2.0, 14.0) * px;
         float occ = 0.0;
         for (int i = 0; i < 8; i++) {
-          float a = 0.7853982 * float(i) + (z0 * 13.7);       // per-depth spin
+          float a = 0.7853982 * float(i) + (z0 * 13.7);        // per-depth spin
           vec2 off = vec2(cos(a), sin(a)) * rad * (0.4 + 0.6 * fract(float(i) * 0.618));
-          float dz = viewZ(vUv + off) - z0;                    // >0 means closer
-          occ += clamp(dz / 0.55, 0.0, 1.0) * step(dz, 2.6);   // range-checked
+          float dz = viewZ(vUv + off) - z0;                     // >0 means closer
+          occ += clamp(dz / 0.55, 0.0, 1.0) * step(dz, 2.6);    // range-checked
         }
         float ao = 1.0 - 0.38 * (occ / 8.0);
         gl_FragColor = vec4(c.rgb * ao, c.a);
       }`,
   });
   composer.addPass(ssao);
+  // MeshDepthMaterial as the scene override: skinned/instanced meshes pack
+  // correct depth (it carries USE_SKINNING variants); the AO shader
+  // linearizes with perspectiveDepthToViewZ.
+  function renderDepthPrepass() {
+    scene.overrideMaterial = _dMat;
+    const fogSave = scene.fog; scene.fog = null;
+    renderer.setRenderTarget(_dRT);
+    renderer.clear();
+    renderer.render(scene, camera);
+    renderer.setRenderTarget(null);
+    scene.overrideMaterial = null; scene.fog = fogSave;
+  }
   const bloom = new UnrealBloomPass(
     new THREE.Vector2(innerWidth, innerHeight), 0.25, 0.65, 0.85);
   composer.addPass(bloom);
@@ -3417,6 +3430,7 @@ async function main() {
       }
     }
     if (stylePass) stylePass.uniforms.time.value = performance.now() / 1000;
+    renderDepthPrepass();               // SSAO depth (half-res, RGBA-packed)
     composer.render();
     // live state for the verify harness (extends the __game probe object)
     window.__game.state = { x: nt.x, y: nt.y, z: nt.z, modelYaw, yaw, speed,
@@ -3457,8 +3471,7 @@ async function main() {
     camera.updateProjectionMatrix();
     renderer.setSize(innerWidth, innerHeight, false);   // keep CSS 100% fill; only resize the buffer
     composer.setSize(innerWidth, innerHeight);
-    _ssaoDepth.image.width = innerWidth; _ssaoDepth.image.height = innerHeight;
-    _ssaoDepth.needsUpdate = true;
+    _dRT.setSize(innerWidth >> 1, innerHeight >> 1);
     ssao.uniforms.res.value.set(innerWidth, innerHeight);
     if (stylePass) stylePass.uniforms.res.value.set(innerWidth, innerHeight);
   });
