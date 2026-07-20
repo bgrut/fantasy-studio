@@ -38,5 +38,8 @@
   "deer": "assets/library/deer.glb",
   "hunter": "assets/library/hunter.glb",
   "goblin": "assets/library/goblin.glb",
-  "fish": "assets/library/fish.glb"
+  "fish": "assets/library/fish.glb",
+  "striker": "assets/library/striker.glb",
+  "detective": "assets/library/detective.glb",
+  "soldier": "assets/library/soldier.glb"
 }
