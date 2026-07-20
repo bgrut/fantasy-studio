@@ -192,7 +192,11 @@ async function main() {
   // Phase 65: per-environment exposure; snow is high-albedo — damp it further
   // so arctic scenes read as LIT SNOW instead of a white void.
   renderer.toneMappingExposure = ((SKY[SPEC.world.sky] || SKY.day).exp || 0.75)
-    * (SPEC.world.weather === 'snow' ? 0.86 : 1.0);
+    * (SPEC.world.weather === 'snow' ? 0.86 : 1.0)
+    // high-albedo grounds (desert sand, beach) wash out like snow does —
+    // same damp, keyed on the actual ground color instead of a name list
+    * ((0.299 * SPEC.world.ground_color[0] + 0.587 * SPEC.world.ground_color[1]
+        + 0.114 * SPEC.world.ground_color[2]) > 0.62 ? 0.88 : 1.0);
   renderer.domElement.style.cssText = 'display:block;width:100%;height:100%';  // fill the frame
   document.getElementById('app').appendChild(renderer.domElement);
 
@@ -211,6 +215,7 @@ async function main() {
   });
 
   const scene = new THREE.Scene();
+  const WIND_U = { value: 0 };                   // shared wind clock (Phase 81)
   scene.background = new THREE.Color(pal.sky);
   if (SPEC.world.fog) {
     // fog_density 0..1: 0.5 = default atmosphere, higher pulls the fog wall
@@ -1091,6 +1096,19 @@ async function main() {
     }
     const bmat = new THREE.MeshStandardMaterial({ side: THREE.DoubleSide, roughness: 1.0,
                                                   vertexColors: true });
+    // WIND (Phase 81): blades sway from the tip, phase-shifted by world
+    // position so gusts ripple across the meadow instead of ticking in sync
+    bmat.onBeforeCompile = sh => {
+      sh.uniforms.uWind = WIND_U;
+      sh.vertexShader = 'uniform float uWind;\n' + sh.vertexShader.replace(
+        '#include <begin_vertex>',
+        ['#include <begin_vertex>',
+         'vec4 wpW = instanceMatrix * vec4(position, 1.0);',
+         'float wA = smoothstep(0.03, 0.34, position.y);',
+         'transformed.x += sin(uWind * 1.7 + wpW.x * 0.5 + wpW.z * 0.35) * 0.055 * wA;',
+         'transformed.z += cos(uWind * 1.35 + wpW.x * 0.33 + wpW.z * 0.5) * 0.045 * wA;'
+        ].join('\n'));
+    };
     const GR = Math.min(gsize * 0.48, 70);
     const GN = Math.min(13000, Math.floor(GR * GR * 2.2));
     const rngG = mulberry32(SPEC.seed + 21);
@@ -2822,6 +2840,26 @@ async function main() {
     });
   }
 
+  // ── FOOTSTEP DUST (Phase 81) — bird flock already ships via Phase 48 ─────
+  const dusts = [];
+  {
+    const dc = document.createElement('canvas'); dc.width = dc.height = 32;
+    const dg2 = dc.getContext('2d');
+    const grad = dg2.createRadialGradient(16, 16, 2, 16, 16, 15);
+    grad.addColorStop(0, 'rgba(255,255,255,0.55)');
+    grad.addColorStop(1, 'rgba(255,255,255,0)');
+    dg2.fillStyle = grad; dg2.fillRect(0, 0, 32, 32);
+    const dtex = new THREE.CanvasTexture(dc);
+    const dustCol = new THREE.Color(...SPEC.world.ground_color).lerp(new THREE.Color(1, 1, 1), 0.35);
+    for (let i = 0; i < 10; i++) {
+      const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: dtex, color: dustCol,
+        transparent: true, opacity: 0, depthWrite: false }));
+      sp.scale.set(0.5, 0.5, 1); scene.add(sp);
+      dusts.push({ sp, t: 1 });
+    }
+  }
+  let dustT = 0, dustIdx = 0;
+
   // ── MATERIAL ENRICHMENT (Phase 76): the SCALABLE realism pass ─────────────
   // Every flat-colored material in the scene — trees, castles, buildings,
   // rocks, fences, ANY prop in ANY game — gains a procedural detail texture
@@ -2842,6 +2880,7 @@ async function main() {
       const key = name + rep;
       if (_pbrCache[key]) return _pbrCache[key];
       const t = _texLoader.load('textures/' + name + '.jpg');
+      t.anisotropy = renderer.capabilities.getMaxAnisotropy();  // crisp at grazing angles
       t.wrapS = t.wrapT = THREE.RepeatWrapping;
       t.repeat.set(rep, rep);
       if (srgb) t.colorSpace = THREE.SRGBColorSpace;
@@ -2923,6 +2962,23 @@ async function main() {
         _seen.add(m.uuid);
         if (!o.geometry.attributes.uv) continue;             // needs UVs to texture
         const cls = classify(m);
+        if (cls === 'foliage' || cls === 'needles') {
+          // canopies breathe in the wind — subtle, phase-shifted per tree
+          m.onBeforeCompile = sh => {
+            sh.uniforms.uWind = WIND_U;
+            sh.vertexShader = 'uniform float uWind;\n' + sh.vertexShader.replace(
+              '#include <begin_vertex>',
+              ['#include <begin_vertex>',
+               '#ifdef USE_INSTANCING',
+               'vec4 wpF = instanceMatrix * vec4(position, 1.0);',
+               '#else',
+               'vec4 wpF = vec4(position, 1.0);',
+               '#endif',
+               'transformed.x += sin(uWind * 0.9 + wpF.x * 0.11 + wpF.z * 0.07) * 0.05;',
+               'transformed.z += cos(uWind * 0.75 + wpF.z * 0.1 + wpF.x * 0.08) * 0.04;'
+              ].join('\n'));
+          };
+        }
         if (PHOTO && PBR_FILE[cls]) {
           m.map = pbr(PBR_FILE[cls], 2, true);
           m.normalMap = pbr(PBR_FILE[cls] + '_n', 2, false);
@@ -3256,6 +3312,23 @@ async function main() {
 
   renderer.setAnimationLoop(() => {
     const dt = Math.min(clock.getDelta(), 0.05);
+    WIND_U.value = performance.now() / 1000;   // wind clock (Phase 81)
+    dustT -= dt;
+    if ((window.__pSpeed || 0) > 3 && dustT <= 0 && typeof playerObj !== 'undefined') {
+      dustT = 0.22;                            // one puff per running stride-ish
+      const d0 = dusts[dustIdx++ % dusts.length];
+      d0.t = 0;
+      d0.sp.position.set(playerObj.position.x,
+        hAt(playerObj.position.x, playerObj.position.z) + 0.12, playerObj.position.z);
+    }
+    for (const d of dusts) {
+      if (d.t < 1) {
+        d.t += dt * 2.2;
+        d.sp.material.opacity = 0.5 * (1 - d.t);
+        d.sp.position.y += dt * 0.5;
+        const dsc = 0.4 + d.t * 0.8; d.sp.scale.set(dsc, dsc, 1);
+      } else if (d.sp.material.opacity !== 0) d.sp.material.opacity = 0;
+    }
     // pre-START or paused: inputs are dead, world idles as the backdrop
     const mvRaw = (gameStarted && !paused) ? readMove() : { x: 0, z: 0, run: false, mag: 0 };
     // Inspect FREE-FLY: while editing, WASD/arrows pan the EDITOR CAMERA
