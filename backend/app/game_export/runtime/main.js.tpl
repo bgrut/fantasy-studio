@@ -841,13 +841,57 @@ async function main() {
   }
   // generated-car paint reads flat/blotchy until the GPU texture tier lands —
   // a glossier material response under the Sky light hides most of it
+  const _despeckled = new Set();
+  function despeckleTexture(m) {
+    // DE-SPECKLE (Phase 87): generated vehicle textures carry white noise
+    // dots ('blotchy paint'). One-time on load: pixels far brighter than
+    // their 5x5 neighborhood average get pulled back to it. Cached per map.
+    const img = m.map && m.map.image;
+    if (!img || !img.width || _despeckled.has(m.map.uuid)) return;
+    _despeckled.add(m.map.uuid);
+    try {
+      const W = Math.min(img.width, 1024), H = Math.min(img.height, 1024);
+      const c = document.createElement('canvas'); c.width = W; c.height = H;
+      const g = c.getContext('2d', { willReadFrequently: true });
+      g.drawImage(img, 0, 0, W, H);
+      const d = g.getImageData(0, 0, W, H), px = d.data;
+      const lum = new Float32Array(W * H);
+      for (let i = 0; i < W * H; i++) lum[i] = 0.299 * px[i * 4] + 0.587 * px[i * 4 + 1] + 0.114 * px[i * 4 + 2];
+      const out = g.createImageData(W, H); out.data.set(px);
+      for (let y = 2; y < H - 2; y += 1) {
+        for (let x = 2; x < W - 2; x += 1) {
+          const i = y * W + x;
+          let nb = 0, cnt = 0;
+          for (let dy = -2; dy <= 2; dy += 2) for (let dx = -2; dx <= 2; dx += 2) {
+            if (!dx && !dy) continue;
+            nb += lum[i + dy * W + dx]; cnt++;
+          }
+          nb /= cnt;
+          if (lum[i] > nb + 52) {                     // speckle: way brighter than area
+            const k = nb / Math.max(lum[i], 1);
+            out.data[i * 4] = px[i * 4] * k;
+            out.data[i * 4 + 1] = px[i * 4 + 1] * k;
+            out.data[i * 4 + 2] = px[i * 4 + 2] * k;
+          }
+        }
+      }
+      g.putImageData(out, 0, 0);
+      const t = new THREE.CanvasTexture(c);
+      t.colorSpace = m.map.colorSpace; t.flipY = m.map.flipY;
+      t.wrapS = m.map.wrapS; t.wrapT = m.map.wrapT;
+      t.anisotropy = renderer.capabilities.getMaxAnisotropy();
+      m.map = t; m.needsUpdate = true;
+    } catch (e) { /* tainted/compressed texture: keep the original */ }
+  }
   function polishVehiclePaint(root, enabled) {
     if (!enabled) return;
     root.traverse(o => {
       if (!o.isMesh) return;
       for (const m of Array.isArray(o.material) ? o.material : [o.material]) {
         if (m && m.isMeshStandardMaterial) {
-          m.roughness = 0.38; m.metalness = 0.28; m.needsUpdate = true;
+          m.roughness = 0.38; m.metalness = 0.28;
+          despeckleTexture(m);
+          m.needsUpdate = true;
         }
       }
     });
@@ -3331,10 +3375,12 @@ async function main() {
       if (cl.length < 8) continue;
       let top = 0, xs = 0;
       for (const q of cl) { if (q[1] - minY > top) top = q[1] - minY; xs += Math.abs(q[0]); }
-      const wr = THREE.MathUtils.clamp(top * 0.56, 0.12, 0.5);
-      const xoff = Math.max(xs / cl.length, wr * 0.9);
-      zones.push({ zc, tol: tol * 1.15, topY: minY + top * 1.1, xmin: xoff * 0.45 });
-      const tireGeo = new THREE.CylinderGeometry(wr, wr, wr * 0.5, 18);
+      const wr = THREE.MathUtils.clamp(top * 0.62, 0.14, 0.55);
+      let xmax = 0;
+      for (const q of cl) if (Math.abs(q[0]) > xmax) xmax = Math.abs(q[0]);
+      const xoff = Math.max(xmax * 0.88, wr * 0.9);   // outer face flush with body
+      zones.push({ zc, tol: tol * 1.45, topY: minY + top * 1.25, xmin: xoff * 0.35 });
+      const tireGeo = new THREE.CylinderGeometry(wr, wr, wr * 0.8, 18);
       tireGeo.rotateZ(Math.PI / 2);
       const tireMat = new THREE.MeshStandardMaterial({ color: 0x181818, roughness: 0.92 });
       const hubGeo = new THREE.CylinderGeometry(wr * 0.42, wr * 0.42, wr * 0.53, 12);
@@ -3368,11 +3414,12 @@ async function main() {
           va.fromBufferAttribute(pos, idx.getX(i)).applyMatrix4(m);
           vb.fromBufferAttribute(pos, idx.getX(i + 1)).applyMatrix4(m);
           vc.fromBufferAttribute(pos, idx.getX(i + 2)).applyMatrix4(m);
-          if (!(inZone(va) && inZone(vb) && inZone(vc))) {
+          const nIn = (inZone(va) ? 1 : 0) + (inZone(vb) ? 1 : 0) + (inZone(vc) ? 1 : 0);
+          if (nIn < 2) {
             keep.push(idx.getX(i), idx.getX(i + 1), idx.getX(i + 2));
           }
         }
-        if (keep.length < idx.count * 0.75) return;   // suspicious cut — abort
+        if (keep.length < idx.count * 0.6) return;    // suspicious cut — abort
         if (keep.length === idx.count) return;        // nothing to cut
         geo.setIndex(keep);
         o.geometry = geo;
