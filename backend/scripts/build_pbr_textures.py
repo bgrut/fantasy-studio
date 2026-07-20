@@ -45,6 +45,10 @@ PACK = {
                 "overhead flat view, warm even light",
     "asphalt":  "top-down photograph of worn asphalt road surface with fine "
                 "cracks, overhead flat view, even light",
+    "leaves":   "dense green leafy tree canopy texture, many small overlapping "
+                "leaves filling the frame, flat frontal view, even light",
+    "needles":  "dense dark green pine needle branches texture filling the "
+                "frame, conifer foliage close-up, flat view, even light",
 }
 NEG = ("shadow of photographer, object, person, animal, watermark, text, "
        "logo, border, vignette, fisheye, tilt")

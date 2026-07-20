@@ -2429,8 +2429,15 @@ async function main() {
   function playAttackAnim() {
     if (!mixer || !actions.__attack) return 0;
     const a = actions.__attack;
-    const dur = Math.min(a.getClip().duration, 0.7);
-    a.reset(); a.setEffectiveWeight(1); a.crossFadeFrom(current, 0.08, true); a.play();
+    // SNAPPY SWING (2026-07-19 'attack always lags'): the baked clip has a
+    // windup — skip its first 10% and play fast enough that the whole swing
+    // lands in ~0.45 s. Input-to-impact now reads instant.
+    const clip = a.getClip();
+    a.timeScale = Math.max(1, clip.duration / 0.45);
+    const dur = Math.min(clip.duration / a.timeScale, 0.5);
+    a.reset(); a.setEffectiveWeight(1);
+    a.time = clip.duration * 0.10;
+    a.crossFadeFrom(current, 0.05, true); a.play();
     current = a;
     attackUntil = performance.now() + dur * 1000;
     setTimeout(() => {                 // return to locomotion after the swing
@@ -2679,7 +2686,7 @@ async function main() {
           while (a < -Math.PI) a += 2 * Math.PI;
           if (Math.abs(a) < 1.35) dmgEnemy(n, atkDmg);
         }
-      }, 180);
+      }, 120);
     }
   }
   // controls per device: keyboard F/Space · touch ATTACK button · gamepad A/X or RT
@@ -2826,7 +2833,8 @@ async function main() {
       _pbrCache[key] = t;
       return t;
     }
-    const PBR_FILE = { bark: 'bark', stone: 'stone', roof: 'roof', brick: 'brick' };
+    const PBR_FILE = { bark: 'bark', stone: 'stone', roof: 'roof', brick: 'brick',
+                       foliage: 'leaves', needles: 'needles' };
     const _detailCache = {};
     function detailTex(cls, baseHex) {
       const key = cls + baseHex;
@@ -2859,7 +2867,7 @@ async function main() {
           g.fillStyle = shade((rngD() - 0.5) * 0.08); g.fillRect(0, y, N, 15);
           g.strokeStyle = shade(-0.12); g.beginPath(); g.moveTo(0, y); g.lineTo(N, y); g.stroke();
         }
-      } else if (cls === 'foliage') {
+      } else if (cls === 'foliage' || cls === 'needles') {
         for (let i = 0; i < 900; i++) {                      // leaf speckle
           g.fillStyle = shade((rngD() - 0.42) * 0.16);
           const s = 2 + rngD() * 5;
@@ -2883,7 +2891,8 @@ async function main() {
       if (/wall|brick|facade/.test(n)) return 'brick';
       if (/stone|rock|castle|slit/.test(n)) return 'stone';
       if (/roof|shingle/.test(n)) return 'roof';
-      if (/leaf|leaves|needle|bush|foliage|lit|dark|mid/.test(n)) return 'foliage';
+      if (/needle/.test(n)) return 'needles';
+      if (/leaf|leaves|bush|foliage|lit|dark|mid/.test(n)) return 'foliage';
       const hsl = {}; m.color.getHSL(hsl);
       if (hsl.s > 0.2 && hsl.h > 0.16 && hsl.h < 0.45) return 'foliage';
       if (hsl.s < 0.12) return 'stone';
@@ -2925,6 +2934,21 @@ async function main() {
       gmat.normalMap = pbr(gname + '_n', Math.max(10, Math.round(gsize / 6)), false);
       gmat.normalScale = new THREE.Vector2(0.65, 0.65);
       gmat.needsUpdate = true;
+      // ALBEDO BLEND: overlay the photo surface into the painted world canvas
+      // (soft-light keeps trails/roads/tints; photo brings blade/grain detail)
+      const gimg = new Image();
+      gimg.onload = () => {
+        const c2 = gtex.image, g2 = c2.getContext('2d');
+        g2.globalAlpha = 0.5;
+        g2.globalCompositeOperation = 'overlay';
+        const tile = Math.max(48, Math.round(c2.width / (gsize / 9)));
+        for (let ty = 0; ty < c2.height; ty += tile)
+          for (let tx2 = 0; tx2 < c2.width; tx2 += tile)
+            g2.drawImage(gimg, tx2, ty, tile, tile);
+        g2.globalAlpha = 1; g2.globalCompositeOperation = 'source-over';
+        gtex.needsUpdate = true;
+      };
+      gimg.src = 'textures/' + gname + '.jpg';
     }
   }
   // re-open scope: enrichment block ends above
