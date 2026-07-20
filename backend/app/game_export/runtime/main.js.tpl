@@ -3324,14 +3324,16 @@ async function main() {
     let fi = Math.floor(BINS * 0.6), ri = 0;
     for (let i = Math.floor(BINS * 0.55); i < BINS; i++) if (hist[i] > hist[fi]) fi = i;
     for (let i = 0; i < Math.floor(BINS * 0.45); i++) if (hist[i] > hist[ri]) ri = i;
+    const zones = [];                          // collected wheel volumes to EXCISE
     for (const [bin, front] of [[fi, true], [ri, false]]) {
       const zc = bz(bin), tol = len / BINS * 1.6;
       const cl = low.filter(q => Math.abs(q[2] - zc) < tol);
       if (cl.length < 8) continue;
       let top = 0, xs = 0;
       for (const q of cl) { if (q[1] - minY > top) top = q[1] - minY; xs += Math.abs(q[0]); }
-      const wr = THREE.MathUtils.clamp(top * 0.55, 0.12, 0.5);
+      const wr = THREE.MathUtils.clamp(top * 0.56, 0.12, 0.5);
       const xoff = Math.max(xs / cl.length, wr * 0.9);
+      zones.push({ zc, tol: tol * 1.15, topY: minY + top * 1.1, xmin: xoff * 0.45 });
       const tireGeo = new THREE.CylinderGeometry(wr, wr, wr * 0.5, 18);
       tireGeo.rotateZ(Math.PI / 2);
       const tireMat = new THREE.MeshStandardMaterial({ color: 0x181818, roughness: 0.92 });
@@ -3347,6 +3349,34 @@ async function main() {
         node.add(g);
         wheels.push({ g, tire, front, wr });
       }
+    }
+    // EXCISE the baked wheels (Phase 86): drop every triangle fully inside a
+    // detected wheel volume so the fused-in tires stop showing through the
+    // animated overlays. Geometry is cloned first (rival cars share it) and
+    // the cut ABORTS if it would take >25% of the mesh (mis-detection guard).
+    if (zones.length) {
+      node.traverse(o => {
+        if (!o.isMesh || !o.geometry || !o.geometry.index) return;
+        const m = new THREE.Matrix4().multiplyMatrices(inv, o.matrixWorld);
+        const geo = o.geometry.clone();
+        const pos = geo.attributes.position, idx = geo.index;
+        const va = new THREE.Vector3(), vb = new THREE.Vector3(), vc = new THREE.Vector3();
+        const keep = [];
+        const inZone = v => zones.some(zn => v.y < zn.topY
+          && Math.abs(v.z - zn.zc) < zn.tol && Math.abs(v.x) > zn.xmin);
+        for (let i = 0; i < idx.count; i += 3) {
+          va.fromBufferAttribute(pos, idx.getX(i)).applyMatrix4(m);
+          vb.fromBufferAttribute(pos, idx.getX(i + 1)).applyMatrix4(m);
+          vc.fromBufferAttribute(pos, idx.getX(i + 2)).applyMatrix4(m);
+          if (!(inZone(va) && inZone(vb) && inZone(vc))) {
+            keep.push(idx.getX(i), idx.getX(i + 1), idx.getX(i + 2));
+          }
+        }
+        if (keep.length < idx.count * 0.75) return;   // suspicious cut — abort
+        if (keep.length === idx.count) return;        // nothing to cut
+        geo.setIndex(keep);
+        o.geometry = geo;
+      });
     }
   }
   if (DRIVE && playerObj.children.length) addWheels(playerObj.children[0]);
