@@ -3289,30 +3289,64 @@ async function main() {
            ? ' — follow the orange gates to the checkered finish' : '');
     }
   }
-  // SPINNING WHEELS (Phase 83 v2): generated car meshes are ONE fused shell.
-  // Overlay wheels attach to the HOLDER (the node modelYaw rotates), so they
-  // turn WITH the car; positions come from the holder's local-frame bounds.
+  // SPINNING WHEELS (Phase 85 v3): find the BAKED wheels from the mesh
+  // itself — the lowest vertex band clusters along the length axis at the
+  // axles. Overlay wheels sit exactly ON the baked ones (slightly larger,
+  // so they visually replace them) and turn with the holder. Scalable:
+  // pure geometry, zero per-car data.
   const wheels = [];
   function addWheels(node) {
     node.updateWorldMatrix(true, true);
-    const bb = new THREE.Box3().setFromObject(node);
-    const size = bb.getSize(new THREE.Vector3());
-    const lc = node.worldToLocal(bb.getCenter(new THREE.Vector3()));
-    const wr = THREE.MathUtils.clamp(size.y * 0.22, 0.14, 0.45);
-    const tireGeo = new THREE.CylinderGeometry(wr, wr, wr * 0.55, 18);
-    tireGeo.rotateZ(Math.PI / 2);
-    const tireMat = new THREE.MeshStandardMaterial({ color: 0x181818, roughness: 0.92 });
-    const hubGeo = new THREE.CylinderGeometry(wr * 0.4, wr * 0.4, wr * 0.58, 12);
-    hubGeo.rotateZ(Math.PI / 2);
-    const hubMat = new THREE.MeshStandardMaterial({ color: 0x8f8f8f, roughness: 0.4, metalness: 0.6 });
-    for (const [sx, sz, front] of [[-1, 1, true], [1, 1, true], [-1, -1, false], [1, -1, false]]) {
-      const g = new THREE.Group();
-      const tire = new THREE.Mesh(tireGeo, tireMat);
-      tire.add(new THREE.Mesh(hubGeo, hubMat));
-      g.add(tire);
-      g.position.set(lc.x + sx * size.x * 0.36, wr * 0.98, lc.z + sz * size.z * 0.30);
-      node.add(g);
-      wheels.push({ g, tire, front, wr });
+    const inv = new THREE.Matrix4().copy(node.matrixWorld).invert();
+    const pts = [];
+    node.traverse(o => {
+      if (!o.isMesh || !o.geometry || !o.geometry.attributes.position) return;
+      const pos = o.geometry.attributes.position;
+      const m = new THREE.Matrix4().multiplyMatrices(inv, o.matrixWorld);
+      const step = Math.max(1, Math.floor(pos.count / 5000));
+      const v = new THREE.Vector3();
+      for (let i = 0; i < pos.count; i += step) {
+        v.fromBufferAttribute(pos, i).applyMatrix4(m);
+        pts.push([v.x, v.y, v.z]);
+      }
+    });
+    if (pts.length < 100) return;
+    let minY = 1e9, maxY = -1e9, minZ = 1e9, maxZ = -1e9;
+    for (const q of pts) {
+      if (q[1] < minY) minY = q[1]; if (q[1] > maxY) maxY = q[1];
+      if (q[2] < minZ) minZ = q[2]; if (q[2] > maxZ) maxZ = q[2];
+    }
+    const h = maxY - minY, len = maxZ - minZ;
+    const low = pts.filter(q => q[1] < minY + h * 0.28);
+    const BINS = 24, hist = new Array(BINS).fill(0);
+    const bz = i => minZ + (i + 0.5) / BINS * len;
+    for (const q of low) hist[Math.min(BINS - 1, Math.floor((q[2] - minZ) / len * BINS))]++;
+    let fi = Math.floor(BINS * 0.6), ri = 0;
+    for (let i = Math.floor(BINS * 0.55); i < BINS; i++) if (hist[i] > hist[fi]) fi = i;
+    for (let i = 0; i < Math.floor(BINS * 0.45); i++) if (hist[i] > hist[ri]) ri = i;
+    for (const [bin, front] of [[fi, true], [ri, false]]) {
+      const zc = bz(bin), tol = len / BINS * 1.6;
+      const cl = low.filter(q => Math.abs(q[2] - zc) < tol);
+      if (cl.length < 8) continue;
+      let top = 0, xs = 0;
+      for (const q of cl) { if (q[1] - minY > top) top = q[1] - minY; xs += Math.abs(q[0]); }
+      const wr = THREE.MathUtils.clamp(top * 0.55, 0.12, 0.5);
+      const xoff = Math.max(xs / cl.length, wr * 0.9);
+      const tireGeo = new THREE.CylinderGeometry(wr, wr, wr * 0.5, 18);
+      tireGeo.rotateZ(Math.PI / 2);
+      const tireMat = new THREE.MeshStandardMaterial({ color: 0x181818, roughness: 0.92 });
+      const hubGeo = new THREE.CylinderGeometry(wr * 0.42, wr * 0.42, wr * 0.53, 12);
+      hubGeo.rotateZ(Math.PI / 2);
+      const hubMat = new THREE.MeshStandardMaterial({ color: 0x8f8f8f, roughness: 0.4, metalness: 0.6 });
+      for (const sx of [-1, 1]) {
+        const g = new THREE.Group();
+        const tire = new THREE.Mesh(tireGeo, tireMat);
+        tire.add(new THREE.Mesh(hubGeo, hubMat));
+        g.add(tire);
+        g.position.set(sx * xoff, minY + wr, zc);
+        node.add(g);
+        wheels.push({ g, tire, front, wr });
+      }
     }
   }
   if (DRIVE && playerObj.children.length) addWheels(playerObj.children[0]);

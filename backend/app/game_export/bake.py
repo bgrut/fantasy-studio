@@ -1078,6 +1078,14 @@ def fix_facing_on_disk(hero_glb: Path, verbose: bool = True) -> None:
     while rot < -180: rot += 360
     if abs(rot) < 1.0:
         return
+    # AXIS-ONLY (2026-07-20): the toe-direction SIGN lied on armored boots
+    # (soldier/knight read 'forward' while facing backward), so the automatic
+    # pass only fixes SIDEWAYS cases (+/-90). A true 180 is corrected once by
+    # hand (_apply_euler ... 0 0 180) and must never be auto-undone.
+    if abs(abs(rot) - 180.0) < 45.0:
+        if verbose:
+            print(f"[bake] disk facing: {rot:.0f} deg is a SIGN call — skipping (axis-only policy)")
+        return
     exe = r"C:\Program Files\Blender Foundation\Blender 5.1lender.exe"
     try:
         from app.main import get_setting
