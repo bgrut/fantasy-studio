@@ -1070,7 +1070,7 @@ async function main() {
     // undergrowth stays PLANT-colored: pull toward green so brown forest
     // floors get living tufts, not floating tan cards
     const gcolA = new THREE.Color(...SPEC.world.ground_color)
-      .lerp(new THREE.Color(0x3f6b2a), 0.55).offsetHSL(0, 0.08, 0.06);
+      .lerp(new THREE.Color(0x4d7a33), 0.55).offsetHSL(0, 0.08, 0.13);   // lighter vs photo ground
     const gcolB = gcolA.clone().offsetHSL(0.02, 0.05, -0.07);
     // REAL blade shape: tapered to a tip, bowed forward, shaded dark at the
     // root — reads as grass, not floating rectangles
@@ -1083,7 +1083,7 @@ async function main() {
         const t = bp.getY(i) / 0.34;               // 0 root -> 1 tip
         bp.setX(i, bp.getX(i) * (1 - 0.85 * t));   // taper to a point
         bp.setZ(i, t * t * 0.07);                  // bow
-        const sh = 0.5 + 0.5 * t;                  // root shadow
+        const sh = 0.66 + 0.34 * t;                // root shadow (was 0.5 — read as black spikes)
         bcol[i * 3] = sh; bcol[i * 3 + 1] = sh; bcol[i * 3 + 2] = sh;
       }
       blade.setAttribute('color', new THREE.BufferAttribute(bcol, 3));
@@ -2581,6 +2581,24 @@ async function main() {
     if (hint) hint.textContent += ` · F to ${ATTACK === 'ranged' ? 'shoot' : 'attack'}`;
   }
   const projectiles = [];
+  // LIGHT + PROJECTILE POOL (2026-07-19 'attack still lags'): adding a NEW
+  // PointLight mid-game changes the scene's light count, which forces THREE
+  // to recompile EVERY shader — a visible freeze on each swing. Both attack
+  // lights now exist from load (count never changes) and projectile meshes
+  // are pooled; nothing is created or removed during combat.
+  const atkFlash = new THREE.PointLight(0xffffff, 0, 5);
+  scene.add(atkFlash);
+  const projLight = new THREE.PointLight(0x9fe8ff, 0, 4);
+  scene.add(projLight);
+  const projPool = [];
+  for (let i = 0; i < 6; i++) {
+    const m = new THREE.Mesh(
+      new THREE.SphereGeometry(0.09, 8, 6),
+      new THREE.MeshBasicMaterial({ color: 0xaef4ff }));
+    m.visible = false;
+    scene.add(m);
+    projPool.push(m);
+  }
   let atkCd = 0;
   // TARGET MARKER + reach helper: a red diamond floats over the nearest
   // hostile you can hit — no more guessing whether the swing will land
@@ -2656,24 +2674,21 @@ async function main() {
     playAttackAnim();                          // the actual katana/claw motion
     const dir = new THREE.Vector3(Math.sin(modelYaw), 0, Math.cos(modelYaw));
     if (ATTACK === 'ranged') {
-      const m = new THREE.Mesh(
-        new THREE.SphereGeometry(0.09, 8, 6),
-        new THREE.MeshBasicMaterial({ color: 0xaef4ff }));
+      const m = projPool.find(pm => !pm.visible)
+        || projPool[0];                        // spam beyond 6: reuse the oldest
+      m.visible = true;
       m.position.copy(playerObj.position).add(new THREE.Vector3(0, P.height_m * 0.6, 0))
         .add(dir.clone().multiplyScalar(0.5));
-      const glow = new THREE.PointLight(0x9fe8ff, 1.6, 4);
-      m.add(glow);
-      scene.add(m);
+      projLight.intensity = 1.6;               // one shared glow tracks the newest shot
       projectiles.push({ mesh: m, vel: dir.clone().multiplyScalar(24), life: 2 });
     } else {
       // melee: damage lands MID-SWING (180ms in) so the hit matches the motion
       setTimeout(() => {
         if (won || lost) return;
-        const flash = new THREE.PointLight(0xffffff, 3.5, 5);
-        flash.position.copy(playerObj.position).add(dir.clone().multiplyScalar(1.2))
+        atkFlash.position.copy(playerObj.position).add(dir.clone().multiplyScalar(1.2))
           .add(new THREE.Vector3(0, P.height_m * 0.5, 0));
-        scene.add(flash);
-        setTimeout(() => scene.remove(flash), 110);
+        atkFlash.intensity = 3.5;
+        setTimeout(() => { atkFlash.intensity = 0; }, 110);
         for (const n of npcs) {
           // Phase 68: prey ('flee') dies to claws too — a wolf hunts with its bite
           if (!(n.behavior === 'hostile' || n.behavior === 'flee') || n.dead) continue;
@@ -3494,9 +3509,14 @@ async function main() {
         if (dd < 0.9) { dmgEnemy(n, atkDmg); hit = true; break; }
       }
       if (hit || pr.life <= 0 || pr.mesh.position.y < hAt(pr.mesh.position.x, pr.mesh.position.z) - 0.2) {
-        scene.remove(pr.mesh);
+        pr.mesh.visible = false;               // back to the pool
         projectiles.splice(i, 1);
       }
+    }
+    if (projectiles.length) {
+      projLight.position.copy(projectiles[projectiles.length - 1].mesh.position);
+    } else if (projLight.intensity > 0) {
+      projLight.intensity = 0;
     }
 
     // collectibles: bob + spin + proximity pickup
