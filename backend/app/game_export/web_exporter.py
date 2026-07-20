@@ -26,6 +26,14 @@ def export_web_game(spec: GameSpec, out_dir: str | Path, verbose: bool = True) -
         shutil.rmtree(assets)
     assets.mkdir(parents=True, exist_ok=True)
 
+    # ── PBR texture pack (Phase 77): SDXL-generated seamless surfaces ───────
+    tex_src = RUNTIME.parent.parent.parent / "assets" / "textures"
+    if tex_src.is_dir():
+        tex_dst = dist / "textures"
+        if tex_dst.exists():
+            shutil.rmtree(tex_dst)
+        shutil.copytree(tex_src, tex_dst)
+
     # ── vendored runtime libs ────────────────────────────────────────────────
     vend_src = RUNTIME / "vendor"
     vend_dst = dist / "vendor"

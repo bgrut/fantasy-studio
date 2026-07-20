@@ -2808,6 +2808,25 @@ async function main() {
   // per-asset artwork ever. Meshes that already carry real textures (GPU
   // characters, terrain) are untouched.
   {
+    // PHOTOREAL TIER (Phase 77): SDXL-generated seamless photo textures
+    // (shipped in dist/textures/) replace the procedural canvases for the
+    // big surface classes. Missing files fall back to canvases silently.
+    // hyper-real is the DEFAULT look; only deliberate style packs
+    // (cartoon/anime/pixel/horror/lowpoly) keep the painted canvases
+    const PHOTO = !SPEC.style || SPEC.style === 'photoreal' || SPEC.style === 'default';
+    const _texLoader = new THREE.TextureLoader();
+    const _pbrCache = {};
+    function pbr(name, rep, srgb) {
+      const key = name + rep;
+      if (_pbrCache[key]) return _pbrCache[key];
+      const t = _texLoader.load('textures/' + name + '.jpg');
+      t.wrapS = t.wrapT = THREE.RepeatWrapping;
+      t.repeat.set(rep, rep);
+      if (srgb) t.colorSpace = THREE.SRGBColorSpace;
+      _pbrCache[key] = t;
+      return t;
+    }
+    const PBR_FILE = { bark: 'bark', stone: 'stone', roof: 'roof', brick: 'brick' };
     const _detailCache = {};
     function detailTex(cls, baseHex) {
       const key = cls + baseHex;
@@ -2861,7 +2880,8 @@ async function main() {
     function classify(m) {
       const n = (m.name || '').toLowerCase();
       if (/bark|trunk|wood|fence|branch/.test(n)) return 'bark';
-      if (/stone|wall|rock|castle|brick|slit/.test(n)) return 'stone';
+      if (/wall|brick|facade/.test(n)) return 'brick';
+      if (/stone|rock|castle|slit/.test(n)) return 'stone';
       if (/roof|shingle/.test(n)) return 'roof';
       if (/leaf|leaves|needle|bush|foliage|lit|dark|mid/.test(n)) return 'foliage';
       const hsl = {}; m.color.getHSL(hsl);
@@ -2879,20 +2899,42 @@ async function main() {
         _seen.add(m.uuid);
         if (!o.geometry.attributes.uv) continue;             // needs UVs to texture
         const cls = classify(m);
-        const tex = detailTex(cls, '#' + m.color.getHexString());
-        m.map = tex;
-        m.color.setRGB(1, 1, 1);
-        m.bumpMap = tex; m.bumpScale = 0.06;
+        if (PHOTO && PBR_FILE[cls]) {
+          m.map = pbr(PBR_FILE[cls], 2, true);
+          m.normalMap = pbr(PBR_FILE[cls] + '_n', 2, false);
+          m.normalScale = new THREE.Vector2(0.9, 0.9);
+          m.color.setRGB(1, 1, 1);
+        } else {
+          const tex = detailTex(cls, '#' + m.color.getHexString());
+          m.map = tex;
+          m.color.setRGB(1, 1, 1);
+          m.bumpMap = tex; m.bumpScale = 0.06;
+        }
         m.roughness = Math.min(1, (m.roughness || 0.9) + 0.03);
         m.needsUpdate = true;
       }
     });
+    // GROUND surface relief: the painted albedo (trails, roads) stays the
+    // color map; a matching photo NORMAL map adds real micro-relief
+    if (PHOTO) {
+      const wn = (SPEC.world.name || '').toLowerCase();
+      const gname = (SPEC.world.weather === 'snow') ? 'snow'
+        : /desert|beach|dune/.test(wn) ? 'sand'
+        : /forest|wood|jungle/.test(wn) ? 'forest'
+        : /city|street|town|road/.test(wn) ? 'asphalt' : 'grass';
+      gmat.normalMap = pbr(gname + '_n', Math.max(10, Math.round(gsize / 6)), false);
+      gmat.normalScale = new THREE.Vector2(0.65, 0.65);
+      gmat.needsUpdate = true;
+    }
   }
+  // re-open scope: enrichment block ends above
+  {
   // sun shadow softening + ground-bounce tied to the actual terrain color —
   // hard black-edged shadows are the #2 "this is CG" tell after fog
   sun.shadow.radius = 3;
   sun.shadow.bias = -0.0004;
   hemi.groundColor.copy(gcol.clone().multiplyScalar(0.55));
+  }
 
   // QUALITY PACK — cinematic post chain: SSAO + subtle bloom + vignette + filmic out
   // SSAO (Phase 73 v2): a dedicated DEPTH PREPASS (RGBA-packed, half-res —
