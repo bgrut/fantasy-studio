@@ -992,6 +992,40 @@ def ensure_playable(kind: str, verbose: bool = True) -> str | None:
         return None
 
 
+_FACING_GATE_CODE = r"""
+import bpy, math, json
+import numpy as np
+o = bpy.data.objects['Hero']
+dg = bpy.context.evaluated_depsgraph_get()
+me = o.evaluated_get(dg).to_mesh()
+n = len(me.vertices)
+co = np.empty(n*3, dtype=np.float64); me.vertices.foreach_get('co', co)
+V = co.reshape(-1,3)
+M = np.array(o.matrix_world)
+Vw = V @ M[:3,:3].T + M[:3,3]
+z = Vw[:,2]; zmin, zmax = z.min(), z.max(); H = zmax - zmin
+torso = Vw[(z > zmin + 0.35*H) & (z < zmin + 0.75*H)]
+ext_x = float(torso[:,0].max()-torso[:,0].min())
+ext_y = float(torso[:,1].max()-torso[:,1].min())
+ratio = max(ext_x, ext_y) / max(min(ext_x, ext_y), 1e-6)
+if ratio < 1.3:
+    __result__ = json.dumps({"ok": True, "skipped": "ambiguous", "ratio": round(ratio,2)})
+else:
+    fb = 0 if ext_x < ext_y else 1
+    feet = Vw[z < zmin + 0.08*H]
+    sign = 1.0 if float(feet[:,fb].mean()) > float(np.median(torso[:,fb])) else -1.0
+    v = (sign, 0.0) if fb == 0 else (0.0, sign)
+    fwd = math.degrees(math.atan2(v[1], v[0]))
+    rot = math.radians(90.0 - fwd)          # hunter convention: +Y forward
+    if abs(rot) > 1e-3:
+        o.rotation_euler[2] += rot
+        bpy.context.view_layer.objects.active = o
+        o.select_set(True)
+        bpy.ops.object.transform_apply(rotation=True)
+    __result__ = json.dumps({"ok": True, "was_deg": fwd, "rotated_deg": round(math.degrees(rot),1)})
+"""
+
+
 def bake_anim_set(hero_glb: str | Path, out_glb: str | Path,
                   clips: dict | None = None, height_m: float = 1.75,
                   fps: int = 24, verbose: bool = True) -> dict:
@@ -1007,6 +1041,17 @@ def bake_anim_set(hero_glb: str | Path, out_glb: str | Path,
     registry.call("import_mesh_file", {
         "filepath": str(hero_glb), "name": "Hero", "normalize_size": height_m,
         "ground_to_z0": True, "join": True, "orientation_fix": None})
+
+    # BIPED FACING GATE (Phase 80): every biped rig must share ONE facing
+    # convention or in-game heading is per-character roulette (soldier walked
+    # sideways, knight backward, hunter fine). Detect facing from the BODY:
+    # shoulders span the wide axis, the front-back axis is the narrow one,
+    # and toes point forward. Rotate to the hunter-calibrated convention
+    # (+Y forward). Skips when the silhouette is ambiguous (T-pose arms make
+    # the extents near-equal, e.g. the legacy 'man' mesh).
+    fg = _call(registry, "facing-gate", _FACING_GATE_CODE)
+    if verbose and fg:
+        print(f"[bake] facing gate: {fg.get('result') or fg}")
 
     # KEYSTONE (Phase 58, FS_RETOPO=1): clean quad topology before rigging.
     from . import retopo
