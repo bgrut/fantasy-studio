@@ -1026,6 +1026,72 @@ else:
 """
 
 
+_FACING_DETECT_FILE = r"""
+import bpy, math, json
+import numpy as np
+bpy.ops.wm.read_homefile(use_empty=True)
+bpy.ops.import_scene.gltf(filepath=r"__GLB__")
+ms = [o for o in bpy.data.objects if o.type == 'MESH']
+o = ms[0]
+dg = bpy.context.evaluated_depsgraph_get()
+me = o.evaluated_get(dg).to_mesh()
+co = np.empty(len(me.vertices)*3); me.vertices.foreach_get('co', co)
+V = co.reshape(-1,3)
+M = np.array(o.matrix_world)
+Vw = V @ M[:3,:3].T + M[:3,3]
+z = Vw[:,2]; zmin, zmax = z.min(), z.max(); H = zmax - zmin
+torso = Vw[(z > zmin + 0.35*H) & (z < zmin + 0.75*H)]
+ext_x = float(torso[:,0].max()-torso[:,0].min())
+ext_y = float(torso[:,1].max()-torso[:,1].min())
+ratio = max(ext_x, ext_y) / max(min(ext_x, ext_y), 1e-6)
+if ratio < 1.3:
+    __result__ = json.dumps({"ok": True, "skipped": "ambiguous"})
+else:
+    fb = 0 if ext_x < ext_y else 1
+    feet = Vw[z < zmin + 0.08*H]
+    sign = 1.0 if float(feet[:,fb].mean()) > float(np.median(torso[:,fb])) else -1.0
+    v = (sign, 0.0) if fb == 0 else (0.0, sign)
+    __result__ = json.dumps({"ok": True,
+                             "forward_deg": math.degrees(math.atan2(v[1], v[0]))})
+"""
+
+
+def fix_facing_on_disk(hero_glb: Path, verbose: bool = True) -> None:
+    """FACING GUARANTEE v2 (Phase 84): rotate the STATIC glb ON DISK to the
+    hunter convention (+Y forward) before rigging. The in-session gate
+    rotation does NOT survive the armature bake/export (verified: soldier
+    and knight shipped un-rotated despite the gate reporting success), so
+    the file itself must be fixed — exactly the manual path that made the
+    hunter correct. Detection: shoulders = wide axis, toes point forward.
+    Ambiguous silhouettes (T-pose arms) are left untouched."""
+    import math
+    import subprocess
+    from app.mcp import registry
+    code = _FACING_DETECT_FILE.replace("__GLB__", str(hero_glb).replace("\\", "/"))
+    r = _call(registry, "facing-detect", code)
+    if not (isinstance(r, dict) and r.get("ok")) or r.get("skipped"):
+        if verbose:
+            print(f"[bake] disk facing: skip ({r})")
+        return
+    rot = 90.0 - float(r["forward_deg"])
+    while rot > 180: rot -= 360
+    while rot < -180: rot += 360
+    if abs(rot) < 1.0:
+        return
+    exe = r"C:\Program Files\Blender Foundation\Blender 5.1lender.exe"
+    try:
+        from app.main import get_setting
+        exe = get_setting("blender_executable_path") or exe
+    except Exception:
+        pass
+    subprocess.run([exe, "--background", "--python",
+                    str(BACKEND_ROOT / "scripts" / "_apply_euler.py"), "--",
+                    str(hero_glb), str(hero_glb), "0", "0", str(rot)],
+                   capture_output=True, timeout=300)
+    if verbose:
+        print(f"[bake] disk facing: rotated {hero_glb.name} by {rot:.0f} deg")
+
+
 def bake_anim_set(hero_glb: str | Path, out_glb: str | Path,
                   clips: dict | None = None, height_m: float = 1.75,
                   fps: int = 24, verbose: bool = True) -> dict:
@@ -1037,6 +1103,7 @@ def bake_anim_set(hero_glb: str | Path, out_glb: str | Path,
     out_glb.parent.mkdir(parents=True, exist_ok=True)
 
     bridge.connect(timeout=8)
+    fix_facing_on_disk(hero_glb, verbose=verbose)   # Phase 84: fix the FILE
     registry.call("reset_scene", {})
     registry.call("import_mesh_file", {
         "filepath": str(hero_glb), "name": "Hero", "normalize_size": height_m,

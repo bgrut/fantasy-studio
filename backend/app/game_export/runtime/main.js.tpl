@@ -3289,33 +3289,33 @@ async function main() {
            ? ' — follow the orange gates to the checkered finish' : '');
     }
   }
-  // SPINNING WHEELS (Phase 83): generated car meshes are ONE fused shell —
-  // the baked wheels can't turn. Overlay four spinning tires at the wheel
-  // arches (positions from the model's bounding box; front pair steers).
+  // SPINNING WHEELS (Phase 83 v2): generated car meshes are ONE fused shell.
+  // Overlay wheels attach to the HOLDER (the node modelYaw rotates), so they
+  // turn WITH the car; positions come from the holder's local-frame bounds.
   const wheels = [];
-  function addWheels(obj) {
-    const bb = new THREE.Box3().setFromObject(obj);
+  function addWheels(node) {
+    node.updateWorldMatrix(true, true);
+    const bb = new THREE.Box3().setFromObject(node);
     const size = bb.getSize(new THREE.Vector3());
-    const wr = Math.max(0.22, size.y * 0.30);            // tire radius
-    const tireGeo = new THREE.CylinderGeometry(wr, wr, wr * 0.62, 18);
-    tireGeo.rotateZ(Math.PI / 2);                        // axis along X
-    const tireMat = new THREE.MeshStandardMaterial({ color: 0x141414, roughness: 0.92 });
-    const hubGeo = new THREE.CylinderGeometry(wr * 0.45, wr * 0.45, wr * 0.66, 12);
+    const lc = node.worldToLocal(bb.getCenter(new THREE.Vector3()));
+    const wr = THREE.MathUtils.clamp(size.y * 0.22, 0.14, 0.45);
+    const tireGeo = new THREE.CylinderGeometry(wr, wr, wr * 0.55, 18);
+    tireGeo.rotateZ(Math.PI / 2);
+    const tireMat = new THREE.MeshStandardMaterial({ color: 0x181818, roughness: 0.92 });
+    const hubGeo = new THREE.CylinderGeometry(wr * 0.4, wr * 0.4, wr * 0.58, 12);
     hubGeo.rotateZ(Math.PI / 2);
-    const hubMat = new THREE.MeshStandardMaterial({ color: 0x9a9a9a, roughness: 0.35, metalness: 0.7 });
+    const hubMat = new THREE.MeshStandardMaterial({ color: 0x8f8f8f, roughness: 0.4, metalness: 0.6 });
     for (const [sx, sz, front] of [[-1, 1, true], [1, 1, true], [-1, -1, false], [1, -1, false]]) {
       const g = new THREE.Group();
       const tire = new THREE.Mesh(tireGeo, tireMat);
       tire.add(new THREE.Mesh(hubGeo, hubMat));
       g.add(tire);
-      g.position.set(sx * size.x * 0.40, wr - obj.position.y + bb.min.y - obj.position.y * 0
-                     , sz * size.z * 0.30);
-      g.position.y = (bb.min.y - obj.position.y) + wr;   // sit on the ground line
-      obj.add(g);
+      g.position.set(lc.x + sx * size.x * 0.36, wr * 0.98, lc.z + sz * size.z * 0.30);
+      node.add(g);
       wheels.push({ g, tire, front, wr });
     }
   }
-  if (DRIVE && typeof playerObj !== 'undefined') addWheels(playerObj);
+  if (DRIVE && playerObj.children.length) addWheels(playerObj.children[0]);
   if (FLY) {                                     // flight instructions in the HUD
     const hint = document.querySelector('#hud .hint');
     if (hint) hint.textContent = 'WASD glide · Space rise · C dive · Shift boost · drag to look';
