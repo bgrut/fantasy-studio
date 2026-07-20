@@ -3309,6 +3309,7 @@ async function main() {
   }
   let vSpeed = 0, hudTick = 0, prevV = 0, leanP = 0, leanR = 0;
   const camTarget = new THREE.Vector3();
+  const _camWant = new THREE.Vector3();
 
   renderer.setAnimationLoop(() => {
     const dt = Math.min(clock.getDelta(), 0.05);
@@ -3644,9 +3645,14 @@ async function main() {
       // Phase 69 look-ahead: the camera peeks ~0.9 m into the travel direction
       // at speed, so fast movement reads as intent instead of chase-cam lag
       const lookAhead = Math.min((window.__pSpeed || 0) / Math.max(P.run_speed, 1), 1) * 0.9;
-      camTarget.set(fX + Math.sin(modelYaw) * lookAhead,
-                    fY + SPEC.camera.height_m * 0.5,
-                    fZ + Math.cos(modelYaw) * lookAhead);
+      // STICKY-CAM FIX (2026-07-20): lookAt() is instant, so a raw look-ahead
+      // point SNAPS sideways on every turn — damp the target like the
+      // position, and the pan is glass again
+      _camWant.set(fX + Math.sin(modelYaw) * lookAhead,
+                   fY + SPEC.camera.height_m * 0.5,
+                   fZ + Math.cos(modelYaw) * lookAhead);
+      if (camTarget.lengthSq() === 0) camTarget.copy(_camWant);
+      camTarget.lerp(_camWant, 1 - Math.exp(-7 * dt));
       const cd = SPEC.camera.distance_m * camZoom * (inspectOn ? 1.5 : 1);
       const cx = fX + Math.sin(yaw) * Math.cos(pitch) * cd;   // camera BEHIND
       const cz = fZ + Math.cos(yaw) * Math.cos(pitch) * cd;   // (W walks away)

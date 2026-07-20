@@ -102,34 +102,41 @@ amod=o.modifiers.get("HeroArmature") or o.modifiers.new("HeroArmature","ARMATURE
 # back via data_transfer (nearest-interpolated). Falls back to manual nearest-bone
 # on ANY problem, so this can never bind worse than before.
 skin_mode="manual"
-try:
-    bpy.ops.object.select_all(action='DESELECT')
-    proxy=o.copy(); proxy.data=o.data.copy(); proxy.name="HeroProxy"
-    for _m in list(proxy.modifiers): proxy.modifiers.remove(_m)
-    bpy.context.scene.collection.objects.link(proxy)
-    _rm=proxy.modifiers.new("rm","REMESH"); _rm.mode='VOXEL'; _rm.voxel_size=max(0.012,H/110.0)
-    bpy.context.view_layer.objects.active=proxy; proxy.select_set(True)
-    bpy.ops.object.modifier_apply(modifier="rm")
-    bpy.ops.object.select_all(action='DESELECT')
-    proxy.select_set(True); rig.select_set(True); bpy.context.view_layer.objects.active=rig
-    bpy.ops.object.parent_set(type='ARMATURE_AUTO')   # bone-heat onto the watertight proxy
-    proxy.parent=None
-    _cov=sum(1 for v in proxy.data.vertices if len(v.groups))
-    if not len(proxy.vertex_groups) or _cov < 0.6*len(proxy.data.vertices):
-        raise RuntimeError("boneheat_sparse")
-    for vg in proxy.vertex_groups:
-        if vg.name not in o.vertex_groups: o.vertex_groups.new(name=vg.name)
-    bpy.ops.object.select_all(action='DESELECT')
-    o.select_set(True); proxy.select_set(True); bpy.context.view_layer.objects.active=proxy
-    bpy.ops.object.data_transfer(data_type='VGROUP_WEIGHTS', vert_mapping='POLYINTERP_NEAREST',
-                                 layers_select_src='ALL', layers_select_dst='NAME')
-    skin_mode="voxel_proxy"
-except Exception as _e:
-    skin_mode="manual("+type(_e).__name__+")"
-finally:
-    _p=bpy.data.objects.get("HeroProxy")
-    if _p: bpy.data.objects.remove(_p, do_unlink=True)
-    bpy.ops.object.select_all(action='DESELECT')
+# RETRY LADDER (Phase 82): bone-heat goes SPARSE when the voxel proxy still
+# has disconnected shells (armor plates, gear). Coarser voxels FUSE the
+# shells into one watertight body, so step up until the heat solve covers.
+for _vox in (max(0.012,H/110.0), max(0.02,H/70.0), max(0.03,H/45.0)):
+    try:
+        bpy.ops.object.select_all(action='DESELECT')
+        proxy=o.copy(); proxy.data=o.data.copy(); proxy.name="HeroProxy"
+        for _m in list(proxy.modifiers): proxy.modifiers.remove(_m)
+        bpy.context.scene.collection.objects.link(proxy)
+        _rm=proxy.modifiers.new("rm","REMESH"); _rm.mode='VOXEL'; _rm.voxel_size=_vox
+        bpy.context.view_layer.objects.active=proxy; proxy.select_set(True)
+        bpy.ops.object.modifier_apply(modifier="rm")
+        bpy.ops.object.select_all(action='DESELECT')
+        proxy.select_set(True); rig.select_set(True); bpy.context.view_layer.objects.active=rig
+        bpy.ops.object.parent_set(type='ARMATURE_AUTO')   # bone-heat onto the watertight proxy
+        proxy.parent=None
+        _cov=sum(1 for v in proxy.data.vertices if len(v.groups))
+        if not len(proxy.vertex_groups) or _cov < 0.6*len(proxy.data.vertices):
+            raise RuntimeError("boneheat_sparse")
+        for vg in proxy.vertex_groups:
+            if vg.name not in o.vertex_groups: o.vertex_groups.new(name=vg.name)
+        bpy.ops.object.select_all(action='DESELECT')
+        o.select_set(True); proxy.select_set(True); bpy.context.view_layer.objects.active=proxy
+        bpy.ops.object.data_transfer(data_type='VGROUP_WEIGHTS', vert_mapping='POLYINTERP_NEAREST',
+                                     layers_select_src='ALL', layers_select_dst='NAME')
+        skin_mode="voxel_proxy(v%.3f)"%_vox
+    except Exception as _e:
+        skin_mode="manual("+type(_e).__name__+")"
+        for _g in list(o.vertex_groups):      # half-written groups poison retry
+            o.vertex_groups.remove(_g)
+    finally:
+        _p=bpy.data.objects.get("HeroProxy")
+        if _p: bpy.data.objects.remove(_p, do_unlink=True)
+        bpy.ops.object.select_all(action='DESELECT')
+    if skin_mode.startswith("voxel"): break
 if not skin_mode.startswith("voxel"):
     # ── MANUAL nearest-bone fallback (proven). SAME-SIDE limb constraint: a vertex
     # clearly on one side of the centreline must NOT bind to the opposite side's
