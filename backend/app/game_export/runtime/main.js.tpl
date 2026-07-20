@@ -3289,6 +3289,33 @@ async function main() {
            ? ' — follow the orange gates to the checkered finish' : '');
     }
   }
+  // SPINNING WHEELS (Phase 83): generated car meshes are ONE fused shell —
+  // the baked wheels can't turn. Overlay four spinning tires at the wheel
+  // arches (positions from the model's bounding box; front pair steers).
+  const wheels = [];
+  function addWheels(obj) {
+    const bb = new THREE.Box3().setFromObject(obj);
+    const size = bb.getSize(new THREE.Vector3());
+    const wr = Math.max(0.22, size.y * 0.30);            // tire radius
+    const tireGeo = new THREE.CylinderGeometry(wr, wr, wr * 0.62, 18);
+    tireGeo.rotateZ(Math.PI / 2);                        // axis along X
+    const tireMat = new THREE.MeshStandardMaterial({ color: 0x141414, roughness: 0.92 });
+    const hubGeo = new THREE.CylinderGeometry(wr * 0.45, wr * 0.45, wr * 0.66, 12);
+    hubGeo.rotateZ(Math.PI / 2);
+    const hubMat = new THREE.MeshStandardMaterial({ color: 0x9a9a9a, roughness: 0.35, metalness: 0.7 });
+    for (const [sx, sz, front] of [[-1, 1, true], [1, 1, true], [-1, -1, false], [1, -1, false]]) {
+      const g = new THREE.Group();
+      const tire = new THREE.Mesh(tireGeo, tireMat);
+      tire.add(new THREE.Mesh(hubGeo, hubMat));
+      g.add(tire);
+      g.position.set(sx * size.x * 0.40, wr - obj.position.y + bb.min.y - obj.position.y * 0
+                     , sz * size.z * 0.30);
+      g.position.y = (bb.min.y - obj.position.y) + wr;   // sit on the ground line
+      obj.add(g);
+      wheels.push({ g, tire, front, wr });
+    }
+  }
+  if (DRIVE && typeof playerObj !== 'undefined') addWheels(playerObj);
   if (FLY) {                                     // flight instructions in the HUD
     const hint = document.querySelector('#hud .hint');
     if (hint) hint.textContent = 'WASD glide · Space rise · C dive · Shift boost · drag to look';
@@ -3314,6 +3341,12 @@ async function main() {
   renderer.setAnimationLoop(() => {
     const dt = Math.min(clock.getDelta(), 0.05);
     WIND_U.value = performance.now() / 1000;   // wind clock (Phase 81)
+    for (const w of wheels) {                  // roll with speed, steer in front
+      w.tire.rotation.x += ((window.__pSpeed || 0) / w.wr) * dt;
+      if (w.front) w.g.rotation.y = THREE.MathUtils.damp(w.g.rotation.y,
+        (keys['KeyA'] || keys['ArrowLeft'] ? 0.42 : 0) +
+        (keys['KeyD'] || keys['ArrowRight'] ? -0.42 : 0), 8, dt);
+    }
     dustT -= dt;
     if ((window.__pSpeed || 0) > 3 && dustT <= 0 && typeof playerObj !== 'undefined') {
       dustT = 0.22;                            // one puff per running stride-ish
