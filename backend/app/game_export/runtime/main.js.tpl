@@ -557,7 +557,17 @@ async function main() {
                                        roughness: 0.12, metalness: 0.1, side: THREE.DoubleSide,
                                        depthWrite: false }));
     waterMesh.rotation.x = -Math.PI / 2;
-    waterMesh.position.y = WATER;
+    // LAKE LEVEL FIX (Phase 88): a fixed height FLOATS above rolling terrain
+    // (the penguin's frozen lake hovered over the ground). Water fills the
+    // LOW BASINS: clamp to just above the terrain's 12th-percentile height.
+    {
+      const hs = [];
+      for (let i = -8; i <= 8; i++) {
+        for (let j = -8; j <= 8; j++) hs.push(hAt(i * gsize / 16, j * gsize / 16));
+      }
+      hs.sort((a, b) => a - b);
+      waterMesh.position.y = Math.min(WATER, hs[Math.floor(hs.length * 0.12)] + 0.05);
+    }
     scene.add(waterMesh);
   }
 
