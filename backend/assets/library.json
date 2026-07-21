@@ -1,13 +1,11 @@
 {
   "dog": "assets/library/dog.glb",
   "man": "assets/library/man_anim.glb",
-  "car": "assets/library/car.glb",
   "fox": "assets/library/fox.glb",
   "horse": "assets/library/horse.glb",
   "samurai": "assets/library/samurai.glb",
   "truck": "assets/library/truck.glb",
   "wizard": "assets/library/wizard.glb",
-  "penguin": "assets/library/penguin.glb",
   "knight": "assets/library/knight.glb",
   "dragon": "assets/library/dragon.glb",
   "whale": "assets/library/whale.glb",
@@ -27,9 +25,6 @@
     "raw": "renders/_actor_cache/b3b02c99774c.glb"
   },
   "tiger": "assets/library/tiger.glb",
-  "corvette": "assets/library/corvette.glb",
-  "ford f-150": "assets/library/ford_f-150.glb",
-  "gorilla": "assets/library/gorilla.glb",
   "moose": "assets/library/moose.glb",
   "elk": "assets/library/elk.glb",
   "wolf": "assets/library/wolf.glb",
@@ -41,5 +36,11 @@
   "fish": "assets/library/fish.glb",
   "striker": "assets/library/striker.glb",
   "detective": "assets/library/detective.glb",
-  "soldier": "assets/library/soldier.glb"
+  "soldier": "assets/library/soldier.glb",
+  "gazelle": "assets/library/gazelle.glb",
+  "gorilla": "assets/library/gorilla.glb",
+  "penguin": "assets/library/penguin.glb",
+  "car": "assets/library/car.glb",
+  "ford f-150": "assets/library/ford_f-150.glb",
+  "corvette": "assets/library/corvette.glb"
 }
