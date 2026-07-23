@@ -116,7 +116,28 @@ def build_level(seed: int, size_m: float, n_objectives: int = 0,
                 landmarks.append([round(lx, 2), round(lz, 2), round(rng.uniform(2.2, 3.2), 2)])
                 break
 
+    # ── POINTS OF INTEREST (moon plan 2.1): 3-5 templated micro-locations
+    # off the mission path — a ruined tower, a campsite, a shrine, a stone
+    # circle, a lumber camp. Each is a prop cluster + a reward spot. This is
+    # what makes open worlds read as DESIGNED: players route POI to POI.
+    _POI_KINDS = ["ruin", "camp", "shrine", "circle", "lumber"]
+    pois = []
+    for _pk in range(rng.randint(3, 5)):
+        for _try in range(30):
+            pa = rng.uniform(0, 2 * math.pi)
+            pr = half * rng.uniform(0.30, 0.78)
+            px2, pz2 = math.cos(pa) * pr, math.sin(pa) * pr
+            d = min(_seg_dist(px2, pz2, *path[k], *path[k + 1])
+                    for k in range(len(path) - 1))
+            far_others = all(math.hypot(px2 - q["x"], pz2 - q["z"]) > 18
+                             for q in pois)
+            if d > corridor * 1.8 and far_others:
+                pois.append({"kind": rng.choice(_POI_KINDS),
+                             "x": round(px2, 2), "z": round(pz2, 2),
+                             "rot": round(rng.uniform(0, 6.28), 2)})
+                break
     return {
+        "pois": pois,
         "grid_n": grid_n, "size_m": size_m, "amplitude_m": amplitude_m,
         "heights": heights,                    # row-major, z rows then x cols
         "path": [[round(a, 2), round(b, 2)] for a, b in path],

@@ -1977,6 +1977,89 @@ async function main() {
       healthPacks.push({ mesh: s, baseY: hy, phase: rngH() * Math.PI * 2 });
     }
   }
+  // ── POINTS OF INTEREST (moon plan 2.1): templated micro-locations off the
+  // path — ruined tower, campsite, shrine, stone circle, lumber camp. Each
+  // is a prop cluster + a heart reward. Open worlds read as DESIGNED.
+  if (!INTERIOR && LVL && LVL.pois && LVL.pois.length) {
+    const stoneT = new THREE.TextureLoader().load('textures/stone.jpg');
+    stoneT.wrapS = stoneT.wrapT = THREE.RepeatWrapping;
+    stoneT.colorSpace = THREE.SRGBColorSpace;
+    const stoneM = new THREE.MeshStandardMaterial({ map: stoneT, roughness: 0.95 });
+    const rngP = mulberry32(SPEC.seed + 551);
+    const addStone = (x, z, w, h, d2, ry) => {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d2), stoneM);
+      m.position.set(x, hAt(x, z) + h / 2 - 0.05, z);
+      m.rotation.y = ry || 0;
+      m.castShadow = m.receiveShadow = true;
+      scene.add(m);
+      if (h > 1.2) world.createCollider(RAPIER.ColliderDesc.cuboid(w / 2, h / 2, d2 / 2)
+        .setTranslation(m.position.x, m.position.y, m.position.z));
+    };
+    const reward = (x, z) => {
+      const geo = new THREE.OctahedronGeometry(0.16, 0);
+      const mm = new THREE.MeshStandardMaterial({
+        color: 0xff5c6a, emissive: 0xff2438, emissiveIntensity: 1.6, roughness: 0.35 });
+      const sm = new THREE.Mesh(geo, mm);
+      const hy2 = hAt(x, z) + 0.55;
+      sm.position.set(x, hy2, z);
+      scene.add(sm);
+      healthPacks.push({ mesh: sm, baseY: hy2, phase: rngP() * 6.28 });
+    };
+    let fires = 0;
+    const propC = {};
+    const addProp = async (name, x, z, ry, sc2) => {
+      try {
+        if (!propC[name]) propC[name] = await loadGLB('props/' + name + '.glb');
+        const inst = propC[name].scene.clone(true);
+        inst.position.set(x, hAt(x, z), z);
+        inst.rotation.y = ry || 0;
+        if (sc2) inst.scale.multiplyScalar(sc2);
+        inst.traverse(o => { if (o.isMesh) o.castShadow = true; });
+        scene.add(inst);
+      } catch (e) { /* prop not shipped: stones still make the POI */ }
+    };
+    for (const poi of LVL.pois) {
+      const { kind, x, z, rot } = poi;
+      if (kind === 'ruin') {
+        // broken tower: partial ring of shattered wall stubs
+        for (let k = 0; k < 6; k++) {
+          const a = rot + k / 8 * Math.PI * 2;
+          addStone(x + Math.cos(a) * 2.6, z + Math.sin(a) * 2.6,
+                   1.3, 0.8 + rngP() * 2.6, 0.7, -a);
+        }
+        addProp('crate', x, z, rot);
+      } else if (kind === 'camp') {
+        addProp('log', x + 1.4, z, rot, 1);
+        addProp('log', x - 1.2, z + 0.8, rot + 1.2, 1);
+        addProp('barrel', x - 0.6, z - 1.5, 0);
+        addStone(x, z, 0.9, 0.35, 0.9, rot);        // fire ring base
+        if (fires < 2) {                             // light budget: max 2 fires
+          fires++;
+          const fl = new THREE.PointLight(0xff9a3d, 9, 11, 1.9);
+          fl.position.set(x, hAt(x, z) + 0.8, z);
+          scene.add(fl);
+          window.__torches = window.__torches || [];
+          window.__torches.push(fl);                 // reuse the flicker loop
+        }
+      } else if (kind === 'shrine') {
+        addStone(x, z, 2.6, 0.4, 2.6, rot);
+        addStone(x, z, 1.6, 0.35, 1.6, rot);
+        addStone(x, z, 0.5, 2.2, 0.5, rot);
+      } else if (kind === 'circle') {
+        for (let k = 0; k < 6; k++) {
+          const a = rot + k / 6 * Math.PI * 2;
+          addStone(x + Math.cos(a) * 3.2, z + Math.sin(a) * 3.2,
+                   0.7, 1.6 + rngP() * 1.0, 0.5, -a);
+        }
+      } else {                                       // lumber camp
+        addProp('stump', x + 1.2, z + 0.6, 0);
+        addProp('stump', x - 1.0, z - 0.8, 0);
+        addProp('log', x, z + 1.6, rot, 1);
+        addProp('crate', x - 1.6, z + 0.4, rot);
+      }
+      reward(x, z);
+    }
+  }
   function stepHealthPacks(dt, nt) {
     if (!healthPacks.length) return;
     const t = performance.now() / 1000;

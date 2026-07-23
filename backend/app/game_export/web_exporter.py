@@ -35,13 +35,18 @@ def export_web_game(spec: GameSpec, out_dir: str | Path, verbose: bool = True) -
         shutil.copytree(tex_src, tex_dst)
 
     # ── interior furniture props (Phase 95): rooms load props/<name>.glb ────
-    interior = ((spec.world.level or {}).get("interior")
-                if getattr(spec.world, "level", None) else None)
+    lvl_d = (spec.world.level or {}) if getattr(spec.world, "level", None) else {}
+    interior = lvl_d.get("interior")
+    needed = set()
     if interior:
+        needed |= {f[0] for f in interior.get("furniture", [])}
+    if lvl_d.get("pois"):
+        # POI clusters (moon plan 2.1) draw from a fixed prop set
+        needed |= {"crate", "log", "stump", "barrel"}
+    if needed:
         props_src = RUNTIME.parent.parent.parent / "assets" / "props"
         props_dst = dist / "props"
         props_dst.mkdir(parents=True, exist_ok=True)
-        needed = {f[0] for f in interior.get("furniture", [])}
         for name in needed:
             src = props_src / f"{name}.glb"
             if src.exists():
