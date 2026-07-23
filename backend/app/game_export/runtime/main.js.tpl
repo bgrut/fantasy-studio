@@ -2747,7 +2747,12 @@ async function main() {
   let xp = 0, plvl = 1;
   const xpNeed = () => 40 * plvl;
   // PERSISTENCE (moon plan 3.2): upgrades survive replays of this game
-  const _progKey = 'fs_prog_' + (SPEC.title || 'game');
+  // CAMPAIGN (moon plan 3.3): levels inside a Game Project share ONE hero —
+  // XP upgrades earned in level 1 carry into level 2 (the hub's URL layout
+  // levels/lvl_N/dist identifies the project scope)
+  const _projM = location.pathname.match(/^(.*)\/levels\/lvl_\d+\/dist/);
+  const _progKey = _projM ? 'fs_prog_proj_' + _projM[1]
+                          : 'fs_prog_' + (SPEC.title || 'game');
   const _picks = [];
   function _applyPick(k, silent) {
     if (k === 'heart') { P.hp = (P.hp || 5) + 1; php += 1; }
@@ -2826,6 +2831,15 @@ async function main() {
   function doLose(text) {
     if (won || lost) return;
     lost = true;
+    // DEATH HEATMAP (moon plan H4): creators see where players die —
+    // recorded here, rendered as markers when Inspect mode opens
+    try {
+      const dk = 'fs_deaths_' + (SPEC.title || 'game');
+      const arr = JSON.parse(localStorage.getItem(dk) || '[]');
+      const pp2 = body.translation();
+      arr.push([Math.round(pp2.x * 10) / 10, Math.round(pp2.z * 10) / 10]);
+      localStorage.setItem(dk, JSON.stringify(arr.slice(-50)));
+    } catch (e) {}
     sfx('lose');
     document.getElementById('losetext').textContent = text;
     document.getElementById('lose').style.display = 'flex';
@@ -3375,6 +3389,27 @@ async function main() {
     on = !!on;
     if (on === inspectOn) return;
     inspectOn = on;
+    // death heatmap markers (H4): red discs where players have died
+    if (on && !window.__deathMarks) {
+      window.__deathMarks = [];
+      try {
+        const arr = JSON.parse(localStorage.getItem(
+          'fs_deaths_' + (SPEC.title || 'game')) || '[]');
+        const dm = new THREE.MeshBasicMaterial({
+          color: 0xff2438, transparent: true, opacity: 0.55, depthWrite: false });
+        for (const [dx3, dz3] of arr.slice(-50)) {
+          const disc = new THREE.Mesh(new THREE.CircleGeometry(0.7, 12), dm);
+          disc.rotation.x = -Math.PI / 2;
+          disc.position.set(dx3, hAt(dx3, dz3) + 0.06, dz3);
+          scene.add(disc);
+          window.__deathMarks.push(disc);
+        }
+        if (arr.length) popText(arr.length + ' recorded deaths shown', '#ff8fa0');
+      } catch (e) {}
+    } else if (!on && window.__deathMarks) {
+      for (const m of window.__deathMarks) scene.remove(m);
+      window.__deathMarks = null;
+    }
     renderer.domElement.style.cursor = on ? 'crosshair' : '';
     if (on) {
       inspT0 = performance.now();
