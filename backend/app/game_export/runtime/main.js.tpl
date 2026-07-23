@@ -2633,6 +2633,52 @@ async function main() {
   const maxHp = php;
   const heartsEl = document.getElementById('hearts');
   const hostilesExist = (SPEC.entities || []).some(e => e.behavior === 'hostile');
+  // ── XP + LEVEL-UPS (moon plan 3.2): kills and pickups grant XP; each
+  // level offers a three-choice upgrade card (roguelike style). The game
+  // keeps running behind the card — choosing is part of the flow.
+  let xp = 0, plvl = 1;
+  const xpNeed = () => 40 * plvl;
+  const xpBar = document.createElement('div');
+  xpBar.style.cssText = 'position:fixed;top:58px;left:50%;transform:translateX(-50%);'
+    + 'width:150px;height:5px;background:rgba(255,255,255,0.15);border-radius:3px;z-index:5';
+  const xpFill = document.createElement('div');
+  xpFill.style.cssText = 'height:100%;width:0%;background:#8de06c;border-radius:3px;'
+    + 'transition:width 0.25s';
+  xpBar.appendChild(xpFill);
+  document.body.appendChild(xpBar);
+  function addXP(n) {
+    xp += n;
+    while (xp >= xpNeed()) { xp -= xpNeed(); plvl++; levelCard(); }
+    xpFill.style.width = Math.min(100, xp / xpNeed() * 100) + '%';
+  }
+  function levelCard() {
+    sfx('pickup');
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'position:fixed;inset:0;display:flex;align-items:center;'
+      + 'justify-content:center;gap:14px;z-index:40;background:rgba(8,6,14,0.45)';
+    const mk = (icon, name, desc, fn) => {
+      const c = document.createElement('button');
+      c.style.cssText = 'width:150px;padding:18px 10px;border-radius:12px;border:1px solid '
+        + 'rgba(255,255,255,0.25);background:rgba(20,16,34,0.92);color:#efeaff;cursor:pointer;'
+        + 'font:600 13px system-ui;text-align:center';
+      c.innerHTML = '<div style="font-size:30px">' + icon + '</div><div style="margin:6px 0 3px">'
+        + name + '</div><div style="font-weight:400;opacity:0.7">' + desc + '</div>';
+      c.onclick = () => { fn(); document.body.removeChild(wrap); };
+      return c;
+    };
+    const title = document.createElement('div');
+    title.style.cssText = 'position:fixed;top:18%;left:50%;transform:translateX(-50%);'
+      + 'color:#ffd257;font:800 22px system-ui;text-shadow:0 2px 8px #000';
+    title.textContent = 'LEVEL ' + plvl + ' — choose an upgrade';
+    wrap.appendChild(title);
+    wrap.appendChild(mk('❤️', '+1 Heart', 'more health',
+      () => { P.hp = (P.hp || 5) + 1; php += 1; renderHearts(); }));
+    wrap.appendChild(mk('⚡', 'Swift', '+12% speed',
+      () => { P.walk_speed *= 1.12; P.run_speed *= 1.12; }));
+    wrap.appendChild(mk('⚔️', 'Power', '+1 damage',
+      () => { atkDmg += 1; }));
+    document.body.appendChild(wrap);
+  }
   function renderHearts() {
     if (!hostilesExist) return;
     heartsEl.style.display = 'block';
@@ -3071,6 +3117,7 @@ async function main() {
       if (m.emissive) m.emissive.setRGB(0.30, 0.16, 0.16); } }, 120);
     if (n.hp <= 0) {
       n.dead = true; kills++; sfx('hit');
+      addXP(10);
       const _st2 = steps[stepIdx];
       if (_st2 && ['defeat', 'eliminate', 'hunt'].includes(_st2.kind)
           && kills - (_st2._k0 || 0) >= _st2.count) {
@@ -4172,6 +4219,7 @@ async function main() {
           const st = steps[stepIdx];
           if (st && st.kind === 'collect') {
             st._got = (st._got || 0) + 1;
+            addXP(6);
             sfx('pickup');
             burst(c.mesh.position, 0xffd54a);
             popText(`+1 ${st.label || ''}  ·  ${st._got}/${st.count}`, '#ffd54a');

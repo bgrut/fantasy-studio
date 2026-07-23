@@ -885,6 +885,30 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             spec.world.level["landmarks"] = []
             job.setdefault("notes", []).append(
                 f"interior level: {_ik} — rooms, doorways, torchlight")
+        # QUEST CHAINS (moon plan 3.1): a single-objective prompt becomes a
+        # 3-step story — scout a Point of Interest, do the deed, reach the
+        # beacon. The scout step is a collect(1) staged AT the POI (collect
+        # steps consume level.collect_points in order, so prepending the POI
+        # position stages it there deterministically).
+        _pois2 = spec.world.level.get("pois") or []
+        _gameplay = [o for o in spec.objectives if o.kind != "reach"]
+        if (_pois2 and len(_gameplay) == 1 and spec.player.mode == "walk"
+                and "interior" not in spec.world.level):
+            from app.game_export.spec import ObjectiveSpec as _OS
+            _poi0 = _pois2[0]
+            _scout_names = {"ruin": "the old watchtower cache",
+                            "camp": "the abandoned camp's supplies",
+                            "shrine": "the shrine offering",
+                            "circle": "the relic at the standing stones",
+                            "lumber": "the woodcutter's stash"}
+            spec.objectives.insert(0, _OS(
+                kind="collect", count=1,
+                label=_scout_names.get(_poi0["kind"], "the lost supplies")))
+            spec.world.level.setdefault("collect_points", []).insert(
+                0, [_poi0["x"], _poi0["z"]])
+            job.setdefault("notes", []).append(
+                "quest chain: scout the " + _poi0["kind"] + " first, then "
+                + (_gameplay[0].label or _gameplay[0].kind))
         # ENTERABLE BUILDING (moon plan 2.2): an EXTERIOR world that mentions
         # a structure gets a real door — outside stays the level, the door
         # teleports into a generated interior past the map edge and back.
