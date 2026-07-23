@@ -298,7 +298,7 @@ async function main() {
     // of displaced low-poly ridges past the playfield gives every level a
     // horizon. Fog tints them into the distance automatically; snow weather
     // and cold skies get white caps via vertex color.
-    if (!(((SPEC.world || {}).level || {}).osm)) {
+    if (!(((SPEC.world || {}).level || {}).osm) && !(((SPEC.world || {}).level || {}).interior)) {
       const gsizeM = SPEC.world.size_m;
       const rngM = mulberry32(SPEC.seed + 777);
       const snowy = SPEC.world.weather === 'snow';
@@ -394,6 +394,7 @@ async function main() {
     if (LVL.landmarks) for (const p of LVL.landmarks) p[1] = 0;
   }
   const OSM = (LVL && LVL.osm) || null;
+  const INTERIOR = (LVL && LVL.interior) || null;   // Phase 95: room levels
   const gcol = new THREE.Color(...SPEC.world.ground_color);
   {
     // SATURATION FLOOR (Phase 76): LLM ground colors trend pastel — real
@@ -1166,6 +1167,102 @@ async function main() {
     } catch (e) { fail(e.message); }
   }
 
+  // ── INTERIOR (Phase 95): rooms, walls with colliders, floor/ceiling,
+  // pooled torch lights, furniture. 'Inside a castle/house/dungeon' is a
+  // real level type — combat/collect/reach verbs all work within walls.
+  if (INTERIOR) {
+    const IK = INTERIOR.kind || 'castle';
+    const WH = INTERIOR.wall_h || 4.0, WT = INTERIOR.wall_t || 0.5;
+    const texL = new THREE.TextureLoader();
+    const itex = (n, rx, ry) => {
+      const t = texL.load('textures/' + n + '.jpg');
+      t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(rx, ry);
+      t.colorSpace = THREE.SRGBColorSpace;
+      t.anisotropy = renderer.capabilities.getMaxAnisotropy();
+      return t;
+    };
+    const wallFile = IK === 'house' ? 'plaster' : 'stone';
+    const floorFile = IK === 'dungeon' ? 'stone' : 'planks';
+    const bx = INTERIOR.bounds[0], bz = INTERIOR.bounds[1];
+    const fmat = new THREE.MeshStandardMaterial({
+      map: itex(floorFile, bx / 4, bz / 4), roughness: 0.9 });
+    const floor = new THREE.Mesh(new THREE.PlaneGeometry(bx, bz), fmat);
+    floor.rotation.x = -Math.PI / 2; floor.position.y = 0.02;
+    floor.receiveShadow = true;
+    scene.add(floor);
+    const cmatI = new THREE.MeshStandardMaterial({
+      map: itex(wallFile, bx / 6, bz / 6), roughness: 1.0,
+      color: 0x9a948c });
+    const ceil = new THREE.Mesh(new THREE.PlaneGeometry(bx, bz), cmatI);
+    ceil.rotation.x = Math.PI / 2; ceil.position.y = WH;
+    scene.add(ceil);
+    const wmat = new THREE.MeshStandardMaterial({
+      map: itex(wallFile, 3, 1.2), roughness: 0.95 });
+    const DOOR_W = 2.4, DOOR_H = Math.min(3.0, WH - 0.6);
+    function seg(cx, cz, ln, rot, y0, hgt, thick) {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(ln, hgt, thick), wmat);
+      m.position.set(cx, y0 + hgt / 2, cz);
+      m.rotation.y = rot ? Math.PI / 2 : 0;
+      m.castShadow = m.receiveShadow = true;
+      scene.add(m);
+      const rr = rot ? [thick / 2, hgt / 2, ln / 2] : [ln / 2, hgt / 2, thick / 2];
+      world.createCollider(RAPIER.ColliderDesc.cuboid(...rr)
+        .setTranslation(cx, y0 + hgt / 2, cz));
+    }
+    for (const [cx, cz, ln, rot, door] of INTERIOR.walls) {
+      if (door < 0) { seg(cx, cz, ln, rot, 0, WH, WT); continue; }
+      // doorway: two flanking segments + a lintel above the gap
+      const dCenter = -ln / 2 + door * ln;
+      const l1 = Math.max(0.1, dCenter - DOOR_W / 2 + ln / 2);
+      const l2 = Math.max(0.1, ln / 2 - dCenter - DOOR_W / 2);
+      const off1 = -ln / 2 + l1 / 2, off2 = ln / 2 - l2 / 2;
+      const o1x = rot ? cx : cx + off1, o1z = rot ? cz + off1 : cz;
+      const o2x = rot ? cx : cx + off2, o2z = rot ? cz + off2 : cz;
+      seg(o1x, o1z, l1, rot, 0, WH, WT);
+      seg(o2x, o2z, l2, rot, 0, WH, WT);
+      const lx = rot ? cx : cx + dCenter, lz = rot ? cz + dCenter : cz;
+      seg(lx, lz, DOOR_W, rot, DOOR_H, WH - DOOR_H, WT);
+    }
+    // torches: pooled flame lights (count FIXED at load — no shader recompiles)
+    const flameG = new THREE.SphereGeometry(0.09, 6, 5);
+    const flameM = new THREE.MeshBasicMaterial({ color: 0xffb347 });
+    window.__torches = [];
+    for (const [tx, tz] of (INTERIOR.torches || []).slice(0, 10)) {
+      const pl = new THREE.PointLight(0xff9a3d, 14, 13, 1.8);
+      pl.position.set(tx, WH * 0.62, tz);
+      scene.add(pl);
+      const fm = new THREE.Mesh(flameG, flameM);
+      fm.position.copy(pl.position);
+      scene.add(fm);
+      window.__torches.push(pl);
+    }
+    // furniture from the shared props (collider = simple box)
+    (async () => {
+      const cache = {};
+      for (const [name, fx, fz, fyaw] of INTERIOR.furniture || []) {
+        try {
+          if (!cache[name]) cache[name] = await loadGLB('props/' + name + '.glb');
+          const inst = cache[name].scene.clone(true);
+          inst.position.set(fx, 0, fz);
+          inst.rotation.y = fyaw;
+          inst.traverse(o => { if (o.isMesh) { o.castShadow = true; } });
+          scene.add(inst);
+          const bb = new THREE.Box3().setFromObject(inst);
+          const sz = bb.getSize(new THREE.Vector3());
+          world.createCollider(RAPIER.ColliderDesc.cuboid(
+            Math.max(sz.x, 0.2) / 2, Math.max(sz.y, 0.2) / 2, Math.max(sz.z, 0.2) / 2)
+            .setTranslation(fx, sz.y / 2, fz));
+        } catch (e) { /* missing prop file: skip */ }
+      }
+    })();
+    // indoor mood: dim the sun, warm the ambience, pull fog off, close camera
+    sun.intensity *= 0.35;
+    hemi.intensity *= 0.55;
+    if (scene.fog) { scene.fog.near = 60; scene.fog.far = 160; }
+    scene.background = new THREE.Color(0x0d0c0a);
+    SPEC.camera.distance_m = Math.min(SPEC.camera.distance_m || 6, 4.6);
+  }
+
   // GRASS: instanced cross-blades on the terrain, thinned along the walking
   // path — the "flat green plane" is gone. (Gated off for cities/snow.)
   if ((SPEC.world.scatter || []).length && SPEC.world.grass !== false) {
@@ -1458,6 +1555,7 @@ async function main() {
               const m = ms[mi].clone();
               if (Array.isArray(o.material)) o.material[mi] = m; else o.material = m;
               m.side = THREE.DoubleSide;    // no hollow heads on NPCs either
+              if (m.map) despeckleTexture(m);
               if (m.emissive !== undefined) {
                 if (dark && m.map) m.emissiveMap = m.map;
                 if (hostile) m.emissive.setRGB(dark ? 0.30 : 0.10, dark ? 0.16 : 0.02, dark ? 0.16 : 0.02);
@@ -2461,6 +2559,15 @@ async function main() {
   // generated creature. Swimmers get a traveling nose→tail body wave (the
   // whale finally *swims*); flyers get a wing flap that grows toward the
   // wingtips. Amplitude follows speed: gentle at idle, full when moving.
+  // HERO DE-BLOTCH (Phase 95): the speckle/blotch filter only ran on
+  // vehicles — characters kept raw generated textures. Every material with
+  // a texture on the player now gets the same one-time clean.
+  pRoot.traverse(o => {
+    if (!o.isMesh) return;
+    for (const m of Array.isArray(o.material) ? o.material : [o.material]) {
+      if (m && m.map) despeckleTexture(m);
+    }
+  });
   const procShaders = [];
   if (P.mode === 'fly' || P.mode === 'swim') {
     pRoot.traverse(o => {
@@ -3763,6 +3870,13 @@ async function main() {
     {
       const stc = steps[stepIdx];
       if (stc && stc.kind === 'capture' && !won && !lost) stepCapture(stc, nt.x, nt.z, dt);
+    }
+    if (window.__torches) {
+      const tt = performance.now() / 1000;
+      for (let i = 0; i < window.__torches.length; i++) {
+        window.__torches[i].intensity = 12.5 + Math.sin(tt * 9 + i * 2.1) * 1.6
+          + Math.sin(tt * 23 + i * 5.7) * 0.9;
+      }
     }
     if (window.__clouds) {                          // slow downwind drift
       for (const sp of window.__clouds) {

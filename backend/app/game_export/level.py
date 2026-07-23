@@ -284,3 +284,86 @@ def build_osm_city(place: str, size_m: float, max_buildings: int = 320) -> dict 
         return out
     except Exception:
         return None
+
+def build_interior(seed: int, kind: str = "castle") -> dict:
+    """Room-plan for INTERIOR levels (Phase 95): a hall plus side chambers,
+    doorway gaps, furniture placements and torch lights — the geometry the
+    runtime turns into textured walls with colliders. Deterministic per seed.
+
+    kind: castle | house | dungeon — picks wall/floor texture + furniture mix.
+    """
+    import random as _random
+    rng = _random.Random(seed * 31 + 7)
+    H = 4.2 if kind == "castle" else 3.0             # wall height (m)
+    T = 0.5                                          # wall thickness
+    rooms = []                                       # [cx, cz, w, d]
+    # central hall + 2-4 side chambers off its long sides
+    hall_w = rng.uniform(14, 20)
+    hall_d = rng.uniform(26, 36)
+    rooms.append([0.0, 0.0, hall_w, hall_d])
+    n_side = rng.randint(2, 4)
+    for k in range(n_side):
+        side = 1 if k % 2 == 0 else -1
+        rw = rng.uniform(8, 12)
+        rd = rng.uniform(8, 13)
+        cz = -hall_d / 2 + (k + 0.5 + rng.uniform(0, 0.3)) * (hall_d / n_side)
+        rooms.append([side * (hall_w / 2 + rw / 2), cz, rw, rd])
+    walls = []                                       # [cx, cz, len, rotY(0|90), doorAt(-1 none | 0..1)]
+    def _wall(cx, cz, ln, rot, door=-1.0):
+        walls.append([round(cx, 2), round(cz, 2), round(ln, 2), rot, round(door, 2)])
+    hw, hd = hall_w / 2, hall_d / 2
+    # hall perimeter; door gaps where side rooms attach + entry at one end
+    _wall(0, -hd, hall_w, 0, 0.5)                    # entry door (south)
+    _wall(0, hd, hall_w, 0, -1)
+    for i, (cx, cz, rw, rd) in enumerate(rooms[1:]):
+        side = 1 if cx > 0 else -1
+        # hall wall segment sharing this room gets a door at the room center
+        door_t = (cz + hd) / hall_d
+        _wall(side * hw, 0, hall_d, 90, door_t)
+        # room's outer three walls
+        _wall(cx + side * rw / 2, cz, rd, 90, -1)
+        _wall(cx, cz - rd / 2, rw, 0, -1)
+        _wall(cx, cz + rd / 2, rw, 0, -1)
+    # dedupe shared hall-side walls (one per side, keep the FIRST with door)
+    seen_side = {}
+    ded = []
+    for w in walls:
+        key = (w[0], w[1], w[3]) if w[3] == 90 else None
+        if key and key in seen_side:
+            continue
+        if key:
+            seen_side[key] = True
+        ded.append(w)
+    walls = ded
+    # any hall side with NO room still needs its wall
+    for side in (1, -1):
+        if not any(w[3] == 90 and abs(w[0] - side * hw) < 0.1 for w in walls):
+            _wall(side * hw, 0, hall_d, 90, -1)
+    # furniture: name + position + yaw; runtime resolves to props
+    FURN = {
+        "castle": ["table", "chair", "chair", "barrel", "crate", "bookshelf"],
+        "house":  ["table", "chair", "chair", "bed", "bookshelf", "crate"],
+        "dungeon": ["barrel", "crate", "crate", "barrel", "table"],
+    }[kind if kind in ("castle", "house", "dungeon") else "castle"]
+    furniture = []
+    for cx, cz, rw, rd in rooms:
+        for name in rng.sample(FURN, k=min(3, len(FURN))):
+            fx = cx + rng.uniform(-rw / 2 + 1.2, rw / 2 - 1.2)
+            fz = cz + rng.uniform(-rd / 2 + 1.2, rd / 2 - 1.2)
+            furniture.append([name, round(fx, 2), round(fz, 2),
+                              round(rng.uniform(0, 6.28), 2)])
+    # torches on the hall walls + one per room
+    torches = []
+    for k in range(4):
+        tz = -hd + (k + 0.5) * (hall_d / 4)
+        for side in (1, -1):
+            torches.append([round(side * (hw - 0.3), 2), round(tz, 2)])
+    for cx, cz, rw, rd in rooms[1:]:
+        torches.append([round(cx, 2), round(cz - rd / 2 + 0.4, 2)])
+    return {
+        "kind": kind, "wall_h": H, "wall_t": T,
+        "rooms": [[round(v, 2) for v in r] for r in rooms],
+        "walls": walls, "furniture": furniture, "torches": torches,
+        "bounds": [round(hall_w + 26, 1), round(hall_d + 8, 1)],
+    }
+

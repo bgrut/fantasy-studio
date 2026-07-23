@@ -49,6 +49,10 @@ PACK = {
                 "leaves filling the frame, flat frontal view, even light",
     "needles":  "dense dark green pine needle branches texture filling the "
                 "frame, conifer foliage close-up, flat view, even light",
+    "planks":   "photograph of aged wooden floor planks, parallel boards with "
+                "visible grain and gaps, overhead flat view, even light",
+    "plaster":  "photograph of aged cream plaster wall with subtle cracks and "
+                "stains, flat frontal view, even light",
 }
 NEG = ("shadow of photographer, object, person, animal, watermark, text, "
        "logo, border, vignette, fisheye, tilt")

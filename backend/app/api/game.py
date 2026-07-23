@@ -838,6 +838,33 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             amp = max(amp, 3.0)
         spec.world.level = build_level(
             spec.seed, spec.world.size_m, n_objectives=n_obj, amplitude_m=amp)
+        # INTERIOR LEVELS (Phase 95): 'inside a castle/house/dungeon' builds
+        # ROOMS — walls with colliders, doorways, furniture, torchlight. The
+        # words must say inside/interior/indoor; 'defends the castle' stays an
+        # exterior castle world.
+        _pl = req.prompt.lower()
+        import re as _re3
+        _im = _re3.search(
+            r"\b(?:inside|interior of|indoors?|within the walls of)\s+"
+            r"(?:a\s+|an\s+|the\s+)?(castle|house|mansion|dungeon|temple|"
+            r"tavern|cottage|fortress|palace|room|home)?", _pl)
+        if _im or " dungeon" in _pl:
+            from app.game_export.level import build_interior
+            _ik_raw = (_im.group(1) if _im else None) or "dungeon"
+            _ik = {"mansion": "house", "cottage": "house", "home": "house",
+                   "room": "house", "tavern": "house", "temple": "castle",
+                   "fortress": "castle", "palace": "castle"}.get(_ik_raw, _ik_raw)
+            interior = build_interior(spec.seed, _ik)
+            # flat floor, no outdoor dressing, world sized to the room plan
+            spec.world.level["heights"] = [0.0] * (
+                spec.world.level["grid_n"] ** 2)
+            spec.world.level["interior"] = interior
+            spec.world.size_m = max(interior["bounds"][0], interior["bounds"][1]) + 8
+            spec.world.scatter = []
+            spec.world.grass = False
+            spec.world.weather = "none"
+            job.setdefault("notes", []).append(
+                f"interior level: {_ik} — rooms, doorways, torchlight")
         if place:
             stage(f"fetching {place} map (OpenStreetMap)")
             osm = build_osm_city(place, spec.world.size_m)

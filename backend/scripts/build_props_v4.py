@@ -320,3 +320,71 @@ for k in range(3):
     cp.data.materials.append(mcap)
     bpy.ops.object.shade_smooth()
 export("mushroom")
+
+# ── FURNITURE (Phase 95 interiors) ──────────────────────────────────────────
+def box(x, y, z, sx, sy, sz, mtl):
+    bpy.ops.mesh.primitive_cube_add(size=1, location=(x, y, z))
+    b = bpy.context.object
+    b.scale = (sx, sy, sz)
+    bpy.ops.object.transform_apply(scale=True)
+    b.data.materials.append(mtl)
+    return b
+
+reset()
+wood = mat("wood_bark", (0.42, 0.28, 0.16), rough=0.8)
+box(0, 0, 0.72, 1.6, 0.9, 0.06, wood)                  # table top
+for sx in (-1, 1):
+    for sy in (-1, 1):
+        box(sx * 0.7, sy * 0.36, 0.35, 0.08, 0.08, 0.7, wood)
+export("table")
+
+reset()
+wood2 = mat("wood_bark", (0.4, 0.26, 0.15), rough=0.8)
+box(0, 0, 0.44, 0.42, 0.42, 0.05, wood2)               # seat
+box(0, 0.2, 0.75, 0.42, 0.05, 0.62, wood2)             # back
+for sx in (-1, 1):
+    for sy in (-1, 1):
+        box(sx * 0.17, sy * 0.17, 0.21, 0.05, 0.05, 0.42, wood2)
+export("chair")
+
+reset()
+frame = mat("wood_bark", (0.38, 0.24, 0.14), rough=0.85)
+blanket = mat("blanket", (0.45, 0.2, 0.22), rough=0.9)
+pillow = mat("pillow", (0.88, 0.86, 0.8), rough=0.9)
+box(0, 0, 0.28, 2.0, 1.1, 0.16, frame)
+box(0, 0, 0.42, 1.9, 1.0, 0.14, blanket)
+box(-0.7, 0, 0.52, 0.4, 0.7, 0.12, pillow)
+box(0.98, 0, 0.5, 0.06, 1.1, 0.5, frame)               # headboard
+export("bed")
+
+reset()
+shelf = mat("wood_bark", (0.36, 0.23, 0.13), rough=0.85)
+books = mat("books", (0.3, 0.22, 0.35), rough=0.9)
+box(0, 0, 1.0, 1.1, 0.32, 2.0, shelf)
+for k in range(4):
+    box(0, 0.02, 0.35 + k * 0.45, 0.96, 0.24, 0.3, books)
+export("bookshelf")
+
+reset()
+brl = mat("wood_bark", (0.34, 0.22, 0.12), rough=0.85)
+band = mat("iron_band", (0.25, 0.25, 0.27), rough=0.4)
+bpy.ops.mesh.primitive_cylinder_add(vertices=12, radius=0.32, depth=0.85, location=(0, 0, 0.425))
+b = bpy.context.object
+for v in b.data.vertices:                              # belly bulge
+    t = 1.0 + 0.14 * (1 - abs(v.co.z / 0.425)) if abs(v.co.z) < 0.42 else 1.0
+    v.co.x *= t; v.co.y *= t
+b.data.materials.append(brl)
+for z in (0.18, 0.67):
+    bpy.ops.mesh.primitive_cylinder_add(vertices=12, radius=0.365, depth=0.05, location=(0, 0, z))
+    bpy.context.object.data.materials.append(band)
+export("barrel")
+
+reset()
+crt = mat("wood_bark", (0.44, 0.3, 0.17), rough=0.85)
+edge = mat("wood_dark", (0.3, 0.19, 0.1), rough=0.85)
+box(0, 0, 0.35, 0.7, 0.7, 0.7, crt)
+for sx in (-1, 1):
+    for sz in (0.04, 0.66):
+        box(sx * 0.33, 0, sz, 0.06, 0.72, 0.08, edge)
+export("crate")
+

@@ -34,6 +34,19 @@ def export_web_game(spec: GameSpec, out_dir: str | Path, verbose: bool = True) -
             shutil.rmtree(tex_dst)
         shutil.copytree(tex_src, tex_dst)
 
+    # ── interior furniture props (Phase 95): rooms load props/<name>.glb ────
+    interior = ((spec.world.level or {}).get("interior")
+                if getattr(spec.world, "level", None) else None)
+    if interior:
+        props_src = RUNTIME.parent.parent.parent / "assets" / "props"
+        props_dst = dist / "props"
+        props_dst.mkdir(parents=True, exist_ok=True)
+        needed = {f[0] for f in interior.get("furniture", [])}
+        for name in needed:
+            src = props_src / f"{name}.glb"
+            if src.exists():
+                shutil.copy2(src, props_dst / src.name)
+
     # ── vendored runtime libs ────────────────────────────────────────────────
     vend_src = RUNTIME / "vendor"
     vend_dst = dist / "vendor"
