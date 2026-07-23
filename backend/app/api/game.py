@@ -885,6 +885,31 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             spec.world.level["landmarks"] = []
             job.setdefault("notes", []).append(
                 f"interior level: {_ik} — rooms, doorways, torchlight")
+        # ENTERABLE BUILDING (moon plan 2.2): an EXTERIOR world that mentions
+        # a structure gets a real door — outside stays the level, the door
+        # teleports into a generated interior past the map edge and back.
+        if "interior" not in spec.world.level and not is_city:
+            _sm = _re3.search(
+                r"\b(castle|fortress|palace|mansion|house|cottage|tavern|"
+                r"temple|cabin|dungeon)\b", _pl)
+            if _sm:
+                from app.game_export.level import build_interior
+                _ek_raw = _sm.group(1)
+                _ek = {"mansion": "house", "cottage": "house", "cabin": "house",
+                       "tavern": "house", "temple": "castle",
+                       "fortress": "castle", "palace": "castle"}.get(_ek_raw, _ek_raw)
+                _eplan = build_interior(spec.seed + 7, _ek)
+                import random as _rnd2
+                _er = _rnd2.Random(spec.seed + 13)
+                _lm = spec.world.level.get("landmarks") or []
+                if _lm:
+                    _door = [_lm[0][0], _lm[0][1]]
+                else:
+                    _half2 = spec.world.size_m / 2
+                    _door = [round(_half2 * 0.5, 2), round(_half2 * _er.uniform(-0.3, 0.3), 2)]
+                spec.world.level["enterable"] = {"plan": _eplan, "door": _door}
+                job.setdefault("notes", []).append(
+                    f"the {_ek_raw} has a real door — step through the glow to go inside")
         if place:
             stage(f"fetching {place} map (OpenStreetMap)")
             osm = build_osm_city(place, spec.world.size_m)

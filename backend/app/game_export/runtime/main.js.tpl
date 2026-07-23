@@ -1167,12 +1167,12 @@ async function main() {
     } catch (e) { fail(e.message); }
   }
 
-  // ── INTERIOR (Phase 95): rooms, walls with colliders, floor/ceiling,
-  // pooled torch lights, furniture. 'Inside a castle/house/dungeon' is a
-  // real level type — combat/collect/reach verbs all work within walls.
-  if (INTERIOR) {
-    const IK = INTERIOR.kind || 'castle';
-    const WH = INTERIOR.wall_h || 4.0, WT = INTERIOR.wall_t || 0.5;
+  // ── ROOM BUILDER (Phase 95/99): builds a room-plan at any x-offset —
+  // used by full INTERIOR levels (offset 0) and by ENTERABLE buildings in
+  // exterior worlds (offset far past the map edge; a door teleports you in).
+  function buildRooms(PLAN, OX) {
+    const IK = PLAN.kind || 'castle';
+    const WH = PLAN.wall_h || 4.0, WT = PLAN.wall_t || 0.5;
     const texL = new THREE.TextureLoader();
     const itex = (n, rx, ry) => {
       const t = texL.load('textures/' + n + '.jpg');
@@ -1183,35 +1183,37 @@ async function main() {
     };
     const wallFile = IK === 'house' ? 'plaster' : 'stone';
     const floorFile = IK === 'dungeon' ? 'stone' : 'planks';
-    const bx = INTERIOR.bounds[0], bz = INTERIOR.bounds[1];
+    const bx = PLAN.bounds[0], bz = PLAN.bounds[1];
     const fmat = new THREE.MeshStandardMaterial({
       map: itex(floorFile, bx / 4, bz / 4), roughness: 0.9 });
     const floor = new THREE.Mesh(new THREE.PlaneGeometry(bx, bz), fmat);
-    floor.rotation.x = -Math.PI / 2; floor.position.y = 0.02;
+    floor.rotation.x = -Math.PI / 2; floor.position.set(OX, 0.02, 0);
     floor.receiveShadow = true;
     scene.add(floor);
+    if (OX !== 0) {                                  // enterable: needs own ground collider
+      world.createCollider(RAPIER.ColliderDesc.cuboid(bx / 2, 0.1, bz / 2)
+        .setTranslation(OX, -0.08, 0));
+    }
     const cmatI = new THREE.MeshStandardMaterial({
-      map: itex(wallFile, bx / 6, bz / 6), roughness: 1.0,
-      color: 0x9a948c });
+      map: itex(wallFile, bx / 6, bz / 6), roughness: 1.0, color: 0x9a948c });
     const ceil = new THREE.Mesh(new THREE.PlaneGeometry(bx, bz), cmatI);
-    ceil.rotation.x = Math.PI / 2; ceil.position.y = WH;
+    ceil.rotation.x = Math.PI / 2; ceil.position.set(OX, WH, 0);
     scene.add(ceil);
     const wmat = new THREE.MeshStandardMaterial({
       map: itex(wallFile, 3, 1.2), roughness: 0.95 });
     const DOOR_W = 2.4, DOOR_H = Math.min(3.0, WH - 0.6);
     function seg(cx, cz, ln, rot, y0, hgt, thick) {
       const m = new THREE.Mesh(new THREE.BoxGeometry(ln, hgt, thick), wmat);
-      m.position.set(cx, y0 + hgt / 2, cz);
+      m.position.set(cx + OX, y0 + hgt / 2, cz);
       m.rotation.y = rot ? Math.PI / 2 : 0;
       m.castShadow = m.receiveShadow = true;
       scene.add(m);
       const rr = rot ? [thick / 2, hgt / 2, ln / 2] : [ln / 2, hgt / 2, thick / 2];
       world.createCollider(RAPIER.ColliderDesc.cuboid(...rr)
-        .setTranslation(cx, y0 + hgt / 2, cz));
+        .setTranslation(cx + OX, y0 + hgt / 2, cz));
     }
-    for (const [cx, cz, ln, rot, door] of INTERIOR.walls) {
+    for (const [cx, cz, ln, rot, door] of PLAN.walls) {
       if (door < 0) { seg(cx, cz, ln, rot, 0, WH, WT); continue; }
-      // doorway: two flanking segments + a lintel above the gap
       const dCenter = -ln / 2 + door * ln;
       const l1 = Math.max(0.1, dCenter - DOOR_W / 2 + ln / 2);
       const l2 = Math.max(0.1, ln / 2 - dCenter - DOOR_W / 2);
@@ -1223,36 +1225,33 @@ async function main() {
       const lx = rot ? cx : cx + dCenter, lz = rot ? cz + dCenter : cz;
       seg(lx, lz, DOOR_W, rot, DOOR_H, WH - DOOR_H, WT);
     }
-    // pillars: castle/temple great-hall columns (square, stone, collidable)
-    for (const [px2, pz2] of INTERIOR.pillars || []) {
+    for (const [px2, pz2] of PLAN.pillars || []) {
       const pm = new THREE.Mesh(new THREE.BoxGeometry(0.9, WH, 0.9), wmat);
-      pm.position.set(px2, WH / 2, pz2);
+      pm.position.set(px2 + OX, WH / 2, pz2);
       pm.castShadow = pm.receiveShadow = true;
       scene.add(pm);
       world.createCollider(RAPIER.ColliderDesc.cuboid(0.45, WH / 2, 0.45)
-        .setTranslation(px2, WH / 2, pz2));
+        .setTranslation(px2 + OX, WH / 2, pz2));
     }
-    // torches: pooled flame lights (count FIXED at load — no shader recompiles)
     const flameG = new THREE.SphereGeometry(0.09, 6, 5);
     const flameM = new THREE.MeshBasicMaterial({ color: 0xffb347 });
-    window.__torches = [];
-    for (const [tx, tz] of (INTERIOR.torches || []).slice(0, 10)) {
+    window.__torches = window.__torches || [];
+    for (const [tx, tz] of (PLAN.torches || []).slice(0, 10)) {
       const pl = new THREE.PointLight(0xff9a3d, 14, 13, 1.8);
-      pl.position.set(tx, WH * 0.62, tz);
+      pl.position.set(tx + OX, WH * 0.62, tz);
       scene.add(pl);
       const fm = new THREE.Mesh(flameG, flameM);
       fm.position.copy(pl.position);
       scene.add(fm);
       window.__torches.push(pl);
     }
-    // furniture from the shared props (collider = simple box)
     (async () => {
       const cache = {};
-      for (const [name, fx, fz, fyaw] of INTERIOR.furniture || []) {
+      for (const [name, fx, fz, fyaw] of PLAN.furniture || []) {
         try {
           if (!cache[name]) cache[name] = await loadGLB('props/' + name + '.glb');
           const inst = cache[name].scene.clone(true);
-          inst.position.set(fx, 0, fz);
+          inst.position.set(fx + OX, 0, fz);
           inst.rotation.y = fyaw;
           inst.traverse(o => { if (o.isMesh) { o.castShadow = true; } });
           scene.add(inst);
@@ -1260,16 +1259,48 @@ async function main() {
           const sz = bb.getSize(new THREE.Vector3());
           world.createCollider(RAPIER.ColliderDesc.cuboid(
             Math.max(sz.x, 0.2) / 2, Math.max(sz.y, 0.2) / 2, Math.max(sz.z, 0.2) / 2)
-            .setTranslation(fx, sz.y / 2, fz));
+            .setTranslation(fx + OX, sz.y / 2, fz));
         } catch (e) { /* missing prop file: skip */ }
       }
     })();
+    return { WH, entryZ: -PLAN.rooms[0][3] / 2 + 2.2 };
+  }
+  if (INTERIOR) {
+    buildRooms(INTERIOR, 0);
     // indoor mood: dim the sun, warm the ambience, pull fog off, close camera
     sun.intensity *= 0.35;
     hemi.intensity *= 0.55;
     if (scene.fog) { scene.fog.near = 60; scene.fog.far = 160; }
     scene.background = new THREE.Color(0x0d0c0a);
     SPEC.camera.distance_m = Math.min(SPEC.camera.distance_m || 6, 4.6);
+  }
+  // ── ENTERABLE BUILDING (moon plan 2.2): an exterior world with a castle/
+  // house gets a REAL door — walk to the glowing doorway and step into a
+  // generated interior (built past the map edge); an exit door leads back.
+  window.__doorway = null;
+  if (!INTERIOR && LVL && LVL.enterable) {
+    const EPLAN = LVL.enterable.plan;
+    const EOX = SPEC.world.size_m * 2.2;
+    const eb = buildRooms(EPLAN, EOX);
+    const [dx2, dz2] = LVL.enterable.door;
+    const dy2 = hAt(dx2, dz2);
+    // glowing doorway marker outside
+    const dgeo = new THREE.PlaneGeometry(1.8, 2.6);
+    const dmat2 = new THREE.MeshBasicMaterial({
+      color: 0xffc46b, transparent: true, opacity: 0.45, side: THREE.DoubleSide });
+    const doorM = new THREE.Mesh(dgeo, dmat2);
+    doorM.position.set(dx2, dy2 + 1.3, dz2);
+    scene.add(doorM);
+    const glow2 = new THREE.PointLight(0xffb347, 6, 9, 1.8);
+    glow2.position.set(dx2, dy2 + 2.0, dz2);
+    scene.add(glow2);
+    // matching exit marker inside (at the hall's entry door)
+    const exitM = doorM.clone();
+    exitM.position.set(EOX, 1.3, eb.entryZ - 3.2);
+    scene.add(exitM);
+    window.__doorway = {
+      out: [dx2, dz2], inSpawn: [EOX, eb.entryZ + 1.0],
+      exit: [EOX, eb.entryZ - 3.2], wallH: eb.WH, cool: 0 };
   }
 
   // GRASS: instanced cross-blades on the terrain, thinned along the walking
@@ -4065,6 +4096,29 @@ async function main() {
     }
     stepDmgNumbers(dt);
     stepDust(dt);
+    // door teleports (moon plan 2.2)
+    if (window.__doorway) {
+      const dw = window.__doorway;
+      dw.cool = Math.max(0, dw.cool - dt);
+      if (!dw.cool) {
+        const pp = body.translation();
+        if (Math.hypot(pp.x - dw.out[0], pp.z - dw.out[1]) < 1.5) {
+          body.setTranslation({ x: dw.inSpawn[0], y: 1.2, z: dw.inSpawn[1] }, true);
+          body.setNextKinematicTranslation({ x: dw.inSpawn[0], y: 1.2, z: dw.inSpawn[1] });
+          dw.cool = 1.2; sfx('step');
+          popText('You step inside…', '#ffc46b');
+        } else if (dw.exit
+                   && Math.hypot(pp.x - dw.exit[0], pp.z - dw.exit[1]) < 1.2
+                   && pp.x > SPEC.world.size_m) {
+          const ox3 = dw.out[0], oz3 = dw.out[1] + 2.4;   // land CLEAR of the pad
+          const oy2 = hAt(ox3, oz3) + 1.2;
+          body.setTranslation({ x: ox3, y: oy2, z: oz3 }, true);
+          body.setNextKinematicTranslation({ x: ox3, y: oy2, z: oz3 });
+          dw.cool = 1.2; sfx('step');
+          popText('Back outside', '#ffc46b');
+        }
+      }
+    }
     if (window.__torches) {
       const tt = performance.now() / 1000;
       for (let i = 0; i < window.__torches.length; i++) {
@@ -4171,6 +4225,9 @@ async function main() {
       // INTERIOR (2026-07-23): never rise above the ceiling — the camera
       // outside the roof showed a void where the player should be
       if (INTERIOR) cy = Math.min(cy, (INTERIOR.wall_h || 4.0) - 0.35);
+      if (window.__doorway && fX > SPEC.world.size_m) {
+        cy = Math.min(cy, window.__doorway.wallH - 0.35);
+      }
       // CAMERA COLLISION (moon plan 1.1): spherecast pull-in — a ray from the
       // player's head toward the desired camera spot; any wall in between
       // pulls the camera in front of it instead of letting it clip through

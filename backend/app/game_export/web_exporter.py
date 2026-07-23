@@ -43,6 +43,8 @@ def export_web_game(spec: GameSpec, out_dir: str | Path, verbose: bool = True) -
     if lvl_d.get("pois"):
         # POI clusters (moon plan 2.1) draw from a fixed prop set
         needed |= {"crate", "log", "stump", "barrel"}
+    if lvl_d.get("enterable"):
+        needed |= {f[0] for f in lvl_d["enterable"]["plan"].get("furniture", [])}
     if needed:
         props_src = RUNTIME.parent.parent.parent / "assets" / "props"
         props_dst = dist / "props"
