@@ -407,8 +407,12 @@ def build_interior(seed: int, kind: str = "castle") -> dict:
             pz = -hall_d / 2 + (k + 0.5) * (hall_d / n_pil)
             pillars.append([round(px, 2), round(pz, 2)])
             pillars.append([round(-px, 2), round(pz, 2)])
+    # MULTI-FLOOR (moon plan 2.4): castles and houses get a second story
+    # reached by real stairs (dungeons stay single-level crawls)
+    floors = 2 if kind in ("castle", "house") else 1
     return {
         "kind": kind, "wall_h": H, "wall_t": T, "pillars": pillars,
+        "floors": floors,
         "rooms": [[round(v, 2) for v in r] for r in rooms],
         "walls": walls, "furniture": furniture, "torches": torches,
         "bounds": [round(hall_w + 26, 1), round(hall_d + 8, 1)],

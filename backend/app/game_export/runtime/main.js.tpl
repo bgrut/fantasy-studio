@@ -1194,10 +1194,12 @@ async function main() {
       world.createCollider(RAPIER.ColliderDesc.cuboid(bx / 2, 0.1, bz / 2)
         .setTranslation(OX, -0.08, 0));
     }
+    const FLR = PLAN.floors || 1;
+    const topY = WH * FLR;
     const cmatI = new THREE.MeshStandardMaterial({
       map: itex(wallFile, bx / 6, bz / 6), roughness: 1.0, color: 0x9a948c });
     const ceil = new THREE.Mesh(new THREE.PlaneGeometry(bx, bz), cmatI);
-    ceil.rotation.x = Math.PI / 2; ceil.position.set(OX, WH, 0);
+    ceil.rotation.x = Math.PI / 2; ceil.position.set(OX, topY, 0);
     scene.add(ceil);
     const wmat = new THREE.MeshStandardMaterial({
       map: itex(wallFile, 3, 1.2), roughness: 0.95 });
@@ -1232,6 +1234,76 @@ async function main() {
       scene.add(pm);
       world.createCollider(RAPIER.ColliderDesc.cuboid(0.45, WH / 2, 0.45)
         .setTranslation(px2 + OX, WH / 2, pz2));
+    }
+    // ── SECOND STORY (moon plan 2.4): solid upper walls, a mezzanine slab
+    // with a stair opening, and a real staircase (0.28m steps — the
+    // character controller's autostep walks them naturally)
+    if (FLR === 2) {
+      for (const [cx, cz, ln, rot] of PLAN.walls) {
+        seg(cx, cz, ln, rot, WH, WH, WT);            // upper walls, no doors
+      }
+      const hw3 = PLAN.rooms[0][2] / 2, hd3 = PLAN.rooms[0][3] / 2;
+      const stW = 2.2;                               // stair + opening width
+      const stX = -hw3 + 1.0 + stW / 2;              // along the west hall wall
+      const nSteps = Math.ceil(WH / 0.28);
+      const runL = nSteps * 0.42;
+      const stZ0 = -Math.min(hd3 - 1.5, runL / 2);
+      const slabM = new THREE.MeshStandardMaterial({
+        map: itex(floorFile, bx / 5, bz / 5), roughness: 0.9 });
+      const holeX0 = stX - stW / 2 - 0.2, holeX1 = stX + stW / 2 + 0.2;
+      const holeZ0 = stZ0 - 0.4, holeZ1 = stZ0 + runL + 1.6;
+      const slabs = [
+        [(-bx / 2 + holeX0) / 2, (holeX0 + bx / 2), 0, bz],            // west of hole
+        [(holeX1 + bx / 2) / 2, (bx / 2 - holeX1), 0, bz],             // east of hole
+        [(holeX0 + holeX1) / 2, holeX1 - holeX0, (-bz / 2 + holeZ0) / 2, holeZ0 + bz / 2],
+        [(holeX0 + holeX1) / 2, holeX1 - holeX0, (holeZ1 + bz / 2) / 2, bz / 2 - holeZ1],
+      ];
+      for (const [scx, sw, scz, sd] of slabs) {
+        if (sw < 0.3 || sd < 0.3) continue;
+        const sl = new THREE.Mesh(new THREE.BoxGeometry(sw, 0.3, sd), slabM);
+        sl.position.set(scx + OX, WH - 0.15, scz);
+        sl.receiveShadow = sl.castShadow = true;
+        scene.add(sl);
+        world.createCollider(RAPIER.ColliderDesc.cuboid(sw / 2, 0.15, sd / 2)
+          .setTranslation(scx + OX, WH - 0.15, scz));
+      }
+      const stepM = new THREE.MeshStandardMaterial({
+        map: itex('stone', 2, 0.5), roughness: 0.95 });
+      for (let k = 0; k < nSteps; k++) {
+        const sh2 = (k + 1) * (WH / nSteps);
+        const sm2 = new THREE.Mesh(new THREE.BoxGeometry(stW, sh2, 0.42), stepM);
+        sm2.position.set(stX + OX, sh2 / 2, stZ0 + k * 0.42 + 0.21);
+        sm2.castShadow = sm2.receiveShadow = true;
+        scene.add(sm2);
+        world.createCollider(RAPIER.ColliderDesc.cuboid(stW / 2, sh2 / 2, 0.21)
+          .setTranslation(stX + OX, sh2 / 2, stZ0 + k * 0.42 + 0.21));
+      }
+      // upstairs torches so the mezzanine isn't a void
+      window.__torches = window.__torches || [];
+      for (const tz2 of [-hd3 * 0.4, hd3 * 0.4]) {
+        const pl2 = new THREE.PointLight(0xff9a3d, 12, 12, 1.8);
+        pl2.position.set(OX, WH * 1.6, tz2);
+        scene.add(pl2);
+        window.__torches.push(pl2);
+      }
+      window.__floors2 = true;
+      // WINDOW LIGHT SHAFTS: glowing high windows + slanted translucent
+      // beams — the classic cheap volumetric that sells 'interior day'
+      const winM = new THREE.MeshBasicMaterial({ color: 0xfff3d6 });
+      const shaftM = new THREE.MeshBasicMaterial({
+        color: 0xffeebb, transparent: true, opacity: 0.10,
+        side: THREE.DoubleSide, depthWrite: false });
+      for (let k = 0; k < 3; k++) {
+        const wz = -hd3 + (k + 0.7) * (hd3 * 2 / 3.4);
+        const win = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 1.8), winM);
+        win.position.set(hw3 - 0.28 + OX, WH * 1.45, wz);
+        win.rotation.y = -Math.PI / 2;
+        scene.add(win);
+        const shaft = new THREE.Mesh(new THREE.PlaneGeometry(1.4, WH * 1.7), shaftM);
+        shaft.position.set(hw3 - 2.2 + OX, WH * 0.75, wz);
+        shaft.rotation.set(0, -Math.PI / 2, 0.42);
+        scene.add(shaft);
+      }
     }
     const flameG = new THREE.SphereGeometry(0.09, 6, 5);
     const flameM = new THREE.MeshBasicMaterial({ color: 0xffb347 });
@@ -1298,7 +1370,7 @@ async function main() {
         } catch (e) { /* missing prop file: skip */ }
       }
     })();
-    return { WH, entryZ: -PLAN.rooms[0][3] / 2 + 2.2 };
+    return { WH: WH * FLR, entryZ: -PLAN.rooms[0][3] / 2 + 2.2 };
   }
   if (INTERIOR) {
     buildRooms(INTERIOR, 0);
@@ -4352,7 +4424,7 @@ async function main() {
       let cy = fY + Math.sin(pitch) * cd + SPEC.camera.height_m * 0.4;
       // INTERIOR (2026-07-23): never rise above the ceiling — the camera
       // outside the roof showed a void where the player should be
-      if (INTERIOR) cy = Math.min(cy, (INTERIOR.wall_h || 4.0) - 0.35);
+      if (INTERIOR) cy = Math.min(cy, (INTERIOR.wall_h || 4.0) * (INTERIOR.floors || 1) - 0.35);
       if (window.__doorway && fX > SPEC.world.size_m) {
         cy = Math.min(cy, window.__doorway.wallH - 0.35);
       }
