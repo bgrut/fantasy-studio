@@ -2864,14 +2864,105 @@ async function main() {
     tgtMark.visible = false;
     scene.add(tgtMark);
   }
+  // footstep dust — pooled soft puffs at the feet while moving on ground
+  const _dustPool = [];
+  let _dustT = 0;
+  {
+    const dc = document.createElement('canvas'); dc.width = dc.height = 64;
+    const dg = dc.getContext('2d');
+    const grad = dg.createRadialGradient(32, 32, 2, 32, 32, 30);
+    grad.addColorStop(0, 'rgba(255,255,255,0.55)');
+    grad.addColorStop(1, 'rgba(255,255,255,0)');
+    dg.fillStyle = grad; dg.beginPath(); dg.arc(32, 32, 30, 0, 7); dg.fill();
+    const dtex = new THREE.CanvasTexture(dc);
+    const gc2 = new THREE.Color(...SPEC.world.ground_color).lerp(new THREE.Color(0xffffff), 0.5);
+    for (let i = 0; i < 10; i++) {
+      const m = new THREE.Sprite(new THREE.SpriteMaterial({
+        map: dtex, transparent: true, depthWrite: false, color: gc2 }));
+      m.visible = false; scene.add(m);
+      _dustPool.push({ m, live: 0 });
+    }
+  }
+  function puffDust(x, y, z) {
+    const d = _dustPool.find(q => !q.live) || _dustPool[0];
+    d.m.position.set(x + (Math.random() - 0.5) * 0.2, y + 0.12, z + (Math.random() - 0.5) * 0.2);
+    d.m.scale.set(0.3, 0.3, 1);
+    d.m.material.opacity = 0.5; d.m.visible = true; d.live = 0.5;
+  }
+  function stepDust(dt) {
+    for (const d of _dustPool) {
+      if (!d.live) continue;
+      d.live = Math.max(0, d.live - dt);
+      d.m.scale.multiplyScalar(1 + dt * 2.4);
+      d.m.position.y += dt * 0.4;
+      d.m.material.opacity = d.live;
+      if (!d.live) d.m.visible = false;
+    }
+  }
+  // pooled 3D damage numbers — no allocations during combat
+  const _dmgPool = [];
+  function dmgNumber(pos, dmg) {
+    let sp = _dmgPool.find(d => !d.live);
+    if (!sp) {
+      if (_dmgPool.length >= 8) sp = _dmgPool[0];
+      else {
+        const cn = document.createElement('canvas'); cn.width = 128; cn.height = 64;
+        const sm = new THREE.SpriteMaterial({ transparent: true, depthTest: false });
+        const spr = new THREE.Sprite(sm);
+        spr.scale.set(0.9, 0.45, 1); spr.visible = false;
+        scene.add(spr);
+        sp = { spr, cn, live: 0 };
+        _dmgPool.push(sp);
+      }
+    }
+    const g2 = sp.cn.getContext('2d');
+    g2.clearRect(0, 0, 128, 64);
+    g2.font = '700 44px system-ui'; g2.textAlign = 'center';
+    g2.fillStyle = dmg > 1 ? '#ffd257' : '#ffffff';
+    g2.strokeStyle = 'rgba(0,0,0,0.8)'; g2.lineWidth = 6;
+    g2.strokeText('-' + dmg, 64, 46); g2.fillText('-' + dmg, 64, 46);
+    if (sp.spr.material.map) sp.spr.material.map.dispose();
+    sp.spr.material.map = new THREE.CanvasTexture(sp.cn);
+    sp.spr.position.copy(pos).add(new THREE.Vector3(0, 1.3, 0));
+    sp.spr.visible = true; sp.spr.material.opacity = 1;
+    sp.live = 0.7;
+  }
+  function stepDmgNumbers(dt) {
+    for (const d of _dmgPool) {
+      if (!d.live) continue;
+      d.live = Math.max(0, d.live - dt);
+      d.spr.position.y += dt * 1.2;
+      d.spr.material.opacity = Math.min(1, d.live * 2.5);
+      if (!d.live) d.spr.visible = false;
+    }
+  }
+  function rumble(ms, mag) {
+    try {
+      for (const gp of navigator.getGamepads() || []) {
+        if (gp && gp.vibrationActuator) {
+          gp.vibrationActuator.playEffect('dual-rumble',
+            { duration: ms, strongMagnitude: mag, weakMagnitude: mag * 0.6 });
+        }
+      }
+    } catch (e) { /* no haptics */ }
+  }
   function dmgEnemy(n, dmg) {
     if (n.dead || n.dormant) return;
     n.hp -= dmg;
+    window.__hitStop = 0.08;                       // weight: the world flinches
+    dmgNumber(n.obj.position, dmg);
+    rumble(80, 0.7);
     for (const m of n.mats) { if (m.emissive) m.emissive.setHex(0xff4444); }
     setTimeout(() => { for (const m of n.mats) {
       if (m.emissive) m.emissive.setRGB(0.30, 0.16, 0.16); } }, 120);
     if (n.hp <= 0) {
       n.dead = true; kills++; sfx('hit');
+      const _st2 = steps[stepIdx];
+      if (_st2 && ['defeat', 'eliminate', 'hunt'].includes(_st2.kind)
+          && kills - (_st2._k0 || 0) >= _st2.count) {
+        window.__slowMo = 0.7;                     // savor the last one
+        rumble(220, 1.0);
+      }
       burst(n.obj.position.clone().add(new THREE.Vector3(0, 0.8, 0)), 0xff5c6a);
       const st = steps[stepIdx];
       if (st && (st.kind === 'defeat' || st.kind === 'eliminate' || st.kind === 'hunt')) {
@@ -3625,7 +3716,11 @@ async function main() {
   const _camWant = new THREE.Vector3();
 
   renderer.setAnimationLoop(() => {
-    const dt = Math.min(clock.getDelta(), 0.05);
+    let dt = Math.min(clock.getDelta(), 0.05);
+    // JUICE (moon plan 1.2): hit-stop freezes 80ms on melee connect; the
+    // final kill of a quest step lands in brief slow motion
+    if (window.__hitStop > 0) { window.__hitStop -= dt; dt *= 0.08; }
+    else if (window.__slowMo > 0) { window.__slowMo -= dt; dt *= 0.35; }
     WIND_U.value = performance.now() / 1000;   // wind clock (Phase 81)
     for (const w of wheels) {                  // roll with speed, steer in front
       w.tire.rotation.x += ((window.__pSpeed || 0) / w.wr) * dt;
@@ -3808,6 +3903,11 @@ async function main() {
 
     // animation state machine
     window.__pSpeed = speed;   // Phase 66: prey hearing keys off player loudness
+    _dustT -= dt;
+    if (speed > 3.2 && grounded && _dustT <= 0) {   // running on the ground
+      puffDust(nt.x, hAt(nt.x, nt.z), nt.z);
+      _dustT = 0.22;
+    }
     if (mixer) {
       setAnim(speed < 0.1 ? actions.__idle : (mv.run && mv.mag > 0.3 ? actions.__run : actions.__walk));
       if (current && current.getClip()) {
@@ -3880,6 +3980,8 @@ async function main() {
       const stc = steps[stepIdx];
       if (stc && stc.kind === 'capture' && !won && !lost) stepCapture(stc, nt.x, nt.z, dt);
     }
+    stepDmgNumbers(dt);
+    stepDust(dt);
     if (window.__torches) {
       const tt = performance.now() / 1000;
       for (let i = 0; i < window.__torches.length; i++) {
@@ -3980,12 +4082,27 @@ async function main() {
       if (camTarget.lengthSq() === 0) camTarget.copy(_camWant);
       camTarget.lerp(_camWant, 1 - Math.exp(-7 * dt));
       const cd = SPEC.camera.distance_m * camZoom * (inspectOn ? 1.5 : 1);
-      const cx = fX + Math.sin(yaw) * Math.cos(pitch) * cd;   // camera BEHIND
-      const cz = fZ + Math.cos(yaw) * Math.cos(pitch) * cd;   // (W walks away)
+      let cx = fX + Math.sin(yaw) * Math.cos(pitch) * cd;     // camera BEHIND
+      let cz = fZ + Math.cos(yaw) * Math.cos(pitch) * cd;     // (W walks away)
       let cy = fY + Math.sin(pitch) * cd + SPEC.camera.height_m * 0.4;
       // INTERIOR (2026-07-23): never rise above the ceiling — the camera
       // outside the roof showed a void where the player should be
       if (INTERIOR) cy = Math.min(cy, (INTERIOR.wall_h || 4.0) - 0.35);
+      // CAMERA COLLISION (moon plan 1.1): spherecast pull-in — a ray from the
+      // player's head toward the desired camera spot; any wall in between
+      // pulls the camera in front of it instead of letting it clip through
+      {
+        const hx = fX, hy = fY + SPEC.camera.height_m * 0.55, hz = fZ;
+        let ddx = cx - hx, ddy = cy - hy, ddz = cz - hz;
+        const dl = Math.hypot(ddx, ddy, ddz) || 1;
+        ddx /= dl; ddy /= dl; ddz /= dl;
+        const ray = new RAPIER.Ray({ x: hx, y: hy, z: hz }, { x: ddx, y: ddy, z: ddz });
+        const hit = world.castRay(ray, dl, true, undefined, undefined, collider, body);
+        if (hit && hit.timeOfImpact > 0.01) {
+          const t = Math.max(hit.timeOfImpact - 0.3, 0.4);
+          cx = hx + ddx * t; cy = hy + ddy * t; cz = hz + ddz * t;
+        }
+      }
       camera.position.lerp(new THREE.Vector3(cx, cy, cz), 1 - Math.exp(-8 * dt));
       camera.lookAt(camTarget);
     }
