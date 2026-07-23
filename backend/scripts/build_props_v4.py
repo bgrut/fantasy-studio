@@ -249,3 +249,74 @@ g.data.materials.append(sdark)
 export("castle")
 
 print("PROPS V4 DONE")
+
+# ── STUMP: cut trunk with growth-ring top ───────────────────────────────────
+reset()
+sbark = mat("wood_bark", (0.24, 0.16, 0.10))
+sring = mat("wood_rings", (0.55, 0.42, 0.26), rough=0.85)
+bpy.ops.mesh.primitive_cylinder_add(vertices=12, radius=0.42, depth=0.6, location=(0, 0, 0.3))
+st = bpy.context.object
+for v in st.data.vertices:
+    if v.co.z < 0.2:
+        f = 1.0 + (0.2 - v.co.z) * 0.6
+        v.co.x *= f; v.co.y *= f
+st.data.materials.append(sbark)
+bpy.ops.mesh.primitive_cylinder_add(vertices=12, radius=0.40, depth=0.04, location=(0, 0, 0.61))
+bpy.context.object.data.materials.append(sring)
+export("stump")
+
+# ── LOG: fallen trunk, slight taper, moss top ───────────────────────────────
+reset()
+lbark = mat("wood_bark", (0.26, 0.17, 0.11))
+moss = mat("moss_leaves", (0.16, 0.34, 0.12))
+bpy.ops.mesh.primitive_cylinder_add(vertices=10, radius=0.30, depth=2.6, location=(0, 0, 0.3))
+lg = bpy.context.object
+lg.rotation_euler = (0, math.radians(90), 0)
+bpy.ops.object.transform_apply(rotation=True)
+for v in lg.data.vertices:
+    v.co.y *= 1.0 + noise.noise(Vector((v.co.x * 2, 0, 0))) * 0.1
+lg.data.materials.append(lbark)
+bpy.ops.mesh.primitive_cube_add(size=1, location=(0, 0, 0.56))
+mz = bpy.context.object
+mz.scale = (1.1, 0.24, 0.05)
+bpy.ops.object.transform_apply(scale=True)
+displace(mz, amp=0.05, freq=4.0)
+mz.data.materials.append(moss)
+export("log")
+
+# ── FLOWERS: grass tuft with colored blossom heads ──────────────────────────
+reset()
+fstem = mat("flower_stem", (0.20, 0.38, 0.12))
+for ci, cc in enumerate(((0.85, 0.25, 0.3), (0.92, 0.78, 0.2), (0.75, 0.5, 0.9))):
+    fpet = mat(f"petal{ci}", cc, rough=0.7)
+    for k in range(3):
+        a = (ci * 3 + k) / 9 * 2 * math.pi
+        r = 0.08 + random.uniform(0, 0.22)
+        h = 0.22 + random.uniform(0, 0.16)
+        bpy.ops.mesh.primitive_cylinder_add(vertices=5, radius=0.012, depth=h,
+            location=(math.cos(a) * r, math.sin(a) * r, h / 2))
+        bpy.context.object.data.materials.append(fstem)
+        bpy.ops.mesh.primitive_ico_sphere_add(subdivisions=1, radius=0.05,
+            location=(math.cos(a) * r, math.sin(a) * r, h + 0.03))
+        bpy.context.object.data.materials.append(fpet)
+export("flowers")
+
+# ── MUSHROOM: cluster of 3 toadstools ───────────────────────────────────────
+reset()
+mstem = mat("mush_stem", (0.85, 0.80, 0.72), rough=0.8)
+mcap = mat("mush_cap", (0.62, 0.22, 0.16), rough=0.7)
+for k in range(3):
+    a = k / 3 * 2 * math.pi
+    r = 0.0 if k == 0 else 0.16
+    sc = 1.0 if k == 0 else 0.65
+    bpy.ops.mesh.primitive_cylinder_add(vertices=8, radius=0.035 * sc, depth=0.16 * sc,
+        location=(math.cos(a) * r, math.sin(a) * r, 0.08 * sc))
+    bpy.context.object.data.materials.append(mstem)
+    bpy.ops.mesh.primitive_uv_sphere_add(segments=10, ring_count=6, radius=0.09 * sc,
+        location=(math.cos(a) * r, math.sin(a) * r, 0.17 * sc))
+    cp = bpy.context.object
+    cp.scale = (1, 1, 0.55)
+    bpy.ops.object.transform_apply(scale=True)
+    cp.data.materials.append(mcap)
+    bpy.ops.object.shade_smooth()
+export("mushroom")

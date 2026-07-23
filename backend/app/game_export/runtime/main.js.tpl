@@ -294,6 +294,48 @@ async function main() {
         window.__clouds.push(sp);
       }
     }
+    // MOUNTAIN SKYLINE (Phase 93): open worlds ended at a fog wall — a ring
+    // of displaced low-poly ridges past the playfield gives every level a
+    // horizon. Fog tints them into the distance automatically; snow weather
+    // and cold skies get white caps via vertex color.
+    if (!(((SPEC.world || {}).level || {}).osm)) {
+      const gsizeM = SPEC.world.size_m;
+      const rngM = mulberry32(SPEC.seed + 777);
+      const snowy = SPEC.world.weather === 'snow';
+      const rock = new THREE.Color(snowy ? 0x9aa4ad : 0x6b6f66)
+        .lerp(new THREE.Color(pal.sky), 0.22);
+      const capC = new THREE.Color(0xf4f7fa);
+      const mmat = new THREE.MeshStandardMaterial({ roughness: 1.0, vertexColors: true });
+      const ring = new THREE.Group();
+      const NPK = 11;
+      for (let i = 0; i < NPK; i++) {
+        const a = (i / NPK) * Math.PI * 2 + rngM() * 0.35;
+        const dist = gsizeM * (0.78 + rngM() * 0.28);
+        const hgt = gsizeM * (0.10 + rngM() * 0.14);
+        const rad = hgt * (1.5 + rngM() * 0.9);
+        const geo = new THREE.ConeGeometry(rad, hgt, 7 + Math.floor(rngM() * 4), 3);
+        const posA = geo.attributes.position;
+        const col = new Float32Array(posA.count * 3);
+        for (let v = 0; v < posA.count; v++) {
+          const vx = posA.getX(v), vy = posA.getY(v), vz = posA.getZ(v);
+          const n = Math.sin(vx * 0.9 + i * 7) * Math.cos(vz * 1.1 + i * 3);
+          posA.setX(v, vx * (1 + n * 0.22));
+          posA.setZ(v, vz * (1 + n * 0.22));
+          const t = (vy / hgt + 0.5);
+          const c = (snowy || t < 0.72) && !(snowy && t > 0.4)
+            ? rock.clone().offsetHSL(0, 0, (t - 0.4) * 0.12)
+            : capC;
+          col[v * 3] = c.r; col[v * 3 + 1] = c.g; col[v * 3 + 2] = c.b;
+        }
+        geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+        geo.computeVertexNormals();
+        const m = new THREE.Mesh(geo, mmat);
+        m.position.set(Math.cos(a) * dist, hgt * 0.42, Math.sin(a) * dist);
+        m.rotation.y = rngM() * Math.PI;
+        ring.add(m);
+      }
+      scene.add(ring);
+    }
   } else {
     const sN = 1400, sPos = new Float32Array(sN * 3);
     const sRng = mulberry32(SPEC.seed + 5);

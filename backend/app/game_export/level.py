@@ -72,6 +72,12 @@ def build_level(seed: int, size_m: float, n_objectives: int = 0,
         for j in range(grid_n):
             x = (j / (grid_n - 1) - 0.5) * size_m
             h = (hgrid[i][j] - 0.45) * 2.0 * amplitude_m
+            # MICRO-RELIEF (Phase 93): a second, higher-frequency octave —
+            # real ground undulates at the metre scale, not only in big
+            # hills. Mesh + collider share these heights, so feet/wheels
+            # track the detail for free.
+            i2, j2 = (i * 3) % grid_n, (j * 3) % grid_n
+            h += (hgrid[i2][j2] - 0.5) * 0.5 * min(amplitude_m, 1.2)
             d = min(_seg_dist(x, z, *path[k], *path[k + 1]) for k in range(len(path) - 1))
             d = min(d, math.hypot(x, z), math.hypot(x - goal[0], z - goal[1]))
             if d < corridor:
