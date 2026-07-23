@@ -132,7 +132,7 @@ def _gen_trellis2(pil_image, output_path: Path, seed: int = 42) -> Path:
            "--seed", str(seed)]
     print(f"[trellis2] running subprocess (isolated venv)…")
     proc = subprocess.run(cmd, cwd=str(_BACKEND_ROOT), capture_output=True, text=True,
-                          timeout=900)
+                          timeout=1800)
     if proc.returncode != 0 or not output_path.exists():
         tail = (proc.stderr or proc.stdout or "")[-800:]
         raise RuntimeError(f"TRELLIS.2 failed (exit {proc.returncode}):\n{tail}")

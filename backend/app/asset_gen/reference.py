@@ -79,7 +79,10 @@ PATTERN_REFERENCE_FRAMING: Dict[str, str] = {
     # These framings are what TripoSR/InstantMesh need for clean upright meshes.
     "quadruped": "perfect side profile, standing still on all four legs, motionless, full body in frame, vertical posture, feet flat on ground, short smooth well-groomed coat, clean silhouette",
     "biped":     "standing upright, both arms relaxed hanging straight down at sides, open empty hands, nothing held, neutral A-pose, full body in frame, feet flat on ground",
-    "vehicle":   "parked stationary, three-quarter front view, all four wheels on ground, vertical orientation",
+    # seamless studio cyclorama (2026-07-22): SDXL loves posing trucks in
+    # FORESTS — the busy background then projects onto the body as camo
+    # blotch whenever the texture falls back to projection
+    "vehicle":   "parked stationary, three-quarter front view, all four wheels on ground, on seamless white studio cyclorama, showroom floor, studio lighting",
     "tree":      "vertical trunk centered, full tree from roots to top, upright",
     "celestial": "centered sphere, fills frame",
     "primitive_geo": "centered, full object visible",
@@ -97,7 +100,7 @@ PATTERN_REFERENCE_FRAMING: Dict[str, str] = {
 PATTERN_NEGATIVE: Dict[str, str] = {
     "quadruped": "running, jumping, leaping, mid-action, motion blur, dynamic pose, legs in the air, tilted, perspective distortion, wispy fur strands, flyaway hair, shaggy fuzzy silhouette, long unkempt fur",
     "biped":     "holding weapon, holding object, aiming, raised arm, bent elbow, crossed arms, hands on hips, dynamic pose, motion blur, running, jumping, tilted, perspective distortion, cropped, anatomy figure, ecorche, flayed, skinless, exposed muscle, muscle suit, x-ray, medical illustration, red and blue veins, nude, naked",
-    "vehicle":   "moving, motion blur, tilted, perspective distortion",
+    "vehicle":   "moving, motion blur, tilted, perspective distortion, forest, trees, outdoor scene, road, landscape, buildings, sky",
     "flying":    "flying, mid-air, coiled, curled, head close-up, portrait, tattoo style, line art, illustration, logo, emblem, circular composition, cropped body, motion blur, dynamic pose",
     "aquatic":   "pattern, wallpaper, multiple animals, many, group, pod, school of fish, repeated, tiled, seamless pattern, illustration, cartoon, drawing, logo, fabric print, cropped body, top view",
 }

@@ -252,11 +252,11 @@ def ensure_asset(kind: str, pattern: str | None = None, target_tris: int = 45000
                 import subprocess
                 subprocess.run(
                     [str(BLENDER_EXE), "--background", "--python",
-                     str(BACKEND_ROOT / "scripts" / "_apply_euler.py"), "--",
-                     str(out), str(out), "0", "90", "180"],
+                     str(BACKEND_ROOT / "scripts" / "_orient_vehicle.py"), "--",
+                     str(out), str(out)],
                     capture_output=True, timeout=180, check=True)
                 if verbose:
-                    print(f"[game] vehicle orientation normalized (0,90,180)")
+                    print(f"[game] vehicle orientation solved (wheels-down)")
             except Exception as _ve:
                 if verbose:
                     print(f"[game] vehicle orient skip: {type(_ve).__name__}")

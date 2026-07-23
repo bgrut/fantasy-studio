@@ -187,8 +187,8 @@ export("building")
 
 # ── CASTLE: keep + 4 towers + battlement walls + gate ───────────────────────
 reset()
-stone = mat("stone", (0.52, 0.50, 0.47), rough=0.95)
-sdark = mat("stone_dark", (0.38, 0.36, 0.34))
+stone = mat("stone", (0.44, 0.42, 0.39), rough=0.95)
+sdark = mat("stone_dark", (0.30, 0.28, 0.26))
 roofc = mat("cone_roof", (0.25, 0.28, 0.42))
 S = 11.0                                              # wall half-span
 bpy.ops.mesh.primitive_cube_add(size=1, location=(0, 0, 5.5))   # central keep
@@ -196,6 +196,16 @@ k = bpy.context.object
 k.scale = (8, 8, 11)
 bpy.ops.object.transform_apply(scale=True)
 k.data.materials.append(stone)
+slit = mat("slit", (0.06, 0.05, 0.05))
+for fy, ax in ((4.05, 0), (-4.05, 0), (4.05, 1), (-4.05, 1)):   # keep window slits
+    for gx in range(2):
+        for gz in range(3):
+            loc = ((gx - 0.5) * 3.2, fy, 3.4 + gz * 2.8) if ax == 0 else (fy, (gx - 0.5) * 3.2, 3.4 + gz * 2.8)
+            bpy.ops.mesh.primitive_cube_add(size=1, location=loc)
+            w = bpy.context.object
+            w.scale = (0.45, 0.12, 1.3) if ax == 0 else (0.12, 0.45, 1.3)
+            bpy.ops.object.transform_apply(scale=True)
+            w.data.materials.append(slit)
 for tx, ty in ((S, S), (-S, S), (S, -S), (-S, -S)):   # corner towers
     bpy.ops.mesh.primitive_cylinder_add(vertices=12, radius=2.2, depth=13,
                                         location=(tx, ty, 6.5))
