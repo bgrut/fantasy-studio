@@ -8,7 +8,7 @@ import { cn } from '@/lib/utils'
 import {
   addLevelToProject, createProject, exportGame, exportProject, gameHealth,
   getGameJob, listProjects, openLevel, removeLevelFromProject, revealProjectZip,
-  updateLevel,
+  rerollAsset, updateLevel,
   type GameHealth, type GameJob, type GameProject,
 } from '@/lib/gameApi'
 
@@ -708,6 +708,23 @@ export default function GameStudio() {
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs border border-white/[0.08] text-[#807d99] hover:text-white transition-colors"
               >
                 <RotateCcw className="w-3 h-3" /> New level
+              </button>
+              <button
+                title="Regenerate this hero with a different look (~6 min), then rebuild the level"
+                onClick={async () => {
+                  const kind = job?.spec_resolved?.player?.name
+                  if (!kind) return
+                  if (!confirm(`Regenerate '${kind}' with a new look? Takes ~6 minutes, then the level rebuilds.`)) return
+                  try {
+                    await rerollAsset(kind)
+                    build()
+                  } catch (e) {
+                    alert(`Hero reroll failed — generate any game with '${kind}' to retry the cast.`)
+                  }
+                }}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs border border-white/[0.08] text-[#807d99] hover:text-white transition-colors"
+              >
+                🎭 New hero
               </button>
               <button
                 onClick={() => {

@@ -1126,6 +1126,52 @@ def library_thumb(kind: str):
     return FileResponse(str(p), media_type="image/png")
 
 
+class RerollAssetRequest(BaseModel):
+    kind: str = Field(min_length=2, max_length=60)
+
+
+@router.post("/api/game/reroll_asset")
+def reroll_asset(req: RerollAssetRequest):
+    """HERO REROLL (Phase 108): purge every cache for `kind` and regenerate
+    with a random seed offset — a different take on the same character.
+    Blocking (~6 min GPU); the frontend shows progress and then rebuilds
+    the game so the new hero ships."""
+    import hashlib as _hl
+    import os as _os
+    import random as _rd
+    from pathlib import Path as _Pth
+    from app.game_export import library as _lib
+    from app.game_export.generate import ensure_asset, guess_pattern
+    from app.game_export.bake import ensure_playable
+    kind = req.kind.strip().lower()
+    h = _hl.md5(kind.encode()).hexdigest()[:12]
+    for f in _Pth(BACKEND_ROOT / "renders" / "_actor_cache").glob(h + "*"):
+        f.unlink(missing_ok=True)
+    safe = kind.replace(" ", "_")
+    for pat in (safe + ".glb", safe + "_anim.glb", safe + "_atlas.png"):
+        (_Pth(BACKEND_ROOT / "assets" / "library") / pat).unlink(missing_ok=True)
+    try:
+        import json as _j
+        _lj = _j.loads(_lib.LIBRARY_JSON.read_text(encoding="utf-8"))
+        _lj.pop(kind, None)
+        _lib.LIBRARY_JSON.write_text(_j.dumps(_lj, indent=2), encoding="utf-8")
+    except Exception:
+        pass
+    _os.environ["FS_REF_SEED"] = str(_rd.randint(1000, 999999))
+    try:
+        ensure_asset(kind, verbose=False)
+        if guess_pattern(kind) in ("vehicle", "flying", "aquatic", "static"):
+            ok = bool(_lib.resolve(kind))
+        else:
+            ok = bool(ensure_playable(kind, verbose=False))
+    finally:
+        _os.environ.pop("FS_REF_SEED", None)
+    if not ok:
+        raise HTTPException(500, f"reroll failed for '{kind}' — the previous "
+                                 "hero was purged; generate any game with it to retry")
+    return {"ok": True, "kind": kind}
+
+
 @router.get("/api/game/health")
 def game_health():
     """Game mode works without a GPU — report what's available."""

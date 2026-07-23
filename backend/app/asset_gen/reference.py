@@ -530,6 +530,11 @@ def generate_reference(
 
     def _gen_once(s):
         device = "cuda" if torch.cuda.is_available() else "cpu"
+        # HERO REROLL (Phase 108): FS_REF_SEED offsets the reference seed so
+        # 'try a different hero' produces a genuinely different look
+        _off = int(_os.environ.get("FS_REF_SEED", "0") or 0)
+        if s is not None and _off:
+            s = int(s) + _off
         gen = torch.Generator(device=device).manual_seed(int(s)) if s is not None else None
         if depth_image is not None:
             pipe = _load_t2i_controlnet_pipeline()

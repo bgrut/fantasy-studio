@@ -46,6 +46,15 @@ async function j<T>(res: Response): Promise<T> {
   return res.json() as Promise<T>
 }
 
+// HERO REROLL (Phase 108): purge + regenerate a character with a fresh look
+export async function rerollAsset(kind: string): Promise<{ ok: boolean }> {
+  return j(await fetch('/api/game/reroll_asset', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ kind }),
+  }))
+}
+
 export async function gameHealth(): Promise<GameHealth> {
   return j(await fetch('/api/game/health'))
 }
