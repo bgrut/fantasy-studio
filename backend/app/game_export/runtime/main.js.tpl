@@ -860,7 +860,7 @@ async function main() {
     if (!img || !img.width || _despeckled.has(m.map.uuid)) return;
     _despeckled.add(m.map.uuid);
     try {
-      const W = Math.min(img.width, 1024), H = Math.min(img.height, 1024);
+      const W = Math.min(img.width, 2048), H = Math.min(img.height, 2048);
       const c = document.createElement('canvas'); c.width = W; c.height = H;
       const g = c.getContext('2d', { willReadFrequently: true });
       g.drawImage(img, 0, 0, W, H);
@@ -877,7 +877,8 @@ async function main() {
             nb += lum[i + dy * W + dx]; cnt++;
           }
           nb /= cnt;
-          if (lum[i] > nb + 52) {                     // speckle: way brighter than area
+          const dev = lum[i] - nb;
+          if (dev > 52 || dev < -60) {               // bright speckle OR dark blotch
             const k = nb / Math.max(lum[i], 1);
             out.data[i * 4] = px[i * 4] * k;
             out.data[i * 4 + 1] = px[i * 4 + 1] * k;
@@ -3012,7 +3013,12 @@ async function main() {
       if (!o.isMesh || !o.material) return;
       if (o.isSkinnedMesh) return;                           // characters keep real textures
       for (const m of Array.isArray(o.material) ? o.material : [o.material]) {
-        if (!m || !m.isMeshStandardMaterial || m.map || _seen.has(m.uuid)) continue;
+        if (!m) continue;
+      if (m.map && m.map.anisotropy < 4) {           // crisp at grazing angles
+        m.map.anisotropy = renderer.capabilities.getMaxAnisotropy();
+        m.map.needsUpdate = true;
+      }
+      if (!m.isMeshStandardMaterial || m.map || _seen.has(m.uuid)) continue;
         _seen.add(m.uuid);
         if (!o.geometry.attributes.uv) continue;             // needs UVs to texture
         const cls = classify(m);
@@ -3386,10 +3392,11 @@ async function main() {
       let top = 0, xs = 0;
       for (const q of cl) { if (q[1] - minY > top) top = q[1] - minY; xs += Math.abs(q[0]); }
       const wr = THREE.MathUtils.clamp(top * 0.62, 0.14, 0.55);
-      let xmax = 0;
-      for (const q of cl) if (Math.abs(q[0]) > xmax) xmax = Math.abs(q[0]);
-      const xoff = Math.max(xmax * 0.88, wr * 0.9);   // outer face flush with body
-      zones.push({ zc, tol: tol * 1.45, topY: minY + top * 1.25, xmin: xoff * 0.35 });
+      let xlo = 1e9, xhi = -1e9;
+      for (const q of cl) { if (q[0] < xlo) xlo = q[0]; if (q[0] > xhi) xhi = q[0]; }
+      const xc = (xlo + xhi) / 2;                     // meshes are NOT centered on x=0
+      const xoff = Math.max((xhi - xlo) / 2 * 0.88, wr * 0.9);
+      zones.push({ zc, xc, tol: tol * 1.45, topY: minY + top * 1.25, xmin: xoff * 0.35 });
       const tireGeo = new THREE.CylinderGeometry(wr, wr, wr * 0.8, 18);
       tireGeo.rotateZ(Math.PI / 2);
       const tireMat = new THREE.MeshStandardMaterial({ color: 0x181818, roughness: 0.92 });
@@ -3401,7 +3408,7 @@ async function main() {
         const tire = new THREE.Mesh(tireGeo, tireMat);
         tire.add(new THREE.Mesh(hubGeo, hubMat));
         g.add(tire);
-        g.position.set(sx * xoff, minY + wr, zc);
+        g.position.set(xc + sx * xoff, minY + wr, zc);
         node.add(g);
         wheels.push({ g, tire, front, wr });
       }
@@ -3419,7 +3426,7 @@ async function main() {
         const va = new THREE.Vector3(), vb = new THREE.Vector3(), vc = new THREE.Vector3();
         const keep = [];
         const inZone = v => zones.some(zn => v.y < zn.topY
-          && Math.abs(v.z - zn.zc) < zn.tol && Math.abs(v.x) > zn.xmin);
+          && Math.abs(v.z - zn.zc) < zn.tol && Math.abs(v.x - (zn.xc || 0)) > zn.xmin);
         for (let i = 0; i < idx.count; i += 3) {
           va.fromBufferAttribute(pos, idx.getX(i)).applyMatrix4(m);
           vb.fromBufferAttribute(pos, idx.getX(i + 1)).applyMatrix4(m);
