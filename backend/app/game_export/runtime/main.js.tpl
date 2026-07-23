@@ -4136,7 +4136,7 @@ async function main() {
     // animation state machine
     window.__pSpeed = speed;   // Phase 66: prey hearing keys off player loudness
     _dustT -= dt;
-    if (speed > 3.2 && grounded && _dustT <= 0) {   // running on the ground
+    if (speed > 3.2 && kcc.computedGrounded() && _dustT <= 0) {   // running on the ground
       puffDust(nt.x, hAt(nt.x, nt.z), nt.z);
       _dustT = 0.22;
     }
