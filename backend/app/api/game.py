@@ -829,6 +829,11 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         # WATER WORLDS: rolling seabed + a water plane the runtime renders;
         # swimmers stay beneath it, everything gets underwater fog below it
         _water = any(k in _wname for k in ("ocean", "underwater", "lake", "river"))
+        # FROZEN water is ICE (2026-07-23: 'frozen lake' floated the polar
+        # bear belly-up like a whale) — solid, walkable, snowy; no water
+        # plane, no swim handling.
+        if _water and any(k in req.prompt.lower() for k in ("frozen", "ice", "icy")):
+            _water = False
         if _water:
             amp = max(amp, 3.0)                     # seabed dunes
             spec.world.water_level = 8.0 if "lake" not in _wname else 4.0
