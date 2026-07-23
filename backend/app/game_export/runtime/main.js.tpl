@@ -1245,6 +1245,41 @@ async function main() {
       scene.add(fm);
       window.__torches.push(pl);
     }
+    // KIND DECOR (moon plan 2.4): castles hang banners + a carpet runner
+    // down the hall; houses get warm rugs. Cheap planes, big identity.
+    if (IK === 'castle') {
+      const rngD2 = mulberry32((SPEC.seed || 1) + 881);
+      const bmatD = new THREE.MeshStandardMaterial({
+        color: 0x7a1f24, roughness: 0.9, side: THREE.DoubleSide });
+      const hw2 = PLAN.rooms[0][2] / 2, hd2 = PLAN.rooms[0][3] / 2;
+      for (let k = 0; k < 4; k++) {                  // wall banners
+        const bz2 = -hd2 + (k + 0.5) * (hd2 * 2 / 4);
+        for (const sd of [-1, 1]) {
+          const bn = new THREE.Mesh(new THREE.PlaneGeometry(1.1, 2.4), bmatD);
+          bn.position.set(sd * (hw2 - 0.32) + OX, WH * 0.55, bz2 + 1.6);
+          bn.rotation.y = sd > 0 ? -Math.PI / 2 : Math.PI / 2;
+          scene.add(bn);
+        }
+      }
+      const cmatD = new THREE.MeshStandardMaterial({ color: 0x6e1d22, roughness: 1.0 });
+      const runner = new THREE.Mesh(new THREE.PlaneGeometry(2.4, hd2 * 2 - 3), cmatD);
+      runner.rotation.x = -Math.PI / 2;
+      runner.position.set(OX, 0.04, 0);
+      runner.receiveShadow = true;
+      scene.add(runner);
+    } else if (IK === 'house') {
+      const rugC = [0x8a4a3b, 0x3f5a7a, 0x6e5a2f];
+      let ri = 0;
+      for (const [rcx, rcz, rrw, rrd] of PLAN.rooms.slice(1)) {
+        const rug = new THREE.Mesh(
+          new THREE.PlaneGeometry(Math.min(rrw - 2, 3.2), Math.min(rrd - 2, 2.4)),
+          new THREE.MeshStandardMaterial({ color: rugC[ri++ % 3], roughness: 1.0 }));
+        rug.rotation.x = -Math.PI / 2;
+        rug.position.set(rcx + OX, 0.04, rcz);
+        rug.receiveShadow = true;
+        scene.add(rug);
+      }
+    }
     (async () => {
       const cache = {};
       for (const [name, fx, fz, fyaw] of PLAN.furniture || []) {
@@ -1554,6 +1589,7 @@ async function main() {
       runT0 = performance.now();
       sfx('step');                        // gesture unlocks WebAudio + confirms start
       startAmbient();                     // Phase 69: wind bed (+ night crickets)
+      if (window.__restoreProg) window.__restoreProg();   // saved upgrades return
       if (IS_RACE) startCountdown();
     });
   }
@@ -2638,6 +2674,30 @@ async function main() {
   // keeps running behind the card — choosing is part of the flow.
   let xp = 0, plvl = 1;
   const xpNeed = () => 40 * plvl;
+  // PERSISTENCE (moon plan 3.2): upgrades survive replays of this game
+  const _progKey = 'fs_prog_' + (SPEC.title || 'game');
+  const _picks = [];
+  function _applyPick(k, silent) {
+    if (k === 'heart') { P.hp = (P.hp || 5) + 1; php += 1; }
+    else if (k === 'swift') { P.walk_speed *= 1.12; P.run_speed *= 1.12; }
+    else if (k === 'power') { atkDmg += 1; }
+    _picks.push(k);
+    if (!silent) {
+      try { localStorage.setItem(_progKey,
+        JSON.stringify({ lvl: plvl, picks: _picks })); } catch (e) {}
+    }
+  }
+  window.__restoreProg = () => {          // called once the player is ready
+    try {
+      const sv = JSON.parse(localStorage.getItem(_progKey) || 'null');
+      if (sv && sv.picks) {
+        for (const k of sv.picks) _applyPick(k, true);
+        plvl = sv.lvl || (sv.picks.length + 1);
+        renderHearts();
+        if (sv.picks.length) popText('Level ' + plvl + ' hunter returns', '#8de06c');
+      }
+    } catch (e) {}
+  };
   const xpBar = document.createElement('div');
   xpBar.style.cssText = 'position:fixed;top:58px;left:50%;transform:translateX(-50%);'
     + 'width:150px;height:5px;background:rgba(255,255,255,0.15);border-radius:3px;z-index:5';
@@ -2645,10 +2705,15 @@ async function main() {
   xpFill.style.cssText = 'height:100%;width:0%;background:#8de06c;border-radius:3px;'
     + 'transition:width 0.25s';
   xpBar.appendChild(xpFill);
+  const lvlChip = document.createElement('div');
+  lvlChip.style.cssText = 'position:absolute;left:-34px;top:-7px;color:#8de06c;'
+    + 'font:700 12px system-ui;text-shadow:0 1px 3px #000';
+  lvlChip.textContent = 'Lv 1';
+  xpBar.appendChild(lvlChip);
   document.body.appendChild(xpBar);
   function addXP(n) {
     xp += n;
-    while (xp >= xpNeed()) { xp -= xpNeed(); plvl++; levelCard(); }
+    while (xp >= xpNeed()) { xp -= xpNeed(); plvl++; lvlChip.textContent = 'Lv ' + plvl; levelCard(); }
     xpFill.style.width = Math.min(100, xp / xpNeed() * 100) + '%';
   }
   function levelCard() {
@@ -2672,11 +2737,11 @@ async function main() {
     title.textContent = 'LEVEL ' + plvl + ' — choose an upgrade';
     wrap.appendChild(title);
     wrap.appendChild(mk('❤️', '+1 Heart', 'more health',
-      () => { P.hp = (P.hp || 5) + 1; php += 1; renderHearts(); }));
+      () => { _applyPick('heart'); renderHearts(); }));
     wrap.appendChild(mk('⚡', 'Swift', '+12% speed',
-      () => { P.walk_speed *= 1.12; P.run_speed *= 1.12; }));
+      () => { _applyPick('swift'); }));
     wrap.appendChild(mk('⚔️', 'Power', '+1 damage',
-      () => { atkDmg += 1; }));
+      () => { _applyPick('power'); }));
     document.body.appendChild(wrap);
   }
   function renderHearts() {
