@@ -26,6 +26,8 @@ const GAME_PROMPTS = [
   'A knight racing three other knights across the castle grounds at dusk',
   'One man with a bow against 12 hostile wolves in the arctic — survive and reach the cabin',
   'A penguin waddling across the moon, collect 6 moon rocks',
+  'A detective collects 5 clues inside a mansion at night',
+  'A knight fights 6 hostile goblins inside a torchlit castle',
 ]
 
 // Phase 44 STYLE PRESETS — the user picks, the AI never guesses. One global

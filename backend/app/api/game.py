@@ -863,6 +863,26 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             spec.world.scatter = []
             spec.world.grass = False
             spec.world.weather = "none"
+            # OBJECTIVES LIVE IN THE ROOMS (2026-07-23 test: clues + beacon
+            # spawned outside the walls — they still used the OUTDOOR path).
+            # Goal -> far room; collectibles spread across rooms; the mission
+            # path runs down the hall so zones/waypoints stay indoors too.
+            _rooms = interior["rooms"]
+            import random as _rnd
+            _rr = _rnd.Random(spec.seed + 9)
+            _far = max(_rooms, key=lambda r: r[0] * r[0] + r[1] * r[1])
+            spec.world.level["goal"] = [_far[0], _far[1]]
+            _pts = []
+            for _k in range(max(n_obj, 1)):
+                _cx, _cz, _rw, _rd = _rooms[_k % len(_rooms)]
+                _pts.append([round(_cx + _rr.uniform(-_rw / 2 + 1.0, _rw / 2 - 1.0), 2),
+                             round(_cz + _rr.uniform(-_rd / 2 + 1.0, _rd / 2 - 1.0), 2)])
+            spec.world.level["collect_points"] = _pts
+            _hall = _rooms[0]
+            spec.world.level["path"] = [
+                [0.0, round(-_hall[3] / 2 + 2.0, 2)], [0.0, 0.0],
+                [_far[0], _far[1]]]
+            spec.world.level["landmarks"] = []
             job.setdefault("notes", []).append(
                 f"interior level: {_ik} — rooms, doorways, torchlight")
         if place:

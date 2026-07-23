@@ -294,18 +294,35 @@ def build_interior(seed: int, kind: str = "castle") -> dict:
     """
     import random as _random
     rng = _random.Random(seed * 31 + 7)
-    H = 4.2 if kind == "castle" else 3.0             # wall height (m)
+    H = 4.2 if kind in ("castle",) else 3.0          # wall height (m)
     T = 0.5                                          # wall thickness
     rooms = []                                       # [cx, cz, w, d]
-    # central hall + 2-4 side chambers off its long sides
-    hall_w = rng.uniform(14, 20)
-    hall_d = rng.uniform(26, 36)
+    # PER-KIND LAYOUT (2026-07-23: 'the viking dungeon was the same style as
+    # the mansion') — a castle is a grand pillared hall, a house is cosy
+    # small rooms, a dungeon is a long narrow corridor-hall with cells.
+    if kind == "castle":
+        hall_w = rng.uniform(17, 22)
+        hall_d = rng.uniform(32, 42)
+    elif kind == "dungeon":
+        hall_w = rng.uniform(7.5, 9.5)               # narrow corridor spine
+        hall_d = rng.uniform(38, 48)
+    else:                                            # house
+        hall_w = rng.uniform(9, 12)
+        hall_d = rng.uniform(16, 22)
     rooms.append([0.0, 0.0, hall_w, hall_d])
-    n_side = rng.randint(2, 4)
+    n_side = {"castle": rng.randint(2, 3), "dungeon": rng.randint(4, 6)}.get(
+        kind, rng.randint(2, 4))
     for k in range(n_side):
         side = 1 if k % 2 == 0 else -1
-        rw = rng.uniform(8, 12)
-        rd = rng.uniform(8, 13)
+        if kind == "dungeon":                        # cells off the corridor
+            rw = rng.uniform(4.5, 6.5)
+            rd = rng.uniform(4.5, 6.5)
+        elif kind == "house":
+            rw = rng.uniform(5.5, 8)
+            rd = rng.uniform(5.5, 9)
+        else:
+            rw = rng.uniform(8, 12)
+            rd = rng.uniform(8, 13)
         cz = -hall_d / 2 + (k + 0.5 + rng.uniform(0, 0.3)) * (hall_d / n_side)
         rooms.append([side * (hall_w / 2 + rw / 2), cz, rw, rd])
     walls = []                                       # [cx, cz, len, rotY(0|90), doorAt(-1 none | 0..1)]
@@ -360,8 +377,17 @@ def build_interior(seed: int, kind: str = "castle") -> dict:
             torches.append([round(side * (hw - 0.3), 2), round(tz, 2)])
     for cx, cz, rw, rd in rooms[1:]:
         torches.append([round(cx, 2), round(cz - rd / 2 + 0.4, 2)])
+    # castle/temple grandeur: two rows of pillars down the hall
+    pillars = []
+    if kind == "castle":
+        px = hall_w / 4
+        n_pil = max(2, int(hall_d // 7))
+        for k in range(n_pil):
+            pz = -hall_d / 2 + (k + 0.5) * (hall_d / n_pil)
+            pillars.append([round(px, 2), round(pz, 2)])
+            pillars.append([round(-px, 2), round(pz, 2)])
     return {
-        "kind": kind, "wall_h": H, "wall_t": T,
+        "kind": kind, "wall_h": H, "wall_t": T, "pillars": pillars,
         "rooms": [[round(v, 2) for v in r] for r in rooms],
         "walls": walls, "furniture": furniture, "torches": torches,
         "bounds": [round(hall_w + 26, 1), round(hall_d + 8, 1)],

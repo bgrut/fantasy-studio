@@ -1223,6 +1223,15 @@ async function main() {
       const lx = rot ? cx : cx + dCenter, lz = rot ? cz + dCenter : cz;
       seg(lx, lz, DOOR_W, rot, DOOR_H, WH - DOOR_H, WT);
     }
+    // pillars: castle/temple great-hall columns (square, stone, collidable)
+    for (const [px2, pz2] of INTERIOR.pillars || []) {
+      const pm = new THREE.Mesh(new THREE.BoxGeometry(0.9, WH, 0.9), wmat);
+      pm.position.set(px2, WH / 2, pz2);
+      pm.castShadow = pm.receiveShadow = true;
+      scene.add(pm);
+      world.createCollider(RAPIER.ColliderDesc.cuboid(0.45, WH / 2, 0.45)
+        .setTranslation(px2, WH / 2, pz2));
+    }
     // torches: pooled flame lights (count FIXED at load — no shader recompiles)
     const flameG = new THREE.SphereGeometry(0.09, 6, 5);
     const flameM = new THREE.MeshBasicMaterial({ color: 0xffb347 });
@@ -3973,7 +3982,10 @@ async function main() {
       const cd = SPEC.camera.distance_m * camZoom * (inspectOn ? 1.5 : 1);
       const cx = fX + Math.sin(yaw) * Math.cos(pitch) * cd;   // camera BEHIND
       const cz = fZ + Math.cos(yaw) * Math.cos(pitch) * cd;   // (W walks away)
-      const cy = fY + Math.sin(pitch) * cd + SPEC.camera.height_m * 0.4;
+      let cy = fY + Math.sin(pitch) * cd + SPEC.camera.height_m * 0.4;
+      // INTERIOR (2026-07-23): never rise above the ceiling — the camera
+      // outside the roof showed a void where the player should be
+      if (INTERIOR) cy = Math.min(cy, (INTERIOR.wall_h || 4.0) - 0.35);
       camera.position.lerp(new THREE.Vector3(cx, cy, cz), 1 - Math.exp(-8 * dt));
       camera.lookAt(camTarget);
     }
