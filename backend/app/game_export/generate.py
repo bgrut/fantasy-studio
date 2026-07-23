@@ -48,6 +48,13 @@ _AQUATIC = ("whale", "shark", "fish", "dolphin", "orca", "mermaid", "octopus",
             "squid", "turtle", "seal", "stingray", "eel", "submarine", "boat",
             "ship", "kayak")
 
+# headless Blender for the vehicle orientation normalize (5.1 preferred;
+# config default may point at an older install)
+from app.config import BLENDER_EXE as _CFG_BEXE
+from pathlib import Path as _P
+BLENDER_EXE = (_CFG_BEXE if _P(_CFG_BEXE).exists()
+               else r"C:\Program Files\Blender Foundation\Blender 5.1\blender.exe")
+
 _PATTERNS = ("biped", "quadruped", "flying", "aquatic", "vehicle", "static")
 _PATTERN_CACHE = BACKEND_ROOT / "renders" / "_pattern_cache.json"
 
@@ -233,6 +240,26 @@ def ensure_asset(kind: str, pattern: str | None = None, target_tris: int = 45000
                        # on 2026-07-15) — both are the same de-spike class
                        despeckle=(pattern in ("vehicle", "biped")),
                        pattern=pattern)
+        # VEHICLE ORIENTATION (2026-07-22): vehicles never pass through the
+        # rig bake, so the bake-time orientation gate never sees them — the
+        # regenerated car shipped lying on its side, the corvette nose-down.
+        # TRELLIS.2 rests vehicles in ONE consistent frame (verified on
+        # car + corvette contact sheets): euler (0, 90, 180) puts them
+        # wheels-down with the nose at +X (the runtime's alignLongAxis
+        # convention). Applied headless; failure leaves the mesh as-was.
+        if pattern == "vehicle":
+            try:
+                import subprocess
+                subprocess.run(
+                    [str(BLENDER_EXE), "--background", "--python",
+                     str(BACKEND_ROOT / "scripts" / "_apply_euler.py"), "--",
+                     str(out), str(out), "0", "90", "180"],
+                    capture_output=True, timeout=180, check=True)
+                if verbose:
+                    print(f"[game] vehicle orientation normalized (0,90,180)")
+            except Exception as _ve:
+                if verbose:
+                    print(f"[game] vehicle orient skip: {type(_ve).__name__}")
         _register(kind, str(out.relative_to(BACKEND_ROOT)).replace("\\", "/"))
         if verbose:
             print(f"[game] '{kind}' registered in library -> {out.name}")
