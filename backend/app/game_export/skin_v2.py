@@ -198,6 +198,18 @@ def heat_enabled() -> bool:
 
 def wrap(template: str) -> str:
     """Prepend the helper prelude and resolve the gate flags."""
+    import os as _os
+    from pathlib import Path as _P
+    _im_exe = str(_P(__file__).resolve().parents[2] / "tools"
+                  / "instant-meshes" / "Instant Meshes.exe")
+    # EXPERIMENT GATE (2026-07-23): Blender bone-heat returns 0 weights on
+    # instant-meshes output even after weld+fill — the SOLVER, not the
+    # proxy, is the bottleneck (same class as the QuadriFlow rejection).
+    # Voxel-heat stays the shipping path; FS_IM_PROXY=1 re-enables the
+    # experiment. Next lever: real BBW via libigl on the voxel proxy.
+    if _os.environ.get("FS_IM_PROXY", "0") != "1" or not _P(_im_exe).exists():
+        _im_exe = ""
     return SKIN_V2_PRELUDE + "\n" + template.replace(
         "__SKINV2__", "True" if enabled() else "False").replace(
-        "__SKINHEAT__", "True" if heat_enabled() else "False")
+        "__SKINHEAT__", "True" if heat_enabled() else "False").replace(
+        "__IMEXE__", _im_exe)

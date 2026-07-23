@@ -271,9 +271,54 @@ else:
             proxy = bpy.context.view_layer.objects.active
             proxy.name = "HeroProxy"
             proxy.modifiers.clear()
-            rm = proxy.modifiers.new("VoxRM", "REMESH")
-            rm.mode = 'VOXEL'; rm.voxel_size = max(float(H) / 64.0, 0.008)
-            bpy.ops.object.modifier_apply(modifier=rm.name)
+            # INSTANT-MESHES PROXY (Phase 105, the KEYSTONE unblocked): a
+            # clean QUAD retopo beats the voxel blob for heat weights —
+            # edge loops follow the limbs, so shoulder/armpit weights stop
+            # bleeding. BSD-3 binary at tools/instant-meshes. Any failure
+            # falls back to the proven voxel proxy below.
+            _im_ok = False
+            try:
+                import subprocess as _sp, os as _os, tempfile as _tf
+                _im = r"__IMEXE__"
+                if _im and _os.path.exists(_im):
+                    _t1 = _os.path.join(_tf.gettempdir(), "fs_im_src.obj")
+                    _t2 = _os.path.join(_tf.gettempdir(), "fs_im_out.obj")
+                    bpy.ops.object.select_all(action='DESELECT')
+                    proxy.select_set(True)
+                    bpy.context.view_layer.objects.active = proxy
+                    bpy.ops.wm.obj_export(filepath=_t1,
+                        export_selected_objects=True, export_materials=False)
+                    _r = _sp.run([_im, _t1, "-o", _t2, "--faces", "9000",
+                                  "--deterministic"], capture_output=True,
+                                 timeout=180)
+                    if _r.returncode == 0 and _os.path.exists(_t2):
+                        _before = set(bpy.data.objects)
+                        bpy.ops.wm.obj_import(filepath=_t2)
+                        _news = [x for x in bpy.data.objects
+                                 if x not in _before and x.type == 'MESH']
+                        if _news:
+                            bpy.data.objects.remove(proxy, do_unlink=True)
+                            proxy = _news[0]
+                            proxy.name = "HeroProxy"
+                            # WATERTIGHT-IFY: bone heat solves a diffusion
+                            # problem — open boundaries break it (0 weights
+                            # on the raw IM mesh). Weld + fill closes it.
+                            bpy.ops.object.select_all(action='DESELECT')
+                            proxy.select_set(True)
+                            bpy.context.view_layer.objects.active = proxy
+                            bpy.ops.object.mode_set(mode='EDIT')
+                            bpy.ops.mesh.select_all(action='SELECT')
+                            bpy.ops.mesh.remove_doubles(threshold=0.0008)
+                            bpy.ops.mesh.fill_holes(sides=0)
+                            bpy.ops.mesh.normals_make_consistent(inside=False)
+                            bpy.ops.object.mode_set(mode='OBJECT')
+                            _im_ok = True
+            except Exception:
+                _im_ok = False
+            if not _im_ok:
+                rm = proxy.modifiers.new("VoxRM", "REMESH")
+                rm.mode = 'VOXEL'; rm.voxel_size = max(float(H) / 64.0, 0.008)
+                bpy.ops.object.modifier_apply(modifier=rm.name)
             for vg in list(proxy.vertex_groups):
                 proxy.vertex_groups.remove(vg)
             bpy.ops.object.select_all(action='DESELECT')
@@ -297,7 +342,7 @@ else:
             bpy.ops.object.datalayout_transfer(modifier=dt.name)
             bpy.ops.object.modifier_apply(modifier=dt.name)
             bpy.data.objects.remove(proxy, do_unlink=True)
-            _heat_status = "heat_ok(%d verts)" % _nw
+            _heat_status = ("heat_ok_im" if _im_ok else "heat_ok") + "(%d verts)" % _nw
         except Exception as _he:
             _heat_status = "heat_failed: %s: %s" % (type(_he).__name__, _he)
             try:

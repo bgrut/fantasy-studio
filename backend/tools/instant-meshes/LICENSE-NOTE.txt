@@ -1,0 +1,4 @@
+Instant Meshes — BSD-3-Clause
+Source: https://github.com/wjakob/instant-meshes
+Copyright (c) 2015 Wenzel Jakob, Daniele Panozzo, Marco Tarini, Olga Sorkine-Hornung
+Commercial use and redistribution permitted under BSD-3 terms (see upstream LICENSE.txt).
