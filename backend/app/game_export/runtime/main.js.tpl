@@ -3489,6 +3489,12 @@ async function main() {
       if (o.isSkinnedMesh) return;                           // characters keep real textures
       for (const m of Array.isArray(o.material) ? o.material : [o.material]) {
         if (!m) continue;
+      if (m.name === 'window' && ['night', 'dusk', 'sunset'].includes(SPEC.world.sky)
+          && m.emissive) {                           // homes light up after dark
+        m.emissive.setHex(0xffb45c);
+        m.emissiveIntensity = 1.4;
+        m.needsUpdate = true;
+      }
       if (m.map && m.map.anisotropy < 4) {           // crisp at grazing angles
         m.map.anisotropy = renderer.capabilities.getMaxAnisotropy();
         m.map.needsUpdate = true;
@@ -4230,6 +4236,15 @@ async function main() {
           popText('Back outside', '#ffc46b');
         }
       }
+    }
+    // LIVING SUN (moon plan 2.3): the sun drifts ~2.4 deg/min — shadows
+    // creep across the ground like real time passing. Skipped indoors.
+    if (!INTERIOR && sun && SPEC.world.sky !== 'night') {
+      const sa = performance.now() / 1000 * 0.0007;
+      const sr = Math.hypot(sun.position.x, sun.position.z) || 60;
+      const sb = Math.atan2(sun.position.z, sun.position.x) + sa * dt * 60;
+      sun.position.x = Math.cos(sb) * sr;
+      sun.position.z = Math.sin(sb) * sr;
     }
     if (window.__torches) {
       const tt = performance.now() / 1000;
