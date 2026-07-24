@@ -301,6 +301,19 @@ def ensure_asset(kind: str, pattern: str | None = None, target_tris: int = 45000
                        # on 2026-07-15) — both are the same de-spike class
                        despeckle=(pattern in ("vehicle", "biped")),
                        pattern=pattern)
+        # BIPED DEFAULT FLIP (2026-07-24): every recent TRELLIS biped came out
+        # facing -Y (soldier, knight, ranger — 3/3); photo-correlation sign
+        # detection failed calibration (would flip the correct hunter), so
+        # the default IS the evidence. Exceptions land in library_heading.json
+        # and the reroll button re-runs this path.
+        if pattern == "biped":
+            import subprocess as _sp3
+            _sp3.run([BLENDER_EXE, "--background", "--python",
+                      str(BACKEND_ROOT / "scripts" / "_apply_euler.py"), "--",
+                      str(out), str(out), "0", "0", "180"],
+                     capture_output=True, timeout=300)
+            if verbose:
+                print(f"[game] biped default flip applied to '{kind}' (TRELLIS faces -Y)")
         # VEHICLE ORIENTATION (2026-07-22): vehicles never pass through the
         # rig bake, so the bake-time orientation gate never sees them — the
         # regenerated car shipped lying on its side, the corvette nose-down.

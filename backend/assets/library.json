@@ -42,5 +42,7 @@
   "monkey": "assets/library/monkey.glb",
   "knight": "assets/library/knight.glb",
   "samurai": "assets/library/samurai.glb",
-  "viking": "assets/library/viking.glb"
+  "viking": "assets/library/viking.glb",
+  "clue": "assets/library/clue.glb",
+  "ranger": "assets/library/ranger.glb"
 }

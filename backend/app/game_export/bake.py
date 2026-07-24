@@ -1145,14 +1145,10 @@ def fix_facing_on_disk(hero_glb: Path, verbose: bool = True) -> None:
                        capture_output=True, timeout=300)
         if verbose:
             print(f"[bake] disk facing: rotated {hero_glb.name} by {rot:.0f} deg (axis)")
-    flip = _refmatch_wants_flip(hero_glb, exe, verbose=verbose)
-    if flip:
-        subprocess.run([exe, "--background", "--python",
-                        str(BACKEND_ROOT / "scripts" / "_apply_euler.py"), "--",
-                        str(hero_glb), str(hero_glb), "0", "0", "180"],
-                       capture_output=True, timeout=300)
-        if verbose:
-            print(f"[bake] disk facing: FLIPPED {hero_glb.name} 180 (ref-match: back side matched the photo)")
+    # ref-match is LOG-ONLY (2026-07-24): photo-correlation failed calibration
+    # (hunter would have been flipped wrong). The biped default flip at
+    # generation time (generate.py) is the acting rule; this stays as telemetry.
+    _refmatch_wants_flip(hero_glb, exe, verbose=verbose)
 
 
 def _refmatch_wants_flip(hero_glb: Path, exe: str, verbose: bool = True) -> bool:
