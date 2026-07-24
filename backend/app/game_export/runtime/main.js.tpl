@@ -4347,9 +4347,11 @@ async function main() {
     // LIVING SUN (moon plan 2.3): the sun drifts ~2.4 deg/min — shadows
     // creep across the ground like real time passing. Skipped indoors.
     if (!INTERIOR && sun && SPEC.world.sky !== 'night') {
-      const sa = performance.now() / 1000 * 0.0007;
+      // FIXED 2026-07-24: the rate multiplied by ELAPSED time each frame —
+      // the sun accelerated into fast circles. Constant 0.0007 rad/s (~2.4
+      // deg/min): shadows creep, they never spin.
       const sr = Math.hypot(sun.position.x, sun.position.z) || 60;
-      const sb = Math.atan2(sun.position.z, sun.position.x) + sa * dt * 60;
+      const sb = Math.atan2(sun.position.z, sun.position.x) + 0.0007 * dt;
       sun.position.x = Math.cos(sb) * sr;
       sun.position.z = Math.sin(sb) * sr;
     }
