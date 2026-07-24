@@ -188,6 +188,43 @@ def ensure_asset(kind: str, pattern: str | None = None, target_tris: int = 45000
     key = hashlib.md5(kind.lower().encode("utf-8")).hexdigest()[:12]
     raw_glb = CACHE_DIR / f"{key}.glb"
 
+    def _two_faced(glb_path) -> bool:
+        """TWO-FACED GATE (Phase 110): TRELLIS sometimes mirrors the FRONT
+        texture onto a biped's back — a phantom face on the back of the head
+        that reads as 'walking backwards' from the chase camera (the ranger).
+        Render front+back and compare: near-identical = mirrored artifact."""
+        import subprocess as _sp
+        import tempfile as _tf
+        try:
+            import numpy as _np
+            from PIL import Image as _Im
+            exe = r"C:\Program Files\Blender Foundation\Blender 5.1\\blender.exe"
+            try:
+                from app.main import get_setting
+                exe = get_setting("blender_executable_path") or exe
+            except Exception:
+                pass
+            with _tf.TemporaryDirectory() as td:
+                r = _sp.run([exe, "--background", "--python",
+                             str(BACKEND_ROOT / "scripts" / "_facing_refmatch.py"),
+                             "--", str(glb_path), td],
+                            capture_output=True, timeout=420)
+                if b"REFMATCH-RENDERED back" not in r.stdout:
+                    return False
+                def _norm(fp):
+                    v = _np.asarray(_Im.open(fp).convert("RGB").resize((48, 48)),
+                                    dtype=float)
+                    return (v - v.mean()) / (v.std() + 1e-6)
+                from pathlib import Path as _P
+                f = _norm(_P(td) / "front.png")
+                b = _norm(_P(td) / "back.png")
+                sim = float((f * b).mean())
+                if verbose:
+                    print(f"[game] two-faced gate: front/back similarity {sim:.2f}")
+                return sim > 0.55
+        except Exception:
+            return False
+
     if not raw_glb.exists():
         ref_png = CACHE_DIR / f"{key}_ref.png"
         if ref_png.exists():
@@ -223,6 +260,30 @@ def ensure_asset(kind: str, pattern: str | None = None, target_tris: int = 45000
                     print(f"[game] {_eng} failed ({type(ge).__name__}: {ge})")
         if _last is not None:
             raise _last
+        # one seed-varied retry when the fresh biped mesh is two-faced
+        if pattern == "biped" and _two_faced(raw_glb):
+            if verbose:
+                print(f"[game] '{kind}' is TWO-FACED (mirrored back) — one seed-varied retry")
+            import os as _os2
+            import random as _rd2
+            raw_glb.unlink(missing_ok=True)
+            ref_png.unlink(missing_ok=True)
+            _os2.environ["FS_REF_SEED"] = str(_rd2.randint(1000, 999999))
+            try:
+                generate_reference(copy.deepcopy(_minimal_slots(kind, pattern)),
+                                   output_path=ref_png, style="photoreal", seed=42)
+                try:
+                    unload_reference_pipeline()
+                    import torch as _t2
+                    if _t2.cuda.is_available():
+                        _t2.cuda.empty_cache()
+                except Exception:
+                    pass
+                generate_mesh(ref_png, output_path=raw_glb,
+                              engine="trellis2" if not cpu_gen else "triposr",
+                              tier="fast", base_pattern=pattern)
+            finally:
+                _os2.environ.pop("FS_REF_SEED", None)
     elif verbose:
         print(f"[game] actor-cache hit for '{kind}'")
 

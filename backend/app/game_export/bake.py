@@ -1121,28 +1121,97 @@ def fix_facing_on_disk(hero_glb: Path, verbose: bool = True) -> None:
     rot = 90.0 - float(r["forward_deg"])
     while rot > 180: rot -= 360
     while rot < -180: rot += 360
-    if abs(rot) < 1.0:
-        return
-    # AXIS-ONLY (2026-07-20): the toe-direction SIGN lied on armored boots
-    # (soldier/knight read 'forward' while facing backward), so the automatic
-    # pass only fixes SIDEWAYS cases (+/-90). A true 180 is corrected once by
-    # hand (_apply_euler ... 0 0 180) and must never be auto-undone.
+    # NOTE: no early return on rot==0 — the toe detector reads '90 = fine'
+    # on backward-facing meshes (ranger), so REF-MATCH must always run
+    # REF-MATCH SIGN (Phase 110, replaces the 2026-07-20 axis-only policy):
+    # the toe heuristic lied on soldier/knight/ranger, so the SIGN now comes
+    # from evidence — render the mesh from both front/back candidates and
+    # pick the side that matches the character's own front-facing reference
+    # photo. The axis part of the detector is still trusted for +/-90.
     if abs(abs(rot) - 180.0) < 45.0:
         if verbose:
-            print(f"[bake] disk facing: {rot:.0f} deg is a SIGN call — skipping (axis-only policy)")
-        return
-    exe = r"C:\Program Files\Blender Foundation\Blender 5.1lender.exe"
+            print(f"[bake] disk facing: {rot:.0f} deg is a SIGN call — deferring to ref-match")
+        rot = 0.0        # axis is fine; ref-match below decides front/back
+    exe = r"C:\Program Files\Blender Foundation\Blender 5.1\\blender.exe"
     try:
         from app.main import get_setting
         exe = get_setting("blender_executable_path") or exe
     except Exception:
         pass
-    subprocess.run([exe, "--background", "--python",
-                    str(BACKEND_ROOT / "scripts" / "_apply_euler.py"), "--",
-                    str(hero_glb), str(hero_glb), "0", "0", str(rot)],
-                   capture_output=True, timeout=300)
-    if verbose:
-        print(f"[bake] disk facing: rotated {hero_glb.name} by {rot:.0f} deg")
+    if abs(rot) >= 1.0:
+        subprocess.run([exe, "--background", "--python",
+                        str(BACKEND_ROOT / "scripts" / "_apply_euler.py"), "--",
+                        str(hero_glb), str(hero_glb), "0", "0", str(rot)],
+                       capture_output=True, timeout=300)
+        if verbose:
+            print(f"[bake] disk facing: rotated {hero_glb.name} by {rot:.0f} deg (axis)")
+    flip = _refmatch_wants_flip(hero_glb, exe, verbose=verbose)
+    if flip:
+        subprocess.run([exe, "--background", "--python",
+                        str(BACKEND_ROOT / "scripts" / "_apply_euler.py"), "--",
+                        str(hero_glb), str(hero_glb), "0", "0", "180"],
+                       capture_output=True, timeout=300)
+        if verbose:
+            print(f"[bake] disk facing: FLIPPED {hero_glb.name} 180 (ref-match: back side matched the photo)")
+
+
+def _refmatch_wants_flip(hero_glb: Path, exe: str, verbose: bool = True) -> bool:
+    """Render the mesh from +Y and -Y; compare both against the character's
+    front-facing reference photo. Returns True when the -Y (back) view matches
+    the photo better by a clear margin — i.e. the mesh faces backward."""
+    import hashlib
+    import subprocess
+    import tempfile
+    kind = hero_glb.stem.replace("_", " ")
+    ref = (BACKEND_ROOT / "renders" / "_actor_cache"
+           / (hashlib.md5(kind.encode()).hexdigest()[:12] + "_ref.png"))
+    if not ref.exists():
+        if verbose:
+            print(f"[bake] ref-match: no reference photo for '{kind}' — sign unchecked")
+        return False
+    try:
+        import numpy as np
+        from PIL import Image
+        with tempfile.TemporaryDirectory() as td:
+            r = subprocess.run(
+                [exe, "--background", "--python",
+                 str(BACKEND_ROOT / "scripts" / "_facing_refmatch.py"), "--",
+                 str(hero_glb), td],
+                capture_output=True, timeout=420)
+            if b"REFMATCH-RENDERED back" not in r.stdout:
+                return False
+
+            def _fore(img_arr):
+                """foreground mask + normalized 32x32 RGB crop"""
+                h, w = img_arr.shape[:2]
+                border = np.concatenate([img_arr[0], img_arr[-1],
+                                         img_arr[:, 0], img_arr[:, -1]])
+                bg = np.median(border, axis=0)
+                mask = (np.abs(img_arr.astype(float) - bg).sum(axis=2) > 60)
+                if mask.sum() < 50:
+                    return None
+                ys, xs = np.where(mask)
+                crop = img_arr[ys.min():ys.max() + 1, xs.min():xs.max() + 1]
+                im = Image.fromarray(crop).resize((32, 32))
+                v = np.asarray(im, dtype=float)
+                v = (v - v.mean()) / (v.std() + 1e-6)
+                return v
+
+            rv = _fore(np.asarray(Image.open(ref).convert("RGB")))
+            fv = _fore(np.asarray(Image.open(Path(td) / "front.png").convert("RGB")))
+            bv = _fore(np.asarray(Image.open(Path(td) / "back.png").convert("RGB")))
+            if rv is None or fv is None or bv is None:
+                return False
+            sf = float((rv * fv).mean())
+            sb = float((rv * bv).mean())
+            if verbose:
+                print(f"[bake] ref-match '{kind}': front={sf:.3f} back={sb:.3f}")
+            # flip only on a CLEAR verdict — ties leave the file untouched
+            return sb > sf + 0.03
+    except Exception as e:
+        if verbose:
+            print(f"[bake] ref-match failed ({type(e).__name__}) — sign unchecked")
+        return False
 
 
 def bake_anim_set(hero_glb: str | Path, out_glb: str | Path,
