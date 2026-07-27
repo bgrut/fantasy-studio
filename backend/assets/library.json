@@ -44,5 +44,8 @@
   "viking": "assets/library/viking.glb",
   "clue": "assets/library/clue.glb",
   "ranger": "assets/library/ranger.glb",
-  "knight": "assets/library/knight.glb"
+  "knight": "assets/library/knight.glb",
+  "health_pack": "assets/library/health_pack.glb",
+  "bear": "assets/library/bear.glb",
+  "taxi": "assets/library/taxi.glb"
 }

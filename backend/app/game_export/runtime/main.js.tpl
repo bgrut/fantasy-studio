@@ -1082,6 +1082,25 @@ async function main() {
   // draw call) with per-building tint; each gets a box collider. Buildings
   // that would sit on the mission path / spawn / goal are skipped.
   const bldBoxes = [];                  // [minx, minz, maxx, maxz] per building
+  function roadDist(x, z) {
+    // distance to the nearest OSM street centerline — scatter/props must
+    // never plant a tree in the middle of an avenue (2026-07-27 London)
+    if (!OSM || !OSM.roads) return 1e9;
+    let best = 1e9;
+    for (const r of OSM.roads) {
+      const p = r.pts;
+      for (let i = 0; i < p.length - 1; i++) {
+        const ax2 = p[i][0], az2 = p[i][1], bx2 = p[i + 1][0], bz2 = p[i + 1][1];
+        const dx2 = bx2 - ax2, dz2 = bz2 - az2;
+        const L2 = dx2 * dx2 + dz2 * dz2 || 1e-9;
+        const t2 = Math.max(0, Math.min(1, ((x - ax2) * dx2 + (z - az2) * dz2) / L2));
+        const d2 = Math.hypot(x - (ax2 + t2 * dx2), z - (az2 + t2 * dz2));
+        if (d2 < best) best = d2;
+        if (best < 1) return best;
+      }
+    }
+    return best;
+  }
   function inBldg(x, z, pad = 1.5) {
     for (const b of bldBoxes) {
       if (x > b[0] - pad && x < b[2] + pad && z > b[1] - pad && z < b[3] + pad) return true;
@@ -1377,6 +1396,7 @@ async function main() {
           x = (rng() - 0.5) * gsize * 0.9; z = (rng() - 0.5) * gsize * 0.9; tries++;
         } while ((Math.hypot(x, z) < sct.min_dist_m || pathDist(x, z) < CORR
                   || inBldg(x, z)
+                  || roadDist(x, z) < 7.5
                   || (clusterN(x, z) < 0.45 && tries < 22)) && tries < 30);
         places.push({ x, z, s: 1 + (rng() - 0.5) * 2 * sct.scale_jitter, rot: rng() * Math.PI * 2 });
       }
