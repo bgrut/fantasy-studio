@@ -184,7 +184,18 @@ async function main() {
     document.body.appendChild(box);
     throw new Error('WebGL unavailable in this browser');
   }
-  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  // QUALITY PRESETS (Phase 116): ultra (default) / balanced / performance —
+  // set from the studio (localStorage) or a ?q= override. The FPS governor
+  // still steps quality down dynamically on weak machines.
+  const QUALITY = (new URLSearchParams(location.search).get('q')
+    || (function () { try { return localStorage.getItem('fs_quality'); } catch (e) { return null; } })()
+    || 'ultra');
+  const QCFG = {
+    ultra:       { dpr: Math.min(devicePixelRatio, 2),   msaa: 4, shadow: 4096 },
+    balanced:    { dpr: Math.min(devicePixelRatio, 1.5), msaa: 4, shadow: 2048 },
+    performance: { dpr: 1,                               msaa: 0, shadow: 2048 },
+  }[QUALITY] || { dpr: Math.min(devicePixelRatio, 2), msaa: 4, shadow: 4096 };
+  renderer.setPixelRatio(QCFG.dpr);
   renderer.setSize(innerWidth, innerHeight, false);   // false: don't set inline px style — CSS fills
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -394,13 +405,22 @@ async function main() {
   const sun = new THREE.DirectionalLight(pal.sunCol || 0xffffff, pal.sun);
   sun.position.set(...pal.sunPos);
   sun.castShadow = true;
-  sun.shadow.mapSize.set(4096, 4096);
+  sun.shadow.mapSize.set(QCFG.shadow, QCFG.shadow);
   // fit the shadow frustum to the VISIBLE play area (48 m), not the whole
   // world — 4096 texels over 96 m = crisp contact shadows, console-style
   const sc = Math.min(SPEC.world.size_m * 0.5, 48);
   Object.assign(sun.shadow.camera, { left: -sc, right: sc, top: sc, bottom: -sc, far: 400 });
   sun.shadow.camera.updateProjectionMatrix();
   scene.add(sun);
+
+  // HERO RIM LIGHT (Phase 116): the classic AAA separator — a cool
+  // back-light opposite the sun that only reads on silhouette edges.
+  // Position follows the player every frame (updated in the main loop).
+  const rim = new THREE.DirectionalLight(0xbfd8ff, 1.1);
+  rim.castShadow = false;
+  scene.add(rim);
+  scene.add(rim.target);
+  const _sunDirN = new THREE.Vector3(...pal.sunPos).normalize();
 
   // ── physics world ────────────────────────────────────────────────────────
   const world = new RAPIER.World({ x: 0, y: -9.81, z: 0 });
@@ -3715,7 +3735,7 @@ async function main() {
   // has NO multisampling, so every edge stair-stepped once post-processing
   // was on. A 4x MSAA half-float target kills the shimmer at ~5% GPU cost.
   const _msaaRT = new THREE.WebGLRenderTarget(1, 1, {
-    samples: 4, type: THREE.HalfFloatType });
+    samples: QCFG.msaa, type: THREE.HalfFloatType });
   const composer = new EffectComposer(renderer, _msaaRT);
   composer.addPass(new RenderPass(scene, camera));
   const _dMat = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking });
@@ -3807,6 +3827,33 @@ async function main() {
       }`,
   });
   composer.addPass(grade);
+  // CAS-style SHARPEN (Phase 116): contrast-adaptive 5-tap sharpen as the
+  // last color op — the 'broadcast crisp' finish. Adaptive weight backs off
+  // on already-high-contrast pixels so it never rings or halos.
+  const sharpen = new ShaderPass({
+    uniforms: { tDiffuse: { value: null },
+                uRes: { value: new THREE.Vector2(innerWidth, innerHeight) },
+                uAmt: { value: 0.22 } },
+    vertexShader: `varying vec2 vUv;
+      void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
+    fragmentShader: `uniform sampler2D tDiffuse; uniform vec2 uRes; uniform float uAmt;
+      varying vec2 vUv;
+      void main(){
+        vec2 px = 1.0 / uRes;
+        vec3 c = texture2D(tDiffuse, vUv).rgb;
+        vec3 n = texture2D(tDiffuse, vUv + vec2(0.0, px.y)).rgb;
+        vec3 s = texture2D(tDiffuse, vUv - vec2(0.0, px.y)).rgb;
+        vec3 e = texture2D(tDiffuse, vUv + vec2(px.x, 0.0)).rgb;
+        vec3 w = texture2D(tDiffuse, vUv - vec2(px.x, 0.0)).rgb;
+        vec3 mn = min(c, min(min(n, s), min(e, w)));
+        vec3 mx = max(c, max(max(n, s), max(e, w)));
+        float contrast = clamp(dot(mx - mn, vec3(0.333)), 0.0, 1.0);
+        float amt = uAmt * (1.0 - contrast);        // adaptive: back off on edges
+        vec3 sharp = c * (1.0 + 4.0 * amt) - (n + s + e + w) * amt;
+        gl_FragColor = vec4(clamp(sharp, 0.0, 4.0), 1.0);
+      }`,
+  });
+  composer.addPass(sharpen);
   // 2D views: the ortho camera stands 40+m off the subject, which would put
   // the WHOLE world inside the fog band — push fog out by the standoff
   if (VIEW !== '3d' && scene.fog) {
@@ -4386,6 +4433,12 @@ async function main() {
       sun.position.x = Math.cos(sb) * sr;
       sun.position.z = Math.sin(sb) * sr;
     }
+    if (playerObj) {
+      rim.position.set(playerObj.position.x - _sunDirN.x * 14,
+                       playerObj.position.y + 9,
+                       playerObj.position.z - _sunDirN.z * 14);
+      rim.target.position.copy(playerObj.position);
+    }
     if (window.__torches) {
       const tt = performance.now() / 1000;
       for (let i = 0; i < window.__torches.length; i++) {
@@ -4595,6 +4648,7 @@ async function main() {
     camera.updateProjectionMatrix();
     renderer.setSize(innerWidth, innerHeight, false);   // keep CSS 100% fill; only resize the buffer
     composer.setSize(innerWidth, innerHeight);
+    sharpen.uniforms.uRes.value.set(innerWidth, innerHeight);
     _dRT.setSize(innerWidth >> 1, innerHeight >> 1);
     ssao.uniforms.res.value.set(innerWidth, innerHeight);
     if (stylePass) stylePass.uniforms.res.value.set(innerWidth, innerHeight);

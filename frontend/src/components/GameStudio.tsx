@@ -76,6 +76,9 @@ export default function GameStudio() {
   const [hoverPick, setHoverPick] = useState<Pick | null>(null)
   const [selPick, setSelPick] = useState<Pick | null>(null)
   const [style, setStyle] = useState('default')            // Phase 44 style preset
+  const [quality, setQuality] = useState<string>(() => {
+    try { return localStorage.getItem('fs_quality') || 'ultra' } catch { return 'ultra' }
+  })
   const [view, setView] = useState('3d')                   // Phase 45 view preset
   const [placeMode, setPlaceMode] = useState<'point' | 'line'>('point')
   const [lineA, setLineA] = useState<Pick | null>(null)    // line tool first click
@@ -415,6 +418,24 @@ export default function GameStudio() {
               )}
             >
               {v.label}
+            </button>
+          ))}
+          <span className="text-[10px] font-mono text-[#4a4764] self-center ml-2">quality:</span>
+          {(['ultra', 'balanced', 'performance'] as const).map(q => (
+            <button
+              key={q}
+              title={q === 'ultra' ? 'native res + 4x MSAA + 4K shadows (default)'
+                : q === 'balanced' ? '1.5x res, 4x MSAA, 2K shadows'
+                : 'lowest cost — 1x res, no MSAA'}
+              onClick={() => { setQuality(q); try { localStorage.setItem('fs_quality', q) } catch {} }}
+              className={cn(
+                'px-2.5 py-1 rounded-full text-[11px] border transition-all',
+                quality === q
+                  ? 'border-[#5cffc9]/50 bg-[#5cffc9]/10 text-[#5cffc9]'
+                  : 'border-white/[0.06] bg-white/[0.02] text-[#807d99] hover:text-white'
+              )}
+            >
+              {q}
             </button>
           ))}
         </div>
