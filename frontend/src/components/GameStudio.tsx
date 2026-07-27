@@ -88,6 +88,7 @@ export default function GameStudio() {
   const gameFrameRef = useRef<HTMLIFrameElement | null>(null)
   const hubFrameRef = useRef<HTMLIFrameElement | null>(null)
   const [showLevels, setShowLevels] = useState(true)   // level tiles open by default
+  const [showCast, setShowCast] = useState(false)      // cast library collapsed by default
 
   useEffect(() => {
     gameHealth().then(setHealth).catch(() => setHealth(null))
@@ -386,7 +387,8 @@ export default function GameStudio() {
           ))}
         </div>
 
-        {/* STYLE + VIEW PRESETS: the user picks — the AI never guesses */}
+        {/* LOOK & FEEL card: style / view / quality grouped in one place */}
+        <div className="mx-auto max-w-3xl rounded-xl border border-white/[0.06] bg-white/[0.015] px-4 py-3 space-y-2">
         <div className="flex flex-wrap justify-center items-center gap-1.5">
           <span className="text-[10px] font-mono text-[#4a4764]">style:</span>
           {STYLES.map((s) => (
@@ -439,6 +441,10 @@ export default function GameStudio() {
             </button>
           ))}
         </div>
+        <p className="text-center text-[10px] font-mono text-[#4a4764]">
+          exports: 🌐 Web (three.js, plays anywhere) · 🎮 Godot 4 project (open-source engine — full editor access) · 🕹 Godot multiplayer guide included
+        </p>
+        </div>
 
         {/* health strip + the CASTABLE CHARACTER LIBRARY (your generations) */}
         {health && (
@@ -449,8 +455,14 @@ export default function GameStudio() {
               {health.library_kinds.length} characters in library
             </p>
             <div className="flex flex-wrap justify-center gap-1.5">
-              <span className="text-[10px] font-mono text-[#4a4764] self-center">cast today:</span>
-              {health.library_kinds.map((k) => (
+              <button
+                onClick={() => setShowCast(v => !v)}
+                className="text-[10px] font-mono text-[#5cffc9]/70 hover:text-[#5cffc9] self-center"
+                title="characters you have generated — click one to start a prompt with it"
+              >
+                🎭 cast library ({health.library_kinds.length}) {showCast ? '▾' : '▸'}
+              </button>
+              {showCast && health.library_kinds.map((k) => (
                 <button
                   key={k}
                   onClick={() => setPrompt((p) => (p.trim() ? p : `A ${k} `))}
@@ -460,11 +472,19 @@ export default function GameStudio() {
                   {k}
                 </button>
               ))}
-              <span className="text-[10px] font-mono text-[#4a4764] self-center">
-                · new characters are CREATED on first use (image → 3D; slower without a GPU)
-              </span>
+              {showCast && (
+                <span className="text-[10px] font-mono text-[#4a4764] self-center">
+                  · new characters are CREATED on first use (image → 3D)
+                </span>
+              )}
             </div>
           </>
+        )}
+
+        {job?.godot_path && (
+          <p className="text-center text-[11px] font-mono text-[#5cffc9]/80">
+            🎮 Godot 4 project emitted: <span className="text-[#efeaff]">{job.godot_path}</span> — open with Godot 4.x (free, godotengine.org)
+          </p>
         )}
 
         {/* MY GAME: collected levels + manager + one-click export (Phase 34/41) */}
@@ -731,6 +751,27 @@ export default function GameStudio() {
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs border border-white/[0.08] text-[#807d99] hover:text-white transition-colors"
               >
                 <RotateCcw className="w-3 h-3" /> New level
+              </button>
+              <button
+                title="Rebuild this game as a Godot 4 project (open-source engine - full editor access)"
+                onClick={async () => {
+                  if (!job || building) return
+                  setBuilding(true)
+                  try {
+                    const { job_id } = await exportGame(job.prompt, {
+                      godot: true,
+                      style: style !== 'default' ? style : undefined,
+                      view: view !== '3d' ? view : undefined,
+                    })
+                    pollJob(job_id)
+                  } catch (e) {
+                    setBuilding(false)
+                    setError(e instanceof Error ? e.message : String(e))
+                  }
+                }}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs border border-white/[0.08] text-[#807d99] hover:text-white transition-colors"
+              >
+                🎮 Godot
               </button>
               <button
                 title="Regenerate this hero with a different look (~6 min), then rebuild the level"
