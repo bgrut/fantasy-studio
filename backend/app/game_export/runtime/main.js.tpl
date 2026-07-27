@@ -1171,10 +1171,12 @@ async function main() {
         const nv = geo.attributes.position.count, cols = new Float32Array(nv * 3);
         for (let i = 0; i < nv; i++) { cols[i * 3] = tint.r; cols[i * 3 + 1] = tint.g; cols[i * 3 + 2] = tint.b; }
         geo.setAttribute('color', new THREE.BufferAttribute(cols, 3));
-        // photo facades DOMINATE (2026-07-28 'placeholder look'): the
-        // procedural window grid is filler for short buildings only (15%)
+        // photo facades ONLY by day (2026-07-28: the procedural grid reads
+        // as placeholder in daylight); at night it keeps a 25% share for
+        // the lit-window checkerboard until photo facades learn to glow
+        const _night = ['night', 'dusk', 'sunset'].includes(SPEC.world.sky);
         const _bkt = h > 26 ? (rngB() < 0.7 ? 1 : 3)
-                   : (rngB() < 0.15 ? 0 : (rngB() < 0.5 ? 2 : 3));
+                   : (_night && rngB() < 0.25 ? 0 : (rngB() < 0.5 ? 2 : 3));
         splitGroups(geo, _bkt);
         if (h >= 16 && (mxx - mnx) > 7 && (mxz - mnz) > 7) {
           roofSpots.push([cx, cz, gy + h, (mxx - mnx), (mxz - mnz)]);
@@ -1378,7 +1380,7 @@ async function main() {
         const MS = new THREE.Matrix4(), QS = new THREE.Quaternion(), VS = new THREE.Vector3();
         for (let si = 0; si < nSk; si++) {
           const a3 = (si / nSk) * Math.PI * 2 + rngSk() * 0.09;
-          const d3 = gsize * (0.66 + rngSk() * 0.42);
+          const d3 = gsize * (0.85 + rngSk() * 0.45);   // beyond fog near — always hazed
           const w3 = 12 + rngSk() * 18, h3 = 14 + rngSk() * 34;
           MS.compose(VS.set(Math.cos(a3) * d3, h3 / 2 - 1, Math.sin(a3) * d3),
                      QS.setFromAxisAngle(new THREE.Vector3(0, 1, 0), rngSk() * Math.PI),
@@ -4028,24 +4030,35 @@ async function main() {
         : /desert|beach|dune/.test(wn) ? 'sand'
         : /forest|wood|jungle/.test(wn) ? 'forest'
         : /city|street|town|road/.test(wn) ? 'concrete' : 'grass';
-      gmat.normalMap = pbr(gname + '_n', Math.max(10, Math.round(gsize / 6)), false);
+      // GROUND LAYERING FLIP (Phase 128, the HD unlock): the old pipeline
+      // squeezed the photo into the world-spanning painted canvas (~60px per
+      // 9m tile — permanently mushy). Now the TILED PHOTO is the primary
+      // albedo at full resolution, and the painted canvas (roads, trails,
+      // crosswalks, palette) multiplies on top as a world-space tint via a
+      // tiny shader patch. Mid-gray in the canvas = neutral; dark road paint
+      // darkens photo concrete into asphalt; grass tint stays green.
+      const grep2 = Math.max(10, Math.round(gsize / 9));
+      gmat.map = pbr(gname, grep2, true);
+      gmat.normalMap = pbr(gname + '_n', grep2, false);
       gmat.normalScale = new THREE.Vector2(0.65, 0.65);
-      gmat.needsUpdate = true;
-      // ALBEDO BLEND: overlay the photo surface into the painted world canvas
-      // (soft-light keeps trails/roads/tints; photo brings blade/grain detail)
-      const gimg = new Image();
-      gimg.onload = () => {
-        const c2 = gtex.image, g2 = c2.getContext('2d');
-        g2.globalAlpha = 0.5;
-        g2.globalCompositeOperation = 'overlay';
-        const tile = Math.max(48, Math.round(c2.width / (gsize / 9)));
-        for (let ty = 0; ty < c2.height; ty += tile)
-          for (let tx2 = 0; tx2 < c2.width; tx2 += tile)
-            g2.drawImage(gimg, tx2, ty, tile, tile);
-        g2.globalAlpha = 1; g2.globalCompositeOperation = 'source-over';
-        gtex.needsUpdate = true;
+      const worldTint = gtex;                        // the painted canvas
+      gmat.onBeforeCompile = (sh) => {
+        sh.uniforms.uWorld = { value: worldTint };
+        sh.vertexShader = `varying vec2 vUvRaw;
+` + sh.vertexShader.replace(
+          '#include <uv_vertex>',
+          `#include <uv_vertex>
+  vUvRaw = uv;`);
+        sh.fragmentShader = `uniform sampler2D uWorld;
+varying vec2 vUvRaw;
+`
+          + sh.fragmentShader.replace(
+            '#include <map_fragment>',
+            `#include <map_fragment>
+  vec3 wTint = texture2D(uWorld, vUvRaw).rgb * 2.0;
+  diffuseColor.rgb *= clamp(wTint, 0.12, 1.45);`);
       };
-      gimg.src = 'textures/' + gname + '.jpg';
+      gmat.needsUpdate = true;
     }
   }
   // re-open scope: enrichment block ends above
