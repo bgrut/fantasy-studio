@@ -12,6 +12,7 @@ from pathlib import Path
 
 from .spec import GameSpec
 
+BACKEND_ROOT = Path(__file__).resolve().parents[2]
 RUNTIME = Path(__file__).resolve().parent / "runtime"
 
 
@@ -53,6 +54,19 @@ def export_web_game(spec: GameSpec, out_dir: str | Path, verbose: bool = True) -
             src = props_src / f"{name}.glb"
             if src.exists():
                 shutil.copy2(src, props_dst / src.name)
+
+    # ── Gaussian-splat world (Phase 136, additive): bundle the file the
+    # spec points at; the runtime lazy-loads the renderer only when present
+    if getattr(spec.world, "splat", None):
+        sp_src = Path(spec.world.splat)
+        if not sp_src.is_absolute():
+            sp_src = BACKEND_ROOT / spec.world.splat
+        if sp_src.exists():
+            (dist / "splats").mkdir(parents=True, exist_ok=True)
+            shutil.copy2(sp_src, dist / "splats" / sp_src.name)
+            spec.world.splat = f"splats/{sp_src.name}"
+        else:
+            spec.world.splat = None            # missing file: normal world
 
     # ── vendored runtime libs ────────────────────────────────────────────────
     vend_src = RUNTIME / "vendor"

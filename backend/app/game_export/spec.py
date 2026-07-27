@@ -77,6 +77,7 @@ class WorldSpec(BaseModel):
     fog: bool = True
     fog_density: Optional[float] = Field(None, ge=0.0, le=1.0)  # 0.5=default, 0.9=thick mist
     water_level: Optional[float] = None   # ocean/lake worlds: water plane height (m)
+    splat: Optional[str] = None    # Tier-1 Gaussian-splat world: dist-relative .ply/.splat URL
     health_packs: int = Field(0, ge=0, le=12)   # heart pickups scattered on the ground
     placed_items: List[PlacedItemSpec] = Field(default_factory=list)  # Inspector placements
     scatter: List[ScatterSpec] = Field(default_factory=list)

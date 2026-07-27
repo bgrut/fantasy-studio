@@ -7,7 +7,7 @@ import { Crosshair, Download, FolderPlus, Gamepad2, Loader2, Maximize2, RotateCc
 import { cn } from '@/lib/utils'
 import {
   addLevelToProject, createProject, exportGame, exportProject, gameHealth,
-  cancelJob, getGameJob, listProjects, openLevel, removeLevelFromProject, revealProjectZip,
+  cancelJob, getGameJob, listProjects, openLevel, removeLevelFromProject, revealProjectZip, uploadSplat,
   rerollAsset, updateLevel,
   type GameHealth, type GameJob, type GameProject,
 } from '@/lib/gameApi'
@@ -77,6 +77,7 @@ export default function GameStudio() {
   const [hoverPick, setHoverPick] = useState<Pick | null>(null)
   const [selPick, setSelPick] = useState<Pick | null>(null)
   const [style, setStyle] = useState('default')            // Phase 44 style preset
+  const [splatPath, setSplatPath] = useState<string | null>(null)
   const [quality, setQuality] = useState<string>(() => {
     try { return localStorage.getItem('fs_quality') || 'ultra' } catch { return 'ultra' }
   })
@@ -173,7 +174,8 @@ export default function GameStudio() {
         ? { baseJobId, at, at2 }
         // fresh build: USER-SELECTED style + view ride along — never guessed
         : { style: style !== 'default' ? style : undefined,
-            view: view !== '3d' ? view : undefined })
+            view: view !== '3d' ? view : undefined,
+            splat: splatPath ?? undefined })
       pollJob(job_id)
     } catch (e) {
       setBuilding(false)
@@ -441,6 +443,25 @@ export default function GameStudio() {
               {q}
             </button>
           ))}
+        </div>
+        <div className="flex justify-center items-center gap-2">
+          <label className="px-2.5 py-1 rounded-full text-[11px] border border-[#c86bff]/40 text-[#c86bff] hover:bg-[#c86bff]/10 cursor-pointer transition-all"
+                 title="Load a Gaussian-splat world (.ply/.splat) — it becomes the scenery of your next build">
+            🌌 {splatPath ? splatPath.split('/').pop() : 'Splat world'}
+            <input type="file" accept=".ply,.splat,.ksplat" className="hidden"
+              onChange={async (e) => {
+                const f = e.target.files?.[0]
+                if (!f) return
+                try {
+                  const r = await uploadSplat(f)
+                  setSplatPath(r.path)
+                } catch (err) { setError(err instanceof Error ? err.message : String(err)) }
+              }} />
+          </label>
+          {splatPath && (
+            <button onClick={() => setSplatPath(null)}
+              className="text-[11px] text-[#807d99] hover:text-white" title="detach splat world">✕</button>
+          )}
         </div>
         <p className="text-center text-[10px] font-mono text-[#4a4764]">
           exports: 🌐 Web (three.js, plays anywhere) · 🎮 Godot 4 project (open-source engine — full editor access) · 🕹 Godot multiplayer guide included

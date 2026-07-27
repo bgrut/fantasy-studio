@@ -174,3 +174,8 @@ nosetests.xml
 # ── Allow exception ───────────────────────────────────────────────
 # Keep the placeholder so the assets folder ships in the repo
 !.github/assets/.gitkeep
+
+# never commit the isolated generation venv or upstream vendor checkouts
+backend/venv_trellis/
+backend/vendor/
+backend/assets/splats/

@@ -79,6 +79,8 @@ class GameExportRequest(BaseModel):
     rule_index: int | None = None
     rule_name: str | None = None
     rule_on: bool | None = None
+    # Phase 136: dist-relative or assets/splats path of a Gaussian-splat world
+    splat: str | None = None
 
 
 def _run_job(job_id: int, req: GameExportRequest) -> None:
@@ -482,6 +484,11 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                 spec.player.yaw_offset_deg = float(_headings[cast])
         except Exception:
             pass
+        if req.splat:
+            spec.world.splat = req.splat
+            job.setdefault("notes", []).append(
+                "Gaussian-splat world attached — the splat is the scenery, "
+                "the mesh terrain stays as the physics floor")
         job["player"] = cast
         if not spec.world.scatter:
             spec.world.scatter = [ScatterSpec(**s) for s in game_scatter(spec.world.name)]
@@ -1224,6 +1231,25 @@ def cancel_job(job_id: int):
     job["stage"] = "cancelled"
     job["updated_at"] = time.time()
     return {"ok": True, "killed_processes": killed}
+
+
+@router.post("/api/game/upload_splat")
+async def upload_splat(request: __import__("fastapi").Request):
+    """Phase 136: accept a .ply/.splat/.ksplat upload (raw body, filename in
+    X-Filename header) into assets/splats/. Returns the backend-relative
+    path to pass as the export request's `splat` field."""
+    name = request.headers.get("x-filename", "world.ply")
+    import re as _re
+    name = _re.sub(r"[^A-Za-z0-9._-]", "_", name)[-80:]
+    if not name.lower().endswith((".ply", ".splat", ".ksplat")):
+        raise HTTPException(400, "expected a .ply / .splat / .ksplat file")
+    dest = BACKEND_ROOT / "assets" / "splats" / name
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    body = await request.body()
+    if len(body) > 800 * 1024 * 1024:
+        raise HTTPException(413, "splat too large (800MB cap)")
+    dest.write_bytes(body)
+    return {"ok": True, "path": f"assets/splats/{name}", "mb": round(len(body) / 1e6, 1)}
 
 
 @router.get("/api/game/health")

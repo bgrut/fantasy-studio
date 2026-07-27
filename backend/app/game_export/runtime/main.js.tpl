@@ -1447,6 +1447,22 @@ async function main() {
                   ' buildings (textured facades), ' + (OSM.roads || []).length + ' roads');
     }
   }
+  // ── GAUSSIAN-SPLAT WORLD (Phase 136, Tier 1): a captured/downloaded
+  // .ply/.splat becomes the visual world — physics, quests and the cine
+  // camera live inside it. The 617KB renderer loads ONLY when used.
+  if (SPEC.world.splat) {
+    try {
+      const GS = await import('./vendor/gaussian-splats-3d.module.js');
+      const sv = new GS.DropInViewer({ gpuAcceleratedSort: false,
+                                       sharedMemoryForWorkers: false });
+      await sv.addSplatScene(SPEC.world.splat, {
+        showLoadingUI: false, progressiveLoad: true });
+      scene.add(sv);
+      console.log('[game] splat world loaded: ' + SPEC.world.splat);
+    } catch (e) {
+      console.warn('[game] splat world failed (' + e.message + ') — mesh world stays');
+    }
+  }
   const rng = mulberry32(SPEC.seed);
   let landmarkAsset = null;
   const swayProps = [];             // Phase 33: wind-swayed prop roots

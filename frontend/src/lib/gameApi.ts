@@ -55,6 +55,12 @@ export async function rerollAsset(kind: string): Promise<{ ok: boolean }> {
   }))
 }
 
+export async function uploadSplat(file: File): Promise<{ ok: boolean; path: string; mb: number }> {
+  return j(await fetch('/api/game/upload_splat', {
+    method: 'POST', headers: { 'X-Filename': file.name }, body: file,
+  }))
+}
+
 export async function cancelJob(id: number): Promise<{ ok: boolean }> {
   return j(await fetch(`/api/game/jobs/${id}/cancel`, { method: 'POST' }))
 }
@@ -71,6 +77,7 @@ export async function exportGame(prompt: string, opts?: {
   godot?: boolean; player?: string; baseJobId?: number; at?: PickPoint
   at2?: { x: number; z: number }                     // line tool second point
   style?: string                                     // USER-selected style preset
+  splat?: string                                     // Phase 136: splat-world path
   view?: string                                      // 3d / topdown / side (Phase 45)
   rule?: { index: number; name: string; on: boolean } // rule chip toggle
 }) {
@@ -86,6 +93,7 @@ export async function exportGame(prompt: string, opts?: {
                                             ...(opts.at.target ? { at_target: opts.at.target } : {}) } : {}),
                            ...(opts?.at2 ? { at_x2: opts.at2.x, at_z2: opts.at2.z } : {}),
                            ...(opts?.style ? { style: opts.style } : {}),
+                           ...(opts?.splat ? { splat: opts.splat } : {}),
                            ...(opts?.view ? { view: opts.view } : {}),
                            ...(opts?.rule ? { rule_index: opts.rule.index,
                                               rule_name: opts.rule.name,
