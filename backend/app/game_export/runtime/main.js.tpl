@@ -67,6 +67,23 @@ async function main() {
   // fully procedural (zero asset files). Started once by the same START-click
   // gesture that unlocks sfx; volume follows weather/wind and the sky preset.
   let ambientOn = false;
+  function _sirenLoop(actx, master) {
+    // distant siren: two slow alternating tones, very quiet, far-city feel
+    const osc = actx.createOscillator(), g2 = actx.createGain();
+    osc.type = 'sine'; g2.gain.value = 0;
+    osc.connect(g2); g2.connect(master);
+    osc.start();
+    const t0 = actx.currentTime;
+    g2.gain.setValueAtTime(0, t0);
+    g2.gain.linearRampToValueAtTime(0.016, t0 + 0.8);
+    for (let k2 = 0; k2 < 6; k2++) {
+      osc.frequency.setValueAtTime(660, t0 + k2 * 0.55);
+      osc.frequency.linearRampToValueAtTime(880, t0 + k2 * 0.55 + 0.5);
+    }
+    g2.gain.linearRampToValueAtTime(0, t0 + 3.6);
+    setTimeout(() => { try { osc.stop(); } catch (e) {} }, 4200);
+    setTimeout(() => _sirenLoop(actx, master), 28000 + Math.random() * 42000);
+  }
   function startAmbient() {
     if (ambientOn || sfxMuted || !actx) return;
     ambientOn = true;
@@ -94,8 +111,13 @@ async function main() {
       lfo.connect(lg); lg.connect(g.gain); lfo.start();
       src.connect(lp); lp.connect(g); g.connect(actx.destination);
       src.start();
+      // city nights get distant sirens instead of crickets (Phase 120)
+      if (window.__isCity && (sky === 'night' || sky === 'dusk') && SPEC.style !== 'horror') {
+        setTimeout(() => { if (ambientOn && !sfxMuted) _sirenLoop(actx, actx.destination); },
+                   9000 + Math.random() * 15000);
+      }
       // night crickets: sparse randomized chirps (skip horror = dead silence sells it)
-      if ((sky === 'night' || sky === 'dusk') && SPEC.style !== 'horror') {
+      if ((sky === 'night' || sky === 'dusk') && SPEC.style !== 'horror' && !window.__isCity) {
         const chirp = () => {
           if (!ambientOn || sfxMuted) return;
           try {
@@ -440,6 +462,7 @@ async function main() {
     if (LVL.landmarks) for (const p of LVL.landmarks) p[1] = 0;
   }
   const OSM = (LVL && LVL.osm) || null;
+  window.__isCity = !!OSM;                          // ambient (module scope) reads this
   const INTERIOR = (LVL && LVL.interior) || null;   // Phase 95: room levels
   const gcol = new THREE.Color(...SPEC.world.ground_color);
   {
@@ -501,6 +524,7 @@ async function main() {
       ctx.stroke();
     }
     ctx.setLineDash([]); ctx.globalAlpha = 1;
+    window.__junctions = [];
     const _ends = {};
     for (const r of OSM.roads) {
       for (const p2 of [r.pts[0], r.pts[r.pts.length - 1]]) {
@@ -512,6 +536,7 @@ async function main() {
     for (const k in _ends) {
       const j = _ends[k];
       if (j.n < 3) continue;                       // true intersections only
+      window.__junctions.push([j.x, j.z]);
       const hp = j.hd.pts, a2 = Math.atan2(hp[1][0] - hp[0][0], hp[1][1] - hp[0][1]);
       const stripeW = Math.max(1, 0.6 / gsize * TEXN);
       for (let si = -3; si <= 3; si++) {
@@ -1223,6 +1248,69 @@ async function main() {
           im.instanceMatrix.needsUpdate = true;
           im.castShadow = true;
           scene.add(im);
+        }
+      }
+      // STREET FURNITURE (Phase 120): traffic lights at intersections +
+      // hydrants mid-block — instanced, capped, collider-free (thin poles).
+      const _jx = (window.__junctions || []).slice(0, 40);
+      if (_jx.length) {
+        const poleG = new THREE.CylinderGeometry(0.09, 0.11, 5.2, 6);
+        const headG = new THREE.BoxGeometry(0.42, 1.1, 0.34);
+        const poleM = new THREE.MeshStandardMaterial({ color: 0x2c2f33, roughness: 0.7, metalness: 0.5 });
+        const headM = new THREE.MeshStandardMaterial({ color: 0x1e2124, roughness: 0.55,
+          emissive: 0x30ff66, emissiveIntensity: 0.9 });
+        const poles = new THREE.InstancedMesh(poleG, poleM, _jx.length);
+        const heads = new THREE.InstancedMesh(headG, headM, _jx.length);
+        const MM = new THREE.Matrix4();
+        const rngS = mulberry32(SPEC.seed + 515);
+        _jx.forEach(([jx2, jz2], ji) => {
+          const ox = jx2 + 4.5 * Math.sign(rngS() - 0.5 || 1), oz = jz2 + 4.5 * Math.sign(rngS() - 0.5 || 1);
+          const gy2 = hAt(ox, oz);
+          MM.makeTranslation(ox, gy2 + 2.6, oz); poles.setMatrixAt(ji, MM);
+          MM.makeTranslation(ox, gy2 + 5.0, oz); heads.setMatrixAt(ji, MM);
+        });
+        for (const im of [poles, heads]) { im.instanceMatrix.needsUpdate = true; im.castShadow = true; scene.add(im); }
+        const hydG = new THREE.CylinderGeometry(0.16, 0.2, 0.8, 8);
+        const hydM = new THREE.MeshStandardMaterial({ color: 0xb03028, roughness: 0.6 });
+        const nHyd = Math.min((OSM.roads || []).length, 40);
+        const hyds = new THREE.InstancedMesh(hydG, hydM, nHyd);
+        let hc = 0;
+        for (const r of (OSM.roads || []).slice(0, nHyd)) {
+          const mid = r.pts[Math.floor(r.pts.length / 2)];
+          const hd2 = Math.atan2(r.pts[r.pts.length - 1][0] - r.pts[0][0],
+                                 r.pts[r.pts.length - 1][1] - r.pts[0][1]);
+          const hx = mid[0] + Math.cos(hd2) * ((r.w || 7) / 2 + 1.6);
+          const hz = mid[1] - Math.sin(hd2) * ((r.w || 7) / 2 + 1.6);
+          if (inBldg(hx, hz, 0.4)) continue;
+          MM.makeTranslation(hx, hAt(hx, hz) + 0.4, hz);
+          hyds.setMatrixAt(hc++, MM);
+        }
+        hyds.count = hc; hyds.instanceMatrix.needsUpdate = true; hyds.castShadow = true;
+        scene.add(hyds);
+      }
+      // NEON SIGNS (Phase 120, night streets): emissive storefront strips on
+      // building faces near roads — the bloom layer that sells 'city at night'
+      if (['night', 'dusk', 'sunset'].includes(SPEC.world.sky)) {
+        const rngNe = mulberry32(SPEC.seed + 606);
+        const neonCols = [0xff3d7a, 0x35d0ff, 0xffd23d, 0x7cff4a, 0xc86bff];
+        let placedN = 0;
+        for (const bb2 of bldBoxes) {
+          if (placedN >= 36 || rngNe() < 0.45) continue;
+          const faces = [
+            [(bb2[0] + bb2[2]) / 2, bb2[1] - 0.15, 0],
+            [(bb2[0] + bb2[2]) / 2, bb2[3] + 0.15, 0],
+            [bb2[0] - 0.15, (bb2[1] + bb2[3]) / 2, Math.PI / 2],
+            [bb2[2] + 0.15, (bb2[1] + bb2[3]) / 2, Math.PI / 2]];
+          const f = faces[Math.floor(rngNe() * 4)];
+          const nw = 2.2 + rngNe() * 2.4;
+          const sgn = new THREE.Mesh(new THREE.PlaneGeometry(nw, 0.7),
+            new THREE.MeshStandardMaterial({ color: 0x101014, side: THREE.DoubleSide,
+              emissive: neonCols[Math.floor(rngNe() * neonCols.length)],
+              emissiveIntensity: 2.4 }));
+          sgn.position.set(f[0], hAt(f[0], f[1]) + 3.1, f[1]);
+          sgn.rotation.y = f[2];
+          scene.add(sgn);
+          placedN++;
         }
       }
       console.log('[game] OSM city "' + (OSM.place || '?') + '": ' + bldBoxes.length +
@@ -3035,6 +3123,57 @@ async function main() {
   polishVehiclePaint(pRoot, (P.mode || 'walk') === 'drive');
   holder.rotation.y = THREE.MathUtils.degToRad(P.yaw_offset_deg || 0);
 
+  // CITY LIFE (Phase 120): in OSM driving games the car mesh is already in
+  // memory — clone it into PARKED cars along curbs + a few AMBIENT drivers
+  // looping the real streets. Zero extra downloads.
+  window.__traffic = [];
+  if (OSM && (P.mode || 'walk') === 'drive' && OSM.roads && OSM.roads.length) {
+    const rngT = mulberry32(SPEC.seed + 717);
+    const carTints = [0xd8d8dc, 0x23252c, 0x8a1f24, 0x2a4d7f, 0xc9a13b, 0x3d3f45];
+    const mkCar = (tint) => {
+      const c2 = pRoot.clone(true);
+      c2.traverse(o => {
+        if (!o.isMesh) return;
+        o.material = Array.isArray(o.material)
+          ? o.material.map(m => m.clone()) : o.material.clone();
+        for (const m of Array.isArray(o.material) ? o.material : [o.material]) {
+          if (m && m.color) m.color.lerp(new THREE.Color(tint), 0.55);
+        }
+      });
+      const g2 = new THREE.Group();
+      g2.add(c2);
+      return g2;
+    };
+    let parked = 0;
+    for (const r of OSM.roads) {
+      if (parked >= 18) break;
+      const hd3 = Math.atan2(r.pts[r.pts.length - 1][0] - r.pts[0][0],
+                             r.pts[r.pts.length - 1][1] - r.pts[0][1]);
+      for (let fi = 0.25; fi < 1 && parked < 18; fi += 0.34) {
+        if (rngT() < 0.45) continue;
+        const pi2 = Math.min(Math.floor(fi * (r.pts.length - 1)), r.pts.length - 2);
+        const px2 = r.pts[pi2][0], pz2 = r.pts[pi2][1];
+        const side = rngT() < 0.5 ? 1 : -1;
+        const cx2 = px2 + Math.cos(hd3) * side * ((r.w || 7) / 2 - 0.4);
+        const cz2 = pz2 - Math.sin(hd3) * side * ((r.w || 7) / 2 - 0.4);
+        if (Math.hypot(cx2, cz2) < 14 || inBldg(cx2, cz2, 0.5)) continue;
+        const pc = mkCar(carTints[Math.floor(rngT() * carTints.length)]);
+        pc.position.set(cx2, hAt(cx2, cz2), cz2);
+        pc.rotation.y = hd3 + (side > 0 ? 0 : Math.PI);
+        scene.add(pc);
+        parked++;
+      }
+    }
+    for (let ti = 0; ti < 4; ti++) {                 // ambient drivers
+      const r = OSM.roads[Math.floor(rngT() * OSM.roads.length)];
+      if (!r || r.pts.length < 2) continue;
+      const tc = mkCar(carTints[Math.floor(rngT() * carTints.length)]);
+      scene.add(tc);
+      window.__traffic.push({ obj: tc, pts: r.pts, seg: 0, t: rngT(),
+                              speed: 6 + rngT() * 3, dir: 1 });
+    }
+  }
+
   // PROCEDURAL MOTION (Phase 20 lite): no rig required — the mesh itself
   // deforms in the vertex shader, keyed off geometry, so it works for ANY
   // generated creature. Swimmers get a traveling nose→tail body wave (the
@@ -4553,6 +4692,16 @@ async function main() {
                        playerObj.position.y + 9,
                        playerObj.position.z - _sunDirN.z * 14);
       rim.target.position.copy(playerObj.position);
+    }
+    for (const tv of window.__traffic || []) {
+      const a2 = tv.pts[tv.seg], b2 = tv.pts[tv.seg + 1];
+      const segL = Math.hypot(b2[0] - a2[0], b2[1] - a2[1]) || 1;
+      tv.t += (tv.speed * dt * tv.dir) / segL;
+      if (tv.t >= 1) { tv.seg++; tv.t = 0;
+        if (tv.seg >= tv.pts.length - 1) { tv.dir = 1; tv.seg = 0; } }
+      const tx2 = a2[0] + (b2[0] - a2[0]) * tv.t, tz2 = a2[1] + (b2[1] - a2[1]) * tv.t;
+      tv.obj.position.set(tx2, hAt(tx2, tz2), tz2);
+      tv.obj.rotation.y = Math.atan2(b2[0] - a2[0], b2[1] - a2[1]);
     }
     if (window.__torches) {
       const tt = performance.now() / 1000;
