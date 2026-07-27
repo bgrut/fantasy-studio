@@ -55,6 +55,10 @@ export async function rerollAsset(kind: string): Promise<{ ok: boolean }> {
   }))
 }
 
+export async function cancelJob(id: number): Promise<{ ok: boolean }> {
+  return j(await fetch(`/api/game/jobs/${id}/cancel`, { method: 'POST' }))
+}
+
 export async function gameHealth(): Promise<GameHealth> {
   return j(await fetch('/api/game/health'))
 }

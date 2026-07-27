@@ -7,7 +7,7 @@ import { Crosshair, Download, FolderPlus, Gamepad2, Loader2, Maximize2, RotateCc
 import { cn } from '@/lib/utils'
 import {
   addLevelToProject, createProject, exportGame, exportProject, gameHealth,
-  getGameJob, listProjects, openLevel, removeLevelFromProject, revealProjectZip,
+  cancelJob, getGameJob, listProjects, openLevel, removeLevelFromProject, revealProjectZip,
   rerollAsset, updateLevel,
   type GameHealth, type GameJob, type GameProject,
 } from '@/lib/gameApi'
@@ -623,7 +623,9 @@ export default function GameStudio() {
             className="max-w-2xl mx-auto flex items-center justify-center gap-3 text-sm text-[#5cffc9]"
           >
             <Loader2 className="w-4 h-4 animate-spin" />
-            {BUILD_STAGES[job.stage] ?? job.stage}
+            {BUILD_STAGES[job.stage] ?? job.stage} <button onClick={async () => { try { await cancelJob(job.id) } catch {} }}
+                title="Cancel this build (kills any character generation in progress)"
+                className="ml-2 px-2 py-0.5 rounded text-[10px] border border-red-400/30 text-red-300 hover:bg-red-500/10">✕ cancel</button>
           </motion.div>
         )}
       </AnimatePresence>

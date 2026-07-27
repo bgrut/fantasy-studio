@@ -1182,6 +1182,40 @@ def reroll_asset(req: RerollAssetRequest):
     return {"ok": True, "kind": kind}
 
 
+@router.post("/api/game/jobs/{job_id}/cancel")
+def cancel_job(job_id: int):
+    """Phase 125: cancel a running build. Kills any generation subprocess
+    (TRELLIS/TripoSG/TripoSR inference) and marks the job failed; the
+    worker thread then errors out at its next subprocess call. The purged
+    character re-generates cleanly on the next prompt that needs it."""
+    job = _jobs.get(job_id)
+    if not job:
+        raise HTTPException(404, "job not found")
+    if job.get("status") != "running":
+        return {"ok": True, "already": job.get("status")}
+    killed = 0
+    try:
+        import subprocess as _sp
+        out = _sp.run(["wmic", "process", "where",
+                       "name like '%python%'", "get", "ProcessId,CommandLine"],
+                      capture_output=True, text=True, timeout=10).stdout
+        import re as _re
+        for line in out.splitlines():
+            if _re.search(r"trellis|triposg|inference_", line, _re.I):
+                m = _re.search(r"(\d+)\s*$", line.strip())
+                if m:
+                    _sp.run(["taskkill", "/PID", m.group(1), "/F"],
+                            capture_output=True, timeout=5)
+                    killed += 1
+    except Exception:
+        pass
+    job["status"] = "failed"
+    job["error"] = "cancelled by user"
+    job["stage"] = "cancelled"
+    job["updated_at"] = time.time()
+    return {"ok": True, "killed_processes": killed}
+
+
 @router.get("/api/game/health")
 def game_health():
     """Game mode works without a GPU — report what's available."""

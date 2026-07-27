@@ -949,3 +949,10 @@ select:focus-visible,
     opacity var(--motion-std, 280ms) var(--ease-out-soft, cubic-bezier(0.16, 1, 0.3, 1)),
     transform var(--motion-std, 280ms) var(--ease-out-soft, cubic-bezier(0.16, 1, 0.3, 1));
 }
+
+/* Phase 125: remove the Blink platform badge (bottom-right "Made with Blink"
+   popup injected by the SDK at runtime — not part of our UI) */
+[id*="blink-badge" i], [class*="blink-badge" i], [data-blink-badge],
+a[href*="blink.new" i], div[style*="z-index: 2147483647"] iframe[src*="blink" i] {
+  display: none !important;
+}
