@@ -472,7 +472,7 @@ async function main() {
     const _h = {}; gcol.getHSL(_h);
     if (_h.s > 0.08 && _h.s < 0.3) gcol.setHSL(_h.h, 0.34, Math.min(_h.l, 0.42));
   }
-  const TEXN = LVL ? 1024 : 256;        // level ground is painted 1:1 (no tiling)
+  const TEXN = (LVL && LVL.osm) ? 2048 : (LVL ? 1024 : 256);   // cities need the res for road markings
   const cnv = document.createElement('canvas'); cnv.width = cnv.height = TEXN;
   const ctx = cnv.getContext('2d');
   const rngTex = mulberry32(SPEC.seed + 1);
@@ -517,7 +517,7 @@ async function main() {
     // stripes where road ENDPOINTS meet (real OSM intersections).
     ctx.globalAlpha = 0.5; ctx.strokeStyle = '#c9c37a';
     ctx.setLineDash([Math.max(2, 3 / gsize * TEXN), Math.max(2, 4 / gsize * TEXN)]);
-    ctx.lineWidth = Math.max(1, 0.35 / gsize * TEXN);
+    ctx.lineWidth = Math.max(2, 0.5 / gsize * TEXN);
     for (const r of OSM.roads) {
       ctx.beginPath();
       r.pts.forEach(([x, z], i) => i ? ctx.lineTo(W2T(x), W2T(z)) : ctx.moveTo(W2T(x), W2T(z)));
@@ -1177,9 +1177,22 @@ async function main() {
           roofSpots.push([cx, cz, gy + h, (mxx - mnx), (mxz - mnz)]);
         }
         bldBoxes.push([mnx, mnz, mxx, mxz]);
-        world.createCollider(RAPIER.ColliderDesc
-          .cuboid((mxx - mnx) / 2, h / 2, (mxz - mnz) / 2)
-          .setTranslation(cx, gy + h / 2, cz));
+        // CONVEX HULL collider (2026-07-27 'invisible walls'): the old
+        // axis-aligned box overhung the street for any diagonal footprint.
+        try {
+          const hullPts = new Float32Array(b.pts.length * 6);
+          b.pts.forEach(([px3, pz3], pi3) => {
+            hullPts[pi3 * 6] = px3;     hullPts[pi3 * 6 + 1] = gy;     hullPts[pi3 * 6 + 2] = pz3;
+            hullPts[pi3 * 6 + 3] = px3; hullPts[pi3 * 6 + 4] = gy + h; hullPts[pi3 * 6 + 5] = pz3;
+          });
+          const hull = RAPIER.ColliderDesc.convexHull(hullPts);
+          if (hull) world.createCollider(hull);
+          else throw new Error('hull failed');
+        } catch (e) {
+          world.createCollider(RAPIER.ColliderDesc
+            .cuboid((mxx - mnx) / 2, h / 2, (mxz - mnz) / 2)
+            .setTranslation(cx, gy + h / 2, cz));
+        }
       } catch (e) { /* one bad footprint never kills the city */ }
     }
     if (wallBuckets.some(b => b.length)) {
@@ -1352,14 +1365,18 @@ async function main() {
         const nSk = 60;
         const skGeo = new THREE.BoxGeometry(1, 1, 1);
         const skMat = new THREE.MeshStandardMaterial({
-          color: new THREE.Color(pal.sky).lerp(new THREE.Color(0x30343c), 0.75),
-          roughness: 1.0, fog: true });
+          map: _fTex('facade_glass'),
+          color: new THREE.Color(pal.sky).lerp(new THREE.Color(0x555b66), 0.5),
+          roughness: 0.7, fog: true });
+        skMat.map = skMat.map.clone();
+        skMat.map.repeat.set(0.4, 0.25);             // whole-face panels at distance
+        skMat.map.needsUpdate = true;
         const skyline = new THREE.InstancedMesh(skGeo, skMat, nSk);
         const MS = new THREE.Matrix4(), QS = new THREE.Quaternion(), VS = new THREE.Vector3();
         for (let si = 0; si < nSk; si++) {
           const a3 = (si / nSk) * Math.PI * 2 + rngSk() * 0.09;
-          const d3 = gsize * (0.58 + rngSk() * 0.5);
-          const w3 = 10 + rngSk() * 22, h3 = 18 + rngSk() * 46;
+          const d3 = gsize * (0.66 + rngSk() * 0.42);
+          const w3 = 12 + rngSk() * 18, h3 = 14 + rngSk() * 34;
           MS.compose(VS.set(Math.cos(a3) * d3, h3 / 2 - 1, Math.sin(a3) * d3),
                      QS.setFromAxisAngle(new THREE.Vector3(0, 1, 0), rngSk() * Math.PI),
                      new THREE.Vector3(w3, h3, w3 * (0.7 + rngSk() * 0.6)));
@@ -2039,7 +2056,8 @@ async function main() {
           holder.position.set(
             PATH[0][0] + rx * lane - Math.sin(hd) * back, 0,
             PATH[0][1] + rz * lane - Math.cos(hd) * back);
-          startYaw = hd;
+          startYaw = hd + (ent.asset === SPEC.player.asset
+            ? THREE.MathUtils.degToRad(SPEC.player.yaw_offset_deg || 0) : 0);
           vehIdx++;
         } else {
           // hostiles spawn FAR (out along the path, guarding the objectives)
@@ -4353,6 +4371,10 @@ async function main() {
       if (q[2] < minZ) minZ = q[2]; if (q[2] > maxZ) maxZ = q[2];
     }
     const h = maxY - minY, len = maxZ - minZ;
+    // OPT-IN ONLY (2026-07-27): auto wheel detection failed twice on real
+    // assets — overlays now require explicit per-asset data (spec.player
+    // .spin_wheels). A correct-looking car beats spinning wheels.
+    if (!SPEC.player.spin_wheels) return;
     const low = pts.filter(q => q[1] < minY + h * 0.28);
     const BINS = 24, hist = new Array(BINS).fill(0);
     const bz = i => minZ + (i + 0.5) / BINS * len;
