@@ -461,6 +461,16 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                     spec.world.fog_density = 0.3
         except Exception:
             pass
+        # CITY GROUND SANITY (2026-07-27 London was PURPLE): the LLM picks
+        # mood colors; real streets are asphalt. Any OSM-city world gets a
+        # neutral urban gray — the painted road/crosswalk layer stays on top.
+        try:
+            from app.game_export.level import detect_place as _dp
+            if _dp(req.prompt):
+                spec.world.ground_color = [0.40, 0.40, 0.43]
+                spec.world.grass = False
+        except Exception:
+            pass
         # per-asset heading facts (play-verified): a generated mesh's nose sign
         # is ambiguous — side-profile refs face either way — so the correction
         # lives as DATA in assets/library_heading.json, never a runtime guess.

@@ -691,6 +691,19 @@ async function main() {
     ground.rotation.x = -Math.PI / 2;
     ground.receiveShadow = true;
     scene.add(ground);
+    // HORIZON SKIRT (Phase 122): beyond the painted map, a vast apron in
+    // the same ground tone runs to 6x the world size — fog fades it into
+    // the sky, so every outdoor world ends gracefully instead of at a cliff
+    if (!INTERIOR) {
+      const skirtC = gcol.clone().offsetHSL(0, -0.04, -0.02);
+      const skirt = new THREE.Mesh(
+        new THREE.RingGeometry(gsize * 0.495, gsize * 6, 48, 1),
+        new THREE.MeshStandardMaterial({ color: skirtC, roughness: 1.0 }));
+      skirt.rotation.x = -Math.PI / 2;
+      skirt.position.y = -0.06;
+      skirt.receiveShadow = true;
+      scene.add(skirt);
+    }
     world.createCollider(RAPIER.ColliderDesc.cuboid(gsize / 2, 0.05, gsize / 2)
       .setTranslation(0, -0.05, 0));
   }
@@ -1331,6 +1344,29 @@ async function main() {
           scene.add(sgn);
           placedN++;
         }
+      }
+      // DISTANT SKYLINE (Phase 122): silhouette towers past the map edge —
+      // a city that visibly CONTINUES instead of stopping at the last block
+      {
+        const rngSk = mulberry32(SPEC.seed + 1213);
+        const nSk = 60;
+        const skGeo = new THREE.BoxGeometry(1, 1, 1);
+        const skMat = new THREE.MeshStandardMaterial({
+          color: new THREE.Color(pal.sky).lerp(new THREE.Color(0x30343c), 0.75),
+          roughness: 1.0, fog: true });
+        const skyline = new THREE.InstancedMesh(skGeo, skMat, nSk);
+        const MS = new THREE.Matrix4(), QS = new THREE.Quaternion(), VS = new THREE.Vector3();
+        for (let si = 0; si < nSk; si++) {
+          const a3 = (si / nSk) * Math.PI * 2 + rngSk() * 0.09;
+          const d3 = gsize * (0.58 + rngSk() * 0.5);
+          const w3 = 10 + rngSk() * 22, h3 = 18 + rngSk() * 46;
+          MS.compose(VS.set(Math.cos(a3) * d3, h3 / 2 - 1, Math.sin(a3) * d3),
+                     QS.setFromAxisAngle(new THREE.Vector3(0, 1, 0), rngSk() * Math.PI),
+                     new THREE.Vector3(w3, h3, w3 * (0.7 + rngSk() * 0.6)));
+          skyline.setMatrixAt(si, MS);
+        }
+        skyline.instanceMatrix.needsUpdate = true;
+        scene.add(skyline);
       }
       console.log('[game] OSM city "' + (OSM.place || '?') + '": ' + bldBoxes.length +
                   ' buildings (textured facades), ' + (OSM.roads || []).length + ' roads');
@@ -4324,6 +4360,10 @@ async function main() {
     let fi = Math.floor(BINS * 0.6), ri = 0;
     for (let i = Math.floor(BINS * 0.55); i < BINS; i++) if (hist[i] > hist[fi]) fi = i;
     for (let i = 0; i < Math.floor(BINS * 0.45); i++) if (hist[i] > hist[ri]) ri = i;
+    // CONFIDENCE GUARD (2026-07-27 London taxi): if the two detected axles
+    // are not clearly separated (>42% of car length), the histogram found
+    // noise, not wheels — mispositioned overlays look WORSE than none.
+    if (Math.abs(bz(fi) - bz(ri)) < len * 0.42) return;
     const zones = [];                          // collected wheel volumes to EXCISE
     for (const [bin, front] of [[fi, true], [ri, false]]) {
       const zc = bz(bin), tol = len / BINS * 1.6;
