@@ -4970,9 +4970,9 @@ varying vec2 vUvRaw;
     }
     for (const hh of window.__headlights || []) {
       const hy = modelYaw;
-      const hx = playerObj.position.x + Math.sin(hy) * 1.6 + Math.cos(hy) * hh.side;
-      const hz = playerObj.position.z + Math.cos(hy) * 1.6 - Math.sin(hy) * hh.side;
-      hh.hl.position.set(hx, playerObj.position.y + 0.7, hz);
+      const hx = playerObj.position.x + Math.sin(hy) * 2.4 + Math.cos(hy) * hh.side;
+      const hz = playerObj.position.z + Math.cos(hy) * 2.4 - Math.sin(hy) * hh.side;
+      hh.hl.position.set(hx, playerObj.position.y + 0.85, hz);
       hh.hl.target.position.set(hx + Math.sin(hy) * 18, playerObj.position.y + 0.15,
                                 hz + Math.cos(hy) * 18);
       hh.cone.position.copy(hh.hl.position);
@@ -5163,9 +5163,10 @@ varying vec2 vUvRaw;
       // motion-blur direction/strength from camera velocity (view space)
       const cvel = camera.position.clone().sub(_cinePrevCam);
       const lv = cvel.applyQuaternion(camera.quaternion.clone().invert());
-      const sp2 = Math.min(lv.length() / Math.max(dt, 1e-3), 40);
+      // 2026-07-29 'too much': blur is a seasoning — cap ~9px total reach
+      const sp2 = Math.min(lv.length() / Math.max(dt, 1e-3), 16);
       cinePass.uniforms.uDir.value.set(lv.x, -lv.y).normalize();
-      cinePass.uniforms.uStr.value = sp2 * 0.55;
+      cinePass.uniforms.uStr.value = sp2 * 0.22;
       cinePass.uniforms.uTime.value = performance.now() / 1000;
     }
     _cinePrevCam.copy(camera.position);

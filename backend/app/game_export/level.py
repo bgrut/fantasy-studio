@@ -250,7 +250,14 @@ def build_osm_city(place: str, size_m: float, max_buildings: int = 320) -> dict 
         cache = Path(__file__).resolve().parents[2] / "renders" / "_osm_cache" / f"{place}_{int(size_m)}.osm"
         cache.parent.mkdir(parents=True, exist_ok=True)
         bb = osm_city.make_bbox(*center, radius_m=size_m / 2.0)
-        osm_city.fetch_osm(*bb, cache_path=cache)
+        # RESILIENCE (2026-07-29 Tokyo report): Overpass hiccups are common —
+        # one retry after a beat before giving up on the real city
+        try:
+            osm_city.fetch_osm(*bb, cache_path=cache)
+        except Exception:
+            import time as _t
+            _t.sleep(3)
+            osm_city.fetch_osm(*bb, cache_path=cache)
         data = osm_city.parse_osm(cache)
         half = size_m / 2.0
         blds = []
