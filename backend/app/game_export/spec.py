@@ -126,7 +126,7 @@ class GameSpec(BaseModel):
     win_text: Optional[str] = None        # narrative layer: victory line (win screen)
     # STYLE PRESET (Phase 44): USER-SELECTED, never LLM-guessed — one global
     # render/post pack applied coherently to the whole game
-    style: Literal["default", "cartoon", "anime", "horror", "pixel", "lowpoly"] = "default"
+    style: Literal["default", "cartoon", "sketch", "anime", "horror", "pixel", "lowpoly"] = "default"
     # VIEW PRESET (Phase 45): 3d = classic third person; topdown = orthographic
     # 2D-Zelda camera; side = orthographic side-scroller (gameplay projected to
     # the z=0 plane). User-selected, like style.

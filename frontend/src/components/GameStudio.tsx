@@ -34,7 +34,8 @@ const GAME_PROMPTS = [
 // render treatment (cel shading, outlines, grain, palette) per game.
 const STYLES: { id: string; label: string; hint: string }[] = [
   { id: 'default', label: '🎬 Photoreal', hint: 'the classic look — natural light and texture' },
-  { id: 'cartoon', label: '🖍️ Cartoon', hint: 'cel shading + ink outlines, bold and friendly' },
+  { id: 'cartoon', label: '🖍️ Cartoon', hint: 'TRUE cel shading — flat color bands + thick clean ink outlines' },
+  { id: 'sketch', label: '✏️ Sketch', hint: 'pencil-drawn look — fine cross-hatched lines (the old Cartoon)' },
   { id: 'anime', label: '🌸 Anime', hint: 'soft cel bands, dreamy bloom, vivid color' },
   { id: 'horror', label: '🕯️ Horror', hint: 'crushing dark, thick fog, film grain' },
   { id: 'pixel', label: '👾 Pixel', hint: 'chunky retro pixels, posterized palette' },

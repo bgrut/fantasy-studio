@@ -4211,7 +4211,12 @@ varying vec2 vUvRaw;
   // guessed by an LLM, so it's never wrong.
   const STYLE = SPEC.style || 'default';
   const STYLE_CFG = {
-    cartoon: { bands: 5, sat: 1.35, exposure: 1.05, grain: 0, edge: 2.4, gamma: 1.0 },
+    // TRUE CEL (Phase 131): luminance-banded flat fills + thick ink on
+    // strong silhouettes only. celBands/inkTh/inkW drive the new path;
+    // 'sketch' preserves the old fine-sobel recipe users liked.
+    cartoon: { bands: 0, sat: 1.5, exposure: 1.08, grain: 0, edge: 0, gamma: 1.0,
+               celBands: 4, inkTh: 0.22, inkW: 2.0 },
+    sketch:  { bands: 5, sat: 1.35, exposure: 1.05, grain: 0, edge: 2.4, gamma: 1.0 },
     anime:   { bands: 8, sat: 1.18, exposure: 1.08, grain: 0, edge: 1.1, gamma: 1.0 },
     horror:  { bands: 0, sat: 0.32, exposure: 0.7, grain: 0.13, edge: 0, gamma: 1.7 },
     pixel:   { bands: 6, sat: 1.12, exposure: 1.0, grain: 0, edge: 0, gamma: 1.0 },
@@ -4227,6 +4232,9 @@ varying vec2 vUvRaw;
                   grain: { value: STYLE_CFG.grain },
                   edge: { value: STYLE_CFG.edge },
                   gamma: { value: STYLE_CFG.gamma },
+                  celBands: { value: STYLE_CFG.celBands || 0 },
+                  inkTh: { value: STYLE_CFG.inkTh || 0 },
+                  inkW: { value: STYLE_CFG.inkW || 1.0 },
                   time: { value: 0 },
                   res: { value: new THREE.Vector2(innerWidth, innerHeight) } },
       vertexShader: `varying vec2 vUv;
@@ -4235,12 +4243,25 @@ varying vec2 vUvRaw;
         uniform float bands; uniform float sat; uniform float exposure;
         uniform float grain; uniform float edge; uniform float time;
         uniform float gamma; uniform vec2 res; varying vec2 vUv;
+        uniform float celBands; uniform float inkTh; uniform float inkW;
         float lum(vec2 uv){ return dot(texture2D(tDiffuse, uv).rgb, vec3(.299,.587,.114)); }
         void main(){
           vec4 c = texture2D(tDiffuse, vUv);
           c.rgb *= exposure;
           if (gamma != 1.0) {                     // midtone crush (horror dark)
             c.rgb = pow(max(c.rgb, vec3(0.0)), vec3(gamma));
+          }
+          if (celBands > 0.5) {                   // TRUE CEL: band the LIGHT,
+            float cl = dot(c.rgb, vec3(.299,.587,.114));       // keep the hue
+            float cb = floor(cl * celBands + 0.5) / celBands;
+            c.rgb *= (cb + 0.02) / max(cl, 0.04);
+          }
+          if (inkTh > 0.0) {                      // thick CLEAN ink: silhouettes
+            vec2 pw = inkW / res;                 // only — threshold kills the
+            float gx2 = lum(vUv + vec2(pw.x, 0.)) - lum(vUv - vec2(pw.x, 0.));
+            float gy2 = lum(vUv + vec2(0., pw.y)) - lum(vUv - vec2(0., pw.y));
+            float ink = step(inkTh, length(vec2(gx2, gy2)));
+            c.rgb = mix(c.rgb, vec3(0.03, 0.03, 0.06), ink * 0.85);
           }
           if (edge > 0.0) {                       // ink outlines (sobel)
             vec2 px = 1.0 / res;
