@@ -263,6 +263,19 @@ async function main() {
       scene.environment = pmrem.fromScene(envScene, 0.02).texture;
       pmrem.dispose();
     } catch (e) { console.warn('[game] env reflections skipped: ' + e.message); }
+    // UNIVERSAL ENV (Tier 2): skies without the atmosphere model (night,
+    // interiors) still need image-based light or PBR materials read dead.
+    // A tinted gradient env is cheap and grounds every material response.
+    if (!scene.environment) {
+      try {
+        const pm2 = new THREE.PMREMGenerator(renderer);
+        const es2 = new THREE.Scene();
+        es2.background = new THREE.Color(pal.sky).lerp(new THREE.Color(0xffffff), 0.2);
+        scene.environment = pm2.fromScene(es2, 0.02).texture;
+        pm2.dispose();
+      } catch (e) {}
+    }
+    if ('environmentIntensity' in scene) scene.environmentIntensity = 0.55;
     // CLOUDS (Phase 74): soft drifting billboards — an empty blue dome reads
     // as a render, a sky with weather reads as a place. Sprite count/opacity
     // tuned per mood; they drift slowly downwind and always face the camera.
@@ -337,6 +350,16 @@ async function main() {
       scene.add(ring);
     }
   } else {
+    // UNIVERSAL ENV for flat skies (night/space): tinted gradient env so
+    // PBR materials keep a live response after dark
+    try {
+      const pm3 = new THREE.PMREMGenerator(renderer);
+      const es3 = new THREE.Scene();
+      es3.background = new THREE.Color(pal.sky).lerp(new THREE.Color(0xffffff), 0.15);
+      scene.environment = pm3.fromScene(es3, 0.02).texture;
+      pm3.dispose();
+      if ('environmentIntensity' in scene) scene.environmentIntensity = 0.4;
+    } catch (e) {}
     const sN = 1400, sPos = new Float32Array(sN * 3);
     const sRng = mulberry32(SPEC.seed + 5);
     for (let i = 0; i < sN; i++) {
@@ -371,9 +394,12 @@ async function main() {
   const sun = new THREE.DirectionalLight(pal.sunCol || 0xffffff, pal.sun);
   sun.position.set(...pal.sunPos);
   sun.castShadow = true;
-  sun.shadow.mapSize.set(2048, 2048);
-  const sc = SPEC.world.size_m * 0.5;
+  sun.shadow.mapSize.set(4096, 4096);
+  // fit the shadow frustum to the VISIBLE play area (48 m), not the whole
+  // world — 4096 texels over 96 m = crisp contact shadows, console-style
+  const sc = Math.min(SPEC.world.size_m * 0.5, 48);
   Object.assign(sun.shadow.camera, { left: -sc, right: sc, top: sc, bottom: -sc, far: 400 });
+  sun.shadow.camera.updateProjectionMatrix();
   scene.add(sun);
 
   // ── physics world ────────────────────────────────────────────────────────
@@ -3685,7 +3711,12 @@ async function main() {
   // shader. v1 shared one depth texture with the composer's ping-pong
   // targets, which blanked the whole frame — never bind a texture that a
   // later pass in the same chain may write to.
-  const composer = new EffectComposer(renderer);
+  // CONSOLE-GRADE IMAGE (Tier 1, 2026-07-27): the default composer target
+  // has NO multisampling, so every edge stair-stepped once post-processing
+  // was on. A 4x MSAA half-float target kills the shimmer at ~5% GPU cost.
+  const _msaaRT = new THREE.WebGLRenderTarget(1, 1, {
+    samples: 4, type: THREE.HalfFloatType });
+  const composer = new EffectComposer(renderer, _msaaRT);
   composer.addPass(new RenderPass(scene, camera));
   const _dMat = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking });
   const _dRT = new THREE.WebGLRenderTarget(innerWidth >> 1, innerHeight >> 1);
