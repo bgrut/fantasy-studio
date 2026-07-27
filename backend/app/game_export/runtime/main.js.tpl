@@ -1028,13 +1028,18 @@ async function main() {
     return false;
   }
   if (OSM && OSM.buildings && OSM.buildings.length) {
-    const wallGeos = [], capGeos = [];
+    // FACADE BUCKETS (Phase 118): 0 = procedural window grid (keeps the
+    // night glow), 1 = glass tower, 2 = brick walk-up, 3 = pre-war stone.
+    // Tall core buildings lean glass; the rest mix — one merged mesh per
+    // bucket, so a whole city is 5 draw calls.
+    const wallBuckets = [[], [], [], []], capGeos = [];
+    const roofSpots = [];
     const tintA = new THREE.Color(0x8d8a84), tintB = new THREE.Color(0x5f6b78);
     const rngB = mulberry32(SPEC.seed + 77);
     // ExtrudeGeometry groups: materialIndex 0 = caps (roof/underside after the
     // rotate), 1 = side walls. Split so walls get the facade texture and roofs
     // stay plain — window grids on rooftops read as a bug from the follow-cam.
-    function splitGroups(geo) {
+    function splitGroups(geo, bucket) {
       for (const g of geo.groups) {
         const sub = new THREE.BufferGeometry();
         for (const name of ['position', 'normal', 'uv', 'color']) {
@@ -1042,7 +1047,7 @@ async function main() {
           sub.setAttribute(name, new THREE.BufferAttribute(
             a.array.slice(g.start * a.itemSize, (g.start + g.count) * a.itemSize), a.itemSize));
         }
-        (g.materialIndex === 0 ? capGeos : wallGeos).push(sub);
+        (g.materialIndex === 0 ? capGeos : wallBuckets[bucket]).push(sub);
       }
     }
     for (const b of OSM.buildings) {
@@ -1058,7 +1063,12 @@ async function main() {
       try {
         const shape = new THREE.Shape();
         b.pts.forEach(([px, pz], i) => i ? shape.lineTo(px, -pz) : shape.moveTo(px, -pz));
-        const h = Math.max(b.h || 9, 4);
+        // MANHATTAN PROFILE (Phase 118): heights rise toward the city core —
+        // skyscraper center, mid-rise ring, low-rise edges. Reads as downtown
+        // from every camera angle.
+        const _half = SPEC.world.size_m * 0.5;
+        const _core = Math.max(0, 1 - Math.hypot(cx, cz) / (_half * 0.85));
+        const h = Math.min(Math.max((b.h || 9) * (1 + 2.6 * _core * _core), 4), 55);
         const geo = new THREE.ExtrudeGeometry(shape, { depth: h, bevelEnabled: false });
         geo.rotateX(-Math.PI / 2);                                // extrude up
         const gy = hAt(cx, cz);
@@ -1067,14 +1077,19 @@ async function main() {
         const nv = geo.attributes.position.count, cols = new Float32Array(nv * 3);
         for (let i = 0; i < nv; i++) { cols[i * 3] = tint.r; cols[i * 3 + 1] = tint.g; cols[i * 3 + 2] = tint.b; }
         geo.setAttribute('color', new THREE.BufferAttribute(cols, 3));
-        splitGroups(geo);
+        const _bkt = h > 26 ? (rngB() < 0.7 ? 1 : 3)
+                   : (rngB() < 0.4 ? 0 : (rngB() < 0.55 ? 2 : 3));
+        splitGroups(geo, _bkt);
+        if (h >= 16 && (mxx - mnx) > 7 && (mxz - mnz) > 7) {
+          roofSpots.push([cx, cz, gy + h, (mxx - mnx), (mxz - mnz)]);
+        }
         bldBoxes.push([mnx, mnz, mxx, mxz]);
         world.createCollider(RAPIER.ColliderDesc
           .cuboid((mxx - mnx) / 2, h / 2, (mxz - mnz) / 2)
           .setTranslation(cx, gy + h / 2, cz));
       } catch (e) { /* one bad footprint never kills the city */ }
     }
-    if (wallGeos.length) {
+    if (wallBuckets.some(b => b.length)) {
       // procedural FACADE: window grid tiled in metres over the extrude UVs
       // (one 6m x 6m tile: 4 windows across, 2 floors) + a matching emissive
       // map so a fraction of windows glow — detail on EVERY building, no
@@ -1102,16 +1117,77 @@ async function main() {
         t.anisotropy = 4;
       }
       facadeTex.colorSpace = THREE.SRGBColorSpace;
-      const walls = new THREE.Mesh(mergeGeometries(wallGeos, false),
+      // photo facade materials (SDXL pack): one tile ~= 18m x 12m of building
+      const _fLoad = new THREE.TextureLoader();
+      const _fTex = (n) => {
+        const t = _fLoad.load('textures/' + n + '.jpg');
+        t.wrapS = t.wrapT = THREE.RepeatWrapping;
+        t.repeat.set(1 / 18, 1 / 12);
+        t.colorSpace = THREE.SRGBColorSpace;
+        t.anisotropy = renderer.capabilities.getMaxAnisotropy();
+        return t;
+      };
+      const _wallMats = [
         new THREE.MeshStandardMaterial({ vertexColors: true, map: facadeTex,
           emissive: 0xffc873, emissiveMap: litTex, emissiveIntensity: 0.4,
-          roughness: 0.85, metalness: 0.08 }));
+          roughness: 0.85, metalness: 0.08 }),
+        new THREE.MeshStandardMaterial({ map: _fTex('facade_glass'),
+          roughness: 0.35, metalness: 0.55 }),
+        new THREE.MeshStandardMaterial({ map: _fTex('facade_brick'),
+          roughness: 0.9, metalness: 0.03 }),
+        new THREE.MeshStandardMaterial({ map: _fTex('facade_stone'),
+          roughness: 0.85, metalness: 0.04 }),
+      ];
+      for (let bi = 0; bi < 4; bi++) {
+        if (!wallBuckets[bi].length) continue;
+        const wm = new THREE.Mesh(mergeGeometries(wallBuckets[bi], false), _wallMats[bi]);
+        wm.castShadow = true; wm.receiveShadow = true;
+        scene.add(wm);
+      }
       const roofs = new THREE.Mesh(mergeGeometries(capGeos, false),
         new THREE.MeshStandardMaterial({ vertexColors: true, color: 0x77746e,
           roughness: 0.96, metalness: 0.02 }));
-      for (const m of [walls, roofs]) {
-        m.castShadow = true; m.receiveShadow = true;
-        scene.add(m);
+      roofs.castShadow = true; roofs.receiveShadow = true;
+      scene.add(roofs);
+      // ROOFTOP CLUTTER (Phase 118): water towers + AC units — the skyline
+      // detail that says 'real city'. Instanced; capped for perf.
+      if (roofSpots.length) {
+        const rngR = mulberry32(SPEC.seed + 909);
+        const spots = roofSpots.slice(0, 120);
+        const drum = new THREE.InstancedMesh(
+          new THREE.CylinderGeometry(1.3, 1.3, 2.4, 10),
+          new THREE.MeshStandardMaterial({ color: 0x6e5744, roughness: 0.9 }), spots.length);
+        const cone = new THREE.InstancedMesh(
+          new THREE.ConeGeometry(1.5, 1.1, 10),
+          new THREE.MeshStandardMaterial({ color: 0x5c4938, roughness: 0.9 }), spots.length);
+        const acs = new THREE.InstancedMesh(
+          new THREE.BoxGeometry(1.3, 0.8, 1.3),
+          new THREE.MeshStandardMaterial({ color: 0x9aa0a6, roughness: 0.6, metalness: 0.4 }),
+          spots.length * 2);
+        const M4 = new THREE.Matrix4();
+        let di = 0, ai = 0;
+        for (const [rcx, rcz, rtop, rw, rd] of spots) {
+          const tx = rcx + (rngR() - 0.5) * (rw - 5);
+          const tz = rcz + (rngR() - 0.5) * (rd - 5);
+          if (rngR() < 0.6) {
+            M4.makeTranslation(tx, rtop + 1.2, tz); drum.setMatrixAt(di, M4);
+            M4.makeTranslation(tx, rtop + 2.95, tz); cone.setMatrixAt(di, M4);
+            di++;
+          }
+          for (let a = 0; a < 2; a++) {
+            if (rngR() < 0.75) {
+              M4.makeTranslation(rcx + (rngR() - 0.5) * (rw - 4), rtop + 0.4,
+                                 rcz + (rngR() - 0.5) * (rd - 4));
+              acs.setMatrixAt(ai++, M4);
+            }
+          }
+        }
+        drum.count = di; cone.count = di; acs.count = ai;
+        for (const im of [drum, cone, acs]) {
+          im.instanceMatrix.needsUpdate = true;
+          im.castShadow = true;
+          scene.add(im);
+        }
       }
       console.log('[game] OSM city "' + (OSM.place || '?') + '": ' + bldBoxes.length +
                   ' buildings (textured facades), ' + (OSM.roads || []).length + ' roads');

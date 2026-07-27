@@ -53,6 +53,15 @@ PACK = {
                 "visible grain and gaps, overhead flat view, even light",
     "plaster":  "photograph of aged cream plaster wall with subtle cracks and "
                 "stains, flat frontal view, even light",
+    "facade_glass": "photograph of modern glass office tower facade, regular "
+                    "grid of reflective blue windows and metal mullions, flat "
+                    "frontal view, even light",
+    "facade_brick": "photograph of new york brick apartment facade with "
+                    "regular window rows and stone sills, flat frontal view, "
+                    "even light",
+    "facade_stone": "photograph of pre-war stone office building facade, "
+                    "regular tall windows, carved cornice lines, flat frontal "
+                    "view, even light",
 }
 NEG = ("shadow of photographer, object, person, animal, watermark, text, "
        "logo, border, vignette, fisheye, tilt")
