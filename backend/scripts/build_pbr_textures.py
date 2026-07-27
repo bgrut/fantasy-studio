@@ -62,6 +62,8 @@ PACK = {
     "facade_stone": "photograph of pre-war stone office building facade, "
                     "regular tall windows, carved cornice lines, flat frontal "
                     "view, even light",
+    "concrete": "top-down photograph of city sidewalk concrete with expansion "
+                "joints, subtle stains and wear, overhead flat view, even light",
 }
 NEG = ("shadow of photographer, object, person, animal, watermark, text, "
        "logo, border, vignette, fisheye, tilt")

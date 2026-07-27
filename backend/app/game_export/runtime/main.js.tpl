@@ -462,7 +462,8 @@ async function main() {
     if (LVL.landmarks) for (const p of LVL.landmarks) p[1] = 0;
   }
   const OSM = (LVL && LVL.osm) || null;
-  window.__isCity = !!OSM;                          // ambient (module scope) reads this
+  window.__isCity = !!OSM;
+  if (OSM && LVL && LVL.landmarks) LVL.landmarks = [];   // no 30m trees on sidewalks                          // ambient (module scope) reads this
   const INTERIOR = (LVL && LVL.interior) || null;   // Phase 95: room levels
   const gcol = new THREE.Color(...SPEC.world.ground_color);
   {
@@ -1170,8 +1171,10 @@ async function main() {
         const nv = geo.attributes.position.count, cols = new Float32Array(nv * 3);
         for (let i = 0; i < nv; i++) { cols[i * 3] = tint.r; cols[i * 3 + 1] = tint.g; cols[i * 3 + 2] = tint.b; }
         geo.setAttribute('color', new THREE.BufferAttribute(cols, 3));
+        // photo facades DOMINATE (2026-07-28 'placeholder look'): the
+        // procedural window grid is filler for short buildings only (15%)
         const _bkt = h > 26 ? (rngB() < 0.7 ? 1 : 3)
-                   : (rngB() < 0.4 ? 0 : (rngB() < 0.55 ? 2 : 3));
+                   : (rngB() < 0.15 ? 0 : (rngB() < 0.5 ? 2 : 3));
         splitGroups(geo, _bkt);
         if (h >= 16 && (mxx - mnx) > 7 && (mxz - mnz) > 7) {
           roofSpots.push([cx, cz, gy + h, (mxx - mnx), (mxz - mnz)]);
@@ -4024,7 +4027,7 @@ async function main() {
       const gname = (SPEC.world.weather === 'snow') ? 'snow'
         : /desert|beach|dune/.test(wn) ? 'sand'
         : /forest|wood|jungle/.test(wn) ? 'forest'
-        : /city|street|town|road/.test(wn) ? 'asphalt' : 'grass';
+        : /city|street|town|road/.test(wn) ? 'concrete' : 'grass';
       gmat.normalMap = pbr(gname + '_n', Math.max(10, Math.round(gsize / 6)), false);
       gmat.normalScale = new THREE.Vector2(0.65, 0.65);
       gmat.needsUpdate = true;
