@@ -8,6 +8,7 @@ are served by the /games static mount added in main.py.
 """
 from __future__ import annotations
 
+import sys
 import threading
 import time
 import traceback
@@ -1250,6 +1251,142 @@ async def upload_splat(request: __import__("fastapi").Request):
         raise HTTPException(413, "splat too large (800MB cap)")
     dest.write_bytes(body)
     return {"ok": True, "path": f"assets/splats/{name}", "mb": round(len(body) / 1e6, 1)}
+
+
+@router.get("/api/game/splats")
+def list_splats():
+    """Phase 137: splat worlds available on disk (uploads + trained + samples)."""
+    d = BACKEND_ROOT / "assets" / "splats"
+    items = []
+    if d.exists():
+        for f in sorted(d.iterdir()):
+            if f.suffix.lower() in (".ply", ".splat", ".ksplat") and f.is_file():
+                items.append({"name": f.name, "path": f"assets/splats/{f.name}",
+                              "mb": round(f.stat().st_size / 1e6, 1)})
+    return {"ok": True, "splats": items}
+
+
+_splat_jobs: dict[int, dict] = {}
+_splat_seq = {"n": 0}
+
+
+@router.post("/api/game/train_splat")
+async def train_splat(request: __import__("fastapi").Request):
+    """Phase 137 Tier 2: upload a walkthrough VIDEO (raw body, X-Filename),
+    train a Gaussian-splat world from it (ffmpeg -> COLMAP -> Brush).
+    Long-running (20-60 min) — returns a job id to poll."""
+    import re as _re
+    name = _re.sub(r"[^A-Za-z0-9._-]", "_",
+                   request.headers.get("x-filename", "capture.mp4"))[-80:]
+    if not name.lower().endswith((".mp4", ".mov", ".mkv", ".webm", ".avi")):
+        raise HTTPException(400, "expected a video file (.mp4/.mov/.mkv/.webm)")
+    body = await request.body()
+    if len(body) > 2000 * 1024 * 1024:
+        raise HTTPException(413, "video too large (2GB cap)")
+    vdir = BACKEND_ROOT / "assets" / "splats" / "_train"
+    vdir.mkdir(parents=True, exist_ok=True)
+    vid = vdir / name
+    vid.write_bytes(body)
+    out = BACKEND_ROOT / "assets" / "splats" / (Path(name).stem + ".ply")
+
+    with _lock:
+        _splat_seq["n"] += 1
+        job_id = _splat_seq["n"]
+        _splat_jobs[job_id] = {"id": job_id, "status": "running",
+                               "stage": "queued", "splat": None, "error": None}
+
+    def _train() -> None:
+        job = _splat_jobs[job_id]
+        try:
+            import subprocess
+            p = subprocess.Popen(
+                [sys.executable, str(BACKEND_ROOT / "scripts" / "train_splat.py"),
+                 str(vid), str(out)],
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+                cwd=str(BACKEND_ROOT))
+            tail: list[str] = []
+            for line in p.stdout or []:
+                line = line.strip()
+                if line:
+                    tail.append(line)
+                    tail[:] = tail[-30:]
+                if line.startswith("STAGE:"):
+                    job["stage"] = line.split(":", 1)[1]
+            p.wait()
+            if p.returncode == 0 and out.exists():
+                job["status"] = "complete"
+                job["stage"] = "done"
+                job["splat"] = f"assets/splats/{out.name}"
+            else:
+                job["status"] = "failed"
+                job["error"] = "\n".join(tail[-6:]) or f"exit {p.returncode}"
+        except Exception as e:  # noqa: BLE001
+            job["status"] = "failed"
+            job["error"] = str(e)
+
+    threading.Thread(target=_train, daemon=True).start()
+    return {"ok": True, "job_id": job_id}
+
+
+class ImagineSplatRequest(BaseModel):
+    prompt: str = Field(..., min_length=3, max_length=300)
+
+
+@router.post("/api/game/imagine_splat")
+def imagine_splat(req: ImagineSplatRequest):
+    """Phase 137 Tier 3: text -> Gaussian splat. SDXL paints the reference,
+    original TRELLIS (MIT) decodes it as 3D Gaussians and saves a .ply.
+    GPU job (~5-10 min after first-run model downloads)."""
+    import re as _re
+    slug = _re.sub(r"[^a-z0-9]+", "_", req.prompt.lower()).strip("_")[:48] or "splat"
+    out = BACKEND_ROOT / "assets" / "splats" / f"{slug}.ply"
+
+    with _lock:
+        _splat_seq["n"] += 1
+        job_id = _splat_seq["n"]
+        _splat_jobs[job_id] = {"id": job_id, "status": "running",
+                               "stage": "reference", "splat": None, "error": None}
+
+    def _imagine() -> None:
+        job = _splat_jobs[job_id]
+        try:
+            import subprocess
+            from app.asset_gen.reference import generate_reference, unload_reference_pipeline
+            from app.game_export.generate import _minimal_slots
+            ref = BACKEND_ROOT / "assets" / "splats" / "_train" / f"{slug}_ref.png"
+            ref.parent.mkdir(parents=True, exist_ok=True)
+            slots = _minimal_slots(req.prompt, "structure")
+            generate_reference(slots, output_path=ref, style="photoreal", seed=42)
+            unload_reference_pipeline()
+            job["stage"] = "gaussians"
+            vpy = BACKEND_ROOT / "venv_trellis" / "Scripts" / "python.exe"
+            r = subprocess.run(
+                [str(vpy), str(BACKEND_ROOT / "scripts" / "text_to_splat.py"),
+                 str(ref), str(out)],
+                capture_output=True, text=True, cwd=str(BACKEND_ROOT),
+                timeout=3600)
+            if r.returncode == 0 and out.exists():
+                job["status"] = "complete"
+                job["stage"] = "done"
+                job["splat"] = f"assets/splats/{out.name}"
+            else:
+                tail = ((r.stdout or "") + "\n" + (r.stderr or "")).strip().splitlines()
+                job["status"] = "failed"
+                job["error"] = "\n".join(tail[-6:]) or f"exit {r.returncode}"
+        except Exception as e:  # noqa: BLE001
+            job["status"] = "failed"
+            job["error"] = str(e)
+
+    threading.Thread(target=_imagine, daemon=True).start()
+    return {"ok": True, "job_id": job_id}
+
+
+@router.get("/api/game/splat_jobs/{job_id}")
+def get_splat_job(job_id: int):
+    job = _splat_jobs.get(job_id)
+    if not job:
+        raise HTTPException(404, "no such splat job")
+    return {"ok": True, "job": job}
 
 
 @router.get("/api/game/health")

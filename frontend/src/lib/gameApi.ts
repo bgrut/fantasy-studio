@@ -61,6 +61,33 @@ export async function uploadSplat(file: File): Promise<{ ok: boolean; path: stri
   }))
 }
 
+// Phase 137: splat worlds on disk (uploads + trained + samples)
+export interface SplatFile { name: string; path: string; mb: number }
+export async function listSplats(): Promise<{ ok: boolean; splats: SplatFile[] }> {
+  return j(await fetch('/api/game/splats'))
+}
+
+// Phase 137 Tier 2: train a splat world from a walkthrough video (long job)
+export async function trainSplat(file: File): Promise<{ ok: boolean; job_id: number }> {
+  return j(await fetch('/api/game/train_splat', {
+    method: 'POST', headers: { 'X-Filename': file.name }, body: file,
+  }))
+}
+
+// Phase 137 Tier 3: text -> splat (SDXL reference + TRELLIS gaussians)
+export async function imagineSplat(prompt: string): Promise<{ ok: boolean; job_id: number }> {
+  return j(await fetch('/api/game/imagine_splat', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ prompt }),
+  }))
+}
+
+export interface SplatJob { id: number; status: 'running' | 'complete' | 'failed'
+  stage: string; splat: string | null; error: string | null }
+export async function getSplatJob(id: number): Promise<{ ok: boolean; job: SplatJob }> {
+  return j(await fetch(`/api/game/splat_jobs/${id}`))
+}
+
 export async function cancelJob(id: number): Promise<{ ok: boolean }> {
   return j(await fetch(`/api/game/jobs/${id}/cancel`, { method: 'POST' }))
 }

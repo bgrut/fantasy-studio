@@ -179,3 +179,9 @@ nosetests.xml
 backend/venv_trellis/
 backend/vendor/
 backend/assets/splats/
+
+# Phase 137 splat toolchain (downloaded binaries)
+backend/tools/brush/
+backend/tools/colmap/
+backend/tools/brush.zip
+backend/tools/colmap.zip

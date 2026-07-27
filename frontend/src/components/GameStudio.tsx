@@ -7,7 +7,7 @@ import { Crosshair, Download, FolderPlus, Gamepad2, Loader2, Maximize2, RotateCc
 import { cn } from '@/lib/utils'
 import {
   addLevelToProject, createProject, exportGame, exportProject, gameHealth,
-  cancelJob, getGameJob, listProjects, openLevel, removeLevelFromProject, revealProjectZip, uploadSplat,
+  cancelJob, getGameJob, listProjects, openLevel, removeLevelFromProject, revealProjectZip, uploadSplat, listSplats, trainSplat, getSplatJob, imagineSplat,
   rerollAsset, updateLevel,
   type GameHealth, type GameJob, type GameProject,
 } from '@/lib/gameApi'
@@ -78,6 +78,26 @@ export default function GameStudio() {
   const [selPick, setSelPick] = useState<Pick | null>(null)
   const [style, setStyle] = useState('default')            // Phase 44 style preset
   const [splatPath, setSplatPath] = useState<string | null>(null)
+  const [splatList, setSplatList] = useState<{ name: string; path: string; mb: number }[] | null>(null)
+  const [splatTrain, setSplatTrain] = useState<string | null>(null)  // splat job stage text
+
+  // shared poll for train_splat / imagine_splat jobs — attaches the result
+  const pollSplat = (jobId: number) => {
+    setSplatTrain('starting')
+    const poll = window.setInterval(async () => {
+      try {
+        const { job } = await getSplatJob(jobId)
+        setSplatTrain(job.stage)
+        if (job.status === 'complete') {
+          window.clearInterval(poll); setSplatTrain(null)
+          if (job.splat) setSplatPath(job.splat)
+        } else if (job.status === 'failed') {
+          window.clearInterval(poll); setSplatTrain(null)
+          setError(job.error ?? 'splat job failed')
+        }
+      } catch { /* backend restart mid-poll — keep trying */ }
+    }, 5000)
+  }
   const [quality, setQuality] = useState<string>(() => {
     try { return localStorage.getItem('fs_quality') || 'ultra' } catch { return 'ultra' }
   })
@@ -445,9 +465,14 @@ export default function GameStudio() {
           ))}
         </div>
         <div className="flex justify-center items-center gap-2">
-          <label className="px-2.5 py-1 rounded-full text-[11px] border border-[#c86bff]/40 text-[#c86bff] hover:bg-[#c86bff]/10 cursor-pointer transition-all"
-                 title="Load a Gaussian-splat world (.ply/.splat) — it becomes the scenery of your next build">
-            🌌 {splatPath ? splatPath.split('/').pop() : 'Splat world'}
+          <label className={cn(
+                   'px-2.5 py-1 rounded-full text-[11px] border cursor-pointer transition-all',
+                   splatPath
+                     ? 'border-[#c86bff]/60 bg-[#c86bff]/15 text-[#c86bff]'
+                     : 'border-white/[0.06] bg-white/[0.02] text-[#807d99] hover:text-white'
+                 )}
+                 title="Optional: load a Gaussian-splat world (.ply/.splat) — it becomes the scenery of your next build. Off by default; builds work normally without one.">
+            🌌 {splatPath ? splatPath.split('/').pop() : 'Splat world: off'}
             <input type="file" accept=".ply,.splat,.ksplat" className="hidden"
               onChange={async (e) => {
                 const f = e.target.files?.[0]
@@ -462,7 +487,60 @@ export default function GameStudio() {
             <button onClick={() => setSplatPath(null)}
               className="text-[11px] text-[#807d99] hover:text-white" title="detach splat world">✕</button>
           )}
+          {!splatPath && (
+            <button
+              className="px-2 py-1 rounded-full text-[11px] border border-white/[0.06] bg-white/[0.02] text-[#807d99] hover:text-white transition-all"
+              title="pick a splat world already on this machine (samples included)"
+              onClick={async () => {
+                if (splatList) { setSplatList(null); return }
+                try { setSplatList((await listSplats()).splats) } catch { setSplatList([]) }
+              }}>▾</button>
+          )}
+          {splatTrain ? (
+            <span className="text-[11px] font-mono text-[#c86bff]">🌌 {splatTrain}…</span>
+          ) : (
+            <label className="px-2.5 py-1 rounded-full text-[11px] border border-white/[0.06] bg-white/[0.02] text-[#807d99] hover:text-white cursor-pointer transition-all"
+                   title="Train a splat world from your own walkthrough video (steady sideways motion, 20-60s). Takes 20-60 min on GPU.">
+              🎥 train from video
+              <input type="file" accept=".mp4,.mov,.mkv,.webm" className="hidden"
+                onChange={async (e) => {
+                  const f = e.target.files?.[0]
+                  if (!f) return
+                  try {
+                    const r = await trainSplat(f)
+                    pollSplat(r.job_id)
+                  } catch (err) { setError(err instanceof Error ? err.message : String(err)) }
+                }} />
+            </label>
+          )}
+          {!splatTrain && (
+            <button
+              className="px-2.5 py-1 rounded-full text-[11px] border border-white/[0.06] bg-white/[0.02] text-[#807d99] hover:text-white transition-all"
+              title="Imagine a splat world from your game prompt (SDXL + TRELLIS gaussians, ~5-10 min on GPU)"
+              onClick={async () => {
+                const p = prompt.trim()
+                if (!p) { setError('type a prompt first — the splat is imagined from it'); return }
+                try {
+                  const r = await imagineSplat(p)
+                  pollSplat(r.job_id)
+                } catch (err) { setError(err instanceof Error ? err.message : String(err)) }
+              }}>✨ imagine</button>
+          )}
         </div>
+        {splatList && (
+          <div className="flex justify-center items-center gap-1.5 flex-wrap">
+            {splatList.length === 0 && (
+              <span className="text-[10px] font-mono text-[#4a4764]">no splats on disk yet — upload or train one</span>
+            )}
+            {splatList.map((s) => (
+              <button key={s.path}
+                onClick={() => { setSplatPath(s.path); setSplatList(null) }}
+                className="px-2 py-0.5 rounded-full text-[10px] border border-[#c86bff]/25 text-[#a58cc9] hover:text-[#c86bff] hover:bg-[#c86bff]/10 transition-all">
+                {s.name} · {s.mb}MB
+              </button>
+            ))}
+          </div>
+        )}
         <p className="text-center text-[10px] font-mono text-[#4a4764]">
           exports: 🌐 Web (three.js, plays anywhere) · 🎮 Godot 4 project (open-source engine — full editor access) · 🕹 Godot multiplayer guide included
         </p>
