@@ -1102,15 +1102,26 @@ async function main() {
   }
   function polishVehiclePaint(root, enabled) {
     if (!enabled) return;
+    // AUTOMOTIVE CLEARCOAT (Phase 134/B): real paint is clear lacquer over
+    // pigment — the physical clearcoat layer + a strong env feed makes
+    // showroom shots read 'wet'. Standard material was the old ceiling.
     root.traverse(o => {
       if (!o.isMesh) return;
-      for (const m of Array.isArray(o.material) ? o.material : [o.material]) {
-        if (m && m.isMeshStandardMaterial) {
-          m.roughness = 0.38; m.metalness = 0.28;
-          despeckleTexture(m);
-          m.needsUpdate = true;
-        }
-      }
+      const mats = Array.isArray(o.material) ? o.material : [o.material];
+      const out = mats.map(m => {
+        if (!m || !m.isMeshStandardMaterial) return m;
+        despeckleTexture(m);
+        const pm = new THREE.MeshPhysicalMaterial();
+        THREE.MeshStandardMaterial.prototype.copy.call(pm, m);
+        pm.clearcoat = 1.0;
+        pm.clearcoatRoughness = 0.08;
+        pm.roughness = 0.34;
+        pm.metalness = 0.25;
+        pm.envMapIntensity = 1.5;
+        pm.needsUpdate = true;
+        return pm;
+      });
+      o.material = Array.isArray(o.material) ? out : out[0];
     });
   }
 
@@ -3244,6 +3255,26 @@ async function main() {
   polishVehiclePaint(pRoot, (P.mode || 'walk') === 'drive');
   holder.rotation.y = THREE.MathUtils.degToRad(P.yaw_offset_deg || 0);
 
+  // NIGHT HEADLIGHTS (Phase 134/D): driving after dark gets two real
+  // spotlights + additive volumetric cones — the Maybach-frame look.
+  // Created at LOAD (light count never changes -> no shader recompiles).
+  if ((P.mode || 'walk') === 'drive' && ['night', 'dusk'].includes(SPEC.world.sky)) {
+    window.__headlights = [];
+    for (const hside of [-0.7, 0.7]) {
+      const hl = new THREE.SpotLight(0xfff2d8, 60, 42, 0.42, 0.45, 1.6);
+      hl.castShadow = false;
+      scene.add(hl); scene.add(hl.target);
+      const coneG = new THREE.ConeGeometry(1.7, 9, 16, 1, true);
+      coneG.translate(0, -4.5, 0);
+      coneG.rotateX(-Math.PI / 2);
+      const cone = new THREE.Mesh(coneG, new THREE.MeshBasicMaterial({
+        color: 0xfff0c8, transparent: true, opacity: 0.055,
+        blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+      scene.add(cone);
+      window.__headlights.push({ hl, cone, side: hside });
+    }
+  }
+
   // CITY LIFE (Phase 120): in OSM driving games the car mesh is already in
   // memory — clone it into PARKED cars along curbs + a few AMBIENT drivers
   // looping the real streets. Zero extra downloads.
@@ -3563,6 +3594,27 @@ async function main() {
     projPool.push(m);
   }
   let atkCd = 0;
+  // CINEMATIC MODE (Phase 134/A): 'V' or the 🎥 chip — the camera hands
+  // off to a choreographed move (FPV chase for driving, low orbit for
+  // heroes) with the cine post stack on. Auto-returns after 22s.
+  let cineOn = false, cineT = 0;
+  const _cinePrevCam = new THREE.Vector3();
+  function setCine(on) {
+    cineOn = on; cineT = 0;
+    cinePass.uniforms.uOn.value = on ? 1 : 0;
+    const cb = document.getElementById('cinebtn');
+    if (cb) cb.style.opacity = on ? '1' : '0.55';
+  }
+  {
+    const cb = document.createElement('button');
+    cb.id = 'cinebtn'; cb.textContent = '🎥';
+    cb.title = 'Cinematic camera (V) — 22s choreographed shot with film-look post';
+    cb.style.cssText = 'position:fixed;right:14px;bottom:14px;z-index:6;font-size:20px;'
+      + 'background:rgba(16,14,28,0.6);border:1px solid rgba(255,255,255,0.2);'
+      + 'border-radius:10px;padding:6px 10px;cursor:pointer;opacity:0.55';
+    cb.onclick = () => setCine(!cineOn);
+    document.body.appendChild(cb);
+  }
   // TARGET MARKER + reach helper: a red diamond floats over the nearest
   // hostile you can hit — no more guessing whether the swing will land
   // ("hard to aim without a prop", 2026-07-08)
@@ -3764,6 +3816,7 @@ async function main() {
     // GRAMMAR: Space = JUMP on foot (fly/swim use it to ascend) — attack
     // lives on F, matching every modern game's muscle memory
     if (e.code === 'KeyF') { e.preventDefault(); doAttack(); }
+    if (e.code === 'KeyV') { e.preventDefault(); setCine(!cineOn); }
   });
   const atkBtn = document.getElementById('atkbtn');
   if (atkBtn && ATTACK !== 'none') {
@@ -4245,6 +4298,56 @@ varying vec2 vUvRaw;
       }`,
   });
   composer.addPass(sharpen);
+  // CINEMATIC PASS (Phase 134/A): off during gameplay. When cine mode is
+  // on: directional motion blur from camera velocity, lens focus falloff
+  // toward frame edges, crushed cinematic grade + vignette + grain — the
+  // 'footage, not gameplay' stack.
+  const cinePass = new ShaderPass({
+    uniforms: { tDiffuse: { value: null },
+                uOn: { value: 0 },
+                uDir: { value: new THREE.Vector2(1, 0) },
+                uStr: { value: 0 },
+                uTime: { value: 0 },
+                uRes: { value: new THREE.Vector2(innerWidth, innerHeight) } },
+    vertexShader: `varying vec2 vUv;
+      void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
+    fragmentShader: `uniform sampler2D tDiffuse; uniform float uOn;
+      uniform vec2 uDir; uniform float uStr; uniform float uTime; uniform vec2 uRes;
+      varying vec2 vUv;
+      void main(){
+        vec4 c = texture2D(tDiffuse, vUv);
+        if (uOn < 0.5) { gl_FragColor = c; return; }
+        // directional motion blur (camera velocity), 8 taps
+        vec2 stepv = uDir * uStr / uRes;
+        vec3 acc = c.rgb;
+        for (int i = 1; i <= 4; i++) {
+          acc += texture2D(tDiffuse, vUv + stepv * float(i)).rgb;
+          acc += texture2D(tDiffuse, vUv - stepv * float(i)).rgb;
+        }
+        c.rgb = acc / 9.0;
+        // lens focus falloff: soften toward frame edges (cheap bokeh feel)
+        float ed = distance(vUv, vec2(0.5, 0.45));
+        if (ed > 0.28) {
+          vec2 bpx = 2.6 / uRes * smoothstep(0.28, 0.75, ed);
+          vec3 bl = vec3(0.0);
+          bl += texture2D(tDiffuse, vUv + vec2(bpx.x, 0.)).rgb;
+          bl += texture2D(tDiffuse, vUv - vec2(bpx.x, 0.)).rgb;
+          bl += texture2D(tDiffuse, vUv + vec2(0., bpx.y)).rgb;
+          bl += texture2D(tDiffuse, vUv - vec2(0., bpx.y)).rgb;
+          c.rgb = mix(c.rgb, bl * 0.25, smoothstep(0.28, 0.7, ed) * 0.8);
+        }
+        // cinematic grade: cool crush + lifted blacks + vignette + grain
+        c.rgb = pow(max(c.rgb, vec3(0.0)), vec3(1.12));
+        c.rgb = mix(c.rgb, c.rgb * vec3(0.92, 1.0, 1.10), 0.5);
+        c.rgb += vec3(0.012, 0.014, 0.02);
+        float vg = smoothstep(0.95, 0.35, distance(vUv, vec2(0.5)));
+        c.rgb *= 0.55 + 0.45 * vg;
+        float gn = fract(sin(dot(vUv * uRes + uTime, vec2(12.9898, 78.233))) * 43758.5453);
+        c.rgb += (gn - 0.5) * 0.035;
+        gl_FragColor = c;
+      }`,
+  });
+  composer.addPass(cinePass);
   // 2D views: the ortho camera stands 40+m off the subject, which would put
   // the WHOLE world inside the fog band — push fog out by the standoff
   if (VIEW !== '3d' && scene.fog) {
@@ -4863,6 +4966,16 @@ varying vec2 vUvRaw;
                        playerObj.position.z - _sunDirN.z * 14);
       rim.target.position.copy(playerObj.position);
     }
+    for (const hh of window.__headlights || []) {
+      const hy = modelYaw;
+      const hx = playerObj.position.x + Math.sin(hy) * 1.6 + Math.cos(hy) * hh.side;
+      const hz = playerObj.position.z + Math.cos(hy) * 1.6 - Math.sin(hy) * hh.side;
+      hh.hl.position.set(hx, playerObj.position.y + 0.7, hz);
+      hh.hl.target.position.set(hx + Math.sin(hy) * 18, playerObj.position.y + 0.15,
+                                hz + Math.cos(hy) * 18);
+      hh.cone.position.copy(hh.hl.position);
+      hh.cone.rotation.set(0, hy, 0);
+    }
     for (const tv of window.__traffic || []) {
       const a2 = tv.pts[tv.seg], b2 = tv.pts[tv.seg + 1];
       const segL = Math.hypot(b2[0] - a2[0], b2[1] - a2[1]) || 1;
@@ -5001,6 +5114,39 @@ varying vec2 vUvRaw;
       camera.position.lerp(new THREE.Vector3(cx, cy, cz), 1 - Math.exp(-8 * dt));
       camera.lookAt(camTarget);
     }
+    if (cineOn) {                        // CINEMATIC CAMERA override
+      cineT += dt;
+      if (cineT > 22) setCine(false);
+      const cp = playerObj.position;
+      if ((P.mode || 'walk') === 'drive') {
+        // FPV chase: low, off-shoulder, banking with lateral velocity
+        const back = 6.5 + Math.sin(cineT * 0.35) * 1.5;
+        const side = Math.sin(cineT * 0.22) * 4.2;
+        const cyaw = modelYaw;
+        camera.position.set(
+          cp.x - Math.sin(cyaw) * back + Math.cos(cyaw) * side,
+          cp.y + 1.1 + Math.sin(cineT * 0.5) * 0.5,
+          cp.z - Math.cos(cyaw) * back - Math.sin(cyaw) * side);
+        camera.lookAt(cp.x + Math.sin(cyaw) * 6, cp.y + 0.6, cp.z + Math.cos(cyaw) * 6);
+        camera.rotation.z = THREE.MathUtils.clamp(-side * 0.02, -0.12, 0.12);
+      } else {
+        // hero orbit: slow low dolly circling the subject
+        const oa = cineT * 0.28;
+        const orad = 4.6 + Math.sin(cineT * 0.4) * 1.2;
+        camera.position.set(cp.x + Math.cos(oa) * orad,
+                            cp.y + 1.3 + Math.sin(cineT * 0.3) * 0.7,
+                            cp.z + Math.sin(oa) * orad);
+        camera.lookAt(cp.x, cp.y + P.height_m * 0.55, cp.z);
+      }
+      // motion-blur direction/strength from camera velocity (view space)
+      const cvel = camera.position.clone().sub(_cinePrevCam);
+      const lv = cvel.applyQuaternion(camera.quaternion.clone().invert());
+      const sp2 = Math.min(lv.length() / Math.max(dt, 1e-3), 40);
+      cinePass.uniforms.uDir.value.set(lv.x, -lv.y).normalize();
+      cinePass.uniforms.uStr.value = sp2 * 0.55;
+      cinePass.uniforms.uTime.value = performance.now() / 1000;
+    }
+    _cinePrevCam.copy(camera.position);
     if (shakeT > 0) {                    // decaying screen shake on damage
       shakeT = Math.max(0, shakeT - dt);
       camera.position.x += (Math.random() - 0.5) * 0.5 * shakeT;
@@ -5083,6 +5229,7 @@ varying vec2 vUvRaw;
     renderer.setSize(innerWidth, innerHeight, false);   // keep CSS 100% fill; only resize the buffer
     composer.setSize(innerWidth, innerHeight);
     sharpen.uniforms.uRes.value.set(innerWidth, innerHeight);
+    cinePass.uniforms.uRes.value.set(innerWidth, innerHeight);
     _dRT.setSize(innerWidth >> 1, innerHeight >> 1);
     ssao.uniforms.res.value.set(innerWidth, innerHeight);
     if (stylePass) stylePass.uniforms.res.value.set(innerWidth, innerHeight);
