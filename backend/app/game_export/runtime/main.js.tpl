@@ -3260,6 +3260,10 @@ async function main() {
   // Created at LOAD (light count never changes -> no shader recompiles).
   if ((P.mode || 'walk') === 'drive' && ['night', 'dusk'].includes(SPEC.world.sky)) {
     window.__headlights = [];
+    // generated car meshes are NOT centered on their own axis — measure the
+    // lateral offset once so the beam pair sits on the actual nose center
+    const _hbb = new THREE.Box3().setFromObject(pRoot);
+    window.__hlOff = { x: (_hbb.min.x + _hbb.max.x) / 2, z: 0 };
     for (const hside of [-0.7, 0.7]) {
       const hl = new THREE.SpotLight(0xfff2d8, 60, 42, 0.42, 0.45, 1.6);
       hl.castShadow = false;
@@ -3602,6 +3606,7 @@ async function main() {
   function setCine(on) {
     if (on && VIEW !== '3d') return;     // choreography is a 3D-camera art
     cineOn = on; cineT = 0;
+    if (!on) { camera.rotation.z = 0; camera.up.set(0, 1, 0); }  // no leftover bank
     cinePass.uniforms.uOn.value = on ? 1 : 0;
     const cb = document.getElementById('cinebtn');
     if (cb) cb.style.opacity = on ? '1' : '0.55';
@@ -4970,8 +4975,12 @@ varying vec2 vUvRaw;
     }
     for (const hh of window.__headlights || []) {
       const hy = modelYaw;
-      const hx = playerObj.position.x + Math.sin(hy) * 2.4 + Math.cos(hy) * hh.side;
-      const hz = playerObj.position.z + Math.cos(hy) * 2.4 - Math.sin(hy) * hh.side;
+      const hyo = hy + THREE.MathUtils.degToRad(P.yaw_offset_deg || 0);
+      const off = window.__hlOff || { x: 0, z: 0 };
+      const ox2 = off.x * Math.cos(hyo) + off.z * Math.sin(hyo);
+      const oz2 = -off.x * Math.sin(hyo) + off.z * Math.cos(hyo);
+      const hx = playerObj.position.x + ox2 + Math.sin(hy) * 2.4 + Math.cos(hy) * hh.side;
+      const hz = playerObj.position.z + oz2 + Math.cos(hy) * 2.4 - Math.sin(hy) * hh.side;
       hh.hl.position.set(hx, playerObj.position.y + 0.85, hz);
       hh.hl.target.position.set(hx + Math.sin(hy) * 18, playerObj.position.y + 0.15,
                                 hz + Math.cos(hy) * 18);
@@ -5088,6 +5097,7 @@ varying vec2 vUvRaw;
                    fZ + Math.cos(modelYaw) * lookAhead);
       if (camTarget.lengthSq() === 0) camTarget.copy(_camWant);
       camTarget.lerp(_camWant, 1 - Math.exp(-7 * dt));
+      camera.up.set(0, 1, 0);              // never let lookAt roll-flip
       const cd = SPEC.camera.distance_m * camZoom * (inspectOn ? 1.5 : 1);
       let cx = fX + Math.sin(yaw) * Math.cos(pitch) * cd;     // camera BEHIND
       let cz = fZ + Math.cos(yaw) * Math.cos(pitch) * cd;     // (W walks away)
@@ -5166,7 +5176,7 @@ varying vec2 vUvRaw;
       // 2026-07-29 'too much': blur is a seasoning — cap ~9px total reach
       const sp2 = Math.min(lv.length() / Math.max(dt, 1e-3), 16);
       cinePass.uniforms.uDir.value.set(lv.x, -lv.y).normalize();
-      cinePass.uniforms.uStr.value = sp2 * 0.22;
+      cinePass.uniforms.uStr.value = sp2 * 0.15;
       cinePass.uniforms.uTime.value = performance.now() / 1000;
     }
     _cinePrevCam.copy(camera.position);
