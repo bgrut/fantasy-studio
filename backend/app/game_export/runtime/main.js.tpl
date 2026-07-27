@@ -3899,7 +3899,7 @@ async function main() {
       return t;
     }
     const PBR_FILE = { bark: 'bark', stone: 'stone', roof: 'roof', brick: 'brick',
-                       foliage: 'leaves', needles: 'needles' };
+                       foliage: 'leaves', needles: 'needles', wall: 'facade_brick' };
     const _detailCache = {};
     function detailTex(cls, baseHex) {
       const key = cls + baseHex;
@@ -3983,7 +3983,8 @@ async function main() {
       if (!m.isMeshStandardMaterial || m.map || _seen.has(m.uuid)) continue;
         _seen.add(m.uuid);
         if (!o.geometry.attributes.uv) continue;             // needs UVs to texture
-        const cls = classify(m);
+        let cls = classify(m);
+        if ((m.name || '').toLowerCase() === 'wall') cls = 'wall';   // prop buildings wear brick facade
         if (cls === 'foliage' || cls === 'needles') {
           // canopies breathe in the wind — subtle, phase-shifted per tree
           m.onBeforeCompile = sh => {

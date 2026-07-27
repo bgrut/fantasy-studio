@@ -485,6 +485,16 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         job["player"] = cast
         if not spec.world.scatter:
             spec.world.scatter = [ScatterSpec(**s) for s in game_scatter(spec.world.name)]
+        # REAL-CITY DE-CLUTTER (Phase 126): OSM already builds the actual
+        # blocks — the boxy prop buildings clash beside them. Trees/bushes
+        # stay (parks); prop buildings + duplicate lamps go.
+        try:
+            from app.game_export.level import detect_place as _dp2
+            if _dp2(req.prompt):
+                spec.world.scatter = [sc for sc in spec.world.scatter
+                                      if 'building' not in sc.asset and 'lamp' not in sc.asset]
+        except Exception:
+            pass
         # generic-human aliases resolve to the man rig instead of generating
         # a new "npc" species from scratch
         _HUMAN_ALIASES = {"npc", "npcs", "guy", "person", "people", "villager",
