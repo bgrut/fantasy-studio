@@ -4210,12 +4210,14 @@ varying vec2 vUvRaw;
   // GLOBAL render treatment applied coherently to the whole frame. Never
   // guessed by an LLM, so it's never wrong.
   const STYLE = SPEC.style || 'default';
+  const _styleNight = ['night', 'dusk'].includes(SPEC.world.sky);
   const STYLE_CFG = {
     // TRUE CEL (Phase 131): luminance-banded flat fills + thick ink on
     // strong silhouettes only. celBands/inkTh/inkW drive the new path;
     // 'sketch' preserves the old fine-sobel recipe users liked.
-    cartoon: { bands: 0, sat: 1.5, exposure: 1.08, grain: 0, edge: 0, gamma: 1.0,
-               celBands: 4, inkTh: 0.22, inkW: 2.0 },
+    cartoon: { bands: 0, sat: 1.5, exposure: _styleNight ? 1.6 : 1.08, grain: 0,
+               edge: 0, gamma: 1.0, celBands: 4,
+               inkTh: _styleNight ? 0.14 : 0.22, inkW: 2.0 },
     sketch:  { bands: 5, sat: 1.35, exposure: 1.05, grain: 0, edge: 2.4, gamma: 1.0 },
     anime:   { bands: 8, sat: 1.18, exposure: 1.08, grain: 0, edge: 1.1, gamma: 1.0 },
     horror:  { bands: 0, sat: 0.32, exposure: 0.7, grain: 0.13, edge: 0, gamma: 1.7 },
@@ -4254,7 +4256,9 @@ varying vec2 vUvRaw;
           if (celBands > 0.5) {                   // TRUE CEL: band the LIGHT,
             float cl = dot(c.rgb, vec3(.299,.587,.114));       // keep the hue
             float cb = floor(cl * celBands + 0.5) / celBands;
-            c.rgb *= (cb + 0.02) / max(cl, 0.04);
+            // clamp the ratio — unclamped division CRUSHED dark scenes into
+            // speckled black blobs (2026-07-28 night-fox report)
+            c.rgb *= clamp((cb + 0.03) / max(cl, 0.05), 0.6, 1.8);
           }
           if (inkTh > 0.0) {                      // thick CLEAN ink: silhouettes
             vec2 pw = inkW / res;                 // only — threshold kills the
