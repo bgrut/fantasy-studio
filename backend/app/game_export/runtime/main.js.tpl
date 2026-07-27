@@ -3600,6 +3600,7 @@ async function main() {
   let cineOn = false, cineT = 0;
   const _cinePrevCam = new THREE.Vector3();
   function setCine(on) {
+    if (on && VIEW !== '3d') return;     // choreography is a 3D-camera art
     cineOn = on; cineT = 0;
     cinePass.uniforms.uOn.value = on ? 1 : 0;
     const cb = document.getElementById('cinebtn');
@@ -3613,6 +3614,7 @@ async function main() {
       + 'background:rgba(16,14,28,0.6);border:1px solid rgba(255,255,255,0.2);'
       + 'border-radius:10px;padding:6px 10px;cursor:pointer;opacity:0.55';
     cb.onclick = () => setCine(!cineOn);
+    if (VIEW !== '3d') cb.style.display = 'none';
     document.body.appendChild(cb);
   }
   // TARGET MARKER + reach helper: a red diamond floats over the nearest
@@ -5137,6 +5139,26 @@ varying vec2 vUvRaw;
                             cp.y + 1.3 + Math.sin(cineT * 0.3) * 0.7,
                             cp.z + Math.sin(oa) * orad);
         camera.lookAt(cp.x, cp.y + P.height_m * 0.55, cp.z);
+      }
+      // SAFETY (audit): the choreographed camera obeys the same physics as
+      // the gameplay camera — pull in front of any wall, stay under
+      // interior ceilings. No clipping through castles or city blocks.
+      if (INTERIOR) {
+        camera.position.y = Math.min(camera.position.y,
+          (INTERIOR.wall_h || 4.0) * (INTERIOR.floors || 1) - 0.4);
+      }
+      {
+        const hx2 = cp.x, hy2 = cp.y + (P.height_m || 1) * 0.6, hz2 = cp.z;
+        let dx3 = camera.position.x - hx2, dy3 = camera.position.y - hy2, dz3 = camera.position.z - hz2;
+        const dl3 = Math.hypot(dx3, dy3, dz3) || 1;
+        dx3 /= dl3; dy3 /= dl3; dz3 /= dl3;
+        const ray3 = new RAPIER.Ray({ x: hx2, y: hy2, z: hz2 }, { x: dx3, y: dy3, z: dz3 });
+        const hit3 = world.castRay(ray3, dl3, true, undefined, undefined, collider, body);
+        if (hit3 && hit3.timeOfImpact > 0.01) {
+          const t3 = Math.max(hit3.timeOfImpact - 0.3, 0.5);
+          camera.position.set(hx2 + dx3 * t3, hy2 + dy3 * t3, hz2 + dz3 * t3);
+          camera.lookAt(cp.x, cp.y + (P.height_m || 1) * 0.55, cp.z);
+        }
       }
       // motion-blur direction/strength from camera velocity (view space)
       const cvel = camera.position.clone().sub(_cinePrevCam);
