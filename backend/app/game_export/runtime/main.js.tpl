@@ -489,6 +489,42 @@ async function main() {
   if (OSM) {                                   // real streets: asphalt + wear
     for (const r of OSM.roads) drawTrail(r.pts, (r.w || 7) + 2, '#26262b', 0.92);
     for (const r of OSM.roads) drawTrail(r.pts, (r.w || 7) * 0.55, '#3a3a41', 0.85);
+    // CENTER DASHES + CROSSWALKS (Phase 119): road markings painted into
+    // the same ground canvas — lane dashes along every street, zebra
+    // stripes where road ENDPOINTS meet (real OSM intersections).
+    ctx.globalAlpha = 0.5; ctx.strokeStyle = '#c9c37a';
+    ctx.setLineDash([Math.max(2, 3 / gsize * TEXN), Math.max(2, 4 / gsize * TEXN)]);
+    ctx.lineWidth = Math.max(1, 0.35 / gsize * TEXN);
+    for (const r of OSM.roads) {
+      ctx.beginPath();
+      r.pts.forEach(([x, z], i) => i ? ctx.lineTo(W2T(x), W2T(z)) : ctx.moveTo(W2T(x), W2T(z)));
+      ctx.stroke();
+    }
+    ctx.setLineDash([]); ctx.globalAlpha = 1;
+    const _ends = {};
+    for (const r of OSM.roads) {
+      for (const p2 of [r.pts[0], r.pts[r.pts.length - 1]]) {
+        const k = Math.round(p2[0] / 4) + ',' + Math.round(p2[1] / 4);
+        (_ends[k] = _ends[k] || { x: p2[0], z: p2[1], n: 0, hd: r }).n++;
+      }
+    }
+    ctx.fillStyle = '#d8d8d8'; ctx.globalAlpha = 0.55;
+    for (const k in _ends) {
+      const j = _ends[k];
+      if (j.n < 3) continue;                       // true intersections only
+      const hp = j.hd.pts, a2 = Math.atan2(hp[1][0] - hp[0][0], hp[1][1] - hp[0][1]);
+      const stripeW = Math.max(1, 0.6 / gsize * TEXN);
+      for (let si = -3; si <= 3; si++) {
+        const off = si * 1.1;
+        const sx2 = j.x + Math.cos(a2) * off, sz2 = j.z - Math.sin(a2) * off;
+        ctx.save();
+        ctx.translate(W2T(sx2), W2T(sz2));
+        ctx.rotate(-a2);
+        ctx.fillRect(-stripeW / 2, -Math.max(2, 2.6 / gsize * TEXN), stripeW, Math.max(4, 5.2 / gsize * TEXN));
+        ctx.restore();
+      }
+    }
+    ctx.globalAlpha = 1;
   } else if (LVL && LVL.path) {                // worn trail along the mission route
     const c = LVL.corridor_m || 5.5;
     drawTrail(LVL.path, c * 1.15, '#' + dirt.getHexString(), 0.5);
@@ -1851,8 +1887,11 @@ async function main() {
           // facing down the street — no more cars materializing inside blocks
           const hd = Math.atan2(PATH[1][0] - PATH[0][0], PATH[1][1] - PATH[0][1]);
           const rx = Math.cos(hd), rz = -Math.sin(hd);         // lateral (right)
-          const lane = (vehIdx % 2 ? 1 : -1) * (2.4 + Math.floor(vehIdx / 2) * 0.001);
-          const back = 5 + Math.floor(vehIdx / 2) * 5.5;
+          // 2026-07-27 'duplicate car': 2.4m lanes + 5m rows packed rivals
+          // into the player's car (cars are ~2m wide, ~4.5m long). Real grid:
+          // 3.4m lanes, 8m rows, and the whole grid starts BEHIND the player.
+          const lane = (vehIdx % 2 ? 1 : -1) * (3.4 + Math.floor(vehIdx / 2) * 0.001);
+          const back = 8 + Math.floor(vehIdx / 2) * 8;
           holder.position.set(
             PATH[0][0] + rx * lane - Math.sin(hd) * back, 0,
             PATH[0][1] + rz * lane - Math.cos(hd) * back);
