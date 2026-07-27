@@ -1015,6 +1015,34 @@ async function main() {
   }
   // generated-car paint reads flat/blotchy until the GPU texture tier lands —
   // a glossier material response under the Sky light hides most of it
+  const _flatStyle = (SPEC.style || 'default') === 'cartoon';
+  function cartoonizeTexture(mm) {
+    // TRUE-CARTOON fills (Phase 132): blur away fur/noise detail, posterize
+    // to a handful of colors, resaturate — fox fur becomes clean orange
+    const img2 = mm.map && mm.map.image;
+    if (!img2 || !img2.width) return;
+    try {
+      const c3 = document.createElement('canvas');
+      c3.width = c3.height = 256;
+      const g3 = c3.getContext('2d');
+      g3.filter = 'blur(2px) saturate(1.5)';
+      g3.drawImage(img2, 0, 0, 256, 256);
+      g3.filter = 'none';
+      const d3 = g3.getImageData(0, 0, 256, 256);
+      for (let i2 = 0; i2 < d3.data.length; i2 += 4) {
+        d3.data[i2] = Math.round(d3.data[i2] / 42) * 42;
+        d3.data[i2 + 1] = Math.round(d3.data[i2 + 1] / 42) * 42;
+        d3.data[i2 + 2] = Math.round(d3.data[i2 + 2] / 42) * 42;
+      }
+      g3.putImageData(d3, 0, 0);
+      const t3 = new THREE.CanvasTexture(c3);
+      t3.colorSpace = THREE.SRGBColorSpace;
+      t3.flipY = mm.map.flipY;
+      mm.map = t3;
+      mm.normalMap = null;
+      mm.needsUpdate = true;
+    } catch (e) {}
+  }
   const _despeckled = new Set();
   function despeckleTexture(m) {
     // DE-SPECKLE (Phase 87): generated vehicle textures carry white noise
@@ -3261,34 +3289,6 @@ async function main() {
   // HERO DE-BLOTCH (Phase 95): the speckle/blotch filter only ran on
   // vehicles — characters kept raw generated textures. Every material with
   // a texture on the player now gets the same one-time clean.
-  const _flatStyle = (SPEC.style || 'default') === 'cartoon';
-  function cartoonizeTexture(mm) {
-    // TRUE-CARTOON fills (Phase 132): blur away fur/noise detail, posterize
-    // to a handful of colors, resaturate — fox fur becomes clean orange
-    const img2 = mm.map && mm.map.image;
-    if (!img2 || !img2.width) return;
-    try {
-      const c3 = document.createElement('canvas');
-      c3.width = c3.height = 256;
-      const g3 = c3.getContext('2d');
-      g3.filter = 'blur(2px) saturate(1.5)';
-      g3.drawImage(img2, 0, 0, 256, 256);
-      g3.filter = 'none';
-      const d3 = g3.getImageData(0, 0, 256, 256);
-      for (let i2 = 0; i2 < d3.data.length; i2 += 4) {
-        d3.data[i2] = Math.round(d3.data[i2] / 42) * 42;
-        d3.data[i2 + 1] = Math.round(d3.data[i2 + 1] / 42) * 42;
-        d3.data[i2 + 2] = Math.round(d3.data[i2 + 2] / 42) * 42;
-      }
-      g3.putImageData(d3, 0, 0);
-      const t3 = new THREE.CanvasTexture(c3);
-      t3.colorSpace = THREE.SRGBColorSpace;
-      t3.flipY = mm.map.flipY;
-      mm.map = t3;
-      mm.normalMap = null;
-      mm.needsUpdate = true;
-    } catch (e) {}
-  }
   pRoot.traverse(o => {
     if (!o.isMesh) return;
     for (const m of Array.isArray(o.material) ? o.material : [o.material]) {
