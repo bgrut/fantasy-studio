@@ -3614,7 +3614,7 @@ async function main() {
   {
     const cb = document.createElement('button');
     cb.id = 'cinebtn'; cb.textContent = '🎥';
-    cb.title = 'Cinematic camera (V) — 22s choreographed shot with film-look post';
+    cb.title = 'Cinematic camera (V) — stays on until toggled off';
     cb.style.cssText = 'position:fixed;right:14px;bottom:14px;z-index:6;font-size:20px;'
       + 'background:rgba(16,14,28,0.6);border:1px solid rgba(255,255,255,0.2);'
       + 'border-radius:10px;padding:6px 10px;cursor:pointer;opacity:0.55';
@@ -5128,7 +5128,8 @@ varying vec2 vUvRaw;
     }
     if (cineOn) {                        // CINEMATIC CAMERA override
       cineT += dt;
-      if (cineT > 22) setCine(false);
+      // PERSISTENT (2026-07-29): cinematic POV is the hyper-real view — it
+      // stays on until the player toggles it off (V / 🎥). No auto-timeout.
       const cp = playerObj.position;
       if ((P.mode || 'walk') === 'drive') {
         // FPV chase: low, off-shoulder, banking with lateral velocity
