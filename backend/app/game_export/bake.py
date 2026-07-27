@@ -805,7 +805,10 @@ def verify_glb_orientation(glb: str | Path, pattern: str | None, fix: bool = Fal
     return r or {"ok": False}
 
 
-def optimize_asset(src_glb: str | Path, out_glb: str | Path, target_tris: int = 45000,
+# HERO MESH BUDGET (Phase 117): 45k tris was tuned for the CPU era. Modern
+# GPU-generated meshes + instanced NPCs run 70k comfortably at 120fps — finer
+# silhouettes on faces, paws, armor edges for every FUTURE generation/reroll.
+def optimize_asset(src_glb: str | Path, out_glb: str | Path, target_tris: int = 70000,
                    height_m: float = 1.0, verbose: bool = True,
                    ref_png: str | Path | None = None,
                    despeckle: bool = False,
