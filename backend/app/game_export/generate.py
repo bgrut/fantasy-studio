@@ -244,6 +244,18 @@ def ensure_asset(kind: str, pattern: str | None = None, target_tris: int = 45000
                     _t.cuda.empty_cache()
             except Exception:
                 pass
+        # OLLAMA EVICTION (Phase 124): the extraction LLM stays resident on
+        # the GPU (~5GB) after every prompt parse — TRELLIS then starts
+        # starved on a 16GB card and THRASHES (the 20-30 min 'slow gen'
+        # class). keep_alive:0 unloads it; it reloads in ~2s next prompt.
+        try:
+            import requests as _rq
+            for _m in _rq.get("http://localhost:11434/api/ps", timeout=3).json().get("models", []):
+                _rq.post("http://localhost:11434/api/generate",
+                         json={"model": _m["name"], "keep_alive": 0}, timeout=5)
+                print(f"[game] evicted '{_m['name']}' from VRAM for the mesh engine", flush=True)
+        except Exception:
+            pass
         # engine order: CUDA gets the quality chain; CPU goes straight to
         # TripoSR (the only CPU-capable engine — TRELLIS.2/TripoSG need CUDA)
         _chain = ["triposr"] if cpu_gen else ["trellis2", "triposg", "triposr"]
