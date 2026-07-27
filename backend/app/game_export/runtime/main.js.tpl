@@ -1025,14 +1025,28 @@ async function main() {
       const c3 = document.createElement('canvas');
       c3.width = c3.height = 256;
       const g3 = c3.getContext('2d');
-      g3.filter = 'blur(2px) saturate(1.5)';
+      g3.filter = 'blur(5px) saturate(1.6)';
       g3.drawImage(img2, 0, 0, 256, 256);
       g3.filter = 'none';
       const d3 = g3.getImageData(0, 0, 256, 256);
+      // DOMINANT-PALETTE quantize (v2): find the 5 most common coarse colors
+      // and snap every pixel to the nearest — genuine flat cel regions, not
+      // per-channel confetti
+      const hist2 = new Map();
       for (let i2 = 0; i2 < d3.data.length; i2 += 4) {
-        d3.data[i2] = Math.round(d3.data[i2] / 42) * 42;
-        d3.data[i2 + 1] = Math.round(d3.data[i2 + 1] / 42) * 42;
-        d3.data[i2 + 2] = Math.round(d3.data[i2 + 2] / 42) * 42;
+        const k2 = ((d3.data[i2] >> 5) << 6) | ((d3.data[i2 + 1] >> 5) << 3) | (d3.data[i2 + 2] >> 5);
+        hist2.set(k2, (hist2.get(k2) || 0) + 1);
+      }
+      const pal2 = [...hist2.entries()].sort((a2, b2) => b2[1] - a2[1]).slice(0, 5)
+        .map(([k2]) => [((k2 >> 6) & 7) * 36 + 18, ((k2 >> 3) & 7) * 36 + 18, (k2 & 7) * 36 + 18]);
+      for (let i2 = 0; i2 < d3.data.length; i2 += 4) {
+        let bi2 = 0, bd2 = 1e9;
+        for (let p2 = 0; p2 < pal2.length; p2++) {
+          const dr = d3.data[i2] - pal2[p2][0], dg = d3.data[i2 + 1] - pal2[p2][1], db = d3.data[i2 + 2] - pal2[p2][2];
+          const dd2 = dr * dr + dg * dg + db * db;
+          if (dd2 < bd2) { bd2 = dd2; bi2 = p2; }
+        }
+        d3.data[i2] = pal2[bi2][0]; d3.data[i2 + 1] = pal2[bi2][1]; d3.data[i2 + 2] = pal2[bi2][2];
       }
       g3.putImageData(d3, 0, 0);
       const t3 = new THREE.CanvasTexture(c3);
@@ -4040,6 +4054,10 @@ async function main() {
           m.normalMap = pbr(PBR_FILE[cls] + '_n', 2, false);
           m.normalScale = new THREE.Vector2(0.9, 0.9);
           m.color.setRGB(1, 1, 1);
+        } else if (_flatStyle) {
+          // TRUE-CARTOON props: no texture at all — flat saturated fills
+          m.map = null; m.bumpMap = null; m.normalMap = null;
+          m.color.offsetHSL(0, 0.14, 0.04);
         } else {
           const tex = detailTex(cls, '#' + m.color.getHexString());
           m.map = tex;
@@ -4245,7 +4263,7 @@ varying vec2 vUvRaw;
     // 'sketch' preserves the old fine-sobel recipe users liked.
     cartoon: { bands: 0, sat: 1.5, exposure: _styleNight ? 1.6 : 1.08, grain: 0,
                edge: 0, gamma: 1.0, celBands: 4,
-               inkTh: _styleNight ? 0.14 : 0.22, inkW: 2.0 },
+               inkTh: _styleNight ? 0.14 : 0.22, inkW: 2.6 },
     sketch:  { bands: 5, sat: 1.35, exposure: 1.05, grain: 0, edge: 2.4, gamma: 1.0 },
     anime:   { bands: 8, sat: 1.18, exposure: 1.08, grain: 0, edge: 1.1, gamma: 1.0 },
     horror:  { bands: 0, sat: 0.32, exposure: 0.7, grain: 0.13, edge: 0, gamma: 1.7 },
