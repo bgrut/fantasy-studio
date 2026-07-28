@@ -11,6 +11,43 @@ import {
   rerollAsset, updateLevel,
   type GameHealth, type GameJob, type GameProject,
 } from '@/lib/gameApi'
+import OnboardingTour, { type TourStep } from '@/components/OnboardingTour'
+
+// First-run walkthroughs (each shows once per browser). The basics tour fires
+// on first visit to Game mode; the Inspect tour fires the first time a
+// playable game appears (its target only mounts then).
+const GAME_TOUR: TourStep[] = [
+  {
+    id: 'game-prompt',
+    targetAttr: 'game-prompt',
+    title: 'Describe your game',
+    body: 'One sentence is enough — cast, world, missions and rules are all generated. Pick a sample card below or type your own, then hit Build Game.',
+    placement: 'bottom',
+  },
+  {
+    id: 'game-look',
+    targetAttr: 'game-look',
+    title: 'Pick a look (optional)',
+    body: 'Style, camera view, and quality are one-click presets applied to the whole world. The defaults — Photoreal · 3D · ultra — are great; change nothing and just build.',
+    placement: 'top',
+  },
+  {
+    id: 'game-splat',
+    targetAttr: 'game-splat',
+    title: 'Splat worlds are extra credit',
+    body: 'Totally optional and experimental — swaps your scenery for a photographic 3D scene. Skip it for your first builds; hover the ? anytime to learn more.',
+    placement: 'top',
+  },
+]
+const INSPECT_TOUR: TourStep[] = [
+  {
+    id: 'game-inspect',
+    targetAttr: 'game-inspect',
+    title: 'Point at the world and change it',
+    body: 'Toggle Inspect, then hover anything in the running game to identify it. Click a spot and type an edit — "place a campfire here", "fence off this pass" — and it drops in live. Rules shows everything your game enforces.',
+    placement: 'bottom',
+  },
+]
 
 // Breadth showcase: classics that always work + wild ideas that exercise the
 // whole pipeline (new creatures generate on first use, worlds span earth to
@@ -362,9 +399,12 @@ export default function GameStudio() {
 
   return (
     <div className="space-y-8">
+      {/* first-run walkthroughs — basics now, Inspect when a game is playable */}
+      <OnboardingTour steps={GAME_TOUR} storageKey="fs.tour.game.v1" />
+      <OnboardingTour steps={INSPECT_TOUR} storageKey="fs.tour.inspect.v1" />
       {/* Prompt input — mirrors the video-mode hero input */}
       <div className="max-w-4xl mx-auto space-y-4">
-        <div className="relative group max-w-2xl mx-auto w-full">
+        <div data-tour-id="game-prompt" className="relative group max-w-2xl mx-auto w-full">
           <textarea
             value={prompt}
             rows={1}
@@ -420,7 +460,7 @@ export default function GameStudio() {
         </div>
 
         {/* LOOK & FEEL card: style / view / quality grouped in one place */}
-        <div className="mx-auto max-w-4xl w-full rounded-xl border border-white/[0.06] bg-white/[0.015] px-5 py-4 space-y-2.5">
+        <div data-tour-id="game-look" className="mx-auto max-w-4xl w-full rounded-xl border border-white/[0.06] bg-white/[0.015] px-5 py-4 space-y-2.5">
         <div className="flex flex-wrap justify-center items-center gap-1.5">
           <span className="text-[10px] font-mono text-[#4a4764]">style:</span>
           {STYLES.map((s) => (
@@ -475,7 +515,20 @@ export default function GameStudio() {
             </button>
           ))}
         </div>
-        <div className="flex justify-center items-center gap-2">
+        <p className="text-center text-[10px] font-mono text-[#4a4764]">
+          exports: 🌐 Web (three.js, plays anywhere) · 🎮 Godot 4 project (open-source engine — full editor access) · 🕹 Godot multiplayer guide included
+        </p>
+        </div>
+
+        {/* SPLAT WORLD — optional + experimental, deliberately its own card so
+            it never reads as a required step */}
+        <div data-tour-id="game-splat" className="mx-auto max-w-4xl w-full rounded-xl border border-dashed border-[#c86bff]/20 bg-[#c86bff]/[0.02] px-5 py-3 space-y-2">
+        <div className="flex flex-wrap justify-center items-center gap-2">
+          <span className="text-[10px] font-mono text-[#c86bff]/80">🌌 splat world</span>
+          <span className="px-1.5 py-0.5 rounded text-[9px] font-mono border border-white/[0.08] text-[#807d99]">optional · experimental</span>
+          <span
+            className="w-4 h-4 inline-flex items-center justify-center rounded-full border border-white/[0.12] text-[10px] text-[#807d99] cursor-help"
+            title="Games never need this — every build works without it. A splat world swaps your level's scenery for a photographic 3D 'Gaussian splat' scene: pick a sample (▾), upload a .ply/.splat file, ✨ imagine one from your prompt, or 🎥 train one from a walkthrough video.">?</span>
           {splatPath ? (
             <span className="px-2.5 py-1 rounded-full text-[11px] border border-[#c86bff]/60 bg-[#c86bff]/15 text-[#c86bff]"
                   title="This splat world is attached — it becomes the scenery of your next build. Hit ✕ to go back to normal worlds.">
@@ -557,9 +610,6 @@ export default function GameStudio() {
             ))}
           </div>
         )}
-        <p className="text-center text-[10px] font-mono text-[#4a4764]">
-          exports: 🌐 Web (three.js, plays anywhere) · 🎮 Godot 4 project (open-source engine — full editor access) · 🕹 Godot multiplayer guide included
-        </p>
         </div>
 
         {/* health strip + the CASTABLE CHARACTER LIBRARY (your generations) */}
@@ -822,6 +872,7 @@ export default function GameStudio() {
                 {addedJob === job!.id ? 'In your game ✓' : 'Add to my game'}
               </button>
               <button
+                data-tour-id="game-inspect"
                 onClick={toggleInspect}
                 title="hover to identify things · click to select a spot or thing, then describe your edit"
                 className={cn(

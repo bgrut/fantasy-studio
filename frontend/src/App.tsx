@@ -13,7 +13,6 @@ import { ToastProvider } from './components/Toast'
 import CommandPalette from './components/CommandPalette'
 import PipelineStatus from './components/PipelineStatus'
 import Onboarding from './components/Onboarding'
-import OnboardingTour from './components/OnboardingTour'
 import { TooltipProvider } from './components/ui/tooltip'
 
 // Pages
@@ -39,7 +38,9 @@ const rootRoute = createRootRoute({
         <PipelineStatus />
         <CommandPalette />
         <Onboarding />
-        <OnboardingTour />
+        {/* the video-mode tour now mounts inside SceneStudio (video mode only)
+            so it can't fire over Game mode; game/inspect tours live in
+            GameStudio the same way */}
       </ToastProvider>
     </TooltipProvider>
   ),

@@ -1,4 +1,5 @@
 import React, { useEffect, useLayoutEffect, useMemo, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { cn } from '@/lib/utils'
 
@@ -8,7 +9,7 @@ import { cn } from '@/lib/utils'
  * decoupled from the surrounding components.
  */
 
-type TourStep = {
+export type TourStep = {
   id: string
   targetAttr: string // value of data-tour-id
   title: string
@@ -44,7 +45,12 @@ const STEPS: TourStep[] = [
 
 const STORAGE_KEY = 'fs.onboarding.v1.done'
 
-export default function OnboardingTour() {
+// Reusable: pass custom steps + storageKey to run a separate one-time tour
+// (game mode, Inspect mode…). Defaults keep the original video-mode tour.
+export default function OnboardingTour({
+  steps = STEPS,
+  storageKey = STORAGE_KEY,
+}: { steps?: TourStep[]; storageKey?: string } = {}) {
   const [stepIdx, setStepIdx] = useState<number>(0)
   const [active, setActive] = useState<boolean>(false)
   const [ready, setReady] = useState<boolean>(false)
@@ -53,10 +59,10 @@ export default function OnboardingTour() {
   useEffect(() => {
     let done = true
     try {
-      done = localStorage.getItem(STORAGE_KEY) === '1'
+      done = localStorage.getItem(storageKey) === '1'
     } catch {}
     if (!done) setActive(true)
-  }, [])
+  }, [storageKey])
 
   // Delay activation a beat so target elements have mounted
   useEffect(() => {
@@ -67,14 +73,14 @@ export default function OnboardingTour() {
 
   const finish = () => {
     try {
-      localStorage.setItem(STORAGE_KEY, '1')
+      localStorage.setItem(storageKey, '1')
     } catch {}
     setActive(false)
   }
 
   const skip = finish
 
-  const step = STEPS[stepIdx]
+  const step = steps[stepIdx]
 
   // Compute target rect for positioning. Recompute on resize/scroll while
   // active so the tooltip tracks its anchor.
@@ -87,7 +93,10 @@ export default function OnboardingTour() {
       ) as HTMLElement | null
     const update = () => {
       const el = find()
-      if (el) setRect(el.getBoundingClientRect())
+      const r = el?.getBoundingClientRect()
+      // hidden / zero-size targets (mode switched away, not yet mounted)
+      // must NOT anchor a tooltip at 0,0
+      if (r && r.width > 8 && r.height > 8) setRect(r)
       else setRect(null)
     }
     update()
@@ -154,7 +163,10 @@ export default function OnboardingTour() {
 
   if (!active) return null
 
-  return (
+  // PORTAL: tours can mount inside animated (CSS-transformed) containers,
+  // where position:fixed anchors to the transform ancestor instead of the
+  // viewport and the halo lands off-target. Body render restores true fixed.
+  return createPortal(
     <AnimatePresence>
       {ready && step && rect && (
         <>
@@ -187,7 +199,7 @@ export default function OnboardingTour() {
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
                   <span className="text-[10px] font-mono text-[#38d9c4]">
-                    {stepIdx + 1} / {STEPS.length}
+                    {stepIdx + 1} / {steps.length}
                   </span>
                   <h4 className="text-sm font-semibold text-white">{step.title}</h4>
                 </div>
@@ -208,7 +220,7 @@ export default function OnboardingTour() {
                     back
                   </button>
                 )}
-                {stepIdx < STEPS.length - 1 ? (
+                {stepIdx < steps.length - 1 ? (
                   <button
                     onClick={() => setStepIdx((i) => i + 1)}
                     className={cn(
@@ -234,6 +246,7 @@ export default function OnboardingTour() {
           </motion.div>
         </>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body,
   )
 }

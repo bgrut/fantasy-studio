@@ -41,6 +41,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import VideoPlayer from '@/components/VideoPlayer'
 import VideoProjectBar from '@/components/VideoProjectBar'
 import GameStudio from '@/components/GameStudio'
+import OnboardingTour from '@/components/OnboardingTour'
 import CastPanel, { type CastChoice } from '@/components/CastPanel'
 import InlineCastStrip, { type InlineCastSlot } from '@/components/InlineCastStrip'
 import LibraryBrowser, { type LibraryBrowserChoice } from '@/components/LibraryBrowser'
@@ -612,6 +613,8 @@ export default function SceneStudio() {
     // v1.4 polish — Phase 2 page-load entrance choreography. Direct children
     // fade-in-and-rise sequentially with 80ms stagger, total under 1.2s.
     <div className="space-y-8 entrance-stagger">
+      {/* first-run tour is per-mode: video tour here, game tour in GameStudio */}
+      {mode === 'video' && <OnboardingTour />}
       {/* ── Hero Prompt ────────────────────────────────────── */}
       {/* v1.4 follow-up — title in Cabinet Grotesk display face, full title
           inherits the animated text-gradient (purple→pink→teal). overflow-hidden
@@ -619,7 +622,7 @@ export default function SceneStudio() {
           shift during page entrance / render state changes. */}
       <div className="text-center space-y-3 pt-4 overflow-x-clip">
         <h1 className="font-display text-5xl sm:text-6xl md:text-7xl font-bold leading-[1.0] text-gradient inline-block">
-          What do you Imagine?
+          {mode === 'game' ? 'Imagine a game. Play it in minutes.' : 'What do you Imagine?'}
         </h1>
         <p className="text-sm sm:text-base text-[#807d99] max-w-lg mx-auto">
           {mode === 'game'
