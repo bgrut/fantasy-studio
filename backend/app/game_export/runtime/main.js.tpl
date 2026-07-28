@@ -10,6 +10,7 @@ import { EffectComposer } from './vendor/jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from './vendor/jsm/postprocessing/RenderPass.js';
 import { ShaderPass } from './vendor/jsm/postprocessing/ShaderPass.js';
 import { N8AOPass } from './vendor/n8ao.module.js';
+import { CSM } from './vendor/jsm/csm/CSM.js';
 import { UnrealBloomPass } from './vendor/jsm/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from './vendor/jsm/postprocessing/OutputPass.js';
 import RAPIER from './vendor/rapier.es.js';
@@ -458,6 +459,39 @@ async function main() {
   Object.assign(sun.shadow.camera, { left: -sc, right: sc, top: sc, bottom: -sc, far: 400 });
   sun.shadow.camera.updateProjectionMatrix();
   scene.add(sun);
+  // CASCADED SHADOWS (Arc A round 3, 2026-07-28): big worlds/cities get
+  // 3-cascade sun shadows — crisp near the camera AND still shadowed at
+  // distance, instead of one 48m fitted box with a bare horizon. Small
+  // worlds keep the proven fitted map (lower risk, same look). The CSM
+  // cascade lights REPLACE the sun's light+shadow contribution; materials
+  // are patched by a periodic traversal so late-spawned meshes join in.
+  let csm = null;
+  if (SPEC.world.size_m > 120 && QUALITY !== 'performance') {
+    try {
+      csm = new CSM({
+        maxFar: 260, cascades: 3, mode: 'practical',
+        shadowMapSize: 2048,
+        lightDirection: new THREE.Vector3(...pal.sunPos).multiplyScalar(-1).normalize(),
+        lightIntensity: pal.sun,
+        camera, parent: scene,
+      });
+      for (const l of csm.lights) l.color.set(pal.sunCol || 0xffffff);
+      csm.fade = true;
+      csm.updateFrustums();
+      sun.castShadow = false;
+      sun.intensity = 0;                 // cascades carry the sun now
+      const _csmSeen = new WeakSet();
+      window.__csmPatch = () => scene.traverse((o) => {
+        if (!o.material) return;
+        const ms = Array.isArray(o.material) ? o.material : [o.material];
+        for (const m of ms) {
+          if ((m.isMeshStandardMaterial || m.isMeshPhysicalMaterial
+               || m.isMeshLambertMaterial || m.isMeshPhongMaterial)
+              && !_csmSeen.has(m)) { csm.setupMaterial(m); _csmSeen.add(m); }
+        }
+      });
+    } catch (e) { console.warn('[game] CSM unavailable: ' + e.message); csm = null; }
+  }
 
   // HERO RIM LIGHT (Phase 116): the classic AAA separator — a cool
   // back-light opposite the sun that only reads on silhouette edges.
@@ -5032,6 +5066,7 @@ varying vec2 vUvRaw;
       const sb = Math.atan2(sun.position.z, sun.position.x) + 0.0007 * dt;
       sun.position.x = Math.cos(sb) * sr;
       sun.position.z = Math.sin(sb) * sr;
+      if (csm) csm.lightDirection.copy(sun.position).multiplyScalar(-1).normalize();
     }
     if (playerObj) {
       rim.position.set(playerObj.position.x - _sunDirN.x * 14,
@@ -5288,6 +5323,11 @@ varying vec2 vUvRaw;
     }
     if (stylePass) stylePass.uniforms.time.value = performance.now() / 1000;
     if (_legacySSAO) renderDepthPrepass();   // retired: N8AO owns depth now
+    if (csm) {
+      csm.update();
+      window.__csmFrame = (window.__csmFrame || 0) + 1;
+      if (window.__csmFrame % 60 === 1) window.__csmPatch();  // catch spawns
+    }
     composer.render();
     // live state for the verify harness (extends the __game probe object)
     window.__game.state = { x: nt.x, y: nt.y, z: nt.z, modelYaw, yaw, speed,
@@ -5329,6 +5369,7 @@ varying vec2 vUvRaw;
     renderer.setSize(innerWidth, innerHeight, false);   // keep CSS 100% fill; only resize the buffer
     composer.setSize(innerWidth, innerHeight);
     n8ao.setSize(innerWidth, innerHeight);
+    if (csm) csm.updateFrustums();
     sharpen.uniforms.uRes.value.set(innerWidth, innerHeight);
     cinePass.uniforms.uRes.value.set(innerWidth, innerHeight);
     _dRT.setSize(innerWidth >> 1, innerHeight >> 1);
