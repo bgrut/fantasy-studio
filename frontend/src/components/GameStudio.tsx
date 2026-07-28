@@ -82,7 +82,8 @@ export default function GameStudio() {
   const [splatTrain, setSplatTrain] = useState<string | null>(null)  // splat job stage text
 
   // shared poll for train_splat / imagine_splat jobs — attaches the result
-  const pollSplat = (jobId: number) => {
+  // and AUTO-BUILDS the game with it so the play panel updates like any run
+  const pollSplat = (jobId: number, buildPrompt?: string) => {
     setSplatTrain('starting')
     const poll = window.setInterval(async () => {
       try {
@@ -90,7 +91,11 @@ export default function GameStudio() {
         setSplatTrain(job.stage)
         if (job.status === 'complete') {
           window.clearInterval(poll); setSplatTrain(null)
-          if (job.splat) setSplatPath(job.splat)
+          if (job.splat) {
+            setSplatPath(job.splat)
+            const p = (buildPrompt ?? prompt).trim()
+            if (p) startJob(p, undefined, undefined, undefined, job.splat)
+          }
         } else if (job.status === 'failed') {
           window.clearInterval(poll); setSplatTrain(null)
           setError(job.error ?? 'splat job failed')
@@ -184,7 +189,8 @@ export default function GameStudio() {
 
   const startJob = useCallback(async (p: string, baseJobId?: number,
                                       at?: { x: number; z: number; target?: string },
-                                      at2?: { x: number; z: number }) => {
+                                      at2?: { x: number; z: number },
+                                      splatNow?: string) => {
     setError(null)
     setSavedLevel(null)                   // any rebuild invalidates "Saved ✓"
     if (baseJobId == null) { setJob(null); setOpenedLevel(null) }  // fresh build = not a level edit
@@ -195,13 +201,13 @@ export default function GameStudio() {
         // fresh build: USER-SELECTED style + view ride along — never guessed
         : { style: style !== 'default' ? style : undefined,
             view: view !== '3d' ? view : undefined,
-            splat: splatPath ?? undefined })
+            splat: (splatNow ?? splatPath) ?? undefined })
       pollJob(job_id)
     } catch (e) {
       setBuilding(false)
       setError(e instanceof Error ? e.message : String(e))
     }
-  }, [pollJob, style, view])
+  }, [pollJob, style, view, splatPath])
 
   // Phase 43 level tiles: click a level -> exact re-export opens as a live
   // job in the player above — play it, Inspect it, edit it, save it back.
@@ -465,24 +471,26 @@ export default function GameStudio() {
           ))}
         </div>
         <div className="flex justify-center items-center gap-2">
-          <label className={cn(
-                   'px-2.5 py-1 rounded-full text-[11px] border cursor-pointer transition-all',
-                   splatPath
-                     ? 'border-[#c86bff]/60 bg-[#c86bff]/15 text-[#c86bff]'
-                     : 'border-white/[0.06] bg-white/[0.02] text-[#807d99] hover:text-white'
-                 )}
-                 title="Optional: load a Gaussian-splat world (.ply/.splat) — it becomes the scenery of your next build. Off by default; builds work normally without one.">
-            🌌 {splatPath ? splatPath.split('/').pop() : 'Splat world: off'}
-            <input type="file" accept=".ply,.splat,.ksplat" className="hidden"
-              onChange={async (e) => {
-                const f = e.target.files?.[0]
-                if (!f) return
-                try {
-                  const r = await uploadSplat(f)
-                  setSplatPath(r.path)
-                } catch (err) { setError(err instanceof Error ? err.message : String(err)) }
-              }} />
-          </label>
+          {splatPath ? (
+            <span className="px-2.5 py-1 rounded-full text-[11px] border border-[#c86bff]/60 bg-[#c86bff]/15 text-[#c86bff]"
+                  title="This splat world is attached — it becomes the scenery of your next build. Hit ✕ to go back to normal worlds.">
+              🌌 {splatPath.split('/').pop()}
+            </span>
+          ) : (
+            <label className="px-2.5 py-1 rounded-full text-[11px] border border-white/[0.06] bg-white/[0.02] text-[#807d99] hover:text-white cursor-pointer transition-all"
+                   title="Optional: upload a Gaussian-splat world file (.ply/.splat). Off by default — builds work normally without one.">
+              🌌 Splat world: off
+              <input type="file" accept=".ply,.splat,.ksplat" className="hidden"
+                onChange={async (e) => {
+                  const f = e.target.files?.[0]
+                  if (!f) return
+                  try {
+                    const r = await uploadSplat(f)
+                    setSplatPath(r.path)
+                  } catch (err) { setError(err instanceof Error ? err.message : String(err)) }
+                }} />
+            </label>
+          )}
           {splatPath && (
             <button onClick={() => setSplatPath(null)}
               className="text-[11px] text-[#807d99] hover:text-white" title="detach splat world">✕</button>
@@ -497,7 +505,10 @@ export default function GameStudio() {
               }}>▾</button>
           )}
           {splatTrain ? (
-            <span className="text-[11px] font-mono text-[#c86bff]">🌌 {splatTrain}…</span>
+            <span className="text-[11px] font-mono text-[#c86bff] animate-pulse"
+                  title="Your splat world is being generated — the game will build automatically the moment it's ready.">
+              🌌 building splat world: {splatTrain}… (game auto-builds when done)
+            </span>
           ) : (
             <label className="px-2.5 py-1 rounded-full text-[11px] border border-white/[0.06] bg-white/[0.02] text-[#807d99] hover:text-white cursor-pointer transition-all"
                    title="Train a splat world from your own walkthrough video (steady sideways motion, 20-60s). Takes 20-60 min on GPU.">
@@ -522,7 +533,7 @@ export default function GameStudio() {
                 if (!p) { setError('type a prompt first — the splat is imagined from it'); return }
                 try {
                   const r = await imagineSplat(p)
-                  pollSplat(r.job_id)
+                  pollSplat(r.job_id, p)
                 } catch (err) { setError(err instanceof Error ? err.message : String(err)) }
               }}>✨ imagine</button>
           )}
