@@ -79,6 +79,7 @@ class WorldSpec(BaseModel):
     water_level: Optional[float] = None   # ocean/lake worlds: water plane height (m)
     splat: Optional[str] = None    # Tier-1 Gaussian-splat world: dist-relative .ply/.splat URL
     splat_fit: Optional[dict] = None  # 137.2 auto-fit: {rotation, scale, position} from bounds
+    hdri: Optional[str] = None     # Arc B: dist-relative CC0 HDRI for image-based lighting
     health_packs: int = Field(0, ge=0, le=12)   # heart pickups scattered on the ground
     placed_items: List[PlacedItemSpec] = Field(default_factory=list)  # Inspector placements
     scatter: List[ScatterSpec] = Field(default_factory=list)

@@ -153,6 +153,19 @@ def export_web_game(spec: GameSpec, out_dir: str | Path, verbose: bool = True) -
             if src.exists():
                 shutil.copy2(src, props_dst / src.name)
 
+    # ── HDRI IBL (Arc B slice, 2026-07-28): bundle the CC0 Poly Haven HDRI
+    # matching the sky mood — real captured light for every PBR material.
+    # Flat/stylized looks skip it (their pipeline strips photo response).
+    if getattr(spec.world, "hdri", None) is None and spec.style in ("default", "horror"):
+        _mood = {"day": "day", "sunset": "sunset", "dusk": "sunset",
+                 "night": "night", "overcast": "overcast"}.get(spec.world.sky)
+        if _mood:
+            _h = BACKEND_ROOT / "assets" / "hdri" / f"{_mood}.hdr"
+            if _h.exists():
+                (dist / "hdri").mkdir(parents=True, exist_ok=True)
+                shutil.copy2(_h, dist / "hdri" / _h.name)
+                spec.world.hdri = f"hdri/{_h.name}"
+
     # ── Gaussian-splat world (Phase 136, additive): bundle the file the
     # spec points at; the runtime lazy-loads the renderer only when present
     if getattr(spec.world, "splat", None):

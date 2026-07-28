@@ -221,7 +221,11 @@ async function main() {
   renderer.setSize(innerWidth, innerHeight, false);   // false: don't set inline px style — CSS fills
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-  renderer.toneMapping = THREE.ACESFilmicToneMapping;   // filmic response for the Sky
+  // AgX (Arc A, 2026-07-28): Blender-4-default tonemapper — best hue
+  // preservation under bright light (ACES skews skin/saturated paint toward
+  // orange). AgX runs ~1 stop flatter, so exposure is compensated below and
+  // the grade pass adds the punch back deliberately.
+  renderer.toneMapping = THREE.AgXToneMapping;
   // Phase 65: per-environment exposure; snow is high-albedo — damp it further
   // so arctic scenes read as LIT SNOW instead of a white void.
   renderer.toneMappingExposure = ((SKY[SPEC.world.sky] || SKY.day).exp || 0.75)
@@ -229,7 +233,8 @@ async function main() {
     // high-albedo grounds (desert sand, beach) wash out like snow does —
     // same damp, keyed on the actual ground color instead of a name list
     * ((0.299 * SPEC.world.ground_color[0] + 0.587 * SPEC.world.ground_color[1]
-        + 0.114 * SPEC.world.ground_color[2]) > 0.62 ? 0.88 : 1.0);
+        + 0.114 * SPEC.world.ground_color[2]) > 0.62 ? 0.88 : 1.0)
+    * 1.35;   // AgX compensation: ~1 stop flatter than the old ACES curve
   renderer.domElement.style.cssText = 'display:block;width:100%;height:100%';  // fill the frame
   document.getElementById('app').appendChild(renderer.domElement);
 
@@ -309,6 +314,24 @@ async function main() {
       } catch (e) {}
     }
     if ('environmentIntensity' in scene) scene.environmentIntensity = 0.55;
+    // HDRI IBL (Arc B slice, 2026-07-28): a real captured environment beats
+    // any procedural one — correct ambient color + reflections on every PBR
+    // material. CC0 Poly Haven capture bundled per sky mood at export; loads
+    // async and replaces the procedural env when ready (sky dome stays the
+    // visible background so the horizon art direction is unchanged).
+    if (SPEC.world.hdri) {
+      import('./vendor/jsm/loaders/RGBELoader.js').then(({ RGBELoader }) => {
+        new RGBELoader().load(SPEC.world.hdri, (tex) => {
+          tex.mapping = THREE.EquirectangularReflectionMapping;
+          const pmH = new THREE.PMREMGenerator(renderer);
+          const envH = pmH.fromEquirectangular(tex).texture;
+          pmH.dispose(); tex.dispose();
+          scene.environment = envH;
+          if ('environmentIntensity' in scene) scene.environmentIntensity = 0.5;
+          console.log('[game] HDRI environment: ' + SPEC.world.hdri);
+        }, undefined, () => console.warn('[game] HDRI env skipped — procedural stays'));
+      }).catch(() => {});
+    }
     // CLOUDS (Phase 74): soft drifting billboards — an empty blue dome reads
     // as a render, a sky with weather reads as a place. Sprite count/opacity
     // tuned per mood; they drift slowly downwind and always face the camera.
@@ -4294,7 +4317,16 @@ varying vec2 vUvRaw;
         vec4 c = texture2D(tDiffuse, vUv);
         float l = dot(c.rgb, vec3(0.299, 0.587, 0.114));
         c.rgb = mix(c.rgb, c.rgb * tint, 0.22);          // mood tint
-        c.rgb = mix(vec3(l), c.rgb, 1.06);               // slight saturation lift
+        // FILM PUNCH (Arc A): AgX is deliberately flat — this restores bite
+        // the graded way: gentle S-contrast around mid-gray, saturation lift,
+        // and a subtle teal-shadow / warm-highlight split tone (the classic
+        // blockbuster grade, kept far below music-video strength).
+        c.rgb = mix(vec3(l), c.rgb, 1.12);               // saturation
+        c.rgb = clamp((c.rgb - 0.5) * 1.07 + 0.5, 0.0, 1.0);  // S-contrast
+        float lu = dot(c.rgb, vec3(0.299, 0.587, 0.114));
+        vec3 shadowTone = vec3(0.94, 1.0, 1.06);         // teal shadows
+        vec3 highTone   = vec3(1.05, 1.0, 0.95);         // warm highlights
+        c.rgb *= mix(shadowTone, highTone, smoothstep(0.18, 0.78, lu));
         gl_FragColor = c;
       }`,
   });
