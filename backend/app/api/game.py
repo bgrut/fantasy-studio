@@ -230,6 +230,36 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                     spec.view = base_spec.get("view", spec.view) or spec.view
                 except Exception:
                     pass
+                # THE WORLD IS SACRED TOO (2026-07-28): "give the knight 3
+                # more hp" once moved the fight OUTSIDE the castle — the LLM
+                # re-imagined the scenery during an unrelated edit. Unless the
+                # edit explicitly talks about the world, every world field and
+                # the SEED carry forward from the base game; only placed_items
+                # (LLM may add) and the deterministic sky/weather/style word
+                # overrides below may differ.
+                _wl = req.prompt.lower()
+                _world_words = (
+                    "world", "setting", "scene", "scenery", "environment",
+                    "map", "terrain", "ground", "move to", "teleport",
+                    "city", "forest", "desert", "ocean", "island", "castle",
+                    "dungeon", "mansion", "arena", "stadium", "village",
+                    "mountain", "cave", "indoor", "outdoor", "outside",
+                    "inside", "interior", "sky", "weather", "night", "day",
+                    "sunset", "snow", "rain", "storm", "fog")
+                if not any(w in _wl for w in _world_words):
+                    _keep_items = spec.world.placed_items
+                    for k, v in (base_spec.get("world") or {}).items():
+                        if k == "placed_items":
+                            continue
+                        try:
+                            setattr(spec.world, k, _copy.deepcopy(v))
+                        except Exception:
+                            pass
+                    spec.world.placed_items = _keep_items
+                try:
+                    spec.seed = base_spec.get("seed", spec.seed) or spec.seed
+                except Exception:
+                    pass
                 # THE USER'S EXPLICIT WORDS WIN (2026-07-08): when an edit
                 # literally names a sky or weather, that beats whatever the
                 # LLM picked — "make it a starry night" once came back as
