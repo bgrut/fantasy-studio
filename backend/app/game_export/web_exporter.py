@@ -67,38 +67,46 @@ def _splat_fit(path: Path) -> dict | None:
     if pts is None or len(pts) < 100:
         return None
 
-    # up-axis by provenance: TRELLIS gaussians are z-up; .splat captures and
-    # Brush-trained scenes are y-down (COLMAP camera convention)
-    up = None
-    meta = Path(str(path) + ".meta.json")
-    if meta.exists():
-        try:
-            up = json.loads(meta.read_text(encoding="utf-8")).get("up")
-        except Exception:  # noqa: BLE001
-            up = None
-    if up is None and path.suffix.lower() == ".splat":
-        up = "y_down"
-    if up == "z":                       # z-up -> y-up: rotate -90 about X
-        pts = np.stack([pts[:, 0], pts[:, 2], -pts[:, 1]], axis=1)
-        s2 = math.sqrt(0.5)
-        rot = [-s2, 0.0, 0.0, s2]
-    elif up == "y_down":                # flip: rotate 180 about X
-        pts = np.stack([pts[:, 0], -pts[:, 1], -pts[:, 2]], axis=1)
-        rot = [1.0, 0.0, 0.0, 0.0]
-    else:
-        rot = [0.0, 0.0, 0.0, 1.0]
+    # up-axis is solved from GEOMETRY, not provenance (the provenance guess
+    # put a shrine upside-down overhead): among the 4 X-axis orientations,
+    # the correct one has its gaussian mass sitting LOW — floors, ground
+    # planes and structure bases are the densest regions of any scene. Same
+    # insight as the vehicle wheels-down solver.
+    s2 = math.sqrt(0.5)
+    cands = [
+        (np.stack([pts[:, 0], pts[:, 1], pts[:, 2]], axis=1),
+         [0.0, 0.0, 0.0, 1.0]),                       # identity
+        (np.stack([pts[:, 0], pts[:, 2], -pts[:, 1]], axis=1),
+         [-s2, 0.0, 0.0, s2]),                        # rotX -90 (z-up src)
+        (np.stack([pts[:, 0], -pts[:, 2], pts[:, 1]], axis=1),
+         [s2, 0.0, 0.0, s2]),                         # rotX +90
+        (np.stack([pts[:, 0], -pts[:, 1], -pts[:, 2]], axis=1),
+         [1.0, 0.0, 0.0, 0.0]),                       # rotX 180 (y-down src)
+    ]
+    best = None
+    for cpts, quat in cands:
+        p2 = np.percentile(cpts[:, 1], 2)
+        p98 = np.percentile(cpts[:, 1], 98)
+        if p98 - p2 <= 1e-6:
+            continue
+        cz_norm = float((cpts[:, 1].mean() - p2) / (p98 - p2))
+        if best is None or cz_norm < best[0]:
+            best = (cz_norm, cpts, quat)
+    if best is None:
+        return None
+    _, pts, rot = best
 
     lo = np.percentile(pts, 2, axis=0)
     hi = np.percentile(pts, 98, axis=0)
     ext = float(max(hi - lo))
     if ext <= 1e-6:
         return None
-    # object-scale gaussians (TRELLIS ~1 unit) become a ~40m diorama the
-    # player walks through; capture-scale scenes (>15m) are left 1:1
-    scale = round(min(40.0 / ext, 60.0), 3) if ext < 15.0 else 1.0
+    # object-scale gaussians (TRELLIS ~1 unit) become THE world (~110m, the
+    # size of a mesh level); capture-scale scenes (>15m) are left 1:1
+    scale = round(min(110.0 / ext, 200.0), 3) if ext < 15.0 else 1.0
     cx = float((lo[0] + hi[0]) / 2) * scale
     cz = float((lo[2] + hi[2]) / 2) * scale
-    py = -float(lo[1]) * scale          # seat the 2%-bottom on the ground
+    py = -float(lo[1]) * scale - 0.4    # seat the 2%-bottom just below ground
     return {"rotation": rot, "scale": scale,
             "position": [round(-cx, 3), round(py, 3), round(-cz, 3)]}
 
