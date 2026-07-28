@@ -1455,8 +1455,13 @@ async function main() {
       const GS = await import('./vendor/gaussian-splats-3d.module.js');
       const sv = new GS.DropInViewer({ gpuAcceleratedSort: false,
                                        sharedMemoryForWorkers: false });
+      // 137.2 auto-fit: export computed rotation/scale/lift from the splat's
+      // real bounds — object-scale splats become a ~40m walkable diorama
+      const sf = SPEC.world.splat_fit || null;
       await sv.addSplatScene(SPEC.world.splat, {
-        showLoadingUI: false, progressiveLoad: true });
+        showLoadingUI: false, progressiveLoad: true,
+        ...(sf ? { rotation: sf.rotation, position: sf.position,
+                   scale: [sf.scale, sf.scale, sf.scale] } : {}) });
       scene.add(sv);
       console.log('[game] splat world loaded: ' + SPEC.world.splat);
     } catch (e) {

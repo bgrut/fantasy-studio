@@ -16,6 +16,93 @@ BACKEND_ROOT = Path(__file__).resolve().parents[2]
 RUNTIME = Path(__file__).resolve().parent / "runtime"
 
 
+def _splat_points(path: Path, max_pts: int = 120_000):
+    """Sample gaussian centers from a .ply (3DGS) or .splat file as an [N,3]
+    float array. Returns None for formats we can't parse (.ksplat)."""
+    import numpy as np
+    ext = path.suffix.lower()
+    if ext == ".splat":
+        # antimatter15 format: 32-byte stride, first 12 bytes = float32 xyz
+        raw = np.fromfile(path, dtype=np.uint8).reshape(-1, 32)
+        pts = raw[:, :12].copy().view(np.float32).reshape(-1, 3)
+    elif ext == ".ply":
+        with open(path, "rb") as f:
+            header = b""
+            while not header.endswith(b"end_header\n"):
+                line = f.readline()
+                if not line:
+                    return None
+                header += line
+            txt = header.decode("ascii", errors="ignore")
+            if "binary_little_endian" not in txt:
+                return None
+            import re as _re
+            m = _re.search(r"element vertex (\d+)", txt)
+            props = [ln.split()[-1] for ln in txt.splitlines()
+                     if ln.startswith("property float")]
+            if not m or "x" not in props:
+                return None
+            n = int(m.group(1))
+            data = np.fromfile(f, dtype=np.float32, count=n * len(props))
+        data = data.reshape(-1, len(props))
+        ix = [props.index(a) for a in ("x", "y", "z")]
+        pts = data[:, ix]
+    else:
+        return None
+    if len(pts) > max_pts:
+        pts = pts[:: max(1, len(pts) // max_pts)]
+    return pts
+
+
+def _splat_fit(path: Path) -> dict | None:
+    """Rotation/scale/position that turns a raw splat into a walkable
+    diorama: source-aware up-axis fix (sidecar <file>.meta.json written by
+    imagine/train), robust 2-98 percentile bounds (ignores floater outliers),
+    object-scale splats blown up to ~40m, bottom seated at ground level."""
+    import json
+    import math
+
+    import numpy as np
+    pts = _splat_points(path)
+    if pts is None or len(pts) < 100:
+        return None
+
+    # up-axis by provenance: TRELLIS gaussians are z-up; .splat captures and
+    # Brush-trained scenes are y-down (COLMAP camera convention)
+    up = None
+    meta = Path(str(path) + ".meta.json")
+    if meta.exists():
+        try:
+            up = json.loads(meta.read_text(encoding="utf-8")).get("up")
+        except Exception:  # noqa: BLE001
+            up = None
+    if up is None and path.suffix.lower() == ".splat":
+        up = "y_down"
+    if up == "z":                       # z-up -> y-up: rotate -90 about X
+        pts = np.stack([pts[:, 0], pts[:, 2], -pts[:, 1]], axis=1)
+        s2 = math.sqrt(0.5)
+        rot = [-s2, 0.0, 0.0, s2]
+    elif up == "y_down":                # flip: rotate 180 about X
+        pts = np.stack([pts[:, 0], -pts[:, 1], -pts[:, 2]], axis=1)
+        rot = [1.0, 0.0, 0.0, 0.0]
+    else:
+        rot = [0.0, 0.0, 0.0, 1.0]
+
+    lo = np.percentile(pts, 2, axis=0)
+    hi = np.percentile(pts, 98, axis=0)
+    ext = float(max(hi - lo))
+    if ext <= 1e-6:
+        return None
+    # object-scale gaussians (TRELLIS ~1 unit) become a ~40m diorama the
+    # player walks through; capture-scale scenes (>15m) are left 1:1
+    scale = round(min(40.0 / ext, 60.0), 3) if ext < 15.0 else 1.0
+    cx = float((lo[0] + hi[0]) / 2) * scale
+    cz = float((lo[2] + hi[2]) / 2) * scale
+    py = -float(lo[1]) * scale          # seat the 2%-bottom on the ground
+    return {"rotation": rot, "scale": scale,
+            "position": [round(-cx, 3), round(py, 3), round(-cz, 3)]}
+
+
 def export_web_game(spec: GameSpec, out_dir: str | Path, verbose: bool = True) -> Path:
     """Emit the playable game into `out_dir` (created/overwritten). Returns the
     dist path. Raises on missing player asset — a game without a player is a
@@ -64,6 +151,14 @@ def export_web_game(spec: GameSpec, out_dir: str | Path, verbose: bool = True) -
         if sp_src.exists():
             (dist / "splats").mkdir(parents=True, exist_ok=True)
             shutil.copy2(sp_src, dist / "splats" / sp_src.name)
+            # PHASE 137.2: auto-fit — raw splats land tiny/sideways (TRELLIS
+            # is object-scale + z-up). Compute rotation/scale/lift from the
+            # actual point cloud so every splat becomes a walkable diorama.
+            try:
+                spec.world.splat_fit = _splat_fit(sp_src)
+            except Exception as e:  # noqa: BLE001 — fit is best-effort
+                if verbose:
+                    print(f"[export] splat fit skipped: {e}")
             spec.world.splat = f"splats/{sp_src.name}"
         else:
             spec.world.splat = None            # missing file: normal world

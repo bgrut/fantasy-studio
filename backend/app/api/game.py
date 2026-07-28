@@ -1314,6 +1314,10 @@ async def train_splat(request: __import__("fastapi").Request):
                     job["stage"] = line.split(":", 1)[1]
             p.wait()
             if p.returncode == 0 and out.exists():
+                # up-axis sidecar for export auto-fit (COLMAP frames are y-down)
+                import json as _json
+                Path(str(out) + ".meta.json").write_text(
+                    _json.dumps({"source": "brush", "up": "y_down"}), encoding="utf-8")
                 job["status"] = "complete"
                 job["stage"] = "done"
                 job["splat"] = f"assets/splats/{out.name}"
@@ -1366,6 +1370,10 @@ def imagine_splat(req: ImagineSplatRequest):
                 capture_output=True, text=True, cwd=str(BACKEND_ROOT),
                 timeout=3600)
             if r.returncode == 0 and out.exists():
+                # up-axis sidecar for export auto-fit (TRELLIS gaussians are z-up)
+                import json as _json
+                Path(str(out) + ".meta.json").write_text(
+                    _json.dumps({"source": "trellis", "up": "z"}), encoding="utf-8")
                 job["status"] = "complete"
                 job["stage"] = "done"
                 job["splat"] = f"assets/splats/{out.name}"
