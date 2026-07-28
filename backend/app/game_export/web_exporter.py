@@ -101,9 +101,12 @@ def _splat_fit(path: Path) -> dict | None:
     ext = float(max(hi - lo))
     if ext <= 1e-6:
         return None
-    # object-scale gaussians (TRELLIS ~1 unit) become THE world (~110m, the
-    # size of a mesh level); capture-scale scenes (>15m) are left 1:1
-    scale = round(min(110.0 / ext, 200.0), 3) if ext < 15.0 else 1.0
+    # object-scale gaussians (TRELLIS ~1 unit) become a large set piece
+    # (~55m). Verified limit: stretching a ~100k-gaussian object to full
+    # world size (110m+) turns to blur up close — splats can't add detail
+    # under magnification. True world-scale splats come from the Tier 2
+    # video-training route. Capture-scale scenes (>15m) are left 1:1.
+    scale = round(min(55.0 / ext, 90.0), 3) if ext < 15.0 else 1.0
     cx = float((lo[0] + hi[0]) / 2) * scale
     cz = float((lo[2] + hi[2]) / 2) * scale
     py = -float(lo[1]) * scale - 0.4    # seat the 2%-bottom just below ground

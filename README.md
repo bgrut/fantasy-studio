@@ -35,7 +35,9 @@ irm https://raw.githubusercontent.com/bgrut/fantasy-studio/main/bootstrap.ps1 | 
 ---
 
 <div align="center">
-<img src=".github/assets/hero-demo.gif" alt="Prompt to playable 3D in minutes" width="780"/>
+<img src=".github/assets/games/fox-snowy-night.png" alt="A fox on a snowy night quest — built from one sentence" width="780"/>
+
+*"A fox on a snowy night quest: collect 6 fireflies, avoid the hostile wolves, reach the beacon" — a real build, captured in-game.*
 
 *One sentence → a playable game or a cinematic video, in minutes. Rendered locally. No cloud. No subscription. No code.*
 </div>
@@ -65,12 +67,22 @@ This is what makes Fantasy Studio different from every other "AI game" tool: **y
 - **📜 The Truth Table.** One panel lists every rule your game actually enforces — hero stats, mission steps, enemy behavior, placed-item rules, rewards — derived from the live spec. Your game's contract, on screen.
 - **Style presets you pick, never guessed.** 🎬 Photoreal · 🖍️ Cartoon (cel + ink outlines) · 🌸 Anime · 🕯️ Horror · 👾 Pixel · 📐 Low-poly. One global look applied coherently to the whole world.
 - **View presets.** 🧊 3D third-person · 🗺️ Top-down 2D (Zelda-style) · 🎞️ Side-scroller. Same world, a different genre from one chip.
-- **Walk-in destinations.** "Reach the shelter / cabin / lighthouse / castle" builds a real structure — open door, warm windows, a lit hearth — that you win by stepping inside.
+- **Walk-in destinations & interiors.** "Reach the shelter / cabin / lighthouse / castle" builds a real structure — open door, warm windows, a lit hearth — that you win by stepping inside. Indoor prompts ("inside a torchlit castle great hall") generate full multi-room, multi-floor interiors with stairs.
+- **Real cities.** Name a city — *New York, Tokyo, London* — and the level is built from its actual OpenStreetMap street grid: real blocks, night-lit facades, rooftop water towers, crosswalks, traffic lights, parked cars, ambient drivers, neon and distant sirens.
+- **🎥 Cinematic mode.** Press V (or the 🎥 chip) for a persistent low chase camera — FPV drone-style banking behind cars, motion blur, film grade — the "how is this real" look, until you toggle it off. Cars get clearcoat paint and working night headlights.
+- **Progression built in.** Kills and pickups earn XP; level-ups offer 3-choice upgrades (heart / swift / power) that persist between runs. Quest chains turn one objective into a story of steps.
+- **Console-grade image.** 4× MSAA, 4K shadows, image-based lighting, adaptive sharpening — with ultra/balanced/performance presets, one click.
+- **🧪 Splat worlds (experimental).** Attach a Gaussian-splat scene (.ply/.splat) as your world's scenery — upload one, pick a bundled sample, train one from your own walkthrough video, or ✨ imagine one from your prompt.
 - **Levels & projects.** Stack levels into one game via clickable level tiles (click to play, inspect, and edit any level, then save it back), and export the whole thing as a hub-menu game.
 
 <div align="center">
-<img src=".github/assets/showcase-bear.gif" alt="Fantasy Studio game mode" width="760"/><br/>
-<sub>Prompt → playable world → click-to-place a campfire and a readable sign → the wolves keep their distance from the firelight.</sub>
+
+| | |
+|---|---|
+| <img src=".github/assets/games/nyc-night-race.png" width="390"/><br/><sub>*"A red sports car races 5 rivals through New York City at night"* — real OSM street grid, night facades, working headlights</sub> | <img src=".github/assets/games/castle-brawl.png" width="390"/><br/><sub>*"A knight fights 6 hostile goblins inside a torchlit castle great hall"* — generated interior, torchlight, live combat</sub> |
+| <img src=".github/assets/games/cartoon-wizard.png" width="390"/><br/><sub>*"A wizard defends a windswept meadow from 8 hostile wolves"* — same world, one click to full cel-shaded cartoon</sub> | <img src=".github/assets/games/fox-snowy-night.png" width="390"/><br/><sub>*"A fox on a snowy night quest"* — photoreal terrain, falling snow, quest chain with XP and level-ups</sub> |
+
+<sub>All four are unedited in-game captures of real builds from the prompts shown.</sub>
 </div>
 
 ---
@@ -94,14 +106,6 @@ The same prompt that makes a game can make a film. Video mode renders **real Ble
 - **Story Director** — one prompt → a multi-scene film, with scenes assembled into a single MP4. Edit any scene later ("make it a snowy night") and re-render just that scene.
 - **Render tiers** — Quick Preview (Eevee, ~30s) → Final Cinematic (Cycles, 4K). The same scene produces all four.
 - **Real exports** — MP4, GIF, PNG sequence, **and the `.blend` source file**, so the scene is yours to re-edit forever.
-
-<div align="center">
-
-|  |  |
-|---|---|
-| <img src=".github/assets/showcase-ferrari.gif" width="380"/><br/>*"a ferrari racing at sunset"* | <img src=".github/assets/showcase-horse.gif" width="380"/><br/>*"a horse galloping through the mountains"* |
-
-</div>
 
 ---
 
@@ -148,7 +152,7 @@ flowchart TB
     VA --> VX["MP4 + .blend + GIF + PNG"]
 ```
 
-**Local, deterministic, ownable.** The LLM is the director; three.js and Blender are the engines. Same prompt → same world (games are seeded; videos are real scene files). Cost per render is electricity. Characters you generate are cached in a local library and reused instantly — the 30-minute image-to-3D generation only ever happens the first time a brand-new noun appears.
+**Local, deterministic, ownable.** The LLM is the director; three.js and Blender are the engines. Same prompt → same world (games are seeded; videos are real scene files). Cost per render is electricity. Characters you generate are cached in a local library and reused instantly — the ~6-minute image-to-3D generation (on GPU) only ever happens the first time a brand-new noun appears.
 
 Deep dives: **[docs/PIPELINE_V2.md](docs/PIPELINE_V2.md)** (video pipeline) · **[docs/USER_GUIDE.md](docs/USER_GUIDE.md)** (full walkthrough) · **[CHANGELOG.md](CHANGELOG.md)** (everything that shipped).
 
@@ -169,15 +173,15 @@ Deep dives: **[docs/PIPELINE_V2.md](docs/PIPELINE_V2.md)** (video pipeline) · *
 
 ---
 
-## Honest state of things (constraint-sprint transparency)
+## Honest state of things
 
-Fantasy Studio is built and used solo, currently **without a working GPU on the dev machine** — so the honest edges are:
+Fantasy Studio is built and used solo, in public, warts-and-all. Characters now generate on-GPU through TRELLIS.2 with 4K textures and a bake-time orientation gate; the honest edges that remain:
 
-- **Character textures** are side-projection baked, so off-axis fur reads a little soft (a warm-fill pass smooths the worst of it); true multi-view texturing is the top GPU-day upgrade.
-- **Motion** can warp slightly on some rigs.
+- **Motion** can warp slightly on some rigs; true foot-lock IK is on the roadmap.
 - **Video mode** is best at single-subject cinematic shots today; multi-subject composition is on the roadmap.
+- **Splat worlds** are experimental: imagined splats are set-piece scale (a shrine, not a city) — world-scale splats come from training on your own walkthrough video, which is early.
 
-None of this is hidden — it's shown warts-and-all. The game side (Inspector, rules, styles, views, sharing, Godot export) is the most complete and is what's front-and-center above. Full detail and the GPU-day list live in **[ROADMAP.md](ROADMAP.md)** and **[CHANGELOG.md](CHANGELOG.md)**.
+Full detail lives in **[ROADMAP.md](ROADMAP.md)** and **[CHANGELOG.md](CHANGELOG.md)**.
 
 ---
 
