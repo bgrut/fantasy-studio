@@ -906,6 +906,23 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         # words must say inside/interior/indoor; 'defends the castle' stays an
         # exterior castle world.
         _pl = req.prompt.lower()
+        if base_spec is not None:
+            # EDITS NEVER RE-DERIVE THE WORLD, part 2 (2026-07-28): every
+            # world-shape heuristic below (interior, enterable buildings,
+            # quest chains) reads the PROMPT — and an edit's prompt is just
+            # "give the knight 3 more hp", so the castle hall vanished on
+            # rebuild. Heuristics on an edit read the ORIGINAL prompt plus
+            # the edit text, so the world keeps its shape and explicit
+            # world words in the edit still work.
+            _base_prompt = (
+                base_spec.get("prompt")
+                or (_jobs.get(req.base_job_id) or {}).get("prompt")
+                # legacy games saved before prompts rode along: the title +
+                # intro + world name usually carry the setting words
+                or " ".join(str(x) for x in (
+                    base_spec.get("title"), base_spec.get("intro"),
+                    (base_spec.get("world") or {}).get("name")) if x))
+            _pl = (str(_base_prompt) + " " + req.prompt).lower()
         import re as _re3
         _im = _re3.search(
             r"\b(?:inside|interior of|indoors?|within the walls of)\s+"
@@ -1039,6 +1056,11 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         # RESOLVED spec (absolute asset paths) — lets Game Projects re-export
         # this exact level later without re-running extraction
         job["spec_resolved"] = spec.model_dump()
+        # the ORIGINAL prompt rides along (2026-07-28): edits re-run the
+        # world-shape heuristics, which must read what the user first asked
+        # for — an edit chain keeps the earliest real prompt
+        job["spec_resolved"]["prompt"] = (
+            base_spec.get("prompt") if base_spec else None) or req.prompt
         out_dir = GAME_JOBS_DIR / f"job_{job_id}"
         dist = export_web_game(spec, out_dir, verbose=False)
         # persist the full spec so this game stays EDITABLE across restarts
