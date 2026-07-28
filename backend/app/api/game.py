@@ -955,7 +955,17 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         # position stages it there deterministically).
         _pois2 = spec.world.level.get("pois") or []
         _gameplay = [o for o in spec.objectives if o.kind != "reach"]
-        if (_pois2 and len(_gameplay) == 1 and spec.player.mode == "walk"
+        # INTENT GATE (2026-07-28): the scout step leaked into EVERY
+        # single-objective game — a soccer match got "collect the abandoned
+        # camp's supplies". Quest chains now require the prompt to actually
+        # sound like a quest/adventure; sports, brawls, and races get
+        # exactly the objectives the user asked for.
+        _questy = _re3.search(
+            r"\b(quest|explor\w*|adventur\w*|journey|wander|trek|search|"
+            r"find|discover|scout|lost|hidden|treasure|relic|ruin\w*|"
+            r"myster\w*|collect)\b", _pl)
+        if (_pois2 and _questy and len(_gameplay) == 1
+                and spec.player.mode == "walk"
                 and "interior" not in spec.world.level):
             from app.game_export.spec import ObjectiveSpec as _OS
             _poi0 = _pois2[0]
