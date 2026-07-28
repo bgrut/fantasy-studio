@@ -9,6 +9,7 @@ import { Sky } from './vendor/jsm/objects/Sky.js';
 import { EffectComposer } from './vendor/jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from './vendor/jsm/postprocessing/RenderPass.js';
 import { ShaderPass } from './vendor/jsm/postprocessing/ShaderPass.js';
+import { N8AOPass } from './vendor/n8ao.module.js';
 import { UnrealBloomPass } from './vendor/jsm/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from './vendor/jsm/postprocessing/OutputPass.js';
 import RAPIER from './vendor/rapier.es.js';
@@ -4232,7 +4233,19 @@ varying vec2 vUvRaw;
   const _msaaRT = new THREE.WebGLRenderTarget(1, 1, {
     samples: QCFG.msaa, type: THREE.HalfFloatType });
   const composer = new EffectComposer(renderer, _msaaRT);
-  composer.addPass(new RenderPass(scene, camera));
+  // N8AO (Arc A round 2, 2026-07-28): ground-truth ambient occlusion (CC0
+  // lib) REPLACES both the RenderPass and the homemade 8-tap SSAO — it
+  // renders the scene itself with a true depth+normal AO pass. Half-res is
+  // 2-4x faster with near-identical quality at 1080p (research budget).
+  const n8ao = new N8AOPass(scene, camera, innerWidth, innerHeight);
+  n8ao.configuration.aoRadius = 2.2;
+  n8ao.configuration.distanceFalloff = 0.7;
+  n8ao.configuration.intensity = 2.6;
+  n8ao.configuration.halfRes = true;
+  n8ao.configuration.gammaCorrection = false;   // later passes own the grade
+  if (QUALITY === 'performance') n8ao.configuration.aoSamples = 8;
+  composer.addPass(n8ao);
+  const _legacySSAO = false;   // homemade SSAO retired; block kept for reference
   const _dMat = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking });
   const _dRT = new THREE.WebGLRenderTarget(innerWidth >> 1, innerHeight >> 1);
   const ssao = new ShaderPass({
@@ -4267,7 +4280,7 @@ varying vec2 vUvRaw;
         gl_FragColor = vec4(c.rgb * ao, c.a);
       }`,
   });
-  composer.addPass(ssao);
+  if (_legacySSAO) composer.addPass(ssao);
   // MeshDepthMaterial as the scene override: skinned/instanced meshes pack
   // correct depth (it carries USE_SKINNING variants); the AO shader
   // linearizes with perspectiveDepthToViewZ.
@@ -5274,7 +5287,7 @@ varying vec2 vUvRaw;
       }
     }
     if (stylePass) stylePass.uniforms.time.value = performance.now() / 1000;
-    renderDepthPrepass();               // SSAO depth (half-res, RGBA-packed)
+    if (_legacySSAO) renderDepthPrepass();   // retired: N8AO owns depth now
     composer.render();
     // live state for the verify harness (extends the __game probe object)
     window.__game.state = { x: nt.x, y: nt.y, z: nt.z, modelYaw, yaw, speed,
@@ -5315,6 +5328,7 @@ varying vec2 vUvRaw;
     camera.updateProjectionMatrix();
     renderer.setSize(innerWidth, innerHeight, false);   // keep CSS 100% fill; only resize the buffer
     composer.setSize(innerWidth, innerHeight);
+    n8ao.setSize(innerWidth, innerHeight);
     sharpen.uniforms.uRes.value.set(innerWidth, innerHeight);
     cinePass.uniforms.uRes.value.set(innerWidth, innerHeight);
     _dRT.setSize(innerWidth >> 1, innerHeight >> 1);

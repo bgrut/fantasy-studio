@@ -89,7 +89,11 @@ background:#7c5cff;color:#fff;text-decoration:none;font-weight:600;display:none"
 letter-spacing:.5px;color:#5cffc9;opacity:.55;pointer-events:none;text-shadow:0 1px 6px rgba(0,0,0,.6)">
 ⚡ MADE WITH FANTASY STUDIO</div>
 <script type="importmap">
-{ "imports": { "three": "./vendor/three.module.js" } }
+{ "imports": {
+  "three": "./vendor/three.module.js",
+  "three/examples/jsm/postprocessing/Pass.js": "./vendor/jsm/postprocessing/Pass.js",
+  "postprocessing": "./vendor/postprocessing-stub.js"
+} }
 </script>
 <script type="module" src="./game.js"></script>
 </body>

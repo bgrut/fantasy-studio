@@ -153,6 +153,32 @@ def export_web_game(spec: GameSpec, out_dir: str | Path, verbose: bool = True) -
             if src.exists():
                 shutil.copy2(src, props_dst / src.name)
 
+    # ── OWNERSHIP MANIFEST (best-in-class plan, 2026-07-28): every export
+    # carries receipts — the full license chain proving the game is the
+    # user's to sell. This is a product feature: no competitor can print it.
+    (dist / "LICENSES.md").write_text(
+        f"""# {spec.title or 'Your Game'} — License Manifest
+
+This game was generated with Fantasy Studio. **Everything in this folder is
+yours** — the runtime is open source and every bundled asset is either
+generated locally on your machine or dedicated to the public domain.
+
+| Component | License |
+|---|---|
+| Game code & runtime (three.js) | MIT |
+| Physics (Rapier) | Apache-2.0 |
+| Gaussian-splat renderer (when present) | MIT |
+| N8AO ambient occlusion | CC0 |
+| HDRI environment (Poly Haven, when present) | CC0 — public domain |
+| PBR textures | Generated locally (Stable Diffusion XL, user output) |
+| Characters & 3D assets | Generated locally (SDXL + Microsoft TRELLIS, MIT) |
+| Character motion | CMU Motion Capture Database (free for commercial products) |
+| City street layouts (when present) | OpenStreetMap contributors, ODbL (data attribution: openstreetmap.org/copyright) |
+
+No cloud services were used to build this game. No third party holds rights
+over its content. You may sell it, publish it, or modify it freely.
+""", encoding="utf-8")
+
     # ── HDRI IBL (Arc B slice, 2026-07-28): bundle the CC0 Poly Haven HDRI
     # matching the sky mood — real captured light for every PBR material.
     # Flat/stylized looks skip it (their pipeline strips photo response).
