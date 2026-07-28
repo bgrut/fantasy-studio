@@ -15,19 +15,22 @@ import {
 // Breadth showcase: classics that always work + wild ideas that exercise the
 // whole pipeline (new creatures generate on first use, worlds span earth to
 // mars, any species can race, rewards headline the win screen).
-const GAME_PROMPTS = [
-  'A fox on a snowy night quest: collect 6 fireflies, then race to the glowing beacon before dawn',
-  'A samurai with a katana fights hostile dogs in a stormy forest — defeat 3, then reach the ancient shrine',
-  'A dragon soaring over the mountains — collect 5 fire flames between the peaks',
-  'A whale in the deep ocean: dive for 5 pearls, then surface at the beacon',
-  'A red sports car races 5 rivals through New York City streets at night',
-  'A cat fighting a monkey on mars — the winner gets a banana',
-  'A wizard defends a windswept meadow — defeat 4 wild wolves with magic bolts, collect 3 lost runes',
-  'A knight racing three other knights across the castle grounds at dusk',
-  'One man with a bow against 12 hostile wolves in the arctic — survive and reach the cabin',
-  'A penguin waddling across the moon, collect 6 moon rocks',
-  'A detective collects 5 clues inside a mansion at night',
-  'A knight fights 6 hostile goblins inside a torchlit castle',
+// one chip per GENRE the engine is good at — icon + short readable line,
+// no truncation (variety: quest, city race, mystery, combat, sport,
+// survival, ocean, flight, delivery, whimsy, magic, hunt)
+const GAME_PROMPTS: { icon: string; text: string }[] = [
+  { icon: '🦊', text: 'A fox on a snowy night quest: collect 6 fireflies, then reach the glowing beacon' },
+  { icon: '🏎️', text: 'A red sports car races 5 rivals through New York City at night' },
+  { icon: '🕵️', text: 'A detective collects 5 clues inside a mansion at night' },
+  { icon: '⚔️', text: 'A knight fights 6 hostile goblins inside a torchlit castle great hall' },
+  { icon: '🏹', text: 'A hunter stalking elk through a misty pine forest at dawn' },
+  { icon: '⚽', text: 'A soccer player scoring 3 goals in a packed stadium' },
+  { icon: '🐉', text: 'A dragon soaring over the mountains — collect 5 fire flames between the peaks' },
+  { icon: '🌊', text: 'A whale in the deep ocean: dive for 5 pearls, then surface at the beacon' },
+  { icon: '🧙', text: 'A wizard defends a windswept meadow — defeat 4 wolves with magic bolts' },
+  { icon: '🚕', text: 'A taxi weaving through Tokyo streets — race 4 rivals before midnight' },
+  { icon: '🛡️', text: 'Outlast 8 rivals as the storm closes in on a ruined village' },
+  { icon: '🐧', text: 'A penguin waddling across the moon, collect 6 moon rocks' },
 ]
 
 // Phase 44 STYLE PRESETS — the user picks, the AI never guesses. One global
@@ -360,8 +363,8 @@ export default function GameStudio() {
   return (
     <div className="space-y-8">
       {/* Prompt input — mirrors the video-mode hero input */}
-      <div className="max-w-2xl mx-auto space-y-3">
-        <div className="relative group">
+      <div className="max-w-4xl mx-auto space-y-4">
+        <div className="relative group max-w-2xl mx-auto w-full">
           <textarea
             value={prompt}
             rows={1}
@@ -401,23 +404,23 @@ export default function GameStudio() {
           </button>
         </div>
 
-        {/* prompt chips — SCRUNCHED: truncated multi-column pills instead of
-            ten full-width rows (full prompt on hover + on click) */}
-        <div className="flex flex-wrap justify-center gap-1.5">
+        {/* sample prompts — readable 3-column cards (icon + full text, no
+            truncation) instead of scrunched truncated pills */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
           {GAME_PROMPTS.map((p) => (
             <button
-              key={p}
-              onClick={() => setPrompt(p)}
-              title={p}
-              className="px-3 py-1 rounded-full text-[11px] border border-white/[0.06] bg-white/[0.02] text-[#807d99] hover:text-white hover:border-[#5cffc9]/30 transition-all max-w-[240px] truncate"
+              key={p.text}
+              onClick={() => setPrompt(p.text)}
+              className="group flex items-start gap-2.5 text-left px-3.5 py-2.5 rounded-xl border border-white/[0.06] bg-white/[0.02] hover:bg-white/[0.04] hover:border-[#5cffc9]/30 transition-all"
             >
-              {p}
+              <span className="text-base leading-5 shrink-0">{p.icon}</span>
+              <span className="text-[12px] leading-5 text-[#9a96b8] group-hover:text-white">{p.text}</span>
             </button>
           ))}
         </div>
 
         {/* LOOK & FEEL card: style / view / quality grouped in one place */}
-        <div className="mx-auto max-w-3xl rounded-xl border border-white/[0.06] bg-white/[0.015] px-4 py-3 space-y-2">
+        <div className="mx-auto max-w-4xl w-full rounded-xl border border-white/[0.06] bg-white/[0.015] px-5 py-4 space-y-2.5">
         <div className="flex flex-wrap justify-center items-center gap-1.5">
           <span className="text-[10px] font-mono text-[#4a4764]">style:</span>
           {STYLES.map((s) => (
@@ -435,7 +438,9 @@ export default function GameStudio() {
               {s.label}
             </button>
           ))}
-          <span className="text-[10px] font-mono text-[#4a4764] ml-2">view:</span>
+        </div>
+        <div className="flex flex-wrap justify-center items-center gap-1.5">
+          <span className="text-[10px] font-mono text-[#4a4764]">view:</span>
           {VIEWS.map((v) => (
             <button
               key={v.id}
@@ -451,7 +456,7 @@ export default function GameStudio() {
               {v.label}
             </button>
           ))}
-          <span className="text-[10px] font-mono text-[#4a4764] self-center ml-2">quality:</span>
+          <span className="text-[10px] font-mono text-[#4a4764] self-center ml-4">quality:</span>
           {(['ultra', 'balanced', 'performance'] as const).map(q => (
             <button
               key={q}
