@@ -1672,6 +1672,118 @@ async function main() {
         awn.castShadow = true;
         scene.add(awn);
       }
+      // r9 STREET TREES: rows of canopies lining every road — the #1
+      // enclosure cue in the GTA-loop reference frame. Two instanced
+      // meshes (trunks + canopies), ~13m spacing, both sidewalk sides.
+      if (OSM.roads && OSM.roads.length) {
+        const rngT2 = mulberry32(SPEC.seed + 707);
+        const spots = [];
+        for (const r of OSM.roads) {
+          const off = (r.w || 7) / 2 + 2.1;
+          for (let i = 0; i < r.pts.length - 1 && spots.length < 240; i++) {
+            const [x1, z1] = r.pts[i], [x2, z2] = r.pts[i + 1];
+            const L = Math.hypot(x2 - x1, z2 - z1);
+            for (let d = 6; d < L; d += 13) {
+              const t = d / L;
+              const px3 = x1 + (x2 - x1) * t, pz3 = z1 + (z2 - z1) * t;
+              const nx3 = -(z2 - z1) / L * off, nz3 = (x2 - x1) / L * off;
+              for (const s of [1, -1]) {
+                if (rngT2() > 0.62) continue;
+                const tx3 = px3 + nx3 * s, tz3 = pz3 + nz3 * s;
+                if (!inBldg(tx3, tz3, 1.2)) spots.push([tx3, tz3, 0.85 + rngT2() * 0.5]);
+              }
+            }
+          }
+        }
+        if (spots.length) {
+          const trkG = new THREE.CylinderGeometry(0.14, 0.22, 3.4, 7);
+          trkG.translate(0, 1.7, 0);
+          const trk = new THREE.InstancedMesh(trkG,
+            new THREE.MeshStandardMaterial({ color: 0x5a4632, roughness: 0.95 }),
+            spots.length);
+          const canG = new THREE.IcosahedronGeometry(1.55, 1);
+          canG.scale(1, 0.85, 1).translate(0, 4.1, 0);
+          const can = new THREE.InstancedMesh(canG,
+            new THREE.MeshStandardMaterial({ roughness: 0.9 }), spots.length);
+          const M5 = new THREE.Matrix4();
+          const CG = [new THREE.Color(0x3f6b2e), new THREE.Color(0x4f7a35),
+                      new THREE.Color(0x5d8a3c), new THREE.Color(0x39602c)];
+          spots.forEach(([tx3, tz3, sc], i) => {
+            const gy3 = hAt(tx3, tz3);
+            M5.makeScale(sc, sc, sc).setPosition(tx3, gy3, tz3);
+            trk.setMatrixAt(i, M5); can.setMatrixAt(i, M5);
+            can.setColorAt(i, CG[Math.floor(rngT2() * CG.length)]);
+          });
+          for (const im of [trk, can]) {
+            im.instanceMatrix.needsUpdate = true;
+            im.castShadow = true; scene.add(im);
+          }
+          if (can.instanceColor) can.instanceColor.needsUpdate = true;
+        }
+      }
+      // r9 SHOP SIGNS: real TEXT above storefronts — signage density is
+      // what makes a street read as a PLACE (the reference frame is full
+      // of it). ~14 canvas-text signs on road-facing edges, emissive at
+      // night. Individual meshes (14 draw calls, trivial).
+      if (OSM.buildings && OSM.buildings.length && OSM.roads && OSM.roads.length) {
+        const rngG2 = mulberry32(SPEC.seed + 909);
+        const NAMES = ["MARIO'S PIZZA", 'GOLDEN DRAGON', 'CITY DELI',
+          "LUCKY'S BAR", 'STAR CAFE', 'BODEGA 24', 'GREEN MARKET',
+          'THE ROXY', "JOE'S DINER", 'HOTEL RIALTO', 'CINEMA', 'RECORDS',
+          'FLOWERS', 'HARDWARE'];
+        const SBG = ['#8a1f1f', '#1f4d8a', '#1f6b3a', '#6b3a8a', '#8a5a1f', '#222222'];
+        const _nightS = SPEC.world.sky === 'night' || SPEC.world.sky === 'dusk';
+        let ns = 0;
+        for (const b of OSM.buildings.slice(3, 160)) {
+          if (ns >= 14) break;
+          if (rngG2() > 0.3) continue;
+          let mnx = 1e9, mnz = 1e9, mxx = -1e9, mxz = -1e9;
+          for (const p of b.pts) {
+            mnx = Math.min(mnx, p[0]); mxx = Math.max(mxx, p[0]);
+            mnz = Math.min(mnz, p[1]); mxz = Math.max(mxz, p[1]);
+          }
+          const cx3 = (mnx + mxx) / 2, cz3 = (mnz + mxz) / 2;
+          const hx3 = (mxx - mnx) / 2, hz3 = (mxz - mnz) / 2;
+          if (hx3 < 3 || hz3 < 3) continue;
+          let bd = 1e9, bx = 0, bz = 0;
+          for (const r of OSM.roads) for (const p of r.pts) {
+            const d = (p[0] - cx3) ** 2 + (p[1] - cz3) ** 2;
+            if (d < bd) { bd = d; bx = p[0]; bz = p[1]; }
+          }
+          if (bd > 40 * 40) continue;
+          const dx3 = bx - cx3, dz3 = bz - cz3;
+          const dl3 = Math.hypot(dx3, dz3) || 1;
+          const nx4 = dx3 / dl3, nz4 = dz3 / dl3;
+          const t2 = Math.min(hx3 / Math.max(Math.abs(nx4), 1e-6),
+                              hz3 / Math.max(Math.abs(nz4), 1e-6));
+          const ex2 = cx3 + nx4 * t2 * 1.01, ez2 = cz3 + nz4 * t2 * 1.01;
+          const name = NAMES[ns % NAMES.length];
+          const sc2 = document.createElement('canvas');
+          sc2.width = 512; sc2.height = 128;
+          const sx = sc2.getContext('2d');
+          sx.fillStyle = SBG[Math.floor(rngG2() * SBG.length)];
+          sx.fillRect(0, 0, 512, 128);
+          sx.strokeStyle = 'rgba(255,255,255,0.85)'; sx.lineWidth = 6;
+          sx.strokeRect(8, 8, 496, 112);
+          sx.fillStyle = _nightS ? '#ffe9b0' : '#f2ede2';
+          sx.font = 'bold 58px Arial';
+          sx.textAlign = 'center'; sx.textBaseline = 'middle';
+          sx.fillText(name, 256, 68);
+          const st2 = new THREE.CanvasTexture(sc2);
+          st2.colorSpace = THREE.SRGBColorSpace;
+          st2.anisotropy = renderer.capabilities.getMaxAnisotropy();
+          const sm2 = new THREE.MeshStandardMaterial({ map: st2,
+            roughness: 0.6,
+            ...(_nightS ? { emissive: new THREE.Color(0xffffff),
+                            emissiveMap: st2, emissiveIntensity: 0.75 } : {}) });
+          const sign = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.85, 0.14), sm2);
+          sign.position.set(ex2, hAt(ex2, ez2) + 4.55, ez2);
+          sign.rotation.y = Math.atan2(nx4, nz4);
+          sign.castShadow = true;
+          scene.add(sign);
+          ns++;
+        }
+      }
       // REAL ASPHALT STREETS r3 (2026-07-30): the 'Google Maps' unlock.
       // Roads were only a tint painted into the ground canvas — the city
       // read as one endless pale plaza and everything on it looked
