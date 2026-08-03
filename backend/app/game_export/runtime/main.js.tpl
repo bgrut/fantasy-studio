@@ -1518,6 +1518,67 @@ async function main() {
           im.instanceMatrix.needsUpdate = true; scene.add(im);
         }
       }
+      // REAL ASPHALT STREETS r3 (2026-07-30): the 'Google Maps' unlock.
+      // Roads were only a tint painted into the ground canvas — the city
+      // read as one endless pale plaza and everything on it looked
+      // misplaced. Streets are now REAL geometry: dark PBR asphalt ribbons
+      // extruded along every OSM road (one merged mesh) + white center
+      // dashes — dark streets vs light sidewalk blocks is what makes a
+      // city read as a MAP.
+      {
+        const roadGeos = [], dashGeos = [];
+        const strip = (x1, z1, x2, z2, w, y1, y2, vmax) => {
+          const dx = x2 - x1, dz = z2 - z1;
+          const len = Math.hypot(dx, dz);
+          if (len < 0.4) return null;
+          const nx = -dz / len * w, nz = dx / len * w;
+          const g = new THREE.BufferGeometry();
+          g.setAttribute('position', new THREE.BufferAttribute(new Float32Array([
+            x1 + nx, y1, z1 + nz, x1 - nx, y1, z1 - nz, x2 + nx, y2, z2 + nz,
+            x1 - nx, y1, z1 - nz, x2 - nx, y2, z2 - nz, x2 + nx, y2, z2 + nz]), 3));
+          const v = vmax || len / 7;
+          g.setAttribute('uv', new THREE.BufferAttribute(new Float32Array([
+            0, 0, 1, 0, 0, v, 1, 0, 1, v, 0, v]), 2));
+          g.computeVertexNormals();
+          return g;
+        };
+        for (const r of OSM.roads || []) {
+          const w = (r.w || 7) / 2 + 0.25;
+          for (let i = 0; i < r.pts.length - 1; i++) {
+            const [x1, z1] = r.pts[i], [x2, z2] = r.pts[i + 1];
+            const y1 = hAt(x1, z1) + 0.05, y2 = hAt(x2, z2) + 0.05;
+            const g = strip(x1, z1, x2, z2, w, y1, y2);
+            if (g) roadGeos.push(g);
+            // center dashes: 1.8m on / 4m off along the segment
+            const segL = Math.hypot(x2 - x1, z2 - z1);
+            for (let d = 1; d + 1.8 < segL; d += 5.8) {
+              const t0 = d / segL, t1 = (d + 1.8) / segL;
+              const dg = strip(
+                x1 + (x2 - x1) * t0, z1 + (z2 - z1) * t0,
+                x1 + (x2 - x1) * t1, z1 + (z2 - z1) * t1,
+                0.09, y1 + 0.03, y2 + 0.03, 1);
+              if (dg) dashGeos.push(dg);
+            }
+          }
+        }
+        if (roadGeos.length) {
+          const at = new THREE.TextureLoader().load('textures/asphalt.jpg');
+          at.wrapS = at.wrapT = THREE.RepeatWrapping;
+          at.colorSpace = THREE.SRGBColorSpace;
+          at.anisotropy = renderer.capabilities.getMaxAnisotropy();
+          // charcoal multiplier: the SDXL asphalt photo is LIGHT gray — at
+          // 0x8f9096 the streets read identical to the concrete sidewalks
+          // (proved by a road running straight through spawn, invisible)
+          const road = new THREE.Mesh(mergeGeometries(roadGeos, false),
+            new THREE.MeshStandardMaterial({ map: at, color: 0x686b73,
+              roughness: 0.96, metalness: 0.0, side: THREE.DoubleSide }));
+          road.receiveShadow = true;
+          scene.add(road);
+          const dash = new THREE.Mesh(mergeGeometries(dashGeos, false),
+            new THREE.MeshBasicMaterial({ color: 0xd8d8d2, side: THREE.DoubleSide }));
+          scene.add(dash);
+        }
+      }
       // NEON SIGNS (Phase 120, night streets): emissive storefront strips on
       // building faces near roads — the bloom layer that sells 'city at night'
       if (['night', 'dusk', 'sunset'].includes(SPEC.world.sky)) {
