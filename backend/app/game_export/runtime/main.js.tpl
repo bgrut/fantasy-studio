@@ -1378,74 +1378,99 @@ async function main() {
       facadeTex.colorSpace = THREE.SRGBColorSpace;
       // photo facade materials (SDXL pack): one tile ~= 18m x 12m of building
       const _fLoad = new THREE.TextureLoader();
-      const _fTex = (n) => {
-        const t = _fLoad.load('textures/' + n + '.jpg');
+      // r13: PER-FAMILY TILE CALIBRATION — one 12x8m tile for every photo
+      // made wide-window facades read STRETCHED (a brick photo with 4 big
+      // windows became 3m panes). Each family now tiles at the scale its
+      // photo implies.
+      const _fSize = {
+        facade_glass: [12, 8], facade_glass2: [12, 8],
+        facade_brick: [9, 6], facade_brick2: [7.5, 5],
+        facade_stone: [10, 6.6], facade_concrete: [10, 6.6],
+        facade_limestone: [9, 6],
+      };
+      const _fTex = (n, suffix) => {
+        const t = _fLoad.load('textures/' + n + (suffix || '') + '.jpg');
+        const [tw, th] = _fSize[n] || [12, 8];
         t.wrapS = t.wrapT = THREE.RepeatWrapping;
-        // r7: 12x8m tile (was 18x12) = +50% texel density on every wall
-        t.repeat.set(1 / 12, 1 / 8);
-        t.colorSpace = THREE.SRGBColorSpace;
+        t.repeat.set(1 / tw, 1 / th);
+        if (!suffix) t.colorSpace = THREE.SRGBColorSpace;
         t.anisotropy = renderer.capabilities.getMaxAnisotropy();
         return t;
       };
-      // r7: the SDXL pack ships _n normal maps that were never wired in —
-      // window reveals and mortar lines now catch real light (linear space!)
-      const _fTexN = (n) => {
-        const t = _fLoad.load('textures/' + n + '_n.jpg');
-        t.wrapS = t.wrapT = THREE.RepeatWrapping;
-        t.repeat.set(1 / 12, 1 / 8);
-        t.anisotropy = renderer.capabilities.getMaxAnisotropy();
-        return t;
-      };
-      const _fPair = (n) => ({ map: _fTex(n), normalMap: _fTexN(n),
+      const _fPair = (n) => ({ map: _fTex(n), normalMap: _fTex(n, '_n'),
         normalScale: new THREE.Vector2(0.6, 0.6) });
-      // NIGHT WINDOWS on photo facades (r5, 2026-07-30): only the procedural
-      // bucket glowed after dark — photo-facade towers were pitch-dead black
-      // slabs. A shared emissive window-mask canvas at the same 18x12m tile
-      // scale as the photo lights ~30% of windows warm (a few cool).
-      let photoLit = null;
-      if (SPEC.world.sky === 'night' || SPEC.world.sky === 'dusk') {
-        const lc = document.createElement('canvas');
-        lc.width = lc.height = 256;
-        const lx = lc.getContext('2d');
-        lx.fillStyle = '#000000'; lx.fillRect(0, 0, 256, 256);
-        const rngL = mulberry32(SPEC.seed + 404);
-        // r6: SMALL + SOFT + DIM — big hard rects read as glowing stickers
-        // misaligned with the photo's own printed windows; ~1m soft cells
-        // read as interior light bleeding through glass.
-        lx.filter = 'blur(3px)';
-        for (let wy = 0; wy < 8; wy++) for (let wx = 0; wx < 11; wx++) {
-          if (rngL() > 0.26) continue;
-          lx.fillStyle = rngL() < 0.72 ? '#c8975a' : '#a8bfd4';
-          lx.fillRect(4 + wx * 23, 5 + wy * 31, 13, 18);
-        }
-        lx.filter = 'none';
-        photoLit = new THREE.CanvasTexture(lc);
-        photoLit.wrapS = photoLit.wrapT = THREE.RepeatWrapping;
-        photoLit.repeat.set(1 / 18, 1 / 12);
-      }
-      const _glow = photoLit
-        ? { emissive: new THREE.Color(0xffc873), emissiveMap: photoLit,
-            emissiveIntensity: 0.34 }
-        : {};
       const _wallMats = [
         new THREE.MeshStandardMaterial({ vertexColors: true, map: facadeTex,
           emissive: 0xffc873, emissiveMap: litTex, emissiveIntensity: 0.4,
           roughness: 0.85, metalness: 0.08 }),
         new THREE.MeshStandardMaterial({ ..._fPair('facade_glass'),
-          vertexColors: true, roughness: 0.35, metalness: 0.55, ..._glow }),
+          vertexColors: true, roughness: 0.35, metalness: 0.55 }),
         new THREE.MeshStandardMaterial({ ..._fPair('facade_brick'),
-          vertexColors: true, roughness: 0.9, metalness: 0.03, ..._glow }),
+          vertexColors: true, roughness: 0.9, metalness: 0.03 }),
         new THREE.MeshStandardMaterial({ ..._fPair('facade_stone'),
-          vertexColors: true, roughness: 0.85, metalness: 0.04, ..._glow }),
+          vertexColors: true, roughness: 0.85, metalness: 0.04 }),
         new THREE.MeshStandardMaterial({ ..._fPair('facade_glass2'),
-          vertexColors: true, roughness: 0.3, metalness: 0.6, ..._glow }),
+          vertexColors: true, roughness: 0.3, metalness: 0.6 }),
         new THREE.MeshStandardMaterial({ ..._fPair('facade_brick2'),
-          vertexColors: true, roughness: 0.92, metalness: 0.02, ..._glow }),
+          vertexColors: true, roughness: 0.92, metalness: 0.02 }),
         new THREE.MeshStandardMaterial({ ..._fPair('facade_concrete'),
-          vertexColors: true, roughness: 0.88, metalness: 0.03, ..._glow }),
+          vertexColors: true, roughness: 0.88, metalness: 0.03 }),
         new THREE.MeshStandardMaterial({ ..._fPair('facade_limestone'),
-          vertexColors: true, roughness: 0.8, metalness: 0.04, ..._glow }),
+          vertexColors: true, roughness: 0.8, metalness: 0.04 }),
       ];
+      // r13 ALIGNED NIGHT WINDOWS: the old shared glow mask floated
+      // misaligned over each photo's own printed windows ('blotchy orange
+      // smears'). The mask is now DERIVED from the facade itself — detect
+      // dark cells (glass) in the loaded photo, light a random ~third of
+      // exactly those cells. Glow lands where the windows actually are.
+      if (SPEC.world.sky === 'night' || SPEC.world.sky === 'dusk') {
+        const FAMS = [[1, 'facade_glass'], [2, 'facade_brick'],
+          [3, 'facade_stone'], [4, 'facade_glass2'], [5, 'facade_brick2'],
+          [6, 'facade_concrete'], [7, 'facade_limestone']];
+        for (const [mi, fn] of FAMS) {
+          _fLoad.load('textures/' + fn + '.jpg', (t2) => {
+            try {
+              const img = t2.image;
+              const c = document.createElement('canvas');
+              c.width = c.height = 256;
+              const g = c.getContext('2d');
+              g.drawImage(img, 0, 0, 256, 256);
+              const d = g.getImageData(0, 0, 256, 256).data;
+              const CELL = 16, N = 256 / CELL;
+              const cell = new Float32Array(N * N);
+              let avg = 0;
+              for (let cy = 0; cy < N; cy++) for (let cx = 0; cx < N; cx++) {
+                let s2 = 0;
+                for (let y = 0; y < CELL; y += 2) for (let x = 0; x < CELL; x += 2) {
+                  const o = (((cy * CELL + y) * 256) + cx * CELL + x) * 4;
+                  s2 += 0.299 * d[o] + 0.587 * d[o + 1] + 0.114 * d[o + 2];
+                }
+                cell[cy * N + cx] = s2 / 64;
+                avg += s2 / 64;
+              }
+              avg /= N * N;
+              const rngW2 = mulberry32(SPEC.seed + 404 + mi);
+              g.clearRect(0, 0, 256, 256);
+              g.fillStyle = '#000000'; g.fillRect(0, 0, 256, 256);
+              for (let cy = 0; cy < N; cy++) for (let cx = 0; cx < N; cx++) {
+                if (cell[cy * N + cx] < avg * 0.78 && rngW2() < 0.34) {
+                  g.fillStyle = rngW2() < 0.75 ? '#e8b268' : '#b8cfe0';
+                  g.fillRect(cx * CELL + 2, cy * CELL + 2, CELL - 4, CELL - 4);
+                }
+              }
+              const gt = new THREE.CanvasTexture(c);
+              gt.wrapS = gt.wrapT = THREE.RepeatWrapping;
+              gt.repeat.copy(_wallMats[mi].map.repeat);
+              gt.colorSpace = THREE.SRGBColorSpace;
+              const m = _wallMats[mi];
+              m.emissive = new THREE.Color(0xffffff);
+              m.emissiveMap = gt;
+              m.emissiveIntensity = 0.7;
+              m.needsUpdate = true;
+            } catch (e) { /* glow is best-effort */ }
+          });
+        }
+      }
       for (let bi = 0; bi < 8; bi++) {
         if (!wallBuckets[bi].length) continue;
         const wm = new THREE.Mesh(mergeGeometries(wallBuckets[bi], false), _wallMats[bi]);
@@ -1670,6 +1695,37 @@ async function main() {
           im.instanceMatrix.needsUpdate = true; scene.add(im);
         }
       }
+      // r13 PLACEMENT VALIDATORS: axis-aligned bbox edges lied for rotated
+      // footprints (signs floating off corners) and per-road offsets landed
+      // trees ON crossing roads. Real geometry tests, used by everything
+      // placed from here on.
+      const _segD = (px, pz, x1, z1, x2, z2) => {
+        const dx = x2 - x1, dz = z2 - z1;
+        const L2 = dx * dx + dz * dz;
+        const t = L2 ? Math.max(0, Math.min(1, ((px - x1) * dx + (pz - z1) * dz) / L2)) : 0;
+        return Math.hypot(px - (x1 + dx * t), pz - (z1 + dz * t));
+      };
+      const _roadSegs = [];
+      for (const r of OSM.roads || []) {
+        const hw = (r.w || 7) / 2;
+        for (let i = 0; i < r.pts.length - 1; i++) {
+          _roadSegs.push([r.pts[i][0], r.pts[i][1], r.pts[i + 1][0], r.pts[i + 1][1], hw]);
+        }
+      }
+      const _onRoad = (px, pz, pad) => {
+        for (const s of _roadSegs) {
+          if (_segD(px, pz, s[0], s[1], s[2], s[3]) < s[4] + pad) return true;
+        }
+        return false;
+      };
+      const _polyEdgeD = (pts, px, pz) => {
+        let m = 1e9;
+        for (let i = 0; i < pts.length; i++) {
+          const a = pts[i], b2 = pts[(i + 1) % pts.length];
+          m = Math.min(m, _segD(px, pz, a[0], a[1], b2[0], b2[1]));
+        }
+        return m;
+      };
       // r8 AWNINGS: tilted storefront canopies on road-facing building
       // bases — with plinths + these, ground floors read as SHOPS instead
       // of texture meeting pavement. Instanced, per-instance color.
@@ -1712,6 +1768,7 @@ async function main() {
           const ex = cx2 + nx2 * t, ez = cz2 + nz2 * t;
           E4.set(-0.22, Math.atan2(nx2, nz2), 0);
           Q4.setFromEuler(E4);
+          if (_polyEdgeD(b.pts, ex, ez) > 1.4) continue;   // r13: real wall only
           M4.compose(new THREE.Vector3(ex, hAt(ex, ez) + 3.0, ez), Q4, S4);
           awn.setMatrixAt(na, M4);
           awn.setColorAt(na, AC[Math.floor(rngA() * AC.length)]);
@@ -1741,7 +1798,11 @@ async function main() {
               for (const s of [1, -1]) {
                 if (rngT2() > 0.62) continue;
                 const tx3 = px3 + nx3 * s, tz3 = pz3 + nz3 * s;
-                if (!inBldg(tx3, tz3, 1.2)) spots.push([tx3, tz3, 0.85 + rngT2() * 0.5]);
+                // r13: also reject spots on ANY road (cross streets used to
+                // catch trees mid-asphalt)
+                if (!inBldg(tx3, tz3, 1.2) && !_onRoad(tx3, tz3, 1.0)) {
+                  spots.push([tx3, tz3, 0.85 + rngT2() * 0.5]);
+                }
               }
             }
           }
@@ -1838,6 +1899,7 @@ async function main() {
           const t2 = Math.min(hx3 / Math.max(Math.abs(nx4), 1e-6),
                               hz3 / Math.max(Math.abs(nz4), 1e-6));
           const ex2 = cx3 + nx4 * t2 * 1.01, ez2 = cz3 + nz4 * t2 * 1.01;
+          if (_polyEdgeD(b.pts, ex2, ez2) > 1.4) continue;   // r13: real wall only
           const name = NAMES[ns % NAMES.length];
           const sc2 = document.createElement('canvas');
           sc2.width = 512; sc2.height = 128;
