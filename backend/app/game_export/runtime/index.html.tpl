@@ -88,6 +88,7 @@ background:#7c5cff;color:#fff;text-decoration:none;font-weight:600;display:none"
 <div id="fsbadge" style="position:fixed;right:10px;bottom:8px;z-index:15;font:600 10px system-ui;
 letter-spacing:.5px;color:#5cffc9;opacity:.55;pointer-events:none;text-shadow:0 1px 6px rgba(0,0,0,.6)">
 ⚡ MADE WITH FANTASY STUDIO</div>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ctext y='26' font-size='26'%3E%E2%9A%A1%3C/text%3E%3C/svg%3E">
 <script type="importmap">
 { "imports": {
   "three": "./vendor/three.module.js",

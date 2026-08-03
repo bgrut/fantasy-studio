@@ -48,4 +48,6 @@ venv_triposg/
 *.png.bak
 
 vendor/blosm/
-tools/
+tools/*
+!tools/shotgate/
+tools/shotgate/node_modules/

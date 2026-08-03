@@ -1195,6 +1195,31 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         job["status"] = "complete"
         job["play_url"] = f"/games/job_{job_id}/dist/"
         job["checks"] = len(v["checks"])
+        # SHOTGATE (2026-07-29): give the build EYES — load the exported game
+        # in headless Chrome, press START, run, screenshot, surface errors.
+        # Best-effort: node/chrome absent or timeout never fails the build.
+        try:
+            stage("visual gate")
+            import subprocess as _sp
+            shot = out_dir / "dist" / "_shot.png"
+            r = _sp.run(
+                ["node", str(BACKEND_ROOT / "tools" / "shotgate" / "shot.mjs"),
+                 f"http://127.0.0.1:8789/games/job_{job_id}/dist/index.html",
+                 str(shot)],
+                capture_output=True, text=True, timeout=90,
+                cwd=str(BACKEND_ROOT / "tools" / "shotgate"))
+            if r.returncode == 0 and shot.exists():
+                job["shot"] = f"/games/job_{job_id}/dist/_shot.png"
+                job.setdefault("notes", []).append("visual gate: rendered clean, no runtime errors")
+                job["checks"] = job.get("checks", 0) + 1
+            elif r.returncode == 2:
+                job.setdefault("notes", []).append(
+                    "visual gate: runtime errors — " +
+                    (r.stderr or "").replace("SHOTGATE-ERRORS", "").strip()[:220])
+                if shot.exists():
+                    job["shot"] = f"/games/job_{job_id}/dist/_shot.png"
+        except Exception:  # noqa: BLE001
+            pass
         stage("done")
         _record_finish(row_id, True, job["play_url"], None)
     except Exception as e:
