@@ -1326,6 +1326,35 @@ async function main() {
           : (_night && rngB() < 0.2 ? 0
              : (_r < 0.28 ? 2 : _r < 0.52 ? 5 : _r < 0.76 ? 7 : 3));
         splitGroups(geo, _bkt);
+        // r14 SETBACKS: real towers STEP BACK as they rise — a single
+        // extruded prism is why buildings read as 'geometric shapes'.
+        // Tall buildings gain 1-2 shrinking tiers above the base (same
+        // facade bucket + tint, so they read as one building).
+        if (h > 30) {
+          const tiers = h > 44 ? 2 : 1;
+          let topY = gy + h;
+          for (let ti2 = 1; ti2 <= tiers; ti2++) {
+            const shrink = 1 - 0.15 * ti2;
+            const th2 = h * (0.38 - 0.1 * ti2);
+            const s2h = new THREE.Shape();
+            b.pts.forEach(([px, pz], i) => {
+              const sx5 = cx + (px - cx) * shrink;
+              const sz5 = cz + (pz - cz) * shrink;
+              i ? s2h.lineTo(sx5, -sz5) : s2h.moveTo(sx5, -sz5);
+            });
+            const tg = new THREE.ExtrudeGeometry(s2h, { depth: th2, bevelEnabled: false });
+            tg.rotateX(-Math.PI / 2);
+            tg.translate(0, topY, 0);
+            const nv2 = tg.attributes.position.count;
+            const cols2 = new Float32Array(nv2 * 3);
+            for (let i = 0; i < nv2; i++) {
+              cols2[i * 3] = tint.r; cols2[i * 3 + 1] = tint.g; cols2[i * 3 + 2] = tint.b;
+            }
+            tg.setAttribute('color', new THREE.BufferAttribute(cols2, 3));
+            splitGroups(tg, _bkt);
+            topY += th2;
+          }
+        }
         if (h >= 16 && (mxx - mnx) > 7 && (mxz - mnz) > 7) {
           roofSpots.push([cx, cz, gy + h, (mxx - mnx), (mxz - mnz)]);
         }
@@ -1900,6 +1929,7 @@ async function main() {
                               hz3 / Math.max(Math.abs(nz4), 1e-6));
           const ex2 = cx3 + nx4 * t2 * 1.01, ez2 = cz3 + nz4 * t2 * 1.01;
           if (_polyEdgeD(b.pts, ex2, ez2) > 1.4) continue;   // r13: real wall only
+          if ((b.h || 9) < 5.5) continue;   // r14: no signs above short roofs
           const name = NAMES[ns % NAMES.length];
           const sc2 = document.createElement('canvas');
           sc2.width = 512; sc2.height = 128;
@@ -1962,18 +1992,9 @@ async function main() {
             const y1 = hAt(x1, z1) + 0.05, y2 = hAt(x2, z2) + 0.05;
             const g = strip(x1, z1, x2, z2, w, y1, y2);
             if (g) roadGeos.push(g);
-            // r6 CURBS: a raised concrete band at each road edge — the
-            // street/sidewalk height step that flat cities are missing
-            {
-              const segL0 = Math.hypot(x2 - x1, z2 - z1) || 1;
-              const ox = -(z2 - z1) / segL0 * (w + 0.09);
-              const oz = (x2 - x1) / segL0 * (w + 0.09);
-              for (const s of [1, -1]) {
-                const cg = strip(x1 + ox * s, z1 + oz * s, x2 + ox * s, z2 + oz * s,
-                                 0.17, y1 + 0.12, y2 + 0.12, 1);
-                if (cg) curbGeos.push(cg);
-              }
-            }
+            // r14: flat curb strips REMOVED — they z-fought and showed their
+            // floating gap as streaky bands at grazing angles (playtest
+            // screenshots). Real instanced curb boxes are built below.
             // center dashes: 1.8m on / 4m off along the segment
             const segL = Math.hypot(x2 - x1, z2 - z1);
             for (let d = 1; d + 1.8 < segL; d += 5.8) {
@@ -2002,11 +2023,46 @@ async function main() {
           const dash = new THREE.Mesh(mergeGeometries(dashGeos, false),
             new THREE.MeshBasicMaterial({ color: 0xd8d8d2, side: THREE.DoubleSide }));
           scene.add(dash);
-          if (curbGeos.length) {
-            const curb = new THREE.Mesh(mergeGeometries(curbGeos, false),
-              new THREE.MeshStandardMaterial({ color: 0xb8b6ae,
-                roughness: 0.9, metalness: 0.0, side: THREE.DoubleSide }));
-            curb.receiveShadow = true;
+          // r14 REAL CURBS: solid instanced boxes (top + side faces) per
+          // road-segment side — an actual 6-inch step, nothing to z-fight
+          {
+            const cg2 = new THREE.BoxGeometry(1, 0.15, 0.3);
+            cg2.translate(0, 0.075, 0);
+            // pieces of ~6m, each midpoint-tested against ALL roads so curbs
+            // never run across an intersection
+            let cap2 = 0;
+            for (const s of _roadSegs) cap2 += (Math.ceil(Math.hypot(s[2] - s[0], s[3] - s[1]) / 6) + 1) * 2;
+            const curb = new THREE.InstancedMesh(cg2,
+              new THREE.MeshStandardMaterial({ color: 0xaaa8a0, roughness: 0.9 }),
+              Math.min(cap2, 6000));
+            const CM = new THREE.Matrix4(), CQ = new THREE.Quaternion();
+            const CE = new THREE.Euler(), CS = new THREE.Vector3();
+            let nc2 = 0;
+            for (const s of _roadSegs) {
+              const len = Math.hypot(s[2] - s[0], s[3] - s[1]);
+              if (len < 1) continue;
+              const yawC = Math.atan2(s[2] - s[0], s[3] - s[1]);
+              const ux = (s[2] - s[0]) / len, uz = (s[3] - s[1]) / len;
+              const oxc = -uz * (s[4] + 0.42), ozc = ux * (s[4] + 0.42);
+              for (let d0 = 0; d0 < len; d0 += 6) {
+                const pl = Math.min(6, len - d0);
+                if (pl < 0.8) continue;
+                const midd = d0 + pl / 2;
+                for (const sd of [1, -1]) {
+                  if (nc2 >= 6000) break;
+                  const mxc = s[0] + ux * midd + oxc * sd;
+                  const mzc = s[1] + uz * midd + ozc * sd;
+                  if (_onRoad(mxc, mzc, 0.22)) continue;   // crossing street
+                  CE.set(0, yawC, 0); CQ.setFromEuler(CE);
+                  CS.set(0.3, 1, pl);
+                  CM.compose(new THREE.Vector3(mxc, hAt(mxc, mzc), mzc), CQ, CS);
+                  curb.setMatrixAt(nc2++, CM);
+                }
+              }
+            }
+            curb.count = nc2;
+            curb.instanceMatrix.needsUpdate = true;
+            curb.receiveShadow = true; curb.castShadow = true;
             scene.add(curb);
           }
         }
@@ -5934,8 +5990,22 @@ varying vec2 vUvRaw;
       // walk the SIDEWALK: offset perpendicular from the road centerline
       const px3 = a3[0] + (b3[0] - a3[0]) * pd.t + Math.cos(hd5) * pd.side;
       const pz3 = a3[1] + (b3[1] - a3[1]) * pd.t - Math.sin(hd5) * pd.side;
-      pd.obj.position.set(px3, hAt(px3, pz3), pz3);
-      pd.obj.rotation.y = hd5 + (pd.dir < 0 ? Math.PI : 0);
+      // r14 GLITCH FIX: at polyline corners the sidewalk offset JUMPS
+      // sideways (visible teleport). Damp position + yaw toward targets.
+      const wantY = hd5 + (pd.dir < 0 ? Math.PI : 0);
+      if (!pd._init) {
+        pd.obj.position.set(px3, hAt(px3, pz3), pz3);
+        pd.obj.rotation.y = wantY; pd._init = true;
+      } else {
+        const k = Math.min(1, dt * 5);
+        pd.obj.position.x += (px3 - pd.obj.position.x) * k;
+        pd.obj.position.z += (pz3 - pd.obj.position.z) * k;
+        pd.obj.position.y = hAt(pd.obj.position.x, pd.obj.position.z);
+        let dy = wantY - pd.obj.rotation.y;
+        while (dy > Math.PI) dy -= Math.PI * 2;
+        while (dy < -Math.PI) dy += Math.PI * 2;
+        pd.obj.rotation.y += dy * Math.min(1, dt * 6);
+      }
       if (pd.mixer) pd.mixer.update(dt);
     }
     if (window.__torches) {
