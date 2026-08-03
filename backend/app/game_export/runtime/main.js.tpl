@@ -1362,16 +1362,40 @@ async function main() {
         t.anisotropy = renderer.capabilities.getMaxAnisotropy();
         return t;
       };
+      // NIGHT WINDOWS on photo facades (r5, 2026-07-30): only the procedural
+      // bucket glowed after dark — photo-facade towers were pitch-dead black
+      // slabs. A shared emissive window-mask canvas at the same 18x12m tile
+      // scale as the photo lights ~30% of windows warm (a few cool).
+      let photoLit = null;
+      if (SPEC.world.sky === 'night' || SPEC.world.sky === 'dusk') {
+        const lc = document.createElement('canvas');
+        lc.width = lc.height = 256;
+        const lx = lc.getContext('2d');
+        lx.fillStyle = '#000000'; lx.fillRect(0, 0, 256, 256);
+        const rngL = mulberry32(SPEC.seed + 404);
+        for (let wy = 0; wy < 5; wy++) for (let wx = 0; wx < 7; wx++) {
+          if (rngL() > 0.30) continue;
+          lx.fillStyle = rngL() < 0.72 ? '#d9a85f' : '#b9cfe4';
+          lx.fillRect(8 + wx * 35, 10 + wy * 48, 22, 30);
+        }
+        photoLit = new THREE.CanvasTexture(lc);
+        photoLit.wrapS = photoLit.wrapT = THREE.RepeatWrapping;
+        photoLit.repeat.set(1 / 18, 1 / 12);
+      }
+      const _glow = photoLit
+        ? { emissive: new THREE.Color(0xffc873), emissiveMap: photoLit,
+            emissiveIntensity: 0.55 }
+        : {};
       const _wallMats = [
         new THREE.MeshStandardMaterial({ vertexColors: true, map: facadeTex,
           emissive: 0xffc873, emissiveMap: litTex, emissiveIntensity: 0.4,
           roughness: 0.85, metalness: 0.08 }),
         new THREE.MeshStandardMaterial({ map: _fTex('facade_glass'),
-          vertexColors: true, roughness: 0.35, metalness: 0.55 }),
+          vertexColors: true, roughness: 0.35, metalness: 0.55, ..._glow }),
         new THREE.MeshStandardMaterial({ map: _fTex('facade_brick'),
-          vertexColors: true, roughness: 0.9, metalness: 0.03 }),
+          vertexColors: true, roughness: 0.9, metalness: 0.03, ..._glow }),
         new THREE.MeshStandardMaterial({ map: _fTex('facade_stone'),
-          vertexColors: true, roughness: 0.85, metalness: 0.04 }),
+          vertexColors: true, roughness: 0.85, metalness: 0.04, ..._glow }),
       ];
       for (let bi = 0; bi < 4; bi++) {
         if (!wallBuckets[bi].length) continue;
