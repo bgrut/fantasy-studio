@@ -2611,6 +2611,69 @@ async function main() {
     } };
   })();
 
+  // ── MINIMAP (r12, 2026-07-30): circular GTA-style map for city games —
+  // roads + building footprints pre-rendered once, live player wedge +
+  // objective dot composited per frame. The reference frame has one; a
+  // minimap is a shockingly large perceived-quality cue.
+  const MINIMAP = (() => {
+    if (!OSM || !OSM.roads || !OSM.roads.length) return null;
+    const base = document.createElement('canvas');
+    base.width = base.height = 160;
+    const bx = base.getContext('2d');
+    const half2 = SPEC.world.size_m / 2;
+    const w2m = (v) => 80 + (v / half2) * 74;
+    bx.fillStyle = 'rgba(10,12,18,0.85)';
+    bx.beginPath(); bx.arc(80, 80, 78, 0, Math.PI * 2); bx.fill();
+    bx.save();
+    bx.beginPath(); bx.arc(80, 80, 76, 0, Math.PI * 2); bx.clip();
+    bx.fillStyle = 'rgba(96,102,118,0.4)';
+    for (const b of OSM.buildings || []) {
+      bx.beginPath();
+      b.pts.forEach((p, i) => i ? bx.lineTo(w2m(p[0]), w2m(p[1]))
+                                : bx.moveTo(w2m(p[0]), w2m(p[1])));
+      bx.closePath(); bx.fill();
+    }
+    bx.strokeStyle = 'rgba(215,220,230,0.85)';
+    bx.lineCap = 'round';
+    for (const r of OSM.roads) {
+      bx.lineWidth = Math.max(1.6, ((r.w || 7) / half2) * 74);
+      bx.beginPath();
+      r.pts.forEach((p, i) => i ? bx.lineTo(w2m(p[0]), w2m(p[1]))
+                                : bx.moveTo(w2m(p[0]), w2m(p[1])));
+      bx.stroke();
+    }
+    bx.restore();
+    const cv = document.createElement('canvas');
+    cv.width = cv.height = 160;
+    cv.style.cssText = 'position:fixed;left:14px;bottom:14px;width:150px;'
+      + 'height:150px;border-radius:50%;border:2px solid rgba(255,255,255,0.22);'
+      + 'z-index:12;box-shadow:0 4px 18px rgba(0,0,0,0.5);pointer-events:none;';
+    document.body.appendChild(cv);
+    const mx = cv.getContext('2d');
+    const dirV = new THREE.Vector3();
+    const goal = LVL && LVL.goal;
+    return { step(pp) {
+      mx.clearRect(0, 0, 160, 160);
+      mx.drawImage(base, 0, 0);
+      if (goal) {
+        mx.fillStyle = '#ffd166';
+        mx.beginPath();
+        mx.arc(w2m(goal[0]), w2m(goal[1]), 4.2, 0, Math.PI * 2);
+        mx.fill();
+      }
+      camera.getWorldDirection(dirV);
+      mx.save();
+      mx.translate(w2m(pp.x), w2m(pp.z));
+      mx.rotate(Math.PI - Math.atan2(dirV.x, dirV.z));
+      mx.fillStyle = '#5cffc9';
+      mx.strokeStyle = 'rgba(0,0,0,0.55)'; mx.lineWidth = 1.4;
+      mx.beginPath();
+      mx.moveTo(0, -6.5); mx.lineTo(4.4, 4.6); mx.lineTo(-4.4, 4.6);
+      mx.closePath(); mx.fill(); mx.stroke();
+      mx.restore();
+    } };
+  })();
+
   function stepDynamics(dt, playerPos, t) {
     if (precip) {
       const a = precip.geometry.attributes.position, arr = a.array, N = arr.length / 3;
@@ -5680,6 +5743,7 @@ varying vec2 vUvRaw;
     }
     stepDynamics(dt, nt, performance.now() / 1000);
     if (VFX) VFX.step(dt, nt);          // element aura + trail follow the hero
+    if (MINIMAP) MINIMAP.step(nt);      // live city map, view-direction wedge
 
     // SURVIVE verb: hold out while escalating waves close in
     {
