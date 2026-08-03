@@ -315,7 +315,7 @@ async function main() {
         pm2.dispose();
       } catch (e) {}
     }
-    if ('environmentIntensity' in scene) scene.environmentIntensity = 0.55;
+    if ('environmentIntensity' in scene) scene.environmentIntensity = 0.62;
     // HDRI IBL (Arc B slice, 2026-07-28): a real captured environment beats
     // any procedural one — correct ambient color + reflections on every PBR
     // material. CC0 Poly Haven capture bundled per sky mood at export; loads
@@ -447,9 +447,12 @@ async function main() {
     camera = new THREE.OrthographicCamera(-os * oa, os * oa, os, -os, 0.1, 1000);
   }
 
-  const hemi = new THREE.HemisphereLight(pal.sky, 0x3a3f35, pal.amb);
+  // r11 LIGHTING POLISH: flat ambience was killing depth — drop the hemi
+  // fill 15% and push the sun 12% so shadowed faces separate from lit ones
+  // (the AAA contrast ratio), with the HDRI env carrying more of the fill.
+  const hemi = new THREE.HemisphereLight(pal.sky, 0x3a3f35, pal.amb * 0.85);
   scene.add(hemi);
-  const sun = new THREE.DirectionalLight(pal.sunCol || 0xffffff, pal.sun);
+  const sun = new THREE.DirectionalLight(pal.sunCol || 0xffffff, pal.sun * 1.12);
   sun.position.set(...pal.sunPos);
   sun.castShadow = true;
   sun.shadow.mapSize.set(QCFG.shadow, QCFG.shadow);
@@ -1454,6 +1457,32 @@ async function main() {
           roughness: 0.96, metalness: 0.02 }));
       roofs.castShadow = true; roofs.receiveShadow = true;
       scene.add(roofs);
+      // r11 CORNICES: clone every roof cap, scale 5% wider about its own
+      // center and drop it 0.45m — a projecting ledge under every roofline.
+      // Breaks the extruded-box silhouette (the AC/GTA depth cue) for the
+      // whole city in ONE merged mesh; below-ground underside clones bury
+      // themselves harmlessly.
+      {
+        const cornices = [];
+        for (const cg of capGeos) {
+          const cc = cg.clone();
+          cc.computeBoundingBox();
+          const cb = cc.boundingBox;
+          if ((cb.max.y + cb.min.y) / 2 < 3) continue;   // skip undersides
+          const ccx = (cb.min.x + cb.max.x) / 2, ccz = (cb.min.z + cb.max.z) / 2;
+          cc.translate(-ccx, 0, -ccz);
+          cc.scale(1.05, 1, 1.05);
+          cc.translate(ccx, -0.45, ccz);
+          cornices.push(cc);
+        }
+        if (cornices.length) {
+          const cor = new THREE.Mesh(mergeGeometries(cornices, false),
+            new THREE.MeshStandardMaterial({ color: 0x5e5b55,
+              roughness: 0.92, metalness: 0.02, side: THREE.DoubleSide }));
+          cor.castShadow = true;
+          scene.add(cor);
+        }
+      }
       // ROOFTOP CLUTTER (Phase 118): water towers + AC units — the skyline
       // detail that says 'real city'. Instanced; capped for perf.
       if (roofSpots.length) {
@@ -1744,8 +1773,19 @@ async function main() {
           }
           const canG = mergeGeometries(lobes, false);
           canG.computeVertexNormals();
+          // r11: LEAF TEXTURE on the lobes — the SDXL leaves PBR set breaks
+          // up the solid-color surface into visible foliage detail
+          const leafT = new THREE.TextureLoader().load('textures/leaves.jpg');
+          leafT.wrapS = leafT.wrapT = THREE.RepeatWrapping;
+          leafT.repeat.set(2.5, 2.5);
+          leafT.colorSpace = THREE.SRGBColorSpace;
+          const leafN = new THREE.TextureLoader().load('textures/leaves_n.jpg');
+          leafN.wrapS = leafN.wrapT = THREE.RepeatWrapping;
+          leafN.repeat.set(2.5, 2.5);
           const can = new THREE.InstancedMesh(canG,
-            new THREE.MeshStandardMaterial({ roughness: 0.9 }), spots.length);
+            new THREE.MeshStandardMaterial({ map: leafT, normalMap: leafN,
+              normalScale: new THREE.Vector2(0.7, 0.7), roughness: 0.95 }),
+            spots.length);
           const M5 = new THREE.Matrix4();
           const CG = [new THREE.Color(0x5a8a42), new THREE.Color(0x6a9a4c),
                       new THREE.Color(0x7aa856), new THREE.Color(0x4f7c3c)];
