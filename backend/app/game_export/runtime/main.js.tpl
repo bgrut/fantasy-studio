@@ -1462,6 +1462,62 @@ async function main() {
         hyds.count = hc; hyds.instanceMatrix.needsUpdate = true; hyds.castShadow = true;
         scene.add(hyds);
       }
+      // STREET FURNITURE r3 (2026-07-30): dumpsters, trash cans, benches —
+      // the sidewalk clutter that separates 'render' from 'street'. All
+      // procedural + instanced on the sidewalk band, hydrant-style.
+      {
+        const rngF = mulberry32(SPEC.seed + 616);
+        const MM2 = new THREE.Matrix4(), Q2 = new THREE.Quaternion();
+        const S1 = new THREE.Vector3(1, 1, 1), E2 = new THREE.Euler(), PV = new THREE.Vector3();
+        const mkIM = (geo, mat, n) => {
+          const im = new THREE.InstancedMesh(geo, mat, n);
+          im.castShadow = im.receiveShadow = true;
+          return im;
+        };
+        const dump = mkIM(new THREE.BoxGeometry(1.9, 1.15, 1.05),
+          new THREE.MeshStandardMaterial({ color: 0x2e4d33, roughness: 0.85, metalness: 0.35 }), 26);
+        const lid = mkIM(new THREE.BoxGeometry(1.95, 0.1, 1.1),
+          new THREE.MeshStandardMaterial({ color: 0x233728, roughness: 0.8, metalness: 0.4 }), 26);
+        const can = mkIM(new THREE.CylinderGeometry(0.3, 0.26, 0.85, 10),
+          new THREE.MeshStandardMaterial({ color: 0x3a3d42, roughness: 0.9, metalness: 0.55 }), 52);
+        const woodM = new THREE.MeshStandardMaterial({ color: 0x6e4f30, roughness: 0.92 });
+        const seat = mkIM(new THREE.BoxGeometry(1.7, 0.08, 0.5), woodM, 26);
+        const back = mkIM(new THREE.BoxGeometry(1.7, 0.45, 0.07), woodM, 26);
+        let nd = 0, ncn = 0, nb = 0;
+        for (const r of (OSM.roads || [])) {
+          if (nd >= 26 && ncn >= 52 && nb >= 26) break;
+          const hd4 = Math.atan2(r.pts[r.pts.length - 1][0] - r.pts[0][0],
+                                 r.pts[r.pts.length - 1][1] - r.pts[0][1]);
+          for (const fr of [0.2, 0.42, 0.66, 0.86]) {
+            const pi3 = Math.min(Math.floor(fr * (r.pts.length - 1)), r.pts.length - 2);
+            const side = rngF() < 0.5 ? 1 : -1;
+            const off = (r.w || 7) / 2 + 1.9 + rngF() * 0.8;
+            const fx2 = r.pts[pi3][0] + Math.cos(hd4) * side * off;
+            const fz2 = r.pts[pi3][1] - Math.sin(hd4) * side * off;
+            if (Math.hypot(fx2, fz2) < 12 || inBldg(fx2, fz2, 0.6)) continue;
+            const gy3 = hAt(fx2, fz2);
+            const yaw = hd4 + Math.PI / 2 + (rngF() - 0.5) * 0.2;
+            Q2.setFromEuler(E2.set(0, yaw, 0));
+            const pick = rngF();
+            if (pick < 0.3 && nd < 26) {
+              MM2.compose(PV.set(fx2, gy3 + 0.58, fz2), Q2, S1); dump.setMatrixAt(nd, MM2);
+              MM2.compose(PV.set(fx2, gy3 + 1.2, fz2), Q2, S1); lid.setMatrixAt(nd, MM2);
+              nd++;
+            } else if (pick < 0.62 && ncn < 52) {
+              MM2.compose(PV.set(fx2, gy3 + 0.43, fz2), Q2, S1); can.setMatrixAt(ncn++, MM2);
+            } else if (nb < 26) {
+              MM2.compose(PV.set(fx2, gy3 + 0.45, fz2), Q2, S1); seat.setMatrixAt(nb, MM2);
+              MM2.compose(PV.set(fx2 - Math.sin(yaw) * 0.24, gy3 + 0.72,
+                                 fz2 - Math.cos(yaw) * 0.24), Q2, S1); back.setMatrixAt(nb, MM2);
+              nb++;
+            }
+          }
+        }
+        dump.count = lid.count = nd; can.count = ncn; seat.count = back.count = nb;
+        for (const im of [dump, lid, can, seat, back]) {
+          im.instanceMatrix.needsUpdate = true; scene.add(im);
+        }
+      }
       // NEON SIGNS (Phase 120, night streets): emissive storefront strips on
       // building faces near roads — the bloom layer that sells 'city at night'
       if (['night', 'dusk', 'sunset'].includes(SPEC.world.sky)) {
