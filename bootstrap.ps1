@@ -56,7 +56,7 @@ try { ollama pull gemma3:12b } catch { Write-Host "  (Ollama pull failed — sta
 
 Write-Host "  fetching CC0 sky HDRIs from Poly Haven (~25 MB, film-grade lighting) ..." -ForegroundColor Cyan
 try { python backend/scripts/fetch_hdris.py } catch { Write-Host "  (HDRI fetch failed - run later)" -ForegroundColor Yellow }
-try { Push-Location backend/tools/shotgate; npm i --no-audit --no-fund; Pop-Location } catch { Write-Host "  (HDRI fetch failed — run later: python backend/scripts/fetch_hdris.py — games fall back to procedural light)" -ForegroundColor Yellow }
+try { Push-Location backend/tools/shotgate; npm i --no-audit --no-fund; Pop-Location } catch { Write-Host "  (shotgate deps failed - run later: cd backend/tools/shotgate; npm i - builds skip the visual gate until then)" -ForegroundColor Yellow }
 
 Write-Host ""
 Write-Host "  Done! Launch Fantasy Studio:" -ForegroundColor Magenta
