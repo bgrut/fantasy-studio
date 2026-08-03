@@ -1267,8 +1267,16 @@ async function main() {
           const ca = sub.attributes.color;
           const pa = sub.attributes.position;
           for (let i = 0; i < ca.count; i++) {
-            const gAO = 0.68 + 0.32 * Math.min(Math.max(pa.getY(i) / 7.5, 0), 1);
-            ca.setXYZ(i, (tone + warm) * gAO, tone * gAO, (tone - warm * 0.6) * gAO);
+            const y = pa.getY(i);
+            const gAO = 0.68 + 0.32 * Math.min(Math.max(y / 7.5, 0), 1);
+            // r8 PLINTH: a distinctly darker neutral ground-floor band —
+            // real buildings have stone bases/storefront framing; bare
+            // facade texture running into the sidewalk is a game-city tell
+            const plinth = y < 4.0 ? 0.62 : 1.0;
+            const pw = y < 4.0 ? 0.3 : 1.0;      // desaturate the warm shift
+            ca.setXYZ(i, (tone + warm * pw) * gAO * plinth,
+                      tone * gAO * plinth,
+                      (tone - warm * 0.6 * pw) * gAO * plinth);
           }
         }
         (g.materialIndex === 0 ? capGeos : wallBuckets[bucket]).push(sub);
@@ -1611,6 +1619,59 @@ async function main() {
           im.instanceMatrix.needsUpdate = true; scene.add(im);
         }
       }
+      // r8 AWNINGS: tilted storefront canopies on road-facing building
+      // bases — with plinths + these, ground floors read as SHOPS instead
+      // of texture meeting pavement. Instanced, per-instance color.
+      if (OSM.buildings && OSM.buildings.length && OSM.roads && OSM.roads.length) {
+        const rngA = mulberry32(SPEC.seed + 606);
+        const awnG = new THREE.BoxGeometry(3.4, 0.16, 1.2);
+        awnG.translate(0, 0, 0.6);
+        const awnM = new THREE.MeshStandardMaterial({ roughness: 0.85 });
+        const maxA = Math.min(OSM.buildings.length, 70);
+        const awn = new THREE.InstancedMesh(awnG, awnM, maxA);
+        const AC = [new THREE.Color(0x7a2e2e), new THREE.Color(0x2e5a3a),
+                    new THREE.Color(0x2e3a5e), new THREE.Color(0x4a4a4a),
+                    new THREE.Color(0x7a5a2e)];
+        const M4 = new THREE.Matrix4(), Q4 = new THREE.Quaternion();
+        const E4 = new THREE.Euler(), S4 = new THREE.Vector3(1, 1, 1);
+        let na = 0;
+        for (const b of OSM.buildings.slice(0, 140)) {
+          if (na >= maxA) break;
+          if (rngA() > 0.55) continue;
+          let mnx = 1e9, mnz = 1e9, mxx = -1e9, mxz = -1e9;
+          for (const p of b.pts) {
+            mnx = Math.min(mnx, p[0]); mxx = Math.max(mxx, p[0]);
+            mnz = Math.min(mnz, p[1]); mxz = Math.max(mxz, p[1]);
+          }
+          const cx2 = (mnx + mxx) / 2, cz2 = (mnz + mxz) / 2;
+          const hx2 = (mxx - mnx) / 2, hz2 = (mxz - mnz) / 2;
+          if (hx2 < 2.2 || hz2 < 2.2) continue;
+          // nearest road point -> awning faces the street
+          let bd = 1e9, bx = 0, bz = 0;
+          for (const r of OSM.roads) for (const p of r.pts) {
+            const d = (p[0] - cx2) ** 2 + (p[1] - cz2) ** 2;
+            if (d < bd) { bd = d; bx = p[0]; bz = p[1]; }
+          }
+          if (bd > 45 * 45) continue;
+          const dx2 = bx - cx2, dz2 = bz - cz2;
+          const dl = Math.hypot(dx2, dz2) || 1;
+          const nx2 = dx2 / dl, nz2 = dz2 / dl;
+          const t = Math.min(hx2 / Math.max(Math.abs(nx2), 1e-6),
+                             hz2 / Math.max(Math.abs(nz2), 1e-6));
+          const ex = cx2 + nx2 * t, ez = cz2 + nz2 * t;
+          E4.set(-0.22, Math.atan2(nx2, nz2), 0);
+          Q4.setFromEuler(E4);
+          M4.compose(new THREE.Vector3(ex, hAt(ex, ez) + 3.0, ez), Q4, S4);
+          awn.setMatrixAt(na, M4);
+          awn.setColorAt(na, AC[Math.floor(rngA() * AC.length)]);
+          na++;
+        }
+        awn.count = na;
+        awn.instanceMatrix.needsUpdate = true;
+        if (awn.instanceColor) awn.instanceColor.needsUpdate = true;
+        awn.castShadow = true;
+        scene.add(awn);
+      }
       // REAL ASPHALT STREETS r3 (2026-07-30): the 'Google Maps' unlock.
       // Roads were only a tint painted into the ground canvas — the city
       // read as one endless pale plaza and everything on it looked
@@ -1629,9 +1690,13 @@ async function main() {
           g.setAttribute('position', new THREE.BufferAttribute(new Float32Array([
             x1 + nx, y1, z1 + nz, x1 - nx, y1, z1 - nz, x2 + nx, y2, z2 + nz,
             x1 - nx, y1, z1 - nz, x2 - nx, y2, z2 - nz, x2 + nx, y2, z2 + nz]), 3));
-          const v = vmax || len / 7;
+          // r8: metric UVs — the texture tiled ONCE across the full road
+          // width (14m of asphalt from one 1K image = mushy oversized
+          // cracks). Now one repeat per ~5m in both axes.
+          const v = vmax || len / 5;
+          const u = vmax ? 1 : (w * 2) / 5;
           g.setAttribute('uv', new THREE.BufferAttribute(new Float32Array([
-            0, 0, 1, 0, 0, v, 1, 0, 1, v, 0, v]), 2));
+            0, 0, u, 0, 0, v, u, 0, u, v, 0, v]), 2));
           g.computeVertexNormals();
           return g;
         };
