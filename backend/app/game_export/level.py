@@ -236,7 +236,7 @@ def _road_route(roads: list[dict], half: float) -> list[list[float]] | None:
     return [[round(x, 1), round(z, 1)] for x, z in thinned]
 
 
-def build_osm_city(place: str, size_m: float, max_buildings: int = 320) -> dict | None:
+def build_osm_city(place: str, size_m: float, max_buildings: int = 500) -> dict | None:
     """Real building footprints + roads for `place` (video pipeline's OSM
     fetch/parse, shared cache). The whole district is SHIFTED so the road
     route starts at the player spawn (origin). Returns None on any failure —

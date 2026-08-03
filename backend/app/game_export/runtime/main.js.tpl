@@ -1585,19 +1585,41 @@ async function main() {
         const seat = mkIM(new THREE.BoxGeometry(1.7, 0.08, 0.5), woodM, 26);
         const back = mkIM(new THREE.BoxGeometry(1.7, 0.45, 0.07), woodM, 26);
         let nd = 0, ncn = 0, nb = 0;
-        for (const r of (OSM.roads || [])) {
+        // r10 PLACEMENT FIX: furniture floating mid-sidewalk read as
+        // MISPLACED (user callout). Real streets put benches/dumpsters/cans
+        // AGAINST BUILDING WALLS — same nearest-road edge projection as the
+        // awnings, then 0.9m out from the wall, back to the building.
+        for (const b of (OSM.buildings || []).slice(0, 200)) {
           if (nd >= 26 && ncn >= 52 && nb >= 26) break;
-          const hd4 = Math.atan2(r.pts[r.pts.length - 1][0] - r.pts[0][0],
-                                 r.pts[r.pts.length - 1][1] - r.pts[0][1]);
-          for (const fr of [0.2, 0.42, 0.66, 0.86]) {
-            const pi3 = Math.min(Math.floor(fr * (r.pts.length - 1)), r.pts.length - 2);
-            const side = rngF() < 0.5 ? 1 : -1;
-            const off = (r.w || 7) / 2 + 1.9 + rngF() * 0.8;
-            const fx2 = r.pts[pi3][0] + Math.cos(hd4) * side * off;
-            const fz2 = r.pts[pi3][1] - Math.sin(hd4) * side * off;
-            if (Math.hypot(fx2, fz2) < 12 || inBldg(fx2, fz2, 0.6)) continue;
+          if (rngF() > 0.5) continue;
+          let mnx = 1e9, mnz = 1e9, mxx = -1e9, mxz = -1e9;
+          for (const p of b.pts) {
+            mnx = Math.min(mnx, p[0]); mxx = Math.max(mxx, p[0]);
+            mnz = Math.min(mnz, p[1]); mxz = Math.max(mxz, p[1]);
+          }
+          const cx4 = (mnx + mxx) / 2, cz4 = (mnz + mxz) / 2;
+          const hx4 = (mxx - mnx) / 2, hz4 = (mxz - mnz) / 2;
+          if (hx4 < 2 || hz4 < 2) continue;
+          let bd2 = 1e9, bx2 = 0, bz2 = 0;
+          for (const r of OSM.roads || []) for (const p of r.pts) {
+            const d = (p[0] - cx4) ** 2 + (p[1] - cz4) ** 2;
+            if (d < bd2) { bd2 = d; bx2 = p[0]; bz2 = p[1]; }
+          }
+          if (bd2 > 42 * 42) continue;
+          const dxx = bx2 - cx4, dzz = bz2 - cz4;
+          const dll = Math.hypot(dxx, dzz) || 1;
+          const nxx = dxx / dll, nzz = dzz / dll;
+          const tt = Math.min(hx4 / Math.max(Math.abs(nxx), 1e-6),
+                              hz4 / Math.max(Math.abs(nzz), 1e-6));
+          // slide along the wall a little so items don't stack with awnings
+          const sx4 = -nzz, sz4 = nxx;
+          const slide = (rngF() - 0.5) * Math.min(hx4, hz4) * 1.2;
+          const fx2 = cx4 + nxx * (tt + 0.9) + sx4 * slide;
+          const fz2 = cz4 + nzz * (tt + 0.9) + sz4 * slide;
+          {
+            if (Math.hypot(fx2, fz2) < 12 || inBldg(fx2, fz2, 0.15)) continue;
             const gy3 = hAt(fx2, fz2);
-            const yaw = hd4 + Math.PI / 2 + (rngF() - 0.5) * 0.2;
+            const yaw = Math.atan2(nxx, nzz);   // face the street, back to wall
             Q2.setFromEuler(E2.set(0, yaw, 0));
             const pick = rngF();
             if (pick < 0.3 && nd < 26) {
@@ -1701,13 +1723,32 @@ async function main() {
           const trk = new THREE.InstancedMesh(trkG,
             new THREE.MeshStandardMaterial({ color: 0x5a4632, roughness: 0.95 }),
             spots.length);
-          const canG = new THREE.IcosahedronGeometry(1.55, 1);
-          canG.scale(1, 0.85, 1).translate(0, 4.1, 0);
+          // r10: multi-lobe ORGANIC canopy — a single squashed icosahedron
+          // read as a lollipop ('very geometric'). Four overlapping jittered
+          // lobes at detail 2 with smooth normals silhouette like foliage.
+          const lobes = [];
+          const lobeDefs = [[0, 4.15, 0, 1.5], [0.85, 3.75, 0.4, 0.95],
+                            [-0.75, 3.9, -0.5, 1.0], [0.15, 4.9, -0.35, 0.85],
+                            [-0.3, 3.5, 0.7, 0.8]];
+          const rngLb = mulberry32(SPEC.seed + 313);
+          for (const [lx2, ly2, lz2, lr] of lobeDefs) {
+            const lg = new THREE.IcosahedronGeometry(lr, 2);
+            const pa2 = lg.attributes.position;
+            for (let vi = 0; vi < pa2.count; vi++) {
+              const j = 0.88 + rngLb() * 0.24;   // organic silhouette jitter
+              pa2.setXYZ(vi, pa2.getX(vi) * j, pa2.getY(vi) * (0.82 + rngLb() * 0.2),
+                         pa2.getZ(vi) * j);
+            }
+            lg.translate(lx2, ly2, lz2);
+            lobes.push(lg);
+          }
+          const canG = mergeGeometries(lobes, false);
+          canG.computeVertexNormals();
           const can = new THREE.InstancedMesh(canG,
             new THREE.MeshStandardMaterial({ roughness: 0.9 }), spots.length);
           const M5 = new THREE.Matrix4();
-          const CG = [new THREE.Color(0x3f6b2e), new THREE.Color(0x4f7a35),
-                      new THREE.Color(0x5d8a3c), new THREE.Color(0x39602c)];
+          const CG = [new THREE.Color(0x5a8a42), new THREE.Color(0x6a9a4c),
+                      new THREE.Color(0x7aa856), new THREE.Color(0x4f7c3c)];
           spots.forEach(([tx3, tz3, sc], i) => {
             const gy3 = hAt(tx3, tz3);
             M5.makeScale(sc, sc, sc).setPosition(tx3, gy3, tz3);
@@ -1734,9 +1775,9 @@ async function main() {
         const SBG = ['#8a1f1f', '#1f4d8a', '#1f6b3a', '#6b3a8a', '#8a5a1f', '#222222'];
         const _nightS = SPEC.world.sky === 'night' || SPEC.world.sky === 'dusk';
         let ns = 0;
-        for (const b of OSM.buildings.slice(3, 160)) {
-          if (ns >= 14) break;
-          if (rngG2() > 0.3) continue;
+        for (const b of OSM.buildings.slice(0, 300)) {
+          if (ns >= 40) break;             // r10: 14 signs vanished in a city
+          if (rngG2() > 0.45) continue;
           let mnx = 1e9, mnz = 1e9, mxx = -1e9, mxz = -1e9;
           for (const p of b.pts) {
             mnx = Math.min(mnx, p[0]); mxx = Math.max(mxx, p[0]);
