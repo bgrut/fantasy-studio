@@ -276,6 +276,7 @@ async function main() {
     const sky = new Sky();
     sky.scale.setScalar(4000);
     scene.add(sky);
+    window.__skyDome = sky;             // r15: HDRI background hides this
     const su = sky.material.uniforms;
     const cfg = {
       day:      { turbidity: 6,  rayleigh: 1.2, elev: 35 },
@@ -327,9 +328,26 @@ async function main() {
           tex.mapping = THREE.EquirectangularReflectionMapping;
           const pmH = new THREE.PMREMGenerator(renderer);
           const envH = pmH.fromEquirectangular(tex).texture;
-          pmH.dispose(); tex.dispose();
+          pmH.dispose();
           scene.environment = envH;
           if ('environmentIntensity' in scene) scene.environmentIntensity = 0.5;
+          // r15 PHOTOGRAPHIC SKY: the HDRI was IBL-only — the VISIBLE sky
+          // stayed a procedural gradient (the '2000s' backdrop). For
+          // photoreal outdoor moods the real captured sky (actual clouds,
+          // real horizon glow) IS the background now; the procedural dome
+          // + cloud sprites hide so they don't occlude it.
+          if ((SPEC.style || 'default') === 'default'
+              && ['day', 'sunset', 'overcast', 'dusk'].includes(SPEC.world.sky)) {
+            scene.background = tex;
+            scene.backgroundIntensity = SPEC.world.sky === 'day' ? 1.0 : 0.9;
+            if (window.__skyDome) window.__skyDome.visible = false;
+            if (window.__clouds) {
+              for (const sp of window.__clouds) sp.visible = false;
+            }
+            console.log('[game] HDRI sky background active');
+          } else {
+            tex.dispose();
+          }
           console.log('[game] HDRI environment: ' + SPEC.world.hdri);
         }, undefined, () => console.warn('[game] HDRI env skipped — procedural stays'));
       }).catch(() => {});
@@ -2015,9 +2033,14 @@ async function main() {
           // charcoal multiplier: the SDXL asphalt photo is LIGHT gray — at
           // 0x8f9096 the streets read identical to the concrete sidewalks
           // (proved by a road running straight through spawn, invisible)
+          // r15 WET NIGHT ASPHALT: at night the road turns glossy and picks
+          // up the HDRI/neon environment — the SSR wet-street look without
+          // SSR. Day stays matte.
+          const _wetN = SPEC.world.sky === 'night' || SPEC.world.sky === 'dusk';
           const road = new THREE.Mesh(mergeGeometries(roadGeos, false),
             new THREE.MeshStandardMaterial({ map: at, color: 0x686b73,
-              roughness: 0.96, metalness: 0.0, side: THREE.DoubleSide }));
+              roughness: _wetN ? 0.42 : 0.96, metalness: _wetN ? 0.12 : 0.0,
+              envMapIntensity: _wetN ? 1.5 : 1.0, side: THREE.DoubleSide }));
           road.receiveShadow = true;
           scene.add(road);
           const dash = new THREE.Mesh(mergeGeometries(dashGeos, false),
@@ -5151,7 +5174,7 @@ varying vec2 vUvRaw;
   const n8ao = new N8AOPass(scene, camera, innerWidth, innerHeight);
   n8ao.configuration.aoRadius = 2.2;
   n8ao.configuration.distanceFalloff = 0.7;
-  n8ao.configuration.intensity = 2.6;
+  n8ao.configuration.intensity = 3.1;   // r15: deeper crevice shading
   n8ao.configuration.halfRes = true;
   n8ao.configuration.gammaCorrection = false;   // later passes own the grade
   if (QUALITY === 'performance') n8ao.configuration.aoSamples = 8;
@@ -5207,6 +5230,38 @@ varying vec2 vUvRaw;
   const bloom = new UnrealBloomPass(
     new THREE.Vector2(innerWidth, innerHeight), 0.25, 0.65, 0.85);
   composer.addPass(bloom);
+  // r15 GODRAYS: screen-space light shafts from the sun — the single
+  // biggest 'photograph' mood cue for scenic worlds (dawn forest, sunset
+  // ridge). Radial luminance-thresholded blur toward the sun's screen
+  // position; strength eases in/out as the sun enters/leaves frame.
+  const godray = (SPEC.world.sky !== 'night') ? new ShaderPass({
+    uniforms: { tDiffuse: { value: null },
+                uSun: { value: new THREE.Vector2(0.5, 0.8) },
+                uStr: { value: 0 } },
+    vertexShader: `varying vec2 vUv;
+      void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
+    fragmentShader: `uniform sampler2D tDiffuse; uniform vec2 uSun;
+      uniform float uStr; varying vec2 vUv;
+      void main(){
+        vec4 c = texture2D(tDiffuse, vUv);
+        if (uStr <= 0.001) { gl_FragColor = c; return; }
+        vec2 dir = (uSun - vUv) / 22.0;
+        vec3 acc = vec3(0.0);
+        vec2 p = vUv;
+        float w = 1.0;
+        for (int i = 0; i < 22; i++) {
+          p += dir;
+          vec3 s = texture2D(tDiffuse, p).rgb;
+          float l = dot(s, vec3(0.299, 0.587, 0.114));
+          acc += s * smoothstep(0.62, 1.0, l) * w;
+          w *= 0.94;
+        }
+        c.rgb += acc / 22.0 * uStr;
+        gl_FragColor = c;
+      }`,
+  }) : null;
+  if (godray) composer.addPass(godray);
+  const _grV1 = new THREE.Vector3(), _grV2 = new THREE.Vector3();
   const vignette = new ShaderPass({
     uniforms: { tDiffuse: { value: null }, strength: { value: 0.42 } },
     vertexShader: `varying vec2 vUv;
@@ -5232,11 +5287,12 @@ varying vec2 vUvRaw;
     gradeTint.multiplyScalar(THREE.MathUtils.clamp(0.9 / Math.max(l, 0.2), 1.0, 2.4));
   }
   const grade = new ShaderPass({
-    uniforms: { tDiffuse: { value: null },
+    uniforms: { tDiffuse: { value: null }, uT: { value: 0 },
                 tint: { value: new THREE.Vector3(gradeTint.r, gradeTint.g, gradeTint.b) } },
     vertexShader: `varying vec2 vUv;
       void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
-    fragmentShader: `uniform sampler2D tDiffuse; uniform vec3 tint; varying vec2 vUv;
+    fragmentShader: `uniform sampler2D tDiffuse; uniform vec3 tint;
+      uniform float uT; varying vec2 vUv;
       void main(){
         vec4 c = texture2D(tDiffuse, vUv);
         float l = dot(c.rgb, vec3(0.299, 0.587, 0.114));
@@ -5251,6 +5307,12 @@ varying vec2 vUvRaw;
         vec3 shadowTone = vec3(0.94, 1.0, 1.06);         // teal shadows
         vec3 highTone   = vec3(1.05, 1.0, 0.95);         // warm highlights
         c.rgb *= mix(shadowTone, highTone, smoothstep(0.18, 0.78, lu));
+        // r15 FILM GRAIN: live fine-grain dither — kills flat digital
+        // gradients, reads as photographed (kept far below visibility
+        // as 'noise')
+        float gr = fract(sin(dot(vUv * 917.0 + vec2(uT * 0.31, uT * 0.17),
+                                 vec2(12.9898, 78.233))) * 43758.5453);
+        c.rgb += (gr - 0.5) * 0.018;
         gl_FragColor = c;
       }`,
   });
@@ -5862,6 +5924,17 @@ varying vec2 vUvRaw;
     stepDynamics(dt, nt, performance.now() / 1000);
     if (VFX) VFX.step(dt, nt);          // element aura + trail follow the hero
     if (MINIMAP) MINIMAP.step(nt);      // live city map, view-direction wedge
+    if (godray) {                       // sun screen position + eased strength
+      _grV1.copy(sun.position).normalize().multiplyScalar(600).add(camera.position);
+      _grV2.copy(_grV1).project(camera);
+      const on2 = _grV2.z < 1 && _grV2.z > -1
+        && Math.abs(_grV2.x) < 1.5 && Math.abs(_grV2.y) < 1.5;
+      godray.uniforms.uSun.value.set((_grV2.x + 1) / 2, (_grV2.y + 1) / 2);
+      const gb = { day: 0.3, sunset: 0.58, dusk: 0.46, overcast: 0.14 }[SPEC.world.sky] || 0.25;
+      godray.uniforms.uStr.value +=
+        ((on2 ? gb : 0) - godray.uniforms.uStr.value) * Math.min(1, dt * 3);
+    }
+    grade.uniforms.uT.value = performance.now() / 1000;   // live film grain
 
     // SURVIVE verb: hold out while escalating waves close in
     {
