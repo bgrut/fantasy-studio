@@ -2012,6 +2012,96 @@ async function main() {
     precip.frustumCulled = false;
     scene.add(precip);
   }
+  // ── ABILITY VFX (2026-07-29): element aura + movement trail bound to the
+  // hero. The element comes from the PROMPT THEME (backend infers water/
+  // fire/frost/… only when the character concept calls for it — a
+  // waterbender hovers inside orbiting water, a fire dragon sheds embers,
+  // a plain knight gets NOTHING). Additive Points, CPU-stepped; ~210
+  // particles ≈ 0.2 ms.
+  const VFX = (() => {
+    const EL = {
+      water:    { a: 0x2fb9ff, b: 0x9fe8ff, orbit: 1, rise: -0.2, size: 0.34, spin: 1.6 },
+      fire:     { a: 0xff7a1a, b: 0xffd75e, orbit: 0, rise: 1.4,  size: 0.30, spin: 0.8 },
+      frost:    { a: 0x9fd8ff, b: 0xffffff, orbit: 1, rise: -0.5, size: 0.22, spin: 0.7 },
+      electric: { a: 0xb388ff, b: 0xf3ecff, orbit: 1, rise: 0.0,  size: 0.20, spin: 3.2 },
+      shadow:   { a: 0x5e3d8f, b: 0x9f7fe8, orbit: 0, rise: 0.5,  size: 0.42, spin: 0.5 },
+      nature:   { a: 0x59c94f, b: 0xd8f77a, orbit: 1, rise: 0.35, size: 0.24, spin: 0.9 },
+      arcane:   { a: 0xc86bff, b: 0x7fd7ff, orbit: 1, rise: 0.25, size: 0.26, spin: 2.2 },
+      wind:     { a: 0xdfe8ee, b: 0xffffff, orbit: 1, rise: 0.15, size: 0.28, spin: 2.6 },
+    }[SPEC.player.vfx || ''];
+    if (!EL) return null;
+    const tex = (() => {
+      const c = document.createElement('canvas'); c.width = c.height = 64;
+      const g = c.getContext('2d');
+      const r = g.createRadialGradient(32, 32, 2, 32, 32, 30);
+      r.addColorStop(0, 'rgba(255,255,255,1)');
+      r.addColorStop(0.45, 'rgba(255,255,255,0.5)');
+      r.addColorStop(1, 'rgba(255,255,255,0)');
+      g.fillStyle = r; g.fillRect(0, 0, 64, 64);
+      const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+      return t;
+    })();
+    const mk = (n, size, color) => {
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position',
+        new THREE.BufferAttribute(new Float32Array(n * 3).fill(-999), 3));
+      const p = new THREE.Points(geo, new THREE.PointsMaterial({
+        map: tex, color, size, transparent: true, opacity: 0.85,
+        depthWrite: false, blending: THREE.AdditiveBlending }));
+      p.frustumCulled = false; p.renderOrder = 9; scene.add(p);
+      return p;
+    };
+    const AN = 80, TN = 110;
+    const aura = mk(AN, EL.size, EL.a);
+    const trail = mk(TN, EL.size * 0.8, EL.b);
+    const tp = new Float32Array(TN * 3), tl = new Float32Array(TN);
+    let ti = 0, prev = null, phase = Math.random() * 9;
+    return { step(dt, pp) {
+      phase += dt * EL.spin;
+      const hh = P.height_m || 1.7;
+      const cy = pp.y + hh * 0.55;
+      const ap = aura.geometry.attributes.position.array;
+      for (let i = 0; i < AN; i++) {
+        const f = i / AN, a = phase + f * Math.PI * 2;
+        if (EL.orbit) {
+          // orbiting ribbon (water/frost/arcane…): two interleaved rings
+          // with a vertical sine weave — reads as bending, not confetti
+          const rad = 0.7 + 0.3 * Math.sin(f * 19.0 + phase * 0.9);
+          ap[i * 3]     = pp.x + Math.cos(a) * rad;
+          ap[i * 3 + 1] = cy + Math.sin(a * 2.0 + f * 9.0) * hh * 0.4;
+          ap[i * 3 + 2] = pp.z + Math.sin(a) * rad;
+        } else {
+          // rising wisps (fire/shadow): respawn at feet, drift upward
+          const cyc = (phase * (0.35 + f * 0.8) + f * 7.0) % 1.0;
+          const rad = 0.45 * (1.0 - cyc * 0.5);
+          ap[i * 3]     = pp.x + Math.cos(a * 3.1) * rad;
+          ap[i * 3 + 1] = pp.y + 0.15 + cyc * hh * 1.15;
+          ap[i * 3 + 2] = pp.z + Math.sin(a * 3.1) * rad;
+        }
+      }
+      aura.geometry.attributes.position.needsUpdate = true;
+      const sp = prev ? Math.hypot(pp.x - prev.x, pp.z - prev.z) / Math.max(dt, 1e-4) : 0;
+      if (prev && sp > 1.2) {
+        for (let k = 0; k < 3; k++) {
+          ti = (ti + 1) % TN; tl[ti] = 1.0;
+          tp[ti * 3]     = pp.x + (Math.random() - 0.5) * 0.5;
+          tp[ti * 3 + 1] = cy - hh * 0.25 + (Math.random() - 0.5) * 0.5;
+          tp[ti * 3 + 2] = pp.z + (Math.random() - 0.5) * 0.5;
+        }
+      }
+      const rp = trail.geometry.attributes.position.array;
+      for (let i = 0; i < TN; i++) {
+        if (tl[i] > 0) {
+          tl[i] -= dt * 0.9;
+          tp[i * 3 + 1] += EL.rise * dt;
+          rp[i * 3] = tp[i * 3]; rp[i * 3 + 1] = tp[i * 3 + 1]; rp[i * 3 + 2] = tp[i * 3 + 2];
+        } else { rp[i * 3 + 1] = -999; }
+      }
+      trail.geometry.attributes.position.needsUpdate = true;
+      prev = { x: pp.x, y: pp.y, z: pp.z };
+    } };
+  })();
+
   function stepDynamics(dt, playerPos, t) {
     if (precip) {
       const a = precip.geometry.attributes.position, arr = a.array, N = arr.length / 3;
@@ -4983,6 +5073,7 @@ varying vec2 vUvRaw;
       }
     }
     stepDynamics(dt, nt, performance.now() / 1000);
+    if (VFX) VFX.step(dt, nt);          // element aura + trail follow the hero
 
     // SURVIVE verb: hold out while escalating waves close in
     {

@@ -84,6 +84,47 @@ class GameExportRequest(BaseModel):
     splat: str | None = None
 
 
+def _infer_vfx(prompt: str) -> str | None:
+    """Ability-VFX element from the game's THEME. Two-gate design: the text
+    must signal a magical/elemental concept (bender, mage, dragon, wraith…)
+    AND name an element. Word-boundary regexes kill false positives —
+    'fireflies' must never set a fox on fire."""
+    import re as _re
+    p = prompt.lower()
+
+    def has(w: str) -> bool:
+        return _re.search(rf"\b{w}", p) is not None
+
+    magical = any(has(w) for w in (
+        "bender", "bending", "mage", "wizard", "sorcer", "witch", "warlock",
+        "elemental", "magic", "summon", "avatar", "spell", "druid",
+        "necromancer", "enchant", "mystic", "shaman"))
+    creature = any(has(w) for w in (
+        "dragon", "phoenix", "wraith", "golem", "demon", "spirit", "ghost",
+        "genie", "djinn", "yeti"))
+    if not (magical or creature):
+        return None
+    if any(has(w) for w in ("water", "tide", "wave", "aqua", "ocean")):
+        return "water"
+    if _re.search(r"\bfire(?!fl)", p) or any(has(w) for w in
+            ("flame", "ember", "lava", "inferno", "phoenix")):
+        return "fire"
+    if any(has(w) for w in ("frost", "ice ", "icy", "snow", "blizzard", "glacier", "yeti")):
+        return "frost"
+    if any(has(w) for w in ("lightning", "thunder", "electric", "storm")):
+        return "electric"
+    if any(has(w) for w in ("shadow", "dark", "void", "necromancer", "wraith", "ghost", "demon")):
+        return "shadow"
+    if any(has(w) for w in ("nature", "druid", "forest spirit", "vine", "leaf", "bloom")):
+        return "nature"
+    if _re.search(r"\bwind\b", p) or any(has(w) for w in
+            ("air bend", "airbend", "gale", "tempest", "sky spirit")):
+        return "wind"
+    if magical:
+        return "arcane"        # a wizard with no named element still glows
+    return "fire" if has("dragon") else None
+
+
 def _run_job(job_id: int, req: GameExportRequest) -> None:
     job = _jobs[job_id]
     row_id = _record_start(req.prompt)     # metrics: live row in the pipeline bar
@@ -322,6 +363,15 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         else:
             stage("extracting")
             spec = extract_game_spec(req.prompt, verbose=False)
+        # ── ABILITY VFX (2026-07-29): element aura inferred from the THEME —
+        # deterministic keywords, and gated so it only fires when the
+        # character concept is actually magical/elemental (a waterbender, a
+        # fire dragon, a storm mage) — never bolted onto a plain knight.
+        try:
+            spec.player.vfx = _infer_vfx(
+                (getattr(spec, "prompt", "") or "") + " " + req.prompt)
+        except Exception:
+            pass
             job["title"] = spec.title
         # STYLE IS THE USER'S CHOICE (Phase 44): the studio's style chips set
         # it explicitly — the LLM never guesses it, so it's never wrong

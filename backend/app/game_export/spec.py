@@ -26,6 +26,7 @@ class PlayerSpec(BaseModel):
     attack: Literal["none", "melee", "ranged"] = "none"   # combat verb (Phase 36)
     hp: int = Field(5, ge=1, le=20)
     mode: Literal["walk", "drive", "fly", "swim"] = "walk"  # drive/fly/swim per species
+    vfx: Optional[str] = None            # Ability VFX element (water/fire/frost/…) — theme-inferred
     anims: dict = Field(default_factory=lambda: {
         "idle": "idle", "walk": "walk", "run": "run"})  # state -> glTF clip name
 
