@@ -1245,12 +1245,25 @@ async function main() {
     // rotate), 1 = side walls. Split so walls get the facade texture and roofs
     // stay plain — window grids on rooftops read as a bug from the follow-cam.
     function splitGroups(geo, bucket) {
+      // DENSITY ARC r2: per-BUILDING tone painted into the vertex colors —
+      // photo-facade buckets merge a whole district into one mesh, so every
+      // tower shared one identical tint (the 'box city' tell). A weathered
+      // tone spread per building breaks the clone skyline at zero extra
+      // draw calls (materials below get vertexColors: true).
+      const tone = 0.72 + rngB() * 0.36;
+      const warm = (rngB() - 0.5) * 0.10;
       for (const g of geo.groups) {
         const sub = new THREE.BufferGeometry();
         for (const name of ['position', 'normal', 'uv', 'color']) {
           const a = geo.attributes[name];
           sub.setAttribute(name, new THREE.BufferAttribute(
             a.array.slice(g.start * a.itemSize, (g.start + g.count) * a.itemSize), a.itemSize));
+        }
+        if (bucket > 0 && g.materialIndex !== 0) {
+          const ca = sub.attributes.color;
+          for (let i = 0; i < ca.count; i++) {
+            ca.setXYZ(i, tone + warm, tone, tone - warm * 0.6);
+          }
         }
         (g.materialIndex === 0 ? capGeos : wallBuckets[bucket]).push(sub);
       }
@@ -1354,11 +1367,11 @@ async function main() {
           emissive: 0xffc873, emissiveMap: litTex, emissiveIntensity: 0.4,
           roughness: 0.85, metalness: 0.08 }),
         new THREE.MeshStandardMaterial({ map: _fTex('facade_glass'),
-          roughness: 0.35, metalness: 0.55 }),
+          vertexColors: true, roughness: 0.35, metalness: 0.55 }),
         new THREE.MeshStandardMaterial({ map: _fTex('facade_brick'),
-          roughness: 0.9, metalness: 0.03 }),
+          vertexColors: true, roughness: 0.9, metalness: 0.03 }),
         new THREE.MeshStandardMaterial({ map: _fTex('facade_stone'),
-          roughness: 0.85, metalness: 0.04 }),
+          vertexColors: true, roughness: 0.85, metalness: 0.04 }),
       ];
       for (let bi = 0; bi < 4; bi++) {
         if (!wallBuckets[bi].length) continue;
@@ -1588,9 +1601,13 @@ async function main() {
                   || inBldg(x, z)
                   || roadDist(x, z) < 7.5
                   || (clusterN(x, z) < 0.45 && tries < 22)) && tries < 30);
-        places.push({ x, z, s: 1 + (rng() - 0.5) * 2 * sct.scale_jitter, rot: rng() * Math.PI * 2 });
+        places.push({ x, z, s: 1 + (rng() - 0.5) * 2 * sct.scale_jitter, rot: rng() * Math.PI * 2,
+                      // DENSITY ARC r2: real trees LEAN a few degrees — a
+                      // perfectly plumb forest is the #1 'toy world' tell
+                      lx: (rng() - 0.5) * 0.10, lz: (rng() - 0.5) * 0.10 });
       }
       const M = new THREE.Matrix4(), T = new THREE.Matrix4(), SV = new THREE.Vector3();
+      const LR = new THREE.Matrix4(), _eul = new THREE.Euler();
       const jitC = new THREE.Color();
       for (const p of parts) {
         const im = new THREE.InstancedMesh(p.geo, p.mat, N);
@@ -1599,6 +1616,8 @@ async function main() {
         for (let i = 0; i < N; i++) {
           const pl = places[i];
           T.makeRotationY(pl.rot).scale(SV.set(pl.s, pl.s, pl.s));
+          LR.makeRotationFromEuler(_eul.set(pl.lx || 0, 0, pl.lz || 0));
+          T.premultiply(LR);
           T.setPosition(pl.x, hAt(pl.x, pl.z), pl.z);
           M.multiplyMatrices(T, p.local);
           im.setMatrixAt(i, M);
@@ -1907,7 +1926,10 @@ async function main() {
         ].join('\n'));
     };
     const GR = Math.min(gsize * 0.48, 70);
-    const GN = Math.min(13000, Math.floor(GR * GR * 2.2));
+    // DENSITY ARC r2: ultra tier earns a thicker meadow (~1.5x blades) —
+    // undergrowth density is the cheapest 'lived-in world' signal we have
+    const GN = Math.min(QUALITY === 'ultra' ? 21000 : 13000,
+                        Math.floor(GR * GR * (QUALITY === 'ultra' ? 3.2 : 2.2)));
     const rngG = mulberry32(SPEC.seed + 21);
     for (const baseRot of [0, Math.PI / 2]) {
       const im = new THREE.InstancedMesh(blade, bmat, GN);
@@ -4335,7 +4357,9 @@ async function main() {
       // gritty/soft up close ('pixels aren't tight'). ~4.5m per tile doubles
       // texel density underfoot; the world-canvas tint keeps large-scale
       // variation so the tighter repeat doesn't look mechanical.
-      const grep2 = Math.max(20, Math.round(gsize / 4.5));
+      // city concrete tightens further (~2.5m): its grout grid at 4.5m read
+      // as giant plaza pavers — at sidewalk-joint scale it reads as pavement
+      const grep2 = Math.max(20, Math.round(gsize / (gname === 'concrete' ? 2.5 : 4.5)));
       gmat.map = pbr(gname, grep2, true);
       gmat.normalMap = pbr(gname + '_n', grep2, false);
       gmat.normalScale = new THREE.Vector2(0.65, 0.65);
