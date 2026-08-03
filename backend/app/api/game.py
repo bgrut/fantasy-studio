@@ -84,6 +84,43 @@ class GameExportRequest(BaseModel):
     splat: str | None = None
 
 
+def _expand_design_doc(prompt: str) -> str | None:
+    """DESIGN-DOC-ALWAYS (2026-07-29): every build thinks like a game
+    designer first — the local LLM expands the one-liner into a compact
+    implementation doc (world, hero+abilities, mission beats, enemies,
+    special rules), and EXTRACTION consumes the doc. This is the Claude-Code
+    pattern: write the plan, then implement it. The user's literal words
+    stay authoritative — the doc may only ADD detail, never contradict.
+    Returns None (build from the raw prompt, exactly as before) when the
+    prompt is already doc-sized or the LLM is unavailable."""
+    if len(prompt) > 400:
+        return None                      # user already wrote a design doc
+    try:
+        from app.orchestrator.llm import OllamaClient
+        msg = OllamaClient().chat(
+            [{"role": "system", "content":
+              "You are a AAA game designer. Expand the player's one-line "
+              "game idea into a compact implementation doc, max 180 words, "
+              "with exactly these sections:\n"
+              "WORLD: setting, time of day, weather, mood.\n"
+              "HERO: who they are, how they move, signature ability/element "
+              "(only if the concept implies one).\n"
+              "MISSION: 2-4 concrete objective steps with counts.\n"
+              "ENEMIES: kinds, counts, behavior.\n"
+              "FEEL: one line on pacing and atmosphere.\n"
+              "HARD RULES: never contradict or drop anything the player "
+              "stated — every noun, number, and place they wrote must appear "
+              "unchanged. Add vivid, specific detail only where they were "
+              "silent. Plain text, no markdown headers beyond the section "
+              "names."},
+             {"role": "user", "content": prompt}],
+            temperature=0.6, max_tokens=340)
+        doc = (msg or {}).get("content") or ""
+        return doc.strip() if len(doc.strip()) > 80 else None
+    except Exception:  # noqa: BLE001 — LLM down: raw prompt path unchanged
+        return None
+
+
 def _infer_vfx(prompt: str) -> str | None:
     """Ability-VFX element from the game's THEME. Two-gate design: the text
     must signal a magical/elemental concept (bender, mage, dragon, wraith…)
@@ -361,8 +398,18 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             job["title"] = spec.title
             job["edited_from"] = req.base_job_id
         else:
+            stage("designing")
+            # DESIGN-DOC-ALWAYS: think like a designer, then build. The doc
+            # rides ABOVE the user's prompt so their words stay the contract.
+            _doc = _expand_design_doc(req.prompt)
+            if _doc:
+                job.setdefault("notes", []).append("design doc written")
+                job["design_doc"] = _doc
             stage("extracting")
-            spec = extract_game_spec(req.prompt, verbose=False)
+            spec = extract_game_spec(
+                (req.prompt + "\n\nIMPLEMENTATION DOC (expands the idea — "
+                 "the line above is authoritative):\n" + _doc)
+                if _doc else req.prompt, verbose=False)
         # ── ABILITY VFX (2026-07-29): element aura inferred from the THEME —
         # deterministic keywords, and gated so it only fires when the
         # character concept is actually magical/elemental (a waterbender, a
