@@ -2265,6 +2265,25 @@ async function main() {
         inst.scale.multiplyScalar((ent.height_m || 1.0) / h);
         alignLongAxis(inst, ent.behavior === 'vehicle');   // rivals drive nose-first too
         polishVehiclePaint(inst, ent.behavior === 'vehicle');
+        // DENSITY ARC (2026-07-29): kill the clone army — each rival vehicle
+        // gets its own paint hue (racing-field palette), cloned materials so
+        // the player's car is untouched.
+        if (ent.behavior === 'vehicle') {
+          const hue = rngN();
+          inst.traverse(o => {
+            if (!o.isMesh || !o.material) return;
+            const ms = Array.isArray(o.material) ? o.material : [o.material];
+            o.material = Array.isArray(o.material) ? ms.map(m => m.clone()) : ms[0].clone();
+            for (const m of (Array.isArray(o.material) ? o.material : [o.material])) {
+              if (m.color) {
+                const hsl = {}; m.color.getHSL(hsl);
+                if (hsl.s > 0.12 && hsl.l > 0.15 && hsl.l < 0.9) {
+                  m.color.setHSL(hue, Math.min(0.85, hsl.s * 1.15), hsl.l);
+                }
+              }
+            }
+          });
+        }
         const b2 = new THREE.Box3().setFromObject(inst);
         const holder = new THREE.Group();
         inst.position.y = -b2.min.y;
@@ -4312,7 +4331,11 @@ async function main() {
       // crosswalks, palette) multiplies on top as a world-space tint via a
       // tiny shader patch. Mid-gray in the canvas = neutral; dark road paint
       // darkens photo concrete into asphalt; grass tint stays green.
-      const grep2 = Math.max(10, Math.round(gsize / 9));
+      // DENSITY ARC (2026-07-29): gsize/9 left ~9m per texture tile — reads
+      // gritty/soft up close ('pixels aren't tight'). ~4.5m per tile doubles
+      // texel density underfoot; the world-canvas tint keeps large-scale
+      // variation so the tighter repeat doesn't look mechanical.
+      const grep2 = Math.max(20, Math.round(gsize / 4.5));
       gmat.map = pbr(gname, grep2, true);
       gmat.normalMap = pbr(gname + '_n', grep2, false);
       gmat.normalScale = new THREE.Vector2(0.65, 0.65);
