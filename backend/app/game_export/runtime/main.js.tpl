@@ -2064,11 +2064,11 @@ async function main() {
       for (let i = 0; i < AN; i++) {
         const f = i / AN, a = phase + f * Math.PI * 2;
         if (EL.orbit) {
-          // orbiting ribbon (water/frost/arcane…): two interleaved rings
-          // with a vertical sine weave — reads as bending, not confetti
-          const rad = 0.7 + 0.3 * Math.sin(f * 19.0 + phase * 0.9);
+          // orbiting ribbon (water/frost/arcane…): hugs the TORSO (anchor
+          // tuned 2026-07-29 — it floated over the head and read detached)
+          const rad = 0.5 + 0.2 * Math.sin(f * 19.0 + phase * 0.9);
           ap[i * 3]     = pp.x + Math.cos(a) * rad;
-          ap[i * 3 + 1] = cy + Math.sin(a * 2.0 + f * 9.0) * hh * 0.4;
+          ap[i * 3 + 1] = pp.y + hh * 0.42 + Math.sin(a * 2.0 + f * 9.0) * hh * 0.3;
           ap[i * 3 + 2] = pp.z + Math.sin(a) * rad;
         } else {
           // rising wisps (fire/shadow): respawn at feet, drift upward

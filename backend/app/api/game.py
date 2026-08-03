@@ -435,6 +435,18 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                 (getattr(spec, "prompt", "") or "") + " " + req.prompt)
         except Exception:
             pass
+        # SWIM-MODE GUARD (2026-07-29): 'water bender' made the LLM cast
+        # mode=swim — a no-collision hover that walks through mountains.
+        # Swim is only legal when the prompt actually puts us IN water.
+        try:
+            _pl = req.prompt.lower()
+            if spec.player.mode == "swim" and not any(
+                    w in _pl for w in ("ocean", "underwater", "sea", "dive",
+                                       "reef", "lake", "swim", "whale",
+                                       "fish", "dolphin", "shark")):
+                spec.player.mode = "walk"
+        except Exception:
+            pass
             job["title"] = spec.title
         # STYLE IS THE USER'S CHOICE (Phase 44): the studio's style chips set
         # it explicitly — the LLM never guesses it, so it's never wrong
