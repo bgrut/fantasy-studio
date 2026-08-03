@@ -153,6 +153,19 @@ def export_web_game(spec: GameSpec, out_dir: str | Path, verbose: bool = True) -
             if src.exists():
                 shutil.copy2(src, props_dst / src.name)
 
+    # ── PEDESTRIANS (r4, 2026-07-30): city levels bundle the lightweight
+    # walker (7.8MB bake of man_anim: decimated + 512px JPEG textures) so
+    # the runtime can clone ambient sidewalk walkers. Baked once by
+    # scripts/_bake_walker.py; silently skipped when absent.
+    try:
+        _lv = getattr(spec.world, "level", None) or {}
+        if isinstance(_lv, dict) and _lv.get("osm"):
+            _wsrc = BACKEND_ROOT / "assets" / "library" / "walker.glb"
+            if _wsrc.exists():
+                shutil.copy2(_wsrc, dist / "assets" / "walker.glb")
+    except Exception:  # noqa: BLE001
+        pass
+
     # ── OWNERSHIP MANIFEST (best-in-class plan, 2026-07-28): every export
     # carries receipts — the full license chain proving the game is the
     # user's to sell. This is a product feature: no competitor can print it.

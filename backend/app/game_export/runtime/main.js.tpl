@@ -3657,6 +3657,51 @@ async function main() {
     }
   }
 
+  // ── PEDESTRIANS (r4, 2026-07-30): ambient walkers on the sidewalk band —
+  // the single biggest 'city feels alive' delta after real streets. A
+  // lightweight walker bake (7.8MB) is bundled for city levels; skinned
+  // clones via SkeletonUtils, walk clip phase-shifted per walker, each
+  // following a road polyline OFFSET to the sidewalk like the furniture.
+  window.__peds = [];
+  if (OSM && OSM.roads && OSM.roads.length) {
+    (async () => {
+      try {
+        const { clone: skClone } = await import('./vendor/jsm/utils/SkeletonUtils.js');
+        const g = await loadGLB('assets/walker.glb');
+        const clips = g.animations || [];
+        const walkClip = clips.find(c => /walk/i.test(c.name)) || clips[0];
+        const rngP = mulberry32(SPEC.seed + 818);
+        for (let i = 0; i < 8; i++) {
+          const r = OSM.roads[Math.floor(rngP() * OSM.roads.length)];
+          if (!r || r.pts.length < 2) continue;
+          const inst = skClone(g.scene);
+          const bb = new THREE.Box3().setFromObject(inst);
+          inst.scale.multiplyScalar((1.66 + rngP() * 0.14)
+            / Math.max(bb.max.y - bb.min.y, 1e-3));
+          const bb2 = new THREE.Box3().setFromObject(inst);
+          inst.position.y = -bb2.min.y;
+          const holder2 = new THREE.Group();
+          holder2.add(inst);
+          holder2.traverse(o => { if (o.isMesh) { o.castShadow = true; o.frustumCulled = false; } });
+          scene.add(holder2);
+          let mixer2 = null;
+          if (walkClip) {
+            mixer2 = new THREE.AnimationMixer(inst);
+            const act = mixer2.clipAction(walkClip);
+            act.timeScale = 0.9 + rngP() * 0.3;
+            act.play();
+            mixer2.update(rngP() * 2.5);      // phase-shift: no synchronized march
+          }
+          window.__peds.push({ obj: holder2, mixer: mixer2, pts: r.pts,
+            seg: Math.max(0, Math.floor(rngP() * (r.pts.length - 1))), t: rngP(),
+            speed: 1.1 + rngP() * 0.6, dir: rngP() < 0.5 ? 1 : -1,
+            side: ((r.w || 7) / 2 + 1.4 + rngP() * 0.8) * (rngP() < 0.5 ? 1 : -1) });
+        }
+        console.log('[game] pedestrians: ' + window.__peds.length);
+      } catch (e) { console.warn('[game] pedestrians skipped: ' + e.message); }
+    })();
+  }
+
   // PROCEDURAL MOTION (Phase 20 lite): no rig required — the mesh itself
   // deforms in the vertex shader, keyed off geometry, so it works for ANY
   // generated creature. Swimmers get a traveling nose→tail body wave (the
@@ -5352,6 +5397,23 @@ varying vec2 vUvRaw;
       const tx2 = a2[0] + (b2[0] - a2[0]) * tv.t, tz2 = a2[1] + (b2[1] - a2[1]) * tv.t;
       tv.obj.position.set(tx2, hAt(tx2, tz2), tz2);
       tv.obj.rotation.y = Math.atan2(b2[0] - a2[0], b2[1] - a2[1]);
+    }
+    for (const pd of window.__peds || []) {
+      const a3 = pd.pts[pd.seg], b3 = pd.pts[pd.seg + 1];
+      if (!a3 || !b3) { pd.seg = 0; continue; }
+      const segL = Math.hypot(b3[0] - a3[0], b3[1] - a3[1]) || 1;
+      pd.t += (pd.speed * dt * pd.dir) / segL;
+      if (pd.t >= 1) { pd.t = 0; pd.seg++;
+        if (pd.seg >= pd.pts.length - 1) { pd.seg = pd.pts.length - 2; pd.dir = -1; } }
+      else if (pd.t < 0) { pd.t = 1; pd.seg--;
+        if (pd.seg < 0) { pd.seg = 0; pd.dir = 1; } }
+      const hd5 = Math.atan2(b3[0] - a3[0], b3[1] - a3[1]);
+      // walk the SIDEWALK: offset perpendicular from the road centerline
+      const px3 = a3[0] + (b3[0] - a3[0]) * pd.t + Math.cos(hd5) * pd.side;
+      const pz3 = a3[1] + (b3[1] - a3[1]) * pd.t - Math.sin(hd5) * pd.side;
+      pd.obj.position.set(px3, hAt(px3, pz3), pz3);
+      pd.obj.rotation.y = hd5 + (pd.dir < 0 ? Math.PI : 0);
+      if (pd.mixer) pd.mixer.update(dt);
     }
     if (window.__torches) {
       const tt = performance.now() / 1000;
