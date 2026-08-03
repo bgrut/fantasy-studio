@@ -1373,18 +1373,23 @@ async function main() {
         const lx = lc.getContext('2d');
         lx.fillStyle = '#000000'; lx.fillRect(0, 0, 256, 256);
         const rngL = mulberry32(SPEC.seed + 404);
-        for (let wy = 0; wy < 5; wy++) for (let wx = 0; wx < 7; wx++) {
-          if (rngL() > 0.30) continue;
-          lx.fillStyle = rngL() < 0.72 ? '#d9a85f' : '#b9cfe4';
-          lx.fillRect(8 + wx * 35, 10 + wy * 48, 22, 30);
+        // r6: SMALL + SOFT + DIM — big hard rects read as glowing stickers
+        // misaligned with the photo's own printed windows; ~1m soft cells
+        // read as interior light bleeding through glass.
+        lx.filter = 'blur(3px)';
+        for (let wy = 0; wy < 8; wy++) for (let wx = 0; wx < 11; wx++) {
+          if (rngL() > 0.26) continue;
+          lx.fillStyle = rngL() < 0.72 ? '#c8975a' : '#a8bfd4';
+          lx.fillRect(4 + wx * 23, 5 + wy * 31, 13, 18);
         }
+        lx.filter = 'none';
         photoLit = new THREE.CanvasTexture(lc);
         photoLit.wrapS = photoLit.wrapT = THREE.RepeatWrapping;
         photoLit.repeat.set(1 / 18, 1 / 12);
       }
       const _glow = photoLit
         ? { emissive: new THREE.Color(0xffc873), emissiveMap: photoLit,
-            emissiveIntensity: 0.55 }
+            emissiveIntensity: 0.34 }
         : {};
       const _wallMats = [
         new THREE.MeshStandardMaterial({ vertexColors: true, map: facadeTex,
@@ -1468,6 +1473,37 @@ async function main() {
           MM.makeTranslation(ox, gy2 + 5.0, oz); heads.setMatrixAt(ji, MM);
         });
         for (const im of [poles, heads]) { im.instanceMatrix.needsUpdate = true; im.castShadow = true; scene.add(im); }
+        // r6 LIGHT POOLS: at night every lamp casts a warm additive pool on
+        // the pavement — the missing streetlight glow that makes night
+        // streets read as LIT instead of ambient-flat. Zero real lights:
+        // radial-gradient decals, one instanced mesh.
+        if (SPEC.world.sky === 'night' || SPEC.world.sky === 'dusk') {
+          const pc = document.createElement('canvas'); pc.width = pc.height = 128;
+          const px2 = pc.getContext('2d');
+          const pg = px2.createRadialGradient(64, 64, 4, 64, 64, 62);
+          pg.addColorStop(0, 'rgba(255,206,130,0.55)');
+          pg.addColorStop(0.5, 'rgba(255,190,110,0.22)');
+          pg.addColorStop(1, 'rgba(255,180,100,0)');
+          px2.fillStyle = pg; px2.fillRect(0, 0, 128, 128);
+          const pt = new THREE.CanvasTexture(pc);
+          const poolG = new THREE.CircleGeometry(4.4, 20).rotateX(-Math.PI / 2);
+          const poolM = new THREE.MeshBasicMaterial({ map: pt, transparent: true,
+            blending: THREE.AdditiveBlending, depthWrite: false });
+          const pools = new THREE.InstancedMesh(poolG, poolM, _jx.length);
+          const rngS2 = mulberry32(SPEC.seed + 515);   // SAME seed = same offsets
+          _jx.forEach(([jx2, jz2], ji) => {
+            const ox = jx2 + 4.5 * Math.sign(rngS2() - 0.5 || 1);
+            const oz = jz2 + 4.5 * Math.sign(rngS2() - 0.5 || 1);
+            MM.makeTranslation(ox, hAt(ox, oz) + 0.07, oz);
+            pools.setMatrixAt(ji, MM);
+          });
+          pools.instanceMatrix.needsUpdate = true;
+          pools.renderOrder = 4;
+          scene.add(pools);
+          // lamp heads glow warm at night instead of reading as gray blobs
+          headM.emissive = new THREE.Color(0xffc880);
+          headM.emissiveIntensity = 1.6;
+        }
         const hydG = new THREE.CylinderGeometry(0.16, 0.2, 0.8, 8);
         const hydM = new THREE.MeshStandardMaterial({ color: 0xb03028, roughness: 0.6 });
         const nHyd = Math.min((OSM.roads || []).length, 40);
@@ -1550,7 +1586,7 @@ async function main() {
       // dashes — dark streets vs light sidewalk blocks is what makes a
       // city read as a MAP.
       {
-        const roadGeos = [], dashGeos = [];
+        const roadGeos = [], dashGeos = [], curbGeos = [];
         const strip = (x1, z1, x2, z2, w, y1, y2, vmax) => {
           const dx = x2 - x1, dz = z2 - z1;
           const len = Math.hypot(dx, dz);
@@ -1573,6 +1609,18 @@ async function main() {
             const y1 = hAt(x1, z1) + 0.05, y2 = hAt(x2, z2) + 0.05;
             const g = strip(x1, z1, x2, z2, w, y1, y2);
             if (g) roadGeos.push(g);
+            // r6 CURBS: a raised concrete band at each road edge — the
+            // street/sidewalk height step that flat cities are missing
+            {
+              const segL0 = Math.hypot(x2 - x1, z2 - z1) || 1;
+              const ox = -(z2 - z1) / segL0 * (w + 0.09);
+              const oz = (x2 - x1) / segL0 * (w + 0.09);
+              for (const s of [1, -1]) {
+                const cg = strip(x1 + ox * s, z1 + oz * s, x2 + ox * s, z2 + oz * s,
+                                 0.17, y1 + 0.12, y2 + 0.12, 1);
+                if (cg) curbGeos.push(cg);
+              }
+            }
             // center dashes: 1.8m on / 4m off along the segment
             const segL = Math.hypot(x2 - x1, z2 - z1);
             for (let d = 1; d + 1.8 < segL; d += 5.8) {
@@ -1601,6 +1649,13 @@ async function main() {
           const dash = new THREE.Mesh(mergeGeometries(dashGeos, false),
             new THREE.MeshBasicMaterial({ color: 0xd8d8d2, side: THREE.DoubleSide }));
           scene.add(dash);
+          if (curbGeos.length) {
+            const curb = new THREE.Mesh(mergeGeometries(curbGeos, false),
+              new THREE.MeshStandardMaterial({ color: 0xb8b6ae,
+                roughness: 0.9, metalness: 0.0, side: THREE.DoubleSide }));
+            curb.receiveShadow = true;
+            scene.add(curb);
+          }
         }
       }
       // NEON SIGNS (Phase 120, night streets): emissive storefront strips on
@@ -2432,16 +2487,43 @@ async function main() {
         // gets its own paint hue (racing-field palette), cloned materials so
         // the player's car is untouched.
         if (ent.behavior === 'vehicle') {
-          const hue = rngN();
+          // r6 FIX: TRELLIS cars carry paint in the TEXTURE (material.color
+          // stays white) so the old HSL shift never fired — rivals stayed a
+          // clone army. Hue-rotate the diffuse texture itself via a one-time
+          // 1K canvas copy per rival (tires/glass are near-neutral, so the
+          // rotation only really moves the paint).
+          const deg = Math.floor(30 + rngN() * 300);
+          const done = new Map();
           inst.traverse(o => {
             if (!o.isMesh || !o.material) return;
-            const ms = Array.isArray(o.material) ? o.material : [o.material];
-            o.material = Array.isArray(o.material) ? ms.map(m => m.clone()) : ms[0].clone();
-            for (const m of (Array.isArray(o.material) ? o.material : [o.material])) {
-              if (m.color) {
+            const ms = Array.isArray(o.material)
+              ? o.material.map(m => m.clone()) : [o.material.clone()];
+            o.material = Array.isArray(o.material) ? ms : ms[0];
+            for (const m of ms) {
+              const img = m.map && m.map.image;
+              if (img && img.width) {
+                if (!done.has(m.map)) {
+                  try {
+                    const c = document.createElement('canvas');
+                    const w = Math.min(img.width, 1024);
+                    c.width = w;
+                    c.height = Math.max(1, Math.round(img.height * w / img.width));
+                    const g2 = c.getContext('2d');
+                    g2.filter = 'hue-rotate(' + deg + 'deg) saturate(1.05)';
+                    g2.drawImage(img, 0, 0, c.width, c.height);
+                    const nt = new THREE.CanvasTexture(c);
+                    nt.colorSpace = THREE.SRGBColorSpace;
+                    nt.flipY = m.map.flipY;
+                    nt.wrapS = m.map.wrapS; nt.wrapT = m.map.wrapT;
+                    done.set(m.map, nt);
+                  } catch (e) { done.set(m.map, m.map); }
+                }
+                m.map = done.get(m.map);
+                m.needsUpdate = true;
+              } else if (m.color) {
                 const hsl = {}; m.color.getHSL(hsl);
                 if (hsl.s > 0.12 && hsl.l > 0.15 && hsl.l < 0.9) {
-                  m.color.setHSL(hue, Math.min(0.85, hsl.s * 1.15), hsl.l);
+                  m.color.setHSL(deg / 360, Math.min(0.85, hsl.s * 1.15), hsl.l);
                 }
               }
             }
