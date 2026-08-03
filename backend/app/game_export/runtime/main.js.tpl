@@ -1237,7 +1237,7 @@ async function main() {
     // night glow), 1 = glass tower, 2 = brick walk-up, 3 = pre-war stone.
     // Tall core buildings lean glass; the rest mix — one merged mesh per
     // bucket, so a whole city is 5 draw calls.
-    const wallBuckets = [[], [], [], []], capGeos = [];
+    const wallBuckets = [[], [], [], [], [], [], [], []], capGeos = [];
     const roofSpots = [];
     const tintA = new THREE.Color(0x8d8a84), tintB = new THREE.Color(0x5f6b78);
     const rngB = mulberry32(SPEC.seed + 77);
@@ -1260,9 +1260,15 @@ async function main() {
             a.array.slice(g.start * a.itemSize, (g.start + g.count) * a.itemSize), a.itemSize));
         }
         if (bucket > 0 && g.materialIndex !== 0) {
+          // r7 GI-LITE: vertical ambient-occlusion gradient baked into the
+          // vertex colors — walls darken toward the street (ground bounce
+          // shadowing) exactly like baked GI reads. The cheapest big
+          // photoreal lever: real city renderers (streets-gl) do the same.
           const ca = sub.attributes.color;
+          const pa = sub.attributes.position;
           for (let i = 0; i < ca.count; i++) {
-            ca.setXYZ(i, tone + warm, tone, tone - warm * 0.6);
+            const gAO = 0.68 + 0.32 * Math.min(Math.max(pa.getY(i) / 7.5, 0), 1);
+            ca.setXYZ(i, (tone + warm) * gAO, tone * gAO, (tone - warm * 0.6) * gAO);
           }
         }
         (g.materialIndex === 0 ? capGeos : wallBuckets[bucket]).push(sub);
@@ -1299,8 +1305,15 @@ async function main() {
         // as placeholder in daylight); at night it keeps a 25% share for
         // the lit-window checkerboard until photo facades learn to glow
         const _night = ['night', 'dusk', 'sunset'].includes(SPEC.world.sky);
-        const _bkt = h > 26 ? (rngB() < 0.7 ? 1 : 3)
-                   : (_night && rngB() < 0.25 ? 0 : (rngB() < 0.5 ? 2 : 3));
+        // r7: seven facade families (was three) — a real skyline mix.
+        // Towers: two glass looks + concrete + stone; mid-rise: two bricks
+        // + limestone + stone. Night keeps a 20% procedural share for the
+        // lit-checkerboard variety.
+        const _r = rngB();
+        const _bkt = h > 26
+          ? (_r < 0.35 ? 1 : _r < 0.6 ? 4 : _r < 0.8 ? 6 : 3)
+          : (_night && rngB() < 0.2 ? 0
+             : (_r < 0.28 ? 2 : _r < 0.52 ? 5 : _r < 0.76 ? 7 : 3));
         splitGroups(geo, _bkt);
         if (h >= 16 && (mxx - mnx) > 7 && (mxz - mnz) > 7) {
           roofSpots.push([cx, cz, gy + h, (mxx - mnx), (mxz - mnz)]);
@@ -1357,11 +1370,23 @@ async function main() {
       const _fTex = (n) => {
         const t = _fLoad.load('textures/' + n + '.jpg');
         t.wrapS = t.wrapT = THREE.RepeatWrapping;
-        t.repeat.set(1 / 18, 1 / 12);
+        // r7: 12x8m tile (was 18x12) = +50% texel density on every wall
+        t.repeat.set(1 / 12, 1 / 8);
         t.colorSpace = THREE.SRGBColorSpace;
         t.anisotropy = renderer.capabilities.getMaxAnisotropy();
         return t;
       };
+      // r7: the SDXL pack ships _n normal maps that were never wired in —
+      // window reveals and mortar lines now catch real light (linear space!)
+      const _fTexN = (n) => {
+        const t = _fLoad.load('textures/' + n + '_n.jpg');
+        t.wrapS = t.wrapT = THREE.RepeatWrapping;
+        t.repeat.set(1 / 12, 1 / 8);
+        t.anisotropy = renderer.capabilities.getMaxAnisotropy();
+        return t;
+      };
+      const _fPair = (n) => ({ map: _fTex(n), normalMap: _fTexN(n),
+        normalScale: new THREE.Vector2(0.6, 0.6) });
       // NIGHT WINDOWS on photo facades (r5, 2026-07-30): only the procedural
       // bucket glowed after dark — photo-facade towers were pitch-dead black
       // slabs. A shared emissive window-mask canvas at the same 18x12m tile
@@ -1395,14 +1420,22 @@ async function main() {
         new THREE.MeshStandardMaterial({ vertexColors: true, map: facadeTex,
           emissive: 0xffc873, emissiveMap: litTex, emissiveIntensity: 0.4,
           roughness: 0.85, metalness: 0.08 }),
-        new THREE.MeshStandardMaterial({ map: _fTex('facade_glass'),
+        new THREE.MeshStandardMaterial({ ..._fPair('facade_glass'),
           vertexColors: true, roughness: 0.35, metalness: 0.55, ..._glow }),
-        new THREE.MeshStandardMaterial({ map: _fTex('facade_brick'),
+        new THREE.MeshStandardMaterial({ ..._fPair('facade_brick'),
           vertexColors: true, roughness: 0.9, metalness: 0.03, ..._glow }),
-        new THREE.MeshStandardMaterial({ map: _fTex('facade_stone'),
+        new THREE.MeshStandardMaterial({ ..._fPair('facade_stone'),
           vertexColors: true, roughness: 0.85, metalness: 0.04, ..._glow }),
+        new THREE.MeshStandardMaterial({ ..._fPair('facade_glass2'),
+          vertexColors: true, roughness: 0.3, metalness: 0.6, ..._glow }),
+        new THREE.MeshStandardMaterial({ ..._fPair('facade_brick2'),
+          vertexColors: true, roughness: 0.92, metalness: 0.02, ..._glow }),
+        new THREE.MeshStandardMaterial({ ..._fPair('facade_concrete'),
+          vertexColors: true, roughness: 0.88, metalness: 0.03, ..._glow }),
+        new THREE.MeshStandardMaterial({ ..._fPair('facade_limestone'),
+          vertexColors: true, roughness: 0.8, metalness: 0.04, ..._glow }),
       ];
-      for (let bi = 0; bi < 4; bi++) {
+      for (let bi = 0; bi < 8; bi++) {
         if (!wallBuckets[bi].length) continue;
         const wm = new THREE.Mesh(mergeGeometries(wallBuckets[bi], false), _wallMats[bi]);
         wm.castShadow = true; wm.receiveShadow = true;

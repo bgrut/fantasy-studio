@@ -59,6 +59,20 @@ PACK = {
     "facade_brick": "photograph of new york brick apartment facade with "
                     "regular window rows and stone sills, flat frontal view, "
                     "even light",
+    # r7 variety pack: four more facade families so city blocks stop
+    # repeating the same three photos building-to-building
+    "facade_glass2": "photograph of blue-green curtain wall skyscraper facade, "
+        "reflective glass panels, aluminum mullions, straight-on view, "
+        "repeating grid, no ground floor, no sky",
+    "facade_brick2": "photograph of old chicago brown brick warehouse facade, "
+        "arched windows, weathered mortar, straight-on view, repeating "
+        "pattern, no ground floor, no sky",
+    "facade_concrete": "photograph of brutalist concrete office tower facade, "
+        "deep window recesses, raw concrete, straight-on view, repeating "
+        "grid, no sky",
+    "facade_limestone": "photograph of 1920s limestone office building facade, "
+        "ornate window surrounds, carved details, straight-on view, "
+        "repeating pattern, no sky",
     "facade_stone": "photograph of pre-war stone office building facade, "
                     "regular tall windows, carved cornice lines, flat frontal "
                     "view, even light",
