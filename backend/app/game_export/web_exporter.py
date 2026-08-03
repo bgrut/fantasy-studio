@@ -166,6 +166,20 @@ def export_web_game(spec: GameSpec, out_dir: str | Path, verbose: bool = True) -
     except Exception:  # noqa: BLE001
         pass
 
+    # ── SCENE PANORAMA (Phase 140): bundle the user's image-derived 360
+    # panorama — the runtime shows it as the world backdrop AND lights the
+    # scene with it, so meshes match the dropped image
+    if getattr(spec.world, "pano", None):
+        pn_src = Path(spec.world.pano)
+        if not pn_src.is_absolute():
+            pn_src = BACKEND_ROOT / spec.world.pano
+        if pn_src.exists():
+            (dist / "pano").mkdir(parents=True, exist_ok=True)
+            shutil.copy2(pn_src, dist / "pano" / pn_src.name)
+            spec.world.pano = f"pano/{pn_src.name}"
+        else:
+            spec.world.pano = None
+
     # ── OWNERSHIP MANIFEST (best-in-class plan, 2026-07-28): every export
     # carries receipts — the full license chain proving the game is the
     # user's to sell. This is a product feature: no competitor can print it.

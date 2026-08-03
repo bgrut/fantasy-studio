@@ -82,8 +82,16 @@ export async function imagineSplat(prompt: string): Promise<{ ok: boolean; job_i
   }))
 }
 
+// Phase 140: drop a scene IMAGE -> SDXL 360 panorama world (mint.gg pattern)
+export async function uploadScene(file: File): Promise<{ ok: boolean; job_id: number }> {
+  return j(await fetch('/api/game/upload_scene', {
+    method: 'POST', headers: { 'X-Filename': file.name }, body: file,
+  }))
+}
+
 export interface SplatJob { id: number; status: 'running' | 'complete' | 'failed'
-  stage: string; splat: string | null; error: string | null }
+  stage: string; splat: string | null; pano?: string | null
+  hint?: string | null; error: string | null }
 export async function getSplatJob(id: number): Promise<{ ok: boolean; job: SplatJob }> {
   return j(await fetch(`/api/game/splat_jobs/${id}`))
 }
@@ -105,6 +113,7 @@ export async function exportGame(prompt: string, opts?: {
   at2?: { x: number; z: number }                     // line tool second point
   style?: string                                     // USER-selected style preset
   splat?: string                                     // Phase 136: splat-world path
+  pano?: string                                      // Phase 140: scene-image panorama world
   view?: string                                      // 3d / topdown / side (Phase 45)
   rule?: { index: number; name: string; on: boolean } // rule chip toggle
 }) {
@@ -121,6 +130,7 @@ export async function exportGame(prompt: string, opts?: {
                            ...(opts?.at2 ? { at_x2: opts.at2.x, at_z2: opts.at2.z } : {}),
                            ...(opts?.style ? { style: opts.style } : {}),
                            ...(opts?.splat ? { splat: opts.splat } : {}),
+                           ...(opts?.pano ? { pano: opts.pano } : {}),
                            ...(opts?.view ? { view: opts.view } : {}),
                            ...(opts?.rule ? { rule_index: opts.rule.index,
                                               rule_name: opts.rule.name,

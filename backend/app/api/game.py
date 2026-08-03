@@ -82,6 +82,7 @@ class GameExportRequest(BaseModel):
     rule_on: bool | None = None
     # Phase 136: dist-relative or assets/splats path of a Gaussian-splat world
     splat: str | None = None
+    pano: str | None = None          # Phase 140: scene-image panorama world
 
 
 def _expand_design_doc(prompt: str) -> str | None:
@@ -640,6 +641,9 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                 spec.player.yaw_offset_deg = float(_headings[cast])
         except Exception:
             pass
+        if req.pano:
+            spec.world.pano = req.pano
+            job.setdefault("notes", []).append("scene-image panorama world attached")
         if req.splat:
             spec.world.splat = req.splat
             job.setdefault("notes", []).append(
@@ -1598,6 +1602,106 @@ def imagine_splat(req: ImagineSplatRequest):
             job["error"] = str(e)
 
     threading.Thread(target=_imagine, daemon=True).start()
+    return {"ok": True, "job_id": job_id}
+
+
+@router.post("/api/game/upload_scene")
+async def upload_scene(request: __import__("fastapi").Request):
+    """Phase 140 (the mint.gg pattern, local): drop a SCENE IMAGE and it
+    becomes the world — gemma3-vision describes it, SDXL img2img expands it
+    into a seamless 360 equirect panorama, and the runtime uses it as the
+    visible world backdrop AND the light source (IBL), so meshes match the
+    backdrop (the coherence mint's splat worlds lack). Returns a job id
+    (same poll endpoint as splat jobs)."""
+    import re as _re
+    name = _re.sub(r"[^A-Za-z0-9._-]", "_",
+                   request.headers.get("x-filename", "scene.png"))[-80:]
+    if not name.lower().endswith((".png", ".jpg", ".jpeg", ".webp")):
+        raise HTTPException(400, "expected an image (.png/.jpg/.webp)")
+    body = await request.body()
+    if len(body) > 40 * 1024 * 1024:
+        raise HTTPException(413, "image too large (40MB cap)")
+    pdir = BACKEND_ROOT / "assets" / "panos"
+    (pdir / "_src").mkdir(parents=True, exist_ok=True)
+    src = pdir / "_src" / name
+    src.write_bytes(body)
+    slug = _re.sub(r"[^a-z0-9]+", "_", Path(name).stem.lower()).strip("_")[:48] or "scene"
+    out = pdir / f"{slug}.jpg"
+
+    with _lock:
+        _splat_seq["n"] += 1
+        job_id = _splat_seq["n"]
+        _splat_jobs[job_id] = {"id": job_id, "status": "running",
+                               "stage": "reading image", "splat": None,
+                               "pano": None, "hint": None, "error": None}
+
+    def _pano() -> None:
+        job = _splat_jobs[job_id]
+        try:
+            import base64
+            import json as _json
+            import urllib.request as _ur
+            # 1 — the local vision LLM describes the scene (drives both the
+            # panorama prompt and the world mood)
+            caption = ""
+            try:
+                b64 = base64.b64encode(src.read_bytes()).decode()
+                req2 = _ur.Request(
+                    "http://127.0.0.1:11434/api/chat",
+                    data=_json.dumps({
+                        "model": "gemma3:12b", "stream": False,
+                        "messages": [{"role": "user", "content":
+                            "Describe this scene for a 360 panorama prompt in "
+                            "one line: setting, time of day, weather, mood, "
+                            "key colors. No preamble.",
+                            "images": [b64]}]}).encode(),
+                    headers={"Content-Type": "application/json"})
+                caption = _json.load(_ur.urlopen(req2, timeout=180))["message"]["content"].strip()[:300]
+            except Exception:  # noqa: BLE001 — caption is enrichment
+                caption = "an atmospheric outdoor scene"
+            job["hint"] = caption
+            job["stage"] = "painting panorama"
+            # 2 — SDXL img2img: source stretched onto a 2:1 canvas with
+            # mirrored wings, then reimagined as a seamless equirect pano
+            from PIL import Image
+            import numpy as np
+            im = Image.open(src).convert("RGB")
+            W, H = 1536, 768
+            base = im.resize((W // 2, H))
+            canvas = Image.new("RGB", (W, H))
+            canvas.paste(base, (W // 4, 0))
+            canvas.paste(base.transpose(Image.FLIP_LEFT_RIGHT).crop((W // 4, 0, W // 2, H)), (0, 0))
+            canvas.paste(base.transpose(Image.FLIP_LEFT_RIGHT).crop((0, 0, W // 4, H)), (3 * W // 4, 0))
+            from app.asset_gen.reference import _load_t2i_pipeline, unload_reference_pipeline
+            from diffusers import StableDiffusionXLImg2ImgPipeline
+            t2i = _load_t2i_pipeline()
+            i2i = StableDiffusionXLImg2ImgPipeline(**t2i.components)
+            res = i2i(prompt="seamless 360 degree equirectangular panorama, "
+                             + caption
+                             + ", photorealistic, consistent horizon line, "
+                               "no seams, natural lighting",
+                      negative_prompt="text, watermark, people, frame, border",
+                      image=canvas, strength=0.52, guidance_scale=6.0,
+                      num_inference_steps=26).images[0]
+            # 3 — horizontal wrap-seam blend so the pano tiles at 0/360
+            arr = np.asarray(res).astype(np.float32)
+            blend = 96
+            for x in range(blend):
+                a = x / blend
+                arr[:, x] = arr[:, x] * a + arr[:, -blend + x] * (1 - a)
+            Image.fromarray(arr.astype(np.uint8)).save(out, quality=90)
+            try:
+                unload_reference_pipeline()
+            except Exception:
+                pass
+            job["status"] = "complete"
+            job["stage"] = "done"
+            job["pano"] = f"assets/panos/{out.name}"
+        except Exception as e:  # noqa: BLE001
+            job["status"] = "failed"
+            job["error"] = str(e)[:300]
+
+    threading.Thread(target=_pano, daemon=True).start()
     return {"ok": True, "job_id": job_id}
 
 

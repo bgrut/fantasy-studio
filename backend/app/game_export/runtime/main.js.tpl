@@ -272,6 +272,25 @@ async function main() {
 
   // QUALITY PACK — real atmospheric sky (day/sunset/overcast) or a starfield
   // dome (night): kills the flat-color backdrop everywhere at once.
+  // PHASE 140 — SCENE-IMAGE PANORAMA (the mint.gg pattern, local): the
+  // user's dropped image, SDXL-expanded to a 360 equirect, IS the world:
+  // visible backdrop + PMREM light source in one. Any sky mood; beats the
+  // HDRI when set. Loads async and hides the procedural dome + clouds.
+  if (SPEC.world.pano) {
+    new THREE.TextureLoader().load(SPEC.world.pano, (pt2) => {
+      pt2.mapping = THREE.EquirectangularReflectionMapping;
+      pt2.colorSpace = THREE.SRGBColorSpace;
+      const pmP = new THREE.PMREMGenerator(renderer);
+      scene.environment = pmP.fromEquirectangular(pt2).texture;
+      pmP.dispose();
+      if ('environmentIntensity' in scene) scene.environmentIntensity = 0.62;
+      scene.background = pt2;
+      scene.backgroundIntensity = 1.0;
+      if (window.__skyDome) window.__skyDome.visible = false;
+      if (window.__clouds) for (const sp of window.__clouds) sp.visible = false;
+      console.log('[game] scene panorama world: ' + SPEC.world.pano);
+    }, undefined, () => console.warn('[game] pano skipped'));
+  }
   if (SPEC.world.sky !== 'night') {
     const sky = new Sky();
     sky.scale.setScalar(4000);
@@ -322,7 +341,7 @@ async function main() {
     // material. CC0 Poly Haven capture bundled per sky mood at export; loads
     // async and replaces the procedural env when ready (sky dome stays the
     // visible background so the horizon art direction is unchanged).
-    if (SPEC.world.hdri) {
+    if (SPEC.world.hdri && !SPEC.world.pano) {
       import('./vendor/jsm/loaders/RGBELoader.js').then(({ RGBELoader }) => {
         new RGBELoader().load(SPEC.world.hdri, (tex) => {
           tex.mapping = THREE.EquirectangularReflectionMapping;

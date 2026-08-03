@@ -7,7 +7,7 @@ import { Crosshair, Download, FolderPlus, Gamepad2, Loader2, Maximize2, RotateCc
 import { cn } from '@/lib/utils'
 import {
   addLevelToProject, createProject, exportGame, exportProject, gameHealth,
-  cancelJob, getGameJob, listProjects, openLevel, removeLevelFromProject, revealProjectZip, uploadSplat, listSplats, trainSplat, getSplatJob, imagineSplat,
+  cancelJob, getGameJob, listProjects, openLevel, removeLevelFromProject, revealProjectZip, uploadSplat, listSplats, trainSplat, getSplatJob, imagineSplat, uploadScene,
   rerollAsset, updateLevel,
   type GameHealth, type GameJob, type GameProject,
 } from '@/lib/gameApi'
@@ -120,6 +120,7 @@ export default function GameStudio() {
   const [splatPath, setSplatPath] = useState<string | null>(null)
   const [splatList, setSplatList] = useState<{ name: string; path: string; mb: number }[] | null>(null)
   const [splatTrain, setSplatTrain] = useState<string | null>(null)  // splat job stage text
+  const [panoPath, setPanoPath] = useState<string | null>(null)      // Phase 140: scene-image world
 
   // shared poll for train_splat / imagine_splat jobs — attaches the result
   // and AUTO-BUILDS the game with it so the play panel updates like any run
@@ -131,10 +132,13 @@ export default function GameStudio() {
         setSplatTrain(job.stage)
         if (job.status === 'complete') {
           window.clearInterval(poll); setSplatTrain(null)
+          const p = (buildPrompt ?? prompt).trim()
           if (job.splat) {
             setSplatPath(job.splat)
-            const p = (buildPrompt ?? prompt).trim()
             if (p) startJob(p, undefined, undefined, undefined, job.splat)
+          } else if (job.pano) {
+            setPanoPath(job.pano)
+            if (p) startJob(p, undefined, undefined, undefined, undefined, job.pano)
           }
         } else if (job.status === 'failed') {
           window.clearInterval(poll); setSplatTrain(null)
@@ -230,7 +234,7 @@ export default function GameStudio() {
   const startJob = useCallback(async (p: string, baseJobId?: number,
                                       at?: { x: number; z: number; target?: string },
                                       at2?: { x: number; z: number },
-                                      splatNow?: string) => {
+                                      splatNow?: string, panoNow?: string) => {
     setError(null)
     setSavedLevel(null)                   // any rebuild invalidates "Saved ✓"
     if (baseJobId == null) { setJob(null); setOpenedLevel(null) }  // fresh build = not a level edit
@@ -241,13 +245,14 @@ export default function GameStudio() {
         // fresh build: USER-SELECTED style + view ride along — never guessed
         : { style: style !== 'default' ? style : undefined,
             view: view !== '3d' ? view : undefined,
-            splat: (splatNow ?? splatPath) ?? undefined })
+            splat: (splatNow ?? splatPath) ?? undefined,
+            pano: (panoNow ?? panoPath) ?? undefined })
       pollJob(job_id)
     } catch (e) {
       setBuilding(false)
       setError(e instanceof Error ? e.message : String(e))
     }
-  }, [pollJob, style, view, splatPath])
+  }, [pollJob, style, view, splatPath, panoPath])
 
   // Phase 43 level tiles: click a level -> exact re-export opens as a live
   // job in the player above — play it, Inspect it, edit it, save it back.
@@ -582,6 +587,28 @@ export default function GameStudio() {
                 }} />
             </label>
           )}
+          {!splatTrain && (panoPath ? (
+            <span className="px-2.5 py-1 rounded-full text-[11px] border border-[#5cffc9]/50 bg-[#5cffc9]/10 text-[#5cffc9]"
+                  title="Your scene image is the world — backdrop and lighting come from it. ✕ to detach.">
+              🖼 {panoPath.split('/').pop()}
+              <button onClick={() => setPanoPath(null)}
+                className="ml-1.5 text-[#5cffc9]/70 hover:text-white">✕</button>
+            </span>
+          ) : (
+            <label className="px-2.5 py-1 rounded-full text-[11px] border border-white/[0.06] bg-white/[0.02] text-[#807d99] hover:text-white cursor-pointer transition-all"
+                   title="Drop a photo or concept image and it BECOMES the world: a 360 panorama is painted from it and used as the backdrop + lighting (~1 min on GPU). The game auto-builds when ready.">
+              🖼 scene image
+              <input type="file" accept=".png,.jpg,.jpeg,.webp" className="hidden"
+                onChange={async (e) => {
+                  const f = e.target.files?.[0]
+                  if (!f) return
+                  try {
+                    const r = await uploadScene(f)
+                    pollSplat(r.job_id, prompt)
+                  } catch (err) { setError(err instanceof Error ? err.message : String(err)) }
+                }} />
+            </label>
+          ))}
           {!splatTrain && (
             <button
               className="px-2.5 py-1 rounded-full text-[11px] border border-white/[0.06] bg-white/[0.02] text-[#807d99] hover:text-white transition-all"
