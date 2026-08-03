@@ -257,7 +257,19 @@ def build_osm_city(place: str, size_m: float, max_buildings: int = 500) -> dict 
         except Exception:
             import time as _t
             _t.sleep(3)
-            osm_city.fetch_osm(*bb, cache_path=cache)
+            try:
+                osm_city.fetch_osm(*bb, cache_path=cache)
+            except Exception:
+                # r15 CACHE FALLBACK (Tokyo report): a different world size
+                # misses the size-keyed cache and a live Overpass failure
+                # then silently dropped the REAL city. Any cached scan of
+                # this place beats the procedural fallback — use the
+                # largest one we have.
+                others = sorted(cache.parent.glob(f"{place}_*.osm"),
+                                key=lambda p: p.stat().st_size, reverse=True)
+                if not others:
+                    raise
+                cache = others[0]
         data = osm_city.parse_osm(cache)
         half = size_m / 2.0
         blds = []
