@@ -406,10 +406,26 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                 job.setdefault("notes", []).append("design doc written")
                 job["design_doc"] = _doc
             stage("extracting")
-            spec = extract_game_spec(
-                (req.prompt + "\n\nIMPLEMENTATION DOC (expands the idea — "
-                 "the line above is authoritative):\n" + _doc)
-                if _doc else req.prompt, verbose=False)
+            # DETERMINISM FIX (2026-07-29): extraction reads ONLY the user's
+            # raw prompt — feeding the doc in let it invent creatures (a
+            # 'snow warbler' with unverified orientation) and fragment
+            # objectives. The doc now enriches FLAVOR ONLY below: narrative
+            # intro + title. Casting, objectives, and world verbs stay a
+            # pure function of the user's words.
+            spec = extract_game_spec(req.prompt, verbose=False)
+            if _doc:
+                try:
+                    import re as _re2
+                    # narrative intro: WORLD flavor + FEEL line from the doc
+                    mW = _re2.search(r"WORLD:\s*(.+?)(?:\n[A-Z]{2,}|$)", _doc, _re2.S)
+                    mF = _re2.search(r"FEEL:\s*(.+?)(?:\n[A-Z]{2,}|$)", _doc, _re2.S)
+                    intro = " ".join(s.strip().replace("\n", " ")
+                                     for s in ((mW.group(1) if mW else ""),
+                                               (mF.group(1) if mF else "")) if s.strip())
+                    if intro and not getattr(spec, "intro", None):
+                        spec.intro = intro[:280]
+                except Exception:
+                    pass
         # ── ABILITY VFX (2026-07-29): element aura inferred from the THEME —
         # deterministic keywords, and gated so it only fires when the
         # character concept is actually magical/elemental (a waterbender, a
