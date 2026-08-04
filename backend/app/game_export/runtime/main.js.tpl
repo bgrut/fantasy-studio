@@ -285,7 +285,13 @@ async function main() {
       pmP.dispose();
       if ('environmentIntensity' in scene) scene.environmentIntensity = 0.62;
       scene.background = pt2;
-      scene.backgroundIntensity = 1.0;
+      scene.backgroundIntensity = 1.15;
+      // dark source images (dusk/night photos) need a lift or the whole
+      // world reads murky — pano worlds get a brighter floor of light
+      if ('environmentIntensity' in scene) {
+        scene.environmentIntensity = Math.max(scene.environmentIntensity, 0.85);
+      }
+      renderer.toneMappingExposure *= 1.18;
       if (window.__skyDome) window.__skyDome.visible = false;
       if (window.__clouds) for (const sp of window.__clouds) sp.visible = false;
       console.log('[game] scene panorama world: ' + SPEC.world.pano);
@@ -2246,7 +2252,13 @@ async function main() {
   }
   // QUALITY PACK: props render as INSTANCED sub-meshes — hundreds of trees at
   // 60fps instead of a sparse dozen of cloned groups.
-  for (const sct of SPEC.world.scatter || []) {
+  // PURE SCENE WORLD (2026-08-04, user callout 'separate it from our other
+  // scene'): when a scene-image world is attached, the IMAGE is the scenery
+  // — procedural scatter (trees/rocks/bushes), grass and landmark giants
+  // stand down so they stop burying the panorama + lifted splats. Terrain,
+  // objectives, NPCs and placed items stay.
+  const PURE_SCENE = !!SPEC.world.pano;
+  for (const sct of PURE_SCENE ? [] : (SPEC.world.scatter || [])) {
     try {
       const gltf = await loadGLB(sct.asset);
       if (!landmarkAsset) landmarkAsset = gltf;
@@ -2575,7 +2587,7 @@ async function main() {
 
   // GRASS: instanced cross-blades on the terrain, thinned along the walking
   // path — the "flat green plane" is gone. (Gated off for cities/snow.)
-  if ((SPEC.world.scatter || []).length && SPEC.world.grass !== false) {
+  if (!PURE_SCENE && (SPEC.world.scatter || []).length && SPEC.world.grass !== false) {
     // undergrowth stays PLANT-colored: pull toward green so brown forest
     // floors get living tufts, not floating tan cards
     const gcolA = new THREE.Color(...SPEC.world.ground_color)
@@ -2644,7 +2656,7 @@ async function main() {
       scene.add(im);
     }
   }
-  if (LVL && LVL.landmarks && landmarkAsset) {
+  if (!PURE_SCENE && LVL && LVL.landmarks && landmarkAsset) {
     for (const [lx, lz, ls] of LVL.landmarks) {
       const inst = landmarkAsset.scene.clone(true);
       inst.traverse(o => { if (o.isMesh) o.castShadow = true; });
