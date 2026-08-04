@@ -1751,9 +1751,30 @@ async def upload_scene(request: __import__("fastapi").Request):
                 # lift ONLY near/mid scenery (disparity >= 0.2 ≈ within
                 # ~225m) — sky and far haze stay on the background pano;
                 # lifting them wrapped the camera in an opaque white shell
-                keep = (lat.ravel() > np.radians(-6.0)) \
-                    & (dm_s.ravel() >= 0.2) & (lat.ravel() < np.radians(35.0))
-                rr = np.clip(45.0 / np.maximum(dm_s.ravel(), 0.14), 0, 340)[keep]
+                # METRIC CALIBRATION (research: THE 'being there' fix — DPT
+                # is relative disparity, so without this the scene has no
+                # true scale). Assume the pano camera stands 1.6m above a
+                # flat floor: a ground-band pixel at latitude L has true
+                # range 1.6/sin(-L). Fit r = k/d on that band (median) so
+                # the WHOLE lift shares one metric scale.
+                lat_f = lat.ravel()
+                d_f = dm_s.ravel()
+                gb = (lat_f < np.radians(-25.0)) & (d_f > 0.05)
+                if int(gb.sum()) > 500:
+                    k = float(np.median((1.6 / np.sin(-lat_f[gb])) * d_f[gb]))
+                    k = float(np.clip(k, 6.0, 120.0))
+                else:
+                    k = 45.0
+                keep = (lat_f > np.radians(-6.0)) & (d_f >= 0.2) \
+                    & (lat_f < np.radians(35.0))
+                # 25m arena standoff: metric-true interiors (a forest photo
+                # is honestly 3-10m deep) crowd the camera into a blur wall —
+                # scenery keeps metric ORDERING but starts at the arena edge
+                rr = np.clip(k / np.maximum(d_f, 0.14), 25, 340)[keep]
+                # depth-edge shrink: splats straddling discontinuities smear
+                # the moment the player translates — shrink them hard
+                gy2, gx2 = np.gradient(np.log(np.maximum(dm_s, 0.05)))
+                shrink = (1.0 / (1.0 + 10.0 * np.hypot(gx2, gy2))).ravel()[keep]
                 lonk, latk = lon.ravel()[keep], lat.ravel()[keep]
                 n = int(rr.size)
                 # 17 floats/vertex: xyz + normals + f_dc + opacity + 3 scale
@@ -1766,7 +1787,7 @@ async def upload_scene(request: __import__("fastapi").Request):
                 d18[:, 6:9] = (pano_s.reshape(-1, 3)[keep] - 0.5) / 0.28209479177
                 d18[:, 9] = 6.0                          # ~opaque after sigmoid
                 d18[:, 10:13] = np.log(np.maximum(
-                    rr * (2.0 * np.pi / sw) * 1.15, 1e-3))[:, None]
+                    rr * (2.0 * np.pi / sw) * 1.15 * shrink, 1e-3))[:, None]
                 d18[:, 13] = 1.0                          # identity rotation
                 sp_out = pdir / f"{slug}_splat.ply"
                 hdr = ("ply\nformat binary_little_endian 1.0\n"

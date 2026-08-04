@@ -795,6 +795,12 @@ async function main() {
                     diffuseColor.rgb *= mix(vec3(1.0), m * 2.0, 0.5); }`);
     };
   }
+  // PURE SCENE floor (2026-08-04): image worlds get a FLAT walkable plane —
+  // procedural hills punched through the panorama as giant mismatched cones
+  // (playtest). mint-style: the image owns all relief; the floor is level.
+  if (SPEC.world.pano && LVL && LVL.heights) {
+    LVL.heights = LVL.heights.map(() => 0);
+  }
   if (LVL && LVL.heights && LVL.heights.length === LVL.grid_n * LVL.grid_n) {
     const n = LVL.grid_n, hs = LVL.heights;
     hAt = (x, z) => {
