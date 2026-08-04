@@ -637,8 +637,29 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             import json as _json
             _headings = _json.loads((BACKEND_ROOT / "assets" / "library_heading.json")
                                     .read_text(encoding="utf-8"))
-            if cast in _headings:
-                spec.player.yaw_offset_deg = float(_headings[cast])
+            # FACING REGRESSION FIX (2026-08-04): the lookup was EXACT-match
+            # only, so a cast of 'red fox' or 'the knight' silently missed a
+            # 'fox'/'knight' override and the character walked backwards
+            # again. Match on the resolved ASSET FILE too (the ground truth
+            # that heading data is really keyed to), then on word overlap.
+            _ck = (cast or "").strip().lower()
+            _hit = _headings.get(_ck)
+            if _hit is None:
+                _stem = Path(spec.player.asset or "").stem.lower() \
+                    .replace("_anim", "").replace("_", " ")
+                _hit = _headings.get(_stem)
+            if _hit is None:
+                _words = set(_ck.split()) | set(
+                    Path(spec.player.asset or "").stem.lower()
+                    .replace("_anim", "").split("_"))
+                for _k, _v in _headings.items():
+                    if set(_k.split()) & _words:
+                        _hit = _v
+                        break
+            if _hit is not None:
+                spec.player.yaw_offset_deg = float(_hit)
+                job.setdefault("notes", []).append(
+                    f"heading data applied: {_hit:+.0f}deg")
         except Exception:
             pass
         if req.pano:
@@ -1875,7 +1896,11 @@ async def upload_scene(request: __import__("fastapi").Request):
                 # 25m arena standoff: metric-true interiors (a forest photo
                 # is honestly 3-10m deep) crowd the camera into a blur wall —
                 # scenery keeps metric ORDERING but starts at the arena edge
-                rr = np.clip(k / np.maximum(d_f, 0.14), 25, 340)[keep]
+                # HARD STANDOFF (2026-08-04 playtest): 25m still buried the
+                # camera inside splats (verified screenshot). Scenery is
+                # BACKDROP — never nearer than 55m, so the play space stays
+                # clear and the lifted world always reads as distance.
+                rr = np.clip(k / np.maximum(d_f, 0.14), 55, 340)[keep]
                 # depth-edge shrink: splats straddling discontinuities smear
                 # the moment the player translates — shrink them hard
                 gy2, gx2 = np.gradient(np.log(np.maximum(dm_s, 0.05)))
