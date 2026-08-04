@@ -1695,51 +1695,124 @@ async def upload_scene(request: __import__("fastapi").Request):
             # belongs inside the panorama instead of clashing with it
             (pdir / f"{slug}.txt").write_text(caption, encoding="utf-8")
             job["stage"] = "painting panorama"
-            # 2 — SDXL img2img: source stretched onto a 2:1 canvas with
-            # mirrored wings, then reimagined as a seamless equirect pano
+            # 2 — THE 'WALK INTO THE IMAGE' REBUILD (2026-08-04): the photo
+            # survives VERBATIM at its natural field of view (~62 deg) —
+            # SDXL only INPAINTS the world around it, and the original is
+            # composited back pixel-perfect afterward. The old path
+            # stretched the photo to 180 deg and repainted ALL of it at
+            # strength 0.52, so the user's own image never survived into
+            # the game. This is the property the reference splat demos
+            # have: the image IS the view you walk into, untouched.
             from PIL import Image
+            from PIL import ImageDraw as _ID
+            from PIL import ImageFilter as _IF
             import numpy as np
             im = Image.open(src).convert("RGB")
             W, H = 1792, 896
-            base = im.resize((W // 2, H))
+            iw, ih = im.size
+            # r2 SIZING (verified 2026-08-04): a 62-degree footprint read as
+            # a POSTCARD floating in invented scenery. The photo now spans
+            # ~120 deg horizontally (a third of the world) and the FULL
+            # height band it implies — it dominates the view you spawn into.
+            src_w2 = int(W * 120.0 / 360.0)
+            src_h = min(int(src_w2 * ih / iw), int(H * 0.94))
+            src_w2 = max(64, int(src_h * iw / ih))
+            srcp = im.resize((src_w2, src_h), Image.LANCZOS)
+            sx0 = W // 2 - src_w2 // 2
+            sy0 = int(H * 0.50) - src_h // 2
             canvas = Image.new("RGB", (W, H))
-            canvas.paste(base, (W // 4, 0))
-            # WINGS DEDUP (2026-08-04): mirrored wings made SDXL keep the
-            # photo's landmarks twice (identical dune grass left+right,
-            # playtest). Wings are now edge-color smears + heavy noise, so
-            # the model INVENTS the unseen 180 degrees instead of copying.
-            # r2: PURE noise wings made SDXL paint abstract giant closeups
-            # (no structural prior). Mirror gives plausible scene structure;
-            # moderate noise on top forces divergence from an exact copy.
-            ba2 = np.asarray(base, dtype=np.float32)
-            _rw = np.random.default_rng(7)
-            noise2 = _rw.normal(0.0, 16.0, (H, W // 4, 3))
-            mirL = np.asarray(base.transpose(Image.FLIP_LEFT_RIGHT)
-                              .crop((W // 4, 0, W // 2, H)), dtype=np.float32)
-            mirR = np.asarray(base.transpose(Image.FLIP_LEFT_RIGHT)
-                              .crop((0, 0, W // 4, H)), dtype=np.float32)
-            canvas.paste(Image.fromarray(
-                np.clip(mirL + noise2, 0, 255).astype(np.uint8)), (0, 0))
-            canvas.paste(Image.fromarray(
-                np.clip(mirR + noise2[:, ::-1], 0, 255).astype(np.uint8)), (3 * W // 4, 0))
+            # r2 PRIOR: the blurred full-stretch let the model invent a
+            # different valley at a different scale. Instead, EDGE-EXTEND
+            # the photo outward (columns/rows continue their own content),
+            # then blur lightly — the surround is forced to continue THIS
+            # scene's horizon, palette and structure.
+            npf = np.asarray(srcp, dtype=np.float32)
+            padL = np.repeat(npf[:, :1], sx0 + 1, axis=1)
+            padR = np.repeat(npf[:, -1:], W - (sx0 + src_w2) + 1, axis=1)
+            band = np.concatenate([padL, npf, padR], axis=1)[:, :W]
+            top = np.repeat(band[:1], sy0 + 1, axis=0)
+            bot = np.repeat(band[-1:], H - (sy0 + src_h) + 1, axis=0)
+            full = np.concatenate([top, band, bot], axis=0)[:H]
+            # r6 ROOT CAUSE (4 verified failed runs): a heavily-blurred prior
+            # gives the diffuser NO structure to denoise into — it returns the
+            # blur, whatever the pipeline (inpaint AND img2img both failed the
+            # same way). The prior must carry real texture. Tiled copies of
+            # the photo itself (alternating mirrored, so the horizon stays
+            # continuous) give exactly that; img2img then reinterprets them
+            # into fresh scenery that matches this world's light and palette.
+            tile_src = srcp.resize((src_w2, H), Image.LANCZOS)
+            tile_flip = tile_src.transpose(Image.FLIP_LEFT_RIGHT)
+            for tx in range(0, W, src_w2):
+                canvas.paste(tile_flip if (tx // src_w2) % 2 else tile_src, (tx, 0))
+            canvas.paste(srcp, (sx0, sy0))
+            mask = Image.new("L", (W, H), 255)
+            _ID.Draw(mask).rectangle(
+                [sx0 + 6, sy0 + 6, sx0 + src_w2 - 6, sy0 + src_h - 6], fill=0)
+            mask = mask.filter(_IF.GaussianBlur(8))
             from app.asset_gen.reference import _load_t2i_pipeline, unload_reference_pipeline
             from diffusers import StableDiffusionXLImg2ImgPipeline
             t2i = _load_t2i_pipeline()
+            # r5: the INPAINT pipeline returned unpainted color fields at
+            # every strength/tiling combination tried (3 verified runs).
+            # img2img is the path already proven in character generation:
+            # repaint the whole tile from the palette prior, then composite
+            # the untouched photo back on top.
             i2i = StableDiffusionXLImg2ImgPipeline(**t2i.components)
-            res = i2i(prompt="seamless 360 degree equirectangular panorama, "
-                             + caption
-                             + ", photorealistic, consistent horizon line, "
-                               "no seams, natural lighting",
-                      negative_prompt="text, watermark, people, frame, border",
-                      image=canvas, strength=0.52, guidance_scale=6.0,
-                      num_inference_steps=26).images[0]
+            # r4 TILED OUTPAINT (verified fix): inpainting the whole 2:1
+            # equirect in one pass returned empty color fields at ANY
+            # strength — SDXL is trained on ~1:1 and collapses on a 1792x896
+            # canvas. Instead the world grows outward in 1024x1024 SQUARE
+            # steps the model handles natively: each pass sees a strip of
+            # already-real pixels on one side and paints the rest, so the
+            # panorama continues the photo instead of inventing a new scene.
+            pw = 1024
+            pano_prompt = ("360 degree panorama continuing outward from the "
+                           "scene, " + caption
+                           + ", photorealistic, consistent horizon line, "
+                             "matching light and colors, no seams")
+            neg = "text, watermark, people, frame, border, blurry, distorted"
+            res = canvas
+            for direction in ("right", "left"):
+                # walk outward from the photo in half-tile steps
+                steps = int(np.ceil(((W - src_w2) / 2) / (pw // 2)))
+                for si in range(steps):
+                    if direction == "right":
+                        x_end = min(W, sx0 + src_w2 + (si + 1) * (pw // 2))
+                        x_start = max(0, x_end - pw)
+                    else:
+                        x_start = max(0, sx0 - (si + 1) * (pw // 2))
+                        x_end = min(W, x_start + pw)
+                    if x_end - x_start < 64:
+                        continue
+                    tile = res.crop((x_start, 0, x_end, H)).resize((pw, pw), Image.LANCZOS)
+                    tmask = mask.crop((x_start, 0, x_end, H)).resize((pw, pw), Image.LANCZOS)
+                    if np.asarray(tmask).mean() < 4:
+                        continue                       # nothing left to paint
+                    # NOTE: never name this 'out' — that's the pano's output
+                    # PATH in the enclosing scope (cost one failed run)
+                    # 0.85: high enough to break the repeated-photo pattern
+                    # into new scenery, low enough to keep its structure
+                    tile_out = i2i(prompt=pano_prompt, negative_prompt=neg,
+                                   image=tile, strength=0.85,
+                                   guidance_scale=6.5,
+                                   num_inference_steps=28).images[0]
+                    painted = tile_out.resize((x_end - x_start, H), Image.LANCZOS)
+                    # keep whatever was already REAL in this strip (the photo
+                    # and previously-painted pixels) — mask decides per pixel
+                    keep = tmask.resize((x_end - x_start, H), Image.LANCZOS)
+                    res.paste(painted, (x_start, 0), keep)
+                    # painted pixels are now REAL: they anchor the next step
+                    md = _ID.Draw(mask)
+                    md.rectangle([x_start, 0, x_end, H], fill=0)
+                    md.rectangle([sx0 - 2, sy0 - 2, sx0 + src_w2 + 2, sy0 + src_h + 2], fill=0)
+            res.paste(srcp, (sx0, sy0))       # the photo, untouched, forever
             # 3 — horizontal wrap-seam blend so the pano tiles at 0/360
             arr = np.asarray(res).astype(np.float32)
             blend = 96
             for x in range(blend):
                 a = x / blend
                 arr[:, x] = arr[:, x] * a + arr[:, -blend + x] * (1 - a)
-            Image.fromarray(arr.astype(np.uint8)).save(out, quality=90)
+            Image.fromarray(arr.astype(np.uint8)).save(out, "JPEG", quality=90)
             try:
                 unload_reference_pipeline()
             except Exception:

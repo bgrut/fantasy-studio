@@ -4582,7 +4582,13 @@ async function main() {
   addEventListener('keyup', e => { keys[e.code] = false; });
   const FLY = SPEC.player.mode === 'fly';   // dragons/birds/aircraft — flight loop below
   const SWIM = SPEC.player.mode === 'swim'; // whales/sharks/subs — swim loop below
-  let yaw = 0, pitch = 0.35, dragging = false, px = 0, py = 0;
+  // SPAWN FACING THE PHOTO (2026-08-04): in image worlds the user's own
+  // photograph is preserved verbatim at panorama center (-Z). Opening the
+  // game looking anywhere else means the first thing you see is invented
+  // filler — 'walking into the image' starts by FACING it.
+  let yaw = SPEC.world.pano ? Math.PI : 0;
+  let pitch = SPEC.world.pano ? 0.16 : 0.35;
+  let dragging = false, px = 0, py = 0;
   let camZoom = 1, freeLookT = 0;   // wheel zoom · seconds of free-look after a drag
   addEventListener('wheel', e => {
     camZoom = THREE.MathUtils.clamp(camZoom * (1 + Math.sign(e.deltaY) * 0.09), 0.45, 2.6);
