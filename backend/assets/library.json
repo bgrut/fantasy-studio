@@ -47,5 +47,17 @@
   "knight": "assets/library/knight.glb",
   "health_pack": "assets/library/health_pack.glb",
   "bear": "assets/library/bear.glb",
-  "taxi": "assets/library/taxi.glb"
+  "taxi": "assets/library/taxi.glb",
+  "grizzly": "assets/library/grizzly.glb",
+  "ferrari": "assets/library/ferrari.glb",
+  "then": "assets/library/then.glb",
+  "soccer player": "assets/library/soccer_player.glb",
+  "the woodcutter' stash": "assets/library/the_woodcutter'_stash.glb",
+  "fire flame": "assets/library/fire_flame.glb",
+  "rival": "assets/library/rival.glb",
+  "thug": "assets/library/thug.glb",
+  "snow weasels": "assets/library/snow_weasels.glb",
+  "waterbender": "assets/library/waterbender.glb",
+  "shadow wraith": "assets/library/shadow_wraith.glb",
+  "water bender": "assets/library/water_bender.glb"
 }

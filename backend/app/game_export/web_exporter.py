@@ -177,6 +177,11 @@ def export_web_game(spec: GameSpec, out_dir: str | Path, verbose: bool = True) -
             (dist / "pano").mkdir(parents=True, exist_ok=True)
             shutil.copy2(pn_src, dist / "pano" / pn_src.name)
             spec.world.pano = f"pano/{pn_src.name}"
+            # Phase B: sibling depth map -> parallax dome (auto-detected)
+            d_src = pn_src.with_name(pn_src.stem + "_d.png")
+            if d_src.exists():
+                shutil.copy2(d_src, dist / "pano" / d_src.name)
+                spec.world.pano_depth = f"pano/{d_src.name}"
         else:
             spec.world.pano = None
 

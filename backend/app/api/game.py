@@ -1694,6 +1694,29 @@ async def upload_scene(request: __import__("fastapi").Request):
                 unload_reference_pipeline()
             except Exception:
                 pass
+            # PHASE B — depth lift: Depth-Anything-V2-Small (Apache-2.0)
+            # estimates per-pixel depth on the panorama; the runtime
+            # displaces a dome with it so the world has REAL PARALLAX as
+            # the player moves (the walkable-splat feel, no splats needed).
+            job["stage"] = "measuring depth"
+            try:
+                from transformers import pipeline as _tfpipe
+                # DPT-MiDaS (MIT/Apache): the installed transformers predates
+                # the 'depth_anything' model type — DPT is the supported
+                # classic and plenty for dome displacement
+                dp = _tfpipe("depth-estimation",
+                             model="Intel/dpt-hybrid-midas", device=0)
+                dres = dp(Image.fromarray(arr.astype(np.uint8)))
+                dm = np.asarray(dres["depth"], dtype=np.float32)
+                dm = (dm - dm.min()) / max(float(dm.max() - dm.min()), 1e-6)
+                Image.fromarray((dm * 255).astype(np.uint8)) \
+                    .resize((768, 384)).save(pdir / f"{slug}_d.png")
+                del dp
+                import torch as _t2
+                if _t2.cuda.is_available():
+                    _t2.cuda.empty_cache()
+            except Exception as e:  # noqa: BLE001 — dome falls back to flat pano
+                print(f"[pano] depth lift skipped: {e}", flush=True)
             job["status"] = "complete"
             job["stage"] = "done"
             job["pano"] = f"assets/panos/{out.name}"

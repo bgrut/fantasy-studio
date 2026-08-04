@@ -289,6 +289,47 @@ async function main() {
       if (window.__skyDome) window.__skyDome.visible = false;
       if (window.__clouds) for (const sp of window.__clouds) sp.visible = false;
       console.log('[game] scene panorama world: ' + SPEC.world.pano);
+      // PHASE B — PARALLAX DOME: displace a sphere by the panorama's depth
+      // map so near scenery sits close and far scenery sits far — REAL
+      // parallax as the player moves (the walkable-splat feel), replacing
+      // the flat infinity backdrop. Falls back silently to the flat pano.
+      if (SPEC.world.pano_depth) {
+        const dim = new Image();
+        dim.onload = () => {
+          try {
+            const dc = document.createElement('canvas');
+            dc.width = dim.width; dc.height = dim.height;
+            const dg = dc.getContext('2d');
+            dg.drawImage(dim, 0, 0);
+            const dd = dg.getImageData(0, 0, dc.width, dc.height).data;
+            const sampleD = (u, v) => {
+              const x = Math.min(dc.width - 1, Math.max(0, Math.round(u * (dc.width - 1))));
+              const y = Math.min(dc.height - 1, Math.max(0, Math.round(v * (dc.height - 1))));
+              return dd[(y * dc.width + x) * 4] / 255;
+            };
+            const dgeo = new THREE.SphereGeometry(1, 128, 64);
+            const dpa = dgeo.attributes.position;
+            const duv = dgeo.attributes.uv;
+            for (let i = 0; i < dpa.count; i++) {
+              const d = sampleD(duv.getX(i), duv.getY(i));
+              // depth 1 = near -> 45m; depth 0 = far -> capped 340m. The
+              // dome is SCENERY parallax, not walls — pulling near regions
+              // closer than ~45m turned them into giant facets (verified).
+              const r = Math.min(340, 45 / Math.max(d, 0.14));
+              dpa.setXYZ(i, dpa.getX(i) * r, dpa.getY(i) * r + 1.6, dpa.getZ(i) * r);
+            }
+            const dome = new THREE.Mesh(dgeo, new THREE.MeshBasicMaterial({
+              map: pt2, side: THREE.BackSide, fog: false,
+              toneMapped: true }));
+            dome.scale.x = -1;              // equirect faces inward correctly
+            dome.frustumCulled = false;
+            dome.renderOrder = -1;
+            scene.add(dome);
+            console.log('[game] parallax dome active');
+          } catch (e) { console.warn('[game] parallax dome skipped: ' + e.message); }
+        };
+        dim.src = SPEC.world.pano_depth;
+      }
     }, undefined, () => console.warn('[game] pano skipped'));
   }
   if (SPEC.world.sky !== 'night') {
