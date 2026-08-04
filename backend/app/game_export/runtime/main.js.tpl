@@ -293,7 +293,7 @@ async function main() {
       // map so near scenery sits close and far scenery sits far — REAL
       // parallax as the player moves (the walkable-splat feel), replacing
       // the flat infinity backdrop. Falls back silently to the flat pano.
-      if (SPEC.world.pano_depth) {
+      if (SPEC.world.pano_depth && !SPEC.world.splat) {   // splat lift replaces the dome
         const dim = new Image();
         dim.onload = () => {
           try {

@@ -182,6 +182,17 @@ def export_web_game(spec: GameSpec, out_dir: str | Path, verbose: bool = True) -
             if d_src.exists():
                 shutil.copy2(d_src, dist / "pano" / d_src.name)
                 spec.world.pano_depth = f"pano/{d_src.name}"
+            # Phase C (the mint answer): a lifted SPLAT sibling beats the
+            # dome — bundle it with an IDENTITY fit (it was synthesized in
+            # world coordinates; the auto-fit solver must not touch it)
+            s_src = pn_src.with_name(pn_src.stem + "_splat.ply")
+            if s_src.exists() and not spec.world.splat:
+                (dist / "splats").mkdir(parents=True, exist_ok=True)
+                shutil.copy2(s_src, dist / "splats" / s_src.name)
+                spec.world.splat = f"splats/{s_src.name}"
+                spec.world.splat_fit = {"rotation": [0.0, 0.0, 0.0, 1.0],
+                                        "scale": 1.0,
+                                        "position": [0.0, 0.0, 0.0]}
         else:
             spec.world.pano = None
 
@@ -226,7 +237,10 @@ over its content. You may sell it, publish it, or modify it freely.
 
     # ── Gaussian-splat world (Phase 136, additive): bundle the file the
     # spec points at; the runtime lazy-loads the renderer only when present
-    if getattr(spec.world, "splat", None):
+    _splat_done = (str(getattr(spec.world, "splat", "") or "")
+                   .replace("\\", "/").startswith("splats/")
+                   and (dist / str(spec.world.splat)).exists())
+    if getattr(spec.world, "splat", None) and not _splat_done:
         sp_src = Path(spec.world.splat)
         if not sp_src.is_absolute():
             sp_src = BACKEND_ROOT / spec.world.splat

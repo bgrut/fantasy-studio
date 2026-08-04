@@ -1733,6 +1733,54 @@ async def upload_scene(request: __import__("fastapi").Request):
                 import torch as _t2
                 if _t2.cuda.is_available():
                     _t2.cuda.empty_cache()
+                # ── SPLAT LIFT (2026-08-04, the mint answer): synthesize a
+                # REAL gaussian-splat world from the image — every pixel
+                # above the horizon band becomes a 3D gaussian at its
+                # measured depth (our terrain owns the floor). No models,
+                # pure numpy; renders through the existing splat pipeline.
+                job["stage"] = "lifting to gaussian splats"
+                sw, sh = 896, 448
+                pano_s = np.asarray(Image.fromarray(arr.astype(np.uint8))
+                                    .resize((sw, sh)), dtype=np.float32) / 255.0
+                dm_s = np.asarray(Image.fromarray((dm * 255).astype(np.uint8))
+                                  .resize((sw, sh)), dtype=np.float32) / 255.0
+                us, vs = np.meshgrid((np.arange(sw) + 0.5) / sw,
+                                     (np.arange(sh) + 0.5) / sh)
+                lon = (us - 0.5) * 2.0 * np.pi
+                lat = (0.5 - vs) * np.pi
+                # lift ONLY near/mid scenery (disparity >= 0.2 ≈ within
+                # ~225m) — sky and far haze stay on the background pano;
+                # lifting them wrapped the camera in an opaque white shell
+                keep = (lat.ravel() > np.radians(-6.0)) \
+                    & (dm_s.ravel() >= 0.2) & (lat.ravel() < np.radians(35.0))
+                rr = np.clip(45.0 / np.maximum(dm_s.ravel(), 0.14), 0, 340)[keep]
+                lonk, latk = lon.ravel()[keep], lat.ravel()[keep]
+                n = int(rr.size)
+                # 17 floats/vertex: xyz + normals + f_dc + opacity + 3 scale
+                # + 4 rot — writing 18 once misaligned every vertex (giant
+                # garbage blobs); the header's property count is the law
+                d18 = np.zeros((n, 17), dtype="<f4")
+                d18[:, 0] = np.cos(latk) * np.sin(lonk) * rr
+                d18[:, 1] = np.sin(latk) * rr + 1.6
+                d18[:, 2] = -np.cos(latk) * np.cos(lonk) * rr
+                d18[:, 6:9] = (pano_s.reshape(-1, 3)[keep] - 0.5) / 0.28209479177
+                d18[:, 9] = 6.0                          # ~opaque after sigmoid
+                d18[:, 10:13] = np.log(np.maximum(
+                    rr * (2.0 * np.pi / sw) * 1.15, 1e-3))[:, None]
+                d18[:, 13] = 1.0                          # identity rotation
+                sp_out = pdir / f"{slug}_splat.ply"
+                hdr = ("ply\nformat binary_little_endian 1.0\n"
+                       f"element vertex {n}\n"
+                       + "".join(f"property float {p}\n" for p in
+                                 ("x", "y", "z", "nx", "ny", "nz",
+                                  "f_dc_0", "f_dc_1", "f_dc_2", "opacity",
+                                  "scale_0", "scale_1", "scale_2",
+                                  "rot_0", "rot_1", "rot_2", "rot_3"))
+                       + "end_header\n")
+                with open(sp_out, "wb") as fh:
+                    fh.write(hdr.encode("ascii"))
+                    d18.tofile(fh)
+                print(f"[pano] splat lift: {n} gaussians -> {sp_out.name}", flush=True)
             except Exception as e:  # noqa: BLE001 — dome falls back to flat pano
                 print(f"[pano] depth lift skipped: {e}", flush=True)
             job["status"] = "complete"
