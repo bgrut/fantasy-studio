@@ -743,14 +743,28 @@ async function main() {
   const btex = new THREE.CanvasTexture(bcnv);
   btex.wrapS = btex.wrapT = THREE.RepeatWrapping;
   btex.repeat.set(gsize / 3, gsize / 3);
-  const gmat = new THREE.MeshStandardMaterial({ map: gtex, roughness: 0.96,
-                                                bumpMap: btex, bumpScale: 0.35 });
+  // PANO GROUND (140D, 'you don't make it the ground'): in image worlds the
+  // floor texture IS the photo's floor, reprojected onto the plane at bake
+  // time — beach sand underfoot is the image's sand, continuous with the
+  // horizon. Replaces the painted canvas + macro tint entirely.
+  let panoGroundTex = null;
+  if (SPEC.world.pano_ground) {
+    panoGroundTex = new THREE.TextureLoader().load(SPEC.world.pano_ground);
+    panoGroundTex.wrapS = panoGroundTex.wrapT = THREE.ClampToEdgeWrapping;
+    panoGroundTex.colorSpace = THREE.SRGBColorSpace;
+    panoGroundTex.anisotropy = 8;
+    panoGroundTex.repeat.set(gsize / 300, gsize / 300);
+    panoGroundTex.offset.set(0.5 - gsize / 600, 0.5 - gsize / 600);
+  }
+  const gmat = new THREE.MeshStandardMaterial({
+    map: panoGroundTex || gtex, roughness: 0.96,
+    bumpMap: btex, bumpScale: panoGroundTex ? 0.12 : 0.35 });
   // MACRO VARIATION (Phase 74): the tiled detail map repeats every 8 m, so
   // from any distance the ground reads as one flat tone. A second LOW-FREQ
   // canvas is sampled in WORLD coordinates (1:1 across the map, no tiling)
   // and multiplied over the albedo — big soft meadow/soil drifts like real
   // terrain, for one extra texture fetch.
-  {
+  if (!panoGroundTex) {          // photo floor owns the albedo — no tint mixing
     const MN = 128;
     const mcnv = document.createElement('canvas'); mcnv.width = mcnv.height = MN;
     const mctx = mcnv.getContext('2d');
@@ -5181,7 +5195,10 @@ async function main() {
     });
     // GROUND surface relief: the painted albedo (trails, roads) stays the
     // color map; a matching photo NORMAL map adds real micro-relief
-    if (PHOTO) {
+    // (140D: skip when the pano's own floor owns the ground — tiling a
+    // generic sand photo over the image's sand is exactly the mismatch
+    // the user called out)
+    if (PHOTO && !panoGroundTex) {
       const wn = (SPEC.world.name || '').toLowerCase();
       const gname = (SPEC.world.weather === 'snow') ? 'snow'
         : /desert|beach|dune/.test(wn) ? 'sand'

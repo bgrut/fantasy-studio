@@ -1802,6 +1802,22 @@ async def upload_scene(request: __import__("fastapi").Request):
                     fh.write(hdr.encode("ascii"))
                     d18.tofile(fh)
                 print(f"[pano] splat lift: {n} gaussians -> {sp_out.name}", flush=True)
+                # GROUND PROJECTION (the user-named gap: 'you don't make it
+                # the ground'): reproject the pano's below-horizon pixels
+                # onto the y=0 floor (camera 1.6m) — the sand you walk on IS
+                # the photo's sand, continuous into the horizon.
+                job["stage"] = "projecting ground"
+                G, half = 1024, 150.0
+                xs2 = np.linspace(-half, half, G)
+                gx3, gz3 = np.meshgrid(xs2, xs2)
+                dist3 = np.hypot(gx3, gz3)
+                lat_g = -np.arctan2(1.6, np.maximum(dist3, 0.35))
+                lon_g = np.arctan2(gx3, -gz3)
+                Hp, Wp = arr.shape[0], arr.shape[1]
+                u_g = np.clip(((lon_g / (2 * np.pi) + 0.5) * (Wp - 1)).astype(int), 0, Wp - 1)
+                v_g = np.clip(((0.5 - lat_g / np.pi) * (Hp - 1)).astype(int), 0, Hp - 1)
+                Image.fromarray(arr[v_g, u_g].astype(np.uint8)) \
+                    .save(pdir / f"{slug}_ground.jpg", quality=88)
             except Exception as e:  # noqa: BLE001 — dome falls back to flat pano
                 print(f"[pano] depth lift skipped: {e}", flush=True)
             job["status"] = "complete"

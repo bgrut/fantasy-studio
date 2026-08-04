@@ -83,6 +83,7 @@ class WorldSpec(BaseModel):
     hdri: Optional[str] = None     # Arc B: dist-relative CC0 HDRI for image-based lighting
     pano: Optional[str] = None     # Phase 140: user scene image -> 360 panorama world backdrop
     pano_depth: Optional[str] = None  # Phase 140B: depth map -> parallax dome displacement
+    pano_ground: Optional[str] = None  # Phase 140D: pano floor reprojected as the ground texture
     health_packs: int = Field(0, ge=0, le=12)   # heart pickups scattered on the ground
     placed_items: List[PlacedItemSpec] = Field(default_factory=list)  # Inspector placements
     scatter: List[ScatterSpec] = Field(default_factory=list)

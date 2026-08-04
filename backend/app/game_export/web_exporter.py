@@ -185,6 +185,10 @@ def export_web_game(spec: GameSpec, out_dir: str | Path, verbose: bool = True) -
             # Phase C (the mint answer): a lifted SPLAT sibling beats the
             # dome — bundle it with an IDENTITY fit (it was synthesized in
             # world coordinates; the auto-fit solver must not touch it)
+            g_src = pn_src.with_name(pn_src.stem + "_ground.jpg")
+            if g_src.exists():
+                shutil.copy2(g_src, dist / "pano" / g_src.name)
+                spec.world.pano_ground = f"pano/{g_src.name}"
             s_src = pn_src.with_name(pn_src.stem + "_splat.ply")
             if s_src.exists() and not spec.world.splat:
                 (dist / "splats").mkdir(parents=True, exist_ok=True)
