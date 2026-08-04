@@ -453,7 +453,8 @@ async function main() {
     // of displaced low-poly ridges past the playfield gives every level a
     // horizon. Fog tints them into the distance automatically; snow weather
     // and cold skies get white caps via vertex color.
-    if (!(((SPEC.world || {}).level || {}).osm) && !(((SPEC.world || {}).level || {}).interior)) {
+    if (!(((SPEC.world || {}).level || {}).osm) && !(((SPEC.world || {}).level || {}).interior)
+        && !SPEC.world.pano) {   // image worlds: the PANORAMA is the horizon
       const gsizeM = SPEC.world.size_m;
       const rngM = mulberry32(SPEC.seed + 777);
       const snowy = SPEC.world.weather === 'snow';
@@ -753,8 +754,8 @@ async function main() {
     panoGroundTex.wrapS = panoGroundTex.wrapT = THREE.ClampToEdgeWrapping;
     panoGroundTex.colorSpace = THREE.SRGBColorSpace;
     panoGroundTex.anisotropy = 8;
-    panoGroundTex.repeat.set(gsize / 300, gsize / 300);
-    panoGroundTex.offset.set(0.5 - gsize / 600, 0.5 - gsize / 600);
+    panoGroundTex.repeat.set(gsize / 240, gsize / 240);   // bake spans ±120m
+    panoGroundTex.offset.set(0.5 - gsize / 480, 0.5 - gsize / 480);
   }
   const gmat = new THREE.MeshStandardMaterial({
     map: panoGroundTex || gtex, roughness: 0.96,
@@ -860,7 +861,7 @@ async function main() {
     // HORIZON SKIRT (Phase 122): beyond the painted map, a vast apron in
     // the same ground tone runs to 6x the world size — fog fades it into
     // the sky, so every outdoor world ends gracefully instead of at a cliff
-    if (!INTERIOR) {
+    if (!INTERIOR && !SPEC.world.pano) {   // pano worlds: photo floor ends at its own horizon
       const skirtC = gcol.clone().offsetHSL(0, -0.04, -0.02);
       const skirt = new THREE.Mesh(
         new THREE.RingGeometry(gsize * 0.495, gsize * 6, 48, 1),

@@ -399,20 +399,6 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             job["title"] = spec.title
             job["edited_from"] = req.base_job_id
         else:
-            # SCENE COHERENCE (2026-08-04): a pano world must not clash with
-            # the built level (snow terrain under a swamp panorama, playtest).
-            # The image's saved caption joins the prompt so the extractor
-            # builds terrain/sky/trees that BELONG inside the panorama.
-            if req.pano:
-                try:
-                    _cap_p = (BACKEND_ROOT / req.pano).with_suffix(".txt")
-                    if _cap_p.exists():
-                        req.prompt += ("\n\nSCENE SETTING (from the player's "
-                                       "reference image — the world's terrain, "
-                                       "sky and vegetation MUST match this): "
-                                       + _cap_p.read_text(encoding="utf-8")[:280])
-                except Exception:
-                    pass
             stage("designing")
             # DESIGN-DOC-ALWAYS: think like a designer, then build. The doc
             # rides ABOVE the user's prompt so their words stay the contract.
@@ -658,6 +644,32 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         if req.pano:
             spec.world.pano = req.pano
             job.setdefault("notes", []).append("scene-image panorama world attached")
+            # RULES-CONTAMINATION FIX (2026-08-04): the caption used to join
+            # the extraction prompt — and the LLM derived OBJECTIVES from
+            # scenery words ('woodcutter's stash' on a beach, playtest). The
+            # caption now patches APPEARANCE fields only, deterministically:
+            # sky + weather word tables, nothing else. Objectives, entities
+            # and rules come from the user's words alone; terrain color and
+            # horizon come from the photo itself (ground bake + pano).
+            try:
+                _cap_p = (BACKEND_ROOT / req.pano).with_suffix(".txt")
+                _cap = _cap_p.read_text(encoding="utf-8").lower() if _cap_p.exists() else ""
+                import re as _re3
+                for w, sky in (("sunset", "sunset"), ("dusk", "dusk"),
+                               ("twilight", "dusk"), ("dawn", "sunset"),
+                               ("night", "night"), ("overcast", "overcast"),
+                               ("cloudy", "overcast"), ("noon", "day"),
+                               ("midday", "day"), ("daytime", "day")):
+                    if _re3.search(rf"\b{w}\b", _cap):
+                        spec.world.sky = sky
+                        break
+                for w, wx in (("snow", "snow"), ("blizzard", "snow"),
+                              ("rain", "rain"), ("storm", "rain")):
+                    if _re3.search(rf"\b{w}\b", _cap):
+                        spec.world.weather = wx
+                        break
+            except Exception:
+                pass
         if req.splat:
             spec.world.splat = req.splat
             job.setdefault("notes", []).append(
@@ -1124,8 +1136,12 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             r"\b(quest|explor\w*|adventur\w*|journey|wander|trek|search|"
             r"find|discover|scout|lost|hidden|treasure|relic|ruin\w*|"
             r"myster\w*|collect)\b", _pl)
+        # PANO GATE (2026-08-04): image worlds skip quest-chain injection —
+        # 'the woodcutter's stash' materializing on a user's beach photo
+        # reads as rules-gone-wrong; their prompt is the whole contract.
         if (_pois2 and _questy and len(_gameplay) == 1
                 and spec.player.mode == "walk"
+                and not spec.world.pano
                 and "interior" not in spec.world.level):
             from app.game_export.spec import ObjectiveSpec as _OS
             _poi0 = _pois2[0]
@@ -1688,8 +1704,24 @@ async def upload_scene(request: __import__("fastapi").Request):
             base = im.resize((W // 2, H))
             canvas = Image.new("RGB", (W, H))
             canvas.paste(base, (W // 4, 0))
-            canvas.paste(base.transpose(Image.FLIP_LEFT_RIGHT).crop((W // 4, 0, W // 2, H)), (0, 0))
-            canvas.paste(base.transpose(Image.FLIP_LEFT_RIGHT).crop((0, 0, W // 4, H)), (3 * W // 4, 0))
+            # WINGS DEDUP (2026-08-04): mirrored wings made SDXL keep the
+            # photo's landmarks twice (identical dune grass left+right,
+            # playtest). Wings are now edge-color smears + heavy noise, so
+            # the model INVENTS the unseen 180 degrees instead of copying.
+            # r2: PURE noise wings made SDXL paint abstract giant closeups
+            # (no structural prior). Mirror gives plausible scene structure;
+            # moderate noise on top forces divergence from an exact copy.
+            ba2 = np.asarray(base, dtype=np.float32)
+            _rw = np.random.default_rng(7)
+            noise2 = _rw.normal(0.0, 16.0, (H, W // 4, 3))
+            mirL = np.asarray(base.transpose(Image.FLIP_LEFT_RIGHT)
+                              .crop((W // 4, 0, W // 2, H)), dtype=np.float32)
+            mirR = np.asarray(base.transpose(Image.FLIP_LEFT_RIGHT)
+                              .crop((0, 0, W // 4, H)), dtype=np.float32)
+            canvas.paste(Image.fromarray(
+                np.clip(mirL + noise2, 0, 255).astype(np.uint8)), (0, 0))
+            canvas.paste(Image.fromarray(
+                np.clip(mirR + noise2[:, ::-1], 0, 255).astype(np.uint8)), (3 * W // 4, 0))
             from app.asset_gen.reference import _load_t2i_pipeline, unload_reference_pipeline
             from diffusers import StableDiffusionXLImg2ImgPipeline
             t2i = _load_t2i_pipeline()
@@ -1807,17 +1839,37 @@ async def upload_scene(request: __import__("fastapi").Request):
                 # onto the y=0 floor (camera 1.6m) — the sand you walk on IS
                 # the photo's sand, continuous into the horizon.
                 job["stage"] = "projecting ground"
-                G, half = 1024, 150.0
+                # r2 CRISPNESS (2026-08-04): 1024px over 300m = 30cm/px mush
+                # underfoot. 2048px over 240m = 12cm/px, BILINEAR sampled +
+                # unsharp — the far field belongs to the splats/pano anyway.
+                G, half = 2048, 120.0
                 xs2 = np.linspace(-half, half, G)
                 gx3, gz3 = np.meshgrid(xs2, xs2)
                 dist3 = np.hypot(gx3, gz3)
                 lat_g = -np.arctan2(1.6, np.maximum(dist3, 0.35))
                 lon_g = np.arctan2(gx3, -gz3)
                 Hp, Wp = arr.shape[0], arr.shape[1]
-                u_g = np.clip(((lon_g / (2 * np.pi) + 0.5) * (Wp - 1)).astype(int), 0, Wp - 1)
-                v_g = np.clip(((0.5 - lat_g / np.pi) * (Hp - 1)).astype(int), 0, Hp - 1)
-                Image.fromarray(arr[v_g, u_g].astype(np.uint8)) \
-                    .save(pdir / f"{slug}_ground.jpg", quality=88)
+                uf = (lon_g / (2 * np.pi) + 0.5) * (Wp - 1)
+                vf = (0.5 - lat_g / np.pi) * (Hp - 1)
+                x0 = np.clip(np.floor(uf).astype(int), 0, Wp - 2)
+                y0 = np.clip(np.floor(vf).astype(int), 0, Hp - 2)
+                fx3 = np.clip(uf - x0, 0, 1)[..., None]
+                fy3 = np.clip(vf - y0, 0, 1)[..., None]
+                ground = (arr[y0, x0] * (1 - fx3) * (1 - fy3)
+                          + arr[y0, x0 + 1] * fx3 * (1 - fy3)
+                          + arr[y0 + 1, x0] * (1 - fx3) * fy3
+                          + arr[y0 + 1, x0 + 1] * fx3 * fy3)
+                # PLAYABILITY LIFT: dark source photos (dusk forest) bake a
+                # near-black floor — gamma-normalize so mean luminance lands
+                # ~0.34 while keeping the photo's identity
+                gl = ground.mean() / 255.0
+                if gl < 0.30:
+                    gamma = np.log(0.34) / np.log(max(gl, 0.02))
+                    ground = np.power(ground / 255.0, gamma) * 255.0
+                from PIL import ImageFilter
+                Image.fromarray(ground.astype(np.uint8)) \
+                    .filter(ImageFilter.UnsharpMask(radius=2, percent=85, threshold=2)) \
+                    .save(pdir / f"{slug}_ground.jpg", quality=92)
             except Exception as e:  # noqa: BLE001 — dome falls back to flat pano
                 print(f"[pano] depth lift skipped: {e}", flush=True)
             job["status"] = "complete"
