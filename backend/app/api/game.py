@@ -399,6 +399,20 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             job["title"] = spec.title
             job["edited_from"] = req.base_job_id
         else:
+            # SCENE COHERENCE (2026-08-04): a pano world must not clash with
+            # the built level (snow terrain under a swamp panorama, playtest).
+            # The image's saved caption joins the prompt so the extractor
+            # builds terrain/sky/trees that BELONG inside the panorama.
+            if req.pano:
+                try:
+                    _cap_p = (BACKEND_ROOT / req.pano).with_suffix(".txt")
+                    if _cap_p.exists():
+                        req.prompt += ("\n\nSCENE SETTING (from the player's "
+                                       "reference image — the world's terrain, "
+                                       "sky and vegetation MUST match this): "
+                                       + _cap_p.read_text(encoding="utf-8")[:280])
+                except Exception:
+                    pass
             stage("designing")
             # DESIGN-DOC-ALWAYS: think like a designer, then build. The doc
             # rides ABOVE the user's prompt so their words stay the contract.
@@ -1660,13 +1674,17 @@ async def upload_scene(request: __import__("fastapi").Request):
             except Exception:  # noqa: BLE001 — caption is enrichment
                 caption = "an atmospheric outdoor scene"
             job["hint"] = caption
+            # persist the caption — at BUILD time it steers the whole world
+            # (terrain palette, trees, sky) to MATCH the image, so the level
+            # belongs inside the panorama instead of clashing with it
+            (pdir / f"{slug}.txt").write_text(caption, encoding="utf-8")
             job["stage"] = "painting panorama"
             # 2 — SDXL img2img: source stretched onto a 2:1 canvas with
             # mirrored wings, then reimagined as a seamless equirect pano
             from PIL import Image
             import numpy as np
             im = Image.open(src).convert("RGB")
-            W, H = 1536, 768
+            W, H = 1792, 896
             base = im.resize((W // 2, H))
             canvas = Image.new("RGB", (W, H))
             canvas.paste(base, (W // 4, 0))
