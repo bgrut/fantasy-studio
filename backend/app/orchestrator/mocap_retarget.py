@@ -50,6 +50,17 @@ sx = not (ay>=ax); SA=(X if sx else Y); smid=(cx if sx else cy)
 def pt(so,zf,fwd=0.0):
     z=zmin+zf*H
     return (smid+so,cy+fwd,z) if sx else (cx+fwd,smid+so,z)
+# HANDEDNESS (2026-08-05, #ARMS): pt() puts FORWARD on +Y when the side axis is
+# X but on +X when it is Y. Anatomical left is (up x forward), which is -X in
+# the first case and +Y in the second — the sign FLIPS with the axis swap. The
+# old fixed "L = negative side offset" was therefore mirrored for every mesh
+# that landed on the Y branch. A mirrored rig is invisible on the legs (they are
+# near-vertical, so swapping them only shifts the stride phase) but the clavicle
+# is a purely LATERAL bone: retargeting it against a mirrored frame rotates the
+# entire arm chain ~180 deg across the chest. Measured 160-169 deg of clavicle
+# flip on the Y-branch asset vs 15-19 deg on the X-branch ones — that is the
+# folded/splayed-arm bug. LSGN is the lateral sign of the true left side.
+LSGN = -1.0 if sx else 1.0
 amax=float(SA.max()); amin=float(SA.min())
 for old in ("HeroRig",):
     ob=bpy.data.objects.get(old)
@@ -74,7 +85,7 @@ _sb=(_zf>=0.76)&(_zf<0.82)
 _shoff=float(np.percentile(np.abs(_latS[_sb]),85)) if int(_sb.sum())>5 else 0.12*H
 _shoff=max(_shoff,0.06*H)
 for s in ("L","R"):
-    sgn=-1.0 if s=="L" else 1.0; lg=sgn*0.10*H
+    sgn=LSGN if s=="L" else -LSGN; lg=sgn*0.10*H
     sh_lat=sgn*_shoff
     # detect the hand: lowest vertex that is clearly OUTBOARD on this side
     _side=(np.sign(_latS)==sgn)&(np.abs(_latS)>0.55*_shoff)&(_zf<0.80)&(_zf>0.28)
@@ -91,15 +102,15 @@ for s in ("L","R"):
     ua=mk("uparm_"+s,pt(_al(0.0),_az(0.0)),pt(_al(0.45),_az(0.45)),cl)
     fa=mk("lowarm_"+s,pt(_al(0.45),_az(0.45)),pt(_al(0.85),_az(0.85)),ua)
     mk("hand_"+s,pt(_al(0.85),_az(0.85)),pt(_al(1.0),_az(1.0)),fa)
-    # KNEE BEND HINT (2026-08-05): the leg was built dead straight — hip,
-    # knee and ankle on one vertical line. A hinge with no bend in its rest
-    # pose has no preferred fold direction, so the retargeted rotation can
-    # resolve the wrong way and the knee inverts backwards mid-stride. Every
-    # production rig ships a few degrees of bend so the joint knows which way
-    # it folds; 1.8cm forward at the knee is enough to disambiguate without
-    # visibly bending the bind pose.
-    th=mk("upleg_"+s,pt(lg,0.50),pt(lg,0.28,0.018),hips)
-    sh=mk("lowleg_"+s,pt(lg,0.28,0.018),pt(lg,0.05),th)
+    # NOTE (2026-08-05, tested + rejected): a rest "knee bend hint" (knee offset
+    # 1.8cm forward) was tried to give the hinge a preferred fold direction.
+    # It is a NO-OP here and was reverted — aim() points each bone AT the source
+    # direction absolutely, so the rest pose only sets the bone's ROLL, never the
+    # resulting direction. Re-baked clips were bit-identical with and without it
+    # (attack knee offset -0.0750..-0.0216 either way). Keep the legs straight;
+    # knee direction is inherited from the source clip, so fix knees there.
+    th=mk("upleg_"+s,pt(lg,0.50),pt(lg,0.28),hips)
+    sh=mk("lowleg_"+s,pt(lg,0.28),pt(lg,0.05),th)
     mk("foot_"+s,pt(lg,0.05),pt(lg,0.0,0.12),sh)
 bpy.ops.object.mode_set(mode="OBJECT")
 amod=o.modifiers.get("HeroArmature") or o.modifiers.new("HeroArmature","ARMATURE"); amod.object=rig
@@ -154,9 +165,12 @@ if not skin_mode.startswith("voxel"):
         seg=t-h; L2=max(float(seg@seg),1e-9); u=np.clip(((V-h)@seg)/L2,0,1)
         proj=h[None,:]+u[:,None]*seg[None,:]; dmat[:,bi]=np.linalg.norm(V-proj,axis=1)
     _mar=0.05*H
+    # _LS is +ve on the anatomical LEFT half, so the masks follow the same
+    # handedness the bones were built with instead of assuming L == -side.
+    _LS=LSGN*(SA-smid)
     for bi,nm in enumerate(names):
-        if nm.endswith("_L"):       dmat[SA>smid+_mar, bi]=1e9
-        elif nm.endswith("_R"):     dmat[SA<smid-_mar, bi]=1e9
+        if nm.endswith("_L"):       dmat[_LS<-_mar, bi]=1e9
+        elif nm.endswith("_R"):     dmat[_LS> _mar, bi]=1e9
     K=min(4,dmat.shape[1]); idxK=np.argsort(dmat,axis=1)[:,:K]; dK=np.take_along_axis(dmat,idxK,1)
     wK=1.0/np.maximum(dK,1e-6)**2; wK/=wK.sum(1,keepdims=True); wK[wK<0.03]=0; wK/=np.maximum(wK.sum(1,keepdims=True),1e-9)
     # densify: W (nv x nbones)
@@ -174,8 +188,8 @@ if not skin_mode.startswith("voxel"):
     nb_cnt=np.maximum(nb_cnt,1)[:,None]
     side_mask=np.ones_like(W)
     for bi,nm in enumerate(names):
-        if nm.endswith("_L"):   side_mask[SA>smid+_mar, bi]=0.0
-        elif nm.endswith("_R"): side_mask[SA<smid-_mar, bi]=0.0
+        if nm.endswith("_L"):   side_mask[_LS<-_mar, bi]=0.0
+        elif nm.endswith("_R"): side_mask[_LS> _mar, bi]=0.0
     for _it in range(8):
         nb_acc[:]=0.0
         np.add.at(nb_acc, ev[:,0], W[ev[:,1]])
@@ -222,7 +236,17 @@ else:
     ORDER=["spine","chest","neck","head","clav_L","uparm_L","lowarm_L","hand_L",
      "clav_R","uparm_R","lowarm_R","hand_R","upleg_L","lowleg_L","foot_L","upleg_R","lowleg_R","foot_R"]
     sc=bpy.context.scene
-    bvh_len=sc.frame_end; step=max(1,int(round(120.0/FPS)))
+    # CLIP LENGTH (2026-08-05): read the length off the imported ACTION, not off
+    # scene.frame_end. reset_scene does not restore the frame range, so the scene
+    # still carries the previous bake's range — and a game export rigs several
+    # humans in one Blender session, so every character after the first was
+    # trimming its clean walk window against the wrong clip length.
+    bvh_len=sc.frame_end
+    try:
+        _act=src.animation_data.action if src.animation_data else None
+        if _act is not None: bvh_len=max(2,int(round(_act.frame_range[1])))
+    except Exception: pass
+    step=max(1,int(round(120.0/FPS)))
     RB={b.name:b.matrix_local.to_3x3() for b in rig.data.bones}
     def swm(n):
         pb=src.pose.bones.get(n); return (src.matrix_world@pb.matrix) if pb else None
@@ -234,6 +258,9 @@ else:
     lo=max(1,int(0.06*bvh_len)); hi=max(lo+2, bvh_len-int(0.02*bvh_len)); win=max(1,hi-lo)
     # net forward travel over the clean window (robust frame-align, immune to the loop)
     sc.frame_set(lo); bpy.context.view_layer.update(); hip_lo=swm("Hips").translation.copy()
+    _lu=swm("LeftUpLeg"); _ru=swm("RightUpLeg")
+    _lat=(Vector(_lu.translation)-Vector(_ru.translation)) if (_lu and _ru) else Vector((0,0,0))
+    _lat.z=0
     sc.frame_set(hi); bpy.context.view_layer.update(); hip_hi=swm("Hips").translation.copy()
     samp=[]
     for i in range(TOTAL):
@@ -253,6 +280,15 @@ else:
     Rz=Matrix.Identity(3)
     hero_fwd=(RB["foot_L"]@Vector((0,1,0))); hero_fwd.z=0
     src_tr=(hip_hi-hip_lo).copy(); src_tr.z=0
+    # SOURCE FORWARD (2026-08-05, #KNEES): net hip travel only means "forward"
+    # for a LOCOMOTION clip. The fight clip is performed in place — measured
+    # 0.10 leg-lengths of net travel against 3.9 for walk and 6.4 for run — so
+    # its travel vector is noise, and aligning to it yawed the whole retargeted
+    # body ~90 deg off. That is what read as backward-bending knees in 'attack'
+    # (walk/run were always clean). Below the threshold take forward from the
+    # source pelvis, which is well defined no matter how little the clip travels.
+    if src_tr.length < 0.75*sleg and _lat.length>1e-6:
+        src_tr=_lat.normalized().cross(Vector((0,0,1)))
     if hero_fwd.length>1e-3 and src_tr.length>1e-3:
         hero_fwd.normalize(); src_tr.normalize()
         yaw=math.atan2(src_tr.cross(hero_fwd).z, src_tr.dot(hero_fwd)); Rz=Matrix.Rotation(yaw,3,'Z')
@@ -264,6 +300,19 @@ else:
     try: bpy.context.preferences.edit.keyframe_new_interpolation_type="LINEAR"
     except Exception: pass
     base=rig.location.copy(); baseo=o.location.copy()
+    # CLAVICLE CONE (2026-08-05, #ARMS): the clavicle is the only purely LATERAL
+    # bone in the chain and it carries ~7% of the skin weight, so any error in
+    # the source-to-hero frame lands on it amplified — a bad frame flips it ~180
+    # deg and drags the whole arm across the chest. A real clavicle travels only
+    # ~15-25 deg, so clamping to that cone is anatomically free in the healthy
+    # case and makes the catastrophic flip unreachable in the degenerate one.
+    CONE={"clav_L":0.44,"clav_R":0.44}
+    def cone(c, d):
+        lim=CONE.get(c)
+        if lim is None or d is None: return d
+        r=(RB[c]@Vector((0,1,0))).normalized()
+        a=r.angle(d, 0.0)
+        return d if a<=lim else r.slerp(d, lim/a).normalized()
     def aim(c, dirv):
         pb=rig.pose.bones[c]; head=pb.matrix.translation.copy(); rest=pb.bone.matrix_local
         d0=(rest.to_3x3()@Vector((0,1,0))).normalized()
@@ -294,6 +343,7 @@ else:
             elif c in ("lowarm_R","hand_R") and dirs.get("uparm_R") is not None and d is not None:
                 d=(dirs["uparm_R"]*0.7+d*0.3).normalized()
             if d is None: continue
+            d=cone(c,d)
             aim(c,d); rig.pose.bones[c].keyframe_insert("rotation_quaternion",frame=f)
         path.append((base.x+dx, base.y+dy, baseo.z))
     # DE-CHOPPER: gaussian-smooth the baked bone curves to kill the small
