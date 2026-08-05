@@ -4660,8 +4660,13 @@ async function main() {
     const cabLen = cp.cabinLen || 0.46, cabH = cp.cabinH || 0.52;
     const cabX = cp.cabinX || -0.04, wr = cp.wheelR || 0.34;
     const paint = new THREE.MeshPhysicalMaterial({
-      color: new THREE.Color(cp.paint || 0xb5202a), metalness: 0.55,
-      roughness: 0.28, clearcoat: 1.0, clearcoatRoughness: 0.06 });
+      // real automotive paint is a metallic basecoat under near-perfect
+      // lacquer: it is almost ENTIRELY reflection. At metalness 0.55 /
+      // roughness 0.28 the body read as flat coloured plastic even with an
+      // environment present (measured in tools/carlab).
+      color: new THREE.Color(cp.paint || 0xb5202a), metalness: 0.85,
+      roughness: 0.22, clearcoat: 1.0, clearcoatRoughness: 0.035,
+      envMapIntensity: 1.6 });
     const glass = new THREE.MeshPhysicalMaterial({
       color: 0x101418, metalness: 0.1, roughness: 0.06,
       transmission: 0.55, thickness: 0.4, transparent: true, opacity: 0.72 });
@@ -4700,6 +4705,11 @@ async function main() {
     const bg = new THREE.ExtrudeGeometry(s, {
       depth: Wd, bevelEnabled: true, bevelSize: 0.05,
       bevelThickness: 0.05, bevelSegments: 3 });
+    // KEEP the rotateY. Tried removing it 2026-08-05 by analogy with
+    // tools/carlab, where the same call was the slab bug — here it is NOT.
+    // This profile is authored on a different axis convention, so without the
+    // rotation the whole body lies FLAT on the road (verified in-game). The
+    // two files are not interchangeable; fix this one in this one.
     bg.rotateY(Math.PI / 2);
     bg.translate(0, bodyY - bodyH * 0.25, Wd / 2);
     const body = new THREE.Mesh(bg, paint);
