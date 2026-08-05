@@ -154,7 +154,18 @@ export default function GameStudio() {
   const [placeMode, setPlaceMode] = useState<'point' | 'line'>('point')
   const [lineA, setLineA] = useState<Pick | null>(null)    // line tool first click
   const [selLine, setSelLine] = useState<{ a: Pick; b: Pick } | null>(null)
-  const [showRules, setShowRules] = useState(false)        // Truth Table panel
+  const [showRules, setShowRules] = useState(false)        // Studio panel open
+  // STUDIO PANEL (2026-08-05): the Truth Table grew into the studio — Cast
+  // (who is in the game), Rules (what it enforces), Scene (live dials).
+  const [studioTab, setStudioTab] = useState<'cast' | 'rules' | 'scene'>('cast')
+  // live dials: these postMessage STRAIGHT to the running game. No backend
+  // roundtrip, no rebuild — dragging a slider changes the world you are
+  // looking at, which is the whole point of the studio.
+  const [dials, setDials] = useState({ fog: 6, sun: 2.2, exposure: 1.0 })
+  const sendPatch = useCallback((patch: Record<string, number>) => {
+    gameFrameRef.current?.contentWindow?.postMessage(
+      { type: 'fs-patch', patch }, '*')
+  }, [])
   const pollRef = useRef<number | null>(null)
   const gameFrameRef = useRef<HTMLIFrameElement | null>(null)
   const hubFrameRef = useRef<HTMLIFrameElement | null>(null)
@@ -940,7 +951,7 @@ export default function GameStudio() {
               )}
               <button
                 onClick={() => setShowRules(v => !v)}
-                title="the Truth Table: every rule this game actually enforces"
+                title="Studio: who is in the game, what rules it enforces, and live scene dials"
                 className={cn(
                   'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-colors',
                   showRules
@@ -948,7 +959,7 @@ export default function GameStudio() {
                     : 'border border-white/[0.08] text-[#807d99] hover:text-white'
                 )}
               >
-                📜 Rules
+                🎛 Studio
               </button>
               <button
                 onClick={build}
@@ -1080,16 +1091,107 @@ export default function GameStudio() {
               rows.push(`📦 ${it.name || it.kind} at (${it.x.toFixed(0)}, ${it.z.toFixed(0)})${r.length ? ': ' + r.join(' · ') : ''}`)
             }
             if (sp.reward) rows.push(`🏆 winner gets: ${sp.reward}`)
+            const cast = [
+              { who: sp.player?.name ?? 'hero', role: 'you', n: 1,
+                detail: `${sp.player?.hp ?? 5} HP` +
+                  (sp.player?.attack && sp.player.attack !== 'none'
+                    ? ` · ${sp.player.attack} (F)` : ' · no weapon'),
+                vfx: (sp.player as { vfx?: string })?.vfx },
+              ...(sp.entities ?? []).map(e => ({
+                who: e.name, role: e.behavior, n: e.count,
+                detail: `${e.hp} HP · speed ${e.speed}`, vfx: undefined })),
+            ]
+            const Dial = ({ label, hint, val, min, max, step, onSet }: {
+              label: string; hint: string; val: number; min: number
+              max: number; step: number; onSet: (v: number) => void }) => (
+              <label className="flex items-center gap-2.5">
+                <span className="w-[86px] shrink-0 text-[11px] font-mono text-[#9a96b8]">{label}</span>
+                <input type="range" min={min} max={max} step={step} value={val}
+                  onChange={e => onSet(parseFloat(e.target.value))}
+                  className="flex-1 accent-[#5cffc9] h-1" />
+                <span className="w-[46px] shrink-0 text-right text-[11px] font-mono text-[#5cffc9]">
+                  {val.toFixed(2)}
+                </span>
+                <span className="hidden lg:block text-[10px] text-[#4a4764]">{hint}</span>
+              </label>
+            )
             return (
-              <div className="rounded-xl border border-[#a78bfa]/25 bg-[#a78bfa]/5 px-4 py-3">
-                <div className="text-[10px] font-mono text-[#a78bfa] mb-1.5">
-                  // THE TRUTH TABLE — every rule this game enforces
-                </div>
-                <div className="grid gap-1 [grid-template-columns:repeat(auto-fit,minmax(280px,1fr))]">
-                  {rows.map((r, i) => (
-                    <div key={i} className="text-[11px] font-mono text-[#c9c6dd]">{r}</div>
+              <div className="rounded-xl border border-[#a78bfa]/25 bg-[#a78bfa]/5 px-4 py-3 space-y-2.5">
+                <div className="flex items-center gap-1.5">
+                  {([['cast', '🎭 Cast'], ['rules', '📜 Rules'],
+                     ['scene', '🎚 Scene']] as const).map(([id, lbl]) => (
+                    <button key={id} onClick={() => setStudioTab(id)}
+                      className={cn('px-2.5 py-1 rounded-full text-[11px] transition-all',
+                        studioTab === id
+                          ? 'bg-[#a78bfa]/25 text-[#d6c9ff]'
+                          : 'text-[#807d99] hover:text-white')}>{lbl}</button>
                   ))}
+                  <span className="ml-auto text-[10px] font-mono text-[#4a4764]">
+                    {studioTab === 'scene'
+                      ? 'live — changes the running game instantly'
+                      : 'derived from the spec this game actually runs'}
+                  </span>
                 </div>
+
+                {studioTab === 'cast' && (
+                  <div className="grid gap-1.5 [grid-template-columns:repeat(auto-fit,minmax(210px,1fr))]">
+                    {cast.map((c, i) => (
+                      <div key={i} className="rounded-lg border border-white/[0.06] bg-white/[0.02] px-3 py-2">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[12px] text-white capitalize">{c.who}</span>
+                          {c.n > 1 && <span className="text-[10px] font-mono text-[#807d99]">×{c.n}</span>}
+                          <span className={cn('ml-auto px-1.5 py-0.5 rounded text-[9px] font-mono',
+                            c.role === 'hostile' ? 'bg-[#ff5c8a]/15 text-[#ff8fae]'
+                              : c.role === 'you' ? 'bg-[#5cffc9]/15 text-[#5cffc9]'
+                              : 'bg-white/[0.05] text-[#807d99]')}>{c.role}</span>
+                        </div>
+                        <div className="text-[10px] font-mono text-[#807d99] mt-0.5">{c.detail}</div>
+                        {c.vfx && <div className="text-[10px] font-mono text-[#c86bff] mt-0.5">✦ {c.vfx} aura</div>}
+                      </div>
+                    ))}
+                    <button onClick={() => setEditPrompt('add ')}
+                      className="rounded-lg border border-dashed border-white/[0.10] px-3 py-2 text-[11px] text-[#807d99] hover:text-white hover:border-[#5cffc9]/40 transition-all">
+                      + add a character
+                    </button>
+                  </div>
+                )}
+
+                {studioTab === 'rules' && (
+                  <div className="grid gap-1 [grid-template-columns:repeat(auto-fit,minmax(280px,1fr))]">
+                    {rows.map((r, i) => (
+                      <div key={i} className="text-[11px] font-mono text-[#c9c6dd]">{r}</div>
+                    ))}
+                  </div>
+                )}
+
+                {studioTab === 'scene' && (
+                  <div className="space-y-2">
+                    <Dial label="fog" hint="haze / depth" val={dials.fog}
+                      min={0} max={20} step={0.5}
+                      onSet={v => { setDials(d => ({ ...d, fog: v })); sendPatch({ fog_density: v }) }} />
+                    <Dial label="sunlight" hint="key light" val={dials.sun}
+                      min={0} max={6} step={0.1}
+                      onSet={v => { setDials(d => ({ ...d, sun: v })); sendPatch({ sun_intensity: v }) }} />
+                    <Dial label="exposure" hint="overall brightness" val={dials.exposure}
+                      min={0.3} max={2.2} step={0.05}
+                      onSet={v => { setDials(d => ({ ...d, exposure: v })); sendPatch({ exposure: v }) }} />
+                    <div className="flex flex-wrap gap-1.5 pt-0.5">
+                      {([['🐺 enemies slower', { enemy_speed: 1.6 }],
+                         ['🐺 enemies faster', { enemy_speed: 4.2 }],
+                         ['❤️ more HP', { player_hp: 8 }],
+                         ['🏃 run faster', { run_speed: 9, walk_speed: 3.4 }]] as const).map(([lbl, patch]) => (
+                        <button key={lbl} onClick={() => sendPatch(patch as Record<string, number>)}
+                          className="px-2.5 py-1 rounded-full text-[11px] border border-white/[0.08] text-[#807d99] hover:text-white hover:border-[#5cffc9]/40 transition-all">
+                          {lbl}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="text-[10px] text-[#4a4764] pt-0.5">
+                      Scene dials apply to the running game — no rebuild. Weather,
+                      time of day and new content still rebuild (type them below).
+                    </div>
+                  </div>
+                )}
               </div>
             )
           })()}
