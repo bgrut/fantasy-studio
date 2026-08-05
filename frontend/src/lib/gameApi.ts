@@ -136,7 +136,10 @@ export async function exportGame(prompt: string, opts?: {
                                               rule_name: opts.rule.name,
                                               rule_on: opts.rule.on } : {}) }),
   })
-  return j<{ ok: boolean; job_id: number }>(res)
+  // `hot` + `patch` come back when the edit only moves runtime dials —
+  // the studio applies them to the RUNNING game instead of rebuilding.
+  return j<{ ok: boolean; job_id: number; hot?: boolean
+             patch?: Record<string, number> }>(res)
 }
 
 export async function getGameJob(id: number) {

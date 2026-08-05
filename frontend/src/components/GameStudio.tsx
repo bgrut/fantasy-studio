@@ -240,14 +240,24 @@ export default function GameStudio() {
     if (baseJobId == null) { setJob(null); setOpenedLevel(null) }  // fresh build = not a level edit
     setBuilding(true)
     try {
-      const { job_id } = await exportGame(p, baseJobId != null
+      const res = await exportGame(p, baseJobId != null
         ? { baseJobId, at, at2 }
         // fresh build: USER-SELECTED style + view ride along — never guessed
         : { style: style !== 'default' ? style : undefined,
             view: view !== '3d' ? view : undefined,
             splat: (splatNow ?? splatPath) ?? undefined,
             pano: (panoNow ?? panoPath) ?? undefined })
-      pollJob(job_id)
+      // LIVE EDIT (2026-08-05): dial-only changes never rebuild — the
+      // running game applies them in a frame. Two-minute rebuilds to
+      // change one number are what stopped iteration from happening.
+      if (res.hot && res.patch) {
+        gameFrameRef.current?.contentWindow?.postMessage(
+          { type: 'fs-patch', patch: res.patch }, '*')
+        setBuilding(false)
+        setPrompt('')
+        return
+      }
+      pollJob(res.job_id)
     } catch (e) {
       setBuilding(false)
       setError(e instanceof Error ? e.message : String(e))

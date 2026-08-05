@@ -5088,6 +5088,61 @@ async function main() {
     const nv = new THREE.Vector2();
     addEventListener('message', e => {
       if (e.data && e.data.type === 'fs-inspect') setInspectOn(e.data.on);
+      // ── LIVE PATCH (2026-08-05, the studio unlock): edits that only move
+      // runtime dials — weather, time of day, fog, speeds, HP — no longer
+      // rebuild the world. They apply to the RUNNING game in a frame, so
+      // iteration costs a keystroke instead of two minutes. Rebuilding to
+      // change one number is what made both users and us go in circles.
+      if (e.data && e.data.type === 'fs-patch' && e.data.patch) {
+        const q = e.data.patch;
+        const done = [];
+        try {
+          if (q.fog_density !== undefined && scene.fog) {
+            scene.fog.density = Math.max(0, q.fog_density) * 0.01;
+            done.push('fog → ' + q.fog_density);
+          }
+          if (q.sun_intensity !== undefined) {
+            sun.intensity = q.sun_intensity;
+            done.push('sun → ' + q.sun_intensity);
+          }
+          if (q.exposure !== undefined) {
+            renderer.toneMappingExposure = q.exposure;
+            done.push('exposure → ' + q.exposure);
+          }
+          if (q.walk_speed !== undefined) {
+            P.walk_speed = q.walk_speed; done.push('walk → ' + q.walk_speed);
+          }
+          if (q.run_speed !== undefined) {
+            P.run_speed = q.run_speed; done.push('run → ' + q.run_speed);
+          }
+          if (q.player_hp !== undefined) {
+            P.hp = Math.max(1, q.player_hp | 0);
+            php = Math.max(1, q.player_hp | 0);
+            done.push('hp → ' + q.player_hp);
+          }
+          if (q.enemy_speed !== undefined) {
+            for (const n of npcs) {
+              if (n.behavior === 'hostile') n.speed = q.enemy_speed;
+            }
+            done.push('enemy speed → ' + q.enemy_speed);
+          }
+          if (q.enemy_hp !== undefined) {
+            for (const n of npcs) {
+              if (n.behavior === 'hostile') n.hp = Math.max(1, q.enemy_hp | 0);
+            }
+            done.push('enemy hp → ' + q.enemy_hp);
+          }
+          // weather + time-of-day stay COLD for now: they own particle
+          // systems and sky uniforms that need real plumbing, and a
+          // half-applied weather change is worse than a clean rebuild.
+        } catch (err) {
+          window.parent.postMessage({ type: 'fs-patched', ok: false,
+                                      error: err.message }, '*');
+          return;
+        }
+        window.parent.postMessage({ type: 'fs-patched', ok: true,
+                                    applied: done }, '*');
+      }
     });
     const pickAt = (cx, cy, kindEv) => {
       nv.set((cx / innerWidth) * 2 - 1, -(cy / innerHeight) * 2 + 1);

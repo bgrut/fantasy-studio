@@ -154,6 +154,63 @@ _CAR_PAINT = {
 }
 
 
+def classify_hot_edit(prompt: str) -> dict | None:
+    """HOT EDITS (2026-08-05, the studio unlock): an edit that only moves
+    runtime dials should never rebuild the world. Rebuilding two minutes to
+    change one number is what makes iteration — and therefore quality —
+    not happen. Returns a patch the running game applies in a frame, or
+    None when the edit needs real geometry (COLD: new terrain, new cast,
+    new city, weather, time of day).
+
+    Deterministic on purpose: the LLM is not consulted, so a hot edit can
+    never silently re-roll the world the user already approved."""
+    import re as _re
+    p = (prompt or "").lower().strip()
+    if not p:
+        return None
+    # any word implying new geometry/content forces the cold path
+    if _re.search(r"\b(add|place|put|spawn|remove|delete|build|make it a|"
+                  r"turn it into|new |another |city|forest|desert|island|"
+                  r"night|day|dusk|dawn|sunset|rain|snow|storm|weather|"
+                  r"terrain|mountain|river|road|building|house|tree)\b", p):
+        return None
+    patch: dict = {}
+
+    def _num(default=None):
+        m = _re.search(r"(\d+(?:\.\d+)?)", p)
+        return float(m.group(1)) if m else default
+
+    more = bool(_re.search(r"\b(more|faster|higher|increase|up|stronger|"
+                           r"brighter|tougher|thicker|heavier|denser|"
+                           r"harder|bigger)\b", p))
+    less = bool(_re.search(r"\b(less|slower|lower|decrease|down|weaker|"
+                           r"darker|easier|thinner|lighter|clearer|"
+                           r"softer|smaller)\b", p))
+    if not (more or less or _re.search(r"\bset\b", p)):
+        return None
+    k = 1.35 if more else 0.72
+
+    if _re.search(r"\b(fog|haze|mist)\b", p):
+        patch["fog_density"] = round(_num(6.0) if _re.search(r"\bset\b", p)
+                                     else 6.0 * k, 2)
+    if _re.search(r"\b(sun|light|lighting|bright)\b", p):
+        patch["sun_intensity"] = round(2.2 * k, 2)
+    if _re.search(r"\b(exposure|contrast|dark|bright)\b", p) and "sun" not in p:
+        patch["exposure"] = round(1.0 * k, 2)
+    if _re.search(r"\b(enemy|enemies|wolves|wolf|hostile|guard|rival)\b", p):
+        if _re.search(r"\b(hp|health|tough|strong)\b", p):
+            patch["enemy_hp"] = int(max(1, round(3 * k)))
+        else:
+            patch["enemy_speed"] = round(2.6 * k, 2)
+    elif _re.search(r"\b(hp|health|lives|tough)\b", p):
+        patch["player_hp"] = int(max(1, round(_num(5) if _re.search(r"\bset\b", p)
+                                              else 5 * k)))
+    elif _re.search(r"\b(speed|run|walk|move|fast|slow)\b", p):
+        patch["walk_speed"] = round(2.0 * k, 2)
+        patch["run_speed"] = round(5.0 * k, 2)
+    return patch or None
+
+
 def _infer_car_params(prompt: str, cast: str) -> dict | None:
     """Parametric-car params from the user's words (2026-08-04). Research
     verdict: cars are hard-surface parametric objects — image-to-3D melts
@@ -1442,6 +1499,21 @@ def open_spec_as_job(spec_dict: dict, title: str = "", prompt: str = "",
 @router.post("/api/game/export")
 def export_game(req: GameExportRequest):
     global _next_id
+    # HOT EDIT SHORT-CIRCUIT (2026-08-05): when an edit only moves runtime
+    # dials, return the patch immediately — no job, no rebuild, no re-roll
+    # of a world the user already approved. The studio applies it to the
+    # running game in a frame. This is the single biggest felt change:
+    # iteration stops costing two minutes.
+    if req.base_job_id is not None:
+        _hot = classify_hot_edit(req.prompt)
+        if _hot:
+            _bj = _jobs.get(req.base_job_id)
+            if _bj:
+                _bj.setdefault("notes", []).append(
+                    "live edit (no rebuild): "
+                    + ", ".join(f"{k}={v}" for k, v in _hot.items()))
+            return {"ok": True, "hot": True, "patch": _hot,
+                    "job_id": req.base_job_id}
     with _lock:
         job_id = _next_id
         _next_id += 1
