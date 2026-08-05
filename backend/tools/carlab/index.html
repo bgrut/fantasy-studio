@@ -182,8 +182,12 @@ function buildCar() {
     new THREE.MeshPhysicalMaterial({
       color: PAINT, roughness: 0.28, metalness: 0.55,
       clearcoat: 1, clearcoatRoughness: 0.06 }));
-  body.rotation.y = Math.PI / 2;
-  body.position.z = (W - g('trackInset') * 2) / 2;
+  // NO rotation. The profile is authored with X = along the car and Y = up,
+  // and ExtrudeGeometry pushes along +Z, which is already the width axis —
+  // the extra 90° spin here is what laid the body on its side as a wedge and
+  // swallowed three of the wheels. Only re-centre on Z so the extrusion
+  // straddles the centreline instead of starting at it.
+  body.position.z = -(W - g('trackInset') * 2) / 2;
   body.castShadow = body.receiveShadow = true;
   grp.add(body);
 
@@ -198,17 +202,33 @@ function buildCar() {
   // wheels
   const tyre = new THREE.MeshStandardMaterial({ color: 0x111317, roughness: 0.95 });
   const rimM = new THREE.MeshStandardMaterial({ color: 0xc8ccd4, roughness: 0.3, metalness: 0.9 });
+  // Wheels sit OUTBOARD of the bodyside, not inside it. Placing them at
+  // (W/2 - wheelW/2) put the whole tyre inboard of the body wall, so they
+  // were swallowed by the extrusion and only the front pair peeked out.
+  // A wheel's inner face meets the bodyside and the tyre stands slightly
+  // proud of it — which is also what makes a car read as planted.
+  const halfBody = W / 2 - g('trackInset');
+  const trackZ = halfBody + g('wheelW') / 2 - 0.03;   // 3cm of overlap
   for (const t of [g('frontAxle'), g('rearAxle')]) {
     for (const side of [-1, 1]) {
       const w = new THREE.Mesh(
         new THREE.CylinderGeometry(g('wheelR'), g('wheelR'), g('wheelW'), 26), tyre);
       w.rotation.x = Math.PI / 2;
-      w.position.set(x(t), g('wheelR'), side * (W / 2 - g('wheelW') / 2 - 0.02));
+      w.position.set(x(t), g('wheelR'), side * trackZ);
       w.castShadow = true; grp.add(w);
+      // hub proud of the tyre's outer face so it is visible from the side
       const d = new THREE.Mesh(
-        new THREE.CylinderGeometry(g('wheelR') * 0.56, g('wheelR') * 0.56, g('wheelW') + 0.02, 20), rimM);
-      d.rotation.x = Math.PI / 2; d.position.copy(w.position);
+        new THREE.CylinderGeometry(g('wheelR') * 0.56, g('wheelR') * 0.56, g('wheelW') * 0.55, 20), rimM);
+      d.rotation.x = Math.PI / 2;
+      d.position.set(x(t), g('wheelR'), side * (trackZ + g('wheelW') * 0.26));
       grp.add(d);
+      // arch cut-out cue: a dark disc behind the wheel reads as a wheel well
+      const ar = new THREE.Mesh(
+        new THREE.CircleGeometry(g('wheelR') * 1.16, 22),
+        new THREE.MeshBasicMaterial({ color: 0x0a0b0e }));
+      ar.position.set(x(t), g('wheelR'), side * (halfBody - 0.005));
+      ar.rotation.y = side > 0 ? 0 : Math.PI;
+      grp.add(ar);
     }
   }
   return grp;
