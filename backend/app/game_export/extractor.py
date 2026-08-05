@@ -53,6 +53,9 @@ Output ONLY the JSON object, no markdown, no commentary. Schema (all fields opti
                "wander","follow","static","hostile","vehicle" (cars/trucks -> "vehicle"),
                "guard" (patrolling sentries with VISION CONES for stealth/heist games —
                they only attack when they SEE the player; sneak past by crouching),
+               "guide" (a friendly mentor/informant/professor who greets the player and
+               explains each objective — add ONE to any game with a story or a
+               tutorial feel; never hostile),
                "count": int 1..8, "speed": float 0.5..8}]
 }
 Map the text's setting to the CLOSEST world.name keyword. entities = OTHER creatures/characters besides

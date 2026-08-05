@@ -105,8 +105,11 @@ class EntitySpec(BaseModel):
     # guard (2026-08-05, the heist kit): patrols a beat and only attacks when
     # it SEES you — vision cone + alert meter, crouch to sneak past. This is
     # what makes burglar/heist games real games instead of chase games.
+    # guide (2026-08-05): a Pokémon-style mentor who HAILS you and speaks the
+    # current objective in character, so a game explains itself through a
+    # person instead of a HUD line nobody reads.
     behavior: Literal["static", "wander", "follow", "hostile", "vehicle",
-                      "flee", "guard"] = "wander"
+                      "flee", "guard", "guide"] = "wander"
     count: int = Field(1, ge=1, le=64)
     speed: float = Field(1.5, ge=0.0, le=40.0)
     height_m: float = Field(1.0, gt=0.1, le=10.0)
@@ -179,6 +182,9 @@ _BEHAVIOR_ALIASES = {"rival": "vehicle", "racer": "vehicle", "race": "vehicle",
                      "enemy": "hostile", "monster": "hostile", "attack": "hostile",
                      "aggressive": "hostile", "idle": "static",
                      "patrol": "guard", "sentry": "guard", "watchman": "guard",
+                     "mentor": "guide", "guide": "guide", "professor": "guide",
+                     "elder": "guide", "trainer": "guide", "narrator": "guide",
+                     "handler": "guide", "informant": "guide", "fence": "guide",
                      "security": "guard", "cop": "guard", "police": "guard",
                      "prop": "static", "object": "static"}
 _KIND_ALIASES = {"find": "collect", "gather": "collect", "pick": "collect",

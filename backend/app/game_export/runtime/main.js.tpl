@@ -615,6 +615,20 @@ async function main() {
   // line reads it long before those run, and a `const` in the temporal dead
   // zone takes the whole runtime down with it
   const HAS_GUARDS = (SPEC.entities || []).some(e => e.behavior === 'guard');
+  // A BURGLAR STARTS AT THE DOOR (2026-08-05): interiors spawned the player
+  // dead-centre in the entry hall — in the open, in every patrol's sightline,
+  // with nothing to duck behind. Start at the near wall by the doorway, the
+  // way someone who just picked the lock would actually be standing.
+  // Declared up HERE with the other level constants, not down by the physics
+  // body: NPC spawning reads it ~1700 lines earlier, and a `const` in the
+  // temporal dead zone takes the whole runtime down.
+  const _sp = { x: 0, z: 0 };
+  if (INTERIOR && INTERIOR.rooms && INTERIOR.rooms.length) {
+    const h0 = INTERIOR.rooms[0];
+    _sp.x = h0[0];
+    _sp.z = h0[1] - h0[3] / 2 + 3.0;   // clear of the wall: at 1.8 m the
+                                       // capsule was embedded and immovable
+  }
   // wall segments [x1,z1,x2,z2] that block a guard's line of sight
   const SIGHT = [];
   function canSee(ax, az, bx, bz) {
@@ -3173,6 +3187,12 @@ async function main() {
           startYaw = hd + (ent.asset === SPEC.player.asset
             ? THREE.MathUtils.degToRad(SPEC.player.yaw_offset_deg || 0) : 0);
           vehIdx++;
+        } else if (ent.behavior === 'guide') {
+          // a guide you never meet is a guide who never guides: stand them
+          // just ahead of the spawn point, in plain sight, facing the player
+          holder.position.set(_sp.x + 2.6, 0, _sp.z + 3.4);
+          holder.position.y = hAt(holder.position.x, holder.position.z);
+          startYaw = Math.PI;
         } else if (ent.behavior === 'guard' && INTERIOR && INTERIOR.rooms
                    && INTERIOR.rooms.length) {
           // HEIST: guards belong to the ROOMS. Spawning them by the usual
@@ -3448,6 +3468,19 @@ async function main() {
           }
           tx = n.target[0]; tz = n.target[1];
         }
+      } else if (n.behavior === 'guide') {
+        // THE GUIDE: stands their ground, turns to face you, and speaks when
+        // you come near. A game should explain itself through a person, not
+        // a HUD line the player never reads.
+        const d = Math.hypot(playerPos.x - n.obj.position.x, playerPos.z - n.obj.position.z);
+        if (d < 14) {
+          n.yaw = THREE.MathUtils.damp(
+            n.yaw, Math.atan2(playerPos.x - n.obj.position.x,
+                              playerPos.z - n.obj.position.z), 5, dt);
+          n.obj.rotation.y = n.yaw;
+        }
+        if (d < 6.5 && !n._said) { n._said = true; sayGuide(n); }
+        if (d > 11) n._said = false;      // re-greets after you wander off
       } else if (n.behavior === 'follow') {
         const d = Math.hypot(playerPos.x - n.obj.position.x, playerPos.z - n.obj.position.z);
         if (d > 2.6) { tx = playerPos.x; tz = playerPos.z; }
@@ -4190,6 +4223,89 @@ async function main() {
       renderQuest();
     }
   }
+  // ── DIALOGUE (2026-08-05): a bottom-of-screen speech panel with the
+  // speaker's name — the Pokémon convention, because it is the one every
+  // player already knows how to read. Also the general popup layer: any
+  // system can say something in character through say().
+  function say(who, text, tint) {
+    let d = document.getElementById('fsdlg');
+    if (!d) {
+      d = document.createElement('div');
+      d.id = 'fsdlg';
+      d.style.cssText = 'position:fixed;left:50%;bottom:34px;transform:translateX(-50%);'
+        + 'width:min(680px,88vw);padding:13px 18px 15px;border-radius:12px;'
+        + 'background:rgba(9,11,20,.90);border:1px solid rgba(255,255,255,.13);'
+        + 'box-shadow:0 10px 34px rgba(0,0,0,.5);z-index:44;pointer-events:none;'
+        + 'font:15px/1.5 system-ui;color:#eceaf6;opacity:0;transition:opacity .22s';
+      d.innerHTML = '<div id="fsdlgwho" style="font:700 12px system-ui;'
+        + 'letter-spacing:.06em;text-transform:uppercase;margin-bottom:5px"></div>'
+        + '<div id="fsdlgtxt"></div>';
+      document.body.appendChild(d);
+    }
+    const w = document.getElementById('fsdlgwho');
+    w.textContent = who || '';
+    w.style.color = tint || '#5cffc9';
+    document.getElementById('fsdlgtxt').textContent = text;
+    d.style.opacity = '1';
+    clearTimeout(window.__dlgT);
+    window.__dlgT = setTimeout(() => { d.style.opacity = '0'; },
+                               Math.min(9000, 2600 + text.length * 45));
+    sfx('pickup');
+  }
+  // OBJECTIVE BANNER: the wipe across the middle of the screen that tells
+  // you the mission just changed. Cheap, and it is most of what makes a
+  // game feel like it is reacting to you.
+  function banner(text, sub) {
+    let b = document.getElementById('fsban');
+    if (!b) {
+      b = document.createElement('div');
+      b.id = 'fsban';
+      b.style.cssText = 'position:fixed;left:0;right:0;top:31%;text-align:center;'
+        + 'z-index:43;pointer-events:none;opacity:0;transition:opacity .3s,'
+        + 'letter-spacing .5s;letter-spacing:.02em';
+      b.innerHTML = '<div id="fsbansub" style="font:700 11px system-ui;'
+        + 'letter-spacing:.22em;text-transform:uppercase;color:#8f8ba8;'
+        + 'margin-bottom:6px">new objective</div>'
+        + '<div id="fsbantxt" style="font:700 27px system-ui;color:#fff;'
+        + 'text-shadow:0 3px 18px rgba(0,0,0,.75)"></div>';
+      document.body.appendChild(b);
+    }
+    document.getElementById('fsbansub').textContent = sub || 'new objective';
+    document.getElementById('fsbantxt').textContent = text;
+    b.style.opacity = '1'; b.style.letterSpacing = '.06em';
+    clearTimeout(window.__banT);
+    window.__banT = setTimeout(() => {
+      b.style.opacity = '0'; b.style.letterSpacing = '.02em';
+    }, 2400);
+  }
+  // what the guide says about the step you are actually on
+  function guideLine(st) {
+    if (!st) return 'That is everything. Get out while you can.';
+    const n = st.count, l = st.label || 'them';
+    if (st.kind === 'collect') return HAS_GUARDS
+      ? `Take ${n} ${l} — and mind the patrols. Crouch with C, and if a guard `
+        + `is in your way, throw something with Q to pull him off it.`
+      : `Find ${n} ${l} for me. They are scattered — look around.`;
+    if (st.kind === 'defeat') return `You will have to fight. Put down ${n} ${l} — press F to strike.`;
+    if (st.kind === 'survive') return `Just stay alive. Keep moving and do not let them corner you.`;
+    if (st.kind === 'race') return `Beat all ${n} of them to the finish. Shift for speed.`;
+    if (st.kind === 'hunt') return `Track ${n} ${l}. Move slow — they bolt if they hear you.`;
+    if (st.kind === 'eliminate') return `Last one standing. ${n} rivals, one winner.`;
+    if (st.kind === 'score') return `Put ${n} away and it is yours.`;
+    if (st.kind === 'capture') return `Hold ${n} ground. Eight seconds each, and do not step off.`;
+    return HAS_GUARDS
+      ? `You have what you came for. Get to ${l} — that is your way out.`
+      : `Make for ${l}. That is where this ends.`;
+  }
+  function sayGuide(n) {
+    // a role, not a species: "MAN" as a speaker name reads like placeholder
+    // text. The job the character is doing is what the player should see.
+    const role = HAS_GUARDS ? 'Informant'
+      : (SPEC.objectives || []).some(o => o.kind === 'race') ? 'Crew Chief'
+      : (SPEC.objectives || []).some(o => o.kind === 'hunt') ? 'Tracker'
+      : 'Guide';
+    say(role, guideLine(steps[stepIdx]), '#ffd166');
+  }
   function stepLabel(st) {
     if (st.kind === 'collect') return `Collect ${st.count} ${st.label || 'items'}`;
     if (st.kind === 'defeat') return `Defeat ${st.count} ${st.label || 'enemies'}`;
@@ -4242,6 +4358,10 @@ async function main() {
             : (SPEC.win_text || 'Mission complete!'));
       return;
     }
+    // NEW-OBJECTIVE BANNER: every step change announces itself, and any
+    // guide in the level re-briefs you on the new one next time you pass.
+    banner(stepLabel(st));
+    for (const g of npcs) { if (g.behavior === 'guide') g._said = false; }
     if (st.kind === 'collect') { st._got = 0; spawnCollectibles(st); }
     if (st.kind === 'defeat' || st.kind === 'eliminate' || st.kind === 'hunt') { st._k0 = kills; }
     if (st.kind === 'score') { st._goals = 0; }
@@ -4822,17 +4942,6 @@ async function main() {
         Math.min((hAt(x, z) + SPEC.world.water_level) / 2,      // mid-water,
                  SPEC.world.water_level - P.height_m / 2 - 0.2)); // under surface
     return g;
-  }
-  // A BURGLAR STARTS AT THE DOOR (2026-08-05): interiors spawned the player
-  // dead-centre in the entry hall — in the open, in every patrol's sightline,
-  // with nothing to duck behind. Start at the near wall by the doorway, the
-  // way someone who just picked the lock would actually be standing.
-  const _sp = { x: 0, z: 0 };
-  if (INTERIOR && INTERIOR.rooms && INTERIOR.rooms.length) {
-    const h0 = INTERIOR.rooms[0];
-    _sp.x = h0[0];
-    _sp.z = h0[1] - h0[3] / 2 + 3.0;   // clear of the wall: at 1.8 m the
-                                       // capsule was embedded and immovable
   }
   const body = world.createRigidBody(
     RAPIER.RigidBodyDesc.kinematicPositionBased()

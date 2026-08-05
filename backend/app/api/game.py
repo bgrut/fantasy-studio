@@ -931,6 +931,26 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                     "raindrops", "wind", "fog", "mist", "cloud", "clouds",
                     "star", "stars", "sunlight", "moonlight", "sky", "dawn",
                     "dusk", "sunset", "sunrise", "shadow", "shadows"}
+        # EVERY GAME EXPLAINS ITSELF (2026-08-05): a game should tell you what
+        # to do through a PERSON standing in the world, the way Pokémon does,
+        # not a HUD line nobody reads. Asking the LLM for an "informant" was
+        # unreliable — it wrote the intro text and skipped the character. So
+        # a guide is added deterministically whenever a game has a mission and
+        # nobody to explain it. The LLM may still name one; this only fills a
+        # gap it left. Locked entities and pano worlds are left alone.
+        if (spec.objectives and not spec.world.pano
+                and "entities" not in (spec.locked or [])
+                and not any(e.behavior == "guide" for e in spec.entities)
+                and len(spec.entities) < 8):
+            from app.game_export.spec import EntitySpec as _GES
+            _gname = ("man" if any(e.behavior == "guard" for e in spec.entities)
+                      else "woman")
+            spec.entities.append(_GES(
+                name=_gname, behavior="guide", count=1, speed=0.0,
+                height_m=library.default_height(_gname), hp=3))
+            job.setdefault("notes", []).append(
+                "a guide was added — they greet you and explain each objective")
+
         kept = []
         for ent in spec.entities:
             if ent.name.lower().strip() in _AMBIENT:
