@@ -5225,6 +5225,11 @@ async function main() {
       // city concrete tightens further (~2.5m): its grout grid at 4.5m read
       // as giant plaza pavers — at sidewalk-joint scale it reads as pavement
       const grep2 = Math.max(20, Math.round(gsize / (gname === 'concrete' ? 2.5 : 4.5)));
+      // PANO FLOOR IS SACRED (2026-08-04): this enrichment ran AFTER the
+      // photo floor was assigned and overwrote it with tiled sand/grass —
+      // the user stood on our procedural ground while their image floated
+      // as a wall. Image worlds keep the reprojected photo, full stop.
+      if (!panoGroundTex) {
       gmat.map = pbr(gname, grep2, true);
       gmat.normalMap = pbr(gname + '_n', grep2, false);
       gmat.normalScale = new THREE.Vector2(0.65, 0.65);
@@ -5245,6 +5250,7 @@ varying vec2 vUvRaw;
   vec3 wTint = texture2D(uWorld, vUvRaw).rgb * 2.0;
   diffuseColor.rgb *= clamp(wTint, 0.12, 1.45);`);
       };
+      }
       gmat.needsUpdate = true;
     }
   }
