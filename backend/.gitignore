@@ -51,3 +51,7 @@ vendor/blosm/
 tools/*
 !tools/shotgate/
 tools/shotgate/node_modules/
+# Car Lab: source is tracked, its vendored three.js copy is not (copy it from
+# any built game's dist/vendor)
+!tools/carlab/
+tools/carlab/vendor/

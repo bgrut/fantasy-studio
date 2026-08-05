@@ -1,0 +1,257 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Car Lab — parametric vehicle workbench</title>
+<!--
+  CAR LAB (2026-08-05) — why this file exists.
+
+  The in-game parametric car renders as a SLAB. It stalled not because the
+  maths is hard but because every attempt cost a full game rebuild (~2 min)
+  and then a hunt for the car inside a dark level. You cannot tune a
+  silhouette on a 2-minute loop; you tune it on a 2-second loop.
+
+  This is that loop: one car, an orbit camera, live sliders, instant redraw.
+  Get the shape right HERE, then port the final buildCar() body into
+  app/game_export/runtime/main.js.tpl. Nothing here ships to players.
+
+  Run:  node tools/carlab/serve.mjs   (then open the printed URL)
+-->
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:#15171c; color:#e8e6ef;
+         font:13px/1.45 ui-sans-serif,system-ui,sans-serif; overflow:hidden; }
+  #app { position:fixed; inset:0; }
+  #panel { position:fixed; top:0; right:0; width:290px; height:100%;
+           overflow-y:auto; padding:14px 16px 40px;
+           background:rgba(16,18,24,.93); border-left:1px solid #2a2d38;
+           backdrop-filter:blur(6px); }
+  h1 { font-size:13px; letter-spacing:.10em; text-transform:uppercase;
+       color:#7fd8c0; margin:0 0 2px; }
+  .sub { color:#7b7f92; font-size:11px; margin-bottom:14px; }
+  .row { display:flex; align-items:center; gap:8px; margin:7px 0; }
+  .row label { flex:0 0 116px; color:#a9adc0; font-size:11px; }
+  .row input[type=range] { flex:1; accent-color:#7fd8c0; height:2px; }
+  .row output { flex:0 0 42px; text-align:right; color:#7fd8c0;
+                font:11px ui-monospace,monospace; }
+  h2 { font-size:10px; letter-spacing:.14em; text-transform:uppercase;
+       color:#5d6273; margin:16px 0 4px; border-top:1px solid #262932;
+       padding-top:10px; }
+  button { width:100%; margin-top:14px; padding:8px; border-radius:7px;
+           border:1px solid #33707f; background:#17323a; color:#9fe7d6;
+           cursor:pointer; font:600 12px system-ui; }
+  button:hover { background:#1d4049; }
+  #out { margin-top:10px; width:100%; height:150px; resize:vertical;
+         background:#0e1015; color:#8fb9c9; border:1px solid #262932;
+         border-radius:6px; padding:8px; font:11px ui-monospace,monospace; }
+  #hint { position:fixed; left:14px; bottom:12px; color:#5d6273; font-size:11px; }
+</style>
+<div id="app"></div>
+<div id="panel">
+  <h1>Car Lab</h1>
+  <div class="sub">Tune the silhouette here, then port <code>buildCar()</code>.</div>
+  <div id="ctrls"></div>
+  <button id="copy">Copy params as JSON</button>
+  <textarea id="out" readonly></textarea>
+</div>
+<div id="hint">drag to orbit · scroll to zoom</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "./vendor/three.module.js",
+  "three/addons/": "./vendor/jsm/"
+} }
+</script>
+<script type="module">
+import * as THREE from 'three';
+// Orbit is ~20 lines inline rather than an import: the game's vendor bundle
+// ships no OrbitControls, and a workbench should not need a dependency to
+// spin an object around.
+function makeOrbit(cam, dom, target) {
+  let az = 0.72, el = 0.36, dist = 9.2, down = false, px = 0, py = 0;
+  dom.addEventListener('pointerdown', e => { down = true; px = e.clientX; py = e.clientY; });
+  addEventListener('pointerup', () => { down = false; });
+  addEventListener('pointermove', e => {
+    if (!down) return;
+    az -= (e.clientX - px) * 0.0065;
+    el = Math.max(-0.25, Math.min(1.35, el + (e.clientY - py) * 0.0055));
+    px = e.clientX; py = e.clientY;
+  });
+  dom.addEventListener('wheel', e => {
+    e.preventDefault();
+    dist = Math.max(3.2, Math.min(22, dist + Math.sign(e.deltaY) * 0.6));
+  }, { passive: false });
+  return { update() {
+    cam.position.set(target.x + Math.sin(az) * Math.cos(el) * dist,
+                     target.y + Math.sin(el) * dist,
+                     target.z + Math.cos(az) * Math.cos(el) * dist);
+    cam.lookAt(target);
+  } };
+}
+
+// ── the parameter set. These are the ~dozen numbers that decide whether a
+// shape reads as "hatchback" or "muscle car". Ranges are deliberately wide
+// so wrong values are VISIBLY wrong rather than subtly off.
+const P = {
+  length:      { v: 4.30, min: 3.0,  max: 5.6,  step: 0.02 },
+  width:       { v: 1.82, min: 1.4,  max: 2.2,  step: 0.02 },
+  rideHeight:  { v: 0.26, min: 0.08, max: 0.55, step: 0.01 },
+  bodyHeight:  { v: 0.62, min: 0.35, max: 1.00, step: 0.01 },
+  roofHeight:  { v: 0.52, min: 0.20, max: 0.95, step: 0.01 },
+  noseFall:    { v: 0.16, min: 0.00, max: 0.45, step: 0.01 },
+  tailRise:    { v: 0.07, min: 0.00, max: 0.40, step: 0.01 },
+  windRake:    { v: 0.55, min: 0.05, max: 1.10, step: 0.01 },
+  backRake:    { v: 0.62, min: 0.05, max: 1.30, step: 0.01 },
+  roofStart:   { v: 0.34, min: 0.10, max: 0.60, step: 0.01 },
+  roofEnd:     { v: 0.68, min: 0.40, max: 0.95, step: 0.01 },
+  wheelR:      { v: 0.34, min: 0.20, max: 0.55, step: 0.01 },
+  wheelW:      { v: 0.24, min: 0.12, max: 0.42, step: 0.01 },
+  frontAxle:   { v: 0.20, min: 0.08, max: 0.35, step: 0.01 },
+  rearAxle:    { v: 0.80, min: 0.62, max: 0.94, step: 0.01 },
+  trackInset:  { v: 0.06, min: 0.00, max: 0.25, step: 0.01 },
+};
+const PAINT = '#b4232c';
+
+const app = document.getElementById('app');
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+app.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x15171c);
+const camera = new THREE.PerspectiveCamera(42, innerWidth / innerHeight, 0.1, 200);
+camera.position.set(6.2, 2.5, 6.6);
+const controls = makeOrbit(camera, renderer.domElement,
+                           new THREE.Vector3(0, 0.65, 0));
+
+// studio lighting: key + rim + fill. A car is read almost entirely through
+// its highlights, so a flat ambient would hide exactly what we are tuning.
+scene.add(new THREE.HemisphereLight(0x9fb6d0, 0x1a1d24, 0.55));
+const key = new THREE.DirectionalLight(0xfff2e0, 2.5);
+key.position.set(5, 8, 4); key.castShadow = true;
+key.shadow.mapSize.set(2048, 2048);
+key.shadow.camera.left = -8; key.shadow.camera.right = 8;
+key.shadow.camera.top = 8; key.shadow.camera.bottom = -8;
+scene.add(key);
+const rim = new THREE.DirectionalLight(0x88b4ff, 1.6);
+rim.position.set(-6, 3.5, -5); scene.add(rim);
+
+const floor = new THREE.Mesh(
+  new THREE.CircleGeometry(14, 64).rotateX(-Math.PI / 2),
+  new THREE.MeshStandardMaterial({ color: 0x22252d, roughness: 0.92 }));
+floor.receiveShadow = true; scene.add(floor);
+scene.add(new THREE.GridHelper(14, 28, 0x2e323d, 0x24272f));
+
+let car = null;
+const g = k => P[k].v;
+
+// ── THE SHAPE UNDER TEST ─────────────────────────────────────────────────
+// Side silhouette as a closed 2D profile, extruded across the car's width.
+// The slab bug came from a profile whose curve control points collapsed —
+// build it as an explicit point list so a wrong number bends the outline
+// visibly instead of degenerating to a rectangle.
+function buildCar() {
+  const grp = new THREE.Group();
+  const L = g('length'), W = g('width');
+  const ride = g('rideHeight'), bh = g('bodyHeight'), rh = g('roofHeight');
+  const x = t => -L / 2 + t * L;                    // 0..1 along the car
+  const yb = ride, yt = ride + bh;                  // body band
+  const rs = g('roofStart'), re = g('roofEnd');
+
+  const s = new THREE.Shape();
+  s.moveTo(x(0.02), yb + g('noseFall') * 0.5);      // nose, low
+  s.lineTo(x(0.30), yt - 0.02);                     // up over the front wheel
+  s.lineTo(x(rs), yt);                              // beltline starts
+  s.lineTo(x(rs + g('windRake') * 0.14), yt + rh);  // windscreen rake
+  s.lineTo(x(re - g('backRake') * 0.10), yt + rh);  // roof
+  s.lineTo(x(re + 0.06), yt);                       // backlight down to deck
+  s.lineTo(x(0.97), yt - 0.04 + g('tailRise'));     // tail
+  s.lineTo(x(0.97), yb);                            // rear valance
+  s.lineTo(x(0.02), yb);                            // sill back to nose
+  s.closePath();
+
+  const body = new THREE.Mesh(
+    new THREE.ExtrudeGeometry(s, {
+      depth: W - g('trackInset') * 2, bevelEnabled: true,
+      bevelSize: 0.045, bevelThickness: 0.045, bevelSegments: 3, curveSegments: 12,
+    }),
+    new THREE.MeshPhysicalMaterial({
+      color: PAINT, roughness: 0.28, metalness: 0.55,
+      clearcoat: 1, clearcoatRoughness: 0.06 }));
+  body.rotation.y = Math.PI / 2;
+  body.position.z = (W - g('trackInset') * 2) / 2;
+  body.castShadow = body.receiveShadow = true;
+  grp.add(body);
+
+  // greenhouse: a darker, slightly inset glass block over the cabin
+  const gl = new THREE.Mesh(
+    new THREE.BoxGeometry((re - rs) * L * 0.82, rh * 0.86, W - 0.16),
+    new THREE.MeshPhysicalMaterial({ color: 0x0d1218, roughness: 0.08,
+      metalness: 0.1, transmission: 0.55, transparent: true, opacity: 0.85 }));
+  gl.position.set(x((rs + re) / 2), yt + rh * 0.52, 0);
+  grp.add(gl);
+
+  // wheels
+  const tyre = new THREE.MeshStandardMaterial({ color: 0x111317, roughness: 0.95 });
+  const rimM = new THREE.MeshStandardMaterial({ color: 0xc8ccd4, roughness: 0.3, metalness: 0.9 });
+  for (const t of [g('frontAxle'), g('rearAxle')]) {
+    for (const side of [-1, 1]) {
+      const w = new THREE.Mesh(
+        new THREE.CylinderGeometry(g('wheelR'), g('wheelR'), g('wheelW'), 26), tyre);
+      w.rotation.x = Math.PI / 2;
+      w.position.set(x(t), g('wheelR'), side * (W / 2 - g('wheelW') / 2 - 0.02));
+      w.castShadow = true; grp.add(w);
+      const d = new THREE.Mesh(
+        new THREE.CylinderGeometry(g('wheelR') * 0.56, g('wheelR') * 0.56, g('wheelW') + 0.02, 20), rimM);
+      d.rotation.x = Math.PI / 2; d.position.copy(w.position);
+      grp.add(d);
+    }
+  }
+  return grp;
+}
+
+function rebuild() {
+  if (car) { scene.remove(car); car.traverse(o => { o.geometry?.dispose?.(); }); }
+  car = buildCar();
+  scene.add(car);
+  document.getElementById('out').value = JSON.stringify(
+    Object.fromEntries(Object.entries(P).map(([k, o]) => [k, +o.v.toFixed(3)])), null, 1);
+}
+
+// controls
+const groups = {
+  'Proportions': ['length', 'width', 'rideHeight', 'bodyHeight'],
+  'Silhouette':  ['roofHeight', 'noseFall', 'tailRise', 'windRake', 'backRake', 'roofStart', 'roofEnd'],
+  'Wheels':      ['wheelR', 'wheelW', 'frontAxle', 'rearAxle', 'trackInset'],
+};
+const ctrls = document.getElementById('ctrls');
+for (const [title, keys] of Object.entries(groups)) {
+  const h = document.createElement('h2'); h.textContent = title; ctrls.appendChild(h);
+  for (const k of keys) {
+    const o = P[k];
+    const row = document.createElement('div'); row.className = 'row';
+    row.innerHTML = `<label>${k}</label>`
+      + `<input type="range" min="${o.min}" max="${o.max}" step="${o.step}" value="${o.v}">`
+      + `<output>${o.v.toFixed(2)}</output>`;
+    const [inp, out] = [row.querySelector('input'), row.querySelector('output')];
+    inp.addEventListener('input', () => {
+      o.v = parseFloat(inp.value); out.textContent = o.v.toFixed(2); rebuild();
+    });
+    ctrls.appendChild(row);
+  }
+}
+document.getElementById('copy').addEventListener('click', () => {
+  navigator.clipboard?.writeText(document.getElementById('out').value);
+});
+
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+rebuild();
+renderer.setAnimationLoop(() => { controls.update(); renderer.render(scene, camera); });
+</script>
