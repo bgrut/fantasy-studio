@@ -128,6 +128,33 @@ camera.position.set(6.2, 2.5, 6.6);
 const controls = makeOrbit(camera, renderer.domElement,
                            new THREE.Vector3(0, 0.65, 0));
 
+// ── ENVIRONMENT (2026-08-05): car paint is ALMOST ENTIRELY REFLECTION.
+// clearcoat with nothing to reflect resolves to flat coloured plastic, which
+// is why the body read as a red block however good the silhouette got. A
+// studio environment — bright ceiling, dark floor, and a horizon band — is
+// what puts the long highlight down the flank that says "painted metal".
+// Also what makes glass read as glass and chrome as chrome.
+scene.environment = (() => {
+  const c = document.createElement('canvas'); c.width = c.height = 256;
+  const x = c.getContext('2d');
+  const gd = x.createLinearGradient(0, 0, 0, 256);
+  gd.addColorStop(0.00, '#e8eef6');    // softbox ceiling
+  gd.addColorStop(0.42, '#9fb0c4');
+  gd.addColorStop(0.50, '#5c6674');    // horizon
+  gd.addColorStop(0.52, '#20242b');    // dark studio floor
+  gd.addColorStop(1.00, '#15171c');
+  x.fillStyle = gd; x.fillRect(0, 0, 256, 256);
+  // two overhead strip lights: the moving highlights that reveal a curve.
+  // A featureless gradient gives an even sheen and hides the shape.
+  x.fillStyle = 'rgba(255,255,255,0.95)';
+  x.fillRect(0, 26, 256, 16);
+  x.fillRect(0, 74, 256, 9);
+  const t = new THREE.CanvasTexture(c);
+  t.mapping = THREE.EquirectangularReflectionMapping;
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+})();
+
 // studio lighting: key + rim + fill. A car is read almost entirely through
 // its highlights, so a flat ambient would hide exactly what we are tuning.
 scene.add(new THREE.HemisphereLight(0x9fb6d0, 0x1a1d24, 0.55));
@@ -180,8 +207,13 @@ function buildCar() {
       bevelSize: 0.045, bevelThickness: 0.045, bevelSegments: 3, curveSegments: 12,
     }),
     new THREE.MeshPhysicalMaterial({
-      color: PAINT, roughness: 0.28, metalness: 0.55,
-      clearcoat: 1, clearcoatRoughness: 0.06 }));
+      // real automotive paint: a metallic basecoat under a near-perfect
+      // clear lacquer. Low roughness + high envMapIntensity is what turns
+      // the flank into a mirror that bends the strip lights along the
+      // bodyline — the read that says "car" before you register the shape.
+      color: PAINT, roughness: 0.22, metalness: 0.85,
+      clearcoat: 1, clearcoatRoughness: 0.035,
+      envMapIntensity: 1.6 }));
   // NO rotation. The profile is authored with X = along the car and Y = up,
   // and ExtrudeGeometry pushes along +Z, which is already the width axis —
   // the extra 90° spin here is what laid the body on its side as a wedge and
@@ -194,8 +226,9 @@ function buildCar() {
   // greenhouse: a darker, slightly inset glass block over the cabin
   const gl = new THREE.Mesh(
     new THREE.BoxGeometry((re - rs) * L * 0.82, rh * 0.86, W - 0.16),
-    new THREE.MeshPhysicalMaterial({ color: 0x0d1218, roughness: 0.08,
-      metalness: 0.1, transmission: 0.55, transparent: true, opacity: 0.85 }));
+    new THREE.MeshPhysicalMaterial({ color: 0x0d1218, roughness: 0.05,
+      metalness: 0.1, transmission: 0.5, transparent: true, opacity: 0.86,
+      envMapIntensity: 2.2 }));   // glass is nearly all reflected sky
   gl.position.set(x((rs + re) / 2), yt + rh * 0.52, 0);
   grp.add(gl);
 
