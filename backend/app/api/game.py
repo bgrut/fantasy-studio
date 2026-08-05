@@ -799,6 +799,20 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         spec.player.name = cast
         if abs(spec.player.height_m - 1.75) < 1e-6:      # untouched default -> species height
             spec.player.height_m = library.default_height(cast)
+        else:
+            # THE MESH DECIDES SCALE, NOT THE NOUN PHRASE (2026-08-05):
+            # "a cat burglar" made the LLM read a person and set 1.7 m, so
+            # the game rendered a house-cat scaled to human height. The cast
+            # resolved to a CAT mesh, and a cat is 0.6 m whatever the job
+            # title says. Deliberate variation still survives (a "giant
+            # wolf" at 1.5x reads as intended); only physically absurd
+            # values — past 1.8x or under 0.55x the species — snap back.
+            _sp_h = library.default_height(cast)
+            if _sp_h > 0 and not (_sp_h * 0.55 <= spec.player.height_m <= _sp_h * 1.8):
+                job.setdefault("notes", []).append(
+                    f"{cast} height {spec.player.height_m:.2f}m → {_sp_h:.2f}m "
+                    f"(species scale; the mesh decides, not the name)")
+                spec.player.height_m = _sp_h
         # CAMERA SCALED TO THE HERO: a 0.6 m fox filmed from person-distance
         # is a speck on screen. Whatever the extractor picked, CLAMP distance
         # and height into a band derived from the cast's actual size — the
