@@ -611,6 +611,10 @@ async function main() {
   window.__isCity = !!OSM;
   if (OSM && LVL && LVL.landmarks) LVL.landmarks = [];   // no 30m trees on sidewalks                          // ambient (module scope) reads this
   const INTERIOR = (LVL && LVL.interior) || null;   // Phase 95: room levels
+  // declared HERE, not beside the combat globals: the start-screen controls
+  // line reads it long before those run, and a `const` in the temporal dead
+  // zone takes the whole runtime down with it
+  const HAS_GUARDS = (SPEC.entities || []).some(e => e.behavior === 'guard');
   // wall segments [x1,z1,x2,z2] that block a guard's line of sight
   const SIGHT = [];
   function canSee(ax, az, bx, bz) {
@@ -3003,7 +3007,10 @@ async function main() {
         ? 'WASD glide · Space rise · C dive · Shift boost'
         : mode === 'swim'
           ? 'WASD swim · Space surface · C dive · Shift burst'
-          : 'WASD / arrows move · Space jump · Shift run · F attack';
+          : HAS_GUARDS
+            // a heist teaches its own verbs: creeping and misdirection
+            ? 'WASD move · <b>C sneak</b> · <b>Q throw a distraction</b> · Shift run · F attack'
+            : 'WASD / arrows move · Space jump · Shift run · F attack';
     const ov = document.createElement('div');
     ov.style.cssText = 'position:fixed;inset:0;display:flex;align-items:center;'
       + 'justify-content:center;background:rgba(8,7,14,.62);z-index:40;backdrop-filter:blur(3px);';
@@ -4260,7 +4267,9 @@ async function main() {
         (medal ? medal + ' · ' : '') + `time ${fmtT(secs)}`
         + (isPB ? ' — new personal best!' : ` · best ${fmtT(prev)}`);
     } catch (e) {}
-    document.getElementById('wintext').textContent = text;
+    // the take is the heist's score — a number worth beating on a rerun
+    document.getElementById('wintext').textContent = window.__take
+      ? `${text}  ·  took $${window.__take.toLocaleString()}` : text;
     document.getElementById('win').style.display = 'flex';
     // Game Projects: hub passes ?next=<url> for level progression
     const nxt = new URLSearchParams(location.search).get('next');
@@ -4281,7 +4290,6 @@ async function main() {
   const heartsEl = document.getElementById('hearts');
   const hostilesExist = (SPEC.entities || []).some(
     e => e.behavior === 'hostile' || e.behavior === 'guard');
-  const HAS_GUARDS = (SPEC.entities || []).some(e => e.behavior === 'guard');
   // ── XP + LEVEL-UPS (moon plan 3.2): kills and pickups grant XP; each
   // level offers a three-choice upgrade card (roguelike style). The game
   // keeps running behind the card — choosing is part of the flow.
@@ -5150,6 +5158,48 @@ async function main() {
     // lives on F, matching every modern game's muscle memory
     if (e.code === 'KeyF') { e.preventDefault(); doAttack(); }
     if (e.code === 'KeyV') { e.preventDefault(); setCine(!cineOn); }
+    // THROW A DISTRACTION (heist kit, Q): stealth is only interesting when
+    // you can ACT on the guards, not just avoid them. Lob a stone; whoever
+    // is nearest walks over to investigate the clatter, opening the room
+    // they were standing in. This is the verb that makes patrols a puzzle.
+    if (e.code === 'KeyQ' && HAS_GUARDS && gameStarted && !won && !lost) {
+      e.preventDefault();
+      if ((window.__throwCd || 0) > playT) return;
+      window.__throwCd = playT + 2.2;
+      const pp = playerObj.position;
+      // lands ~9 m ahead of where the hero faces
+      const lx = pp.x + Math.sin(modelYaw) * 9, lz = pp.z + Math.cos(modelYaw) * 9;
+      const stone = new THREE.Mesh(
+        new THREE.SphereGeometry(0.11, 8, 6),
+        new THREE.MeshStandardMaterial({ color: 0x9a9384, roughness: 1 }));
+      stone.position.set(pp.x, pp.y + 0.9, pp.z);
+      scene.add(stone);
+      const t0 = playT, sx = stone.position.x, sy = stone.position.y, sz = stone.position.z;
+      const flight = { obj: stone, until: playT + 0.75,
+        step: () => {
+          const k = Math.min(1, (playT - t0) / 0.75);
+          stone.position.set(sx + (lx - sx) * k, sy + (0 - sy) * k + Math.sin(k * Math.PI) * 1.9,
+                             sz + (lz - sz) * k);
+          if (k >= 1) {
+            scene.remove(stone);
+            sfx('step'); burst(new THREE.Vector3(lx, 0.2, lz), 0xbdb6a4);
+            popText('🪨 clatter — something moved over there', '#bdb6a4');
+            let best = null, bd = 26;
+            for (const n of npcs) {
+              if (n.behavior !== 'guard' || n.dead || n.dormant || n.mode === 'chase') continue;
+              const dd = Math.hypot(n.obj.position.x - lx, n.obj.position.z - lz);
+              if (dd < bd) { bd = dd; best = n; }
+            }
+            if (best) {                     // go look, then resume the beat
+              best.beat = [[lx, lz]].concat(best.beat || []);
+              best.wp = 0; best.alert = 0;
+            }
+            return true;
+          }
+          return false;
+        } };
+      (window.__flights = window.__flights || []).push(flight);
+    }
   });
   const atkBtn = document.getElementById('atkbtn');
   if (atkBtn && ATTACK !== 'none') {
@@ -6382,6 +6432,9 @@ varying vec2 vUvRaw;
     // you can edit in peace, but the camera, player and rendering stay live
     if (gameStarted && !paused && !inspectOn) {
       playT += dt;
+      if (window.__flights && window.__flights.length) {
+        window.__flights = window.__flights.filter(f => !f.step());
+      }
       stepNPCs(dt, nt, performance.now() / 1000);
       // SUSPICION HUD (heist kit): an eye that opens as a guard grows sure
       // of you, and goes red the moment you're made.
@@ -6635,7 +6688,29 @@ varying vec2 vUvRaw;
             addXP(6);
             sfx('pickup');
             burst(c.mesh.position, 0xffd54a);
-            popText(`+1 ${st.label || ''}  ·  ${st._got}/${st.count}`, '#ffd54a');
+            if (HAS_GUARDS) {
+              // LOOT HAS VALUE (heist kit): every piece is worth a different
+              // amount, so a burglar chooses what to risk reaching for
+              // instead of vacuuming up identical tokens. The take is
+              // tallied and shown on the win screen — that's the score.
+              const val = 200 + ((c.phase * 977) | 0) % 1800;
+              window.__take = (window.__take || 0) + val;
+              popText(`💎 ${st.label || 'loot'}  +$${val.toLocaleString()}`
+                      + `  ·  ${st._got}/${st.count}`, '#ffd54a');
+              // grabbing it makes noise — a nearby guard comes to look
+              for (const n of npcs) {
+                if (n.behavior !== 'guard' || n.dead || n.dormant) continue;
+                if (Math.hypot(n.obj.position.x - nt.x, n.obj.position.z - nt.z) < 13
+                    && n.mode !== 'chase') {
+                  n.alert = Math.min(0.95, (n.alert || 0) + 0.45);
+                  n.beat = [[nt.x, nt.z]].concat(n.beat || []);
+                  n.wp = 0;
+                  break;
+                }
+              }
+            } else {
+              popText(`+1 ${st.label || ''}  ·  ${st._got}/${st.count}`, '#ffd54a');
+            }
             renderQuest();
             if (st._got >= st.count) advanceStep();
           }
@@ -6674,8 +6749,14 @@ varying vec2 vUvRaw;
       // STICKY-CAM FIX (2026-07-20): lookAt() is instant, so a raw look-ahead
       // point SNAPS sideways on every turn — damp the target like the
       // position, and the pan is glass again
+      // LOW-HERO FRAMING (2026-08-05): camera lift scaled off camera.height_m
+      // alone, so a cat (0.4 m tall) put the eye at tail height — the tail
+      // filled the frame and you couldn't read the room ahead. Floor the
+      // lift so short heroes are looked DOWN at, like every third-person
+      // game with a small character.
+      const _lift = Math.max(SPEC.camera.height_m, 1.5);
       _camWant.set(fX + Math.sin(modelYaw) * lookAhead,
-                   fY + SPEC.camera.height_m * 0.5,
+                   fY + _lift * 0.5,
                    fZ + Math.cos(modelYaw) * lookAhead);
       if (camTarget.lengthSq() === 0) camTarget.copy(_camWant);
       camTarget.lerp(_camWant, 1 - Math.exp(-7 * dt));
@@ -6683,7 +6764,7 @@ varying vec2 vUvRaw;
       const cd = SPEC.camera.distance_m * camZoom * (inspectOn ? 1.5 : 1);
       let cx = fX + Math.sin(yaw) * Math.cos(pitch) * cd;     // camera BEHIND
       let cz = fZ + Math.cos(yaw) * Math.cos(pitch) * cd;     // (W walks away)
-      let cy = fY + Math.sin(pitch) * cd + SPEC.camera.height_m * 0.4;
+      let cy = fY + Math.sin(pitch) * cd + _lift * 0.55;
       // INTERIOR (2026-07-23): never rise above the ceiling — the camera
       // outside the roof showed a void where the player should be
       if (INTERIOR) cy = Math.min(cy, (INTERIOR.wall_h || 4.0) * (INTERIOR.floors || 1) - 0.35);
