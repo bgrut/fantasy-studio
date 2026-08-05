@@ -4294,15 +4294,23 @@ async function main() {
     const cabR = cabC - L * cabLen * 0.5;        // cabin rear
     const cabF = cabC + L * cabLen * 0.5;        // cabin front
     const roofY = bodyH + cabH;
+    // RAKED + ROUNDED (2026-08-04): straight vertical jumps to the roof read
+    // as stacked boxes. Quadratic curves give a real backlight rake, a
+    // domed roof and a sloped windshield — the silhouette IS the car.
     s.moveTo(-hl, 0.06);
-    s.lineTo(-hl, bodyH * 0.62);                       // rear panel
-    s.lineTo(-hl + L * 0.06, bodyH * 0.88);            // decklid rise
-    s.lineTo(cabR, bodyH * 0.92);                      // rear window base
-    s.lineTo(cabR + L * 0.05, roofY);                  // roof rear
-    s.lineTo(cabF - L * 0.05, roofY);                  // roof front
-    s.lineTo(cabF, bodyH * 0.90);                      // windshield base
-    s.lineTo(hl - L * 0.10, bodyH * 0.80);             // hood
-    s.lineTo(hl, bodyH * 0.52);                        // nose top
+    s.lineTo(-hl, bodyH * 0.55);
+    s.quadraticCurveTo(-hl + L * 0.02, bodyH * 0.86,
+                       -hl + L * 0.09, bodyH * 0.90);   // rounded tail
+    s.lineTo(cabR - L * 0.02, bodyH * 0.93);            // decklid run
+    s.quadraticCurveTo(cabR + L * 0.06, bodyH * 0.99,
+                       cabR + L * 0.12, roofY * 0.985); // backlight rake
+    s.quadraticCurveTo(cabC, roofY * 1.01,
+                       cabF - L * 0.12, roofY * 0.985); // domed roof
+    s.quadraticCurveTo(cabF - L * 0.02, bodyH * 1.02,
+                       cabF + L * 0.03, bodyH * 0.88);  // windshield rake
+    s.lineTo(hl - L * 0.13, bodyH * 0.83);              // hood
+    s.quadraticCurveTo(hl - L * 0.02, bodyH * 0.78,
+                       hl, bodyH * 0.46);               // nose fall
     s.lineTo(hl, 0.06);
     const bg = new THREE.ExtrudeGeometry(s, {
       depth: Wd, bevelEnabled: true, bevelSize: 0.05,
@@ -5770,6 +5778,7 @@ varying vec2 vUvRaw;
     return cur + d * (1 - Math.exp(-lambda * dt));
   }
   const DRIVE = SPEC.player.mode === 'drive';    // arcade car physics
+  let carVX = 0, carVZ = 0;      // world velocity — lateral part is the drift
   if (DRIVE && PATH && PATH.length > 1) {        // face down the street at spawn
     modelYaw = Math.atan2(PATH[1][0] - PATH[0][0], PATH[1][1] - PATH[0][1]);
   }
@@ -5960,12 +5969,27 @@ varying vec2 vUvRaw;
       else if (throttle < -0.05) vSpeed -= 14 * -throttle * dt;   // brake/reverse
       else vSpeed *= Math.max(0, 1 - 1.6 * dt);                   // coast friction
       vSpeed = THREE.MathUtils.clamp(vSpeed, -maxV * 0.35, maxV);
-      const grip = Math.min(Math.abs(vSpeed) / 5, 1);
-      modelYaw -= steer * 1.9 * grip * Math.sign(vSpeed || 1) * dt;
+      const steerAuth = Math.min(Math.abs(vSpeed) / 5, 1);
+      // DRIFT (2026-08-04, the gta7 grip model): the car was on RAILS —
+      // velocity was always exactly along the nose, so it could never
+      // slide. Now world velocity is split into FORWARD + LATERAL each
+      // frame and grip bleeds the lateral part away. Hold Shift over
+      // 6 m/s and grip drops: momentum carries while the nose swings.
+      // That one number is the whole drift model (and it feels better
+      // than a half-tuned rigid-body vehicle).
+      const sliding = !!mv.run && Math.abs(vSpeed) > 6;
+      window.__drifting = sliding;
+      modelYaw -= steer * (sliding ? 2.6 : 1.9) * steerAuth
+                  * Math.sign(vSpeed || 1) * dt;
       dir.set(Math.sin(modelYaw), 0, Math.cos(modelYaw));
-      speed = Math.abs(vSpeed);
+      const fwdV = carVX * dir.x + carVZ * dir.z;
+      const latVX = carVX - fwdV * dir.x, latVZ = carVZ - fwdV * dir.z;
+      const keepLat = Math.exp(-(sliding ? 0.9 : 9.5) * dt);
+      carVX = dir.x * vSpeed + latVX * keepLat;
+      carVZ = dir.z * vSpeed + latVZ * keepLat;
+      speed = Math.hypot(carVX, carVZ);
       vy = Math.max(vy - 9.81 * dt, -25);
-      var desired = { x: dir.x * vSpeed * dt, y: vy * dt, z: dir.z * vSpeed * dt };
+      var desired = { x: carVX * dt, y: vy * dt, z: carVZ * dt };
     } else if (FLY) {
       // FLIGHT: camera-relative glide, Space to rise, C to dive. The kinematic
       // body still collides with terrain/buildings, so landing just works.
@@ -6079,6 +6103,9 @@ varying vec2 vUvRaw;
       leanR = THREE.MathUtils.damp(leanR,
         THREE.MathUtils.clamp(mv.x * Math.min(Math.abs(vSpeed) / 8, 1) * 0.07, -0.08, 0.08), 6, dt);
       holder.rotation.x = leanP; holder.rotation.z = leanR;
+      if (window.__drifting) {          // exaggerate the lean into a slide
+        leanR = THREE.MathUtils.clamp(leanR * 1.6, -0.17, 0.17);
+      }
     } else if (!FLY && !SWIM) {
       // FOOT-PLANT LITE (Phase 74): align the body to the terrain slope so
       // feet track the ground on hills instead of the front hovering and the

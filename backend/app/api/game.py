@@ -650,6 +650,12 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                     _cls = _cp.pop("_class", "sedan")
                     spec.player.car_params = _cp
                     spec.player.yaw_offset_deg = 0.0   # built nose +X
+                    # TRUE SCALE: the runtime scales any model to height_m,
+                    # so a 1.5m default inflated the metric-built car (it
+                    # towered over the rivals, verified). Height comes from
+                    # the params themselves now — real car proportions.
+                    spec.player.height_m = round(
+                        _cp["bodyY"] + _cp["bodyH"] * 0.75 + _cp["cabinH"], 2)
                     job.setdefault("notes", []).append(
                         f"parametric {_cls} built in code — crisp panels, "
                         f"round wheels, real glass (no mesh generation)")
