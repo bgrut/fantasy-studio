@@ -1759,13 +1759,39 @@ async def upload_scene(request: __import__("fastapi").Request):
                    request.headers.get("x-filename", "scene.png"))[-80:]
     if not name.lower().endswith((".png", ".jpg", ".jpeg", ".webp")):
         raise HTTPException(400, "expected an image (.png/.jpg/.webp)")
-    body = await request.body()
-    if len(body) > 40 * 1024 * 1024:
-        raise HTTPException(413, "image too large (40MB cap)")
     pdir = BACKEND_ROOT / "assets" / "panos"
     (pdir / "_src").mkdir(parents=True, exist_ok=True)
-    src = pdir / "_src" / name
-    src.write_bytes(body)
+    # MULTI-PHOTO (Arc H1): multipart posts carry 2-8 views of the SAME place
+    # (what mint asks for, and the only honest way to get real coverage).
+    # A raw body is still the single-photo path, unchanged.
+    srcs: list[Path] = []
+    _ctype = (request.headers.get("content-type") or "").lower()
+    if _ctype.startswith("multipart/form-data"):
+        form = await request.form()
+        for _k, _v in form.multi_items():
+            fn = getattr(_v, "filename", None)
+            if not fn or not fn.lower().endswith((".png", ".jpg", ".jpeg", ".webp")):
+                continue
+            fn = _re.sub(r"[^A-Za-z0-9._-]", "_", fn)[-80:]
+            data = await _v.read()
+            if not data or len(data) > 40 * 1024 * 1024:
+                continue
+            p = pdir / "_src" / fn
+            p.write_bytes(data)
+            srcs.append(p)
+            if len(srcs) >= 8:
+                break
+        if not srcs:
+            raise HTTPException(400, "no usable images in the upload")
+        name = srcs[0].name
+    else:
+        body = await request.body()
+        if len(body) > 40 * 1024 * 1024:
+            raise HTTPException(413, "image too large (40MB cap)")
+        p = pdir / "_src" / name
+        p.write_bytes(body)
+        srcs = [p]
+    src = srcs[0]
     slug = _re.sub(r"[^a-z0-9]+", "_", Path(name).stem.lower()).strip("_")[:48] or "scene"
     out = pdir / f"{slug}.jpg"
 
@@ -1835,34 +1861,75 @@ async def upload_scene(request: __import__("fastapi").Request):
             # straight, the horizon lands exactly at latitude 0, and the
             # ground below the horizon maps to real distances on the floor.
             HFOV = 88.0                     # phone-ish wide; honest footprint
-            f_px = (iw / 2.0) / np.tan(np.radians(HFOV / 2.0))
             uu, vv = np.meshgrid((np.arange(W) + 0.5) / W,
                                  (np.arange(H) + 0.5) / H)
             lon_e = (uu - 0.5) * 2.0 * np.pi
             lat_e = (0.5 - vv) * np.pi
-            dx_e = np.cos(lat_e) * np.sin(lon_e)
-            dy_e = np.sin(lat_e)
-            dz_e = -np.cos(lat_e) * np.cos(lon_e)      # camera looks down -Z
-            fwd = dz_e < -1e-6
-            with np.errstate(divide="ignore", invalid="ignore"):
-                pxf = np.where(fwd, f_px * dx_e / (-dz_e) + iw / 2.0, -1e9)
-                pyf = np.where(fwd, -f_px * dy_e / (-dz_e) + ih / 2.0, -1e9)
-            inside = fwd & (pxf >= 0) & (pxf <= iw - 1.001) \
-                & (pyf >= 0) & (pyf <= ih - 1.001)
-            ima = np.asarray(im, dtype=np.float32)
-            xi = np.clip(pxf, 0, iw - 1.001)
-            yi = np.clip(pyf, 0, ih - 1.001)
-            x0i = xi.astype(np.int32); y0i = yi.astype(np.int32)
-            fxi = (xi - x0i)[..., None]; fyi = (yi - y0i)[..., None]
-            warped = (ima[y0i, x0i] * (1 - fxi) * (1 - fyi)
-                      + ima[y0i, x0i + 1] * fxi * (1 - fyi)
-                      + ima[y0i + 1, x0i] * (1 - fxi) * fyi
-                      + ima[y0i + 1, x0i + 1] * fxi * fyi)
+
+            def _warp_one(pim, yaw_deg):
+                """Ray-trace ONE pinhole photo into the equirect at a given
+                yaw. Multi-photo worlds (Arc H1) call this per photo — real
+                coverage from real views beats inventing 300 degrees of
+                scenery, which is the whole reason mint asks for 2-8 images."""
+                pw, ph = pim.size
+                fpx = (pw / 2.0) / np.tan(np.radians(HFOV / 2.0))
+                lo = lon_e - np.radians(yaw_deg)          # rotate into its sector
+                dx = np.cos(lat_e) * np.sin(lo)
+                dy = np.sin(lat_e)
+                dz = -np.cos(lat_e) * np.cos(lo)          # camera looks down -Z
+                fw = dz < -1e-6
+                with np.errstate(divide="ignore", invalid="ignore"):
+                    px = np.where(fw, fpx * dx / (-dz) + pw / 2.0, -1e9)
+                    py = np.where(fw, -fpx * dy / (-dz) + ph / 2.0, -1e9)
+                ins = fw & (px >= 0) & (px <= pw - 1.001) \
+                    & (py >= 0) & (py <= ph - 1.001)
+                pa = np.asarray(pim, dtype=np.float32)
+                xj = np.clip(px, 0, pw - 1.001); yj = np.clip(py, 0, ph - 1.001)
+                x0j = xj.astype(np.int32); y0j = yj.astype(np.int32)
+                fxj = (xj - x0j)[..., None]; fyj = (yj - y0j)[..., None]
+                wv = (pa[y0j, x0j] * (1 - fxj) * (1 - fyj)
+                      + pa[y0j, x0j + 1] * fxj * (1 - fyj)
+                      + pa[y0j + 1, x0j] * (1 - fxj) * fyj
+                      + pa[y0j + 1, x0j + 1] * fxj * fyj)
+                return wv, ins
+
+            # MULTI-PHOTO (Arc H1): every extra photo is real information the
+            # diffuser no longer has to hallucinate. Photos are spread evenly
+            # around the compass; photo 0 stays at yaw 0 so the player still
+            # spawns facing the primary view.
+            _ims = []
+            for _sp in srcs:
+                try:
+                    _ims.append(Image.open(_sp).convert("RGB"))
+                except Exception:
+                    pass
+            if not _ims:
+                _ims = [im]
+            _n_ph = len(_ims)
+            warped = np.zeros((H, W, 3), dtype=np.float32)
+            inside = np.zeros((H, W), dtype=bool)
+            inside0 = None
+            for _i, _pim in enumerate(_ims):
+                _yaw = (360.0 / _n_ph) * _i if _n_ph > 1 else 0.0
+                _wv, _ins = _warp_one(_pim, _yaw)
+                _fresh = _ins & ~inside          # first photo wins overlaps
+                warped[_fresh] = _wv[_fresh]
+                inside |= _ins
+                if inside0 is None:
+                    inside0 = _ins.copy()        # tile prior uses photo 0 ONLY
+            if _n_ph > 1:
+                job["stage"] = f"placing {_n_ph} photos around the compass"
             photo_eq = Image.fromarray(warped.astype(np.uint8))
             photo_mask = Image.fromarray((inside * 255).astype(np.uint8))
             # bounding box of the photo's true angular footprint
-            _cols = np.where(inside.any(axis=0))[0]
-            _rows = np.where(inside.any(axis=1))[0]
+            # MULTI-PHOTO FIX (2026-08-05): the bbox must come from ONE
+            # photo's footprint. With photos spread around the compass the
+            # merged bbox spans the whole frame INCLUDING the unfilled gaps,
+            # so the tile prior tiled black and img2img (not mask-aware)
+            # preserved it — verified: black wedges between every view.
+            _bb = inside0 if inside0 is not None else inside
+            _cols = np.where(_bb.any(axis=0))[0]
+            _rows = np.where(_bb.any(axis=1))[0]
             sx0, src_w2 = int(_cols[0]), int(_cols[-1] - _cols[0] + 1)
             sy0, src_h = int(_rows[0]), int(_rows[-1] - _rows[0] + 1)
             srcp = photo_eq.crop((sx0, sy0, sx0 + src_w2, sy0 + src_h))
@@ -1949,8 +2016,29 @@ async def upload_scene(request: __import__("fastapi").Request):
             # the ray-traced photo goes back through its true footprint —
             # geometrically exact, and it always wins over generated pixels
             res.paste(photo_eq, (0, 0), photo_mask)
-            # 3 — horizontal wrap-seam blend so the pano tiles at 0/360
             arr = np.asarray(res).astype(np.float32)
+            # 2b — POLE REPAIR (2026-08-05): SDXL has no concept of equirect
+            # projection, so in the top/bottom bands it paints BUILDINGS —
+            # verified: upside-down towers overhead and aerial streets
+            # underfoot. Geometry knows better: above the scene there is
+            # sky, below it there is ground. Both poles are rebuilt by
+            # vertically extending the nearest valid row and easing into a
+            # single averaged colour at the pole itself, so the dome closes
+            # cleanly instead of pinwheeling invented architecture.
+            _pol = np.radians(38.0)
+            _lat_col = (0.5 - (np.arange(H) + 0.5) / H) * np.pi
+            _top_i = int(np.argmax(_lat_col < _pol))          # first row below +38
+            _bot_i = int(np.argmax(_lat_col < -_pol))         # first row below -38
+            if 0 < _top_i < _bot_i < H:
+                _sky = arr[_top_i:_top_i + 12].mean(axis=(0, 1))
+                _gnd = arr[max(0, _bot_i - 12):_bot_i].mean(axis=(0, 1))
+                for _y in range(_top_i):
+                    t = 1.0 - (_y / max(_top_i - 1, 1))       # 1 at pole
+                    arr[_y] = arr[_top_i] * (1 - t) + _sky * t
+                for _y in range(_bot_i, H):
+                    t = (_y - _bot_i) / max(H - _bot_i - 1, 1)
+                    arr[_y] = arr[_bot_i - 1] * (1 - t) + _gnd * t
+            # 3 — horizontal wrap-seam blend so the pano tiles at 0/360
             blend = 96
             for x in range(blend):
                 a = x / blend
