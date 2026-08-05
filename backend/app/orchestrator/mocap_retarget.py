@@ -91,7 +91,15 @@ for s in ("L","R"):
     ua=mk("uparm_"+s,pt(_al(0.0),_az(0.0)),pt(_al(0.45),_az(0.45)),cl)
     fa=mk("lowarm_"+s,pt(_al(0.45),_az(0.45)),pt(_al(0.85),_az(0.85)),ua)
     mk("hand_"+s,pt(_al(0.85),_az(0.85)),pt(_al(1.0),_az(1.0)),fa)
-    th=mk("upleg_"+s,pt(lg,0.50),pt(lg,0.28),hips); sh=mk("lowleg_"+s,pt(lg,0.28),pt(lg,0.05),th)
+    # KNEE BEND HINT (2026-08-05): the leg was built dead straight — hip,
+    # knee and ankle on one vertical line. A hinge with no bend in its rest
+    # pose has no preferred fold direction, so the retargeted rotation can
+    # resolve the wrong way and the knee inverts backwards mid-stride. Every
+    # production rig ships a few degrees of bend so the joint knows which way
+    # it folds; 1.8cm forward at the knee is enough to disambiguate without
+    # visibly bending the bind pose.
+    th=mk("upleg_"+s,pt(lg,0.50),pt(lg,0.28,0.018),hips)
+    sh=mk("lowleg_"+s,pt(lg,0.28,0.018),pt(lg,0.05),th)
     mk("foot_"+s,pt(lg,0.05),pt(lg,0.0,0.12),sh)
 bpy.ops.object.mode_set(mode="OBJECT")
 amod=o.modifiers.get("HeroArmature") or o.modifiers.new("HeroArmature","ARMATURE"); amod.object=rig
