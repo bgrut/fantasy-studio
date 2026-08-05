@@ -1729,47 +1729,77 @@ async def upload_scene(request: __import__("fastapi").Request):
             from PIL import ImageFilter as _IF
             import numpy as np
             im = Image.open(src).convert("RGB")
-            W, H = 1792, 896
+            W, H = 2560, 1280
             iw, ih = im.size
-            # r2 SIZING (verified 2026-08-04): a 62-degree footprint read as
-            # a POSTCARD floating in invented scenery. The photo now spans
-            # ~120 deg horizontally (a third of the world) and the FULL
-            # height band it implies — it dominates the view you spawn into.
-            src_w2 = int(W * 120.0 / 360.0)
-            src_h = min(int(src_w2 * ih / iw), int(H * 0.94))
-            src_w2 = max(64, int(src_h * iw / ih))
-            srcp = im.resize((src_w2, src_h), Image.LANCZOS)
-            sx0 = W // 2 - src_w2 // 2
-            sy0 = int(H * 0.50) - src_h // 2
+            # ══ THE ROOT-CAUSE FIX (2026-08-05) ═══════════════════════════
+            # Every 'it looks stretched' report traces to ONE geometric bug:
+            # we pasted a PERSPECTIVE photo straight into an EQUIRECTANGULAR
+            # panorama. Those are different projections — like pasting a flat
+            # map onto a globe. The horizon bent, verticals sheared, and the
+            # ground smeared into a funnel when reprojected down.
+            #
+            # Correct operation: treat the photo as what it is — a pinhole
+            # camera view with a focal length — and RAY-TRACE it into equirect.
+            # For each panorama pixel we build its 3D ray, intersect it with
+            # the photo's image plane, and sample. Straight lines stay
+            # straight, the horizon lands exactly at latitude 0, and the
+            # ground below the horizon maps to real distances on the floor.
+            HFOV = 88.0                     # phone-ish wide; honest footprint
+            f_px = (iw / 2.0) / np.tan(np.radians(HFOV / 2.0))
+            uu, vv = np.meshgrid((np.arange(W) + 0.5) / W,
+                                 (np.arange(H) + 0.5) / H)
+            lon_e = (uu - 0.5) * 2.0 * np.pi
+            lat_e = (0.5 - vv) * np.pi
+            dx_e = np.cos(lat_e) * np.sin(lon_e)
+            dy_e = np.sin(lat_e)
+            dz_e = -np.cos(lat_e) * np.cos(lon_e)      # camera looks down -Z
+            fwd = dz_e < -1e-6
+            with np.errstate(divide="ignore", invalid="ignore"):
+                pxf = np.where(fwd, f_px * dx_e / (-dz_e) + iw / 2.0, -1e9)
+                pyf = np.where(fwd, -f_px * dy_e / (-dz_e) + ih / 2.0, -1e9)
+            inside = fwd & (pxf >= 0) & (pxf <= iw - 1.001) \
+                & (pyf >= 0) & (pyf <= ih - 1.001)
+            ima = np.asarray(im, dtype=np.float32)
+            xi = np.clip(pxf, 0, iw - 1.001)
+            yi = np.clip(pyf, 0, ih - 1.001)
+            x0i = xi.astype(np.int32); y0i = yi.astype(np.int32)
+            fxi = (xi - x0i)[..., None]; fyi = (yi - y0i)[..., None]
+            warped = (ima[y0i, x0i] * (1 - fxi) * (1 - fyi)
+                      + ima[y0i, x0i + 1] * fxi * (1 - fyi)
+                      + ima[y0i + 1, x0i] * (1 - fxi) * fyi
+                      + ima[y0i + 1, x0i + 1] * fxi * fyi)
+            photo_eq = Image.fromarray(warped.astype(np.uint8))
+            photo_mask = Image.fromarray((inside * 255).astype(np.uint8))
+            # bounding box of the photo's true angular footprint
+            _cols = np.where(inside.any(axis=0))[0]
+            _rows = np.where(inside.any(axis=1))[0]
+            sx0, src_w2 = int(_cols[0]), int(_cols[-1] - _cols[0] + 1)
+            sy0, src_h = int(_rows[0]), int(_rows[-1] - _rows[0] + 1)
+            srcp = photo_eq.crop((sx0, sy0, sx0 + src_w2, sy0 + src_h))
             canvas = Image.new("RGB", (W, H))
             # r2 PRIOR: the blurred full-stretch let the model invent a
             # different valley at a different scale. Instead, EDGE-EXTEND
             # the photo outward (columns/rows continue their own content),
             # then blur lightly — the surround is forced to continue THIS
             # scene's horizon, palette and structure.
-            npf = np.asarray(srcp, dtype=np.float32)
-            padL = np.repeat(npf[:, :1], sx0 + 1, axis=1)
-            padR = np.repeat(npf[:, -1:], W - (sx0 + src_w2) + 1, axis=1)
-            band = np.concatenate([padL, npf, padR], axis=1)[:, :W]
-            top = np.repeat(band[:1], sy0 + 1, axis=0)
-            bot = np.repeat(band[-1:], H - (sy0 + src_h) + 1, axis=0)
-            full = np.concatenate([top, band, bot], axis=0)[:H]
-            # r6 ROOT CAUSE (4 verified failed runs): a heavily-blurred prior
-            # gives the diffuser NO structure to denoise into — it returns the
-            # blur, whatever the pipeline (inpaint AND img2img both failed the
-            # same way). The prior must carry real texture. Tiled copies of
-            # the photo itself (alternating mirrored, so the horizon stays
-            # continuous) give exactly that; img2img then reinterprets them
-            # into fresh scenery that matches this world's light and palette.
+            # r6 (kept): the prior must carry real TEXTURE — a blurred palette
+            # field gives the diffuser nothing to denoise into and it returns
+            # the blur (4 verified failed runs, inpaint AND img2img alike).
+            # Alternating mirrored tiles of the warped photo supply structure;
+            # img2img reinterprets them into fresh matching scenery.
+            # The tiles are now EQUIRECT-WARPED, so the invented surround
+            # shares the photo's projection instead of fighting it.
             tile_src = srcp.resize((src_w2, H), Image.LANCZOS)
             tile_flip = tile_src.transpose(Image.FLIP_LEFT_RIGHT)
             for tx in range(0, W, src_w2):
                 canvas.paste(tile_flip if (tx // src_w2) % 2 else tile_src, (tx, 0))
-            canvas.paste(srcp, (sx0, sy0))
-            mask = Image.new("L", (W, H), 255)
-            _ID.Draw(mask).rectangle(
-                [sx0 + 6, sy0 + 6, sx0 + src_w2 - 6, sy0 + src_h - 6], fill=0)
-            mask = mask.filter(_IF.GaussianBlur(8))
+            # composite the ray-traced photo through its TRUE footprint mask
+            # (the footprint is a barrel-shaped region, not a rectangle —
+            # that curvature IS the correct equirect geometry)
+            canvas.paste(photo_eq, (0, 0), photo_mask)
+            mask = Image.fromarray(
+                (255 - np.asarray(photo_mask.filter(_IF.MaxFilter(9)))).astype(np.uint8))
+            mask = mask.filter(_IF.GaussianBlur(6))
             from app.asset_gen.reference import _load_t2i_pipeline, unload_reference_pipeline
             from diffusers import StableDiffusionXLImg2ImgPipeline
             t2i = _load_t2i_pipeline()
@@ -1826,7 +1856,9 @@ async def upload_scene(request: __import__("fastapi").Request):
                     md = _ID.Draw(mask)
                     md.rectangle([x_start, 0, x_end, H], fill=0)
                     md.rectangle([sx0 - 2, sy0 - 2, sx0 + src_w2 + 2, sy0 + src_h + 2], fill=0)
-            res.paste(srcp, (sx0, sy0))       # the photo, untouched, forever
+            # the ray-traced photo goes back through its true footprint —
+            # geometrically exact, and it always wins over generated pixels
+            res.paste(photo_eq, (0, 0), photo_mask)
             # 3 — horizontal wrap-seam blend so the pano tiles at 0/360
             arr = np.asarray(res).astype(np.float32)
             blend = 96

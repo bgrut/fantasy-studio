@@ -185,8 +185,17 @@ def export_web_game(spec: GameSpec, out_dir: str | Path, verbose: bool = True) -
             # Phase C (the mint answer): a lifted SPLAT sibling beats the
             # dome — bundle it with an IDENTITY fit (it was synthesized in
             # world coordinates; the auto-fit solver must not touch it)
+            # GROUND PROJECTION RETIRED (2026-08-05, verified 4 playtests):
+            # an eye-level photo contains NO data about the floor beneath the
+            # camera — the panorama's nadir is pure invention, so projecting
+            # it down produced the radial 'funnel smear' the user reported
+            # every single round. The photo owns the horizon and above; the
+            # sharp caption-matched PBR ground owns underfoot, which is also
+            # what real splat games do (near-field floor is real geometry).
+            # Bake kept on disk for the future layered-inpaint approach.
+            _USE_PANO_GROUND = False
             g_src = pn_src.with_name(pn_src.stem + "_ground.jpg")
-            if g_src.exists():
+            if _USE_PANO_GROUND and g_src.exists():
                 shutil.copy2(g_src, dist / "pano" / g_src.name)
                 spec.world.pano_ground = f"pano/{g_src.name}"
             s_src = pn_src.with_name(pn_src.stem + "_splat.ply")
