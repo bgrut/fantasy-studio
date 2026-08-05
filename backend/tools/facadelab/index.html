@@ -124,6 +124,27 @@ function makeOrbit(cam, dom, target) {
 }
 const controls = makeOrbit(camera, renderer.domElement, new THREE.Vector3(0, 14, 0));
 
+// ── ENVIRONMENT (2026-08-05): the single biggest photoreal gap was that
+// glass had nothing to reflect. A material with reflectivity and no envMap
+// resolves to a flat dark panel no matter how good the albedo is — real
+// windows are almost entirely SKY and NEIGHBOURING BUILDINGS bounced back.
+// A procedural sky-gradient cube costs one 256px render and lights every
+// specular in the scene, so it also gives stone its damp sheen.
+function skyEnv(topC, horC, botC) {
+  const c = document.createElement('canvas'); c.width = c.height = 256;
+  const x = c.getContext('2d');
+  const gd = x.createLinearGradient(0, 0, 0, 256);
+  gd.addColorStop(0, topC); gd.addColorStop(0.48, horC);
+  gd.addColorStop(0.52, botC); gd.addColorStop(1, botC);
+  x.fillStyle = gd; x.fillRect(0, 0, 256, 256);
+  // a hot band at the horizon: sun glare is what makes glass GLINT rather
+  // than merely tint
+  x.fillStyle = 'rgba(255,225,180,0.55)'; x.fillRect(0, 118, 256, 12);
+  const t = new THREE.CanvasTexture(c);
+  t.mapping = THREE.EquirectangularReflectionMapping;
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
 const hemi = new THREE.HemisphereLight(0xbcd4f0, 0x2a2620, 0.6); scene.add(hemi);
 const sun = new THREE.DirectionalLight(0xffe9cf, 3.0);
 sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048);
@@ -146,10 +167,18 @@ function facadeMaps(storeys, cols, seed) {
   const alb = document.createElement('canvas'); alb.width = W; alb.height = H;
   const nrm = document.createElement('canvas'); nrm.width = W; nrm.height = H;
   const emi = document.createElement('canvas'); emi.width = W; emi.height = H;
+  // ROUGHNESS + AO. Uniform roughness is a dead giveaway: real stone is matte,
+  // glass is mirror-smooth, and grime is matte streaks over both. One shared
+  // sheen across a whole facade is what makes CG buildings look like plastic.
+  const rgh = document.createElement('canvas'); rgh.width = W; rgh.height = H;
+  const aoc = document.createElement('canvas'); aoc.width = W; aoc.height = H;
   const a = alb.getContext('2d'), n = nrm.getContext('2d'), e = emi.getContext('2d');
+  const rq = rgh.getContext('2d'), ao = aoc.getContext('2d');
   a.fillStyle = F.wall; a.fillRect(0, 0, W, H);
   n.fillStyle = '#8080ff'; n.fillRect(0, 0, W, H);   // flat normal
   e.fillStyle = '#000'; e.fillRect(0, 0, W, H);
+  rq.fillStyle = '#d8d8d8'; rq.fillRect(0, 0, W, H); // masonry: rough
+  ao.fillStyle = '#ffffff'; ao.fillRect(0, 0, W, H); // unoccluded
   let s = seed * 9301 + 49297;
   const rnd = () => ((s = (s * 9301 + 49297) % 233280) / 233280);
 
@@ -192,6 +221,19 @@ function facadeMaps(storeys, cols, seed) {
       a.fillRect(bx - 2, by + bh, bw + 4, 3);      // sill
       a.fillStyle = `rgba(0,0,0,${0.22 + 0.25 * g('grime')})`;
       a.fillRect(bx - 2, by + bh + 3, bw + 4, 2);  // shadow the sill casts
+      // glass panes are near-mirror; the frame and sill stay matte
+      rq.fillStyle = '#141414'; rq.fillRect(bx, by, bw, bh);
+      rq.fillStyle = '#c8c8c8';
+      rq.fillRect(bx + bw / 2 - mw / 2, by, mw, bh);
+      rq.fillRect(bx - 2, by + bh, bw + 4, 3);
+      // AO: the reveal darkens the pane edges where the wall wraps in, and
+      // the sill traps dirt-shadow beneath it
+      const ag = ao.createLinearGradient(bx, by, bx, by + bh);
+      ag.addColorStop(0, `rgba(0,0,0,${0.55 * rv})`);
+      ag.addColorStop(0.30, 'rgba(0,0,0,0)');
+      ao.fillStyle = ag; ao.fillRect(bx, by, bw, bh);
+      ao.fillStyle = `rgba(0,0,0,${0.35 * rv})`;
+      ao.fillRect(bx - 3, by + bh + 3, bw + 6, 5);
       // normal map: encode the inset as opposing edge slopes
       const d = Math.round(60 * rv);
       n.fillStyle = `rgb(${128 - d},${128 + d},255)`; n.fillRect(bx, by, bw, 4);
@@ -218,16 +260,23 @@ function facadeMaps(storeys, cols, seed) {
   // grime: vertical streaking under sills, the thing that stops a building
   // looking freshly extruded
   a.globalAlpha = g('grime') * 0.5;
+  rq.globalAlpha = g('grime') * 0.7;
   for (let i = 0; i < W / 3; i++) {
-    const gx = rnd() * W, gy = rnd() * H;
+    const gx = rnd() * W, gy = rnd() * H, gw = 1 + rnd() * 3, gh2 = 20 + rnd() * 90;
     a.fillStyle = `rgba(0,0,0,${0.05 + rnd() * 0.10})`;
-    a.fillRect(gx, gy, 1 + rnd() * 3, 20 + rnd() * 90);
+    a.fillRect(gx, gy, gw, gh2);
+    // grime is MATTE — a dirt streak that stays glossy reads as wet paint.
+    // Driving roughness from the same streaks is what sells weathering.
+    rq.fillStyle = `rgba(255,255,255,${0.10 + rnd() * 0.18})`;
+    rq.fillRect(gx, gy, gw, gh2);
   }
-  a.globalAlpha = 1;
+  a.globalAlpha = 1; rq.globalAlpha = 1;
   const mk = (cv, srgb) => { const t = new THREE.CanvasTexture(cv);
     t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    t.anisotropy = renderer.capabilities.getMaxAnisotropy();
     if (srgb) t.colorSpace = THREE.SRGBColorSpace; return t; };
-  return { map: mk(alb, true), normalMap: mk(nrm, false), emissiveMap: mk(emi, true) };
+  return { map: mk(alb, true), normalMap: mk(nrm, false), emissiveMap: mk(emi, true),
+           roughnessMap: mk(rgh, false), aoMap: mk(aoc, false) };
 }
 
 let city = null;
@@ -252,12 +301,19 @@ function build() {
     const mat = showFacade
       ? new THREE.MeshStandardMaterial({
           ...facadeMaps(b.st, cols, i + 1),
-          roughness: 0.82, metalness: family === 'glass' ? 0.35 : 0.03,
+          roughness: 1.0,          // modulated by roughnessMap, not overridden
+          metalness: family === 'glass' ? 0.55 : 0.06,
+          envMapIntensity: family === 'glass' ? 1.45 : 0.75,
           normalScale: new THREE.Vector2(1.3, 1.3),
           emissive: 0xffffff,
           emissiveIntensity: tod === 'night' ? 1.5 : tod === 'dusk' ? 0.7 : 0.0 })
       : new THREE.MeshStandardMaterial({ color: F.wall, roughness: 0.9 });
-    const m = new THREE.Mesh(new THREE.BoxGeometry(b.w, h, b.d), mat);
+    const bgeo = new THREE.BoxGeometry(b.w, h, b.d);
+    // aoMap samples the SECOND uv set; BoxGeometry ships only one, so without
+    // this the ambient-occlusion map is silently ignored — no error, just a
+    // flatter building and a wasted texture.
+    bgeo.setAttribute('uv1', bgeo.attributes.uv);
+    const m = new THREE.Mesh(bgeo, mat);
     m.position.set(b.x, h / 2, 0);
     m.castShadow = m.receiveShadow = true;
     city.add(m);
@@ -350,6 +406,12 @@ function build() {
 }
 
 function applyTOD() {
+  // the environment changes with the hour too — glass reflecting a noon sky
+  // at midnight is the kind of mismatch that reads as "off" without the
+  // viewer being able to say why
+  scene.environment = tod === 'noon' ? skyEnv('#7fa8d8', '#cfe0f2', '#4a4b47')
+    : tod === 'dusk' ? skyEnv('#37304f', '#ff9d5c', '#2a2430')
+    : skyEnv('#070a12', '#1d2740', '#0a0c12');
   if (tod === 'noon') {
     sun.position.set(40, 90, 30); sun.intensity = 3.0; sun.color.set(0xffe9cf);
     hemi.intensity = 0.6; scene.background = new THREE.Color(0x8fb2d8);
