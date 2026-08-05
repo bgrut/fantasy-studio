@@ -6630,6 +6630,21 @@ varying vec2 vUvRaw;
     // you can edit in peace, but the camera, player and rendering stay live
     if (gameStarted && !paused && !inspectOn) {
       playT += dt;
+      // ── LIGHT BUDGET (2026-08-05): WebGL2 compiles a FIXED number of light
+      // slots into every shader. Ten lit torches plus sun and hemi already
+      // sat at the ceiling — adding anything (spotlight cookies) made
+      // MeshStandardMaterial fail to LINK, which renders a black room rather
+      // than logging a warning. Rooms you cannot see do not need to be lit,
+      // so only the nearest few torches stay on. This is both the fix and
+      // the headroom that lighting work needs.
+      if (window.__torches && window.__torches.length > 4 && (window.__ltT || 0) < playT) {
+        window.__ltT = playT + 0.25;          // 4Hz is plenty; lights are cheap to toggle
+        const px2 = playerObj.position.x, pz2 = playerObj.position.z;
+        const ranked = window.__torches
+          .map(L => [L, (L.position.x - px2) ** 2 + (L.position.z - pz2) ** 2])
+          .sort((a, b) => a[1] - b[1]);
+        ranked.forEach(([L], i) => { L.visible = i < 4; });
+      }
       if (window.__flights && window.__flights.length) {
         window.__flights = window.__flights.filter(f => !f.step());
       }
