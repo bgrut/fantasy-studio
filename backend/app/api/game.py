@@ -2091,8 +2091,32 @@ async def upload_scene(request: __import__("fastapi").Request):
                     gamma = np.log(0.34) / np.log(max(gl, 0.02))
                     ground = np.power(ground / 255.0, gamma) * 255.0
                 from PIL import ImageFilter
-                Image.fromarray(ground.astype(np.uint8)) \
-                    .filter(ImageFilter.UnsharpMask(radius=2, percent=85, threshold=2)) \
+                # RING FIX (2026-08-04 playtest): pure reprojection fans the
+                # floor into concentric rings — a photo has almost no pixels
+                # for the ground BENEATH the camera (it never sees there), so
+                # each distance ring samples one image row. Standard fix:
+                # the projection keeps large-scale colour + lighting (blurred),
+                # and a TILED CROP of the photo's real visible ground supplies
+                # the high-frequency grain. Rings vanish, material is honest.
+                gimg = Image.fromarray(ground.astype(np.uint8))
+                low = np.asarray(gimg.filter(ImageFilter.GaussianBlur(14)),
+                                 dtype=np.float32)
+                # crop the photo's own near-ground band (bottom centre)
+                cw = max(64, min(iw, ih) // 3)
+                cx1 = max(0, iw // 2 - cw // 2)
+                cy1 = max(0, ih - int(ih * 0.30) - cw // 2)
+                patch = np.asarray(im.crop((cx1, cy1, cx1 + cw, cy1 + cw))
+                                   .resize((512, 512), Image.LANCZOS),
+                                   dtype=np.float32)
+                # mirror-tile so edges meet, then normalise to a detail mask
+                tile = np.concatenate([patch, patch[:, ::-1]], axis=1)
+                tile = np.concatenate([tile, tile[::-1]], axis=0)   # 1024^2
+                reps = int(np.ceil(G / tile.shape[0]))
+                det = np.tile(tile, (reps, reps, 1))[:G, :G]
+                det = det / np.maximum(det.mean(axis=(0, 1), keepdims=True), 1e-3)
+                final = np.clip(low * (0.62 + 0.38 * det), 0, 255)
+                Image.fromarray(final.astype(np.uint8)) \
+                    .filter(ImageFilter.UnsharpMask(radius=2, percent=70, threshold=2)) \
                     .save(pdir / f"{slug}_ground.jpg", quality=92)
             except Exception as e:  # noqa: BLE001 — dome falls back to flat pano
                 print(f"[pano] depth lift skipped: {e}", flush=True)
