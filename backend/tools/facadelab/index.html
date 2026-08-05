@@ -1,0 +1,323 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Facade Lab — building dimension workbench</title>
+<!--
+  FACADE LAB (2026-08-05) — why this file exists.
+
+  OSM gives real footprints and real heights. It does NOT give facades, so an
+  extruded footprint is a flat-sided box: right shape, right place, blank wall.
+  "All the buildings look flat" is not an OSM problem and OSM cannot fix it.
+
+  Dimension comes from what we paint ONTO the footprint. This lab develops that
+  look in isolation — procedural facade textures (albedo + NORMAL + roughness +
+  emissive night mask), storey-accurate UVs, per-district families — against
+  real geometry with raking light, which is the only way to judge relief.
+
+  Everything here is generated in canvas at runtime: zero downloads, zero
+  licence risk, and it scales to any building because it is parametric.
+
+  Port target: the OSM building material path in the runtime.
+  Run: node tools/facadelab/serve.mjs
+-->
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:#101218; color:#e8e6ef;
+         font:13px/1.45 ui-sans-serif,system-ui,sans-serif; overflow:hidden; }
+  #app { position:fixed; inset:0; }
+  #panel { position:fixed; top:0; right:0; width:280px; height:100%;
+           overflow-y:auto; padding:14px 16px 40px;
+           background:rgba(14,16,22,.94); border-left:1px solid #262a34; }
+  h1 { font-size:13px; letter-spacing:.10em; text-transform:uppercase;
+       color:#7fd8c0; margin:0 0 2px; }
+  .sub { color:#7b7f92; font-size:11px; margin-bottom:12px; }
+  h2 { font-size:10px; letter-spacing:.14em; text-transform:uppercase;
+       color:#5d6273; margin:15px 0 5px; border-top:1px solid #242833;
+       padding-top:9px; }
+  .row { display:flex; align-items:center; gap:8px; margin:6px 0; }
+  .row label { flex:0 0 104px; color:#a9adc0; font-size:11px; }
+  .row input[type=range] { flex:1; accent-color:#7fd8c0; height:2px; }
+  .row output { flex:0 0 38px; text-align:right; color:#7fd8c0;
+                font:11px ui-monospace,monospace; }
+  .fams { display:flex; flex-wrap:wrap; gap:5px; }
+  .fams button { flex:1 1 auto; padding:5px 8px; border-radius:6px;
+                 border:1px solid #2c3040; background:#171a22; color:#9aa0b4;
+                 cursor:pointer; font:11px system-ui; }
+  .fams button.on { border-color:#3d8f7e; background:#16302c; color:#8fe7d0; }
+  .tog { display:flex; gap:6px; margin-top:8px; }
+  .tog button { flex:1; padding:6px; border-radius:6px; border:1px solid #2c3040;
+                background:#171a22; color:#9aa0b4; cursor:pointer; font:11px system-ui; }
+  .tog button.on { border-color:#3d8f7e; background:#16302c; color:#8fe7d0; }
+  #hint { position:fixed; left:14px; bottom:12px; color:#5d6273; font-size:11px; }
+</style>
+<div id="app"></div>
+<div id="panel">
+  <h1>Facade Lab</h1>
+  <div class="sub">The look, developed against real geometry.</div>
+  <h2>Family</h2><div class="fams" id="fams"></div>
+  <h2>Time</h2>
+  <div class="tog" id="tod">
+    <button data-t="noon" class="on">Noon</button>
+    <button data-t="dusk">Dusk</button>
+    <button data-t="night">Night</button>
+  </div>
+  <h2>Parameters</h2><div id="ctrls"></div>
+  <h2>Compare</h2>
+  <div class="tog" id="cmp">
+    <button data-c="on" class="on">Facade</button>
+    <button data-c="off">Flat (before)</button>
+  </div>
+</div>
+<div id="hint">drag to orbit · scroll to zoom · the test: do neighbours read as different buildings?</div>
+
+<script type="importmap">
+{ "imports": { "three": "./vendor/three.module.js" } }
+</script>
+<script type="module">
+import * as THREE from 'three';
+
+const P = {
+  storeyH:   { v: 3.3,  min: 2.6, max: 4.6, step: 0.1 },
+  winW:      { v: 0.56, min: 0.2, max: 0.9, step: 0.02 },
+  winH:      { v: 0.55, min: 0.2, max: 0.9, step: 0.02 },
+  colsPer10m:{ v: 4.0,  min: 2,   max: 9,   step: 0.5 },
+  reveal:    { v: 0.62, min: 0.0, max: 1.0, step: 0.02 },
+  ledge:     { v: 0.55, min: 0.0, max: 1.0, step: 0.02 },
+  grime:     { v: 0.38, min: 0.0, max: 1.0, step: 0.02 },
+  litFrac:   { v: 0.42, min: 0.0, max: 1.0, step: 0.02 },
+};
+// Families are the coherence layer. Mixing them randomly is what reads as AI
+// slop; a district picks ONE and every building in it agrees.
+const FAM = {
+  brownstone: { wall:'#7d4a38', trim:'#b99a80', glass:'#1d2531', warm:'#ffb562', cols:3.2, ledge:1 },
+  glass:      { wall:'#4d5f70', trim:'#8fa6ba', glass:'#16222e', warm:'#cfe4ff', cols:6.0, ledge:0.15 },
+  concrete:   { wall:'#8d8b83', trim:'#adaba2', glass:'#1b2028', warm:'#ffd9a0', cols:4.2, ledge:0.5 },
+  tokyo:      { wall:'#9aa0a6', trim:'#d3d7db', glass:'#1a2029', warm:'#e8f2ff', cols:5.2, ledge:0.35 },
+};
+let family = 'brownstone', tod = 'noon', showFacade = true;
+
+const app = document.getElementById('app');
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+app.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(46, innerWidth / innerHeight, 0.2, 900);
+function makeOrbit(cam, dom, target) {
+  let az = 0.85, el = 0.22, dist = 62, down = false, px = 0, py = 0;
+  dom.addEventListener('pointerdown', e => { down = true; px = e.clientX; py = e.clientY; });
+  addEventListener('pointerup', () => down = false);
+  addEventListener('pointermove', e => { if (!down) return;
+    az -= (e.clientX - px) * 0.006;
+    el = Math.max(-0.05, Math.min(1.2, el + (e.clientY - py) * 0.005));
+    px = e.clientX; py = e.clientY; });
+  dom.addEventListener('wheel', e => { e.preventDefault();
+    dist = Math.max(16, Math.min(190, dist + Math.sign(e.deltaY) * 4)); }, { passive:false });
+  return { update() {
+    cam.position.set(target.x + Math.sin(az)*Math.cos(el)*dist,
+                     target.y + Math.sin(el)*dist + 6,
+                     target.z + Math.cos(az)*Math.cos(el)*dist);
+    cam.lookAt(target); } };
+}
+const controls = makeOrbit(camera, renderer.domElement, new THREE.Vector3(0, 14, 0));
+
+const hemi = new THREE.HemisphereLight(0xbcd4f0, 0x2a2620, 0.6); scene.add(hemi);
+const sun = new THREE.DirectionalLight(0xffe9cf, 3.0);
+sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048);
+const sc = sun.shadow.camera;
+sc.left = -70; sc.right = 70; sc.top = 90; sc.bottom = -20; sc.far = 300;
+scene.add(sun);
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(400, 400).rotateX(-Math.PI/2),
+  new THREE.MeshStandardMaterial({ color: 0x22252c, roughness: 0.95 }));
+ground.receiveShadow = true; scene.add(ground);
+
+// ── PROCEDURAL FACADE TEXTURES ───────────────────────────────────────────
+// Albedo + NORMAL + roughness, drawn per building. The NORMAL map is what
+// actually creates relief: window reveals and ledges catch raking light and
+// read as depth at zero geometry cost. Albedo alone still looks painted-on.
+const g = k => P[k].v;
+function facadeMaps(storeys, cols, seed) {
+  const F = FAM[family];
+  const CW = 64, CH = 64;                       // px per bay/storey cell
+  const W = Math.max(8, Math.round(cols)) * CW, H = Math.max(1, storeys) * CH;
+  const alb = document.createElement('canvas'); alb.width = W; alb.height = H;
+  const nrm = document.createElement('canvas'); nrm.width = W; nrm.height = H;
+  const emi = document.createElement('canvas'); emi.width = W; emi.height = H;
+  const a = alb.getContext('2d'), n = nrm.getContext('2d'), e = emi.getContext('2d');
+  a.fillStyle = F.wall; a.fillRect(0, 0, W, H);
+  n.fillStyle = '#8080ff'; n.fillRect(0, 0, W, H);   // flat normal
+  e.fillStyle = '#000'; e.fillRect(0, 0, W, H);
+  let s = seed * 9301 + 49297;
+  const rnd = () => ((s = (s * 9301 + 49297) % 233280) / 233280);
+
+  for (let r = 0; r < storeys; r++) {
+    const y0 = r * CH;
+    const ground = (r === storeys - 1);           // texture v runs top->bottom
+    // GROUND FLOOR IS DIFFERENT. Shopfronts and doorways at street level do
+    // more for realism than any post effect, because the camera lives there.
+    const ww = ground ? 0.80 : g('winW'), wh = ground ? 0.74 : g('winH');
+    for (let c = 0; c < Math.round(cols); c++) {
+      const x0 = c * CW;
+      const bw = CW * ww, bh = CH * wh;
+      const bx = x0 + (CW - bw) / 2, by = y0 + (CH - bh) / 2;
+      // reveal: the window sits INSET, so its top/left edge is in shadow
+      const rv = g('reveal');
+      a.fillStyle = F.glass; a.fillRect(bx, by, bw, bh);
+      a.fillStyle = `rgba(0,0,0,${0.35 * rv})`;
+      a.fillRect(bx, by, bw, bh * 0.16);           // shadow under the head
+      a.fillStyle = F.trim;
+      a.fillRect(bx - 2, by + bh, bw + 4, 3);      // sill
+      // normal map: encode the inset as opposing edge slopes
+      const d = Math.round(60 * rv);
+      n.fillStyle = `rgb(${128 - d},${128 + d},255)`; n.fillRect(bx, by, bw, 4);
+      n.fillStyle = `rgb(${128 + d},${128 - d},255)`; n.fillRect(bx, by + bh - 4, bw, 4);
+      n.fillStyle = `rgb(${128 - d},128,255)`; n.fillRect(bx, by, 4, bh);
+      n.fillStyle = `rgb(${128 + d},128,255)`; n.fillRect(bx + bw - 4, by, 4, bh);
+      // night: a randomly lit subset of cells, warm and uneven
+      if (rnd() < g('litFrac')) {
+        const warm = F.warm;
+        e.fillStyle = warm; e.globalAlpha = 0.55 + rnd() * 0.45;
+        e.fillRect(bx, by, bw, bh); e.globalAlpha = 1;
+      }
+    }
+    // storey ledge / banding — the horizontal that breaks a blank wall
+    const lg = g('ledge') * FAM[family].ledge;
+    if (lg > 0.02) {
+      a.fillStyle = `rgba(255,255,255,${0.10 * lg})`; a.fillRect(0, y0, W, 3);
+      a.fillStyle = `rgba(0,0,0,${0.30 * lg})`;      a.fillRect(0, y0 + 3, W, 3);
+      const dd = Math.round(70 * lg);
+      n.fillStyle = `rgb(128,${128 + dd},255)`; n.fillRect(0, y0, W, 3);
+      n.fillStyle = `rgb(128,${128 - dd},255)`; n.fillRect(0, y0 + 3, W, 3);
+    }
+  }
+  // grime: vertical streaking under sills, the thing that stops a building
+  // looking freshly extruded
+  a.globalAlpha = g('grime') * 0.5;
+  for (let i = 0; i < W / 3; i++) {
+    const gx = rnd() * W, gy = rnd() * H;
+    a.fillStyle = `rgba(0,0,0,${0.05 + rnd() * 0.10})`;
+    a.fillRect(gx, gy, 1 + rnd() * 3, 20 + rnd() * 90);
+  }
+  a.globalAlpha = 1;
+  const mk = (cv, srgb) => { const t = new THREE.CanvasTexture(cv);
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    if (srgb) t.colorSpace = THREE.SRGBColorSpace; return t; };
+  return { map: mk(alb, true), normalMap: mk(nrm, false), emissiveMap: mk(emi, true) };
+}
+
+let city = null;
+function build() {
+  if (city) { scene.remove(city); }
+  city = new THREE.Group();
+  const F = FAM[family];
+  // a short street of neighbours — the ONLY honest test of "do buildings look
+  // different from each other", which a single hero building cannot answer
+  const specs = [
+    { w: 16, d: 14, st: 5,  x: -34 },
+    { w: 13, d: 14, st: 9,  x: -14 },
+    { w: 18, d: 14, st: 3,  x:   6 },
+    { w: 12, d: 14, st: 12, x:  26 },
+  ];
+  specs.forEach((b, i) => {
+    const h = b.st * g('storeyH');
+    // UV BY REAL METRES, not per-face 0-1: one texture repeat = one storey.
+    // Stretching one image over every wall is what made a 12-storey and a
+    // 3-storey building look like the same building twice.
+    const cols = Math.max(2, Math.round(b.w / 10 * g('colsPer10m')));
+    const mat = showFacade
+      ? new THREE.MeshStandardMaterial({
+          ...facadeMaps(b.st, cols, i + 1),
+          roughness: 0.82, metalness: family === 'glass' ? 0.35 : 0.03,
+          normalScale: new THREE.Vector2(1.3, 1.3),
+          emissive: 0xffffff,
+          emissiveIntensity: tod === 'night' ? 1.5 : tod === 'dusk' ? 0.7 : 0.0 })
+      : new THREE.MeshStandardMaterial({ color: F.wall, roughness: 0.9 });
+    const m = new THREE.Mesh(new THREE.BoxGeometry(b.w, h, b.d), mat);
+    m.position.set(b.x, h / 2, 0);
+    m.castShadow = m.receiveShadow = true;
+    city.add(m);
+    // ROOFLINE BREAK-UP: instanced clutter kills the sheared-off box
+    // silhouette, which is where flatness is most obvious against the sky.
+    if (showFacade && b.st >= 4) {
+      const cm = new THREE.MeshStandardMaterial({ color: 0x6d7078, roughness: 0.9 });
+      const cg = new THREE.BoxGeometry(1, 1, 1);
+      const inst = new THREE.InstancedMesh(cg, cm, 7);
+      const mtx = new THREE.Matrix4();
+      let s2 = (i + 3) * 7919;
+      const rr = () => ((s2 = (s2 * 9301 + 49297) % 233280) / 233280);
+      for (let k = 0; k < 7; k++) {
+        const sw = 0.9 + rr() * 2.4, sh = 0.7 + rr() * 2.0, sd = 0.9 + rr() * 2.0;
+        mtx.compose(
+          new THREE.Vector3(b.x + (rr() - 0.5) * (b.w - 3), h + sh / 2, (rr() - 0.5) * (b.d - 3)),
+          new THREE.Quaternion(), new THREE.Vector3(sw, sh, sd));
+        inst.setMatrixAt(k, mtx);
+      }
+      inst.castShadow = true; city.add(inst);
+      // parapet: a thin lip around the roof edge
+      const pr = new THREE.Mesh(new THREE.BoxGeometry(b.w + 0.4, 0.7, b.d + 0.4),
+        new THREE.MeshStandardMaterial({ color: F.trim, roughness: 0.9 }));
+      pr.position.set(b.x, h + 0.35, 0); pr.castShadow = true; city.add(pr);
+    }
+  });
+  scene.add(city);
+}
+
+function applyTOD() {
+  if (tod === 'noon') {
+    sun.position.set(40, 90, 30); sun.intensity = 3.0; sun.color.set(0xffe9cf);
+    hemi.intensity = 0.6; scene.background = new THREE.Color(0x8fb2d8);
+    renderer.toneMappingExposure = 1.0;
+  } else if (tod === 'dusk') {
+    // raking light is the whole point: a low sun is what makes reveals and
+    // ledges cast the shadows that read as depth
+    sun.position.set(-80, 22, 26); sun.intensity = 3.4; sun.color.set(0xffb070);
+    hemi.intensity = 0.35; scene.background = new THREE.Color(0x3b3550);
+    renderer.toneMappingExposure = 1.05;
+  } else {
+    sun.position.set(-40, 60, 40); sun.intensity = 0.30; sun.color.set(0x8fa8d8);
+    hemi.intensity = 0.16; scene.background = new THREE.Color(0x0d1018);
+    renderer.toneMappingExposure = 1.15;
+  }
+}
+
+const fams = document.getElementById('fams');
+Object.keys(FAM).forEach(k => {
+  const btn = document.createElement('button');
+  btn.textContent = k; btn.className = k === family ? 'on' : '';
+  btn.onclick = () => { family = k;
+    [...fams.children].forEach(c => c.className = c.textContent === k ? 'on' : '');
+    build(); };
+  fams.appendChild(btn);
+});
+document.getElementById('tod').onclick = e => {
+  if (!e.target.dataset.t) return; tod = e.target.dataset.t;
+  [...e.currentTarget.children].forEach(c => c.className = c.dataset.t === tod ? 'on' : '');
+  applyTOD(); build();
+};
+document.getElementById('cmp').onclick = e => {
+  if (!e.target.dataset.c) return; showFacade = e.target.dataset.c === 'on';
+  [...e.currentTarget.children].forEach(c =>
+    c.className = (c.dataset.c === 'on') === showFacade ? 'on' : '');
+  build();
+};
+const ctrls = document.getElementById('ctrls');
+for (const [k, o] of Object.entries(P)) {
+  const row = document.createElement('div'); row.className = 'row';
+  row.innerHTML = `<label>${k}</label>`
+    + `<input type="range" min="${o.min}" max="${o.max}" step="${o.step}" value="${o.v}">`
+    + `<output>${o.v}</output>`;
+  const [inp, out] = [row.querySelector('input'), row.querySelector('output')];
+  inp.addEventListener('input', () => { o.v = parseFloat(inp.value);
+    out.textContent = o.v; build(); });
+  ctrls.appendChild(row);
+}
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+applyTOD(); build();
+renderer.setAnimationLoop(() => { controls.update(); renderer.render(scene, camera); });
+</script>
