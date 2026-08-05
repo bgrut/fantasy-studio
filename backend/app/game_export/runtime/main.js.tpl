@@ -3383,6 +3383,12 @@ async function main() {
         // read the danger and react. Stealth without feedback is a coin flip.
         window.__alertPeak = Math.max(window.__alertPeak || 0,
                                       n.mode === 'chase' ? 1 : n.alert);
+        // casing: once YOU have had a clear look at him, he goes on the
+        // blueprint permanently. Intelligence you gathered, not a wallhack.
+        if (!n._seenByPlayer && d < 18
+            && canSee(playerPos.x, playerPos.z, n.obj.position.x, n.obj.position.z)) {
+          n._seenByPlayer = true;
+        }
         if (n.mode === 'chase') {
           n.vjit = 1.5;                        // guards sprint when alerted
           if (d > 1.7) { tx = playerPos.x; tz = playerPos.z; }
@@ -5158,6 +5164,89 @@ async function main() {
     // lives on F, matching every modern game's muscle memory
     if (e.code === 'KeyF') { e.preventDefault(); doAttack(); }
     if (e.code === 'KeyV') { e.preventDefault(); setCine(!cineOn); }
+    // ── THE BLUEPRINT (B): a burglar cases the place before going in.
+    // Draws the real floor plan from the interior data — walls, doorways,
+    // the loot, the exit, and your own position. Guards appear only where
+    // you have actually SEEN them, so the plan is intelligence you gather,
+    // not a wallhack. This is the "study the blueprints" half of the genre.
+    if (e.code === 'KeyB' && INTERIOR) {
+      e.preventDefault();
+      let bp = document.getElementById('fsbp');
+      if (bp) { bp.remove(); return; }
+      bp = document.createElement('div');
+      bp.id = 'fsbp';
+      bp.style.cssText = 'position:fixed;inset:0;display:flex;align-items:center;'
+        + 'justify-content:center;background:rgba(4,10,26,.86);z-index:60;'
+        + 'backdrop-filter:blur(2px);font:600 12px system-ui;color:#8ecbff';
+      const W = 640, H = 520;
+      const cv = document.createElement('canvas');
+      cv.width = W; cv.height = H;
+      cv.style.cssText = 'max-width:92vw;max-height:80vh;border:1px solid #2b6ea8;'
+        + 'border-radius:10px;background:#071427';
+      bp.appendChild(cv);
+      const cap = document.createElement('div');
+      cap.style.cssText = 'position:absolute;bottom:6%;left:0;right:0;text-align:center;'
+        + 'color:#5b9fd6;letter-spacing:.04em';
+      cap.textContent = 'BLUEPRINT — B to close · guards shown where you have seen them';
+      bp.appendChild(cap);
+      document.body.appendChild(bp);
+      const g = cv.getContext('2d');
+      const bx = INTERIOR.bounds[0], bz = INTERIOR.bounds[1];
+      const sc = Math.min((W - 70) / bx, (H - 90) / bz);
+      const PX = (x) => W / 2 + x * sc, PZ = (z) => H / 2 + z * sc;
+      g.fillStyle = '#071427'; g.fillRect(0, 0, W, H);
+      // faint drafting grid, like a real plan sheet
+      g.strokeStyle = 'rgba(80,150,220,.10)'; g.lineWidth = 1;
+      for (let i = 0; i <= W; i += 26) { g.beginPath(); g.moveTo(i, 0); g.lineTo(i, H); g.stroke(); }
+      for (let i = 0; i <= H; i += 26) { g.beginPath(); g.moveTo(0, i); g.lineTo(W, i); g.stroke(); }
+      // rooms
+      g.strokeStyle = 'rgba(120,190,255,.30)';
+      for (const [cx, cz, rw, rd] of INTERIOR.rooms) {
+        g.strokeRect(PX(cx - rw / 2), PZ(cz - rd / 2), rw * sc, rd * sc);
+      }
+      // walls, with the doorway gap left open exactly as built
+      g.strokeStyle = '#7ec4ff'; g.lineWidth = 2.5;
+      const DW = 2.4;
+      for (const [cx, cz, ln, rot, door] of INTERIOR.walls) {
+        const seg2 = (a, b) => {
+          g.beginPath();
+          if (rot) { g.moveTo(PX(cx), PZ(cz + a)); g.lineTo(PX(cx), PZ(cz + b)); }
+          else { g.moveTo(PX(cx + a), PZ(cz)); g.lineTo(PX(cx + b), PZ(cz)); }
+          g.stroke();
+        };
+        if (door < 0) { seg2(-ln / 2, ln / 2); continue; }
+        const dC = -ln / 2 + door * ln;
+        seg2(-ln / 2, dC - DW / 2);
+        seg2(dC + DW / 2, ln / 2);
+      }
+      // the loot still on the floor
+      const st2 = steps[stepIdx];
+      if (st2 && st2.kind === 'collect') {
+        g.fillStyle = '#ffd54a';
+        for (const c of collectibles || []) {
+          if (!c.mesh || !c.mesh.parent) continue;
+          g.beginPath();
+          g.arc(PX(c.mesh.position.x), PZ(c.mesh.position.z), 5, 0, 7);
+          g.fill();
+        }
+      }
+      // guards you have actually laid eyes on
+      g.fillStyle = '#ff6b6b';
+      for (const n of npcs) {
+        if (n.behavior !== 'guard' || n.dead || !n._seenByPlayer) continue;
+        g.beginPath();
+        g.arc(PX(n.obj.position.x), PZ(n.obj.position.z), 5.5, 0, 7);
+        g.fill();
+      }
+      // you
+      g.fillStyle = '#5cffc9';
+      g.beginPath();
+      g.arc(PX(playerObj.position.x), PZ(playerObj.position.z), 5.5, 0, 7);
+      g.fill();
+      g.fillStyle = '#9fd8ff';
+      g.font = '600 11px system-ui';
+      g.fillText('YOU', PX(playerObj.position.x) + 9, PZ(playerObj.position.z) + 4);
+    }
     // THROW A DISTRACTION (heist kit, Q): stealth is only interesting when
     // you can ACT on the guards, not just avoid them. Lob a stone; whoever
     // is nearest walks over to investigate the clatter, opening the room
