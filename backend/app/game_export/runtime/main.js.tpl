@@ -625,6 +625,18 @@ async function main() {
   // line reads it long before those run, and a `const` in the temporal dead
   // zone takes the whole runtime down with it
   const HAS_GUARDS = (SPEC.entities || []).some(e => e.behavior === 'guard');
+  // STEAL A CAR (2026-08-05): walking and driving were two separate games —
+  // a heist could end by "escaping to the getaway car" you were never able to
+  // get into. `DRIVING` is the RUNTIME half of SPEC.player.mode: the physics
+  // branch reads `DRIVE || DRIVING`, so the arcade car model (and its lateral
+  // grip-bleed drift) is reused verbatim rather than forked.
+  // Declared UP here with the other level constants: the minimap closure and
+  // the E-key handler are both built hundreds of lines earlier than the car
+  // system, and a `let` read inside its temporal dead zone takes the whole
+  // runtime down (three times, one morning — see ENTERABLES above).
+  let DRIVING = false;
+  window.__cars = [];        // parked, drivable — the minimap reads it lazily
+  window.__inCar = null;
   // A BURGLAR STARTS AT THE DOOR (2026-08-05): interiors spawned the player
   // dead-centre in the entry hall — in the open, in every patrol's sightline,
   // with nothing to duck behind. Start at the near wall by the doorway, the
@@ -2986,6 +2998,15 @@ async function main() {
         mx.arc(w2m(E.door[0]), w2m(E.door[1]), 3.4, 0, Math.PI * 2);
         mx.fill();
       }
+      // parked cars: the same "where do I even go" problem the venue dots
+      // solve — a getaway car you cannot find is not a getaway car
+      for (const c of window.__cars || []) {
+        if (c === window.__inCar) continue;          // that one is the arrow
+        mx.fillStyle = '#7fd4ff';
+        mx.beginPath();
+        mx.arc(w2m(c.x), w2m(c.z), 3.0, 0, Math.PI * 2);
+        mx.fill();
+      }
       camera.getWorldDirection(dirV);
       mx.save();
       mx.translate(w2m(pp.x), w2m(pp.z));
@@ -4230,6 +4251,10 @@ async function main() {
   addEventListener('keydown', e => {
     if (e.code === 'KeyE') {
       if (reading) { setReading(false); return; }
+      // a car beats a readable note on the same key: you are standing at a
+      // door handle, not a signpost. Hooked through `window` on purpose —
+      // this listener is built ~1300 lines before the car system exists.
+      if (gameStarted && window.__carE && window.__carE()) return;
       if (readable && gameStarted) setReading(true, readable);
     }
   });
@@ -5522,6 +5547,187 @@ async function main() {
     view: VIEW,
   };
 
+  // ── PARKED CARS YOU CAN STEAL ────────────────────────────────────────────
+  // The whole bridge between the two demos. Placed HERE, after the player
+  // capsule, `playerObj` and `spawnHeight` exist, so enter/exit can move the
+  // real body instead of inventing a second one. Nothing about the car is a
+  // new physics object: getting in swaps the visible model, points the
+  // existing kinematic capsule at the car, and flips `DRIVING`.
+  // A REAL ROAD GRAPH IS THE GATE (2026-08-05): the first cut parked cars in
+  // any outdoor walking world, which put modern sedans in forest valleys and
+  // on castle grounds. A car needs somewhere it could plausibly have been
+  // driven and left, and OSM roads are the only honest evidence of that.
+  // Interiors are excluded for the obvious reason.
+  const CARS_OK = !INTERIOR && !PURE_SCENE && VIEW === '3d'
+                  && (P.mode || 'walk') === 'walk'
+                  && !!(OSM && OSM.roads && OSM.roads.length);
+  let carPrompt = null, nearCar = null, heldCar = null, camDistMul = 1, carCool = 0;
+  if (CARS_OK) {
+    const rngC = mulberry32(SPEC.seed + 9091);
+    const tints = [0x8e1f26, 0x1d2530, 0xb8bcc4, 0x2b4a72, 0xc2a03a, 0x24503c];
+    const cand = [];
+    for (const r of OSM.roads) {
+      if (!r.pts || r.pts.length < 2) continue;
+      for (let i = 0; i < r.pts.length - 1; i++) {
+        const a = r.pts[i], b = r.pts[i + 1];
+        const segL = Math.hypot(b[0] - a[0], b[1] - a[1]);
+        if (segL < 8) continue;
+        const hd = Math.atan2(b[0] - a[0], b[1] - a[1]);
+        for (let f = 0.3; f < 0.95; f += 0.3) {
+          const mx3 = a[0] + (b[0] - a[0]) * f, mz3 = a[1] + (b[1] - a[1]) * f;
+          const side = rngC() < 0.5 ? 1 : -1;
+          const off = Math.max((r.w || 7) / 2 - 1.2, 1.4);   // at the curb
+          cand.push([mx3 + Math.cos(hd) * side * off,
+                     mz3 - Math.sin(hd) * side * off,
+                     hd + (side > 0 ? 0 : Math.PI)]);
+        }
+      }
+    }
+    const half3 = SPEC.world.size_m / 2 - 5;
+    const ok = cand.filter(c =>
+      Math.hypot(c[0] - _sp.x, c[1] - _sp.z) > 11
+      && Math.abs(c[0]) < half3 && Math.abs(c[1]) < half3
+      && !inBldg(c[0], c[1], 1.0)
+      && !ENTERABLES.some(E => Math.hypot(c[0] - E.door[0], c[1] - E.door[1]) < 7))
+      .sort((p, q) => Math.hypot(p[0] - _sp.x, p[1] - _sp.z)
+                    - Math.hypot(q[0] - _sp.x, q[1] - _sp.z));
+    for (const c of ok) {
+      if (window.__cars.length >= 5) break;
+      // spread them over the map — five cars on one block is a dealership,
+      // and the nearest-first sort still guarantees one close to the spawn
+      if (window.__cars.some(k => Math.hypot(k.x - c[0], k.z - c[1]) < 24)) continue;
+      const rig = new THREE.Group();
+      rig.rotation.order = 'YXZ';        // yaw first: body-roll must not steer
+      const shell = buildCar({ paint: tints[window.__cars.length % tints.length],
+                               length: 4.25 + rngC() * 0.55, width: 1.84 });
+      // buildCar extrudes the nose along +X (the Car Lab axis); the runtime's
+      // forward is +Z — the same +90 deg the baked car assets get from
+      // alignLongAxis. -90 deg is the one that faces the camera.
+      shell.rotation.y = Math.PI / 2;
+      shell.traverse(o => {
+        if (!o.isMesh) return;
+        o.castShadow = o.receiveShadow = true;
+        // five transmissive greenhouses would each cost their own render
+        // pass; parked glass is flat smoked instead (only the car you drive
+        // is close enough for real transmission to read anyway)
+        const mats = Array.isArray(o.material) ? o.material : [o.material];
+        if (mats.some(m => m && m.transmission > 0)) {
+          o.material = new THREE.MeshStandardMaterial({
+            color: 0x0d1116, metalness: 0.4, roughness: 0.12 });
+        }
+      });
+      rig.add(shell);
+      rig.position.set(c[0], hAt(c[0], c[1]), c[1]);
+      rig.rotation.y = c[2];
+      scene.add(rig);
+      // NO COLLIDER, deliberately (2026-08-05): a solid parked car is a box
+      // you can be squeezed into on exit, and "player stuck inside geometry"
+      // is a worse bug than driving through an unoccupied fender.
+      window.__cars.push({ rig, x: c[0], z: c[1], yaw: c[2] });
+    }
+    if (window.__cars.length) {
+      carPrompt = document.createElement('div');
+      carPrompt.style.cssText = 'position:fixed;left:50%;bottom:130px;'
+        + 'transform:translateX(-50%);font:600 14px system-ui;color:#dff4ff;'
+        + 'background:rgba(10,9,18,.78);border:1px solid rgba(127,212,255,.45);'
+        + 'border-radius:10px;padding:8px 14px;z-index:24;display:none;'
+        + 'pointer-events:none;';
+      document.body.appendChild(carPrompt);
+      const hintC = document.querySelector('#hud .hint');
+      if (hintC) hintC.textContent += ' · E by a parked car to drive it';
+    }
+  }
+  function enterCar(c) {
+    if (DRIVING || !c || lost) return;
+    DRIVING = true; heldCar = c; window.__inCar = c;
+    holder.visible = false;
+    scene.remove(c.rig);
+    playerObj.add(c.rig);
+    // playerObj sits at the capsule's FEET, and spawnHeight floats it 0.15 m
+    // clear of the terrain — drop the shell back onto its tyres.
+    c.rig.position.set(0, -0.14, 0);
+    modelYaw = c.yaw;
+    carVX = 0; carVZ = 0; vSpeed = 0; vy = 0; prevV = 0;
+    window.__sneak = false;
+    if (window.__sneakChip) window.__sneakChip.style.display = 'none';
+    const ey = spawnHeight(c.x, c.z);
+    body.setTranslation({ x: c.x, y: ey, z: c.z }, true);
+    body.setNextKinematicTranslation({ x: c.x, y: ey, z: c.z });
+    sfx('go');
+    popText('Engine on — W to drive, E to get out', '#7fd4ff');
+  }
+  function exitCar() {
+    if (!DRIVING || !heldCar) return;
+    const c = heldCar;
+    const cx5 = playerObj.position.x, cz5 = playerObj.position.z;
+    playerObj.remove(c.rig);
+    scene.add(c.rig);
+    c.rig.position.set(cx5, hAt(cx5, cz5), cz5);
+    c.rig.rotation.set(0, modelYaw, 0);
+    c.x = cx5; c.z = cz5; c.yaw = modelYaw;
+    // STEP OUT, NEVER INTO A WALL (2026-08-05): driver's side first, then
+    // passenger side, then behind. Each candidate is ray-tested outward from
+    // the driver's seat — a hit means that "pavement" is a building, so the
+    // next door is tried. Falling through leaves the player on the car's own
+    // (collider-free) spot, which is always escapable.
+    let ex = cx5, ez = cz5;
+    for (const [sx5, sz5] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) {
+      const dxw = Math.cos(modelYaw) * sx5 + Math.sin(modelYaw) * sz5;
+      const dzw = -Math.sin(modelYaw) * sx5 + Math.cos(modelYaw) * sz5;
+      const ray = new RAPIER.Ray({ x: cx5, y: hAt(cx5, cz5) + 1.0, z: cz5 },
+                                 { x: dxw, y: 0, z: dzw });
+      if (world.castRay(ray, 3.4, true, undefined, undefined, collider, body)) continue;
+      ex = cx5 + dxw * 2.6; ez = cz5 + dzw * 2.6;
+      break;
+    }
+    DRIVING = false; heldCar = null; window.__inCar = null;
+    holder.visible = true;
+    holder.rotation.x = 0; holder.rotation.z = 0;
+    leanP = 0; leanR = 0;
+    carVX = 0; carVZ = 0; vSpeed = 0; vy = 0;
+    const ey = spawnHeight(ex, ez);
+    body.setTranslation({ x: ex, y: ey, z: ez }, true);
+    body.setNextKinematicTranslation({ x: ex, y: ey, z: ez });
+    sfx('step');
+    popText('Out of the car', '#7fd4ff');
+  }
+  // keydown REPEATS while E is held — without the cooldown one press
+  // toggles in and out of the car a dozen times.
+  window.__carE = () => {
+    if (!CARS_OK || !window.__cars.length) return false;
+    if (performance.now() < carCool) return true;
+    if (DRIVING) { carCool = performance.now() + 550; exitCar(); return true; }
+    if (nearCar) { carCool = performance.now() + 550; enterCar(nearCar); return true; }
+    return false;
+  };
+  function stepCars(dt) {
+    if (!CARS_OK || !carPrompt) return;
+    camDistMul = THREE.MathUtils.damp(camDistMul, DRIVING ? 1.75 : 1, 3.2, dt);
+    if (DRIVING) {
+      if (heldCar) {
+        heldCar.rig.rotation.set(leanP, modelYaw, leanR);
+        heldCar.x = playerObj.position.x;   // keeps the minimap dot on the car
+        heldCar.z = playerObj.position.z;
+      }
+      nearCar = null;
+      carPrompt.textContent = 'E — get out';
+      carPrompt.style.display = 'block';
+      return;
+    }
+    let best = null, bd = 6.0;
+    const pp5 = playerObj.position;
+    for (const c of window.__cars) {
+      const d = Math.hypot(c.x - pp5.x, c.z - pp5.z);
+      if (d < bd) { bd = d; best = c; }
+    }
+    nearCar = best;
+    carPrompt.style.display = best ? 'block' : 'none';
+    if (best) carPrompt.textContent = 'E — drive';
+  }
+  window.__game.cars = () => window.__cars.map(c => ({ x: c.x, z: c.z }));
+  window.__game.driving = () => DRIVING;
+  window.__game.nearCar = () => (nearCar ? { x: nearCar.x, z: nearCar.z } : null);
+
   // Inspect = SOFT FREEZE: while editing, enemies stop, damage stops, and
   // the run/survive clocks hold — dying mid-edit is not a feature. Exiting
   // inspect shifts the clocks by the frozen duration (same math as pause).
@@ -6520,11 +6726,14 @@ varying vec2 vUvRaw;
     }
     let speed;
     const dir = new THREE.Vector3();
-    if (DRIVE) {
+    if (DRIVE || DRIVING) {
       // CAR PHYSICS: throttle/brake + speed-scaled steering — no crab-walking
       const throttle = raceGo ? -mv.z : 0;          // W/up = forward (after GO)
       const steer = raceGo ? mv.x : 0;
-      const maxV = mv.run ? P.run_speed : P.walk_speed;
+      // a STOLEN car does not inherit the pedestrian's top speed — a detective
+      // who runs at 7 m/s would otherwise "drive" at jogging pace.
+      const maxV = DRIVING ? (mv.run ? 30 : 19)
+                           : (mv.run ? P.run_speed : P.walk_speed);
       if (throttle > 0.05) vSpeed += 11 * throttle * dt;
       else if (throttle < -0.05) vSpeed -= 14 * -throttle * dt;   // brake/reverse
       else vSpeed *= Math.max(0, 1 - 1.6 * dt);                   // coast friction
@@ -6671,7 +6880,7 @@ varying vec2 vUvRaw;
     }
     playerObj.position.set(nt.x, nt.y - (capHalf + capR), nt.z);
     holder.rotation.y = modelYaw + THREE.MathUtils.degToRad(P.yaw_offset_deg || 0);
-    if (DRIVE) {
+    if (DRIVE || DRIVING) {
       // suspension feel: pitch under accel/brake, roll into turns
       const accel = (vSpeed - prevV) / Math.max(dt, 1e-3); prevV = vSpeed;
       leanP = THREE.MathUtils.damp(leanP,
@@ -6834,6 +7043,7 @@ varying vec2 vUvRaw;
     }
     stepDmgNumbers(dt);
     stepDust(dt);
+    stepCars(dt);
     // door teleports (moon plan 2.2; many venues 2026-08-05)
     if (window.__doors && window.__doors.length) {
       const pp = body.translation();
@@ -7035,7 +7245,7 @@ varying vec2 vUvRaw;
     if (!dragging && freeLookT <= 0 && mv.mag > 0.15) {
       let dyaw = (modelYaw + Math.PI) - yaw;
       dyaw = Math.atan2(Math.sin(dyaw), Math.cos(dyaw));
-      yaw += dyaw * Math.min(1, (DRIVE ? 3.0 : 1.8) * dt);
+      yaw += dyaw * Math.min(1, ((DRIVE || DRIVING) ? 3.0 : 1.8) * dt);
     }
     // inspect free-cam looks at the roaming focus point, slightly pulled back
     const fX = (inspectOn && inspF) ? inspF.x : nt.x;
@@ -7072,7 +7282,10 @@ varying vec2 vUvRaw;
       if (camTarget.lengthSq() === 0) camTarget.copy(_camWant);
       camTarget.lerp(_camWant, 1 - Math.exp(-7 * dt));
       camera.up.set(0, 1, 0);              // never let lookAt roll-flip
-      const cd = SPEC.camera.distance_m * camZoom * (inspectOn ? 1.5 : 1);
+      // camDistMul eases 1 -> 1.75 on entering a car: a walking-distance
+      // camera sat on the roof at 19 m/s. Damped, so it reads as the camera
+      // pulling back with you rather than a cut.
+      const cd = SPEC.camera.distance_m * camZoom * camDistMul * (inspectOn ? 1.5 : 1);
       let cx = fX + Math.sin(yaw) * Math.cos(pitch) * cd;     // camera BEHIND
       let cz = fZ + Math.cos(yaw) * Math.cos(pitch) * cd;     // (W walks away)
       let cy = fY + Math.sin(pitch) * cd + _lift * 0.55;
