@@ -166,10 +166,32 @@ function facadeMaps(storeys, cols, seed) {
       // reveal: the window sits INSET, so its top/left edge is in shadow
       const rv = g('reveal');
       a.fillStyle = F.glass; a.fillRect(bx, by, bw, bh);
+      // GLASS IS NOT FLAT: a diagonal sky reflection across the upper pane is
+      // the single cheapest cue that a window is glass and not a dark hole.
+      const gr = a.createLinearGradient(bx, by, bx + bw, by + bh);
+      gr.addColorStop(0, 'rgba(150,185,225,0.40)');
+      gr.addColorStop(0.42, 'rgba(120,150,190,0.10)');
+      gr.addColorStop(0.55, 'rgba(0,0,0,0)');
+      a.fillStyle = gr; a.fillRect(bx, by, bw, bh);
+      // blinds/curtains at a random height — occupancy variety. Identical
+      // windows in every bay is the tell that a facade was generated.
+      if (!ground && rnd() < 0.45) {
+        a.fillStyle = `rgba(228,224,210,${0.55 + rnd() * 0.35})`;
+        a.fillRect(bx, by, bw, bh * (0.18 + rnd() * 0.5));
+      }
+      // MULLIONS: the frame bars. Real windows are divided; a single dark
+      // rectangle reads as a hole punched in a wall.
+      a.fillStyle = F.trim;
+      const mw = Math.max(1.5, bw * 0.045);
+      a.fillRect(bx + bw / 2 - mw / 2, by, mw, bh);              // vertical
+      a.fillRect(bx, by + bh * (ground ? 0.72 : 0.44), bw, mw);  // transom
+      a.fillRect(bx - 1.5, by - 1.5, bw + 3, 2);                 // head casing
       a.fillStyle = `rgba(0,0,0,${0.35 * rv})`;
       a.fillRect(bx, by, bw, bh * 0.16);           // shadow under the head
       a.fillStyle = F.trim;
       a.fillRect(bx - 2, by + bh, bw + 4, 3);      // sill
+      a.fillStyle = `rgba(0,0,0,${0.22 + 0.25 * g('grime')})`;
+      a.fillRect(bx - 2, by + bh + 3, bw + 4, 2);  // shadow the sill casts
       // normal map: encode the inset as opposing edge slopes
       const d = Math.round(60 * rv);
       n.fillStyle = `rgb(${128 - d},${128 + d},255)`; n.fillRect(bx, by, bw, 4);
@@ -260,6 +282,68 @@ function build() {
       const pr = new THREE.Mesh(new THREE.BoxGeometry(b.w + 0.4, 0.7, b.d + 0.4),
         new THREE.MeshStandardMaterial({ color: F.trim, roughness: 0.9 }));
       pr.position.set(b.x, h + 0.35, 0); pr.castShadow = true; city.add(pr);
+
+      // ── REAL GEOMETRY AT THE SILHOUETTE ─────────────────────────────────
+      // A normal map cannot fix an outline. Where a building meets the sky
+      // and where it meets the street are the two places the eye checks for
+      // depth, and both need actual geometry.
+      const trimM = new THREE.MeshStandardMaterial({ color: F.trim, roughness: 0.85 });
+
+      // CORNICE: the projecting crown course. This one band does more for
+      // "a real building" than any texture, because it breaks the vertical
+      // edge and throws a hard shadow down the facade.
+      const corn = new THREE.Mesh(new THREE.BoxGeometry(b.w + 1.1, 0.55, b.d + 1.1), trimM);
+      corn.position.set(b.x, h - 0.3, 0);
+      corn.castShadow = corn.receiveShadow = true; city.add(corn);
+
+      // WATER TOWER — the NYC roofline signature, and pure silhouette value
+      if (rr() < 0.6) {
+        const tw = new THREE.Group();
+        const barrel = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 1.6, 3.1, 14),
+          new THREE.MeshStandardMaterial({ color: 0x6b4a34, roughness: 0.95 }));
+        barrel.position.y = 3.4; tw.add(barrel);
+        const cone = new THREE.Mesh(new THREE.ConeGeometry(1.75, 1.1, 14),
+          new THREE.MeshStandardMaterial({ color: 0x55391f, roughness: 0.95 }));
+        cone.position.y = 5.5; tw.add(cone);
+        const legM = new THREE.MeshStandardMaterial({ color: 0x3b3b3f, roughness: 0.9 });
+        for (let L = 0; L < 4; L++) {
+          const lgm = new THREE.Mesh(new THREE.BoxGeometry(0.16, 3.4, 0.16), legM);
+          lgm.position.set(Math.cos(L * 1.571) * 1.05, 1.7, Math.sin(L * 1.571) * 1.05);
+          tw.add(lgm);
+        }
+        tw.position.set(b.x + (rr() - 0.5) * (b.w - 6), h, (rr() - 0.5) * (b.d - 6));
+        tw.traverse(o => o.castShadow = true);
+        city.add(tw);
+      }
+
+      // FIRE ESCAPE — the other NYC signature. A zig-zag of landings hung off
+      // the face: it casts a busy, unmistakably urban shadow and it is the
+      // strongest single cue that this is a street and not a render.
+      if (family === 'brownstone' || family === 'concrete') {
+        const feM = new THREE.MeshStandardMaterial({ color: 0x24262b, roughness: 0.85,
+                                                     metalness: 0.55 });
+        const fx = b.x + (rr() - 0.5) * (b.w * 0.4);
+        for (let s3 = 1; s3 < b.st; s3++) {
+          const y = s3 * g('storeyH');
+          const deck = new THREE.Mesh(new THREE.BoxGeometry(3.0, 0.10, 1.15), feM);
+          deck.position.set(fx, y, b.d / 2 + 0.6);
+          deck.castShadow = true; city.add(deck);
+          const rail = new THREE.Mesh(new THREE.BoxGeometry(3.0, 0.85, 0.06), feM);
+          rail.position.set(fx, y + 0.45, b.d / 2 + 1.15);
+          rail.castShadow = true; city.add(rail);
+          // the diagonal stair between landings — the zig-zag
+          const st2 = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.08, 3.1), feM);
+          st2.position.set(fx + (s3 % 2 ? 1.0 : -1.0), y - g('storeyH') / 2, b.d / 2 + 0.75);
+          st2.rotation.x = 0.72; st2.castShadow = true; city.add(st2);
+        }
+      }
+
+      // GROUND-FLOOR AWNING + stoop. The street-level band is where the
+      // camera actually lives, so it earns real geometry too.
+      const aw = new THREE.Mesh(new THREE.BoxGeometry(b.w * 0.52, 0.16, 1.5),
+        new THREE.MeshStandardMaterial({ color: F.warm, roughness: 0.8 }));
+      aw.position.set(b.x, g('storeyH') * 0.78, b.d / 2 + 0.75);
+      aw.rotation.x = -0.16; aw.castShadow = true; city.add(aw);
     }
   });
   scene.add(city);
