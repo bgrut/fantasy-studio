@@ -285,13 +285,13 @@ async function main() {
       pmP.dispose();
       if ('environmentIntensity' in scene) scene.environmentIntensity = 0.62;
       scene.background = pt2;
-      scene.backgroundIntensity = 1.15;
-      // dark source images (dusk/night photos) need a lift or the whole
-      // world reads murky — pano worlds get a brighter floor of light
+      // NEUTRAL EXPOSURE (2026-08-05): panoramas are brightness-normalised
+      // at bake time now, so the blanket +18% lift that blew out bright
+      // photos is gone. One neutral setting works for every image.
+      scene.backgroundIntensity = 1.0;
       if ('environmentIntensity' in scene) {
-        scene.environmentIntensity = Math.max(scene.environmentIntensity, 0.85);
+        scene.environmentIntensity = Math.max(scene.environmentIntensity, 0.7);
       }
-      renderer.toneMappingExposure *= 1.18;
       if (window.__skyDome) window.__skyDome.visible = false;
       if (window.__clouds) for (const sp of window.__clouds) sp.visible = false;
       console.log('[game] scene panorama world: ' + SPEC.world.pano);

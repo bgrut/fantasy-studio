@@ -1955,6 +1955,16 @@ async def upload_scene(request: __import__("fastapi").Request):
             for x in range(blend):
                 a = x / blend
                 arr[:, x] = arr[:, x] * a + arr[:, -blend + x] * (1 - a)
+            # EXPOSURE NORMALISATION (2026-08-05): a blanket runtime lift
+            # blew out bright source photos and still left dark ones murky
+            # (verified: a sunset test photo rendered as white haze).
+            # Normalise HERE instead — every panorama lands on the same
+            # mid-tone, so ONE neutral runtime exposure serves all images.
+            # Gentle (sqrt, clamped) so contrast and mood survive.
+            _luma = float((arr * np.array([0.299, 0.587, 0.114])).sum(-1).mean())
+            if 4.0 < _luma < 250.0:
+                arr = np.clip(arr * float(np.clip(np.sqrt(112.0 / _luma),
+                                                  0.72, 1.5)), 0, 255)
             Image.fromarray(arr.astype(np.uint8)).save(out, "JPEG", quality=90)
             try:
                 unload_reference_pipeline()
