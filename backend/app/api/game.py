@@ -84,6 +84,12 @@ class GameExportRequest(BaseModel):
     splat: str | None = None
     pano: str | None = None          # Phase 140: scene-image panorama world
     procedural: bool = False         # build vehicles in code (crisp) vs generated mesh
+    # Pivot Move 1: LOCKED LAYERS — sections the user approved; edits carry
+    # them forward verbatim ("player" | "world" | "objectives" | "entities" |
+    # "entities:<name>"). None = keep the base game's locks.
+    locked: list[str] | None = None
+    # Pivot Move 5: QUALITY PACK — none/cinematic/noir/golden/retro
+    grade: str | None = None
 
 
 def _expand_design_doc(prompt: str) -> str | None:
@@ -423,7 +429,42 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                 elif req.at_target:
                     change += (f"\n\nCONTEXT: the user clicked the {req.at_target} — "
                                f"'this'/'it' refers to that.")
+                # Pivot Move 1 — LOCKED LAYERS: tell the LLM what is frozen…
+                _locked = list(req.locked if req.locked is not None
+                               else (base_spec.get("locked") or []))
+                if _locked:
+                    change += ("\n\nLOCKED (approved by the user — copy these "
+                               "sections from the base spec VERBATIM, never "
+                               "modify them): " + ", ".join(_locked))
                 spec = patch_game_spec(base_spec, change, verbose=False)
+                # …and then ENFORCE it deterministically: whatever the LLM
+                # did, locked sections are restored from the base game. A
+                # lock is a promise, not a suggestion.
+                try:
+                    from ..game_export.spec import (PlayerSpec as _PS,
+                                                    WorldSpec as _WS,
+                                                    EntitySpec as _ES,
+                                                    ObjectiveSpec as _OS)
+                    for _sec in _locked:
+                        if _sec == "player" and base_spec.get("player"):
+                            spec.player = _PS(**base_spec["player"])
+                        elif _sec == "world" and base_spec.get("world"):
+                            spec.world = _WS(**base_spec["world"])
+                        elif _sec == "objectives" and base_spec.get("objectives") is not None:
+                            spec.objectives = [_OS(**o) for o in base_spec["objectives"]]
+                        elif _sec == "entities" and base_spec.get("entities") is not None:
+                            spec.entities = [_ES(**e) for e in base_spec["entities"]]
+                        elif _sec.startswith("entities:"):
+                            _nm = _sec.split(":", 1)[1].strip().lower()
+                            _base_e = next((e for e in (base_spec.get("entities") or [])
+                                            if str(e.get("name", "")).lower() == _nm), None)
+                            if _base_e:
+                                _kept = [e for e in spec.entities
+                                         if e.name.lower() != _nm]
+                                spec.entities = _kept + [_ES(**_base_e)]
+                    spec.locked = _locked
+                except Exception:
+                    pass
                 # STYLE + VIEW ARE SACRED (2026-07-08): the LLM must never
                 # drop or drift them during an edit — carry the base game's
                 # choices forward; only the explicit-word overrides below may
@@ -431,6 +472,7 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                 try:
                     spec.style = base_spec.get("style", spec.style) or spec.style
                     spec.view = base_spec.get("view", spec.view) or spec.view
+                    spec.grade = base_spec.get("grade", spec.grade) or spec.grade
                 except Exception:
                     pass
                 # THE WORLD IS SACRED TOO (2026-07-28): "give the knight 3
@@ -587,6 +629,14 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             except Exception:
                 job.setdefault("notes", []).append(
                     f"unknown view '{req.view}' — kept {spec.view}")
+        if req.grade:
+            try:
+                spec.grade = req.grade        # pydantic validates the literal
+            except Exception:
+                job.setdefault("notes", []).append(
+                    f"unknown grade '{req.grade}' — kept {spec.grade}")
+        if req.locked is not None and base_spec is None:
+            spec.locked = req.locked          # fresh build with locks pre-set
         # "a cat with 9 lives" → 9 HP: numbers the user wrote are game facts
         import re as _re9
         _m9 = _re9.search(r"(\d+)\s*lives\b", req.prompt.lower())
@@ -1251,12 +1301,29 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             r"\b(?:inside|interior of|indoors?|within the walls of)\s+"
             r"(?:a\s+|an\s+|the\s+)?(castle|house|mansion|dungeon|temple|"
             r"tavern|cottage|fortress|palace|room|home)?", _pl)
-        if _im or " dungeon" in _pl:
+        # THE GENRE IMPLIES THE WORLD SHAPE (2026-08-05): a burglar game is
+        # ALWAYS indoors — you cannot infiltrate a meadow. "A cat burglar
+        # infiltrates a moonlit mansion" built an open grass field because
+        # the prompt never said the literal word "inside". Heist words plus
+        # a building noun are as strong a signal as "inside" ever was.
+        _heist = _re3.search(r"\b(?:heist|burglar|burgle|burgl\w+|infiltrat\w+|"
+                             r"steal|stole|stealing|rob|robbing|robbery|loot\w*|"
+                             r"thief|thieve\w*|sneak\w*|stealth)\b", _pl)
+        _bld = _re3.search(r"\b(mansion|museum|vault|bank|gallery|manor|estate|"
+                           r"penthouse|villa|castle|house|palace|temple|"
+                           r"fortress|tower|warehouse)\b", _pl)
+        if _im or " dungeon" in _pl or (_heist and _bld):
             from app.game_export.level import build_interior
-            _ik_raw = (_im.group(1) if _im else None) or "dungeon"
+            _ik_raw = (_im.group(1) if _im else None) \
+                or (_bld.group(1) if (_heist and _bld) else None) or "dungeon"
             _ik = {"mansion": "house", "cottage": "house", "home": "house",
                    "room": "house", "tavern": "house", "temple": "castle",
-                   "fortress": "castle", "palace": "castle"}.get(_ik_raw, _ik_raw)
+                   "fortress": "castle", "palace": "castle",
+                   # heist venues: grand halls read as castle, homes as house
+                   "museum": "castle", "gallery": "castle", "manor": "house",
+                   "estate": "house", "villa": "house", "penthouse": "house",
+                   "vault": "dungeon", "bank": "castle", "warehouse": "dungeon",
+                   "tower": "castle"}.get(_ik_raw, _ik_raw)
             interior = build_interior(spec.seed, _ik)
             # flat floor, no outdoor dressing, world sized to the room plan
             spec.world.level["heights"] = [0.0] * (

@@ -611,6 +611,20 @@ async function main() {
   window.__isCity = !!OSM;
   if (OSM && LVL && LVL.landmarks) LVL.landmarks = [];   // no 30m trees on sidewalks                          // ambient (module scope) reads this
   const INTERIOR = (LVL && LVL.interior) || null;   // Phase 95: room levels
+  // wall segments [x1,z1,x2,z2] that block a guard's line of sight
+  const SIGHT = [];
+  function canSee(ax, az, bx, bz) {
+    for (const [x1, z1, x2, z2] of SIGHT) {
+      // segment/segment intersection — eye ray vs wall
+      const d1x = bx - ax, d1z = bz - az, d2x = x2 - x1, d2z = z2 - z1;
+      const den = d1x * d2z - d1z * d2x;
+      if (Math.abs(den) < 1e-9) continue;            // parallel
+      const s = ((x1 - ax) * d2z - (z1 - az) * d2x) / den;
+      const u = ((x1 - ax) * d1z - (z1 - az) * d1x) / den;
+      if (s > 0.02 && s < 0.98 && u >= 0 && u <= 1) return false;
+    }
+    return true;
+  }
   const gcol = new THREE.Color(...SPEC.world.ground_color);
   {
     // SATURATION FLOOR (Phase 76): LLM ground colors trend pastel — real
@@ -2401,6 +2415,16 @@ async function main() {
       map: itex(wallFile, 3, 1.2), roughness: 0.95 });
     const DOOR_W = 2.4, DOOR_H = Math.min(3.0, WH - 0.6);
     function seg(cx, cz, ln, rot, y0, hgt, thick) {
+      // SIGHT-BLOCKERS (2026-08-05): remember every wall as a 2D segment so
+      // guards can't see through them. Without this a sentry two rooms away
+      // "spotted" the player through solid stone and the whole patrol
+      // converged at once — stealth is meaningless if walls don't block eyes.
+      // Only floor-level walls count; the lintel above a doorway (y0 > 0)
+      // leaves the doorway see-through, which is correct.
+      if (y0 === 0) {
+        const hx = rot ? 0 : ln / 2, hz = rot ? ln / 2 : 0;
+        SIGHT.push([cx + OX - hx, cz - hz, cx + OX + hx, cz + hz]);
+      }
       const m = new THREE.Mesh(new THREE.BoxGeometry(ln, hgt, thick), wmat);
       m.position.set(cx + OX, y0 + hgt / 2, cz);
       m.rotation.y = rot ? Math.PI / 2 : 0;
@@ -2939,6 +2963,9 @@ async function main() {
   const IS_RACE = (SPEC.objectives || []).some(o => o.kind === 'race');
   let raceGo = !IS_RACE;
   let gameStarted = false;
+  let playT = 0;        // seconds since START — NOT page-load time, which is
+                        // already ~7s deep by the time anyone clicks through
+                        // the title card (the heist grace window needs this)
   let runT0 = 0;                          // run clock starts at START
   const bestKey = 'fs_best_' + (SPEC.title || 'game');
   const fmtT = s => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
@@ -3021,6 +3048,7 @@ async function main() {
   const npcs = [];
   const rngN = mulberry32(SPEC.seed + 31);
   let vehIdx = 0;                       // starting-grid slot for vehicle rivals
+  let gIdx = 0;                         // heist: which room each guard owns
   // WAVE POOL (survive verb): extra hostiles are pre-built DORMANT at load
   // time — waking one costs nothing, so waves never cause loading hitches
   // (same no-mid-game-spikes philosophy as the collectible glow sprites)
@@ -3138,6 +3166,28 @@ async function main() {
           startYaw = hd + (ent.asset === SPEC.player.asset
             ? THREE.MathUtils.degToRad(SPEC.player.yaw_offset_deg || 0) : 0);
           vehIdx++;
+        } else if (ent.behavior === 'guard' && INTERIOR && INTERIOR.rooms
+                   && INTERIOR.rooms.length) {
+          // HEIST: guards belong to the ROOMS. Spawning them by the usual
+          // random spread put sentries in the garden of a house they were
+          // meant to be guarding — and their patrol beat walked through
+          // walls. Each guard gets its own room and walks a circuit of
+          // room centres, so patrols use the doorways like a person would.
+          // …and never in the entry hall (rooms[0]) — the player walks in
+          // there. Three guards standing on the doormat spotted you at t=0
+          // and the heist was over in six seconds.
+          const rms = INTERIOR.rooms.length > 1
+            ? INTERIOR.rooms.slice(1) : INTERIOR.rooms;
+          const home = rms[gIdx % rms.length];
+          holder.position.set(home[0], 0, home[1]);
+          const beat = [];
+          for (let bi = 0; bi < Math.min(3, rms.length); bi++) {
+            const r2 = rms[(gIdx + bi) % rms.length];
+            beat.push([r2[0], r2[1]]);
+          }
+          startYaw = rngN() * Math.PI * 2;   // not all facing the door
+          holder.userData.fsBeat = beat;
+          gIdx++;
         } else {
           // hostiles spawn FAR (out along the path, guarding the objectives)
           const spread = hostile ? 0.6 : 0.3;
@@ -3164,7 +3214,8 @@ async function main() {
                   + (hostile ? ` · hp ${ent.hp || 3}` : '') };
         npcs.push({ obj: holder, speed: ent.speed || 1.5, behavior: ent.behavior || 'wander',
                     target: null, yaw: startYaw, phase: rngN() * Math.PI * 2,
-                    h: ent.height_m || 1.0,
+                    h: ent.height_m || 1.0, name: ent.name,
+                    beat: holder.userData.fsBeat || null,   // heist patrol circuit
                     hp: ent.hp || 3, cd: 0, dead: false, dieT: 0, mats, anim, dormant });
       }
     } catch (e) { fail(e.message); }
@@ -3183,6 +3234,7 @@ async function main() {
     return woke;
   }
   function stepNPCs(dt, playerPos, t) {
+    window.__alertPeak = 0;             // recomputed by the guards each frame
     for (const n of npcs) {
       if (n.dormant) continue;           // wave-pool members sleep until woken
       // death animation: keel over + sink, then remove
@@ -3262,6 +3314,90 @@ async function main() {
           n.target = [(rngN() - 0.5) * gsize * 0.6, (rngN() - 0.5) * gsize * 0.6];
           tx = n.target[0]; tz = n.target[1];
         } else { tx = n.target[0]; tz = n.target[1]; }
+      } else if (n.behavior === 'guard' && !won && !lost) {
+        // ── THE HEIST KIT (2026-08-05): guards are not omniscient. They walk
+        // a beat and only care about what their EYES catch — a vision cone,
+        // an alert meter that fills with exposure, and a radio call when it
+        // tops out. Crouch (C) halves how far they see. This one behavior
+        // turns "chase game" into "stealth game".
+        if (n.wp === undefined) {
+          // indoor guards get a room circuit at spawn; outdoor ones walk a
+          // box around their post
+          if (!n.beat) {
+            const hx = n.obj.position.x, hz = n.obj.position.z;
+            const r = 7 + rngN() * 5;
+            n.beat = [[hx - r, hz - r], [hx + r, hz - r],
+                      [hx + r, hz + r], [hx - r, hz + r]];
+          }
+          n.wp = 0; n.alert = n.alert || 0;
+          n.mode = n.mode || 'patrol'; n.lostT = 0;   // radio may pre-alert us
+        }
+        const d = Math.hypot(playerPos.x - n.obj.position.x, playerPos.z - n.obj.position.z);
+        // CASING GRACE: nobody is looking your way for the first few seconds.
+        // A heist has to let you get through the door and read the room.
+        const range = (playT < 5) ? 0 : (window.__sneak ? 7 : 14);
+        let dA = Math.atan2(playerPos.x - n.obj.position.x,
+                            playerPos.z - n.obj.position.z) - n.yaw;
+        while (dA > Math.PI) dA -= 2 * Math.PI;
+        while (dA < -Math.PI) dA += 2 * Math.PI;
+        // seen = inside the cone (~115°), in range, and with a clear line —
+        // walls, not distance, are what hide you
+        const sees = d < range && (Math.abs(dA) < 1.0 || d < 2.5)
+          && canSee(n.obj.position.x, n.obj.position.z, playerPos.x, playerPos.z);
+        if (n.mode !== 'chase') {
+          if (sees) {
+            // SUSPICION TAKES TIME. At the old rate the meter filled in
+            // under a second, so "spotted" was indistinguishable from
+            // "instantly killed" — there was no moment to duck behind a
+            // wall, which is the entire game. ~1.8s point-blank, ~4s at
+            // the edge of vision.
+            n.alert += dt * (0.62 - 0.34 * (d / range));
+            if (n.alert >= 1) {
+              n.mode = 'chase';
+              popText(`👁 ${n.name || 'guard'} spotted you!`, '#ff6b6b');
+              // the radio: only the guard in earshot answers. A 24 m call in
+              // a 35 m house summoned the entire patrol at once, which is a
+              // firing squad, not a stealth game.
+              let called = 0;
+              for (const g of npcs) {
+                if (g !== n && g.behavior === 'guard' && !g.dead && !g.dormant
+                    && Math.hypot(g.obj.position.x - n.obj.position.x,
+                                  g.obj.position.z - n.obj.position.z) < 11) {
+                  g.mode = 'chase'; g.alert = 1;
+                  if (++called >= 1) break;
+                }
+              }
+            }
+          } else {
+            n.alert = Math.max(0, n.alert - dt * 0.5);
+          }
+        }
+        // the eye: show the worst suspicion in the house so the player can
+        // read the danger and react. Stealth without feedback is a coin flip.
+        window.__alertPeak = Math.max(window.__alertPeak || 0,
+                                      n.mode === 'chase' ? 1 : n.alert);
+        if (n.mode === 'chase') {
+          n.vjit = 1.5;                        // guards sprint when alerted
+          if (d > 1.7) { tx = playerPos.x; tz = playerPos.z; }
+          // slower than a monster's bite: a whole patrol converging at the
+          // hostile cadence emptied five hearts in two seconds
+          else { n.cd -= dt; if (n.cd <= 0) { n.cd = 2.0; playerHit(1); } }
+          // breaking line of sight is the escape, not out-running them: in a
+          // 35 m house "get 16 m away" was never achievable
+          if (!sees && d > 9) {
+            n.lostT += dt;
+            if (n.lostT > 3) {
+              n.mode = 'patrol'; n.alert = 0; n.lostT = 0; n.vjit = 0.55;
+              popText(`${n.name || 'guard'} lost you — stay low`, '#9fd8a2');
+            }
+          } else n.lostT = 0;
+        } else if (n.beat) {
+          n.vjit = 0.55;                       // an unbothered walking pace
+          const w = n.beat[n.wp];
+          if (Math.hypot(w[0] - n.obj.position.x, w[1] - n.obj.position.z) < 1.2)
+            n.wp = (n.wp + 1) % n.beat.length;
+          tx = n.beat[n.wp][0]; tz = n.beat[n.wp][1];
+        }
       } else if (n.behavior === 'vehicle') {
         // RACE AI: drive the level path toward the goal, record finish order.
         // The grid holds until the countdown says GO.
@@ -3343,6 +3479,7 @@ async function main() {
       // real gait: crossfade idle/walk/run with movement state (no more gliding)
       if (n.anim) {
         const want = moving ? ((n.behavior === 'hostile' && n.speed > 2.2) || n._fleeing
+                               || (n.behavior === 'guard' && n.mode === 'chase')
                                ? n.anim.run : n.anim.walk)
                             : n.anim.idle;
         if (want && want !== n.anim.cur) {
@@ -4142,7 +4279,9 @@ async function main() {
   let php = SPEC.player.hp || 5;
   const maxHp = php;
   const heartsEl = document.getElementById('hearts');
-  const hostilesExist = (SPEC.entities || []).some(e => e.behavior === 'hostile');
+  const hostilesExist = (SPEC.entities || []).some(
+    e => e.behavior === 'hostile' || e.behavior === 'guard');
+  const HAS_GUARDS = (SPEC.entities || []).some(e => e.behavior === 'guard');
   // ── XP + LEVEL-UPS (moon plan 3.2): kills and pickups grant XP; each
   // level offers a three-choice upgrade card (roguelike style). The game
   // keeps running behind the card — choosing is part of the flow.
@@ -4256,7 +4395,9 @@ async function main() {
     renderHearts();
     dmgEl.style.opacity = '1';
     setTimeout(() => { dmgEl.style.opacity = '0'; }, 160);
-    if (php <= 0) doLose('Overwhelmed by enemies.');
+    if (php <= 0) doLose(HAS_GUARDS
+      ? 'Busted. The guards dragged you out.'   // a heist ends in cuffs
+      : 'Overwhelmed by enemies.');
   }
 
   // ── player: animated GLB + kinematic capsule ─────────────────────────────
@@ -4668,8 +4809,20 @@ async function main() {
                  SPEC.world.water_level - P.height_m / 2 - 0.2)); // under surface
     return g;
   }
+  // A BURGLAR STARTS AT THE DOOR (2026-08-05): interiors spawned the player
+  // dead-centre in the entry hall — in the open, in every patrol's sightline,
+  // with nothing to duck behind. Start at the near wall by the doorway, the
+  // way someone who just picked the lock would actually be standing.
+  const _sp = { x: 0, z: 0 };
+  if (INTERIOR && INTERIOR.rooms && INTERIOR.rooms.length) {
+    const h0 = INTERIOR.rooms[0];
+    _sp.x = h0[0];
+    _sp.z = h0[1] - h0[3] / 2 + 3.0;   // clear of the wall: at 1.8 m the
+                                       // capsule was embedded and immovable
+  }
   const body = world.createRigidBody(
-    RAPIER.RigidBodyDesc.kinematicPositionBased().setTranslation(0, spawnHeight(0, 0), 0));
+    RAPIER.RigidBodyDesc.kinematicPositionBased()
+      .setTranslation(_sp.x, spawnHeight(_sp.x, _sp.z), _sp.z));
   const collider = world.createCollider(RAPIER.ColliderDesc.capsule(capHalf, capR), body);
   const kcc = world.createCharacterController(0.02);
   kcc.setApplyImpulsesToDynamicBodies(false);
@@ -4805,7 +4958,7 @@ async function main() {
     let best = null, bd = maxD;
     for (const n of npcs) {
       // Phase 66: prey ('flee') is a legitimate attack target — hunting games
-      if (!(n.behavior === 'hostile' || n.behavior === 'flee') || n.dead || n.dormant) continue;
+      if (!(n.behavior === 'hostile' || n.behavior === 'flee' || n.behavior === 'guard') || n.dead || n.dormant) continue;
       const d = Math.hypot(n.obj.position.x - playerObj.position.x,
                            n.obj.position.z - playerObj.position.z);
       if (d < bd) { bd = d; best = n; }
@@ -4978,7 +5131,7 @@ async function main() {
         setTimeout(() => { atkFlash.intensity = 0; }, 110);
         for (const n of npcs) {
           // Phase 68: prey ('flee') dies to claws too — a wolf hunts with its bite
-          if (!(n.behavior === 'hostile' || n.behavior === 'flee') || n.dead) continue;
+          if (!(n.behavior === 'hostile' || n.behavior === 'flee' || n.behavior === 'guard') || n.dead) continue;
           const dx = n.obj.position.x - playerObj.position.x;
           const dz = n.obj.position.z - playerObj.position.z;
           const d = Math.hypot(dx, dz);
@@ -5027,7 +5180,8 @@ async function main() {
                     active: steps[stepIdx] ? stepLabel(steps[stepIdx]) : null, won }),
     objectives: () => ({ collected: steps.filter(s => s.kind === 'collect').reduce((a, s) => a + (s._got || 0), 0),
                          left: collectibles.filter(c => c.mesh.parent).map(c => c.mesh.position.toArray()) }),
-    npcs: () => npcs.filter(n => !n.gone).map(n => ({ behavior: n.behavior, dead: !!n.dead, pos: n.obj.position.toArray() })),
+    npcs: () => npcs.filter(n => !n.gone).map(n => ({ behavior: n.behavior, dead: !!n.dead, pos: n.obj.position.toArray(),
+                                                      mode: n.mode, alert: n.alert, playT })),
     placed: () => placedItems.map(p => ({ kind: p.it.kind, x: p.it.x, z: p.it.z,
                                           interact: !!p.it.interact, alive: !!p.anim })),
     reading: () => ({ readable: readable ? readable.label : null, open: reading }),
@@ -5086,8 +5240,26 @@ async function main() {
   {
     const rc = new THREE.Raycaster();
     const nv = new THREE.Vector2();
+    // ── QUALITY PACKS (pivot Move 5): one named grade the whole game wears.
+    // Each pack is a coherent exposure/fog/light recipe — the "months of
+    // polish" defaults, chosen once instead of dialed per-game.
+    const GRADES = {
+      cinematic: { exposure: 1.16, fog: 4.5, sun: 2.6 },   // deep contrast, light haze
+      noir:      { exposure: 0.72, fog: 9.0, sun: 1.1 },   // heist weather
+      golden:    { exposure: 1.28, fog: 6.0, sun: 3.2 },   // late-sun warmth
+      retro:     { exposure: 1.05, fog: 1.5, sun: 2.0 },   // flat, clean, arcade
+    };
+    const applyGrade = g => {
+      const gr = GRADES[g];
+      if (!gr) return;
+      renderer.toneMappingExposure = gr.exposure;
+      if (scene.fog) scene.fog.density = gr.fog * 0.01;
+      sun.intensity = gr.sun;
+    };
+    applyGrade(SPEC.grade);
     addEventListener('message', e => {
       if (e.data && e.data.type === 'fs-inspect') setInspectOn(e.data.on);
+      if (e.data && e.data.type === 'fs-grade') applyGrade(e.data.grade);
       // ── LIVE PATCH (2026-08-05, the studio unlock): edits that only move
       // runtime dials — weather, time of day, fog, speeds, HP — no longer
       // rebuild the world. They apply to the RUNNING game in a frame, so
@@ -6098,6 +6270,22 @@ varying vec2 vUvRaw;
         speed = (mv.run ? P.run_speed : P.walk_speed) * mv.mag;
         dir.set(mv.x, 0, mv.z);
       }
+      // SNEAK (the heist kit): hold C/Ctrl to crouch-walk — slower, but
+      // guards' vision range halves. The flag is read by guard AI.
+      window.__sneak = !!(keys.KeyC || keys.ControlLeft) && !mv.run;
+      if (window.__sneak) {
+        speed *= 0.45;
+        if (!window.__sneakChip) {
+          const c = document.createElement('div');
+          c.style.cssText = 'position:fixed;left:50%;bottom:64px;transform:translateX(-50%);'
+            + 'padding:4px 12px;border-radius:999px;background:rgba(10,12,20,.72);'
+            + 'color:#9fd8a2;font:600 12px system-ui;z-index:40;pointer-events:none';
+          c.textContent = '🤫 sneaking — guards see half as far';
+          document.body.appendChild(c);
+          window.__sneakChip = c;
+        }
+        window.__sneakChip.style.display = '';
+      } else if (window.__sneakChip) window.__sneakChip.style.display = 'none';
       if (dir.lengthSq() > 1e-4) {
         dir.normalize().applyAxisAngle(new THREE.Vector3(0, 1, 0), VIEW === '3d' ? yaw : 0);
         modelYaw = dampAngle(modelYaw, Math.atan2(dir.x, dir.z), P.turn_speed, dt);
@@ -6192,7 +6380,34 @@ varying vec2 vUvRaw;
 
     // Inspect mode is a SOFT FREEZE: NPCs, damage and timers hold still so
     // you can edit in peace, but the camera, player and rendering stay live
-    if (gameStarted && !paused && !inspectOn) stepNPCs(dt, nt, performance.now() / 1000);
+    if (gameStarted && !paused && !inspectOn) {
+      playT += dt;
+      stepNPCs(dt, nt, performance.now() / 1000);
+      // SUSPICION HUD (heist kit): an eye that opens as a guard grows sure
+      // of you, and goes red the moment you're made.
+      if (HAS_GUARDS) {
+        const a = window.__alertPeak || 0;
+        if (!window.__eyeEl) {
+          const e2 = document.createElement('div');
+          e2.style.cssText = 'position:fixed;left:50%;top:16px;transform:translateX(-50%);'
+            + 'display:flex;align-items:center;gap:7px;padding:5px 13px;border-radius:999px;'
+            + 'background:rgba(8,10,16,.66);font:600 12px system-ui;z-index:41;'
+            + 'pointer-events:none;transition:opacity .25s';
+          e2.innerHTML = '<span id="fseye">👁</span>'
+            + '<span style="display:block;width:78px;height:4px;border-radius:2px;'
+            + 'background:rgba(255,255,255,.16);overflow:hidden">'
+            + '<i id="fsbar" style="display:block;height:100%;width:0;background:#ffd166"></i></span>';
+          document.body.appendChild(e2);
+          window.__eyeEl = e2;
+        }
+        const bar = document.getElementById('fsbar');
+        window.__eyeEl.style.opacity = a > 0.03 ? '1' : '0';
+        if (bar) {
+          bar.style.width = Math.min(100, a * 100) + '%';
+          bar.style.background = a >= 1 ? '#ff5c5c' : (a > 0.6 ? '#ff9f45' : '#ffd166');
+        }
+      }
+    }
     if (tgtMark) {
       const tn = (!won && !lost && !inspectOn)
         ? nearestHostile(ATTACK === 'ranged' ? RANGED_RANGE : MELEE_REACH) : null;
@@ -6388,7 +6603,7 @@ varying vec2 vUvRaw;
       let hit = false;
       for (const n of npcs) {
         // Phase 68: prey ('flee') is shootable — hunting needs a kill
-        if (!(n.behavior === 'hostile' || n.behavior === 'flee') || n.dead) continue;
+        if (!(n.behavior === 'hostile' || n.behavior === 'flee' || n.behavior === 'guard') || n.dead) continue;
         const dd = pr.mesh.position.distanceTo(n.obj.position.clone().add(new THREE.Vector3(0, 0.5, 0)));
         if (dd < 0.9) { dmgEnemy(n, atkDmg); hit = true; break; }
       }

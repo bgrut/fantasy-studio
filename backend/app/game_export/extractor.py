@@ -51,10 +51,16 @@ Output ONLY the JSON object, no markdown, no commentary. Schema (all fields opti
                (prey = entity behavior "flee" - it runs when it hears the player),
  "entities": [{"name": simple noun like "dog","cat","horse","wolf","car", "behavior": one of
                "wander","follow","static","hostile","vehicle" (cars/trucks -> "vehicle"),
+               "guard" (patrolling sentries with VISION CONES for stealth/heist games —
+               they only attack when they SEE the player; sneak past by crouching),
                "count": int 1..8, "speed": float 0.5..8}]
 }
 Map the text's setting to the CLOSEST world.name keyword. entities = OTHER creatures/characters besides
-the player (companion pet -> "follow"; enemies/monsters/guards the player fights -> "hostile").
+the player (companion pet -> "follow"; enemies/monsters the player fights -> "hostile";
+guards/security/police in a heist or stealth game -> "guard").
+HEIST/BURGLAR/STEAL games: objectives = steal the goods ({"kind":"collect",
+"label":"jewels"|"paintings"|...}) then escape ({"kind":"reach","label":"the getaway car"});
+entities = 2-4 "guard".
 "defeat" objectives need hostile entities. Do not invent fields not in the schema."""
 
 _JSON_RE = re.compile(r"\{.*\}", re.DOTALL)
@@ -253,7 +259,8 @@ Output ONLY the complete updated JSON object, no markdown. Rules:
   {"name": "wolf", "behavior": "hostile", "count": 2, "speed": 3.0}
 - If the change replaces the player, update player.name (assets re-resolve).
 - objectives kinds: collect, defeat, reach, race, survive. entity behaviors:
-  wander, follow, static, hostile, vehicle.
+  wander, follow, static, hostile, vehicle, guard (patrolling vision-cone
+  sentry for stealth/heist — attacks only when it sees the player).
 - world.sky one of day,sunset,night,overcast,mars,space,dusk; weather none,rain,snow.
 - "fog_density" 0..1 in world: misty/foggy -> 0.7-0.9, clear air -> 0.2.
 - "health_packs" int in world: "add health packs/potions" -> 4-6.

@@ -162,6 +162,15 @@ export default function GameStudio() {
   // roundtrip, no rebuild — dragging a slider changes the world you are
   // looking at, which is the whole point of the studio.
   const [dials, setDials] = useState({ fog: 6, sun: 2.2, exposure: 1.0 })
+  // Move 5: quality pack — applies LIVE via fs-grade and rides along on the
+  // next build so it persists. Move 1: locked layers — the user's approvals;
+  // every edit carries them and the backend enforces them verbatim.
+  const [grade, setGrade] = useState<string>('none')
+  const [lockedLayers, setLockedLayers] = useState<string[]>([])
+  const toggleLock = useCallback((layer: string) => {
+    setLockedLayers(ls => ls.includes(layer)
+      ? ls.filter(l => l !== layer) : [...ls, layer])
+  }, [])
   const sendPatch = useCallback((patch: Record<string, number>) => {
     gameFrameRef.current?.contentWindow?.postMessage(
       { type: 'fs-patch', patch }, '*')
@@ -252,10 +261,13 @@ export default function GameStudio() {
     setBuilding(true)
     try {
       const res = await exportGame(p, baseJobId != null
-        ? { baseJobId, at, at2 }
+        ? { baseJobId, at, at2,
+            locked: lockedLayers.length ? lockedLayers : undefined,
+            grade: grade !== 'none' ? grade : undefined }
         // fresh build: USER-SELECTED style + view ride along — never guessed
         : { style: style !== 'default' ? style : undefined,
             view: view !== '3d' ? view : undefined,
+            grade: grade !== 'none' ? grade : undefined,
             splat: (splatNow ?? splatPath) ?? undefined,
             pano: (panoNow ?? panoPath) ?? undefined })
       // LIVE EDIT (2026-08-05): dial-only changes never rebuild — the
@@ -273,7 +285,7 @@ export default function GameStudio() {
       setBuilding(false)
       setError(e instanceof Error ? e.message : String(e))
     }
-  }, [pollJob, style, view, splatPath, panoPath])
+  }, [pollJob, style, view, splatPath, panoPath, lockedLayers, grade])
 
   // Phase 43 level tiles: click a level -> exact re-export opens as a live
   // job in the player above — play it, Inspect it, edit it, save it back.
@@ -1092,13 +1104,14 @@ export default function GameStudio() {
             }
             if (sp.reward) rows.push(`🏆 winner gets: ${sp.reward}`)
             const cast = [
-              { who: sp.player?.name ?? 'hero', role: 'you', n: 1,
+              { who: sp.player?.name ?? 'hero', role: 'you', n: 1, lock: 'player',
                 detail: `${sp.player?.hp ?? 5} HP` +
                   (sp.player?.attack && sp.player.attack !== 'none'
                     ? ` · ${sp.player.attack} (F)` : ' · no weapon'),
                 vfx: (sp.player as { vfx?: string })?.vfx },
               ...(sp.entities ?? []).map(e => ({
                 who: e.name, role: e.behavior, n: e.count,
+                lock: `entities:${e.name.toLowerCase()}`,
                 detail: `${e.hp} HP · speed ${e.speed}`, vfx: undefined })),
             ]
             const Dial = ({ label, hint, val, min, max, step, onSet }: {
@@ -1142,8 +1155,18 @@ export default function GameStudio() {
                           {c.n > 1 && <span className="text-[10px] font-mono text-[#807d99]">×{c.n}</span>}
                           <span className={cn('ml-auto px-1.5 py-0.5 rounded text-[9px] font-mono',
                             c.role === 'hostile' ? 'bg-[#ff5c8a]/15 text-[#ff8fae]'
+                              : c.role === 'guard' ? 'bg-[#ffd88a]/15 text-[#ffd88a]'
                               : c.role === 'you' ? 'bg-[#5cffc9]/15 text-[#5cffc9]'
                               : 'bg-white/[0.05] text-[#807d99]')}>{c.role}</span>
+                          <button onClick={() => toggleLock(c.lock)}
+                            title={lockedLayers.includes(c.lock)
+                              ? 'locked — edits can never change this; click to unlock'
+                              : 'lock this so future edits keep it exactly as-is'}
+                            className={cn('text-[11px] transition-all',
+                              lockedLayers.includes(c.lock)
+                                ? 'opacity-100' : 'opacity-30 hover:opacity-70')}>
+                            {lockedLayers.includes(c.lock) ? '🔒' : '🔓'}
+                          </button>
                         </div>
                         <div className="text-[10px] font-mono text-[#807d99] mt-0.5">{c.detail}</div>
                         {c.vfx && <div className="text-[10px] font-mono text-[#c86bff] mt-0.5">✦ {c.vfx} aura</div>}
@@ -1166,6 +1189,34 @@ export default function GameStudio() {
 
                 {studioTab === 'scene' && (
                   <div className="space-y-2">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="text-[11px] font-mono text-[#9a96b8] w-[86px] shrink-0">polish</span>
+                      {([['none', '— none'], ['cinematic', '🎬 Cinematic'],
+                         ['noir', '🌫 Noir'], ['golden', '🌇 Golden'],
+                         ['retro', '🕹 Retro']] as const).map(([id, lbl]) => (
+                        <button key={id}
+                          onClick={() => {
+                            setGrade(id)
+                            gameFrameRef.current?.contentWindow?.postMessage(
+                              { type: 'fs-grade', grade: id }, '*')
+                          }}
+                          title="a coherent exposure/fog/light recipe — applies instantly and sticks for future builds"
+                          className={cn('px-2.5 py-1 rounded-full text-[11px] transition-all',
+                            grade === id
+                              ? 'bg-[#5cffc9]/15 text-[#5cffc9] border border-[#5cffc9]/40'
+                              : 'border border-white/[0.08] text-[#807d99] hover:text-white')}>
+                          {lbl}
+                        </button>
+                      ))}
+                      <button onClick={() => toggleLock('world')}
+                        title="lock the world: scenery, sky and layout survive every future edit untouched"
+                        className={cn('ml-auto px-2.5 py-1 rounded-full text-[11px] border transition-all',
+                          lockedLayers.includes('world')
+                            ? 'border-[#ffd88a]/50 text-[#ffd88a] bg-[#ffd88a]/10'
+                            : 'border-white/[0.08] text-[#807d99] hover:text-white')}>
+                        {lockedLayers.includes('world') ? '🔒 world locked' : '🔓 lock world'}
+                      </button>
+                    </div>
                     <Dial label="fog" hint="haze / depth" val={dials.fog}
                       min={0} max={20} step={0.5}
                       onSet={v => { setDials(d => ({ ...d, fog: v })); sendPatch({ fog_density: v }) }} />

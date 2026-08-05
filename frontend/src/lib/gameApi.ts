@@ -31,6 +31,8 @@ export interface GameSpecResolved {
   objectives?: { kind: string; label: string; count: number }[]
   player?: { name?: string; hp?: number; attack?: string }
   reward?: string | null
+  locked?: string[]                      // pivot Move 1: approved layers
+  grade?: string                         // pivot Move 5: quality pack
 }
 
 export interface GameHealth {
@@ -116,6 +118,8 @@ export async function exportGame(prompt: string, opts?: {
   pano?: string                                      // Phase 140: scene-image panorama world
   view?: string                                      // 3d / topdown / side (Phase 45)
   rule?: { index: number; name: string; on: boolean } // rule chip toggle
+  grade?: string                                     // quality pack (pivot Move 5)
+  locked?: string[]                                  // locked layers (pivot Move 1)
 }) {
   const res = await fetch('/api/game/export', {
     method: 'POST',
@@ -132,6 +136,8 @@ export async function exportGame(prompt: string, opts?: {
                            ...(opts?.splat ? { splat: opts.splat } : {}),
                            ...(opts?.pano ? { pano: opts.pano } : {}),
                            ...(opts?.view ? { view: opts.view } : {}),
+                           ...(opts?.grade ? { grade: opts.grade } : {}),
+                           ...(opts?.locked ? { locked: opts.locked } : {}),
                            ...(opts?.rule ? { rule_index: opts.rule.index,
                                               rule_name: opts.rule.name,
                                               rule_on: opts.rule.on } : {}) }),

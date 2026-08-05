@@ -102,7 +102,11 @@ class EntitySpec(BaseModel):
     """Non-player entity. hostile = chases and attacks the player (combat)."""
     asset: str = ""                       # resolved from the asset library by name
     name: str = "entity"
-    behavior: Literal["static", "wander", "follow", "hostile", "vehicle", "flee"] = "wander"
+    # guard (2026-08-05, the heist kit): patrols a beat and only attacks when
+    # it SEES you — vision cone + alert meter, crouch to sneak past. This is
+    # what makes burglar/heist games real games instead of chase games.
+    behavior: Literal["static", "wander", "follow", "hostile", "vehicle",
+                      "flee", "guard"] = "wander"
     count: int = Field(1, ge=1, le=64)
     speed: float = Field(1.5, ge=0.0, le=40.0)
     height_m: float = Field(1.0, gt=0.1, le=10.0)
@@ -140,6 +144,14 @@ class GameSpec(BaseModel):
     # the z=0 plane). User-selected, like style.
     view: Literal["3d", "topdown", "side"] = "3d"
     seed: int = 7                         # deterministic scatter placement
+    # LOCKED LAYERS (pivot Move 1): sections the user has approved — edits
+    # carry them forward verbatim, the LLM can never re-roll them. Entries:
+    # "player" | "world" | "objectives" | "entities" | "entities:<name>".
+    locked: List[str] = Field(default_factory=list)
+    # QUALITY PACK (pivot Move 5): a named grade the whole game wears —
+    # exposure/fog/light tuned as one coherent look. User-selected, never
+    # LLM-guessed (same contract as style/view).
+    grade: Literal["none", "cinematic", "noir", "golden", "retro"] = "none"
 
     def runtime_json(self) -> dict:
         """The subset injected into the JS runtime as __GAME_SPEC__ (asset
@@ -165,9 +177,13 @@ _BEHAVIOR_ALIASES = {"rival": "vehicle", "racer": "vehicle", "race": "vehicle",
                      "pet": "follow", "companion": "follow", "ally": "follow",
                      "friendly": "wander", "roam": "wander", "neutral": "wander",
                      "enemy": "hostile", "monster": "hostile", "attack": "hostile",
-                     "aggressive": "hostile", "guard": "hostile", "idle": "static",
+                     "aggressive": "hostile", "idle": "static",
+                     "patrol": "guard", "sentry": "guard", "watchman": "guard",
+                     "security": "guard", "cop": "guard", "police": "guard",
                      "prop": "static", "object": "static"}
 _KIND_ALIASES = {"find": "collect", "gather": "collect", "pick": "collect",
+                 "steal": "collect", "rob": "collect", "loot": "collect",
+                 "burgle": "collect", "swipe": "collect", "grab": "collect",
                  "kill": "defeat", "destroy": "defeat", "fight": "defeat",
                  "escape": "reach", "goto": "reach", "arrive": "reach",
                  "explore": "reach", "win": "race", "hold": "survive",
