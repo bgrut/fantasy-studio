@@ -1508,9 +1508,20 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                 job.setdefault("notes", []).append("visual gate: rendered clean, no runtime errors")
                 job["checks"] = job.get("checks", 0) + 1
             elif r.returncode == 2:
+                # LOUD, NOT BURIED (2026-08-05): a shader link failure
+                # ("VALIDATE_STATUS false") renders a BLACK ROOM, yet the
+                # build still said complete because runtime errors were
+                # appended as one note among many and nothing surfaced them.
+                # Broken output must never read as a clean build.
+                _det = (r.stderr or "").replace("SHOTGATE-ERRORS", "").strip()
+                job["visual_errors"] = _det[:400]
+                _fatal = ("VALIDATE_STATUS" in _det or "Shader Error" in _det
+                          or "is not a function" in _det
+                          or "before initialization" in _det)
                 job.setdefault("notes", []).append(
-                    "visual gate: runtime errors — " +
-                    (r.stderr or "").replace("SHOTGATE-ERRORS", "").strip()[:220])
+                    ("⚠ VISUAL GATE FAILED — the game renders broken: "
+                     if _fatal else "⚠ visual gate: runtime errors — ")
+                    + _det[:220])
                 if shot.exists():
                     job["shot"] = f"/games/job_{job_id}/dist/_shot.png"
         except Exception:  # noqa: BLE001
