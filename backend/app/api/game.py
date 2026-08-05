@@ -1346,7 +1346,19 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         _bld = _re3.search(r"\b(mansion|museum|vault|bank|gallery|manor|estate|"
                            r"penthouse|villa|castle|house|palace|temple|"
                            r"fortress|tower|warehouse)\b", _pl)
-        if _im or " dungeon" in _pl or (_heist and _bld):
+        # A CITY HEIST IS NOT ONE ROOM (2026-08-05): in a named real city the
+        # genre-implies-interior shortcut would throw the whole street grid
+        # away and drop the player in a single hall. There the heist is the
+        # BLOCK — see the multi-building pass after the OSM fetch. An explicit
+        # "inside the vault" still wins; only the implied case defers.
+        _city_heist = bool(_heist and is_city and place)
+        # ...and a BARE "inside" defers too. The interior regex matches the
+        # word alone with no building noun, so "4 guards patrol inside them"
+        # in a Manhattan heist collapsed the whole street grid into one
+        # nameless dungeon. Only a named venue ("inside the vault") outranks
+        # the block.
+        if ((_im and (_im.group(1) or not _city_heist))
+                or " dungeon" in _pl or (_heist and _bld and not _city_heist)):
             from app.game_export.level import build_interior
             _ik_raw = (_im.group(1) if _im else None) \
                 or (_bld.group(1) if (_heist and _bld) else None) or "dungeon"
@@ -1479,6 +1491,43 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             else:
                 job.setdefault("notes", []).append(
                     f"OSM fetch for '{place}' unavailable — procedural city used")
+
+        # ── MULTI-BUILDING CITY HEIST (2026-08-05) ──────────────────────────
+        # The flagship shape: a burglar working a real block. Several OSM
+        # footprints each get their own interior parked past the map edge and
+        # a glowing door on their street face; the loot spreads ACROSS them,
+        # so finishing the job means four break-ins, not one room sweep. Runs
+        # after the OSM fetch because it needs the real footprints and the
+        # road route (the door faces the nearest street).
+        if _city_heist and spec.world.level.get("osm"):
+            from app.game_export.level import plan_enterables, spread_loot
+            _want = 4
+            _nm = _re3.search(r"\b(\d+)\s+(?:buildings?|houses?|homes?|shops?|"
+                              r"stores?|apartments?|places?)\b", _pl)
+            if _nm:
+                _want = max(2, min(5, int(_nm.group(1))))
+            _ents = plan_enterables(spec.world.level["osm"], spec.world.level,
+                                    spec.seed, spec.world.size_m, want=_want)
+            if _ents:
+                spec.world.level["enterables"] = _ents
+                if n_obj:
+                    spec.world.level["collect_points"] = spread_loot(
+                        _ents, n_obj, spec.seed)
+                # ONE SENTRY PER VENUE minimum: with 4 doors and 2 guards two
+                # buildings were free money, and the stealth loop only exists
+                # where somebody is watching.
+                _gs = [e for e in spec.entities if e.behavior == "guard"]
+                if _gs:
+                    _have = sum(e.count for e in _gs)
+                    if _have < len(_ents):
+                        _gs[0].count += len(_ents) - _have
+                job.setdefault("notes", []).append(
+                    "city heist: " + str(len(_ents)) + " enterable buildings ("
+                    + ", ".join(e["label"] for e in _ents)
+                    + ") — walk to a glowing door to go inside")
+            else:
+                job.setdefault("notes", []).append(
+                    "no footprint suited an enterable door — street-level heist")
 
         stage("building")
         # RESOLVED spec (absolute asset paths) — lets Game Projects re-export

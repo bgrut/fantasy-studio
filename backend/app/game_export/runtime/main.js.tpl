@@ -611,6 +611,16 @@ async function main() {
   window.__isCity = !!OSM;
   if (OSM && LVL && LVL.landmarks) LVL.landmarks = [];   // no 30m trees on sidewalks                          // ambient (module scope) reads this
   const INTERIOR = (LVL && LVL.interior) || null;   // Phase 95: room levels
+  // ENTERABLE VENUES (2026-08-05): the multi-building city heist. One entry
+  // per building — {plan, door:[x,z], ox, label}. The legacy single
+  // `enterable` is just a one-element list with no explicit offset.
+  // Declared UP here with the other level constants: the OSM building pass,
+  // the NPC spawner and the minimap all read it hundreds of lines earlier
+  // than the door builder runs, and a `const` read inside its temporal dead
+  // zone takes the whole runtime down with it (three times, one morning).
+  const ENTERABLES = (LVL && LVL.enterables && LVL.enterables.length)
+    ? LVL.enterables
+    : ((LVL && LVL.enterable) ? [LVL.enterable] : []);
   // declared HERE, not beside the combat globals: the start-screen controls
   // line reads it long before those run, and a `const` in the temporal dead
   // zone takes the whole runtime down with it
@@ -1429,9 +1439,15 @@ async function main() {
         mnz = Math.min(mnz, pz); mxz = Math.max(mxz, pz);
       }
       const cx = (mnx + mxx) / 2, cz = (mnz + mxz) / 2;
-      if (Math.hypot(cx, cz) < 9) continue;                       // spawn stays open
-      if (goalPos && Math.hypot(cx - goalPos.x, cz - goalPos.z) < 8) continue;
-      if (pathDist(cx, cz) < CORR + Math.max(mxx - mnx, mxz - mnz) / 2) continue;
+      // A DOOR NEEDS ITS BUILDING (2026-08-05): footprints picked as heist
+      // venues are exempt from the cull. Python already checked they clear
+      // the path and the spawn, and a culled venue would leave a glowing
+      // doorway standing in open air with nothing behind it.
+      if (b.enter === undefined) {
+        if (Math.hypot(cx, cz) < 9) continue;                     // spawn stays open
+        if (goalPos && Math.hypot(cx - goalPos.x, cz - goalPos.z) < 8) continue;
+        if (pathDist(cx, cz) < CORR + Math.max(mxx - mnx, mxz - mnz) / 2) continue;
+      }
       try {
         const shape = new THREE.Shape();
         b.pts.forEach(([px, pz], i) => i ? shape.lineTo(px, -pz) : shape.moveTo(px, -pz));
@@ -2521,6 +2537,7 @@ async function main() {
       for (const tz2 of [-hd3 * 0.4, hd3 * 0.4]) {
         const pl2 = new THREE.PointLight(0xff9a3d, 12, 12, 1.8);
         pl2.position.set(OX, WH * 1.6, tz2);
+        if (OX !== 0) pl2.visible = false;            // see the budget note below
         scene.add(pl2);
         window.__torches.push(pl2);
       }
@@ -2549,6 +2566,14 @@ async function main() {
     for (const [tx, tz] of (PLAN.torches || []).slice(0, 10)) {
       const pl = new THREE.PointLight(0xff9a3d, 14, 13, 1.8);
       pl.position.set(tx + OX, WH * 0.62, tz);
+      // OFF UNTIL YOU ARE IN THE ROOM (2026-08-05): an offset interior is a
+      // building you are not standing in, and four of them is forty point
+      // lights. WebGL2 compiles a fixed light count, so blowing the budget
+      // makes MeshStandardMaterial fail to LINK and every room renders
+      // BLACK — no warning. Invisible lights are skipped by the renderer's
+      // traversal entirely; the frame loop's budget pass lights the nearest
+      // four once the player is actually inside.
+      if (OX !== 0) pl.visible = false;
       scene.add(pl);
       const fm = new THREE.Mesh(flameG, flameM);
       fm.position.copy(pl.position);
@@ -2622,30 +2647,46 @@ async function main() {
   // ── ENTERABLE BUILDING (moon plan 2.2): an exterior world with a castle/
   // house gets a REAL door — walk to the glowing doorway and step into a
   // generated interior (built past the map edge); an exit door leads back.
-  window.__doorway = null;
-  if (!INTERIOR && LVL && LVL.enterable) {
-    const EPLAN = LVL.enterable.plan;
-    const EOX = SPEC.world.size_m * 2.2;
-    const eb = buildRooms(EPLAN, EOX);
-    const [dx2, dz2] = LVL.enterable.door;
-    const dy2 = hAt(dx2, dz2);
-    // glowing doorway marker outside
+  // MANY VENUES (2026-08-05): the same door contract, once per building. Each
+  // interior gets its own x-lane past the map edge (Python hands us `ox`), so
+  // the player can leave one brownstone, cross the street and break into the
+  // next without either interior ever touching the other.
+  window.__doorway = null;                  // the venue you are currently in
+  window.__doors = [];
+  if (!INTERIOR && ENTERABLES.length) {
     const dgeo = new THREE.PlaneGeometry(1.8, 2.6);
     const dmat2 = new THREE.MeshBasicMaterial({
       color: 0xffc46b, transparent: true, opacity: 0.45, side: THREE.DoubleSide });
-    const doorM = new THREE.Mesh(dgeo, dmat2);
-    doorM.position.set(dx2, dy2 + 1.3, dz2);
-    scene.add(doorM);
-    const glow2 = new THREE.PointLight(0xffb347, 6, 9, 1.8);
-    glow2.position.set(dx2, dy2 + 2.0, dz2);
-    scene.add(glow2);
-    // matching exit marker inside (at the hall's entry door)
-    const exitM = doorM.clone();
-    exitM.position.set(EOX, 1.3, eb.entryZ - 3.2);
-    scene.add(exitM);
-    window.__doorway = {
-      out: [dx2, dz2], inSpawn: [EOX, eb.entryZ + 1.0],
-      exit: [EOX, eb.entryZ - 3.2], wallH: eb.WH, cool: 0 };
+    window.__torches = window.__torches || [];
+    for (let ei = 0; ei < ENTERABLES.length; ei++) {
+      const E = ENTERABLES[ei];
+      const EOX = (typeof E.ox === 'number') ? E.ox : SPEC.world.size_m * 2.2;
+      const eb = buildRooms(E.plan, EOX);
+      const [dx2, dz2] = E.door;
+      const dy2 = hAt(dx2, dz2);
+      const doorM = new THREE.Mesh(dgeo, dmat2);
+      doorM.position.set(dx2, dy2 + 1.3, dz2);
+      scene.add(doorM);
+      const glow2 = new THREE.PointLight(0xffb347, 6, 9, 1.8);
+      glow2.position.set(dx2, dy2 + 2.0, dz2);
+      scene.add(glow2);
+      // the porch lamps ride the SAME budget list as the torches: four doors
+      // plus four lit interiors is well past the shader's light slots, and
+      // over-budget renders black rather than warning (see buildRooms).
+      window.__torches.push(glow2);
+      // matching exit marker inside (at the hall's entry door)
+      const exitM = new THREE.Mesh(dgeo, dmat2);
+      exitM.position.set(EOX, 1.3, eb.entryZ - 3.2);
+      scene.add(exitM);
+      window.__doors.push({
+        out: [dx2, dz2], inSpawn: [EOX, eb.entryZ + 1.0],
+        exit: [EOX, eb.entryZ - 3.2], wallH: eb.WH, ox: EOX, cool: 0,
+        label: E.label || 'the building',
+        bounds: E.plan.bounds || [40, 40],
+        // room centres in WORLD space — the guard spawner walks patrol beats
+        // through them, and they are the only handle it has on this venue
+        rooms: (E.plan.rooms || []).map(r => [r[0] + EOX, r[1]]) });
+    }
   }
 
   // GRASS: instanced cross-blades on the terrain, thinned along the walking
@@ -2937,6 +2978,14 @@ async function main() {
         mx.arc(w2m(goal[0]), w2m(goal[1]), 4.2, 0, Math.PI * 2);
         mx.fill();
       }
+      // heist venues: without these the player has no way to know WHICH of
+      // three hundred blocks has a door in it
+      for (const E of ENTERABLES) {
+        mx.fillStyle = '#ff9f45';
+        mx.beginPath();
+        mx.arc(w2m(E.door[0]), w2m(E.door[1]), 3.4, 0, Math.PI * 2);
+        mx.fill();
+      }
       camera.getWorldDirection(dirV);
       mx.save();
       mx.translate(w2m(pp.x), w2m(pp.z));
@@ -3215,6 +3264,27 @@ async function main() {
           startYaw = rngN() * Math.PI * 2;   // not all facing the door
           holder.userData.fsBeat = beat;
           gIdx++;
+        } else if (ent.behavior === 'guard'
+                   && window.__doors && window.__doors.length) {
+          // CITY HEIST: one sentry per venue before any venue gets two —
+          // an unguarded building is free money, and the stealth loop only
+          // exists where somebody is watching. Same room-circuit beat as the
+          // single-interior case, just in that building's world-space lane.
+          const dwG = window.__doors[gIdx % window.__doors.length];
+          const rmsG = dwG.rooms.length > 1 ? dwG.rooms.slice(1) : dwG.rooms;
+          const homeG = rmsG[Math.floor(gIdx / window.__doors.length) % rmsG.length];
+          holder.position.set(homeG[0], 0, homeG[1]);
+          const beatG = [];
+          for (let bi = 0; bi < Math.min(3, rmsG.length); bi++) {
+            beatG.push(rmsG[(gIdx + bi) % rmsG.length].slice());
+          }
+          startYaw = rngN() * Math.PI * 2;
+          holder.userData.fsBeat = beatG;
+          holder.userData.fsPen = [dwG.ox - dwG.bounds[0] / 2 + 1,
+                                   dwG.ox + dwG.bounds[0] / 2 - 1,
+                                   -dwG.bounds[1] / 2 + 1,
+                                   dwG.bounds[1] / 2 - 1];
+          gIdx++;
         } else {
           // hostiles spawn FAR (out along the path, guarding the objectives)
           const spread = hostile ? 0.6 : 0.3;
@@ -3243,6 +3313,7 @@ async function main() {
                     target: null, yaw: startYaw, phase: rngN() * Math.PI * 2,
                     h: ent.height_m || 1.0, name: ent.name,
                     beat: holder.userData.fsBeat || null,   // heist patrol circuit
+                    pen: holder.userData.fsPen || null,     // venue he never leaves
                     hp: ent.hp || 3, cd: 0, dead: false, dieT: 0, mats, anim, dormant });
       }
     } catch (e) { fail(e.message); }
@@ -3540,10 +3611,18 @@ async function main() {
         }
         n.anim.mixer.update(dt);
       }
-      // stay inside the walls
-      const lim = gsize * 0.47;
-      n.obj.position.x = THREE.MathUtils.clamp(n.obj.position.x, -lim, lim);
-      n.obj.position.z = THREE.MathUtils.clamp(n.obj.position.z, -lim, lim);
+      // stay inside the walls — or, for a heist sentry, inside HIS building.
+      // (2026-08-05: this world-bounds clamp yanked every venue guard from
+      // x=792 back to x=169, so all four stood in the same empty street and
+      // no building had anybody in it.)
+      if (n.pen) {
+        n.obj.position.x = THREE.MathUtils.clamp(n.obj.position.x, n.pen[0], n.pen[1]);
+        n.obj.position.z = THREE.MathUtils.clamp(n.obj.position.z, n.pen[2], n.pen[3]);
+      } else {
+        const lim = gsize * 0.47;
+        n.obj.position.x = THREE.MathUtils.clamp(n.obj.position.x, -lim, lim);
+        n.obj.position.z = THREE.MathUtils.clamp(n.obj.position.z, -lim, lim);
+      }
     }
   }
 
@@ -4282,6 +4361,12 @@ async function main() {
   function guideLine(st) {
     if (!st) return 'That is everything. Get out while you can.';
     const n = st.count, l = st.label || 'them';
+    // a city heist has to say WHERE: the loot is behind four doors on the
+    // block, and nothing else on screen tells you the glow is a way in
+    if (st.kind === 'collect' && ENTERABLES.length > 1)
+      return `${n} ${l}, spread across ${ENTERABLES.length} buildings on this `
+        + `block. Walk into a glowing doorway to get inside — the amber dots `
+        + `on the map are the ways in. Same doorway takes you back out.`;
     if (st.kind === 'collect') return HAS_GUARDS
       ? `Take ${n} ${l} — and mind the patrols. Crouch with C, and if a guard `
         + `is in your way, throw something with Q to pull him off it.`
@@ -6749,26 +6834,39 @@ varying vec2 vUvRaw;
     }
     stepDmgNumbers(dt);
     stepDust(dt);
-    // door teleports (moon plan 2.2)
-    if (window.__doorway) {
-      const dw = window.__doorway;
-      dw.cool = Math.max(0, dw.cool - dt);
-      if (!dw.cool) {
-        const pp = body.translation();
-        if (Math.hypot(pp.x - dw.out[0], pp.z - dw.out[1]) < 1.5) {
+    // door teleports (moon plan 2.2; many venues 2026-08-05)
+    if (window.__doors && window.__doors.length) {
+      const pp = body.translation();
+      const inside = pp.x > SPEC.world.size_m;
+      for (const dw of window.__doors) {
+        dw.cool = Math.max(0, dw.cool - dt);
+        if (dw.cool) continue;
+        if (!inside && Math.hypot(pp.x - dw.out[0], pp.z - dw.out[1]) < 1.5) {
           body.setTranslation({ x: dw.inSpawn[0], y: 1.2, z: dw.inSpawn[1] }, true);
           body.setNextKinematicTranslation({ x: dw.inSpawn[0], y: 1.2, z: dw.inSpawn[1] });
           dw.cool = 1.2; sfx('step');
-          popText('You step inside…', '#ffc46b');
-        } else if (dw.exit
-                   && Math.hypot(pp.x - dw.exit[0], pp.z - dw.exit[1]) < 1.2
-                   && pp.x > SPEC.world.size_m) {
+          window.__doorway = dw;             // the camera ceiling follows you in
+          popText('Inside ' + dw.label + '…', '#ffc46b');
+          break;
+        }
+        if (inside && dw.exit
+            && Math.hypot(pp.x - dw.exit[0], pp.z - dw.exit[1]) < 1.2) {
           const ox3 = dw.out[0], oz3 = dw.out[1] + 2.4;   // land CLEAR of the pad
           const oy2 = hAt(ox3, oz3) + 1.2;
           body.setTranslation({ x: ox3, y: oy2, z: oz3 }, true);
           body.setNextKinematicTranslation({ x: ox3, y: oy2, z: oz3 });
           dw.cool = 1.2; sfx('step');
-          popText('Back outside', '#ffc46b');
+          window.__doorway = null;
+          // THE DOOR IS THE ESCAPE (2026-08-05): a guard left in `chase`
+          // steers at the player's world position, and the player is now a
+          // city block and eight hundred metres away — the whole patrol
+          // would file out of the building and across the void after you.
+          // Slipping out the front door is exactly when you lose them.
+          for (const g of npcs) {
+            if (g.behavior === 'guard') { g.mode = 'patrol'; g.alert = 0; g.lostT = 0; }
+          }
+          popText('Back on the street', '#ffc46b');
+          break;
         }
       }
     }

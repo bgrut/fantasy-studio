@@ -437,3 +437,180 @@ def build_interior(seed: int, kind: str = "castle") -> dict:
         "bounds": [round(hall_w + 26, 1), round(hall_d + 8, 1)],
     }
 
+
+# ── MULTI-BUILDING HEIST (2026-08-05) ───────────────────────────────────────
+# A city heist is a ROUTE, not a room: pick a handful of real OSM footprints,
+# give each one its own interior plan parked past the map edge, and put a
+# glowing door on the street face of each. The player works the block —
+# in, steal, out, next door. Selection has to agree with the runtime's own
+# building cull or a door ends up floating where no building was drawn, so
+# the chosen footprints are TAGGED (`enter`) and the runtime keeps them.
+
+def _poly_exit_point(pts, cx, cz, ux, uz) -> tuple[float, float]:
+    """Where the ray (c + t*u) last leaves the footprint polygon."""
+    best = 0.0
+    n = len(pts)
+    for i in range(n):
+        ax, az = pts[i]
+        bx, bz = pts[(i + 1) % n]
+        ex, ez = bx - ax, bz - az
+        den = ux * ez - uz * ex
+        if abs(den) < 1e-9:
+            continue
+        t = ((ax - cx) * ez - (az - cz) * ex) / den
+        s = ((ax - cx) * uz - (az - cz) * ux) / den
+        if t > best and -0.001 <= s <= 1.001:
+            best = t
+    return cx + ux * best, cz + uz * best
+
+
+def _road_dist(roads, x, z) -> float:
+    best = 1e9
+    for r in roads:
+        p = r["pts"]
+        for i in range(len(p) - 1):
+            d = _seg_dist(x, z, p[i][0], p[i][1], p[i + 1][0], p[i + 1][1])
+            if d < best:
+                best = d
+                if best < 1.0:
+                    return best
+    return best
+
+
+def _nearest_road_point(roads, x, z) -> tuple[float, float]:
+    best, bp = 1e9, (x + 1.0, z)
+    for r in roads:
+        p = r["pts"]
+        for i in range(len(p) - 1):
+            ax, az, bx, bz = p[i][0], p[i][1], p[i + 1][0], p[i + 1][1]
+            dx, dz = bx - ax, bz - az
+            L2 = dx * dx + dz * dz
+            t = 0.0 if L2 < 1e-9 else max(0.0, min(1.0, ((x - ax) * dx + (z - az) * dz) / L2))
+            qx, qz = ax + t * dx, az + t * dz
+            d = math.hypot(x - qx, z - qz)
+            if d < best:
+                best, bp = d, (qx, qz)
+    return bp
+
+
+def plan_enterables(osm: dict, level: dict, seed: int, size_m: float,
+                    want: int = 4) -> list[dict]:
+    """Choose `want` OSM buildings to make enterable and plan each interior.
+
+    Returns [{plan, door, ox, label, kind, center}] — `ox` is the x-offset the
+    runtime builds that building's rooms at (far past the map edge, one lane
+    each so two interiors can never share a wall). Tags the chosen footprints
+    in `osm` with `enter` so the runtime's path/spawn cull spares them.
+    """
+    blds = osm.get("buildings") or []
+    roads = osm.get("roads") or []
+    if not blds or not roads:
+        return []
+    path = level.get("path") or []
+    corr = (level.get("corridor_m") or 5.5) + 1.5
+    goal = level.get("goal") or [1e9, 1e9]
+    half = size_m / 2.0
+
+    def _path_dist(x, z) -> float:
+        if len(path) < 2:
+            return 1e9
+        return min(_seg_dist(x, z, path[k][0], path[k][1],
+                             path[k + 1][0], path[k + 1][1])
+                   for k in range(len(path) - 1))
+
+    def _sweep(min_side, min_r, max_r, sep):
+        cands = []
+        for b in blds:
+            pts = b["pts"]
+            xs = [p[0] for p in pts]
+            zs = [p[1] for p in pts]
+            w, d = max(xs) - min(xs), max(zs) - min(zs)
+            cx, cz = (max(xs) + min(xs)) / 2, (max(zs) + min(zs)) / 2
+            r = math.hypot(cx, cz)
+            if not (min_side <= w <= 80.0 and min_side <= d <= 80.0):
+                continue                              # too thin to read as a venue
+            if not (min_r <= r <= max_r):             # a walk, but not a hike
+                continue
+            if math.hypot(cx - goal[0], cz - goal[1]) < 14.0:
+                continue                              # runtime skips these
+            if _path_dist(cx, cz) < corr + max(w, d) / 2 + 1.0:
+                continue
+            if _road_dist(roads, cx, cz) > 30.0:      # no street, no burglary
+                continue
+            cands.append((r, b, cx, cz, w, d))
+        cands.sort(key=lambda c: c[0])                # nearest first: a block walk
+        out2 = []
+        for c in cands:
+            if any(math.hypot(c[2] - p[2], c[3] - p[3]) < sep for p in out2):
+                continue                              # spread across the block
+            out2.append(c)
+            if len(out2) >= want:
+                break
+        return out2
+
+    # A REAL OSM DISTRICT IS THINNER THAN IT LOOKS (2026-08-05): the cached
+    # 360 m Manhattan scan carries 46 footprints, and the handsome-venue
+    # filter left three. Sweep once for the ideal block, then relax the
+    # radius and the spacing rather than shipping a one-door "multi" heist.
+    picked = _sweep(11.0, 24.0, half * 0.62, 34.0)
+    if len(picked) < min(want, 3):
+        picked = _sweep(8.0, 15.0, half * 0.88, 22.0)
+    if len(picked) < 2:
+        return []
+
+    _LABELS = ["the brownstone", "the corner gallery", "the townhouse",
+               "the old bank", "the loft building", "the counting house"]
+    out = []
+    ox = size_m * 2.2
+    for k, (r, b, cx, cz, w, d) in enumerate(picked):
+        h = float(b.get("h") or 9.0)
+        area = w * d
+        kind = "castle" if h >= 20.0 else ("dungeon" if area > 1600 else "house")
+        # NO TWO VENUES IN A ROW LOOK ALIKE (2026-08-05 playtest): the block's
+        # two towers both scored `castle` and the second break-in was the
+        # first one repeated — same stone, same red runner, same pillars. The
+        # kind drives ALL of a room's identity, so rotate off a repeat.
+        if out and out[-1]["kind"] == kind:
+            kind = {"castle": "house", "house": "dungeon", "dungeon": "castle"}[kind]
+        plan = build_interior(seed + 101 + k * 37, kind)
+        # ONE STOREY PER VENUE in a city heist: four two-storey plans is four
+        # extra ceilings, four staircases and eight more point lights, and the
+        # WebGL2 light budget is the thing that renders a black room rather
+        # than warning you. The stairs stay for single-building heists.
+        plan["floors"] = 1
+        b["enter"] = k                                # runtime must not cull it
+        # the door goes on the street face: ride the centroid->nearest-road
+        # direction out through the footprint, then a step clear of the wall
+        rx, rz = _nearest_road_point(roads, cx, cz)
+        ux, uz = rx - cx, rz - cz
+        m = math.hypot(ux, uz) or 1.0
+        ux, uz = ux / m, uz / m
+        ex, ez = _poly_exit_point(b["pts"], cx, cz, ux, uz)
+        door = [round(ex + ux * 1.1, 2), round(ez + uz * 1.1, 2)]
+        out.append({
+            "plan": plan, "door": door, "ox": round(ox, 1),
+            "label": _LABELS[k % len(_LABELS)], "kind": kind,
+            "center": [round(cx, 2), round(cz, 2)],
+        })
+        ox += plan["bounds"][0] + 30.0
+    return out
+
+
+def spread_loot(enterables: list[dict], n: int, seed: int) -> list[list[float]]:
+    """`n` collect points spread ACROSS the enterable buildings' rooms.
+
+    Round-robin by building so a 4-jewel heist really is four break-ins, and
+    never in a hall's entry strip (rooms[0]) where the player lands.
+    """
+    import random as _random
+    rng = _random.Random(seed * 17 + 3)
+    pts = []
+    for i in range(n):
+        e = enterables[i % len(enterables)]
+        rooms = e["plan"]["rooms"]
+        pool = rooms[1:] if len(rooms) > 1 else rooms
+        cx, cz, rw, rd = pool[(i // len(enterables)) % len(pool)]
+        pts.append([round(e["ox"] + cx + rng.uniform(-rw / 2 + 1.2, rw / 2 - 1.2), 2),
+                    round(cz + rng.uniform(-rd / 2 + 1.2, rd / 2 - 1.2), 2)])
+    return pts
+

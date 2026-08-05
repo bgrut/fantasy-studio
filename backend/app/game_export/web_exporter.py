@@ -144,6 +144,8 @@ def export_web_game(spec: GameSpec, out_dir: str | Path, verbose: bool = True) -
         needed |= {"crate", "log", "stump", "barrel"}
     if lvl_d.get("enterable"):
         needed |= {f[0] for f in lvl_d["enterable"]["plan"].get("furniture", [])}
+    for _e in lvl_d.get("enterables") or []:          # city heist: many venues
+        needed |= {f[0] for f in _e["plan"].get("furniture", [])}
     if needed:
         props_src = RUNTIME.parent.parent.parent / "assets" / "props"
         props_dst = dist / "props"
