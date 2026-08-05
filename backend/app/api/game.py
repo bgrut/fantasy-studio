@@ -83,6 +83,7 @@ class GameExportRequest(BaseModel):
     # Phase 136: dist-relative or assets/splats path of a Gaussian-splat world
     splat: str | None = None
     pano: str | None = None          # Phase 140: scene-image panorama world
+    procedural: bool = False         # build vehicles in code (crisp) vs generated mesh
 
 
 def _expand_design_doc(prompt: str) -> str | None:
@@ -120,6 +121,72 @@ def _expand_design_doc(prompt: str) -> str | None:
         return doc.strip() if len(doc.strip()) > 80 else None
     except Exception:  # noqa: BLE001 — LLM down: raw prompt path unchanged
         return None
+
+
+_CAR_CLASSES = {
+    # class -> parametric silhouette (metres + ratios). Hand-tuned so each
+    # reads instantly from a distance: a coupe is long/low, a truck is tall
+    # with a short cabin pushed forward.
+    "sports":   {"length": 4.35, "width": 1.90, "bodyH": 0.50, "bodyY": 0.44,
+                 "cabinLen": 0.40, "cabinH": 0.40, "cabinX": -0.06,
+                 "wheelR": 0.33, "wheelBase": 0.32},
+    "sedan":    {"length": 4.70, "width": 1.83, "bodyH": 0.62, "bodyY": 0.52,
+                 "cabinLen": 0.46, "cabinH": 0.52, "cabinX": -0.03,
+                 "wheelR": 0.34, "wheelBase": 0.31},
+    "suv":      {"length": 4.75, "width": 1.95, "bodyH": 0.80, "bodyY": 0.66,
+                 "cabinLen": 0.52, "cabinH": 0.62, "cabinX": -0.02,
+                 "wheelR": 0.40, "wheelBase": 0.30},
+    "truck":    {"length": 5.40, "width": 2.02, "bodyH": 0.84, "bodyY": 0.72,
+                 "cabinLen": 0.36, "cabinH": 0.66, "cabinX": 0.10,
+                 "wheelR": 0.44, "wheelBase": 0.31},
+    "van":      {"length": 5.10, "width": 1.98, "bodyH": 0.96, "bodyY": 0.70,
+                 "cabinLen": 0.66, "cabinH": 0.70, "cabinX": -0.04,
+                 "wheelR": 0.38, "wheelBase": 0.32},
+    "taxi":     {"length": 4.72, "width": 1.86, "bodyH": 0.66, "bodyY": 0.54,
+                 "cabinLen": 0.48, "cabinH": 0.56, "cabinX": -0.02,
+                 "wheelR": 0.35, "wheelBase": 0.31},
+}
+_CAR_PAINT = {
+    "red": 0xb5202a, "blue": 0x1e4f9c, "black": 0x14161a, "white": 0xdfe3e8,
+    "silver": 0xa9b0b8, "grey": 0x6d737a, "gray": 0x6d737a, "green": 0x1f6b3a,
+    "yellow": 0xd9a410, "orange": 0xcf5a12, "purple": 0x5b2c86,
+    "gold": 0xc8a13a, "pink": 0xcf5f8f,
+}
+
+
+def _infer_car_params(prompt: str, cast: str) -> dict | None:
+    """Parametric-car params from the user's words (2026-08-04). Research
+    verdict: cars are hard-surface parametric objects — image-to-3D melts
+    rooflines and smears wheels on every single one. Built-in-code cars are
+    crisp by construction; the prompt picks class + paint."""
+    import re as _re
+    t = (prompt + " " + (cast or "")).lower()
+    if not _re.search(r"\b(car|truck|van|taxi|cab|suv|jeep|sedan|coupe|"
+                      r"pickup|lorry|ferrari|lamborghini|porsche|mustang|"
+                      r"corvette|f150|f-150|racer|racecar|race car)\b", t):
+        return None
+    if _re.search(r"\b(truck|pickup|f150|f-150|lorry)\b", t):
+        cls = "truck"
+    elif _re.search(r"\b(van|minivan|bus)\b", t):
+        cls = "van"
+    elif _re.search(r"\b(suv|jeep|4x4|crossover)\b", t):
+        cls = "suv"
+    elif _re.search(r"\b(taxi|cab)\b", t):
+        cls = "taxi"
+    elif _re.search(r"\b(sports?|ferrari|lamborghini|porsche|mustang|"
+                    r"corvette|coupe|racer|racecar|race car|supercar)\b", t):
+        cls = "sports"
+    else:
+        cls = "sedan"
+    p = dict(_CAR_CLASSES[cls])
+    paint = 0xf2c200 if cls == "taxi" else _CAR_CLASSES and 0xb5202a
+    for name, hexv in _CAR_PAINT.items():
+        if _re.search(rf"\b{name}\b", t):
+            paint = hexv
+            break
+    p["paint"] = paint
+    p["_class"] = cls
+    return p
 
 
 def _infer_vfx(prompt: str) -> str | None:
@@ -571,6 +638,23 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                 spec.player.walk_speed = 9.0                 # cruise
             if abs(spec.player.run_speed - 5.0) < 1e-6:
                 spec.player.run_speed = 19.0                 # boost
+            # PARAMETRIC CARS (2026-08-04): a car is a HARD-SURFACE
+            # parametric object — image-to-3D melts rooflines and smears
+            # wheels on every single one. Vehicles are now BUILT IN CODE
+            # (research: this is what the good three.js GTA demos do);
+            # the prompt picks class + paint. Animals keep the mesh path.
+            try:
+                _cp = _infer_car_params(req.prompt, spec.player.name or "") \
+                    if req.procedural else None
+                if _cp:
+                    _cls = _cp.pop("_class", "sedan")
+                    spec.player.car_params = _cp
+                    spec.player.yaw_offset_deg = 0.0   # built nose +X
+                    job.setdefault("notes", []).append(
+                        f"parametric {_cls} built in code — crisp panels, "
+                        f"round wheels, real glass (no mesh generation)")
+            except Exception:
+                pass
         if player_glb and pattern == "flying":
             spec.player.mode = "fly"
             if abs(spec.player.walk_speed - 2.0) < 1e-6:
@@ -1923,16 +2007,26 @@ async def upload_scene(request: __import__("fastapi").Request):
                     k = float(np.clip(k, 6.0, 120.0))
                 else:
                     k = 45.0
-                keep = (lat_f > np.radians(-6.0)) & (d_f >= 0.2) \
-                    & (lat_f < np.radians(35.0))
-                # 25m arena standoff: metric-true interiors (a forest photo
-                # is honestly 3-10m deep) crowd the camera into a blur wall —
-                # scenery keeps metric ORDERING but starts at the arena edge
-                # HARD STANDOFF (2026-08-04 playtest): 25m still buried the
-                # camera inside splats (verified screenshot). Scenery is
-                # BACKDROP — never nearer than 55m, so the play space stays
-                # clear and the lifted world always reads as distance.
-                rr = np.clip(k / np.maximum(d_f, 0.14), 55, 340)[keep]
+                # THE WALL FIX (2026-08-04 — research verdict, verbatim:
+                # "the 45m inner radius. Delete it. That single number is
+                # what makes it a wall."). Standing scenery off at 55m is
+                # exactly why the photo read as a billboard in front of the
+                # player instead of a place around them. Two changes:
+                #  1. NO minimum radius — near scenery comes all the way in.
+                #  2. GROUND SUBSTITUTION below the horizon: predicted depth
+                #     is DISCARDED and replaced with the exact plane
+                #     solution r = h / sin(-lat), h = 1.6m eye height (the
+                #     same math three.js GroundedSkybox uses). A relative
+                #     depth model can never hold a floor flat; geometry can.
+                # Result: ONE CONTINUOUS SHEET from underfoot to horizon —
+                # the seam only existed because we had a shell with a hole.
+                r_depth = k / np.maximum(d_f, 0.14)
+                lat_g2 = np.minimum(lat_f, np.radians(-2.5))
+                r_ground = 1.6 / np.maximum(np.sin(-lat_g2), 1e-3)
+                below = lat_f < np.radians(-2.5)
+                rr_all = np.where(below, np.minimum(r_ground, 400.0), r_depth)
+                keep = (d_f >= 0.10) & (lat_f < np.radians(58.0))  # sky stays on the pano
+                rr = np.clip(rr_all, 0.7, 400.0)[keep]
                 # depth-edge shrink: splats straddling discontinuities smear
                 # the moment the player translates — shrink them hard
                 gy2, gx2 = np.gradient(np.log(np.maximum(dm_s, 0.05)))

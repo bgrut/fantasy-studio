@@ -4262,7 +4262,100 @@ async function main() {
   // ── player: animated GLB + kinematic capsule ─────────────────────────────
   let mixer = null, actions = {}, current = null;
   const P = SPEC.player;
-  const pg = await loadGLB(P.asset);            // hard fail = visible error
+  // ── PARAMETRIC CARS (2026-08-04): image-to-3D is blobby on vehicles
+  // because a car is a HARD-SURFACE PARAMETRIC object, not an organic
+  // blob — every AI mesh melts the roofline and smears the wheels. Cars
+  // are now BUILT IN CODE from ~20 params (the reference image only sets
+  // proportions + paint), so panels are crisp, wheels are round, glass
+  // is glass. Animals keep the generated-mesh path, where it wins.
+  function buildCar(cp) {
+    const g = new THREE.Group();
+    const L = cp.length || 4.4, Wd = cp.width || 1.85;
+    const bodyH = cp.bodyH || 0.62, bodyY = cp.bodyY || 0.52;
+    const cabLen = cp.cabinLen || 0.46, cabH = cp.cabinH || 0.52;
+    const cabX = cp.cabinX || -0.04, wr = cp.wheelR || 0.34;
+    const paint = new THREE.MeshPhysicalMaterial({
+      color: new THREE.Color(cp.paint || 0xb5202a), metalness: 0.55,
+      roughness: 0.28, clearcoat: 1.0, clearcoatRoughness: 0.06 });
+    const glass = new THREE.MeshPhysicalMaterial({
+      color: 0x101418, metalness: 0.1, roughness: 0.06,
+      transmission: 0.55, thickness: 0.4, transparent: true, opacity: 0.72 });
+    const trim = new THREE.MeshStandardMaterial({
+      color: 0x1b1d20, metalness: 0.7, roughness: 0.42 });
+    // BODY: side silhouette (hood -> windshield -> roof -> decklid) is an
+    // extruded profile swept across the width — this single choice is what
+    // separates 'a car' from 'a box with wheels'
+    // ONE consistent axis: rear at -hl, nose at +hl, strictly increasing x.
+    // (Mixing rear-relative and nose-relative terms folded the roofline
+    // back on itself and extruded a self-intersecting wedge — verified.)
+    const s = new THREE.Shape();
+    const hl = L * 0.5;
+    const cabC = L * cabX;                       // cabin centre offset
+    const cabR = cabC - L * cabLen * 0.5;        // cabin rear
+    const cabF = cabC + L * cabLen * 0.5;        // cabin front
+    const roofY = bodyH + cabH;
+    s.moveTo(-hl, 0.06);
+    s.lineTo(-hl, bodyH * 0.62);                       // rear panel
+    s.lineTo(-hl + L * 0.06, bodyH * 0.88);            // decklid rise
+    s.lineTo(cabR, bodyH * 0.92);                      // rear window base
+    s.lineTo(cabR + L * 0.05, roofY);                  // roof rear
+    s.lineTo(cabF - L * 0.05, roofY);                  // roof front
+    s.lineTo(cabF, bodyH * 0.90);                      // windshield base
+    s.lineTo(hl - L * 0.10, bodyH * 0.80);             // hood
+    s.lineTo(hl, bodyH * 0.52);                        // nose top
+    s.lineTo(hl, 0.06);
+    const bg = new THREE.ExtrudeGeometry(s, {
+      depth: Wd, bevelEnabled: true, bevelSize: 0.05,
+      bevelThickness: 0.05, bevelSegments: 3 });
+    bg.rotateY(Math.PI / 2);
+    bg.translate(0, bodyY - bodyH * 0.25, Wd / 2);
+    const body = new THREE.Mesh(bg, paint);
+    body.castShadow = body.receiveShadow = true;
+    g.add(body);
+    // GREENHOUSE: inset glass box so windows read as openings, not decals
+    const gh = new THREE.Mesh(new THREE.BoxGeometry(
+      L * cabLen * 0.92, cabH * 0.78, Wd * 0.86), glass);
+    gh.position.set(L * cabX, bodyY + bodyH * 0.52 + cabH * 0.36, 0);
+    g.add(gh);
+    // WHEELS: real cylinders in real arches
+    const tyre = new THREE.Mesh(
+      new THREE.CylinderGeometry(wr, wr, Wd * 0.17, 22),
+      new THREE.MeshStandardMaterial({ color: 0x14161a, roughness: 0.92 }));
+    tyre.rotation.z = Math.PI / 2;
+    const rim = new THREE.Mesh(
+      new THREE.CylinderGeometry(wr * 0.58, wr * 0.58, Wd * 0.18, 14),
+      new THREE.MeshStandardMaterial({ color: 0xc9ced6, metalness: 0.92,
+                                       roughness: 0.22 }));
+    rim.rotation.z = Math.PI / 2;
+    const wx = L * (cp.wheelBase || 0.31), wz = Wd * 0.5 - Wd * 0.06;
+    for (const sx of [1, -1]) for (const sz of [1, -1]) {
+      const t2 = tyre.clone(); t2.position.set(sx * wx, wr, sz * wz);
+      t2.castShadow = true; g.add(t2);
+      const r2 = rim.clone(); r2.position.set(sx * wx, wr, sz * wz * 1.02);
+      g.add(r2);
+    }
+    // lights + grille: the small reads that sell 'car' at a glance
+    for (const sz of [1, -1]) {
+      const hlm = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.16, Wd * 0.22),
+        new THREE.MeshStandardMaterial({ color: 0xfff6e0, emissive: 0xffeec2,
+                                         emissiveIntensity: 0.55 }));
+      hlm.position.set(hl - 0.06, bodyY + bodyH * 0.18, sz * Wd * 0.3);
+      g.add(hlm);
+      const tl = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.13, Wd * 0.2),
+        new THREE.MeshStandardMaterial({ color: 0x8c1414, emissive: 0xd11a1a,
+                                         emissiveIntensity: 0.5 }));
+      tl.position.set(-hl + 0.04, bodyY + bodyH * 0.34, sz * Wd * 0.3);
+      g.add(tl);
+    }
+    const grille = new THREE.Mesh(
+      new THREE.BoxGeometry(0.06, bodyH * 0.3, Wd * 0.6), trim);
+    grille.position.set(hl - 0.02, bodyY - bodyH * 0.02, 0);
+    g.add(grille);
+    return g;
+  }
+  const pg = P.car_params
+    ? { scene: buildCar(P.car_params), animations: [] }
+    : await loadGLB(P.asset);            // hard fail = visible error
   const { holder, root: pRoot, radius } =
     prepModel(pg, P.height_m, ['fly', 'swim'].includes(P.mode || 'walk'));
   // ORIENTATION (2026-07-06 rewrite — heuristics OUT, baked truth IN):
