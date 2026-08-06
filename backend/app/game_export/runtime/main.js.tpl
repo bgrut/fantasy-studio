@@ -6155,12 +6155,29 @@ async function main() {
   // are now BUILT IN CODE from ~20 params (the reference image only sets
   // proportions + paint), so panels are crisp, wheels are round, glass
   // is glass. Animals keep the generated-mesh path, where it wins.
+  // ── VEHICLE TYPES (2026-08-06) ────────────────────────────────────────
+  // One shell, six silhouettes. A street of identical sedans is the same
+  // clone-army tell as a street of identical buildings, and every knob
+  // these presets turn was already a buildCar parameter — the only new
+  // geometry is the pickup bed and the taxi roof light.
+  const CAR_TYPES = {
+    sedan:  { length: 4.55, width: 1.83, bodyH: 0.60, bodyY: 0.52, cabinLen: 0.42, cabinH: 0.50, cabinX: -0.03, wheelR: 0.33, wheelBase: 0.31 },
+    coupe:  { length: 4.30, width: 1.86, bodyH: 0.55, bodyY: 0.47, cabinLen: 0.34, cabinH: 0.44, cabinX: -0.09, wheelR: 0.33, wheelBase: 0.32 },
+    suv:    { length: 4.85, width: 1.98, bodyH: 0.80, bodyY: 0.70, cabinLen: 0.50, cabinH: 0.60, cabinX: -0.02, wheelR: 0.41, wheelBase: 0.31 },
+    pickup: { length: 5.40, width: 2.00, bodyH: 0.74, bodyY: 0.68, cabinLen: 0.30, cabinH: 0.62, cabinX: 0.13, wheelR: 0.41, wheelBase: 0.33, bed: 1 },
+    van:    { length: 5.25, width: 2.02, bodyH: 1.08, bodyY: 0.80, cabinLen: 0.58, cabinH: 0.44, cabinX: -0.11, wheelR: 0.36, wheelBase: 0.33 },
+    taxi:   { length: 4.60, width: 1.86, bodyH: 0.62, bodyY: 0.54, cabinLen: 0.44, cabinH: 0.52, cabinX: -0.03, wheelR: 0.34, wheelBase: 0.31, taxi: 1 },
+  };
+  const CAR_TYPE_KEYS = ['sedan', 'sedan', 'coupe', 'suv', 'suv', 'pickup', 'van', 'taxi'];
   function buildCar(cp) {
     const g = new THREE.Group();
-    const L = cp.length || 4.4, Wd = cp.width || 1.85;
-    const bodyH = cp.bodyH || 0.62, bodyY = cp.bodyY || 0.52;
-    const cabLen = cp.cabinLen || 0.46, cabH = cp.cabinH || 0.52;
-    const cabX = cp.cabinX || -0.04, wr = cp.wheelR || 0.34;
+    const T = CAR_TYPES[cp.type] || {};
+    const L = cp.length || T.length || 4.4, Wd = cp.width || T.width || 1.85;
+    const bodyH = cp.bodyH || T.bodyH || 0.62, bodyY = cp.bodyY || T.bodyY || 0.52;
+    const cabLen = cp.cabinLen || T.cabinLen || 0.46, cabH = cp.cabinH || T.cabinH || 0.52;
+    const cabX = cp.cabinX !== undefined ? cp.cabinX
+               : (T.cabinX !== undefined ? T.cabinX : -0.04);
+    const wr = cp.wheelR || T.wheelR || 0.34;
     const paint = new THREE.MeshPhysicalMaterial({
       // real automotive paint is a metallic basecoat under near-perfect
       // lacquer: it is almost ENTIRELY reflection. At metalness 0.55 /
@@ -6206,20 +6223,28 @@ async function main() {
     const wsT = Math.min(cabF + WIND_RAKE * 0.14, cabR - 0.10);
     const rrT = Math.max(cabR - BACK_RAKE * 0.10, wsT + 0.06);
     const s = new THREE.Shape();
+    // r5: this profile was eight STRAIGHT lines, which is why the car read
+    // as folded cardboard however good the paint was. The same control points
+    // as quadratics give a crowned bonnet, a curved screen and a rounded tail
+    // for no new parameters and no extra draw calls.
     s.moveTo(xAt(0.02), yb + NOSE_FALL * 0.5);        // nose, low
-    s.lineTo(xAt(0.30), yt - 0.02);                   // up over the front wheel
+    s.quadraticCurveTo(xAt(0.15), yt - 0.13, xAt(0.30), yt - 0.02);
     s.lineTo(xAt(cabF), yt);                          // beltline
-    s.lineTo(xAt(wsT), yt + cabH);                    // windscreen rake
+    s.quadraticCurveTo(xAt(cabF + (wsT - cabF) * 0.5), yt + cabH * 0.74,
+                       xAt(wsT), yt + cabH);          // windscreen
     s.lineTo(xAt(rrT), yt + cabH);                    // roof
-    s.lineTo(xAt(Math.min(cabR + 0.06, 0.95)), yt);   // backlight to the deck
-    s.lineTo(xAt(0.97), yt - 0.04 + TAIL_RISE);       // tail
+    s.quadraticCurveTo(xAt(rrT + (Math.min(cabR + 0.06, 0.95) - rrT) * 0.55),
+                       yt + cabH * 0.5,
+                       xAt(Math.min(cabR + 0.06, 0.95)), yt);   // backlight
+    s.quadraticCurveTo(xAt(0.93), yt + TAIL_RISE,
+                       xAt(0.97), yt - 0.04 + TAIL_RISE);       // tail
     s.lineTo(xAt(0.97), yb);                          // rear valance
     s.lineTo(xAt(0.02), yb);                          // sill
     s.closePath();
     const depth = Wd - TRACK_INSET * 2;
     const bg = new THREE.ExtrudeGeometry(s, {
-      depth, bevelEnabled: true, bevelSize: 0.045,
-      bevelThickness: 0.045, bevelSegments: 3, curveSegments: 12 });
+      depth, bevelEnabled: true, bevelSize: 0.075,
+      bevelThickness: 0.06, bevelSegments: 4, curveSegments: 18 });
     bg.translate(0, 0, -depth / 2);            // straddle the centreline
     const body = new THREE.Mesh(bg, paint);
     body.castShadow = body.receiveShadow = true;
@@ -6228,6 +6253,7 @@ async function main() {
     const gh = new THREE.Mesh(new THREE.BoxGeometry(
       (cabR - cabF) * L * 0.82, cabH * 0.86, Wd - 0.16), glass);
     gh.position.set(xAt((cabF + cabR) * 0.5), yt + cabH * 0.52, 0);
+    gh.userData.noShadow = 1;
     g.add(gh);
     // WHEELS sit OUTBOARD of the bodyside, not inside it (carlab): a wheel's
     // inner face meets the flank and the tyre stands slightly proud of it.
@@ -6239,26 +6265,55 @@ async function main() {
     const rimM = new THREE.MeshStandardMaterial({ color: 0xc9ced6, metalness: 0.92,
                                                   roughness: 0.22 });
     const archM = new THREE.MeshBasicMaterial({ color: 0x0a0b0e });
-    const wb = cp.wheelBase || 0.31;
+    const wb = cp.wheelBase || T.wheelBase || 0.31;
+    // 2026-08-06 PERF: these were twelve separate meshes per car. At 60-odd
+    // cars on screen that is ~700 draw calls of wheel, and each one paid
+    // again in the shadow pass — measured 60fps -> 38fps the moment the kerbs
+    // filled up. Same geometry, merged per material: twelve becomes three.
+    const tyG = [], hubG = [], arG = [];
     for (const t of [0.5 - wb, 0.5 + wb]) {
       for (const side of [-1, 1]) {
-        const w = new THREE.Mesh(
-          new THREE.CylinderGeometry(wr, wr, wheelW, 22), tyreM);
-        w.rotation.x = Math.PI / 2;
-        w.position.set(xAt(t), wr, side * trackZ);
-        w.castShadow = true; g.add(w);
-        const hub = new THREE.Mesh(
-          new THREE.CylinderGeometry(wr * 0.56, wr * 0.56, wheelW * 0.55, 16), rimM);
-        hub.rotation.x = Math.PI / 2;
-        hub.position.set(xAt(t), wr, side * (trackZ + wheelW * 0.26));
-        g.add(hub);
+        const wg = new THREE.CylinderGeometry(wr, wr, wheelW, 18);
+        wg.rotateX(Math.PI / 2);
+        wg.translate(xAt(t), wr, side * trackZ);
+        tyG.push(wg);
+        const hg = new THREE.CylinderGeometry(wr * 0.56, wr * 0.56, wheelW * 0.55, 14);
+        hg.rotateX(Math.PI / 2);
+        hg.translate(xAt(t), wr, side * (trackZ + wheelW * 0.26));
+        hubG.push(hg);
         // dark disc behind the wheel: reads as a wheel well, which is what
         // stops a cylinder looking stuck onto a flat flank
-        const ar = new THREE.Mesh(new THREE.CircleGeometry(wr * 1.16, 20), archM);
-        ar.position.set(xAt(t), wr, side * (halfBody - 0.005));
-        ar.rotation.y = side > 0 ? 0 : Math.PI;
-        g.add(ar);
+        const ag = new THREE.CircleGeometry(wr * 1.16, 16);
+        if (side < 0) ag.rotateY(Math.PI);
+        ag.translate(xAt(t), wr, side * (halfBody - 0.005));
+        arG.push(ag);
       }
+    }
+    const tyres = new THREE.Mesh(mergeGeometries(tyG, false), tyreM);
+    tyres.castShadow = true; g.add(tyres);
+    const hubs = new THREE.Mesh(mergeGeometries(hubG, false), rimM);
+    hubs.userData.noShadow = 1; g.add(hubs);
+    const arches = new THREE.Mesh(mergeGeometries(arG, false), archM);
+    arches.userData.noShadow = 1; g.add(arches);
+    if (T.bed) {
+      // a flatbed deck alone still reads as a saloon with a long boot;
+      // what says PICKUP is the sidewall standing above the beltline
+      const bF = xAt(Math.min(cabR + 0.06, 0.95)), bR = xAt(0.97);
+      const bL = Math.abs(bF - bR), bC = (bF + bR) / 2;
+      const bw2 = new THREE.Mesh(new THREE.BoxGeometry(bL, 0.32, Wd - 0.10), paint);
+      bw2.position.set(bC, yt + 0.16, 0);
+      bw2.castShadow = true; g.add(bw2);
+      const bin = new THREE.Mesh(new THREE.BoxGeometry(bL - 0.16, 0.28, Wd - 0.38),
+        new THREE.MeshStandardMaterial({ color: 0x2a2c30, roughness: 0.88 }));
+      bin.position.set(bC, yt + 0.21, 0);
+      g.add(bin);
+    }
+    if (T.taxi) {
+      const tl = new THREE.Mesh(new THREE.BoxGeometry(0.58, 0.17, 0.30),
+        new THREE.MeshStandardMaterial({ color: 0xf7d045, emissive: 0xf7d045,
+                                         emissiveIntensity: 0.7 }));
+      tl.position.set(xAt((cabF + cabR) * 0.5), yt + cabH + 0.10, 0);
+      g.add(tl);
     }
     // lights + grille: the small reads that sell 'car' at a glance. Same
     // convention as everything else — length on X, lateral on Z.
@@ -6403,17 +6458,71 @@ async function main() {
     // the 7 cap was set when every car dragged a transmissive greenhouse
     // through its own render pass. The glass is opaque at traffic distance
     // now, so the cap can follow the street count instead of the old cliff.
-    const NT = Math.min(13, lanes.length);
+    const NT = Math.min(18, lanes.length);
+    // PARKED CARS (2026-08-06): the parked pass was gated to drive mode, so a
+    // walk-mode city had five drivable cars and nothing else at the kerb —
+    // every street read as freshly swept. These are scenery: no colliders,
+    // for the same reason the drivable ones have none.
+    {
+      const rngPk = mulberry32(SPEC.seed + 2727);
+      window.__parkedSpots = [];
+      let nPk = 0;
+      for (const r of OSM.roads || []) {
+        if (nPk >= 34) break;
+        if (!r.pts || r.pts.length < 2) continue;
+        for (let i = 0; i < r.pts.length - 1 && nPk < 34; i++) {
+          const [x1, z1] = r.pts[i], [x2, z2] = r.pts[i + 1];
+          const segL = Math.hypot(x2 - x1, z2 - z1);
+          if (segL < 9) continue;
+          const ux = (x2 - x1) / segL, uz = (z2 - z1) / segL;
+          const hdP = Math.atan2(ux, uz);
+          for (let d0 = 5; d0 < segL - 5 && nPk < 34; d0 += 7.5 + rngPk() * 6) {
+            if (rngPk() < 0.45) continue;
+            const side = rngPk() < 0.5 ? 1 : -1;
+            const off = (r.w || 7) / 2 - 1.05;
+            const cxP = x1 + ux * d0 - uz * off * side;
+            const czP = z1 + uz * d0 + ux * off * side;
+            if (Math.hypot(cxP, czP) < 15 || inBldg(cxP, czP, 0.6)) continue;
+            if (window.__cars.some(k => Math.hypot(k.x - cxP, k.z - czP) < 7)) continue;
+            const tyP = CAR_TYPE_KEYS[Math.floor(rngPk() * CAR_TYPE_KEYS.length)];
+            const shP = buildCar({ type: tyP,
+              paint: tyP === 'taxi' ? 0xf2b400
+                                    : tints2[Math.floor(rngPk() * tints2.length)] });
+            shP.rotation.y = -Math.PI / 2;
+            shP.traverse(o => {
+              if (!o.isMesh) return;
+              o.castShadow = !o.userData.noShadow;
+              o.receiveShadow = true;
+              const ms = Array.isArray(o.material) ? o.material : [o.material];
+              if (ms.some(m => m && m.transmission > 0)) {
+                o.material = new THREE.MeshStandardMaterial({
+                  color: 0x0d1116, metalness: 0.4, roughness: 0.12 });
+              }
+            });
+            const gp = new THREE.Group();
+            gp.add(shP);
+            gp.position.set(cxP, hAt(cxP, czP), czP);
+            gp.rotation.y = hdP + (side > 0 ? 0 : Math.PI);
+            scene.add(gp);
+            window.__parkedSpots.push([cxP, czP]);
+            nPk++;
+          }
+        }
+      }
+      console.log('[game] parked cars: ' + nPk);
+    }
     for (let ti = 0; ti < NT; ti++) {
       const r = lanes[Math.floor(ti * lanes.length / Math.max(NT, 1))].r;
       const rig2 = new THREE.Group();
       rig2.rotation.order = 'YXZ';
-      const shell2 = buildCar({ paint: tints2[Math.floor(rngT2() * tints2.length)],
-                                length: 4.2 + rngT2() * 0.7, width: 1.82 });
+      const ty2 = CAR_TYPE_KEYS[Math.floor(rngT2() * CAR_TYPE_KEYS.length)];
+      const shell2 = buildCar({ type: ty2,
+        paint: ty2 === 'taxi' ? 0xf2b400
+                             : tints2[Math.floor(rngT2() * tints2.length)] });
       shell2.rotation.y = -Math.PI / 2;             // same +X nose -> +Z forward
       shell2.traverse(o => {
         if (!o.isMesh) return;
-        o.castShadow = true;
+        o.castShadow = !o.userData.noShadow;
         // TRAP 2 territory: every transmissive greenhouse is its own render
         // pass. Seven of them moving is a framerate cliff, and at traffic
         // distance smoked glass is indistinguishable.
@@ -6433,7 +6542,7 @@ async function main() {
       // NO COLLIDER, same reason parked cars have none (2026-08-05): being
       // shoved inside geometry is a worse bug than a car clipping you.
       window.__traffic.push({ obj: rig2, pts: r.pts, seg: seg0, t: rngT2(),
-                              speed: 7.5 + rngT2() * 4.5, dir: 1,
+                              speed: 7.5 + rngT2() * 4.5, dir: 1, steal: 1,
                               lane: Math.max((r.w || 7) / 4, 1.7) });
     }
   }
@@ -6492,10 +6601,11 @@ async function main() {
             }
           });
         };
-        // 2026-08-06: 15 walkers on a whole Manhattan block is a quiet
-        // Sunday, not a city. The cost is a skinned clone each, and the
-        // mixers are the only per-frame work — 28 measured flat.
-        for (let i = 0; i < 28; i++) {
+        // 2026-08-06 r2: a Manhattan block is CROWDED. The limit is not
+        // the draw — it is one AnimationMixer and one skeleton update per
+        // walker per frame, so the crowd scales by only paying that for
+        // the ones you can actually see (LOD in the step loop below).
+        for (let i = 0; i < 90; i++) {
           const r = OSM.roads[Math.floor(rngP() * OSM.roads.length)];
           if (!r || r.pts.length < 2) continue;
           const inst = skClone(g.scene);
@@ -6526,10 +6636,16 @@ async function main() {
             act.play();
             mixer2.update(rngP() * 2.5);      // phase-shift: no synchronized march
           }
+          const _pdir = rngP() < 0.5 ? 1 : -1;
           window.__peds.push({ obj: holder2, mixer: mixer2, pts: r.pts,
             seg: Math.max(0, Math.floor(rngP() * (r.pts.length - 1))), t: rngP(),
-            speed: spd, dir: rngP() < 0.5 ? 1 : -1,
-            side: ((r.w || 7) / 2 + 1.6 + rngP() * 1.6) * (rngP() < 0.5 ? 1 : -1) });
+            speed: spd, dir: _pdir,
+            // KEEP RIGHT: side was rolled independently of direction, so
+            // half the crowd walked head-on into the other half on the
+            // same slab. Tying it to dir gives each pavement one dominant
+            // flow, with a tenth going against it so it is not a parade.
+            side: ((r.w || 7) / 2 + 1.6 + rngP() * 1.6)
+                  * (rngP() < 0.9 ? _pdir : -_pdir) });
         }
         console.log('[game] pedestrians: ' + window.__peds.length);
       } catch (e) { console.warn('[game] pedestrians skipped: ' + e.message); }
@@ -7268,10 +7384,16 @@ async function main() {
       // spread them over the map — five cars on one block is a dealership,
       // and the nearest-first sort still guarantees one close to the spawn
       if (window.__cars.some(k => Math.hypot(k.x - c[0], k.z - c[1]) < 24)) continue;
+      // a drivable car merged into a scenery one is two cars in the same
+      // metre of kerb, and the scenery pass ran first
+      if ((window.__parkedSpots || []).some(
+          q => Math.hypot(q[0] - c[0], q[1] - c[1]) < 6.5)) continue;
       const rig = new THREE.Group();
       rig.rotation.order = 'YXZ';        // yaw first: body-roll must not steer
-      const shell = buildCar({ paint: tints[window.__cars.length % tints.length],
-                               length: 4.25 + rngC() * 0.55, width: 1.84 });
+      const tyC = CAR_TYPE_KEYS[Math.floor(rngC() * CAR_TYPE_KEYS.length)];
+      const shell = buildCar({ type: tyC,
+        paint: tyC === 'taxi' ? 0xf2b400
+                              : tints[window.__cars.length % tints.length] });
       // buildCar now really does put the nose on +X (before 2026-08-06 its
       // own internal rotateY had already swung it to -Z, so this +90 was
       // compensating for that). -90 deg is what alignLongAxis applies to a
@@ -7280,7 +7402,10 @@ async function main() {
       shell.rotation.y = -Math.PI / 2;
       shell.traverse(o => {
         if (!o.isMesh) return;
-        o.castShadow = o.receiveShadow = true;
+        // noShadow parts sit inside the car's own silhouette, so they add
+        // nothing to the shadow but cost a full extra draw each
+        o.castShadow = !o.userData.noShadow;
+        o.receiveShadow = true;
         // five transmissive greenhouses would each cost their own render
         // pass; parked glass is flat smoked instead (only the car you drive
         // is close enough for real transmission to read anyway)
@@ -7307,8 +7432,27 @@ async function main() {
         + 'border-radius:10px;padding:8px 14px;z-index:24;display:none;'
         + 'pointer-events:none;';
       document.body.appendChild(carPrompt);
+      // SPEEDO. Hung on window rather than a module const so nothing in
+      // this ~8000-line single scope can read it before its declaration
+      // and take the whole runtime down with it (TRAP 1).
+      const sp = document.createElement('div');
+      sp.style.cssText = 'position:fixed;right:22px;bottom:22px;z-index:24;'
+        + 'display:none;font:700 13px system-ui;color:#dff4ff;text-align:center;'
+        + 'background:rgba(10,9,18,.72);border:1px solid rgba(127,212,255,.4);'
+        + 'border-radius:12px;padding:10px 16px 8px;pointer-events:none;'
+        + 'min-width:104px;';
+      sp.innerHTML = '<div id="spdN" style="font:800 30px system-ui;'
+        + 'line-height:1;color:#eaf7ff">0</div>'
+        + '<div style="opacity:.65;letter-spacing:.14em;margin-top:3px">KM/H</div>'
+        + '<div style="margin-top:7px;height:4px;background:rgba(255,255,255,.14);'
+        + 'border-radius:3px;overflow:hidden">'
+        + '<div id="spdB" style="height:100%;width:0%;background:#7fd4ff"></div></div>';
+      document.body.appendChild(sp);
+      window.__speedEl = sp;
+      window.__speedN = sp.querySelector('#spdN');
+      window.__speedB = sp.querySelector('#spdB');
       const hintC = document.querySelector('#hud .hint');
-      if (hintC) hintC.textContent += ' · E by a parked car to drive it';
+      if (hintC) hintC.textContent += ' · E by a car to drive it';
     }
   }
   function enterCar(c) {
@@ -7367,11 +7511,27 @@ async function main() {
   }
   // keydown REPEATS while E is held — without the cooldown one press
   // toggles in and out of the car a dozen times.
+  // Hand a moving traffic car over to the drivable system: pull it out of
+  // the traffic list (which is what stops it), keep the exact world transform
+  // it had, and enter it. It is an ordinary car from here on — it can be
+  // parked, left, and found again.
+  function stealCar(tv) {
+    const i = (window.__traffic || []).indexOf(tv);
+    if (i >= 0) window.__traffic.splice(i, 1);
+    const c = { rig: tv.obj, x: tv.obj.position.x, z: tv.obj.position.z,
+                yaw: tv.obj.rotation.y };
+    window.__cars.push(c);
+    popText('Car stolen', '#ffd06a');
+    enterCar(c);
+  }
   window.__carE = () => {
-    if (!CARS_OK || !window.__cars.length) return false;
+    if (!CARS_OK) return false;
     if (performance.now() < carCool) return true;
     if (DRIVING) { carCool = performance.now() + 550; exitCar(); return true; }
     if (nearCar) { carCool = performance.now() + 550; enterCar(nearCar); return true; }
+    if (window.__nearTraffic) {
+      carCool = performance.now() + 550; stealCar(window.__nearTraffic); return true;
+    }
     return false;
   };
   function stepCars(dt) {
@@ -7384,19 +7544,42 @@ async function main() {
         heldCar.z = playerObj.position.z;
       }
       nearCar = null;
+      window.__nearTraffic = null;
       carPrompt.textContent = 'E — get out';
       carPrompt.style.display = 'block';
+      if (window.__speedEl) {
+        const kph = Math.round(Math.hypot(carVX, carVZ) * 3.6);
+        window.__speedEl.style.display = 'block';
+        window.__speedN.textContent = kph;
+        window.__speedB.style.width = Math.min(100, kph / 1.1) + '%';
+        window.__speedN.style.color = kph > 85 ? '#ffd06a' : '#eaf7ff';
+      }
       return;
     }
+    if (window.__speedEl) window.__speedEl.style.display = 'none';
     let best = null, bd = 6.0;
     const pp5 = playerObj.position;
     for (const c of window.__cars) {
       const d = Math.hypot(c.x - pp5.x, c.z - pp5.z);
       if (d < bd) { bd = d; best = c; }
     }
+    // CARJACKING (2026-08-06): a moving car you cannot touch is scenery. The
+    // reach is a little longer than for a parked one because it is closing on
+    // you while you press the key. A parked car still wins a tie — it is the
+    // safer read when you are stood between the two.
+    let bt = null, btd = 7.5;
+    if (!best) {
+      for (const tv of window.__traffic || []) {
+        if (!tv.steal) continue;
+        const d = Math.hypot(tv.obj.position.x - pp5.x, tv.obj.position.z - pp5.z);
+        if (d < btd) { btd = d; bt = tv; }
+      }
+    }
     nearCar = best;
-    carPrompt.style.display = best ? 'block' : 'none';
+    window.__nearTraffic = bt;
+    carPrompt.style.display = (best || bt) ? 'block' : 'none';
     if (best) carPrompt.textContent = 'E — drive';
+    else if (bt) carPrompt.textContent = 'E — steal car';
   }
   window.__game.cars = () => window.__cars.map(c => ({ x: c.x, z: c.z }));
   window.__game.driving = () => DRIVING;
@@ -8815,7 +8998,24 @@ varying vec2 vUvRaw;
       while (dyT > Math.PI) dyT -= Math.PI * 2;
       while (dyT < -Math.PI) dyT += Math.PI * 2;
       tv.obj.rotation.y += dyT * Math.min(1, dt * 4);
+      // GETTING RUN OVER (2026-08-06). Only while ON FOOT: inside a car
+      // the capsule rides at the same place as the bonnet, and every
+      // overtake would read as a collision.
+      if (!DRIVING && tv.speed > 2.5) {
+        const hx = tx2 - playerObj.position.x, hz = tz2 - playerObj.position.z;
+        if (hx * hx + hz * hz < 3.1 * 3.1
+            && performance.now() > (window.__carHitCool || 0)) {
+          window.__carHitCool = performance.now() + 1400;
+          playerHit(1);
+          popText('Hit by a car', '#ff8fa0');
+        }
+      }
     }
+    // CROWD LOD (2026-08-06): a skinned walker costs a skeleton update and
+    // a mixer tick every frame whether or not it is on screen. Positions
+    // keep integrating for everyone so the crowd stays coherent when you
+    // turn round; only the expensive half is distance-gated.
+    const _pcam = playerObj.position;
     for (const pd of window.__peds || []) {
       const a3 = pd.pts[pd.seg], b3 = pd.pts[pd.seg + 1];
       if (!a3 || !b3) { pd.seg = 0; continue; }
@@ -8845,7 +9045,10 @@ varying vec2 vUvRaw;
         while (dy < -Math.PI) dy += Math.PI * 2;
         pd.obj.rotation.y += dy * Math.min(1, dt * 6);
       }
-      if (pd.mixer) pd.mixer.update(dt);
+      const _pd2 = (pd.obj.position.x - _pcam.x) ** 2 + (pd.obj.position.z - _pcam.z) ** 2;
+      const _vis = _pd2 < 95 * 95;
+      if (pd.obj.visible !== _vis) pd.obj.visible = _vis;
+      if (pd.mixer && _vis && _pd2 < 62 * 62) pd.mixer.update(dt);
     }
     if (window.__torches) {
       const tt = performance.now() / 1000;
