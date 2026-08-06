@@ -5,6 +5,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Crosshair, Download, FolderPlus, Gamepad2, Loader2, Maximize2, RotateCcw } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import AssetPalette, { type PaletteAsset } from '@/components/AssetPalette'
+import EnginePanel from '@/components/EnginePanel'
 import {
   addLevelToProject, createProject, exportGame, exportProject, gameHealth,
   cancelJob, getGameJob, listProjects, openLevel, removeLevelFromProject, revealProjectZip, uploadSplat, listSplats, trainSplat, getSplatJob, imagineSplat, uploadScene,
@@ -157,7 +159,15 @@ export default function GameStudio() {
   const [showRules, setShowRules] = useState(false)        // Studio panel open
   // STUDIO PANEL (2026-08-05): the Truth Table grew into the studio — Cast
   // (who is in the game), Rules (what it enforces), Scene (live dials).
-  const [studioTab, setStudioTab] = useState<'cast' | 'rules' | 'scene'>('cast')
+  const [studioTab, setStudioTab] =
+    useState<'cast' | 'library' | 'engines' | 'rules' | 'scene'>('cast')
+  // DRAG-AND-DROP PLACEMENT (2026-08-06). `dragAsset` is live only while a
+  // palette card is in flight; it raises the drop overlay over the iframe,
+  // because an iframe swallows the parent's drag events and there is
+  // otherwise no way to drop onto the running game. `pendingDrop` survives
+  // the round trip to the runtime, which answers with fs-pick asynchronously.
+  const [dragAsset, setDragAsset] = useState<PaletteAsset | null>(null)
+  const pendingDrop = useRef<PaletteAsset | null>(null)
   // live dials: these postMessage STRAIGHT to the running game. No backend
   // roundtrip, no rebuild — dragging a slider changes the world you are
   // looking at, which is the whole point of the studio.
@@ -349,6 +359,23 @@ export default function GameStudio() {
     void startJob(p, job.id, at, at2)
   }, [editPrompt, building, job, startJob, selPick, selLine])
 
+  // The runtime is the only thing that can turn a screen point into a world
+  // point, so the drop asks it and finishes in the fs-pick handler below.
+  const onGameDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    const raw = e.dataTransfer.getData('application/x-fs-asset')
+    setDragAsset(null)
+    if (!raw || !job || building) return
+    let asset: PaletteAsset
+    try { asset = JSON.parse(raw) } catch { return }
+    const frame = gameFrameRef.current
+    if (!frame) return
+    const r = frame.getBoundingClientRect()
+    pendingDrop.current = asset
+    frame.contentWindow?.postMessage(
+      { type: 'fs-dropat', cx: e.clientX - r.left, cy: e.clientY - r.top }, '*')
+  }, [job, building])
+
   const playing = job?.status === 'complete' && job.play_url
 
   // Inspector bridge: the game raycasts under the cursor and reports what/where
@@ -358,6 +385,19 @@ export default function GameStudio() {
       if (!d || d.type !== 'fs-pick') return
       const p: Pick = { x: d.x, z: d.z, target: d.target ?? { type: 'ground', name: 'ground' } }
       if (d.kind === 'hover') { setHoverPick(p); return }
+      // a drop already knows WHAT it is placing, so it goes straight to the
+      // edit instead of arming a selection the user then has to describe
+      if (d.kind === 'drop') {
+        const a = pendingDrop.current
+        pendingDrop.current = null
+        if (!a) return
+        setSelPick(null); setSelLine(null); setLineA(null)
+        setError(null)
+        void startJobRef.current?.(
+          `place a ${a.subject} here`, jobRef.current?.id,
+          { x: p.x, z: p.z, target: p.target.name })
+        return
+      }
       // LINE TOOL: first click anchors A, second closes the run A→B
       setPlaceMode(mode => {
         if (mode === 'line') {
@@ -377,6 +417,13 @@ export default function GameStudio() {
     window.addEventListener('message', onMsg)
     return () => window.removeEventListener('message', onMsg)
   }, [])
+
+  // the fs-pick listener is mounted once and must not capture a stale job or
+  // a stale startJob; refs keep it correct without re-subscribing every render
+  const startJobRef = useRef<typeof startJob | null>(null)
+  const jobRef = useRef<typeof job>(null)
+  useEffect(() => { startJobRef.current = startJob }, [startJob])
+  useEffect(() => { jobRef.current = job }, [job])
 
   const sendInspect = useCallback((on: boolean) => {
     gameFrameRef.current?.contentWindow?.postMessage({ type: 'fs-inspect', on }, '*')
@@ -1052,6 +1099,22 @@ export default function GameStudio() {
               allowFullScreen
               onLoad={() => { gameFrameRef.current?.focus({ preventScroll: true }); if (inspect) sendInspect(true) }}
             />
+            {/* DROP TARGET. Only mounted mid-drag: a permanent overlay would
+                eat every click meant for the game. */}
+            {dragAsset && (
+              <div
+                className="absolute inset-0 z-20 flex items-center justify-center
+                           bg-[#a78bfa]/10 border-2 border-dashed border-[#a78bfa]/70
+                           rounded-2xl"
+                onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy' }}
+                onDrop={onGameDrop}
+              >
+                <span className="px-3 py-1.5 rounded-lg bg-[rgba(10,9,18,0.9)]
+                                 border border-[#a78bfa]/40 text-xs text-[#d6c9ff]">
+                  drop to place <b>{dragAsset.subject}</b>
+                </span>
+              </div>
+            )}
             {/* hover-audit chip: what's under the cursor, live */}
             {inspect && (
               <div className="absolute top-2 left-2 pointer-events-none px-3 py-1.5 rounded-lg bg-[rgba(10,9,18,0.85)] border border-[#ffd88a]/30 text-xs font-mono">
@@ -1131,7 +1194,8 @@ export default function GameStudio() {
             return (
               <div className="rounded-xl border border-[#a78bfa]/25 bg-[#a78bfa]/5 px-4 py-3 space-y-2.5">
                 <div className="flex items-center gap-1.5">
-                  {([['cast', '🎭 Cast'], ['rules', '📜 Rules'],
+                  {([['cast', '🎭 Cast'], ['library', '🧩 Library'],
+                     ['engines', '⚙ Engines'], ['rules', '📜 Rules'],
                      ['scene', '🎚 Scene']] as const).map(([id, lbl]) => (
                     <button key={id} onClick={() => setStudioTab(id)}
                       className={cn('px-2.5 py-1 rounded-full text-[11px] transition-all',
@@ -1142,7 +1206,11 @@ export default function GameStudio() {
                   <span className="ml-auto text-[10px] font-mono text-[#4a4764]">
                     {studioTab === 'scene'
                       ? 'live — changes the running game instantly'
-                      : 'derived from the spec this game actually runs'}
+                      : studioTab === 'library'
+                        ? 'drag onto the game to place — rebuilds with the edit'
+                        : studioTab === 'engines'
+                          ? 'procedural systems every generated city inherits'
+                          : 'derived from the spec this game actually runs'}
                   </span>
                 </div>
 
@@ -1178,6 +1246,16 @@ export default function GameStudio() {
                     </button>
                   </div>
                 )}
+
+                {studioTab === 'library' && (
+                  <AssetPalette
+                    disabled={!playing || building}
+                    onDragStart={setDragAsset}
+                    onDragEnd={() => setDragAsset(null)}
+                  />
+                )}
+
+                {studioTab === 'engines' && <EnginePanel />}
 
                 {studioTab === 'rules' && (
                   <div className="grid gap-1 [grid-template-columns:repeat(auto-fit,minmax(280px,1fr))]">

@@ -8308,6 +8308,15 @@ async function main() {
     applyGrade(SPEC.grade);
     addEventListener('message', e => {
       if (e.data && e.data.type === 'fs-inspect') setInspectOn(e.data.on);
+      // DROP TARGETING (2026-08-06): the studio's asset palette drags a card
+      // over the iframe and needs the WORLD point under the cursor. It cannot
+      // raycast from out there — an iframe swallows the parent's drag events
+      // and the parent has no camera — so it hands us viewport coordinates
+      // and we answer with the same fs-pick the click path already emits.
+      // Works whether or not Inspect is armed: dropping is its own gesture.
+      if (e.data && e.data.type === 'fs-dropat') {
+        pickAt(e.data.cx, e.data.cy, 'drop');
+      }
       if (e.data && e.data.type === 'fs-grade') applyGrade(e.data.grade);
       // ── LIVE PATCH (2026-08-05, the studio unlock): edits that only move
       // runtime dials — weather, time of day, fog, speeds, HP — no longer
