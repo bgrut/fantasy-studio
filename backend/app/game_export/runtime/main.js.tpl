@@ -4705,11 +4705,14 @@ async function main() {
     const bg = new THREE.ExtrudeGeometry(s, {
       depth: Wd, bevelEnabled: true, bevelSize: 0.05,
       bevelThickness: 0.05, bevelSegments: 3 });
-    // KEEP the rotateY. Tried removing it 2026-08-05 by analogy with
-    // tools/carlab, where the same call was the slab bug — here it is NOT.
-    // This profile is authored on a different axis convention, so without the
-    // rotation the whole body lies FLAT on the road (verified in-game). The
-    // two files are not interchangeable; fix this one in this one.
+    // DO NOT "FIX" THIS AXIS (2026-08-05, tried twice, reverted twice).
+    // The body geometry is rotated HERE, on its own, and that is load-bearing:
+    // alignLongAxis() runs on the finished model afterwards and re-orients it
+    // to the runtime's +Z forward. Rotating the whole GROUP instead double-
+    // applies with that pass and lays the car FLAT on the road; removing the
+    // rotation entirely does the same. Both were verified in-game and undone.
+    // The real defect is that the fittings below use a different convention
+    // from the shell — fix THOSE positions, never this rotation.
     bg.rotateY(Math.PI / 2);
     bg.translate(0, bodyY - bodyH * 0.25, Wd / 2);
     const body = new THREE.Mesh(bg, paint);
@@ -4717,8 +4720,8 @@ async function main() {
     g.add(body);
     // GREENHOUSE: inset glass box so windows read as openings, not decals
     const gh = new THREE.Mesh(new THREE.BoxGeometry(
-      L * cabLen * 0.92, cabH * 0.78, Wd * 0.86), glass);
-    gh.position.set(L * cabX, bodyY + bodyH * 0.52 + cabH * 0.36, 0);
+      Wd * 0.86, cabH * 0.78, L * cabLen * 0.92), glass);
+    gh.position.set(0, bodyY + bodyH * 0.52 + cabH * 0.36, L * cabX);
     g.add(gh);
     // WHEELS: real cylinders in real arches
     const tyre = new THREE.Mesh(
@@ -4730,11 +4733,11 @@ async function main() {
       new THREE.MeshStandardMaterial({ color: 0xc9ced6, metalness: 0.92,
                                        roughness: 0.22 }));
     rim.rotation.z = Math.PI / 2;
-    const wx = L * (cp.wheelBase || 0.31), wz = Wd * 0.5 - Wd * 0.06;
+    const wz = L * (cp.wheelBase || 0.31), wx = Wd * 0.5 - Wd * 0.06;   // length is on Z after the shell rotate
     for (const sx of [1, -1]) for (const sz of [1, -1]) {
-      const t2 = tyre.clone(); t2.position.set(sx * wx, wr, sz * wz);
+      const t2 = tyre.clone(); t2.position.set(sz * wx, wr, sx * wz);
       t2.castShadow = true; g.add(t2);
-      const r2 = rim.clone(); r2.position.set(sx * wx, wr, sz * wz * 1.02);
+      const r2 = rim.clone(); r2.position.set(sz * wx * 1.02, wr, sx * wz);
       g.add(r2);
     }
     // lights + grille: the small reads that sell 'car' at a glance
@@ -4742,17 +4745,23 @@ async function main() {
       const hlm = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.16, Wd * 0.22),
         new THREE.MeshStandardMaterial({ color: 0xfff6e0, emissive: 0xffeec2,
                                          emissiveIntensity: 0.55 }));
-      hlm.position.set(hl - 0.06, bodyY + bodyH * 0.18, sz * Wd * 0.3);
+      // the shell's rotateY put LENGTH on Z and WIDTH on X, so a headlight
+      // placed at x=hl sat out past the flank as a pale slab. Swap the axes
+      // to match the body: length -> z, lateral -> x.
+      hlm.rotation.y = Math.PI / 2;
+      hlm.position.set(sz * Wd * 0.3, bodyY + bodyH * 0.18, hl - 0.06);
       g.add(hlm);
       const tl = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.13, Wd * 0.2),
         new THREE.MeshStandardMaterial({ color: 0x8c1414, emissive: 0xd11a1a,
                                          emissiveIntensity: 0.5 }));
-      tl.position.set(-hl + 0.04, bodyY + bodyH * 0.34, sz * Wd * 0.3);
+      tl.rotation.y = Math.PI / 2;
+      tl.position.set(sz * Wd * 0.3, bodyY + bodyH * 0.34, -hl + 0.04);
       g.add(tl);
     }
     const grille = new THREE.Mesh(
       new THREE.BoxGeometry(0.06, bodyH * 0.3, Wd * 0.6), trim);
-    grille.position.set(hl - 0.02, bodyY - bodyH * 0.02, 0);
+    grille.rotation.y = Math.PI / 2;
+    grille.position.set(0, bodyY - bodyH * 0.02, hl - 0.02);
     g.add(grille);
     return g;
   }
@@ -5555,7 +5564,21 @@ async function main() {
     reading: () => ({ readable: readable ? readable.label : null, open: reading }),
     inspect: on => setInspectOn(on),
     view: VIEW,
+    // PERF GATE (2026-08-05): the city merges into a handful of draw calls on
+    // purpose, and any facade change that quietly gives buildings their own
+    // materials would undo that with no visible symptom until a real city
+    // stutters. Exposed so the shotgate can fail the change on the number.
+    stats: () => ({ calls: window.__frameCalls | 0,
+                    tris: window.__frameTris | 0,
+                    programs: renderer.info.programs ? renderer.info.programs.length : -1,
+                    textures: renderer.info.memory.textures,
+                    geometries: renderer.info.memory.geometries }),
   };
+  // scene/renderer handles for the shotgate probes: judging a lighting or
+  // material change from screenshots alone is guesswork, and the city's
+  // night look is decided by numbers (fog density, env intensity) that a
+  // picture cannot report.
+  window.__scene = scene; window.__renderer = renderer;
 
   // ── PARKED CARS YOU CAN STEAL ────────────────────────────────────────────
   // The whole bridge between the two demos. Placed HERE, after the player
@@ -7424,7 +7447,15 @@ varying vec2 vUvRaw;
       window.__csmFrame = (window.__csmFrame || 0) + 1;
       if (window.__csmFrame % 60 === 1) window.__csmPatch();  // catch spawns
     }
+    // PERF GATE (2026-08-05): renderer.info resets on every render call, and
+    // the composer's last fullscreen pass is a render — so reading the counter
+    // after the frame reports 1 draw call for any scene. Freeze autoReset and
+    // reset once per frame so the number covers scene + passes together.
+    renderer.info.autoReset = false;
+    renderer.info.reset();
     composer.render();
+    window.__frameCalls = renderer.info.render.calls;
+    window.__frameTris = renderer.info.render.triangles;
     // live state for the verify harness (extends the __game probe object)
     window.__game.state = { x: nt.x, y: nt.y, z: nt.z, modelYaw, yaw, speed,
                             started: gameStarted, go: raceGo,
