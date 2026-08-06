@@ -741,9 +741,16 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                     f"using a stand-in for now; re-run to try again")
         if player_glb and pattern == "vehicle":
             spec.player.mode = "drive"
-            if abs(spec.player.walk_speed - 2.0) < 1e-6:
+            # A DRIVE-MODE CAR'S NO-SHIFT TOP SPEED *IS* walk_speed
+            # (2026-08-06). These tests used to fire only when the model had
+            # left the schema default untouched, so an unlucky roll of
+            # walk_speed 0.1 shipped a racing demo you could outwalk — same
+            # prompt, same code, dead car, and nothing in the job notes to say
+            # why. Below a jogging pace is not a car, so the floor is enforced
+            # whatever the model asked for.
+            if spec.player.walk_speed < 7.0:
                 spec.player.walk_speed = 9.0                 # cruise
-            if abs(spec.player.run_speed - 5.0) < 1e-6:
+            if spec.player.run_speed < 14.0:
                 spec.player.run_speed = 19.0                 # boost
             # PARAMETRIC CARS (2026-08-04): a car is a HARD-SURFACE
             # parametric object — image-to-3D melts rooflines and smears
@@ -770,15 +777,15 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                 pass
         if player_glb and pattern == "flying":
             spec.player.mode = "fly"
-            if abs(spec.player.walk_speed - 2.0) < 1e-6:
+            if spec.player.walk_speed < 4.5:                 # floor, see 'drive'
                 spec.player.walk_speed = 6.0                 # glide
-            if abs(spec.player.run_speed - 5.0) < 1e-6:
+            if spec.player.run_speed < 11.0:
                 spec.player.run_speed = 15.0                 # dive/boost
         if player_glb and pattern == "aquatic":
             spec.player.mode = "swim"
-            if abs(spec.player.walk_speed - 2.0) < 1e-6:
+            if spec.player.walk_speed < 4.5:                 # floor, see 'drive'
                 spec.player.walk_speed = 6.0                 # cruise (whales MOVE)
-            if abs(spec.player.run_speed - 5.0) < 1e-6:
+            if spec.player.run_speed < 10.0:
                 spec.player.run_speed = 14.0                 # burst
         if not player_glb:
             # HONEST STAND-IN — never cross species. A hero we can't build yet
@@ -951,6 +958,30 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             job.setdefault("notes", []).append(
                 "a guide was added — they greet you and explain each objective")
 
+        # A HEIST WITH NO GUARDS IS AN EMPTY BLOCK (2026-08-06).
+        # Casting is LLM-luck: one build cast a noun that was neither in the
+        # library nor named in the prompt, so every guard was dropped by the
+        # invited-nouns rule and the level shipped with nothing to sneak past —
+        # a silent, total loss of the game's premise. Behaviours the DESIGN
+        # depends on now fall back to a library humanoid instead of vanishing.
+        # Ambience entities keep the old behaviour: they are meant to be
+        # skippable, and substituting for them is how you get a crowd of
+        # identical men standing in for birds.
+        _STRUCTURAL = {"guard", "guide", "hostile", "vehicle"}
+
+        def _understudy(behavior: str):
+            """(kind, glb) for a structural role whose own noun could not be
+            cast, or (None, None) if even the fallbacks are missing."""
+            if behavior not in _STRUCTURAL:
+                return None, None
+            ladder = (("car", "van", "truck") if behavior == "vehicle"
+                      else ("man", "soldier", "thug", "knight", "detective", "woman"))
+            for cand in ladder:
+                glb2 = ensure_playable(cand, verbose=False) or library.resolve(cand)
+                if glb2:
+                    return cand, glb2
+            return None, None
+
         kept = []
         for ent in spec.entities:
             if ent.name.lower().strip() in _AMBIENT:
@@ -967,11 +998,17 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                 # cached, but an uninvited noun must never cost 35 CPU-minutes
                 # of generation. Skip with a note; prompt-named nouns still
                 # generate like always.
+                sub, glb = _understudy(ent.behavior)
+                if not glb:
+                    job.setdefault("notes", []).append(
+                        f"the AI imagined '{ekind}' for this world — it's not in "
+                        f"your library yet, so it was skipped. Mention '{ekind}' in "
+                        f"a prompt or edit to create it once (then it's free forever)")
+                    continue
                 job.setdefault("notes", []).append(
-                    f"the AI imagined '{ekind}' for this world — it's not in "
-                    f"your library yet, so it was skipped. Mention '{ekind}' in "
-                    f"a prompt or edit to create it once (then it's free forever)")
-                continue
+                    f"'{ekind}' isn't in your library, so the {ent.behavior} is "
+                    f"played by '{sub}' — the level keeps its {ent.behavior}s")
+                ekind = sub
             if not glb:
                 # THE SAME PIPELINE FOR EVERY NOUN (2026-07-06): entities and
                 # props generate exactly like the player does — a missing
@@ -998,8 +1035,19 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                         ent.height_m = 0.5   # unknown props default small, not person-sized
                 kept.append(ent)
             else:
-                job.setdefault("notes", []).append(
-                    f"entity '{ekind}' not in library yet — skipped")
+                sub, glb2 = _understudy(ent.behavior)
+                if glb2:
+                    ent.name = sub
+                    ent.asset = glb2
+                    if ent.height_m == 1.0:
+                        ent.height_m = library.default_height(sub)
+                    kept.append(ent)
+                    job.setdefault("notes", []).append(
+                        f"'{ekind}' could not be cast, so the {ent.behavior} is "
+                        f"played by '{sub}' — the level keeps its {ent.behavior}s")
+                else:
+                    job.setdefault("notes", []).append(
+                        f"entity '{ekind}' not in library yet — skipped")
         spec.entities = kept
 
         # PLACED ITEMS (Phase 42 Inspector): explicit-coordinate objects from

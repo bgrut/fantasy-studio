@@ -1345,6 +1345,12 @@ async function main() {
       const mats = Array.isArray(o.material) ? o.material : [o.material];
       const out = mats.map(m => {
         if (!m || !m.isMeshStandardMaterial) return m;
+        // MeshPhysicalMaterial reports isMeshStandardMaterial too, so this
+        // pass was quietly overwriting the parametric car's own paint
+        // (metalness 0.85 -> 0.25, roughness 0.22 -> 0.34) and undoing the
+        // whole point of e17d2f7. Anything already authored physical was
+        // authored deliberately — leave it alone. (2026-08-06)
+        if (m.isMeshPhysicalMaterial) return m;
         despeckleTexture(m);
         const pm = new THREE.MeshPhysicalMaterial();
         THREE.MeshStandardMaterial.prototype.copy.call(pm, m);
@@ -1414,8 +1420,138 @@ async function main() {
     // night glow), 1 = glass tower, 2 = brick walk-up, 3 = pre-war stone.
     // Tall core buildings lean glass; the rest mix — one merged mesh per
     // bucket, so a whole city is 5 draw calls.
+    // ── TEXEL DENSITY, IN REAL METRES (2026-08-06) ───────────────────────
+    // Per family: [tileW_m, tileH_m, bays_in_photo, storeys_in_photo].
+    // The metres are DERIVED, not chosen: each photo was measured (vertical
+    // autocorrelation of its row luminance) to count how many storeys and
+    // bays it actually depicts, then multiplied by a real storey height
+    // (3.0-4.6m by building type) and a real bay width (2.7-4.4m).
+    //
+    // r13 sized every tile at 8m or less TALL, so a photo showing 6-8
+    // storeys of windows was crushed into one storey of building: windows
+    // came out postage-stamp sized and a tower wore the same image ~20x.
+    // That single number is what read as "a textured box" from the street —
+    // no albedo, normal map or cornice can survive wrong texel density.
+    const _FTILE = [
+      [6, 6, 4, 2],                 // 0 procedural window grid (canvas, 6m tile)
+      [14, 23.8, 4, 7],             // 1 facade_glass      7 storeys/tile
+      [11.7, 19.8, 3, 6],           // 2 facade_brick      6
+      [12, 18, 3, 5],               // 3 facade_stone      5
+      [20, 20.4, 5, 6],             // 4 facade_glass2     diagrid, panel-scaled
+      [18.9, 16.8, 7, 4],           // 5 facade_brick2     4 tall loft storeys
+      [15.2, 24, 4, 8],             // 6 facade_concrete   8 balcony storeys
+      [13.2, 13.8, 3, 3],           // 7 facade_limestone  3 grand storeys
+    ];
+    const _FFAM = [null, 'facade_glass', 'facade_brick', 'facade_stone',
+      'facade_glass2', 'facade_brick2', 'facade_concrete', 'facade_limestone'];
+    const _storeyH = (bkt) => _FTILE[bkt][1] / _FTILE[bkt][3];
+    // Rewrite the side-wall UVs of one extruded footprint so the texture is
+    // laid out in METRES ALONG THE REAL WALL rather than in ExtrudeGeometry's
+    // default coordinates. Three defects go away at once:
+    //   * default side-wall U is the vertex's world x OR z, whichever varies
+    //     more — so any wall not axis-aligned wears the photo compressed by
+    //     cos(angle) (a 45 deg wall, by 1.41x).
+    //   * U restarted mid-window at every corner; now each edge starts on a
+    //     bay boundary and fits a whole number of bays.
+    //   * default V is 1 - extrudeDepth, which runs the photo UPSIDE DOWN;
+    //     ground-floor detail landed at the roofline.
+    // Non-indexed only (ExtrudeGeometry is); each side quad spans exactly one
+    // footprint edge, so a triangle is matched to its edge by centroid.
+    function metricWallUV(geo, pts, baseY, hh, bkt) {
+      if (geo.index) return;
+      const T = _FTILE[bkt] || _FTILE[0];
+      const bayW = T[0] / T[2], stH = T[1] / T[3];
+      // metres -> uv scale. The building height is snapped to whole storeys
+      // before it gets here, so this is 1.0 for the main mass and only bends
+      // for setback tiers.
+      const kv = Math.max(1, Math.round(hh / stH)) * stH / Math.max(hh, 0.01);
+      const E = [];
+      for (let i = 0; i < pts.length; i++) {
+        const a = pts[i], c = pts[(i + 1) % pts.length];
+        const dx = c[0] - a[0], dz = c[1] - a[1];
+        const L = Math.hypot(dx, dz);
+        if (L < 0.05) continue;
+        E.push([a[0], a[1], dx / L, dz / L, L,
+                Math.max(1, Math.round(L / bayW)) * bayW / L]);
+      }
+      if (!E.length) return;
+      const pos = geo.attributes.position, uv = geo.attributes.uv;
+      for (const g of geo.groups) {
+        if (g.materialIndex === 0) continue;          // caps keep their own UVs
+        const end = g.start + g.count;
+        for (let i = g.start; i + 2 < end; i += 3) {
+          const mx = (pos.getX(i) + pos.getX(i + 1) + pos.getX(i + 2)) / 3;
+          const mz = (pos.getZ(i) + pos.getZ(i + 1) + pos.getZ(i + 2)) / 3;
+          let be = E[0], bd = 1e9;
+          for (const e of E) {
+            const t = Math.max(0, Math.min(1,
+              ((mx - e[0]) * e[2] + (mz - e[1]) * e[3]) / e[4]));
+            const d = Math.hypot(mx - (e[0] + e[2] * e[4] * t),
+                                 mz - (e[1] + e[3] * e[4] * t));
+            if (d < bd) { bd = d; be = e; }
+          }
+          for (let k = 0; k < 3; k++) {
+            const j = i + k;
+            const along = (pos.getX(j) - be[0]) * be[2]
+                        + (pos.getZ(j) - be[1]) * be[3];
+            uv.setXY(j, along * be[5], (pos.getY(j) - baseY) * kv);
+          }
+        }
+      }
+      uv.needsUpdate = true;
+    }
+    // A BBOX FACE IS NOT A WALL (2026-08-06). Projecting a footprint's centre
+    // outward to its axis-aligned bounding box lands INSIDE the building for
+    // anything that is not an axis-aligned rectangle, and a buried prop is
+    // simply an invisible one — that is how the fire-escape pass first
+    // shipped 24 landings and showed none. Everything hung on a facade picks
+    // the real polygon EDGE facing the road and takes its outward normal from
+    // the edge itself. Function declaration: it is read above where the
+    // const helpers below are declared, and a const would be in its TDZ.
+    function faceEdge(pts, cx, cz, bx, bz, minLen) {
+      let bi = -1, bd = 1e9, nx = 0, nz = 0;
+      for (let i = 0; i < pts.length; i++) {
+        const a = pts[i], c = pts[(i + 1) % pts.length];
+        const ex = c[0] - a[0], ez = c[1] - a[1];
+        const L = Math.hypot(ex, ez);
+        if (L < (minLen || 2)) continue;
+        const mx = (a[0] + c[0]) / 2, mz = (a[1] + c[1]) / 2;
+        let px = -ez / L, pz = ex / L;
+        if ((mx - cx) * px + (mz - cz) * pz < 0) { px = -px; pz = -pz; }
+        const d = Math.hypot(mx - bx, mz - bz);
+        if (d < bd) { bd = d; bi = i; nx = px; nz = pz; }
+      }
+      if (bi < 0) return null;
+      const a = pts[bi], c = pts[(bi + 1) % pts.length];
+      return { x: (a[0] + c[0]) / 2, z: (a[1] + c[1]) / 2, nx, nz,
+               len: Math.hypot(c[0] - a[0], c[1] - a[1]) };
+    }
+    // inBldg() tests axis-aligned bounding boxes, which is the right cheap
+    // answer for "can the player walk here" and the WRONG one for a prop
+    // deliberately placed 0.9m off a wall: on a diagonal footprint that point
+    // is outside the building but well inside its box, so the box test was
+    // throwing away exactly the placements the edge picker had just got
+    // right (5 pieces of street furniture survived out of ~23 candidates).
+    // This is the honest test — even-odd crossing against the real polygon.
+    function inFootprint(x, z) {
+      for (const b2 of OSM.buildings) {
+        const q = b2.pts;
+        let hit = false;
+        for (let i = 0, j = q.length - 1; i < q.length; j = i++) {
+          if ((q[i][1] > z) !== (q[j][1] > z)
+              && x < (q[j][0] - q[i][0]) * (z - q[i][1])
+                     / ((q[j][1] - q[i][1]) || 1e-9) + q[i][0]) hit = !hit;
+        }
+        if (hit) return true;
+      }
+      return false;
+    }
     const wallBuckets = [[], [], [], [], [], [], [], []], capGeos = [];
     const roofSpots = [];
+    // [pts, topY] for the topmost slab of every building — the parapet pass
+    // below needs the polygon of the LAST setback tier, which nothing else
+    // keeps hold of.
+    const capRings = [];
     // [pts, cx, cz, groundY, height, bucket] — the fire-escape pass below runs
     // long after this loop and needs the height that MANHATTAN PROFILE derived
     // here, which is not recoverable from b.h alone.
@@ -1487,15 +1623,9 @@ async function main() {
         // from every camera angle.
         const _half = SPEC.world.size_m * 0.5;
         const _core = Math.max(0, 1 - Math.hypot(cx, cz) / (_half * 0.85));
-        const h = Math.min(Math.max((b.h || 9) * (1 + 2.6 * _core * _core), 4), 55);
-        const geo = new THREE.ExtrudeGeometry(shape, { depth: h, bevelEnabled: false });
-        geo.rotateX(-Math.PI / 2);                                // extrude up
+        const _h0 = Math.min(Math.max((b.h || 9) * (1 + 2.6 * _core * _core), 4), 55);
         const gy = hAt(cx, cz);
-        geo.translate(0, gy, 0);
         const tint = tintA.clone().lerp(tintB, rngB()).offsetHSL(0, 0, (rngB() - 0.5) * 0.12);
-        const nv = geo.attributes.position.count, cols = new Float32Array(nv * 3);
-        for (let i = 0; i < nv; i++) { cols[i * 3] = tint.r; cols[i * 3 + 1] = tint.g; cols[i * 3 + 2] = tint.b; }
-        geo.setAttribute('color', new THREE.BufferAttribute(cols, 3));
         // photo facades ONLY by day (2026-07-28: the procedural grid reads
         // as placeholder in daylight); at night it keeps a 25% share for
         // the lit-window checkerboard until photo facades learn to glow
@@ -1504,13 +1634,31 @@ async function main() {
         // Towers: two glass looks + concrete + stone; mid-rise: two bricks
         // + limestone + stone. Night keeps a 20% procedural share for the
         // lit-checkerboard variety.
+        // (2026-08-06: the family is now chosen BEFORE the geometry, because
+        // it decides the storey height the mass is quantised to. The rngB()
+        // call ORDER is unchanged so the same seed still builds the same city.)
         const _r = rngB();
-        const _bkt = h > 26
+        const _bkt = _h0 > 26
           ? (_r < 0.35 ? 1 : _r < 0.6 ? 4 : _r < 0.8 ? 6 : 3)
           : (_night && rngB() < 0.2 ? 0
              : (_r < 0.28 ? 2 : _r < 0.52 ? 5 : _r < 0.76 ? 7 : 3));
+        // STOREY-QUANTISED MASS (2026-08-06): snap the extrusion to a whole
+        // number of the family's storeys. The roofline then lands on a floor
+        // line instead of slicing a window row in half, and the wall UVs need
+        // no vertical distortion at all — the building IS an integer number
+        // of storeys tall, so one texture storey is one real storey.
+        const _sh = _storeyH(_bkt);
+        const h = Math.max(1, Math.round(_h0 / _sh)) * _sh;
+        const geo = new THREE.ExtrudeGeometry(shape, { depth: h, bevelEnabled: false });
+        geo.rotateX(-Math.PI / 2);                                // extrude up
+        geo.translate(0, gy, 0);
+        const nv = geo.attributes.position.count, cols = new Float32Array(nv * 3);
+        for (let i = 0; i < nv; i++) { cols[i * 3] = tint.r; cols[i * 3 + 1] = tint.g; cols[i * 3 + 2] = tint.b; }
+        geo.setAttribute('color', new THREE.BufferAttribute(cols, 3));
+        metricWallUV(geo, b.pts, gy, h, _bkt);
         splitGroups(geo, _bkt);
         feCand.push([b.pts, cx, cz, gy, h, _bkt]);
+        let _capPts = b.pts, _capTop = gy + h;
         // r14 SETBACKS: real towers STEP BACK as they rise — a single
         // extruded prism is why buildings read as 'geometric shapes'.
         // Tall buildings gain 1-2 shrinking tiers above the base (same
@@ -1520,13 +1668,13 @@ async function main() {
           let topY = gy + h;
           for (let ti2 = 1; ti2 <= tiers; ti2++) {
             const shrink = 1 - 0.15 * ti2;
-            const th2 = h * (0.38 - 0.1 * ti2);
+            // tiers are storey-quantised too, or the setback line cuts a
+            // window row and the whole point of the snap is lost
+            const th2 = Math.max(1, Math.round(h * (0.38 - 0.1 * ti2) / _sh)) * _sh;
+            const tPts = b.pts.map(([px, pz]) =>
+              [cx + (px - cx) * shrink, cz + (pz - cz) * shrink]);
             const s2h = new THREE.Shape();
-            b.pts.forEach(([px, pz], i) => {
-              const sx5 = cx + (px - cx) * shrink;
-              const sz5 = cz + (pz - cz) * shrink;
-              i ? s2h.lineTo(sx5, -sz5) : s2h.moveTo(sx5, -sz5);
-            });
+            tPts.forEach(([sx5, sz5], i) => i ? s2h.lineTo(sx5, -sz5) : s2h.moveTo(sx5, -sz5));
             const tg = new THREE.ExtrudeGeometry(s2h, { depth: th2, bevelEnabled: false });
             tg.rotateX(-Math.PI / 2);
             tg.translate(0, topY, 0);
@@ -1536,10 +1684,13 @@ async function main() {
               cols2[i * 3] = tint.r; cols2[i * 3 + 1] = tint.g; cols2[i * 3 + 2] = tint.b;
             }
             tg.setAttribute('color', new THREE.BufferAttribute(cols2, 3));
+            metricWallUV(tg, tPts, topY, th2, _bkt);
             splitGroups(tg, _bkt);
             topY += th2;
+            _capPts = tPts; _capTop = topY;
           }
         }
+        if (h >= 8) capRings.push([_capPts, _capTop]);
         if (h >= 16 && (mxx - mnx) > 7 && (mxz - mnz) > 7) {
           roofSpots.push([cx, cz, gy + h, (mxx - mnx), (mxz - mnz)]);
         }
@@ -1592,16 +1743,11 @@ async function main() {
       facadeTex.colorSpace = THREE.SRGBColorSpace;
       // photo facade materials (SDXL pack): one tile ~= 18m x 12m of building
       const _fLoad = new THREE.TextureLoader();
-      // r13: PER-FAMILY TILE CALIBRATION — one 12x8m tile for every photo
-      // made wide-window facades read STRETCHED (a brick photo with 4 big
-      // windows became 3m panes). Each family now tiles at the scale its
-      // photo implies.
-      const _fSize = {
-        facade_glass: [12, 8], facade_glass2: [12, 8],
-        facade_brick: [9, 6], facade_brick2: [7.5, 5],
-        facade_stone: [10, 6.6], facade_concrete: [10, 6.6],
-        facade_limestone: [9, 6],
-      };
+      // r13 calibrated per family by eye; r15 replaced those numbers with the
+      // measured ones in _FTILE above, so the material repeat and the UVs
+      // baked into the walls cannot drift apart — they read the same table.
+      const _fSize = {};
+      _FFAM.forEach((n, i) => { if (n) _fSize[n] = [_FTILE[i][0], _FTILE[i][1]]; });
       const _fTex = (n, suffix) => {
         const t = _fLoad.load('textures/' + n + (suffix || '') + '.jpg');
         const [tw, th] = _fSize[n] || [12, 8];
@@ -1611,8 +1757,12 @@ async function main() {
         t.anisotropy = renderer.capabilities.getMaxAnisotropy();
         return t;
       };
+      // negative Y: metricWallUV runs V UPWARD (so the photo is the right way
+      // up on the wall), where ExtrudeGeometry's default ran it downward.
+      // The tangent frame follows the UVs, so without the sign flip every
+      // window reveal derived from the photo would light as if it PROTRUDED.
       const _fPair = (n) => ({ map: _fTex(n), normalMap: _fTex(n, '_n'),
-        normalScale: new THREE.Vector2(0.6, 0.6) });
+        normalScale: new THREE.Vector2(0.6, -0.6) });
       const _wallMats = [
         new THREE.MeshStandardMaterial({ vertexColors: true, map: facadeTex,
           emissive: 0xffc873, emissiveMap: litTex, emissiveIntensity: 0.4,
@@ -1652,9 +1802,7 @@ async function main() {
       // Once per FAMILY, not per building: seven texture sets for an entire
       // city, so the merged facade buckets still draw as one mesh each and
       // VRAM does not scale with the number of buildings.
-      const _RFAMS = [[1, 'facade_glass'], [2, 'facade_brick'],
-        [3, 'facade_stone'], [4, 'facade_glass2'], [5, 'facade_brick2'],
-        [6, 'facade_concrete'], [7, 'facade_limestone']];
+      const _RFAMS = _FFAM.map((n, i) => [i, n]).filter(e => e[1]);
       {
         const AN = 512;                 // analysis + normal-map resolution
         const AO_N = 256;               // AO/roughness are low-frequency
@@ -1839,7 +1987,7 @@ async function main() {
                 // the photo's own _n shipped at 0.6 and read as a faint
                 // texture; the derived map carries actual window reveals, so
                 // it is worth pushing to where raking light bites
-                m.normalScale.set(1.35, 1.35);
+                m.normalScale.set(1.35, -1.35);   // see _fPair: V runs upward
                 m.roughnessMap = mk(rc);
                 m.roughness = 1.0;          // absolute value lives in the map
                 m.aoMap = mk(ac, 1);        // channel 1 => reads uv1
@@ -1907,6 +2055,87 @@ async function main() {
           cor.castShadow = true;
           scene.add(cor);
         }
+      }
+      // ── PARAPETS (2026-08-06, the outline half of the facade work) ───────
+      // The cornice above hangs a ledge UNDER the roofline. What was still
+      // missing is the wall that stands ABOVE it: on a real building the
+      // facade continues past the roof deck as a 0.8-1.2m parapet, and the
+      // roof you never see is behind it. Without one the roofline is a clean
+      // shear against the sky, which is the single strongest "extruded box"
+      // read — and unlike everything else on a facade, a normal map cannot
+      // fake it, because it is a silhouette.
+      // One InstancedMesh of unit boxes scaled per edge: whole city, 1 draw
+      // call, no colliders (nothing can reach roof height on foot).
+      if (capRings.length) {
+        const PH = 0.95, PT = 0.42, PCAP = 1200;
+        const par = new THREE.InstancedMesh(
+          new THREE.BoxGeometry(1, 1, 1),
+          new THREE.MeshStandardMaterial({ color: 0x6b6760, roughness: 0.93,
+            metalness: 0.02, vertexColors: false }), PCAP);
+        const MP = new THREE.Matrix4(), QP = new THREE.Quaternion();
+        const EP = new THREE.Euler(), SP = new THREE.Vector3(), VP = new THREE.Vector3();
+        let np = 0;
+        for (const [pts, topY] of capRings) {
+          if (np >= PCAP) break;
+          let ccx = 0, ccz = 0;
+          for (const q of pts) { ccx += q[0]; ccz += q[1]; }
+          ccx /= pts.length; ccz /= pts.length;
+          for (let i = 0; i < pts.length && np < PCAP; i++) {
+            const a = pts[i], c = pts[(i + 1) % pts.length];
+            const dx = c[0] - a[0], dz = c[1] - a[1];
+            const L = Math.hypot(dx, dz);
+            if (L < 1.5) continue;
+            const ux = dx / L, uz = dz / L;
+            const mx = (a[0] + c[0]) / 2, mz = (a[1] + c[1]) / 2;
+            // inward = toward the footprint centroid, so the parapet sits ON
+            // the slab instead of hanging off it
+            let ix = -uz, iz = ux;
+            if ((mx - ccx) * ix + (mz - ccz) * iz > 0) { ix = -ix; iz = -iz; }
+            const off = PT / 2 - 0.05;      // 5cm proud: catches raking light
+            EP.set(0, Math.atan2(-uz, ux), 0);
+            QP.setFromEuler(EP);
+            // overlap the corners by PT so two runs meet in a solid quoin
+            SP.set(L + PT, PH, PT);
+            VP.set(mx + ix * off, topY + PH / 2 - 0.12, mz + iz * off);
+            MP.compose(VP, QP, SP);
+            par.setMatrixAt(np++, MP);
+          }
+        }
+        par.count = np;
+        par.instanceMatrix.needsUpdate = true;
+        par.castShadow = par.receiveShadow = true;
+        scene.add(par);
+        // ROOFTOP BULKHEADS: the stair/lift head that pokes above every real
+        // roof. Cheap, but it is a second silhouette event above the parapet,
+        // which is what stops a skyline reading as a bar chart.
+        const rngK = mulberry32(SPEC.seed + 313);
+        const blk = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1),
+          new THREE.MeshStandardMaterial({ color: 0x5d5a55, roughness: 0.9 }), 160);
+        let nk = 0;
+        for (const [pts, topY] of capRings) {
+          if (nk >= 160) break;
+          if (rngK() > 0.45) continue;
+          let mnx = 1e9, mnz = 1e9, mxx = -1e9, mxz = -1e9, ccx = 0, ccz = 0;
+          for (const q of pts) {
+            mnx = Math.min(mnx, q[0]); mxx = Math.max(mxx, q[0]);
+            mnz = Math.min(mnz, q[1]); mxz = Math.max(mxz, q[1]);
+            ccx += q[0]; ccz += q[1];
+          }
+          ccx /= pts.length; ccz /= pts.length;
+          const bw = Math.min(4.2, (mxx - mnx) * 0.34), bd3 = Math.min(4.2, (mxz - mnz) * 0.34);
+          if (bw < 2 || bd3 < 2) continue;
+          const bh3 = 2.4 + rngK() * 1.4;
+          SP.set(bw, bh3, bd3);
+          QP.identity();
+          VP.set(ccx + (rngK() - 0.5) * (mxx - mnx - bw) * 0.5, topY + bh3 / 2,
+                 ccz + (rngK() - 0.5) * (mxz - mnz - bd3) * 0.5);
+          MP.compose(VP, QP, SP);
+          blk.setMatrixAt(nk++, MP);
+        }
+        blk.count = nk;
+        blk.instanceMatrix.needsUpdate = true;
+        blk.castShadow = blk.receiveShadow = true;
+        scene.add(blk);
       }
       // ROOFTOP CLUTTER (Phase 118): water towers + AC units — the skyline
       // detail that says 'real city'. Instanced; capped for perf.
@@ -2052,26 +2281,26 @@ async function main() {
             mnz = Math.min(mnz, p[1]); mxz = Math.max(mxz, p[1]);
           }
           const cx4 = (mnx + mxx) / 2, cz4 = (mnz + mxz) / 2;
-          const hx4 = (mxx - mnx) / 2, hz4 = (mxz - mnz) / 2;
-          if (hx4 < 2 || hz4 < 2) continue;
+          if ((mxx - mnx) < 4 || (mxz - mnz) < 4) continue;
           let bd2 = 1e9, bx2 = 0, bz2 = 0;
           for (const r of OSM.roads || []) for (const p of r.pts) {
             const d = (p[0] - cx4) ** 2 + (p[1] - cz4) ** 2;
             if (d < bd2) { bd2 = d; bx2 = p[0]; bz2 = p[1]; }
           }
           if (bd2 > 42 * 42) continue;
-          const dxx = bx2 - cx4, dzz = bz2 - cz4;
-          const dll = Math.hypot(dxx, dzz) || 1;
-          const nxx = dxx / dll, nzz = dzz / dll;
-          const tt = Math.min(hx4 / Math.max(Math.abs(nxx), 1e-6),
-                              hz4 / Math.max(Math.abs(nzz), 1e-6));
+          // 2026-08-06: this used the bbox projection the fire escapes were
+          // already fixed away from, so on any non-rectangular footprint the
+          // bench was inside the lobby. Same edge picker now.
+          const fe2 = faceEdge(b.pts, cx4, cz4, bx2, bz2, 3);
+          if (!fe2) continue;
+          const nxx = fe2.nx, nzz = fe2.nz;
           // slide along the wall a little so items don't stack with awnings
           const sx4 = -nzz, sz4 = nxx;
-          const slide = (rngF() - 0.5) * Math.min(hx4, hz4) * 1.2;
-          const fx2 = cx4 + nxx * (tt + 0.9) + sx4 * slide;
-          const fz2 = cz4 + nzz * (tt + 0.9) + sz4 * slide;
+          const slide = (rngF() - 0.5) * Math.max(0, fe2.len - 2.4);
+          const fx2 = fe2.x + nxx * 0.9 + sx4 * slide;
+          const fz2 = fe2.z + nzz * 0.9 + sz4 * slide;
           {
-            if (Math.hypot(fx2, fz2) < 12 || inBldg(fx2, fz2, 0.15)) continue;
+            if (Math.hypot(fx2, fz2) < 12 || inFootprint(fx2, fz2)) continue;
             const gy3 = hAt(fx2, fz2);
             const yaw = Math.atan2(nxx, nzz);   // face the street, back to wall
             Q2.setFromEuler(E2.set(0, yaw, 0));
@@ -2151,8 +2380,7 @@ async function main() {
             mnz = Math.min(mnz, p[1]); mxz = Math.max(mxz, p[1]);
           }
           const cx2 = (mnx + mxx) / 2, cz2 = (mnz + mxz) / 2;
-          const hx2 = (mxx - mnx) / 2, hz2 = (mxz - mnz) / 2;
-          if (hx2 < 2.2 || hz2 < 2.2) continue;
+          if ((mxx - mnx) < 4.4 || (mxz - mnz) < 4.4) continue;
           // nearest road point -> awning faces the street
           let bd = 1e9, bx = 0, bz = 0;
           for (const r of OSM.roads) for (const p of r.pts) {
@@ -2160,15 +2388,17 @@ async function main() {
             if (d < bd) { bd = d; bx = p[0]; bz = p[1]; }
           }
           if (bd > 45 * 45) continue;
-          const dx2 = bx - cx2, dz2 = bz - cz2;
-          const dl = Math.hypot(dx2, dz2) || 1;
-          const nx2 = dx2 / dl, nz2 = dz2 / dl;
-          const t = Math.min(hx2 / Math.max(Math.abs(nx2), 1e-6),
-                             hz2 / Math.max(Math.abs(nz2), 1e-6));
-          const ex = cx2 + nx2 * t, ez = cz2 + nz2 * t;
+          // 2026-08-06: was the bbox projection, then a _polyEdgeD < 1.4m
+          // rescue test that silently DROPPED every awning on a diagonal
+          // footprint. Picking the real edge means none of them are lost.
+          const fe = faceEdge(b.pts, cx2, cz2, bx, bz, 3.6);
+          if (!fe) continue;
+          const nx2 = fe.nx, nz2 = fe.nz;
+          const slideA = (rngA() - 0.5) * Math.max(0, fe.len - 3.8);
+          const ex = fe.x + nx2 * 0.05 - nz2 * slideA;
+          const ez = fe.z + nz2 * 0.05 + nx2 * slideA;
           E4.set(-0.22, Math.atan2(nx2, nz2), 0);
           Q4.setFromEuler(E4);
-          if (_polyEdgeD(b.pts, ex, ez) > 1.4) continue;   // r13: real wall only
           M4.compose(new THREE.Vector3(ex, hAt(ex, ez) + 3.0, ez), Q4, S4);
           awn.setMatrixAt(na, M4);
           awn.setColorAt(na, AC[Math.floor(rngA() * AC.length)]);
@@ -4982,96 +5212,109 @@ async function main() {
       transmission: 0.55, thickness: 0.4, transparent: true, opacity: 0.72 });
     const trim = new THREE.MeshStandardMaterial({
       color: 0x1b1d20, metalness: 0.7, roughness: 0.42 });
-    // BODY: side silhouette (hood -> windshield -> roof -> decklid) is an
-    // extruded profile swept across the width — this single choice is what
-    // separates 'a car' from 'a box with wheels'
-    // ONE consistent axis: rear at -hl, nose at +hl, strictly increasing x.
-    // (Mixing rear-relative and nose-relative terms folded the roofline
-    // back on itself and extruded a self-intersecting wedge — verified.)
+    // ── ONE AXIS FOR THE WHOLE CAR (2026-08-06 rewrite) ──────────────────
+    // Previously the shell was built on X, spun 90 deg onto Z by itself, and
+    // then translated by Wd/2 — but that rotate had already moved the width
+    // axis onto X, so the translate slid the BODY 0.9m down the car relative
+    // to every wheel, light and grille, and left the shell 0.9m off-centre
+    // sideways as well. In game that is exactly what you saw: a black slab
+    // with the wheels buried on one side and floating free on the other, and
+    // the nose pointing at -Z (backwards) because rotateY(+90) maps +x to -z.
+    //
+    // The prior fix attempts failed because they moved the rotation around
+    // while the FITTINGS stayed in the rotated convention. So: no rotation
+    // anywhere in here. The car is authored the way tools/carlab authors it —
+    // X along the car, NOSE AT +X, Y up, extrusion across Z — which is the
+    // convention alignLongAxis() was written for ("vehicles that lie along X
+    // carry the NOSE at +X"). It does the single -90 deg turn onto +Z for the
+    // finished model, once, and nothing double-applies.
+    //
+    // t runs 0 = nose .. 1 = tail, so every fraction below reads as a place
+    // on the car. The numbers are carlab's tuned values.
+    const NOSE_FALL = 0.16, TAIL_RISE = 0.07, WIND_RAKE = 0.55, BACK_RAKE = 0.62;
+    const TRACK_INSET = 0.06;
+    const xAt = t => L * 0.5 - t * L;
+    const yb = Math.max(0.13, bodyY - bodyH * 0.5);   // sill height (ride)
+    const yt = yb + bodyH;                            // beltline
+    // cabin as a span of t. Clamped so the windscreen always sits behind the
+    // point where the profile has finished climbing over the front wheel —
+    // an unclamped truck cabin ran the outline backwards on itself.
+    const cabF = Math.min(Math.max(0.5 - cabX - cabLen * 0.5, 0.32), 0.60);
+    const cabR = Math.min(cabF + cabLen, 0.90);
+    const wsT = Math.min(cabF + WIND_RAKE * 0.14, cabR - 0.10);
+    const rrT = Math.max(cabR - BACK_RAKE * 0.10, wsT + 0.06);
     const s = new THREE.Shape();
-    const hl = L * 0.5;
-    const cabC = L * cabX;                       // cabin centre offset
-    const cabR = cabC - L * cabLen * 0.5;        // cabin rear
-    const cabF = cabC + L * cabLen * 0.5;        // cabin front
-    const roofY = bodyH + cabH;
-    // RAKED + ROUNDED (2026-08-04): straight vertical jumps to the roof read
-    // as stacked boxes. Quadratic curves give a real backlight rake, a
-    // domed roof and a sloped windshield — the silhouette IS the car.
-    s.moveTo(-hl, 0.06);
-    s.lineTo(-hl, bodyH * 0.55);
-    s.quadraticCurveTo(-hl + L * 0.02, bodyH * 0.86,
-                       -hl + L * 0.09, bodyH * 0.90);   // rounded tail
-    s.lineTo(cabR - L * 0.02, bodyH * 0.93);            // decklid run
-    s.quadraticCurveTo(cabR + L * 0.06, bodyH * 0.99,
-                       cabR + L * 0.12, roofY * 0.985); // backlight rake
-    s.quadraticCurveTo(cabC, roofY * 1.01,
-                       cabF - L * 0.12, roofY * 0.985); // domed roof
-    s.quadraticCurveTo(cabF - L * 0.02, bodyH * 1.02,
-                       cabF + L * 0.03, bodyH * 0.88);  // windshield rake
-    s.lineTo(hl - L * 0.13, bodyH * 0.83);              // hood
-    s.quadraticCurveTo(hl - L * 0.02, bodyH * 0.78,
-                       hl, bodyH * 0.46);               // nose fall
-    s.lineTo(hl, 0.06);
+    s.moveTo(xAt(0.02), yb + NOSE_FALL * 0.5);        // nose, low
+    s.lineTo(xAt(0.30), yt - 0.02);                   // up over the front wheel
+    s.lineTo(xAt(cabF), yt);                          // beltline
+    s.lineTo(xAt(wsT), yt + cabH);                    // windscreen rake
+    s.lineTo(xAt(rrT), yt + cabH);                    // roof
+    s.lineTo(xAt(Math.min(cabR + 0.06, 0.95)), yt);   // backlight to the deck
+    s.lineTo(xAt(0.97), yt - 0.04 + TAIL_RISE);       // tail
+    s.lineTo(xAt(0.97), yb);                          // rear valance
+    s.lineTo(xAt(0.02), yb);                          // sill
+    s.closePath();
+    const depth = Wd - TRACK_INSET * 2;
     const bg = new THREE.ExtrudeGeometry(s, {
-      depth: Wd, bevelEnabled: true, bevelSize: 0.05,
-      bevelThickness: 0.05, bevelSegments: 3 });
-    // DO NOT "FIX" THIS AXIS (2026-08-05, tried twice, reverted twice).
-    // The body geometry is rotated HERE, on its own, and that is load-bearing:
-    // alignLongAxis() runs on the finished model afterwards and re-orients it
-    // to the runtime's +Z forward. Rotating the whole GROUP instead double-
-    // applies with that pass and lays the car FLAT on the road; removing the
-    // rotation entirely does the same. Both were verified in-game and undone.
-    // The real defect is that the fittings below use a different convention
-    // from the shell — fix THOSE positions, never this rotation.
-    bg.rotateY(Math.PI / 2);
-    bg.translate(0, bodyY - bodyH * 0.25, Wd / 2);
+      depth, bevelEnabled: true, bevelSize: 0.045,
+      bevelThickness: 0.045, bevelSegments: 3, curveSegments: 12 });
+    bg.translate(0, 0, -depth / 2);            // straddle the centreline
     const body = new THREE.Mesh(bg, paint);
     body.castShadow = body.receiveShadow = true;
     g.add(body);
     // GREENHOUSE: inset glass box so windows read as openings, not decals
     const gh = new THREE.Mesh(new THREE.BoxGeometry(
-      Wd * 0.86, cabH * 0.78, L * cabLen * 0.92), glass);
-    gh.position.set(0, bodyY + bodyH * 0.52 + cabH * 0.36, L * cabX);
+      (cabR - cabF) * L * 0.82, cabH * 0.86, Wd - 0.16), glass);
+    gh.position.set(xAt((cabF + cabR) * 0.5), yt + cabH * 0.52, 0);
     g.add(gh);
-    // WHEELS: real cylinders in real arches
-    const tyre = new THREE.Mesh(
-      new THREE.CylinderGeometry(wr, wr, Wd * 0.17, 22),
-      new THREE.MeshStandardMaterial({ color: 0x14161a, roughness: 0.92 }));
-    tyre.rotation.z = Math.PI / 2;
-    const rim = new THREE.Mesh(
-      new THREE.CylinderGeometry(wr * 0.58, wr * 0.58, Wd * 0.18, 14),
-      new THREE.MeshStandardMaterial({ color: 0xc9ced6, metalness: 0.92,
-                                       roughness: 0.22 }));
-    rim.rotation.z = Math.PI / 2;
-    const wz = L * (cp.wheelBase || 0.31), wx = Wd * 0.5 - Wd * 0.06;   // length is on Z after the shell rotate
-    for (const sx of [1, -1]) for (const sz of [1, -1]) {
-      const t2 = tyre.clone(); t2.position.set(sz * wx, wr, sx * wz);
-      t2.castShadow = true; g.add(t2);
-      const r2 = rim.clone(); r2.position.set(sz * wx * 1.02, wr, sx * wz);
-      g.add(r2);
+    // WHEELS sit OUTBOARD of the bodyside, not inside it (carlab): a wheel's
+    // inner face meets the flank and the tyre stands slightly proud of it.
+    // Placed inboard they are simply swallowed by the extrusion.
+    const wheelW = Math.max(0.18, Wd * 0.13);
+    const halfBody = Wd * 0.5 - TRACK_INSET;
+    const trackZ = halfBody + wheelW * 0.5 - 0.03;
+    const tyreM = new THREE.MeshStandardMaterial({ color: 0x14161a, roughness: 0.93 });
+    const rimM = new THREE.MeshStandardMaterial({ color: 0xc9ced6, metalness: 0.92,
+                                                  roughness: 0.22 });
+    const archM = new THREE.MeshBasicMaterial({ color: 0x0a0b0e });
+    const wb = cp.wheelBase || 0.31;
+    for (const t of [0.5 - wb, 0.5 + wb]) {
+      for (const side of [-1, 1]) {
+        const w = new THREE.Mesh(
+          new THREE.CylinderGeometry(wr, wr, wheelW, 22), tyreM);
+        w.rotation.x = Math.PI / 2;
+        w.position.set(xAt(t), wr, side * trackZ);
+        w.castShadow = true; g.add(w);
+        const hub = new THREE.Mesh(
+          new THREE.CylinderGeometry(wr * 0.56, wr * 0.56, wheelW * 0.55, 16), rimM);
+        hub.rotation.x = Math.PI / 2;
+        hub.position.set(xAt(t), wr, side * (trackZ + wheelW * 0.26));
+        g.add(hub);
+        // dark disc behind the wheel: reads as a wheel well, which is what
+        // stops a cylinder looking stuck onto a flat flank
+        const ar = new THREE.Mesh(new THREE.CircleGeometry(wr * 1.16, 20), archM);
+        ar.position.set(xAt(t), wr, side * (halfBody - 0.005));
+        ar.rotation.y = side > 0 ? 0 : Math.PI;
+        g.add(ar);
+      }
     }
-    // lights + grille: the small reads that sell 'car' at a glance
+    // lights + grille: the small reads that sell 'car' at a glance. Same
+    // convention as everything else — length on X, lateral on Z.
     for (const sz of [1, -1]) {
-      const hlm = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.16, Wd * 0.22),
+      const hlm = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.16, Wd * 0.22),
         new THREE.MeshStandardMaterial({ color: 0xfff6e0, emissive: 0xffeec2,
                                          emissiveIntensity: 0.55 }));
-      // the shell's rotateY put LENGTH on Z and WIDTH on X, so a headlight
-      // placed at x=hl sat out past the flank as a pale slab. Swap the axes
-      // to match the body: length -> z, lateral -> x.
-      hlm.rotation.y = Math.PI / 2;
-      hlm.position.set(sz * Wd * 0.3, bodyY + bodyH * 0.18, hl - 0.06);
+      hlm.position.set(L * 0.5 - 0.10, yb + bodyH * 0.62, sz * Wd * 0.28);
       g.add(hlm);
-      const tl = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.13, Wd * 0.2),
+      const tl = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.13, Wd * 0.2),
         new THREE.MeshStandardMaterial({ color: 0x8c1414, emissive: 0xd11a1a,
                                          emissiveIntensity: 0.5 }));
-      tl.rotation.y = Math.PI / 2;
-      tl.position.set(sz * Wd * 0.3, bodyY + bodyH * 0.34, -hl + 0.04);
+      tl.position.set(-L * 0.5 + 0.08, yb + bodyH * 0.72, sz * Wd * 0.28);
       g.add(tl);
     }
     const grille = new THREE.Mesh(
-      new THREE.BoxGeometry(0.06, bodyH * 0.3, Wd * 0.6), trim);
-    grille.rotation.y = Math.PI / 2;
-    grille.position.set(0, bodyY - bodyH * 0.02, hl - 0.02);
+      new THREE.BoxGeometry(0.07, bodyH * 0.3, Wd * 0.55), trim);
+    grille.position.set(L * 0.5 - 0.06, yb + bodyH * 0.34, 0);
     g.add(grille);
     return g;
   }
@@ -5947,10 +6190,12 @@ async function main() {
       rig.rotation.order = 'YXZ';        // yaw first: body-roll must not steer
       const shell = buildCar({ paint: tints[window.__cars.length % tints.length],
                                length: 4.25 + rngC() * 0.55, width: 1.84 });
-      // buildCar extrudes the nose along +X (the Car Lab axis); the runtime's
-      // forward is +Z — the same +90 deg the baked car assets get from
-      // alignLongAxis. -90 deg is the one that faces the camera.
-      shell.rotation.y = Math.PI / 2;
+      // buildCar now really does put the nose on +X (before 2026-08-06 its
+      // own internal rotateY had already swung it to -Z, so this +90 was
+      // compensating for that). -90 deg is what alignLongAxis applies to a
+      // baked car asset for the same reason: it maps +X onto the runtime's
+      // +Z forward.
+      shell.rotation.y = -Math.PI / 2;
       shell.traverse(o => {
         if (!o.isMesh) return;
         o.castShadow = o.receiveShadow = true;
