@@ -3223,7 +3223,12 @@ async function main() {
           // r14 REAL CURBS: solid instanced boxes (top + side faces) per
           // road-segment side — an actual 6-inch step, nothing to z-fight
           {
-            const cg2 = new THREE.BoxGeometry(1, 0.15, 0.3);
+            // 2026-08-06: the unit box was 0.3 DEEP on Z and the per-piece
+            // scale multiplies Z by the piece LENGTH, so a 6m piece drew
+            // 1.8m of kerb — the kerb line came out as detached blocks with
+            // 4m gaps (visible in playtest shots as rubble on the pavement).
+            // The unit box must be 1 on the axis the length scales.
+            const cg2 = new THREE.BoxGeometry(1, 0.15, 1);
             cg2.translate(0, 0.075, 0);
             // pieces of ~6m, each midpoint-tested against ALL roads so curbs
             // never run across an intersection
@@ -3262,6 +3267,87 @@ async function main() {
             curb.receiveShadow = true; curb.castShadow = true;
             scene.add(curb);
           }
+          // ── PAVEMENT BAND (2026-08-06) ─────────────────────────────────
+          // The kerb was a lip standing on the same pale plaza the whole
+          // world is made of, so the street had no pavement — just a road
+          // painted on a courtyard. This is a real concrete band behind
+          // every kerb, darker and finer-grained than the plaza, so the
+          // ground reads street / kerb / pavement / building.
+          //
+          // It is a WEDGE, not a slab: proud of the plaza at the kerb and
+          // feathered back to ground level at the building side. A flat
+          // raised slab needs a step at BOTH edges, and the outer step has
+          // nothing to justify it — you get a 15cm ledge running down the
+          // middle of the pavement. The wedge also means the walk height
+          // never changes, so nothing about movement or NPC pathing moves.
+          {
+            const SW = 4.6, pavGeos = [];
+            for (const s of _roadSegs) {
+              const len = Math.hypot(s[2] - s[0], s[3] - s[1]);
+              if (len < 1.5) continue;
+              const ux = (s[2] - s[0]) / len, uz = (s[3] - s[1]) / len;
+              const px5 = -uz, pz5 = ux;
+              const di = s[4] + 0.57, dou = di + SW;
+              for (let d0 = 0; d0 < len; d0 += 4) {
+                const pl = Math.min(4, len - d0);
+                if (pl < 0.8) continue;
+                for (const sd of [1, -1]) {
+                  const mid = d0 + pl / 2;
+                  const bx5 = s[0] + ux * mid, bz5 = s[1] + uz * mid;
+                  const iX = bx5 + px5 * di * sd, iZ = bz5 + pz5 * di * sd;
+                  const oX = bx5 + px5 * dou * sd, oZ = bz5 + pz5 * dou * sd;
+                  // a crossing street must keep its asphalt: painting the
+                  // band over an intersection floats concrete above the road
+                  if (_onRoad(iX, iZ, 0.3) || _onRoad(oX, oZ, 0.3)) continue;
+                  const aX = s[0] + ux * d0, aZ = s[1] + uz * d0;
+                  const cX = s[0] + ux * (d0 + pl), cZ = s[1] + uz * (d0 + pl);
+                  const q = [];
+                  for (const [bxq, bzq] of [[aX, aZ], [cX, cZ]]) {
+                    q.push([bxq + px5 * di * sd, bzq + pz5 * di * sd,
+                            hAt(bxq + px5 * di * sd, bzq + pz5 * di * sd) + 0.145]);
+                    q.push([bxq + px5 * dou * sd, bzq + pz5 * dou * sd,
+                            hAt(bxq + px5 * dou * sd, bzq + pz5 * dou * sd) + 0.012]);
+                  }
+                  const g5 = new THREE.BufferGeometry();
+                  const V = (k) => [q[k][0], q[k][2], q[k][1]];
+                  // wind so the face points up on the side being built
+                  const order = [0, 1, 2, 1, 3, 2];
+                  const pos = [], uvs = [], nrm = [];
+                  for (const k of order) {
+                    pos.push(...V(k));
+                    uvs.push((k < 2 ? 0 : pl) / 2, (k % 2 ? SW : 0) / 2);
+                    // the wedge falls 13cm over 4.6m (~1.6 deg): a flat up
+                    // normal is correct to the eye and cannot be flipped by
+                    // the winding, which computeVertexNormals would do on
+                    // whichever side of the road is wound the other way
+                    nrm.push(0, 1, 0);
+                  }
+                  g5.setAttribute('position', new THREE.BufferAttribute(new Float32Array(pos), 3));
+                  g5.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(uvs), 2));
+                  g5.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(nrm), 3));
+                  pavGeos.push(g5);
+                }
+              }
+            }
+            if (pavGeos.length) {
+              const pl2 = new THREE.TextureLoader();
+              const pt2 = pl2.load('textures/concrete.jpg');
+              const pn2 = pl2.load('textures/concrete_n.jpg');
+              for (const t of [pt2, pn2]) {
+                t.wrapS = t.wrapT = THREE.RepeatWrapping;
+                t.anisotropy = renderer.capabilities.getMaxAnisotropy();
+              }
+              pt2.colorSpace = THREE.SRGBColorSpace;
+              const pav = new THREE.Mesh(mergeGeometries(pavGeos, false),
+                new THREE.MeshStandardMaterial({ map: pt2, normalMap: pn2,
+                  normalScale: new THREE.Vector2(0.7, 0.7),
+                  color: 0x8b8983, roughness: 0.95, metalness: 0.0,
+                  side: THREE.DoubleSide }));
+              pav.receiveShadow = true;
+              scene.add(pav);
+              for (const g5 of pavGeos) g5.dispose();
+            }
+          }
         }
       }
       // NEON SIGNS (Phase 120, night streets): emissive storefront strips on
@@ -3269,6 +3355,8 @@ async function main() {
       if (['night', 'dusk', 'sunset'].includes(SPEC.world.sky)) {
         const rngNe = mulberry32(SPEC.seed + 606);
         const neonCols = [0xff3d7a, 0x35d0ff, 0xffd23d, 0x7cff4a, 0xc86bff];
+        const NEON_WORDS = ['BAR', 'HOTEL', 'LIQUOR', 'OPEN', 'PIZZA', 'DINER',
+          'JAZZ', 'TATTOO', 'PAWN', 'MOTEL', 'COFFEE', 'DELI', 'BOOKS', 'LAUNDRY'];
         let placedN = 0;
         // 2026-08-06: these were placed on BOUNDING-BOX faces, so on every
         // building whose footprint is not an axis-aligned rectangle the sign
@@ -3292,15 +3380,71 @@ async function main() {
           if (d3 > 40 * 40) continue;
           const fe4 = faceEdge(b3.pts, c3x, c3z, r3x, r3z, 3.2);
           if (!fe4) continue;
-          const nw = Math.min(2.2 + rngNe() * 2.4, fe4.len * 0.6);
-          const sgn = new THREE.Mesh(new THREE.PlaneGeometry(nw, 0.7),
-            new THREE.MeshStandardMaterial({ color: 0x101014, side: THREE.DoubleSide,
-              emissive: neonCols[Math.floor(rngNe() * neonCols.length)],
-              emissiveIntensity: 2.4 }));
-          const sx3 = fe4.x + fe4.nx * 0.12 - fe4.nz * (rngNe() - 0.5) * (fe4.len - nw);
-          const sz3 = fe4.z + fe4.nz * 0.12 + fe4.nx * (rngNe() - 0.5) * (fe4.len - nw);
-          sgn.position.set(sx3, hAt(sx3, sz3) + 3.1, sz3);
-          sgn.rotation.y = Math.atan2(fe4.nx, fe4.nz);
+          // 2026-08-06: this was a bare plane whose WHOLE surface was
+          // emissive in one colour — a 4m magenta rectangle stuck to a
+          // building, which reads as a missing texture, not as signage.
+          // The plate is now dark and only the TUBE glows, which is what a
+          // neon sign actually is. Text is drawn in canvas: no download, no
+          // licence, and legible text is the strongest "this is a place"
+          // cue a street has.
+          const col = neonCols[Math.floor(rngNe() * neonCols.length)];
+          const hexN = '#' + col.toString(16).padStart(6, '0');
+          const word = NEON_WORDS[Math.floor(rngNe() * NEON_WORDS.length)];
+          const blade = rngNe() < 0.34 && fe4.len > 4;
+          const cn = document.createElement('canvas');
+          const gx = () => cn.getContext('2d');
+          let sgn;
+          if (blade) {
+            cn.width = 128; cn.height = 320;
+            const g6 = gx();
+            g6.fillStyle = '#0c0c11'; g6.fillRect(0, 0, 128, 320);
+            g6.strokeStyle = hexN; g6.lineWidth = 7;
+            g6.shadowColor = hexN; g6.shadowBlur = 16;
+            g6.strokeRect(11, 11, 106, 298);
+            g6.fillStyle = '#fff6ff';
+            g6.font = 'bold 42px Arial';
+            g6.textAlign = 'center'; g6.textBaseline = 'middle';
+            const letters = word.slice(0, 6).split('');
+            letters.forEach((ch, li) =>
+              g6.fillText(ch, 64, 52 + li * (216 / Math.max(letters.length - 1, 1))));
+          } else {
+            cn.width = 320; cn.height = 128;
+            const g6 = gx();
+            g6.fillStyle = '#0c0c11'; g6.fillRect(0, 0, 320, 128);
+            g6.strokeStyle = hexN; g6.lineWidth = 7;
+            g6.shadowColor = hexN; g6.shadowBlur = 16;
+            g6.strokeRect(11, 11, 298, 106);
+            g6.fillStyle = '#fff6ff';
+            g6.font = 'bold 56px Arial';
+            g6.textAlign = 'center'; g6.textBaseline = 'middle';
+            g6.fillText(word, 160, 68);
+          }
+          const tn = new THREE.CanvasTexture(cn);
+          tn.colorSpace = THREE.SRGBColorSpace;
+          tn.anisotropy = renderer.capabilities.getMaxAnisotropy();
+          // emissive is driven by the MAP, so the dark plate stays dark and
+          // only the tube and the letters throw light. A flat `emissive`
+          // colour is what made the whole slab glow.
+          const mn = new THREE.MeshStandardMaterial({ map: tn, color: 0xffffff,
+            side: THREE.DoubleSide, roughness: 0.55,
+            emissive: 0xffffff, emissiveMap: tn, emissiveIntensity: 1.9 });
+          const nw = blade ? 0.86 : Math.min(1.9 + rngNe() * 1.5, fe4.len * 0.55);
+          const nh = blade ? 2.15 : nw * 0.4;
+          sgn = new THREE.Mesh(new THREE.PlaneGeometry(nw, nh), mn);
+          const yaw6 = Math.atan2(fe4.nx, fe4.nz);
+          if (blade) {
+            // projecting blade: hangs off the wall face, read down the street
+            const outN = 0.10 + nw / 2;
+            const sx3 = fe4.x + fe4.nx * outN, sz3 = fe4.z + fe4.nz * outN;
+            sgn.position.set(sx3, hAt(sx3, sz3) + 4.3, sz3);
+            sgn.rotation.y = yaw6 + Math.PI / 2;
+          } else {
+            const slideN = (rngNe() - 0.5) * Math.max(0, fe4.len - nw - 0.4);
+            const sx3 = fe4.x + fe4.nx * 0.12 - fe4.nz * slideN;
+            const sz3 = fe4.z + fe4.nz * 0.12 + fe4.nx * slideN;
+            sgn.position.set(sx3, hAt(sx3, sz3) + 3.35, sz3);
+            sgn.rotation.y = yaw6;
+          }
           scene.add(sgn);
           placedN++;
         }
@@ -5908,7 +6052,71 @@ async function main() {
       const tc = mkCar(carTints[Math.floor(rngT() * carTints.length)]);
       scene.add(tc);
       window.__traffic.push({ obj: tc, pts: r.pts, seg: 0, t: rngT(),
-                              speed: 6 + rngT() * 3, dir: 1 });
+                              speed: 6 + rngT() * 3, dir: 1,
+                              lane: (r.w || 7) / 4 });
+    }
+  }
+
+  // ── STREET TRAFFIC ON FOOT (2026-08-06) ────────────────────────────────
+  // Ambient cars only ever existed in DRIVE mode, because that mode has a
+  // car mesh already loaded to clone. The whole GTA-style demo is played on
+  // FOOT, so the streets the city was built for were empty of moving cars —
+  // the loudest "this is a diorama" tell left after the pavement. buildCar()
+  // is parametric and costs no download, so walk mode gets its own pool.
+  //
+  // Deliberately NOT car-following/IDM: cars pick a street, hold a lane and
+  // hold a speed. They turn around at the end of the polyline and swap to
+  // the opposite lane, which is what a real one-way pair looks like from the
+  // pavement, and it means nothing can ever drive off the road graph.
+  if (OSM && (P.mode || 'walk') === 'walk' && OSM.roads && OSM.roads.length
+      && !INTERIOR && VIEW === '3d') {
+    const rngT2 = mulberry32(SPEC.seed + 3131);
+    const tints2 = [0xd8d8dc, 0x23252c, 0x8a1f24, 0x2a4d7f, 0xc9a13b, 0x3d3f45,
+                    0x1f5f52, 0x6d2f6d];
+    // longest streets first: a car on a 12m stub spends its life turning round
+    const lanes = (OSM.roads || [])
+      .filter(r => r.pts && r.pts.length >= 2)
+      .map(r => {
+        let L = 0;
+        for (let i = 0; i < r.pts.length - 1; i++)
+          L += Math.hypot(r.pts[i + 1][0] - r.pts[i][0], r.pts[i + 1][1] - r.pts[i][1]);
+        return { r, L };
+      })
+      .filter(o => o.L > 55)
+      .sort((a, b2) => b2.L - a.L)
+      .slice(0, 14);
+    const NT = Math.min(7, lanes.length);
+    for (let ti = 0; ti < NT; ti++) {
+      const r = lanes[Math.floor(ti * lanes.length / Math.max(NT, 1))].r;
+      const rig2 = new THREE.Group();
+      rig2.rotation.order = 'YXZ';
+      const shell2 = buildCar({ paint: tints2[Math.floor(rngT2() * tints2.length)],
+                                length: 4.2 + rngT2() * 0.7, width: 1.82 });
+      shell2.rotation.y = -Math.PI / 2;             // same +X nose -> +Z forward
+      shell2.traverse(o => {
+        if (!o.isMesh) return;
+        o.castShadow = true;
+        // TRAP 2 territory: every transmissive greenhouse is its own render
+        // pass. Seven of them moving is a framerate cliff, and at traffic
+        // distance smoked glass is indistinguishable.
+        const mats2 = Array.isArray(o.material) ? o.material : [o.material];
+        if (mats2.some(m => m && m.transmission > 0)) {
+          o.material = new THREE.MeshStandardMaterial({
+            color: 0x0d1116, metalness: 0.4, roughness: 0.12 });
+        }
+      });
+      rig2.add(shell2);
+      const seg0 = Math.floor(rngT2() * (r.pts.length - 1));
+      const hd0 = Math.atan2(r.pts[seg0 + 1][0] - r.pts[seg0][0],
+                             r.pts[seg0 + 1][1] - r.pts[seg0][1]);
+      rig2.rotation.y = hd0;
+      rig2.position.set(r.pts[seg0][0], hAt(r.pts[seg0][0], r.pts[seg0][1]), r.pts[seg0][1]);
+      scene.add(rig2);
+      // NO COLLIDER, same reason parked cars have none (2026-08-05): being
+      // shoved inside geometry is a worse bug than a car clipping you.
+      window.__traffic.push({ obj: rig2, pts: r.pts, seg: seg0, t: rngT2(),
+                              speed: 7.5 + rngT2() * 4.5, dir: 1,
+                              lane: Math.max((r.w || 7) / 4, 1.7) });
     }
   }
 
@@ -5926,31 +6134,81 @@ async function main() {
         const clips = g.animations || [];
         const walkClip = clips.find(c => /walk/i.test(c.name)) || clips[0];
         const rngP = mulberry32(SPEC.seed + 818);
-        for (let i = 0; i < 8; i++) {
+        // ── WALKER VARIETY (2026-08-06) ────────────────────────────────
+        // Every pedestrian was one bake at one height wearing one texture:
+        // eight identical people walking the same block. Clothing colour is
+        // painted into the walker's TEXTURE (material.color is white), so a
+        // material tint does nothing — the same finding the rival cars hit.
+        // Hue-rotate the diffuse in a canvas instead, and share the result
+        // across a fixed set of buckets so the texture count stays small.
+        const _pedTex = new Map();
+        const pedSkin = (inst, bucket) => {
+          inst.traverse(o => {
+            if (!o.isMesh || !o.material) return;
+            const ms = Array.isArray(o.material)
+              ? o.material.map(m => m.clone()) : [o.material.clone()];
+            o.material = Array.isArray(o.material) ? ms : ms[0];
+            for (const m of ms) {
+              const img = m.map && m.map.image;
+              if (!img || !img.width) continue;
+              const key = bucket + '|' + (m.map.uuid || '');
+              if (!_pedTex.has(key)) {
+                try {
+                  const c = document.createElement('canvas');
+                  const w = Math.min(img.width, 512);
+                  c.width = w; c.height = Math.max(1, Math.round(img.height * w / img.width));
+                  const g3 = c.getContext('2d');
+                  g3.filter = 'hue-rotate(' + (bucket * 51) + 'deg) saturate('
+                    + (0.85 + (bucket % 3) * 0.16).toFixed(2) + ') brightness('
+                    + (0.86 + (bucket % 4) * 0.09).toFixed(2) + ')';
+                  g3.drawImage(img, 0, 0, c.width, c.height);
+                  const nt = new THREE.CanvasTexture(c);
+                  nt.colorSpace = THREE.SRGBColorSpace;
+                  nt.flipY = m.map.flipY;
+                  nt.wrapS = m.map.wrapS; nt.wrapT = m.map.wrapT;
+                  _pedTex.set(key, nt);
+                } catch (e) { _pedTex.set(key, m.map); }
+              }
+              m.map = _pedTex.get(key);
+              m.needsUpdate = true;
+            }
+          });
+        };
+        for (let i = 0; i < 15; i++) {
           const r = OSM.roads[Math.floor(rngP() * OSM.roads.length)];
           if (!r || r.pts.length < 2) continue;
           const inst = skClone(g.scene);
+          // bucket 0 keeps the original bake — an untinted walker in the mix
+          // stops the crowd reading as a colour wheel
+          if (i % 7 !== 0) pedSkin(inst, 1 + (i % 6));
           const bb = new THREE.Box3().setFromObject(inst);
-          inst.scale.multiplyScalar((1.66 + rngP() * 0.14)
+          inst.scale.multiplyScalar((1.56 + rngP() * 0.33)
             / Math.max(bb.max.y - bb.min.y, 1e-3));
+          // build: a crowd of one silhouette is still a clone army even in
+          // different colours
+          const build = 0.90 + rngP() * 0.22;
+          inst.scale.x *= build; inst.scale.z *= build;
           const bb2 = new THREE.Box3().setFromObject(inst);
           inst.position.y = -bb2.min.y;
           const holder2 = new THREE.Group();
           holder2.add(inst);
           holder2.traverse(o => { if (o.isMesh) { o.castShadow = true; o.frustumCulled = false; } });
           scene.add(holder2);
+          // strollers and people late for something, not one march tempo
+          const spd = 0.8 + rngP() * 1.25;
           let mixer2 = null;
           if (walkClip) {
             mixer2 = new THREE.AnimationMixer(inst);
             const act = mixer2.clipAction(walkClip);
-            act.timeScale = 0.9 + rngP() * 0.3;
+            // clip rate follows ground speed or the fast walkers moonwalk
+            act.timeScale = (spd / 1.35) / build;
             act.play();
             mixer2.update(rngP() * 2.5);      // phase-shift: no synchronized march
           }
           window.__peds.push({ obj: holder2, mixer: mixer2, pts: r.pts,
             seg: Math.max(0, Math.floor(rngP() * (r.pts.length - 1))), t: rngP(),
-            speed: 1.1 + rngP() * 0.6, dir: rngP() < 0.5 ? 1 : -1,
-            side: ((r.w || 7) / 2 + 1.4 + rngP() * 0.8) * (rngP() < 0.5 ? 1 : -1) });
+            speed: spd, dir: rngP() < 0.5 ? 1 : -1,
+            side: ((r.w || 7) / 2 + 1.6 + rngP() * 1.6) * (rngP() < 0.5 ? 1 : -1) });
         }
         console.log('[game] pedestrians: ' + window.__peds.length);
       } catch (e) { console.warn('[game] pedestrians skipped: ' + e.message); }
@@ -8208,14 +8466,34 @@ varying vec2 vUvRaw;
       hh.cone.rotation.set(0, hy, 0);
     }
     for (const tv of window.__traffic || []) {
-      const a2 = tv.pts[tv.seg], b2 = tv.pts[tv.seg + 1];
+      let a2 = tv.pts[tv.seg], b2 = tv.pts[tv.seg + 1];
+      if (!a2 || !b2) { tv.seg = 0; tv.t = 0; continue; }
       const segL = Math.hypot(b2[0] - a2[0], b2[1] - a2[1]) || 1;
       tv.t += (tv.speed * dt * tv.dir) / segL;
-      if (tv.t >= 1) { tv.seg++; tv.t = 0;
-        if (tv.seg >= tv.pts.length - 1) { tv.dir = 1; tv.seg = 0; } }
-      const tx2 = a2[0] + (b2[0] - a2[0]) * tv.t, tz2 = a2[1] + (b2[1] - a2[1]) * tv.t;
+      // 2026-08-06: reaching the end used to TELEPORT the car back to the
+      // start of the street, in full view. It now turns round and crosses
+      // to the opposite lane, which is both continuous and the correct
+      // side of the road for the new heading.
+      if (tv.t >= 1) {
+        tv.t = 0; tv.seg++;
+        if (tv.seg >= tv.pts.length - 1) {
+          tv.seg = tv.pts.length - 2; tv.t = 1; tv.dir = -1; tv.lane = -tv.lane;
+        }
+      } else if (tv.t <= 0) {
+        tv.t = 1; tv.seg--;
+        if (tv.seg < 0) { tv.seg = 0; tv.t = 0; tv.dir = 1; tv.lane = -tv.lane; }
+      }
+      a2 = tv.pts[tv.seg]; b2 = tv.pts[tv.seg + 1];
+      if (!a2 || !b2) continue;
+      const hdT = Math.atan2(b2[0] - a2[0], b2[1] - a2[1]);
+      const lane = tv.lane || 0;
+      const tx2 = a2[0] + (b2[0] - a2[0]) * tv.t + Math.cos(hdT) * lane;
+      const tz2 = a2[1] + (b2[1] - a2[1]) * tv.t - Math.sin(hdT) * lane;
       tv.obj.position.set(tx2, hAt(tx2, tz2), tz2);
-      tv.obj.rotation.y = Math.atan2(b2[0] - a2[0], b2[1] - a2[1]);
+      let dyT = hdT + (tv.dir < 0 ? Math.PI : 0) - tv.obj.rotation.y;
+      while (dyT > Math.PI) dyT -= Math.PI * 2;
+      while (dyT < -Math.PI) dyT += Math.PI * 2;
+      tv.obj.rotation.y += dyT * Math.min(1, dt * 4);
     }
     for (const pd of window.__peds || []) {
       const a3 = pd.pts[pd.seg], b3 = pd.pts[pd.seg + 1];
