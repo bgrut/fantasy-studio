@@ -1688,7 +1688,7 @@ async function main() {
     }
     // The wall grid for one building: a pier on every bay boundary, a
     // spandrel on every storey line. What is LEFT between them is the window.
-    function buildPunched(pts, cx, cz, gy, h, F, tint, prog) {
+    function buildPunched(pts, cx, cz, gy, h, F, tint, wantShop) {
       const sink = wallBoxes[F.tex] || wallBoxes.brick;
       const nSt = Math.max(1, Math.round(h / F.st));
       const rngQ = mulberry32(Math.floor(Math.abs(cx) * 131 + Math.abs(cz) * 977) + 5);
@@ -1738,7 +1738,7 @@ async function main() {
         // glass. Carrying the upstairs pier rhythm down to the pavement is
         // what made a street of shops read as public housing. Program decides,
         // so a cafe opens up and an apartment block does not.
-        const shop = _SHOPPROG.has(prog) && nSt >= 2 && L > F.bay * 2.2;
+        const shop = wantShop && nSt >= 2 && L > F.bay * 2.2;
         const shopTop = gy + F.st;
         for (let k = 0; k <= nb; k++) {
           if (shop && k > 0 && k < nb) {
@@ -1941,6 +1941,11 @@ async function main() {
         // facade it also means the top storey is a whole storey, so the wall
         // grid closes cleanly under the parapet instead of ending mid-window.
         const _prog = programFor(_h0, rngB());
+        // Ground-floor retail is near-universal here: a 40-storey tower
+        // still has a deli in its base. Only a pure residential block
+        // keeps a blank street wall (it gets fire escapes and a stoop
+        // instead). Gating this on _prog gave a city with five shops in it.
+        const _shop = _prog !== 'apartment';
         const _fac = facadeOf(_bkt, mnx, mnz);
         const _sh = _fac ? _fac.st : _storeyH(_bkt);
         const h = Math.max(_fac ? 2 : 1, Math.round(_h0 / _sh)) * _sh;
@@ -1989,12 +1994,12 @@ async function main() {
             }
             backGeos.push(sub);
           }
-          buildPunched(b.pts, cx, cz, gy, h, _fac, tint, _prog);
+          buildPunched(b.pts, cx, cz, gy, h, _fac, tint, _shop);
         } else {
           metricWallUV(geo, b.pts, gy, h, _bkt);
           splitGroups(geo, _bkt);
         }
-        feCand.push([b.pts, cx, cz, gy, h, _bkt, tint, _prog]);
+        feCand.push([b.pts, cx, cz, gy, h, _bkt, tint, _prog, _sh, _shop]);
         let _capPts = b.pts, _capTop = gy + h;
         // r14 SETBACKS: real towers STEP BACK as they rise — a single
         // extruded prism is why buildings read as 'geometric shapes'.
@@ -3097,22 +3102,29 @@ async function main() {
       // of texture meeting pavement. Instanced, per-instance color.
       if (OSM.buildings && OSM.buildings.length && OSM.roads && OSM.roads.length) {
         const rngA = mulberry32(SPEC.seed + 606);
-        const awnG = new THREE.BoxGeometry(3.4, 0.16, 1.2);
-        awnG.translate(0, 0, 0.6);
+        // 2026-08-06: 3.4m was narrower than the shop it belonged to, so
+        // it read as a canopy over a doorway. A real storefront awning
+        // spans the whole bay and projects far enough to shade the glass.
+        const awnG = new THREE.BoxGeometry(4.4, 0.18, 1.45);
+        awnG.translate(0, 0, 0.72);
         const awnM = new THREE.MeshStandardMaterial({ roughness: 0.85 });
         const maxA = Math.min(OSM.buildings.length, 70);
         const awn = new THREE.InstancedMesh(awnG, awnM, maxA);
-        const AC = [new THREE.Color(0x7a2e2e), new THREE.Color(0x2e5a3a),
-                    new THREE.Color(0x2e3a5e), new THREE.Color(0x4a4a4a),
-                    new THREE.Color(0x7a5a2e)];
+        // the muted set read as tasteful, which is the one thing a New
+        // York awning never is -- these are the fascia palette
+        const AC = [new THREE.Color(0xc8102e), new THREE.Color(0x0a7d3e),
+                    new THREE.Color(0x1b52a4), new THREE.Color(0xd81b7a),
+                    new THREE.Color(0xe8541f), new THREE.Color(0xf2b400),
+                    new THREE.Color(0x00857a), new THREE.Color(0x141414)];
         const M4 = new THREE.Matrix4(), Q4 = new THREE.Quaternion();
         const E4 = new THREE.Euler(), S4 = new THREE.Vector3(1, 1, 1);
         let na = 0;
         // built buildings only, and only ones with a shop under them — an
         // awning over an apartment lobby is furniture nobody ordered
-        for (const [bpts, cx2, cz2, gyA, hA, bktA, tintA2, progA] of feCand) {
+        for (const [bpts, cx2, cz2, gyA, hA, bktA, tintA2, progA, fstA, fcA9]
+             of feCand) {
           if (na >= maxA) break;
-          if (!_SHOPPROG.has(progA)) continue;
+          if (!fcA9) continue;                     // no shopfront, no awning
           if (rngA() > 0.8) continue;
           let mnx = 1e9, mnz = 1e9, mxx = -1e9, mxz = -1e9;
           for (const p of bpts) {
@@ -3146,6 +3158,68 @@ async function main() {
         }
         awn.count = na;
         awn.instanceMatrix.needsUpdate = true;
+        // -- PROJECTING FLAGS (2026-08-06) -------------------------------
+        // Every Lower Manhattan photo has them: a staff angled up out of the
+        // facade above head height with a flag hanging off it. They break the
+        // wall plane at exactly the height the follow-cam looks at, and cost
+        // two instanced meshes for the whole city.
+        {
+          const rngFl = mulberry32(SPEC.seed + 4141);
+          const maxF = 26;
+          const poleG2 = new THREE.CylinderGeometry(0.045, 0.045, 2.1, 6);
+          poleG2.rotateZ(Math.PI / 2);            // lie along local X...
+          poleG2.rotateY(Math.PI / 2);            // ...then out along local Z
+          poleG2.translate(0, 0, 1.05);
+          const clothG = new THREE.BoxGeometry(0.04, 0.62, 1.05);
+          clothG.translate(0, -0.34, 1.35);
+          const poleM2 = new THREE.MeshStandardMaterial({ color: 0x2a2c30,
+            metalness: 0.7, roughness: 0.42 });
+          const clothM = new THREE.MeshStandardMaterial({ roughness: 0.86,
+            side: THREE.DoubleSide });
+          const flP = new THREE.InstancedMesh(poleG2, poleM2, maxF);
+          const flC = new THREE.InstancedMesh(clothG, clothM, maxF);
+          const FC = [new THREE.Color(0xb22234), new THREE.Color(0x1b3a8a),
+                      new THREE.Color(0xf2f2f2), new THREE.Color(0x0a7d3e),
+                      new THREE.Color(0xf2b400)];
+          const MF2 = new THREE.Matrix4(), QF2 = new THREE.Quaternion();
+          const EF2 = new THREE.Euler(), SF2 = new THREE.Vector3(1, 1, 1);
+          const VF2 = new THREE.Vector3();
+          let nf2 = 0;
+          for (const fc of feCand) {
+            if (nf2 >= maxF) break;
+            const bpts = fc[0], cxF = fc[1], czF = fc[2], gyF = fc[3], hF = fc[4];
+            if (hF < 8) continue;
+            if (rngFl() > 0.42) continue;
+            let bdF = 1e9, bxF = 0, bzF = 0;
+            for (const r of OSM.roads || []) for (const q of r.pts) {
+              const d = (q[0] - cxF) ** 2 + (q[1] - czF) ** 2;
+              if (d < bdF) { bdF = d; bxF = q[0]; bzF = q[1]; }
+            }
+            if (bdF > 44 * 44) continue;
+            const feF = faceEdge(bpts, cxF, czF, bxF, bzF, 3.4);
+            if (!feF) continue;
+            // slide along the wall so a flag and a shop sign are not fighting
+            // for the same square metre of facade
+            const txF = -feF.nz, tzF = feF.nx;
+            const slideF = (rngFl() - 0.5) * Math.max(0, feF.len - 3.0);
+            const fxF = feF.x + txF * slideF, fzF = feF.z + tzF * slideF;
+            EF2.set(-0.42, Math.atan2(feF.nx, feF.nz), 0, 'YXZ');
+            QF2.setFromEuler(EF2);
+            VF2.set(fxF, gyF + 4.6 + rngFl() * 1.2, fzF);
+            MF2.compose(VF2, QF2, SF2);
+            flP.setMatrixAt(nf2, MF2);
+            flC.setMatrixAt(nf2, MF2);
+            flC.setColorAt(nf2, FC[Math.floor(rngFl() * FC.length)]);
+            nf2++;
+          }
+          flP.count = flC.count = nf2;
+          flP.instanceMatrix.needsUpdate = true;
+          flC.instanceMatrix.needsUpdate = true;
+          if (flC.instanceColor) flC.instanceColor.needsUpdate = true;
+          flP.castShadow = flC.castShadow = true;
+          scene.add(flP); scene.add(flC);
+          console.log('[game] flags: ' + nf2);
+        }
         if (awn.instanceColor) awn.instanceColor.needsUpdate = true;
         awn.castShadow = true;
         scene.add(awn);
@@ -3337,74 +3411,187 @@ async function main() {
           if (can.instanceColor) can.instanceColor.needsUpdate = true;
         }
       }
-      // r9 SHOP SIGNS: real TEXT above storefronts — signage density is
-      // what makes a street read as a PLACE (the reference frame is full
-      // of it). ~14 canvas-text signs on road-facing edges, emissive at
-      // night. Individual meshes (14 draw calls, trivial).
-      if (OSM.buildings && OSM.buildings.length && OSM.roads && OSM.roads.length) {
+      // -- STOREFRONT SIGNAGE + WALL ADS (2026-08-06 r6) -------------------
+      // Reference: St Marks Place, Mott Street, Times Square. At street level
+      // a New York block is almost entirely SIGN -- a fascia board the full
+      // width of the shop, saturated, name in big type, and painted ads on the
+      // blank upper walls above it. The previous pass hung one 3.4m panel per
+      // building, which reads as a brass plaque rather than a shopfront.
+      //
+      // Every sign in the city shares ONE atlas and merges into ONE mesh, so
+      // all of this costs a single draw call. Per-sign canvases would have
+      // been forty textures and forty materials for the same picture.
+      if (feCand.length) {
         const rngG2 = mulberry32(SPEC.seed + 909);
-        // names now come from _PROGNAMES, keyed by what the building IS
-        const SBG = ['#8a1f1f', '#1f4d8a', '#1f6b3a', '#6b3a8a', '#8a5a1f', '#222222'];
         const _nightS = SPEC.world.sky === 'night' || SPEC.world.sky === 'dusk';
+        const SLOTS = 16, SW2 = 1024, SH2 = 128;
+        const atl = document.createElement('canvas');
+        atl.width = SW2; atl.height = SH2 * SLOTS;
+        const ag2 = atl.getContext('2d');
+        // the fascia colours those streets actually use: saturated,
+        // high-contrast, never tasteful
+        const SBG = ['#c8102e', '#f2b400', '#d81b7a', '#0a7d3e', '#1b52a4',
+                     '#141414', '#e8541f', '#00857a'];
+        const GROUPS = [['cafe', 0], ['restaurant', 4], ['store', 8], ['bar', 12]];
+        const slotOf = {};
+        for (const gi in GROUPS) {
+          const prog = GROUPS[gi][0], base = GROUPS[gi][1];
+          const pool = _PROGNAMES[prog] || ['SHOP'];
+          slotOf[prog] = [];
+          for (let k = 0; k < 4; k++) {
+            const i = base + k, y0 = i * SH2;
+            const bg2 = SBG[Math.floor(rngG2() * SBG.length)];
+            ag2.fillStyle = bg2; ag2.fillRect(0, y0, SW2, SH2);
+            ag2.fillStyle = 'rgba(0,0,0,0.28)';
+            ag2.fillRect(0, y0 + SH2 - 12, SW2, 12);       // shadow under the lip
+            ag2.strokeStyle = 'rgba(255,255,255,0.8)'; ag2.lineWidth = 5;
+            ag2.strokeRect(9, y0 + 9, SW2 - 18, SH2 - 18);
+            const nm = pool[k % pool.length];
+            ag2.fillStyle = bg2 === '#f2b400' ? '#1a1a1a' : '#fdf6e8';
+            ag2.textAlign = 'center'; ag2.textBaseline = 'middle';
+            let fs = 78;
+            do { fs -= 4; ag2.font = 'bold ' + fs + 'px Arial'; }
+            while (fs > 30 && ag2.measureText(nm).width > SW2 - 90);
+            ag2.fillText(nm, SW2 / 2, y0 + SH2 / 2 + 2);
+            slotOf[prog].push(i);
+          }
+        }
+        const atlT = new THREE.CanvasTexture(atl);
+        atlT.colorSpace = THREE.SRGBColorSpace;
+        atlT.anisotropy = renderer.capabilities.getMaxAnisotropy();
+        const quads = [];
+        const mkQuad = (sink, qx, qy, qz, nx0, nz0, w, hh, v0, v1, out) => {
+          const tx = -nz0, tz = nx0;
+          const bx3 = qx + nx0 * out, bz3 = qz + nz0 * out;
+          const c6 = [[-1, -1, 0, v0], [1, -1, 1, v0], [1, 1, 1, v1],
+                      [-1, -1, 0, v0], [1, 1, 1, v1], [-1, 1, 0, v1]];
+          const pos = [], uv = [], nor = [];
+          for (const cc of c6) {
+            pos.push(bx3 + tx * (w / 2) * cc[0], qy + (hh / 2) * cc[1],
+                     bz3 + tz * (w / 2) * cc[0]);
+            uv.push(cc[2], cc[3]);
+            nor.push(nx0, 0, nz0);
+          }
+          const q3 = new THREE.BufferGeometry();
+          q3.setAttribute('position', new THREE.BufferAttribute(new Float32Array(pos), 3));
+          q3.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(uv), 2));
+          q3.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(nor), 3));
+          sink.push(q3);
+        };
         let ns = 0;
-        // feCand, NOT OSM.buildings: the raw list still contains every
-        // footprint the spawn/path cull threw away, so signs were being hung
-        // in the empty air where no building was ever built. That is the
-        // floating GOLDEN DRAGON, and awnings and street furniture had it
-        // too. (2026-08-06)
-        for (const [bpts, cx3, cz3, gy3, h3, bkt3, tint3, prog3] of feCand) {
-          if (ns >= 40) break;             // r10: 14 signs vanished in a city
-          // a sign belongs to a BUSINESS. Hanging "JOE'S DINER" on an
-          // apartment slab or a 60m office tower is the same class of error
-          // as hanging it in mid-air, just less obvious.
-          const pool = _PROGNAMES[prog3];
-          if (!pool) continue;
-          if (rngG2() > 0.82) continue;
-          let mnx = 1e9, mnz = 1e9, mxx = -1e9, mxz = -1e9;
-          for (const p of bpts) {
-            mnx = Math.min(mnx, p[0]); mxx = Math.max(mxx, p[0]);
-            mnz = Math.min(mnz, p[1]); mxz = Math.max(mxz, p[1]);
-          }
-          if ((mxx - mnx) < 6 || (mxz - mnz) < 6) continue;
+        for (const fc of feCand) {
+          if (ns >= 46) break;
+          const bpts = fc[0], cx3 = fc[1], cz3 = fc[2], gy3 = fc[3];
+          const h3 = fc[4], prog3 = fc[7], fst3 = fc[8], shop3 = fc[9];
+          if (!shop3) continue;                        // residential street wall
+          // a tower's ground floor is somebody else's shop, so when the
+          // building's own program is not a trade, pick one
+          const gk = slotOf[prog3] ? prog3
+            : GROUPS[Math.floor(rngG2() * GROUPS.length)][0];
+          const slots = slotOf[gk];
+          if (!slots) continue;
+          if (h3 < 5.5) continue;
           let bd = 1e9, bx = 0, bz = 0;
-          for (const r of OSM.roads) for (const p of r.pts) {
-            const d = (p[0] - cx3) ** 2 + (p[1] - cz3) ** 2;
-            if (d < bd) { bd = d; bx = p[0]; bz = p[1]; }
+          for (const r of OSM.roads || []) for (const q of r.pts) {
+            const d = (q[0] - cx3) ** 2 + (q[1] - cz3) ** 2;
+            if (d < bd) { bd = d; bx = q[0]; bz = q[1]; }
           }
-          if (bd > 40 * 40) continue;
-          // r15: bbox face + a "is it near a wall" rescue test, which both
-          // floated signs off diagonal corners and silently dropped the ones
-          // it caught. Real edge, real normal.
+          if (bd > 44 * 44) continue;
           const fe3 = faceEdge(bpts, cx3, cz3, bx, bz, 3.8);
           if (!fe3) continue;
-          const nx4 = fe3.nx, nz4 = fe3.nz;
-          const ex2 = fe3.x + nx4 * 0.09, ez2 = fe3.z + nz4 * 0.09;
-          if (h3 < 5.5) continue;          // r14: no signs above short roofs
-          const name = pool[Math.floor(rngG2() * pool.length) % pool.length];
-          const sc2 = document.createElement('canvas');
-          sc2.width = 512; sc2.height = 128;
-          const sx = sc2.getContext('2d');
-          sx.fillStyle = SBG[Math.floor(rngG2() * SBG.length)];
-          sx.fillRect(0, 0, 512, 128);
-          sx.strokeStyle = 'rgba(255,255,255,0.85)'; sx.lineWidth = 6;
-          sx.strokeRect(8, 8, 496, 112);
-          sx.fillStyle = _nightS ? '#ffe9b0' : '#f2ede2';
-          sx.font = 'bold 58px Arial';
-          sx.textAlign = 'center'; sx.textBaseline = 'middle';
-          sx.fillText(name, 256, 68);
-          const st2 = new THREE.CanvasTexture(sc2);
-          st2.colorSpace = THREE.SRGBColorSpace;
-          st2.anisotropy = renderer.capabilities.getMaxAnisotropy();
-          const sm2 = new THREE.MeshStandardMaterial({ map: st2,
-            roughness: 0.6,
-            ...(_nightS ? { emissive: new THREE.Color(0xffffff),
-                            emissiveMap: st2, emissiveIntensity: 0.75 } : {}) });
-          const sign = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.85, 0.14), sm2);
-          sign.position.set(ex2, hAt(ex2, ez2) + 4.55, ez2);
-          sign.rotation.y = Math.atan2(nx4, nz4);
-          sign.castShadow = true;
-          scene.add(sign);
+          // the fascia runs the width of the SHOP, not a fixed 3.4m: a board
+          // stopping short of the piers is the plaque look all over again
+          const eL3 = Math.max(3.2, Math.min(fe3.len === undefined ? 9 : fe3.len, 17));
+          const slot = slots[Math.floor(rngG2() * slots.length)];
+          mkQuad(quads, fe3.x, gy3 + (fst3 || 3.3) - 0.60, fe3.z, fe3.nx, fe3.nz,
+                 eL3 * 0.86, 1.05, 1 - (slot + 1) / SLOTS, 1 - slot / SLOTS, 0.17);
           ns++;
+        }
+        if (quads.length) {
+          const sm3 = new THREE.MeshStandardMaterial({ map: atlT, roughness: 0.62,
+            side: THREE.DoubleSide });
+          if (_nightS) {
+            // a shop sign is lit from inside; unlit it is a dark board and the
+            // street loses the thing that makes it read as open for business
+            sm3.emissive = new THREE.Color(0xffffff);
+            sm3.emissiveMap = atlT;
+            sm3.emissiveIntensity = 0.95;
+          }
+          const sMesh = new THREE.Mesh(mergeGeometries(quads, false), sm3);
+          sMesh.receiveShadow = true;
+          scene.add(sMesh);
+          for (const q3 of quads) q3.dispose();
+          console.log('[game] storefront signs: ' + ns);
+        }
+        // -- WALL ADS ------------------------------------------------------
+        // The painted brick ad is what fills the blank upper wall in every one
+        // of those photos. Square, so its own atlas and its own mesh -- still
+        // only one more draw call for the whole city.
+        {
+          const AD = 512, ADN = 4;
+          const ac3 = document.createElement('canvas');
+          ac3.width = AD; ac3.height = AD * ADN;
+          const dg = ac3.getContext('2d');
+          const rngAd = mulberry32(SPEC.seed + 1313);
+          const ADS = [['DRINK', 'COLA', '#b3121f', '#f6e7c8'],
+                       ['SMOKE', 'LUCKY', '#1d4e89', '#ffe9a8'],
+                       ['THE', 'DAILY NEWS', '#141414', '#f2b400'],
+                       ['VISIT', 'BROADWAY', '#7a1f6d', '#ffd9f2']];
+          for (let i = 0; i < ADN; i++) {
+            const l1 = ADS[i][0], l2 = ADS[i][1], bg3 = ADS[i][2], fg3 = ADS[i][3];
+            const y0 = i * AD;
+            dg.fillStyle = bg3; dg.fillRect(0, y0, AD, AD);
+            dg.strokeStyle = 'rgba(255,255,255,0.28)'; dg.lineWidth = 10;
+            dg.strokeRect(16, y0 + 16, AD - 32, AD - 32);
+            // a painted wall ad is never clean; a clean one reads as a decal
+            // stuck on the brick rather than paint soaked into it
+            for (let k = 0; k < 260; k++) {
+              dg.fillStyle = 'rgba(0,0,0,' + (0.02 + rngAd() * 0.06) + ')';
+              dg.fillRect(rngAd() * AD, y0 + rngAd() * AD,
+                          2 + rngAd() * 26, 2 + rngAd() * 40);
+            }
+            dg.fillStyle = fg3; dg.textAlign = 'center'; dg.textBaseline = 'middle';
+            dg.font = 'bold 92px Arial';
+            dg.fillText(l1, AD / 2, y0 + AD * 0.34);
+            let fs2 = 108;
+            do { fs2 -= 4; dg.font = 'bold ' + fs2 + 'px Arial'; }
+            while (fs2 > 34 && dg.measureText(l2).width > AD - 60);
+            dg.fillText(l2, AD / 2, y0 + AD * 0.60);
+          }
+          const adT = new THREE.CanvasTexture(ac3);
+          adT.colorSpace = THREE.SRGBColorSpace;
+          adT.anisotropy = renderer.capabilities.getMaxAnisotropy();
+          const adQ = [];
+          let na2 = 0;
+          for (const fc of feCand) {
+            if (na2 >= 14) break;
+            const bpts = fc[0], cx3 = fc[1], cz3 = fc[2], gy3 = fc[3], h3 = fc[4];
+            if (h3 < 17) continue;                     // needs blank wall to carry it
+            if (rngAd() > 0.5) continue;
+            let bd = 1e9, bx = 0, bz = 0;
+            for (const r of OSM.roads || []) for (const q of r.pts) {
+              const d = (q[0] - cx3) ** 2 + (q[1] - cz3) ** 2;
+              if (d < bd) { bd = d; bx = q[0]; bz = q[1]; }
+            }
+            if (bd > 52 * 52) continue;
+            const fe4 = faceEdge(bpts, cx3, cz3, bx, bz, 3.8);
+            if (!fe4) continue;
+            const eL4 = fe4.len === undefined ? 9 : fe4.len;
+            const wA = Math.min(9, Math.max(4.5, eL4 * 0.55));
+            const ai = Math.floor(rngAd() * ADN);
+            mkQuad(adQ, fe4.x, gy3 + h3 * 0.58, fe4.z, fe4.nx, fe4.nz, wA, wA,
+                   1 - (ai + 1) / ADN, 1 - ai / ADN, 0.13);
+            na2++;
+          }
+          if (adQ.length) {
+            const aMesh = new THREE.Mesh(mergeGeometries(adQ, false),
+              new THREE.MeshStandardMaterial({ map: adT, roughness: 0.92,
+                side: THREE.DoubleSide }));
+            aMesh.receiveShadow = true;
+            scene.add(aMesh);
+            for (const q4 of adQ) q4.dispose();
+            console.log('[game] wall ads: ' + na2);
+          }
         }
       }
       // REAL ASPHALT STREETS r3 (2026-07-30): the 'Google Maps' unlock.
@@ -3674,10 +3861,10 @@ async function main() {
         // Same edge picker as everything else that hangs on a facade.
         // ...and the same built-buildings-only rule: the edge picker cannot
         // save a sign whose building does not exist. (2026-08-06)
-        for (const [b3pts, , , , , , , prog3n] of feCand) {
+        for (const [b3pts, , , , , , , , , prog3n] of feCand) {
           const b3 = { pts: b3pts };
           if (placedN >= 36) break;
-          if (!_SHOPPROG.has(prog3n)) continue;
+          if (!prog3n) continue;                   // no shopfront here
           if (rngNe() < 0.45) continue;
           let n3x = 1e9, n3z = 1e9, x3x = -1e9, x3z = -1e9;
           for (const q of b3.pts) {
@@ -6183,9 +6370,17 @@ async function main() {
       // lacquer: it is almost ENTIRELY reflection. At metalness 0.55 /
       // roughness 0.28 the body read as flat coloured plastic even with an
       // environment present (measured in tools/carlab).
-      color: new THREE.Color(cp.paint || 0xb5202a), metalness: 0.85,
-      roughness: 0.22, clearcoat: 1.0, clearcoatRoughness: 0.035,
-      envMapIntensity: 1.6 });
+      // 2026-08-06: metalness 0.85 at envMapIntensity 1.6 is the SAME bug
+      // the window glazing had. A metal has almost no diffuse and tints its
+      // reflection by its base colour, so at night every car became a mirror
+      // of a warm dark sky and the whole fleet came out WOODEN — brown, matte
+      // and colourless. Real metallic paint is a thin metal flake suspended in
+      // a dielectric binder under clear lacquer: most of what you see is the
+      // clearcoat, not raw metal. Low metalness keeps the colour alive under
+      // any lighting; clearcoat still supplies the wet highlight.
+      color: new THREE.Color(cp.paint || 0xb5202a), metalness: 0.28,
+      roughness: 0.34, clearcoat: 1.0, clearcoatRoughness: 0.06,
+      envMapIntensity: 0.85 });
     const glass = new THREE.MeshPhysicalMaterial({
       color: 0x101418, metalness: 0.1, roughness: 0.06,
       transmission: 0.55, thickness: 0.4, transparent: true, opacity: 0.72 });
@@ -6246,6 +6441,36 @@ async function main() {
       depth, bevelEnabled: true, bevelSize: 0.075,
       bevelThickness: 0.06, bevelSegments: 4, curveSegments: 18 });
     bg.translate(0, 0, -depth / 2);            // straddle the centreline
+    // ── THE CAR IS STILL A BOX IN PLAN (2026-08-06 r6) ──────────────────
+    // The profile curve fixed the SIDE view, but an extrusion is a constant
+    // width from nose to tail with vertical flanks, and that is what still
+    // read as a brick: real cars pull in at both ends and lean the glasshouse
+    // inboard above the beltline (tumblehome). Both are a cheap deformation
+    // of the extruded vertices — no new geometry, no extra draw call.
+    {
+      const bp = bg.attributes.position;
+      const roofY = yt + cabH;
+      for (let i = 0; i < bp.count; i++) {
+        const x = bp.getX(i), y = bp.getY(i), z = bp.getZ(i);
+        const t = Math.min(1, Math.max(0, (L * 0.5 - x) / L));   // 0 nose .. 1 tail
+        // full width across the cabin, drawn in toward both ends. Tail pulls
+        // in slightly less than the nose, which is what a car actually does.
+        const nose = Math.min(1, t / 0.22), tail = Math.min(1, (1 - t) / 0.18);
+        const plan = 1 - 0.17 * (1 - nose) - 0.11 * (1 - tail);
+        // tumblehome above the beltline, plus a little sill tuck below it
+        const above = Math.min(1, Math.max(0, (y - yt) / Math.max(cabH, 1e-3)));
+        const below = Math.min(1, Math.max(0, (yb + 0.14 - y) / 0.2));
+        const lean = 1 - 0.20 * above * above - 0.06 * below;
+        bp.setZ(i, z * plan * lean);
+        // crown the roof so it is not a flat plate
+        if (y > roofY - 0.02) {
+          const across = Math.min(1, Math.abs(z) / (depth * 0.5));
+          bp.setY(i, y + 0.030 * (1 - across * across));
+        }
+      }
+      bp.needsUpdate = true;
+      bg.computeVertexNormals();
+    }
     const body = new THREE.Mesh(bg, paint);
     body.castShadow = body.receiveShadow = true;
     g.add(body);
