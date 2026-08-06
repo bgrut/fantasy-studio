@@ -282,6 +282,7 @@ def build_osm_city(place: str, size_m: float, max_buildings: int = 500) -> dict 
             if abs(cx) > half or abs(cz) > half:
                 continue
             blds.append({"pts": pts, "h": round(float(b.get("height", 9.0)), 1),
+                         "use": str(b.get("use") or "")[:24],
                          "d": cx * cx + cz * cz})
         blds.sort(key=lambda b: b["d"])
         for b in blds:

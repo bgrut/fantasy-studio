@@ -1457,6 +1457,26 @@ async function main() {
     // building" tells there is — a glass tower with stone sill bands, or a
     // brownstone with aluminium fins, reads wrong before you can say why.
     const _GLASSY = new Set([1, 4]);
+    // ── DISTRICT COHERENCE (2026-08-06) ──────────────────────────────────
+    // The facade family was picked per building from height plus a coin
+    // flip, so a brownstone, a limestone and a diagrid tower stood shoulder
+    // to shoulder on one block. That is the AI-slop read: every piece is
+    // defensible and the street is nonsense. Real cities agree over a few
+    // blocks at a time, so the family is now a property of a ~110m DISTRICT
+    // and each building draws from that district's two-family palette.
+    const _DGRID = 110;
+    const _DPAL = [
+      { tall: [1, 4], low: [7, 3] },   // financial — glass over stone bases
+      { tall: [6, 3], low: [2, 5] },   // pre-war mixed — concrete/stone + brick
+      { tall: [4, 1], low: [5, 2] },   // loft district — brick walk-ups
+      { tall: [3, 6], low: [3, 7] },   // civic/stone
+    ];
+    function districtPal(px, pz) {
+      const k = Math.floor((px + 4096) / _DGRID) * 1471
+              + Math.floor((pz + 4096) / _DGRID) * 5273;
+      const s = Math.abs(Math.sin(k * 0.6180339 + SPEC.seed * 0.0137) * 43758.5453) % 1;
+      return _DPAL[Math.floor(s * _DPAL.length) % _DPAL.length];
+    }
     // ── PUNCHED FACADE (2026-08-06 r3): masonry buildings stop wearing a
     // photograph of windows and start HAVING windows.
     //
@@ -1850,11 +1870,25 @@ async function main() {
         // (2026-08-06: the family is now chosen BEFORE the geometry, because
         // it decides the storey height the mass is quantised to. The rngB()
         // call ORDER is unchanged so the same seed still builds the same city.)
-        const _r = rngB();
+        // OSM names the use for roughly 40% of a Manhattan extract; the
+        // district palette answers for the rest. The TAG wins where it
+        // exists: an office tower standing in a brick district is a real
+        // thing and reads as one, whereas a brownstone dropped into a glass
+        // district reads as a bug.
+        // (rngB() is now consumed exactly twice per building instead of
+        // once-or-twice depending on the branch, which is what made the
+        // family assignment drift with the night flag.)
+        const _use = (b.use || '').toLowerCase();
+        const _resid = /apartment|residential|house|terrace|dormitor/.test(_use);
+        const _comm = /office|commercial|hotel|retail|shop|supermarket|mall|bank/.test(_use);
+        const _pal = districtPal(cx, cz);
+        const _r = rngB(), _r2 = rngB();
         const _bkt = _h0 > 26
-          ? (_r < 0.35 ? 1 : _r < 0.6 ? 4 : _r < 0.8 ? 6 : 3)
-          : (_night && rngB() < 0.2 ? 0
-             : (_r < 0.28 ? 2 : _r < 0.52 ? 5 : _r < 0.76 ? 7 : 3));
+          ? (_comm ? (_r < 0.6 ? 1 : 4) : _resid ? 6 : _pal.tall[_r < 0.62 ? 0 : 1])
+          : (_night && _r2 < 0.16 ? 0
+             : _resid ? (_r < 0.55 ? 2 : 5)
+             : _comm ? (_r < 0.5 ? 7 : 3)
+             : _pal.low[_r < 0.62 ? 0 : 1]);
         // STOREY-QUANTISED MASS (2026-08-06): snap the extrusion to a whole
         // number of the family's storeys. The roofline then lands on a floor
         // line instead of slicing a window row in half — and for a punched
@@ -2009,6 +2043,33 @@ async function main() {
         const _night2 = SPEC.world.sky === 'night' || SPEC.world.sky === 'dusk';
         const litFrac = _night2 ? 0.42 : 0.0;
         const pane = new THREE.PlaneGeometry(1, 1);
+        // ── PANE TEXTURE (2026-08-06) ───────────────────────────────────
+        // A lit window was an untextured plane with a per-instance colour:
+        // at street level that is a blank cream rectangle 3m across, and it
+        // was the loudest remaining "textured box" tell once the facade got
+        // real openings. A window needs a frame, a mullion and a transom
+        // (that is what tells you which way is up and how big it is) and a
+        // top-down brightness falloff, because rooms are lit from the
+        // ceiling. One shared 128px canvas — both materials use it, so the
+        // instancing and the draw-call count are untouched.
+        const wc = document.createElement('canvas');
+        wc.width = wc.height = 128;
+        {
+          const wx2 = wc.getContext('2d');
+          const grd = wx2.createLinearGradient(0, 0, 0, 128);
+          grd.addColorStop(0, '#ffffff');
+          grd.addColorStop(0.55, '#e2e2e2');
+          grd.addColorStop(1, '#9c9c9c');
+          wx2.fillStyle = grd; wx2.fillRect(0, 0, 128, 128);
+          wx2.fillStyle = '#2a2724';
+          wx2.fillRect(0, 0, 128, 7); wx2.fillRect(0, 121, 128, 7);
+          wx2.fillRect(0, 0, 7, 128); wx2.fillRect(121, 0, 7, 128);
+          wx2.fillRect(61, 0, 6, 128);            // mullion
+          wx2.fillRect(0, 52, 128, 5);            // transom
+        }
+        const paneTex = new THREE.CanvasTexture(wc);
+        paneTex.colorSpace = THREE.SRGBColorSpace;
+        paneTex.anisotropy = renderer.capabilities.getMaxAnisotropy();
         const lit = [], dark = [];
         for (const w of glassI) (w[6] < litFrac ? lit : dark).push(w);
         const place = (arr, mat, cast) => {
@@ -2046,8 +2107,8 @@ async function main() {
         // need a real light behind every window and the light budget is 4
         // toneMapped stays ON: unmapped, every lit pane clipped to the same
         // flat cream and the whole street lit up like paper
-        place(lit, new THREE.MeshBasicMaterial(), true);
-        place(dark, new THREE.MeshStandardMaterial({ roughness: 0.12,
+        place(lit, new THREE.MeshBasicMaterial({ map: paneTex }), true);
+        place(dark, new THREE.MeshStandardMaterial({ map: paneTex, roughness: 0.12,
           metalness: 0.6, envMapIntensity: 1.6, color: 0xffffff }), false);
       }
     }

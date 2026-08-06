@@ -87,7 +87,15 @@ def parse_osm(osm_path: Path) -> Dict:
             if len(pts) < 3:
                 continue
             h = _building_height(tags)
-            buildings.append({"footprint": pts, "height": h})
+            # 2026-08-06: the game picked a facade family from height alone,
+            # so a hotel and a warehouse of the same height wore the same
+            # wall. About 40% of a Manhattan extract carries a real use tag
+            # (hotel/commercial/office/apartments/...); shop and amenity
+            # catch the ground-floor ones that are only tagged as "yes".
+            use = tags.get("building") or tags.get("building:part") or ""
+            if use in ("", "yes"):
+                use = tags.get("shop") and "retail" or tags.get("amenity") or use
+            buildings.append({"footprint": pts, "height": h, "use": use or ""})
         elif "highway" in tags:
             roads.append({"path": pts, "width": _road_width(tags)})
     return {"buildings": buildings, "roads": roads, "center": (lat0, lon0)}
