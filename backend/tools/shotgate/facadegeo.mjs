@@ -22,7 +22,7 @@ p.on('pageerror', e => console.log('PAGEERROR:', e.message.slice(0, 240)));
 await p.goto(`http://127.0.0.1:8789/games/job_${JOB}/dist/`, { waitUntil: 'networkidle2', timeout: 90000 });
 await new Promise(r => setTimeout(r, 5000));
 await p.click('#startbtn').catch(() => {});
-await new Promise(r => setTimeout(r, 4000));
+await new Promise(r => setTimeout(r, 7000));
 if (await p.evaluate(() => typeof window.__game) !== 'object') {
   console.log('DEAD'); await b.close(); process.exit(2);
 }

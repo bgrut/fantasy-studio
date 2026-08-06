@@ -1457,6 +1457,48 @@ async function main() {
     // building" tells there is — a glass tower with stone sill bands, or a
     // brownstone with aluminium fins, reads wrong before you can say why.
     const _GLASSY = new Set([1, 4]);
+    // ── PUNCHED FACADE (2026-08-06 r3): masonry buildings stop wearing a
+    // photograph of windows and start HAVING windows.
+    //
+    // Trying to align real openings to a photo's printed ones failed: the
+    // storey pitch measures cleanly out of every photo but the bay pitch does
+    // not, so sills landed on brick as often as on glass. The way every
+    // procedural city tool answers this is not to measure harder — it is to
+    // GENERATE the facade and drop the photo, because you cannot punch a hole
+    // where a picture has already painted one.
+    //
+    // The wall becomes a grid of solid boxes: a pier between every bay, a
+    // spandrel between every storey, standing 0.42m proud of a plain backing
+    // wall. The GAPS between those boxes are the openings, so the jambs, head
+    // and sill are real surfaces at real depth — they shade themselves, they
+    // shift as you walk past, and they notch the corner against the sky. No
+    // boolean, no runtime triangulation.
+    //
+    // Wall material is plain masonry at brick-sized texel density, which is
+    // the trade that buys all of the above.
+    const _FACADE = {
+      0: { tex: 'plaster',  tile: 3.0, st: 3.2, bay: 3.0, pier: 1.40, spand: 1.20 },
+      2: { tex: 'brick',    tile: 2.2, st: 3.3, bay: 2.9, pier: 1.50, spand: 1.30 },
+      3: { tex: 'stone',    tile: 3.0, st: 3.6, bay: 3.4, pier: 1.70, spand: 1.40 },
+      5: { tex: 'brick',    tile: 2.6, st: 4.0, bay: 3.5, pier: 1.40, spand: 1.30 },
+      6: { tex: 'concrete', tile: 4.0, st: 3.1, bay: 3.2, pier: 1.00, spand: 1.10 },
+      7: { tex: 'plaster',  tile: 3.2, st: 4.2, bay: 3.8, pier: 1.90, spand: 1.60 },
+    };
+    const WT = 0.42;                  // wall thickness == window reveal depth
+    // Per-building variation. "Each building can be a bit different" is not a
+    // nicety: an identical bay rhythm down a whole street is the clone-army
+    // read that survives every other fix.
+    function facadeOf(bkt, seedx, seedz) {
+      const f = _FACADE[bkt];
+      if (!f) return null;
+      let s = Math.abs(Math.sin(seedx * 51.17 + seedz * 13.71) * 43758.5453) % 1;
+      const nx = () => (s = (s * 9301 + 49297 / 233280) % 1);
+      return { tex: f.tex, tile: f.tile,
+               st: f.st * (0.94 + nx() * 0.14),
+               bay: f.bay * (0.90 + nx() * 0.22),
+               pier: f.pier * (0.86 + nx() * 0.30),
+               spand: f.spand * (0.88 + nx() * 0.26) };
+    }
     const _FFAM = [null, 'facade_glass', 'facade_brick', 'facade_stone',
       'facade_glass2', 'facade_brick2', 'facade_concrete', 'facade_limestone'];
     const _storeyH = (bkt) => _FTILE[bkt][1] / _FTILE[bkt][3];
@@ -1572,6 +1614,147 @@ async function main() {
       }
       return false;
     }
+    // Merged per masonry TEXTURE, not per building: four draw calls carry
+    // every punched facade in the city.
+    const wallBoxes = { brick: [], stone: [], concrete: [], plaster: [] };
+    const backGeos = [];                       // the plain wall behind the reveals
+    const glassI = [];                         // [x,y,z,yaw,w,h,lit,r,g,b]
+    const _BOX1 = new THREE.BoxGeometry(1, 1, 1);
+    // Backstop only. A 78m tower on a long block is a few hundred boxes, so a
+    // dense downtown scan stays well inside this; a pathological footprint set
+    // must not be able to spend the whole load budget on masonry. Declared
+    // ABOVE the functions that read it — a const/let read before its
+    // declaration kills the entire runtime with no build error.
+    let _boxN = 0;
+    const BOX_MAX = 26000;
+    const _bM = new THREE.Matrix4(), _bQ = new THREE.Quaternion();
+    const _bE = new THREE.Euler(), _bV = new THREE.Vector3(), _bS = new THREE.Vector3();
+    // One box of the wall grid. UVs are projected in METRES on the face's own
+    // plane rather than left at BoxGeometry's per-face 0..1, or the brick
+    // would smear differently on every pier — which is the whole reason these
+    // are merged geometry and not an InstancedMesh.
+    function wallBox(sink, ax, az, ux, uz, nx, nz, along, y, w, hh, gy, tone, th) {
+      const t = th || WT;
+      const g = _BOX1.clone();
+      _bE.set(0, Math.atan2(nx, nz), 0); _bQ.setFromEuler(_bE);
+      // seated so the OUTER face lands on the wall plane whatever the
+      // thickness — that is what lets a sill stand proud of its own spandrel
+      _bV.set(ax + ux * along - nx * (WT - t / 2), y, az + uz * along - nz * (WT - t / 2));
+      _bS.set(w, hh, t);
+      g.applyMatrix4(_bM.compose(_bV, _bQ, _bS));
+      const pos = g.attributes.position, nor = g.attributes.normal, uv = g.attributes.uv;
+      const cols = new Float32Array(pos.count * 3);
+      for (let i = 0; i < pos.count; i++) {
+        const px = pos.getX(i), py = pos.getY(i), pz = pos.getZ(i);
+        const al = (px - ax) * ux + (pz - az) * uz;
+        const ou = (px - ax) * nx + (pz - az) * nz;
+        const ny = nor.getY(i), nxx = nor.getX(i), nzz = nor.getZ(i);
+        if (Math.abs(ny) > 0.7) uv.setXY(i, al, ou);                    // sill / soffit
+        else if (Math.abs(nxx * ux + nzz * uz) > 0.7) uv.setXY(i, ou, py - gy);  // jamb
+        else uv.setXY(i, al, py - gy);                                  // face
+        // the same ground-bounce gradient the photo walls carry, so the two
+        // families of building still light alike
+        const gAO = 0.66 + 0.34 * Math.min(Math.max((py - gy) / 8, 0), 1);
+        // reveal faces sit inside the opening and must read darker than the
+        // face, or the depth is thrown away by uniform shading
+        const inset = Math.abs(ny) > 0.7 || Math.abs(nxx * ux + nzz * uz) > 0.7 ? 0.72 : 1;
+        cols[i * 3] = tone.r * gAO * inset;
+        cols[i * 3 + 1] = tone.g * gAO * inset;
+        cols[i * 3 + 2] = tone.b * gAO * inset;
+      }
+      g.setAttribute('color', new THREE.BufferAttribute(cols, 3));
+      sink.push(g);
+      _boxN++;
+    }
+    // The wall grid for one building: a pier on every bay boundary, a
+    // spandrel on every storey line. What is LEFT between them is the window.
+    function buildPunched(pts, cx, cz, gy, h, F, tint) {
+      const sink = wallBoxes[F.tex] || wallBoxes.brick;
+      const nSt = Math.max(1, Math.round(h / F.st));
+      const rngQ = mulberry32(Math.floor(Math.abs(cx) * 131 + Math.abs(cz) * 977) + 5);
+      // colour varies per building but stays out of the texture's way — the
+      // brick's own hue has to survive, or every wall goes the same grey
+      const tv = 0.78 + rngQ() * 0.34, tw2 = (rngQ() - 0.5) * 0.14;
+      const tone = new THREE.Color(tv + tw2, tv, tv - tw2 * 0.7);
+      // Some buildings are mostly awake at 2am and some are mostly asleep.
+      // A single global lit fraction gave every tower the same even sprinkle,
+      // which is a texture, not a city.
+      const litBias = 0.45 + rngQ() * 1.25;
+      let ccx = 0, ccz = 0;
+      for (const q of pts) { ccx += q[0]; ccz += q[1]; }
+      ccx /= pts.length; ccz /= pts.length;
+      for (let i = 0; i < pts.length; i++) {
+        const a = pts[i], c = pts[(i + 1) % pts.length];
+        const dx = c[0] - a[0], dz = c[1] - a[1];
+        const L = Math.hypot(dx, dz);
+        if (L < 1.0) continue;
+        const ux = dx / L, uz = dz / L;
+        const mx = (a[0] + c[0]) / 2, mz = (a[1] + c[1]) / 2;
+        let nx = -uz, nz = ux;
+        if ((mx - ccx) * nx + (mz - ccz) * nz < 0) { nx = -nx; nz = -nz; }
+        if (L < F.bay * 1.25 || _boxN > BOX_MAX) {
+          // too narrow to punch — leave it solid rather than emit a sliver of
+          // window jammed against two corners
+          wallBox(sink, a[0], a[1], ux, uz, nx, nz, L / 2, gy + h / 2, L, h, gy, tone);
+          continue;
+        }
+        const nb = Math.max(1, Math.round(L / F.bay)), bw = L / nb;
+        // never let the pier eat more than half the bay: at 0.74 a narrow bay
+        // produced a sub-0.55m opening, the glazing was skipped entirely, and
+        // that whole building came out as a grid of blind slots
+        const pw = Math.min(F.pier, bw * 0.52);
+        const sh2 = Math.min(F.spand, F.st * 0.60);
+        // SHOPFRONT: a New York ground floor is glass, not the same punched
+        // window as floor six. Without this the whole city reads as public
+        // housing — it was the loudest thing wrong with the first punch.
+        const sh0 = Math.min(0.42, sh2);
+        const stY = (s) => gy + s * F.st + (s === 0 ? sh0 : sh2);   // window head
+        // piers, one per bay boundary. The end ones overhang the corner on
+        // purpose: two edges' end piers overlap there, so a corner is solid
+        // masonry rather than a window wrapping an arris. Slightly thicker
+        // than the spandrels, which gives the wall a vertical rhythm instead
+        // of one flat plane with holes in it.
+        for (let k = 0; k <= nb; k++) {
+          wallBox(sink, a[0], a[1], ux, uz, nx, nz, k * bw, gy + h / 2, pw, h, gy,
+                  tone, WT + 0.07);
+        }
+        for (let s = 0; s <= nSt; s++) {
+          const top = s === nSt;
+          const bh2 = top ? sh2 : (s === 0 ? sh0 : sh2);
+          const y = top ? gy + h - sh2 / 2 : gy + s * F.st + bh2 / 2;
+          wallBox(sink, a[0], a[1], ux, uz, nx, nz, L / 2, y, L + 0.02, bh2, gy, tone);
+          // SILL COURSE on top of each spandrel and LINTEL under the next —
+          // every opening gets a lip above it and a shelf below it, both
+          // standing proud enough to throw their own shadow line. Continuous
+          // per storey rather than per window: one box instead of one per
+          // bay, and a continuous sill course is what a brownstone has.
+          if (!top) {
+            wallBox(sink, a[0], a[1], ux, uz, nx, nz, L / 2,
+                    gy + s * F.st + bh2 + 0.055, L + 0.30, 0.11, gy, tone, WT + 0.17);
+          }
+          if (s > 0) {
+            wallBox(sink, a[0], a[1], ux, uz, nx, nz, L / 2,
+                    gy + s * F.st - 0.07, L + 0.22, 0.14, gy, tone, WT + 0.10);
+          }
+        }
+        // glazing sits on the backing wall, so it is seen down a real reveal
+        const ww = bw - pw;
+        for (let s = 0; s < nSt; s++) {
+          const y0 = stY(s);
+          const y1 = gy + (s + 1) * F.st - (s === nSt - 1 ? sh2 : 0);
+          if (y1 - y0 < 0.6) continue;
+          for (let k = 0; k < nb; k++) {
+            const al = (k + 0.5) * bw;
+            // shop windows are lit far more often than flats, and they are
+            // the ones at eye level
+            const r2 = s === 0 ? rngQ() * 0.35 : Math.min(0.999, rngQ() * litBias);
+            glassI.push([a[0] + ux * al - nx * (WT - 0.04), (y0 + y1) / 2,
+                         a[1] + uz * al - nz * (WT - 0.04),
+                         Math.atan2(nx, nz), ww, y1 - y0, r2]);
+          }
+        }
+      }
+    }
     const wallBuckets = [[], [], [], [], [], [], [], []], capGeos = [];
     const roofSpots = [];
     // [pts, topY] for the topmost slab of every building — the parapet pass
@@ -1649,7 +1832,11 @@ async function main() {
         // from every camera angle.
         const _half = SPEC.world.size_m * 0.5;
         const _core = Math.max(0, 1 - Math.hypot(cx, cz) / (_half * 0.85));
-        const _h0 = Math.min(Math.max((b.h || 9) * (1 + 2.6 * _core * _core), 4), 55);
+        // r3: NYC has almost no 1-2 storey buildings. The old floor of 4m let
+        // OSM's missing-height default drop bungalows into midtown, which is
+        // what made the block read as a suburb with towers behind it. Floor is
+        // now four storeys and the core reaches genuinely tall.
+        const _h0 = Math.min(Math.max((b.h || 12) * (1 + 2.9 * _core * _core), 13.5), 78);
         const gy = hAt(cx, cz);
         const tint = tintA.clone().lerp(tintB, rngB()).offsetHSL(0, 0, (rngB() - 0.5) * 0.12);
         // photo facades ONLY by day (2026-07-28: the procedural grid reads
@@ -1670,19 +1857,62 @@ async function main() {
              : (_r < 0.28 ? 2 : _r < 0.52 ? 5 : _r < 0.76 ? 7 : 3));
         // STOREY-QUANTISED MASS (2026-08-06): snap the extrusion to a whole
         // number of the family's storeys. The roofline then lands on a floor
-        // line instead of slicing a window row in half, and the wall UVs need
-        // no vertical distortion at all — the building IS an integer number
-        // of storeys tall, so one texture storey is one real storey.
-        const _sh = _storeyH(_bkt);
-        const h = Math.max(1, Math.round(_h0 / _sh)) * _sh;
+        // line instead of slicing a window row in half — and for a punched
+        // facade it also means the top storey is a whole storey, so the wall
+        // grid closes cleanly under the parapet instead of ending mid-window.
+        const _fac = facadeOf(_bkt, mnx, mnz);
+        const _sh = _fac ? _fac.st : _storeyH(_bkt);
+        const h = Math.max(_fac ? 2 : 1, Math.round(_h0 / _sh)) * _sh;
         const geo = new THREE.ExtrudeGeometry(shape, { depth: h, bevelEnabled: false });
         geo.rotateX(-Math.PI / 2);                                // extrude up
         geo.translate(0, gy, 0);
         const nv = geo.attributes.position.count, cols = new Float32Array(nv * 3);
         for (let i = 0; i < nv; i++) { cols[i * 3] = tint.r; cols[i * 3 + 1] = tint.g; cols[i * 3 + 2] = tint.b; }
         geo.setAttribute('color', new THREE.BufferAttribute(cols, 3));
-        metricWallUV(geo, b.pts, gy, h, _bkt);
-        splitGroups(geo, _bkt);
+        if (_fac) {
+          // PUNCHED FACADE. The extrusion is kept only for its roof cap and
+          // for a backing wall set WT inside the footprint — that backing is
+          // what you see through every opening, so the recess is real depth
+          // and not a painted shadow.
+          for (const g2 of geo.groups) {
+            if (g2.materialIndex === 0) {
+              const sub = new THREE.BufferGeometry();
+              for (const nmA of ['position', 'normal', 'uv', 'color']) {
+                const at = geo.attributes[nmA];
+                sub.setAttribute(nmA, new THREE.BufferAttribute(
+                  at.array.slice(g2.start * at.itemSize,
+                                 (g2.start + g2.count) * at.itemSize), at.itemSize));
+              }
+              capGeos.push(sub);
+            }
+          }
+          let rSum = 0;
+          for (let i = 0; i < b.pts.length; i++) {
+            const q1 = b.pts[i], q2 = b.pts[(i + 1) % b.pts.length];
+            rSum += Math.hypot((q1[0] + q2[0]) / 2 - cx, (q1[1] + q2[1]) / 2 - cz);
+          }
+          const shr = Math.max(0.55, 1 - WT / Math.max(rSum / b.pts.length, 1.2));
+          const bPts = b.pts.map(([px, pz]) => [cx + (px - cx) * shr, cz + (pz - cz) * shr]);
+          const bShape = new THREE.Shape();
+          bPts.forEach(([px, pz], i) => i ? bShape.lineTo(px, -pz) : bShape.moveTo(px, -pz));
+          const bg2 = new THREE.ExtrudeGeometry(bShape, { depth: h, bevelEnabled: false });
+          bg2.rotateX(-Math.PI / 2); bg2.translate(0, gy, 0);
+          for (const g2 of bg2.groups) {
+            if (g2.materialIndex === 0) continue;                 // its cap is buried
+            const sub = new THREE.BufferGeometry();
+            for (const nmA of ['position', 'normal', 'uv']) {
+              const at = bg2.attributes[nmA];
+              sub.setAttribute(nmA, new THREE.BufferAttribute(
+                at.array.slice(g2.start * at.itemSize,
+                               (g2.start + g2.count) * at.itemSize), at.itemSize));
+            }
+            backGeos.push(sub);
+          }
+          buildPunched(b.pts, cx, cz, gy, h, _fac, tint);
+        } else {
+          metricWallUV(geo, b.pts, gy, h, _bkt);
+          splitGroups(geo, _bkt);
+        }
         feCand.push([b.pts, cx, cz, gy, h, _bkt, tint]);
         let _capPts = b.pts, _capTop = gy + h;
         // r14 SETBACKS: real towers STEP BACK as they rise — a single
@@ -1739,7 +1969,89 @@ async function main() {
         }
       } catch (e) { /* one bad footprint never kills the city */ }
     }
-    if (wallBuckets.some(b => b.length)) {
+    // ── ASSEMBLE THE PUNCHED FACADES ─────────────────────────────────────
+    {
+      const _mLoad = new THREE.TextureLoader();
+      const _mTex = (n, sfx, tile) => {
+        const t = _mLoad.load('textures/' + n + (sfx || '') + '.jpg');
+        t.wrapS = t.wrapT = THREE.RepeatWrapping;
+        t.repeat.set(1 / tile, 1 / tile);        // UVs are already in metres
+        if (!sfx) t.colorSpace = THREE.SRGBColorSpace;
+        t.anisotropy = renderer.capabilities.getMaxAnisotropy();
+        return t;
+      };
+      const _TILE = { brick: 2.2, stone: 3.0, concrete: 4.0, plaster: 3.0 };
+      const _ROUGH = { brick: 0.94, stone: 0.88, concrete: 0.9, plaster: 0.92 };
+      for (const key of Object.keys(wallBoxes)) {
+        const list = wallBoxes[key];
+        if (!list.length) continue;
+        const m = new THREE.Mesh(mergeGeometries(list, false),
+          new THREE.MeshStandardMaterial({
+            map: _mTex(key, '', _TILE[key]),
+            normalMap: _mTex(key, '_n', _TILE[key]),
+            normalScale: new THREE.Vector2(1.1, 1.1),
+            vertexColors: true, roughness: _ROUGH[key], metalness: 0.02 }));
+        m.castShadow = m.receiveShadow = true;
+        scene.add(m);
+        for (const g2 of list) g2.dispose();
+      }
+      if (backGeos.length) {
+        // deliberately dark and matte: this is what you look at down every
+        // reveal, and a bright backing throws the depth away
+        const bm = new THREE.Mesh(mergeGeometries(backGeos, false),
+          new THREE.MeshStandardMaterial({ color: 0x27241f, roughness: 0.97,
+            metalness: 0.0 }));
+        bm.receiveShadow = true;
+        scene.add(bm);
+        for (const g2 of backGeos) g2.dispose();
+      }
+      if (glassI.length) {
+        const _night2 = SPEC.world.sky === 'night' || SPEC.world.sky === 'dusk';
+        const litFrac = _night2 ? 0.42 : 0.0;
+        const pane = new THREE.PlaneGeometry(1, 1);
+        const lit = [], dark = [];
+        for (const w of glassI) (w[6] < litFrac ? lit : dark).push(w);
+        const place = (arr, mat, cast) => {
+          if (!arr.length) return;
+          const im = new THREE.InstancedMesh(pane, mat, arr.length);
+          const M = new THREE.Matrix4(), Q = new THREE.Quaternion();
+          const E = new THREE.Euler(), V = new THREE.Vector3(), S = new THREE.Vector3();
+          const C = new THREE.Color();
+          arr.forEach((w, i) => {
+            E.set(0, w[3], 0); Q.setFromEuler(E);
+            V.set(w[0], w[1], w[2]); S.set(w[4], w[5], 1);
+            im.setMatrixAt(i, M.compose(V, Q, S));
+            const wr = (w[6] * 7919) % 1, wr2 = (w[6] * 104729) % 1;
+            if (cast) {
+              // Warm tungsten with the odd cold fluorescent, and a wide spread
+              // of BRIGHTNESS. Every lit pane at full value was the giveaway
+              // in the first punch: a row of identical cream rectangles reads
+              // as cardboard, because no two rooms are ever lit the same.
+              const v = 0.34 + wr2 * 0.66;
+              if (wr < 0.82) C.setRGB(v, v * (0.68 + wr * 0.1), v * (0.36 + wr * 0.2));
+              else C.setRGB(v * 0.72, v * 0.86, v);
+            } else {
+              // unlit glass is not black — it is a dark mirror of the night
+              // sky, and a little variation stops the grid reading as print
+              C.setRGB(0.16 + wr * 0.10, 0.19 + wr * 0.11, 0.26 + wr * 0.13);
+            }
+            im.setColorAt(i, C);
+          });
+          im.instanceMatrix.needsUpdate = true;
+          if (im.instanceColor) im.instanceColor.needsUpdate = true;
+          im.receiveShadow = !cast;
+          scene.add(im);
+        };
+        // lit panes are self-luminous, so Basic — a StandardMaterial would
+        // need a real light behind every window and the light budget is 4
+        // toneMapped stays ON: unmapped, every lit pane clipped to the same
+        // flat cream and the whole street lit up like paper
+        place(lit, new THREE.MeshBasicMaterial(), true);
+        place(dark, new THREE.MeshStandardMaterial({ roughness: 0.12,
+          metalness: 0.6, envMapIntensity: 1.6, color: 0xffffff }), false);
+      }
+    }
+    if (wallBuckets.some(b => b.length) || capGeos.length) {
       // procedural FACADE: window grid tiled in metres over the extrude UVs
       // (one 6m x 6m tile: 4 windows across, 2 floors) + a matching emissive
       // map so a fraction of windows glow — detail on EVERY building, no
@@ -1789,25 +2101,22 @@ async function main() {
       // window reveal derived from the photo would light as if it PROTRUDED.
       const _fPair = (n) => ({ map: _fTex(n), normalMap: _fTex(n, '_n'),
         normalScale: new THREE.Vector2(0.6, -0.6) });
-      const _wallMats = [
-        new THREE.MeshStandardMaterial({ vertexColors: true, map: facadeTex,
-          emissive: 0xffc873, emissiveMap: litTex, emissiveIntensity: 0.4,
-          roughness: 0.85, metalness: 0.08 }),
-        new THREE.MeshStandardMaterial({ ..._fPair('facade_glass'),
-          vertexColors: true, roughness: 0.35, metalness: 0.55 }),
-        new THREE.MeshStandardMaterial({ ..._fPair('facade_brick'),
-          vertexColors: true, roughness: 0.9, metalness: 0.03 }),
-        new THREE.MeshStandardMaterial({ ..._fPair('facade_stone'),
-          vertexColors: true, roughness: 0.85, metalness: 0.04 }),
-        new THREE.MeshStandardMaterial({ ..._fPair('facade_glass2'),
-          vertexColors: true, roughness: 0.3, metalness: 0.6 }),
-        new THREE.MeshStandardMaterial({ ..._fPair('facade_brick2'),
-          vertexColors: true, roughness: 0.92, metalness: 0.02 }),
-        new THREE.MeshStandardMaterial({ ..._fPair('facade_concrete'),
-          vertexColors: true, roughness: 0.88, metalness: 0.03 }),
-        new THREE.MeshStandardMaterial({ ..._fPair('facade_limestone'),
-          vertexColors: true, roughness: 0.8, metalness: 0.04 }),
-      ];
+      // Only the families that actually have geometry get built. Since the
+      // masonry families became punched geometry, loading all seven photo
+      // sets was ~48MB of VRAM and twelve texture decodes for materials
+      // nothing referenced. (2026-08-06 r3)
+      const _wallSpec = [null, [0.35, 0.55], [0.9, 0.03], [0.85, 0.04],
+        [0.3, 0.6], [0.92, 0.02], [0.88, 0.03], [0.8, 0.04]];
+      const _wallMats = _wallSpec.map((sp, bi) => {
+        if (!wallBuckets[bi].length) return null;
+        if (bi === 0) {
+          return new THREE.MeshStandardMaterial({ vertexColors: true, map: facadeTex,
+            emissive: 0xffc873, emissiveMap: litTex, emissiveIntensity: 0.4,
+            roughness: 0.85, metalness: 0.08 });
+        }
+        return new THREE.MeshStandardMaterial({ ..._fPair(_FFAM[bi]),
+          vertexColors: true, roughness: sp[0], metalness: sp[1] });
+      });
       // ── FACADE RELIEF, DERIVED FROM THE PHOTO (2026-08-05) ───────────────
       // Ported from tools/facadelab. The lab's finding is that RELIEF, not
       // albedo, is what stops an extruded footprint reading as a box: window
@@ -1828,7 +2137,8 @@ async function main() {
       // Once per FAMILY, not per building: seven texture sets for an entire
       // city, so the merged facade buckets still draw as one mesh each and
       // VRAM does not scale with the number of buildings.
-      const _RFAMS = _FFAM.map((n, i) => [i, n]).filter(e => e[1]);
+      const _RFAMS = _FFAM.map((n, i) => [i, n])
+        .filter(e => e[1] && wallBuckets[e[0]].length);
       {
         const AN = 512;                 // analysis + normal-map resolution
         const AO_N = 256;               // AO/roughness are low-frequency
@@ -2217,7 +2527,11 @@ async function main() {
           const stH = T7[1] / T7[3], bayW7 = T7[0] / T7[2];
           const nSt7 = Math.max(1, Math.round(h7 / stH));
           const glassy = _GLASSY.has(bkt7);
-          const PB = Math.min(Math.max(stH, 3.2), 5.5);      // one ground storey
+          // A LOW base course, not a whole storey (2026-08-06 r3): a
+          // full-height plinth boarded the shopfronts up and the street lost
+          // its ground floor. Real buildings have a water table around knee
+          // to waist height and glass above it.
+          const PB = _FACADE[bkt7] ? 1.05 : Math.min(Math.max(stH, 3.2), 5.5);
           let ccx = 0, ccz = 0;
           for (const q of pts) { ccx += q[0]; ccz += q[1]; }
           ccx /= pts.length; ccz /= pts.length;
@@ -2256,11 +2570,11 @@ async function main() {
                 put(fin, nf2++, (k / nf3) * L7, gy7 + PB + (h7 - PB) / 2,
                     0.13, h7 - PB, 0.26, seat(0.17, 0.26));
               }
-            } else {
-              // STOREY COURSES: a hard shadow line every storey, all the way
-              // up. This is the cue that survives being looked at from a
-              // moving camera, and it serrates the corner so the building
-              // stops ending in a knife edge against the sky.
+            } else if (!_FACADE[bkt7]) {
+              // STOREY COURSES, for any family that did NOT get a punched
+              // facade. Where the wall is a real grid of piers and spandrels
+              // the spandrels already ARE the courses, and stacking these on
+              // top of them just doubles every shadow line.
               for (let s = 1; s < nSt7 && nb2 < CAP_B; s++) {
                 const y7 = gy7 + s * stH;
                 if (y7 < gy7 + PB + 0.4) continue;        // swallowed by the plinth
@@ -2793,21 +3107,20 @@ async function main() {
             mnz = Math.min(mnz, p[1]); mxz = Math.max(mxz, p[1]);
           }
           const cx3 = (mnx + mxx) / 2, cz3 = (mnz + mxz) / 2;
-          const hx3 = (mxx - mnx) / 2, hz3 = (mxz - mnz) / 2;
-          if (hx3 < 3 || hz3 < 3) continue;
+          if ((mxx - mnx) < 6 || (mxz - mnz) < 6) continue;
           let bd = 1e9, bx = 0, bz = 0;
           for (const r of OSM.roads) for (const p of r.pts) {
             const d = (p[0] - cx3) ** 2 + (p[1] - cz3) ** 2;
             if (d < bd) { bd = d; bx = p[0]; bz = p[1]; }
           }
           if (bd > 40 * 40) continue;
-          const dx3 = bx - cx3, dz3 = bz - cz3;
-          const dl3 = Math.hypot(dx3, dz3) || 1;
-          const nx4 = dx3 / dl3, nz4 = dz3 / dl3;
-          const t2 = Math.min(hx3 / Math.max(Math.abs(nx4), 1e-6),
-                              hz3 / Math.max(Math.abs(nz4), 1e-6));
-          const ex2 = cx3 + nx4 * t2 * 1.01, ez2 = cz3 + nz4 * t2 * 1.01;
-          if (_polyEdgeD(b.pts, ex2, ez2) > 1.4) continue;   // r13: real wall only
+          // r15: bbox face + a "is it near a wall" rescue test, which both
+          // floated signs off diagonal corners and silently dropped the ones
+          // it caught. Real edge, real normal.
+          const fe3 = faceEdge(b.pts, cx3, cz3, bx, bz, 3.8);
+          if (!fe3) continue;
+          const nx4 = fe3.nx, nz4 = fe3.nz;
+          const ex2 = fe3.x + nx4 * 0.09, ez2 = fe3.z + nz4 * 0.09;
           if ((b.h || 9) < 5.5) continue;   // r14: no signs above short roofs
           const name = NAMES[ns % NAMES.length];
           const sc2 = document.createElement('canvas');
@@ -2957,21 +3270,37 @@ async function main() {
         const rngNe = mulberry32(SPEC.seed + 606);
         const neonCols = [0xff3d7a, 0x35d0ff, 0xffd23d, 0x7cff4a, 0xc86bff];
         let placedN = 0;
-        for (const bb2 of bldBoxes) {
-          if (placedN >= 36 || rngNe() < 0.45) continue;
-          const faces = [
-            [(bb2[0] + bb2[2]) / 2, bb2[1] - 0.15, 0],
-            [(bb2[0] + bb2[2]) / 2, bb2[3] + 0.15, 0],
-            [bb2[0] - 0.15, (bb2[1] + bb2[3]) / 2, Math.PI / 2],
-            [bb2[2] + 0.15, (bb2[1] + bb2[3]) / 2, Math.PI / 2]];
-          const f = faces[Math.floor(rngNe() * 4)];
-          const nw = 2.2 + rngNe() * 2.4;
+        // 2026-08-06: these were placed on BOUNDING-BOX faces, so on every
+        // building whose footprint is not an axis-aligned rectangle the sign
+        // hung in mid-air over the street — a 10m magenta slab floating in
+        // front of the camera was the single most broken thing on screen.
+        // Same edge picker as everything else that hangs on a facade.
+        for (const b3 of (OSM.buildings || [])) {
+          if (placedN >= 36) break;
+          if (rngNe() < 0.45) continue;
+          let n3x = 1e9, n3z = 1e9, x3x = -1e9, x3z = -1e9;
+          for (const q of b3.pts) {
+            n3x = Math.min(n3x, q[0]); x3x = Math.max(x3x, q[0]);
+            n3z = Math.min(n3z, q[1]); x3z = Math.max(x3z, q[1]);
+          }
+          const c3x = (n3x + x3x) / 2, c3z = (n3z + x3z) / 2;
+          let d3 = 1e9, r3x = 0, r3z = 0;
+          for (const r of OSM.roads || []) for (const q of r.pts) {
+            const dd = (q[0] - c3x) ** 2 + (q[1] - c3z) ** 2;
+            if (dd < d3) { d3 = dd; r3x = q[0]; r3z = q[1]; }
+          }
+          if (d3 > 40 * 40) continue;
+          const fe4 = faceEdge(b3.pts, c3x, c3z, r3x, r3z, 3.2);
+          if (!fe4) continue;
+          const nw = Math.min(2.2 + rngNe() * 2.4, fe4.len * 0.6);
           const sgn = new THREE.Mesh(new THREE.PlaneGeometry(nw, 0.7),
             new THREE.MeshStandardMaterial({ color: 0x101014, side: THREE.DoubleSide,
               emissive: neonCols[Math.floor(rngNe() * neonCols.length)],
               emissiveIntensity: 2.4 }));
-          sgn.position.set(f[0], hAt(f[0], f[1]) + 3.1, f[1]);
-          sgn.rotation.y = f[2];
+          const sx3 = fe4.x + fe4.nx * 0.12 - fe4.nz * (rngNe() - 0.5) * (fe4.len - nw);
+          const sz3 = fe4.z + fe4.nz * 0.12 + fe4.nx * (rngNe() - 0.5) * (fe4.len - nw);
+          sgn.position.set(sx3, hAt(sx3, sz3) + 3.1, sz3);
+          sgn.rotation.y = Math.atan2(fe4.nx, fe4.nz);
           scene.add(sgn);
           placedN++;
         }
