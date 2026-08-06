@@ -3220,6 +3220,176 @@ async function main() {
           scene.add(flP); scene.add(flC);
           console.log('[game] flags: ' + nf2);
         }
+        // ── SIDEWALK KIT (2026-08-06) ──────────────────────────────────
+        // Three of the five reference photos are dominated by things that are
+        // not buildings and not cars: a sidewalk shed over the pavement, an
+        // A-board outside a shop, a rank of newspaper boxes, a standpipe on
+        // the wall. They sit at eye level, which is where the follow-cam
+        // lives, and their absence is why the pavement read as swept.
+        // Everything here is merged or instanced: four draw calls total.
+        {
+          const rngK = mulberry32(SPEC.seed + 6161);
+          const shedFrame = [], shedFascia = [];
+          const boards = [], boxSpots = [], pipeSpots = [];
+          for (const fc of feCand) {
+            const bpts = fc[0], cxK = fc[1], czK = fc[2], gyK = fc[3];
+            const hK = fc[4], shopK = fc[9];
+            if (hK < 7) continue;
+            let bdK = 1e9, bxK = 0, bzK = 0;
+            for (const r of OSM.roads || []) for (const q of r.pts) {
+              const d = (q[0] - cxK) ** 2 + (q[1] - czK) ** 2;
+              if (d < bdK) { bdK = d; bxK = q[0]; bzK = q[1]; }
+            }
+            if (bdK > 42 * 42) continue;
+            const feK = faceEdge(bpts, cxK, czK, bxK, bzK, 5.0);
+            if (!feK) continue;
+            const nxK = feK.nx, nzK = feK.nz;
+            const txK = -nzK, tzK = nxK;              // along the wall
+            const eLK = Math.min(feK.len, 20);
+            // A SIDEWALK SHED, on about one building in six. Half of New York
+            // is under one at any time and nothing else says the city is
+            // being worked on rather than modelled.
+            if (rngK() < 0.17 && eLK > 8) {
+              const DECK = 3.9, DEP = 2.3;
+              const nPost = Math.max(3, Math.round(eLK / 2.7));
+              for (let k = 0; k <= nPost; k++) {
+                const al = -eLK / 2 + k * (eLK / nPost);
+                for (const dp of [0.25, DEP - 0.25]) {
+                  const px7 = feK.x + txK * al + nxK * dp;
+                  const pz7 = feK.z + tzK * al + nzK * dp;
+                  const pg7 = new THREE.BoxGeometry(0.13, DECK, 0.13);
+                  pg7.translate(px7, gyK + DECK / 2, pz7);
+                  shedFrame.push(pg7);
+                }
+              }
+              const dg7 = new THREE.BoxGeometry(eLK, 0.16, DEP);
+              dg7.rotateY(Math.atan2(nxK, nzK));
+              dg7.translate(feK.x + nxK * (DEP / 2), gyK + DECK, feK.z + nzK * (DEP / 2));
+              shedFrame.push(dg7);
+              const fg7 = new THREE.BoxGeometry(eLK, 0.62, 0.1);
+              fg7.rotateY(Math.atan2(nxK, nzK));
+              fg7.translate(feK.x + nxK * (DEP - 0.02), gyK + DECK + 0.36,
+                            feK.z + nzK * (DEP - 0.02));
+              shedFascia.push(fg7);
+            }
+            // freestanding kit lives ON the pavement, out from the wall
+            const outK = 1.9 + rngK() * 0.7;
+            const slideK = (rngK() - 0.5) * Math.max(0, eLK - 3);
+            const fxK = feK.x + nxK * outK + txK * slideK;
+            const fzK = feK.z + nzK * outK + tzK * slideK;
+            if (!inBldg(fxK, fzK, 0.4) && !_onRoad(fxK, fzK, 0.5)
+                && Math.hypot(fxK, fzK) > 12) {
+              const yawK = Math.atan2(nxK, nzK);
+              if (shopK && rngK() < 0.5) boards.push([fxK, fzK, yawK]);
+              else if (rngK() < 0.4) boxSpots.push([fxK, fzK, yawK]);
+            }
+            // standpipe: on the wall, always, because every building has one
+            if (rngK() < 0.55) {
+              const sl2 = (rngK() - 0.5) * Math.max(0, eLK - 2);
+              pipeSpots.push([feK.x + txK * sl2 + nxK * 0.18, gyK,
+                              feK.z + tzK * sl2 + nzK * 0.18,
+                              Math.atan2(nxK, nzK)]);
+            }
+          }
+          if (shedFrame.length) {
+            const fm7 = new THREE.Mesh(mergeGeometries(shedFrame, false),
+              new THREE.MeshStandardMaterial({ color: 0x8e9298, metalness: 0.55,
+                roughness: 0.6 }));
+            fm7.castShadow = fm7.receiveShadow = true;
+            scene.add(fm7);
+            for (const g7 of shedFrame) g7.dispose();
+            const fa7 = new THREE.Mesh(mergeGeometries(shedFascia, false),
+              new THREE.MeshStandardMaterial({ color: 0x1f6b45, roughness: 0.88 }));
+            fa7.castShadow = true;
+            scene.add(fa7);
+            for (const g7 of shedFascia) g7.dispose();
+            console.log('[game] sidewalk sheds: ' + shedFascia.length);
+          }
+          // A-BOARD: two leaves leaning together, one instanced mesh
+          if (boards.length) {
+            const l1 = new THREE.BoxGeometry(0.62, 0.92, 0.04);
+            l1.translate(0, 0, 0.13); l1.rotateX(0.20); l1.translate(0, 0.47, 0);
+            const l2 = new THREE.BoxGeometry(0.62, 0.92, 0.04);
+            l2.translate(0, 0, -0.13); l2.rotateX(-0.20); l2.translate(0, 0.47, 0);
+            const ab = new THREE.InstancedMesh(mergeGeometries([l1, l2], false),
+              new THREE.MeshStandardMaterial({ color: 0x2b2b2b, roughness: 0.9,
+                side: THREE.DoubleSide }), Math.min(boards.length, 30));
+            const MK = new THREE.Matrix4(), QK = new THREE.Quaternion();
+            const EK = new THREE.Euler(), SK = new THREE.Vector3(1, 1, 1);
+            const VK = new THREE.Vector3();
+            let nb7 = 0;
+            for (const bb of boards) {
+              if (nb7 >= 30) break;
+              EK.set(0, bb[2], 0); QK.setFromEuler(EK);
+              VK.set(bb[0], hAt(bb[0], bb[1]), bb[1]);
+              ab.setMatrixAt(nb7++, MK.compose(VK, QK, SK));
+            }
+            ab.count = nb7; ab.instanceMatrix.needsUpdate = true;
+            ab.castShadow = true; scene.add(ab);
+            l1.dispose(); l2.dispose();
+            console.log('[game] a-boards: ' + nb7);
+          }
+          // NEWSPAPER BOXES: they come in ranks of two or three, never alone
+          if (boxSpots.length) {
+            const bxg = new THREE.BoxGeometry(0.44, 1.05, 0.42);
+            bxg.translate(0, 0.52, 0);
+            const CAPB = 44;
+            const nb8 = new THREE.InstancedMesh(bxg,
+              new THREE.MeshStandardMaterial({ roughness: 0.72, metalness: 0.25 }),
+              CAPB);
+            const BC = [new THREE.Color(0xc02a2a), new THREE.Color(0x1c5aa8),
+                        new THREE.Color(0x2a2a2a), new THREE.Color(0x1f7a4a),
+                        new THREE.Color(0xd8a416)];
+            const MK2 = new THREE.Matrix4(), QK2 = new THREE.Quaternion();
+            const EK2 = new THREE.Euler(), SK2 = new THREE.Vector3(1, 1, 1);
+            const VK2 = new THREE.Vector3();
+            let nn = 0;
+            for (const bs2 of boxSpots) {
+              const rank = 2 + Math.floor(rngK() * 2);
+              for (let k = 0; k < rank && nn < CAPB; k++) {
+                const off = (k - (rank - 1) / 2) * 0.5;
+                const ox2 = bs2[0] + Math.cos(bs2[2]) * off;
+                const oz2 = bs2[1] - Math.sin(bs2[2]) * off;
+                EK2.set(0, bs2[2], 0); QK2.setFromEuler(EK2);
+                VK2.set(ox2, hAt(ox2, oz2), oz2);
+                nb8.setMatrixAt(nn, MK2.compose(VK2, QK2, SK2));
+                nb8.setColorAt(nn, BC[Math.floor(rngK() * BC.length)]);
+                nn++;
+              }
+            }
+            nb8.count = nn; nb8.instanceMatrix.needsUpdate = true;
+            if (nb8.instanceColor) nb8.instanceColor.needsUpdate = true;
+            nb8.castShadow = true; scene.add(nb8);
+            console.log('[game] newspaper boxes: ' + nn);
+          }
+          // STANDPIPE: the siamese fire connection, brass, on every wall
+          if (pipeSpots.length) {
+            const st1 = new THREE.CylinderGeometry(0.055, 0.055, 1.0, 8);
+            st1.translate(0, 0.5, 0);
+            const st2 = new THREE.CylinderGeometry(0.075, 0.075, 0.30, 8);
+            st2.rotateZ(Math.PI / 2.6); st2.translate(-0.16, 1.05, 0.06);
+            const st3 = new THREE.CylinderGeometry(0.075, 0.075, 0.30, 8);
+            st3.rotateZ(-Math.PI / 2.6); st3.translate(0.16, 1.05, 0.06);
+            const CAPP = 40;
+            const sp7 = new THREE.InstancedMesh(mergeGeometries([st1, st2, st3], false),
+              new THREE.MeshStandardMaterial({ color: 0xa8813c, metalness: 0.85,
+                roughness: 0.38 }), CAPP);
+            const MK3 = new THREE.Matrix4(), QK3 = new THREE.Quaternion();
+            const EK3 = new THREE.Euler(), SK3 = new THREE.Vector3(1, 1, 1);
+            const VK3 = new THREE.Vector3();
+            let np2 = 0;
+            for (const ps of pipeSpots) {
+              if (np2 >= CAPP) break;
+              EK3.set(0, ps[3], 0); QK3.setFromEuler(EK3);
+              VK3.set(ps[0], ps[1], ps[2]);
+              sp7.setMatrixAt(np2++, MK3.compose(VK3, QK3, SK3));
+            }
+            sp7.count = np2; sp7.instanceMatrix.needsUpdate = true;
+            sp7.castShadow = true; scene.add(sp7);
+            st1.dispose(); st2.dispose(); st3.dispose();
+            console.log('[game] standpipes: ' + np2);
+          }
+        }
         if (awn.instanceColor) awn.instanceColor.needsUpdate = true;
         awn.castShadow = true;
         scene.add(awn);
@@ -3675,6 +3845,54 @@ async function main() {
           // all of it. 0.5 is what actually lands under a night sky.
           gmat.color.multiplyScalar(0.5);
           gmat.needsUpdate = true;
+          // ZEBRA CROSSWALKS (2026-08-06). Every reference photo has them
+          // and the eye reads them as "this is a street" before it reads a
+          // single building. They join dashGeos so the whole of the city's
+          // white paint stays ONE draw call.
+          {
+            const rngZ = mulberry32(SPEC.seed + 5151);
+            let nz2 = 0;
+            for (const j2 of (window.__junctions || []).slice(0, 26)) {
+              // the bars run ACROSS the road, so they need the road's
+              // direction at this junction, not the junction alone
+              let bs = null, bdz = 1e9;
+              for (const sg3 of _roadSegs) {
+                const mxz2 = (sg3[0] + sg3[2]) / 2, mzz2 = (sg3[1] + sg3[3]) / 2;
+                const d2 = (mxz2 - j2[0]) ** 2 + (mzz2 - j2[1]) ** 2;
+                if (d2 < bdz) { bdz = d2; bs = sg3; }
+              }
+              if (!bs) continue;
+              const dxz = bs[2] - bs[0], dzz = bs[3] - bs[1];
+              const lz = Math.hypot(dxz, dzz) || 1;
+              const uxz = dxz / lz, uzz = dzz / lz;
+              const hwz = bs[4];
+              // set back from the middle of the junction on both approaches
+              for (const app of [1, -1]) {
+                const bxz = j2[0] + uxz * (hwz + 1.7) * app;
+                const bzz = j2[1] + uzz * (hwz + 1.7) * app;
+                if (!_onRoad(bxz, bzz, 0.1)) continue;
+                const NB = 6;
+                for (let k2 = 0; k2 < NB; k2++) {
+                  const off = (-hwz + 0.7) + k2 * ((hwz * 2 - 1.4) / (NB - 1));
+                  const sx6 = bxz - uzz * off, sz6 = bzz + uxz * off;
+                  const bar = new THREE.PlaneGeometry(0.42, 2.4);
+                  bar.rotateX(-Math.PI / 2);
+                  bar.rotateY(Math.atan2(uxz, uzz));
+                  bar.translate(sx6, hAt(sx6, sz6) + 0.022, sz6);
+                  // mergeGeometries needs an index attribute on ALL of its
+                  // inputs or on NONE. PlaneGeometry is indexed and the road
+                  // dashes are not, so pushing these raw killed the whole
+                  // merge — and a failed merge here takes the entire runtime
+                  // down while the build still reports complete (TRAP 4).
+                  dashGeos.push(dashGeos.length && !dashGeos[0].index
+                    ? bar.toNonIndexed() : bar);
+                  nz2++;
+                }
+              }
+            }
+            if (rngZ() < 2) { /* deterministic hook */ }
+            console.log('[game] crosswalk bars: ' + nz2);
+          }
           const dash = new THREE.Mesh(mergeGeometries(dashGeos, false),
             new THREE.MeshBasicMaterial({ color: 0xd8d8d2, side: THREE.DoubleSide }));
           scene.add(dash);
@@ -4124,8 +4342,10 @@ async function main() {
       t.anisotropy = renderer.capabilities.getMaxAnisotropy();
       return t;
     };
-    const wallFile = IK === 'house' ? 'plaster' : 'stone';
-    const floorFile = IK === 'dungeon' ? 'stone' : 'planks';
+    // an office floor is painted board and carpet tile, not keep masonry
+    const wallFile = (IK === 'house' || IK === 'office') ? 'plaster' : 'stone';
+    const floorFile = IK === 'dungeon' ? 'stone'
+                    : (IK === 'office' ? 'concrete' : 'planks');
     const bx = PLAN.bounds[0], bz = PLAN.bounds[1];
     const fmat = new THREE.MeshStandardMaterial({
       map: itex(floorFile, bx / 4, bz / 4), roughness: 0.9 });
@@ -4281,6 +4501,62 @@ async function main() {
     }
     // KIND DECOR (moon plan 2.4): castles hang banners + a carpet runner
     // down the hall; houses get warm rugs. Cheap planes, big identity.
+    if (IK === 'office') {
+      // What says OFFICE is not a texture: it is the horizon of low
+      // partitions, a reception desk facing the door, and cold overhead
+      // strips instead of firelight. All merged or instanced — a heist
+      // interior is drawn on top of the whole city and cannot afford
+      // per-desk draw calls.
+      const rngO = mulberry32((SPEC.seed || 1) + 977);
+      const hw3 = PLAN.rooms[0][2] / 2, hd3 = PLAN.rooms[0][3] / 2;
+      // an explicit map on purpose: the late flat-material pass re-textures
+      // any untextured material by NAME heuristic, and an unnamed grey one
+      // came back wearing fieldstone rubble — cubicle walls made of castle
+      // masonry (2026-08-06)
+      const partM = new THREE.MeshStandardMaterial({ color: 0xb9bcb4,
+        map: itex('plaster', 3, 1), roughness: 0.9, side: THREE.DoubleSide });
+      const parts = [];
+      // cubicle runs down the floor plate, gapped so you can walk between
+      for (let r2 = 0; r2 < 3; r2++) {
+        const pz2 = -hd3 + (r2 + 1) * (hd3 * 2 / 4);
+        for (let c2 = -1; c2 <= 1; c2++) {
+          if (c2 === 0) continue;
+          const pg2 = new THREE.BoxGeometry(hw3 * 0.62, 1.35, 0.09);
+          pg2.translate(c2 * hw3 * 0.42 + OX, 0.68, pz2);
+          parts.push(pg2);
+          const pg3 = new THREE.BoxGeometry(0.09, 1.35, 2.6);
+          pg3.translate(c2 * hw3 * 0.11 + OX, 0.68, pz2 + 1.3);
+          parts.push(pg3);
+        }
+      }
+      // reception desk, squared up to the entry so it reads as the front
+      const rd2 = new THREE.BoxGeometry(4.6, 1.05, 0.75);
+      rd2.translate(OX, 0.53, -hd3 + 3.2);
+      parts.push(rd2);
+      const rt2 = new THREE.BoxGeometry(5.0, 0.09, 1.05);
+      rt2.translate(OX, 1.08, -hd3 + 3.2);
+      parts.push(rt2);
+      const pMesh = new THREE.Mesh(mergeGeometries(parts, false), partM);
+      pMesh.castShadow = pMesh.receiveShadow = true;
+      scene.add(pMesh);
+      for (const g5 of parts) g5.dispose();
+      // ceiling strips: emissive only, because the WebGL2 light budget is
+      // what renders a BLACK ROOM rather than an error (TRAP 2)
+      const stripM = new THREE.MeshBasicMaterial({ color: 0xe8f2ff, toneMapped: false });
+      const strips = [];
+      for (let r2 = 0; r2 < 4; r2++) {
+        for (const c2 of [-1, 1]) {
+          const sg2 = new THREE.BoxGeometry(0.42, 0.06, hd3 * 0.7);
+          sg2.translate(c2 * hw3 * 0.45 + OX, topY - 0.10,
+                        -hd3 + (r2 + 0.5) * (hd3 * 2 / 4));
+          strips.push(sg2);
+        }
+      }
+      const sMesh2 = new THREE.Mesh(mergeGeometries(strips, false), stripM);
+      scene.add(sMesh2);
+      for (const g5 of strips) g5.dispose();
+      if (rngO() < 2) { /* seeded for future layout variation */ }
+    }
     if (IK === 'castle') {
       const rngD2 = mulberry32((SPEC.seed || 1) + 881);
       const bmatD = new THREE.MeshStandardMaterial({
