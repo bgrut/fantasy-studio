@@ -1497,12 +1497,12 @@ async function main() {
     // Wall material is plain masonry at brick-sized texel density, which is
     // the trade that buys all of the above.
     const _FACADE = {
-      0: { tex: 'plaster',  tile: 3.0, st: 3.2, bay: 3.0, pier: 1.40, spand: 1.20 },
-      2: { tex: 'brick',    tile: 2.2, st: 3.3, bay: 2.9, pier: 1.50, spand: 1.30 },
-      3: { tex: 'stone',    tile: 3.0, st: 3.6, bay: 3.4, pier: 1.70, spand: 1.40 },
-      5: { tex: 'brick',    tile: 2.6, st: 4.0, bay: 3.5, pier: 1.40, spand: 1.30 },
-      6: { tex: 'concrete', tile: 4.0, st: 3.1, bay: 3.2, pier: 1.00, spand: 1.10 },
-      7: { tex: 'plaster',  tile: 3.2, st: 4.2, bay: 3.8, pier: 1.90, spand: 1.60 },
+      0: { tex: 'stucco', tile: 3.0, st: 3.2, bay: 3.0, pier: 1.40, spand: 1.20 },
+      2: { tex: 'brick',  tile: 2.2, st: 3.3, bay: 2.9, pier: 1.50, spand: 1.30 },
+      3: { tex: 'ashlar', tile: 2.4, st: 3.6, bay: 3.4, pier: 1.70, spand: 1.40 },
+      5: { tex: 'brick',  tile: 2.6, st: 4.0, bay: 3.5, pier: 1.40, spand: 1.30 },
+      6: { tex: 'panel',  tile: 3.6, st: 3.1, bay: 3.2, pier: 1.00, spand: 1.10 },
+      7: { tex: 'ashlar', tile: 2.6, st: 4.2, bay: 3.8, pier: 1.90, spand: 1.60 },
     };
     const WT = 0.42;                  // wall thickness == window reveal depth
     // Per-building variation. "Each building can be a bit different" is not a
@@ -1636,7 +1636,7 @@ async function main() {
     }
     // Merged per masonry TEXTURE, not per building: four draw calls carry
     // every punched facade in the city.
-    const wallBoxes = { brick: [], stone: [], concrete: [], plaster: [] };
+    const wallBoxes = { brick: [], ashlar: [], stucco: [], panel: [] };
     const backGeos = [];                       // the plain wall behind the reveals
     const glassI = [];                         // [x,y,z,yaw,w,h,lit,r,g,b]
     const _BOX1 = new THREE.BoxGeometry(1, 1, 1);
@@ -1688,7 +1688,7 @@ async function main() {
     }
     // The wall grid for one building: a pier on every bay boundary, a
     // spandrel on every storey line. What is LEFT between them is the window.
-    function buildPunched(pts, cx, cz, gy, h, F, tint) {
+    function buildPunched(pts, cx, cz, gy, h, F, tint, prog) {
       const sink = wallBoxes[F.tex] || wallBoxes.brick;
       const nSt = Math.max(1, Math.round(h / F.st));
       const rngQ = mulberry32(Math.floor(Math.abs(cx) * 131 + Math.abs(cz) * 977) + 5);
@@ -1734,9 +1734,20 @@ async function main() {
         // masonry rather than a window wrapping an arris. Slightly thicker
         // than the spandrels, which gives the wall a vertical rhythm instead
         // of one flat plane with holes in it.
+        // SHOP SPAN (2026-08-06): a retail ground floor is ONE long run of
+        // glass. Carrying the upstairs pier rhythm down to the pavement is
+        // what made a street of shops read as public housing. Program decides,
+        // so a cafe opens up and an apartment block does not.
+        const shop = _SHOPPROG.has(prog) && nSt >= 2 && L > F.bay * 2.2;
+        const shopTop = gy + F.st;
         for (let k = 0; k <= nb; k++) {
-          wallBox(sink, a[0], a[1], ux, uz, nx, nz, k * bw, gy + h / 2, pw, h, gy,
-                  tone, WT + 0.07);
+          if (shop && k > 0 && k < nb) {
+            wallBox(sink, a[0], a[1], ux, uz, nx, nz, k * bw,
+                    (shopTop + gy + h) / 2, pw, gy + h - shopTop, gy, tone, WT + 0.07);
+          } else {
+            wallBox(sink, a[0], a[1], ux, uz, nx, nz, k * bw, gy + h / 2, pw, h, gy,
+                    tone, WT + 0.07);
+          }
         }
         for (let s = 0; s <= nSt; s++) {
           const top = s === nSt;
@@ -1763,6 +1774,13 @@ async function main() {
           const y0 = stY(s);
           const y1 = gy + (s + 1) * F.st - (s === nSt - 1 ? sh2 : 0);
           if (y1 - y0 < 0.6) continue;
+          if (shop && s === 0) {
+            // one pane for the whole span, lit warm: a shop at night is the
+            // brightest thing at street level and it is what you walk past
+            glassI.push([mx - nx * (WT - 0.05), (y0 + y1) / 2, mz - nz * (WT - 0.05),
+                         Math.atan2(nx, nz), L - pw * 1.15, y1 - y0, 0.02]);
+            continue;
+          }
           for (let k = 0; k < nb; k++) {
             const al = (k + 0.5) * bw;
             // shop windows are lit far more often than flats, and they are
@@ -1784,7 +1802,35 @@ async function main() {
     // [pts, cx, cz, groundY, height, bucket] — the fire-escape pass below runs
     // long after this loop and needs the height that MANHATTAN PROFILE derived
     // here, which is not recoverable from b.h alone.
+    // Every decoration pass downstream MUST iterate this and not OSM.buildings.
+    // OSM.buildings includes footprints the spawn/path cull threw away, so a
+    // pass that walks the raw list hangs its awnings and shop signs in the
+    // empty air where a building was never built — which is exactly what
+    // "GOLDEN DRAGON floating in the street" was. (2026-08-06)
     const feCand = [];
+    // LAND USE. A city is not a texture problem: an apartment block with a
+    // restaurant sign on it, or a tower with no ground floor, reads wrong no
+    // matter how good the facade is. Program drives signage, shopfronts and
+    // awnings so the street tells you what each building IS.
+    const _PROGNAMES = {
+      cafe: ['STAR CAFE', 'BEAN & BAR', 'CAFE ROMA', 'DAILY GRIND', 'ESPRESSO'],
+      restaurant: ["MARIO'S PIZZA", 'GOLDEN DRAGON', "JOE'S DINER", 'SUSHI KO',
+        'CITY DELI', 'NOODLE HOUSE'],
+      store: ['GREEN MARKET', 'RECORDS', 'FLOWERS', 'HARDWARE', 'BODEGA 24',
+        'LAUNDROMAT', 'PHARMACY'],
+      bar: ["LUCKY'S BAR", 'THE ROXY', 'CINEMA', 'JAZZ CLUB'],
+      hotel: ['HOTEL RIALTO', 'THE CARLYLE', 'GRAND HOTEL'],
+    };
+    const _SHOPPROG = new Set(['cafe', 'restaurant', 'store', 'bar']);
+    function programFor(h, rnd) {
+      if (h > 42) return rnd < 0.82 ? 'office' : 'hotel';
+      if (h > 24) return rnd < 0.42 ? 'office' : rnd < 0.62 ? 'hotel' : 'apartment';
+      if (rnd < 0.34) return 'apartment';
+      if (rnd < 0.52) return 'store';
+      if (rnd < 0.68) return 'restaurant';
+      if (rnd < 0.82) return 'cafe';
+      return rnd < 0.92 ? 'bar' : 'apartment';
+    }
     const tintA = new THREE.Color(0x8d8a84), tintB = new THREE.Color(0x5f6b78);
     const rngB = mulberry32(SPEC.seed + 77);
     // ExtrudeGeometry groups: materialIndex 0 = caps (roof/underside after the
@@ -1894,6 +1940,7 @@ async function main() {
         // line instead of slicing a window row in half — and for a punched
         // facade it also means the top storey is a whole storey, so the wall
         // grid closes cleanly under the parapet instead of ending mid-window.
+        const _prog = programFor(_h0, rngB());
         const _fac = facadeOf(_bkt, mnx, mnz);
         const _sh = _fac ? _fac.st : _storeyH(_bkt);
         const h = Math.max(_fac ? 2 : 1, Math.round(_h0 / _sh)) * _sh;
@@ -1942,12 +1989,12 @@ async function main() {
             }
             backGeos.push(sub);
           }
-          buildPunched(b.pts, cx, cz, gy, h, _fac, tint);
+          buildPunched(b.pts, cx, cz, gy, h, _fac, tint, _prog);
         } else {
           metricWallUV(geo, b.pts, gy, h, _bkt);
           splitGroups(geo, _bkt);
         }
-        feCand.push([b.pts, cx, cz, gy, h, _bkt, tint]);
+        feCand.push([b.pts, cx, cz, gy, h, _bkt, tint, _prog]);
         let _capPts = b.pts, _capTop = gy + h;
         // r14 SETBACKS: real towers STEP BACK as they rise — a single
         // extruded prism is why buildings read as 'geometric shapes'.
@@ -2014,21 +2061,119 @@ async function main() {
         t.anisotropy = renderer.capabilities.getMaxAnisotropy();
         return t;
       };
-      const _TILE = { brick: 2.2, stone: 3.0, concrete: 4.0, plaster: 3.0 };
-      const _ROUGH = { brick: 0.94, stone: 0.88, concrete: 0.9, plaster: 0.92 };
+      const _TILE = { brick: 2.2, ashlar: 2.4, stucco: 3.0, panel: 3.6 };
+      const _ROUGH = { brick: 0.94, ashlar: 0.86, stucco: 0.93, panel: 0.88 };
+      // ── WALL TEXTURES ARE DRAWN, NOT PHOTOGRAPHED (2026-08-06) ──────────
+      // The library's stone.jpg is fieldstone RUBBLE and its concrete.jpg is
+      // paving slabs. Both are fine on the ground and both read as a castle
+      // the moment they go on a wall at storey scale — which is exactly how
+      // the first punched city came out. brick.jpg is the one that works, so
+      // it stays; the rest are drawn, which also means the coursing pitch is
+      // right by construction instead of by tiling luck.
+      const _mkWall = (kind) => {
+        const N = 512, c = document.createElement('canvas');
+        c.width = c.height = N;
+        const g = c.getContext('2d');
+        const rn = mulberry32(SPEC.seed + 4400 + kind.charCodeAt(0));
+        if (kind === 'ashlar') {
+          // cut limestone: 0.4m courses, 1.2m blocks, running bond. This is
+          // what pre-war New York is actually faced with.
+          g.fillStyle = '#5f584c'; g.fillRect(0, 0, N, N);      // joint
+          const rows = 6, ch = N / rows, bl = N / 2;
+          for (let r = 0; r < rows; r++) {
+            const off = (r % 2) ? bl / 2 : 0;
+            for (let k = -1; k < 3; k++) {
+              const x = k * bl + off, y = r * ch;
+              const v = 168 + Math.floor(rn() * 44);
+              g.fillStyle = 'rgb(' + v + ',' + (v - 7) + ',' + (v - 20) + ')';
+              g.fillRect(x + 2.5, y + 2.5, bl - 5, ch - 5);
+              g.fillStyle = 'rgba(112,104,90,' + (0.04 + rn() * 0.10) + ')';
+              g.fillRect(x + 2.5, y + 2.5 + (ch - 5) * 0.62, bl - 5, (ch - 5) * 0.38);
+            }
+          }
+        } else if (kind === 'stucco') {
+          g.fillStyle = '#b5ac9c'; g.fillRect(0, 0, N, N);
+          for (let i = 0; i < 2400; i++) {
+            const d2 = rn() < 0.5;
+            g.fillStyle = d2 ? 'rgba(148,140,126,0.10)' : 'rgba(208,200,186,0.10)';
+            g.beginPath(); g.arc(rn() * N, rn() * N, 2 + rn() * 13, 0, 6.2832); g.fill();
+          }
+          for (let i = 0; i < 44; i++) {          // rain staining, always down
+            g.fillStyle = 'rgba(124,116,102,' + (0.03 + rn() * 0.06) + ')';
+            g.fillRect(rn() * N, rn() * N, 3 + rn() * 9, 40 + rn() * 190);
+          }
+        } else if (kind === 'panel') {
+          g.fillStyle = '#a6a29a'; g.fillRect(0, 0, N, N);
+          for (let i = 0; i < 1900; i++) {
+            g.fillStyle = 'rgba(150,147,140,' + (0.04 + rn() * 0.07) + ')';
+            g.beginPath(); g.arc(rn() * N, rn() * N, 1 + rn() * 8, 0, 6.2832); g.fill();
+          }
+          g.strokeStyle = 'rgba(118,115,108,0.6)'; g.lineWidth = 3;
+          for (const t of [0.5, N / 2 + 0.5]) {
+            g.beginPath(); g.moveTo(t, 0); g.lineTo(t, N); g.stroke();
+            g.beginPath(); g.moveTo(0, t); g.lineTo(N, t); g.stroke();
+          }
+          for (let i = 0; i < 26; i++) {          // form-tie holes
+            g.fillStyle = 'rgba(108,104,98,0.5)';
+            g.beginPath(); g.arc(rn() * N, rn() * N, 2.5, 0, 6.2832); g.fill();
+          }
+        }
+        return c;
+      };
+      // relief straight off the drawn albedo: the joints ARE the height
+      // field, so they cannot drift out of register with the courses
+      const _normalOf = (cv, amp) => {
+        const N = cv.width;
+        const src = cv.getContext('2d').getImageData(0, 0, N, N).data;
+        const L = new Float32Array(N * N);
+        for (let i = 0, q = 0; i < N * N; i++, q += 4) {
+          L[i] = (0.299 * src[q] + 0.587 * src[q + 1] + 0.114 * src[q + 2]) / 255;
+        }
+        const nc = document.createElement('canvas');
+        nc.width = nc.height = N;
+        const ng = nc.getContext('2d'), img = ng.createImageData(N, N);
+        const at = (x, y) => L[(((y % N) + N) % N) * N + (((x % N) + N) % N)];
+        for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+          const gx = at(x + 1, y) - at(x - 1, y), gy2 = at(x, y + 1) - at(x, y - 1);
+          const q = (y * N + x) * 4;
+          img.data[q] = Math.max(0, Math.min(255, (-gx * amp + 0.5) * 255));
+          img.data[q + 1] = Math.max(0, Math.min(255, (gy2 * amp + 0.5) * 255));
+          img.data[q + 2] = 255; img.data[q + 3] = 255;
+        }
+        ng.putImageData(img, 0, 0);
+        return nc;
+      };
+      const _canvasTex = (cv, tile, srgb) => {
+        const t = new THREE.CanvasTexture(cv);
+        t.wrapS = t.wrapT = THREE.RepeatWrapping;
+        t.repeat.set(1 / tile, 1 / tile);
+        if (srgb) t.colorSpace = THREE.SRGBColorSpace;
+        t.anisotropy = renderer.capabilities.getMaxAnisotropy();
+        return t;
+      };
       for (const key of Object.keys(wallBoxes)) {
         const list = wallBoxes[key];
         if (!list.length) continue;
+        let mp, nm;
+        if (key === 'brick') {
+          mp = _mTex(key, '', _TILE[key]);
+          nm = _mTex(key, '_n', _TILE[key]);
+        } else {
+          const cv = _mkWall(key);
+          mp = _canvasTex(cv, _TILE[key], true);
+          nm = _canvasTex(_normalOf(cv, key === 'ashlar' ? 3.2 : 1.4), _TILE[key], false);
+        }
         const m = new THREE.Mesh(mergeGeometries(list, false),
           new THREE.MeshStandardMaterial({
-            map: _mTex(key, '', _TILE[key]),
-            normalMap: _mTex(key, '_n', _TILE[key]),
+            map: mp, normalMap: nm,
             normalScale: new THREE.Vector2(1.1, 1.1),
             vertexColors: true, roughness: _ROUGH[key], metalness: 0.02 }));
         m.castShadow = m.receiveShadow = true;
         scene.add(m);
         for (const g2 of list) g2.dispose();
       }
+      console.log('[facade] wallBoxes=' + Object.keys(wallBoxes).map(k => k + ':' + wallBoxes[k].length).join(' ')
+        + ' backGeos=' + backGeos.length + ' capGeos=' + capGeos.length + ' glass=' + glassI.length);
       if (backGeos.length) {
         // deliberately dark and matte: this is what you look at down every
         // reveal, and a bright backing throws the depth away
@@ -2036,6 +2181,7 @@ async function main() {
           new THREE.MeshStandardMaterial({ color: 0x27241f, roughness: 0.97,
             metalness: 0.0 }));
         bm.receiveShadow = true;
+        bm.name = 'BACKING';
         scene.add(bm);
         for (const g2 of backGeos) g2.dispose();
       }
@@ -2107,9 +2253,26 @@ async function main() {
         // need a real light behind every window and the light budget is 4
         // toneMapped stays ON: unmapped, every lit pane clipped to the same
         // flat cream and the whole street lit up like paper
-        place(lit, new THREE.MeshBasicMaterial({ map: paneTex }), true);
-        place(dark, new THREE.MeshStandardMaterial({ map: paneTex, roughness: 0.12,
-          metalness: 0.6, envMapIntensity: 1.6, color: 0xffffff }), false);
+        // toneMapped:false — a lit window is a LIGHT SOURCE, and running it
+        // through the tone curve with everything else landed it at the same
+        // value as pale paint. Letting it clip is what makes it read as lit.
+        place(lit, new THREE.MeshBasicMaterial({ map: paneTex, toneMapped: false }), true);
+        // 2026-08-06: this was a near-mirror (roughness 0.12, env 1.6) over a
+        // near-white base, so on a night city every unlit pane sampled the
+        // warm sky and came back a streaky brown panel — the windows read as
+        // WOOD, which is the opposite of the depth the reveal just bought.
+        // Real glass at night is nearly black and only catches a sheen at
+        // grazing angles: dark base, environment demoted to a highlight.
+        // 2026-08-06: this was metalness 0.6 at envMapIntensity 1.6. A metal
+        // has no diffuse and tints its reflection by its base colour, so each
+        // unlit pane became a coloured mirror of a warm night sky and the
+        // whole grid read as WOOD PANELLING — the opposite of the depth the
+        // reveal had just bought. Glass is a DIELECTRIC: metalness 0, so the
+        // dark blue comes through and the environment is only a sheen.
+        // The base stays white because the per-instance colour above is what
+        // carries the tint; darkening both would crush the panes to black.
+        place(dark, new THREE.MeshStandardMaterial({ map: paneTex, roughness: 0.28,
+          metalness: 0.0, envMapIntensity: 0.45, color: 0xffffff }), false);
       }
     }
     if (wallBuckets.some(b => b.length) || capGeos.length) {
@@ -2821,7 +2984,10 @@ async function main() {
         // MISPLACED (user callout). Real streets put benches/dumpsters/cans
         // AGAINST BUILDING WALLS — same nearest-road edge projection as the
         // awnings, then 0.9m out from the wall, back to the building.
-        for (const b of (OSM.buildings || []).slice(0, 200)) {
+        // built buildings only — a bench against a wall that was culled is a
+        // bench in the middle of an empty plaza (2026-08-06)
+        for (const [bpts] of feCand) {
+          const b = { pts: bpts };
           if (nd >= 26 && ncn >= 52 && nb >= 26) break;
           if (rngF() > 0.5) continue;
           let mnx = 1e9, mnz = 1e9, mxx = -1e9, mxz = -1e9;
@@ -2896,6 +3062,25 @@ async function main() {
         }
         return false;
       };
+      // ── IS THIS POINT ON A CROSSING STREET? (2026-08-06) ───────────────
+      // Kerbs and the pavement band have to stop where another street cuts
+      // through, and _onRoad cannot answer that: the test point sits only
+      // ~0.4m outside its OWN carriageway, so any pad wide enough to catch a
+      // real crossing also rejects every kerb on the street it belongs to.
+      // That is why the pad was pinned at 0.22, and why kerb bars were left
+      // lying across wide or oblique junctions. Segments running nearly
+      // PARALLEL to the piece are the same street (or its continuation) by
+      // definition and are skipped, which frees the pad to be honest.
+      const _onCross = (px, pz, ux, uz, pad) => {
+        for (const s of _roadSegs) {
+          const L2 = Math.hypot(s[2] - s[0], s[3] - s[1]);
+          if (L2 < 0.5) continue;
+          const vx = (s[2] - s[0]) / L2, vz = (s[3] - s[1]) / L2;
+          if (Math.abs(vx * ux + vz * uz) > 0.85) continue;
+          if (_segD(px, pz, s[0], s[1], s[2], s[3]) < s[4] + pad) return true;
+        }
+        return false;
+      };
       const _polyEdgeD = (pts, px, pz) => {
         let m = 1e9;
         for (let i = 0; i < pts.length; i++) {
@@ -2904,6 +3089,9 @@ async function main() {
         }
         return m;
       };
+      // published for the minimap, which runs far below this and must not
+      // draw blocks the cull never built
+      window.__builtFootprints = feCand.map(e => ({ pts: e[0] }));
       // r8 AWNINGS: tilted storefront canopies on road-facing building
       // bases — with plinths + these, ground floors read as SHOPS instead
       // of texture meeting pavement. Instanced, per-instance color.
@@ -2920,16 +3108,19 @@ async function main() {
         const M4 = new THREE.Matrix4(), Q4 = new THREE.Quaternion();
         const E4 = new THREE.Euler(), S4 = new THREE.Vector3(1, 1, 1);
         let na = 0;
-        for (const b of OSM.buildings.slice(0, 140)) {
+        // built buildings only, and only ones with a shop under them — an
+        // awning over an apartment lobby is furniture nobody ordered
+        for (const [bpts, cx2, cz2, gyA, hA, bktA, tintA2, progA] of feCand) {
           if (na >= maxA) break;
-          if (rngA() > 0.55) continue;
+          if (!_SHOPPROG.has(progA)) continue;
+          if (rngA() > 0.8) continue;
           let mnx = 1e9, mnz = 1e9, mxx = -1e9, mxz = -1e9;
-          for (const p of b.pts) {
+          for (const p of bpts) {
             mnx = Math.min(mnx, p[0]); mxx = Math.max(mxx, p[0]);
             mnz = Math.min(mnz, p[1]); mxz = Math.max(mxz, p[1]);
           }
-          const cx2 = (mnx + mxx) / 2, cz2 = (mnz + mxz) / 2;
           if ((mxx - mnx) < 4.4 || (mxz - mnz) < 4.4) continue;
+          const b = { pts: bpts };
           // nearest road point -> awning faces the street
           let bd = 1e9, bx = 0, bz = 0;
           for (const r of OSM.roads) for (const p of r.pts) {
@@ -3152,22 +3343,28 @@ async function main() {
       // night. Individual meshes (14 draw calls, trivial).
       if (OSM.buildings && OSM.buildings.length && OSM.roads && OSM.roads.length) {
         const rngG2 = mulberry32(SPEC.seed + 909);
-        const NAMES = ["MARIO'S PIZZA", 'GOLDEN DRAGON', 'CITY DELI',
-          "LUCKY'S BAR", 'STAR CAFE', 'BODEGA 24', 'GREEN MARKET',
-          'THE ROXY', "JOE'S DINER", 'HOTEL RIALTO', 'CINEMA', 'RECORDS',
-          'FLOWERS', 'HARDWARE'];
+        // names now come from _PROGNAMES, keyed by what the building IS
         const SBG = ['#8a1f1f', '#1f4d8a', '#1f6b3a', '#6b3a8a', '#8a5a1f', '#222222'];
         const _nightS = SPEC.world.sky === 'night' || SPEC.world.sky === 'dusk';
         let ns = 0;
-        for (const b of OSM.buildings.slice(0, 300)) {
+        // feCand, NOT OSM.buildings: the raw list still contains every
+        // footprint the spawn/path cull threw away, so signs were being hung
+        // in the empty air where no building was ever built. That is the
+        // floating GOLDEN DRAGON, and awnings and street furniture had it
+        // too. (2026-08-06)
+        for (const [bpts, cx3, cz3, gy3, h3, bkt3, tint3, prog3] of feCand) {
           if (ns >= 40) break;             // r10: 14 signs vanished in a city
-          if (rngG2() > 0.45) continue;
+          // a sign belongs to a BUSINESS. Hanging "JOE'S DINER" on an
+          // apartment slab or a 60m office tower is the same class of error
+          // as hanging it in mid-air, just less obvious.
+          const pool = _PROGNAMES[prog3];
+          if (!pool) continue;
+          if (rngG2() > 0.82) continue;
           let mnx = 1e9, mnz = 1e9, mxx = -1e9, mxz = -1e9;
-          for (const p of b.pts) {
+          for (const p of bpts) {
             mnx = Math.min(mnx, p[0]); mxx = Math.max(mxx, p[0]);
             mnz = Math.min(mnz, p[1]); mxz = Math.max(mxz, p[1]);
           }
-          const cx3 = (mnx + mxx) / 2, cz3 = (mnz + mxz) / 2;
           if ((mxx - mnx) < 6 || (mxz - mnz) < 6) continue;
           let bd = 1e9, bx = 0, bz = 0;
           for (const r of OSM.roads) for (const p of r.pts) {
@@ -3178,12 +3375,12 @@ async function main() {
           // r15: bbox face + a "is it near a wall" rescue test, which both
           // floated signs off diagonal corners and silently dropped the ones
           // it caught. Real edge, real normal.
-          const fe3 = faceEdge(b.pts, cx3, cz3, bx, bz, 3.8);
+          const fe3 = faceEdge(bpts, cx3, cz3, bx, bz, 3.8);
           if (!fe3) continue;
           const nx4 = fe3.nx, nz4 = fe3.nz;
           const ex2 = fe3.x + nx4 * 0.09, ez2 = fe3.z + nz4 * 0.09;
-          if ((b.h || 9) < 5.5) continue;   // r14: no signs above short roofs
-          const name = NAMES[ns % NAMES.length];
+          if (h3 < 5.5) continue;          // r14: no signs above short roofs
+          const name = pool[Math.floor(rngG2() * pool.length) % pool.length];
           const sc2 = document.createElement('canvas');
           sc2.width = 512; sc2.height = 128;
           const sx = sc2.getContext('2d');
@@ -3278,6 +3475,19 @@ async function main() {
               envMapIntensity: _wetN ? 1.5 : 1.0, side: THREE.DoubleSide }));
           road.receiveShadow = true;
           scene.add(road);
+          // 2026-08-06: the world ground is shared with forests and deserts,
+          // so nobody had ever tuned it AGAINST asphalt. On a night city it
+          // came out brighter than every other surface on screen — a white
+          // courtyard with a road painted on it, which is exactly how the
+          // block read. Knocking it down puts plaza, pavement and asphalt in
+          // one believable range, and it means the gaps the pavement band
+          // leaves at intersections stop reading as bright holes.
+          // Scoped to OSM cities only; every other world keeps its ground.
+          // 0.66 was still the brightest surface on screen: city levels run
+          // environmentIntensity 2.4 for the facades, and the ground eats
+          // all of it. 0.5 is what actually lands under a night sky.
+          gmat.color.multiplyScalar(0.5);
+          gmat.needsUpdate = true;
           const dash = new THREE.Mesh(mergeGeometries(dashGeos, false),
             new THREE.MeshBasicMaterial({ color: 0xd8d8d2, side: THREE.DoubleSide }));
           scene.add(dash);
@@ -3315,7 +3525,22 @@ async function main() {
                   if (nc2 >= 6000) break;
                   const mxc = s[0] + ux * midd + oxc * sd;
                   const mzc = s[1] + uz * midd + ozc * sd;
-                  if (_onRoad(mxc, mzc, 0.22)) continue;   // crossing street
+                  // BOTH tests are load-bearing. _onRoad with its tight pad
+                  // is what keeps a kerb out of a NEARLY PARALLEL road's
+                  // carriageway (a service road beside an avenue) — dropping
+                  // it in favour of the crossing test alone put 10% of all
+                  // kerb pieces in the roadway, measured. _onCross is what
+                  // clears wide and oblique junctions, which the tight pad
+                  // cannot reach. Both ends as well as the middle: a 6m bar
+                  // half over a junction still reads as a kerb in the road.
+                  const e1x = s[0] + ux * d0 + oxc * sd, e1z = s[1] + uz * d0 + ozc * sd;
+                  const e2x = s[0] + ux * (d0 + pl) + oxc * sd,
+                        e2z = s[1] + uz * (d0 + pl) + ozc * sd;
+                  if (_onRoad(mxc, mzc, 0.22) || _onRoad(e1x, e1z, 0.22)
+                      || _onRoad(e2x, e2z, 0.22)
+                      || _onCross(mxc, mzc, ux, uz, 1.8)
+                      || _onCross(e1x, e1z, ux, uz, 1.8)
+                      || _onCross(e2x, e2z, ux, uz, 1.8)) continue;
                   CE.set(0, yawC, 0); CQ.setFromEuler(CE);
                   CS.set(0.3, 1, pl);
                   CM.compose(new THREE.Vector3(mxc, hAt(mxc, mzc), mzc), CQ, CS);
@@ -3359,7 +3584,9 @@ async function main() {
                   const oX = bx5 + px5 * dou * sd, oZ = bz5 + pz5 * dou * sd;
                   // a crossing street must keep its asphalt: painting the
                   // band over an intersection floats concrete above the road
-                  if (_onRoad(iX, iZ, 0.3) || _onRoad(oX, oZ, 0.3)) continue;
+                  if (_onRoad(iX, iZ, 0.3) || _onRoad(oX, oZ, 0.3)
+                      || _onCross(iX, iZ, ux, uz, 1.4)
+                      || _onCross(oX, oZ, ux, uz, 1.4)) continue;
                   const aX = s[0] + ux * d0, aZ = s[1] + uz * d0;
                   const cX = s[0] + ux * (d0 + pl), cZ = s[1] + uz * (d0 + pl);
                   const q = [];
@@ -3392,7 +3619,28 @@ async function main() {
             }
             if (pavGeos.length) {
               const pl2 = new THREE.TextureLoader();
-              const pt2 = pl2.load('textures/concrete.jpg');
+              // SLAB JOINTS (2026-08-06): plain concrete made the band the
+              // same flat grey as the plaza it sits on, so there was no
+              // pavement — just a slightly different grey. What reads as a
+              // sidewalk at a glance is the JOINT GRID, not the material, so
+              // the flags are drawn: 1m slabs with scored joints and a little
+              // per-slab tone drift. UV units here are 2m, hence 2x2 slabs.
+              const pc3 = document.createElement('canvas');
+              pc3.width = pc3.height = 256;
+              const pg3 = pc3.getContext('2d');
+              const rngP3 = mulberry32(SPEC.seed + 313);
+              pg3.fillStyle = '#6e6c67'; pg3.fillRect(0, 0, 256, 256);
+              for (let sy = 0; sy < 2; sy++) for (let sx3 = 0; sx3 < 2; sx3++) {
+                const v = 118 + Math.floor(rngP3() * 26);
+                pg3.fillStyle = `rgb(${v},${v - 2},${v - 6})`;
+                pg3.fillRect(sx3 * 128 + 3, sy * 128 + 3, 122, 122);
+              }
+              // a worn chip here and there, or every flag is identical
+              for (let i = 0; i < 60; i++) {
+                pg3.fillStyle = `rgba(90,88,84,${0.06 + rngP3() * 0.12})`;
+                pg3.fillRect(rngP3() * 256, rngP3() * 256, 2 + rngP3() * 9, 2 + rngP3() * 9);
+              }
+              const pt2 = new THREE.CanvasTexture(pc3);
               const pn2 = pl2.load('textures/concrete_n.jpg');
               for (const t of [pt2, pn2]) {
                 t.wrapS = t.wrapT = THREE.RepeatWrapping;
@@ -3402,7 +3650,7 @@ async function main() {
               const pav = new THREE.Mesh(mergeGeometries(pavGeos, false),
                 new THREE.MeshStandardMaterial({ map: pt2, normalMap: pn2,
                   normalScale: new THREE.Vector2(0.7, 0.7),
-                  color: 0x8b8983, roughness: 0.95, metalness: 0.0,
+                  color: 0xffffff, roughness: 0.95, metalness: 0.0,
                   side: THREE.DoubleSide }));
               pav.receiveShadow = true;
               scene.add(pav);
@@ -3424,8 +3672,12 @@ async function main() {
         // hung in mid-air over the street — a 10m magenta slab floating in
         // front of the camera was the single most broken thing on screen.
         // Same edge picker as everything else that hangs on a facade.
-        for (const b3 of (OSM.buildings || [])) {
+        // ...and the same built-buildings-only rule: the edge picker cannot
+        // save a sign whose building does not exist. (2026-08-06)
+        for (const [b3pts, , , , , , , prog3n] of feCand) {
+          const b3 = { pts: b3pts };
           if (placedN >= 36) break;
+          if (!_SHOPPROG.has(prog3n)) continue;
           if (rngNe() < 0.45) continue;
           let n3x = 1e9, n3z = 1e9, x3x = -1e9, x3z = -1e9;
           for (const q of b3.pts) {
@@ -4204,7 +4456,9 @@ async function main() {
     bx.save();
     bx.beginPath(); bx.arc(80, 80, 76, 0, Math.PI * 2); bx.clip();
     bx.fillStyle = 'rgba(96,102,118,0.4)';
-    for (const b of OSM.buildings || []) {
+    // the minimap has to agree with the world: drawing culled footprints put
+    // solid blocks on the map where the player can see open plaza
+    for (const b of (window.__builtFootprints || OSM.buildings || [])) {
       bx.beginPath();
       b.pts.forEach((p, i) => i ? bx.lineTo(w2m(p[0]), w2m(p[1]))
                                 : bx.moveTo(w2m(p[0]), w2m(p[1])));
@@ -6089,10 +6343,10 @@ async function main() {
     };
     let parked = 0;
     for (const r of OSM.roads) {
-      if (parked >= 18) break;
+      if (parked >= 30) break;
       const hd3 = Math.atan2(r.pts[r.pts.length - 1][0] - r.pts[0][0],
                              r.pts[r.pts.length - 1][1] - r.pts[0][1]);
-      for (let fi = 0.25; fi < 1 && parked < 18; fi += 0.34) {
+      for (let fi = 0.18; fi < 1 && parked < 30; fi += 0.24) {
         if (rngT() < 0.45) continue;
         const pi2 = Math.min(Math.floor(fi * (r.pts.length - 1)), r.pts.length - 2);
         const px2 = r.pts[pi2][0], pz2 = r.pts[pi2][1];
@@ -6107,7 +6361,7 @@ async function main() {
         parked++;
       }
     }
-    for (let ti = 0; ti < 4; ti++) {                 // ambient drivers
+    for (let ti = 0; ti < 9; ti++) {                 // ambient drivers
       const r = OSM.roads[Math.floor(rngT() * OSM.roads.length)];
       if (!r || r.pts.length < 2) continue;
       const tc = mkCar(carTints[Math.floor(rngT() * carTints.length)]);
@@ -6145,8 +6399,11 @@ async function main() {
       })
       .filter(o => o.L > 55)
       .sort((a, b2) => b2.L - a.L)
-      .slice(0, 14);
-    const NT = Math.min(7, lanes.length);
+      .slice(0, 20);
+    // the 7 cap was set when every car dragged a transmissive greenhouse
+    // through its own render pass. The glass is opaque at traffic distance
+    // now, so the cap can follow the street count instead of the old cliff.
+    const NT = Math.min(13, lanes.length);
     for (let ti = 0; ti < NT; ti++) {
       const r = lanes[Math.floor(ti * lanes.length / Math.max(NT, 1))].r;
       const rig2 = new THREE.Group();
@@ -6235,13 +6492,16 @@ async function main() {
             }
           });
         };
-        for (let i = 0; i < 15; i++) {
+        // 2026-08-06: 15 walkers on a whole Manhattan block is a quiet
+        // Sunday, not a city. The cost is a skinned clone each, and the
+        // mixers are the only per-frame work — 28 measured flat.
+        for (let i = 0; i < 28; i++) {
           const r = OSM.roads[Math.floor(rngP() * OSM.roads.length)];
           if (!r || r.pts.length < 2) continue;
           const inst = skClone(g.scene);
           // bucket 0 keeps the original bake — an untinted walker in the mix
           // stops the crowd reading as a colour wheel
-          if (i % 7 !== 0) pedSkin(inst, 1 + (i % 6));
+          if (i % 9 !== 0) pedSkin(inst, 1 + (i % 10));
           const bb = new THREE.Box3().setFromObject(inst);
           inst.scale.multiplyScalar((1.56 + rngP() * 0.33)
             / Math.max(bb.max.y - bb.min.y, 1e-3));
