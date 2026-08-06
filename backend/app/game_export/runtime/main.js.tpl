@@ -3673,8 +3673,36 @@ async function main() {
           // stopping short of the piers is the plaque look all over again
           const eL3 = Math.max(3.2, Math.min(fe3.len === undefined ? 9 : fe3.len, 17));
           const slot = slots[Math.floor(rngG2() * slots.length)];
+          const v0s = 1 - (slot + 1) / SLOTS, v1s = 1 - slot / SLOTS;
           mkQuad(quads, fe3.x, gy3 + (fst3 || 3.3) - 0.60, fe3.z, fe3.nx, fe3.nz,
-                 eL3 * 0.86, 1.05, 1 - (slot + 1) / SLOTS, 1 - slot / SLOTS, 0.17);
+                 eL3 * 0.86, 1.05, v0s, v1s, 0.17);
+          // BLADE SIGN: hung PERPENDICULAR to the wall, which is the one that
+          // reads from down the block — a flat fascia disappears the moment
+          // you are not standing square to it, and half of Mott Street is
+          // these. The material is already DoubleSide, so one quad does both
+          // faces. Width runs along the wall NORMAL, not the wall.
+          if (rngG2() < 0.55) {
+            const by2 = gy3 + (fst3 || 3.3) + 0.95;
+            const bx2 = fe3.x, bz2 = fe3.z;
+            const px8 = fe3.nx, pz8 = fe3.nz;
+            const tx8 = -pz8, tz8 = px8;
+            const inR = 0.12, outR = 1.45, bh2 = 0.86;
+            const sl8 = (rngG2() - 0.5) * Math.max(0, eL3 - 2.4);
+            const ox8 = bx2 + tx8 * sl8, oz8 = bz2 + tz8 * sl8;
+            const c8 = [[inR, -1, 0, v0s], [outR, -1, 1, v0s], [outR, 1, 1, v1s],
+                        [inR, -1, 0, v0s], [outR, 1, 1, v1s], [inR, 1, 0, v1s]];
+            const pos8 = [], uv8 = [], nor8 = [];
+            for (const cc of c8) {
+              pos8.push(ox8 + px8 * cc[0], by2 + (bh2 / 2) * cc[1], oz8 + pz8 * cc[0]);
+              uv8.push(cc[2], cc[3]);
+              nor8.push(tx8, 0, tz8);
+            }
+            const q8 = new THREE.BufferGeometry();
+            q8.setAttribute('position', new THREE.BufferAttribute(new Float32Array(pos8), 3));
+            q8.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(uv8), 2));
+            q8.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(nor8), 3));
+            quads.push(q8);
+          }
           ns++;
         }
         if (quads.length) {
@@ -4482,9 +4510,16 @@ async function main() {
     const flameG = new THREE.SphereGeometry(0.09, 6, 5);
     const flameM = new THREE.MeshBasicMaterial({ color: 0xffb347 });
     window.__torches = window.__torches || [];
+    // An office lit by FIRE was the loudest thing left wrong in there: the
+    // plan hands every kind the same torch list, so a floor plate with a
+    // suspended ceiling had orange flames guttering on its walls. Same
+    // positions and the same light-budget behaviour, but cool, high, and
+    // without the flame mesh — the fitting is the ceiling troffer instead.
+    const _fire = IK !== 'office';
     for (const [tx, tz] of (PLAN.torches || []).slice(0, 10)) {
-      const pl = new THREE.PointLight(0xff9a3d, 14, 13, 1.8);
-      pl.position.set(tx + OX, WH * 0.62, tz);
+      const pl = new THREE.PointLight(_fire ? 0xff9a3d : 0xdfeaff,
+                                      _fire ? 14 : 11, 13, 1.8);
+      pl.position.set(tx + OX, _fire ? WH * 0.62 : WH * 0.92, tz);
       // OFF UNTIL YOU ARE IN THE ROOM (2026-08-05): an offset interior is a
       // building you are not standing in, and four of them is forty point
       // lights. WebGL2 compiles a fixed light count, so blowing the budget
@@ -4494,68 +4529,185 @@ async function main() {
       // four once the player is actually inside.
       if (OX !== 0) pl.visible = false;
       scene.add(pl);
-      const fm = new THREE.Mesh(flameG, flameM);
-      fm.position.copy(pl.position);
-      scene.add(fm);
+      if (_fire) {
+        const fm = new THREE.Mesh(flameG, flameM);
+        fm.position.copy(pl.position);
+        scene.add(fm);
+      }
       window.__torches.push(pl);
     }
     // KIND DECOR (moon plan 2.4): castles hang banners + a carpet runner
     // down the hall; houses get warm rugs. Cheap planes, big identity.
     if (IK === 'office') {
-      // What says OFFICE is not a texture: it is the horizon of low
-      // partitions, a reception desk facing the door, and cold overhead
-      // strips instead of firelight. All merged or instanced — a heist
-      // interior is drawn on top of the whole city and cannot afford
-      // per-desk draw calls.
+      // ── WHAT MAKES A ROOM READ AS AN OFFICE (2026-08-06 r7) ────────────
+      // Not the walls. It is the SUSPENDED CEILING with its T-bar grid and
+      // recessed troffers, carpet tile underfoot, a horizon of low
+      // partitions, and monitors glowing on desks. Get those four and the
+      // space is unmistakable; miss them and plaster walls are just plaster
+      // walls. Everything below is drawn or merged — a heist interior is
+      // built on top of an entire city and cannot spend draw calls per desk.
       const rngO = mulberry32((SPEC.seed || 1) + 977);
       const hw3 = PLAN.rooms[0][2] / 2, hd3 = PLAN.rooms[0][3] / 2;
-      // an explicit map on purpose: the late flat-material pass re-textures
-      // any untextured material by NAME heuristic, and an unnamed grey one
-      // came back wearing fieldstone rubble — cubicle walls made of castle
-      // masonry (2026-08-06)
-      const partM = new THREE.MeshStandardMaterial({ color: 0xb9bcb4,
-        map: itex('plaster', 3, 1), roughness: 0.9, side: THREE.DoubleSide });
-      const parts = [];
-      // cubicle runs down the floor plate, gapped so you can walk between
+      const cv2 = (draw, px) => {
+        const c = document.createElement('canvas');
+        c.width = c.height = px;
+        draw(c.getContext('2d'), px);
+        const t = new THREE.CanvasTexture(c);
+        t.wrapS = t.wrapT = THREE.RepeatWrapping;
+        t.colorSpace = THREE.SRGBColorSpace;
+        t.anisotropy = renderer.capabilities.getMaxAnisotropy();
+        return t;
+      };
+      // CARPET TILE: 60cm squares laid quarter-turned, which is why a real
+      // office floor has a faint chequer in raking light
+      const carpetT = cv2((g5, N5) => {
+        g5.fillStyle = '#4a4f57'; g5.fillRect(0, 0, N5, N5);
+        for (let ty = 0; ty < 2; ty++) for (let tx = 0; tx < 2; tx++) {
+          const v = 70 + Math.floor(rngO() * 10);
+          g5.fillStyle = 'rgb(' + v + ',' + (v + 4) + ',' + (v + 11) + ')';
+          g5.fillRect(tx * N5 / 2 + 1, ty * N5 / 2 + 1, N5 / 2 - 2, N5 / 2 - 2);
+          // fleck, running the other way on alternate tiles
+          for (let k = 0; k < 320; k++) {
+            g5.fillStyle = 'rgba(' + (v + 26) + ',' + (v + 30) + ',' + (v + 38)
+              + ',' + (0.15 + rngO() * 0.3) + ')';
+            const fx = tx * N5 / 2 + rngO() * (N5 / 2), fy = ty * N5 / 2 + rngO() * (N5 / 2);
+            if ((tx + ty) % 2) g5.fillRect(fx, fy, 1, 3); else g5.fillRect(fx, fy, 3, 1);
+          }
+        }
+      }, 256);
+      carpetT.repeat.set(bx / 1.2, bz / 1.2);
+      floor.material.map = carpetT;
+      floor.material.color.setHex(0xffffff);
+      floor.material.roughness = 1.0;
+      floor.material.needsUpdate = true;
+      // SUSPENDED CEILING: white acoustic tile in a T-bar grid. This is the
+      // single most recognisable surface in any commercial interior.
+      const ceilT = cv2((g5, N5) => {
+        g5.fillStyle = '#9aa0a6'; g5.fillRect(0, 0, N5, N5);      // the bar
+        for (let ty = 0; ty < 2; ty++) for (let tx = 0; tx < 2; tx++) {
+          g5.fillStyle = '#e9e7e2';
+          g5.fillRect(tx * N5 / 2 + 3, ty * N5 / 2 + 3, N5 / 2 - 6, N5 / 2 - 6);
+          for (let k = 0; k < 900; k++) {                          // perforation
+            g5.fillStyle = 'rgba(150,148,143,' + (0.10 + rngO() * 0.22) + ')';
+            g5.fillRect(tx * N5 / 2 + 4 + rngO() * (N5 / 2 - 9),
+                        ty * N5 / 2 + 4 + rngO() * (N5 / 2 - 9), 2, 2);
+          }
+        }
+      }, 256);
+      ceilT.repeat.set(bx / 1.22, bz / 1.22);
+      ceil.material.map = ceilT;
+      ceil.material.color.setHex(0xffffff);
+      ceil.material.needsUpdate = true;
+      // Both of these carry a map ONLY so the late flat-material pass leaves
+      // them alone; the point is the tint and a fine grain. At the repeats
+      // they shipped with, the partitions read as rendered stucco and the
+      // desks as sawn planks — office furniture is nearly plain.
+      const partM = new THREE.MeshStandardMaterial({ color: 0x8d97a2,
+        map: itex('plaster', 9, 5), roughness: 0.96, side: THREE.DoubleSide });
+      const deskM = new THREE.MeshStandardMaterial({ color: 0xbdb4a4,
+        map: itex('plaster', 7, 7), roughness: 0.55, metalness: 0.05 });
+      const metalM = new THREE.MeshStandardMaterial({ color: 0x2e3236,
+        metalness: 0.7, roughness: 0.42 });
+      const parts = [], desks = [], legs = [], screens = [], troffers = [];
+      const DESK_H = 0.74, PART_H = 1.32;
+      // cubicle runs: a partition spine with desks hung off both sides, which
+      // is how a floor plate is actually laid out
       for (let r2 = 0; r2 < 3; r2++) {
         const pz2 = -hd3 + (r2 + 1) * (hd3 * 2 / 4);
-        for (let c2 = -1; c2 <= 1; c2++) {
-          if (c2 === 0) continue;
-          const pg2 = new THREE.BoxGeometry(hw3 * 0.62, 1.35, 0.09);
-          pg2.translate(c2 * hw3 * 0.42 + OX, 0.68, pz2);
-          parts.push(pg2);
-          const pg3 = new THREE.BoxGeometry(0.09, 1.35, 2.6);
-          pg3.translate(c2 * hw3 * 0.11 + OX, 0.68, pz2 + 1.3);
-          parts.push(pg3);
-        }
-      }
-      // reception desk, squared up to the entry so it reads as the front
-      const rd2 = new THREE.BoxGeometry(4.6, 1.05, 0.75);
-      rd2.translate(OX, 0.53, -hd3 + 3.2);
-      parts.push(rd2);
-      const rt2 = new THREE.BoxGeometry(5.0, 0.09, 1.05);
-      rt2.translate(OX, 1.08, -hd3 + 3.2);
-      parts.push(rt2);
-      const pMesh = new THREE.Mesh(mergeGeometries(parts, false), partM);
-      pMesh.castShadow = pMesh.receiveShadow = true;
-      scene.add(pMesh);
-      for (const g5 of parts) g5.dispose();
-      // ceiling strips: emissive only, because the WebGL2 light budget is
-      // what renders a BLACK ROOM rather than an error (TRAP 2)
-      const stripM = new THREE.MeshBasicMaterial({ color: 0xe8f2ff, toneMapped: false });
-      const strips = [];
-      for (let r2 = 0; r2 < 4; r2++) {
         for (const c2 of [-1, 1]) {
-          const sg2 = new THREE.BoxGeometry(0.42, 0.06, hd3 * 0.7);
-          sg2.translate(c2 * hw3 * 0.45 + OX, topY - 0.10,
-                        -hd3 + (r2 + 0.5) * (hd3 * 2 / 4));
-          strips.push(sg2);
+          const runW = hw3 * 0.66;
+          const pg2 = new THREE.BoxGeometry(runW, PART_H, 0.08);
+          pg2.translate(c2 * hw3 * 0.44 + OX, PART_H / 2, pz2);
+          parts.push(pg2);
+          const nD = Math.max(2, Math.round(runW / 1.7));
+          for (let d2 = 0; d2 < nD; d2++) {
+            const dxo = c2 * hw3 * 0.44 - runW / 2 + (d2 + 0.5) * (runW / nD) + OX;
+            for (const face of [-1, 1]) {
+              const dz2 = pz2 + face * 0.42;
+              const dg2 = new THREE.BoxGeometry(runW / nD - 0.12, 0.05, 0.72);
+              dg2.translate(dxo, DESK_H, dz2);
+              desks.push(dg2);
+              for (const lx of [-0.4, 0.4]) {
+                const lg2 = new THREE.BoxGeometry(0.05, DESK_H, 0.05);
+                lg2.translate(dxo + lx * (runW / nD - 0.3), DESK_H / 2, dz2);
+                legs.push(lg2);
+              }
+              // a monitor, on most desks. Lit screens at 2am are the reason
+              // an empty office still reads as occupied.
+              if (rngO() < 0.78) {
+                const mg2 = new THREE.BoxGeometry(0.54, 0.34, 0.03);
+                mg2.translate(dxo, DESK_H + 0.26, pz2 + face * 0.14);
+                screens.push(mg2);
+                const sg2 = new THREE.BoxGeometry(0.09, 0.16, 0.09);
+                sg2.translate(dxo, DESK_H + 0.08, pz2 + face * 0.15);
+                legs.push(sg2);
+              }
+            }
+          }
         }
       }
-      const sMesh2 = new THREE.Mesh(mergeGeometries(strips, false), stripM);
-      scene.add(sMesh2);
-      for (const g5 of strips) g5.dispose();
-      if (rngO() < 2) { /* seeded for future layout variation */ }
+      // reception desk, squared to the entry so it reads as the front
+      const rd2 = new THREE.BoxGeometry(4.6, 1.05, 0.78);
+      rd2.translate(OX, 0.53, -hd3 + 3.2); parts.push(rd2);
+      const rt2 = new THREE.BoxGeometry(5.0, 0.08, 1.06);
+      rt2.translate(OX, 1.09, -hd3 + 3.2); desks.push(rt2);
+      const pMesh = new THREE.Mesh(mergeGeometries(parts, false), partM);
+      pMesh.castShadow = pMesh.receiveShadow = true; scene.add(pMesh);
+      const dMesh = new THREE.Mesh(mergeGeometries(desks, false), deskM);
+      dMesh.castShadow = dMesh.receiveShadow = true; scene.add(dMesh);
+      const lMesh = new THREE.Mesh(mergeGeometries(legs, false), metalM);
+      lMesh.castShadow = true; scene.add(lMesh);
+      for (const g5 of parts.concat(desks, legs)) g5.dispose();
+      if (screens.length) {
+        const scMesh = new THREE.Mesh(mergeGeometries(screens, false),
+          new THREE.MeshBasicMaterial({ color: 0x6fa8c8, toneMapped: false }));
+        scene.add(scMesh);
+        for (const g5 of screens) g5.dispose();
+      }
+      // RECESSED TROFFERS on the ceiling grid. Emissive only: the WebGL2
+      // light budget is what renders a BLACK ROOM rather than an error, so
+      // real lights here would cost the whole interior (TRAP 2).
+      for (let r2 = 0; r2 < 4; r2++) {
+        for (const c2 of [-1, 0, 1]) {
+          const tg2 = new THREE.BoxGeometry(1.2, 0.05, 0.6);
+          tg2.translate(c2 * hw3 * 0.52 + OX, topY - 0.06,
+                        -hd3 + (r2 + 0.5) * (hd3 * 2 / 4));
+          troffers.push(tg2);
+        }
+      }
+      const tMesh = new THREE.Mesh(mergeGeometries(troffers, false),
+        new THREE.MeshBasicMaterial({ color: 0xf2f6ff, toneMapped: false }));
+      scene.add(tMesh);
+      for (const g5 of troffers) g5.dispose();
+      // GLAZED MEETING ROOMS: the side rooms get a glass front, which is what
+      // stops them reading as store cupboards off a corridor
+      const glassRoomM = new THREE.MeshPhysicalMaterial({ color: 0xbcd4dd,
+        roughness: 0.08, metalness: 0, transparent: true, opacity: 0.24,
+        side: THREE.DoubleSide });
+      const mullM = new THREE.MeshStandardMaterial({ color: 0x30343a,
+        metalness: 0.6, roughness: 0.4 });
+      const glz = [], mull = [];
+      for (const rm of PLAN.rooms.slice(1)) {
+        const rcx = rm[0], rcz = rm[1], rw2 = rm[2];
+        const side = rcx > 0 ? -1 : 1;                 // face back to the floor
+        const gx2 = rcx + side * (rw2 / 2);
+        const pg5 = new THREE.PlaneGeometry(Math.min(rm[3], 7.5), WH - 0.35);
+        pg5.rotateY(side > 0 ? -Math.PI / 2 : Math.PI / 2);
+        pg5.translate(gx2 + OX, (WH - 0.35) / 2, rcz);
+        glz.push(pg5);
+        for (const fy of [0.02, WH - 0.36]) {
+          const mg5 = new THREE.BoxGeometry(0.07, 0.09, Math.min(rm[3], 7.5));
+          mg5.translate(gx2 + OX, fy + 0.05, rcz);
+          mull.push(mg5);
+        }
+      }
+      if (glz.length) {
+        const gMesh = new THREE.Mesh(mergeGeometries(glz, false), glassRoomM);
+        gMesh.renderOrder = 3; scene.add(gMesh);
+        const mMesh = new THREE.Mesh(mergeGeometries(mull, false), mullM);
+        scene.add(mMesh);
+        for (const g5 of glz.concat(mull)) g5.dispose();
+      }
     }
     if (IK === 'castle') {
       const rngD2 = mulberry32((SPEC.seed || 1) + 881);
