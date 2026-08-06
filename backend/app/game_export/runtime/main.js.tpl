@@ -501,7 +501,22 @@ async function main() {
       es3.background = new THREE.Color(pal.sky).lerp(new THREE.Color(0xffffff), 0.15);
       scene.environment = pm3.fromScene(es3, 0.02).texture;
       pm3.dispose();
-      if ('environmentIntensity' in scene) scene.environmentIntensity = 0.4;
+      // NIGHT CITY WALLS WERE UNLIT (2026-08-05). At 0.4 the flat-sky env gave
+      // vertical surfaces almost nothing, and an OSM city is nearly all
+      // vertical surface: facades rendered as black voids with the emissive
+      // windows floating on top, which is what "the buildings feel geometric"
+      // actually looked like. No facade texture, normal map or cornice can
+      // show through zero light. A real night street is lit by skyglow and
+      // bounce, so the city gets a much stronger env; enclosed levels keep
+      // 0.4 because their walls are lit by their own lamps and a bright env
+      // flattens them. Read straight off SPEC, not the OSM const — that is
+      // declared ~100 lines below and would be in its temporal dead zone.
+      const _isCity = !!(SPEC.world.level && SPEC.world.level.osm);
+      // 2.4 chosen from a live sweep against the noir grade, not guessed: it
+      // is the point where brick, stone and glass each read as their own
+      // material and the window reveals cast, while the street still reads as
+      // night. The grade's exposure is deliberately left alone.
+      if ('environmentIntensity' in scene) scene.environmentIntensity = _isCity ? 2.4 : 0.4;
     } catch (e) {}
     const sN = 1400, sPos = new Float32Array(sN * 3);
     const sRng = mulberry32(SPEC.seed + 5);
@@ -1401,6 +1416,10 @@ async function main() {
     // bucket, so a whole city is 5 draw calls.
     const wallBuckets = [[], [], [], [], [], [], [], []], capGeos = [];
     const roofSpots = [];
+    // [pts, cx, cz, groundY, height, bucket] — the fire-escape pass below runs
+    // long after this loop and needs the height that MANHATTAN PROFILE derived
+    // here, which is not recoverable from b.h alone.
+    const feCand = [];
     const tintA = new THREE.Color(0x8d8a84), tintB = new THREE.Color(0x5f6b78);
     const rngB = mulberry32(SPEC.seed + 77);
     // ExtrudeGeometry groups: materialIndex 0 = caps (roof/underside after the
@@ -1491,6 +1510,7 @@ async function main() {
           : (_night && rngB() < 0.2 ? 0
              : (_r < 0.28 ? 2 : _r < 0.52 ? 5 : _r < 0.76 ? 7 : 3));
         splitGroups(geo, _bkt);
+        feCand.push([b.pts, cx, cz, gy, h, _bkt]);
         // r14 SETBACKS: real towers STEP BACK as they rise — a single
         // extruded prism is why buildings read as 'geometric shapes'.
         // Tall buildings gain 1-2 shrinking tiers above the base (same
@@ -1612,62 +1632,248 @@ async function main() {
         new THREE.MeshStandardMaterial({ ..._fPair('facade_limestone'),
           vertexColors: true, roughness: 0.8, metalness: 0.04 }),
       ];
-      // r13 ALIGNED NIGHT WINDOWS: the old shared glow mask floated
-      // misaligned over each photo's own printed windows ('blotchy orange
-      // smears'). The mask is now DERIVED from the facade itself — detect
-      // dark cells (glass) in the loaded photo, light a random ~third of
-      // exactly those cells. Glow lands where the windows actually are.
-      if (SPEC.world.sky === 'night' || SPEC.world.sky === 'dusk') {
-        const FAMS = [[1, 'facade_glass'], [2, 'facade_brick'],
-          [3, 'facade_stone'], [4, 'facade_glass2'], [5, 'facade_brick2'],
-          [6, 'facade_concrete'], [7, 'facade_limestone']];
-        for (const [mi, fn] of FAMS) {
+      // ── FACADE RELIEF, DERIVED FROM THE PHOTO (2026-08-05) ───────────────
+      // Ported from tools/facadelab. The lab's finding is that RELIEF, not
+      // albedo, is what stops an extruded footprint reading as a box: window
+      // reveals and storey ledges have to catch raking light and cast their
+      // own shadows. The lab draws those reveals by hand, which it can only do
+      // because it also draws its own albedo.
+      //
+      // Here the albedo is a photo, so hand-drawn reveals would land in the
+      // wrong places — the exact misalignment r13 already hit with the night
+      // glow ('blotchy orange smears'). The relief is therefore DERIVED from
+      // each photo. A facade photo is LIT, and on a lit facade whatever
+      // protrudes is bright and whatever is recessed sits in shadow, so the
+      // baked lighting IS a height field. High-passing the luminance (which
+      // discards the photo's overall gradient and keeps its local structure)
+      // recovers it aligned by construction — for brick, stone and glass
+      // alike, without needing to know what a window looks like.
+      //
+      // Once per FAMILY, not per building: seven texture sets for an entire
+      // city, so the merged facade buckets still draw as one mesh each and
+      // VRAM does not scale with the number of buildings.
+      const _RFAMS = [[1, 'facade_glass'], [2, 'facade_brick'],
+        [3, 'facade_stone'], [4, 'facade_glass2'], [5, 'facade_brick2'],
+        [6, 'facade_concrete'], [7, 'facade_limestone']];
+      {
+        const AN = 512;                 // analysis + normal-map resolution
+        const AO_N = 256;               // AO/roughness are low-frequency
+        // wrapping separable box blur: the facade tiles, so a clamped blur
+        // would leave a visible band down every seam in the city
+        const boxBlur = (src, R) => {
+          const tmp = new Float32Array(AN * AN), out = new Float32Array(AN * AN);
+          const inv = 1 / (2 * R + 1);
+          const wrap = v => ((v % AN) + AN) % AN;
+          for (let y = 0; y < AN; y++) {
+            const row = y * AN;
+            let acc = 0;
+            for (let k = -R; k <= R; k++) acc += src[row + wrap(k)];
+            for (let x = 0; x < AN; x++) {
+              tmp[row + x] = acc * inv;
+              acc -= src[row + wrap(x - R)];
+              acc += src[row + wrap(x + R + 1)];
+            }
+          }
+          for (let x = 0; x < AN; x++) {
+            let acc = 0;
+            for (let k = -R; k <= R; k++) acc += tmp[wrap(k) * AN + x];
+            for (let y = 0; y < AN; y++) {
+              out[y * AN + x] = acc * inv;
+              acc -= tmp[wrap(y - R) * AN + x];
+              acc += tmp[wrap(y + R + 1) * AN + x];
+            }
+          }
+          return out;
+        };
+        const lumOf = (img, n) => {
+          const c = document.createElement('canvas');
+          c.width = c.height = n;
+          const g = c.getContext('2d', { willReadFrequently: true });
+          g.drawImage(img, 0, 0, n, n);
+          return g.getImageData(0, 0, n, n).data;
+        };
+        for (const [mi, fn] of _RFAMS) {
           _fLoad.load('textures/' + fn + '.jpg', (t2) => {
-            try {
-              const img = t2.image;
-              const c = document.createElement('canvas');
-              c.width = c.height = 256;
-              const g = c.getContext('2d');
-              g.drawImage(img, 0, 0, 256, 256);
-              const d = g.getImageData(0, 0, 256, 256).data;
-              const CELL = 16, N = 256 / CELL;
-              const cell = new Float32Array(N * N);
-              let avg = 0;
-              for (let cy = 0; cy < N; cy++) for (let cx = 0; cx < N; cx++) {
-                let s2 = 0;
-                for (let y = 0; y < CELL; y += 2) for (let x = 0; x < CELL; x += 2) {
-                  const o = (((cy * CELL + y) * 256) + cx * CELL + x) * 4;
-                  s2 += 0.299 * d[o] + 0.587 * d[o + 1] + 0.114 * d[o + 2];
+            // the _n companion carries the fine grain (brick courses, stone
+            // pitting) that a high-pass at this radius cannot see. Blended in
+            // rather than replaced, so the derived relief supplies the storey
+            // scale and the photo's own map supplies the millimetre scale.
+            _fLoad.load('textures/' + fn + '_n.jpg', (tn) => {
+              try {
+                const d = lumOf(t2.image, AN);
+                const dn = lumOf(tn.image, AN);
+                // these two loads exist only to be READ; the material keeps its
+                // own copy of the albedo and gets a generated normal below
+                t2.dispose(); tn.dispose();
+                const L = new Float32Array(AN * AN);
+                for (let i = 0, p = 0; i < AN * AN; i++, p += 4) {
+                  L[i] = (0.299 * d[p] + 0.587 * d[p + 1] + 0.114 * d[p + 2]) / 255;
                 }
-                cell[cy * N + cx] = s2 / 64;
-                avg += s2 / 64;
-              }
-              avg /= N * N;
-              const rngW2 = mulberry32(SPEC.seed + 404 + mi);
-              g.clearRect(0, 0, 256, 256);
-              g.fillStyle = '#000000'; g.fillRect(0, 0, 256, 256);
-              for (let cy = 0; cy < N; cy++) for (let cx = 0; cx < N; cx++) {
-                if (cell[cy * N + cx] < avg * 0.78 && rngW2() < 0.34) {
-                  g.fillStyle = rngW2() < 0.75 ? '#e8b268' : '#b8cfe0';
-                  g.fillRect(cx * CELL + 2, cy * CELL + 2, CELL - 4, CELL - 4);
+                const Lb = boxBlur(L, 14);
+                const H0 = new Float32Array(AN * AN);
+                for (let i = 0; i < AN * AN; i++) {
+                  H0[i] = Math.max(-1, Math.min(1, (L[i] - Lb[i]) * 3.4));
                 }
-              }
-              const gt = new THREE.CanvasTexture(c);
-              gt.wrapS = gt.wrapT = THREE.RepeatWrapping;
-              gt.repeat.copy(_wallMats[mi].map.repeat);
-              gt.colorSpace = THREE.SRGBColorSpace;
-              const m = _wallMats[mi];
-              m.emissive = new THREE.Color(0xffffff);
-              m.emissiveMap = gt;
-              m.emissiveIntensity = 0.7;
-              m.needsUpdate = true;
-            } catch (e) { /* glow is best-effort */ }
+                // JPEG grain is high-pass too, so it survives the filter and a
+                // Sobel turns it into per-pixel noise that shimmers across a
+                // whole wall once normalScale is high enough to be worth
+                // having. Facade relief is a storey-scale feature; smoothing
+                // below that scale costs nothing real.
+                const H = boxBlur(H0, 2);
+                // WINDOWNESS: recessed (locally dark) = glass. Drives both
+                // the gloss and the occlusion, which is the lab's point that
+                // one uniform sheen across a facade is what reads as plastic.
+                const W = new Float32Array(AN * AN);
+                for (let i = 0; i < AN * AN; i++) W[i] = Math.max(0, Math.min(1, -H[i] * 1.6));
+                const Wb = boxBlur(W, 5);
+
+                // ---- normal map: Sobel of the height field, plus the photo's
+                const nc = document.createElement('canvas');
+                nc.width = nc.height = AN;
+                const ng = nc.getContext('2d');
+                const nimg = ng.createImageData(AN, AN);
+                const at = (x, y) => H[(((y % AN) + AN) % AN) * AN + (((x % AN) + AN) % AN)];
+                for (let y = 0; y < AN; y++) for (let x = 0; x < AN; x++) {
+                  const gx = (at(x + 1, y - 1) + 2 * at(x + 1, y) + at(x + 1, y + 1))
+                           - (at(x - 1, y - 1) + 2 * at(x - 1, y) + at(x - 1, y + 1));
+                  const gy = (at(x - 1, y + 1) + 2 * at(x, y + 1) + at(x + 1, y + 1))
+                           - (at(x - 1, y - 1) + 2 * at(x, y - 1) + at(x + 1, y - 1));
+                  const p = (y * AN + x) * 4;
+                  // tangent-space linear blend: offsets add, then re-centre
+                  const bx = (dn[p] / 255 - 0.5) * 0.32;
+                  const by = (dn[p + 1] / 255 - 0.5) * 0.32;
+                  const nx = Math.max(-0.5, Math.min(0.5, -gx * 0.30 + bx));
+                  const ny = Math.max(-0.5, Math.min(0.5, gy * 0.30 + by));
+                  nimg.data[p] = (nx + 0.5) * 255;
+                  nimg.data[p + 1] = (ny + 0.5) * 255;
+                  nimg.data[p + 2] = 255;
+                  nimg.data[p + 3] = 255;
+                }
+                ng.putImageData(nimg, 0, 0);
+
+                // ---- roughness + AO, at quarter area (both low-frequency)
+                const rc = document.createElement('canvas');
+                rc.width = rc.height = AO_N;
+                const rg = rc.getContext('2d');
+                const rimg = rg.createImageData(AO_N, AO_N);
+                const ac = document.createElement('canvas');
+                ac.width = ac.height = AO_N;
+                const ag = ac.getContext('2d');
+                const aimg = ag.createImageData(AO_N, AO_N);
+                const base = _wallMats[mi].roughness;
+                const st = AN / AO_N;
+                for (let y = 0; y < AO_N; y++) for (let x = 0; x < AO_N; x++) {
+                  const s = (y * st) * AN + (x * st);
+                  // glass is near-mirror, the masonry around it stays matte —
+                  // the single biggest reason a facade stops looking printed
+                  const r = base * (1 - 0.72 * W[s]);
+                  const o = 1 - 0.55 * Wb[s];
+                  const p = (y * AO_N + x) * 4;
+                  rimg.data[p] = rimg.data[p + 1] = rimg.data[p + 2] = r * 255;
+                  aimg.data[p] = aimg.data[p + 1] = aimg.data[p + 2] = o * 255;
+                  rimg.data[p + 3] = aimg.data[p + 3] = 255;
+                }
+                rg.putImageData(rimg, 0, 0);
+                ag.putImageData(aimg, 0, 0);
+                // GRIME drives roughness, not colour: a dirt streak that stays
+                // glossy reads as wet paint (facadelab). Vertical streaking
+                // under sills is what stops a wall looking freshly extruded.
+                const rngG = mulberry32(SPEC.seed + 850 + mi);
+                rg.globalAlpha = 0.5;
+                for (let i = 0; i < 90; i++) {
+                  rg.fillStyle = `rgba(255,255,255,${0.10 + rngG() * 0.22})`;
+                  rg.fillRect(rngG() * AO_N, rngG() * AO_N,
+                              1 + rngG() * 3, 15 + rngG() * 70);
+                }
+                rg.globalAlpha = 1;
+
+                // ---- LIT WINDOWS, SHAPED BY THE MASK (2026-08-05)
+                // r13 lit whole 16px cells of a fixed grid. That grid is not
+                // any photo's window grid, so the glow landed as rectangles
+                // sitting BETWEEN windows — invisible while the walls were
+                // black, obvious the moment they were lit. The windowness mask
+                // is already aligned to the real openings, so it supplies the
+                // SHAPE and the coarse grid is demoted to only choosing which
+                // ones are switched on.
+                let ec2 = null;
+                if (SPEC.world.sky === 'night' || SPEC.world.sky === 'dusk') {
+                  ec2 = document.createElement('canvas');
+                  ec2.width = ec2.height = AO_N;
+                  const eg = ec2.getContext('2d');
+                  const eimg = eg.createImageData(AO_N, AO_N);
+                  const CG = 16, NC = Math.ceil(AO_N / CG);
+                  const rngL = mulberry32(SPEC.seed + 404 + mi);
+                  const on = new Uint8Array(NC * NC), hue = new Float32Array(NC * NC);
+                  for (let i = 0; i < NC * NC; i++) {
+                    on[i] = rngL() < 0.32 ? 1 : 0;
+                    hue[i] = rngL();
+                  }
+                  for (let y = 0; y < AO_N; y++) for (let x = 0; x < AO_N; x++) {
+                    const ci = ((y / CG) | 0) * NC + ((x / CG) | 0);
+                    // the BLURRED mask, so a whole pane lights rather than the
+                    // one darkest sliver inside it — a lit window is a filled
+                    // rectangle of light, not an outline
+                    const w = Wb[(y * st) * AN + (x * st)];
+                    const p = (y * AO_N + x) * 4;
+                    const lit = on[ci] && w > 0.20 ? Math.min(1, (w - 0.20) * 3.4) : 0;
+                    const warm = hue[ci] < 0.75;
+                    eimg.data[p] = lit * (warm ? 232 : 184);
+                    eimg.data[p + 1] = lit * (warm ? 178 : 207);
+                    eimg.data[p + 2] = lit * (warm ? 104 : 224);
+                    eimg.data[p + 3] = 255;
+                  }
+                  eg.putImageData(eimg, 0, 0);
+                }
+
+                const m = _wallMats[mi];
+                const mk = (cv, ch) => {
+                  const t = new THREE.CanvasTexture(cv);
+                  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+                  t.repeat.copy(m.map.repeat);
+                  t.anisotropy = renderer.capabilities.getMaxAnisotropy();
+                  if (ch !== undefined) t.channel = ch;
+                  return t;
+                };
+                if (m.normalMap) m.normalMap.dispose();
+                m.normalMap = mk(nc);
+                // the photo's own _n shipped at 0.6 and read as a faint
+                // texture; the derived map carries actual window reveals, so
+                // it is worth pushing to where raking light bites
+                m.normalScale.set(1.35, 1.35);
+                m.roughnessMap = mk(rc);
+                m.roughness = 1.0;          // absolute value lives in the map
+                m.aoMap = mk(ac, 1);        // channel 1 => reads uv1
+                m.aoMapIntensity = 0.85;
+                // glass needs something to reflect or it resolves to a flat
+                // dark panel however good the albedo is (facadelab)
+                m.envMapIntensity = /glass/.test(fn) ? 1.5 : 0.9;
+                if (ec2) {
+                  if (m.emissiveMap) m.emissiveMap.dispose();
+                  m.emissive = new THREE.Color(0xffffff);
+                  m.emissiveMap = mk(ec2);
+                  m.emissiveMap.colorSpace = THREE.SRGBColorSpace;
+                  m.emissiveIntensity = 0.85;
+                }
+                m.needsUpdate = true;
+              } catch (e) { /* relief is an enhancement, never a hard gate */ }
+            });
           });
         }
       }
+      // r13's night-window glow lived here. It is now produced by the
+      // facade-relief pass above, from the same windowness mask that
+      // drives the reveals — one image analysis, and the glow cannot
+      // drift out of alignment with the relief because they share a mask.
       for (let bi = 0; bi < 8; bi++) {
         if (!wallBuckets[bi].length) continue;
-        const wm = new THREE.Mesh(mergeGeometries(wallBuckets[bi], false), _wallMats[bi]);
+        const wg = mergeGeometries(wallBuckets[bi], false);
+        // aoMap samples the SECOND uv set. ExtrudeGeometry ships only one, so
+        // without this the ambient occlusion derived above is silently
+        // ignored — no error, just a flatter city and wasted texture memory
+        // (facadelab, 2026-08-05). The extrude UVs are already in metres, so
+        // copying them is exactly the mapping the AO map was built against.
+        wg.setAttribute('uv1', wg.attributes.uv);
+        const wm = new THREE.Mesh(wg, _wallMats[bi]);
         wm.castShadow = true; wm.receiveShadow = true;
         scene.add(wm);
       }
@@ -1973,6 +2179,110 @@ async function main() {
         if (awn.instanceColor) awn.instanceColor.needsUpdate = true;
         awn.castShadow = true;
         scene.add(awn);
+      }
+      // ── FIRE ESCAPES (2026-08-05, from facadelab) ────────────────────────
+      // The lab's last and strongest street-level cue. A normal map cannot fix
+      // an OUTLINE: where a facade meets the sky and where it meets the
+      // street are the two places the eye checks for depth, and a zig-zag of
+      // landings hung off the face is the one piece of geometry that breaks
+      // the flat wall plane at exactly the height the follow-cam looks at.
+      // Walk-ups only — a glass tower with a fire escape reads as a mistake.
+      // Three instanced meshes for the whole city: +3 draw calls, no colliders
+      // (every landing sits above head height, so nothing can walk into one).
+      if (feCand.length && OSM.roads && OSM.roads.length) {
+        const rngE = mulberry32(SPEC.seed + 4242);
+        // brick / stone / limestone / concrete — the lab's brownstone+concrete
+        // rule, mapped onto this runtime's seven families. Glass is excluded.
+        const WALKUP = new Set([2, 3, 5, 6, 7]);
+        const STOREY = 3.4, MAXB = 48, CAP = 260;
+        const feM = new THREE.MeshStandardMaterial({ color: 0x1e2025,
+          roughness: 0.8, metalness: 0.55 });
+        // local +z is the outward wall normal after the yaw below, so the deck
+        // is pushed forward half its depth to hang OFF the face rather than
+        // straddle it
+        const deckG = new THREE.BoxGeometry(2.7, 0.09, 1.15); deckG.translate(0, 0, 0.58);
+        const railG = new THREE.BoxGeometry(2.7, 0.85, 0.07);
+        const stairG = new THREE.BoxGeometry(0.85, 0.08, 3.0);
+        const deck = new THREE.InstancedMesh(deckG, feM, CAP);
+        const rail = new THREE.InstancedMesh(railG, feM, CAP);
+        const stair = new THREE.InstancedMesh(stairG, feM, CAP);
+        const MF = new THREE.Matrix4(), QF = new THREE.Quaternion();
+        const EF = new THREE.Euler(), SF = new THREE.Vector3(1, 1, 1);
+        const PF = new THREE.Vector3();
+        let nf = 0;
+        for (const [pts, cx6, cz6, gy6, h6, bkt6] of feCand) {
+          if (nf >= CAP) break;
+          if (!WALKUP.has(bkt6) || h6 < 9 || h6 > MAXB) continue;
+          if (rngE() > 0.8) continue;
+          let mnx = 1e9, mnz = 1e9, mxx = -1e9, mxz = -1e9;
+          for (const q of pts) {
+            mnx = Math.min(mnx, q[0]); mxx = Math.max(mxx, q[0]);
+            mnz = Math.min(mnz, q[1]); mxz = Math.max(mxz, q[1]);
+          }
+          const hx6 = (mxx - mnx) / 2, hz6 = (mxz - mnz) / 2;
+          if (hx6 < 3 || hz6 < 3) continue;
+          let bd6 = 1e9, bx6 = 0, bz6 = 0;
+          for (const r of OSM.roads) for (const q of r.pts) {
+            const d6 = (q[0] - cx6) ** 2 + (q[1] - cz6) ** 2;
+            if (d6 < bd6) { bd6 = d6; bx6 = q[0]; bz6 = q[1]; }
+          }
+          if (bd6 > 45 * 45) continue;
+          // PICK A REAL WALL, NOT A BBOX FACE. Projecting the centre outward
+          // to the bounding box (what the awnings do) lands inside the
+          // building for any footprint that is not an axis-aligned rectangle,
+          // and a buried fire escape is simply an invisible one — which is how
+          // this pass first shipped 24 landings and showed none. Choose the
+          // actual polygon EDGE facing the nearest road, and take its outward
+          // normal from the edge itself.
+          let bE = -1, bEd = 1e9, enx = 0, enz = 0;
+          for (let e6 = 0; e6 < pts.length; e6++) {
+            const a6 = pts[e6], c6 = pts[(e6 + 1) % pts.length];
+            const ex7 = c6[0] - a6[0], ez7 = c6[1] - a6[1];
+            const eL = Math.hypot(ex7, ez7);
+            if (eL < 4) continue;                    // no room for a landing
+            const mx7 = (a6[0] + c6[0]) / 2, mz7 = (a6[1] + c6[1]) / 2;
+            // outward = whichever perpendicular steps AWAY from the centroid
+            let px7 = -ez7 / eL, pz7 = ex7 / eL;
+            if ((mx7 - cx6) * px7 + (mz7 - cz6) * pz7 < 0) { px7 = -px7; pz7 = -pz7; }
+            const d7 = Math.hypot(mx7 - bx6, mz7 - bz6);
+            if (d7 < bEd) { bEd = d7; bE = e6; enx = px7; enz = pz7; }
+          }
+          if (bE < 0) continue;
+          const a8 = pts[bE], c8 = pts[(bE + 1) % pts.length];
+          const ex6 = (a8[0] + c8[0]) / 2, ez6 = (a8[1] + c8[1]) / 2;
+          const eLen = Math.hypot(c8[0] - a8[0], c8[1] - a8[1]);
+          const nx6 = enx, nz6 = enz;
+          const yaw6 = Math.atan2(nx6, nz6);
+          EF.order = 'YXZ';                 // yaw to the wall FIRST, then tilt
+          EF.set(0, yaw6, 0); QF.setFromEuler(EF);
+          // slide along the wall so every building's escape is not dead-centre,
+          // bounded by the edge so it cannot hang off the corner
+          const tx6 = -nz6, tz6 = nx6;      // wall tangent
+          const slide = (rngE() - 0.5) * Math.max(0, eLen - 3.6);
+          const px6 = ex6 + tx6 * slide, pz6 = ez6 + tz6 * slide;
+          const floors = Math.min(Math.floor(h6 / STOREY) - 1, 7);
+          for (let s6 = 1; s6 <= floors && nf < CAP; s6++) {
+            const y6 = gy6 + s6 * STOREY;
+            MF.compose(PF.set(px6, y6, pz6), QF, SF); deck.setMatrixAt(nf, MF);
+            MF.compose(PF.set(px6 + nx6 * 1.1, y6 + 0.45, pz6 + nz6 * 1.1), QF, SF);
+            rail.setMatrixAt(nf, MF);
+            // the diagonal between landings — the zig-zag that makes the
+            // shadow read as a fire escape and not a row of shelves
+            EF.set(0.72, yaw6, 0); QF.setFromEuler(EF);
+            const zig = s6 % 2 ? 0.95 : -0.95;
+            MF.compose(PF.set(px6 + tx6 * zig + nx6 * 0.55, y6 - STOREY / 2,
+                              pz6 + tz6 * zig + nz6 * 0.55), QF, SF);
+            stair.setMatrixAt(nf, MF);
+            EF.set(0, yaw6, 0); QF.setFromEuler(EF);
+            nf++;
+          }
+        }
+        deck.count = rail.count = stair.count = nf;
+        for (const im of [deck, rail, stair]) {
+          im.instanceMatrix.needsUpdate = true;
+          im.castShadow = true;
+          scene.add(im);
+        }
       }
       // r9 STREET TREES: rows of canopies lining every road — the #1
       // enclosure cue in the GTA-loop reference frame. Two instanced
@@ -5574,6 +5884,10 @@ async function main() {
                     textures: renderer.info.memory.textures,
                     geometries: renderer.info.memory.geometries }),
   };
+  // aim the follow-cam from the harness. The default framing looks DOWN at
+  // the street, so screenshot checks of anything vertical — facades above the
+  // first storey especially — were judging a view the shot never contained.
+  window.__game.aim = (y, p) => { yaw = y; pitch = Math.max(0.02, p); };
   // scene/renderer handles for the shotgate probes: judging a lighting or
   // material change from screenshots alone is guesswork, and the city's
   // night look is decided by numbers (fog density, env intensity) that a
