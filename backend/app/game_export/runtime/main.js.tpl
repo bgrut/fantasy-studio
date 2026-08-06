@@ -1432,16 +1432,31 @@ async function main() {
     // came out postage-stamp sized and a tower wore the same image ~20x.
     // That single number is what read as "a textured box" from the street —
     // no albedo, normal map or cornice can survive wrong texel density.
+    // r16 recalibration: the storey counts are now MEASURED, not eyeballed.
+    // Two independent passes over each photo (luminance autocorrelation, and
+    // connected-component labelling of the same windowness mask the runtime
+    // derives) agreed on glass/brick/brick2/concrete; stone and limestone were
+    // settled by rendering candidate storey lines over the photo and picking
+    // the one that lands on the cornices. limestone's repeating unit turned
+    // out to be TWO grand 5m storeys, not three — which is why its band of
+    // ornament was repeating at the wrong pitch.
+    // Bays are the less trustworthy axis (the detector locks onto paired
+    // sashes rather than the bay rhythm), so they carry a visual count.
     const _FTILE = [
       [6, 6, 4, 2],                 // 0 procedural window grid (canvas, 6m tile)
-      [14, 23.8, 4, 7],             // 1 facade_glass      7 storeys/tile
-      [11.7, 19.8, 3, 6],           // 2 facade_brick      6
-      [12, 18, 3, 5],               // 3 facade_stone      5
-      [20, 20.4, 5, 6],             // 4 facade_glass2     diagrid, panel-scaled
-      [18.9, 16.8, 7, 4],           // 5 facade_brick2     4 tall loft storeys
-      [15.2, 24, 4, 8],             // 6 facade_concrete   8 balcony storeys
-      [13.2, 13.8, 3, 3],           // 7 facade_limestone  3 grand storeys
+      [26.8, 27.4, 10.3, 7.4],      // 1 facade_glass      2.6m pane / 3.7m storey
+      [25.6, 15.2, 7.3, 4.6],       // 2 facade_brick      3.5m bay  / 3.3m storey
+      [22.8, 33.3, 6.5, 10.4],      // 3 facade_stone      composite, 10 storeys
+      [20.8, 20.4, 8, 6],           // 4 facade_glass2     diagrid, panel-scaled
+      [18.7, 17.2, 5.5, 4],         // 5 facade_brick2     4 tall loft storeys
+      [23.5, 27.9, 6.9, 9],         // 6 facade_concrete   9 balcony storeys
+      [11.3, 10, 2.5, 2],           // 7 facade_limestone  2 grand 5m storeys
     ];
+    // Masonry gets horizontal storey courses; curtain wall gets vertical
+    // mullion fins. Getting this backwards is one of the loudest "generated
+    // building" tells there is — a glass tower with stone sill bands, or a
+    // brownstone with aluminium fins, reads wrong before you can say why.
+    const _GLASSY = new Set([1, 4]);
     const _FFAM = [null, 'facade_glass', 'facade_brick', 'facade_stone',
       'facade_glass2', 'facade_brick2', 'facade_concrete', 'facade_limestone'];
     const _storeyH = (bkt) => _FTILE[bkt][1] / _FTILE[bkt][3];
@@ -1461,6 +1476,17 @@ async function main() {
       if (geo.index) return;
       const T = _FTILE[bkt] || _FTILE[0];
       const bayW = T[0] / T[2], stH = T[1] / T[3];
+      // PHASE, PER BUILDING: neighbours sharing a family used to start the
+      // same photo at the same pixel, so a distinctive feature (limestone's
+      // ornamented bay especially) lined up across the whole street and the
+      // block read as one building stamped out repeatedly. Shifted by a WHOLE
+      // number of cells, so the storey grid the trim geometry is placed on is
+      // untouched and a window still maps onto a window. Hashed from the
+      // footprint centre rather than drawn from rngB, so adding it does not
+      // reshuffle the city every existing seed generates.
+      const _hsh = Math.abs(Math.sin(pts[0][0] * 12.9898 + pts[0][1] * 78.233) * 43758.5453);
+      const phU = (Math.floor(_hsh * 97) % 7) * bayW;
+      const phV = (Math.floor(_hsh * 31) % 5) * stH;
       // metres -> uv scale. The building height is snapped to whole storeys
       // before it gets here, so this is 1.0 for the main mass and only bends
       // for setback tiers.
@@ -1494,7 +1520,7 @@ async function main() {
             const j = i + k;
             const along = (pos.getX(j) - be[0]) * be[2]
                         + (pos.getZ(j) - be[1]) * be[3];
-            uv.setXY(j, along * be[5], (pos.getY(j) - baseY) * kv);
+            uv.setXY(j, along * be[5] + phU, (pos.getY(j) - baseY) * kv + phV);
           }
         }
       }
@@ -1657,7 +1683,7 @@ async function main() {
         geo.setAttribute('color', new THREE.BufferAttribute(cols, 3));
         metricWallUV(geo, b.pts, gy, h, _bkt);
         splitGroups(geo, _bkt);
-        feCand.push([b.pts, cx, cz, gy, h, _bkt]);
+        feCand.push([b.pts, cx, cz, gy, h, _bkt, tint]);
         let _capPts = b.pts, _capTop = gy + h;
         // r14 SETBACKS: real towers STEP BACK as they rise — a single
         // extruded prism is why buildings read as 'geometric shapes'.
@@ -2136,6 +2162,154 @@ async function main() {
         blk.instanceMatrix.needsUpdate = true;
         blk.castShadow = blk.receiveShadow = true;
         scene.add(blk);
+      }
+      // ── THE FACADE AS GEOMETRY, NOT AS A PHOTO (2026-08-06 r2) ───────────
+      // A photograph has no parallax and no silhouette. Every depth cue in it
+      // was baked at the photographer's light angle, so it does not move when
+      // you move and it does not change when the sun does — which is exactly
+      // the two things the eye checks. That is why a well-lit, correctly
+      // scaled photo facade STILL reads as a box with a picture on it.
+      //
+      // So the wall gets real projecting geometry, lit by the real scene
+      // lights: a plinth the building stands on, a course at every storey
+      // line, and a pier at every corner. Cheap in the only way that matters
+      // — five instanced meshes for an entire city.
+      //
+      // These land on the STOREY GRID rather than on individual windows, and
+      // that is a deliberate limit. The storey period measures cleanly out of
+      // every photo; the bay period does not (windows come in irregular pairs
+      // and the detector locks onto the wrong rhythm), so window-aligned
+      // sills would sit on brick as often as on glass. Horizontal courses
+      // need only the number this engine already trusts enough to quantise
+      // building heights to.
+      if (feCand.length) {
+        const CAP_B = 6000, CAP_F = 3600, CAP_P = 900, CAP_L = 1400;
+        // Untinted pale stone made the trim read as a separate pile of slabs
+        // leaning on the building. Each instance is coloured from its own
+        // building's tint (a shade lighter, the way real stone trim sits
+        // against brick), so the courses belong to the wall they grow out of.
+        const stoneM = new THREE.MeshStandardMaterial({ color: 0xffffff,
+          roughness: 0.95, metalness: 0.02 });
+        const finM = new THREE.MeshStandardMaterial({ color: 0xffffff,
+          roughness: 0.42, metalness: 0.72 });
+        const U1 = new THREE.BoxGeometry(1, 1, 1);
+        const mkI = (mat, n) => {
+          const im = new THREE.InstancedMesh(U1, mat, n);
+          im.castShadow = im.receiveShadow = true;
+          return im;
+        };
+        const band = mkI(stoneM, CAP_B);      // storey course
+        const fin = mkI(finM, CAP_F);         // curtain-wall mullion
+        const pier = mkI(stoneM, CAP_P);      // corner pier / quoin
+        const base = mkI(stoneM, CAP_L);      // plinth
+        const bcap = mkI(stoneM, CAP_L);      // plinth cap
+        let nb2 = 0, nf2 = 0, npr = 0, nbs = 0;
+        const MB = new THREE.Matrix4(), QB = new THREE.Quaternion();
+        const EB = new THREE.Euler(), SB = new THREE.Vector3(), VB = new THREE.Vector3();
+        // a box of thickness t whose centre sits this far along the outward
+        // normal projects exactly `p` proud of the wall and stays keyed into
+        // it by the remainder — floating trim is worse than none
+        const seat = (p, t) => p - t / 2;
+        const trimC = new THREE.Color();
+        for (const [pts, bcx, bcz, gy7, h7, bkt7, tint7] of feCand) {
+          trimC.copy(tint7 || new THREE.Color(0x8a857c)).multiplyScalar(1.18);
+          const T7 = _FTILE[bkt7] || _FTILE[0];
+          const stH = T7[1] / T7[3], bayW7 = T7[0] / T7[2];
+          const nSt7 = Math.max(1, Math.round(h7 / stH));
+          const glassy = _GLASSY.has(bkt7);
+          const PB = Math.min(Math.max(stH, 3.2), 5.5);      // one ground storey
+          let ccx = 0, ccz = 0;
+          for (const q of pts) { ccx += q[0]; ccz += q[1]; }
+          ccx /= pts.length; ccz /= pts.length;
+          for (let i = 0; i < pts.length; i++) {
+            const a = pts[i], c = pts[(i + 1) % pts.length];
+            const dx = c[0] - a[0], dz = c[1] - a[1];
+            const L7 = Math.hypot(dx, dz);
+            if (L7 < 2.2) continue;
+            const ux = dx / L7, uz = dz / L7;
+            const mx = (a[0] + c[0]) / 2, mz = (a[1] + c[1]) / 2;
+            let nx = -uz, nz = ux;                    // outward
+            if ((mx - ccx) * nx + (mz - ccz) * nz < 0) { nx = -nx; nz = -nz; }
+            EB.set(0, Math.atan2(-uz, ux), 0);        // local X runs the edge
+            QB.setFromEuler(EB);
+            const put = (im, idx, along, y, sx, sy, sz, d) => {
+              SB.set(sx, sy, sz);
+              VB.set(a[0] + ux * along + nx * d, y, a[1] + uz * along + nz * d);
+              MB.compose(VB, QB, SB);
+              im.setMatrixAt(idx, MB);
+              im.setColorAt(idx, trimC);
+            };
+            // PLINTH: a building standing ON something instead of sprouting
+            // out of the pavement. Also hides the ground-floor seam where the
+            // facade photo used to run straight into the kerb.
+            if (nbs < CAP_L) {
+              put(base, nbs, L7 / 2, gy7 + PB / 2, L7 + 0.3, PB, 0.26, seat(0.13, 0.26));
+              put(bcap, nbs, L7 / 2, gy7 + PB, L7 + 0.48, 0.14, 0.34, seat(0.20, 0.34));
+              nbs++;
+            }
+            if (glassy) {
+              // MULLION FINS: the vertical blades that give a curtain wall its
+              // corduroy of shadow and its only real depth. Spaced on the
+              // photo's own pane rhythm so they agree with the printed glazing.
+              const nf3 = Math.max(2, Math.round(L7 / Math.max(bayW7, 1.6)));
+              for (let k = 0; k <= nf3 && nf2 < CAP_F; k++) {
+                put(fin, nf2++, (k / nf3) * L7, gy7 + PB + (h7 - PB) / 2,
+                    0.13, h7 - PB, 0.26, seat(0.17, 0.26));
+              }
+            } else {
+              // STOREY COURSES: a hard shadow line every storey, all the way
+              // up. This is the cue that survives being looked at from a
+              // moving camera, and it serrates the corner so the building
+              // stops ending in a knife edge against the sky.
+              for (let s = 1; s < nSt7 && nb2 < CAP_B; s++) {
+                const y7 = gy7 + s * stH;
+                if (y7 < gy7 + PB + 0.4) continue;        // swallowed by the plinth
+                // Deep enough to catch light and throw a line of shadow, no
+                // deeper: at the first tuning these projected ~20cm and the
+                // building read as a stack of pancakes. A sill course is a
+                // few centimetres of stone, not a balcony.
+                const major = (s % 3) === 0;             // every third reads deeper
+                put(band, nb2++, L7 / 2, y7,
+                    L7 + (major ? 0.28 : 0.16), major ? 0.14 : 0.085,
+                    major ? 0.24 : 0.17,
+                    seat(major ? 0.10 : 0.055, major ? 0.24 : 0.17));
+              }
+            }
+          }
+          // CORNER PIERS: real buildings turn a corner with something — a
+          // quoin, a pilaster, a structural pier. An unarticulated 90 deg
+          // arris is the most box-like thing a building can do, and it is the
+          // first thing the eye lands on at street level.
+          if (h7 >= 7) {
+            for (let i = 0; i < pts.length && npr < CAP_P; i++) {
+              const pv = pts[(i - 1 + pts.length) % pts.length];
+              const q = pts[i], nx2 = pts[(i + 1) % pts.length];
+              const e1x = q[0] - pv[0], e1z = q[1] - pv[1];
+              const e2x = nx2[0] - q[0], e2z = nx2[1] - q[1];
+              const l1 = Math.hypot(e1x, e1z), l2 = Math.hypot(e2x, e2z);
+              if (l1 < 2.2 || l2 < 2.2) continue;
+              // only where the wall actually TURNS — a near-straight vertex
+              // from a noisy OSM trace would stud the wall with random posts
+              const dot = (e1x * e2x + e1z * e2z) / (l1 * l2);
+              if (dot > 0.72) continue;
+              const w7 = glassy ? 0.36 : 0.52;
+              SB.set(w7, h7, w7);
+              EB.set(0, Math.atan2(-e1z / l1, e1x / l1), 0);
+              QB.setFromEuler(EB);
+              VB.set(q[0], gy7 + h7 / 2, q[1]);
+              MB.compose(VB, QB, SB);
+              pier.setColorAt(npr, trimC);
+              pier.setMatrixAt(npr++, MB);
+            }
+          }
+        }
+        band.count = nb2; fin.count = nf2; pier.count = npr;
+        base.count = nbs; bcap.count = nbs;
+        for (const im of [band, fin, pier, base, bcap]) {
+          im.instanceMatrix.needsUpdate = true;
+          if (im.instanceColor) im.instanceColor.needsUpdate = true;
+          if (im.count) scene.add(im);
+        }
       }
       // ROOFTOP CLUTTER (Phase 118): water towers + AC units — the skyline
       // detail that says 'real city'. Instanced; capped for perf.
