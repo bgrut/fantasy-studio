@@ -167,6 +167,7 @@ export default function GameStudio() {
   // otherwise no way to drop onto the running game. `pendingDrop` survives
   // the round trip to the runtime, which answers with fs-pick asynchronously.
   const [dragAsset, setDragAsset] = useState<PaletteAsset | null>(null)
+  const [dropToast, setDropToast] = useState<string | null>(null)
   const pendingDrop = useRef<PaletteAsset | null>(null)
   // A card can unmount mid-drag (switching palette tabs), and then its own
   // dragend never fires and the overlay stays up over the running game —
@@ -404,16 +405,21 @@ export default function GameStudio() {
         const a = pendingDrop.current
         pendingDrop.current = null
         if (!a) return
-        // STAGE, DON'T FIRE (2026-08-06). Dropping used to rebuild instantly,
-        // which meant an unresolvable noun failed SILENTLY — you waited out a
-        // build and got no building. The drop now writes the same sentence you
-        // would have typed into the edit bar and arms the point, so you can see
-        // what is about to happen, reword it, and press the button you already
-        // press for every other edit.
+        // A DROP IS A COMPLETE INSTRUCTION (2026-08-06 r2). Staging it in
+        // the edit bar meant a drag did nothing visible until you found and
+        // pressed a button somewhere else, which read as "drag is broken".
+        // You already said what and where by dropping, so it applies itself.
+        // The sentence still lands in the edit bar so the edit is legible and
+        // re-runnable, and Inspect is no longer the only route to a placed
+        // edit.
         setSelLine(null); setLineA(null)
-        setSelPick(p)
+        setSelPick(null)
         setError(null)
-        setEditPrompt(`place a ${a.subject} here`)
+        const sentence = `place a ${a.subject} here`
+        setEditPrompt(sentence)
+        setDropToast(`Placing ${a.subject} at (${p.x.toFixed(1)}, ${p.z.toFixed(1)})…`)
+        void startJobRef.current?.(sentence, jobRef.current?.id,
+          { x: p.x, z: p.z, target: p.target.name })
         return
       }
       // LINE TOOL: first click anchors A, second closes the run A→B
@@ -442,6 +448,12 @@ export default function GameStudio() {
   const jobRef = useRef<typeof job>(null)
   useEffect(() => { startJobRef.current = startJob }, [startJob])
   useEffect(() => { jobRef.current = job }, [job])
+
+  useEffect(() => {
+    if (!dropToast) return
+    const t = setTimeout(() => setDropToast(null), 6000)
+    return () => clearTimeout(t)
+  }, [dropToast])
 
   const sendInspect = useCallback((on: boolean) => {
     gameFrameRef.current?.contentWindow?.postMessage({ type: 'fs-inspect', on }, '*')
@@ -1131,6 +1143,13 @@ export default function GameStudio() {
                                  border border-[#a78bfa]/40 text-xs text-[#d6c9ff]">
                   drop to place <b>{dragAsset.subject}</b>
                 </span>
+              </div>
+            )}
+            {dropToast && (
+              <div className="absolute top-2 right-2 z-30 px-3 py-1.5 rounded-lg
+                              bg-[rgba(10,9,18,0.9)] border border-[#a78bfa]/40
+                              text-xs text-[#d6c9ff] pointer-events-none">
+                🧩 {dropToast}
               </div>
             )}
             {/* hover-audit chip: what's under the cursor, live */}

@@ -354,7 +354,7 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                 import re as _re
                 m = _re.match(
                     r"^\s*(?:please\s+)?(?:place|put|add|drop|spawn)\s+"
-                    r"(?:a|an|the|another|some)?\s*(.+)$",
+                    r"(?:an|a|the|another|some)?\b\s*(.+)$",
                     req.prompt.strip(), _re.IGNORECASE)
                 if m:
                     rest = m.group(1)
@@ -368,10 +368,23 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                             interact = rest[i + len(sep):].strip().strip("\"'“”‘’.") or None
                             rest = rest[:i]
                             break
-                    noun = _re.sub(
-                        r"\b(right\s+)?(here|there|at (this|the selected) spot|"
-                        r"on (this|the) spot|in this spot)\b",
-                        "", rest, flags=_re.IGNORECASE).strip(" .!,\"'")
+                    # LOCATIVE STRIPPING (2026-08-06). This was five literal
+                    # phrases, so "add storefront at the point i picked" left a
+                    # six-word noun, missed the <=3 word gate below, and fell
+                    # through to the LLM — which regenerates the spec and threw
+                    # an entire OSM city away to add one shop. A surgical
+                    # append must not depend on the user phrasing "here"
+                    # exactly: the coordinates are already attached, so the
+                    # locative carries no information and is pure noise.
+                    for _pat in (
+                        r"\bwhere\s+i\s+(clicked|picked|selected|pointed).*$",
+                        r"\b(at|on|in|to)\s+(this|that|the|my)?\s*"
+                        r"(selected|clicked|picked|chosen|marked)?\s*"
+                        r"(point|spot|place|location|marker|pin|position|pick)\b.*$",
+                        r"\b(right\s+)?(here|there)\b",
+                    ):
+                        rest = _re.sub(_pat, "", rest, flags=_re.IGNORECASE)
+                    noun = rest.strip(" .!,\"'")
                     # strip PURPOSE clauses — "a fence to block the dogs" is
                     # still just a fence (the blocking comes free: colliders)
                     for cut in (" to ", " so ", " for ", " between ",
@@ -1344,7 +1357,16 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         # prompt swaps procedural building scatter for actual OSM footprints.
         # Real blocks are ~100-250m — the world grows to hold a real district.
         place = detect_place(req.prompt) if is_city else None
-        if place:
+        # EDITS MUST NOT BULLDOZE THE CITY (2026-08-06). Place detection reads
+        # the PROMPT, and an edit's prompt is "add a storefront here" — there is
+        # no city name in it, because the setting was decided two builds ago. So
+        # a real-map game quietly rebuilt itself as procedural scatter and 46
+        # OSM footprints became 0: the user added one shop and lost Manhattan.
+        # A scan the base already paid for IS the world; carry it rather than
+        # re-derive it from a sentence that was never about the setting.
+        _base_level = ((base_spec or {}).get("world") or {}).get("level") or {}
+        _keep_city = (not place) and bool(_base_level.get("osm"))
+        if place or _keep_city:
             spec.world.size_m = max(spec.world.size_m, 360.0)
         # SETTING-DRIVEN TERRAIN (2026-07-05): "mountains" means PEAKS, not a
         # flat plane — amplitude scales with the world class, scalably.
@@ -1377,6 +1399,16 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             amp = max(amp, 3.0)
         spec.world.level = build_level(
             spec.seed, spec.world.size_m, n_objectives=n_obj, amplitude_m=amp)
+        if _keep_city:
+            # everything the city scan produced: footprints, the road route the
+            # mission path follows, the goal pin, and any doors already planned
+            for _ck in ("osm", "path", "goal", "enterable", "enterables",
+                        "landmarks", "spawn"):
+                if _ck in _base_level:
+                    spec.world.level[_ck] = _base_level[_ck]
+            job.setdefault("notes", []).append(
+                "kept the base game's real-city map (%d buildings) — an edit "
+                "does not re-scan" % len((_base_level.get("osm") or {}).get("buildings", [])))
         # INTERIOR LEVELS (Phase 95): 'inside a castle/house/dungeon' builds
         # ROOMS — walls with colliders, doorways, furniture, torchlight. The
         # words must say inside/interior/indoor; 'defends the castle' stays an
