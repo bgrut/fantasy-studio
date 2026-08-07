@@ -78,6 +78,20 @@ PATTERN_REFERENCE_FRAMING: Dict[str, str] = {
     # Strong directives: NO action poses, NO motion blur, full body grounded.
     # These framings are what TripoSR/InstantMesh need for clean upright meshes.
     "quadruped": "perfect side profile, standing still on all four legs, motionless, full body in frame, vertical posture, feet flat on ground, short smooth well-groomed coat, clean silhouette",
+    # 2026-08-07: THE PROMPT DOES NOT DECIDE THE POSE. Biped references are
+    # generated through controlnet-depth against pose_templates/
+    # biped_depth.png, and that template is a flat T-POSE — arms straight
+    # out. Depth conditioning dominates the text, so asking for "arms
+    # hanging down at sides" here changes nothing, and adding T-pose to the
+    # negative prompt (below) changed nothing either: both were tried and
+    # both produced arms-out references.
+    #
+    # That matters because the rigger builds its arm chain expecting a
+    # TRELLIS A-pose (hands ~0.18H BELOW the shoulders, see
+    # orchestrator/mocap_retarget.py). A T-posed mesh gets a skeleton that
+    # disagrees with it, so the character keeps its arms out through every
+    # clip — idle, walk and run alike. Fixing this means authoring an
+    # arms-down biped_depth.png, NOT editing these strings.
     "biped":     "standing upright, both arms relaxed hanging straight down at sides, open empty hands, nothing held, neutral A-pose, full body in frame, feet flat on ground",
     # seamless studio cyclorama (2026-07-22): SDXL loves posing trucks in
     # FORESTS — the busy background then projects onto the body as camo
@@ -99,7 +113,7 @@ PATTERN_REFERENCE_FRAMING: Dict[str, str] = {
 # Negative-prompt additions per pattern — explicitly veto problematic poses
 PATTERN_NEGATIVE: Dict[str, str] = {
     "quadruped": "running, jumping, leaping, mid-action, motion blur, dynamic pose, legs in the air, tilted, perspective distortion, wispy fur strands, flyaway hair, shaggy fuzzy silhouette, long unkempt fur",
-    "biped":     "holding weapon, holding object, aiming, raised arm, bent elbow, crossed arms, hands on hips, dynamic pose, motion blur, running, jumping, tilted, perspective distortion, cropped, anatomy figure, ecorche, flayed, skinless, exposed muscle, muscle suit, x-ray, medical illustration, red and blue veins, nude, naked",
+    "biped":     "T-pose, t pose, arms outstretched, arms straight out, arms horizontal, arms spread wide, wingspan, jumping jack, holding weapon, holding object, aiming, raised arm, bent elbow, crossed arms, hands on hips, dynamic pose, motion blur, running, jumping, tilted, perspective distortion, cropped, anatomy figure, ecorche, flayed, skinless, exposed muscle, muscle suit, x-ray, medical illustration, red and blue veins, nude, naked",
     "vehicle":   "moving, motion blur, tilted, perspective distortion, forest, trees, outdoor scene, road, landscape, buildings, sky",
     "flying":    "flying, mid-air, coiled, curled, head close-up, portrait, tattoo style, line art, illustration, logo, emblem, circular composition, cropped body, motion blur, dynamic pose",
     "aquatic":   "pattern, wallpaper, multiple animals, many, group, pod, school of fish, repeated, tiled, seamless pattern, illustration, cartoon, drawing, logo, fabric print, cropped body, top view",
