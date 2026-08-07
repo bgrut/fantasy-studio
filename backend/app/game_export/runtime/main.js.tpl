@@ -7046,8 +7046,20 @@ async function main() {
     pickup: { length: 5.40, width: 2.00, bodyH: 0.74, bodyY: 0.68, cabinLen: 0.30, cabinH: 0.62, cabinX: 0.13, wheelR: 0.41, wheelBase: 0.33, bed: 1 },
     van:    { length: 5.25, width: 2.02, bodyH: 1.08, bodyY: 0.80, cabinLen: 0.58, cabinH: 0.44, cabinX: -0.11, wheelR: 0.36, wheelBase: 0.33 },
     taxi:   { length: 4.60, width: 1.86, bodyH: 0.62, bodyY: 0.54, cabinLen: 0.44, cabinH: 0.52, cabinX: -0.03, wheelR: 0.34, wheelBase: 0.31, taxi: 1 },
+    // 2026-08-07: six silhouettes repeated down a whole avenue still read as
+    // a fleet of the same car. These four are the shapes a New York street
+    // actually has that the set was missing — the long low one, the tall
+    // narrow one, the box truck and the wagon.
+    sports: { length: 4.35, width: 1.94, bodyH: 0.46, bodyY: 0.40, cabinLen: 0.30, cabinH: 0.34, cabinX: -0.12, wheelR: 0.34, wheelBase: 0.34 },
+    compact:{ length: 3.85, width: 1.70, bodyH: 0.62, bodyY: 0.54, cabinLen: 0.46, cabinH: 0.54, cabinX: -0.01, wheelR: 0.30, wheelBase: 0.30 },
+    box:    { length: 6.10, width: 2.18, bodyH: 1.35, bodyY: 0.92, cabinLen: 0.26, cabinH: 0.50, cabinX: 0.30, wheelR: 0.40, wheelBase: 0.34 },
+    wagon:  { length: 4.90, width: 1.88, bodyH: 0.66, bodyY: 0.56, cabinLen: 0.56, cabinH: 0.50, cabinX: -0.05, wheelR: 0.34, wheelBase: 0.31 },
   };
-  const CAR_TYPE_KEYS = ['sedan', 'sedan', 'coupe', 'suv', 'suv', 'pickup', 'van', 'taxi'];
+  // weighted so the street is mostly ordinary traffic with the odd truck —
+  // an even mix reads as a car showroom, not a city
+  const CAR_TYPE_KEYS = ['sedan', 'sedan', 'sedan', 'compact', 'compact',
+    'coupe', 'suv', 'suv', 'wagon', 'pickup', 'van', 'taxi', 'taxi',
+    'sports', 'box'];
   function buildCar(cp) {
     const g = new THREE.Group();
     const T = CAR_TYPES[cp.type] || {};
@@ -7618,7 +7630,11 @@ async function main() {
         // the draw — it is one AnimationMixer and one skeleton update per
         // walker per frame, so the crowd scales by only paying that for
         // the ones you can actually see (LOD in the step loop below).
-        for (let i = 0; i < 90; i++) {
+        // 2026-08-07: 90 across a whole Manhattan district is a quiet
+        // Sunday. The per-frame cost is the mixer and the skeleton update,
+        // and both are already gated by the LOD in the step loop, so only
+        // the pedestrians actually on screen pay for the extra hundred.
+        for (let i = 0; i < 190; i++) {
           // Picking a road uniformly gave a 20m alley the same share of the
           // crowd as a 400m avenue, so ninety people piled into whichever
           // short stubs won the roll and the rest of the city read as empty.
@@ -7653,17 +7669,19 @@ async function main() {
           scene.add(holder2);
           // strollers and people late for something, not one march tempo
           const spd = 0.8 + rngP() * 1.25;
-          let mixer2 = null;
+          let mixer2 = null, _pedAct = null;
           if (_mv.walk) {
             mixer2 = new THREE.AnimationMixer(inst);
             const act = mixer2.clipAction(_mv.walk);
             // clip rate follows ground speed or the fast walkers moonwalk
             act.timeScale = (spd / 1.35) / build;
             act.play();
+            _pedAct = act;                    // so a knockdown can resume it
             mixer2.update(rngP() * 2.5);      // phase-shift: no synchronized march
           }
           const _pdir = rngP() < 0.5 ? 1 : -1;
           window.__peds.push({ obj: holder2, mixer: mixer2, pts: r.pts,
+            down: 0, kx: 0, kz: 0, spin: 0, _act: _pedAct,
             seg: Math.max(0, Math.floor(rngP() * (r.pts.length - 1))), t: rngP(),
             speed: spd, dir: _pdir,
             // KEEP RIGHT: side was rolled independently of direction, so
@@ -8390,6 +8408,10 @@ async function main() {
                   && (P.mode || 'walk') === 'walk'
                   && !!(OSM && OSM.roads && OSM.roads.length);
   let carPrompt = null, nearCar = null, heldCar = null, camDistMul = 1, carCool = 0;
+  // KNOCKED DOWN (2026-08-07): seconds left on the floor, and the slide
+  // still carrying you. Declared UP here with the other drive state — a
+  // const read before its declaration takes the whole runtime down (TRAP 1).
+  let downT = 0, downVX = 0, downVZ = 0;
   if (CARS_OK) {
     const rngC = mulberry32(SPEC.seed + 9091);
     const tints = [0x8e1f26, 0x1d2530, 0xb8bcc4, 0x2b4a72, 0xc2a03a, 0x24503c];
@@ -8477,20 +8499,56 @@ async function main() {
       // and take the whole runtime down with it (TRAP 1).
       const sp = document.createElement('div');
       sp.style.cssText = 'position:fixed;right:22px;bottom:22px;z-index:24;'
-        + 'display:none;font:700 13px system-ui;color:#dff4ff;text-align:center;'
+        + 'display:none;color:#dff4ff;text-align:center;'
         + 'background:rgba(10,9,18,.72);border:1px solid rgba(127,212,255,.4);'
-        + 'border-radius:12px;padding:10px 16px 8px;pointer-events:none;'
-        + 'min-width:104px;';
-      sp.innerHTML = '<div id="spdN" style="font:800 30px system-ui;'
-        + 'line-height:1;color:#eaf7ff">0</div>'
-        + '<div style="opacity:.65;letter-spacing:.14em;margin-top:3px">KM/H</div>'
-        + '<div style="margin-top:7px;height:4px;background:rgba(255,255,255,.14);'
-        + 'border-radius:3px;overflow:hidden">'
-        + '<div id="spdB" style="height:100%;width:0%;background:#7fd4ff"></div></div>';
+        + 'border-radius:50%;padding:6px;pointer-events:none;line-height:0;';
+      // ANALOG DIAL (2026-08-07). A digital readout tells you a number; a
+      // needle tells you how hard you are pushing without being read at
+      // all, which is the only thing that matters at speed. 240 degrees of
+      // sweep from -210 to +30, ticks every 20 km/h, redline past 120.
+      const SWEEP = 240, A0 = -210, VMAX = 160, R = 46;
+      const polar = (deg, rad) => {
+        const a = deg * Math.PI / 180;
+        return [60 + Math.cos(a) * rad, 60 + Math.sin(a) * rad];
+      };
+      let ticks = '';
+      for (let v = 0; v <= VMAX; v += 20) {
+        const ang = A0 + (v / VMAX) * SWEEP;
+        const [x1, y1] = polar(ang, R - 3), [x2, y2] = polar(ang, R - 11);
+        const hot = v >= 120;
+        ticks += `<line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" `
+          + `x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}" `
+          + `stroke="${hot ? '#ff7a6a' : 'rgba(223,244,255,.55)'}" stroke-width="2"/>`;
+        const [tx, ty] = polar(ang, R - 20);
+        ticks += `<text x="${tx.toFixed(1)}" y="${(ty + 3).toFixed(1)}" `
+          + `fill="rgba(223,244,255,.5)" font-size="8" font-family="system-ui" `
+          + `text-anchor="middle">${v}</text>`;
+      }
+      const arcPt = (v) => polar(A0 + (v / VMAX) * SWEEP, R);
+      const [ax0, ay0] = arcPt(0), [ax1, ay1] = arcPt(VMAX);
+      const [rx0, ry0] = arcPt(120), [rx1, ry1] = arcPt(VMAX);
+      sp.innerHTML = '<svg width="120" height="120" viewBox="0 0 120 120">'
+        + `<path d="M${ax0.toFixed(1)} ${ay0.toFixed(1)} A${R} ${R} 0 1 1 `
+        + `${ax1.toFixed(1)} ${ay1.toFixed(1)}" fill="none" `
+        + 'stroke="rgba(127,212,255,.30)" stroke-width="3"/>'
+        + `<path d="M${rx0.toFixed(1)} ${ry0.toFixed(1)} A${R} ${R} 0 0 1 `
+        + `${rx1.toFixed(1)} ${ry1.toFixed(1)}" fill="none" `
+        + 'stroke="rgba(255,122,106,.75)" stroke-width="3"/>'
+        + ticks
+        + '<line id="spdNdl" x1="60" y1="60" x2="60" y2="22" stroke="#7fd4ff" '
+        + 'stroke-width="3" stroke-linecap="round" '
+        + 'transform="rotate(-210 60 60)"/>'
+        + '<circle cx="60" cy="60" r="5" fill="#0d0b16" stroke="#7fd4ff" stroke-width="2"/>'
+        + '<text id="spdN" x="60" y="86" fill="#eaf7ff" font-size="15" '
+        + 'font-weight="800" font-family="system-ui" text-anchor="middle">0</text>'
+        + '<text x="60" y="98" fill="rgba(223,244,255,.5)" font-size="7.5" '
+        + 'font-family="system-ui" text-anchor="middle" letter-spacing="1.4">KM/H</text>'
+        + '</svg>';
       document.body.appendChild(sp);
       window.__speedEl = sp;
       window.__speedN = sp.querySelector('#spdN');
-      window.__speedB = sp.querySelector('#spdB');
+      window.__speedNdl = sp.querySelector('#spdNdl');
+      window.__speedMax = 160;
       const hintC = document.querySelector('#hud .hint');
       if (hintC) hintC.textContent += ' · E by a car to drive it';
     }
@@ -8599,8 +8657,15 @@ async function main() {
         const kph = Math.round(Math.hypot(carVX, carVZ) * 3.6);
         window.__speedEl.style.display = 'block';
         window.__speedN.textContent = kph;
-        window.__speedB.style.width = Math.min(100, kph / 1.1) + '%';
-        window.__speedN.style.color = kph > 85 ? '#ffd06a' : '#eaf7ff';
+        // the needle lags a little, like a real one — an instant snap reads
+        // as a number that happens to be drawn as a line
+        const want = -210 + Math.min(kph / window.__speedMax, 1) * 240;
+        window.__speedNdlA = window.__speedNdlA === undefined
+          ? want : window.__speedNdlA + (want - window.__speedNdlA) * 0.22;
+        window.__speedNdl.setAttribute('transform',
+          'rotate(' + window.__speedNdlA.toFixed(1) + ' 60 60)');
+        window.__speedNdl.setAttribute('stroke', kph > 120 ? '#ff7a6a' : '#7fd4ff');
+        window.__speedN.setAttribute('fill', kph > 120 ? '#ffb0a4' : '#eaf7ff');
       }
       return;
     }
@@ -9778,7 +9843,7 @@ varying vec2 vUvRaw;
       }
       // GRAMMAR: jump — grounded Space gives a real ballistic arc through the
       // same collider (platformers unlock from this one verb)
-      if (gameStarted && keys.Space && kcc.computedGrounded()) { vy = 7.2; sfx('step'); }
+      if (gameStarted && keys.Space && kcc.computedGrounded() && downT <= 0) { vy = 7.2; sfx('step'); }
       vy = Math.max(vy - 9.81 * dt, -25);
       // airborne body language: tilt back on the rise, forward into the fall —
       // the cheap half of jump articulation until the jump clip lands
@@ -9989,6 +10054,41 @@ varying vec2 vUvRaw;
     stepDmgNumbers(dt);
     stepDust(dt);
     stepCars(dt);
+    // ── THE HERO GETS RUN OVER TOO (2026-08-07) ───────────────────────
+    // Traffic that harmlessly passes through you is the same diorama tell
+    // as pedestrians it cannot touch. On foot, a car with speed on it puts
+    // you on the tarmac: you take a hit, you slide, and you have to get
+    // back up before you can move — which is the cost that makes crossing
+    // a road mean something.
+    if (!DRIVING && !lost && downT <= 0) {
+      const pp5 = body.translation();
+      for (const tc of window.__traffic || []) {
+        if (tc.speed < 2.2) continue;
+        const dx5 = pp5.x - tc.obj.position.x, dz5 = pp5.z - tc.obj.position.z;
+        if (dx5 * dx5 + dz5 * dz5 > 5.3) continue;          // ~2.3m
+        downT = 2.2;
+        downVX = Math.sin(tc.obj.rotation.y) * Math.min(tc.speed * 0.7, 11);
+        downVZ = Math.cos(tc.obj.rotation.y) * Math.min(tc.speed * 0.7, 11);
+        playerHit(1);
+        shakeT = Math.max(shakeT, 0.45);
+        popText('Knocked down!', '#ff8fa0');
+        break;
+      }
+    }
+    if (downT > 0) {
+      downT -= dt;
+      const pp6 = body.translation();
+      const nx6 = pp6.x + downVX * dt, nz6 = pp6.z + downVZ * dt;
+      const k6 = Math.min(1, dt * 3.0);
+      downVX -= downVX * k6; downVZ -= downVZ * k6;
+      const ny6 = spawnHeight(nx6, nz6);
+      body.setNextKinematicTranslation({ x: nx6, y: ny6, z: nz6 });
+      // flat on your back, then up in the last half second
+      holder.rotation.x = downT > 0.55
+        ? Math.min(holder.rotation.x + dt * 6, Math.PI / 2)
+        : Math.max(holder.rotation.x - dt * 3.4, 0);
+      if (downT <= 0) { downT = 0; holder.rotation.x = 0; }
+    }
     // door teleports (moon plan 2.2; many venues 2026-08-05)
     if (window.__doors && window.__doors.length) {
       const pp = body.translation();
@@ -10104,7 +10204,62 @@ varying vec2 vUvRaw;
     // keep integrating for everyone so the crowd stays coherent when you
     // turn round; only the expensive half is distance-gated.
     const _pcam = playerObj.position;
+    // ── STRUCK BY A CAR (2026-08-07) ──────────────────────────────────
+    // A city where cars pass through people is a diorama. Every car with
+    // real speed on it — yours or the traffic's — knocks a pedestrian down,
+    // throws them along its heading, and they lie there before picking
+    // themselves up. Cheap: a downed walker stops its mixer, so a pile-up
+    // costs LESS per frame than the crowd walking.
+    {
+      const _hits = [];
+      if (DRIVING && heldCar && heldCar.rig) {
+        const cv = Math.hypot(carVX, carVZ);
+        if (cv > 2.2) _hits.push([heldCar.rig.position, cv, heldCar.rig.rotation.y]);
+      }
+      for (const tc of window.__traffic || []) {
+        if (tc.speed > 2.2) _hits.push([tc.obj.position, tc.speed, tc.obj.rotation.y]);
+      }
+      if (_hits.length) {
+        for (const pd of window.__peds || []) {
+          if (pd.down > 0) continue;
+          for (const [cpos, cspd, cyaw] of _hits) {
+            const dx4 = pd.obj.position.x - cpos.x, dz4 = pd.obj.position.z - cpos.z;
+            if (dx4 * dx4 + dz4 * dz4 > 6.25) continue;      // 2.5m strike radius
+            pd.down = 2.6 + Math.random() * 1.6;
+            // thrown along the CAR's heading, not away from its centre: a
+            // glancing hit should still carry you down the road
+            pd.kx = Math.sin(cyaw) * Math.min(cspd * 0.55, 9);
+            pd.kz = Math.cos(cyaw) * Math.min(cspd * 0.55, 9);
+            pd.spin = (Math.random() - 0.5) * 5;
+            if (pd.mixer) pd.mixer.stopAllAction();
+            sfx('hit');
+            break;
+          }
+        }
+      }
+    }
     for (const pd of window.__peds || []) {
+      // DOWNED: fly back, tumble flat, lie still, then get up. The walk
+      // path is frozen meanwhile so they resume where they were hit rather
+      // than snapping back onto the pavement mid-air.
+      if (pd.down > 0) {
+        pd.down -= dt;
+        const k2 = Math.min(1, dt * 3.2);
+        pd.obj.position.x += pd.kx * dt;
+        pd.obj.position.z += pd.kz * dt;
+        pd.kx -= pd.kx * k2; pd.kz -= pd.kz * k2;
+        pd.obj.position.y = hAt(pd.obj.position.x, pd.obj.position.z);
+        // tip flat over ~0.35s, hold, then stand back up in the last 0.6s
+        const tgt = pd.down > 0.6 ? Math.PI / 2 : 0;
+        pd.obj.rotation.x += (tgt - pd.obj.rotation.x) * Math.min(1, dt * 7);
+        pd.obj.rotation.y += pd.spin * dt;
+        pd.spin -= pd.spin * k2;
+        if (pd.down <= 0) {
+          pd.down = 0; pd.obj.rotation.x = 0;
+          if (pd.mixer && pd._act) pd._act.reset().play();
+        }
+        continue;
+      }
       const a3 = pd.pts[pd.seg], b3 = pd.pts[pd.seg + 1];
       if (!a3 || !b3) { pd.seg = 0; continue; }
       const segL = Math.hypot(b3[0] - a3[0], b3[1] - a3[1]) || 1;
