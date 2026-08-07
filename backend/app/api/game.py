@@ -1062,6 +1062,22 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                         f"entity '{ekind}' generation failed ({type(ge).__name__}) — skipped")
             if glb:
                 ent.name = ekind
+                # NPCs GET THE LIGHT BAKE (2026-08-07). man_anim.glb is 49MB:
+                # 478,407 triangles and 4K textures. As a background NPC its
+                # texture never finished landing, so the informant and the
+                # guards rendered as untextured grey mannequins while the
+                # crowd — which already uses the light bake — looked right.
+                # walker.glb is that same rig decimated with 512px maps and
+                # the identical idle/walk/run/attack clip set, which is
+                # exactly what scripts/_bake_walker.py exists to produce. The
+                # PLAYER keeps the full-resolution asset; it is the one
+                # character the camera ever gets close to.
+                _light = BACKEND_ROOT / "assets" / "library" / "walker.glb"
+                if str(glb).endswith("man_anim.glb") and _light.exists():
+                    glb = str(_light)
+                    job.setdefault("notes", []).append(
+                        f"{ent.behavior} uses the light walker bake "
+                        f"(man_anim is 49MB — too heavy for a background NPC)")
                 ent.asset = glb
                 if ent.height_m == 1.0:
                     ent.height_m = library.default_height(ekind)

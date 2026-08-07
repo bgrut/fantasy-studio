@@ -1239,19 +1239,19 @@ async function main() {
         // The emissive lift is dropped instead, which is what turned the
         // untextured moment into a glowing white cutout rather than a dull
         // grey one.
-        if (!m.map) {
-          // safe to tint: this pass runs after loading has settled, so a
-          // material still missing its albedo here is missing it for good.
-          // Base colour multiplies the map, so this could never be done
-          // speculatively while a texture might still arrive.
-          if (m.color && m.color.r > 0.92 && m.color.g > 0.92 && m.color.b > 0.92) {
-            m.color.setHex(0x7f8489);
-            m.needsUpdate = true;
-          }
-          if (m.emissive && m.emissive.getHex() !== 0) {
-            m.emissive.setScalar(0);
-            m.needsUpdate = true;
-          }
+        // NEVER TINT AN UNTEXTURED MATERIAL. I did, twice, reasoning that a
+        // material still missing its albedo after a settle delay was missing
+        // it for good. It is a RACE, not a permanent state: the same build
+        // shows the hero textured on one run and bare on the next, because a
+        // 4K map inside a 38MB GLB does not always decode inside the window.
+        // Base colour MULTIPLIES the map, so a tint applied during that gap
+        // survives the texture's arrival and greys the costume permanently —
+        // which is precisely the grey character being reported. Only the
+        // emissive lift is dropped, since that is what turns the bare moment
+        // into a glowing cutout instead of a plain one.
+        if (!m.map && m.emissive && m.emissive.getHex() !== 0) {
+          m.emissive.setScalar(0);
+          m.needsUpdate = true;
         }
       }
     });
@@ -7456,7 +7456,19 @@ async function main() {
             // and 29 that ignored you — which reads as broken, not as set
             // dressing. Same shape as the drivable ones, so the E prompt and
             // the drive rig pick them up unchanged.
-            window.__cars.push({ rig: gp, x: cxP, z: czP, yaw: gp.rotation.y });
+            // SOLID (2026-08-07). These were left collider-free because a
+            // solid car is a box you can be shoved inside on exit — but a
+            // street you drive straight through is a worse bug, and it is
+            // the one people notice first. The collider is DISABLED while
+            // you are driving that particular car, so entering and leaving
+            // never fights its own hull.
+            const _cc = world.createCollider(RAPIER.ColliderDesc
+              .cuboid(0.95, 0.72, 2.15)
+              .setTranslation(cxP, hAt(cxP, czP) + 0.72, czP)
+              .setRotation({ x: 0, y: Math.sin(gp.rotation.y / 2),
+                             z: 0, w: Math.cos(gp.rotation.y / 2) }));
+            window.__cars.push({ rig: gp, x: cxP, z: czP, yaw: gp.rotation.y,
+                                 col: _cc });
             nPk++;
           }
         }
@@ -7540,6 +7552,28 @@ async function main() {
         const g = { scene: _models[0].scene };
         const walkClip = _models[0].walk;
         const rngP = mulberry32(SPEC.seed + 818);
+        const _rcum = [];
+        {
+          let acc = 0;
+          for (const r of OSM.roads) {
+            let L = 0;
+            for (let i = 0; i < r.pts.length - 1; i++) {
+              L += Math.hypot(r.pts[i + 1][0] - r.pts[i][0],
+                              r.pts[i + 1][1] - r.pts[i][1]);
+            }
+            acc += Math.max(L, 1);
+            _rcum.push(acc);
+          }
+        }
+        const _pickRoadByLength = (u) => {
+          const target = u * _rcum[_rcum.length - 1];
+          let lo = 0, hi = _rcum.length - 1;
+          while (lo < hi) {
+            const mid = (lo + hi) >> 1;
+            if (_rcum[mid] < target) lo = mid + 1; else hi = mid;
+          }
+          return OSM.roads[lo];
+        };
         // ── WALKER VARIETY (2026-08-06) ────────────────────────────────
         // Every pedestrian was one bake at one height wearing one texture:
         // eight identical people walking the same block. Clothing colour is
@@ -7585,7 +7619,12 @@ async function main() {
         // walker per frame, so the crowd scales by only paying that for
         // the ones you can actually see (LOD in the step loop below).
         for (let i = 0; i < 90; i++) {
-          const r = OSM.roads[Math.floor(rngP() * OSM.roads.length)];
+          // Picking a road uniformly gave a 20m alley the same share of the
+          // crowd as a 400m avenue, so ninety people piled into whichever
+          // short stubs won the roll and the rest of the city read as empty.
+          // Choosing by cumulative LENGTH makes density per metre of
+          // pavement even, which is what "scattered everywhere" means.
+          const r = _pickRoadByLength(rngP());
           if (!r || r.pts.length < 2) continue;
           // pick the body FIRST — clothing and build come with the model,
           // and the tint below is now only within-variant variation
@@ -8459,6 +8498,7 @@ async function main() {
   function enterCar(c) {
     if (DRIVING || !c || lost) return;
     DRIVING = true; heldCar = c; window.__inCar = c;
+    if (c.col) c.col.setEnabled(false);      // never collide with your own car
     holder.visible = false;
     scene.remove(c.rig);
     playerObj.add(c.rig);
@@ -8499,7 +8539,14 @@ async function main() {
       ex = cx5 + dxw * 2.6; ez = cz5 + dzw * 2.6;
       break;
     }
-    DRIVING = false; heldCar = null; window.__inCar = null;
+    DRIVING = false; window.__inCar = null;
+    // re-arm on the NEXT frame: re-enabling while the player is still
+    // standing in the door well is how you get shoved through a wall
+    if (heldCar && heldCar.col) {
+      const _rc = heldCar.col;
+      setTimeout(() => { try { _rc.setEnabled(true); } catch (e) {} }, 700);
+    }
+    heldCar = null;
     holder.visible = true;
     holder.rotation.x = 0; holder.rotation.z = 0;
     leanP = 0; leanR = 0;
