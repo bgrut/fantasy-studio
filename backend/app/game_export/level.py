@@ -506,6 +506,33 @@ def _nearest_road_point(roads, x, z) -> tuple[float, float]:
     return bp
 
 
+def nearest_road_yaw(roads, x, z) -> float | None:
+    """Heading (degrees, runtime yaw convention) of the road segment nearest
+    (x, z), or None when there are no roads.
+
+    A dropped shopfront that ignores the street reads as a mistake even when
+    it lands exactly where the user aimed (2026-08-06): real buildings face
+    the road they front onto. Returning the SEGMENT direction rather than the
+    bearing to the road lets callers align a facade parallel to the kerb.
+    """
+    best, ang = 1e9, None
+    for r in roads or []:
+        p = r.get("pts") or []
+        for i in range(len(p) - 1):
+            ax, az, bx, bz = p[i][0], p[i][1], p[i + 1][0], p[i + 1][1]
+            dx, dz = bx - ax, bz - az
+            L2 = dx * dx + dz * dz
+            if L2 < 1e-9:
+                continue
+            t = max(0.0, min(1.0, ((x - ax) * dx + (z - az) * dz) / L2))
+            qx, qz = ax + t * dx, az + t * dz
+            d = math.hypot(x - qx, z - qz)
+            if d < best:
+                best = d
+                ang = math.degrees(math.atan2(dx, dz))
+    return None if ang is None else round(ang % 360.0, 1)
+
+
 def plan_enterables(osm: dict, level: dict, seed: int, size_m: float,
                     want: int = 4) -> list[dict]:
     """Choose `want` OSM buildings to make enterable and plan each interior.

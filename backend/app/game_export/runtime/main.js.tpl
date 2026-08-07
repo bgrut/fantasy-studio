@@ -6986,7 +6986,25 @@ async function main() {
     s.quadraticCurveTo(xAt(0.93), yt + TAIL_RISE,
                        xAt(0.97), yt - 0.04 + TAIL_RISE);       // tail
     s.lineTo(xAt(0.97), yb);                          // rear valance
-    s.lineTo(xAt(0.02), yb);                          // sill
+    // WHEEL ARCHES (2026-08-06 r7). The sill ran dead straight from tail to
+    // nose, so the flank met the ground as one flat slab and the wheels read
+    // as cylinders parked beside a wedge. Every car cuts an arch over each
+    // axle; that scallop is most of what says "car" from the side. Walking
+    // the sill BACKWARD (tail → nose) here because the profile is wound that
+    // way — arcs added in the wrong order self-intersect the shape.
+    {
+      const wb = cp.wheelBase || 0.31;
+      const arch = (wr || 0.33) * 1.16;               // arch clears the tyre
+      const aR = 1 - wb, aF = wb;                     // rear, front axle (t)
+      const halfA = arch / L;                         // arch half-width in t
+      s.lineTo(xAt(aR + halfA), yb);                  // sill up to rear arch
+      s.quadraticCurveTo(xAt(aR), yb + arch * 0.92,
+                         xAt(aR - halfA), yb);        // over the rear wheel
+      s.lineTo(xAt(aF + halfA), yb);                  // rocker panel between
+      s.quadraticCurveTo(xAt(aF), yb + arch * 0.92,
+                         xAt(aF - halfA), yb);        // over the front wheel
+    }
+    s.lineTo(xAt(0.02), yb);                          // sill to the nose
     s.closePath();
     const depth = Wd - TRACK_INSET * 2;
     const bg = new THREE.ExtrudeGeometry(s, {
@@ -8515,6 +8533,30 @@ async function main() {
                            detail: `terrain (${h.point.x.toFixed(1)}, ${h.point.z.toFixed(1)})` },
         }, '*');
         return;
+      }
+      // A DROP ALWAYS LANDS (2026-08-06). The loop above returns silently when
+      // the ray hits nothing — aimed at open sky, through a gap between
+      // buildings, or past the terrain edge. The studio arms `pendingDrop` and
+      // waits for a reply that never comes, so the drag reads as "nothing
+      // happened" with no error anywhere. Fall back to the mathematical ground
+      // plane so a drop is never swallowed; only a ray pointing at or above
+      // the horizon has no ground answer, and that we report honestly.
+      if (kindEv === 'drop') {
+        const dir = rc.ray.direction, org = rc.ray.origin;
+        if (dir.y < -1e-4) {
+          const t = -org.y / dir.y;
+          const gx = org.x + dir.x * t, gz = org.z + dir.z * t;
+          if (Math.abs(gx) < 4000 && Math.abs(gz) < 4000) {
+            window.parent.postMessage({
+              type: 'fs-pick', kind: kindEv,
+              x: +gx.toFixed(2), z: +gz.toFixed(2), y: 0,
+              target: { type: 'ground', name: 'ground',
+                        detail: `ground (${gx.toFixed(1)}, ${gz.toFixed(1)})` },
+            }, '*');
+            return;
+          }
+        }
+        window.parent.postMessage({ type: 'fs-pick', kind: 'dropfail' }, '*');
       }
     };
     window.__game.pick = (cx, cy) => pickAt(cx, cy, 'click');   // test harness

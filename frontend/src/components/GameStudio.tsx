@@ -397,6 +397,15 @@ export default function GameStudio() {
     const onMsg = (e: MessageEvent) => {
       const d = e.data
       if (!d || d.type !== 'fs-pick') return
+      // the game could not resolve a ground point (dropped on the sky, or
+      // past the map edge) — say so instead of leaving the drag armed and
+      // the user staring at an unchanged world
+      if (d.kind === 'dropfail') {
+        pendingDrop.current = null
+        setDragAsset(null)
+        setError('Dropped past the edge of the world — aim at the ground and try again.')
+        return
+      }
       const p: Pick = { x: d.x, z: d.z, target: d.target ?? { type: 'ground', name: 'ground' } }
       if (d.kind === 'hover') { setHoverPick(p); return }
       // a drop already knows WHAT it is placing, so it goes straight to the

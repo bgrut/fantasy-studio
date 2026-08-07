@@ -421,10 +421,31 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                             job.setdefault("notes", []).append(
                                 f"placed {n} × '{noun}' along your line ({dist:.0f} m)")
                         else:
-                            items.append(
-                                {"kind": kind, "name": noun.lower(),
-                                 "x": round(req.at_x, 2), "z": round(req.at_z, 2),
-                                 "interact": interact})
+                            # FACE THE STREET (2026-08-06): a shopfront dropped
+                            # at the right spot but at an arbitrary angle still
+                            # reads as a mistake — real buildings front onto the
+                            # road. Structures snap parallel to the nearest kerb;
+                            # loose props (books, chests) keep their free angle,
+                            # because a crate askew in an alley is correct.
+                            _drop = {"kind": kind, "name": noun.lower(),
+                                     "x": round(req.at_x, 2),
+                                     "z": round(req.at_z, 2),
+                                     "interact": interact}
+                            _STRUCT = ("building", "shop", "store", "storefront",
+                                       "shopfront", "cafe", "restaurant", "bar",
+                                       "office", "tower", "house", "hut", "stall",
+                                       "kiosk", "wall", "fence", "sign", "billboard")
+                            if any(w in (kind + " " + noun).lower() for w in _STRUCT):
+                                _roads = ((cur.get("world") or {}).get("level")
+                                          or {}).get("osm", {}).get("roads")
+                                if _roads:
+                                    from app.game_export.level import nearest_road_yaw
+                                    _ry = nearest_road_yaw(_roads, req.at_x, req.at_z)
+                                    if _ry is not None:
+                                        _drop["yaw_deg"] = _ry
+                                        job.setdefault("notes", []).append(
+                                            f"'{noun}' aligned to the street ({_ry:.0f}°)")
+                            items.append(_drop)
                             job.setdefault("notes", []).append(
                                 f"placed '{noun}' at ({req.at_x:.1f}, {req.at_z:.1f})"
                                 + (" with a readable hint" if interact else ""))
