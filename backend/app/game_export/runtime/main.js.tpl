@@ -7188,7 +7188,18 @@ async function main() {
   //   Flyers keep their wingspan lateral — no rotation at all.
   alignLongAxis(pRoot, ['drive', 'swim'].includes(P.mode || 'walk'));
   polishVehiclePaint(pRoot, (P.mode || 'walk') === 'drive');
-  holder.rotation.y = THREE.MathUtils.degToRad(P.yaw_offset_deg || 0);
+  // ── THE HERO FACED BACKWARDS (2026-08-07) ────────────────────────────
+  // modelYaw is atan2(dir.x, dir.z), which points the model's local +Z along
+  // the direction of travel. But these meshes are authored with their FRONT
+  // on local -Z: hold W and the follow-cam looked straight at the hero's
+  // face while he walked away from it. Measured on two different heroes
+  // (man and detective, dot = -1.00 both) so it is the player path, not an
+  // asset — and it is why four of the five entries in library_heading.json
+  // were exactly 180: each was a hand-patch for this same bug. Those entries
+  // are correspondingly reduced by 180, so a per-asset override once again
+  // means "this asset is unusual", not "the default is broken".
+  const FRONT_IS_MINUS_Z = Math.PI;
+  holder.rotation.y = FRONT_IS_MINUS_Z + THREE.MathUtils.degToRad(P.yaw_offset_deg || 0);
 
   // NIGHT HEADLIGHTS (Phase 134/D): driving after dark gets two real
   // spotlights + additive volumetric cones — the Maybach-frame look.
@@ -9655,7 +9666,8 @@ varying vec2 vUvRaw;
       console.warn('[game] fell out of world — respawned');
     }
     playerObj.position.set(nt.x, nt.y - (capHalf + capR), nt.z);
-    holder.rotation.y = modelYaw + THREE.MathUtils.degToRad(P.yaw_offset_deg || 0);
+    holder.rotation.y = modelYaw + FRONT_IS_MINUS_Z
+                      + THREE.MathUtils.degToRad(P.yaw_offset_deg || 0);
     if (DRIVE || DRIVING) {
       // suspension feel: pitch under accel/brake, roll into turns
       const accel = (vSpeed - prevV) / Math.max(dt, 1e-3); prevV = vSpeed;
