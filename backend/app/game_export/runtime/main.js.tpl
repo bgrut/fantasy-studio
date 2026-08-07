@@ -170,6 +170,134 @@ async function main() {
     } catch (e) { /* audio is garnish — never let it break the game */ }
   }
 
+  // ── CONTINUOUS AUDIO (2026-08-07) ────────────────────────────────────
+  // sfx() covers one-shots. What a street actually sounds like is
+  // CONTINUOUS: an engine whose pitch tracks your right foot, footsteps at
+  // your own cadence, tyres complaining in a hard turn, and a bed of distant
+  // traffic that never quite stops. A silent city reads as a tech demo no
+  // matter how good the facades are.
+  //
+  // Everything is SYNTHESISED — oscillators and shaped noise, no audio files
+  // at all. That keeps the hard constraint (local, free, commercially safe)
+  // trivially satisfied and adds nothing to the export payload.
+  let _audPX = 0, _audPZ = 0;      // last frame's player position
+  const AUD = { ready: false, eng: null, engF: null, engG: null,
+                amb: null, ambG: null, scrubG: null, walked: 0 };
+  function audioNoiseBuffer(sec) {
+    const N = Math.floor(actx.sampleRate * sec);
+    const buf = actx.createBuffer(1, N, actx.sampleRate);
+    const d = buf.getChannelData(0);
+    // brown-ish noise: integrated white, which sits far lower than white and
+    // is what distant traffic and tyre roar actually sound like
+    let last = 0;
+    for (let i = 0; i < N; i++) {
+      const w = Math.random() * 2 - 1;
+      last = (last + 0.02 * w) / 1.02;
+      d[i] = last * 3.5;
+    }
+    return buf;
+  }
+  function audioInit() {
+    // must follow a user gesture, so this is called from the START button
+    if (AUD.ready || sfxMuted) return;
+    try {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return;
+      if (!actx) actx = new AC();
+      if (actx.state === 'suspended') actx.resume();
+      // ENGINE: two detuned saws through a lowpass. One oscillator is a
+      // buzzer; the beat between two is what reads as a motor.
+      AUD.engG = actx.createGain(); AUD.engG.gain.value = 0;
+      AUD.engF = actx.createBiquadFilter();
+      AUD.engF.type = 'lowpass'; AUD.engF.frequency.value = 340; AUD.engF.Q.value = 6;
+      AUD.eng = [];
+      for (const det of [0, 7]) {
+        const o = actx.createOscillator();
+        o.type = 'sawtooth'; o.frequency.value = 42; o.detune.value = det;
+        o.connect(AUD.engF); o.start();
+        AUD.eng.push(o);
+      }
+      AUD.engF.connect(AUD.engG); AUD.engG.connect(actx.destination);
+      // TYRE SCRUB: noise band that only opens up under lateral load
+      const nb = audioNoiseBuffer(2);
+      const scr = actx.createBufferSource();
+      scr.buffer = nb; scr.loop = true;
+      const scrF = actx.createBiquadFilter();
+      scrF.type = 'bandpass'; scrF.frequency.value = 1600; scrF.Q.value = 1.2;
+      AUD.scrubG = actx.createGain(); AUD.scrubG.gain.value = 0;
+      scr.connect(scrF); scrF.connect(AUD.scrubG);
+      AUD.scrubG.connect(actx.destination); scr.start();
+      // CITY BED: the same noise, filtered right down — the hum you stop
+      // hearing until it is missing
+      const amb = actx.createBufferSource();
+      amb.buffer = nb; amb.loop = true;
+      const ambF = actx.createBiquadFilter();
+      ambF.type = 'lowpass'; ambF.frequency.value = 420;
+      AUD.ambG = actx.createGain();
+      AUD.ambG.gain.value = (OSM && OSM.roads && OSM.roads.length) ? 0.055 : 0.0;
+      amb.connect(ambF); ambF.connect(AUD.ambG);
+      AUD.ambG.connect(actx.destination); amb.start();
+      AUD.amb = amb;
+      AUD.ready = true;
+      // same reason window.__game exists: the shot harness has to be able
+      // to assert on the audio graph, and "I heard it" is not a check
+      window.__audio = () => ({ ready: AUD.ready, state: actx.state,
+        engineHz: AUD.eng[0].frequency.value,
+        engineGain: +AUD.engG.gain.value.toFixed(4),
+        scrubGain: +AUD.scrubG.gain.value.toFixed(4),
+        ambGain: +AUD.ambG.gain.value.toFixed(4) });
+    } catch (e) { /* never let audio break the game */ }
+  }
+  function audioStep(surface) {
+    if (!AUD.ready || sfxMuted) return;
+    try {
+      const src = actx.createBufferSource();
+      src.buffer = audioNoiseBuffer(0.12);
+      const f = actx.createBiquadFilter();
+      f.type = 'bandpass';
+      f.frequency.value = surface === 'road' ? 900 : 620;   // asphalt vs slab
+      f.Q.value = 0.9;
+      const g = actx.createGain();
+      const t0 = actx.currentTime;
+      g.gain.setValueAtTime(0.10, t0);
+      g.gain.exponentialRampToValueAtTime(0.0007, t0 + 0.11);
+      src.connect(f); f.connect(g); g.connect(actx.destination);
+      src.start(t0); src.stop(t0 + 0.13);
+    } catch (e) { /* ignore */ }
+  }
+  function audioFrame(dt, moved) {
+    if (!AUD.ready || sfxMuted) return;
+    try {
+      const t = actx.currentTime;
+      if (DRIVING) {
+        const kmh = Math.hypot(carVX, carVZ) * 3.6;
+        // fundamental climbs with road speed but never idles below a rumble
+        const f0 = 42 + Math.min(kmh, 150) * 0.72;
+        for (const o of AUD.eng) o.frequency.setTargetAtTime(f0, t, 0.08);
+        AUD.engF.frequency.setTargetAtTime(320 + f0 * 7, t, 0.08);
+        AUD.engG.gain.setTargetAtTime(0.055 + Math.min(kmh / 150, 1) * 0.05, t, 0.1);
+        // Real tyre noise is about SLIP ANGLE, not steering input: the
+        // component of world velocity running across the nose rather than
+        // along it. That is already computed by the drift model, so the
+        // scrub rises exactly when the car is actually sliding.
+        const fx9 = Math.sin(modelYaw), fz9 = Math.cos(modelYaw);
+        const lat = Math.min(Math.abs(carVX * fz9 - carVZ * fx9) / 7, 1);
+        AUD.scrubG.gain.setTargetAtTime(lat * 0.06, t, 0.06);
+        AUD.walked = 0;
+      } else {
+        AUD.engG.gain.setTargetAtTime(0, t, 0.15);
+        AUD.scrubG.gain.setTargetAtTime(0, t, 0.1);
+        // a step every ~0.78m of ground covered, so cadence follows the
+        // player's real speed instead of a fixed timer
+        AUD.walked += moved;
+        if (AUD.walked > 0.78) {
+          AUD.walked = 0;
+          audioStep(typeof _onRoad === 'function' ? 'road' : 'slab');
+        }
+      }
+    } catch (e) { /* ignore */ }
+  }
+
   // ── renderer / scene / camera ────────────────────────────────────────────
   // RESILIENT CONTEXT CREATION (2026-07-08): Chrome refuses new WebGL contexts
   // when its global limit is hit (many tabs) or hardware accel is off/blocked
@@ -5503,6 +5631,7 @@ async function main() {
       runT0 = performance.now();
       sfx('step');                        // gesture unlocks WebAudio + confirms start
       startAmbient();                     // Phase 69: wind bed (+ night crickets)
+      audioInit();                        // engine / footsteps / tyres / city bed
       if (window.__restoreProg) window.__restoreProg();   // saved upgrades return
       if (IS_RACE) startCountdown();
     });
@@ -9207,6 +9336,43 @@ async function main() {
       if (e.data && e.data.type === 'fs-dropat') {
         pickAt(e.data.cx, e.data.cy, 'drop');
       }
+      // ── HOT DROP (2026-08-07) ───────────────────────────────────────
+      // Placing something used to mean waiting out a full rebuild, which is
+      // the one thing this studio is supposed to be better at than everyone
+      // else. The runtime already knows how to build every placeable kind —
+      // procProp covers the procedural ones and the facade kit builds real
+      // buildings — so a drop can just BUILD IT NOW and let the rebuild
+      // catch up later to make it permanent.
+      if (e.data && e.data.type === 'fs-spawn') {
+        try {
+          const q = e.data;
+          const kind = String(q.kind || 'beacon').toLowerCase();
+          const pp = procProp(kind);
+          const g9 = pp.g;
+          const gy9 = hAt(q.x, q.z);
+          g9.position.set(q.x, gy9, q.z);
+          g9.traverse(o => { if (o.isMesh) { o.castShadow = true; o.frustumCulled = false; } });
+          g9.userData.fsTag = { type: 'placed', name: kind, kind,
+                                detail: kind + ' (live — apply the edit to keep it)' };
+          scene.add(g9);
+          // a live drop gets the same collider a built one would, or you
+          // could walk through the building you just placed
+          const bb9 = new THREE.Box3().setFromObject(g9);
+          if ((bb9.max.y - bb9.min.y) > 0.5) {
+            world.createCollider(RAPIER.ColliderDesc.cuboid(
+              Math.max((bb9.max.x - bb9.min.x) / 2 * 0.85, 0.1),
+              (bb9.max.y - bb9.min.y) / 2,
+              Math.max((bb9.max.z - bb9.min.z) / 2 * 0.85, 0.1))
+              .setTranslation(q.x, gy9 + (bb9.max.y - bb9.min.y) / 2, q.z));
+          }
+          popText(kind + ' placed', '#7fd4ff');
+          sfx('pickup');
+          window.parent.postMessage({ type: 'fs-spawned', ok: true, kind }, '*');
+        } catch (err) {
+          window.parent.postMessage({ type: 'fs-spawned', ok: false,
+                                      err: String(err && err.message || err) }, '*');
+        }
+      }
       if (e.data && e.data.type === 'fs-grade') applyGrade(e.data.grade);
       // ── LIVE PATCH (2026-08-05, the studio unlock): edits that only move
       // runtime dials — weather, time of day, fog, speeds, HP — no longer
@@ -10487,6 +10653,11 @@ varying vec2 vUvRaw;
     stepDmgNumbers(dt);
     stepDust(dt);
     stepCars(dt);
+    // ground actually covered this frame drives footstep cadence, so a
+    // sprint sounds like a sprint without a second timer to keep in sync
+    audioFrame(dt, Math.hypot(playerObj.position.x - _audPX,
+                              playerObj.position.z - _audPZ));
+    _audPX = playerObj.position.x; _audPZ = playerObj.position.z;
     fixArmSplay();          // after the mixers, before the frame is drawn
     // ── AIMING (2026-08-07) ───────────────────────────────────────────
     // Holding F with the pistol out slows you to a walk, pulls the camera

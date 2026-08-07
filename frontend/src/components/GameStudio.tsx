@@ -396,6 +396,11 @@ export default function GameStudio() {
   useEffect(() => {
     const onMsg = (e: MessageEvent) => {
       const d = e.data
+      if (d && d.type === 'fs-spawned') {
+        if (!d.ok) setError(`Could not place that live (${d.err ?? 'unknown'}) — `
+          + 'press Apply edit to place it with a rebuild instead.')
+        return
+      }
       if (!d || d.type !== 'fs-pick') return
       // the game could not resolve a ground point (dropped on the sky, or
       // past the map edge) — say so instead of leaving the drag armed and
@@ -421,14 +426,18 @@ export default function GameStudio() {
         // The sentence still lands in the edit bar so the edit is legible and
         // re-runnable, and Inspect is no longer the only route to a placed
         // edit.
+        // HOT DROP (2026-08-07). Rebuilding to place one object threw away
+        // the thing this studio is actually better at: a two-minute wait to
+        // see a bench. The runtime can build every placeable kind itself, so
+        // the drop lands LIVE and the sentence is staged in the edit bar —
+        // press Apply edit when you want it baked into the spec for good.
         setSelLine(null); setLineA(null)
-        setSelPick(null)
         setError(null)
-        const sentence = `place a ${a.subject} here`
-        setEditPrompt(sentence)
-        setDropToast(`Placing ${a.subject} at (${p.x.toFixed(1)}, ${p.z.toFixed(1)})…`)
-        void startJobRef.current?.(sentence, jobRef.current?.id,
-          { x: p.x, z: p.z, target: p.target.name })
+        setSelPick(p)
+        setEditPrompt(`place a ${a.subject} here`)
+        gameFrameRef.current?.contentWindow?.postMessage(
+          { type: 'fs-spawn', kind: a.subject, x: p.x, z: p.z }, '*')
+        setDropToast(`${a.subject} placed live — Apply edit to keep it`)
         return
       }
       // LINE TOOL: first click anchors A, second closes the run A→B
