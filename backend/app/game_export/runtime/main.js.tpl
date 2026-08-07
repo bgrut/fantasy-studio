@@ -2349,8 +2349,17 @@ async function main() {
         // dark blue comes through and the environment is only a sheen.
         // The base stays white because the per-instance colour above is what
         // carries the tint; darkening both would crush the panes to black.
-        place(dark, new THREE.MeshStandardMaterial({ map: paneTex, roughness: 0.28,
-          metalness: 0.0, envMapIntensity: 0.45, color: 0xffffff }), false);
+        // Glass wants the same treatment: a whole city of panes at one
+        // roughness reads as printed-on. Three grades of grime, split by
+        // instance so the tower still draws in three calls rather than one
+        // per window.
+        const _thirds = [[], [], []];
+        dark.forEach((w9, i9) => _thirds[i9 % 3].push(w9));
+        [[0.16, 0.62], [0.30, 0.42], [0.46, 0.26]].forEach(([rg, ev], gi) => {
+          place(_thirds[gi], new THREE.MeshStandardMaterial({ map: paneTex,
+            roughness: rg, metalness: 0.0, envMapIntensity: ev,
+            color: 0xffffff }), false);
+        });
       }
     }
     if (wallBuckets.some(b => b.length) || capGeos.length) {
@@ -7260,9 +7269,23 @@ async function main() {
       // a dielectric binder under clear lacquer: most of what you see is the
       // clearcoat, not raw metal. Low metalness keeps the colour alive under
       // any lighting; clearcoat still supplies the wet highlight.
+      // PER-CAR FINISH (2026-08-07). Uniform roughness across a fleet is
+      // the single loudest CG-plastic tell there is — twenty cars sharing
+      // one lacquer read as twenty copies of one object even in different
+      // colours. Each car gets its own place on the scale from a showroom
+      // respray to a cab that has not been washed since the spring, keyed
+      // off its own paint so it is stable across rebuilds.
       color: new THREE.Color(cp.paint || 0xb5202a), metalness: 0.28,
-      roughness: 0.34, clearcoat: 1.0, clearcoatRoughness: 0.06,
-      envMapIntensity: 0.85 });
+      ...(() => {
+        const h7 = ((cp.paint || 0xb5202a) * 2654435761) % 1000 / 1000;
+        const wear = 0.25 + h7 * 0.75;              // 0 pristine .. 1 neglected
+        return {
+          roughness: 0.22 + wear * 0.36,
+          clearcoat: 1.0 - wear * 0.45,
+          clearcoatRoughness: 0.03 + wear * 0.22,
+          envMapIntensity: 1.15 - wear * 0.5,
+        };
+      })() });
     const glass = new THREE.MeshPhysicalMaterial({
       color: 0x101418, metalness: 0.1, roughness: 0.06,
       transmission: 0.55, thickness: 0.4, transparent: true, opacity: 0.72 });
@@ -8014,6 +8037,39 @@ async function main() {
     let handBone = null;
     pg.scene.traverse(o => { if (!handBone && o.isBone && /hand_R/i.test(o.name)) handBone = o; });
     if (!handBone) return;
+    // One group per weapon, all parented to the hand, with only the
+    // selected one visible. 2026-08-07: the arsenal switched what F DID but
+    // the character kept holding the sword through all of it, which reads
+    // as the switch not having worked.
+    const wGroups = [];
+    const mkPistol = () => {
+      const g2 = new THREE.Group();
+      const body2 = new THREE.Mesh(new THREE.BoxGeometry(0.032, 0.088, 0.17),
+        new THREE.MeshStandardMaterial({ color: 0x24272b, metalness: 0.75, roughness: 0.35 }));
+      body2.position.set(0, 0.06, 0.03);
+      const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.011, 0.011, 0.10, 8),
+        new THREE.MeshStandardMaterial({ color: 0x36393e, metalness: 0.9, roughness: 0.25 }));
+      barrel.rotation.x = Math.PI / 2; barrel.position.set(0, 0.075, 0.15);
+      const grip2 = new THREE.Mesh(new THREE.BoxGeometry(0.030, 0.105, 0.045),
+        new THREE.MeshStandardMaterial({ color: 0x1a1d21, roughness: 0.85 }));
+      grip2.position.set(0, -0.015, -0.015); grip2.rotation.x = -0.25;
+      g2.add(body2, barrel, grip2);
+      return g2;
+    };
+    const mkLauncher = () => {
+      const g2 = new THREE.Group();
+      const tube = new THREE.Mesh(new THREE.CylinderGeometry(0.042, 0.046, 0.56, 12),
+        new THREE.MeshStandardMaterial({ color: 0x3d4a37, metalness: 0.5, roughness: 0.6 }));
+      tube.rotation.x = Math.PI / 2; tube.position.set(0, 0.07, 0.14);
+      const muzzle = new THREE.Mesh(new THREE.CylinderGeometry(0.062, 0.046, 0.09, 12),
+        new THREE.MeshStandardMaterial({ color: 0x2b3327, metalness: 0.5, roughness: 0.65 }));
+      muzzle.rotation.x = Math.PI / 2; muzzle.position.set(0, 0.07, 0.41);
+      const grip3 = new THREE.Mesh(new THREE.BoxGeometry(0.030, 0.10, 0.042),
+        new THREE.MeshStandardMaterial({ color: 0x1d2119, roughness: 0.9 }));
+      grip3.position.set(0, -0.005, 0.02);
+      g2.add(tube, muzzle, grip3);
+      return g2;
+    };
     const w = new THREE.Group();
     if (atkMode === 'ranged') {
       const bow = new THREE.Mesh(
@@ -8039,9 +8095,17 @@ async function main() {
       grip.position.y = -0.04;
       w.add(blade, guard, grip);
     }
-    w.traverse(o => { if (o.isMesh) o.castShadow = true; });
-    w.rotation.x = Math.PI / 2;          // lie along the hand's forward
-    handBone.add(w);
+    const wp2 = mkPistol(), wp3 = mkLauncher();
+    for (const g3 of [w, wp2, wp3]) {
+      g3.traverse(o => {
+        if (o.isMesh) { o.castShadow = true; o.material.userData.noAutoTex = true; }
+      });
+      g3.rotation.x = Math.PI / 2;       // lie along the hand's forward
+      handBone.add(g3);
+      wGroups.push(g3);
+    }
+    wp2.visible = false; wp3.visible = false;
+    window.__wpnModels = wGroups;
   })();
 
   const capR = Math.min(Math.max(radius * 0.6, 0.22), 0.6);
@@ -8278,6 +8342,9 @@ async function main() {
       if (slot === undefined || ATTACK === 'none') return;
       weaponIdx = slot;
       const w2 = WEAPONS[slot];
+      if (window.__wpnModels) {
+        window.__wpnModels.forEach((g4, i) => { g4.visible = (i === slot); });
+      }
       popText(w2.icon + '  ' + w2.name, '#a78bfa');
       if (window.__wpnEl) {
         window.__wpnEl.textContent = w2.icon + ' ' + w2.name;
@@ -8300,6 +8367,23 @@ async function main() {
       wl.textContent = WEAPONS[0].icon + ' ' + WEAPONS[0].name;
       document.body.appendChild(wl);
       window.__wpnEl = wl;
+      // AIM RETICLE. Only the pistol has one — a blade has nothing to aim
+      // and the launcher is lobbed, so a crosshair on either would be
+      // lying about how they work.
+      const rt = document.createElement('div');
+      rt.style.cssText = 'position:fixed;left:50%;top:50%;width:26px;height:26px;'
+        + 'transform:translate(-50%,-50%);z-index:23;display:none;'
+        + 'pointer-events:none;';
+      rt.innerHTML = '<svg width="26" height="26" viewBox="0 0 26 26">'
+        + '<circle cx="13" cy="13" r="9" fill="none" stroke="rgba(255,255,255,.5)" stroke-width="1.2"/>'
+        + '<line x1="13" y1="0" x2="13" y2="6" stroke="#ff6a6a" stroke-width="1.6"/>'
+        + '<line x1="13" y1="20" x2="13" y2="26" stroke="#ff6a6a" stroke-width="1.6"/>'
+        + '<line x1="0" y1="13" x2="6" y2="13" stroke="#ff6a6a" stroke-width="1.6"/>'
+        + '<line x1="20" y1="13" x2="26" y2="13" stroke="#ff6a6a" stroke-width="1.6"/>'
+        + '<circle id="rtDot" cx="13" cy="13" r="1.6" fill="#ff6a6a"/></svg>';
+      document.body.appendChild(rt);
+      window.__aimEl = rt;
+      window.__aimDot = rt.querySelector('#rtDot');
     }
     const hintL = document.querySelector('#hud .hint');
     if (hintL) hintL.textContent += ' · Tab loadout';
@@ -8448,18 +8532,23 @@ async function main() {
         vx: Math.sin(modelYaw) * 26, vz: Math.cos(modelYaw) * 26, vy: 6.5 });
       return;
     }
-    atkCd = WPN.id === 'pistol' ? WPN.cd : WPN.cd;
+    atkCd = WPN.cd;
     sfx('attack');
+    // DISPATCH ON THE SELECTED WEAPON. This branched on ATTACK — the value
+    // the SPEC picked once at build time — so in a melee-cast game choosing
+    // the pistol still ran a sword swing and nothing left the barrel. The
+    // arsenal decides what F does; ATTACK only decides whether F exists.
+    const _isRanged = WPN.id === 'pistol';
     // AIM ASSIST: swings snap toward the marked target — you committed to
     // the attack, the game commits to the hit (reach was 2.3m and the angle
     // check punished honest inputs; now 3.2m + auto-face)
-    if (ATTACK === 'melee') {
+    if (!_isRanged) {
       const tn = nearestHostile(MELEE_REACH);
       if (tn) {
         modelYaw = Math.atan2(tn.obj.position.x - playerObj.position.x,
                               tn.obj.position.z - playerObj.position.z);
       }
-    } else if (ATTACK === 'ranged') {
+    } else {
       // Phase 68 AIM: shots snap toward the marked target out to rifle range —
       // hunters line up on the prey the marker shows, not pixel-perfect yaw
       const tn = nearestHostile(RANGED_RANGE);
@@ -10147,7 +10236,10 @@ varying vec2 vUvRaw;
         : THREE.MathUtils.clamp(-vy * 0.035, -0.22, 0.3);
       leanP = THREE.MathUtils.damp(leanP, airTilt, 7, dt);
       holder.rotation.x = leanP;
-      var desired = { x: dir.x * speed * dt, y: vy * dt, z: dir.z * speed * dt };
+      // aiming is a walk, not a sprint — the price of the reticle
+      const _aimK = 1 - aimT * 0.62;
+      var desired = { x: dir.x * speed * _aimK * dt, y: vy * dt,
+                      z: dir.z * speed * _aimK * dt };
       if (VIEW === 'side') {              // hold the hero on the gameplay lane
         desired.z = (0 - body.translation().z) * Math.min(6 * dt, 1);
       }
@@ -10350,6 +10442,25 @@ varying vec2 vUvRaw;
     stepDmgNumbers(dt);
     stepDust(dt);
     stepCars(dt);
+    // ── AIMING (2026-08-07) ───────────────────────────────────────────
+    // Holding F with the pistol out slows you to a walk, pulls the camera
+    // in, and raises a reticle that turns red when a target is actually
+    // inside range. Releasing fires. Aiming has to COST something or it is
+    // just a crosshair; the movement penalty is that cost.
+    {
+      const wpnNow = WEAPONS[weaponIdx] || WEAPONS[0];
+      const wantAim = !!keys.KeyF && wpnNow.id === 'pistol'
+                      && ATTACK !== 'none' && !DRIVING && !lost && downT <= 0;
+      aimT = Math.max(0, Math.min(1, aimT + (wantAim ? dt * 6 : -dt * 8)));
+      if (window.__aimEl) {
+        window.__aimEl.style.display = aimT > 0.05 ? 'block' : 'none';
+        window.__aimEl.style.opacity = aimT.toFixed(2);
+        if (window.__aimDot && aimT > 0.05) {
+          const tgtA = nearestHostile(RANGED_RANGE);
+          window.__aimDot.setAttribute('fill', tgtA ? '#6aff8f' : '#ff6a6a');
+        }
+      }
+    }
     // ── SHELLS AND BLASTS ─────────────────────────────────────────────
     for (let i = shells.length - 1; i >= 0; i--) {
       const sh = shells[i];
