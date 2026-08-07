@@ -7136,6 +7136,60 @@ async function main() {
     console.log('[game] LOSE — ' + text);
   }
   const dmgEl = document.getElementById('dmg');
+  // A blast is the same knockdown the cars use, applied radially — one
+  // downed-state machine for being run over and being blown off your feet,
+  // so they can never drift apart.
+  function detonate(x, y, z) {
+    const W = WEAPONS[2], R = W.blast;
+    const ball = new THREE.Mesh(new THREE.SphereGeometry(1, 14, 10),
+      new THREE.MeshBasicMaterial({ color: 0xffb347, transparent: true,
+        opacity: 0.9, depthWrite: false, toneMapped: false }));
+    ball.position.set(x, y + 0.9, z);
+    ball.renderOrder = 6;
+    scene.add(ball);
+    // a real light for the flash, registered with the LIGHT BUDGET culler so
+    // it cannot push a MeshStandardMaterial past its slot count and render a
+    // black room instead of an error (TRAP 2)
+    let lt = null;
+    try {
+      lt = new THREE.PointLight(0xffa040, 24, R * 3.2, 2);
+      lt.position.set(x, y + 1.2, z);
+      scene.add(lt);
+      if (window.__torches) window.__torches.push(lt);
+    } catch (e) { lt = null; }
+    blasts.push({ obj: ball, light: lt, t: 0, r: R });
+    shakeT = Math.max(shakeT, 0.5);
+    sfx('hit');
+    const knock = (o, rec, isNpc) => {
+      const dx7 = o.position.x - x, dz7 = o.position.z - z;
+      const d7 = Math.hypot(dx7, dz7);
+      if (d7 > R) return;
+      const f7 = (1 - d7 / R);
+      rec.down = 2.4 + f7 * 1.8;
+      rec.kx = (dx7 / (d7 || 1)) * 13 * f7;
+      rec.kz = (dz7 / (d7 || 1)) * 13 * f7;
+      if (isNpc) {
+        rec.hp = (rec.hp || 1) - WEAPONS[2].dmg;
+        if (rec.hp <= 0 && !rec.dead) { rec.dead = true; rec.dieT = 0; }
+        if (rec.behavior === 'guard') { rec.mode = 'patrol'; rec.alert = 0; }
+      } else if (rec.mixer) { rec.mixer.stopAllAction(); }
+    };
+    for (const nn of npcs) {
+      if (nn.dormant || nn.dead) continue;
+      knock(nn.obj, nn, true);
+    }
+    for (const pd of window.__peds || []) knock(pd.obj, pd, false);
+    // and it throws YOU, which is what makes a launcher a decision
+    const bp8 = body.translation();
+    const dxp = bp8.x - x, dzp = bp8.z - z;
+    const dp8 = Math.hypot(dxp, dzp);
+    if (dp8 < R && !DRIVING) {
+      downT = 1.8;
+      downVX = (dxp / (dp8 || 1)) * 12 * (1 - dp8 / R);
+      downVZ = (dzp / (dp8 || 1)) * 12 * (1 - dp8 / R);
+      playerHit(1);
+    }
+  }
   function playerHit(dmg) {
     if (won || lost) return;
     php = Math.max(0, php - dmg);
@@ -8150,6 +8204,21 @@ async function main() {
     }
     return best;
   }
+  // ── ARSENAL (2026-08-07) ─────────────────────────────────────────────
+  // Three weapons with genuinely different verbs, switched on 1/2/3 and
+  // listed in the Tab panel. Declared here, above everything that reads
+  // them: a const read before its declaration takes the whole runtime down
+  // with a black page and a build that still reports complete (TRAP 1).
+  const WEAPONS = [
+    { id: 'blade', name: 'Blade', icon: '🗡', reach: 2.6, dmg: 1,
+      cd: 0.55, desc: 'swing at whatever is in front of you' },
+    { id: 'pistol', name: 'Pistol', icon: '🔫', reach: 46, dmg: 1,
+      cd: 0.32, desc: 'hold F to aim, release to fire' },
+    { id: 'launcher', name: 'Launcher', icon: '🧨', reach: 60, dmg: 3,
+      cd: 1.5, blast: 7.0, desc: 'lobbed shell — everything nearby goes down' },
+  ];
+  let weaponIdx = 0, aimT = 0;
+  const shells = [], blasts = [];
   let tgtMark = null;
   // ── LOADOUT (2026-08-07, TAB) ────────────────────────────────────────
   // The verbs were only ever announced once, in a strip of grey text at the
@@ -8165,8 +8234,9 @@ async function main() {
       + 'align-items:center;justify-content:center;';
     const rows = [];
     const mode = SPEC.player.mode || 'walk';
-    if (ATTACK === 'ranged') rows.push(['🔫', 'Sidearm', 'F', 'fires at the nearest target']);
-    else if (ATTACK === 'melee') rows.push(['🗡', 'Blade', 'F', 'swing at whatever is in front of you']);
+    if (ATTACK !== 'none') {
+      WEAPONS.forEach((w, i) => rows.push([w.icon, w.name, String(i + 1), w.desc, i]));
+    }
     if (typeof HAS_GUARDS !== 'undefined' && HAS_GUARDS) {
       rows.push(['🥫', 'Distraction', 'Q', 'thrown — pulls a guard to the noise']);
       rows.push(['🐈', 'Crouch', 'C', 'halves how far a guard can see you']);
@@ -8182,8 +8252,11 @@ async function main() {
       + '<div style="font:800 20px system-ui;color:#e8e2ff;margin-bottom:4px">Loadout</div>'
       + '<div style="font:400 12px system-ui;color:#8d89a6;margin-bottom:16px">'
       + 'everything this game gave you · Tab to close</div>'
-      + rows.map(r => '<div style="display:flex;align-items:center;gap:12px;'
-        + 'padding:9px 0;border-top:1px solid rgba(255,255,255,.07)">'
+      + rows.map(r => '<div'
+        + (r[4] !== undefined ? ` data-slot="${r[4]}"` : '')
+        + ' style="display:flex;align-items:center;gap:12px;padding:9px 8px;'
+        + 'border-radius:8px;border-top:1px solid rgba(255,255,255,.07);'
+        + (r[4] === 0 ? 'background:rgba(167,139,250,.18)' : '') + '">'
         + `<div style="font-size:21px;width:28px;text-align:center">${r[0]}</div>`
         + '<div style="flex:1">'
         + `<div style="font:700 14px system-ui;color:#e8e2ff">${r[1]}</div>`
@@ -8195,11 +8268,39 @@ async function main() {
     document.body.appendChild(lo);
     let loOpen = false;
     addEventListener('keydown', e => {
-      if (e.code !== 'Tab') return;
-      e.preventDefault();                 // Tab must not walk the DOM focus
-      loOpen = !loOpen;
-      lo.style.display = loOpen ? 'flex' : 'none';
+      if (e.code === 'Tab') {
+        e.preventDefault();               // Tab must not walk the DOM focus
+        loOpen = !loOpen;
+        lo.style.display = loOpen ? 'flex' : 'none';
+        return;
+      }
+      const slot = { Digit1: 0, Digit2: 1, Digit3: 2 }[e.code];
+      if (slot === undefined || ATTACK === 'none') return;
+      weaponIdx = slot;
+      const w2 = WEAPONS[slot];
+      popText(w2.icon + '  ' + w2.name, '#a78bfa');
+      if (window.__wpnEl) {
+        window.__wpnEl.textContent = w2.icon + ' ' + w2.name;
+        window.__wpnEl.style.display = 'block';
+      }
+      for (const el of lo.querySelectorAll('[data-slot]')) {
+        el.style.background = (+el.dataset.slot === slot)
+          ? 'rgba(167,139,250,.18)' : 'transparent';
+      }
     });
+    // a small standing readout, so the current weapon is knowable without
+    // opening anything
+    if (ATTACK !== 'none') {
+      const wl = document.createElement('div');
+      wl.style.cssText = 'position:fixed;left:50%;bottom:96px;'
+        + 'transform:translateX(-50%);z-index:23;font:700 13px system-ui;'
+        + 'color:#e8e2ff;background:rgba(10,9,18,.72);'
+        + 'border:1px solid rgba(167,139,250,.35);border-radius:9px;'
+        + 'padding:5px 12px;pointer-events:none;';
+      wl.textContent = WEAPONS[0].icon + ' ' + WEAPONS[0].name;
+      document.body.appendChild(wl);
+      window.__wpnEl = wl;
+    }
     const hintL = document.querySelector('#hud .hint');
     if (hintL) hintL.textContent += ' · Tab loadout';
   }
@@ -8328,7 +8429,26 @@ async function main() {
   }
   function doAttack() {
     if (ATTACK === 'none' || atkCd > 0 || won || lost) return;
-    atkCd = ATTACK === 'ranged' ? 0.35 : 0.55;
+    const WPN = WEAPONS[weaponIdx] || WEAPONS[0];
+    // LAUNCHER: a lobbed shell, not a hitscan. It has travel time and an
+    // arc, so you lead the shot and you can absolutely catch yourself in
+    // your own blast — which is what makes carrying it a decision.
+    if (WPN.id === 'launcher') {
+      atkCd = WPN.cd;
+      sfx('attack');
+      const sm = new THREE.Mesh(new THREE.SphereGeometry(0.16, 10, 8),
+        new THREE.MeshStandardMaterial({ color: 0x2f3338, metalness: 0.7,
+          roughness: 0.35, emissive: 0x662200, emissiveIntensity: 0.8 }));
+      sm.userData.noAutoTex = true;
+      const bp9 = body.translation();
+      sm.position.set(bp9.x + Math.sin(modelYaw) * 0.9, bp9.y + 1.15,
+                      bp9.z + Math.cos(modelYaw) * 0.9);
+      scene.add(sm);
+      shells.push({ obj: sm, life: 3.2,
+        vx: Math.sin(modelYaw) * 26, vz: Math.cos(modelYaw) * 26, vy: 6.5 });
+      return;
+    }
+    atkCd = WPN.id === 'pistol' ? WPN.cd : WPN.cd;
     sfx('attack');
     // AIM ASSIST: swings snap toward the marked target — you committed to
     // the attack, the game commits to the hit (reach was 2.3m and the angle
@@ -10230,6 +10350,38 @@ varying vec2 vUvRaw;
     stepDmgNumbers(dt);
     stepDust(dt);
     stepCars(dt);
+    // ── SHELLS AND BLASTS ─────────────────────────────────────────────
+    for (let i = shells.length - 1; i >= 0; i--) {
+      const sh = shells[i];
+      sh.life -= dt;
+      sh.vy -= 16 * dt;                          // lobbed, not laser-straight
+      sh.obj.position.x += sh.vx * dt;
+      sh.obj.position.y += sh.vy * dt;
+      sh.obj.position.z += sh.vz * dt;
+      const gy7 = hAt(sh.obj.position.x, sh.obj.position.z);
+      if (sh.obj.position.y <= gy7 + 0.25 || sh.life <= 0) {
+        detonate(sh.obj.position.x, gy7, sh.obj.position.z);
+        scene.remove(sh.obj);
+        shells.splice(i, 1);
+      }
+    }
+    for (let i = blasts.length - 1; i >= 0; i--) {
+      const bl = blasts[i];
+      bl.t += dt;
+      const k7 = bl.t / 0.55;
+      if (k7 >= 1) {
+        scene.remove(bl.obj);
+        if (bl.light) { scene.remove(bl.light); if (window.__torches) {
+          const ix = window.__torches.indexOf(bl.light);
+          if (ix >= 0) window.__torches.splice(ix, 1); } }
+        blasts.splice(i, 1);
+        continue;
+      }
+      const r7 = 0.6 + k7 * bl.r;
+      bl.obj.scale.setScalar(r7);
+      bl.obj.material.opacity = (1 - k7) * 0.9;
+      if (bl.light) bl.light.intensity = (1 - k7) * 26;
+    }
     // ── THE HERO GETS RUN OVER TOO (2026-08-07) ───────────────────────
     // Traffic that harmlessly passes through you is the same diorama tell
     // as pedestrians it cannot touch. On foot, a car with speed on it puts
@@ -10388,9 +10540,17 @@ varying vec2 vUvRaw;
     // costs LESS per frame than the crowd walking.
     {
       const _hits = [];
-      if (DRIVING && heldCar && heldCar.rig) {
+      if (DRIVING && heldCar) {
+        // The car you are driving is PARENTED TO THE PLAYER, so its rig
+        // position is a local offset near zero — reading it as a world point
+        // put every strike test at the origin, which is why traffic mowed
+        // people down and your own bonnet went straight through them. The
+        // kinematic body IS the car while driving; use that and modelYaw.
         const cv = Math.hypot(carVX, carVZ);
-        if (cv > 2.2) _hits.push([heldCar.rig.position, cv, heldCar.rig.rotation.y]);
+        if (cv > 2.2) {
+          const bp7 = body.translation();
+          _hits.push([{ x: bp7.x, z: bp7.z }, cv, modelYaw]);
+        }
       }
       for (const tc of window.__traffic || []) {
         if (tc.speed > 2.2) _hits.push([tc.obj.position, tc.speed, tc.obj.rotation.y]);
