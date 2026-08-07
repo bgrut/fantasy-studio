@@ -836,6 +836,21 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             cast = stand_in
         if not player_glb:
             raise RuntimeError("no player asset in library (assets/library.json)")
+        # PNG-EMBEDDED CHARACTERS RENDER UNTEXTURED (2026-08-07). detective_anim
+        # and man_anim embed PNG and both showed up as white/grey mannequins;
+        # walker.glb embeds JPEG and was always fine — same loader, same rig,
+        # same clips, the codec is the only difference. scripts/_bake_hero.py
+        # re-encodes to JPEG keeping full geometry and 2048px maps, so the hero
+        # loses no detail. Applied at the ONE point the asset is finally set:
+        # player_glb is assigned down several branches and patching them
+        # individually already missed one.
+        if player_glb and str(player_glb).endswith("_anim.glb"):
+            _hero = Path(str(player_glb)[:-len("_anim.glb")] + "_hero.glb")
+            if _hero.exists():
+                player_glb = str(_hero)
+                job.setdefault("notes", []).append(
+                    f"hero uses the JPEG bake ({_hero.name}) — PNG-embedded "
+                    f"characters render untextured in the web runtime")
         spec.player.asset = player_glb
         spec.player.name = cast
         if abs(spec.player.height_m - 1.75) < 1e-6:      # untouched default -> species height
