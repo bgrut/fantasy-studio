@@ -1198,6 +1198,64 @@ async function main() {
       }
     });
   }
+  // ── A CHARACTER MUST NOT BE A WHITE CUTOUT (2026-08-07 r2) ────────────
+  // Two defects, both of which end in the same flat white silhouette:
+  //   * glTF defaults metallicFactor to 1.0, and a baked character that
+  //     never wrote a metallicRoughness texture inherits it. At metalness 1
+  //     the albedo contributes no diffuse at all.
+  //   * some baked bodies carry a material with NO map, left at pure white.
+  //     Any night-grade emissive lift then has nothing but white to lift.
+  // Fixing this inside prepModel was not enough: material and texture
+  // assignment finishes AFTER the loader callback in some GLBs, so the pass
+  // ran against materials that were still defaults and the correction was
+  // silently undone. deChalk is therefore re-run once the scene has settled.
+  function deChalk(root) {
+    if (!root) return;
+    root.traverse(o => {
+      if (!o.isMesh || !o.material) return;
+      for (const m of Array.isArray(o.material) ? o.material : [o.material]) {
+        if (!m || m.metalness === undefined) continue;
+        // PEOPLE ARE DIELECTRIC. Every baked character here ships a
+        // metallicRoughness TEXTURE and no metallicFactor, so glTF defaults
+        // the factor to 1.0 and the body renders as polished metal — it
+        // mirrors the sky and comes out a white cutout however the scene is
+        // lit. The asset is not at fault: its baseColorTexture is present
+        // and correct, which is why "missing texture" was the wrong theory
+        // twice. Respecting the metalness map here would mean respecting a
+        // value no baker chose, so skin and cloth are forced dielectric and
+        // the map is dropped with it. Genuinely metallic characters (armour)
+        // would need this as an explicit per-asset opt-in.
+        if (m.metalness > 0.6) {
+          m.metalnessMap = null;
+          m.metalness = 0.05;
+          if (!m.roughnessMap && m.roughness >= 0.99) m.roughness = 0.78;
+          m.needsUpdate = true;
+        }
+        // NO RECOLOURING HERE. An untextured white body at spawn is usually
+        // a texture that has not DECODED yet, not one that is missing: the
+        // same build shows map=NONE at 8s and a fully textured shirt a few
+        // seconds later. base color multiplies the map, so tinting it to
+        // hide the gap would permanently grey the costume once it arrives.
+        // The emissive lift is dropped instead, which is what turned the
+        // untextured moment into a glowing white cutout rather than a dull
+        // grey one.
+        if (!m.map) {
+          // safe to tint: this pass runs after loading has settled, so a
+          // material still missing its albedo here is missing it for good.
+          // Base colour multiplies the map, so this could never be done
+          // speculatively while a texture might still arrive.
+          if (m.color && m.color.r > 0.92 && m.color.g > 0.92 && m.color.b > 0.92) {
+            m.color.setHex(0x7f8489);
+            m.needsUpdate = true;
+          }
+          if (m.emissive && m.emissive.getHex() !== 0) {
+            m.emissive.setScalar(0);
+            m.needsUpdate = true;
+          }
+        }
+      }
+    });
+  }
   function prepModel(gltf, targetH, byMaxDim) {
     const root = gltf.scene;
     hardenAlpha(root);
@@ -7656,6 +7714,16 @@ async function main() {
       }
     });
   }
+
+  // the settle pass: player, guide and every NPC, after their GLBs, their
+  // textures and every night-grade material tweak have all landed
+  setTimeout(() => {
+    try {
+      deChalk(holder);
+      for (const n of (npcs || [])) deChalk(n.obj);
+      for (const q of (window.__peds || [])) deChalk(q.obj);
+    } catch (e) { /* cosmetic pass, never a gate */ }
+  }, 4000);
 
   if (pg.animations && pg.animations.length) {
     mixer = new THREE.AnimationMixer(pg.scene);
