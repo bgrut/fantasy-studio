@@ -3574,6 +3574,15 @@ async function main() {
             M5.makeScale(sc, sc, sc).setPosition(tx3, gy3, tz3);
             trk.setMatrixAt(i, M5); can.setMatrixAt(i, M5);
             can.setColorAt(i, CG[Math.floor(rngT2() * CG.length)]);
+            // A TREE IS SOLID (2026-08-07). Street trees shipped as pure
+            // decoration, so a car drove straight through a 3.4m trunk and
+            // the whole street stopped reading as physical. One static
+            // cylinder each: no bodies, no simulation cost, and the trunk is
+            // the only part worth colliding — clipping a canopy overhead is
+            // what real cars do too.
+            world.createCollider(RAPIER.ColliderDesc
+              .cylinder(1.7 * sc, 0.26 * sc)
+              .setTranslation(tx3, gy3 + 1.7 * sc, tz3));
           });
           for (const im of [trk, can]) {
             im.instanceMatrix.needsUpdate = true;
@@ -3651,8 +3660,23 @@ async function main() {
           // fascia board and wall ad in the city rendered as its own mirror
           // image. Flipping U rather than the tangent leaves the winding and
           // the explicit normals alone.
-          const c6 = [[-1, -1, 1, v0], [1, -1, 0, v0], [1, 1, 0, v1],
-                      [-1, -1, 1, v0], [1, 1, 0, v1], [-1, 1, 0, v1]];
+          // TWO BUGS LIVED HERE, and the first fix caused the second.
+          //
+          // These quads are wound so their FRONT face points inward; the
+          // street sees the BACK, and a back face already mirrors its
+          // texture. An earlier pass reasoned about tangent-vs-viewer-right
+          // on paper, concluded U ran backwards, and flipped it — which
+          // mirrored correct signs into "ERAWDRAH". U is back to its
+          // original direction, confirmed by reading a sign in-game rather
+          // than by algebra.
+          //
+          // That flip also updated three corners and missed the fourth, so
+          // the two LEFT corners disagreed (u=1 and u=0) and the texture
+          // sheared across the second triangle — the "warped and stretched"
+          // report. Corner UVs must agree per edge: both left u=0, both
+          // right u=1.
+          const c6 = [[-1, -1, 0, v0], [1, -1, 1, v0], [1, 1, 1, v1],
+                      [-1, -1, 0, v0], [1, 1, 1, v1], [-1, 1, 0, v1]];
           const pos = [], uv = [], nor = [];
           for (const cc of c6) {
             pos.push(bx3 + tx * (w / 2) * cc[0], qy + (hh / 2) * cc[1],
@@ -3724,7 +3748,10 @@ async function main() {
               const pos8 = [], uv8 = [], nor8 = [];
               // 1.5cm apart: enough that the near face always wins the depth
               // test, far too little to read as two boards
-              const sh8 = face * 0.015;
+              // 1.5cm read as z-fighting at street distance and the two
+              // faces smeared into each other; a blade is a real board, so
+              // give it a board's thickness
+              const sh8 = face * 0.045;
               for (const cc of c8) {
                 pos8.push(ox8 + px8 * cc[0] + tx8 * sh8,
                           by2 + (bh2 / 2) * cc[1],
