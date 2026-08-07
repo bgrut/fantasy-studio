@@ -7150,23 +7150,12 @@ async function main() {
   // so they can never drift apart.
   function detonate(x, y, z) {
     const W = WEAPONS[2], R = W.blast;
-    const ball = new THREE.Mesh(new THREE.SphereGeometry(1, 14, 10),
-      new THREE.MeshBasicMaterial({ color: 0xffb347, transparent: true,
-        opacity: 0.9, depthWrite: false, toneMapped: false }));
-    ball.position.set(x, y + 0.9, z);
-    ball.renderOrder = 6;
-    scene.add(ball);
-    // a real light for the flash, registered with the LIGHT BUDGET culler so
-    // it cannot push a MeshStandardMaterial past its slot count and render a
-    // black room instead of an error (TRAP 2)
-    let lt = null;
-    try {
-      lt = new THREE.PointLight(0xffa040, 24, R * 3.2, 2);
-      lt.position.set(x, y + 1.2, z);
-      scene.add(lt);
-      if (window.__torches) window.__torches.push(lt);
-    } catch (e) { lt = null; }
-    blasts.push({ obj: ball, light: lt, t: 0, r: R });
+    _blastBall.position.set(x, y + 0.9, z);
+    _blastBall.visible = true;
+    _blastLight.position.set(x, y + 1.2, z);
+    _blastLight.distance = R * 3.2;
+    blasts.length = 0;                    // one fireball, so one blast at a time
+    blasts.push({ obj: _blastBall, light: _blastLight, t: 0, r: R });
     shakeT = Math.max(shakeT, 0.5);
     sfx('hit');
     const knock = (o, rec, isNpc) => {
@@ -8108,6 +8097,38 @@ async function main() {
     window.__wpnModels = wGroups;
   })();
 
+  // ── ARMS SWING FORWARD, NOT OUTWARD (2026-08-07) ─────────────────────
+  // Measured on the running rig: uparm_L.y = +0.82 and uparm_R.y = -0.81,
+  // a symmetric 47 degrees of SPLAY carried in every clip. It is baked in
+  // because the meshes are bound in a T-pose (pose_templates/biped_depth.png
+  // is a flat T) while mocap_retarget builds its arm chain expecting an
+  // A-pose — the clip then rotates from a rest position that already had the
+  // arms out, so the swing comes out lateral instead of sagittal.
+  //
+  // The real fix is an A-pose template and re-baked rigs, and that is still
+  // the right one. This is the standard interim: a REST-POSE CORRECTION,
+  // applied after the mixer writes each frame. It scales down only the splay
+  // axis and leaves X — which carries the actual forward swing — untouched,
+  // so the walk keeps its motion and loses its chicken wings.
+  const _armBones = [];
+  let _armScanned = false;
+  function scanArms() {
+    _armScanned = true;
+    scene.traverse(o => {
+      if (!o.isSkinnedMesh || !o.skeleton) return;
+      for (const bn of o.skeleton.bones) {
+        if (/^uparm_[LR]$/i.test(bn.name)) _armBones.push(bn);
+      }
+    });
+  }
+  function fixArmSplay() {
+    if (!_armScanned) scanArms();
+    for (const bn of _armBones) {
+      // 0.22 leaves ~10 degrees, which is what a relaxed arm actually does
+      bn.rotation.y *= 0.22;
+    }
+  }
+
   const capR = Math.min(Math.max(radius * 0.6, 0.22), 0.6);
   const capHalf = Math.max(P.height_m / 2 - capR, 0.1);
   // spawn ON the terrain, never at flat-world height: on hilly or seabed
@@ -8283,6 +8304,30 @@ async function main() {
   ];
   let weaponIdx = 0, aimT = 0;
   const shells = [], blasts = [];
+  // BLAST FX ARE POOLED, NOT CREATED (2026-08-07). Adding a PointLight
+  // changes the scene's light COUNT, which invalidates every
+  // MeshStandardMaterial shader variant in the world — a single detonation
+  // compiled ~66 programs (67 -> 133 measured), and each compile is a
+  // synchronous GPU stall. That was the launcher "lag". One light that
+  // lives forever at intensity 0 and one reusable fireball keep the light
+  // count and the material set completely constant, so a blast costs a
+  // matrix update and nothing else.
+  const _blastLight = new THREE.PointLight(0xffa040, 0, 30, 2);
+  _blastLight.position.set(0, -500, 0);
+  const _blastBall = new THREE.Mesh(new THREE.SphereGeometry(1, 14, 10),
+    new THREE.MeshBasicMaterial({ color: 0xffb347, transparent: true,
+      opacity: 0, depthWrite: false, toneMapped: false }));
+  _blastBall.renderOrder = 6;
+  _blastBall.visible = false;
+  // Added HERE, immediately after the declarations. The first cut put
+  // these scene.add calls 180 lines earlier, next to the other one-time
+  // setup — which reads a const before its declaration and takes the
+  // whole runtime down with a black page while the build still reports
+  // complete (TRAP 1). Deliberately NOT registered with __torches: the
+  // light-budget culler toggles .visible, and an invisible light also
+  // changes the light count and recompiles everything. Intensity 0 is free.
+  scene.add(_blastLight);
+  scene.add(_blastBall);
   let tgtMark = null;
   // ── LOADOUT (2026-08-07, TAB) ────────────────────────────────────────
   // The verbs were only ever announced once, in a strip of grey text at the
@@ -10442,6 +10487,7 @@ varying vec2 vUvRaw;
     stepDmgNumbers(dt);
     stepDust(dt);
     stepCars(dt);
+    fixArmSplay();          // after the mixers, before the frame is drawn
     // ── AIMING (2026-08-07) ───────────────────────────────────────────
     // Holding F with the pistol out slows you to a walk, pulls the camera
     // in, and raises a reticle that turns red when a target is actually
@@ -10481,10 +10527,8 @@ varying vec2 vUvRaw;
       bl.t += dt;
       const k7 = bl.t / 0.55;
       if (k7 >= 1) {
-        scene.remove(bl.obj);
-        if (bl.light) { scene.remove(bl.light); if (window.__torches) {
-          const ix = window.__torches.indexOf(bl.light);
-          if (ix >= 0) window.__torches.splice(ix, 1); } }
+        bl.obj.visible = false;           // parked, never removed
+        if (bl.light) bl.light.intensity = 0;
         blasts.splice(i, 1);
         continue;
       }
