@@ -539,6 +539,122 @@ def generate_reference(
     # negatives drive the body (orientation is handled later by the silhouette
     # gate). Set FS_VEHICLE_DEPTH=1 to restore depth-locked vehicle references.
     _cscale = CONTROLNET_CONDITIONING_SCALE
+    # BIPED POSE IS UNSOLVED, AND THE LEVERS ARE MAPPED (2026-08-07).
+    # Every generated biped is born T-posed while mocap_retarget binds its
+    # arm chain expecting an A-pose (hands ~0.18H below the shoulders), so
+    # each new character arrives with its arms splayed and gets corrected by
+    # hand downstream. The cause is NOT the prompt: pose comes from
+    # controlnet-depth against pose_templates/biped_depth.png.
+    #
+    # Measured, all on 'woman', so the next attempt does not repeat them:
+    #   - negative prompt "T-pose, arms outstretched" +4 more : no effect
+    #   - A-pose depth template at this 0.35 scale             : still T-pose
+    #   - A-pose template at scale 0.75  : incoherent, and it reproduced the
+    #     template's own hard mask edges as a rectangle across the chest —
+    #     any future template edit must be feathered
+    #   - A-pose template at scale 0.55  : T-pose gone, but SDXL omitted the
+    #     arms below the shoulder entirely
+    # The template rebuild itself is sound (rotate the arms about the
+    # measured shoulder joints, inpaint the vacated region from background,
+    # feather every edit) and is kept in git history at this commit.
+    #
+    # Left at the shared 0.35 deliberately: it is the only setting that
+    # yields a coherent figure today, and shipping armless references would
+    # be a worse asset pipeline than the T-posed one it replaced.
+    if base_pattern == "vehicle":
+        vq = (library_query + " " + name + " " + identity)
+        _LOWNEG = "SUV, crossover, minivan, van, pickup truck, station wagon, tall body, high roofline, raised ride height, boxy"
+        _VT = [
+            (("ferrari", "lamborghini", "mclaren", "supercar", "exotic"),
+             "exotic supercar, very low-slung sleek aerodynamic body, long hood, extremely low roofline, two-door", _LOWNEG),
+            (("porsche", "corvette", "sports", "coupe", "convertible", "roadster", "racing"),
+             "sleek low-slung two-door sports car, long hood, low roofline, short rear deck, aggressive aerodynamic styling, wide stance", _LOWNEG),
+            (("suv", "jeep", "crossover", "wagon", "land rover", "range rover"),
+             "tall boxy SUV, high ground clearance, upright blocky body, large greenhouse", "low sports car, sports coupe"),
+            (("pickup", "truck"),
+             "pickup truck, tall cabin, open cargo bed, high stance", "sports car, sedan"),
+            (("van", "minivan", "bus"),
+             "boxy van, tall slab-sided body", "sports car"),
+            (("sedan", "saloon"),
+             "four-door sedan, classic three-box silhouette", "SUV, van"),
+        ]
+        species = "modern car, clean glossy paint, polished bodywork"
+        vehicle_neg = ""
+        for keys, desc, neg in _VT:
+            if any(k in vq for k in keys):
+                species = desc; vehicle_neg = neg
+                break
+
+    positive_parts = [preset["positive"], f"a {subject_phrase}", species, framing]
+    positive = ", ".join(p for p in positive_parts if p)
+
+    # Append pattern-specific negative directives so SDXL avoids action poses
+    pattern_neg = PATTERN_NEGATIVE.get(base_pattern, "")
+    negative_parts = [preset["negative"], pattern_neg, vehicle_neg]
+    negative = ", ".join(p for p in negative_parts if p)
+    return positive, negative
+
+
+def generate_reference(
+    slots: Dict[str, Any],
+    output_path: str | Path,
+    style: str = "photoreal",
+    width: int = 1024,
+    height: int = 1024,
+    guidance_scale: float = 7.5,
+    steps: int = 28,
+    seed: Optional[int] = None,
+) -> Path:
+    """Generate a clean reference image of the subject.
+
+    Args:
+        slots: extracted slot dict (subject.base_pattern, .library_query, etc.)
+        output_path: where to save the PNG
+        style: photoreal / cartoon / anime / painting / claymation
+        width, height: defaults to SDXL native 1024×1024 (best quality)
+        guidance_scale: SDXL CFG. 7-9 works.
+        steps: denoising steps. 25-30 is the sweet spot.
+        seed: reproducibility. None = random.
+
+    Returns:
+        Path to the saved PNG.
+    """
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    import torch
+    positive, negative = _build_reference_prompt(slots, style)
+
+    # If a pose template exists for this pattern, use ControlNet-Depth to lock
+    # subject composition. This is what makes "a dog" and "a cat" produce
+    # the SAME pose (and therefore TripoSR produces the same mesh orientation).
+    subj = (slots or {}).get("subject", {}) or {}
+    base_pattern = subj.get("base_pattern", "primitive_geo")
+    template_path = get_pose_template_path(base_pattern)
+
+    depth_image = None
+    if template_path is not None:
+        from PIL import Image
+        depth_image = Image.open(template_path).convert("RGB").resize(
+            (int(width), int(height)), Image.BILINEAR
+        )
+
+    # Vehicles: the generic boxy vehicle_depth template forced an SUV/van
+    # silhouette regardless of "sports car" — even at low conditioning. SKIP the
+    # depth template for vehicles so the strong type descriptor + anti-SUV
+    # negatives drive the body (orientation is handled later by the silhouette
+    # gate). Set FS_VEHICLE_DEPTH=1 to restore depth-locked vehicle references.
+    _cscale = CONTROLNET_CONDITIONING_SCALE
+    # BIPEDS NEED THE POSE TO ACTUALLY BIND (2026-08-07). At the shared 0.35
+    # the depth map is a hint, and SDXL's own prior for "full body character
+    # reference" is overwhelmingly a T-pose — so every biped came out
+    # T-posed no matter what the template said. Proven the hard way: the
+    # template was rebuilt into a clean A-pose and the output did not move
+    # until this scale did. Bipeds are the one pattern where the pose is
+    # load-bearing downstream (mocap_retarget binds its arm chain against an
+    # A-pose), so they get a scale that makes the template govern.
+    if base_pattern == "biped":
+        _cscale = float(_os.environ.get("FS_CONTROLNET_SCALE_BIPED", "0.55"))
     if base_pattern == "vehicle" and _os.environ.get("FS_VEHICLE_DEPTH", "0") != "1":
         depth_image = None
 
