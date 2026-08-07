@@ -2182,9 +2182,10 @@ async function main() {
       if (backGeos.length) {
         // deliberately dark and matte: this is what you look at down every
         // reveal, and a bright backing throws the depth away
-        const bm = new THREE.Mesh(mergeGeometries(backGeos, false),
-          new THREE.MeshStandardMaterial({ color: 0x27241f, roughness: 0.97,
-            metalness: 0.0 }));
+        const backM = new THREE.MeshStandardMaterial({ color: 0x27241f,
+          roughness: 0.97, metalness: 0.0 });
+        backM.userData.noAutoTex = true;
+        const bm = new THREE.Mesh(mergeGeometries(backGeos, false), backM);
         bm.receiveShadow = true;
         bm.name = 'BACKING';
         scene.add(bm);
@@ -6028,6 +6029,128 @@ async function main() {
   let inspectOn = false;                 // studio inspect mode (picking bridge)
   const placedItems = [];
   const interactables = [];
+  // ── ONE BUILDING, SAME RULES AS THE BLOCK (2026-08-06) ─────────────────
+  // The city builds its facades as a merged grid of piers and spandrels
+  // because it draws forty of them at once. A DROPPED building has the
+  // opposite constraint — one instance, placed by hand — so it gets its own
+  // assembly here rather than being wedged into the city path. What must not
+  // diverge is the RULE: storeys are whole, the wall stands proud of a
+  // backing, and the gaps between piers and spandrels are the windows. A
+  // dropped brownstone that read differently from the one next door would be
+  // worse than no drop at all.
+  const FACADE_KIT = {
+    brownstone: { tex: 'brick',    st: 3.3, bay: 2.9, pier: 1.5, spand: 1.3,
+                  w: 11, d: 9,  storeys: 5, tone: 0x9a6a52, roof: 0x4a4640 },
+    skyscraper: { tex: 'concrete', st: 3.1, bay: 3.2, pier: 1.0, spand: 1.1,
+                  w: 15, d: 15, storeys: 16, tone: 0xa9a49b, roof: 0x55524c },
+    warehouse:  { tex: 'brick',    st: 4.0, bay: 3.5, pier: 1.4, spand: 1.3,
+                  w: 16, d: 12, storeys: 4, tone: 0x8d5340, roof: 0x4a4640 },
+    storefront: { tex: 'plaster',  st: 3.2, bay: 3.0, pier: 1.2, spand: 1.1,
+                  w: 10, d: 8,  storeys: 3, tone: 0xb0a99b, roof: 0x4a4640 },
+    limestone:  { tex: 'plaster',  st: 4.2, bay: 3.8, pier: 1.9, spand: 1.6,
+                  w: 14, d: 11, storeys: 6, tone: 0xbdb5a4, roof: 0x55524c },
+  };
+  function buildFacadeBox(kind) {
+    const F = FACADE_KIT[kind] || FACADE_KIT.brownstone;
+    const g = new THREE.Group();
+    const WTP = 0.42;
+    const H = F.st * F.storeys;
+    const hw = F.w / 2, hd = F.d / 2;
+    const texL2 = new THREE.TextureLoader();
+    const mtex = (n, sfx) => {
+      const t = texL2.load('textures/' + n + (sfx || '') + '.jpg');
+      t.wrapS = t.wrapT = THREE.RepeatWrapping;
+      t.repeat.set(1 / 2.4, 1 / 2.4);              // UVs below are in metres
+      if (!sfx) t.colorSpace = THREE.SRGBColorSpace;
+      return t;
+    };
+    const wallM = new THREE.MeshStandardMaterial({
+      map: mtex(F.tex), normalMap: mtex(F.tex, '_n'),
+      normalScale: new THREE.Vector2(1.1, 1.1),
+      color: new THREE.Color(F.tone), roughness: 0.93, metalness: 0.02 });
+    // backing: what you see down every reveal, so it stays dark and matte
+    const backM2 = new THREE.MeshStandardMaterial({ color: 0x27241f, roughness: 0.97 });
+    backM2.userData.noAutoTex = true;
+    const back = new THREE.Mesh(
+      new THREE.BoxGeometry(F.w - WTP * 2, H, F.d - WTP * 2), backM2);
+    back.position.y = H / 2;
+    back.castShadow = back.receiveShadow = true;
+    g.add(back);
+    const boxes = [], panes = [];
+    const B1 = new THREE.BoxGeometry(1, 1, 1);
+    const M = new THREE.Matrix4(), Q = new THREE.Quaternion();
+    const E = new THREE.Euler(), V = new THREE.Vector3(), S = new THREE.Vector3();
+    // four walls; local +Z of each is its outward normal
+    const sides = [[0, hd, 0, F.w], [0, -hd, Math.PI, F.w],
+                   [hw, 0, Math.PI / 2, F.d], [-hw, 0, -Math.PI / 2, F.d]];
+    for (const [sx, sz, yaw, L] of sides) {
+      const nx = Math.sin(yaw), nz = Math.cos(yaw);
+      const ux = nz, uz = -nx;                      // along the wall
+      const ax = sx - ux * L / 2, az = sz - uz * L / 2;
+      const nb = Math.max(1, Math.round(L / F.bay)), bw = L / nb;
+      const pw = Math.min(F.pier, bw * 0.74);
+      const sh = Math.min(F.spand, F.st * 0.6);
+      const emit = (along, y, w, hh) => {
+        const b = B1.clone();
+        E.set(0, yaw, 0); Q.setFromEuler(E);
+        V.set(ax + ux * along - nx * (WTP / 2), y, az + uz * along - nz * (WTP / 2));
+        S.set(w, hh, WTP);
+        b.applyMatrix4(M.compose(V, Q, S));
+        // metre UVs on the outward faces so the brick reads at brick size
+        const ps = b.attributes.position, no = b.attributes.normal, uv = b.attributes.uv;
+        for (let i = 0; i < ps.count; i++) {
+          const px = ps.getX(i), py = ps.getY(i), pz = ps.getZ(i);
+          const al = (px - ax) * ux + (pz - az) * uz;
+          const ou = (px - ax) * nx + (pz - az) * nz;
+          if (Math.abs(no.getY(i)) > 0.7) uv.setXY(i, al, ou);
+          else if (Math.abs(no.getX(i) * ux + no.getZ(i) * uz) > 0.7) uv.setXY(i, ou, py);
+          else uv.setXY(i, al, py);
+        }
+        boxes.push(b);
+      };
+      for (let k = 0; k <= nb; k++) emit(k * bw, H / 2, pw, H);
+      for (let sI = 0; sI <= F.storeys; sI++) {
+        const y = sI === F.storeys ? H - sh / 2 : sI * F.st + sh / 2;
+        emit(L / 2, y, L + 0.02, sh);
+      }
+      const ww = bw - pw;
+      if (ww < 0.55) continue;
+      for (let sI = 0; sI < F.storeys; sI++) {
+        const y0 = sI * F.st + sh;
+        const y1 = (sI + 1) * F.st - (sI === F.storeys - 1 ? sh : 0);
+        if (y1 - y0 < 0.6) continue;
+        for (let k = 0; k < nb; k++) {
+          const al = (k + 0.5) * bw;
+          const pane = new THREE.PlaneGeometry(ww, y1 - y0);
+          pane.rotateY(yaw);
+          pane.translate(ax + ux * al - nx * (WTP - 0.04), (y0 + y1) / 2,
+                         az + uz * al - nz * (WTP - 0.04));
+          panes.push(pane);
+        }
+      }
+    }
+    const wm = new THREE.Mesh(mergeGeometries(boxes, false), wallM);
+    wm.castShadow = wm.receiveShadow = true;
+    g.add(wm);
+    for (const b of boxes) b.dispose();
+    if (panes.length) {
+      // 0.09 roughness against a noon sky is a mirror, which is why these
+      // panes read as flat blue cards. The city's own glazing already learned
+      // this: mostly a dark, slightly rough reflector.
+      const glassM2 = new THREE.MeshStandardMaterial({ color: 0x2b3440,
+        roughness: 0.26, metalness: 0.0, envMapIntensity: 0.45 });
+      glassM2.userData.noAutoTex = true;
+      const gm = new THREE.Mesh(mergeGeometries(panes, false), glassM2);
+      g.add(gm);
+      for (const q of panes) q.dispose();
+    }
+    const cap = new THREE.Mesh(new THREE.BoxGeometry(F.w + 0.5, 0.5, F.d + 0.5),
+      new THREE.MeshStandardMaterial({ color: F.roof, roughness: 0.94 }));
+    cap.position.y = H + 0.25;
+    cap.castShadow = true;
+    g.add(cap);
+    return { g, h: H };
+  }
   function procProp(kind) {
     const g = new THREE.Group();
     const std = (c, e, ei) => new THREE.MeshStandardMaterial({
@@ -6057,6 +6180,7 @@ async function main() {
       add(new THREE.BoxGeometry(0.87, 0.09, 0.57), std(0xd9a441, 0xa87418, 0.5), 0, 0.32);
       return { g, h: 0.72 };
     }
+    if (FACADE_KIT[kind]) return buildFacadeBox(kind);
     if (kind === 'building') {
       add(new THREE.BoxGeometry(4.4, 3.3, 3.7), std(0x9a8f7e), 0, 1.65);
       const roof = add(new THREE.ConeGeometry(3.35, 1.9, 4), std(0x6a4438), 0, 4.25, 0, 0, Math.PI / 4);
@@ -8545,7 +8669,13 @@ async function main() {
         m.map.anisotropy = renderer.capabilities.getMaxAnisotropy();
         m.map.needsUpdate = true;
       }
-      if (!m.isMeshStandardMaterial || m.map || _seen.has(m.uuid)) continue;
+      // OPT-OUT (2026-08-06): the sweep claims any untextured standard
+      // material. That silently handed a woodgrain albedo to the dark wall
+      // behind every window reveal — the surface you look AT down the
+      // recess — which reads as a lighting bug rather than a texturing
+      // one. Deliberately flat materials now say so and are left alone.
+      if (!m.isMeshStandardMaterial || m.map || m.userData.noAutoTex
+          || _seen.has(m.uuid)) continue;
         _seen.add(m.uuid);
         if (!o.geometry.attributes.uv) continue;             // needs UVs to texture
         let cls = classify(m);

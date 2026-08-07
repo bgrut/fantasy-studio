@@ -168,6 +168,19 @@ export default function GameStudio() {
   // the round trip to the runtime, which answers with fs-pick asynchronously.
   const [dragAsset, setDragAsset] = useState<PaletteAsset | null>(null)
   const pendingDrop = useRef<PaletteAsset | null>(null)
+  // A card can unmount mid-drag (switching palette tabs), and then its own
+  // dragend never fires and the overlay stays up over the running game —
+  // which is how it ended up printed across a defeat dialog. Window-level
+  // listeners end the drag no matter where it died.
+  useEffect(() => {
+    const clear = () => setDragAsset(null)
+    window.addEventListener('dragend', clear)
+    window.addEventListener('drop', clear)
+    return () => {
+      window.removeEventListener('dragend', clear)
+      window.removeEventListener('drop', clear)
+    }
+  }, [])
   // live dials: these postMessage STRAIGHT to the running game. No backend
   // roundtrip, no rebuild — dragging a slider changes the world you are
   // looking at, which is the whole point of the studio.
@@ -391,11 +404,16 @@ export default function GameStudio() {
         const a = pendingDrop.current
         pendingDrop.current = null
         if (!a) return
-        setSelPick(null); setSelLine(null); setLineA(null)
+        // STAGE, DON'T FIRE (2026-08-06). Dropping used to rebuild instantly,
+        // which meant an unresolvable noun failed SILENTLY — you waited out a
+        // build and got no building. The drop now writes the same sentence you
+        // would have typed into the edit bar and arms the point, so you can see
+        // what is about to happen, reword it, and press the button you already
+        // press for every other edit.
+        setSelLine(null); setLineA(null)
+        setSelPick(p)
         setError(null)
-        void startJobRef.current?.(
-          `place a ${a.subject} here`, jobRef.current?.id,
-          { x: p.x, z: p.z, target: p.target.name })
+        setEditPrompt(`place a ${a.subject} here`)
         return
       }
       // LINE TOOL: first click anchors A, second closes the run A→B

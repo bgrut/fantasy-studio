@@ -1055,8 +1055,26 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         # runtime; any other noun resolves through the same casting ladder as
         # entities. Placed items are ALWAYS user-invited (they come from an
         # edit, never LLM invention), so unknown nouns may generate.
-        _PROC_ALIASES = {"house": "building", "hut": "building", "cabin": "building",
-                         "cottage": "building", "shack": "building", "tower": "building",
+        # NYC KIT (2026-08-06): the city's facade families, droppable one at a
+        # time. These are not library GLBs — there is no such asset — they are
+        # the SAME generator the block is built from, called for one footprint.
+        # Dropping a "brownstone" therefore gets real punched windows, not a
+        # box wearing a photograph of some.
+        _PROC_ALIASES = {"house": "brownstone", "hut": "building", "cabin": "building",
+                         "cottage": "brownstone", "shack": "building",
+                         "tower": "skyscraper", "highrise": "skyscraper",
+                         "high-rise": "skyscraper", "office": "skyscraper",
+                         "office tower": "skyscraper", "glass tower": "skyscraper",
+                         "walkup": "brownstone", "walk-up": "brownstone",
+                         "apartment": "brownstone", "tenement": "brownstone",
+                         "townhouse": "brownstone", "row house": "brownstone",
+                         "loft": "warehouse", "factory": "warehouse",
+                         "warehouse building": "warehouse",
+                         "bodega": "storefront", "shop": "storefront",
+                         "store": "storefront", "deli": "storefront",
+                         "cafe": "storefront", "restaurant": "storefront",
+                         "bank": "limestone", "courthouse": "limestone",
+                         "library building": "limestone",
                          "stone": "rock", "boulder": "rock", "lantern": "beacon",
                          "torch": "campfire", "fire": "campfire", "bonfire": "campfire",
                          "note": "book", "letter": "book", "scroll": "book",
@@ -1065,7 +1083,10 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                          "wall": "fence", "railing": "fence", "barrier": "fence",
                          "hedge": "fence", "gate": "fence", "palisade": "fence"}
         _PROC_PROPS = {"book", "sign", "chest", "building", "rock", "beacon",
-                       "campfire", "fence"}
+                       "campfire", "fence",
+                       # facade families — see procProp/buildFacadeBox
+                       "brownstone", "skyscraper", "warehouse", "storefront",
+                       "limestone"}
         kept_items = []
         for it in spec.world.placed_items:
             k = _PROC_ALIASES.get((it.kind or "").lower().strip(),

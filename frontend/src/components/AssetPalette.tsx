@@ -31,10 +31,27 @@ export type PaletteAsset = {
 const TABS = [
   { id: 'character', label: 'Characters', cats: 'character', hint: 'people and creatures — they arrive with their behaviour' },
   { id: 'object', label: 'Objects', cats: 'prop,vehicle', hint: 'props and vehicles — a car you drop is a car you can drive' },
-  { id: 'building', label: 'Buildings', cats: 'environment', hint: 'structures and set dressing placed on the ground plane' },
+  { id: 'building', label: 'Buildings', cats: '', hint: 'generated on the spot by the facade engine — real windows, whole storeys' },
 ] as const
 
 type TabId = (typeof TABS)[number]['id']
+
+/**
+ * The Buildings tab is NOT the library.
+ *
+ * The library's `environment` category is HDRIs, terrains and skyboxes — none
+ * of it places as a building, which is why dropping "procedural" produced
+ * nothing at all. The buildings this project actually renders are generated,
+ * so the palette offers the GENERATOR's families instead, and each id here is
+ * a kind the backend can resolve (see _PROC_PROPS in app/api/game.py).
+ */
+const NYC_KIT: Array<{ id: string; label: string; note: string; emoji: string }> = [
+  { id: 'brownstone', label: 'Brownstone', emoji: '🏠', note: '5 storeys · brick walk-up' },
+  { id: 'storefront', label: 'Storefront', emoji: '🏪', note: '3 storeys · shop at grade' },
+  { id: 'warehouse', label: 'Loft building', emoji: '🏭', note: '4 storeys · tall bays' },
+  { id: 'limestone', label: 'Limestone', emoji: '🏛', note: '6 storeys · grand order' },
+  { id: 'skyscraper', label: 'Office tower', emoji: '🏢', note: '16 storeys · panel concrete' },
+]
 
 export default function AssetPalette({
   onDragStart,
@@ -60,6 +77,9 @@ export default function AssetPalette({
 
   useEffect(() => {
     const spec = TABS.find(t => t.id === tab)!
+    // the Buildings tab is generated, not fetched — an empty category would
+    // otherwise pull the whole library just to throw it away
+    if (tab === 'building') { setAssets([]); setLoading(false); setError(null); return }
     const seq = ++reqRef.current
     setLoading(true)
     setError(null)
@@ -93,6 +113,16 @@ export default function AssetPalette({
     e.dataTransfer.effectAllowed = 'copy'
     onDragStart(payload)
   }, [disabled, onDragStart])
+
+  const handleKitDragStart = useCallback((k: { id: string; label: string }) =>
+    (e: React.DragEvent) => {
+      if (disabled) { e.preventDefault(); return }
+      const payload: PaletteAsset = { id: k.id, subject: k.id, category: 'building' }
+      e.dataTransfer.setData('application/x-fs-asset', JSON.stringify(payload))
+      e.dataTransfer.setData('text/plain', k.id)
+      e.dataTransfer.effectAllowed = 'copy'
+      onDragStart(payload)
+    }, [disabled, onDragStart])
 
   return (
     <div className="space-y-2.5">
@@ -134,6 +164,29 @@ export default function AssetPalette({
         <p className="text-[11px] text-[#ff8fa0]">Library unavailable: {error}</p>
       )}
 
+      {tab === 'building' ? (
+        <div className="grid gap-1.5 [grid-template-columns:repeat(auto-fill,minmax(132px,1fr))]">
+          {NYC_KIT.map(k => (
+            <div
+              key={k.id}
+              draggable={!disabled}
+              onDragStart={handleKitDragStart(k)}
+              onDragEnd={onDragEnd}
+              title={`${k.label} — ${k.note}`}
+              className={cn(
+                'rounded-lg border border-[#a78bfa]/20 bg-black/25 px-2 py-2 select-none',
+                disabled
+                  ? 'opacity-40 cursor-not-allowed'
+                  : 'cursor-grab active:cursor-grabbing hover:border-[#a78bfa]/60 hover:bg-[#a78bfa]/10',
+              )}
+            >
+              <div className="text-[15px] leading-none mb-1">{k.emoji}</div>
+              <div className="text-[10.5px] text-[#c9c2e4]">{k.label}</div>
+              <div className="text-[9.5px] font-mono text-[#6f6a8c]">{k.note}</div>
+            </div>
+          ))}
+        </div>
+      ) : (
       <div className="relative">
         {loading && (
           <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/20 rounded-lg">
@@ -175,6 +228,7 @@ export default function AssetPalette({
           )}
         </div>
       </div>
+      )}
     </div>
   )
 }
