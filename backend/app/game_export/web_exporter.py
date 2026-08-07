@@ -162,9 +162,22 @@ def export_web_game(spec: GameSpec, out_dir: str | Path, verbose: bool = True) -
     try:
         _lv = getattr(spec.world, "level", None) or {}
         if isinstance(_lv, dict) and _lv.get("osm"):
-            _wsrc = BACKEND_ROOT / "assets" / "library" / "walker.glb"
-            if _wsrc.exists():
-                shutil.copy2(_wsrc, dist / "assets" / "walker.glb")
+            # 2026-08-07: one walker meant one silhouette repeated ninety
+            # times down a block — recolouring it only ever made a colour
+            # wheel of the same person. Every walker_*.glb baked into the
+            # library ships, and the runtime picks between them per
+            # pedestrian. Each is ~1.4MB, so four cost less than the single
+            # 7.8MB original did.
+            _wlib = BACKEND_ROOT / "assets" / "library"
+            _wnames = []
+            for _wsrc in sorted(_wlib.glob("walker*.glb")):
+                shutil.copy2(_wsrc, dist / "assets" / _wsrc.name)
+                _wnames.append(_wsrc.name)
+            # the runtime cannot list a directory over HTTP, so the manifest
+            # is what tells it which variants are actually there
+            if _wnames:
+                (dist / "assets" / "walkers.json").write_text(
+                    json.dumps(_wnames), encoding="utf-8")
     except Exception:  # noqa: BLE001
         pass
 

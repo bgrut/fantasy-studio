@@ -7402,9 +7402,36 @@ async function main() {
     (async () => {
       try {
         const { clone: skClone } = await import('./vendor/jsm/utils/SkeletonUtils.js');
-        const g = await loadGLB('assets/walker.glb');
-        const clips = g.animations || [];
-        const walkClip = clips.find(c => /walk/i.test(c.name)) || clips[0];
+        // ── CROWD VARIETY (2026-08-07) ─────────────────────────────────
+        // One walker cloned ninety times is one person having a very busy
+        // day, and hue-rotating their shirt does not change that — the
+        // silhouette is what you recognise from across a street. Every
+        // walker variant the exporter bundled is loaded and pedestrians
+        // draw from the set. Each variant carries its OWN walk clip, so a
+        // mixer must be built against the model it belongs to; sharing one
+        // clip across skeletons is what makes limbs fly off.
+        let _wlist = ['walker.glb'];
+        try {
+          const _wr = await fetch('assets/walkers.json');
+          if (_wr.ok) {
+            const _wj = await _wr.json();
+            if (Array.isArray(_wj) && _wj.length) _wlist = _wj;
+          }
+        } catch (e) { /* manifest is an optimisation, never a gate */ }
+        const _models = [];
+        for (const _wn of _wlist) {
+          try {
+            const _wg = await loadGLB('assets/' + _wn);
+            const _wc = _wg.animations || [];
+            const _ww = _wc.find(c => /walk/i.test(c.name)) || _wc[0];
+            if (_wg.scene) _models.push({ scene: _wg.scene, walk: _ww });
+          } catch (e) { /* a missing variant must not empty the street */ }
+        }
+        if (!_models.length) return;
+        console.log('[game] walker variants: ' + _models.length
+                    + ' (' + _wlist.join(', ') + ')');
+        const g = { scene: _models[0].scene };
+        const walkClip = _models[0].walk;
         const rngP = mulberry32(SPEC.seed + 818);
         // ── WALKER VARIETY (2026-08-06) ────────────────────────────────
         // Every pedestrian was one bake at one height wearing one texture:
@@ -7453,10 +7480,18 @@ async function main() {
         for (let i = 0; i < 90; i++) {
           const r = OSM.roads[Math.floor(rngP() * OSM.roads.length)];
           if (!r || r.pts.length < 2) continue;
-          const inst = skClone(g.scene);
-          // bucket 0 keeps the original bake — an untinted walker in the mix
-          // stops the crowd reading as a colour wheel
-          if (i % 9 !== 0) pedSkin(inst, 1 + (i % 10));
+          // pick the body FIRST — clothing and build come with the model,
+          // and the tint below is now only within-variant variation
+          const _mv = _models[i % _models.length];
+          const inst = skClone(_mv.scene);
+          // NO HUE ROTATION when there are real bodies to draw from. The
+          // rotation was a stand-in for variety back when the crowd was one
+          // model ninety times, and it works on the whole diffuse — skin
+          // included — so a third of the street came out green. Four models
+          // supply the variety honestly; the tint is kept only for the
+          // single-variant fallback, where a colour wheel still beats a
+          // literal clone army.
+          if (_models.length < 2 && i % 9 !== 0) pedSkin(inst, 1 + (i % 10));
           const bb = new THREE.Box3().setFromObject(inst);
           inst.scale.multiplyScalar((1.56 + rngP() * 0.33)
             / Math.max(bb.max.y - bb.min.y, 1e-3));
@@ -7473,9 +7508,9 @@ async function main() {
           // strollers and people late for something, not one march tempo
           const spd = 0.8 + rngP() * 1.25;
           let mixer2 = null;
-          if (walkClip) {
+          if (_mv.walk) {
             mixer2 = new THREE.AnimationMixer(inst);
-            const act = mixer2.clipAction(walkClip);
+            const act = mixer2.clipAction(_mv.walk);
             // clip rate follows ground speed or the fast walkers moonwalk
             act.timeScale = (spd / 1.35) / build;
             act.play();
