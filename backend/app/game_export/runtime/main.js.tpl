@@ -3224,7 +3224,11 @@ async function main() {
           const ez = fe.z + nz2 * 0.05 + nx2 * slideA;
           E4.set(-0.22, Math.atan2(nx2, nz2), 0);
           Q4.setFromEuler(E4);
-          M4.compose(new THREE.Vector3(ex, hAt(ex, ez) + 3.0, ez), Q4, S4);
+          // 2026-08-07: the awning sat at 3.0m and the fascia sign at 2.7m,
+          // so a 1.2m-deep canopy hung directly in FRONT of the shop name
+          // and hid it from any street-level angle. Real storefronts stack
+          // them the other way: canopy at head height, sign band above it.
+          M4.compose(new THREE.Vector3(ex, hAt(ex, ez) + 2.35, ez), Q4, S4);
           awn.setMatrixAt(na, M4);
           awn.setColorAt(na, AC[Math.floor(rngA() * AC.length)]);
           na++;
@@ -3791,7 +3795,7 @@ async function main() {
           const fascW = Math.min(eL3 * 0.86, 1.05 * 8.4);
           const slot = slots[Math.floor(rngG2() * slots.length)];
           const v0s = 1 - (slot + 1) / SLOTS, v1s = 1 - slot / SLOTS;
-          mkQuad(quads, fe3.x, gy3 + (fst3 || 3.3) - 0.60, fe3.z, fe3.nx, fe3.nz,
+          mkQuad(quads, fe3.x, gy3 + (fst3 || 3.3) - 0.22, fe3.z, fe3.nx, fe3.nz,
                  fascW, 1.05, v0s, v1s, 0.17);
           // BLADE SIGN: hung PERPENDICULAR to the wall, which is the one that
           // reads from down the block — a flat fascia disappears the moment
@@ -4512,9 +4516,10 @@ async function main() {
       return t;
     };
     // an office floor is painted board and carpet tile, not keep masonry
-    const wallFile = (IK === 'house' || IK === 'office') ? 'plaster' : 'stone';
+    const wallFile = (IK === 'house' || IK === 'office' || IK === 'shop')
+      ? 'plaster' : 'stone';
     const floorFile = IK === 'dungeon' ? 'stone'
-                    : (IK === 'office' ? 'concrete' : 'planks');
+                    : (IK === 'office' || IK === 'shop' ? 'concrete' : 'planks');
     const bx = PLAN.bounds[0], bz = PLAN.bounds[1];
     const fmat = new THREE.MeshStandardMaterial({
       map: itex(floorFile, bx / 4, bz / 4), roughness: 0.9 });
@@ -4679,6 +4684,105 @@ async function main() {
     }
     // KIND DECOR (moon plan 2.4): castles hang banners + a carpet runner
     // down the hall; houses get warm rugs. Cheap planes, big identity.
+    if (IK === 'shop') {
+      // ── WHAT MAKES A ROOM READ AS A SHOP (2026-08-07) ──────────────────
+      // A counter you stand across, gondola shelving in aisles you walk
+      // between, stock on the shelves, a lit sign behind the till. Same
+      // reasoning as the office: the identity is in the fittings, not the
+      // wall texture, and everything here merges so a store costs a handful
+      // of draw calls on top of a whole city.
+      const rngS = mulberry32((SPEC.seed || 1) + 611);
+      const hwS = PLAN.rooms[0][2] / 2, hdS = PLAN.rooms[0][3] / 2;
+      const woodM = new THREE.MeshStandardMaterial({ color: 0x8a6a4a,
+        map: itex('planks', 8, 2), roughness: 0.8 });
+      // OPT OUT OF THE AUTO-TEXTURER. It claims any untextured standard
+      // material, so painted steel shelving and cardboard stock came back
+      // wearing BRICK and rubble — a stockroom quarried out of masonry.
+      // Deliberately flat materials have to say so.
+      const shelfM = new THREE.MeshStandardMaterial({ color: 0xb9bcc2,
+        roughness: 0.6, metalness: 0.3 });
+      shelfM.userData.noAutoTex = true;
+      const stockM = new THREE.MeshStandardMaterial({ color: 0xffffff,
+        vertexColors: true, roughness: 0.85 });
+      stockM.userData.noAutoTex = true;
+      const counter = [], shelves = [], stock = [];
+      // SERVICE COUNTER across the back, with a raised top
+      const cw = hwS * 1.1;
+      const cg = new THREE.BoxGeometry(cw, 1.02, 0.72);
+      cg.translate(OX, 0.51, hdS - 2.2); counter.push(cg);
+      const ct = new THREE.BoxGeometry(cw + 0.22, 0.07, 0.95);
+      ct.translate(OX, 1.06, hdS - 2.2); counter.push(ct);
+      // GONDOLA AISLES: double-sided runs with a kick plate and four decks
+      const aisles = 3, runL = hdS * 1.15;
+      for (let a = 0; a < aisles; a++) {
+        const ax2 = OX + (a - (aisles - 1) / 2) * (hwS * 2 / (aisles + 0.6));
+        const back = new THREE.BoxGeometry(0.09, 1.85, runL);
+        back.translate(ax2, 0.93, -0.6); shelves.push(back);
+        for (let d2 = 0; d2 < 4; d2++) {
+          for (const side of [-1, 1]) {
+            const deck = new THREE.BoxGeometry(0.46, 0.05, runL);
+            deck.translate(ax2 + side * 0.27, 0.38 + d2 * 0.46, -0.6);
+            shelves.push(deck);
+            // stock: little boxes along each deck, colour per instance so a
+            // shelf reads as goods rather than one long extruded slab
+            const nb2 = Math.max(3, Math.round(runL / 0.55));
+            for (let b2 = 0; b2 < nb2; b2++) {
+              if (rngS() < 0.22) continue;              // gaps = things sold
+              const bw2 = 0.16 + rngS() * 0.14, bh2 = 0.16 + rngS() * 0.16;
+              const bx2 = new THREE.BoxGeometry(bw2, bh2, 0.22 + rngS() * 0.12);
+              bx2.translate(ax2 + side * (0.27 + rngS() * 0.06),
+                            0.38 + d2 * 0.46 + bh2 / 2 + 0.03,
+                            -0.6 - runL / 2 + (b2 + 0.5) * (runL / nb2));
+              const col = new THREE.Color().setHSL(rngS(), 0.45 + rngS() * 0.3,
+                                                   0.42 + rngS() * 0.22);
+              const ca2 = new Float32Array(bx2.attributes.position.count * 3);
+              for (let v2 = 0; v2 < bx2.attributes.position.count; v2++) {
+                ca2[v2 * 3] = col.r; ca2[v2 * 3 + 1] = col.g; ca2[v2 * 3 + 2] = col.b;
+              }
+              bx2.setAttribute('color', new THREE.BufferAttribute(ca2, 3));
+              stock.push(bx2);
+            }
+          }
+        }
+      }
+      const addMerged = (list, mat, cast) => {
+        if (!list.length) return;
+        const m2 = new THREE.Mesh(mergeGeometries(list, false), mat);
+        m2.castShadow = !!cast; m2.receiveShadow = true;
+        scene.add(m2);
+        for (const g5 of list) g5.dispose();
+      };
+      addMerged(counter, woodM, true);
+      addMerged(shelves, shelfM, true);
+      addMerged(stock, stockM, false);
+      // LIT SIGN behind the till — the one warm thing in the room, and the
+      // reason a shop reads as open rather than abandoned
+      const sc4 = document.createElement('canvas');
+      sc4.width = 512; sc4.height = 128;
+      const sx4 = sc4.getContext('2d');
+      sx4.fillStyle = '#12202b'; sx4.fillRect(0, 0, 512, 128);
+      sx4.fillStyle = '#ffd98a';
+      sx4.font = 'bold 62px Arial';
+      sx4.textAlign = 'center'; sx4.textBaseline = 'middle';
+      sx4.fillText('OPEN 24 HRS', 256, 68);
+      const st4 = new THREE.CanvasTexture(sc4);
+      st4.colorSpace = THREE.SRGBColorSpace;
+      const sgn4 = new THREE.Mesh(new THREE.PlaneGeometry(3.4, 0.85),
+        new THREE.MeshBasicMaterial({ map: st4, toneMapped: false }));
+      sgn4.position.set(OX, 2.15, hdS - 0.28);
+      sgn4.rotation.y = Math.PI;
+      scene.add(sgn4);
+      // ceiling strips, emissive only — a real light per store would eat the
+      // WebGL2 light budget and render a BLACK ROOM instead (TRAP 2)
+      const strips4 = [];
+      for (let r4 = 0; r4 < 3; r4++) {
+        const sg5 = new THREE.BoxGeometry(hwS * 1.5, 0.06, 0.3);
+        sg5.translate(OX, topY - 0.09, -hdS + (r4 + 0.7) * (hdS * 2 / 3.6));
+        strips4.push(sg5);
+      }
+      addMerged(strips4, new THREE.MeshBasicMaterial({ color: 0xf4f8ff,
+        toneMapped: false }), false);
+    }
     if (IK === 'office') {
       // ── WHAT MAKES A ROOM READ AS AN OFFICE (2026-08-06 r7) ────────────
       // Not the walls. It is the SUSPENDED CEILING with its T-bar grid and
@@ -4749,6 +4853,7 @@ async function main() {
         map: itex('plaster', 7, 7), roughness: 0.55, metalness: 0.05 });
       const metalM = new THREE.MeshStandardMaterial({ color: 0x2e3236,
         metalness: 0.7, roughness: 0.42 });
+      metalM.userData.noAutoTex = true;      // desk legs are steel, not stone
       const parts = [], desks = [], legs = [], screens = [], troffers = [];
       const DESK_H = 0.74, PART_H = 1.32;
       // cubicle runs: a partition spine with desks hung off both sides, which
@@ -5588,7 +5693,8 @@ async function main() {
           type: 'npc', name: ent.name || 'creature',
           detail: `${ent.behavior || 'wander'} · speed ${ent.speed || 1.5}`
                   + (hostile ? ` · hp ${ent.hp || 3}` : '') };
-        npcs.push({ obj: holder, speed: ent.speed || 1.5, behavior: ent.behavior || 'wander',
+        npcs.push({ obj: holder, down: 0, kx: 0, kz: 0,
+                speed: ent.speed || 1.5, behavior: ent.behavior || 'wander',
                     target: null, yaw: startYaw, phase: rngN() * Math.PI * 2,
                     h: ent.height_m || 1.0, name: ent.name,
                     beat: holder.userData.fsBeat || null,   // heist patrol circuit
@@ -5614,6 +5720,24 @@ async function main() {
     window.__alertPeak = 0;             // recomputed by the guards each frame
     for (const n of npcs) {
       if (n.dormant) continue;           // wave-pool members sleep until woken
+      // STRUCK BY A CAR (2026-08-07 r2). The first cut only knocked down
+      // ambient __peds, but guards, the informant and every wandering
+      // entity are `npcs` — a different list on a different update path —
+      // so the people you were most likely to aim at were exactly the ones
+      // that ignored you. Downed NPCs skip their AI entirely: no patrol, no
+      // chase, no attack until they are back on their feet.
+      if (n.down > 0) {
+        n.down -= dt;
+        const kd = Math.min(1, dt * 3.2);
+        n.obj.position.x += n.kx * dt;
+        n.obj.position.z += n.kz * dt;
+        n.kx -= n.kx * kd; n.kz -= n.kz * kd;
+        n.obj.position.y = hAt(n.obj.position.x, n.obj.position.z);
+        const tg = n.down > 0.6 ? Math.PI / 2 : 0;
+        n.obj.rotation.x += (tg - n.obj.rotation.x) * Math.min(1, dt * 7);
+        if (n.down <= 0) { n.down = 0; n.obj.rotation.x = 0; }
+        continue;
+      }
       // death animation: keel over + sink, then remove
       if (n.dead) {
         n.dieT += dt;
@@ -8027,6 +8151,58 @@ async function main() {
     return best;
   }
   let tgtMark = null;
+  // ── LOADOUT (2026-08-07, TAB) ────────────────────────────────────────
+  // The verbs were only ever announced once, in a strip of grey text at the
+  // top of the screen that scrolls past before you have started playing —
+  // so "what can I actually do" had no answer you could ask for. Tab is a
+  // panel you can open mid-game. It is built from the SPEC, not hardcoded,
+  // so a game without guards does not advertise a distraction it cannot
+  // throw and a swimmer is not told to sneak.
+  {
+    const lo = document.createElement('div');
+    lo.style.cssText = 'position:fixed;inset:0;display:none;z-index:34;'
+      + 'background:rgba(8,7,14,.72);backdrop-filter:blur(3px);'
+      + 'align-items:center;justify-content:center;';
+    const rows = [];
+    const mode = SPEC.player.mode || 'walk';
+    if (ATTACK === 'ranged') rows.push(['🔫', 'Sidearm', 'F', 'fires at the nearest target']);
+    else if (ATTACK === 'melee') rows.push(['🗡', 'Blade', 'F', 'swing at whatever is in front of you']);
+    if (typeof HAS_GUARDS !== 'undefined' && HAS_GUARDS) {
+      rows.push(['🥫', 'Distraction', 'Q', 'thrown — pulls a guard to the noise']);
+      rows.push(['🐈', 'Crouch', 'C', 'halves how far a guard can see you']);
+    }
+    if (window.__doors && window.__doors.length) {
+      rows.push(['📐', 'Blueprint', 'B', 'overlay of the block and its ways in']);
+    }
+    if (mode === 'walk') rows.push(['🏃', 'Sprint', 'Shift', 'faster on foot, louder too']);
+    rows.push(['🚗', 'Hotwire', 'E', 'any car you are standing beside']);
+    lo.innerHTML = '<div style="max-width:560px;width:88%;padding:26px 30px;'
+      + 'background:rgba(14,12,24,.96);border:1px solid rgba(167,139,250,.4);'
+      + 'border-radius:16px;">'
+      + '<div style="font:800 20px system-ui;color:#e8e2ff;margin-bottom:4px">Loadout</div>'
+      + '<div style="font:400 12px system-ui;color:#8d89a6;margin-bottom:16px">'
+      + 'everything this game gave you · Tab to close</div>'
+      + rows.map(r => '<div style="display:flex;align-items:center;gap:12px;'
+        + 'padding:9px 0;border-top:1px solid rgba(255,255,255,.07)">'
+        + `<div style="font-size:21px;width:28px;text-align:center">${r[0]}</div>`
+        + '<div style="flex:1">'
+        + `<div style="font:700 14px system-ui;color:#e8e2ff">${r[1]}</div>`
+        + `<div style="font:400 11.5px system-ui;color:#8d89a6">${r[3]}</div></div>`
+        + '<kbd style="font:700 12px ui-monospace,monospace;color:#0d0b16;'
+        + 'background:#a78bfa;border-radius:6px;padding:4px 9px">'
+        + `${r[2]}</kbd></div>`).join('')
+      + '</div>';
+    document.body.appendChild(lo);
+    let loOpen = false;
+    addEventListener('keydown', e => {
+      if (e.code !== 'Tab') return;
+      e.preventDefault();                 // Tab must not walk the DOM focus
+      loOpen = !loOpen;
+      lo.style.display = loOpen ? 'flex' : 'none';
+    });
+    const hintL = document.querySelector('#hud .hint');
+    if (hintL) hintL.textContent += ' · Tab loadout';
+  }
   if (ATTACK !== 'none') {
     const c = document.createElement('canvas');
     c.width = c.height = 64;
@@ -10220,6 +10396,21 @@ varying vec2 vUvRaw;
         if (tc.speed > 2.2) _hits.push([tc.obj.position, tc.speed, tc.obj.rotation.y]);
       }
       if (_hits.length) {
+        for (const nn of npcs) {
+          if (nn.dead || nn.dormant || nn.down > 0) continue;
+          for (const [cpos, cspd, cyaw] of _hits) {
+            const dxn = nn.obj.position.x - cpos.x, dzn = nn.obj.position.z - cpos.z;
+            if (dxn * dxn + dzn * dzn > 6.25) continue;
+            nn.down = 2.6 + Math.random() * 1.4;
+            nn.kx = Math.sin(cyaw) * Math.min(cspd * 0.55, 9);
+            nn.kz = Math.cos(cyaw) * Math.min(cspd * 0.55, 9);
+            // a guard bowled over loses you — being run down is exactly
+            // when a chase should break
+            if (nn.behavior === 'guard') { nn.mode = 'patrol'; nn.alert = 0; nn.lostT = 0; }
+            sfx('hit');
+            break;
+          }
+        }
         for (const pd of window.__peds || []) {
           if (pd.down > 0) continue;
           for (const [cpos, cspd, cyaw] of _hits) {

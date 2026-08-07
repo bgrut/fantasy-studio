@@ -341,7 +341,12 @@ def build_interior(seed: int, kind: str = "castle") -> dict:
     # PER-KIND LAYOUT (2026-07-23: 'the viking dungeon was the same style as
     # the mansion') — a castle is a grand pillared hall, a house is cosy
     # small rooms, a dungeon is a long narrow corridor-hall with cells.
-    if kind == "office":
+    if kind == "shop":
+        # A store is one wide room you can see across the moment you step in
+        # — shallow, no processional hall, with a back-of-house behind it.
+        hall_w = rng.uniform(13, 17)
+        hall_d = rng.uniform(11, 15)
+    elif kind == "office":
         # A tower's floor plate is WIDE and shallow with a service core, not a
         # long processional hall. Walking into a skyscraper and finding a
         # pillared mansion was the loudest thing wrong with the city heist.
@@ -358,12 +363,16 @@ def build_interior(seed: int, kind: str = "castle") -> dict:
         hall_d = rng.uniform(16, 22)
     rooms.append([0.0, 0.0, hall_w, hall_d])
     n_side = {"castle": rng.randint(2, 3), "dungeon": rng.randint(4, 6),
-              "office": rng.randint(3, 4)}.get(kind, rng.randint(2, 4))
+              "office": rng.randint(3, 4), "shop": rng.randint(1, 2)}.get(
+                  kind, rng.randint(2, 4))
     for k in range(n_side):
         side = 1 if k % 2 == 0 else -1
         if kind == "dungeon":                        # cells off the corridor
             rw = rng.uniform(4.5, 6.5)
             rd = rng.uniform(4.5, 6.5)
+        elif kind == "shop":                         # stock room / back office
+            rw = rng.uniform(4.5, 6.5)
+            rd = rng.uniform(4, 6)
         elif kind == "office":                       # meeting rooms off the floor
             rw = rng.uniform(6.5, 9)
             rd = rng.uniform(6, 8.5)
@@ -414,7 +423,10 @@ def build_interior(seed: int, kind: str = "castle") -> dict:
         # desks and filing cabinets, expressed in props that already exist —
         # a new interior kind must not also become an asset dependency
         "office": ["table", "chair", "chair", "bookshelf", "table", "crate"],
-    }[kind if kind in ("castle", "house", "dungeon", "office") else "castle"]
+        # shelving and stock: the runtime draws the real fittings, these are
+        # only the scatter that keeps the floor from reading as empty
+        "shop": ["bookshelf", "crate", "table", "crate", "bookshelf"],
+    }[kind if kind in ("castle", "house", "dungeon", "office", "shop") else "castle"]
     furniture = []
     for cx, cz, rw, rd in rooms:
         for name in rng.sample(FURN, k=min(3, len(FURN))):
@@ -605,14 +617,21 @@ def plan_enterables(osm: dict, level: dict, seed: int, size_m: float,
     for k, (r, b, cx, cz, w, d) in enumerate(picked):
         h = float(b.get("h") or 9.0)
         area = w * d
-        kind = "office" if h >= 20.0 else ("dungeon" if area > 1600 else "house")
+        # 2026-08-07: every low venue was a "house", so walking into a shop
+        # on a commercial street gave you somebody's sitting room. Ground
+        # floors on a street are retail; a house is what you get when the
+        # footprint is big and set back enough to be one.
+        kind = ("office" if h >= 20.0
+                else "dungeon" if area > 1600
+                else "shop" if h < 14.0
+                else "house")
         # NO TWO VENUES IN A ROW LOOK ALIKE (2026-08-05 playtest): the block's
         # two towers both scored `castle` and the second break-in was the
         # first one repeated — same stone, same red runner, same pillars. The
         # kind drives ALL of a room's identity, so rotate off a repeat.
         if out and out[-1]["kind"] == kind:
-            kind = {"castle": "house", "house": "dungeon",
-                    "dungeon": "office", "office": "house"}[kind]
+            kind = {"castle": "house", "house": "shop", "shop": "house",
+                    "dungeon": "office", "office": "shop"}[kind]
         plan = build_interior(seed + 101 + k * 37, kind)
         # ONE STOREY PER VENUE in a city heist: four two-storey plans is four
         # extra ceilings, four staircases and eight more point lights, and the
