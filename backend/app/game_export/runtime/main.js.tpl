@@ -1209,7 +1209,21 @@ async function main() {
         // holes through heads/ears at grazing angles ("half cut-off face",
         // 2026-07-08). Render both sides until GPU-day watertight meshes.
         for (const m of Array.isArray(o.material) ? o.material : [o.material]) {
-          if (m) m.side = THREE.DoubleSide;
+          if (!m) continue;
+          m.side = THREE.DoubleSide;
+          // SKIN AND CLOTH ARE NOT METAL (2026-08-07). glTF defaults
+          // metallicFactor to 1.0, and a baked character that never wrote a
+          // metallicRoughness texture inherits it — so the albedo contributes
+          // NO diffuse and the model is lit only by reflections. On the hero
+          // the moonlit-grade emissive then supplies the only visible signal
+          // and he renders as a flat white cutout in any dark street, which
+          // is exactly how this surfaced. A metalness map means the asset
+          // meant it; a bare factor of 1 never does.
+          if (m.metalness !== undefined && !m.metalnessMap && m.metalness > 0.6) {
+            m.metalness = 0.05;
+            if (!m.roughnessMap && m.roughness >= 0.99) m.roughness = 0.78;
+            m.needsUpdate = true;
+          }
         }
       }
     });
@@ -3660,23 +3674,20 @@ async function main() {
           // fascia board and wall ad in the city rendered as its own mirror
           // image. Flipping U rather than the tangent leaves the winding and
           // the explicit normals alone.
-          // TWO BUGS LIVED HERE, and the first fix caused the second.
+          // Read from the STREET these quads show their back face, and a
+          // back face mirrors its texture — so u has to run the opposite way
+          // to the tangent for the text to come out forwards. Settled by
+          // photographing signs in play, not by algebra: two earlier passes
+          // reasoned it out on paper and got opposite answers, and one of my
+          // "mirrored" readings turned out to be a camera stuck inside a
+          // building looking at the genuine back of a sign.
           //
-          // These quads are wound so their FRONT face points inward; the
-          // street sees the BACK, and a back face already mirrors its
-          // texture. An earlier pass reasoned about tangent-vs-viewer-right
-          // on paper, concluded U ran backwards, and flipped it — which
-          // mirrored correct signs into "ERAWDRAH". U is back to its
-          // original direction, confirmed by reading a sign in-game rather
-          // than by algebra.
-          //
-          // That flip also updated three corners and missed the fourth, so
-          // the two LEFT corners disagreed (u=1 and u=0) and the texture
-          // sheared across the second triangle — the "warped and stretched"
-          // report. Corner UVs must agree per edge: both left u=0, both
-          // right u=1.
-          const c6 = [[-1, -1, 0, v0], [1, -1, 1, v0], [1, 1, 1, v1],
-                      [-1, -1, 0, v0], [1, 1, 1, v1], [-1, 1, 0, v1]];
+          // Corner UVs must also agree per edge. An earlier fix flipped u on
+          // three corners and missed the fourth, so the two LEFT corners
+          // carried u=1 and u=0 and the texture sheared diagonally across the
+          // second triangle — that was the "warped and stretched" report.
+          const c6 = [[-1, -1, 1, v0], [1, -1, 0, v0], [1, 1, 0, v1],
+                      [-1, -1, 1, v0], [1, 1, 0, v1], [-1, 1, 1, v1]];
           const pos = [], uv = [], nor = [];
           for (const cc of c6) {
             pos.push(bx3 + tx * (w / 2) * cc[0], qy + (hh / 2) * cc[1],
@@ -7634,7 +7645,11 @@ async function main() {
       if (!o.isMesh) return;
       for (const m of Array.isArray(o.material) ? o.material : [o.material]) {
         if (m && m.emissive !== undefined && m.map) {
-          m.emissiveMap = m.map; m.emissive.setScalar(0.34); m.needsUpdate = true;
+          // 0.34 was tuned against materials whose diffuse was dead, so it
+          // had to carry the whole hero. With diffuse restored above it is a
+          // lift, not a substitute — anything near the old value re-blows a
+          // light-coloured costume out to white.
+          m.emissiveMap = m.map; m.emissive.setScalar(0.10); m.needsUpdate = true;
         } else if (m && m.emissive) {
           m.emissive.setScalar(0.12);
         }
