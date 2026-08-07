@@ -3634,8 +3634,15 @@ async function main() {
         const mkQuad = (sink, qx, qy, qz, nx0, nz0, w, hh, v0, v1, out) => {
           const tx = -nz0, tz = nx0;
           const bx3 = qx + nx0 * out, bz3 = qz + nz0 * out;
-          const c6 = [[-1, -1, 0, v0], [1, -1, 1, v0], [1, 1, 1, v1],
-                      [-1, -1, 0, v0], [1, 1, 1, v1], [-1, 1, 0, v1]];
+          // MIRRORED TEXT (2026-08-06). The tangent below is (-nz, nx),
+          // which is exactly the NEGATIVE of the viewer's right hand when
+          // they stand outside the wall looking at it (right = forward x up
+          // = (nz, -nx) for forward = -n). So U ran right-to-left and every
+          // fascia board and wall ad in the city rendered as its own mirror
+          // image. Flipping U rather than the tangent leaves the winding and
+          // the explicit normals alone.
+          const c6 = [[-1, -1, 1, v0], [1, -1, 0, v0], [1, 1, 0, v1],
+                      [-1, -1, 1, v0], [1, 1, 0, v1], [-1, 1, 0, v1]];
           const pos = [], uv = [], nor = [];
           for (const cc of c6) {
             pos.push(bx3 + tx * (w / 2) * cc[0], qy + (hh / 2) * cc[1],
@@ -3680,8 +3687,13 @@ async function main() {
           // BLADE SIGN: hung PERPENDICULAR to the wall, which is the one that
           // reads from down the block — a flat fascia disappears the moment
           // you are not standing square to it, and half of Mott Street is
-          // these. The material is already DoubleSide, so one quad does both
-          // faces. Width runs along the wall NORMAL, not the wall.
+          // these. Width runs along the wall NORMAL, not the wall.
+          //
+          // A single DoubleSide quad was wrong here: both faces share one set
+          // of UVs, so whichever side you did not design for reads mirrored,
+          // and a blade is meant to be read from BOTH ends of the block. Two
+          // quads back to back, the rear one with U flipped, so each side is
+          // correct and the nearer one occludes the other.
           if (rngG2() < 0.55) {
             const by2 = gy3 + (fst3 || 3.3) + 0.95;
             const bx2 = fe3.x, bz2 = fe3.z;
@@ -3692,17 +3704,24 @@ async function main() {
             const ox8 = bx2 + tx8 * sl8, oz8 = bz2 + tz8 * sl8;
             const c8 = [[inR, -1, 0, v0s], [outR, -1, 1, v0s], [outR, 1, 1, v1s],
                         [inR, -1, 0, v0s], [outR, 1, 1, v1s], [inR, 1, 0, v1s]];
-            const pos8 = [], uv8 = [], nor8 = [];
-            for (const cc of c8) {
-              pos8.push(ox8 + px8 * cc[0], by2 + (bh2 / 2) * cc[1], oz8 + pz8 * cc[0]);
-              uv8.push(cc[2], cc[3]);
-              nor8.push(tx8, 0, tz8);
+            for (const face of [1, -1]) {
+              const pos8 = [], uv8 = [], nor8 = [];
+              // 1.5cm apart: enough that the near face always wins the depth
+              // test, far too little to read as two boards
+              const sh8 = face * 0.015;
+              for (const cc of c8) {
+                pos8.push(ox8 + px8 * cc[0] + tx8 * sh8,
+                          by2 + (bh2 / 2) * cc[1],
+                          oz8 + pz8 * cc[0] + tz8 * sh8);
+                uv8.push(face > 0 ? cc[2] : 1 - cc[2], cc[3]);
+                nor8.push(tx8 * face, 0, tz8 * face);
+              }
+              const q8 = new THREE.BufferGeometry();
+              q8.setAttribute('position', new THREE.BufferAttribute(new Float32Array(pos8), 3));
+              q8.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(uv8), 2));
+              q8.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(nor8), 3));
+              quads.push(q8);
             }
-            const q8 = new THREE.BufferGeometry();
-            q8.setAttribute('position', new THREE.BufferAttribute(new Float32Array(pos8), 3));
-            q8.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(uv8), 2));
-            q8.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(nor8), 3));
-            quads.push(q8);
           }
           ns++;
         }
@@ -4185,6 +4204,15 @@ async function main() {
             const sx3 = fe4.x + fe4.nx * outN, sz3 = fe4.z + fe4.nz * outN;
             sgn.position.set(sx3, hAt(sx3, sz3) + 4.3, sz3);
             sgn.rotation.y = yaw6 + Math.PI / 2;
+            // A blade is meant to be read from BOTH ends of the block, and a
+            // DoubleSide plane shows one set of UVs to both faces — so the far
+            // side was always the mirror image. A second plane turned to face
+            // the other way carries its own correct copy.
+            const back6 = new THREE.Mesh(sgn.geometry, mn);
+            back6.position.copy(sgn.position);
+            back6.rotation.y = yaw6 - Math.PI / 2;
+            back6.translateZ(-0.02);
+            scene.add(back6);
           } else {
             const slideN = (rngNe() - 0.5) * Math.max(0, fe4.len - nw - 0.4);
             const sx3 = fe4.x + fe4.nx * 0.12 - fe4.nz * slideN;
