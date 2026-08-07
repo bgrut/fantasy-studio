@@ -3630,6 +3630,16 @@ async function main() {
         const atlT = new THREE.CanvasTexture(atl);
         atlT.colorSpace = THREE.SRGBColorSpace;
         atlT.anisotropy = renderer.capabilities.getMaxAnisotropy();
+        // NO MIPMAPS (2026-08-06). Sixteen shop names share one 1024x2048
+        // canvas, so each mip level averages across slot BOUNDARIES — at a
+        // grazing angle the lower mips blend one shop's name into the next
+        // and the board reads as horizontal smears of two words at once.
+        // Padding the slots would not save it: mip 5 and beyond mixes the
+        // whole atlas regardless. Anisotropic filtering still handles the
+        // grazing case, which is the only place mips were earning anything.
+        atlT.generateMipmaps = false;
+        atlT.minFilter = THREE.LinearFilter;
+        atlT.magFilter = THREE.LinearFilter;
         const quads = [];
         const mkQuad = (sink, qx, qy, qz, nx0, nz0, w, hh, v0, v1, out) => {
           const tx = -nz0, tz = nx0;
@@ -3679,11 +3689,17 @@ async function main() {
           if (!fe3) continue;
           // the fascia runs the width of the SHOP, not a fixed 3.4m: a board
           // stopping short of the piers is the plaque look all over again
+          // The atlas slot is 1024x128 — 8:1. A shop 17m wide stretched that
+          // slot to 14:1 and the letters came out drawn out sideways. Real
+          // fascia boards are 3-8m and sit centred over the entrance, so the
+          // board is capped near the slot's own aspect instead of running the
+          // full width of the building.
           const eL3 = Math.max(3.2, Math.min(fe3.len === undefined ? 9 : fe3.len, 17));
+          const fascW = Math.min(eL3 * 0.86, 1.05 * 8.4);
           const slot = slots[Math.floor(rngG2() * slots.length)];
           const v0s = 1 - (slot + 1) / SLOTS, v1s = 1 - slot / SLOTS;
           mkQuad(quads, fe3.x, gy3 + (fst3 || 3.3) - 0.60, fe3.z, fe3.nx, fe3.nz,
-                 eL3 * 0.86, 1.05, v0s, v1s, 0.17);
+                 fascW, 1.05, v0s, v1s, 0.17);
           // BLADE SIGN: hung PERPENDICULAR to the wall, which is the one that
           // reads from down the block — a flat fascia disappears the moment
           // you are not standing square to it, and half of Mott Street is
@@ -7328,6 +7344,12 @@ async function main() {
             gp.rotation.y = hdP + (side > 0 ? 0 : Math.PI);
             scene.add(gp);
             window.__parkedSpots.push([cxP, czP]);
+            // STEALABLE (2026-08-06): these were built as scenery and never
+            // registered, so a street of 34 cars offered five you could take
+            // and 29 that ignored you — which reads as broken, not as set
+            // dressing. Same shape as the drivable ones, so the E prompt and
+            // the drive rig pick them up unchanged.
+            window.__cars.push({ rig: gp, x: cxP, z: czP, yaw: gp.rotation.y });
             nPk++;
           }
         }
