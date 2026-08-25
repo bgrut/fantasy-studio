@@ -3277,6 +3277,9 @@ async function main() {
         }
         return false;
       };
+      // the scene audit (init scope, defined much later) needs this test but
+      // cannot see a block-scoped const — hand it out through window
+      window.__onRoadChk = _onRoad;
       // ── IS THIS POINT ON A CROSSING STREET? (2026-08-06) ───────────────
       // Kerbs and the pavement band have to stop where another street cuts
       // through, and _onRoad cannot answer that: the test point sits only
@@ -6630,7 +6633,36 @@ async function main() {
     add(new THREE.CylinderGeometry(0.12, 0.19, 2.2, 10), std(0xb9a0ff, 0x7c5cff, 2.2), 0, 1.35);
     return { g, h: 2.5 };
   }
+  // ── AUDIT FIXES (2026-08-25, critique-loop phase 1) ────────────────────
+  // After a build, the pipeline loads the game headless, asks the scene to
+  // audit itself (window.__audit below), and writes the corrections next to
+  // the build as audit_fixes.json. Applied HERE, before anything is built,
+  // so a moved placed item moves its collider with it — fixing the mesh
+  // after the collider exists would leave an invisible wall at the old spot.
+  // Absent file = first build or clean audit; both are fine.
+  let __AUDIT_FIX = null;
+  try {
+    const _afr = await fetch('audit_fixes.json');
+    if (_afr.ok) __AUDIT_FIX = await _afr.json();
+  } catch (e) { /* no fixes yet — the audit writes them post-build */ }
+  window.__AUDIT_FIX = __AUDIT_FIX;
+  if (__AUDIT_FIX && Array.isArray(__AUDIT_FIX.fixes)) {
+    let _nfx = 0;
+    for (const f of __AUDIT_FIX.fixes) {
+      const m = /^placed:(\d+)$/.exec(f.id || '');
+      if (!m || !f.fix) continue;
+      const it = (SPEC.world.placed_items || [])[+m[1]];
+      if (!it) continue;
+      if (f.fix.hide) { it.__hide = true; _nfx++; continue; }
+      it.x += f.fix.dx || 0;
+      it.z += f.fix.dz || 0;
+      if (f.fix.dy) it.__fy = (it.__fy || 0) + f.fix.dy;
+      _nfx++;
+    }
+    if (_nfx) console.log('[audit] applied ' + _nfx + ' placed-item fix(es)');
+  }
   for (const [pIdx, it] of (SPEC.world.placed_items || []).entries()) {
+    if (it.__hide) continue;             // audit verdict: no safe spot exists
     try {
       let obj, hgt = it.height_m || 0, pAnim = null;
       if (it.asset) {
@@ -6648,7 +6680,7 @@ async function main() {
         obj = pp.g;
         if (hgt > 0) obj.scale.multiplyScalar(hgt / pp.h); else hgt = pp.h;
       }
-      const gy = hAt(it.x, it.z);
+      const gy = hAt(it.x, it.z) + (it.__fy || 0);
       obj.position.set(it.x, gy, it.z);
       obj.rotation.y = (it.yaw_deg || 0) * Math.PI / 180;
       obj.traverse(o => { if (o.isMesh) { o.castShadow = true; o.frustumCulled = false; } });
@@ -9474,6 +9506,94 @@ async function main() {
       }
     };
     window.__game.pick = (cx, cy) => pickAt(cx, cy, 'click');   // test harness
+    // ── SCENE AUDIT (2026-08-25): the WorldClaw lesson, locally ──────────
+    // Their real contribution is not a model — it is that the agent LOOKS AT
+    // what it built and fixes it before anyone sees it. The geometric 80% of
+    // that needs no VLM at all: the scene graph knows where the ground is,
+    // where every building footprint is, and where every object stands.
+    // Floating, buried, and inside-a-wall are arithmetic.
+    window.__audit = () => {
+      const defects = [];
+      const BLDG_KINDS = /brownstone|skyscraper|warehouse|storefront|limestone|building/i;
+      const FLYERS = /bird|dragon|drone|ghost|wraith|bee|bat|butterfly|wisp/i;
+      const check = (id, obj, kind, allowBldg) => {
+        if (!obj || !obj.parent || !obj.visible) return;
+        const bb = new THREE.Box3().setFromObject(obj);
+        if (!isFinite(bb.min.y) || bb.isEmpty()) return;
+        const x = obj.position.x, z = obj.position.z;
+        const g = hAt(x, z);
+        const lift = bb.min.y - g;
+        let type = null, fix = null;
+        if (lift > 0.35) { type = 'floating'; fix = { dy: +(-lift).toFixed(2) }; }
+        else if (lift < -0.5) { type = 'buried'; fix = { dy: +(-lift).toFixed(2) }; }
+        // strictly INSIDE a footprint (negative pad), so a bench against a
+        // wall — which is where benches belong — never trips it
+        if (!type && !allowBldg && typeof inBldg === 'function' && inBldg(x, z, -0.4)) {
+          type = 'in_building';
+          // radii must clear a REAL footprint: Manhattan blocks run 20m+
+          // across, so an 8m cap could never escape one and everything
+          // deep inside got hidden instead of moved (first live test)
+          outer: for (const r of [2.5, 4, 6, 8, 11, 15, 20]) {
+            for (let k = 0; k < 8; k++) {
+              const a = k * Math.PI / 4;
+              const cx = x + Math.cos(a) * r, cz = z + Math.sin(a) * r;
+              if (inBldg(cx, cz, 0.3)) continue;
+              if (window.__onRoadChk && window.__onRoadChk(cx, cz, 0.6)) continue;
+              fix = { dx: +(cx - x).toFixed(2), dz: +(cz - z).toFixed(2) };
+              break outer;
+            }
+          }
+          if (!fix) fix = { hide: true };   // boxed in on all sides: remove it
+        }
+        if (type) defects.push({ id, kind, type, x: +x.toFixed(2), z: +z.toFixed(2), fix });
+      };
+      for (const pI of placedItems) {
+        const si = (SPEC.world.placed_items || []).indexOf(pI.it);
+        if (si >= 0) check('placed:' + si, pI.obj, pI.it.kind || 'placed',
+                           BLDG_KINDS.test(pI.it.kind || ''));
+      }
+      npcs.forEach((n2, i) => {
+        if (n2.dormant || n2.dead) return;
+        const kd = ((n2.obj.userData && n2.obj.userData.fsTag) || {}).name || 'npc';
+        if (FLYERS.test(kd)) return;
+        check('npc:' + i, n2.obj, kd, false);
+      });
+      (window.__cars || []).forEach((c, i) => {
+        if (window.__inCar === c || !c.rig) return;
+        check('car:' + i, c.rig, 'car', false);
+      });
+      return { checked: placedItems.length + npcs.length
+                        + (window.__cars || []).length, defects };
+    };
+    // NPC and car fixes cannot be applied through the spec (they spawn from
+    // entities and road seeds, not coordinates), so they are applied to the
+    // live objects. Registries fill asynchronously, so retry until landed.
+    if (window.__AUDIT_FIX && Array.isArray(window.__AUDIT_FIX.fixes)) {
+      const later = window.__AUDIT_FIX.fixes.filter(f => /^(npc|car):/.test(f.id || ''));
+      if (later.length) {
+        const done = new Set();
+        let tries = 0;
+        const tick = setInterval(() => {
+          tries++;
+          for (const f of later) {
+            if (done.has(f.id) || !f.fix) continue;
+            const kk = f.id.split(':')[0], si = +f.id.split(':')[1];
+            const rec = kk === 'npc' ? npcs[si] : (window.__cars || [])[si];
+            const o = rec && (rec.obj || rec.rig);
+            if (!o) continue;
+            if (f.fix.hide) o.visible = false;
+            else {
+              o.position.x += f.fix.dx || 0;
+              o.position.y += f.fix.dy || 0;
+              o.position.z += f.fix.dz || 0;
+              if (kk === 'car') { rec.x = o.position.x; rec.z = o.position.z; }
+            }
+            done.add(f.id);
+          }
+          if (done.size >= later.length || tries > 8) clearInterval(tick);
+        }, 1000);
+      }
+    }
     // pick on pointerUP with no movement — dragging stays camera-look, so
     // Inspect mode never steals the ability to orbit and reposition the view
     let pkX = 0, pkY = 0;

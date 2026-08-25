@@ -330,6 +330,11 @@ over its content. You may sell it, publish it, or modify it freely.
         js.replace("__GAME_SPEC__", json.dumps(rt)), encoding="utf-8")
     # machine-readable copy of the injected spec — read by verify_game + debugging
     (dist / "spec.json").write_text(json.dumps(rt, indent=2), encoding="utf-8")
+    # seeded EMPTY so the runtime's boot-time fetch never 404s — a 404
+    # logs a console error, and the shot gate reads console errors as a
+    # broken build (2026-08-25). The scene audit overwrites it if it
+    # finds anything to fix.
+    (dist / "audit_fixes.json").write_text('{"fixes": []}', encoding="utf-8")
 
     if verbose:
         n = sum(1 for _ in dist.rglob("*") if _.is_file())

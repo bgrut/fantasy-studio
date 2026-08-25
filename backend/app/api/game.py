@@ -1748,6 +1748,63 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                     job["shot"] = f"/games/job_{job_id}/dist/_shot.png"
         except Exception:  # noqa: BLE001
             pass
+        # ── SCENE AUDIT (2026-08-25, critique-loop phase 1) ─────────────
+        # The shot gate above answers "does it render without errors". This
+        # answers "is what it rendered PLAUSIBLE": the game audits its own
+        # scene graph headless — floating, buried, inside-a-wall — and the
+        # corrections are written next to the build, where the runtime
+        # applies them at every boot. One confirm pass proves they landed.
+        # Best-effort like the shot gate: no chrome, no audit, no failure.
+        try:
+            stage("scene audit")
+            import subprocess as _sp3
+            import json as _json3
+            _aurl = f"http://127.0.0.1:8789/games/job_{job_id}/dist/index.html"
+
+            def _run_audit():
+                r3 = _sp3.run(
+                    ["node", str(BACKEND_ROOT / "tools" / "shotgate" / "audit.mjs"),
+                     _aurl],
+                    capture_output=True, text=True, timeout=150,
+                    cwd=str(BACKEND_ROOT / "tools" / "shotgate"))
+                for ln in (r3.stdout or "").splitlines():
+                    if ln.startswith("AUDIT-JSON "):
+                        return _json3.loads(ln[len("AUDIT-JSON "):])
+                return None
+
+            _rep = _run_audit()
+            if _rep is not None:
+                _dfx = [d for d in _rep.get("defects", []) if d.get("fix")]
+                if _dfx:
+                    (out_dir / "dist" / "audit_fixes.json").write_text(
+                        _json3.dumps({"fixes": [{"id": d["id"], "fix": d["fix"]}
+                                                for d in _dfx]}),
+                        encoding="utf-8")
+                    _rep2 = _run_audit()
+                    _left = (len(_rep2.get("defects", []))
+                             if _rep2 is not None else None)
+                    _kinds = {}
+                    for d in _dfx:
+                        _kinds[d["type"]] = _kinds.get(d["type"], 0) + 1
+                    job["audit"] = {"checked": _rep.get("checked"),
+                                    "found": len(_rep["defects"]),
+                                    "fixed": len(_dfx), "remaining": _left}
+                    job.setdefault("notes", []).append(
+                        "scene audit: fixed "
+                        + ", ".join(f"{v} {k}" for k, v in _kinds.items())
+                        + (f" — {_left} remaining after apply"
+                           if _left is not None else ""))
+                    if _left == 0:
+                        job["checks"] = job.get("checks", 0) + 1
+                else:
+                    job["audit"] = {"checked": _rep.get("checked"),
+                                    "found": 0, "fixed": 0}
+                    job.setdefault("notes", []).append(
+                        f"scene audit: {_rep.get('checked', 0)} objects checked"
+                        " — nothing floating, buried or inside a wall")
+                    job["checks"] = job.get("checks", 0) + 1
+        except Exception:  # noqa: BLE001
+            pass
         stage("done")
         _record_finish(row_id, True, job["play_url"], None)
     except Exception as e:
