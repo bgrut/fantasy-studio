@@ -42,8 +42,166 @@ def _seg_dist(px, pz, ax, az, bx, bz) -> float:
     return math.hypot(px - (ax + t * dx), pz - (az + t * dz))
 
 
+# ── SEMANTIC LAYOUT (2026-08-25, critique-loop phase 2) ────────────────────
+# WorldClaw's layout stage, done locally and deterministically: spatial
+# language in the prompt ("a lake in the north, a village on its southern
+# shore") becomes REGIONS — organic blobs rasterized onto the same grid the
+# heightfield lives on. Terrain, ground paint and vegetation all read them.
+# No model in the loop: a parser and a noise-warped distance field give the
+# controllable 80% of what their GPT-Image-2 layout map provides, and a
+# neural map can slot in behind the same region schema later.
+
+_REGION_KINDS = {
+    "lake": "water", "pond": "water", "lagoon": "water", "bay": "water",
+    "forest": "forest", "woods": "forest", "woodland": "forest",
+    "pines": "forest", "pine forest": "forest", "grove": "forest",
+    "village": "village", "town": "village", "hamlet": "village",
+    "settlement": "village",
+    "meadow": "meadow", "field": "meadow", "plains": "meadow",
+    "clearing": "meadow",
+    "rocks": "rock", "cliffs": "rock", "crags": "rock", "boulders": "rock",
+    "quarry": "rock",
+    "beach": "sand", "dunes": "sand", "desert": "sand",
+    "hills": "hill", "hill": "hill", "mountain": "hill", "ridge": "hill",
+}
+_REGION_RADII = {"water": 0.30, "forest": 0.38, "village": 0.20,
+                 "meadow": 0.32, "rock": 0.28, "sand": 0.32, "hill": 0.32}
+_DIRS = {
+    "north": (0, -1), "south": (0, 1), "east": (1, 0), "west": (-1, 0),
+    "northeast": (0.7, -0.7), "northwest": (-0.7, -0.7),
+    "southeast": (0.7, 0.7), "southwest": (-0.7, 0.7),
+    "center": (0, 0), "centre": (0, 0), "middle": (0, 0),
+}
+
+
+def parse_regions(prompt: str) -> list[dict]:
+    """Spatial language -> [{kind, name, dir:(ux,uz)}]. Deterministic; an
+    empty list means the prompt asked for nothing spatial and the world
+    builds exactly as it always did."""
+    import re as _re
+    low = (prompt or "").lower()
+    out: list[dict] = []
+    kind_pat = "|".join(sorted(_REGION_KINDS, key=len, reverse=True))
+    dir_pat = "|".join(sorted(_DIRS, key=len, reverse=True))
+    # "<kind> in/to/at/toward(s) the <dir>"
+    for m in _re.finditer(
+            rf"\b({kind_pat})\b[^.,;!?]{{0,26}}?\b(?:in|to|at|towards?|on)\s+the\s+"
+            rf"({dir_pat})(?:ern)?\b", low):
+        out.append({"kind": _REGION_KINDS[m.group(1)], "name": m.group(1),
+                    "dir": _DIRS[m.group(2)]})
+    # "<dir>ern <kind>" ("the northern lake")
+    for m in _re.finditer(rf"\b({dir_pat})(?:ern)?\s+({kind_pat})\b", low):
+        if not any(r["name"] == m.group(2) for r in out):
+            out.append({"kind": _REGION_KINDS[m.group(2)], "name": m.group(2),
+                        "dir": _DIRS[m.group(1)]})
+    # "<kind> on its/the <dir>(ern) shore/bank/edge/side" — relative to the
+    # most recent water region; falls back to the direction alone
+    for m in _re.finditer(
+            rf"\b({kind_pat})\b[^.,;!?]{{0,18}}?\bon\s+(?:its|the)\s+"
+            rf"({dir_pat})(?:ern)?\s+(?:shore|bank|edge|side)\b", low):
+        kind = _REGION_KINDS[m.group(1)]
+        if any(r["name"] == m.group(1) for r in out):
+            continue
+        anchor = next((r for r in reversed(out) if r["kind"] == "water"), None)
+        out.append({"kind": kind, "name": m.group(1),
+                    "dir": _DIRS[m.group(2)], "shore_of": bool(anchor)})
+    # dedupe by (kind, dir): "lake in the north ... the northern lake" is one
+    seen, ded = set(), []
+    for r in out:
+        key = (r["kind"], r["dir"])
+        if key in seen:
+            continue
+        seen.add(key)
+        ded.append(r)
+    return ded[:5]                        # a valley is not an atlas
+
+
+def _rasterize_regions(regions: list[dict], grid_n: int, size_m: float,
+                       seed: int, path: list[list[float]]) -> dict | None:
+    """Region seeds -> per-cell (id, weight) on the heights grid. Blob
+    boundaries are warped by value noise so nothing reads as a circle."""
+    if not regions:
+        return None
+    rng = random.Random(seed * 17 + 3)
+    half = size_m / 2.0
+
+    def _pdist(x, z):
+        return min(_seg_dist(x, z, *path[k], *path[k + 1])
+                   for k in range(len(path) - 1))
+
+    seeds = []
+    prev_water = None
+    for r in regions:
+        ux, uz = r["dir"]
+        if r.get("shore_of") and prev_water:
+            # sit at the water blob's rim, on the stated side of it
+            wx, wz, wrad = prev_water
+            ax, az = wx + ux * wrad * 1.25, wz + uz * wrad * 1.25
+        else:
+            ax, az = ux * half * 0.55, uz * half * 0.55
+        rad = _REGION_RADII.get(r["kind"], 0.3) * half
+        # candidate seeds: water flees the mission path (a causeway through a
+        # lake is a defect), a village hugs it (a village nobody passes is
+        # scenery, not a place)
+        best, best_score = (ax, az), None
+        for _ in range(12):
+            cx = max(-half * 0.8, min(half * 0.8,
+                                      ax + rng.uniform(-0.16, 0.16) * half))
+            cz = max(-half * 0.8, min(half * 0.8,
+                                      az + rng.uniform(-0.16, 0.16) * half))
+            d = _pdist(cx, cz)
+            if r["kind"] == "water":
+                score = d
+            elif r["kind"] == "village":
+                score = -abs(d - 14.0)    # near the path, not ON it
+            else:
+                score = 0 if best_score is None else best_score
+            if best_score is None or score > best_score:
+                best, best_score = (cx, cz), score
+        seeds.append((best[0], best[1], rad, r["kind"]))
+        if r["kind"] == "water":
+            prev_water = (best[0], best[1], rad)
+
+    wx_g = _value_noise_grid(rng, grid_n)
+    wz_g = _value_noise_grid(rng, grid_n)
+    grid, weights = [], []
+    for i in range(grid_n):
+        z = (i / (grid_n - 1) - 0.5) * size_m
+        for j in range(grid_n):
+            x = (j / (grid_n - 1) - 0.5) * size_m
+            # domain warp: ±14% of half, enough to break every circle
+            px = x + (wx_g[i][j] - 0.5) * 0.28 * half
+            pz = z + (wz_g[i][j] - 0.5) * 0.28 * half
+            bid, bw = -1, 0.0
+            for si, (sx, sz, rad, _k) in enumerate(seeds):
+                t = 1.0 - math.hypot(px - sx, pz - sz) / rad
+                if t <= 0.04:
+                    continue
+                w = min(1.0, t * 1.4)
+                w = w * w * (3 - 2 * w)   # smoothstep falloff
+                if w > bw:
+                    bid, bw = si, w
+            grid.append(bid)
+            weights.append(round(bw, 2))
+    return {"grid": grid,
+            "w": weights,
+            "palette": [{"kind": k, "x": round(sx, 1), "z": round(sz, 1),
+                         "r": round(rad, 1)}
+                        for (sx, sz, rad, k) in seeds]}
+
+
+def _cell_kind(raster: dict, grid_n: int, size_m: float,
+               x: float, z: float) -> str | None:
+    """Region kind at a world position, or None outside every region."""
+    j = max(0, min(grid_n - 1, int((x / size_m + 0.5) * (grid_n - 1) + 0.5)))
+    i = max(0, min(grid_n - 1, int((z / size_m + 0.5) * (grid_n - 1) + 0.5)))
+    rid = raster["grid"][i * grid_n + j]
+    return None if rid < 0 else raster["palette"][rid]["kind"]
+
+
 def build_level(seed: int, size_m: float, n_objectives: int = 0,
-                amplitude_m: float = 2.4, grid_n: int = 48) -> dict:
+                amplitude_m: float = 2.4, grid_n: int = 48,
+                regions: list[dict] | None = None) -> dict:
     """Deterministic LevelPlan. Returns a JSON-safe dict for the runtime."""
     rng = random.Random(seed)
 
@@ -65,6 +223,9 @@ def build_level(seed: int, size_m: float, n_objectives: int = 0,
     corridor = 5.5                                   # flattened, prop-free (m)
 
     # ── terrain: hills, flattened along the corridor + zones ────────────────
+    raster = _rasterize_regions(regions or [], grid_n, size_m, seed, path)
+    has_water = bool(raster) and any(
+        p["kind"] == "water" for p in raster["palette"])
     hgrid = _value_noise_grid(rng, grid_n)
     heights: list[float] = []
     for i in range(grid_n):
@@ -78,6 +239,28 @@ def build_level(seed: int, size_m: float, n_objectives: int = 0,
             # track the detail for free.
             i2, j2 = (i * 3) % grid_n, (j * 3) % grid_n
             h += (hgrid[i2][j2] - 0.5) * 0.5 * min(amplitude_m, 1.2)
+            # REGION MODULATION, before the corridor flattens the path: the
+            # route must stay walkable whatever the layout asked for, so the
+            # corridor always has the last word.
+            if raster is not None:
+                _rid = raster["grid"][i * grid_n + j]
+                if _rid >= 0:
+                    _w = raster["w"][i * grid_n + j]
+                    _rk = raster["palette"][_rid]["kind"]
+                    if _rk == "water":
+                        # basin: sharpen the weight so the bed is flat and
+                        # the shore is a real slope, not a 40m ramp
+                        _wb = _w ** 0.65
+                        h = h * (1 - _wb) + (-2.6) * _wb
+                    elif _rk == "hill":
+                        h += _w * max(3.4, amplitude_m * 1.6)
+                    elif _rk == "rock":
+                        h += _w * 1.6 + (hgrid[i2][j2] - 0.5) * _w * 1.8
+                    elif _rk in ("village", "meadow"):
+                        h *= (1 - _w * 0.75)
+                if has_water and h < -0.35 and (
+                        _rid < 0 or raster["palette"][_rid]["kind"] != "water"):
+                    h = -0.35            # nothing but the lake dips below water
             d = min(_seg_dist(x, z, *path[k], *path[k + 1]) for k in range(len(path) - 1))
             d = min(d, math.hypot(x, z), math.hypot(x - goal[0], z - goal[1]))
             if d < corridor:
@@ -112,6 +295,8 @@ def build_level(seed: int, size_m: float, n_objectives: int = 0,
             lr = half * rng.uniform(0.35, 0.75)
             lx, lz = math.cos(la) * lr, math.sin(la) * lr
             d = min(_seg_dist(lx, lz, *path[k], *path[k + 1]) for k in range(len(path) - 1))
+            if raster is not None and _cell_kind(raster, grid_n, size_m, lx, lz) == "water":
+                continue                  # a 30m tree in a lake is a defect
             if d > corridor * 2.0:
                 landmarks.append([round(lx, 2), round(lz, 2), round(rng.uniform(2.2, 3.2), 2)])
                 break
@@ -131,12 +316,21 @@ def build_level(seed: int, size_m: float, n_objectives: int = 0,
                     for k in range(len(path) - 1))
             far_others = all(math.hypot(px2 - q["x"], pz2 - q["z"]) > 18
                              for q in pois)
+            if raster is not None and _cell_kind(raster, grid_n, size_m, px2, pz2) == "water":
+                continue
             if d > corridor * 1.8 and far_others:
                 pois.append({"kind": rng.choice(_POI_KINDS),
                              "x": round(px2, 2), "z": round(pz2, 2),
                              "rot": round(rng.uniform(0, 6.28), 2)})
                 break
-    return {
+    if raster is not None:
+        for pal in raster["palette"]:
+            if pal["kind"] == "village":
+                # the flattened clearing gets its settlement — prepended so
+                # the camp props cluster at the village heart, not randomly
+                pois.insert(0, {"kind": "camp", "x": pal["x"], "z": pal["z"],
+                                "rot": round(rng.uniform(0, 6.28), 2)})
+    out_level = {
         "pois": pois,
         "grid_n": grid_n, "size_m": size_m, "amplitude_m": amplitude_m,
         "heights": heights,                    # row-major, z rows then x cols
@@ -146,6 +340,12 @@ def build_level(seed: int, size_m: float, n_objectives: int = 0,
         "collect_points": collect_points,
         "landmarks": landmarks,                # [x, z, scale]
     }
+    if raster is not None:
+        out_level["regions"] = raster
+        out_level["regions_src"] = regions     # edits re-parse from here
+        if has_water:
+            out_level["water_suggest"] = -0.8  # lake level; bed is at -2.6
+    return out_level
 
 
 def landmark_spots(seed: int, size_m: float) -> list[list[float]]:

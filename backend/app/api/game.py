@@ -1436,7 +1436,22 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             amp = max(amp, 8.0)                     # flyers deserve relief to soar over
         # WATER WORLDS: rolling seabed + a water plane the runtime renders;
         # swimmers stay beneath it, everything gets underwater fog below it
+        # ── SEMANTIC LAYOUT (2026-08-25, phase 2): spatial language becomes
+        # regions. Parsed from the prompt; an EDIT with no spatial language
+        # inherits the base game's layout — same contract as the city carry:
+        # an edit must never re-derive the world.
+        from app.game_export.level import parse_regions
+        _regions = parse_regions(req.prompt)
+        if not _regions and base_spec is not None:
+            _regions = ((((base_spec.get("world") or {}).get("level") or {})
+                         .get("regions_src")) or [])
+        _regional_water = any(r.get("kind") == "water" for r in _regions)
         _water = any(k in _wname for k in ("ocean", "underwater", "lake", "river"))
+        # a REGIONAL lake must not trigger the whole-world flood: "a lake in
+        # the north" used to fill the entire map to +4m because the world got
+        # named after its lake. Oceans stay global; lakes become terrain.
+        if _regional_water and not any(k in _wname for k in ("ocean", "underwater")):
+            _water = False
         # FROZEN water is ICE (2026-07-23: 'frozen lake' floated the polar
         # bear belly-up like a whale) — solid, walkable, snowy; no water
         # plane, no swim handling.
@@ -1450,7 +1465,18 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             spec.world.water_level = 8.0
             amp = max(amp, 3.0)
         spec.world.level = build_level(
-            spec.seed, spec.world.size_m, n_objectives=n_obj, amplitude_m=amp)
+            spec.seed, spec.world.size_m, n_objectives=n_obj, amplitude_m=amp,
+            regions=_regions)
+        if (spec.world.water_level is None
+                and spec.world.level.get("water_suggest") is not None):
+            spec.world.water_level = spec.world.level["water_suggest"]
+        if _regions:
+            _dirname = {(0, -1): "north", (0, 1): "south",
+                        (1, 0): "east", (-1, 0): "west", (0, 0): "center"}
+            job.setdefault("notes", []).append(
+                "semantic layout: " + ", ".join(
+                    r["name"] + " in the " + _dirname.get(tuple(r["dir"]), "map")
+                    for r in _regions))
         if _keep_city:
             # everything the city scan produced: footprints, the road route the
             # mission path follows, the goal pin, and any doors already planned

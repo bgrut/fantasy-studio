@@ -837,12 +837,67 @@ async function main() {
     g.addColorStop(0, '#' + dirt.getHexString() + '66'); g.addColorStop(1, '#' + dirt.getHexString() + '00');
     ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.fill();
   }
-  // fine speckle (pebbles / grass tufts)
+  // fine speckle (pebbles / grass tufts) — but not on a lake bed, where
+  // gcol-green flecks read as drowned grass
   for (let i = 0; i < TEXN * 26; i++) {
     const sh = (rngTex() - 0.5) * 0.22;
     const c2 = gcol.clone().offsetHSL(0, (rngTex() - 0.5) * 0.06, sh * 0.5);
+    const px9 = rngTex() * TEXN, py9 = rngTex() * TEXN;
+    if (LVL && LVL.regions) {
+      const nR9 = LVL.grid_n;
+      const id9 = LVL.regions.grid[
+        Math.min(nR9 - 1, Math.floor(py9 / TEXN * nR9)) * nR9
+        + Math.min(nR9 - 1, Math.floor(px9 / TEXN * nR9))];
+      if (id9 >= 0 && LVL.regions.palette[id9].kind === 'water') continue;
+    }
     ctx.fillStyle = '#' + c2.getHexString();
-    ctx.fillRect(rngTex() * TEXN, rngTex() * TEXN, 1 + rngTex() * 2, 1 + rngTex() * 2);
+    ctx.fillRect(px9, py9, 1 + rngTex() * 2, 1 + rngTex() * 2);
+  }
+  // ── SEMANTIC LAYOUT (2026-08-25, phase 2): the region grid the level
+  // planner rasterized. One lookup serves the ground paint here, the
+  // vegetation gates below, and anything else that wants to know what kind
+  // of place a point is.
+  const regionAt = (x, z) => {
+    const R = LVL && LVL.regions;
+    if (!R) return null;
+    const nR = LVL.grid_n;
+    const j = Math.max(0, Math.min(nR - 1, Math.round((x / gsize + 0.5) * (nR - 1))));
+    const i = Math.max(0, Math.min(nR - 1, Math.round((z / gsize + 0.5) * (nR - 1))));
+    const id = R.grid[i * nR + j];
+    if (id < 0) return null;
+    return { kind: R.palette[id].kind, w: R.w[i * nR + j] };
+  };
+  window.__regionAt = regionAt;
+  if (!OSM && LVL && LVL.regions) {
+    // painted as soft radial blobs, one per claimed cell — they overlap into
+    // organic patches and the speckle pass after this keeps the grain on top
+    const RCOL = {
+      water: new THREE.Color(0x2b4a45),          // the bed seen through water
+      forest: gcol.clone().offsetHSL(0.015, 0.06, -0.065),
+      village: gcol.clone().lerp(new THREE.Color(0x77664a), 0.72),
+      meadow: gcol.clone().offsetHSL(-0.01, 0.05, 0.045),
+      rock: new THREE.Color(0x86837a),
+      sand: new THREE.Color(0xc7b28a),
+      hill: gcol.clone().lerp(new THREE.Color(0x8b8474), 0.55),
+    };
+    const nR = LVL.grid_n, cell = TEXN / nR;
+    for (let i = 0; i < nR; i++) {
+      for (let j = 0; j < nR; j++) {
+        const id = LVL.regions.grid[i * nR + j];
+        if (id < 0) continue;
+        const col = RCOL[LVL.regions.palette[id].kind];
+        if (!col) continue;
+        const w = LVL.regions.w[i * nR + j];
+        const cx = (j + 0.5) * cell, cy = (i + 0.5) * cell, r = cell * 1.45;
+        const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+        const hex = '#' + col.getHexString();
+        g.addColorStop(0, hex + Math.round(Math.min(0.92, w) * 255)
+          .toString(16).padStart(2, '0'));
+        g.addColorStop(1, hex + '00');
+        ctx.fillStyle = g;
+        ctx.beginPath(); ctx.arc(cx, cy, r, 0, 7); ctx.fill();
+      }
+    }
   }
   const W2T = v => (v / gsize + 0.5) * TEXN;         // world (x,z) -> texel
   function drawTrail(pts, widthM, col, alpha) {
@@ -4557,6 +4612,92 @@ async function main() {
   // stand down so they stop burying the panorama + lifted splats. Terrain,
   // objectives, NPCs and placed items stay.
   const PURE_SCENE = !!SPEC.world.pano;
+  // ── REGION FOREST (2026-08-25): the layout said "forest", so there WILL
+  // be one. Scatter assets are the LLM's choice and the library has no tree
+  // at all, so a forest region that depended on either could come out as an
+  // empty green field — which is exactly how the first build shipped. The
+  // same procedural trunk+canopy kit the city plants along streets grows
+  // here wherever the region mask says forest: no asset, no LLM, no luck.
+  if (!PURE_SCENE && !OSM && LVL && LVL.regions
+      && LVL.regions.palette.some(q => q.kind === 'forest')) {
+    const rngF2 = mulberry32(SPEC.seed + 6464);
+    const spots2 = [];
+    const CAP_T = 300;
+    for (let t2 = 0; t2 < CAP_T * 14 && spots2.length < CAP_T; t2++) {
+      const x = (rngF2() - 0.5) * gsize * 0.94;
+      const z = (rngF2() - 0.5) * gsize * 0.94;
+      const r2 = regionAt(x, z);
+      if (!r2 || r2.kind !== 'forest') continue;
+      // density follows the mask: solid heart, ragged edge
+      if (rngF2() > r2.w * 1.15) continue;
+      if (pathDist(x, z) < CORR * 1.2) continue;
+      if (spots2.some(q => (q[0] - x) * (q[0] - x) + (q[1] - z) * (q[1] - z) < 7)) continue;
+      spots2.push([x, z, 0.8 + rngF2() * 0.7]);
+    }
+    if (spots2.length) {
+      const trkG2 = new THREE.CylinderGeometry(0.16, 0.26, 2.6, 7);
+      trkG2.translate(0, 1.3, 0);
+      const trk2 = new THREE.InstancedMesh(trkG2,
+        new THREE.MeshStandardMaterial({ map: (() => {
+          const t = new THREE.TextureLoader().load('textures/bark.jpg');
+          t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(1, 2);
+          t.colorSpace = THREE.SRGBColorSpace; return t;
+        })(), roughness: 0.95 }), spots2.length);
+      // two stacked cones: the pine silhouette, and a cone reads as a tree
+      // from every angle with zero texture dependence
+      const cone1 = new THREE.ConeGeometry(1.7, 3.4, 8); cone1.translate(0, 3.6, 0);
+      const cone2 = new THREE.ConeGeometry(1.25, 2.6, 8); cone2.translate(0, 5.5, 0);
+      const canG2 = mergeGeometries([cone1, cone2], false);
+      cone1.dispose(); cone2.dispose();
+      const can2 = new THREE.InstancedMesh(canG2,
+        new THREE.MeshStandardMaterial({ vertexColors: false, roughness: 0.9,
+          color: 0x2d5232 }), spots2.length);
+      const M2 = new THREE.Matrix4(), Q2 = new THREE.Quaternion();
+      const E2 = new THREE.Euler(), V2 = new THREE.Vector3(), S2 = new THREE.Vector3();
+      const C2 = new THREE.Color();
+      spots2.forEach(([x, z, sc], i2) => {
+        E2.set((rngF2() - 0.5) * 0.08, rngF2() * Math.PI * 2, (rngF2() - 0.5) * 0.08);
+        Q2.setFromEuler(E2);
+        V2.set(x, hAt(x, z), z);
+        S2.set(sc, sc * (0.9 + rngF2() * 0.35), sc);
+        M2.compose(V2, Q2, S2);
+        trk2.setMatrixAt(i2, M2);
+        can2.setMatrixAt(i2, M2);
+        can2.setColorAt(i2, C2.setHex(0x2d5232)
+          .offsetHSL((rngF2() - 0.5) * 0.03, (rngF2() - 0.5) * 0.1, (rngF2() - 0.5) * 0.08));
+      });
+      for (const im2 of [trk2, can2]) {
+        im2.instanceMatrix.needsUpdate = true;
+        im2.castShadow = true; im2.receiveShadow = true;
+        scene.add(im2);
+      }
+      if (can2.instanceColor) can2.instanceColor.needsUpdate = true;
+      console.log('[game] region forest: ' + spots2.length + ' trees');
+    }
+  }
+  // vegetation reads the layout: a forest region is where the trees ARE, a
+  // lake is where they are not, and a village keeps its clearing open
+  const _isTreeAsset = a => /tree|pine|fir|oak|bush|palm|birch|spruce|foliage/i.test(a || '');
+  const _isRockAsset = a => /rock|boulder|stone|crag/i.test(a || '');
+  const _regReject = (x, z, sct) => {
+    const r = window.__regionAt && window.__regionAt(x, z);
+    if (!r) return false;
+    if (r.kind === 'water' && r.w > 0.18) return true;
+    if (r.kind === 'village' && r.w > 0.4) return true;
+    if (_isTreeAsset(sct.asset)) {
+      if (r.kind === 'forest') return false;
+      if ((r.kind === 'rock' || r.kind === 'sand') && r.w > 0.35) return rng() < 0.85;
+      return rng() < 0.5;              // thinner everywhere that is not forest
+    }
+    if (_isRockAsset(sct.asset) && r.kind === 'forest' && r.w > 0.5) return rng() < 0.5;
+    return false;
+  };
+  // inside a forest region the cluster-noise gate stands down — the REGION
+  // is the cluster, and punching gaps in it reads as mange, not clearings
+  const _regForce = (x, z, sct) => {
+    const r = window.__regionAt && window.__regionAt(x, z);
+    return !!(r && r.kind === 'forest' && r.w > 0.3 && _isTreeAsset(sct.asset));
+  };
   for (const sct of PURE_SCENE ? [] : (SPEC.world.scatter || [])) {
     try {
       const gltf = await loadGLB(sct.asset);
@@ -4599,7 +4740,9 @@ async function main() {
         } while ((Math.hypot(x, z) < sct.min_dist_m || pathDist(x, z) < CORR
                   || inBldg(x, z)
                   || roadDist(x, z) < 7.5
-                  || (clusterN(x, z) < 0.45 && tries < 22)) && tries < 30);
+                  || _regReject(x, z, sct)
+                  || (clusterN(x, z) < 0.45 && !_regForce(x, z, sct)
+                      && tries < 22)) && tries < 30);
         places.push({ x, z, s: 1 + (rng() - 0.5) * 2 * sct.scale_jitter, rot: rng() * Math.PI * 2,
                       // DENSITY ARC r2: real trees LEAN a few degrees — a
                       // perfectly plumb forest is the #1 'toy world' tell
@@ -5258,6 +5401,10 @@ async function main() {
         const x = (rngG() - 0.5) * 2 * GR, z = (rngG() - 0.5) * 2 * GR;
         if (pathDist(x, z) < CORR * 0.5 && rngG() < 0.7) continue;   // trodden path
         if (inBldg(x, z, 0.5)) continue;                             // not through floors
+        const _rg = window.__regionAt && window.__regionAt(x, z);
+        if (_rg && _rg.kind === 'water' && _rg.w > 0.2) continue;    // no grass in the lake
+        if (_rg && (_rg.kind === 'rock' || _rg.kind === 'sand')
+            && _rg.w > 0.4 && rngG() < 0.85) continue;
         const s = 0.7 + rngG() * 0.8;
         M.makeRotationY(baseRot + rngG() * 0.9)
           .multiply(RX.makeRotationX((rngG() - 0.5) * 0.5))          // random lean
