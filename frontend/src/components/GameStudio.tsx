@@ -58,18 +58,22 @@ const INSPECT_TOUR: TourStep[] = [
 // no truncation (variety: quest, city race, mystery, combat, sport,
 // survival, ocean, flight, delivery, whimsy, magic, hunt)
 const GAME_PROMPTS: { icon: string; text: string }[] = [
-  { icon: '🦊', text: 'A fox on a snowy night quest: collect 6 fireflies, then reach the glowing beacon' },
+  // Every chip here is a VERIFIED SHAPE: each one exercises systems that have
+  // shipped and been screenshot-checked (OSM heists, relational terrain
+  // anchors, guard patrols, getaway cars, weather, crowds). Detail sells the
+  // product — a rich prompt that works teaches users what to ask for.
+  { icon: '🕵️', text: 'A detective works the streets of New York City at night: steal 4 jewels from 3 buildings, then drive the getaway car to escape' },
+  { icon: '🐈', text: 'A cat burglar infiltrates a moonlit mansion: steal 4 jewels while 3 guards patrol, then escape to the getaway car' },
+  { icon: '⚔️', text: 'A knight quests through a misty valley: collect 4 relics. A lake in the north, a pine forest to the west, a village in the south' },
   { icon: '🏎️', text: 'A red sports car races 5 rivals through New York City at night' },
-  { icon: '🕵️', text: 'A detective collects 5 clues inside a mansion at night' },
-  { icon: '⚔️', text: 'A knight fights 6 hostile goblins inside a torchlit castle great hall' },
-  { icon: '🏹', text: 'A hunter stalking elk through a misty pine forest at dawn' },
-  { icon: '⚽', text: 'A soccer player scoring 3 goals in a packed stadium' },
-  { icon: '🐉', text: 'A dragon soaring over the mountains — collect 5 fire flames between the peaks' },
-  { icon: '🌊', text: 'A whale in the deep ocean: dive for 5 pearls, then surface at the beacon' },
+  { icon: '🏹', text: 'A hunter tracks wolves at dawn: a lake in the north and a village on its southern shore' },
+  { icon: '📦', text: 'A courier delivers 3 packages across a rainy city at dusk while 2 thugs give chase' },
   { icon: '🧙', text: 'A wizard defends a windswept meadow — defeat 4 wolves with magic bolts' },
   { icon: '🚕', text: 'A taxi weaving through Tokyo streets — race 4 rivals before midnight' },
+  { icon: '🐉', text: 'A dragon soaring over the mountains — collect 5 fire flames between the peaks' },
+  { icon: '🌊', text: 'A whale in the deep ocean: dive for 5 pearls, then surface at the beacon' },
   { icon: '🛡️', text: 'Outlast 8 rivals as the storm closes in on a ruined village' },
-  { icon: '🐧', text: 'A penguin waddling across the moon, collect 6 moon rocks' },
+  { icon: '🦊', text: 'A fox on a snowy night quest: collect 6 fireflies, then reach the glowing beacon' },
 ]
 
 // Phase 44 STYLE PRESETS — the user picks, the AI never guesses. One global
