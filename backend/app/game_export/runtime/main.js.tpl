@@ -7631,6 +7631,19 @@ async function main() {
       new THREE.BoxGeometry(0.07, bodyH * 0.3, Wd * 0.55), trim);
     grille.position.set(L * 0.5 - 0.06, yb + bodyH * 0.34, 0);
     g.add(grille);
+    // THE WOODEN CAR, FINALLY (2026-08-25). Every buildCar material is
+    // map-less by design — paint is colour under clearcoat, glass is smoked.
+    // The auto-texture sweep claims any untextured standard material, and
+    // its colour classifier files a car body under 'bark' or 'grain', so
+    // every car in the city has been quietly wearing WOODGRAIN, tinted by
+    // its own paint. Beige cars read as planks outright; that was the
+    // screenshot that finally caught it. Cars declare their own finish.
+    g.traverse(o => {
+      if (!o.isMesh) return;
+      for (const m of (Array.isArray(o.material) ? o.material : [o.material])) {
+        if (m) m.userData.noAutoTex = true;
+      }
+    });
     return g;
   }
   const pg = P.car_params
@@ -7806,6 +7819,7 @@ async function main() {
               if (ms.some(m => m && m.transmission > 0)) {
                 o.material = new THREE.MeshStandardMaterial({
                   color: 0x0d1116, metalness: 0.4, roughness: 0.12 });
+                o.material.userData.noAutoTex = true;   // smoked glass, never planks
               }
             });
             const gp = new THREE.Group();
@@ -7857,6 +7871,7 @@ async function main() {
         if (mats2.some(m => m && m.transmission > 0)) {
           o.material = new THREE.MeshStandardMaterial({
             color: 0x0d1116, metalness: 0.4, roughness: 0.12 });
+          o.material.userData.noAutoTex = true;   // smoked glass, never planks
         }
       });
       rig2.add(shell2);
@@ -9066,6 +9081,7 @@ async function main() {
         if (mats.some(m => m && m.transmission > 0)) {
           o.material = new THREE.MeshStandardMaterial({
             color: 0x0d1116, metalness: 0.4, roughness: 0.12 });
+          o.material.userData.noAutoTex = true;   // smoked glass, never planks
         }
       });
       rig.add(shell);
