@@ -1136,11 +1136,13 @@ export default function GameStudio() {
             onClick={() => gameFrameRef.current?.focus({ preventScroll: true })}
           >
             <iframe
-              key={job!.play_url}   /* new game = fresh iframe: releases the old
+              key={job!.play_url + quality} /* fresh iframe per game AND per tier — the
+                                       runtime reads ?q= once at boot, so a tier
+                                       change must reload; also releases the old
                                        WebGL context (WebView2 caps them; leaks
                                        caused the silent white-canvas bug) */
               ref={gameFrameRef}
-              src={job!.play_url}
+              src={job!.play_url + '?q=' + quality}
               title={job!.title ?? 'game'}
               className="w-full h-full"
               allow="fullscreen; gamepad; pointer-lock"

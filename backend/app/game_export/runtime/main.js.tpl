@@ -590,6 +590,11 @@ async function main() {
         .lerp(new THREE.Color(pal.sky), 0.22);
       const capC = new THREE.Color(0xf4f7fa);
       const mmat = new THREE.MeshStandardMaterial({ roughness: 1.0, vertexColors: true });
+      // the auto-texture sweep was draping 'stone' slabs over these cones'
+      // 0-1 UVs — a 300m ridge wearing a 3m slab photo stretched 100x is
+      // the single most "2003" surface in every valley shot. Sculpted
+      // low-poly + vertex colour + distance fog is the intended look.
+      mmat.userData.noAutoTex = true;
       const ring = new THREE.Group();
       const NPK = 11;
       for (let i = 0; i < NPK; i++) {
@@ -816,7 +821,9 @@ async function main() {
     const _h = {}; gcol.getHSL(_h);
     if (_h.s > 0.08 && _h.s < 0.3) gcol.setHSL(_h.h, 0.34, Math.min(_h.l, 0.42));
   }
-  const TEXN = (LVL && LVL.osm) ? 2048 : (LVL ? 1024 : 256);   // cities need the res for road markings
+  // 2048 for ANY level (2026-08-25): nature worlds ran 1024 over 220m+ —
+  // ~4.7 px/m, the giant green blur behind every 'looks like 2003' read.
+  const TEXN = LVL ? 2048 : 256;
   const cnv = document.createElement('canvas'); cnv.width = cnv.height = TEXN;
   const ctx = cnv.getContext('2d');
   const rngTex = mulberry32(SPEC.seed + 1);
@@ -1046,9 +1053,29 @@ async function main() {
     mctx.putImageData(mimg, 0, 0);
     const macroTex = new THREE.CanvasTexture(mcnv);
     macroTex.wrapS = macroTex.wrapT = THREE.ClampToEdgeWrapping;
+    // DETAIL ALBEDO (2026-08-25): the painted canvas carries the LAYOUT
+    // (regions, trails, roads) but at map scale it can never carry GRAIN.
+    // A real tiled texture sampled in world metres supplies it — the same
+    // texel-density lesson the facades learned, applied to the floor. The
+    // family follows the ground colour, so snow worlds get snow grain and
+    // deserts get sand, without a new spec field.
+    let detailTex = null;
+    if (!OSM) {
+      const _dh = {}; gcol.getHSL(_dh);
+      const _dn = SPEC.world.weather === 'snow' ? 'snow'
+        : (_dh.s < 0.10 ? 'stone'
+        : (_dh.h > 0.16 && _dh.h < 0.45 ? 'grass'
+        : (_dh.l > 0.55 ? 'sand' : 'soil')));
+      detailTex = new THREE.TextureLoader().load('textures/' + _dn + '.jpg');
+      detailTex.wrapS = detailTex.wrapT = THREE.RepeatWrapping;
+      detailTex.colorSpace = THREE.SRGBColorSpace;
+      detailTex.anisotropy = 8;
+    }
     gmat.onBeforeCompile = sh => {
       sh.uniforms.macroMap = { value: macroTex };
       sh.uniforms.macroSize = { value: gsize };
+      sh.uniforms.detailMap = { value: detailTex };
+      sh.uniforms.detailOn = { value: detailTex ? 1.0 : 0.0 };
       sh.vertexShader = sh.vertexShader
         .replace('#include <common>', '#include <common>\nvarying vec3 vMacroW;')
         .replace('#include <worldpos_vertex>',
@@ -1056,10 +1083,20 @@ async function main() {
       sh.fragmentShader = sh.fragmentShader
         .replace('#include <common>',
                  '#include <common>\nuniform sampler2D macroMap; uniform float macroSize; varying vec3 vMacroW;')
+        .replace('#include <common>\nuniform sampler2D macroMap;',
+                 '#include <common>\nuniform sampler2D detailMap; uniform float detailOn; uniform sampler2D macroMap;')
         .replace('#include <map_fragment>',
                  `#include <map_fragment>
                   { vec3 m = texture2D(macroMap, clamp(vMacroW.xz / macroSize + 0.5, 0.0, 1.0)).rgb;
-                    diffuseColor.rgb *= mix(vec3(1.0), m * 2.0, 0.5); }`);
+                    diffuseColor.rgb *= mix(vec3(1.0), m * 2.0, 0.5);
+                    if (detailOn > 0.5) {
+                      // two octaves at 2.7m and 13m: grain up close, patchiness
+                      // at distance, and the mismatch hides both tilings
+                      vec3 d1 = texture2D(detailMap, vMacroW.xz / 2.7).rgb;
+                      vec3 d2 = texture2D(detailMap, vMacroW.xz / 13.0).rgb;
+                      vec3 dt = mix(d1, d2, 0.42);
+                      diffuseColor.rgb *= mix(vec3(1.0), dt * 1.9, 0.62);
+                    } }`);
     };
   }
   // PURE SCENE floor (2026-08-04): image worlds get a FLAT walkable plane —
