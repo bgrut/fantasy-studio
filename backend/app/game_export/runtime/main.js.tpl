@@ -6148,6 +6148,9 @@ async function main() {
           const dG = Math.hypot(gp.x - n.obj.position.x, gp.z - n.obj.position.z);
           if (dG < 3.0) {
             n._arrived = true;
+            juicePOV = { x: n.obj.position.x, y: n.obj.position.y + (n.h || 1.7) * 0.9,
+                         z: n.obj.position.z, lx: playerPos.x, ly: playerPos.y + 1.2,
+                         lz: playerPos.z, t: 0 };
             popText((n.name || 'the escort') + ' made it!', '#8fe7d0');
             sfx('win');
           } else if (dPl > 14) {
@@ -7522,6 +7525,7 @@ async function main() {
   function doWin(text) {
     if (won || lost) return;
     won = true; won_ = true;
+    juiceFly = 0;                          // the world takes a bow
     // the heist take outlives the heist: winnings bank into the campaign
     // hero, so level 2 of a project starts with level 1's money on the books
     if (window.__take > 0) {
@@ -7792,6 +7796,8 @@ async function main() {
     for (const ev of EVENTS) {
       if (ev.fired || !evCondition(ev.when)) continue;
       ev.fired = true;
+      shakeT = Math.max(shakeT, 0.4);
+      juicePunch = Math.max(juicePunch, 0.7);
       console.log('[events] fired:', ev.when, '->', ev.then.join(' | '));
       for (const a of ev.then) evRun(String(a));
     }
@@ -9235,6 +9241,8 @@ async function main() {
       if (m.emissive) m.emissive.setRGB(0.30, 0.16, 0.16); } }, 120);
     if (n.hp <= 0) {
       n.dead = true; kills++; sfx('hit');
+      juiceSlow = Math.max(juiceSlow, 0.32);
+      juicePunch = Math.max(juicePunch, 0.5);
       addXP(10);
       const _st2 = steps[stepIdx];
       if (_st2 && ['defeat', 'eliminate', 'hunt'].includes(_st2.kind)
@@ -9516,7 +9524,8 @@ async function main() {
   // material change from screenshots alone is guesswork, and the city's
   // night look is decided by numbers (fog density, env intensity) that a
   // picture cannot report.
-  window.__scene = scene; window.__renderer = renderer;
+  window.__scene = scene;
+  window.__camera = camera;   // harness: fov punches are assertable, not vibes window.__renderer = renderer;
 
   // ── PARKED CARS YOU CAN STEAL ────────────────────────────────────────────
   // The whole bridge between the two demos. Placed HERE, after the player
@@ -9533,6 +9542,16 @@ async function main() {
                   && (P.mode || 'walk') === 'walk'
                   && !!(OSM && OSM.roads && OSM.roads.length);
   let carPrompt = null, nearCar = null, heldCar = null, camDistMul = 1, carCool = 0;
+  // ── JUICE (2026-08-25): the camera reacts to what you did ─────────────
+  // The lesson from every hand-crafted three.js toy that feels better than
+  // an engine twenty times its size: interactions deserve MOMENTS. A pickup
+  // punches the lens, a kill dilates time, a fired event shakes the frame,
+  // a win earns a flyover, an escort arrival cuts to HIS eyes looking back
+  // at you. All state, no allocations; each effect is one number decaying.
+  let juiceSlow = 0;      // seconds of world slow-mo left (0.3x)
+  let juicePunch = 0;     // 0..1 fov kick, decays fast
+  let juiceFly = -1;      // >=0: win flyover clock
+  let juicePOV = null;    // {x,y,z,lx,ly,lz,t}: brief borrowed-eyes shot
   // KNOCKED DOWN (2026-08-07): seconds left on the floor, and the slide
   // still carrying you. Declared UP here with the other drive state — a
   // const read before its declaration takes the whole runtime down (TRAP 1).
@@ -10943,6 +10962,8 @@ varying vec2 vUvRaw;
 
   renderer.setAnimationLoop(() => {
     let dt = Math.min(clock.getDelta(), 0.05);
+    const rdt = dt;                       // real dt: camera + juice decay
+    if (juiceSlow > 0) { juiceSlow -= rdt; dt *= 0.3; }
     // JUICE (moon plan 1.2): hit-stop freezes 80ms on melee connect; the
     // final kill of a quest step lands in brief slow motion
     if (window.__hitStop > 0) { window.__hitStop -= dt; dt *= 0.08; }
@@ -11686,6 +11707,8 @@ varying vec2 vUvRaw;
             addXP(6);
             sfx('pickup');
             burst(c.mesh.position, 0xffd54a);
+            juicePunch = 1;
+            juiceSlow = Math.max(juiceSlow, 0.09);   // a heartbeat of hitstop
             if (HAS_GUARDS) {
               // LOOT HAS VALUE (heist kit): every piece is worth a different
               // amount, so a burglar chooses what to risk reaching for
@@ -11895,6 +11918,33 @@ varying vec2 vUvRaw;
     // the composer's last fullscreen pass is a render — so reading the counter
     // after the frame reports 1 draw call for any scene. Freeze autoReset and
     // reset once per frame so the number covers scene + passes together.
+    // ── JUICE CAMERA, last write before render ──────────────────────
+    if (juiceFly >= 0 && won) {
+      // slow orbit around where the run ended — the world takes a bow
+      juiceFly += rdt;
+      const fp = playerObj.position;
+      const fa = juiceFly * 0.55;
+      const fr = SPEC.camera.distance_m * 1.6 + juiceFly * 1.2;
+      camera.position.lerp(new THREE.Vector3(
+        fp.x + Math.sin(fa) * fr, fp.y + 3.2 + juiceFly * 0.7,
+        fp.z + Math.cos(fa) * fr), 1 - Math.exp(-4 * rdt));
+      camera.lookAt(fp.x, fp.y + 1.0, fp.z);
+    } else if (juicePOV) {
+      // the escortee turns and looks back at the one who got him here
+      juicePOV.t += rdt;
+      camera.position.lerp(new THREE.Vector3(juicePOV.x, juicePOV.y, juicePOV.z),
+                           1 - Math.exp(-10 * rdt));
+      camera.lookAt(juicePOV.lx, juicePOV.ly, juicePOV.lz);
+      if (juicePOV.t > 1.6) juicePOV = null;
+    }
+    if (juicePunch > 0.001) {
+      camera.fov = SPEC.camera.fov_deg * (1 - 0.16 * juicePunch);
+      camera.updateProjectionMatrix();
+      juicePunch = Math.max(0, juicePunch - rdt * 4.2);
+    } else if (camera.fov !== SPEC.camera.fov_deg) {
+      camera.fov = SPEC.camera.fov_deg;
+      camera.updateProjectionMatrix();
+    }
     renderer.info.autoReset = false;
     renderer.info.reset();
     composer.render();
