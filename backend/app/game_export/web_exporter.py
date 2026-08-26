@@ -301,10 +301,27 @@ over its content. You may sell it, publish it, or modify it freely.
         src = Path(src_path)
         if not src.exists():
             raise FileNotFoundError(f"{tag} asset missing: {src}")
-        dst = assets / src.name
+        # TEXTURE SLIMMING (2026-08-25): generated characters ship 4096x4096
+        # PNGs — the knight carried 47MB of texture in a 50MB GLB. At boot the
+        # runtime decodes dozens of images concurrently and under that
+        # pressure Chrome's createImageBitmap starts FAILING; GLTFLoader logs
+        # "Couldn't load texture blob:" and the hero renders chalk-white.
+        # (Verified: each image decodes fine alone on an idle page — it is
+        # the pile-up that kills them, so the fix is shrinking the pile.)
+        # Slimming at EXPORT means every game ever built inherits it and the
+        # library masters stay full-resolution for bakes.
+        if src.suffix.lower() == ".glb":
+            try:
+                slim = _slim_glb_cached(src, verbose=verbose)
+                if slim is not None:
+                    src = slim
+            except Exception as _se:  # noqa: BLE001 — slimming is an optimization
+                if verbose:
+                    print(f"[export] slim skipped for {src.name}: {_se}")
+        dst = assets / Path(src_path).name
         if not dst.exists() or dst.stat().st_size != src.stat().st_size:
             shutil.copy2(src, dst)
-        return f"./assets/{src.name}"
+        return f"./assets/{Path(src_path).name}"
 
     if not spec.player.asset:
         raise ValueError("GameSpec.player.asset is required for export")
@@ -341,3 +358,114 @@ over its content. You may sell it, publish it, or modify it freely.
         mb = sum(f.stat().st_size for f in dist.rglob("*") if f.is_file()) / 1e6
         print(f"[game] exported '{spec.title}' -> {dist} ({n} files, {mb:.1f} MB)")
     return dist
+
+
+_SLIM_LIMIT = 3_000_000        # embedded images above this get re-encoded
+_SLIM_MAXDIM = 2048
+
+
+def _slim_glb_cached(src, verbose: bool = True):
+    """Return a cached slim variant of a GLB whose embedded textures exceed
+    _SLIM_LIMIT, or None when the file is already lean. Pure stdlib + PIL:
+    the GLB container is length-prefixed chunks, and bufferViews are
+    sequential slices, so rewriting images is a copy with new offsets."""
+    import json as _json
+    import struct as _struct
+    import io as _io
+    from PIL import Image as _Img
+
+    src = Path(src)
+    cache_dir = src.parent / "_webcache"
+    st = src.stat()
+    cached = cache_dir / f"{src.stem}_{int(st.st_mtime)}_{st.st_size}.glb"
+    if cached.exists():
+        return cached
+
+    data = src.read_bytes()
+    if data[:4] != b"glTF":
+        return None
+    off = 12
+    js = None
+    bin_ = b""
+    while off < len(data):
+        clen, ctype = _struct.unpack("<II", data[off:off + 8])
+        chunk = data[off + 8:off + 8 + clen]
+        if ctype == 0x4E4F534A:
+            js = _json.loads(chunk)
+        elif ctype == 0x004E4942:
+            bin_ = chunk
+        off += 8 + clen
+    if not js or not js.get("images"):
+        return None
+
+    views = js.get("bufferViews", [])
+    img_views = {}
+    for ii, im in enumerate(js["images"]):
+        bv = im.get("bufferView")
+        if bv is None:
+            continue
+        if views[bv]["byteLength"] > _SLIM_LIMIT:
+            img_views[bv] = ii
+    if not img_views:
+        return None
+
+    replacements = {}
+    for bv_i, img_i in img_views.items():
+        bv = views[bv_i]
+        blob = bin_[bv.get("byteOffset", 0): bv.get("byteOffset", 0) + bv["byteLength"]]
+        img = _Img.open(_io.BytesIO(blob))
+        img.load()
+        if max(img.size) > _SLIM_MAXDIM:
+            sc = _SLIM_MAXDIM / max(img.size)
+            img = img.resize((max(1, int(img.width * sc)),
+                              max(1, int(img.height * sc))), _Img.LANCZOS)
+        has_alpha = img.mode in ("RGBA", "LA") and img.getextrema()[-1][0] < 250
+        out = _io.BytesIO()
+        if has_alpha:
+            img.save(out, "PNG", optimize=True)
+            mime = "image/png"
+        else:
+            img.convert("RGB").save(out, "JPEG", quality=88)
+            mime = "image/jpeg"
+        nb = out.getvalue()
+        if len(nb) < len(blob):
+            replacements[bv_i] = nb
+            js["images"][img_i]["mimeType"] = mime
+    if not replacements:
+        return None
+
+    # rebuild the BIN chunk view by view; offsets move, indices do not
+    new_bin = bytearray()
+    for vi, bv in enumerate(views):
+        while len(new_bin) % 4:
+            new_bin += b"\x00"
+        payload = replacements.get(vi)
+        if payload is None:
+            payload = bin_[bv.get("byteOffset", 0): bv.get("byteOffset", 0) + bv["byteLength"]]
+        bv["byteOffset"] = len(new_bin)
+        bv["byteLength"] = len(payload)
+        new_bin += payload
+    js["buffers"][0]["byteLength"] = len(new_bin)
+
+    jb = _json.dumps(js, separators=(",", ":")).encode()
+    while len(jb) % 4:
+        jb += b" "
+    while len(new_bin) % 4:
+        new_bin += b"\x00"
+    total = 12 + 8 + len(jb) + 8 + len(new_bin)
+    out = bytearray()
+    out += _struct.pack("<III", 0x46546C67, 2, total)
+    out += _struct.pack("<II", len(jb), 0x4E4F534A) + jb
+    out += _struct.pack("<II", len(new_bin), 0x004E4942) + bytes(new_bin)
+
+    cache_dir.mkdir(exist_ok=True)
+    # sweep stale cache entries for this stem so mtime bumps don't accumulate
+    for old in cache_dir.glob(f"{src.stem}_*.glb"):
+        if old != cached:
+            try: old.unlink()
+            except OSError: pass
+    cached.write_bytes(bytes(out))
+    if verbose:
+        print(f"[export] slimmed {src.name}: "
+              f"{len(data) / 1e6:.1f}MB -> {len(out) / 1e6:.1f}MB")
+    return cached
