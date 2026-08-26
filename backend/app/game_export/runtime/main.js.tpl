@@ -427,6 +427,60 @@ async function main() {
     balanced:    { dpr: Math.min(devicePixelRatio, 1.5), msaa: 4, shadow: 2048 },
     performance: { dpr: 1,                               msaa: 0, shadow: 2048 },
   }[QUALITY] || { dpr: Math.min(devicePixelRatio, 2), msaa: 4, shadow: 4096 };
+  // ── STYLE IDENTITY (2026-08-25): the UI is part of the art direction ─
+  // A style was a post-shader — the same HUD font, the same rounded chrome,
+  // whether the game was a watercolor cartoon or a horror crawl. The frame
+  // changed and the FRAME AROUND THE FRAME never did, which is half of why
+  // styles read as filters. body gets a style class and one injected sheet;
+  // !important is deliberate — the HUD is built with inline cssText, and a
+  // stylesheet only outranks inline styles when it says so.
+  // (SPEC.style read directly: the STYLE const lives thousands of lines
+  // down and reading it here would be TRAP 1.)
+  {
+    const _st = SPEC.style || 'default';
+    document.body.classList.add('style-' + _st);
+    const FONTS = {
+      cartoon: '"Comic Sans MS", "Chalkboard SE", "Segoe UI", cursive',
+      sketch: '"Segoe Print", "Bradley Hand", cursive',
+      anime: '"Trebuchet MS", "Segoe UI", sans-serif',
+      horror: 'Georgia, "Times New Roman", serif',
+      pixel: '"Courier New", monospace',
+    };
+    const css = [];
+    if (FONTS[_st]) {
+      css.push('body.style-' + _st + ', body.style-' + _st + ' * '
+        + '{ font-family: ' + FONTS[_st] + ' !important; }');
+    }
+    if (_st === 'cartoon') {
+      css.push('body.style-cartoon #hud h1 { color:#ffde59 !important; '
+        + '-webkit-text-stroke: 1.5px #4a2c00; letter-spacing: 0.5px; }');
+      css.push('body.style-cartoon #startbtn, body.style-cartoon .card '
+        + '{ border-radius: 26px !important; }');
+      css.push('body.style-cartoon #hearts { font-size: 26px !important; }');
+    } else if (_st === 'horror') {
+      css.push('body.style-horror #hud h1 { color:#b01818 !important; '
+        + 'letter-spacing: 4px; text-shadow: 0 0 14px #600 !important; }');
+      css.push('body.style-horror #startbtn, body.style-horror .card '
+        + '{ border-radius: 0 !important; }');
+      css.push('body.style-horror #startbtn { background:#7a1010 !important; '
+        + 'color:#e8dcc8 !important; }');
+    } else if (_st === 'anime') {
+      css.push('body.style-anime #hud h1 { color:#ff7ab8 !important; '
+        + '-webkit-text-stroke: 1px #fff; }');
+    } else if (_st === 'pixel') {
+      css.push('body.style-pixel canvas { image-rendering: pixelated !important; }');
+      css.push('body.style-pixel #hud h1 { text-transform: uppercase; '
+        + 'letter-spacing: 2px; }');
+    }
+    if (css.length) {
+      const el = document.createElement('style');
+      el.textContent = css.join('\n');
+      document.head.appendChild(el);
+    }
+    // pixel style earns its name: a QUARTER-res framebuffer stretched with
+    // nearest-neighbor IS the aesthetic — banding alone never was
+    if (_st === 'pixel') QCFG.dpr = Math.max(0.32, QCFG.dpr * 0.38);
+  }
   renderer.setPixelRatio(QCFG.dpr);
   renderer.setSize(innerWidth, innerHeight, false);   // false: don't set inline px style — CSS fills
   renderer.shadowMap.enabled = true;
@@ -7947,8 +8001,8 @@ async function main() {
     for (const ev of EVENTS) {
       if (ev.fired || !evCondition(ev.when)) continue;
       ev.fired = true;
-      shakeT = Math.max(shakeT, 0.4);
-      juicePunch = Math.max(juicePunch, 0.7);
+      shakeT = Math.max(shakeT, 0.4 * FEEL.shake);
+      juicePunch = Math.max(juicePunch, 0.7 * FEEL.punch);
       console.log('[events] fired:', ev.when, '->', ev.then.join(' | '));
       for (const a of ev.then) evRun(String(a));
     }
@@ -9392,8 +9446,8 @@ async function main() {
       if (m.emissive) m.emissive.setRGB(0.30, 0.16, 0.16); } }, 120);
     if (n.hp <= 0) {
       n.dead = true; kills++; sfx('hit');
-      juiceSlow = Math.max(juiceSlow, 0.32);
-      juicePunch = Math.max(juicePunch, 0.5);
+      juiceSlow = Math.max(juiceSlow, 0.32 * FEEL.slow);
+      juicePunch = Math.max(juicePunch, 0.5 * FEEL.punch);
       addXP(10);
       const _st2 = steps[stepIdx];
       if (_st2 && ['defeat', 'eliminate', 'hunt'].includes(_st2.kind)
@@ -9699,6 +9753,14 @@ async function main() {
   // punches the lens, a kill dilates time, a fired event shakes the frame,
   // a win earns a flyover, an escort arrival cuts to HIS eyes looking back
   // at you. All state, no allocations; each effect is one number decaying.
+  // a cartoon bounces, a horror drags: the same five moments land with
+  // style-specific weight. Multipliers only — one table, no new systems.
+  const FEEL = ({
+    cartoon: { punch: 1.55, slow: 0.7, shake: 0.6 },
+    anime:   { punch: 1.3,  slow: 1.1, shake: 0.9 },
+    horror:  { punch: 0.35, slow: 1.6, shake: 1.7 },
+    pixel:   { punch: 1.2,  slow: 1.0, shake: 1.0 },
+  })[SPEC.style] || { punch: 1, slow: 1, shake: 1 };
   let juiceSlow = 0;      // seconds of world slow-mo left (0.3x)
   let juicePunch = 0;     // 0..1 fov kick, decays fast
   let juiceFly = -1;      // >=0: win flyover clock
@@ -11875,8 +11937,8 @@ varying vec2 vUvRaw;
             addXP(6);
             sfx('pickup');
             burst(c.mesh.position, 0xffd54a);
-            juicePunch = 1;
-            juiceSlow = Math.max(juiceSlow, 0.09);   // a heartbeat of hitstop
+            juicePunch = FEEL.punch;
+            juiceSlow = Math.max(juiceSlow, 0.09 * FEEL.slow);
             if (HAS_GUARDS) {
               // LOOT HAS VALUE (heist kit): every piece is worth a different
               // amount, so a burglar chooses what to risk reaching for
