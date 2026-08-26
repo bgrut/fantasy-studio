@@ -5997,6 +5997,43 @@ async function main() {
         } else if (ent.behavior === 'escort') {
           const aE = rngN() * Math.PI * 2;
           holder.position.set(Math.cos(aE) * 5, 0, Math.sin(aE) * 5);
+          // he can NEVER outrun the player at a walk: an escortee who pulls
+          // away reads as a stranger leaving, not a charge to protect.
+          // SPEC.player, not P — P is declared far below and reading it here
+          // is a TDZ that silently deletes the escortee (TRAP 1, sixth time
+          // this arc; the entity loop's catch turns the throw into a skip).
+          ent.speed = Math.min(ent.speed || 1.6,
+                               ((SPEC.player || {}).walk_speed || 2) * 0.8);
+          // overhead chip: name + hearts, camera-facing, visible at a glance.
+          // Redrawn only when hp changes — a canvas repaint per frame would
+          // be pure waste for a value that changes a few times per game.
+          const ec9 = document.createElement('canvas');
+          ec9.width = 256; ec9.height = 72;
+          const eg9 = ec9.getContext('2d');
+          const eTex9 = new THREE.CanvasTexture(ec9);
+          const chip9 = new THREE.Sprite(new THREE.SpriteMaterial({
+            map: eTex9, transparent: true, depthTest: false }));
+          // 1.5m wide, not 2.6: at follow-cam distance the first cut covered
+          // the courier's whole torso — a nameplate, not a billboard
+          chip9.scale.set(1.5, 0.42, 1);
+          chip9.position.y = (ent.height_m || 1.7) + 0.55;
+          chip9.renderOrder = 8;
+          holder.add(chip9);
+          holder.userData.fsEscortChip = (hp9, maxHp9, waiting9) => {
+            eg9.clearRect(0, 0, 256, 72);
+            eg9.fillStyle = 'rgba(10,9,18,0.72)';
+            eg9.beginPath(); eg9.roundRect(8, 6, 240, 60, 12); eg9.fill();
+            eg9.fillStyle = waiting9 ? '#ffd166' : '#8fe7d0';
+            eg9.font = '700 26px system-ui';
+            eg9.textAlign = 'center';
+            eg9.fillText(waiting9 ? '⏸ ' + (ent.name || 'escort') + ' waits'
+                                  : '🛡 ' + (ent.name || 'escort'), 128, 32);
+            eg9.font = '400 24px system-ui';
+            eg9.fillStyle = '#ff8fa0';
+            eg9.fillText('♥'.repeat(Math.max(0, hp9)) + '♡'.repeat(Math.max(0, maxHp9 - hp9)), 128, 58);
+            eTex9.needsUpdate = true;
+          };
+          holder.userData.fsEscortChip(ent.hp || 3, ent.hp || 3, false);
         } else {
           // hostiles spawn FAR (out along the path, guarding the objectives)
           const spread = hostile ? 0.6 : 0.3;
@@ -6097,8 +6134,15 @@ async function main() {
             sfx('win');
           } else if (dPl > 14) {
             // too far ahead of the player: stop and say so, once per stall
-            if (!n._waitSaid) { popText((n.name || 'the escort') + ' waits for you…', '#ffd166'); n._waitSaid = true; }
+            if (!n._waitSaid) {
+              popText((n.name || 'the escort') + ' waits for you…', '#ffd166');
+              n._waitSaid = true;
+              if (n.obj.userData.fsEscortChip)
+                n.obj.userData.fsEscortChip(n.hp || 3, n._maxHp || n.hp || 3, true);
+            }
           } else {
+            if (n._waitSaid && n.obj.userData.fsEscortChip)
+              n.obj.userData.fsEscortChip(n.hp || 3, n._maxHp || n.hp || 3, false);
             n._waitSaid = false;
             const dx = wx - n.obj.position.x, dz = wz - n.obj.position.z;
             n.yaw = THREE.MathUtils.damp(n.yaw, Math.atan2(dx, dz), 5, dt);
@@ -6189,7 +6233,10 @@ async function main() {
               n.cd -= dt;
               if (n.cd <= 0) {
                 n.cd = 1.3;
+                esc._maxHp = esc._maxHp || esc.hp || 3;
                 esc.hp = (esc.hp || 3) - 1;
+                if (esc.obj.userData.fsEscortChip)
+                  esc.obj.userData.fsEscortChip(esc.hp, esc._maxHp, false);
                 for (const m of esc.mats || []) { if (m.emissive) m.emissive.setHex(0xff4444); }
                 setTimeout(() => { for (const m of esc.mats || []) { if (m.emissive) m.emissive.setHex(0x000000); } }, 140);
                 shakeT = Math.max(shakeT, 0.15);
@@ -7354,6 +7401,10 @@ async function main() {
         + `is in your way, throw something with Q to pull him off it.`
       : `Find ${n} ${l} for me. They are scattered — look around.`;
     if (st.kind === 'defeat') return `You will have to fight. Put down ${n} ${l} — press F to strike.`;
+    if (st.kind === 'escort')
+      return `${l ? l[0].toUpperCase() + l.slice(1) : 'Your charge'} walks the road `
+        + `on his own — STAY CLOSE or he stops and waits for you. The wolves will `
+        + `go for HIM, not you. Keep them off him until he reaches the beacon.`;
     if (st.kind === 'survive') return `Just stay alive. Keep moving and do not let them corner you.`;
     if (st.kind === 'race') return `Beat all ${n} of them to the finish. Shift for speed.`;
     if (st.kind === 'hunt') return `Track ${n} ${l}. Move slow — they bolt if they hear you.`;
