@@ -108,8 +108,11 @@ class EntitySpec(BaseModel):
     # guide (2026-08-05): a Pokémon-style mentor who HAILS you and speaks the
     # current objective in character, so a game explains itself through a
     # person instead of a HUD line nobody reads.
+    # escort (2026-08-25): walks from the spawn to the goal on its own legs,
+    # waits when the player falls behind, and can be killed — the most common
+    # mission shape in open-world games: protect someone who moves.
     behavior: Literal["static", "wander", "follow", "hostile", "vehicle",
-                      "flee", "guard", "guide"] = "wander"
+                      "flee", "guard", "guide", "escort"] = "wander"
     count: int = Field(1, ge=1, le=64)
     speed: float = Field(1.5, ge=0.0, le=40.0)
     height_m: float = Field(1.0, gt=0.1, le=10.0)
@@ -123,7 +126,7 @@ class ObjectiveSpec(BaseModel):
     shrinking storm zone hurts anyone outside it); score = sports (drive the
     ball into the goal N times)."""
     kind: Literal["collect", "defeat", "reach", "race", "survive",
-                  "eliminate", "score", "hunt", "capture"] = "collect"
+                  "eliminate", "score", "hunt", "capture", "escort"] = "collect"
     label: str = "stars"
     count: int = Field(5, ge=1, le=600)   # survive: SECONDS to hold out (waves escalate)
     asset: Optional[str] = None   # collect steps: generated mesh spawned instead of the orb

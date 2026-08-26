@@ -5994,6 +5994,9 @@ async function main() {
                                    -dwG.bounds[1] / 2 + 1,
                                    dwG.bounds[1] / 2 - 1];
           gIdx++;
+        } else if (ent.behavior === 'escort') {
+          const aE = rngN() * Math.PI * 2;
+          holder.position.set(Math.cos(aE) * 5, 0, Math.sin(aE) * 5);
         } else {
           // hostiles spawn FAR (out along the path, guarding the objectives)
           const spread = hostile ? 0.6 : 0.3;
@@ -6071,6 +6074,52 @@ async function main() {
         continue;
       }
       let tx = null, tz = null;
+      if (n.behavior === 'escort' && !won && !lost) {
+        // Walks its own road: along the level PATH when one exists, else
+        // straight at the goal. Waits when the player falls behind — the
+        // escort sets the pace but never abandons its protection.
+        if (n._epi === undefined) { n._epi = 0; n._waitSaid = false; }
+        const gp = goalPos;
+        if (gp && !n._arrived) {
+          const dPl = Math.hypot(playerPos.x - n.obj.position.x,
+                                 playerPos.z - n.obj.position.z);
+          let wx = gp.x, wz = gp.z;
+          if (PATH && PATH.length > 1) {
+            while (n._epi < PATH.length - 1
+                   && Math.hypot(PATH[n._epi][0] - n.obj.position.x,
+                                 PATH[n._epi][1] - n.obj.position.z) < 3.5) n._epi++;
+            wx = PATH[n._epi][0]; wz = PATH[n._epi][1];
+          }
+          const dG = Math.hypot(gp.x - n.obj.position.x, gp.z - n.obj.position.z);
+          if (dG < 3.0) {
+            n._arrived = true;
+            popText((n.name || 'the escort') + ' made it!', '#8fe7d0');
+            sfx('win');
+          } else if (dPl > 14) {
+            // too far ahead of the player: stop and say so, once per stall
+            if (!n._waitSaid) { popText((n.name || 'the escort') + ' waits for you…', '#ffd166'); n._waitSaid = true; }
+          } else {
+            n._waitSaid = false;
+            const dx = wx - n.obj.position.x, dz = wz - n.obj.position.z;
+            n.yaw = THREE.MathUtils.damp(n.yaw, Math.atan2(dx, dz), 5, dt);
+            n.obj.rotation.y = n.yaw;
+            const sp = (n.speed || 1.6) * dt;
+            n.obj.position.x += Math.sin(n.yaw) * sp;
+            n.obj.position.z += Math.cos(n.yaw) * sp;
+            n.obj.position.y = hAt(n.obj.position.x, n.obj.position.z);
+          }
+          if (n.anim) {
+            const moving2 = !n._arrived && dPl <= 14 && dG >= 3.0;
+            const want2 = moving2 ? n.anim.walk : n.anim.idle;
+            if (want2 && want2 !== n.anim.cur) {
+              want2.reset(); want2.crossFadeFrom(n.anim.cur, 0.25, true); want2.play();
+              n.anim.cur = want2;
+            }
+            n.anim.mixer.update(dt);
+          }
+        }
+        continue;
+      }
       if (n.behavior === 'hostile' && !won && !lost) {
         const d = Math.hypot(playerPos.x - n.obj.position.x, playerPos.z - n.obj.position.z);
         // BATTLE ROYALE (Phase 70): rivals fight EACH OTHER, not just the
@@ -6121,6 +6170,55 @@ async function main() {
               n.anim.mixer.update(dt);
             }
             continue;   // this rival is busy brawling — skip player logic
+          }
+        }
+        // ESCORT PRIORITY: hostiles hunt whichever of (player, escortee) is
+        // nearer — an escort mission where the wolves politely ignore the
+        // cargo is not an escort mission.
+        {
+          let esc = null, ed = 1e9;
+          for (const o3 of npcs) {
+            if (o3.behavior !== 'escort' || o3.dead || o3._arrived) continue;
+            const dd3 = Math.hypot(o3.obj.position.x - n.obj.position.x,
+                                   o3.obj.position.z - n.obj.position.z);
+            if (dd3 < ed) { ed = dd3; esc = o3; }
+          }
+          if (esc && ed < d && ed < 16) {
+            if (ed > 1.8) { tx = esc.obj.position.x; tz = esc.obj.position.z; }
+            else {
+              n.cd -= dt;
+              if (n.cd <= 0) {
+                n.cd = 1.3;
+                esc.hp = (esc.hp || 3) - 1;
+                for (const m of esc.mats || []) { if (m.emissive) m.emissive.setHex(0xff4444); }
+                setTimeout(() => { for (const m of esc.mats || []) { if (m.emissive) m.emissive.setHex(0x000000); } }, 140);
+                shakeT = Math.max(shakeT, 0.15);
+                popText((esc.name || 'the escort') + ' is under attack!', '#ff8fa0');
+                if (esc.hp <= 0 && !esc.dead) {
+                  esc.dead = true;
+                  burst(esc.obj.position.clone().add(new THREE.Vector3(0, 0.8, 0)), 0xff5c6a);
+                  doLose((esc.name || 'The escort') + ' was lost.');
+                }
+              }
+            }
+            if (tx !== null) {
+              const dx4 = tx - n.obj.position.x, dz4 = tz - n.obj.position.z;
+              n.yaw = THREE.MathUtils.damp(n.yaw, Math.atan2(dx4, dz4), 6, dt);
+              n.obj.rotation.y = n.yaw;
+              const sp4 = n.speed * dt;
+              n.obj.position.x += Math.sin(n.yaw) * sp4;
+              n.obj.position.z += Math.cos(n.yaw) * sp4;
+              n.obj.position.y = hAt(n.obj.position.x, n.obj.position.z);
+            }
+            if (n.anim) {
+              const want4 = tx !== null ? n.anim.run : n.anim.idle;
+              if (want4 && want4 !== n.anim.cur) {
+                want4.reset(); want4.crossFadeFrom(n.anim.cur, 0.2, true); want4.play();
+                n.anim.cur = want4;
+              }
+              n.anim.mixer.update(dt);
+            }
+            continue;   // busy with the cargo — skip player logic
           }
         }
         const pSafe = inSafeZone(playerPos.x, playerPos.z);
@@ -7284,6 +7382,7 @@ async function main() {
     if (st.kind === 'hunt') return `Hunt ${st.count} ${st.label || 'prey'} (approach quietly)`;
     if (st.kind === 'score') return `Score ${st.count} ${st.label || 'goals'}`;
     if (st.kind === 'capture') return `Capture ${st.count} zone${st.count > 1 ? 's' : ''} (hold 8s each)`;
+    if (st.kind === 'escort') return `Escort ${st.label || 'your charge'} to the beacon — keep them alive`;
     return `Reach ${st.label || 'the beacon'}`;
   }
   function stepProgress(st) {
@@ -7291,6 +7390,14 @@ async function main() {
     if (st.kind === 'defeat' || st.kind === 'eliminate' || st.kind === 'hunt')
       return `${Math.min(kills - (st._k0 || 0), st.count)}/${st.count}`;
     if (st.kind === 'score') return `${st._goals || 0}/${st.count}`;
+    if (st.kind === 'escort') {
+      const e5 = npcs.find(nn => nn.behavior === 'escort' && !nn.dead);
+      if (!e5 || !goalPos) return '';
+      if (e5._arrived) return '100%';
+      const dNow = Math.hypot(goalPos.x - e5.obj.position.x, goalPos.z - e5.obj.position.z);
+      const d0 = st._d0 || dNow || 1;
+      return Math.max(0, Math.min(99, Math.round((1 - dNow / d0) * 100))) + '%';
+    }
     if (st.kind === 'capture') {
       const pct = st._hold ? ` · ${Math.min(99, Math.round(st._hold / 8 * 100))}%` : '';
       return `${st._zi || 0}/${st.count}${pct}`;
@@ -7335,6 +7442,11 @@ async function main() {
     if (st.kind === 'defeat' || st.kind === 'eliminate' || st.kind === 'hunt') { st._k0 = kills; }
     if (st.kind === 'score') { st._goals = 0; }
     if (st.kind === 'capture') { st._zi = 0; st._hold = 0; spawnCaptureZones(st); }
+    if (st.kind === 'escort') {
+      const e6 = npcs.find(nn => nn.behavior === 'escort' && !nn.dead);
+      if (e6 && goalPos) st._d0 = Math.hypot(goalPos.x - e6.obj.position.x,
+                                             goalPos.z - e6.obj.position.z);
+    }
     renderQuest();
   }
   let won_ = false;   // guard alias kept for clarity in doWin
@@ -11086,6 +11198,10 @@ varying vec2 vUvRaw;
       const st = steps[stepIdx];
       const gd = Math.hypot(goalPos.x - nt.x, goalPos.z - nt.z);
       if (st && st.kind === 'reach' && gd < 2.2) advanceStep();
+      if (st && st.kind === 'escort'
+          && npcs.some(nn => nn.behavior === 'escort' && !nn.dead && nn._arrived)) {
+        advanceStep();
+      }
       else if (st && st.kind === 'race') {
         // live standings: position = cars already finished + cars closer to goal
         hudTick += dt;

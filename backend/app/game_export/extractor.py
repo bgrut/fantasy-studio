@@ -48,7 +48,12 @@ Output ONLY the JSON object, no markdown, no commentary. Schema (all fields opti
                {"kind":"eliminate","label":"rivals","count": N rivals 2..12};
                soccer/football/"score N goals" -> {"kind":"score","label":"goals","count": N 1..10};
                "hunt N elk/deer..." -> {"kind":"hunt","label":prey noun,"count": N 1..8}
-               (prey = entity behavior "flee" - it runs when it hears the player),
+               (prey = entity behavior "flee" - it runs when it hears the player);
+               "escort/protect/lead/guide NAME to PLACE" -> {"kind":"escort",
+               "label": NAME} AND one entity {"name": NAME, "behavior":"escort",
+               "count":1} — the escortee walks to the goal by itself and DIES if
+               unprotected, so escort games also need hostile entities to defend
+               against (an escort without threats is a walk),
  "entities": [{"name": simple noun like "dog","cat","horse","wolf","car", "behavior": one of
                "wander","follow","static","hostile","vehicle" (cars/trucks -> "vehicle"),
                "guard" (patrolling sentries with VISION CONES for stealth/heist games —
@@ -56,6 +61,8 @@ Output ONLY the JSON object, no markdown, no commentary. Schema (all fields opti
                "guide" (a friendly mentor/informant/professor who greets the player and
                explains each objective — add ONE to any game with a story or a
                tutorial feel; never hostile),
+               "escort" (the person/creature the player must protect on the road —
+               use with an "escort" objective; never also mark them "guide"),
                "count": int 1..8, "speed": float 0.5..8}]
 }
 Map the text's setting to the CLOSEST world.name keyword. entities = OTHER creatures/characters besides
