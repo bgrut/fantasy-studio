@@ -6034,6 +6034,18 @@ async function main() {
             eTex9.needsUpdate = true;
           };
           holder.userData.fsEscortChip(ent.hp || 3, ent.hp || 3, false);
+          // the RING is the identifier at any distance and from behind: five
+          // similar humans can stand together and only one wears the mission
+          // color at his feet. Same visual grammar as the goal ring, so the
+          // player has already been taught what a glowing torus means.
+          const er9 = new THREE.Mesh(
+            new THREE.TorusGeometry(0.85, 0.07, 10, 36),
+            new THREE.MeshStandardMaterial({ color: 0x8fe7d0,
+              emissive: 0x2fbf9a, emissiveIntensity: 2.4 }));
+          er9.rotation.x = Math.PI / 2;
+          er9.position.y = 0.12;
+          holder.add(er9);
+          holder.userData.fsEscortRing = er9;
         } else {
           // hostiles spawn FAR (out along the path, guarding the objectives)
           const spread = hostile ? 0.6 : 0.3;
@@ -6116,6 +6128,12 @@ async function main() {
         // straight at the goal. Waits when the player falls behind — the
         // escort sets the pace but never abandons its protection.
         if (n._epi === undefined) { n._epi = 0; n._waitSaid = false; }
+        const ring9 = n.obj.userData.fsEscortRing;
+        if (ring9) {
+          const pu = 1 + Math.sin(performance.now() / 300) * 0.12;
+          ring9.scale.setScalar(n._waitSaid ? pu * 1.35 : pu);
+          ring9.material.emissiveIntensity = n._waitSaid ? 3.4 : 2.4;
+        }
         const gp = goalPos;
         if (gp && !n._arrived) {
           const dPl = Math.hypot(playerPos.x - n.obj.position.x,
