@@ -64,7 +64,21 @@ guards/security/police in a heist or stealth game -> "guard").
 HEIST/BURGLAR/STEAL games: objectives = steal the goods ({"kind":"collect",
 "label":"jewels"|"paintings"|...}) then escape ({"kind":"reach","label":"the getaway car"});
 entities = 2-4 "guard".
-"defeat" objectives need hostile entities. Do not invent fields not in the schema."""
+"defeat" objectives need hostile entities.
+"events": OPTIONAL story beats — scripted reversals that fire DURING play. Each is
+{"when": condition, "then": [actions]}. Conditions (exact grammar):
+"collected>=N" (N items taken so far) | "kills>=N" | "time>N" (seconds since start) |
+"hp<=N" (player hearts) | "alert" (a guard has spotted the player).
+Actions (exact grammar): "popup:TEXT" (dramatic one-liner shown to the player) |
+"spawn:NAME xN" (N more of an entity ALREADY in this game's entities list appear near
+the player) | "alertguards" (every guard converges) | "timer:SECONDS:LABEL:lose"
+(countdown; reaching zero loses with LABEL) | "win:TEXT" | "lose:TEXT".
+Use 1-3 events when the text implies drama — an alarm tripped halfway through a
+heist, reinforcements at the second relic, a collapse timer once the vault is
+opened. Example: {"when":"collected>=2","then":["popup:The alarm is tripped!",
+"spawn:guard x2","alertguards"]}. Only reference entity names that exist in
+"entities". Omit "events" entirely for calm games.
+Do not invent fields not in the schema."""
 
 _JSON_RE = re.compile(r"\{.*\}", re.DOTALL)
 

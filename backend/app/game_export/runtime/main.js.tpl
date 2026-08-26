@@ -7472,6 +7472,145 @@ async function main() {
     heartsEl.style.color = php <= 1 ? '#ff5c6a' : '#ff8fa0';
   }
   renderHearts();
+  // ── EVENTS: when <condition> then <reactions> (2026-08-25) ─────────────
+  // The verb that turns the objective checklist into a STORY. Every
+  // condition reads state the engine already tracks and every action drives
+  // a primitive that already exists (popups, guard alerts, win/lose, NPC
+  // clones), so the LLM composes drama out of parts that cannot break the
+  // game. Function declarations, hoisted on purpose: the frame loop calls
+  // stepEvents long after this point, and a const would be one more chance
+  // at TRAP 1.
+  const EVENTS = (SPEC.events || []).map(e => ({
+    when: String(e.when || ''), then: Array.isArray(e.then) ? e.then : [],
+    fired: false }));
+  let evTimer = null;                     // {left, label, onZero}
+  let evPoll = 0;
+  function evCollected() {
+    let g = 0;
+    for (const st of steps || []) if (st.kind === 'collect') g += (st._got || 0);
+    return g;
+  }
+  function evCondition(w) {
+    let m;
+    if ((m = w.match(/^collected\s*>=\s*(\d+)$/))) return evCollected() >= +m[1];
+    if ((m = w.match(/^kills\s*>=\s*(\d+)$/))) return kills >= +m[1];
+    if ((m = w.match(/^time\s*>\s*(\d+)$/)))
+      return (performance.now() - runT0) / 1000 > +m[1];
+    if ((m = w.match(/^hp\s*<=\s*(\d+)$/))) return php <= +m[1];
+    if (w === 'alert')
+      return npcs.some(nn => nn.behavior === 'guard' && !nn.dead
+                             && (nn.mode === 'chase' || (nn.alert || 0) > 0.65));
+    return false;                          // unknown grammar: never fires
+  }
+  function evSpawn(name, count) {
+    // clone an NPC that already exists — the grammar promises only "more of
+    // what is already in the scene", so there is no asset fetch, no bake,
+    // and a spawn cannot fail into a missing-mesh crash
+    const src = npcs.find(nn => !nn.dead && nn.name === name)
+             || npcs.find(nn => !nn.dead && (nn.behavior === 'guard' || nn.behavior === 'hostile'));
+    if (!src) return;
+    const bp = body.translation();
+    for (let i = 0; i < Math.min(count, 6); i++) {
+      try {
+        const holder2 = skClone(src.obj);
+        const a = Math.random() * Math.PI * 2, r = 11 + Math.random() * 5;
+        const sx = bp.x + Math.cos(a) * r, sz = bp.z + Math.sin(a) * r;
+        holder2.position.set(sx, hAt(sx, sz), sz);
+        holder2.visible = true;
+        scene.add(holder2);
+        // rebuild the mixer on the CLONE's own skeleton — actions cannot be
+        // shared across skClone copies
+        let anim2 = null;
+        if (src.anim && src.anim.mixer) {
+          const inner = holder2.children[0] || holder2;
+          const mixer2 = new THREE.AnimationMixer(inner);
+          const clipOf = a2 => (a2 && a2.getClip ? a2.getClip() : null);
+          const mk = c => (c ? mixer2.clipAction(c) : null);
+          anim2 = { mixer: mixer2, idle: mk(clipOf(src.anim.idle)),
+                    walk: mk(clipOf(src.anim.walk)), run: mk(clipOf(src.anim.run)),
+                    cur: null };
+          anim2.cur = anim2.idle || anim2.walk;
+          if (anim2.cur) anim2.cur.play();
+        }
+        const mats2 = [];
+        holder2.traverse(o => { if (o.isMesh) {
+          o.castShadow = true; o.frustumCulled = false;
+          for (const mm of (Array.isArray(o.material) ? o.material : [o.material]))
+            if (mm) mats2.push(mm);
+        } });
+        holder2.userData.fsTag = { type: 'npc', name: src.name || 'reinforcement',
+                                   detail: 'hostile · event spawn' };
+        npcs.push({ obj: holder2, down: 0, kx: 0, kz: 0,
+                    speed: (src.speed || 1.5) * 1.1, behavior: 'hostile',
+                    target: null, yaw: Math.random() * Math.PI * 2,
+                    phase: Math.random() * Math.PI * 2, h: src.h || 1.0,
+                    name: src.name, beat: null, pen: null,
+                    hp: src.hp || 3, cd: 0, dead: false, dieT: 0,
+                    mats: mats2, anim: anim2, dormant: false });
+      } catch (err) { console.warn('[events] spawn failed:', err.message); }
+    }
+  }
+  function evRun(action) {
+    let m;
+    if ((m = action.match(/^popup:(.+)$/))) { popText(m[1].trim(), '#ffd166'); sfx('beep'); return; }
+    if ((m = action.match(/^spawn:\s*([\w ]+?)\s*x(\d+)$/))) { evSpawn(m[1].trim(), +m[2]); return; }
+    if (action === 'alertguards') {
+      for (const nn of npcs) if (nn.behavior === 'guard' && !nn.dead) {
+        nn.mode = 'chase'; nn.alert = 1;
+      }
+      sfx('hurt');
+      return;
+    }
+    if ((m = action.match(/^timer:(\d+):([^:]+):(lose|win)$/))) {
+      evTimer = { left: +m[1], label: m[2].trim(), onZero: m[3] };
+      return;
+    }
+    if ((m = action.match(/^win:(.*)$/))) { doWin(m[1].trim() || undefined); return; }
+    if ((m = action.match(/^lose:(.*)$/))) { doLose(m[1].trim() || 'The job went wrong.'); return; }
+    console.warn('[events] unknown action:', action);
+  }
+  function stepEvents(dt) {
+    if (!gameStarted || won || lost) return;
+    if (evTimer) {
+      evTimer.left -= dt;
+      if (!window.__evTimerEl) {
+        const el = document.createElement('div');
+        el.style.cssText = 'position:fixed;top:64px;left:50%;transform:translateX(-50%);'
+          + 'font:800 22px system-ui;color:#ff9f5c;background:rgba(10,9,18,.78);'
+          + 'border:1px solid rgba(255,159,92,.4);border-radius:10px;'
+          + 'padding:6px 18px;z-index:30;pointer-events:none;';
+        document.body.appendChild(el);
+        window.__evTimerEl = el;
+      }
+      window.__evTimerEl.textContent =
+        evTimer.label + ' — ' + Math.max(0, evTimer.left).toFixed(0) + 's';
+      if (evTimer.left <= 0) {
+        const z = evTimer; evTimer = null;
+        window.__evTimerEl.remove(); window.__evTimerEl = null;
+        if (z.onZero === 'lose') doLose(z.label); else doWin();
+        return;
+      }
+    }
+    evPoll += dt;
+    if (evPoll < 0.4) return;              // conditions are cheap but not free
+    evPoll = 0;
+    for (const ev of EVENTS) {
+      if (ev.fired || !evCondition(ev.when)) continue;
+      ev.fired = true;
+      console.log('[events] fired:', ev.when, '->', ev.then.join(' | '));
+      for (const a of ev.then) evRun(String(a));
+    }
+  }
+  // harness hooks: assertions need to SEE the events and force one to run.
+  // Stashed here and merged where window.__game is CREATED — assigning onto
+  // __game at this point in the file was writing to undefined and took the
+  // whole runtime down (TRAP 4, again, while this block's own comment was
+  // busy congratulating itself about TRAP 1).
+  const __evHooks = {
+    events: () => EVENTS.map(e => ({ when: e.when, fired: e.fired })),
+    trigger: i => { const e = EVENTS[i]; if (!e || e.fired) return false;
+      e.fired = true; for (const a of e.then) evRun(String(a)); return true; },
+  };
   function doLose(text) {
     if (won || lost) return;
     lost = true;
@@ -9147,6 +9286,7 @@ async function main() {
 
   // exposed for the verify harness (synthetic input, position probes, dev teleport)
   window.__game = {
+    ...__evHooks,
     pos: () => playerObj.position.toArray(), keys, ready: true,
     tp: (x, z) => body.setTranslation({ x, y: spawnHeight(x, z), z }, true),
     attack: doAttack,
@@ -10975,6 +11115,7 @@ varying vec2 vUvRaw;
     stepCars(dt);
     // ground actually covered this frame drives footstep cadence, so a
     // sprint sounds like a sprint without a second timer to keep in sync
+    stepEvents(dt);
     audioFrame(dt, Math.hypot(playerObj.position.x - _audPX,
                               playerObj.position.z - _audPZ));
     _audPX = playerObj.position.x; _audPZ = playerObj.position.z;

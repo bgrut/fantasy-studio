@@ -129,6 +129,20 @@ class ObjectiveSpec(BaseModel):
     asset: Optional[str] = None   # collect steps: generated mesh spawned instead of the orb
 
 
+class EventSpec(BaseModel):
+    """A STORY BEAT: when <condition>, do <reactions>. This is the verb that
+    turns the objective checklist into a narrative — ambushes, alarms,
+    deadlines, reversals — without any new mission types. Conditions and
+    actions are tiny string grammars parsed by the runtime dispatcher, so
+    the LLM can only compose primitives the engine actually has:
+      when:  collected>=N | kills>=N | time>N | hp<=N | alert
+      then:  popup:TEXT | spawn:NAME xN | alertguards |
+             timer:SECONDS:LABEL:lose|win | win:TEXT | lose:TEXT
+    Each event fires once."""
+    when: str = ""
+    then: List[str] = Field(default_factory=list)
+
+
 class GameSpec(BaseModel):
     title: str = "Fantasy Studio Game"
     player: PlayerSpec = Field(default_factory=PlayerSpec)
@@ -136,6 +150,7 @@ class GameSpec(BaseModel):
     world: WorldSpec = Field(default_factory=WorldSpec)
     entities: List[EntitySpec] = Field(default_factory=list)
     objectives: List[ObjectiveSpec] = Field(default_factory=list)
+    events: List[EventSpec] = Field(default_factory=list)   # story beats
     reward: Optional[str] = None          # "winner gets a banana" → shown on the win screen
     intro: Optional[str] = None           # narrative layer: 1-2 line quest intro (START screen)
     win_text: Optional[str] = None        # narrative layer: victory line (win screen)
