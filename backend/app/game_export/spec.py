@@ -88,6 +88,7 @@ class WorldSpec(BaseModel):
     health_packs: int = Field(0, ge=0, le=12)   # heart pickups scattered on the ground
     placed_items: List[PlacedItemSpec] = Field(default_factory=list)  # Inspector placements
     palette: Optional[PaletteSpec] = None   # film-grade color script
+    flora: Optional[str] = None    # prompt's tree word: silhouettes obey it
     scatter: List[ScatterSpec] = Field(default_factory=list)
     level: Optional[dict] = None    # Phase 32 LevelPlan (terrain/path/goal), injected by the exporter
 

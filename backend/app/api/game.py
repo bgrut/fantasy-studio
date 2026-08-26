@@ -1442,6 +1442,16 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         # prompt swaps procedural building scatter for actual OSM footprints.
         # Real blocks are ~100-250m — the world grows to hold a real district.
         place = detect_place(req.prompt) if is_city else None
+        # FLORA OBEYS THE PROMPT (2026-08-25): the silhouette pack rolls a
+        # tree archetype from the seed, and its first field test planted dead
+        # snags in a prompt that said "a pine forest". An explicit tree word
+        # outranks the dice; the seed only decides when the user didn't.
+        import re as _flre
+        _flm = _flre.search(
+            r"\b(pine|fir|spruce|conifer|birch|oak|willow|maple|palm|cypress|"
+            r"dead tree|cactus|jungle)\b", req.prompt.lower())
+        if _flm:
+            spec.world.flora = _flm.group(1)
         # EDITS MUST NOT BULLDOZE THE CITY (2026-08-06). Place detection reads
         # the PROMPT, and an edit's prompt is "add a storefront here" — there is
         # no city name in it, because the setting was decided two builds ago. So

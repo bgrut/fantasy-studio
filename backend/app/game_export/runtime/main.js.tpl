@@ -54,6 +54,42 @@ const SKY = {
               sunCol: 0xffd9b0, sunPos: [70, 18, 15], exp: 0.75 },
 };
 
+// ── SILHOUETTE PACK (2026-08-25): the seed decides the SHAPES ──────────
+// Palettes made every world light differently; this makes them GROW
+// differently. One seeded identity — tree archetype, proportions, mountain
+// jaggedness — read by every generator that stamps the horizon, so two
+// valleys are never planted with the same tree. Biome words nudge the
+// archetype (deserts lean dead wood, snow leans pine); the seed decides
+// within the nudge. Top-level const: everything below main() can read it.
+const SIL = (() => {
+  const r = mulberry32(((SPEC.seed || 1) >>> 0) + 8181);
+  const wname = ((SPEC.world || {}).name || '') + ' ' + ((SPEC.world || {}).sky || '');
+  const snowy = (SPEC.world || {}).weather === 'snow' || /arctic/.test(wname);
+  let arch;
+  // an explicit tree word in the prompt outranks every roll: the pack's
+  // first field test planted dead snags in "a pine forest" (2026-08-25)
+  const flora = ((SPEC.world || {}).flora || '');
+  if (/pine|fir|spruce|conifer/.test(flora)) arch = 'pine';
+  else if (/birch|oak|willow|maple|jungle/.test(flora)) arch = 'broadleaf';
+  else if (/palm|cypress/.test(flora)) arch = 'cypress';
+  else if (/dead|cactus/.test(flora)) arch = 'dead';
+  else if (/desert|canyon|mars|volcano/.test(wname)) arch = r() < 0.55 ? 'dead' : 'cypress';
+  else if (snowy) arch = r() < 0.8 ? 'pine' : 'dead';
+  else arch = ['pine', 'broadleaf', 'cypress', 'pine', 'broadleaf', 'dead'][Math.floor(r() * 6)];
+  const out = {
+    arch,
+    trunkH: 2.0 + r() * 1.6,
+    tiers: 2 + Math.floor(r() * 3),        // pine cone stacks
+    spread: 0.8 + r() * 0.7,               // canopy width multiplier
+    squash: 0.72 + r() * 0.6,              // broadleaf lobe flattening
+    gnarl: r(),                            // dead-branch chaos
+    mtnJag: 0.10 + r() * 0.26,             // ridge displacement (was 0.22 fixed)
+    mtnSeg: 6 + Math.floor(r() * 6),       // ridge facet count (was 7-10)
+  };
+  window.__sil = out;          // harness: silhouette identity is assertable
+  return out;
+})();
+
 async function main() {
   await RAPIER.init();
   // ── WORLD PALETTE (2026-08-25): the preset is a BASE, not a verdict ──
@@ -665,14 +701,14 @@ async function main() {
         const dist = gsizeM * (0.78 + rngM() * 0.28);
         const hgt = gsizeM * (0.10 + rngM() * 0.14);
         const rad = hgt * (1.5 + rngM() * 0.9);
-        const geo = new THREE.ConeGeometry(rad, hgt, 7 + Math.floor(rngM() * 4), 3);
+        const geo = new THREE.ConeGeometry(rad, hgt, SIL.mtnSeg + Math.floor(rngM() * 3), 3);
         const posA = geo.attributes.position;
         const col = new Float32Array(posA.count * 3);
         for (let v = 0; v < posA.count; v++) {
           const vx = posA.getX(v), vy = posA.getY(v), vz = posA.getZ(v);
           const n = Math.sin(vx * 0.9 + i * 7) * Math.cos(vz * 1.1 + i * 3);
-          posA.setX(v, vx * (1 + n * 0.22));
-          posA.setZ(v, vz * (1 + n * 0.22));
+          posA.setX(v, vx * (1 + n * SIL.mtnJag));
+          posA.setZ(v, vz * (1 + n * SIL.mtnJag));
           const t = (vy / hgt + 0.5);
           const c = (snowy || t < 0.72) && !(snowy && t > 0.4)
             ? rock.clone().offsetHSL(0, 0, (t - 0.4) * 0.12)
@@ -3922,9 +3958,12 @@ async function main() {
           // read as a lollipop ('very geometric'). Four overlapping jittered
           // lobes at detail 2 with smooth normals silhouette like foliage.
           const lobes = [];
-          const lobeDefs = [[0, 4.15, 0, 1.5], [0.85, 3.75, 0.4, 0.95],
-                            [-0.75, 3.9, -0.5, 1.0], [0.15, 4.9, -0.35, 0.85],
-                            [-0.3, 3.5, 0.7, 0.8]];
+          // city trees stay broadleaf (an avenue of dead snags reads as a
+          // bug, not a biome) but their PROPORTIONS follow the pack
+          const _sw = 0.78 + SIL.spread * 0.38;
+          const lobeDefs = [[0, 4.15, 0, 1.5 * _sw], [0.85, 3.75, 0.4, 0.95 * _sw],
+                            [-0.75, 3.9, -0.5, 1.0 * _sw], [0.15, 4.9, -0.35, 0.85 * _sw],
+                            [-0.3, 3.5, 0.7, 0.8 * _sw]];
           const rngLb = mulberry32(SPEC.seed + 313);
           for (const [lx2, ly2, lz2, lr] of lobeDefs) {
             const lg = new THREE.IcosahedronGeometry(lr, 2);
@@ -4750,23 +4789,57 @@ async function main() {
       spots2.push([x, z, 0.8 + rngF2() * 0.7]);
     }
     if (spots2.length) {
-      const trkG2 = new THREE.CylinderGeometry(0.16, 0.26, 2.6, 7);
-      trkG2.translate(0, 1.3, 0);
+      const trkG2 = new THREE.CylinderGeometry(0.16, 0.26, SIL.trunkH, 7);
+      trkG2.translate(0, SIL.trunkH / 2, 0);
       const trk2 = new THREE.InstancedMesh(trkG2,
         new THREE.MeshStandardMaterial({ map: (() => {
           const t = new THREE.TextureLoader().load('textures/bark.jpg');
           t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(1, 2);
           t.colorSpace = THREE.SRGBColorSpace; return t;
         })(), roughness: 0.95 }), spots2.length);
-      // two stacked cones: the pine silhouette, and a cone reads as a tree
-      // from every angle with zero texture dependence
-      const cone1 = new THREE.ConeGeometry(1.7, 3.4, 8); cone1.translate(0, 3.6, 0);
-      const cone2 = new THREE.ConeGeometry(1.25, 2.6, 8); cone2.translate(0, 5.5, 0);
-      const canG2 = mergeGeometries([cone1, cone2], false);
-      cone1.dispose(); cone2.dispose();
+      // the canopy follows the pack: this forest's trees are THIS world's
+      // trees, not the universal two-cone pine every level used to plant
+      const _cparts = [];
+      if (SIL.arch === 'broadleaf') {
+        const rLb = mulberry32(SPEC.seed + 979);
+        const defs = [[0, 1.1, 0, 1.5], [0.8, 0.8, 0.4, 0.95],
+                      [-0.7, 0.9, -0.5, 1.0], [0.1, 1.8, -0.3, 0.85]];
+        for (const [lx, ly, lz, lr] of defs) {
+          const g = new THREE.IcosahedronGeometry(lr * SIL.spread, 1);
+          g.scale(1, SIL.squash, 1);
+          g.translate(lx, SIL.trunkH + ly, lz);
+          _cparts.push(g);
+        }
+        if (rLb() < 2) { /* seeded hook */ }
+      } else if (SIL.arch === 'cypress') {
+        const g = new THREE.ConeGeometry(0.95 * SIL.spread, 5.2, 7);
+        g.translate(0, SIL.trunkH + 2.2, 0);
+        _cparts.push(g);
+      } else if (SIL.arch === 'dead') {
+        const rB = mulberry32(SPEC.seed + 717);
+        for (let b2 = 0; b2 < 4; b2++) {
+          const bl = 1.9 + rB() * 1.4;
+          const g = new THREE.CylinderGeometry(0.05, 0.11, bl, 5);
+          g.translate(0, bl / 2, 0);
+          g.rotateZ(0.5 + rB() * 0.7 * (1 + SIL.gnarl));
+          g.rotateY(rB() * Math.PI * 2);
+          g.translate(0, SIL.trunkH * 0.75 + rB() * 0.9, 0);
+          _cparts.push(g);
+        }
+      } else {                              // pine, in this world's proportions
+        for (let t9 = 0; t9 < SIL.tiers; t9++) {
+          const g = new THREE.ConeGeometry(
+            Math.max((1.8 - t9 * 0.45) * SIL.spread, 0.5),
+            Math.max(3.4 - t9 * 0.7, 1.2), 8);
+          g.translate(0, SIL.trunkH + 1.0 + t9 * 1.9, 0);
+          _cparts.push(g);
+        }
+      }
+      const canG2 = mergeGeometries(_cparts, false);
+      for (const g of _cparts) g.dispose();
       const can2 = new THREE.InstancedMesh(canG2,
         new THREE.MeshStandardMaterial({ vertexColors: false, roughness: 0.9,
-          color: 0x2d5232 }), spots2.length);
+          color: SIL.arch === 'dead' ? 0x5b4030 : 0x2d5232 }), spots2.length);
       const M2 = new THREE.Matrix4(), Q2 = new THREE.Quaternion();
       const E2 = new THREE.Euler(), V2 = new THREE.Vector3(), S2 = new THREE.Vector3();
       const C2 = new THREE.Color();
@@ -4778,7 +4851,7 @@ async function main() {
         M2.compose(V2, Q2, S2);
         trk2.setMatrixAt(i2, M2);
         can2.setMatrixAt(i2, M2);
-        can2.setColorAt(i2, C2.setHex(0x2d5232)
+        can2.setColorAt(i2, C2.setHex(SIL.arch === 'dead' ? 0x5b4030 : 0x2d5232)
           .offsetHSL((rngF2() - 0.5) * 0.03, (rngF2() - 0.5) * 0.1, (rngF2() - 0.5) * 0.08));
       });
       for (const im2 of [trk2, can2]) {
