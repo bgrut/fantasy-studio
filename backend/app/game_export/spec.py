@@ -154,6 +154,12 @@ class GameSpec(BaseModel):
     entities: List[EntitySpec] = Field(default_factory=list)
     objectives: List[ObjectiveSpec] = Field(default_factory=list)
     events: List[EventSpec] = Field(default_factory=list)   # story beats
+    # CAMPAIGN SCOPE (2026-08-25): levels of one project share one hero. The
+    # exported hub already gets this from its URL layout; in the STUDIO a
+    # project level opens as an ordinary job URL, so the runtime needs the
+    # project identity IN the spec or progression silently resets while the
+    # creator iterates — which is exactly when they are testing the campaign.
+    project_tag: Optional[str] = None
     reward: Optional[str] = None          # "winner gets a banana" → shown on the win screen
     intro: Optional[str] = None           # narrative layer: 1-2 line quest intro (START screen)
     win_text: Optional[str] = None        # narrative layer: victory line (win screen)

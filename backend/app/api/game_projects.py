@@ -142,7 +142,11 @@ def open_level(pid: int, index: int):
         raise HTTPException(status_code=400, detail="level index out of range")
     lv = p["levels"][index]
     from .game import open_spec_as_job
-    job_id = open_spec_as_job(lv["spec"], title=lv.get("title") or f"Level {index + 1}",
+    # copy, then stamp: the stored level spec must stay tag-free so exports
+    # and saves stay byte-comparable across projects
+    _sp = dict(lv["spec"])
+    _sp["project_tag"] = f"p{pid}"
+    job_id = open_spec_as_job(_sp, title=lv.get("title") or f"Level {index + 1}",
                               prompt=lv.get("prompt") or "", player=lv.get("player"))
     return {"ok": True, "job_id": job_id, "title": lv.get("title")}
 

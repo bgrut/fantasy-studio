@@ -7453,6 +7453,12 @@ async function main() {
   function doWin(text) {
     if (won || lost) return;
     won = true; won_ = true;
+    // the heist take outlives the heist: winnings bank into the campaign
+    // hero, so level 2 of a project starts with level 1's money on the books
+    if (window.__take > 0) {
+      _bank += window.__take;
+      _saveProg();
+    }
     sfx('win');
     // run time + personal best (localStorage) — every win answers "how well?"
     try {
@@ -7507,18 +7513,24 @@ async function main() {
   // XP upgrades earned in level 1 carry into level 2 (the hub's URL layout
   // levels/lvl_N/dist identifies the project scope)
   const _projM = location.pathname.match(/^(.*)\/levels\/lvl_\d+\/dist/);
-  const _progKey = _projM ? 'fs_prog_proj_' + _projM[1]
+  // scope resolution, most explicit wins: a spec-stamped project tag (the
+  // studio opening a project level), then the exported hub's URL layout,
+  // then the single game's own title
+  const _progKey = SPEC.project_tag ? 'fs_prog_proj_' + SPEC.project_tag
+                 : _projM ? 'fs_prog_proj_' + _projM[1]
                           : 'fs_prog_' + (SPEC.title || 'game');
   const _picks = [];
+  let _bank = 0;                 // career haul, paid in on every win
+  function _saveProg() {
+    try { localStorage.setItem(_progKey,
+      JSON.stringify({ lvl: plvl, picks: _picks, bank: _bank })); } catch (e) {}
+  }
   function _applyPick(k, silent) {
     if (k === 'heart') { P.hp = (P.hp || 5) + 1; php += 1; }
     else if (k === 'swift') { P.walk_speed *= 1.12; P.run_speed *= 1.12; }
     else if (k === 'power') { atkDmg += 1; }
     _picks.push(k);
-    if (!silent) {
-      try { localStorage.setItem(_progKey,
-        JSON.stringify({ lvl: plvl, picks: _picks })); } catch (e) {}
-    }
+    if (!silent) _saveProg();
   }
   window.__restoreProg = () => {          // called once the player is ready
     try {
@@ -7526,8 +7538,10 @@ async function main() {
       if (sv && sv.picks) {
         for (const k of sv.picks) _applyPick(k, true);
         plvl = sv.lvl || (sv.picks.length + 1);
+        _bank = sv.bank || 0;
         renderHearts();
         if (sv.picks.length) popText('Level ' + plvl + ' hunter returns', '#8de06c');
+        if (_bank > 0) popText('Career haul: $' + _bank.toLocaleString(), '#ffd54a');
       }
     } catch (e) {}
   };
