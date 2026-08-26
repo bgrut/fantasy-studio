@@ -29,6 +29,17 @@ Output ONLY the JSON object, no markdown, no commentary. Schema (all fields opti
            "fog_density": float 0..1 (misty/foggy scene -> 0.7-0.9; default 0.5),
            "health_packs": int 0..12 ("health packs/potions on the ground" -> 4),
            "ground_color": [r,g,b] floats 0..1},
+ "world" may also include "palette": a COLOR SCRIPT when the text implies a mood —
+ {"sky":"#rrggbb","fog":"#rrggbb","sun_color":"#rrggbb","accent":"#rrggbb",
+  "sun_azimuth_deg":0-360,"sun_elevation_deg":4-88,"sun_intensity":0.2-4.5,
+  "ambient":0.1-1.0,"exposure":0.4-1.3}. COMMIT to 2-4 hues like a film still —
+ sky and fog in the same family, one warm or neon accent. Examples:
+ neon/synthwave/cyberpunk night -> {"sky":"#0a0618","fog":"#1a0f2e",
+ "sun_color":"#b0c8ff","accent":"#ff2fa0","sun_elevation_deg":18,"exposure":0.85};
+ golden/peach sunset -> {"sky":"#e8996a","fog":"#e5b48a","sun_color":"#ffcf9a",
+ "accent":"#ff8a4a","sun_elevation_deg":10,"sun_azimuth_deg":255,"exposure":0.75};
+ violet starlit night -> {"sky":"#0d0a24","fog":"#241a44","sun_color":"#9a8ce8",
+ "accent":"#ffb060","ambient":0.42}. Omit "palette" entirely for neutral scenes.
  "reward": str or null — what the winner GETS ("winner gets a banana" -> "banana"); null if none stated,
  "intro": 1-2 SHORT atmospheric sentences setting up the quest, written like a real game
           ("The fireflies have scattered across the frozen wood. Find them before dawn."),

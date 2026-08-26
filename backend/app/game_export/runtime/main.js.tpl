@@ -56,7 +56,51 @@ const SKY = {
 
 async function main() {
   await RAPIER.init();
-  const pal = SKY[SPEC.world.sky] || SKY.day;
+  // ── WORLD PALETTE (2026-08-25): the preset is a BASE, not a verdict ──
+  // Two hundred prompts used to produce two hundred worlds lit by seven
+  // hardcoded rigs — 'day' was always the same sun at [40,80,30]. Now the
+  // extractor may author a color script, and underneath it the seed jitters
+  // azimuth and hue so even two builds of one prompt light differently.
+  // Every downstream consumer already reads `pal`, so this one intercept is
+  // the entire system.
+  const pal = (() => {
+    const base = Object.assign({}, SKY[SPEC.world.sky] || SKY.day);
+    const PW = SPEC.world.palette || {};
+    const hx = v => (typeof v === 'string' && /^#?[0-9a-fA-F]{6}$/.test(v))
+      ? parseInt(v.replace('#', ''), 16) : null;
+    if (hx(PW.sky) !== null) base.sky = hx(PW.sky);
+    if (hx(PW.fog) !== null) base.fog = hx(PW.fog);
+    if (hx(PW.sun_color) !== null) base.sunCol = hx(PW.sun_color);
+    if (PW.sun_intensity > 0) base.sun = PW.sun_intensity;
+    if (PW.ambient > 0) base.amb = PW.ambient;
+    if (PW.exposure > 0) base.exp = PW.exposure;
+    // sun direction: authored angles win; otherwise jitter the preset's
+    // azimuth +/-40deg and elevation +/-18% — the difference between two
+    // "misty dawn" worlds is which shoulder the light falls over
+    const rj = mulberry32((SPEC.seed || 1) + 3131);
+    const bp = base.sunPos;
+    const bEl = Math.asin(Math.max(0.05, Math.min(1, bp[1] / Math.hypot(bp[0], bp[1], bp[2]))));
+    const bAz = Math.atan2(bp[2], bp[0]);
+    const az = PW.sun_azimuth_deg >= 0 ? PW.sun_azimuth_deg * Math.PI / 180
+             : bAz + (rj() - 0.5) * 1.4;
+    const el = PW.sun_elevation_deg >= 4 ? PW.sun_elevation_deg * Math.PI / 180
+             : Math.max(0.08, bEl * (0.82 + rj() * 0.36));
+    const R = 95;
+    base.sunPos = [Math.cos(el) * Math.cos(az) * R, Math.sin(el) * R,
+                   Math.cos(el) * Math.sin(az) * R];
+    // unauthored worlds still drift in hue: +/-0.035 on sky and fog together,
+    // so the pair stays a family instead of splitting
+    if (hx(PW.sky) === null && hx(PW.fog) === null) {
+      const dh = (rj() - 0.5) * 0.07;
+      for (const k of ['sky', 'fog']) {
+        const c = new THREE.Color(base[k]);
+        c.offsetHSL(dh, (rj() - 0.5) * 0.06, 0);
+        base[k] = c.getHex();
+      }
+    }
+    window.__accent = hx(PW.accent);      // mission color, read by beacon+ring
+    return base;
+  })();
 
   // ── SOUND (game-feel pass) — synthesized in WebAudio: zero asset files,
   // zero network, works in every export. Each player action gets an answer:
@@ -358,7 +402,7 @@ async function main() {
   renderer.toneMapping = THREE.AgXToneMapping;
   // Phase 65: per-environment exposure; snow is high-albedo — damp it further
   // so arctic scenes read as LIT SNOW instead of a white void.
-  renderer.toneMappingExposure = ((SKY[SPEC.world.sky] || SKY.day).exp || 0.75)
+  renderer.toneMappingExposure = (pal.exp || 0.75)
     * (SPEC.world.weather === 'snow' ? 0.86 : 1.0)
     // high-albedo grounds (desert sand, beach) wash out like snow does —
     // same damp, keyed on the actual ground color instead of a name list
@@ -466,7 +510,19 @@ async function main() {
       }
     }, undefined, () => console.warn('[game] pano skipped'));
   }
-  if (SPEC.world.sky !== 'night') {
+  // DARK WORLDS SKIP THE ATMOSPHERE (2026-08-25). 'space' had no cfg entry
+  // here, so it fell through to the DAY atmosphere — turbidity 6, sun at 35
+  // degrees — and every starless-night prompt got a pale blue daytime dome
+  // behind its dark fog. Night already knew the answer: flat palette
+  // background + starfield. Space joins it, and so does any AUTHORED palette
+  // whose sky is genuinely dark — a committed #0a0618 must never be handed
+  // to a shader whose whole job is simulating daylight scattering.
+  const _palLum = (() => { const c = new THREE.Color(pal.sky);
+    return 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b; })();
+  const _darkWorld = SPEC.world.sky === 'night' || SPEC.world.sky === 'space'
+    || (!!SPEC.world.palette && _palLum < 0.22);
+  window.__darkWorld = _darkWorld;
+  if (!_darkWorld) {
     const sky = new Sky();
     sky.scale.setScalar(4000);
     scene.add(sky);
@@ -505,7 +561,14 @@ async function main() {
       try {
         const pm2 = new THREE.PMREMGenerator(renderer);
         const es2 = new THREE.Scene();
-        es2.background = new THREE.Color(pal.sky).lerp(new THREE.Color(0xffffff), 0.2);
+        // A COMMITTED palette must not be washed toward white by its own
+        // ambient light: the synthwave test came out pale lavender because
+        // this env gradient lightened a #0a0618 sky by 20% white and then
+        // LIT the whole world with it. Authored palettes blend sky->fog
+        // (their own family); preset skies keep the old lift.
+        es2.background = SPEC.world.palette
+          ? new THREE.Color(pal.sky).lerp(new THREE.Color(pal.fog), 0.5)
+          : new THREE.Color(pal.sky).lerp(new THREE.Color(0xffffff), 0.2);
         scene.environment = pm2.fromScene(es2, 0.02).texture;
         pm2.dispose();
       } catch (e) {}
@@ -683,7 +746,12 @@ async function main() {
   // r11 LIGHTING POLISH: flat ambience was killing depth — drop the hemi
   // fill 15% and push the sun 12% so shadowed faces separate from lit ones
   // (the AAA contrast ratio), with the HDRI env carrying more of the fill.
-  const hemi = new THREE.HemisphereLight(pal.sky, 0x3a3f35, pal.amb * 0.85);
+  // ground bounce joins the palette family — a fixed moss-grey underside
+  // is why authored worlds still lit like the default one from below
+  const hemi = new THREE.HemisphereLight(pal.sky,
+    SPEC.world.palette ? new THREE.Color(pal.fog).multiplyScalar(0.45).getHex()
+                       : 0x3a3f35,
+    pal.amb * 0.85);
   scene.add(hemi);
   const sun = new THREE.DirectionalLight(pal.sunCol || 0xffffff, pal.sun * 1.12);
   sun.position.set(...pal.sunPos);
@@ -1317,9 +1385,11 @@ async function main() {
                                       side: THREE.DoubleSide, depthWrite: false }));
       pil.position.set(goalPos.x, goalPos.y + 11, goalPos.z);
       scene.add(pil);
+      const _acc = window.__accent;
       const ring = new THREE.Mesh(
         new THREE.TorusGeometry(1.5, 0.09, 10, 40),
-        new THREE.MeshStandardMaterial({ color: 0xb9a0ff, emissive: 0x7c5cff, emissiveIntensity: 2.2 }));
+        new THREE.MeshStandardMaterial({ color: _acc || 0xb9a0ff,
+          emissive: _acc || 0x7c5cff, emissiveIntensity: 2.2 }));
       ring.rotation.x = Math.PI / 2;
       ring.position.set(goalPos.x, goalPos.y + 0.25, goalPos.z);
       scene.add(ring);
@@ -10488,7 +10558,10 @@ varying vec2 vUvRaw;
   // biggest 'photograph' mood cue for scenic worlds (dawn forest, sunset
   // ridge). Radial luminance-thresholded blur toward the sun's screen
   // position; strength eases in/out as the sun enters/leaves frame.
-  const godray = (SPEC.world.sky !== 'night') ? new ShaderPass({
+  // no godrays without an atmosphere: 'space' got sun shafts through a
+  // starless void, which is what washed the neon test to fog-grey
+  const godray = !(['night', 'space'].includes(SPEC.world.sky)
+                   || window.__darkWorld) ? new ShaderPass({
     uniforms: { tDiffuse: { value: null },
                 uSun: { value: new THREE.Vector2(0.5, 0.8) },
                 uStr: { value: 0 } },

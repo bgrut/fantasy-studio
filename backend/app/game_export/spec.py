@@ -87,6 +87,7 @@ class WorldSpec(BaseModel):
     pano_ground: Optional[str] = None  # Phase 140D: pano floor reprojected as the ground texture
     health_packs: int = Field(0, ge=0, le=12)   # heart pickups scattered on the ground
     placed_items: List[PlacedItemSpec] = Field(default_factory=list)  # Inspector placements
+    palette: Optional[PaletteSpec] = None   # film-grade color script
     scatter: List[ScatterSpec] = Field(default_factory=list)
     level: Optional[dict] = None    # Phase 32 LevelPlan (terrain/path/goal), injected by the exporter
 
@@ -96,6 +97,25 @@ class WorldSpec(BaseModel):
         if len(v) != 3 or not all(0.0 <= c <= 1.0 for c in v):
             raise ValueError("ground_color must be 3 floats in [0,1]")
         return v
+
+
+class PaletteSpec(BaseModel):
+    """A FILM-GRADE COLOR SCRIPT (2026-08-25). What separates a world with
+    identity from a preset is palette commitment: two to four hues that sky,
+    fog, sun and accents all obey. Every reference frame worth chasing — the
+    neon night racer, the violet festival, the peach low-poly sunset — is a
+    lighting decision, not a geometry one. All fields optional; whatever is
+    absent falls back to the sky preset, and the runtime seed-jitters the
+    result so even two builds of one prompt light differently."""
+    sky: Optional[str] = None            # '#rrggbb'
+    fog: Optional[str] = None
+    sun_color: Optional[str] = None
+    accent: Optional[str] = None         # mission color: beacon, ring, glow
+    sun_azimuth_deg: Optional[float] = Field(None, ge=0, le=360)
+    sun_elevation_deg: Optional[float] = Field(None, ge=4, le=88)
+    sun_intensity: Optional[float] = Field(None, ge=0.2, le=4.5)
+    ambient: Optional[float] = Field(None, ge=0.1, le=1.0)
+    exposure: Optional[float] = Field(None, ge=0.4, le=1.3)
 
 
 class EntitySpec(BaseModel):
