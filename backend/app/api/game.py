@@ -773,6 +773,23 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                 job.setdefault("notes", []).append(
                     f"player '{want}' generation failed ({type(ge).__name__}) — "
                     f"using a stand-in for now; re-run to try again")
+        # A RACE PUTS YOU IN A CAR (2026-08-25): "a courier races 5 rivals"
+        # cast a human, so the player stood at the start line on foot while
+        # the rivals drove past (user report: "i wasnt even in the car??").
+        # A race objective implies a seat: a walk-mode hero in a racing game
+        # is promoted to pattern "vehicle" so the whole hardened branch below
+        # (drive mode, speed floors, parametric car, metric height) applies
+        # unchanged. The hero's NAME survives for the HUD and intro.
+        _race_seated = False
+        if (any(o.kind == "race" for o in spec.objectives)
+                and pattern != "vehicle"
+                and (spec.player.mode or "walk") == "walk"
+                and player_glb):
+            pattern = "vehicle"
+            _race_seated = True
+            job.setdefault("notes", []).append(
+                f"'{spec.player.name}' races on wheels — a race objective "
+                "implies a driver's seat, so the hero starts in a car")
         if player_glb and pattern == "vehicle":
             spec.player.mode = "drive"
             # A DRIVE-MODE CAR'S NO-SHIFT TOP SPEED *IS* walk_speed
@@ -792,8 +809,24 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             # (research: this is what the good three.js GTA demos do);
             # the prompt picks class + paint. Animals keep the mesh path.
             try:
+                # a promoted racer HAS no vehicle mesh — without the
+                # parametric car he would drive his own body laid on its
+                # side, so the seat promotion overrides the procedural opt-in
                 _cp = _infer_car_params(req.prompt, spec.player.name or "") \
-                    if req.procedural else None
+                    if (req.procedural or _race_seated) else None
+                # The fallback fires for BOTH failure paths: the promoted
+                # racer (human hero, race objective) AND the misclassified
+                # one — 'courier' classifies as a vehicle (courier van), takes
+                # this branch naturally, and would drive his own body laid on
+                # its side. If there is a race and the subject's NAME carries
+                # no car word, he gets the sedan's full geometry — the height
+                # line below reads bodyY/bodyH, so a partial dict would throw.
+                if not _cp and (
+                        _race_seated
+                        or (any(o.kind == "race" for o in spec.objectives)
+                            and _infer_car_params(spec.player.name or "", "")
+                            is None)):
+                    _cp = _infer_car_params("car", "car")
                 if _cp:
                     _cls = _cp.pop("_class", "sedan")
                     spec.player.car_params = _cp

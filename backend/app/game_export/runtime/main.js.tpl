@@ -2666,11 +2666,19 @@ async function main() {
       const rngW = mulberry32(SPEC.seed + 5);
       for (let wy = 0; wy < 2; wy++) for (let wx = 0; wx < 4; wx++) {
         const x = 10 + wx * 64, y = 16 + wy * 128, lit = rngW() < 0.28;
-        fx.fillStyle = lit ? '#e8d9a8' : (rngW() < 0.5 ? '#2c3138' : '#3d4550');
+        const _accW = window.__accent !== null && window.__accent !== undefined
+          ? '#' + window.__accent.toString(16).padStart(6, '0') : null;
+        fx.fillStyle = lit ? (_accW && rngW() < 0.5 ? _accW : '#e8d9a8')
+                           : (rngW() < 0.5 ? '#2c3138' : '#3d4550');
         fx.fillRect(x, y, 40, 76);
         fx.strokeStyle = '#5b5b60'; fx.lineWidth = 3; fx.strokeRect(x, y, 40, 76);
         fx.fillStyle = '#77767c'; fx.fillRect(x - 4, y + 76, 48, 6);   // sill
-        if (lit) { ex.fillStyle = '#cfa96a'; ex.fillRect(x, y, 40, 76); }
+        if (lit) {
+          ex.fillStyle = (window.__accent !== null && window.__accent !== undefined
+            && rngW() < 0.6)
+            ? '#' + window.__accent.toString(16).padStart(6, '0') : '#cfa96a';
+          ex.fillRect(x, y, 40, 76);
+        }
       }
       const facadeTex = new THREE.CanvasTexture(fc);
       const litTex = new THREE.CanvasTexture(ec);
@@ -9775,6 +9783,16 @@ async function main() {
     holder.visible = false;
     scene.remove(c.rig);
     playerObj.add(c.rig);
+    // SPINNING WHEELS FOR STOLEN CARS (2026-08-25): addWheels only ran for
+    // born-in-car games, so every car entered with E — the getaway, the
+    // synthwave racer, all 34 kerb cars — drove with frozen wheels. Same
+    // overlay-wheel pass, applied at the moment of theft; removed on exit
+    // so the steering keys stop reaching a parked car's front axle.
+    try {
+      const _w0 = wheels.length;
+      addWheels(c.rig);
+      c._wRange = [_w0, wheels.length];
+    } catch (e) { c._wRange = null; }
     // playerObj sits at the capsule's FEET, and spawnHeight floats it 0.15 m
     // clear of the terrain — drop the shell back onto its tyres.
     c.rig.position.set(0, -0.14, 0);
@@ -9792,6 +9810,10 @@ async function main() {
     if (!DRIVING || !heldCar) return;
     const c = heldCar;
     const cx5 = playerObj.position.x, cz5 = playerObj.position.z;
+    if (c._wRange) {
+      wheels.splice(c._wRange[0], c._wRange[1] - c._wRange[0]);
+      c._wRange = null;
+    }
     playerObj.remove(c.rig);
     scene.add(c.rig);
     c.rig.position.set(cx5, hAt(cx5, cz5), cz5);
