@@ -1,0 +1,62 @@
+<!doctype html><body style="margin:0;background:#f5dfe2">
+<script type="importmap">{"imports":{"three":"./vendor/three.module.js"}}</script>
+<script type="module">
+import * as THREE from 'three';
+import { createRoadster } from '../src/roadster.js';
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0xf2ccd0);           // reference cyclorama
+const cam = new THREE.PerspectiveCamera(32, 4/3, 0.1, 60);
+const r = new THREE.WebGLRenderer({ antialias: true });
+r.setSize(1024, 768); r.shadowMap.enabled = true;
+r.toneMapping = THREE.ACESFilmicToneMapping;            // spec render intent
+document.body.appendChild(r.domElement);
+// lighting per spec lightingFromPhoto: key high front-right, pink fill, rim rear-left
+const key = new THREE.DirectionalLight(0xfff2e6, 2.4);
+key.position.set(3.5, 4.2, 4.5); key.castShadow = true;
+key.shadow.mapSize.set(2048, 2048);
+scene.add(key);
+const pm = new THREE.PMREMGenerator(r);
+{ // studio-ish gradient env: bright dome + floor bounce + a key card, enough
+  // for chrome to have something real to mirror
+  const es = new THREE.Scene();
+  es.background = new THREE.Color(0xf6e8ea);
+  const card = new THREE.Mesh(new THREE.PlaneGeometry(6, 3),
+    new THREE.MeshBasicMaterial({ color: 0xffffff }));
+  card.position.set(2, 3, 2); card.lookAt(0, 0, 0); es.add(card);
+  const dark = new THREE.Mesh(new THREE.PlaneGeometry(8, 8),
+    new THREE.MeshBasicMaterial({ color: 0x9a8f90 }));
+  dark.rotation.x = Math.PI / 2; dark.position.y = -1; es.add(dark);
+  scene.environment = pm.fromScene(es, 0.04).texture;
+}
+scene.add(new THREE.AmbientLight(0xf2c8cc, 0.55));
+const rim = new THREE.DirectionalLight(0xffffff, 0.9);
+rim.position.set(-3, 1.2, -4); scene.add(rim);
+const floor = new THREE.Mesh(new THREE.CircleGeometry(9, 48),
+  new THREE.MeshStandardMaterial({ color: 0xf7f2f2, roughness: 0.9 }));
+floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; scene.add(floor);
+const car = createRoadster();
+scene.add(car);
+car.rotation.y = 0.22;   // 3/4: nose ~35deg off the lens axis                                    // three-quarter like ref
+window.__car = car;
+// camera framed like the reference: low, front-right three-quarter
+cam.position.set(4.9, 1.15, 4.4); cam.lookAt(0, 0.40, 0);
+let t = 0;
+function frame() {
+  requestAnimationFrame(frame);
+  if (window.__animate) {
+    t += 1/60;
+    car.userData.drive.setSteer(Math.sin(t * 1.2) * 0.45);
+    car.userData.drive.spin(0.12);
+  }
+  r.render(scene, cam);
+}
+frame();
+if (location.hash === '#stripped') {
+  // map-stripped unlit evidence: geometry only, no materials to hide behind
+  const nm = new THREE.MeshNormalMaterial();
+  car.traverse(o => { if (o.isMesh) o.material = nm; });
+  scene.environment = null;
+}
+window.__ready = true;
+</script></body>

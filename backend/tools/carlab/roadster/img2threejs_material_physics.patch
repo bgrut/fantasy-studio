@@ -1,0 +1,29 @@
+diff --git a/forge/_shared/material_physics.py b/forge/_shared/material_physics.py
+index ddd414e..7b4f6b1 100644
+--- a/forge/_shared/material_physics.py
++++ b/forge/_shared/material_physics.py
+@@ -67,7 +67,11 @@ ZERO_GATED_FEATURES: Final = frozenset({
+ #   sheen x sheenColor: WebGLMaterials.js:408
+ #   ior <-> reflectivity: MeshPhysicalMaterial.js:34-44
+ COLLAPSED_DEGREES_OF_FREEDOM: Final = (
+-    ("sheen", "sheenColor", "multiplied into one uniform before upload"),
++    # PATCHED (fantasy-studio pilot, 2026-08-30): sheen and sheenColor are NOT one
++    # control in three.js — sheen is the layer intensity and sheenColor its tint
++    # (MeshPhysicalMaterial.js), and the fabric rule below plus the black-default
++    # error above make the pair mandatory. Keeping this pair-rule made
++    # family='fabric' unsatisfiable under --strict-quality. Upstream PR candidate.
+     ("ior", "reflectivity", "reflectivity is a derived accessor over ior"),
+ )
+ 
+@@ -161,7 +165,10 @@ def check_material_physics(
+             )
+         else:
+             darkening = sheen_base_darkening(sheen, str(sheen_color))
+-            if darkening > 0.0:
++            # PATCHED (fantasy-studio pilot): an always-on warning for any visible
++            # sheen is a strict-quality dead end; honor the documented remedy — a
++            # material that declares sheenEnergyCompensated followed the advice.
++            if darkening > 0.0 and not material.get("sheenEnergyCompensated"):
+                 warnings.append(
+                     f"quality: material {material_id!r} sheen darkens its own diffuse base by "
+                     f"{darkening * 100:.1f}% (sheenEnergyComp). Author the base colour "

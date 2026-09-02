@@ -1,0 +1,4310 @@
+{
+  "targetName": "classic white roadster",
+  "targetId": "classic-white-roadster",
+  "schemaVersion": "2.1",
+  "terminologyProfile": {
+    "domain": "real-time procedural Three.js asset",
+    "geometryTerms": [
+      "silhouette",
+      "topology",
+      "primitive",
+      "bevel",
+      "chamfer",
+      "taper",
+      "bend",
+      "boolean cut",
+      "edge loop",
+      "surface normal",
+      "displacement"
+    ],
+    "materialTerms": [
+      "albedo",
+      "baseColor",
+      "roughness",
+      "metalness",
+      "normal map",
+      "bump map",
+      "ambient occlusion",
+      "cavity dirt",
+      "edge wear",
+      "clearcoat"
+    ],
+    "lightingTerms": [
+      "key light",
+      "fill light",
+      "rim light",
+      "HDRI/environment reflection",
+      "contact shadow"
+    ],
+    "descriptionRule": "Use measurable 3D graphics terms. Avoid vague words unless they are paired with concrete geometry/material/shader parameters."
+  },
+  "sourceImage": "car_ref.png",
+  "referenceCamera": {
+    "solved": false,
+    "fovDegrees": 40.0,
+    "aspect": 1.0,
+    "orientation": {
+      "yaw": 0.0,
+      "pitch": 0.0,
+      "roll": 0.0
+    },
+    "positionHint": [
+      0.0,
+      0.0,
+      3.0
+    ],
+    "note": "For likeness work, solve the reference camera (forge/stage1_intake/solve_camera_pose.py) so the review render aligns with the photo and the reference can be projected. Confirm by overlay review."
+  },
+  "suitability": "conditional",
+  "scores": {
+    "object_isolation": 0,
+    "silhouette_readability": 0,
+    "depth_inference": 0,
+    "primitive_decomposition": 0,
+    "material_procedurality": 0,
+    "occlusion_risk": 0,
+    "interaction_fit": 0
+  },
+  "preSpecAssessment": {
+    "objectClass": {
+      "primaryType": "two-seat roadster (soft-top)",
+      "primaryDomain": "object",
+      "formLanguage": [
+        "lofted-curve shell",
+        "organic-geometric blend",
+        "bilateral symmetry"
+      ],
+      "structureKind": [
+        "monocoque shell + attached assemblies",
+        "wheeled chassis"
+      ],
+      "motionPotential": [
+        "wheel spin",
+        "front-wheel steering",
+        "suspension travel (minor)"
+      ],
+      "materialFamilies": [
+        "clearcoat paint",
+        "canvas",
+        "chrome",
+        "rubber",
+        "painted alloy",
+        "glass",
+        "leather"
+      ],
+      "notes": "Classic European roadster. Rear + far side unseen: bilateral symmetry assumed, rear fascia generic (stated in suitability)."
+    },
+    "complexity": {
+      "tier": "moderate",
+      "scores": {
+        "silhouetteComplexity": 3,
+        "componentCount": 3,
+        "hierarchyDepth": 2,
+        "repetitionDensity": 2,
+        "materialLayerCount": 3,
+        "localDetailDensity": 2,
+        "occlusionRisk": 2,
+        "actionReadinessNeed": 3
+      },
+      "estimatedCounts": {
+        "macroComponents": 7,
+        "mesoComponents": 10,
+        "microFeatureGroups": 5,
+        "materialLayers": 8,
+        "repetitionSystems": 2
+      },
+      "reasoning": [
+        "Body reads as one lofted shell; assemblies are discrete and socketed.",
+        "12-spoke rim is a radial repetition system; wheel assembly x4 is another.",
+        "Action readiness matters: wheels must spin and fronts must steer (pilot goal is articulated vehicles for a game engine)."
+      ]
+    },
+    "specDepthDecision": {
+      "requiredDepth": "moderate",
+      "minimumComponentLevels": [
+        "macro",
+        "meso"
+      ],
+      "needsRepetitionSystems": true,
+      "needsMaterialLocalOverrides": false,
+      "needsMultipleReviewViews": true,
+      "needsActionReadyHierarchy": true,
+      "rationale": "Choose simple/moderate/complex/ultra-complex from observed structure, not from a hardcoded domain."
+    },
+    "unknownsToResolveBeforeImplementation": [],
+    "detailInventory": {
+      "scanMethod": "component-zones",
+      "targetMinDetails": 6,
+      "note": "Enumerate every identity-defining small detail before authoring the spec. Each detail must map to a component.localFeatures entry or material.localOverrides entry, never prose only. Use forge/stage1_intake/build_detail_inventory.py to scan zones.",
+      "details": [
+        {
+          "id": "headlamp-pair",
+          "zone": "r1c2",
+          "desc": "two round headlamps, chrome bezel proud of wing, recessed convex lens",
+          "component": "front-lamps",
+          "kind": "contour",
+          "mapsTo": {
+            "ref": "headlamp-L"
+          }
+        },
+        {
+          "id": "bumper-red-insert",
+          "zone": "r1c2",
+          "desc": "thin red rubber strip inset along chrome bumper blade centerline",
+          "component": "front-bumper",
+          "kind": "groove",
+          "mapsTo": {
+            "ref": "chrome/bumper-red-insert"
+          }
+        },
+        {
+          "id": "bumper-standoff",
+          "zone": "r1c2",
+          "desc": "bumper blade stands off body on hidden brackets, visible shadow gap",
+          "component": "front-bumper",
+          "kind": "contour",
+          "mapsTo": {
+            "ref": "front-bumper"
+          }
+        },
+        {
+          "id": "amber-indicators",
+          "zone": "r1c2",
+          "desc": "round amber lenses on wing tips below headlamp line",
+          "component": "front-lamps",
+          "kind": "emissive",
+          "mapsTo": {
+            "ref": "indicator-L"
+          }
+        },
+        {
+          "id": "nose-crest",
+          "zone": "r1c2",
+          "desc": "small shield crest badge on bonnet nose (generic, no brand fidelity)",
+          "component": "body-shell",
+          "kind": "decal",
+          "mapsTo": {
+            "ref": "crest-badge"
+          }
+        },
+        {
+          "id": "valance-slot",
+          "zone": "r1c2",
+          "desc": "black lower valance with recessed intake slot beneath bumper",
+          "component": "body-shell",
+          "kind": "hole",
+          "mapsTo": {
+            "ref": "body-shell/valance-slot"
+          }
+        },
+        {
+          "id": "rim-12spoke",
+          "zone": "r1c1",
+          "desc": "12 thin red spokes, chrome center spinner cap",
+          "component": "wheel-assembly",
+          "kind": "ridge",
+          "mapsTo": {
+            "ref": "wheel-FL-rim"
+          }
+        },
+        {
+          "id": "soft-top-seams",
+          "zone": "r0c1",
+          "desc": "red canvas top with visible bow seams and taut rear edge",
+          "component": "soft-top",
+          "kind": "seam",
+          "mapsTo": {
+            "ref": "soft-top/soft-top-seams"
+          }
+        },
+        {
+          "id": "door-handle",
+          "zone": "r1c1",
+          "desc": "horizontal chrome pull handle at beltline",
+          "component": "body-shell",
+          "kind": "contour",
+          "mapsTo": {
+            "ref": "door-handle"
+          }
+        },
+        {
+          "id": "screen-surround",
+          "zone": "r0c1",
+          "desc": "chrome windscreen frame, raked, wraps to A-pillar",
+          "component": "windscreen",
+          "kind": "linework",
+          "mapsTo": {
+            "ref": "windscreen"
+          }
+        },
+        {
+          "id": "sill-band",
+          "zone": "r2c1",
+          "desc": "satin black rocker band full length below doors",
+          "component": "body-shell",
+          "kind": "linework",
+          "mapsTo": {
+            "ref": "paint-body/sill-band"
+          }
+        }
+      ]
+    },
+    "anatomy": {
+      "applies": false,
+      "styleHeads": 0.0,
+      "proportions": {
+        "headUnit": 0.0,
+        "torso": 0.0,
+        "legs": 0.0,
+        "shoulderWidth": 0.0,
+        "hipWidth": 0.0
+      },
+      "pose": {
+        "type": "unassessed",
+        "jointAngles": {}
+      },
+      "faceLandmarks": {
+        "eyeLine": 0.0,
+        "eyeSpacing": 0.0,
+        "noseBase": 0.0,
+        "mouthLine": 0.0,
+        "hairline": 0.0
+      },
+      "features": [],
+      "confidence": 0.0,
+      "note": "Only meaningful when objectClass.primaryDomain is character or hybrid. Set applies=true and fill from forge/stage1_intake/extract_landmarks.py. See grimoire/character/reconstruction.md and grimoire/character/likeness_maximization.md."
+    },
+    "sourceImage": "car_ref.png",
+    "resolvedDecisions": [
+      "rear fascia: generic era-correct roadster tail — twin round lamps, chrome blade bumper mirroring the front, confidence 0.4, flagged stylized",
+      "interior: two seats + dash silhouette + wheel only; viewed through glazing, never close-up"
+    ]
+  },
+  "qualityContract": {
+    "qualityBar": "moderate",
+    "definitionOfDone": [
+      "The rendered model matches the reference silhouette, primary proportions, visible component hierarchy, material response, and most recognizable local features for the selected fidelity tier."
+    ],
+    "minimumSpecDepth": {
+      "macroComponents": 2,
+      "mesoComponents": 3,
+      "microFeatureGroups": 2,
+      "materialLayers": 2,
+      "repetitionSystems": 0,
+      "reviewViewpoints": 3
+    },
+    "featureGroups": [
+      {
+        "id": "overall-silhouette",
+        "name": "Overall silhouette and proportions",
+        "required": true,
+        "qualityCriteria": [
+          "Bounding shape, dominant curves, negative spaces, and scale relationships are explicitly described."
+        ],
+        "evidenceRefs": [
+          "full-object"
+        ],
+        "failureModes": [
+          "model reads as a generic placeholder instead of the reference object",
+          "major proportions are guessed without evidence"
+        ]
+      },
+      {
+        "id": "primary-structure",
+        "name": "Primary structure and hierarchy",
+        "required": true,
+        "qualityCriteria": [
+          "Major parts, joints, seams, contact points, and parent-child relationships are named before code generation."
+        ],
+        "evidenceRefs": [
+          "full-object"
+        ],
+        "failureModes": [
+          "large visible parts are merged into one mesh",
+          "component hierarchy is too shallow for the observed complexity"
+        ]
+      },
+      {
+        "id": "attachment-joint-correctness",
+        "name": "Attachment and joint correctness",
+        "required": true,
+        "qualityCriteria": [
+          "Every visible child appendage, branch, limb, handle, connector, tube, cable, horn, wing, leg, or hinged part has an attachment contract with parent socket, localStart/localEnd, contact type, embed/overlap, and gap tolerance."
+        ],
+        "evidenceRefs": [
+          "full-object"
+        ],
+        "failureModes": [
+          "child part root floats away from the parent",
+          "branch/limb/tube is centered in space instead of pivoting from its root",
+          "parent-child transform mixes world and local coordinates"
+        ]
+      },
+      {
+        "id": "surface-material-response",
+        "name": "Surface material response",
+        "required": true,
+        "qualityCriteria": [
+          "Albedo zones, roughness, normal/bump/displacement intent, cavity dirt, edge wear, and local overrides are specified where visible.",
+          "Important materials define independent albedo, roughness, height/normal, and AO responses instead of reusing one texture for unrelated PBR channels.",
+          "Surface response is decomposed into macro, meso, and micro frequency bands with scale and amplitude tied to object scale."
+        ],
+        "evidenceRefs": [
+          "full-object"
+        ],
+        "failureModes": [
+          "surface looks like flat plastic",
+          "local material variation is missing or not tied to image evidence"
+        ]
+      },
+      {
+        "id": "reference-lookdev",
+        "name": "Reference color, material, and lighting response",
+        "required": true,
+        "qualityCriteria": [
+          "Material-pass names the reference-derived albedo palette, roughness variation, tactile normal/bump/displacement response, and local masks.",
+          "When a source image is available, run reference PBR extraction and require confidence >= 0.7 before treating maps as implementation-ready.",
+          "Lighting-pass names key/fill/rim or environment light, exposure, tone mapping, background, and contact shadow behavior.",
+          "Neutral, grazing-angle, and reference-matched renders prove that surface relief survives relighting and is not painted into albedo."
+        ],
+        "evidenceRefs": [
+          "full-object"
+        ],
+        "failureModes": [
+          "model has acceptable shape but reads as flat shaded or plastic",
+          "colors are a generic average instead of reference-observed local color zones",
+          "lighting is evenly ambient and cannot reproduce the source value range"
+        ]
+      }
+    ],
+    "visualDeltaChecks": [
+      "silhouette and negative-space delta",
+      "component hierarchy depth delta",
+      "repetition density and distribution delta",
+      "material albedo/roughness/normal response delta",
+      "local feature placement and scale delta"
+    ],
+    "antiShallowSpecRules": [
+      "Do not proceed to code if qualityContract.qualityBar is unassessed.",
+      "Do not proceed to code if the spec only contains a root component for a moderate or complex object.",
+      "Do not proceed to code if required featureGroups are not represented by componentTree, materials, or repetitionSystems.",
+      "Do not proceed to code if visible local features are described only in prose and not attached to components/materials/evidenceRefs.",
+      "Do not proceed past structural-pass if attached child parts lack attachment.parentSocket, localStart, localEnd, embedDepth/overlap, and gapTolerance.",
+      "Do not pass material look-dev when albedo is reused as roughness, height, normal, or AO.",
+      "Do not pass material look-dev without macro, meso, and micro surface frequency bands for close-up materials.",
+      "Do not pass reference-fidelity material look-dev from a source image without usable referencePbr maps or an explicit documented limitation.",
+      "Do not patch a spec with extracted PBR maps when extraction confidence is below the target threshold unless the user explicitly accepts lower fidelity.",
+      "Do not place adjacent separate-geometry parts below 0.02 world-unit seam overlap (source: grimoire/build/geometry_patterns.md).",
+      "Do not satisfy raised or recessed relief, fasteners, or grip structure with a map alone when the feature affects form; use geometry or displacement (source: grimoire/build/geometry_patterns.md).",
+      "Adjacent components must overlap by at least 0.02 world units at shared seams (source: grimoire/build/geometry_patterns.md).",
+      "Raised or recessed relief and fasteners must be geometry, instanced micro-parts, or displacement; a map alone is an approximation (source: grimoire/build/geometry_patterns.md)."
+    ],
+    "mustNotDo": [
+      "Do not proceed to code if qualityContract.qualityBar is unassessed.",
+      "Do not proceed to code if the spec only contains a root component for a moderate or complex object.",
+      "Do not proceed to code if required featureGroups are not represented by componentTree, materials, or repetitionSystems.",
+      "Do not proceed to code if visible local features are described only in prose and not attached to components/materials/evidenceRefs.",
+      "Do not proceed past structural-pass if attached child parts lack attachment.parentSocket, localStart, localEnd, embedDepth/overlap, and gapTolerance.",
+      "Do not pass material look-dev when albedo is reused as roughness, height, normal, or AO.",
+      "Do not pass material look-dev without macro, meso, and micro surface frequency bands for close-up materials.",
+      "Do not pass reference-fidelity material look-dev from a source image without usable referencePbr maps or an explicit documented limitation.",
+      "Do not patch a spec with extracted PBR maps when extraction confidence is below the target threshold unless the user explicitly accepts lower fidelity.",
+      "Do not place adjacent separate-geometry parts below 0.02 world-unit seam overlap (source: grimoire/build/geometry_patterns.md).",
+      "Do not satisfy raised or recessed relief, fasteners, or grip structure with a map alone when the feature affects form; use geometry or displacement (source: grimoire/build/geometry_patterns.md).",
+      "Adjacent components must overlap by at least 0.02 world units at shared seams (source: grimoire/build/geometry_patterns.md).",
+      "Raised or recessed relief and fasteners must be geometry, instanced micro-parts, or displacement; a map alone is an approximation (source: grimoire/build/geometry_patterns.md)."
+    ]
+  },
+  "qualityTargets": {
+    "targetFidelity": 0.7,
+    "mustMatch": [
+      "macro silhouette and proportions",
+      "primary material albedo/roughness response",
+      "reference-derived PBR material response at or above 0.7 confidence when source pixels are usable",
+      "most recognizable local features"
+    ],
+    "niceToHave": [
+      "micro scratches, stains, chips, and dirt masks",
+      "secondary lighting match"
+    ],
+    "fpsTarget": 60,
+    "reviewViewpoints": [
+      "front",
+      "three-quarter",
+      "side",
+      "thickness-axis",
+      "long-axis"
+    ]
+  },
+  "selfCorrectLoop": {
+    "enabled": true,
+    "visualAcceptance": {
+      "reviewer": "ai-vision",
+      "threshold": 0.7,
+      "comparisonArtifactRequired": true,
+      "layerScoresRequired": true,
+      "codePixelDiffIsAcceptanceAuthority": false,
+      "scoringRule": "AI vision must inspect a side-by-side reference/render sheet and score the current pass from 0 to 1. Pixel-diff code may assist diagnostics but cannot approve a pass.",
+      "requiredLayerScores": [
+        "silhouetteProportion",
+        "componentStructure",
+        "formDetail",
+        "materialSurface",
+        "lightingCamera"
+      ],
+      "featureReviewPolicy": {
+        "enabled": true,
+        "reviewUnit": "semantic-subsystem",
+        "maxCriticalFeaturesPerPass": 5,
+        "maxImportantFeaturesPerPass": 3,
+        "criticalDefaultThreshold": 0.8,
+        "importantAverageThreshold": 0.65,
+        "adaptiveEscalation": true,
+        "singleImagePairOnly": true,
+        "selectionRule": "Choose only the most visually salient, identity-defining, user-prioritized, or high-risk semantic systems. Group repeated parts instead of reviewing every mesh. AI vision scores every selected feature from the same full reference/render pair."
+      }
+    },
+    "reviewAfterPasses": [
+      "blockout",
+      "structural-pass",
+      "form-refinement",
+      "material-pass",
+      "surface-pass",
+      "lighting-pass",
+      "interaction-pass",
+      "optimization-pass"
+    ],
+    "allowedActions": [
+      "continue",
+      "refine-spec",
+      "refine-code",
+      "request-input",
+      "stop"
+    ],
+    "specRefineTriggers": [
+      "missing component",
+      "wrong primitive family",
+      "wrong proportions",
+      "material layer under-specified",
+      "local feature not traceable to viewEvidence",
+      "reference ambiguity discovered during implementation"
+    ],
+    "codeRefineTriggers": [
+      "spec is adequate but generated geometry/material does not match",
+      "browser render differs from reference",
+      "performance budget exceeded",
+      "lighting hides geometry or material response"
+    ],
+    "stopCriteria": [
+      "target fidelity reached or user accepts current approximation",
+      "remaining gaps require new reference images or manual art"
+    ],
+    "screenshotPolicy": {
+      "requiredForPasses": [
+        "blockout",
+        "structural-pass",
+        "form-refinement",
+        "material-pass",
+        "surface-pass",
+        "lighting-pass",
+        "interaction-pass"
+      ],
+      "preferredCapture": "in-app-browser-screenshot",
+      "fallbackCapture": "user-supplied-screenshot-path",
+      "minimumEvidence": "Each visual pass needs a reference image, rendered screenshot, side-by-side comparison sheet, AI vision score, layer scores, and critique before choosing continue.",
+      "reviewPairRule": "Compare the same camera/viewpoint whenever possible; do not judge a front reference against a random render angle.",
+      "acceptanceAuthority": "AI vision review of the comparison sheet. Code-generated pixel similarity is not sufficient evidence."
+    }
+  },
+  "featureReviewTargets": [
+    {
+      "id": "stance",
+      "name": "Stance and proportion",
+      "check": "long bonnet / short deck; wheels fill arches; beltline falls toward the nose; body sits low over 0.33m-radius wheels",
+      "tier": "critical"
+    },
+    {
+      "id": "red-accent-story",
+      "name": "Red accent system",
+      "check": "soft-top, rims, bumper insert and badge share the red family; nothing else on the car is red",
+      "tier": "critical"
+    },
+    {
+      "id": "chrome-jewelry",
+      "name": "Chrome jewelry set",
+      "check": "bumper blade, headlamp bezels, screen surround, door handle, hub spinners all read as one polished-metal family",
+      "tier": "important"
+    },
+    {
+      "id": "lamp-face",
+      "name": "Front lamp face",
+      "check": "two round proud headlamps + two small amber indicators below; this quartet IS the face of the car",
+      "tier": "critical"
+    },
+    {
+      "id": "wheel-articulation",
+      "name": "Wheel articulation contract",
+      "check": "fronts steer about yaw pivots at hub center, all four spin about x; 12 spokes readable in silhouette",
+      "tier": "critical"
+    }
+  ],
+  "sculptPipeline": {
+    "passGateMode": "locked-sequential",
+    "passOrder": [
+      "blockout",
+      "structural-pass",
+      "form-refinement",
+      "material-pass",
+      "surface-pass",
+      "lighting-pass",
+      "interaction-pass",
+      "optimization-pass"
+    ],
+    "currentPass": "structural-pass",
+    "completedPasses": [
+      "blockout"
+    ],
+    "lastCompletedPass": "blockout",
+    "blockedReason": "",
+    "nextRequiredEvidence": [
+      "Macro, meso, and repeated structures meet qualityContract.minimumSpecDepth.",
+      "Parent-child relations, joints, seams, sockets, and contact points are explicit.",
+      "Every attached child appendage/connector has parentSocket, localStart/localEnd, contactType, embedDepth or overlap, and gapTolerance.",
+      "AI vision comparison score meets selfCorrectLoop.visualAcceptance.threshold.",
+      "attachment contracts for child appendages/connectors",
+      "no floating child roots/joints in the browser screenshot",
+      "browser render screenshot from your agent's browser/screenshot tool",
+      "single side-by-side full reference/render comparison sheet",
+      "all critical semantic feature scores at or above their thresholds",
+      "self-correction review appended with action=continue before the next pass"
+    ]
+  },
+  "lookDevTargets": {
+    "qualityPriority": "reference-fidelity",
+    "materialPass": {
+      "albedoPaletteRequired": true,
+      "roughnessVariationRequired": true,
+      "normalOrBumpRequired": true,
+      "localOverridesRequired": true,
+      "minimumTextureResolution": 1024,
+      "preferredTextureResolution": 2048,
+      "independentMapChannels": [
+        "albedo",
+        "roughness",
+        "height",
+        "normal",
+        "ambient-occlusion"
+      ],
+      "requiredSurfaceFrequencyBands": [
+        "macro",
+        "meso",
+        "micro"
+      ],
+      "geometryReliefRequiredWhenSilhouetteAffected": true,
+      "referencePbrExtraction": {
+        "requiredWhenSourceImagePresent": true,
+        "targetThreshold": 0.7,
+        "stopOnLowConfidence": true,
+        "script": "forge/stage1_intake/extract_pbr_evidence.py",
+        "acceptedLimitation": "single-image extraction is reference-derived inference, not exact photogrammetry"
+      },
+      "mustAvoid": [
+        "single flat albedo per material",
+        "uniform roughness",
+        "albedo texture reused as roughness/height/normal/AO",
+        "single-frequency random noise",
+        "plastic-looking smooth bark, stone, cloth, foliage, or aged material",
+        "local color/detail described only in prose without material masks",
+        "claiming exact PBR recovery when confidence is below the target threshold"
+      ]
+    },
+    "lightingPass": {
+      "requiredTerms": [
+        "key light",
+        "fill light",
+        "rim or environment light",
+        "exposure",
+        "tone mapping",
+        "background",
+        "contact shadow"
+      ],
+      "mustAvoid": [
+        "ambient-only lighting",
+        "flat value range",
+        "missing contact shadow",
+        "reference lighting copied without separating material readability"
+      ]
+    },
+    "screenshotReview": [
+      "Compare albedo palette and local color zones.",
+      "Compare roughness/normal/bump response under light.",
+      "Compare cavity dirt, edge wear, stains, moss, scratches, or other local masks.",
+      "Compare key/fill/rim structure, exposure, tone mapping, background, and contact shadows.",
+      "Capture a neutral-light render to verify material readability without reference lighting.",
+      "Capture a grazing-light close-up to expose flat normals, uniform roughness, tiling, and plastic highlights.",
+      "Capture a reference-matched render from the same camera framing as the source."
+    ]
+  },
+  "actionReadiness": {
+    "contract": "Every macro/meso component should be generated as a stable named Object3D pivot node with a mesh child, action metadata, optional sockets, collider proxy, and destruction metadata.",
+    "defaultRigType": "action-ready-static-rig",
+    "rootMotionNode": "root",
+    "requiredComponentFields": [
+      "id",
+      "parent",
+      "transform",
+      "attachment for child appendages, connectors, limbs, tubes, handles, legs, horns, wings, branches, or cables",
+      "actionProfile.animationRole",
+      "actionProfile.pivot",
+      "actionProfile.collider",
+      "actionProfile.destruction"
+    ],
+    "transformChannels": [
+      "translate",
+      "rotate",
+      "scale",
+      "bend",
+      "twist",
+      "detach",
+      "visibility",
+      "material-state"
+    ],
+    "authoringRules": [
+      "Do not collapse independently movable parts into one mesh.",
+      "Put transforms on component pivot groups, not only on raw meshes.",
+      "For attached child parts, put the pivot at the semantic root/socket and build visible geometry from localStart to localEnd.",
+      "Represent hinge, socket, detachable, and breakable intent even when no animation is implemented yet.",
+      "Use simplified collider proxies for runtime physics instead of visual mesh colliders by default."
+    ],
+    "destructionPolicy": {
+      "defaultBreakable": false,
+      "fractureGroupNaming": "Use stable semantic names such as body-shell, left-hinge, glass-panel, branch-segment.",
+      "debrisStrategy": "Prefer detachable component groups and a small number of procedural fragments over random mesh explosion."
+    }
+  },
+  "assumptions": [],
+  "coordinateFrame": {
+    "front": "camera-facing side in the reference image",
+    "up": "image up direction",
+    "scaleReference": "unit scale; adjust after first browser render"
+  },
+  "silhouette": {
+    "boundingShape": "",
+    "aspectRatios": [],
+    "symmetry": "",
+    "dominantCurves": [],
+    "negativeSpaces": [],
+    "landmarks": []
+  },
+  "viewEvidence": [
+    {
+      "id": "full-object",
+      "view": "primary",
+      "imageRegion": {
+        "x": 0.0,
+        "y": 0.0,
+        "width": 1.0,
+        "height": 1.0,
+        "units": "normalized"
+      },
+      "observations": [],
+      "confidence": 0.5
+    }
+  ],
+  "componentTree": [
+    {
+      "id": "root",
+      "name": "classic white roadster",
+      "level": "macro",
+      "role": "body",
+      "importance": 1.0,
+      "confidence": 1.0,
+      "primitive": "box",
+      "topologyClass": "assembled-solid",
+      "topologyRationale": "root pivot at ground center, +Z nose, Y up; all assemblies socket here",
+      "geometryDescriptor": {
+        "topologyIntent": "root pivot at ground center, +Z nose, Y up; all assemblies socket here",
+        "edgeTreatment": {
+          "type": "none",
+          "bevelRadius": 0.0,
+          "segments": 1
+        },
+        "deformationStack": [],
+        "uvStrategy": "generated procedural coordinates",
+        "normalStrategy": "vertex normals from generated geometry"
+      },
+      "parent": null,
+      "attachment": null,
+      "dimensions": {
+        "width": 1.0,
+        "height": 1.0,
+        "depth": 1.0,
+        "units": "relative",
+        "confidence": 0.5
+      },
+      "transform": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "actionProfile": {
+        "animationRole": "root-motion",
+        "pivot": {
+          "node": "root-pivot",
+          "position": "component-origin",
+          "axes": []
+        },
+        "collider": {
+          "type": "box",
+          "fit": "tight"
+        },
+        "destruction": {
+          "breakable": false,
+          "debrisClass": "panel"
+        }
+      },
+      "material": "paint-body",
+      "materialLayers": [
+        "paint-body"
+      ],
+      "deformations": [],
+      "joints": [],
+      "seams": [],
+      "localFeatures": [],
+      "surfaceDetail": {
+        "macroRoughness": 0.0,
+        "microRoughness": 0.0,
+        "bumpAmplitude": 0.0,
+        "normalPattern": "",
+        "displacementPattern": "",
+        "occlusionPattern": "",
+        "edgeWearPattern": "",
+        "notes": ""
+      },
+      "evidenceRefs": [
+        "full-object"
+      ],
+      "details": [],
+      "fidelityTier": "blockout",
+      "colorMaterialRecipe": {
+        "dominantAlbedo": "rgba(242, 239, 232, 1.0)",
+        "secondaryAlbedo": "rgba(20, 20, 22, 1.0)",
+        "materialClass": "metal",
+        "materialClassConfidence": 1.0
+      }
+    },
+    {
+      "id": "body-shell",
+      "name": "monocoque body shell",
+      "level": "macro",
+      "role": "body",
+      "importance": 1.0,
+      "confidence": 0.95,
+      "primitive": "extrude",
+      "topologyClass": "assembled-solid",
+      "topologyRationale": "side-silhouette profile curve (falling bonnet, high rear haunch) extruded across width with plan taper at nose/tail and tumblehome above beltline; wheel arches cut as arch sweeps; includes black sill band and valance slot",
+      "geometryDescriptor": {
+        "topologyIntent": "side-silhouette profile curve (falling bonnet, high rear haunch) extruded across width with plan taper at nose/tail and tumblehome above beltline; wheel arches cut as arch sweeps; includes black sill band and valance slot",
+        "edgeTreatment": {
+          "type": "none",
+          "bevelRadius": 0.0,
+          "segments": 1
+        },
+        "deformationStack": [],
+        "uvStrategy": "generated procedural coordinates",
+        "normalStrategy": "vertex normals from generated geometry"
+      },
+      "parent": "root",
+      "attachment": null,
+      "dimensions": {
+        "width": 1.0,
+        "height": 1.0,
+        "depth": 1.0,
+        "units": "relative",
+        "confidence": 0.5
+      },
+      "transform": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "actionProfile": {
+        "animationRole": "static",
+        "pivot": {
+          "node": "body-shell-pivot",
+          "position": "component-origin",
+          "axes": []
+        },
+        "collider": {
+          "type": "box",
+          "fit": "tight"
+        },
+        "destruction": {
+          "breakable": false,
+          "debrisClass": "panel"
+        }
+      },
+      "material": "paint-body",
+      "materialLayers": [
+        "paint-body"
+      ],
+      "deformations": [],
+      "joints": [],
+      "seams": [],
+      "localFeatures": [
+        {
+          "id": "nose-crest",
+          "kind": "decal",
+          "description": "small shield crest badge on bonnet nose (generic, no brand fidelity)",
+          "zone": "r1c2"
+        },
+        {
+          "id": "valance-slot",
+          "kind": "hole",
+          "description": "black lower valance with recessed intake slot beneath bumper",
+          "zone": "r1c2"
+        },
+        {
+          "id": "door-handle",
+          "kind": "contour",
+          "description": "horizontal chrome pull handle at beltline",
+          "zone": "r1c1"
+        },
+        {
+          "id": "sill-band",
+          "kind": "linework",
+          "description": "satin black rocker band full length below doors",
+          "zone": "r2c1"
+        }
+      ],
+      "surfaceDetail": {
+        "macroRoughness": 0.0,
+        "microRoughness": 0.0,
+        "bumpAmplitude": 0.0,
+        "normalPattern": "",
+        "displacementPattern": "",
+        "occlusionPattern": "",
+        "edgeWearPattern": "",
+        "notes": ""
+      },
+      "evidenceRefs": [
+        "full-object"
+      ],
+      "details": [],
+      "fidelityTier": "blockout",
+      "colorMaterialRecipe": {
+        "dominantAlbedo": "rgba(242, 239, 232, 1.0)",
+        "secondaryAlbedo": "rgba(20, 20, 22, 1.0)",
+        "materialClass": "metal",
+        "materialClassConfidence": 0.9
+      }
+    },
+    {
+      "id": "soft-top",
+      "name": "red canvas soft-top",
+      "level": "macro",
+      "role": "canopy",
+      "importance": 0.9,
+      "confidence": 0.95,
+      "primitive": "extrude",
+      "topologyClass": "assembled-solid",
+      "topologyRationale": "truncated wedge dome from windscreen header to rear deck, bow seams as shallow ridges; taut rear edge",
+      "geometryDescriptor": {
+        "topologyIntent": "truncated wedge dome from windscreen header to rear deck, bow seams as shallow ridges; taut rear edge",
+        "edgeTreatment": {
+          "type": "none",
+          "bevelRadius": 0.0,
+          "segments": 1
+        },
+        "deformationStack": [],
+        "uvStrategy": "generated procedural coordinates",
+        "normalStrategy": "vertex normals from generated geometry"
+      },
+      "parent": "body-shell",
+      "attachment": {
+        "parentSocket": "body-shell/beltline-rear",
+        "localStart": [
+          -0.7,
+          0.95,
+          0.4
+        ],
+        "localEnd": [
+          0.7,
+          0.95,
+          -1.1
+        ],
+        "contactType": "overlap",
+        "overlap": 0.04,
+        "gapTolerance": 0.004
+      },
+      "dimensions": {
+        "width": 1.0,
+        "height": 1.0,
+        "depth": 1.0,
+        "units": "relative",
+        "confidence": 0.5
+      },
+      "transform": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "actionProfile": {
+        "animationRole": "static",
+        "pivot": {
+          "node": "soft-top-pivot",
+          "position": "component-origin",
+          "axes": []
+        },
+        "collider": {
+          "type": "box",
+          "fit": "tight"
+        },
+        "destruction": {
+          "breakable": false,
+          "debrisClass": "panel"
+        }
+      },
+      "material": "canvas-top",
+      "materialLayers": [
+        "canvas-top"
+      ],
+      "deformations": [],
+      "joints": [],
+      "seams": [],
+      "localFeatures": [
+        {
+          "id": "soft-top-seams",
+          "kind": "seam",
+          "description": "red canvas top with visible bow seams and taut rear edge",
+          "zone": "r0c1"
+        }
+      ],
+      "surfaceDetail": {
+        "macroRoughness": 0.0,
+        "microRoughness": 0.0,
+        "bumpAmplitude": 0.0,
+        "normalPattern": "",
+        "displacementPattern": "",
+        "occlusionPattern": "",
+        "edgeWearPattern": "",
+        "notes": ""
+      },
+      "evidenceRefs": [
+        "full-object"
+      ],
+      "details": [],
+      "fidelityTier": "blockout",
+      "colorMaterialRecipe": {
+        "dominantAlbedo": "rgba(200, 32, 42, 1.0)",
+        "secondaryAlbedo": "rgba(150, 22, 30, 1.0)",
+        "materialClass": "fabric",
+        "materialClassConfidence": 0.95
+      }
+    },
+    {
+      "id": "windscreen",
+      "name": "windscreen and chrome frame",
+      "level": "macro",
+      "role": "glazing",
+      "importance": 0.8,
+      "confidence": 0.9,
+      "primitive": "extrude",
+      "topologyClass": "assembled-solid",
+      "topologyRationale": "raked flat-curved glass in chrome surround wrapping to A-pillars",
+      "geometryDescriptor": {
+        "topologyIntent": "raked flat-curved glass in chrome surround wrapping to A-pillars",
+        "edgeTreatment": {
+          "type": "none",
+          "bevelRadius": 0.0,
+          "segments": 1
+        },
+        "deformationStack": [],
+        "uvStrategy": "generated procedural coordinates",
+        "normalStrategy": "vertex normals from generated geometry"
+      },
+      "parent": "body-shell",
+      "attachment": {
+        "parentSocket": "body-shell/cowl-socket",
+        "localStart": [
+          -0.68,
+          0.9,
+          0.55
+        ],
+        "localEnd": [
+          0.68,
+          0.9,
+          0.55
+        ],
+        "contactType": "embed",
+        "overlap": 0.03,
+        "gapTolerance": 0.003
+      },
+      "dimensions": {
+        "width": 1.0,
+        "height": 1.0,
+        "depth": 1.0,
+        "units": "relative",
+        "confidence": 0.5
+      },
+      "transform": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "actionProfile": {
+        "animationRole": "static",
+        "pivot": {
+          "node": "windscreen-pivot",
+          "position": "component-origin",
+          "axes": []
+        },
+        "collider": {
+          "type": "box",
+          "fit": "tight"
+        },
+        "destruction": {
+          "breakable": false,
+          "debrisClass": "panel"
+        }
+      },
+      "material": "glass",
+      "materialLayers": [
+        "glass"
+      ],
+      "deformations": [],
+      "joints": [],
+      "seams": [],
+      "localFeatures": [
+        {
+          "id": "screen-surround",
+          "kind": "linework",
+          "description": "chrome windscreen frame, raked, wraps to A-pillar",
+          "zone": "r0c1"
+        }
+      ],
+      "surfaceDetail": {
+        "macroRoughness": 0.0,
+        "microRoughness": 0.0,
+        "bumpAmplitude": 0.0,
+        "normalPattern": "",
+        "displacementPattern": "",
+        "occlusionPattern": "",
+        "edgeWearPattern": "",
+        "notes": ""
+      },
+      "evidenceRefs": [
+        "full-object"
+      ],
+      "details": [],
+      "fidelityTier": "blockout",
+      "colorMaterialRecipe": {
+        "dominantAlbedo": "rgba(159, 180, 196, 0.35)",
+        "secondaryAlbedo": "rgba(235, 235, 240, 1.0)",
+        "materialClass": "glass",
+        "materialClassConfidence": 0.9
+      }
+    },
+    {
+      "id": "front-bumper",
+      "name": "chrome blade bumper",
+      "level": "macro",
+      "role": "guard",
+      "importance": 0.85,
+      "confidence": 0.95,
+      "primitive": "curve-sweep",
+      "topologyClass": "assembled-solid",
+      "topologyRationale": "thin chrome blade swept across nose standing off body on two hidden brackets; full-length red rubber insert strip at centerline",
+      "geometryDescriptor": {
+        "topologyIntent": "thin chrome blade swept across nose standing off body on two hidden brackets; full-length red rubber insert strip at centerline",
+        "edgeTreatment": {
+          "type": "none",
+          "bevelRadius": 0.0,
+          "segments": 1
+        },
+        "deformationStack": [],
+        "uvStrategy": "generated procedural coordinates",
+        "normalStrategy": "vertex normals from generated geometry"
+      },
+      "parent": "body-shell",
+      "attachment": {
+        "parentSocket": "body-shell/nose-brackets",
+        "localStart": [
+          -0.75,
+          0.35,
+          2.02
+        ],
+        "localEnd": [
+          0.75,
+          0.35,
+          2.02
+        ],
+        "contactType": "overlap",
+        "overlap": 0.03,
+        "gapTolerance": 0.004
+      },
+      "dimensions": {
+        "width": 1.0,
+        "height": 1.0,
+        "depth": 1.0,
+        "units": "relative",
+        "confidence": 0.5
+      },
+      "transform": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "actionProfile": {
+        "animationRole": "static",
+        "pivot": {
+          "node": "front-bumper-pivot",
+          "position": "component-origin",
+          "axes": []
+        },
+        "collider": {
+          "type": "box",
+          "fit": "tight"
+        },
+        "destruction": {
+          "breakable": false,
+          "debrisClass": "panel"
+        }
+      },
+      "material": "chrome",
+      "materialLayers": [
+        "chrome"
+      ],
+      "deformations": [],
+      "joints": [],
+      "seams": [],
+      "localFeatures": [
+        {
+          "id": "bumper-red-insert",
+          "kind": "groove",
+          "description": "thin red rubber strip inset along chrome bumper blade centerline",
+          "zone": "r1c2"
+        },
+        {
+          "id": "bumper-standoff",
+          "kind": "contour",
+          "description": "bumper blade stands off body on hidden brackets, visible shadow gap",
+          "zone": "r1c2"
+        }
+      ],
+      "surfaceDetail": {
+        "macroRoughness": 0.0,
+        "microRoughness": 0.0,
+        "bumpAmplitude": 0.0,
+        "normalPattern": "",
+        "displacementPattern": "",
+        "occlusionPattern": "",
+        "edgeWearPattern": "",
+        "notes": ""
+      },
+      "evidenceRefs": [
+        "full-object"
+      ],
+      "details": [],
+      "fidelityTier": "blockout",
+      "colorMaterialRecipe": {
+        "dominantAlbedo": "rgba(235, 235, 240, 1.0)",
+        "secondaryAlbedo": "rgba(192, 32, 38, 1.0)",
+        "materialClass": "metal",
+        "materialClassConfidence": 0.95
+      }
+    },
+    {
+      "id": "rear-bumper",
+      "name": "rear chrome blade (inferred)",
+      "level": "macro",
+      "role": "guard",
+      "importance": 0.5,
+      "confidence": 0.4,
+      "primitive": "curve-sweep",
+      "topologyClass": "assembled-solid",
+      "topologyRationale": "mirror of front blade; INFERRED - rear not visible",
+      "geometryDescriptor": {
+        "topologyIntent": "mirror of front blade; INFERRED - rear not visible",
+        "edgeTreatment": {
+          "type": "none",
+          "bevelRadius": 0.0,
+          "segments": 1
+        },
+        "deformationStack": [],
+        "uvStrategy": "generated procedural coordinates",
+        "normalStrategy": "vertex normals from generated geometry"
+      },
+      "parent": "body-shell",
+      "attachment": {
+        "parentSocket": "body-shell/tail-brackets",
+        "localStart": [
+          -0.75,
+          0.35,
+          -2.02
+        ],
+        "localEnd": [
+          0.75,
+          0.35,
+          -2.02
+        ],
+        "contactType": "overlap",
+        "overlap": 0.03,
+        "gapTolerance": 0.004
+      },
+      "dimensions": {
+        "width": 1.0,
+        "height": 1.0,
+        "depth": 1.0,
+        "units": "relative",
+        "confidence": 0.5
+      },
+      "transform": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "actionProfile": {
+        "animationRole": "static",
+        "pivot": {
+          "node": "rear-bumper-pivot",
+          "position": "component-origin",
+          "axes": []
+        },
+        "collider": {
+          "type": "box",
+          "fit": "tight"
+        },
+        "destruction": {
+          "breakable": false,
+          "debrisClass": "panel"
+        }
+      },
+      "material": "chrome",
+      "materialLayers": [
+        "chrome"
+      ],
+      "deformations": [],
+      "joints": [],
+      "seams": [],
+      "localFeatures": [],
+      "surfaceDetail": {
+        "macroRoughness": 0.0,
+        "microRoughness": 0.0,
+        "bumpAmplitude": 0.0,
+        "normalPattern": "",
+        "displacementPattern": "",
+        "occlusionPattern": "",
+        "edgeWearPattern": "",
+        "notes": ""
+      },
+      "evidenceRefs": [
+        "full-object"
+      ],
+      "details": [],
+      "fidelityTier": "blockout",
+      "colorMaterialRecipe": {
+        "dominantAlbedo": "rgba(235, 235, 240, 1.0)",
+        "secondaryAlbedo": "rgba(192, 32, 38, 1.0)",
+        "materialClass": "metal",
+        "materialClassConfidence": 0.4
+      }
+    },
+    {
+      "id": "headlamp-L",
+      "name": "headlamp L",
+      "level": "meso",
+      "role": "lamp",
+      "importance": 0.85,
+      "confidence": 0.95,
+      "primitive": "cylinder",
+      "topologyClass": "assembled-solid",
+      "topologyRationale": "chrome bezel ring proud of wing + recessed convex lens, front-facing",
+      "geometryDescriptor": {
+        "topologyIntent": "chrome bezel ring proud of wing + recessed convex lens, front-facing",
+        "edgeTreatment": {
+          "type": "none",
+          "bevelRadius": 0.0,
+          "segments": 1
+        },
+        "deformationStack": [],
+        "uvStrategy": "generated procedural coordinates",
+        "normalStrategy": "vertex normals from generated geometry"
+      },
+      "parent": "body-shell",
+      "attachment": {
+        "parentSocket": "body-shell/wing-front-L",
+        "localStart": [
+          -0.62,
+          0.62,
+          1.85
+        ],
+        "localEnd": [
+          -0.62,
+          0.62,
+          1.98
+        ],
+        "contactType": "embed",
+        "overlap": 0.06,
+        "gapTolerance": 0.003
+      },
+      "dimensions": {
+        "width": 1.0,
+        "height": 1.0,
+        "depth": 1.0,
+        "units": "relative",
+        "confidence": 0.5
+      },
+      "transform": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "actionProfile": {
+        "animationRole": "static",
+        "pivot": {
+          "node": "headlamp-L-pivot",
+          "position": "component-origin",
+          "axes": []
+        },
+        "collider": {
+          "type": "box",
+          "fit": "tight"
+        },
+        "destruction": {
+          "breakable": true,
+          "debrisClass": "panel"
+        }
+      },
+      "material": "chrome",
+      "materialLayers": [
+        "chrome"
+      ],
+      "deformations": [],
+      "joints": [],
+      "seams": [],
+      "localFeatures": [],
+      "surfaceDetail": {
+        "macroRoughness": 0.0,
+        "microRoughness": 0.0,
+        "bumpAmplitude": 0.0,
+        "normalPattern": "",
+        "displacementPattern": "",
+        "occlusionPattern": "",
+        "edgeWearPattern": "",
+        "notes": ""
+      },
+      "evidenceRefs": [
+        "full-object"
+      ],
+      "details": [],
+      "fidelityTier": "blockout",
+      "colorMaterialRecipe": {
+        "dominantAlbedo": "rgba(235, 235, 240, 1.0)",
+        "secondaryAlbedo": "rgba(210, 218, 228, 1.0)",
+        "materialClass": "glass",
+        "materialClassConfidence": 0.95
+      }
+    },
+    {
+      "id": "indicator-L",
+      "name": "amber indicator L",
+      "level": "micro",
+      "role": "lamp",
+      "importance": 0.5,
+      "confidence": 0.9,
+      "primitive": "cylinder",
+      "topologyClass": "assembled-solid",
+      "topologyRationale": "small round amber lens on wing tip below headlamp line",
+      "geometryDescriptor": {
+        "topologyIntent": "small round amber lens on wing tip below headlamp line",
+        "edgeTreatment": {
+          "type": "none",
+          "bevelRadius": 0.0,
+          "segments": 1
+        },
+        "deformationStack": [],
+        "uvStrategy": "generated procedural coordinates",
+        "normalStrategy": "vertex normals from generated geometry"
+      },
+      "parent": "body-shell",
+      "attachment": {
+        "parentSocket": "body-shell/wing-tip-L",
+        "localStart": [
+          -0.68,
+          0.48,
+          1.95
+        ],
+        "localEnd": [
+          -0.68,
+          0.48,
+          2.0
+        ],
+        "contactType": "embed",
+        "overlap": 0.02,
+        "gapTolerance": 0.002
+      },
+      "dimensions": {
+        "width": 1.0,
+        "height": 1.0,
+        "depth": 1.0,
+        "units": "relative",
+        "confidence": 0.5
+      },
+      "transform": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "actionProfile": {
+        "animationRole": "static",
+        "pivot": {
+          "node": "indicator-L-pivot",
+          "position": "component-origin",
+          "axes": []
+        },
+        "collider": {
+          "type": "box",
+          "fit": "tight"
+        },
+        "destruction": {
+          "breakable": true,
+          "debrisClass": "panel"
+        }
+      },
+      "material": "amber-lens",
+      "materialLayers": [
+        "amber-lens"
+      ],
+      "deformations": [],
+      "joints": [],
+      "seams": [],
+      "localFeatures": [],
+      "surfaceDetail": {
+        "macroRoughness": 0.0,
+        "microRoughness": 0.0,
+        "bumpAmplitude": 0.0,
+        "normalPattern": "",
+        "displacementPattern": "",
+        "occlusionPattern": "",
+        "edgeWearPattern": "",
+        "notes": ""
+      },
+      "evidenceRefs": [
+        "full-object"
+      ],
+      "details": [],
+      "fidelityTier": "blockout",
+      "colorMaterialRecipe": {
+        "dominantAlbedo": "rgba(224, 120, 24, 0.9)",
+        "secondaryAlbedo": "rgba(180, 90, 16, 1.0)",
+        "materialClass": "plastic",
+        "materialClassConfidence": 0.9
+      }
+    },
+    {
+      "id": "headlamp-R",
+      "name": "headlamp R",
+      "level": "meso",
+      "role": "lamp",
+      "importance": 0.85,
+      "confidence": 0.95,
+      "primitive": "cylinder",
+      "topologyClass": "assembled-solid",
+      "topologyRationale": "chrome bezel ring proud of wing + recessed convex lens, front-facing",
+      "geometryDescriptor": {
+        "topologyIntent": "chrome bezel ring proud of wing + recessed convex lens, front-facing",
+        "edgeTreatment": {
+          "type": "none",
+          "bevelRadius": 0.0,
+          "segments": 1
+        },
+        "deformationStack": [],
+        "uvStrategy": "generated procedural coordinates",
+        "normalStrategy": "vertex normals from generated geometry"
+      },
+      "parent": "body-shell",
+      "attachment": {
+        "parentSocket": "body-shell/wing-front-R",
+        "localStart": [
+          0.62,
+          0.62,
+          1.85
+        ],
+        "localEnd": [
+          0.62,
+          0.62,
+          1.98
+        ],
+        "contactType": "embed",
+        "overlap": 0.06,
+        "gapTolerance": 0.003
+      },
+      "dimensions": {
+        "width": 1.0,
+        "height": 1.0,
+        "depth": 1.0,
+        "units": "relative",
+        "confidence": 0.5
+      },
+      "transform": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "actionProfile": {
+        "animationRole": "static",
+        "pivot": {
+          "node": "headlamp-R-pivot",
+          "position": "component-origin",
+          "axes": []
+        },
+        "collider": {
+          "type": "box",
+          "fit": "tight"
+        },
+        "destruction": {
+          "breakable": true,
+          "debrisClass": "panel"
+        }
+      },
+      "material": "chrome",
+      "materialLayers": [
+        "chrome"
+      ],
+      "deformations": [],
+      "joints": [],
+      "seams": [],
+      "localFeatures": [],
+      "surfaceDetail": {
+        "macroRoughness": 0.0,
+        "microRoughness": 0.0,
+        "bumpAmplitude": 0.0,
+        "normalPattern": "",
+        "displacementPattern": "",
+        "occlusionPattern": "",
+        "edgeWearPattern": "",
+        "notes": ""
+      },
+      "evidenceRefs": [
+        "full-object"
+      ],
+      "details": [],
+      "fidelityTier": "blockout",
+      "colorMaterialRecipe": {
+        "dominantAlbedo": "rgba(235, 235, 240, 1.0)",
+        "secondaryAlbedo": "rgba(210, 218, 228, 1.0)",
+        "materialClass": "glass",
+        "materialClassConfidence": 0.95
+      }
+    },
+    {
+      "id": "indicator-R",
+      "name": "amber indicator R",
+      "level": "micro",
+      "role": "lamp",
+      "importance": 0.5,
+      "confidence": 0.9,
+      "primitive": "cylinder",
+      "topologyClass": "assembled-solid",
+      "topologyRationale": "small round amber lens on wing tip below headlamp line",
+      "geometryDescriptor": {
+        "topologyIntent": "small round amber lens on wing tip below headlamp line",
+        "edgeTreatment": {
+          "type": "none",
+          "bevelRadius": 0.0,
+          "segments": 1
+        },
+        "deformationStack": [],
+        "uvStrategy": "generated procedural coordinates",
+        "normalStrategy": "vertex normals from generated geometry"
+      },
+      "parent": "body-shell",
+      "attachment": {
+        "parentSocket": "body-shell/wing-tip-R",
+        "localStart": [
+          0.68,
+          0.48,
+          1.95
+        ],
+        "localEnd": [
+          0.68,
+          0.48,
+          2.0
+        ],
+        "contactType": "embed",
+        "overlap": 0.02,
+        "gapTolerance": 0.002
+      },
+      "dimensions": {
+        "width": 1.0,
+        "height": 1.0,
+        "depth": 1.0,
+        "units": "relative",
+        "confidence": 0.5
+      },
+      "transform": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "actionProfile": {
+        "animationRole": "static",
+        "pivot": {
+          "node": "indicator-R-pivot",
+          "position": "component-origin",
+          "axes": []
+        },
+        "collider": {
+          "type": "box",
+          "fit": "tight"
+        },
+        "destruction": {
+          "breakable": true,
+          "debrisClass": "panel"
+        }
+      },
+      "material": "amber-lens",
+      "materialLayers": [
+        "amber-lens"
+      ],
+      "deformations": [],
+      "joints": [],
+      "seams": [],
+      "localFeatures": [],
+      "surfaceDetail": {
+        "macroRoughness": 0.0,
+        "microRoughness": 0.0,
+        "bumpAmplitude": 0.0,
+        "normalPattern": "",
+        "displacementPattern": "",
+        "occlusionPattern": "",
+        "edgeWearPattern": "",
+        "notes": ""
+      },
+      "evidenceRefs": [
+        "full-object"
+      ],
+      "details": [],
+      "fidelityTier": "blockout",
+      "colorMaterialRecipe": {
+        "dominantAlbedo": "rgba(224, 120, 24, 0.9)",
+        "secondaryAlbedo": "rgba(180, 90, 16, 1.0)",
+        "materialClass": "plastic",
+        "materialClassConfidence": 0.9
+      }
+    },
+    {
+      "id": "wheel-FL",
+      "name": "wheel assembly FL",
+      "level": "meso",
+      "role": "wheel",
+      "importance": 0.95,
+      "confidence": 0.95,
+      "primitive": "box",
+      "topologyClass": "assembled-solid",
+      "topologyRationale": "steer-yaw pivot node containing spin pivot",
+      "geometryDescriptor": {
+        "topologyIntent": "steer-yaw pivot node containing spin pivot",
+        "edgeTreatment": {
+          "type": "none",
+          "bevelRadius": 0.0,
+          "segments": 1
+        },
+        "deformationStack": [],
+        "uvStrategy": "generated procedural coordinates",
+        "normalStrategy": "vertex normals from generated geometry"
+      },
+      "parent": "root",
+      "attachment": {
+        "parentSocket": "root/arch-FL",
+        "localStart": [
+          -0.78,
+          0.33,
+          1.3
+        ],
+        "localEnd": [
+          -0.78,
+          0.33,
+          1.3
+        ],
+        "contactType": "socket",
+        "overlap": 0.05,
+        "gapTolerance": 0.01
+      },
+      "dimensions": {
+        "width": 1.0,
+        "height": 1.0,
+        "depth": 1.0,
+        "units": "relative",
+        "confidence": 0.5
+      },
+      "transform": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "actionProfile": {
+        "animationRole": "articulated",
+        "pivot": {
+          "node": "wheel-FL-steer",
+          "position": "hub-center",
+          "axes": [
+            "yaw",
+            "spin-x"
+          ]
+        },
+        "collider": {
+          "type": "box",
+          "fit": "tight"
+        },
+        "destruction": {
+          "breakable": true,
+          "debrisClass": "panel"
+        }
+      },
+      "material": "rim-paint",
+      "materialLayers": [
+        "rim-paint"
+      ],
+      "deformations": [],
+      "joints": [],
+      "seams": [],
+      "localFeatures": [],
+      "surfaceDetail": {
+        "macroRoughness": 0.0,
+        "microRoughness": 0.0,
+        "bumpAmplitude": 0.0,
+        "normalPattern": "",
+        "displacementPattern": "",
+        "occlusionPattern": "",
+        "edgeWearPattern": "",
+        "notes": ""
+      },
+      "evidenceRefs": [
+        "full-object"
+      ],
+      "details": [],
+      "fidelityTier": "blockout",
+      "colorMaterialRecipe": {
+        "dominantAlbedo": "rgba(184, 31, 38, 1.0)",
+        "secondaryAlbedo": "rgba(23, 24, 26, 1.0)",
+        "materialClass": "metal",
+        "materialClassConfidence": 0.95
+      }
+    },
+    {
+      "id": "wheel-FL-tire",
+      "name": "tire FL",
+      "level": "meso",
+      "role": "wheel",
+      "importance": 0.8,
+      "confidence": 0.95,
+      "primitive": "torus",
+      "topologyClass": "assembled-solid",
+      "topologyRationale": "low-profile tire, matte rubber",
+      "geometryDescriptor": {
+        "topologyIntent": "low-profile tire, matte rubber",
+        "edgeTreatment": {
+          "type": "none",
+          "bevelRadius": 0.0,
+          "segments": 1
+        },
+        "deformationStack": [],
+        "uvStrategy": "generated procedural coordinates",
+        "normalStrategy": "vertex normals from generated geometry"
+      },
+      "parent": "wheel-FL",
+      "attachment": {
+        "parentSocket": "wheel-FL/hub",
+        "localStart": [
+          0,
+          0,
+          0
+        ],
+        "localEnd": [
+          0,
+          0,
+          0
+        ],
+        "contactType": "socket",
+        "overlap": 0.02,
+        "gapTolerance": 0.002
+      },
+      "dimensions": {
+        "width": 1.0,
+        "height": 1.0,
+        "depth": 1.0,
+        "units": "relative",
+        "confidence": 0.5
+      },
+      "transform": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "actionProfile": {
+        "animationRole": "static",
+        "pivot": {
+          "node": "wheel-FL-tire-pivot",
+          "position": "component-origin",
+          "axes": []
+        },
+        "collider": {
+          "type": "box",
+          "fit": "tight"
+        },
+        "destruction": {
+          "breakable": true,
+          "debrisClass": "panel"
+        }
+      },
+      "material": "tire-rubber",
+      "materialLayers": [
+        "tire-rubber"
+      ],
+      "deformations": [],
+      "joints": [],
+      "seams": [],
+      "localFeatures": [],
+      "surfaceDetail": {
+        "macroRoughness": 0.0,
+        "microRoughness": 0.0,
+        "bumpAmplitude": 0.0,
+        "normalPattern": "",
+        "displacementPattern": "",
+        "occlusionPattern": "",
+        "edgeWearPattern": "",
+        "notes": ""
+      },
+      "evidenceRefs": [
+        "full-object"
+      ],
+      "details": [],
+      "fidelityTier": "blockout",
+      "colorMaterialRecipe": {
+        "dominantAlbedo": "rgba(23, 24, 26, 1.0)",
+        "secondaryAlbedo": "rgba(40, 41, 44, 1.0)",
+        "materialClass": "rubber",
+        "materialClassConfidence": 0.95
+      }
+    },
+    {
+      "id": "wheel-FL-rim",
+      "name": "12-spoke rim FL",
+      "level": "meso",
+      "role": "wheel",
+      "importance": 0.85,
+      "confidence": 0.95,
+      "primitive": "instanced-cluster",
+      "topologyClass": "assembled-solid",
+      "topologyRationale": "RADIAL REPETITION: 12 thin red spokes between hub and barrel, chrome center spinner cap",
+      "geometryDescriptor": {
+        "topologyIntent": "RADIAL REPETITION: 12 thin red spokes between hub and barrel, chrome center spinner cap",
+        "edgeTreatment": {
+          "type": "none",
+          "bevelRadius": 0.0,
+          "segments": 1
+        },
+        "deformationStack": [],
+        "uvStrategy": "generated procedural coordinates",
+        "normalStrategy": "vertex normals from generated geometry"
+      },
+      "parent": "wheel-FL",
+      "attachment": {
+        "parentSocket": "wheel-FL/hub",
+        "localStart": [
+          0,
+          0,
+          0
+        ],
+        "localEnd": [
+          0,
+          0,
+          0
+        ],
+        "contactType": "socket",
+        "overlap": 0.02,
+        "gapTolerance": 0.002
+      },
+      "dimensions": {
+        "width": 1.0,
+        "height": 1.0,
+        "depth": 1.0,
+        "units": "relative",
+        "confidence": 0.5
+      },
+      "transform": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "actionProfile": {
+        "animationRole": "static",
+        "pivot": {
+          "node": "wheel-FL-rim-pivot",
+          "position": "component-origin",
+          "axes": []
+        },
+        "collider": {
+          "type": "box",
+          "fit": "tight"
+        },
+        "destruction": {
+          "breakable": true,
+          "debrisClass": "panel"
+        }
+      },
+      "material": "rim-paint",
+      "materialLayers": [
+        "rim-paint"
+      ],
+      "deformations": [],
+      "joints": [],
+      "seams": [],
+      "localFeatures": [],
+      "surfaceDetail": {
+        "macroRoughness": 0.0,
+        "microRoughness": 0.0,
+        "bumpAmplitude": 0.0,
+        "normalPattern": "",
+        "displacementPattern": "",
+        "occlusionPattern": "",
+        "edgeWearPattern": "",
+        "notes": ""
+      },
+      "evidenceRefs": [
+        "full-object"
+      ],
+      "details": [],
+      "fidelityTier": "blockout",
+      "repetitionSystem": {
+        "kind": "radial",
+        "count": 12,
+        "element": "spoke"
+      },
+      "colorMaterialRecipe": {
+        "dominantAlbedo": "rgba(184, 31, 38, 1.0)",
+        "secondaryAlbedo": "rgba(235, 235, 240, 1.0)",
+        "materialClass": "metal",
+        "materialClassConfidence": 0.95
+      }
+    },
+    {
+      "id": "wheel-FR",
+      "name": "wheel assembly FR",
+      "level": "meso",
+      "role": "wheel",
+      "importance": 0.95,
+      "confidence": 0.95,
+      "primitive": "box",
+      "topologyClass": "assembled-solid",
+      "topologyRationale": "steer-yaw pivot node containing spin pivot",
+      "geometryDescriptor": {
+        "topologyIntent": "steer-yaw pivot node containing spin pivot",
+        "edgeTreatment": {
+          "type": "none",
+          "bevelRadius": 0.0,
+          "segments": 1
+        },
+        "deformationStack": [],
+        "uvStrategy": "generated procedural coordinates",
+        "normalStrategy": "vertex normals from generated geometry"
+      },
+      "parent": "root",
+      "attachment": {
+        "parentSocket": "root/arch-FR",
+        "localStart": [
+          0.78,
+          0.33,
+          1.3
+        ],
+        "localEnd": [
+          0.78,
+          0.33,
+          1.3
+        ],
+        "contactType": "socket",
+        "overlap": 0.05,
+        "gapTolerance": 0.01
+      },
+      "dimensions": {
+        "width": 1.0,
+        "height": 1.0,
+        "depth": 1.0,
+        "units": "relative",
+        "confidence": 0.5
+      },
+      "transform": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "actionProfile": {
+        "animationRole": "articulated",
+        "pivot": {
+          "node": "wheel-FR-steer",
+          "position": "hub-center",
+          "axes": [
+            "yaw",
+            "spin-x"
+          ]
+        },
+        "collider": {
+          "type": "box",
+          "fit": "tight"
+        },
+        "destruction": {
+          "breakable": true,
+          "debrisClass": "panel"
+        }
+      },
+      "material": "rim-paint",
+      "materialLayers": [
+        "rim-paint"
+      ],
+      "deformations": [],
+      "joints": [],
+      "seams": [],
+      "localFeatures": [],
+      "surfaceDetail": {
+        "macroRoughness": 0.0,
+        "microRoughness": 0.0,
+        "bumpAmplitude": 0.0,
+        "normalPattern": "",
+        "displacementPattern": "",
+        "occlusionPattern": "",
+        "edgeWearPattern": "",
+        "notes": ""
+      },
+      "evidenceRefs": [
+        "full-object"
+      ],
+      "details": [],
+      "fidelityTier": "blockout",
+      "colorMaterialRecipe": {
+        "dominantAlbedo": "rgba(184, 31, 38, 1.0)",
+        "secondaryAlbedo": "rgba(23, 24, 26, 1.0)",
+        "materialClass": "metal",
+        "materialClassConfidence": 0.95
+      }
+    },
+    {
+      "id": "wheel-FR-tire",
+      "name": "tire FR",
+      "level": "meso",
+      "role": "wheel",
+      "importance": 0.8,
+      "confidence": 0.95,
+      "primitive": "torus",
+      "topologyClass": "assembled-solid",
+      "topologyRationale": "low-profile tire, matte rubber",
+      "geometryDescriptor": {
+        "topologyIntent": "low-profile tire, matte rubber",
+        "edgeTreatment": {
+          "type": "none",
+          "bevelRadius": 0.0,
+          "segments": 1
+        },
+        "deformationStack": [],
+        "uvStrategy": "generated procedural coordinates",
+        "normalStrategy": "vertex normals from generated geometry"
+      },
+      "parent": "wheel-FR",
+      "attachment": {
+        "parentSocket": "wheel-FR/hub",
+        "localStart": [
+          0,
+          0,
+          0
+        ],
+        "localEnd": [
+          0,
+          0,
+          0
+        ],
+        "contactType": "socket",
+        "overlap": 0.02,
+        "gapTolerance": 0.002
+      },
+      "dimensions": {
+        "width": 1.0,
+        "height": 1.0,
+        "depth": 1.0,
+        "units": "relative",
+        "confidence": 0.5
+      },
+      "transform": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "actionProfile": {
+        "animationRole": "static",
+        "pivot": {
+          "node": "wheel-FR-tire-pivot",
+          "position": "component-origin",
+          "axes": []
+        },
+        "collider": {
+          "type": "box",
+          "fit": "tight"
+        },
+        "destruction": {
+          "breakable": true,
+          "debrisClass": "panel"
+        }
+      },
+      "material": "tire-rubber",
+      "materialLayers": [
+        "tire-rubber"
+      ],
+      "deformations": [],
+      "joints": [],
+      "seams": [],
+      "localFeatures": [],
+      "surfaceDetail": {
+        "macroRoughness": 0.0,
+        "microRoughness": 0.0,
+        "bumpAmplitude": 0.0,
+        "normalPattern": "",
+        "displacementPattern": "",
+        "occlusionPattern": "",
+        "edgeWearPattern": "",
+        "notes": ""
+      },
+      "evidenceRefs": [
+        "full-object"
+      ],
+      "details": [],
+      "fidelityTier": "blockout",
+      "colorMaterialRecipe": {
+        "dominantAlbedo": "rgba(23, 24, 26, 1.0)",
+        "secondaryAlbedo": "rgba(40, 41, 44, 1.0)",
+        "materialClass": "rubber",
+        "materialClassConfidence": 0.95
+      }
+    },
+    {
+      "id": "wheel-FR-rim",
+      "name": "12-spoke rim FR",
+      "level": "meso",
+      "role": "wheel",
+      "importance": 0.85,
+      "confidence": 0.95,
+      "primitive": "instanced-cluster",
+      "topologyClass": "assembled-solid",
+      "topologyRationale": "RADIAL REPETITION: 12 thin red spokes between hub and barrel, chrome center spinner cap",
+      "geometryDescriptor": {
+        "topologyIntent": "RADIAL REPETITION: 12 thin red spokes between hub and barrel, chrome center spinner cap",
+        "edgeTreatment": {
+          "type": "none",
+          "bevelRadius": 0.0,
+          "segments": 1
+        },
+        "deformationStack": [],
+        "uvStrategy": "generated procedural coordinates",
+        "normalStrategy": "vertex normals from generated geometry"
+      },
+      "parent": "wheel-FR",
+      "attachment": {
+        "parentSocket": "wheel-FR/hub",
+        "localStart": [
+          0,
+          0,
+          0
+        ],
+        "localEnd": [
+          0,
+          0,
+          0
+        ],
+        "contactType": "socket",
+        "overlap": 0.02,
+        "gapTolerance": 0.002
+      },
+      "dimensions": {
+        "width": 1.0,
+        "height": 1.0,
+        "depth": 1.0,
+        "units": "relative",
+        "confidence": 0.5
+      },
+      "transform": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "actionProfile": {
+        "animationRole": "static",
+        "pivot": {
+          "node": "wheel-FR-rim-pivot",
+          "position": "component-origin",
+          "axes": []
+        },
+        "collider": {
+          "type": "box",
+          "fit": "tight"
+        },
+        "destruction": {
+          "breakable": true,
+          "debrisClass": "panel"
+        }
+      },
+      "material": "rim-paint",
+      "materialLayers": [
+        "rim-paint"
+      ],
+      "deformations": [],
+      "joints": [],
+      "seams": [],
+      "localFeatures": [],
+      "surfaceDetail": {
+        "macroRoughness": 0.0,
+        "microRoughness": 0.0,
+        "bumpAmplitude": 0.0,
+        "normalPattern": "",
+        "displacementPattern": "",
+        "occlusionPattern": "",
+        "edgeWearPattern": "",
+        "notes": ""
+      },
+      "evidenceRefs": [
+        "full-object"
+      ],
+      "details": [],
+      "fidelityTier": "blockout",
+      "repetitionSystem": {
+        "kind": "radial",
+        "count": 12,
+        "element": "spoke"
+      },
+      "colorMaterialRecipe": {
+        "dominantAlbedo": "rgba(184, 31, 38, 1.0)",
+        "secondaryAlbedo": "rgba(235, 235, 240, 1.0)",
+        "materialClass": "metal",
+        "materialClassConfidence": 0.95
+      }
+    },
+    {
+      "id": "wheel-RL",
+      "name": "wheel assembly RL",
+      "level": "meso",
+      "role": "wheel",
+      "importance": 0.95,
+      "confidence": 0.95,
+      "primitive": "box",
+      "topologyClass": "assembled-solid",
+      "topologyRationale": "spin pivot node",
+      "geometryDescriptor": {
+        "topologyIntent": "spin pivot node",
+        "edgeTreatment": {
+          "type": "none",
+          "bevelRadius": 0.0,
+          "segments": 1
+        },
+        "deformationStack": [],
+        "uvStrategy": "generated procedural coordinates",
+        "normalStrategy": "vertex normals from generated geometry"
+      },
+      "parent": "root",
+      "attachment": {
+        "parentSocket": "root/arch-RL",
+        "localStart": [
+          -0.78,
+          0.33,
+          -1.25
+        ],
+        "localEnd": [
+          -0.78,
+          0.33,
+          -1.25
+        ],
+        "contactType": "socket",
+        "overlap": 0.05,
+        "gapTolerance": 0.01
+      },
+      "dimensions": {
+        "width": 1.0,
+        "height": 1.0,
+        "depth": 1.0,
+        "units": "relative",
+        "confidence": 0.5
+      },
+      "transform": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "actionProfile": {
+        "animationRole": "articulated",
+        "pivot": {
+          "node": "wheel-RL-spin",
+          "position": "hub-center",
+          "axes": [
+            "spin-x"
+          ]
+        },
+        "collider": {
+          "type": "box",
+          "fit": "tight"
+        },
+        "destruction": {
+          "breakable": true,
+          "debrisClass": "panel"
+        }
+      },
+      "material": "rim-paint",
+      "materialLayers": [
+        "rim-paint"
+      ],
+      "deformations": [],
+      "joints": [],
+      "seams": [],
+      "localFeatures": [],
+      "surfaceDetail": {
+        "macroRoughness": 0.0,
+        "microRoughness": 0.0,
+        "bumpAmplitude": 0.0,
+        "normalPattern": "",
+        "displacementPattern": "",
+        "occlusionPattern": "",
+        "edgeWearPattern": "",
+        "notes": ""
+      },
+      "evidenceRefs": [
+        "full-object"
+      ],
+      "details": [],
+      "fidelityTier": "blockout",
+      "colorMaterialRecipe": {
+        "dominantAlbedo": "rgba(184, 31, 38, 1.0)",
+        "secondaryAlbedo": "rgba(23, 24, 26, 1.0)",
+        "materialClass": "metal",
+        "materialClassConfidence": 0.95
+      }
+    },
+    {
+      "id": "wheel-RL-tire",
+      "name": "tire RL",
+      "level": "meso",
+      "role": "wheel",
+      "importance": 0.8,
+      "confidence": 0.95,
+      "primitive": "torus",
+      "topologyClass": "assembled-solid",
+      "topologyRationale": "low-profile tire, matte rubber",
+      "geometryDescriptor": {
+        "topologyIntent": "low-profile tire, matte rubber",
+        "edgeTreatment": {
+          "type": "none",
+          "bevelRadius": 0.0,
+          "segments": 1
+        },
+        "deformationStack": [],
+        "uvStrategy": "generated procedural coordinates",
+        "normalStrategy": "vertex normals from generated geometry"
+      },
+      "parent": "wheel-RL",
+      "attachment": {
+        "parentSocket": "wheel-RL/hub",
+        "localStart": [
+          0,
+          0,
+          0
+        ],
+        "localEnd": [
+          0,
+          0,
+          0
+        ],
+        "contactType": "socket",
+        "overlap": 0.02,
+        "gapTolerance": 0.002
+      },
+      "dimensions": {
+        "width": 1.0,
+        "height": 1.0,
+        "depth": 1.0,
+        "units": "relative",
+        "confidence": 0.5
+      },
+      "transform": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "actionProfile": {
+        "animationRole": "static",
+        "pivot": {
+          "node": "wheel-RL-tire-pivot",
+          "position": "component-origin",
+          "axes": []
+        },
+        "collider": {
+          "type": "box",
+          "fit": "tight"
+        },
+        "destruction": {
+          "breakable": true,
+          "debrisClass": "panel"
+        }
+      },
+      "material": "tire-rubber",
+      "materialLayers": [
+        "tire-rubber"
+      ],
+      "deformations": [],
+      "joints": [],
+      "seams": [],
+      "localFeatures": [],
+      "surfaceDetail": {
+        "macroRoughness": 0.0,
+        "microRoughness": 0.0,
+        "bumpAmplitude": 0.0,
+        "normalPattern": "",
+        "displacementPattern": "",
+        "occlusionPattern": "",
+        "edgeWearPattern": "",
+        "notes": ""
+      },
+      "evidenceRefs": [
+        "full-object"
+      ],
+      "details": [],
+      "fidelityTier": "blockout",
+      "colorMaterialRecipe": {
+        "dominantAlbedo": "rgba(23, 24, 26, 1.0)",
+        "secondaryAlbedo": "rgba(40, 41, 44, 1.0)",
+        "materialClass": "rubber",
+        "materialClassConfidence": 0.95
+      }
+    },
+    {
+      "id": "wheel-RL-rim",
+      "name": "12-spoke rim RL",
+      "level": "meso",
+      "role": "wheel",
+      "importance": 0.85,
+      "confidence": 0.95,
+      "primitive": "instanced-cluster",
+      "topologyClass": "assembled-solid",
+      "topologyRationale": "RADIAL REPETITION: 12 thin red spokes between hub and barrel, chrome center spinner cap",
+      "geometryDescriptor": {
+        "topologyIntent": "RADIAL REPETITION: 12 thin red spokes between hub and barrel, chrome center spinner cap",
+        "edgeTreatment": {
+          "type": "none",
+          "bevelRadius": 0.0,
+          "segments": 1
+        },
+        "deformationStack": [],
+        "uvStrategy": "generated procedural coordinates",
+        "normalStrategy": "vertex normals from generated geometry"
+      },
+      "parent": "wheel-RL",
+      "attachment": {
+        "parentSocket": "wheel-RL/hub",
+        "localStart": [
+          0,
+          0,
+          0
+        ],
+        "localEnd": [
+          0,
+          0,
+          0
+        ],
+        "contactType": "socket",
+        "overlap": 0.02,
+        "gapTolerance": 0.002
+      },
+      "dimensions": {
+        "width": 1.0,
+        "height": 1.0,
+        "depth": 1.0,
+        "units": "relative",
+        "confidence": 0.5
+      },
+      "transform": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "actionProfile": {
+        "animationRole": "static",
+        "pivot": {
+          "node": "wheel-RL-rim-pivot",
+          "position": "component-origin",
+          "axes": []
+        },
+        "collider": {
+          "type": "box",
+          "fit": "tight"
+        },
+        "destruction": {
+          "breakable": true,
+          "debrisClass": "panel"
+        }
+      },
+      "material": "rim-paint",
+      "materialLayers": [
+        "rim-paint"
+      ],
+      "deformations": [],
+      "joints": [],
+      "seams": [],
+      "localFeatures": [],
+      "surfaceDetail": {
+        "macroRoughness": 0.0,
+        "microRoughness": 0.0,
+        "bumpAmplitude": 0.0,
+        "normalPattern": "",
+        "displacementPattern": "",
+        "occlusionPattern": "",
+        "edgeWearPattern": "",
+        "notes": ""
+      },
+      "evidenceRefs": [
+        "full-object"
+      ],
+      "details": [],
+      "fidelityTier": "blockout",
+      "repetitionSystem": {
+        "kind": "radial",
+        "count": 12,
+        "element": "spoke"
+      },
+      "colorMaterialRecipe": {
+        "dominantAlbedo": "rgba(184, 31, 38, 1.0)",
+        "secondaryAlbedo": "rgba(235, 235, 240, 1.0)",
+        "materialClass": "metal",
+        "materialClassConfidence": 0.95
+      }
+    },
+    {
+      "id": "wheel-RR",
+      "name": "wheel assembly RR",
+      "level": "meso",
+      "role": "wheel",
+      "importance": 0.95,
+      "confidence": 0.95,
+      "primitive": "box",
+      "topologyClass": "assembled-solid",
+      "topologyRationale": "spin pivot node",
+      "geometryDescriptor": {
+        "topologyIntent": "spin pivot node",
+        "edgeTreatment": {
+          "type": "none",
+          "bevelRadius": 0.0,
+          "segments": 1
+        },
+        "deformationStack": [],
+        "uvStrategy": "generated procedural coordinates",
+        "normalStrategy": "vertex normals from generated geometry"
+      },
+      "parent": "root",
+      "attachment": {
+        "parentSocket": "root/arch-RR",
+        "localStart": [
+          0.78,
+          0.33,
+          -1.25
+        ],
+        "localEnd": [
+          0.78,
+          0.33,
+          -1.25
+        ],
+        "contactType": "socket",
+        "overlap": 0.05,
+        "gapTolerance": 0.01
+      },
+      "dimensions": {
+        "width": 1.0,
+        "height": 1.0,
+        "depth": 1.0,
+        "units": "relative",
+        "confidence": 0.5
+      },
+      "transform": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "actionProfile": {
+        "animationRole": "articulated",
+        "pivot": {
+          "node": "wheel-RR-spin",
+          "position": "hub-center",
+          "axes": [
+            "spin-x"
+          ]
+        },
+        "collider": {
+          "type": "box",
+          "fit": "tight"
+        },
+        "destruction": {
+          "breakable": true,
+          "debrisClass": "panel"
+        }
+      },
+      "material": "rim-paint",
+      "materialLayers": [
+        "rim-paint"
+      ],
+      "deformations": [],
+      "joints": [],
+      "seams": [],
+      "localFeatures": [],
+      "surfaceDetail": {
+        "macroRoughness": 0.0,
+        "microRoughness": 0.0,
+        "bumpAmplitude": 0.0,
+        "normalPattern": "",
+        "displacementPattern": "",
+        "occlusionPattern": "",
+        "edgeWearPattern": "",
+        "notes": ""
+      },
+      "evidenceRefs": [
+        "full-object"
+      ],
+      "details": [],
+      "fidelityTier": "blockout",
+      "colorMaterialRecipe": {
+        "dominantAlbedo": "rgba(184, 31, 38, 1.0)",
+        "secondaryAlbedo": "rgba(23, 24, 26, 1.0)",
+        "materialClass": "metal",
+        "materialClassConfidence": 0.95
+      }
+    },
+    {
+      "id": "wheel-RR-tire",
+      "name": "tire RR",
+      "level": "meso",
+      "role": "wheel",
+      "importance": 0.8,
+      "confidence": 0.95,
+      "primitive": "torus",
+      "topologyClass": "assembled-solid",
+      "topologyRationale": "low-profile tire, matte rubber",
+      "geometryDescriptor": {
+        "topologyIntent": "low-profile tire, matte rubber",
+        "edgeTreatment": {
+          "type": "none",
+          "bevelRadius": 0.0,
+          "segments": 1
+        },
+        "deformationStack": [],
+        "uvStrategy": "generated procedural coordinates",
+        "normalStrategy": "vertex normals from generated geometry"
+      },
+      "parent": "wheel-RR",
+      "attachment": {
+        "parentSocket": "wheel-RR/hub",
+        "localStart": [
+          0,
+          0,
+          0
+        ],
+        "localEnd": [
+          0,
+          0,
+          0
+        ],
+        "contactType": "socket",
+        "overlap": 0.02,
+        "gapTolerance": 0.002
+      },
+      "dimensions": {
+        "width": 1.0,
+        "height": 1.0,
+        "depth": 1.0,
+        "units": "relative",
+        "confidence": 0.5
+      },
+      "transform": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "actionProfile": {
+        "animationRole": "static",
+        "pivot": {
+          "node": "wheel-RR-tire-pivot",
+          "position": "component-origin",
+          "axes": []
+        },
+        "collider": {
+          "type": "box",
+          "fit": "tight"
+        },
+        "destruction": {
+          "breakable": true,
+          "debrisClass": "panel"
+        }
+      },
+      "material": "tire-rubber",
+      "materialLayers": [
+        "tire-rubber"
+      ],
+      "deformations": [],
+      "joints": [],
+      "seams": [],
+      "localFeatures": [],
+      "surfaceDetail": {
+        "macroRoughness": 0.0,
+        "microRoughness": 0.0,
+        "bumpAmplitude": 0.0,
+        "normalPattern": "",
+        "displacementPattern": "",
+        "occlusionPattern": "",
+        "edgeWearPattern": "",
+        "notes": ""
+      },
+      "evidenceRefs": [
+        "full-object"
+      ],
+      "details": [],
+      "fidelityTier": "blockout",
+      "colorMaterialRecipe": {
+        "dominantAlbedo": "rgba(23, 24, 26, 1.0)",
+        "secondaryAlbedo": "rgba(40, 41, 44, 1.0)",
+        "materialClass": "rubber",
+        "materialClassConfidence": 0.95
+      }
+    },
+    {
+      "id": "wheel-RR-rim",
+      "name": "12-spoke rim RR",
+      "level": "meso",
+      "role": "wheel",
+      "importance": 0.85,
+      "confidence": 0.95,
+      "primitive": "instanced-cluster",
+      "topologyClass": "assembled-solid",
+      "topologyRationale": "RADIAL REPETITION: 12 thin red spokes between hub and barrel, chrome center spinner cap",
+      "geometryDescriptor": {
+        "topologyIntent": "RADIAL REPETITION: 12 thin red spokes between hub and barrel, chrome center spinner cap",
+        "edgeTreatment": {
+          "type": "none",
+          "bevelRadius": 0.0,
+          "segments": 1
+        },
+        "deformationStack": [],
+        "uvStrategy": "generated procedural coordinates",
+        "normalStrategy": "vertex normals from generated geometry"
+      },
+      "parent": "wheel-RR",
+      "attachment": {
+        "parentSocket": "wheel-RR/hub",
+        "localStart": [
+          0,
+          0,
+          0
+        ],
+        "localEnd": [
+          0,
+          0,
+          0
+        ],
+        "contactType": "socket",
+        "overlap": 0.02,
+        "gapTolerance": 0.002
+      },
+      "dimensions": {
+        "width": 1.0,
+        "height": 1.0,
+        "depth": 1.0,
+        "units": "relative",
+        "confidence": 0.5
+      },
+      "transform": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "actionProfile": {
+        "animationRole": "static",
+        "pivot": {
+          "node": "wheel-RR-rim-pivot",
+          "position": "component-origin",
+          "axes": []
+        },
+        "collider": {
+          "type": "box",
+          "fit": "tight"
+        },
+        "destruction": {
+          "breakable": true,
+          "debrisClass": "panel"
+        }
+      },
+      "material": "rim-paint",
+      "materialLayers": [
+        "rim-paint"
+      ],
+      "deformations": [],
+      "joints": [],
+      "seams": [],
+      "localFeatures": [],
+      "surfaceDetail": {
+        "macroRoughness": 0.0,
+        "microRoughness": 0.0,
+        "bumpAmplitude": 0.0,
+        "normalPattern": "",
+        "displacementPattern": "",
+        "occlusionPattern": "",
+        "edgeWearPattern": "",
+        "notes": ""
+      },
+      "evidenceRefs": [
+        "full-object"
+      ],
+      "details": [],
+      "fidelityTier": "blockout",
+      "repetitionSystem": {
+        "kind": "radial",
+        "count": 12,
+        "element": "spoke"
+      },
+      "colorMaterialRecipe": {
+        "dominantAlbedo": "rgba(184, 31, 38, 1.0)",
+        "secondaryAlbedo": "rgba(235, 235, 240, 1.0)",
+        "materialClass": "metal",
+        "materialClassConfidence": 0.95
+      }
+    },
+    {
+      "id": "interior",
+      "name": "cabin interior (simplified)",
+      "level": "meso",
+      "role": "cabin",
+      "importance": 0.6,
+      "confidence": 0.6,
+      "primitive": "box",
+      "topologyClass": "assembled-solid",
+      "topologyRationale": "two red seats + dash silhouette + wheel, visible through glazing only",
+      "geometryDescriptor": {
+        "topologyIntent": "two red seats + dash silhouette + wheel, visible through glazing only",
+        "edgeTreatment": {
+          "type": "none",
+          "bevelRadius": 0.0,
+          "segments": 1
+        },
+        "deformationStack": [],
+        "uvStrategy": "generated procedural coordinates",
+        "normalStrategy": "vertex normals from generated geometry"
+      },
+      "parent": "body-shell",
+      "attachment": {
+        "parentSocket": "body-shell/cabin-tub",
+        "localStart": [
+          -0.6,
+          0.5,
+          0.4
+        ],
+        "localEnd": [
+          0.6,
+          0.5,
+          -0.6
+        ],
+        "contactType": "embed",
+        "overlap": 0.1,
+        "gapTolerance": 0.01
+      },
+      "dimensions": {
+        "width": 1.0,
+        "height": 1.0,
+        "depth": 1.0,
+        "units": "relative",
+        "confidence": 0.5
+      },
+      "transform": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "actionProfile": {
+        "animationRole": "static",
+        "pivot": {
+          "node": "interior-pivot",
+          "position": "component-origin",
+          "axes": []
+        },
+        "collider": {
+          "type": "box",
+          "fit": "tight"
+        },
+        "destruction": {
+          "breakable": true,
+          "debrisClass": "panel"
+        }
+      },
+      "material": "cabin-leather",
+      "materialLayers": [
+        "cabin-leather"
+      ],
+      "deformations": [],
+      "joints": [],
+      "seams": [],
+      "localFeatures": [],
+      "surfaceDetail": {
+        "macroRoughness": 0.0,
+        "microRoughness": 0.0,
+        "bumpAmplitude": 0.0,
+        "normalPattern": "",
+        "displacementPattern": "",
+        "occlusionPattern": "",
+        "edgeWearPattern": "",
+        "notes": ""
+      },
+      "evidenceRefs": [
+        "full-object"
+      ],
+      "details": [],
+      "fidelityTier": "blockout",
+      "colorMaterialRecipe": {
+        "dominantAlbedo": "rgba(168, 40, 48, 1.0)",
+        "secondaryAlbedo": "rgba(40, 20, 20, 1.0)",
+        "materialClass": "fabric",
+        "materialClassConfidence": 0.6
+      }
+    },
+    {
+      "id": "crest-badge",
+      "name": "nose crest badge",
+      "level": "micro",
+      "role": "trim",
+      "importance": 0.4,
+      "confidence": 0.8,
+      "primitive": "extrude",
+      "topologyClass": "assembled-solid",
+      "topologyRationale": "small generic shield relief on bonnet nose",
+      "geometryDescriptor": {
+        "topologyIntent": "small generic shield relief on bonnet nose",
+        "edgeTreatment": {
+          "type": "none",
+          "bevelRadius": 0.0,
+          "segments": 1
+        },
+        "deformationStack": [],
+        "uvStrategy": "generated procedural coordinates",
+        "normalStrategy": "vertex normals from generated geometry"
+      },
+      "parent": "body-shell",
+      "attachment": {
+        "parentSocket": "body-shell/nose-center",
+        "localStart": [
+          0.0,
+          0.66,
+          1.98
+        ],
+        "localEnd": [
+          0.0,
+          0.7,
+          2.0
+        ],
+        "contactType": "overlap",
+        "overlap": 0.005,
+        "gapTolerance": 0.001
+      },
+      "dimensions": {
+        "width": 1.0,
+        "height": 1.0,
+        "depth": 1.0,
+        "units": "relative",
+        "confidence": 0.5
+      },
+      "transform": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "actionProfile": {
+        "animationRole": "static",
+        "pivot": {
+          "node": "crest-badge-pivot",
+          "position": "component-origin",
+          "axes": []
+        },
+        "collider": {
+          "type": "box",
+          "fit": "tight"
+        },
+        "destruction": {
+          "breakable": true,
+          "debrisClass": "panel"
+        }
+      },
+      "material": "chrome",
+      "materialLayers": [
+        "chrome"
+      ],
+      "deformations": [],
+      "joints": [],
+      "seams": [],
+      "localFeatures": [],
+      "surfaceDetail": {
+        "macroRoughness": 0.0,
+        "microRoughness": 0.0,
+        "bumpAmplitude": 0.0,
+        "normalPattern": "",
+        "displacementPattern": "",
+        "occlusionPattern": "",
+        "edgeWearPattern": "",
+        "notes": ""
+      },
+      "evidenceRefs": [
+        "full-object"
+      ],
+      "details": [],
+      "fidelityTier": "blockout",
+      "colorMaterialRecipe": {
+        "dominantAlbedo": "rgba(235, 235, 240, 1.0)",
+        "secondaryAlbedo": "rgba(192, 32, 38, 1.0)",
+        "materialClass": "metal",
+        "materialClassConfidence": 0.8
+      }
+    },
+    {
+      "id": "door-handle",
+      "name": "chrome door handle",
+      "level": "micro",
+      "role": "trim",
+      "importance": 0.4,
+      "confidence": 0.9,
+      "primitive": "box",
+      "topologyClass": "assembled-solid",
+      "topologyRationale": "horizontal chrome pull at beltline",
+      "geometryDescriptor": {
+        "topologyIntent": "horizontal chrome pull at beltline",
+        "edgeTreatment": {
+          "type": "none",
+          "bevelRadius": 0.0,
+          "segments": 1
+        },
+        "deformationStack": [],
+        "uvStrategy": "generated procedural coordinates",
+        "normalStrategy": "vertex normals from generated geometry"
+      },
+      "parent": "body-shell",
+      "attachment": {
+        "parentSocket": "body-shell/beltline-socket",
+        "localStart": [
+          0.86,
+          0.62,
+          0.15
+        ],
+        "localEnd": [
+          0.86,
+          0.62,
+          -0.12
+        ],
+        "contactType": "overlap",
+        "overlap": 0.01,
+        "gapTolerance": 0.002
+      },
+      "dimensions": {
+        "width": 1.0,
+        "height": 1.0,
+        "depth": 1.0,
+        "units": "relative",
+        "confidence": 0.5
+      },
+      "transform": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "actionProfile": {
+        "animationRole": "static",
+        "pivot": {
+          "node": "door-handle-pivot",
+          "position": "component-origin",
+          "axes": []
+        },
+        "collider": {
+          "type": "box",
+          "fit": "tight"
+        },
+        "destruction": {
+          "breakable": true,
+          "debrisClass": "panel"
+        }
+      },
+      "material": "chrome",
+      "materialLayers": [
+        "chrome"
+      ],
+      "deformations": [],
+      "joints": [],
+      "seams": [],
+      "localFeatures": [],
+      "surfaceDetail": {
+        "macroRoughness": 0.0,
+        "microRoughness": 0.0,
+        "bumpAmplitude": 0.0,
+        "normalPattern": "",
+        "displacementPattern": "",
+        "occlusionPattern": "",
+        "edgeWearPattern": "",
+        "notes": ""
+      },
+      "evidenceRefs": [
+        "full-object"
+      ],
+      "details": [],
+      "fidelityTier": "blockout",
+      "colorMaterialRecipe": {
+        "dominantAlbedo": "rgba(235, 235, 240, 1.0)",
+        "secondaryAlbedo": "rgba(180, 184, 190, 1.0)",
+        "materialClass": "metal",
+        "materialClassConfidence": 0.95
+      }
+    },
+    {
+      "id": "tail-lamps",
+      "name": "tail lamps (inferred)",
+      "level": "micro",
+      "role": "lamp",
+      "importance": 0.4,
+      "confidence": 0.4,
+      "primitive": "cylinder",
+      "topologyClass": "assembled-solid",
+      "topologyRationale": "round red lenses, INFERRED from era",
+      "geometryDescriptor": {
+        "topologyIntent": "round red lenses, INFERRED from era",
+        "edgeTreatment": {
+          "type": "none",
+          "bevelRadius": 0.0,
+          "segments": 1
+        },
+        "deformationStack": [],
+        "uvStrategy": "generated procedural coordinates",
+        "normalStrategy": "vertex normals from generated geometry"
+      },
+      "parent": "body-shell",
+      "attachment": {
+        "parentSocket": "body-shell/tail-socket",
+        "localStart": [
+          0.0,
+          0.55,
+          -2.05
+        ],
+        "localEnd": [
+          0.0,
+          0.55,
+          -2.02
+        ],
+        "contactType": "embed",
+        "overlap": 0.02,
+        "gapTolerance": 0.003
+      },
+      "dimensions": {
+        "width": 1.0,
+        "height": 1.0,
+        "depth": 1.0,
+        "units": "relative",
+        "confidence": 0.5
+      },
+      "transform": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "actionProfile": {
+        "animationRole": "static",
+        "pivot": {
+          "node": "tail-lamps-pivot",
+          "position": "component-origin",
+          "axes": []
+        },
+        "collider": {
+          "type": "box",
+          "fit": "tight"
+        },
+        "destruction": {
+          "breakable": true,
+          "debrisClass": "panel"
+        }
+      },
+      "material": "amber-lens",
+      "materialLayers": [
+        "amber-lens"
+      ],
+      "deformations": [],
+      "joints": [],
+      "seams": [],
+      "localFeatures": [],
+      "surfaceDetail": {
+        "macroRoughness": 0.0,
+        "microRoughness": 0.0,
+        "bumpAmplitude": 0.0,
+        "normalPattern": "",
+        "displacementPattern": "",
+        "occlusionPattern": "",
+        "edgeWearPattern": "",
+        "notes": ""
+      },
+      "evidenceRefs": [
+        "full-object"
+      ],
+      "details": [],
+      "fidelityTier": "blockout",
+      "colorMaterialRecipe": {
+        "dominantAlbedo": "rgba(200, 30, 36, 0.85)",
+        "secondaryAlbedo": "rgba(120, 14, 18, 1.0)",
+        "materialClass": "plastic",
+        "materialClassConfidence": 0.4
+      }
+    }
+  ],
+  "materials": [
+    {
+      "id": "paint-body",
+      "appliesTo": [
+        "body-shell"
+      ],
+      "family": "clearcoat-paint",
+      "metalness": 0.1,
+      "roughness": {
+        "value": 0.25,
+        "map": "material-evidence/r1c1/base_roughness.png",
+        "source": "extract_pbr_evidence single-crop"
+      },
+      "clearcoat": 1.0,
+      "clearcoatRoughness": 0.06,
+      "evidenceZone": "r1c1",
+      "localOverrides": [
+        {
+          "feature": "sill-band",
+          "roughness": 0.7,
+          "baseColor": "#141416",
+          "detailId": "sill-band",
+          "id": "sill-band"
+        },
+        {
+          "feature": "valance-slot",
+          "roughness": 0.8,
+          "baseColor": "#101012",
+          "detailId": "valance-slot",
+          "id": "valance-slot"
+        }
+      ],
+      "baseColor": "#f2efe8",
+      "referencePbr": {
+        "version": "1",
+        "sourceImage": "detail-inventory/zone-r1c1.png",
+        "extractor": "forge/stage1_intake/extract_pbr_evidence.py",
+        "method": "single-crop",
+        "verdict": "pass",
+        "usable": true,
+        "confidence": 0.86,
+        "estimatedFidelity": 0.86,
+        "targetThreshold": 0.7,
+        "maps": {
+          "albedo": {
+            "path": "material-evidence/r1c1/base_albedo.png",
+            "resolution": 1024
+          },
+          "roughness": {
+            "path": "material-evidence/r1c1/base_roughness.png",
+            "resolution": 1024
+          },
+          "height": {
+            "path": "material-evidence/r1c1/base_height.png",
+            "resolution": 1024
+          },
+          "normal": {
+            "path": "material-evidence/r1c1/base_normal.png",
+            "resolution": 1024
+          },
+          "ao": {
+            "path": "material-evidence/r1c1/base_ao.png",
+            "resolution": 1024
+          }
+        }
+      },
+      "ambientOcclusion": {
+        "mode": "crevice-darkening",
+        "intensity": 0.5
+      },
+      "textureResolution": 1024,
+      "textureProjection": {
+        "mode": "triplanar",
+        "texelDensity": "512 px/m on body panels; hero surface"
+      },
+      "surfaceFrequencyBands": [
+        {
+          "id": "macro",
+          "detail": "panel-scale tone: uniform warm white with reflection gradients",
+          "frequency": 0.5,
+          "amplitude": 0.02
+        },
+        {
+          "id": "meso",
+          "detail": "panel seams and sill/valance boundary lines",
+          "frequency": 4.0,
+          "amplitude": 0.01
+        },
+        {
+          "id": "micro",
+          "detail": "clearcoat orange-peel micro-normal, procedural, sub-mm",
+          "frequency": 400.0,
+          "amplitude": 0.002
+        }
+      ],
+      "palette": {
+        "dominant": "#f2efe8",
+        "zones": [
+          {
+            "zone": "sill-band",
+            "color": "#141416",
+            "role": "secondary"
+          },
+          {
+            "zone": "valance",
+            "color": "#101012",
+            "role": "secondary"
+          },
+          {
+            "zone": "bumper-insert",
+            "color": "#c02026",
+            "role": "accent"
+          },
+          {
+            "zone": "soft-top+rims",
+            "color": "#c8202a",
+            "role": "accent"
+          }
+        ],
+        "source": "reference r1c1/r1c2 crops; red accents recur on top, rims, insert, badge"
+      },
+      "colorVariation": "dominant warm white #f2efe8 with pink cyclorama bounce in lower panels; secondary satin black on sill band and valance; recurring red accent family (#c8202a top / #b81f26 rims / #c02026 bumper insert) — the reference is a two-color story, white body + red accents"
+    },
+    {
+      "id": "canvas-top",
+      "appliesTo": [
+        "soft-top"
+      ],
+      "family": "fabric",
+      "metalness": 0.0,
+      "roughness": {
+        "value": 0.85,
+        "map": "material-evidence/r0c1/base_roughness.png",
+        "source": "extract_pbr_evidence single-crop"
+      },
+      "evidenceZone": "r0c1",
+      "baseColor": "#d4212c",
+      "sheen": 0.45,
+      "sheenRoughness": 0.6,
+      "referencePbr": {
+        "version": "1",
+        "sourceImage": "detail-inventory/zone-r0c1.png",
+        "extractor": "forge/stage1_intake/extract_pbr_evidence.py",
+        "method": "single-crop",
+        "verdict": "pass",
+        "usable": true,
+        "confidence": 0.721,
+        "estimatedFidelity": 0.721,
+        "targetThreshold": 0.7,
+        "maps": {
+          "albedo": {
+            "path": "material-evidence/r0c1/base_albedo.png",
+            "resolution": 1024
+          },
+          "roughness": {
+            "path": "material-evidence/r0c1/base_roughness.png",
+            "resolution": 1024
+          },
+          "height": {
+            "path": "material-evidence/r0c1/base_height.png",
+            "resolution": 1024
+          },
+          "normal": {
+            "path": "material-evidence/r0c1/base_normal.png",
+            "resolution": 1024
+          },
+          "ao": {
+            "path": "material-evidence/r0c1/base_ao.png",
+            "resolution": 1024
+          }
+        }
+      },
+      "ambientOcclusion": {
+        "mode": "crevice-darkening",
+        "intensity": 0.5
+      },
+      "textureResolution": 1024,
+      "textureProjection": {
+        "mode": "triplanar",
+        "texelDensity": "384 px/m; seam ridges carry the identity"
+      },
+      "surfaceFrequencyBands": [
+        {
+          "id": "macro",
+          "detail": "taut dome form shading across the top",
+          "frequency": 0.8,
+          "amplitude": 0.03
+        },
+        {
+          "id": "meso",
+          "detail": "bow seams at ~25cm pitch as shallow ridges",
+          "frequency": 4.0,
+          "amplitude": 0.015
+        },
+        {
+          "id": "micro",
+          "detail": "woven canvas weave via sheen response, not resolvable as texels",
+          "frequency": 200.0,
+          "amplitude": 0.004
+        }
+      ],
+      "sheenColor": "#d24a52",
+      "sheenEnergyCompensated": true
+    },
+    {
+      "id": "chrome",
+      "appliesTo": [
+        "front-bumper",
+        "rear-bumper",
+        "windscreen",
+        "headlamp-L",
+        "headlamp-R",
+        "door-handle",
+        "crest-badge"
+      ],
+      "family": "polished-metal",
+      "metalness": 1.0,
+      "roughness": 0.08,
+      "evidenceZone": "r1c2",
+      "localOverrides": [
+        {
+          "feature": "bumper-red-insert",
+          "metalness": 0.0,
+          "roughness": 0.5,
+          "baseColor": "#c02026",
+          "detailId": "bumper-red-insert",
+          "id": "bumper-red-insert"
+        }
+      ],
+      "baseColor": "#ffffff",
+      "textureless": {
+        "declared": true,
+        "evidence": [
+          "zone r1c2 bumper/bezel crop: specular streaks only, zero albedo variation across 300px run (extract_pbr_evidence albedo variance flat); identity is pure reflection"
+        ]
+      }
+    },
+    {
+      "id": "rim-paint",
+      "appliesTo": [
+        "wheel-FL-rim",
+        "wheel-FR-rim",
+        "wheel-RL-rim",
+        "wheel-RR-rim"
+      ],
+      "family": "painted-alloy",
+      "metalness": 0.3,
+      "roughness": 0.45,
+      "evidenceZone": "r1c1",
+      "baseColor": "#b81f26",
+      "textureless": {
+        "declared": true,
+        "evidence": [
+          "spoke faces are uniform painted alloy in r1c1 crop; geometry (12-spoke radial array) carries all the detail, not texture"
+        ]
+      }
+    },
+    {
+      "id": "tire-rubber",
+      "appliesTo": [
+        "wheel-FL-tire",
+        "wheel-FR-tire",
+        "wheel-RL-tire",
+        "wheel-RR-tire"
+      ],
+      "family": "rubber",
+      "metalness": 0.0,
+      "roughness": {
+        "value": 0.92,
+        "map": "material-evidence/r1c1/base_roughness.png",
+        "source": "extract_pbr_evidence single-crop"
+      },
+      "evidenceZone": "r1c1",
+      "baseColor": "#17181a",
+      "referencePbr": {
+        "version": "1",
+        "sourceImage": "detail-inventory/zone-r1c1.png",
+        "extractor": "forge/stage1_intake/extract_pbr_evidence.py",
+        "method": "single-crop",
+        "verdict": "pass",
+        "usable": true,
+        "confidence": 0.86,
+        "estimatedFidelity": 0.86,
+        "targetThreshold": 0.7,
+        "maps": {
+          "albedo": {
+            "path": "material-evidence/r1c1/base_albedo.png",
+            "resolution": 1024
+          },
+          "roughness": {
+            "path": "material-evidence/r1c1/base_roughness.png",
+            "resolution": 1024
+          },
+          "height": {
+            "path": "material-evidence/r1c1/base_height.png",
+            "resolution": 1024
+          },
+          "normal": {
+            "path": "material-evidence/r1c1/base_normal.png",
+            "resolution": 1024
+          },
+          "ao": {
+            "path": "material-evidence/r1c1/base_ao.png",
+            "resolution": 1024
+          }
+        }
+      },
+      "ambientOcclusion": {
+        "mode": "crevice-darkening",
+        "intensity": 0.5
+      },
+      "textureResolution": 1024,
+      "textureProjection": {
+        "mode": "triplanar",
+        "texelDensity": "256 px/m; sidewall ring is the only meso feature"
+      },
+      "surfaceFrequencyBands": [
+        {
+          "id": "macro",
+          "detail": "tire barrel form, uniform near-black",
+          "frequency": 1.0,
+          "amplitude": 0.02
+        },
+        {
+          "id": "meso",
+          "detail": "sidewall lettering ring and rim-guard ridge",
+          "frequency": 8.0,
+          "amplitude": 0.008
+        },
+        {
+          "id": "micro",
+          "detail": "rubber micro-sheen at grazing angles only",
+          "frequency": 300.0,
+          "amplitude": 0.002
+        }
+      ]
+    },
+    {
+      "id": "glass",
+      "appliesTo": [
+        "windscreen"
+      ],
+      "family": "glass",
+      "metalness": 0.0,
+      "roughness": 0.05,
+      "opacity": 0.35,
+      "evidenceZone": "r0c1",
+      "baseColor": "#9fb4c4",
+      "textureless": {
+        "declared": true,
+        "evidence": [
+          "windscreen region shows only transmitted/reflected content, no surface detail of its own at this resolution"
+        ]
+      }
+    },
+    {
+      "id": "amber-lens",
+      "appliesTo": [
+        "indicator-L",
+        "indicator-R"
+      ],
+      "family": "translucent-plastic",
+      "emissiveCapable": true,
+      "roughness": 0.3,
+      "evidenceZone": "r1c2",
+      "baseColor": "#e07818",
+      "textureless": {
+        "declared": true,
+        "evidence": [
+          "indicator lens is a uniform translucent dome ~20px in frame; no resolvable texture, identity is color + emissive response"
+        ]
+      }
+    },
+    {
+      "id": "cabin-leather",
+      "appliesTo": [
+        "interior"
+      ],
+      "family": "leather",
+      "metalness": 0.0,
+      "roughness": {
+        "value": 0.6,
+        "map": "material-evidence/r0c1/base_roughness.png",
+        "source": "extract_pbr_evidence single-crop"
+      },
+      "evidenceZone": "r0c1",
+      "confidence": 0.6,
+      "baseColor": "#a82830",
+      "referencePbr": {
+        "version": "1",
+        "sourceImage": "detail-inventory/zone-r0c1.png",
+        "extractor": "forge/stage1_intake/extract_pbr_evidence.py",
+        "method": "single-crop",
+        "verdict": "pass",
+        "usable": true,
+        "confidence": 0.721,
+        "estimatedFidelity": 0.721,
+        "targetThreshold": 0.7,
+        "maps": {
+          "albedo": {
+            "path": "material-evidence/r0c1/base_albedo.png",
+            "resolution": 1024
+          },
+          "roughness": {
+            "path": "material-evidence/r0c1/base_roughness.png",
+            "resolution": 1024
+          },
+          "height": {
+            "path": "material-evidence/r0c1/base_height.png",
+            "resolution": 1024
+          },
+          "normal": {
+            "path": "material-evidence/r0c1/base_normal.png",
+            "resolution": 1024
+          },
+          "ao": {
+            "path": "material-evidence/r0c1/base_ao.png",
+            "resolution": 1024
+          }
+        }
+      },
+      "ambientOcclusion": {
+        "mode": "crevice-darkening",
+        "intensity": 0.55,
+        "note": "seat piping and tuck seams darken; independent of roughness response"
+      },
+      "textureResolution": 1024,
+      "textureProjection": {
+        "mode": "triplanar",
+        "texelDensity": "256 px/m; glimpsed through glazing, silhouette first"
+      },
+      "surfaceFrequency": {
+        "macro": "seat form and backrest curvature, panel-scale tone shifts",
+        "meso": "piping lines, tuck-and-roll pleats ~6cm pitch",
+        "micro": "leather grain pores via procedural bump, no visible weave"
+      },
+      "surfaceFrequencyBands": [
+        {
+          "id": "macro",
+          "detail": "seat form and backrest curvature, panel-scale tone shifts",
+          "frequency": 0.7,
+          "amplitude": 0.03
+        },
+        {
+          "id": "meso",
+          "detail": "piping lines, tuck-and-roll pleats ~6cm pitch",
+          "frequency": 16.0,
+          "amplitude": 0.012
+        },
+        {
+          "id": "micro",
+          "detail": "leather grain pores via procedural bump",
+          "frequency": 250.0,
+          "amplitude": 0.003
+        }
+      ]
+    }
+  ],
+  "repetitionSystems": [],
+  "buildPasses": [
+    {
+      "id": "blockout",
+      "goal": "Match macro silhouette and proportions.",
+      "componentRefs": [
+        "root"
+      ],
+      "acceptance": [
+        "Silhouette reads correctly without materials.",
+        "Quality contract has named all required macro feature groups before code generation.",
+        "AI vision comparison score meets selfCorrectLoop.visualAcceptance.threshold."
+      ]
+    },
+    {
+      "id": "structural-pass",
+      "goal": "Build the component hierarchy implied by the pre-spec complexity assessment.",
+      "componentRefs": [
+        "root"
+      ],
+      "acceptance": [
+        "Macro, meso, and repeated structures meet qualityContract.minimumSpecDepth.",
+        "Parent-child relations, joints, seams, sockets, and contact points are explicit.",
+        "Every attached child appendage/connector has parentSocket, localStart/localEnd, contactType, embedDepth or overlap, and gapTolerance.",
+        "AI vision comparison score meets selfCorrectLoop.visualAcceptance.threshold."
+      ]
+    },
+    {
+      "id": "form-refinement",
+      "goal": "Refine shape, deformation, bevels, tapers, curves, asymmetry, and visible local geometry.",
+      "componentRefs": [
+        "root"
+      ],
+      "acceptance": [
+        "Important visible forms are represented in component geometryDescriptor, deformations, localFeatures, or repetitionSystems.",
+        "Endpoint-based child parts are rooted at their attachment sockets and do not visibly float away from parents.",
+        "AI vision comparison score meets selfCorrectLoop.visualAcceptance.threshold."
+      ]
+    },
+    {
+      "id": "material-pass",
+      "goal": "Match material color, roughness, bump, and local variation.",
+      "componentRefs": [
+        "root"
+      ],
+      "acceptance": [
+        "Reference-derived albedo palette records dominant, secondary, and accent colors per visible material.",
+        "Each important material defines roughness variation and at least one normal/bump/displacement response.",
+        "Local material overrides, dirt/wear/stains/moss/chips/scratches or equivalent masks are tied to evidenceRefs.",
+        "Thin, transparent, reflective, wet, or fibrous materials document alpha/transmission/clearcoat/metalness/fiber response when relevant.",
+        "Generated preview uses procedural albedo/roughness/bump texture or vertex color variation instead of one flat color.",
+        "Generated preview uses independent PBR maps at 1024px or higher for the quality-first tier.",
+        "If source pixels are available, referencePbr extraction passed at confidence >= 0.7 or the pass is stopped/requesting better references.",
+        "Macro, meso, and micro surface frequency bands are visible at the intended review distance without obvious tiling.",
+        "AI vision comparison score meets selfCorrectLoop.visualAcceptance.threshold."
+      ]
+    },
+    {
+      "id": "surface-pass",
+      "goal": "Add procedural surface locality such as normal/bump/displacement, AO, dirt, stains, chips, grain, moss, scratches, and wear.",
+      "componentRefs": [
+        "root"
+      ],
+      "acceptance": [
+        "Every required material feature group has local overrides or surfaceDetail tied to evidenceRefs.",
+        "A grazing-angle close-up proves that normal/height detail breaks highlights naturally and does not read as smooth plastic.",
+        "AI vision comparison score meets selfCorrectLoop.visualAcceptance.threshold."
+      ]
+    },
+    {
+      "id": "lighting-pass",
+      "goal": "Make material and form readable under neutral turntable lighting plus optional reference lighting.",
+      "componentRefs": [
+        "root"
+      ],
+      "acceptance": [
+        "lightingFromPhoto identifies key light direction/color/intensity, fill light, rim or environment light, and ambient color.",
+        "Exposure, tone mapping, background color/gradient, shadow softness, and contact shadow behavior are specified.",
+        "Lighting does not hide geometry/material gaps and screenshots can be compared fairly to the reference.",
+        "Neutral, grazing, and reference-matched lighting checks distinguish material errors from lighting errors.",
+        "AI vision comparison score meets selfCorrectLoop.visualAcceptance.threshold."
+      ]
+    },
+    {
+      "id": "interaction-pass",
+      "goal": "Make the model ready for future animation, transformation, physics, or destruction.",
+      "componentRefs": [
+        "root"
+      ],
+      "acceptance": [
+        "Macro and movable meso components have stable pivot nodes.",
+        "Sockets, collider proxies, and destruction metadata are present for future runtime actions.",
+        "AI vision comparison score meets selfCorrectLoop.visualAcceptance.threshold."
+      ]
+    },
+    {
+      "id": "optimization-pass",
+      "goal": "Protect runtime performance after visual fidelity is accepted.",
+      "componentRefs": [
+        "root"
+      ],
+      "acceptance": [
+        "Triangle count, draw calls, instancing, LOD strategy, and FPS target are documented or verified.",
+        "Repeated detail is instanced or simplified where possible without breaking silhouette/material believability."
+      ]
+    }
+  ],
+  "visualEvidence": [
+    {
+      "timestamp": "2026-09-02T00:08:36.916779+00:00",
+      "passId": "blockout",
+      "estimatedFidelity": 0.72,
+      "aiVisionScore": 0.72,
+      "visualAcceptanceThreshold": 0.7,
+      "layerScores": {
+        "silhouetteProportion": 0.74,
+        "componentStructure": 0.8,
+        "formDetail": 0.58,
+        "materialSurface": 0.62,
+        "lightingCamera": 0.7
+      },
+      "featureReviews": [],
+      "referenceScreenshot": "car_ref.png",
+      "renderScreenshot": "evidence/render_blockout_form.png",
+      "comparisonImage": "evidence/comparison_blockout.png",
+      "cameraView": "front-right three-quarter",
+      "notes": "",
+      "aiVisionNotes": ""
+    }
+  ],
+  "reviewHistory": [
+    {
+      "timestamp": "2026-09-02T00:08:36.916779+00:00",
+      "passId": "blockout",
+      "estimatedFidelity": 0.72,
+      "aiVisionScore": 0.72,
+      "visualAcceptanceThreshold": 0.7,
+      "layerScores": {
+        "silhouetteProportion": 0.74,
+        "componentStructure": 0.8,
+        "formDetail": 0.58,
+        "materialSurface": 0.62,
+        "lightingCamera": 0.7
+      },
+      "featureReviews": [],
+      "action": "continue",
+      "summary": "Blockout+form verdict from agent vision against car_ref.png: stance, red-accent story, lamp face and wheel articulation present; spokes readable after in-plane fan fix; steered capture proves front yaw pivots; map-stripped normal render confirms taper/tumblehome and clean arches. Stylized deviations: inferred rear, simplified windscreen, soft-top rear seam.",
+      "matched": [
+        "stance",
+        "red-accent-story",
+        "lamp-face",
+        "wheel-articulation"
+      ],
+      "mismatches": [
+        "chrome-jewelry under-reads",
+        "soft-top rear cap seam"
+      ],
+      "specFixes": [],
+      "codeFixes": [],
+      "evidence": [
+        "evidence/review_blockout.md"
+      ],
+      "mapStrippedRender": "evidence/render_blockout_stripped.png",
+      "visualEvidence": {
+        "referenceScreenshot": "car_ref.png",
+        "renderScreenshot": "evidence/render_blockout_form.png",
+        "comparisonImage": "evidence/comparison_blockout.png",
+        "cameraView": "front-right three-quarter",
+        "notes": "",
+        "aiVisionNotes": ""
+      }
+    }
+  ],
+  "lodPlan": [
+    {
+      "tier": "near",
+      "distance": 0,
+      "strategy": "full component tree and material layers"
+    },
+    {
+      "tier": "far",
+      "distance": 30,
+      "strategy": "merge static components and reduce local feature geometry"
+    }
+  ],
+  "performanceBudget": {
+    "qualityPriority": "reference-fidelity",
+    "targetTriangles": 250000,
+    "maxDrawCalls": 160,
+    "textureSize": 2048,
+    "fpsTarget": 30,
+    "optimizationPolicy": "Reach accepted visual fidelity first, then optimize without removing reference-critical geometry or surface layers."
+  },
+  "lightingFromPhoto": [
+    {
+      "role": "key",
+      "type": "directional",
+      "direction": "high front-right, ~35deg elevation",
+      "color": "#fff2e6",
+      "intensity": 2.4,
+      "evidence": "specular streak along bonnet top + hard shadow under sill"
+    },
+    {
+      "role": "fill",
+      "type": "ambient-dome",
+      "direction": "omni, pink-tinted",
+      "color": "#f2c8cc",
+      "intensity": 0.8,
+      "evidence": "pink cyclorama bounce visible in body side reflections"
+    },
+    {
+      "role": "rim",
+      "type": "directional",
+      "direction": "rear-left low",
+      "color": "#ffffff",
+      "intensity": 0.9,
+      "evidence": "bright edge along rear haunch and soft-top rear seam"
+    },
+    {
+      "role": "render-intent",
+      "type": "grade",
+      "detail": "exposure 1.0 with ACES filmic tone mapping; soft contact shadow pooled under sills and tires (ambient occlusion grounded), matching the cyclorama floor shadow in the reference"
+    }
+  ],
+  "proceduralStrategy": [
+    "Block out macro silhouette first.",
+    "Add component hierarchy and joints.",
+    "Create stable pivot groups, sockets, collider proxies, and destruction metadata before visual polish.",
+    "Refine forms with bevels, tapers, bends, and procedural noise.",
+    "Run reference PBR extraction for important source-image materials and stop when confidence is below the target threshold.",
+    "Add material variation before adding expensive micro-geometry."
+  ],
+  "animationAnchors": [
+    "root pivot node supports whole-object translation, rotation, scale, and visibility changes",
+    "component pivot groups support later local transforms without rebuilding geometry"
+  ],
+  "destructionAnchors": [
+    "actionProfile.destruction.fractureGroup marks detachable or breakable component sets",
+    "component seams and sockets define plausible break points instead of random explosions"
+  ],
+  "risks": [],
+  "localSpecSearch": {
+    "collection": "core_3d",
+    "query": "classic white roadster",
+    "index": {
+      "status": "rebuilt",
+      "reason": "missing",
+      "fingerprint": "ac4f0bc9028e34083dbb5d5531ae3df7699c8e7641d5f8e6d42e7492ea1be1d0"
+    },
+    "matches": [
+      {
+        "record_id": "core.pbr-metalness",
+        "file_path": "docs/raw/img2threejs-skill-dataset.json",
+        "heading": null,
+        "key_path": "categories.material_pbr[0]",
+        "score": 3.022605711513,
+        "snippets": [
+          "... Recognition cues: Metallic surfaces tint their reflections with the base color at grazing angles instead of showing white specular highlights; CS2 specifically uses a strict binary model â€” pure metal (1.0) or pure dielectric (0.0), no ..."
+        ],
+        "source_refs": [
+          {
+            "path": "docs/raw/img2threejs-skill-dataset.json",
+            "heading": null,
+            "key_path": "categories.material_pbr[0]"
+          }
+        ],
+        "evidence_refs": [
+          {
+            "kind": "source",
+            "ref": "docs/raw/img2threejs-skill-dataset.json",
+            "note": "img2threejs NotebookLM research distillation"
+          }
+        ]
+      }
+    ]
+  }
+}
