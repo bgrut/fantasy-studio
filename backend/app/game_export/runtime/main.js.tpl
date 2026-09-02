@@ -8375,7 +8375,29 @@ async function main() {
     });
     return g;
   }
-  const pg = P.car_params
+  // PROC HERO (2026-08-30): a proc: asset is a sculpted module, not a
+  // mesh file. It arrives with named steer/spin pivots and a drive API —
+  // the articulation contract the img2threejs lane exists to provide.
+  let procRoot = null;
+  if (P.asset && P.asset.startsWith('proc:')) {
+    const mod = await import('./proc/' + P.asset.slice(5) + '.js');
+    procRoot = (mod.createRoadster || mod.default)();
+    // proc modules author +Z-forward; engine heroes face -Z by convention
+    procRoot.rotateY(Math.PI);
+    // a sculpted module's materials are AUTHORED — flat by intent where flat.
+    // Without this the auto-texture sweep dressed the white roadster in bark,
+    // the same failure the mountain ring and blast glass already taught us.
+    procRoot.traverse(o => {
+      if (!o.isMesh) return;
+      for (const m of (Array.isArray(o.material) ? o.material : [o.material])) {
+        if (m) m.userData.noAutoTex = true;
+      }
+    });
+    window.__procDrive = procRoot;
+  }
+  const pg = procRoot
+    ? { scene: procRoot, animations: [] }
+    : P.car_params
     ? { scene: buildCar(P.car_params), animations: [] }
     : await loadGLB(P.asset);            // hard fail = visible error
   const { holder, root: pRoot, radius } =
@@ -8387,7 +8409,9 @@ async function main() {
   //   drive/swim travel along their long axis → align long axis to +Z
   //   (car nose is +X per the 2026-07-05 axis renders; whale body likewise).
   //   Flyers keep their wingspan lateral — no rotation at all.
-  alignLongAxis(pRoot, ['drive', 'swim'].includes(P.mode || 'walk'));
+  // a sculpted module's orientation is authored, not inferred — the whole
+  // point of the contract is that nothing downstream has to guess
+  if (!procRoot) alignLongAxis(pRoot, ['drive', 'swim'].includes(P.mode || 'walk'));
   polishVehiclePaint(pRoot, (P.mode || 'walk') === 'drive');
   // ── THE HERO FACED BACKWARDS (2026-08-07) ────────────────────────────
   // modelYaw is atan2(dir.x, dir.z), which points the model's local +Z along
@@ -11167,7 +11191,20 @@ varying vec2 vUvRaw;
       });
     }
   }
-  if (DRIVE && playerObj.children.length) addWheels(playerObj.children[0]);
+  if (DRIVE && window.__procDrive) {
+    // REAL PIVOTS, NOT INFERENCE. addWheels reverse-engineers axle positions
+    // from vertex bands and overlays fake wheels on top — the best a baked
+    // mesh allows. A sculpted module NAMES its pivots, so the same roll/steer
+    // loop drives the actual wheels: fronts steer about their own hubs, all
+    // four spin. wr matches the module's WHEEL_R.
+    window.__procDrive.traverse(o => {
+      if (/^wheel-F[LR]-steer$/.test(o.name)) {
+        wheels.push({ g: o, tire: o.children[0], wr: 0.315, front: true });
+      } else if (/^wheel-R[LR]-spin$/.test(o.name)) {
+        wheels.push({ g: o, tire: o, wr: 0.315, front: false });
+      }
+    });
+  } else if (DRIVE && playerObj.children.length) addWheels(playerObj.children[0]);
   if (FLY) {                                     // flight instructions in the HUD
     const hint = document.querySelector('#hud .hint');
     if (hint) hint.textContent = 'WASD glide · Space rise · C dive · Shift boost · drag to look';

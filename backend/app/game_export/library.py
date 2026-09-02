@@ -56,11 +56,25 @@ def register(kind: str, glb_path: str | Path, ready: bool = False) -> None:
     _save(lib)
 
 
+# PROC MODULES (2026-08-30): sculpted code-only assets from the img2threejs
+# lane. A proc: URI is not a file — the runtime imports runtime/proc/<n>.js
+# and gets articulated pivots (steering, spinning wheels) no GLB carries.
+_PROC_MODULES = {
+    "roadster": "proc:roadster",
+    "classic roadster": "proc:roadster",
+    "classic car": "proc:roadster",
+    "vintage car": "proc:roadster",
+    "white roadster": "proc:roadster",
+}
+
+
 def resolve(kind: str) -> str | None:
     """Return an absolute path to a game-ready GLB for `kind`, or None.
     Raw (unoptimized) generated entries are decimated to game budget on first
     use via the CPU-Blender optimizer, then cached as ready."""
     k = (kind or "").strip().lower()
+    if k in _PROC_MODULES:
+        return _PROC_MODULES[k]
     lib = _load()
     for key in (k, _SYNONYMS.get(k, ""), *(w for w in k.split() if w in lib)):
         entry = lib.get(key)

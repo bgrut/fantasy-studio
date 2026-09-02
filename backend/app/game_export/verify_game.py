@@ -65,7 +65,11 @@ def verify_dist(dist: str | Path) -> dict:
         refs += [s["asset"] for s in spec.get("world", {}).get("scatter", [])]
         refs += [e["asset"] for e in spec.get("entities", [])]
         for r in refs:
-            check(f"asset {Path(r).name}", (dist / r.lstrip("./")).exists())
+            if str(r).startswith("proc:"):
+                # sculpted code module: verify the shipped JS, not a mesh file
+                check(f"asset {r}", (dist / "proc" / (str(r)[5:] + ".js")).exists())
+            else:
+                check(f"asset {Path(r).name}", (dist / r.lstrip("./")).exists())
 
     # ── JS syntax via node (skipped cleanly if node absent) ──────────────────
     game_js = dist / "game.js"

@@ -747,7 +747,19 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         if pattern in ("vehicle", "flying", "aquatic", "static"):
             player_glb = library.resolve(want)
         else:
-            player_glb = ensure_playable(want, verbose=False)
+            # proc modules are code, not meshes — no rig bake to run
+            _pre = library.resolve(want)
+            player_glb = _pre if (_pre or "").startswith("proc:") \
+                else ensure_playable(want, verbose=False)
+        if (player_glb or "").startswith("proc:"):
+            # sculpted module: authored in metres with named drive pivots.
+            # The roadster is 1.135m tall; the camera band derives from this.
+            spec.player.asset = player_glb
+            spec.player.height_m = 1.15
+            spec.player.mode = spec.player.mode or "drive"
+            job.setdefault("notes", []).append(
+                f"hero is a sculpted proc module ({player_glb}) — wheels steer "
+                "and spin on real pivots (img2threejs lane)")
         if not player_glb:
             # THE VISION PATH (primary): unknown hero → SDXL image → 3D mesh →
             # library → playable. This is how the pipeline is MEANT to work and

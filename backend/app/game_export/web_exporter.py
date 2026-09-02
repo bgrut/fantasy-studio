@@ -293,11 +293,21 @@ over its content. You may sell it, publish it, or modify it freely.
     if vend_dst.exists():
         shutil.rmtree(vend_dst)
     shutil.copytree(vend_src, vend_dst)
+    # sculpted proc modules ride next to vendor: tiny JS, always shipped, so
+    # a spec can cast proc:<n> without the exporter knowing which games use it
+    _proc_src = RUNTIME / "proc"
+    if _proc_src.exists():
+        _proc_dst = dist / "proc"
+        if _proc_dst.exists():
+            shutil.rmtree(_proc_dst)
+        shutil.copytree(_proc_src, _proc_dst)
 
     # ── copy assets, rewrite spec paths to dist-relative ────────────────────
     rt = spec.runtime_json()
 
     def bring(src_path: str, tag: str) -> str:
+        if str(src_path).startswith("proc:"):
+            return str(src_path)          # code module — shipped via dist/proc
         src = Path(src_path)
         if not src.exists():
             raise FileNotFoundError(f"{tag} asset missing: {src}")
