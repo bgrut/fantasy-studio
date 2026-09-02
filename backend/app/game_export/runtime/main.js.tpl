@@ -8382,8 +8382,11 @@ async function main() {
   if (P.asset && P.asset.startsWith('proc:')) {
     const mod = await import('./proc/' + P.asset.slice(5) + '.js');
     procRoot = (mod.createRoadster || mod.default)();
-    // proc modules author +Z-forward; engine heroes face -Z by convention
-    procRoot.rotateY(Math.PI);
+    // proc modules author +Z-forward. The knight taught us facing bugs are
+    // settled by MOTION SCREENSHOTS, not convention reasoning: with the pi
+    // flip here the user drove the car nose-backwards (headlamps to the
+    // chase cam under throttle), so the flip comes out and the tail shot
+    // below is the proof either way.
     // a sculpted module's materials are AUTHORED — flat by intent where flat.
     // Without this the auto-texture sweep dressed the white roadster in bark,
     // the same failure the mountain ring and blast glass already taught us.
