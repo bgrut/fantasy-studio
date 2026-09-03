@@ -8964,12 +8964,14 @@ async function main() {
             if (w2 > 0) { muted.push([a2, w2]); a2.setEffectiveWeight(0); }
           }
           act.play(); act.setEffectiveWeight(1); act.timeScale = 1;
-          // rotation-independent: the widest horizontal separation between
-          // any two sampled foot positions IS the stride, whichever way the
-          // model happens to be turned. Measuring only world Z undercounted
-          // it to an implausible 0.20 m/s for a 1.8m biped.
-          const pts = [];
-          const N = 30;
+          // STANCE-PHASE VELOCITY, not stride excursion. A planted foot is
+          // stationary in the world, so its speed RELATIVE to the body is
+          // exactly the ground speed the clip depicts — true whether the
+          // export packs one gait cycle or four, which excursion/duration is
+          // not (it read 3x slow and over-cranked the legs to a ratio of
+          // 2.07). Stance frames are the ones where the foot is lowest.
+          const pts = [], ys = [];
+          const N = 60;
           for (let i = 0; i <= N; i++) {
             act.time = (i / N) * dur;
             mixer.update(0);                       // evaluate the pose, advance nothing
@@ -8978,19 +8980,24 @@ async function main() {
             _fw.setFromMatrixPosition(footBone.matrixWorld);
             _rw.setFromMatrixPosition(pg.scene.matrixWorld);
             pts.push([_fw.x - _rw.x, _fw.z - _rw.z]);
+            ys.push(_fw.y - _rw.y);
           }
-          let lo = 0, hi = 0;
-          for (let i = 0; i < pts.length; i++) {
-            for (let j = i + 1; j < pts.length; j++) {
-              const d = Math.hypot(pts[i][0] - pts[j][0], pts[i][1] - pts[j][1]);
-              if (d > hi) hi = d;
-            }
+          const yLo = Math.min(...ys), yHi = Math.max(...ys);
+          const plant = yLo + (yHi - yLo) * 0.25;   // lowest quarter = planted
+          const dt = dur / N;
+          const speeds = [];
+          for (let i = 1; i < pts.length; i++) {
+            if (ys[i] > plant || ys[i - 1] > plant) continue;
+            const d = Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);
+            if (d > 1e-5) speeds.push(d / dt);
           }
+          if (!speeds.length) return 0;
+          speeds.sort((a, b) => a - b);
+          const hi = speeds[Math.floor(speeds.length / 2)];   // median stance speed
           act.time = wasTime; act.setEffectiveWeight(wasWeight);
           act.timeScale = wasScale;
           for (const [a2, w2] of muted) a2.setEffectiveWeight(w2);
-          const excursion = hi;                    // one stride, in metres
-          return excursion > 0.05 ? excursion / dur : 0;
+          return hi > 0.05 ? hi : 0;               // metres/sec the clip depicts
         };
         for (const a of [actions.__walk, actions.__run]) {
           if (!a) continue;
@@ -11572,8 +11579,17 @@ varying vec2 vUvRaw;
         // configured speed only as a fallback for rigs with no foot bone
         const base = _strideRate.get(current)
           || (current === actions.__run ? P.run_speed : P.walk_speed);
+        // Ceiling raised 3.0 -> 5.5 because it, not the clips, was the
+        // binding constraint. The run clip strides ~0.67m per cycle — a
+        // perfectly normal stride — over a 1.67s cycle, which is simply a
+        // slow cadence; selling 2.5 m/s of travel needs ~4.6x, and the old
+        // 3.0 clamped it to 1.6 m/s, leaving the character to slide the
+        // difference. Fast legs that match the ground read as sprinting;
+        // correct-cadence legs that do not read as broken, which is far
+        // worse. 5.5 covers the observed range with headroom and still
+        // stops a degenerate speed from becoming a blur.
         current.timeScale = speed > 0.1
-          ? THREE.MathUtils.clamp(speed / base, 0.5, 3.0) : 1.0;
+          ? THREE.MathUtils.clamp(speed / base, 0.5, 5.5) : 1.0;
       }
       mixer.update(dt);
     }

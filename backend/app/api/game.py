@@ -854,6 +854,24 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                         f"round wheels, real glass (no mesh generation)")
             except Exception:
                 pass
+        if player_glb and spec.player.mode == "walk":
+            # BIPED SPEED CEILING (2026-08-30), the sibling of the drive/fly
+            # floors below. Nothing bounded a WALKING hero, so the model was
+            # free to roll walk_speed 2.5 m/s — jog pace — for a character
+            # whose walk clip depicts 0.40, and the legs could never catch up.
+            # The bound scales with leg length (height is the proxy we have),
+            # because a 1.2m fox and a 2.4m ogre do not walk at one speed.
+            _h = max(0.4, float(spec.player.height_m or 1.8))
+            _k = _h / 1.8
+            _wmax, _rmax = round(2.4 * _k, 2), round(7.0 * _k, 2)
+            if spec.player.walk_speed > _wmax:
+                job.setdefault("notes", []).append(
+                    f"walk speed {spec.player.walk_speed:.1f} -> {_wmax:.1f} m/s "
+                    f"(anatomical ceiling for a {_h:.1f}m cast; the legs have to "
+                    f"keep up)")
+                spec.player.walk_speed = _wmax
+            if spec.player.run_speed > _rmax:
+                spec.player.run_speed = _rmax
         if player_glb and pattern == "flying":
             spec.player.mode = "fly"
             if spec.player.walk_speed < 4.5:                 # floor, see 'drive'
