@@ -45,8 +45,10 @@ Output ONLY the JSON object, no markdown, no commentary. Schema (all fields opti
  "sky" to a real daylight or night sky (never "space"). archipelago is the only
  landform that puts a sea in the world, so without it a sailing game is dry
  lumpy ground and the boat sits on dirt.
- "style": THE ART DIRECTION, and the single biggest lever on whether two games
- look like different products. Pick from: "default" (photoreal — natural light
+ "style": A TOP-LEVEL FIELD, a sibling of "world" and "player" — NOT a key
+ inside "world". Put it at the root of the object: {"title":..., "style":"pixel",
+ "world":{...}}. It is THE ART DIRECTION, and the single biggest lever on
+ whether two games look like different products. Pick from: "default" (photoreal — natural light
  and texture), "cartoon" (flat cel fills, thick ink outlines, saturated),
  "sketch" (hand-drawn linework), "anime" (soft cel banding, bright), "horror"
  (desaturated, crushed blacks, heavy grain), "pixel" (low-res nearest-neighbour,
@@ -54,8 +56,14 @@ Output ONLY the JSON object, no markdown, no commentary. Schema (all fields opti
  the subject and mood, do not default to photoreal out of habit: a shark-hunting
  sailboat adventure reads "lowpoly" or "cartoon"; a haunted asylum reads
  "horror"; an arcade racer reads "pixel"; a Ghibli-ish forest walk reads
- "anime"; a gritty city heist or a wildlife documentary reads "default". Omit
- the field ONLY when the text gives no signal at all about look or genre.
+ "anime"; a gritty city heist or a wildlife documentary reads "default".
+ ALWAYS EMIT "style". Every prompt carries a genre and every genre implies a
+ look, so "default" is a CHOICE meaning "photoreal", never a way to skip the
+ question. A prompt naming neon, arcade, retro, 8-bit or synthwave MUST be
+ "pixel"; naming haunted, cursed, undead, asylum or nightmare MUST be
+ "horror"; naming cute, cartoon, toy or kid-friendly MUST be "cartoon". If two
+ prompts on the same subject would look identical coming out of this field,
+ you have not used it.
  "world" may also include "palette": a COLOR SCRIPT when the text implies a mood —
  {"sky":"#rrggbb","fog":"#rrggbb","sun_color":"#rrggbb","accent":"#rrggbb",
   "sun_azimuth_deg":0-360,"sun_elevation_deg":4-88,"sun_intensity":0.2-4.5,
@@ -301,6 +309,18 @@ def extract_game_spec(text: str, model: str | None = None, verbose: bool = True)
             print(f"[game] extractor: LLM path failed ({type(e).__name__}: {e}) — keyword fallback")
 
     over = llm_out if llm_out is not None else _keyword_fallback(text)
+    # STYLE ARRIVES NESTED (2026-09-03). "style" is a top-level GameSpec field
+    # but it is DESCRIBED in the middle of the world section, and the model
+    # duly emitted it inside "world" — where the schema silently dropped it.
+    # Measured: a neon arcade racer and a haunted asylum both came back
+    # style="default" while archetype and ground_color were picked correctly,
+    # so the art direction the user asked for never reached the renderer and
+    # every game looked the same. The prompt now says where it goes; this
+    # catches the model when it puts it somewhere else anyway.
+    if isinstance(over, dict):
+        _w = over.get("world")
+        if isinstance(_w, dict) and "style" in _w and "style" not in over:
+            over["style"] = _w.pop("style")
     spec = spec_from_dict(_merge(base, over))
     if verbose:
         src = "ollama" if llm_out is not None else "keywords"
