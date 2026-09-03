@@ -651,6 +651,15 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             job["title"] = spec.title
         # STYLE IS THE USER'S CHOICE (Phase 44): the studio's style chips set
         # it explicitly — the LLM never guesses it, so it's never wrong
+        # ART DIRECTION IS NOW PROMPT-DRIVEN (2026-08-30). Style used to come
+        # only from the studio dropdown, which defaults to Photoreal — so every
+        # game built without touching that control shipped identical art
+        # direction, and "they all look the same" was structurally true. The
+        # extractor now picks one; an explicit user choice below still wins.
+        if not req.style and spec.style and spec.style != "default":
+            job.setdefault("notes", []).append(
+                f"art direction: {spec.style} (chosen from your prompt — "
+                f"pick a style in the studio to override)")
         if req.style:
             try:
                 spec.style = req.style        # pydantic validates the literal

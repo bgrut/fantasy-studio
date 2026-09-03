@@ -29,6 +29,17 @@ Output ONLY the JSON object, no markdown, no commentary. Schema (all fields opti
            "fog_density": float 0..1 (misty/foggy scene -> 0.7-0.9; default 0.5),
            "health_packs": int 0..12 ("health packs/potions on the ground" -> 4),
            "ground_color": [r,g,b] floats 0..1},
+ "style": THE ART DIRECTION, and the single biggest lever on whether two games
+ look like different products. Pick from: "default" (photoreal — natural light
+ and texture), "cartoon" (flat cel fills, thick ink outlines, saturated),
+ "sketch" (hand-drawn linework), "anime" (soft cel banding, bright), "horror"
+ (desaturated, crushed blacks, heavy grain), "pixel" (low-res nearest-neighbour,
+ retro), "lowpoly" (flat-shaded facets, clean palettes). CHOOSE ONE that fits
+ the subject and mood, do not default to photoreal out of habit: a shark-hunting
+ sailboat adventure reads "lowpoly" or "cartoon"; a haunted asylum reads
+ "horror"; an arcade racer reads "pixel"; a Ghibli-ish forest walk reads
+ "anime"; a gritty city heist or a wildlife documentary reads "default". Omit
+ the field ONLY when the text gives no signal at all about look or genre.
  "world" may also include "palette": a COLOR SCRIPT when the text implies a mood —
  {"sky":"#rrggbb","fog":"#rrggbb","sun_color":"#rrggbb","accent":"#rrggbb",
   "sun_azimuth_deg":0-360,"sun_elevation_deg":4-88,"sun_intensity":0.2-4.5,
