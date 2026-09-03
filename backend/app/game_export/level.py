@@ -199,9 +199,60 @@ def _cell_kind(raster: dict, grid_n: int, size_m: float,
     return None if rid < 0 else raster["palette"][rid]["kind"]
 
 
+def _archetype_height(kind: str, x: float, z: float, base: float,
+                      amp: float, half: float, rng_seed: int) -> float:
+    """The LANDFORM, applied before regions and before the path corridor.
+
+    Every world used to be the same gently-rolling field: value noise times a
+    small amplitude. Colour and silhouette varied; the shape of the ground
+    never did. Each archetype here answers "what KIND of place is this" in
+    the one term that reads from every camera angle.
+
+    The corridor flattening downstream always has the last word, so even a
+    canyon floor or an island chain stays walkable along the mission path.
+    """
+    import math as _m
+    if kind == "plain" or not kind:
+        return base
+    r = _m.hypot(x, z) / max(half, 1e-6)          # 0 centre .. 1 edge
+    a = _m.atan2(z, x)
+    if kind == "canyon":
+        # high tableland split by a winding gorge; the gorge is the world
+        wind = _m.sin(z / max(half, 1) * 2.4 + rng_seed % 7) * half * 0.22
+        d = abs(x - wind) / max(half * 0.20, 1e-6)
+        floor_t = max(0.0, 1.0 - d * d)           # 1 in the gorge, 0 on the rim
+        rim = amp * 4.5 + base * 1.4
+        return rim * (1.0 - floor_t) - 1.2 * floor_t
+    if kind == "mesa":
+        # stepped plateaus: quantise the noise so tops are flat and the
+        # transitions are cliffs rather than slopes
+        steps = 4.0
+        q = _m.floor((base / max(amp, 1e-6) * 0.5 + 0.5) * steps) / steps
+        return q * amp * 5.0
+    if kind == "dunes":
+        # long parallel ridges running one way, softened by the base noise
+        ridge = _m.sin((x * 0.055) + (z * 0.017) + rng_seed % 5)
+        return ridge * amp * 2.6 + base * 0.45
+    if kind == "basin":
+        # a bowl: low, sheltered centre inside a raised rim
+        return base * 0.5 + (r ** 2.2) * amp * 6.0 - amp * 0.8
+    if kind == "peaks":
+        # alpine — the same noise pushed through a sharpening curve so
+        # summits are pointed and valleys are deep
+        sgn = 1.0 if base >= 0 else -1.0
+        return sgn * ((abs(base) / max(amp, 1e-6)) ** 1.9) * amp * 4.2
+    if kind == "archipelago":
+        # sea level is the default state; islands are what rises out of it
+        blob = _m.sin(x * 0.021 + rng_seed % 3) * _m.cos(z * 0.019 - rng_seed % 4)
+        land = base * 0.8 + blob * amp * 3.2
+        return land - amp * 1.4                   # most of the map falls below 0
+    return base
+
+
 def build_level(seed: int, size_m: float, n_objectives: int = 0,
                 amplitude_m: float = 2.4, grid_n: int = 48,
-                regions: list[dict] | None = None) -> dict:
+                regions: list[dict] | None = None,
+                archetype: str = "plain") -> dict:
     """Deterministic LevelPlan. Returns a JSON-safe dict for the runtime."""
     rng = random.Random(seed)
 
@@ -224,6 +275,7 @@ def build_level(seed: int, size_m: float, n_objectives: int = 0,
 
     # ── terrain: hills, flattened along the corridor + zones ────────────────
     raster = _rasterize_regions(regions or [], grid_n, size_m, seed, path)
+    _arch = archetype or "plain"
     has_water = bool(raster) and any(
         p["kind"] == "water" for p in raster["palette"])
     hgrid = _value_noise_grid(rng, grid_n)
@@ -233,6 +285,7 @@ def build_level(seed: int, size_m: float, n_objectives: int = 0,
         for j in range(grid_n):
             x = (j / (grid_n - 1) - 0.5) * size_m
             h = (hgrid[i][j] - 0.45) * 2.0 * amplitude_m
+            h = _archetype_height(archetype, x, z, h, amplitude_m, half, seed)
             # MICRO-RELIEF (Phase 93): a second, higher-frequency octave —
             # real ground undulates at the metre scale, not only in big
             # hills. Mesh + collider share these heights, so feet/wheels

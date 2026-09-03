@@ -29,6 +29,22 @@ Output ONLY the JSON object, no markdown, no commentary. Schema (all fields opti
            "fog_density": float 0..1 (misty/foggy scene -> 0.7-0.9; default 0.5),
            "health_packs": int 0..12 ("health packs/potions on the ground" -> 4),
            "ground_color": [r,g,b] floats 0..1},
+ "world" may also include "archetype": THE LANDFORM, and the structural twin of
+ "style" — one of "plain" (gentle rolling ground, the default), "canyon" (high
+ tableland split by a deep winding gorge), "mesa" (stepped flat-topped plateaus
+ with cliff edges), "dunes" (long parallel desert ridges), "basin" (a sheltered
+ bowl inside a raised rim), "peaks" (alpine, sharp summits and deep valleys),
+ "archipelago" (open sea with islands rising out of it). Pick the one the text
+ describes or implies: sailing/diving/island-hopping -> archipelago; desert or
+ sand -> dunes; a gorge, ravine or river-cut -> canyon; badlands or a
+ southwestern butte country -> mesa; a crater, valley floor or sheltered
+ hollow -> basin; mountains, climbing or snowy summits -> peaks. Use "plain"
+ for ordinary fields, forests, towns and city streets.
+ ANY world set ON or UNDER water — sailing, a boat or ship, the sea, the ocean,
+ diving, reefs, islands, pirates — MUST use "archetype":"archipelago" and set
+ "sky" to a real daylight or night sky (never "space"). archipelago is the only
+ landform that puts a sea in the world, so without it a sailing game is dry
+ lumpy ground and the boat sits on dirt.
  "style": THE ART DIRECTION, and the single biggest lever on whether two games
  look like different products. Pick from: "default" (photoreal — natural light
  and texture), "cartoon" (flat cel fills, thick ink outlines, saturated),

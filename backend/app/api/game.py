@@ -1546,9 +1546,23 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             # aquatic player in a non-water world: give them water anyway
             spec.world.water_level = 8.0
             amp = max(amp, 3.0)
+        # ARCHETYPE (2026-08-30): the landform the prompt asked for. Applied
+        # before regions and before the corridor, so it changes the SHAPE of
+        # the world rather than its dressing — and the corridor still flattens
+        # the mission path, so a canyon floor stays walkable.
+        _arch = getattr(spec.world, "archetype", "plain") or "plain"
         spec.world.level = build_level(
             spec.seed, spec.world.size_m, n_objectives=n_obj, amplitude_m=amp,
-            regions=_regions)
+            regions=_regions, archetype=_arch)
+        if _arch != "plain":
+            job.setdefault("notes", []).append(
+                f"landform: {_arch} (from your prompt — the ground itself, "
+                f"not just its colour)")
+        if _arch == "archipelago" and spec.world.water_level is None:
+            # an archipelago without a sea is just lumpy ground: this landform
+            # puts most of the map below zero on purpose, so the water plane
+            # IS the world and has to exist
+            spec.world.water_level = 0.0
         if (spec.world.water_level is None
                 and spec.world.level.get("water_suggest") is not None):
             spec.world.water_level = spec.world.level["water_suggest"]

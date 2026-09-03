@@ -86,6 +86,13 @@ class WorldSpec(BaseModel):
     pano_depth: Optional[str] = None  # Phase 140B: depth map -> parallax dome displacement
     pano_ground: Optional[str] = None  # Phase 140D: pano floor reprojected as the ground texture
     health_packs: int = Field(0, ge=0, le=12)   # heart pickups scattered on the ground
+    # WORLD ARCHETYPE (2026-08-30): the LANDFORM, chosen before regions and
+    # before the path corridor. Palette changed a world's colour and
+    # silhouette packs changed its shapes, but every world was still the same
+    # gently-rolling playfield ringed by mountains — the sameness that survived
+    # both. This is the structural axis.
+    archetype: Literal["plain", "canyon", "mesa", "dunes", "basin",
+                       "peaks", "archipelago"] = "plain"
     placed_items: List[PlacedItemSpec] = Field(default_factory=list)  # Inspector placements
     palette: Optional[PaletteSpec] = None   # film-grade color script
     flora: Optional[str] = None    # prompt's tree word: silhouettes obey it
