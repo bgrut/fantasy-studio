@@ -26,6 +26,13 @@ class PlayerSpec(BaseModel):
     attack: Literal["none", "melee", "ranged"] = "none"   # combat verb (Phase 36)
     hp: int = Field(5, ge=1, le=20)
     mode: Literal["walk", "drive", "fly", "swim"] = "walk"  # drive/fly/swim per species
+    # BUOYANT (2026-09-03): swim mode was written for whales, sharks and
+    # subs — it spawns you MID-WATER and clamps you BELOW the surface. A
+    # sailboat given that treatment starts on the seabed looking up through
+    # seven metres of ocean, which is exactly how the first sailing game
+    # shipped. A surface vessel rides the waterline instead: it spawns on it
+    # and cannot dive.
+    buoyant: bool = False
     vfx: Optional[str] = None            # Ability VFX element (water/fire/frost/…) — theme-inferred
     car_params: Optional[dict] = None    # 2026-08-04: parametric car built in code (crisp panels)
     anims: dict = Field(default_factory=lambda: {

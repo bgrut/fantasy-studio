@@ -1550,6 +1550,23 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         # before regions and before the corridor, so it changes the SHAPE of
         # the world rather than its dressing — and the corridor still flattens
         # the mission path, so a canyon floor stays walkable.
+        # SURFACE VESSELS FLOAT (2026-09-03). The model picks mode="swim"
+        # for anything that belongs on water, which is right for a shark and
+        # wrong for a boat — one swims through it, the other sits on top of
+        # it. Decided here rather than asked of the LLM: the vocabulary for
+        # "thing that floats" is small and closed, and a wrong guess puts the
+        # player underwater with no way to tell why.
+        if spec.player.mode == "swim":
+            _hay = " ".join(str(x).lower() for x in (
+                spec.player.asset, getattr(spec.player, "species", "") or "",
+                spec.world.name or "", spec.title or ""))
+            if any(w in _hay for w in ("boat", "ship", "sail", "raft", "canoe",
+                                       "kayak", "yacht", "ferry", "schooner",
+                                       "galleon", "dinghy", "trawler", "cutter")):
+                spec.player.buoyant = True
+                job.setdefault("notes", []).append(
+                    "surface vessel: rides the waterline (boats float, they "
+                    "don't dive)")
         _arch = getattr(spec.world, "archetype", "plain") or "plain"
         spec.world.level = build_level(
             spec.seed, spec.world.size_m, n_objectives=n_obj, amplitude_m=amp,

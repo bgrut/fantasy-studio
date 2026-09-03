@@ -9188,10 +9188,13 @@ async function main() {
   function spawnHeight(x, z) {
     const g = hAt(x, z) + P.height_m / 2 + 0.15;
     if (SPEC.player.mode === 'fly') return g + 6;              // airborne start
-    if (SPEC.player.mode === 'swim' && SPEC.world.water_level != null)
+    if (SPEC.player.mode === 'swim' && SPEC.world.water_level != null) {
+      // a hull sits ON the waterline; a whale hangs somewhere below it
+      if (P.buoyant) return SPEC.world.water_level;
       return Math.max(g + 0.4,                                  // clear of seabed,
         Math.min((hAt(x, z) + SPEC.world.water_level) / 2,      // mid-water,
                  SPEC.world.water_level - P.height_m / 2 - 0.2)); // under surface
+    }
     return g;
   }
   const body = world.createRigidBody(
@@ -9210,6 +9213,7 @@ async function main() {
   addEventListener('keyup', e => { keys[e.code] = false; });
   const FLY = SPEC.player.mode === 'fly';   // dragons/birds/aircraft — flight loop below
   const SWIM = SPEC.player.mode === 'swim'; // whales/sharks/subs — swim loop below
+  const BUOYANT = SWIM && !!SPEC.player.buoyant;  // hulls ride the waterline
   // SPAWN FACING THE PHOTO (2026-08-04): in image worlds the user's own
   // photograph is preserved verbatim at panorama center (-Z). Opening the
   // game looking anywhere else means the first thing you see is invented
@@ -11365,7 +11369,9 @@ varying vec2 vUvRaw;
   }
   if (SWIM) {                                    // swim instructions in the HUD
     const hint = document.querySelector('#hud .hint');
-    if (hint) hint.textContent = 'WASD swim · Space surface · C dive · Shift burst · drag to look';
+    if (hint) hint.textContent = SPEC.player.buoyant
+      ? 'WASD sail · Shift for speed · drag to look'
+      : 'WASD swim · Space surface · C dive · Shift burst · drag to look';
   }
   if (VIEW === 'side') {                         // side-scroller controls
     const hint = document.querySelector('#hud .hint');
@@ -11497,14 +11503,18 @@ varying vec2 vUvRaw;
         horiz = speed * mv.mag;
       }
       let vv = 0;
-      if (keys.Space) vv = speed * 0.6;
-      else if (keys.KeyC || keys.ControlLeft) vv = -speed * 0.6;
-      const bob = Math.sin(performance.now() / 640) * 0.18;
+      if (!BUOYANT) {                       // a boat cannot dive or breach
+        if (keys.Space) vv = speed * 0.6;
+        else if (keys.KeyC || keys.ControlLeft) vv = -speed * 0.6;
+      }
+      const bob = BUOYANT ? 0 : Math.sin(performance.now() / 640) * 0.18;
       vy = 0;                                              // buoyant — no gravity
       var desired = { x: dir.x * horiz * dt, y: (vv + bob) * dt, z: dir.z * horiz * dt };
       leanP = THREE.MathUtils.damp(leanP, THREE.MathUtils.clamp(-vv * 0.05, -0.35, 0.35), 3, dt);
       leanR = THREE.MathUtils.damp(leanR, THREE.MathUtils.clamp(-mv.x * 0.25, -0.35, 0.35), 3, dt);
-      holder.rotation.x = leanP; holder.rotation.z = leanR;
+      // a hull heels a little into a turn; it does not pitch like a fish
+      holder.rotation.x = BUOYANT ? 0 : leanP;
+      holder.rotation.z = BUOYANT ? leanR * 0.45 : leanR;
     } else {
       if (VIEW === 'side') {
         // side-scroller: A/D (or ←→) run the lane, Space jumps — W/S unused
@@ -11564,9 +11574,15 @@ varying vec2 vUvRaw;
       body.setNextKinematicTranslation({ x: nt.x, y: 60, z: nt.z });
       nt = { x: nt.x, y: 60, z: nt.z };
     }
-    if (SWIM && WATER !== null && nt.y > WATER - 0.15) {   // swimmers stay wet
-      body.setNextKinematicTranslation({ x: nt.x, y: WATER - 0.15, z: nt.z });
-      nt = { x: nt.x, y: WATER - 0.15, z: nt.z };
+    if (SWIM && WATER !== null) {
+      // BOATS RIDE, SWIMMERS SUBMERGE. The old rule pushed every swim-mode
+      // player under the surface; a sailboat pinned 15cm below the waterline
+      // is a shipwreck. A buoyant hull is held ON the line instead.
+      const _wy = BUOYANT ? WATER : WATER - 0.15;
+      if (BUOYANT ? Math.abs(nt.y - _wy) > 0.01 : nt.y > _wy) {
+        body.setNextKinematicTranslation({ x: nt.x, y: _wy, z: nt.z });
+        nt = { x: nt.x, y: _wy, z: nt.z };
+      }
     }
     if (WATER !== null) {     // tide bob + underwater fog when the camera dips
       waterMesh.position.y = WATER + Math.sin(performance.now() / 1400) * 0.12;
