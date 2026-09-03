@@ -8951,6 +8951,18 @@ async function main() {
           const wasWeight = act.getEffectiveWeight();
           const wasTime = act.time;
           const wasScale = act.timeScale;
+          // SOLO THE CLIP. idle is already playing at weight 1, so sampling
+          // without muting it measures a 50/50 BLEND of idle (feet still) and
+          // this clip — which halves every excursion and makes walk and run
+          // report nearly the same number. That artifact is what looked like
+          // "the retarget bakes short shuffles"; the clips were fine.
+          const muted = [];
+          for (const k of Object.keys(actions)) {
+            const a2 = actions[k];
+            if (!a2 || a2 === act || typeof a2.getEffectiveWeight !== 'function') continue;
+            const w2 = a2.getEffectiveWeight();
+            if (w2 > 0) { muted.push([a2, w2]); a2.setEffectiveWeight(0); }
+          }
           act.play(); act.setEffectiveWeight(1); act.timeScale = 1;
           // rotation-independent: the widest horizontal separation between
           // any two sampled foot positions IS the stride, whichever way the
@@ -8976,6 +8988,7 @@ async function main() {
           }
           act.time = wasTime; act.setEffectiveWeight(wasWeight);
           act.timeScale = wasScale;
+          for (const [a2, w2] of muted) a2.setEffectiveWeight(w2);
           const excursion = hi;                    // one stride, in metres
           return excursion > 0.05 ? excursion / dur : 0;
         };
@@ -11545,7 +11558,15 @@ varying vec2 vUvRaw;
       _dustT = 0.22;
     }
     if (mixer) {
-      setAnim(speed < 0.1 ? actions.__idle : (mv.run && mv.mag > 0.3 ? actions.__run : actions.__walk));
+      // CLIP CHOICE FOLLOWS GROUND SPEED, not just the shift key. The
+      // configured walk_speed is routinely far faster than the walk clip
+      // depicts (knight: 2.5 m/s of travel against a 0.40 m/s clip), and no
+      // playback rate hides a 6x gap. When walking would need more crank
+      // than the ceiling allows, the run clip is simply the closer lie.
+      const _wr = _strideRate.get(actions.__walk) || P.walk_speed || 1;
+      const _rr = _strideRate.get(actions.__run) || P.run_speed || 1;
+      const _wantRun = (mv.run && mv.mag > 0.3) || (_rr > _wr && speed / _wr > 3.0);
+      setAnim(speed < 0.1 ? actions.__idle : (_wantRun ? actions.__run : actions.__walk));
       if (current && current.getClip()) {
         // the clip's OWN stride rate when we could measure it; the
         // configured speed only as a fallback for rigs with no foot bone
