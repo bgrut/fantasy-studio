@@ -8904,6 +8904,10 @@ async function main() {
     } catch (e) { /* cosmetic pass, never a gate */ }
   }, 4000);
 
+  // AnimationAction has no userData in three.js (assumed once, cost a
+  // frame-loop throw that froze the player); an external Map is the
+  // storage. Declared above BOTH the calibration and the frame loop.
+  const _strideRate = new Map();
   if (pg.animations && pg.animations.length) {
     mixer = new THREE.AnimationMixer(pg.scene);
     for (const clip of pg.animations) actions[clip.name] = mixer.clipAction(clip);
@@ -8916,6 +8920,80 @@ async function main() {
       actions.__attack.clampWhenFinished = false;
     }
     current = actions.__idle; current.play();
+    // ── STRIDE CALIBRATION (2026-08-30) ────────────────────────────────
+    // Clip playback rate was speed / P.walk_speed — a number that has
+    // nothing to do with how far the animation actually moves a foot. The
+    // gap is measurable: a knight walking covered 3.75m of ground while his
+    // feet travelled 2.19m relative to his body (ratio 0.58 where planted
+    // feet give ~1.2). He was gliding with under-cranked legs, which is the
+    // single loudest "the movement is wrong" tell we have.
+    //
+    // So ask the CLIP how far it strides. Step it through one cycle with the
+    // body still, track the foot's fore-aft excursion relative to the root,
+    // and that excursion over the clip's duration IS the speed this
+    // animation was authored to walk at. Self-calibrating: any rig, any
+    // mocap source, any body scale, no per-asset data.
+    try {
+      let footBone = null;
+      pg.scene.traverse(o => {
+        if (footBone || !o.isSkinnedMesh || !o.skeleton) return;
+        for (const bn of o.skeleton.bones) {
+          if (/foot|ankle|toe/i.test(bn.name)) { footBone = bn; break; }
+        }
+      });
+      if (footBone) {
+        const _fw = new THREE.Vector3(), _rw = new THREE.Vector3();
+        const measure = (act) => {
+          if (!act || !act.getClip) return 0;
+          const clip = act.getClip();
+          const dur = clip.duration || 0;
+          if (dur <= 0.01) return 0;
+          const wasWeight = act.getEffectiveWeight();
+          const wasTime = act.time;
+          const wasScale = act.timeScale;
+          act.play(); act.setEffectiveWeight(1); act.timeScale = 1;
+          // rotation-independent: the widest horizontal separation between
+          // any two sampled foot positions IS the stride, whichever way the
+          // model happens to be turned. Measuring only world Z undercounted
+          // it to an implausible 0.20 m/s for a 1.8m biped.
+          const pts = [];
+          const N = 30;
+          for (let i = 0; i <= N; i++) {
+            act.time = (i / N) * dur;
+            mixer.update(0);                       // evaluate the pose, advance nothing
+            footBone.updateMatrixWorld(true);
+            pg.scene.updateMatrixWorld(true);
+            _fw.setFromMatrixPosition(footBone.matrixWorld);
+            _rw.setFromMatrixPosition(pg.scene.matrixWorld);
+            pts.push([_fw.x - _rw.x, _fw.z - _rw.z]);
+          }
+          let lo = 0, hi = 0;
+          for (let i = 0; i < pts.length; i++) {
+            for (let j = i + 1; j < pts.length; j++) {
+              const d = Math.hypot(pts[i][0] - pts[j][0], pts[i][1] - pts[j][1]);
+              if (d > hi) hi = d;
+            }
+          }
+          act.time = wasTime; act.setEffectiveWeight(wasWeight);
+          act.timeScale = wasScale;
+          const excursion = hi;                    // one stride, in metres
+          return excursion > 0.05 ? excursion / dur : 0;
+        };
+        for (const a of [actions.__walk, actions.__run]) {
+          if (!a) continue;
+          const rate = measure(a);
+          if (rate > 0.05) _strideRate.set(a, rate);
+        }
+        current = actions.__idle;
+        current.setEffectiveWeight(1); current.play();
+        mixer.update(0);
+        console.log('[game] stride rates — walk: '
+          + (_strideRate.get(actions.__walk) || 0).toFixed(2)
+          + ' run: '
+          + (_strideRate.get(actions.__run) || 0).toFixed(2)
+          + ' m/s');
+      }
+    } catch (e) { console.warn('[game] stride calibration skipped: ' + e.message); }
   } else {
     console.warn('[game] player GLB has no animations — static fallback');
   }
@@ -11469,8 +11547,12 @@ varying vec2 vUvRaw;
     if (mixer) {
       setAnim(speed < 0.1 ? actions.__idle : (mv.run && mv.mag > 0.3 ? actions.__run : actions.__walk));
       if (current && current.getClip()) {
-        const base = current === actions.__run ? P.run_speed : P.walk_speed;
-        current.timeScale = speed > 0.1 ? Math.max(speed / base, 0.5) : 1.0;
+        // the clip's OWN stride rate when we could measure it; the
+        // configured speed only as a fallback for rigs with no foot bone
+        const base = _strideRate.get(current)
+          || (current === actions.__run ? P.run_speed : P.walk_speed);
+        current.timeScale = speed > 0.1
+          ? THREE.MathUtils.clamp(speed / base, 0.5, 3.0) : 1.0;
       }
       mixer.update(dt);
     }
