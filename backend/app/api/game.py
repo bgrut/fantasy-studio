@@ -1554,6 +1554,23 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         spec.world.level = build_level(
             spec.seed, spec.world.size_m, n_objectives=n_obj, amplitude_m=amp,
             regions=_regions, archetype=_arch)
+        # GROUND FOLLOWS THE LANDFORM (2026-08-30). The first built canyon was
+        # a red-rock gorge carpeted in meadow grass, which throws away most of
+        # what the archetype just bought: shape read as canyon, surface read as
+        # valley. The runtime picks its detail texture (grass / soil / stone /
+        # sand / snow) from the ground COLOUR, so tinting the ground per
+        # landform swings the material with it for free. Only applied when the
+        # model left the default green — an explicit colour still wins.
+        _ARCH_GROUND = {
+            "canyon": [0.46, 0.26, 0.17],      # red rock
+            "mesa":   [0.52, 0.34, 0.22],      # dusty butte
+            "dunes":  [0.72, 0.62, 0.40],      # sand
+            "peaks":  [0.62, 0.64, 0.66],      # bare stone above the treeline
+            "basin":  [0.40, 0.42, 0.28],      # dry scrub
+        }
+        if (_arch in _ARCH_GROUND
+                and list(spec.world.ground_color) == [0.35, 0.52, 0.28]):
+            spec.world.ground_color = _ARCH_GROUND[_arch]
         if _arch != "plain":
             job.setdefault("notes", []).append(
                 f"landform: {_arch} (from your prompt — the ground itself, "

@@ -214,6 +214,19 @@ def _archetype_height(kind: str, x: float, z: float, base: float,
     import math as _m
     if kind == "plain" or not kind:
         return base
+    # AMPLITUDE IS CAPPED FOR LANDFORMS (2026-08-30). amp is already boosted
+    # by setting keywords, and a canyon prompt boosted it far enough that the
+    # first built gorge came out 62m deep — walls that fill the frame from the
+    # floor and read as a corridor, not a canyon. Landform relief is dramatic
+    # by construction, so it does not also need the keyword boost stacked on
+    # top; cap the term the archetype multiplies.
+    # base arrives already multiplied by the CALLER's amplitude, so capping
+    # amp alone leaves the two out of step — peaks read (base/amp)**1.9 and
+    # blew up to a 121m span. Scale both by the same factor so the landform
+    # keeps its proportions and only its size is bounded.
+    amp0 = max(amp, 1e-6)
+    amp = min(amp, 3.2)
+    base = base * (amp / amp0)
     r = _m.hypot(x, z) / max(half, 1e-6)          # 0 centre .. 1 edge
     a = _m.atan2(z, x)
     if kind == "canyon":

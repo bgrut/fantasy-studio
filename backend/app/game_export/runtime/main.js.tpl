@@ -5592,8 +5592,16 @@ async function main() {
   if (!PURE_SCENE && (SPEC.world.scatter || []).length && SPEC.world.grass !== false) {
     // undergrowth stays PLANT-colored: pull toward green so brown forest
     // floors get living tufts, not floating tan cards
+    // Blades are instance-coloured, so THIS is the lever, not bmat.color: a
+    // 55% lerp toward a hardcoded meadow green swamped whatever the ground
+    // was made of, which is why a red-rock canyon still rendered as lawn.
+    // Green pull only where the ground is actually green; elsewhere the
+    // scatter takes the ground's own hue and reads as dry stalks.
+    const _bh = {}; new THREE.Color(...SPEC.world.ground_color).getHSL(_bh);
+    const _bGrassy = _bh.h > 0.16 && _bh.h < 0.45 && _bh.s > 0.12;
     const gcolA = new THREE.Color(...SPEC.world.ground_color)
-      .lerp(new THREE.Color(0x4d7a33), 0.55).offsetHSL(0, 0.08, 0.13);   // lighter vs photo ground
+      .lerp(new THREE.Color(0x4d7a33), _bGrassy ? 0.55 : 0.0)
+      .offsetHSL(0, _bGrassy ? 0.08 : -0.06, _bGrassy ? 0.13 : 0.10);
     const gcolB = gcolA.clone().offsetHSL(0.02, 0.05, -0.07);
     // REAL blade shape: tapered to a tip, bowed forward, shaded dark at the
     // root — reads as grass, not floating rectangles
@@ -5630,8 +5638,20 @@ async function main() {
     const GR = Math.min(gsize * 0.48, 70);
     // DENSITY ARC r2: ultra tier earns a thicker meadow (~1.5x blades) —
     // undergrowth density is the cheapest 'lived-in world' signal we have
-    const GN = Math.min(QUALITY === 'ultra' ? 21000 : 13000,
-                        Math.floor(GR * GR * (QUALITY === 'ultra' ? 3.2 : 2.2)));
+    // GRASS BELONGS ON GRASSLAND (2026-08-30). 21,000 lush blades were laid
+    // over every world regardless of what the ground was made of, so the
+    // first red-rock canyon rendered as a green meadow with a gorge in it —
+    // the landform read correctly and the surface threw it all away. The
+    // ground colour already tells us the biome (it drives the detail texture
+    // the same way), so a non-green floor gets a sparse dry scatter instead
+    // of a meadow, and the blades take its colour.
+    const _gh = {}; gcol.getHSL(_gh);
+    const _grassy = _gh.h > 0.16 && _gh.h < 0.45 && _gh.s > 0.12;
+    const GN = Math.floor(Math.min(QUALITY === 'ultra' ? 21000 : 13000,
+                        Math.floor(GR * GR * (QUALITY === 'ultra' ? 3.2 : 2.2)))
+                        * (_grassy ? 1 : 0.10));
+    // (blade colour itself is handled at gcolA/gcolB above — instance colours
+    // multiply the material, so tinting bmat here would double-darken)
     const rngG = mulberry32(SPEC.seed + 21);
     for (const baseRot of [0, Math.PI / 2]) {
       const im = new THREE.InstancedMesh(blade, bmat, GN);
