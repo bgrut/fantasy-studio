@@ -10725,10 +10725,31 @@ async function main() {
     // the user called out)
     if (PHOTO && !panoGroundTex) {
       const wn = (SPEC.world.name || '').toLowerCase();
+      // THE GROUND TEXTURE FOLLOWS THE GROUND, NOT ITS NAME (2026-09-03).
+      // This is the primary albedo of the whole world — the painted canvas
+      // below only tints it — and it used to be picked by four keyword
+      // regexes on world.name with a hardcoded 'grass' fallback. So every
+      // world that was not literally a desert, forest or city got a lawn:
+      // a red rock canyon with ground_color #996619 rendered as meadow,
+      // and an ocean floor rendered as drowned grass. Three earlier attempts
+      // at that bug went after the grass BLADES and the painted canvas and
+      // could not move it, because neither is what you are standing on.
+      // Archetype is the strongest statement about what the ground is made
+      // of; ground colour is the next; the name regexes only refine, and
+      // the fallback now follows the colour exactly like the detail map at
+      // the top of this file, so the two can never disagree again.
+      const _gh2 = {}; gcol.getHSL(_gh2);
+      const ARCH_TEX = { canyon: 'rock', mesa: 'rock', peaks: 'stone',
+                         dunes: 'sand', basin: 'soil', archipelago: 'sand' };
+      const _arch2 = SPEC.world.archetype || 'plain';
       const gname = (SPEC.world.weather === 'snow') ? 'snow'
+        : ARCH_TEX[_arch2] ? ARCH_TEX[_arch2]
         : /desert|beach|dune/.test(wn) ? 'sand'
         : /forest|wood|jungle/.test(wn) ? 'forest'
-        : /city|street|town|road/.test(wn) ? 'concrete' : 'grass';
+        : /city|street|town|road/.test(wn) ? 'concrete'
+        : (_gh2.s < 0.10 ? 'stone'
+        : (_gh2.h > 0.16 && _gh2.h < 0.45 ? 'grass'
+        : (_gh2.l > 0.55 ? 'sand' : 'soil')));
       // GROUND LAYERING FLIP (Phase 128, the HD unlock): the old pipeline
       // squeezed the photo into the world-spanning painted canvas (~60px per
       // 9m tile — permanently mushy). Now the TILED PHOTO is the primary
@@ -10751,6 +10772,18 @@ async function main() {
       gmat.map = pbr(gname, grep2, true);
       gmat.normalMap = pbr(gname + '_n', grep2, false);
       gmat.normalScale = new THREE.Vector2(0.65, 0.65);
+      // AND IT IS TINTED BY THE WORLD'S OWN COLOUR (2026-09-03). The tiled
+      // photo below is a neutral grey rock / grey sand / green grass; the
+      // world tint that is supposed to colour it rides in the shader patch
+      // further down, and measurably does not reach the surface — a canyon
+      // whose ground_color is a strong red still rendered plain grey stone,
+      // with the material colour sitting at pure white. Rather than stack a
+      // second shader patch onto a material that already carries one, the
+      // colour goes where nothing can swallow it. Lerped toward white so it
+      // tints the photo instead of crushing it: multiplying a mid-grey rock
+      // by a raw 0.6/0.3/0.1 would leave the canyon nearly black.
+      gmat.color.copy(gcol).lerp(new THREE.Color(0xffffff), 0.28)
+        .offsetHSL(0, 0.10, 0);
       const worldTint = gtex;                        // the painted canvas
       gmat.onBeforeCompile = (sh) => {
         sh.uniforms.uWorld = { value: worldTint };

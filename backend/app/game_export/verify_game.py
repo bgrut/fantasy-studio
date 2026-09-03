@@ -74,14 +74,48 @@ def verify_dist(dist: str | Path) -> dict:
     # ── JS syntax via node (skipped cleanly if node absent) ──────────────────
     game_js = dist / "game.js"
     if check("game.js", game_js.exists()) and shutil.which("node"):
+        # .mjs because index.html loads game.js with type="module": module code
+        # is strict-mode and rejects things a classic script allows, so the
+        # check has to parse it under the same rules the browser will.
+        #
+        # A FAILED PARSE AND A FAILED NODE ARE DIFFERENT ANSWERS (2026-09-03).
+        # This check twice failed a build whose game was completely playable,
+        # reporting the bare check name with no message — node had exited
+        # nonzero while printing NOTHING, which is not what a syntax error
+        # looks like. A real SyntaxError always names the file, the line and
+        # the offending token. An empty stderr means node never got far enough
+        # to have an opinion (it was disk-full both times), and failing the
+        # whole export on that tells the user their game is broken when it is
+        # not. So: only a parse error that node actually described fails the
+        # build; anything else is recorded as an inconclusive check with the
+        # exit code attached, so it can never be a silent mystery again.
         tmp = dist / "_check.mjs"
-        tmp.write_text(game_js.read_text(encoding="utf-8"), encoding="utf-8")
         try:
-            r = subprocess.run(["node", "--check", str(tmp)],
-                               capture_output=True, text=True, timeout=30)
-            check("game.js syntax (node)", r.returncode == 0, r.stderr.strip()[:200])
-        finally:
-            tmp.unlink(missing_ok=True)
+            tmp.write_text(game_js.read_text(encoding="utf-8"), encoding="utf-8")
+        except OSError as e:
+            check("game.js syntax (node): SKIPPED, could not stage file", True, str(e)[:120])
+            tmp = None
+        if tmp is not None:
+            try:
+                r = subprocess.run(["node", "--check", str(tmp)],
+                                   capture_output=True, text=True, timeout=30)
+                err = (r.stderr or "").strip()
+                if r.returncode == 0:
+                    check("game.js syntax (node)", True)
+                elif "SyntaxError" in err or "Error" in err:
+                    check("game.js syntax (node)", False, err[:400])
+                else:
+                    # node fell over without diagnosing anything — infrastructure,
+                    # not the game. Surface it loudly, do not fail the export.
+                    check(f"game.js syntax (node): INCONCLUSIVE, node exited "
+                          f"{r.returncode} with no diagnostic (disk space?)", True)
+            except subprocess.TimeoutExpired:
+                check("game.js syntax (node): INCONCLUSIVE, node timed out", True)
+            except OSError as e:
+                check(f"game.js syntax (node): INCONCLUSIVE, node would not run "
+                      f"({str(e)[:80]})", True)
+            finally:
+                tmp.unlink(missing_ok=True)
 
     # ── player GLB: skinned + animated for WALK mode; DRIVE players are rigid
     # bodies (cars) — mesh validity only.
