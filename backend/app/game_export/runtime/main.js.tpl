@@ -4857,6 +4857,8 @@ async function main() {
   // a forest of them would cost more than it is worth.
   const _dynProps = [];
   const _dynQ = new THREE.Quaternion(), _dynV = new THREE.Vector3();
+  const _dynP = new THREE.Vector3(), _dynS = new THREE.Vector3();
+  const _dynM = new THREE.Matrix4(), _dynM2 = new THREE.Matrix4();
   const DYN_MAX = QUALITY === 'ultra' ? 90 : 55;
   function placeProp(inst, x, z, scale, collide) {
     inst.scale.multiplyScalar(scale);
@@ -5073,8 +5075,10 @@ async function main() {
       const M = new THREE.Matrix4(), T = new THREE.Matrix4(), SV = new THREE.Vector3();
       const LR = new THREE.Matrix4(), _eul = new THREE.Euler();
       const jitC = new THREE.Color();
+      const _ims = [];
       for (const p of parts) {
         const im = new THREE.InstancedMesh(p.geo, p.mat, N);
+        _ims.push({ im, local: p.local });
         im.castShadow = true;
         im.frustumCulled = false;
         for (let i = 0; i < N; i++) {
@@ -5097,10 +5101,36 @@ async function main() {
         scene.add(im);
       }
       if (sct.collide) {
+        // A BARREL IS NOT A TREE (2026-09-04). Every scatter prop got the same
+        // hardcoded cylinder(1.6*s, 0.22*s) — a 3.2m trunk — so a barrel or a
+        // lantern carried an invisible tree you bumped into from a metre away.
+        // Measure the prop instead.
+        const _pb = new THREE.Box3().setFromObject(gltf.scene);
+        const _ph = Math.max(_pb.max.y - _pb.min.y, 0.05);
+        const _pr = Math.max((_pb.max.x - _pb.min.x), (_pb.max.z - _pb.min.z)) * 0.5;
         for (let i = 0; i < Math.min(N, 260); i++) {
           const pl = places[i];
-          world.createCollider(RAPIER.ColliderDesc.cylinder(1.6 * pl.s, 0.22 * pl.s)
-            .setTranslation(pl.x, hAt(pl.x, pl.z) + 1.6 * pl.s, pl.z));
+          const h = _ph * pl.s, r = Math.max(_pr * pl.s, 0.08);
+          const gy = hAt(pl.x, pl.z);
+          // small enough to shove, and there is still solver budget
+          const loose = h >= 0.18 && h <= 1.35 && r <= 0.9
+                        && _dynProps.length < DYN_MAX;
+          if (loose) {
+            const rb = world.createRigidBody(
+              RAPIER.RigidBodyDesc.dynamic()
+                .setTranslation(pl.x, gy + h / 2, pl.z)
+                .setLinearDamping(0.55).setAngularDamping(0.85));
+            world.createCollider(
+              RAPIER.ColliderDesc.cylinder(h / 2, r).setDensity(0.5)
+                .setFriction(0.9).setRestitution(0.05), rb);
+            // an instanced prop is several InstancedMeshes sharing one index,
+            // so the body drives every part of it
+            _dynProps.push({ body: rb, idx: i, off: h / 2 + _pb.min.y * pl.s,
+                             s: pl.s, insts: _ims.map(o => o) });
+          } else {
+            world.createCollider(RAPIER.ColliderDesc.cylinder(h / 2, r)
+              .setTranslation(pl.x, gy + h / 2, pl.z));
+          }
         }
       }
     } catch (e) { fail(e.message); }
@@ -9282,7 +9312,15 @@ async function main() {
       .setTranslation(_sp.x, spawnHeight(_sp.x, _sp.z), _sp.z));
   const collider = world.createCollider(RAPIER.ColliderDesc.capsule(capHalf, capR), body);
   const kcc = world.createCharacterController(0.02);
-  kcc.setApplyImpulsesToDynamicBodies(false);
+  // THE PLAYER CAN NOW SHOVE THINGS (2026-09-04). This was false, which was
+  // correct while nothing in the world was dynamic — there was nothing to
+  // push, so the flag only cost solver work. With loose props simulated it is
+  // exactly wrong: a kinematic character in Rapier passes through dynamic
+  // bodies unless it is told to apply impulses, and MEASURED with it off the
+  // player walked into a barrel and moved it 0.000m. The character mass is
+  // what decides how hard a shove lands, so it is set rather than defaulted.
+  kcc.setApplyImpulsesToDynamicBodies(true);
+  kcc.setCharacterMass(Math.max(35, (P.height_m || 1.8) * 40));
   kcc.enableAutostep(0.3, 0.15, true);
   kcc.enableSnapToGround(0.3);
   let vy = 0;
@@ -11736,14 +11774,28 @@ varying vec2 vUvRaw;
     // DYNAMIC PROPS follow the solver. Written straight after the step so the
     // render never shows a frame of stale physics.
     if (_dynProps.length) {
+      const _touched = new Set();
       for (let i = 0; i < _dynProps.length; i++) {
         const d = _dynProps[i];
         const t = d.body.translation(), q = d.body.rotation();
         _dynQ.set(q.x, q.y, q.z, q.w);
         _dynV.set(0, d.off, 0).applyQuaternion(_dynQ);
-        d.obj.position.set(t.x - _dynV.x, t.y - _dynV.y, t.z - _dynV.z);
-        d.obj.quaternion.copy(_dynQ);
+        const px = t.x - _dynV.x, py = t.y - _dynV.y, pz = t.z - _dynV.z;
+        if (d.obj) {                       // a cloned Object3D (landmarks)
+          d.obj.position.set(px, py, pz);
+          d.obj.quaternion.copy(_dynQ);
+        } else {                           // one index across several InstancedMeshes
+          _dynS.set(d.s, d.s, d.s);
+          _dynP.set(px, py, pz);
+          _dynM.compose(_dynP, _dynQ, _dynS);
+          for (const e of d.insts) {
+            _dynM2.multiplyMatrices(_dynM, e.local);
+            e.im.setMatrixAt(d.idx, _dynM2);
+            _touched.add(e.im);
+          }
+        }
       }
+      for (const im of _touched) im.instanceMatrix.needsUpdate = true;
     }
 
     let nt = body.translation();
