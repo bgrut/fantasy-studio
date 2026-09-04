@@ -11062,12 +11062,17 @@ varying vec2 vUvRaw;
         vec3 shadowTone = vec3(0.94, 1.0, 1.06);         // teal shadows
         vec3 highTone   = vec3(1.05, 1.0, 0.95);         // warm highlights
         c.rgb *= mix(shadowTone, highTone, smoothstep(0.18, 0.78, lu));
-        // r15 FILM GRAIN: live fine-grain dither — kills flat digital
-        // gradients, reads as photographed (kept far below visibility
-        // as 'noise')
-        float gr = fract(sin(dot(vUv * 917.0 + vec2(uT * 0.31, uT * 0.17),
-                                 vec2(12.9898, 78.233))) * 43758.5453);
-        c.rgb += (gr - 0.5) * 0.018;
+        // FILM GRAIN MOVED AFTER THE SHARPEN (2026-09-04). It used to be
+        // added here, and the CAS sharpen that runs next amplified it: that
+        // sharpen weights itself as uAmt * (1 - contrast), so it applies its
+        // FULL strength exactly where the image is flat — and flat is where
+        // grain is the only signal there is. A dither deliberately kept at
+        // +/-0.9% ("far below visibility") came out the far side as visible
+        // speckle across sky, rock and skin alike, measured at the same
+        // 4-6 per-pixel deviation in all three. That uniform crawl is what
+        // reads as gritty and papery in photoreal, and as dirty smudge under
+        // the cartoon cel bands. The grain now goes on last, at the size it
+        // was always meant to be.
         gl_FragColor = c;
       }`,
   });
@@ -11078,10 +11083,12 @@ varying vec2 vUvRaw;
   const sharpen = new ShaderPass({
     uniforms: { tDiffuse: { value: null },
                 uRes: { value: new THREE.Vector2(innerWidth, innerHeight) },
+                uT: { value: 0 },
                 uAmt: { value: 0.22 } },
     vertexShader: `varying vec2 vUv;
       void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
     fragmentShader: `uniform sampler2D tDiffuse; uniform vec2 uRes; uniform float uAmt;
+      uniform float uT;
       varying vec2 vUv;
       void main(){
         vec2 px = 1.0 / uRes;
@@ -11093,8 +11100,19 @@ varying vec2 vUvRaw;
         vec3 mn = min(c, min(min(n, s), min(e, w)));
         vec3 mx = max(c, max(max(n, s), max(e, w)));
         float contrast = clamp(dot(mx - mn, vec3(0.333)), 0.0, 1.0);
-        float amt = uAmt * (1.0 - contrast);        // adaptive: back off on edges
+        // SHARPEN THE DETAIL, NOT THE FLOOR (2026-09-04). This backed off on
+        // edges (right, that is how you avoid ringing) but ran at FULL
+        // strength on flat pixels, where the only thing to amplify is the
+        // 8-bit quantisation step of the render target and whatever dither
+        // sits on top. A smooth sky measured the same per-pixel deviation as
+        // cracked rock. Sharpening is a BAND-pass: nothing to do on a flat
+        // region, most to do in mid-contrast detail, careful near an edge.
+        float amt = uAmt * (1.0 - contrast) * smoothstep(0.015, 0.09, contrast);
         vec3 sharp = c * (1.0 + 4.0 * amt) - (n + s + e + w) * amt;
+        // grain LAST, so nothing downstream multiplies it (see the grade pass)
+        float gr = fract(sin(dot(vUv * 917.0 + vec2(uT * 0.31, uT * 0.17),
+                                 vec2(12.9898, 78.233))) * 43758.5453);
+        sharp += (gr - 0.5) * 0.012;
         gl_FragColor = vec4(clamp(sharp, 0.0, 4.0), 1.0);
       }`,
   });
@@ -11835,7 +11853,8 @@ varying vec2 vUvRaw;
       godray.uniforms.uStr.value +=
         ((on2 ? gb : 0) - godray.uniforms.uStr.value) * Math.min(1, dt * 3);
     }
-    grade.uniforms.uT.value = performance.now() / 1000;   // live film grain
+    grade.uniforms.uT.value = performance.now() / 1000;
+    sharpen.uniforms.uT.value = grade.uniforms.uT.value;  // live film grain
 
     // SURVIVE verb: hold out while escalating waves close in
     {
