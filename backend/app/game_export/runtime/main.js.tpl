@@ -6495,9 +6495,45 @@ async function main() {
       }
       // death animation: keel over + sink, then remove
       if (n.dead) {
+        // A BODY FALLS, IT DOES NOT PIVOT (2026-09-04). Death used to be
+        // rotation.x driven to 90 degrees over 0.4s — a felled plank, hinged
+        // at the feet, landing identically every time and clipping through
+        // whatever it fell on. Now the corpse becomes a real dynamic body:
+        // knocked backwards off its own facing with a spin, tumbling and
+        // settling on the actual ground, so no two deaths land the same and
+        // a body on a slope lies along the slope. It rides the same
+        // per-frame sync as the loose props, and the animation freezes at
+        // whatever pose it died in rather than playing on underneath.
+        if (!n._rag) {
+          n._rag = true;
+          try {
+            const _bb = new THREE.Box3().setFromObject(n.obj);
+            const _h = Math.max(0.3, _bb.max.y - _bb.min.y);
+            const _r = Math.max(0.1, Math.min(0.45,
+              Math.max(_bb.max.x - _bb.min.x, _bb.max.z - _bb.min.z) * 0.34));
+            const _oy = n.obj.position.y;
+            const _rb = world.createRigidBody(
+              RAPIER.RigidBodyDesc.dynamic()
+                .setTranslation(n.obj.position.x, _oy + _h / 2, n.obj.position.z)
+                .setLinearDamping(0.2).setAngularDamping(0.3));
+            world.createCollider(
+              RAPIER.ColliderDesc.capsule(Math.max(0.05, _h / 2 - _r), _r)
+                .setDensity(0.9).setFriction(0.85).setRestitution(0.05), _rb);
+            // knocked back along its OWN facing — deliberately not read off
+            // the player, whose object is declared much further down this
+            // file and would be a temporal-dead-zone trap from here
+            const _fy = n.obj.rotation.y;
+            _rb.applyImpulse({ x: -Math.sin(_fy) * 2.4, y: 2.4,
+                               z: -Math.cos(_fy) * 2.4 }, true);
+            _rb.applyTorqueImpulse({ x: (rng() - 0.5) * 1.4, y: (rng() - 0.5) * 0.9,
+                                     z: (rng() - 0.5) * 1.4 }, true);
+            _dynProps.push({ body: _rb, obj: n.obj,
+                             off: _h / 2 + (_bb.min.y - _oy) });
+            if (n.anim && n.anim.mixer) n.anim.mixer.timeScale = 0;
+          } catch (e) { /* no physics for this one; it just lies where it fell */ }
+        }
         n.dieT += dt;
-        n.obj.rotation.x = Math.min(n.dieT * 4, Math.PI / 2);
-        if (n.dieT > 1.4) { scene.remove(n.obj); n.gone = true; }
+        if (n.dieT > 6.0) { scene.remove(n.obj); n.gone = true; }
         continue;
       }
       let tx = null, tz = null;
