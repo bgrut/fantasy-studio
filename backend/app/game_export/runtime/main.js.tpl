@@ -4842,6 +4842,22 @@ async function main() {
   const rng = mulberry32(SPEC.seed);
   let landmarkAsset = null;
   const swayProps = [];             // Phase 33: wind-swayed prop roots
+  // NOTHING IN THIS WORLD COULD MOVE (2026-09-04). Every collider in the
+  // runtime was created with world.createCollider() and no rigid body, which
+  // in Rapier means FIXED — the only rigid body in the whole game was the
+  // player's own kinematic capsule. So a barrel was scenery welded to the
+  // ground, a crate could not be knocked over, and nothing ever fell, rolled
+  // or reacted to anything. That absence is most of what "our games lack the
+  // little details" means: the physics engine was running a full step every
+  // frame with nothing dynamic in it to simulate.
+  //
+  // Small loose props are now DYNAMIC bodies. The player capsule is kinematic,
+  // which in Rapier pushes dynamics correctly, so you can walk into a barrel
+  // and shove it. Capped, because every dynamic body is real solver cost and
+  // a forest of them would cost more than it is worth.
+  const _dynProps = [];
+  const _dynQ = new THREE.Quaternion(), _dynV = new THREE.Vector3();
+  const DYN_MAX = QUALITY === 'ultra' ? 90 : 55;
   function placeProp(inst, x, z, scale, collide) {
     inst.scale.multiplyScalar(scale);
     inst.rotation.y = rng() * Math.PI * 2;
@@ -4849,11 +4865,31 @@ async function main() {
     const gy = hAt(x, z);
     inst.position.set(x, gy - bb.min.y, z);
     scene.add(inst);
-    if ((bb.max.y - bb.min.y) > 1.2) swayProps.push({ o: inst, ph: rng() * Math.PI * 2 });
+    const _h = bb.max.y - bb.min.y;
+    if (_h > 1.2) swayProps.push({ o: inst, ph: rng() * Math.PI * 2 });
     if (collide) {
       const r = Math.max(bb.max.x - bb.min.x, bb.max.z - bb.min.z) * 0.25;
-      world.createCollider(RAPIER.ColliderDesc.cylinder((bb.max.y - bb.min.y) / 2, Math.max(r, 0.1))
-        .setTranslation(x, gy + (bb.max.y - bb.min.y) / 2, z));
+      const rr = Math.max(r, 0.1);
+      // a thing you could plausibly shove: small, and not a tree trunk
+      const loose = _h >= 0.18 && _h <= 1.25 && rr <= 0.9
+                    && _dynProps.length < DYN_MAX;
+      if (loose) {
+        const rb = world.createRigidBody(
+          RAPIER.RigidBodyDesc.dynamic()
+            .setTranslation(x, gy + _h / 2, z)
+            .setLinearDamping(0.55)      // ground friction stand-in: props
+            .setAngularDamping(0.85));   // settle instead of rolling forever
+        world.createCollider(
+          RAPIER.ColliderDesc.cylinder(_h / 2, rr).setDensity(0.5)
+            .setFriction(0.9).setRestitution(0.05), rb);
+        // the mesh sits with its BASE on the ground while the body is centred,
+        // so the render offset is half the height plus wherever the mesh's own
+        // origin sits inside its box
+        _dynProps.push({ body: rb, obj: inst, off: _h / 2 + bb.min.y });
+      } else {
+        world.createCollider(RAPIER.ColliderDesc.cylinder(_h / 2, rr)
+          .setTranslation(x, gy + _h / 2, z));
+      }
     }
   }
   // QUALITY PACK: props render as INSTANCED sub-meshes — hundreds of trees at
@@ -9947,6 +9983,17 @@ async function main() {
       } catch (e) {}
       if (WATER !== null && f.player_y != null)
         f.depth_below_water = +(WATER - f.player_y).toFixed(3);
+      // how much of this world can actually MOVE
+      try {
+        f.dynamic_props = _dynProps.length;
+        f.dyn_settled = _dynProps.filter(d => {
+          const v = d.body.linvel();
+          return Math.hypot(v.x, v.y, v.z) < 0.05;
+        }).length;
+        f.dyn_below_ground = _dynProps.filter(d =>
+          d.body.translation().y < hAt(d.body.translation().x,
+                                       d.body.translation().z) - 1.0).length;
+      } catch (e) {}
       return f;
     },
     stats: () => ({ calls: window.__frameCalls | 0,
@@ -11686,6 +11733,18 @@ varying vec2 vUvRaw;
     const t = body.translation();
     body.setNextKinematicTranslation({ x: t.x + cm.x, y: t.y + cm.y, z: t.z + cm.z });
     world.step();
+    // DYNAMIC PROPS follow the solver. Written straight after the step so the
+    // render never shows a frame of stale physics.
+    if (_dynProps.length) {
+      for (let i = 0; i < _dynProps.length; i++) {
+        const d = _dynProps[i];
+        const t = d.body.translation(), q = d.body.rotation();
+        _dynQ.set(q.x, q.y, q.z, q.w);
+        _dynV.set(0, d.off, 0).applyQuaternion(_dynQ);
+        d.obj.position.set(t.x - _dynV.x, t.y - _dynV.y, t.z - _dynV.z);
+        d.obj.quaternion.copy(_dynQ);
+      }
+    }
 
     let nt = body.translation();
     if (FLY && nt.y > 60) {   // flight ceiling — the world stays in view
