@@ -1266,6 +1266,8 @@ def bake_anim_set(hero_glb: str | Path, out_glb: str | Path,
                 .replace("__TRACK__", "False")
                 .replace("__WIDE__", "1.00")
                 .replace("__INPLACE__", "True"))
+        _lo, _hi = M.state_window(name)
+        code = code.replace("__LOF__", f"{_lo:.4f}").replace("__HIF__", f"{_hi:.4f}")
         r = _call(registry, name, code)
         if not (r and r.get("ok")):
             raise RuntimeError(f"retarget '{name}' failed: {r}")

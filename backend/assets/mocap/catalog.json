@@ -1,21 +1,53 @@
 {
-  "_comment": "ONE source of truth for what motion this engine can perform. mocap_retarget.py reads it for its action->clip candidates and bake.py derives the per-character clip set from it, because the two used to name the same BVH files in two independent tables and nothing kept them honest. Adding an action is a data edit here plus the .bvh next door -- see ATTRIBUTION.md for the licence (CMU motion is commercial-safe to retarget and ship, and NOT to resell as data).",
+  "_comment": "ONE source of truth for what motion this engine can perform. mocap_retarget.py reads it for action->clip candidates and its per-action window; bake.py derives the per-character clip set from it. Adding an action is a data edit here plus the .bvh next door. See ATTRIBUTION.md for the licence (CMU motion is commercial-safe to retarget and ship, and NOT to resell as data).",
+  "_window": "Fraction of the source trial that actually holds the motion, MEASURED with tools/bvhwindow.py, never guessed. The retargeter samples lo + (i*step) % window with step = 120/fps = 5, so a one-shot wants window_frames ~= frames*5 (it then walks the slice once instead of wrapping), while a cycle can use any window it likes.",
+  "_verified": "false means the clip is measured and wired but no bake has been LOOKED at yet, so it stays out of the default character clip set. Shipping motion nobody has watched is how a jump ends up sampling its own landing.",
   "actions": {
     "walk": {
       "clips": ["02_01.bvh", "02_02.bvh", "07_01.bvh", "08_01.bvh", "35_01.bvh"],
-      "game_state": "walk",
-      "frames": 40
+      "game_state": "walk", "frames": 40, "window": [0.06, 0.98],
+      "cyclic": true, "verified": true
     },
     "run": {
       "clips": ["02_03.bvh", "09_01.bvh", "16_01.bvh"],
-      "game_state": "run",
-      "frames": 28
+      "game_state": "run", "frames": 28, "window": [0.06, 0.98],
+      "cyclic": true, "verified": true
     },
     "fight": {
       "clips": ["02_05.bvh", "02_07.bvh"],
-      "game_state": "attack",
-      "frames": 16,
+      "game_state": "attack", "frames": 16, "window": [0.06, 0.98],
+      "cyclic": false, "verified": true,
       "note": "strike slice of the fight clip -- the swing, not the wind-down"
+    },
+    "idle": {
+      "clips": ["140_06.bvh"],
+      "game_state": "idle", "frames": 72, "window": [0.50, 0.60],
+      "cyclic": true, "verified": false,
+      "note": "29.7s standing trial; energy is lowest around 0.48-0.62 so the window sits in its calmest stretch. 0.10 of 3563 frames = 356 source frames ~= 72 output frames at step 5, so it walks the slice once and loops cleanly. Replaces the PROCEDURAL breathing idle, which is why heroes stand with flared arms."
+    },
+    "jump": {
+      "clips": ["02_04.bvh"],
+      "game_state": "jump", "frames": 25, "window": [0.18, 0.44],
+      "cyclic": false, "verified": false,
+      "note": "root height peaks at 0.295 of the trial (26.04 against a 17.5 standing baseline), so take-off/apex/landing sit inside 0.18-0.44. Unblocks player.jump, hardcoded off since the comment 'off until foot-plant/land anims exist'."
+    },
+    "sneak": {
+      "clips": ["136_09.bvh"],
+      "game_state": "sneak", "frames": 40, "window": [0.30, 0.70],
+      "cyclic": true, "verified": false,
+      "note": "Walk Crouched, steady energy throughout; the heist kit's sneak currently has no animation at all."
+    },
+    "swim": {
+      "clips": ["79_02.bvh"],
+      "game_state": "swim", "frames": 32, "window": [0.30, 0.70],
+      "cyclic": true, "verified": false,
+      "note": "swim mode has no swim clip; energy is steady from 0.25 on."
+    },
+    "die": {
+      "clips": ["90_16.bvh"],
+      "game_state": "die", "frames": 35, "window": [0.48, 0.72],
+      "cyclic": false, "verified": false,
+      "note": "root height runs 20.5 -> 31.6 -> 6.0 across 0.48-0.72 and settles on the ground. Replaces death-by-rotating-the-mesh-90-degrees."
     }
   }
 }

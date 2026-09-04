@@ -48,8 +48,35 @@ MOCAP_ACTIONS = set(CATALOG.keys())
 
 def game_clip_set() -> dict:
     """state name -> (bvh, frames), the per-character clip set bake.py bakes."""
+    # UNVERIFIED CLIPS DO NOT SHIP (2026-09-04). A clip is "verified" once a
+    # bake using it has actually been looked at. Measuring a window is not the
+    # same as watching the result, and this whole week has been about the
+    # difference.
     return {v.get("game_state", k): (v["clips"][0], int(v.get("frames", 40)))
-            for k, v in ACTIONS.items() if v.get("clips")}
+            for k, v in ACTIONS.items()
+            if v.get("clips") and v.get("verified")}
+
+
+def action_window(action: str) -> tuple[float, float]:
+    """(lo, hi) as fractions of the source clip that actually hold the motion.
+
+    Cyclic locomotion can use nearly the whole trial. A one-shot cannot: the
+    slice has to be named, or looping re-enters the motion mid-air.
+    """
+    a = ACTIONS.get(action) or {}
+    w = a.get("window") or [0.06, 0.98]
+    lo, hi = float(w[0]), float(w[1])
+    if not (0.0 <= lo < hi <= 1.0):
+        return 0.06, 0.98
+    return lo, hi
+
+
+def state_window(game_state: str) -> tuple[float, float]:
+    """Same, addressed by the GAME state name bake.py uses (attack vs fight)."""
+    for k, v in ACTIONS.items():
+        if v.get("game_state", k) == game_state:
+            return action_window(k)
+    return 0.06, 0.98
 
 
 def pick_clip(action, seed=0):
@@ -278,7 +305,16 @@ else:
     # the whole clip to fill TOTAL frames re-samples that startup pose and the
     # character goes airborne/legs-together mid-shot. Trim leading calibration +
     # trailing settle and forward-loop ONLY within the clean window.
-    lo=max(1,int(0.06*bvh_len)); hi=max(lo+2, bvh_len-int(0.02*bvh_len)); win=max(1,hi-lo)
+    # WINDOW (2026-09-04). This used to be a fixed 6%..98% of the source clip
+    # and then LOOP inside it, which is exactly right for a walk or a run,
+    # because those are cycles — any window of a cycle is the cycle. It is
+    # wrong for everything else. A jump looped across its whole trial samples
+    # the landing back into the take-off; a 2.7MB standing-idle trial looped
+    # end to end wanders through minutes of unrelated motion. One-shot and
+    # long clips need to name the slice that holds the motion, so the window
+    # is now per-action data (assets/mocap/catalog.json) with the old
+    # 6%..98% as the default.
+    lo=max(1,int(__LOF__*bvh_len)); hi=max(lo+2, min(bvh_len-1, int(__HIF__*bvh_len))); win=max(1,hi-lo)
     # net forward travel over the clean window (robust frame-align, immune to the loop)
     sc.frame_set(lo); bpy.context.view_layer.update(); hip_lo=swm("Hips").translation.copy()
     _lu=swm("LeftUpLeg"); _ru=swm("RightUpLeg")
@@ -522,6 +558,8 @@ def build_mocap_motion(runner, hero_name, action, total_frames, fps=24,
                 .replace("__TRACK__", "True" if track_camera else "False")
                 .replace("__WIDE__", f"{float(wide):.2f}")
                 .replace("__INPLACE__", "False"))   # video path: always False
+        _lo, _hi = action_window(action)
+        code = code.replace("__LOF__", f"{_lo:.4f}").replace("__HIF__", f"{_hi:.4f}")
         r = _run(runner, "mocap_retarget", code, verbose)
         if r and r.get("ok"):
             if verbose:

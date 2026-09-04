@@ -60,4 +60,6 @@ tools/carlab/vendor/
 # every library model in world space and assetfix.py stands the fallen ones up
 !tools/assetmeta.py
 !tools/assetfix.py
+# finds the slice of a mocap trial that holds the motion (windows, not guesses)
+!tools/bvhwindow.py
 tools/facadelab/vendor/
