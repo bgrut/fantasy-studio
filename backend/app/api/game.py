@@ -1588,9 +1588,22 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                     "surface vessel: rides the waterline (boats float, they "
                     "don't dive)")
         _arch = getattr(spec.world, "archetype", "plain") or "plain"
+        # TERRAIN RESOLUTION SCALES WITH THE WORLD (2026-09-04). grid_n was a
+        # flat 48 whatever the world's size, so a 150m map had 3.1m polygons
+        # and a 350m map 7.3m ones. At that size a hillside is a handful of
+        # facets and every landform reads as folded card — the single biggest
+        # thing standing between us and anything that looks photographed.
+        # Targeting ~1.6m per cell instead, capped so the trimesh collider and
+        # the level payload stay sane (128 -> 16k heights, ~120KB of JSON,
+        # against 2.3k and 17KB before).
+        _gn = int(max(64, min(128, round(float(spec.world.size_m) / 1.6))))
         spec.world.level = build_level(
             spec.seed, spec.world.size_m, n_objectives=n_obj, amplitude_m=amp,
-            regions=_regions, archetype=_arch)
+            grid_n=_gn, regions=_regions, archetype=_arch)
+        job.setdefault("notes", []).append(
+            f"terrain {_gn}x{_gn} "
+            f"({float(spec.world.size_m) / _gn:.1f}m per polygon, was "
+            f"{float(spec.world.size_m) / 48:.1f}m)")
         # GROUND FOLLOWS THE LANDFORM (2026-08-30). The first built canyon was
         # a red-rock gorge carpeted in meadow grass, which throws away most of
         # what the archetype just bought: shape read as canyon, surface read as
