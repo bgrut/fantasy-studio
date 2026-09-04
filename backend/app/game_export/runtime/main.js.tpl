@@ -10964,7 +10964,9 @@ async function main() {
       // the fallback now follows the colour exactly like the detail map at
       // the top of this file, so the two can never disagree again.
       const _gh2 = {}; gcol.getHSL(_gh2);
-      const ARCH_TEX = { canyon: 'rock', mesa: 'rock', peaks: 'stone',
+      // peaks was 'stone', and stone.jpg is MASONRY — an alpine ridge came
+      // out paved in cobblestones. Bare mountain is rock.
+      const ARCH_TEX = { canyon: 'rock', mesa: 'rock', peaks: 'rock',
                          dunes: 'sand', basin: 'soil', archipelago: 'sand' };
       const _arch2 = SPEC.world.archetype || 'plain';
       const gname = (SPEC.world.weather === 'snow') ? 'snow'

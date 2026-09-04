@@ -13,7 +13,7 @@ from __future__ import annotations
 
 # the ground photo each landform must be standing on — mirrors ARCH_TEX in
 # the runtime. Keep the two in step: they answer the same question.
-ARCH_TEX = {"canyon": "rock", "mesa": "rock", "peaks": "stone",
+ARCH_TEX = {"canyon": "rock", "mesa": "rock", "peaks": "rock",
             "dunes": "sand", "basin": "soil", "archipelago": "sand"}
 
 
