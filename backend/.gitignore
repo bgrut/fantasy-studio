@@ -56,4 +56,8 @@ tools/shotgate/node_modules/
 !tools/carlab/
 tools/carlab/vendor/
 !tools/facadelab/
+# the asset manifest tools are pipeline, not scratch: assetmeta.py measures
+# every library model in world space and assetfix.py stands the fallen ones up
+!tools/assetmeta.py
+!tools/assetfix.py
 tools/facadelab/vendor/
