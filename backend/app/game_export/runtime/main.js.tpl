@@ -9864,6 +9864,47 @@ async function main() {
     // purpose, and any facade change that quietly gives buildings their own
     // materials would undo that with no visible symptom until a real city
     // stutters. Exposed so the shotgate can fail the change on the number.
+    // PROOF OVER CLAIMS (2026-09-03): the visual gate asked only "did it
+    // render without errors", and a red rock canyon that rendered as a green
+    // lawn and a sailboat that rendered on the seabed both answered yes.
+    // Liveness is not the brief. These are the facts a build can be WRONG
+    // about while still being perfectly alive, reported from the RUNNING
+    // game so the gate can hold them against the spec that asked for them.
+    // Deliberately a seam rather than something the harness reverse-engineers
+    // out of the scene graph: probing for "the big flat mesh" read the water
+    // plane as a capsized boat more than once.
+    facts: () => {
+      const f = {
+        style: SPEC.style || 'default',
+        archetype: (SPEC.world && SPEC.world.archetype) || 'plain',
+        mode: P.mode || 'walk',
+        buoyant: !!P.buoyant,
+        water_level: SPEC.world.water_level == null ? null : +SPEC.world.water_level,
+      };
+      try {
+        const im = gmat.map && gmat.map.image;
+        f.ground_tex = im && im.src ? im.src.split('/').pop()
+          : (im ? 'canvas' : null);
+        f.ground_color = '#' + gmat.color.getHexString();
+      } catch (e) { f.ground_tex = null; }
+      try {
+        const bb = new THREE.Box3().setFromObject(holder);
+        f.player_dims = [bb.max.x - bb.min.x, bb.max.y - bb.min.y,
+                         bb.max.z - bb.min.z].map(v => +v.toFixed(3));
+        f.player_y = +playerObj.position.y.toFixed(3);
+        // the rig says what shape the thing is: bipeds carry ~19-20 joints,
+        // the quadrupeds 12, and only a biped must be taller than it is long
+        let bones = 0;
+        holder.traverse(o => {
+          if (o.isSkinnedMesh && o.skeleton && o.skeleton.bones)
+            bones = Math.max(bones, o.skeleton.bones.length);
+        });
+        f.player_bones = bones;
+      } catch (e) {}
+      if (WATER !== null && f.player_y != null)
+        f.depth_below_water = +(WATER - f.player_y).toFixed(3);
+      return f;
+    },
     stats: () => ({ calls: window.__frameCalls | 0,
                     tris: window.__frameTris | 0,
                     programs: renderer.info.programs ? renderer.info.programs.length : -1,

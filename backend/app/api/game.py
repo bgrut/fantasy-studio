@@ -8,6 +8,7 @@ are served by the /games static mount added in main.py.
 """
 from __future__ import annotations
 
+import json
 import sys
 import threading
 import time
@@ -1881,9 +1882,33 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                  str(shot)],
                 capture_output=True, text=True, timeout=90,
                 cwd=str(BACKEND_ROOT / "tools" / "shotgate"))
+            # DOES IT MATCH THE BRIEF (2026-09-03). "Rendered clean" was
+            # true of every bug in the 2026-09-03 pass: the green canyon,
+            # the sunken sailboat and the photoreal neon racer all passed
+            # this gate. The running game now reports what it actually
+            # built and we hold that against the spec that asked for it.
+            _facts = {}
+            for _ln in (r.stdout or "").splitlines():
+                if _ln.startswith("SHOTGATE-FACTS "):
+                    try:
+                        _facts = json.loads(_ln[len("SHOTGATE-FACTS "):])
+                    except Exception:  # noqa: BLE001
+                        _facts = {}
+            if _facts:
+                from ..game_export.brief_check import check_brief
+                _miss = check_brief(spec, _facts)
+                job["facts"] = _facts
+                for _m in _miss:
+                    job.setdefault("notes", []).append(f"⚠ off-brief — {_m}")
+                if _miss:
+                    job["brief_errors"] = _miss
             if r.returncode == 0 and shot.exists():
                 job["shot"] = f"/games/job_{job_id}/dist/_shot.png"
-                job.setdefault("notes", []).append("visual gate: rendered clean, no runtime errors")
+                job.setdefault("notes", []).append(
+                    "visual gate: rendered clean, no runtime errors"
+                    + ("" if not _facts else
+                       " — and matches the brief" if not job.get("brief_errors")
+                       else f" — but {len(job['brief_errors'])} thing(s) off-brief"))
                 job["checks"] = job.get("checks", 0) + 1
             elif r.returncode == 2:
                 # LOUD, NOT BURIED (2026-08-05): a shader link failure
@@ -1902,8 +1927,14 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                     + _det[:220])
                 if shot.exists():
                     job["shot"] = f"/games/job_{job_id}/dist/_shot.png"
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as _ge:  # noqa: BLE001
+            # BEST-EFFORT MUST NOT MEAN SILENT (2026-09-03). This handler
+            # swallowed a NameError for a whole release: json was never
+            # imported here, so the gate raised on its first line and every
+            # build reported no screenshot, no facts and no complaint. A gate
+            # that can disable itself without saying so is not a gate.
+            job.setdefault("notes", []).append(
+                f"⚠ visual gate did not run ({type(_ge).__name__}: {_ge})"[:200])
         # ── SCENE AUDIT (2026-08-25, critique-loop phase 1) ─────────────
         # The shot gate above answers "does it render without errors". This
         # answers "is what it rendered PLAUSIBLE": the game audits its own

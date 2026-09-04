@@ -44,6 +44,14 @@ try {
   await page.keyboard.up('w');
   await new Promise(r => setTimeout(r, wait));
   await page.screenshot({ path: out });
+  // FACTS, NOT JUST LIVENESS: what the running game actually built, so the
+  // build can be held against the spec that asked for it. Best-effort — an
+  // older export without __game.facts still passes the gate on errors alone.
+  try {
+    const facts = await page.evaluate(
+      () => (window.__game && window.__game.facts) ? window.__game.facts() : null);
+    if (facts) console.log('SHOTGATE-FACTS ' + JSON.stringify(facts));
+  } catch {}
   if (errs.length) {
     console.error('SHOTGATE-ERRORS ' + errs.slice(0, 5).join(' | ').slice(0, 500));
     process.exit(2);
