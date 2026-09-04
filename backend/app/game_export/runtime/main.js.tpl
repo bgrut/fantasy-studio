@@ -5711,7 +5711,12 @@ async function main() {
     const _bGrassy = _bh.h > 0.16 && _bh.h < 0.45 && _bh.s > 0.12;
     const gcolA = new THREE.Color(...SPEC.world.ground_color)
       .lerp(new THREE.Color(0x4d7a33), _bGrassy ? 0.55 : 0.0)
-      .offsetHSL(0, _bGrassy ? 0.08 : -0.06, _bGrassy ? 0.13 : 0.10);
+      // BLADES SIT IN THE GROUND, NOT ON IT (2026-09-04). The +0.13 lightness
+      // was tuned when the ground was a flat painted colour; now that cartoon
+      // worlds carry a real grass texture the tufts came out PALER than the
+      // field and read as light-green claws standing on dark green. A blade
+      // is the same plant as the ground cover, so it barely differs in tone.
+      .offsetHSL(0, _bGrassy ? 0.06 : -0.06, _bGrassy ? 0.02 : 0.08);
     const gcolB = gcolA.clone().offsetHSL(0.02, 0.05, -0.07);
     // REAL blade shape: tapered to a tip, bowed forward, shaded dark at the
     // root — reads as grass, not floating rectangles
@@ -10782,7 +10787,11 @@ async function main() {
     // big surface classes. Missing files fall back to canvases silently.
     // hyper-real is the DEFAULT look; only deliberate style packs
     // (cartoon/anime/pixel/horror/lowpoly) keep the painted canvases
-    const PHOTO = (SPEC.style || 'default') !== 'cartoon';  // cartoon = FLAT fills
+    // Cartoon KEEPS its ground texture (2026-09-04): a stylised world still
+    // has surface under the character's feet, and skipping the tiled photo
+    // left cartoon worlds standing on a single flat painted colour — the
+    // largest flat area in the frame, and a big part of the papery read.
+    const PHOTO = true;
     const _texLoader = new THREE.TextureLoader();
     const _pbrCache = {};
     function pbr(name, rep, srgb) {
@@ -11048,6 +11057,14 @@ varying vec2 vUvRaw;
   n8ao.configuration.halfRes = true;
   n8ao.configuration.gammaCorrection = false;   // later passes own the grade
   if (QUALITY === 'performance') n8ao.configuration.aoSamples = 8;
+  // AO IS THE ANTI-PAPER (2026-09-04). Ambient occlusion is the cue that says
+  // a shape has volume — corners darken, things sit ON the ground instead of
+  // floating over it. A stylised look needs MORE of it than a photoreal one,
+  // not less, because it has less texture detail doing that job.
+  if ((SPEC.style || 'default') === 'cartoon') {
+    n8ao.configuration.intensity = 4.4;
+    n8ao.configuration.aoRadius = 2.8;
+  }
   composer.addPass(n8ao);
   const _legacySSAO = false;   // homemade SSAO retired; block kept for reference
   const _dMat = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking });
@@ -11301,9 +11318,17 @@ varying vec2 vUvRaw;
     // TRUE CEL (Phase 131): luminance-banded flat fills + thick ink on
     // strong silhouettes only. celBands/inkTh/inkW drive the new path;
     // 'sketch' preserves the old fine-sobel recipe users liked.
-    cartoon: { bands: 0, sat: 1.5, exposure: _styleNight ? 1.6 : 1.08, grain: 0,
-               edge: 0, gamma: 1.0, celBands: 4,
-               inkTh: _styleNight ? 0.14 : 0.22, inkW: 2.6 },
+    // CARTOON IS STYLISED PBR, NOT A COMIC FILTER (2026-09-04). This banded
+    // luminance into FOUR levels and drew ink outlines, which is a comic-book
+    // post-process — and posterising a lit 3D surface to four steps is
+    // literally how you flatten form into paper. The reference everyone means
+    // by "cartoon game" (Fortnite and its neighbours) is not that: it is
+    // saturated albedo, real shadows, heavy ambient occlusion and clean
+    // silhouettes, with the LIGHTING left intact to carry the volume. The
+    // comic look still exists, under "sketch", which is where it belongs.
+    cartoon: { bands: 0, sat: 1.42, exposure: _styleNight ? 1.55 : 1.06,
+               grain: 0, edge: 0, gamma: 0.94, celBands: 0,
+               inkTh: 0, inkW: 0 },
     sketch:  { bands: 5, sat: 1.35, exposure: 1.05, grain: 0, edge: 2.4, gamma: 1.0 },
     anime:   { bands: 8, sat: 1.18, exposure: 1.08, grain: 0, edge: 1.1, gamma: 1.0 },
     horror:  { bands: 0, sat: 0.32, exposure: 0.7, grain: 0.13, edge: 0, gamma: 1.7 },

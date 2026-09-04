@@ -79,6 +79,12 @@ Output ONLY the JSON object, no markdown, no commentary. Schema (all fields opti
   "sun_azimuth_deg":0-360,"sun_elevation_deg":4-88,"sun_intensity":0.2-4.5,
   "ambient":0.1-1.0,"exposure":0.4-1.3}. COMMIT to 2-4 hues like a film still —
  sky and fog in the same family, one warm or neon accent. Examples:
+ The "sky" you give MUST BE A REAL SKY COLOUR with real saturation — daylight
+ is a deep blue near #6ba3e8, overcast a grey-blue near #9aa8b4, sunset orange,
+ night near-black blue. NEVER a pale near-white wash: a sky lighter than about
+ #c8dce8 renders as fog, drains the whole frame and makes a sunny world look
+ washed out and flat. If you are not confident, OMIT "palette" and let the
+ preset sky do its job — it is already correct for day/sunset/night.
  neon/synthwave/cyberpunk night -> {"sky":"#0a0618","fog":"#1a0f2e",
  "sun_color":"#b0c8ff","accent":"#ff2fa0","sun_elevation_deg":18,"exposure":0.85};
  golden/peach sunset -> {"sky":"#e8996a","fog":"#e5b48a","sun_color":"#ffcf9a",

@@ -1579,6 +1579,45 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         # sand / snow) from the ground COLOUR, so tinting the ground per
         # landform swings the material with it for free. Only applied when the
         # model left the default green — an explicit colour still wins.
+        # A PALE SKY FOGS THE WHOLE FRAME (2026-09-04). world.palette.sky
+        # overrides the preset, and the model keeps authoring near-white
+        # washes for bright scenes — #bfe0d4 for a sunny meadow, then #c2d8f0
+        # after the prompt was tightened. A sky lighter than the ground drains
+        # every other colour and is a large part of the "papery" read, so this
+        # is clamped here rather than asked for again: telling the model twice
+        # and getting it twice is the signal to make it deterministic.
+        try:
+            # palette is a PaletteSpec MODEL, not a dict — the first version of
+            # this guarded on isinstance(dict) and so never ran at all, and the
+            # sky it was written to catch (#c2d4ff, lightness 0.88) sailed
+            # straight through. Handle both shapes.
+            _pal = getattr(spec.world, "palette", None)
+            if isinstance(_pal, dict):
+                _sky_hex = _pal.get("sky")
+            else:
+                _sky_hex = getattr(_pal, "sky", None) if _pal is not None else None
+            if _sky_hex and str(_sky_hex).startswith("#") and len(str(_sky_hex)) == 7:
+                import colorsys
+                _r = int(_sky_hex[1:3], 16) / 255
+                _g = int(_sky_hex[3:5], 16) / 255
+                _b = int(_sky_hex[5:7], 16) / 255
+                _h, _l, _sat = colorsys.rgb_to_hls(_r, _g, _b)
+                # night skies are meant to be dark; only bright ones can wash
+                if _l > 0.78 or (_l > 0.62 and _sat < 0.30):
+                    _l2, _s2 = min(_l, 0.68), max(_sat, 0.45)
+                    _r2, _g2, _b2 = colorsys.hls_to_rgb(_h, _l2, _s2)
+                    _new = "#%02x%02x%02x" % (int(_r2 * 255), int(_g2 * 255),
+                                              int(_b2 * 255))
+                    if isinstance(_pal, dict):
+                        _pal["sky"] = _new
+                    else:
+                        _pal.sky = _new
+                    spec.world.palette = _pal
+                    job.setdefault("notes", []).append(
+                        f"sky deepened {_sky_hex} -> {_new} (a near-white sky "
+                        f"fogs the whole frame)")
+        except Exception:  # noqa: BLE001
+            pass
         _ARCH_GROUND = {
             "canyon": [0.46, 0.26, 0.17],      # red rock
             "mesa":   [0.52, 0.34, 0.22],      # dusty butte
