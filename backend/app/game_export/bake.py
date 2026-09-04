@@ -1252,10 +1252,17 @@ def bake_anim_set(hero_glb: str | Path, out_glb: str | Path,
         print(f"[bake] rig: {a.get('bones')} bones, skin={a.get('skin')}")
 
     # idle first (procedural), then each mocap clip — every one to its own track
-    r = _call(registry, "idle", _IDLE_CODE.replace("__TOTAL__", str(IDLE_FRAMES)))
-    if not (r and r.get("ok")):
-        raise RuntimeError(f"idle bake failed: {r}")
-    _call(registry, "push", _PUSH_NLA.replace("__NAME__", "idle"))
+    # A MOCAP IDLE WINS OVER THE PROCEDURAL ONE (2026-09-04). This always
+    # baked a procedural breathing idle and pushed it as "idle"; when a real
+    # idle clip is also in the set, both tracks are called "idle", one of them
+    # silently loses at export, and the survivor was the procedural pose --
+    # the flared-arm stance in every screenshot. The procedural idle stays as
+    # the fallback for when no idle clip is configured.
+    if "idle" not in clips:
+        r = _call(registry, "idle", _IDLE_CODE.replace("__TOTAL__", str(IDLE_FRAMES)))
+        if not (r and r.get("ok")):
+            raise RuntimeError(f"idle bake failed: {r}")
+        _call(registry, "push", _PUSH_NLA.replace("__NAME__", "idle"))
 
     for name, (bvh, frames) in clips.items():
         code = (M._RETARGET_CODE
