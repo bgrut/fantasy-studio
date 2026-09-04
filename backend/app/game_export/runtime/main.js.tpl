@@ -1121,6 +1121,14 @@ async function main() {
     drawTrail(LVL.path, c * 0.22, '#8a7048', 0.75);
   }
   const gtex = new THREE.CanvasTexture(cnv);
+  // THE WORLD MAP IS NOT A PROP TEXTURE (2026-09-04). Marked so the cartoon
+  // flattener leaves it alone: cartoonizeTexture blurs to 256x256 and
+  // posterizes to five dominant colours, which is right for a fox's fur and
+  // catastrophic for a 2048px map that carries the LAYOUT of the whole world.
+  // Run over this canvas it averaged a sunny meadow to rgb(240,239,214) —
+  // cream, saturation 0.109 — and every cartoon game came out bleached.
+  gtex.userData = gtex.userData || {};
+  gtex.userData.worldCanvas = true;
   gtex.wrapS = gtex.wrapT = THREE.RepeatWrapping;
   gtex.repeat.set(LVL ? 1 : gsize / 8, LVL ? 1 : gsize / 8);
   gtex.anisotropy = 8;
@@ -1703,7 +1711,43 @@ async function main() {
   // generated-car paint reads flat/blotchy until the GPU texture tier lands —
   // a glossier material response under the Sky light hides most of it
   const _flatStyle = (SPEC.style || 'default') === 'cartoon';
+  // A FLAT FILL STILL HAS TO BE THE RIGHT COLOUR (2026-09-04). Cartoon props
+  // were flattened with `m.map = null; m.color.offsetHSL(0, 0.14, 0.04)`,
+  // and these materials keep their colour in the TEXTURE with color left at
+  // pure white — so dropping the map threw the colour away and offsetHSL on
+  // white is a no-op (white has no saturation to shift). Every cartoon world
+  // came out the same washed cream, which is a bad look for the one style
+  // people actually buy. Take the fill FROM the texture, then drop it.
+  const _fillCache = new WeakMap();
+  function fillFromMap(m) {
+    const img = m.map && m.map.image;
+    if (!img || !img.width) return false;
+    if (_fillCache.has(m.map)) { m.color.multiply(_fillCache.get(m.map)); return true; }
+    try {
+      const c = document.createElement('canvas');
+      c.width = c.height = 32;
+      const g = c.getContext('2d', { willReadFrequently: true });
+      g.drawImage(img, 0, 0, 32, 32);
+      const d = g.getImageData(0, 0, 32, 32).data;
+      let r = 0, gg = 0, b = 0, n = 0;
+      for (let i = 0; i < d.length; i += 4) {
+        if (d[i + 3] < 8) continue;            // ignore cut-out transparency
+        r += d[i]; gg += d[i + 1]; b += d[i + 2]; n++;
+      }
+      if (!n) return false;
+      const avg = new THREE.Color().setStyle(
+        `rgb(${Math.round(r / n)},${Math.round(gg / n)},${Math.round(b / n)})`);
+      // an average is always duller than the material it came from; cel art
+      // wants the colour pushed, not the mean
+      avg.offsetHSL(0, 0.30, 0.06);
+      _fillCache.set(m.map, avg);
+      m.color.multiply(avg);
+      return true;
+    } catch (e) { return false; }
+  }
   function cartoonizeTexture(mm) {
+    // never flatten the world's layout canvas — see gtex above
+    if (mm.map && mm.map.userData && mm.map.userData.worldCanvas) return;
     // TRUE-CARTOON fills (Phase 132): blur away fur/noise detail, posterize
     // to a handful of colors, resaturate — fox fur becomes clean orange
     const img2 = mm.map && mm.map.image;
@@ -10750,7 +10794,11 @@ async function main() {
           m.normalScale = new THREE.Vector2(0.9, 0.9);
           m.color.setRGB(1, 1, 1);
         } else if (_flatStyle) {
-          // TRUE-CARTOON props: no texture at all — flat saturated fills
+          // TRUE-CARTOON props: no texture at all — flat saturated fills,
+          // but the fill is lifted off the texture first (see fillFromMap),
+          // because these materials keep their colour there and nulling the
+          // map used to leave every cartoon prop pure white.
+          fillFromMap(m);
           m.map = null; m.bumpMap = null; m.normalMap = null;
           m.color.offsetHSL(0, 0.14, 0.04);
         } else {
@@ -11156,7 +11204,18 @@ varying vec2 vUvRaw;
             c.rgb = pow(max(c.rgb, vec3(0.0)), vec3(gamma));
           }
           if (celBands > 0.5) {                   // TRUE CEL: band the LIGHT,
-            float cl = dot(c.rgb, vec3(.299,.587,.114));       // keep the hue
+            // BAND A SMOOTHED LUMINANCE (2026-09-04). Deciding the band from
+            // the raw pixel means any grain in the source flips neighbouring
+            // pixels across a band boundary, and four bands turn a textured
+            // meadow into stipple — the "not crisp" read on cartoon worlds.
+            // Cel art is flat REGIONS; the decision has to be made on the
+            // region, not the pixel. The hue still comes from the pixel, so
+            // this softens the banding noise without softening the image.
+            vec2 cpx = 1.5 / res;
+            float cl = (dot(c.rgb, vec3(.299,.587,.114)) * 4.0
+                        + lum(vUv + vec2(cpx.x, 0.)) + lum(vUv - vec2(cpx.x, 0.))
+                        + lum(vUv + vec2(0., cpx.y)) + lum(vUv - vec2(0., cpx.y))
+                       ) / 8.0;
             float cb = floor(cl * celBands + 0.5) / celBands;
             // clamp the ratio — unclamped division CRUSHED dark scenes into
             // speckled black blobs (2026-07-28 night-fox report)

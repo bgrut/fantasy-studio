@@ -28,7 +28,17 @@ Output ONLY the JSON object, no markdown, no commentary. Schema (all fields opti
            "weather": one of "none","rain","snow", "wind": float 0..1,
            "fog_density": float 0..1 (misty/foggy scene -> 0.7-0.9; default 0.5),
            "health_packs": int 0..12 ("health packs/potions on the ground" -> 4),
-           "ground_color": [r,g,b] floats 0..1},
+           "ground_color": [r,g,b] floats 0..1 — the COLOUR OF THE GROUND
+           MATERIAL ITSELF, as if you picked it up in your hand: grass is
+           green, soil brown, rock grey, sand pale gold, snow white. It is
+           NOT the lighting, the time of day or the mood. A "sunny meadow"
+           has GREEN ground and warm LIGHT — put the sunlight in "palette",
+           never in the ground, because a pale-yellow ground renders the
+           meadow as bleached sand. Keep it SATURATED and MID-DARK: real
+           ground sits around 0.2-0.55 per channel, and anything above 0.75
+           on every channel is snow or nothing. Grass [0.30,0.48,0.22],
+           forest floor [0.22,0.30,0.16], soil [0.34,0.24,0.15], red rock
+           [0.46,0.24,0.16], sand [0.72,0.62,0.40], snow [0.90,0.92,0.95]},
  "world" may also include "archetype": THE LANDFORM, and the structural twin of
  "style" — one of "plain" (gentle rolling ground, the default), "canyon" (high
  tableland split by a deep winding gorge), "mesa" (stepped flat-topped plateaus
