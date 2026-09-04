@@ -9087,7 +9087,10 @@ async function main() {
     const pick = want => actions[P.anims[want]] || actions[want] ||
                          actions[Object.keys(actions)[0]];
     actions.__idle = pick('idle'); actions.__walk = pick('walk'); actions.__run = pick('run');
-    actions.__attack = actions['attack'] || null;    // one-shot swing overlay
+    // through pick() like the rest: a kit whose swing is called
+    // 'attack-melee-right' is still an attack, and hardcoding the literal
+    // name meant any library but our own bakes silently had no attack.
+    actions.__attack = actions[P.anims && P.anims.attack] || actions['attack'] || null;
     if (actions.__attack) {
       actions.__attack.setLoop(THREE.LoopOnce, 1);
       actions.__attack.clampWhenFinished = false;

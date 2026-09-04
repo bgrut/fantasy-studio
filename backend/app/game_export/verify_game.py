@@ -129,7 +129,17 @@ def verify_dist(dist: str | Path) -> dict:
                           f"meshes={len(g.get('meshes', []))}")
                 else:
                     anims = [a.get("name", "") for a in g.get("animations", [])]
-                    check("player skinned", bool(g.get("skins")), f"skins={len(g.get('skins', []))}")
+                    # A NODE-ANIMATED RIG IS A RIG (2026-09-04). This demanded
+                    # skins because every character we made came from our own
+                    # skinning bake. Blocky/kit characters animate their limbs
+                    # as separate nodes instead — no weights at all — and they
+                    # are not broken, they are a different and perfectly valid
+                    # construction. Requiring a skin rejected 18 working
+                    # characters for having no bones to weigh.
+                    _rigged = bool(g.get("skins")) or bool(g.get("animations"))
+                    check("player rig (skinned or node-animated)", _rigged,
+                          f"skins={len(g.get('skins', []))} "
+                          f"clips={len(g.get('animations', []))}")
                     want = set(spec["player"].get("anims", {}).values())
                     have = want & set(anims)
                     check("player animations", bool(anims), f"clips={anims}")

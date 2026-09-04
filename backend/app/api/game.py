@@ -864,6 +864,23 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                         f"round wheels, real glass (no mesh generation)")
             except Exception:
                 pass
+        # KIT CHARACTERS NAME THEIR CLIPS THEIR OWN WAY (2026-09-04). The
+        # Kenney blocky cast ships 27 authored animations per character, but
+        # calls the run "sprint" and the swing "attack-melee-right". The
+        # runtime resolves clips through player.anims, so the mapping is all
+        # that is needed — without it a blocky hero would sprint by playing
+        # whatever clip happened to be first in the file.
+        try:
+            if player_glb and "kc_" in str(player_glb).replace("\\", "/"):
+                spec.player.anims = {
+                    "idle": "idle", "walk": "walk", "run": "sprint",
+                    "attack": "attack-melee-right", "die": "die",
+                }
+                job.setdefault("notes", []).append(
+                    "blocky cast: 27 authored clips, style-matched to the "
+                    "low-poly scenery")
+        except Exception:  # noqa: BLE001
+            pass
         if player_glb and spec.player.mode == "walk":
             # BIPED SPEED CEILING (2026-08-30), the sibling of the drive/fly
             # floors below. Nothing bounded a WALKING hero, so the model was
