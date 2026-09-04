@@ -5789,14 +5789,15 @@ async function main() {
     // of a meadow, and the blades take its colour.
     const _gh = {}; gcol.getHSL(_gh);
     const _grassy = _gh.h > 0.16 && _gh.h < 0.45 && _gh.s > 0.12;
-    // COUNT REBALANCED FOR TUFTS (2026-09-04). Each instance is now three
-    // blades instead of one, so it draws 3x the triangles and covers roughly
-    // 3x the ground. Halving the instance count lands at ~1.5x the old
-    // triangle budget for a meadow that actually reads as ground cover
-    // instead of scattered slivers — the cheapest quality per triangle in
-    // the whole renderer.
-    const GN = Math.floor(Math.min(QUALITY === 'ultra' ? 11000 : 6800,
-                        Math.floor(GR * GR * (QUALITY === 'ultra' ? 1.7 : 1.2)))
+    // DENSITY RESTORED (2026-09-04, same day, my own regression). Making each
+    // instance a 3-blade tuft, I halved the count to hold the triangle budget
+    // — and a meadow got THINNER, because tufts are discrete clumps with gaps
+    // between them while the old single blades were spread evenly. The budget
+    // was the wrong thing to hold constant; COVERAGE is. An earlier commit was
+    // literally titled "thicker meadows" and I undid it. Back to roughly the
+    // old count, with tufts on top.
+    const GN = Math.floor(Math.min(QUALITY === 'ultra' ? 19000 : 12000,
+                        Math.floor(GR * GR * (QUALITY === 'ultra' ? 2.9 : 2.0)))
                         * (_grassy ? 1 : 0.10));
     // (blade colour itself is handled at gcolA/gcolB above — instance colours
     // multiply the material, so tinting bmat here would double-darken)

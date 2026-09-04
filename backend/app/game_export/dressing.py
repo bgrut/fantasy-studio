@@ -93,9 +93,35 @@ def recipe_for(setting: str | None):
     return None
 
 
-def game_scatter(setting: str | None) -> list[dict]:
-    """ScatterSpec dicts for GameSpec.world.scatter (empty if no recipe/props)."""
-    rec = recipe_for(setting)
+# THE LANDFORM DRESSES ITSELF (2026-09-04). Recipes keyed only off the world
+# NAME, so the ground could be a canyon, a dune sea or an alpine ridge and it
+# still got oak, birch, bush, flowers and rock in near-identical proportions.
+# With ten nature props total, an identical MIX of them is most of why every
+# world looks like the last one. These are the same ten meshes — the library is
+# the real limit — but a canyon of bare rock and dead stumps and an alpine
+# slope of dense pine are not the same picture, and neither is a dune sea that
+# is nearly empty. Emptiness is a look too, and we never used it.
+_ARCH_RECIPES = {
+    "canyon":      [("rock", 70, 6), ("stump", 12, 2), ("bush", 12, 2),
+                    ("log", 8, 1)],
+    "mesa":        [("rock", 60, 6), ("bush", 10, 2), ("stump", 8, 1)],
+    "dunes":       [("rock", 20, 3), ("bush", 6, 1)],
+    "basin":       [("bush", 34, 4), ("flowers", 26, 3), ("rock", 24, 3),
+                    ("tree_birch", 12, 2), ("mushroom", 10, 1)],
+    "peaks":       [("tree_pine", 90, 7), ("rock", 60, 6), ("stump", 12, 2),
+                    ("log", 10, 1)],
+    "archipelago": [("tree_oak", 16, 3), ("bush", 22, 3), ("rock", 36, 4),
+                    ("flowers", 14, 2)],
+}
+
+
+def game_scatter(setting: str | None, archetype: str | None = None) -> list[dict]:
+    """ScatterSpec dicts for GameSpec.world.scatter (empty if no recipe/props).
+
+    A named landform outranks the setting keyword: "plain" keeps the old
+    name-driven recipes, everything else dresses to its own ground.
+    """
+    rec = _ARCH_RECIPES.get((archetype or "plain").lower()) or recipe_for(setting)
     if not rec:
         return []
     out = []
