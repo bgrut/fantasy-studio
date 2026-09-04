@@ -1057,7 +1057,7 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         if not spec.world.scatter:
             spec.world.scatter = [ScatterSpec(**s) for s in game_scatter(
                 spec.world.name, getattr(spec.world, 'archetype', 'plain'),
-                int(spec.seed or 0))]
+                int(spec.seed or 0), spec.style)]
         # REAL-CITY DE-CLUTTER (Phase 126): OSM already builds the actual
         # blocks — the boxy prop buildings clash beside them. Trees/bushes
         # stay (parks); prop buildings + duplicate lamps go.

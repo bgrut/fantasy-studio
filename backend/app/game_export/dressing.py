@@ -136,6 +136,56 @@ _CACTUS = ["k_cactus_tall", "k_cactus_short"]
 _CROP = ["k_crops_cornStageD", "k_crops_wheatStageD", "k_crop_pumpkin",
          "k_crops_bambooStageB"]
 
+# TWO PROP SETS, PICKED BY STYLE (2026-09-04). Importing Kenney fixed the
+# stylised lane and broke the realistic one: a photoreal knight ended up
+# fighting among low-poly trees, which is the SAME clash the user reported,
+# moved to the other lane. Realistic worlds now dress from Poly Haven
+# photogrammetry (CC0), stylised ones from Kenney.
+#
+# The counts differ sharply and that is the point. These props carry 3k-32k
+# triangles each against Kenney's few hundred, and instanced scatter draws the
+# full geometry PER INSTANCE — so a realistic world gets a dozen detailed rocks
+# where a stylised one gets sixty simple ones, for a similar frame cost and a
+# completely different picture. Everything is normalised to ~1 unit by the
+# decimation pass, so scale here is just the size in metres.
+_PH_ROCK = ["ph_boulder_01", "ph_moon_rock_01", "ph_coast_land_rocks_02"]
+_PH_SMALLROCK = ["ph_moon_rock_02", "ph_moon_rock_01"]
+_PH_CLIFF = ["ph_coastal_cliff_01", "ph_coast_land_rocks_02"]
+_PH_DEAD = ["ph_dead_tree_trunk", "ph_dead_quiver_trunk"]
+_PH_TREE = ["ph_island_tree_01", "ph_island_tree_02"]
+_PH_UNDER = ["ph_fern_02", "ph_grass_medium_01"]
+_PH_FLOWER = ["ph_flower_gazania"]
+_PH_LITTER = ["ph_dry_branches_medium_01"]
+
+# TUNED AFTER LOOKING (2026-09-04). The first pass cost 7.19M triangles a
+# frame and put almost nothing on screen: the budget went on small undergrowth
+# that reads as a few yellow slivers at any distance, while the boulders that
+# would actually say "this is a real place" were too small and too few. Fewer,
+# BIGGER, closer to the camera. Undergrowth is cut hard because photogrammetry
+# grass is the worst value in the set — thousands of triangles to render
+# something a texture already implies.
+_ARCH_RECIPES_REAL = {
+    "canyon": [(_PH_CLIFF, 16, 3, 11.0), (_PH_ROCK, 20, 3, 3.2),
+               (_PH_SMALLROCK, 18, 3, 1.4), (_PH_DEAD, 10, 2, 4.5),
+               (_PH_LITTER, 8, 2, 1.6)],
+    "mesa": [(_PH_CLIFF, 14, 3, 11.0), (_PH_ROCK, 22, 3, 3.0),
+             (_PH_SMALLROCK, 16, 3, 1.4), (_PH_DEAD, 6, 1, 4.0)],
+    "dunes": [(_PH_SMALLROCK, 12, 2, 1.6), (_PH_LITTER, 6, 1, 1.6),
+              (_PH_ROCK, 6, 1, 3.0)],
+    "basin": [(_PH_TREE, 14, 2, 7.5), (_PH_UNDER, 12, 2, 1.4),
+              (_PH_FLOWER, 10, 2, 0.9), (_PH_ROCK, 10, 2, 2.4)],
+    "peaks": [(_PH_TREE, 18, 3, 7.0), (_PH_ROCK, 24, 3, 3.4),
+              (_PH_CLIFF, 12, 2, 10.0), (_PH_DEAD, 8, 1, 4.0)],
+    "archipelago": [(_PH_TREE, 12, 2, 7.0), (_PH_ROCK, 14, 2, 2.6),
+                    (_PH_SMALLROCK, 14, 2, 1.4)],
+    "plain": [(_PH_TREE, 16, 3, 7.5), (_PH_UNDER, 14, 2, 1.4),
+              (_PH_FLOWER, 12, 2, 0.9), (_PH_ROCK, 12, 2, 2.6),
+              (_PH_LITTER, 6, 1, 1.6)],
+}
+
+# styles whose scenery should be photographed rather than drawn
+_REAL_STYLES = {"default", "horror", "sketch"}
+
 _ARCH_RECIPES = {
     # a gorge is rock and dead wood — no canopy at all
     "canyon": [(_CLIFF_R, 34, 4, 6.0), (_ROCK_L, 46, 5, 2.4),
@@ -168,13 +218,21 @@ _ARCH_RECIPES = {
 
 
 def game_scatter(setting: str | None, archetype: str | None = None,
-                 seed: int = 0) -> list[dict]:
+                 seed: int = 0, style: str | None = None) -> list[dict]:
     """ScatterSpec dicts for GameSpec.world.scatter (empty if no recipe/props).
 
     A named landform outranks the setting keyword: "plain" keeps the old
     name-driven recipes, everything else dresses to its own ground.
     """
-    rec = _ARCH_RECIPES.get((archetype or "plain").lower())
+    arch = (archetype or "plain").lower()
+    table = (_ARCH_RECIPES_REAL if (style or "default").lower() in _REAL_STYLES
+             else _ARCH_RECIPES)
+    rec = table.get(arch)
+    if rec:                       # fall back if a prop set is not installed
+        have = [e for e in rec
+                if any((PROPS_DIR / f"{n}.glb").exists()
+                       for n in (e[0] if isinstance(e[0], list) else [e[0]]))]
+        rec = have or _ARCH_RECIPES.get(arch)
     if rec is None:
         legacy = recipe_for(setting)
         if not legacy:

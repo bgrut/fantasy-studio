@@ -62,4 +62,6 @@ tools/carlab/vendor/
 !tools/assetfix.py
 # finds the slice of a mocap trial that holds the motion (windows, not guesses)
 !tools/bvhwindow.py
+# imports Poly Haven CC0 props and packs them into single self-contained GLBs
+!tools/phimport.py
 tools/facadelab/vendor/

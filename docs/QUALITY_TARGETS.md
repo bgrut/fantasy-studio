@@ -122,8 +122,19 @@ but a realism world can afford 40 rocks at high detail where it cannot afford
 200. The import needs a gltf+textures -> single GLB conversion step, which
 Blender can do headlessly and we already drive Blender.
 
-Until that exists, realism worlds are internally inconsistent and should be
-judged on terrain and lighting rather than on their props.
+DONE 2026-09-04: 13 Poly Haven assets imported, decimated and split by style.
+The clash is gone — a photoreal world is now photoreal end to end.
+
+STILL OPEN, and measured:
+- **8.07M triangles a frame** against 1.2M for the stylised lane. Holds 60fps
+  on this machine; that is not evidence it holds anywhere else, and the number
+  is too high. Photogrammetry scatter draws its full geometry per instance.
+- **Density and placement.** Two tuning passes in, the boulders that should
+  say "real place" still are not landing near the camera, and the frame reads
+  sparse. Suspect min_dist_m and the path corridor pushing scatter away from
+  exactly where the player looks. Needs a pass on placement, not on counts.
+- ph_fir_tree_01 was dropped: 7M triangles, 487MB, and it timed out the
+  Blender bridge during decimation.
 
 ## The honest strategic note
 
