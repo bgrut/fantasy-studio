@@ -77,6 +77,32 @@ not claim anything about them.
 | terrain resolution | unfixed | 3.1 m per polygon |
 | character triangles | unfixed | ~45k |
 
+## The sameness problem (the one that keeps coming back)
+
+"It looks like the same style each time" has been raised repeatedly and kept
+getting answered with rendering fixes. Rendering was never the cause.
+
+**Every outdoor world is dressed from TEN nature props**: bush, flowers, log,
+mushroom, rock, stump, tree, tree_birch, tree_oak, tree_pine. That is the
+entire environmental vocabulary of the product. A meadow, a canyon, a desert
+and an alien planet all draw from those ten meshes.
+
+Partly mitigated 2026-09-04 by making recipes landform-first, so at least the
+MIX differs sharply — a canyon gets rock and dead stumps and no trees, dunes
+get near-emptiness. That buys real variety from the same library and it does
+not raise the ceiling.
+
+**The fix is more props, and it is a content problem, not a rendering one.**
+Options, cheapest first:
+1. CC0 asset packs (Kenney, Poly Haven, Quaternius) — free, commercial-safe,
+   hundreds of meshes, and the licence question is already settled ground.
+2. Generate them locally — works, but CPU mesh generation ran 20+ minutes per
+   prop in testing and each one permanently costs disk.
+3. Paid generative API — the bring-your-own-key lane.
+
+Option 1 is almost certainly the highest value per hour of anything on this
+page, and nothing about it conflicts with the local/free/commercial-safe rule.
+
 ## The honest strategic note
 
 Physics and skinning were NOT the ceiling — Blender bone-heat via a watertight
