@@ -151,6 +151,16 @@ for s in ("L","R"):
     cl=mk("clav_"+s,pt(0,0.80),pt(sh_lat,0.80),chest)
     ua=mk("uparm_"+s,pt(_al(0.0),_az(0.0)),pt(_al(0.45),_az(0.45)),cl)
     fa=mk("lowarm_"+s,pt(_al(0.45),_az(0.45)),pt(_al(0.85),_az(0.85)),ua)
+    # HANDS CARRY ALMOST NO WEIGHT, AND IT IS NOT THE BONE LENGTH
+    # (2026-09-04). Measured on a shipped character, the outermost arm
+    # vertices carry lowarm 56.8% and hand 2.6%, so hands never articulate.
+    # The obvious theory was that this tail stops at t=1.0 -- the DETECTED
+    # hand point -- leaving the fingers past it with no bone reaching them.
+    # Tested: extending the tail to t=1.14 and baking the SAME mesh both ways
+    # gives identical weights, hand absent from the top twenty either way.
+    # Bone-heat simply never assigns these hands anything, whatever the bone
+    # length, so the fix has to be a deterministic post-pass that reassigns
+    # vertices past the wrist plane. Left at 1.0; the note is the result.
     mk("hand_"+s,pt(_al(0.85),_az(0.85)),pt(_al(1.0),_az(1.0)),fa)
     # NOTE (2026-08-05, tested + rejected): a rest "knee bend hint" (knee offset
     # 1.8cm forward) was tried to give the hinge a preferred fold direction.
