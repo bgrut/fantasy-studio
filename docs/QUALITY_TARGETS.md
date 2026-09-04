@@ -103,6 +103,28 @@ Options, cheapest first:
 Option 1 is almost certainly the highest value per hour of anything on this
 page, and nothing about it conflicts with the local/free/commercial-safe rule.
 
+## NEW 2026-09-04: the style clash moved lanes
+
+Importing the Kenney props fixed the cartoon lane and quietly broke the
+realism one. Kenney models are used for EVERY world now, so a photoreal
+canyon gets low-poly trees, and a photoreal knight fights among them. The
+clash the user originally reported ("they don't fit the game") is solved for
+stylised worlds and reintroduced for realistic ones.
+
+The fix is a second prop set, selected by style:
+- stylised (cartoon / lowpoly / pixel / anime) -> Kenney, as now
+- realistic (default / horror / sketch)        -> photoreal props
+
+Poly Haven is the obvious source for the second: 113 CC0 nature assets,
+photogrammetry, already checked. They are high-poly with 4K textures, which is
+exactly why they were the wrong choice for stylised scatter at 200 instances —
+but a realism world can afford 40 rocks at high detail where it cannot afford
+200. The import needs a gltf+textures -> single GLB conversion step, which
+Blender can do headlessly and we already drive Blender.
+
+Until that exists, realism worlds are internally inconsistent and should be
+judged on terrain and lighting rather than on their props.
+
 ## The honest strategic note
 
 Physics and skinning were NOT the ceiling — Blender bone-heat via a watertight
