@@ -61,12 +61,10 @@ def ensure_bridge(verbose: bool = True) -> bool:
         print("[bake] bridge relaunch FAILED — bake cannot proceed")
     return False
 
-# default game clip set: state name -> (CMU bvh, frames at 24fps)
-DEFAULT_CLIPS = {
-    "walk": ("02_01.bvh", 40),
-    "run":  ("02_03.bvh", 28),
-    "attack": ("02_05.bvh", 16),   # fight-clip strike slice — the swing
-}
+# default game clip set: state name -> (CMU bvh, frames at 24fps). Derived
+# from assets/mocap/catalog.json so this and the retargeter's action table
+# cannot drift; see mocap_retarget.game_clip_set.
+DEFAULT_CLIPS = M.game_clip_set()
 IDLE_FRAMES = 72
 
 

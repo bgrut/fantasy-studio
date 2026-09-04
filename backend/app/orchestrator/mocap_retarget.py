@@ -20,13 +20,36 @@ from pathlib import Path
 
 MOCAP_DIR = Path(__file__).resolve().parents[2] / "assets" / "mocap" / "cmu"
 
+# ONE CATALOG (2026-09-03). This table and bake.py's clip set named the same
+# BVH files independently, so nothing stopped them drifting apart -- and they
+# already disagreed on the name of the fight action ("fight" here, "attack"
+# there). Both now read assets/mocap/catalog.json; adding an action is a data
+# edit plus the .bvh, not a code change in two places.
+_CATALOG_FILE = MOCAP_DIR.parent / "catalog.json"
+
+
+def _load_catalog() -> dict:
+    try:
+        raw = json.loads(_CATALOG_FILE.read_text(encoding="utf-8"))
+        acts = raw.get("actions", {})
+        if acts:
+            return acts
+    except Exception:  # noqa: BLE001
+        pass
+    # the engine must still animate if the catalog is missing or malformed
+    return {"walk": {"clips": ["02_01.bvh"], "game_state": "walk", "frames": 40}}
+
+
+ACTIONS = _load_catalog()
 # action -> candidate clips (random/seeded pick — the "Fortnite emote" idea)
-CATALOG = {
-    "walk": ["02_01.bvh", "02_02.bvh", "07_01.bvh", "08_01.bvh", "35_01.bvh"],
-    "run":  ["02_03.bvh", "09_01.bvh", "16_01.bvh"],
-    "fight": ["02_05.bvh", "02_07.bvh"],
-}
+CATALOG = {k: v["clips"] for k, v in ACTIONS.items()}
 MOCAP_ACTIONS = set(CATALOG.keys())
+
+
+def game_clip_set() -> dict:
+    """state name -> (bvh, frames), the per-character clip set bake.py bakes."""
+    return {v.get("game_state", k): (v["clips"][0], int(v.get("frames", 40)))
+            for k, v in ACTIONS.items() if v.get("clips")}
 
 
 def pick_clip(action, seed=0):

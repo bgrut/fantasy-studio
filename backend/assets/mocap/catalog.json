@@ -1,0 +1,21 @@
+{
+  "_comment": "ONE source of truth for what motion this engine can perform. mocap_retarget.py reads it for its action->clip candidates and bake.py derives the per-character clip set from it, because the two used to name the same BVH files in two independent tables and nothing kept them honest. Adding an action is a data edit here plus the .bvh next door -- see ATTRIBUTION.md for the licence (CMU motion is commercial-safe to retarget and ship, and NOT to resell as data).",
+  "actions": {
+    "walk": {
+      "clips": ["02_01.bvh", "02_02.bvh", "07_01.bvh", "08_01.bvh", "35_01.bvh"],
+      "game_state": "walk",
+      "frames": 40
+    },
+    "run": {
+      "clips": ["02_03.bvh", "09_01.bvh", "16_01.bvh"],
+      "game_state": "run",
+      "frames": 28
+    },
+    "fight": {
+      "clips": ["02_05.bvh", "02_07.bvh"],
+      "game_state": "attack",
+      "frames": 16,
+      "note": "strike slice of the fight clip -- the swing, not the wind-down"
+    }
+  }
+}
