@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 import os
+import shutil
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -34,9 +35,36 @@ PORT = int(os.getenv("BLENDER_LANE_PORT", "8789"))
 DEFAULT_BLENDER_EXE = r"C:\Program Files\Blender Foundation\Blender 4.5\blender.exe"
 ALT_BLENDER_EXE = r"C:\Program Files\Blender Foundation\Blender\blender.exe"
 
-BLENDER_EXE = os.getenv("BLENDER_EXE", DEFAULT_BLENDER_EXE)
-if not Path(BLENDER_EXE).exists() and Path(ALT_BLENDER_EXE).exists():
-    BLENDER_EXE = ALT_BLENDER_EXE
+
+
+def _find_blender() -> str:
+    """Whatever Blender this machine actually has (2026-09-04).
+
+    The two hardcoded candidates were "Blender 4.5" and "Blender", and this
+    machine has "Blender 5.1" — so BLENDER_EXE resolved to a binary that does
+    not exist and the bake lane failed at RUN time, one dead subprocess at a
+    time, instead of saying so at import. An explicit BLENDER_EXE still wins;
+    otherwise take the newest install present, then anything on PATH.
+    """
+    env = os.getenv("BLENDER_EXE")
+    if env:
+        return env
+    cands = [Path(DEFAULT_BLENDER_EXE), Path(ALT_BLENDER_EXE)]
+    for base in (Path(DEFAULT_BLENDER_EXE).parent.parent,
+                 Path(DEFAULT_BLENDER_EXE).parent.parent.parent
+                 / "Program Files (x86)" / "Blender Foundation"):
+        try:
+            if base.is_dir():
+                cands += sorted(base.glob("Blender*/blender.exe"), reverse=True)
+        except OSError:
+            pass
+    for c in cands:
+        if c.exists():
+            return str(c)
+    return shutil.which("blender") or DEFAULT_BLENDER_EXE
+
+
+BLENDER_EXE = _find_blender()
 
 LOCAL_RENDER_MODE = os.getenv("LOCAL_RENDER_MODE", "1") == "1"
 FPS = 24

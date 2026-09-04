@@ -37,6 +37,16 @@ no-derivatives), which violates the commercial-safe rule. Do not add it.
 | 16_01.bvh   | walk/run (mixed) | run      |
 | 02_05.bvh   | punch/strike     | fight    |
 | 02_07.bvh   | swordplay        | fight    |
+| 02_04.bvh   | jump, balance    | jump     |
+| 140_06.bvh  | Idle             | idle     |
+| 136_09.bvh  | Walk Crouched    | sneak    |
+| 79_02.bvh   | swimming         | swim     |
+| 90_16.bvh   | fall on face     | die      |
+
+The five below the swordplay line were added 2026-09-04 from the same mirror
+under the same terms. All carry the identical 31-joint CMU skeleton as the
+originals, so the bone mapping above applies unchanged (verified by joint-name
+comparison, not assumed).
 
 ## BVH skeleton → canonical 19-bone rig mapping (for the retargeter)
 
