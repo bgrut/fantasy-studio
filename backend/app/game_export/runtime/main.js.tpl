@@ -5067,7 +5067,11 @@ async function main() {
                   || _regReject(x, z, sct)
                   || (clusterN(x, z) < 0.45 && !_regForce(x, z, sct)
                       && tries < 22)) && tries < 30);
-        places.push({ x, z, s: 1 + (rng() - 0.5) * 2 * sct.scale_jitter, rot: rng() * Math.PI * 2,
+        places.push({ x, z,
+                      // base scale from the recipe (asset kits have their own
+                      // unit scale), jittered around it rather than around 1
+                      s: (sct.scale || 1) * (1 + (rng() - 0.5) * 2 * sct.scale_jitter),
+                      rot: rng() * Math.PI * 2,
                       // DENSITY ARC r2: real trees LEAN a few degrees — a
                       // perfectly plumb forest is the #1 'toy world' tell
                       lx: (rng() - 0.5) * 0.10, lz: (rng() - 0.5) * 0.10 });

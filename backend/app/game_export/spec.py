@@ -52,6 +52,11 @@ class ScatterSpec(BaseModel):
     count: int = Field(12, ge=1, le=500)
     min_dist_m: float = Field(4.0, ge=0.0)      # keep-out radius around spawn
     scale_jitter: float = Field(0.25, ge=0.0, le=1.0)
+    # BASE SCALE (2026-09-04): asset kits are authored at their own unit
+    # scale — a Kenney tree is 1.43 units tall, which planted at our implicit
+    # scale of 1.0 is a shrub. The recipe knows how big the thing is meant to
+    # be in metres; scale_jitter varies around this rather than around 1.
+    scale: float = Field(1.0, gt=0.0, le=40.0)
     collide: bool = True
 
 

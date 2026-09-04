@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import zlib
+import random
 from pathlib import Path
 
 PROPS_DIR = Path(__file__).resolve().parents[2] / "assets" / "props"
@@ -93,44 +94,113 @@ def recipe_for(setting: str | None):
     return None
 
 
-# THE LANDFORM DRESSES ITSELF (2026-09-04). Recipes keyed only off the world
-# NAME, so the ground could be a canyon, a dune sea or an alpine ridge and it
-# still got oak, birch, bush, flowers and rock in near-identical proportions.
-# With ten nature props total, an identical MIX of them is most of why every
-# world looks like the last one. These are the same ten meshes — the library is
-# the real limit — but a canyon of bare rock and dead stumps and an alpine
-# slope of dense pine are not the same picture, and neither is a dune sea that
-# is nearly empty. Emptiness is a look too, and we never used it.
+# THE LANDFORM DRESSES ITSELF, AND NO TWO WORLDS THE SAME (2026-09-04).
+# Two problems, one table. Recipes keyed only off the world NAME, so a gorge
+# and a dune sea got the same oak/birch/bush/flowers/rock mix; and the whole
+# product owned TEN nature meshes, so an identical mix of an already tiny
+# library was most of why every world looked like the last one.
+#
+# The library is now the Kenney Nature Kit (CC0, commercial use explicit):
+# 329 low-poly models — 61 trees, 56 cliffs, 60 rocks and stones, plus cactus,
+# crops, tents, campfires and fences. Low-poly matters: these are scattered by
+# the hundred as instances, and photoscanned props would cost the frame.
+#
+# Each entry is (POOL, count, video_count, scale). POOL is a list of
+# interchangeable assets and the WORLD SEED picks one, so two canyons built
+# from the same recipe still differ in which rock and which cliff they are
+# made of. Scale is in the entry because kits are authored at their own unit
+# size — a Kenney tree is 1.43 units tall, which is a shrub at our scale of 1.
+_T_BROAD = ["k_tree_default", "k_tree_detailed", "k_tree_blocks", "k_tree_oak"]
+_T_DARK = ["k_tree_default_dark", "k_tree_detailed_dark", "k_tree_blocks_dark"]
+_T_FALL = ["k_tree_default_fall", "k_tree_detailed_fall", "k_tree_blocks_fall"]
+_T_CONE = ["k_tree_cone", "k_tree_cone_dark", "k_tree_thin", "k_tree_tall"]
+_ROCK_L = ["k_rock_largeA", "k_rock_largeB", "k_rock_largeC", "k_rock_largeD",
+           "k_rock_largeE", "k_rock_largeF"]
+_ROCK_S = ["k_rock_smallA", "k_rock_smallB", "k_rock_smallC", "k_rock_smallD"]
+_STONE_L = ["k_stone_largeA", "k_stone_largeB", "k_stone_largeC", "k_stone_largeD"]
+_STONE_F = ["k_stone_smallFlatA", "k_stone_smallFlatB", "k_rock_smallFlatA"]
+_CLIFF_R = ["k_cliff_blockHalf_rock", "k_cliff_blockQuarter_rock",
+            "k_cliff_blockDiagonal_rock", "k_cliff_blockCave_rock"]
+_CLIFF_S = ["k_cliff_blockHalf_stone", "k_cliff_blockQuarter_stone",
+            "k_cliff_blockDiagonal_stone"]
+_BUSH = ["k_plant_bush", "k_plant_bushDetailed", "k_plant_bushLarge",
+         "k_plant_bushTriangle"]
+_FLOWER = ["k_flower_redA", "k_flower_purpleA", "k_flower_yellowA",
+           "k_flower_redB", "k_flower_purpleC", "k_flower_yellowB"]
+_GRASS = ["k_grass", "k_grass_large", "k_grass_leafs", "k_grass_leafsLarge"]
+_MUSH = ["k_mushroom_red", "k_mushroom_tan", "k_mushroom_redGroup",
+         "k_mushroom_tanTall"]
+_STUMP = ["k_stump_old", "k_stump_oldTall", "k_stump_round", "k_stump_square"]
+_LOG = ["k_log", "k_log_large", "k_log_stack"]
+_CACTUS = ["k_cactus_tall", "k_cactus_short"]
+_CROP = ["k_crops_cornStageD", "k_crops_wheatStageD", "k_crop_pumpkin",
+         "k_crops_bambooStageB"]
+
 _ARCH_RECIPES = {
-    "canyon":      [("rock", 70, 6), ("stump", 12, 2), ("bush", 12, 2),
-                    ("log", 8, 1)],
-    "mesa":        [("rock", 60, 6), ("bush", 10, 2), ("stump", 8, 1)],
-    "dunes":       [("rock", 20, 3), ("bush", 6, 1)],
-    "basin":       [("bush", 34, 4), ("flowers", 26, 3), ("rock", 24, 3),
-                    ("tree_birch", 12, 2), ("mushroom", 10, 1)],
-    "peaks":       [("tree_pine", 90, 7), ("rock", 60, 6), ("stump", 12, 2),
-                    ("log", 10, 1)],
-    "archipelago": [("tree_oak", 16, 3), ("bush", 22, 3), ("rock", 36, 4),
-                    ("flowers", 14, 2)],
+    # a gorge is rock and dead wood — no canopy at all
+    "canyon": [(_CLIFF_R, 34, 4, 6.0), (_ROCK_L, 46, 5, 2.4),
+               (_ROCK_S, 40, 4, 1.6), (_STUMP, 12, 2, 2.0),
+               (_CACTUS, 14, 2, 3.0)],
+    # stepped stone country: flatter debris, paler stone, sparse succulents
+    "mesa": [(_CLIFF_S, 30, 4, 6.0), (_STONE_L, 44, 5, 2.4),
+             (_STONE_F, 36, 4, 1.6), (_CACTUS, 18, 2, 3.0)],
+    # EMPTINESS IS A LOOK. A dune sea is mostly nothing, and we had never
+    # once shipped a world that was allowed to be sparse.
+    "dunes": [(_CACTUS, 16, 2, 3.0), (_STONE_F, 22, 3, 1.5),
+              (_ROCK_S, 10, 1, 1.4)],
+    # sheltered bowl: the lush one, with crops because someone farms here
+    "basin": [(_T_BROAD, 26, 3, 4.5), (_BUSH, 40, 4, 2.2),
+              (_FLOWER, 44, 4, 1.7), (_CROP, 20, 2, 2.2),
+              (_MUSH, 16, 2, 1.6), (_ROCK_S, 18, 2, 1.5)],
+    # alpine: conifers and boulders, and it gets DARKER trees
+    "peaks": [(_T_CONE, 80, 7, 4.8), (_ROCK_L, 50, 5, 2.4),
+              (_STONE_L, 34, 4, 2.2), (_STUMP, 12, 2, 2.0),
+              (_LOG, 10, 1, 2.2)],
+    # islands: low scrub and shore stone, few trees
+    "archipelago": [(_T_BROAD, 18, 3, 4.2), (_BUSH, 30, 3, 2.2),
+                    (_STONE_F, 34, 4, 1.6), (_GRASS, 30, 3, 2.2)],
+    # the default: a mixed wood-edge meadow, seasonally variable
+    "plain": [(_T_BROAD + _T_DARK + _T_FALL, 30, 4, 4.5), (_BUSH, 34, 4, 2.2),
+              (_FLOWER, 40, 4, 1.7), (_GRASS, 26, 3, 2.2),
+              (_MUSH, 12, 2, 1.6), (_ROCK_S, 22, 3, 1.5),
+              (_LOG, 6, 1, 2.2)],
 }
 
 
-def game_scatter(setting: str | None, archetype: str | None = None) -> list[dict]:
+def game_scatter(setting: str | None, archetype: str | None = None,
+                 seed: int = 0) -> list[dict]:
     """ScatterSpec dicts for GameSpec.world.scatter (empty if no recipe/props).
 
     A named landform outranks the setting keyword: "plain" keeps the old
     name-driven recipes, everything else dresses to its own ground.
     """
-    rec = _ARCH_RECIPES.get((archetype or "plain").lower()) or recipe_for(setting)
-    if not rec:
-        return []
+    rec = _ARCH_RECIPES.get((archetype or "plain").lower())
+    if rec is None:
+        legacy = recipe_for(setting)
+        if not legacy:
+            return []
+        rec = [(p, n, v, 1.0) for p, n, v in legacy]
+    rnd = random.Random(seed)
     out = []
-    for prop, game_n, _ in rec:
-        glb = PROPS_DIR / f"{prop}.glb"
-        if glb.exists():
-            out.append({"asset": str(glb), "count": game_n,
-                        "min_dist_m": 5.0, "scale_jitter": 0.3,
-                        "collide": prop != "rock"})
+    for entry in rec:
+        pool, game_n, _v, scale = entry
+        names = pool if isinstance(pool, list) else [pool]
+        # the SEED decides which member of the pool this world is made of, so
+        # two canyons off the same recipe are still different canyons
+        pick = rnd.choice(names)
+        glb = PROPS_DIR / f"{pick}.glb"
+        if not glb.exists():
+            cand = [n for n in names if (PROPS_DIR / f"{n}.glb").exists()]
+            if not cand:
+                continue
+            pick = rnd.choice(cand)
+            glb = PROPS_DIR / f"{pick}.glb"
+        out.append({"asset": str(glb), "count": game_n,
+                    "min_dist_m": 5.0, "scale_jitter": 0.3,
+                    "scale": float(scale),
+                    "collide": not pick.startswith(("k_flower", "k_grass",
+                                                    "k_mushroom", "k_rock_small",
+                                                    "k_stone_smallFlat"))})
     return out
 
 
