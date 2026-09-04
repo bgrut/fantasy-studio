@@ -5715,21 +5715,48 @@ async function main() {
     const gcolB = gcolA.clone().offsetHSL(0.02, 0.05, -0.07);
     // REAL blade shape: tapered to a tip, bowed forward, shaded dark at the
     // root — reads as grass, not floating rectangles
-    const blade = new THREE.PlaneGeometry(0.10, 0.34, 1, 3);
-    blade.translate(0, 0.17, 0);
-    {
-      const bp = blade.attributes.position;
-      const bcol = new Float32Array(bp.count * 3);
-      for (let i = 0; i < bp.count; i++) {
-        const t = bp.getY(i) / 0.34;               // 0 root -> 1 tip
-        bp.setX(i, bp.getX(i) * (1 - 0.85 * t));   // taper to a point
-        bp.setZ(i, t * t * 0.07);                  // bow
-        const sh = 0.66 + 0.34 * t;                // root shadow (was 0.5 — read as black spikes)
-        bcol[i * 3] = sh; bcol[i * 3 + 1] = sh; bcol[i * 3 + 2] = sh;
+    // A TUFT, NOT A SLIVER (2026-09-04). The comment above has said
+    // "cross-blades" for a long time and this was ONE PlaneGeometry: a single
+    // flat quad per instance. A single plane disappears edge-on and reads as
+    // an isolated green shark fin from above, which is exactly what a meadow
+    // looked like — scattered flat triangles rather than ground cover. Each
+    // instance is now three tapered, bowed blades fanned around a common
+    // root, so it reads as a tuft from ANY angle and the ground between them
+    // stops showing through. Built by hand rather than merging three planes
+    // because the vertex colours (dark at the root, light at the tip) and the
+    // bow have to survive the rotation.
+    const blade = (() => {
+      const BLADES = 3, SEG = 3, H = 0.34, W = 0.10;
+      const pos = [], col = [], idx = [];
+      for (let b = 0; b < BLADES; b++) {
+        const a = (b / BLADES) * Math.PI * 2 + 0.4;
+        const ca = Math.cos(a), sa = Math.sin(a);
+        const lean = 0.05 + 0.05 * b;          // each blade flops a bit differently
+        const base = pos.length / 3;
+        for (let sgi = 0; sgi <= SEG; sgi++) {
+          const t = sgi / SEG;                 // 0 root -> 1 tip
+          const halfW = (W * 0.5) * (1 - 0.85 * t);   // taper to a point
+          const y = H * t;
+          const bow = t * t * 0.07 + lean * t * t;    // bowed forward
+          for (const sgn of [-1, 1]) {
+            const x = sgn * halfW;
+            pos.push(x * ca - bow * sa, y, x * sa + bow * ca);
+            const sh = 0.66 + 0.34 * t;        // root shadow
+            col.push(sh, sh, sh);
+          }
+        }
+        for (let sgi = 0; sgi < SEG; sgi++) {
+          const i0 = base + sgi * 2;
+          idx.push(i0, i0 + 2, i0 + 1, i0 + 1, i0 + 2, i0 + 3);
+        }
       }
-      blade.setAttribute('color', new THREE.BufferAttribute(bcol, 3));
-      blade.computeVertexNormals();
-    }
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+      g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+      g.setIndex(idx);
+      g.computeVertexNormals();
+      return g;
+    })();
     const bmat = new THREE.MeshStandardMaterial({ side: THREE.DoubleSide, roughness: 1.0,
                                                   vertexColors: true });
     // WIND (Phase 81): blades sway from the tip, phase-shifted by world
@@ -5757,8 +5784,14 @@ async function main() {
     // of a meadow, and the blades take its colour.
     const _gh = {}; gcol.getHSL(_gh);
     const _grassy = _gh.h > 0.16 && _gh.h < 0.45 && _gh.s > 0.12;
-    const GN = Math.floor(Math.min(QUALITY === 'ultra' ? 21000 : 13000,
-                        Math.floor(GR * GR * (QUALITY === 'ultra' ? 3.2 : 2.2)))
+    // COUNT REBALANCED FOR TUFTS (2026-09-04). Each instance is now three
+    // blades instead of one, so it draws 3x the triangles and covers roughly
+    // 3x the ground. Halving the instance count lands at ~1.5x the old
+    // triangle budget for a meadow that actually reads as ground cover
+    // instead of scattered slivers — the cheapest quality per triangle in
+    // the whole renderer.
+    const GN = Math.floor(Math.min(QUALITY === 'ultra' ? 11000 : 6800,
+                        Math.floor(GR * GR * (QUALITY === 'ultra' ? 1.7 : 1.2)))
                         * (_grassy ? 1 : 0.10));
     // (blade colour itself is handled at gcolA/gcolB above — instance colours
     // multiply the material, so tinting bmat here would double-darken)
