@@ -84,6 +84,7 @@ const GAME_PROMPTS: { icon: string; text: string }[] = [
 // whole directions, not filters, which is why they change the picture far
 // more than the render row does.
 const STYLES: { id: string; label: string; hint: string; group: string }[] = [
+  { id: 'auto', label: '✨ Auto', hint: 'let the prompt choose the look — pick anything else to lock it', group: 'render' },
   { id: 'default', label: '🎬 Photoreal', hint: 'the classic look — natural light and texture', group: 'render' },
   { id: 'cartoon', label: '🖍️ Cartoon', hint: 'stylised PBR — saturated color, real shadows, heavy occlusion (Fortnite-ish)', group: 'render' },
   { id: 'sketch', label: '✏️ Sketch', hint: 'pencil-drawn look — fine cross-hatched lines', group: 'render' },
@@ -138,7 +139,10 @@ export default function GameStudio() {
   const [inspect, setInspect] = useState(false)
   const [hoverPick, setHoverPick] = useState<Pick | null>(null)
   const [selPick, setSelPick] = useState<Pick | null>(null)
-  const [style, setStyle] = useState('default')            // Phase 44 style preset
+  // 'auto' means the prompt decides; every other value is an EXPLICIT choice
+  // and is always sent. 'default' used to double as both, so picking
+  // Photoreal sent undefined and the extractor overrode it.
+  const [style, setStyle] = useState('auto')               // Phase 44 style preset
   const [splatPath, setSplatPath] = useState<string | null>(null)
   const [splatList, setSplatList] = useState<{ name: string; path: string; mb: number }[] | null>(null)
   const [splatTrain, setSplatTrain] = useState<string | null>(null)  // splat job stage text
@@ -309,7 +313,7 @@ export default function GameStudio() {
             locked: lockedLayers.length ? lockedLayers : undefined,
             grade: grade !== 'none' ? grade : undefined }
         // fresh build: USER-SELECTED style + view ride along — never guessed
-        : { style: style !== 'default' ? style : undefined,
+        : { style: style !== 'auto' ? style : undefined,
             view: view !== '3d' ? view : undefined,
             grade: grade !== 'none' ? grade : undefined,
             splat: (splatNow ?? splatPath) ?? undefined,
@@ -614,6 +618,9 @@ export default function GameStudio() {
 
         {/* LOOK & FEEL card: style / view / quality grouped in one place */}
         <div data-tour-id="game-look" className="mx-auto max-w-4xl w-full rounded-xl border border-white/[0.06] bg-white/[0.015] px-5 py-4 space-y-2.5">
+        {/* ONE look per game: the two rows are a single choice, not two
+            independent controls — picking an art direction replaces the
+            style and vice versa. */}
         {([
           { key: 'render', label: 'style:' },
           { key: 'art', label: 'art direction:' },
@@ -1107,7 +1114,7 @@ export default function GameStudio() {
                   try {
                     const { job_id } = await exportGame(job.prompt, {
                       godot: true,
-                      style: style !== 'default' ? style : undefined,
+                      style: style !== 'auto' ? style : undefined,
                       view: view !== '3d' ? view : undefined,
                     })
                     pollJob(job_id)
