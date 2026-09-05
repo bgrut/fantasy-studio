@@ -1661,9 +1661,39 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         # the level payload stay sane (128 -> 16k heights, ~120KB of JSON,
         # against 2.3k and 17KB before).
         _gn = int(max(64, min(128, round(float(spec.world.size_m) / 1.6))))
+        # THE GROUND ITSELF IS ART DIRECTION (2026-09-05). Seventeen styles
+        # shared ONE terrain generator — value-noise heightfield every time —
+        # so however far the props and palette diverged, the third-person
+        # looks kept rhyming with each other. Archetype answers "what kind of
+        # place this is"; this answers what the ground is MADE of. Folded
+        # planes for papercraft and comic, terraces for synthwave, modelled
+        # clay for claymation and watercolour, big flat facets for lowpoly.
+        # Also flattens the side-on and overhead games, where dramatic relief
+        # fights a readable ground line rather than helping it.
+        _STYLE_TERRAIN = {            # form, grid multiplier, amplitude mult
+            "lowpoly":    ("faceted", 0.55, 1.0),
+            "papercraft": ("stepped", 0.60, 0.95),
+            "comic":      ("stepped", 0.70, 0.70),
+            "synthwave":  ("stepped", 0.70, 1.25),
+            "pixel":      ("stepped", 0.60, 0.45),
+            "claymation": ("smooth",  0.85, 0.85),
+            "watercolor": ("smooth",  0.90, 0.75),
+            "kawaii":     ("smooth",  0.90, 0.75),
+            "dunescape":  ("smooth",  0.85, 0.65),
+            "noir":       ("natural", 0.75, 0.55),
+            "storybook":  ("natural", 0.75, 0.55),
+        }
+        _tf, _gm, _am = _STYLE_TERRAIN.get(spec.style or "default",
+                                           ("natural", 1.0, 1.0))
+        _gn = max(40, int(_gn * _gm))
         spec.world.level = build_level(
-            spec.seed, spec.world.size_m, n_objectives=n_obj, amplitude_m=amp,
-            grid_n=_gn, regions=_regions, archetype=_arch)
+            spec.seed, spec.world.size_m, n_objectives=n_obj,
+            amplitude_m=amp * _am, grid_n=_gn, regions=_regions,
+            archetype=_arch, terrain_form=_tf)
+        if _tf != "natural" or _gm != 1.0:
+            job.setdefault("notes", []).append(
+                f"terrain form: {_tf} ({_gn}x{_gn}) — the ground is shaped by "
+                f"the art direction, not just coloured by it")
         job.setdefault("notes", []).append(
             f"terrain {_gn}x{_gn} "
             f"({float(spec.world.size_m) / _gn:.1f}m per polygon, was "

@@ -262,10 +262,62 @@ def _archetype_height(kind: str, x: float, z: float, base: float,
     return base
 
 
+def _apply_terrain_form(h: list[float], n: int, form: str, amp: float) -> list[float]:
+    """The SHAPE of the ground, as an art-direction decision.
+
+    Every world this engine has ever made was value-noise heightfield: the
+    same gently-rolling ground under seventeen different colour grades, which
+    is most of why the third-person styles all rhyme with each other however
+    much the props and palette differ. Landform (archetype) answers "what kind
+    of place"; this answers "what is it MADE of" — folded planes, rounded clay,
+    faceted rock, or nature.
+
+    Applied to the finished height field so it composes with archetype rather
+    than competing with it. The path corridor is flattened downstream either
+    way, so a stepped or terraced world stays walkable.
+    """
+    if form in ("natural", "", None) or not h:
+        return h
+    if form == "stepped":
+        # folded paper / cut card / terraces: quantise to a handful of planes
+        step = max(amp * 0.55, 0.35)
+        return [round(round(v / step) * step, 3) for v in h]
+    if form == "smooth":
+        # clay and watercolour: rounded forms, no sharp noise. One 3x3 box
+        # blur is enough to kill the high frequency and keep the silhouette.
+        cur = list(h)
+        for _pass in range(3):          # one pass barely moved it; three reads
+            nxt = list(cur)             # as modelled clay rather than as noise
+            for i in range(n):
+                for j in range(n):
+                    acc = c = 0.0
+                    for di in (-1, 0, 1):
+                        for dj in (-1, 0, 1):
+                            ii, jj = i + di, j + dj
+                            if 0 <= ii < n and 0 <= jj < n:
+                                acc += cur[ii * n + jj]; c += 1
+                    nxt[i * n + j] = round(acc / c, 3)
+            cur = nxt
+        return cur
+    if form == "faceted":
+        # low-poly: big flat facets. Average each 2x2 block so the mesh reads
+        # as large planes even though the grid stays fine enough to collide on.
+        out = list(h)
+        for i in range(0, n - 1, 2):
+            for j in range(0, n - 1, 2):
+                q = [h[(i + a) * n + (j + b)] for a in (0, 1) for b in (0, 1)]
+                m = round(sum(q) / 4.0, 3)
+                for a in (0, 1):
+                    for b in (0, 1):
+                        out[(i + a) * n + (j + b)] = m
+        return out
+    return h
+
+
 def build_level(seed: int, size_m: float, n_objectives: int = 0,
                 amplitude_m: float = 2.4, grid_n: int = 48,
                 regions: list[dict] | None = None,
-                archetype: str = "plain") -> dict:
+                archetype: str = "plain", terrain_form: str = "natural") -> dict:
     """Deterministic LevelPlan. Returns a JSON-safe dict for the runtime."""
     rng = random.Random(seed)
 
@@ -338,6 +390,8 @@ def build_level(seed: int, size_m: float, n_objectives: int = 0,
             if edge > 0.92:
                 h *= max(0.0, (1.0 - edge) / 0.08)
             heights.append(round(h, 3))
+
+    heights = _apply_terrain_form(heights, grid_n, terrain_form, amplitude_m)
 
     # ── objectives along the route (progress-ordered, lateral jitter) ───────
     collect_points = []
