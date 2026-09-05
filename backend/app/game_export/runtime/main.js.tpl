@@ -548,6 +548,15 @@ async function main() {
                    exp: 0.95, flat: true },   // Don't Starve: inked paper
     claymation:  { sky: 0xBFD4E6, fog: 0xC4D3E0, near: 0.12, far: 0.80,
                    exp: 0.98 },               // Arise: simple forms, real light
+    // added 2026-09-05 — the cute end, which the set was missing entirely
+    kawaii:      { sky: 0xFFDCEB, fog: 0xFFC8DF, near: 0.14, far: 0.92,
+                   exp: 1.12, flat: true },   // candy pastels, soft and bright
+    comic:       { sky: 0xFFF0BE, fog: 0xFFDE85, near: 0.09, far: 0.70,
+                   exp: 1.04, flat: true },   // bold ink over primary colour
+    papercraft:  { sky: 0xEFE6D4, fog: 0xDFD2B8, near: 0.07, far: 0.60,
+                   exp: 1.00, flat: true },   // Tengami: folded pastel paper
+    synthwave:   { sky: 0x180A2C, fog: 0x3A1163, near: 0.04, far: 0.46,
+                   exp: 1.18 },               // neon night, magenta and cyan
   }[SPEC.style] || null;
   if (LOOK) {
     pal.sky = LOOK.sky;
@@ -1756,7 +1765,8 @@ async function main() {
   // generated-car paint reads flat/blotchy until the GPU texture tier lands —
   // a glossier material response under the Sky light hides most of it
   const _flatStyle = (SPEC.style || 'default') === 'cartoon'
-    || ['illustrated', 'noir', 'watercolor', 'storybook'].includes(SPEC.style);
+    || ['illustrated', 'noir', 'watercolor', 'storybook',
+        'kawaii', 'comic', 'papercraft'].includes(SPEC.style);
   // A FLAT FILL STILL HAS TO BE THE RIGHT COLOUR (2026-09-04). Cartoon props
   // were flattened with `m.map = null; m.color.offsetHSL(0, 0.14, 0.04)`,
   // and these materials keep their colour in the TEXTURE with color left at
@@ -10885,7 +10895,15 @@ async function main() {
     // has surface under the character's feet, and skipping the tiled photo
     // left cartoon worlds standing on a single flat painted colour — the
     // largest flat area in the frame, and a big part of the papery read.
-    const PHOTO = true;
+    //
+    // The FLAT ILLUSTRATION looks are the opposite case (2026-09-05). A
+    // Firewatch or Limbo ground is a field of colour, not photogrammetry, and
+    // a tiled rock photo underneath one fights the whole art direction — the
+    // first builds had painted haze over a pebble beach. These keep the
+    // painted canvas, which already carries the regions and trails as soft
+    // colour fields, which is exactly the surface they want.
+    const PHOTO = !['illustrated', 'noir', 'watercolor', 'storybook',
+                    'papercraft', 'comic'].includes(SPEC.style || 'default');
     const _texLoader = new THREE.TextureLoader();
     const _pbrCache = {};
     function pbr(name, rep, srgb) {
@@ -11443,6 +11461,12 @@ varying vec2 vUvRaw;
     noir:        { bands: 0, sat: 0.05, exposure: 0.74, grain: 0.11, edge: 0, gamma: 1.45 },
     // Don't Starve: inked linework over muted paper
     storybook:   { bands: 5, sat: 0.82, exposure: 1.0, grain: 0.03, edge: 2.6, gamma: 1.02 },
+    // cute: bright, sweet, no crush anywhere. gamma under 1 lifts the midtones
+    // so nothing reads heavy, which is most of what makes a look "cute".
+    kawaii:      { bands: 0, sat: 1.52, exposure: 1.10, grain: 0, edge: 0, gamma: 0.86 },
+    comic:       { bands: 4, sat: 1.55, exposure: 1.04, grain: 0, edge: 3.0, gamma: 0.94 },
+    papercraft:  { bands: 6, sat: 0.94, exposure: 1.02, grain: 0.02, edge: 1.2, gamma: 1.0 },
+    synthwave:   { bands: 0, sat: 1.62, exposure: 1.16, grain: 0.04, edge: 0, gamma: 0.92 },
   }[STYLE];
   let stylePass = null;
   if (STYLE_CFG) {

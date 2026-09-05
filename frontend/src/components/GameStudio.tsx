@@ -78,15 +78,31 @@ const GAME_PROMPTS: { icon: string; text: string }[] = [
 
 // Phase 44 STYLE PRESETS — the user picks, the AI never guesses. One global
 // render treatment (cel shading, outlines, grain, palette) per game.
-const STYLES: { id: string; label: string; hint: string }[] = [
-  { id: 'default', label: '🎬 Photoreal', hint: 'the classic look — natural light and texture' },
-  { id: 'cartoon', label: '🖍️ Cartoon', hint: 'TRUE cel shading — flat color bands + thick clean ink outlines' },
-  { id: 'sketch', label: '✏️ Sketch', hint: 'pencil-drawn look — fine cross-hatched lines (the old Cartoon)' },
-  { id: 'anime', label: '🌸 Anime', hint: 'soft cel bands, dreamy bloom, vivid color' },
-  { id: 'horror', label: '🕯️ Horror', hint: 'crushing dark, thick fog, film grain' },
-  { id: 'pixel', label: '👾 Pixel', hint: 'chunky retro pixels, posterized palette' },
-  { id: 'lowpoly', label: '📐 Low-poly', hint: 'flat-shaded facets, minimalist color' },
-]
+// Grouped because there are seventeen of them now and a single row of pills
+// was unreadable. 'render' treatments are a grade over the scene; 'art
+// direction' looks set palette, atmosphere and surface together — they are
+// whole directions, not filters, which is why they change the picture far
+// more than the render row does.
+const STYLES: { id: string; label: string; hint: string; group: string }[] = [
+  { id: 'default', label: '🎬 Photoreal', hint: 'the classic look — natural light and texture', group: 'render' },
+  { id: 'cartoon', label: '🖍️ Cartoon', hint: 'stylised PBR — saturated color, real shadows, heavy occlusion (Fortnite-ish)', group: 'render' },
+  { id: 'sketch', label: '✏️ Sketch', hint: 'pencil-drawn look — fine cross-hatched lines', group: 'render' },
+  { id: 'anime', label: '🌸 Anime', hint: 'soft cel bands, dreamy bloom, vivid color', group: 'render' },
+  { id: 'horror', label: '🕯️ Horror', hint: 'crushing dark, thick fog, film grain', group: 'render' },
+  { id: 'pixel', label: '👾 Pixel', hint: 'chunky retro pixels, posterized palette', group: 'render' },
+  { id: 'lowpoly', label: '📐 Low-poly', hint: 'flat-shaded facets, minimalist color', group: 'render' },
+
+  { id: 'illustrated', label: '🏔️ Illustrated', hint: 'warm flat color fields separated by haze — painted-poster wilderness' },
+  { id: 'dunescape', label: '🏜️ Dunescape', hint: 'sand and a low golden sun, vast and quiet' },
+  { id: 'watercolor', label: '💧 Watercolour', hint: 'pale washes and soft light — storybook fairy tale' },
+  { id: 'claymation', label: '🏺 Claymation', hint: 'simple rounded forms under real light, toy-like and tactile' },
+  { id: 'noir', label: '🌑 Noir', hint: 'near-monochrome silhouettes in grey haze, grain and dread' },
+  { id: 'storybook', label: '🪶 Storybook', hint: 'inked linework over muted paper — spindly, gothic, hand-drawn' },
+  { id: 'kawaii', label: '🍬 Kawaii', hint: 'candy pastels, bright and soft — the cute one' },
+  { id: 'comic', label: '💥 Comic', hint: 'bold ink over primary colour, punchy and graphic' },
+  { id: 'papercraft', label: '📄 Papercraft', hint: 'folded pastel paper, pop-up book depth' },
+  { id: 'synthwave', label: '🌃 Synthwave', hint: 'neon night in magenta and cyan' },
+].map((s) => ({ ...s, group: (s as { group?: string }).group || 'art' }))
 
 // Phase 45 VIEW PRESETS — same world, different game: classic 3D, top-down
 // 2D (orthographic Zelda feel), or a side-scroller locked to one lane.
@@ -598,24 +614,29 @@ export default function GameStudio() {
 
         {/* LOOK & FEEL card: style / view / quality grouped in one place */}
         <div data-tour-id="game-look" className="mx-auto max-w-4xl w-full rounded-xl border border-white/[0.06] bg-white/[0.015] px-5 py-4 space-y-2.5">
-        <div className="flex flex-wrap justify-center items-center gap-1.5">
-          <span className="text-[10px] font-mono text-[#4a4764]">style:</span>
-          {STYLES.map((s) => (
-            <button
-              key={s.id}
-              onClick={() => setStyle(s.id)}
-              title={s.hint}
-              className={cn(
-                'px-2.5 py-1 rounded-full text-[11px] border transition-all',
-                style === s.id
-                  ? 'border-[#5cffc9]/50 bg-[#5cffc9]/10 text-[#5cffc9]'
-                  : 'border-white/[0.06] bg-white/[0.02] text-[#807d99] hover:text-white'
-              )}
-            >
-              {s.label}
-            </button>
-          ))}
-        </div>
+        {([
+          { key: 'render', label: 'style:' },
+          { key: 'art', label: 'art direction:' },
+        ] as const).map((row) => (
+          <div key={row.key} className="flex flex-wrap justify-center items-center gap-1.5">
+            <span className="text-[10px] font-mono text-[#4a4764]">{row.label}</span>
+            {STYLES.filter((s) => s.group === row.key).map((s) => (
+              <button
+                key={s.id}
+                onClick={() => setStyle(s.id)}
+                title={s.hint}
+                className={cn(
+                  'px-2.5 py-1 rounded-full text-[11px] border transition-all',
+                  style === s.id
+                    ? 'border-[#5cffc9]/50 bg-[#5cffc9]/10 text-[#5cffc9]'
+                    : 'border-white/[0.06] bg-white/[0.02] text-[#807d99] hover:text-white'
+                )}
+              >
+                {s.label}
+              </button>
+            ))}
+          </div>
+        ))}
         <div className="flex flex-wrap justify-center items-center gap-1.5">
           <span className="text-[10px] font-mono text-[#4a4764]">view:</span>
           {VIEWS.map((v) => (

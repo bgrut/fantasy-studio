@@ -207,7 +207,8 @@ class GameSpec(BaseModel):
     # render/post pack applied coherently to the whole game
     style: Literal["default", "cartoon", "sketch", "anime", "horror", "pixel",
                    "lowpoly", "illustrated", "dunescape", "watercolor",
-                   "claymation", "noir", "storybook"] = "default"
+                   "claymation", "noir", "storybook", "kawaii", "comic",
+                   "papercraft", "synthwave"] = "default"
     # VIEW PRESET (Phase 45): 3d = classic third person; topdown = orthographic
     # 2D-Zelda camera; side = orthographic side-scroller (gameplay projected to
     # the z=0 plane). User-selected, like style.
