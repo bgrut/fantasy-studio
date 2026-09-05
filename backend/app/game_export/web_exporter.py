@@ -146,6 +146,38 @@ def export_web_game(spec: GameSpec, out_dir: str | Path, verbose: bool = True) -
         needed |= {f[0] for f in lvl_d["enterable"]["plan"].get("furniture", [])}
     for _e in lvl_d.get("enterables") or []:          # city heist: many venues
         needed |= {f[0] for f in _e["plan"].get("furniture", [])}
+    # STRUCTURES, NOT JUST SCATTER (2026-09-05). Points of interest — ruins,
+    # shrines, camps — were built from procedural grey BOXES, so the only
+    # constructed thing in any world was six stone stubs in a ring. That is
+    # why every world reads as bare terrain with decoration on it, and why
+    # adding props changed the dressing without changing the place. These kit
+    # pieces let a POI be an actual ruin, crypt cluster, village square or
+    # crashed craft. Keep in step with STRUCT_KIT in the runtime — the runtime
+    # falls back to stones for anything not shipped, so a mismatch degrades
+    # rather than breaks.
+    _STRUCT_KIT = {
+        "grave":  ["gy_crypt-small", "gy_crypt-a", "gy_gravestone-cross",
+                   "gy_gravestone-bevel", "gy_cross-wood", "gy_iron-fence-bar",
+                   "gy_altar-stone"],
+        "town":   ["tw_fountain-round", "tw_cart", "tw_banner-red",
+                   "tw_fence", "tw_fence-curved"],
+        "castle": ["ca_flag", "ca_rocks-large", "ca_siege-catapult", "ca_gate"],
+        "camp":   ["sv_tent", "sv_campfire-pit", "sv_box-large", "sv_fence",
+                   "sv_barrel"],
+        "space":  ["sp_rock_crystalsLargeA", "sp_craft_speederA", "sp_barrels",
+                   "sp_rock_largeA"],
+    }
+    _STYLE_STRUCT = {
+        "noir": "grave", "storybook": "grave", "horror": "grave",
+        "kawaii": "town", "watercolor": "town", "comic": "town",
+        "cartoon": "town", "anime": "town",
+        "claymation": "castle", "papercraft": "castle", "lowpoly": "castle",
+        "dunescape": "camp", "illustrated": "camp",
+        "synthwave": "space", "pixel": "space",
+    }
+    _kit = _STYLE_STRUCT.get(getattr(spec, "style", "default") or "default")
+    if _kit:
+        needed |= set(_STRUCT_KIT[_kit])
     if needed:
         props_src = RUNTIME.parent.parent.parent / "assets" / "props"
         props_dst = dist / "props"

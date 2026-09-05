@@ -7217,8 +7217,52 @@ async function main() {
         scene.add(inst);
       } catch (e) { /* prop not shipped: stones still make the POI */ }
     };
+    // A POI SHOULD BE A PLACE, NOT SIX GREY BOXES (2026-09-05). Every world
+    // was terrain plus scattered decoration, and the only CONSTRUCTED thing in
+    // any of them was a ring of BoxGeometry stubs. Adding props changed the
+    // dressing without changing the place, which is exactly the criticism.
+    // A style's kit now builds its landmarks: a noir ruin is a crypt with
+    // gravestones and railings, a kawaii one is a fountain square with carts
+    // and banners, a synthwave one is a crashed speeder among crystal spires.
+    // Anything not shipped simply fails to load and the stones still stand,
+    // so this degrades instead of breaking.
+    const STRUCT_KIT = {
+      grave:  { hero: 'gy_crypt-small', mid: ['gy_gravestone-cross', 'gy_gravestone-bevel'],
+                edge: 'gy_iron-fence-bar', mark: 'gy_cross-wood', s: 2.2 },
+      town:   { hero: 'tw_fountain-round', mid: ['tw_cart'],
+                edge: 'tw_fence', mark: 'tw_banner-red', s: 2.2 },
+      castle: { hero: 'ca_gate', mid: ['ca_rocks-large', 'ca_siege-catapult'],
+                edge: 'ca_rocks-small', mark: 'ca_flag', s: 2.6 },
+      camp:   { hero: 'sv_tent', mid: ['sv_box-large', 'sv_barrel'],
+                edge: 'sv_fence', mark: 'sv_campfire-pit', s: 2.2 },
+      space:  { hero: 'sp_craft_speederA', mid: ['sp_rock_crystalsLargeA', 'sp_barrels'],
+                edge: 'sp_rock_largeA', mark: 'sp_rock_crystalsLargeA', s: 2.2 },
+    }[{ noir: 'grave', storybook: 'grave', horror: 'grave',
+        kawaii: 'town', watercolor: 'town', comic: 'town',
+        cartoon: 'town', anime: 'town',
+        claymation: 'castle', papercraft: 'castle', lowpoly: 'castle',
+        dunescape: 'camp', illustrated: 'camp',
+        synthwave: 'space', pixel: 'space' }[SPEC.style || 'default']] || null;
+    const buildStruct = (K, x, z, rot) => {
+      addProp(K.hero, x, z, rot, K.s);
+      for (let k = 0; k < 5; k++) {                 // a ring of markers
+        const a = rot + k / 5 * Math.PI * 2;
+        addProp(K.mid[k % K.mid.length], x + Math.cos(a) * 3.4,
+                z + Math.sin(a) * 3.4, -a, K.s * 0.8);
+      }
+      for (let k = 0; k < 8; k++) {                 // a boundary around it
+        const a = rot + k / 8 * Math.PI * 2;
+        addProp(K.edge, x + Math.cos(a) * 6.2, z + Math.sin(a) * 6.2,
+                -a + Math.PI / 2, K.s * 0.9);
+      }
+      addProp(K.mark, x + 1.8, z - 1.8, rot, K.s);
+    };
     for (const poi of LVL.pois) {
       const { kind, x, z, rot } = poi;
+      if (STRUCT_KIT && (kind === 'ruin' || kind === 'shrine' || kind === 'camp')) {
+        buildStruct(STRUCT_KIT, x, z, rot);
+        continue;
+      }
       if (kind === 'ruin') {
         // broken tower: partial ring of shattered wall stubs
         for (let k = 0; k < 6; k++) {
