@@ -11631,6 +11631,13 @@ varying vec2 vUvRaw;
   }
   if (STYLE === 'anime') bloom.strength = 0.45;   // dreamy glow
   if (STYLE === 'lowpoly') {
+    // TRUE LOW-POLY IS UNTEXTURED (2026-09-05). This set flatShading and
+    // stopped, so the terrain got faceted normals with a photographic texture
+    // still stretched over it — facets you could not see under noise you did
+    // not want. The look everyone means by low-poly (PolyTrack, the island
+    // and terrain demos) has NO texture anywhere: colour comes from the
+    // material and form comes entirely from the facets catching the light.
+    // Stripping the ground map is what makes the silhouette read.
     scene.traverse(o => {
       if (o.isMesh) {
         for (const m of Array.isArray(o.material) ? o.material : [o.material]) {
@@ -11638,6 +11645,13 @@ varying vec2 vUvRaw;
         }
       }
     });
+    try {
+      gmat.map = null; gmat.bumpMap = null; gmat.normalMap = null;
+      gmat.color.setRGB(...SPEC.world.ground_color).offsetHSL(0, 0.10, 0.04);
+      gmat.roughness = 0.92;
+      gmat.flatShading = true;
+      gmat.needsUpdate = true;
+    } catch (e) { /* keep the textured ground rather than lose it */ }
   }
   composer.addPass(new OutputPass());
 
