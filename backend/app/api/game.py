@@ -750,6 +750,44 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         want = (req.player or spec.player.name or "man").strip().lower()
         from app.game_export.bake import ensure_playable
         from app.game_export.generate import guess_pattern
+        # THE CAST HAS TO MATCH THE ART DIRECTION (2026-09-05). A photoreal
+        # scanned human standing in a flat illustrated world is the same clash
+        # that put low-poly trees in a photoreal one, and no material trick
+        # fixes a silhouette. For the FLAT looks, a generic human is recast
+        # from the blocky roster, which is drawn in the same language as the
+        # scenery.
+        #
+        # Deliberately narrow. Only bare, interchangeable nouns are recast: a
+        # "wizard", "samurai" or "detective" is a specific character the user
+        # asked for by name and keeps its own mesh, because losing that
+        # identity would be a worse bug than the style clash. Photoreal styles
+        # are never touched.
+        _FLAT_LOOKS = {"cartoon", "illustrated", "watercolor", "storybook",
+                       "kawaii", "comic", "papercraft", "lowpoly"}
+        _GENERIC_HUMAN = {"man", "woman", "person", "human", "guy", "girl",
+                          "boy", "villager", "farmer", "traveller", "traveler",
+                          "adventurer", "hiker", "settler", "trader", "guard",
+                          "scout", "worker", "miner", "sailor", "wanderer",
+                          "climber", "camper", "kid", "child"}
+        _BLOCKY = ["blocky villager", "blocky adventurer", "blocky traveller",
+                   "blocky farmer", "blocky scout", "blocky settler",
+                   "blocky trader", "blocky worker", "blocky hiker"]
+        try:
+            if (spec.style in _FLAT_LOOKS
+                    and (want or "").strip().lower() in _GENERIC_HUMAN):
+                _pick = _BLOCKY[int(spec.seed or 0) % len(_BLOCKY)]
+                if library.resolve(_pick):
+                    want = _pick
+                    spec.player.anims = {
+                        "idle": "idle", "walk": "walk", "run": "sprint",
+                        "attack": "attack-melee-right", "die": "die",
+                    }
+                    job.setdefault("notes", []).append(
+                        f"cast recast to the blocky {spec.style} look — a "
+                        f"scanned human in a flat world is a style clash "
+                        f"(name a specific character to keep a detailed one)")
+        except Exception:  # noqa: BLE001
+            pass
         cast = want
         pattern = guess_pattern(want)
         # vehicles DRIVE, flyers FLY, swimmers SWIM — all play as static

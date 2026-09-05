@@ -1774,6 +1774,26 @@ async function main() {
   // white is a no-op (white has no saturation to shift). Every cartoon world
   // came out the same washed cream, which is a bad look for the one style
   // people actually buy. Take the fill FROM the texture, then drop it.
+  // A PALETTE ATLAS IS NOT A PHOTO (2026-09-05). Kit models (Kenney and the
+  // like) are already flat-shaded: every surface reads a single texel out of
+  // one tiny shared palette image. Running the cartoon flattener over them
+  // AVERAGES that whole palette into one muddy colour and then boosts its
+  // saturation, which is why a farm valley came out with cyan trees. A small
+  // texture shared across a kit is a palette, not a photograph, and the
+  // correct amount of stylising to apply to something already stylised is
+  // none.
+  function _isPaletteAtlas(m) {
+    if (!m) return false;
+    // NO TEXTURE AT ALL IS THE FLATTEST THING THERE IS. Kenney nature models
+    // carry no images whatsoever — every material is a baseColorFactor, and
+    // the leaf one is [0.16, 0.79, 0.67], already a teal-leaning green. The
+    // flattener's saturation bump pushed that to full cyan and gave a farm
+    // valley turquoise trees. An untextured material is a flat fill by
+    // definition and there is nothing left to flatten.
+    if (!m.map) return true;
+    const im = m.map.image;
+    return !!(im && im.width && im.width <= 256 && im.height <= 256);
+  }
   const _fillCache = new WeakMap();
   function fillFromMap(m) {
     const img = m.map && m.map.image;
@@ -1804,6 +1824,7 @@ async function main() {
   function cartoonizeTexture(mm) {
     // never flatten the world's layout canvas — see gtex above
     if (mm.map && mm.map.userData && mm.map.userData.worldCanvas) return;
+    if (_isPaletteAtlas(mm)) return;         // kit art is already flat
     // TRUE-CARTOON fills (Phase 132): blur away fur/noise detail, posterize
     // to a handful of colors, resaturate — fox fur becomes clean orange
     const img2 = mm.map && mm.map.image;
@@ -10902,14 +10923,52 @@ async function main() {
     // first builds had painted haze over a pebble beach. These keep the
     // painted canvas, which already carries the regions and trails as soft
     // colour fields, which is exactly the surface they want.
+    // EVERY STYLISED LOOK STANDS ON FLAT GROUND (2026-09-05). Cartoon was
+    // given the tiled photo back on 09-04 because the flat alternative looked
+    // washed out — but that was the ground_colour bug (a sunny meadow came
+    // back as cream, saturation 0.109), not the flat ground. With colour
+    // fixed, a photo is the wrong surface for ANY stylised look: posterising
+    // it does not help, because the noise is geometric, and a posterised
+    // photo of gravel is still gravel. Crisp means flat regions that hold
+    // their edges, which is what the painted canvas already is.
     const PHOTO = !['illustrated', 'noir', 'watercolor', 'storybook',
-                    'papercraft', 'comic'].includes(SPEC.style || 'default');
+                    'papercraft', 'comic', 'cartoon', 'kawaii',
+                    'lowpoly'].includes(SPEC.style || 'default');
     const _texLoader = new THREE.TextureLoader();
     const _pbrCache = {};
+    // CRISP MEANS FLAT REGIONS (2026-09-05). A toon world was standing on a
+    // photoreal grass PHOTO — thousands of tiny green variations per square
+    // metre, which is the exact opposite of crisp no matter how clean the
+    // grade on top is. Posterising the ground albedo to a handful of levels
+    // turns it into flat cel regions that hold their edges at any distance,
+    // which is what "crispy" actually means. Photoreal never enters here.
+    const _toonGround = ['cartoon', 'kawaii', 'comic', 'lowpoly', 'anime']
+      .includes(SPEC.style || 'default');
+    function _posterize(tex, levels) {
+      try {
+        const img = tex.image;
+        if (!img || !img.width) return;
+        const N = Math.min(1024, img.width);
+        const c = document.createElement('canvas');
+        c.width = c.height = N;
+        const g = c.getContext('2d', { willReadFrequently: true });
+        g.drawImage(img, 0, 0, N, N);
+        const d = g.getImageData(0, 0, N, N), px = d.data;
+        for (let i = 0; i < px.length; i += 4) {
+          px[i]     = Math.round(px[i]     / 255 * levels) / levels * 255;
+          px[i + 1] = Math.round(px[i + 1] / 255 * levels) / levels * 255;
+          px[i + 2] = Math.round(px[i + 2] / 255 * levels) / levels * 255;
+        }
+        g.putImageData(d, 0, 0);
+        tex.image = c;
+        tex.needsUpdate = true;
+      } catch (e) { /* keep the photo rather than lose the ground */ }
+    }
     function pbr(name, rep, srgb) {
-      const key = name + rep;
+      const key = name + rep + (_toonGround ? '#toon' : '');
       if (_pbrCache[key]) return _pbrCache[key];
-      const t = _texLoader.load('textures/' + name + '.jpg');
+      const t = _texLoader.load('textures/' + name + '.jpg',
+        _toonGround ? (tex => _posterize(tex, 5)) : undefined);
       t.anisotropy = renderer.capabilities.getMaxAnisotropy();  // crisp at grazing angles
       t.wrapS = t.wrapT = THREE.RepeatWrapping;
       t.repeat.set(rep, rep);
@@ -11032,7 +11091,7 @@ async function main() {
           m.normalMap = pbr(PBR_FILE[cls] + '_n', 2, false);
           m.normalScale = new THREE.Vector2(0.9, 0.9);
           m.color.setRGB(1, 1, 1);
-        } else if (_flatStyle) {
+        } else if (_flatStyle && !_isPaletteAtlas(m)) {
           // TRUE-CARTOON props: no texture at all — flat saturated fills,
           // but the fill is lifted off the texture first (see fillFromMap),
           // because these materials keep their colour there and nulling the
@@ -11040,6 +11099,9 @@ async function main() {
           fillFromMap(m);
           m.map = null; m.bumpMap = null; m.normalMap = null;
           m.color.offsetHSL(0, 0.14, 0.04);
+        } else if (_flatStyle) {
+          // ALREADY FLAT: leave it entirely alone. See _isPaletteAtlas.
+          m.needsUpdate = true;
         } else {
           const tex = detailTex(cls, '#' + m.color.getHexString());
           m.map = tex;
@@ -11440,7 +11502,11 @@ varying vec2 vUvRaw;
     // saturated albedo, real shadows, heavy ambient occlusion and clean
     // silhouettes, with the LIGHTING left intact to carry the volume. The
     // comic look still exists, under "sketch", which is where it belongs.
-    cartoon: { bands: 0, sat: 1.42, exposure: _styleNight ? 1.55 : 1.06,
+    // sat was 1.42, tuned when every surface was a desaturated photo. Kit art
+    // arrives ALREADY saturated — Kenney's leaf material is [0.16,0.79,0.67],
+    // a teal-leaning green — and multiplying that by 1.42 turned every tree in
+    // a farm valley cyan. A palette that was authored does not need boosting.
+    cartoon: { bands: 0, sat: 1.16, exposure: _styleNight ? 1.55 : 1.06,
                grain: 0, edge: 0, gamma: 0.94, celBands: 0,
                inkTh: 0, inkW: 0 },
     sketch:  { bands: 5, sat: 1.35, exposure: 1.05, grain: 0, edge: 2.4, gamma: 1.0 },
@@ -11463,7 +11529,7 @@ varying vec2 vUvRaw;
     storybook:   { bands: 5, sat: 0.82, exposure: 1.0, grain: 0.03, edge: 2.6, gamma: 1.02 },
     // cute: bright, sweet, no crush anywhere. gamma under 1 lifts the midtones
     // so nothing reads heavy, which is most of what makes a look "cute".
-    kawaii:      { bands: 0, sat: 1.52, exposure: 1.10, grain: 0, edge: 0, gamma: 0.86 },
+    kawaii:      { bands: 0, sat: 1.24, exposure: 1.10, grain: 0, edge: 0, gamma: 0.86 },
     comic:       { bands: 4, sat: 1.55, exposure: 1.04, grain: 0, edge: 3.0, gamma: 0.94 },
     papercraft:  { bands: 6, sat: 0.94, exposure: 1.02, grain: 0.02, edge: 1.2, gamma: 1.0 },
     synthwave:   { bands: 0, sat: 1.62, exposure: 1.16, grain: 0.04, edge: 0, gamma: 0.92 },
