@@ -9123,6 +9123,10 @@ async function main() {
     const pick = want => actions[P.anims[want]] || actions[want] ||
                          actions[Object.keys(actions)[0]];
     actions.__idle = pick('idle'); actions.__walk = pick('walk'); actions.__run = pick('run');
+    // baked since the mocap window landed, and until now never played:
+    // the heist kit's crouch-walk halved your speed with the standing
+    // walk still looping on top of it.
+    actions.__sneak = actions[(P.anims && P.anims.sneak)] || actions['sneak'] || null;
     // through pick() like the rest: a kit whose swing is called
     // 'attack-melee-right' is still an attack, and hardcoding the literal
     // name meant any library but our own bakes silently had no attack.
@@ -11975,12 +11979,16 @@ varying vec2 vUvRaw;
       const _wr = _strideRate.get(actions.__walk) || P.walk_speed || 1;
       const _rr = _strideRate.get(actions.__run) || P.run_speed || 1;
       const _wantRun = (mv.run && mv.mag > 0.3) || (_rr > _wr && speed / _wr > 3.0);
-      setAnim(speed < 0.1 ? actions.__idle : (_wantRun ? actions.__run : actions.__walk));
+      setAnim(speed < 0.1 ? actions.__idle
+            : (window.__sneak && actions.__sneak) ? actions.__sneak
+            : (_wantRun ? actions.__run : actions.__walk));
       if (current && current.getClip()) {
         // the clip's OWN stride rate when we could measure it; the
         // configured speed only as a fallback for rigs with no foot bone
         const base = _strideRate.get(current)
-          || (current === actions.__run ? P.run_speed : P.walk_speed);
+          || (current === actions.__run ? P.run_speed
+              : current === actions.__sneak ? P.walk_speed * 0.45
+              : P.walk_speed);
         // Ceiling raised 3.0 -> 5.5 because it, not the clips, was the
         // binding constraint. The run clip strides ~0.67m per cycle — a
         // perfectly normal stride — over a 1.67s cycle, which is simply a
