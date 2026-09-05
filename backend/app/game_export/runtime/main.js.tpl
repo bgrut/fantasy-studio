@@ -5117,6 +5117,17 @@ async function main() {
       gltf.scene.traverse(o => {
         if (o.isMesh) parts.push({ geo: o.geometry, mat: o.material, local: o.matrixWorld.clone() });
       });
+      // THE CORRIDOR SHOULD SCALE WITH THE PROP (2026-09-05). Everything was
+      // kept the full path-corridor's distance away, tree and pebble alike —
+      // and since the camera FOLLOWS the path, that cleared a band through
+      // exactly the part of the world the player looks at. It is why realistic
+      // worlds read sparse no matter how the counts are tuned: the props were
+      // not missing, they were pushed out of frame. A tree has to stay out of
+      // the walking line; a fern or a rock does not block anyone and belongs
+      // right beside the path, where it is actually seen.
+      const _sbb = new THREE.Box3().setFromObject(gltf.scene);
+      const _sH = (_sbb.max.y - _sbb.min.y) * (sct.scale || 1);
+      const _corr = _sH <= 1.5 ? CORR * 0.22 : CORR;
       const N = sct.count;
       const places = [];
       // Phase 65 CLUSTERING: real vegetation grows in patches, not an even
@@ -5138,7 +5149,7 @@ async function main() {
         let x, z, tries = 0;
         do {
           x = (rng() - 0.5) * gsize * 0.9; z = (rng() - 0.5) * gsize * 0.9; tries++;
-        } while ((Math.hypot(x, z) < sct.min_dist_m || pathDist(x, z) < CORR
+        } while ((Math.hypot(x, z) < sct.min_dist_m || pathDist(x, z) < _corr
                   || inBldg(x, z)
                   || roadDist(x, z) < 7.5
                   || _regReject(x, z, sct)
