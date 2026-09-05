@@ -518,6 +518,42 @@ async function main() {
 
   const scene = new THREE.Scene();
   const WIND_U = { value: 0 };                   // shared wind clock (Phase 81)
+  // ── ART DIRECTION (2026-09-05) ──────────────────────────────────────────
+  // Our "styles" were post-processing: the same photoreal scene under a
+  // different filter, which is exactly why they all read as one game wearing
+  // hats. Looking at what actually separates Firewatch, Journey, Limbo,
+  // Alto's Odyssey and Monument Valley, none of them is a filter. Every one
+  // is the same three decisions made HARD and made together: a committed
+  // limited palette, strong atmospheric perspective so distance collapses
+  // into flat bands of colour, and minimal surface texture so shape and
+  // silhouette carry the image.
+  //
+  // Atmospheric perspective is the one we already had and never used — fog
+  // existed as a faint grey wash pushed out past the far edge. Pulling it IN
+  // and giving it a real colour is most of what makes an illustrated game
+  // look painted rather than photographed.
+  //
+  // near/far are fractions of world size. 'default' is deliberately absent:
+  // photoreal is not a look, it is the absence of one, and it must not move.
+  const LOOK = {
+    illustrated: { sky: 0xE9A45C, fog: 0xC9663A, near: 0.05, far: 0.50,
+                   exp: 0.92, flat: true },   // Firewatch: warm bands, flat fields
+    noir:        { sky: 0x9EA4A8, fog: 0x6E747A, near: 0.02, far: 0.32,
+                   exp: 0.68, flat: true },   // Limbo: silhouettes in haze
+    dunescape:   { sky: 0xF3CE93, fog: 0xE0A05E, near: 0.08, far: 0.60,
+                   exp: 0.95 },               // Journey / Alto: sand and low sun
+    watercolor:  { sky: 0xDCE8F2, fog: 0xD2DEEA, near: 0.05, far: 0.55,
+                   exp: 1.02, flat: true },   // Child of Light: pale washes
+    storybook:   { sky: 0xCFC6AE, fog: 0xB6AD95, near: 0.06, far: 0.48,
+                   exp: 0.95, flat: true },   // Don't Starve: inked paper
+    claymation:  { sky: 0xBFD4E6, fog: 0xC4D3E0, near: 0.12, far: 0.80,
+                   exp: 0.98 },               // Arise: simple forms, real light
+  }[SPEC.style] || null;
+  if (LOOK) {
+    pal.sky = LOOK.sky;
+    pal.fog = LOOK.fog;
+    if (LOOK.exp != null) pal.exp = LOOK.exp;
+  }
   scene.background = new THREE.Color(pal.sky);
   if (SPEC.world.fog) {
     // fog_density 0..1: 0.5 = default atmosphere, higher pulls the fog wall
@@ -530,6 +566,15 @@ async function main() {
     const near = SPEC.world.size_m * (0.80 - fd * 0.72);   // 0.80..0.08 of world
     const far  = SPEC.world.size_m * (2.20 - fd * 1.55);   // 2.20..0.65 of world
     scene.fog = new THREE.Fog(pal.fog, Math.max(near, 2), Math.max(far, near + 20));
+  }
+  if (LOOK) {
+    // A LOOK OWNS ITS ATMOSPHERE. The prompt's fog_density describes weather;
+    // this describes the picture, so it overrides — and it always applies,
+    // even when world.fog is off, because for these styles the haze IS the
+    // art direction rather than an effect laid over it.
+    scene.fog = new THREE.Fog(pal.fog,
+                              Math.max(SPEC.world.size_m * LOOK.near, 2),
+                              Math.max(SPEC.world.size_m * LOOK.far, 24));
   }
 
   // QUALITY PACK — real atmospheric sky (day/sunset/overcast) or a starfield
@@ -1710,7 +1755,8 @@ async function main() {
   }
   // generated-car paint reads flat/blotchy until the GPU texture tier lands —
   // a glossier material response under the Sky light hides most of it
-  const _flatStyle = (SPEC.style || 'default') === 'cartoon';
+  const _flatStyle = (SPEC.style || 'default') === 'cartoon'
+    || ['illustrated', 'noir', 'watercolor', 'storybook'].includes(SPEC.style);
   // A FLAT FILL STILL HAS TO BE THE RIGHT COLOUR (2026-09-04). Cartoon props
   // were flattened with `m.map = null; m.color.offsetHSL(0, 0.14, 0.04)`,
   // and these materials keep their colour in the TEXTURE with color left at
@@ -11384,6 +11430,19 @@ varying vec2 vUvRaw;
     horror:  { bands: 0, sat: 0.32, exposure: 0.7, grain: 0.13, edge: 0, gamma: 1.7 },
     pixel:   { bands: 6, sat: 1.12, exposure: 1.0, grain: 0, edge: 0, gamma: 1.0 },
     lowpoly: { bands: 7, sat: 1.15, exposure: 1.02, grain: 0, edge: 0, gamma: 1.0 },
+    // THE ILLUSTRATION LOOKS. Their palette and atmosphere are set up top in
+    // LOOK; this is only the grade that finishes them. Deliberately gentle —
+    // the picture is meant to come from the colour script and the fog, not
+    // from a filter, which is the whole lesson of the games these are named
+    // after.
+    illustrated: { bands: 0, sat: 1.30, exposure: 1.02, grain: 0, edge: 0, gamma: 0.96 },
+    dunescape:   { bands: 0, sat: 1.18, exposure: 1.02, grain: 0, edge: 0, gamma: 0.98 },
+    watercolor:  { bands: 0, sat: 0.95, exposure: 1.04, grain: 0, edge: 0, gamma: 0.97 },
+    claymation:  { bands: 0, sat: 1.10, exposure: 1.00, grain: 0, edge: 0, gamma: 0.97 },
+    // Limbo: near-monochrome, crushed, grainy, everything a silhouette
+    noir:        { bands: 0, sat: 0.05, exposure: 0.74, grain: 0.11, edge: 0, gamma: 1.45 },
+    // Don't Starve: inked linework over muted paper
+    storybook:   { bands: 5, sat: 0.82, exposure: 1.0, grain: 0.03, edge: 2.6, gamma: 1.02 },
   }[STYLE];
   let stylePass = null;
   if (STYLE_CFG) {

@@ -62,7 +62,17 @@ Output ONLY the JSON object, no markdown, no commentary. Schema (all fields opti
  and texture), "cartoon" (flat cel fills, thick ink outlines, saturated),
  "sketch" (hand-drawn linework), "anime" (soft cel banding, bright), "horror"
  (desaturated, crushed blacks, heavy grain), "pixel" (low-res nearest-neighbour,
- retro), "lowpoly" (flat-shaded facets, clean palettes). CHOOSE ONE that fits
+ retro), "lowpoly" (flat-shaded facets, clean palettes), and the ILLUSTRATION looks,
+ which are whole art directions rather than filters — each commits a palette,
+ an atmosphere and a surface treatment together: "illustrated" (warm flat
+ colour fields separated by haze, like a painted poster; forests, lookouts,
+ wilderness), "dunescape" (sand and low golden sun, soft distance, vast and
+ quiet; deserts, dunes, pilgrimage), "watercolor" (pale washes, soft light,
+ storybook; fairy tales, gentle worlds), "claymation" (simple rounded forms
+ under real light, toy-like and tactile), "noir" (near-monochrome silhouettes
+ in grey haze, grain, dread; horror, mystery, the unsettling), "storybook"
+ (inked linework over muted paper, spindly and hand-drawn; gothic whimsy,
+ survival, the eerie). CHOOSE ONE that fits
  the subject and mood, do not default to photoreal out of habit: a shark-hunting
  sailboat adventure reads "lowpoly" or "cartoon"; a haunted asylum reads
  "horror"; an arcade racer reads "pixel"; a Ghibli-ish forest walk reads
