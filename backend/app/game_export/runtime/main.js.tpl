@@ -10942,9 +10942,16 @@ async function main() {
     // it does not help, because the noise is geometric, and a posterised
     // photo of gravel is still gravel. Crisp means flat regions that hold
     // their edges, which is what the painted canvas already is.
+    // The end-to-end run across all seventeen styles caught three art
+    // directions still standing on rock.jpg while every other one had a flat
+    // ground: dunescape, claymation and synthwave. A Journey-style sand field
+    // is not photogrammetry, clay is not gravel, and a neon night is not a
+    // quarry. An ART DIRECTION always owns its ground; only the RENDER
+    // treatments (default, sketch, horror, anime, pixel) keep the photo.
     const PHOTO = !['illustrated', 'noir', 'watercolor', 'storybook',
-                    'papercraft', 'comic', 'cartoon', 'kawaii',
-                    'lowpoly'].includes(SPEC.style || 'default');
+                    'papercraft', 'comic', 'cartoon', 'kawaii', 'lowpoly',
+                    'dunescape', 'claymation', 'synthwave'].includes(
+                      SPEC.style || 'default');
     const _texLoader = new THREE.TextureLoader();
     const _pbrCache = {};
     // CRISP MEANS FLAT REGIONS (2026-09-05). A toon world was standing on a
