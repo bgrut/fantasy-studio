@@ -108,6 +108,7 @@ const STYLES: { id: string; label: string; hint: string; group: string }[] = [
 // Phase 45 VIEW PRESETS — same world, different game: classic 3D, top-down
 // 2D (orthographic Zelda feel), or a side-scroller locked to one lane.
 const VIEWS: { id: string; label: string; hint: string }[] = [
+  { id: 'auto', label: '✨ Auto', hint: "let the art direction choose — noir plays side-on, pixel overhead" },
   { id: '3d', label: '🧊 3D', hint: 'classic third-person camera' },
   { id: 'topdown', label: '🗺️ Top-down 2D', hint: 'orthographic overhead — the 2D-Zelda feel (pairs great with Pixel style)' },
   { id: 'side', label: '🎞️ Side-scroller', hint: 'run and jump along one lane — terrain becomes the platforming' },
@@ -176,7 +177,10 @@ export default function GameStudio() {
   const [quality, setQuality] = useState<string>(() => {
     try { return localStorage.getItem('fs_quality') || 'ultra' } catch { return 'ultra' }
   })
-  const [view, setView] = useState('3d')                   // Phase 45 view preset
+  // 'auto' lets the STYLE choose its camera (noir plays side-on, pixel
+  // overhead); any explicit pick overrides it. Same lesson as style:
+  // '3d' cannot mean both "third person" and "no preference".
+  const [view, setView] = useState('auto')                 // Phase 45 view preset
   const [placeMode, setPlaceMode] = useState<'point' | 'line'>('point')
   const [lineA, setLineA] = useState<Pick | null>(null)    // line tool first click
   const [selLine, setSelLine] = useState<{ a: Pick; b: Pick } | null>(null)
@@ -314,7 +318,7 @@ export default function GameStudio() {
             grade: grade !== 'none' ? grade : undefined }
         // fresh build: USER-SELECTED style + view ride along — never guessed
         : { style: style !== 'auto' ? style : undefined,
-            view: view !== '3d' ? view : undefined,
+            view: view !== 'auto' ? view : undefined,
             grade: grade !== 'none' ? grade : undefined,
             splat: (splatNow ?? splatPath) ?? undefined,
             pano: (panoNow ?? panoPath) ?? undefined })
@@ -1115,7 +1119,7 @@ export default function GameStudio() {
                     const { job_id } = await exportGame(job.prompt, {
                       godot: true,
                       style: style !== 'auto' ? style : undefined,
-                      view: view !== '3d' ? view : undefined,
+                      view: view !== 'auto' ? view : undefined,
                     })
                     pollJob(job_id)
                   } catch (e) {

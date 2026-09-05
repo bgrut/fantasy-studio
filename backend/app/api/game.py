@@ -667,6 +667,32 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             except Exception:
                 job.setdefault("notes", []).append(
                     f"unknown style '{req.style}' — kept {spec.style}")
+        # A STYLE IS A GAME, NOT A COAT OF PAINT (2026-09-05). Every world we
+        # made was a heightfield seen from a third-person follow camera, so
+        # seventeen styles were seventeen paint jobs on ONE game — "always on
+        # the same plane", exactly as the user put it. The games these looks
+        # are named after are not all third-person: Limbo is a side-scroller,
+        # Alto's Odyssey is a side-scroller, Tengami is a side-on pop-up book,
+        # Monument Valley and the 2D-Zelda pixel lineage are overhead. Binding
+        # a default CAMERA to the look changes what the game IS, not merely
+        # how it is lit, and it costs nothing because the view presets have
+        # existed all along and no style ever reached for one.
+        #
+        # Only a default: an explicit pick from the studio still wins below.
+        _STYLE_VIEW = {
+            "noir": "side",        # Limbo
+            "comic": "side",       # panels read across
+            "papercraft": "side",  # Tengami's folding pages
+            "dunescape": "side",   # Alto's Odyssey
+            "pixel": "topdown",    # the 2D Zelda lineage
+            "storybook": "topdown",
+        }
+        _sv = _STYLE_VIEW.get(spec.style or "default")
+        if _sv and not req.view:
+            spec.view = _sv
+            job.setdefault("notes", []).append(
+                f"{spec.style} plays as a {_sv} game — this look's camera is "
+                f"part of it (pick a view in the studio to override)")
         if req.view:
             try:
                 spec.view = req.view
