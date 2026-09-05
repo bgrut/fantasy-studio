@@ -183,6 +183,65 @@ _ARCH_RECIPES_REAL = {
               (_PH_LITTER, 6, 1, 1.6)],
 }
 
+# A STYLE NEEDS ITS OWN OBJECTS, NOT A FILTER OVER SHARED ONES (2026-09-05).
+# Fourteen of seventeen styles were dressed from the same nature kit, so a
+# "noir" world and a "kawaii" world were the same trees and rocks under
+# different colour grades. That is a filter, and the user was right to keep
+# saying so. Style now brings its OWN vocabulary — a signature set laid on top
+# of whatever the landform provides — so the worlds differ in what is IN them
+# and not merely in how they are lit.
+#
+# Six more CC0 Kenney kits carry it: graveyard, fantasy town, castle, survival,
+# pirate and space, 639 models between them. A noir valley has gravestones,
+# crypts and iron railings; a kawaii one has fountains, carts and banners; a
+# synthwave one has crystal spires and abandoned craft. Same terrain, same
+# engine, genuinely different places.
+_SIG_GRAVE = [
+    (["gy_gravestone-cross", "gy_gravestone-bevel", "gy_gravestone-broken",
+      "gy_gravestone-debris"], 30, 3, 1.5),
+    (["gy_cross-wood", "gy_cross"], 16, 2, 2.0),
+    (["gy_crypt-small", "gy_crypt-a", "gy_crypt-b"], 8, 1, 3.2),
+    (["gy_iron-fence-bar", "gy_iron-fence-curve"], 18, 2, 2.0),
+]
+_SIG_TOWN = [
+    (["tw_cart", "tw_cart-high"], 12, 2, 2.4),
+    (["tw_fountain-round", "tw_fountain-square"], 5, 1, 3.0),
+    (["tw_banner-green", "tw_banner-red"], 16, 2, 2.6),
+    (["tw_fence", "tw_fence-curved"], 22, 2, 2.0),
+]
+_SIG_CASTLE = [
+    (["ca_flag", "ca_flag-wide", "ca_flag-pennant"], 14, 2, 4.0),
+    (["ca_rocks-large", "ca_rocks-small"], 26, 3, 2.0),
+    (["ca_siege-catapult", "ca_siege-ram"], 5, 1, 2.6),
+]
+_SIG_CAMP = [
+    (["sv_tent", "sv_tent-canvas"], 9, 2, 2.6),
+    (["sv_campfire-pit", "sv_campfire-stand"], 8, 1, 1.6),
+    (["sv_barrel", "sv_box", "sv_box-large"], 20, 2, 1.4),
+    (["sv_fence", "sv_fence-fortified"], 18, 2, 2.0),
+]
+_SIG_SPACE = [
+    (["sp_rock_crystals", "sp_rock_crystalsLargeA", "sp_rock_crystalsLargeB"], 26, 3, 2.4),
+    (["sp_rock_largeA", "sp_rock_largeB"], 18, 2, 2.2),
+    (["sp_craft_speederA", "sp_craft_miner"], 6, 1, 2.2),
+    (["sp_barrels", "sp_barrel"], 14, 2, 1.4),
+]
+_SIG_PIRATE = [
+    (["pr_palm-straight", "pr_palm-bend", "pr_palm-detailed-straight"], 20, 3, 5.0),
+    (["pr_barrel", "pr_crate"], 18, 2, 1.4),
+    (["pr_grass-patch", "pr_grass-plant"], 24, 2, 1.6),
+]
+
+_STYLE_SIGNATURE = {
+    "noir": _SIG_GRAVE, "storybook": _SIG_GRAVE, "horror": _SIG_GRAVE,
+    "kawaii": _SIG_TOWN, "watercolor": _SIG_TOWN, "comic": _SIG_TOWN,
+    "cartoon": _SIG_TOWN, "anime": _SIG_TOWN,
+    "claymation": _SIG_CASTLE, "papercraft": _SIG_CASTLE, "lowpoly": _SIG_CASTLE,
+    "dunescape": _SIG_CAMP, "illustrated": _SIG_CAMP,
+    "synthwave": _SIG_SPACE, "pixel": _SIG_SPACE,
+}
+
+
 # styles whose scenery should be photographed rather than drawn
 _REAL_STYLES = {"default", "horror", "sketch"}
 
@@ -239,6 +298,8 @@ def game_scatter(setting: str | None, archetype: str | None = None,
             return []
         rec = [(p, n, v, 1.0) for p, n, v in legacy]
     rnd = random.Random(seed)
+    # the style's own furniture, on top of whatever the landform grows
+    rec = list(rec) + list(_STYLE_SIGNATURE.get((style or "").lower(), []))
     out = []
     for entry in rec:
         pool, game_n, _v, scale = entry
