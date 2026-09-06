@@ -258,13 +258,47 @@ let tool = 'miner';
 let drawing = false;
 let lastCell = null;
 
+// In first person you aim with the CROSSHAIR, not the cursor — the pointer is
+// locked and has no position. Overhead keeps the cursor. Reach is limited on
+// foot for the obvious reason: a build game where you can place a machine on
+// the far side of the island from where you stand is a board game again.
 function cellUnder(ev) {
-  ndc.set((ev.clientX / innerWidth) * 2 - 1, -(ev.clientY / innerHeight) * 2 + 1);
+  if (overhead && ev) {
+    ndc.set((ev.clientX / innerWidth) * 2 - 1, -(ev.clientY / innerHeight) * 2 + 1);
+  } else {
+    ndc.set(0, 0);
+  }
   ray.setFromCamera(ndc, camera);
   if (!ray.ray.intersectPlane(plane, hitPt)) return null;
+  if (!overhead && hitPt.distanceTo(camera.position) > REACH) return null;
   const x = Math.floor((hitPt.x + HALF) / T);
   const z = Math.floor((hitPt.z + HALF) / T);
   return inGrid(x, z) ? [x, z] : null;
+}
+
+// the ghost: what you are about to build, where you are about to build it
+const ghost = new THREE.Mesh(
+  new THREE.BoxGeometry(T * 0.92, 0.5, T * 0.92),
+  new THREE.MeshBasicMaterial({ color: 0x6cf5d0, transparent: true, opacity: 0.28,
+    depthWrite: false }));
+ghost.visible = false;
+scene.add(ghost);
+const ghostEdge = new THREE.LineSegments(
+  new THREE.EdgesGeometry(new THREE.BoxGeometry(T * 0.92, 0.5, T * 0.92)),
+  new THREE.LineBasicMaterial({ color: 0x9dffe8, transparent: true, opacity: 0.85 }));
+ghost.add(ghostEdge);
+
+function updateGhost() {
+  const c = cellUnder(null);
+  if (!c) { ghost.visible = false; return; }
+  const legal = tool === 'erase'
+    ? cells[c[0]][c[1]].t !== EMPTY && cells[c[0]][c[1]].t !== NODE
+    : tool === 'miner' ? cells[c[0]][c[1]].t === NODE
+    : cells[c[0]][c[1]].t !== NODE;
+  ghost.visible = true;
+  ghost.position.set(wx(c[0]), 0.26, wz(c[1]));
+  ghost.material.color.setHex(legal ? 0x6cf5d0 : 0xff6b7d);
+  ghostEdge.material.color.setHex(legal ? 0x9dffe8 : 0xffa8b4);
 }
 
 function dirBetween(a, b) {
@@ -319,27 +353,77 @@ addEventListener('keydown', e => {
   if (k) pickTool(k);
 });
 
-// ── orbit camera, deliberately tiny ────────────────────────────────────────
-let yaw = 0.72, pitch = 0.92, dist = 46, ox = 0, oy = 0, orbiting = false;
-addEventListener('contextmenu', e => e.preventDefault());
-addEventListener('pointerdown', e => {
-  if (e.button === 2) { orbiting = true; ox = e.clientX; oy = e.clientY; }
+// ── YOU ARE ON THE ISLAND ───────────────────────────────────────────────────
+// Arranging a factory on a board and STANDING IN ONE are different games. The
+// second is the one people lose evenings to, because a belt you walked beside
+// is yours in a way a belt you dragged on a grid is not. First person is the
+// default; the overhead view stays on Tab because routing a junction from eye
+// level is genuinely worse than seeing it from above, and a build game needs
+// both.
+const EYE = 1.68, REACH = 12;
+const player = {
+  pos: new THREE.Vector3(0, EYE, HALF - 4),
+  vel: new THREE.Vector3(),
+  // starts looking DOWN at the ground. Level-eyed, the ground plane is
+  // metres beyond arm's reach and the build ghost simply never appears —
+  // you would be standing in a build game with no way to tell why nothing
+  // can be placed.
+  yaw: Math.PI, pitch: -0.38, onGround: true,
+};
+let overhead = false;
+let orbYaw = 0.72, orbPitch = 0.92, orbDist = 46;
+
+const keys = Object.create(null);
+addEventListener('keydown', e => {
+  keys[e.code] = true;
+  if (e.code === 'Tab') { e.preventDefault(); overhead = !overhead; }
 });
-addEventListener('pointerup', e => { if (e.button === 2) orbiting = false; });
-addEventListener('pointermove', e => {
-  if (!orbiting) return;
-  yaw -= (e.clientX - ox) * 0.006;
-  pitch = Math.max(0.28, Math.min(1.45, pitch + (e.clientY - oy) * 0.005));
-  ox = e.clientX; oy = e.clientY;
+addEventListener('keyup', e => { keys[e.code] = false; });
+addEventListener('contextmenu', e => e.preventDefault());
+
+// pointer lock is what makes it feel embodied rather than operated
+renderer.domElement.addEventListener('click', () => {
+  if (!overhead && document.pointerLockElement !== renderer.domElement) {
+    renderer.domElement.requestPointerLock();
+  }
+});
+addEventListener('mousemove', e => {
+  if (document.pointerLockElement !== renderer.domElement) return;
+  player.yaw -= e.movementX * 0.0022;
+  player.pitch = Math.max(-1.45, Math.min(1.35, player.pitch - e.movementY * 0.0022));
 });
 addEventListener('wheel', e => {
-  dist = Math.max(18, Math.min(96, dist * (1 + Math.sign(e.deltaY) * 0.09)));
+  if (overhead) orbDist = Math.max(18, Math.min(96, orbDist * (1 + Math.sign(e.deltaY) * 0.09)));
 }, { passive: true });
 addEventListener('resize', () => {
   camera.aspect = innerWidth / innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight);
 });
+
+function movePlayer(dt) {
+  const f = new THREE.Vector3(Math.sin(player.yaw), 0, Math.cos(player.yaw));
+  const r = new THREE.Vector3(f.z, 0, -f.x);
+  const wish = new THREE.Vector3();
+  if (keys['KeyW']) wish.add(f);
+  if (keys['KeyS']) wish.sub(f);
+  if (keys['KeyD']) wish.add(r);
+  if (keys['KeyA']) wish.sub(r);
+  if (wish.lengthSq() > 0) wish.normalize();
+  const speed = keys['ShiftLeft'] ? 11 : 6.2;
+  player.vel.x = wish.x * speed;
+  player.vel.z = wish.z * speed;
+  if (keys['Space'] && player.onGround) { player.vel.y = 6.4; player.onGround = false; }
+  player.vel.y -= 19 * dt;
+  player.pos.addScaledVector(player.vel, dt);
+  // the island is a slab, so the ground rule is simply its top face
+  if (player.pos.y <= EYE) { player.pos.y = EYE; player.vel.y = 0; player.onGround = true; }
+  // and you cannot walk off it — falling off a floating island is a death
+  // this prototype has no answer for
+  const lim = HALF - 0.6;
+  player.pos.x = Math.max(-lim, Math.min(lim, player.pos.x));
+  player.pos.z = Math.max(-lim, Math.min(lim, player.pos.z));
+}
 
 // ── a starter line, so the loop is legible the moment it loads ─────────────
 (function seed() {
@@ -388,16 +472,30 @@ renderer.setAnimationLoop(() => {
 
   scene.traverse(o => { if (o.userData.spin) o.rotation.y += dt * o.userData.spin; });
 
-  camera.position.set(
-    Math.sin(yaw) * Math.cos(pitch) * dist,
-    Math.sin(pitch) * dist,
-    Math.cos(yaw) * Math.cos(pitch) * dist);
-  camera.lookAt(0, 0, 0);
+  if (overhead) {
+    camera.position.set(
+      Math.sin(orbYaw) * Math.cos(orbPitch) * orbDist,
+      Math.sin(orbPitch) * orbDist,
+      Math.cos(orbYaw) * Math.cos(orbPitch) * orbDist);
+    camera.lookAt(0, 0, 0);
+    ghost.visible = false;
+  } else {
+    movePlayer(dt);
+    camera.position.copy(player.pos);
+    // YXZ, set directly: rotateY-then-rotateX accumulates roll and the
+    // horizon slowly tilts as you look around
+    camera.rotation.order = 'YXZ';
+    camera.rotation.set(player.pitch, player.yaw, 0);
+    updateGhost();
+  }
+  document.body.classList.toggle('overhead', overhead);
   renderer.render(scene, camera);
 });
 
 window.__factory = {
-  cells, items, N, T,
+  cells, items, N, T, player,
   get ore() { return ore; },
   place, removeAt,
+  camPos: () => camera.position.toArray(),
+  ghostVisible: () => ghost.visible,
 };

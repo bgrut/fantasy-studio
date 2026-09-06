@@ -28,6 +28,15 @@ seconds at 120/minute, 3 items in transit, 60fps, no runtime errors.
 - Miners may only stand on crystal nodes. Scarcity is the whole reason belts
   exist; without it you would just put a miner on the hub.
 
+## Controls
+
+    WASD          walk        Shift  run        Space  jump
+    click         lock the pointer / look
+    hold LMB      sweep your view to draw a belt line
+    1 2 3 4       miner / belt / hub / erase
+    TAB           overhead build view (routing a junction from eye level is
+                  genuinely worse than seeing it from above)
+
 ## Next
 
 - Smelter (2 crystal -> 1 ingot) so the belt has a REASON beyond distance

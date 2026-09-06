@@ -19,6 +19,14 @@
   .tool b{display:block;font-size:11px;letter-spacing:.05em}
   .tool small{color:#6b7590}
   #hint{position:fixed;right:14px;bottom:16px;z-index:5;color:#6d7590;text-align:right}
+  /* the crosshair IS the cursor once the pointer is locked */
+  #cross{position:fixed;left:50%;top:50%;width:16px;height:16px;margin:-8px 0 0 -8px;
+         z-index:4;pointer-events:none;opacity:.85}
+  #cross:before,#cross:after{content:"";position:absolute;background:#8ff3dd;
+         box-shadow:0 0 4px rgba(0,0,0,.9)}
+  #cross:before{left:7px;top:0;width:2px;height:16px}
+  #cross:after{top:7px;left:0;height:2px;width:16px}
+  body.overhead #cross{display:none}
 </style>
 <div id="hud">
   <h1>CRYSTAL WORKS</h1>
@@ -34,6 +42,7 @@
   <div class="tool" data-tool="hub"><b>3 · HUB</b><small>delivers</small></div>
   <div class="tool" data-tool="erase"><b>4 · ERASE</b><small></small></div>
 </div>
-<div id="hint">drag to draw belts · right-drag orbits · scroll zooms</div>
+<div id="cross"></div>
+<div id="hint">WASD walk · Shift run · Space jump · click to look<br>hold LMB and sweep to draw belts · TAB overhead</div>
 <script type="importmap">{"imports":{"three":"./vendor/three.module.js"}}</script>
 <script type="module" src="./factory.js"></script>
