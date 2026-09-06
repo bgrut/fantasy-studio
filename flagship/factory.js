@@ -12,13 +12,24 @@
 import * as THREE from 'three';
 
 const N = 24, T = 2, TICK = 0.42, HALF = (N * T) / 2;
-const EMPTY = 0, MINER = 1, BELT = 2, HUB = 3, NODE = 4;
+const EMPTY = 0, MINER = 1, BELT = 2, HUB = 3, NODE = 4, SMELTER = 5;
 const DIRS = [[1, 0], [0, 1], [-1, 0], [0, -1]];        // E S W N
+
+// Items now have a TYPE, and that is the whole point of the smelter. Until
+// now a belt only ever solved "the node is far from the hub" — a distance
+// problem, which is a chore rather than a puzzle. A recipe makes belts solve
+// "these things have to MEET", which is where this genre's actual decisions
+// live: where to put the smelter, how to feed it from two nodes, what to do
+// with the surplus when one input runs dry.
+const CRYSTAL = 1, INGOT = 2;
+const VALUE = { [CRYSTAL]: 1, [INGOT]: 6 };   // an ingot is worth the detour
+const SMELT_IN = 2;                            // crystals per ingot
+const SMELT_TICKS = 3;                         // and it takes time
 
 const cells = [];
 for (let x = 0; x < N; x++) {
   cells[x] = [];
-  for (let z = 0; z < N; z++) cells[x][z] = { t: EMPTY, d: 0, item: 0 };
+  for (let z = 0; z < N; z++) cells[x][z] = { t: EMPTY, d: 0, item: 0, buf: 0, cook: 0 };
 }
 const inGrid = (x, z) => x >= 0 && z >= 0 && x < N && z < N;
 const wx = x => -HALF + x * T + T / 2;
@@ -104,12 +115,15 @@ const MAT = {
   belt: new THREE.MeshStandardMaterial({ color: 0x3ad39a, roughness: 0.6, metalness: 0.2 }),
   hub: new THREE.MeshStandardMaterial({ color: 0xffc75a, roughness: 0.35, metalness: 0.45,
     emissive: 0x6b4a00, emissiveIntensity: 0.6 }),
+  smelt: new THREE.MeshStandardMaterial({ color: 0x8c6bff, roughness: 0.42, metalness: 0.4,
+    emissive: 0x2a1470, emissiveIntensity: 0.5 }),
 };
 const GEO = {
   miner: new THREE.BoxGeometry(T * 0.74, 1.5, T * 0.74),
   belt: new THREE.BoxGeometry(T * 0.9, 0.22, T * 0.9),
   arrow: new THREE.ConeGeometry(0.2, 0.5, 4),
   hub: new THREE.CylinderGeometry(T * 0.5, T * 0.58, 1.1, 8),
+  smelt: new THREE.BoxGeometry(T * 0.82, 1.25, T * 0.82),
 };
 
 function refreshCounts() {
@@ -122,6 +136,9 @@ function refreshCounts() {
   }
   document.getElementById('nmine').textContent = m;
   document.getElementById('nbelt').textContent = b;
+  let sm = 0;
+  for (let x = 0; x < N; x++) for (let z = 0; z < N; z++) if (cells[x][z].t === SMELTER) sm++;
+  document.getElementById('nsmelt').textContent = sm;
 }
 
 function removeAt(x, z) {
@@ -152,6 +169,17 @@ function place(x, z, type, dir) {
   } else if (type === HUB) {
     const b = new THREE.Mesh(GEO.hub, MAT.hub);
     b.position.y = 0.55; b.castShadow = true; g.add(b);
+  } else if (type === SMELTER) {
+    const b = new THREE.Mesh(GEO.smelt, MAT.smelt);
+    b.position.y = 0.63; b.castShadow = true; g.add(b);
+    // a lamp that lights while it is cooking: a factory you can read at a
+    // glance from across the island is the whole appeal of the genre
+    const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.17, 8, 6),
+      new THREE.MeshBasicMaterial({ color: 0xffb04a }));
+    lamp.position.set(0, 1.34, 0);
+    lamp.name = 'lamp';
+    g.add(lamp);
+    g.rotation.y = -dir * Math.PI / 2;
   }
   g.position.set(wx(x), 0, wz(z));
   scene.add(g);
@@ -173,7 +201,17 @@ const items = new THREE.InstancedMesh(
 items.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
 items.frustumCulled = false;
 items.count = 0;
+// One mesh still, but two products: instanceColor is what lets a single draw
+// call carry both. Reading a belt at a glance — "that line is running ingots,
+// that one is still raw" — is most of what makes a factory legible.
+items.instanceColor = new THREE.InstancedBufferAttribute(
+  new Float32Array(MAX_ITEMS * 3), 3);
+items.instanceColor.setUsage(THREE.DynamicDrawUsage);
 scene.add(items);
+const ITEM_COL = {
+  [CRYSTAL]: new THREE.Color(0x7df9ff),
+  [INGOT]: new THREE.Color(0xffae4d),
+};
 
 const _m = new THREE.Matrix4();
 const _p = new THREE.Vector3();
@@ -183,11 +221,40 @@ const _up = new THREE.Vector3(0, 1, 0);
 
 // ── the tick: belts advance, miners feed, the hub banks ────────────────────
 let ore = 0;
+let ingots = 0;
 let sinceTick = 0;
 let minedWindow = 0;
 let rateWindow = 0;
+const rateBuckets = [];
+
+function bank(type) { ore += VALUE[type] || 1; if (type === INGOT) ingots++; }
 
 function step() {
+  // Smelters run FIRST so a finished ingot leaves before the belts feeding
+  // this smelter get their turn — otherwise a full input belt would block the
+  // machine that is about to free it, and lines deadlock at exactly the
+  // moment they start working.
+  for (let x = 0; x < N; x++) {
+    for (let z = 0; z < N; z++) {
+      const c = cells[x][z];
+      if (c.t !== SMELTER) continue;
+      if (c.cook > 0) {
+        c.cook--;
+        if (c.cook === 0) {
+          const d = DIRS[c.d];
+          const nx = x + d[0], nz = z + d[1];
+          const dst = inGrid(nx, nz) ? cells[nx][nz] : null;
+          if (dst && dst.t === HUB) bank(INGOT);
+          else if (dst && dst.t === BELT && !dst.item) dst.item = INGOT;
+          else c.cook = 1;                  // output blocked: hold it, retry
+        }
+      }
+      if (c.cook === 0 && c.buf >= SMELT_IN) { c.buf -= SMELT_IN; c.cook = SMELT_TICKS; }
+      const lamp = c.build && c.build.getObjectByName('lamp');
+      if (lamp) lamp.material.color.setHex(c.cook > 0 ? 0xffb04a : 0x3a2f5e);
+    }
+  }
+
   // Collect first, THEN commit. Moving in place would let one item ride the
   // whole line in a single tick depending on iteration order.
   const moves = [];
@@ -199,14 +266,20 @@ function step() {
       const nx = x + d[0], nz = z + d[1];
       if (!inGrid(nx, nz)) continue;
       const dst = cells[nx][nz];
-      if (dst.t === HUB) moves.push([x, z, null]);
-      else if (dst.t === BELT && !dst.item) moves.push([x, z, [nx, nz]]);
+      if (dst.t === HUB) moves.push([x, z, 'bank']);
+      // a smelter only accepts CRYSTALS, and only while it has room. An ingot
+      // arriving at a smelter simply waits, which is the correct answer and
+      // also a visible one — the belt backs up and you can see the mistake.
+      else if (dst.t === SMELTER && c.item === CRYSTAL && dst.buf < SMELT_IN * 2) {
+        moves.push([x, z, 'smelt', nx, nz]);
+      } else if (dst.t === BELT && !dst.item) moves.push([x, z, 'belt', nx, nz]);
     }
   }
   for (const mv of moves) {
     const c = cells[mv[0]][mv[1]];
-    if (mv[2]) cells[mv[2][0]][mv[2][1]].item = c.item;
-    else ore += c.item;
+    if (mv[2] === 'bank') bank(c.item);
+    else if (mv[2] === 'smelt') cells[mv[3]][mv[4]].buf++;
+    else cells[mv[3]][mv[4]].item = c.item;
     c.item = 0;
   }
   for (let x = 0; x < N; x++) {
@@ -217,8 +290,9 @@ function step() {
       const nx = x + d[0], nz = z + d[1];
       if (!inGrid(nx, nz)) continue;
       const dst = cells[nx][nz];
-      if (dst.t === BELT && !dst.item) dst.item = 1;
-      else if (dst.t === HUB) ore += 1;
+      if (dst.t === BELT && !dst.item) dst.item = CRYSTAL;
+      else if (dst.t === HUB) bank(CRYSTAL);
+      else if (dst.t === SMELTER && dst.buf < SMELT_IN * 2) dst.buf++;
     }
   }
 }
@@ -241,11 +315,13 @@ function drawItems(alpha) {
       _p.set(wx(x) + d[0] * T * a, 0.42, wz(z) + d[1] * T * a);
       _q.setFromAxisAngle(_up, spin);
       _m.compose(_p, _q, _s);
+      items.setColorAt(n, ITEM_COL[c.item] || ITEM_COL[CRYSTAL]);
       items.setMatrixAt(n++, _m);
     }
   }
   items.count = n;
   items.instanceMatrix.needsUpdate = true;
+  if (items.instanceColor) items.instanceColor.needsUpdate = true;
   return n;
 }
 
@@ -312,6 +388,7 @@ function apply(cell, dir) {
   if (tool === 'erase') { removeAt(x, z); return; }
   if (tool === 'miner') { place(x, z, MINER, dir == null ? 0 : dir); return; }
   if (tool === 'hub') { place(x, z, HUB, 0); return; }
+  if (tool === 'smelter') { place(x, z, SMELTER, dir == null ? 0 : dir); return; }
   if (tool === 'belt') { place(x, z, BELT, dir == null ? 0 : dir); }
 }
 
@@ -349,7 +426,7 @@ document.querySelectorAll('.tool').forEach(el => {
   el.addEventListener('pointerdown', ev => { ev.stopPropagation(); pickTool(el.dataset.tool); });
 });
 addEventListener('keydown', e => {
-  const k = { '1': 'miner', '2': 'belt', '3': 'hub', '4': 'erase' }[e.key];
+  const k = { '1': 'miner', '2': 'belt', '3': 'smelter', '4': 'hub', '5': 'erase' }[e.key];
   if (k) pickTool(k);
 });
 
@@ -445,7 +522,11 @@ function movePlayer(dt) {
   if (!found) return;
   const x = found[0], z = found[1];
   place(x, z, MINER, 0);
-  for (let i = 1; i < RUN; i++) place(x + i, z, BELT, 0);
+  place(x + 1, z, BELT, 0);
+  place(x + 2, z, BELT, 0);
+  place(x + 3, z, SMELTER, 0);     // two crystals in, one ingot out
+  place(x + 4, z, BELT, 0);
+  place(x + 5, z, BELT, 0);
   place(x + RUN, z, HUB, 0);
 })();
 
@@ -462,12 +543,21 @@ renderer.setAnimationLoop(() => {
   while (sinceTick >= TICK) { sinceTick -= TICK; step(); }
   minedWindow += ore - before;
   if (rateWindow >= 1) {
-    document.getElementById('rate').textContent =
-      Math.round(minedWindow / rateWindow * 60);
+    // AVERAGE OVER LONGER THAN THE SLOWEST MACHINE (2026-09-06). This sampled
+    // a one-second window, and a smelter emits once every three ticks — 1.26s.
+    // So the readout sat at 0 for whole seconds while value was visibly
+    // climbing, which reads as a broken game rather than as a bursty one. In
+    // a genre whose entire hook is watching a number go up, the number has to
+    // be trustworthy. Six one-second buckets, reported as their sum.
+    rateBuckets.push(minedWindow / rateWindow);
+    if (rateBuckets.length > 6) rateBuckets.shift();
+    const perSec = rateBuckets.reduce((a, b) => a + b, 0) / rateBuckets.length;
+    document.getElementById('rate').textContent = Math.round(perSec * 60);
     minedWindow = 0;
     rateWindow = 0;
   }
   document.getElementById('ore').textContent = ore;
+  document.getElementById('ingot').textContent = ingots;
   document.getElementById('nitem').textContent = drawItems(sinceTick / TICK);
 
   scene.traverse(o => { if (o.userData.spin) o.rotation.y += dt * o.userData.spin; });

@@ -30,17 +30,20 @@
 </style>
 <div id="hud">
   <h1>CRYSTAL WORKS</h1>
-  <div class="row"><span class="k">crystals</span><span class="v" id="ore">0</span></div>
+  <div class="row"><span class="k">value</span><span class="v" id="ore">0</span></div>
+  <div class="row"><span class="k">ingots</span><span class="v" id="ingot">0</span></div>
   <div class="row"><span class="k">per minute</span><span class="v" id="rate">0</span></div>
   <div class="row"><span class="k">miners</span><span class="v" id="nmine">0</span></div>
   <div class="row"><span class="k">belts</span><span class="v" id="nbelt">0</span></div>
+  <div class="row"><span class="k">smelters</span><span class="v" id="nsmelt">0</span></div>
   <div class="row"><span class="k">on belts</span><span class="v" id="nitem">0</span></div>
 </div>
 <div id="tools">
   <div class="tool on" data-tool="miner"><b>1 · MINER</b><small>on a node</small></div>
   <div class="tool" data-tool="belt"><b>2 · BELT</b><small>drag to draw</small></div>
-  <div class="tool" data-tool="hub"><b>3 · HUB</b><small>delivers</small></div>
-  <div class="tool" data-tool="erase"><b>4 · ERASE</b><small></small></div>
+  <div class="tool" data-tool="smelter"><b>3 · SMELTER</b><small>2 ore &rarr; 1 ingot</small></div>
+  <div class="tool" data-tool="hub"><b>4 · HUB</b><small>delivers</small></div>
+  <div class="tool" data-tool="erase"><b>5 · ERASE</b><small>&nbsp;</small></div>
 </div>
 <div id="cross"></div>
 <div id="hint">WASD walk · Shift run · Space jump · click to look<br>hold LMB and sweep to draw belts · TAB overhead</div>
