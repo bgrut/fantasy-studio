@@ -33,7 +33,7 @@ seconds at 120/minute, 3 items in transit, 60fps, no runtime errors.
     WASD          walk        Shift  run        Space  jump
     click         lock the pointer / look
     hold LMB      sweep your view to draw a belt line
-    1 2 3 4 5     miner / belt / smelter / hub / erase
+    1..6          miner / belt / smelter / splitter / hub / erase
     TAB           overhead build view (routing a junction from eye level is
                   genuinely worse than seeing it from above)
 
@@ -41,6 +41,8 @@ seconds at 120/minute, 3 items in transit, 60fps, no runtime errors.
 
     miner    on a crystal node only        1 crystal per tick
     smelter  2 crystals -> 1 ingot         3 ticks to cook
+    splitter accepts from any side        sends each item out a different
+                                          side in turn
     hub      banks anything                crystal 1, ingot 6
 
 Node scarcity is why belts exist. The recipe is why belts have to MEET
@@ -48,6 +50,6 @@ somewhere rather than just run to the hub.
 
 ## Next
 
-- Splitter / merger, the first real routing puzzle
+- Merger fairness (two belts into one currently resolve by grid order)
 - Upgrade tree: tick rate, belt speed, miner yield
 - Save/load, then the Steam packaging path from the brief

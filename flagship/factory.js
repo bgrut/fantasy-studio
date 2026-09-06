@@ -12,7 +12,7 @@
 import * as THREE from 'three';
 
 const N = 24, T = 2, TICK = 0.42, HALF = (N * T) / 2;
-const EMPTY = 0, MINER = 1, BELT = 2, HUB = 3, NODE = 4, SMELTER = 5;
+const EMPTY = 0, MINER = 1, BELT = 2, HUB = 3, NODE = 4, SMELTER = 5, SPLITTER = 6;
 const DIRS = [[1, 0], [0, 1], [-1, 0], [0, -1]];        // E S W N
 
 // Items now have a TYPE, and that is the whole point of the smelter. Until
@@ -29,7 +29,7 @@ const SMELT_TICKS = 3;                         // and it takes time
 const cells = [];
 for (let x = 0; x < N; x++) {
   cells[x] = [];
-  for (let z = 0; z < N; z++) cells[x][z] = { t: EMPTY, d: 0, item: 0, buf: 0, cook: 0 };
+  for (let z = 0; z < N; z++) cells[x][z] = { t: EMPTY, d: 0, item: 0, buf: 0, cook: 0, rr: 0 };
 }
 const inGrid = (x, z) => x >= 0 && z >= 0 && x < N && z < N;
 const wx = x => -HALF + x * T + T / 2;
@@ -117,6 +117,8 @@ const MAT = {
     emissive: 0x6b4a00, emissiveIntensity: 0.6 }),
   smelt: new THREE.MeshStandardMaterial({ color: 0x8c6bff, roughness: 0.42, metalness: 0.4,
     emissive: 0x2a1470, emissiveIntensity: 0.5 }),
+  split: new THREE.MeshStandardMaterial({ color: 0x4bb5ff, roughness: 0.45, metalness: 0.35,
+    emissive: 0x0d3f66, emissiveIntensity: 0.45 }),
 };
 const GEO = {
   miner: new THREE.BoxGeometry(T * 0.74, 1.5, T * 0.74),
@@ -124,6 +126,8 @@ const GEO = {
   arrow: new THREE.ConeGeometry(0.2, 0.5, 4),
   hub: new THREE.CylinderGeometry(T * 0.5, T * 0.58, 1.1, 8),
   smelt: new THREE.BoxGeometry(T * 0.82, 1.25, T * 0.82),
+  split: new THREE.CylinderGeometry(T * 0.42, T * 0.42, 0.34, 4),
+  splitArm: new THREE.BoxGeometry(T * 0.86, 0.16, 0.22),
 };
 
 function refreshCounts() {
@@ -169,6 +173,16 @@ function place(x, z, type, dir) {
   } else if (type === HUB) {
     const b = new THREE.Mesh(GEO.hub, MAT.hub);
     b.position.y = 0.55; b.castShadow = true; g.add(b);
+  } else if (type === SPLITTER) {
+    const b = new THREE.Mesh(GEO.split, MAT.split);
+    b.position.y = 0.18; b.rotation.y = Math.PI / 4;
+    b.castShadow = true; b.receiveShadow = true; g.add(b);
+    // a cross, so what it does is visible from across the island rather than
+    // being a box you have to remember the meaning of
+    for (const r of [0, Math.PI / 2]) {
+      const arm = new THREE.Mesh(GEO.splitArm, MAT.split);
+      arm.position.y = 0.4; arm.rotation.y = r; g.add(arm);
+    }
   } else if (type === SMELTER) {
     const b = new THREE.Mesh(GEO.smelt, MAT.smelt);
     b.position.y = 0.63; b.castShadow = true; g.add(b);
@@ -229,6 +243,22 @@ const rateBuckets = [];
 
 function bank(type) { ore += VALUE[type] || 1; if (type === INGOT) ingots++; }
 
+// One acceptance rule, asked by belts, miners and splitters alike. Having each
+// of them decide separately is how a factory sim ends up with items that can
+// enter a machine one way and not another for no reason the player can see.
+function accepts(dst, type) {
+  if (!dst) return false;
+  if (dst.t === HUB) return true;
+  if (dst.t === BELT || dst.t === SPLITTER) return !dst.item;
+  if (dst.t === SMELTER) return type === CRYSTAL && dst.buf < SMELT_IN * 2;
+  return false;
+}
+function deliver(dst, dx, dz, type) {
+  if (dst.t === HUB) bank(type);
+  else if (dst.t === SMELTER) dst.buf++;
+  else dst.item = type;
+}
+
 function step() {
   // Smelters run FIRST so a finished ingot leaves before the belts feeding
   // this smelter get their turn — otherwise a full input belt would block the
@@ -261,6 +291,24 @@ function step() {
   for (let x = 0; x < N; x++) {
     for (let z = 0; z < N; z++) {
       const c = cells[x][z];
+      // A SPLITTER IS A BELT THAT CHOOSES. It sends each item out of a
+      // different side in turn, so one miner can feed two smelters without
+      // the player hand-balancing anything. The round-robin cursor advances
+      // only when an item actually LEAVES — advancing on a failed attempt
+      // would silently starve whichever output happened to be busy.
+      if (c.t === SPLITTER && c.item) {
+        for (let k = 0; k < 4; k++) {
+          const dir = (c.rr + k) % 4;
+          const dd = DIRS[dir];
+          const ax = x + dd[0], az = z + dd[1];
+          if (!inGrid(ax, az)) continue;
+          if (!accepts(cells[ax][az], c.item)) continue;
+          moves.push([x, z, 'to', ax, az]);
+          c.rr = (dir + 1) % 4;
+          break;
+        }
+        continue;
+      }
       if (c.t !== BELT || !c.item) continue;
       const d = DIRS[c.d];
       const nx = x + d[0], nz = z + d[1];
@@ -270,16 +318,13 @@ function step() {
       // a smelter only accepts CRYSTALS, and only while it has room. An ingot
       // arriving at a smelter simply waits, which is the correct answer and
       // also a visible one — the belt backs up and you can see the mistake.
-      else if (dst.t === SMELTER && c.item === CRYSTAL && dst.buf < SMELT_IN * 2) {
-        moves.push([x, z, 'smelt', nx, nz]);
-      } else if (dst.t === BELT && !dst.item) moves.push([x, z, 'belt', nx, nz]);
+      else if (accepts(dst, c.item)) moves.push([x, z, 'to', nx, nz]);
     }
   }
   for (const mv of moves) {
     const c = cells[mv[0]][mv[1]];
     if (mv[2] === 'bank') bank(c.item);
-    else if (mv[2] === 'smelt') cells[mv[3]][mv[4]].buf++;
-    else cells[mv[3]][mv[4]].item = c.item;
+    else deliver(cells[mv[3]][mv[4]], mv[3], mv[4], c.item);
     c.item = 0;
   }
   for (let x = 0; x < N; x++) {
@@ -290,9 +335,7 @@ function step() {
       const nx = x + d[0], nz = z + d[1];
       if (!inGrid(nx, nz)) continue;
       const dst = cells[nx][nz];
-      if (dst.t === BELT && !dst.item) dst.item = CRYSTAL;
-      else if (dst.t === HUB) bank(CRYSTAL);
-      else if (dst.t === SMELTER && dst.buf < SMELT_IN * 2) dst.buf++;
+      if (accepts(dst, CRYSTAL)) deliver(dst, nx, nz, CRYSTAL);
     }
   }
 }
@@ -389,6 +432,7 @@ function apply(cell, dir) {
   if (tool === 'miner') { place(x, z, MINER, dir == null ? 0 : dir); return; }
   if (tool === 'hub') { place(x, z, HUB, 0); return; }
   if (tool === 'smelter') { place(x, z, SMELTER, dir == null ? 0 : dir); return; }
+  if (tool === 'splitter') { place(x, z, SPLITTER, 0); return; }
   if (tool === 'belt') { place(x, z, BELT, dir == null ? 0 : dir); }
 }
 
@@ -426,7 +470,8 @@ document.querySelectorAll('.tool').forEach(el => {
   el.addEventListener('pointerdown', ev => { ev.stopPropagation(); pickTool(el.dataset.tool); });
 });
 addEventListener('keydown', e => {
-  const k = { '1': 'miner', '2': 'belt', '3': 'smelter', '4': 'hub', '5': 'erase' }[e.key];
+  const k = { '1': 'miner', '2': 'belt', '3': 'smelter', '4': 'splitter',
+              '5': 'hub', '6': 'erase' }[e.key];
   if (k) pickTool(k);
 });
 
@@ -584,6 +629,8 @@ renderer.setAnimationLoop(() => {
 
 window.__factory = {
   cells, items, N, T, player,
+  TYPES: { EMPTY, MINER, BELT, HUB, NODE, SMELTER, SPLITTER, CRYSTAL, INGOT },
+  get ingots() { return ingots; },
   get ore() { return ore; },
   place, removeAt,
   camPos: () => camera.position.toArray(),
