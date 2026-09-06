@@ -1,0 +1,39 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Crystal Works — automation prototype</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#0a0a12;
+            font:13px/1.45 ui-monospace,Menlo,Consolas,monospace;color:#dfe3ee}
+  #hud{position:fixed;left:14px;top:12px;z-index:5;background:rgba(8,10,20,.78);
+       border:1px solid rgba(120,200,255,.18);border-radius:10px;padding:12px 14px;
+       min-width:210px;backdrop-filter:blur(6px)}
+  #hud h1{margin:0 0 8px;font-size:14px;letter-spacing:.06em;color:#5ce0d0;font-weight:700}
+  .row{display:flex;justify-content:space-between;gap:14px;padding:1px 0}
+  .k{color:#7d86a3}
+  .v{color:#ffd479;font-variant-numeric:tabular-nums}
+  #tools{position:fixed;left:50%;transform:translateX(-50%);bottom:16px;z-index:5;
+         display:flex;gap:8px}
+  .tool{background:rgba(8,10,20,.82);border:1px solid rgba(120,200,255,.18);
+        border-radius:8px;padding:7px 12px;cursor:pointer;user-select:none;color:#aeb6cd}
+  .tool.on{border-color:#5ce0d0;color:#5ce0d0;background:rgba(92,224,208,.10)}
+  .tool b{display:block;font-size:11px;letter-spacing:.05em}
+  .tool small{color:#6b7590}
+  #hint{position:fixed;right:14px;bottom:16px;z-index:5;color:#6d7590;text-align:right}
+</style>
+<div id="hud">
+  <h1>CRYSTAL WORKS</h1>
+  <div class="row"><span class="k">crystals</span><span class="v" id="ore">0</span></div>
+  <div class="row"><span class="k">per minute</span><span class="v" id="rate">0</span></div>
+  <div class="row"><span class="k">miners</span><span class="v" id="nmine">0</span></div>
+  <div class="row"><span class="k">belts</span><span class="v" id="nbelt">0</span></div>
+  <div class="row"><span class="k">on belts</span><span class="v" id="nitem">0</span></div>
+</div>
+<div id="tools">
+  <div class="tool on" data-tool="miner"><b>1 · MINER</b><small>on a node</small></div>
+  <div class="tool" data-tool="belt"><b>2 · BELT</b><small>drag to draw</small></div>
+  <div class="tool" data-tool="hub"><b>3 · HUB</b><small>delivers</small></div>
+  <div class="tool" data-tool="erase"><b>4 · ERASE</b><small></small></div>
+</div>
+<div id="hint">drag to draw belts · right-drag orbits · scroll zooms</div>
+<script type="importmap">{"imports":{"three":"./vendor/three.module.js"}}</script>
+<script type="module" src="./factory.js"></script>
