@@ -26,6 +26,9 @@ says so.
 | **three minerals + forge** | an alloy no single face can make: a reason to cross |
 | **filter tile** | routing by ore type, configured from the crosshair |
 | **market ticker** | the hub pays a live price, so what to make is a decision |
+| **chronos rift** | borrowed ore on a clock, and a storm if you miss it |
+| **studio inspect** | the factory answers the studio's picking bridge |
+| **demo is generated** | the standalone build IS the studio's output |
 
 Measured on a prompt-built export: 40x40x6 grid, 40 nodes, 180 value/min,
 9 ingots in 12s, 18 draw calls, no console errors. The player walks top ->
@@ -134,7 +137,7 @@ a filter with one item type to sort is a belt.
 Also fixed on the way: items sitting on a splitter were never drawn at all, so
 a backed-up splitter looked empty.
 
-## 5. Chronos paradox loop — **park it**
+## ~~5. Chronos paradox loop~~ — SHIPPED 2026-09-07, as a debt with a clock
 
 Buffer 10s of item history, replay it as ghosts, and storm if the player
 cannot repay the exact items in time.
@@ -148,6 +151,21 @@ of the funnel.
 Not a bad idea; a bad *early* idea. Revisit once there are properties, filters
 and a market, because it needs all three to mean anything.
 
+**As built, once those three existed:** the debt is the good idea; the ghosts
+are the part that takes a paragraph to explain, which is the opposite of the
+funnel. So a rift lends you six of whichever ore the market currently pays most
+for, pays the loan out onto your belts one tile at a time like a miner, and
+puts the amount and the deadline on the HUD. Feed it back through the same ring
+and it settles at a premium. Miss the deadline and it throws every machine
+within three tiles into the sky — the meltdown's debris path, aimed at you
+rather than chosen by you. It only accepts back exactly what it lent, which is
+what makes the filter tile the instrument for repaying one.
+
+One fairness bug worth remembering: the countdown originally started when the
+rift opened, so a rift whose output belt was blocked demanded repayment of ore
+it had never handed over, then blew up the factory for not returning it. The
+clock starts when the loan lands.
+
 ---
 
 ## Suggested order
@@ -156,8 +174,11 @@ and a market, because it needs all three to mean anything.
 2. ~~Prestige meltdown~~ — shipped
 3. ~~Filter tile~~ and ~~more recipes~~ — shipped
 4. ~~Market ticker~~ — shipped
-5. Revisit **Chronos** only if 3 and 4 give it something to bite on — they now
-   do, so this is the next one to argue about rather than the one to skip
+5. ~~Chronos~~ — shipped, as a debt with a clock rather than replayed ghosts
+
+All five differentiators from the brief are in. What is left is not mechanics:
+save/load, player collision, merger fairness, an art pass, a progression frame,
+and the Tauri/Steam packaging path.
 
 ## Also outstanding
 

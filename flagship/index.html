@@ -16,8 +16,8 @@
   #tools{position:fixed;left:50%;transform:translateX(-50%);bottom:14px;z-index:5;
          display:flex;gap:6px;white-space:nowrap}
   .tool{background:rgba(8,10,20,.82);border:1px solid rgba(120,200,255,.18);
-        border-radius:8px;padding:6px 10px;cursor:pointer;user-select:none;
-        color:#aeb6cd;white-space:nowrap}
+        border-radius:8px;padding:6px 8px;cursor:pointer;user-select:none;
+        color:#aeb6cd;white-space:nowrap;font-size:12px}
   .tool.on{border-color:#5ce0d0;color:#5ce0d0;background:rgba(92,224,208,.10)}
   .tool b{display:block;font-size:11px;letter-spacing:.05em}
   .tool small{color:#6b7590}
@@ -43,6 +43,12 @@
   #melt b{display:block;font-size:11px;letter-spacing:.09em;color:#ff9f7a}
   #melt small{display:block;color:#8a7a86;font-size:10px}
   #melt:hover{background:rgba(255,110,80,.18)}
+  /* a debt with a clock on it belongs where the counters are, not in a corner */
+  #rift{margin-top:9px;border:1px solid rgba(140,110,255,.5);border-radius:7px;
+        padding:6px 8px;background:rgba(110,80,255,.10);display:none;text-align:center}
+  #rift.on{display:block}
+  #rift b{display:block;font-size:11px;letter-spacing:.09em;color:#b39cff}
+  #rift small{display:block;color:#8f88b8;font-size:10px}
   /* the ticker sits under the counters: it is a reason to change what you are
      making, so it has to be visible while you are looking at production */
   #tick{margin-top:9px;border-top:1px solid rgba(120,200,255,.14);padding-top:8px}
@@ -77,6 +83,7 @@
   <div class="row"><span class="k">cores</span><span class="v" id="tok">0</span></div>
   <div id="tick"></div>
   <div id="ups"></div>
+  <div id="rift"></div>
   <div id="melt"><b>MELTDOWN</b><small>collapse it all for cores</small></div>
 </div>
 <div id="tools">
@@ -87,7 +94,8 @@
   <div class="tool" data-tool="hub"><b>5 · HUB</b><small>delivers</small></div>
   <div class="tool" data-tool="forge"><b>6 · FORGE</b><small>2 different ores</small></div>
   <div class="tool" data-tool="filter"><b>7 · FILTER</b><small>F to set ore</small></div>
-  <div class="tool" data-tool="erase"><b>8 · ERASE</b><small>&nbsp;</small></div>
+  <div class="tool" data-tool="rift"><b>8 · RIFT</b><small>ore now, pay later</small></div>
+  <div class="tool" data-tool="erase"><b>9 · ERASE</b><small>&nbsp;</small></div>
 </div>
 <div id="cross"></div>
 <div id="hint">WASD walk · Shift run · Space jump · click to look<br>hold LMB and sweep to draw belts · TAB overhead<br>point at a filter and press F to change what passes<br>walk over an edge — each side of the world grows a different ore</div>

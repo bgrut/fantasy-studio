@@ -124,7 +124,7 @@ function faceOfPoint(px, py, pz) {
 const BASE_TICK = 0.42;
 let TICK = BASE_TICK;
 const EMPTY = 0, MINER = 1, BELT = 2, HUB = 3, NODE = 4, SMELTER = 5,
-      SPLITTER = 6, FORGE = 7, FILTER = 8;
+      SPLITTER = 6, FORGE = 7, FILTER = 8, RIFT = 9;
 const DIRS = [[1, 0], [0, 1], [-1, 0], [0, -1]];        // E S W N
 
 // Items now have a TYPE, and that is the whole point of the smelter. Until
@@ -150,7 +150,8 @@ const IS_INGOT = t => t === INGOT || t === INGOT_E || t === INGOT_S;
 const MINERAL_OF_FACE = [CRYSTAL, CRYSTAL, EMBER, EMBER, SALT, SALT];
 const MINERAL_NAME = { [CRYSTAL]: 'crystal', [EMBER]: 'ember', [SALT]: 'salt' };
 const TYPE_NAME = { 1: 'miner', 2: 'belt', 3: 'hub', 4: 'ore node',
-                    5: 'smelter', 6: 'splitter', 7: 'forge', 8: 'filter' };
+                    5: 'smelter', 6: 'splitter', 7: 'forge', 8: 'filter',
+                    9: 'chronos rift' };
 
 const VALUE = { [CRYSTAL]: 1, [INGOT]: 6 };   // an ingot is worth the detour
 const SMELT_IN = 2;                            // ore of one kind per ingot
@@ -237,7 +238,8 @@ for (let f = 0; f < 6; f++) {
     for (let j = 0; j < N; j++)
       cells[f][i][j] = { t: EMPTY, d: 0, item: 0, buf: 0, bt: 0,
                          fa: 0, fb: 0, cook: 0, rr: 0, min: 0,
-                         filt: CRYSTAL };
+                         filt: CRYSTAL,
+                         dbt: 0, dmin: 0, emit: 0, left: 0, cool: 0 };
   }
 }
 const cellOf = t => (t ? cells[t.face][t.i][t.j] : null);
@@ -378,6 +380,8 @@ const MAT = {
     metalness: 0.55, flatShading: true }),
   filt: new THREE.MeshStandardMaterial({ color: 0x2f8f7d, roughness: 0.55,
     metalness: 0.25 }),
+  rift: new THREE.MeshStandardMaterial({ color: 0x6a3cff, emissive: 0x3a1c9c,
+    emissiveIntensity: 0.8, roughness: 0.3, metalness: 0.5, flatShading: true }),
   smelt: new THREE.MeshStandardMaterial({ color: 0x8c6bff, roughness: 0.42, metalness: 0.4,
     emissive: 0x2a1470, emissiveIntensity: 0.5 }),
   split: new THREE.MeshStandardMaterial({ color: 0x4bb5ff, roughness: 0.45, metalness: 0.35,
@@ -394,6 +398,8 @@ const GEO = {
   // taller and eight-sided, so a forge is not mistaken for a smelter
   // from across the worldlet
   forge: new THREE.CylinderGeometry(T * 0.44, T * 0.5, 1.4, 8),
+  rift: new THREE.TorusGeometry(T * 0.38, 0.16, 6, 12),
+  riftCore: new THREE.OctahedronGeometry(0.34, 0),
   filter: new THREE.BoxGeometry(T * 0.9, 0.3, T * 0.9),
   filterGate: new THREE.BoxGeometry(T * 0.16, 0.5, T * 0.62),
 };
@@ -421,6 +427,11 @@ function removeAt(face, i, j) {
 function place(face, i, j, type, dir) {
   const c = cells[face][i][j];
   if (type === MINER && c.t !== NODE && c.t !== MINER) return false;
+  // REFUSE A TYPE THIS FACTORY DOES NOT BUILD (2026-09-07). place() used to
+  // fall off the end of its if-chain for an unrecognised type and set
+  // c.t = undefined: an invisible machine that no rule matched and no counter
+  // saw. Nothing threw; the tile just quietly stopped being part of the game.
+  if (!TYPE_NAME[type]) return false;
   c.buf = 0; c.bt = 0; c.fa = 0; c.fb = 0; c.cook = 0;
   if (type !== MINER && c.t === NODE) return false;      // keep nodes clear
   if (c.build) { scene.remove(c.build); c.build = null; }
@@ -450,6 +461,15 @@ function place(face, i, j, type, dir) {
       const arm = new THREE.Mesh(GEO.splitArm, MAT.split);
       arm.position.y = 0.4; arm.rotation.y = r; g.add(arm);
     }
+  } else if (type === RIFT) {
+    const ring = new THREE.Mesh(GEO.rift, MAT.rift);
+    ring.position.y = 0.95; ring.rotation.x = Math.PI / 2;
+    ring.castShadow = true; ring.name = 'ring'; g.add(ring);
+    const core = new THREE.Mesh(GEO.riftCore,
+      new THREE.MeshBasicMaterial({ color: 0x2a2050 }));
+    core.position.y = 0.95; core.name = 'lamp'; g.add(core);
+    const base = new THREE.Mesh(GEO.belt, MAT.rift);
+    base.position.y = 0.11; base.receiveShadow = true; g.add(base);
   } else if (type === FILTER) {
     const b = new THREE.Mesh(GEO.filter, MAT.filt);
     b.position.y = 0.15; b.castShadow = true; b.receiveShadow = true; g.add(b);
@@ -611,12 +631,16 @@ function accepts(dst, type) {
   if (dst.t === FORGE)
     return IS_MINERAL(type) && dst.cook === 0 &&
            (dst.fa === 0 || (dst.fb === 0 && type !== dst.fa));
+  // a rift only takes back exactly what it lent — anything else rides past it,
+  // which is what makes the filter tile the tool for repaying one
+  if (dst.t === RIFT) return dst.dbt > 0 && type === dst.dmin;
   return false;
 }
 function deliver(dst, dx, dz, type) {
   if (dst.t === HUB) bank(type);
   else if (dst.t === SMELTER) { dst.buf++; dst.bt = type; }
   else if (dst.t === FORGE) { if (dst.fa === 0) dst.fa = type; else dst.fb = type; }
+  else if (dst.t === RIFT) { if (--dst.dbt <= 0) riftSettle(dst, true); }
   else dst.item = type;
 }
 
@@ -696,6 +720,13 @@ function step() {
     else deliver(cellOf(mv[2]), 0, 0, c.item);
     c.item = 0;
   }
+  // a rift pays out the ore it lent one tile at a time, like a miner, so the
+  // loan arrives on your belts instead of appearing in a counter
+  eachTile((c, f, i, j) => {
+    if (c.t !== RIFT || c.emit <= 0) return;
+    const dst = cellOf(stepTile(f, i, j, c.d));
+    if (accepts(dst, c.dmin)) { deliver(dst, 0, 0, c.dmin); c.emit--; }
+  });
   eachTile((c, f, i, j) => {
     if (c.t !== MINER) return;
     // a miner digs whatever the seam under it is, which is the face's mineral
@@ -834,6 +865,7 @@ function apply(t, dir) {
   if (tool === 'splitter') { place(t.face, t.i, t.j, SPLITTER, 0); return; }
   if (tool === 'forge') { place(t.face, t.i, t.j, FORGE, d); return; }
   if (tool === 'filter') { place(t.face, t.i, t.j, FILTER, d); return; }
+  if (tool === 'rift') { place(t.face, t.i, t.j, RIFT, d); return; }
   if (tool === 'belt') { place(t.face, t.i, t.j, BELT, d); }
 }
 
@@ -897,7 +929,8 @@ document.querySelectorAll('.tool').forEach(el => {
 });
 addEventListener('keydown', e => {
   const k = { '1': 'miner', '2': 'belt', '3': 'smelter', '4': 'splitter',
-              '5': 'hub', '6': 'forge', '7': 'filter', '8': 'erase' }[e.key];
+              '5': 'hub', '6': 'forge', '7': 'filter', '8': 'rift',
+              '9': 'erase' }[e.key];
   if (k) pickTool(k);
   if (e.code === 'KeyF') cycleFilter();
   const u = { 'KeyZ': 'tick', 'KeyX': 'yield', 'KeyC': 'smelt' }[e.code];
@@ -1105,6 +1138,82 @@ function seedLine(placePlayer) {
 }
 seedLine(true);
 
+// ── THE CHRONOS RIFT ───────────────────────────────────────────────────────
+// A rift lends you ore and names its price on the HUD: this much of THAT ore,
+// back through the same ring, before the clock runs out. Pay and it settles at
+// triple the market rate. Miss and it throws every machine near it into the
+// sky — the meltdown's debris path, aimed at you rather than chosen by you.
+//
+// The borrowed ore is deliberately whichever one the market currently pays
+// most for, so a rift is a bet on a price you can see moving, and the filter
+// tile is how you route the repayment back without unpicking your line.
+const RIFT_COUNT = 6;        // ore lent per opening
+const RIFT_WINDOW = 45;      // seconds to pay it back
+const RIFT_COOL = 22;        // seconds shut afterwards
+const RIFT_BLAST = 3;        // tiles of factory it takes when it is not paid
+
+function riftOpen(c) {
+  // borrow against the best price on the board
+  let best = MINERALS[0];
+  for (const m of MINERALS) if (PRICE[INGOT_OF[m]] > PRICE[INGOT_OF[best]]) best = m;
+  c.dmin = best;
+  c.dbt = RIFT_COUNT;
+  c.emit = RIFT_COUNT;
+  c.left = RIFT_WINDOW;
+  c.cool = 0;
+}
+
+function riftSettle(c, paid) {
+  if (paid) {
+    const v = (VALUE[INGOT_OF[c.dmin]] || 6) * (PRICE[INGOT_OF[c.dmin]] || 1)
+              * RIFT_COUNT * 0.5;
+    ore += v; runValue += v;
+  }
+  c.dbt = 0; c.emit = 0; c.left = 0; c.dmin = 0;
+  c.cool = RIFT_COOL;
+}
+
+// The storm. Everything within RIFT_BLAST tiles ON THE SAME FACE is thrown —
+// same face because a blast that reached around an edge would be impossible to
+// read, and the player has to be able to see what they are risking.
+function riftStorm(f, i, j) {
+  for (let a = Math.max(0, i - RIFT_BLAST); a <= Math.min(N - 1, i + RIFT_BLAST); a++) {
+    for (let b = Math.max(0, j - RIFT_BLAST); b <= Math.min(N - 1, j + RIFT_BLAST); b++) {
+      const c = cells[f][a][b];
+      if (c.t === EMPTY || c.t === NODE || c.t === RIFT) continue;
+      if (c.build) { throwPiece(c.build); c.build = null; }
+      c.t = c.mesh ? NODE : EMPTY;
+      c.item = 0; c.buf = 0; c.bt = 0; c.fa = 0; c.fb = 0; c.cook = 0;
+    }
+  }
+  melting = Math.max(melting, 1.2);
+  refreshCounts();
+}
+
+function stepRifts(dt) {
+  eachTile((c, f, i, j) => {
+    if (c.t !== RIFT) return;
+    if (c.cool > 0) {
+      c.cool -= dt;
+      if (c.cool <= 0) riftOpen(c);
+    } else if (c.left > 0) {
+      // THE CLOCK STARTS WHEN THE LOAN LANDS (2026-09-07). Counting down while
+      // the rift still had ore to pay out meant a rift with a blocked output
+      // demanded repayment of something it had never handed over, and then
+      // blew up the factory for not returning it.
+      if (c.emit === 0) c.left -= dt;
+      if (c.left <= 0) { riftStorm(f, i, j); riftSettle(c, false); }
+    } else if (c.dbt === 0 && c.emit === 0) {
+      riftOpen(c);                     // a freshly placed rift opens at once
+    }
+    const lamp = c.build && c.build.getObjectByName('lamp');
+    if (lamp) lamp.material.color.setHex(
+      c.dbt > 0 ? (MIN_COL[c.dmin] || 0xff5ad9) : 0x2a2050);
+    const ring = c.build && c.build.getObjectByName('ring');
+    if (ring) ring.rotation.z += dt * (c.dbt > 0 ? 2.4 : 0.4);
+  });
+}
+
 // ── the meltdown itself ────────────────────────────────────────────────────
 // The machines are not deleted, they are THROWN. Every build group is detached
 // from its tile, given an outward velocity off the cube and a tumble, and left
@@ -1115,6 +1224,28 @@ seedLine(true);
 const debris = [];
 let melting = 0;
 
+// ONE PLACE THAT THROWS A MACHINE. The meltdown chooses to do this and the
+// rift storm does it to you, and the two looking different would read as a
+// bug rather than as two causes of the same event.
+function throwPiece(g) {
+  const p = g.position;
+  const r = Math.max(1e-3, Math.hypot(p.x, p.y, p.z));
+  debris.push({
+    o: g,
+    // SLOW ENOUGH TO WATCH (2026-09-07). The first pass threw everything at
+    // 9-25 m/s and the entire factory was out of frame inside 300ms — the one
+    // moment in the game worth filming, over before a screenshot could catch
+    // it. Pieces arc out and fall back toward the cube.
+    v: new THREE.Vector3(
+      p.x / r * (5 + Math.random() * 6) + (Math.random() - 0.5) * 4,
+      p.y / r * (5 + Math.random() * 6) + (Math.random() - 0.5) * 4,
+      p.z / r * (5 + Math.random() * 6) + (Math.random() - 0.5) * 4),
+    w: new THREE.Vector3((Math.random() - 0.5) * 9,
+                         (Math.random() - 0.5) * 9,
+                         (Math.random() - 0.5) * 9),
+  });
+}
+
 function meltdown() {
   if (ore < MELT_MIN || melting > 0) return;
   const won = Math.max(1, coresFor(runValue));
@@ -1122,23 +1253,7 @@ function meltdown() {
 
   eachTile((c, f, i, j) => {
     if (c.build) {
-      const g = c.build;
-      const p = g.position;
-      const r = Math.max(1e-3, Math.hypot(p.x, p.y, p.z));
-      debris.push({
-        o: g,
-        // SLOW ENOUGH TO WATCH (2026-09-07). The first pass threw everything at
-        // 9-25 m/s and the entire factory was out of frame inside 300ms — the
-        // one moment in the game worth filming, over before a screenshot could
-        // catch it. Pieces now arc out and fall back toward the cube.
-        v: new THREE.Vector3(
-          p.x / r * (5 + Math.random() * 6) + (Math.random() - 0.5) * 4,
-          p.y / r * (5 + Math.random() * 6) + (Math.random() - 0.5) * 4,
-          p.z / r * (5 + Math.random() * 6) + (Math.random() - 0.5) * 4),
-        w: new THREE.Vector3((Math.random() - 0.5) * 9,
-                             (Math.random() - 0.5) * 9,
-                             (Math.random() - 0.5) * 9),
-      });
+      throwPiece(c.build);
       c.build = null;
     }
     // a node outlives the factory built on it, exactly as it does for ERASE
@@ -1193,6 +1308,7 @@ renderer.setAnimationLoop(() => {
   last = now;
 
   stepMarket(dt);
+  if (!melting) stepRifts(dt);
   if (melting > 0) {
     melting = Math.max(0, melting - dt);
     // the replacement line arrives when the old one has finished falling, not
@@ -1232,6 +1348,18 @@ renderer.setAnimationLoop(() => {
   // the number climbing is watching it cross a threshold
   if (Math.floor(ore) !== lastOreShown) { lastOreShown = Math.floor(ore); renderUpgrades(); }
   document.getElementById('melt').classList.toggle('on', ore >= MELT_MIN && !melting);
+  {
+    // the debt and the clock, in words, because a rift you have to remember is
+    // a rift you will be surprised by
+    let owed = null;
+    eachTile(c => { if (c.t === RIFT && c.dbt > 0 && !owed) owed = c; });
+    const el = document.getElementById('rift');
+    if (el) {
+      el.classList.toggle('on', !!owed);
+      if (owed) el.innerHTML = '<b>RIFT DEBT</b><small>' + owed.dbt + ' \u00d7 '
+        + MINERAL_NAME[owed.dmin] + ' \u00b7 ' + Math.ceil(owed.left) + 's</small>';
+    }
+  }
   document.getElementById('nitem').textContent = drawItems(sinceTick / TICK);
 
   // a crystal on the west face spins about the west face's up
@@ -1342,6 +1470,7 @@ function setInspectOn(on) {
     hub: HUB, depot: HUB, base: HUB,
     forge: FORGE, alloy: FORGE,
     filter: FILTER, sorter: FILTER,
+    rift: RIFT, chronos: RIFT, portal: RIFT,
   };
 
   addEventListener('message', e => {
@@ -1435,6 +1564,11 @@ window.__game = {
     items_on_belts: items.count,
     alloys,
     prices: TRADED.map(t => +PRICE[t].toFixed(3)),
+    rift: (() => { let r = null;
+      eachTile(c => { if (c.t === RIFT && !r) r = { debt: c.dbt,
+        ore: MINERAL_NAME[c.dmin] || null, left: +c.left.toFixed(1),
+        cool: +c.cool.toFixed(1), emit: c.emit }; });
+      return r; })(),
     best: TRADE_NAME[TRADED.reduce((a, b) => PRICE[a] > PRICE[b] ? a : b)],
     minerals: MINERAL_OF_FACE.map(m => MINERAL_NAME[m]),
     cores,
@@ -1455,8 +1589,9 @@ window.__factory = {
   cells, items, N, T, player, HALF, FACES,
   stepTile, tileWorld, faceOfPoint,
   TYPES: { EMPTY, MINER, BELT, HUB, NODE, SMELTER, SPLITTER, FORGE, FILTER,
-           CRYSTAL, EMBER, SALT, INGOT, ALLOY },
+           RIFT, CRYSTAL, EMBER, SALT, INGOT, INGOT_E, INGOT_S, ALLOY },
   MINERAL_OF_FACE, get alloys() { return alloys; }, cycleFilter,
+  riftOpen, riftStorm, RIFT_COUNT, RIFT_WINDOW,
   PRICE, TRADED, stepMarket,
   UPGRADES, buy, costOf, get tick() { return TICK; },
   meltdown, MELT_MIN, get cores() { return cores; },
