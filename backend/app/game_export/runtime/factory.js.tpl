@@ -39,6 +39,88 @@ import * as THREE from 'three';
 const T = 2;
 const N = Math.max(12, Math.min(40, Math.round(_sz / 6)));
 const HALF = (N * T) / 2;
+
+// ── THE CUBE (2026-09-07) ──────────────────────────────────────────────────
+// The factory does not sit on a plane; it wraps a cube. A belt that runs off
+// the top face keeps running down the side, and a player who walks over an
+// edge finds gravity rotate under them. Every flat-ground competitor in this
+// genre would have to rebuild their spatial core to copy it.
+//
+// This math is verified on its own in flagship/cubegrid.test.mjs — nineteen
+// properties, including all 192 edge crossings of an 8-cube — because a wrong
+// wrap does not crash. Items just quietly arrive on the wrong face, three
+// hours into somebody's save.
+const FACES = [
+  { name: 'top',   u: [1, 0, 0],  v: [0, 0, -1] },
+  { name: 'bot',   u: [1, 0, 0],  v: [0, 0, 1] },
+  { name: 'east',  u: [0, 0, -1], v: [0, -1, 0] },
+  { name: 'west',  u: [0, 0, 1],  v: [0, -1, 0] },
+  { name: 'south', u: [1, 0, 0],  v: [0, -1, 0] },
+  { name: 'north', u: [-1, 0, 0], v: [0, -1, 0] },
+];
+const _cr = (a, b) => [a[1] * b[2] - a[2] * b[1],
+                       a[2] * b[0] - a[0] * b[2],
+                       a[0] * b[1] - a[1] * b[0]];
+const _dt3 = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+const _ng = a => [-a[0], -a[1], -a[2]];
+const _eqv = (a, b) => Math.abs(a[0] - b[0]) < 1e-9 &&
+                       Math.abs(a[1] - b[1]) < 1e-9 && Math.abs(a[2] - b[2]) < 1e-9;
+for (const f of FACES) f.n = _cr(f.u, f.v);      // right-handed: u x v = n
+
+const dirVec = (face, d) => [FACES[face].u, FACES[face].v,
+                             _ng(FACES[face].u), _ng(FACES[face].v)][d & 3];
+
+/** World-space centre of tile [face,i,j], on the cube surface. */
+function tileWorld(face, i, j) {
+  const f = FACES[face];
+  const a = (i + 0.5 - N / 2) * T, b = (j + 0.5 - N / 2) * T;
+  return [f.n[0] * HALF + f.u[0] * a + f.v[0] * b,
+          f.n[1] * HALF + f.u[1] * a + f.v[1] * b,
+          f.n[2] * HALF + f.u[2] * a + f.v[2] * b];
+}
+
+/**
+ * One tile along heading d. Inside a face this is arithmetic; crossing an edge
+ * is the whole feature. The destination is the face whose normal matches the
+ * way you walked off, and your heading there becomes the OLD face's inward
+ * normal. The indices come from projecting the tile you left onto the new
+ * basis — which is how twenty-four hand-written edge cases, one of them
+ * inevitably wrong, are avoided.
+ */
+function stepTile(face, i, j, d) {
+  const ni = i + [1, 0, -1, 0][d & 3];
+  const nj = j + [0, 1, 0, -1][d & 3];
+  if (ni >= 0 && nj >= 0 && ni < N && nj < N) return { face, i: ni, j: nj, d };
+
+  const walk = dirVec(face, d), oldN = FACES[face].n;
+  let dst = -1;
+  for (let k = 0; k < 6; k++) if (_eqv(FACES[k].n, walk)) { dst = k; break; }
+  if (dst < 0) return null;
+  const want = _ng(oldN);
+  let nd = -1;
+  for (let k = 0; k < 4; k++) if (_eqv(dirVec(dst, k), want)) { nd = k; break; }
+  if (nd < 0) return null;
+
+  const o = FACES[face], g = FACES[dst];
+  const a = i + 0.5 - N / 2, b = j + 0.5 - N / 2;   // unit tiles: indices only
+  const w = [o.n[0] * (N / 2) + o.u[0] * a + o.v[0] * b,
+             o.n[1] * (N / 2) + o.u[1] * a + o.v[1] * b,
+             o.n[2] * (N / 2) + o.u[2] * a + o.v[2] * b];
+  const ri = Math.max(0, Math.min(N - 1, Math.round(_dt3(w, g.u) + N / 2 - 0.5)));
+  const rj = Math.max(0, Math.min(N - 1, Math.round(_dt3(w, g.v) + N / 2 - 0.5)));
+  return { face: dst, i: ri, j: rj, d: nd, wrapped: true };
+}
+
+/** Which face a world point belongs to: the one whose normal it is furthest along. */
+function faceOfPoint(px, py, pz) {
+  let best = 0, bestD = -Infinity;
+  for (let k = 0; k < 6; k++) {
+    const n = FACES[k].n, d = px * n[0] + py * n[1] + pz * n[2];
+    if (d > bestD) { bestD = d; best = k; }
+  }
+  return best;
+}
+
 const BASE_TICK = 0.42;
 let TICK = BASE_TICK;
 const EMPTY = 0, MINER = 1, BELT = 2, HUB = 3, NODE = 4, SMELTER = 5, SPLITTER = 6;
@@ -108,19 +190,31 @@ function renderUpgrades() {
   }
 }
 
+// Six faces of N x N. Nothing else in the simulation knows the shape of the
+// world: it asks stepTile what is next to a tile, and stepTile is the only
+// place an edge exists.
 const cells = [];
-for (let x = 0; x < N; x++) {
-  cells[x] = [];
-  for (let z = 0; z < N; z++) cells[x][z] = { t: EMPTY, d: 0, item: 0, buf: 0, cook: 0, rr: 0 };
+for (let f = 0; f < 6; f++) {
+  cells[f] = [];
+  for (let i = 0; i < N; i++) {
+    cells[f][i] = [];
+    for (let j = 0; j < N; j++)
+      cells[f][i][j] = { t: EMPTY, d: 0, item: 0, buf: 0, cook: 0, rr: 0 };
+  }
 }
-const inGrid = (x, z) => x >= 0 && z >= 0 && x < N && z < N;
-const wx = x => -HALF + x * T + T / 2;
-const wz = z => -HALF + z * T + T / 2;
+const cellOf = t => (t ? cells[t.face][t.i][t.j] : null);
+/** Every tile on the cube, once. */
+function eachTile(fn) {
+  for (let f = 0; f < 6; f++)
+    for (let i = 0; i < N; i++)
+      for (let j = 0; j < N; j++) fn(cells[f][i][j], f, i, j);
+}
 
 // ── scene ──────────────────────────────────────────────────────────────────
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(SKY_COL);
-scene.fog = new THREE.Fog(FOG_COL, HALF * 1.6, HALF * 4.0);
+const worldFog = new THREE.Fog(FOG_COL, HALF * 1.6, HALF * 4.0);
+scene.fog = worldFog;
 const camera = new THREE.PerspectiveCamera(52, innerWidth / innerHeight, 0.1, 500);
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
@@ -146,29 +240,61 @@ sun.shadow.camera.far = 170;
 sun.shadow.camera.updateProjectionMatrix();
 scene.add(sun);
 
-// ── the island, chamfered underneath so it reads as FLOATING ───────────────
+// ONE SUN LIGHTS ONE SIDE OF A CUBE (2026-09-07). On a flat island a single
+// directional light was enough. On a worldlet the faces facing away from it
+// fall to pure hemisphere ambient and read as unlit black — you walk around
+// the corner into a game that looks broken. A dimmer fill from the opposite
+// quadrant keeps every face legible without flattening the key light.
+const fill = new THREE.DirectionalLight(0xb9d2ff, 0.85);
+fill.position.set(-34, -40, -26);
+scene.add(fill);
+
+// ── the worldlet: a cube you can walk all the way around ───────────────────
+const cube = new THREE.Mesh(
+  new THREE.BoxGeometry(N * T, N * T, N * T),
+  new THREE.MeshStandardMaterial({ color: 0x2b3252, roughness: 0.96 }));
+cube.receiveShadow = true;
+scene.add(cube);
 {
-  const slab = new THREE.Mesh(new THREE.BoxGeometry(N * T, 1.2, N * T),
-    new THREE.MeshStandardMaterial({ color: 0x2b3252, roughness: 0.96 }));
-  slab.position.y = -0.6;
-  slab.receiveShadow = true;
-  scene.add(slab);
-
-  const keel = new THREE.Mesh(new THREE.ConeGeometry(N * T * 0.6, 14, 6),
-    new THREE.MeshStandardMaterial({ color: 0x1c2137, roughness: 1, flatShading: true }));
-  keel.rotation.x = Math.PI;
-  keel.position.y = -7.6;
-  scene.add(keel);
-
+  // grid lines on all six faces, lifted a hair off the surface. Without them
+  // the underside of the world is an unreadable dark field and you cannot
+  // tell where a belt will land.
   const pts = [];
-  for (let i = 0; i <= N; i++) {
-    const p = -HALF + i * T;
-    pts.push(-HALF, 0.02, p, HALF, 0.02, p, p, 0.02, -HALF, p, 0.02, HALF);
+  const E = HALF + 0.02;
+  for (const f of FACES) {
+    for (let k = 0; k <= N; k++) {
+      const q = -HALF + k * T;
+      for (const [a, b, c, d] of [[q, -HALF, q, HALF], [-HALF, q, HALF, q]]) {
+        pts.push(f.n[0] * E + f.u[0] * a + f.v[0] * b,
+                 f.n[1] * E + f.u[1] * a + f.v[1] * b,
+                 f.n[2] * E + f.u[2] * a + f.v[2] * b,
+                 f.n[0] * E + f.u[0] * c + f.v[0] * d,
+                 f.n[1] * E + f.u[1] * c + f.v[1] * d,
+                 f.n[2] * E + f.u[2] * c + f.v[2] * d);
+      }
+    }
   }
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
   scene.add(new THREE.LineSegments(g, new THREE.LineBasicMaterial(
     { color: 0x46527d, transparent: true, opacity: 0.22 })));
+}
+
+// SEATING. Everything that stands on the cube shares one rule: local +Y
+// becomes the face normal and local +X the heading. Written once, so a belt
+// arrow, a smelter and the build ghost cannot disagree about which way is up
+// on the underside of the world.
+const _mx = new THREE.Matrix4();
+const _bx = new THREE.Vector3(), _by = new THREE.Vector3(), _bz = new THREE.Vector3();
+function seat(obj, face, i, j, dir, up) {
+  const f = FACES[face], w = tileWorld(face, i, j), dv = dirVec(face, dir || 0);
+  _bx.set(dv[0], dv[1], dv[2]);
+  _by.set(f.n[0], f.n[1], f.n[2]);
+  _bz.crossVectors(_bx, _by);
+  _mx.makeBasis(_bx, _by, _bz);
+  obj.quaternion.setFromRotationMatrix(_mx);
+  const h = up || 0;
+  obj.position.set(w[0] + f.n[0] * h, w[1] + f.n[1] * h, w[2] + f.n[2] * h);
 }
 
 // ── crystal nodes: the only tiles a miner can stand on ─────────────────────
@@ -180,16 +306,19 @@ let rngState = 1337;
 const rnd = () => (rngState = (rngState * 1664525 + 1013904223) % 4294967296) / 4294967296;
 const NODE_COUNT = Math.max(6, Math.min(40, Math.round(N * N * 0.028)));
 for (let k = 0; k < NODE_COUNT; k++) {
-  const x = 2 + Math.floor(rnd() * (N - 4));
-  const z = 2 + Math.floor(rnd() * (N - 4));
-  if (cells[x][z].t !== EMPTY) continue;
-  cells[x][z].t = NODE;
+  const f = Math.floor(rnd() * 6);
+  const i = 2 + Math.floor(rnd() * (N - 4));
+  const j = 2 + Math.floor(rnd() * (N - 4));
+  const c = cells[f][i][j];
+  if (c.t !== EMPTY) continue;
+  c.t = NODE;
   const m = new THREE.Mesh(nodeGeo, nodeMat);
-  m.position.set(wx(x), 0.7, wz(z));
+  seat(m, f, i, j, 0, 0.7);
   m.castShadow = true;
   m.userData.spin = 0.4 + rnd() * 0.6;
+  m.userData.axis = FACES[f].n;      // spin about the face's up, not the world's
   scene.add(m);
-  cells[x][z].mesh = m;
+  c.mesh = m;
 }
 
 // ── build meshes ───────────────────────────────────────────────────────────
@@ -214,30 +343,27 @@ const GEO = {
 };
 
 function refreshCounts() {
-  let m = 0, b = 0;
-  for (let x = 0; x < N; x++) {
-    for (let z = 0; z < N; z++) {
-      if (cells[x][z].t === MINER) m++;
-      else if (cells[x][z].t === BELT) b++;
-    }
-  }
+  let m = 0, b = 0, sm = 0;
+  eachTile(c => {
+    if (c.t === MINER) m++;
+    else if (c.t === BELT) b++;
+    else if (c.t === SMELTER) sm++;
+  });
   document.getElementById('nmine').textContent = m;
   document.getElementById('nbelt').textContent = b;
-  let sm = 0;
-  for (let x = 0; x < N; x++) for (let z = 0; z < N; z++) if (cells[x][z].t === SMELTER) sm++;
   document.getElementById('nsmelt').textContent = sm;
 }
 
-function removeAt(x, z) {
-  const c = cells[x][z];
+function removeAt(face, i, j) {
+  const c = cells[face][i][j];
   if (c.build) { scene.remove(c.build); c.build = null; }
   c.t = c.mesh ? NODE : EMPTY;               // a node outlives its miner
   c.item = 0;
   refreshCounts();
 }
 
-function place(x, z, type, dir) {
-  const c = cells[x][z];
+function place(face, i, j, type, dir) {
+  const c = cells[face][i][j];
   if (type === MINER && c.t !== NODE && c.t !== MINER) return false;
   if (type !== MINER && c.t === NODE) return false;      // keep nodes clear
   if (c.build) { scene.remove(c.build); c.build = null; }
@@ -252,7 +378,8 @@ function place(x, z, type, dir) {
     a.position.set(0.55, 0.3, 0);
     a.rotation.z = -Math.PI / 2;
     g.add(a);
-    g.rotation.y = -dir * Math.PI / 2;
+    // the heading is baked into the seating basis now, not into a Y rotation:
+    // on the east face there is no such thing as "rotate about world up"
   } else if (type === HUB) {
     const b = new THREE.Mesh(GEO.hub, MAT.hub);
     b.position.y = 0.55; b.castShadow = true; g.add(b);
@@ -276,9 +403,8 @@ function place(x, z, type, dir) {
     lamp.position.set(0, 1.34, 0);
     lamp.name = 'lamp';
     g.add(lamp);
-    g.rotation.y = -dir * Math.PI / 2;
   }
-  g.position.set(wx(x), 0, wz(z));
+  seat(g, face, i, j, dir, 0);
   scene.add(g);
   c.build = g;
   c.t = type;
@@ -314,7 +440,7 @@ const _m = new THREE.Matrix4();
 const _p = new THREE.Vector3();
 const _q = new THREE.Quaternion();
 const _s = new THREE.Vector3(1, 1, 1);
-const _up = new THREE.Vector3(0, 1, 0);
+const _up = new THREE.Vector3(0, 1, 0);   // reused per item: the face normal
 
 // ── the tick: belts advance, miners feed, the hub banks ────────────────────
 let ore = 0;
@@ -348,80 +474,63 @@ function step() {
   // this smelter get their turn — otherwise a full input belt would block the
   // machine that is about to free it, and lines deadlock at exactly the
   // moment they start working.
-  for (let x = 0; x < N; x++) {
-    for (let z = 0; z < N; z++) {
-      const c = cells[x][z];
-      if (c.t !== SMELTER) continue;
-      if (c.cook > 0) {
-        c.cook--;
-        if (c.cook === 0) {
-          const d = DIRS[c.d];
-          const nx = x + d[0], nz = z + d[1];
-          const dst = inGrid(nx, nz) ? cells[nx][nz] : null;
-          if (dst && dst.t === HUB) bank(INGOT);
-          else if (dst && dst.t === BELT && !dst.item) dst.item = INGOT;
-          else c.cook = 1;                  // output blocked: hold it, retry
-        }
+  eachTile((c, f, i, j) => {
+    if (c.t !== SMELTER) return;
+    if (c.cook > 0) {
+      c.cook--;
+      if (c.cook === 0) {
+        const dst = cellOf(stepTile(f, i, j, c.d));
+        if (dst && dst.t === HUB) bank(INGOT);
+        else if (dst && dst.t === BELT && !dst.item) dst.item = INGOT;
+        else c.cook = 1;                  // output blocked: hold it, retry
       }
-      if (c.cook === 0 && c.buf >= SMELT_IN) { c.buf -= SMELT_IN; c.cook = SMELT_TICKS; }
-      const lamp = c.build && c.build.getObjectByName('lamp');
-      if (lamp) lamp.material.color.setHex(c.cook > 0 ? 0xffb04a : 0x3a2f5e);
     }
-  }
+    if (c.cook === 0 && c.buf >= SMELT_IN) { c.buf -= SMELT_IN; c.cook = SMELT_TICKS; }
+    const lamp = c.build && c.build.getObjectByName('lamp');
+    if (lamp) lamp.material.color.setHex(c.cook > 0 ? 0xffb04a : 0x3a2f5e);
+  });
 
   // Collect first, THEN commit. Moving in place would let one item ride the
   // whole line in a single tick depending on iteration order.
   const moves = [];
-  for (let x = 0; x < N; x++) {
-    for (let z = 0; z < N; z++) {
-      const c = cells[x][z];
-      // A SPLITTER IS A BELT THAT CHOOSES. It sends each item out of a
-      // different side in turn, so one miner can feed two smelters without
-      // the player hand-balancing anything. The round-robin cursor advances
-      // only when an item actually LEAVES — advancing on a failed attempt
-      // would silently starve whichever output happened to be busy.
-      if (c.t === SPLITTER && c.item) {
-        for (let k = 0; k < 4; k++) {
-          const dir = (c.rr + k) % 4;
-          const dd = DIRS[dir];
-          const ax = x + dd[0], az = z + dd[1];
-          if (!inGrid(ax, az)) continue;
-          if (!accepts(cells[ax][az], c.item)) continue;
-          moves.push([x, z, 'to', ax, az]);
-          c.rr = (dir + 1) % 4;
-          break;
-        }
-        continue;
+  eachTile((c, f, i, j) => {
+    // A SPLITTER IS A BELT THAT CHOOSES. It sends each item out of a
+    // different side in turn, so one miner can feed two smelters without
+    // the player hand-balancing anything. The round-robin cursor advances
+    // only when an item actually LEAVES — advancing on a failed attempt
+    // would silently starve whichever output happened to be busy.
+    if (c.t === SPLITTER && c.item) {
+      for (let k = 0; k < 4; k++) {
+        const dir = (c.rr + k) % 4;
+        const to = stepTile(f, i, j, dir);
+        if (!to || !accepts(cellOf(to), c.item)) continue;
+        moves.push([c, 'to', to]);
+        c.rr = (dir + 1) % 4;
+        break;
       }
-      if (c.t !== BELT || !c.item) continue;
-      const d = DIRS[c.d];
-      const nx = x + d[0], nz = z + d[1];
-      if (!inGrid(nx, nz)) continue;
-      const dst = cells[nx][nz];
-      if (dst.t === HUB) moves.push([x, z, 'bank']);
-      // a smelter only accepts CRYSTALS, and only while it has room. An ingot
-      // arriving at a smelter simply waits, which is the correct answer and
-      // also a visible one — the belt backs up and you can see the mistake.
-      else if (accepts(dst, c.item)) moves.push([x, z, 'to', nx, nz]);
+      return;
     }
-  }
+    if (c.t !== BELT || !c.item) return;
+    const to = stepTile(f, i, j, c.d);
+    const dst = cellOf(to);
+    if (!dst) return;
+    if (dst.t === HUB) moves.push([c, 'bank']);
+    // a smelter only accepts CRYSTALS, and only while it has room. An ingot
+    // arriving at a smelter simply waits, which is the correct answer and
+    // also a visible one — the belt backs up and you can see the mistake.
+    else if (accepts(dst, c.item)) moves.push([c, 'to', to]);
+  });
   for (const mv of moves) {
-    const c = cells[mv[0]][mv[1]];
-    if (mv[2] === 'bank') bank(c.item);
-    else deliver(cells[mv[3]][mv[4]], mv[3], mv[4], c.item);
+    const c = mv[0];
+    if (mv[1] === 'bank') bank(c.item);
+    else deliver(cellOf(mv[2]), 0, 0, c.item);
     c.item = 0;
   }
-  for (let x = 0; x < N; x++) {
-    for (let z = 0; z < N; z++) {
-      const c = cells[x][z];
-      if (c.t !== MINER) continue;
-      const d = DIRS[c.d];
-      const nx = x + d[0], nz = z + d[1];
-      if (!inGrid(nx, nz)) continue;
-      const dst = cells[nx][nz];
-      if (accepts(dst, CRYSTAL)) deliver(dst, nx, nz, CRYSTAL);
-    }
-  }
+  eachTile((c, f, i, j) => {
+    if (c.t !== MINER) return;
+    const dst = cellOf(stepTile(f, i, j, c.d));
+    if (accepts(dst, CRYSTAL)) deliver(dst, 0, 0, CRYSTAL);
+  });
 }
 
 // Items are drawn BETWEEN their tile and the next, so the motion reads smooth
@@ -430,22 +539,28 @@ function step() {
 function drawItems(alpha) {
   let n = 0;
   const spin = performance.now() * 0.002;
-  for (let x = 0; x < N && n < MAX_ITEMS; x++) {
-    for (let z = 0; z < N && n < MAX_ITEMS; z++) {
-      const c = cells[x][z];
-      if (c.t !== BELT || !c.item) continue;
-      const d = DIRS[c.d];
-      const nx = x + d[0], nz = z + d[1];
-      const ahead = inGrid(nx, nz) ? cells[nx][nz] : null;
-      const free = ahead && (ahead.t === HUB || (ahead.t === BELT && !ahead.item));
-      const a = free ? alpha : 0;
-      _p.set(wx(x) + d[0] * T * a, 0.42, wz(z) + d[1] * T * a);
-      _q.setFromAxisAngle(_up, spin);
-      _m.compose(_p, _q, _s);
-      items.setColorAt(n, ITEM_COL[c.item] || ITEM_COL[CRYSTAL]);
-      items.setMatrixAt(n++, _m);
-    }
-  }
+  eachTile((c, f, i, j) => {
+    if (n >= MAX_ITEMS || c.t !== BELT || !c.item) return;
+    const to = stepTile(f, i, j, c.d);
+    const ahead = cellOf(to);
+    const free = ahead && (ahead.t === HUB || (ahead.t === BELT && !ahead.item));
+    const a = free ? alpha : 0;
+    // Interpolating between the two tiles' world centres carries an item
+    // around an edge on its own: across a corner the two centres are on
+    // different faces, so the crystal cuts the corner instead of flying off
+    // into space. That the tiles are never more than one diagonal apart is
+    // one of the properties the cube-grid test pins down.
+    const A = tileWorld(f, i, j), nrm = FACES[f].n;
+    const B = ahead ? tileWorld(to.face, to.i, to.j) : A;
+    _p.set(A[0] + (B[0] - A[0]) * a + nrm[0] * 0.42,
+           A[1] + (B[1] - A[1]) * a + nrm[1] * 0.42,
+           A[2] + (B[2] - A[2]) * a + nrm[2] * 0.42);
+    _up.set(nrm[0], nrm[1], nrm[2]);
+    _q.setFromAxisAngle(_up, spin);
+    _m.compose(_p, _q, _s);
+    items.setColorAt(n, ITEM_COL[c.item] || ITEM_COL[CRYSTAL]);
+    items.setMatrixAt(n++, _m);
+  });
   items.count = n;
   items.instanceMatrix.needsUpdate = true;
   if (items.instanceColor) items.instanceColor.needsUpdate = true;
@@ -455,8 +570,17 @@ function drawItems(alpha) {
 // ── input: raycast the ground plane, drag to draw belts ────────────────────
 const ray = new THREE.Raycaster();
 const ndc = new THREE.Vector2();
-const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 const hitPt = new THREE.Vector3();
+
+/** The tile a world point sits over, or null if it is off the cube. */
+function tileOfPoint(p) {
+  const face = faceOfPoint(p.x, p.y, p.z), f = FACES[face];
+  const a = p.x * f.u[0] + p.y * f.u[1] + p.z * f.u[2];
+  const b = p.x * f.v[0] + p.y * f.v[1] + p.z * f.v[2];
+  const i = Math.floor(a / T + N / 2), j = Math.floor(b / T + N / 2);
+  if (i < 0 || j < 0 || i >= N || j >= N) return null;
+  return { face, i, j };
+}
 let tool = 'miner';
 let drawing = false;
 let lastCell = null;
@@ -472,11 +596,15 @@ function cellUnder(ev) {
     ndc.set(0, 0);
   }
   ray.setFromCamera(ndc, camera);
-  if (!ray.ray.intersectPlane(plane, hitPt)) return null;
+  // AIM AT THE SOLID, NOT AT A PLANE. The ground used to be the y=0 plane,
+  // which on a cube would let you place machines on a face you are standing
+  // inside of. Raycasting the cube itself means you build on the surface you
+  // are actually looking at, whichever of the six it is.
+  const hit = ray.intersectObject(cube, false)[0];
+  if (!hit) return null;
+  hitPt.copy(hit.point);
   if (!overhead && hitPt.distanceTo(camera.position) > REACH) return null;
-  const x = Math.floor((hitPt.x + HALF) / T);
-  const z = Math.floor((hitPt.z + HALF) / T);
-  return inGrid(x, z) ? [x, z] : null;
+  return tileOfPoint(hitPt);
 }
 
 // the ghost: what you are about to build, where you are about to build it
@@ -492,32 +620,38 @@ const ghostEdge = new THREE.LineSegments(
 ghost.add(ghostEdge);
 
 function updateGhost() {
-  const c = cellUnder(null);
-  if (!c) { ghost.visible = false; return; }
-  const legal = tool === 'erase'
-    ? cells[c[0]][c[1]].t !== EMPTY && cells[c[0]][c[1]].t !== NODE
-    : tool === 'miner' ? cells[c[0]][c[1]].t === NODE
-    : cells[c[0]][c[1]].t !== NODE;
+  const t = cellUnder(null);
+  if (!t) { ghost.visible = false; return; }
+  const c = cellOf(t);
+  const legal = tool === 'erase' ? (c.t !== EMPTY && c.t !== NODE)
+    : tool === 'miner' ? c.t === NODE
+    : c.t !== NODE;
   ghost.visible = true;
-  ghost.position.set(wx(c[0]), 0.26, wz(c[1]));
+  seat(ghost, t.face, t.i, t.j, 0, 0.26);
   ghost.material.color.setHex(legal ? 0x6cf5d0 : 0xff6b7d);
   ghostEdge.material.color.setHex(legal ? 0x9dffe8 : 0xffa8b4);
 }
 
+// WHICH WAY DID THE DRAG GO. On a flat grid this was a subtraction of indices.
+// Across an edge the two tiles are not in the same coordinate system at all,
+// so the question is asked the only way that stays true: try each of the four
+// headings and see which one actually steps from a to b.
 function dirBetween(a, b) {
-  const dx = b[0] - a[0], dz = b[1] - a[1];
-  for (let i = 0; i < 4; i++) if (DIRS[i][0] === dx && DIRS[i][1] === dz) return i;
+  for (let d = 0; d < 4; d++) {
+    const s = stepTile(a.face, a.i, a.j, d);
+    if (s && s.face === b.face && s.i === b.i && s.j === b.j) return d;
+  }
   return null;
 }
 
-function apply(cell, dir) {
-  const x = cell[0], z = cell[1];
-  if (tool === 'erase') { removeAt(x, z); return; }
-  if (tool === 'miner') { place(x, z, MINER, dir == null ? 0 : dir); return; }
-  if (tool === 'hub') { place(x, z, HUB, 0); return; }
-  if (tool === 'smelter') { place(x, z, SMELTER, dir == null ? 0 : dir); return; }
-  if (tool === 'splitter') { place(x, z, SPLITTER, 0); return; }
-  if (tool === 'belt') { place(x, z, BELT, dir == null ? 0 : dir); }
+function apply(t, dir) {
+  const d = dir == null ? 0 : dir;
+  if (tool === 'erase') { removeAt(t.face, t.i, t.j); return; }
+  if (tool === 'miner') { place(t.face, t.i, t.j, MINER, d); return; }
+  if (tool === 'hub') { place(t.face, t.i, t.j, HUB, 0); return; }
+  if (tool === 'smelter') { place(t.face, t.i, t.j, SMELTER, d); return; }
+  if (tool === 'splitter') { place(t.face, t.i, t.j, SPLITTER, 0); return; }
+  if (tool === 'belt') { place(t.face, t.i, t.j, BELT, d); }
 }
 
 renderer.domElement.addEventListener('pointerdown', e => {
@@ -531,16 +665,19 @@ renderer.domElement.addEventListener('pointerdown', e => {
 renderer.domElement.addEventListener('pointermove', e => {
   if (!drawing || !lastCell) return;
   const c = cellUnder(e);
-  if (!c || (c[0] === lastCell[0] && c[1] === lastCell[1])) return;
+  if (!c || (c.face === lastCell.face && c.i === lastCell.i && c.j === lastCell.j)) return;
   const d = dirBetween(lastCell, c);
   if (d == null) { lastCell = c; return; }
   // the tile we just left now points at the one we moved to
-  const prev = cells[lastCell[0]][lastCell[1]];
+  const prev = cellOf(lastCell);
   if (prev.t === BELT || prev.t === MINER) {
     prev.d = d;
-    if (prev.build && prev.t === BELT) prev.build.rotation.y = -d * Math.PI / 2;
+    if (prev.build) seat(prev.build, lastCell.face, lastCell.i, lastCell.j, d, 0);
   }
-  apply(c, d);
+  // the drag arrives on the new tile heading the same way it left the old one,
+  // which across an edge is NOT the direction the mouse moved
+  const sd = stepTile(lastCell.face, lastCell.i, lastCell.j, d);
+  apply(c, sd ? sd.d : d);
   lastCell = c;
 });
 addEventListener('pointerup', () => { drawing = false; lastCell = null; });
@@ -570,16 +707,29 @@ addEventListener('keydown', e => {
 // both.
 const EYE = 1.68, REACH = 12;
 const player = {
-  pos: new THREE.Vector3(0, EYE, HALF - 4),
-  vel: new THREE.Vector3(),
-  // starts looking DOWN at the ground. Level-eyed, the ground plane is
-  // metres beyond arm's reach and the build ghost simply never appears —
-  // you would be standing in a build game with no way to tell why nothing
-  // can be placed.
-  yaw: 0, pitch: -0.38, onGround: true,
+  pos: new THREE.Vector3(0, HALF + EYE, 0),
+  face: 0,
+  // The heading is a WORLD vector tangent to the current face, not a yaw
+  // angle. A yaw needs a reference direction per face, and the six of them
+  // cannot be made to agree along every edge — one seam always ends up with
+  // the player spinning as they cross it.
+  fwd: new THREE.Vector3(0, 0, -1),
+  up: new THREE.Vector3(0, 1, 0),
+  h: 0, vy: 0,
+  // starts looking DOWN at the ground. Level-eyed, the surface is metres
+  // beyond arm's reach and the build ghost simply never appears — you would
+  // be standing in a build game with no way to tell why nothing can be placed.
+  pitch: -0.38, onGround: true,
 };
+// the camera's up lags the player's by a few frames, so crossing an edge
+// ROLLS the world over instead of snapping it. This is the shot the whole
+// mechanic exists for; a hard cut throws it away.
+const camUp = new THREE.Vector3(0, 1, 0);
 let overhead = false;
-let orbYaw = 0.72, orbPitch = 0.92, orbDist = 46;
+// FRAMED FOR A CUBE, NOT A SLAB (2026-09-07). A fixed 46m orbit was outside a
+// flat island and INSIDE a worldlet — Tab showed you a dark field of grid
+// lines and nothing else. Every distance here is a multiple of the world.
+let orbYaw = 0.72, orbPitch = 0.62, orbDist = HALF * 4.4;
 
 const keys = Object.create(null);
 addEventListener('keydown', e => {
@@ -597,11 +747,12 @@ renderer.domElement.addEventListener('click', () => {
 });
 addEventListener('mousemove', e => {
   if (document.pointerLockElement !== renderer.domElement) return;
-  player.yaw -= e.movementX * 0.0022;
+  // turning is a rotation about whichever way is up HERE
+  player.fwd.applyAxisAngle(player.up, -e.movementX * 0.0022).normalize();
   player.pitch = Math.max(-1.45, Math.min(1.35, player.pitch - e.movementY * 0.0022));
 });
 addEventListener('wheel', e => {
-  if (overhead) orbDist = Math.max(18, Math.min(96, orbDist * (1 + Math.sign(e.deltaY) * 0.09)));
+  if (overhead) orbDist = Math.max(HALF * 1.5, Math.min(HALF * 6, orbDist * (1 + Math.sign(e.deltaY) * 0.09)));
 }, { passive: true });
 addEventListener('resize', () => {
   camera.aspect = innerWidth / innerHeight;
@@ -609,33 +760,92 @@ addEventListener('resize', () => {
   renderer.setSize(innerWidth, innerHeight);
 });
 
+const _rt = new THREE.Vector3(), _wish = new THREE.Vector3();
+const _n3 = new THREE.Vector3(), _oldN = new THREE.Vector3();
+const _qr = new THREE.Quaternion();
+const faceNormal = (face, out) => {
+  const n = FACES[face].n; return out.set(n[0], n[1], n[2]);
+};
+
 function movePlayer(dt) {
-  // WALK WHERE YOU LOOK (2026-09-07). This was (sin, 0, cos), which is the
-  // exact NEGATION of where a YXZ camera at this yaw points: three.js looks
-  // down local -Z, so a yaw of y faces (-sin y, 0, -cos y). W walked you
-  // backwards out of frame. It survived because the sim runs fine whether or
-  // not the player can see it — only a screenshot catches this.
-  const f = new THREE.Vector3(-Math.sin(player.yaw), 0, -Math.cos(player.yaw));
-  const r = new THREE.Vector3(f.z, 0, -f.x);
-  const wish = new THREE.Vector3();
-  if (keys['KeyW']) wish.add(f);
-  if (keys['KeyS']) wish.sub(f);
-  if (keys['KeyD']) wish.add(r);
-  if (keys['KeyA']) wish.sub(r);
-  if (wish.lengthSq() > 0) wish.normalize();
+  faceNormal(player.face, _n3);
+  player.up.copy(_n3);
+  // keep the heading tangent to the face actually underfoot
+  player.fwd.addScaledVector(_n3, -player.fwd.dot(_n3));
+  if (player.fwd.lengthSq() < 1e-8) {
+    const u = FACES[player.face].u; player.fwd.set(u[0], u[1], u[2]);
+  }
+  player.fwd.normalize();
+  _rt.crossVectors(player.fwd, _n3).normalize();
+
+  _wish.set(0, 0, 0);
+  if (keys['KeyW']) _wish.add(player.fwd);
+  if (keys['KeyS']) _wish.sub(player.fwd);
+  if (keys['KeyD']) _wish.add(_rt);
+  if (keys['KeyA']) _wish.sub(_rt);
+  if (_wish.lengthSq() > 0) _wish.normalize();
   const speed = keys['ShiftLeft'] ? 11 : 6.2;
-  player.vel.x = wish.x * speed;
-  player.vel.z = wish.z * speed;
-  if (keys['Space'] && player.onGround) { player.vel.y = 6.4; player.onGround = false; }
-  player.vel.y -= 19 * dt;
-  player.pos.addScaledVector(player.vel, dt);
-  // the island is a slab, so the ground rule is simply its top face
-  if (player.pos.y <= EYE) { player.pos.y = EYE; player.vel.y = 0; player.onGround = true; }
-  // and you cannot walk off it — falling off a floating island is a death
-  // this prototype has no answer for
-  const lim = HALF - 0.6;
-  player.pos.x = Math.max(-lim, Math.min(lim, player.pos.x));
-  player.pos.z = Math.max(-lim, Math.min(lim, player.pos.z));
+
+  // gravity points at the face you are on, so "down" is a different world
+  // direction depending on where you are standing
+  if (keys['Space'] && player.onGround) { player.vy = 6.4; player.onGround = false; }
+  player.vy -= 19 * dt;
+  player.h += player.vy * dt;
+  if (player.h <= 0) { player.h = 0; player.vy = 0; player.onGround = true; }
+
+  player.pos.addScaledVector(_wish, speed * dt);
+
+  // WALKING OFF AN EDGE. Two passes, because a corner crosses two edges in a
+  // single frame at a run. The heading is carried across by the rotation that
+  // takes the old normal onto the new one — a projection cannot do it: walk
+  // straight off an edge and your forward direction IS the new face's normal,
+  // which projects to nothing.
+  for (let pass = 0; pass < 2; pass++) {
+    const f = FACES[player.face];
+    const a = player.pos.dot(_rt.set(f.u[0], f.u[1], f.u[2]));
+    const b = player.pos.dot(_rt.set(f.v[0], f.v[1], f.v[2]));
+    let over = null;
+    if (a > HALF) over = f.u;
+    else if (a < -HALF) over = _ng(f.u);
+    else if (b > HALF) over = f.v;
+    else if (b < -HALF) over = _ng(f.v);
+    if (!over) break;
+    let nf = -1;
+    for (let k = 0; k < 6; k++) if (_eqv(FACES[k].n, over)) { nf = k; break; }
+    if (nf < 0) break;
+    _oldN.copy(player.up);
+    faceNormal(nf, _n3);
+    _qr.setFromUnitVectors(_oldN, _n3);
+    player.fwd.applyQuaternion(_qr).normalize();
+    player.face = nf;
+    player.up.copy(_n3);
+    player.h = 0; player.vy = 0; player.onGround = true;
+    // RE-SEAT IMMEDIATELY, not after the loop (2026-09-07). Left until the
+    // end, the second pass read a position that was still measured against
+    // the OLD face: standing eye-height above the top face reads as 1.68m
+    // off the side face's edge, so the player crossed straight back and the
+    // net effect was a wall you could not walk over. The two passes exist for
+    // corners; they only mean anything once each one lands.
+    seatPlayer();
+  }
+  seatPlayer();
+}
+
+// Sit exactly eye-height (plus any jump) above the current face, inside its
+// square. This is the only place the player's world position is written from
+// face coordinates, which is why crossing an edge is a change of two numbers
+// rather than a special case for each of the twelve edges.
+function seatPlayer() {
+  const f = FACES[player.face];
+  const lim = HALF - 0.05;
+  const a = Math.max(-lim, Math.min(lim,
+    player.pos.x * f.u[0] + player.pos.y * f.u[1] + player.pos.z * f.u[2]));
+  const b = Math.max(-lim, Math.min(lim,
+    player.pos.x * f.v[0] + player.pos.y * f.v[1] + player.pos.z * f.v[2]));
+  const up = HALF + EYE + player.h;
+  player.pos.set(f.n[0] * up + f.u[0] * a + f.v[0] * b,
+                 f.n[1] * up + f.u[1] * a + f.v[1] * b,
+                 f.n[2] * up + f.u[2] * a + f.v[2] * b);
 }
 
 // ── a starter line, so the loop is legible the moment it loads ─────────────
@@ -645,33 +855,44 @@ function movePlayer(dt) {
   // sitting in that line silently refused two placements, so the demo line
   // ended in mid-air with no hub and delivered nothing. A starter line that
   // does not complete the loop teaches the player the wrong thing.
-  const RUN = 6;
+  // On the top face, so the game opens on the orientation people expect —
+  // the other five are discovered by walking there.
+  const RUN = 6, F = 0;
   let found = null;
-  for (let x = 2; x < N - RUN - 1 && !found; x++) {
-    for (let z = 2; z < N - 2 && !found; z++) {
-      if (cells[x][z].t !== NODE) continue;
+  for (let i = 2; i < N - RUN - 1 && !found; i++) {
+    for (let j = 2; j < N - 2 && !found; j++) {
+      if (cells[F][i][j].t !== NODE) continue;
       let clear = true;
-      for (let i = 1; i <= RUN && clear; i++) clear = cells[x + i][z].t === EMPTY;
-      if (clear) found = [x, z];
+      for (let k = 1; k <= RUN && clear; k++) clear = cells[F][i + k][j].t === EMPTY;
+      if (clear) found = [i, j];
     }
   }
   if (!found) return;
   const x = found[0], z = found[1];
-  place(x, z, MINER, 0);
-  place(x + 1, z, BELT, 0);
-  place(x + 2, z, BELT, 0);
-  place(x + 3, z, SMELTER, 0);     // two crystals in, one ingot out
-  place(x + 4, z, BELT, 0);
-  place(x + 5, z, BELT, 0);
-  place(x + RUN, z, HUB, 0);
+  place(F, x, z, MINER, 0);
+  place(F, x + 1, z, BELT, 0);
+  place(F, x + 2, z, BELT, 0);
+  place(F, x + 3, z, SMELTER, 0);     // two crystals in, one ingot out
+  place(F, x + 4, z, BELT, 0);
+  place(F, x + 5, z, BELT, 0);
+  place(F, x + RUN, z, HUB, 0);
 
   // STAND WHERE THE LOOP IS (2026-09-07). A fixed spawn on the south edge left
   // the whole starter line behind the player on a large grid: the game was
   // running perfectly and the first frame showed bare ground. Put the camera
   // just south of the middle of the line, looking along it, so the first thing
   // anyone sees — player or screenshot gate — is ore actually moving.
-  player.pos.set(wx(x + RUN / 2), EYE, wz(z) + 7.5);
-  player.yaw = 0;
+  // BEHIND the line, not past the edge. The top face's v axis is -Z, so the
+  // tile "in front of" the player is j+1; standing at j+4 put the spawn four
+  // tiles PAST the line and, on a line near the far edge, off the face
+  // entirely — where the clamp pinned it and W did nothing at all.
+  const w = tileWorld(F, x + RUN / 2, Math.max(1, Math.min(N - 2, z - 4)));
+  player.pos.set(w[0], HALF + EYE, w[2]);
+  player.face = F;
+  player.up.set(0, 1, 0);
+  camUp.set(0, 1, 0);
+  // FACES[0].v is -Z, so the line we just built lies that way
+  player.fwd.set(0, 0, -1);
 })();
 
 {
@@ -714,7 +935,13 @@ renderer.setAnimationLoop(() => {
   if (Math.floor(ore) !== lastOreShown) { lastOreShown = Math.floor(ore); renderUpgrades(); }
   document.getElementById('nitem').textContent = drawItems(sinceTick / TICK);
 
-  scene.traverse(o => { if (o.userData.spin) o.rotation.y += dt * o.userData.spin; });
+  // a crystal on the west face spins about the west face's up
+  scene.traverse(o => {
+    if (!o.userData.spin) return;
+    const ax = o.userData.axis;
+    if (ax) o.rotateOnAxis(_bx.set(0, 1, 0), dt * o.userData.spin);
+    else o.rotation.y += dt * o.userData.spin;
+  });
 
   if (overhead) {
     camera.position.set(
@@ -722,14 +949,26 @@ renderer.setAnimationLoop(() => {
       Math.sin(orbPitch) * orbDist,
       Math.cos(orbYaw) * Math.cos(orbPitch) * orbDist);
     camera.lookAt(0, 0, 0);
+    // fog is tuned for standing ON the surface; from an orbit it erases the
+    // whole worldlet, which is the one view that has to read at a glance
+    scene.fog = null;
     ghost.visible = false;
   } else {
+    if (!scene.fog) scene.fog = worldFog;
     movePlayer(dt);
     camera.position.copy(player.pos);
-    // YXZ, set directly: rotateY-then-rotateX accumulates roll and the
-    // horizon slowly tilts as you look around
-    camera.rotation.order = 'YXZ';
-    camera.rotation.set(player.pitch, player.yaw, 0);
+    // Built from a basis, not from Euler angles: there is no global "up" left
+    // to write a yaw against once the player can be standing on the underside
+    // of the world. camUp trails the true up so an edge crossing rolls.
+    camUp.lerp(player.up, Math.min(1, dt * 7)).normalize();
+    _bz.copy(player.fwd).addScaledVector(camUp, -player.fwd.dot(camUp));
+    if (_bz.lengthSq() < 1e-8) _bz.copy(player.fwd);
+    _bz.normalize();
+    _bx.crossVectors(_bz, camUp).normalize();     // right
+    _by.crossVectors(_bx, _bz).normalize();       // orthonormal up
+    _mx.makeBasis(_bx, _by, _bz.negate());        // a camera looks down -Z
+    camera.quaternion.setFromRotationMatrix(_mx);
+    camera.rotateX(player.pitch);
     updateGhost();
   }
   document.body.classList.toggle('overhead', overhead);
@@ -756,10 +995,12 @@ window.__game = {
     value: ore,
     ingots,
     machines: (() => { let n = 0;
-      for (let x = 0; x < N; x++) for (let z = 0; z < N; z++)
-        if (cells[x][z].t !== 0 && cells[x][z].t !== 4) n++;
+      eachTile(c => { if (c.t !== EMPTY && c.t !== NODE) n++; });
       return n; })(),
     items_on_belts: items.count,
+    faces: 6,
+    player_face: FACES[player.face].name,
+    player_up: player.up.toArray().map(v => +v.toFixed(2)),
     player_y: +player.pos.y.toFixed(2),
   }),
 };
@@ -768,7 +1009,8 @@ window.__renderer = renderer;
 window.__camera = camera;
 
 window.__factory = {
-  cells, items, N, T, player,
+  cells, items, N, T, player, HALF, FACES,
+  stepTile, tileWorld, faceOfPoint,
   TYPES: { EMPTY, MINER, BELT, HUB, NODE, SMELTER, SPLITTER, CRYSTAL, INGOT },
   UPGRADES, buy, costOf, get tick() { return TICK; },
   addValue: n => { ore += n; },
