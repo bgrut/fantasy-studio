@@ -149,6 +149,8 @@ const IS_INGOT = t => t === INGOT || t === INGOT_E || t === INGOT_S;
 // mineral so that whichever way you walk off the top, the ore changes.
 const MINERAL_OF_FACE = [CRYSTAL, CRYSTAL, EMBER, EMBER, SALT, SALT];
 const MINERAL_NAME = { [CRYSTAL]: 'crystal', [EMBER]: 'ember', [SALT]: 'salt' };
+const TYPE_NAME = { 1: 'miner', 2: 'belt', 3: 'hub', 4: 'ore node',
+                    5: 'smelter', 6: 'splitter', 7: 'forge', 8: 'filter' };
 
 const VALUE = { [CRYSTAL]: 1, [INGOT]: 6 };   // an ingot is worth the detour
 const SMELT_IN = 2;                            // ore of one kind per ingot
@@ -356,6 +358,9 @@ for (let k = 0; k < NODE_COUNT; k++) {
   c.min = MINERAL_OF_FACE[f];
   const m = new THREE.Mesh(nodeGeo, nodeMats[c.min]);
   seat(m, f, i, j, 0, 0.7);
+  m.userData.fsTag = { type: 'ore', name: MINERAL_NAME[c.min] + ' seam',
+                       detail: FACES[f].name + ' face · tile ' + i + ',' + j,
+                       face: f, i, j };
   m.castShadow = true;
   m.userData.spin = 0.4 + rnd() * 0.6;
   m.userData.axis = FACES[f].n;      // spin about the face's up, not the world's
@@ -481,6 +486,11 @@ function place(face, i, j, type, dir) {
     g.add(lamp);
   }
   seat(g, face, i, j, dir, 0);
+  // what the studio's inspector reads when you click this. Same shape the
+  // adventure runtime uses, so one panel renders picks from either genre.
+  g.userData.fsTag = { type: 'machine', name: TYPE_NAME[type] || 'machine',
+                       detail: FACES[face].name + ' face · tile ' + i + ',' + j,
+                       face, i, j };
   scene.add(g);
   c.build = g;
   c.t = type;
@@ -829,6 +839,11 @@ function apply(t, dir) {
 
 renderer.domElement.addEventListener('pointerdown', e => {
   if (e.button !== 0) return;
+  // INSPECTING IS LOOKING, NOT BUILDING (2026-09-07). The studio arms Inspect
+  // to let someone click things and read what they are; with the build path
+  // still live, every one of those clicks dropped a machine on the world they
+  // were trying to examine.
+  if (inspectOn) return;
   const c = cellUnder(e);
   if (!c) return;
   drawing = true;
@@ -836,7 +851,7 @@ renderer.domElement.addEventListener('pointerdown', e => {
   apply(c, null);
 });
 renderer.domElement.addEventListener('pointermove', e => {
-  if (!drawing || !lastCell) return;
+  if (inspectOn || !drawing || !lastCell) return;
   const c = cellUnder(e);
   if (!c || (c.face === lastCell.face && c.i === lastCell.i && c.j === lastCell.j)) return;
   const d = dirBetween(lastCell, c);
@@ -1227,7 +1242,7 @@ renderer.setAnimationLoop(() => {
     else o.rotation.y += dt * o.userData.spin;
   });
 
-  if (overhead) {
+  if (overhead || inspectOn) {
     camera.position.set(
       Math.sin(orbYaw) * Math.cos(orbPitch) * orbDist,
       Math.sin(orbPitch) * orbDist,
@@ -1259,6 +1274,139 @@ renderer.setAnimationLoop(() => {
   renderer.render(scene, camera);
 });
 
+// ── STUDIO INSPECTOR BRIDGE ────────────────────────────────────────────────
+// Standalone (itch.io, the flagship demo, a shared zip) this is inert: nothing
+// is listening and window.parent is the window itself. Inside the studio it is
+// how Inspect, drag-to-place and the property panel reach the running game.
+let inspectOn = false;
+let overheadBefore = false;
+let lastPick = null;                     // the tile the studio last asked about
+
+function setInspectOn(on) {
+  if (on === inspectOn) return;
+  inspectOn = on;
+  if (on) {
+    overheadBefore = overhead;
+    overhead = true;                     // inspecting is a camera you can aim
+    if (document.pointerLockElement === renderer.domElement) document.exitPointerLock();
+  } else {
+    overhead = overheadBefore;
+  }
+  document.body.classList.toggle('inspect', on);
+}
+
+{
+  const rc = new THREE.Raycaster();
+  const nv = new THREE.Vector2();
+  const send = m => { try { window.parent.postMessage(m, '*'); } catch (e) {} };
+
+  function pickAt(cx, cy, kindEv) {
+    nv.set((cx / innerWidth) * 2 - 1, -(cy / innerHeight) * 2 + 1);
+    rc.setFromCamera(nv, camera);
+    for (const h of rc.intersectObjects(scene.children, true)) {
+      if (h.object.isLine || h.object === ghost || ghost.children.indexOf(h.object) >= 0)
+        continue;                        // grid lines and the build ghost are not things
+      let o = h.object, tag = null;
+      while (o) { if (o.userData && o.userData.fsTag) { tag = o.userData.fsTag; break; }
+                  o = o.parent; }
+      const t = tag && tag.face !== undefined
+        ? { face: tag.face, i: tag.i, j: tag.j } : tileOfPoint(h.point);
+      lastPick = t;
+      send({ type: 'fs-pick', kind: kindEv,
+             x: +h.point.x.toFixed(2), y: +h.point.y.toFixed(2), z: +h.point.z.toFixed(2),
+             tile: t,
+             target: tag || (t
+               ? { type: 'ground', name: FACES[t.face].name + ' face',
+                   detail: 'tile ' + t.i + ',' + t.j + ' · '
+                           + MINERAL_NAME[MINERAL_OF_FACE[t.face]] + ' country' }
+               : { type: 'ground', name: 'ground', detail: 'off the worldlet' }) });
+      return true;
+    }
+    // A DROP ALWAYS LANDS, or says why it did not. Aimed past the cube there is
+    // no ground plane to fall back on — a worldlet is surrounded by space — so
+    // the honest answer is dropfail rather than a silent nothing, which the
+    // studio would sit and wait on forever.
+    if (kindEv === 'drop') send({ type: 'fs-pick', kind: 'dropfail' });
+    return false;
+  }
+
+  // A SPAWN NEEDS A FACE, AND x/z CANNOT CARRY ONE. The studio sends the world
+  // coordinates its own drop reported, which on a flat map is enough and on a
+  // cube is not: (x,z) names a column through the world, not a tile. So a spawn
+  // lands on the tile the pick that preceded it resolved.
+  const SPAWN_KIND = {
+    miner: MINER, drill: MINER, mine: MINER,
+    belt: BELT, conveyor: BELT, conveyer: BELT,
+    smelter: SMELTER, furnace: SMELTER, kiln: SMELTER,
+    splitter: SPLITTER, split: SPLITTER,
+    hub: HUB, depot: HUB, base: HUB,
+    forge: FORGE, alloy: FORGE,
+    filter: FILTER, sorter: FILTER,
+  };
+
+  addEventListener('message', e => {
+    const d = e.data;
+    if (!d || !d.type) return;
+    if (d.type === 'fs-inspect') { setInspectOn(!!d.on); return; }
+    if (d.type === 'fs-dropat') { pickAt(d.cx, d.cy, 'drop'); return; }
+    if (d.type === 'fs-spawn') {
+      const kind = String(d.kind || '').toLowerCase().replace(/[^a-z]/g, '');
+      const type = SPAWN_KIND[kind];
+      if (!type) {
+        send({ type: 'fs-spawned', ok: false, kind: d.kind,
+               err: 'a factory builds machines — try miner, belt, smelter, '
+                    + 'splitter, hub, forge or filter' });
+        return;
+      }
+      const t = (d.tile && d.tile.face !== undefined) ? d.tile : lastPick;
+      if (!t) { send({ type: 'fs-spawned', ok: false, kind: d.kind,
+                       err: 'nothing picked yet — click a tile first' }); return; }
+      const ok = place(t.face, t.i, t.j, type, 0) !== false;
+      send({ type: 'fs-spawned', ok, kind: d.kind,
+             err: ok ? undefined : 'a miner only goes on an ore seam' });
+      return;
+    }
+  });
+
+  // hover picks, so the studio's panel updates as you move over the world.
+  // Throttled: an unthrottled raycast per mousemove is a scene traversal per
+  // pixel of travel, and this runs beside a simulation.
+  let hoverAt = 0;
+  renderer.domElement.addEventListener('mousemove', e => {
+    if (!inspectOn) return;
+    const now = performance.now();
+    if (now - hoverAt < 90) return;
+    hoverAt = now;
+    pickAt(e.clientX, e.clientY, 'hover');
+  });
+  renderer.domElement.addEventListener('click', e => {
+    if (inspectOn) pickAt(e.clientX, e.clientY, 'click');
+  });
+  window.__pickAt = pickAt;
+}
+
+// ORBIT BY DRAGGING. The overhead camera could only be zoomed, which is fine
+// as a glance at your own factory and useless as an inspector: half the world
+// is on faces you cannot bring into view.
+{
+  let drag = null;
+  renderer.domElement.addEventListener('pointerdown', e => {
+    if (!overhead && !inspectOn) return;
+    // Right-drag orbits, because in the overhead view LEFT-drag already draws
+    // belts and taking that away to spin the camera would be a worse trade.
+    // While inspecting there is no drawing, so left-drag orbits too.
+    if (e.button !== 2 && !(inspectOn && e.button === 0)) return;
+    drag = { x: e.clientX, y: e.clientY };
+  });
+  addEventListener('pointermove', e => {
+    if (!drag) return;
+    orbYaw -= (e.clientX - drag.x) * 0.006;
+    orbPitch = Math.max(-1.45, Math.min(1.45, orbPitch + (e.clientY - drag.y) * 0.005));
+    drag.x = e.clientX; drag.y = e.clientY;
+  });
+  addEventListener('pointerup', () => { drag = null; });
+}
+
 // The shot gate, the scene audit and the brief check all talk to window.__game.
 // A second genre that invented its own interface would need a second gate, and
 // then only one of them would stay honest.
@@ -1266,6 +1414,9 @@ window.__game = {
   ready: true,
   pos: () => player.pos.toArray(),
   keys: {},
+  pick: (cx, cy) => window.__pickAt(cx, cy, 'click'),
+  inspect: on => setInspectOn(on),
+  get inspecting() { return inspectOn; },
   stats: () => ({ calls: renderer.info.render.calls,
                   tris: renderer.info.render.triangles,
                   programs: renderer.info.programs ? renderer.info.programs.length : -1,

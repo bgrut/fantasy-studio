@@ -61,6 +61,8 @@
   #cross:before{left:7px;top:0;width:2px;height:16px}
   #cross:after{top:7px;left:0;height:2px;width:16px}
   body.overhead #cross{display:none}
+  /* while the studio is inspecting, the build bar is not what you are doing */
+  body.inspect #tools,body.inspect #hint{opacity:.28;pointer-events:none}
 </style>
 <div id="hud">
   <h1>CRYSTAL WORKS</h1>
