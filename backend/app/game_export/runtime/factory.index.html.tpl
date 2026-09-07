@@ -11,10 +11,13 @@
   .row{display:flex;justify-content:space-between;gap:14px;padding:1px 0}
   .k{color:#7d86a3}
   .v{color:#ffd479;font-variant-numeric:tabular-nums}
-  #tools{position:fixed;left:50%;transform:translateX(-50%);bottom:16px;z-index:5;
-         display:flex;gap:8px}
+  /* seven tools no longer fit at the old size: the bar wrapped onto two lines
+     and ran into the hint text in the corner */
+  #tools{position:fixed;left:50%;transform:translateX(-50%);bottom:14px;z-index:5;
+         display:flex;gap:6px;white-space:nowrap}
   .tool{background:rgba(8,10,20,.82);border:1px solid rgba(120,200,255,.18);
-        border-radius:8px;padding:7px 12px;cursor:pointer;user-select:none;color:#aeb6cd}
+        border-radius:8px;padding:6px 10px;cursor:pointer;user-select:none;
+        color:#aeb6cd;white-space:nowrap}
   .tool.on{border-color:#5ce0d0;color:#5ce0d0;background:rgba(92,224,208,.10)}
   .tool b{display:block;font-size:11px;letter-spacing:.05em}
   .tool small{color:#6b7590}
@@ -41,7 +44,8 @@
   #melt small{display:block;color:#8a7a86;font-size:10px}
   #melt:hover{background:rgba(255,110,80,.18)}
   #hud{pointer-events:auto}
-  #hint{position:fixed;right:14px;bottom:16px;z-index:5;color:#6d7590;text-align:right}
+  /* above the bar, not beside it — at seven tools there is no room beside it */
+  #hint{position:fixed;right:14px;bottom:74px;z-index:5;color:#6d7590;text-align:right}
   /* the crosshair IS the cursor once the pointer is locked */
   #cross{position:fixed;left:50%;top:50%;width:16px;height:16px;margin:-8px 0 0 -8px;
          z-index:4;pointer-events:none;opacity:.85}
@@ -55,6 +59,7 @@
   <h1>CRYSTAL WORKS</h1>
   <div class="row"><span class="k">value</span><span class="v" id="ore">0</span></div>
   <div class="row"><span class="k">ingots</span><span class="v" id="ingot">0</span></div>
+  <div class="row"><span class="k">alloys</span><span class="v" id="alloy">0</span></div>
   <div class="row"><span class="k">per minute</span><span class="v" id="rate">0</span></div>
   <div class="row"><span class="k">miners</span><span class="v" id="nmine">0</span></div>
   <div class="row"><span class="k">belts</span><span class="v" id="nbelt">0</span></div>
@@ -70,9 +75,10 @@
   <div class="tool" data-tool="smelter"><b>3 · SMELTER</b><small>2 ore &rarr; 1 ingot</small></div>
   <div class="tool" data-tool="splitter"><b>4 · SPLITTER</b><small>feeds both ways</small></div>
   <div class="tool" data-tool="hub"><b>5 · HUB</b><small>delivers</small></div>
-  <div class="tool" data-tool="erase"><b>6 · ERASE</b><small>&nbsp;</small></div>
+  <div class="tool" data-tool="forge"><b>6 · FORGE</b><small>2 different ores</small></div>
+  <div class="tool" data-tool="erase"><b>7 · ERASE</b><small>&nbsp;</small></div>
 </div>
 <div id="cross"></div>
-<div id="hint">WASD walk · Shift run · Space jump · click to look<br>hold LMB and sweep to draw belts · TAB overhead</div>
+<div id="hint">WASD walk · Shift run · Space jump · click to look<br>hold LMB and sweep to draw belts · TAB overhead<br>walk over an edge — each side of the world grows a different ore</div>
 <script type="importmap">{"imports":{"three":"./vendor/three.module.js"}}</script>
 <script type="module" src="./game.js"></script>

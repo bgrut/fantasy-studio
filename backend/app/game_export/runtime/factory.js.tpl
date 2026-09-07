@@ -123,7 +123,8 @@ function faceOfPoint(px, py, pz) {
 
 const BASE_TICK = 0.42;
 let TICK = BASE_TICK;
-const EMPTY = 0, MINER = 1, BELT = 2, HUB = 3, NODE = 4, SMELTER = 5, SPLITTER = 6;
+const EMPTY = 0, MINER = 1, BELT = 2, HUB = 3, NODE = 4, SMELTER = 5,
+      SPLITTER = 6, FORGE = 7;
 const DIRS = [[1, 0], [0, 1], [-1, 0], [0, -1]];        // E S W N
 
 // Items now have a TYPE, and that is the whole point of the smelter. Until
@@ -132,10 +133,27 @@ const DIRS = [[1, 0], [0, 1], [-1, 0], [0, -1]];        // E S W N
 // "these things have to MEET", which is where this genre's actual decisions
 // live: where to put the smelter, how to feed it from two nodes, what to do
 // with the surplus when one input runs dry.
-const CRYSTAL = 1, INGOT = 2;
+// ── WHAT THE CUBE IS FOR (2026-09-07) ──────────────────────────────────────
+// Every face used to grow the same crystal, which made the other five faces
+// scenery: a factory that never left the top was optimal, and the mechanic
+// the whole build is named for was a gimmick you could ignore. Three minerals,
+// one per opposite pair of faces, and an alloy that cannot be made from any
+// single face's ore. Now a belt HAS to go over an edge.
+const CRYSTAL = 1, EMBER = 2, SALT = 3;
+const MINERALS = [CRYSTAL, EMBER, SALT];
+const INGOT = 4, INGOT_E = 5, INGOT_S = 6, ALLOY = 7;
+const INGOT_OF = { [CRYSTAL]: INGOT, [EMBER]: INGOT_E, [SALT]: INGOT_S };
+const IS_MINERAL = t => t === CRYSTAL || t === EMBER || t === SALT;
+const IS_INGOT = t => t === INGOT || t === INGOT_E || t === INGOT_S;
+// FACES is [top, bot, east, west, south, north]; opposite faces share a
+// mineral so that whichever way you walk off the top, the ore changes.
+const MINERAL_OF_FACE = [CRYSTAL, CRYSTAL, EMBER, EMBER, SALT, SALT];
+const MINERAL_NAME = { [CRYSTAL]: 'crystal', [EMBER]: 'ember', [SALT]: 'salt' };
+
 const VALUE = { [CRYSTAL]: 1, [INGOT]: 6 };   // an ingot is worth the detour
-const SMELT_IN = 2;                            // crystals per ingot
+const SMELT_IN = 2;                            // ore of one kind per ingot
 let SMELT_TICKS = 3;                           // and it takes time
+let FORGE_TICKS = 4;                           // an alloy takes longer still
 
 // ── UPGRADES ───────────────────────────────────────────────────────────────
 // The loop this genre runs on is: build something, watch the number climb,
@@ -169,8 +187,11 @@ function applyUpgrades() {
   // steep enough that melting down a good factory beats keeping it, or the
   // prestige is a button nobody presses twice.
   const y = (1 + UPGRADES.yield.lvl) * (1 + 0.45 * cores);
-  VALUE[CRYSTAL] = y;
-  VALUE[INGOT] = 6 * y;
+  for (const m of MINERALS) { VALUE[m] = y; VALUE[INGOT_OF[m]] = 6 * y; }
+  // An alloy is worth more than the three ingots it displaces, because it
+  // costs a belt run across a face boundary and the risk of getting it wrong.
+  VALUE[ALLOY] = 26 * y;
+  FORGE_TICKS = Math.max(2, 4 - UPGRADES.smelt.lvl);
 }
 
 function buy(key) {
@@ -212,7 +233,8 @@ for (let f = 0; f < 6; f++) {
   for (let i = 0; i < N; i++) {
     cells[f][i] = [];
     for (let j = 0; j < N; j++)
-      cells[f][i][j] = { t: EMPTY, d: 0, item: 0, buf: 0, cook: 0, rr: 0 };
+      cells[f][i][j] = { t: EMPTY, d: 0, item: 0, buf: 0, bt: 0,
+                         fa: 0, fb: 0, cook: 0, rr: 0, min: 0 };
   }
 }
 const cellOf = t => (t ? cells[t.face][t.i][t.j] : null);
@@ -311,9 +333,14 @@ function seat(obj, face, i, j, dir, up) {
 }
 
 // ── crystal nodes: the only tiles a miner can stand on ─────────────────────
-const nodeMat = new THREE.MeshStandardMaterial({
-  color: ACCENT, emissive: ACCENT, emissiveIntensity: 0.55,
+// The player's first read of "this face is different" is the colour of the
+// ore standing on it, from across the worldlet, before they have walked there.
+const MIN_COL = { [CRYSTAL]: ACCENT, [EMBER]: 0xff8a3d, [SALT]: 0xe8f0ff };
+const nodeMats = {};
+for (const m of MINERALS) nodeMats[m] = new THREE.MeshStandardMaterial({
+  color: MIN_COL[m], emissive: MIN_COL[m], emissiveIntensity: 0.55,
   roughness: 0.25, flatShading: true });
+const nodeMat = nodeMats[CRYSTAL];
 const nodeGeo = new THREE.OctahedronGeometry(0.62, 0);
 let rngState = 1337;
 const rnd = () => (rngState = (rngState * 1664525 + 1013904223) % 4294967296) / 4294967296;
@@ -325,7 +352,8 @@ for (let k = 0; k < NODE_COUNT; k++) {
   const c = cells[f][i][j];
   if (c.t !== EMPTY) continue;
   c.t = NODE;
-  const m = new THREE.Mesh(nodeGeo, nodeMat);
+  c.min = MINERAL_OF_FACE[f];
+  const m = new THREE.Mesh(nodeGeo, nodeMats[c.min]);
   seat(m, f, i, j, 0, 0.7);
   m.castShadow = true;
   m.userData.spin = 0.4 + rnd() * 0.6;
@@ -340,6 +368,8 @@ const MAT = {
   belt: new THREE.MeshStandardMaterial({ color: 0x3ad39a, roughness: 0.6, metalness: 0.2 }),
   hub: new THREE.MeshStandardMaterial({ color: 0xffc75a, roughness: 0.35, metalness: 0.45,
     emissive: 0x6b4a00, emissiveIntensity: 0.6 }),
+  forge: new THREE.MeshStandardMaterial({ color: 0xd94fb0, roughness: 0.34,
+    metalness: 0.55, flatShading: true }),
   smelt: new THREE.MeshStandardMaterial({ color: 0x8c6bff, roughness: 0.42, metalness: 0.4,
     emissive: 0x2a1470, emissiveIntensity: 0.5 }),
   split: new THREE.MeshStandardMaterial({ color: 0x4bb5ff, roughness: 0.45, metalness: 0.35,
@@ -353,6 +383,9 @@ const GEO = {
   smelt: new THREE.BoxGeometry(T * 0.82, 1.25, T * 0.82),
   split: new THREE.CylinderGeometry(T * 0.42, T * 0.42, 0.34, 4),
   splitArm: new THREE.BoxGeometry(T * 0.86, 0.16, 0.22),
+  // taller and eight-sided, so a forge is not mistaken for a smelter
+  // from across the worldlet
+  forge: new THREE.CylinderGeometry(T * 0.44, T * 0.5, 1.4, 8),
 };
 
 function refreshCounts() {
@@ -378,6 +411,7 @@ function removeAt(face, i, j) {
 function place(face, i, j, type, dir) {
   const c = cells[face][i][j];
   if (type === MINER && c.t !== NODE && c.t !== MINER) return false;
+  c.buf = 0; c.bt = 0; c.fa = 0; c.fb = 0; c.cook = 0;
   if (type !== MINER && c.t === NODE) return false;      // keep nodes clear
   if (c.build) { scene.remove(c.build); c.build = null; }
   const g = new THREE.Group();
@@ -406,6 +440,14 @@ function place(face, i, j, type, dir) {
       const arm = new THREE.Mesh(GEO.splitArm, MAT.split);
       arm.position.y = 0.4; arm.rotation.y = r; g.add(arm);
     }
+  } else if (type === FORGE) {
+    const b = new THREE.Mesh(GEO.forge, MAT.forge);
+    b.position.y = 0.7; b.castShadow = true; g.add(b);
+    const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.17, 8, 6),
+      new THREE.MeshBasicMaterial({ color: 0xff5ad9 }));
+    lamp.position.set(0, 1.5, 0);
+    lamp.name = 'lamp';
+    g.add(lamp);
   } else if (type === SMELTER) {
     const b = new THREE.Mesh(GEO.smelt, MAT.smelt);
     b.position.y = 0.63; b.castShadow = true; g.add(b);
@@ -446,7 +488,12 @@ items.instanceColor.setUsage(THREE.DynamicDrawUsage);
 scene.add(items);
 const ITEM_COL = {
   [CRYSTAL]: new THREE.Color(0x7df9ff),
-  [INGOT]: new THREE.Color(0xffae4d),
+  [EMBER]: new THREE.Color(0xff8a3d),
+  [SALT]: new THREE.Color(0xe8f0ff),
+  [INGOT]: new THREE.Color(0x9fd6ff),
+  [INGOT_E]: new THREE.Color(0xffae4d),
+  [INGOT_S]: new THREE.Color(0xd8e2f5),
+  [ALLOY]: new THREE.Color(0xff5ad9),
 };
 
 const _m = new THREE.Matrix4();
@@ -458,6 +505,7 @@ const _up = new THREE.Vector3(0, 1, 0);   // reused per item: the face normal
 // ── the tick: belts advance, miners feed, the hub banks ────────────────────
 let ore = 0;
 let ingots = 0;
+let alloys = 0;
 let sinceTick = 0;
 let minedWindow = 0;
 let rateWindow = 0;
@@ -467,7 +515,8 @@ let lastOreShown = -1;
 function bank(type) {
   const v = VALUE[type] || 1;
   ore += v; runValue += v;
-  if (type === INGOT) ingots++;
+  if (IS_INGOT(type)) ingots++;
+  if (type === ALLOY) alloys++;
 }
 
 // One acceptance rule, asked by belts, miners and splitters alike. Having each
@@ -477,12 +526,22 @@ function accepts(dst, type) {
   if (!dst) return false;
   if (dst.t === HUB) return true;
   if (dst.t === BELT || dst.t === SPLITTER) return !dst.item;
-  if (dst.t === SMELTER) return type === CRYSTAL && dst.buf < SMELT_IN * 2;
+  // A smelter refines ONE kind at a time — mixing two ores in it would make
+  // the alloy free, and the alloy is supposed to cost a trip across an edge.
+  if (dst.t === SMELTER)
+    return IS_MINERAL(type) && dst.buf < SMELT_IN * 2 &&
+           (dst.buf === 0 || dst.bt === type);
+  // A forge is the opposite rule: it wants two DIFFERENT minerals, so it
+  // cannot be fed from a single face.
+  if (dst.t === FORGE)
+    return IS_MINERAL(type) && dst.cook === 0 &&
+           (dst.fa === 0 || (dst.fb === 0 && type !== dst.fa));
   return false;
 }
 function deliver(dst, dx, dz, type) {
   if (dst.t === HUB) bank(type);
-  else if (dst.t === SMELTER) dst.buf++;
+  else if (dst.t === SMELTER) { dst.buf++; dst.bt = type; }
+  else if (dst.t === FORGE) { if (dst.fa === 0) dst.fa = type; else dst.fb = type; }
   else dst.item = type;
 }
 
@@ -492,17 +551,22 @@ function step() {
   // machine that is about to free it, and lines deadlock at exactly the
   // moment they start working.
   eachTile((c, f, i, j) => {
-    if (c.t !== SMELTER) return;
+    if (c.t !== SMELTER && c.t !== FORGE) return;
     if (c.cook > 0) {
       c.cook--;
       if (c.cook === 0) {
+        const out = c.t === FORGE ? ALLOY : (INGOT_OF[c.bt] || INGOT);
         const dst = cellOf(stepTile(f, i, j, c.d));
-        if (dst && dst.t === HUB) bank(INGOT);
-        else if (dst && dst.t === BELT && !dst.item) dst.item = INGOT;
+        if (dst && dst.t === HUB) bank(out);
+        else if (dst && dst.t === BELT && !dst.item) dst.item = out;
         else c.cook = 1;                  // output blocked: hold it, retry
       }
     }
-    if (c.cook === 0 && c.buf >= SMELT_IN) { c.buf -= SMELT_IN; c.cook = SMELT_TICKS; }
+    if (c.t === SMELTER) {
+      if (c.cook === 0 && c.buf >= SMELT_IN) { c.buf -= SMELT_IN; c.cook = SMELT_TICKS; }
+    } else if (c.cook === 0 && c.fa && c.fb) {
+      c.fa = 0; c.fb = 0; c.cook = FORGE_TICKS;
+    }
     const lamp = c.build && c.build.getObjectByName('lamp');
     if (lamp) lamp.material.color.setHex(c.cook > 0 ? 0xffb04a : 0x3a2f5e);
   });
@@ -545,8 +609,10 @@ function step() {
   }
   eachTile((c, f, i, j) => {
     if (c.t !== MINER) return;
+    // a miner digs whatever the seam under it is, which is the face's mineral
+    const m = c.min || MINERAL_OF_FACE[f];
     const dst = cellOf(stepTile(f, i, j, c.d));
-    if (accepts(dst, CRYSTAL)) deliver(dst, 0, 0, CRYSTAL);
+    if (accepts(dst, m)) deliver(dst, 0, 0, m);
   });
 }
 
@@ -668,6 +734,7 @@ function apply(t, dir) {
   if (tool === 'hub') { place(t.face, t.i, t.j, HUB, 0); return; }
   if (tool === 'smelter') { place(t.face, t.i, t.j, SMELTER, d); return; }
   if (tool === 'splitter') { place(t.face, t.i, t.j, SPLITTER, 0); return; }
+  if (tool === 'forge') { place(t.face, t.i, t.j, FORGE, d); return; }
   if (tool === 'belt') { place(t.face, t.i, t.j, BELT, d); }
 }
 
@@ -709,7 +776,7 @@ document.querySelectorAll('.tool').forEach(el => {
 });
 addEventListener('keydown', e => {
   const k = { '1': 'miner', '2': 'belt', '3': 'smelter', '4': 'splitter',
-              '5': 'hub', '6': 'erase' }[e.key];
+              '5': 'hub', '6': 'forge', '7': 'erase' }[e.key];
   if (k) pickTool(k);
   const u = { 'KeyZ': 'tick', 'KeyX': 'yield', 'KeyC': 'smelt' }[e.code];
   if (u) buy(u);
@@ -954,7 +1021,7 @@ function meltdown() {
     }
     // a node outlives the factory built on it, exactly as it does for ERASE
     c.t = c.mesh ? NODE : EMPTY;
-    c.item = 0; c.buf = 0; c.cook = 0; c.rr = 0;
+    c.item = 0; c.buf = 0; c.bt = 0; c.fa = 0; c.fb = 0; c.cook = 0; c.rr = 0;
   });
 
   ore = 0; ingots = 0; runValue = 0;
@@ -1034,6 +1101,7 @@ renderer.setAnimationLoop(() => {
   }
   document.getElementById('ore').textContent = ore;
   document.getElementById('ingot').textContent = ingots;
+  document.getElementById('alloy').textContent = alloys;
   // the buttons light up the moment you can afford them — the whole point of
   // the number climbing is watching it cross a threshold
   if (Math.floor(ore) !== lastOreShown) { lastOreShown = Math.floor(ore); renderUpgrades(); }
@@ -1103,6 +1171,8 @@ window.__game = {
       eachTile(c => { if (c.t !== EMPTY && c.t !== NODE) n++; });
       return n; })(),
     items_on_belts: items.count,
+    alloys,
+    minerals: MINERAL_OF_FACE.map(m => MINERAL_NAME[m]),
     cores,
     run_value: +runValue.toFixed(1),
     melting: +melting.toFixed(2),
@@ -1120,7 +1190,9 @@ window.__camera = camera;
 window.__factory = {
   cells, items, N, T, player, HALF, FACES,
   stepTile, tileWorld, faceOfPoint,
-  TYPES: { EMPTY, MINER, BELT, HUB, NODE, SMELTER, SPLITTER, CRYSTAL, INGOT },
+  TYPES: { EMPTY, MINER, BELT, HUB, NODE, SMELTER, SPLITTER, FORGE,
+           CRYSTAL, EMBER, SALT, INGOT, ALLOY },
+  MINERAL_OF_FACE, get alloys() { return alloys; },
   UPGRADES, buy, costOf, get tick() { return TICK; },
   meltdown, MELT_MIN, get cores() { return cores; },
   addValue: n => { ore += n; },

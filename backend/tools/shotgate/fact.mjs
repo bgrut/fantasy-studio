@@ -84,6 +84,34 @@ const wrap = await p.evaluate(async () => {
   return { skipped: true };
 });
 console.log('belt wrap :', JSON.stringify(wrap));
+// THE REASON TO LEAVE THE TOP FACE: an alloy needs two different ores, and no
+// single face grows two. Fed one crystal and one ember, the forge must produce
+// something the hub banks as an alloy.
+const forge = await p.evaluate(async () => {
+  const F = window.__factory, TY = F.TYPES;
+  const faces = F.MINERAL_OF_FACE;
+  const distinct = new Set(faces).size;
+  for (let i = 3; i < F.N - 3; i++) {
+    for (let j = 3; j < F.N - 3; j++) {
+      const clear = [[i,j],[i+1,j],[i-1,j],[i,j-1]]
+        .every(([a,b]) => F.cells[0][a][b].t === TY.EMPTY);
+      if (!clear) continue;
+      F.place(0, i, j, TY.FORGE, 0);
+      F.place(0, i + 1, j, TY.HUB, 0);
+      F.place(0, i - 1, j, TY.BELT, 0);        // points +u, into the forge
+      F.place(0, i, j - 1, TY.BELT, 1);        // points +v, into the forge
+      F.cells[0][i - 1][j].item = TY.CRYSTAL;
+      F.cells[0][i][j - 1].item = TY.EMBER;
+      const before = F.alloys;
+      await new Promise(r => setTimeout(r, 3500));
+      return { distinct, faces, made: F.alloys - before };
+    }
+  }
+  return { distinct, faces, skipped: true };
+});
+console.log('minerals  :', forge.faces ? forge.faces.join(' ') : '?',
+            '|', forge.distinct, 'distinct | alloys made', forge.made);
+
 // PRESTIGE: the factory is destroyed and the run is faster afterwards. Both
 // halves matter — a meltdown that clears the cube but leaves you with nothing
 // running is indistinguishable from having lost the game.
@@ -106,4 +134,5 @@ console.log('produced  :', t1.value - t0.value, 'value in 12s |', 'ingots', t1.i
 console.log('errors    :', errs.length ? errs.join(' | ') : 'none');
 await b.close();
 process.exit((errs.length || t1.value <= t0.value || !crossed || offCube
-  || !wrap.arrived || !wrap.left || !meltOk) ? 1 : 0);
+  || !wrap.arrived || !wrap.left || !meltOk
+  || forge.distinct !== 3 || !(forge.made > 0)) ? 1 : 0);
