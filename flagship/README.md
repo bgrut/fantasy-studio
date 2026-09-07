@@ -48,7 +48,19 @@ seconds at 120/minute, 3 items in transit, 60fps, no runtime errors.
 Node scarcity is why belts exist. The recipe is why belts have to MEET
 somewhere rather than just run to the hub.
 
+## Upgrades
+
+    Z  OVERCLOCK     everything runs faster    6 levels
+    X  RICH SEAMS    crystals worth more       6 levels
+    C  HOT FURNACE   smelters cook quicker     4 levels
+
+Costs scale 2.3-2.8x per level. Buttons light up the moment you can afford
+them, because watching the number cross a threshold IS the loop.
+
 ## Next
+
+See ROADMAP.md for the Voxel Forge differentiators, ordered by value per unit
+of risk rather than by the order they were written.
 
 - Merger fairness (two belts into one currently resolve by grid order)
 - Upgrade tree: tick rate, belt speed, miner yield

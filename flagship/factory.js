@@ -11,7 +11,9 @@
 // thousand items across a hundred belts cost a single draw call.
 import * as THREE from 'three';
 
-const N = 24, T = 2, TICK = 0.42, HALF = (N * T) / 2;
+const N = 24, T = 2, HALF = (N * T) / 2;
+const BASE_TICK = 0.42;
+let TICK = BASE_TICK;
 const EMPTY = 0, MINER = 1, BELT = 2, HUB = 3, NODE = 4, SMELTER = 5, SPLITTER = 6;
 const DIRS = [[1, 0], [0, 1], [-1, 0], [0, -1]];        // E S W N
 
@@ -24,7 +26,60 @@ const DIRS = [[1, 0], [0, 1], [-1, 0], [0, -1]];        // E S W N
 const CRYSTAL = 1, INGOT = 2;
 const VALUE = { [CRYSTAL]: 1, [INGOT]: 6 };   // an ingot is worth the detour
 const SMELT_IN = 2;                            // crystals per ingot
-const SMELT_TICKS = 3;                         // and it takes time
+let SMELT_TICKS = 3;                           // and it takes time
+
+// ── UPGRADES ───────────────────────────────────────────────────────────────
+// The loop this genre runs on is: build something, watch the number climb,
+// spend the number to make it climb faster. Each of these has to be VISIBLE
+// when bought — a purchase that only changes a hidden coefficient feels like
+// nothing, and feeling like something is the entire product.
+const UPGRADES = {
+  tick:  { lvl: 0, cap: 6, cost: 60,  mult: 2.3,
+           label: 'OVERCLOCK', note: 'everything runs faster' },
+  yield: { lvl: 0, cap: 6, cost: 90,  mult: 2.5,
+           label: 'RICH SEAMS', note: 'crystals are worth more' },
+  smelt: { lvl: 0, cap: 4, cost: 150, mult: 2.8,
+           label: 'HOT FURNACE', note: 'smelters cook quicker' },
+};
+const costOf = u => Math.round(u.cost * Math.pow(u.mult, u.lvl));
+
+function applyUpgrades() {
+  TICK = BASE_TICK * Math.pow(0.86, UPGRADES.tick.lvl);
+  SMELT_TICKS = Math.max(1, 3 - UPGRADES.smelt.lvl);
+  const y = 1 + UPGRADES.yield.lvl;
+  VALUE[CRYSTAL] = y;
+  VALUE[INGOT] = 6 * y;
+}
+
+function buy(key) {
+  const u = UPGRADES[key];
+  if (!u || u.lvl >= u.cap) return false;
+  const c = costOf(u);
+  if (ore < c) return false;
+  ore -= c;
+  u.lvl++;
+  applyUpgrades();
+  renderUpgrades();
+  return true;
+}
+
+function renderUpgrades() {
+  const box = document.getElementById('ups');
+  if (!box) return;
+  box.innerHTML = '';
+  for (const key of Object.keys(UPGRADES)) {
+    const u = UPGRADES[key];
+    const maxed = u.lvl >= u.cap;
+    const c = costOf(u);
+    const el = document.createElement('div');
+    el.className = 'up' + (maxed ? ' maxed' : (ore >= c ? ' can' : ''));
+    el.innerHTML = '<b>' + u.label + ' <span>' + u.lvl + '/' + u.cap + '</span></b>' +
+      '<small>' + u.note + '</small>' +
+      '<i>' + (maxed ? 'MAX' : c + ' value') + '</i>';
+    if (!maxed) el.addEventListener('pointerdown', ev => { ev.stopPropagation(); buy(key); });
+    box.appendChild(el);
+  }
+}
 
 const cells = [];
 for (let x = 0; x < N; x++) {
@@ -240,6 +295,7 @@ let sinceTick = 0;
 let minedWindow = 0;
 let rateWindow = 0;
 const rateBuckets = [];
+let lastOreShown = -1;
 
 function bank(type) { ore += VALUE[type] || 1; if (type === INGOT) ingots++; }
 
@@ -473,6 +529,8 @@ addEventListener('keydown', e => {
   const k = { '1': 'miner', '2': 'belt', '3': 'smelter', '4': 'splitter',
               '5': 'hub', '6': 'erase' }[e.key];
   if (k) pickTool(k);
+  const u = { 'KeyZ': 'tick', 'KeyX': 'yield', 'KeyC': 'smelt' }[e.code];
+  if (u) buy(u);
 });
 
 // ── YOU ARE ON THE ISLAND ───────────────────────────────────────────────────
@@ -575,6 +633,9 @@ function movePlayer(dt) {
   place(x + RUN, z, HUB, 0);
 })();
 
+applyUpgrades();
+renderUpgrades();
+
 // ── frame ──────────────────────────────────────────────────────────────────
 let last = performance.now();
 renderer.setAnimationLoop(() => {
@@ -603,6 +664,9 @@ renderer.setAnimationLoop(() => {
   }
   document.getElementById('ore').textContent = ore;
   document.getElementById('ingot').textContent = ingots;
+  // the buttons light up the moment you can afford them — the whole point of
+  // the number climbing is watching it cross a threshold
+  if (Math.floor(ore) !== lastOreShown) { lastOreShown = Math.floor(ore); renderUpgrades(); }
   document.getElementById('nitem').textContent = drawItems(sinceTick / TICK);
 
   scene.traverse(o => { if (o.userData.spin) o.rotation.y += dt * o.userData.spin; });
@@ -630,6 +694,8 @@ renderer.setAnimationLoop(() => {
 window.__factory = {
   cells, items, N, T, player,
   TYPES: { EMPTY, MINER, BELT, HUB, NODE, SMELTER, SPLITTER, CRYSTAL, INGOT },
+  UPGRADES, buy, costOf, get tick() { return TICK; },
+  addValue: n => { ore += n; },
   get ingots() { return ingots; },
   get ore() { return ore; },
   place, removeAt,

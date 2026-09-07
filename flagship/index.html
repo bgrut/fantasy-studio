@@ -18,6 +18,20 @@
   .tool.on{border-color:#5ce0d0;color:#5ce0d0;background:rgba(92,224,208,.10)}
   .tool b{display:block;font-size:11px;letter-spacing:.05em}
   .tool small{color:#6b7590}
+  #ups{margin-top:10px;border-top:1px solid rgba(120,200,255,.14);padding-top:9px;
+       display:flex;flex-direction:column;gap:5px;pointer-events:auto}
+  .up{border:1px solid rgba(120,200,255,.13);border-radius:7px;padding:5px 8px;
+      cursor:not-allowed;opacity:.5}
+  .up b{display:block;font-size:11px;letter-spacing:.05em;color:#aeb6cd}
+  .up b span{color:#5d67a0}
+  .up small{display:block;color:#6d7590;font-size:10px}
+  .up i{font-style:normal;color:#ffd479;font-size:10px}
+  .up.can{opacity:1;cursor:pointer;border-color:rgba(92,224,208,.45);
+          background:rgba(92,224,208,.07)}
+  .up.can:hover{background:rgba(92,224,208,.14)}
+  .up.maxed{opacity:.42;border-color:rgba(120,200,255,.09)}
+  .up.maxed i{color:#5ce0d0}
+  #hud{pointer-events:auto}
   #hint{position:fixed;right:14px;bottom:16px;z-index:5;color:#6d7590;text-align:right}
   /* the crosshair IS the cursor once the pointer is locked */
   #cross{position:fixed;left:50%;top:50%;width:16px;height:16px;margin:-8px 0 0 -8px;
@@ -37,6 +51,7 @@
   <div class="row"><span class="k">belts</span><span class="v" id="nbelt">0</span></div>
   <div class="row"><span class="k">smelters</span><span class="v" id="nsmelt">0</span></div>
   <div class="row"><span class="k">on belts</span><span class="v" id="nitem">0</span></div>
+  <div id="ups"></div>
 </div>
 <div id="tools">
   <div class="tool on" data-tool="miner"><b>1 · MINER</b><small>on a node</small></div>
