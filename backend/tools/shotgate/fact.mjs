@@ -15,8 +15,11 @@ p.on('console', m => { const t = m.text();
   // location(), which is where the favicon has to be filtered
   const u = (m.location() && m.location().url) || '';
   if (m.type()==='error' && !/favicon/i.test(u)) errs.push('console: '+t.slice(0,200)); });
-await p.goto('http://127.0.0.1:8789/games/job_' + process.env.J + '/dist/',
-  { waitUntil:'domcontentloaded', timeout:90000 });
+// URL lets the same gate run against the standalone demo as well as a studio
+// build — the point of generating one from the other is that both must pass it
+const URL = process.env.URL ||
+  ('http://127.0.0.1:8789/games/job_' + process.env.J + '/dist/');
+await p.goto(URL, { waitUntil:'domcontentloaded', timeout:90000 });
 await new Promise(r=>setTimeout(r,6000));
 
 const t0 = await p.evaluate(()=> window.__game ? window.__game.facts() : null);

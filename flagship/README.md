@@ -1,9 +1,28 @@
 # Crystal Works — 3D incremental automation
 
-Flagship prototype. Runs standalone in a browser; no build step.
+Flagship demo. Runs standalone in a browser; no build step.
 
     cd flagship && python -m http.server 8123
     open http://127.0.0.1:8123/
+
+## This directory is GENERATED
+
+`factory.js` and `index.html` are built from the studio's own factory runtime:
+
+    python backend/tools/flagship_build.py          # rewrite the demo
+    python backend/tools/flagship_build.py --check  # fail if it is stale
+
+Do not edit them — edit
+`backend/app/game_export/runtime/factory.js.tpl` and re-run the builder.
+
+The demo used to be its own file, and within a week of the cube grid, the
+meltdown, the minerals, the filter and the market landing in the studio it was
+601 lines behind with nobody noticing. Keeping two copies "in parallel" is a
+discipline, and disciplines lapse. This way a feature cannot exist in one and
+not the other, because there is only one source — and the demo doubles as the
+honest proof of the claim on the box: what you play here IS what a prompt
+produces. Both are run against the same gate
+(`backend/tools/shotgate/fact.mjs`, `URL=` to point it at either).
 
 ## What is proven
 
