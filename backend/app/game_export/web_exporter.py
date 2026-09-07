@@ -125,9 +125,16 @@ def export_web_game(spec: GameSpec, out_dir: str | Path, verbose: bool = True) -
         shutil.rmtree(assets)
     assets.mkdir(parents=True, exist_ok=True)
 
+    # A FACTORY SHIPS ITS OWN WEIGHT (2026-09-07). The adventure payload — the
+    # PBR texture pack, character bakes, panoramas, HDRIs — is hundreds of MB
+    # that the factory runtime never loads: it draws its own geometry with
+    # flat materials. Copying it filled the disk mid-build, and even when it
+    # fits it is dead weight in the download.
+    _factory = (getattr(spec, "genre", "adventure") or "adventure") == "factory"
+
     # ── PBR texture pack (Phase 77): SDXL-generated seamless surfaces ───────
     tex_src = RUNTIME.parent.parent.parent / "assets" / "textures"
-    if tex_src.is_dir():
+    if tex_src.is_dir() and not _factory:
         tex_dst = dist / "textures"
         if tex_dst.exists():
             shutil.rmtree(tex_dst)
@@ -380,11 +387,19 @@ over its content. You may sell it, publish it, or modify it freely.
             rt["world"]["placed_items"][i]["asset"] = bring(it.asset, f"placed[{i}]")
 
     # ── render templates ─────────────────────────────────────────────────────
-    html = (RUNTIME / "index.html.tpl").read_text(encoding="utf-8")
+    # WHICH RUNTIME (2026-09-07). A spec picks its genre and the genre picks
+    # its runtime. Everything up to this point — casting, assets, level, props,
+    # style — is shared, which is the point: the factory genre is a different
+    # GAME, not a different pipeline.
+    _genre = getattr(spec, "genre", "adventure") or "adventure"
+    _htmlTpl = "factory.index.html.tpl" if _genre == "factory" else "index.html.tpl"
+    _jsTpl = "factory.js.tpl" if _genre == "factory" else "main.js.tpl"
+
+    html = (RUNTIME / _htmlTpl).read_text(encoding="utf-8")
     (dist / "index.html").write_text(
         html.replace("__TITLE__", spec.title), encoding="utf-8")
 
-    js = (RUNTIME / "main.js.tpl").read_text(encoding="utf-8")
+    js = (RUNTIME / _jsTpl).read_text(encoding="utf-8")
     (dist / "game.js").write_text(
         js.replace("__GAME_SPEC__", json.dumps(rt)), encoding="utf-8")
     # machine-readable copy of the injected spec — read by verify_game + debugging

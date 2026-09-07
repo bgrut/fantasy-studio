@@ -55,6 +55,13 @@ Output ONLY the JSON object, no markdown, no commentary. Schema (all fields opti
  "sky" to a real daylight or night sky (never "space"). archipelago is the only
  landform that puts a sea in the world, so without it a sailing game is dry
  lumpy ground and the boat sits on dirt.
+ "genre": "adventure" or "factory", TOP-LEVEL. Use "factory" when the text
+ describes BUILDING A PRODUCTION SYSTEM rather than a quest — automation,
+ conveyor belts, mining and refining, a factory, a base you expand, "automate",
+ "production line", "assembly", "logistics", "idle/incremental". A factory game
+ has no hero and no combat: the player is a builder placing machines, so do not
+ invent objectives like "defeat" or "collect 5 X" for one. Everything else is
+ "adventure".
  "style": A TOP-LEVEL FIELD, a sibling of "world" and "player" — NOT a key
  inside "world". Put it at the root of the object: {"title":..., "style":"pixel",
  "world":{...}}. It is THE ART DIRECTION, and the single biggest lever on

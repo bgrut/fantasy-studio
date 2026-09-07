@@ -119,6 +119,13 @@ def verify_dist(dist: str | Path) -> dict:
 
     # ── player GLB: skinned + animated for WALK mode; DRIVE players are rigid
     # bodies (cars) — mesh validity only.
+    # A FACTORY HAS NO HERO (2026-09-07). The player is a first-person camera,
+    # not a rigged character, so the animation and skin checks below are
+    # meaningless for that genre — running them would fail every factory build
+    # for lacking something it is not supposed to have.
+    if spec and spec.get("genre") == "factory":
+        check("factory runtime", (dist / "game.js").exists())
+        spec = None
     if spec:
         glb = dist / spec["player"]["asset"].lstrip("./")
         if glb.exists():

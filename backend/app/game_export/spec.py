@@ -205,6 +205,11 @@ class GameSpec(BaseModel):
     win_text: Optional[str] = None        # narrative layer: victory line (win screen)
     # STYLE PRESET (Phase 44): USER-SELECTED, never LLM-guessed — one global
     # render/post pack applied coherently to the whole game
+    # GENRE (2026-09-07): which RUNTIME renders this spec. "adventure" is the
+    # world you walk through; "factory" is the world you build in. They share
+    # the export pipeline, the asset library and the verification gate — the
+    # game is the only thing that differs.
+    genre: Literal["adventure", "factory"] = "adventure"
     style: Literal["default", "cartoon", "sketch", "anime", "horror", "pixel",
                    "lowpoly", "illustrated", "dunescape", "watercolor",
                    "claymation", "noir", "storybook", "kawaii", "comic",
