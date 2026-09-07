@@ -527,6 +527,49 @@ const _up = new THREE.Vector3(0, 1, 0);   // reused per item: the face normal
 let ore = 0;
 let ingots = 0;
 let alloys = 0;
+
+// ── THE MARKET ─────────────────────────────────────────────────────────────
+// A price per traded good, drifting on a mean-reverting random walk. The hub
+// pays the live rate, so "which ingot should this line be making" becomes a
+// question with an answer that changes — which is the thing a single-recipe
+// factory can never have. The filter tile is how you act on it.
+const TRADED = [INGOT, INGOT_E, INGOT_S, ALLOY];
+const TRADE_NAME = { [INGOT]: 'crystal', [INGOT_E]: 'ember',
+                     [INGOT_S]: 'salt', [ALLOY]: 'alloy' };
+const TRADE_COL = { [INGOT]: '#9fd6ff', [INGOT_E]: '#ffae4d',
+                    [INGOT_S]: '#d8e2f5', [ALLOY]: '#ff5ad9' };
+const PRICE = {}, LAST_PRICE = {};
+for (const t of TRADED) { PRICE[t] = 1; LAST_PRICE[t] = 1; }
+const PRICE_MIN = 0.55, PRICE_MAX = 1.85;
+let priceClock = 0;
+
+function stepMarket(dt) {
+  priceClock += dt;
+  if (priceClock < 3.5) return;
+  priceClock = 0;
+  for (const t of TRADED) {
+    LAST_PRICE[t] = PRICE[t];
+    // mean reversion keeps a long session from parking every price at a rail,
+    // which would quietly turn the market back off
+    const drift = (1 - PRICE[t]) * 0.12;
+    const shock = (Math.random() - 0.5) * 0.34;
+    PRICE[t] = Math.max(PRICE_MIN, Math.min(PRICE_MAX, PRICE[t] + drift + shock));
+  }
+  renderTicker();
+}
+
+function renderTicker() {
+  const box = document.getElementById('tick');
+  if (!box) return;
+  let html = '';
+  for (const t of TRADED) {
+    const up = PRICE[t] >= LAST_PRICE[t];
+    html += '<div class="tr"><span style="color:' + TRADE_COL[t] + '">' +
+      TRADE_NAME[t] + '</span><span class="' + (up ? 'u' : 'd') + '">' +
+      PRICE[t].toFixed(2) + (up ? ' \u25b2' : ' \u25bc') + '</span></div>';
+  }
+  box.innerHTML = html;
+}
 let sinceTick = 0;
 let minedWindow = 0;
 let rateWindow = 0;
@@ -534,7 +577,8 @@ const rateBuckets = [];
 let lastOreShown = -1;
 
 function bank(type) {
-  const v = VALUE[type] || 1;
+  // the market only prices refined goods; raw ore always sells for its base
+  const v = (VALUE[type] || 1) * (PRICE[type] || 1);
   ore += v; runValue += v;
   if (IS_INGOT(type)) ingots++;
   if (type === ALLOY) alloys++;
@@ -1124,6 +1168,7 @@ function stepDebris(dt) {
 }
 applyUpgrades();
 renderUpgrades();
+renderTicker();
 
 // ── frame ──────────────────────────────────────────────────────────────────
 let last = performance.now();
@@ -1132,6 +1177,7 @@ renderer.setAnimationLoop(() => {
   const dt = Math.min(0.1, (now - last) / 1000);
   last = now;
 
+  stepMarket(dt);
   if (melting > 0) {
     melting = Math.max(0, melting - dt);
     // the replacement line arrives when the old one has finished falling, not
@@ -1162,7 +1208,9 @@ renderer.setAnimationLoop(() => {
     minedWindow = 0;
     rateWindow = 0;
   }
-  document.getElementById('ore').textContent = ore;
+  // market prices are fractional, so the banked total is too; nobody wants to
+  // read "47.870509893495935" as their score
+  document.getElementById('ore').textContent = Math.floor(ore);
   document.getElementById('ingot').textContent = ingots;
   document.getElementById('alloy').textContent = alloys;
   // the buttons light up the moment you can afford them — the whole point of
@@ -1235,6 +1283,8 @@ window.__game = {
       return n; })(),
     items_on_belts: items.count,
     alloys,
+    prices: TRADED.map(t => +PRICE[t].toFixed(3)),
+    best: TRADE_NAME[TRADED.reduce((a, b) => PRICE[a] > PRICE[b] ? a : b)],
     minerals: MINERAL_OF_FACE.map(m => MINERAL_NAME[m]),
     cores,
     run_value: +runValue.toFixed(1),
@@ -1256,6 +1306,7 @@ window.__factory = {
   TYPES: { EMPTY, MINER, BELT, HUB, NODE, SMELTER, SPLITTER, FORGE, FILTER,
            CRYSTAL, EMBER, SALT, INGOT, ALLOY },
   MINERAL_OF_FACE, get alloys() { return alloys; }, cycleFilter,
+  PRICE, TRADED, stepMarket,
   UPGRADES, buy, costOf, get tick() { return TICK; },
   meltdown, MELT_MIN, get cores() { return cores; },
   addValue: n => { ore += n; },

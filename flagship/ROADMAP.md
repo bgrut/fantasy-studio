@@ -25,6 +25,7 @@ says so.
 | **prestige meltdown** | the factory is thrown into the sky for a permanent core |
 | **three minerals + forge** | an alloy no single face can make: a reason to cross |
 | **filter tile** | routing by ore type, configured from the crosshair |
+| **market ticker** | the hub pays a live price, so what to make is a decision |
 
 Measured on a prompt-built export: 40x40x6 grid, 40 nodes, 180 value/min,
 9 ingots in 12s, 18 draw calls, no console errors. The player walks top ->
@@ -84,13 +85,23 @@ the whole factory left the frame inside 300ms, and re-seeding the starter line
 inside `meltdown()` meant the collapse and the rebuild were the same frame, so
 neither read. The replacement line now arrives when the old one has landed.
 
-## 3. Galactic market ticker — **cheap, and it earns its keep**
+## ~~3. Galactic market ticker~~ — SHIPPED 2026-09-07
 
 A random-walk price per product, and a launch pad that sells at the live rate.
 
 Small to build. Its real value is not the spectacle — it is that it gives the
 player a *reason to choose what to produce*, which is the thing a one-recipe
 factory currently lacks. Pairs naturally with more recipes.
+
+**As built:** four traded goods (three ingots and the alloy) on a mean-reverting
+random walk between 0.55 and 1.85, and the hub pays the live rate. Mean
+reversion matters more than it sounds: without it a long session parks every
+price against a rail and the market quietly switches itself off. Raw ore always
+sells at base, so the market rewards refining rather than hoarding.
+
+The three mechanics now close a loop: the market says which good is worth
+making, the filter is how you re-route production to make it, and the forge
+means the best-paying good may need ore from a face you have not built on yet.
 
 ## ~~4. Scriptable logic belts~~ — SHIPPED 2026-09-07, as a filter tile
 
@@ -144,8 +155,9 @@ and a market, because it needs all three to mean anything.
 1. ~~Multi-sided gravity grid~~ — shipped
 2. ~~Prestige meltdown~~ — shipped
 3. ~~Filter tile~~ and ~~more recipes~~ — shipped
-4. **Market ticker** — gives the recipes a reason to differ
-5. Revisit **Chronos** only if 3 and 4 give it something to bite on
+4. ~~Market ticker~~ — shipped
+5. Revisit **Chronos** only if 3 and 4 give it something to bite on — they now
+   do, so this is the next one to argue about rather than the one to skip
 
 ## Also outstanding
 

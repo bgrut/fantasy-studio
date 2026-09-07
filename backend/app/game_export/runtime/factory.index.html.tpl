@@ -43,6 +43,13 @@
   #melt b{display:block;font-size:11px;letter-spacing:.09em;color:#ff9f7a}
   #melt small{display:block;color:#8a7a86;font-size:10px}
   #melt:hover{background:rgba(255,110,80,.18)}
+  /* the ticker sits under the counters: it is a reason to change what you are
+     making, so it has to be visible while you are looking at production */
+  #tick{margin-top:9px;border-top:1px solid rgba(120,200,255,.14);padding-top:8px}
+  #tick .tr{display:flex;justify-content:space-between;gap:14px;font-size:11px;
+            line-height:1.55}
+  #tick .u{color:#5ce0a0}
+  #tick .d{color:#e8697d}
   #hud{pointer-events:auto}
   /* above the bar, not beside it — at seven tools there is no room beside it */
   #hint{position:fixed;right:14px;bottom:74px;z-index:5;color:#6d7590;text-align:right}
@@ -66,6 +73,7 @@
   <div class="row"><span class="k">smelters</span><span class="v" id="nsmelt">0</span></div>
   <div class="row"><span class="k">on belts</span><span class="v" id="nitem">0</span></div>
   <div class="row"><span class="k">cores</span><span class="v" id="tok">0</span></div>
+  <div id="tick"></div>
   <div id="ups"></div>
   <div id="melt"><b>MELTDOWN</b><small>collapse it all for cores</small></div>
 </div>

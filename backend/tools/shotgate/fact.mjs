@@ -112,6 +112,22 @@ const forge = await p.evaluate(async () => {
 console.log('minerals  :', forge.faces ? forge.faces.join(' ') : '?',
             '|', forge.distinct, 'distinct | alloys made', forge.made);
 
+// THE MARKET: prices have to actually move, stay inside their rails, and be
+// what the hub pays — a ticker that drifts but does not change the payout is
+// decoration, and gives the player nothing to decide.
+const mkt = await p.evaluate(async () => {
+  const F = window.__factory;
+  const a = F.TRADED.map(t => F.PRICE[t]);
+  for (let k = 0; k < 40; k++) F.stepMarket(1.0);      // 40 simulated seconds
+  const b = F.TRADED.map(t => F.PRICE[t]);
+  const moved = a.filter((v, i) => Math.abs(v - b[i]) > 1e-6).length;
+  const inRange = b.every(v => v >= 0.55 - 1e-9 && v <= 1.85 + 1e-9);
+  return { moved, inRange, sample: b.map(v => +v.toFixed(2)),
+           alloyPrice: +F.PRICE[F.TYPES.ALLOY].toFixed(2) };
+});
+console.log('market    :', mkt.moved, 'of 4 prices moved | in range', mkt.inRange,
+            '|', JSON.stringify(mkt.sample));
+
 // THE FILTER: matching ore goes straight, everything else out of the side.
 // Both halves are checked, because a filter that passes everything and a
 // filter that rejects everything both "work" if you only test one ore.
@@ -178,4 +194,5 @@ console.log('errors    :', errs.length ? errs.join(' | ') : 'none');
 await b.close();
 process.exit((errs.length || t1.value <= t0.value || !crossed || offCube
   || !wrap.arrived || !wrap.left || !meltOk
-  || forge.distinct !== 3 || !(forge.made > 0) || !filtOk) ? 1 : 0);
+  || forge.distinct !== 3 || !(forge.made > 0) || !filtOk
+  || mkt.moved !== 4 || !mkt.inRange) ? 1 : 0);
