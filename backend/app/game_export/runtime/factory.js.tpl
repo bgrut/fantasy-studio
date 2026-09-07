@@ -142,6 +142,16 @@ let SMELT_TICKS = 3;                           // and it takes time
 // spend the number to make it climb faster. Each of these has to be VISIBLE
 // when bought — a purchase that only changes a hidden coefficient feels like
 // nothing, and feeling like something is the entire product.
+// ── PRESTIGE ───────────────────────────────────────────────────────────────
+// Everything on the cube is destroyed and you keep a number. It is the oldest
+// trick in the incremental genre and it works because the second run is
+// visibly faster than the first — the factory you rebuild is the same one,
+// and it earns nearly half again as much per crystal.
+let cores = 0;
+let runValue = 0;                       // banked THIS run; cores are priced off it
+const MELT_MIN = 400;
+const coresFor = v => Math.floor(Math.sqrt(v / 220));
+
 const UPGRADES = {
   tick:  { lvl: 0, cap: 6, cost: 60,  mult: 2.3,
            label: 'OVERCLOCK', note: 'everything runs faster' },
@@ -155,7 +165,10 @@ const costOf = u => Math.round(u.cost * Math.pow(u.mult, u.lvl));
 function applyUpgrades() {
   TICK = BASE_TICK * Math.pow(0.86, UPGRADES.tick.lvl);
   SMELT_TICKS = Math.max(1, 3 - UPGRADES.smelt.lvl);
-  const y = 1 + UPGRADES.yield.lvl;
+  // A CORE IS WORTH MORE THAN THE FACTORY IT COST. The multiplier has to be
+  // steep enough that melting down a good factory beats keeping it, or the
+  // prestige is a button nobody presses twice.
+  const y = (1 + UPGRADES.yield.lvl) * (1 + 0.45 * cores);
   VALUE[CRYSTAL] = y;
   VALUE[INGOT] = 6 * y;
 }
@@ -451,7 +464,11 @@ let rateWindow = 0;
 const rateBuckets = [];
 let lastOreShown = -1;
 
-function bank(type) { ore += VALUE[type] || 1; if (type === INGOT) ingots++; }
+function bank(type) {
+  const v = VALUE[type] || 1;
+  ore += v; runValue += v;
+  if (type === INGOT) ingots++;
+}
 
 // One acceptance rule, asked by belts, miners and splitters alike. Having each
 // of them decide separately is how a factory sim ends up with items that can
@@ -849,7 +866,9 @@ function seatPlayer() {
 }
 
 // ── a starter line, so the loop is legible the moment it loads ─────────────
-(function seed() {
+// Called again after every meltdown: a prestige that drops you onto an empty
+// cube with no line running is indistinguishable from having lost.
+function seedLine(placePlayer) {
   // Pick a node with a CLEAR run east of it. The first version just took the
   // first node it found and drew six tiles east regardless — a second node
   // sitting in that line silently refused two placements, so the demo line
@@ -892,8 +911,82 @@ function seatPlayer() {
   player.up.set(0, 1, 0);
   camUp.set(0, 1, 0);
   // FACES[0].v is -Z, so the line we just built lies that way
+  if (!placePlayer) return;
   player.fwd.set(0, 0, -1);
-})();
+}
+seedLine(true);
+
+// ── the meltdown itself ────────────────────────────────────────────────────
+// The machines are not deleted, they are THROWN. Every build group is detached
+// from its tile, given an outward velocity off the cube and a tumble, and left
+// to shrink into nothing over a couple of seconds. The engine side of this
+// project has shipped physics-driven destruction before; here it is two lines
+// of integration per frame, and it is the only moment in the game that is
+// worth filming.
+const debris = [];
+let melting = 0;
+
+function meltdown() {
+  if (ore < MELT_MIN || melting > 0) return;
+  const won = Math.max(1, coresFor(runValue));
+  cores += won;
+
+  eachTile((c, f, i, j) => {
+    if (c.build) {
+      const g = c.build;
+      const p = g.position;
+      const r = Math.max(1e-3, Math.hypot(p.x, p.y, p.z));
+      debris.push({
+        o: g,
+        // SLOW ENOUGH TO WATCH (2026-09-07). The first pass threw everything at
+        // 9-25 m/s and the entire factory was out of frame inside 300ms — the
+        // one moment in the game worth filming, over before a screenshot could
+        // catch it. Pieces now arc out and fall back toward the cube.
+        v: new THREE.Vector3(
+          p.x / r * (5 + Math.random() * 6) + (Math.random() - 0.5) * 4,
+          p.y / r * (5 + Math.random() * 6) + (Math.random() - 0.5) * 4,
+          p.z / r * (5 + Math.random() * 6) + (Math.random() - 0.5) * 4),
+        w: new THREE.Vector3((Math.random() - 0.5) * 9,
+                             (Math.random() - 0.5) * 9,
+                             (Math.random() - 0.5) * 9),
+      });
+      c.build = null;
+    }
+    // a node outlives the factory built on it, exactly as it does for ERASE
+    c.t = c.mesh ? NODE : EMPTY;
+    c.item = 0; c.buf = 0; c.cook = 0; c.rr = 0;
+  });
+
+  ore = 0; ingots = 0; runValue = 0;
+  for (const k in UPGRADES) UPGRADES[k].lvl = 0;
+  applyUpgrades();
+  renderUpgrades();
+  items.count = 0;
+  melting = 2.4;
+  refreshCounts();
+  document.getElementById('tok').textContent = cores;
+}
+
+function stepDebris(dt) {
+  for (let k = debris.length - 1; k >= 0; k--) {
+    const d = debris[k];
+    // the worldlet still pulls: pieces arc out and come back, which reads as
+    // a collapse rather than as a scene being deleted
+    const p = d.o.position;
+    const r = Math.max(1e-3, Math.hypot(p.x, p.y, p.z));
+    d.v.addScaledVector(_bx.set(p.x / r, p.y / r, p.z / r), -7 * dt);
+    p.addScaledVector(d.v, dt);
+    d.o.rotateX(d.w.x * dt); d.o.rotateY(d.w.y * dt); d.o.rotateZ(d.w.z * dt);
+    const sc = Math.max(0, d.o.scale.x - dt * 0.42);
+    d.o.scale.setScalar(sc);
+    if (sc <= 0.02) { scene.remove(d.o); debris.splice(k, 1); }
+  }
+}
+
+{
+  const btn = document.getElementById('melt');
+  if (btn) btn.addEventListener('pointerdown', ev => { ev.stopPropagation(); meltdown(); });
+}
 
 {
   const h = document.querySelector('#hud h1');
@@ -909,10 +1002,21 @@ renderer.setAnimationLoop(() => {
   const dt = Math.min(0.1, (now - last) / 1000);
   last = now;
 
+  if (melting > 0) {
+    melting = Math.max(0, melting - dt);
+    // the replacement line arrives when the old one has finished falling, not
+    // while it is still in the air — otherwise the collapse and the rebuild
+    // are the same frame and neither reads
+    if (melting === 0) { seedLine(false); refreshCounts(); }
+  }
+  stepDebris(dt);
+
   sinceTick += dt;
   rateWindow += dt;
   const before = ore;
-  while (sinceTick >= TICK) { sinceTick -= TICK; step(); }
+  // the tick stops while the factory is still in the air — a meltdown that
+  // kept banking value would read as though nothing had been given up
+  while (sinceTick >= TICK) { sinceTick -= TICK; if (!melting) step(); }
   minedWindow += ore - before;
   if (rateWindow >= 1) {
     // AVERAGE OVER LONGER THAN THE SLOWEST MACHINE (2026-09-06). This sampled
@@ -933,6 +1037,7 @@ renderer.setAnimationLoop(() => {
   // the buttons light up the moment you can afford them — the whole point of
   // the number climbing is watching it cross a threshold
   if (Math.floor(ore) !== lastOreShown) { lastOreShown = Math.floor(ore); renderUpgrades(); }
+  document.getElementById('melt').classList.toggle('on', ore >= MELT_MIN && !melting);
   document.getElementById('nitem').textContent = drawItems(sinceTick / TICK);
 
   // a crystal on the west face spins about the west face's up
@@ -998,6 +1103,10 @@ window.__game = {
       eachTile(c => { if (c.t !== EMPTY && c.t !== NODE) n++; });
       return n; })(),
     items_on_belts: items.count,
+    cores,
+    run_value: +runValue.toFixed(1),
+    melting: +melting.toFixed(2),
+    debris: debris.length,
     faces: 6,
     player_face: FACES[player.face].name,
     player_up: player.up.toArray().map(v => +v.toFixed(2)),
@@ -1013,6 +1122,7 @@ window.__factory = {
   stepTile, tileWorld, faceOfPoint,
   TYPES: { EMPTY, MINER, BELT, HUB, NODE, SMELTER, SPLITTER, CRYSTAL, INGOT },
   UPGRADES, buy, costOf, get tick() { return TICK; },
+  meltdown, MELT_MIN, get cores() { return cores; },
   addValue: n => { ore += n; },
   get ingots() { return ingots; },
   get ore() { return ore; },

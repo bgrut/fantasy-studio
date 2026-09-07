@@ -31,6 +31,15 @@
   .up.can:hover{background:rgba(92,224,208,.14)}
   .up.maxed{opacity:.42;border-color:rgba(120,200,255,.09)}
   .up.maxed i{color:#5ce0d0}
+  /* the meltdown is the loudest thing in the panel because it is the loudest
+     thing in the game: it destroys the factory you just spent an hour on */
+  #melt{margin-top:9px;border:1px solid rgba(255,120,90,.5);border-radius:7px;
+        padding:6px 8px;background:rgba(255,110,80,.09);cursor:pointer;
+        display:none;text-align:center}
+  #melt.on{display:block}
+  #melt b{display:block;font-size:11px;letter-spacing:.09em;color:#ff9f7a}
+  #melt small{display:block;color:#8a7a86;font-size:10px}
+  #melt:hover{background:rgba(255,110,80,.18)}
   #hud{pointer-events:auto}
   #hint{position:fixed;right:14px;bottom:16px;z-index:5;color:#6d7590;text-align:right}
   /* the crosshair IS the cursor once the pointer is locked */
@@ -51,7 +60,9 @@
   <div class="row"><span class="k">belts</span><span class="v" id="nbelt">0</span></div>
   <div class="row"><span class="k">smelters</span><span class="v" id="nsmelt">0</span></div>
   <div class="row"><span class="k">on belts</span><span class="v" id="nitem">0</span></div>
+  <div class="row"><span class="k">cores</span><span class="v" id="tok">0</span></div>
   <div id="ups"></div>
+  <div id="melt"><b>MELTDOWN</b><small>collapse it all for cores</small></div>
 </div>
 <div id="tools">
   <div class="tool on" data-tool="miner"><b>1 · MINER</b><small>on a node</small></div>

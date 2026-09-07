@@ -84,8 +84,26 @@ const wrap = await p.evaluate(async () => {
   return { skipped: true };
 });
 console.log('belt wrap :', JSON.stringify(wrap));
+// PRESTIGE: the factory is destroyed and the run is faster afterwards. Both
+// halves matter — a meltdown that clears the cube but leaves you with nothing
+// running is indistinguishable from having lost the game.
+await p.evaluate(()=>{ const F = window.__factory; F.addValue(F.MELT_MIN + 240); });
+await new Promise(r=>setTimeout(r,300));
+const preMachines = (await p.evaluate(()=>window.__game.facts())).machines;
+await p.evaluate(()=>window.__factory.meltdown());
+await new Promise(r=>setTimeout(r,350));
+const mid = await p.evaluate(()=>window.__game.facts());
+await p.screenshot({ path: (process.env.OUT || 'factory.png').replace(/\.png$/, '_melt.png') });
+await new Promise(r=>setTimeout(r,3200));
+const post = await p.evaluate(()=>window.__game.facts());
+const val = await p.evaluate(()=>window.__factory.TYPES && window.__SPEC ? null : null);
+console.log('meltdown  : machines', preMachines, '-> debris', mid.debris,
+            '-> rebuilt', post.machines, '| cores', post.cores,
+            '| value reset to', post.value);
+const meltOk = mid.debris >= preMachines && post.debris === 0
+            && post.machines >= 5 && post.cores >= 1 && post.value < 40;
 console.log('produced  :', t1.value - t0.value, 'value in 12s |', 'ingots', t1.ingots);
 console.log('errors    :', errs.length ? errs.join(' | ') : 'none');
 await b.close();
 process.exit((errs.length || t1.value <= t0.value || !crossed || offCube
-  || !wrap.arrived || !wrap.left) ? 1 : 0);
+  || !wrap.arrived || !wrap.left || !meltOk) ? 1 : 0);
