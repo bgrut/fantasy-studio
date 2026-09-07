@@ -23,6 +23,8 @@ says so.
 | **built by the studio** | a prompt produces this game, not a hand-run file |
 | **multi-sided gravity grid** | the differentiator: belts and gravity wrap a cube |
 | **prestige meltdown** | the factory is thrown into the sky for a permanent core |
+| **three minerals + forge** | an alloy no single face can make: a reason to cross |
+| **filter tile** | routing by ore type, configured from the crosshair |
 
 Measured on a prompt-built export: 40x40x6 grid, 40 nodes, 180 value/min,
 9 ingots in 12s, 18 draw calls, no console errors. The player walks top ->
@@ -90,7 +92,7 @@ Small to build. Its real value is not the spectacle — it is that it gives the
 player a *reason to choose what to produce*, which is the thing a one-recipe
 factory currently lacks. Pairs naturally with more recipes.
 
-## 4. Scriptable logic belts — **strong idea, wrong first implementation**
+## ~~4. Scriptable logic belts~~ — SHIPPED 2026-09-07, as a filter tile
 
 Route items by rule: `if (item.purity > 80) OUTPUT_A else OUTPUT_B`.
 
@@ -108,6 +110,18 @@ Better shape: a **filter/condition tile** the player configures from a short
 menu (by item type, then later by a property). Same decision space, no parser,
 no immersion break. A raw script mode can come later for the audience that
 wants it, once there are properties worth branching on.
+
+**As built:** point at a filter, press F, and the gate on it changes colour to
+whichever ore now passes — the setting is readable from across the face rather
+than from a tooltip. Matching ore carries straight on, everything else leaves
+out of the side. It deliberately does NOT fall back to the other output when
+the chosen one is full: an item that takes the wrong exit because the right one
+was busy is a filter that has silently stopped filtering, and the player would
+have no way to see it happen. Shipped after the minerals, not before, because
+a filter with one item type to sort is a belt.
+
+Also fixed on the way: items sitting on a splitter were never drawn at all, so
+a backed-up splitter looked empty.
 
 ## 5. Chronos paradox loop — **park it**
 
@@ -129,16 +143,13 @@ and a market, because it needs all three to mean anything.
 
 1. ~~Multi-sided gravity grid~~ — shipped
 2. ~~Prestige meltdown~~ — shipped
-3. **Filter tile** (item 4, done without a parser) + more recipes
+3. ~~Filter tile~~ and ~~more recipes~~ — shipped
 4. **Market ticker** — gives the recipes a reason to differ
 5. Revisit **Chronos** only if 3 and 4 give it something to bite on
 
 ## Also outstanding
 
 - Merger fairness: two belts into one currently resolve by grid order
-- Nothing on the five new faces yet: the cube is walkable and belts wrap, but
-  the game gives no reason to go there. Ore density per face, or a recipe that
-  only exists on one side, is the cheapest fix
 - The player walks through machines; there is no collision
 - Save / load
 - Art uplift — placeholder boxes; the Kenney space kit (already vendored in

@@ -76,9 +76,10 @@
   <div class="tool" data-tool="splitter"><b>4 · SPLITTER</b><small>feeds both ways</small></div>
   <div class="tool" data-tool="hub"><b>5 · HUB</b><small>delivers</small></div>
   <div class="tool" data-tool="forge"><b>6 · FORGE</b><small>2 different ores</small></div>
-  <div class="tool" data-tool="erase"><b>7 · ERASE</b><small>&nbsp;</small></div>
+  <div class="tool" data-tool="filter"><b>7 · FILTER</b><small>F to set ore</small></div>
+  <div class="tool" data-tool="erase"><b>8 · ERASE</b><small>&nbsp;</small></div>
 </div>
 <div id="cross"></div>
-<div id="hint">WASD walk · Shift run · Space jump · click to look<br>hold LMB and sweep to draw belts · TAB overhead<br>walk over an edge — each side of the world grows a different ore</div>
+<div id="hint">WASD walk · Shift run · Space jump · click to look<br>hold LMB and sweep to draw belts · TAB overhead<br>point at a filter and press F to change what passes<br>walk over an edge — each side of the world grows a different ore</div>
 <script type="importmap">{"imports":{"three":"./vendor/three.module.js"}}</script>
 <script type="module" src="./game.js"></script>

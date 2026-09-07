@@ -112,6 +112,49 @@ const forge = await p.evaluate(async () => {
 console.log('minerals  :', forge.faces ? forge.faces.join(' ') : '?',
             '|', forge.distinct, 'distinct | alloys made', forge.made);
 
+// THE FILTER: matching ore goes straight, everything else out of the side.
+// Both halves are checked, because a filter that passes everything and a
+// filter that rejects everything both "work" if you only test one ore.
+const filt = await p.evaluate(async () => {
+  const F = window.__factory, TY = F.TYPES;
+  const free = (a, b) => F.cells[0][a][b].t === TY.EMPTY;
+  for (let i = 4; i < F.N - 4; i++) {
+    for (let j = 4; j < F.N - 4; j++) {
+      const straight = F.stepTile(0, i, j, 0), side = F.stepTile(0, i, j, 1);
+      const beyondS = F.stepTile(straight.face, straight.i, straight.j, straight.d);
+      const beyondD = F.stepTile(side.face, side.i, side.j, side.d);
+      const tiles = [[i,j], [straight.i,straight.j], [side.i,side.j],
+                     [beyondS.i,beyondS.j], [beyondD.i,beyondD.j]];
+      if (!tiles.every(([a,b]) => free(a,b))) continue;
+      F.place(0, i, j, TY.FILTER, 0);
+      // the two collectors point at empty ground, so whatever lands on them
+      // stays there for the check instead of moving on next tick
+      F.place(straight.face, straight.i, straight.j, TY.BELT, straight.d);
+      F.place(side.face, side.i, side.j, TY.BELT, side.d);
+      const cf = F.cells[0][i][j];
+      const S = F.cells[straight.face][straight.i][straight.j];
+      const D = F.cells[side.face][side.i][side.j];
+      cf.filt = TY.CRYSTAL;
+
+      cf.item = TY.CRYSTAL;
+      await new Promise(r => setTimeout(r, 1100));
+      const pass = { straight: S.item, side: D.item };
+      S.item = 0; D.item = 0;
+
+      cf.item = TY.EMBER;
+      await new Promise(r => setTimeout(r, 1100));
+      const rej = { straight: S.item, side: D.item };
+      return { crystal: pass, ember: rej, CRYSTAL: TY.CRYSTAL, EMBER: TY.EMBER };
+    }
+  }
+  return { skipped: true };
+});
+const filtOk = filt.crystal && filt.crystal.straight === filt.CRYSTAL
+            && filt.crystal.side === 0
+            && filt.ember.side === filt.EMBER && filt.ember.straight === 0;
+console.log('filter    : crystal', JSON.stringify(filt.crystal),
+            '| ember', JSON.stringify(filt.ember), '|', filtOk ? 'sorts' : 'WRONG');
+
 // PRESTIGE: the factory is destroyed and the run is faster afterwards. Both
 // halves matter — a meltdown that clears the cube but leaves you with nothing
 // running is indistinguishable from having lost the game.
@@ -135,4 +178,4 @@ console.log('errors    :', errs.length ? errs.join(' | ') : 'none');
 await b.close();
 process.exit((errs.length || t1.value <= t0.value || !crossed || offCube
   || !wrap.arrived || !wrap.left || !meltOk
-  || forge.distinct !== 3 || !(forge.made > 0)) ? 1 : 0);
+  || forge.distinct !== 3 || !(forge.made > 0) || !filtOk) ? 1 : 0);

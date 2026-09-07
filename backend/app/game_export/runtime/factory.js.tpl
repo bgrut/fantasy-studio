@@ -124,7 +124,7 @@ function faceOfPoint(px, py, pz) {
 const BASE_TICK = 0.42;
 let TICK = BASE_TICK;
 const EMPTY = 0, MINER = 1, BELT = 2, HUB = 3, NODE = 4, SMELTER = 5,
-      SPLITTER = 6, FORGE = 7;
+      SPLITTER = 6, FORGE = 7, FILTER = 8;
 const DIRS = [[1, 0], [0, 1], [-1, 0], [0, -1]];        // E S W N
 
 // Items now have a TYPE, and that is the whole point of the smelter. Until
@@ -234,7 +234,8 @@ for (let f = 0; f < 6; f++) {
     cells[f][i] = [];
     for (let j = 0; j < N; j++)
       cells[f][i][j] = { t: EMPTY, d: 0, item: 0, buf: 0, bt: 0,
-                         fa: 0, fb: 0, cook: 0, rr: 0, min: 0 };
+                         fa: 0, fb: 0, cook: 0, rr: 0, min: 0,
+                         filt: CRYSTAL };
   }
 }
 const cellOf = t => (t ? cells[t.face][t.i][t.j] : null);
@@ -370,6 +371,8 @@ const MAT = {
     emissive: 0x6b4a00, emissiveIntensity: 0.6 }),
   forge: new THREE.MeshStandardMaterial({ color: 0xd94fb0, roughness: 0.34,
     metalness: 0.55, flatShading: true }),
+  filt: new THREE.MeshStandardMaterial({ color: 0x2f8f7d, roughness: 0.55,
+    metalness: 0.25 }),
   smelt: new THREE.MeshStandardMaterial({ color: 0x8c6bff, roughness: 0.42, metalness: 0.4,
     emissive: 0x2a1470, emissiveIntensity: 0.5 }),
   split: new THREE.MeshStandardMaterial({ color: 0x4bb5ff, roughness: 0.45, metalness: 0.35,
@@ -386,6 +389,8 @@ const GEO = {
   // taller and eight-sided, so a forge is not mistaken for a smelter
   // from across the worldlet
   forge: new THREE.CylinderGeometry(T * 0.44, T * 0.5, 1.4, 8),
+  filter: new THREE.BoxGeometry(T * 0.9, 0.3, T * 0.9),
+  filterGate: new THREE.BoxGeometry(T * 0.16, 0.5, T * 0.62),
 };
 
 function refreshCounts() {
@@ -440,6 +445,22 @@ function place(face, i, j, type, dir) {
       const arm = new THREE.Mesh(GEO.splitArm, MAT.split);
       arm.position.y = 0.4; arm.rotation.y = r; g.add(arm);
     }
+  } else if (type === FILTER) {
+    const b = new THREE.Mesh(GEO.filter, MAT.filt);
+    b.position.y = 0.15; b.castShadow = true; b.receiveShadow = true; g.add(b);
+    // the gate is coloured with the ore that passes, so a filter's setting is
+    // readable from across the face instead of from a tooltip
+    const gate = new THREE.Mesh(GEO.filterGate,
+      new THREE.MeshStandardMaterial({ color: MIN_COL[c.filt] || 0x7df9ff,
+        emissive: MIN_COL[c.filt] || 0x7df9ff, emissiveIntensity: 0.5,
+        roughness: 0.3, flatShading: true }));
+    gate.position.set(0.36, 0.42, 0);
+    gate.name = 'gate';
+    g.add(gate);
+    const a = new THREE.Mesh(GEO.arrow, MAT.filt);   // pass: straight on
+    a.position.set(0.72, 0.4, 0); a.rotation.z = -Math.PI / 2; g.add(a);
+    const r = new THREE.Mesh(GEO.arrow, MAT.filt);   // reject: out the side
+    r.position.set(0, 0.4, 0.72); r.rotation.x = Math.PI / 2; g.add(r);
   } else if (type === FORGE) {
     const b = new THREE.Mesh(GEO.forge, MAT.forge);
     b.position.y = 0.7; b.castShadow = true; g.add(b);
@@ -525,7 +546,7 @@ function bank(type) {
 function accepts(dst, type) {
   if (!dst) return false;
   if (dst.t === HUB) return true;
-  if (dst.t === BELT || dst.t === SPLITTER) return !dst.item;
+  if (dst.t === BELT || dst.t === SPLITTER || dst.t === FILTER) return !dst.item;
   // A smelter refines ONE kind at a time — mixing two ores in it would make
   // the alloy free, and the alloy is supposed to cost a trip across an edge.
   if (dst.t === SMELTER)
@@ -591,6 +612,20 @@ function step() {
       }
       return;
     }
+    // A FILTER IS A BELT THAT SORTS. Matching ore carries straight on;
+    // anything else leaves out of the side. Crucially it does NOT fall back to
+    // the other output when the chosen one is full — an item that took the
+    // wrong exit because the right one was busy is a filter that silently
+    // stops filtering, and the player would have no way to see it happen.
+    if (c.t === FILTER && c.item) {
+      const dir = c.item === c.filt ? c.d : (c.d + 1) % 4;
+      const to = stepTile(f, i, j, dir);
+      const dst = cellOf(to);
+      if (!dst) return;
+      if (dst.t === HUB) moves.push([c, 'bank']);
+      else if (accepts(dst, c.item)) moves.push([c, 'to', to]);
+      return;
+    }
     if (c.t !== BELT || !c.item) return;
     const to = stepTile(f, i, j, c.d);
     const dst = cellOf(to);
@@ -623,10 +658,19 @@ function drawItems(alpha) {
   let n = 0;
   const spin = performance.now() * 0.002;
   eachTile((c, f, i, j) => {
-    if (n >= MAX_ITEMS || c.t !== BELT || !c.item) return;
-    const to = stepTile(f, i, j, c.d);
+    if (n >= MAX_ITEMS || !c.item) return;
+    if (c.t !== BELT && c.t !== FILTER && c.t !== SPLITTER) return;
+    // A splitter's next hop is not decided until the tick, and a filter's
+    // depends on what it is holding. Items on a splitter therefore sit in the
+    // middle of the tile — before this they were not drawn at all, so a
+    // backed-up splitter looked empty.
+    const dir = c.t === SPLITTER ? c.d
+      : c.t === FILTER ? (c.item === c.filt ? c.d : (c.d + 1) % 4)
+      : c.d;
+    const to = c.t === SPLITTER ? null : stepTile(f, i, j, dir);
     const ahead = cellOf(to);
-    const free = ahead && (ahead.t === HUB || (ahead.t === BELT && !ahead.item));
+    const free = ahead && (ahead.t === HUB ||
+      ((ahead.t === BELT || ahead.t === FILTER) && !ahead.item));
     const a = free ? alpha : 0;
     // Interpolating between the two tiles' world centres carries an item
     // around an edge on its own: across a corner the two centres are on
@@ -735,6 +779,7 @@ function apply(t, dir) {
   if (tool === 'smelter') { place(t.face, t.i, t.j, SMELTER, d); return; }
   if (tool === 'splitter') { place(t.face, t.i, t.j, SPLITTER, 0); return; }
   if (tool === 'forge') { place(t.face, t.i, t.j, FORGE, d); return; }
+  if (tool === 'filter') { place(t.face, t.i, t.j, FILTER, d); return; }
   if (tool === 'belt') { place(t.face, t.i, t.j, BELT, d); }
 }
 
@@ -766,6 +811,23 @@ renderer.domElement.addEventListener('pointermove', e => {
 });
 addEventListener('pointerup', () => { drawing = false; lastCell = null; });
 
+// Point at a filter and press F. A short cycle rather than a text box: the
+// same decision space as a script, with nothing to parse, nothing to corrupt a
+// shared save, and no typing in a first-person game.
+function cycleFilter() {
+  const t = cellUnder(null);
+  if (!t) return;
+  const c = cellOf(t);
+  if (c.t !== FILTER) return;
+  const k = MINERALS.indexOf(c.filt);
+  c.filt = MINERALS[(k + 1) % MINERALS.length];
+  const gate = c.build && c.build.getObjectByName('gate');
+  if (gate) {
+    gate.material.color.setHex(MIN_COL[c.filt]);
+    gate.material.emissive.setHex(MIN_COL[c.filt]);
+  }
+}
+
 function pickTool(name) {
   tool = name;
   document.querySelectorAll('.tool').forEach(o =>
@@ -776,8 +838,9 @@ document.querySelectorAll('.tool').forEach(el => {
 });
 addEventListener('keydown', e => {
   const k = { '1': 'miner', '2': 'belt', '3': 'smelter', '4': 'splitter',
-              '5': 'hub', '6': 'forge', '7': 'erase' }[e.key];
+              '5': 'hub', '6': 'forge', '7': 'filter', '8': 'erase' }[e.key];
   if (k) pickTool(k);
+  if (e.code === 'KeyF') cycleFilter();
   const u = { 'KeyZ': 'tick', 'KeyX': 'yield', 'KeyC': 'smelt' }[e.code];
   if (u) buy(u);
 });
@@ -1190,9 +1253,9 @@ window.__camera = camera;
 window.__factory = {
   cells, items, N, T, player, HALF, FACES,
   stepTile, tileWorld, faceOfPoint,
-  TYPES: { EMPTY, MINER, BELT, HUB, NODE, SMELTER, SPLITTER, FORGE,
+  TYPES: { EMPTY, MINER, BELT, HUB, NODE, SMELTER, SPLITTER, FORGE, FILTER,
            CRYSTAL, EMBER, SALT, INGOT, ALLOY },
-  MINERAL_OF_FACE, get alloys() { return alloys; },
+  MINERAL_OF_FACE, get alloys() { return alloys; }, cycleFilter,
   UPGRADES, buy, costOf, get tick() { return TICK; },
   meltdown, MELT_MIN, get cores() { return cores; },
   addValue: n => { ore += n; },
