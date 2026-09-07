@@ -3,6 +3,7 @@
 // free ore dispenser, and a storm nobody can trigger is a threat that is not
 // really there.
 import puppeteer from 'puppeteer-core';
+
 const b = await puppeteer.launch({ headless:'new',
   executablePath:'C:/Program Files/Google/Chrome/Application/chrome.exe',
   args:['--use-angle=d3d11','--enable-unsafe-swiftshader','--window-size=1280,760'] });
@@ -14,7 +15,9 @@ p.on('console', m => { const u = (m.location() && m.location().url) || '';
   if (m.type()==='error' && !/favicon/i.test(u)) errs.push('console: '+m.text().slice(0,160)); });
 const URL = process.env.URL ||
   ('http://127.0.0.1:8789/games/job_' + process.env.J + '/dist/');
-await p.goto(URL, { waitUntil:'domcontentloaded', timeout:90000 });
+// ?fresh=1: this run must not grade the previous run's factory
+await p.goto(URL + (URL.includes('?') ? '&' : '?') + 'fresh=1',
+  { waitUntil:'domcontentloaded', timeout:90000 });
 await new Promise(r=>setTimeout(r,6000));
 
 // 1. a rift wired to a belt opens and pays its loan out onto it

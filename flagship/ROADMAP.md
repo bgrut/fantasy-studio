@@ -29,6 +29,7 @@ says so.
 | **chronos rift** | borrowed ore on a clock, and a storm if you miss it |
 | **studio inspect** | the factory answers the studio's picking bridge |
 | **demo is generated** | the standalone build IS the studio's output |
+| **save / load** | a factory survives closing the tab |
 
 Measured on a prompt-built export: 40x40x6 grid, 40 nodes, 180 value/min,
 9 ingots in 12s, 18 draw calls, no console errors. The player walks top ->
@@ -176,15 +177,23 @@ clock starts when the loan lands.
 4. ~~Market ticker~~ — shipped
 5. ~~Chronos~~ — shipped, as a debt with a clock rather than replayed ghosts
 
-All five differentiators from the brief are in. What is left is not mechanics:
-save/load, player collision, merger fairness, an art pass, a progression frame,
-and the Tauri/Steam packaging path.
+All five differentiators from the brief are in, and the factory now saves.
+What is left is not mechanics: player collision, merger fairness, an art pass,
+a progression frame, and the Tauri/Steam packaging path.
+
+## Checking both at once
+
+The demo is generated from the studio runtime, so they can only disagree if the
+generator was not re-run. One command checks that and then runs all four gates
+against each:
+
+    cd flagship && python -m http.server 8790     # serve the demo
+    python backend/tools/factory_check.py --job <id>
 
 ## Also outstanding
 
 - Merger fairness: two belts into one currently resolve by grid order
 - The player walks through machines; there is no collision
-- Save / load
 - Art uplift — placeholder boxes; the Kenney space kit (already vendored in
   `backend/assets/props`, CC0) is the right visual language for this
 - Levels / progression frame: goals, unlocks, a reason to expand

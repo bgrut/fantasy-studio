@@ -49,6 +49,10 @@
   #rift.on{display:block}
   #rift b{display:block;font-size:11px;letter-spacing:.09em;color:#b39cff}
   #rift small{display:block;color:#8f88b8;font-size:10px}
+  /* the factory saves itself; this is the only way back to an empty one */
+  #wipe{margin-top:8px;text-align:center;font-size:10px;color:#5d6480;
+        cursor:pointer;user-select:none;letter-spacing:.05em}
+  #wipe:hover{color:#e8697d}
   /* the ticker sits under the counters: it is a reason to change what you are
      making, so it has to be visible while you are looking at production */
   #tick{margin-top:9px;border-top:1px solid rgba(120,200,255,.14);padding-top:8px}
@@ -85,6 +89,7 @@
   <div id="ups"></div>
   <div id="rift"></div>
   <div id="melt"><b>MELTDOWN</b><small>collapse it all for cores</small></div>
+  <div id="wipe">new world</div>
 </div>
 <div id="tools">
   <div class="tool on" data-tool="miner"><b>1 · MINER</b><small>on a node</small></div>
@@ -98,6 +103,6 @@
   <div class="tool" data-tool="erase"><b>9 · ERASE</b><small>&nbsp;</small></div>
 </div>
 <div id="cross"></div>
-<div id="hint">WASD walk · Shift run · Space jump · click to look<br>hold LMB and sweep to draw belts · TAB overhead<br>point at a filter and press F to change what passes<br>walk over an edge — each side of the world grows a different ore</div>
+<div id="hint">WASD walk · Shift run · Space jump · click to look<br>hold LMB and sweep to draw belts · TAB overhead<br>point at a filter and press F to change what passes<br>walk over an edge — each side of the world grows a different ore<br>your factory saves itself</div>
 <script type="importmap">{"imports":{"three":"./vendor/three.module.js"}}</script>
 <script type="module" src="./game.js"></script>

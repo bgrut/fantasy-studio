@@ -2,6 +2,7 @@
 // adventure gates: load it, let it run, and read the numbers off the running
 // game rather than off the source.
 import puppeteer from 'puppeteer-core';
+
 const b = await puppeteer.launch({ headless:'new',
   executablePath:'C:/Program Files/Google/Chrome/Application/chrome.exe',
   args:['--use-angle=d3d11','--enable-unsafe-swiftshader','--window-size=1280,760'] });
@@ -19,7 +20,9 @@ p.on('console', m => { const t = m.text();
 // build — the point of generating one from the other is that both must pass it
 const URL = process.env.URL ||
   ('http://127.0.0.1:8789/games/job_' + process.env.J + '/dist/');
-await p.goto(URL, { waitUntil:'domcontentloaded', timeout:90000 });
+// ?fresh=1: this run must not grade the previous run's factory
+await p.goto(URL + (URL.includes('?') ? '&' : '?') + 'fresh=1',
+  { waitUntil:'domcontentloaded', timeout:90000 });
 await new Promise(r=>setTimeout(r,6000));
 
 const t0 = await p.evaluate(()=> window.__game ? window.__game.facts() : null);

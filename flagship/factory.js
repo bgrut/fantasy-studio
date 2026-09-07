@@ -1298,9 +1298,133 @@ function stepDebris(dt) {
   if (btn) btn.addEventListener('pointerdown', ev => { ev.stopPropagation(); meltdown(); });
 }
 
+// ── SAVE / LOAD ────────────────────────────────────────────────────────────
+// One key per title, so two games exported from the studio do not overwrite
+// each other's worlds. Every access is wrapped: storage throws outright in
+// some privacy modes, and a game that will not start because it could not read
+// a save is worse than a game that forgets.
+const SAVE_KEY = 'fs-factory-' +
+  String(SPEC.title || 'untitled').toLowerCase().replace(/[^a-z0-9]+/g, '-');
+const SAVE_V = 1;
+
+function clearFactory() {
+  eachTile(c => {
+    if (c.build) { scene.remove(c.build); c.build = null; }
+    c.t = c.mesh ? NODE : EMPTY;
+    c.item = 0; c.buf = 0; c.bt = 0; c.fa = 0; c.fb = 0; c.cook = 0; c.rr = 0;
+    c.dbt = 0; c.dmin = 0; c.emit = 0; c.left = 0; c.cool = 0;
+  });
+  items.count = 0;
+}
+
+function saveState() {
+  const m = [];
+  eachTile((c, f, i, j) => {
+    if (c.t === EMPTY || c.t === NODE) return;
+    m.push([f, i, j, c.t, c.d, c.item | 0, c.buf | 0, c.bt | 0, c.fa | 0,
+            c.fb | 0, c.cook | 0, c.rr | 0, c.filt | 0, c.dbt | 0, c.dmin | 0,
+            c.emit | 0, Math.round(c.left || 0), Math.round(c.cool || 0)]);
+  });
+  return {
+    v: SAVE_V, n: N, ore, ingots, alloys, cores, runValue,
+    up: { tick: UPGRADES.tick.lvl, yield: UPGRADES.yield.lvl,
+          smelt: UPGRADES.smelt.lvl },
+    price: TRADED.map(t => PRICE[t]),
+    p: { face: player.face, pos: player.pos.toArray(),
+         fwd: player.fwd.toArray(), pitch: player.pitch },
+    m,
+  };
+}
+
+function loadState(d) {
+  // A SAVE FROM A DIFFERENT WORLD IS NOT A SAVE. The ore seams are generated
+  // from a seeded RNG keyed to the grid size; restoring machines onto a
+  // different N would put miners on empty ground and leave seams buried under
+  // belts, with nothing to indicate why the factory had stopped earning.
+  if (!d || d.v !== SAVE_V || d.n !== N) return false;
+  clearFactory();
+  for (const r of d.m) {
+    const [f, i, j, t, dir] = r;
+    if (f < 0 || f > 5 || i < 0 || j < 0 || i >= N || j >= N) continue;
+    if (!place(f, i, j, t, dir)) continue;
+    const c = cells[f][i][j];
+    c.item = r[5]; c.buf = r[6]; c.bt = r[7]; c.fa = r[8]; c.fb = r[9];
+    c.cook = r[10]; c.rr = r[11]; c.filt = r[12] || CRYSTAL;
+    c.dbt = r[13]; c.dmin = r[14]; c.emit = r[15];
+    c.left = r[16]; c.cool = r[17];
+    const gate = c.build && c.build.getObjectByName('gate');
+    if (gate) { gate.material.color.setHex(MIN_COL[c.filt]);
+                gate.material.emissive.setHex(MIN_COL[c.filt]); }
+  }
+  ore = +d.ore || 0; ingots = d.ingots | 0; alloys = d.alloys | 0;
+  cores = d.cores | 0; runValue = +d.runValue || 0;
+  if (d.up) for (const k in UPGRADES)
+    UPGRADES[k].lvl = Math.max(0, Math.min(UPGRADES[k].cap, d.up[k] | 0));
+  if (d.price) TRADED.forEach((t, k) => {
+    const v = +d.price[k];
+    if (isFinite(v)) PRICE[t] = LAST_PRICE[t] =
+      Math.max(PRICE_MIN, Math.min(PRICE_MAX, v));
+  });
+  if (d.p) {
+    player.face = d.p.face | 0;
+    if (d.p.pos) player.pos.fromArray(d.p.pos);
+    if (d.p.fwd) player.fwd.fromArray(d.p.fwd);
+    player.pitch = +d.p.pitch || 0;
+    faceNormal(player.face, player.up);
+    camUp.copy(player.up);
+  }
+  applyUpgrades(); renderUpgrades(); renderTicker(); refreshCounts();
+  document.getElementById('tok').textContent = cores;
+  return true;
+}
+
+function save() {
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify(saveState())); return true; }
+  catch (e) { return false; }
+}
+function load() {
+  try {
+    const raw = localStorage.getItem(SAVE_KEY);
+    return raw ? loadState(JSON.parse(raw)) : false;
+  } catch (e) { return false; }
+}
+function wipe() {
+  try { localStorage.removeItem(SAVE_KEY); } catch (e) {}
+  clearFactory();
+  ore = 0; ingots = 0; alloys = 0; cores = 0; runValue = 0;
+  for (const k in UPGRADES) UPGRADES[k].lvl = 0;
+  applyUpgrades(); renderUpgrades();
+  seedLine(true);
+  refreshCounts();
+  document.getElementById('tok').textContent = cores;
+}
+
+// A LINK THAT STARTS A NEW WORLD. Useful to a player who wants to hand someone
+// a clean copy, and the only reliable way for a test to get a fresh boot: a
+// harness that clears storage from inside the page has it written straight back
+// by the beforeunload save that the next navigation fires.
+const FRESH = /[?&](fresh|new)=1/.test(location.search);
+if (FRESH) { try { localStorage.removeItem(SAVE_KEY); } catch (e) {} }
+// the starter line is what a NEW world looks like; a save replaces it whole
+const restored = FRESH ? false : load();
+
+let saveClock = 0;
+// beforeunload is not reliable on mobile or when a tab is discarded, so the
+// periodic write is the real save and this is only the tidy case
+addEventListener('beforeunload', save);
+addEventListener('visibilitychange', () => { if (document.hidden) save(); });
+
 {
   const h = document.querySelector('#hud h1');
   if (h) h.textContent = (SPEC.title || 'FACTORY').toUpperCase();
+  const w = document.getElementById('wipe');
+  if (w) w.addEventListener('pointerdown', ev => {
+    ev.stopPropagation();
+    // a wipe is not undoable, so it asks once — but only once, because a
+    // confirm on every click is its own kind of hostile
+    if (w.dataset.armed) { wipe(); save(); w.dataset.armed = ''; w.textContent = 'new world'; }
+    else { w.dataset.armed = '1'; w.textContent = 'wipe this world?'; }
+  });
 }
 applyUpgrades();
 renderUpgrades();
@@ -1315,6 +1439,8 @@ renderer.setAnimationLoop(() => {
 
   stepMarket(dt);
   if (!melting) stepRifts(dt);
+  saveClock += dt;
+  if (saveClock >= 10) { saveClock = 0; save(); }
   if (melting > 0) {
     melting = Math.max(0, melting - dt);
     // the replacement line arrives when the old one has finished falling, not
@@ -1570,6 +1696,7 @@ window.__game = {
     items_on_belts: items.count,
     alloys,
     prices: TRADED.map(t => +PRICE[t].toFixed(3)),
+    restored,
     rift: (() => { let r = null;
       eachTile(c => { if (c.t === RIFT && !r) r = { debt: c.dbt,
         ore: MINERAL_NAME[c.dmin] || null, left: +c.left.toFixed(1),
@@ -1598,6 +1725,7 @@ window.__factory = {
            RIFT, CRYSTAL, EMBER, SALT, INGOT, INGOT_E, INGOT_S, ALLOY },
   MINERAL_OF_FACE, get alloys() { return alloys; }, cycleFilter,
   riftOpen, riftStorm, RIFT_COUNT, RIFT_WINDOW,
+  save, load, wipe, saveState, SAVE_KEY,
   PRICE, TRADED, stepMarket,
   UPGRADES, buy, costOf, get tick() { return TICK; },
   meltdown, MELT_MIN, get cores() { return cores; },

@@ -23,8 +23,13 @@ await p.setContent(`<!doctype html><style>html,body{margin:0;height:100%}
   </script>`, { waitUntil:'domcontentloaded' });
 await new Promise(r=>setTimeout(r,7000));
 
-const frame = p.frames().find(f => f.url().startsWith(GAME));
+let frame = p.frames().find(f => f.url().startsWith(GAME));
 if (!frame) { console.log('FAIL: game frame did not load'); await b.close(); process.exit(1); }
+// the game autosaves, and a save from an earlier run would seed this one
+await frame.evaluate(()=>{ try { localStorage.clear(); } catch (e) {} location.reload(); });
+await new Promise(r=>setTimeout(r,7000));
+frame = p.frames().find(f => f.url().startsWith(GAME));
+if (!frame) { console.log('FAIL: frame gone after reload'); await b.close(); process.exit(1); }
 
 const log = () => p.evaluate(()=>window.LOG.slice());
 const clear = () => p.evaluate(()=>{ window.LOG.length = 0; });
