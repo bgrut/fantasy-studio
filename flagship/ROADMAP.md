@@ -20,12 +20,19 @@ says so.
 | smelter | belts solve "these must meet", not just "that is far" |
 | splitter | routing becomes a decision, not a drawing |
 | upgrades | the number climbs, and spending it makes it climb faster |
+| **built by the studio** | a prompt produces this game, not a hand-run file |
+| **multi-sided gravity grid** | the differentiator: belts and gravity wrap a cube |
+| **prestige meltdown** | the factory is thrown into the sky for a permanent core |
 
-Measured: ~960 value/min after three upgrades, 60fps, no runtime errors.
+Measured on a prompt-built export: 40x40x6 grid, 40 nodes, 180 value/min,
+9 ingots in 12s, 18 draw calls, no console errors. The player walks top ->
+south with up [0,0,-1] and never leaves the surface; a crystal on a belt at
+the top face's edge arrives on the next face. 19/19 cube-grid properties pass
+against an extract of the shipping template, not against the library copy.
 
 ---
 
-## 1. Multi-sided gravity grid — **the differentiator, and the hard one**
+## ~~1. Multi-sided gravity grid~~ — SHIPPED 2026-09-07
 
 Walk over the edge of a floating cube and the world rotates under you; belts
 wrap around the corner and keep running.
@@ -45,7 +52,17 @@ re-basing. This is not a feature bolted on; it replaces the spatial core.
 Porting one face's worth of belts and smelters is a week; porting five
 mechanics' worth afterwards is a month.
 
-## 2. Prestige meltdown — **cheapest viral moment on the list**
+**What it actually cost:** the simulation no longer knows the shape of the
+world — it asks `stepTile` what is next to a tile, and that is the only place
+an edge exists. Everything that stands on the surface goes through one seating
+rule, so a belt arrow, a smelter and the build ghost cannot disagree about
+which way is up. Three bugs, none of which threw an error: a two-pass edge
+loop that crossed and immediately crossed back (the re-seat has to happen
+*inside* the loop), a spawn offset the wrong way along the face's v axis that
+pinned the player to the clamp so W did nothing at all, and a Tab orbit framed
+for a flat island that sat *inside* the worldlet.
+
+## ~~2. Prestige meltdown~~ — SHIPPED 2026-09-07
 
 Pause the sim, convert every instance matrix into a particle with outward
 velocity and gravity, collapse the factory, award tokens.
@@ -54,6 +71,16 @@ We already have the two hard parts: everything is in `InstancedMesh` (so the
 transforms are already in one buffer) and the engine side of this project has
 shipped physics-driven destruction before. Mostly a render-mode switch. High
 spectacle, low structural risk. Good candidate to do *alongside* item 1.
+
+**As built:** machines are not deleted, they are thrown — each build group is
+detached, given an outward velocity and a tumble, and pulled back by the
+worldlet so it arcs rather than simply leaving. Cores multiply everything the
+hub banks by 45% each, which has to be steep enough that melting a good
+factory beats keeping it or the prestige is a button nobody presses twice.
+Two timing bugs worth remembering: the first pass threw debris at 9-25 m/s and
+the whole factory left the frame inside 300ms, and re-seeding the starter line
+inside `meltdown()` meant the collapse and the rebuild were the same frame, so
+neither read. The replacement line now arrives when the old one has landed.
 
 ## 3. Galactic market ticker — **cheap, and it earns its keep**
 
@@ -100,8 +127,8 @@ and a market, because it needs all three to mean anything.
 
 ## Suggested order
 
-1. **Multi-sided gravity grid** while the mechanic count is still low
-2. **Prestige meltdown** — spectacle, and it reuses the instance buffers
+1. ~~Multi-sided gravity grid~~ — shipped
+2. ~~Prestige meltdown~~ — shipped
 3. **Filter tile** (item 4, done without a parser) + more recipes
 4. **Market ticker** — gives the recipes a reason to differ
 5. Revisit **Chronos** only if 3 and 4 give it something to bite on
@@ -109,6 +136,10 @@ and a market, because it needs all three to mean anything.
 ## Also outstanding
 
 - Merger fairness: two belts into one currently resolve by grid order
+- Nothing on the five new faces yet: the cube is walkable and belts wrap, but
+  the game gives no reason to go there. Ore density per face, or a recipe that
+  only exists on one side, is the cheapest fix
+- The player walks through machines; there is no collision
 - Save / load
 - Art uplift — placeholder boxes; the Kenney space kit (already vendored in
   `backend/assets/props`, CC0) is the right visual language for this
