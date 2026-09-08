@@ -17,11 +17,16 @@ await new Promise(r=>setTimeout(r,6000));
 // 1. every tool in the bar carries an icon, and a locked one is dimmed
 const icons = await p.evaluate(()=>{
   const t = [...document.querySelectorAll('.tool')];
-  return { tools: t.length, withIcon: t.filter(o => o.querySelector('svg')).length,
+  // an icon is a RENDER of the machine now, not a drawing of one — so it is an
+  // <img> with a data URL, and only ERASE is still a glyph
+  return { tools: t.length,
+           withIcon: t.filter(o => o.querySelector('img,svg')).length,
+           rendered: t.filter(o => { const i = o.querySelector('img');
+             return i && i.src.startsWith('data:image/png') && i.src.length > 4000; }).length,
            locked: t.filter(o => o.classList.contains('locked')).length };
 });
-console.log('tool bar  :', icons.withIcon, 'of', icons.tools, 'tools have an icon |',
-            icons.locked, 'locked');
+console.log('tool bar  :', icons.withIcon, 'of', icons.tools, 'have an icon |',
+            icons.rendered, 'are rendered machines |', icons.locked, 'locked');
 
 // 2. belts are instanced: many belts, few draw calls
 const inst = await p.evaluate(async ()=>{
@@ -108,6 +113,7 @@ console.log('errors    :', errs.length ? errs.join(' | ') : 'none');
 await p.screenshot({ path: process.env.OUT || 'art.png' });
 await b.close();
 const ok = icons.withIcon === icons.tools && icons.tools >= 9
+  && icons.rendered >= 8            // every machine; ERASE stays a glyph
   && inst.belts > 100 && inst.calls < 120
   && moving.moved
   && sky.found && sky.radius < sky.far && sky.stars > 500

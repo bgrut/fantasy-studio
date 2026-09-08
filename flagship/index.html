@@ -13,12 +13,13 @@
   .v{color:#ffd479;font-variant-numeric:tabular-nums}
   /* seven tools no longer fit at the old size: the bar wrapped onto two lines
      and ran into the hint text in the corner */
-  #tools{position:fixed;left:50%;transform:translateX(-50%);bottom:14px;z-index:5;
-         display:flex;gap:6px;white-space:nowrap}
-  .tool{background:rgba(8,10,20,.82);border:1px solid rgba(120,200,255,.18);
-        border-radius:8px;padding:6px 8px;cursor:pointer;user-select:none;
-        color:#aeb6cd;white-space:nowrap;font-size:12px}
-  .tool.on{border-color:#5ce0d0;color:#5ce0d0;background:rgba(92,224,208,.10)}
+  #tools{position:fixed;left:50%;transform:translateX(-50%);bottom:16px;z-index:5;
+         display:flex;gap:9px;white-space:nowrap}
+  .tool{cursor:pointer;user-select:none;color:#aeb6cd;white-space:nowrap}
+  .tool.on{border-color:#5ce0d0;
+           background:linear-gradient(180deg,rgba(26,66,62,.95),rgba(10,24,26,.95));
+           box-shadow:0 2px 14px rgba(92,224,208,.28),inset 0 1px 0 rgba(255,255,255,.07)}
+  .tool.on b{color:#a8f6e6}
   .tool b{display:block;font-size:11px;letter-spacing:.05em}
   .tool small{color:#6b7590}
   /* THE ICON IS THE LABEL. A row of nine identical boxes reading MINER BELT
@@ -26,12 +27,32 @@
      furnace are recognised without reading. Each one is drawn as its machine
      is drawn in the world, in the machine's own colour, so the bar and the
      worldlet agree about what a thing looks like. */
-  /* a two-row grid so the icon sits beside BOTH lines of the label; flex would
-     put the name and the hint side by side instead of stacked */
-  .tool{display:grid;grid-template-columns:19px auto;align-items:center;
-        column-gap:7px}
-  .tool svg{width:19px;height:19px;grid-row:1 / span 2;color:#5ce0d0}
+  /* A BAR, NOT A LIST OF COMMANDS. Monospace labels with "1 · MINER" in them
+     read as a terminal; a game's build bar is a row of things you recognise by
+     picture, with the key as a small badge rather than part of the name. The
+     icon is a render of the actual machine — see buildToolIcons(). */
+  .tool{display:grid;grid-template-columns:38px auto;align-items:center;
+        column-gap:9px;position:relative;padding:8px 12px 8px 9px;
+        border-radius:11px;
+        background:linear-gradient(180deg,rgba(24,30,52,.92),rgba(10,13,26,.94));
+        border:1px solid rgba(120,200,255,.16);
+        box-shadow:0 2px 10px rgba(0,0,0,.45),inset 0 1px 0 rgba(255,255,255,.05);
+        transition:transform .12s,border-color .12s,box-shadow .12s}
+  .tool:hover{transform:translateY(-2px);border-color:rgba(120,200,255,.4)}
+  .tool svg,.tool .ico{width:38px;height:38px;grid-row:1 / span 2;
+        display:block;color:#5ce0d0}
+  .tool .ico{filter:drop-shadow(0 2px 3px rgba(0,0,0,.55))}
   .tool b,.tool small{grid-column:2}
+  .tool b{font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+          font-size:11.5px;font-weight:650;letter-spacing:.07em;color:#dfe6f5}
+  .tool small{font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+              font-size:10px;letter-spacing:.01em;color:#7b86a6}
+  /* the shortcut is a badge in the corner, not part of the machine's name */
+  .tool .key{position:absolute;top:-6px;left:-6px;width:17px;height:17px;
+             border-radius:6px;background:#1b2340;border:1px solid rgba(120,200,255,.3);
+             color:#8fa3cc;font-style:normal;font-size:10px;line-height:15px;
+             text-align:center;font-variant-numeric:tabular-nums}
+  .tool.on .key{background:#12463f;border-color:#5ce0d0;color:#8ff3dd}
   .tool[data-tool="miner"] svg{color:#ff5d73}
   .tool[data-tool="belt"] svg{color:#3ad39a}
   .tool[data-tool="smelter"] svg{color:#8c6bff}
@@ -149,15 +170,15 @@
   <div id="wipe">new world</div>
 </div>
 <div id="tools">
-  <div class="tool on" data-tool="miner"><svg viewBox="0 0 24 24"><path d="M4 20h16M6 20V9M18 20V9M6 9h12M8 9V6M16 9V6M8 6h8" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linecap="round"/><path d="M12 20v-6l-2-3h4l-2 3" fill="currentColor"/></svg><b>1 · MINER</b><small>on a node</small></div>
-  <div class="tool" data-tool="belt"><svg viewBox="0 0 24 24"><rect x="2.5" y="9" width="19" height="6" rx="3" stroke="currentColor" stroke-width="1.7" fill="none"/><circle cx="6" cy="12" r="1.6" fill="currentColor"/><circle cx="18" cy="12" r="1.6" fill="currentColor"/><path d="M10 9.5l2 2.5-2 2.5M13.5 9.5l2 2.5-2 2.5" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg><b>2 · BELT</b><small>drag to draw</small></div>
-  <div class="tool" data-tool="smelter"><svg viewBox="0 0 24 24"><path d="M5 20V9h14v11z" stroke="currentColor" stroke-width="1.7" fill="none"/><path d="M4 9h16" stroke="currentColor" stroke-width="1.7"/><path d="M15 9V4h3v5" stroke="currentColor" stroke-width="1.7" fill="none"/><rect x="9" y="13" width="6" height="5" fill="currentColor"/></svg><b>3 · SMELTER</b><small>2 ore &rarr; 1 ingot</small></div>
-  <div class="tool" data-tool="splitter"><svg viewBox="0 0 24 24"><path d="M12 3v18M3 12h18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="12" cy="12" r="3.6" stroke="currentColor" stroke-width="1.7" fill="none"/></svg><b>4 · SPLITTER</b><small>feeds both ways</small></div>
-  <div class="tool" data-tool="hub"><svg viewBox="0 0 24 24"><ellipse cx="12" cy="17" rx="9" ry="4" stroke="currentColor" stroke-width="1.7" fill="none"/><ellipse cx="12" cy="17" rx="4.5" ry="2" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M12 15V5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><circle cx="12" cy="4" r="2" fill="currentColor"/></svg><b>5 · HUB</b><small>delivers</small></div>
-  <div class="tool" data-tool="forge"><svg viewBox="0 0 24 24"><path d="M6 20V8h12v12z" stroke="currentColor" stroke-width="1.7" fill="none"/><ellipse cx="12" cy="8" rx="6" ry="2.4" stroke="currentColor" stroke-width="1.7" fill="none"/><path d="M9 4l1.5 3M15 4l-1.5 3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="12" cy="15" r="2.6" fill="currentColor"/></svg><b>6 · FORGE</b><small>2 different ores</small></div>
-  <div class="tool" data-tool="filter"><svg viewBox="0 0 24 24"><path d="M3 5h18l-7 8v6l-4 2v-8z" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linejoin="round"/></svg><b>7 · FILTER</b><small>F to set ore</small></div>
-  <div class="tool" data-tool="rift"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" stroke="currentColor" stroke-width="1.7" fill="none"/><circle cx="12" cy="12" r="3.4" stroke="currentColor" stroke-width="1.5" fill="none"/><path d="M12 4v3M12 17v3M4 12h3M17 12h3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg><b>8 · RIFT</b><small>ore now, pay later</small></div>
-  <div class="tool" data-tool="erase"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg><b>9 · ERASE</b><small>&nbsp;</small></div>
+  <div class="tool on" data-tool="miner"><svg viewBox="0 0 24 24"><path d="M4 20h16M6 20V9M18 20V9M6 9h12M8 9V6M16 9V6M8 6h8" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linecap="round"/><path d="M12 20v-6l-2-3h4l-2 3" fill="currentColor"/></svg><i class="key">1</i><b>MINER</b><small>on a node</small></div>
+  <div class="tool" data-tool="belt"><svg viewBox="0 0 24 24"><rect x="2.5" y="9" width="19" height="6" rx="3" stroke="currentColor" stroke-width="1.7" fill="none"/><circle cx="6" cy="12" r="1.6" fill="currentColor"/><circle cx="18" cy="12" r="1.6" fill="currentColor"/><path d="M10 9.5l2 2.5-2 2.5M13.5 9.5l2 2.5-2 2.5" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg><i class="key">2</i><b>BELT</b><small>drag to draw</small></div>
+  <div class="tool" data-tool="smelter"><svg viewBox="0 0 24 24"><path d="M5 20V9h14v11z" stroke="currentColor" stroke-width="1.7" fill="none"/><path d="M4 9h16" stroke="currentColor" stroke-width="1.7"/><path d="M15 9V4h3v5" stroke="currentColor" stroke-width="1.7" fill="none"/><rect x="9" y="13" width="6" height="5" fill="currentColor"/></svg><i class="key">3</i><b>SMELTER</b><small>2 ore &rarr; 1 ingot</small></div>
+  <div class="tool" data-tool="splitter"><svg viewBox="0 0 24 24"><path d="M12 3v18M3 12h18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="12" cy="12" r="3.6" stroke="currentColor" stroke-width="1.7" fill="none"/></svg><i class="key">4</i><b>SPLITTER</b><small>feeds both ways</small></div>
+  <div class="tool" data-tool="hub"><svg viewBox="0 0 24 24"><ellipse cx="12" cy="17" rx="9" ry="4" stroke="currentColor" stroke-width="1.7" fill="none"/><ellipse cx="12" cy="17" rx="4.5" ry="2" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M12 15V5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><circle cx="12" cy="4" r="2" fill="currentColor"/></svg><i class="key">5</i><b>HUB</b><small>delivers</small></div>
+  <div class="tool" data-tool="forge"><svg viewBox="0 0 24 24"><path d="M6 20V8h12v12z" stroke="currentColor" stroke-width="1.7" fill="none"/><ellipse cx="12" cy="8" rx="6" ry="2.4" stroke="currentColor" stroke-width="1.7" fill="none"/><path d="M9 4l1.5 3M15 4l-1.5 3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="12" cy="15" r="2.6" fill="currentColor"/></svg><i class="key">6</i><b>FORGE</b><small>2 different ores</small></div>
+  <div class="tool" data-tool="filter"><svg viewBox="0 0 24 24"><path d="M3 5h18l-7 8v6l-4 2v-8z" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linejoin="round"/></svg><i class="key">7</i><b>FILTER</b><small>F to set ore</small></div>
+  <div class="tool" data-tool="rift"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" stroke="currentColor" stroke-width="1.7" fill="none"/><circle cx="12" cy="12" r="3.4" stroke="currentColor" stroke-width="1.5" fill="none"/><path d="M12 4v3M12 17v3M4 12h3M17 12h3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg><i class="key">8</i><b>RIFT</b><small>ore now, pay later</small></div>
+  <div class="tool" data-tool="erase"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg><i class="key">9</i><b>ERASE</b><small>&nbsp;</small></div>
 </div>
 <div id="toast"></div>
 <div id="cross"></div>

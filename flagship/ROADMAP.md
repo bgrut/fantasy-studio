@@ -36,6 +36,7 @@ says so.
 | **lighting pass** | bloom, a graded composite, particles, a lit silhouette |
 | **grounding pass** | real cast shadows, contact shadows, curved belt corners |
 | **material pass** | an environment to reflect, baked occlusion, rim light, detail |
+| **UI pass** | tool icons that ARE the machines, rendered at boot |
 | **unlockable worlds** | four places to put the factory, bought with cores |
 
 Measured on a prompt-built export: 40x40x6 grid, 40 nodes, 180 value/min,

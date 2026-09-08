@@ -530,6 +530,47 @@ function renderFrame() {
 }
 
 // ── the sky ────────────────────────────────────────────────────────────────
+// A flat background colour behind a star field is a black card with dots on
+// it. A shallow vertical gradient with a soft band across the middle gives the
+// void a top and a bottom, which is all it takes for the worldlet to feel like
+// it is somewhere rather than nowhere. One inverted sphere, no lighting, drawn
+// first and never written to the depth buffer.
+let skyDome = null;
+function buildSky(topHex, deepHex, bandHex) {
+  if (skyDome) { scene.remove(skyDome); skyDome.geometry.dispose();
+                 skyDome.material.dispose(); }
+  const mat = new THREE.ShaderMaterial({
+    side: THREE.BackSide, depthWrite: false, depthTest: false, fog: false,
+    uniforms: { uTop: { value: new THREE.Color(topHex) },
+                uDeep: { value: new THREE.Color(deepHex) },
+                uBand: { value: new THREE.Color(bandHex) } },
+    vertexShader: `
+      varying vec3 vDir;
+      void main() {
+        vDir = normalize(position);
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }`,
+    fragmentShader: `
+      varying vec3 vDir;
+      uniform vec3 uTop; uniform vec3 uDeep; uniform vec3 uBand;
+      void main() {
+        float h = vDir.y * 0.5 + 0.5;
+        vec3 c = mix(uDeep, uTop, smoothstep(0.15, 0.95, h));
+        // a wide, very soft band near the horizon: a galactic plane, at the
+        // strength where you notice it only once you look for it
+        // RESTRAINT. At half strength the band read as a planet's horizon glow
+        // and the worldlet stopped looking like it was in space at all. It
+        // should be something noticed on the second look.
+        c += uBand * (1.0 - smoothstep(0.0, 0.42, abs(vDir.y - 0.04))) * 0.16;
+        gl_FragColor = vec4(c, 1.0);
+      }`,
+  });
+  skyDome = new THREE.Mesh(new THREE.SphereGeometry(460, 24, 16), mat);
+  skyDome.frustumCulled = false;
+  skyDome.renderOrder = -1;
+  skyDome.name = 'sky';
+  scene.add(skyDome);
+}
 // A floating worldlet against flat black reads as a bug. Stars cost one draw
 // call and give the cube something to be floating IN — and when you walk over
 // an edge and the world rotates, they are what makes the rotation legible.
@@ -1167,6 +1208,117 @@ addRim(MAT.filt, 0x8fffdd, 2.7, 0.45);
 addRim(MAT.rift, 0xc0a8ff, 2.2, 0.70);
 for (const m of MINERALS) addRim(nodeMats[m], MIN_COL[m], 2.0, 0.7);
 
+// ── TOOL ICONS ─────────────────────────────────────────────────────────────
+// A thumbnail is a render of the machine, not a drawing of one. Done once at
+// boot into a 128px target; the whole set costs a few milliseconds and never
+// disagrees with the world afterwards.
+function renderThumb(obj, size) {
+  // AN LDR TARGET, DELIBERATELY. readRenderTargetPixels has to be handed the
+  // buffer type the texture actually uses — a HalfFloat target wants a
+  // Uint16Array, and both a Uint8Array and a Float32Array come back empty
+  // without throwing, which shows up as eight blank squares in the tool bar
+  // and nothing in the console. Bytes clip the highlights on a 38px icon,
+  // which nobody will ever see.
+  const rt = new THREE.WebGLRenderTarget(size, size, { depthBuffer: true });
+  const sc = new THREE.Scene();
+  sc.environment = scene.environment;
+  sc.add(new THREE.HemisphereLight(0xcfe0ff, 0x2a3050, 1.5));
+  const key = new THREE.DirectionalLight(0xfff4e2, 2.9);
+  key.position.set(4, 6, 5); sc.add(key);
+  const rim = new THREE.DirectionalLight(0x8fd8ff, 1.5);
+  rim.position.set(-5, 2, -4); sc.add(rim);
+  sc.add(obj);
+
+  // frame it: bounding sphere, then back off far enough to fit with a margin
+  const box = new THREE.Box3().setFromObject(obj);
+  const c = box.getCenter(new THREE.Vector3());
+  const r = Math.max(0.001, box.getSize(new THREE.Vector3()).length() * 0.5);
+  const cam = new THREE.PerspectiveCamera(30, 1, 0.01, 200);
+  const d = (r / Math.sin(15 * Math.PI / 180)) * 0.82;
+  cam.position.set(c.x + d * 0.62, c.y + d * 0.52, c.z + d * 0.59);
+  cam.lookAt(c);
+
+  const prevTarget = renderer.getRenderTarget();
+  const prevAlpha = renderer.getClearAlpha();
+  renderer.setClearAlpha(0);
+  renderer.setRenderTarget(rt);
+  renderer.clear();
+  renderer.render(sc, cam);
+  // A FLOAT TARGET NEEDS A FLOAT BUFFER (2026-09-08). Reading a HalfFloat
+  // render target into a Uint8Array is a type mismatch: it returns nothing
+  // useful and throws nothing, so every icon came out blank and the only
+  // symptom was an empty square in the bar.
+  const buf = new Uint8Array(size * size * 4);
+  renderer.readRenderTargetPixels(rt, 0, 0, size, size, buf);
+  renderer.setRenderTarget(prevTarget);
+  renderer.setClearAlpha(prevAlpha);
+
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = size;
+  const g2 = cv.getContext('2d');
+  const img = g2.createImageData(size, size);
+  const aces = x => {
+    const v = x * 1.06;
+    return Math.max(0, Math.min(1, (v * (2.51 * v + 0.03)) / (v * (2.43 * v + 0.59) + 0.14)));
+  };
+  const srgb = x => x <= 0.0031308 ? x * 12.92 : 1.055 * Math.pow(x, 1 / 2.4) - 0.055;
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      // readRenderTargetPixels is bottom-origin, ImageData is top-origin
+      const src = ((size - 1 - y) * size + x) * 4;
+      const dst = (y * size + x) * 4;
+      const a = buf[src + 3] / 255;
+      for (let k = 0; k < 3; k++) {
+        // un-premultiply, then the same tone map and encode the main composite
+        // does — a render target is linear and nobody converts it for you
+        let v = buf[src + k] / 255;
+        if (a > 0.004) v /= a;
+        img.data[dst + k] = Math.round(srgb(aces(v)) * 255);
+      }
+      img.data[dst + 3] = buf[src + 3];
+    }
+  }
+  g2.putImageData(img, 0, 0);
+  rt.dispose();
+  return cv.toDataURL('image/png');
+}
+
+function buildToolIcons() {
+  const mk = (geo, mat) => new THREE.Mesh(geo, mat);
+  const grp = list => { const g = new THREE.Group();
+                        for (const o of list) g.add(o); return g; };
+  const SET = {
+    miner: () => grp([mk(GEO.miner, MAT.miner),
+                      (() => { const b = mk(GEO.minerBit, MAT.miner);
+                               b.position.y = 0.42; return b; })()]),
+    belt: () => grp([mk(GEO.beltFrame, MAT.beltFrame),
+                     (() => { const d = mk(GEO.beltDeck, MAT.beltDeck);
+                              d.position.y = 0.155; return d; })()]),
+    smelter: () => mk(GEO.smelt, MAT.smelt),
+    splitter: () => mk(GEO.split, MAT.split),
+    hub: () => mk(GEO.hub, MAT.hub),
+    forge: () => mk(GEO.forge, MAT.forge),
+    filter: () => mk(GEO.filter, MAT.filt),
+    rift: () => grp([mk(GEO.riftBase, MAT.rift),
+                     (() => { const r = mk(GEO.rift, MAT.rift);
+                              r.position.y = 0.95; r.rotation.x = Math.PI / 2;
+                              return r; })()]),
+  };
+  for (const name in SET) {
+    const el = document.querySelector('.tool[data-tool="' + name + '"]');
+    if (!el) continue;
+    let url = null;
+    try { url = renderThumb(SET[name](), 128); } catch (e) { url = null; }
+    if (!url) continue;                    // the drawn fallback stays in place
+    const img = document.createElement('img');
+    img.className = 'ico';
+    img.src = url;
+    img.alt = name;
+    const svg = el.querySelector('svg');
+    if (svg) svg.replaceWith(img); else el.prepend(img);
+  }
+}
+
 function refreshCounts() {
   let m = 0, b = 0, sm = 0;
   eachTile(c => {
@@ -1706,6 +1858,17 @@ function accepts(dst, type) {
 // `to` is the tile it landed on. Passing it costs nothing and is what lets an
 // arrival be a visible event rather than a counter changing in the corner.
 function deliver(dst, to, type) {
+  // a machine eating something should be visible from outside it
+  if (to && (dst.t === SMELTER || dst.t === FORGE || dst.t === RIFT)) {
+    const n = FACES[to.face].n, w = tileWorld(to.face, to.i, to.j);
+    const col = ITEM_COL[type] || ITEM_COL[CRYSTAL];
+    for (let k = 0; k < 3; k++)
+      emit(w[0] + n[0] * 0.9, w[1] + n[1] * 0.9, w[2] + n[2] * 0.9,
+           n[0] * 1.1 + (Math.random() - 0.5) * 1.5,
+           n[1] * 1.1 + (Math.random() - 0.5) * 1.5,
+           n[2] * 1.1 + (Math.random() - 0.5) * 1.5,
+           col.r, col.g, col.b, -0.035, 3.1);
+  }
   if (dst.t === HUB) {
     bank(type);
     dst.pulse = 1;
@@ -1878,8 +2041,11 @@ function drawItems(alpha) {
       : c.d;
     const to = c.t === SPLITTER ? null : stepTile(f, i, j, dir);
     const ahead = cellOf(to);
-    const free = ahead && (ahead.t === HUB ||
-      ((ahead.t === BELT || ahead.t === FILTER) && !ahead.item));
+    // ANYTHING THAT WILL TAKE IT IS MOVEMENT. This listed the destinations by
+    // hand and left the machines out, so a crystal about to be smelted sat
+    // dead still on the last belt tile and then vanished. accepts() already
+    // knows the answer, and it is the same answer the tick will act on.
+    const free = ahead && accepts(ahead, c.item);
     const a = free ? alpha : 0;
     // Interpolating between the two tiles' world centres carries an item
     // around an edge on its own: across a corner the two centres are on
@@ -2519,6 +2685,11 @@ function applyWorld(k) {
   // the bounce light is the world's own colour, which is what stops a red
   // planet from having neutral grey machines standing on it
   scene.environment = buildEnv(w.edge || w.grid, w.ground);
+  // a real vertical gradient: lifted overhead, deeper below, so the void has a
+  // top and a bottom instead of being one flat value with a band painted on it
+  buildSky(new THREE.Color(w.sky).lerp(new THREE.Color(w.edge || w.grid), 0.16).getHex(),
+           new THREE.Color(w.sky).lerp(new THREE.Color(0x000000), 0.55).getHex(),
+           w.edge || w.grid);
   matComposite.uniforms.uTint.value.setHex(w.fog);
   const h = document.querySelector('#hud h1');
   if (h) h.textContent = String(w.name).toUpperCase();
@@ -2781,6 +2952,8 @@ addEventListener('visibilitychange', () => { if (document.hidden) save(); });
 applyUpgrades();
 renderUpgrades();
 renderTicker();
+// after the world exists, so the icons are lit by the same environment it is
+buildToolIcons();
 renderGoal();
 if (!restored) applyWorld(worldIdx);   // a restored save has already chosen
 
@@ -3154,7 +3327,7 @@ window.__factory = {
   MINERAL_OF_FACE, get alloys() { return alloys; }, cycleFilter,
   riftOpen, riftStorm, RIFT_COUNT, RIFT_WINDOW,
   save, load, wipe, saveState, SAVE_KEY, TREAD, beltFrames, beltDecks, POST,
-  beltShape, scatterVent, scatterBolt, scatterSpots,
+  beltShape, scatterVent, scatterBolt, scatterSpots, renderThumb, GEO, MAT,
   GOALS, UNLOCKED, get goalIdx() { return goalIdx; }, visitedFaces,
   WORLDS, travelTo, applyWorld, get worldIdx() { return worldIdx; },
   // aim the overhead camera, so a harness can look at a chosen face
