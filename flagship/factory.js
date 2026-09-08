@@ -641,7 +641,10 @@ function buildSky(topHex, deepHex, bandHex) {
 // throughout, because plating should be something noticed underfoot rather
 // than a second grid competing with the one that means something.
 const PLATE_PX = 256;
-function plateCanvas() {
+const PLATE_DEFAULT = { base: '#8792c4', tint: '#6a74a6', seam: 'rgba(90,100,150,0.75)',
+                        rivet: 'rgba(190,200,235,0.55)', overlay: null };
+function plateCanvas(pl) {
+  pl = pl || PLATE_DEFAULT;
   const c = document.createElement('canvas');
   c.width = c.height = PLATE_PX;
   const g = c.getContext('2d');
@@ -649,21 +652,22 @@ function plateCanvas() {
   let seed = 7717;
   const rr = () => (seed = (seed * 1664525 + 1013904223) % 4294967296) / 4294967296;
 
-  g.fillStyle = '#8792c4'; g.fillRect(0, 0, P, P);
-  // four sub-panels, each very slightly a different shade
+  g.fillStyle = pl.base; g.fillRect(0, 0, P, P);
+  // four sub-panels, each very slightly a different shade of the world's own
   for (let a = 0; a < 2; a++) for (let b = 0; b < 2; b++) {
-    const v = 132 + Math.floor(rr() * 16);
-    g.fillStyle = 'rgb(' + v + ',' + (v + 10) + ',' + (v + 40) + ')';
+    g.fillStyle = pl.tint;
+    g.globalAlpha = 0.25 + rr() * 0.35;
     g.fillRect(a * P / 2 + 2, b * P / 2 + 2, P / 2 - 4, P / 2 - 4);
   }
+  g.globalAlpha = 1;
   // seams
-  g.strokeStyle = 'rgba(90,100,150,0.75)'; g.lineWidth = 3;
+  g.strokeStyle = pl.seam; g.lineWidth = 3;
   g.strokeRect(1.5, 1.5, P - 3, P - 3);
   g.lineWidth = 2;
   g.beginPath(); g.moveTo(P / 2, 0); g.lineTo(P / 2, P);
   g.moveTo(0, P / 2); g.lineTo(P, P / 2); g.stroke();
   // rivets at the panel corners
-  g.fillStyle = 'rgba(190,200,235,0.55)';
+  g.fillStyle = pl.rivet;
   for (const [x, y] of [[10, 10], [P - 10, 10], [10, P - 10], [P - 10, P - 10],
                         [P / 2, 10], [P / 2, P - 10], [10, P / 2], [P - 10, P / 2]]) {
     g.beginPath(); g.arc(x, y, 2.6, 0, 6.3); g.fill();
@@ -673,6 +677,36 @@ function plateCanvas() {
     const x = rr() * P, y = rr() * P, w = 12 + rr() * 40, h = 2 + rr() * 5;
     g.fillStyle = 'rgba(' + (rr() < 0.5 ? '70,78,120' : '175,185,220') + ',0.10)';
     g.fillRect(x, y, w, h);
+  }
+  // WHAT THE WORLD HAS DONE TO THE PLATING. Snow on bare steel reads as a
+  // bug; snow on plating that has frosted over reads as a place.
+  if (pl.overlay === 'frost') {
+    for (let k = 0; k < 900; k++) {
+      g.fillStyle = 'rgba(255,255,255,' + (0.18 + rr() * 0.5) + ')';
+      const r = 0.6 + rr() * 1.6;
+      g.beginPath(); g.arc(rr() * P, rr() * P, r, 0, 6.3); g.fill();
+    }
+    for (let k = 0; k < 7; k++) {          // drifts along seams
+      g.fillStyle = 'rgba(235,245,255,0.28)';
+      g.fillRect(rr() * P, rr() < 0.5 ? 0 : P / 2 - 6, 30 + rr() * 60, 10);
+    }
+  } else if (pl.overlay === 'moss') {
+    for (let k = 0; k < 26; k++) {
+      const x = rr() * P, y = rr() * P, r = 8 + rr() * 26;
+      const grd = g.createRadialGradient(x, y, 1, x, y, r);
+      grd.addColorStop(0, 'rgba(96,150,88,0.55)');
+      grd.addColorStop(1, 'rgba(96,150,88,0)');
+      g.fillStyle = grd; g.beginPath(); g.arc(x, y, r, 0, 6.3); g.fill();
+    }
+  } else if (pl.overlay === 'soot') {
+    for (let k = 0; k < 18; k++) {
+      g.fillStyle = 'rgba(20,12,10,' + (0.15 + rr() * 0.25) + ')';
+      g.fillRect(rr() * P, rr() * P, 10 + rr() * 50, 3 + rr() * 9);
+    }
+    for (let k = 0; k < 5; k++) {          // a few embers still in the cracks
+      g.fillStyle = 'rgba(255,120,50,0.55)';
+      g.fillRect(rr() * P, rr() * P, 2 + rr() * 4, 2);
+    }
   }
   // grain
   const d = g.getImageData(0, 0, P, P);
@@ -684,8 +718,8 @@ function plateCanvas() {
   return c;
 }
 
-function plateTexture() {
-  const t = new THREE.CanvasTexture(plateCanvas());
+function plateTexture(pl) {
+  const t = new THREE.CanvasTexture(plateCanvas(pl));
   t.wrapS = t.wrapT = THREE.RepeatWrapping;
   t.repeat.set(N / 5, N / 5);      // panels bigger than tiles, so they read as panels
   t.colorSpace = THREE.SRGBColorSpace;
@@ -696,8 +730,8 @@ function plateTexture() {
 // The same plating, as roughness. Seams and rivets are smoother than the panel
 // they sit in, so a moving light crawls across the floor instead of sliding
 // over one uniform sheen — which is most of what tells you a surface is metal.
-function plateRoughness() {
-  const src = plateCanvas();
+function plateRoughness(pl) {
+  const src = plateCanvas(pl);
   const c = document.createElement('canvas');
   c.width = c.height = PLATE_PX;
   const g = c.getContext('2d');
@@ -1450,6 +1484,14 @@ function place(face, i, j, type, dir) {
     const beacon = new THREE.Mesh(new THREE.SphereGeometry(0.15, 8, 6),
       new THREE.MeshBasicMaterial({ color: 0xffd479 }));
     beacon.position.y = 1.22; beacon.name = 'lamp'; g.add(beacon);
+    // the price board, on the mast, facing the way the hub faces: the thing
+    // that pays the prices is the thing that displays them
+    const board = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.45),
+      new THREE.MeshBasicMaterial({ map: TICK_TEX, transparent: false }));
+    board.position.set(0.12, 0.82, 0);
+    board.rotation.y = Math.PI / 2;
+    board.name = 'board';
+    g.add(board);
   } else if (type === SPLITTER) {
     // a cross, so what it does is visible from across the worldlet rather than
     // being a box you have to remember the meaning of
@@ -1929,7 +1971,30 @@ function stepMarket(dt) {
   renderTicker();
 }
 
+// One texture for every hub's board. Drawn here, in the same call that
+// redraws the panel, so the world and the HUD never disagree about a price.
+const TICK_TEX = (() => {
+  const c = document.createElement('canvas');
+  c.width = 128; c.height = 64;
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.userData.canvas = c;
+  return t;
+})();
+function drawTickerBoard() {
+  const c = TICK_TEX.userData.canvas, g = c.getContext('2d');
+  g.fillStyle = '#0b1020'; g.fillRect(0, 0, 128, 64);
+  g.strokeStyle = 'rgba(120,200,255,0.35)'; g.lineWidth = 2; g.strokeRect(1, 1, 126, 62);
+  TRADED.forEach((t, k) => {
+    const h = Math.round(((PRICE[t] - PRICE_MIN) / (PRICE_MAX - PRICE_MIN)) * 40 + 6);
+    g.fillStyle = TRADE_COL[t];
+    g.fillRect(10 + k * 30, 56 - h, 20, h);
+  });
+  TICK_TEX.needsUpdate = true;
+}
+
 function renderTicker() {
+  drawTickerBoard();
   const box = document.getElementById('tick');
   if (!box) return;
   // FOUR BARS, NOT FOUR NUMBERS. Height is price, colour is the ore, so the
@@ -2808,6 +2873,9 @@ function meltdown() {
   const won = Math.max(1, coresFor(runValue));
   cores += won;
   sfxMelt();
+  // the most filmable moment in the game, shown from where it can be seen
+  playIntro('MELTDOWN', '+' + won + (won === 1 ? ' core' : ' cores') +
+            ' \u00b7 the factory is thrown to the sky', 2.6, true);
 
   eachTile((c, f, i, j) => {
     const piece = pieceFor(f, i, j, c);
@@ -2858,16 +2926,16 @@ function stepDebris(dt) {
 // behaves. Ore colours are excluded on purpose — they are how a belt is read at
 // a glance, and re-learning them per world would be a tax on travelling.
 const WORLDS = [
-  { id: 'prompt', weather: { col: [0.55, 0.62, 0.80], rate: 5, size: 0.028, fall: 0.25, drift: 0.35, life: 0.16 }, edge: 0x7fd8ff, sun: 0xfff2d6, name: SPEC.title || 'Crystal Isle', cores: 0,
+  { id: 'prompt', plate: { base: '#8792c4', tint: '#6a74a6', seam: 'rgba(90,100,150,0.75)', rivet: 'rgba(190,200,235,0.55)', overlay: null }, weather: { col: [0.55, 0.62, 0.80], rate: 5, size: 0.028, fall: 0.25, drift: 0.35, life: 0.16 }, edge: 0x7fd8ff, sun: 0xfff2d6, name: SPEC.title || 'Crystal Isle', cores: 0,
     blurb: 'where the prompt dropped you',
     sky: SKY_COL, fog: FOG_COL, ground: 0x3c4470, grid: 0x46527d, star: 0xffffff },
-  { id: 'ember', weather: { col: [0.95, 0.42, 0.22], rate: 14, size: 0.040, fall: 0.55, drift: 0.55, life: 0.14 }, edge: 0xff9a5c, sun: 0xffd0a0, name: 'Ember Reach', cores: 2,
+  { id: 'ember', plate: { base: '#6a5a58', tint: '#4a3a38', seam: 'rgba(40,24,22,0.8)', rivet: 'rgba(160,120,110,0.5)', overlay: 'soot' }, weather: { col: [0.95, 0.42, 0.22], rate: 14, size: 0.040, fall: 0.55, drift: 0.55, life: 0.14 }, edge: 0xff9a5c, sun: 0xffd0a0, name: 'Ember Reach', cores: 2,
     blurb: 'a cinder still cooling',
     sky: 0x1a0c0e, fog: 0x2a1210, ground: 0x6b3a34, grid: 0xa2564a, star: 0xffd2b8 },
-  { id: 'frost', weather: { col: [0.92, 0.96, 1.00], rate: 18, size: 0.034, fall: 0.40, drift: 0.90, life: 0.12 }, edge: 0xcfe8ff, sun: 0xe8f4ff, name: 'Frostline', cores: 5,
+  { id: 'frost', plate: { base: '#c4d2e6', tint: '#a8b8cf', seam: 'rgba(120,140,170,0.6)', rivet: 'rgba(255,255,255,0.7)', overlay: 'frost' }, weather: { col: [0.92, 0.96, 1.00], rate: 18, size: 0.034, fall: 0.40, drift: 0.90, life: 0.12 }, edge: 0xcfe8ff, sun: 0xe8f4ff, name: 'Frostline', cores: 5,
     blurb: 'ice over something older',
     sky: 0x0a1420, fog: 0x11202f, ground: 0x7c93ad, grid: 0xa8c4dd, star: 0xdcefff },
-  { id: 'verdant', weather: { col: [0.55, 0.95, 0.60], rate: 9, size: 0.046, fall: -0.30, drift: 0.45, life: 0.10 }, edge: 0x8fe6a0, sun: 0xdfffe6, name: 'The Verdant Fault', cores: 9,
+  { id: 'verdant', plate: { base: '#7c8a78', tint: '#5f6e5a', seam: 'rgba(50,64,48,0.75)', rivet: 'rgba(170,190,160,0.5)', overlay: 'moss' }, weather: { col: [0.55, 0.95, 0.60], rate: 9, size: 0.046, fall: -0.30, drift: 0.45, life: 0.10 }, edge: 0x8fe6a0, sun: 0xdfffe6, name: 'The Verdant Fault', cores: 9,
     blurb: 'it grew back around the machines',
     sky: 0x08170f, fog: 0x0f2418, ground: 0x3f6b4a, grid: 0x63a072, star: 0xd6ffe0 },
 ];
@@ -2886,6 +2954,13 @@ function applyWorld(k) {
   // the bounce light is the world's own colour, which is what stops a red
   // planet from having neutral grey machines standing on it
   scene.environment = buildEnv(w.edge || w.grid, w.ground);
+  // the plating is rebuilt for the world, not recoloured: frost, moss and
+  // soot are things drawn ON it, and a tint cannot draw
+  if (cube.material.map) cube.material.map.dispose();
+  if (cube.material.roughnessMap) cube.material.roughnessMap.dispose();
+  cube.material.map = plateTexture(w.plate);
+  cube.material.roughnessMap = plateRoughness(w.plate);
+  cube.material.needsUpdate = true;
   // a real vertical gradient: lifted overhead, deeper below, so the void has a
   // top and a bottom instead of being one flat value with a band painted on it
   buildSky(new THREE.Color(w.sky).lerp(new THREE.Color(w.edge || w.grid), 0.16).getHex(),
@@ -3333,9 +3408,27 @@ renderer.setAnimationLoop(() => {
     intro = Math.max(0, intro - dt);
     const t = 1 - intro / introTotal;                    // 0 -> 1
     const e = t * t * (3 - 2 * t);
-    const yaw = introFrom.yaw + e * Math.PI * 1.5;
-    const pitch = 1.05 - e * 0.55;
-    const dist = HALF * (5.2 - e * 2.6);
+    // Two different shots. The arrival eases IN from far out, low, a
+    // three-quarter turn. The meltdown starts high and close over the face the
+    // factory is on — so the machines going up fill the frame — and pulls OUT
+    // until the whole world is in view as the debris lands. The first version
+    // ran the arrival path backwards, which began at a wide of the cube with
+    // the debris three pixels tall at the top edge.
+    let yaw, pitch, dist;
+    if (introFrom.reverse) {
+      const n = FACES[player.face].n;
+      // the orbit rig only looks at the origin, so aim at the FACE by choosing
+      // yaw and pitch from its normal, then rise and pull away along it
+      const fy = Math.atan2(n[0], n[2]);
+      const fp = Math.asin(Math.max(-0.99, Math.min(0.99, n[1])));
+      yaw = fy + (e - 0.5) * 0.5;
+      pitch = fp * (1 - e * 0.32);
+      dist = HALF * (1.9 + e * 2.6);
+    } else {
+      yaw = introFrom.yaw + e * Math.PI * 1.5;
+      pitch = 1.05 - e * 0.55;
+      dist = HALF * (5.2 - e * 2.6);
+    }
     camera.position.set(Math.sin(yaw) * Math.cos(pitch) * dist,
                         Math.sin(pitch) * dist,
                         Math.cos(yaw) * Math.cos(pitch) * dist);
@@ -3559,15 +3652,18 @@ function audioFollow() {
 // A slow orbit of the whole worldlet with its name over it, then the camera
 // drops to the player. Runs from a single clock so it cannot desynchronise
 // from the HUD fade; ends early on any input.
-function playIntro(name, blurb) {
+function playIntro(name, blurb, secs, reverse) {
   const card = document.getElementById('title');
   if (card) {
     card.querySelector('b').textContent = String(name).toUpperCase();
     card.querySelector('small').textContent = blurb || '';
     card.classList.add('on');
   }
+  introTotal = secs || 3.6;
   intro = introTotal;
-  introFrom = { yaw: orbYaw, pitch: orbPitch, dist: orbDist };
+  // reverse pulls BACK — near to far — which is the meltdown's shape: the
+  // machines fill the frame, then the whole world is in view as they land
+  introFrom = { yaw: orbYaw, pitch: orbPitch, dist: orbDist, reverse: !!reverse };
   if (document.pointerLockElement === renderer.domElement) document.exitPointerLock();
 }
 function endIntro() {

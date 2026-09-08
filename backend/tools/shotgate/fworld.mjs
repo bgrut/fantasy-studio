@@ -56,6 +56,52 @@ console.log('travelled :', c.world, '| sky', a.sky, '->', c.sky,
             '| cores kept', c.cores, '| value reset to', c.value.toFixed(0),
             '| machines', c.machines);
 
+// 3b. the GROUND changed, not just the sky: a world's plating is rebuilt on
+//     arrival, so the cube's map is a different texture than it was at home
+const plate = await p.evaluate(()=>{
+  const F = window.__factory;
+  const cube = window.__scene.children.find(o => o.isMesh && o.geometry.type === 'BoxGeometry'
+                                            && o.geometry.parameters.width === F.N * F.T);
+  const here = cube.material.map.uuid;
+  F.travelTo(0); F.endIntro();
+  const home = cube.material.map.uuid;
+  F.travelTo(1); F.endIntro();
+  return { here, home, back: cube.material.map.uuid };
+});
+console.log('plating   : ember', plate.here.slice(0, 8), '| home', plate.home.slice(0, 8),
+            '| rebuilt per world:', plate.here !== plate.home && plate.back !== plate.home);
+
+// 3c. every hub carries the price board, and they all show the SAME texture
+const boards = await p.evaluate(()=>{
+  const F = window.__factory, TY = F.TYPES;
+  let hubs = 0, withBoard = 0, shared = true, first = null;
+  F.cells.forEach(face => face.forEach(col => col.forEach(c => {
+    if (c.t !== TY.HUB || !c.build) return;
+    hubs++;
+    const bd = c.build.getObjectByName('board');
+    if (!bd) return;
+    withBoard++;
+    const id = bd.material.map && bd.material.map.uuid;
+    if (first === null) first = id; else if (id !== first) shared = false;
+  })));
+  return { hubs, withBoard, shared };
+});
+console.log('hub boards:', boards.withBoard, 'of', boards.hubs, 'hubs | one shared texture:', boards.shared);
+
+// 3d. the meltdown plays its own reveal — the card says so, and the clock runs
+const meltShot = await p.evaluate(async ()=>{
+  const F = window.__factory;
+  F.addValue(F.MELT_MIN + 50);
+  F.meltdown();
+  await new Promise(r => setTimeout(r, 250));
+  const f = window.__game.facts();
+  return { intro: f.intro, card: document.querySelector('#title b').textContent,
+           up: document.getElementById('title').classList.contains('on') };
+});
+console.log('meltdown  : card', JSON.stringify(meltShot.card), meltShot.up ? 'up' : 'DOWN',
+            '| clock', meltShot.intro + 's');
+await p.evaluate(()=>window.__factory.endIntro());
+
 // 4. and it is where you are when you come back
 await p.goto(URL, { waitUntil:'domcontentloaded' });
 await new Promise(r=>setTimeout(r,5500));
@@ -68,6 +114,8 @@ const ok = a.world === 'prompt' && a.open === 1
   && refused.after === refused.before
   && armed.open >= 2
   && c.world === 'ember' && c.sky !== a.sky && c.cores === 3 && c.value < 5
-  && back.world === 'ember' && back.sky === c.sky && back.cores === 3
+  && plate.here !== plate.home && boards.hubs > 0 && boards.withBoard === boards.hubs && boards.shared
+  && meltShot.up && /MELTDOWN/.test(meltShot.card) && meltShot.intro > 0
+  && back.world === 'ember' && back.sky === c.sky && back.cores >= 3
   && errs.length === 0;
 process.exit(ok ? 0 : 1);
