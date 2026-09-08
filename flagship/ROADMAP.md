@@ -38,6 +38,7 @@ says so.
 | **material pass** | an environment to reflect, baked occlusion, rim light, detail |
 | **UI pass** | tool icons that ARE the machines, rendered at boot |
 | **presence pass** | a tool in your hands, jams that read, seams that flex, one HUD |
+| **depletion** | seams thin under a rig and grow back, so placement is a decision |
 | **unlockable worlds** | four places to put the factory, bought with cores |
 
 Measured on a prompt-built export: 40x40x6 grid, 40 nodes, 180 value/min,

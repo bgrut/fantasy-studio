@@ -30,6 +30,7 @@ GATES = [
     ("fperf.mjs", "a 250-machine factory stays inside its draw-call budget"),
     ("fworld.mjs", "worlds unlock with cores, change the scene, and survive a reload"),
     ("fground.mjs", "the factory is grounded: shadows land on a lit face and an unlit one"),
+    ("fdeplete.mjs", "seams thin under a rig, grow back without one, trickle at zero, and reload"),
 ]
 
 

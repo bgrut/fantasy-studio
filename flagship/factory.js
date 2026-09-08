@@ -161,6 +161,14 @@ const TYPE_NAME = { 1: 'miner', 2: 'belt', 3: 'hub', 4: 'ore node',
 
 const VALUE = { [CRYSTAL]: 1, [INGOT]: 6 };   // an ingot is worth the detour
 const SMELT_IN = 2;                            // ore of one kind per ingot
+// ── DEPLETION ──────────────────────────────────────────────────────────────
+// A crystal costs the seam this much; it grows back at this rate per second;
+// and it never yields below the floor. Sixty crystals to work a seam flat, two
+// minutes to recover — long enough that moving rigs is worth it, short enough
+// that a worked face is not dead for the rest of the session.
+const SEAM_COST = 1 / 60;
+const SEAM_REGROW = 1 / 120;
+const SEAM_FLOOR = 0.10;
 let SMELT_TICKS = 3;                           // and it takes time
 let FORGE_TICKS = 4;                           // an alloy takes longer still
 
@@ -244,7 +252,7 @@ for (let f = 0; f < 6; f++) {
     for (let j = 0; j < N; j++)
       cells[f][i][j] = { t: EMPTY, d: 0, item: 0, buf: 0, bt: 0,
                          fa: 0, fb: 0, cook: 0, rr: 0, min: 0,
-                         filt: CRYSTAL, mrr: 0, pulse: 0,
+                         filt: CRYSTAL, mrr: 0, pulse: 0, rich: 1,
                          dbt: 0, dmin: 0, emit: 0, left: 0, cool: 0 };
   }
 }
@@ -956,7 +964,8 @@ for (let k = 0; k < NODE_COUNT; k++) {
   m.userData.base = m.scale.x;      // the pulse scales relative to this
   m.userData.fsTag = { type: 'ore', name: MINERAL_NAME[c.min] + ' seam',
                        detail: FACES[f].name + ' face · tile ' + i + ',' + j,
-                       face: f, i, j };
+                       face: f, i, j,
+                       get rich() { return Math.round(c.rich * 100) + '%'; } };
   m.castShadow = true;
   m.userData.spin = 0.4 + rnd() * 0.6;
   m.userData.axis = FACES[f].n;      // spin about the face's up, not the world's
@@ -2063,8 +2072,12 @@ function step() {
     const m = c.min || MINERAL_OF_FACE[f];
     const to = stepTile(f, i, j, c.d);
     const dst = cellOf(to);
-    if (accepts(dst, m)) {
+    // PROBABILISTIC, NOT A COUNTDOWN. A seam at 40% yields on 40% of ticks,
+    // which reads as a line that has slowed rather than a line that stops and
+    // starts — and it needs no extra state to do it.
+    if (accepts(dst, m) && Math.random() < Math.max(SEAM_FLOOR, c.rich)) {
       deliver(dst, to, m);
+      c.rich = Math.max(0, c.rich - SEAM_COST);
       // the seam flexes as the crystal leaves it: which rigs are actually
       // producing is readable from across the face
       if (c.mesh) c.mesh.userData.pulse = 1;
@@ -2840,7 +2853,7 @@ const GOALS = [
     got: 'FILTER — point at it and press F to sort by ore',
     done: () => alloys >= 1 },
   { text: 'bank 250 value', unlock: 'rift',
-    tip: 'the market moves; make whatever it is paying for',
+    tip: 'seams thin as they are worked and grow back — spread the rigs out',
     got: 'CHRONOS RIFT — borrowed ore, on a deadline',
     done: () => ore >= 250 },
   { text: 'bank ' + MELT_MIN + ' value', unlock: 'meltdown',
@@ -2902,6 +2915,7 @@ const SAVE_V = 3;
 function clearFactory() {
   beltsDirty = true;
   eachTile(c => {
+    c.rich = 1;                       // a new factory gets fresh ground
     if (c.build) { scene.remove(c.build); c.build = null; }
     c.t = c.mesh ? NODE : EMPTY;
     c.item = 0; c.buf = 0; c.bt = 0; c.fa = 0; c.fb = 0; c.cook = 0; c.rr = 0;
@@ -2926,6 +2940,11 @@ function saveState() {
     p: { face: player.face, pos: player.pos.toArray(),
          fwd: player.fwd.toArray(), pitch: player.pitch },
     g: goalIdx, u: Object.keys(UNLOCKED), vf: [...visitedFaces], w: worldIdx,
+    // seams come back from the RNG; how worked each one is does not
+    r: (() => { const out = [];
+      eachTile((c, f, i, j) => { if (c.mesh && c.rich < 0.999)
+        out.push([f, i, j, +c.rich.toFixed(3)]); });
+      return out; })(),
     m,
   };
 }
@@ -2968,6 +2987,10 @@ function loadState(d) {
     camUp.copy(player.up);
   }
   applyWorld(d.w | 0);
+  if (Array.isArray(d.r)) for (const r of d.r) {
+    const c = cells[r[0]] && cells[r[0]][r[1]] && cells[r[0]][r[1]][r[2]];
+    if (c && c.mesh) c.rich = Math.max(0, Math.min(1, +r[3] || 0));
+  }
   goalIdx = Math.max(0, Math.min(GOALS.length, d.g | 0));
   if (Array.isArray(d.u)) for (const k of d.u) UNLOCKED[k] = 1;
   visitedFaces.clear();
@@ -3046,6 +3069,12 @@ renderer.setAnimationLoop(() => {
   last = now;
 
   stepMarket(dt);
+  // seams grow back on their own, and wear their richness as their size
+  eachTile(c => {
+    if (!c.mesh) return;
+    if (c.rich < 1) c.rich = Math.min(1, c.rich + dt * SEAM_REGROW);
+    c.mesh.userData.rich = c.rich;
+  });
   visitedFaces.add(player.face);
   stepGoals(dt);
   if (!melting) stepRifts(dt);
@@ -3155,10 +3184,17 @@ renderer.setAnimationLoop(() => {
     const ax = o.userData.axis;
     if (ax) o.rotateOnAxis(_bx.set(0, 1, 0), dt * o.userData.spin);
     else o.rotation.y += dt * o.userData.spin;
-    if (o.userData.pulse > 0) {
-      o.userData.pulse = Math.max(0, o.userData.pulse - dt * 3.2);
-      const p2 = o.userData.pulse, b = o.userData.base || 1;
-      o.scale.setScalar(b * (1 + Math.sin(p2 * Math.PI) * 0.22));
+    // size = richness, plus the extraction flex on top of it. A worked-out
+    // seam is a small one, which is a thing you can see from orbit.
+    if (o.userData.rich !== undefined || o.userData.pulse > 0) {
+      const rich = o.userData.rich === undefined ? 1 : o.userData.rich;
+      const b = (o.userData.base || 1) * (0.42 + 0.58 * rich);
+      if (o.userData.pulse > 0) {
+        o.userData.pulse = Math.max(0, o.userData.pulse - dt * 3.2);
+        o.scale.setScalar(b * (1 + Math.sin(o.userData.pulse * Math.PI) * 0.22));
+      } else {
+        o.scale.setScalar(b);
+      }
     }
   });
 
@@ -3458,6 +3494,9 @@ window.__game = {
     goal_index: goalIdx,
     unlocked: Object.keys(UNLOCKED),
     faces_visited: visitedFaces.size,
+    seams: (() => { let n = 0, sum = 0, worked = 0;
+      eachTile(c => { if (c.mesh) { n++; sum += c.rich; if (c.rich < 0.9) worked++; } });
+      return { count: n, mean_rich: n ? +(sum / n).toFixed(3) : 1, worked }; })(),
     rift: (() => { let r = null;
       eachTile(c => { if (c.t === RIFT && !r) r = { debt: c.dbt,
         ore: MINERAL_NAME[c.dmin] || null, left: +c.left.toFixed(1),
@@ -3488,6 +3527,8 @@ window.__factory = {
   riftOpen, riftStorm, RIFT_COUNT, RIFT_WINDOW,
   save, load, wipe, saveState, SAVE_KEY, TREAD, beltFrames, beltDecks, POST,
   beltShape, scatterVent, scatterBolt, scatterSpots, renderThumb, GEO, MAT,
+  SEAM_COST, SEAM_REGROW, SEAM_FLOOR,
+  step,                 // one simulation tick, for a harness that cannot wait
   beltIndexOf: (f, i, j) => {
     const k = beltShape(f, i, j, cells[f][i][j]);
     return beltIndex[k].findIndex(t => t.face === f && t.i === i && t.j === j);
