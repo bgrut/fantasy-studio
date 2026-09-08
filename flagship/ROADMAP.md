@@ -33,6 +33,7 @@ says so.
 | **collision + fair mergers** | machines are solid; a merge stopped eating items |
 | **progression frame** | goals unlock machines in the order that teaches them |
 | **art pass** | conveyors that convey, icons in the bar, a sky to float in |
+| **lighting pass** | bloom, a graded composite, particles, a lit silhouette |
 | **unlockable worlds** | four places to put the factory, bought with cores |
 
 Measured on a prompt-built export: 40x40x6 grid, 40 nodes, 180 value/min,
@@ -222,6 +223,21 @@ against each:
 
     cd flagship && python -m http.server 8790     # serve the demo
     python backend/tools/factory_check.py --job <id>
+
+### Rendering
+
+The post pipeline is written by hand rather than pulled from three's addons —
+the standalone demo vendors exactly one file and keeping it that way means the
+demo cannot break in a way the studio build does not. Scene into a target,
+bright pass, two blur pairs, then a composite that adds the bloom in linear
+light, tone maps, tints the shadows toward the world's own fog colour and
+closes a vignette.
+
+The trap worth remembering: three applies tone mapping and sRGB encoding **only
+when rendering to the canvas**. Render into a target and you get raw linear
+values, and compositing those straight to the screen produces a nearly black
+world that looks exactly like a lighting bug and is not one. The art gate now
+reads a floor pixel and asserts it is lit.
 
 Nine gates, run against each: the core loop and cube walk, the rift, the studio
 inspect bridge, save/load, collision and merge losslessness, the goal chain, the

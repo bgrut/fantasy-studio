@@ -256,7 +256,13 @@ scene.background = new THREE.Color(SKY_COL);
 const worldFog = new THREE.Fog(FOG_COL, HALF * 1.6, HALF * 4.0);
 scene.fog = worldFog;
 const camera = new THREE.PerspectiveCamera(52, innerWidth / innerHeight, 0.1, 500);
-const renderer = new THREE.WebGLRenderer({ antialias: true });
+const renderer = new THREE.WebGLRenderer({ antialias: true,
+  // A READABLE FRAMEBUFFER, ON REQUEST. After compositing, the default
+  // framebuffer's contents are undefined unless this is set, so a test that
+  // wants to assert "the picture is actually lit" reads zeros and cannot tell
+  // a black screen from an unreadable one. Off by default because it costs a
+  // copy every frame; on with ?debug=1, which only a harness passes.
+  preserveDrawingBuffer: /[?&]debug=1/.test(location.search) });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.setSize(innerWidth, innerHeight);
 renderer.shadowMap.enabled = true;
@@ -289,7 +295,177 @@ const fill = new THREE.DirectionalLight(0xb9d2ff, 0.85);
 fill.position.set(-34, -40, -26);
 scene.add(fill);
 
-let starField = null, gridLines = null;   // a world recolours these
+let starField = null, gridLines = null, cubeEdges = null, sunDisc = null;
+
+// ── POST ───────────────────────────────────────────────────────────────────
+// Scene -> RT, bright pass, two blur pairs, then a composite that adds the
+// bloom back, tints the shadows toward the world's own fog colour and closes
+// a vignette on the corners. The grade is what makes Ember Reach feel like a
+// different PLACE rather than the same place with a red wall.
+// The threshold is in LINEAR light, not in display values: an emissive crystal
+// sits well above 1.0 there, and a lit floor sits well below it, which is
+// exactly the separation bloom wants.
+const POST = { on: true, threshold: 0.55, knee: 0.5, strength: 1.0,
+               vignette: 0.3, tint: 0.14 };
+
+const _rtOpts = { type: THREE.HalfFloatType, depthBuffer: true };
+let rtScene = new THREE.WebGLRenderTarget(1, 1, _rtOpts);
+let rtA = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType });
+let rtB = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType });
+for (const rt of [rtScene, rtA, rtB]) {
+  rt.texture.minFilter = THREE.LinearFilter;
+  rt.texture.magFilter = THREE.LinearFilter;
+}
+
+const QUAD_VS = `
+varying vec2 vUv;
+void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`;
+
+const matBright = new THREE.ShaderMaterial({
+  uniforms: { tDiffuse: { value: null }, uThresh: { value: 0.55 },
+              uKnee: { value: 0.5 } },
+  vertexShader: QUAD_VS,
+  fragmentShader: `
+    varying vec2 vUv;
+    uniform sampler2D tDiffuse; uniform float uThresh; uniform float uKnee;
+    void main() {
+      vec3 c = texture2D(tDiffuse, vUv).rgb;
+      float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
+      // a soft knee, so a surface that drifts past the threshold brightens
+      // gradually instead of popping into bloom as the camera moves
+      gl_FragColor = vec4(c * smoothstep(uThresh, uThresh + uKnee, l), 1.0);
+    }`,
+});
+
+const matBlur = new THREE.ShaderMaterial({
+  uniforms: { tDiffuse: { value: null }, uDir: { value: new THREE.Vector2() } },
+  vertexShader: QUAD_VS,
+  fragmentShader: `
+    varying vec2 vUv;
+    uniform sampler2D tDiffuse; uniform vec2 uDir;
+    void main() {
+      // nine-tap gaussian, separable: two of these is a 2D blur for the cost
+      // of eighteen samples instead of eighty-one
+      vec4 sum = texture2D(tDiffuse, vUv) * 0.2270270270;
+      sum += texture2D(tDiffuse, vUv + uDir * 1.3846153846) * 0.3162162162;
+      sum += texture2D(tDiffuse, vUv - uDir * 1.3846153846) * 0.3162162162;
+      sum += texture2D(tDiffuse, vUv + uDir * 3.2307692308) * 0.0702702703;
+      sum += texture2D(tDiffuse, vUv - uDir * 3.2307692308) * 0.0702702703;
+      gl_FragColor = sum;
+    }`,
+});
+
+const matComposite = new THREE.ShaderMaterial({
+  uniforms: {
+    tDiffuse: { value: null }, tBloom: { value: null },
+    uStrength: { value: 0.85 }, uVignette: { value: 0.34 },
+    uTint: { value: new THREE.Color(0x0b0d18) }, uTintAmt: { value: 0.16 },
+    uExposure: { value: 1.06 },
+  },
+  vertexShader: QUAD_VS,
+  fragmentShader: `
+    varying vec2 vUv;
+    uniform sampler2D tDiffuse; uniform sampler2D tBloom;
+    uniform float uStrength; uniform float uVignette;
+    uniform vec3 uTint; uniform float uTintAmt; uniform float uExposure;
+
+    // TONE MAP AND ENCODE HERE, because three does neither when it renders
+    // into a render target — it only applies them on the way to the canvas.
+    // The first version composited raw linear values straight to the screen
+    // and the whole world came out nearly black, which looks exactly like a
+    // lighting bug and is not one.
+    vec3 aces(vec3 x) {
+      x *= uExposure;
+      return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14),
+                   0.0, 1.0);
+    }
+    vec3 toSRGB(vec3 c) {
+      return mix(c * 12.92, 1.055 * pow(max(c, vec3(0.0)), vec3(0.41666)) - 0.055,
+                 step(vec3(0.0031308), c));
+    }
+    void main() {
+      // bloom is added in LINEAR light, which is the only place adding light
+      // means anything
+      vec3 c = texture2D(tDiffuse, vUv).rgb;
+      c += texture2D(tBloom, vUv).rgb * uStrength;
+      c = aces(c);
+      // then graded in display space, where "shadows" is a thing you can point
+      // at: pull the dark end toward the world's own colour so neutral greys
+      // stop reading as untinted no matter what the sky is doing
+      float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
+      c = mix(c, uTint, uTintAmt * (1.0 - smoothstep(0.0, 0.5, l)));
+      vec2 d = vUv - 0.5;
+      c *= 1.0 - uVignette * dot(d, d) * 2.0;
+      gl_FragColor = vec4(toSRGB(c), 1.0);
+    }`,
+});
+
+const quadCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+const quadScene = new THREE.Scene();
+const quadMesh = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), matBright);
+quadMesh.frustumCulled = false;
+quadScene.add(quadMesh);
+
+function blit(mat, target) {
+  quadMesh.material = mat;
+  renderer.setRenderTarget(target || null);
+  renderer.render(quadScene, quadCam);
+}
+
+function sizePost() {
+  const dpr = renderer.getPixelRatio();
+  const w = Math.max(2, Math.floor(innerWidth * dpr));
+  const h = Math.max(2, Math.floor(innerHeight * dpr));
+  rtScene.setSize(w, h);
+  rtA.setSize(Math.max(1, w >> 1), Math.max(1, h >> 1));
+  rtB.setSize(Math.max(1, w >> 1), Math.max(1, h >> 1));
+}
+sizePost();
+
+// WHAT THE SCENE COST, not what the last pass cost. renderer.info.render is
+// reset by every render() call, so after five post passes it reports the two
+// triangles of a full-screen quad — which would let a draw-call budget pass no
+// matter how much geometry the factory had.
+let sceneCalls = 0, sceneTris = 0;
+function noteSceneCost() {
+  sceneCalls = renderer.info.render.calls;
+  sceneTris = renderer.info.render.triangles;
+}
+
+function renderFrame() {
+  if (!POST.on) {
+    renderer.setRenderTarget(null);
+    renderer.render(scene, camera);
+    noteSceneCost();
+    return;
+  }
+  renderer.setRenderTarget(rtScene);
+  renderer.clear();
+  renderer.render(scene, camera);
+  noteSceneCost();
+
+  matBright.uniforms.tDiffuse.value = rtScene.texture;
+  matBright.uniforms.uThresh.value = POST.threshold;
+  matBright.uniforms.uKnee.value = POST.knee;
+  blit(matBright, rtA);
+
+  const px = 1 / rtA.width, py = 1 / rtA.height;
+  for (let k = 0; k < 2; k++) {
+    matBlur.uniforms.tDiffuse.value = rtA.texture;
+    matBlur.uniforms.uDir.value.set(px * (1 + k), 0);
+    blit(matBlur, rtB);
+    matBlur.uniforms.tDiffuse.value = rtB.texture;
+    matBlur.uniforms.uDir.value.set(0, py * (1 + k));
+    blit(matBlur, rtA);
+  }
+
+  matComposite.uniforms.tDiffuse.value = rtScene.texture;
+  matComposite.uniforms.tBloom.value = rtA.texture;
+  matComposite.uniforms.uStrength.value = POST.strength;
+  matComposite.uniforms.uVignette.value = POST.vignette;
+  matComposite.uniforms.uTintAmt.value = POST.tint;
+  blit(matComposite, null);
+}
 
 // ── the sky ────────────────────────────────────────────────────────────────
 // A floating worldlet against flat black reads as a bug. Stars cost one draw
@@ -323,6 +499,7 @@ let starField = null, gridLines = null;   // a world recolours these
     size: 2.1, sizeAttenuation: false, vertexColors: true,
     transparent: true, opacity: 0.95, depthWrite: false, fog: false }));
   starField.frustumCulled = false;
+  starField.name = 'stars';
   scene.add(starField);
 }
 
@@ -387,6 +564,29 @@ scene.add(cube);
     { color: 0x46527d, transparent: true, opacity: 0.14 })));
 }
 
+{
+  // THE SILHOUETTE. A cube against space met the sky at a hard flat seam and
+  // read as a cut-out. A lit edge along all twelve gives the worldlet an
+  // outline for the bloom to catch, which is what makes it look like an object
+  // with a size rather than a shape pasted on the background.
+  const eg = new THREE.EdgesGeometry(cube.geometry);
+  cubeEdges = new THREE.LineSegments(eg, new THREE.LineBasicMaterial(
+    { color: 0x7fd8ff, transparent: true, opacity: 0.75, fog: false }));
+  cubeEdges.scale.setScalar(1.0015);      // off the surface, out of z-fighting
+  cubeEdges.name = 'worldEdge';
+  scene.add(cubeEdges);
+
+  // and something for the key light to be coming FROM. Placed down the sun's
+  // own direction so the lighting and the sky agree with each other.
+  const d = sun.position.clone().normalize().multiplyScalar(370);
+  sunDisc = new THREE.Mesh(new THREE.SphereGeometry(9, 16, 12),
+    new THREE.MeshBasicMaterial({ color: 0xfff2d6, fog: false }));
+  sunDisc.position.copy(d);
+  sunDisc.frustumCulled = false;
+  sunDisc.name = 'sun';
+  scene.add(sunDisc);
+}
+
 // SEATING. Everything that stands on the cube shares one rule: local +Y
 // becomes the face normal and local +X the heading. Written once, so a belt
 // arrow, a smelter and the build ghost cannot disagree about which way is up
@@ -448,13 +648,28 @@ function seat(obj, face, i, j, dir, up) {
 // ── crystal nodes: the only tiles a miner can stand on ─────────────────────
 // The player's first read of "this face is different" is the colour of the
 // ore standing on it, from across the worldlet, before they have walked there.
-const MIN_COL = { [CRYSTAL]: ACCENT, [EMBER]: 0xff8a3d, [SALT]: 0xe8f0ff };
+// Salt was near-white, which under bloom clips to pure white at any distance
+// and stops being distinguishable from crystal — the one thing ore colour has
+// to do. Pulled down to a pale blue that still reads as salt and still has a
+// hue left when it glows.
+const MIN_COL = { [CRYSTAL]: ACCENT, [EMBER]: 0xff8a3d, [SALT]: 0xb9cdf0 };
 const nodeMats = {};
 for (const m of MINERALS) nodeMats[m] = new THREE.MeshStandardMaterial({
-  color: MIN_COL[m], emissive: MIN_COL[m], emissiveIntensity: 0.55,
+  // bright enough to cross the bloom threshold: a seam should read as a light
+  // source on the far side of the worldlet, not as a coloured pebble
+  color: MIN_COL[m], emissive: MIN_COL[m], emissiveIntensity: 1.35,
   roughness: 0.25, flatShading: true });
 const nodeMat = nodeMats[CRYSTAL];
-const nodeGeo = new THREE.OctahedronGeometry(0.62, 0);
+// A SEAM IS A CLUSTER. One floating diamond per tile read as a placeholder
+// token; three crystals of different sizes leaning out of the ground read as
+// something growing there. Merged, so it is still one draw call per seam.
+const nodeGeo = mergeParts([
+  { g: new THREE.OctahedronGeometry(0.58, 0) },
+  { g: new THREE.OctahedronGeometry(0.30, 0), x: 0.44, y: -0.22, z: 0.20,
+    rz: 0.5, ry: 0.8 },
+  { g: new THREE.OctahedronGeometry(0.23, 0), x: -0.38, y: -0.26, z: -0.30,
+    rz: -0.6, ry: 0.3 },
+]);
 let rngState = 1337;
 const rnd = () => (rngState = (rngState * 1664525 + 1013904223) % 4294967296) / 4294967296;
 const NODE_COUNT = Math.max(6, Math.min(40, Math.round(N * N * 0.028)));
@@ -507,23 +722,32 @@ const TREAD = treadTexture();
 
 // ── build meshes ───────────────────────────────────────────────────────────
 const MAT = {
-  miner: new THREE.MeshStandardMaterial({ color: 0xff5d73, roughness: 0.4, metalness: 0.35 }),
+  // EVERY MACHINE IS A LITTLE BIT ON. A dark object in a dark scene has no
+  // silhouette; a faint self-lit trim gives each one an edge the bloom can
+  // catch, which is most of why a lit game looks lit.
+  miner: new THREE.MeshStandardMaterial({ color: 0xff5d73, roughness: 0.4,
+    metalness: 0.35, emissive: 0x4a0d1a, emissiveIntensity: 0.9 }),
   belt: new THREE.MeshStandardMaterial({ color: 0x3ad39a, roughness: 0.6, metalness: 0.2 }),
   beltFrame: new THREE.MeshStandardMaterial({ color: 0x2b7f68, roughness: 0.45,
-    metalness: 0.6, flatShading: true }),
+    metalness: 0.6, flatShading: true, emissive: 0x07271f,
+    emissiveIntensity: 0.9 }),
   beltDeck: new THREE.MeshStandardMaterial({ map: TREAD, roughness: 0.85,
     metalness: 0.05 }),
-  hub: new THREE.MeshStandardMaterial({ color: 0xffc75a, roughness: 0.35, metalness: 0.45,
+  hub: new THREE.MeshStandardMaterial({ color: 0xffc75a, roughness: 0.35,
+    metalness: 0.45, emissive: 0x6a4708, emissiveIntensity: 0.9,
     emissive: 0x6b4a00, emissiveIntensity: 0.6 }),
   forge: new THREE.MeshStandardMaterial({ color: 0xd94fb0, roughness: 0.34,
-    metalness: 0.55, flatShading: true }),
+    metalness: 0.55, flatShading: true, emissive: 0x5c0f45,
+    emissiveIntensity: 1.0 }),
   filt: new THREE.MeshStandardMaterial({ color: 0x2f8f7d, roughness: 0.55,
-    metalness: 0.25 }),
+    metalness: 0.25, emissive: 0x0a3329, emissiveIntensity: 0.9 }),
   rift: new THREE.MeshStandardMaterial({ color: 0x6a3cff, emissive: 0x3a1c9c,
     emissiveIntensity: 0.8, roughness: 0.3, metalness: 0.5, flatShading: true }),
-  smelt: new THREE.MeshStandardMaterial({ color: 0x8c6bff, roughness: 0.42, metalness: 0.4,
+  smelt: new THREE.MeshStandardMaterial({ color: 0x8c6bff, roughness: 0.42,
+    metalness: 0.4, emissive: 0x2a1b6a, emissiveIntensity: 0.85,
     emissive: 0x2a1470, emissiveIntensity: 0.5 }),
-  split: new THREE.MeshStandardMaterial({ color: 0x4bb5ff, roughness: 0.45, metalness: 0.35,
+  split: new THREE.MeshStandardMaterial({ color: 0x4bb5ff, roughness: 0.45,
+    metalness: 0.35, emissive: 0x0d3a63, emissiveIntensity: 0.9,
     emissive: 0x0d3f66, emissiveIntensity: 0.45 }),
 };
 // Each machine is authored as parts and merged into one geometry. Local +X is
@@ -747,6 +971,124 @@ function pieceFor(face, i, j, c) {
   seat(g, face, i, j, c.d, 0);
   scene.add(g);
   return g;
+}
+
+// ── SMOKE AND SPARKS ───────────────────────────────────────────────────────
+// One system, two jobs. Two particle systems doing the same arithmetic with
+// different constants is how a codebase ends up with two subtly different
+// gravities, and how one of them ends up wrong on the underside of the cube.
+const PMAX = 420;
+const pPos = new Float32Array(PMAX * 3);
+const pVel = new Float32Array(PMAX * 3);
+const pCol = new Float32Array(PMAX * 3);
+const pLife = new Float32Array(PMAX);      // 1 at birth, 0 at death
+const pDecay = new Float32Array(PMAX);
+const pSize = new Float32Array(PMAX);
+let pHead = 0;
+
+const partGeo = new THREE.BufferGeometry();
+partGeo.setAttribute('position', new THREE.BufferAttribute(pPos, 3));
+partGeo.setAttribute('aColor', new THREE.BufferAttribute(pCol, 3));
+partGeo.setAttribute('aLife', new THREE.BufferAttribute(pLife, 1));
+partGeo.setAttribute('aSize', new THREE.BufferAttribute(pSize, 1));
+const partMat = new THREE.ShaderMaterial({
+  transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+  vertexShader: `
+    attribute vec3 aColor; attribute float aLife; attribute float aSize;
+    varying vec3 vCol; varying float vLife;
+    void main() {
+      vCol = aColor; vLife = aLife;
+      vec4 mv = modelViewMatrix * vec4(position, 1.0);
+      // smoke swells as it dies, sparks shrink: aSize carries the sign
+      float grow = aSize > 0.0 ? (1.6 - 0.9 * aLife) : aLife;
+      gl_PointSize = abs(aSize) * grow * 300.0 / max(1.0, -mv.z);
+      gl_Position = projectionMatrix * mv;
+    }`,
+  fragmentShader: `
+    varying vec3 vCol; varying float vLife;
+    void main() {
+      vec2 d = gl_PointCoord - 0.5;
+      float r2 = dot(d, d);
+      if (r2 > 0.25) discard;                 // round, not square
+      float a = (1.0 - smoothstep(0.0, 0.25, r2)) * vLife;
+      gl_FragColor = vec4(vCol * a, a);
+    }`,
+});
+const particles = new THREE.Points(partGeo, partMat);
+particles.frustumCulled = false;
+particles.name = 'particles';
+scene.add(particles);
+
+/** Emit one particle. size > 0 swells (smoke), size < 0 shrinks (spark). */
+function emit(x, y, z, vx, vy, vz, r, g, bcol, size, decay) {
+  const k = pHead; pHead = (pHead + 1) % PMAX;
+  pPos[k * 3] = x; pPos[k * 3 + 1] = y; pPos[k * 3 + 2] = z;
+  pVel[k * 3] = vx; pVel[k * 3 + 1] = vy; pVel[k * 3 + 2] = vz;
+  pCol[k * 3] = r; pCol[k * 3 + 1] = g; pCol[k * 3 + 2] = bcol;
+  pLife[k] = 1; pDecay[k] = decay; pSize[k] = size;
+}
+
+function stepParticles(dt) {
+  let alive = 0;
+  for (let k = 0; k < PMAX; k++) {
+    if (pLife[k] <= 0) continue;
+    pLife[k] -= dt * pDecay[k];
+    if (pLife[k] <= 0) { pLife[k] = 0; pSize[k] = 0; continue; }
+    pPos[k * 3] += pVel[k * 3] * dt;
+    pPos[k * 3 + 1] += pVel[k * 3 + 1] * dt;
+    pPos[k * 3 + 2] += pVel[k * 3 + 2] * dt;
+    // drag, so nothing flies off in a straight line forever
+    const f = 1 - Math.min(1, dt * 1.1);
+    pVel[k * 3] *= f; pVel[k * 3 + 1] *= f; pVel[k * 3 + 2] *= f;
+    alive++;
+  }
+  partGeo.attributes.position.needsUpdate = true;
+  partGeo.attributes.aLife.needsUpdate = true;
+  partGeo.attributes.aColor.needsUpdate = true;
+  partGeo.attributes.aSize.needsUpdate = true;
+  return alive;
+}
+
+// Emitters live where the machines are, and every one of them pushes UP off
+// the face rather than up in the world — smoke that rises toward +Y on the
+// underside of the cube would fall into the ground.
+let emitClock = 0;
+function stepEmitters(dt) {
+  emitClock += dt;
+  if (emitClock < 0.055) return;
+  emitClock = 0;
+  eachTile((c, f, i, j) => {
+    if (c.t === SMELTER && c.cook > 0) {
+      if (Math.random() > 0.34) return;
+      const n = FACES[f].n, w = tileWorld(f, i, j), u = FACES[f].u, v = FACES[f].v;
+      // the flue sits at (+0.22T, -0.22T) in the machine's own frame
+      const ox = u[0] * T * 0.22 - v[0] * T * 0.22;
+      const oy = u[1] * T * 0.22 - v[1] * T * 0.22;
+      const oz = u[2] * T * 0.22 - v[2] * T * 0.22;
+      const sp = 0.9 + Math.random() * 0.7;
+      emit(w[0] + ox + n[0] * 1.75, w[1] + oy + n[1] * 1.75, w[2] + oz + n[2] * 1.75,
+           n[0] * sp + (Math.random() - 0.5) * 0.4,
+           n[1] * sp + (Math.random() - 0.5) * 0.4,
+           n[2] * sp + (Math.random() - 0.5) * 0.4,
+           // ADDITIVE, so a dark grey adds almost nothing. Smoke against a
+           // starfield has to be brighter than smoke against daylight.
+           0.44, 0.42, 0.52, 0.10, 0.7);
+    } else if (c.t === MINER) {
+      if (Math.random() > 0.22) return;
+      const n = FACES[f].n, w = tileWorld(f, i, j);
+      const sp = 1.6 + Math.random() * 1.8;
+      const col = MIN_COL[c.min || CRYSTAL];
+      const cr = ((col >> 16) & 255) / 255, cg = ((col >> 8) & 255) / 255,
+            cb = (col & 255) / 255;
+      // ALONG THE FACE NORMAL, not along world +Y. Written the lazy way, a
+      // drill on the underside of the cube throws its sparks into the ground.
+      emit(w[0] + n[0] * 0.45, w[1] + n[1] * 0.45, w[2] + n[2] * 0.45,
+           n[0] * 1.3 + (Math.random() - 0.5) * sp,
+           n[1] * 1.3 + (Math.random() - 0.5) * sp,
+           n[2] * 1.3 + (Math.random() - 0.5) * sp,
+           cr, cg, cb, -0.045, 2.3);
+    }
+  });
 }
 
 // ── items: one InstancedMesh for every crystal in transit ──────────────────
@@ -1270,6 +1612,7 @@ addEventListener('resize', () => {
   camera.aspect = innerWidth / innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight);
+  sizePost();          // the targets are not attached to the canvas by magic
 });
 
 // Belts and filters are ankle-high and you walk over them; everything else on
@@ -1295,6 +1638,7 @@ function solidAt(face, a, b) {
 }
 
 const _rt = new THREE.Vector3(), _wish = new THREE.Vector3();
+let bobPhase = 0, bobAmt = 0, moveMag = 0;
 const _n3 = new THREE.Vector3(), _oldN = new THREE.Vector3();
 const _qr = new THREE.Quaternion();
 const faceNormal = (face, out) => {
@@ -1317,6 +1661,7 @@ function movePlayer(dt) {
   if (keys['KeyS']) _wish.sub(player.fwd);
   if (keys['KeyD']) _wish.add(_rt);
   if (keys['KeyA']) _wish.sub(_rt);
+  moveMag = _wish.length();
   if (_wish.lengthSq() > 0) _wish.normalize();
   const speed = keys['ShiftLeft'] ? 11 : 6.2;
 
@@ -1623,16 +1968,16 @@ function stepDebris(dt) {
 // behaves. Ore colours are excluded on purpose — they are how a belt is read at
 // a glance, and re-learning them per world would be a tax on travelling.
 const WORLDS = [
-  { id: 'prompt', name: SPEC.title || 'Crystal Isle', cores: 0,
+  { id: 'prompt', edge: 0x7fd8ff, sun: 0xfff2d6, name: SPEC.title || 'Crystal Isle', cores: 0,
     blurb: 'where the prompt dropped you',
     sky: SKY_COL, fog: FOG_COL, ground: 0x3c4470, grid: 0x46527d, star: 0xffffff },
-  { id: 'ember', name: 'Ember Reach', cores: 2,
+  { id: 'ember', edge: 0xff9a5c, sun: 0xffd0a0, name: 'Ember Reach', cores: 2,
     blurb: 'a cinder still cooling',
     sky: 0x1a0c0e, fog: 0x2a1210, ground: 0x6b3a34, grid: 0xa2564a, star: 0xffd2b8 },
-  { id: 'frost', name: 'Frostline', cores: 5,
+  { id: 'frost', edge: 0xcfe8ff, sun: 0xe8f4ff, name: 'Frostline', cores: 5,
     blurb: 'ice over something older',
     sky: 0x0a1420, fog: 0x11202f, ground: 0x7c93ad, grid: 0xa8c4dd, star: 0xdcefff },
-  { id: 'verdant', name: 'The Verdant Fault', cores: 9,
+  { id: 'verdant', edge: 0x8fe6a0, sun: 0xdfffe6, name: 'The Verdant Fault', cores: 9,
     blurb: 'it grew back around the machines',
     sky: 0x08170f, fog: 0x0f2418, ground: 0x3f6b4a, grid: 0x63a072, star: 0xd6ffe0 },
 ];
@@ -1646,6 +1991,9 @@ function applyWorld(k) {
   cube.material.color.setHex(w.ground);
   gridLines.material.color.setHex(w.grid);
   starField.material.color.setHex(w.star);
+  if (cubeEdges) cubeEdges.material.color.setHex(w.edge || w.grid);
+  if (sunDisc) sunDisc.material.color.setHex(w.sun || 0xfff2d6);
+  matComposite.uniforms.uTint.value.setHex(w.fog);
   const h = document.querySelector('#hud h1');
   if (h) h.textContent = String(w.name).toUpperCase();
   renderWorlds();
@@ -1982,6 +2330,8 @@ renderer.setAnimationLoop(() => {
   document.getElementById('nitem').textContent = drawItems(sinceTick / TICK);
 
   if (beltsDirty) rebuildBelts();
+  if (!melting) stepEmitters(dt);
+  stepParticles(dt);
   // the tread scrolls at the speed items actually travel: one tile per tick.
   // A belt whose surface moves at a speed unrelated to its throughput is worse
   // than one that does not move at all.
@@ -2015,6 +2365,7 @@ renderer.setAnimationLoop(() => {
     if (!scene.fog) scene.fog = worldFog;
     movePlayer(dt);
     camera.position.copy(player.pos);
+
     // Built from a basis, not from Euler angles: there is no global "up" left
     // to write a yaw against once the player can be standing on the underside
     // of the world. camUp trails the true up so an edge crossing rolls.
@@ -2027,10 +2378,19 @@ renderer.setAnimationLoop(() => {
     _mx.makeBasis(_bx, _by, _bz.negate());        // a camera looks down -Z
     camera.quaternion.setFromRotationMatrix(_mx);
     camera.rotateX(player.pitch);
+    // A CAMERA THAT DOES NOT MOVE WHEN YOU WALK reads as a drone, not a person.
+    // After the basis, so it can use the camera's OWN right vector — _rt is a
+    // scratch the edge-crossing loop overwrites with a face axis, and swaying
+    // along whatever that happened to be is not a bob.
+    bobPhase += dt * (moveMag > 0.01 ? 9.5 : 0) * (keys['ShiftLeft'] ? 1.35 : 1);
+    bobAmt += ((moveMag > 0.01 && player.onGround ? 1 : 0) - bobAmt) *
+              Math.min(1, dt * 7);
+    camera.position.addScaledVector(_by, Math.sin(bobPhase * 2) * 0.045 * bobAmt);
+    camera.position.addScaledVector(_bx, Math.sin(bobPhase) * 0.035 * bobAmt);
     updateGhost();
   }
   document.body.classList.toggle('overhead', overhead);
-  renderer.render(scene, camera);
+  renderFrame();
 });
 
 // ── STUDIO INSPECTOR BRIDGE ────────────────────────────────────────────────
@@ -2186,8 +2546,9 @@ window.__game = {
   pick: (cx, cy) => window.__pickAt(cx, cy, 'click'),
   inspect: on => setInspectOn(on),
   get inspecting() { return inspectOn; },
-  stats: () => ({ calls: renderer.info.render.calls,
-                  tris: renderer.info.render.triangles,
+  stats: () => ({ calls: sceneCalls,
+                  tris: sceneTris,
+                  post: POST.on,
                   programs: renderer.info.programs ? renderer.info.programs.length : -1,
                   textures: renderer.info.memory.textures,
                   geometries: renderer.info.memory.geometries }),
@@ -2202,6 +2563,8 @@ window.__game = {
       eachTile(c => { if (c.t !== EMPTY && c.t !== NODE) n++; });
       return n; })(),
     items_on_belts: items.count,
+    particles: (() => { let n = 0; for (let k = 0; k < PMAX; k++) if (pLife[k] > 0) n++;
+                        return n; })(),
     alloys,
     prices: TRADED.map(t => +PRICE[t].toFixed(3)),
     restored,
@@ -2240,7 +2603,7 @@ window.__factory = {
            RIFT, CRYSTAL, EMBER, SALT, INGOT, INGOT_E, INGOT_S, ALLOY },
   MINERAL_OF_FACE, get alloys() { return alloys; }, cycleFilter,
   riftOpen, riftStorm, RIFT_COUNT, RIFT_WINDOW,
-  save, load, wipe, saveState, SAVE_KEY, TREAD, beltFrames, beltDecks,
+  save, load, wipe, saveState, SAVE_KEY, TREAD, beltFrames, beltDecks, POST,
   GOALS, UNLOCKED, get goalIdx() { return goalIdx; }, visitedFaces,
   WORLDS, travelTo, applyWorld, get worldIdx() { return worldIdx; },
   addCores: n => { cores += n; document.getElementById('tok').textContent = cores;

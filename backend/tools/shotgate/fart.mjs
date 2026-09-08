@@ -10,7 +10,8 @@ const errs = [];
 p.on('pageerror', e => errs.push(e.message.slice(0,200)));
 const URL = process.env.URL ||
   ('http://127.0.0.1:8789/games/job_' + process.env.J + '/dist/');
-await p.goto(URL + '?fresh=1', { waitUntil:'domcontentloaded', timeout:90000 });
+// debug=1 makes the framebuffer readable so a pixel can be asserted on
+await p.goto(URL + '?fresh=1&debug=1', { waitUntil:'domcontentloaded', timeout:90000 });
 await new Promise(r=>setTimeout(r,6000));
 
 // 1. every tool in the bar carries an icon, and a locked one is dimmed
@@ -46,10 +47,55 @@ const moving = await p.evaluate(async ()=>{
 console.log('tread     :', moving.moved ? 'scrolls' : 'STATIC',
             '(offset', (moving.from||0).toFixed(2), '->', (moving.to||0).toFixed(2) + ')');
 
+// 3b. the post pipeline is on, and it is what puts the picture on the screen.
+//     A composite that forgot to tone map and encode renders a nearly black
+//     world, which looks exactly like a lighting bug and is not one — so the
+//     mid-grey of a lit surface is checked directly.
+const post = await p.evaluate(async ()=>{
+  const F = window.__factory;
+  const on = F.POST && F.POST.on;
+  const c = document.querySelector('canvas');
+  // sample the framebuffer through a fresh readback, since a WebGL canvas
+  // cannot be drawn into a 2D context after compositing
+  const gl = c.getContext('webgl2') || c.getContext('webgl');
+  const px = new Uint8Array(4);
+  let lum = -1;
+  if (gl) {
+    gl.readPixels(Math.floor(c.width / 2), Math.floor(c.height * 0.25),
+                  1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
+    lum = (px[0] + px[1] + px[2]) / 3;
+  }
+  return { on, lum, px: [px[0], px[1], px[2]] };
+});
+console.log('post      :', post.on ? 'on' : 'OFF', '| a lit floor pixel reads',
+            JSON.stringify(post.px));
+
+// 3c. machines that are working are visibly working
+const smoke = await p.evaluate(async ()=>{
+  const F = window.__factory, TY = F.TYPES;
+  // force a smelter to cook so there is something to emit
+  let lit = 0;
+  F.cells.forEach((face, f) => face.forEach((col, i) => col.forEach((c, j) => {
+    if (c.t === TY.SMELTER) { c.cook = 30; lit++; }
+  })));
+  await new Promise(r => setTimeout(r, 1400));
+  return { lit, alive: window.__game.facts().particles };
+});
+console.log('particles :', smoke.alive, 'alive from', smoke.lit, 'cooking smelters');
+
+// 3d. the worldlet has an outline and something to be lit by
+const sil = await p.evaluate(()=>({
+  edges: window.__scene.getObjectByName('worldEdge') ? 1 : 0,
+  sun: window.__scene.getObjectByName('sun') ? 1 : 0,
+}));
+console.log('silhouette:', sil.edges, 'edge outline |', sil.sun, 'sun');
+
 // 4. the starfield is actually drawn, i.e. inside the far plane
 const sky = await p.evaluate(()=>{
-  let pts = null;
-  window.__scene.traverse(o => { if (o.isPoints) pts = o; });
+  // BY NAME. "the last Points in the scene" was the starfield right up until
+  // the particle system was added, at which point this silently started
+  // measuring smoke and reporting 420 stars at a radius of 32.
+  const pts = window.__scene.getObjectByName('stars');
   if (!pts) return { found: false };
   pts.geometry.computeBoundingSphere();
   return { found: true, stars: pts.geometry.attributes.position.count,
@@ -65,5 +111,7 @@ const ok = icons.withIcon === icons.tools && icons.tools >= 9
   && inst.belts > 100 && inst.calls < 120
   && moving.moved
   && sky.found && sky.radius < sky.far && sky.stars > 500
+  && post.on && post.lum > 6 && post.lum < 250   // lit, not black, not blown
+  && smoke.alive > 0 && sil.edges === 1 && sil.sun === 1
   && errs.length === 0;
 process.exit(ok ? 0 : 1);
