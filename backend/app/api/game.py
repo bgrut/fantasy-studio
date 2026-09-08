@@ -93,6 +93,23 @@ class GameExportRequest(BaseModel):
     grade: str | None = None
 
 
+# FACTORY-READS-AS-FACTORY (2026-09-08): the LLM classified "a rusted mining
+# outpost on a dead red moon" as an adventure one run and a factory the next,
+# and the adventure reading costs a 25-minute hero mesh on CPU. The words that
+# make a prompt a factory are few and deterministic, so read them here — the
+# same way the swim guard reads "ocean" — and hold the genre to what they say.
+import re as _fre
+_FACTORY_WORDS = _fre.compile(
+    r"\b(factor(y|ies)|conveyor\w*|automat\w*|refiner\w*|smelt\w*|foundr(y|ies)|"
+    r"production line|assembly line|logistics|supply chain|"
+    r"mining (outpost|colony|base|station|rig|camp|op\w*)|ore processing|"
+    r"idle game|incremental game)\b", _fre.I)
+
+
+def _reads_as_factory(prompt: str) -> bool:
+    return bool(_FACTORY_WORDS.search(prompt or ""))
+
+
 def _expand_design_doc(prompt: str) -> str | None:
     """DESIGN-DOC-ALWAYS (2026-07-29): every build thinks like a game
     designer first — the local LLM expands the one-liner into a compact
@@ -603,7 +620,9 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             stage("designing")
             # DESIGN-DOC-ALWAYS: think like a designer, then build. The doc
             # rides ABOVE the user's prompt so their words stay the contract.
-            _doc = _expand_design_doc(req.prompt)
+            # a factory has no hero and no enemies, and the doc's sections
+            # are HERO/MISSION/ENEMIES: expanding one only invents a quest
+            _doc = None if _reads_as_factory(req.prompt) else _expand_design_doc(req.prompt)
             if _doc:
                 job.setdefault("notes", []).append("design doc written")
                 job["design_doc"] = _doc
@@ -615,6 +634,10 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             # intro + title. Casting, objectives, and world verbs stay a
             # pure function of the user's words.
             spec = extract_game_spec(req.prompt, verbose=False)
+            if _reads_as_factory(req.prompt) and getattr(spec, "genre", "") != "factory":
+                spec.genre = "factory"
+                job.setdefault("notes", []).append(
+                    "genre held to factory: the prompt names a production system")
             if _doc:
                 try:
                     import re as _re2
@@ -2046,6 +2069,7 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
 
         job["status"] = "complete"
         job["play_url"] = f"/games/job_{job_id}/dist/"
+        job["genre"] = getattr(spec, "genre", "adventure")   # the studio offers creative mode to a factory
         job["checks"] = len(v["checks"])
         # SHOTGATE (2026-07-29): give the build EYES — load the exported game
         # in headless Chrome, press START, run, screenshot, surface errors.

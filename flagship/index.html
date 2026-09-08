@@ -112,6 +112,17 @@
   #wipe{margin-top:8px;text-align:center;font-size:10px;color:#5d6480;
         cursor:pointer;user-select:none;letter-spacing:.05em}
   #wipe:hover{color:#e8697d}
+  #wipe span{display:inline-block;margin:0 5px;padding:3px 9px;border-radius:6px;
+             border:1px solid rgba(255,255,255,.14);color:#d7dcec;letter-spacing:.08em}
+  #wipe span:hover{border-color:#5cffc9;color:#5cffc9}
+  #wipe span[data-mode="creative"]:hover{border-color:#ffd479;color:#ffd479}
+  #wipe small{display:block;margin-top:5px;color:#5d6480;font-size:9px}
+  /* a creative world says so, on every frame, so a screenshot cannot pass for
+     a survival run */
+  #hud h1::after{content:"CREATIVE";display:none;margin-left:10px;padding:2px 7px;border-radius:5px;
+                 font-size:9px;letter-spacing:.14em;vertical-align:middle;
+                 color:#1a1408;background:#ffd479}
+  body.creative #hud h1::after{display:inline-block}
   /* the ticker sits under the counters: it is a reason to change what you are
      making, so it has to be visible while you are looking at production */
   #tick{margin-top:9px;border-top:1px solid rgba(120,200,255,.14);padding-top:8px}
@@ -216,6 +227,8 @@
            background:linear-gradient(180deg,rgba(255,212,121,.12),rgba(255,212,121,.03))}
   .st.core b{color:#ffd479}
   /* the goal shows how far along it is */
+  #goal em{float:right;font-style:normal;font-size:9px;letter-spacing:.12em;color:#8d7f5c}
+  #goal .held{display:block;margin-top:4px;font-size:9px;letter-spacing:.08em;color:#c9b27a;font-variant-numeric:tabular-nums}
   #goal .bar{height:4px;margin-top:7px;border-radius:2px;background:rgba(255,212,121,.14);overflow:hidden}
   #goal .bar i{display:block;height:100%;background:linear-gradient(90deg,#ffd479,#ff9a5c);
                border-radius:2px;transition:width .4s;box-shadow:0 0 8px rgba(255,212,121,.6)}

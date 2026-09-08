@@ -42,11 +42,28 @@ const refused = await p.evaluate(async ()=>{
 console.log('locked    : travel to the first unlock at 0 cores ->',
             refused.after === refused.before ? 'refused' : 'ALLOWED (wrong)');
 
-// 2. earn the cores and it opens
+// 2. cores alone do not open a world that asks for a capability: the row says
+//    what it is waiting on, and travel refuses until the chain has handed it out
 await p.evaluate(()=>{ window.__factory.addValue(300); window.__factory.addCores(3); });
 await new Promise(r=>setTimeout(r,400));
+const capd = await p.evaluate(async ()=>{
+  const F = window.__factory;
+  const k = F.WORLDS.findIndex(w => w.needs && w.needs !== 'drift' && w.cores <= 3);
+  if (k < 0) return { skipped: true };
+  const row = document.querySelector('#world .wr[data-world="' + k + '"]');
+  const before = F.worldIdx;
+  F.travelTo(k);
+  await new Promise(r => setTimeout(r, 300));
+  return { id: F.WORLDS[k].id, needs: F.WORLDS[k].needs, row: row && row.textContent,
+           refused: F.worldIdx === before };
+});
+console.log('capability:', capd.skipped ? 'no capability world within 3 cores' :
+  capd.id + ' needs ' + capd.needs + ' | row says ' + JSON.stringify(capd.row) +
+  ' | at 3 cores without it: ' + (capd.refused ? 'refused' : 'ALLOWED (wrong)'));
+await p.evaluate(()=>{ window.__factory.goalIdx = window.__factory.GOALS.length; });
+await new Promise(r=>setTimeout(r,300));
 const armed = await look();
-console.log('3 cores   : open', armed.open, '|', armed.rows.join(' · '));
+console.log('chain done: open', armed.open, '|', armed.rows.join(' · '));
 
 // 3. travelling changes the scene and keeps the cores
 await p.evaluate(()=>window.__factory.travelTo(1));
@@ -114,6 +131,7 @@ await p.screenshot({ path: process.env.OUT || 'world.png' });
 await b.close();
 const ok = a.world === 'prompt' && a.open === 1
   && refused.after === refused.before
+  && (capd.skipped || (capd.refused && /needs/.test(capd.row)))
   && armed.open >= 2
   && c.world === dest.id && c.sky === dest.sky && c.sky !== a.sky && c.cores === 3 && c.value < 5
   && plate.here !== plate.home && boards.hubs > 0 && boards.withBoard === boards.hubs && boards.shared

@@ -54,11 +54,11 @@ const repay = await p.evaluate(async (back) => {
   }
   const after = window.__game.facts();
   return { owed, ore, valueBefore: before.value, valueAfter: after.value,
-           rift: after.rift };
+           rift: after.rift, paid: (after.rifts_paid | 0) - (before.rifts_paid | 0) };
 }, lend.back);
 console.log('repaid     :', repay.owed, '\u00d7', repay.ore,
             '| value', repay.valueBefore.toFixed(1), '->', repay.valueAfter.toFixed(1),
-            '| now', JSON.stringify(repay.rift));
+            '| now', JSON.stringify(repay.rift), '| repayments counted:', repay.paid);
 
 // 3. and a rift that is NOT paid takes the factory around it
 const storm = await p.evaluate(async () => {
@@ -84,7 +84,7 @@ console.log('errors     :', errs.length ? errs.join(' | ') : 'none');
 await p.screenshot({ path: process.env.OUT || 'rift.png' });
 await b.close();
 const ok = lend.rift && lend.rift.debt > 0 && lend.rift.ore && lend.onBelt
-  && repay.valueAfter > repay.valueBefore && repay.rift.debt === 0 && repay.rift.cool > 0
+  && repay.valueAfter > repay.valueBefore && repay.rift.debt === 0 && repay.rift.cool > 0 && repay.paid === 1
   && storm.after < storm.before && storm.debris > 0 && storm.smelterGone
   && errs.length === 0;
 process.exit(ok ? 0 : 1);

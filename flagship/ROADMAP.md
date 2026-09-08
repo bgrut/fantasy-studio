@@ -47,6 +47,12 @@ says so.
 | **refinements** | prices read from a 1.0 baseline; belts belong to their world; a title with weight; idle motion |
 | **the prompt's mood** | world zero reads its own words when no palette was committed; unlocks are the families home is not |
 | **unlockable worlds** | four places to put the factory, bought with cores |
+| **the chain, twelve deep** | rates are HELD, not reached; rewards are machines, caps, or capabilities, derived from the tier on load |
+| **capabilities** | Frostline needs the heated drill, Verdant the spore scrubber, the Drift the whole chain; cores only buy the trip |
+| **creative** | chosen at world creation (`?creative=1`, or "new world"); its own save; all open, free, nothing runs out |
+| **spores** | Verdant's pressure: an unfiltered belt clogs every few seconds; a filter within 3 tiles shields the belts around it |
+| **the starter line always exists** | seedLine grows a seam at the head of the first clear run when the scatter left none; `?grid=` and `?seed=` debug overrides let a gate prove it by size |
+| **factory reads as factory** | the pipeline holds prompts that name a production system to the factory genre, deterministically, before the 25-minute hero path can start |
 
 Measured on a prompt-built export: 40x40x6 grid, 40 nodes, 180 value/min,
 9 ingots in 12s, 18 draw calls, no console errors. The player walks top ->
@@ -203,12 +209,16 @@ Cores were a multiplier and nothing else, so prestige was a number going up. A
 world is the other half of the trade — melt the factory down enough times and
 somewhere new opens, which gives the meltdown a destination.
 
-| world | cores |
-|---|---|
-| whatever the prompt asked for | 0 |
-| Ember Reach | 2 |
-| Frostline | 5 |
-| The Verdant Fault | 9 |
+| world | cores | needs |
+|---|---|---|
+| whatever the prompt asked for | 0 | — |
+| the first family home is not | 2 | — (warm) / heated drill (cold) / spore scrubber (green) |
+| the second | 5 | same rule, by family |
+| The Long Drift (void) | 3 | the whole chain walked |
+
+The three unlockables are the families the home world is not, so a warm prompt
+offers frost, verdant and the drift. Cores buy the trip; the capability makes
+it survivable, and the chain hands the capabilities out.
 
 Deliberately DATA: a world is a row of sky, fog, ground, grid, stars and a
 price, so adding one is an edit to that table and nothing else. Ore colours are
@@ -219,13 +229,26 @@ The progression chain, for reference — ordered so each unlock lands when the
 previous one has made it mean something, and so that finding the cube is a
 goal rather than a hope:
 
-| goal | unlocks |
-|---|---|
-| bank 40 value | SPLITTER |
-| stand on a second face | FORGE |
-| forge one alloy | FILTER |
-| bank 250 value | CHRONOS RIFT |
-| bank 400 value | MELTDOWN |
+| tier | goal | reward |
+|---|---|---|
+| 1 | bank 40 value | SPLITTER |
+| 2 | hold 400 a minute for 20s | OVERCLOCK cap 8 |
+| 3 | stand on a second face | FORGE |
+| 4 | forge one alloy | FILTER |
+| 5 | run three rigs on three seams | RICH SEAMS cap 8 |
+| 6 | hold 1200 a minute for 30s | CHRONOS RIFT |
+| 7 | sell an alloy above 1.20 | HOT FURNACE cap 6 |
+| 8 | bank 400 value | MELTDOWN |
+| 9 | earn a core | HEATED DRILL (Frostline opens) |
+| 10 | hold 3000 a minute for 30s | SPORE SCRUBBER (Verdant opens) |
+| 11 | repay a rift | STABLE RIFT (cores worth a quarter more) |
+| 12 | reach three cores | THE LONG DRIFT opens |
+
+A rate goal's timer runs only while the rate is at or over the target and
+resets the instant it is not: the starter line alone earns ~210/min at level
+zero, so 120 would have been a total wearing a costume. Rewards are never
+saved — `applyRewards()` re-derives caps and capabilities from the tier index
+on every load, so an old save cannot carry a stale cap.
 
 ## Checking both at once
 

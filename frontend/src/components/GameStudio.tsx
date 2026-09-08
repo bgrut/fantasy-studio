@@ -3,7 +3,7 @@
 // then embedded right here so the user plays what they typed.
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Crosshair, Download, FolderPlus, Gamepad2, Loader2, Maximize2, RotateCcw } from 'lucide-react'
+import { Crosshair, Download, FolderPlus, Gamepad2, Loader2, Maximize2, RotateCcw, Sparkles } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import AssetPalette, { type PaletteAsset } from '@/components/AssetPalette'
 import EnginePanel from '@/components/EnginePanel'
@@ -174,6 +174,13 @@ export default function GameStudio() {
       } catch { /* backend restart mid-poll — keep trying */ }
     }, 5000)
   }
+  // CREATIVE MODE (factory games): chosen when the world is made, never
+  // mid-run. It rides on the iframe URL — the runtime reads ?creative=1 once
+  // at boot and keeps that world under its own save key — so flipping it
+  // reloads the frame, the same way a quality tier does.
+  const [creative, setCreative] = useState<boolean>(() => {
+    try { return localStorage.getItem('fs_creative') === '1' } catch { return false }
+  })
   const [quality, setQuality] = useState<string>(() => {
     try { return localStorage.getItem('fs_quality') || 'ultra' } catch { return 'ultra' }
   })
@@ -1062,6 +1069,21 @@ export default function GameStudio() {
                 <FolderPlus className="w-3 h-3" />
                 {addedJob === job!.id ? 'In your game ✓' : 'Add to my game'}
               </button>
+              {job!.genre === 'factory' && (
+                <button
+                  onClick={() => setCreative(v => { try { localStorage.setItem('fs_creative', v ? '0' : '1') } catch {}; return !v })}
+                  title="creative: everything unlocked, seams never run out, the market sits still — its own world, kept separately from your survival one"
+                  className={cn(
+                    'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-colors',
+                    creative
+                      ? 'bg-[#ffd479]/20 text-[#ffd479]'
+                      : 'border border-white/[0.08] text-[#807d99] hover:text-white'
+                  )}
+                >
+                  <Sparkles className="w-3 h-3" />
+                  {creative ? 'Creative' : 'Survival'}
+                </button>
+              )}
               <button
                 data-tour-id="game-inspect"
                 onClick={toggleInspect}
@@ -1172,13 +1194,13 @@ export default function GameStudio() {
             onClick={() => gameFrameRef.current?.focus({ preventScroll: true })}
           >
             <iframe
-              key={job!.play_url + quality} /* fresh iframe per game AND per tier — the
+              key={job!.play_url + quality + (creative ? 'c' : 's')} /* fresh iframe per game AND per tier — the
                                        runtime reads ?q= once at boot, so a tier
                                        change must reload; also releases the old
                                        WebGL context (WebView2 caps them; leaks
                                        caused the silent white-canvas bug) */
               ref={gameFrameRef}
-              src={job!.play_url + '?q=' + quality}
+              src={job!.play_url + '?q=' + quality + (creative && job!.genre === 'factory' ? '&creative=1' : '')}
               title={job!.title ?? 'game'}
               className="w-full h-full"
               allow="fullscreen; gamepad; pointer-lock"

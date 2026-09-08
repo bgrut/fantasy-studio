@@ -3,6 +3,7 @@
 // video lane's asset generation is GPU-blocked.
 
 export interface GameJob {
+  genre?: string;             // 'factory' jobs get a creative-mode toggle in the studio
   id: number
   prompt: string
   status: 'running' | 'complete' | 'failed'

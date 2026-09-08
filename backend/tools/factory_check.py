@@ -25,14 +25,17 @@ GATES = [
     ("finspect.mjs", "the studio's picking bridge, driven through a real iframe"),
     ("fsave.mjs", "a factory survives a real reload"),
     ("fphys.mjs", "you cannot walk through machines; a merge does not eat items"),
-    ("fgoals.mjs", "locked machines refuse; the goal chain advances on what it asks for"),
+    ("fgoals.mjs", "twelve tiers: rates are held, rewards derive from the index, capabilities gate worlds"),
     ("fart.mjs", "icons, instanced belts, a tread that scrolls, a sky that is drawn"),
     ("fperf.mjs", "a 250-machine factory stays inside its draw-call budget"),
-    ("fworld.mjs", "worlds unlock with cores, change the scene, and survive a reload"),
+    ("fworld.mjs", "worlds need cores AND a capability, change the scene, and survive a reload"),
     ("fground.mjs", "the factory is grounded: shadows land on a lit face and an unlit one"),
     ("fdeplete.mjs", "seams thin under a rig, grow back without one, trickle at zero, and reload"),
     ("fbeat.mjs", "the reveal hands over and skips; every world has weather; sound wakes and mutes"),
     ("fmood.mjs", "world zero's look follows the prompt's words when no palette was committed"),
+    ("fcreative.mjs", "creative is its own world: all open, free, nothing runs out, survival untouched"),
+    ("fspores.mjs", "spores clog unfiltered belts on green worlds; a filter within reach shields them"),
+    ("fseed.mjs", "the starter line exists at every grid size and seed"),
 ]
 
 

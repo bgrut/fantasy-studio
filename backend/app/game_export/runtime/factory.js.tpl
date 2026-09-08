@@ -41,7 +41,7 @@ const MOOD_LOOK = {
            plate: { base: '#c4d2e6', tint: '#a8b8cf', seam: 'rgba(120,140,170,0.6)', rivet: 'rgba(255,255,255,0.7)', overlay: 'frost' },
            belt: { frame: 0x5a7590, glow: 0x0f1a2a, deck: 0xd8e8ff },
            weather: { col: [0.92, 0.96, 1.00], rate: 18, size: 0.034, fall: 0.40, drift: 0.90, life: 0.12 } },
-  green: { sky: 0x08170f, fog: 0x0f2418, accent: 0x8fe6a0, ground: 0x3f6b4a, grid: 0x63a072,
+  green: { sky: 0x08170f, fog: 0x0f2418, accent: 0x8fe6a0, ground: 0x3f6b4a, grid: 0x63a072, spores: true,
            star: 0xd6ffe0, edge: 0x8fe6a0, sun: 0xdfffe6,
            plate: { base: '#7c8a78', tint: '#5f6e5a', seam: 'rgba(50,64,48,0.75)', rivet: 'rgba(170,190,160,0.5)', overlay: 'moss' },
            belt: { frame: 0x6a7a3a, glow: 0x16220a, deck: 0xd0f0c0 },
@@ -74,7 +74,10 @@ import * as THREE from 'three';
 // grid resolution follows the prompt's world size: a bigger island is a
 // bigger factory, not the same factory further apart
 const T = 2;
-const N = Math.max(12, Math.min(40, Math.round(_sz / 6)));
+// ?grid=N is a debug override (like ?debug=1): the seam fallback in seedLine
+// has to hold for every size a spec can ask for, and a gate proves it by size
+const _gridQ = +((location.search.match(/[?&]grid=(\d+)/) || [])[1]);
+const N = _gridQ ? Math.max(12, Math.min(40, _gridQ)) : Math.max(12, Math.min(40, Math.round(_sz / 6)));
 const HALF = (N * T) / 2;
 
 // ── THE CUBE (2026-09-07) ──────────────────────────────────────────────────
@@ -226,7 +229,7 @@ const UPGRADES = {
   smelt: { lvl: 0, cap: 4, cost: 150, mult: 2.8,
            label: 'HOT FURNACE', note: 'smelters cook quicker' },
 };
-const costOf = u => Math.round(u.cost * Math.pow(u.mult, u.lvl));
+const costOf = u => CREATIVE ? 0 : Math.round(u.cost * Math.pow(u.mult, u.lvl));
 
 function applyUpgrades() {
   TICK = BASE_TICK * Math.pow(0.86, UPGRADES.tick.lvl);
@@ -234,7 +237,7 @@ function applyUpgrades() {
   // A CORE IS WORTH MORE THAN THE FACTORY IT COST. The multiplier has to be
   // steep enough that melting down a good factory beats keeping it, or the
   // prestige is a button nobody presses twice.
-  const y = (1 + UPGRADES.yield.lvl) * (1 + 0.45 * cores);
+  const y = (1 + UPGRADES.yield.lvl) * (1 + (CAPS.stable ? 0.5625 : 0.45) * cores);
   for (const m of MINERALS) { VALUE[m] = y; VALUE[INGOT_OF[m]] = 6 * y; }
   // An alloy is worth more than the three ingots it displaces, because it
   // costs a belt run across a face boundary and the risk of getting it wrong.
@@ -366,6 +369,13 @@ let starField = null, gridLines = null, cubeEdges = null, sunDisc = null;
 // which is hundreds of lines before the meshes that draw it get built — and a
 // const declared after its first use is a temporal-dead-zone throw at boot,
 // which in a file this size is a blank screen with one line of console.
+// capabilities the chain hands out; declared here because applyUpgrades
+// reads CAPS.stable and applyUpgrades runs at boot
+const CAPS = { heated: 0, scrubber: 0, stable: 0 };
+// spores: one unfiltered belt clogs every SPORE_EVERY seconds on a green
+// world, for SPORE_CLOG seconds; a filter within SPORE_REACH tiles shields it
+const SPORE_EVERY = 5, SPORE_CLOG = 8, SPORE_REACH = 3;
+let sporeClock = 0, sporeHits = 0, sporeToasted = false;
 const scatterSpots = [];
 // Same reason, same place. The starter line is seeded at boot, seeding calls
 // place(), place() clicks — and the click reads AUDIO, which was declared six
@@ -1027,15 +1037,12 @@ const nodeGeos = [
   ]),
 ];
 const nodeGeo = nodeGeos[0];      // the shape a thumbnail or a fallback uses
-let rngState = 1337;
+let rngState = +((location.search.match(/[?&]seed=(\d+)/) || [])[1]) || 1337;   // ?seed= is a debug override
 const rnd = () => (rngState = (rngState * 1664525 + 1013904223) % 4294967296) / 4294967296;
 const NODE_COUNT = Math.max(6, Math.min(40, Math.round(N * N * 0.028)));
-for (let k = 0; k < NODE_COUNT; k++) {
-  const f = Math.floor(rnd() * 6);
-  const i = 2 + Math.floor(rnd() * (N - 4));
-  const j = 2 + Math.floor(rnd() * (N - 4));
+// a seam on a tile: the cell becomes a NODE and grows its crystal
+function makeSeam(f, i, j) {
   const c = cells[f][i][j];
-  if (c.t !== EMPTY) continue;
   c.t = NODE;
   c.min = MINERAL_OF_FACE[f];
   const m = new THREE.Mesh(nodeGeos[Math.floor(rnd() * nodeGeos.length)],
@@ -1052,6 +1059,12 @@ for (let k = 0; k < NODE_COUNT; k++) {
   m.userData.axis = FACES[f].n;      // spin about the face's up, not the world's
   scene.add(m);
   c.mesh = m;
+}
+for (let k = 0; k < NODE_COUNT; k++) {
+  const f = Math.floor(rnd() * 6);
+  const i = 2 + Math.floor(rnd() * (N - 4));
+  const j = 2 + Math.floor(rnd() * (N - 4));
+  if (cells[f][i][j].t === EMPTY) makeSeam(f, i, j);
 }
 
 // ── the tread, drawn rather than loaded ────────────────────────────────────
@@ -1987,7 +2000,49 @@ for (const t of TRADED) { PRICE[t] = 1; LAST_PRICE[t] = 1; }
 const PRICE_MIN = 0.55, PRICE_MAX = 1.85;
 let priceClock = 0;
 
+// ── SPORES ─────────────────────────────────────────────────────────────────
+// Active on a green world once the filter exists (the pressure never arrives
+// before its answer), never in creative.
+const sporesActive = () => !CREATIVE && !!(WORLDS[worldIdx] && WORLDS[worldIdx].spores) && !!UNLOCKED.filter;
+// a filter within reach, on the same face, keeps a belt clean
+function sporeShielded(f, i, j) {
+  for (let a = Math.max(0, i - SPORE_REACH); a <= Math.min(N - 1, i + SPORE_REACH); a++)
+    for (let b = Math.max(0, j - SPORE_REACH); b <= Math.min(N - 1, j + SPORE_REACH); b++)
+      if (cells[f][a][b].t === FILTER) return true;
+  return false;
+}
+function sporeStrike() {
+  const open = [];
+  eachTile((c, f, i, j) => { if (c.t === BELT && !(c.clog > 0) && !sporeShielded(f, i, j)) open.push([c, f, i, j]); });
+  if (!open.length) return null;
+  const [c, f, i, j] = open[(Math.random() * open.length) | 0];
+  c.clog = SPORE_CLOG;
+  sporeHits++;
+  // a puff of spores settling onto the deck
+  const n = FACES[f].n, w = tileWorld(f, i, j), u = FACES[f].u, v = FACES[f].v;
+  for (let k = 0; k < 14; k++) {
+    const du = (Math.random() - 0.5) * T * 1.2, dv = (Math.random() - 0.5) * T * 1.2;
+    emit(w[0] + u[0] * du + v[0] * dv + n[0] * 1.4, w[1] + u[1] * du + v[1] * dv + n[1] * 1.4, w[2] + u[2] * du + v[2] * dv + n[2] * 1.4,
+         -n[0] * 0.5 + (Math.random() - 0.5) * 0.3, -n[1] * 0.5 + (Math.random() - 0.5) * 0.3, -n[2] * 0.5 + (Math.random() - 0.5) * 0.3,
+         0.55, 0.95, 0.60, 0.06, 0.9);
+  }
+  if (!sporeToasted) {
+    sporeToasted = true;
+    const t = document.getElementById('toast');
+    if (t) { t.textContent = 'SPORES — an unfiltered belt clogged. A filter within ' + SPORE_REACH + ' tiles keeps a line clean'; t.classList.add('on'); toastAt = 6; }
+  }
+  return [f, i, j];
+}
+function stepSpores(dt) {
+  // clogs clear on their own; the strikes keep coming while the world is green
+  eachTile(c => { if (c.clog > 0) c.clog = Math.max(0, c.clog - dt); });
+  if (!sporesActive()) { sporeClock = 0; return; }
+  sporeClock += dt;
+  if (sporeClock >= SPORE_EVERY) { sporeClock = 0; sporeStrike(); }
+}
+
 function stepMarket(dt) {
+  if (CREATIVE) return;                // the board sits at 1.0
   priceClock += dt;
   if (priceClock < 3.5) return;
   priceClock = 0;
@@ -2095,6 +2150,7 @@ function bank(type) {
   // the market only prices refined goods; raw ore always sells for its base
   const v = (VALUE[type] || 1) * (PRICE[type] || 1);
   ore += v; runValue += v;
+  if (type === ALLOY && (PRICE[ALLOY] || 1) >= 1.2) soldHigh++;
   if (IS_INGOT(type)) ingots++;
   if (type === ALLOY) alloys++;
 }
@@ -2226,7 +2282,7 @@ function step() {
       else if (accepts(dst, c.item)) moves.push([c, 'to', to]);
       return;
     }
-    if (c.t !== BELT || !c.item) return;
+    if (c.t !== BELT || !c.item || c.clog > 0) return;   // a clogged belt holds its load
     const to = stepTile(f, i, j, c.d);
     const dst = cellOf(to);
     if (!dst) return;
@@ -2291,7 +2347,7 @@ function step() {
     // starts — and it needs no extra state to do it.
     if (accepts(dst, m) && Math.random() < Math.max(SEAM_FLOOR, c.rich)) {
       deliver(dst, to, m);
-      c.rich = Math.max(0, c.rich - SEAM_COST);
+      if (!CREATIVE) c.rich = Math.max(0, c.rich - SEAM_COST);
       // the seam flexes as the crystal leaves it: which rigs are actually
       // producing is readable from across the face
       if (c.mesh) c.mesh.userData.pulse = 1;
@@ -2312,7 +2368,10 @@ function paintBeltLoad() {
     if (n[k] >= MAX_BELTS) return;
     const stuck = c.item && !accepts(cellOf(stepTile(f, i, j, c.d)), c.item);
     const dk = beltDecks[k];
-    if (stuck) dk.instanceColor.setXYZ(n[k], 1.5, 0.62, 0.3);
+    // spores: a DEEP green, darker than any world's deck, so it reads against
+    // Verdant's own pale-green belts and not only against steel
+    if (c.clog > 0) dk.instanceColor.setXYZ(n[k], 0.22, 0.95, 0.18);
+    else if (stuck) dk.instanceColor.setXYZ(n[k], 1.5, 0.62, 0.3);
     else dk.instanceColor.setXYZ(n[k], 1, 1, 1);
     n[k]++;
   });
@@ -2773,7 +2832,22 @@ function seedLine(placePlayer) {
       if (clear) found = [i, j];
     }
   }
-  if (!found) return;
+  // THE STARTER LINE ALWAYS EXISTS (2026-09-08). Seed 1 of the red-moon prompt
+  // scattered its eleven seams so that none on the top face had a clear run
+  // east, and seedLine returned: a studio build that opened on bare ground,
+  // no rig, no belt, nothing moving — and every gate that assumes a factory
+  // failed on it. If the scatter left no usable seam, grow one at the head of
+  // the first clear run. It uses the same seeded rng, so it is deterministic.
+  if (!found) {
+    for (let i = 2; i < N - RUN - 1 && !found; i++)
+      for (let j = 2; j < N - 2 && !found; j++) {
+        let clear = true;
+        for (let k = 0; k <= RUN && clear; k++) clear = cells[F][i + k][j].t === EMPTY;
+        if (clear) found = [i, j];
+      }
+    if (!found) return;
+    makeSeam(F, found[0], found[1]);
+  }
   const x = found[0], z = found[1];
   place(F, x, z, MINER, 0);
   place(F, x + 1, z, BELT, 0);
@@ -2830,6 +2904,7 @@ function riftOpen(c) {
 
 function riftSettle(c, paid) {
   if (paid) {
+    riftsPaid++;
     const v = (VALUE[INGOT_OF[c.dmin]] || 6) * (PRICE[INGOT_OF[c.dmin]] || 1)
               * RIFT_COUNT * 0.5;
     ore += v; runValue += v;
@@ -2984,7 +3059,7 @@ const WORLDS = [
   // world zero is the prompt's: its palette where one was committed, and the
   // prompt's own mood for everything else
   { id: 'prompt', plate: HOME.plate, belt: HOME.belt, weather: HOME.weather,
-    edge: HOME.edge, sun: HOME.sun, name: SPEC.title || 'Crystal Isle', cores: 0,
+    edge: HOME.edge, sun: HOME.sun, name: SPEC.title || 'Crystal Isle', cores: 0, spores: !!HOME.spores,
     blurb: 'where the prompt dropped you',
     sky: SKY_COL, fog: FOG_COL, ground: HOME.ground, grid: HOME.grid, star: HOME.star },
   // THE UNLOCKS ARE THE THREE FAMILIES HOME IS NOT (2026-09-08). A prompt
@@ -2993,14 +3068,16 @@ const WORLDS = [
   // presets are one family each, and the home world's family is left out.
   ...[
     { fam: 'warm',  id: 'ember',   name: 'Ember Reach',       blurb: 'a cinder still cooling' },
-    { fam: 'cold',  id: 'frost',   name: 'Frostline',         blurb: 'ice over something older' },
-    { fam: 'green', id: 'verdant', name: 'The Verdant Fault', blurb: 'it grew back around the machines' },
-    { fam: 'void',  id: 'drift',   name: 'The Long Drift',    blurb: 'nothing for a very long way' },
+    { fam: 'cold',  id: 'frost',   name: 'Frostline',         blurb: 'ice over something older', needs: 'heated' },
+    { fam: 'green', id: 'verdant', name: 'The Verdant Fault', blurb: 'it grew back around the machines', needs: 'scrubber' },
+    { fam: 'void',  id: 'drift',   name: 'The Long Drift',    blurb: 'nothing for a very long way', needs: 'drift' },
   ].filter(w => w.fam !== MOOD).map((w, k) => {
     const L = MOOD_LOOK[w.fam];
-    return { id: w.id, name: w.name, blurb: w.blurb, cores: [2, 5, 9][k],
+    // the void is priced at the three cores the last tier asks for; the rest
+    // by distance down the list
+    return { id: w.id, name: w.name, blurb: w.blurb, cores: w.needs === 'drift' ? 3 : [2, 5, 9][k], needs: w.needs || null,
              sky: L.sky, fog: L.fog, ground: L.ground, grid: L.grid, star: L.star,
-             edge: L.edge, sun: L.sun, plate: L.plate, belt: L.belt, weather: L.weather };
+             edge: L.edge, sun: L.sun, plate: L.plate, belt: L.belt, weather: L.weather, spores: !!L.spores };
   }),
 ];
 let worldIdx = 0;
@@ -3050,9 +3127,15 @@ function renderWorlds() {
            + '<small>' + WORLDS[worldIdx].blurb + '</small>';
   for (let k = 0; k < WORLDS.length; k++) {
     if (k === worldIdx) continue;
-    const w = WORLDS[k], can = cores >= w.cores;
+    const w = WORLDS[k];
+    // cores buy the trip; the capability makes it survivable. Both are named,
+    // so a locked world says what it is waiting on rather than just "no".
+    const capOk = worldCapOk(w);
+    const can = (CREATIVE || cores >= w.cores) && capOk;
+    const why = !capOk ? 'needs ' + (w.needs === 'drift' ? 'three cores' : CAP_NAME[w.needs])
+              : (!CREATIVE && cores < w.cores) ? w.cores + ' cores' : 'travel';
     html += '<div class="wr' + (can ? ' can' : '') + '" data-world="' + k + '">'
-         + w.name + '<span>' + (can ? 'travel' : w.cores + ' cores') + '</span></div>';
+         + w.name + '<span>' + why + '</span></div>';
   }
   el.innerHTML = html;
   el.querySelectorAll('.wr.can').forEach(o => o.addEventListener('pointerdown', ev => {
@@ -3064,9 +3147,14 @@ function renderWorlds() {
 // TRAVELLING IS A FRESH FACTORY IN A NEW PLACE. Cores and the goal chain are
 // what you carry; the factory and the value are not. Same shape as a meltdown,
 // so there is one rule to learn about what survives you starting over.
+function worldCapOk(w) {
+  if (CREATIVE || !w.needs) return true;
+  if (w.needs === 'drift') return goalIdx >= GOALS.length;   // the last tier opens it
+  return !!CAPS[w.needs];
+}
 function travelTo(k) {
   const w = WORLDS[k];
-  if (!w || k === worldIdx || cores < w.cores) return;
+  if (!w || k === worldIdx || (!CREATIVE && cores < w.cores) || !worldCapOk(w)) return;
   playIntro(w.name, w.blurb);          // arriving is the payoff; show the place
   clearFactory();
   ore = 0; ingots = 0; alloys = 0; runValue = 0;
@@ -3093,11 +3181,24 @@ const UNLOCKED = {};
 for (const k of START_TOOLS) UNLOCKED[k] = 1;
 let goalIdx = 0;
 
+// what the chain can hand out besides a machine (CAPS itself lives in the
+// early block: applyUpgrades reads it, and applyUpgrades runs at boot)
+const CAP_NAME = { heated: 'heated drill', scrubber: 'spore scrubber', stable: 'stable rift' };
+let rateNow = 0;                 // value per minute, as the panel shows it
+let rateForce = null;            // debug seam: hold the rate at a number
+let soldHigh = 0;                // alloys sold while the board paid over 1.20
+let riftsPaid = 0;
+
+const rigsOnSeams = () => { let n = 0; eachTile(c => { if (c.t === MINER && c.mesh) n++; }); return n; };
+
 const GOALS = [
   { text: 'bank 40 value', unlock: 'splitter',
     tip: 'the hub buys anything that reaches it',
     got: 'SPLITTER — one line can feed two machines',
     done: () => ore >= 40, progress: () => ore / 40 },
+  { text: 'hold 400 a minute for 20s', rate: 400, hold: 20, cap: 'tick',
+    tip: 'a rate has to be HELD; a total only has to be reached once',
+    got: 'OVERCLOCK goes to 8 — the line can run faster' },
   { text: 'stand on a second face', unlock: 'forge',
     tip: 'walk over an edge; the world turns under you',
     got: 'FORGE — two different ores in, one alloy out',
@@ -3106,25 +3207,77 @@ const GOALS = [
     tip: 'no single face grows two ores, so a belt has to cross',
     got: 'FILTER — point at it and press F to sort by ore',
     done: () => alloys >= 1, progress: () => alloys },
-  { text: 'bank 250 value', unlock: 'rift',
-    tip: 'seams thin as they are worked and grow back — spread the rigs out',
-    got: 'CHRONOS RIFT — borrowed ore, on a deadline',
-    done: () => ore >= 250, progress: () => ore / 250 },
+  { text: 'run three rigs on three seams', cap: 'yield',
+    tip: 'seams thin as they are worked; a rig per seam is a rig that lasts',
+    got: 'RICH SEAMS goes to 8 — every crystal is worth more',
+    done: () => rigsOnSeams() >= 3, progress: () => rigsOnSeams() / 3 },
+  { text: 'hold 1200 a minute for 30s', rate: 1200, hold: 30, unlock: 'rift',
+    tip: 'the market moves; make whatever it is paying for',
+    got: 'CHRONOS RIFT — borrowed ore, on a deadline' },
+  { text: 'sell an alloy above 1.20', cap: 'smelt',
+    tip: 'watch the board on the hub; hold the alloy until it pays',
+    got: 'HOT FURNACE goes to 6 — smelters cook faster',
+    done: () => soldHigh >= 1, progress: () => soldHigh },
   { text: 'bank ' + MELT_MIN + ' value', unlock: 'meltdown',
     tip: 'enough of a factory to be worth destroying',
     got: 'MELTDOWN — collapse it all for a permanent core',
     done: () => ore >= MELT_MIN, progress: () => ore / MELT_MIN },
+  { text: 'earn a core', gives: 'heated',
+    tip: 'a meltdown pays in cores; the cold world needs the drill this buys',
+    got: 'HEATED DRILL — Frostline is survivable now',
+    done: () => cores >= 1, progress: () => cores },
+  { text: 'hold 3000 a minute for 30s', rate: 3000, hold: 30, gives: 'scrubber',
+    tip: 'a second run is faster than the first; prove it',
+    got: 'SPORE SCRUBBER — filters clean the green world\'s lines' },
+  { text: 'repay a rift', gives: 'stable',
+    tip: 'borrow against the best price, and give it back on time',
+    got: 'STABLE RIFT — every core is worth a quarter more',
+    done: () => riftsPaid >= 1, progress: () => riftsPaid },
+  { text: 'reach three cores',
+    tip: 'the void is the last place left to go',
+    got: 'THE LONG DRIFT is open',
+    done: () => cores >= 3, progress: () => cores / 3 },
 ];
+// rate goals: held time is the progress, and it resets the moment the rate drops
+for (const g of GOALS) if (g.rate) {
+  g.held = 0;
+  g.done = () => g.held >= g.hold;
+  g.progress = () => g.held / g.hold;
+}
+const BASE_CAP = { tick: 6, yield: 6, smelt: 4 };
+
+// REWARDS ARE DERIVED, NOT SAVED. Re-applied from the goal index every time it
+// changes and on every load, from a clean base — so an old save cannot carry a
+// stale cap, and a reward added to the chain later is never missed by one.
+function applyRewards() {
+  for (const k in BASE_CAP) UPGRADES[k].cap = BASE_CAP[k];
+  for (const k in CAPS) CAPS[k] = 0;
+  // creative is the chain already walked: every reward, from the first frame
+  const upto = CREATIVE ? GOALS.length : goalIdx;
+  for (let k = 0; k < upto && k < GOALS.length; k++) {
+    const g = GOALS[k];
+    if (g.unlock) UNLOCKED[g.unlock] = 1;
+    if (g.cap) UPGRADES[g.cap].cap += 2;
+    if (g.gives) CAPS[g.gives] = 1;
+  }
+  applyUpgrades();
+}
 
 function renderGoal() {
   const el = document.getElementById('goal');
   if (el) {
-    if (goalIdx >= GOALS.length) {
+    if (CREATIVE) {
+      el.innerHTML = '<b>CREATIVE</b><small>everything is open; nothing runs out</small>';
+    } else if (goalIdx >= GOALS.length) {
       el.innerHTML = '<b>ALL SYSTEMS ONLINE</b><small>the worldlet is yours</small>';
     } else {
       const g = GOALS[goalIdx];
-      el.innerHTML = '<b>' + g.text.toUpperCase() + '</b><small>' + g.tip + '</small>' +
-        '<div class="bar"><i style="width:0%"></i></div>';
+      // twelve tiers is a ladder; say which rung, and for a rate goal how long
+      // it has been held, because a bar that resets to zero needs a reason
+      el.innerHTML = '<em>' + (goalIdx + 1) + ' / ' + GOALS.length + '</em>' +
+        '<b>' + g.text.toUpperCase() + '</b><small>' + g.tip + '</small>' +
+        '<div class="bar"><i style="width:0%"></i></div>' +
+        (g.rate ? '<span class="held">0s</span>' : '');
     }
   }
   // the locked tools stay VISIBLE, dimmed. A tool you can see and cannot use
@@ -3137,6 +3290,14 @@ function renderGoal() {
 let toastAt = 0;
 let goalBarAt = 0;
 function stepGoals(dt) {
+  // creative has no chain to walk; the toast still needs its clock
+  if (CREATIVE) { if (toastAt > 0) { toastAt -= dt; if (toastAt <= 0) document.getElementById('toast').classList.remove('on'); } return; }
+  // a rate goal is HELD: the timer runs only while the rate is at or over the
+  // target and resets the instant it is not
+  if (goalIdx < GOALS.length && GOALS[goalIdx].rate) {
+    const g = GOALS[goalIdx];
+    g.held = rateNow >= g.rate ? g.held + dt : 0;
+  }
   // the bar under the goal moves at a few Hz; the goal itself is checked
   // every frame because an unlock has to land the instant it is earned
   goalBarAt += dt;
@@ -3146,11 +3307,15 @@ function stepGoals(dt) {
     const g = GOALS[goalIdx];
     if (bar && g.progress) bar.style.width =
       Math.round(Math.max(0, Math.min(1, g.progress())) * 100) + '%';
+    const held = document.querySelector('#goal .held');
+    if (held && g.rate) held.textContent = rateNow + '/min · held ' + Math.floor(g.held) + 's';
   }
   while (goalIdx < GOALS.length && GOALS[goalIdx].done()) {
     const g = GOALS[goalIdx];
-    UNLOCKED[g.unlock] = 1;
     goalIdx++;
+    applyRewards();
+    renderUpgrades();
+    renderWorlds();
     sfxUnlock();
     const t = document.getElementById('toast');
     if (t) { t.textContent = g.got; t.classList.add('on'); toastAt = 3.5; }
@@ -3170,8 +3335,14 @@ function stepGoals(dt) {
 // each other's worlds. Every access is wrapped: storage throws outright in
 // some privacy modes, and a game that will not start because it could not read
 // a save is worse than a game that forgets.
+// CREATIVE is decided here, once, from the URL: the studio passes ?creative=1
+// and the in-game "new world" control reloads with it. It is never flipped
+// mid-run. Each mode keeps its own save, so the two worlds coexist.
+const CREATIVE = /[?&]creative=1/.test(location.search);
 const SAVE_KEY = 'fs-factory-' +
-  String(SPEC.title || 'untitled').toLowerCase().replace(/[^a-z0-9]+/g, '-');
+  String(SPEC.title || 'untitled').toLowerCase().replace(/[^a-z0-9]+/g, '-') +
+  (CREATIVE ? '-creative' : '');
+document.body.classList.toggle('creative', CREATIVE);
 // v2 adds the progression. A v1 save still loads: the goal chain re-derives
 // itself from what you have banked on the next frame, so an old world comes
 // back with its unlocks intact rather than being refused.
@@ -3180,6 +3351,7 @@ const SAVE_KEY = 'fs-factory-' +
 const SAVE_V = 3;
 
 function clearFactory() {
+  eachTile(c => { c.clog = 0; });
   beltsDirty = true;
   eachTile(c => {
     c.rich = 1;                       // a new factory gets fresh ground
@@ -3207,6 +3379,7 @@ function saveState() {
     p: { face: player.face, pos: player.pos.toArray(),
          fwd: player.fwd.toArray(), pitch: player.pitch },
     g: goalIdx, u: Object.keys(UNLOCKED), vf: [...visitedFaces], w: worldIdx,
+    sh: soldHigh, rp: riftsPaid,
     // seams come back from the RNG; how worked each one is does not
     r: (() => { const out = [];
       eachTile((c, f, i, j) => { if (c.mesh && c.rich < 0.999)
@@ -3259,7 +3432,9 @@ function loadState(d) {
     if (c && c.mesh) c.rich = Math.max(0, Math.min(1, +r[3] || 0));
   }
   goalIdx = Math.max(0, Math.min(GOALS.length, d.g | 0));
+  soldHigh = d.sh | 0; riftsPaid = d.rp | 0;
   if (Array.isArray(d.u)) for (const k of d.u) UNLOCKED[k] = 1;
+  applyRewards();
   visitedFaces.clear();
   if (Array.isArray(d.vf)) for (const f of d.vf) visitedFaces.add(f | 0);
   visitedFaces.add(player.face);
@@ -3283,9 +3458,11 @@ function wipe() {
   clearFactory();
   ore = 0; ingots = 0; alloys = 0; cores = 0; runValue = 0;
   for (const k in UPGRADES) UPGRADES[k].lvl = 0;
-  goalIdx = 0;
+  goalIdx = 0; soldHigh = 0; riftsPaid = 0;
+  for (const g of GOALS) if (g.rate) g.held = 0;
   applyWorld(0);
   for (const k in UNLOCKED) if (!START_TOOLS.includes(k)) delete UNLOCKED[k];
+  applyRewards();
   visitedFaces.clear();
   applyUpgrades(); renderUpgrades(); renderGoal();
   seedLine(true);
@@ -3316,8 +3493,23 @@ addEventListener('visibilitychange', () => { if (document.hidden) save(); });
     ev.stopPropagation();
     // a wipe is not undoable, so it asks once — but only once, because a
     // confirm on every click is its own kind of hostile
-    if (w.dataset.armed) { wipe(); save(); w.dataset.armed = ''; w.textContent = 'new world'; }
-    else { w.dataset.armed = '1'; w.textContent = 'wipe this world?'; }
+    // and it is where the MODE is chosen: a new world is survival or creative,
+    // and the choice reloads under the matching save key (no wipe needed —
+    // the other mode's world is still there under its own)
+    if (w.dataset.armed) return;
+    w.dataset.armed = '1';
+    w.innerHTML = '<span data-mode="survival">survival</span><span data-mode="creative">creative</span>' +
+                  '<small>new world - or click away</small>';
+    w.querySelectorAll('[data-mode]').forEach(o => o.addEventListener('pointerdown', e => {
+      e.stopPropagation();
+      const cr = o.dataset.mode === 'creative';
+      if (cr === CREATIVE) { wipe(); save(); disarm(); return; }
+      const u = new URL(location.href);
+      u.searchParams.set('creative', cr ? '1' : '0');
+      location.href = u.toString();
+    }));
+    const disarm = () => { w.dataset.armed = ''; w.textContent = 'new world'; document.removeEventListener('pointerdown', disarm); };
+    setTimeout(() => document.addEventListener('pointerdown', disarm), 0);
   });
 }
 applyUpgrades();
@@ -3325,6 +3517,9 @@ renderUpgrades();
 renderTicker();
 // after the world exists, so the icons are lit by the same environment it is
 buildToolIcons();
+// a NEW world has no save to derive its rewards from: creative's "everything
+// open" has to be applied here, on the first frame, not on the first reload
+applyRewards(); renderUpgrades();
 renderGoal();
 if (!restored) applyWorld(worldIdx);   // a restored save has already chosen
 // only a NEW world gets the reveal. A returning player has seen it; showing it
@@ -3340,6 +3535,7 @@ renderer.setAnimationLoop(() => {
   last = now;
 
   stepMarket(dt);
+  stepSpores(dt);
   // seams grow back on their own, and wear their richness as their size
   eachTile(c => {
     if (!c.mesh) return;
@@ -3382,7 +3578,8 @@ renderer.setAnimationLoop(() => {
     if (sparkHist.length > 40) sparkHist.shift();
     drawSpark();
     const perSec = rateBuckets.reduce((a, b) => a + b, 0) / rateBuckets.length;
-    document.getElementById('rate').textContent = Math.round(perSec * 60);
+    rateNow = rateForce === null ? Math.round(perSec * 60) : rateForce;
+    document.getElementById('rate').textContent = rateNow;
     minedWindow = 0;
     rateWindow = 0;
   }
@@ -3946,9 +4143,18 @@ window.__game = {
     world: WORLDS[worldIdx].id,
     mood: MOOD,
     world_name: WORLDS[worldIdx].name,
-    worlds_open: WORLDS.filter(w => cores >= w.cores).length,
+    worlds_open: WORLDS.filter(w => (CREATIVE || cores >= w.cores) && worldCapOk(w)).length,
+    creative: CREATIVE,
+    spores: (() => { let n = 0; eachTile(c => { if (c.clog > 0) n++; });
+                     return { active: sporesActive(), hits: sporeHits, clogged: n, reach: SPORE_REACH }; })(),
+    sold_high: soldHigh, rifts_paid: riftsPaid,
     goal: goalIdx < GOALS.length ? GOALS[goalIdx].text : null,
     goal_index: goalIdx,
+    goal_total: GOALS.length,
+    goal_held: goalIdx < GOALS.length && GOALS[goalIdx].rate ? +GOALS[goalIdx].held.toFixed(1) : null,
+    rate_now: rateNow,
+    caps: Object.keys(CAPS).filter(k => CAPS[k]),
+    upgrade_caps: { tick: UPGRADES.tick.cap, yield: UPGRADES.yield.cap, smelt: UPGRADES.smelt.cap },
     unlocked: Object.keys(UNLOCKED),
     faces_visited: visitedFaces.size,
     weather: (WORLDS[worldIdx].weather || null) && {
@@ -3984,7 +4190,7 @@ window.__factory = {
            RIFT, CRYSTAL, EMBER, SALT, INGOT, INGOT_E, INGOT_S, ALLOY },
   MINERAL_OF_FACE, get alloys() { return alloys; }, cycleFilter,
   riftOpen, riftStorm, RIFT_COUNT, RIFT_WINDOW,
-  save, load, wipe, saveState, SAVE_KEY, TREAD, beltFrames, beltDecks, POST,
+  save, load, wipe, saveState, SAVE_KEY, CREATIVE, TREAD, beltFrames, beltDecks, POST,
   beltShape, scatterVent, scatterBolt, scatterSpots, renderThumb, GEO, MAT,
   SEAM_COST, SEAM_REGROW, SEAM_FLOOR,
   step,                 // one simulation tick, for a harness that cannot wait
@@ -3995,6 +4201,10 @@ window.__factory = {
     return beltIndex[k].findIndex(t => t.face === f && t.i === i && t.j === j);
   },
   GOALS, UNLOCKED, get goalIdx() { return goalIdx; }, visitedFaces,
+  CAPS, applyRewards, worldCapOk, bank,
+  sporeStrike, sporeShielded, sporesActive, SPORE_REACH, SPORE_CLOG,
+  set riftsPaid(v) { riftsPaid = v; },
+  set rateNow(v) { rateForce = v; rateNow = v === null ? rateNow : v; }, set goalIdx(v) { goalIdx = v; applyRewards(); renderGoal(); renderWorlds(); },
   WORLDS, travelTo, applyWorld, get worldIdx() { return worldIdx; },
   // aim the overhead camera, so a harness can look at a chosen face
   orbit: (yaw, pitch, dist) => { orbYaw = yaw; orbPitch = pitch;
