@@ -295,6 +295,8 @@ const fill = new THREE.DirectionalLight(0xb9d2ff, 0.85);
 fill.position.set(-34, -40, -26);
 scene.add(fill);
 
+let starField = null, gridLines = null;   // a world recolours these
+
 // ── the sky ────────────────────────────────────────────────────────────────
 // A floating worldlet against flat black reads as a bug. Stars cost one draw
 // call and give the cube something to be floating IN — and when you walk over
@@ -323,11 +325,11 @@ scene.add(fill);
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
-  const stars = new THREE.Points(g, new THREE.PointsMaterial({
+  starField = new THREE.Points(g, new THREE.PointsMaterial({
     size: 2.1, sizeAttenuation: false, vertexColors: true,
     transparent: true, opacity: 0.95, depthWrite: false, fog: false }));
-  stars.frustumCulled = false;
-  scene.add(stars);
+  starField.frustumCulled = false;
+  scene.add(starField);
 }
 
 // ── the worldlet: a cube you can walk all the way around ───────────────────
@@ -385,7 +387,7 @@ scene.add(cube);
   }
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
-  scene.add(new THREE.LineSegments(g, new THREE.LineBasicMaterial(
+  scene.add(gridLines = new THREE.LineSegments(g, new THREE.LineBasicMaterial(
     // fainter than it was: forty lines a face is a placement aid up close and
     // a moire pattern from orbit
     { color: 0x46527d, transparent: true, opacity: 0.14 })));
@@ -1598,6 +1600,7 @@ function meltdown() {
   melting = 2.4;
   refreshCounts();
   document.getElementById('tok').textContent = cores;
+  renderWorlds();                     // a core may have opened somewhere new
 }
 
 function stepDebris(dt) {
@@ -1619,6 +1622,76 @@ function stepDebris(dt) {
 {
   const btn = document.getElementById('melt');
   if (btn) btn.addEventListener('pointerdown', ev => { ev.stopPropagation(); meltdown(); });
+}
+
+// ── WORLDS ─────────────────────────────────────────────────────────────────
+// Everything a world changes is scenery: where you are, never how the factory
+// behaves. Ore colours are excluded on purpose — they are how a belt is read at
+// a glance, and re-learning them per world would be a tax on travelling.
+const WORLDS = [
+  { id: 'prompt', name: SPEC.title || 'Crystal Isle', cores: 0,
+    blurb: 'where the prompt dropped you',
+    sky: SKY_COL, fog: FOG_COL, ground: 0x3c4470, grid: 0x46527d, star: 0xffffff },
+  { id: 'ember', name: 'Ember Reach', cores: 2,
+    blurb: 'a cinder still cooling',
+    sky: 0x1a0c0e, fog: 0x2a1210, ground: 0x6b3a34, grid: 0xa2564a, star: 0xffd2b8 },
+  { id: 'frost', name: 'Frostline', cores: 5,
+    blurb: 'ice over something older',
+    sky: 0x0a1420, fog: 0x11202f, ground: 0x7c93ad, grid: 0xa8c4dd, star: 0xdcefff },
+  { id: 'verdant', name: 'The Verdant Fault', cores: 9,
+    blurb: 'it grew back around the machines',
+    sky: 0x08170f, fog: 0x0f2418, ground: 0x3f6b4a, grid: 0x63a072, star: 0xd6ffe0 },
+];
+let worldIdx = 0;
+
+function applyWorld(k) {
+  const w = WORLDS[k] || WORLDS[0];
+  worldIdx = WORLDS[k] ? k : 0;
+  scene.background.setHex(w.sky);
+  worldFog.color.setHex(w.fog);
+  cube.material.color.setHex(w.ground);
+  gridLines.material.color.setHex(w.grid);
+  starField.material.color.setHex(w.star);
+  const h = document.querySelector('#hud h1');
+  if (h) h.textContent = String(w.name).toUpperCase();
+  renderWorlds();
+}
+
+function renderWorlds() {
+  const el = document.getElementById('world');
+  if (!el) return;
+  let html = '<b>' + WORLDS[worldIdx].name.toUpperCase() + '</b>'
+           + '<small>' + WORLDS[worldIdx].blurb + '</small>';
+  for (let k = 0; k < WORLDS.length; k++) {
+    if (k === worldIdx) continue;
+    const w = WORLDS[k], can = cores >= w.cores;
+    html += '<div class="wr' + (can ? ' can' : '') + '" data-world="' + k + '">'
+         + w.name + '<span>' + (can ? 'travel' : w.cores + ' cores') + '</span></div>';
+  }
+  el.innerHTML = html;
+  el.querySelectorAll('.wr.can').forEach(o => o.addEventListener('pointerdown', ev => {
+    ev.stopPropagation();
+    travelTo(+o.dataset.world);
+  }));
+}
+
+// TRAVELLING IS A FRESH FACTORY IN A NEW PLACE. Cores and the goal chain are
+// what you carry; the factory and the value are not. Same shape as a meltdown,
+// so there is one rule to learn about what survives you starting over.
+function travelTo(k) {
+  const w = WORLDS[k];
+  if (!w || k === worldIdx || cores < w.cores) return;
+  clearFactory();
+  ore = 0; ingots = 0; alloys = 0; runValue = 0;
+  for (const key in UPGRADES) UPGRADES[key].lvl = 0;
+  applyUpgrades(); renderUpgrades();
+  applyWorld(k);
+  seedLine(true);
+  refreshCounts();
+  const t = document.getElementById('toast');
+  if (t) { t.textContent = w.name.toUpperCase() + ' — ' + w.blurb;
+           t.classList.add('on'); toastAt = 3.5; }
+  save();
 }
 
 // ── PROGRESSION ────────────────────────────────────────────────────────────
@@ -1702,7 +1775,9 @@ const SAVE_KEY = 'fs-factory-' +
 // v2 adds the progression. A v1 save still loads: the goal chain re-derives
 // itself from what you have banked on the next frame, so an old world comes
 // back with its unlocks intact rather than being refused.
-const SAVE_V = 2;
+// v3 records which world you are standing in. v1 and v2 still load and default
+// to world 0, which is where they were.
+const SAVE_V = 3;
 
 function clearFactory() {
   beltsDirty = true;
@@ -1730,7 +1805,7 @@ function saveState() {
     price: TRADED.map(t => PRICE[t]),
     p: { face: player.face, pos: player.pos.toArray(),
          fwd: player.fwd.toArray(), pitch: player.pitch },
-    g: goalIdx, u: Object.keys(UNLOCKED), vf: [...visitedFaces],
+    g: goalIdx, u: Object.keys(UNLOCKED), vf: [...visitedFaces], w: worldIdx,
     m,
   };
 }
@@ -1772,6 +1847,7 @@ function loadState(d) {
     faceNormal(player.face, player.up);
     camUp.copy(player.up);
   }
+  applyWorld(d.w | 0);
   goalIdx = Math.max(0, Math.min(GOALS.length, d.g | 0));
   if (Array.isArray(d.u)) for (const k of d.u) UNLOCKED[k] = 1;
   visitedFaces.clear();
@@ -1798,6 +1874,7 @@ function wipe() {
   ore = 0; ingots = 0; alloys = 0; cores = 0; runValue = 0;
   for (const k in UPGRADES) UPGRADES[k].lvl = 0;
   goalIdx = 0;
+  applyWorld(0);
   for (const k in UNLOCKED) if (!START_TOOLS.includes(k)) delete UNLOCKED[k];
   visitedFaces.clear();
   applyUpgrades(); renderUpgrades(); renderGoal();
@@ -1837,6 +1914,7 @@ applyUpgrades();
 renderUpgrades();
 renderTicker();
 renderGoal();
+if (!restored) applyWorld(worldIdx);   // a restored save has already chosen
 
 // ── frame ──────────────────────────────────────────────────────────────────
 let last = performance.now();
@@ -2133,6 +2211,9 @@ window.__game = {
     alloys,
     prices: TRADED.map(t => +PRICE[t].toFixed(3)),
     restored,
+    world: WORLDS[worldIdx].id,
+    world_name: WORLDS[worldIdx].name,
+    worlds_open: WORLDS.filter(w => cores >= w.cores).length,
     goal: goalIdx < GOALS.length ? GOALS[goalIdx].text : null,
     goal_index: goalIdx,
     unlocked: Object.keys(UNLOCKED),
@@ -2167,6 +2248,9 @@ window.__factory = {
   riftOpen, riftStorm, RIFT_COUNT, RIFT_WINDOW,
   save, load, wipe, saveState, SAVE_KEY, TREAD, beltFrames, beltDecks,
   GOALS, UNLOCKED, get goalIdx() { return goalIdx; }, visitedFaces,
+  WORLDS, travelTo, applyWorld, get worldIdx() { return worldIdx; },
+  addCores: n => { cores += n; document.getElementById('tok').textContent = cores;
+                   renderWorlds(); },
   PRICE, TRADED, stepMarket,
   UPGRADES, buy, costOf, get tick() { return TICK; },
   meltdown, MELT_MIN, get cores() { return cores; },

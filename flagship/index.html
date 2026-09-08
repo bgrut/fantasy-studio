@@ -86,6 +86,18 @@
         padding:6px 8px;background:rgba(255,212,121,.07)}
   #goal b{display:block;font-size:11px;letter-spacing:.07em;color:#ffd479}
   #goal small{display:block;color:#8d8564;font-size:10px}
+  /* where you are, and where you could go. Locked rows stay visible with their
+     price on them: a destination you cannot afford yet is the reason to melt
+     the factory down again. */
+  #world{margin-top:9px;border-top:1px solid rgba(120,200,255,.14);padding-top:8px}
+  #world b{display:block;font-size:11px;letter-spacing:.06em;color:#9fd6ff}
+  #world small{display:block;color:#6d7590;font-size:10px;margin-bottom:5px}
+  #world .wr{display:flex;justify-content:space-between;gap:10px;font-size:10px;
+             color:#5d6480;padding:2px 0}
+  #world .wr span{color:#4e5674}
+  #world .wr.can{color:#9fd6ff;cursor:pointer}
+  #world .wr.can span{color:#5ce0d0}
+  #world .wr.can:hover{color:#5ce0d0}
   .tool.locked{opacity:.3}
   .tool.locked b{color:#6b7590}
   .tool.deny{border-color:#e8697d;background:rgba(232,105,125,.16)}
@@ -96,7 +108,14 @@
          border-radius:9px;padding:9px 16px;color:#5ce0d0;letter-spacing:.05em;
          opacity:0;transition:opacity .25s;pointer-events:none}
   #toast.on{opacity:1}
-  #hud{pointer-events:auto}
+  /* THE PANEL KEEPS GROWING (2026-09-08). Counters, then a ticker, then a goal,
+     then a world list — it now runs off the bottom of the screen and collides
+     with the tool bar. Capped and scrollable, so the next feature to land in
+     here does not push something off the screen instead. */
+  #hud{pointer-events:auto;max-height:calc(100vh - 128px);overflow-y:auto;
+       scrollbar-width:thin;scrollbar-color:rgba(120,200,255,.28) transparent}
+  #hud::-webkit-scrollbar{width:6px}
+  #hud::-webkit-scrollbar-thumb{background:rgba(120,200,255,.28);border-radius:3px}
   /* above the bar, not beside it — at seven tools there is no room beside it */
   #hint{position:fixed;right:14px;bottom:74px;z-index:5;color:#6d7590;text-align:right}
   /* the crosshair IS the cursor once the pointer is locked */
@@ -121,6 +140,7 @@
   <div class="row"><span class="k">smelters</span><span class="v" id="nsmelt">0</span></div>
   <div class="row"><span class="k">on belts</span><span class="v" id="nitem">0</span></div>
   <div class="row"><span class="k">cores</span><span class="v" id="tok">0</span></div>
+  <div id="world"></div>
   <div id="goal"></div>
   <div id="tick"></div>
   <div id="ups"></div>

@@ -32,6 +32,8 @@ says so.
 | **save / load** | a factory survives closing the tab |
 | **collision + fair mergers** | machines are solid; a merge stopped eating items |
 | **progression frame** | goals unlock machines in the order that teaches them |
+| **art pass** | conveyors that convey, icons in the bar, a sky to float in |
+| **unlockable worlds** | four places to put the factory, bought with cores |
 
 Measured on a prompt-built export: 40x40x6 grid, 40 nodes, 180 value/min,
 9 ingots in 12s, 18 draw calls, no console errors. The player walks top ->
@@ -180,7 +182,25 @@ clock starts when the loan lands.
 5. ~~Chronos~~ — shipped, as a debt with a clock rather than replayed ghosts
 
 All five differentiators from the brief are in, and the factory now saves.
-What is left is an art pass and the Tauri/Steam packaging path.
+What is left is the Tauri/Steam packaging path.
+
+## Worlds
+
+Cores were a multiplier and nothing else, so prestige was a number going up. A
+world is the other half of the trade — melt the factory down enough times and
+somewhere new opens, which gives the meltdown a destination.
+
+| world | cores |
+|---|---|
+| whatever the prompt asked for | 0 |
+| Ember Reach | 2 |
+| Frostline | 5 |
+| The Verdant Fault | 9 |
+
+Deliberately DATA: a world is a row of sky, fog, ground, grid, stars and a
+price, so adding one is an edit to that table and nothing else. Ore colours are
+excluded on purpose — they are how a belt is read at a glance, and re-learning
+them per world would be a tax on travelling.
 
 The progression chain, for reference — ordered so each unlock lands when the
 previous one has made it mean something, and so that finding the cube is a
@@ -202,6 +222,11 @@ against each:
 
     cd flagship && python -m http.server 8790     # serve the demo
     python backend/tools/factory_check.py --job <id>
+
+Nine gates, run against each: the core loop and cube walk, the rift, the studio
+inspect bridge, save/load, collision and merge losslessness, the goal chain, the
+art (icons, instancing, a scrolling tread, a drawn sky), a draw-call budget for
+a 250-machine factory, and world unlocking.
 
 ## Also outstanding
 

@@ -28,6 +28,7 @@ GATES = [
     ("fgoals.mjs", "locked machines refuse; the goal chain advances on what it asks for"),
     ("fart.mjs", "icons, instanced belts, a tread that scrolls, a sky that is drawn"),
     ("fperf.mjs", "a 250-machine factory stays inside its draw-call budget"),
+    ("fworld.mjs", "worlds unlock with cores, change the scene, and survive a reload"),
 ]
 
 
