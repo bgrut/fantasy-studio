@@ -911,13 +911,33 @@ const nodeMat = nodeMats[CRYSTAL];
 // A SEAM IS A CLUSTER. One floating diamond per tile read as a placeholder
 // token; three crystals of different sizes leaning out of the ground read as
 // something growing there. Merged, so it is still one draw call per seam.
-const nodeGeo = mergeParts([
-  { g: new THREE.OctahedronGeometry(0.58, 0) },
-  { g: new THREE.OctahedronGeometry(0.30, 0), x: 0.44, y: -0.22, z: 0.20,
-    rz: 0.5, ry: 0.8 },
-  { g: new THREE.OctahedronGeometry(0.23, 0), x: -0.38, y: -0.26, z: -0.30,
-    rz: -0.6, ry: 0.3 },
-]);
+// Three clusters, not one rotated four ways: with a dozen seams on a face the
+// repeat is obvious the moment two of them are in frame together. Different
+// counts and different leans, so they differ in silhouette and not only in
+// orientation.
+const nodeGeos = [
+  mergeParts([
+    { g: new THREE.OctahedronGeometry(0.58, 0) },
+    { g: new THREE.OctahedronGeometry(0.30, 0), x: 0.44, y: -0.22, z: 0.20,
+      rz: 0.5, ry: 0.8 },
+    { g: new THREE.OctahedronGeometry(0.23, 0), x: -0.38, y: -0.26, z: -0.30,
+      rz: -0.6, ry: 0.3 },
+  ]),
+  mergeParts([
+    { g: new THREE.OctahedronGeometry(0.44, 0), rz: 0.34 },
+    { g: new THREE.OctahedronGeometry(0.40, 0), x: -0.30, y: -0.10, z: 0.34,
+      rz: -0.42, ry: 1.1 },
+    { g: new THREE.OctahedronGeometry(0.26, 0), x: 0.36, y: -0.20, z: -0.24,
+      rz: 0.7 },
+    { g: new THREE.OctahedronGeometry(0.17, 0), x: 0.10, y: -0.30, z: 0.44 },
+  ]),
+  mergeParts([
+    { g: new THREE.OctahedronGeometry(0.66, 0), rz: -0.22, ry: 0.4 },
+    { g: new THREE.OctahedronGeometry(0.20, 0), x: 0.46, y: -0.30, z: -0.10,
+      rz: 0.9 },
+  ]),
+];
+const nodeGeo = nodeGeos[0];      // the shape a thumbnail or a fallback uses
 let rngState = 1337;
 const rnd = () => (rngState = (rngState * 1664525 + 1013904223) % 4294967296) / 4294967296;
 const NODE_COUNT = Math.max(6, Math.min(40, Math.round(N * N * 0.028)));
@@ -929,8 +949,10 @@ for (let k = 0; k < NODE_COUNT; k++) {
   if (c.t !== EMPTY) continue;
   c.t = NODE;
   c.min = MINERAL_OF_FACE[f];
-  const m = new THREE.Mesh(nodeGeo, nodeMats[c.min]);
-  seat(m, f, i, j, 0, 0.7);
+  const m = new THREE.Mesh(nodeGeos[Math.floor(rnd() * nodeGeos.length)],
+                           nodeMats[c.min]);
+  seat(m, f, i, j, Math.floor(rnd() * 4), 0.66 + rnd() * 0.12);
+  m.scale.setScalar(0.82 + rnd() * 0.42);
   m.userData.fsTag = { type: 'ore', name: MINERAL_NAME[c.min] + ' seam',
                        detail: FACES[f].name + ' face · tile ' + i + ',' + j,
                        face: f, i, j };
@@ -1063,6 +1085,19 @@ const GEO = {
     { g: _cyl(0.105, 0.105, T * 0.70, 8), y: 0.13, x: T * 0.41, rx: Math.PI / 2 },
     { g: _cyl(0.105, 0.105, T * 0.70, 8), y: 0.13, z: T * 0.41,
       rx: Math.PI / 2, ry: Math.PI / 2 },
+  ]),
+  // A MERGE. Straight run with a ramp on each flank: it does not try to say
+  // WHICH side is feeding — with two or three inputs there is no single answer
+  // and a piece that guessed would be wrong more often than not — it says that
+  // this is where lines join, which is the thing worth seeing from a distance.
+  beltFrameJ: mergeParts([
+    { g: _box(T * 0.96, 0.05, T * 0.94), y: 0.03 },
+    { g: _box(T * 0.96, 0.14, 0.09), y: 0.15, z: T * 0.37, tint: 0.85 },
+    { g: _box(T * 0.96, 0.14, 0.09), y: 0.15, z: -T * 0.37, tint: 0.85 },
+    { g: _cyl(0.105, 0.105, T * 0.70, 8), y: 0.13, x: T * 0.41, rx: Math.PI / 2 },
+    { g: _cyl(0.105, 0.105, T * 0.70, 8), y: 0.13, x: -T * 0.41, rx: Math.PI / 2 },
+    { g: _box(T * 0.34, 0.05, T * 0.30), y: 0.13, z: T * 0.44, rx: 0.32, tint: 0.7 },
+    { g: _box(T * 0.34, 0.05, T * 0.30), y: 0.13, z: -T * 0.44, rx: -0.32, tint: 0.7 },
   ]),
   beltFrameB: mergeParts([
     { g: new THREE.RingGeometry(ARC_R - ARC_W - 0.11, ARC_R + ARC_W + 0.11, 14, 1,
@@ -1447,12 +1482,13 @@ const MAX_BELTS = 6000;
 // ways, and which one it is depends on where its input comes from — so the
 // shape is a property of the LAYOUT, not of the tile, and it has to be
 // recomputed whenever anything around it changes.
-const BELT_KIND = ['', 'A', 'B'];
-const beltFrames = [], beltDecks = [], beltIndex = [[], [], []];
-for (let k = 0; k < 3; k++) {
+const BELT_KIND = ['', 'A', 'B', 'J'];
+const beltFrames = [], beltDecks = [], beltIndex = BELT_KIND.map(() => []);
+for (let k = 0; k < BELT_KIND.length; k++) {
   const fm = new THREE.InstancedMesh(GEO['beltFrame' + BELT_KIND[k]],
                                      MAT.beltFrame, MAX_BELTS);
-  const dk = new THREE.InstancedMesh(GEO['beltDeck' + BELT_KIND[k]],
+  // a junction runs straight through, so it wears the straight deck
+  const dk = new THREE.InstancedMesh(GEO['beltDeck' + BELT_KIND[k]] || GEO.beltDeck,
                                      MAT.beltDeck, MAX_BELTS);
   for (const m of [fm, dk]) {
     m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
@@ -1485,13 +1521,17 @@ function beltShape(f, i, j, c) {
     inbound = (d + 2) % 4;                          // travel direction into us
     found++;
   }
+  if (found > 1) return 3;                          // a merge
   if (found !== 1 || inbound === c.d) return 0;
   const turn = (c.d - inbound + 4) % 4;
   return turn === 3 ? 1 : turn === 1 ? 2 : 0;       // 1 = A, 2 = B, 0 = straight
 }
 
 function rebuildBelts() {
-  const n = [0, 0, 0];
+  // one counter per belt shape — straight, two turns, junction. Sized by
+  // hand once too often: a fourth shape with a three-slot counter set its
+  // instance count to undefined, and undefined belts draw as nothing.
+  const n = BELT_KIND.map(() => 0);
   let d = 0, sv = 0, sb = 0;
   for (const a of beltIndex) a.length = 0;
   eachTile((c, f, i, j) => {
@@ -1512,7 +1552,7 @@ function rebuildBelts() {
     // the corner shapes bake their own height in, so both batches seat at zero
     seatMatrix(f, i, j, c.d, 0, _mx);
     beltFrames[k].setMatrixAt(n[k], _mx);
-    if (k === 0) seatMatrix(f, i, j, c.d, 0.155, _mx);
+    if (k === 0 || k === 3) seatMatrix(f, i, j, c.d, 0.155, _mx);
     beltDecks[k].setMatrixAt(n[k], _mx);
     beltIndex[k][n[k]] = { face: f, i, j };
     n[k]++;
@@ -1533,7 +1573,7 @@ function rebuildBelts() {
   scatterVent.instanceMatrix.needsUpdate = true;
   scatterBolt.instanceMatrix.needsUpdate = true;
 
-  for (let k = 0; k < 3; k++) {
+  for (let k = 0; k < BELT_KIND.length; k++) {
     beltFrames[k].count = n[k]; beltDecks[k].count = n[k];
     beltFrames[k].instanceMatrix.needsUpdate = true;
     beltDecks[k].instanceMatrix.needsUpdate = true;
@@ -2054,11 +2094,22 @@ function drawItems(alpha) {
     // one of the properties the cube-grid test pins down.
     const A = tileWorld(f, i, j), nrm = FACES[f].n;
     const B = ahead ? tileWorld(to.face, to.i, to.j) : A;
-    _p.set(A[0] + (B[0] - A[0]) * a + nrm[0] * 0.42,
-           A[1] + (B[1] - A[1]) * a + nrm[1] * 0.42,
-           A[2] + (B[2] - A[2]) * a + nrm[2] * 0.42);
+    // DERIVED FROM THE TILE, NOT FROM THE ITEM. A per-item random would make
+    // a crystal jump sideways every time it advanced; keyed to the tile it is
+    // standing on, the whole line looks hand-placed and nothing twitches.
+    const key = (f * 73856093) ^ (i * 19349663) ^ (j * 83492791);
+    const jit = ((key >>> 8) & 1023) / 1023 - 0.5;
+    const ph = ((key >>> 18) & 1023) / 1023 * 6.283;
+    const side = FACES[f].v;
+    // a shallow carry bob, so a run of items has a wave in it rather than
+    // sliding like a decal
+    const lift = 0.42 + Math.sin(a * Math.PI) * 0.045;
+    const off = jit * T * 0.10;
+    _p.set(A[0] + (B[0] - A[0]) * a + nrm[0] * lift + side[0] * off,
+           A[1] + (B[1] - A[1]) * a + nrm[1] * lift + side[1] * off,
+           A[2] + (B[2] - A[2]) * a + nrm[2] * lift + side[2] * off);
     _up.set(nrm[0], nrm[1], nrm[2]);
-    _q.setFromAxisAngle(_up, spin);
+    _q.setFromAxisAngle(_up, spin + ph);
     _m.compose(_p, _q, _s);
     items.setColorAt(n, ITEM_COL[c.item] || ITEM_COL[CRYSTAL]);
     items.setMatrixAt(n++, _m);
