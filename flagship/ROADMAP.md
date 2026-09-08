@@ -42,6 +42,7 @@ says so.
 | **the reveal** | the worldlet shown before control is handed over; again on arrival |
 | **weather** | ash on Ember, snow on Frostline, spores on Verdant, dust at home |
 | **sound** | six synthesised layers, no assets; wakes on the first click, M mutes |
+| **the panel** | read by shape: a hero number, a sparkline, icon chips, bars, pips |
 | **unlockable worlds** | four places to put the factory, bought with cores |
 
 Measured on a prompt-built export: 40x40x6 grid, 40 nodes, 180 value/min,

@@ -84,7 +84,7 @@ for (const w of wx) console.log('weather   :', w.world.padEnd(8), w.alive, 'part
 const snd = await p.evaluate(async ()=>{
   const F = window.__factory;
   const before = window.__game.facts().audio;
-  document.querySelector('canvas').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  window.__renderer.domElement.dispatchEvent(new MouseEvent('click', { bubbles: true }));
   await new Promise(r => setTimeout(r, 400));
   const woke = window.__game.facts().audio;
   // the belt layer follows the belt count: build some and let a tick pass

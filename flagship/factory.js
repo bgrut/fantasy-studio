@@ -233,9 +233,12 @@ function renderUpgrades() {
     const c = costOf(u);
     const el = document.createElement('div');
     el.className = 'up' + (maxed ? ' maxed' : (ore >= c ? ' can' : ''));
+    let pips = '<div class="pips">';
+    for (let k = 0; k < u.cap; k++) pips += '<s' + (k < u.lvl ? ' class="on"' : '') + '></s>';
+    pips += '</div>';
+    el.title = u.note;
     el.innerHTML = '<b>' + u.label + ' <span>' + u.lvl + '/' + u.cap + '</span></b>' +
-      '<small>' + u.note + '</small>' +
-      '<i>' + (maxed ? 'MAX' : c + ' value') + '</i>';
+      pips + '<i>' + (maxed ? 'MAX' : c + ' value') + '</i>';
     if (!maxed) el.addEventListener('pointerdown', ev => { ev.stopPropagation(); buy(key); });
     box.appendChild(el);
   }
@@ -1362,6 +1365,28 @@ function buildToolIcons() {
                               r.position.y = 0.95; r.rotation.x = Math.PI / 2;
                               return r; })()]),
   };
+  // the stat chips too: a miner is the same picture everywhere it appears.
+  // Items and cores are not machines, so they get their own small renders.
+  const CHIP = {
+    miner: SET.miner, belt: SET.belt, smelter: SET.smelter,
+    item: () => mk(new THREE.OctahedronGeometry(0.5, 0), nodeMats[CRYSTAL]),
+    ingot: () => mk(new THREE.BoxGeometry(0.9, 0.35, 0.5),
+      new THREE.MeshStandardMaterial({ color: 0xffae4d, emissive: 0x7a4a10,
+        emissiveIntensity: 0.8, metalness: 0.7, roughness: 0.3 })),
+    alloy: () => mk(new THREE.OctahedronGeometry(0.5, 1),
+      new THREE.MeshStandardMaterial({ color: 0xff5ad9, emissive: 0x8a1a6a,
+        emissiveIntensity: 0.9, metalness: 0.6, roughness: 0.25 })),
+    core: () => mk(new THREE.IcosahedronGeometry(0.5, 0),
+      new THREE.MeshStandardMaterial({ color: 0xffd479, emissive: 0xa06a10,
+        emissiveIntensity: 1.1, metalness: 0.8, roughness: 0.2 })),
+  };
+  for (const name in CHIP) {
+    const el = document.querySelector('.st[data-ico="' + name + '"] i');
+    if (!el) continue;
+    let url = null;
+    try { url = renderThumb(CHIP[name](), 64); } catch (e) { url = null; }
+    if (url) el.style.backgroundImage = 'url(' + url + ')';
+  }
   for (const name in SET) {
     const el = document.querySelector('.tool[data-tool="' + name + '"]');
     if (!el) continue;
@@ -1907,12 +1932,17 @@ function stepMarket(dt) {
 function renderTicker() {
   const box = document.getElementById('tick');
   if (!box) return;
+  // FOUR BARS, NOT FOUR NUMBERS. Height is price, colour is the ore, so the
+  // best thing to be making right now is simply the tallest bar — a decision
+  // you can make from across the room instead of by comparing decimals.
   let html = '';
   for (const t of TRADED) {
     const up = PRICE[t] >= LAST_PRICE[t];
-    html += '<div class="tr"><span style="color:' + TRADE_COL[t] + '">' +
-      TRADE_NAME[t] + '</span><span class="' + (up ? 'u' : 'd') + '">' +
-      PRICE[t].toFixed(2) + (up ? ' \u25b2' : ' \u25bc') + '</span></div>';
+    const hgt = Math.round(((PRICE[t] - PRICE_MIN) / (PRICE_MAX - PRICE_MIN)) * 34 + 6);
+    html += '<div class="mk ' + (up ? 'u' : 'd') + '">' +
+      '<span class="px">' + PRICE[t].toFixed(2) + '</span>' +
+      '<div class="bar" style="height:' + hgt + 'px;background:' + TRADE_COL[t] + '"></div>' +
+      '<span class="nm">' + TRADE_NAME[t] + '</span></div>';
   }
   box.innerHTML = html;
 }
@@ -1920,6 +1950,35 @@ let sinceTick = 0;
 let minedWindow = 0;
 let rateWindow = 0;
 const rateBuckets = [];
+const sparkHist = [];            // one entry per second, the last forty
+function drawSpark() {
+  const cv = document.getElementById('spark');
+  if (!cv) return;
+  const g = cv.getContext('2d'), W = cv.width, H = cv.height;
+  g.clearRect(0, 0, W, H);
+  if (sparkHist.length < 2) return;
+  const max = Math.max(1, ...sparkHist);
+  // area first, line on top: the fill is what makes it read as a quantity
+  g.beginPath();
+  for (let k = 0; k < sparkHist.length; k++) {
+    const x = (k / 39) * (W - 2) + 1;
+    const y = H - 3 - (sparkHist[k] / max) * (H - 8);
+    if (k === 0) g.moveTo(x, y); else g.lineTo(x, y);
+  }
+  const lastX = ((sparkHist.length - 1) / 39) * (W - 2) + 1;
+  g.lineTo(lastX, H); g.lineTo(1, H); g.closePath();
+  const grd = g.createLinearGradient(0, 0, 0, H);
+  grd.addColorStop(0, 'rgba(255,212,121,0.42)');
+  grd.addColorStop(1, 'rgba(255,212,121,0.02)');
+  g.fillStyle = grd; g.fill();
+  g.beginPath();
+  for (let k = 0; k < sparkHist.length; k++) {
+    const x = (k / 39) * (W - 2) + 1;
+    const y = H - 3 - (sparkHist[k] / max) * (H - 8);
+    if (k === 0) g.moveTo(x, y); else g.lineTo(x, y);
+  }
+  g.strokeStyle = '#ffd479'; g.lineWidth = 1.5; g.lineJoin = 'round'; g.stroke();
+}
 let lastOreShown = -1;
 
 function bank(type) {
@@ -2892,23 +2951,23 @@ const GOALS = [
   { text: 'bank 40 value', unlock: 'splitter',
     tip: 'the hub buys anything that reaches it',
     got: 'SPLITTER — one line can feed two machines',
-    done: () => ore >= 40 },
+    done: () => ore >= 40, progress: () => ore / 40 },
   { text: 'stand on a second face', unlock: 'forge',
     tip: 'walk over an edge; the world turns under you',
     got: 'FORGE — two different ores in, one alloy out',
-    done: () => visitedFaces.size >= 2 },
+    done: () => visitedFaces.size >= 2, progress: () => (visitedFaces.size - 1) },
   { text: 'forge one alloy', unlock: 'filter',
     tip: 'no single face grows two ores, so a belt has to cross',
     got: 'FILTER — point at it and press F to sort by ore',
-    done: () => alloys >= 1 },
+    done: () => alloys >= 1, progress: () => alloys },
   { text: 'bank 250 value', unlock: 'rift',
     tip: 'seams thin as they are worked and grow back — spread the rigs out',
     got: 'CHRONOS RIFT — borrowed ore, on a deadline',
-    done: () => ore >= 250 },
+    done: () => ore >= 250, progress: () => ore / 250 },
   { text: 'bank ' + MELT_MIN + ' value', unlock: 'meltdown',
     tip: 'enough of a factory to be worth destroying',
     got: 'MELTDOWN — collapse it all for a permanent core',
-    done: () => ore >= MELT_MIN },
+    done: () => ore >= MELT_MIN, progress: () => ore / MELT_MIN },
 ];
 
 function renderGoal() {
@@ -2918,7 +2977,8 @@ function renderGoal() {
       el.innerHTML = '<b>ALL SYSTEMS ONLINE</b><small>the worldlet is yours</small>';
     } else {
       const g = GOALS[goalIdx];
-      el.innerHTML = '<b>' + g.text.toUpperCase() + '</b><small>' + g.tip + '</small>';
+      el.innerHTML = '<b>' + g.text.toUpperCase() + '</b><small>' + g.tip + '</small>' +
+        '<div class="bar"><i style="width:0%"></i></div>';
     }
   }
   // the locked tools stay VISIBLE, dimmed. A tool you can see and cannot use
@@ -2929,7 +2989,18 @@ function renderGoal() {
 }
 
 let toastAt = 0;
+let goalBarAt = 0;
 function stepGoals(dt) {
+  // the bar under the goal moves at a few Hz; the goal itself is checked
+  // every frame because an unlock has to land the instant it is earned
+  goalBarAt += dt;
+  if (goalBarAt > 0.25 && goalIdx < GOALS.length) {
+    goalBarAt = 0;
+    const bar = document.querySelector('#goal .bar i');
+    const g = GOALS[goalIdx];
+    if (bar && g.progress) bar.style.width =
+      Math.round(Math.max(0, Math.min(1, g.progress())) * 100) + '%';
+  }
   while (goalIdx < GOALS.length && GOALS[goalIdx].done()) {
     const g = GOALS[goalIdx];
     UNLOCKED[g.unlock] = 1;
@@ -3161,6 +3232,9 @@ renderer.setAnimationLoop(() => {
     // be trustworthy. Six one-second buckets, reported as their sum.
     rateBuckets.push(minedWindow / rateWindow);
     if (rateBuckets.length > 6) rateBuckets.shift();
+    sparkHist.push(minedWindow / rateWindow);
+    if (sparkHist.length > 40) sparkHist.shift();
+    drawSpark();
     const perSec = rateBuckets.reduce((a, b) => a + b, 0) / rateBuckets.length;
     document.getElementById('rate').textContent = Math.round(perSec * 60);
     minedWindow = 0;

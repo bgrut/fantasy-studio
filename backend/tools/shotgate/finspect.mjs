@@ -52,7 +52,7 @@ console.log('pick           :', JSON.stringify(pick && {
 // 3. building is disabled while inspecting: a click must not place anything
 const before = await frame.evaluate(()=>window.__game.facts().machines);
 await frame.evaluate(()=>{
-  const c = document.querySelector('canvas');
+  const c = window.__renderer.domElement;
   c.dispatchEvent(new PointerEvent('pointerdown', { button:0, clientX:640, clientY:400, bubbles:true }));
 });
 await new Promise(r=>setTimeout(r,400));

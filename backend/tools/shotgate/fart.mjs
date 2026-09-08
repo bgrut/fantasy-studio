@@ -59,7 +59,7 @@ console.log('tread     :', moving.moved ? 'scrolls' : 'STATIC',
 const post = await p.evaluate(async ()=>{
   const F = window.__factory;
   const on = F.POST && F.POST.on;
-  const c = document.querySelector('canvas');
+  const c = window.__renderer.domElement;
   // sample the framebuffer through a fresh readback, since a WebGL canvas
   // cannot be drawn into a 2D context after compositing
   const gl = c.getContext('webgl2') || c.getContext('webgl');

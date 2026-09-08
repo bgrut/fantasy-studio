@@ -26,7 +26,7 @@ const probe = await p.evaluate(async () => {
   window.__game.inspect(true);                            // orbit, so a face fills frame
   await new Promise(r => setTimeout(r, 900));
 
-  const cv = document.querySelector('canvas');
+  const cv = window.__renderer.domElement;
   const gl = cv.getContext('webgl2') || cv.getContext('webgl');
   const px = new Uint8Array(4);
   const sample = (sx, sy) => {

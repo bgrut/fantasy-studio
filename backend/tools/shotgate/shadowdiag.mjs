@@ -38,7 +38,7 @@ const lum = await p.evaluate(async ()=>{
   F.player.fwd.set(0, 0, -1);
   F.player.pitch = -0.5;
   await new Promise(r => setTimeout(r, 900));
-  const c = document.querySelector('canvas');
+  const c = window.__renderer.domElement;
   const gl = c.getContext('webgl2') || c.getContext('webgl');
   const row = Math.floor(c.height * 0.34);          // ground just past the machine
   const out = [];

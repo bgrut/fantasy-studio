@@ -178,6 +178,60 @@
        scrollbar-width:thin;scrollbar-color:rgba(120,200,255,.28) transparent}
   #hud::-webkit-scrollbar{width:6px}
   #hud::-webkit-scrollbar-thumb{background:rgba(120,200,255,.28);border-radius:3px}
+  /* ── the redesigned panel ──────────────────────────────────────────────── */
+  #hud{min-width:236px;width:236px;padding:12px 12px 10px}
+  .hero{position:relative;padding:2px 0 4px}
+  .hero .big{display:flex;align-items:baseline;gap:8px}
+  .hero .big span{font-size:34px;font-weight:800;letter-spacing:-.01em;color:#ffd479;
+                  font-variant-numeric:tabular-nums;line-height:1;
+                  text-shadow:0 0 18px rgba(255,212,121,.35)}
+  .hero .big small{font-size:11px;color:#8d8564;letter-spacing:.12em;text-transform:uppercase;
+                   font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
+  .hero .rate{margin-top:4px;font-size:12px;color:#8ff3dd;display:flex;align-items:baseline;gap:5px}
+  .hero .rate b{font-variant-numeric:tabular-nums;font-weight:700}
+  .hero .rate small{color:#5d6480;font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
+  #spark{display:block;width:100%;height:38px;margin-top:6px;border-radius:6px;
+         background:rgba(0,0,0,.18)}
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:5px;margin-top:9px}
+  .st{display:flex;align-items:center;gap:5px;padding:4px 6px;border-radius:8px;
+      background:linear-gradient(180deg,rgba(255,255,255,.035),rgba(0,0,0,.14));
+      border:1px solid rgba(120,200,255,.10)}
+  .st i{width:20px;height:20px;flex:0 0 20px;border-radius:5px;display:block;
+        background-size:contain;background-repeat:no-repeat;background-position:center}
+  .st b{font-size:12px;color:#dfe6f5;font-variant-numeric:tabular-nums}
+  .st.core{grid-column:span 2;border-color:rgba(255,212,121,.35);
+           background:linear-gradient(180deg,rgba(255,212,121,.12),rgba(255,212,121,.03))}
+  .st.core b{color:#ffd479}
+  /* the goal shows how far along it is */
+  #goal .bar{height:4px;margin-top:7px;border-radius:2px;background:rgba(255,212,121,.14);overflow:hidden}
+  #goal .bar i{display:block;height:100%;background:linear-gradient(90deg,#ffd479,#ff9a5c);
+               border-radius:2px;transition:width .4s;box-shadow:0 0 8px rgba(255,212,121,.6)}
+  /* the market is four bars, not four numbers */
+  #tick{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;align-items:end;height:64px}
+  #tick .mk{display:flex;flex-direction:column;align-items:center;justify-content:flex-end;
+            height:100%;gap:3px;font-size:9.5px;
+            font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
+  #tick .mk .bar{width:100%;border-radius:4px 4px 2px 2px;min-height:4px;
+                 transition:height .5s;box-shadow:inset 0 1px 0 rgba(255,255,255,.18)}
+  #tick .mk .px{font-variant-numeric:tabular-nums;font-family:ui-monospace,Menlo,Consolas,monospace;
+                font-size:10px;color:#c9d2e8}
+  #tick .mk .nm{color:#6d7590;letter-spacing:.04em}
+  #tick .mk.u .px{color:#5ce0a0}
+  #tick .mk.d .px{color:#e8697d}
+  /* upgrades are a row of three; level is pips */
+  #ups{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:9px;
+       border-top:1px solid rgba(120,200,255,.14);padding-top:9px}
+  .up{padding:7px 6px 6px;text-align:center;cursor:default}
+  .up b{font-size:9.5px;letter-spacing:.06em}
+  .up b span{display:none}
+  .up small{display:none}
+  .up i{display:block;margin-top:5px;font-size:9.5px}
+  .up .pips{display:flex;justify-content:center;gap:2px;margin-top:5px}
+  .up .pips s{display:block;width:8px;height:4px;border-radius:2px;background:rgba(120,200,255,.14);
+              text-decoration:none}
+  .up .pips s.on{background:#5ce0d0;box-shadow:0 0 5px rgba(92,224,208,.7)}
+  .up.can{cursor:pointer}
+  .up.can:hover{transform:translateY(-1px)}
   /* above the bar, not beside it — at seven tools there is no room beside it */
   #hint{position:fixed;right:14px;bottom:74px;z-index:5;color:#6d7590;text-align:right}
   /* the crosshair IS the cursor once the pointer is locked */
@@ -193,19 +247,24 @@
 </style>
 <div id="hud">
   <h1>CRYSTAL WORKS</h1>
-  <div class="row"><span class="k">value</span><span class="v" id="ore">0</span></div>
-  <div class="row"><span class="k">ingots</span><span class="v" id="ingot">0</span></div>
-  <div class="row"><span class="k">alloys</span><span class="v" id="alloy">0</span></div>
-  <div class="row"><span class="k">per minute</span><span class="v" id="rate">0</span></div>
-  <div class="row"><span class="k">miners</span><span class="v" id="nmine">0</span></div>
-  <div class="row"><span class="k">belts</span><span class="v" id="nbelt">0</span></div>
-  <div class="row"><span class="k">smelters</span><span class="v" id="nsmelt">0</span></div>
-  <div class="row"><span class="k">on belts</span><span class="v" id="nitem">0</span></div>
-  <div class="row"><span class="k">cores</span><span class="v" id="tok">0</span></div>
-  <div id="world"></div>
+  <div class="hero">
+    <div class="big"><span id="ore">0</span><small>value</small></div>
+    <div class="rate"><b id="rate">0</b><small>/ min</small></div>
+    <canvas id="spark" width="216" height="38"></canvas>
+  </div>
+  <div class="stats">
+    <div class="st" data-ico="miner"   title="miners"><i></i><b id="nmine">0</b></div>
+    <div class="st" data-ico="belt"    title="belts"><i></i><b id="nbelt">0</b></div>
+    <div class="st" data-ico="smelter" title="smelters"><i></i><b id="nsmelt">0</b></div>
+    <div class="st" data-ico="item"    title="on belts"><i></i><b id="nitem">0</b></div>
+    <div class="st" data-ico="ingot"   title="ingots"><i></i><b id="ingot">0</b></div>
+    <div class="st" data-ico="alloy"   title="alloys"><i></i><b id="alloy">0</b></div>
+    <div class="st core" data-ico="core" title="cores"><i></i><b id="tok">0</b></div>
+  </div>
   <div id="goal"></div>
   <div id="tick"></div>
   <div id="ups"></div>
+  <div id="world"></div>
   <div id="rift"></div>
   <div id="melt"><b>MELTDOWN</b><small>collapse it all for cores</small></div>
   <div id="wipe">new world</div>
