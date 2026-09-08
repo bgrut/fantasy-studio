@@ -39,7 +39,7 @@ const refused = await p.evaluate(async ()=>{
   await new Promise(r => setTimeout(r, 300));
   return { before, after: F.worldIdx };
 });
-console.log('locked    : travel to Ember at 0 cores ->',
+console.log('locked    : travel to the first unlock at 0 cores ->',
             refused.after === refused.before ? 'refused' : 'ALLOWED (wrong)');
 
 // 2. earn the cores and it opens
@@ -52,7 +52,9 @@ console.log('3 cores   : open', armed.open, '|', armed.rows.join(' · '));
 await p.evaluate(()=>window.__factory.travelTo(1));
 await new Promise(r=>setTimeout(r,700));
 const c = await look();
-console.log('travelled :', c.world, '| sky', a.sky, '->', c.sky,
+const dest = await p.evaluate(()=>{ const w = window.__factory.WORLDS[1];
+  return { id: w.id, sky: '#' + w.sky.toString(16).padStart(6, '0') }; });
+console.log('travelled :', c.world, '| sky', a.sky, '->', c.sky, '(declared', dest.sky + ')',
             '| cores kept', c.cores, '| value reset to', c.value.toFixed(0),
             '| machines', c.machines);
 
@@ -113,9 +115,9 @@ await b.close();
 const ok = a.world === 'prompt' && a.open === 1
   && refused.after === refused.before
   && armed.open >= 2
-  && c.world === 'ember' && c.sky !== a.sky && c.cores === 3 && c.value < 5
+  && c.world === dest.id && c.sky === dest.sky && c.sky !== a.sky && c.cores === 3 && c.value < 5
   && plate.here !== plate.home && boards.hubs > 0 && boards.withBoard === boards.hubs && boards.shared
   && meltShot.up && /MELTDOWN/.test(meltShot.card) && meltShot.intro > 0
-  && back.world === 'ember' && back.sky === c.sky && back.cores >= 3
+  && back.world === dest.id && back.sky === c.sky && back.cores >= 3
   && errs.length === 0;
 process.exit(ok ? 0 : 1);

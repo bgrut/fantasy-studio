@@ -32,6 +32,7 @@ GATES = [
     ("fground.mjs", "the factory is grounded: shadows land on a lit face and an unlit one"),
     ("fdeplete.mjs", "seams thin under a rig, grow back without one, trickle at zero, and reload"),
     ("fbeat.mjs", "the reveal hands over and skips; every world has weather; sound wakes and mutes"),
+    ("fmood.mjs", "world zero's look follows the prompt's words when no palette was committed"),
 ]
 
 

@@ -17,9 +17,46 @@ const _hex = (v, d) => {
   if (typeof v !== 'string' || v[0] !== '#' || v.length !== 7) return d;
   return parseInt(v.slice(1), 16);
 };
-const SKY_COL = _hex(_pal.sky, 0x0b0d18);
-const FOG_COL = _hex(_pal.fog, SKY_COL);
-const ACCENT = _hex(_pal.accent, 0x39e6ff);
+// ── THE MOOD OF THE PROMPT ─────────────────────────────────────────────────
+// Read from the spec's own words. Four families, matched by the first family
+// whose words appear; a prompt that names none of them gets the void.
+const MOODS = [
+  { id: 'warm', words: /\b(red|rust|rusted|ember|cinder|lava|magma|volcan|scorch|burn|fire|ash|crimson|copper|desert|sun-?baked|inferno|forge)\w*/i },
+  { id: 'cold', words: /\b(ice|icy|frost|frozen|snow|glacier|arctic|tundra|winter|polar|blizzard|cryo|white)\w*/i },
+  { id: 'green', words: /\b(jungle|forest|moss|verdant|overgrown|swamp|fungal|spore|garden|bloom|vine|toxic|acid)\w*/i },
+];
+const MOOD_LOOK = {
+  void:  { sky: 0x0b0d18, fog: 0x0b0d18, accent: 0x39e6ff, ground: 0x3c4470, grid: 0x46527d,
+           star: 0xffffff, edge: 0x7fd8ff, sun: 0xfff2d6,
+           plate: { base: '#8792c4', tint: '#6a74a6', seam: 'rgba(90,100,150,0.75)', rivet: 'rgba(190,200,235,0.55)', overlay: null },
+           belt: { frame: 0x2b7f68, glow: 0x07271f, deck: 0xffffff },
+           weather: { col: [0.55, 0.62, 0.80], rate: 5, size: 0.028, fall: 0.25, drift: 0.35, life: 0.16 } },
+  warm:  { sky: 0x1a0c0e, fog: 0x2a1210, accent: 0xff9a5c, ground: 0x6b3a34, grid: 0xa2564a,
+           star: 0xffd2b8, edge: 0xff9a5c, sun: 0xffd0a0,
+           plate: { base: '#6a5a58', tint: '#4a3a38', seam: 'rgba(40,24,22,0.8)', rivet: 'rgba(160,120,110,0.5)', overlay: 'soot' },
+           belt: { frame: 0x8a4a2a, glow: 0x2a1006, deck: 0xffd0b0 },
+           weather: { col: [0.95, 0.42, 0.22], rate: 14, size: 0.040, fall: 0.55, drift: 0.55, life: 0.14 } },
+  cold:  { sky: 0x0a1420, fog: 0x11202f, accent: 0xcfe8ff, ground: 0x7c93ad, grid: 0xa8c4dd,
+           star: 0xdcefff, edge: 0xcfe8ff, sun: 0xe8f4ff,
+           plate: { base: '#c4d2e6', tint: '#a8b8cf', seam: 'rgba(120,140,170,0.6)', rivet: 'rgba(255,255,255,0.7)', overlay: 'frost' },
+           belt: { frame: 0x5a7590, glow: 0x0f1a2a, deck: 0xd8e8ff },
+           weather: { col: [0.92, 0.96, 1.00], rate: 18, size: 0.034, fall: 0.40, drift: 0.90, life: 0.12 } },
+  green: { sky: 0x08170f, fog: 0x0f2418, accent: 0x8fe6a0, ground: 0x3f6b4a, grid: 0x63a072,
+           star: 0xd6ffe0, edge: 0x8fe6a0, sun: 0xdfffe6,
+           plate: { base: '#7c8a78', tint: '#5f6e5a', seam: 'rgba(50,64,48,0.75)', rivet: 'rgba(170,190,160,0.5)', overlay: 'moss' },
+           belt: { frame: 0x6a7a3a, glow: 0x16220a, deck: 0xd0f0c0 },
+           weather: { col: [0.55, 0.95, 0.60], rate: 9, size: 0.046, fall: -0.30, drift: 0.45, life: 0.10 } },
+};
+const _moodText = [SPEC.title, SPEC.world && SPEC.world.name, SPEC.world && SPEC.world.description,
+                   SPEC.world && SPEC.world.setting].filter(Boolean).join(' ');
+const MOOD = (MOODS.find(m => m.words.test(_moodText)) || { id: 'void' }).id;
+const HOME = MOOD_LOOK[MOOD];
+
+// a committed palette still wins for the three colours it carries; the mood
+// fills in everything a palette does not say
+const SKY_COL = _hex(_pal.sky, HOME.sky);
+const FOG_COL = _hex(_pal.fog, HOME.fog);
+const ACCENT = _hex(_pal.accent, HOME.accent);
 
 // CRYSTAL WORKS — 3D incremental automation, core-loop prototype.
 //
@@ -2944,18 +2981,27 @@ function stepDebris(dt) {
 // behaves. Ore colours are excluded on purpose — they are how a belt is read at
 // a glance, and re-learning them per world would be a tax on travelling.
 const WORLDS = [
-  { id: 'prompt', belt: { frame: 0x2b7f68, glow: 0x07271f, deck: 0xffffff }, plate: { base: '#8792c4', tint: '#6a74a6', seam: 'rgba(90,100,150,0.75)', rivet: 'rgba(190,200,235,0.55)', overlay: null }, weather: { col: [0.55, 0.62, 0.80], rate: 5, size: 0.028, fall: 0.25, drift: 0.35, life: 0.16 }, edge: 0x7fd8ff, sun: 0xfff2d6, name: SPEC.title || 'Crystal Isle', cores: 0,
+  // world zero is the prompt's: its palette where one was committed, and the
+  // prompt's own mood for everything else
+  { id: 'prompt', plate: HOME.plate, belt: HOME.belt, weather: HOME.weather,
+    edge: HOME.edge, sun: HOME.sun, name: SPEC.title || 'Crystal Isle', cores: 0,
     blurb: 'where the prompt dropped you',
-    sky: SKY_COL, fog: FOG_COL, ground: 0x3c4470, grid: 0x46527d, star: 0xffffff },
-  { id: 'ember', belt: { frame: 0x8a4a2a, glow: 0x2a1006, deck: 0xffd0b0 }, plate: { base: '#6a5a58', tint: '#4a3a38', seam: 'rgba(40,24,22,0.8)', rivet: 'rgba(160,120,110,0.5)', overlay: 'soot' }, weather: { col: [0.95, 0.42, 0.22], rate: 14, size: 0.040, fall: 0.55, drift: 0.55, life: 0.14 }, edge: 0xff9a5c, sun: 0xffd0a0, name: 'Ember Reach', cores: 2,
-    blurb: 'a cinder still cooling',
-    sky: 0x1a0c0e, fog: 0x2a1210, ground: 0x6b3a34, grid: 0xa2564a, star: 0xffd2b8 },
-  { id: 'frost', belt: { frame: 0x5a7590, glow: 0x0f1a2a, deck: 0xd8e8ff }, plate: { base: '#c4d2e6', tint: '#a8b8cf', seam: 'rgba(120,140,170,0.6)', rivet: 'rgba(255,255,255,0.7)', overlay: 'frost' }, weather: { col: [0.92, 0.96, 1.00], rate: 18, size: 0.034, fall: 0.40, drift: 0.90, life: 0.12 }, edge: 0xcfe8ff, sun: 0xe8f4ff, name: 'Frostline', cores: 5,
-    blurb: 'ice over something older',
-    sky: 0x0a1420, fog: 0x11202f, ground: 0x7c93ad, grid: 0xa8c4dd, star: 0xdcefff },
-  { id: 'verdant', belt: { frame: 0x6a7a3a, glow: 0x16220a, deck: 0xd0f0c0 }, plate: { base: '#7c8a78', tint: '#5f6e5a', seam: 'rgba(50,64,48,0.75)', rivet: 'rgba(170,190,160,0.5)', overlay: 'moss' }, weather: { col: [0.55, 0.95, 0.60], rate: 9, size: 0.046, fall: -0.30, drift: 0.45, life: 0.10 }, edge: 0x8fe6a0, sun: 0xdfffe6, name: 'The Verdant Fault', cores: 9,
-    blurb: 'it grew back around the machines',
-    sky: 0x08170f, fog: 0x0f2418, ground: 0x3f6b4a, grid: 0x63a072, star: 0xd6ffe0 },
+    sky: SKY_COL, fog: FOG_COL, ground: HOME.ground, grid: HOME.grid, star: HOME.star },
+  // THE UNLOCKS ARE THE THREE FAMILIES HOME IS NOT (2026-09-08). A prompt
+  // that reads warm used to be offered Ember Reach for two cores — the same
+  // sky, the same soot, the same weather it was already standing in. The
+  // presets are one family each, and the home world's family is left out.
+  ...[
+    { fam: 'warm',  id: 'ember',   name: 'Ember Reach',       blurb: 'a cinder still cooling' },
+    { fam: 'cold',  id: 'frost',   name: 'Frostline',         blurb: 'ice over something older' },
+    { fam: 'green', id: 'verdant', name: 'The Verdant Fault', blurb: 'it grew back around the machines' },
+    { fam: 'void',  id: 'drift',   name: 'The Long Drift',    blurb: 'nothing for a very long way' },
+  ].filter(w => w.fam !== MOOD).map((w, k) => {
+    const L = MOOD_LOOK[w.fam];
+    return { id: w.id, name: w.name, blurb: w.blurb, cores: [2, 5, 9][k],
+             sky: L.sky, fog: L.fog, ground: L.ground, grid: L.grid, star: L.star,
+             edge: L.edge, sun: L.sun, plate: L.plate, belt: L.belt, weather: L.weather };
+  }),
 ];
 let worldIdx = 0;
 
@@ -3898,6 +3944,7 @@ window.__game = {
     audio: { ready: AUDIO.ready, muted: AUDIO.muted,
              state: AUDIO.ctx ? AUDIO.ctx.state : null },
     world: WORLDS[worldIdx].id,
+    mood: MOOD,
     world_name: WORLDS[worldIdx].name,
     worlds_open: WORLDS.filter(w => cores >= w.cores).length,
     goal: goalIdx < GOALS.length ? GOALS[goalIdx].text : null,
