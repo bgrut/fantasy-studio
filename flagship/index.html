@@ -162,11 +162,24 @@
   #title{position:fixed;left:0;right:0;top:34%;z-index:7;text-align:center;
          pointer-events:none;opacity:0;transition:opacity .6s}
   #title.on{opacity:1}
-  #title b{display:block;font-size:44px;letter-spacing:.22em;color:#eef4ff;
+  /* A NAME WITH WEIGHT. A display face — system ones, since the demo ships no
+     fonts — a rule above and below, and a settle in scale so the name ARRIVES
+     rather than appears. The rules are what make it a title card and not a
+     caption. */
+  #title b{display:block;font-size:52px;line-height:1;letter-spacing:.2em;color:#f4f8ff;
+           padding:0 .2em 0 .4em;
+           font-family:"Segoe UI Black","Arial Black",Impact,"Helvetica Neue",sans-serif;
+           font-weight:900;text-transform:uppercase;
+           text-shadow:0 0 34px rgba(92,224,208,.55),0 6px 22px rgba(0,0,0,.85);
+           transform:scale(1.05);transition:transform 1.8s cubic-bezier(.2,.7,.2,1)}
+  #title.on b{transform:scale(1)}
+  #title b::before,#title b::after{content:"";display:block;height:1px;margin:0 auto 14px;
+           width:min(46vw,520px);
+           background:linear-gradient(90deg,transparent,rgba(159,214,255,.8),transparent)}
+  #title b::after{margin:14px auto 0}
+  #title small{display:block;margin-top:14px;font-size:13px;letter-spacing:.28em;
+           text-transform:uppercase;color:#9fd6ff;
            font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
-           font-weight:800;text-shadow:0 0 28px rgba(92,224,208,.55),0 4px 18px rgba(0,0,0,.8)}
-  #title small{display:block;margin-top:10px;font-size:14px;letter-spacing:.12em;
-           color:#9fd6ff;font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
            text-shadow:0 2px 10px rgba(0,0,0,.8)}
   /* the HUD steps back while the card is up; it is not the subject yet */
   body:has(#title.on) #hud,body:has(#title.on) #tools,body:has(#title.on) #hint{opacity:.12}
@@ -211,8 +224,14 @@
   #tick .mk{display:flex;flex-direction:column;align-items:center;justify-content:flex-end;
             height:100%;gap:3px;font-size:9.5px;
             font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
-  #tick .mk .bar{width:100%;border-radius:4px 4px 2px 2px;min-height:4px;
+  /* each bar rises from, or hangs below, a baseline at 1.0 */
+  #tick .mk .pole{position:relative;width:100%;height:38px}
+  #tick .mk .pole::before{content:"";position:absolute;left:0;right:0;top:19px;height:1px;
+                          background:rgba(200,220,255,.28)}
+  #tick .mk .bar{position:absolute;left:0;right:0;border-radius:3px;min-height:2px;
                  transition:height .5s;box-shadow:inset 0 1px 0 rgba(255,255,255,.18)}
+  #tick .mk .bar.pos{bottom:19px}
+  #tick .mk .bar.neg{top:20px;opacity:.7}
   #tick .mk .px{font-variant-numeric:tabular-nums;font-family:ui-monospace,Menlo,Consolas,monospace;
                 font-size:10px;color:#c9d2e8}
   #tick .mk .nm{color:#6d7590;letter-spacing:.04em}

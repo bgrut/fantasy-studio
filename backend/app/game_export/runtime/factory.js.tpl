@@ -1975,14 +1975,25 @@ const TICK_TEX = (() => {
   t.userData.canvas = c;
   return t;
 })();
+// Height is DISTANCE FROM 1.0, not distance from the floor of the range.
+// Mapped from the floor, a price of 1.0 sat a third of the way up and, since
+// prices live near 1.0, every bar was the same height and the board said
+// nothing. Above the line is a good deal; below it is not.
+function priceBar(t, span) {
+  return Math.max(-span, Math.min(span, (PRICE[t] - 1.0) / 0.85 * span));
+}
 function drawTickerBoard() {
   const c = TICK_TEX.userData.canvas, g = c.getContext('2d');
   g.fillStyle = '#0b1020'; g.fillRect(0, 0, 128, 64);
   g.strokeStyle = 'rgba(120,200,255,0.35)'; g.lineWidth = 2; g.strokeRect(1, 1, 126, 62);
+  const base = 34;                       // the 1.0 line
+  g.strokeStyle = 'rgba(200,220,255,0.35)'; g.lineWidth = 1;
+  g.beginPath(); g.moveTo(6, base + 0.5); g.lineTo(122, base + 0.5); g.stroke();
   TRADED.forEach((t, k) => {
-    const h = Math.round(((PRICE[t] - PRICE_MIN) / (PRICE_MAX - PRICE_MIN)) * 40 + 6);
+    const h = priceBar(t, 24);
     g.fillStyle = TRADE_COL[t];
-    g.fillRect(10 + k * 30, 56 - h, 20, h);
+    if (h >= 0) g.fillRect(10 + k * 30, base - h, 20, Math.max(2, h));
+    else g.fillRect(10 + k * 30, base, 20, Math.max(2, -h));
   });
   TICK_TEX.needsUpdate = true;
 }
@@ -1997,10 +2008,13 @@ function renderTicker() {
   let html = '';
   for (const t of TRADED) {
     const up = PRICE[t] >= LAST_PRICE[t];
-    const hgt = Math.round(((PRICE[t] - PRICE_MIN) / (PRICE_MAX - PRICE_MIN)) * 34 + 6);
+    // the panel uses the same rule as the board: a bar that rises from a
+    // baseline at 1.0, or hangs below it
+    const h = priceBar(t, 18);
     html += '<div class="mk ' + (up ? 'u' : 'd') + '">' +
       '<span class="px">' + PRICE[t].toFixed(2) + '</span>' +
-      '<div class="bar" style="height:' + hgt + 'px;background:' + TRADE_COL[t] + '"></div>' +
+      '<div class="pole"><div class="bar ' + (h >= 0 ? 'pos' : 'neg') +
+      '" style="height:' + Math.max(2, Math.abs(h)) + 'px;background:' + TRADE_COL[t] + '"></div></div>' +
       '<span class="nm">' + TRADE_NAME[t] + '</span></div>';
   }
   box.innerHTML = html;
@@ -2930,16 +2944,16 @@ function stepDebris(dt) {
 // behaves. Ore colours are excluded on purpose — they are how a belt is read at
 // a glance, and re-learning them per world would be a tax on travelling.
 const WORLDS = [
-  { id: 'prompt', plate: { base: '#8792c4', tint: '#6a74a6', seam: 'rgba(90,100,150,0.75)', rivet: 'rgba(190,200,235,0.55)', overlay: null }, weather: { col: [0.55, 0.62, 0.80], rate: 5, size: 0.028, fall: 0.25, drift: 0.35, life: 0.16 }, edge: 0x7fd8ff, sun: 0xfff2d6, name: SPEC.title || 'Crystal Isle', cores: 0,
+  { id: 'prompt', belt: { frame: 0x2b7f68, glow: 0x07271f, deck: 0xffffff }, plate: { base: '#8792c4', tint: '#6a74a6', seam: 'rgba(90,100,150,0.75)', rivet: 'rgba(190,200,235,0.55)', overlay: null }, weather: { col: [0.55, 0.62, 0.80], rate: 5, size: 0.028, fall: 0.25, drift: 0.35, life: 0.16 }, edge: 0x7fd8ff, sun: 0xfff2d6, name: SPEC.title || 'Crystal Isle', cores: 0,
     blurb: 'where the prompt dropped you',
     sky: SKY_COL, fog: FOG_COL, ground: 0x3c4470, grid: 0x46527d, star: 0xffffff },
-  { id: 'ember', plate: { base: '#6a5a58', tint: '#4a3a38', seam: 'rgba(40,24,22,0.8)', rivet: 'rgba(160,120,110,0.5)', overlay: 'soot' }, weather: { col: [0.95, 0.42, 0.22], rate: 14, size: 0.040, fall: 0.55, drift: 0.55, life: 0.14 }, edge: 0xff9a5c, sun: 0xffd0a0, name: 'Ember Reach', cores: 2,
+  { id: 'ember', belt: { frame: 0x8a4a2a, glow: 0x2a1006, deck: 0xffd0b0 }, plate: { base: '#6a5a58', tint: '#4a3a38', seam: 'rgba(40,24,22,0.8)', rivet: 'rgba(160,120,110,0.5)', overlay: 'soot' }, weather: { col: [0.95, 0.42, 0.22], rate: 14, size: 0.040, fall: 0.55, drift: 0.55, life: 0.14 }, edge: 0xff9a5c, sun: 0xffd0a0, name: 'Ember Reach', cores: 2,
     blurb: 'a cinder still cooling',
     sky: 0x1a0c0e, fog: 0x2a1210, ground: 0x6b3a34, grid: 0xa2564a, star: 0xffd2b8 },
-  { id: 'frost', plate: { base: '#c4d2e6', tint: '#a8b8cf', seam: 'rgba(120,140,170,0.6)', rivet: 'rgba(255,255,255,0.7)', overlay: 'frost' }, weather: { col: [0.92, 0.96, 1.00], rate: 18, size: 0.034, fall: 0.40, drift: 0.90, life: 0.12 }, edge: 0xcfe8ff, sun: 0xe8f4ff, name: 'Frostline', cores: 5,
+  { id: 'frost', belt: { frame: 0x5a7590, glow: 0x0f1a2a, deck: 0xd8e8ff }, plate: { base: '#c4d2e6', tint: '#a8b8cf', seam: 'rgba(120,140,170,0.6)', rivet: 'rgba(255,255,255,0.7)', overlay: 'frost' }, weather: { col: [0.92, 0.96, 1.00], rate: 18, size: 0.034, fall: 0.40, drift: 0.90, life: 0.12 }, edge: 0xcfe8ff, sun: 0xe8f4ff, name: 'Frostline', cores: 5,
     blurb: 'ice over something older',
     sky: 0x0a1420, fog: 0x11202f, ground: 0x7c93ad, grid: 0xa8c4dd, star: 0xdcefff },
-  { id: 'verdant', plate: { base: '#7c8a78', tint: '#5f6e5a', seam: 'rgba(50,64,48,0.75)', rivet: 'rgba(170,190,160,0.5)', overlay: 'moss' }, weather: { col: [0.55, 0.95, 0.60], rate: 9, size: 0.046, fall: -0.30, drift: 0.45, life: 0.10 }, edge: 0x8fe6a0, sun: 0xdfffe6, name: 'The Verdant Fault', cores: 9,
+  { id: 'verdant', belt: { frame: 0x6a7a3a, glow: 0x16220a, deck: 0xd0f0c0 }, plate: { base: '#7c8a78', tint: '#5f6e5a', seam: 'rgba(50,64,48,0.75)', rivet: 'rgba(170,190,160,0.5)', overlay: 'moss' }, weather: { col: [0.55, 0.95, 0.60], rate: 9, size: 0.046, fall: -0.30, drift: 0.45, life: 0.10 }, edge: 0x8fe6a0, sun: 0xdfffe6, name: 'The Verdant Fault', cores: 9,
     blurb: 'it grew back around the machines',
     sky: 0x08170f, fog: 0x0f2418, ground: 0x3f6b4a, grid: 0x63a072, star: 0xd6ffe0 },
 ];
@@ -2965,6 +2979,13 @@ function applyWorld(k) {
   cube.material.map = plateTexture(w.plate);
   cube.material.roughnessMap = plateRoughness(w.plate);
   cube.material.needsUpdate = true;
+  // and the belts: rust on the cinder, steel-blue on the ice, brass in the
+  // green. The tread texture is shared and scrolls the same under every tint.
+  const bt = w.belt || WORLDS[0].belt;
+  MAT.beltFrame.color.setHex(bt.frame);
+  MAT.beltFrame.emissive.setHex(bt.glow);
+  MAT.beltDeck.color.setHex(bt.deck);
+  MAT.belt.color.setHex(bt.frame);
   // a real vertical gradient: lifted overhead, deeper below, so the void has a
   // top and a bottom instead of being one flat value with a band painted on it
   buildSky(new THREE.Color(w.sky).lerp(new THREE.Color(w.edge || w.grid), 0.16).getHex(),
@@ -3360,12 +3381,23 @@ renderer.setAnimationLoop(() => {
   eachTile(c => {
     if (!c.build) return;
     if (c.t === MINER) {
+      // the bit slows as the seam thins, and a rig on a seam that has run
+      // dry sits down a little — a worked-out face should look tired, not
+      // switched off
       const bit = c.build.getObjectByName('bit');
-      if (bit) bit.rotation.y += dt * 7;
+      const rich = c.rich === undefined ? 1 : c.rich;
+      if (bit) bit.rotation.y += dt * (1.2 + 5.8 * rich);
+      const sag = rich < 0.2 ? (0.2 - rich) * 0.35 : 0;
+      c.build.children[0].position.y = -sag;
     } else if (c.t === HUB) {
       if (c.pulse > 0) c.pulse = Math.max(0, c.pulse - dt * 2.6);
       const beacon = c.build.getObjectByName('lamp');
-      if (beacon) beacon.scale.setScalar(1 + c.pulse * 1.5);
+      // at idle the beacon breathes, so a hub with nothing arriving still
+      // reads as on; a delivery pulse rides on top of it
+      const breathe = 1 + Math.sin(performance.now() * 0.0028) * 0.07;
+      if (beacon) beacon.scale.setScalar(breathe + c.pulse * 1.5);
+      const board = c.build.getObjectByName('board');
+      if (board) board.rotation.y = Math.PI / 2 + Math.sin(performance.now() * 0.0009) * 0.18;
     } else if (c.t === SPLITTER) {
       // slow, and only while it has something to route: a splitter idling at
       // speed reads as broken rather than as busy

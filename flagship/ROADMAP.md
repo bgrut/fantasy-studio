@@ -44,6 +44,7 @@ says so.
 | **sound** | six synthesised layers, no assets; wakes on the first click, M mutes |
 | **the panel** | read by shape: a hero number, a sparkline, icon chips, bars, pips |
 | **the world, finished** | the meltdown pulls to orbit; hubs carry the price board; each world has its own ground |
+| **refinements** | prices read from a 1.0 baseline; belts belong to their world; a title with weight; idle motion |
 | **unlockable worlds** | four places to put the factory, bought with cores |
 
 Measured on a prompt-built export: 40x40x6 grid, 40 nodes, 180 value/min,
