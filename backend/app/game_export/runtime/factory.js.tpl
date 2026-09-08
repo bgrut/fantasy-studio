@@ -238,7 +238,7 @@ for (let f = 0; f < 6; f++) {
     for (let j = 0; j < N; j++)
       cells[f][i][j] = { t: EMPTY, d: 0, item: 0, buf: 0, bt: 0,
                          fa: 0, fb: 0, cook: 0, rr: 0, min: 0,
-                         filt: CRYSTAL, mrr: 0,
+                         filt: CRYSTAL, mrr: 0, pulse: 0,
                          dbt: 0, dmin: 0, emit: 0, left: 0, cool: 0 };
   }
 }
@@ -272,17 +272,35 @@ renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.06;
 document.body.appendChild(renderer.domElement);
 
-scene.add(new THREE.HemisphereLight(0x9fc4ff, 0x1b2038, 1.1));
+// HALF THE WORLD WAS AT FOUR PERCENT (2026-09-08). Measured: ground on the
+// underside read 11 of 255. Three of six faces are away from the key light at
+// any time, and a game where half its content sits at the bottom of the value
+// range is a game where half its content is invisible — and where a contact
+// shadow has nothing left to subtract from. The bounce is lifted enough that
+// the dark faces are a legible low mid-tone rather than black.
+scene.add(new THREE.HemisphereLight(0x9fc4ff, 0x323b5c, 1.25));
+// OUTSIDE THE WORLD, NOT INSIDE IT (2026-09-08). A directional light's shadow
+// camera sits AT the light looking at its target, so anything farther from the
+// target than the light is behind the camera and casts nothing. This sun was
+// 58 units out; the cube's corners are at HALF*sqrt(3) = 69. A third of the
+// world silently cast no shadow at all, which reads as machines hovering.
+// Everything here is a multiple of HALF so it stays true at any grid size.
+const CORNER = HALF * Math.SQRT2 * 1.2;      // a little past the true corner
 const sun = new THREE.DirectionalLight(0xfff0d8, 2.2);
-sun.position.set(30, 46, 20);
+sun.position.set(HALF * 2.4, HALF * 3.2, HALF * 1.8);
 sun.castShadow = true;
 sun.shadow.mapSize.set(2048, 2048);
-sun.shadow.camera.left = -HALF * 1.5;
-sun.shadow.camera.right = HALF * 1.5;
-sun.shadow.camera.top = HALF * 1.5;
-sun.shadow.camera.bottom = -HALF * 1.5;
-sun.shadow.camera.near = 1;
-sun.shadow.camera.far = 170;
+sun.shadow.camera.left = -CORNER;
+sun.shadow.camera.right = CORNER;
+sun.shadow.camera.top = CORNER;
+sun.shadow.camera.bottom = -CORNER;
+sun.shadow.camera.near = HALF * 0.5;
+sun.shadow.camera.far = HALF * 9;
+// normalBias rather than a plain bias: it offsets along the surface normal, so
+// a steeply lit face stops shadow-acneing without the whole scene peeling away
+// from its own contact points
+sun.shadow.bias = -0.0004;
+sun.shadow.normalBias = 0.06;
 sun.shadow.camera.updateProjectionMatrix();
 scene.add(sun);
 
@@ -291,8 +309,8 @@ scene.add(sun);
 // fall to pure hemisphere ambient and read as unlit black — you walk around
 // the corner into a game that looks broken. A dimmer fill from the opposite
 // quadrant keeps every face legible without flattening the key light.
-const fill = new THREE.DirectionalLight(0xb9d2ff, 0.85);
-fill.position.set(-34, -40, -26);
+const fill = new THREE.DirectionalLight(0xb9d2ff, 1.15);
+fill.position.set(-HALF * 2.2, -HALF * 2.8, -HALF * 1.7);
 scene.add(fill);
 
 let starField = null, gridLines = null, cubeEdges = null, sunDisc = null;
@@ -755,6 +773,30 @@ const MAT = {
 const _box = (w, h, d) => new THREE.BoxGeometry(w, h, d);
 const _cyl = (rt, rb, h, n) => new THREE.CylinderGeometry(rt, rb, h, n);
 
+// A quarter-turn deck. Ring sectors live in the XY plane, so laying one flat
+// with rx=-90 maps ring (cos t, sin t) to local (cos t, 0, -sin t); every angle
+// below was derived through that mapping, which is why they look off by a
+// quarter turn if you read them as world angles.
+function arcDeck(inner, outer, thetaStart, flip) {
+  const g = new THREE.RingGeometry(inner, outer, 14, 1, thetaStart, Math.PI / 2);
+  const pos = g.attributes.position, uv = g.attributes.uv;
+  const mid = (inner + outer) / 2;
+  // the arc is shorter than a tile, so the chevrons have to be packed to match
+  // or the tread visibly changes speed through every corner
+  const arcU = (Math.PI / 2) * mid / T;
+  for (let k = 0; k < pos.count; k++) {
+    const x = pos.getX(k), y = pos.getY(k);
+    let th = Math.atan2(y, x);
+    while (th < thetaStart - 1e-6) th += Math.PI * 2;
+    const t = (th - thetaStart) / (Math.PI / 2);
+    const r = Math.hypot(x, y);
+    uv.setXY(k, (flip ? 1 - t : t) * arcU, (r - inner) / (outer - inner));
+  }
+  uv.needsUpdate = true;
+  return g;
+}
+const ARC_R = T * 0.5, ARC_W = T * 0.30;
+
 const GEO = {
   // A CONVEYOR, not a plank: side rails, an end roller at each end, a base
   // plate, and a separate deck that carries the moving tread.
@@ -766,6 +808,29 @@ const GEO = {
     { g: _cyl(0.105, 0.105, T * 0.70, 8), y: 0.13, x: -T * 0.41, rx: Math.PI / 2 },
   ]),
   beltDeck: _box(T * 0.86, 0.06, T * 0.60),
+
+  // A: enters across the +Z edge heading -Z, leaves out the +X edge.
+  // B: enters across the -Z edge heading +Z, leaves out the +X edge.
+  beltDeckA: mergeParts([{ g: arcDeck(ARC_R - ARC_W, ARC_R + ARC_W, Math.PI / 2, true),
+                           rx: -Math.PI / 2, x: T / 2, z: T / 2, y: 0.155 }]),
+  beltDeckB: mergeParts([{ g: arcDeck(ARC_R - ARC_W, ARC_R + ARC_W, Math.PI, false),
+                           rx: -Math.PI / 2, x: T / 2, z: -T / 2, y: 0.155 }]),
+  beltFrameA: mergeParts([
+    { g: new THREE.RingGeometry(ARC_R - ARC_W - 0.11, ARC_R + ARC_W + 0.11, 14, 1,
+                                Math.PI / 2, Math.PI / 2),
+      rx: -Math.PI / 2, x: T / 2, z: T / 2, y: 0.03 },
+    { g: _cyl(0.105, 0.105, T * 0.70, 8), y: 0.13, x: T * 0.41, rx: Math.PI / 2 },
+    { g: _cyl(0.105, 0.105, T * 0.70, 8), y: 0.13, z: T * 0.41,
+      rx: Math.PI / 2, ry: Math.PI / 2 },
+  ]),
+  beltFrameB: mergeParts([
+    { g: new THREE.RingGeometry(ARC_R - ARC_W - 0.11, ARC_R + ARC_W + 0.11, 14, 1,
+                                Math.PI, Math.PI / 2),
+      rx: -Math.PI / 2, x: T / 2, z: -T / 2, y: 0.03 },
+    { g: _cyl(0.105, 0.105, T * 0.70, 8), y: 0.13, x: T * 0.41, rx: Math.PI / 2 },
+    { g: _cyl(0.105, 0.105, T * 0.70, 8), y: 0.13, z: -T * 0.41,
+      rx: Math.PI / 2, ry: Math.PI / 2 },
+  ]),
 
   // a rig with legs and a bit that turns, so a miner reads as MINING
   miner: mergeParts([
@@ -832,7 +897,7 @@ function refreshCounts() {
 
 function removeAt(face, i, j) {
   const c = cells[face][i][j];
-  if (c.t === BELT) beltsDirty = true;
+  beltsDirty = true;
   if (c.build) { scene.remove(c.build); c.build = null; }
   c.t = c.mesh ? NODE : EMPTY;               // a node outlives its miner
   c.item = 0;
@@ -919,8 +984,10 @@ function place(face, i, j, type, dir) {
   g.userData.fsTag = { type: 'machine', name: TYPE_NAME[type] || 'machine',
                        detail: FACES[face].name + ' face · tile ' + i + ',' + j,
                        face, i, j };
-  if (type === BELT) beltsDirty = true;      // drawn as an instance instead
-  else scene.add(g);
+  // EVERY placement is dirty now, not just belts: the contact shadows are
+  // rebuilt in the same pass and a smelter needs one as much as a belt does.
+  beltsDirty = true;
+  if (type !== BELT) scene.add(g);
   c.build = type === BELT ? null : g;
   c.t = type;
   c.d = dir;
@@ -933,33 +1000,87 @@ function place(face, i, j, type, dir) {
 // 241 belts cost 482 draw calls as individual groups, before any detail was
 // added. As instances they cost two, and the art pass became affordable.
 const MAX_BELTS = 6000;
-const beltFrames = new THREE.InstancedMesh(GEO.beltFrame, MAT.beltFrame, MAX_BELTS);
-const beltDecks = new THREE.InstancedMesh(GEO.beltDeck, MAT.beltDeck, MAX_BELTS);
-const beltIndex = [];                 // instance -> tile, so Inspect can name one
-for (const m of [beltFrames, beltDecks]) {
-  m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-  m.frustumCulled = false;
-  m.castShadow = true; m.receiveShadow = true;
-  m.count = 0;
-  scene.add(m);
+// three shapes, six batches. A belt is either straight or turning one of two
+// ways, and which one it is depends on where its input comes from — so the
+// shape is a property of the LAYOUT, not of the tile, and it has to be
+// recomputed whenever anything around it changes.
+const BELT_KIND = ['', 'A', 'B'];
+const beltFrames = [], beltDecks = [], beltIndex = [[], [], []];
+for (let k = 0; k < 3; k++) {
+  const fm = new THREE.InstancedMesh(GEO['beltFrame' + BELT_KIND[k]],
+                                     MAT.beltFrame, MAX_BELTS);
+  const dk = new THREE.InstancedMesh(GEO['beltDeck' + BELT_KIND[k]],
+                                     MAT.beltDeck, MAX_BELTS);
+  for (const m of [fm, dk]) {
+    m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    m.frustumCulled = false;
+    m.castShadow = true; m.receiveShadow = true;
+    m.count = 0;
+    scene.add(m);
+  }
+  beltFrames.push(fm); beltDecks.push(dk);
 }
 let beltsDirty = true;
 
+/**
+ * Which way does an item arrive at this belt? Whichever neighbour points AT it.
+ * A tile with no feeder, or more than one, is drawn straight: a corner piece
+ * that guessed would be wrong half the time, and a straight one is never
+ * actively misleading.
+ */
+function beltShape(f, i, j, c) {
+  let inbound = -1, found = 0;
+  for (let d = 0; d < 4; d++) {
+    if (d === c.d) continue;                       // that side is the output
+    const nb = stepTile(f, i, j, d);
+    const src = cellOf(nb);
+    if (!src) continue;
+    if (src.t !== BELT && src.t !== MINER && src.t !== FILTER &&
+        src.t !== SMELTER && src.t !== FORGE && src.t !== RIFT) continue;
+    const out = stepTile(nb.face, nb.i, nb.j, src.d);
+    if (!out || out.face !== f || out.i !== i || out.j !== j) continue;
+    inbound = (d + 2) % 4;                          // travel direction into us
+    found++;
+  }
+  if (found !== 1 || inbound === c.d) return 0;
+  const turn = (c.d - inbound + 4) % 4;
+  return turn === 3 ? 1 : turn === 1 ? 2 : 0;       // 1 = A, 2 = B, 0 = straight
+}
+
 function rebuildBelts() {
-  let n = 0;
-  beltIndex.length = 0;
+  const n = [0, 0, 0];
+  let d = 0;
+  for (const a of beltIndex) a.length = 0;
   eachTile((c, f, i, j) => {
-    if (c.t !== BELT || n >= MAX_BELTS) return;
+    const w = DECAL_W[c.t];
+    if (w && d < MAX_DECALS) {
+      // the plane is authored face-up in its own frame, so seating it and then
+      // laying it flat puts it on whichever face the machine is standing on
+      seatMatrix(f, i, j, c.d, 0.03, _dm);
+      _dpos.setFromMatrixPosition(_dm);
+      _dq.setFromRotationMatrix(_dm).multiply(_flat);
+      _dscale.set(T * w, T * w, 1);
+      _dm.compose(_dpos, _dq, _dscale);
+      decals.setMatrixAt(d++, _dm);
+    }
+    if (c.t !== BELT) return;
+    const k = beltShape(f, i, j, c);
+    if (n[k] >= MAX_BELTS) return;
+    // the corner shapes bake their own height in, so both batches seat at zero
     seatMatrix(f, i, j, c.d, 0, _mx);
-    beltFrames.setMatrixAt(n, _mx);
-    seatMatrix(f, i, j, c.d, 0.155, _mx);
-    beltDecks.setMatrixAt(n, _mx);
-    beltIndex[n] = { face: f, i, j };
-    n++;
+    beltFrames[k].setMatrixAt(n[k], _mx);
+    if (k === 0) seatMatrix(f, i, j, c.d, 0.155, _mx);
+    beltDecks[k].setMatrixAt(n[k], _mx);
+    beltIndex[k][n[k]] = { face: f, i, j };
+    n[k]++;
   });
-  beltFrames.count = n; beltDecks.count = n;
-  beltFrames.instanceMatrix.needsUpdate = true;
-  beltDecks.instanceMatrix.needsUpdate = true;
+  for (let k = 0; k < 3; k++) {
+    beltFrames[k].count = n[k]; beltDecks[k].count = n[k];
+    beltFrames[k].instanceMatrix.needsUpdate = true;
+    beltDecks[k].instanceMatrix.needsUpdate = true;
+  }
+  decals.count = d;
+  decals.instanceMatrix.needsUpdate = true;
   beltsDirty = false;
 }
 
@@ -972,6 +1093,55 @@ function pieceFor(face, i, j, c) {
   scene.add(g);
   return g;
 }
+
+// ── CONTACT SHADOWS ────────────────────────────────────────────────────────
+// One directional light can only shadow the three faces it lights; walk around
+// the corner and the factory is hovering again. A soft dark disc under every
+// machine grounds it on all six, and reads as the ambient occlusion a real
+// renderer would compute. One instanced batch for the whole worldlet.
+function contactTexture() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 64;
+  const g = c.getContext('2d');
+  const grd = g.createRadialGradient(32, 32, 2, 32, 32, 31);
+  // AS STRONG AS THE CAST SHADOW IT STANDS IN FOR. Measured against the real
+  // one on a lit face, the first version darkened a quarter as much, so a
+  // machine on the underside still read as floating next to an identical
+  // machine on top that did not.
+  grd.addColorStop(0, 'rgba(0,0,0,0.86)');
+  grd.addColorStop(0.45, 'rgba(0,0,0,0.62)');
+  grd.addColorStop(0.78, 'rgba(0,0,0,0.22)');
+  grd.addColorStop(1, 'rgba(0,0,0,0)');
+  g.fillStyle = grd; g.fillRect(0, 0, 64, 64);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+const MAX_DECALS = 6000;
+const decals = new THREE.InstancedMesh(
+  new THREE.PlaneGeometry(1, 1),
+  new THREE.MeshBasicMaterial({ map: contactTexture(), transparent: true,
+    depthWrite: false, fog: true, opacity: 0.95 }),
+  MAX_DECALS);
+decals.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+decals.frustumCulled = false;
+decals.renderOrder = 1;              // after the ground, before the machines
+decals.count = 0;
+decals.name = 'contact';
+scene.add(decals);
+
+// how wide a machine's shadow is. A belt is nearly flat and casts a thin one;
+// a drill rig on legs casts a wide soft one.
+// Wider than the machine that casts it, because a contact shadow that stops at
+// the footprint reads as a dark mat someone put down rather than as light being
+// blocked. A belt's is narrow and long-ish; a rig on legs throws a broad soft one.
+const DECAL_W = { 1: 1.8, 2: 1.25, 3: 1.9, 5: 1.85, 6: 1.55, 7: 1.75,
+                  8: 1.25, 9: 1.7 };
+
+const _dq = new THREE.Quaternion();
+const _dm = new THREE.Matrix4();
+const _dpos = new THREE.Vector3(), _dscale = new THREE.Vector3();
+const _flat = new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.PI / 2, 0, 0));
 
 // ── SMOKE AND SPARKS ───────────────────────────────────────────────────────
 // One system, two jobs. Two particle systems doing the same arithmetic with
@@ -1207,8 +1377,25 @@ function accepts(dst, type) {
   if (dst.t === RIFT) return dst.dbt > 0 && type === dst.dmin;
   return false;
 }
-function deliver(dst, dx, dz, type) {
-  if (dst.t === HUB) bank(type);
+// `to` is the tile it landed on. Passing it costs nothing and is what lets an
+// arrival be a visible event rather than a counter changing in the corner.
+function deliver(dst, to, type) {
+  if (dst.t === HUB) {
+    bank(type);
+    dst.pulse = 1;
+    if (to) {
+      // a small burst in the item's own colour: you can tell from across the
+      // worldlet WHAT just sold, not merely that something did
+      const n = FACES[to.face].n, w = tileWorld(to.face, to.i, to.j);
+      const col = ITEM_COL[type] || ITEM_COL[CRYSTAL];
+      for (let k = 0; k < 5; k++)
+        emit(w[0] + n[0] * 1.2, w[1] + n[1] * 1.2, w[2] + n[2] * 1.2,
+             n[0] * 2.2 + (Math.random() - 0.5) * 2.4,
+             n[1] * 2.2 + (Math.random() - 0.5) * 2.4,
+             n[2] * 2.2 + (Math.random() - 0.5) * 2.4,
+             col.r, col.g, col.b, -0.05, 2.6);
+    }
+  }
   else if (dst.t === SMELTER) { dst.buf++; dst.bt = type; }
   else if (dst.t === FORGE) { if (dst.fa === 0) dst.fa = type; else dst.fb = type; }
   else if (dst.t === RIFT) { if (--dst.dbt <= 0) riftSettle(dst, true); }
@@ -1318,22 +1505,24 @@ function step() {
     if (mv[1] === 'bank') { bank(c.item); c.item = 0; continue; }
     const dst = cellOf(mv[2]);
     if (!accepts(dst, c.item)) continue;   // another input reached it first
-    deliver(dst, 0, 0, c.item);
+    deliver(dst, mv[2], c.item);
     c.item = 0;
   }
   // a rift pays out the ore it lent one tile at a time, like a miner, so the
   // loan arrives on your belts instead of appearing in a counter
   eachTile((c, f, i, j) => {
     if (c.t !== RIFT || c.emit <= 0) return;
-    const dst = cellOf(stepTile(f, i, j, c.d));
-    if (accepts(dst, c.dmin)) { deliver(dst, 0, 0, c.dmin); c.emit--; }
+    const to = stepTile(f, i, j, c.d);
+    const dst = cellOf(to);
+    if (accepts(dst, c.dmin)) { deliver(dst, to, c.dmin); c.emit--; }
   });
   eachTile((c, f, i, j) => {
     if (c.t !== MINER) return;
     // a miner digs whatever the seam under it is, which is the face's mineral
     const m = c.min || MINERAL_OF_FACE[f];
-    const dst = cellOf(stepTile(f, i, j, c.d));
-    if (accepts(dst, m)) deliver(dst, 0, 0, m);
+    const to = stepTile(f, i, j, c.d);
+    const dst = cellOf(to);
+    if (accepts(dst, m)) deliver(dst, to, m);
   });
 }
 
@@ -2336,11 +2525,18 @@ renderer.setAnimationLoop(() => {
   // A belt whose surface moves at a speed unrelated to its throughput is worse
   // than one that does not move at all.
   if (!melting) TREAD.offset.x -= dt / TICK;
-  // drill bits turn while their rig is on a seam
+  // drill bits turn while their rig is on a seam, and a hub's beacon answers
+  // when something sells: the delivery is the payoff and it deserves a beat
   eachTile(c => {
-    if (c.t !== MINER || !c.build) return;
-    const bit = c.build.getObjectByName('bit');
-    if (bit) bit.rotation.y += dt * 7;
+    if (c.t === MINER && c.build) {
+      const bit = c.build.getObjectByName('bit');
+      if (bit) bit.rotation.y += dt * 7;
+      return;
+    }
+    if (c.t !== HUB || !c.build) return;
+    if (c.pulse > 0) c.pulse = Math.max(0, c.pulse - dt * 2.6);
+    const beacon = c.build.getObjectByName('lamp');
+    if (beacon) beacon.scale.setScalar(1 + c.pulse * 1.5);
   });
 
   // a crystal on the west face spins about the west face's up
@@ -2428,9 +2624,10 @@ function setInspectOn(on) {
       let o = h.object, tag = null;
       // an instanced belt has no object of its own, so the instance id is the
       // only way back to the tile it came from
-      if ((h.object === beltFrames || h.object === beltDecks) &&
-          h.instanceId != null && beltIndex[h.instanceId]) {
-        const t2 = beltIndex[h.instanceId];
+      const bk = beltFrames.indexOf(h.object) >= 0 ? beltFrames.indexOf(h.object)
+               : beltDecks.indexOf(h.object);
+      if (bk >= 0 && h.instanceId != null && beltIndex[bk][h.instanceId]) {
+        const t2 = beltIndex[bk][h.instanceId];
         tag = { type: 'machine', name: 'belt',
                 detail: FACES[t2.face].name + ' face · tile ' + t2.i + ',' + t2.j,
                 face: t2.face, i: t2.i, j: t2.j };
@@ -2604,8 +2801,12 @@ window.__factory = {
   MINERAL_OF_FACE, get alloys() { return alloys; }, cycleFilter,
   riftOpen, riftStorm, RIFT_COUNT, RIFT_WINDOW,
   save, load, wipe, saveState, SAVE_KEY, TREAD, beltFrames, beltDecks, POST,
+  beltShape,
   GOALS, UNLOCKED, get goalIdx() { return goalIdx; }, visitedFaces,
   WORLDS, travelTo, applyWorld, get worldIdx() { return worldIdx; },
+  // aim the overhead camera, so a harness can look at a chosen face
+  orbit: (yaw, pitch, dist) => { orbYaw = yaw; orbPitch = pitch;
+                                 if (dist) orbDist = dist; },
   addCores: n => { cores += n; document.getElementById('tok').textContent = cores;
                    renderWorlds(); },
   PRICE, TRADED, stepMarket,

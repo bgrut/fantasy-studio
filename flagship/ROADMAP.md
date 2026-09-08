@@ -34,6 +34,7 @@ says so.
 | **progression frame** | goals unlock machines in the order that teaches them |
 | **art pass** | conveyors that convey, icons in the bar, a sky to float in |
 | **lighting pass** | bloom, a graded composite, particles, a lit silhouette |
+| **grounding pass** | real cast shadows, contact shadows, curved belt corners |
 | **unlockable worlds** | four places to put the factory, bought with cores |
 
 Measured on a prompt-built export: 40x40x6 grid, 40 nodes, 180 value/min,
@@ -233,7 +234,19 @@ bright pass, two blur pairs, then a composite that adds the bloom in linear
 light, tone maps, tints the shadows toward the world's own fog colour and
 closes a vignette.
 
-The trap worth remembering: three applies tone mapping and sRGB encoding **only
+The second trap, in the same family: a directional light's shadow camera sits
+AT the light looking at its target, so anything farther from the target than
+the light is behind the camera and casts nothing. The sun was 58 units out on a
+world whose corners are at 69 — measured, ground luminance across a smelter's
+base read 109/110/110/110/106, perfectly flat. Every distance in the light rig
+is a multiple of HALF now.
+
+Even fixed, one directional light only shadows three of six faces, so every
+machine also carries a contact shadow of its own. It is tuned against the real
+one: the first version darkened a quarter as much, which left a machine on the
+underside floating next to an identical machine on top that did not.
+
+The first trap: three applies tone mapping and sRGB encoding **only
 when rendering to the canvas**. Render into a target and you get raw linear
 values, and compositing those straight to the screen produces a nearly black
 world that looks exactly like a lighting bug and is not one. The art gate now

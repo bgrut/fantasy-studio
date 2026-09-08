@@ -29,6 +29,7 @@ GATES = [
     ("fart.mjs", "icons, instanced belts, a tread that scrolls, a sky that is drawn"),
     ("fperf.mjs", "a 250-machine factory stays inside its draw-call budget"),
     ("fworld.mjs", "worlds unlock with cores, change the scene, and survive a reload"),
+    ("fground.mjs", "the factory is grounded: shadows land on a lit face and an unlit one"),
 ]
 
 
