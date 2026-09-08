@@ -41,10 +41,13 @@ const probe = await p.evaluate(async () => {
     const pts = [];
     for (let k = 0; k < 8; k++) {
       const a = (k / 8) * Math.PI * 2;
-      // INSIDE the contact shadow. At 0.85 the ring sat just past its outer
-      // edge, so on a face the sun does not reach there was nothing to measure
-      // and the reading was identical with the shadowing on and off.
-      const du = Math.cos(a) * T * 0.55, dv = Math.sin(a) * T * 0.55;
+      // Between the machine's own footprint and the outer edge of its contact
+      // shadow. 0.85 sat past the shadow entirely; 0.55 landed on the machine
+      // once every machine grew a skirt, and a sample on the machine reads the
+      // same with the shadowing on or off. The band is narrow and it moves
+      // when the art does — which is the point of measuring rather than
+      // asserting a constant.
+      const du = Math.cos(a) * T * 0.75, dv = Math.sin(a) * T * 0.75;
       const v = new THREE_V(
         w[0] + f.u[0] * du + f.v[0] * dv + f.n[0] * 0.05,
         w[1] + f.u[1] * du + f.v[1] * dv + f.n[1] * 0.05,

@@ -35,6 +35,7 @@ says so.
 | **art pass** | conveyors that convey, icons in the bar, a sky to float in |
 | **lighting pass** | bloom, a graded composite, particles, a lit silhouette |
 | **grounding pass** | real cast shadows, contact shadows, curved belt corners |
+| **material pass** | an environment to reflect, baked occlusion, rim light, detail |
 | **unlockable worlds** | four places to put the factory, bought with cores |
 
 Measured on a prompt-built export: 40x40x6 grid, 40 nodes, 180 value/min,
@@ -224,6 +225,27 @@ against each:
 
     cd flagship && python -m http.server 8790     # serve the demo
     python backend/tools/factory_check.py --job <id>
+
+### Materials
+
+Three things that are not more polygons and matter more than polygons:
+
+- **An environment to reflect.** metalness with no environment map makes a
+  surface DARKER, not shinier — raising it on the ground plating turned the
+  floor black. A PMREM built from a two-stop gradient (an HDRI would be a
+  megabyte of asset for a look three colours wide) fixed that and turned out to
+  be the single biggest lighting upgrade available: every standard material
+  gets a soft directional bounce instead of flat lambert. Tinted per world, so
+  a red planet does not have neutral grey machines standing on it.
+- **Baked occlusion.** Machines are merged into one geometry at boot, which is
+  the moment to write an occlusion ramp into their vertex colours — dark where
+  they meet the ground and under downward faces. Plus a per-part tint, so one
+  material carries a recessed door, a plinth and a panel without a second draw
+  call.
+- **A rim light**, a fresnel pushed into emissive so the bloom outlines every
+  machine. Use `normal`, never `vNormal`: a flatShading material has no vNormal
+  varying, so referencing it fails to compile on exactly the materials most
+  likely to be flat shaded.
 
 ### Rendering
 

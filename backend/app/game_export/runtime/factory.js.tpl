@@ -314,6 +314,44 @@ fill.position.set(-HALF * 2.2, -HALF * 2.8, -HALF * 1.7);
 scene.add(fill);
 
 let starField = null, gridLines = null, cubeEdges = null, sunDisc = null;
+// DECLARED UP HERE ON PURPOSE. The scatter is CHOSEN next to the ore seams,
+// which is hundreds of lines before the meshes that draw it get built — and a
+// const declared after its first use is a temporal-dead-zone throw at boot,
+// which in a file this size is a blank screen with one line of console.
+const scatterSpots = [];
+
+// ── AN ENVIRONMENT TO REFLECT ──────────────────────────────────────────────
+// metalness without an environment map makes a surface DARKER, not shinier:
+// a metal reflects its surroundings and there were none, so raising it on the
+// ground plating turned the floor black. This is the fix, and it is also the
+// single biggest lighting upgrade available — every standard material in the
+// scene gains a soft directional bounce instead of flat lambert.
+//
+// Generated from a two-stop gradient rather than loaded: an HDRI would be a
+// megabyte of asset for a look that is three colours wide.
+let _envRT = null;
+function buildEnv(skyHex, groundHex) {
+  const c = document.createElement('canvas');
+  c.width = 64; c.height = 32;
+  const g = c.getContext('2d');
+  const sky = new THREE.Color(skyHex).lerp(new THREE.Color(0xffffff), 0.30);
+  const grd = g.createLinearGradient(0, 0, 0, 32);
+  grd.addColorStop(0, '#' + sky.getHexString());
+  grd.addColorStop(0.52, '#' + new THREE.Color(skyHex)
+    .lerp(new THREE.Color(groundHex), 0.5).getHexString());
+  grd.addColorStop(1, '#' + new THREE.Color(groundHex)
+    .lerp(new THREE.Color(0x000000), 0.35).getHexString());
+  g.fillStyle = grd; g.fillRect(0, 0, 64, 32);
+  const tex = new THREE.CanvasTexture(c);
+  tex.mapping = THREE.EquirectangularReflectionMapping;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  const rt = pmrem.fromEquirectangular(tex);
+  pmrem.dispose(); tex.dispose();
+  if (_envRT) _envRT.dispose();          // a world change replaces it
+  _envRT = rt;
+  return rt.texture;
+}
 
 // ── POST ───────────────────────────────────────────────────────────────────
 // Scene -> RT, bright pass, two blur pairs, then a composite that adds the
@@ -525,34 +563,97 @@ function renderFrame() {
 // PLATING, drawn at boot like the tread. A flat colour over 6400 square metres
 // reads as a placeholder no matter what colour it is; panel seams and a little
 // grain give the light something to catch as you walk.
-function plateTexture() {
+// MORE THAN ONE SCALE. A texture with a single feature size tiles visibly and
+// reads as wallpaper; the eye finds the repeat immediately. This has a big
+// panel, a quartering seam, rivets, wear streaks and grain — four scales — so
+// what repeats at any one of them is hidden by the others. Low contrast
+// throughout, because plating should be something noticed underfoot rather
+// than a second grid competing with the one that means something.
+const PLATE_PX = 256;
+function plateCanvas() {
   const c = document.createElement('canvas');
-  c.width = c.height = 128;
+  c.width = c.height = PLATE_PX;
   const g = c.getContext('2d');
-  // LOW CONTRAST ON PURPOSE (2026-09-08). The first pass drew hard dark seams
-  // twenty times per face, which on top of the tile grid read as a wireframe
-  // mesh rather than as a surface. Plating should be something you notice
-  // underfoot, not a second grid competing with the one that means something.
-  g.fillStyle = '#8792c4'; g.fillRect(0, 0, 128, 128);
-  g.strokeStyle = '#7a85b8'; g.lineWidth = 2;
-  g.strokeRect(1, 1, 126, 126);
-  const d = g.getImageData(0, 0, 128, 128);
+  const P = PLATE_PX;
+  let seed = 7717;
+  const rr = () => (seed = (seed * 1664525 + 1013904223) % 4294967296) / 4294967296;
+
+  g.fillStyle = '#8792c4'; g.fillRect(0, 0, P, P);
+  // four sub-panels, each very slightly a different shade
+  for (let a = 0; a < 2; a++) for (let b = 0; b < 2; b++) {
+    const v = 132 + Math.floor(rr() * 16);
+    g.fillStyle = 'rgb(' + v + ',' + (v + 10) + ',' + (v + 40) + ')';
+    g.fillRect(a * P / 2 + 2, b * P / 2 + 2, P / 2 - 4, P / 2 - 4);
+  }
+  // seams
+  g.strokeStyle = 'rgba(90,100,150,0.75)'; g.lineWidth = 3;
+  g.strokeRect(1.5, 1.5, P - 3, P - 3);
+  g.lineWidth = 2;
+  g.beginPath(); g.moveTo(P / 2, 0); g.lineTo(P / 2, P);
+  g.moveTo(0, P / 2); g.lineTo(P, P / 2); g.stroke();
+  // rivets at the panel corners
+  g.fillStyle = 'rgba(190,200,235,0.55)';
+  for (const [x, y] of [[10, 10], [P - 10, 10], [10, P - 10], [P - 10, P - 10],
+                        [P / 2, 10], [P / 2, P - 10], [10, P / 2], [P - 10, P / 2]]) {
+    g.beginPath(); g.arc(x, y, 2.6, 0, 6.3); g.fill();
+  }
+  // wear: a few soft streaks, so no two quadrants look identical
+  for (let k = 0; k < 14; k++) {
+    const x = rr() * P, y = rr() * P, w = 12 + rr() * 40, h = 2 + rr() * 5;
+    g.fillStyle = 'rgba(' + (rr() < 0.5 ? '70,78,120' : '175,185,220') + ',0.10)';
+    g.fillRect(x, y, w, h);
+  }
+  // grain
+  const d = g.getImageData(0, 0, P, P);
   for (let k = 0; k < d.data.length; k += 4) {
-    const v = (Math.random() - 0.5) * 22;
+    const v = (rr() - 0.5) * 26;
     d.data[k] += v; d.data[k + 1] += v; d.data[k + 2] += v;
+  }
+  g.putImageData(d, 0, 0);
+  return c;
+}
+
+function plateTexture() {
+  const t = new THREE.CanvasTexture(plateCanvas());
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.repeat.set(N / 5, N / 5);      // panels bigger than tiles, so they read as panels
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 8;
+  return t;
+}
+
+// The same plating, as roughness. Seams and rivets are smoother than the panel
+// they sit in, so a moving light crawls across the floor instead of sliding
+// over one uniform sheen — which is most of what tells you a surface is metal.
+function plateRoughness() {
+  const src = plateCanvas();
+  const c = document.createElement('canvas');
+  c.width = c.height = PLATE_PX;
+  const g = c.getContext('2d');
+  g.drawImage(src, 0, 0);
+  const d = g.getImageData(0, 0, PLATE_PX, PLATE_PX);
+  for (let k = 0; k < d.data.length; k += 4) {
+    // invert luminance into roughness: the bright bits (rivets, seams) are the
+    // polished ones
+    const l = (d.data[k] + d.data[k + 1] + d.data[k + 2]) / 3;
+    const r = 235 - (l - 120) * 1.6;
+    d.data[k] = d.data[k + 1] = d.data[k + 2] = Math.max(120, Math.min(255, r));
   }
   g.putImageData(d, 0, 0);
   const t = new THREE.CanvasTexture(c);
   t.wrapS = t.wrapT = THREE.RepeatWrapping;
-  t.repeat.set(N / 5, N / 5);      // panels bigger than tiles, so they read as panels
-  t.colorSpace = THREE.SRGBColorSpace;
-  t.anisotropy = 4;
+  t.repeat.set(N / 5, N / 5);
+  t.anisotropy = 8;
   return t;
 }
 const cube = new THREE.Mesh(
   new THREE.BoxGeometry(N * T, N * T, N * T),
-  new THREE.MeshStandardMaterial({ color: 0x3c4470, roughness: 0.94,
-    metalness: 0.12, map: plateTexture() }));
+  new THREE.MeshStandardMaterial({ color: 0x36406a, roughness: 0.9,
+    metalness: 0.3, map: plateTexture(), roughnessMap: plateRoughness(),
+    // dialled back once there WAS an environment: at 0.75 the floor read wet,
+    // and a ground plane competing with the machines for attention is a value
+    // hierarchy problem, not a lighting one
+    envMapIntensity: 0.5 }));
 cube.receiveShadow = true;
 scene.add(cube);
 {
@@ -621,8 +722,8 @@ const _pq = new THREE.Quaternion();
 const _pe = new THREE.Euler();
 const _pv = new THREE.Vector3();
 const _ps = new THREE.Vector3(1, 1, 1);
-function mergeParts(parts) {
-  const pos = [], nor = [], uvs = [];
+function mergeParts(parts, opts) {
+  const pos = [], nor = [], uvs = [], tint = [];
   for (const p of parts) {
     const g = p.g.clone().toNonIndexed();
     _pe.set(p.rx || 0, p.ry || 0, p.rz || 0);
@@ -634,6 +735,12 @@ function mergeParts(parts) {
     for (let k = 0; k < a.position.array.length; k++) pos.push(a.position.array[k]);
     for (let k = 0; k < a.normal.array.length; k++) nor.push(a.normal.array[k]);
     if (a.uv) for (let k = 0; k < a.uv.array.length; k++) uvs.push(a.uv.array[k]);
+    // ONE MATERIAL, MANY VALUES. A recessed door and the panel around it are
+    // the same paint; what separates them is that one of them is in shadow.
+    // Carrying a per-part multiplier into the vertex colours buys that for
+    // nothing — no second material, no second draw call.
+    const tv = p.tint === undefined ? 1 : p.tint;
+    for (let k = 0; k < a.position.count; k++) tint.push(tv);
     g.dispose();
   }
   const out = new THREE.BufferGeometry();
@@ -641,8 +748,84 @@ function mergeParts(parts) {
   out.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
   if (uvs.length === (pos.length / 3) * 2)
     out.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  bakeOcclusion(out, opts);
+  const col = out.attributes.color;
+  for (let k = 0; k < col.count; k++) {
+    const t = tint[k] === undefined ? 1 : tint[k];
+    col.setXYZ(k, col.getX(k) * t, col.getY(k) * t, col.getZ(k) * t);
+  }
   out.computeBoundingSphere();
   return out;
+}
+
+/**
+ * Bake an occlusion ramp into vertex colours.
+ *
+ * Two terms, both of which a real bounce would produce and neither of which
+ * costs anything at runtime: DOWN-FACING surfaces see less sky, and everything
+ * near the ground sits in its own contact shadow. Machines stop looking like
+ * they were cut from coloured paper and start having a bottom.
+ */
+function bakeOcclusion(geo, opts) {
+  const o = opts || {};
+  const floor = o.floor === undefined ? 0.42 : o.floor;   // darkest it gets
+  const reach = o.reach === undefined ? 0.55 : o.reach;   // metres of falloff
+  const pos = geo.attributes.position, nor = geo.attributes.normal;
+  let minY = Infinity, maxY = -Infinity;
+  for (let k = 0; k < pos.count; k++) {
+    const y = pos.getY(k);
+    if (y < minY) minY = y;
+    if (y > maxY) maxY = y;
+  }
+  const span = Math.max(1e-3, Math.min(reach, maxY - minY));
+  const col = new Float32Array(pos.count * 3);
+  for (let k = 0; k < pos.count; k++) {
+    const h = Math.min(1, Math.max(0, (pos.getY(k) - minY) / span));
+    const ny = nor.getY(k);
+    // smoothstep off the ground, then a second bite out of anything facing down
+    const rise = h * h * (3 - 2 * h);
+    let v = floor + (1 - floor) * rise;
+    v *= 0.78 + 0.22 * Math.max(0, ny * 0.5 + 0.5);
+    col[k * 3] = col[k * 3 + 1] = col[k * 3 + 2] = v;
+  }
+  geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+}
+
+/** Geometry drawn by a vertexColors material still needs the attribute. */
+function ensureColors(geo) {
+  if (geo.attributes.color) return geo;
+  const n = geo.attributes.position.count;
+  const col = new Float32Array(n * 3).fill(1);
+  geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  return geo;
+}
+
+/**
+ * A fresnel rim, pushed into the emissive term so the bloom picks it up.
+ *
+ * This is the single cheapest thing that reads as "lit by an artist": every
+ * machine gets an outline against whatever is behind it, which is most of what
+ * separates a silhouette from a shape.
+ */
+function addRim(mat, color, power, strength) {
+  mat.onBeforeCompile = (sh) => {
+    sh.uniforms.uRimCol = { value: new THREE.Color(color) };
+    sh.uniforms.uRimP = { value: power };
+    sh.uniforms.uRimS = { value: strength };
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>',
+        '#include <common>\nuniform vec3 uRimCol;\nuniform float uRimP;\nuniform float uRimS;')
+      .replace('#include <emissivemap_fragment>',
+        '#include <emissivemap_fragment>\n' +
+        // `normal` NOT `vNormal`: a flatShading material has no vNormal varying —
+        // it derives its normal from screen-space derivatives — so referencing it
+        // fails to compile on exactly the materials most likely to BE flat shaded.
+        // three has already computed `normal` by the time this include runs.
+        'float _rim = pow(1.0 - abs(dot(normal, normalize(vViewPosition))), uRimP);\n' +
+        'totalEmissiveRadiance += uRimCol * _rim * uRimS;');
+  };
+  mat.needsUpdate = true;
+  return mat;
 }
 
 /** The seating transform as a matrix, for machines drawn as instances. */
@@ -738,6 +921,17 @@ function treadTexture() {
 }
 const TREAD = treadTexture();
 
+// Scattered after the seams, so nothing lands on one: an ore seam is the only
+// thing on the ground a player is looking FOR.
+for (let k = 0; k < 320; k++) {
+  const f = Math.floor(rnd() * 6);
+  const i = 1 + Math.floor(rnd() * (N - 2));
+  const j = 1 + Math.floor(rnd() * (N - 2));
+  if (cells[f][i][j].t !== EMPTY) continue;
+  scatterSpots.push({ f, i, j, kind: rnd() < 0.45 ? 0 : 1,
+                      d: Math.floor(rnd() * 4), s: 0.75 + rnd() * 0.6 });
+}
+
 // ── build meshes ───────────────────────────────────────────────────────────
 const MAT = {
   // EVERY MACHINE IS A LITTLE BIT ON. A dark object in a dark scene has no
@@ -832,56 +1026,140 @@ const GEO = {
       rx: Math.PI / 2, ry: Math.PI / 2 },
   ]),
 
-  // a rig with legs and a bit that turns, so a miner reads as MINING
+  // a rig with legs, cross-braces, a motor over the shaft it drives, and a
+  // control box on one side, so a miner reads as MINING rather than as a table
   miner: mergeParts([
-    { g: _box(T * 0.78, 0.30, T * 0.78), y: 0.15 },
-    { g: _box(0.13, 0.95, 0.13), y: 0.62, x: T * 0.28, z: T * 0.28 },
-    { g: _box(0.13, 0.95, 0.13), y: 0.62, x: -T * 0.28, z: T * 0.28 },
-    { g: _box(0.13, 0.95, 0.13), y: 0.62, x: T * 0.28, z: -T * 0.28 },
-    { g: _box(0.13, 0.95, 0.13), y: 0.62, x: -T * 0.28, z: -T * 0.28 },
-    { g: _box(T * 0.70, 0.14, T * 0.70), y: 1.14 },
-    { g: _cyl(0.10, 0.10, 0.80, 6), y: 0.72 },
+    { g: _box(T * 0.86, 0.14, T * 0.86), y: 0.07, tint: 0.6 },   // skirt
+    { g: _box(T * 0.74, 0.24, T * 0.74), y: 0.24 },              // deck
+    { g: _box(0.13, 0.95, 0.13), y: 0.68, x: T * 0.28, z: T * 0.28 },
+    { g: _box(0.13, 0.95, 0.13), y: 0.68, x: -T * 0.28, z: T * 0.28 },
+    { g: _box(0.13, 0.95, 0.13), y: 0.68, x: T * 0.28, z: -T * 0.28 },
+    { g: _box(0.13, 0.95, 0.13), y: 0.68, x: -T * 0.28, z: -T * 0.28 },
+    { g: _box(T * 0.62, 0.07, 0.09), y: 0.66, z: T * 0.28, rz: 0.55 },  // braces
+    { g: _box(T * 0.62, 0.07, 0.09), y: 0.66, z: -T * 0.28, rz: -0.55 },
+    { g: _box(T * 0.70, 0.13, T * 0.70), y: 1.18 },              // head plate
+    { g: _cyl(0.10, 0.10, 0.86, 6), y: 0.74 },                   // shaft
+    { g: _cyl(0.19, 0.19, 0.30, 8), y: 1.38, rz: Math.PI / 2, tint: 0.72 }, // motor
+    { g: _box(0.20, 0.30, 0.24), y: 0.52, x: T * 0.36, tint: 0.62 }, // control box
   ]),
   minerBit: _cyl(0.02, 0.28, 0.5, 6),
 
   arrow: new THREE.ConeGeometry(0.2, 0.5, 4),
 
-  // a landing pad with a mast, so the place everything is going to looks like
-  // a destination instead of another box
-  hub: mergeParts([
-    { g: _cyl(T * 0.56, T * 0.62, 0.30, 12), y: 0.15 },
-    { g: new THREE.TorusGeometry(T * 0.46, 0.06, 6, 18), y: 0.36, rx: Math.PI / 2 },
-    { g: _cyl(0.09, 0.09, 0.85, 6), y: 0.74 },
-  ]),
+  // a landing pad with ribs, a collar and a mast: the place everything is
+  // going to should look like a destination, not another box
+  hub: mergeParts((() => {
+    const parts = [
+      { g: _cyl(T * 0.66, T * 0.70, 0.10, 12), y: 0.05, tint: 0.6 }, // skirt
+      { g: _cyl(T * 0.54, T * 0.62, 0.26, 12), y: 0.20 },          // pad
+      { g: new THREE.TorusGeometry(T * 0.46, 0.06, 6, 18), y: 0.36, rx: Math.PI / 2 },
+      { g: _cyl(0.09, 0.09, 0.85, 6), y: 0.78 },                   // mast
+      { g: _cyl(0.16, 0.16, 0.10, 8), y: 1.06 },                   // collar
+    ];
+    // radiating ribs, so the pad has a direction to it under the landing ring
+    for (let k = 0; k < 6; k++) {
+      const a = (k / 6) * Math.PI * 2;
+      parts.push({ g: _box(T * 0.30, 0.07, 0.10), y: 0.35,
+                   x: Math.cos(a) * T * 0.30, z: Math.sin(a) * T * 0.30, ry: -a });
+    }
+    return parts;
+  })()),
 
-  // a furnace: body, rim, and a flue offset to one corner
+  // a furnace with a door facing its output, vents facing away, and a flue.
+  // Detail that explains the machine reads as design; detail scattered for
+  // texture's sake reads as noise.
   smelt: mergeParts([
-    { g: _box(T * 0.80, 1.00, T * 0.80), y: 0.52 },
-    { g: _box(T * 0.90, 0.11, T * 0.90), y: 1.06 },
-    { g: _cyl(0.13, 0.17, 0.60, 6), y: 1.40, x: T * 0.22, z: -T * 0.22 },
+    { g: _box(T * 0.90, 0.13, T * 0.90), y: 0.065, tint: 0.6 },  // skirt
+    { g: _box(T * 0.78, 0.92, T * 0.78), y: 0.58 },              // body
+    { g: _box(T * 0.90, 0.11, T * 0.90), y: 1.09 },              // cap
+    { g: _box(T * 0.42, 0.46, 0.10), y: 0.50, x: T * 0.40, tint: 0.72 }, // frame
+    { g: _box(T * 0.30, 0.34, 0.07), y: 0.50, x: T * 0.44, tint: 0.34 }, // door
+    { g: _box(0.09, 0.09, T * 0.50), y: 0.86, z: -T * 0.40, tint: 0.5 }, // vents
+    { g: _box(0.09, 0.09, T * 0.50), y: 0.70, z: -T * 0.40, tint: 0.5 },
+    { g: _box(0.09, 0.09, T * 0.50), y: 0.54, z: -T * 0.40, tint: 0.5 },
+    { g: _cyl(0.13, 0.17, 0.62, 6), y: 1.42, x: T * 0.22, z: -T * 0.22 },
+    { g: new THREE.TorusGeometry(0.16, 0.035, 5, 10), y: 1.62,
+      x: T * 0.22, z: -T * 0.22, rx: Math.PI / 2 },              // flue lip
   ]),
 
   split: mergeParts([
-    { g: _cyl(T * 0.42, T * 0.42, 0.30, 4), y: 0.15, ry: Math.PI / 4 },
-    { g: _box(T * 0.88, 0.15, 0.20), y: 0.36 },
-    { g: _box(T * 0.88, 0.15, 0.20), y: 0.36, ry: Math.PI / 2 },
+    { g: _cyl(T * 0.50, T * 0.50, 0.09, 8), y: 0.045, tint: 0.6 }, // skirt
+    { g: _cyl(T * 0.42, T * 0.42, 0.26, 4), y: 0.20, ry: Math.PI / 4 },
+    { g: _box(T * 0.88, 0.15, 0.20), y: 0.40 },
+    { g: _box(T * 0.88, 0.15, 0.20), y: 0.40, ry: Math.PI / 2 },
+    { g: _cyl(0.17, 0.13, 0.14, 8), y: 0.52 },                   // hub cap
   ]),
 
   // taller and eight-sided, so a forge is not mistaken for a smelter
   // from across the worldlet
-  forge: mergeParts([
-    { g: _cyl(T * 0.44, T * 0.50, 1.30, 8), y: 0.65 },
-    { g: new THREE.TorusGeometry(T * 0.40, 0.08, 6, 16), y: 1.28, rx: Math.PI / 2 },
-  ]),
+  forge: mergeParts((() => {
+    const parts = [
+      { g: _cyl(T * 0.56, T * 0.58, 0.11, 8), y: 0.055, tint: 0.6 }, // skirt
+      { g: _cyl(T * 0.42, T * 0.50, 1.22, 8), y: 0.72 },         // drum
+      { g: new THREE.TorusGeometry(T * 0.40, 0.08, 6, 16), y: 1.30, rx: Math.PI / 2 },
+      { g: new THREE.TorusGeometry(T * 0.46, 0.05, 5, 16), y: 0.42, rx: Math.PI / 2 },
+    ];
+    // vertical ribs: an eight-sided drum with nothing on it reads as a barrel
+    for (let k = 0; k < 4; k++) {
+      const a = (k / 4) * Math.PI * 2 + Math.PI / 8;
+      parts.push({ g: _box(0.09, 1.0, 0.13), y: 0.75,
+                   x: Math.cos(a) * T * 0.46, z: Math.sin(a) * T * 0.46, ry: -a });
+    }
+    return parts;
+  })()),
   rift: new THREE.TorusGeometry(T * 0.38, 0.16, 6, 12),
-  riftBase: _cyl(T * 0.46, T * 0.5, 0.18, 8),
+  riftBase: mergeParts([
+    { g: _cyl(T * 0.54, T * 0.56, 0.09, 8), y: 0.045, tint: 0.6 }, // skirt
+    { g: _cyl(T * 0.44, T * 0.50, 0.20, 8), y: 0.16 },
+    { g: _box(0.12, 0.62, 0.12), y: 0.50, x: T * 0.30 },         // supports
+    { g: _box(0.12, 0.62, 0.12), y: 0.50, x: -T * 0.30 },
+  ]),
   riftCore: new THREE.OctahedronGeometry(0.34, 0),
   filter: mergeParts([
-    { g: _box(T * 0.92, 0.24, T * 0.92), y: 0.12 },
-    { g: _box(T * 0.16, 0.34, T * 0.66), y: 0.34, x: T * 0.34 },
+    { g: _box(T * 0.96, 0.10, T * 0.96), y: 0.05, tint: 0.6 },    // skirt
+    { g: _box(T * 0.88, 0.20, T * 0.88), y: 0.18 },
+    { g: _box(T * 0.16, 0.34, T * 0.66), y: 0.40, x: T * 0.34 }, // sorter housing
+    { g: _box(0.10, 0.26, 0.10), y: 0.36, x: -T * 0.36, z: T * 0.36 },
+    { g: _box(0.10, 0.26, 0.10), y: 0.36, x: -T * 0.36, z: -T * 0.36 },
   ]),
   filterGate: new THREE.BoxGeometry(T * 0.16, 0.5, T * 0.62),
+
+  // Ground detail. Nothing here is interactive; it exists so the floor has a
+  // size. Two kinds is enough — one flat and wide, one small and clustered —
+  // because variation at this density comes from rotation and scale far more
+  // than from silhouette.
+  detailVent: mergeParts([
+    { g: _box(T * 0.44, 0.05, T * 0.30), y: 0.025, tint: 0.7 },
+    { g: _box(T * 0.34, 0.06, 0.05), y: 0.06, z: -0.16, tint: 0.5 },
+    { g: _box(T * 0.34, 0.06, 0.05), y: 0.06, tint: 0.5 },
+    { g: _box(T * 0.34, 0.06, 0.05), y: 0.06, z: 0.16, tint: 0.5 },
+  ], { floor: 0.55, reach: 0.2 }),
+  detailBolts: mergeParts([
+    { g: _cyl(T * 0.13, T * 0.14, 0.05, 8), y: 0.025, tint: 0.72 },
+    { g: _cyl(0.05, 0.05, 0.07, 6), y: 0.06, x: 0.11, tint: 0.95 },
+    { g: _cyl(0.05, 0.05, 0.07, 6), y: 0.06, x: -0.06, z: 0.09, tint: 0.95 },
+    { g: _cyl(0.05, 0.05, 0.07, 6), y: 0.06, x: -0.06, z: -0.09, tint: 0.95 },
+  ], { floor: 0.55, reach: 0.2 }),
 };
+// A vertexColors material draws garbage from a geometry with no colour
+// attribute, and the same material serves both merged parts and plain boxes —
+// so everything gets one, white where nothing was baked.
+for (const k in GEO) ensureColors(GEO[k]);
+
+// Vertex colours carry the baked occlusion; the rim is a fresnel pushed into
+// emissive so the bloom outlines every machine. Tinted per machine, warm on the
+// hot ones and cold on the rest, because a single white rim on everything looks
+// like a shader and not like light.
+for (const k in MAT) MAT[k].vertexColors = true;
+addRim(MAT.miner, 0xff9aa8, 2.6, 0.55);
+addRim(MAT.beltFrame, 0x7fffd8, 2.8, 0.40);
+addRim(MAT.hub, 0xffe4a8, 2.4, 0.60);
+addRim(MAT.smelt, 0xc3aaff, 2.5, 0.55);
+addRim(MAT.split, 0xa8ddff, 2.6, 0.50);
+addRim(MAT.forge, 0xff9ada, 2.3, 0.65);
+addRim(MAT.filt, 0x8fffdd, 2.7, 0.45);
+addRim(MAT.rift, 0xc0a8ff, 2.2, 0.70);
+for (const m of MINERALS) addRim(nodeMats[m], MIN_COL[m], 2.0, 0.7);
 
 function refreshCounts() {
   let m = 0, b = 0, sm = 0;
@@ -935,7 +1213,7 @@ function place(face, i, j, type, dir) {
     // a cross, so what it does is visible from across the worldlet rather than
     // being a box you have to remember the meaning of
     const b = new THREE.Mesh(GEO.split, MAT.split);
-    b.castShadow = true; b.receiveShadow = true; g.add(b);
+    b.castShadow = true; b.receiveShadow = true; b.name = 'spin'; g.add(b);
   } else if (type === RIFT) {
     const ring = new THREE.Mesh(GEO.rift, MAT.rift);
     ring.position.y = 0.95; ring.rotation.x = Math.PI / 2;
@@ -944,7 +1222,7 @@ function place(face, i, j, type, dir) {
       new THREE.MeshBasicMaterial({ color: 0x2a2050 }));
     core.position.y = 0.95; core.name = 'lamp'; g.add(core);
     const base = new THREE.Mesh(GEO.riftBase, MAT.rift);
-    base.position.y = 0.11; base.receiveShadow = true; g.add(base);
+    base.receiveShadow = true; g.add(base);
   } else if (type === FILTER) {
     const b = new THREE.Mesh(GEO.filter, MAT.filt);
     b.castShadow = true; b.receiveShadow = true; g.add(b);
@@ -962,6 +1240,10 @@ function place(face, i, j, type, dir) {
   } else if (type === FORGE) {
     const b = new THREE.Mesh(GEO.forge, MAT.forge);
     b.castShadow = true; g.add(b);
+    const halo = new THREE.Mesh(new THREE.TorusGeometry(T * 0.41, 0.05, 6, 18),
+      new THREE.MeshBasicMaterial({ color: 0xff5ad9 }));
+    halo.position.y = 1.30; halo.rotation.x = Math.PI / 2;
+    halo.name = 'halo'; halo.visible = false; g.add(halo);
     const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.17, 8, 6),
       new THREE.MeshBasicMaterial({ color: 0xff5ad9 }));
     lamp.position.set(0, 1.5, 0);
@@ -972,9 +1254,12 @@ function place(face, i, j, type, dir) {
     b.castShadow = true; g.add(b);
     // a lamp that lights while it is cooking: a factory you can read at a
     // glance from across the island is the whole appeal of the genre
-    const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.17, 8, 6),
+    // THE DOOR IS THE LAMP. A bulb on the roof told you a smelter was working;
+    // a furnace door glowing where the heat is tells you the same thing and
+    // looks like a furnace while doing it.
+    const lamp = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.32, T * 0.26),
       new THREE.MeshBasicMaterial({ color: 0xffb04a }));
-    lamp.position.set(0, 1.34, 0);
+    lamp.position.set(T * 0.47, 0.50, 0);
     lamp.name = 'lamp';
     g.add(lamp);
   }
@@ -1049,7 +1334,7 @@ function beltShape(f, i, j, c) {
 
 function rebuildBelts() {
   const n = [0, 0, 0];
-  let d = 0;
+  let d = 0, sv = 0, sb = 0;
   for (const a of beltIndex) a.length = 0;
   eachTile((c, f, i, j) => {
     const w = DECAL_W[c.t];
@@ -1074,6 +1359,22 @@ function rebuildBelts() {
     beltIndex[k][n[k]] = { face: f, i, j };
     n[k]++;
   });
+  // ground detail, minus anything now standing on it
+  for (const sp of scatterSpots) {
+    const c = cells[sp.f][sp.i][sp.j];
+    if (c.t !== EMPTY) continue;
+    seatMatrix(sp.f, sp.i, sp.j, sp.d, 0.02, _dm);
+    _dpos.setFromMatrixPosition(_dm);
+    _dq.setFromRotationMatrix(_dm);
+    _dscale.setScalar(sp.s);
+    _dm.compose(_dpos, _dq, _dscale);
+    if (sp.kind === 0) { if (sv < MAX_SCATTER) scatterVent.setMatrixAt(sv++, _dm); }
+    else if (sb < MAX_SCATTER) scatterBolt.setMatrixAt(sb++, _dm);
+  }
+  scatterVent.count = sv; scatterBolt.count = sb;
+  scatterVent.instanceMatrix.needsUpdate = true;
+  scatterBolt.instanceMatrix.needsUpdate = true;
+
   for (let k = 0; k < 3; k++) {
     beltFrames[k].count = n[k]; beltDecks[k].count = n[k];
     beltFrames[k].instanceMatrix.needsUpdate = true;
@@ -1117,6 +1418,25 @@ function contactTexture() {
   t.colorSpace = THREE.SRGBColorSpace;
   return t;
 }
+// ── GROUND DETAIL ──────────────────────────────────────────────────────────
+// Seeded from the same RNG the ore uses, so a given world always looks like
+// itself; instanced, so several hundred pieces cost two draw calls; and hidden
+// under anything built on their tile, because a vent poking through a smelter
+// is worse than no vent at all.
+const MAX_SCATTER = 900;
+const scatterMats = new THREE.MeshStandardMaterial({
+  color: 0x707ba8, roughness: 0.82, metalness: 0.3,
+  vertexColors: true, envMapIntensity: 0.6 });
+const scatterVent = new THREE.InstancedMesh(GEO.detailVent, scatterMats, MAX_SCATTER);
+const scatterBolt = new THREE.InstancedMesh(GEO.detailBolts, scatterMats, MAX_SCATTER);
+for (const m of [scatterVent, scatterBolt]) {
+  m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+  m.frustumCulled = false;
+  m.receiveShadow = true;
+  m.count = 0;
+  scene.add(m);
+}
+
 const MAX_DECALS = 6000;
 const decals = new THREE.InstancedMesh(
   new THREE.PlaneGeometry(1, 1),
@@ -1424,8 +1744,16 @@ function step() {
     } else if (c.cook === 0 && c.fa && c.fb) {
       c.fa = 0; c.fb = 0; c.cook = FORGE_TICKS;
     }
-    const lamp = c.build && c.build.getObjectByName('lamp');
-    if (lamp) lamp.material.color.setHex(c.cook > 0 ? 0xffb04a : 0x3a2f5e);
+    // THE HEAT COMES UP. A door that snaps between two colours reads as a
+    // status LED; one that swells and falls reads as a fire in there.
+    const lamp = c.t === SMELTER && c.build && c.build.getObjectByName('lamp');
+    if (lamp) {
+      c.glow = c.glow || 0;
+      c.glow += ((c.cook > 0 ? 1 : 0) - c.glow) * 0.25;
+      lamp.material.color.setRGB(0.10 + 0.90 * c.glow,
+                                 0.06 + 0.63 * c.glow,
+                                 0.22 + 0.07 * c.glow);
+    }
   });
 
   // Collect first, THEN commit. Moving in place would let one item ride the
@@ -2182,6 +2510,9 @@ function applyWorld(k) {
   starField.material.color.setHex(w.star);
   if (cubeEdges) cubeEdges.material.color.setHex(w.edge || w.grid);
   if (sunDisc) sunDisc.material.color.setHex(w.sun || 0xfff2d6);
+  // the bounce light is the world's own colour, which is what stops a red
+  // planet from having neutral grey machines standing on it
+  scene.environment = buildEnv(w.edge || w.grid, w.ground);
   matComposite.uniforms.uTint.value.setHex(w.fog);
   const h = document.querySelector('#hud h1');
   if (h) h.textContent = String(w.name).toUpperCase();
@@ -2525,18 +2856,34 @@ renderer.setAnimationLoop(() => {
   // A belt whose surface moves at a speed unrelated to its throughput is worse
   // than one that does not move at all.
   if (!melting) TREAD.offset.x -= dt / TICK;
-  // drill bits turn while their rig is on a seam, and a hub's beacon answers
-  // when something sells: the delivery is the payoff and it deserves a beat
+  // A FACTORY WHOSE PARTS DO NOT MOVE IS A DIORAMA. Each machine says what it
+  // is doing with the one part that would move if it were real.
   eachTile(c => {
-    if (c.t === MINER && c.build) {
+    if (!c.build) return;
+    if (c.t === MINER) {
       const bit = c.build.getObjectByName('bit');
       if (bit) bit.rotation.y += dt * 7;
-      return;
+    } else if (c.t === HUB) {
+      if (c.pulse > 0) c.pulse = Math.max(0, c.pulse - dt * 2.6);
+      const beacon = c.build.getObjectByName('lamp');
+      if (beacon) beacon.scale.setScalar(1 + c.pulse * 1.5);
+    } else if (c.t === SPLITTER) {
+      // slow, and only while it has something to route: a splitter idling at
+      // speed reads as broken rather than as busy
+      const spin = c.build.getObjectByName('spin');
+      if (spin) spin.rotation.y += dt * (c.item ? 2.2 : 0.35);
+    } else if (c.t === FORGE) {
+      const halo = c.build.getObjectByName('halo');
+      if (halo) {
+        halo.visible = c.cook > 0;
+        halo.rotation.z += dt * 3.4;
+        halo.scale.setScalar(1 + Math.sin(performance.now() * 0.006) * 0.06);
+      }
+    } else if (c.t === FILTER) {
+      const gate = c.build.getObjectByName('gate');
+      if (gate) gate.material.emissiveIntensity =
+        0.45 + Math.sin(performance.now() * 0.003) * 0.18;
     }
-    if (c.t !== HUB || !c.build) return;
-    if (c.pulse > 0) c.pulse = Math.max(0, c.pulse - dt * 2.6);
-    const beacon = c.build.getObjectByName('lamp');
-    if (beacon) beacon.scale.setScalar(1 + c.pulse * 1.5);
   });
 
   // a crystal on the west face spins about the west face's up
@@ -2801,7 +3148,7 @@ window.__factory = {
   MINERAL_OF_FACE, get alloys() { return alloys; }, cycleFilter,
   riftOpen, riftStorm, RIFT_COUNT, RIFT_WINDOW,
   save, load, wipe, saveState, SAVE_KEY, TREAD, beltFrames, beltDecks, POST,
-  beltShape,
+  beltShape, scatterVent, scatterBolt, scatterSpots,
   GOALS, UNLOCKED, get goalIdx() { return goalIdx; }, visitedFaces,
   WORLDS, travelTo, applyWorld, get worldIdx() { return worldIdx; },
   // aim the overhead camera, so a harness can look at a chosen face
