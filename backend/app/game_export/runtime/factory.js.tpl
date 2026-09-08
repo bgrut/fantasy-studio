@@ -327,6 +327,19 @@ let starField = null, gridLines = null, cubeEdges = null, sunDisc = null;
 // const declared after its first use is a temporal-dead-zone throw at boot,
 // which in a file this size is a blank screen with one line of console.
 const scatterSpots = [];
+// Same reason, same place. The starter line is seeded at boot, seeding calls
+// place(), place() clicks — and the click reads AUDIO, which was declared six
+// hundred lines further down. The functions can live with the mixer; the
+// object they touch has to exist before the first machine does.
+const AUDIO = { ctx: null, master: null, muted: false, hum: null, belts: null,
+                furnace: null, ready: false };
+// And the reveal's clock, for the same reason: playIntro() runs at first
+// render, which is long before the reveal block that owns it is evaluated.
+// Everything that a hoisted function touches at boot lives up here.
+let intro = 0;                 // seconds remaining; 0 = not playing
+let introTotal = 3.6;
+let introFrom = null;          // where the orbit camera starts
+try { AUDIO.muted = localStorage.getItem('fs-factory-muted') === '1'; } catch (e) {}
 
 // ── AN ENVIRONMENT TO REFLECT ──────────────────────────────────────────────
 // metalness without an environment map makes a surface DARKER, not shinier:
@@ -1461,6 +1474,7 @@ function place(face, i, j, type, dir) {
     g.add(lamp);
   }
   seat(g, face, i, j, dir, 0);
+  if (typeof sfxPlace === 'function') sfxPlace();
   // what the studio's inspector reads when you click this. Same shape the
   // adventure runtime uses, so one panel renders picks from either genre.
   g.userData.fsTag = { type: 'machine', name: TYPE_NAME[type] || 'machine',
@@ -1732,8 +1746,10 @@ function stepParticles(dt) {
     pPos[k * 3] += pVel[k * 3] * dt;
     pPos[k * 3 + 1] += pVel[k * 3 + 1] * dt;
     pPos[k * 3 + 2] += pVel[k * 3 + 2] * dt;
-    // drag, so nothing flies off in a straight line forever
-    const f = 1 - Math.min(1, dt * 1.1);
+    // drag, so nothing flies off in a straight line forever — scaled by how
+    // fast the particle is dying, so a spark (decay ~2.5) is braked hard and a
+    // snowflake (decay ~0.12) keeps falling
+    const f = 1 - Math.min(1, dt * 1.1 * Math.min(1, pDecay[k] * 0.6));
     pVel[k * 3] *= f; pVel[k * 3 + 1] *= f; pVel[k * 3 + 2] *= f;
     alive++;
   }
@@ -1742,6 +1758,34 @@ function stepParticles(dt) {
   partGeo.attributes.aColor.needsUpdate = true;
   partGeo.attributes.aSize.needsUpdate = true;
   return alive;
+}
+
+// WEATHER. A volume above the face the player is standing on, refilled at the
+// world's own rate. Positive `fall` sinks toward the face, negative rises off
+// it — spores go up. Drift is sideways sway, in the face's own tangent frame,
+// so it is sideways on the underside of the cube too.
+let weatherClock = 0;
+function stepWeather(dt) {
+  const w = WORLDS[worldIdx] && WORLDS[worldIdx].weather;
+  if (!w || intro > 0) return;
+  weatherClock += dt * w.rate;
+  const f = FACES[player.face], n = f.n, u = f.u, v = f.v;
+  while (weatherClock >= 1) {
+    weatherClock -= 1;
+    // a disc around the player, 14m across, 2-9m above the face
+    const a = Math.random() * Math.PI * 2, r = Math.sqrt(Math.random()) * 14;
+    const du = Math.cos(a) * r, dv = Math.sin(a) * r;
+    const h = w.fall >= 0 ? 2 + Math.random() * 7 : 0.2 + Math.random() * 1.5;
+    const px = player.pos.x + u[0] * du + v[0] * dv + n[0] * (h - EYE);
+    const py = player.pos.y + u[1] * du + v[1] * dv + n[1] * (h - EYE);
+    const pz = player.pos.z + u[2] * du + v[2] * dv + n[2] * (h - EYE);
+    const sway = (Math.random() - 0.5) * w.drift, sway2 = (Math.random() - 0.5) * w.drift;
+    emit(px, py, pz,
+         -n[0] * w.fall + u[0] * sway + v[0] * sway2,
+         -n[1] * w.fall + u[1] * sway + v[1] * sway2,
+         -n[2] * w.fall + u[2] * sway + v[2] * sway2,
+         w.col[0], w.col[1], w.col[2], w.size, w.life);
+  }
 }
 
 // Emitters live where the machines are, and every one of them pushes UP off
@@ -1919,6 +1963,7 @@ function deliver(dst, to, type) {
   if (dst.t === HUB) {
     bank(type);
     dst.pulse = 1;
+    sfxSold(type);
     if (to) {
       // a small burst in the item's own colour: you can tell from across the
       // worldlet WHAT just sold, not merely that something did
@@ -2325,6 +2370,7 @@ addEventListener('keydown', e => {
               '9': 'erase' }[e.key];
   if (k) pickTool(k);
   if (e.code === 'KeyF') cycleFilter();
+  if (e.code === 'KeyM') audioMute(!AUDIO.muted);
   const u = { 'KeyZ': 'tick', 'KeyX': 'yield', 'KeyC': 'smelt' }[e.code];
   if (u) buy(u);
 });
@@ -2372,6 +2418,7 @@ addEventListener('contextmenu', e => e.preventDefault());
 
 // pointer lock is what makes it feel embodied rather than operated
 renderer.domElement.addEventListener('click', () => {
+  audioStart();                       // the browser wants a gesture; this is it
   if (!overhead && document.pointerLockElement !== renderer.domElement) {
     renderer.domElement.requestPointerLock();
   }
@@ -2695,6 +2742,7 @@ function meltdown() {
   if (ore < MELT_MIN || melting > 0) return;
   const won = Math.max(1, coresFor(runValue));
   cores += won;
+  sfxMelt();
 
   eachTile((c, f, i, j) => {
     const piece = pieceFor(f, i, j, c);
@@ -2745,16 +2793,16 @@ function stepDebris(dt) {
 // behaves. Ore colours are excluded on purpose — they are how a belt is read at
 // a glance, and re-learning them per world would be a tax on travelling.
 const WORLDS = [
-  { id: 'prompt', edge: 0x7fd8ff, sun: 0xfff2d6, name: SPEC.title || 'Crystal Isle', cores: 0,
+  { id: 'prompt', weather: { col: [0.55, 0.62, 0.80], rate: 5, size: 0.028, fall: 0.25, drift: 0.35, life: 0.16 }, edge: 0x7fd8ff, sun: 0xfff2d6, name: SPEC.title || 'Crystal Isle', cores: 0,
     blurb: 'where the prompt dropped you',
     sky: SKY_COL, fog: FOG_COL, ground: 0x3c4470, grid: 0x46527d, star: 0xffffff },
-  { id: 'ember', edge: 0xff9a5c, sun: 0xffd0a0, name: 'Ember Reach', cores: 2,
+  { id: 'ember', weather: { col: [0.95, 0.42, 0.22], rate: 14, size: 0.040, fall: 0.55, drift: 0.55, life: 0.14 }, edge: 0xff9a5c, sun: 0xffd0a0, name: 'Ember Reach', cores: 2,
     blurb: 'a cinder still cooling',
     sky: 0x1a0c0e, fog: 0x2a1210, ground: 0x6b3a34, grid: 0xa2564a, star: 0xffd2b8 },
-  { id: 'frost', edge: 0xcfe8ff, sun: 0xe8f4ff, name: 'Frostline', cores: 5,
+  { id: 'frost', weather: { col: [0.92, 0.96, 1.00], rate: 18, size: 0.034, fall: 0.40, drift: 0.90, life: 0.12 }, edge: 0xcfe8ff, sun: 0xe8f4ff, name: 'Frostline', cores: 5,
     blurb: 'ice over something older',
     sky: 0x0a1420, fog: 0x11202f, ground: 0x7c93ad, grid: 0xa8c4dd, star: 0xdcefff },
-  { id: 'verdant', edge: 0x8fe6a0, sun: 0xdfffe6, name: 'The Verdant Fault', cores: 9,
+  { id: 'verdant', weather: { col: [0.55, 0.95, 0.60], rate: 9, size: 0.046, fall: -0.30, drift: 0.45, life: 0.10 }, edge: 0x8fe6a0, sun: 0xdfffe6, name: 'The Verdant Fault', cores: 9,
     blurb: 'it grew back around the machines',
     sky: 0x08170f, fog: 0x0f2418, ground: 0x3f6b4a, grid: 0x63a072, star: 0xd6ffe0 },
 ];
@@ -2808,6 +2856,7 @@ function renderWorlds() {
 function travelTo(k) {
   const w = WORLDS[k];
   if (!w || k === worldIdx || cores < w.cores) return;
+  playIntro(w.name, w.blurb);          // arriving is the payoff; show the place
   clearFactory();
   ore = 0; ingots = 0; alloys = 0; runValue = 0;
   for (const key in UPGRADES) UPGRADES[key].lvl = 0;
@@ -2879,6 +2928,7 @@ function stepGoals(dt) {
     const g = GOALS[goalIdx];
     UNLOCKED[g.unlock] = 1;
     goalIdx++;
+    sfxUnlock();
     const t = document.getElementById('toast');
     if (t) { t.textContent = g.got; t.classList.add('on'); toastAt = 3.5; }
     renderGoal();
@@ -3054,6 +3104,10 @@ renderTicker();
 buildToolIcons();
 renderGoal();
 if (!restored) applyWorld(worldIdx);   // a restored save has already chosen
+// only a NEW world gets the reveal. A returning player has seen it; showing it
+// again on every load is how an intro becomes a thing people hate.
+if (!restored && !/[?&]nointro=1/.test(location.search))
+  playIntro(WORLDS[worldIdx].name, WORLDS[worldIdx].blurb);
 
 // ── frame ──────────────────────────────────────────────────────────────────
 let last = performance.now();
@@ -3090,7 +3144,7 @@ renderer.setAnimationLoop(() => {
   // kept banking value would read as though nothing had been given up
   let ticked = false;
   while (sinceTick >= TICK) { sinceTick -= TICK; if (!melting) { step(); ticked = true; } }
-  if (ticked) paintBeltLoad();
+  if (ticked) { paintBeltLoad(); audioFollow(); }
   minedWindow += ore - before;
   if (rateWindow >= 1) {
     // AVERAGE OVER LONGER THAN THE SLOWEST MACHINE (2026-09-06). This sampled
@@ -3136,6 +3190,7 @@ renderer.setAnimationLoop(() => {
 
   if (beltsDirty) rebuildBelts();
   if (!melting) stepEmitters(dt);
+  stepWeather(dt);
   stepParticles(dt);
   // the tread scrolls at the speed items actually travel: one tile per tick.
   // A belt whose surface moves at a speed unrelated to its throughput is worse
@@ -3192,7 +3247,24 @@ renderer.setAnimationLoop(() => {
     }
   });
 
-  if (overhead || inspectOn) {
+  if (intro > 0) {
+    // the reveal: three-quarters of a turn, easing in from far out, and a
+    // gentle drop in pitch so the last frame is nearly the player's own view
+    intro = Math.max(0, intro - dt);
+    const t = 1 - intro / introTotal;                    // 0 -> 1
+    const e = t * t * (3 - 2 * t);
+    const yaw = introFrom.yaw + e * Math.PI * 1.5;
+    const pitch = 1.05 - e * 0.55;
+    const dist = HALF * (5.2 - e * 2.6);
+    camera.position.set(Math.sin(yaw) * Math.cos(pitch) * dist,
+                        Math.sin(pitch) * dist,
+                        Math.cos(yaw) * Math.cos(pitch) * dist);
+    camera.lookAt(0, 0, 0);
+    scene.fog = null;
+    ghost.visible = false;
+    heldRig.visible = false;
+    if (intro === 0) endIntro();
+  } else if (overhead || inspectOn) {
     camera.position.set(
       Math.sin(orbYaw) * Math.cos(orbPitch) * orbDist,
       Math.sin(orbPitch) * orbDist,
@@ -3304,6 +3376,132 @@ function setHolo(name) {
   holoMat.color.setHex(name === 'erase' ? 0xff6b7d : ACCENT);
 }
 setHolo(tool);      // here, AFTER HOLO_GEO exists — not up by the tool bar
+
+// ── SOUND ──────────────────────────────────────────────────────────────────
+
+function noiseBuffer(ctx, seconds) {
+  const n = Math.floor(ctx.sampleRate * seconds);
+  const buf = ctx.createBuffer(1, n, ctx.sampleRate);
+  const d = buf.getChannelData(0);
+  let last = 0;
+  for (let k = 0; k < n; k++) {
+    // brown-ish rather than white: a conveyor is a low rumble, not a hiss
+    last = (last + (Math.random() * 2 - 1) * 0.04) / 1.04;
+    d[k] = last * 3.2;
+  }
+  return buf;
+}
+
+function audioStart() {
+  if (AUDIO.ready) return;
+  const AC = window.AudioContext || window.webkitAudioContext;
+  if (!AC) return;
+  const ctx = new AC();
+  const master = ctx.createGain();
+  master.gain.value = AUDIO.muted ? 0 : 0.7;
+  master.connect(ctx.destination);
+
+  // the hum: two detuned lows, lowpassed, barely there
+  const humGain = ctx.createGain(); humGain.gain.value = 0.045;
+  const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 220;
+  for (const f of [54, 54.7]) {
+    const o = ctx.createOscillator(); o.type = 'sawtooth'; o.frequency.value = f;
+    o.connect(lp); o.start();
+  }
+  lp.connect(humGain); humGain.connect(master);
+
+  // the belts: brown noise, level follows the belt count
+  const bGain = ctx.createGain(); bGain.gain.value = 0;
+  const bSrc = ctx.createBufferSource(); bSrc.buffer = noiseBuffer(ctx, 2.5);
+  bSrc.loop = true;
+  const bp = ctx.createBiquadFilter(); bp.type = 'bandpass';
+  bp.frequency.value = 340; bp.Q.value = 0.7;
+  bSrc.connect(bp); bp.connect(bGain); bGain.connect(master); bSrc.start();
+
+  // the furnace: a low rumble that opens while something cooks
+  const fGain = ctx.createGain(); fGain.gain.value = 0;
+  const fSrc = ctx.createBufferSource(); fSrc.buffer = noiseBuffer(ctx, 3.1);
+  fSrc.loop = true;
+  const flp = ctx.createBiquadFilter(); flp.type = 'lowpass'; flp.frequency.value = 120;
+  fSrc.connect(flp); flp.connect(fGain); fGain.connect(master); fSrc.start();
+
+  Object.assign(AUDIO, { ctx, master, hum: humGain, belts: bGain, furnace: fGain,
+                         ready: true });
+}
+
+// a short tone with an envelope; everything transient is built on this
+function tone(freq, dur, type, vol, when) {
+  if (!AUDIO.ready || AUDIO.muted) return;
+  const ctx = AUDIO.ctx, t0 = ctx.currentTime + (when || 0);
+  const o = ctx.createOscillator(), g = ctx.createGain();
+  o.type = type || 'sine'; o.frequency.value = freq;
+  g.gain.setValueAtTime(0, t0);
+  g.gain.linearRampToValueAtTime(vol || 0.2, t0 + 0.008);
+  g.gain.exponentialRampToValueAtTime(0.0008, t0 + dur);
+  o.connect(g); g.connect(AUDIO.master);
+  o.start(t0); o.stop(t0 + dur + 0.02);
+}
+
+const SOLD_PITCH = { 1: 660, 2: 587, 3: 740, 4: 880, 5: 784, 6: 988, 7: 1175 };
+function sfxSold(type) { tone(SOLD_PITCH[type] || 660, 0.16, 'sine', 0.16); }
+function sfxUnlock() { tone(523, 0.22, 'triangle', 0.18); tone(784, 0.36, 'triangle', 0.18, 0.13); }
+function sfxMelt() {
+  if (!AUDIO.ready || AUDIO.muted) return;
+  const ctx = AUDIO.ctx, t0 = ctx.currentTime;
+  const o = ctx.createOscillator(), g = ctx.createGain();
+  o.type = 'sawtooth';
+  o.frequency.setValueAtTime(420, t0);
+  o.frequency.exponentialRampToValueAtTime(48, t0 + 2.2);
+  g.gain.setValueAtTime(0.22, t0);
+  g.gain.exponentialRampToValueAtTime(0.001, t0 + 2.3);
+  o.connect(g); g.connect(AUDIO.master); o.start(t0); o.stop(t0 + 2.4);
+}
+function sfxPlace() { tone(330, 0.07, 'square', 0.06); }
+
+function audioMute(on) {
+  AUDIO.muted = on;
+  if (AUDIO.master) AUDIO.master.gain.value = on ? 0 : 0.7;
+  try { localStorage.setItem('fs-factory-muted', on ? '1' : '0'); } catch (e) {}
+}
+
+// the continuous layers follow the factory, once a tick is plenty
+function audioFollow() {
+  if (!AUDIO.ready) return;
+  let belts = 0, cooking = 0;
+  eachTile(c => { if (c.t === BELT) belts++;
+                  if ((c.t === SMELTER || c.t === FORGE) && c.cook > 0) cooking++; });
+  const t = AUDIO.ctx.currentTime;
+  AUDIO.belts.gain.setTargetAtTime(Math.min(0.11, belts * 0.004), t, 0.4);
+  AUDIO.furnace.gain.setTargetAtTime(Math.min(0.18, cooking * 0.06), t, 0.5);
+}
+
+// ── THE REVEAL ─────────────────────────────────────────────────────────────
+// A slow orbit of the whole worldlet with its name over it, then the camera
+// drops to the player. Runs from a single clock so it cannot desynchronise
+// from the HUD fade; ends early on any input.
+function playIntro(name, blurb) {
+  const card = document.getElementById('title');
+  if (card) {
+    card.querySelector('b').textContent = String(name).toUpperCase();
+    card.querySelector('small').textContent = blurb || '';
+    card.classList.add('on');
+  }
+  intro = introTotal;
+  introFrom = { yaw: orbYaw, pitch: orbPitch, dist: orbDist };
+  if (document.pointerLockElement === renderer.domElement) document.exitPointerLock();
+}
+function endIntro() {
+  // NO EARLY RETURN ON intro. The clock reaches zero one line before this is
+  // called from the frame loop, so a guard on `intro` returned before taking
+  // the card down and the title sat over play forever. Removing a class that
+  // is already gone costs nothing; leaving one up costs the whole first
+  // impression.
+  intro = 0;
+  const card = document.getElementById('title');
+  if (card) card.classList.remove('on');
+}
+addEventListener('keydown', endIntro);
+addEventListener('pointerdown', endIntro);
 
 // ── STUDIO INSPECTOR BRIDGE ────────────────────────────────────────────────
 // Standalone (itch.io, the flagship demo, a shared zip) this is inert: nothing
@@ -3481,6 +3679,9 @@ window.__game = {
     alloys,
     prices: TRADED.map(t => +PRICE[t].toFixed(3)),
     restored,
+    intro: +intro.toFixed(2),
+    audio: { ready: AUDIO.ready, muted: AUDIO.muted,
+             state: AUDIO.ctx ? AUDIO.ctx.state : null },
     world: WORLDS[worldIdx].id,
     world_name: WORLDS[worldIdx].name,
     worlds_open: WORLDS.filter(w => cores >= w.cores).length,
@@ -3488,6 +3689,8 @@ window.__game = {
     goal_index: goalIdx,
     unlocked: Object.keys(UNLOCKED),
     faces_visited: visitedFaces.size,
+    weather: (WORLDS[worldIdx].weather || null) && {
+      rate: WORLDS[worldIdx].weather.rate, fall: WORLDS[worldIdx].weather.fall },
     seams: (() => { let n = 0, sum = 0, worked = 0;
       eachTile(c => { if (c.mesh) { n++; sum += c.rich; if (c.rich < 0.9) worked++; } });
       return { count: n, mean_rich: n ? +(sum / n).toFixed(3) : 1, worked }; })(),
@@ -3523,6 +3726,8 @@ window.__factory = {
   beltShape, scatterVent, scatterBolt, scatterSpots, renderThumb, GEO, MAT,
   SEAM_COST, SEAM_REGROW, SEAM_FLOOR,
   step,                 // one simulation tick, for a harness that cannot wait
+  playIntro, endIntro,
+  audioStart, audioMute, sfxSold, sfxUnlock, sfxMelt, AUDIO,
   beltIndexOf: (f, i, j) => {
     const k = beltShape(f, i, j, cells[f][i][j]);
     return beltIndex[k].findIndex(t => t.face === f && t.i === i && t.j === j);

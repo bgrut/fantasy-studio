@@ -156,6 +156,20 @@
          font-weight:650;box-shadow:0 6px 24px rgba(0,0,0,.5);
          opacity:0;transition:opacity .25s;pointer-events:none}
   #toast.on{opacity:1}
+  /* the name of the place, over the reveal. Large, centred, and gone the
+     moment the player does anything — a title that lingers over play is a
+     watermark. */
+  #title{position:fixed;left:0;right:0;top:34%;z-index:7;text-align:center;
+         pointer-events:none;opacity:0;transition:opacity .6s}
+  #title.on{opacity:1}
+  #title b{display:block;font-size:44px;letter-spacing:.22em;color:#eef4ff;
+           font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+           font-weight:800;text-shadow:0 0 28px rgba(92,224,208,.55),0 4px 18px rgba(0,0,0,.8)}
+  #title small{display:block;margin-top:10px;font-size:14px;letter-spacing:.12em;
+           color:#9fd6ff;font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+           text-shadow:0 2px 10px rgba(0,0,0,.8)}
+  /* the HUD steps back while the card is up; it is not the subject yet */
+  body:has(#title.on) #hud,body:has(#title.on) #tools,body:has(#title.on) #hint{opacity:.12}
   /* THE PANEL KEEPS GROWING (2026-09-08). Counters, then a ticker, then a goal,
      then a world list — it now runs off the bottom of the screen and collides
      with the tool bar. Capped and scrollable, so the next feature to land in
@@ -208,6 +222,7 @@
   <div class="tool" data-tool="erase"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg><i class="key">9</i><b>ERASE</b><small>&nbsp;</small></div>
 </div>
 <div id="toast"></div>
+<div id="title"><b></b><small></small></div>
 <div id="cross"></div>
 <div id="hint">WASD walk · Shift run · Space jump · click to look<br>hold LMB and sweep to draw belts · TAB overhead<br>point at a filter and press F to change what passes<br>walk over an edge — each side of the world grows a different ore<br>your factory saves itself</div>
 <script type="importmap">{"imports":{"three":"./vendor/three.module.js"}}</script>

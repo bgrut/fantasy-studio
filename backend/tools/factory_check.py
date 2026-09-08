@@ -31,6 +31,7 @@ GATES = [
     ("fworld.mjs", "worlds unlock with cores, change the scene, and survive a reload"),
     ("fground.mjs", "the factory is grounded: shadows land on a lit face and an unlit one"),
     ("fdeplete.mjs", "seams thin under a rig, grow back without one, trickle at zero, and reload"),
+    ("fbeat.mjs", "the reveal hands over and skips; every world has weather; sound wakes and mutes"),
 ]
 
 

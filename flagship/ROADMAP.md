@@ -39,6 +39,9 @@ says so.
 | **UI pass** | tool icons that ARE the machines, rendered at boot |
 | **presence pass** | a tool in your hands, jams that read, seams that flex, one HUD |
 | **depletion** | seams thin under a rig and grow back, so placement is a decision |
+| **the reveal** | the worldlet shown before control is handed over; again on arrival |
+| **weather** | ash on Ember, snow on Frostline, spores on Verdant, dust at home |
+| **sound** | six synthesised layers, no assets; wakes on the first click, M mutes |
 | **unlockable worlds** | four places to put the factory, bought with cores |
 
 Measured on a prompt-built export: 40x40x6 grid, 40 nodes, 180 value/min,
@@ -276,6 +279,16 @@ when rendering to the canvas**. Render into a target and you get raw linear
 values, and compositing those straight to the screen produces a nearly black
 world that looks exactly like a lighting bug and is not one. The art gate now
 reads a floor pixel and asserts it is lit.
+
+Twelve gates, run against each — the three newest cover depletion, the
+reveal/weather/sound beat, and grounding.
+
+The bug this file keeps producing, so it is written down: a `const` or `let`
+declared after a hoisted function that touches it AT BOOT. `scatterSpots`,
+`AUDIO`, and the intro clock all threw a temporal-dead-zone error the first
+time — each because something that runs during the starter-line seed or the
+first render reached forward. Everything a boot-time path touches now lives in
+one block near the top, next to the scene handles.
 
 Nine gates, run against each: the core loop and cube walk, the rift, the studio
 inspect bridge, save/load, collision and merge losslessness, the goal chain, the
