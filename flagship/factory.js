@@ -2888,6 +2888,16 @@ function meltdown() {
     c.item = 0; c.buf = 0; c.bt = 0; c.fa = 0; c.fb = 0; c.cook = 0; c.rr = 0;
   });
 
+  // THE SHOT LOOKS AT THE FACTORY, not at the middle of the world. The orbit
+  // rig only ever looks at the origin, and a line built near a face edge was
+  // out of frame for its own meltdown. Every piece has been thrown by this
+  // line, so their centroid is exactly where the camera should look.
+  if (introFrom && introFrom.reverse && debris.length) {
+    introFrom.at = new THREE.Vector3();
+    for (const d of debris) introFrom.at.add(d.o.position);
+    introFrom.at.multiplyScalar(1 / debris.length);
+    introFrom.face = player.face;
+  }
   ore = 0; ingots = 0; runValue = 0;
   beltsDirty = true;
   for (const k in UPGRADES) UPGRADES[k].lvl = 0;
@@ -3414,25 +3424,28 @@ renderer.setAnimationLoop(() => {
     // until the whole world is in view as the debris lands. The first version
     // ran the arrival path backwards, which began at a wide of the cube with
     // the debris three pixels tall at the top edge.
-    let yaw, pitch, dist;
-    if (introFrom.reverse) {
-      const n = FACES[player.face].n;
-      // the orbit rig only looks at the origin, so aim at the FACE by choosing
-      // yaw and pitch from its normal, then rise and pull away along it
-      const fy = Math.atan2(n[0], n[2]);
-      const fp = Math.asin(Math.max(-0.99, Math.min(0.99, n[1])));
-      yaw = fy + (e - 0.5) * 0.5;
-      pitch = fp * (1 - e * 0.32);
-      dist = HALF * (1.9 + e * 2.6);
+    if (introFrom.reverse && introFrom.at) {
+      // start a few tiles above where the machines were, offset along the
+      // face so it is not straight down, and rise away along the normal as
+      // they scatter. The look target drifts toward the world's centre, so
+      // the last frame is the whole worldlet with the debris landing on it.
+      const f = FACES[introFrom.face], n = f.n, u = f.u;
+      const at = introFrom.at;
+      const h = HALF * (0.55 + e * 3.4);
+      const side = HALF * (0.35 + e * 0.9);
+      camera.position.set(at.x + n[0] * h + u[0] * side,
+                          at.y + n[1] * h + u[1] * side,
+                          at.z + n[2] * h + u[2] * side);
+      camera.lookAt(at.x * (1 - e * 0.6), at.y * (1 - e * 0.6), at.z * (1 - e * 0.6));
     } else {
-      yaw = introFrom.yaw + e * Math.PI * 1.5;
-      pitch = 1.05 - e * 0.55;
-      dist = HALF * (5.2 - e * 2.6);
+      const yaw = introFrom.yaw + e * Math.PI * 1.5;
+      const pitch = 1.05 - e * 0.55;
+      const dist = HALF * (5.2 - e * 2.6);
+      camera.position.set(Math.sin(yaw) * Math.cos(pitch) * dist,
+                          Math.sin(pitch) * dist,
+                          Math.cos(yaw) * Math.cos(pitch) * dist);
+      camera.lookAt(0, 0, 0);
     }
-    camera.position.set(Math.sin(yaw) * Math.cos(pitch) * dist,
-                        Math.sin(pitch) * dist,
-                        Math.cos(yaw) * Math.cos(pitch) * dist);
-    camera.lookAt(0, 0, 0);
     scene.fog = null;
     ghost.visible = false;
     heldRig.visible = false;
