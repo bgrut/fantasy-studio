@@ -24,6 +24,7 @@ GATES = [
     ("frift.mjs", "chronos rift: lends, is repaid, storms when it is not"),
     ("finspect.mjs", "the studio's picking bridge, driven through a real iframe"),
     ("fsave.mjs", "a factory survives a real reload"),
+    ("fphys.mjs", "you cannot walk through machines; a merge does not eat items"),
 ]
 
 

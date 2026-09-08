@@ -50,10 +50,18 @@ console.log('walked    :', Math.hypot(c[0]-a[0], c[2]-a[2]).toFixed(2)+'m');
 
 // THE MECHANIC: walk far enough to go over an edge and check that the world
 // rotated under you rather than that you fell off it.
+// MACHINES ARE SOLID NOW (2026-09-08). The spawn stands you four tiles behind
+// the starter line looking AT it, which is right for a first frame and wrong
+// for a walk test: the edge walk ended against your own smelter two tiles in
+// and reported that the world had no edges. Turn around first.
+await p.evaluate(()=>{ window.__factory.player.fwd.negate(); });
 const startFace = t1.player_face;
 let crossed = null, offCube = 0;
 await p.keyboard.down('KeyW');
-for (let k = 0; k < 24; k++) {
+// far enough to cross from anywhere on the face. Turning away from the line
+// means the near edge is now behind the factory and the far one is up to 65m
+// off; 24 samples covered 45m and reported that the world had no edges.
+for (let k = 0; k < 46; k++) {
   await new Promise(r=>setTimeout(r,300));
   const f = await p.evaluate(()=>window.__game.facts());
   const H = await p.evaluate(()=>window.__factory.HALF);

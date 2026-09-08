@@ -244,7 +244,7 @@ for (let f = 0; f < 6; f++) {
     for (let j = 0; j < N; j++)
       cells[f][i][j] = { t: EMPTY, d: 0, item: 0, buf: 0, bt: 0,
                          fa: 0, fb: 0, cook: 0, rr: 0, min: 0,
-                         filt: CRYSTAL,
+                         filt: CRYSTAL, mrr: 0,
                          dbt: 0, dmin: 0, emit: 0, left: 0, cool: 0 };
   }
 }
@@ -720,10 +720,40 @@ function step() {
     // also a visible one — the belt backs up and you can see the mistake.
     else if (accepts(dst, c.item)) moves.push([c, 'to', to]);
   });
+  // ── TWO BELTS INTO ONE (2026-09-08) ───────────────────────────────────
+  // Acceptance was decided while COLLECTING, against the state at the start of
+  // the tick, and the commit trusted it. Two belts feeding the same tile both
+  // passed, and the second deliver overwrote the first: a merge silently
+  // DESTROYED one item every tick. In a game about throughput that is the
+  // worst shape a bug can take — the line looks correct and the number is just
+  // quietly lower than it should be, which reads as the game being balanced
+  // that way.
+  //
+  // Re-checking at commit stops the loss. Rotating who goes first stops the
+  // unfairness that would replace it: otherwise the winner is whoever eachTile
+  // reached first, which is fixed by grid order, so one input starves forever.
+  const byDst = new Map();
   for (const mv of moves) {
+    if (mv[1] === 'bank') continue;
+    const d = cellOf(mv[2]);
+    const g = byDst.get(d);
+    if (g) g.push(mv); else byDst.set(d, [mv]);
+  }
+  for (const [d, g] of byDst) {
+    if (g.length < 2) continue;
+    const k = (d.mrr | 0) % g.length;
+    g.push(...g.splice(0, k));            // rotate: a different input leads
+    d.mrr = (k + 1) % g.length;
+  }
+  const order = moves.filter(mv => mv[1] === 'bank');
+  for (const g of byDst.values()) order.push(...g);
+  for (const mv of order) {
     const c = mv[0];
-    if (mv[1] === 'bank') bank(c.item);
-    else deliver(cellOf(mv[2]), 0, 0, c.item);
+    if (!c.item) continue;
+    if (mv[1] === 'bank') { bank(c.item); c.item = 0; continue; }
+    const dst = cellOf(mv[2]);
+    if (!accepts(dst, c.item)) continue;   // another input reached it first
+    deliver(dst, 0, 0, c.item);
     c.item = 0;
   }
   // a rift pays out the ore it lent one tile at a time, like a miner, so the
@@ -1005,6 +1035,28 @@ addEventListener('resize', () => {
   renderer.setSize(innerWidth, innerHeight);
 });
 
+// Belts and filters are ankle-high and you walk over them; everything else on
+// the grid is something you walk around. An ore seam counts — it is a metre of
+// crystal standing out of the ground, and phasing through one looked worse
+// than phasing through a machine.
+const SOLID_T = { 1: 1, 3: 1, 4: 1, 5: 1, 6: 1, 7: 1, 9: 1 };
+const PLAYER_R = 0.4;
+
+/** Is the player's circle, at face-local (a,b), overlapping a solid tile? */
+function solidAt(face, a, b) {
+  const lo = PLAYER_R + T / 2;
+  const ci = Math.floor(a / T + N / 2), cj = Math.floor(b / T + N / 2);
+  for (let i = ci - 1; i <= ci + 1; i++) {
+    for (let j = cj - 1; j <= cj + 1; j++) {
+      if (i < 0 || j < 0 || i >= N || j >= N) continue;   // an edge is not a wall
+      if (!SOLID_T[cells[face][i][j].t]) continue;
+      const cx = (i + 0.5 - N / 2) * T, cz = (j + 0.5 - N / 2) * T;
+      if (Math.abs(a - cx) < lo && Math.abs(b - cz) < lo) return true;
+    }
+  }
+  return false;
+}
+
 const _rt = new THREE.Vector3(), _wish = new THREE.Vector3();
 const _n3 = new THREE.Vector3(), _oldN = new THREE.Vector3();
 const _qr = new THREE.Quaternion();
@@ -1038,7 +1090,33 @@ function movePlayer(dt) {
   player.h += player.vy * dt;
   if (player.h <= 0) { player.h = 0; player.vy = 0; player.onGround = true; }
 
-  player.pos.addScaledVector(_wish, speed * dt);
+  // ── WALKING INTO THINGS (2026-09-08) ──────────────────────────────────
+  // You could walk through your own factory, which reads as the machines not
+  // being there. Resolved in FACE-LOCAL coordinates rather than world ones:
+  // on the underside of the cube "x" and "z" mean nothing, but the face's own
+  // u and v axes always mean along-the-tiles.
+  //
+  // Each axis is tried on its own so a shoulder against a smelter slides along
+  // it instead of stopping dead — a factory is a corridor maze and stopping
+  // dead in one is miserable.
+  const fc = FACES[player.face];
+  let pa = player.pos.x * fc.u[0] + player.pos.y * fc.u[1] + player.pos.z * fc.u[2];
+  let pb = player.pos.x * fc.v[0] + player.pos.y * fc.v[1] + player.pos.z * fc.v[2];
+  const da = (_wish.x * fc.u[0] + _wish.y * fc.u[1] + _wish.z * fc.u[2]) * speed * dt;
+  const db = (_wish.x * fc.v[0] + _wish.y * fc.v[1] + _wish.z * fc.v[2]) * speed * dt;
+  // If you are ALREADY inside something — a machine placed on top of you, a
+  // save restored under a smelter — collision is skipped entirely this frame.
+  // A player who cannot move is a bug report; a player who can walk out of a
+  // wall is a shrug.
+  const stuck = solidAt(player.face, pa, pb);
+  if (!stuck) {
+    if (!solidAt(player.face, pa + da, pb)) pa += da;
+    if (!solidAt(player.face, pa, pb + db)) pb += db;
+  } else { pa += da; pb += db; }
+  const ph = HALF + EYE + player.h;
+  player.pos.set(fc.n[0] * ph + fc.u[0] * pa + fc.v[0] * pb,
+                 fc.n[1] * ph + fc.u[1] * pa + fc.v[1] * pb,
+                 fc.n[2] * ph + fc.u[2] * pa + fc.v[2] * pb);
 
   // WALKING OFF AN EDGE. Two passes, because a corner crosses two edges in a
   // single frame at a run. The heading is carried across by the rotation that
