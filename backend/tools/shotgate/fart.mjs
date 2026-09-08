@@ -1,0 +1,69 @@
+// The art pass, checked the way art has to be checked: is the thing on screen,
+// is it moving, and did it cost what it was supposed to cost.
+import puppeteer from 'puppeteer-core';
+const b = await puppeteer.launch({ headless:'new',
+  executablePath:'C:/Program Files/Google/Chrome/Application/chrome.exe',
+  args:['--use-angle=d3d11','--enable-unsafe-swiftshader','--window-size=1280,760'] });
+const p = await b.newPage();
+await p.setViewport({ width:1280, height:760 });
+const errs = [];
+p.on('pageerror', e => errs.push(e.message.slice(0,200)));
+const URL = process.env.URL ||
+  ('http://127.0.0.1:8789/games/job_' + process.env.J + '/dist/');
+await p.goto(URL + '?fresh=1', { waitUntil:'domcontentloaded', timeout:90000 });
+await new Promise(r=>setTimeout(r,6000));
+
+// 1. every tool in the bar carries an icon, and a locked one is dimmed
+const icons = await p.evaluate(()=>{
+  const t = [...document.querySelectorAll('.tool')];
+  return { tools: t.length, withIcon: t.filter(o => o.querySelector('svg')).length,
+           locked: t.filter(o => o.classList.contains('locked')).length };
+});
+console.log('tool bar  :', icons.withIcon, 'of', icons.tools, 'tools have an icon |',
+            icons.locked, 'locked');
+
+// 2. belts are instanced: many belts, few draw calls
+const inst = await p.evaluate(async ()=>{
+  const F = window.__factory, TY = F.TYPES;
+  let n = 0;
+  for (let j = 4; j < Math.min(F.N - 4, 24); j += 2)
+    for (let i = 4; i < Math.min(F.N - 4, 24); i++)
+      if (F.cells[0][i][j].t === TY.EMPTY && F.place(0, i, j, TY.BELT, 0)) n++;
+  await new Promise(r => setTimeout(r, 900));
+  return { belts: n, calls: window.__game.stats().calls };
+});
+console.log('instanced :', inst.belts, 'belts ->', inst.calls, 'draw calls total');
+
+// 3. THE TREAD MOVES. A conveyor whose surface is static is a green plank, and
+//    nothing in the scene graph would show that — only the pixels do.
+const moving = await p.evaluate(async ()=>{
+  const F = window.__factory;
+  const a = F.TREAD ? F.TREAD.offset.x : null;
+  await new Promise(r => setTimeout(r, 400));
+  const c = F.TREAD ? F.TREAD.offset.x : null;
+  return { from: a, to: c, moved: a !== null && Math.abs(c - a) > 0.05 };
+});
+console.log('tread     :', moving.moved ? 'scrolls' : 'STATIC',
+            '(offset', (moving.from||0).toFixed(2), '->', (moving.to||0).toFixed(2) + ')');
+
+// 4. the starfield is actually drawn, i.e. inside the far plane
+const sky = await p.evaluate(()=>{
+  let pts = null;
+  window.__scene.traverse(o => { if (o.isPoints) pts = o; });
+  if (!pts) return { found: false };
+  pts.geometry.computeBoundingSphere();
+  return { found: true, stars: pts.geometry.attributes.position.count,
+           radius: Math.round(pts.geometry.boundingSphere.radius),
+           far: window.__camera.far };
+});
+console.log('starfield :', sky.found ? sky.stars + ' stars at r=' + sky.radius +
+            ', camera far ' + sky.far : 'MISSING');
+console.log('errors    :', errs.length ? errs.join(' | ') : 'none');
+await p.screenshot({ path: process.env.OUT || 'art.png' });
+await b.close();
+const ok = icons.withIcon === icons.tools && icons.tools >= 9
+  && inst.belts > 100 && inst.calls < 120
+  && moving.moved
+  && sky.found && sky.radius < sky.far && sky.stars > 500
+  && errs.length === 0;
+process.exit(ok ? 0 : 1);

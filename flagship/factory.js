@@ -295,10 +295,73 @@ const fill = new THREE.DirectionalLight(0xb9d2ff, 0.85);
 fill.position.set(-34, -40, -26);
 scene.add(fill);
 
+// ── the sky ────────────────────────────────────────────────────────────────
+// A floating worldlet against flat black reads as a bug. Stars cost one draw
+// call and give the cube something to be floating IN — and when you walk over
+// an edge and the world rotates, they are what makes the rotation legible.
+{
+  const n = 1600, pos = new Float32Array(n * 3), col = new Float32Array(n * 3);
+  const c = new THREE.Color();
+  let seed = 90210;
+  const rr = () => (seed = (seed * 1664525 + 1013904223) % 4294967296) / 4294967296;
+  for (let k = 0; k < n; k++) {
+    // even over the sphere: acos keeps them off the poles, which a naive
+    // lat/long scatter clumps at
+    // INSIDE THE FAR PLANE (2026-09-08). The first pass put the field at 900
+    // with the camera's far at 500, so every star was clipped and the sky
+    // stayed exactly as black as it had been.
+    const u = rr() * 2 - 1, th = rr() * Math.PI * 2, r = 400;
+    const sp = Math.sqrt(1 - u * u);
+    pos[k * 3] = Math.cos(th) * sp * r;
+    pos[k * 3 + 1] = u * r;
+    pos[k * 3 + 2] = Math.sin(th) * sp * r;
+    // a few warm and a few blue ones; an all-white field looks printed
+    c.setHSL(rr() < 0.75 ? 0.58 + rr() * 0.06 : 0.08 + rr() * 0.05,
+             0.35 + rr() * 0.4, 0.55 + rr() * 0.4);
+    col[k * 3] = c.r; col[k * 3 + 1] = c.g; col[k * 3 + 2] = c.b;
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  const stars = new THREE.Points(g, new THREE.PointsMaterial({
+    size: 2.1, sizeAttenuation: false, vertexColors: true,
+    transparent: true, opacity: 0.95, depthWrite: false, fog: false }));
+  stars.frustumCulled = false;
+  scene.add(stars);
+}
+
 // ── the worldlet: a cube you can walk all the way around ───────────────────
+// PLATING, drawn at boot like the tread. A flat colour over 6400 square metres
+// reads as a placeholder no matter what colour it is; panel seams and a little
+// grain give the light something to catch as you walk.
+function plateTexture() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 128;
+  const g = c.getContext('2d');
+  // LOW CONTRAST ON PURPOSE (2026-09-08). The first pass drew hard dark seams
+  // twenty times per face, which on top of the tile grid read as a wireframe
+  // mesh rather than as a surface. Plating should be something you notice
+  // underfoot, not a second grid competing with the one that means something.
+  g.fillStyle = '#8792c4'; g.fillRect(0, 0, 128, 128);
+  g.strokeStyle = '#7a85b8'; g.lineWidth = 2;
+  g.strokeRect(1, 1, 126, 126);
+  const d = g.getImageData(0, 0, 128, 128);
+  for (let k = 0; k < d.data.length; k += 4) {
+    const v = (Math.random() - 0.5) * 22;
+    d.data[k] += v; d.data[k + 1] += v; d.data[k + 2] += v;
+  }
+  g.putImageData(d, 0, 0);
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.repeat.set(N / 5, N / 5);      // panels bigger than tiles, so they read as panels
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 4;
+  return t;
+}
 const cube = new THREE.Mesh(
   new THREE.BoxGeometry(N * T, N * T, N * T),
-  new THREE.MeshStandardMaterial({ color: 0x2b3252, roughness: 0.96 }));
+  new THREE.MeshStandardMaterial({ color: 0x3c4470, roughness: 0.94,
+    metalness: 0.12, map: plateTexture() }));
 cube.receiveShadow = true;
 scene.add(cube);
 {
@@ -323,7 +386,9 @@ scene.add(cube);
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
   scene.add(new THREE.LineSegments(g, new THREE.LineBasicMaterial(
-    { color: 0x46527d, transparent: true, opacity: 0.22 })));
+    // fainter than it was: forty lines a face is a placement aid up close and
+    // a moire pattern from orbit
+    { color: 0x46527d, transparent: true, opacity: 0.14 })));
 }
 
 // SEATING. Everything that stands on the cube shares one rule: local +Y
@@ -332,15 +397,56 @@ scene.add(cube);
 // on the underside of the world.
 const _mx = new THREE.Matrix4();
 const _bx = new THREE.Vector3(), _by = new THREE.Vector3(), _bz = new THREE.Vector3();
-function seat(obj, face, i, j, dir, up) {
+
+// ONE MACHINE, ONE GEOMETRY. A smelter drawn as a body plus a chimney plus a
+// rim is three draw calls every frame forever; merged at boot it is one. The
+// parts are still authored separately because that is the only sane way to
+// describe a shape, they just do not survive as separate objects.
+const _pm = new THREE.Matrix4();
+const _pq = new THREE.Quaternion();
+const _pe = new THREE.Euler();
+const _pv = new THREE.Vector3();
+const _ps = new THREE.Vector3(1, 1, 1);
+function mergeParts(parts) {
+  const pos = [], nor = [], uvs = [];
+  for (const p of parts) {
+    const g = p.g.clone().toNonIndexed();
+    _pe.set(p.rx || 0, p.ry || 0, p.rz || 0);
+    _pq.setFromEuler(_pe);
+    _pv.set(p.x || 0, p.y || 0, p.z || 0);
+    _pm.compose(_pv, _pq, _ps);
+    g.applyMatrix4(_pm);
+    const a = g.attributes;
+    for (let k = 0; k < a.position.array.length; k++) pos.push(a.position.array[k]);
+    for (let k = 0; k < a.normal.array.length; k++) nor.push(a.normal.array[k]);
+    if (a.uv) for (let k = 0; k < a.uv.array.length; k++) uvs.push(a.uv.array[k]);
+    g.dispose();
+  }
+  const out = new THREE.BufferGeometry();
+  out.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  out.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+  if (uvs.length === (pos.length / 3) * 2)
+    out.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  out.computeBoundingSphere();
+  return out;
+}
+
+/** The seating transform as a matrix, for machines drawn as instances. */
+function seatMatrix(face, i, j, dir, up, out) {
   const f = FACES[face], w = tileWorld(face, i, j), dv = dirVec(face, dir || 0);
   _bx.set(dv[0], dv[1], dv[2]);
   _by.set(f.n[0], f.n[1], f.n[2]);
   _bz.crossVectors(_bx, _by);
-  _mx.makeBasis(_bx, _by, _bz);
-  obj.quaternion.setFromRotationMatrix(_mx);
+  out.makeBasis(_bx, _by, _bz);
   const h = up || 0;
-  obj.position.set(w[0] + f.n[0] * h, w[1] + f.n[1] * h, w[2] + f.n[2] * h);
+  out.setPosition(w[0] + f.n[0] * h, w[1] + f.n[1] * h, w[2] + f.n[2] * h);
+  return out;
+}
+
+function seat(obj, face, i, j, dir, up) {
+  seatMatrix(face, i, j, dir, up, _mx);
+  obj.position.setFromMatrixPosition(_mx);
+  obj.quaternion.setFromRotationMatrix(_mx);
 }
 
 // ── crystal nodes: the only tiles a miner can stand on ─────────────────────
@@ -376,10 +482,41 @@ for (let k = 0; k < NODE_COUNT; k++) {
   c.mesh = m;
 }
 
+// ── the tread, drawn rather than loaded ────────────────────────────────────
+// A conveyor that does not visibly move is a green plank. Slats and chevrons
+// on a 64px canvas, scrolled by the tick clock: one shared material animates
+// every belt on the worldlet, and the direction reads without an arrow
+// hovering over each tile.
+function treadTexture() {
+  const c = document.createElement('canvas');
+  c.width = 64; c.height = 64;
+  const g = c.getContext('2d');
+  g.fillStyle = '#16362e'; g.fillRect(0, 0, 64, 64);
+  g.fillStyle = '#1f4f43';
+  for (let x = 0; x < 64; x += 16) g.fillRect(x, 0, 10, 64);   // slats across
+  g.strokeStyle = '#57e0b0'; g.lineWidth = 4; g.lineCap = 'round';
+  g.lineJoin = 'round';
+  for (let x = 4; x < 64; x += 16) {                            // chevrons -> +u
+    g.beginPath();
+    g.moveTo(x, 18); g.lineTo(x + 8, 32); g.lineTo(x, 46);
+    g.stroke();
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 4;
+  return t;
+}
+const TREAD = treadTexture();
+
 // ── build meshes ───────────────────────────────────────────────────────────
 const MAT = {
   miner: new THREE.MeshStandardMaterial({ color: 0xff5d73, roughness: 0.4, metalness: 0.35 }),
   belt: new THREE.MeshStandardMaterial({ color: 0x3ad39a, roughness: 0.6, metalness: 0.2 }),
+  beltFrame: new THREE.MeshStandardMaterial({ color: 0x2b7f68, roughness: 0.45,
+    metalness: 0.6, flatShading: true }),
+  beltDeck: new THREE.MeshStandardMaterial({ map: TREAD, roughness: 0.85,
+    metalness: 0.05 }),
   hub: new THREE.MeshStandardMaterial({ color: 0xffc75a, roughness: 0.35, metalness: 0.45,
     emissive: 0x6b4a00, emissiveIntensity: 0.6 }),
   forge: new THREE.MeshStandardMaterial({ color: 0xd94fb0, roughness: 0.34,
@@ -393,20 +530,71 @@ const MAT = {
   split: new THREE.MeshStandardMaterial({ color: 0x4bb5ff, roughness: 0.45, metalness: 0.35,
     emissive: 0x0d3f66, emissiveIntensity: 0.45 }),
 };
+// Each machine is authored as parts and merged into one geometry. Local +X is
+// the heading and local +Y is up off the face, which is what seat() promises.
+const _box = (w, h, d) => new THREE.BoxGeometry(w, h, d);
+const _cyl = (rt, rb, h, n) => new THREE.CylinderGeometry(rt, rb, h, n);
+
 const GEO = {
-  miner: new THREE.BoxGeometry(T * 0.74, 1.5, T * 0.74),
-  belt: new THREE.BoxGeometry(T * 0.9, 0.22, T * 0.9),
+  // A CONVEYOR, not a plank: side rails, an end roller at each end, a base
+  // plate, and a separate deck that carries the moving tread.
+  beltFrame: mergeParts([
+    { g: _box(T * 0.96, 0.05, T * 0.82), y: 0.03 },
+    { g: _box(T * 0.96, 0.14, 0.09), y: 0.15, z: T * 0.37 },
+    { g: _box(T * 0.96, 0.14, 0.09), y: 0.15, z: -T * 0.37 },
+    { g: _cyl(0.105, 0.105, T * 0.70, 8), y: 0.13, x: T * 0.41, rx: Math.PI / 2 },
+    { g: _cyl(0.105, 0.105, T * 0.70, 8), y: 0.13, x: -T * 0.41, rx: Math.PI / 2 },
+  ]),
+  beltDeck: _box(T * 0.86, 0.06, T * 0.60),
+
+  // a rig with legs and a bit that turns, so a miner reads as MINING
+  miner: mergeParts([
+    { g: _box(T * 0.78, 0.30, T * 0.78), y: 0.15 },
+    { g: _box(0.13, 0.95, 0.13), y: 0.62, x: T * 0.28, z: T * 0.28 },
+    { g: _box(0.13, 0.95, 0.13), y: 0.62, x: -T * 0.28, z: T * 0.28 },
+    { g: _box(0.13, 0.95, 0.13), y: 0.62, x: T * 0.28, z: -T * 0.28 },
+    { g: _box(0.13, 0.95, 0.13), y: 0.62, x: -T * 0.28, z: -T * 0.28 },
+    { g: _box(T * 0.70, 0.14, T * 0.70), y: 1.14 },
+    { g: _cyl(0.10, 0.10, 0.80, 6), y: 0.72 },
+  ]),
+  minerBit: _cyl(0.02, 0.28, 0.5, 6),
+
   arrow: new THREE.ConeGeometry(0.2, 0.5, 4),
-  hub: new THREE.CylinderGeometry(T * 0.5, T * 0.58, 1.1, 8),
-  smelt: new THREE.BoxGeometry(T * 0.82, 1.25, T * 0.82),
-  split: new THREE.CylinderGeometry(T * 0.42, T * 0.42, 0.34, 4),
-  splitArm: new THREE.BoxGeometry(T * 0.86, 0.16, 0.22),
+
+  // a landing pad with a mast, so the place everything is going to looks like
+  // a destination instead of another box
+  hub: mergeParts([
+    { g: _cyl(T * 0.56, T * 0.62, 0.30, 12), y: 0.15 },
+    { g: new THREE.TorusGeometry(T * 0.46, 0.06, 6, 18), y: 0.36, rx: Math.PI / 2 },
+    { g: _cyl(0.09, 0.09, 0.85, 6), y: 0.74 },
+  ]),
+
+  // a furnace: body, rim, and a flue offset to one corner
+  smelt: mergeParts([
+    { g: _box(T * 0.80, 1.00, T * 0.80), y: 0.52 },
+    { g: _box(T * 0.90, 0.11, T * 0.90), y: 1.06 },
+    { g: _cyl(0.13, 0.17, 0.60, 6), y: 1.40, x: T * 0.22, z: -T * 0.22 },
+  ]),
+
+  split: mergeParts([
+    { g: _cyl(T * 0.42, T * 0.42, 0.30, 4), y: 0.15, ry: Math.PI / 4 },
+    { g: _box(T * 0.88, 0.15, 0.20), y: 0.36 },
+    { g: _box(T * 0.88, 0.15, 0.20), y: 0.36, ry: Math.PI / 2 },
+  ]),
+
   // taller and eight-sided, so a forge is not mistaken for a smelter
   // from across the worldlet
-  forge: new THREE.CylinderGeometry(T * 0.44, T * 0.5, 1.4, 8),
+  forge: mergeParts([
+    { g: _cyl(T * 0.44, T * 0.50, 1.30, 8), y: 0.65 },
+    { g: new THREE.TorusGeometry(T * 0.40, 0.08, 6, 16), y: 1.28, rx: Math.PI / 2 },
+  ]),
   rift: new THREE.TorusGeometry(T * 0.38, 0.16, 6, 12),
+  riftBase: _cyl(T * 0.46, T * 0.5, 0.18, 8),
   riftCore: new THREE.OctahedronGeometry(0.34, 0),
-  filter: new THREE.BoxGeometry(T * 0.9, 0.3, T * 0.9),
+  filter: mergeParts([
+    { g: _box(T * 0.92, 0.24, T * 0.92), y: 0.12 },
+    { g: _box(T * 0.16, 0.34, T * 0.66), y: 0.34, x: T * 0.34 },
+  ]),
   filterGate: new THREE.BoxGeometry(T * 0.16, 0.5, T * 0.62),
 };
 
@@ -424,6 +612,7 @@ function refreshCounts() {
 
 function removeAt(face, i, j) {
   const c = cells[face][i][j];
+  if (c.t === BELT) beltsDirty = true;
   if (c.build) { scene.remove(c.build); c.build = null; }
   c.t = c.mesh ? NODE : EMPTY;               // a node outlives its miner
   c.item = 0;
@@ -444,29 +633,24 @@ function place(face, i, j, type, dir) {
   const g = new THREE.Group();
   if (type === MINER) {
     const b = new THREE.Mesh(GEO.miner, MAT.miner);
-    b.position.y = 0.75; b.castShadow = true; g.add(b);
+    b.castShadow = true; g.add(b);
+    // the bit turns while the rig is on a seam: the only moving part on a
+    // machine that otherwise just sits there
+    const bit = new THREE.Mesh(GEO.minerBit, MAT.miner);
+    bit.position.y = 0.42; bit.name = 'bit'; g.add(bit);
   } else if (type === BELT) {
-    const b = new THREE.Mesh(GEO.belt, MAT.belt);
-    b.position.y = 0.11; b.castShadow = true; b.receiveShadow = true; g.add(b);
-    const a = new THREE.Mesh(GEO.arrow, MAT.belt);
-    a.position.set(0.55, 0.3, 0);
-    a.rotation.z = -Math.PI / 2;
-    g.add(a);
-    // the heading is baked into the seating basis now, not into a Y rotation:
-    // on the east face there is no such thing as "rotate about world up"
+    // belts are drawn as instances, not as objects — see rebuildBelts()
   } else if (type === HUB) {
     const b = new THREE.Mesh(GEO.hub, MAT.hub);
-    b.position.y = 0.55; b.castShadow = true; g.add(b);
+    b.castShadow = true; g.add(b);
+    const beacon = new THREE.Mesh(new THREE.SphereGeometry(0.15, 8, 6),
+      new THREE.MeshBasicMaterial({ color: 0xffd479 }));
+    beacon.position.y = 1.22; beacon.name = 'lamp'; g.add(beacon);
   } else if (type === SPLITTER) {
-    const b = new THREE.Mesh(GEO.split, MAT.split);
-    b.position.y = 0.18; b.rotation.y = Math.PI / 4;
-    b.castShadow = true; b.receiveShadow = true; g.add(b);
-    // a cross, so what it does is visible from across the island rather than
+    // a cross, so what it does is visible from across the worldlet rather than
     // being a box you have to remember the meaning of
-    for (const r of [0, Math.PI / 2]) {
-      const arm = new THREE.Mesh(GEO.splitArm, MAT.split);
-      arm.position.y = 0.4; arm.rotation.y = r; g.add(arm);
-    }
+    const b = new THREE.Mesh(GEO.split, MAT.split);
+    b.castShadow = true; b.receiveShadow = true; g.add(b);
   } else if (type === RIFT) {
     const ring = new THREE.Mesh(GEO.rift, MAT.rift);
     ring.position.y = 0.95; ring.rotation.x = Math.PI / 2;
@@ -474,11 +658,11 @@ function place(face, i, j, type, dir) {
     const core = new THREE.Mesh(GEO.riftCore,
       new THREE.MeshBasicMaterial({ color: 0x2a2050 }));
     core.position.y = 0.95; core.name = 'lamp'; g.add(core);
-    const base = new THREE.Mesh(GEO.belt, MAT.rift);
+    const base = new THREE.Mesh(GEO.riftBase, MAT.rift);
     base.position.y = 0.11; base.receiveShadow = true; g.add(base);
   } else if (type === FILTER) {
     const b = new THREE.Mesh(GEO.filter, MAT.filt);
-    b.position.y = 0.15; b.castShadow = true; b.receiveShadow = true; g.add(b);
+    b.castShadow = true; b.receiveShadow = true; g.add(b);
     // the gate is coloured with the ore that passes, so a filter's setting is
     // readable from across the face instead of from a tooltip
     const gate = new THREE.Mesh(GEO.filterGate,
@@ -488,13 +672,11 @@ function place(face, i, j, type, dir) {
     gate.position.set(0.36, 0.42, 0);
     gate.name = 'gate';
     g.add(gate);
-    const a = new THREE.Mesh(GEO.arrow, MAT.filt);   // pass: straight on
-    a.position.set(0.72, 0.4, 0); a.rotation.z = -Math.PI / 2; g.add(a);
     const r = new THREE.Mesh(GEO.arrow, MAT.filt);   // reject: out the side
-    r.position.set(0, 0.4, 0.72); r.rotation.x = Math.PI / 2; g.add(r);
+    r.position.set(0, 0.42, 0.74); r.rotation.x = Math.PI / 2; g.add(r);
   } else if (type === FORGE) {
     const b = new THREE.Mesh(GEO.forge, MAT.forge);
-    b.position.y = 0.7; b.castShadow = true; g.add(b);
+    b.castShadow = true; g.add(b);
     const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.17, 8, 6),
       new THREE.MeshBasicMaterial({ color: 0xff5ad9 }));
     lamp.position.set(0, 1.5, 0);
@@ -502,7 +684,7 @@ function place(face, i, j, type, dir) {
     g.add(lamp);
   } else if (type === SMELTER) {
     const b = new THREE.Mesh(GEO.smelt, MAT.smelt);
-    b.position.y = 0.63; b.castShadow = true; g.add(b);
+    b.castShadow = true; g.add(b);
     // a lamp that lights while it is cooking: a factory you can read at a
     // glance from across the island is the whole appeal of the genre
     const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.17, 8, 6),
@@ -517,13 +699,58 @@ function place(face, i, j, type, dir) {
   g.userData.fsTag = { type: 'machine', name: TYPE_NAME[type] || 'machine',
                        detail: FACES[face].name + ' face · tile ' + i + ',' + j,
                        face, i, j };
-  scene.add(g);
-  c.build = g;
+  if (type === BELT) beltsDirty = true;      // drawn as an instance instead
+  else scene.add(g);
+  c.build = type === BELT ? null : g;
   c.t = type;
   c.d = dir;
   c.item = 0;
   refreshCounts();
   return true;
+}
+
+// ── belts: ONE InstancedMesh pair, however many you build ──────────────────
+// 241 belts cost 482 draw calls as individual groups, before any detail was
+// added. As instances they cost two, and the art pass became affordable.
+const MAX_BELTS = 6000;
+const beltFrames = new THREE.InstancedMesh(GEO.beltFrame, MAT.beltFrame, MAX_BELTS);
+const beltDecks = new THREE.InstancedMesh(GEO.beltDeck, MAT.beltDeck, MAX_BELTS);
+const beltIndex = [];                 // instance -> tile, so Inspect can name one
+for (const m of [beltFrames, beltDecks]) {
+  m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+  m.frustumCulled = false;
+  m.castShadow = true; m.receiveShadow = true;
+  m.count = 0;
+  scene.add(m);
+}
+let beltsDirty = true;
+
+function rebuildBelts() {
+  let n = 0;
+  beltIndex.length = 0;
+  eachTile((c, f, i, j) => {
+    if (c.t !== BELT || n >= MAX_BELTS) return;
+    seatMatrix(f, i, j, c.d, 0, _mx);
+    beltFrames.setMatrixAt(n, _mx);
+    seatMatrix(f, i, j, c.d, 0.155, _mx);
+    beltDecks.setMatrixAt(n, _mx);
+    beltIndex[n] = { face: f, i, j };
+    n++;
+  });
+  beltFrames.count = n; beltDecks.count = n;
+  beltFrames.instanceMatrix.needsUpdate = true;
+  beltDecks.instanceMatrix.needsUpdate = true;
+  beltsDirty = false;
+}
+
+/** A throwable stand-in for a machine that is drawn as an instance. */
+function pieceFor(face, i, j, c) {
+  if (c.build) return c.build;
+  if (c.t !== BELT) return null;
+  const g = new THREE.Mesh(GEO.beltFrame, MAT.beltFrame);
+  seat(g, face, i, j, c.d, 0);
+  scene.add(g);
+  return g;
 }
 
 // ── items: one InstancedMesh for every crystal in transit ──────────────────
@@ -929,7 +1156,8 @@ renderer.domElement.addEventListener('pointermove', e => {
   const prev = cellOf(lastCell);
   if (prev.t === BELT || prev.t === MINER) {
     prev.d = d;
-    if (prev.build) seat(prev.build, lastCell.face, lastCell.i, lastCell.j, d, 0);
+    if (prev.t === BELT) beltsDirty = true;
+    else if (prev.build) seat(prev.build, lastCell.face, lastCell.i, lastCell.j, d, 0);
   }
   // the drag arrives on the new tile heading the same way it left the old one,
   // which across an edge is NOT the direction the mouse moved
@@ -1274,11 +1502,13 @@ function riftSettle(c, paid) {
 // same face because a blast that reached around an edge would be impossible to
 // read, and the player has to be able to see what they are risking.
 function riftStorm(f, i, j) {
+  beltsDirty = true;
   for (let a = Math.max(0, i - RIFT_BLAST); a <= Math.min(N - 1, i + RIFT_BLAST); a++) {
     for (let b = Math.max(0, j - RIFT_BLAST); b <= Math.min(N - 1, j + RIFT_BLAST); b++) {
       const c = cells[f][a][b];
       if (c.t === EMPTY || c.t === NODE || c.t === RIFT) continue;
-      if (c.build) { throwPiece(c.build); c.build = null; }
+      const piece = pieceFor(f, a, b, c);
+      if (piece) { throwPiece(piece); c.build = null; }
       c.t = c.mesh ? NODE : EMPTY;
       c.item = 0; c.buf = 0; c.bt = 0; c.fa = 0; c.fb = 0; c.cook = 0;
     }
@@ -1349,8 +1579,9 @@ function meltdown() {
   cores += won;
 
   eachTile((c, f, i, j) => {
-    if (c.build) {
-      throwPiece(c.build);
+    const piece = pieceFor(f, i, j, c);
+    if (piece) {
+      throwPiece(piece);
       c.build = null;
     }
     // a node outlives the factory built on it, exactly as it does for ERASE
@@ -1359,6 +1590,7 @@ function meltdown() {
   });
 
   ore = 0; ingots = 0; runValue = 0;
+  beltsDirty = true;
   for (const k in UPGRADES) UPGRADES[k].lvl = 0;
   applyUpgrades();
   renderUpgrades();
@@ -1473,6 +1705,7 @@ const SAVE_KEY = 'fs-factory-' +
 const SAVE_V = 2;
 
 function clearFactory() {
+  beltsDirty = true;
   eachTile(c => {
     if (c.build) { scene.remove(c.build); c.build = null; }
     c.t = c.mesh ? NODE : EMPTY;
@@ -1676,6 +1909,18 @@ renderer.setAnimationLoop(() => {
   }
   document.getElementById('nitem').textContent = drawItems(sinceTick / TICK);
 
+  if (beltsDirty) rebuildBelts();
+  // the tread scrolls at the speed items actually travel: one tile per tick.
+  // A belt whose surface moves at a speed unrelated to its throughput is worse
+  // than one that does not move at all.
+  if (!melting) TREAD.offset.x -= dt / TICK;
+  // drill bits turn while their rig is on a seam
+  eachTile(c => {
+    if (c.t !== MINER || !c.build) return;
+    const bit = c.build.getObjectByName('bit');
+    if (bit) bit.rotation.y += dt * 7;
+  });
+
   // a crystal on the west face spins about the west face's up
   scene.traverse(o => {
     if (!o.userData.spin) return;
@@ -1749,8 +1994,17 @@ function setInspectOn(on) {
       if (h.object.isLine || h.object === ghost || ghost.children.indexOf(h.object) >= 0)
         continue;                        // grid lines and the build ghost are not things
       let o = h.object, tag = null;
-      while (o) { if (o.userData && o.userData.fsTag) { tag = o.userData.fsTag; break; }
-                  o = o.parent; }
+      // an instanced belt has no object of its own, so the instance id is the
+      // only way back to the tile it came from
+      if ((h.object === beltFrames || h.object === beltDecks) &&
+          h.instanceId != null && beltIndex[h.instanceId]) {
+        const t2 = beltIndex[h.instanceId];
+        tag = { type: 'machine', name: 'belt',
+                detail: FACES[t2.face].name + ' face · tile ' + t2.i + ',' + t2.j,
+                face: t2.face, i: t2.i, j: t2.j };
+      }
+      while (!tag && o) { if (o.userData && o.userData.fsTag) { tag = o.userData.fsTag; break; }
+                          o = o.parent; }
       const t = tag && tag.face !== undefined
         ? { face: tag.face, i: tag.i, j: tag.j } : tileOfPoint(h.point);
       lastPick = t;
@@ -1911,7 +2165,7 @@ window.__factory = {
            RIFT, CRYSTAL, EMBER, SALT, INGOT, INGOT_E, INGOT_S, ALLOY },
   MINERAL_OF_FACE, get alloys() { return alloys; }, cycleFilter,
   riftOpen, riftStorm, RIFT_COUNT, RIFT_WINDOW,
-  save, load, wipe, saveState, SAVE_KEY,
+  save, load, wipe, saveState, SAVE_KEY, TREAD, beltFrames, beltDecks,
   GOALS, UNLOCKED, get goalIdx() { return goalIdx; }, visitedFaces,
   PRICE, TRADED, stepMarket,
   UPGRADES, buy, costOf, get tick() { return TICK; },

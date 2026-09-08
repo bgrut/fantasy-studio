@@ -26,6 +26,8 @@ GATES = [
     ("fsave.mjs", "a factory survives a real reload"),
     ("fphys.mjs", "you cannot walk through machines; a merge does not eat items"),
     ("fgoals.mjs", "locked machines refuse; the goal chain advances on what it asks for"),
+    ("fart.mjs", "icons, instanced belts, a tread that scrolls, a sky that is drawn"),
+    ("fperf.mjs", "a 250-machine factory stays inside its draw-call budget"),
 ]
 
 

@@ -13,10 +13,12 @@ const face = () => p.evaluate(()=>window.__game.facts().player_face);
 await p.screenshot({ path: OUT + '_1_top.png' });
 console.log('1 top face   :', await face());
 
-// walk to the edge and over it
+// walk to the edge and over it. Machines are solid now, and the spawn faces
+// the starter line, so walking forward ends against your own smelter.
+await p.evaluate(()=>{ window.__factory.player.fwd.negate(); });
 await p.keyboard.down('KeyW');
 let shot = false;
-for (let k = 0; k < 30 && !shot; k++) {
+for (let k = 0; k < 60 && !shot; k++) {
   await new Promise(r=>setTimeout(r,250));
   if (await face() !== 'top') { shot = true; }
 }
