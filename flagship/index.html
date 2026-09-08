@@ -4,10 +4,20 @@
 <style>
   html,body{margin:0;height:100%;overflow:hidden;background:#0a0a12;
             font:13px/1.45 ui-monospace,Menlo,Consolas,monospace;color:#dfe3ee}
-  #hud{position:fixed;left:14px;top:12px;z-index:5;background:rgba(8,10,20,.78);
-       border:1px solid rgba(120,200,255,.18);border-radius:10px;padding:12px 14px;
-       min-width:210px;backdrop-filter:blur(6px)}
-  #hud h1{margin:0 0 8px;font-size:14px;letter-spacing:.06em;color:#5ce0d0;font-weight:700}
+  /* ONE LANGUAGE. The tool bar became chips with rendered icons and a sans face
+     while this panel stayed a stack of monospace boxes, and the two together
+     read as two different products. Same cards, same gradients, same faces —
+     numbers stay monospace, because numbers should line up. */
+  #hud{position:fixed;left:14px;top:12px;z-index:5;
+       background:linear-gradient(180deg,rgba(18,23,42,.90),rgba(8,10,20,.90));
+       border:1px solid rgba(120,200,255,.16);border-radius:14px;padding:12px 14px;
+       min-width:224px;backdrop-filter:blur(8px);
+       box-shadow:0 6px 24px rgba(0,0,0,.45),inset 0 1px 0 rgba(255,255,255,.05)}
+  #hud h1{margin:0 0 9px;font-size:13px;letter-spacing:.12em;color:#8ff3dd;
+          font-weight:700;
+          font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
+  .k{font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+     letter-spacing:.02em}
   .row{display:flex;justify-content:space-between;gap:14px;padding:1px 0}
   .k{color:#7d86a3}
   .v{color:#ffd479;font-variant-numeric:tabular-nums}
@@ -65,11 +75,15 @@
   .tool.locked svg{color:#5b6480}
   #ups{margin-top:10px;border-top:1px solid rgba(120,200,255,.14);padding-top:9px;
        display:flex;flex-direction:column;gap:5px;pointer-events:auto}
-  .up{border:1px solid rgba(120,200,255,.13);border-radius:7px;padding:5px 8px;
+  .up{border:1px solid rgba(120,200,255,.13);border-radius:10px;padding:7px 9px;
+      background:linear-gradient(180deg,rgba(255,255,255,.03),rgba(0,0,0,.12));
       cursor:not-allowed;opacity:.5}
-  .up b{display:block;font-size:11px;letter-spacing:.05em;color:#aeb6cd}
+  .up b{display:block;font-size:11px;letter-spacing:.07em;color:#c9d2e8;
+        font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+        font-weight:650}
   .up b span{color:#5d67a0}
-  .up small{display:block;color:#6d7590;font-size:10px}
+  .up small{display:block;color:#7b86a6;font-size:10px;
+            font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
   .up i{font-style:normal;color:#ffd479;font-size:10px}
   .up.can{opacity:1;cursor:pointer;border-color:rgba(92,224,208,.45);
           background:rgba(92,224,208,.07)}
@@ -78,16 +92,19 @@
   .up.maxed i{color:#5ce0d0}
   /* the meltdown is the loudest thing in the panel because it is the loudest
      thing in the game: it destroys the factory you just spent an hour on */
-  #melt{margin-top:9px;border:1px solid rgba(255,120,90,.5);border-radius:7px;
-        padding:6px 8px;background:rgba(255,110,80,.09);cursor:pointer;
-        display:none;text-align:center}
+  #melt{margin-top:9px;border:1px solid rgba(255,120,90,.5);border-radius:10px;
+        padding:8px 10px;cursor:pointer;display:none;text-align:center;
+        background:linear-gradient(180deg,rgba(255,110,80,.18),rgba(255,110,80,.06));
+        font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
   #melt.on{display:block}
   #melt b{display:block;font-size:11px;letter-spacing:.09em;color:#ff9f7a}
   #melt small{display:block;color:#8a7a86;font-size:10px}
   #melt:hover{background:rgba(255,110,80,.18)}
   /* a debt with a clock on it belongs where the counters are, not in a corner */
-  #rift{margin-top:9px;border:1px solid rgba(140,110,255,.5);border-radius:7px;
-        padding:6px 8px;background:rgba(110,80,255,.10);display:none;text-align:center}
+  #rift{margin-top:9px;border:1px solid rgba(140,110,255,.5);border-radius:10px;
+        padding:8px 10px;display:none;text-align:center;
+        background:linear-gradient(180deg,rgba(110,80,255,.18),rgba(110,80,255,.06));
+        font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
   #rift.on{display:block}
   #rift b{display:block;font-size:11px;letter-spacing:.09em;color:#b39cff}
   #rift small{display:block;color:#8f88b8;font-size:10px}
@@ -103,18 +120,25 @@
   #tick .u{color:#5ce0a0}
   #tick .d{color:#e8697d}
   /* the objective sits directly under the counters it is asking you to move */
-  #goal{margin-top:9px;border:1px solid rgba(255,212,121,.34);border-radius:7px;
-        padding:6px 8px;background:rgba(255,212,121,.07)}
-  #goal b{display:block;font-size:11px;letter-spacing:.07em;color:#ffd479}
-  #goal small{display:block;color:#8d8564;font-size:10px}
+  #goal{margin-top:9px;border:1px solid rgba(255,212,121,.34);border-radius:10px;
+        padding:8px 10px;
+        background:linear-gradient(180deg,rgba(255,212,121,.12),rgba(255,212,121,.04))}
+  #goal b{display:block;font-size:11px;letter-spacing:.09em;color:#ffd479;
+          font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+          font-weight:700}
+  #goal small{display:block;color:#a89a72;font-size:10px;
+              font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
   /* where you are, and where you could go. Locked rows stay visible with their
      price on them: a destination you cannot afford yet is the reason to melt
      the factory down again. */
   #world{margin-top:9px;border-top:1px solid rgba(120,200,255,.14);padding-top:8px}
-  #world b{display:block;font-size:11px;letter-spacing:.06em;color:#9fd6ff}
+  #world b{display:block;font-size:11px;letter-spacing:.08em;color:#9fd6ff;
+           font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+           font-weight:700}
   #world small{display:block;color:#6d7590;font-size:10px;margin-bottom:5px}
   #world .wr{display:flex;justify-content:space-between;gap:10px;font-size:10px;
-             color:#5d6480;padding:2px 0}
+             color:#5d6480;padding:2px 0;
+             font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
   #world .wr span{color:#4e5674}
   #world .wr.can{color:#9fd6ff;cursor:pointer}
   #world .wr.can span{color:#5ce0d0}
@@ -124,9 +148,12 @@
   .tool.deny{border-color:#e8697d;background:rgba(232,105,125,.16)}
   /* an unlock is worth a beat of the screen; it is the only reward here that
      is not a number going up */
-  #toast{position:fixed;left:50%;transform:translateX(-50%);bottom:96px;z-index:6;
-         background:rgba(8,10,20,.92);border:1px solid rgba(92,224,208,.5);
-         border-radius:9px;padding:9px 16px;color:#5ce0d0;letter-spacing:.05em;
+  #toast{position:fixed;left:50%;transform:translateX(-50%);bottom:104px;z-index:6;
+         background:linear-gradient(180deg,rgba(18,23,42,.96),rgba(8,10,20,.96));
+         border:1px solid rgba(92,224,208,.5);
+         border-radius:11px;padding:10px 18px;color:#8ff3dd;letter-spacing:.06em;
+         font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+         font-weight:650;box-shadow:0 6px 24px rgba(0,0,0,.5);
          opacity:0;transition:opacity .25s;pointer-events:none}
   #toast.on{opacity:1}
   /* THE PANEL KEEPS GROWING (2026-09-08). Counters, then a ticker, then a goal,

@@ -947,6 +947,7 @@ for (let k = 0; k < NODE_COUNT; k++) {
                            nodeMats[c.min]);
   seat(m, f, i, j, Math.floor(rnd() * 4), 0.66 + rnd() * 0.12);
   m.scale.setScalar(0.82 + rnd() * 0.42);
+  m.userData.base = m.scale.x;      // the pulse scales relative to this
   m.userData.fsTag = { type: 'ore', name: MINERAL_NAME[c.min] + ' seam',
                        detail: FACES[f].name + ' face · tile ' + i + ',' + j,
                        face: f, i, j };
@@ -1484,6 +1485,9 @@ for (let k = 0; k < BELT_KIND.length; k++) {
   // a junction runs straight through, so it wears the straight deck
   const dk = new THREE.InstancedMesh(GEO['beltDeck' + BELT_KIND[k]] || GEO.beltDeck,
                                      MAT.beltDeck, MAX_BELTS);
+  dk.instanceColor = new THREE.InstancedBufferAttribute(
+    new Float32Array(MAX_BELTS * 3).fill(1), 3);
+  dk.instanceColor.setUsage(THREE.DynamicDrawUsage);
   for (const m of [fm, dk]) {
     m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     m.frustumCulled = false;
@@ -2053,8 +2057,33 @@ function step() {
     const m = c.min || MINERAL_OF_FACE[f];
     const to = stepTile(f, i, j, c.d);
     const dst = cellOf(to);
-    if (accepts(dst, m)) deliver(dst, to, m);
+    if (accepts(dst, m)) {
+      deliver(dst, to, m);
+      // the seam flexes as the crystal leaves it: which rigs are actually
+      // producing is readable from across the face
+      if (c.mesh) c.mesh.userData.pulse = 1;
+    }
   });
+}
+
+// A JAM SHOULD LOOK LIKE A JAM. The tread scrolls whether or not anything is
+// moving over it, so a backed-up line was indistinguishable from a running one
+// until you noticed the crystals had stopped. Belts holding something that
+// cannot advance go amber. Once a tick, not once a frame: it changes at tick
+// rate and nothing is gained by asking sixty times a second.
+function paintBeltLoad() {
+  const n = BELT_KIND.map(() => 0);
+  eachTile((c, f, i, j) => {
+    if (c.t !== BELT) return;
+    const k = beltShape(f, i, j, c);
+    if (n[k] >= MAX_BELTS) return;
+    const stuck = c.item && !accepts(cellOf(stepTile(f, i, j, c.d)), c.item);
+    const dk = beltDecks[k];
+    if (stuck) dk.instanceColor.setXYZ(n[k], 1.5, 0.62, 0.3);
+    else dk.instanceColor.setXYZ(n[k], 1, 1, 1);
+    n[k]++;
+  });
+  for (const dk of beltDecks) dk.instanceColor.needsUpdate = true;
 }
 
 // Items are drawn BETWEEN their tile and the next, so the motion reads smooth
@@ -2257,6 +2286,7 @@ function cycleFilter() {
 }
 
 function pickTool(name) {
+  if (typeof setHolo === 'function' && UNLOCKED[name]) setHolo(name);
   if (!UNLOCKED[name]) {
     // say WHY, rather than ignoring the click. A control that does nothing and
     // explains nothing is indistinguishable from a broken one.
@@ -3029,7 +3059,9 @@ renderer.setAnimationLoop(() => {
   const before = ore;
   // the tick stops while the factory is still in the air — a meltdown that
   // kept banking value would read as though nothing had been given up
-  while (sinceTick >= TICK) { sinceTick -= TICK; if (!melting) step(); }
+  let ticked = false;
+  while (sinceTick >= TICK) { sinceTick -= TICK; if (!melting) { step(); ticked = true; } }
+  if (ticked) paintBeltLoad();
   minedWindow += ore - before;
   if (rateWindow >= 1) {
     // AVERAGE OVER LONGER THAN THE SLOWEST MACHINE (2026-09-06). This sampled
@@ -3110,12 +3142,18 @@ renderer.setAnimationLoop(() => {
     }
   });
 
-  // a crystal on the west face spins about the west face's up
+  // a crystal on the west face spins about the west face's up, and one being
+  // mined flexes as each crystal is pulled out of it
   scene.traverse(o => {
     if (!o.userData.spin) return;
     const ax = o.userData.axis;
     if (ax) o.rotateOnAxis(_bx.set(0, 1, 0), dt * o.userData.spin);
     else o.rotation.y += dt * o.userData.spin;
+    if (o.userData.pulse > 0) {
+      o.userData.pulse = Math.max(0, o.userData.pulse - dt * 3.2);
+      const p2 = o.userData.pulse, b = o.userData.base || 1;
+      o.scale.setScalar(b * (1 + Math.sin(p2 * Math.PI) * 0.22));
+    }
   });
 
   if (overhead || inspectOn) {
@@ -3128,6 +3166,7 @@ renderer.setAnimationLoop(() => {
     // whole worldlet, which is the one view that has to read at a glance
     scene.fog = null;
     ghost.visible = false;
+    heldRig.visible = false;      // nobody is holding it from up here
   } else {
     if (!scene.fog) scene.fog = worldFog;
     movePlayer(dt);
@@ -3154,11 +3193,81 @@ renderer.setAnimationLoop(() => {
               Math.min(1, dt * 7);
     camera.position.addScaledVector(_by, Math.sin(bobPhase * 2) * 0.045 * bobAmt);
     camera.position.addScaledVector(_bx, Math.sin(bobPhase) * 0.035 * bobAmt);
+    // the rig rides the camera, so it only needs a little sway of its own —
+    // a held object that is perfectly rigid to the view reads as painted on
+    heldRig.visible = true;
+    heldRig.position.set(0.36 + Math.sin(bobPhase) * 0.012 * bobAmt,
+                         -0.25 + Math.sin(bobPhase * 2) * 0.009 * bobAmt,
+                         -0.55);
+    heldRig.rotation.z = 0.06 + Math.sin(bobPhase) * 0.02 * bobAmt;
+    holo.rotation.y += dt * 0.9;
+    holo.position.y = 0.26 + Math.sin(performance.now() * 0.0022) * 0.008;
     updateGhost();
   }
   document.body.classList.toggle('overhead', overhead);
   renderFrame();
 });
+
+// ── WHAT YOU ARE HOLDING ───────────────────────────────────────────────────
+// A projector on your forearm, and above it a hologram of whatever the tool
+// bar has selected. Parented to the camera, so it inherits the walk bob for
+// free and only needs a little lag of its own.
+const heldRig = new THREE.Group();
+{
+  const dark = new THREE.MeshStandardMaterial({ color: 0x2a3350, roughness: 0.5,
+    metalness: 0.65, vertexColors: true, envMapIntensity: 0.8 });
+  addRim(dark, 0x8fd8ff, 2.4, 0.5);
+  const body = new THREE.Mesh(mergeParts([
+    { g: _box(0.13, 0.10, 0.34), z: 0.10 },                    // forearm
+    { g: _box(0.16, 0.13, 0.16), z: -0.10, tint: 0.85 },       // wrist unit
+    { g: _cyl(0.018, 0.018, 0.10, 6), x: 0.055, y: 0.075, z: -0.14, tint: 1.2 },
+    { g: _cyl(0.018, 0.018, 0.10, 6), x: -0.055, y: 0.075, z: -0.14, tint: 1.2 },
+    { g: _cyl(0.018, 0.018, 0.10, 6), y: 0.075, z: -0.19, tint: 1.2 },
+  ], { floor: 0.55, reach: 0.25 }), dark);
+  heldRig.add(body);
+
+  // the emitter's own glow, so the projection has a source
+  const emit3 = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.03, 0.02, 10),
+    new THREE.MeshBasicMaterial({ color: ACCENT, transparent: true, opacity: 0.85 }));
+  emit3.position.set(0, 0.115, -0.155);
+  heldRig.add(emit3);
+
+  // SMALL, AND IN THE CORNER. The first pass sat a forearm the size of a
+  // smelter in the middle-right of the view; a held thing should be present
+  // at the edge of attention, not competing with the factory for it.
+  heldRig.scale.setScalar(0.62);
+  heldRig.position.set(0.36, -0.25, -0.55);
+  heldRig.rotation.set(-0.12, 0.34, 0.06);
+  heldRig.renderOrder = 2;
+  camera.add(heldRig);
+  scene.add(camera);          // a camera only renders children once it is IN the scene
+}
+
+// The hologram. Normalised by each geometry's own radius so a rift and a belt
+// read at the same size — a preview that changes scale with the machine tells
+// you about the mesh, not about the choice.
+const holoMat = new THREE.MeshBasicMaterial({ color: ACCENT, transparent: true,
+  opacity: 0.55, depthWrite: false, blending: THREE.AdditiveBlending });
+const holo = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), holoMat);
+holo.position.set(0, 0.26, -0.16);
+holo.renderOrder = 3;
+heldRig.add(holo);
+
+const HOLO_GEO = {
+  miner: 'miner', belt: 'beltFrame', smelter: 'smelt', splitter: 'split',
+  hub: 'hub', forge: 'forge', filter: 'filter', rift: 'riftBase',
+};
+function setHolo(name) {
+  const g = GEO[HOLO_GEO[name]];
+  if (!g) { holo.visible = false; return; }
+  holo.visible = true;
+  holo.geometry = g;
+  g.computeBoundingSphere();
+  const r = Math.max(0.001, g.boundingSphere.radius);
+  holo.scale.setScalar(0.09 / r);
+  holoMat.color.setHex(name === 'erase' ? 0xff6b7d : ACCENT);
+}
+setHolo(tool);      // here, AFTER HOLO_GEO exists — not up by the tool bar
 
 // ── STUDIO INSPECTOR BRIDGE ────────────────────────────────────────────────
 // Standalone (itch.io, the flagship demo, a shared zip) this is inert: nothing
@@ -3373,6 +3482,10 @@ window.__factory = {
   riftOpen, riftStorm, RIFT_COUNT, RIFT_WINDOW,
   save, load, wipe, saveState, SAVE_KEY, TREAD, beltFrames, beltDecks, POST,
   beltShape, scatterVent, scatterBolt, scatterSpots, renderThumb, GEO, MAT,
+  beltIndexOf: (f, i, j) => {
+    const k = beltShape(f, i, j, cells[f][i][j]);
+    return beltIndex[k].findIndex(t => t.face === f && t.i === i && t.j === j);
+  },
   GOALS, UNLOCKED, get goalIdx() { return goalIdx; }, visitedFaces,
   WORLDS, travelTo, applyWorld, get worldIdx() { return worldIdx; },
   // aim the overhead camera, so a harness can look at a chosen face

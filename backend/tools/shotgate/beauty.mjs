@@ -29,6 +29,14 @@ await p.evaluate(()=>{
     F.place(face, i, j - 8, TY.HUB, 1);
   }
   F.player.pitch = -0.12;
+  // and jam one lane: cap its hub with a smelter that is already full, so the
+  // belts behind it back up and the amber can be seen
+  const jl = bi + 3, jj = bj - 3;
+  if (jl >= 2 && jl <= N - 3) {
+    F.removeAt(face, jl, jj - 8);
+    F.place(face, jl, jj - 8, TY.SMELTER, 1);
+    F.cells[face][jl][jj - 8].buf = 99;
+  }
 });
 await new Promise(r=>setTimeout(r,9000));
 const f = await p.evaluate(()=>window.__game.facts());
