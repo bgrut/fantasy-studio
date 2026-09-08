@@ -887,6 +887,7 @@ function dirBetween(a, b) {
 }
 
 function apply(t, dir) {
+  if (!UNLOCKED[tool]) return;      // hotkeys and drags go through here too
   const d = dir == null ? 0 : dir;
   if (tool === 'erase') { removeAt(t.face, t.i, t.j); return; }
   if (tool === 'miner') { place(t.face, t.i, t.j, MINER, d); return; }
@@ -950,6 +951,18 @@ function cycleFilter() {
 }
 
 function pickTool(name) {
+  if (!UNLOCKED[name]) {
+    // say WHY, rather than ignoring the click. A control that does nothing and
+    // explains nothing is indistinguishable from a broken one.
+    const el = document.querySelector('.tool[data-tool="' + name + '"]');
+    if (el) { el.classList.add('deny'); setTimeout(() => el.classList.remove('deny'), 320); }
+    const t = document.getElementById('toast');
+    if (t && goalIdx < GOALS.length) {
+      t.textContent = 'locked — ' + GOALS[goalIdx].text;
+      t.classList.add('on'); toastAt = 2.2;
+    }
+    return;
+  }
   tool = name;
   document.querySelectorAll('.tool').forEach(o =>
     o.classList.toggle('on', o.dataset.tool === name));
@@ -1370,6 +1383,77 @@ function stepDebris(dt) {
   if (btn) btn.addEventListener('pointerdown', ev => { ev.stopPropagation(); meltdown(); });
 }
 
+// ── PROGRESSION ────────────────────────────────────────────────────────────
+// Ordered so each unlock lands when the previous one has made it mean
+// something: routing before sorting, and the FORGE only after you have stood
+// on a second face and seen that the ore there is a different colour. A player
+// who never walks over an edge never learns the thing this game is for, so it
+// is a goal rather than a hope.
+const visitedFaces = new Set();
+const START_TOOLS = ['miner', 'belt', 'smelter', 'hub', 'erase'];
+const UNLOCKED = {};
+for (const k of START_TOOLS) UNLOCKED[k] = 1;
+let goalIdx = 0;
+
+const GOALS = [
+  { text: 'bank 40 value', unlock: 'splitter',
+    tip: 'the hub buys anything that reaches it',
+    got: 'SPLITTER — one line can feed two machines',
+    done: () => ore >= 40 },
+  { text: 'stand on a second face', unlock: 'forge',
+    tip: 'walk over an edge; the world turns under you',
+    got: 'FORGE — two different ores in, one alloy out',
+    done: () => visitedFaces.size >= 2 },
+  { text: 'forge one alloy', unlock: 'filter',
+    tip: 'no single face grows two ores, so a belt has to cross',
+    got: 'FILTER — point at it and press F to sort by ore',
+    done: () => alloys >= 1 },
+  { text: 'bank 250 value', unlock: 'rift',
+    tip: 'the market moves; make whatever it is paying for',
+    got: 'CHRONOS RIFT — borrowed ore, on a deadline',
+    done: () => ore >= 250 },
+  { text: 'bank ' + MELT_MIN + ' value', unlock: 'meltdown',
+    tip: 'enough of a factory to be worth destroying',
+    got: 'MELTDOWN — collapse it all for a permanent core',
+    done: () => ore >= MELT_MIN },
+];
+
+function renderGoal() {
+  const el = document.getElementById('goal');
+  if (el) {
+    if (goalIdx >= GOALS.length) {
+      el.innerHTML = '<b>ALL SYSTEMS ONLINE</b><small>the worldlet is yours</small>';
+    } else {
+      const g = GOALS[goalIdx];
+      el.innerHTML = '<b>' + g.text.toUpperCase() + '</b><small>' + g.tip + '</small>';
+    }
+  }
+  // the locked tools stay VISIBLE, dimmed. A tool you can see and cannot use
+  // yet is a reason to keep playing; a tool that appears from nowhere is a
+  // surprise you have to re-read the bar to notice.
+  document.querySelectorAll('.tool').forEach(o =>
+    o.classList.toggle('locked', !UNLOCKED[o.dataset.tool]));
+}
+
+let toastAt = 0;
+function stepGoals(dt) {
+  while (goalIdx < GOALS.length && GOALS[goalIdx].done()) {
+    const g = GOALS[goalIdx];
+    UNLOCKED[g.unlock] = 1;
+    goalIdx++;
+    const t = document.getElementById('toast');
+    if (t) { t.textContent = g.got; t.classList.add('on'); toastAt = 3.5; }
+    renderGoal();
+  }
+  if (toastAt > 0) {
+    toastAt -= dt;
+    if (toastAt <= 0) {
+      const t = document.getElementById('toast');
+      if (t) t.classList.remove('on');
+    }
+  }
+}
+
 // ── SAVE / LOAD ────────────────────────────────────────────────────────────
 // One key per title, so two games exported from the studio do not overwrite
 // each other's worlds. Every access is wrapped: storage throws outright in
@@ -1377,7 +1461,10 @@ function stepDebris(dt) {
 // a save is worse than a game that forgets.
 const SAVE_KEY = 'fs-factory-' +
   String(SPEC.title || 'untitled').toLowerCase().replace(/[^a-z0-9]+/g, '-');
-const SAVE_V = 1;
+// v2 adds the progression. A v1 save still loads: the goal chain re-derives
+// itself from what you have banked on the next frame, so an old world comes
+// back with its unlocks intact rather than being refused.
+const SAVE_V = 2;
 
 function clearFactory() {
   eachTile(c => {
@@ -1404,6 +1491,7 @@ function saveState() {
     price: TRADED.map(t => PRICE[t]),
     p: { face: player.face, pos: player.pos.toArray(),
          fwd: player.fwd.toArray(), pitch: player.pitch },
+    g: goalIdx, u: Object.keys(UNLOCKED), vf: [...visitedFaces],
     m,
   };
 }
@@ -1413,7 +1501,7 @@ function loadState(d) {
   // from a seeded RNG keyed to the grid size; restoring machines onto a
   // different N would put miners on empty ground and leave seams buried under
   // belts, with nothing to indicate why the factory had stopped earning.
-  if (!d || d.v !== SAVE_V || d.n !== N) return false;
+  if (!d || !(d.v >= 1 && d.v <= SAVE_V) || d.n !== N) return false;
   clearFactory();
   for (const r of d.m) {
     const [f, i, j, t, dir] = r;
@@ -1445,7 +1533,12 @@ function loadState(d) {
     faceNormal(player.face, player.up);
     camUp.copy(player.up);
   }
-  applyUpgrades(); renderUpgrades(); renderTicker(); refreshCounts();
+  goalIdx = Math.max(0, Math.min(GOALS.length, d.g | 0));
+  if (Array.isArray(d.u)) for (const k of d.u) UNLOCKED[k] = 1;
+  visitedFaces.clear();
+  if (Array.isArray(d.vf)) for (const f of d.vf) visitedFaces.add(f | 0);
+  visitedFaces.add(player.face);
+  applyUpgrades(); renderUpgrades(); renderTicker(); refreshCounts(); renderGoal();
   document.getElementById('tok').textContent = cores;
   return true;
 }
@@ -1465,7 +1558,10 @@ function wipe() {
   clearFactory();
   ore = 0; ingots = 0; alloys = 0; cores = 0; runValue = 0;
   for (const k in UPGRADES) UPGRADES[k].lvl = 0;
-  applyUpgrades(); renderUpgrades();
+  goalIdx = 0;
+  for (const k in UNLOCKED) if (!START_TOOLS.includes(k)) delete UNLOCKED[k];
+  visitedFaces.clear();
+  applyUpgrades(); renderUpgrades(); renderGoal();
   seedLine(true);
   refreshCounts();
   document.getElementById('tok').textContent = cores;
@@ -1501,6 +1597,7 @@ addEventListener('visibilitychange', () => { if (document.hidden) save(); });
 applyUpgrades();
 renderUpgrades();
 renderTicker();
+renderGoal();
 
 // ── frame ──────────────────────────────────────────────────────────────────
 let last = performance.now();
@@ -1510,6 +1607,8 @@ renderer.setAnimationLoop(() => {
   last = now;
 
   stepMarket(dt);
+  visitedFaces.add(player.face);
+  stepGoals(dt);
   if (!melting) stepRifts(dt);
   saveClock += dt;
   if (saveClock >= 10) { saveClock = 0; save(); }
@@ -1551,7 +1650,12 @@ renderer.setAnimationLoop(() => {
   // the buttons light up the moment you can afford them — the whole point of
   // the number climbing is watching it cross a threshold
   if (Math.floor(ore) !== lastOreShown) { lastOreShown = Math.floor(ore); renderUpgrades(); }
-  document.getElementById('melt').classList.toggle('on', ore >= MELT_MIN && !melting);
+  // !! IS LOAD-BEARING (2026-09-08). classList.toggle(name, force) TOGGLES when
+  // force is undefined, and UNLOCKED.meltdown is undefined until it is earned —
+  // so a locked meltdown button flipped on and off every single frame, which
+  // renders as permanently visible and let you prestige before it was unlocked.
+  document.getElementById('melt').classList.toggle('on',
+    !!(UNLOCKED.meltdown && ore >= MELT_MIN && !melting));
   {
     // the debt and the clock, in words, because a rift you have to remember is
     // a rift you will be surprised by
@@ -1769,6 +1873,10 @@ window.__game = {
     alloys,
     prices: TRADED.map(t => +PRICE[t].toFixed(3)),
     restored,
+    goal: goalIdx < GOALS.length ? GOALS[goalIdx].text : null,
+    goal_index: goalIdx,
+    unlocked: Object.keys(UNLOCKED),
+    faces_visited: visitedFaces.size,
     rift: (() => { let r = null;
       eachTile(c => { if (c.t === RIFT && !r) r = { debt: c.dbt,
         ore: MINERAL_NAME[c.dmin] || null, left: +c.left.toFixed(1),
@@ -1798,6 +1906,7 @@ window.__factory = {
   MINERAL_OF_FACE, get alloys() { return alloys; }, cycleFilter,
   riftOpen, riftStorm, RIFT_COUNT, RIFT_WINDOW,
   save, load, wipe, saveState, SAVE_KEY,
+  GOALS, UNLOCKED, get goalIdx() { return goalIdx; }, visitedFaces,
   PRICE, TRADED, stepMarket,
   UPGRADES, buy, costOf, get tick() { return TICK; },
   meltdown, MELT_MIN, get cores() { return cores; },

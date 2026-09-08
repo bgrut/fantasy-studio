@@ -30,6 +30,8 @@ says so.
 | **studio inspect** | the factory answers the studio's picking bridge |
 | **demo is generated** | the standalone build IS the studio's output |
 | **save / load** | a factory survives closing the tab |
+| **collision + fair mergers** | machines are solid; a merge stopped eating items |
+| **progression frame** | goals unlock machines in the order that teaches them |
 
 Measured on a prompt-built export: 40x40x6 grid, 40 nodes, 180 value/min,
 9 ingots in 12s, 18 draw calls, no console errors. The player walks top ->
@@ -178,8 +180,19 @@ clock starts when the loan lands.
 5. ~~Chronos~~ — shipped, as a debt with a clock rather than replayed ghosts
 
 All five differentiators from the brief are in, and the factory now saves.
-What is left is not mechanics: player collision, merger fairness, an art pass,
-a progression frame, and the Tauri/Steam packaging path.
+What is left is an art pass and the Tauri/Steam packaging path.
+
+The progression chain, for reference — ordered so each unlock lands when the
+previous one has made it mean something, and so that finding the cube is a
+goal rather than a hope:
+
+| goal | unlocks |
+|---|---|
+| bank 40 value | SPLITTER |
+| stand on a second face | FORGE |
+| forge one alloy | FILTER |
+| bank 250 value | CHRONOS RIFT |
+| bank 400 value | MELTDOWN |
 
 ## Checking both at once
 
@@ -192,8 +205,6 @@ against each:
 
 ## Also outstanding
 
-- Merger fairness: two belts into one currently resolve by grid order
-- The player walks through machines; there is no collision
 - Art uplift — placeholder boxes; the Kenney space kit (already vendored in
   `backend/assets/props`, CC0) is the right visual language for this
 - Levels / progression frame: goals, unlocks, a reason to expand

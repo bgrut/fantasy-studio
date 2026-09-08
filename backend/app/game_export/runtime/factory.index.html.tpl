@@ -60,6 +60,21 @@
             line-height:1.55}
   #tick .u{color:#5ce0a0}
   #tick .d{color:#e8697d}
+  /* the objective sits directly under the counters it is asking you to move */
+  #goal{margin-top:9px;border:1px solid rgba(255,212,121,.34);border-radius:7px;
+        padding:6px 8px;background:rgba(255,212,121,.07)}
+  #goal b{display:block;font-size:11px;letter-spacing:.07em;color:#ffd479}
+  #goal small{display:block;color:#8d8564;font-size:10px}
+  .tool.locked{opacity:.3}
+  .tool.locked b{color:#6b7590}
+  .tool.deny{border-color:#e8697d;background:rgba(232,105,125,.16)}
+  /* an unlock is worth a beat of the screen; it is the only reward here that
+     is not a number going up */
+  #toast{position:fixed;left:50%;transform:translateX(-50%);bottom:96px;z-index:6;
+         background:rgba(8,10,20,.92);border:1px solid rgba(92,224,208,.5);
+         border-radius:9px;padding:9px 16px;color:#5ce0d0;letter-spacing:.05em;
+         opacity:0;transition:opacity .25s;pointer-events:none}
+  #toast.on{opacity:1}
   #hud{pointer-events:auto}
   /* above the bar, not beside it — at seven tools there is no room beside it */
   #hint{position:fixed;right:14px;bottom:74px;z-index:5;color:#6d7590;text-align:right}
@@ -85,6 +100,7 @@
   <div class="row"><span class="k">smelters</span><span class="v" id="nsmelt">0</span></div>
   <div class="row"><span class="k">on belts</span><span class="v" id="nitem">0</span></div>
   <div class="row"><span class="k">cores</span><span class="v" id="tok">0</span></div>
+  <div id="goal"></div>
   <div id="tick"></div>
   <div id="ups"></div>
   <div id="rift"></div>
@@ -102,6 +118,7 @@
   <div class="tool" data-tool="rift"><b>8 · RIFT</b><small>ore now, pay later</small></div>
   <div class="tool" data-tool="erase"><b>9 · ERASE</b><small>&nbsp;</small></div>
 </div>
+<div id="toast"></div>
 <div id="cross"></div>
 <div id="hint">WASD walk · Shift run · Space jump · click to look<br>hold LMB and sweep to draw belts · TAB overhead<br>point at a filter and press F to change what passes<br>walk over an edge — each side of the world grows a different ore<br>your factory saves itself</div>
 <script type="importmap">{"imports":{"three":"./vendor/three.module.js"}}</script>
