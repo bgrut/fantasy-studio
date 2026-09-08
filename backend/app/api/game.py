@@ -834,7 +834,19 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             job.setdefault("notes", []).append(
                 f"hero is a sculpted proc module ({player_glb}) — wheels steer "
                 "and spin on real pivots (img2threejs lane)")
-        if not player_glb:
+        # A FACTORY HAS NO HERO TO GENERATE (2026-09-08). Its player is a
+        # first-person projector rig drawn by the runtime; the spec's player
+        # asset is never loaded. The vision path below is 25-30 minutes on CPU
+        # per unfamiliar subject — measured on "a rusted mining outpost on a
+        # dead red moon", which sat at 9/28 sampler steps for a character it
+        # would never show. Factories skip it and take the library stand-in,
+        # which the exporter accepts and the verifier already exempts.
+        _factory_genre = getattr(spec, "genre", "adventure") == "factory"
+        if not player_glb and _factory_genre:
+            job.setdefault("notes", []).append(
+                f"factory: '{want}' is not generated — a factory draws its own "
+                "machines and its player is the camera")
+        if not player_glb and not _factory_genre:
             # THE VISION PATH (primary): unknown hero → SDXL image → 3D mesh →
             # library → playable. This is how the pipeline is MEANT to work and
             # it runs on CPU too (~25-30 min once, then cached forever — the cat
@@ -1214,7 +1226,8 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                     f"'{ekind}' isn't in your library, so the {ent.behavior} is "
                     f"played by '{sub}' — the level keeps its {ent.behavior}s")
                 ekind = sub
-            if not glb:
+            # a factory draws its own machines: nothing here is generated for it
+            if not glb and not _factory_genre:
                 # THE SAME PIPELINE FOR EVERY NOUN (2026-07-06): entities and
                 # props generate exactly like the player does — a missing
                 # monkey or bottle is created once, cached in the library
@@ -1325,7 +1338,7 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             _anim_glb = BACKEND_ROOT / "assets" / "library" / f"{k}_anim.glb"
             glb = (str(_anim_glb) if _anim_glb.exists() else None) \
                 or library.resolve(k)
-            if not glb:
+            if not glb and not _factory_genre:
                 try:
                     from app.game_export.generate import ensure_asset
                     stage(f"creating '{k}' — image → 3D mesh "
@@ -1409,7 +1422,7 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                     f"thing ('fish', 'bones', 'apples') to generate a real mesh for it")
                 continue
             glb = library.resolve(sing)
-            if not glb:
+            if not glb and not _factory_genre:
                 try:
                     from app.game_export.generate import ensure_asset
                     stage(f"creating '{sing}' — image → 3D mesh "
