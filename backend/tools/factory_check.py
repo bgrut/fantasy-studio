@@ -40,6 +40,7 @@ GATES = [
     ("fshare.mjs", "a share link carries a factory into a fresh page; the drift is finite and pays double"),
     ("fcontract.mjs", "contracts post, count their item, pay a shard; three shards make a core; a meltdown ranks"),
     ("fstanding.mjs", "three kept contracts earn a standing order; it pays each held minute and closes when the rate falls short"),
+    ("frival.mjs", "a rival buyer bids one product up for a minute, marks it on the board, and leaves saying what it took"),
 ]
 
 

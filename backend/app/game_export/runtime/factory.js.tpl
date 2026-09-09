@@ -442,6 +442,9 @@ let contract = null, contractClock = 40, contractsFilled = 0, shards = 0, rank =
 // standing orders: a rate to be HELD, offered after three contracts kept in a row
 const STANDING_STREAK = 3, STANDING_GRACE = 10;
 let streak = 0, standing = null;
+// a rival buyer: one product bid up for a minute, every couple of minutes
+const RIVAL_EVERY = 130, RIVAL_SECS = 60, RIVAL_MULT = 1.8;
+let rival = null, rivalClock = 60;
 const scatterSpots = [];
 // Same reason, same place. The starter line is seeded at boot, seeding calls
 // place(), place() clicks — and the click reads AUDIO, which was declared six
@@ -2783,6 +2786,51 @@ function renderStanding() {
   }
 }
 
+// ── THE RIVAL BUYER ────────────────────────────────────────────────────────
+function offerRival(forceItem) {
+  if (rival) return rival;
+  const pool = [INGOT, INGOT_E, INGOT_S];
+  if (UNLOCKED.forge) pool.push(ALLOY);
+  const item = forceItem || pool[(Math.random() * pool.length) | 0];
+  rival = { item, mult: RIVAL_MULT, left: RIVAL_SECS, sold: 0, extra: 0 };
+  renderRival(); renderTicker(); drawTickerBoard();
+  const t = document.getElementById('toast');
+  if (t) { t.textContent = 'RIVAL BUYER. Someone on the board is paying ' + RIVAL_MULT.toFixed(1) + ' times the going rate for ' + contractName(item, 2) + ' for the next ' + RIVAL_SECS + ' seconds. Turn a filter or swing a splitter their way.'; t.classList.add('on'); toastAt = 6; }
+  return rival;
+}
+function stepRival(dt) {
+  if (intro > 0) return;
+  if (rival) {
+    rival.left -= dt;
+    if (rival.left <= 0) {
+      const r = rival; rival = null; rivalClock = 0;
+      renderRival(); renderTicker(); drawTickerBoard();
+      const t = document.getElementById('toast');
+      if (t) {
+        t.textContent = r.sold > 0
+          ? 'The rival buyer left. They took ' + r.sold + ' ' + contractName(r.item, r.sold) + ' and the premium came to +' + Math.round(r.extra) + ' value.'
+          : 'The rival buyer left with nothing. They were paying ' + RIVAL_MULT.toFixed(1) + ' times for ' + contractName(r.item, 2) + '; a filter turned their way would have caught it.';
+        t.classList.add('on'); toastAt = 5;
+      }
+      return;
+    }
+    if ((performance.now() % 500) < 20) renderRival();
+    return;
+  }
+  if (!UNLOCKED.filter) return;           // a buyer you cannot reroute for is just noise
+  rivalClock += dt;
+  if (rivalClock >= RIVAL_EVERY) offerRival();
+}
+function renderRival() {
+  const el = document.getElementById('rival');
+  if (!el) return;
+  if (!rival) { el.classList.remove('on'); return; }
+  el.classList.add('on');
+  el.querySelector('b').textContent = 'RIVAL BUYER: ' + contractName(rival.item, 2).toUpperCase() + ' PAY \u00d7' + rival.mult.toFixed(1);
+  el.querySelector('small').textContent = 'for ' + Math.ceil(Math.max(0, rival.left)) + 's more. Sold them ' + rival.sold + ' so far, +' + Math.round(rival.extra) + ' over the going rate.';
+  const i = el.querySelector('.bar i'); if (i) i.style.width = Math.round(100 * Math.max(0, rival.left) / RIVAL_SECS) + '%';
+}
+
 function renderContract() {
   const el = document.getElementById('contract');
   if (!el) return;
@@ -2870,6 +2918,8 @@ function drawTickerBoard() {
   g.beginPath(); g.moveTo(6, base + 0.5); g.lineTo(122, base + 0.5); g.stroke();
   TRADED.forEach((t, k) => {
     const h = priceBar(t, 24);
+    // the rival's product is boxed in white while the buyer is in
+    if (rival && rival.item === t) { g.strokeStyle = 'rgba(255,255,255,0.9)'; g.lineWidth = 2; g.strokeRect(7 + k * 30, 6, 26, 52); }
     g.fillStyle = TRADE_COL[t];
     if (h >= 0) g.fillRect(10 + k * 30, base - h, 20, Math.max(2, h));
     else g.fillRect(10 + k * 30, base, 20, Math.max(2, -h));
@@ -2890,7 +2940,7 @@ function renderTicker() {
     // the panel uses the same rule as the board: a bar that rises from a
     // baseline at 1.0, or hangs below it
     const h = priceBar(t, 18);
-    html += '<div class="mk ' + (up ? 'u' : 'd') + '">' +
+    html += '<div class="mk ' + (up ? 'u' : 'd') + (rival && rival.item === t ? ' hot' : '') + '">' +
       '<span class="px">' + PRICE[t].toFixed(2) + '</span>' +
       '<div class="pole"><div class="bar ' + (h >= 0 ? 'pos' : 'neg') +
       '" style="height:' + Math.max(2, Math.abs(h)) + 'px;background:' + TRADE_COL[t] + '"></div></div>' +
@@ -2935,7 +2985,8 @@ let lastOreShown = -1;
 
 function bank(type) {
   // the market only prices refined goods; raw ore always sells for its base
-  const v = (VALUE[type] || 1) * (PRICE[type] || 1);
+  let v = (VALUE[type] || 1) * (PRICE[type] || 1);
+  if (rival && type === rival.item) { const extra = v * (rival.mult - 1); rival.sold++; rival.extra += extra; v += extra; }
   ore += v; runValue += v;
   if (type === ALLOY && (PRICE[ALLOY] || 1) >= 1.2) soldHigh++;
   if (contract && type === contract.item) { contract.have++; renderContract(); if (contract.have >= contract.need) fillContract(); }
@@ -4439,7 +4490,7 @@ function wipe() {
   ore = 0; ingots = 0; alloys = 0; cores = 0; runValue = 0;
   for (const k in UPGRADES) UPGRADES[k].lvl = 0;
   goalIdx = 0; soldHigh = 0; riftsPaid = 0; shards = 0; rank = 0; contractsFilled = 0;
-  contract = null; contractClock = 40; standing = null; streak = 0; renderContract(); renderStanding(); renderRank();
+  contract = null; contractClock = 40; standing = null; streak = 0; rival = null; rivalClock = 60; renderContract(); renderStanding(); renderRival(); renderRank();
   for (const g of GOALS) if (g.rate) g.held = 0;
   applyWorld(0);
   for (const k in UNLOCKED) if (!START_TOOLS.includes(k)) delete UNLOCKED[k];
@@ -4537,7 +4588,7 @@ buildToolIcons();
 // open" has to be applied here, on the first frame, not on the first reload
 applyRewards(); renderUpgrades();
 renderGoal();
-renderRank(); renderContract(); renderStanding();
+renderRank(); renderContract(); renderStanding(); renderRival();
 if (!restored) applyWorld(worldIdx);   // a restored save has already chosen
 // ?world=k is a debug override (like ?grid=): a gate can measure any world's
 // light without walking the chain first
@@ -4559,6 +4610,7 @@ renderer.setAnimationLoop(() => {
   stepIce(dt);
   stepContracts(dt);
   stepStanding(dt);
+  stepRival(dt);
   if (contract && (performance.now() % 500) < 20) renderContract();
   // seams grow back on their own, and wear their richness as their size
   eachTile((c, f, i, j) => {
@@ -5302,6 +5354,7 @@ window.__game = {
     contract: contract ? { item: contractName(contract.item, contract.need), need: contract.need, have: contract.have,
                            left: +contract.left.toFixed(1), bonus: contract.bonus } : null,
     shards, rank, contracts_filled: contractsFilled, streak,
+    rival: rival ? { item: contractName(rival.item, 2), mult: rival.mult, left: +rival.left.toFixed(1), sold: rival.sold, extra: +rival.extra.toFixed(1) } : null,
     standing: standing ? { item: contractName(standing.item, standing.perMin), per_min: standing.perMin, pay: standing.pay,
                            held: +standing.held.toFixed(1), rate: standing.rate, minutes: standing.minutes, short: +standing.short.toFixed(1) } : null,
     spores: (() => { let n = 0; eachTile(c => { if (c.clog > 0) n++; });
@@ -5370,6 +5423,7 @@ window.__factory = {
   get shards() { return shards; }, set shards(v) { shards = v; renderRank(); }, get rank() { return rank; }, CONTRACT_EVERY,
   offerStanding, get standing() { return standing; }, set streak(v) { streak = v; }, get streak() { return streak; },
   set standingHeld(v) { if (standing) standing.held = v; }, STANDING_GRACE,
+  offerRival, get rival() { return rival; }, set rivalLeft(v) { if (rival) rival.left = v; }, RIVAL_MULT,
   sporeStrike, sporeShielded, sporesActive, SPORE_REACH, SPORE_CLOG,
   set riftsPaid(v) { riftsPaid = v; },
   set rateNow(v) { rateForce = v; rateNow = v === null ? rateNow : v; }, set goalIdx(v) { goalIdx = v; applyRewards(); renderGoal(); renderWorlds(); },

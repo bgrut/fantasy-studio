@@ -306,6 +306,16 @@
   #standing .bar i{display:block;height:100%;background:linear-gradient(90deg,#ffd479,#5ce0d0);transition:width .3s}
   #standing.short .bar i{background:linear-gradient(90deg,#ff9f7a,#ffd479)}
   #standing .left{display:block;margin-top:4px;font-family:var(--f-mono);font-size:10px;letter-spacing:.06em;color:#c9b27a}
+  /* the rival buyer: white, because it is not ours, and it drains left to right */
+  #rival{display:none;margin-top:8px;border:1px solid rgba(255,255,255,.35);border-radius:10px;padding:8px 10px;
+         background:linear-gradient(180deg,rgba(255,255,255,.10),rgba(255,255,255,.03))}
+  #rival.on{display:block}
+  #rival b{display:block;font-family:var(--f-head);font-size:13px;letter-spacing:.05em;color:#f4f8ff;font-weight:700}
+  #rival small{display:block;color:#9aa3bf;font-size:10px;margin-top:2px}
+  #rival .bar{height:4px;margin-top:7px;border-radius:2px;background:rgba(255,255,255,.12);overflow:hidden}
+  #rival .bar i{display:block;height:100%;background:linear-gradient(90deg,#ffffff,#9fd6ff);transition:width .4s linear}
+  #tick .mk.hot .px{color:#fff;text-shadow:0 0 8px rgba(255,255,255,.8)}
+  #tick .mk.hot .nm{color:#fff}
   /* rank and shards, under the rate */
   #rank{display:flex;justify-content:space-between;align-items:baseline;margin-top:3px;font-size:10px;letter-spacing:.14em}
   #rank b{font-family:var(--f-head);font-weight:600;color:#8d8564}
@@ -379,6 +389,7 @@
   <div id="goal"></div>
   <div id="contract"><b></b><small></small><div class="bar"><i style="width:0%"></i></div><span class="left"></span></div>
   <div id="standing"><b></b><small></small><div class="bar"><i style="width:0%"></i></div><span class="left"></span></div>
+  <div id="rival"><b></b><small></small><div class="bar"><i style="width:100%"></i></div></div>
   <div id="tick"></div>
   <div id="ups"></div>
   <div id="world"></div>

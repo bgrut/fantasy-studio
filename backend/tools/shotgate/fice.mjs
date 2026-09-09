@@ -42,11 +42,14 @@ const frozen = await p.evaluate(async () => {
   const hit = F.iceStrike();
   if (!hit) return { hit: null };
   const shell = !!F.cells[hit[0]][hit[1]][hit[2]].iceMesh && !!window.__scene.getObjectByName('ice');
+  // any face, any seam with an empty tile beside it in the +i direction
   let pick = null;
-  for (let i = 2; i < F.N - 3 && !pick; i++) for (let j = 2; j < F.N - 2 && !pick; j++) {
-    const s = F.cells[0][i][j];
-    if (s.t === TY.NODE && s.mesh && F.cells[0][i + 1][j].t === TY.EMPTY) pick = [0, i, j];
-  }
+  for (let f = 0; f < 6 && !pick; f++)
+    for (let i = 1; i < F.N - 2 && !pick; i++) for (let j = 1; j < F.N - 1 && !pick; j++) {
+      const s = F.cells[f][i][j];
+      if (s.t === TY.NODE && s.mesh && F.cells[f][i + 1][j].t === TY.EMPTY) pick = [f, i, j];
+    }
+  if (!pick) return { hit, shell, outFrozen: 0, outThawed: 0, noSeam: true };
   const c = F.cells[pick[0]][pick[1]][pick[2]];
   c.ice = F.ICE_THAW;
   F.place(pick[0], pick[1], pick[2], TY.MINER, 0);
