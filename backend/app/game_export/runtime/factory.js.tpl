@@ -39,7 +39,7 @@ const MOOD_LOOK = {
            // faces sit at 0.06 flattened the contact shadows to nothing
            grade: { lift: [0.010, 0.004, 0.0], gamma: [1.0, 0.97, 0.94], gain: [1.05, 0.98, 0.92], sat: 1.08 },
            star: 0xffd2b8, edge: 0xff9a5c, sun: 0xffd0a0,
-           plate: { base: '#6a5a58', tint: '#4a3a38', seam: 'rgba(40,24,22,0.8)', rivet: 'rgba(160,120,110,0.5)', overlay: 'soot' },
+           plate: { base: '#766360', tint: '#524240', seam: 'rgba(40,24,22,0.8)', rivet: 'rgba(160,120,110,0.5)', overlay: 'soot' },
            belt: { frame: 0x8a4a2a, glow: 0x2a1006, deck: 0xffd0b0 },
            weather: { col: [0.95, 0.42, 0.22], rate: 14, size: 0.040, fall: 0.55, drift: 0.55, life: 0.14 } },
   cold:  { sky: 0x0a1420, fog: 0x11202f, accent: 0xcfe8ff, ground: 0x7c93ad, grid: 0xa8c4dd,
@@ -345,7 +345,25 @@ const renderer = new THREE.WebGLRenderer({ antialias: true,
   // a black screen from an unreadable one. Off by default because it costs a
   // copy every frame; on with ?debug=1, which only a harness passes.
   preserveDrawingBuffer: /[?&]debug=1/.test(location.search) });
-renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+// THE TIER. The studio's three names; the URL wins, then the saved choice.
+// Pixel ratio, shadow map, the post pipeline's internal resolution and the
+// particle budget scale together, so one word means one thing.
+const TIERS = {
+  ultra:       { dpr: 2,   shadow: 2048, post: 1.0,  budget: 1.0 },
+  balanced:    { dpr: 1.5, shadow: 2048, post: 0.85, budget: 0.8 },
+  performance: { dpr: 1,   shadow: 1024, post: 0.6,  budget: 0.5 },
+};
+let tierName = (location.search.match(/[?&]q=(\w+)/) || [])[1];
+if (!TIERS[tierName]) { try { tierName = localStorage.getItem('fs-factory-q'); } catch (e) {} }
+if (!TIERS[tierName]) tierName = 'ultra';
+let TIER = TIERS[tierName];
+renderer.setPixelRatio(Math.min(devicePixelRatio, TIER.dpr));
+// REDUCED MOTION: the system preference, ?motion=0, or the panel's toggle
+let REDUCED = false;
+try { REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches || localStorage.getItem('fs-factory-motion') === '0'; } catch (e) {}
+if (/[?&]motion=0/.test(location.search)) REDUCED = true;
+if (/[?&]motion=1/.test(location.search)) REDUCED = false;
+document.body.classList.toggle('reduced', REDUCED);
 renderer.setSize(innerWidth, innerHeight);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -376,7 +394,7 @@ const CORNER = HALF * Math.SQRT2 * 1.2;      // a little past the true corner
 const sun = new THREE.DirectionalLight(0xfff0d8, 3.1);
 sun.position.set(HALF * 2.4, HALF * 3.2, HALF * 1.8);
 sun.castShadow = true;
-sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.mapSize.set(TIER.shadow, TIER.shadow);
 sun.shadow.camera.left = -CORNER;
 sun.shadow.camera.right = CORNER;
 sun.shadow.camera.top = CORNER;
@@ -530,6 +548,7 @@ const matComposite = new THREE.ShaderMaterial({
     uGamma: { value: new THREE.Vector3(1, 1, 1) },
     uGain: { value: new THREE.Vector3(1, 1, 1) },
     uSat: { value: 1.0 },
+    uFlash: { value: 0.0 },        // the meltdown's white
   },
   vertexShader: QUAD_VS,
   fragmentShader: `
@@ -538,6 +557,7 @@ const matComposite = new THREE.ShaderMaterial({
     uniform float uStrength; uniform float uVignette;
     uniform vec3 uTint; uniform float uTintAmt; uniform float uExposure;
     uniform vec3 uLift; uniform vec3 uGamma; uniform vec3 uGain; uniform float uSat;
+    uniform float uFlash;
 
     // TONE MAP AND ENCODE HERE, because three does neither when it renders
     // into a render target — it only applies them on the way to the canvas.
@@ -571,6 +591,7 @@ const matComposite = new THREE.ShaderMaterial({
       c = pow(max(c * uGain + uLift, vec3(0.0)), vec3(1.0) / uGamma);
       float l2 = dot(c, vec3(0.2126, 0.7152, 0.0722));
       c = clamp(mix(vec3(l2), c, uSat), 0.0, 1.0);
+      c = mix(c, vec3(1.0, 0.96, 0.9), uFlash);
       vec2 d = vUv - 0.5;
       c *= 1.0 - uVignette * dot(d, d) * 2.0;
       gl_FragColor = vec4(toSRGB(c), 1.0);
@@ -590,7 +611,7 @@ function blit(mat, target) {
 }
 
 function sizePost() {
-  const dpr = renderer.getPixelRatio();
+  const dpr = renderer.getPixelRatio() * TIER.post;      // the post runs under the canvas on a lower tier
   const w = Math.max(2, Math.floor(innerWidth * dpr));
   const h = Math.max(2, Math.floor(innerHeight * dpr));
   rtScene.setSize(w, h);
@@ -640,6 +661,7 @@ function renderFrame() {
   matComposite.uniforms.tBloom.value = rtA.texture;
   matComposite.uniforms.uStrength.value = POST.strength;
   matComposite.uniforms.uVignette.value = POST.vignette + crossVig;   // the crossing's bite
+  matComposite.uniforms.uFlash.value = meltFlash;
   matComposite.uniforms.uTintAmt.value = POST.tint;
   blit(matComposite, null);
 }
@@ -1214,6 +1236,39 @@ const nodeMat = nodeMats[CRYSTAL];
 // repeat is obvious the moment two of them are in frame together. Different
 // counts and different leans, so they differ in silhouette and not only in
 // orientation.
+// EACH ORE HAS A SILHOUETTE. Crystal: octahedra. Ember: blocky clusters.
+// Salt: flat hexagonal plates. Colour-blind or not, the seam and the item say
+// which ore they are by shape.
+const nodeGeosEmber = [
+  mergeParts([
+    { g: new THREE.BoxGeometry(0.72, 0.62, 0.72), y: 0.2, ry: 0.4 },
+    { g: new THREE.BoxGeometry(0.42, 0.5, 0.42), x: 0.42, y: 0.05, z: -0.2, ry: 0.9, rz: 0.25, tint: 0.85 },
+  ]),
+  mergeParts([
+    { g: new THREE.BoxGeometry(0.56, 0.9, 0.56), y: 0.3, ry: 0.7, rz: 0.18 },
+    { g: new THREE.BoxGeometry(0.36, 0.34, 0.36), x: -0.38, y: 0.02, z: 0.22, ry: 0.2 },
+    { g: new THREE.BoxGeometry(0.28, 0.42, 0.28), x: 0.36, y: 0.1, z: 0.3, ry: 1.1, tint: 0.8 },
+  ]),
+  mergeParts([
+    { g: new THREE.BoxGeometry(0.9, 0.46, 0.7), y: 0.12, ry: 0.3, rx: 0.15 },
+    { g: new THREE.BoxGeometry(0.34, 0.58, 0.34), x: 0.2, y: 0.4, z: 0.1, ry: 0.8, tint: 0.85 },
+  ]),
+];
+const nodeGeosSalt = [
+  mergeParts([
+    { g: new THREE.CylinderGeometry(0.58, 0.62, 0.16, 6), y: 0.08 },
+    { g: new THREE.CylinderGeometry(0.34, 0.38, 0.14, 6), x: 0.3, y: 0.24, z: 0.1, ry: 0.5, tint: 0.85 },
+  ]),
+  mergeParts([
+    { g: new THREE.CylinderGeometry(0.5, 0.56, 0.18, 6), y: 0.09, rx: 0.2 },
+    { g: new THREE.CylinderGeometry(0.42, 0.46, 0.12, 6), x: -0.3, y: 0.28, z: -0.2, rx: -0.3, ry: 0.6, tint: 0.85 },
+    { g: new THREE.CylinderGeometry(0.22, 0.26, 0.10, 6), x: 0.36, y: 0.14, z: 0.32, tint: 0.8 },
+  ]),
+  mergeParts([
+    { g: new THREE.CylinderGeometry(0.66, 0.70, 0.12, 6), y: 0.06 },
+    { g: new THREE.CylinderGeometry(0.30, 0.34, 0.22, 6), x: 0.1, y: 0.22, z: -0.1, ry: 0.3, tint: 0.85 },
+  ]),
+];
 const nodeGeos = [
   mergeParts([
     { g: new THREE.OctahedronGeometry(0.58, 0) },
@@ -1247,7 +1302,8 @@ function makeSeam(f, i, j) {
   c.min = MINERAL_OF_FACE[f];
   // ITS OWN MATERIAL, so its glow can follow its richness (a shared one
   // would dim every seam of that ore at once); still one draw call per seam
-  const m = new THREE.Mesh(nodeGeos[Math.floor(rnd() * nodeGeos.length)],
+  const geos = c.min === EMBER ? nodeGeosEmber : c.min === SALT ? nodeGeosSalt : nodeGeos;
+  const m = new THREE.Mesh(geos[Math.floor(rnd() * geos.length)],
                            nodeMats[c.min].clone());
   // the core: a small bright heart in the ore's colour, additive so it reads
   // as light rather than as a second crystal; it shrinks as the seam thins
@@ -2004,7 +2060,7 @@ function contactTexture() {
   // seventeen on top where the cast shadow helps. The ramp holds longer now.
   grd.addColorStop(0, 'rgba(0,0,0,0.86)');
   grd.addColorStop(0.5, 'rgba(0,0,0,0.64)');
-  grd.addColorStop(0.82, 'rgba(0,0,0,0.30)');
+  grd.addColorStop(0.85, 'rgba(0,0,0,0.36)');
   grd.addColorStop(1, 'rgba(0,0,0,0)');
   g.fillStyle = grd; g.fillRect(0, 0, 64, 64);
   const t = new THREE.CanvasTexture(c);
@@ -2145,6 +2201,7 @@ const _flat = new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.PI / 2, 
 // different constants is how a codebase ends up with two subtly different
 // gravities, and how one of them ends up wrong on the underside of the cube.
 const PMAX = 640;          // weather, machines, and an ambience layer
+let PBUDGET = Math.max(64, Math.floor(PMAX * TIER.budget));   // the tier's share of it
 const pPos = new Float32Array(PMAX * 3);
 const pVel = new Float32Array(PMAX * 3);
 const pCol = new Float32Array(PMAX * 3);
@@ -2207,7 +2264,7 @@ scene.add(particles);
 
 /** Emit one particle. size > 0 swells (smoke), size < 0 shrinks (spark). */
 function emit(x, y, z, vx, vy, vz, r, g, bcol, size, decay, grav) {
-  const k = pHead; pHead = (pHead + 1) % PMAX;
+  const k = pHead; pHead = (pHead + 1) % PBUDGET;
   pPos[k * 3] = x; pPos[k * 3 + 1] = y; pPos[k * 3 + 2] = z;
   pVel[k * 3] = vx; pVel[k * 3 + 1] = vy; pVel[k * 3 + 2] = vz;
   pCol[k * 3] = r; pCol[k * 3 + 1] = g; pCol[k * 3 + 2] = bcol;
@@ -2307,7 +2364,7 @@ function stepAmbience(dt) {
 function stepWeather(dt) {
   const w = WORLDS[worldIdx] && WORLDS[worldIdx].weather;
   if (!w || intro > 0) return;
-  weatherClock += dt * w.rate;
+  weatherClock += dt * w.rate * TIER.budget;
   const f = FACES[player.face], n = f.n, u = f.u, v = f.v;
   while (weatherClock >= 1) {
     weatherClock -= 1;
@@ -2389,6 +2446,21 @@ const items = new THREE.InstancedMesh(
 items.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
 items.frustumCulled = false;
 items.count = 0;
+// and the other two ores on the belt, each in its own silhouette
+const itemsEmber = new THREE.InstancedMesh(
+  mergeParts([
+    { g: new THREE.BoxGeometry(0.30, 0.26, 0.30), ry: 0.4 },
+    { g: new THREE.BoxGeometry(0.17, 0.2, 0.17), x: 0.17, y: -0.05, z: 0.08, ry: 0.9, rz: 0.2, tint: 0.8 },
+  ], { floor: 0.7, reach: 0.4 }), items.material, MAX_ITEMS);
+const itemsSalt = new THREE.InstancedMesh(
+  mergeParts([
+    { g: new THREE.CylinderGeometry(0.25, 0.27, 0.08, 6) },
+    { g: new THREE.CylinderGeometry(0.14, 0.16, 0.07, 6), x: 0.12, y: 0.07, z: 0.05, ry: 0.5, tint: 0.85 },
+  ], { floor: 0.7, reach: 0.3 }), items.material, MAX_ITEMS);
+for (const m of [itemsEmber, itemsSalt]) {
+  m.instanceMatrix.setUsage(THREE.DynamicDrawUsage); m.frustumCulled = false; m.count = 0; scene.add(m);
+}
+const ORE_MESH = { [EMBER]: itemsEmber, [SALT]: itemsSalt };
 // A REFINED PRODUCT IS A BAR: a chamfered ingot lying flat, aligned with the
 // belt, a groove stamped across it, metallic so the world's light runs along
 // it. The alloy is the same bar with a band of its second tone.
@@ -2500,7 +2572,18 @@ function sporeStrike() {
 }
 function stepSpores(dt) {
   // clogs clear on their own; the strikes keep coming while the world is green
-  eachTile(c => { if (c.clog > 0) c.clog = Math.max(0, c.clog - dt); });
+  eachTile((c, f, i, j) => {
+    if (!(c.clog > 0)) return;
+    c.clog = Math.max(0, c.clog - dt);
+    // and it keeps puffing while clogged: a clog and a jam differ by motion,
+    // not only by green against amber
+    if (Math.random() < dt * 1.6) {
+      const n = FACES[f].n, w = tileWorld(f, i, j);
+      emit(w[0] + n[0] * 0.5 + (Math.random() - 0.5) * 0.6, w[1] + n[1] * 0.5 + (Math.random() - 0.5) * 0.6,
+           w[2] + n[2] * 0.5 + (Math.random() - 0.5) * 0.6, n[0] * 0.35, n[1] * 0.35, n[2] * 0.35,
+           0.5, 0.95, 0.55, 0.05, 1.1);
+    }
+  });
   if (!sporesActive()) { sporeClock = 0; return; }
   sporeClock += dt;
   if (sporeClock >= SPORE_EVERY) { sporeClock = 0; sporeStrike(); }
@@ -2848,7 +2931,7 @@ function paintBeltLoad() {
 // even though the simulation is a discrete grid step. A blocked item sits
 // still, which is what makes a jam legible.
 function drawItems(alpha) {
-  let n = 0, nb = 0;
+  let n = 0, nb = 0, nE = 0, nS = 0;
   const spin = performance.now() * 0.002;
   eachTile((c, f, i, j) => {
     if (n >= MAX_ITEMS || !c.item) return;
@@ -2911,12 +2994,19 @@ function drawItems(alpha) {
     }
     _q.setFromAxisAngle(_up, spin + ph);
     _m.compose(_p, _q, _s);
+    if (c.item === EMBER) { itemsEmber.setColorAt(nE, ITEM_COL[EMBER]); itemsEmber.setMatrixAt(nE++, _m); return; }
+    if (c.item === SALT) { itemsSalt.setColorAt(nS, ITEM_COL[SALT]); itemsSalt.setMatrixAt(nS++, _m); return; }
     items.setColorAt(n, ITEM_COL[c.item] || ITEM_COL[CRYSTAL]);
     items.setMatrixAt(n++, _m);
   });
   items.count = n;
   items.instanceMatrix.needsUpdate = true;
   if (items.instanceColor) items.instanceColor.needsUpdate = true;
+  itemsEmber.count = nE; itemsEmber.instanceMatrix.needsUpdate = true;
+  if (itemsEmber.instanceColor) itemsEmber.instanceColor.needsUpdate = true;
+  itemsSalt.count = nS; itemsSalt.instanceMatrix.needsUpdate = true;
+  if (itemsSalt.instanceColor) itemsSalt.instanceColor.needsUpdate = true;
+  n += nE + nS;
   bars.count = nb;
   bars.instanceMatrix.needsUpdate = true;
   if (bars.instanceColor) bars.instanceColor.needsUpdate = true;
@@ -3224,6 +3314,9 @@ function rigPulse(kind) { rigKick = 1; rigKind = kind; }
 // THE CROSSING. crossFlash runs 1 -> 0 after an edge: field of view, vignette,
 // a caption naming the face and its ore.
 let crossFlash = 0, BASE_FOV = null, captionAt = 0, crossVig = 0;
+// THE MELTDOWN'S CEREMONY: a flash that decays, a shockwave across the face,
+// a half-second of shake on the pulled-back shot
+let meltFlash = 0, meltShake = 0, shockwave = null, shockAge = 0;
 // THE BODY LAGS THE INTENT. playerVel is where the keys say to go; velLag is
 // where the body has caught up to; the difference leans the camera. landDip
 // is how hard the last landing was, springing back.
@@ -3575,10 +3668,37 @@ function meltdown() {
   melting = 2.4;
   refreshCounts();
   document.getElementById('tok').textContent = cores;
+  // the ceremony: flash, shockwave from where the factory stood, shake, thump, pop
+  meltFlash = REDUCED ? 0.35 : 0.9; meltShake = REDUCED ? 0 : 1;
+  if (introFrom && introFrom.at) {
+    if (shockwave) { scene.remove(shockwave); shockwave.geometry.dispose(); }
+    shockwave = new THREE.Mesh(new THREE.RingGeometry(0.86, 1.0, 48),
+      new THREE.MeshBasicMaterial({ color: 0xffc07a, transparent: true, opacity: 0.9, side: THREE.DoubleSide,
+                                    blending: THREE.AdditiveBlending, depthWrite: false }));
+    const f = FACES[player.face];
+    _gbx.set(f.u[0], f.u[1], f.u[2]); _gby.set(f.v[0], f.v[1], f.v[2]); _gbz.set(f.n[0], f.n[1], f.n[2]);
+    shockwave.quaternion.setFromRotationMatrix(_gm.makeBasis(_gbx, _gby, _gbz));
+    shockwave.position.copy(introFrom.at).addScaledVector(_gbz, 0.12);
+    shockwave.scale.setScalar(0.2);
+    shockAge = 0;
+    scene.add(shockwave);
+  }
+  if (AUDIO.ready && !AUDIO.muted) { tone(40, 0.6, 'sine', 0.32); tone(30, 0.9, 'sine', 0.2, 0.08); }
+  const tk = document.getElementById('tok');
+  if (tk) { tk.classList.remove('won'); void tk.offsetWidth; tk.classList.add('won'); setTimeout(() => tk.classList.remove('won'), 1000); }
   renderWorlds();                     // a core may have opened somewhere new
 }
 
 function stepDebris(dt) {
+  meltFlash *= Math.exp(-dt * 4.5); if (meltFlash < 0.004) meltFlash = 0;
+  meltShake *= Math.exp(-dt * 3.5); if (meltShake < 0.01) meltShake = 0;
+  if (shockwave) {
+    shockAge += dt;
+    const k = Math.min(1, shockAge / 0.9), e = 1 - (1 - k) * (1 - k);
+    shockwave.scale.setScalar(0.2 + HALF * 1.7 * e);
+    shockwave.material.opacity = 0.9 * (1 - k);
+    if (k >= 1) { scene.remove(shockwave); shockwave.geometry.dispose(); shockwave = null; }
+  }
   for (let k = debris.length - 1; k >= 0; k--) {
     const d = debris[k];
     // the worldlet still pulls: pieces arc out and come back, which reads as
@@ -3646,6 +3766,14 @@ function applyWorld(k) {
   // not a tint, and the dark faces keep a floor to stand on.
   hemi.color.copy(new THREE.Color(w.sky).lerp(new THREE.Color(0xffffff), 0.55));
   hemi.groundColor.copy(new THREE.Color(w.ground || w.grid).lerp(new THREE.Color(0xffffff), 0.4));
+  // AND A FLOOR UNDER DARK PLATING (2026-09-09). Soot plating reflects half
+  // what steel does, so the warm world's unlit faces sat at 18/255 and a
+  // contact shadow's twelve percent was two counts — invisible. The bounce
+  // scales up with the darkness of the plate, so every world's underside
+  // reads, and the shadow on it has something to subtract from.
+  const pb = new THREE.Color((w.plate && w.plate.base) || '#8792c4');
+  const plum = 0.2126 * pb.r + 0.7152 * pb.g + 0.0722 * pb.b;
+  hemi.intensity = 0.95 * Math.max(1, Math.min(1.6, 0.34 / Math.max(0.05, plum)));
   if (lanes) lanes.material.color.setHex(w.edge || w.grid);
   starField.material.color.setHex(w.star);
   if (cubeEdges) cubeEdges.material.color.setHex(w.edge || w.grid);
@@ -4055,6 +4183,16 @@ addEventListener('visibilitychange', () => { if (document.hidden) save(); });
 {
   const h = document.querySelector('#hud h1');
   if (h) h.textContent = (SPEC.title || 'FACTORY').toUpperCase();
+  const mo = document.getElementById('motion');
+  const showMotion = () => { if (mo) mo.textContent = 'motion: ' + (REDUCED ? 'reduced' : 'full'); };
+  showMotion();
+  if (mo) mo.addEventListener('pointerdown', ev => {
+    ev.stopPropagation();
+    REDUCED = !REDUCED;
+    document.body.classList.toggle('reduced', REDUCED);
+    try { localStorage.setItem('fs-factory-motion', REDUCED ? '0' : '1'); } catch (e) {}
+    showMotion();
+  });
   const w = document.getElementById('wipe');
   if (w) w.addEventListener('pointerdown', ev => {
     ev.stopPropagation();
@@ -4198,6 +4336,7 @@ renderer.setAnimationLoop(() => {
   if (!melting) stepEmitters(dt);
   stepWeather(dt);
   stepAmbience(dt);
+  watchFrames(dt);
   stepParticles(dt);
   // the tread scrolls at the speed items actually travel: one tile per tick.
   // A belt whose surface moves at a speed unrelated to its throughput is worse
@@ -4269,7 +4408,8 @@ renderer.setAnimationLoop(() => {
     // the reveal: three-quarters of a turn, easing in from far out, and a
     // gentle drop in pitch so the last frame is nearly the player's own view
     intro = Math.max(0, intro - dt);
-    const t = 1 - intro / introTotal;                    // 0 -> 1
+    // reduced motion: the card over your own view, no orbit
+    const t = REDUCED ? 1 : 1 - intro / introTotal;      // 0 -> 1
     const e = t * t * (3 - 2 * t);
     // Two different shots. The arrival eases IN from far out, low, a
     // three-quarter turn. The meltdown starts high and close over the face the
@@ -4290,6 +4430,8 @@ renderer.setAnimationLoop(() => {
                           at.y + n[1] * h + u[1] * side,
                           at.z + n[2] * h + u[2] * side);
       camera.lookAt(at.x * (1 - e * 0.6), at.y * (1 - e * 0.6), at.z * (1 - e * 0.6));
+      // the shake: the shot itself is hit by the blast
+      if (meltShake > 0) camera.position.add(_lean.set((Math.random() - 0.5), (Math.random() - 0.5), (Math.random() - 0.5)).multiplyScalar(0.5 * meltShake));
     } else {
       const yaw = introFrom.yaw + e * Math.PI * 1.5;
       const pitch = 1.05 - e * 0.55;
@@ -4332,25 +4474,26 @@ renderer.setAnimationLoop(() => {
     // Built from a basis, not from Euler angles: there is no global "up" left
     // to write a yaw against once the player can be standing on the underside
     // of the world. camUp trails the true up so an edge crossing rolls.
-    camUp.lerp(player.up, Math.min(1, dt * 5)).normalize();   // an edge crossing rolls with weight
+    camUp.lerp(player.up, Math.min(1, dt * (REDUCED ? 16 : 5))).normalize();   // an edge crossing rolls with weight
     fpQuaternion(camera.quaternion, camUp);
     // WEIGHT. Lean into a start and out of a stop by the gap between intent
     // and body; dip on a landing by how hard it was; spring back.
     velLag.lerp(playerVel, Math.min(1, dt * 6));
     _lean.copy(playerVel).sub(velLag);
-    const roll = Math.max(-0.06, Math.min(0.06, -_lean.dot(_bx) * 0.006));
-    const nod = Math.max(-0.05, Math.min(0.05, -_lean.dot(_bz) * 0.004));   // _bz is -forward here
+    const mo = REDUCED ? 0 : 1;
+    const roll = mo * Math.max(-0.06, Math.min(0.06, -_lean.dot(_bx) * 0.006));
+    const nod = mo * Math.max(-0.05, Math.min(0.05, -_lean.dot(_bz) * 0.004));   // _bz is -forward here
     camera.rotateZ(roll);
     camera.rotateX(-nod);
     if (!wasGround && player.onGround) landDip = Math.min(0.16, Math.abs(prevVy) * 0.016);
     landDip *= Math.exp(-dt * 8);
-    camera.position.addScaledVector(_by, -landDip);
+    camera.position.addScaledVector(_by, -landDip * mo);
     // A CAMERA THAT DOES NOT MOVE WHEN YOU WALK reads as a drone, not a person.
     // After the basis, so it can use the camera's OWN right vector — _rt is a
     // scratch the edge-crossing loop overwrites with a face axis, and swaying
     // along whatever that happened to be is not a bob.
     bobPhase += dt * (moveMag > 0.01 ? 9.5 : 0) * (keys['ShiftLeft'] ? 1.35 : 1);
-    bobAmt += ((moveMag > 0.01 && player.onGround ? 1 : 0) - bobAmt) *
+    bobAmt += (((moveMag > 0.01 && player.onGround && !REDUCED) ? 1 : 0) - bobAmt) *
               Math.min(1, dt * 7);
     camera.position.addScaledVector(_by, Math.sin(bobPhase * 2) * 0.045 * bobAmt);
     camera.position.addScaledVector(_bx, Math.sin(bobPhase) * 0.035 * bobAmt);
@@ -4376,15 +4519,45 @@ renderer.setAnimationLoop(() => {
     if (BASE_FOV === null) BASE_FOV = camera.fov;
     crossFlash *= Math.exp(-dt * 3.2);
     const cf = crossFlash < 0.003 ? 0 : crossFlash;
-    const fov = BASE_FOV + 7 * Math.sin(Math.min(1, cf) * Math.PI);
+    const fov = BASE_FOV + 7 * mo * Math.sin(Math.min(1, cf) * Math.PI);
     if (Math.abs(camera.fov - fov) > 0.01) { camera.fov = fov; camera.updateProjectionMatrix(); }
-    crossVig = 0.4 * cf;                    // renderFrame adds it to the vignette
+    crossVig = 0.4 * cf * mo;               // renderFrame adds it to the vignette
     if (captionAt > 0) { captionAt -= dt; if (captionAt <= 0) { const fc = document.getElementById('facecap'); if (fc) fc.classList.remove('on'); } }
     updateGhost();
   }
   document.body.classList.toggle('overhead', overhead);
   renderFrame();
 });
+
+// ── THE TIER, LIVE ─────────────────────────────────────────────────────────
+// Steps down once on its own if the frames are not keeping up, and says so.
+function applyTier(name, why) {
+  if (!TIERS[name] || name === tierName) return;
+  tierName = name; TIER = TIERS[name];
+  renderer.setPixelRatio(Math.min(devicePixelRatio, TIER.dpr));
+  renderer.setSize(innerWidth, innerHeight);
+  sun.shadow.mapSize.set(TIER.shadow, TIER.shadow);
+  if (sun.shadow.map) { sun.shadow.map.dispose(); sun.shadow.map = null; }
+  sizePost();
+  PBUDGET = Math.max(64, Math.floor(PMAX * TIER.budget));
+  try { localStorage.setItem('fs-factory-q', name); } catch (e) {}
+  const t = document.getElementById('toast');
+  if (t && why) { t.textContent = 'graphics: ' + name + ' — ' + why; t.classList.add('on'); toastAt = 3.5; }
+}
+const frameTimes = [];
+let tierStepped = false, tierClock = 0;
+function watchFrames(dt) {
+  if (tierStepped || REDUCED) return;
+  frameTimes.push(dt); tierClock += dt;
+  if (tierClock < 5) return;
+  const sorted = frameTimes.slice().sort((a, b) => a - b);
+  const median = sorted[sorted.length >> 1];
+  frameTimes.length = 0; tierClock = 0;
+  if (median > 0.024) {
+    const next = tierName === 'ultra' ? 'balanced' : tierName === 'balanced' ? 'performance' : null;
+    if (next) { applyTier(next, 'frames were dropping'); tierStepped = true; }
+  }
+}
 
 // ── WHAT YOU ARE HOLDING ───────────────────────────────────────────────────
 // A projector on your forearm, and above it a hologram of whatever the tool
@@ -4800,6 +4973,7 @@ window.__game = {
     world_name: WORLDS[worldIdx].name,
     worlds_open: WORLDS.filter(w => (CREATIVE || cores >= w.cores) && worldCapOk(w)).length,
     creative: CREATIVE,
+    tier: tierName, reduced_motion: REDUCED,
     spores: (() => { let n = 0; eachTile(c => { if (c.clog > 0) n++; });
                      return { active: sporesActive(), hits: sporeHits, clogged: n, reach: SPORE_REACH }; })(),
     sold_high: soldHigh, rifts_paid: riftsPaid,
@@ -4857,6 +5031,9 @@ window.__factory = {
   },
   GOALS, UNLOCKED, get goalIdx() { return goalIdx; }, visitedFaces,
   CAPS, applyRewards, worldCapOk, bank, agreesWithMood, MOOD, SKY_COL,
+  applyTier, TIERS, get tier() { return tierName; }, get PBUDGET() { return PBUDGET; },
+  get REDUCED() { return REDUCED; }, set REDUCED(v) { REDUCED = !!v; document.body.classList.toggle('reduced', REDUCED); },
+  get meltFlash() { return meltFlash; }, get shockwave() { return shockwave; }, itemsEmber, itemsSalt,
   sporeStrike, sporeShielded, sporesActive, SPORE_REACH, SPORE_CLOG,
   set riftsPaid(v) { riftsPaid = v; },
   set rateNow(v) { rateForce = v; rateNow = v === null ? rateNow : v; }, set goalIdx(v) { goalIdx = v; applyRewards(); renderGoal(); renderWorlds(); },

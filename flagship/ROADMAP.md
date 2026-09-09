@@ -72,6 +72,11 @@ says so.
 | **a title in each voice** | the reveal card's face, tracking, glow and rules follow the world's family: heavy and hot on the cinder, light and wide on the ice, italic serif on the green |
 | **the projector reacts** | recoils on a place with a white flash, red on an erase, spins the new hologram up from small on a switch |
 | **the crossing's ceremony** | an edge widens the view for a beat, bites the vignette, lands a low whoomp, and captions the face and the ore it grows |
+| **reduced motion** | the system preference, `?motion=0`, or the panel toggle stills bob, lean, dip, pulses and the title's settle, and plays the reveal as a card over your own view |
+| **ores by shape** | crystal octahedra, ember blocks, salt plates, in the seam and on the belt; a clogged belt keeps puffing so a clog and a jam differ by motion |
+| **the tier** | `?q=ultra/balanced/performance` scales pixel ratio, shadows, the post's resolution and the particle budget together; steps down once on its own if frames drop |
+| **the meltdown's ceremony** | a white flash that decays, a shockwave across the face from where the factory stood, shake on the shot, a bass thump, the core counter pops |
+| **a floor under dark plating** | the bounce scales with how dark a world's plate is, soot is a shade lighter, the contact ramp holds longer; the warm underside grounds at 11 where it read 2 |
 | **machine skin** | one shared panel map (seams, rivets, a lip, wear) on every machine; glow moved from the paint to the lamps; sun made the key (3.1 over 0.95 hemi / 0.85 fill); a frame on the smelter |
 | **the companion** | a planet or moon low in every world's sky, shaded from the sun's side with a terminator and an atmosphere rim, drawn in the sky shader; one fixed direction so it is a landmark |
 | **lanes** | every fifth grid line is a faint lit strip in the world's edge colour; the far plane widened to 1400 so the sky dome no longer clips from orbit |

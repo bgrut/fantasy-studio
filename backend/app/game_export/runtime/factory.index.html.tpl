@@ -112,6 +112,15 @@
   #wipe{margin-top:8px;text-align:center;font-size:10px;color:#5d6480;
         cursor:pointer;user-select:none;letter-spacing:.05em}
   #wipe:hover{color:#e8697d}
+  #motion{margin-top:4px;text-align:center;font-size:10px;color:#5d6480;cursor:pointer;letter-spacing:.06em}
+  #motion:hover{color:#9fd6ff}
+  /* reduced motion: nothing settles, slides or pulses in the chrome either */
+  body.reduced #title b{transition:none;transform:none}
+  body.reduced #facecap,body.reduced #toast,body.reduced .tool{transition:none}
+  /* the core counter pops when a meltdown pays */
+  @keyframes won{0%{transform:scale(1)}30%{transform:scale(1.7);color:#fff3c4}100%{transform:scale(1)}}
+  #tok.won{display:inline-block;animation:won .9s cubic-bezier(.2,.8,.2,1)}
+  body.reduced #tok.won{animation:none}
   #wipe span{display:inline-block;margin:0 5px;padding:3px 9px;border-radius:6px;
              border:1px solid rgba(255,255,255,.14);color:#d7dcec;letter-spacing:.08em}
   #wipe span:hover{border-color:#5cffc9;color:#5cffc9}
@@ -326,6 +335,7 @@
   <div id="rift"></div>
   <div id="melt"><b>MELTDOWN</b><small>collapse it all for cores</small></div>
   <div id="wipe">new world</div>
+  <div id="motion">motion: full</div>
 </div>
 <div id="tools">
   <div class="tool on" data-tool="miner"><svg viewBox="0 0 24 24"><path d="M4 20h16M6 20V9M18 20V9M6 9h12M8 9V6M16 9V6M8 6h8" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linecap="round"/><path d="M12 20v-6l-2-3h4l-2 3" fill="currentColor"/></svg><i class="key">1</i><b>MINER</b><small>on a node</small></div>
