@@ -84,6 +84,9 @@ says so.
 | **ice** | on a cold world an unheated seam freezes over every few seconds and its rig scrapes at half the floor; a smelter or forge within 3 tiles is heat and melts what it reaches three times faster; the heated drill ignores ice |
 | **the Long Drift's rule** | seams do not grow back there and a meltdown pays double: the last place is finite and it is where the cores are |
 | **a link that carries a factory** | "share link" copies a URL with the whole save in it; opening it starts that factory and drops the parameter; the studio is told |
+| **one type system** | Barlow Condensed for what is named, Barlow for what is read, IBM Plex Mono for what is counted (all SIL OFL, shipped in vendor/fonts); the three title voices are three weights of one family |
+| **contracts** | every seventy seconds the market posts one sized to the current rate; deliveries of its item count at the hub; filled pays a bonus and a shard, lapsed comes again |
+| **shards and rank** | three shards make a core without a meltdown; every meltdown raises the rank, which pays contracts more and gilds the worldlet's edge |
 | **machine skin** | one shared panel map (seams, rivets, a lip, wear) on every machine; glow moved from the paint to the lamps; sun made the key (3.1 over 0.95 hemi / 0.85 fill); a frame on the smelter |
 | **the companion** | a planet or moon low in every world's sky, shaded from the sun's side with a terminator and an atmosphere rim, drawn in the sky shader; one fixed direction so it is a landmark |
 | **lanes** | every fifth grid line is a faint lit strip in the world's edge colour; the far plane widened to 1400 so the sky dome no longer clips from orbit |

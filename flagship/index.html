@@ -8,19 +8,37 @@
      while this panel stayed a stack of monospace boxes, and the two together
      read as two different products. Same cards, same gradients, same faces —
      numbers stay monospace, because numbers should line up. */
+  /* ONE TYPE SYSTEM, SHIPPED. Three faces under the SIL Open Font License,
+     in vendor/fonts with the game, so it looks the same on every machine and
+     needs no network. Condensed for what is named, Barlow for what is read,
+     Plex Mono for what is counted. */
+  @font-face{font-family:"Barlow Condensed";font-weight:500;font-display:swap;src:url(vendor/fonts/BarlowCondensed-Medium.ttf) format("truetype")}
+  @font-face{font-family:"Barlow Condensed";font-weight:600;font-display:swap;src:url(vendor/fonts/BarlowCondensed-SemiBold.ttf) format("truetype")}
+  @font-face{font-family:"Barlow Condensed";font-weight:700;font-display:swap;src:url(vendor/fonts/BarlowCondensed-Bold.ttf) format("truetype")}
+  @font-face{font-family:"Barlow";font-weight:400;font-display:swap;src:url(vendor/fonts/Barlow-Regular.ttf) format("truetype")}
+  @font-face{font-family:"Barlow";font-weight:500;font-display:swap;src:url(vendor/fonts/Barlow-Medium.ttf) format("truetype")}
+  @font-face{font-family:"Barlow";font-weight:600;font-display:swap;src:url(vendor/fonts/Barlow-SemiBold.ttf) format("truetype")}
+  @font-face{font-family:"IBM Plex Mono";font-weight:400;font-display:swap;src:url(vendor/fonts/IBMPlexMono-Regular.ttf) format("truetype")}
+  @font-face{font-family:"IBM Plex Mono";font-weight:500;font-display:swap;src:url(vendor/fonts/IBMPlexMono-Medium.ttf) format("truetype")}
+  :root{--f-head:"Barlow Condensed","Arial Narrow",sans-serif;
+        --f-ui:"Barlow","Segoe UI",system-ui,sans-serif;
+        --f-mono:"IBM Plex Mono",ui-monospace,Consolas,monospace}
+  body{font-family:var(--f-ui)}
   #hud{position:fixed;left:14px;top:12px;z-index:5;
        background:linear-gradient(180deg,rgba(18,23,42,.90),rgba(8,10,20,.90));
        border:1px solid rgba(120,200,255,.16);border-radius:14px;padding:12px 14px;
        min-width:224px;backdrop-filter:blur(8px);
+       max-height:calc(100vh - 110px);overflow-y:auto;scrollbar-width:none;
        box-shadow:0 6px 24px rgba(0,0,0,.45),inset 0 1px 0 rgba(255,255,255,.05)}
-  #hud h1{margin:0 0 9px;font-size:13px;letter-spacing:.12em;color:#8ff3dd;
-          font-weight:700;
-          font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
-  .k{font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+  #hud::-webkit-scrollbar{display:none}
+  #hud h1{margin:0 0 7px;font-size:16px;letter-spacing:.14em;color:#8ff3dd;
+          font-weight:600;
+          font-family:var(--f-head)}
+  .k{font-family:var(--f-ui);font-weight:500;
      letter-spacing:.02em}
   .row{display:flex;justify-content:space-between;gap:14px;padding:1px 0}
   .k{color:#7d86a3}
-  .v{color:#ffd479;font-variant-numeric:tabular-nums}
+  .v{color:#ffd479;font-variant-numeric:tabular-nums;font-family:var(--f-mono)}
   /* seven tools no longer fit at the old size: the bar wrapped onto two lines
      and ran into the hint text in the corner */
   #tools{position:fixed;left:50%;transform:translateX(-50%);bottom:16px;z-index:5;
@@ -53,9 +71,9 @@
         display:block;color:#5ce0d0}
   .tool .ico{filter:drop-shadow(0 2px 3px rgba(0,0,0,.55))}
   .tool b,.tool small{grid-column:2}
-  .tool b{font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
-          font-size:11.5px;font-weight:650;letter-spacing:.07em;color:#dfe6f5}
-  .tool small{font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+  .tool b{font-family:var(--f-head);
+          font-size:14px;font-weight:600;letter-spacing:.08em;color:#dfe6f5}
+  .tool small{font-family:var(--f-ui);
               font-size:10px;letter-spacing:.01em;color:#7b86a6}
   /* the shortcut is a badge in the corner, not part of the machine's name */
   .tool .key{position:absolute;top:-6px;left:-6px;width:17px;height:17px;
@@ -78,12 +96,12 @@
   .up{border:1px solid rgba(120,200,255,.13);border-radius:10px;padding:7px 9px;
       background:linear-gradient(180deg,rgba(255,255,255,.03),rgba(0,0,0,.12));
       cursor:not-allowed;opacity:.5}
-  .up b{display:block;font-size:11px;letter-spacing:.07em;color:#c9d2e8;
-        font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
-        font-weight:650}
+  .up b{display:block;font-size:13px;letter-spacing:.08em;color:#c9d2e8;
+        font-family:var(--f-head);
+        font-weight:600}
   .up b span{color:#5d67a0}
   .up small{display:block;color:#7b86a6;font-size:10px;
-            font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
+            font-family:var(--f-ui)}
   .up i{font-style:normal;color:#ffd479;font-size:10px}
   .up.can{opacity:1;cursor:pointer;border-color:rgba(92,224,208,.45);
           background:rgba(92,224,208,.07)}
@@ -95,18 +113,18 @@
   #melt{margin-top:9px;border:1px solid rgba(255,120,90,.5);border-radius:10px;
         padding:8px 10px;cursor:pointer;display:none;text-align:center;
         background:linear-gradient(180deg,rgba(255,110,80,.18),rgba(255,110,80,.06));
-        font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
+        font-family:var(--f-ui)}
   #melt.on{display:block}
-  #melt b{display:block;font-size:11px;letter-spacing:.09em;color:#ff9f7a}
+  #melt b{display:block;font-size:14px;letter-spacing:.1em;color:#ff9f7a;font-family:var(--f-head);font-weight:600}
   #melt small{display:block;color:#8a7a86;font-size:10px}
   #melt:hover{background:rgba(255,110,80,.18)}
   /* a debt with a clock on it belongs where the counters are, not in a corner */
   #rift{margin-top:9px;border:1px solid rgba(140,110,255,.5);border-radius:10px;
         padding:8px 10px;display:none;text-align:center;
         background:linear-gradient(180deg,rgba(110,80,255,.18),rgba(110,80,255,.06));
-        font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
+        font-family:var(--f-ui)}
   #rift.on{display:block}
-  #rift b{display:block;font-size:11px;letter-spacing:.09em;color:#b39cff}
+  #rift b{display:block;font-size:14px;letter-spacing:.1em;color:#b39cff;font-family:var(--f-head);font-weight:600}
   #rift small{display:block;color:#8f88b8;font-size:10px}
   /* the factory saves itself; this is the only way back to an empty one */
   #wipe{margin-top:8px;text-align:center;font-size:10px;color:#5d6480;
@@ -147,22 +165,22 @@
   #goal{margin-top:9px;border:1px solid rgba(255,212,121,.34);border-radius:10px;
         padding:8px 10px;
         background:linear-gradient(180deg,rgba(255,212,121,.12),rgba(255,212,121,.04))}
-  #goal b{display:block;font-size:11px;letter-spacing:.09em;color:#ffd479;
-          font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+  #goal b{display:block;font-size:14px;letter-spacing:.09em;color:#ffd479;font-family:var(--f-head);font-weight:600;
+          font-family:var(--f-ui);
           font-weight:700}
   #goal small{display:block;color:#a89a72;font-size:10px;
-              font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
+              font-family:var(--f-ui)}
   /* where you are, and where you could go. Locked rows stay visible with their
      price on them: a destination you cannot afford yet is the reason to melt
      the factory down again. */
   #world{margin-top:9px;border-top:1px solid rgba(120,200,255,.14);padding-top:8px}
-  #world b{display:block;font-size:11px;letter-spacing:.08em;color:#9fd6ff;
-           font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+  #world b{font-family:var(--f-head);display:block;font-size:11px;letter-spacing:.08em;color:#9fd6ff;
+           font-family:var(--f-ui);
            font-weight:700}
   #world small{display:block;color:#6d7590;font-size:10px;margin-bottom:5px}
   #world .wr{display:flex;justify-content:space-between;gap:10px;font-size:10px;
              color:#5d6480;padding:2px 0;
-             font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
+             font-family:var(--f-ui)}
   #world .wr b{font-weight:normal;display:inline-flex;align-items:center;gap:6px}
   #world .wr:not(.can) b{opacity:.6}   /* a locked world is a dimmer place */
   #world .wr .sw{width:11px;height:11px;border-radius:3px;flex:none;
@@ -180,7 +198,7 @@
          background:linear-gradient(180deg,rgba(18,23,42,.96),rgba(8,10,20,.96));
          border:1px solid rgba(92,224,208,.5);
          border-radius:11px;padding:10px 18px;color:#8ff3dd;letter-spacing:.06em;
-         font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+         font-family:var(--f-ui);
          font-weight:650;box-shadow:0 6px 24px rgba(0,0,0,.5);
          opacity:0;transition:opacity .25s;pointer-events:none}
   #toast.on{opacity:1}
@@ -194,10 +212,10 @@
      fonts — a rule above and below, and a settle in scale so the name ARRIVES
      rather than appears. The rules are what make it a title card and not a
      caption. */
-  #title b{display:block;font-size:52px;line-height:1;letter-spacing:.2em;color:#f4f8ff;
+  #title b{display:block;font-size:58px;line-height:1;letter-spacing:.18em;color:#f4f8ff;
            padding:0 .2em 0 .4em;
-           font-family:"Segoe UI Black","Arial Black",Impact,"Helvetica Neue",sans-serif;
-           font-weight:900;text-transform:uppercase;
+           font-family:var(--f-head);
+           font-weight:700;text-transform:uppercase;
            text-shadow:0 0 34px rgba(92,224,208,.55),0 6px 22px rgba(0,0,0,.85);
            transform:scale(1.05);transition:transform 1.8s cubic-bezier(.2,.7,.2,1)}
   #title.on b{transform:scale(1)}
@@ -213,22 +231,22 @@
   #title[data-mood="green"]{--tcol:#e2ffe6;--tglow:rgba(120,230,150,.55);--rule:rgba(143,230,160,.85);--sub:#a8f0b6}
   #title b{color:var(--tcol);text-shadow:0 0 34px var(--tglow),0 6px 22px rgba(0,0,0,.85)}
   #title b::before,#title b::after{background:linear-gradient(90deg,transparent,var(--rule),transparent)}
-  #title[data-mood="warm"] b{font-family:Impact,"Arial Narrow","Franklin Gothic Medium","Segoe UI Black",sans-serif;
-           font-weight:900;letter-spacing:.09em;font-size:60px}
-  #title[data-mood="cold"] b{font-family:"Segoe UI Light","Segoe UI","Helvetica Neue",sans-serif;
-           font-weight:200;letter-spacing:.46em;font-size:46px}
-  #title[data-mood="green"] b{font-family:Georgia,"Times New Roman",serif;
-           font-weight:700;font-style:italic;letter-spacing:.12em;font-size:54px}
+  #title[data-mood="warm"] b{font-family:var(--f-head);
+           font-weight:700;letter-spacing:.06em;font-size:70px}
+  #title[data-mood="cold"] b{font-family:var(--f-ui);
+           font-weight:400;letter-spacing:.5em;font-size:44px}
+  #title[data-mood="green"] b{font-family:var(--f-head);
+           font-weight:500;text-transform:none;letter-spacing:.14em;font-size:60px}
   /* the face caption after a crossing */
   /* high, above the placement ghost, and big enough to read in the beat it is up */
   #facecap{position:fixed;left:0;right:0;top:12%;text-align:center;z-index:6;pointer-events:none;
-           font-family:ui-monospace,Consolas,monospace;font-size:14px;letter-spacing:.42em;
+           font-family:var(--f-mono);font-size:13px;letter-spacing:.42em;
            color:#eef4ff;text-shadow:0 0 18px rgba(92,224,208,.6),0 2px 12px rgba(0,0,0,.95);opacity:0;transform:translateY(6px);
            transition:opacity .35s,transform .35s}
   #facecap.on{opacity:.9;transform:translateY(0)}
-  #title small{display:block;margin-top:14px;font-size:13px;letter-spacing:.28em;
+  #title small{display:block;margin-top:14px;font-size:12px;letter-spacing:.3em;font-family:var(--f-mono);
            text-transform:uppercase;color:var(--sub);
-           font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+           font-family:var(--f-ui);
            text-shadow:0 2px 10px rgba(0,0,0,.8)}
   /* the HUD steps back while the card is up; it is not the subject yet */
   body:has(#title.on) #hud,body:has(#title.on) #tools,body:has(#title.on) #hint{opacity:.12}
@@ -244,14 +262,14 @@
   #hud{min-width:236px;width:236px;padding:12px 12px 10px}
   .hero{position:relative;padding:2px 0 4px}
   .hero .big{display:flex;align-items:baseline;gap:8px}
-  .hero .big span{font-size:34px;font-weight:800;letter-spacing:-.01em;color:#ffd479;
+  .hero .big span{font-family:var(--f-mono);font-size:34px;font-weight:500;letter-spacing:-.02em;color:#ffd479;
                   font-variant-numeric:tabular-nums;line-height:1;
                   text-shadow:0 0 18px rgba(255,212,121,.35)}
-  .hero .big small{font-size:11px;color:#8d8564;letter-spacing:.12em;text-transform:uppercase;
-                   font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
+  .hero .big small{font-family:var(--f-head);font-size:12px;color:#8d8564;letter-spacing:.16em;text-transform:uppercase;
+                   font-family:var(--f-ui)}
   .hero .rate{margin-top:4px;font-size:12px;color:#8ff3dd;display:flex;align-items:baseline;gap:5px}
-  .hero .rate b{font-variant-numeric:tabular-nums;font-weight:700}
-  .hero .rate small{color:#5d6480;font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
+  .hero .rate b{font-variant-numeric:tabular-nums;font-weight:500;font-family:var(--f-mono)}
+  .hero .rate small{color:#5d6480;font-family:var(--f-ui)}
   #spark{display:block;width:100%;height:38px;margin-top:6px;border-radius:6px;
          background:rgba(0,0,0,.18)}
   .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:5px;margin-top:9px}
@@ -265,8 +283,22 @@
            background:linear-gradient(180deg,rgba(255,212,121,.12),rgba(255,212,121,.03))}
   .st.core b{color:#ffd479}
   /* the goal shows how far along it is */
-  #goal em{float:right;font-style:normal;font-size:9px;letter-spacing:.12em;color:#8d7f5c}
-  #goal .held{display:block;margin-top:4px;font-size:9px;letter-spacing:.08em;color:#c9b27a;font-variant-numeric:tabular-nums}
+  #goal em{float:right;font-style:normal;font-size:10px;letter-spacing:.12em;color:#8d7f5c;font-family:var(--f-mono)}
+  #goal .held{display:block;margin-top:4px;font-size:10px;letter-spacing:.06em;color:#c9b27a;font-variant-numeric:tabular-nums;font-family:var(--f-mono)}
+  /* a contract is a clock: it sits under the goal in the market's violet, with
+     its own bar and its own countdown */
+  #contract{display:none;margin-top:8px;border:1px solid rgba(140,110,255,.4);border-radius:10px;padding:8px 10px;
+            background:linear-gradient(180deg,rgba(110,80,255,.14),rgba(110,80,255,.04))}
+  #contract.on{display:block}
+  #contract b{display:block;font-family:var(--f-head);font-size:14px;letter-spacing:.1em;color:#c9b8ff;font-weight:600}
+  #contract small{display:block;color:#8f88b8;font-size:10px;margin-top:2px}
+  #contract .bar{height:4px;margin-top:7px;border-radius:2px;background:rgba(140,110,255,.16);overflow:hidden}
+  #contract .bar i{display:block;height:100%;background:linear-gradient(90deg,#b39cff,#5ce0d0);transition:width .3s}
+  #contract .left{display:block;margin-top:4px;font-family:var(--f-mono);font-size:10px;letter-spacing:.06em;color:#b39cff}
+  /* rank and shards, under the rate */
+  #rank{display:flex;justify-content:space-between;align-items:baseline;margin-top:3px;font-size:10px;letter-spacing:.14em}
+  #rank b{font-family:var(--f-head);font-weight:600;color:#8d8564}
+  #rank span{font-family:var(--f-mono);color:#ffd479;letter-spacing:.1em}
   #goal .bar{height:4px;margin-top:7px;border-radius:2px;background:rgba(255,212,121,.14);overflow:hidden}
   #goal .bar i{display:block;height:100%;background:linear-gradient(90deg,#ffd479,#ff9a5c);
                border-radius:2px;transition:width .4s;box-shadow:0 0 8px rgba(255,212,121,.6)}
@@ -274,7 +306,7 @@
   #tick{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;align-items:end;height:64px}
   #tick .mk{display:flex;flex-direction:column;align-items:center;justify-content:flex-end;
             height:100%;gap:3px;font-size:9.5px;
-            font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
+            font-family:var(--f-ui)}
   /* each bar rises from, or hangs below, a baseline at 1.0 */
   #tick .mk .pole{position:relative;width:100%;height:38px}
   #tick .mk .pole::before{content:"";position:absolute;left:0;right:0;top:19px;height:1px;
@@ -283,7 +315,7 @@
                  transition:height .5s;box-shadow:inset 0 1px 0 rgba(255,255,255,.18)}
   #tick .mk .bar.pos{bottom:19px}
   #tick .mk .bar.neg{top:20px;opacity:.7}
-  #tick .mk .px{font-variant-numeric:tabular-nums;font-family:ui-monospace,Menlo,Consolas,monospace;
+  #tick .mk .px{font-family:var(--f-mono);font-variant-numeric:tabular-nums;
                 font-size:10px;color:#c9d2e8}
   #tick .mk .nm{color:#6d7590;letter-spacing:.04em}
   #tick .mk.u .px{color:#5ce0a0}
@@ -304,7 +336,7 @@
   .up.can:hover{transform:translateY(-1px)}
   /* above the bar, not beside it — at seven tools there is no room beside it */
   /* centred above the bar: at bottom-right it sat on top of the held tool's hologram */
-  #hint{position:fixed;left:50%;transform:translateX(-50%);bottom:84px;z-index:5;color:#6d7590;text-align:center;white-space:nowrap}
+  #hint{font-family:var(--f-mono);position:fixed;left:50%;transform:translateX(-50%);bottom:84px;z-index:5;color:#6d7590;text-align:center;white-space:nowrap}
   /* the crosshair IS the cursor once the pointer is locked */
   #cross{position:fixed;left:50%;top:50%;width:16px;height:16px;margin:-8px 0 0 -8px;
          z-index:4;pointer-events:none;opacity:.85}
@@ -321,6 +353,7 @@
   <div class="hero">
     <div class="big"><span id="ore">0</span><small>value</small></div>
     <div class="rate"><b id="rate">0</b><small>/ min</small></div>
+    <div id="rank"><b>UNRANKED</b><span>◇◇◇</span></div>
     <canvas id="spark" width="216" height="38"></canvas>
   </div>
   <div class="stats">
@@ -333,6 +366,7 @@
     <div class="st core" data-ico="core" title="cores"><i></i><b id="tok">0</b></div>
   </div>
   <div id="goal"></div>
+  <div id="contract"><b></b><small></small><div class="bar"><i style="width:0%"></i></div><span class="left"></span></div>
   <div id="tick"></div>
   <div id="ups"></div>
   <div id="world"></div>

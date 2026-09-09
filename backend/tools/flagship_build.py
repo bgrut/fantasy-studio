@@ -74,6 +74,32 @@ def render() -> dict[str, str]:
     return {"factory.js": js, "index.html": html}
 
 
+def sync_fonts(check: bool) -> bool:
+    """The type system ships with the game: vendor/fonts rides from the runtime
+    into flagship/vendor/fonts exactly as the exporter copies it into a build.
+    Returns False under --check if any font is missing or differs."""
+    import shutil
+    src = RUNTIME / "vendor" / "fonts"
+    dst = OUT / "vendor" / "fonts"
+    if not src.exists():
+        return True
+    ok = True
+    dst.mkdir(parents=True, exist_ok=True)
+    for f in sorted(src.iterdir()):
+        if not f.is_file():
+            continue
+        d = dst / f.name
+        same = d.exists() and d.read_bytes() == f.read_bytes()
+        if same:
+            continue
+        if check:
+            ok = False
+            print(f"  stale: flagship/vendor/fonts/{f.name}")
+        else:
+            shutil.copyfile(f, d)
+    return ok
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--check", action="store_true",
@@ -81,6 +107,7 @@ def main() -> int:
     args = ap.parse_args()
 
     files = render()
+    fonts_ok = sync_fonts(args.check)
     stale = []
     for name, text in files.items():
         p = OUT / name
@@ -92,6 +119,9 @@ def main() -> int:
             p.write_text(text, encoding="utf-8")
 
     if args.check:
+        if not fonts_ok:
+            print("STALE: flagship/vendor/fonts" + chr(10) + "run: python backend/tools/flagship_build.py")
+            return 1
         if stale:
             print("STALE: " + ", ".join(stale)
                   + "\nrun: python backend/tools/flagship_build.py")

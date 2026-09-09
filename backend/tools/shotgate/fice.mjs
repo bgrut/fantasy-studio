@@ -37,13 +37,20 @@ console.log('cold world:', where.cold, '->', where.world, '| ice active', where.
 const frozen = await p.evaluate(async () => {
   const F = window.__factory, TY = F.TYPES;
   const w = ms => new Promise(r => setTimeout(r, ms));
+  // the strike proves the shell; the yield test picks its own seam — one with
+  // no rig and a free tile beside it, so the rig has somewhere to deliver
   const hit = F.iceStrike();
   if (!hit) return { hit: null };
-  const c = F.cells[hit[0]][hit[1]][hit[2]];
-  const shell = !!c.iceMesh && !!window.__scene.getObjectByName('ice');
-  // a rig on it, fed straight into a hub-less belt run: count what comes out in 40 ticks
-  F.place(hit[0], hit[1], hit[2], TY.MINER, 0);
-  const to = F.stepTile(hit[0], hit[1], hit[2], 0);
+  const shell = !!F.cells[hit[0]][hit[1]][hit[2]].iceMesh && !!window.__scene.getObjectByName('ice');
+  let pick = null;
+  for (let i = 2; i < F.N - 3 && !pick; i++) for (let j = 2; j < F.N - 2 && !pick; j++) {
+    const s = F.cells[0][i][j];
+    if (s.t === TY.NODE && s.mesh && F.cells[0][i + 1][j].t === TY.EMPTY) pick = [0, i, j];
+  }
+  const c = F.cells[pick[0]][pick[1]][pick[2]];
+  c.ice = F.ICE_THAW;
+  F.place(pick[0], pick[1], pick[2], TY.MINER, 0);
+  const to = F.stepTile(pick[0], pick[1], pick[2], 0);
   F.place(to.face, to.i, to.j, TY.BELT, 0);
   const belt = F.cells[to.face][to.i][to.j];
   let outFrozen = 0;

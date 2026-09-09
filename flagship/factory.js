@@ -442,6 +442,9 @@ let sporeClock = 0, sporeHits = 0, sporeToasted = false;
 // drill ignores it
 const ICE_EVERY = 7, ICE_THAW = 14, ICE_REACH = 3;
 let iceClock = 0, iceHits = 0, iceToasted = false;
+// contracts: a clock you can hear ticking
+const CONTRACT_EVERY = 70, CONTRACT_SECS = 90;
+let contract = null, contractClock = 40, contractsFilled = 0, shards = 0, rank = 0;
 const scatterSpots = [];
 // Same reason, same place. The starter line is seeded at boot, seeding calls
 // place(), place() clicks — and the click reads AUDIO, which was declared six
@@ -2655,6 +2658,89 @@ function stepIce(dt) {
   if (iceClock >= ICE_EVERY) { iceClock = 0; iceStrike(); }
 }
 
+// ── CONTRACTS ──────────────────────────────────────────────────────────────
+// Posted by the market when none is open, sized to the factory's current
+// rate so it is always achievable if you hurry, and paid with a shard.
+// a contract names what it wants without ambiguity: "crystal" is the ore,
+// "crystal ingots" is what a hub is paid for
+const contractName = (item, n) => item === ALLOY ? (n === 1 ? 'alloy bar' : 'alloy bars') : (TRADE_NAME[item] || 'item') + (n === 1 ? ' ingot' : ' ingots');
+function offerContract(forceItem) {
+  if (contract) return contract;
+  const pool = [INGOT, INGOT_E, INGOT_S];
+  if (UNLOCKED.forge) pool.push(ALLOY, ALLOY);
+  const item = forceItem || pool[(Math.random() * pool.length) | 0];
+  const unit = (VALUE[item] || 6) * (PRICE[item] || 1);
+  // a third of a minute's output at the current rate, in units of the item,
+  // never fewer than four and never more than sixty
+  const need = Math.max(4, Math.min(60, Math.round((Math.max(rateNow, 90) / 3) / unit)));
+  const bonus = Math.round(need * unit * (0.8 + 0.15 * rank));
+  contract = { item, need, have: 0, left: CONTRACT_SECS, total: CONTRACT_SECS, bonus };
+  renderContract();
+  const t = document.getElementById('toast');
+  if (t) { t.textContent = 'CONTRACT — deliver ' + need + ' ' + contractName(item, need) + ' in ' + CONTRACT_SECS + 's for +' + bonus; t.classList.add('on'); toastAt = 3.2; }
+  return contract;
+}
+function fillContract() {
+  const c = contract; contract = null; contractClock = 0;
+  contractsFilled++;
+  ore += c.bonus; runValue += c.bonus;
+  shards++;
+  sfxUnlock();
+  let msg = 'CONTRACT FILLED — +' + c.bonus + ' value · +1 shard';
+  if (shards >= 3) {
+    shards -= 3; cores++;
+    msg = 'A CORE FROM SHARDS — three promises kept';
+    document.getElementById('tok').textContent = cores;
+    const tk = document.getElementById('tok');
+    if (tk) { tk.classList.remove('won'); void tk.offsetWidth; tk.classList.add('won'); setTimeout(() => tk.classList.remove('won'), 1000); }
+    renderWorlds();
+  }
+  const t = document.getElementById('toast');
+  if (t) { t.textContent = msg; t.classList.add('on'); toastAt = 3.5; }
+  renderContract(); renderRank();
+}
+function stepContracts(dt) {
+  if (intro > 0) return;
+  if (contract) {
+    contract.left -= dt;
+    if (contract.left <= 0) {
+      contract = null; contractClock = 0;
+      const t = document.getElementById('toast');
+      if (t) { t.textContent = 'contract lapsed — another will come'; t.classList.add('on'); toastAt = 2.2; }
+      renderContract();
+    }
+    return;
+  }
+  if (goalIdx < 1) return;                 // the market posts nothing before the first tier
+  contractClock += dt;
+  if (contractClock >= CONTRACT_EVERY) offerContract();
+}
+function renderContract() {
+  const el = document.getElementById('contract');
+  if (!el) return;
+  if (!contract) { el.classList.remove('on'); return; }
+  el.classList.add('on');
+  el.querySelector('b').textContent = 'DELIVER ' + contract.need + ' ' + contractName(contract.item, contract.need).toUpperCase();
+  el.querySelector('small').textContent = '+' + contract.bonus + ' value · 1 shard';
+  const i = el.querySelector('.bar i'); if (i) i.style.width = Math.round(100 * contract.have / contract.need) + '%';
+  const s = el.querySelector('.left');
+  if (s) { const l = Math.max(0, contract.left); s.textContent = contract.have + ' / ' + contract.need + '  ·  ' + Math.floor(l / 60) + ':' + String(Math.floor(l % 60)).padStart(2, '0'); }
+}
+function renderRank() {
+  const el = document.getElementById('rank');
+  if (!el) return;
+  const roman = ['', 'I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X'][Math.min(10, rank)] || String(rank);
+  el.innerHTML = (rank > 0 ? '<b>RANK ' + roman + '</b>' : '<b>UNRANKED</b>') +
+    '<span>' + '\u25c6'.repeat(shards) + '\u25c7'.repeat(Math.max(0, 3 - shards)) + '</span>';
+  el.title = shards + ' of 3 shards toward a core · a meltdown raises the rank';
+}
+// the worldlet's edge gilds with rank: a veteran's world looks like one from orbit
+function gildEdge() {
+  if (!cubeEdges) return;
+  const w = WORLDS[worldIdx] || WORLDS[0];
+  cubeEdges.material.color.setHex(w.edge || w.grid).lerp(new THREE.Color(0xffd479), Math.min(3, rank) / 3 * 0.55);
+}
+
 function stepSpores(dt) {
   // clogs clear on their own; the strikes keep coming while the world is green
   eachTile((c, f, i, j) => {
@@ -2784,6 +2870,7 @@ function bank(type) {
   const v = (VALUE[type] || 1) * (PRICE[type] || 1);
   ore += v; runValue += v;
   if (type === ALLOY && (PRICE[ALLOY] || 1) >= 1.2) soldHigh++;
+  if (contract && type === contract.item) { contract.have++; renderContract(); if (contract.have >= contract.need) fillContract(); }
   if (IS_INGOT(type)) ingots++;
   if (type === ALLOY) alloys++;
 }
@@ -3779,6 +3866,7 @@ function meltdown() {
   renderUpgrades();
   items.count = 0;
   melting = 2.4;
+  rank++; renderRank(); gildEdge();
   refreshCounts();
   document.getElementById('tok').textContent = cores;
   // the ceremony: flash, shockwave from where the factory stood, shake, thump, pop
@@ -3900,6 +3988,7 @@ function applyWorld(k) {
   if (lanes) lanes.material.color.setHex(w.edge || w.grid);
   starField.material.color.setHex(w.star);
   if (cubeEdges) cubeEdges.material.color.setHex(w.edge || w.grid);
+  gildEdge();
   if (sunDisc) sunDisc.material.color.setHex(w.sun || 0xfff2d6);
   // the bounce light is the world's own colour, which is what stops a red
   // planet from having neutral grey machines standing on it
@@ -4200,7 +4289,7 @@ function saveState() {
     p: { face: player.face, pos: player.pos.toArray(),
          fwd: player.fwd.toArray(), pitch: player.pitch },
     g: goalIdx, u: Object.keys(UNLOCKED), vf: [...visitedFaces], w: worldIdx,
-    sh: soldHigh, rp: riftsPaid,
+    sh: soldHigh, rp: riftsPaid, cs: shards, rk: rank, cf: contractsFilled,
     // seams come back from the RNG; how worked each one is does not
     r: (() => { const out = [];
       eachTile((c, f, i, j) => { if (c.mesh && c.rich < 0.999)
@@ -4253,7 +4342,8 @@ function loadState(d) {
     if (c && c.mesh) c.rich = Math.max(0, Math.min(1, +r[3] || 0));
   }
   goalIdx = Math.max(0, Math.min(GOALS.length, d.g | 0));
-  soldHigh = d.sh | 0; riftsPaid = d.rp | 0;
+  soldHigh = d.sh | 0; riftsPaid = d.rp | 0; shards = d.cs | 0; rank = d.rk | 0; contractsFilled = d.cf | 0;
+  renderRank();
   if (Array.isArray(d.u)) for (const k of d.u) UNLOCKED[k] = 1;
   applyRewards();
   visitedFaces.clear();
@@ -4279,7 +4369,8 @@ function wipe() {
   clearFactory();
   ore = 0; ingots = 0; alloys = 0; cores = 0; runValue = 0;
   for (const k in UPGRADES) UPGRADES[k].lvl = 0;
-  goalIdx = 0; soldHigh = 0; riftsPaid = 0;
+  goalIdx = 0; soldHigh = 0; riftsPaid = 0; shards = 0; rank = 0; contractsFilled = 0;
+  contract = null; contractClock = 40; renderContract(); renderRank();
   for (const g of GOALS) if (g.rate) g.held = 0;
   applyWorld(0);
   for (const k in UNLOCKED) if (!START_TOOLS.includes(k)) delete UNLOCKED[k];
@@ -4377,6 +4468,7 @@ buildToolIcons();
 // open" has to be applied here, on the first frame, not on the first reload
 applyRewards(); renderUpgrades();
 renderGoal();
+renderRank(); renderContract();
 if (!restored) applyWorld(worldIdx);   // a restored save has already chosen
 // ?world=k is a debug override (like ?grid=): a gate can measure any world's
 // light without walking the chain first
@@ -4396,6 +4488,8 @@ renderer.setAnimationLoop(() => {
   stepMarket(dt);
   stepSpores(dt);
   stepIce(dt);
+  stepContracts(dt);
+  if (contract && (performance.now() % 500) < 20) renderContract();
   // seams grow back on their own, and wear their richness as their size
   eachTile((c, f, i, j) => {
     if (!c.mesh) return;
@@ -5135,6 +5229,9 @@ window.__game = {
                   return { active: iceActive(), hits: iceHits, frozen: n, reach: ICE_REACH }; })(),
     finite: !!(WORLDS[worldIdx] && WORLDS[worldIdx].finite), core_mult: (WORLDS[worldIdx] && WORLDS[worldIdx].coreMult) || 1,
     shared: !!SHARED,
+    contract: contract ? { item: contractName(contract.item, contract.need), need: contract.need, have: contract.have,
+                           left: +contract.left.toFixed(1), bonus: contract.bonus } : null,
+    shards, rank, contracts_filled: contractsFilled,
     spores: (() => { let n = 0; eachTile(c => { if (c.clog > 0) n++; });
                      return { active: sporesActive(), hits: sporeHits, clogged: n, reach: SPORE_REACH }; })(),
     sold_high: soldHigh, rifts_paid: riftsPaid,
@@ -5197,6 +5294,8 @@ window.__factory = {
   get meltFlash() { return meltFlash; }, get shockwave() { return shockwave; }, itemsEmber, itemsSalt,
   setPhoto, get photo() { return photo; }, get iconsWorld() { return iconsWorld; }, buildToolIcons,
   iceStrike, iceShielded, iceActive, ICE_REACH, ICE_THAW, shareLink, coresFor,
+  offerContract, get contract() { return contract; }, set contractLeft(v) { if (contract) contract.left = v; },
+  get shards() { return shards; }, set shards(v) { shards = v; renderRank(); }, get rank() { return rank; }, CONTRACT_EVERY,
   sporeStrike, sporeShielded, sporesActive, SPORE_REACH, SPORE_CLOG,
   set riftsPaid(v) { riftsPaid = v; },
   set rateNow(v) { rateForce = v; rateNow = v === null ? rateNow : v; }, set goalIdx(v) { goalIdx = v; applyRewards(); renderGoal(); renderWorlds(); },

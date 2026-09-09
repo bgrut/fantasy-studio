@@ -38,6 +38,7 @@ GATES = [
     ("fseed.mjs", "the starter line exists at every grid size and seed"),
     ("fice.mjs", "ice freezes unheated seams on cold worlds; a furnace within reach thaws; the drill ignores it"),
     ("fshare.mjs", "a share link carries a factory into a fresh page; the drift is finite and pays double"),
+    ("fcontract.mjs", "contracts post, count their item, pay a shard; three shards make a core; a meltdown ranks"),
 ]
 
 
