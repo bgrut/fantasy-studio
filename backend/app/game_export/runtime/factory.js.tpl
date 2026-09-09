@@ -445,6 +445,75 @@ let streak = 0, standing = null;
 // a rival buyer: one product bid up for a minute, every couple of minutes
 const RIVAL_EVERY = 130, RIVAL_SECS = 60, RIVAL_MULT = 1.8;
 let rival = null, rivalClock = 60;
+// THE BLUEPRINT: a copied box of machines, relative to its own corner, and
+// the quarter turns applied when it is stamped
+let blueprint = null, bpRot = 0, bpStart = null, bpEnd = null;
+try { const raw = localStorage.getItem('fs-factory-bp'); if (raw) blueprint = JSON.parse(raw); } catch (e) {}
+const BP_TYPES = () => [BELT, MINER, SMELTER, SPLITTER, FORGE, FILTER, HUB, RIFT];
+function captureBlueprint(f, i0, j0, i1, j1) {
+  const a = Math.min(i0, i1), b = Math.max(i0, i1), c = Math.min(j0, j1), d = Math.max(j0, j1);
+  const cells = [];
+  for (let i = a; i <= b; i++) for (let j = c; j <= d; j++) {
+    const cell = cells_at(f, i, j);
+    if (!cell || !BP_TYPES().includes(cell.t)) continue;
+    cells.push({ di: i - a, dj: j - c, t: cell.t, d: cell.d | 0, filt: cell.filt || 0 });
+  }
+  const t = document.getElementById('toast');
+  if (!cells.length) {
+    if (t) { t.textContent = 'Nothing to copy there. Drag a box over machines you have built.'; t.classList.add('on'); toastAt = 3; }
+    return null;
+  }
+  blueprint = { w: b - a + 1, h: d - c + 1, cells };
+  bpRot = 0;
+  try { localStorage.setItem('fs-factory-bp', JSON.stringify(blueprint)); } catch (e) {}
+  if (t) { t.textContent = 'Blueprint copied: ' + cells.length + ' machines over ' + blueprint.w + ' by ' + blueprint.h + ' tiles. Click a tile on any face to stamp it there. R turns it a quarter; 0 again drops it.'; t.classList.add('on'); toastAt = 6; }
+  updateGhost();
+  return blueprint;
+}
+const cells_at = (f, i, j) => (cells[f] && cells[f][i] && cells[f][i][j]) || null;
+// the blueprint's cells with the current rotation applied, corner at (0,0)
+function bpCells() {
+  if (!blueprint) return [];
+  let out = blueprint.cells.map(c => ({ ...c }));
+  for (let r = 0; r < (bpRot & 3); r++) out = out.map(c => ({ ...c, di: -c.dj, dj: c.di, d: (c.d + 1) & 3 }));
+  const mi = Math.min(...out.map(c => c.di)), mj = Math.min(...out.map(c => c.dj));
+  return out.map(c => ({ ...c, di: c.di - mi, dj: c.dj - mj }));
+}
+function bpSize() { const cs = bpCells(); if (!cs.length) return [0, 0]; return [Math.max(...cs.map(c => c.di)) + 1, Math.max(...cs.map(c => c.dj)) + 1]; }
+function stampBlueprint(f, i, j) {
+  if (!blueprint) return 0;
+  let placed = 0, taken = 0, noSeam = 0, off = 0;
+  for (const c of bpCells()) {
+    const cell = cells_at(f, i + c.di, j + c.dj);
+    if (!cell) { off++; continue; }
+    if (c.t === MINER) { if (cell.t !== NODE) { cell.t === EMPTY ? noSeam++ : taken++; continue; } }
+    else if (cell.t !== EMPTY) { taken++; continue; }
+    if (place(f, i + c.di, j + c.dj, c.t, c.d)) {
+      placed++;
+      const nc = cells_at(f, i + c.di, j + c.dj);
+      if (c.t === FILTER && c.filt) { nc.filt = c.filt; const gate = nc.build && nc.build.getObjectByName('gate');
+        if (gate) { gate.material.color.setHex(MIN_COL[nc.filt]); gate.material.emissive.setHex(MIN_COL[nc.filt]); } }
+    }
+  }
+  const t = document.getElementById('toast');
+  if (t) {
+    let why = [];
+    if (taken) why.push(taken + ' had a machine in the way');
+    if (noSeam) why.push(noSeam + (noSeam === 1 ? ' rig had no seam under it' : ' rigs had no seam under them'));
+    if (off) why.push(off + ' fell off the face');
+    t.textContent = 'Stamped ' + placed + ' of ' + blueprint.cells.length + ' machines.' + (why.length ? ' The rest: ' + why.join(', ') + '.' : '');
+    t.classList.add('on'); toastAt = 4;
+  }
+  if (placed) sfxPlace();
+  return placed;
+}
+function dropBlueprint() {
+  blueprint = null; bpRot = 0;
+  try { localStorage.removeItem('fs-factory-bp'); } catch (e) {}
+  const t = document.getElementById('toast');
+  if (t) { t.textContent = 'Blueprint dropped. Drag a box over a line to copy another.'; t.classList.add('on'); toastAt = 2.5; }
+  updateGhost();
+}
 const scatterSpots = [];
 // Same reason, same place. The starter line is seeded at boot, seeding calls
 // place(), place() clicks — and the click reads AUDIO, which was declared six
@@ -3380,13 +3449,27 @@ function updateGhost() {
   const c = cellOf(t);
   const legal = tool === 'erase' ? (c.t !== EMPTY && c.t !== NODE)
     : tool === 'miner' ? c.t === NODE
+    : tool === 'blueprint' ? (blueprint ? bpCells().some(b => { const x = cells_at(t.face, t.i + b.di, t.j + b.dj); return x && (b.t === MINER ? x.t === NODE : x.t === EMPTY); }) : true)
     : c.t !== NODE;
   ghost.visible = true;
   // the machine's own shape, seated the way the machine would be; the box for
   // erase, lifted to sit over whatever it is about to remove
-  const shape = tool !== 'erase' && GEO[HOLO_GEO[tool]];
+  const shape = tool !== 'erase' && tool !== 'blueprint' && GEO[HOLO_GEO[tool]];
   ghostShape(shape || GHOST_BOX);
   seat(ghost, t.face, t.i, t.j, 0, shape ? 0 : 0.26);
+  ghost.scale.set(1, 1, 1);
+  if (tool === 'blueprint') {
+    // the whole footprint, corner on the cursor; a box to copy while dragging
+    let w = 1, h = 1, ai = t.i, aj = t.j;
+    if (blueprint) { [w, h] = bpSize(); }
+    else if (bpStart) { w = Math.abs(bpEnd.i - bpStart.i) + 1; h = Math.abs(bpEnd.j - bpStart.j) + 1; ai = Math.min(bpStart.i, bpEnd.i); aj = Math.min(bpStart.j, bpEnd.j); }
+    seat(ghost, t.face, ai, aj, 0, 0.26);
+    const f = FACES[t.face];
+    ghost.position.x += f.u[0] * (w - 1) * T / 2 + f.v[0] * (h - 1) * T / 2;
+    ghost.position.y += f.u[1] * (w - 1) * T / 2 + f.v[1] * (h - 1) * T / 2;
+    ghost.position.z += f.u[2] * (w - 1) * T / 2 + f.v[2] * (h - 1) * T / 2;
+    ghost.scale.set(w, 1, h);
+  }
   ghost.material.color.setHex(legal ? 0x6cf5d0 : 0xff6b7d);
   ghostEdge.material.color.setHex(legal ? 0x9dffe8 : 0xffa8b4);
 }
@@ -3426,11 +3509,18 @@ renderer.domElement.addEventListener('pointerdown', e => {
   if (inspectOn) return;
   const c = cellUnder(e);
   if (!c) return;
+  if (tool === 'blueprint') {
+    if (!UNLOCKED.blueprint) { pickTool('blueprint'); return; }
+    if (blueprint) { stampBlueprint(c.face, c.i, c.j); rigPulse('place'); }
+    else { bpStart = c; bpEnd = c; }
+    return;
+  }
   drawing = true;
   lastCell = c;
   apply(c, null);
 });
 renderer.domElement.addEventListener('pointermove', e => {
+  if (tool === 'blueprint' && bpStart) { const c = cellUnder(e); if (c && c.face === bpStart.face) bpEnd = c; return; }
   if (inspectOn || !drawing || !lastCell) return;
   const c = cellUnder(e);
   if (!c || (c.face === lastCell.face && c.i === lastCell.i && c.j === lastCell.j)) return;
@@ -3449,7 +3539,14 @@ renderer.domElement.addEventListener('pointermove', e => {
   apply(c, sd ? sd.d : d);
   lastCell = c;
 });
-addEventListener('pointerup', () => { drawing = false; lastCell = null; });
+addEventListener('pointerup', () => {
+  drawing = false; lastCell = null;
+  if (tool === 'blueprint' && bpStart && !blueprint) {
+    const a = bpStart, b = bpEnd || bpStart;
+    captureBlueprint(a.face, a.i, a.j, b.i, b.j);
+  }
+  bpStart = null; bpEnd = null;
+});
 
 // Point at a filter and press F. A short cycle rather than a text box: the
 // same decision space as a script, with nothing to parse, nothing to corrupt a
@@ -3493,8 +3590,10 @@ document.querySelectorAll('.tool').forEach(el => {
 addEventListener('keydown', e => {
   const k = { '1': 'miner', '2': 'belt', '3': 'smelter', '4': 'splitter',
               '5': 'hub', '6': 'forge', '7': 'filter', '8': 'rift',
-              '9': 'erase' }[e.key];
+              '9': 'erase', '0': 'blueprint' }[e.key];
+  if (k === 'blueprint' && tool === 'blueprint' && blueprint) { dropBlueprint(); return; }
   if (k) pickTool(k);
+  if (e.code === 'KeyR' && tool === 'blueprint' && blueprint) { bpRot = (bpRot + 1) & 3; updateGhost(); }
   if (e.code === 'KeyF') cycleFilter();
   if (e.code === 'KeyM') audioMute(!AUDIO.muted);
   if (e.code === 'KeyP') setPhoto(!photo);
@@ -4229,9 +4328,9 @@ const GOALS = [
   { text: 'hold 400 a minute for 20s', rate: 400, hold: 20, cap: 'tick',
     tip: 'A rate has to be held for the whole stretch; the timer resets the moment it drops. Add a second line or buy Overclock.',
     got: 'Overclock can now be bought to level 8. Everything runs faster.' },
-  { text: 'stand on a second face', unlock: 'forge',
+  { text: 'stand on a second face', unlock: 'forge', also: 'blueprint',
     tip: 'Walk over any edge of the worldlet. The world turns under you, and each face grows a different ore.',
-    got: 'Forge unlocked. Feed it two different ores and it makes one alloy, which sells for far more than either.',
+    got: 'Forge unlocked. Feed it two different ores and it makes one alloy, which sells for far more than either. The Blueprint tool comes with it: drag a box over a line to copy it, then stamp it on any face.',
     done: () => visitedFaces.size >= 2, progress: () => (visitedFaces.size - 1) },
   { text: 'forge one alloy', unlock: 'filter',
     tip: 'No single face grows two ores, so a belt has to cross an edge to bring the second one to a forge.',
@@ -4287,6 +4386,7 @@ function applyRewards() {
   for (let k = 0; k < upto && k < GOALS.length; k++) {
     const g = GOALS[k];
     if (g.unlock) UNLOCKED[g.unlock] = 1;
+    if (g.also) UNLOCKED[g.also] = 1;
     if (g.cap) UPGRADES[g.cap].cap += 2;
     if (g.gives) CAPS[g.gives] = 1;
   }
@@ -5355,6 +5455,7 @@ window.__game = {
                            left: +contract.left.toFixed(1), bonus: contract.bonus } : null,
     shards, rank, contracts_filled: contractsFilled, streak,
     rival: rival ? { item: contractName(rival.item, 2), mult: rival.mult, left: +rival.left.toFixed(1), sold: rival.sold, extra: +rival.extra.toFixed(1) } : null,
+    blueprint: blueprint ? { w: blueprint.w, h: blueprint.h, n: blueprint.cells.length, rot: bpRot } : null,
     standing: standing ? { item: contractName(standing.item, standing.perMin), per_min: standing.perMin, pay: standing.pay,
                            held: +standing.held.toFixed(1), rate: standing.rate, minutes: standing.minutes, short: +standing.short.toFixed(1) } : null,
     spores: (() => { let n = 0; eachTile(c => { if (c.clog > 0) n++; });
@@ -5424,6 +5525,7 @@ window.__factory = {
   offerStanding, get standing() { return standing; }, set streak(v) { streak = v; }, get streak() { return streak; },
   set standingHeld(v) { if (standing) standing.held = v; }, STANDING_GRACE,
   offerRival, get rival() { return rival; }, set rivalLeft(v) { if (rival) rival.left = v; }, RIVAL_MULT,
+  captureBlueprint, stampBlueprint, dropBlueprint, bpCells, get blueprint() { return blueprint; }, set bpRot(v) { bpRot = v & 3; },
   sporeStrike, sporeShielded, sporesActive, SPORE_REACH, SPORE_CLOG,
   set riftsPaid(v) { riftsPaid = v; },
   set rateNow(v) { rateForce = v; rateNow = v === null ? rateNow : v; }, set goalIdx(v) { goalIdx = v; applyRewards(); renderGoal(); renderWorlds(); },

@@ -409,6 +409,7 @@
   <div class="tool" data-tool="filter"><svg viewBox="0 0 24 24"><path d="M3 5h18l-7 8v6l-4 2v-8z" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linejoin="round"/></svg><i class="key">7</i><b>FILTER</b><small>sorts an ore, F picks</small></div>
   <div class="tool" data-tool="rift"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" stroke="currentColor" stroke-width="1.7" fill="none"/><circle cx="12" cy="12" r="3.4" stroke="currentColor" stroke-width="1.5" fill="none"/><path d="M12 4v3M12 17v3M4 12h3M17 12h3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg><i class="key">8</i><b>RIFT</b><small>lends ore, on a clock</small></div>
   <div class="tool" data-tool="erase"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg><i class="key">9</i><b>ERASE</b><small>remove</small></div>
+  <div class="tool" data-tool="blueprint"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="10" height="10" rx="1.5" stroke="currentColor" stroke-width="1.7" fill="none" stroke-dasharray="3 2"/><rect x="10" y="10" width="10" height="10" rx="1.5" stroke="currentColor" stroke-width="1.7" fill="none"/></svg><i class="key">0</i><b>BLUEPRINT</b><small>copy a line, stamp it</small></div>
 </div>
 <div id="toast"></div>
 <div id="title"><b></b><small></small></div>
