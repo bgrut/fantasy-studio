@@ -114,6 +114,8 @@
   #wipe:hover{color:#e8697d}
   #motion{margin-top:4px;text-align:center;font-size:10px;color:#5d6480;cursor:pointer;letter-spacing:.06em}
   #motion:hover{color:#9fd6ff}
+  #share{margin-top:4px;text-align:center;font-size:10px;color:#5d6480;cursor:pointer;letter-spacing:.06em}
+  #share:hover{color:#5cffc9}
   /* reduced motion: nothing settles, slides or pulses in the chrome either */
   body.reduced #title b{transition:none;transform:none}
   body.reduced #facecap,body.reduced #toast,body.reduced .tool{transition:none}
@@ -338,6 +340,7 @@
   <div id="melt"><b>MELTDOWN</b><small>collapse it all for cores</small></div>
   <div id="wipe">new world</div>
   <div id="motion">motion: full</div>
+  <div id="share">share link</div>
 </div>
 <div id="tools">
   <div class="tool on" data-tool="miner"><svg viewBox="0 0 24 24"><path d="M4 20h16M6 20V9M18 20V9M6 9h12M8 9V6M16 9V6M8 6h8" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linecap="round"/><path d="M12 20v-6l-2-3h4l-2 3" fill="currentColor"/></svg><i class="key">1</i><b>MINER</b><small>on a node</small></div>

@@ -49,7 +49,7 @@ const MOOD_LOOK = {
            belt: { frame: 0x8a4a2a, glow: 0x2a1006, deck: 0xffd0b0 },
            weather: { col: [0.95, 0.42, 0.22], rate: 14, size: 0.040, fall: 0.55, drift: 0.55, life: 0.14 } },
   cold:  { sky: 0x0a1420, fog: 0x11202f, accent: 0xcfe8ff, ground: 0x7c93ad, grid: 0xa8c4dd,
-           planet: { col: 0xbfd6ea, size: 0.09, bands: 0.0 }, ambience: 'breath',
+           planet: { col: 0xbfd6ea, size: 0.09, bands: 0.0 }, ambience: 'breath', ice: true,
            grade: { lift: [0.0, 0.014, 0.034], gamma: [0.98, 1.0, 1.04], gain: [0.94, 1.0, 1.08], sat: 0.86 },
            star: 0xdcefff, edge: 0xcfe8ff, sun: 0xe8f4ff,
            plate: { base: '#c4d2e6', tint: '#a8b8cf', seam: 'rgba(120,140,170,0.6)', rivet: 'rgba(255,255,255,0.7)', overlay: 'frost' },
@@ -437,6 +437,11 @@ const CAPS = { heated: 0, scrubber: 0, stable: 0 };
 // world, for SPORE_CLOG seconds; a filter within SPORE_REACH tiles shields it
 const SPORE_EVERY = 5, SPORE_CLOG = 8, SPORE_REACH = 3;
 let sporeClock = 0, sporeHits = 0, sporeToasted = false;
+// ice: one unheated seam freezes every ICE_EVERY seconds on a cold world, for
+// ICE_THAW seconds; a smelter or forge within ICE_REACH is heat; the heated
+// drill ignores it
+const ICE_EVERY = 7, ICE_THAW = 14, ICE_REACH = 3;
+let iceClock = 0, iceHits = 0, iceToasted = false;
 const scatterSpots = [];
 // Same reason, same place. The starter line is seeded at boot, seeding calls
 // place(), place() clicks — and the click reads AUDIO, which was declared six
@@ -2586,6 +2591,70 @@ function sporeStrike() {
   }
   return [f, i, j];
 }
+// ── ICE ────────────────────────────────────────────────────────────────────
+const iceActive = () => !CREATIVE && !!(WORLDS[worldIdx] && WORLDS[worldIdx].ice) && !CAPS.heated;
+// heat within reach, on the same face: a furnace of either kind
+function iceShielded(f, i, j) {
+  for (let a = Math.max(0, i - ICE_REACH); a <= Math.min(N - 1, i + ICE_REACH); a++)
+    for (let b = Math.max(0, j - ICE_REACH); b <= Math.min(N - 1, j + ICE_REACH); b++) {
+      const t = cells[f][a][b].t;
+      if (t === SMELTER || t === FORGE) return true;
+    }
+  return false;
+}
+let iceMat = null;
+function iceShell(c, f, i, j) {
+  if (!iceMat) iceMat = new THREE.MeshStandardMaterial({ color: 0xdff2ff, transparent: true, opacity: 0.55,
+    roughness: 0.15, metalness: 0.05, flatShading: true, emissive: 0x6fb0ff, emissiveIntensity: 0.15, depthWrite: false });
+  const m = new THREE.Mesh(new THREE.IcosahedronGeometry(0.95, 0), iceMat);
+  seat(m, f, i, j, 0, 0.55);
+  m.scale.set(1.0, 0.75, 1.0);
+  m.name = 'ice';
+  scene.add(m);
+  c.iceMesh = m;
+}
+function iceStrike() {
+  const open = [];
+  eachTile((c, f, i, j) => { if (c.mesh && !(c.ice > 0) && !iceShielded(f, i, j)) open.push([c, f, i, j]); });
+  if (!open.length) return null;
+  const [c, f, i, j] = open[(Math.random() * open.length) | 0];
+  c.ice = ICE_THAW;
+  iceHits++;
+  iceShell(c, f, i, j);
+  // frost settling onto the seam
+  const n = FACES[f].n, w = tileWorld(f, i, j), u = FACES[f].u, v = FACES[f].v;
+  for (let k = 0; k < 16; k++) {
+    const du = (Math.random() - 0.5) * T * 1.4, dv = (Math.random() - 0.5) * T * 1.4;
+    emit(w[0] + u[0] * du + v[0] * dv + n[0] * 1.6, w[1] + u[1] * du + v[1] * dv + n[1] * 1.6, w[2] + u[2] * du + v[2] * dv + n[2] * 1.6,
+         -n[0] * 0.6 + (Math.random() - 0.5) * 0.2, -n[1] * 0.6 + (Math.random() - 0.5) * 0.2, -n[2] * 0.6 + (Math.random() - 0.5) * 0.2,
+         0.85, 0.93, 1.0, 0.05, 0.8);
+  }
+  if (!iceToasted) {
+    iceToasted = true;
+    const t = document.getElementById('toast');
+    if (t) { t.textContent = 'ICE — a seam froze over. A smelter or forge within ' + ICE_REACH + ' tiles keeps seams thawed; the heated drill ignores it'; t.classList.add('on'); toastAt = 6; }
+  }
+  return [f, i, j];
+}
+function thawSeam(c) {
+  c.ice = 0;
+  if (c.iceMesh) { scene.remove(c.iceMesh); c.iceMesh.geometry.dispose(); c.iceMesh = null; }
+}
+function stepIce(dt) {
+  // ice thaws on its own, three times faster once heat is near, and at once
+  // under the drill; the strikes keep coming while the world is cold
+  eachTile((c, f, i, j) => {
+    if (!(c.ice > 0)) return;
+    if (CAPS.heated) { thawSeam(c); return; }
+    c.ice -= dt * (iceShielded(f, i, j) ? 3 : 1);
+    if (c.iceMesh) { const k = Math.min(1, c.ice / 3); c.iceMesh.scale.set(k, 0.75 * k, k); }
+    if (c.ice <= 0) thawSeam(c);
+  });
+  if (!iceActive()) { iceClock = 0; return; }
+  iceClock += dt;
+  if (iceClock >= ICE_EVERY) { iceClock = 0; iceStrike(); }
+}
+
 function stepSpores(dt) {
   // clogs clear on their own; the strikes keep coming while the world is green
   eachTile((c, f, i, j) => {
@@ -2910,7 +2979,9 @@ function step() {
     // PROBABILISTIC, NOT A COUNTDOWN. A seam at 40% yields on 40% of ticks,
     // which reads as a line that has slowed rather than a line that stops and
     // starts — and it needs no extra state to do it.
-    if (accepts(dst, m) && Math.random() < Math.max(SEAM_FLOOR, c.rich)) {
+    // a frozen seam yields at half the floor: the rig is scraping ice
+    const chance = c.ice > 0 && !CAPS.heated ? SEAM_FLOOR * 0.5 : Math.max(SEAM_FLOOR, c.rich);
+    if (accepts(dst, m) && Math.random() < chance) {
       deliver(dst, to, m); sfxTick(m);
       if (!CREATIVE) c.rich = Math.max(0, c.rich - SEAM_COST);
       // the seam flexes as the crystal leaves it: which rigs are actually
@@ -3673,7 +3744,7 @@ function throwPiece(g) {
 
 function meltdown() {
   if (ore < MELT_MIN || melting > 0) return;
-  const won = Math.max(1, coresFor(runValue));
+  const won = Math.max(1, coresFor(runValue)) * ((WORLDS[worldIdx] && WORLDS[worldIdx].coreMult) || 1);
   cores += won;
   sfxMelt();
   // the most filmable moment in the game, shown from where it can be seen
@@ -3770,7 +3841,7 @@ const WORLDS = [
   // prompt's own mood for everything else
   { id: 'prompt', plate: HOME.plate, belt: HOME.belt, weather: HOME.weather,
     edge: HOME.edge, sun: HOME.sun, name: SPEC.title || 'Crystal Isle', cores: 0, spores: !!HOME.spores,
-    planet: HOME.planet, grade: HOME.grade, ambience: HOME.ambience, fam: MOOD,
+    planet: HOME.planet, grade: HOME.grade, ambience: HOME.ambience, fam: MOOD, ice: !!HOME.ice, coreMult: 1,
     blurb: 'where the prompt dropped you',
     sky: SKY_COL, fog: FOG_COL, ground: HOME.ground, grid: HOME.grid, star: HOME.star },
   // THE UNLOCKS ARE THE THREE FAMILIES HOME IS NOT (2026-09-08). A prompt
@@ -3781,7 +3852,8 @@ const WORLDS = [
     { fam: 'warm',  id: 'ember',   name: 'Ember Reach',       blurb: 'a cinder still cooling' },
     { fam: 'cold',  id: 'frost',   name: 'Frostline',         blurb: 'ice over something older', needs: 'heated' },
     { fam: 'green', id: 'verdant', name: 'The Verdant Fault', blurb: 'it grew back around the machines', needs: 'scrubber' },
-    { fam: 'void',  id: 'drift',   name: 'The Long Drift',    blurb: 'nothing for a very long way', needs: 'drift' },
+    { fam: 'void',  id: 'drift',   name: 'The Long Drift',    blurb: 'nothing grows back here, and a meltdown pays double', needs: 'drift',
+      finite: true, coreMult: 2 },
   ].filter(w => w.fam !== MOOD).map((w, k) => {
     const L = MOOD_LOOK[w.fam];
     // the void is priced at the three cores the last tier asks for; the rest
@@ -3789,7 +3861,8 @@ const WORLDS = [
     return { id: w.id, name: w.name, blurb: w.blurb, cores: w.needs === 'drift' ? 3 : [2, 5, 9][k], needs: w.needs || null,
              sky: L.sky, fog: L.fog, ground: L.ground, grid: L.grid, star: L.star,
              edge: L.edge, sun: L.sun, plate: L.plate, belt: L.belt, weather: L.weather, spores: !!L.spores,
-             planet: L.planet, grade: L.grade, ambience: L.ambience, fam: w.fam };
+             planet: L.planet, grade: L.grade, ambience: L.ambience, fam: w.fam, ice: !!L.ice,
+             finite: !!w.finite, coreMult: w.coreMult || 1 };
   }),
 ];
 let worldIdx = 0;
@@ -4099,7 +4172,7 @@ document.body.classList.toggle('creative', CREATIVE);
 const SAVE_V = 3;
 
 function clearFactory() {
-  eachTile(c => { c.clog = 0; });
+  eachTile(c => { c.clog = 0; if (c.ice > 0) thawSeam(c); });
   beltsDirty = true;
   eachTile(c => {
     c.rich = 1;                       // a new factory gets fresh ground
@@ -4224,8 +4297,31 @@ function wipe() {
 // by the beforeunload save that the next navigation fires.
 const FRESH = /[?&](fresh|new)=1/.test(location.search);
 if (FRESH) { try { localStorage.removeItem(SAVE_KEY); } catch (e) {} }
+// A LINK THAT CARRIES A FACTORY. ?share= holds a whole save; opening it
+// starts that factory, then the parameter is dropped so a reload keeps it as
+// your own world under the usual key.
+let SHARED = null;
+{
+  const m = location.search.match(/[?&]share=([A-Za-z0-9+/=_-]+)/);
+  if (m) {
+    try { SHARED = JSON.parse(decodeURIComponent(escape(atob(m[1].replace(/-/g, '+').replace(/_/g, '/'))))); } catch (e) { SHARED = null; }
+    try { const u = new URL(location.href); u.searchParams.delete('share'); history.replaceState(null, '', u.toString()); } catch (e) {}
+  }
+}
+function shareLink() {
+  const raw = JSON.stringify(saveState());
+  const b64 = btoa(unescape(encodeURIComponent(raw))).replace(/\+/g, '-').replace(/\//g, '_');
+  const u = new URL(location.href);
+  u.search = ''; u.searchParams.set('share', b64);
+  const link = u.toString();
+  try { navigator.clipboard && navigator.clipboard.writeText(link); } catch (e) {}
+  try { window.parent.postMessage({ type: 'fs-share', link, bytes: raw.length }, '*'); } catch (e) {}
+  const fc = document.getElementById('facecap');
+  if (fc) { fc.textContent = 'LINK COPIED  ·  ' + Math.round(link.length / 1024) + ' KB'; fc.classList.add('on'); captionAt = 2.2; }
+  return link;
+}
 // the starter line is what a NEW world looks like; a save replaces it whole
-const restored = FRESH ? false : load();
+const restored = FRESH ? false : (SHARED ? !!loadState(SHARED) : load());
 
 let saveClock = 0;
 // beforeunload is not reliable on mobile or when a tab is discarded, so the
@@ -4246,6 +4342,8 @@ addEventListener('visibilitychange', () => { if (document.hidden) save(); });
     try { localStorage.setItem('fs-factory-motion', REDUCED ? '0' : '1'); } catch (e) {}
     showMotion();
   });
+  const sh = document.getElementById('share');
+  if (sh) sh.addEventListener('pointerdown', ev => { ev.stopPropagation(); shareLink(); });
   const w = document.getElementById('wipe');
   if (w) w.addEventListener('pointerdown', ev => {
     ev.stopPropagation();
@@ -4297,10 +4395,12 @@ renderer.setAnimationLoop(() => {
 
   stepMarket(dt);
   stepSpores(dt);
+  stepIce(dt);
   // seams grow back on their own, and wear their richness as their size
   eachTile((c, f, i, j) => {
     if (!c.mesh) return;
-    if (c.rich < 1) c.rich = Math.min(1, c.rich + dt * SEAM_REGROW);
+    // on a finite world nothing grows back
+    if (c.rich < 1 && !(WORLDS[worldIdx] && WORLDS[worldIdx].finite)) c.rich = Math.min(1, c.rich + dt * SEAM_REGROW);
     c.mesh.userData.rich = c.rich;
     // the glow follows the richness: emissive, core, and the pool on the ground
     // a light, not a blowout: the core and the pool carry the brightness now
@@ -4408,7 +4508,7 @@ renderer.setAnimationLoop(() => {
       // switched off
       const bit = c.build.getObjectByName('bit');
       const rich = c.rich === undefined ? 1 : c.rich;
-      if (bit) bit.rotation.y += dt * (1.2 + 5.8 * rich);
+      if (bit) bit.rotation.y += dt * (1.2 + 5.8 * rich) * (c.ice > 0 && !CAPS.heated ? 0.25 : 1);
       const sag = rich < 0.2 ? (0.2 - rich) * 0.35 : 0;
       c.build.children[0].position.y = -sag;
     } else if (c.t === HUB) {
@@ -5031,6 +5131,10 @@ window.__game = {
     worlds_open: WORLDS.filter(w => (CREATIVE || cores >= w.cores) && worldCapOk(w)).length,
     creative: CREATIVE,
     tier: tierName, reduced_motion: REDUCED, photo,
+    ice: (() => { let n = 0; eachTile(c => { if (c.ice > 0) n++; });
+                  return { active: iceActive(), hits: iceHits, frozen: n, reach: ICE_REACH }; })(),
+    finite: !!(WORLDS[worldIdx] && WORLDS[worldIdx].finite), core_mult: (WORLDS[worldIdx] && WORLDS[worldIdx].coreMult) || 1,
+    shared: !!SHARED,
     spores: (() => { let n = 0; eachTile(c => { if (c.clog > 0) n++; });
                      return { active: sporesActive(), hits: sporeHits, clogged: n, reach: SPORE_REACH }; })(),
     sold_high: soldHigh, rifts_paid: riftsPaid,
@@ -5092,6 +5196,7 @@ window.__factory = {
   get REDUCED() { return REDUCED; }, set REDUCED(v) { REDUCED = !!v; document.body.classList.toggle('reduced', REDUCED); },
   get meltFlash() { return meltFlash; }, get shockwave() { return shockwave; }, itemsEmber, itemsSalt,
   setPhoto, get photo() { return photo; }, get iconsWorld() { return iconsWorld; }, buildToolIcons,
+  iceStrike, iceShielded, iceActive, ICE_REACH, ICE_THAW, shareLink, coresFor,
   sporeStrike, sporeShielded, sporesActive, SPORE_REACH, SPORE_CLOG,
   set riftsPaid(v) { riftsPaid = v; },
   set rateNow(v) { rateForce = v; rateNow = v === null ? rateNow : v; }, set goalIdx(v) { goalIdx = v; applyRewards(); renderGoal(); renderWorlds(); },

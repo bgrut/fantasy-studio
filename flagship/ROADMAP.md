@@ -81,6 +81,9 @@ says so.
 | **photo mode** | P hides the chrome and leaves you free to frame; Enter saves a PNG named for the world and tells the studio; P restores |
 | **the studio's first run** | a factory job opens under a card naming the world, the mode and the six things to know, once per job; the latest saved frame shows as a chip under the frame |
 | **the fill is the world's** | the far-quadrant fill takes a lifted edge colour and the same floor as the bounce, so a red soot plate reflects it; `?world=k` lets a gate measure any world's light |
+| **ice** | on a cold world an unheated seam freezes over every few seconds and its rig scrapes at half the floor; a smelter or forge within 3 tiles is heat and melts what it reaches three times faster; the heated drill ignores ice |
+| **the Long Drift's rule** | seams do not grow back there and a meltdown pays double: the last place is finite and it is where the cores are |
+| **a link that carries a factory** | "share link" copies a URL with the whole save in it; opening it starts that factory and drops the parameter; the studio is told |
 | **machine skin** | one shared panel map (seams, rivets, a lip, wear) on every machine; glow moved from the paint to the lamps; sun made the key (3.1 over 0.95 hemi / 0.85 fill); a frame on the smelter |
 | **the companion** | a planet or moon low in every world's sky, shaded from the sun's side with a terminator and an atmosphere rim, drawn in the sky shader; one fixed direction so it is a landmark |
 | **lanes** | every fifth grid line is a faint lit strip in the world's edge colour; the far plane widened to 1400 so the sky dome no longer clips from orbit |
@@ -247,7 +250,7 @@ somewhere new opens, which gives the meltdown a destination.
 | whatever the prompt asked for | 0 | — |
 | the first family home is not | 2 | — (warm) / heated drill (cold) / spore scrubber (green) |
 | the second | 5 | same rule, by family |
-| The Long Drift (void) | 3 | the whole chain walked |
+| The Long Drift (void) | 3 | the whole chain walked — seams never grow back, a meltdown pays double |
 
 The three unlockables are the families the home world is not, so a warm prompt
 offers frost, verdant and the drift. Cores buy the trip; the capability makes
