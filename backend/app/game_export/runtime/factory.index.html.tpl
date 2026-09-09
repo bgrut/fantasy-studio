@@ -295,6 +295,17 @@
   #contract .bar{height:4px;margin-top:7px;border-radius:2px;background:rgba(140,110,255,.16);overflow:hidden}
   #contract .bar i{display:block;height:100%;background:linear-gradient(90deg,#b39cff,#5ce0d0);transition:width .3s}
   #contract .left{display:block;margin-top:4px;font-family:var(--f-mono);font-size:10px;letter-spacing:.06em;color:#b39cff}
+  /* a standing order is the contract card in gold: a rate to be held */
+  #standing{display:none;margin-top:8px;border:1px solid rgba(255,212,121,.45);border-radius:10px;padding:8px 10px;
+            background:linear-gradient(180deg,rgba(255,212,121,.14),rgba(255,212,121,.04))}
+  #standing.on{display:block}
+  #standing.short{border-color:rgba(255,120,90,.7)}
+  #standing b{display:block;font-family:var(--f-head);font-size:13px;letter-spacing:.05em;color:#ffd479;font-weight:700}
+  #standing small{display:block;color:#a89a72;font-size:10px;margin-top:2px}
+  #standing .bar{height:4px;margin-top:7px;border-radius:2px;background:rgba(255,212,121,.16);overflow:hidden}
+  #standing .bar i{display:block;height:100%;background:linear-gradient(90deg,#ffd479,#5ce0d0);transition:width .3s}
+  #standing.short .bar i{background:linear-gradient(90deg,#ff9f7a,#ffd479)}
+  #standing .left{display:block;margin-top:4px;font-family:var(--f-mono);font-size:10px;letter-spacing:.06em;color:#c9b27a}
   /* rank and shards, under the rate */
   #rank{display:flex;justify-content:space-between;align-items:baseline;margin-top:3px;font-size:10px;letter-spacing:.14em}
   #rank b{font-family:var(--f-head);font-weight:600;color:#8d8564}
@@ -367,6 +378,7 @@
   </div>
   <div id="goal"></div>
   <div id="contract"><b></b><small></small><div class="bar"><i style="width:0%"></i></div><span class="left"></span></div>
+  <div id="standing"><b></b><small></small><div class="bar"><i style="width:0%"></i></div><span class="left"></span></div>
   <div id="tick"></div>
   <div id="ups"></div>
   <div id="world"></div>

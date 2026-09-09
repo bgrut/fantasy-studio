@@ -439,6 +439,9 @@ let iceClock = 0, iceHits = 0, iceToasted = false;
 // contracts: a clock you can hear ticking
 const CONTRACT_EVERY = 70, CONTRACT_SECS = 90;
 let contract = null, contractClock = 40, contractsFilled = 0, shards = 0, rank = 0;
+// standing orders: a rate to be HELD, offered after three contracts kept in a row
+const STANDING_STREAK = 3, STANDING_GRACE = 10;
+let streak = 0, standing = null;
 const scatterSpots = [];
 // Same reason, same place. The starter line is seeded at boot, seeding calls
 // place(), place() clicks — and the click reads AUDIO, which was declared six
@@ -2677,6 +2680,7 @@ function offerContract(forceItem) {
 function fillContract() {
   const c = contract; contract = null; contractClock = 0;
   contractsFilled++;
+  streak++;
   ore += c.bonus; runValue += c.bonus;
   shards++;
   sfxUnlock();
@@ -2692,6 +2696,8 @@ function fillContract() {
   const t = document.getElementById('toast');
   if (t) { t.textContent = msg; t.classList.add('on'); toastAt = 3.5; }
   renderContract(); renderRank();
+  // the standing order is offered LAST, so its toast is the one that stays up
+  if (streak >= STANDING_STREAK && !standing) offerStanding(c.item);
 }
 function stepContracts(dt) {
   if (intro > 0) return;
@@ -2699,6 +2705,7 @@ function stepContracts(dt) {
     contract.left -= dt;
     if (contract.left <= 0) {
       contract = null; contractClock = 0;
+      streak = 0;
       const t = document.getElementById('toast');
       if (t) { t.textContent = 'The contract lapsed. Nothing is lost, and the market will post another soon.'; t.classList.add('on'); toastAt = 3; }
       renderContract();
@@ -2709,6 +2716,73 @@ function stepContracts(dt) {
   contractClock += dt;
   if (contractClock >= CONTRACT_EVERY) offerContract();
 }
+// ── STANDING ORDERS ────────────────────────────────────────────────────────
+function offerStanding(item) {
+  if (standing) return standing;
+  const unit = (VALUE[item] || 6) * (PRICE[item] || 1);
+  // two thirds of the current rate, in units a minute, never fewer than four
+  const perMin = Math.max(4, Math.round((Math.max(rateNow, 90) * 0.66) / unit));
+  const pay = Math.round(perMin * unit * 0.5 * (1 + 0.15 * rank));
+  standing = { item, perMin, pay, held: 0, short: 0, minutes: 0, log: [], rate: 0 };
+  renderStanding();
+  const t = document.getElementById('toast');
+  if (t) { t.textContent = 'STANDING ORDER. Three contracts kept in a row. The market will pay +' + pay + ' for every minute you keep ' + perMin + ' ' + contractName(item, perMin) + ' a minute flowing to a hub, and a core shard every third minute. It closes the moment the rate falls short for ' + STANDING_GRACE + ' seconds.'; t.classList.add('on'); toastAt = 8; }
+  return standing;
+}
+function stepStanding(dt) {
+  if (!standing || intro > 0) return;
+  const now = performance.now();
+  while (standing.log.length && now - standing.log[0] > 60000) standing.log.shift();
+  standing.rate = standing.log.length;
+  if (standing.rate >= standing.perMin || standing.held < 5) {
+    // the first five seconds are grace to get the line moving
+    standing.short = standing.rate >= standing.perMin ? 0 : standing.short;
+    standing.held += dt;
+    const minutes = Math.floor(standing.held / 60);
+    while (standing.minutes < minutes) {
+      standing.minutes++;
+      ore += standing.pay; runValue += standing.pay;
+      let msg = 'STANDING ORDER HELD for ' + standing.minutes + (standing.minutes === 1 ? ' minute. +' : ' minutes. +') + standing.pay + ' value.';
+      if (standing.minutes % 3 === 0) {
+        shards++;
+        msg += ' A core shard for the third minute.';
+        if (shards >= 3) { shards -= 3; cores++; document.getElementById('tok').textContent = cores; renderWorlds(); msg += ' That makes a core.'; }
+        renderRank();
+      }
+      sfxSold(ALLOY);
+      const t = document.getElementById('toast');
+      if (t) { t.textContent = msg; t.classList.add('on'); toastAt = 4; }
+    }
+  } else {
+    standing.short += dt;
+    if (standing.short >= STANDING_GRACE) {
+      const held = standing.held;
+      standing = null; streak = 0;
+      const t = document.getElementById('toast');
+      if (t) { t.textContent = 'The standing order closed after ' + Math.floor(held / 60) + ':' + String(Math.floor(held % 60)).padStart(2, '0') + '. The rate fell short for ' + STANDING_GRACE + ' seconds. Keep three more contracts to earn another.'; t.classList.add('on'); toastAt = 6; }
+      renderStanding();
+      return;
+    }
+  }
+  if ((now % 500) < 20) renderStanding();
+}
+function renderStanding() {
+  const el = document.getElementById('standing');
+  if (!el) return;
+  if (!standing) { el.classList.remove('on'); return; }
+  el.classList.add('on');
+  el.querySelector('b').textContent = 'STANDING ORDER: ' + standing.perMin + ' ' + contractName(standing.item, standing.perMin).toUpperCase() + ' A MINUTE';
+  el.querySelector('small').textContent = 'pays +' + standing.pay + ' every minute it holds, and a shard every third';
+  const i = el.querySelector('.bar i'); if (i) i.style.width = Math.min(100, Math.round(100 * standing.rate / standing.perMin)) + '%';
+  const s = el.querySelector('.left');
+  if (s) {
+    const h = standing.held;
+    s.textContent = standing.rate + ' / ' + standing.perMin + ' this minute  ·  held ' + Math.floor(h / 60) + ':' + String(Math.floor(h % 60)).padStart(2, '0')
+      + (standing.short > 0 ? '  ·  short ' + Math.ceil(STANDING_GRACE - standing.short) + 's' : '');
+    el.classList.toggle('short', standing.short > 0);
+  }
+}
+
 function renderContract() {
   const el = document.getElementById('contract');
   if (!el) return;
@@ -2865,6 +2939,7 @@ function bank(type) {
   ore += v; runValue += v;
   if (type === ALLOY && (PRICE[ALLOY] || 1) >= 1.2) soldHigh++;
   if (contract && type === contract.item) { contract.have++; renderContract(); if (contract.have >= contract.need) fillContract(); }
+  if (standing && type === standing.item) standing.log.push(performance.now());
   if (IS_INGOT(type)) ingots++;
   if (type === ALLOY) alloys++;
 }
@@ -4283,7 +4358,7 @@ function saveState() {
     p: { face: player.face, pos: player.pos.toArray(),
          fwd: player.fwd.toArray(), pitch: player.pitch },
     g: goalIdx, u: Object.keys(UNLOCKED), vf: [...visitedFaces], w: worldIdx,
-    sh: soldHigh, rp: riftsPaid, cs: shards, rk: rank, cf: contractsFilled,
+    sh: soldHigh, rp: riftsPaid, cs: shards, rk: rank, cf: contractsFilled, sk: streak,
     // seams come back from the RNG; how worked each one is does not
     r: (() => { const out = [];
       eachTile((c, f, i, j) => { if (c.mesh && c.rich < 0.999)
@@ -4336,7 +4411,7 @@ function loadState(d) {
     if (c && c.mesh) c.rich = Math.max(0, Math.min(1, +r[3] || 0));
   }
   goalIdx = Math.max(0, Math.min(GOALS.length, d.g | 0));
-  soldHigh = d.sh | 0; riftsPaid = d.rp | 0; shards = d.cs | 0; rank = d.rk | 0; contractsFilled = d.cf | 0;
+  soldHigh = d.sh | 0; riftsPaid = d.rp | 0; shards = d.cs | 0; rank = d.rk | 0; contractsFilled = d.cf | 0; streak = d.sk | 0;
   renderRank();
   if (Array.isArray(d.u)) for (const k of d.u) UNLOCKED[k] = 1;
   applyRewards();
@@ -4364,7 +4439,7 @@ function wipe() {
   ore = 0; ingots = 0; alloys = 0; cores = 0; runValue = 0;
   for (const k in UPGRADES) UPGRADES[k].lvl = 0;
   goalIdx = 0; soldHigh = 0; riftsPaid = 0; shards = 0; rank = 0; contractsFilled = 0;
-  contract = null; contractClock = 40; renderContract(); renderRank();
+  contract = null; contractClock = 40; standing = null; streak = 0; renderContract(); renderStanding(); renderRank();
   for (const g of GOALS) if (g.rate) g.held = 0;
   applyWorld(0);
   for (const k in UNLOCKED) if (!START_TOOLS.includes(k)) delete UNLOCKED[k];
@@ -4462,7 +4537,7 @@ buildToolIcons();
 // open" has to be applied here, on the first frame, not on the first reload
 applyRewards(); renderUpgrades();
 renderGoal();
-renderRank(); renderContract();
+renderRank(); renderContract(); renderStanding();
 if (!restored) applyWorld(worldIdx);   // a restored save has already chosen
 // ?world=k is a debug override (like ?grid=): a gate can measure any world's
 // light without walking the chain first
@@ -4483,6 +4558,7 @@ renderer.setAnimationLoop(() => {
   stepSpores(dt);
   stepIce(dt);
   stepContracts(dt);
+  stepStanding(dt);
   if (contract && (performance.now() % 500) < 20) renderContract();
   // seams grow back on their own, and wear their richness as their size
   eachTile((c, f, i, j) => {
@@ -5225,7 +5301,9 @@ window.__game = {
     shared: !!SHARED,
     contract: contract ? { item: contractName(contract.item, contract.need), need: contract.need, have: contract.have,
                            left: +contract.left.toFixed(1), bonus: contract.bonus } : null,
-    shards, rank, contracts_filled: contractsFilled,
+    shards, rank, contracts_filled: contractsFilled, streak,
+    standing: standing ? { item: contractName(standing.item, standing.perMin), per_min: standing.perMin, pay: standing.pay,
+                           held: +standing.held.toFixed(1), rate: standing.rate, minutes: standing.minutes, short: +standing.short.toFixed(1) } : null,
     spores: (() => { let n = 0; eachTile(c => { if (c.clog > 0) n++; });
                      return { active: sporesActive(), hits: sporeHits, clogged: n, reach: SPORE_REACH }; })(),
     sold_high: soldHigh, rifts_paid: riftsPaid,
@@ -5290,6 +5368,8 @@ window.__factory = {
   iceStrike, iceShielded, iceActive, ICE_REACH, ICE_THAW, shareLink, coresFor,
   offerContract, get contract() { return contract; }, set contractLeft(v) { if (contract) contract.left = v; },
   get shards() { return shards; }, set shards(v) { shards = v; renderRank(); }, get rank() { return rank; }, CONTRACT_EVERY,
+  offerStanding, get standing() { return standing; }, set streak(v) { streak = v; }, get streak() { return streak; },
+  set standingHeld(v) { if (standing) standing.held = v; }, STANDING_GRACE,
   sporeStrike, sporeShielded, sporesActive, SPORE_REACH, SPORE_CLOG,
   set riftsPaid(v) { riftsPaid = v; },
   set rateNow(v) { rateForce = v; rateNow = v === null ? rateNow : v; }, set goalIdx(v) { goalIdx = v; applyRewards(); renderGoal(); renderWorlds(); },
