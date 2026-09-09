@@ -12,17 +12,14 @@
      in vendor/fonts with the game, so it looks the same on every machine and
      needs no network. Condensed for what is named, Barlow for what is read,
      Plex Mono for what is counted. */
-  @font-face{font-family:"Barlow Condensed";font-weight:500;font-display:swap;src:url(vendor/fonts/BarlowCondensed-Medium.ttf) format("truetype")}
-  @font-face{font-family:"Barlow Condensed";font-weight:600;font-display:swap;src:url(vendor/fonts/BarlowCondensed-SemiBold.ttf) format("truetype")}
-  @font-face{font-family:"Barlow Condensed";font-weight:700;font-display:swap;src:url(vendor/fonts/BarlowCondensed-Bold.ttf) format("truetype")}
-  @font-face{font-family:"Barlow";font-weight:400;font-display:swap;src:url(vendor/fonts/Barlow-Regular.ttf) format("truetype")}
-  @font-face{font-family:"Barlow";font-weight:500;font-display:swap;src:url(vendor/fonts/Barlow-Medium.ttf) format("truetype")}
-  @font-face{font-family:"Barlow";font-weight:600;font-display:swap;src:url(vendor/fonts/Barlow-SemiBold.ttf) format("truetype")}
-  @font-face{font-family:"IBM Plex Mono";font-weight:400;font-display:swap;src:url(vendor/fonts/IBMPlexMono-Regular.ttf) format("truetype")}
-  @font-face{font-family:"IBM Plex Mono";font-weight:500;font-display:swap;src:url(vendor/fonts/IBMPlexMono-Medium.ttf) format("truetype")}
-  :root{--f-head:"Barlow Condensed","Arial Narrow",sans-serif;
-        --f-ui:"Barlow","Segoe UI",system-ui,sans-serif;
-        --f-mono:"IBM Plex Mono",ui-monospace,Consolas,monospace}
+  @font-face{font-family:"Bricolage Grotesque";font-weight:200 800;font-stretch:75% 100%;font-display:swap;src:url(vendor/fonts/BricolageGrotesque-Variable.ttf) format("truetype")}
+  @font-face{font-family:"Instrument Sans";font-weight:400 700;font-stretch:75% 100%;font-display:swap;src:url(vendor/fonts/InstrumentSans-Variable.ttf) format("truetype")}
+  @font-face{font-family:"DM Mono";font-weight:300;font-display:swap;src:url(vendor/fonts/DMMono-Light.ttf) format("truetype")}
+  @font-face{font-family:"DM Mono";font-weight:400;font-display:swap;src:url(vendor/fonts/DMMono-Regular.ttf) format("truetype")}
+  @font-face{font-family:"DM Mono";font-weight:500;font-display:swap;src:url(vendor/fonts/DMMono-Medium.ttf) format("truetype")}
+  :root{--f-head:"Bricolage Grotesque","Instrument Sans",system-ui,sans-serif;
+        --f-ui:"Instrument Sans",system-ui,sans-serif;
+        --f-mono:"DM Mono",ui-monospace,monospace}
   body{font-family:var(--f-ui)}
   #hud{position:fixed;left:14px;top:12px;z-index:5;
        background:linear-gradient(180deg,rgba(18,23,42,.90),rgba(8,10,20,.90));
@@ -31,8 +28,8 @@
        max-height:calc(100vh - 110px);overflow-y:auto;scrollbar-width:none;
        box-shadow:0 6px 24px rgba(0,0,0,.45),inset 0 1px 0 rgba(255,255,255,.05)}
   #hud::-webkit-scrollbar{display:none}
-  #hud h1{margin:0 0 7px;font-size:16px;letter-spacing:.14em;color:#8ff3dd;
-          font-weight:600;
+  #hud h1{margin:0 0 7px;font-size:15px;letter-spacing:.08em;color:#8ff3dd;
+          font-weight:700;font-variation-settings:"opsz" 24;
           font-family:var(--f-head)}
   .k{font-family:var(--f-ui);font-weight:500;
      letter-spacing:.02em}
@@ -42,7 +39,7 @@
   /* seven tools no longer fit at the old size: the bar wrapped onto two lines
      and ran into the hint text in the corner */
   #tools{position:fixed;left:50%;transform:translateX(-50%);bottom:16px;z-index:5;
-         display:flex;gap:9px;white-space:nowrap}
+         display:flex;gap:7px;white-space:nowrap;max-width:calc(100vw - 24px)}
   .tool{cursor:pointer;user-select:none;color:#aeb6cd;white-space:nowrap}
   .tool.on{border-color:#5ce0d0;
            background:linear-gradient(180deg,rgba(26,66,62,.95),rgba(10,24,26,.95));
@@ -59,7 +56,7 @@
      read as a terminal; a game's build bar is a row of things you recognise by
      picture, with the key as a small badge rather than part of the name. The
      icon is a render of the actual machine — see buildToolIcons(). */
-  .tool{display:grid;grid-template-columns:38px auto;align-items:center;
+  .tool{display:grid;grid-template-columns:34px auto;align-items:center;
         column-gap:9px;position:relative;padding:8px 12px 8px 9px;
         border-radius:11px;
         background:linear-gradient(180deg,rgba(24,30,52,.92),rgba(10,13,26,.94));
@@ -67,14 +64,17 @@
         box-shadow:0 2px 10px rgba(0,0,0,.45),inset 0 1px 0 rgba(255,255,255,.05);
         transition:transform .12s,border-color .12s,box-shadow .12s}
   .tool:hover{transform:translateY(-2px);border-color:rgba(120,200,255,.4)}
-  .tool svg,.tool .ico{width:38px;height:38px;grid-row:1 / span 2;
+  .tool svg,.tool .ico{width:34px;height:34px;grid-row:1 / span 2;
         display:block;color:#5ce0d0}
   .tool .ico{filter:drop-shadow(0 2px 3px rgba(0,0,0,.55))}
   .tool b,.tool small{grid-column:2}
   .tool b{font-family:var(--f-head);
-          font-size:14px;font-weight:600;letter-spacing:.08em;color:#dfe6f5}
+          font-size:12.5px;font-weight:700;letter-spacing:.05em;color:#dfe6f5}
   .tool small{font-family:var(--f-ui);
-              font-size:10px;letter-spacing:.01em;color:#7b86a6}
+              font-size:9.5px;letter-spacing:0;color:#7b86a6}
+  /* nine tools have to fit: the descriptions step out below 1360px and the
+     names carry the bar on their own */
+  @media (max-width:1360px){.tool small{display:none}.tool b{grid-row:1 / span 2}}
   /* the shortcut is a badge in the corner, not part of the machine's name */
   .tool .key{position:absolute;top:-6px;left:-6px;width:17px;height:17px;
              border-radius:6px;background:#1b2340;border:1px solid rgba(120,200,255,.3);
@@ -96,9 +96,9 @@
   .up{border:1px solid rgba(120,200,255,.13);border-radius:10px;padding:7px 9px;
       background:linear-gradient(180deg,rgba(255,255,255,.03),rgba(0,0,0,.12));
       cursor:not-allowed;opacity:.5}
-  .up b{display:block;font-size:13px;letter-spacing:.08em;color:#c9d2e8;
+  .up b{display:block;font-size:11.5px;letter-spacing:.05em;color:#c9d2e8;
         font-family:var(--f-head);
-        font-weight:600}
+        font-weight:700}
   .up b span{color:#5d67a0}
   .up small{display:block;color:#7b86a6;font-size:10px;
             font-family:var(--f-ui)}
@@ -115,7 +115,7 @@
         background:linear-gradient(180deg,rgba(255,110,80,.18),rgba(255,110,80,.06));
         font-family:var(--f-ui)}
   #melt.on{display:block}
-  #melt b{display:block;font-size:14px;letter-spacing:.1em;color:#ff9f7a;font-family:var(--f-head);font-weight:600}
+  #melt b{display:block;font-size:13px;letter-spacing:.06em;color:#ff9f7a;font-family:var(--f-head);font-weight:700}
   #melt small{display:block;color:#8a7a86;font-size:10px}
   #melt:hover{background:rgba(255,110,80,.18)}
   /* a debt with a clock on it belongs where the counters are, not in a corner */
@@ -124,7 +124,7 @@
         background:linear-gradient(180deg,rgba(110,80,255,.18),rgba(110,80,255,.06));
         font-family:var(--f-ui)}
   #rift.on{display:block}
-  #rift b{display:block;font-size:14px;letter-spacing:.1em;color:#b39cff;font-family:var(--f-head);font-weight:600}
+  #rift b{display:block;font-size:13px;letter-spacing:.06em;color:#b39cff;font-family:var(--f-head);font-weight:700}
   #rift small{display:block;color:#8f88b8;font-size:10px}
   /* the factory saves itself; this is the only way back to an empty one */
   #wipe{margin-top:8px;text-align:center;font-size:10px;color:#5d6480;
@@ -212,9 +212,9 @@
      fonts — a rule above and below, and a settle in scale so the name ARRIVES
      rather than appears. The rules are what make it a title card and not a
      caption. */
-  #title b{display:block;font-size:58px;line-height:1;letter-spacing:.18em;color:#f4f8ff;
-           padding:0 .2em 0 .4em;
-           font-family:var(--f-head);
+  #title b{display:block;font-size:56px;line-height:1;letter-spacing:.12em;color:#f4f8ff;
+           padding:0 .2em 0 .3em;
+           font-family:var(--f-head);font-variation-settings:"opsz" 96;
            font-weight:700;text-transform:uppercase;
            text-shadow:0 0 34px rgba(92,224,208,.55),0 6px 22px rgba(0,0,0,.85);
            transform:scale(1.05);transition:transform 1.8s cubic-bezier(.2,.7,.2,1)}
@@ -231,12 +231,12 @@
   #title[data-mood="green"]{--tcol:#e2ffe6;--tglow:rgba(120,230,150,.55);--rule:rgba(143,230,160,.85);--sub:#a8f0b6}
   #title b{color:var(--tcol);text-shadow:0 0 34px var(--tglow),0 6px 22px rgba(0,0,0,.85)}
   #title b::before,#title b::after{background:linear-gradient(90deg,transparent,var(--rule),transparent)}
-  #title[data-mood="warm"] b{font-family:var(--f-head);
-           font-weight:700;letter-spacing:.06em;font-size:70px}
-  #title[data-mood="cold"] b{font-family:var(--f-ui);
-           font-weight:400;letter-spacing:.5em;font-size:44px}
+  #title[data-mood="warm"] b{font-family:var(--f-head);font-stretch:78%;
+           font-weight:800;letter-spacing:.03em;font-size:68px}
+  #title[data-mood="cold"] b{font-family:var(--f-head);
+           font-weight:300;letter-spacing:.42em;font-size:46px}
   #title[data-mood="green"] b{font-family:var(--f-head);
-           font-weight:500;text-transform:none;letter-spacing:.14em;font-size:60px}
+           font-weight:500;text-transform:none;letter-spacing:.08em;font-size:58px}
   /* the face caption after a crossing */
   /* high, above the placement ghost, and big enough to read in the beat it is up */
   #facecap{position:fixed;left:0;right:0;top:12%;text-align:center;z-index:6;pointer-events:none;
@@ -262,7 +262,7 @@
   #hud{min-width:236px;width:236px;padding:12px 12px 10px}
   .hero{position:relative;padding:2px 0 4px}
   .hero .big{display:flex;align-items:baseline;gap:8px}
-  .hero .big span{font-family:var(--f-mono);font-size:34px;font-weight:500;letter-spacing:-.02em;color:#ffd479;
+  .hero .big span{font-family:var(--f-mono);font-size:34px;font-weight:500;letter-spacing:-.03em;color:#ffd479;
                   font-variant-numeric:tabular-nums;line-height:1;
                   text-shadow:0 0 18px rgba(255,212,121,.35)}
   .hero .big small{font-family:var(--f-head);font-size:12px;color:#8d8564;letter-spacing:.16em;text-transform:uppercase;
@@ -290,7 +290,7 @@
   #contract{display:none;margin-top:8px;border:1px solid rgba(140,110,255,.4);border-radius:10px;padding:8px 10px;
             background:linear-gradient(180deg,rgba(110,80,255,.14),rgba(110,80,255,.04))}
   #contract.on{display:block}
-  #contract b{display:block;font-family:var(--f-head);font-size:14px;letter-spacing:.1em;color:#c9b8ff;font-weight:600}
+  #contract b{display:block;font-family:var(--f-head);font-size:13px;letter-spacing:.05em;color:#c9b8ff;font-weight:700}
   #contract small{display:block;color:#8f88b8;font-size:10px;margin-top:2px}
   #contract .bar{height:4px;margin-top:7px;border-radius:2px;background:rgba(140,110,255,.16);overflow:hidden}
   #contract .bar i{display:block;height:100%;background:linear-gradient(90deg,#b39cff,#5ce0d0);transition:width .3s}
@@ -371,26 +371,26 @@
   <div id="ups"></div>
   <div id="world"></div>
   <div id="rift"></div>
-  <div id="melt"><b>MELTDOWN</b><small>collapse it all for cores</small></div>
+  <div id="melt"><b>MELTDOWN</b><small>throw the whole factory to the sky for a permanent core</small></div>
   <div id="wipe">new world</div>
   <div id="motion">motion: full</div>
   <div id="share">share link</div>
 </div>
 <div id="tools">
-  <div class="tool on" data-tool="miner"><svg viewBox="0 0 24 24"><path d="M4 20h16M6 20V9M18 20V9M6 9h12M8 9V6M16 9V6M8 6h8" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linecap="round"/><path d="M12 20v-6l-2-3h4l-2 3" fill="currentColor"/></svg><i class="key">1</i><b>MINER</b><small>on a node</small></div>
+  <div class="tool on" data-tool="miner"><svg viewBox="0 0 24 24"><path d="M4 20h16M6 20V9M18 20V9M6 9h12M8 9V6M16 9V6M8 6h8" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linecap="round"/><path d="M12 20v-6l-2-3h4l-2 3" fill="currentColor"/></svg><i class="key">1</i><b>MINER</b><small>on a seam</small></div>
   <div class="tool" data-tool="belt"><svg viewBox="0 0 24 24"><rect x="2.5" y="9" width="19" height="6" rx="3" stroke="currentColor" stroke-width="1.7" fill="none"/><circle cx="6" cy="12" r="1.6" fill="currentColor"/><circle cx="18" cy="12" r="1.6" fill="currentColor"/><path d="M10 9.5l2 2.5-2 2.5M13.5 9.5l2 2.5-2 2.5" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg><i class="key">2</i><b>BELT</b><small>drag to draw</small></div>
-  <div class="tool" data-tool="smelter"><svg viewBox="0 0 24 24"><path d="M5 20V9h14v11z" stroke="currentColor" stroke-width="1.7" fill="none"/><path d="M4 9h16" stroke="currentColor" stroke-width="1.7"/><path d="M15 9V4h3v5" stroke="currentColor" stroke-width="1.7" fill="none"/><rect x="9" y="13" width="6" height="5" fill="currentColor"/></svg><i class="key">3</i><b>SMELTER</b><small>2 ore &rarr; 1 ingot</small></div>
-  <div class="tool" data-tool="splitter"><svg viewBox="0 0 24 24"><path d="M12 3v18M3 12h18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="12" cy="12" r="3.6" stroke="currentColor" stroke-width="1.7" fill="none"/></svg><i class="key">4</i><b>SPLITTER</b><small>feeds both ways</small></div>
-  <div class="tool" data-tool="hub"><svg viewBox="0 0 24 24"><ellipse cx="12" cy="17" rx="9" ry="4" stroke="currentColor" stroke-width="1.7" fill="none"/><ellipse cx="12" cy="17" rx="4.5" ry="2" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M12 15V5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><circle cx="12" cy="4" r="2" fill="currentColor"/></svg><i class="key">5</i><b>HUB</b><small>delivers</small></div>
-  <div class="tool" data-tool="forge"><svg viewBox="0 0 24 24"><path d="M6 20V8h12v12z" stroke="currentColor" stroke-width="1.7" fill="none"/><ellipse cx="12" cy="8" rx="6" ry="2.4" stroke="currentColor" stroke-width="1.7" fill="none"/><path d="M9 4l1.5 3M15 4l-1.5 3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="12" cy="15" r="2.6" fill="currentColor"/></svg><i class="key">6</i><b>FORGE</b><small>2 different ores</small></div>
-  <div class="tool" data-tool="filter"><svg viewBox="0 0 24 24"><path d="M3 5h18l-7 8v6l-4 2v-8z" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linejoin="round"/></svg><i class="key">7</i><b>FILTER</b><small>F to set ore</small></div>
-  <div class="tool" data-tool="rift"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" stroke="currentColor" stroke-width="1.7" fill="none"/><circle cx="12" cy="12" r="3.4" stroke="currentColor" stroke-width="1.5" fill="none"/><path d="M12 4v3M12 17v3M4 12h3M17 12h3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg><i class="key">8</i><b>RIFT</b><small>ore now, pay later</small></div>
-  <div class="tool" data-tool="erase"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg><i class="key">9</i><b>ERASE</b><small>&nbsp;</small></div>
+  <div class="tool" data-tool="smelter"><svg viewBox="0 0 24 24"><path d="M5 20V9h14v11z" stroke="currentColor" stroke-width="1.7" fill="none"/><path d="M4 9h16" stroke="currentColor" stroke-width="1.7"/><path d="M15 9V4h3v5" stroke="currentColor" stroke-width="1.7" fill="none"/><rect x="9" y="13" width="6" height="5" fill="currentColor"/></svg><i class="key">3</i><b>SMELTER</b><small>two ore, one ingot</small></div>
+  <div class="tool" data-tool="splitter"><svg viewBox="0 0 24 24"><path d="M12 3v18M3 12h18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="12" cy="12" r="3.6" stroke="currentColor" stroke-width="1.7" fill="none"/></svg><i class="key">4</i><b>SPLITTER</b><small>feeds two lines</small></div>
+  <div class="tool" data-tool="hub"><svg viewBox="0 0 24 24"><ellipse cx="12" cy="17" rx="9" ry="4" stroke="currentColor" stroke-width="1.7" fill="none"/><ellipse cx="12" cy="17" rx="4.5" ry="2" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M12 15V5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><circle cx="12" cy="4" r="2" fill="currentColor"/></svg><i class="key">5</i><b>HUB</b><small>sells what arrives</small></div>
+  <div class="tool" data-tool="forge"><svg viewBox="0 0 24 24"><path d="M6 20V8h12v12z" stroke="currentColor" stroke-width="1.7" fill="none"/><ellipse cx="12" cy="8" rx="6" ry="2.4" stroke="currentColor" stroke-width="1.7" fill="none"/><path d="M9 4l1.5 3M15 4l-1.5 3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="12" cy="15" r="2.6" fill="currentColor"/></svg><i class="key">6</i><b>FORGE</b><small>two ores, one alloy</small></div>
+  <div class="tool" data-tool="filter"><svg viewBox="0 0 24 24"><path d="M3 5h18l-7 8v6l-4 2v-8z" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linejoin="round"/></svg><i class="key">7</i><b>FILTER</b><small>sorts an ore, F picks</small></div>
+  <div class="tool" data-tool="rift"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" stroke="currentColor" stroke-width="1.7" fill="none"/><circle cx="12" cy="12" r="3.4" stroke="currentColor" stroke-width="1.5" fill="none"/><path d="M12 4v3M12 17v3M4 12h3M17 12h3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg><i class="key">8</i><b>RIFT</b><small>lends ore, on a clock</small></div>
+  <div class="tool" data-tool="erase"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg><i class="key">9</i><b>ERASE</b><small>remove</small></div>
 </div>
 <div id="toast"></div>
 <div id="title"><b></b><small></small></div>
 <div id="facecap"></div>
 <div id="cross"></div>
-<div id="hint">WASD walk · Shift run · Space jump · click to look<br>hold LMB and sweep to draw belts · TAB overhead<br>point at a filter and press F to change what passes<br>walk over an edge — each side of the world grows a different ore<br>your factory saves itself</div>
+<div id="hint">WASD to walk, Shift to run, Space to jump, click to look around.<br>Hold the left button and sweep to draw belts. TAB opens the overhead view.<br>Point at a filter and press F to change which ore it passes.<br>Walk over any edge: each side of the world grows a different ore.<br>Your factory saves itself.</div>
 <script type="importmap">{"imports":{"three":"./vendor/three.module.js"}}</script>
 <script type="module" src="./factory.js"></script>

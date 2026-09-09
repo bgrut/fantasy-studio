@@ -2590,7 +2590,7 @@ function sporeStrike() {
   if (!sporeToasted) {
     sporeToasted = true;
     const t = document.getElementById('toast');
-    if (t) { t.textContent = 'SPORES — an unfiltered belt clogged. A filter within ' + SPORE_REACH + ' tiles keeps a line clean'; t.classList.add('on'); toastAt = 6; }
+    if (t) { t.textContent = 'SPORES. A belt that no filter is watching has clogged and is holding its load. A filter within ' + SPORE_REACH + ' tiles keeps the belts around it clean.'; t.classList.add('on'); toastAt = 7; }
   }
   return [f, i, j];
 }
@@ -2635,7 +2635,7 @@ function iceStrike() {
   if (!iceToasted) {
     iceToasted = true;
     const t = document.getElementById('toast');
-    if (t) { t.textContent = 'ICE — a seam froze over. A smelter or forge within ' + ICE_REACH + ' tiles keeps seams thawed; the heated drill ignores it'; t.classList.add('on'); toastAt = 6; }
+    if (t) { t.textContent = 'ICE. A seam has frozen over and its rig is scraping at half rate. A smelter or forge within ' + ICE_REACH + ' tiles keeps nearby seams thawed, and the heated drill ignores ice entirely.'; t.classList.add('on'); toastAt = 7; }
   }
   return [f, i, j];
 }
@@ -2677,7 +2677,7 @@ function offerContract(forceItem) {
   contract = { item, need, have: 0, left: CONTRACT_SECS, total: CONTRACT_SECS, bonus };
   renderContract();
   const t = document.getElementById('toast');
-  if (t) { t.textContent = 'CONTRACT — deliver ' + need + ' ' + contractName(item, need) + ' in ' + CONTRACT_SECS + 's for +' + bonus; t.classList.add('on'); toastAt = 3.2; }
+  if (t) { t.textContent = 'CONTRACT. The market wants ' + need + ' ' + contractName(item, need) + ' delivered to a hub within ' + CONTRACT_SECS + ' seconds. Fill it for +' + bonus + ' value and a core shard.'; t.classList.add('on'); toastAt = 5; }
   return contract;
 }
 function fillContract() {
@@ -2686,10 +2686,10 @@ function fillContract() {
   ore += c.bonus; runValue += c.bonus;
   shards++;
   sfxUnlock();
-  let msg = 'CONTRACT FILLED — +' + c.bonus + ' value · +1 shard';
+  let msg = 'CONTRACT FILLED. +' + c.bonus + ' value and a core shard. Three shards make a core.';
   if (shards >= 3) {
     shards -= 3; cores++;
-    msg = 'A CORE FROM SHARDS — three promises kept';
+    msg = 'A CORE FROM SHARDS. Three contracts kept, and a core earned without a meltdown.';
     document.getElementById('tok').textContent = cores;
     const tk = document.getElementById('tok');
     if (tk) { tk.classList.remove('won'); void tk.offsetWidth; tk.classList.add('won'); setTimeout(() => tk.classList.remove('won'), 1000); }
@@ -2706,7 +2706,7 @@ function stepContracts(dt) {
     if (contract.left <= 0) {
       contract = null; contractClock = 0;
       const t = document.getElementById('toast');
-      if (t) { t.textContent = 'contract lapsed — another will come'; t.classList.add('on'); toastAt = 2.2; }
+      if (t) { t.textContent = 'The contract lapsed. Nothing is lost, and the market will post another soon.'; t.classList.add('on'); toastAt = 3; }
       renderContract();
     }
     return;
@@ -2721,7 +2721,7 @@ function renderContract() {
   if (!contract) { el.classList.remove('on'); return; }
   el.classList.add('on');
   el.querySelector('b').textContent = 'DELIVER ' + contract.need + ' ' + contractName(contract.item, contract.need).toUpperCase();
-  el.querySelector('small').textContent = '+' + contract.bonus + ' value · 1 shard';
+  el.querySelector('small').textContent = 'to a hub, for +' + contract.bonus + ' value and a core shard';
   const i = el.querySelector('.bar i'); if (i) i.style.width = Math.round(100 * contract.have / contract.need) + '%';
   const s = el.querySelector('.left');
   if (s) { const l = Math.max(0, contract.left); s.textContent = contract.have + ' / ' + contract.need + '  ·  ' + Math.floor(l / 60) + ':' + String(Math.floor(l % 60)).padStart(2, '0'); }
@@ -2732,7 +2732,7 @@ function renderRank() {
   const roman = ['', 'I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X'][Math.min(10, rank)] || String(rank);
   el.innerHTML = (rank > 0 ? '<b>RANK ' + roman + '</b>' : '<b>UNRANKED</b>') +
     '<span>' + '\u25c6'.repeat(shards) + '\u25c7'.repeat(Math.max(0, 3 - shards)) + '</span>';
-  el.title = shards + ' of 3 shards toward a core · a meltdown raises the rank';
+  el.title = shards + ' of 3 shards toward a core. Filled contracts pay shards; a meltdown raises the rank, and rank raises what contracts pay.';
 }
 // the worldlet's edge gilds with rank: a veteran's world looks like one from orbit
 function gildEdge() {
@@ -3357,7 +3357,7 @@ function pickTool(name) {
     if (el) { el.classList.add('deny'); setTimeout(() => el.classList.remove('deny'), 320); }
     const t = document.getElementById('toast');
     if (t && goalIdx < GOALS.length) {
-      t.textContent = 'locked — ' + GOALS[goalIdx].text;
+      t.textContent = 'That tool is locked until you ' + GOALS[goalIdx].text + '.';
       t.classList.add('on'); toastAt = 2.2;
     }
     return;
@@ -4074,7 +4074,7 @@ function travelTo(k) {
   seedLine(true);
   refreshCounts();
   const t = document.getElementById('toast');
-  if (t) { t.textContent = w.name.toUpperCase() + ' — ' + w.blurb;
+  if (t) { t.textContent = w.name.toUpperCase() + ': ' + w.blurb + '.';
            t.classList.add('on'); toastAt = 3.5; }
   save();
 }
@@ -4103,49 +4103,49 @@ const rigsOnSeams = () => { let n = 0; eachTile(c => { if (c.t === MINER && c.me
 
 const GOALS = [
   { text: 'bank 40 value', unlock: 'splitter',
-    tip: 'the hub buys anything that reaches it',
-    got: 'SPLITTER — one line can feed two machines',
+    tip: 'Anything that reaches a hub is sold. Bank 40 value to unlock the splitter.',
+    got: 'Splitter unlocked. It sends each item out of a different side in turn, so one line can feed two machines.',
     done: () => ore >= 40, progress: () => ore / 40 },
   { text: 'hold 400 a minute for 20s', rate: 400, hold: 20, cap: 'tick',
-    tip: 'a rate has to be HELD; a total only has to be reached once',
-    got: 'OVERCLOCK goes to 8 — the line can run faster' },
+    tip: 'A rate has to be held for the whole stretch; the timer resets the moment it drops. Add a second line or buy Overclock.',
+    got: 'Overclock can now be bought to level 8. Everything runs faster.' },
   { text: 'stand on a second face', unlock: 'forge',
-    tip: 'walk over an edge; the world turns under you',
-    got: 'FORGE — two different ores in, one alloy out',
+    tip: 'Walk over any edge of the worldlet. The world turns under you, and each face grows a different ore.',
+    got: 'Forge unlocked. Feed it two different ores and it makes one alloy, which sells for far more than either.',
     done: () => visitedFaces.size >= 2, progress: () => (visitedFaces.size - 1) },
   { text: 'forge one alloy', unlock: 'filter',
-    tip: 'no single face grows two ores, so a belt has to cross',
-    got: 'FILTER — point at it and press F to sort by ore',
+    tip: 'No single face grows two ores, so a belt has to cross an edge to bring the second one to a forge.',
+    got: 'Filter unlocked. Matching ore carries straight on and everything else leaves out of the side. Point at one and press F to choose the ore.',
     done: () => alloys >= 1, progress: () => alloys },
   { text: 'run three rigs on three seams', cap: 'yield',
-    tip: 'seams thin as they are worked; a rig per seam is a rig that lasts',
-    got: 'RICH SEAMS goes to 8 — every crystal is worth more',
+    tip: 'A seam thins as it is worked and grows back when it rests. Spread three rigs over three seams so no single one runs dry.',
+    got: 'Rich Seams can now be bought to level 8. Every crystal that leaves a seam is worth more.',
     done: () => rigsOnSeams() >= 3, progress: () => rigsOnSeams() / 3 },
   { text: 'hold 1200 a minute for 30s', rate: 1200, hold: 30, unlock: 'rift',
-    tip: 'the market moves; make whatever it is paying for',
-    got: 'CHRONOS RIFT — borrowed ore, on a deadline' },
+    tip: 'The board on the hub moves. Make whatever it is paying most for, and hold the rate for thirty seconds.',
+    got: 'Chronos Rift unlocked. It lends ore now against a repayment later; miss the deadline and it takes the machines around it.' },
   { text: 'sell an alloy above 1.20', cap: 'smelt',
-    tip: 'watch the board on the hub; hold the alloy until it pays',
-    got: 'HOT FURNACE goes to 6 — smelters cook faster',
+    tip: 'Watch the alloy price on the hub board. Hold your alloy back until it pays over 1.20, then let it through.',
+    got: 'Hot Furnace can now be bought to level 6. Smelters and forges cook faster.',
     done: () => soldHigh >= 1, progress: () => soldHigh },
   { text: 'bank ' + MELT_MIN + ' value', unlock: 'meltdown',
-    tip: 'enough of a factory to be worth destroying',
-    got: 'MELTDOWN — collapse it all for a permanent core',
+    tip: 'A meltdown throws the whole factory to the sky and pays a permanent core for it. Build enough to make that worth doing.',
+    got: 'Meltdown unlocked. Collapse everything for a permanent core; cores buy the trip to other worlds and multiply every yield.',
     done: () => ore >= MELT_MIN, progress: () => ore / MELT_MIN },
   { text: 'earn a core', gives: 'heated',
-    tip: 'a meltdown pays in cores; the cold world needs the drill this buys',
-    got: 'HEATED DRILL — Frostline is survivable now',
+    tip: 'A meltdown pays in cores. Your first core also brings the heated drill, which Frostline needs.',
+    got: 'Heated Drill earned. Ice cannot close over a seam you work, and Frostline is open to you.',
     done: () => cores >= 1, progress: () => cores },
   { text: 'hold 3000 a minute for 30s', rate: 3000, hold: 30, gives: 'scrubber',
-    tip: 'a second run is faster than the first; prove it',
-    got: 'SPORE SCRUBBER — filters clean the green world\'s lines' },
+    tip: 'With a core in hand every yield is higher. Prove the second run is faster than the first.',
+    got: 'Spore Scrubber earned. The Verdant Fault is open to you, and its spores can be answered with filters.' },
   { text: 'repay a rift', gives: 'stable',
-    tip: 'borrow against the best price, and give it back on time',
-    got: 'STABLE RIFT — every core is worth a quarter more',
+    tip: 'Open a rift, take the loan, and pay it back through the ring before the clock runs out.',
+    got: 'Stable Rift earned. Every core you hold is worth a quarter more.',
     done: () => riftsPaid >= 1, progress: () => riftsPaid },
   { text: 'reach three cores',
-    tip: 'the void is the last place left to go',
-    got: 'THE LONG DRIFT is open',
+    tip: 'The Long Drift is the last place left. Nothing grows back there, and a meltdown pays double.',
+    got: 'The Long Drift is open to you.',
     done: () => cores >= 3, progress: () => cores / 3 },
 ];
 // rate goals: held time is the progress, and it resets the moment the rate drops
@@ -4177,9 +4177,9 @@ function renderGoal() {
   const el = document.getElementById('goal');
   if (el) {
     if (CREATIVE) {
-      el.innerHTML = '<b>CREATIVE</b><small>everything is open; nothing runs out</small>';
+      el.innerHTML = '<b>CREATIVE</b><small>Every machine and world is open, upgrades are free, and seams never run out.</small>';
     } else if (goalIdx >= GOALS.length) {
-      el.innerHTML = '<b>ALL SYSTEMS ONLINE</b><small>the worldlet is yours</small>';
+      el.innerHTML = '<b>ALL SYSTEMS ONLINE</b><small>Every tier is done. Contracts keep coming, and every meltdown raises your rank.</small>';
     } else {
       const g = GOALS[goalIdx];
       // twelve tiers is a ladder; say which rung, and for a rate goal how long
@@ -4228,7 +4228,7 @@ function stepGoals(dt) {
     renderWorlds();
     sfxUnlock();
     const t = document.getElementById('toast');
-    if (t) { t.textContent = g.got; t.classList.add('on'); toastAt = 3.5; }
+    if (t) { t.textContent = g.got; t.classList.add('on'); toastAt = 5; }
     renderGoal();
   }
   if (toastAt > 0) {
@@ -4793,7 +4793,7 @@ function applyTier(name, why) {
   PBUDGET = Math.max(64, Math.floor(PMAX * TIER.budget));
   try { localStorage.setItem('fs-factory-q', name); } catch (e) {}
   const t = document.getElementById('toast');
-  if (t && why) { t.textContent = 'graphics: ' + name + ' — ' + why; t.classList.add('on'); toastAt = 3.5; }
+  if (t && why) { t.textContent = 'Graphics stepped down to ' + name + ' because ' + why + '. The panel keeps the setting.'; t.classList.add('on'); toastAt = 4; }
 }
 const frameTimes = [];
 let tierStepped = false, tierClock = 0;
@@ -5131,13 +5131,13 @@ function setInspectOn(on) {
       const type = SPAWN_KIND[kind];
       if (!type) {
         send({ type: 'fs-spawned', ok: false, kind: d.kind,
-               err: 'a factory builds machines — try miner, belt, smelter, '
+               err: 'A factory builds machines. Try miner, belt, smelter, '
                     + 'splitter, hub, forge or filter' });
         return;
       }
       const t = (d.tile && d.tile.face !== undefined) ? d.tile : lastPick;
       if (!t) { send({ type: 'fs-spawned', ok: false, kind: d.kind,
-                       err: 'nothing picked yet — click a tile first' }); return; }
+                       err: 'Nothing is picked yet. Click a tile first.' }); return; }
       const ok = place(t.face, t.i, t.j, type, 0) !== false;
       send({ type: 'fs-spawned', ok, kind: d.kind,
              err: ok ? undefined : 'a miner only goes on an ore seam' });
