@@ -150,6 +150,10 @@
   #world .wr{display:flex;justify-content:space-between;gap:10px;font-size:10px;
              color:#5d6480;padding:2px 0;
              font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
+  #world .wr b{font-weight:normal;display:inline-flex;align-items:center;gap:6px}
+  #world .wr:not(.can) b{opacity:.6}   /* a locked world is a dimmer place */
+  #world .wr .sw{width:11px;height:11px;border-radius:3px;flex:none;
+                 box-shadow:inset 0 0 0 1px rgba(255,255,255,.18),0 0 6px rgba(0,0,0,.4)}
   #world .wr span{color:#4e5674}
   #world .wr.can{color:#9fd6ff;cursor:pointer}
   #world .wr.can span{color:#5ce0d0}

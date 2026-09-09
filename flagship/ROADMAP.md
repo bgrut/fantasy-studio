@@ -58,6 +58,9 @@ says so.
 | **items** | ore is a two-crystal chunk that spins; a refined product is a chamfered, stamped, metallic bar lying flat along its belt; the glow follows the instance colour |
 | **particles** | smoke has a seeded lobed edge and dims as it swells; sparks carry a gravity along their face, arc, and cool white to red |
 | **frames, finished** | the forge, splitter and filter get the cap, posts, bands and lips the smelter, rig and hub got |
+| **the ghost is the machine** | the placement preview is the machine's own silhouette with a lit edge, green where it can go and red where it cannot |
+| **lamps light the ground** | every lit lamp pools its light on the deck: orange under a cooking smelter, pink under a forge, gold breathing under a hub, the ore's colour under an open rift |
+| **worlds show their sky** | each world row carries a swatch of its sky and edge colour; locked rows are dimmer places |
 | **machine skin** | one shared panel map (seams, rivets, a lip, wear) on every machine; glow moved from the paint to the lamps; sun made the key (3.1 over 0.95 hemi / 0.85 fill); a frame on the smelter |
 | **the companion** | a planet or moon low in every world's sky, shaded from the sun's side with a terminator and an atmosphere rim, drawn in the sky shader; one fixed direction so it is a landmark |
 | **lanes** | every fifth grid line is a faint lit strip in the world's edge colour; the far plane widened to 1400 so the sky dome no longer clips from orbit |

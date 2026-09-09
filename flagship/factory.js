@@ -2027,6 +2027,47 @@ eachTile((c, f, i, j) => {
 });
 glowPools.instanceColor.needsUpdate = true;
 
+// LAMPS LIGHT THE GROUND. A furnace door glowed and the floor under it did
+// not, so the lamp read as a sticker. Every lit lamp has a pool of its light
+// on the deck: rebuilt each frame from the machines, one draw call.
+const MAX_LAMPS = 600;
+const lampPools = new THREE.InstancedMesh(
+  new THREE.PlaneGeometry(1, 1),
+  new THREE.MeshBasicMaterial({ map: glowTexture(), transparent: true, depthWrite: false,
+                                blending: THREE.AdditiveBlending, fog: true }),
+  MAX_LAMPS);
+lampPools.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+lampPools.frustumCulled = false;
+lampPools.renderOrder = 0;
+lampPools.count = 0;
+lampPools.name = 'lampGlow';
+scene.add(lampPools);
+const _lc = new THREE.Color();
+function poolAt(mesh, k, f, i, j, size, col, strength) {
+  const F_ = FACES[f], w = tileWorld(f, i, j);
+  _gbx.set(F_.u[0], F_.u[1], F_.u[2]); _gby.set(F_.v[0], F_.v[1], F_.v[2]); _gbz.set(F_.n[0], F_.n[1], F_.n[2]);
+  _gm.makeBasis(_gbx, _gby, _gbz);
+  _gm.scale(_gs.set(size, size, 1));
+  _gm.setPosition(w[0] + F_.n[0] * 0.04, w[1] + F_.n[1] * 0.04, w[2] + F_.n[2] * 0.04);
+  mesh.setMatrixAt(k, _gm);
+  _lc.setHex(col).multiplyScalar(strength);
+  mesh.setColorAt(k, _lc);
+}
+function stepLampPools() {
+  let k = 0;
+  const breathe = 0.5 + Math.sin(performance.now() * 0.0028) * 0.08;
+  eachTile((c, f, i, j) => {
+    if (k >= MAX_LAMPS || !c.build) return;
+    if (c.t === SMELTER) { if (c.glow > 0.03) poolAt(lampPools, k++, f, i, j, T * 1.6, 0xff7a22, 0.9 * c.glow); }
+    else if (c.t === FORGE) { if (c.cook > 0) poolAt(lampPools, k++, f, i, j, T * 1.8, 0xff5ad9, 0.7); }
+    else if (c.t === HUB) poolAt(lampPools, k++, f, i, j, T * 2.2, 0xffd479, breathe + (c.pulse || 0) * 0.9);
+    else if (c.t === RIFT) { if (c.dbt > 0) poolAt(lampPools, k++, f, i, j, T * 1.7, MIN_COL[c.dmin] || 0xff5ad9, 0.6); }
+  });
+  lampPools.count = k;
+  lampPools.instanceMatrix.needsUpdate = true;
+  if (lampPools.instanceColor) lampPools.instanceColor.needsUpdate = true;
+}
+
 const MAX_DECALS = 6000;
 const decals = new THREE.InstancedMesh(
   new THREE.PlaneGeometry(1, 1),
@@ -2821,17 +2862,32 @@ function cellUnder(ev) {
   return tileOfPoint(hitPt);
 }
 
-// the ghost: what you are about to build, where you are about to build it
-const ghost = new THREE.Mesh(
-  new THREE.BoxGeometry(T * 0.92, 0.5, T * 0.92),
-  new THREE.MeshBasicMaterial({ color: 0x6cf5d0, transparent: true, opacity: 0.28,
+// THE GHOST IS THE MACHINE. What you are about to build, where you are about
+// to build it — as the machine's own silhouette, translucent with a lit edge,
+// not a box that means "something goes here". The erase tool keeps the box.
+// which geometry stands for which tool — the held hologram and the ghost
+// both read it, so it lives before either
+const HOLO_GEO = {
+  miner: 'miner', belt: 'beltFrame', smelter: 'smelt', splitter: 'split',
+  hub: 'hub', forge: 'forge', filter: 'filter', rift: 'riftBase',
+};
+const GHOST_BOX = new THREE.BoxGeometry(T * 0.92, 0.5, T * 0.92);
+const ghost = new THREE.Mesh(GHOST_BOX,
+  new THREE.MeshBasicMaterial({ color: 0x6cf5d0, transparent: true, opacity: 0.30,
     depthWrite: false }));
 ghost.visible = false;
 scene.add(ghost);
 const ghostEdge = new THREE.LineSegments(
-  new THREE.EdgesGeometry(new THREE.BoxGeometry(T * 0.92, 0.5, T * 0.92)),
+  new THREE.EdgesGeometry(GHOST_BOX, 28),
   new THREE.LineBasicMaterial({ color: 0x9dffe8, transparent: true, opacity: 0.85 }));
 ghost.add(ghostEdge);
+const ghostEdges = new Map();          // geometry -> its edges, built once
+function ghostShape(g) {
+  if (ghost.geometry === g) return;
+  ghost.geometry = g;
+  if (!ghostEdges.has(g)) ghostEdges.set(g, new THREE.EdgesGeometry(g, 28));
+  ghostEdge.geometry = ghostEdges.get(g);
+}
 
 function updateGhost() {
   const t = cellUnder(null);
@@ -2841,7 +2897,11 @@ function updateGhost() {
     : tool === 'miner' ? c.t === NODE
     : c.t !== NODE;
   ghost.visible = true;
-  seat(ghost, t.face, t.i, t.j, 0, 0.26);
+  // the machine's own shape, seated the way the machine would be; the box for
+  // erase, lifted to sit over whatever it is about to remove
+  const shape = tool !== 'erase' && GEO[HOLO_GEO[tool]];
+  ghostShape(shape || GHOST_BOX);
+  seat(ghost, t.face, t.i, t.j, 0, shape ? 0 : 0.26);
   ghost.material.color.setHex(legal ? 0x6cf5d0 : 0xff6b7d);
   ghostEdge.material.color.setHex(legal ? 0x9dffe8 : 0xffa8b4);
 }
@@ -3490,8 +3550,11 @@ function renderWorlds() {
     const can = (CREATIVE || cores >= w.cores) && capOk;
     const why = !capOk ? 'needs ' + (w.needs === 'drift' ? 'three cores' : CAP_NAME[w.needs])
               : (!CREATIVE && cores < w.cores) ? w.cores + ' cores' : 'travel';
+    // a swatch of the world's sky and edge colour, so the list reads as places
+    const sw = '<i class="sw" style="background:linear-gradient(160deg,#' + w.sky.toString(16).padStart(6, '0')
+             + ',#' + (w.edge || w.grid).toString(16).padStart(6, '0') + ')"></i>';
     html += '<div class="wr' + (can ? ' can' : '') + '" data-world="' + k + '">'
-         + w.name + '<span>' + why + '</span></div>';
+         + '<b>' + sw + w.name + '</b><span>' + why + '</span></div>';
   }
   el.innerHTML = html;
   el.querySelectorAll('.wr.can').forEach(o => o.addEventListener('pointerdown', ev => {
@@ -3913,6 +3976,7 @@ renderer.setAnimationLoop(() => {
     }
   });
   if (glowPools) glowPools.instanceMatrix.needsUpdate = true;
+  stepLampPools();
   visitedFaces.add(player.face);
   stepGoals(dt);
   if (!melting) stepRifts(dt);
@@ -4187,10 +4251,6 @@ holo.position.set(0, 0.26, -0.16);
 holo.renderOrder = 3;
 heldRig.add(holo);
 
-const HOLO_GEO = {
-  miner: 'miner', belt: 'beltFrame', smelter: 'smelt', splitter: 'split',
-  hub: 'hub', forge: 'forge', filter: 'filter', rift: 'riftBase',
-};
 function setHolo(name) {
   const g = GEO[HOLO_GEO[name]];
   if (!g) { holo.visible = false; return; }
