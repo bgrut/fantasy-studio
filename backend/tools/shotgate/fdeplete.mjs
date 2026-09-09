@@ -26,16 +26,23 @@ const work = await p.evaluate(async () => {
   })));
   if (!seam) return { skipped: 'no rig on a seam' };
   const c = F.cells[seam.f][seam.i][seam.j];
-  const r0 = c.rich, s0 = c.mesh.scale.x;
+  const r0 = c.rich, s0 = c.mesh.scale.x, e0 = c.mesh.material.emissiveIntensity;
+  const core = c.mesh.children[0], k0 = core ? core.scale.x : null;
   // speed the clock up rather than waiting a minute: every tick is a chance to
   // extract, so run the sim forward directly
   for (let k = 0; k < 90; k++) F.step();
   await new Promise(r => setTimeout(r, 400));
   return { seam, before: +r0.toFixed(3), after: +c.rich.toFixed(3),
-           scaleBefore: +s0.toFixed(3), scaleAfter: +c.mesh.scale.x.toFixed(3) };
+           scaleBefore: +s0.toFixed(3), scaleAfter: +c.mesh.scale.x.toFixed(3),
+           // a seam is a light: its glow, its core and its pool follow the richness
+           glowBefore: +e0.toFixed(2), glowAfter: +c.mesh.material.emissiveIntensity.toFixed(2),
+           coreBefore: k0 && +k0.toFixed(2), coreAfter: core && +core.scale.x.toFixed(2),
+           pool: c.glow !== undefined, ownMaterial: c.mesh.material !== F.cells[seam.f][seam.i][seam.j].mesh.material || true };
 });
 console.log('worked    : rich', work.before, '->', work.after,
-            '| seam scale', work.scaleBefore, '->', work.scaleAfter);
+            '| seam scale', work.scaleBefore, '->', work.scaleAfter,
+            '| glow', work.glowBefore, '->', work.glowAfter, '| core', work.coreBefore, '->', work.coreAfter,
+            '| pool', work.pool);
 
 // 2. take the rig away and it grows back
 const regrow = await p.evaluate(async (seam) => {
@@ -82,7 +89,8 @@ console.log('reloaded  : restored', back.restored, '| that seam is at', back.ric
 console.log('errors    :', errs.length ? errs.join(' | ') : 'none');
 await p.screenshot({ path: process.env.OUT || 'deplete.png' });
 await b.close();
-const ok = !work.skipped
+const ok = work.glowAfter < work.glowBefore && work.coreAfter < work.coreBefore && work.pool
+  && !work.skipped
   && work.after < work.before - 0.2                 // 90 ticks took a real bite
   && work.scaleAfter < work.scaleBefore             // and it is visibly smaller
   && regrow.after > regrow.before                   // it grows back on its own

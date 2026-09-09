@@ -51,6 +51,10 @@ says so.
 | **capabilities** | Frostline needs the heated drill, Verdant the spore scrubber, the Drift the whole chain; cores only buy the trip |
 | **creative** | chosen at world creation (`?creative=1`, or "new world"); its own save; all open, free, nothing runs out |
 | **spores** | Verdant's pressure: an unfiltered belt clogs every few seconds; a filter within 3 tiles shields the belts around it |
+| **the machine skin** | one shared panel map (seams, rivets, wear) on every machine; glow moved to the lamps; the sun made the key |
+| **the companion** | a planet or moon in every sky, cratered or banded by hash noise, lit from the sun's side, drawn in the sky shader |
+| **lanes** | every fifth grid line is a lit strip in the world's edge colour, one instanced mesh for six faces |
+| **seams are lights** | each seam owns its glow: a dark-glass body, an additive core and a pool on the ground that all follow its richness |
 | **machine skin** | one shared panel map (seams, rivets, a lip, wear) on every machine; glow moved from the paint to the lamps; sun made the key (3.1 over 0.95 hemi / 0.85 fill); a frame on the smelter |
 | **the companion** | a planet or moon low in every world's sky, shaded from the sun's side with a terminator and an atmosphere rim, drawn in the sky shader; one fixed direction so it is a landmark |
 | **lanes** | every fifth grid line is a faint lit strip in the world's edge colour; the far plane widened to 1400 so the sky dome no longer clips from orbit |

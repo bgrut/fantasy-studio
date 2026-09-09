@@ -378,6 +378,7 @@ fill.position.set(-HALF * 2.2, -HALF * 2.8, -HALF * 1.7);
 scene.add(fill);
 
 let starField = null, gridLines = null, cubeEdges = null, sunDisc = null, lanes = null;
+let glowPools = null;             // built with the decals; the seams index into it
 // DECLARED UP HERE ON PURPOSE. The scatter is CHOSEN next to the ore seams,
 // which is hundreds of lines before the meshes that draw it get built — and a
 // const declared after its first use is a temporal-dead-zone throw at boot,
@@ -642,6 +643,15 @@ function buildSky(topHex, deepHex, bandHex, planet) {
       uniform vec3 uTop; uniform vec3 uDeep; uniform vec3 uBand;
       uniform vec3 uPlanet; uniform vec3 uPlanetDir; uniform float uPlanetSize;
       uniform float uPlanetBands; uniform vec3 uSunDir;
+      // hash noise, three octaves: enough for craters and cloud bands, cheap
+      // enough for a sky dome
+      float hsh(vec3 p) { return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }
+      float vnoise(vec3 p) {
+        vec3 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+        return mix(mix(mix(hsh(i), hsh(i + vec3(1,0,0)), f.x), mix(hsh(i + vec3(0,1,0)), hsh(i + vec3(1,1,0)), f.x), f.y),
+                   mix(mix(hsh(i + vec3(0,0,1)), hsh(i + vec3(1,0,1)), f.x), mix(hsh(i + vec3(0,1,1)), hsh(i + vec3(1,1,1)), f.x), f.y), f.z);
+      }
+      float fbm(vec3 p) { return vnoise(p) * 0.5 + vnoise(p * 2.03) * 0.25 + vnoise(p * 4.11) * 0.125; }
       void main() {
         float h = vDir.y * 0.5 + 0.5;
         vec3 c = mix(uDeep, uTop, smoothstep(0.15, 0.95, h));
@@ -660,8 +670,16 @@ function buildSky(topHex, deepHex, bandHex, planet) {
           float z = sqrt(max(0.0, 1.0 - rr * rr));
           vec3 n = normalize(ax * p.x + ay * p.y + uPlanetDir * z);   // sphere normal
           float lit = clamp(dot(n, uSunDir) * 0.85 + 0.15, 0.0, 1.0);
-          float bands = 1.0 + uPlanetBands * 0.22 * sin(p.y * 9.0 + sin(p.x * 3.0) * 0.6);
-          vec3 body = uPlanet * bands * (0.10 + 0.90 * lit);
+          // THE SURFACE. A gas world: cloud bands, turbulence bending them.
+          // A rocky one: mottling, and craters where the noise pits — rimmed,
+          // and picked out at the terminator where the light is low.
+          float turb = fbm(n * 3.0 + 7.0);
+          float bands = 1.0 + uPlanetBands * 0.22 * sin(p.y * 9.0 + turb * 2.4);
+          float mottle = 0.80 + 0.40 * fbm(n * 5.0);
+          float pits = vnoise(n * 7.5 + 3.0);
+          float crater = (1.0 - uPlanetBands) * (smoothstep(0.62, 0.70, pits) * 0.35 - smoothstep(0.70, 0.78, pits) * 0.30);
+          float relief = mottle - crater * (1.4 - lit);
+          vec3 body = uPlanet * bands * relief * (0.10 + 0.90 * lit);
           float disc = 1.0 - smoothstep(0.985, 1.0, rr);
           // the atmosphere: a rim just outside the limb, brighter on the sunlit side
           float rim = (1.0 - smoothstep(1.0, 1.22, rr)) * smoothstep(0.90, 1.0, rr);
@@ -1144,10 +1162,14 @@ function seat(obj, face, i, j, dir, up) {
 const MIN_COL = { [CRYSTAL]: ACCENT, [EMBER]: 0xff8a3d, [SALT]: 0xb9cdf0 };
 const nodeMats = {};
 for (const m of MINERALS) nodeMats[m] = new THREE.MeshStandardMaterial({
-  // bright enough to cross the bloom threshold: a seam should read as a light
-  // source on the far side of the worldlet, not as a coloured pebble
-  color: MIN_COL[m], emissive: MIN_COL[m], emissiveIntensity: 1.35,
-  roughness: 0.25, flatShading: true });
+  // THE BODY IS DARK GLASS, THE LIGHT IS INSIDE (2026-09-09). A saturated
+  // full-strength colour under a 3.1 sun clipped to a white-cyan blob under
+  // ACES no matter how low the emissive went; the facets were gone. A dark
+  // body keeps the facets, the emissive carries the hue, and the core and the
+  // pool on the ground carry the brightness — which is what lets a thin seam
+  // go dark instead of just small.
+  color: new THREE.Color(MIN_COL[m]).multiplyScalar(0.34), emissive: MIN_COL[m],
+  emissiveIntensity: 0.62, roughness: 0.2, metalness: 0.1, flatShading: true });
 const nodeMat = nodeMats[CRYSTAL];
 // A SEAM IS A CLUSTER. One floating diamond per tile read as a placeholder
 // token; three crystals of different sizes leaning out of the ground read as
@@ -1187,8 +1209,24 @@ function makeSeam(f, i, j) {
   const c = cells[f][i][j];
   c.t = NODE;
   c.min = MINERAL_OF_FACE[f];
+  // ITS OWN MATERIAL, so its glow can follow its richness (a shared one
+  // would dim every seam of that ore at once); still one draw call per seam
   const m = new THREE.Mesh(nodeGeos[Math.floor(rnd() * nodeGeos.length)],
-                           nodeMats[c.min]);
+                           nodeMats[c.min].clone());
+  // the core: a small bright heart in the ore's colour, additive so it reads
+  // as light rather than as a second crystal; it shrinks as the seam thins
+  const core = new THREE.Mesh(new THREE.OctahedronGeometry(0.22, 0),
+    new THREE.MeshBasicMaterial({ color: MIN_COL[c.min], transparent: true, opacity: 0.85,
+                                  blending: THREE.AdditiveBlending, depthWrite: false }));
+  core.name = 'core'; core.position.y = 0.05;
+  m.add(core);
+  // and a pool of its light on the ground
+  if (glowPools && glowPools.count < MAX_POOLS) {
+    c.glow = glowPools.count++;
+    _gc.setHex(MIN_COL[c.min]);
+    glowPools.setColorAt(c.glow, _gc);
+    glowPools.instanceColor.needsUpdate = true;
+  }
   seat(m, f, i, j, Math.floor(rnd() * 4), 0.66 + rnd() * 0.12);
   m.scale.setScalar(0.82 + rnd() * 0.42);
   m.userData.base = m.scale.x;      // the pulse scales relative to this
@@ -1373,6 +1411,9 @@ const GEO = {
     { g: _box(T * 0.62, 0.07, 0.09), y: 0.66, z: T * 0.28, rz: 0.55 },  // braces
     { g: _box(T * 0.62, 0.07, 0.09), y: 0.66, z: -T * 0.28, rz: -0.55 },
     { g: _box(T * 0.70, 0.13, T * 0.70), y: 1.18 },              // head plate
+    { g: _box(T * 0.80, 0.07, T * 0.80), y: 0.40, tint: 0.55 },  // a band round the deck
+    { g: _box(T * 0.78, 0.05, 0.06), y: 1.26, z: T * 0.36, tint: 0.62 },  // a lip on the head
+    { g: _box(T * 0.78, 0.05, 0.06), y: 1.26, z: -T * 0.36, tint: 0.62 },
     { g: _cyl(0.10, 0.10, 0.86, 6), y: 0.74 },                   // shaft
     { g: _cyl(0.19, 0.19, 0.30, 8), y: 1.38, rz: Math.PI / 2, tint: 0.72 }, // motor
     { g: _box(0.20, 0.30, 0.24), y: 0.52, x: T * 0.36, tint: 0.62 }, // control box
@@ -1396,6 +1437,9 @@ const GEO = {
       const a = (k / 6) * Math.PI * 2;
       parts.push({ g: _box(T * 0.30, 0.07, 0.10), y: 0.35,
                    x: Math.cos(a) * T * 0.30, z: Math.sin(a) * T * 0.30, ry: -a });
+      // bollards round the skirt, so the pad has an edge you would not walk off
+      parts.push({ g: _cyl(0.06, 0.07, 0.30, 6), y: 0.22,
+                   x: Math.cos(a + Math.PI / 6) * T * 0.66, z: Math.sin(a + Math.PI / 6) * T * 0.66, tint: 0.6 });
     }
     return parts;
   })()),
@@ -1929,6 +1973,41 @@ for (const m of [scatterVent, scatterBolt]) {
   scene.add(m);
 }
 
+// THE POOLS. One instanced additive disc per seam, in the ore's colour,
+// scaled by richness every frame: a fresh seam lights the ground around it,
+// a thin one barely does. Drawn under the decals.
+function glowTexture() {
+  const c = document.createElement('canvas'); c.width = c.height = 64;
+  const g = c.getContext('2d');
+  const gr = g.createRadialGradient(32, 32, 2, 32, 32, 32);
+  gr.addColorStop(0, 'rgba(255,255,255,0.55)');
+  gr.addColorStop(0.35, 'rgba(255,255,255,0.22)');
+  gr.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+}
+const MAX_POOLS = 64;
+const _gc = new THREE.Color();
+glowPools = new THREE.InstancedMesh(
+  new THREE.PlaneGeometry(1, 1),
+  new THREE.MeshBasicMaterial({ map: glowTexture(), transparent: true, depthWrite: false,
+                                blending: THREE.AdditiveBlending, fog: true }),
+  MAX_POOLS);
+glowPools.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+glowPools.frustumCulled = false;
+glowPools.renderOrder = 0;
+glowPools.count = 0;
+glowPools.name = 'seamGlow';
+scene.add(glowPools);
+// the seams were scattered before this ran; hand each its pool now
+eachTile((c, f, i, j) => {
+  if (!c.mesh || c.glow !== undefined || glowPools.count >= MAX_POOLS) return;
+  c.glow = glowPools.count++;
+  _gc.setHex(MIN_COL[c.min]);
+  glowPools.setColorAt(c.glow, _gc);
+});
+glowPools.instanceColor.needsUpdate = true;
+
 const MAX_DECALS = 6000;
 const decals = new THREE.InstancedMesh(
   new THREE.PlaneGeometry(1, 1),
@@ -1950,6 +2029,8 @@ scene.add(decals);
 const DECAL_W = { 1: 1.8, 2: 1.25, 3: 1.9, 5: 1.85, 6: 1.55, 7: 1.75,
                   8: 1.25, 9: 1.7 };
 
+const _gm = new THREE.Matrix4(), _gs = new THREE.Vector3();
+const _gbx = new THREE.Vector3(), _gby = new THREE.Vector3(), _gbz = new THREE.Vector3();
 const _dq = new THREE.Quaternion();
 const _dm = new THREE.Matrix4();
 const _dpos = new THREE.Vector3(), _dscale = new THREE.Vector3();
@@ -3703,11 +3784,26 @@ renderer.setAnimationLoop(() => {
   stepMarket(dt);
   stepSpores(dt);
   // seams grow back on their own, and wear their richness as their size
-  eachTile(c => {
+  eachTile((c, f, i, j) => {
     if (!c.mesh) return;
     if (c.rich < 1) c.rich = Math.min(1, c.rich + dt * SEAM_REGROW);
     c.mesh.userData.rich = c.rich;
+    // the glow follows the richness: emissive, core, and the pool on the ground
+    // a light, not a blowout: the core and the pool carry the brightness now
+    c.mesh.material.emissiveIntensity = 0.12 + 0.5 * c.rich;
+    const core = c.mesh.children[0];
+    if (core) { core.scale.setScalar(0.35 + 0.95 * c.rich); core.material.opacity = 0.12 + 0.38 * c.rich; }
+    if (c.glow !== undefined && glowPools) {
+      const F_ = FACES[f], w = tileWorld(f, i, j);
+      const sz = T * (1.1 + 2.6 * c.rich);
+      _gbx.set(F_.u[0], F_.u[1], F_.u[2]); _gby.set(F_.v[0], F_.v[1], F_.v[2]); _gbz.set(F_.n[0], F_.n[1], F_.n[2]);
+      _gm.makeBasis(_gbx, _gby, _gbz);
+      _gm.scale(_gs.set(sz, sz, 1));
+      _gm.setPosition(w[0] + F_.n[0] * 0.035, w[1] + F_.n[1] * 0.035, w[2] + F_.n[2] * 0.035);
+      glowPools.setMatrixAt(c.glow, _gm);
+    }
   });
+  if (glowPools) glowPools.instanceMatrix.needsUpdate = true;
   visitedFaces.add(player.face);
   stepGoals(dt);
   if (!melting) stepRifts(dt);
