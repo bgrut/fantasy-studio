@@ -77,6 +77,10 @@ says so.
 | **the tier** | `?q=ultra/balanced/performance` scales pixel ratio, shadows, the post's resolution and the particle budget together; steps down once on its own if frames drop |
 | **the meltdown's ceremony** | a white flash that decays, a shockwave across the face from where the factory stood, shake on the shot, a bass thump, the core counter pops |
 | **a floor under dark plating** | the bounce scales with how dark a world's plate is, soot is a shade lighter, the contact ramp holds longer; the warm underside grounds at 11 where it read 2 |
+| **icons through the grade** | the tool bar's renders take the world's lift, gamma, gain and saturation, and are re-rendered when you travel |
+| **photo mode** | P hides the chrome and leaves you free to frame; Enter saves a PNG named for the world and tells the studio; P restores |
+| **the studio's first run** | a factory job opens under a card naming the world, the mode and the six things to know, once per job; the latest saved frame shows as a chip under the frame |
+| **the fill is the world's** | the far-quadrant fill takes a lifted edge colour and the same floor as the bounce, so a red soot plate reflects it; `?world=k` lets a gate measure any world's light |
 | **machine skin** | one shared panel map (seams, rivets, a lip, wear) on every machine; glow moved from the paint to the lamps; sun made the key (3.1 over 0.95 hemi / 0.85 fill); a frame on the smelter |
 | **the companion** | a planet or moon low in every world's sky, shaded from the sun's side with a terminator and an atmosphere rim, drawn in the sky shader; one fixed direction so it is a landmark |
 | **lanes** | every fifth grid line is a faint lit strip in the world's edge colour; the far plane widened to 1400 so the sky dome no longer clips from orbit |

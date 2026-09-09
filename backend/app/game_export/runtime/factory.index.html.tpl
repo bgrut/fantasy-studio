@@ -121,6 +121,8 @@
   @keyframes won{0%{transform:scale(1)}30%{transform:scale(1.7);color:#fff3c4}100%{transform:scale(1)}}
   #tok.won{display:inline-block;animation:won .9s cubic-bezier(.2,.8,.2,1)}
   body.reduced #tok.won{animation:none}
+  /* photo mode: the chrome steps out of the frame */
+  body.photo #hud,body.photo #tools,body.photo #hint,body.photo #toast,body.photo #cross{opacity:0;pointer-events:none;transition:opacity .25s}
   #wipe span{display:inline-block;margin:0 5px;padding:3px 9px;border-radius:6px;
              border:1px solid rgba(255,255,255,.14);color:#d7dcec;letter-spacing:.08em}
   #wipe span:hover{border-color:#5cffc9;color:#5cffc9}

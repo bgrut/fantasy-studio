@@ -1709,6 +1709,9 @@ function renderThumb(obj, size) {
     return Math.max(0, Math.min(1, (v * (2.51 * v + 0.03)) / (v * (2.43 * v + 0.59) + 0.14)));
   };
   const srgb = x => x <= 0.0031308 ? x * 12.92 : 1.055 * Math.pow(x, 1 / 2.4) - 0.055;
+  // AND THE WORLD'S GRADE, so the bar belongs to the world it sits over
+  const gr = (WORLDS[worldIdx] && WORLDS[worldIdx].grade) || { lift: [0, 0, 0], gamma: [1, 1, 1], gain: [1, 1, 1], sat: 1 };
+  const px = [0, 0, 0];
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
       // readRenderTargetPixels is bottom-origin, ImageData is top-origin
@@ -1720,8 +1723,11 @@ function renderThumb(obj, size) {
         // does — a render target is linear and nobody converts it for you
         let v = buf[src + k] / 255;
         if (a > 0.004) v /= a;
-        img.data[dst + k] = Math.round(srgb(aces(v)) * 255);
+        v = aces(v);
+        px[k] = Math.pow(Math.max(0, v * gr.gain[k] + gr.lift[k]), 1 / gr.gamma[k]);
       }
+      const l = 0.2126 * px[0] + 0.7152 * px[1] + 0.0722 * px[2];
+      for (let k = 0; k < 3; k++) img.data[dst + k] = Math.round(srgb(Math.max(0, Math.min(1, l + (px[k] - l) * gr.sat))) * 255);
       img.data[dst + 3] = buf[src + 3];
     }
   }
@@ -1730,7 +1736,9 @@ function renderThumb(obj, size) {
   return cv.toDataURL('image/png');
 }
 
+let iconsWorld = -1;             // which world the bar was last rendered under
 function buildToolIcons() {
+  iconsWorld = worldIdx;
   const mk = (geo, mat) => new THREE.Mesh(geo, mat);
   const grp = list => { const g = new THREE.Group();
                         for (const o of list) g.add(o); return g; };
@@ -1783,8 +1791,10 @@ function buildToolIcons() {
     img.className = 'ico';
     img.src = url;
     img.alt = name;
-    const svg = el.querySelector('svg');
-    if (svg) svg.replaceWith(img); else el.prepend(img);
+    // REPLACE, never stack: the bar is re-rendered when you travel, and a
+    // second prepend put two icons on every tool
+    const old = el.querySelector('img.ico'), svg = el.querySelector('svg');
+    if (old) old.replaceWith(img); else if (svg) svg.replaceWith(img); else el.prepend(img);
   }
 }
 
@@ -3203,6 +3213,8 @@ addEventListener('keydown', e => {
   if (k) pickTool(k);
   if (e.code === 'KeyF') cycleFilter();
   if (e.code === 'KeyM') audioMute(!AUDIO.muted);
+  if (e.code === 'KeyP') setPhoto(!photo);
+  if (photo && (e.code === 'Enter' || e.code === 'NumpadEnter')) shotRequest = true;
   const u = { 'KeyZ': 'tick', 'KeyX': 'yield', 'KeyC': 'smelt' }[e.code];
   if (u) buy(u);
 });
@@ -3314,6 +3326,30 @@ function rigPulse(kind) { rigKick = 1; rigKind = kind; }
 // THE CROSSING. crossFlash runs 1 -> 0 after an edge: field of view, vignette,
 // a caption naming the face and its ore.
 let crossFlash = 0, BASE_FOV = null, captionAt = 0, crossVig = 0;
+// PHOTO MODE. P hides the chrome and leaves you free to frame; Enter saves
+// the frame; P again brings the chrome back.
+let photo = false, shotRequest = false, shotCount = 0;
+function setPhoto(on) {
+  photo = on;
+  document.body.classList.toggle('photo', on);
+  const fc = document.getElementById('facecap');
+  if (fc) {
+    if (on) { fc.textContent = 'PHOTO  ·  ENTER SAVES  ·  P EXITS'; fc.classList.add('on'); captionAt = 2.6; }
+    else { fc.classList.remove('on'); captionAt = 0; }
+  }
+}
+function takeShot() {
+  // called right after the frame is composited, so the canvas still holds it
+  let url = null;
+  try { url = renderer.domElement.toDataURL('image/png'); } catch (e) { return; }
+  const name = String((WORLDS[worldIdx] && WORLDS[worldIdx].name) || SPEC.title || 'factory')
+    .toLowerCase().replace(/[^a-z0-9]+/g, '-') + '-' + String(++shotCount).padStart(2, '0') + '.png';
+  const a = document.createElement('a'); a.href = url; a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  try { window.parent.postMessage({ type: 'fs-shot', name, dataUrl: url, world: WORLDS[worldIdx] && WORLDS[worldIdx].id }, '*'); } catch (e) {}
+  const fc = document.getElementById('facecap');
+  if (fc) { fc.textContent = 'SAVED  ·  ' + name.toUpperCase(); fc.classList.add('on'); captionAt = 1.8; }
+}
 // THE MELTDOWN'S CEREMONY: a flash that decays, a shockwave across the face,
 // a half-second of shake on the pulled-back shot
 let meltFlash = 0, meltShake = 0, shockwave = null, shockAge = 0;
@@ -3773,7 +3809,15 @@ function applyWorld(k) {
   // reads, and the shadow on it has something to subtract from.
   const pb = new THREE.Color((w.plate && w.plate.base) || '#8792c4');
   const plum = 0.2126 * pb.r + 0.7152 * pb.g + 0.0722 * pb.b;
-  hemi.intensity = 0.95 * Math.max(1, Math.min(1.6, 0.34 / Math.max(0.05, plum)));
+  const floor = Math.max(1, Math.min(2.0, 0.30 / Math.max(0.05, plum)));
+  hemi.intensity = 0.95 * floor;
+  // AND THE FILL IS THE WORLD'S TOO. The fill from the far quadrant is what
+  // lights a face the sun never reaches, and it was a fixed blue: a red soot
+  // plate reflects almost none of it, which is most of why the warm world's
+  // underside starved. The fill takes a lifted version of the world's edge
+  // colour, and the same floor the bounce gets.
+  fill.color.copy(new THREE.Color(w.edge || w.grid).lerp(new THREE.Color(0xffffff), 0.45));
+  fill.intensity = 0.85 * Math.min(2.6, floor * 1.25);   // a little more than the bounce: it is the underside's only key
   if (lanes) lanes.material.color.setHex(w.edge || w.grid);
   starField.material.color.setHex(w.star);
   if (cubeEdges) cubeEdges.material.color.setHex(w.edge || w.grid);
@@ -3807,6 +3851,9 @@ function applyWorld(k) {
   matComposite.uniforms.uGamma.value.fromArray(gr.gamma);
   matComposite.uniforms.uGain.value.fromArray(gr.gain);
   matComposite.uniforms.uSat.value = gr.sat;
+  // the bar is re-rendered under the new world's grade (not at boot: the
+  // boot block builds it once itself, after the world is applied)
+  if (iconsWorld >= 0 && iconsWorld !== worldIdx) buildToolIcons();
   const h = document.querySelector('#hud h1');
   if (h) h.textContent = String(w.name).toUpperCase();
   renderWorlds();
@@ -4227,6 +4274,9 @@ buildToolIcons();
 applyRewards(); renderUpgrades();
 renderGoal();
 if (!restored) applyWorld(worldIdx);   // a restored save has already chosen
+// ?world=k is a debug override (like ?grid=): a gate can measure any world's
+// light without walking the chain first
+{ const wq = +((location.search.match(/[?&]world=(\d+)/) || [])[1]); if (!restored && wq > 0 && WORLDS[wq]) applyWorld(wq); }
 // only a NEW world gets the reveal. A returning player has seen it; showing it
 // again on every load is how an intro becomes a thing people hate.
 if (!restored && !/[?&]nointro=1/.test(location.search))
@@ -4527,6 +4577,7 @@ renderer.setAnimationLoop(() => {
   }
   document.body.classList.toggle('overhead', overhead);
   renderFrame();
+  if (shotRequest) { shotRequest = false; takeShot(); }
 });
 
 // ── THE TIER, LIVE ─────────────────────────────────────────────────────────
@@ -4973,7 +5024,7 @@ window.__game = {
     world_name: WORLDS[worldIdx].name,
     worlds_open: WORLDS.filter(w => (CREATIVE || cores >= w.cores) && worldCapOk(w)).length,
     creative: CREATIVE,
-    tier: tierName, reduced_motion: REDUCED,
+    tier: tierName, reduced_motion: REDUCED, photo,
     spores: (() => { let n = 0; eachTile(c => { if (c.clog > 0) n++; });
                      return { active: sporesActive(), hits: sporeHits, clogged: n, reach: SPORE_REACH }; })(),
     sold_high: soldHigh, rifts_paid: riftsPaid,
@@ -5034,6 +5085,7 @@ window.__factory = {
   applyTier, TIERS, get tier() { return tierName; }, get PBUDGET() { return PBUDGET; },
   get REDUCED() { return REDUCED; }, set REDUCED(v) { REDUCED = !!v; document.body.classList.toggle('reduced', REDUCED); },
   get meltFlash() { return meltFlash; }, get shockwave() { return shockwave; }, itemsEmber, itemsSalt,
+  setPhoto, get photo() { return photo; }, get iconsWorld() { return iconsWorld; }, buildToolIcons,
   sporeStrike, sporeShielded, sporesActive, SPORE_REACH, SPORE_CLOG,
   set riftsPaid(v) { riftsPaid = v; },
   set rateNow(v) { rateForce = v; rateNow = v === null ? rateNow : v; }, set goalIdx(v) { goalIdx = v; applyRewards(); renderGoal(); renderWorlds(); },

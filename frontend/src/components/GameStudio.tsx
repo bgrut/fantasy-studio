@@ -181,6 +181,11 @@ export default function GameStudio() {
   const [creative, setCreative] = useState<boolean>(() => {
     try { return localStorage.getItem('fs_creative') === '1' } catch { return false }
   })
+  // FIRST RUN. A factory job opens under a card that names the world, the
+  // mode and the five things a player needs to know, once per job.
+  const [firstRun, setFirstRun] = useState<boolean>(false)
+  // the latest frame the game saved from photo mode (P, then Enter)
+  const [lastShot, setLastShot] = useState<{ name: string; dataUrl: string } | null>(null)
   const [quality, setQuality] = useState<string>(() => {
     try { return localStorage.getItem('fs_quality') || 'ultra' } catch { return 'ultra' }
   })
@@ -431,6 +436,10 @@ export default function GameStudio() {
   useEffect(() => {
     const onMsg = (e: MessageEvent) => {
       const d = e.data
+      if (d && d.type === 'fs-shot' && typeof d.dataUrl === 'string' && d.dataUrl.startsWith('data:image/png')) {
+        setLastShot({ name: String(d.name || 'shot.png'), dataUrl: d.dataUrl })
+        return
+      }
       if (d && d.type === 'fs-spawned') {
         if (!d.ok) setError(`Could not place that live (${d.err ?? 'unknown'}) — `
           + 'press Apply edit to place it with a rebuild instead.')
@@ -521,6 +530,11 @@ export default function GameStudio() {
   // a rebuild replaces the iframe: picks are stale, but Inspect MODE stays on
   // (it re-arms via the iframe's onLoad) — mid-editing flow never breaks
   useEffect(() => { setHoverPick(null); setSelPick(null); setLineA(null); setSelLine(null) }, [job?.play_url])
+  useEffect(() => {
+    setLastShot(null)
+    if (!job || job.genre !== 'factory' || !job.play_url) { setFirstRun(false); return }
+    try { setFirstRun(localStorage.getItem('fs_seen_' + job.id) !== '1') } catch { setFirstRun(true) }
+  }, [job?.id, job?.genre, job?.play_url])
 
   // RULE CHIPS: flip one honored rule on the selected placed item — fully
   // deterministic on the backend, re-exports in seconds
@@ -1207,6 +1221,42 @@ export default function GameStudio() {
               allowFullScreen
               onLoad={() => { gameFrameRef.current?.focus({ preventScroll: true }); if (inspect) sendInspect(true) }}
             />
+            {/* FIRST RUN: the card over the frame, once per job */}
+            {firstRun && (
+              <div className="absolute inset-0 z-30 flex items-center justify-center bg-[rgba(6,6,12,0.72)] backdrop-blur-sm">
+                <div className="max-w-md w-[88%] rounded-2xl border border-white/[0.08] bg-[rgba(12,11,20,0.96)] p-6 text-center">
+                  <div className="text-[10px] tracking-[.32em] text-[#807d99] uppercase">a factory · {creative ? 'creative' : 'survival'}</div>
+                  <div className="mt-2 text-2xl font-black tracking-[.14em] uppercase text-white">{job!.title ?? 'your world'}</div>
+                  <div className="mt-1 text-xs text-[#9fd6ff]">a worldlet you can walk all the way around</div>
+                  <div className="mt-5 grid grid-cols-2 gap-x-6 gap-y-2 text-left text-xs text-[#c7c4d6]">
+                    <div><b className="text-white">WASD</b> walk · <b className="text-white">Shift</b> run</div>
+                    <div><b className="text-white">1–9</b> tools · <b className="text-white">drag</b> draws belts</div>
+                    <div><b className="text-white">TAB</b> overhead to plan</div>
+                    <div><b className="text-white">walk over an edge</b> for another ore</div>
+                    <div><b className="text-white">F</b> sets a filter · <b className="text-white">M</b> mutes</div>
+                    <div><b className="text-white">P</b> photo mode · <b className="text-white">Enter</b> saves</div>
+                  </div>
+                  <button
+                    onClick={() => { setFirstRun(false); try { localStorage.setItem('fs_seen_' + job!.id, '1') } catch {}; gameFrameRef.current?.focus({ preventScroll: true }) }}
+                    className="mt-6 px-5 py-2 rounded-lg text-sm font-semibold bg-[#5cffc9] text-[#06110d] hover:bg-[#8affdc] transition-colors"
+                  >
+                    Play
+                  </button>
+                </div>
+              </div>
+            )}
+            {/* the latest photo-mode frame, as a chip you can open */}
+            {lastShot && !firstRun && (
+              <a
+                href={lastShot.dataUrl}
+                download={lastShot.name}
+                title="the frame you just saved — click to download again"
+                className="absolute left-3 bottom-3 z-20 flex items-center gap-2 rounded-lg border border-white/[0.1] bg-[rgba(10,9,18,0.85)] p-1 pr-3 text-xs text-[#d6c9ff] hover:border-[#5cffc9]/50"
+              >
+                <img src={lastShot.dataUrl} alt="" className="h-10 w-16 rounded object-cover" />
+                saved {lastShot.name}
+              </a>
+            )}
             {/* DROP TARGET. Only mounted mid-drag: a permanent overlay would
                 eat every click meant for the game. */}
             {dragAsset && (
