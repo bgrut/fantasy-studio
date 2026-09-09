@@ -69,6 +69,9 @@ says so.
 | **weight** | the body lags the intent: the camera leans into starts and out of stops, dips on a landing by how hard it was, and rolls an edge crossing with weight |
 | **ambience** | a second layer in the air per family: motes in the light at home, embers off the cinder, breath on the ice, fireflies over the green |
 | **the overhead** | TAB opens over the face you stand on with your heading up the screen; the tread glows and every machine pools its colour, a city at night |
+| **a title in each voice** | the reveal card's face, tracking, glow and rules follow the world's family: heavy and hot on the cinder, light and wide on the ice, italic serif on the green |
+| **the projector reacts** | recoils on a place with a white flash, red on an erase, spins the new hologram up from small on a switch |
+| **the crossing's ceremony** | an edge widens the view for a beat, bites the vignette, lands a low whoomp, and captions the face and the ore it grows |
 | **machine skin** | one shared panel map (seams, rivets, a lip, wear) on every machine; glow moved from the paint to the lamps; sun made the key (3.1 over 0.95 hemi / 0.85 fill); a frame on the smelter |
 | **the companion** | a planet or moon low in every world's sky, shaded from the sun's side with a terminator and an atmosphere rim, drawn in the sky shader; one fixed direction so it is a landmark |
 | **lanes** | every fifth grid line is a faint lit strip in the world's edge colour; the far plane widened to 1400 so the sky dome no longer clips from orbit |

@@ -645,7 +645,7 @@ function renderFrame() {
   matComposite.uniforms.tDiffuse.value = rtScene.texture;
   matComposite.uniforms.tBloom.value = rtA.texture;
   matComposite.uniforms.uStrength.value = POST.strength;
-  matComposite.uniforms.uVignette.value = POST.vignette;
+  matComposite.uniforms.uVignette.value = POST.vignette + crossVig;   // the crossing's bite
   matComposite.uniforms.uTintAmt.value = POST.tint;
   blit(matComposite, null);
 }
@@ -3028,15 +3028,15 @@ function dirBetween(a, b) {
 function apply(t, dir) {
   if (!UNLOCKED[tool]) return;      // hotkeys and drags go through here too
   const d = dir == null ? 0 : dir;
-  if (tool === 'erase') { removeAt(t.face, t.i, t.j); return; }
-  if (tool === 'miner') { place(t.face, t.i, t.j, MINER, d); return; }
-  if (tool === 'hub') { place(t.face, t.i, t.j, HUB, 0); return; }
-  if (tool === 'smelter') { place(t.face, t.i, t.j, SMELTER, d); return; }
-  if (tool === 'splitter') { place(t.face, t.i, t.j, SPLITTER, 0); return; }
-  if (tool === 'forge') { place(t.face, t.i, t.j, FORGE, d); return; }
-  if (tool === 'filter') { place(t.face, t.i, t.j, FILTER, d); return; }
-  if (tool === 'rift') { place(t.face, t.i, t.j, RIFT, d); return; }
-  if (tool === 'belt') { place(t.face, t.i, t.j, BELT, d); }
+  const c0 = cellOf(t), was = c0 ? c0.t : -1;
+  if (tool === 'erase') { removeAt(t.face, t.i, t.j); if (c0 && c0.t !== was) rigPulse('erase'); return; }
+  const TOOL_TYPE = { miner: MINER, hub: HUB, smelter: SMELTER, splitter: SPLITTER,
+                      forge: FORGE, filter: FILTER, rift: RIFT, belt: BELT };
+  const ty = TOOL_TYPE[tool];
+  if (ty === undefined) return;
+  place(t.face, t.i, t.j, ty, (ty === HUB || ty === SPLITTER) ? 0 : d);
+  // the projector recoils only when something actually went down
+  if (c0 && c0.t === ty && was !== ty) rigPulse('place');
 }
 
 renderer.domElement.addEventListener('pointerdown', e => {
@@ -3104,6 +3104,7 @@ function pickTool(name) {
     }
     return;
   }
+  if (tool !== name) rigPulse('switch');
   tool = name;
   document.querySelectorAll('.tool').forEach(o =>
     o.classList.toggle('on', o.dataset.tool === name));
@@ -3220,6 +3221,15 @@ function solidAt(face, a, b) {
 
 const _rt = new THREE.Vector3(), _wish = new THREE.Vector3();
 let bobPhase = 0, bobAmt = 0, moveMag = 0;
+// THE PROJECTOR REACTS. rigKick runs 1 -> 0 after a place, an erase or a
+// tool switch; rigKind says which, so the hologram flashes the right colour.
+let rigKick = 0, rigKind = 'place', holoBaseScale = 1;
+const holoBase = new THREE.Color(), _holoFlash = new THREE.Color();
+const FLASH_COL = { place: 0xffffff, erase: 0xff6b7d, switch: 0x9dffe8 };
+function rigPulse(kind) { rigKick = 1; rigKind = kind; }
+// THE CROSSING. crossFlash runs 1 -> 0 after an edge: field of view, vignette,
+// a caption naming the face and its ore.
+let crossFlash = 0, BASE_FOV = null, captionAt = 0, crossVig = 0;
 // THE BODY LAGS THE INTENT. playerVel is where the keys say to go; velLag is
 // where the body has caught up to; the difference leans the camera. landDip
 // is how hard the last landing was, springing back.
@@ -3312,6 +3322,7 @@ function movePlayer(dt) {
     player.face = nf;
     player.up.copy(_n3);
     player.h = 0; player.vy = 0; player.onGround = true;
+    crossEdge(nf);
     // RE-SEAT IMMEDIATELY, not after the loop (2026-09-07). Left until the
     // end, the second pass read a position that was still measured against
     // the OLD face: standing eye-height above the top face reads as 1.68m
@@ -3321,6 +3332,20 @@ function movePlayer(dt) {
     seatPlayer();
   }
   seatPlayer();
+}
+
+// THE CROSSING'S CEREMONY: a beat on the view, a low whoomp, and a caption
+// naming the face and the ore it grows — the one fact a player needs at
+// exactly that moment
+function crossEdge(nf) {
+  crossFlash = 1;
+  const fc = document.getElementById('facecap');
+  if (fc) {
+    fc.textContent = FACES[nf].name.toUpperCase() + ' FACE  ·  ' + (MINERAL_NAME[MINERAL_OF_FACE[nf]] || '');
+    fc.classList.add('on');
+    captionAt = 1.6;
+  }
+  if (typeof sfxCross === 'function') sfxCross();
 }
 
 // Sit exactly eye-height (plus any jump) above the current face, inside its
@@ -3589,7 +3614,7 @@ const WORLDS = [
   // prompt's own mood for everything else
   { id: 'prompt', plate: HOME.plate, belt: HOME.belt, weather: HOME.weather,
     edge: HOME.edge, sun: HOME.sun, name: SPEC.title || 'Crystal Isle', cores: 0, spores: !!HOME.spores,
-    planet: HOME.planet, grade: HOME.grade, ambience: HOME.ambience,
+    planet: HOME.planet, grade: HOME.grade, ambience: HOME.ambience, fam: MOOD,
     blurb: 'where the prompt dropped you',
     sky: SKY_COL, fog: FOG_COL, ground: HOME.ground, grid: HOME.grid, star: HOME.star },
   // THE UNLOCKS ARE THE THREE FAMILIES HOME IS NOT (2026-09-08). A prompt
@@ -3608,7 +3633,7 @@ const WORLDS = [
     return { id: w.id, name: w.name, blurb: w.blurb, cores: w.needs === 'drift' ? 3 : [2, 5, 9][k], needs: w.needs || null,
              sky: L.sky, fog: L.fog, ground: L.ground, grid: L.grid, star: L.star,
              edge: L.edge, sun: L.sun, plate: L.plate, belt: L.belt, weather: L.weather, spores: !!L.spores,
-             planet: L.planet, grade: L.grade, ambience: L.ambience };
+             planet: L.planet, grade: L.grade, ambience: L.ambience, fam: w.fam };
   }),
 ];
 let worldIdx = 0;
@@ -3703,7 +3728,7 @@ function worldCapOk(w) {
 function travelTo(k) {
   const w = WORLDS[k];
   if (!w || k === worldIdx || (!CREATIVE && cores < w.cores) || !worldCapOk(w)) return;
-  playIntro(w.name, w.blurb);          // arriving is the payoff; show the place
+  playIntro(w.name, w.blurb, undefined, false, w.fam);   // arriving is the payoff; show the place
   clearFactory();
   ore = 0; ingots = 0; alloys = 0; runValue = 0;
   for (const key in UPGRADES) UPGRADES[key].lvl = 0;
@@ -4342,8 +4367,25 @@ renderer.setAnimationLoop(() => {
                          -0.25 + Math.sin(bobPhase * 2) * 0.009 * bobAmt,
                          -0.55);
     heldRig.rotation.z = 0.06 + Math.sin(bobPhase) * 0.02 * bobAmt;
-    holo.rotation.y += dt * 0.9;
+    // the recoil and the flash: back and down on a place or erase, the
+    // hologram to the flash colour and, on a switch, up from small with a spin
+    rigKick *= Math.exp(-dt * 7);
+    const kk = rigKick < 0.002 ? 0 : rigKick;
+    heldRig.position.z += kk * 0.06;
+    heldRig.rotation.x = -kk * 0.14;
+    holoMat.color.copy(holoBase).lerp(_holoFlash.setHex(FLASH_COL[rigKind] || 0xffffff), kk);
+    holoMat.opacity = 0.42 + 0.45 * kk;
+    holo.scale.setScalar(holoBaseScale * (rigKind === 'switch' ? (0.25 + 0.75 * (1 - kk)) : (1 + 0.28 * kk)));
+    holo.rotation.y += dt * (0.9 + (rigKind === 'switch' ? 9 * kk : 0));
     holo.position.y = 0.26 + Math.sin(performance.now() * 0.0022) * 0.008;
+    // THE CROSSING: the view widens and settles, the vignette bites and lets go
+    if (BASE_FOV === null) BASE_FOV = camera.fov;
+    crossFlash *= Math.exp(-dt * 3.2);
+    const cf = crossFlash < 0.003 ? 0 : crossFlash;
+    const fov = BASE_FOV + 7 * Math.sin(Math.min(1, cf) * Math.PI);
+    if (Math.abs(camera.fov - fov) > 0.01) { camera.fov = fov; camera.updateProjectionMatrix(); }
+    crossVig = 0.4 * cf;                    // renderFrame adds it to the vignette
+    if (captionAt > 0) { captionAt -= dt; if (captionAt <= 0) { const fc = document.getElementById('facecap'); if (fc) fc.classList.remove('on'); } }
     updateGhost();
   }
   document.body.classList.toggle('overhead', overhead);
@@ -4402,8 +4444,10 @@ function setHolo(name) {
   holo.geometry = g;
   g.computeBoundingSphere();
   const r = Math.max(0.001, g.boundingSphere.radius);
-  holo.scale.setScalar(0.09 / r);
-  holoMat.color.setHex(name === 'erase' ? 0xff6b7d : ACCENT);
+  holoBaseScale = 0.09 / r;
+  holo.scale.setScalar(holoBaseScale);
+  holoBase.setHex(name === 'erase' ? 0xff6b7d : ACCENT);
+  holoMat.color.copy(holoBase);
 }
 setHolo(tool);      // here, AFTER HOLO_GEO exists — not up by the tool bar
 
@@ -4500,6 +4544,10 @@ function sfxClank() {
   if (!throttled('clank', 140) || !AUDIO.ready || AUDIO.muted) return;
   tone(196, 0.09, 'square', 0.05); tone(392, 0.05, 'triangle', 0.04, 0.01);
 }
+function sfxCross() {
+  if (!throttled('cross', 400) || !AUDIO.ready || AUDIO.muted) return;
+  tone(58, 0.36, 'sine', 0.16); tone(87, 0.22, 'triangle', 0.05, 0.03);
+}
 function sfxClog() { if (throttled('clog', 300)) { tone(96, 0.22, 'sine', 0.12); tone(72, 0.30, 'sine', 0.08, 0.05); } }
 
 function audioMute(on) {
@@ -4542,11 +4590,15 @@ const _hq2 = new THREE.Quaternion();
 // A slow orbit of the whole worldlet with its name over it, then the camera
 // drops to the player. Runs from a single clock so it cannot desynchronise
 // from the HUD fade; ends early on any input.
-function playIntro(name, blurb, secs, reverse) {
+function playIntro(name, blurb, secs, reverse, fam) {
   const card = document.getElementById('title');
   if (card) {
     card.querySelector('b').textContent = String(name).toUpperCase();
     card.querySelector('small').textContent = blurb || '';
+    // the card speaks in the world's own voice: its family picks the type
+    // the destination's family, passed in: travel plays the reveal before the
+    // world index moves, so reading it here would name the world being left
+    card.dataset.mood = fam || (WORLDS[worldIdx] && WORLDS[worldIdx].fam) || MOOD;
     card.classList.add('on');
   }
   introTotal = secs || 3.6;

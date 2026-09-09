@@ -192,8 +192,29 @@
            width:min(46vw,520px);
            background:linear-gradient(90deg,transparent,rgba(159,214,255,.8),transparent)}
   #title b::after{margin:14px auto 0}
+  /* EACH WORLD IN ITS OWN VOICE: the family picks the face, the tracking, the
+     glow and the rule colour. The void keeps the clean face above. */
+  #title{--tcol:#f4f8ff;--tglow:rgba(92,224,208,.55);--rule:rgba(159,214,255,.8);--sub:#9fd6ff}
+  #title[data-mood="warm"]{--tcol:#ffe1c2;--tglow:rgba(255,122,50,.65);--rule:rgba(255,154,92,.85);--sub:#ffb27a}
+  #title[data-mood="cold"]{--tcol:#f2f8ff;--tglow:rgba(160,210,255,.6);--rule:rgba(207,232,255,.85);--sub:#cfe8ff}
+  #title[data-mood="green"]{--tcol:#e2ffe6;--tglow:rgba(120,230,150,.55);--rule:rgba(143,230,160,.85);--sub:#a8f0b6}
+  #title b{color:var(--tcol);text-shadow:0 0 34px var(--tglow),0 6px 22px rgba(0,0,0,.85)}
+  #title b::before,#title b::after{background:linear-gradient(90deg,transparent,var(--rule),transparent)}
+  #title[data-mood="warm"] b{font-family:Impact,"Arial Narrow","Franklin Gothic Medium","Segoe UI Black",sans-serif;
+           font-weight:900;letter-spacing:.09em;font-size:60px}
+  #title[data-mood="cold"] b{font-family:"Segoe UI Light","Segoe UI","Helvetica Neue",sans-serif;
+           font-weight:200;letter-spacing:.46em;font-size:46px}
+  #title[data-mood="green"] b{font-family:Georgia,"Times New Roman",serif;
+           font-weight:700;font-style:italic;letter-spacing:.12em;font-size:54px}
+  /* the face caption after a crossing */
+  /* high, above the placement ghost, and big enough to read in the beat it is up */
+  #facecap{position:fixed;left:0;right:0;top:12%;text-align:center;z-index:6;pointer-events:none;
+           font-family:ui-monospace,Consolas,monospace;font-size:14px;letter-spacing:.42em;
+           color:#eef4ff;text-shadow:0 0 18px rgba(92,224,208,.6),0 2px 12px rgba(0,0,0,.95);opacity:0;transform:translateY(6px);
+           transition:opacity .35s,transform .35s}
+  #facecap.on{opacity:.9;transform:translateY(0)}
   #title small{display:block;margin-top:14px;font-size:13px;letter-spacing:.28em;
-           text-transform:uppercase;color:#9fd6ff;
+           text-transform:uppercase;color:var(--sub);
            font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
            text-shadow:0 2px 10px rgba(0,0,0,.8)}
   /* the HUD steps back while the card is up; it is not the subject yet */
@@ -319,6 +340,7 @@
 </div>
 <div id="toast"></div>
 <div id="title"><b></b><small></small></div>
+<div id="facecap"></div>
 <div id="cross"></div>
 <div id="hint">WASD walk · Shift run · Space jump · click to look<br>hold LMB and sweep to draw belts · TAB overhead<br>point at a filter and press F to change what passes<br>walk over an edge — each side of the world grows a different ore<br>your factory saves itself</div>
 <script type="importmap">{"imports":{"three":"./vendor/three.module.js"}}</script>
