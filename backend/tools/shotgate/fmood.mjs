@@ -37,6 +37,21 @@ let ok = ['void','warm','cold','green'].includes(r.mood) && errs.length === 0;
 if (warmWords)      ok = ok && r.mood === 'warm' && r.sky[0] > r.sky[2] && r.overlay === 'soot';
 else if (coldWords) ok = ok && r.mood === 'cold' && r.sky[2] > r.sky[0] && r.overlay === 'frost';
 else                ok = ok && (r.palette ? true : r.mood === 'void');
+// A COMMITTED PALETTE WINS ONLY WHEN IT AGREES. The extractor handed a red
+// moon a violet night sky one build in four; the rule is asked directly
+// because a given build may or may not carry a palette at all.
+const rule = await p.evaluate(() => {
+  const F = window.__factory;
+  return { mood: F.MOOD, red: F.agreesWithMood('#3a0c08'), violet: F.agreesWithMood('#0d0a24'),
+           ice: F.agreesWithMood('#0a1420'), green: F.agreesWithMood('#08170f'), none: F.agreesWithMood(null),
+           sky: '#' + F.SKY_COL.toString(16).padStart(6, '0') };
+});
+const expect = { warm: { red: true, violet: false, ice: false }, cold: { red: false, ice: true, violet: true },
+                 green: { green: true, red: false }, void: { red: true, violet: true, ice: true, green: true } }[rule.mood] || {};
+const ruleOk = !rule.none && Object.keys(expect).every(k => rule[k] === expect[k]);
+console.log('palette   : mood', rule.mood, '| red', rule.red, '| violet', rule.violet, '| ice', rule.ice,
+            '| green', rule.green, '| none', rule.none, '| sky in use', rule.sky, '|', ruleOk ? 'rule holds' : 'RULE BROKEN');
+ok = ok && ruleOk;
 console.log('verdict   :', ok ? 'the world matches its prompt' : 'MISMATCH');
 console.log('errors    :', errs.length ? errs.join(' | ') : 'none');
 await p.screenshot({ path: process.env.OUT || 'mood.png' });

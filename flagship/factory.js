@@ -34,24 +34,30 @@ const MOODS = [
 const MOOD_LOOK = {
   void:  { sky: 0x0b0d18, fog: 0x0b0d18, accent: 0x39e6ff, ground: 0x3c4470, grid: 0x46527d,
            planet: { col: 0x56668f, size: 0.10, bands: 0.0 },
+           grade: { lift: [0.008, 0.010, 0.026], gamma: [1.0, 1.0, 1.02], gain: [1.0, 1.0, 1.04], sat: 1.06 },
            star: 0xffffff, edge: 0x7fd8ff, sun: 0xfff2d6,
            plate: { base: '#8792c4', tint: '#6a74a6', seam: 'rgba(90,100,150,0.75)', rivet: 'rgba(190,200,235,0.55)', overlay: null },
            belt: { frame: 0x2b7f68, glow: 0x07271f, deck: 0xffffff },
            weather: { col: [0.55, 0.62, 0.80], rate: 5, size: 0.028, fall: 0.25, drift: 0.35, life: 0.16 } },
   warm:  { sky: 0x1a0c0e, fog: 0x2a1210, accent: 0xff9a5c, ground: 0x6b3a34, grid: 0xa2564a,
            planet: { col: 0xb0402a, size: 0.16, bands: 0.5 },
+           // a lighter lift than the first cut: 0.028 of red on a world whose unlit
+           // faces sit at 0.06 flattened the contact shadows to nothing
+           grade: { lift: [0.010, 0.004, 0.0], gamma: [1.0, 0.97, 0.94], gain: [1.05, 0.98, 0.92], sat: 1.08 },
            star: 0xffd2b8, edge: 0xff9a5c, sun: 0xffd0a0,
            plate: { base: '#6a5a58', tint: '#4a3a38', seam: 'rgba(40,24,22,0.8)', rivet: 'rgba(160,120,110,0.5)', overlay: 'soot' },
            belt: { frame: 0x8a4a2a, glow: 0x2a1006, deck: 0xffd0b0 },
            weather: { col: [0.95, 0.42, 0.22], rate: 14, size: 0.040, fall: 0.55, drift: 0.55, life: 0.14 } },
   cold:  { sky: 0x0a1420, fog: 0x11202f, accent: 0xcfe8ff, ground: 0x7c93ad, grid: 0xa8c4dd,
            planet: { col: 0xbfd6ea, size: 0.09, bands: 0.0 },
+           grade: { lift: [0.0, 0.014, 0.034], gamma: [0.98, 1.0, 1.04], gain: [0.94, 1.0, 1.08], sat: 0.86 },
            star: 0xdcefff, edge: 0xcfe8ff, sun: 0xe8f4ff,
            plate: { base: '#c4d2e6', tint: '#a8b8cf', seam: 'rgba(120,140,170,0.6)', rivet: 'rgba(255,255,255,0.7)', overlay: 'frost' },
            belt: { frame: 0x5a7590, glow: 0x0f1a2a, deck: 0xd8e8ff },
            weather: { col: [0.92, 0.96, 1.00], rate: 18, size: 0.034, fall: 0.40, drift: 0.90, life: 0.12 } },
   green: { sky: 0x08170f, fog: 0x0f2418, accent: 0x8fe6a0, ground: 0x3f6b4a, grid: 0x63a072, spores: true,
            planet: { col: 0x5f9a6a, size: 0.13, bands: 0.8 },
+           grade: { lift: [0.0, 0.018, 0.008], gamma: [0.98, 1.03, 0.98], gain: [0.96, 1.06, 0.95], sat: 1.0 },
            star: 0xd6ffe0, edge: 0x8fe6a0, sun: 0xdfffe6,
            plate: { base: '#7c8a78', tint: '#5f6e5a', seam: 'rgba(50,64,48,0.75)', rivet: 'rgba(170,190,160,0.5)', overlay: 'moss' },
            belt: { frame: 0x6a7a3a, glow: 0x16220a, deck: 0xd0f0c0 },
@@ -64,8 +70,25 @@ const HOME = MOOD_LOOK[MOOD];
 
 // a committed palette still wins for the three colours it carries; the mood
 // fills in everything a palette does not say
-const SKY_COL = _hex(_pal.sky, HOME.sky);
-const FOG_COL = _hex(_pal.fog, HOME.fog);
+// A COMMITTED PALETTE WINS ONLY WHEN IT AGREES WITH THE PROMPT (2026-09-09).
+// The extractor handed "a dead red moon" a violet night sky one build in
+// four, and the palette used to win outright, so the same prompt came out
+// warm or cold by the roll of the extractor. Now a palette's sky and fog are
+// taken when they belong to the prompt's own family — red over blue on a
+// warm world, blue over red on a cold one, green on a green one — and the
+// mood's when they do not. The accent is always the palette's: it is the
+// one colour the extractor reliably reads from the words.
+function agreesWithMood(hex) {
+  if (hex === undefined || hex === null) return false;
+  const c = new THREE.Color(hex);
+  if (MOOD === 'warm') return c.r >= c.b;
+  if (MOOD === 'cold') return c.b >= c.r;
+  if (MOOD === 'green') return c.g >= c.r && c.g >= c.b;
+  return true;
+}
+const _paletteSky = _hex(_pal.sky, null), _paletteFog = _hex(_pal.fog, null);
+const SKY_COL = agreesWithMood(_paletteSky) ? _paletteSky : HOME.sky;
+const FOG_COL = agreesWithMood(_paletteFog) ? _paletteFog : HOME.fog;
 const ACCENT = _hex(_pal.accent, HOME.accent);
 
 // CRYSTAL WORKS — 3D incremental automation, core-loop prototype.
@@ -508,6 +531,11 @@ const matComposite = new THREE.ShaderMaterial({
     uStrength: { value: 0.85 }, uVignette: { value: 0.34 },
     uTint: { value: new THREE.Color(0x0b0d18) }, uTintAmt: { value: 0.16 },
     uExposure: { value: 1.06 },
+    // the grade: lift / gamma / gain per channel and a saturation, per world
+    uLift: { value: new THREE.Vector3(0, 0, 0) },
+    uGamma: { value: new THREE.Vector3(1, 1, 1) },
+    uGain: { value: new THREE.Vector3(1, 1, 1) },
+    uSat: { value: 1.0 },
   },
   vertexShader: QUAD_VS,
   fragmentShader: `
@@ -515,6 +543,7 @@ const matComposite = new THREE.ShaderMaterial({
     uniform sampler2D tDiffuse; uniform sampler2D tBloom;
     uniform float uStrength; uniform float uVignette;
     uniform vec3 uTint; uniform float uTintAmt; uniform float uExposure;
+    uniform vec3 uLift; uniform vec3 uGamma; uniform vec3 uGain; uniform float uSat;
 
     // TONE MAP AND ENCODE HERE, because three does neither when it renders
     // into a render target — it only applies them on the way to the canvas.
@@ -541,6 +570,13 @@ const matComposite = new THREE.ShaderMaterial({
       // stop reading as untinted no matter what the sky is doing
       float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
       c = mix(c, uTint, uTintAmt * (1.0 - smoothstep(0.0, 0.5, l)));
+      // THE GRADE. Lift the shadows toward the world's own cast, bend the
+      // mids, scale the highlights, then a saturation — the same furnace
+      // reads as a different object under each world's curve, which is what
+      // makes the worlds different places and not different wallpapers.
+      c = pow(max(c * uGain + uLift, vec3(0.0)), vec3(1.0) / uGamma);
+      float l2 = dot(c, vec3(0.2126, 0.7152, 0.0722));
+      c = clamp(mix(vec3(l2), c, uSat), 0.0, 1.0);
       vec2 d = vUv - 0.5;
       c *= 1.0 - uVignette * dot(d, d) * 2.0;
       gl_FragColor = vec4(toSRGB(c), 1.0);
@@ -1964,9 +2000,14 @@ function contactTexture() {
   // one on a lit face, the first version darkened a quarter as much, so a
   // machine on the underside still read as floating next to an identical
   // machine on top that did not.
+  // AND WIDER THAN THE FOOTPRINT (2026-09-09). The ground a tile out from a
+  // machine is where a contact shadow carries the grounding on a face the sun
+  // never reaches, and the first ramp had faded to nothing by there: the
+  // measured darkening a tile out on the underside was seven percent, against
+  // seventeen on top where the cast shadow helps. The ramp holds longer now.
   grd.addColorStop(0, 'rgba(0,0,0,0.86)');
-  grd.addColorStop(0.45, 'rgba(0,0,0,0.62)');
-  grd.addColorStop(0.78, 'rgba(0,0,0,0.22)');
+  grd.addColorStop(0.5, 'rgba(0,0,0,0.64)');
+  grd.addColorStop(0.82, 'rgba(0,0,0,0.30)');
   grd.addColorStop(1, 'rgba(0,0,0,0)');
   g.fillStyle = grd; g.fillRect(0, 0, 64, 64);
   const t = new THREE.CanvasTexture(c);
@@ -2086,8 +2127,8 @@ scene.add(decals);
 // Wider than the machine that casts it, because a contact shadow that stops at
 // the footprint reads as a dark mat someone put down rather than as light being
 // blocked. A belt's is narrow and long-ish; a rig on legs throws a broad soft one.
-const DECAL_W = { 1: 1.8, 2: 1.25, 3: 1.9, 5: 1.85, 6: 1.55, 7: 1.75,
-                  8: 1.25, 9: 1.7 };
+const DECAL_W = { 1: 2.1, 2: 1.4, 3: 2.25, 5: 2.2, 6: 1.8, 7: 2.05,
+                  8: 1.4, 9: 2.0 };
 
 const _gm = new THREE.Matrix4(), _gs = new THREE.Vector3();
 const _gbx = new THREE.Vector3(), _gby = new THREE.Vector3(), _gbz = new THREE.Vector3();
@@ -2383,6 +2424,7 @@ function sporeStrike() {
   const [c, f, i, j] = open[(Math.random() * open.length) | 0];
   c.clog = SPORE_CLOG;
   sporeHits++;
+  sfxClog();
   // a puff of spores settling onto the deck
   const n = FACES[f].n, w = tileWorld(f, i, j), u = FACES[f].u, v = FACES[f].v;
   for (let k = 0; k < 14; k++) {
@@ -2590,6 +2632,7 @@ function step() {
       c.cook--;
       if (c.cook === 0) {
         const out = c.t === FORGE ? ALLOY : (INGOT_OF[c.bt] || INGOT);
+        sfxClank();
         const dst = cellOf(stepTile(f, i, j, c.d));
         if (dst && dst.t === HUB) bank(out);
         else if (dst && dst.t === BELT && !dst.item) dst.item = out;
@@ -2711,7 +2754,7 @@ function step() {
     // which reads as a line that has slowed rather than a line that stops and
     // starts — and it needs no extra state to do it.
     if (accepts(dst, m) && Math.random() < Math.max(SEAM_FLOOR, c.rich)) {
-      deliver(dst, to, m);
+      deliver(dst, to, m); sfxTick(m);
       if (!CREATIVE) c.rich = Math.max(0, c.rich - SEAM_COST);
       // the seam flexes as the crystal leaves it: which rigs are actually
       // producing is readable from across the face
@@ -3466,7 +3509,7 @@ const WORLDS = [
   // prompt's own mood for everything else
   { id: 'prompt', plate: HOME.plate, belt: HOME.belt, weather: HOME.weather,
     edge: HOME.edge, sun: HOME.sun, name: SPEC.title || 'Crystal Isle', cores: 0, spores: !!HOME.spores,
-    planet: HOME.planet,
+    planet: HOME.planet, grade: HOME.grade,
     blurb: 'where the prompt dropped you',
     sky: SKY_COL, fog: FOG_COL, ground: HOME.ground, grid: HOME.grid, star: HOME.star },
   // THE UNLOCKS ARE THE THREE FAMILIES HOME IS NOT (2026-09-08). A prompt
@@ -3485,7 +3528,7 @@ const WORLDS = [
     return { id: w.id, name: w.name, blurb: w.blurb, cores: w.needs === 'drift' ? 3 : [2, 5, 9][k], needs: w.needs || null,
              sky: L.sky, fog: L.fog, ground: L.ground, grid: L.grid, star: L.star,
              edge: L.edge, sun: L.sun, plate: L.plate, belt: L.belt, weather: L.weather, spores: !!L.spores,
-             planet: L.planet };
+             planet: L.planet, grade: L.grade };
   }),
 ];
 let worldIdx = 0;
@@ -3531,6 +3574,11 @@ function applyWorld(k) {
            new THREE.Color(w.sky).lerp(new THREE.Color(0x000000), 0.55).getHex(),
            w.edge || w.grid, w.planet);
   matComposite.uniforms.uTint.value.setHex(w.fog);
+  const gr = w.grade || { lift: [0, 0, 0], gamma: [1, 1, 1], gain: [1, 1, 1], sat: 1 };
+  matComposite.uniforms.uLift.value.fromArray(gr.lift);
+  matComposite.uniforms.uGamma.value.fromArray(gr.gamma);
+  matComposite.uniforms.uGain.value.fromArray(gr.gain);
+  matComposite.uniforms.uSat.value = gr.sat;
   const h = document.querySelector('#hud h1');
   if (h) h.textContent = String(w.name).toUpperCase();
   renderWorlds();
@@ -4149,6 +4197,15 @@ renderer.setAnimationLoop(() => {
                           Math.sin(pitch) * dist,
                           Math.cos(yaw) * Math.cos(pitch) * dist);
       camera.lookAt(0, 0, 0);
+      // THE HANDOVER. The orbit used to CUT to the player's eyes. Over its
+      // last fifth it eases position and orientation into the first-person
+      // pose, so the world is arrived at rather than switched to.
+      const k0 = Math.max(0, (t - 0.80) / 0.20), k = k0 * k0 * (3 - 2 * k0);
+      if (k > 0) {
+        fpQuaternion(_hq, player.up);
+        camera.position.lerp(player.pos, k);
+        camera.quaternion.slerp(_hq, k);
+      }
     }
     scene.fog = null;
     ghost.visible = false;
@@ -4174,14 +4231,7 @@ renderer.setAnimationLoop(() => {
     // to write a yaw against once the player can be standing on the underside
     // of the world. camUp trails the true up so an edge crossing rolls.
     camUp.lerp(player.up, Math.min(1, dt * 7)).normalize();
-    _bz.copy(player.fwd).addScaledVector(camUp, -player.fwd.dot(camUp));
-    if (_bz.lengthSq() < 1e-8) _bz.copy(player.fwd);
-    _bz.normalize();
-    _bx.crossVectors(_bz, camUp).normalize();     // right
-    _by.crossVectors(_bx, _bz).normalize();       // orthonormal up
-    _mx.makeBasis(_bx, _by, _bz.negate());        // a camera looks down -Z
-    camera.quaternion.setFromRotationMatrix(_mx);
-    camera.rotateX(player.pitch);
+    fpQuaternion(camera.quaternion, camUp);
     // A CAMERA THAT DOES NOT MOVE WHEN YOU WALK reads as a drone, not a person.
     // After the basis, so it can use the camera's OWN right vector — _rt is a
     // scratch the edge-crossing loop overwrites with a face axis, and swaying
@@ -4343,6 +4393,20 @@ function sfxMelt() {
   o.connect(g); g.connect(AUDIO.master); o.start(t0); o.stop(t0 + 2.4);
 }
 function sfxPlace() { tone(330, 0.07, 'square', 0.06); }
+// throttled transients: a factory with forty rigs must not become a drum kit
+const _sfxAt = {};
+function throttled(name, ms) {
+  const now = performance.now();
+  if (_sfxAt[name] && now - _sfxAt[name] < ms) return false;
+  _sfxAt[name] = now; return true;
+}
+const TICK_PITCH = { [CRYSTAL]: 1480, [EMBER]: 1180, [SALT]: 1760 };
+function sfxTick(min) { if (throttled('tick', 90)) tone(TICK_PITCH[min] || 1480, 0.035, 'triangle', 0.05); }
+function sfxClank() {
+  if (!throttled('clank', 140) || !AUDIO.ready || AUDIO.muted) return;
+  tone(196, 0.09, 'square', 0.05); tone(392, 0.05, 'triangle', 0.04, 0.01);
+}
+function sfxClog() { if (throttled('clog', 300)) { tone(96, 0.22, 'sine', 0.12); tone(72, 0.30, 'sine', 0.08, 0.05); } }
 
 function audioMute(on) {
   AUDIO.muted = on;
@@ -4360,6 +4424,25 @@ function audioFollow() {
   AUDIO.belts.gain.setTargetAtTime(Math.min(0.11, belts * 0.004), t, 0.4);
   AUDIO.furnace.gain.setTargetAtTime(Math.min(0.18, cooking * 0.06), t, 0.5);
 }
+
+// the first-person orientation for a given up: heading in the plane of that
+// up, pitched. Built from a basis, not from Euler angles — there is no global
+// "up" to write a yaw against once the player can stand on the underside.
+// Shared by the walking camera and the reveal's handover into it.
+const _hq = new THREE.Quaternion();
+function fpQuaternion(q, up) {
+  _bz.copy(player.fwd).addScaledVector(up, -player.fwd.dot(up));
+  if (_bz.lengthSq() < 1e-8) _bz.copy(player.fwd);
+  _bz.normalize();
+  _bx.crossVectors(_bz, up).normalize();        // right
+  _by.crossVectors(_bx, _bz).normalize();       // orthonormal up
+  _mx.makeBasis(_bx, _by, _bz.negate());        // a camera looks down -Z
+  q.setFromRotationMatrix(_mx);
+  _hq2.setFromAxisAngle(_bx, player.pitch);     // pitch about the camera's own right
+  q.premultiply(_hq2);
+  return q;
+}
+const _hq2 = new THREE.Quaternion();
 
 // ── THE REVEAL ─────────────────────────────────────────────────────────────
 // A slow orbit of the whole worldlet with its name over it, then the camera
@@ -4386,6 +4469,7 @@ function endIntro() {
   // is already gone costs nothing; leaving one up costs the whole first
   // impression.
   intro = 0;
+  camUp.copy(player.up);        // no roll after the handover
   const card = document.getElementById('title');
   if (card) card.classList.remove('on');
 }
@@ -4632,7 +4716,7 @@ window.__factory = {
     return beltIndex[k].findIndex(t => t.face === f && t.i === i && t.j === j);
   },
   GOALS, UNLOCKED, get goalIdx() { return goalIdx; }, visitedFaces,
-  CAPS, applyRewards, worldCapOk, bank,
+  CAPS, applyRewards, worldCapOk, bank, agreesWithMood, MOOD, SKY_COL,
   sporeStrike, sporeShielded, sporesActive, SPORE_REACH, SPORE_CLOG,
   set riftsPaid(v) { riftsPaid = v; },
   set rateNow(v) { rateForce = v; rateNow = v === null ? rateNow : v; }, set goalIdx(v) { goalIdx = v; applyRewards(); renderGoal(); renderWorlds(); },
