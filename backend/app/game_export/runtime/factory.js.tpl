@@ -1474,6 +1474,13 @@ const GEO = {
     { g: _box(T * 0.88, 0.15, 0.20), y: 0.40 },
     { g: _box(T * 0.88, 0.15, 0.20), y: 0.40, ry: Math.PI / 2 },
     { g: _cyl(0.17, 0.13, 0.14, 8), y: 0.52 },                   // hub cap
+    // corner posts and a lip on each arm, so the cross reads as built
+    { g: _box(0.09, 0.34, 0.09), y: 0.17, x: T * 0.30, z: T * 0.30, tint: 0.6 },
+    { g: _box(0.09, 0.34, 0.09), y: 0.17, x: -T * 0.30, z: T * 0.30, tint: 0.6 },
+    { g: _box(0.09, 0.34, 0.09), y: 0.17, x: T * 0.30, z: -T * 0.30, tint: 0.6 },
+    { g: _box(0.09, 0.34, 0.09), y: 0.17, x: -T * 0.30, z: -T * 0.30, tint: 0.6 },
+    { g: _box(T * 0.88, 0.04, 0.26), y: 0.49, tint: 0.55 },
+    { g: _box(T * 0.88, 0.04, 0.26), y: 0.49, ry: Math.PI / 2, tint: 0.55 },
   ]),
 
   // taller and eight-sided, so a forge is not mistaken for a smelter
@@ -1484,6 +1491,8 @@ const GEO = {
       { g: _cyl(T * 0.42, T * 0.50, 1.22, 8), y: 0.72 },         // drum
       { g: new THREE.TorusGeometry(T * 0.40, 0.08, 6, 16), y: 1.30, rx: Math.PI / 2 },
       { g: new THREE.TorusGeometry(T * 0.46, 0.05, 5, 16), y: 0.42, rx: Math.PI / 2 },
+      { g: _cyl(T * 0.34, T * 0.40, 0.10, 8), y: 1.38, tint: 0.7 },      // cap plate
+      { g: _cyl(T * 0.52, T * 0.52, 0.10, 8), y: 0.16, tint: 0.55 },     // base band
     ];
     // vertical ribs: an eight-sided drum with nothing on it reads as a barrel
     for (let k = 0; k < 4; k++) {
@@ -1507,6 +1516,10 @@ const GEO = {
     { g: _box(T * 0.16, 0.34, T * 0.66), y: 0.40, x: T * 0.34 }, // sorter housing
     { g: _box(0.10, 0.26, 0.10), y: 0.36, x: -T * 0.36, z: T * 0.36 },
     { g: _box(0.10, 0.26, 0.10), y: 0.36, x: -T * 0.36, z: -T * 0.36 },
+    // a band round the deck and posts on the housing's corners
+    { g: _box(T * 0.92, 0.05, T * 0.92), y: 0.30, tint: 0.55 },
+    { g: _box(0.08, 0.42, 0.08), y: 0.44, x: T * 0.40, z: T * 0.34, tint: 0.62 },
+    { g: _box(0.08, 0.42, 0.08), y: 0.44, x: T * 0.40, z: -T * 0.34, tint: 0.62 },
   ]),
   filterGate: new THREE.BoxGeometry(T * 0.16, 0.5, T * 0.62),
 
@@ -2047,6 +2060,8 @@ const pCol = new Float32Array(PMAX * 3);
 const pLife = new Float32Array(PMAX);      // 1 at birth, 0 at death
 const pDecay = new Float32Array(PMAX);
 const pSize = new Float32Array(PMAX);
+const pSeed = new Float32Array(PMAX);      // per-particle shape seed
+const pGrav = new Float32Array(PMAX * 3);  // sparks fall toward the face they left
 let pHead = 0;
 
 const partGeo = new THREE.BufferGeometry();
@@ -2054,13 +2069,14 @@ partGeo.setAttribute('position', new THREE.BufferAttribute(pPos, 3));
 partGeo.setAttribute('aColor', new THREE.BufferAttribute(pCol, 3));
 partGeo.setAttribute('aLife', new THREE.BufferAttribute(pLife, 1));
 partGeo.setAttribute('aSize', new THREE.BufferAttribute(pSize, 1));
+partGeo.setAttribute('aSeed', new THREE.BufferAttribute(pSeed, 1));
 const partMat = new THREE.ShaderMaterial({
   transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
   vertexShader: `
-    attribute vec3 aColor; attribute float aLife; attribute float aSize;
-    varying vec3 vCol; varying float vLife;
+    attribute vec3 aColor; attribute float aLife; attribute float aSize; attribute float aSeed;
+    varying vec3 vCol; varying float vLife; varying float vSeed; varying float vKind;
     void main() {
-      vCol = aColor; vLife = aLife;
+      vCol = aColor; vLife = aLife; vSeed = aSeed; vKind = aSize > 0.0 ? 1.0 : 0.0;
       vec4 mv = modelViewMatrix * vec4(position, 1.0);
       // smoke swells as it dies, sparks shrink: aSize carries the sign
       float grow = aSize > 0.0 ? (1.6 - 0.9 * aLife) : aLife;
@@ -2068,13 +2084,29 @@ const partMat = new THREE.ShaderMaterial({
       gl_Position = projectionMatrix * mv;
     }`,
   fragmentShader: `
-    varying vec3 vCol; varying float vLife;
+    varying vec3 vCol; varying float vLife; varying float vSeed; varying float vKind;
     void main() {
       vec2 d = gl_PointCoord - 0.5;
       float r2 = dot(d, d);
       if (r2 > 0.25) discard;                 // round, not square
-      float a = (1.0 - smoothstep(0.0, 0.25, r2)) * vLife;
-      gl_FragColor = vec4(vCol * a, a);
+      float a;
+      if (vKind > 0.5) {
+        // SMOKE: a lobed, slightly ragged edge from the particle's own seed,
+        // rotating slowly as it lives, and dimmer as it swells — a plume is a
+        // stack of these, and it reads as a plume rather than a string of discs
+        float ang = atan(d.y, d.x) + vSeed * 6.2832 + (1.0 - vLife) * 1.5;
+        float lobes = 0.78 + 0.14 * sin(ang * 3.0 + vSeed * 9.0) + 0.08 * sin(ang * 7.0 - vSeed * 4.0);
+        float r = sqrt(r2) / (0.5 * lobes);
+        a = (1.0 - smoothstep(0.35, 1.0, r)) * vLife * (0.45 + 0.55 * vLife);
+        gl_FragColor = vec4(vCol * a, a);
+      } else {
+        // SPARK: a hot core, cooling as it dies — white to the ore's colour to
+        // a dull red at the end
+        a = (1.0 - smoothstep(0.0, 0.25, r2)) * vLife;
+        vec3 hot = mix(vec3(0.75, 0.12, 0.04), vCol, smoothstep(0.0, 0.55, vLife));
+        hot = mix(hot, vec3(1.0, 0.97, 0.9), smoothstep(0.75, 1.0, vLife) * 0.8);
+        gl_FragColor = vec4(hot * a * 1.4, a);
+      }
     }`,
 });
 const particles = new THREE.Points(partGeo, partMat);
@@ -2083,12 +2115,17 @@ particles.name = 'particles';
 scene.add(particles);
 
 /** Emit one particle. size > 0 swells (smoke), size < 0 shrinks (spark). */
-function emit(x, y, z, vx, vy, vz, r, g, bcol, size, decay) {
+function emit(x, y, z, vx, vy, vz, r, g, bcol, size, decay, grav) {
   const k = pHead; pHead = (pHead + 1) % PMAX;
   pPos[k * 3] = x; pPos[k * 3 + 1] = y; pPos[k * 3 + 2] = z;
   pVel[k * 3] = vx; pVel[k * 3 + 1] = vy; pVel[k * 3 + 2] = vz;
   pCol[k * 3] = r; pCol[k * 3 + 1] = g; pCol[k * 3 + 2] = bcol;
   pLife[k] = 1; pDecay[k] = decay; pSize[k] = size;
+  pSeed[k] = Math.random();
+  // gravity is per particle and along the FACE it left, so a spark on the
+  // underside falls toward the underside
+  if (grav) { pGrav[k * 3] = grav[0]; pGrav[k * 3 + 1] = grav[1]; pGrav[k * 3 + 2] = grav[2]; }
+  else { pGrav[k * 3] = 0; pGrav[k * 3 + 1] = 0; pGrav[k * 3 + 2] = 0; }
 }
 
 function stepParticles(dt) {
@@ -2105,12 +2142,14 @@ function stepParticles(dt) {
     // snowflake (decay ~0.12) keeps falling
     const f = 1 - Math.min(1, dt * 1.1 * Math.min(1, pDecay[k] * 0.6));
     pVel[k * 3] *= f; pVel[k * 3 + 1] *= f; pVel[k * 3 + 2] *= f;
+    pVel[k * 3] += pGrav[k * 3] * dt; pVel[k * 3 + 1] += pGrav[k * 3 + 1] * dt; pVel[k * 3 + 2] += pGrav[k * 3 + 2] * dt;
     alive++;
   }
   partGeo.attributes.position.needsUpdate = true;
   partGeo.attributes.aLife.needsUpdate = true;
   partGeo.attributes.aColor.needsUpdate = true;
   partGeo.attributes.aSize.needsUpdate = true;
+  partGeo.attributes.aSeed.needsUpdate = true;
   return alive;
 }
 
@@ -2165,7 +2204,7 @@ function stepEmitters(dt) {
            n[2] * sp + (Math.random() - 0.5) * 0.4,
            // ADDITIVE, so a dark grey adds almost nothing. Smoke against a
            // starfield has to be brighter than smoke against daylight.
-           0.44, 0.42, 0.52, 0.10, 0.7);
+           0.44, 0.42, 0.52, 0.13, 0.55);
     } else if (c.t === MINER) {
       if (Math.random() > 0.22) return;
       const n = FACES[f].n, w = tileWorld(f, i, j);
@@ -2175,25 +2214,67 @@ function stepEmitters(dt) {
             cb = (col & 255) / 255;
       // ALONG THE FACE NORMAL, not along world +Y. Written the lazy way, a
       // drill on the underside of the cube throws its sparks into the ground.
+      // SPARKS LAND. Thrown up off the face at 2.2 and pulled back at 9,
+      // they top out at a quarter-metre and are back on the deck in half a
+      // second, cooling from white to red on the way down.
       emit(w[0] + n[0] * 0.45, w[1] + n[1] * 0.45, w[2] + n[2] * 0.45,
-           n[0] * 1.3 + (Math.random() - 0.5) * sp,
-           n[1] * 1.3 + (Math.random() - 0.5) * sp,
-           n[2] * 1.3 + (Math.random() - 0.5) * sp,
-           cr, cg, cb, -0.045, 2.3);
+           n[0] * 2.2 + (Math.random() - 0.5) * sp * 1.6,
+           n[1] * 2.2 + (Math.random() - 0.5) * sp * 1.6,
+           n[2] * 2.2 + (Math.random() - 0.5) * sp * 1.6,
+           cr, cg, cb, -0.045, 1.9, [-n[0] * 9, -n[1] * 9, -n[2] * 9]);
     }
   });
 }
 
 // ── items: one InstancedMesh for every crystal in transit ──────────────────
 const MAX_ITEMS = 4000;
+// ORE IS A CHUNK: two crystals grown together, so it reads as something dug
+// out rather than as a game token. Dark glass like the seams it came from;
+// the instance colour carries the ore.
 const items = new THREE.InstancedMesh(
-  new THREE.OctahedronGeometry(0.26, 0),
-  new THREE.MeshStandardMaterial({ color: 0x7df9ff, emissive: 0x2aa6c4,
-    emissiveIntensity: 1.4, roughness: 0.3, flatShading: true }),
+  mergeParts([
+    { g: new THREE.OctahedronGeometry(0.24, 0), ry: 0.3 },
+    { g: new THREE.OctahedronGeometry(0.15, 0), x: 0.16, y: -0.06, z: 0.10, rz: 0.5, ry: 0.9, tint: 0.8 },
+  ], { floor: 0.7, reach: 0.4 }),
+  new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xffffff,
+    emissiveIntensity: 0.55, roughness: 0.22, metalness: 0.1, flatShading: true,
+    vertexColors: true }),
   MAX_ITEMS);
 items.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
 items.frustumCulled = false;
 items.count = 0;
+// A REFINED PRODUCT IS A BAR: a chamfered ingot lying flat, aligned with the
+// belt, a groove stamped across it, metallic so the world's light runs along
+// it. The alloy is the same bar with a band of its second tone.
+const barGeo = mergeParts([
+  { g: new THREE.CylinderGeometry(0.24, 0.30, 0.15, 4), ry: Math.PI / 4 },   // a chamfered brick
+  { g: _box(0.50, 0.02, 0.06), y: 0.076, tint: 0.4 },                        // the stamp
+  { g: _box(0.06, 0.02, 0.34), y: 0.076, x: 0.11, tint: 0.4 },
+], { floor: 0.75, reach: 0.2 });
+const bars = new THREE.InstancedMesh(barGeo,
+  new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xffffff,
+    emissiveIntensity: 0.34, roughness: 0.28, metalness: 0.8, flatShading: true,
+    vertexColors: true }),
+  MAX_ITEMS);
+bars.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+bars.frustumCulled = false;
+bars.count = 0;
+bars.name = 'bars';
+scene.add(bars);
+// THE GLOW FOLLOWS THE INSTANCE. A material's emissive is one colour for
+// every instance — so with a white emissive every chunk and bar glowed white
+// and the ore's colour was gone. three folds instanceColor into vColor; the
+// emissive is multiplied by it here, so a crystal glows cyan and an ember
+// chunk glows orange from the same draw call.
+for (const mat of [items.material, bars.material]) {
+  mat.onBeforeCompile = sh => {
+    sh.fragmentShader = sh.fragmentShader.replace('#include <emissivemap_fragment>',
+      '#include <emissivemap_fragment>\n  totalEmissiveRadiance *= vColor.rgb;');
+  };
+  mat.needsUpdate = true;
+}
+const IS_BAR = t => IS_INGOT(t) || t === ALLOY;
+const _bq = new THREE.Quaternion(), _bfwd = new THREE.Vector3(), _bside = new THREE.Vector3();
 // One mesh still, but two products: instanceColor is what lets a single draw
 // call carry both. Reading a belt at a glance — "that line is running ingots,
 // that one is still raw" — is most of what makes a factory legible.
@@ -2619,7 +2700,7 @@ function paintBeltLoad() {
 // even though the simulation is a discrete grid step. A blocked item sits
 // still, which is what makes a jam legible.
 function drawItems(alpha) {
-  let n = 0;
+  let n = 0, nb = 0;
   const spin = performance.now() * 0.002;
   eachTile((c, f, i, j) => {
     if (n >= MAX_ITEMS || !c.item) return;
@@ -2655,12 +2736,31 @@ function drawItems(alpha) {
     const side = FACES[f].v;
     // a shallow carry bob, so a run of items has a wave in it rather than
     // sliding like a decal
-    const lift = 0.42 + Math.sin(a * Math.PI) * 0.045;
+    // low enough to sit ON the deck (its top is at 0.19; a chunk is 0.24 across)
+    const lift = 0.33 + Math.sin(a * Math.PI) * 0.045;
     const off = jit * T * 0.10;
     _p.set(A[0] + (B[0] - A[0]) * a + nrm[0] * lift + side[0] * off,
            A[1] + (B[1] - A[1]) * a + nrm[1] * lift + side[1] * off,
            A[2] + (B[2] - A[2]) * a + nrm[2] * lift + side[2] * off);
     _up.set(nrm[0], nrm[1], nrm[2]);
+    if (IS_BAR(c.item)) {
+      // a bar lies flat and rides ALONG the belt: its long axis follows the
+      // tile's heading, in the face's own frame, so it is right on every side
+      if (nb >= MAX_ITEMS) return;
+      const d = stepTile(f, i, j, dir);
+      if (d) { const Dw = tileWorld(d.face, d.i, d.j); _bfwd.set(Dw[0] - A[0], Dw[1] - A[1], Dw[2] - A[2]); }
+      else _bfwd.set(FACES[f].u[0], FACES[f].u[1], FACES[f].u[2]);
+      _bfwd.addScaledVector(_up, -_bfwd.dot(_up)).normalize();
+      _bside.crossVectors(_up, _bfwd);
+      _m.makeBasis(_bfwd, _up, _bside);
+      _p.addScaledVector(_up, -0.07);                 // sits on the deck, not floating
+      _m.setPosition(_p);
+      if (c.item === ALLOY) _m.scale(_s.set(1.15, 1.35, 1.15));
+      bars.setColorAt(nb, ITEM_COL[c.item] || ITEM_COL[INGOT]);
+      bars.setMatrixAt(nb++, _m);
+      _s.set(1, 1, 1);
+      return;
+    }
     _q.setFromAxisAngle(_up, spin + ph);
     _m.compose(_p, _q, _s);
     items.setColorAt(n, ITEM_COL[c.item] || ITEM_COL[CRYSTAL]);
@@ -2669,7 +2769,10 @@ function drawItems(alpha) {
   items.count = n;
   items.instanceMatrix.needsUpdate = true;
   if (items.instanceColor) items.instanceColor.needsUpdate = true;
-  return n;
+  bars.count = nb;
+  bars.instanceMatrix.needsUpdate = true;
+  if (bars.instanceColor) bars.instanceColor.needsUpdate = true;
+  return n + nb;
 }
 
 // ── input: raycast the ground plane, drag to draw belts ────────────────────

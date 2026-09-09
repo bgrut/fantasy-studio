@@ -55,6 +55,9 @@ says so.
 | **the companion** | a planet or moon in every sky, cratered or banded by hash noise, lit from the sun's side, drawn in the sky shader |
 | **lanes** | every fifth grid line is a lit strip in the world's edge colour, one instanced mesh for six faces |
 | **seams are lights** | each seam owns its glow: a dark-glass body, an additive core and a pool on the ground that all follow its richness |
+| **items** | ore is a two-crystal chunk that spins; a refined product is a chamfered, stamped, metallic bar lying flat along its belt; the glow follows the instance colour |
+| **particles** | smoke has a seeded lobed edge and dims as it swells; sparks carry a gravity along their face, arc, and cool white to red |
+| **frames, finished** | the forge, splitter and filter get the cap, posts, bands and lips the smelter, rig and hub got |
 | **machine skin** | one shared panel map (seams, rivets, a lip, wear) on every machine; glow moved from the paint to the lamps; sun made the key (3.1 over 0.95 hemi / 0.85 fill); a frame on the smelter |
 | **the companion** | a planet or moon low in every world's sky, shaded from the sun's side with a terminator and an atmosphere rim, drawn in the sky shader; one fixed direction so it is a landmark |
 | **lanes** | every fifth grid line is a faint lit strip in the world's edge colour; the far plane widened to 1400 so the sky dome no longer clips from orbit |
