@@ -66,6 +66,9 @@ says so.
 | **sound for the light** | a rig ticks per crystal pitched by the ore, a smelter clanks as an ingot leaves, a spore strike thuds; all throttled |
 | **shadows that reach** | the contact ramp holds to a tile out and the decals are a fifth wider, so an unlit face grounds its machines at any grid size |
 | **a palette that agrees** | a committed palette's sky and fog win only when they belong to the prompt's own family; the mood's win otherwise |
+| **weight** | the body lags the intent: the camera leans into starts and out of stops, dips on a landing by how hard it was, and rolls an edge crossing with weight |
+| **ambience** | a second layer in the air per family: motes in the light at home, embers off the cinder, breath on the ice, fireflies over the green |
+| **the overhead** | TAB opens over the face you stand on with your heading up the screen; the tread glows and every machine pools its colour, a city at night |
 | **machine skin** | one shared panel map (seams, rivets, a lip, wear) on every machine; glow moved from the paint to the lamps; sun made the key (3.1 over 0.95 hemi / 0.85 fill); a frame on the smelter |
 | **the companion** | a planet or moon low in every world's sky, shaded from the sun's side with a terminator and an atmosphere rim, drawn in the sky shader; one fixed direction so it is a landmark |
 | **lanes** | every fifth grid line is a faint lit strip in the world's edge colour; the far plane widened to 1400 so the sky dome no longer clips from orbit |

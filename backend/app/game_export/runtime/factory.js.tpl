@@ -27,14 +27,14 @@ const MOODS = [
 ];
 const MOOD_LOOK = {
   void:  { sky: 0x0b0d18, fog: 0x0b0d18, accent: 0x39e6ff, ground: 0x3c4470, grid: 0x46527d,
-           planet: { col: 0x56668f, size: 0.10, bands: 0.0 },
+           planet: { col: 0x56668f, size: 0.10, bands: 0.0 }, ambience: 'motes',
            grade: { lift: [0.008, 0.010, 0.026], gamma: [1.0, 1.0, 1.02], gain: [1.0, 1.0, 1.04], sat: 1.06 },
            star: 0xffffff, edge: 0x7fd8ff, sun: 0xfff2d6,
            plate: { base: '#8792c4', tint: '#6a74a6', seam: 'rgba(90,100,150,0.75)', rivet: 'rgba(190,200,235,0.55)', overlay: null },
            belt: { frame: 0x2b7f68, glow: 0x07271f, deck: 0xffffff },
            weather: { col: [0.55, 0.62, 0.80], rate: 5, size: 0.028, fall: 0.25, drift: 0.35, life: 0.16 } },
   warm:  { sky: 0x1a0c0e, fog: 0x2a1210, accent: 0xff9a5c, ground: 0x6b3a34, grid: 0xa2564a,
-           planet: { col: 0xb0402a, size: 0.16, bands: 0.5 },
+           planet: { col: 0xb0402a, size: 0.16, bands: 0.5 }, ambience: 'embers',
            // a lighter lift than the first cut: 0.028 of red on a world whose unlit
            // faces sit at 0.06 flattened the contact shadows to nothing
            grade: { lift: [0.010, 0.004, 0.0], gamma: [1.0, 0.97, 0.94], gain: [1.05, 0.98, 0.92], sat: 1.08 },
@@ -43,14 +43,14 @@ const MOOD_LOOK = {
            belt: { frame: 0x8a4a2a, glow: 0x2a1006, deck: 0xffd0b0 },
            weather: { col: [0.95, 0.42, 0.22], rate: 14, size: 0.040, fall: 0.55, drift: 0.55, life: 0.14 } },
   cold:  { sky: 0x0a1420, fog: 0x11202f, accent: 0xcfe8ff, ground: 0x7c93ad, grid: 0xa8c4dd,
-           planet: { col: 0xbfd6ea, size: 0.09, bands: 0.0 },
+           planet: { col: 0xbfd6ea, size: 0.09, bands: 0.0 }, ambience: 'breath',
            grade: { lift: [0.0, 0.014, 0.034], gamma: [0.98, 1.0, 1.04], gain: [0.94, 1.0, 1.08], sat: 0.86 },
            star: 0xdcefff, edge: 0xcfe8ff, sun: 0xe8f4ff,
            plate: { base: '#c4d2e6', tint: '#a8b8cf', seam: 'rgba(120,140,170,0.6)', rivet: 'rgba(255,255,255,0.7)', overlay: 'frost' },
            belt: { frame: 0x5a7590, glow: 0x0f1a2a, deck: 0xd8e8ff },
            weather: { col: [0.92, 0.96, 1.00], rate: 18, size: 0.034, fall: 0.40, drift: 0.90, life: 0.12 } },
   green: { sky: 0x08170f, fog: 0x0f2418, accent: 0x8fe6a0, ground: 0x3f6b4a, grid: 0x63a072, spores: true,
-           planet: { col: 0x5f9a6a, size: 0.13, bands: 0.8 },
+           planet: { col: 0x5f9a6a, size: 0.13, bands: 0.8 }, ambience: 'fireflies',
            grade: { lift: [0.0, 0.018, 0.008], gamma: [0.98, 1.03, 0.98], gain: [0.96, 1.06, 0.95], sat: 1.0 },
            star: 0xd6ffe0, edge: 0x8fe6a0, sun: 0xdfffe6,
            plate: { base: '#7c8a78', tint: '#5f6e5a', seam: 'rgba(50,64,48,0.75)', rivet: 'rgba(170,190,160,0.5)', overlay: 'moss' },
@@ -1337,7 +1337,10 @@ const MAT = {
   beltFrame: new THREE.MeshStandardMaterial({ color: 0x2b7f68, roughness: 0.45,
     metalness: 0.6, flatShading: true, emissive: 0x07271f,
     emissiveIntensity: 0.9 }),
-  beltDeck: new THREE.MeshStandardMaterial({ map: TREAD, roughness: 0.85,
+  // the tread carries a faint emissive, so a belt line reads from orbit;
+  // the overhead turns it up
+  beltDeck: new THREE.MeshStandardMaterial({ map: TREAD, emissiveMap: TREAD,
+    emissive: 0xffffff, emissiveIntensity: 0.14, roughness: 0.85,
     metalness: 0.05 }),
   hub: new THREE.MeshStandardMaterial({ color: 0xffc75a, roughness: 0.4,
     metalness: 0.45, emissive: 0x6b4a00, emissiveIntensity: 0.25,
@@ -2088,11 +2091,17 @@ function poolAt(mesh, k, f, i, j, size, col, strength) {
   _lc.setHex(col).multiplyScalar(strength);
   mesh.setColorAt(k, _lc);
 }
+const OVERHEAD_COL = { [MINER]: 0xff5d73, [SMELTER]: 0x8c6bff, [SPLITTER]: 0x4bb5ff, [FORGE]: 0xd94fb0,
+                       [FILTER]: 0x2f8f7d, [RIFT]: 0x6a3cff, [HUB]: 0xffd479 };
 function stepLampPools() {
   let k = 0;
   const breathe = 0.5 + Math.sin(performance.now() * 0.0028) * 0.08;
+  // from up there the factory is a city at night: every machine pools its own
+  // colour, and the tread comes up
+  MAT.beltDeck.emissiveIntensity = overhead ? 0.55 : 0.14;
   eachTile((c, f, i, j) => {
     if (k >= MAX_LAMPS || !c.build) return;
+    if (overhead) { poolAt(lampPools, k++, f, i, j, T * 1.5, OVERHEAD_COL[c.t] || 0xffffff, 0.55); return; }
     if (c.t === SMELTER) { if (c.glow > 0.03) poolAt(lampPools, k++, f, i, j, T * 1.6, 0xff7a22, 0.9 * c.glow); }
     else if (c.t === FORGE) { if (c.cook > 0) poolAt(lampPools, k++, f, i, j, T * 1.8, 0xff5ad9, 0.7); }
     else if (c.t === HUB) poolAt(lampPools, k++, f, i, j, T * 2.2, 0xffd479, breathe + (c.pulse || 0) * 0.9);
@@ -2135,7 +2144,7 @@ const _flat = new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.PI / 2, 
 // One system, two jobs. Two particle systems doing the same arithmetic with
 // different constants is how a codebase ends up with two subtly different
 // gravities, and how one of them ends up wrong on the underside of the cube.
-const PMAX = 420;
+const PMAX = 640;          // weather, machines, and an ambience layer
 const pPos = new Float32Array(PMAX * 3);
 const pVel = new Float32Array(PMAX * 3);
 const pCol = new Float32Array(PMAX * 3);
@@ -2240,6 +2249,61 @@ function stepParticles(dt) {
 // it — spores go up. Drift is sideways sway, in the face's own tangent frame,
 // so it is sideways on the underside of the cube too.
 let weatherClock = 0;
+// AMBIENCE. A second, quieter layer than the weather, one per family: what
+// the air itself is doing when nothing is falling through it.
+let ambClock = 0, breathClock = 0;
+const _camFwd = new THREE.Vector3();
+function stepAmbience(dt) {
+  const kind = WORLDS[worldIdx] && WORLDS[worldIdx].ambience;
+  if (!kind || intro > 0 || overhead) return;
+  const f = FACES[player.face], n = f.n, u = f.u, v = f.v;
+  const at = (du, dv, h) => [player.pos.x + u[0] * du + v[0] * dv + n[0] * (h - EYE),
+                             player.pos.y + u[1] * du + v[1] * dv + n[1] * (h - EYE),
+                             player.pos.z + u[2] * du + v[2] * dv + n[2] * (h - EYE)];
+  if (kind === 'breath') {
+    // your own breath, every few seconds, just ahead of the eye, drifting off
+    breathClock += dt;
+    if (breathClock > 3.4) {
+      breathClock = 0;
+      camera.getWorldDirection(_camFwd);
+      for (let k = 0; k < 6; k++) {
+        const px = camera.position.x + _camFwd.x * 0.45, py = camera.position.y + _camFwd.y * 0.45 - 0.08,
+              pz = camera.position.z + _camFwd.z * 0.45;
+        emit(px + (Math.random() - 0.5) * 0.06, py + (Math.random() - 0.5) * 0.04, pz + (Math.random() - 0.5) * 0.06,
+             _camFwd.x * 0.35 + n[0] * 0.12 + (Math.random() - 0.5) * 0.1,
+             _camFwd.y * 0.35 + n[1] * 0.12 + (Math.random() - 0.5) * 0.1,
+             _camFwd.z * 0.35 + n[2] * 0.12 + (Math.random() - 0.5) * 0.1,
+             0.62, 0.70, 0.80, 0.05, 1.3);
+      }
+    }
+    return;
+  }
+  const rate = kind === 'motes' ? 7 : kind === 'embers' ? 10 : 4;
+  ambClock += dt * rate;
+  while (ambClock >= 1) {
+    ambClock -= 1;
+    const a = Math.random() * Math.PI * 2, r = Math.sqrt(Math.random()) * 9;
+    const du = Math.cos(a) * r, dv = Math.sin(a) * r;
+    if (kind === 'motes') {
+      // dust turning in the light: tiny, slow, long-lived, faintly warm
+      const p = at(du, dv, 0.4 + Math.random() * 3.2);
+      const sw = (Math.random() - 0.5) * 0.12, sw2 = (Math.random() - 0.5) * 0.12;
+      emit(p[0], p[1], p[2], u[0] * sw + v[0] * sw2 + n[0] * 0.03, u[1] * sw + v[1] * sw2 + n[1] * 0.03,
+           u[2] * sw + v[2] * sw2 + n[2] * 0.03, 0.55, 0.50, 0.40, 0.011, 0.16);
+    } else if (kind === 'embers') {
+      // embers off the cinder: born low, rise, cool from white to red as they die
+      const p = at(du, dv, 0.1 + Math.random() * 0.5);
+      const sw = (Math.random() - 0.5) * 0.5, sw2 = (Math.random() - 0.5) * 0.5;
+      emit(p[0], p[1], p[2], u[0] * sw + v[0] * sw2 + n[0] * 0.9, u[1] * sw + v[1] * sw2 + n[1] * 0.9,
+           u[2] * sw + v[2] * sw2 + n[2] * 0.9, 1.0, 0.72, 0.30, -0.034, 0.38);   // hot enough to read against the sky
+    } else {
+      // fireflies: a blink low over the green — short life, so the blink is the life
+      const p = at(du, dv, 0.3 + Math.random() * 1.4);
+      emit(p[0], p[1], p[2], (Math.random() - 0.5) * 0.2, (Math.random() - 0.5) * 0.2, (Math.random() - 0.5) * 0.2,
+           0.62, 1.0, 0.45, 0.016, 0.85);
+    }
+  }
+}
 function stepWeather(dt) {
   const w = WORLDS[worldIdx] && WORLDS[worldIdx].weather;
   if (!w || intro > 0) return;
@@ -3084,11 +3148,21 @@ let overhead = false;
 // flat island and INSIDE a worldlet — Tab showed you a dark field of grid
 // lines and nothing else. Every distance here is a multiple of the world.
 let orbYaw = 0.72, orbPitch = 0.62, orbDist = HALF * 4.4;
+// THE OVERHEAD OPENS OVER YOUR FACE. It used to open on the whole cube from
+// a fixed corner, the machines a few pixels across. Now it opens over the
+// face you are standing on with your heading up the screen, close enough
+// to plan on; the wheel still pulls out to the whole world.
+function frameOverhead() {
+  const n = FACES[player.face].n, f = player.fwd;
+  if (Math.abs(n[1]) > 0.5) { orbPitch = Math.sign(n[1]) * 1.22; orbYaw = Math.atan2(-f.x, -f.z); }
+  else { orbPitch = 0.5; orbYaw = Math.atan2(n[0], n[2]); }
+  orbDist = HALF * 2.4;
+}
 
 const keys = Object.create(null);
 addEventListener('keydown', e => {
   keys[e.code] = true;
-  if (e.code === 'Tab') { e.preventDefault(); overhead = !overhead; }
+  if (e.code === 'Tab') { e.preventDefault(); overhead = !overhead; if (overhead) frameOverhead(); }
 });
 addEventListener('keyup', e => { keys[e.code] = false; });
 addEventListener('contextmenu', e => e.preventDefault());
@@ -3140,6 +3214,11 @@ function solidAt(face, a, b) {
 
 const _rt = new THREE.Vector3(), _wish = new THREE.Vector3();
 let bobPhase = 0, bobAmt = 0, moveMag = 0;
+// THE BODY LAGS THE INTENT. playerVel is where the keys say to go; velLag is
+// where the body has caught up to; the difference leans the camera. landDip
+// is how hard the last landing was, springing back.
+const playerVel = new THREE.Vector3(), velLag = new THREE.Vector3(), _lean = new THREE.Vector3();
+let landDip = 0, wasGround = true, prevVy = 0;
 const _n3 = new THREE.Vector3(), _oldN = new THREE.Vector3();
 const _qr = new THREE.Quaternion();
 const faceNormal = (face, out) => {
@@ -3165,6 +3244,7 @@ function movePlayer(dt) {
   moveMag = _wish.length();
   if (_wish.lengthSq() > 0) _wish.normalize();
   const speed = keys['ShiftLeft'] ? 11 : 6.2;
+  playerVel.copy(_wish).multiplyScalar(speed);
 
   // gravity points at the face you are on, so "down" is a different world
   // direction depending on where you are standing
@@ -3503,7 +3583,7 @@ const WORLDS = [
   // prompt's own mood for everything else
   { id: 'prompt', plate: HOME.plate, belt: HOME.belt, weather: HOME.weather,
     edge: HOME.edge, sun: HOME.sun, name: SPEC.title || 'Crystal Isle', cores: 0, spores: !!HOME.spores,
-    planet: HOME.planet, grade: HOME.grade,
+    planet: HOME.planet, grade: HOME.grade, ambience: HOME.ambience,
     blurb: 'where the prompt dropped you',
     sky: SKY_COL, fog: FOG_COL, ground: HOME.ground, grid: HOME.grid, star: HOME.star },
   // THE UNLOCKS ARE THE THREE FAMILIES HOME IS NOT (2026-09-08). A prompt
@@ -3522,7 +3602,7 @@ const WORLDS = [
     return { id: w.id, name: w.name, blurb: w.blurb, cores: w.needs === 'drift' ? 3 : [2, 5, 9][k], needs: w.needs || null,
              sky: L.sky, fog: L.fog, ground: L.ground, grid: L.grid, star: L.star,
              edge: L.edge, sun: L.sun, plate: L.plate, belt: L.belt, weather: L.weather, spores: !!L.spores,
-             planet: L.planet, grade: L.grade };
+             planet: L.planet, grade: L.grade, ambience: L.ambience };
   }),
 ];
 let worldIdx = 0;
@@ -3561,6 +3641,7 @@ function applyWorld(k) {
   MAT.beltFrame.color.setHex(bt.frame);
   MAT.beltFrame.emissive.setHex(bt.glow);
   MAT.beltDeck.color.setHex(bt.deck);
+  MAT.beltDeck.emissive.setHex(bt.deck);
   MAT.belt.color.setHex(bt.frame);
   // a real vertical gradient: lifted overhead, deeper below, so the void has a
   // top and a bottom instead of being one flat value with a band painted on it
@@ -4091,6 +4172,7 @@ renderer.setAnimationLoop(() => {
   if (beltsDirty) rebuildBelts();
   if (!melting) stepEmitters(dt);
   stepWeather(dt);
+  stepAmbience(dt);
   stepParticles(dt);
   // the tread scrolls at the speed items actually travel: one tile per tick.
   // A belt whose surface moves at a speed unrelated to its throughput is worse
@@ -4218,14 +4300,26 @@ renderer.setAnimationLoop(() => {
     heldRig.visible = false;      // nobody is holding it from up here
   } else {
     if (!scene.fog) scene.fog = worldFog;
+    wasGround = player.onGround; prevVy = player.vy;
     movePlayer(dt);
     camera.position.copy(player.pos);
 
     // Built from a basis, not from Euler angles: there is no global "up" left
     // to write a yaw against once the player can be standing on the underside
     // of the world. camUp trails the true up so an edge crossing rolls.
-    camUp.lerp(player.up, Math.min(1, dt * 7)).normalize();
+    camUp.lerp(player.up, Math.min(1, dt * 5)).normalize();   // an edge crossing rolls with weight
     fpQuaternion(camera.quaternion, camUp);
+    // WEIGHT. Lean into a start and out of a stop by the gap between intent
+    // and body; dip on a landing by how hard it was; spring back.
+    velLag.lerp(playerVel, Math.min(1, dt * 6));
+    _lean.copy(playerVel).sub(velLag);
+    const roll = Math.max(-0.06, Math.min(0.06, -_lean.dot(_bx) * 0.006));
+    const nod = Math.max(-0.05, Math.min(0.05, -_lean.dot(_bz) * 0.004));   // _bz is -forward here
+    camera.rotateZ(roll);
+    camera.rotateX(-nod);
+    if (!wasGround && player.onGround) landDip = Math.min(0.16, Math.abs(prevVy) * 0.016);
+    landDip *= Math.exp(-dt * 8);
+    camera.position.addScaledVector(_by, -landDip);
     // A CAMERA THAT DOES NOT MOVE WHEN YOU WALK reads as a drone, not a person.
     // After the basis, so it can use the camera's OWN right vector — _rt is a
     // scratch the edge-crossing loop overwrites with a face axis, and swaying
