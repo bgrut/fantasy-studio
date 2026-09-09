@@ -51,6 +51,9 @@ says so.
 | **capabilities** | Frostline needs the heated drill, Verdant the spore scrubber, the Drift the whole chain; cores only buy the trip |
 | **creative** | chosen at world creation (`?creative=1`, or "new world"); its own save; all open, free, nothing runs out |
 | **spores** | Verdant's pressure: an unfiltered belt clogs every few seconds; a filter within 3 tiles shields the belts around it |
+| **machine skin** | one shared panel map (seams, rivets, a lip, wear) on every machine; glow moved from the paint to the lamps; sun made the key (3.1 over 0.95 hemi / 0.85 fill); a frame on the smelter |
+| **the companion** | a planet or moon low in every world's sky, shaded from the sun's side with a terminator and an atmosphere rim, drawn in the sky shader; one fixed direction so it is a landmark |
+| **lanes** | every fifth grid line is a faint lit strip in the world's edge colour; the far plane widened to 1400 so the sky dome no longer clips from orbit |
 | **the starter line always exists** | seedLine grows a seam at the head of the first clear run when the scatter left none; `?grid=` and `?seed=` debug overrides let a gate prove it by size |
 | **factory reads as factory** | the pipeline holds prompts that name a production system to the factory genre, deterministically, before the 25-minute hero path can start |
 

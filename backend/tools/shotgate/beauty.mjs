@@ -4,7 +4,7 @@ const b = await puppeteer.launch({ headless:'new',
   args:['--use-angle=d3d11','--enable-unsafe-swiftshader','--window-size=1280,760'] });
 const p = await b.newPage();
 await p.setViewport({ width:1280, height:760 });
-const U = 'http://127.0.0.1:8789/games/job_' + process.env.J + '/dist/';
+const U = process.env.URL || ('http://127.0.0.1:8789/games/job_' + process.env.J + '/dist/');
 await p.goto(U + '?fresh=1', { waitUntil:'domcontentloaded', timeout:60000 });
 await new Promise(r=>setTimeout(r,6000));
 

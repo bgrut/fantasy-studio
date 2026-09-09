@@ -33,21 +33,25 @@ const MOODS = [
 ];
 const MOOD_LOOK = {
   void:  { sky: 0x0b0d18, fog: 0x0b0d18, accent: 0x39e6ff, ground: 0x3c4470, grid: 0x46527d,
+           planet: { col: 0x56668f, size: 0.10, bands: 0.0 },
            star: 0xffffff, edge: 0x7fd8ff, sun: 0xfff2d6,
            plate: { base: '#8792c4', tint: '#6a74a6', seam: 'rgba(90,100,150,0.75)', rivet: 'rgba(190,200,235,0.55)', overlay: null },
            belt: { frame: 0x2b7f68, glow: 0x07271f, deck: 0xffffff },
            weather: { col: [0.55, 0.62, 0.80], rate: 5, size: 0.028, fall: 0.25, drift: 0.35, life: 0.16 } },
   warm:  { sky: 0x1a0c0e, fog: 0x2a1210, accent: 0xff9a5c, ground: 0x6b3a34, grid: 0xa2564a,
+           planet: { col: 0xb0402a, size: 0.16, bands: 0.5 },
            star: 0xffd2b8, edge: 0xff9a5c, sun: 0xffd0a0,
            plate: { base: '#6a5a58', tint: '#4a3a38', seam: 'rgba(40,24,22,0.8)', rivet: 'rgba(160,120,110,0.5)', overlay: 'soot' },
            belt: { frame: 0x8a4a2a, glow: 0x2a1006, deck: 0xffd0b0 },
            weather: { col: [0.95, 0.42, 0.22], rate: 14, size: 0.040, fall: 0.55, drift: 0.55, life: 0.14 } },
   cold:  { sky: 0x0a1420, fog: 0x11202f, accent: 0xcfe8ff, ground: 0x7c93ad, grid: 0xa8c4dd,
+           planet: { col: 0xbfd6ea, size: 0.09, bands: 0.0 },
            star: 0xdcefff, edge: 0xcfe8ff, sun: 0xe8f4ff,
            plate: { base: '#c4d2e6', tint: '#a8b8cf', seam: 'rgba(120,140,170,0.6)', rivet: 'rgba(255,255,255,0.7)', overlay: 'frost' },
            belt: { frame: 0x5a7590, glow: 0x0f1a2a, deck: 0xd8e8ff },
            weather: { col: [0.92, 0.96, 1.00], rate: 18, size: 0.034, fall: 0.40, drift: 0.90, life: 0.12 } },
   green: { sky: 0x08170f, fog: 0x0f2418, accent: 0x8fe6a0, ground: 0x3f6b4a, grid: 0x63a072, spores: true,
+           planet: { col: 0x5f9a6a, size: 0.13, bands: 0.8 },
            star: 0xd6ffe0, edge: 0x8fe6a0, sun: 0xdfffe6,
            plate: { base: '#7c8a78', tint: '#5f6e5a', seam: 'rgba(50,64,48,0.75)', rivet: 'rgba(170,190,160,0.5)', overlay: 'moss' },
            belt: { frame: 0x6a7a3a, glow: 0x16220a, deck: 0xd0f0c0 },
@@ -312,7 +316,11 @@ const scene = new THREE.Scene();
 scene.background = new THREE.Color(SKY_COL);
 const worldFog = new THREE.Fog(FOG_COL, HALF * 1.6, HALF * 4.0);
 scene.fog = worldFog;
-const camera = new THREE.PerspectiveCamera(52, innerWidth / innerHeight, 0.1, 500);
+// FAR ENOUGH FOR THE ORBIT (2026-09-09). The sky dome is 460 out and the
+// orbit camera sits up to HALF*6 off centre, so the dome's far side was past
+// a 500 far plane: from orbit a sharp dark disc sat behind the worldlet where
+// the sky was being clipped. Depth precision at 1400 is still fine at 0.1 near.
+const camera = new THREE.PerspectiveCamera(52, innerWidth / innerHeight, 0.1, 1400);
 const renderer = new THREE.WebGLRenderer({ antialias: true,
   // A READABLE FRAMEBUFFER, ON REQUEST. After compositing, the default
   // framebuffer's contents are undefined unless this is set, so a test that
@@ -335,7 +343,12 @@ document.body.appendChild(renderer.domElement);
 // range is a game where half its content is invisible — and where a contact
 // shadow has nothing left to subtract from. The bounce is lifted enough that
 // the dark faces are a legible low mid-tone rather than black.
-scene.add(new THREE.HemisphereLight(0x9fc4ff, 0x323b5c, 1.25));
+// KEY OVER FILL (2026-09-09). With the hemisphere at 1.25 and the fill at
+// 1.15 against a 2.2 sun, a box's lit face and its shaded face differed by a
+// few percent and every machine read as a paper cut-out. The ratio is what
+// makes form; the floor of the dark faces is kept by the bounce.
+const hemi = new THREE.HemisphereLight(0x9fc4ff, 0x323b5c, 0.95);
+scene.add(hemi);
 // OUTSIDE THE WORLD, NOT INSIDE IT (2026-09-08). A directional light's shadow
 // camera sits AT the light looking at its target, so anything farther from the
 // target than the light is behind the camera and casts nothing. This sun was
@@ -343,7 +356,7 @@ scene.add(new THREE.HemisphereLight(0x9fc4ff, 0x323b5c, 1.25));
 // world silently cast no shadow at all, which reads as machines hovering.
 // Everything here is a multiple of HALF so it stays true at any grid size.
 const CORNER = HALF * Math.SQRT2 * 1.2;      // a little past the true corner
-const sun = new THREE.DirectionalLight(0xfff0d8, 2.2);
+const sun = new THREE.DirectionalLight(0xfff0d8, 3.1);
 sun.position.set(HALF * 2.4, HALF * 3.2, HALF * 1.8);
 sun.castShadow = true;
 sun.shadow.mapSize.set(2048, 2048);
@@ -366,11 +379,11 @@ scene.add(sun);
 // fall to pure hemisphere ambient and read as unlit black — you walk around
 // the corner into a game that looks broken. A dimmer fill from the opposite
 // quadrant keeps every face legible without flattening the key light.
-const fill = new THREE.DirectionalLight(0xb9d2ff, 1.15);
+const fill = new THREE.DirectionalLight(0xb9d2ff, 1.0);
 fill.position.set(-HALF * 2.2, -HALF * 2.8, -HALF * 1.7);
 scene.add(fill);
 
-let starField = null, gridLines = null, cubeEdges = null, sunDisc = null;
+let starField = null, gridLines = null, cubeEdges = null, sunDisc = null, lanes = null;
 // DECLARED UP HERE ON PURPOSE. The scatter is CHOSEN next to the ore seams,
 // which is hundreds of lines before the meshes that draw it get built — and a
 // const declared after its first use is a temporal-dead-zone throw at boot,
@@ -607,14 +620,23 @@ function renderFrame() {
 // it is somewhere rather than nowhere. One inverted sphere, no lighting, drawn
 // first and never written to the depth buffer.
 let skyDome = null;
-function buildSky(topHex, deepHex, bandHex) {
+// where the companion hangs: one fixed world direction, low, so it rides over
+// a different part of each face's sky and walking round an edge has a landmark
+const PLANET_DIR = new THREE.Vector3(0.82, 0.26, -0.51).normalize();
+function buildSky(topHex, deepHex, bandHex, planet) {
   if (skyDome) { scene.remove(skyDome); skyDome.geometry.dispose();
                  skyDome.material.dispose(); }
+  const pl = planet || { col: 0x3a4a7a, size: 0.05, bands: 0 };
   const mat = new THREE.ShaderMaterial({
     side: THREE.BackSide, depthWrite: false, depthTest: false, fog: false,
     uniforms: { uTop: { value: new THREE.Color(topHex) },
                 uDeep: { value: new THREE.Color(deepHex) },
-                uBand: { value: new THREE.Color(bandHex) } },
+                uBand: { value: new THREE.Color(bandHex) },
+                uPlanet: { value: new THREE.Color(pl.col) },
+                uPlanetDir: { value: PLANET_DIR.clone() },
+                uPlanetSize: { value: pl.size },
+                uPlanetBands: { value: pl.bands },
+                uSunDir: { value: sun.position.clone().normalize() } },
     vertexShader: `
       varying vec3 vDir;
       void main() {
@@ -624,9 +646,35 @@ function buildSky(topHex, deepHex, bandHex) {
     fragmentShader: `
       varying vec3 vDir;
       uniform vec3 uTop; uniform vec3 uDeep; uniform vec3 uBand;
+      uniform vec3 uPlanet; uniform vec3 uPlanetDir; uniform float uPlanetSize;
+      uniform float uPlanetBands; uniform vec3 uSunDir;
       void main() {
         float h = vDir.y * 0.5 + 0.5;
         vec3 c = mix(uDeep, uTop, smoothstep(0.15, 0.95, h));
+        // THE COMPANION. A disc of angular radius uPlanetSize around
+        // uPlanetDir, shaded as a sphere lit from the sun's side, with a thin
+        // atmosphere at the limb and, for a gas world, latitude bands.
+        vec3 d = normalize(vDir);
+        float ang = acos(clamp(dot(d, uPlanetDir), -1.0, 1.0));
+        float r = ang / uPlanetSize;                 // 0 at centre, 1 at the limb
+        if (r < 1.25) {
+          // a local frame on the disc: x to the right, y up
+          vec3 ax = normalize(cross(vec3(0.0, 1.0, 0.0), uPlanetDir));
+          vec3 ay = cross(uPlanetDir, ax);
+          vec2 p = vec2(dot(d - uPlanetDir, ax), dot(d - uPlanetDir, ay)) / uPlanetSize;
+          float rr = length(p);
+          float z = sqrt(max(0.0, 1.0 - rr * rr));
+          vec3 n = normalize(ax * p.x + ay * p.y + uPlanetDir * z);   // sphere normal
+          float lit = clamp(dot(n, uSunDir) * 0.85 + 0.15, 0.0, 1.0);
+          float bands = 1.0 + uPlanetBands * 0.22 * sin(p.y * 9.0 + sin(p.x * 3.0) * 0.6);
+          vec3 body = uPlanet * bands * (0.10 + 0.90 * lit);
+          float disc = 1.0 - smoothstep(0.985, 1.0, rr);
+          // the atmosphere: a rim just outside the limb, brighter on the sunlit side
+          float rim = (1.0 - smoothstep(1.0, 1.22, rr)) * smoothstep(0.90, 1.0, rr);
+          float rimLit = clamp(dot(normalize(ax * p.x + ay * p.y), uSunDir) * 0.5 + 0.6, 0.0, 1.0);
+          c = mix(c, body, disc);
+          c += uPlanet * rim * 0.55 * rimLit;
+        }
         // a wide, very soft band near the horizon: a galactic plane, at the
         // strength where you notice it only once you look for it
         // RESTRAINT. At half strength the band read as a planet's horizon glow
@@ -765,6 +813,68 @@ function plateCanvas(pl) {
   return c;
 }
 
+// ── THE MACHINE SKIN ──────────────────────────────────────────────────────
+// One neutral panel map shared by every machine — seams, a rivet run, a lip,
+// a hairline of wear — kept near white so each machine's own colour survives
+// the multiply, plus a roughness map that makes the seams matte and the panels
+// a little polished. Box parts of different sizes stretch it differently,
+// which reads as panels cut to fit rather than as wallpaper.
+const SKIN_PX = 256;
+function skinCanvas(rough) {
+  const c = document.createElement('canvas');
+  c.width = c.height = SKIN_PX;
+  const g = c.getContext('2d'), P = SKIN_PX;
+  let seed = 4241;
+  const rr = () => (seed = (seed * 1664525 + 1013904223) % 4294967296) / 4294967296;
+  g.fillStyle = rough ? '#8c8c8c' : '#f2f2f2'; g.fillRect(0, 0, P, P);
+  // panels: a 2x2 with one panel split again, each a hair different
+  const panels = [[0, 0, P / 2, P / 2], [P / 2, 0, P / 2, P / 2], [0, P / 2, P / 2, P / 2],
+                  [P / 2, P / 2, P / 2, P / 4], [P / 2, P * 3 / 4, P / 2, P / 4]];
+  for (const [x, y, w, h] of panels) {
+    const v = Math.round(rough ? 120 + rr() * 30 : 224 + rr() * 26);
+    g.fillStyle = 'rgb(' + v + ',' + v + ',' + v + ')';
+    g.fillRect(x + 3, y + 3, w - 6, h - 6);
+  }
+  // seams between panels: dark on the map, matte on the roughness
+  g.strokeStyle = rough ? '#e0e0e0' : 'rgba(40,40,48,0.75)'; g.lineWidth = 3;
+  g.strokeRect(1.5, 1.5, P - 3, P - 3);
+  g.beginPath(); g.moveTo(P / 2, 0); g.lineTo(P / 2, P); g.moveTo(0, P / 2); g.lineTo(P, P / 2);
+  g.moveTo(P / 2, P * 3 / 4); g.lineTo(P, P * 3 / 4); g.stroke();
+  // a bevel highlight one pixel inside each panel, so the seam has a lip
+  if (!rough) {
+    g.strokeStyle = 'rgba(255,255,255,0.35)'; g.lineWidth = 1;
+    for (const [x, y, w, h] of panels) g.strokeRect(x + 4.5, y + 4.5, w - 9, h - 9);
+  }
+  // rivets along the seams
+  const rivets = [];
+  for (let k = 12; k < P; k += 24) rivets.push([P / 2 - 8, k], [P / 2 + 8, k], [k, P / 2 - 8], [k, P / 2 + 8]);
+  g.fillStyle = rough ? '#f4f4f4' : 'rgba(30,30,36,0.7)';
+  for (const [x, y] of rivets) { g.beginPath(); g.arc(x, y, 2.2, 0, Math.PI * 2); g.fill(); }
+  if (!rough) {
+    g.fillStyle = 'rgba(255,255,255,0.5)';
+    for (const [x, y] of rivets) { g.beginPath(); g.arc(x - 0.7, y - 0.7, 0.9, 0, Math.PI * 2); g.fill(); }
+  }
+  // wear: hairline scratches, and grime toward the corners of each panel
+  for (let k = 0; k < 26; k++) {
+    const x = rr() * P, y = rr() * P, l = 6 + rr() * 30, an = rr() * Math.PI;
+    g.strokeStyle = rough ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,' + (0.08 + rr() * 0.12).toFixed(2) + ')';
+    g.lineWidth = 1; g.beginPath(); g.moveTo(x, y); g.lineTo(x + Math.cos(an) * l, y + Math.sin(an) * l); g.stroke();
+  }
+  for (const [x, y, w, h] of panels) {
+    const gr = g.createRadialGradient(x + w / 2, y + h / 2, Math.min(w, h) * 0.25,
+                                      x + w / 2, y + h / 2, Math.max(w, h) * 0.75);
+    gr.addColorStop(0, 'rgba(0,0,0,0)');
+    gr.addColorStop(1, rough ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.16)');
+    g.fillStyle = gr; g.fillRect(x, y, w, h);
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = rough ? THREE.NoColorSpace : THREE.SRGBColorSpace;
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.anisotropy = 4;
+  return t;
+}
+const SKIN = skinCanvas(false), SKIN_ROUGH = skinCanvas(true);
+
 function plateTexture(pl) {
   const t = new THREE.CanvasTexture(plateCanvas(pl));
   t.wrapS = t.wrapT = THREE.RepeatWrapping;
@@ -833,6 +943,38 @@ scene.add(cube);
     // fainter than it was: forty lines a face is a placement aid up close and
     // a moire pattern from orbit
     { color: 0x46527d, transparent: true, opacity: 0.14 })));
+
+  // LANES. Every fifth line is a faint lit strip in the world's edge colour,
+  // so a face reads as a floor that was laid out rather than as graph paper,
+  // and the bloom has something to catch at ground level. One instanced mesh
+  // for all six faces; recoloured with the world.
+  const laneGeo = new THREE.BoxGeometry(HALF * 2, 0.012, 0.075);
+  const laneMat = new THREE.MeshBasicMaterial({ color: 0x7fd8ff, transparent: true,
+                                                opacity: 0.32, depthWrite: false });
+  const laneCount = (Math.floor(N / 5) + 1) * 2 * 6;
+  lanes = new THREE.InstancedMesh(laneGeo, laneMat, laneCount);
+  const m4 = new THREE.Matrix4(), bx = new THREE.Vector3(), by = new THREE.Vector3(),
+        bz = new THREE.Vector3(), pos = new THREE.Vector3();
+  let li = 0;
+  for (let fi = 0; fi < 6; fi++) {
+    const f = FACES[fi];
+    by.set(f.n[0], f.n[1], f.n[2]);
+    for (let k = 0; k <= N; k += 5) {
+      const q = -HALF + k * T;
+      // along u at v = q
+      bx.set(f.u[0], f.u[1], f.u[2]); bz.crossVectors(bx, by).negate();
+      pos.set(f.n[0] * (E + 0.01) + f.v[0] * q, f.n[1] * (E + 0.01) + f.v[1] * q, f.n[2] * (E + 0.01) + f.v[2] * q);
+      m4.makeBasis(bx, by, bz).setPosition(pos); lanes.setMatrixAt(li++, m4);
+      // along v at u = q
+      bx.set(f.v[0], f.v[1], f.v[2]); bz.crossVectors(bx, by).negate();
+      pos.set(f.n[0] * (E + 0.01) + f.u[0] * q, f.n[1] * (E + 0.01) + f.u[1] * q, f.n[2] * (E + 0.01) + f.u[2] * q);
+      m4.makeBasis(bx, by, bz).setPosition(pos); lanes.setMatrixAt(li++, m4);
+    }
+  }
+  lanes.count = li;
+  lanes.instanceMatrix.needsUpdate = true;
+  lanes.name = 'lanes';
+  scene.add(lanes);
 }
 
 {
@@ -1116,30 +1258,37 @@ const MAT = {
   // EVERY MACHINE IS A LITTLE BIT ON. A dark object in a dark scene has no
   // silhouette; a faint self-lit trim gives each one an edge the bloom can
   // catch, which is most of why a lit game looks lit.
-  miner: new THREE.MeshStandardMaterial({ color: 0xff5d73, roughness: 0.4,
-    metalness: 0.35, emissive: 0x4a0d1a, emissiveIntensity: 0.9 }),
+  // THE GLOW IS ON THE LAMPS NOW, NOT THE PAINT. A body-wide emissive of 0.9
+  // filled every shadow with the machine's own colour and cut it out like
+  // paper; a third of that keeps the silhouette for the bloom and gives the
+  // key light its shading back.
+  miner: new THREE.MeshStandardMaterial({ color: 0xff5d73, roughness: 0.45,
+    metalness: 0.35, emissive: 0x4a0d1a, emissiveIntensity: 0.35,
+    map: SKIN, roughnessMap: SKIN_ROUGH }),
   belt: new THREE.MeshStandardMaterial({ color: 0x3ad39a, roughness: 0.6, metalness: 0.2 }),
   beltFrame: new THREE.MeshStandardMaterial({ color: 0x2b7f68, roughness: 0.45,
     metalness: 0.6, flatShading: true, emissive: 0x07271f,
     emissiveIntensity: 0.9 }),
   beltDeck: new THREE.MeshStandardMaterial({ map: TREAD, roughness: 0.85,
     metalness: 0.05 }),
-  hub: new THREE.MeshStandardMaterial({ color: 0xffc75a, roughness: 0.35,
-    metalness: 0.45, emissive: 0x6a4708, emissiveIntensity: 0.9,
-    emissive: 0x6b4a00, emissiveIntensity: 0.6 }),
-  forge: new THREE.MeshStandardMaterial({ color: 0xd94fb0, roughness: 0.34,
+  hub: new THREE.MeshStandardMaterial({ color: 0xffc75a, roughness: 0.4,
+    metalness: 0.45, emissive: 0x6b4a00, emissiveIntensity: 0.25,
+    map: SKIN, roughnessMap: SKIN_ROUGH }),
+  forge: new THREE.MeshStandardMaterial({ color: 0xd94fb0, roughness: 0.4,
     metalness: 0.55, flatShading: true, emissive: 0x5c0f45,
-    emissiveIntensity: 1.0 }),
+    emissiveIntensity: 0.35, map: SKIN, roughnessMap: SKIN_ROUGH }),
   filt: new THREE.MeshStandardMaterial({ color: 0x2f8f7d, roughness: 0.55,
-    metalness: 0.25, emissive: 0x0a3329, emissiveIntensity: 0.9 }),
+    metalness: 0.25, emissive: 0x0a3329, emissiveIntensity: 0.35,
+    map: SKIN, roughnessMap: SKIN_ROUGH }),
   rift: new THREE.MeshStandardMaterial({ color: 0x6a3cff, emissive: 0x3a1c9c,
-    emissiveIntensity: 0.8, roughness: 0.3, metalness: 0.5, flatShading: true }),
-  smelt: new THREE.MeshStandardMaterial({ color: 0x8c6bff, roughness: 0.42,
-    metalness: 0.4, emissive: 0x2a1b6a, emissiveIntensity: 0.85,
-    emissive: 0x2a1470, emissiveIntensity: 0.5 }),
+    emissiveIntensity: 0.5, roughness: 0.35, metalness: 0.5, flatShading: true,
+    map: SKIN, roughnessMap: SKIN_ROUGH }),
+  smelt: new THREE.MeshStandardMaterial({ color: 0x8c6bff, roughness: 0.45,
+    metalness: 0.4, emissive: 0x2a1470, emissiveIntensity: 0.3,
+    map: SKIN, roughnessMap: SKIN_ROUGH }),
   split: new THREE.MeshStandardMaterial({ color: 0x4bb5ff, roughness: 0.45,
-    metalness: 0.35, emissive: 0x0d3a63, emissiveIntensity: 0.9,
-    emissive: 0x0d3f66, emissiveIntensity: 0.45 }),
+    metalness: 0.35, emissive: 0x0d3f66, emissiveIntensity: 0.3,
+    map: SKIN, roughnessMap: SKIN_ROUGH }),
 };
 // Each machine is authored as parts and merged into one geometry. Local +X is
 // the heading and local +Y is up off the face, which is what seat() promises.
@@ -1264,6 +1413,13 @@ const GEO = {
     { g: _box(T * 0.90, 0.13, T * 0.90), y: 0.065, tint: 0.6 },  // skirt
     { g: _box(T * 0.78, 0.92, T * 0.78), y: 0.58 },              // body
     { g: _box(T * 0.90, 0.11, T * 0.90), y: 1.09 },              // cap
+    // corner posts and a mid band: a box with a frame is a machine, a box is
+    // a box
+    { g: _box(0.10, 1.0, 0.10), y: 0.58, x: T * 0.40, z: T * 0.40, tint: 0.62 },
+    { g: _box(0.10, 1.0, 0.10), y: 0.58, x: -T * 0.40, z: T * 0.40, tint: 0.62 },
+    { g: _box(0.10, 1.0, 0.10), y: 0.58, x: T * 0.40, z: -T * 0.40, tint: 0.62 },
+    { g: _box(0.10, 1.0, 0.10), y: 0.58, x: -T * 0.40, z: -T * 0.40, tint: 0.62 },
+    { g: _box(T * 0.82, 0.08, T * 0.82), y: 0.92, tint: 0.55 },
     { g: _box(T * 0.42, 0.46, 0.10), y: 0.50, x: T * 0.40, tint: 0.72 }, // frame
     { g: _box(T * 0.30, 0.34, 0.07), y: 0.50, x: T * 0.44, tint: 0.34 }, // door
     { g: _box(0.09, 0.09, T * 0.50), y: 0.86, z: -T * 0.40, tint: 0.5 }, // vents
@@ -1591,7 +1747,7 @@ function place(face, i, j, type, dir) {
     // a furnace door glowing where the heat is tells you the same thing and
     // looks like a furnace while doing it.
     const lamp = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.32, T * 0.26),
-      new THREE.MeshBasicMaterial({ color: 0xffb04a }));
+      new THREE.MeshBasicMaterial({ color: 0xff7a22 }));   // furnace-hot, not lamp-yellow
     lamp.position.set(T * 0.47, 0.50, 0);
     lamp.name = 'lamp';
     g.add(lamp);
@@ -3066,6 +3222,7 @@ const WORLDS = [
   // prompt's own mood for everything else
   { id: 'prompt', plate: HOME.plate, belt: HOME.belt, weather: HOME.weather,
     edge: HOME.edge, sun: HOME.sun, name: SPEC.title || 'Crystal Isle', cores: 0, spores: !!HOME.spores,
+    planet: HOME.planet,
     blurb: 'where the prompt dropped you',
     sky: SKY_COL, fog: FOG_COL, ground: HOME.ground, grid: HOME.grid, star: HOME.star },
   // THE UNLOCKS ARE THE THREE FAMILIES HOME IS NOT (2026-09-08). A prompt
@@ -3083,7 +3240,8 @@ const WORLDS = [
     // by distance down the list
     return { id: w.id, name: w.name, blurb: w.blurb, cores: w.needs === 'drift' ? 3 : [2, 5, 9][k], needs: w.needs || null,
              sky: L.sky, fog: L.fog, ground: L.ground, grid: L.grid, star: L.star,
-             edge: L.edge, sun: L.sun, plate: L.plate, belt: L.belt, weather: L.weather, spores: !!L.spores };
+             edge: L.edge, sun: L.sun, plate: L.plate, belt: L.belt, weather: L.weather, spores: !!L.spores,
+             planet: L.planet };
   }),
 ];
 let worldIdx = 0;
@@ -3095,6 +3253,14 @@ function applyWorld(k) {
   worldFog.color.setHex(w.fog);
   cube.material.color.setHex(w.ground);
   gridLines.material.color.setHex(w.grid);
+  // THE BOUNCE IS THE WORLD'S (2026-09-09). The hemisphere was a fixed blue
+  // sky over a fixed navy ground; on a soot-plated red world the unlit faces
+  // fell to ~9/255 and a contact shadow had nothing to subtract from. Lifted
+  // versions of the world's own sky and ground, so the bounce is a light and
+  // not a tint, and the dark faces keep a floor to stand on.
+  hemi.color.copy(new THREE.Color(w.sky).lerp(new THREE.Color(0xffffff), 0.55));
+  hemi.groundColor.copy(new THREE.Color(w.ground || w.grid).lerp(new THREE.Color(0xffffff), 0.4));
+  if (lanes) lanes.material.color.setHex(w.edge || w.grid);
   starField.material.color.setHex(w.star);
   if (cubeEdges) cubeEdges.material.color.setHex(w.edge || w.grid);
   if (sunDisc) sunDisc.material.color.setHex(w.sun || 0xfff2d6);
@@ -3119,7 +3285,7 @@ function applyWorld(k) {
   // top and a bottom instead of being one flat value with a band painted on it
   buildSky(new THREE.Color(w.sky).lerp(new THREE.Color(w.edge || w.grid), 0.16).getHex(),
            new THREE.Color(w.sky).lerp(new THREE.Color(0x000000), 0.55).getHex(),
-           w.edge || w.grid);
+           w.edge || w.grid, w.planet);
   matComposite.uniforms.uTint.value.setHex(w.fog);
   const h = document.querySelector('#hud h1');
   if (h) h.textContent = String(w.name).toUpperCase();

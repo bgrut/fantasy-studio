@@ -80,6 +80,7 @@ const t5 = await p.evaluate(async () => {
   const w = ms => new Promise(r => setTimeout(r, ms));
   F.player.face = 2; await w(300);
   const face = window.__game.facts().goal_index;
+  F.PRICE[TY.ALLOY] = 1.0;                 // the market may already be paying over 1.20; tier 7 must not be met here
   F.bank(TY.ALLOY); await w(300);
   const alloy = window.__game.facts().goal_index;
   // rigs go on NODE tiles; find three seams anywhere and drop a rig on each

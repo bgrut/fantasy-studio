@@ -265,7 +265,8 @@
   .up.can{cursor:pointer}
   .up.can:hover{transform:translateY(-1px)}
   /* above the bar, not beside it — at seven tools there is no room beside it */
-  #hint{position:fixed;right:14px;bottom:74px;z-index:5;color:#6d7590;text-align:right}
+  /* centred above the bar: at bottom-right it sat on top of the held tool's hologram */
+  #hint{position:fixed;left:50%;transform:translateX(-50%);bottom:84px;z-index:5;color:#6d7590;text-align:center;white-space:nowrap}
   /* the crosshair IS the cursor once the pointer is locked */
   #cross{position:fixed;left:50%;top:50%;width:16px;height:16px;margin:-8px 0 0 -8px;
          z-index:4;pointer-events:none;opacity:.85}

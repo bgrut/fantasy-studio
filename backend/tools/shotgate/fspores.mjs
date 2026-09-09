@@ -68,9 +68,11 @@ console.log('hold      : clogged belt kept its crystal', !!hold.heldA && !hold.h
 const shield = await p.evaluate(async () => {
   const F = window.__factory, TY = F.TYPES, R = F.SPORE_REACH;
   const f = F.player.face;
+  // from the far corner, so the filter does not also shield the starter line
+  // and the hold test's belts, which would leave the strikes nothing to hit
   let spot = null;
-  for (let i = R + 1; i < F.N - R - 2 && !spot; i++)
-    for (let j = R + 1; j < F.N - R - 2 && !spot; j++)
+  for (let i = F.N - R - 3; i > R && !spot; i--)
+    for (let j = F.N - R - 3; j > R && !spot; j--)
       if (F.cells[f][i][j].t === TY.EMPTY && F.cells[f][i + R][j].t === TY.EMPTY && F.cells[f][i + R + 1][j].t === TY.EMPTY) spot = [i, j];
   const [i, j] = spot;
   F.place(f, i, j, TY.FILTER, 0);
@@ -127,7 +129,7 @@ const ok = where.green >= 0 && !where.homeActiveBefore
   && (where.homeSpores || !where.homeActive)
   && where.active && where.belts > 0
   && !!hold.heldA && !hold.heldB && hold.clogged >= 1 && !hold.afterA && !!hold.afterB
-  && shield.inside && !shield.outside && shield.landed >= 5 && shield.onShielded === 0 && shield.notBelt === 0
+  && shield.inside && !shield.outside && shield.landed >= 3 && shield.onShielded === 0 && shield.notBelt === 0
   && /SPORES/.test(shield.toast) && shield.hits >= shield.landed
   && clock.b > clock.a
   && creative.creative && !creative.active

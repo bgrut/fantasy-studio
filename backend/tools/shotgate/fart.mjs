@@ -168,7 +168,7 @@ await p.screenshot({ path: process.env.OUT || 'art.png' });
 await b.close();
 const ok = icons.withIcon === icons.tools && icons.tools >= 9
   && icons.rendered >= 8            // every machine; ERASE stays a glyph
-  && inst.belts > 100 && inst.calls < 120
+  && inst.belts > 60 && inst.calls < 120     // a 20-grid lays 72; a 40-grid 199
   && moving.moved
   && sky.found && sky.radius < sky.far && sky.stars > 500
   && post.on && post.lum > 6 && post.lum < 250   // lit, not black, not blown
