@@ -3534,7 +3534,7 @@ renderer.domElement.addEventListener('pointerdown', e => {
   if (!c) return;
   if (tool === 'blueprint') {
     if (!UNLOCKED.blueprint) { pickTool('blueprint'); return; }
-    if (blueprint) { stampBlueprint(c.face, c.i, c.j); rigPulse('place'); }
+    if (blueprint) { bpStamps++; stampBlueprint(c.face, c.i, c.j); rigPulse('place'); }
     else { bpStart = c; bpEnd = c; }
     return;
   }
@@ -3676,7 +3676,7 @@ function frameOverhead() {
 const keys = Object.create(null);
 addEventListener('keydown', e => {
   keys[e.code] = true;
-  if (e.code === 'Tab') { e.preventDefault(); overhead = !overhead; if (overhead) frameOverhead(); }
+  if (e.code === 'Tab') { e.preventDefault(); overhead = !overhead; overheadSeen++; if (overhead) frameOverhead(); }
 });
 addEventListener('keyup', e => { keys[e.code] = false; });
 addEventListener('contextmenu', e => e.preventDefault());
@@ -4512,7 +4512,34 @@ function playWorks() {
 // what to do, why, and where — a ring in the world on the tile it means, and
 // the tool it wants pulsing in the bar.
 let tutIdx = 0, tutMark = null, tutBase = { rate: 0, rigs: 0, belts: 0, pos: null, rig: null }, tutClock = 0;
-const TUT = [
+// two acts: the first opens a new world, the second comes back when the forge
+// unlocks. TUT points at whichever is running; tutAct says which.
+let tutAct = 1, act2Done = false, overheadSeen = 0, bpStamps = 0;
+let TUT = null;
+const freeSeamOffHome = () => { let s = null; eachTile((c, f, i, j) => { if (!s && f !== 0 && c.t === NODE && c.mesh) s = { face: f, i, j }; }); return s; };
+const rigOffHome = () => { let n = 0; eachTile((c, f) => { if (c.t === MINER && f !== 0) n++; }); return n; };
+const ACT2 = [
+  { title: 'Bring a second ore home', text: 'Press 1 and build a rig on the seam inside the ring, on another face. Run its belt over the edge toward your smelters.', tool: 'miner',
+    why: 'No face grows two ores. A forge needs two, so the second one has to come from over an edge. Belts carry ore round a corner on their own.',
+    mark: () => freeSeamOffHome(),
+    check: () => rigOffHome() > 0 },
+  { title: 'Forge an alloy', text: 'Press 6 and place a forge where two belts of different ore arrive. Two ores in, one alloy out.', tool: 'forge',
+    why: 'An alloy sells for far more than either ore. Point at the forge to see what it is waiting for.',
+    check: () => alloys >= 1 },
+  { title: 'Sort with a filter', text: 'Press 7 and place a filter on a belt that carries mixed ore. Point at it and press F to choose which ore passes; the rest leave out of its side.', tool: 'filter',
+    why: 'A filter is how one belt feeds two different machines. The rival buyer, when one appears, is answered with a filter turned their way.',
+    check: () => countType(FILTER) > 0 },
+  { title: 'Plan from above', text: 'Press TAB. The face you stand on is seen from above; the wheel zooms, a right drag orbits. TAB again brings you down.',
+    why: 'Long lines are easier to draw from up here, and the whole factory reads as a map of lights.',
+    check: () => overheadSeen >= 2 },
+  { title: 'Keep a promise', text: 'A contract sits under the goal card: an amount of one product, to a hub, before its clock runs out. Fill one.',
+    why: 'A filled contract pays credits and a core shard; three shards make a core without a meltdown. Three in a row earn a standing order.',
+    check: () => contractsFilled >= 1 },
+  { title: 'Copy a line', text: 'Press 0, drag a box over a line you built, then click a tile on any face to stamp a copy there. R turns it.', tool: 'blueprint',
+    why: 'Six faces are six factories once a line takes one drag to lay. This is the last thing the foreman knows; the goal card leads from here.',
+    check: () => bpStamps > 0 },
+];
+const ACT1 = [
   { title: 'Look around', text: 'Move the mouse to look. W, A, S and D walk. Shift runs.',
     why: 'This is a worldlet: a cube you can walk all the way around. Every face grows a different ore.',
     check: () => tutBase.pos && player.pos.distanceTo(tutBase.pos) > 3.5 },
@@ -4536,9 +4563,10 @@ const TUT = [
     // in the rate must not clear it
     check: () => rateNow >= Math.max(60, tutBase.rate + 60) },
   { title: 'Read the panel', text: 'Credits are what your hubs have earned by selling; they buy upgrades. The rate is credits a minute. The gold card is your next goal, and contracts appear under it. Press Enter or click got it when you are ready.',
-    why: 'From here the goal card leads: bank 40 credits and the splitter is yours. Press P for photo mode any time.',
+    why: 'From here the goal card leads: bank 40 credits and the splitter is yours. The foreman comes back when the forge unlocks. Press P for photo mode any time.',
     check: () => false, gotit: true },
 ];
+TUT = ACT1;
 function findTile(face, type) { for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) if (cells[face][i][j].t === type) return { face, i, j }; return null; }
 function countType(type) { let n = 0; eachTile(c => { if (c.t === type) n++; }); return n; }
 function tileDist(t) { const w = tileWorld(t.face, t.i, t.j); return Math.hypot(player.pos.x - w[0], player.pos.y - w[1], player.pos.z - w[2]); }
@@ -4554,13 +4582,19 @@ function freeSeamNear(t) {
   return best;
 }
 const tutActive = () => !CREATIVE && !SHARED && tutIdx < TUT.length && intro === 0;
+function startAct2() {
+  tutAct = 2; TUT = ACT2; tutStart(0);
+  const t = document.getElementById('toast');
+  if (t) { t.textContent = 'The foreman is back, with the six things that come after a line. Enter moves on, G sends him away.'; t.classList.add('on'); toastAt = 5; }
+}
 function tutStart(k) {
   tutIdx = k;
   // the step puts the tool in your hand: nothing during the first two steps,
   // so the world is seen without a ghost over it; the rig, then the belt
   if (k <= 1) { tool = null; if (typeof setHolo === 'function') setHolo(null); document.querySelectorAll('.tool').forEach(o => o.classList.remove('on')); }
-  else if (k === 2) pickTool('miner');
-  else if (k === 3) pickTool('belt');
+  else if (tutAct === 1 && k === 2) pickTool('miner');
+  else if (tutAct === 1 && k === 3) pickTool('belt');
+  else if (tutAct === 2 && TUT[k] && TUT[k].tool && UNLOCKED[TUT[k].tool]) pickTool(TUT[k].tool);
   tutBase.rate = rateNow; tutBase.rigs = countType(MINER); tutBase.belts = countType(BELT);
   tutBase.pos = player.pos.clone(); tutBase.age = 0;
   // the line's steady rate is what the finish step is measured against; a
@@ -4577,7 +4611,7 @@ function renderTutor() {
   if (tutIdx >= TUT.length || CREATIVE || SHARED) { el.classList.remove('on'); if (tutMark) tutMark.visible = false; return; }
   const t = TUT[tutIdx];
   el.classList.add('on');
-  el.querySelector('em').textContent = 'the foreman  ·  ' + (tutIdx + 1) + ' / ' + TUT.length;
+  el.querySelector('em').textContent = 'the foreman' + (tutAct === 2 ? ', second act' : '') + '  ·  ' + (tutIdx + 1) + ' / ' + TUT.length;
   el.querySelector('b').textContent = t.title;
   el.querySelector('small').textContent = t.text;
   el.querySelector('p').textContent = t.why;
@@ -4591,7 +4625,9 @@ function tutAdvance() {
   if (tutIdx + 1 >= TUT.length) {
     tutIdx = TUT.length; renderTutor();
     if (!tool) pickTool('miner');
-    if (t) { t.textContent = 'The foreman steps back. The goal card leads from here: bank 40 credits. "the guide" in the panel brings him back.'; t.classList.add('on'); toastAt = 5; }
+    if (tutAct === 2) { act2Done = true;
+      if (t) { t.textContent = 'The foreman leaves for good. The goal card leads from here; "the guide" in the panel replays what he knew.'; t.classList.add('on'); toastAt = 5; } }
+    else if (t) { t.textContent = 'The foreman steps back. The goal card leads from here: bank 40 credits. He comes back when the forge unlocks.'; t.classList.add('on'); toastAt = 5; }
     save();
     return;
   }
@@ -4599,6 +4635,7 @@ function tutAdvance() {
   tutStart(tutIdx + 1);
 }
 function stepTutorial(dt) {
+  if (tutAct === 1 && tutIdx >= TUT.length && !act2Done && !CREATIVE && !SHARED && intro === 0 && UNLOCKED.forge) startAct2();
   if (!tutActive()) { if (tutMark) tutMark.visible = false; return; }
   const t = TUT[tutIdx];
   // the new rig is whichever rig was not there when the step began
@@ -4753,7 +4790,7 @@ function saveState() {
     p: { face: player.face, pos: player.pos.toArray(),
          fwd: player.fwd.toArray(), pitch: player.pitch },
     g: goalIdx, u: Object.keys(UNLOCKED), vf: [...visitedFaces], w: worldIdx,
-    sh: soldHigh, rp: riftsPaid, cs: shards, rk: rank, cf: contractsFilled, sk: streak, tu: tutIdx,
+    sh: soldHigh, rp: riftsPaid, cs: shards, rk: rank, cf: contractsFilled, sk: streak, tu: tutIdx, ta: tutAct, t2: act2Done ? 1 : 0,
     lt: { v: Math.round(lifetime.value), c: lifetime.contracts, h: Math.round(lifetime.longestHold), w: [...visitedWorlds], k: lifetime.works ? 1 : 0 },
     // seams come back from the RNG; how worked each one is does not
     r: (() => { const out = [];
@@ -4809,6 +4846,7 @@ function loadState(d) {
   goalIdx = Math.max(0, Math.min(GOALS.length, d.g | 0));
   soldHigh = d.sh | 0; riftsPaid = d.rp | 0; shards = d.cs | 0; rank = d.rk | 0; contractsFilled = d.cf | 0; streak = d.sk | 0;
   // a returning player is past the foreman unless the save says otherwise
+  tutAct = d.ta === 2 ? 2 : 1; TUT = tutAct === 2 ? ACT2 : ACT1; act2Done = !!d.t2 || d.tu === undefined;
   tutIdx = d.tu === undefined ? TUT.length : Math.min(TUT.length, d.tu | 0);
   if (d.lt) { lifetime.value = +d.lt.v || 0; lifetime.contracts = d.lt.c | 0; lifetime.longestHold = +d.lt.h || 0; lifetime.works = !!d.lt.k;
               visitedWorlds = new Set(Array.isArray(d.lt.w) ? d.lt.w.map(x => x | 0) : [0]); }
@@ -4841,7 +4879,7 @@ function wipe() {
   ore = 0; ingots = 0; alloys = 0; cores = 0; runValue = 0;
   for (const k in UPGRADES) UPGRADES[k].lvl = 0;
   goalIdx = 0; soldHigh = 0; riftsPaid = 0; shards = 0; rank = 0; contractsFilled = 0;
-  tutIdx = 0;
+  tutIdx = 0; tutAct = 1; TUT = ACT1; act2Done = false;
   lifetime.value = 0; lifetime.contracts = 0; lifetime.longestHold = 0; lifetime.works = false; visitedWorlds = new Set([0]);
   contract = null; contractClock = 40; standing = null; streak = 0; rival = null; rivalClock = 60; renderContract(); renderStanding(); renderRival(); renderRank();
   for (const g of GOALS) if (g.rate) g.held = 0;
@@ -4915,6 +4953,7 @@ addEventListener('visibilitychange', () => { if (document.hidden) save(); });
   if (gd) gd.addEventListener('pointerdown', ev => {
     ev.stopPropagation();
     if (CREATIVE || SHARED) { const t = document.getElementById('toast'); if (t) { t.textContent = 'The guide runs on a survival world of your own.'; t.classList.add('on'); toastAt = 3; } return; }
+    if (UNLOCKED.forge && act2Done) { tutAct = 2; TUT = ACT2; act2Done = false; } else { tutAct = 1; TUT = ACT1; }
     tutStart(0); save();
   });
   if (tu) tu.addEventListener('pointerdown', ev => { ev.stopPropagation(); tutIdx = TUT.length; renderTutor(); if (!tool) pickTool('miner'); save();
@@ -5733,7 +5772,8 @@ window.__game = {
                            left: +contract.left.toFixed(1), bonus: contract.bonus } : null,
     shards, rank, contracts_filled: contractsFilled, streak,
     perks: PERKS.slice(0, Math.min(rank, PERKS.length)).map(p => p.name),
-    tutorial: (tutIdx < TUT.length && !CREATIVE && !SHARED) ? { step: tutIdx + 1, total: TUT.length, title: TUT[tutIdx].title, active: tutActive(),
+    tutorial_act: tutAct, act2_done: act2Done,
+    tutorial: (tutIdx < TUT.length && !CREATIVE && !SHARED) ? { step: tutIdx + 1, total: TUT.length, act: tutAct, title: TUT[tutIdx].title, active: tutActive(),
                                        marker: !!(tutMark && tutMark.visible) } : null,
     look: (document.getElementById('look') && document.getElementById('look').classList.contains('on')) ? document.getElementById('look').textContent : null,
     lifetime: { value: Math.round(lifetime.value), contracts: lifetime.contracts, longest_hold: +lifetime.longestHold.toFixed(1),
@@ -5810,7 +5850,8 @@ window.__factory = {
   offerStanding, get standing() { return standing; }, set streak(v) { streak = v; }, get streak() { return streak; },
   set rank(v) { rank = v; renderRank(); gildEdge(); applyUpgrades(); }, PERKS, lifetime, get visitedWorlds() { return visitedWorlds; },
   worksDone, playWorks,
-  TUT, get tutIdx() { return tutIdx; }, set tutIdx(v) { tutStart(v); }, tutStart, describeCell, get tool() { return tool; },
+  get TUT() { return TUT; }, ACT1, ACT2, get tutAct() { return tutAct; }, startAct2, get tutIdx() { return tutIdx; }, set tutIdx(v) { tutStart(v); }, tutStart, describeCell, get tool() { return tool; },
+  set bpStamps(v) { bpStamps = v; }, set overheadSeen(v) { overheadSeen = v; },
   set standingHeld(v) { if (standing) standing.held = v; }, STANDING_GRACE,
   offerRival, get rival() { return rival; }, set rivalLeft(v) { if (rival) rival.left = v; }, RIVAL_MULT,
   captureBlueprint, stampBlueprint, dropBlueprint, bpCells, get blueprint() { return blueprint; }, set bpRot(v) { bpRot = v & 3; },

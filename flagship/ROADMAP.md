@@ -86,6 +86,9 @@ says so.
 | **a link that carries a factory** | "share link" copies a URL with the whole save in it; opening it starts that factory and drops the parameter; the studio is told |
 | **shared factories in the studio** | a share link arrives with a thumbnail, world, mode, machines, value and rank; the studio keeps them per game as cards under the frame: open, copy, remove |
 | **the foreman** | a new world opens one step at a time: look, walk to the hub, build a rig on the ringed seam, run a belt from it, finish the line, read the panel; each clears on the thing done, the step puts the tool in your hand, skippable and remembered |
+| **the guide, movable** | Enter is the next step and G skips, named on the card; a restored step starts properly; "the guide" in the panel replays it |
+| **credits** | the number is credits, earned by hubs selling to the market and spent on upgrades, in every place a player reads it |
+| **the second act** | when the forge unlocks the foreman comes back for six steps: a rig on another face, an alloy, a filter, the overhead, a contract, a stamped blueprint; each clears on the thing itself |
 | **the panel says what it is** | value banked, a minute to your hubs, a word under every chip, headers on market and upgrades, each upgrade's effect in a line |
 | **the look label** | point at anything within reach and a line under the crosshair names it and says what it is doing |
 | **one type system** | Bricolage Grotesque for what is named (a variable face whose width and optical size set the three title voices from one file), Instrument Sans for what is read, DM Mono for what is counted; all SIL OFL, shipped in vendor/fonts |

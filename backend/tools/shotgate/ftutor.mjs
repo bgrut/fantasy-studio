@@ -127,6 +127,56 @@ const look = await p.evaluate(async () => {
   }
   return { none, smelter, seam: seamLabel, creative: window.__game.facts().creative };
 });
+// 6. the second act: the forge unlock brings the foreman back for six steps
+await p.goto(URL + q + 'nointro=1', { waitUntil:'domcontentloaded', timeout:90000 });
+await wait(4500);
+const act2 = await p.evaluate(async () => {
+  const F = window.__factory, TY = F.TYPES;
+  const w = ms => new Promise(r => setTimeout(r, ms));
+  const f0 = window.__game.facts();
+  const before = { act: f0.tutorial_act, tutorial: f0.tutorial };
+  F.goalIdx = 3;                                   // the forge unlocks
+  await w(600);
+  const s1 = window.__game.facts().tutorial;
+  const card = document.querySelector('#tutor em').textContent;
+  // a rig on another face
+  let seam = null;
+  for (let f = 1; f < 6 && !seam; f++) for (let i = 1; i < F.N - 1 && !seam; i++) for (let j = 1; j < F.N - 1 && !seam; j++)
+    if (F.cells[f][i][j].t === TY.NODE && F.cells[f][i][j].mesh) seam = [f, i, j];
+  const marker = !!(window.__scene.getObjectByName('tutMark') && window.__scene.getObjectByName('tutMark').visible);
+  F.place(seam[0], seam[1], seam[2], TY.MINER, 0); await w(400);
+  const s2 = window.__game.facts().tutorial;
+  F.bank(TY.ALLOY); await w(400);                  // an alloy
+  const s3 = window.__game.facts().tutorial;
+  let e = null; for (let i = 3; i < F.N - 3 && !e; i++) for (let j = 3; j < F.N - 3 && !e; j++) if (F.cells[0][i][j].t === TY.EMPTY) e = [i, j];
+  F.place(0, e[0], e[1], TY.FILTER, 0); await w(400);
+  const s4 = window.__game.facts().tutorial;
+  return { before, s1: s1 && s1.title, act: s1 && s1.act, card, marker, s2: s2 && s2.title, s3: s3 && s3.title, s4: s4 && s4.title,
+           tools: [F.tool] };
+});
+console.log('second act: before', JSON.stringify(act2.before.tutorial), '| forge unlocked ->', JSON.stringify(act2.s1), '(act', act2.act + ')',
+            JSON.stringify(act2.card), '| ring on a far seam', act2.marker);
+console.log('            rig off home ->', JSON.stringify(act2.s2), '| alloy ->', JSON.stringify(act2.s3), '| filter ->', JSON.stringify(act2.s4));
+await p.keyboard.press('Tab'); await wait(300); await p.keyboard.press('Tab'); await wait(500);
+const act2b = await p.evaluate(async () => {
+  const F = window.__factory, TY = F.TYPES;
+  const w = ms => new Promise(r => setTimeout(r, ms));
+  const s5 = window.__game.facts().tutorial;
+  F.addValue(60); await w(300);
+  const c = F.offerContract(TY.INGOT); for (let k = 0; k < c.need; k++) F.bank(TY.INGOT); await w(400);
+  const s6 = window.__game.facts().tutorial;
+  F.bpStamps = 1; await w(500);
+  const f = window.__game.facts();
+  F.save();
+  return { s5: s5 && s5.title, s6: s6 && s6.title, after: f.tutorial, act2Done: f.act2_done, toast: document.getElementById('toast').textContent };
+});
+console.log('            overhead ->', JSON.stringify(act2b.s5), '| contract ->', JSON.stringify(act2b.s6), '| stamp -> done', act2b.act2Done,
+            '| said:', JSON.stringify(act2b.toast).slice(0, 70) + '...');
+await p.goto(URL + q + 'nointro=1', { waitUntil:'domcontentloaded', timeout:90000 });
+await wait(4500);
+const back2 = await p.evaluate(() => { const f = window.__game.facts(); return { act2Done: f.act2_done, tutorial: f.tutorial }; });
+console.log('reloaded  : second act done', back2.act2Done, '| card', JSON.stringify(back2.tutorial));
+
 console.log('creative  : tutorial', JSON.stringify(look.none), '| creative', look.creative);
 console.log('the look  : smelter ->', JSON.stringify(look.smelter), '| seam ->', JSON.stringify(look.seam));
 console.log('errors    :', errs.length ? errs.join(' | ') : 'none');
@@ -139,6 +189,10 @@ const ok = s1.before.step === 1 && s1.before.on && s1.before.tool === null && !s
   && s5.onSeam && s5.s4.step === 4 && s5.s4.tool === 'belt' && s5.s4.hint && s5.step === 5
   && done.step6 === 6 && done.gotit === 'got it' && done.after === null && !done.cardOn && !!done.tool && /foreman steps back/.test(done.toast)
   && back.tutorial === null && !back.cardOn
+  && act2.before.tutorial === null && act2.act === 2 && /second act/.test(act2.card) && act2.s1 === 'Bring a second ore home' && act2.marker
+  && act2.s2 === 'Forge an alloy' && act2.s3 === 'Sort with a filter' && act2.s4 === 'Plan from above'
+  && act2b.s5 === 'Keep a promise' && act2b.s6 === 'Copy a line' && act2b.after === null && act2b.act2Done && /leaves for good/.test(act2b.toast)
+  && back2.act2Done && back2.tutorial === null
   && look.none === null && look.creative && /^SMELTER/.test(look.smelter || '') && /SEAM/.test(look.seam || '') && /rich/.test(look.seam || '')
   && errs.length === 0;
 process.exit(ok ? 0 : 1);
