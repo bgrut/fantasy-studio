@@ -1356,7 +1356,7 @@ export default function GameStudio() {
                       )}
                     </div>
                     <div className="flex items-center justify-between gap-2 px-2.5 py-2 text-[11px] text-[#aeb6cd]">
-                      <span>{sh.machines} machines · {sh.value.toLocaleString()} value{sh.rank > 0 ? ` · rank ${sh.rank}` : ''}</span>
+                      <span>{sh.machines} machines · {sh.value.toLocaleString()} credits{sh.rank > 0 ? ` · rank ${sh.rank}` : ''}</span>
                     </div>
                     <div className="flex gap-1 px-2 pb-2 text-[11px]">
                       <button onClick={() => setOpenLink(sh.link)}

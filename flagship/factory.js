@@ -305,7 +305,7 @@ function renderUpgrades() {
     pips += '</div>';
     el.title = u.note;
     el.innerHTML = '<b>' + u.label + ' <span>' + u.lvl + '/' + u.cap + '</span></b>' +
-      pips + '<i>' + (maxed ? 'MAX' : c + ' value') + '</i>' + '<em>' + u.note + '</em>';
+      pips + '<i>' + (maxed ? 'MAX' : c + ' credits') + '</i>' + '<em>' + u.note + '</em>';
     if (!maxed) el.addEventListener('pointerdown', ev => { ev.stopPropagation(); buy(key); });
     box.appendChild(el);
   }
@@ -2762,7 +2762,7 @@ function offerContract(forceItem) {
   contract = { item, need, have: 0, left: CONTRACT_SECS, total: CONTRACT_SECS, bonus };
   renderContract();
   const t = document.getElementById('toast');
-  if (t) { t.textContent = 'CONTRACT. The market wants ' + need + ' ' + contractName(item, need) + ' delivered to a hub within ' + CONTRACT_SECS + ' seconds. Fill it for +' + bonus + ' value and a core shard.'; t.classList.add('on'); toastAt = 5; }
+  if (t) { t.textContent = 'CONTRACT. The market wants ' + need + ' ' + contractName(item, need) + ' delivered to a hub within ' + CONTRACT_SECS + ' seconds. Fill it for +' + bonus + ' credits and a core shard.'; t.classList.add('on'); toastAt = 5; }
   return contract;
 }
 function fillContract() {
@@ -2773,7 +2773,7 @@ function fillContract() {
   shards += perk(3) ? 2 : 1;                                                 // BROKER
   lifetime.contracts++;
   sfxUnlock();
-  let msg = 'CONTRACT FILLED. +' + c.bonus + ' value and ' + (perk(3) ? 'two core shards, because you are a broker.' : 'a core shard. Three shards make a core.');
+  let msg = 'CONTRACT FILLED. +' + c.bonus + ' credits and ' + (perk(3) ? 'two core shards, because you are a broker.' : 'a core shard. Three shards make a core.');
   if (shards >= 3) {
     shards -= 3; cores++;
     msg = 'A CORE FROM SHARDS. Three contracts kept, and a core earned without a meltdown.';
@@ -2815,7 +2815,7 @@ function offerStanding(item) {
   standing = { item, perMin, pay, held: 0, short: 0, minutes: 0, log: [], rate: 0 };
   renderStanding();
   const t = document.getElementById('toast');
-  if (t) { t.textContent = 'STANDING ORDER. Three contracts kept in a row. The market will pay +' + pay + ' for every minute you keep ' + perMin + ' ' + contractName(item, perMin) + ' a minute flowing to a hub, and a core shard every third minute. It closes the moment the rate falls short for ' + STANDING_GRACE + ' seconds.'; t.classList.add('on'); toastAt = 8; }
+  if (t) { t.textContent = 'STANDING ORDER. Three contracts kept in a row. The market will pay +' + pay + ' credits for every minute you keep ' + perMin + ' ' + contractName(item, perMin) + ' a minute flowing to a hub, and a core shard every third minute. It closes the moment the rate falls short for ' + STANDING_GRACE + ' seconds.'; t.classList.add('on'); toastAt = 8; }
   return standing;
 }
 function stepStanding(dt) {
@@ -2832,7 +2832,7 @@ function stepStanding(dt) {
     while (standing.minutes < minutes) {
       standing.minutes++;
       ore += standing.pay; runValue += standing.pay;
-      let msg = 'STANDING ORDER HELD for ' + standing.minutes + (standing.minutes === 1 ? ' minute. +' : ' minutes. +') + standing.pay + ' value.';
+      let msg = 'STANDING ORDER HELD for ' + standing.minutes + (standing.minutes === 1 ? ' minute. +' : ' minutes. +') + standing.pay + ' credits.';
       if (standing.minutes % 3 === 0) {
         shards++;
         msg += ' A core shard for the third minute.';
@@ -2896,7 +2896,7 @@ function stepRival(dt) {
       const t = document.getElementById('toast');
       if (t) {
         t.textContent = r.sold > 0
-          ? 'The rival buyer left. They took ' + r.sold + ' ' + contractName(r.item, r.sold) + ' and the premium came to +' + Math.round(r.extra) + ' value.'
+          ? 'The rival buyer left. They took ' + r.sold + ' ' + contractName(r.item, r.sold) + ' and the premium came to +' + Math.round(r.extra) + ' credits.'
           : 'The rival buyer left with nothing. They were paying ' + RIVAL_MULT.toFixed(1) + ' times for ' + contractName(r.item, 2) + '; a filter turned their way would have caught it.';
         t.classList.add('on'); toastAt = 5;
       }
@@ -2925,7 +2925,7 @@ function renderContract() {
   if (!contract) { el.classList.remove('on'); return; }
   el.classList.add('on');
   el.querySelector('b').textContent = 'DELIVER ' + contract.need + ' ' + contractName(contract.item, contract.need).toUpperCase();
-  el.querySelector('small').textContent = 'to a hub, for +' + contract.bonus + ' value and a core shard';
+  el.querySelector('small').textContent = 'to a hub, for +' + contract.bonus + ' credits and a core shard';
   const i = el.querySelector('.bar i'); if (i) i.style.width = Math.round(100 * contract.have / contract.need) + '%';
   const s = el.querySelector('.left');
   if (s) { const l = Math.max(0, contract.left); s.textContent = contract.have + ' / ' + contract.need + '  ·  ' + Math.floor(l / 60) + ':' + String(Math.floor(l % 60)).padStart(2, '0'); }
@@ -3621,6 +3621,11 @@ addEventListener('keydown', e => {
   if (e.code === 'KeyM') audioMute(!AUDIO.muted);
   if (e.code === 'KeyP') setPhoto(!photo);
   if (photo && (e.code === 'Enter' || e.code === 'NumpadEnter')) shotRequest = true;
+  // the guide answers the keyboard, because once you click into the game the
+  // mouse is captured and the card cannot be clicked
+  if (tutActive() && !photo && (e.code === 'Enter' || e.code === 'NumpadEnter')) { tutAdvance(); return; }
+  if (tutActive() && e.code === 'KeyG') { tutIdx = TUT.length; renderTutor(); if (!tool) pickTool('miner'); save();
+    const t = document.getElementById('toast'); if (t) { t.textContent = 'The foreman steps back. The goal card leads from here; "the guide" in the panel brings him back.'; t.classList.add('on'); toastAt = 4; } return; }
   const u = { 'KeyZ': 'tick', 'KeyX': 'yield', 'KeyC': 'smelt' }[e.code];
   if (u) buy(u);
 });
@@ -4385,8 +4390,8 @@ let riftsPaid = 0;
 const rigsOnSeams = () => { let n = 0; eachTile(c => { if (c.t === MINER && c.mesh) n++; }); return n; };
 
 const GOALS = [
-  { text: 'bank 40 value', unlock: 'splitter',
-    tip: 'Anything that reaches a hub is sold. Bank 40 value to unlock the splitter.',
+  { text: 'bank 40 credits', unlock: 'splitter',
+    tip: 'Anything that reaches a hub is sold. Bank 40 credits to unlock the splitter.',
     got: 'Splitter unlocked. It sends each item out of a different side in turn, so one line can feed two machines.',
     done: () => ore >= 40, progress: () => ore / 40 },
   { text: 'hold 400 a minute for 20s', rate: 400, hold: 20, cap: 'tick',
@@ -4411,7 +4416,7 @@ const GOALS = [
     tip: 'Watch the alloy price on the hub board. Hold your alloy back until it pays over 1.20, then let it through.',
     got: 'Hot Furnace can now be bought to level 6. Smelters and forges cook faster.',
     done: () => soldHigh >= 1, progress: () => soldHigh },
-  { text: 'bank ' + MELT_MIN + ' value', unlock: 'meltdown',
+  { text: 'bank ' + MELT_MIN + ' credits', unlock: 'meltdown',
     tip: 'A meltdown throws the whole factory to the sky and pays a permanent core for it. Build enough to make that worth doing.',
     got: 'Meltdown unlocked. Collapse everything for a permanent core; cores buy the trip to other worlds and multiply every yield.',
     done: () => ore >= MELT_MIN, progress: () => ore / MELT_MIN },
@@ -4463,7 +4468,7 @@ function renderGoal() {
     if (CREATIVE) {
       el.innerHTML = '<b>CREATIVE</b><small>Every machine and world is open, upgrades are free, and seams never run out.</small>';
     } else if (lifetime.works) {
-      el.innerHTML = '<b>THE WORKS ARE YOURS</b><small>' + Math.round(lifetime.value).toLocaleString() + ' value banked, ' + lifetime.contracts + (lifetime.contracts === 1 ? ' contract kept, ' : ' contracts kept, ') + visitedWorlds.size + ' worlds. The run carries on.</small>';
+      el.innerHTML = '<b>THE WORKS ARE YOURS</b><small>' + Math.round(lifetime.value).toLocaleString() + ' credits banked, ' + lifetime.contracts + (lifetime.contracts === 1 ? ' contract kept, ' : ' contracts kept, ') + visitedWorlds.size + ' worlds. The run carries on.</small>';
     } else if (goalIdx >= GOALS.length) {
       const left = [cores < 3 && 'three cores', visitedWorlds.size < 3 && 'three worlds', lifetime.longestHold < 300 && 'a standing order held five minutes'].filter(Boolean);
       el.innerHTML = '<b>ALL SYSTEMS ONLINE</b><small>Every tier is done. ' + (left.length ? 'For the works, still: ' + left.join(', ') + '.' : '') + '</small>';
@@ -4494,7 +4499,7 @@ function worksDone() {
 function playWorks() {
   lifetime.works = true;
   const m = Math.floor(lifetime.longestHold / 60), sec = String(Math.floor(lifetime.longestHold % 60)).padStart(2, '0');
-  playIntro('THE WORKS', Math.round(lifetime.value).toLocaleString() + ' value banked  \u00b7  ' + lifetime.contracts + (lifetime.contracts === 1 ? ' contract kept  ' : ' contracts kept  ') + '\u00b7  longest order ' + m + ':' + sec
+  playIntro('THE WORKS', Math.round(lifetime.value).toLocaleString() + ' credits banked  \u00b7  ' + lifetime.contracts + (lifetime.contracts === 1 ? ' contract kept  ' : ' contracts kept  ') + '\u00b7  longest order ' + m + ':' + sec
             + '  \u00b7  ' + visitedWorlds.size + ' worlds', 11, false, 'void');
   if (cubeEdges) cubeEdges.material.color.setHex(0xffd479);
   sfxUnlock(); setTimeout(sfxUnlock, 400); setTimeout(sfxUnlock, 800);
@@ -4530,8 +4535,8 @@ const TUT = [
     // a second rig's worth over what the line did when the step began: noise
     // in the rate must not clear it
     check: () => rateNow >= Math.max(60, tutBase.rate + 60) },
-  { title: 'Read the panel', text: 'Value is what you have banked; it buys upgrades. The rate is what your hubs sell in a minute. The gold card is your next goal, and contracts appear under it. Click got it when you are ready.',
-    why: 'From here the goal card leads: bank 40 value and the splitter is yours. Press P for photo mode any time.',
+  { title: 'Read the panel', text: 'Credits are what your hubs have earned by selling; they buy upgrades. The rate is credits a minute. The gold card is your next goal, and contracts appear under it. Press Enter or click got it when you are ready.',
+    why: 'From here the goal card leads: bank 40 credits and the splitter is yours. Press P for photo mode any time.',
     check: () => false, gotit: true },
 ];
 function findTile(face, type) { for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) if (cells[face][i][j].t === type) return { face, i, j }; return null; }
@@ -4577,6 +4582,8 @@ function renderTutor() {
   el.querySelector('small').textContent = t.text;
   el.querySelector('p').textContent = t.why;
   el.querySelector('.skip').textContent = t.gotit ? 'got it' : 'skip the guide';
+  el.querySelector('.next').style.display = t.gotit ? 'none' : '';
+  el.querySelector('.keys').textContent = t.gotit ? 'Enter: got it  \u00b7  Esc frees the mouse' : 'Enter: next step  \u00b7  G: skip the guide  \u00b7  Esc frees the mouse to click';
   if (t.tool) { const chip = document.querySelector('.tool[data-tool="' + t.tool + '"]'); if (chip) chip.classList.add('hint'); }
 }
 function tutAdvance() {
@@ -4584,7 +4591,7 @@ function tutAdvance() {
   if (tutIdx + 1 >= TUT.length) {
     tutIdx = TUT.length; renderTutor();
     if (!tool) pickTool('miner');
-    if (t) { t.textContent = 'The foreman steps back. The goal card leads from here: bank 40 value.'; t.classList.add('on'); toastAt = 5; }
+    if (t) { t.textContent = 'The foreman steps back. The goal card leads from here: bank 40 credits. "the guide" in the panel brings him back.'; t.classList.add('on'); toastAt = 5; }
     save();
     return;
   }
@@ -4902,6 +4909,14 @@ addEventListener('visibilitychange', () => { if (document.hidden) save(); });
     showMotion();
   });
   const tu = document.querySelector('#tutor .skip');
+  const nx = document.querySelector('#tutor .next');
+  if (nx) nx.addEventListener('pointerdown', ev => { ev.stopPropagation(); if (tutActive()) tutAdvance(); });
+  const gd = document.getElementById('guide');
+  if (gd) gd.addEventListener('pointerdown', ev => {
+    ev.stopPropagation();
+    if (CREATIVE || SHARED) { const t = document.getElementById('toast'); if (t) { t.textContent = 'The guide runs on a survival world of your own.'; t.classList.add('on'); toastAt = 3; } return; }
+    tutStart(0); save();
+  });
   if (tu) tu.addEventListener('pointerdown', ev => { ev.stopPropagation(); tutIdx = TUT.length; renderTutor(); if (!tool) pickTool('miner'); save();
     const t = document.getElementById('toast'); if (t) { t.textContent = 'The foreman steps back. The goal card leads from here.'; t.classList.add('on'); toastAt = 4; } });
   const sh = document.getElementById('share');
@@ -5346,7 +5361,12 @@ function setHolo(name) {
 setHolo(tool);      // here, AFTER HOLO_GEO exists — not up by the tool bar
 // the foreman starts on a new survival world; here, after the hologram
 // exists, because its first step takes the tool out of your hand
-if (!restored && !CREATIVE && !SHARED) tutStart(0); else renderTutor();
+// a restored save mid-guide STARTS its step, so the step's checks have their
+// baseline; drawing the card alone left the first step with no starting
+// point and nothing could clear it
+if (!restored && !CREATIVE && !SHARED) tutStart(0);
+else if (tutActive()) tutStart(tutIdx);
+else renderTutor();
 
 // ── SOUND ──────────────────────────────────────────────────────────────────
 

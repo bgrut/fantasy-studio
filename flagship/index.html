@@ -51,6 +51,9 @@
   #tutor p{margin:6px 0 0;font-family:var(--f-ui);font-size:11px;color:#a89a72;line-height:1.35}
   #tutor .skip{position:absolute;right:14px;top:10px;font-family:var(--f-mono);font-size:9px;letter-spacing:.12em;color:#8d7f5c;cursor:pointer}
   #tutor .skip:hover{color:#ffd479}
+  #tutor .next{position:absolute;right:112px;top:10px;font-family:var(--f-mono);font-size:9px;letter-spacing:.12em;color:#c9b27a;cursor:pointer}
+  #tutor .next:hover{color:#ffd479}
+  #tutor .keys{display:block;margin-top:8px;font-style:normal;font-family:var(--f-mono);font-size:8.5px;letter-spacing:.14em;color:#7d7050}
   /* the tool a step wants pulses in the bar */
   .tool.hint{border-color:#ffd479;animation:hint 1.1s ease-in-out infinite}
   @keyframes hint{0%,100%{box-shadow:0 0 0 0 rgba(255,212,121,0)}50%{box-shadow:0 0 0 5px rgba(255,212,121,.35)}}
@@ -161,6 +164,8 @@
   #motion:hover{color:#9fd6ff}
   #share{margin-top:4px;text-align:center;font-size:10px;color:#5d6480;cursor:pointer;letter-spacing:.06em}
   #share:hover{color:#5cffc9}
+  #guide{margin-top:4px;text-align:center;font-size:10px;color:#5d6480;cursor:pointer;letter-spacing:.06em}
+  #guide:hover{color:#ffd479}
   /* reduced motion: nothing settles, slides or pulses in the chrome either */
   body.reduced #title b{transition:none;transform:none}
   body.reduced #facecap,body.reduced #toast,body.reduced .tool{transition:none}
@@ -400,7 +405,7 @@
 <div id="hud">
   <h1>CRYSTAL WORKS</h1>
   <div class="hero">
-    <div class="big" title="Value is what your hubs have banked. Upgrades are bought with it."><span id="ore">0</span><small>value banked</small></div>
+    <div class="big" title="Credits are what your hubs have earned by selling to the market. Upgrades are bought with them."><span id="ore">0</span><small>credits banked</small></div>
     <div class="rate" title="What your hubs sell in a minute. Rate goals ask you to hold this."><b id="rate">0</b><small>a minute, to your hubs</small></div>
     <div id="rank"><b>UNRANKED</b><span>◇◇◇</span></div>
     <canvas id="spark" width="216" height="38"></canvas>
@@ -420,7 +425,7 @@
   <div id="rival"><b></b><small></small><div class="bar"><i style="width:100%"></i></div></div>
   <div class="sec" title="The board moves on its own. A price over 1.00 pays more than base; a rival buyer bids one product up for a minute.">MARKET <span>what a hub pays per unit; 1.00 is base</span></div>
   <div id="tick"></div>
-  <div class="sec" title="Bought with banked value. Each has a cap, and the chain raises some caps.">UPGRADES <span>bought with value; click one to buy</span></div>
+  <div class="sec" title="Bought with credits. Each has a cap, and the chain raises some caps.">UPGRADES <span>bought with credits; click one to buy</span></div>
   <div id="ups"></div>
   <div id="world"></div>
   <div id="rift"></div>
@@ -428,6 +433,7 @@
   <div id="wipe">new world</div>
   <div id="motion">motion: full</div>
   <div id="share">share link</div>
+  <div id="guide">the guide</div>
 </div>
 <div id="tools">
   <div class="tool on" data-tool="miner"><svg viewBox="0 0 24 24"><path d="M4 20h16M6 20V9M18 20V9M6 9h12M8 9V6M16 9V6M8 6h8" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linecap="round"/><path d="M12 20v-6l-2-3h4l-2 3" fill="currentColor"/></svg><i class="key">1</i><b>MINER</b><small>on a seam</small></div>
@@ -445,7 +451,7 @@
 <div id="title"><b></b><small></small></div>
 <div id="facecap"></div>
 <div id="look"></div>
-<div id="tutor"><em></em><b></b><small></small><p></p><span class="skip">skip the guide</span></div>
+<div id="tutor"><em></em><b></b><small></small><p></p><span class="next">next step</span><span class="skip">skip the guide</span><i class="keys"></i></div>
 <div id="cross"></div>
 <div id="hint">WASD to walk, Shift to run, Space to jump, click to look around.<br>Hold the left button and sweep to draw belts. TAB opens the overhead view.<br>Point at a filter and press F to change which ore it passes.<br>Walk over any edge: each side of the world grows a different ore.<br>Your factory saves itself.</div>
 <script type="importmap">{"imports":{"three":"./vendor/three.module.js"}}</script>
