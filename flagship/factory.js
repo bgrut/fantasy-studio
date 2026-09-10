@@ -233,6 +233,8 @@ const SMELT_IN = 2;                            // ore of one kind per ingot
 // and it never yields below the floor. Sixty crystals to work a seam flat, two
 // minutes to recover — long enough that moving rigs is worth it, short enough
 // that a worked face is not dead for the rest of the session.
+// A HUB TAKES TWO ITEMS A TICK. More than that backs up where it enters.
+const HUB_INTAKE = 2;
 const SEAM_COST = 1 / 60;
 const SEAM_REGROW = 1 / 120;
 const SEAM_FLOOR = 0.10;
@@ -433,6 +435,9 @@ let glowPools = null;             // built with the decals; the seams index into
 // capabilities the chain hands out; declared here because applyUpgrades
 // reads CAPS.stable and applyUpgrades runs at boot
 const CAPS = { heated: 0, scrubber: 0, stable: 0 };
+// creative is read from the URL here, in the early block: hubCost() reads it,
+// and the starter line's seeding calls that before the save block runs
+const CREATIVE = /[?&]creative=1/.test(location.search);
 // spores: one unfiltered belt clogs every SPORE_EVERY seconds on a green
 // world, for SPORE_CLOG seconds; a filter within SPORE_REACH tiles shields it
 const SPORE_EVERY = 5, SPORE_CLOG = 8, SPORE_REACH = 3;
@@ -471,7 +476,7 @@ function captureBlueprint(f, i0, j0, i1, j1) {
   const cells = [];
   for (let i = a; i <= b; i++) for (let j = c; j <= d; j++) {
     const cell = cells_at(f, i, j);
-    if (!cell || !BP_TYPES().includes(cell.t)) continue;
+    if (!cell || !BP_TYPES().includes(cell.t) || cell.t === HUB) continue;   // hubs are placed by hand and paid for
     cells.push({ di: i - a, dj: j - c, t: cell.t, d: cell.d | 0, filt: cell.filt || 0 });
   }
   const t = document.getElementById('toast');
@@ -1907,6 +1912,7 @@ function refreshCounts() {
   document.getElementById('nmine').textContent = m;
   document.getElementById('nbelt').textContent = b;
   document.getElementById('nsmelt').textContent = sm;
+  renderHubChip();
 }
 
 function removeAt(face, i, j) {
@@ -3090,7 +3096,9 @@ function bank(type) {
 // enter a machine one way and not another for no reason the player can see.
 function accepts(dst, type) {
   if (!dst) return false;
-  if (dst.t === HUB) return true;
+  // a hub that took its fill last tick reads as full until the next one, so
+  // the belts feeding it hold and go amber where the bottleneck is
+  if (dst.t === HUB) return (dst.took | 0) < HUB_INTAKE;
   if (dst.t === BELT || dst.t === SPLITTER || dst.t === FILTER) return !dst.item;
   // A smelter refines ONE kind at a time — mixing two ores in it would make
   // the alloy free, and the alloy is supposed to cost a trip across an edge.
@@ -3145,6 +3153,7 @@ function deliver(dst, to, type) {
 }
 
 function step() {
+  eachTile(c => { if (c.t === HUB) c.took = 0; });    // each tick a hub can take its fill again
   // Smelters run FIRST so a finished ingot leaves before the belts feeding
   // this smelter get their turn — otherwise a full input belt would block the
   // machine that is about to free it, and lines deadlock at exactly the
@@ -3209,7 +3218,7 @@ function step() {
       const to = stepTile(f, i, j, dir);
       const dst = cellOf(to);
       if (!dst) return;
-      if (dst.t === HUB) moves.push([c, 'bank']);
+      if (dst.t === HUB) moves.push([c, 'bank', to]);
       else if (accepts(dst, c.item)) moves.push([c, 'to', to]);
       return;
     }
@@ -3217,7 +3226,7 @@ function step() {
     const to = stepTile(f, i, j, c.d);
     const dst = cellOf(to);
     if (!dst) return;
-    if (dst.t === HUB) moves.push([c, 'bank']);
+    if (dst.t === HUB) moves.push([c, 'bank', to]);
     // a smelter only accepts CRYSTALS, and only while it has room. An ingot
     // arriving at a smelter simply waits, which is the correct answer and
     // also a visible one — the belt backs up and you can see the mistake.
@@ -3253,7 +3262,13 @@ function step() {
   for (const mv of order) {
     const c = mv[0];
     if (!c.item) continue;
-    if (mv[1] === 'bank') { bank(c.item); c.item = 0; continue; }
+    if (mv[1] === 'bank') {
+      // the hub's intake: past its fill the item stays on the belt this tick
+      const h = cellOf(mv[2]);
+      if (!h || (h.took | 0) >= HUB_INTAKE) continue;
+      h.took = (h.took | 0) + 1;
+      bank(c.item); c.item = 0; continue;
+    }
     const dst = cellOf(mv[2]);
     if (!accepts(dst, c.item)) continue;   // another input reached it first
     deliver(dst, mv[2], c.item);
@@ -3509,10 +3524,36 @@ function dirBetween(a, b) {
   return null;
 }
 
+// HUBS COST CREDITS. The first is free; then 200, 500, 1200, doubling. A
+// face has to be brought to one place, which is what makes it a puzzle.
+function hubCount() { let n = 0; eachTile(c => { if (c.t === HUB) n++; }); return n; }
+function hubCost(n) {
+  const k = n === undefined ? hubCount() : n;
+  if (CREATIVE || k === 0) return 0;
+  const ladder = [0, 200, 500, 1200];
+  return k < ladder.length ? ladder[k] : ladder[ladder.length - 1] * Math.pow(2, k - ladder.length + 1);
+}
+function renderHubChip() {
+  const el = document.querySelector('.tool[data-tool="hub"] small');
+  if (!el) return;
+  const cost = hubCost();
+  el.textContent = cost ? 'next hub ' + cost + ' credits' : 'sells what arrives';
+}
 function apply(t, dir) {
   if (!UNLOCKED[tool]) return;      // hotkeys and drags go through here too
   const d = dir == null ? 0 : dir;
   const c0 = cellOf(t), was = c0 ? c0.t : -1;
+  if (tool === 'hub' && c0 && c0.t !== HUB && c0.t !== NODE) {
+    const cost = hubCost();
+    if (ore < cost) {
+      const tt = document.getElementById('toast');
+      if (tt) { tt.textContent = 'A second hub costs ' + cost + ' credits and you have ' + Math.floor(ore) + '. Join this line to the hub you already have, or bank more first.'; tt.classList.add('on'); toastAt = 4.5; }
+      const el = document.querySelector('.tool[data-tool="hub"]');
+      if (el) { el.classList.add('deny'); setTimeout(() => el.classList.remove('deny'), 320); }
+      return;
+    }
+    ore -= cost;
+  }
   if (tool === 'erase') { removeAt(t.face, t.i, t.j); if (c0 && c0.t !== was) rigPulse('erase'); return; }
   const TOOL_TYPE = { miner: MINER, hub: HUB, smelter: SMELTER, splitter: SPLITTER,
                       forge: FORGE, filter: FILTER, rift: RIFT, belt: BELT };
@@ -3521,6 +3562,7 @@ function apply(t, dir) {
   place(t.face, t.i, t.j, ty, (ty === HUB || ty === SPLITTER) ? 0 : d);
   // the projector recoils only when something actually went down
   if (c0 && c0.t === ty && was !== ty) rigPulse('place');
+  if (ty === HUB) { renderHubChip(); renderUpgrades(); }
 }
 
 renderer.domElement.addEventListener('pointerdown', e => {
@@ -4391,7 +4433,7 @@ const rigsOnSeams = () => { let n = 0; eachTile(c => { if (c.t === MINER && c.me
 
 const GOALS = [
   { text: 'bank 40 credits', unlock: 'splitter',
-    tip: 'Anything that reaches a hub is sold. Bank 40 credits to unlock the splitter.',
+    tip: 'Anything that reaches a hub is sold, two items a tick per hub. Bank 40 credits to unlock the splitter.',
     got: 'Splitter unlocked. It sends each item out of a different side in turn, so one line can feed two machines.',
     done: () => ore >= 40, progress: () => ore / 40 },
   { text: 'hold 400 a minute for 20s', rate: 400, hold: 20, cap: 'tick',
@@ -4556,7 +4598,7 @@ const ACT1 = [
     mark: () => tutBase.rig && stepTile(tutBase.rig.face, tutBase.rig.i, tutBase.rig.j, cells[tutBase.rig.face][tutBase.rig.i][tutBase.rig.j].d),
     check: () => { const r = tutBase.rig; if (!r) return false; const f = stepTile(r.face, r.i, r.j, cells[r.face][r.i][r.j].d);
                    return f && cellOf(f) && cellOf(f).t === BELT && countType(BELT) >= tutBase.belts + 2; } },
-  { title: 'Finish the line', text: 'End the belt at a smelter (3), then run its output to a hub (5), or join the belt that already feeds the hub.',
+  { title: 'Finish the line', text: 'End the belt at a smelter (3), then run its output into the belt that already feeds your hub. A second hub costs 200 credits, so joining the line is the cheap way.',
     why: 'Anything that reaches a hub is sold. When your new rig\'s ore starts selling, the rate on the panel rises. Hold it there and the goal card will ask you for more.',
     mark: () => findTile(0, HUB),
     // a second rig's worth over what the line did when the step began: noise
@@ -4679,7 +4721,7 @@ function describeCell(c, t) {
     case BELT: return 'BELT  ·  heading ' + heading + (item ? '  ·  carrying a ' + item : '  ·  empty') + (c.clog > 0 ? '  ·  clogged with spores' : '');
     case SMELTER: return 'SMELTER  ·  two ore in, one ingot out' + (c.cook > 0 ? '  ·  cooking' : c.buf > 0 ? '  ·  waiting for a second ore' : '  ·  waiting for ore');
     case FORGE: return 'FORGE  ·  two different ores in, one alloy out' + (c.cook > 0 ? '  ·  cooking' : (c.fa && c.fb) ? '  ·  ready' : c.fa || c.fb ? '  ·  has one ore, needs the other' : '  ·  waiting for ore');
-    case HUB: return 'HUB  ·  sells whatever arrives';
+    case HUB: return 'HUB  ·  sells what arrives  ·  ' + (c.took | 0) + ' of ' + HUB_INTAKE + ' taken this tick' + ((c.took | 0) >= HUB_INTAKE ? '  ·  full' : '');
     case SPLITTER: return 'SPLITTER  ·  sends each item out of a different side in turn' + (item ? '  ·  holding a ' + item : '');
     case FILTER: return 'FILTER  ·  passes ' + (ORE_NAME[c.filt] || 'crystal') + ', the rest exits the side  ·  F changes it';
     case RIFT: return 'RIFT  ·  ' + (c.dbt > 0 ? 'lent ' + c.dbt + ' to repay, ' + Math.ceil(c.left || 0) + 's left' : 'lends ore against a deadline');
@@ -4749,7 +4791,6 @@ function stepGoals(dt) {
 // CREATIVE is decided here, once, from the URL: the studio passes ?creative=1
 // and the in-game "new world" control reloads with it. It is never flipped
 // mid-run. Each mode keeps its own save, so the two worlds coexist.
-const CREATIVE = /[?&]creative=1/.test(location.search);
 const SAVE_KEY = 'fs-factory-' +
   String(SPEC.title || 'untitled').toLowerCase().replace(/[^a-z0-9]+/g, '-') +
   (CREATIVE ? '-creative' : '');
@@ -5779,6 +5820,7 @@ window.__game = {
     lifetime: { value: Math.round(lifetime.value), contracts: lifetime.contracts, longest_hold: +lifetime.longestHold.toFixed(1),
                 worlds: [...visitedWorlds], works: lifetime.works, works_done: worksDone() },
     smelt_ticks: SMELT_TICKS,
+    hubs: hubCount(), hub_cost: hubCost(), hub_intake: HUB_INTAKE,
     rival: rival ? { item: contractName(rival.item, 2), mult: rival.mult, left: +rival.left.toFixed(1), sold: rival.sold, extra: +rival.extra.toFixed(1) } : null,
     blueprint: blueprint ? { w: blueprint.w, h: blueprint.h, n: blueprint.cells.length, rot: bpRot } : null,
     standing: standing ? { item: contractName(standing.item, standing.perMin), per_min: standing.perMin, pay: standing.pay,
@@ -5849,7 +5891,7 @@ window.__factory = {
   get shards() { return shards; }, set shards(v) { shards = v; renderRank(); }, get rank() { return rank; }, CONTRACT_EVERY,
   offerStanding, get standing() { return standing; }, set streak(v) { streak = v; }, get streak() { return streak; },
   set rank(v) { rank = v; renderRank(); gildEdge(); applyUpgrades(); }, PERKS, lifetime, get visitedWorlds() { return visitedWorlds; },
-  worksDone, playWorks,
+  worksDone, playWorks, hubCost, hubCount, HUB_INTAKE, apply, pickTool,
   get TUT() { return TUT; }, ACT1, ACT2, get tutAct() { return tutAct; }, startAct2, get tutIdx() { return tutIdx; }, set tutIdx(v) { tutStart(v); }, tutStart, describeCell, get tool() { return tool; },
   set bpStamps(v) { bpStamps = v; }, set overheadSeen(v) { overheadSeen = v; },
   set standingHeld(v) { if (standing) standing.held = v; }, STANDING_GRACE,
