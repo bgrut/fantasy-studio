@@ -191,7 +191,7 @@ function faceOfPoint(px, py, pz) {
 const BASE_TICK = 0.42;
 let TICK = BASE_TICK;
 const EMPTY = 0, MINER = 1, BELT = 2, HUB = 3, NODE = 4, SMELTER = 5,
-      SPLITTER = 6, FORGE = 7, FILTER = 8, RIFT = 9;
+      SPLITTER = 6, FORGE = 7, FILTER = 8, RIFT = 9, ASSEMBLER = 10;
 const DIRS = [[1, 0], [0, 1], [-1, 0], [0, -1]];        // E S W N
 
 // Items now have a TYPE, and that is the whole point of the smelter. Until
@@ -208,7 +208,7 @@ const DIRS = [[1, 0], [0, 1], [-1, 0], [0, -1]];        // E S W N
 // single face's ore. Now a belt HAS to go over an edge.
 const CRYSTAL = 1, EMBER = 2, SALT = 3;
 const MINERALS = [CRYSTAL, EMBER, SALT];
-const INGOT = 4, INGOT_E = 5, INGOT_S = 6, ALLOY = 7;
+const INGOT = 4, INGOT_E = 5, INGOT_S = 6, ALLOY = 7, COMPONENT = 8;
 const INGOT_OF = { [CRYSTAL]: INGOT, [EMBER]: INGOT_E, [SALT]: INGOT_S };
 const IS_MINERAL = t => t === CRYSTAL || t === EMBER || t === SALT;
 const IS_INGOT = t => t === INGOT || t === INGOT_E || t === INGOT_S;
@@ -218,7 +218,7 @@ const MINERAL_OF_FACE = [CRYSTAL, CRYSTAL, EMBER, EMBER, SALT, SALT];
 const MINERAL_NAME = { [CRYSTAL]: 'crystal', [EMBER]: 'ember', [SALT]: 'salt' };
 const TYPE_NAME = { 1: 'miner', 2: 'belt', 3: 'hub', 4: 'ore node',
                     5: 'smelter', 6: 'splitter', 7: 'forge', 8: 'filter',
-                    9: 'chronos rift' };
+                    9: 'chronos rift', 10: 'assembler' };
 
 const VALUE = { [CRYSTAL]: 1, [INGOT]: 6 };   // an ingot is worth the detour
 const SMELT_IN = 2;                            // ore of one kind per ingot
@@ -234,6 +234,7 @@ const SEAM_REGROW = 1 / 120;
 const SEAM_FLOOR = 0.10;
 let SMELT_TICKS = 3;                           // and it takes time
 let FORGE_TICKS = 4;                           // an alloy takes longer still
+let ASSEMBLE_TICKS = 4;
 
 // ── UPGRADES ───────────────────────────────────────────────────────────────
 // The loop this genre runs on is: build something, watch the number climb,
@@ -271,7 +272,9 @@ function applyUpgrades() {
   // An alloy is worth more than the three ingots it displaces, because it
   // costs a belt run across a face boundary and the risk of getting it wrong.
   VALUE[ALLOY] = 26 * y;
+  VALUE[COMPONENT] = 64 * y;                    // an alloy and an ingot, assembled: worth more than both
   FORGE_TICKS = Math.max(2, 4 - UPGRADES.smelt.lvl - (perk(2) ? 1 : 0));
+  ASSEMBLE_TICKS = Math.max(2, 4 - Math.floor(UPGRADES.smelt.lvl / 2));
 }
 
 function buy(key) {
@@ -444,6 +447,7 @@ let iceClock = 0, iceHits = 0, iceToasted = false;
 // contracts: a clock you can hear ticking
 const CONTRACT_EVERY = 70, CONTRACT_SECS = 90;
 let contract = null, contractClock = 40, contractsFilled = 0, shards = 0, rank = 0;
+let components = 0;
 // what a rank changes in the machines, derived from the rank, never saved
 const PERKS = [
   { name: 'DEEP BITS', text: 'a rig on a seam over 80% rich yields every tick' },
@@ -464,7 +468,7 @@ let rival = null, rivalClock = 60;
 // the quarter turns applied when it is stamped
 let blueprint = null, bpRot = 0, bpStart = null, bpEnd = null;
 try { const raw = localStorage.getItem('fs-factory-bp'); if (raw) blueprint = JSON.parse(raw); } catch (e) {}
-const BP_TYPES = () => [BELT, MINER, SMELTER, SPLITTER, FORGE, FILTER, HUB, RIFT];
+const BP_TYPES = () => [BELT, MINER, SMELTER, SPLITTER, FORGE, FILTER, HUB, RIFT, ASSEMBLER];
 function captureBlueprint(f, i0, j0, i1, j1) {
   const a = Math.min(i0, i1), b = Math.max(i0, i1), c = Math.min(j0, j1), d = Math.max(j0, j1);
   const cells = [];
@@ -1511,6 +1515,9 @@ const MAT = {
   smelt: new THREE.MeshStandardMaterial({ color: 0x8c6bff, roughness: 0.45,
     metalness: 0.4, emissive: 0x2a1470, emissiveIntensity: 0.3,
     map: SKIN, roughnessMap: SKIN_ROUGH }),
+  assem: new THREE.MeshStandardMaterial({ color: 0xe0b451, roughness: 0.42,
+    metalness: 0.5, emissive: 0x4a3a08, emissiveIntensity: 0.3,
+    map: SKIN, roughnessMap: SKIN_ROUGH }),
   split: new THREE.MeshStandardMaterial({ color: 0x4bb5ff, roughness: 0.45,
     metalness: 0.35, emissive: 0x0d3f66, emissiveIntensity: 0.3,
     map: SKIN, roughnessMap: SKIN_ROUGH }),
@@ -1715,6 +1722,22 @@ const GEO = {
     { g: _box(0.08, 0.42, 0.08), y: 0.44, x: T * 0.40, z: -T * 0.34, tint: 0.62 },
   ]),
   filterGate: new THREE.BoxGeometry(T * 0.16, 0.5, T * 0.62),
+  // an assembler: a low bench with two intake ports on the sides, a gantry
+  // over the middle and a press head under it, so it reads as a machine that
+  // puts two things together rather than a furnace that melts one
+  assembler: mergeParts([
+    { g: _box(T * 0.92, 0.12, T * 0.92), y: 0.06, tint: 0.6 },                // skirt
+    { g: _box(T * 0.80, 0.34, T * 0.80), y: 0.29 },                           // bench
+    { g: _box(0.14, 0.26, T * 0.30), y: 0.20, z: T * 0.44, tint: 0.55 },      // port
+    { g: _box(0.14, 0.26, T * 0.30), y: 0.20, z: -T * 0.44, tint: 0.55 },     // port
+    { g: _box(0.10, 0.92, 0.10), y: 0.75, x: -T * 0.28, z: T * 0.30, tint: 0.62 },
+    { g: _box(0.10, 0.92, 0.10), y: 0.75, x: -T * 0.28, z: -T * 0.30, tint: 0.62 },
+    { g: _box(0.10, 0.92, 0.10), y: 0.75, x: T * 0.28, z: T * 0.30, tint: 0.62 },
+    { g: _box(0.10, 0.92, 0.10), y: 0.75, x: T * 0.28, z: -T * 0.30, tint: 0.62 },
+    { g: _box(T * 0.72, 0.12, T * 0.76), y: 1.22, tint: 0.7 },                // gantry
+    { g: _cyl(0.16, 0.16, 0.40, 8), y: 0.96 },                                // press
+    { g: _box(T * 0.30, 0.10, T * 0.30), y: 0.74, tint: 0.45 },               // the head
+  ]),
 
   // Ground detail. Nothing here is interactive; it exists so the floor has a
   // size. Two kinds is enough — one flat and wide, one small and clustered —
@@ -1851,6 +1874,7 @@ function buildToolIcons() {
     splitter: () => mk(GEO.split, MAT.split),
     hub: () => mk(GEO.hub, MAT.hub),
     forge: () => mk(GEO.forge, MAT.forge),
+    assembler: () => mk(GEO.assembler, MAT.assem),
     filter: () => mk(GEO.filter, MAT.filt),
     rift: () => grp([mk(GEO.riftBase, MAT.rift),
                      (() => { const r = mk(GEO.rift, MAT.rift);
@@ -1868,6 +1892,9 @@ function buildToolIcons() {
     alloy: () => mk(new THREE.OctahedronGeometry(0.5, 1),
       new THREE.MeshStandardMaterial({ color: 0xff5ad9, emissive: 0x8a1a6a,
         emissiveIntensity: 0.9, metalness: 0.6, roughness: 0.25 })),
+    component: () => mk(new THREE.BoxGeometry(1.0, 0.42, 0.62),
+      new THREE.MeshStandardMaterial({ color: 0xffe27a, emissive: 0x8a6a10,
+        emissiveIntensity: 0.9, metalness: 0.75, roughness: 0.25 })),
     core: () => mk(new THREE.IcosahedronGeometry(0.5, 0),
       new THREE.MeshStandardMaterial({ color: 0xffd479, emissive: 0xa06a10,
         emissiveIntensity: 1.1, metalness: 0.8, roughness: 0.2 })),
@@ -1981,6 +2008,13 @@ function place(face, i, j, type, dir) {
     g.add(gate);
     const r = new THREE.Mesh(GEO.arrow, MAT.filt);   // reject: out the side
     r.position.set(0, 0.42, 0.74); r.rotation.x = Math.PI / 2; g.add(r);
+  } else if (type === ASSEMBLER) {
+    const b = new THREE.Mesh(GEO.assembler, MAT.assem);
+    b.castShadow = true; b.receiveShadow = true; g.add(b);
+    // the press head glows while it cooks
+    const lamp = new THREE.Mesh(new THREE.BoxGeometry(T * 0.26, 0.05, T * 0.26),
+      new THREE.MeshBasicMaterial({ color: 0x3a2a08 }));
+    lamp.position.set(0, 0.70, 0); lamp.name = 'lamp'; g.add(lamp);
   } else if (type === FORGE) {
     const b = new THREE.Mesh(GEO.forge, MAT.forge);
     b.castShadow = true; g.add(b);
@@ -2256,7 +2290,7 @@ function poolAt(mesh, k, f, i, j, size, col, strength) {
   _lc.setHex(col).multiplyScalar(strength);
   mesh.setColorAt(k, _lc);
 }
-const OVERHEAD_COL = { [MINER]: 0xff5d73, [SMELTER]: 0x8c6bff, [SPLITTER]: 0x4bb5ff, [FORGE]: 0xd94fb0,
+const OVERHEAD_COL = { [MINER]: 0xff5d73, [SMELTER]: 0x8c6bff, [SPLITTER]: 0x4bb5ff, [FORGE]: 0xd94fb0, [ASSEMBLER]: 0xe0b451,
                        [FILTER]: 0x2f8f7d, [RIFT]: 0x6a3cff, [HUB]: 0xffd479 };
 function stepLampPools() {
   let k = 0;
@@ -2269,6 +2303,8 @@ function stepLampPools() {
     if (overhead) { poolAt(lampPools, k++, f, i, j, T * 1.5, OVERHEAD_COL[c.t] || 0xffffff, 0.55); return; }
     if (c.t === SMELTER) { if (c.glow > 0.03) poolAt(lampPools, k++, f, i, j, T * 1.6, 0xff7a22, 0.9 * c.glow); }
     else if (c.t === FORGE) { if (c.cook > 0) poolAt(lampPools, k++, f, i, j, T * 1.8, 0xff5ad9, 0.7); }
+    else if (c.t === ASSEMBLER) { const lamp = c.build.getObjectByName('lamp'); if (lamp) lamp.material.color.setHex(c.cook > 0 ? 0xffe27a : 0x3a2a08);
+                                  if (c.cook > 0) poolAt(lampPools, k++, f, i, j, T * 1.6, 0xffe27a, 0.6); }
     else if (c.t === HUB) poolAt(lampPools, k++, f, i, j, T * 2.2, 0xffd479, breathe + (c.pulse || 0) * 0.9);
     else if (c.t === RIFT) { if (c.dbt > 0) poolAt(lampPools, k++, f, i, j, T * 1.7, MIN_COL[c.dmin] || 0xff5ad9, 0.6); }
   });
@@ -2600,7 +2636,7 @@ for (const mat of [items.material, bars.material]) {
   };
   mat.needsUpdate = true;
 }
-const IS_BAR = t => IS_INGOT(t) || t === ALLOY;
+const IS_BAR = t => IS_INGOT(t) || t === ALLOY || t === COMPONENT;
 const _bq = new THREE.Quaternion(), _bfwd = new THREE.Vector3(), _bside = new THREE.Vector3();
 // One mesh still, but two products: instanceColor is what lets a single draw
 // call carry both. Reading a belt at a glance — "that line is running ingots,
@@ -2617,6 +2653,7 @@ const ITEM_COL = {
   [INGOT_E]: new THREE.Color(0xffae4d),
   [INGOT_S]: new THREE.Color(0xd8e2f5),
   [ALLOY]: new THREE.Color(0xff5ad9),
+  [COMPONENT]: new THREE.Color(0xffe27a),
 };
 
 const _m = new THREE.Matrix4();
@@ -2635,10 +2672,10 @@ let alloys = 0;
 // pays the live rate, so "which ingot should this line be making" becomes a
 // question with an answer that changes — which is the thing a single-recipe
 // factory can never have. The filter tile is how you act on it.
-const TRADED = [INGOT, INGOT_E, INGOT_S, ALLOY];
-const TRADE_NAME = { [INGOT]: 'crystal', [INGOT_E]: 'ember',
+const TRADED = [INGOT, INGOT_E, INGOT_S, ALLOY, COMPONENT];
+const TRADE_NAME = { [COMPONENT]: 'component', [INGOT]: 'crystal', [INGOT_E]: 'ember',
                      [INGOT_S]: 'salt', [ALLOY]: 'alloy' };
-const TRADE_COL = { [INGOT]: '#9fd6ff', [INGOT_E]: '#ffae4d',
+const TRADE_COL = { [COMPONENT]: '#ffe27a', [INGOT]: '#9fd6ff', [INGOT_E]: '#ffae4d',
                     [INGOT_S]: '#d8e2f5', [ALLOY]: '#ff5ad9' };
 const PRICE = {}, LAST_PRICE = {};
 for (const t of TRADED) { PRICE[t] = 1; LAST_PRICE[t] = 1; }
@@ -2748,11 +2785,13 @@ function stepIce(dt) {
 // rate so it is always achievable if you hurry, and paid with a shard.
 // a contract names what it wants without ambiguity: "crystal" is the ore,
 // "crystal ingots" is what a hub is paid for
-const contractName = (item, n) => item === ALLOY ? (n === 1 ? 'alloy bar' : 'alloy bars') : (TRADE_NAME[item] || 'item') + (n === 1 ? ' ingot' : ' ingots');
+const contractName = (item, n) => item === COMPONENT ? (n === 1 ? 'component' : 'components')
+  : item === ALLOY ? (n === 1 ? 'alloy bar' : 'alloy bars') : (TRADE_NAME[item] || 'item') + (n === 1 ? ' ingot' : ' ingots');
 function offerContract(forceItem) {
   if (contract) return contract;
   const pool = [INGOT, INGOT_E, INGOT_S];
   if (UNLOCKED.forge) pool.push(ALLOY, ALLOY);
+  if (UNLOCKED.assembler) pool.push(COMPONENT, COMPONENT);   // once you can make them, the market wants them
   const item = forceItem || pool[(Math.random() * pool.length) | 0];
   const unit = (VALUE[item] || 6) * (PRICE[item] || 1);
   // a third of a minute's output at the current rate, in units of the item,
@@ -3009,10 +3048,11 @@ function drawTickerBoard() {
   TRADED.forEach((t, k) => {
     const h = priceBar(t, 24);
     // the rival's product is boxed in white while the buyer is in
-    if (rival && rival.item === t) { g.strokeStyle = 'rgba(255,255,255,0.9)'; g.lineWidth = 2; g.strokeRect(7 + k * 30, 6, 26, 52); }
+    const x = 6 + k * 24;                       // five products on a 128px board
+    if (rival && rival.item === t) { g.strokeStyle = 'rgba(255,255,255,0.9)'; g.lineWidth = 2; g.strokeRect(x - 3, 6, 22, 52); }
     g.fillStyle = TRADE_COL[t];
-    if (h >= 0) g.fillRect(10 + k * 30, base - h, 20, Math.max(2, h));
-    else g.fillRect(10 + k * 30, base, 20, Math.max(2, -h));
+    if (h >= 0) g.fillRect(x, base - h, 16, Math.max(2, h));
+    else g.fillRect(x, base, 16, Math.max(2, -h));
   });
   TICK_TEX.needsUpdate = true;
 }
@@ -3079,6 +3119,7 @@ function bank(type) {
   if (rival && type === rival.item) { const extra = v * (rival.mult - 1); rival.sold++; rival.extra += extra; v += extra; }
   ore += v; runValue += v; lifetime.value += v;
   if (type === ALLOY && (PRICE[ALLOY] || 1) >= 1.2) soldHigh++;
+  if (type === COMPONENT) components++;
   if (contract && type === contract.item) { contract.have++; renderContract(); if (contract.have >= contract.need) fillContract(); }
   if (standing && type === standing.item) standing.log.push(performance.now());
   if (IS_INGOT(type)) ingots++;
@@ -3104,6 +3145,9 @@ function accepts(dst, type) {
   if (dst.t === FORGE)
     return IS_MINERAL(type) && dst.cook === 0 &&
            (dst.fa === 0 || (dst.fb === 0 && type !== dst.fa));
+  // an assembler wants one alloy and one ingot of any kind, and nothing else
+  if (dst.t === ASSEMBLER)
+    return dst.cook === 0 && ((type === ALLOY && !dst.ha) || (IS_INGOT(type) && !dst.hb));
   // a rift only takes back exactly what it lent — anything else rides past it,
   // which is what makes the filter tile the tool for repaying one
   if (dst.t === RIFT) return dst.dbt > 0 && type === dst.dmin;
@@ -3113,7 +3157,7 @@ function accepts(dst, type) {
 // arrival be a visible event rather than a counter changing in the corner.
 function deliver(dst, to, type) {
   // a machine eating something should be visible from outside it
-  if (to && (dst.t === SMELTER || dst.t === FORGE || dst.t === RIFT)) {
+  if (to && (dst.t === SMELTER || dst.t === FORGE || dst.t === RIFT || dst.t === ASSEMBLER)) {
     const n = FACES[to.face].n, w = tileWorld(to.face, to.i, to.j);
     const col = ITEM_COL[type] || ITEM_COL[CRYSTAL];
     for (let k = 0; k < 3; k++)
@@ -3142,6 +3186,7 @@ function deliver(dst, to, type) {
   }
   else if (dst.t === SMELTER) { dst.buf++; dst.bt = type; }
   else if (dst.t === FORGE) { if (dst.fa === 0) dst.fa = type; else dst.fb = type; }
+  else if (dst.t === ASSEMBLER) { if (type === ALLOY) dst.ha = 1; else dst.hb = 1; }
   else if (dst.t === RIFT) { if (--dst.dbt <= 0) riftSettle(dst, true); }
   else dst.item = type;
 }
@@ -3153,11 +3198,11 @@ function step() {
   // machine that is about to free it, and lines deadlock at exactly the
   // moment they start working.
   eachTile((c, f, i, j) => {
-    if (c.t !== SMELTER && c.t !== FORGE) return;
+    if (c.t !== SMELTER && c.t !== FORGE && c.t !== ASSEMBLER) return;
     if (c.cook > 0) {
       c.cook--;
       if (c.cook === 0) {
-        const out = c.t === FORGE ? ALLOY : (INGOT_OF[c.bt] || INGOT);
+        const out = c.t === ASSEMBLER ? COMPONENT : c.t === FORGE ? ALLOY : (INGOT_OF[c.bt] || INGOT);
         sfxClank();
         const dst = cellOf(stepTile(f, i, j, c.d));
         if (dst && dst.t === HUB) bank(out);
@@ -3167,6 +3212,8 @@ function step() {
     }
     if (c.t === SMELTER) {
       if (c.cook === 0 && c.buf >= SMELT_IN) { c.buf -= SMELT_IN; c.cook = SMELT_TICKS; }
+    } else if (c.t === ASSEMBLER) {
+      if (c.cook === 0 && c.ha && c.hb) { c.ha = 0; c.hb = 0; c.cook = ASSEMBLE_TICKS; }
     } else if (c.cook === 0 && c.fa && c.fb) {
       c.fa = 0; c.fb = 0; c.cook = FORGE_TICKS;
     }
@@ -3382,6 +3429,7 @@ function drawItems(alpha) {
       _p.addScaledVector(_up, -0.07);                 // sits on the deck, not floating
       _m.setPosition(_p);
       if (c.item === ALLOY) _m.scale(_s.set(1.15, 1.35, 1.15));
+      else if (c.item === COMPONENT) _m.scale(_s.set(1.3, 1.6, 1.3));
       bars.setColorAt(nb, ITEM_COL[c.item] || ITEM_COL[INGOT]);
       bars.setMatrixAt(nb++, _m);
       _s.set(1, 1, 1);
@@ -3455,7 +3503,7 @@ function cellUnder(ev) {
 // both read it, so it lives before either
 const HOLO_GEO = {
   miner: 'miner', belt: 'beltFrame', smelter: 'smelt', splitter: 'split',
-  hub: 'hub', forge: 'forge', filter: 'filter', rift: 'riftBase',
+  hub: 'hub', forge: 'forge', filter: 'filter', rift: 'riftBase', assembler: 'assembler',
 };
 const GHOST_BOX = new THREE.BoxGeometry(T * 0.92, 0.5, T * 0.92);
 const ghost = new THREE.Mesh(GHOST_BOX,
@@ -3550,7 +3598,7 @@ function apply(t, dir) {
   }
   if (tool === 'erase') { removeAt(t.face, t.i, t.j); if (c0 && c0.t !== was) rigPulse('erase'); return; }
   const TOOL_TYPE = { miner: MINER, hub: HUB, smelter: SMELTER, splitter: SPLITTER,
-                      forge: FORGE, filter: FILTER, rift: RIFT, belt: BELT };
+                      forge: FORGE, filter: FILTER, rift: RIFT, belt: BELT, assembler: ASSEMBLER };
   const ty = TOOL_TYPE[tool];
   if (ty === undefined) return;
   place(t.face, t.i, t.j, ty, (ty === HUB || ty === SPLITTER) ? 0 : d);
@@ -3648,7 +3696,7 @@ document.querySelectorAll('.tool').forEach(el => {
 });
 addEventListener('keydown', e => {
   const k = { '1': 'miner', '2': 'belt', '3': 'smelter', '4': 'splitter',
-              '5': 'hub', '6': 'forge', '7': 'filter', '8': 'rift',
+              '5': 'hub', '6': 'forge', '7': 'filter', '8': 'rift', 'q': 'assembler', 'Q': 'assembler',
               '9': 'erase', '0': 'blueprint' }[e.key];
   if (k === 'blueprint' && tool === 'blueprint' && blueprint) { dropBlueprint(); return; }
   if (k) pickTool(k);
@@ -4450,7 +4498,8 @@ const GOALS = [
     got: 'Chronos Rift unlocked. It lends ore now against a repayment later; miss the deadline and it takes the machines around it.' },
   { text: 'sell an alloy above 1.20', cap: 'smelt',
     tip: 'Watch the alloy price on the hub board. Hold your alloy back until it pays over 1.20, then let it through.',
-    got: 'Hot Furnace can now be bought to level 6. Smelters and forges cook faster.',
+    unlock: 'assembler',
+    got: 'Assembler unlocked (Q). Feed it an alloy bar and an ingot of any kind and it makes a component, worth more than both. Hot Furnace can now be bought to level 6.',
     done: () => soldHigh >= 1, progress: () => soldHigh },
   { text: 'bank ' + MELT_MIN + ' credits', unlock: 'meltdown',
     tip: 'A meltdown throws the whole factory to the sky and pays a permanent core for it. Build enough to make that worth doing.',
@@ -4714,6 +4763,7 @@ function describeCell(c, t) {
       + (c.ice > 0 && !CAPS.heated ? '  ·  frozen, scraping at half rate' : '') + '  ·  ore leaves out of the front';
     case BELT: return 'BELT  ·  heading ' + heading + (item ? '  ·  carrying a ' + item : '  ·  empty') + (c.clog > 0 ? '  ·  clogged with spores' : '');
     case SMELTER: return 'SMELTER  ·  two ore in, one ingot out' + (c.cook > 0 ? '  ·  cooking' : c.buf > 0 ? '  ·  waiting for a second ore' : '  ·  waiting for ore');
+    case ASSEMBLER: return 'ASSEMBLER  ·  an alloy bar and an ingot in, one component out' + (c.cook > 0 ? '  ·  assembling' : c.ha && c.hb ? '  ·  ready' : c.ha ? '  ·  has the alloy, needs an ingot' : c.hb ? '  ·  has an ingot, needs an alloy bar' : '  ·  waiting');
     case FORGE: return 'FORGE  ·  two different ores in, one alloy out' + (c.cook > 0 ? '  ·  cooking' : (c.fa && c.fb) ? '  ·  ready' : c.fa || c.fb ? '  ·  has one ore, needs the other' : '  ·  waiting for ore');
     case HUB: return 'HUB  ·  sells what arrives  ·  ' + (c.took | 0) + ' of ' + HUB_INTAKE + ' taken this tick' + ((c.took | 0) >= HUB_INTAKE ? '  ·  full' : '');
     case SPLITTER: return 'SPLITTER  ·  sends each item out of a different side in turn' + (item ? '  ·  holding a ' + item : '');
@@ -4818,7 +4868,7 @@ function saveState() {
             c.emit | 0, Math.round(c.left || 0), Math.round(c.cool || 0)]);
   });
   return {
-    v: SAVE_V, n: N, ore, ingots, alloys, cores, runValue,
+    v: SAVE_V, n: N, ore, ingots, alloys, cores, runValue, components,
     up: { tick: UPGRADES.tick.lvl, yield: UPGRADES.yield.lvl,
           smelt: UPGRADES.smelt.lvl },
     price: TRADED.map(t => PRICE[t]),
@@ -4856,7 +4906,7 @@ function loadState(d) {
     if (gate) { gate.material.color.setHex(MIN_COL[c.filt]);
                 gate.material.emissive.setHex(MIN_COL[c.filt]); }
   }
-  ore = +d.ore || 0; ingots = d.ingots | 0; alloys = d.alloys | 0;
+  ore = +d.ore || 0; ingots = d.ingots | 0; alloys = d.alloys | 0; components = d.components | 0;
   cores = d.cores | 0; runValue = +d.runValue || 0;
   if (d.up) for (const k in UPGRADES)
     UPGRADES[k].lvl = Math.max(0, Math.min(UPGRADES[k].cap, d.up[k] | 0));
@@ -5123,6 +5173,7 @@ renderer.setAnimationLoop(() => {
   document.getElementById('ore').textContent = Math.floor(ore);
   document.getElementById('ingot').textContent = ingots;
   document.getElementById('alloy').textContent = alloys;
+  const nc = document.getElementById('ncomp'); if (nc) nc.textContent = components;
   // the buttons light up the moment you can afford them — the whole point of
   // the number climbing is watching it cross a threshold
   if (Math.floor(ore) !== lastOreShown) { lastOreShown = Math.floor(ore); renderUpgrades(); }
@@ -5787,7 +5838,7 @@ window.__game = {
     items_on_belts: items.count,
     particles: (() => { let n = 0; for (let k = 0; k < PMAX; k++) if (pLife[k] > 0) n++;
                         return n; })(),
-    alloys,
+    alloys, components,
     prices: TRADED.map(t => +PRICE[t].toFixed(3)),
     restored,
     intro: +intro.toFixed(2),
@@ -5861,7 +5912,7 @@ window.__factory = {
   cells, items, N, T, player, HALF, FACES,
   stepTile, tileWorld, faceOfPoint,
   TYPES: { EMPTY, MINER, BELT, HUB, NODE, SMELTER, SPLITTER, FORGE, FILTER,
-           RIFT, CRYSTAL, EMBER, SALT, INGOT, INGOT_E, INGOT_S, ALLOY },
+           RIFT, CRYSTAL, EMBER, SALT, INGOT, INGOT_E, INGOT_S, ALLOY, ASSEMBLER, COMPONENT },
   MINERAL_OF_FACE, get alloys() { return alloys; }, cycleFilter,
   riftOpen, riftStorm, RIFT_COUNT, RIFT_WINDOW,
   save, load, wipe, saveState, SAVE_KEY, CREATIVE, TREAD, beltFrames, beltDecks, POST,
@@ -5885,7 +5936,7 @@ window.__factory = {
   get shards() { return shards; }, set shards(v) { shards = v; renderRank(); }, get rank() { return rank; }, CONTRACT_EVERY,
   offerStanding, get standing() { return standing; }, set streak(v) { streak = v; }, get streak() { return streak; },
   set rank(v) { rank = v; renderRank(); gildEdge(); applyUpgrades(); }, PERKS, lifetime, get visitedWorlds() { return visitedWorlds; },
-  worksDone, playWorks, hubCost, hubCount, HUB_INTAKE, apply, pickTool,
+  worksDone, playWorks, hubCost, hubCount, HUB_INTAKE, apply, pickTool, accepts, get components() { return components; },
   get TUT() { return TUT; }, ACT1, ACT2, get tutAct() { return tutAct; }, startAct2, get tutIdx() { return tutIdx; }, set tutIdx(v) { tutStart(v); }, tutStart, describeCell, get tool() { return tool; },
   set bpStamps(v) { bpStamps = v; }, set overheadSeen(v) { overheadSeen = v; },
   set standingHeld(v) { if (standing) standing.held = v; }, STANDING_GRACE,

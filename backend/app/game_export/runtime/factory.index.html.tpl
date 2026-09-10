@@ -117,6 +117,7 @@
   .tool[data-tool="splitter"] svg{color:#4bb5ff}
   .tool[data-tool="hub"] svg{color:#ffc75a}
   .tool[data-tool="forge"] svg{color:#d94fb0}
+  .tool[data-tool="assembler"] svg{color:#e0b451}
   .tool[data-tool="filter"] svg{color:#2fd6b0}
   .tool[data-tool="rift"] svg{color:#9b7cff}
   .tool[data-tool="erase"] svg{color:#e8697d}
@@ -417,6 +418,7 @@
     <div class="st" data-ico="item"    title="Items riding belts right now."><i></i><b id="nitem">0</b><small>in transit</small></div>
     <div class="st" data-ico="ingot"   title="Ingots sold this run."><i></i><b id="ingot">0</b><small>ingots</small></div>
     <div class="st" data-ico="alloy"   title="Alloys sold this run. A forge makes them from two different ores."><i></i><b id="alloy">0</b><small>alloys</small></div>
+    <div class="st" data-ico="component" title="Components sold this run. An assembler makes one from an alloy bar and an ingot."><i></i><b id="ncomp">0</b><small>parts</small></div>
     <div class="st core" data-ico="core" title="Cores are permanent. A meltdown or three shards earns one; they buy the trip to other worlds and multiply every yield."><i></i><b id="tok">0</b><small>cores</small></div>
   </div>
   <div id="goal"></div>
@@ -442,6 +444,7 @@
   <div class="tool" data-tool="splitter"><svg viewBox="0 0 24 24"><path d="M12 3v18M3 12h18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="12" cy="12" r="3.6" stroke="currentColor" stroke-width="1.7" fill="none"/></svg><i class="key">4</i><b>SPLITTER</b><small>feeds two lines</small></div>
   <div class="tool" data-tool="hub"><svg viewBox="0 0 24 24"><ellipse cx="12" cy="17" rx="9" ry="4" stroke="currentColor" stroke-width="1.7" fill="none"/><ellipse cx="12" cy="17" rx="4.5" ry="2" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M12 15V5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><circle cx="12" cy="4" r="2" fill="currentColor"/></svg><i class="key">5</i><b>HUB</b><small>sells what arrives</small></div>
   <div class="tool" data-tool="forge"><svg viewBox="0 0 24 24"><path d="M6 20V8h12v12z" stroke="currentColor" stroke-width="1.7" fill="none"/><ellipse cx="12" cy="8" rx="6" ry="2.4" stroke="currentColor" stroke-width="1.7" fill="none"/><path d="M9 4l1.5 3M15 4l-1.5 3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="12" cy="15" r="2.6" fill="currentColor"/></svg><i class="key">6</i><b>FORGE</b><small>two ores, one alloy</small></div>
+  <div class="tool" data-tool="assembler"><svg viewBox="0 0 24 24"><path d="M4 20h16M6 20v-6h12v6M5 14V9h14v5" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linejoin="round"/><path d="M12 9V4M9 6l3-2 3 2" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/><rect x="9.5" y="15.5" width="5" height="3" fill="currentColor"/></svg><i class="key">Q</i><b>ASSEMBLER</b><small>alloy and ingot, one component</small></div>
   <div class="tool" data-tool="filter"><svg viewBox="0 0 24 24"><path d="M3 5h18l-7 8v6l-4 2v-8z" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linejoin="round"/></svg><i class="key">7</i><b>FILTER</b><small>sorts an ore, F picks</small></div>
   <div class="tool" data-tool="rift"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" stroke="currentColor" stroke-width="1.7" fill="none"/><circle cx="12" cy="12" r="3.4" stroke="currentColor" stroke-width="1.5" fill="none"/><path d="M12 4v3M12 17v3M4 12h3M17 12h3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg><i class="key">8</i><b>RIFT</b><small>lends ore, on a clock</small></div>
   <div class="tool" data-tool="erase"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg><i class="key">9</i><b>ERASE</b><small>remove</small></div>

@@ -44,6 +44,7 @@ GATES = [
     ("fblueprint.mjs", "the blueprint copies a box of machines with headings and stamps it on any face, turned or not"),
     ("ftutor.mjs", "the foreman opens a new world one step at a time, hands over each tool, and the look label names what you point at"),
     ("fhub.mjs", "a hub takes two a tick and backs up; a second hub costs credits on a ladder; creative is free; blueprints leave hubs out"),
+    ("fassembler.mjs", "the assembler takes an alloy and an ingot and makes a component worth more than both; contracts ask for them"),
     ("fworks.mjs", "rank perks change the machines; the works play once when the whole game is done and survive a reload"),
 ]
 
