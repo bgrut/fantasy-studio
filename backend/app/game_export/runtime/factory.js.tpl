@@ -212,6 +212,12 @@ const INGOT = 4, INGOT_E = 5, INGOT_S = 6, ALLOY = 7, COMPONENT = 8;
 const INGOT_OF = { [CRYSTAL]: INGOT, [EMBER]: INGOT_E, [SALT]: INGOT_S };
 const IS_MINERAL = t => t === CRYSTAL || t === EMBER || t === SALT;
 const IS_INGOT = t => t === INGOT || t === INGOT_E || t === INGOT_S;
+// FAR ORE IS WORTH MORE: a hub pays this for an ingot of an ore its own face
+// does not grow, so crossing an edge with a trunk is the best play on the board
+const FAR_PREMIUM = 1.35;
+const MINERAL_OF_INGOT = {};
+for (const m in INGOT_OF) MINERAL_OF_INGOT[INGOT_OF[m]] = +m;
+let farToasted = false;
 // FACES is [top, bot, east, west, south, north]; opposite faces share a
 // mineral so that whichever way you walk off the top, the ore changes.
 const MINERAL_OF_FACE = [CRYSTAL, CRYSTAL, EMBER, EMBER, SALT, SALT];
@@ -3113,9 +3119,19 @@ function drawSpark() {
 }
 let lastOreShown = -1;
 
-function bank(type) {
+function bank(type, face) {
   // the market only prices refined goods; raw ore always sells for its base
   let v = (VALUE[type] || 1) * (PRICE[type] || 1);
+  // and a hub pays more for an ingot from another face's ore
+  const far = face !== undefined && IS_INGOT(type) && MINERAL_OF_INGOT[type] !== MINERAL_OF_FACE[face];
+  if (far) {
+    v *= FAR_PREMIUM;
+    if (!farToasted) {
+      farToasted = true;
+      const t = document.getElementById('toast');
+      if (t) { t.textContent = 'FAR ORE. This hub paid ' + FAR_PREMIUM + ' times for an ingot of an ore its face does not grow. Bringing the far face home is the best trade on the board.'; t.classList.add('on'); toastAt = 6; }
+    }
+  }
   if (rival && type === rival.item) { const extra = v * (rival.mult - 1); rival.sold++; rival.extra += extra; v += extra; }
   ore += v; runValue += v; lifetime.value += v;
   if (type === ALLOY && (PRICE[ALLOY] || 1) >= 1.2) soldHigh++;
@@ -3168,7 +3184,7 @@ function deliver(dst, to, type) {
            col.r, col.g, col.b, -0.035, 3.1);
   }
   if (dst.t === HUB) {
-    bank(type);
+    bank(type, to ? to.face : undefined);
     dst.pulse = 1;
     sfxSold(type);
     if (to) {
@@ -3205,7 +3221,7 @@ function step() {
         const out = c.t === ASSEMBLER ? COMPONENT : c.t === FORGE ? ALLOY : (INGOT_OF[c.bt] || INGOT);
         sfxClank();
         const dst = cellOf(stepTile(f, i, j, c.d));
-        if (dst && dst.t === HUB) bank(out);
+        if (dst && dst.t === HUB) bank(out, stepTile(f, i, j, c.d).face);
         else if (dst && dst.t === BELT && !dst.item) dst.item = out;
         else c.cook = 1;                  // output blocked: hold it, retry
       }
@@ -3308,7 +3324,7 @@ function step() {
       const h = cellOf(mv[2]);
       if (!h || (h.took | 0) >= HUB_INTAKE) continue;
       h.took = (h.took | 0) + 1;
-      bank(c.item); c.item = 0; continue;
+      bank(c.item, mv[2].face); c.item = 0; continue;
     }
     const dst = cellOf(mv[2]);
     if (!accepts(dst, c.item)) continue;   // another input reached it first
@@ -4765,7 +4781,7 @@ function describeCell(c, t) {
     case SMELTER: return 'SMELTER  ·  two ore in, one ingot out' + (c.cook > 0 ? '  ·  cooking' : c.buf > 0 ? '  ·  waiting for a second ore' : '  ·  waiting for ore');
     case ASSEMBLER: return 'ASSEMBLER  ·  an alloy bar and an ingot in, one component out' + (c.cook > 0 ? '  ·  assembling' : c.ha && c.hb ? '  ·  ready' : c.ha ? '  ·  has the alloy, needs an ingot' : c.hb ? '  ·  has an ingot, needs an alloy bar' : '  ·  waiting');
     case FORGE: return 'FORGE  ·  two different ores in, one alloy out' + (c.cook > 0 ? '  ·  cooking' : (c.fa && c.fb) ? '  ·  ready' : c.fa || c.fb ? '  ·  has one ore, needs the other' : '  ·  waiting for ore');
-    case HUB: return 'HUB  ·  sells what arrives  ·  ' + (c.took | 0) + ' of ' + HUB_INTAKE + ' taken this tick' + ((c.took | 0) >= HUB_INTAKE ? '  ·  full' : '');
+    case HUB: return 'HUB  ·  sells what arrives, ' + FAR_PREMIUM + 'x for ingots from other faces  ·  ' + (c.took | 0) + ' of ' + HUB_INTAKE + ' taken this tick' + ((c.took | 0) >= HUB_INTAKE ? '  ·  full' : '');
     case SPLITTER: return 'SPLITTER  ·  sends each item out of a different side in turn' + (item ? '  ·  holding a ' + item : '');
     case FILTER: return 'FILTER  ·  passes ' + (ORE_NAME[c.filt] || 'crystal') + ', the rest exits the side  ·  F changes it';
     case RIFT: return 'RIFT  ·  ' + (c.dbt > 0 ? 'lent ' + c.dbt + ' to repay, ' + Math.ceil(c.left || 0) + 's left' : 'lends ore against a deadline');
@@ -5865,7 +5881,7 @@ window.__game = {
     lifetime: { value: Math.round(lifetime.value), contracts: lifetime.contracts, longest_hold: +lifetime.longestHold.toFixed(1),
                 worlds: [...visitedWorlds], works: lifetime.works, works_done: worksDone() },
     smelt_ticks: SMELT_TICKS,
-    hubs: hubCount(), hub_cost: hubCost(), hub_intake: HUB_INTAKE,
+    hubs: hubCount(), hub_cost: hubCost(), hub_intake: HUB_INTAKE, far_premium: FAR_PREMIUM,
     rival: rival ? { item: contractName(rival.item, 2), mult: rival.mult, left: +rival.left.toFixed(1), sold: rival.sold, extra: +rival.extra.toFixed(1) } : null,
     blueprint: blueprint ? { w: blueprint.w, h: blueprint.h, n: blueprint.cells.length, rot: bpRot } : null,
     standing: standing ? { item: contractName(standing.item, standing.perMin), per_min: standing.perMin, pay: standing.pay,
@@ -5937,6 +5953,7 @@ window.__factory = {
   offerStanding, get standing() { return standing; }, set streak(v) { streak = v; }, get streak() { return streak; },
   set rank(v) { rank = v; renderRank(); gildEdge(); applyUpgrades(); }, PERKS, lifetime, get visitedWorlds() { return visitedWorlds; },
   worksDone, playWorks, hubCost, hubCount, HUB_INTAKE, apply, pickTool, accepts, get components() { return components; },
+  FAR_PREMIUM, MINERAL_OF_INGOT,
   get TUT() { return TUT; }, ACT1, ACT2, get tutAct() { return tutAct; }, startAct2, get tutIdx() { return tutIdx; }, set tutIdx(v) { tutStart(v); }, tutStart, describeCell, get tool() { return tool; },
   set bpStamps(v) { bpStamps = v; }, set overheadSeen(v) { overheadSeen = v; },
   set standingHeld(v) { if (standing) standing.held = v; }, STANDING_GRACE,

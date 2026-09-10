@@ -91,6 +91,7 @@ says so.
 | **the second act** | when the forge unlocks the foreman comes back for six steps: a rig on another face, an alloy, a filter, the overhead, a contract, a stamped blueprint; each clears on the thing itself |
 | **hubs are rare** | a hub takes two items a tick and the belts feeding it back up amber past that; the first hub is free, then 200, 500, 1200, doubling, so a face has to be brought to one place; the blueprint leaves hubs out |
 | **the assembler** | key Q, earned at tier seven: an alloy bar and an ingot of any kind in, one component out, worth more than both; it trades on the board and contracts ask for it |
+| **far ore is worth more** | a hub pays 1.35 times for an ingot of an ore its own face does not grow, so bringing the far face home is the best trade on the board; the label says so and the first premium explains itself |
 | **the panel says what it is** | value banked, a minute to your hubs, a word under every chip, headers on market and upgrades, each upgrade's effect in a line |
 | **the look label** | point at anything within reach and a line under the crosshair names it and says what it is doing |
 | **one type system** | Bricolage Grotesque for what is named (a variable face whose width and optical size set the three title voices from one file), Instrument Sans for what is read, DM Mono for what is counted; all SIL OFL, shipped in vendor/fonts |
