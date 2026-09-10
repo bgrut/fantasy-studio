@@ -85,6 +85,9 @@ says so.
 | **the Long Drift's rule** | seams do not grow back there and a meltdown pays double: the last place is finite and it is where the cores are |
 | **a link that carries a factory** | "share link" copies a URL with the whole save in it; opening it starts that factory and drops the parameter; the studio is told |
 | **shared factories in the studio** | a share link arrives with a thumbnail, world, mode, machines, value and rank; the studio keeps them per game as cards under the frame: open, copy, remove |
+| **the foreman** | a new world opens one step at a time: look, walk to the hub, build a rig on the ringed seam, run a belt from it, finish the line, read the panel; each clears on the thing done, the step puts the tool in your hand, skippable and remembered |
+| **the panel says what it is** | value banked, a minute to your hubs, a word under every chip, headers on market and upgrades, each upgrade's effect in a line |
+| **the look label** | point at anything within reach and a line under the crosshair names it and says what it is doing |
 | **one type system** | Bricolage Grotesque for what is named (a variable face whose width and optical size set the three title voices from one file), Instrument Sans for what is read, DM Mono for what is counted; all SIL OFL, shipped in vendor/fonts |
 | **copy that tells you** | every toast, tip, unlock line, tool label and the hint says what happened, what it means and what to do, in sentences, with no em dashes |
 | **contracts** | every seventy seconds the market posts one sized to the current rate; deliveries of its item count at the hub; filled pays a bonus and a shard, lapsed comes again |

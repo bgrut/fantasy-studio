@@ -42,6 +42,7 @@ GATES = [
     ("fstanding.mjs", "three kept contracts earn a standing order; it pays each held minute and closes when the rate falls short"),
     ("frival.mjs", "a rival buyer bids one product up for a minute, marks it on the board, and leaves saying what it took"),
     ("fblueprint.mjs", "the blueprint copies a box of machines with headings and stamps it on any face, turned or not"),
+    ("ftutor.mjs", "the foreman opens a new world one step at a time, hands over each tool, and the look label names what you point at"),
     ("fworks.mjs", "rank perks change the machines; the works play once when the whole game is done and survive a reload"),
 ]
 

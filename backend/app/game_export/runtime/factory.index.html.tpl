@@ -28,6 +28,33 @@
        max-height:calc(100vh - 110px);overflow-y:auto;scrollbar-width:none;
        box-shadow:0 6px 24px rgba(0,0,0,.45),inset 0 1px 0 rgba(255,255,255,.05)}
   #hud::-webkit-scrollbar{display:none}
+  /* the panel says what it is */
+  .st small{display:block;font-family:var(--f-ui);font-size:8px;letter-spacing:.04em;color:#6d7590;line-height:1;margin-top:1px}
+  .sec{margin:10px 0 4px;font-family:var(--f-head);font-size:10px;font-weight:700;letter-spacing:.08em;color:#8d95b3}
+  .sec span{font-family:var(--f-ui);font-weight:400;letter-spacing:0;color:#5d6480;margin-left:6px;font-size:9.5px}
+  .up em{display:block;font-style:normal;font-family:var(--f-ui);font-size:8.5px;color:#7b86a6;margin-top:3px;line-height:1.2}
+  /* the look label: whatever is under the crosshair, named */
+  #look{position:fixed;left:50%;top:55%;transform:translateX(-50%);z-index:6;pointer-events:none;
+        font-family:var(--f-mono);font-size:11px;letter-spacing:.06em;color:#dfe8ff;white-space:nowrap;
+        padding:4px 10px;border-radius:6px;background:rgba(10,12,22,.62);border:1px solid rgba(255,255,255,.08);
+        opacity:0;transition:opacity .15s}
+  #look.on{opacity:1}
+  /* the foreman: one step at a time, at the top, with the reason */
+  #tutor{position:fixed;left:50%;top:18px;transform:translateX(-50%);z-index:8;width:min(560px,80vw);
+         padding:12px 16px 12px;border-radius:12px;border:1px solid rgba(255,212,121,.45);
+         background:linear-gradient(180deg,rgba(28,24,14,.96),rgba(12,10,8,.96));box-shadow:0 8px 30px rgba(0,0,0,.5);
+         opacity:0;pointer-events:none;transform:translate(-50%,-8px);transition:opacity .25s,transform .25s}
+  #tutor.on{opacity:1;pointer-events:auto;transform:translate(-50%,0)}
+  #tutor em{display:block;font-style:normal;font-family:var(--f-mono);font-size:9px;letter-spacing:.16em;color:#a0865a;margin-bottom:4px}
+  #tutor b{display:block;font-family:var(--f-head);font-size:18px;font-weight:700;letter-spacing:.02em;color:#ffd479}
+  #tutor small{display:block;font-family:var(--f-ui);font-size:12.5px;color:#f1e6c8;margin-top:4px;line-height:1.35}
+  #tutor p{margin:6px 0 0;font-family:var(--f-ui);font-size:11px;color:#a89a72;line-height:1.35}
+  #tutor .skip{position:absolute;right:14px;top:10px;font-family:var(--f-mono);font-size:9px;letter-spacing:.12em;color:#8d7f5c;cursor:pointer}
+  #tutor .skip:hover{color:#ffd479}
+  /* the tool a step wants pulses in the bar */
+  .tool.hint{border-color:#ffd479;animation:hint 1.1s ease-in-out infinite}
+  @keyframes hint{0%,100%{box-shadow:0 0 0 0 rgba(255,212,121,0)}50%{box-shadow:0 0 0 5px rgba(255,212,121,.35)}}
+  body:has(#title.on) #tutor,body:has(#title.on) #look{opacity:0 !important}
   #hud h1{margin:0 0 7px;font-size:15px;letter-spacing:.08em;color:#8ff3dd;
           font-weight:700;font-variation-settings:"opsz" 24;
           font-family:var(--f-head)}
@@ -373,25 +400,27 @@
 <div id="hud">
   <h1>CRYSTAL WORKS</h1>
   <div class="hero">
-    <div class="big"><span id="ore">0</span><small>value</small></div>
-    <div class="rate"><b id="rate">0</b><small>/ min</small></div>
+    <div class="big" title="Value is what your hubs have banked. Upgrades are bought with it."><span id="ore">0</span><small>value banked</small></div>
+    <div class="rate" title="What your hubs sell in a minute. Rate goals ask you to hold this."><b id="rate">0</b><small>a minute, to your hubs</small></div>
     <div id="rank"><b>UNRANKED</b><span>◇◇◇</span></div>
     <canvas id="spark" width="216" height="38"></canvas>
   </div>
   <div class="stats">
-    <div class="st" data-ico="miner"   title="miners"><i></i><b id="nmine">0</b></div>
-    <div class="st" data-ico="belt"    title="belts"><i></i><b id="nbelt">0</b></div>
-    <div class="st" data-ico="smelter" title="smelters"><i></i><b id="nsmelt">0</b></div>
-    <div class="st" data-ico="item"    title="on belts"><i></i><b id="nitem">0</b></div>
-    <div class="st" data-ico="ingot"   title="ingots"><i></i><b id="ingot">0</b></div>
-    <div class="st" data-ico="alloy"   title="alloys"><i></i><b id="alloy">0</b></div>
-    <div class="st core" data-ico="core" title="cores"><i></i><b id="tok">0</b></div>
+    <div class="st" data-ico="miner"   title="Rigs standing on seams. Each one pulls ore out of its seam."><i></i><b id="nmine">0</b><small>rigs</small></div>
+    <div class="st" data-ico="belt"    title="Belt tiles laid. Belts carry ore between machines."><i></i><b id="nbelt">0</b><small>belts</small></div>
+    <div class="st" data-ico="smelter" title="Smelters and forges. Two ore in, one ingot out."><i></i><b id="nsmelt">0</b><small>furnaces</small></div>
+    <div class="st" data-ico="item"    title="Items riding belts right now."><i></i><b id="nitem">0</b><small>in transit</small></div>
+    <div class="st" data-ico="ingot"   title="Ingots sold this run."><i></i><b id="ingot">0</b><small>ingots</small></div>
+    <div class="st" data-ico="alloy"   title="Alloys sold this run. A forge makes them from two different ores."><i></i><b id="alloy">0</b><small>alloys</small></div>
+    <div class="st core" data-ico="core" title="Cores are permanent. A meltdown or three shards earns one; they buy the trip to other worlds and multiply every yield."><i></i><b id="tok">0</b><small>cores</small></div>
   </div>
   <div id="goal"></div>
   <div id="contract"><b></b><small></small><div class="bar"><i style="width:0%"></i></div><span class="left"></span></div>
   <div id="standing"><b></b><small></small><div class="bar"><i style="width:0%"></i></div><span class="left"></span></div>
   <div id="rival"><b></b><small></small><div class="bar"><i style="width:100%"></i></div></div>
+  <div class="sec" title="The board moves on its own. A price over 1.00 pays more than base; a rival buyer bids one product up for a minute.">MARKET <span>what a hub pays per unit; 1.00 is base</span></div>
   <div id="tick"></div>
+  <div class="sec" title="Bought with banked value. Each has a cap, and the chain raises some caps.">UPGRADES <span>bought with value; click one to buy</span></div>
   <div id="ups"></div>
   <div id="world"></div>
   <div id="rift"></div>
@@ -415,6 +444,8 @@
 <div id="toast"></div>
 <div id="title"><b></b><small></small></div>
 <div id="facecap"></div>
+<div id="look"></div>
+<div id="tutor"><em></em><b></b><small></small><p></p><span class="skip">skip the guide</span></div>
 <div id="cross"></div>
 <div id="hint">WASD to walk, Shift to run, Space to jump, click to look around.<br>Hold the left button and sweep to draw belts. TAB opens the overhead view.<br>Point at a filter and press F to change which ore it passes.<br>Walk over any edge: each side of the world grows a different ore.<br>Your factory saves itself.</div>
 <script type="importmap">{"imports":{"three":"./vendor/three.module.js"}}</script>
