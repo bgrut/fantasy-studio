@@ -317,7 +317,8 @@
   #tick .mk.hot .px{color:#fff;text-shadow:0 0 8px rgba(255,255,255,.8)}
   #tick .mk.hot .nm{color:#fff}
   /* rank and shards, under the rate */
-  #rank{display:flex;justify-content:space-between;align-items:baseline;margin-top:3px;font-size:10px;letter-spacing:.14em}
+  #rank{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;margin-top:3px;font-size:10px;letter-spacing:.14em}
+  #rank i{display:block;width:100%;font-style:normal;font-family:var(--f-mono);font-size:8.5px;letter-spacing:.1em;color:#8d7f5c;margin-top:2px}
   #rank b{font-family:var(--f-head);font-weight:600;color:#8d8564}
   #rank span{font-family:var(--f-mono);color:#ffd479;letter-spacing:.1em}
   #goal .bar{height:4px;margin-top:7px;border-radius:2px;background:rgba(255,212,121,.14);overflow:hidden}

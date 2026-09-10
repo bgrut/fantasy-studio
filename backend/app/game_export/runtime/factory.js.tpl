@@ -260,7 +260,7 @@ const costOf = u => CREATIVE ? 0 : Math.round(u.cost * Math.pow(u.mult, u.lvl));
 
 function applyUpgrades() {
   TICK = BASE_TICK * Math.pow(0.86, UPGRADES.tick.lvl);
-  SMELT_TICKS = Math.max(1, 3 - UPGRADES.smelt.lvl);
+  SMELT_TICKS = Math.max(1, 3 - UPGRADES.smelt.lvl - (perk(2) ? 1 : 0));   // TWIN FURNACE
   // A CORE IS WORTH MORE THAN THE FACTORY IT COST. The multiplier has to be
   // steep enough that melting down a good factory beats keeping it, or the
   // prestige is a button nobody presses twice.
@@ -269,7 +269,7 @@ function applyUpgrades() {
   // An alloy is worth more than the three ingots it displaces, because it
   // costs a belt run across a face boundary and the risk of getting it wrong.
   VALUE[ALLOY] = 26 * y;
-  FORGE_TICKS = Math.max(2, 4 - UPGRADES.smelt.lvl);
+  FORGE_TICKS = Math.max(2, 4 - UPGRADES.smelt.lvl - (perk(2) ? 1 : 0));
 }
 
 function buy(key) {
@@ -439,6 +439,16 @@ let iceClock = 0, iceHits = 0, iceToasted = false;
 // contracts: a clock you can hear ticking
 const CONTRACT_EVERY = 70, CONTRACT_SECS = 90;
 let contract = null, contractClock = 40, contractsFilled = 0, shards = 0, rank = 0;
+// what a rank changes in the machines, derived from the rank, never saved
+const PERKS = [
+  { name: 'DEEP BITS', text: 'a rig on a seam over 80% rich yields every tick' },
+  { name: 'TWIN FURNACE', text: 'smelters and forges cook a tick faster' },
+  { name: 'BROKER', text: 'a filled contract pays two shards' },
+];
+const perk = k => rank >= k;
+// the whole run, for the ending
+const lifetime = { value: 0, contracts: 0, longestHold: 0, worlds: [], works: false };
+let visitedWorlds = new Set([0]);
 // standing orders: a rate to be HELD, offered after three contracts kept in a row
 const STANDING_STREAK = 3, STANDING_GRACE = 10;
 let streak = 0, standing = null;
@@ -2754,9 +2764,10 @@ function fillContract() {
   contractsFilled++;
   streak++;
   ore += c.bonus; runValue += c.bonus;
-  shards++;
+  shards += perk(3) ? 2 : 1;                                                 // BROKER
+  lifetime.contracts++;
   sfxUnlock();
-  let msg = 'CONTRACT FILLED. +' + c.bonus + ' value and a core shard. Three shards make a core.';
+  let msg = 'CONTRACT FILLED. +' + c.bonus + ' value and ' + (perk(3) ? 'two core shards, because you are a broker.' : 'a core shard. Three shards make a core.');
   if (shards >= 3) {
     shards -= 3; cores++;
     msg = 'A CORE FROM SHARDS. Three contracts kept, and a core earned without a meltdown.';
@@ -2810,6 +2821,7 @@ function stepStanding(dt) {
     // the first five seconds are grace to get the line moving
     standing.short = standing.rate >= standing.perMin ? 0 : standing.short;
     standing.held += dt;
+    lifetime.longestHold = Math.max(lifetime.longestHold, standing.held);
     const minutes = Math.floor(standing.held / 60);
     while (standing.minutes < minutes) {
       standing.minutes++;
@@ -2829,6 +2841,7 @@ function stepStanding(dt) {
     standing.short += dt;
     if (standing.short >= STANDING_GRACE) {
       const held = standing.held;
+      lifetime.longestHold = Math.max(lifetime.longestHold, held);
       standing = null; streak = 0;
       const t = document.getElementById('toast');
       if (t) { t.textContent = 'The standing order closed after ' + Math.floor(held / 60) + ':' + String(Math.floor(held % 60)).padStart(2, '0') + '. The rate fell short for ' + STANDING_GRACE + ' seconds. Keep three more contracts to earn another.'; t.classList.add('on'); toastAt = 6; }
@@ -2916,8 +2929,10 @@ function renderRank() {
   if (!el) return;
   const roman = ['', 'I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X'][Math.min(10, rank)] || String(rank);
   el.innerHTML = (rank > 0 ? '<b>RANK ' + roman + '</b>' : '<b>UNRANKED</b>') +
-    '<span>' + '\u25c6'.repeat(shards) + '\u25c7'.repeat(Math.max(0, 3 - shards)) + '</span>';
-  el.title = shards + ' of 3 shards toward a core. Filled contracts pay shards; a meltdown raises the rank, and rank raises what contracts pay.';
+    '<span>' + '\u25c6'.repeat(Math.min(3, shards)) + '\u25c7'.repeat(Math.max(0, 3 - shards)) + '</span>' +
+    (rank > 0 ? '<i>' + PERKS.slice(0, Math.min(rank, PERKS.length)).map(p => p.name).join(' \u00b7 ') + '</i>' : '');
+  el.title = shards + ' of 3 shards toward a core. Filled contracts pay shards; a meltdown raises the rank. '
+    + (rank < PERKS.length ? 'Next rank: ' + PERKS[rank].name + ', ' + PERKS[rank].text + '.' : 'Every perk is yours.');
 }
 // the worldlet's edge gilds with rank: a veteran's world looks like one from orbit
 function gildEdge() {
@@ -3056,7 +3071,7 @@ function bank(type) {
   // the market only prices refined goods; raw ore always sells for its base
   let v = (VALUE[type] || 1) * (PRICE[type] || 1);
   if (rival && type === rival.item) { const extra = v * (rival.mult - 1); rival.sold++; rival.extra += extra; v += extra; }
-  ore += v; runValue += v;
+  ore += v; runValue += v; lifetime.value += v;
   if (type === ALLOY && (PRICE[ALLOY] || 1) >= 1.2) soldHigh++;
   if (contract && type === contract.item) { contract.have++; renderContract(); if (contract.have >= contract.need) fillContract(); }
   if (standing && type === standing.item) standing.log.push(performance.now());
@@ -3256,7 +3271,9 @@ function step() {
     // which reads as a line that has slowed rather than a line that stops and
     // starts — and it needs no extra state to do it.
     // a frozen seam yields at half the floor: the rig is scraping ice
-    const chance = c.ice > 0 && !CAPS.heated ? SEAM_FLOOR * 0.5 : Math.max(SEAM_FLOOR, c.rich);
+    const chance = c.ice > 0 && !CAPS.heated ? SEAM_FLOOR * 0.5
+                 : (perk(1) && c.rich > 0.8) ? 1                              // DEEP BITS
+                 : Math.max(SEAM_FLOOR, c.rich);
     if (accepts(dst, m) && Math.random() < chance) {
       deliver(dst, to, m); sfxTick(m);
       if (!CREATIVE) c.rich = Math.max(0, c.rich - SEAM_COST);
@@ -4085,7 +4102,11 @@ function meltdown() {
   renderUpgrades();
   items.count = 0;
   melting = 2.4;
-  rank++; renderRank(); gildEdge();
+  rank++; renderRank(); gildEdge(); applyUpgrades();
+  if (rank <= PERKS.length) {
+    const t = document.getElementById('toast');
+    if (t) { t.textContent = 'RANK ' + ['I', 'II', 'III'][rank - 1] + '. ' + PERKS[rank - 1].name + ': ' + PERKS[rank - 1].text + '.'; t.classList.add('on'); toastAt = 6; }
+  }
   refreshCounts();
   document.getElementById('tok').textContent = cores;
   // the ceremony: flash, shockwave from where the factory stood, shake, thump, pop
@@ -4284,6 +4305,7 @@ function worldCapOk(w) {
 function travelTo(k) {
   const w = WORLDS[k];
   if (!w || k === worldIdx || (!CREATIVE && cores < w.cores) || !worldCapOk(w)) return;
+  visitedWorlds.add(k);
   playIntro(w.name, w.blurb, undefined, false, w.fam);   // arriving is the payoff; show the place
   clearFactory();
   ore = 0; ingots = 0; alloys = 0; runValue = 0;
@@ -4398,8 +4420,11 @@ function renderGoal() {
   if (el) {
     if (CREATIVE) {
       el.innerHTML = '<b>CREATIVE</b><small>Every machine and world is open, upgrades are free, and seams never run out.</small>';
+    } else if (lifetime.works) {
+      el.innerHTML = '<b>THE WORKS ARE YOURS</b><small>' + Math.round(lifetime.value).toLocaleString() + ' value banked, ' + lifetime.contracts + (lifetime.contracts === 1 ? ' contract kept, ' : ' contracts kept, ') + visitedWorlds.size + ' worlds. The run carries on.</small>';
     } else if (goalIdx >= GOALS.length) {
-      el.innerHTML = '<b>ALL SYSTEMS ONLINE</b><small>Every tier is done. Contracts keep coming, and every meltdown raises your rank.</small>';
+      const left = [cores < 3 && 'three cores', visitedWorlds.size < 3 && 'three worlds', lifetime.longestHold < 300 && 'a standing order held five minutes'].filter(Boolean);
+      el.innerHTML = '<b>ALL SYSTEMS ONLINE</b><small>Every tier is done. ' + (left.length ? 'For the works, still: ' + left.join(', ') + '.' : '') + '</small>';
     } else {
       const g = GOALS[goalIdx];
       // twelve tiers is a ladder; say which rung, and for a rate goal how long
@@ -4419,7 +4444,24 @@ function renderGoal() {
 
 let toastAt = 0;
 let goalBarAt = 0;
+// THE WORKS. Plays once, when the whole game has been done: the chain,
+// three cores, three worlds stood on, a standing order held five minutes.
+function worksDone() {
+  return goalIdx >= GOALS.length && cores >= 3 && visitedWorlds.size >= 3 && lifetime.longestHold >= 300;
+}
+function playWorks() {
+  lifetime.works = true;
+  const m = Math.floor(lifetime.longestHold / 60), sec = String(Math.floor(lifetime.longestHold % 60)).padStart(2, '0');
+  playIntro('THE WORKS', Math.round(lifetime.value).toLocaleString() + ' value banked  \u00b7  ' + lifetime.contracts + (lifetime.contracts === 1 ? ' contract kept  ' : ' contracts kept  ') + '\u00b7  longest order ' + m + ':' + sec
+            + '  \u00b7  ' + visitedWorlds.size + ' worlds', 11, false, 'void');
+  if (cubeEdges) cubeEdges.material.color.setHex(0xffd479);
+  sfxUnlock(); setTimeout(sfxUnlock, 400); setTimeout(sfxUnlock, 800);
+  const t = document.getElementById('toast');
+  if (t) { t.textContent = 'THE WORKS ARE YOURS. Every tier, three cores, three worlds and an order held five minutes. The run carries on: contracts keep coming, and every meltdown still raises your rank.'; t.classList.add('on'); toastAt = 10; }
+  renderGoal();
+}
 function stepGoals(dt) {
+  if (!lifetime.works && !CREATIVE && worksDone()) playWorks();
   // creative has no chain to walk; the toast still needs its clock
   if (CREATIVE) { if (toastAt > 0) { toastAt -= dt; if (toastAt <= 0) document.getElementById('toast').classList.remove('on'); } return; }
   // a rate goal is HELD: the timer runs only while the rate is at or over the
@@ -4510,6 +4552,7 @@ function saveState() {
          fwd: player.fwd.toArray(), pitch: player.pitch },
     g: goalIdx, u: Object.keys(UNLOCKED), vf: [...visitedFaces], w: worldIdx,
     sh: soldHigh, rp: riftsPaid, cs: shards, rk: rank, cf: contractsFilled, sk: streak,
+    lt: { v: Math.round(lifetime.value), c: lifetime.contracts, h: Math.round(lifetime.longestHold), w: [...visitedWorlds], k: lifetime.works ? 1 : 0 },
     // seams come back from the RNG; how worked each one is does not
     r: (() => { const out = [];
       eachTile((c, f, i, j) => { if (c.mesh && c.rich < 0.999)
@@ -4563,6 +4606,10 @@ function loadState(d) {
   }
   goalIdx = Math.max(0, Math.min(GOALS.length, d.g | 0));
   soldHigh = d.sh | 0; riftsPaid = d.rp | 0; shards = d.cs | 0; rank = d.rk | 0; contractsFilled = d.cf | 0; streak = d.sk | 0;
+  if (d.lt) { lifetime.value = +d.lt.v || 0; lifetime.contracts = d.lt.c | 0; lifetime.longestHold = +d.lt.h || 0; lifetime.works = !!d.lt.k;
+              visitedWorlds = new Set(Array.isArray(d.lt.w) ? d.lt.w.map(x => x | 0) : [0]); }
+  visitedWorlds.add(worldIdx);
+  if (lifetime.works && cubeEdges) cubeEdges.material.color.setHex(0xffd479);
   renderRank();
   if (Array.isArray(d.u)) for (const k of d.u) UNLOCKED[k] = 1;
   applyRewards();
@@ -4590,6 +4637,7 @@ function wipe() {
   ore = 0; ingots = 0; alloys = 0; cores = 0; runValue = 0;
   for (const k in UPGRADES) UPGRADES[k].lvl = 0;
   goalIdx = 0; soldHigh = 0; riftsPaid = 0; shards = 0; rank = 0; contractsFilled = 0;
+  lifetime.value = 0; lifetime.contracts = 0; lifetime.longestHold = 0; lifetime.works = false; visitedWorlds = new Set([0]);
   contract = null; contractClock = 40; standing = null; streak = 0; rival = null; rivalClock = 60; renderContract(); renderStanding(); renderRival(); renderRank();
   for (const g of GOALS) if (g.rate) g.held = 0;
   applyWorld(0);
@@ -5454,6 +5502,10 @@ window.__game = {
     contract: contract ? { item: contractName(contract.item, contract.need), need: contract.need, have: contract.have,
                            left: +contract.left.toFixed(1), bonus: contract.bonus } : null,
     shards, rank, contracts_filled: contractsFilled, streak,
+    perks: PERKS.slice(0, Math.min(rank, PERKS.length)).map(p => p.name),
+    lifetime: { value: Math.round(lifetime.value), contracts: lifetime.contracts, longest_hold: +lifetime.longestHold.toFixed(1),
+                worlds: [...visitedWorlds], works: lifetime.works, works_done: worksDone() },
+    smelt_ticks: SMELT_TICKS,
     rival: rival ? { item: contractName(rival.item, 2), mult: rival.mult, left: +rival.left.toFixed(1), sold: rival.sold, extra: +rival.extra.toFixed(1) } : null,
     blueprint: blueprint ? { w: blueprint.w, h: blueprint.h, n: blueprint.cells.length, rot: bpRot } : null,
     standing: standing ? { item: contractName(standing.item, standing.perMin), per_min: standing.perMin, pay: standing.pay,
@@ -5523,6 +5575,8 @@ window.__factory = {
   offerContract, get contract() { return contract; }, set contractLeft(v) { if (contract) contract.left = v; },
   get shards() { return shards; }, set shards(v) { shards = v; renderRank(); }, get rank() { return rank; }, CONTRACT_EVERY,
   offerStanding, get standing() { return standing; }, set streak(v) { streak = v; }, get streak() { return streak; },
+  set rank(v) { rank = v; renderRank(); gildEdge(); applyUpgrades(); }, PERKS, lifetime, get visitedWorlds() { return visitedWorlds; },
+  worksDone, playWorks,
   set standingHeld(v) { if (standing) standing.held = v; }, STANDING_GRACE,
   offerRival, get rival() { return rival; }, set rivalLeft(v) { if (rival) rival.left = v; }, RIVAL_MULT,
   captureBlueprint, stampBlueprint, dropBlueprint, bpCells, get blueprint() { return blueprint; }, set bpRot(v) { bpRot = v & 3; },

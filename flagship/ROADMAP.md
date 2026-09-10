@@ -91,6 +91,8 @@ says so.
 | **standing orders** | three contracts kept in a row earn one: a rate to hold, paid every minute it holds and a shard every third; it closes after ten seconds short and says how long it held |
 | **a rival buyer** | every couple of minutes, once the filter exists, one product pays 1.8 times for sixty seconds; the board and the card mark it; the buyer leaves saying what it took and what the premium came to |
 | **the blueprint** | key 0, earned with the forge: drag a box over a line to copy it with headings and filter settings, click to stamp it on any face, R turns it; rigs land only on seams and the toast says what did not fit |
+| **rank perks** | rank I Deep Bits (a rig on a seam over 80% yields every tick), II Twin Furnace (a tick off every cook), III Broker (two shards a contract); derived from the rank, named under it |
+| **the works** | when the chain, three cores, three worlds and a five-minute order are all done, the reveal plays once more with the run's numbers under the name, the edge goes gold for good, and the run carries on |
 | **machine skin** | one shared panel map (seams, rivets, a lip, wear) on every machine; glow moved from the paint to the lamps; sun made the key (3.1 over 0.95 hemi / 0.85 fill); a frame on the smelter |
 | **the companion** | a planet or moon low in every world's sky, shaded from the sun's side with a terminator and an atmosphere rim, drawn in the sky shader; one fixed direction so it is a landmark |
 | **lanes** | every fifth grid line is a faint lit strip in the world's edge colour; the far plane widened to 1400 so the sky dome no longer clips from orbit |
