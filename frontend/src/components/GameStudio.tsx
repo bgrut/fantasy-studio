@@ -186,6 +186,14 @@ export default function GameStudio() {
   const [firstRun, setFirstRun] = useState<boolean>(false)
   // the latest frame the game saved from photo mode (P, then Enter)
   const [lastShot, setLastShot] = useState<{ name: string; dataUrl: string } | null>(null)
+  // SHARED FACTORIES. A link the runtime hands over carries a whole save; the
+  // studio keeps them per game as cards under the frame, so a factory can be
+  // opened again, handed to someone, or dropped.
+  type Share = { link: string; thumb: string | null; world: string; worldId: string; sky: string; edge: string;
+                 mode: string; machines: number; value: number; rank: number; cores: number; at: number }
+  const [shares, setShares] = useState<Share[]>([])
+  const [openLink, setOpenLink] = useState<string | null>(null)
+  const sharesKey = (id: number | string) => 'fs_shares_' + id
   const [quality, setQuality] = useState<string>(() => {
     try { return localStorage.getItem('fs_quality') || 'ultra' } catch { return 'ultra' }
   })
@@ -436,6 +444,20 @@ export default function GameStudio() {
   useEffect(() => {
     const onMsg = (e: MessageEvent) => {
       const d = e.data
+      if (d && d.type === 'fs-share' && typeof d.link === 'string' && /[?&]share=/.test(d.link)) {
+        const card: Share = {
+          link: d.link, thumb: typeof d.thumb === 'string' && d.thumb.startsWith('data:image/') ? d.thumb : null,
+          world: String(d.world || 'factory'), worldId: String(d.worldId || ''), sky: String(d.sky || '#0b0d18'),
+          edge: String(d.edge || '#7fd8ff'), mode: String(d.mode || 'survival'), machines: Number(d.machines) || 0,
+          value: Number(d.value) || 0, rank: Number(d.rank) || 0, cores: Number(d.cores) || 0, at: Date.now(),
+        }
+        setShares(prev => {
+          const next = [card, ...prev.filter(x => x.link !== card.link)].slice(0, 12)
+          try { if (job) localStorage.setItem(sharesKey(job.id), JSON.stringify(next)) } catch {}
+          return next
+        })
+        return
+      }
       if (d && d.type === 'fs-shot' && typeof d.dataUrl === 'string' && d.dataUrl.startsWith('data:image/png')) {
         setLastShot({ name: String(d.name || 'shot.png'), dataUrl: d.dataUrl })
         return
@@ -532,6 +554,8 @@ export default function GameStudio() {
   useEffect(() => { setHoverPick(null); setSelPick(null); setLineA(null); setSelLine(null) }, [job?.play_url])
   useEffect(() => {
     setLastShot(null)
+    setOpenLink(null)
+    try { const raw = job?.id != null ? localStorage.getItem(sharesKey(job.id)) : null; setShares(raw ? JSON.parse(raw) : []) } catch { setShares([]) }
     if (!job || job.genre !== 'factory' || !job.play_url) { setFirstRun(false); return }
     try { setFirstRun(localStorage.getItem('fs_seen_' + job.id) !== '1') } catch { setFirstRun(true) }
   }, [job?.id, job?.genre, job?.play_url])
@@ -1208,13 +1232,15 @@ export default function GameStudio() {
             onClick={() => gameFrameRef.current?.focus({ preventScroll: true })}
           >
             <iframe
-              key={job!.play_url + quality + (creative ? 'c' : 's')} /* fresh iframe per game AND per tier — the
+              key={(openLink || job!.play_url) + quality + (creative ? 'c' : 's')} /* fresh iframe per game AND per tier — the
                                        runtime reads ?q= once at boot, so a tier
                                        change must reload; also releases the old
                                        WebGL context (WebView2 caps them; leaks
                                        caused the silent white-canvas bug) */
               ref={gameFrameRef}
-              src={job!.play_url + '?q=' + quality + (creative && job!.genre === 'factory' ? '&creative=1' : '')}
+              src={openLink
+                ? openLink + '&q=' + quality
+                : job!.play_url + '?q=' + quality + (creative && job!.genre === 'factory' ? '&creative=1' : '')}
               title={job!.title ?? 'game'}
               className="w-full h-full"
               allow="fullscreen; gamepad; pointer-lock"
@@ -1303,6 +1329,48 @@ export default function GameStudio() {
               </div>
             )}
           </div>
+          {/* SHARED FACTORIES: the links the runtime handed over, as cards */}
+          {job!.genre === 'factory' && shares.length > 0 && (
+            <div className="mt-3">
+              <div className="mb-1.5 flex items-center justify-between text-[11px] tracking-wide text-[#807d99]">
+                <span>Shared factories · {shares.length}</span>
+                {openLink && (
+                  <button onClick={() => setOpenLink(null)} className="text-[#5cffc9] hover:underline">back to your own world</button>
+                )}
+              </div>
+              <div className="flex gap-2 overflow-x-auto pb-1">
+                {shares.map(sh => (
+                  <div key={sh.link} className={cn(
+                    'flex w-[268px] flex-none flex-col overflow-hidden rounded-xl border bg-[rgba(10,9,18,0.85)]',
+                    openLink === sh.link ? 'border-[#5cffc9]/60' : 'border-white/[0.08]'
+                  )}>
+                    <div className="relative h-[110px] bg-black" style={{ background: sh.thumb ? undefined : `linear-gradient(160deg, ${sh.sky}, ${sh.edge})` }}>
+                      {sh.thumb && <img src={sh.thumb} alt="" className="h-full w-full object-cover" />}
+                      <span className="absolute left-2 top-2 rounded px-1.5 py-0.5 text-[10px] tracking-wide"
+                            style={{ background: 'rgba(10,9,18,0.8)', color: '#dfe6f5' }}>
+                        <i className="mr-1 inline-block h-2 w-2 rounded-sm align-middle" style={{ background: `linear-gradient(160deg, ${sh.sky}, ${sh.edge})` }} />
+                        {sh.world}
+                      </span>
+                      {sh.mode === 'creative' && (
+                        <span className="absolute right-2 top-2 rounded px-1.5 py-0.5 text-[9px] tracking-wider" style={{ background: '#ffd479', color: '#1a1408' }}>CREATIVE</span>
+                      )}
+                    </div>
+                    <div className="flex items-center justify-between gap-2 px-2.5 py-2 text-[11px] text-[#aeb6cd]">
+                      <span>{sh.machines} machines · {sh.value.toLocaleString()} value{sh.rank > 0 ? ` · rank ${sh.rank}` : ''}</span>
+                    </div>
+                    <div className="flex gap-1 px-2 pb-2 text-[11px]">
+                      <button onClick={() => setOpenLink(sh.link)}
+                              className="flex-1 rounded-md bg-[#5cffc9]/15 px-2 py-1 text-[#5cffc9] hover:bg-[#5cffc9]/25">Open</button>
+                      <button onClick={() => { try { navigator.clipboard.writeText(sh.link) } catch {} }}
+                              className="flex-1 rounded-md border border-white/[0.08] px-2 py-1 text-[#d6c9ff] hover:text-white">Copy link</button>
+                      <button onClick={() => setShares(prev => { const next = prev.filter(x => x.link !== sh.link); try { if (job) localStorage.setItem(sharesKey(job.id), JSON.stringify(next)) } catch {}; return next })}
+                              title="remove this card" className="rounded-md border border-white/[0.08] px-2 py-1 text-[#807d99] hover:text-[#e8697d]">✕</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
           {/* THE TRUTH TABLE (Phase 44): every rule this game ENFORCES, derived
               from the resolved spec — nothing listed here is decorative */}
           {showRules && job!.spec_resolved && (() => {

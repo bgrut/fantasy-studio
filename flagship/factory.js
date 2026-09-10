@@ -3744,6 +3744,25 @@ function setPhoto(on) {
     else { fc.classList.remove('on'); captionAt = 0; }
   }
 }
+let shareRequest = null;
+function postShare(req) {
+  let thumb = null;
+  try {
+    const src = renderer.domElement, cv = document.createElement('canvas');
+    cv.width = 320; cv.height = Math.round(320 * src.height / src.width);
+    cv.getContext('2d').drawImage(src, 0, 0, cv.width, cv.height);
+    thumb = cv.toDataURL('image/jpeg', 0.72);
+  } catch (e) {}
+  let machines = 0;
+  eachTile(c => { if (c.t !== EMPTY && c.t !== NODE) machines++; });
+  const w = WORLDS[worldIdx] || WORLDS[0];
+  try {
+    window.parent.postMessage({ type: 'fs-share', link: req.link, bytes: req.bytes, thumb,
+      world: w.name, worldId: w.id, sky: '#' + (w.sky | 0).toString(16).padStart(6, '0'),
+      edge: '#' + ((w.edge || w.grid) | 0).toString(16).padStart(6, '0'),
+      mode: CREATIVE ? 'creative' : 'survival', machines, value: Math.round(ore), rank, cores }, '*');
+  } catch (e) {}
+}
 function takeShot() {
   // called right after the frame is composited, so the canvas still holds it
   let url = null;
@@ -4680,7 +4699,9 @@ function shareLink() {
   u.search = ''; u.searchParams.set('share', b64);
   const link = u.toString();
   try { navigator.clipboard && navigator.clipboard.writeText(link); } catch (e) {}
-  try { window.parent.postMessage({ type: 'fs-share', link, bytes: raw.length }, '*'); } catch (e) {}
+  // the studio's card wants a picture of the frame the link was taken from:
+  // captured after the next composite, when the canvas holds it
+  shareRequest = { link, bytes: raw.length };
   const fc = document.getElementById('facecap');
   if (fc) { fc.textContent = 'LINK COPIED  ·  ' + Math.round(link.length / 1024) + ' KB'; fc.classList.add('on'); captionAt = 2.2; }
   return link;
@@ -5054,6 +5075,7 @@ renderer.setAnimationLoop(() => {
   document.body.classList.toggle('overhead', overhead);
   renderFrame();
   if (shotRequest) { shotRequest = false; takeShot(); }
+  if (shareRequest) { const r = shareRequest; shareRequest = null; postShare(r); }
 });
 
 // ── THE TIER, LIVE ─────────────────────────────────────────────────────────

@@ -84,6 +84,7 @@ says so.
 | **ice** | on a cold world an unheated seam freezes over every few seconds and its rig scrapes at half the floor; a smelter or forge within 3 tiles is heat and melts what it reaches three times faster; the heated drill ignores ice |
 | **the Long Drift's rule** | seams do not grow back there and a meltdown pays double: the last place is finite and it is where the cores are |
 | **a link that carries a factory** | "share link" copies a URL with the whole save in it; opening it starts that factory and drops the parameter; the studio is told |
+| **shared factories in the studio** | a share link arrives with a thumbnail, world, mode, machines, value and rank; the studio keeps them per game as cards under the frame: open, copy, remove |
 | **one type system** | Bricolage Grotesque for what is named (a variable face whose width and optical size set the three title voices from one file), Instrument Sans for what is read, DM Mono for what is counted; all SIL OFL, shipped in vendor/fonts |
 | **copy that tells you** | every toast, tip, unlock line, tool label and the hint says what happened, what it means and what to do, in sentences, with no em dashes |
 | **contracts** | every seventy seconds the market posts one sized to the current rate; deliveries of its item count at the hub; filled pays a bonus and a shard, lapsed comes again |

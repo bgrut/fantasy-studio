@@ -27,11 +27,16 @@ const made = await p.evaluate(async () => {
   const link = F.shareLink();
   await new Promise(r => setTimeout(r, 200));          // the message to the studio is asynchronous
   const f = window.__game.facts();
+  const m = window.__share || {};
   return { link, len: link.length, machines: f.machines, value: Math.round(f.value), told: !!window.__share,
+           card: { thumb: typeof m.thumb === 'string' && m.thumb.startsWith('data:image/jpeg'), world: m.world, machines: m.machines,
+                   value: m.value, mode: m.mode, sky: m.sky },
            caption: document.getElementById('facecap').textContent };
 });
 console.log('shared    :', made.machines, 'machines, value', made.value, '| link', Math.round(made.len / 1024) + ' KB',
             '| studio told', made.told, '| said:', JSON.stringify(made.caption));
+console.log('the card  : thumb', made.card.thumb, '| world', JSON.stringify(made.card.world), '| machines', made.card.machines,
+            '| value', made.card.value, '| mode', made.card.mode, '| sky', made.card.sky);
 
 // 2. a fresh page opened on the link is that factory; the parameter is gone; a reload keeps it
 await p.evaluate(() => { try { localStorage.clear(); } catch (e) {} });
@@ -83,6 +88,7 @@ await p.screenshot({ path: process.env.OUT || 'share.png' });
 await b.close();
 
 const ok = made.machines >= 8 && made.told && /LINK COPIED/.test(made.caption)
+  && made.card.thumb && typeof made.card.world === 'string' && made.card.machines === made.machines && made.card.mode === 'survival' && /^#[0-9a-f]{6}$/.test(made.card.sky)
   && back.shared && back.machines === made.machines && back.value >= made.value && back.belts2 >= 8 && !/share=/.test(back.url)
   && kept.machines === made.machines && !kept.shared
   && (!drift.offered || (drift.finite && drift.mult === 2 && drift.grew <= 0.3 && drift.won === drift.expect && drift.won >= 2))
