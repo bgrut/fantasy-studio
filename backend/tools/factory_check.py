@@ -46,6 +46,7 @@ GATES = [
     ("fhub.mjs", "a hub takes two a tick and backs up; a second hub costs credits on a ladder; creative is free; blueprints leave hubs out"),
     ("fassembler.mjs", "the assembler takes an alloy and an ingot and makes a component worth more than both; contracts ask for them"),
     ("ffarore.mjs", "a hub pays a premium for an ingot of an ore its own face does not grow; none for alloys"),
+    ("fplay.mjs", "a played session with real keys, clicks and drags walks the foreman's six steps through the game's own handlers"),
     ("fworks.mjs", "rank perks change the machines; the works play once when the whole game is done and survive a reload"),
 ]
 

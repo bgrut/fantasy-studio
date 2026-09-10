@@ -3539,8 +3539,9 @@ function ghostShape(g) {
   ghostEdge.geometry = ghostEdges.get(g);
 }
 
+let lastPtr = null;                     // where the mouse is, for the overhead's ghost
 function updateGhost() {
-  const t = cellUnder(null);
+  const t = cellUnder(overhead ? lastPtr : null);
   if (!t || !tool) { ghost.visible = false; return; }   // no tool in hand, no ghost
   const c = cellOf(t);
   const legal = tool === 'erase' ? (c.t !== EMPTY && c.t !== NODE)
@@ -3643,6 +3644,7 @@ renderer.domElement.addEventListener('pointerdown', e => {
   apply(c, null);
 });
 renderer.domElement.addEventListener('pointermove', e => {
+  lastPtr = { clientX: e.clientX, clientY: e.clientY };
   if (tool === 'blueprint' && bpStart) { const c = cellUnder(e); if (c && c.face === bpStart.face) bpEnd = c; return; }
   if (inspectOn || !drawing || !lastCell) return;
   const c = cellUnder(e);
@@ -3770,13 +3772,20 @@ function frameOverhead() {
   const n = FACES[player.face].n, f = player.fwd;
   if (Math.abs(n[1]) > 0.5) { orbPitch = Math.sign(n[1]) * 1.22; orbYaw = Math.atan2(-f.x, -f.z); }
   else { orbPitch = 0.5; orbYaw = Math.atan2(n[0], n[2]); }
-  orbDist = HALF * 2.4;
+  orbDist = HALF * 3.1;                 // the whole face in view, so a ringed tile is never off the edge
 }
 
 const keys = Object.create(null);
 addEventListener('keydown', e => {
   keys[e.code] = true;
-  if (e.code === 'Tab') { e.preventDefault(); overhead = !overhead; overheadSeen++; if (overhead) frameOverhead(); }
+  if (e.code === 'Tab') {
+    e.preventDefault(); overhead = !overhead; overheadSeen++;
+    // THE OVERHEAD FREES THE MOUSE (2026-09-10). Clicking into the game locks
+    // the pointer; TAB never released it, so every overhead click landed on
+    // the lock point and the hidden cursor could not be aimed. The played
+    // session caught it: a rig clicked on a seam went down four tiles away.
+    if (overhead) { frameOverhead(); if (document.pointerLockElement === renderer.domElement) document.exitPointerLock(); }
+  }
 });
 addEventListener('keyup', e => { keys[e.code] = false; });
 addEventListener('contextmenu', e => e.preventDefault());
@@ -4643,7 +4652,10 @@ const ACT2 = [
 const ACT1 = [
   { title: 'Look around', text: 'Move the mouse to look. W, A, S and D walk. Shift runs.',
     why: 'This is a worldlet: a cube you can walk all the way around. Every face grows a different ore.',
-    check: () => tutBase.pos && player.pos.distanceTo(tutBase.pos) > 3.5 },
+    // "look around" clears on looking as much as on walking: a player who only
+    // turns the mouse has done what the card asked, and on a small world the
+    // line can be close enough that walking forward bumps into it
+    check: () => tutBase.pos && (player.pos.distanceTo(tutBase.pos) > 2.5 || (tutBase.fwd && player.fwd.angleTo(tutBase.fwd) > 0.6)) },
   { title: 'This is a line', text: 'Walk to the hub inside the ring.',
     why: 'Ore leaves the rig, rides the belt, the smelter cooks two ore into one ingot, and the hub sells whatever reaches it. That is the whole game, and you are about to build a second one.',
     mark: () => findTile(0, HUB),
@@ -4662,7 +4674,9 @@ const ACT1 = [
     mark: () => findTile(0, HUB),
     // a second rig's worth over what the line did when the step began: noise
     // in the rate must not clear it
-    check: () => rateNow >= Math.max(60, tutBase.rate + 60) },
+    // against the rate BEFORE the new rig existed, not the moment this step
+    // began: by then its ore may already be selling, and the rise is gone
+    check: () => rateNow >= Math.max(60, (tutBase.lineRate === undefined ? tutBase.rate : tutBase.lineRate) + 60) },
   { title: 'Read the panel', text: 'Credits are what your hubs have earned by selling; they buy upgrades. The rate is credits a minute. The gold card is your next goal, and contracts appear under it. Press Enter or click got it when you are ready.',
     why: 'From here the goal card leads: bank 40 credits and the splitter is yours. The foreman comes back when the forge unlocks. Press P for photo mode any time.',
     check: () => false, gotit: true },
@@ -4693,11 +4707,11 @@ function tutStart(k) {
   // the step puts the tool in your hand: nothing during the first two steps,
   // so the world is seen without a ghost over it; the rig, then the belt
   if (k <= 1) { tool = null; if (typeof setHolo === 'function') setHolo(null); document.querySelectorAll('.tool').forEach(o => o.classList.remove('on')); }
-  else if (tutAct === 1 && k === 2) pickTool('miner');
+  else if (tutAct === 1 && k === 2) { pickTool('miner'); tutBase.lineRate = rateNow; }   // what one line did
   else if (tutAct === 1 && k === 3) pickTool('belt');
   else if (tutAct === 2 && TUT[k] && TUT[k].tool && UNLOCKED[TUT[k].tool]) pickTool(TUT[k].tool);
   tutBase.rate = rateNow; tutBase.rigs = countType(MINER); tutBase.belts = countType(BELT);
-  tutBase.pos = player.pos.clone(); tutBase.age = 0;
+  tutBase.pos = player.pos.clone(); tutBase.fwd = player.fwd.clone(); tutBase.age = 0;
   // the line's steady rate is what the finish step is measured against; a
   // line that has only just started reads low and would clear it at once
   if (k === 4) tutBase.rate = Math.max(rateNow, 180);
@@ -5952,7 +5966,10 @@ window.__factory = {
   get shards() { return shards; }, set shards(v) { shards = v; renderRank(); }, get rank() { return rank; }, CONTRACT_EVERY,
   offerStanding, get standing() { return standing; }, set streak(v) { streak = v; }, get streak() { return streak; },
   set rank(v) { rank = v; renderRank(); gildEdge(); applyUpgrades(); }, PERKS, lifetime, get visitedWorlds() { return visitedWorlds; },
-  worksDone, playWorks, hubCost, hubCount, HUB_INTAKE, apply, pickTool, accepts, get components() { return components; },
+  worksDone, playWorks, hubCost, hubCount, HUB_INTAKE, apply, pickTool, accepts, cellUnder, get overhead() { return overhead; }, get components() { return components; },
+  // where a tile is on screen, for a harness that clicks like a player
+  screenOf: (f, i, j) => { const w = tileWorld(f, i, j); const v = new THREE.Vector3(w[0], w[1], w[2]).project(camera);
+                           return [(v.x + 1) / 2 * innerWidth, (1 - v.y) / 2 * innerHeight, v.z]; },
   FAR_PREMIUM, MINERAL_OF_INGOT,
   get TUT() { return TUT; }, ACT1, ACT2, get tutAct() { return tutAct; }, startAct2, get tutIdx() { return tutIdx; }, set tutIdx(v) { tutStart(v); }, tutStart, describeCell, get tool() { return tool; },
   set bpStamps(v) { bpStamps = v; }, set overheadSeen(v) { overheadSeen = v; },
