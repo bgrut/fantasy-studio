@@ -103,6 +103,7 @@ _FACTORY_WORDS = _fre.compile(
     r"\b(factor(y|ies)|conveyor\w*|automat\w*|refiner\w*|smelt\w*|foundr(y|ies)|"
     r"production line|assembly line|logistics|supply chain|"
     r"mining (outpost|colony|base|station|rig|camp|op\w*)|ore processing|"
+    r"bakery|brewery|distillery|sawmill|cannery|shipyard|windmill|watermill|"
     r"idle game|incremental game)\b", _fre.I)
 
 

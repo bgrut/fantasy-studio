@@ -210,6 +210,12 @@ class GameSpec(BaseModel):
     # the export pipeline, the asset library and the verification gate — the
     # game is the only thing that differs.
     genre: Literal["adventure", "factory"] = "adventure"
+    # THE WORDS (2026-09-10): a factory prompt's nouns over the same dynamics.
+    # Optional; the runtime swaps whole words on screen and nothing in the
+    # simulation knows. Keys: resource, deposit, ores (three), refined,
+    # combined, product, currency, extractor, refiner, combiner, assembler,
+    # outlet, carrier. Any subset is fine; missing words keep the default.
+    theme: Optional[dict] = None
     style: Literal["default", "cartoon", "sketch", "anime", "horror", "pixel",
                    "lowpoly", "illustrated", "dunescape", "watercolor",
                    "claymation", "noir", "storybook", "kawaii", "comic",

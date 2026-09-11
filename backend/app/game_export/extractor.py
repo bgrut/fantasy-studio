@@ -62,6 +62,20 @@ Output ONLY the JSON object, no markdown, no commentary. Schema (all fields opti
  has no hero and no combat: the player is a builder placing machines, so do not
  invent objectives like "defeat" or "collect 5 X" for one. Everything else is
  "adventure".
+ "theme": TOP-LEVEL, ONLY for genre "factory", and only when the prompt's world
+ is not literally mining and smelting. It names the game's things in the
+ prompt's own fiction so the screen reads in that world. An object with these
+ keys, each a short lowercase noun (singular): "resource" (what is gathered:
+ "grain", "kelp", "scrap"), "deposit" (where it grows or lies: "field",
+ "bed", "heap"), "ores" (a list of exactly three kinds of the resource:
+ ["wheat","barley","rye"]), "refined" (one step processed: "flour"),
+ "combined" (two kinds combined: "dough"), "product" (the finished thing:
+ "loaf"), "currency" (what it sells for: "coins"), "extractor" (the machine
+ that gathers: "harvester"), "refiner" ("mill"), "combiner" ("kneader"),
+ "assembler" ("oven"), "outlet" (where things are sold: "stall"), "carrier"
+ (what moves things: "cart"). Give a plural after a slash when it is not the
+ singular plus s: "flour/flour", "dough/dough", "loaf/loaves", "grain/grain".
+ A rusted mining outpost needs no theme: omit it.
  "style": A TOP-LEVEL FIELD, a sibling of "world" and "player" — NOT a key
  inside "world". Put it at the root of the object: {"title":..., "style":"pixel",
  "world":{...}}. It is THE ART DIRECTION, and the single biggest lever on

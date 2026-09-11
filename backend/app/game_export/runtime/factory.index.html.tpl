@@ -358,7 +358,8 @@
   #goal .bar i{display:block;height:100%;background:linear-gradient(90deg,#ffd479,#ff9a5c);
                border-radius:2px;transition:width .4s;box-shadow:0 0 8px rgba(255,212,121,.6)}
   /* the market is four bars, not four numbers */
-  #tick{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;align-items:end;height:64px}
+  /* five products since the assembler: the board and the panel show them all */
+  #tick{display:grid;grid-template-columns:repeat(5,1fr);gap:4px;align-items:end;height:64px}
   #tick .mk{display:flex;flex-direction:column;align-items:center;justify-content:flex-end;
             height:100%;gap:3px;font-size:9.5px;
             font-family:var(--f-ui)}

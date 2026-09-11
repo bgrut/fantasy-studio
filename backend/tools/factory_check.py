@@ -10,6 +10,10 @@ getting tested.
     python backend/tools/factory_check.py --job 18 --demo http://127.0.0.1:8790/
 
 Serve the demo with:  cd flagship && python -m http.server 8790
+
+The --job target must be an UNTHEMED factory prompt (a mining outpost): a
+themed build renames every word on screen, and the gates assert the game's
+own words. The theme itself is proven by ftheme against both.
 """
 from __future__ import annotations
 
@@ -47,6 +51,7 @@ GATES = [
     ("fassembler.mjs", "the assembler takes an alloy and an ingot and makes a component worth more than both; contracts ask for them"),
     ("ffarore.mjs", "a hub pays a premium for an ingot of an ore its own face does not grow; none for alloys"),
     ("fplay.mjs", "a played session with real keys, clicks and drags walks the foreman's six steps through the game's own handlers"),
+    ("ftheme.mjs", "a theme reskins every word a player reads, singular and plural, and touches nothing else"),
     ("fworks.mjs", "rank perks change the machines; the works play once when the whole game is done and survive a reload"),
 ]
 

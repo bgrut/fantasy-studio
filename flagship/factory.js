@@ -228,6 +228,67 @@ let farToasted = false;
 // mineral so that whichever way you walk off the top, the ore changes.
 const MINERAL_OF_FACE = [CRYSTAL, CRYSTAL, EMBER, EMBER, SALT, SALT];
 const MINERAL_NAME = { [CRYSTAL]: 'crystal', [EMBER]: 'ember', [SALT]: 'salt' };
+
+// ── THE WORDS ──────────────────────────────────────────────────────────────
+// A prompt's nouns over the same dynamics. SPEC.theme names the things; every
+// string that reaches the screen passes through WORD(), which swaps whole words,
+// singular and plural, keeping the case of what it replaces.
+const THEME = (() => {
+  try { const m = location.search.match(/[?&]theme=([A-Za-z0-9+/=_-]+)/);
+        if (m) return JSON.parse(decodeURIComponent(escape(atob(m[1].replace(/-/g, '+').replace(/_/g, '/'))))); } catch (e) {}
+  return SPEC.theme && typeof SPEC.theme === 'object' ? SPEC.theme : null;
+})();
+const WORDS = (() => {
+  if (!THEME) return null;
+  const pairs = [];
+  // a value may carry its plural after a slash ("loaf/loaves", "flour/flour"),
+  // because a mass noun's plural is itself and English does not add an s to it
+  const add = (from, to) => { if (typeof to !== 'string' || !to.trim()) return;
+    let [sing, plur] = to.toLowerCase().split('/').map(x => x.trim());
+    // an extractor that answers "coins" for the currency has given the plural:
+    // a word already ending in s is its own plural unless told otherwise
+    if (!plur && /s$/.test(sing)) plur = sing;
+    if (sing && sing !== from) pairs.push([from, sing, plur || null]); };
+  const ores = Array.isArray(THEME.ores) ? THEME.ores : [];
+  add('alloy bar', THEME.combined);                  // the two-word forms first
+  add('ore node', THEME.deposit);
+  add('crystal', ores[0]); add('ember', ores[1]); add('salt', ores[2]);
+  add('ore', THEME.resource); add('seam', THEME.deposit); add('ingot', THEME.refined); add('alloy', THEME.combined);
+  add('component', THEME.product); add('part', THEME.product); add('credit', THEME.currency);
+  add('rig', THEME.extractor); add('miner', THEME.extractor); add('smelter', THEME.refiner); add('furnace', THEME.refiner);
+  add('forge', THEME.combiner); add('assembler', THEME.assembler); add('hub', THEME.outlet); add('belt', THEME.carrier);
+  return pairs.map(([from, to, plur]) => [new RegExp('\\b(' + from.replace(/ /g, '\\s+') + ')(s|es)?\\b', 'gi'), to, plur]);
+})();
+// English plurals for the words an extractor is likely to answer with: mass
+// nouns are their own plural, -f and -fe take -ves, and the usual endings
+const MASS = /^(flour|dough|grain|bread|sand|water|ore|wool|rice|sugar|salt|coal|oil|milk|honey|cheese|iron|steel|glass|paper|cloth|clay|wax|ash|dust|silk|wheat|barley|rye|corn|hay|straw|rock|stone|timber|lumber|fuel|gas|ice|snow|slag|scrap|kelp|silver|gold|copper|tin|lead|brass|bronze|cotton|linen|leather|meat|fish|fruit|juice|wine|beer|tea|coffee|chocolate|sap|resin|amber|pollen|nectar|thread|yarn|rope|foam|pulp|mash|paste|ink|dye|pigment|powder|meal|malt|hops|yeast|butter|cream|jam|syrup|soup|broth|stock)$/i;
+const plural = w => MASS.test(w) ? w
+  : /(s|x|z|ch|sh)$/i.test(w) ? w + 'es'
+  : /[^aeiou]y$/i.test(w) ? w.slice(0, -1) + 'ies'
+  : /(?:[^f]f|fe)$/i.test(w) && !/(roof|chief|belief|chef|proof|reef)$/i.test(w) ? w.replace(/fe?$/i, 'ves')
+  : w + 's';
+function WORD(str) {
+  if (!WORDS || typeof str !== 'string') return str;
+  let out = str;
+  for (const [re, to, plur] of WORDS) {
+    out = out.replace(re, (m, word, pl) => {
+      const w = pl ? (plur || plural(to)) : to;
+      if (word === word.toUpperCase() && /[A-Z]/.test(word)) return w.toUpperCase();
+      if (word[0] === word[0].toUpperCase()) return w[0].toUpperCase() + w.slice(1);
+      return w;
+    });
+  }
+  return out;
+}
+// walk an element's text nodes and title attributes; never its tags
+function themeNode(root) {
+  if (!WORDS || !root) return;
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  const nodes = []; let n; while ((n = walker.nextNode())) nodes.push(n);
+  for (const t of nodes) { const v = WORD(t.nodeValue); if (v !== t.nodeValue) t.nodeValue = v; }
+  root.querySelectorAll('[title]').forEach(el => { const v = WORD(el.title); if (v !== el.title) el.title = v; });
+  if (root.title) { const v = WORD(root.title); if (v !== root.title) root.title = v; }
+}
 const TYPE_NAME = { 1: 'miner', 2: 'belt', 3: 'hub', 4: 'ore node',
                     5: 'smelter', 6: 'splitter', 7: 'forge', 8: 'filter',
                     9: 'chronos rift', 10: 'assembler' };
@@ -301,7 +362,8 @@ function buy(key) {
   return true;
 }
 
-function renderUpgrades() {
+function renderUpgrades() { _renderUpgrades(); themeNode(document.getElementById('ups')); }
+function _renderUpgrades() {
   const box = document.getElementById('ups');
   if (!box) return;
   box.innerHTML = '';
@@ -491,13 +553,13 @@ function captureBlueprint(f, i0, j0, i1, j1) {
   }
   const t = document.getElementById('toast');
   if (!cells.length) {
-    if (t) { t.textContent = 'Nothing to copy there. Drag a box over machines you have built.'; t.classList.add('on'); toastAt = 3; }
+    if (t) { t.textContent = WORD('Nothing to copy there. Drag a box over machines you have built.'); t.classList.add('on'); toastAt = 3; }
     return null;
   }
   blueprint = { w: b - a + 1, h: d - c + 1, cells };
   bpRot = 0;
   try { localStorage.setItem('fs-factory-bp', JSON.stringify(blueprint)); } catch (e) {}
-  if (t) { t.textContent = 'Blueprint copied: ' + cells.length + ' machines over ' + blueprint.w + ' by ' + blueprint.h + ' tiles. Click a tile on any face to stamp it there. R turns it a quarter; 0 again drops it.'; t.classList.add('on'); toastAt = 6; }
+  if (t) { t.textContent = WORD('Blueprint copied: ' + cells.length + ' machines over ' + blueprint.w + ' by ' + blueprint.h + ' tiles. Click a tile on any face to stamp it there. R turns it a quarter; 0 again drops it.'); t.classList.add('on'); toastAt = 6; }
   updateGhost();
   return blueprint;
 }
@@ -542,7 +604,7 @@ function dropBlueprint() {
   blueprint = null; bpRot = 0;
   try { localStorage.removeItem('fs-factory-bp'); } catch (e) {}
   const t = document.getElementById('toast');
-  if (t) { t.textContent = 'Blueprint dropped. Drag a box over a line to copy another.'; t.classList.add('on'); toastAt = 2.5; }
+  if (t) { t.textContent = WORD('Blueprint dropped. Drag a box over a line to copy another.'); t.classList.add('on'); toastAt = 2.5; }
   updateGhost();
 }
 const scatterSpots = [];
@@ -2724,7 +2786,7 @@ function sporeStrike() {
   if (!sporeToasted) {
     sporeToasted = true;
     const t = document.getElementById('toast');
-    if (t) { t.textContent = 'SPORES. A belt that no filter is watching has clogged and is holding its load. A filter within ' + SPORE_REACH + ' tiles keeps the belts around it clean.'; t.classList.add('on'); toastAt = 7; }
+    if (t) { t.textContent = WORD('SPORES. A belt that no filter is watching has clogged and is holding its load. A filter within ' + SPORE_REACH + ' tiles keeps the belts around it clean.'); t.classList.add('on'); toastAt = 7; }
   }
   return [f, i, j];
 }
@@ -2769,7 +2831,7 @@ function iceStrike() {
   if (!iceToasted) {
     iceToasted = true;
     const t = document.getElementById('toast');
-    if (t) { t.textContent = 'ICE. A seam has frozen over and its rig is scraping at half rate. A smelter or forge within ' + ICE_REACH + ' tiles keeps nearby seams thawed, and the heated drill ignores ice entirely.'; t.classList.add('on'); toastAt = 7; }
+    if (t) { t.textContent = WORD('ICE. A seam has frozen over and its rig is scraping at half rate. A smelter or forge within ' + ICE_REACH + ' tiles keeps nearby seams thawed, and the heated drill ignores ice entirely.'); t.classList.add('on'); toastAt = 7; }
   }
   return [f, i, j];
 }
@@ -2813,7 +2875,7 @@ function offerContract(forceItem) {
   contract = { item, need, have: 0, left: CONTRACT_SECS, total: CONTRACT_SECS, bonus };
   renderContract();
   const t = document.getElementById('toast');
-  if (t) { t.textContent = 'CONTRACT. The market wants ' + need + ' ' + contractName(item, need) + ' delivered to a hub within ' + CONTRACT_SECS + ' seconds. Fill it for +' + bonus + ' credits and a core shard.'; t.classList.add('on'); toastAt = 5; }
+  if (t) { t.textContent = WORD('CONTRACT. The market wants ' + need + ' ' + contractName(item, need) + ' delivered to a hub within ' + CONTRACT_SECS + ' seconds. Fill it for +' + bonus + ' credits and a core shard.'); t.classList.add('on'); toastAt = 5; }
   return contract;
 }
 function fillContract() {
@@ -2834,7 +2896,7 @@ function fillContract() {
     renderWorlds();
   }
   const t = document.getElementById('toast');
-  if (t) { t.textContent = msg; t.classList.add('on'); toastAt = 3.5; }
+  if (t) { t.textContent = WORD(msg); t.classList.add('on'); toastAt = 3.5; }
   renderContract(); renderRank();
   // the standing order is offered LAST, so its toast is the one that stays up
   if (streak >= STANDING_STREAK && !standing) offerStanding(c.item);
@@ -2847,7 +2909,7 @@ function stepContracts(dt) {
       contract = null; contractClock = 0;
       streak = 0;
       const t = document.getElementById('toast');
-      if (t) { t.textContent = 'The contract lapsed. Nothing is lost, and the market will post another soon.'; t.classList.add('on'); toastAt = 3; }
+      if (t) { t.textContent = WORD('The contract lapsed. Nothing is lost, and the market will post another soon.'); t.classList.add('on'); toastAt = 3; }
       renderContract();
     }
     return;
@@ -2866,7 +2928,7 @@ function offerStanding(item) {
   standing = { item, perMin, pay, held: 0, short: 0, minutes: 0, log: [], rate: 0 };
   renderStanding();
   const t = document.getElementById('toast');
-  if (t) { t.textContent = 'STANDING ORDER. Three contracts kept in a row. The market will pay +' + pay + ' credits for every minute you keep ' + perMin + ' ' + contractName(item, perMin) + ' a minute flowing to a hub, and a core shard every third minute. It closes the moment the rate falls short for ' + STANDING_GRACE + ' seconds.'; t.classList.add('on'); toastAt = 8; }
+  if (t) { t.textContent = WORD('STANDING ORDER. Three contracts kept in a row. The market will pay +' + pay + ' credits for every minute you keep ' + perMin + ' ' + contractName(item, perMin) + ' a minute flowing to a hub, and a core shard every third minute. It closes the moment the rate falls short for ' + STANDING_GRACE + ' seconds.'); t.classList.add('on'); toastAt = 8; }
   return standing;
 }
 function stepStanding(dt) {
@@ -2892,7 +2954,7 @@ function stepStanding(dt) {
       }
       sfxSold(ALLOY);
       const t = document.getElementById('toast');
-      if (t) { t.textContent = msg; t.classList.add('on'); toastAt = 4; }
+      if (t) { t.textContent = WORD(msg); t.classList.add('on'); toastAt = 4; }
     }
   } else {
     standing.short += dt;
@@ -2901,14 +2963,15 @@ function stepStanding(dt) {
       lifetime.longestHold = Math.max(lifetime.longestHold, held);
       standing = null; streak = 0;
       const t = document.getElementById('toast');
-      if (t) { t.textContent = 'The standing order closed after ' + Math.floor(held / 60) + ':' + String(Math.floor(held % 60)).padStart(2, '0') + '. The rate fell short for ' + STANDING_GRACE + ' seconds. Keep three more contracts to earn another.'; t.classList.add('on'); toastAt = 6; }
+      if (t) { t.textContent = WORD('The standing order closed after ' + Math.floor(held / 60) + ':' + String(Math.floor(held % 60)).padStart(2, '0') + '. The rate fell short for ' + STANDING_GRACE + ' seconds. Keep three more contracts to earn another.'); t.classList.add('on'); toastAt = 6; }
       renderStanding();
       return;
     }
   }
   if ((now % 500) < 20) renderStanding();
 }
-function renderStanding() {
+function renderStanding() { _renderStanding(); themeNode(document.getElementById('standing')); }
+function _renderStanding() {
   const el = document.getElementById('standing');
   if (!el) return;
   if (!standing) { el.classList.remove('on'); return; }
@@ -2934,7 +2997,7 @@ function offerRival(forceItem) {
   rival = { item, mult: RIVAL_MULT, left: RIVAL_SECS, sold: 0, extra: 0 };
   renderRival(); renderTicker(); drawTickerBoard();
   const t = document.getElementById('toast');
-  if (t) { t.textContent = 'RIVAL BUYER. Someone on the board is paying ' + RIVAL_MULT.toFixed(1) + ' times the going rate for ' + contractName(item, 2) + ' for the next ' + RIVAL_SECS + ' seconds. Turn a filter or swing a splitter their way.'; t.classList.add('on'); toastAt = 6; }
+  if (t) { t.textContent = WORD('RIVAL BUYER. Someone on the board is paying ' + RIVAL_MULT.toFixed(1) + ' times the going rate for ' + contractName(item, 2) + ' for the next ' + RIVAL_SECS + ' seconds. Turn a filter or swing a splitter their way.'); t.classList.add('on'); toastAt = 6; }
   return rival;
 }
 function stepRival(dt) {
@@ -2960,7 +3023,8 @@ function stepRival(dt) {
   rivalClock += dt;
   if (rivalClock >= RIVAL_EVERY) offerRival();
 }
-function renderRival() {
+function renderRival() { _renderRival(); themeNode(document.getElementById('rival')); }
+function _renderRival() {
   const el = document.getElementById('rival');
   if (!el) return;
   if (!rival) { el.classList.remove('on'); return; }
@@ -2970,7 +3034,8 @@ function renderRival() {
   const i = el.querySelector('.bar i'); if (i) i.style.width = Math.round(100 * Math.max(0, rival.left) / RIVAL_SECS) + '%';
 }
 
-function renderContract() {
+function renderContract() { _renderContract(); themeNode(document.getElementById('contract')); }
+function _renderContract() {
   const el = document.getElementById('contract');
   if (!el) return;
   if (!contract) { el.classList.remove('on'); return; }
@@ -2981,7 +3046,8 @@ function renderContract() {
   const s = el.querySelector('.left');
   if (s) { const l = Math.max(0, contract.left); s.textContent = contract.have + ' / ' + contract.need + '  ·  ' + Math.floor(l / 60) + ':' + String(Math.floor(l % 60)).padStart(2, '0'); }
 }
-function renderRank() {
+function renderRank() { _renderRank(); themeNode(document.getElementById('rank')); }
+function _renderRank() {
   const el = document.getElementById('rank');
   if (!el) return;
   const roman = ['', 'I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X'][Math.min(10, rank)] || String(rank);
@@ -3069,7 +3135,8 @@ function drawTickerBoard() {
   TICK_TEX.needsUpdate = true;
 }
 
-function renderTicker() {
+function renderTicker() { _renderTicker(); themeNode(document.getElementById('tick')); }
+function _renderTicker() {
   drawTickerBoard();
   const box = document.getElementById('tick');
   if (!box) return;
@@ -3135,7 +3202,7 @@ function bank(type, face) {
     if (!farToasted) {
       farToasted = true;
       const t = document.getElementById('toast');
-      if (t) { t.textContent = 'FAR ORE. This hub paid ' + FAR_PREMIUM + ' times for an ingot of an ore its face does not grow. Bringing the far face home is the best trade on the board.'; t.classList.add('on'); toastAt = 6; }
+      if (t) { t.textContent = WORD('FAR ORE. This hub paid ' + FAR_PREMIUM + ' times for an ingot of an ore its face does not grow. Bringing the far face home is the best trade on the board.'); t.classList.add('on'); toastAt = 6; }
     }
   }
   if (rival && type === rival.item) { const extra = v * (rival.mult - 1); rival.sold++; rival.extra += extra; v += extra; }
@@ -3612,7 +3679,7 @@ function apply(t, dir) {
     const cost = hubCost();
     if (ore < cost) {
       const tt = document.getElementById('toast');
-      if (tt) { tt.textContent = 'A second hub costs ' + cost + ' credits and you have ' + Math.floor(ore) + '. Join this line to the hub you already have, or bank more first.'; tt.classList.add('on'); toastAt = 4.5; }
+      if (tt) { tt.textContent = WORD('A second hub costs ' + cost + ' credits and you have ' + Math.floor(ore) + '. Join this line to the hub you already have, or bank more first.'); tt.classList.add('on'); toastAt = 4.5; }
       const el = document.querySelector('.tool[data-tool="hub"]');
       if (el) { el.classList.add('deny'); setTimeout(() => el.classList.remove('deny'), 320); }
       return;
@@ -3733,7 +3800,7 @@ addEventListener('keydown', e => {
   // mouse is captured and the card cannot be clicked
   if (tutActive() && !photo && (e.code === 'Enter' || e.code === 'NumpadEnter')) { tutAdvance(); return; }
   if (tutActive() && e.code === 'KeyG') { tutIdx = TUT.length; renderTutor(); if (!tool) pickTool('miner'); save();
-    const t = document.getElementById('toast'); if (t) { t.textContent = 'The foreman steps back. The goal card leads from here; "the guide" in the panel brings him back.'; t.classList.add('on'); toastAt = 4; } return; }
+    const t = document.getElementById('toast'); if (t) { t.textContent = WORD('The foreman steps back. The goal card leads from here; "the guide" in the panel brings him back.'); t.classList.add('on'); toastAt = 4; } return; }
   const u = { 'KeyZ': 'tick', 'KeyX': 'yield', 'KeyC': 'smelt' }[e.code];
   if (u) buy(u);
 });
@@ -4009,7 +4076,7 @@ function crossEdge(nf) {
   crossFlash = 1;
   const fc = document.getElementById('facecap');
   if (fc) {
-    fc.textContent = FACES[nf].name.toUpperCase() + ' FACE  ·  ' + (MINERAL_NAME[MINERAL_OF_FACE[nf]] || '');
+    fc.textContent = WORD(FACES[nf].name.toUpperCase() + ' FACE  ·  ' + (MINERAL_NAME[MINERAL_OF_FACE[nf]] || ''));
     fc.classList.add('on');
     captionAt = 1.6;
   }
@@ -4267,7 +4334,7 @@ function meltdown() {
   rank++; renderRank(); gildEdge(); applyUpgrades();
   if (rank <= PERKS.length) {
     const t = document.getElementById('toast');
-    if (t) { t.textContent = 'RANK ' + ['I', 'II', 'III'][rank - 1] + '. ' + PERKS[rank - 1].name + ': ' + PERKS[rank - 1].text + '.'; t.classList.add('on'); toastAt = 6; }
+    if (t) { t.textContent = WORD('RANK ' + ['I', 'II', 'III'][rank - 1] + '. ' + PERKS[rank - 1].name + ': ' + PERKS[rank - 1].text + '.'); t.classList.add('on'); toastAt = 6; }
   }
   refreshCounts();
   document.getElementById('tok').textContent = cores;
@@ -4578,7 +4645,8 @@ function applyRewards() {
   applyUpgrades();
 }
 
-function renderGoal() {
+function renderGoal() { _renderGoal(); themeNode(document.getElementById('goal')); }
+function _renderGoal() {
   const el = document.getElementById('goal');
   if (el) {
     if (CREATIVE) {
@@ -4620,7 +4688,7 @@ function playWorks() {
   if (cubeEdges) cubeEdges.material.color.setHex(0xffd479);
   sfxUnlock(); setTimeout(sfxUnlock, 400); setTimeout(sfxUnlock, 800);
   const t = document.getElementById('toast');
-  if (t) { t.textContent = 'THE WORKS ARE YOURS. Every tier, three cores, three worlds and an order held five minutes. The run carries on: contracts keep coming, and every meltdown still raises your rank.'; t.classList.add('on'); toastAt = 10; }
+  if (t) { t.textContent = WORD('THE WORKS ARE YOURS. Every tier, three cores, three worlds and an order held five minutes. The run carries on: contracts keep coming, and every meltdown still raises your rank.'); t.classList.add('on'); toastAt = 10; }
   renderGoal();
 }
 // ── THE FOREMAN ────────────────────────────────────────────────────────────
@@ -4706,7 +4774,7 @@ const tutActive = () => !CREATIVE && !SHARED && tutIdx < TUT.length && intro ===
 function startAct2() {
   tutAct = 2; TUT = ACT2; tutStart(0);
   const t = document.getElementById('toast');
-  if (t) { t.textContent = 'The foreman is back, with the six things that come after a line. Enter moves on, G sends him away.'; t.classList.add('on'); toastAt = 5; }
+  if (t) { t.textContent = WORD('The foreman is back, with the six things that come after a line. Enter moves on, G sends him away.'); t.classList.add('on'); toastAt = 5; }
 }
 function tutStart(k) {
   tutIdx = k;
@@ -4725,7 +4793,8 @@ function tutStart(k) {
   if (k === 2) { tutBase.rig = null; tutBase.rigTiles = []; eachTile((c, f, i, j) => { if (c.t === MINER) tutBase.rigTiles.push([f, i, j]); }); }
   renderTutor();
 }
-function renderTutor() {
+function renderTutor() { _renderTutor(); themeNode(document.getElementById('tutor')); }
+function _renderTutor() {
   const el = document.getElementById('tutor');
   if (!el) return;
   document.querySelectorAll('.tool.hint').forEach(o => o.classList.remove('hint'));
@@ -4747,8 +4816,8 @@ function tutAdvance() {
     tutIdx = TUT.length; renderTutor();
     if (!tool) pickTool('miner');
     if (tutAct === 2) { act2Done = true;
-      if (t) { t.textContent = 'The foreman leaves for good. The goal card leads from here; "the guide" in the panel replays what he knew.'; t.classList.add('on'); toastAt = 5; } }
-    else if (t) { t.textContent = 'The foreman steps back. The goal card leads from here: bank 40 credits. He comes back when the forge unlocks.'; t.classList.add('on'); toastAt = 5; }
+      if (t) { t.textContent = WORD('The foreman leaves for good. The goal card leads from here; "the guide" in the panel replays what he knew.'); t.classList.add('on'); toastAt = 5; } }
+    else if (t) { t.textContent = WORD('The foreman steps back. The goal card leads from here: bank 40 credits. He comes back when the forge unlocks.'); t.classList.add('on'); toastAt = 5; }
     save();
     return;
   }
@@ -4818,7 +4887,7 @@ function stepLook(dt) {
   const t = cellUnder(null);
   const c = t && cellOf(t);
   const text = c ? describeCell(c, t) : '';
-  if (text) { el.textContent = text; el.classList.add('on'); } else el.classList.remove('on');
+  if (text) { el.textContent = WORD(text); el.classList.add('on'); } else el.classList.remove('on');
 }
 
 function stepGoals(dt) {
@@ -4851,7 +4920,7 @@ function stepGoals(dt) {
     renderWorlds();
     sfxUnlock();
     const t = document.getElementById('toast');
-    if (t) { t.textContent = g.got; t.classList.add('on'); toastAt = 5; }
+    if (t) { t.textContent = WORD(g.got); t.classList.add('on'); toastAt = 5; }
     renderGoal();
   }
   if (toastAt > 0) {
@@ -5073,12 +5142,12 @@ addEventListener('visibilitychange', () => { if (document.hidden) save(); });
   const gd = document.getElementById('guide');
   if (gd) gd.addEventListener('pointerdown', ev => {
     ev.stopPropagation();
-    if (CREATIVE || SHARED) { const t = document.getElementById('toast'); if (t) { t.textContent = 'The guide runs on a survival world of your own.'; t.classList.add('on'); toastAt = 3; } return; }
+    if (CREATIVE || SHARED) { const t = document.getElementById('toast'); if (t) { t.textContent = WORD('The guide runs on a survival world of your own.'); t.classList.add('on'); toastAt = 3; } return; }
     if (UNLOCKED.forge && act2Done) { tutAct = 2; TUT = ACT2; act2Done = false; } else { tutAct = 1; TUT = ACT1; }
     tutStart(0); save();
   });
   if (tu) tu.addEventListener('pointerdown', ev => { ev.stopPropagation(); tutIdx = TUT.length; renderTutor(); if (!tool) pickTool('miner'); save();
-    const t = document.getElementById('toast'); if (t) { t.textContent = 'The foreman steps back. The goal card leads from here.'; t.classList.add('on'); toastAt = 4; } });
+    const t = document.getElementById('toast'); if (t) { t.textContent = WORD('The foreman steps back. The goal card leads from here.'); t.classList.add('on'); toastAt = 4; } });
   const sh = document.getElementById('share');
   if (sh) sh.addEventListener('pointerdown', ev => { ev.stopPropagation(); shareLink(); });
   const w = document.getElementById('wipe');
@@ -5110,6 +5179,7 @@ renderUpgrades();
 renderTicker();
 // after the world exists, so the icons are lit by the same environment it is
 buildToolIcons();
+themeNode(document.body);                 // the chips, the tool bar, the hint, the panel's headers
 // a NEW world has no save to derive its rewards from: creative's "everything
 // open" has to be applied here, on the first frame, not on the first reload
 applyRewards(); renderUpgrades();
@@ -5445,7 +5515,7 @@ function applyTier(name, why) {
   PBUDGET = Math.max(64, Math.floor(PMAX * TIER.budget));
   try { localStorage.setItem('fs-factory-q', name); } catch (e) {}
   const t = document.getElementById('toast');
-  if (t && why) { t.textContent = 'Graphics stepped down to ' + name + ' because ' + why + '. The panel keeps the setting.'; t.classList.add('on'); toastAt = 4; }
+  if (t && why) { t.textContent = WORD('Graphics stepped down to ' + name + ' because ' + why + '. The panel keeps the setting.'); t.classList.add('on'); toastAt = 4; }
 }
 const frameTimes = [];
 let tierStepped = false, tierClock = 0;
@@ -5890,6 +5960,7 @@ window.__game = {
                   return { active: iceActive(), hits: iceHits, frozen: n, reach: ICE_REACH }; })(),
     finite: !!(WORLDS[worldIdx] && WORLDS[worldIdx].finite), core_mult: (WORLDS[worldIdx] && WORLDS[worldIdx].coreMult) || 1,
     shared: !!SHARED,
+    themed: !!WORDS,
     contract: contract ? { item: contractName(contract.item, contract.need), need: contract.need, have: contract.have,
                            left: +contract.left.toFixed(1), bonus: contract.bonus } : null,
     shards, rank, contracts_filled: contractsFilled, streak,
