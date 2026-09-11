@@ -97,6 +97,15 @@ await p.goto(URL + q + 'nointro=1', { waitUntil:'domcontentloaded', timeout:9000
 await wait(4000);
 const back = await p.evaluate(() => ({ tutorial: window.__game.facts().tutorial, cardOn: document.getElementById('tutor').classList.contains('on') }));
 console.log('reloaded  : tutorial', JSON.stringify(back.tutorial), '| card on', back.cardOn);
+// the nudge toward the edge: between the acts, three minutes on one face
+const nudge = await p.evaluate(async () => {
+  const F = window.__factory;
+  const before = { nudged: F.edgeNudged, toast: document.getElementById('toast').textContent };
+  F.nudgeClock = 181;
+  await new Promise(r => setTimeout(r, 400));
+  return { before, nudged: F.edgeNudged, toast: document.getElementById('toast').textContent };
+});
+console.log('the nudge :', 'before', nudge.before.nudged, '| after three minutes on one face:', nudge.nudged, JSON.stringify(nudge.toast).slice(0, 70));
 
 // 5. creative has no foreman; the look label names what you point at
 await p.goto(URL + q + 'creative=1&fresh=1&nointro=1', { waitUntil:'domcontentloaded', timeout:90000 });
@@ -184,6 +193,7 @@ await p.screenshot({ path: process.env.OUT || 'tutor.png' });
 await b.close();
 
 const ok = s1.before.step === 1 && s1.before.on && s1.before.tool === null && !s1.before.ghost && !s1.before.toolOn
+  && !nudge.before.nudged && nudge.nudged && /Walk over any edge/.test(nudge.toast)
   && s1.after.step === 2 && s1.after.marker
   && s3.ringOnHub && s3.step === 3 && s3.tool === 'miner' && s3.hint
   && s5.onSeam && s5.s4.step === 4 && s5.s4.tool === 'belt' && s5.s4.hint && s5.step === 5

@@ -4629,6 +4629,7 @@ function travelTo(k) {
 // who never walks over an edge never learns the thing this game is for, so it
 // is a goal rather than a hope.
 const visitedFaces = new Set();
+let nudgeClock = 0, edgeNudged = false;   // the one nudge toward the edge, between the acts
 const START_TOOLS = ['miner', 'belt', 'smelter', 'hub', 'erase'];
 const UNLOCKED = {};
 for (const k of START_TOOLS) UNLOCKED[k] = 1;
@@ -4924,6 +4925,17 @@ function tutAdvance() {
 }
 function stepTutorial(dt) {
   if (tutAct === 1 && tutIdx >= TUT.length && !act2Done && !CREATIVE && !SHARED && intro === 0 && UNLOCKED.forge) startAct2();
+  // A NUDGE TOWARD THE EDGE (2026-09-10). Between the acts, a player who has
+  // stayed three minutes on the face they started on is told once where the
+  // rest of the game is. Once: a second nudge is nagging.
+  if (tutAct === 1 && tutIdx >= TUT.length && !edgeNudged && !CREATIVE && !SHARED && intro === 0 && visitedFaces.size < 2) {
+    nudgeClock += dt;
+    if (nudgeClock > 180) {
+      edgeNudged = true;
+      const t = document.getElementById('toast');
+      if (t) { t.textContent = WORD('The other five faces grow other ores. Walk over any edge: the world turns with you, and an ore from far away sells for more back home.'); t.classList.add('on'); toastAt = 7; }
+    }
+  }
   if (!tutActive()) { if (tutMark) tutMark.visible = false; return; }
   const t = TUT[tutIdx];
   // the new rig is whichever rig was not there when the step began
@@ -6151,6 +6163,7 @@ window.__factory = {
   SEAM_COST, SEAM_REGROW, SEAM_FLOOR,
   step,                 // one simulation tick, for a harness that cannot wait
   playIntro, endIntro, showWorksCard, KitEnd,
+  get nudgeClock() { return nudgeClock; }, set nudgeClock(v) { nudgeClock = v; }, get edgeNudged() { return edgeNudged; },
   audioStart, audioMute, sfxSold, sfxUnlock, sfxMelt, AUDIO,
   beltIndexOf: (f, i, j) => {
     const k = beltShape(f, i, j, cells[f][i][j]);
