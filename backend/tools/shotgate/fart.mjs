@@ -157,12 +157,20 @@ const sky = await p.evaluate(()=>{
   const pts = window.__scene.getObjectByName('stars');
   if (!pts) return { found: false };
   pts.geometry.computeBoundingSphere();
+  // and the sky has weather of its own: a nebula with a strength, drifting
+  // on a clock the frame loop advances
+  const dome = window.__scene.getObjectByName('sky');
+  const u = dome && dome.material.uniforms;
+  const t0 = u ? u.uTime.value : -1;
   return { found: true, stars: pts.geometry.attributes.position.count,
            radius: Math.round(pts.geometry.boundingSphere.radius),
-           far: window.__camera.far };
+           far: window.__camera.far,
+           nebula: u ? u.uNebAmt.value : -1, aurora: u ? u.uAurora.value : -1, t0 };
 });
+await new Promise(r => setTimeout(r, 400));
+sky.t1 = await p.evaluate(() => { const d = window.__scene.getObjectByName('sky'); return d ? d.material.uniforms.uTime.value : -1; });
 console.log('starfield :', sky.found ? sky.stars + ' stars at r=' + sky.radius +
-            ', camera far ' + sky.far : 'MISSING');
+            ', camera far ' + sky.far + ' | nebula ' + sky.nebula + ' aurora ' + sky.aurora + ' | sky clock ' + (sky.t1 > sky.t0 ? 'runs' : 'STOPPED') : 'MISSING');
 console.log('errors    :', errs.length ? errs.join(' | ') : 'none');
 await p.screenshot({ path: process.env.OUT || 'art.png' });
 await b.close();
@@ -170,7 +178,7 @@ const ok = icons.withIcon === icons.tools && icons.tools >= 9
   && icons.rendered >= 8            // every machine; ERASE stays a glyph
   && inst.belts > 60 && inst.calls < 120     // a 20-grid lays 72; a 40-grid 199
   && moving.moved
-  && sky.found && sky.radius < sky.far && sky.stars > 500
+  && sky.found && sky.radius < sky.far && sky.stars > 500 && sky.nebula > 0 && sky.t1 > sky.t0
   && post.on && post.lum > 6 && post.lum < 250   // lit, not black, not blown
   && smoke.alive > 0 && sil.edges === 1 && sil.sun === 1
   && held.hasRig && held.hasHolo && held.changed && held.fpVisible && !held.orbitVisible

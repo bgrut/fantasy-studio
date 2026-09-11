@@ -33,14 +33,16 @@ const MOODS = [
   { id: 'green', words: /\b(jungle|forest|moss|verdant|overgrown|swamp|fungal|spore|garden|bloom|vine|toxic|acid)\w*/i },
 ];
 const MOOD_LOOK = {
-  void:  { sky: 0x0b0d18, fog: 0x0b0d18, accent: 0x39e6ff, ground: 0x3c4470, grid: 0x46527d,
+  void:  { nebula: { a: 0x2a3a8c, b: 0x9a3a9c, amt: 0.85, aurora: 0.30, auroraA: 0x39e6ff, auroraB: 0x8a5cff },
+           sky: 0x0b0d18, fog: 0x0b0d18, accent: 0x39e6ff, ground: 0x3c4470, grid: 0x46527d,
            planet: { col: 0x56668f, size: 0.10, bands: 0.0 }, ambience: 'motes',
            grade: { lift: [0.008, 0.010, 0.026], gamma: [1.0, 1.0, 1.02], gain: [1.0, 1.0, 1.04], sat: 1.06 },
            star: 0xffffff, edge: 0x7fd8ff, sun: 0xfff2d6,
            plate: { base: '#8792c4', tint: '#6a74a6', seam: 'rgba(90,100,150,0.75)', rivet: 'rgba(190,200,235,0.55)', overlay: null },
            belt: { frame: 0x2b7f68, glow: 0x07271f, deck: 0xffffff },
            weather: { col: [0.55, 0.62, 0.80], rate: 5, size: 0.028, fall: 0.25, drift: 0.35, life: 0.16 } },
-  warm:  { sky: 0x1a0c0e, fog: 0x2a1210, accent: 0xff9a5c, ground: 0x6b3a34, grid: 0xa2564a,
+  warm:  { nebula: { a: 0x6a1a18, b: 0xc0602a, amt: 0.75, aurora: 0.0, auroraA: 0xff9a5c, auroraB: 0xff5c8a },
+           sky: 0x1a0c0e, fog: 0x2a1210, accent: 0xff9a5c, ground: 0x6b3a34, grid: 0xa2564a,
            planet: { col: 0xb0402a, size: 0.16, bands: 0.5 }, ambience: 'embers',
            // a lighter lift than the first cut: 0.028 of red on a world whose unlit
            // faces sit at 0.06 flattened the contact shadows to nothing
@@ -49,14 +51,16 @@ const MOOD_LOOK = {
            plate: { base: '#766360', tint: '#524240', seam: 'rgba(40,24,22,0.8)', rivet: 'rgba(160,120,110,0.5)', overlay: 'soot' },
            belt: { frame: 0x8a4a2a, glow: 0x2a1006, deck: 0xffd0b0 },
            weather: { col: [0.95, 0.42, 0.22], rate: 14, size: 0.040, fall: 0.55, drift: 0.55, life: 0.14 } },
-  cold:  { sky: 0x0a1420, fog: 0x11202f, accent: 0xcfe8ff, ground: 0x7c93ad, grid: 0xa8c4dd,
+  cold:  { nebula: { a: 0x123a5a, b: 0x2c8a9a, amt: 0.55, aurora: 1.0, auroraA: 0x3af0a0, auroraB: 0x8a5cff },
+           sky: 0x0a1420, fog: 0x11202f, accent: 0xcfe8ff, ground: 0x7c93ad, grid: 0xa8c4dd,
            planet: { col: 0xbfd6ea, size: 0.09, bands: 0.0 }, ambience: 'breath', ice: true,
            grade: { lift: [0.0, 0.014, 0.034], gamma: [0.98, 1.0, 1.04], gain: [0.94, 1.0, 1.08], sat: 0.86 },
            star: 0xdcefff, edge: 0xcfe8ff, sun: 0xe8f4ff,
            plate: { base: '#c4d2e6', tint: '#a8b8cf', seam: 'rgba(120,140,170,0.6)', rivet: 'rgba(255,255,255,0.7)', overlay: 'frost' },
            belt: { frame: 0x5a7590, glow: 0x0f1a2a, deck: 0xd8e8ff },
            weather: { col: [0.92, 0.96, 1.00], rate: 18, size: 0.034, fall: 0.40, drift: 0.90, life: 0.12 } },
-  green: { sky: 0x08170f, fog: 0x0f2418, accent: 0x8fe6a0, ground: 0x3f6b4a, grid: 0x63a072, spores: true,
+  green: { nebula: { a: 0x0e3a2a, b: 0x6a8a2a, amt: 0.65, aurora: 0.55, auroraA: 0x8fe6a0, auroraB: 0xe6d48f },
+           sky: 0x08170f, fog: 0x0f2418, accent: 0x8fe6a0, ground: 0x3f6b4a, grid: 0x63a072, spores: true,
            planet: { col: 0x5f9a6a, size: 0.13, bands: 0.8 }, ambience: 'fireflies',
            grade: { lift: [0.0, 0.018, 0.008], gamma: [0.98, 1.03, 0.98], gain: [0.96, 1.06, 0.95], sat: 1.0 },
            star: 0xd6ffe0, edge: 0x8fe6a0, sun: 0xdfffe6,
@@ -854,10 +858,16 @@ let skyDome = null;
 // where the companion hangs: one fixed world direction, low, so it rides over
 // a different part of each face's sky and walking round an edge has a landmark
 const PLANET_DIR = new THREE.Vector3(0.82, 0.26, -0.51).normalize();
-function buildSky(topHex, deepHex, bandHex, planet) {
+function buildSky(topHex, deepHex, bandHex, planet, nebula) {
   if (skyDome) { scene.remove(skyDome); skyDome.geometry.dispose();
                  skyDome.material.dispose(); }
   const pl = planet || { col: 0x3a4a7a, size: 0.05, bands: 0 };
+  const nb = nebula || MOOD_LOOK.void.nebula;
+  // THE NEBULA sits away from the companion: a third of a turn round and a
+  // little above the horizon, so the two never compete and the planet keeps
+  // the sky behind it clean
+  const nebDir = PLANET_DIR.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), 2.1);
+  nebDir.y = 0.42; nebDir.normalize();
   const mat = new THREE.ShaderMaterial({
     side: THREE.BackSide, depthWrite: false, depthTest: false, fog: false,
     uniforms: { uTop: { value: new THREE.Color(topHex) },
@@ -867,7 +877,12 @@ function buildSky(topHex, deepHex, bandHex, planet) {
                 uPlanetDir: { value: PLANET_DIR.clone() },
                 uPlanetSize: { value: pl.size },
                 uPlanetBands: { value: pl.bands },
-                uSunDir: { value: sun.position.clone().normalize() } },
+                uSunDir: { value: sun.position.clone().normalize() },
+                uNebA: { value: new THREE.Color(nb.a) }, uNebB: { value: new THREE.Color(nb.b) },
+                uNebDir: { value: nebDir }, uNebAmt: { value: nb.amt },
+                uAurora: { value: nb.aurora || 0 },
+                uAurA: { value: new THREE.Color(nb.auroraA || 0x3af0a0) }, uAurB: { value: new THREE.Color(nb.auroraB || 0x8a5cff) },
+                uTime: { value: 0 } },
     vertexShader: `
       varying vec3 vDir;
       void main() {
@@ -879,6 +894,8 @@ function buildSky(topHex, deepHex, bandHex, planet) {
       uniform vec3 uTop; uniform vec3 uDeep; uniform vec3 uBand;
       uniform vec3 uPlanet; uniform vec3 uPlanetDir; uniform float uPlanetSize;
       uniform float uPlanetBands; uniform vec3 uSunDir;
+      uniform vec3 uNebA; uniform vec3 uNebB; uniform vec3 uNebDir; uniform float uNebAmt;
+      uniform float uAurora; uniform vec3 uAurA; uniform vec3 uAurB; uniform float uTime;
       // hash noise, three octaves: enough for craters and cloud bands, cheap
       // enough for a sky dome
       float hsh(vec3 p) { return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }
@@ -891,6 +908,52 @@ function buildSky(topHex, deepHex, bandHex, planet) {
       void main() {
         float h = vDir.y * 0.5 + 0.5;
         vec3 c = mix(uDeep, uTop, smoothstep(0.15, 0.95, h));
+        // THE NEBULA. Clouds of colour at three scales, thinned to wisps by a
+        // power curve so most of the sky stays dark and the bright knots read
+        // as structure, held in a wide soft mask around uNebDir, and drifting
+        // at a rate you only notice standing still. Two colours: the deep one
+        // where the cloud is thin, the hot one where it is dense.
+        {
+          vec3 d0 = normalize(vDir);
+          float angN = acos(clamp(dot(d0, uNebDir), -1.0, 1.0));
+          float mask = 1.0 - smoothstep(0.45, 1.75, angN);
+          if (mask > 0.001) {
+            // domain warp, then a ridged read of the warped field: the
+            // ridges are the wisps, the folds between them the dark lanes.
+            // A plain fbm made one soft blot; this makes filaments.
+            vec3 q = d0 * 3.4 + vec3(uTime * 0.006, 0.0, uTime * 0.004);
+            vec3 warp = vec3(fbm(q + 1.7), fbm(q + 9.2), fbm(q + 4.1)) - 0.5;
+            vec3 q2 = q + warp * 1.6;
+            float n1 = fbm(q2 * 1.3);
+            float ridge = 1.0 - abs(2.0 * n1 - 1.0);           // 1 on the ridge, 0 in the fold
+            float lanes = smoothstep(0.30, 0.62, fbm(q2 * 2.7 + 6.0));
+            float body = smoothstep(0.38, 0.68, fbm(q * 0.9 + 3.3));   // where the cloud is at all
+            float dens = pow(ridge, 3.2) * lanes * body * 2.6;
+            float knots = pow(max(0.0, fbm(q2 * 4.1 + 2.2) - 0.58), 2.0) * 4.0 * body;
+            vec3 neb = mix(uNebA, uNebB, clamp(ridge * 1.5 - 0.35, 0.0, 1.0));
+            c += (neb * dens + uNebB * knots * 0.5) * mask * uNebAmt;
+          }
+        }
+        // THE AURORA. A curtain low in the sky: bright at its foot, fading
+        // to the crown, folded by noise along the horizon and rippling with
+        // time. Green below, violet above, as the real thing is. Only in a
+        // sector of the sky, so it is a thing on one side rather than a ring.
+        if (uAurora > 0.001) {
+          vec3 d1 = normalize(vDir);
+          float az = atan(d1.z, d1.x);
+          float azN = atan(uNebDir.z, uNebDir.x) + 2.4;      // its own side, not the nebula's
+          float dAz = abs(mod(az - azN + 3.14159, 6.28318) - 3.14159);
+          float sector = 1.0 - smoothstep(0.6, 1.5, dAz);
+          float y = d1.y;
+          float foot = smoothstep(0.02, 0.09, y);
+          float crown = 1.0 - smoothstep(0.10, 0.48, y);
+          float fold = vnoise(vec3(az * 5.0 + uTime * 0.07, y * 6.0, 2.0)) * 0.6
+                     + vnoise(vec3(az * 13.0 - uTime * 0.11, y * 3.0, 7.0)) * 0.4;
+          float ray = pow(max(0.0, fold - 0.30), 1.4) * 2.6;
+          float curtain = foot * crown * sector * ray;
+          vec3 aur = mix(uAurA, uAurB, smoothstep(0.06, 0.40, y));
+          c += aur * curtain * 0.95 * uAurora;
+        }
         // THE COMPANION. A disc of angular radius uPlanetSize around
         // uPlanetDir, shaded as a sphere lit from the sun's side, with a thin
         // atmosphere at the limb and, for a gas world, latitude bands.
@@ -4483,7 +4546,7 @@ function applyWorld(k) {
   // top and a bottom instead of being one flat value with a band painted on it
   buildSky(new THREE.Color(w.sky).lerp(new THREE.Color(w.edge || w.grid), 0.16).getHex(),
            new THREE.Color(w.sky).lerp(new THREE.Color(0x000000), 0.55).getHex(),
-           w.edge || w.grid, w.planet);
+           w.edge || w.grid, w.planet, w.nebula || (MOOD_LOOK[w.fam] || MOOD_LOOK.void).nebula);
   matComposite.uniforms.uTint.value.setHex(w.fog);
   const gr = w.grade || { lift: [0, 0, 0], gamma: [1, 1, 1], gain: [1, 1, 1], sat: 1 };
   matComposite.uniforms.uLift.value.fromArray(gr.lift);
@@ -5204,6 +5267,7 @@ renderer.setAnimationLoop(() => {
   const now = performance.now();
   const dt = Math.min(0.1, (now - last) / 1000);
   last = now;
+  if (skyDome) skyDome.material.uniforms.uTime.value = now * 0.001;   // the nebula drifts, the aurora ripples
 
   stepMarket(dt);
   stepSpores(dt);
