@@ -108,6 +108,7 @@ const ACCENT = _hex(_pal.accent, HOME.accent);
 // every crystal in the world and the tick writes matrices into it, so a
 // thousand items across a hundred belts cost a single draw call.
 import * as THREE from 'three';
+import { Bed as KitBed } from './vendor/kit/kit.js';   // the music bed, shared with every runtime
 
 // grid resolution follows the prompt's world size: a bigger island is a
 // bigger factory, not the same factory further apart
@@ -4521,6 +4522,7 @@ function applyWorld(k) {
   fill.intensity = 0.85 * Math.min(2.6, floor * 1.25);   // a little more than the bounce: it is the underside's only key
   if (lanes) lanes.material.color.setHex(w.edge || w.grid);
   starField.material.color.setHex(w.star);
+  if (AUDIO.bed) AUDIO.bed.family(w.fam);   // the bed changes key with the world
   if (cubeEdges) cubeEdges.material.color.setHex(w.edge || w.grid);
   gildEdge();
   if (sunDisc) sunDisc.material.color.setHex(w.sun || 0xfff2d6);
@@ -5268,6 +5270,7 @@ renderer.setAnimationLoop(() => {
   const dt = Math.min(0.1, (now - last) / 1000);
   last = now;
   if (skyDome) skyDome.material.uniforms.uTime.value = now * 0.001;   // the nebula drifts, the aurora ripples
+  if (AUDIO.bed) AUDIO.bed.step(dt);
 
   stepMarket(dt);
   stepSpores(dt);
@@ -5717,6 +5720,8 @@ function audioStart() {
 
   Object.assign(AUDIO, { ctx, master, hum: humGain, belts: bGain, furnace: fGain,
                          ready: true });
+  // THE MUSIC BED. The world's room tone, from the kit, in the world's family.
+  try { AUDIO.bed = new KitBed(ctx, master); AUDIO.bed.family(WORLDS[worldIdx] ? WORLDS[worldIdx].fam : 'void', true); } catch (e) { AUDIO.bed = null; }
 }
 
 // a short tone with an envelope; everything transient is built on this
@@ -6034,7 +6039,8 @@ window.__game = {
     restored,
     intro: +intro.toFixed(2),
     audio: { ready: AUDIO.ready, muted: AUDIO.muted,
-             state: AUDIO.ctx ? AUDIO.ctx.state : null },
+             state: AUDIO.ctx ? AUDIO.ctx.state : null,
+             bed: AUDIO.bed ? { fam: AUDIO.bed.fam, chord: AUDIO.bed.chord, voices: AUDIO.bed.voices.length, level: AUDIO.bed.key.level, on: AUDIO.bed.on } : null },
     world: WORLDS[worldIdx].id,
     mood: MOOD,
     world_name: WORLDS[worldIdx].name,

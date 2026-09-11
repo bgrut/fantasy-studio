@@ -176,3 +176,82 @@ export const MOODS = [
 ];
 export function moodOf(text) { return (MOODS.find(m => m.words.test(text || '')) || { id: 'void' }).id; }
 export function setMood(mood) { document.body.dataset.mood = mood || 'void'; }
+
+// ── THE MUSIC BED. Generative, per family, no assets. ───────────────────────
+//
+//   const bed = new Bed(ctx, masterGain);   // after the user's first gesture
+//   bed.family('cold');                      // void | warm | cold | green
+//   bed.step(dt);                            // every frame
+//   bed.on = false;                          // fades out; true fades back
+//
+// A pad of four voices moving through a progression on a slow clock, and a
+// sparse high line over it, through one lowpass and one feedback echo. Room
+// tone, not a soundtrack: quiet enough to be missed and heard when it stops.
+export const BED_KEYS = {
+  //         root      mode (semitones)          progression (degrees, 4 voices)                       hold  sparkle gap  wave        cutoff level high
+  void:  { root: 220.0, mode: [0, 2, 4, 6, 7, 9, 11], prog: [[0, 2, 4, 6], [3, 5, 0, 2], [4, 6, 1, 3], [1, 3, 5, 0]], hold: 11, gap: [2.2, 5.5], wave: 'triangle', cut: 900,  level: 0.11, high: 2 },
+  warm:  { root: 164.8, mode: [0, 2, 3, 5, 7, 9, 10], prog: [[0, 2, 4, 6], [5, 0, 2, 4], [3, 5, 0, 2], [4, 6, 1, 3]], hold: 13, gap: [4.0, 9.0], wave: 'sawtooth', cut: 520,  level: 0.08, high: 1 },
+  cold:  { root: 261.6, mode: [0, 2, 4, 5, 7, 9, 11], prog: [[0, 2, 4, 5], [3, 5, 0, 2], [1, 3, 5, 0], [4, 6, 1, 3]], hold: 12, gap: [1.6, 4.0], wave: 'sine',     cut: 1400, level: 0.10, high: 3 },
+  green: { root: 196.0, mode: [0, 2, 4, 7, 9],        prog: [[0, 1, 2, 3], [1, 2, 3, 4], [2, 3, 4, 0], [3, 4, 0, 1]], hold: 10, gap: [1.2, 3.2], wave: 'triangle', cut: 1100, level: 0.10, high: 2 },
+};
+export function bedNote(key, deg, oct) {
+  const m = key.mode, o = Math.floor(deg / m.length) + (oct || 0), d = ((deg % m.length) + m.length) % m.length;
+  return key.root * Math.pow(2, o + m[d] / 12);
+}
+export class Bed {
+  constructor(ctx, master) {
+    this.ctx = ctx; this.fam = 'void'; this.chord = -1; this.next = 0; this.gap = 1.5; this._on = true;
+    this.gain = ctx.createGain(); this.gain.gain.value = 0;
+    this.lp = ctx.createBiquadFilter(); this.lp.type = 'lowpass'; this.lp.frequency.value = 900; this.lp.Q.value = 0.4;
+    // one echo for the whole bed: a fifth of a second, feeding a third back
+    this.delay = ctx.createDelay(1.0); this.delay.delayTime.value = 0.42;
+    const fb = ctx.createGain(); fb.gain.value = 0.34;
+    const wet = ctx.createGain(); wet.gain.value = 0.35;
+    this.delay.connect(fb); fb.connect(this.delay); this.lp.connect(this.delay); this.delay.connect(wet); wet.connect(this.gain);
+    this.lp.connect(this.gain); this.gain.connect(master);
+    this.voices = [];
+    for (let v = 0; v < 4; v++) {
+      const o = ctx.createOscillator(), g = ctx.createGain(); g.gain.value = 0;
+      o.type = 'triangle'; o.frequency.value = 220; o.detune.value = (v - 1.5) * 6;   // a little apart: a pad, not an organ
+      o.connect(g); g.connect(this.lp); o.start();
+      this.voices.push({ o, g });
+    }
+  }
+  get key() { return BED_KEYS[this.fam] || BED_KEYS.void; }
+  get on() { return this._on; }
+  set on(v) { this._on = !!v; this.gain.gain.setTargetAtTime(this._on ? this.key.level : 0, this.ctx.currentTime, 1.2); }
+  family(fam, slow) {
+    this.fam = BED_KEYS[fam] ? fam : 'void';
+    const t = this.ctx.currentTime;
+    this.lp.frequency.setTargetAtTime(this.key.cut, t, 1.5);
+    for (const v of this.voices) v.o.type = this.key.wave;
+    this.chord = -1; this.next = 0; this.gap = 1.5;
+    this.gain.gain.setTargetAtTime(this._on ? this.key.level : 0, t, slow ? 2.5 : 1.0);
+  }
+  step(dt) {
+    const key = this.key, t = this.ctx.currentTime;
+    this.next -= dt;
+    if (this.next <= 0) {
+      this.chord = (this.chord + 1) % key.prog.length;
+      const degs = key.prog[this.chord];
+      this.voices.forEach((v, i) => {
+        const hz = bedNote(key, degs[i], i === 3 ? 1 : 0);
+        v.g.gain.setTargetAtTime(0, t, 0.3);               // the old note falls
+        v.o.frequency.setTargetAtTime(hz, t + 1.1, 0.3);   // the move happens under near silence
+        v.g.gain.setTargetAtTime(0.22, t + 1.5, 1.4);      // and the new one swells
+      });
+      this.next = key.hold + Math.random() * 2;
+    }
+    this.gap -= dt;
+    if (this.gap <= 0) {
+      // a note of the current chord, high: a bell with a long fall through the echo
+      const degs = key.prog[Math.max(0, this.chord)];
+      const hz = bedNote(key, degs[Math.floor(Math.random() * degs.length)], key.high);
+      const o = this.ctx.createOscillator(), g = this.ctx.createGain();
+      o.type = 'sine'; o.frequency.value = hz;
+      g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.16, t + 0.02); g.gain.exponentialRampToValueAtTime(0.0006, t + 2.4);
+      o.connect(g); g.connect(this.lp); o.start(t); o.stop(t + 2.5);
+      this.gap = key.gap[0] + Math.random() * (key.gap[1] - key.gap[0]);
+    }
+  }
+}

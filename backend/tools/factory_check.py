@@ -55,6 +55,7 @@ GATES = [
     ("fworks.mjs", "rank perks change the machines; the works play once when the whole game is done and survive a reload"),
     ("fkit.mjs", "the build links the shared kit, loads the studio's three faces, and sets its title in the display face"),
     ("fworlds.mjs", "the reveal reads the prompt that made the world; the demo lists the worlds it ships and opens each under its own save"),
+    ("fmusic.mjs", "the kit's music bed plays in the world's family after the first gesture, moves on its clock, changes key with the world, and makes sound"),
 ]
 
 

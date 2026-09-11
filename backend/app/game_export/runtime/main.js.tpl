@@ -2,7 +2,7 @@
 // exporter injects __GAME_SPEC__ and never edits logic. three.js r170 (MIT) +
 // Rapier 0.14 (Apache-2.0), all vendored locally: works fully offline.
 import * as THREE from 'three';
-import { moodOf as __kitMoodOf, setMood as __kitSetMood } from './vendor/kit/kit.js';
+import { moodOf as __kitMoodOf, setMood as __kitSetMood, Bed as __KitBed } from './vendor/kit/kit.js';
 import { GLTFLoader } from './vendor/jsm/loaders/GLTFLoader.js';
 import { clone as skClone } from './vendor/jsm/utils/SkeletonUtils.js';
 import { mergeGeometries } from './vendor/jsm/utils/BufferGeometryUtils.js';
@@ -320,9 +320,18 @@ async function main() {
       AUD.ambG.connect(actx.destination); amb.start();
       AUD.amb = amb;
       AUD.ready = true;
+      // THE MUSIC BED (2026-09-10). The world's room tone, from the kit, in
+      // the family the prompt's own words chose: the same bed the factory
+      // plays, so a drift race and a bakery share a hand without sharing a
+      // note. It sits under the engine and the city; a race is still a race.
+      try {
+        AUD.bed = new __KitBed(actx, actx.destination);
+        AUD.bed.family(__kitMoodOf([SPEC.title, SPEC.world && SPEC.world.name, SPEC.world && SPEC.world.description, SPEC.world && SPEC.world.setting].filter(Boolean).join(' ')), true);
+      } catch (e) { AUD.bed = null; }
       // same reason window.__game exists: the shot harness has to be able
       // to assert on the audio graph, and "I heard it" is not a check
       window.__audio = () => ({ ready: AUD.ready, state: actx.state,
+        bed: AUD.bed ? { fam: AUD.bed.fam, chord: AUD.bed.chord, voices: AUD.bed.voices.length, level: AUD.bed.key.level, on: AUD.bed.on } : null,
         engineHz: AUD.eng[0].frequency.value,
         engineGain: +AUD.engG.gain.value.toFixed(4),
         scrubGain: +AUD.scrubG.gain.value.toFixed(4),
@@ -347,6 +356,7 @@ async function main() {
     } catch (e) { /* ignore */ }
   }
   function audioFrame(dt, moved) {
+    if (AUD.bed) { try { AUD.bed.step(dt); } catch (e) {} }
     if (!AUD.ready || sfxMuted) return;
     try {
       const t = actx.currentTime;
