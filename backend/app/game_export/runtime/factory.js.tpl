@@ -108,7 +108,7 @@ const ACCENT = _hex(_pal.accent, HOME.accent);
 // every crystal in the world and the tick writes matrices into it, so a
 // thousand items across a hundred belts cost a single draw call.
 import * as THREE from 'three';
-import { Bed as KitBed } from './vendor/kit/kit.js';   // the music bed, shared with every runtime
+import { Bed as KitBed, end as KitEnd } from './vendor/kit/kit.js';   // the music bed and the end card, shared with every runtime
 
 // grid resolution follows the prompt's world size: a bigger island is a
 // bigger factory, not the same factory further apart
@@ -4747,15 +4747,40 @@ let goalBarAt = 0;
 function worksDone() {
   return goalIdx >= GOALS.length && cores >= 3 && visitedWorlds.size >= 3 && lifetime.longestHold >= 300;
 }
+// THE ARC CLOSES ON A CARD (2026-09-10). When the works' reveal comes down,
+// the kit's end card stands: the sentence the world was made from, four
+// numbers for the run, and three things to do with it. Clicking the backdrop
+// or "play on" puts it away; the run carries on underneath.
+let worksCardPending = false;
+function showWorksCard() {
+  const m = Math.floor(lifetime.longestHold / 60), sec = String(Math.floor(lifetime.longestHold % 60)).padStart(2, '0');
+  KitEnd.show({
+    title: 'The works are yours',
+    text: (SPEC.prompt ? 'Made from one sentence: \u201c' + SPEC.prompt + '\u201d. ' : '') +
+          'Every tier, three cores, three worlds and an order held five minutes. The run carries on: contracts keep coming, and every meltdown still raises the stakes.',
+    stats: [Math.round(lifetime.value).toLocaleString() + ' credits banked',
+            lifetime.contracts + (lifetime.contracts === 1 ? ' contract kept' : ' contracts kept'),
+            'longest order held ' + m + ':' + sec,
+            visitedWorlds.size + (visitedWorlds.size === 1 ? ' world seen' : ' worlds seen')],
+    mood: MOOD,
+    buttons: [
+      { text: 'copy a share link', onClick: () => { shareLink(); } },
+      { text: 'photo mode', onClick: () => { KitEnd.hide(); setPhoto(true); } },
+    ],
+    onAgain: () => KitEnd.hide(), again: 'play on',
+  });
+  lifetime.worksCard = true;
+}
 function playWorks() {
   lifetime.works = true;
+  worksCardPending = true;
   const m = Math.floor(lifetime.longestHold / 60), sec = String(Math.floor(lifetime.longestHold % 60)).padStart(2, '0');
   playIntro('THE WORKS', Math.round(lifetime.value).toLocaleString() + ' credits banked  \u00b7  ' + lifetime.contracts + (lifetime.contracts === 1 ? ' contract kept  ' : ' contracts kept  ') + '\u00b7  longest order ' + m + ':' + sec
             + '  \u00b7  ' + visitedWorlds.size + ' worlds', 11, false, 'void');
   if (cubeEdges) cubeEdges.material.color.setHex(0xffd479);
   sfxUnlock(); setTimeout(sfxUnlock, 400); setTimeout(sfxUnlock, 800);
   const t = document.getElementById('toast');
-  if (t) { t.textContent = WORD('THE WORKS ARE YOURS. Every tier, three cores, three worlds and an order held five minutes. The run carries on: contracts keep coming, and every meltdown still raises your rank.'); t.classList.add('on'); toastAt = 10; }
+  if (t) { t.textContent = WORD('THE WORKS ARE YOURS. The run carries on, and the card says what you did.'); t.classList.add('on'); toastAt = 10; }
   renderGoal();
 }
 // ── THE FOREMAN ────────────────────────────────────────────────────────────
@@ -5857,6 +5882,7 @@ function endIntro() {
   camUp.copy(player.up);        // no roll after the handover
   const card = document.getElementById('title');
   if (card) card.classList.remove('on');
+  if (worksCardPending) { worksCardPending = false; showWorksCard(); }
 }
 addEventListener('keydown', endIntro);
 addEventListener('pointerdown', endIntro);
@@ -6061,6 +6087,7 @@ window.__game = {
                                        marker: !!(tutMark && tutMark.visible) } : null,
     look: (document.getElementById('look') && document.getElementById('look').classList.contains('on')) ? document.getElementById('look').textContent : null,
     lifetime: { value: Math.round(lifetime.value), contracts: lifetime.contracts, longest_hold: +lifetime.longestHold.toFixed(1),
+      works_card: !!lifetime.worksCard,
                 worlds: [...visitedWorlds], works: lifetime.works, works_done: worksDone() },
     smelt_ticks: SMELT_TICKS,
     hubs: hubCount(), hub_cost: hubCost(), hub_intake: HUB_INTAKE, far_premium: FAR_PREMIUM,
@@ -6117,7 +6144,7 @@ window.__factory = {
   beltShape, scatterVent, scatterBolt, scatterSpots, renderThumb, GEO, MAT,
   SEAM_COST, SEAM_REGROW, SEAM_FLOOR,
   step,                 // one simulation tick, for a harness that cannot wait
-  playIntro, endIntro,
+  playIntro, endIntro, showWorksCard, KitEnd,
   audioStart, audioMute, sfxSold, sfxUnlock, sfxMelt, AUDIO,
   beltIndexOf: (f, i, j) => {
     const k = beltShape(f, i, j, cells[f][i][j]);

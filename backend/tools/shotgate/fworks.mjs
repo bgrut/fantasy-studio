@@ -71,14 +71,30 @@ const works = await p.evaluate(async () => {
   const card = document.querySelector('#title b').textContent, sub = document.querySelector('#title small').textContent;
   const up = document.getElementById('title').classList.contains('on');
   F.endIntro();
+  // the reveal comes down and the kit's end card stands, with the run on it
+  await w(200);
+  const endEl = document.getElementById('fs-end');
+  const endCard = endEl && endEl.classList.contains('on') ? {
+    title: endEl.querySelector('h2').textContent, stats: [...endEl.querySelectorAll('.stat')].map(x => x.textContent),
+    buttons: [...endEl.querySelectorAll('button')].map(x => x.textContent), quoted: /\u201c.+\u201d/.test(endEl.querySelector('p').textContent) } : null;
+  let linkCap = null, playedOn = null;
+  if (endCard) {
+    [...endEl.querySelectorAll('button')].find(x => /share/.test(x.textContent)).click();
+    await w(100);
+    linkCap = document.getElementById('facecap').textContent;
+    [...endEl.querySelectorAll('button')].find(x => /play on/.test(x.textContent)).click();
+    await w(100);
+    playedOn = !endEl.classList.contains('on');
+  }
   const goal = document.querySelector('#goal b').textContent;
   const edge = '#' + window.__scene.getObjectByName('worldEdge').material.color.getHexString();
   F.save();
-  return { early, played: f.lifetime.works, card, sub, up, goal, edge, toast: document.getElementById('toast').textContent };
+  return { early, played: f.lifetime.works, card, sub, up, goal, edge, toast: document.getElementById('toast').textContent, endCard, linkCap, playedOn, worksCard: window.__game.facts().lifetime.works_card };
 });
 console.log('the works : before three worlds: done', works.early.done, 'played', works.early.played, '(worlds', works.early.worlds + ')');
 console.log('            after: played', works.played, '| card', JSON.stringify(works.card), works.up ? 'up' : 'DOWN', '| under it:', JSON.stringify(works.sub));
 console.log('            goal card', JSON.stringify(works.goal), '| edge', works.edge, '| said:', JSON.stringify(works.toast).slice(0, 80) + '...');
+console.log('the card  :', JSON.stringify(works.endCard), '| share ->', JSON.stringify(works.linkCap), '| play on ->', works.playedOn ? 'away' : 'STILL UP', '| facts', works.worksCard);
 
 await p.goto(URL + q + 'nointro=1', { waitUntil:'domcontentloaded', timeout:90000 });
 await wait(4500);
@@ -92,6 +108,8 @@ const ok = deep.at0 < 40 && deep.at1 === 40 && deep.perks.join(',') === 'DEEP BI
   && more.t2 === more.t1 - 1 && more.shards === 2 && /two core shards/.test(more.said) && more.perks.length === 3
   && !works.early.done && !works.early.played && works.played && works.card === 'THE WORKS' && works.up && /contracts? kept/.test(works.sub)
   && /WORKS ARE YOURS/.test(works.goal) && works.edge === '#ffd479' && /THE WORKS ARE YOURS/.test(works.toast)
+  && works.endCard && /WORKS ARE YOURS/i.test(works.endCard.title) && works.endCard.stats.length === 4 && works.endCard.buttons.length === 3
+  && /LINK COPIED/.test(works.linkCap || '') && works.playedOn && works.worksCard
   && back.works && back.contracts >= 1 && back.hold >= 320 && back.worlds >= 3 && back.rank === 3 && back.perks === 3 && /WORKS ARE YOURS/.test(back.goal)
   && errs.length === 0;
 process.exit(ok ? 0 : 1);

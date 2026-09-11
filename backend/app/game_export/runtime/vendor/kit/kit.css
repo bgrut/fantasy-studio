@@ -135,7 +135,8 @@ body:has(.fs-title.on) .fs-card,body:has(.fs-title.on) .fs-look{opacity:0 !impor
         background:rgba(4,8,14,.55)}
 .fs-end.on{display:flex}
 .fs-end .card{background:linear-gradient(180deg,rgba(16,24,38,.97),rgba(8,10,20,.97));border:1px solid var(--fs-line);
-              border-radius:16px;padding:30px 44px;text-align:center;color:var(--fs-ink);box-shadow:0 20px 60px rgba(0,0,0,.6)}
+              border-radius:16px;padding:30px 44px;max-width:640px;margin:0 20px;text-align:center;color:var(--fs-ink);box-shadow:0 20px 60px rgba(0,0,0,.6)}
+.fs-end .stats{display:flex;flex-wrap:wrap;justify-content:center;gap:2px 26px;margin-top:6px}
 .fs-end h2{margin:0 0 8px;font-family:var(--f-head);font-size:34px;letter-spacing:.06em;text-transform:uppercase;color:var(--tcol);
            text-shadow:0 0 30px var(--tglow)}
 .fs-end p{margin:0;font-family:var(--f-ui);font-size:14px;color:var(--fs-ink-2);line-height:1.45}

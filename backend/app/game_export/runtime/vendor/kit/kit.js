@@ -84,7 +84,8 @@ export const look = {
   clear() { look.set(''); },
 };
 
-// ── THE END CARD. end.show({ title, text, stats: [...], mood, links: [{text, href}], onAgain }) ──
+// ── THE END CARD. end.show({ title, text, stats: [...], mood, links: [{text, href}],
+//    buttons: [{text, onClick}], onAgain, again }). The backdrop is "play on". ──
 export const end = {
   show(o = {}) {
     const e = el('fs-end', 'fs-end', '<div class="card"><h2></h2><p></p><div class="stats"></div><div class="acts"></div></div>');
@@ -94,8 +95,11 @@ export const end = {
     e.querySelector('.stats').innerHTML = (o.stats || []).map(s => '<span class="stat"></span>').join('');
     [...e.querySelectorAll('.stat')].forEach((s, k) => { s.textContent = o.stats[k]; });
     const acts = e.querySelector('.acts'); acts.innerHTML = '';
-    for (const l of (o.links || [])) { const a = document.createElement('a'); a.textContent = l.text; a.href = l.href; acts.appendChild(a); }
-    if (o.onAgain) { const b = document.createElement('button'); b.textContent = o.again || 'play again'; b.addEventListener('click', o.onAgain); acts.appendChild(b); }
+    for (const l of (o.links || [])) { const a = document.createElement('a'); a.textContent = l.text; a.href = l.href; a.target = l.target || '_blank'; a.rel = 'noopener'; acts.appendChild(a); }
+    for (const bt of (o.buttons || [])) { const b = document.createElement('button'); b.textContent = bt.text; b.addEventListener('click', ev => { ev.stopPropagation(); bt.onClick(ev); }); acts.appendChild(b); }
+    if (o.onAgain) { const b = document.createElement('button'); b.textContent = o.again || 'play again'; b.addEventListener('click', ev => { ev.stopPropagation(); o.onAgain(ev); }); acts.appendChild(b); }
+    // the card swallows the game's pointer; the backdrop is the way back in
+    e.onpointerdown = ev => { ev.stopPropagation(); if (ev.target === e) end.hide(); };
     e.classList.add('on');
     return e;
   },
