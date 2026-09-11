@@ -53,6 +53,8 @@ GATES = [
     ("fplay.mjs", "a played session with real keys, clicks and drags walks the foreman's six steps through the game's own handlers"),
     ("ftheme.mjs", "a theme reskins every word a player reads, singular and plural, and touches nothing else"),
     ("fworks.mjs", "rank perks change the machines; the works play once when the whole game is done and survive a reload"),
+    ("fkit.mjs", "the build links the shared kit, loads the studio's three faces, and sets its title in the display face"),
+    ("fworlds.mjs", "the reveal reads the prompt that made the world; the demo lists the worlds it ships and opens each under its own save"),
 ]
 
 
@@ -60,7 +62,7 @@ def run(gate: str, env_extra: dict[str, str]) -> tuple[bool, str]:
     import os
     env = dict(os.environ, **env_extra)
     r = subprocess.run([_node(), gate], cwd=str(ROOT / "backend" / "tools" / "shotgate"),
-                       env=env, capture_output=True, text=True, timeout=600)
+                       env=env, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=600)
     return r.returncode == 0, (r.stdout or "") + (r.stderr or "")
 
 

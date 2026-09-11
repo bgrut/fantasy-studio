@@ -1,6 +1,7 @@
 <!doctype html>
 <meta charset="utf-8">
 <title>Crystal Works — Fantasy Studio</title>
+<link rel="stylesheet" href="vendor/kit/kit.css">
 <style>
   html,body{margin:0;height:100%;overflow:hidden;background:#0a0a12;
             font:13px/1.45 ui-monospace,Menlo,Consolas,monospace;color:#dfe3ee}
@@ -12,14 +13,7 @@
      in vendor/fonts with the game, so it looks the same on every machine and
      needs no network. Condensed for what is named, Barlow for what is read,
      Plex Mono for what is counted. */
-  @font-face{font-family:"Bricolage Grotesque";font-weight:200 800;font-stretch:75% 100%;font-display:swap;src:url(vendor/fonts/BricolageGrotesque-Variable.ttf) format("truetype")}
-  @font-face{font-family:"Instrument Sans";font-weight:400 700;font-stretch:75% 100%;font-display:swap;src:url(vendor/fonts/InstrumentSans-Variable.ttf) format("truetype")}
-  @font-face{font-family:"DM Mono";font-weight:300;font-display:swap;src:url(vendor/fonts/DMMono-Light.ttf) format("truetype")}
-  @font-face{font-family:"DM Mono";font-weight:400;font-display:swap;src:url(vendor/fonts/DMMono-Regular.ttf) format("truetype")}
-  @font-face{font-family:"DM Mono";font-weight:500;font-display:swap;src:url(vendor/fonts/DMMono-Medium.ttf) format("truetype")}
-  :root{--f-head:"Bricolage Grotesque","Instrument Sans",system-ui,sans-serif;
-        --f-ui:"Instrument Sans",system-ui,sans-serif;
-        --f-mono:"DM Mono",ui-monospace,monospace}
+  /* the type system and the shared chrome come from the kit (vendor/kit/kit.css), linked above */
   body{font-family:var(--f-ui)}
   #hud{position:fixed;left:14px;top:12px;z-index:5;
        background:linear-gradient(180deg,rgba(18,23,42,.90),rgba(8,10,20,.90));
@@ -270,6 +264,18 @@
            font-weight:300;letter-spacing:.42em;font-size:46px}
   #title[data-mood="green"] b{font-family:var(--f-head);
            font-weight:500;text-transform:none;letter-spacing:.08em;font-size:58px}
+  /* the worlds a demo ships, on the title card: the sentences that made them */
+  #title .worlds{margin-top:26px;pointer-events:auto;display:flex;gap:10px;justify-content:center;flex-wrap:wrap;
+                 opacity:0;transition:opacity .6s .9s}
+  #title.on .worlds{opacity:1}
+  #title .worlds i{display:block;width:100%;font-style:normal;font-family:var(--f-mono);font-size:9px;letter-spacing:.3em;
+                   text-transform:uppercase;color:var(--sub);margin-bottom:6px;opacity:.8}
+  #title .worlds a{display:block;width:210px;padding:9px 12px;border-radius:10px;text-decoration:none;text-align:left;
+                   background:rgba(8,10,20,.72);border:1px solid rgba(255,255,255,.12);transition:border-color .2s,transform .2s}
+  #title .worlds a:hover{border-color:var(--rule);transform:translateY(-2px)}
+  #title .worlds a.here{border-color:var(--rule);box-shadow:0 0 18px var(--tglow)}
+  #title .worlds b{display:block;font-family:var(--f-head);font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--tcol)}
+  #title .worlds span{display:block;margin-top:3px;font-family:var(--f-ui);font-size:10.5px;line-height:1.3;color:#b9c4dc}
   /* the face caption after a crossing */
   /* high, above the placement ghost, and big enough to read in the beat it is up */
   #facecap{position:fixed;left:0;right:0;top:12%;text-align:center;z-index:6;pointer-events:none;

@@ -1,0 +1,153 @@
+/* ══════════════════════════════════════════════════════════════════════════
+   THE KIT — the studio's presentation layer, shared by every runtime.
+
+   The factory game earned this look one pass at a time: one type system,
+   a title card with a voice per world, a toast that says what happened and
+   why, a caption for a beat, a label for what you point at, a card that
+   teaches by doing. None of it is about ore. A racing game, a heist, a
+   walk through a forest: all of them should open on a title that arrives,
+   speak in sentences, and teach one thing at a time. So it lives here, in
+   vendor/kit, shipped with every build the way the fonts are, and each
+   runtime's own stylesheet starts by importing it.
+
+   Fonts (all SIL Open Font License, in vendor/fonts):
+     --f-head  Bricolage Grotesque   what is named
+     --f-ui    Instrument Sans       what is read
+     --f-mono  DM Mono               what is counted
+
+   Every class is prefixed fs- so it never collides with a runtime's own ids.
+   Voices: set data-mood="warm|cold|green|void" on .fs-title (or on <body> for
+   the whole page) and the card's face, tracking, glow and rule colour follow.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+@font-face{font-family:"Bricolage Grotesque";font-weight:200 800;font-stretch:75% 100%;font-display:swap;src:url(../fonts/BricolageGrotesque-Variable.ttf) format("truetype")}
+@font-face{font-family:"Instrument Sans";font-weight:400 700;font-stretch:75% 100%;font-display:swap;src:url(../fonts/InstrumentSans-Variable.ttf) format("truetype")}
+@font-face{font-family:"DM Mono";font-weight:300;font-display:swap;src:url(../fonts/DMMono-Light.ttf) format("truetype")}
+@font-face{font-family:"DM Mono";font-weight:400;font-display:swap;src:url(../fonts/DMMono-Regular.ttf) format("truetype")}
+@font-face{font-family:"DM Mono";font-weight:500;font-display:swap;src:url(../fonts/DMMono-Medium.ttf) format("truetype")}
+
+:root{
+  --f-head:"Bricolage Grotesque","Instrument Sans",system-ui,sans-serif;
+  --f-ui:"Instrument Sans",system-ui,sans-serif;
+  --f-mono:"DM Mono",ui-monospace,monospace;
+  /* the palette the chrome is built from; a runtime may retint --fs-accent */
+  --fs-ink:#eef2fb; --fs-ink-2:#aeb6cd; --fs-ink-3:#6d7590;
+  --fs-accent:#5ce0d0; --fs-gold:#ffd479; --fs-warn:#ff9f7a;
+  --fs-panel:rgba(12,14,26,.92); --fs-panel-2:rgba(8,10,20,.96);
+  --fs-line:rgba(255,255,255,.09);
+  /* the voices: the void's defaults */
+  --tcol:#f4f8ff; --tglow:rgba(92,224,208,.55); --rule:rgba(159,214,255,.8); --sub:#9fd6ff;
+}
+[data-mood="warm"]{--tcol:#ffe1c2;--tglow:rgba(255,122,50,.65);--rule:rgba(255,154,92,.85);--sub:#ffb27a;--fs-accent:#ff9a5c}
+[data-mood="cold"]{--tcol:#f2f8ff;--tglow:rgba(160,210,255,.6);--rule:rgba(207,232,255,.85);--sub:#cfe8ff;--fs-accent:#cfe8ff}
+[data-mood="green"]{--tcol:#e2ffe6;--tglow:rgba(120,230,150,.55);--rule:rgba(143,230,160,.85);--sub:#a8f0b6;--fs-accent:#8fe6a0}
+
+body{font-family:var(--f-ui)}
+
+/* ── THE TITLE CARD. A name with weight: a rule above and below, a settle in
+   scale so the name arrives rather than appears, and a voice per family. ── */
+.fs-title{position:fixed;left:0;right:0;top:34%;z-index:7;text-align:center;
+          pointer-events:none;opacity:0;transition:opacity .6s}
+.fs-title.on{opacity:1}
+.fs-title b{display:block;font-size:56px;line-height:1;letter-spacing:.12em;color:var(--tcol);
+            padding:0 .2em 0 .3em;font-family:var(--f-head);font-variation-settings:"opsz" 96;
+            font-weight:700;text-transform:uppercase;
+            text-shadow:0 0 34px var(--tglow),0 6px 22px rgba(0,0,0,.85);
+            transform:scale(1.05);transition:transform 1.8s cubic-bezier(.2,.7,.2,1)}
+.fs-title.on b{transform:scale(1)}
+.fs-title b::before,.fs-title b::after{content:"";display:block;height:1px;margin:0 auto 14px;
+            width:min(46vw,520px);background:linear-gradient(90deg,transparent,var(--rule),transparent)}
+.fs-title b::after{margin:14px auto 0}
+.fs-title[data-mood="warm"] b{font-stretch:78%;font-weight:800;letter-spacing:.03em;font-size:68px}
+.fs-title[data-mood="cold"] b{font-weight:300;letter-spacing:.42em;font-size:46px}
+.fs-title[data-mood="green"] b{font-weight:500;text-transform:none;letter-spacing:.08em;font-size:58px}
+.fs-title small{display:block;margin-top:14px;font-size:12px;letter-spacing:.3em;text-transform:uppercase;
+            color:var(--sub);font-family:var(--f-ui);text-shadow:0 2px 10px rgba(0,0,0,.8)}
+/* the rest of the page steps back while the card is up; it is not the subject yet */
+body:has(.fs-title.on) .fs-dims{opacity:.12;transition:opacity .4s}
+
+/* ── THE TOAST. One sentence about what just happened, what it means, and what
+   to do; centred low, in the accent, gone on its own. ── */
+.fs-toast{position:fixed;left:50%;transform:translateX(-50%);bottom:104px;z-index:6;
+          max-width:min(720px,86vw);text-align:center;
+          background:linear-gradient(180deg,rgba(18,23,42,.96),rgba(8,10,20,.96));
+          border:1px solid color-mix(in srgb,var(--fs-accent) 55%,transparent);
+          border-radius:11px;padding:10px 18px;color:var(--fs-accent);letter-spacing:.02em;
+          font-family:var(--f-ui);font-weight:650;font-size:13px;line-height:1.4;
+          box-shadow:0 6px 24px rgba(0,0,0,.5);opacity:0;transition:opacity .25s;pointer-events:none}
+.fs-toast.on{opacity:1}
+
+/* ── THE CAPTION. A few tracked words high on the screen for a beat: a face
+   crossed, a mode entered, a link copied. ── */
+.fs-caption{position:fixed;left:0;right:0;top:12%;text-align:center;z-index:6;pointer-events:none;
+            font-family:var(--f-mono);font-size:13px;letter-spacing:.42em;color:#eef4ff;
+            text-shadow:0 0 18px var(--tglow),0 2px 12px rgba(0,0,0,.95);
+            opacity:0;transform:translateY(6px);transition:opacity .35s,transform .35s}
+.fs-caption.on{opacity:.9;transform:translateY(0)}
+
+/* ── THE LOOK LABEL. Under the crosshair: what you are pointing at and what it
+   is doing, in one line. ── */
+.fs-look{position:fixed;left:50%;top:55%;transform:translateX(-50%);z-index:6;pointer-events:none;
+         font-family:var(--f-mono);font-size:11px;letter-spacing:.06em;color:#dfe8ff;white-space:nowrap;
+         padding:4px 10px;border-radius:6px;background:rgba(10,12,22,.62);border:1px solid var(--fs-line);
+         opacity:0;transition:opacity .15s}
+.fs-look.on{opacity:1}
+
+/* ── THE FOREMAN'S CARD. One step at a time at the top: what to do, why, and
+   the keys; a next and a skip a mouse can reach and a key can replace. ── */
+.fs-card{position:fixed;left:50%;top:18px;transform:translate(-50%,-8px);z-index:8;width:min(560px,80vw);
+         padding:12px 16px 12px;border-radius:12px;border:1px solid color-mix(in srgb,var(--fs-gold) 45%,transparent);
+         background:linear-gradient(180deg,rgba(28,24,14,.96),rgba(12,10,8,.96));box-shadow:0 8px 30px rgba(0,0,0,.5);
+         opacity:0;pointer-events:none;transition:opacity .25s,transform .25s}
+.fs-card.on{opacity:1;pointer-events:auto;transform:translate(-50%,0)}
+.fs-card em{display:block;font-style:normal;font-family:var(--f-mono);font-size:9px;letter-spacing:.16em;color:#a0865a;margin-bottom:4px}
+.fs-card b{display:block;font-family:var(--f-head);font-size:18px;font-weight:700;letter-spacing:.02em;color:var(--fs-gold)}
+.fs-card small{display:block;font-family:var(--f-ui);font-size:12.5px;color:#f1e6c8;margin-top:4px;line-height:1.35}
+.fs-card p{margin:6px 0 0;font-family:var(--f-ui);font-size:11px;color:#a89a72;line-height:1.35}
+.fs-card .skip,.fs-card .next{position:absolute;top:10px;font-family:var(--f-mono);font-size:9px;letter-spacing:.12em;cursor:pointer}
+.fs-card .skip{right:14px;color:#8d7f5c}
+.fs-card .next{right:112px;color:#c9b27a}
+.fs-card .skip:hover,.fs-card .next:hover{color:var(--fs-gold)}
+.fs-card .keys{display:block;margin-top:8px;font-style:normal;font-family:var(--f-mono);font-size:8.5px;letter-spacing:.14em;color:#7d7050}
+body:has(.fs-title.on) .fs-card,body:has(.fs-title.on) .fs-look{opacity:0 !important}
+
+/* ── THE PANEL. A dark plate with a headline in the display face, chips of
+   counted things, and section headers that say what a block is. ── */
+.fs-panel{position:fixed;left:14px;top:12px;z-index:5;min-width:236px;width:236px;padding:12px 12px 10px;
+          border-radius:14px;background:linear-gradient(180deg,var(--fs-panel),var(--fs-panel-2));
+          border:1px solid var(--fs-line);box-shadow:0 10px 34px rgba(0,0,0,.45);color:var(--fs-ink);
+          max-height:calc(100vh - 128px);overflow-y:auto;scrollbar-width:thin}
+.fs-panel h1{margin:0 0 7px;font-size:15px;letter-spacing:.08em;color:var(--fs-accent);font-weight:700;
+             font-variation-settings:"opsz" 24;font-family:var(--f-head);text-transform:uppercase}
+.fs-head{margin:9px 0 4px;font-family:var(--f-head);font-size:9.5px;letter-spacing:.14em;color:var(--fs-ink-3);text-transform:uppercase}
+.fs-head span{font-family:var(--f-ui);font-size:9px;letter-spacing:0;text-transform:none;color:#4e5674;margin-left:6px}
+.fs-big{font-family:var(--f-mono);font-size:34px;font-weight:500;letter-spacing:-.03em;color:var(--fs-gold);line-height:1}
+.fs-big small{font-family:var(--f-ui);font-size:10px;letter-spacing:.14em;color:#8a90a6;margin-left:6px;text-transform:uppercase}
+.fs-chip{display:inline-flex;align-items:center;gap:6px;padding:4px 8px;border-radius:8px;background:rgba(255,255,255,.04);
+         border:1px solid var(--fs-line);font-family:var(--f-mono);font-size:12px;color:var(--fs-ink)}
+.fs-chip small{font-family:var(--f-ui);font-size:8.5px;letter-spacing:.06em;color:#7b86a6}
+.fs-bar{height:4px;margin-top:7px;border-radius:2px;background:rgba(255,212,121,.14);overflow:hidden}
+.fs-bar i{display:block;height:100%;background:linear-gradient(90deg,var(--fs-gold),var(--fs-warn));transition:width .3s}
+
+/* ── THE END CARD. A win or a loss is a card in the display face, not a box
+   with a button. ── */
+.fs-end{position:fixed;inset:0;display:none;align-items:center;justify-content:center;z-index:8;
+        background:rgba(4,8,14,.55)}
+.fs-end.on{display:flex}
+.fs-end .card{background:linear-gradient(180deg,rgba(16,24,38,.97),rgba(8,10,20,.97));border:1px solid var(--fs-line);
+              border-radius:16px;padding:30px 44px;text-align:center;color:var(--fs-ink);box-shadow:0 20px 60px rgba(0,0,0,.6)}
+.fs-end h2{margin:0 0 8px;font-family:var(--f-head);font-size:34px;letter-spacing:.06em;text-transform:uppercase;color:var(--tcol);
+           text-shadow:0 0 30px var(--tglow)}
+.fs-end p{margin:0;font-family:var(--f-ui);font-size:14px;color:var(--fs-ink-2);line-height:1.45}
+.fs-end .stat{display:block;margin-top:10px;font-family:var(--f-mono);font-size:12px;letter-spacing:.1em;color:var(--sub)}
+.fs-end a,.fs-end button{display:inline-block;margin:16px 6px 0;padding:9px 22px;border-radius:10px;border:1px solid var(--fs-line);
+           background:rgba(255,255,255,.06);color:var(--fs-ink);font-family:var(--f-head);font-size:13px;letter-spacing:.06em;
+           text-decoration:none;cursor:pointer;text-transform:uppercase}
+.fs-end a:hover,.fs-end button:hover{border-color:var(--fs-accent);color:var(--fs-accent)}
+
+/* ── MOTION. One switch stills everything that moves for its own sake. ── */
+body.reduced .fs-title b{transition:none;transform:none}
+body.reduced .fs-caption,body.reduced .fs-toast,body.reduced .fs-card{transition:none}
+@keyframes fs-hint{0%,100%{box-shadow:0 0 0 0 rgba(255,212,121,0)}50%{box-shadow:0 0 0 5px rgba(255,212,121,.35)}}
+.fs-hint{animation:fs-hint 1.1s ease-in-out infinite}
+body.reduced .fs-hint{animation:none}

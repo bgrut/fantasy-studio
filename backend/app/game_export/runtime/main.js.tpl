@@ -2,6 +2,7 @@
 // exporter injects __GAME_SPEC__ and never edits logic. three.js r170 (MIT) +
 // Rapier 0.14 (Apache-2.0), all vendored locally: works fully offline.
 import * as THREE from 'three';
+import { moodOf as __kitMoodOf, setMood as __kitSetMood } from './vendor/kit/kit.js';
 import { GLTFLoader } from './vendor/jsm/loaders/GLTFLoader.js';
 import { clone as skClone } from './vendor/jsm/utils/SkeletonUtils.js';
 import { mergeGeometries } from './vendor/jsm/utils/BufferGeometryUtils.js';
@@ -439,17 +440,25 @@ async function main() {
   {
     const _st = SPEC.style || 'default';
     document.body.classList.add('style-' + _st);
-    const FONTS = {
-      cartoon: '"Comic Sans MS", "Chalkboard SE", "Segoe UI", cursive',
-      sketch: '"Segoe Print", "Bradley Hand", cursive',
-      anime: '"Trebuchet MS", "Segoe UI", sans-serif',
-      horror: 'Georgia, "Times New Roman", serif',
-      pixel: '"Courier New", monospace',
+    // THE KIT SETS THE TYPE (2026-09-10). A style no longer swaps in a system
+    // font (Comic Sans, Courier New: the "made by a machine" look). Every
+    // style speaks in the studio's faces; a style changes the voice of the
+    // display face, not the face. pixel counts in mono, cartoon rounds and
+    // widens, horror narrows and spaces, anime leans light.
+    const VOICES = {
+      cartoon: '"wdth" 100, "opsz" 12',
+      sketch:  '"wdth" 90, "opsz" 36',
+      anime:   '"wdth" 100, "opsz" 96',
+      horror:  '"wdth" 75, "opsz" 96',
     };
     const css = [];
-    if (FONTS[_st]) {
-      css.push('body.style-' + _st + ', body.style-' + _st + ' * '
-        + '{ font-family: ' + FONTS[_st] + ' !important; }');
+    if (VOICES[_st]) {
+      css.push('body.style-' + _st + ' h1, body.style-' + _st + ' h2, body.style-' + _st + ' .fs-start '
+        + '{ font-variation-settings: ' + VOICES[_st] + ' !important; }');
+    }
+    if (_st === 'pixel') {
+      css.push('body.style-pixel h1, body.style-pixel h2, body.style-pixel .fs-start, body.style-pixel #hud '
+        + '{ font-family: var(--f-mono) !important; }');
     }
     if (_st === 'cartoon') {
       css.push('body.style-cartoon #hud h1 { color:#ffde59 !important; '
@@ -6248,24 +6257,27 @@ async function main() {
             // a heist teaches its own verbs: creeping and misdirection
             ? 'WASD move · <b>C sneak</b> · <b>Q throw a distraction</b> · Shift run · F attack'
             : 'WASD / arrows move · Space jump · Shift run · F attack';
+    // THE KIT'S VOICE (2026-09-10): the start card is set in the studio's faces and
+    // takes the mood of the prompt's own words, the way the factory's title does
+    try { __kitSetMood(__kitMoodOf([SPEC.title, SPEC.world && SPEC.world.name, SPEC.world && SPEC.world.description, SPEC.world && SPEC.world.setting].filter(Boolean).join(' '))); } catch (e) {}
     const ov = document.createElement('div');
     ov.style.cssText = 'position:fixed;inset:0;display:flex;align-items:center;'
       + 'justify-content:center;background:rgba(8,7,14,.62);z-index:40;backdrop-filter:blur(3px);';
     // narrative layer: the LLM-written quest intro turns "collect 6 fireflies"
     // into a game with a WORLD — content, not code, so it can't break a build
     const introHtml = SPEC.intro
-      ? `<div style="font:italic 400 15px Georgia,serif;color:#b9b4d8;margin-bottom:14px;max-width:44ch;margin-left:auto;margin-right:auto;line-height:1.5;">${SPEC.intro}</div>`
+      ? `<div style="font:400 15px var(--f-ui);color:#b9b4d8;margin-bottom:14px;max-width:44ch;margin-left:auto;margin-right:auto;line-height:1.5;">${SPEC.intro}</div>`
       : '';
     ov.innerHTML = '<div style="text-align:center;max-width:520px;padding:36px;">'
-      + `<h1 style="font:800 40px system-ui;color:#fff;margin:0 0 10px;">${SPEC.title || 'Your World'}</h1>`
+      + `<h1 class="fs-start" style="font:700 44px var(--f-head);letter-spacing:.08em;text-transform:uppercase;color:var(--tcol);text-shadow:0 0 34px var(--tglow),0 6px 22px rgba(0,0,0,.85);margin:0 0 12px;">${SPEC.title || 'Your World'}</h1>`
       + introHtml
-      + `<div style="font:500 16px system-ui;color:#cfcbe6;margin-bottom:6px;">`
+      + `<div style="font:500 15px var(--f-ui);color:#cfcbe6;margin-bottom:6px;">`
       + objLines.map(l => '• ' + l).join('<br>') + '</div>'
-      + `<div style="font:400 13px system-ui;color:#8d89a6;margin-bottom:24px;">${controls} · drag to look</div>`
-      + '<button id="startbtn" style="font:700 20px system-ui;color:#0d0b16;background:#5cffc9;'
+      + `<div style="font:400 12px var(--f-mono);letter-spacing:.04em;color:#8d89a6;margin-bottom:24px;">${controls} · drag to look</div>`
+      + '<button id="startbtn" style="font:700 18px var(--f-head);letter-spacing:.08em;text-transform:uppercase;color:#0d0b16;background:var(--fs-accent);'
       + 'border:none;border-radius:14px;padding:14px 46px;cursor:pointer;">START</button>'
-      + '<div style="font:600 11px system-ui;color:#5cffc9;opacity:.65;margin-top:20px;letter-spacing:.6px;">'
-      + '⚡ MADE WITH FANTASY STUDIO — one sentence → a playable world</div></div>';
+      + '<div style="font:500 10px var(--f-mono);color:var(--fs-accent);opacity:.65;margin-top:20px;letter-spacing:.14em;">'
+      + '⚡ MADE WITH FANTASY STUDIO  ·  one sentence, one playable world</div></div>';
     document.body.appendChild(ov);
     // personal best on the start screen — "one more run" fuel
     try {
@@ -7911,8 +7923,8 @@ async function main() {
         + 'width:min(680px,88vw);padding:13px 18px 15px;border-radius:12px;'
         + 'background:rgba(9,11,20,.90);border:1px solid rgba(255,255,255,.13);'
         + 'box-shadow:0 10px 34px rgba(0,0,0,.5);z-index:44;pointer-events:none;'
-        + 'font:15px/1.5 system-ui;color:#eceaf6;opacity:0;transition:opacity .22s';
-      d.innerHTML = '<div id="fsdlgwho" style="font:700 12px system-ui;'
+        + 'font:15px/1.5 var(--f-ui);color:#eceaf6;opacity:0;transition:opacity .22s';
+      d.innerHTML = '<div id="fsdlgwho" style="font:700 11px var(--f-head);'
         + 'letter-spacing:.06em;text-transform:uppercase;margin-bottom:5px"></div>'
         + '<div id="fsdlgtxt"></div>';
       document.body.appendChild(d);
@@ -7938,10 +7950,10 @@ async function main() {
       b.style.cssText = 'position:fixed;left:0;right:0;top:31%;text-align:center;'
         + 'z-index:43;pointer-events:none;opacity:0;transition:opacity .3s,'
         + 'letter-spacing .5s;letter-spacing:.02em';
-      b.innerHTML = '<div id="fsbansub" style="font:700 11px system-ui;'
+      b.innerHTML = '<div id="fsbansub" style="font:500 10px var(--f-mono);'
         + 'letter-spacing:.22em;text-transform:uppercase;color:#8f8ba8;'
         + 'margin-bottom:6px">new objective</div>'
-        + '<div id="fsbantxt" style="font:700 27px system-ui;color:#fff;'
+        + '<div id="fsbantxt" style="font:700 30px var(--f-head);letter-spacing:.06em;text-transform:uppercase;color:var(--tcol);'
         + 'text-shadow:0 3px 18px rgba(0,0,0,.75)"></div>';
       document.body.appendChild(b);
     }

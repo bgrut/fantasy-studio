@@ -4,44 +4,46 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
 <title>__TITLE__</title>
+<link rel="stylesheet" href="./vendor/kit/kit.css">
 <style>
   html,body{margin:0;padding:0;height:100%;overflow:hidden;background:#0b0e12;
-            font-family:system-ui,Segoe UI,Arial,sans-serif}
+            font-family:var(--f-ui)}
   #app{position:fixed;inset:0}
   #hud{position:fixed;left:12px;top:10px;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.7);
        user-select:none;pointer-events:none;z-index:5;max-width:52vw}
-  #hud h1{font-size:15px;margin:0 0 2px;font-weight:600;letter-spacing:.3px;
+  #hud h1{font-size:15px;margin:0 0 2px;font-weight:700;letter-spacing:.08em;font-family:var(--f-head);
+       text-transform:uppercase;color:var(--fs-accent);
        overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   #hud .hint{font-size:11px;opacity:.75}
-  #fps{position:fixed;right:12px;top:10px;color:#9f9;font:11px monospace;
+  #fps{position:fixed;right:12px;top:10px;color:#9f9;font:11px var(--f-mono);
        text-shadow:0 1px 3px rgba(0,0,0,.7);z-index:5}
   #err{position:fixed;inset:auto 12px 12px 12px;display:none;background:#3a1114;
        color:#ffd9d9;border:1px solid #a33;border-radius:8px;padding:10px 12px;
        font:12px monospace;white-space:pre-wrap;z-index:9}
-  #obj{position:fixed;left:50%;top:10px;transform:translateX(-50%);color:#ffe9a8;
-       font:600 14px system-ui;text-shadow:0 1px 4px rgba(0,0,0,.8);z-index:5;display:none}
-  #quest{position:fixed;left:12px;top:64px;z-index:5;font:12px system-ui;color:#cfcbe8;
+  #obj{position:fixed;left:50%;top:10px;transform:translateX(-50%);color:var(--fs-gold);
+       font:700 14px var(--f-head);letter-spacing:.04em;text-shadow:0 1px 4px rgba(0,0,0,.8);z-index:5;display:none}
+  #quest{position:fixed;left:12px;top:64px;z-index:5;font:12px var(--f-ui);color:#cfcbe8;
        text-shadow:0 1px 3px rgba(0,0,0,.8);display:none;max-width:260px}
   #quest .qs{margin:2px 0;opacity:.45}
   #quest .qs.active{opacity:1;color:#ffe9a8;font-weight:600}
   #quest .qs.done{opacity:.55;text-decoration:line-through;color:#8fdc9f}
   #hearts{position:fixed;left:50%;top:34px;transform:translateX(-50%);z-index:5;
-       font:16px system-ui;letter-spacing:2px;display:none;text-shadow:0 1px 4px rgba(0,0,0,.8)}
+       font:16px var(--f-ui);letter-spacing:2px;display:none;text-shadow:0 1px 4px rgba(0,0,0,.8)}
   #dmg{position:fixed;inset:0;pointer-events:none;z-index:7;opacity:0;
        background:radial-gradient(ellipse at center, transparent 55%, rgba(255,30,50,.55) 100%);
        transition:opacity .12s}
   #lose{position:fixed;inset:0;display:none;align-items:center;justify-content:center;
        background:rgba(20,4,8,.6);z-index:8}
-  #lose .card{background:#1a0f14;border:1px solid #a33;border-radius:14px;padding:28px 40px;
-       color:#ffe3e3;text-align:center;font-family:system-ui}
-  #lose h2{margin:0 0 6px;font-size:26px;color:#ff8a9a}
-  #lose button{margin-top:14px;padding:8px 26px;border-radius:10px;border:0;cursor:pointer;
-       background:#ff5c8a;color:#fff;font-weight:600;font-size:14px}
+  #lose .card{background:linear-gradient(180deg,rgba(38,12,18,.97),rgba(14,6,10,.97));border:1px solid rgba(255,90,120,.35);border-radius:16px;padding:30px 44px;
+       color:#ffe3e3;text-align:center;font-family:var(--f-ui);box-shadow:0 20px 60px rgba(0,0,0,.6)}
+  #lose h2{margin:0 0 8px;font-family:var(--f-head);font-size:34px;letter-spacing:.06em;text-transform:uppercase;color:#ff8a9a;text-shadow:0 0 30px rgba(255,90,120,.45)}
+  #lose button{margin-top:14px;padding:9px 26px;border-radius:10px;border:0;cursor:pointer;
+       background:#ff5c8a;color:#fff;font-family:var(--f-head);font-weight:700;font-size:13px;letter-spacing:.06em;text-transform:uppercase}
   #win{position:fixed;inset:0;display:none;align-items:center;justify-content:center;
        background:rgba(4,8,14,.55);z-index:8}
-  #win .card{background:#101826;border:1px solid #3a5;border-radius:14px;padding:28px 40px;
-       color:#eaffe9;text-align:center;font-family:system-ui}
-  #win h2{margin:0 0 6px;font-size:26px;color:#8f8}
+  #win .card{background:linear-gradient(180deg,rgba(16,24,38,.97),rgba(8,10,20,.97));border:1px solid var(--fs-line);border-radius:16px;padding:30px 44px;
+       color:var(--fs-ink);text-align:center;font-family:var(--f-ui);box-shadow:0 20px 60px rgba(0,0,0,.6)}
+  #win h2{margin:0 0 8px;font-family:var(--f-head);font-size:34px;letter-spacing:.06em;text-transform:uppercase;color:var(--tcol);text-shadow:0 0 30px var(--tglow)}
   #stick{position:fixed;left:18px;bottom:18px;width:104px;height:104px;border-radius:50%;
          border:2px solid rgba(255,255,255,.35);display:none;z-index:6;touch-action:none}
   #nub{position:absolute;left:32px;top:32px;width:40px;height:40px;border-radius:50%;

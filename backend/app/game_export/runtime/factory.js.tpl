@@ -8,7 +8,14 @@
 // Every constant below is derived from the injected spec, so the same
 // generator that produces an adventure produces an island whose size, ore
 // density and palette come from the prompt.
-const SPEC = __GAME_SPEC__;
+// THE SPEC. Inlined by the exporter; or, when the page was opened with
+// ?spec=<path>, fetched from there — which is how one demo opens any of the
+// worlds it ships. The module boots after the fetch, so nothing below changes.
+const SPEC = await (async () => {
+  const m = location.search.match(/[?&]spec=([\w./-]+\.json)/);
+  if (m) { try { const r = await fetch(m[1]); if (r.ok) return await r.json(); } catch (e) {} }
+  return __GAME_SPEC__;
+})();
 window.__SPEC = SPEC;
 
 const _sz = Math.max(60, Math.min(480, +(SPEC.world && SPEC.world.size_m) || 150));
@@ -500,6 +507,7 @@ let glowPools = null;             // built with the decals; the seams index into
 // capabilities the chain hands out; declared here because applyUpgrades
 // reads CAPS.stable and applyUpgrades runs at boot
 const CAPS = { heated: 0, scrubber: 0, stable: 0 };
+let picksOn = false;                    // the boot reveal lists the worlds a demo ships; a crossing's card does not (hoisted: set at boot, read in playIntro)
 // creative is read from the URL here, in the early block: hubCost() reads it,
 // and the starter line's seeding calls that before the save block runs
 const CREATIVE = /[?&]creative=1/.test(location.search);
@@ -4393,7 +4401,7 @@ const WORLDS = [
   { id: 'prompt', plate: HOME.plate, belt: HOME.belt, weather: HOME.weather,
     edge: HOME.edge, sun: HOME.sun, name: SPEC.title || 'Crystal Isle', cores: 0, spores: !!HOME.spores,
     planet: HOME.planet, grade: HOME.grade, ambience: HOME.ambience, fam: MOOD, ice: !!HOME.ice, coreMult: 1,
-    blurb: 'where the prompt dropped you',
+    blurb: SPEC.prompt ? '\u201c' + SPEC.prompt + '\u201d' : 'where the prompt dropped you',   // the sentence that made it
     sky: SKY_COL, fog: FOG_COL, ground: HOME.ground, grid: HOME.grid, star: HOME.star },
   // THE UNLOCKS ARE THE THREE FAMILIES HOME IS NOT (2026-09-08). A prompt
   // that reads warm used to be offered Ember Reach for two cores — the same
@@ -5185,8 +5193,10 @@ if (!restored) applyWorld(worldIdx);   // a restored save has already chosen
 { const wq = +((location.search.match(/[?&]world=(\d+)/) || [])[1]); if (!restored && wq > 0 && WORLDS[wq]) applyWorld(wq); }
 // only a NEW world gets the reveal. A returning player has seen it; showing it
 // again on every load is how an intro becomes a thing people hate.
-if (!restored && !/[?&]nointro=1/.test(location.search))
+if (!restored && !/[?&]nointro=1/.test(location.search)) {
+  picksOn = true;                       // the boot reveal lists the worlds a demo ships
   playIntro(WORLDS[worldIdx].name, WORLDS[worldIdx].blurb);
+}
 
 // ── frame ──────────────────────────────────────────────────────────────────
 let last = performance.now();
@@ -5732,7 +5742,24 @@ const _hq2 = new THREE.Quaternion();
 // A slow orbit of the whole worldlet with its name over it, then the camera
 // drops to the player. Runs from a single clock so it cannot desynchronise
 // from the HUD fade; ends early on any input.
+// THREE PROMPTS, ONE SYSTEM. A demo that ships several worlds lists them on
+// the title card as the sentences that made them; a build from the studio
+// carries no list and shows nothing here.
+function renderWorldPicks(on) {
+  const card = document.getElementById('title');
+  if (!card) return;
+  let row = card.querySelector('.worlds');
+  const list = on && Array.isArray(SPEC.worlds) ? SPEC.worlds : [];
+  if (!list.length) { if (row) row.remove(); return; }
+  if (!row) { row = document.createElement('div'); row.className = 'worlds'; card.appendChild(row); }
+  const here = (location.search.match(/[?&]spec=([\w./-]+\.json)/) || [])[1] || null;
+  row.innerHTML = '<i>three prompts, one system</i>' + list.map(w =>
+    '<a href="' + (w.file ? '?spec=' + w.file : './') + '" class="' + (w.file === here || (!here && w.home) ? 'here' : '') + '">' +
+    '<b>' + w.name + '</b><span>\u201c' + w.prompt + '\u201d</span></a>').join('');
+  row.querySelectorAll('a').forEach(a => a.addEventListener('pointerdown', e => e.stopPropagation()));
+}
 function playIntro(name, blurb, secs, reverse, fam) {
+  renderWorldPicks(picksOn); picksOn = false;
   const card = document.getElementById('title');
   if (card) {
     card.querySelector('b').textContent = String(name).toUpperCase();

@@ -33,6 +33,22 @@ OUT = ROOT / "flagship"
 # The demo's spec. Every field here is one the studio itself fills in from a
 # prompt — this is a hand-written example of the same document, not a special
 # case in the runtime.
+# THREE PROMPTS, ONE SYSTEM. The demo opens on Crystal Works and ships three
+# more worlds the studio built from a sentence each: their spec.json files ride
+# in flagship/worlds and the title card lists them. Each shipped file is a real
+# studio export copied from a job's dist, never hand-written; a world whose
+# file is missing is simply not listed.
+DEMO_WORLDS = [
+    {"slug": None, "home": True, "name": "Crystal Works",
+     "prompt": "a crystal works on a worldlet adrift in the void, six faces of ore and one sky"},
+    {"slug": "moon", "name": "Red Moon Outpost",
+     "prompt": "a rusted mining outpost on a dead red moon"},
+    {"slug": "frost", "name": "Frostline Refinery",
+     "prompt": "an ice refinery on a frozen moon"},
+    {"slug": "bakery", "name": "Skybound Bakery",
+     "prompt": "a bakery on a floating island where grain is milled into flour and baked into loaves"},
+]
+
 DEMO_SPEC = {
     "title": "Crystal Works",
     "genre": "factory",
@@ -66,7 +82,29 @@ def render() -> dict[str, str]:
     if "__TITLE__" not in html:
         raise SystemExit("factory.index.html.tpl has no __TITLE__ placeholder")
 
-    js = BANNER + js.replace("__GAME_SPEC__", json.dumps(DEMO_SPEC))
+    # the demo's own spec carries the sentence that made it and the list of
+    # the worlds it ships; every shipped world carries the same list
+    worlds_dir = OUT / "worlds"
+    spec_for_demo = dict(DEMO_SPEC)
+    spec_for_demo["prompt"] = DEMO_WORLDS[0]["prompt"]
+    shipped = [w for w in DEMO_WORLDS if w["slug"] is None or (worlds_dir / (w["slug"] + ".json")).exists()]
+    def named(w):                             # a shipped world goes by the title the studio gave it
+        if not w["slug"]:
+            return w["name"]
+        return json.loads((worlds_dir / (w["slug"] + ".json")).read_text(encoding="utf-8")).get("title") or w["name"]
+    spec_for_demo["worlds"] = [{"name": named(w), "prompt": w["prompt"], "home": bool(w.get("home")),
+                                "file": ("worlds/" + w["slug"] + ".json") if w["slug"] else ""} for w in shipped]
+    for w in shipped:
+        if not w["slug"]:
+            continue
+        wp = worlds_dir / (w["slug"] + ".json")
+        d = json.loads(wp.read_text(encoding="utf-8"))
+        d["worlds"] = spec_for_demo["worlds"]
+        d.setdefault("prompt", w["prompt"])
+        text = json.dumps(d, indent=2)
+        if wp.read_text(encoding="utf-8") != text:      # --check stays a read unless a list is stale
+            wp.write_text(text, encoding="utf-8")
+    js = BANNER + js.replace("__GAME_SPEC__", json.dumps(spec_for_demo))
     html = html.replace("__TITLE__", DEMO_SPEC["title"] + " — Fantasy Studio")
     # the demo keeps its historical filename; everything else is byte-identical
     # to what a build ships
@@ -75,28 +113,30 @@ def render() -> dict[str, str]:
 
 
 def sync_fonts(check: bool) -> bool:
-    """The type system ships with the game: vendor/fonts rides from the runtime
-    into flagship/vendor/fonts exactly as the exporter copies it into a build.
-    Returns False under --check if any font is missing or differs."""
+    """The type system and the kit ship with the game: vendor/fonts and
+    vendor/kit ride from the runtime into flagship/vendor exactly as the
+    exporter copies them into a build. Returns False under --check if any
+    file is missing or differs."""
     import shutil
-    src = RUNTIME / "vendor" / "fonts"
-    dst = OUT / "vendor" / "fonts"
-    if not src.exists():
-        return True
     ok = True
-    dst.mkdir(parents=True, exist_ok=True)
-    for f in sorted(src.iterdir()):
-        if not f.is_file():
+    for sub in ("fonts", "kit"):
+        src = RUNTIME / "vendor" / sub
+        dst = OUT / "vendor" / sub
+        if not src.exists():
             continue
-        d = dst / f.name
-        same = d.exists() and d.read_bytes() == f.read_bytes()
-        if same:
-            continue
-        if check:
-            ok = False
-            print(f"  stale: flagship/vendor/fonts/{f.name}")
-        else:
-            shutil.copyfile(f, d)
+        dst.mkdir(parents=True, exist_ok=True)
+        for f in sorted(src.iterdir()):
+            if not f.is_file():
+                continue
+            d = dst / f.name
+            same = d.exists() and d.read_bytes() == f.read_bytes()
+            if same:
+                continue
+            if check:
+                ok = False
+                print(f"  stale: flagship/vendor/{sub}/{f.name}")
+            else:
+                shutil.copyfile(f, d)
     return ok
 
 
@@ -120,7 +160,7 @@ def main() -> int:
 
     if args.check:
         if not fonts_ok:
-            print("STALE: flagship/vendor/fonts" + chr(10) + "run: python backend/tools/flagship_build.py")
+            print("STALE: flagship/vendor" + chr(10) + "run: python backend/tools/flagship_build.py")
             return 1
         if stale:
             print("STALE: " + ", ".join(stale)

@@ -635,6 +635,8 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             # intro + title. Casting, objectives, and world verbs stay a
             # pure function of the user's words.
             spec = extract_game_spec(req.prompt, verbose=False)
+            try: spec.prompt = req.prompt            # the sentence that made it rides with the spec
+            except Exception: pass
             if _reads_as_factory(req.prompt) and getattr(spec, "genre", "") != "factory":
                 spec.genre = "factory"
                 job.setdefault("notes", []).append(

@@ -216,6 +216,10 @@ class GameSpec(BaseModel):
     # combined, product, currency, extractor, refiner, combiner, assembler,
     # outlet, carrier. Any subset is fine; missing words keep the default.
     theme: Optional[dict] = None
+    # THE SENTENCE THAT MADE IT (2026-09-10): shown on the reveal, so the first
+    # thing a player reads is the prompt itself
+    prompt: Optional[str] = None
+    worlds: Optional[list] = None            # a demo that ships several worlds lists them here
     style: Literal["default", "cartoon", "sketch", "anime", "horror", "pixel",
                    "lowpoly", "illustrated", "dunescape", "watercolor",
                    "claymation", "noir", "storybook", "kawaii", "comic",
