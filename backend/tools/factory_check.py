@@ -56,6 +56,7 @@ GATES = [
     ("fkit.mjs", "the build links the shared kit, loads the studio's three faces, and sets its title in the display face"),
     ("fworlds.mjs", "the reveal reads the prompt that made the world; the demo lists the worlds it ships and opens each under its own save"),
     ("fmusic.mjs", "the kit's music bed plays in the world's family after the first gesture, moves on its clock, changes key with the world, and makes sound"),
+    ("fcity.mjs", "a city prompt gets a district with or without a map, drawn as a city at full resolution, with a race route on its streets (needs --adv)"),
 ]
 
 
@@ -76,6 +77,8 @@ def main() -> int:
     ap.add_argument("--job", help="game job id to gate (the studio build)")
     ap.add_argument("--demo", default="http://127.0.0.1:8790/",
                     help="URL the standalone demo is served at")
+    ap.add_argument("--adv", type=int, default=None,
+                    help="an adventure job id built from a city prompt; gates that need one (fcity) skip without it")
     ap.add_argument("-v", "--verbose", action="store_true")
     args = ap.parse_args()
 
@@ -91,6 +94,9 @@ def main() -> int:
         targets.append(("studio build", {"J": str(args.job)}))
     if args.demo:
         targets.append(("standalone demo", {"URL": args.demo}))
+    if args.adv is not None:                  # the adventure job rides along to every target
+        for _, env in targets:
+            env["A"] = str(args.adv)
     if not targets:
         print("nothing to check: pass --job and/or --demo")
         return 1

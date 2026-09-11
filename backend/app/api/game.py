@@ -1165,7 +1165,7 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         # stay (parks); prop buildings + duplicate lamps go.
         try:
             from app.game_export.level import detect_place as _dp2
-            if _dp2(req.prompt):
+            if _dp2(req.prompt) or (spec.world.level or {}).get("osm"):
                 spec.world.scatter = [sc for sc in spec.world.scatter
                                       if 'building' not in sc.asset and 'lamp' not in sc.asset]
         except Exception:
@@ -1599,7 +1599,12 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         stage("designing level")
         from app.game_export.level import build_level, build_osm_city, detect_place
         n_obj = sum(o.count for o in spec.objectives if o.kind == "collect")
-        is_city = any(k in (spec.world.name or "").lower() for k in ("city", "street", "town"))
+        is_city = any(k in (spec.world.name or "").lower() for k in ("city", "street", "town")) or bool(
+            _fre.search(r"\b(city|cities|streets?|town|downtown|urban|metropolis|neon|boulevard|avenue|"
+                        r"skyline|cyberpunk|skyscrapers?|blocks?|alleys?|highway)\b", (req.prompt or "").lower()))
+        # A CITY WITH NO MAP (2026-09-11): a city prompt without a known place, or
+        # one whose map fetch fails, still gets streets and blocks: the procedural
+        # district below, in the same shape the real map arrives in.
         # REAL CITIES (shared with video's OSM system): a named place in the
         # prompt swaps procedural building scatter for actual OSM footprints.
         # Real blocks are ~100-250m — the world grows to hold a real district.
@@ -1623,7 +1628,7 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         # re-derive it from a sentence that was never about the setting.
         _base_level = ((base_spec or {}).get("world") or {}).get("level") or {}
         _keep_city = (not place) and bool(_base_level.get("osm"))
-        if place or _keep_city:
+        if place or _keep_city or is_city:
             spec.world.size_m = max(spec.world.size_m, 360.0)
         # SETTING-DRIVEN TERRAIN (2026-07-05): "mountains" means PEAKS, not a
         # flat plane — amplitude scales with the world class, scalably.
@@ -1978,33 +1983,41 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                 spec.world.level["enterable"] = {"plan": _eplan, "door": _door}
                 job.setdefault("notes", []).append(
                     f"the {_ek_raw} has a real door — step through the glow to go inside")
+        def _use_city(osm, label):
+            spec.world.level["osm"] = osm
+            # streets are the level: the mission path FOLLOWS the road
+            # route (race rivals, collectibles and the goal pin to it) and
+            # the ground is dead flat so nothing pokes through the asphalt
+            route = osm.get("route")
+            if route:
+                spec.world.level["path"] = route
+                spec.world.level["goal"] = list(route[-1])
+                n = len(route)
+                spec.world.level["collect_points"] = [
+                    list(route[int((k + 1) / (n_obj + 1) * (n - 1))])
+                    for k in range(n_obj)]
+                g = spec.world.level["grid_n"]
+                spec.world.level["heights"] = [0.0] * (g * g)
+            spec.world.scatter = [s for s in spec.world.scatter
+                                  if "building" not in Path(s.asset).name]
+            job.setdefault("notes", []).append(
+                f"{label}: {len(osm['buildings'])} buildings, {len(osm['roads'])} roads, "
+                f"route={'yes' if route else 'no'}")
+        osm = None
         if place:
             stage(f"fetching {place} map (OpenStreetMap)")
             osm = build_osm_city(place, spec.world.size_m)
             if osm:
-                spec.world.level["osm"] = osm
-                # streets are the level: the mission path FOLLOWS the road
-                # route (race rivals, collectibles and the goal pin to it) and
-                # the ground is dead flat so nothing pokes through the asphalt
-                route = osm.get("route")
-                if route:
-                    spec.world.level["path"] = route
-                    spec.world.level["goal"] = list(route[-1])
-                    n = len(route)
-                    spec.world.level["collect_points"] = [
-                        list(route[int((k + 1) / (n_obj + 1) * (n - 1))])
-                        for k in range(n_obj)]
-                    g = spec.world.level["grid_n"]
-                    spec.world.level["heights"] = [0.0] * (g * g)
-                spec.world.scatter = [s for s in spec.world.scatter
-                                      if "building" not in Path(s.asset).name]
-                job.setdefault("notes", []).append(
-                    f"real-city map: {place} ({len(osm['buildings'])} buildings, "
-                    f"{len(osm['roads'])} roads, route={'yes' if route else 'no'}, "
-                    f"© OpenStreetMap contributors)")
+                _use_city(osm, f"real-city map: {place} (© OpenStreetMap contributors)")
             else:
                 job.setdefault("notes", []).append(
-                    f"OSM fetch for '{place}' unavailable — procedural city used")
+                    f"OSM fetch for '{place}' unavailable — a procedural district stands in")
+        if is_city and not osm and not spec.world.level.get("interior"):
+            from app.game_export.level import build_proc_city
+            stage("laying out the district")
+            osm = build_proc_city(int(spec.seed or 0), spec.world.size_m, place or (spec.world.name or "city"))
+            if osm:
+                _use_city(osm, "procedural district (no map needed): avenues, streets, a tall core")
 
         # ── MULTI-BUILDING CITY HEIST (2026-08-05) ──────────────────────────
         # The flagship shape: a burglar working a real block. Several OSM

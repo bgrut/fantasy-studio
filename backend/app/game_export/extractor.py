@@ -96,11 +96,15 @@ Output ONLY the JSON object, no markdown, no commentary. Schema (all fields opti
  survival, the eerie). CHOOSE ONE that fits
  the subject and mood, do not default to photoreal out of habit: a shark-hunting
  sailboat adventure reads "lowpoly" or "cartoon"; a haunted asylum reads
- "horror"; an arcade racer reads "pixel"; a Ghibli-ish forest walk reads
- "anime"; a gritty city heist or a wildlife documentary reads "default".
+ "horror"; a retro 8-bit arcade racer reads "pixel"; a Ghibli-ish forest walk reads
+ "anime"; a gritty city heist, a wildlife documentary, or a NIGHT STREET RACE
+ under neon reads "default" (neon is light, not resolution: it wants real
+ reflections and a night palette with a hot accent, not a low-res filter).
  ALWAYS EMIT "style". Every prompt carries a genre and every genre implies a
  look, so "default" is a CHOICE meaning "photoreal", never a way to skip the
- question. A prompt naming neon, arcade, retro, 8-bit or synthwave MUST be
+ question. A prompt naming retro, 8-bit, 16-bit, pixel art or "arcade cabinet"
+ MUST be "pixel"; neon, synthwave, cyberpunk and night-city prompts are
+ "default" with a palette (dark sky, coloured fog, one hot accent), never
  "pixel"; naming haunted, cursed, undead, asylum or nightmare MUST be
  "horror"; naming cute, cartoon, toy or kid-friendly MUST be "cartoon". If two
  prompts on the same subject would look identical coming out of this field,

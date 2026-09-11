@@ -615,34 +615,7 @@ def build_osm_city(place: str, size_m: float, max_buildings: int = 500) -> dict 
         if len(blds) < 10:
             return None
 
-        # ROUTE: longest street chain from the district center; shift the whole
-        # district so the route STARTS at the player spawn (origin).
-        route = _road_route(roads, half)
-        sx, sz = (route[0][0], route[0][1]) if route else (0.0, 0.0)
-        if sx or sz:
-            for b in blds:
-                b["pts"] = [(round(x - sx, 1), round(z - sz, 1)) for x, z in b["pts"]]
-            for r in roads:
-                r["pts"] = [(round(x - sx, 1), round(z - sz, 1)) for x, z in r["pts"]]
-            if route:
-                route = [[round(x - sx, 1), round(z - sz, 1)] for x, z in route]
-        # re-filter to world bounds after the shift
-        def _inside(pts):
-            cx = sum(p[0] for p in pts) / len(pts)
-            cz = sum(p[1] for p in pts) / len(pts)
-            return abs(cx) < half * 0.95 and abs(cz) < half * 0.95
-        blds = [b for b in blds if _inside(b["pts"])]
-        if route:                        # truncate the route at the walls
-            clipped = []
-            for p in route:
-                if abs(p[0]) >= half * 0.85 or abs(p[1]) >= half * 0.85:
-                    break
-                clipped.append(p)
-            route = clipped if len(clipped) >= 3 else None
-        out = {"place": place, "buildings": blds[:max_buildings], "roads": roads}
-        if route:
-            out["route"] = route
-        return out
+        return _finish_city(place, blds, roads, half, max_buildings)
     except Exception:
         return None
 
@@ -994,3 +967,141 @@ def spread_loot(enterables: list[dict], n: int, seed: int) -> list[list[float]]:
                     round(cz + rng.uniform(-rd / 2 + 1.2, rd / 2 - 1.2), 2)])
     return pts
 
+
+def _finish_city(place: str, blds: list[dict], roads: list[dict], half: float,
+                 max_buildings: int = 500) -> dict:
+    """Shared by the OSM and procedural builders: pick the longest drivable
+    route, shift the district so it starts at the player spawn (origin),
+    re-clip to the world, truncate the route at the walls."""
+    # ROUTE: longest street chain from the district center; shift the whole
+    # district so the route STARTS at the player spawn (origin).
+    route = _road_route(roads, half)
+    sx, sz = (route[0][0], route[0][1]) if route else (0.0, 0.0)
+    if sx or sz:
+        for b in blds:
+            b["pts"] = [(round(x - sx, 1), round(z - sz, 1)) for x, z in b["pts"]]
+        for r in roads:
+            r["pts"] = [(round(x - sx, 1), round(z - sz, 1)) for x, z in r["pts"]]
+        if route:
+            route = [[round(x - sx, 1), round(z - sz, 1)] for x, z in route]
+    # re-filter to world bounds after the shift
+    def _inside(pts):
+        cx = sum(p[0] for p in pts) / len(pts)
+        cz = sum(p[1] for p in pts) / len(pts)
+        return abs(cx) < half * 0.95 and abs(cz) < half * 0.95
+    blds = [b for b in blds if _inside(b["pts"])]
+    if route:                        # truncate the route at the walls
+        clipped = []
+        for p in route:
+            if abs(p[0]) >= half * 0.85 or abs(p[1]) >= half * 0.85:
+                break
+            clipped.append(p)
+        route = clipped if len(clipped) >= 3 else None
+    out = {"place": place, "buildings": blds[:max_buildings], "roads": roads}
+    if route:
+        out["route"] = route
+    return out
+
+
+def build_proc_city(seed: int, size_m: float, place: str = "city",
+                    max_buildings: int = 500) -> dict | None:
+    """A district with no network, in build_osm_city's shape. A jittered grid
+    of avenues (12 m) and streets (8 m); every block cut into lots along its
+    long side; heights fall from a tall core to low edges; one lot in eight is
+    a plaza. Deterministic from the seed, like everything else in a build."""
+    import random
+    rnd = random.Random(int(seed) * 7919 + 17)
+    half = float(size_m) / 2.0
+    ext = half * 0.96                              # streets run edge to edge
+    # avenue/street positions: a pitch with jitter, always one through the middle
+    def lines(pitch: float, jit: float) -> list[float]:
+        out = [0.0]
+        x = 0.0
+        while True:
+            x += pitch + rnd.uniform(-jit, jit)
+            if x > ext - pitch * 0.45:
+                break
+            out.append(x)
+        x = 0.0
+        while True:
+            x -= pitch + rnd.uniform(-jit, jit)
+            if x < -ext + pitch * 0.45:
+                break
+            out.append(x)
+        return sorted(out)
+    xs = lines(52.0, 6.0)                          # avenues run north-south (constant x)
+    zs = lines(42.0, 5.0)                          # streets run east-west (constant z)
+    roads = []
+    for x in xs:
+        roads.append({"pts": [(round(x, 1), round(-ext, 1)), (round(x, 1), round(ext, 1))], "w": 12.0 if abs(x) < 1.0 else 9.0})
+    for z in zs:
+        roads.append({"pts": [(round(-ext, 1), round(z, 1)), (round(ext, 1), round(z, 1))], "w": 12.0 if abs(z) < 1.0 else 8.0})
+    # blocks between the lines, inset by half a road plus a sidewalk
+    blds = []
+    uses = ["commercial", "residential", "retail", "office", "apartments"]
+    for i in range(len(xs) - 1):
+        for j in range(len(zs) - 1):
+            x0, x1 = xs[i] + 5.0 + 3.0, xs[i + 1] - 5.0 - 3.0
+            z0, z1 = zs[j] + 4.5 + 2.5, zs[j + 1] - 4.5 - 2.5
+            bw, bd = x1 - x0, z1 - z0
+            if bw < 9 or bd < 9:
+                continue
+            cx, cz = (x0 + x1) / 2, (z0 + z1) / 2
+            d = (cx * cx + cz * cz) ** 0.5 / half    # 0 at the core, ~1 at the edge
+            # lots along the block's long side; a deep block has a row on each
+            # long side with a service lane between, as real blocks do
+            along_x = bw >= bd
+            length = bw if along_x else bd
+            depth = bd if along_x else bw
+            rows = 2 if depth >= 26 else 1
+            n = max(1, min(7, int(round(length / rnd.uniform(11.0, 17.0)))))
+            gap = 2.0
+            lot = (length - gap * (n - 1)) / n
+            row_d = (depth - 4.0) / 2 if rows == 2 else depth
+            for row in range(rows):
+              for k in range(n):
+                if rnd.random() < 0.12:
+                    continue                        # a plaza, a car park, a gap in the wall
+                a0 = k * (lot + gap)
+                a1 = a0 + lot
+                inset = rnd.uniform(0.0, 2.5)        # a setback, so facades do not all align
+                d0 = row * (row_d + 4.0)             # this row's near edge across the block
+                d1 = d0 + row_d
+                if along_x:
+                    px0, px1, pz0, pz1 = x0 + a0, x0 + a1, z0 + d0 + inset, z0 + d1 - inset
+                else:
+                    px0, px1, pz0, pz1 = x0 + d0 + inset, x0 + d1 - inset, z0 + a0, z0 + a1
+                if d < 0.30:
+                    h = rnd.uniform(28.0, 72.0)
+                elif d < 0.62:
+                    h = rnd.uniform(12.0, 32.0)
+                else:
+                    h = rnd.uniform(6.0, 15.0)
+                if rnd.random() < 0.08:
+                    h *= 1.6                         # a landmark tower here and there
+                pts = [(round(px0, 1), round(pz0, 1)), (round(px1, 1), round(pz0, 1)),
+                       (round(px1, 1), round(pz1, 1)), (round(px0, 1), round(pz1, 1))]
+                blds.append({"pts": pts, "h": round(h, 1), "use": rnd.choice(uses)})
+    if len(blds) < 10:
+        return None
+    blds.sort(key=lambda b: sum(q[0] for q in b["pts"]) ** 2 + sum(q[1] for q in b["pts"]) ** 2)
+    # THE ROUTE IS A LOOP FROM SPAWN. The shared finish shifts a district so
+    # the route starts at the origin, which for a grid centred on the origin
+    # throws half of it outside the world. This grid already has the player
+    # at its centre crossroads, so the route starts there: north on the
+    # central avenue, round three sides of the district, and back along the
+    # southern street to a beacon one block short of home.
+    def near(vals, target):
+        return min(vals, key=lambda v: abs(v - target))
+    zn, zs_ = near(zs, ext * 0.72), near(zs, -ext * 0.72)
+    xe, xw = near(xs, ext * 0.72), near(xs, -ext * 0.72)
+    route = [[0.0, 0.0], [0.0, zn], [xe, zn], [xe, zs_], [xw, zs_], [xw, 0.0]]
+    # a point every ~12 m so rivals and collectibles have somewhere to sit
+    dense = []
+    for (ax, az), (bx, bz) in zip(route, route[1:]):
+        n = max(1, int(((bx - ax) ** 2 + (bz - az) ** 2) ** 0.5 / 12.0))
+        for k in range(n):
+            dense.append([round(ax + (bx - ax) * k / n, 1), round(az + (bz - az) * k / n, 1)])
+    dense.append([round(route[-1][0], 1), round(route[-1][1], 1)])
+    return {"place": place or "city", "buildings": blds[:max_buildings], "roads": roads,
+            "route": dense, "procedural": True}

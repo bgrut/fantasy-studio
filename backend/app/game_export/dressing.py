@@ -287,6 +287,13 @@ def game_scatter(setting: str | None, archetype: str | None = None,
     table = (_ARCH_RECIPES_REAL if (style or "default").lower() in _REAL_STYLES
              else _ARCH_RECIPES)
     rec = table.get(arch)
+    # A CITY IS NOT A MEADOW (2026-09-11): a plain landform under a city,
+    # street or town takes the place's own recipe (lamps, a few trees), not
+    # the plain's forest floor of mushrooms and flowers
+    if arch == "plain" and any(k in (setting or "").lower() for k in ("city", "street", "town", "urban", "downtown")):
+        legacy = recipe_for(setting)
+        if legacy:
+            rec = [(p, n, v, 1.0) for p, n, v in legacy]
     if rec:                       # fall back if a prop set is not installed
         have = [e for e in rec
                 if any((PROPS_DIR / f"{n}.glb").exists()
