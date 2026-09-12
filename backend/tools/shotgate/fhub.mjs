@@ -65,9 +65,11 @@ const cost = await p.evaluate(async () => {
   F.addValue(300);
   const ore0 = window.__game.facts().value;
   F.apply({ face: 0, i: spot[0], j: spot[1] }, 0);
+  // read the balance NOW: apply pays synchronously, and the starter line keeps
+  // selling in the frames after it, which read as a discount on the hub
+  const paid = +(ore0 - window.__game.facts().value).toFixed(0);
   await w(200);
   const placed = F.cells[0][spot[0]][spot[1]].t === TY.HUB;
-  const paid = +(ore0 - window.__game.facts().value).toFixed(0);
   const c2 = F.hubCost();
   const chip2 = document.querySelector('.tool[data-tool="hub"] small').textContent;
   F.pickTool('miner');

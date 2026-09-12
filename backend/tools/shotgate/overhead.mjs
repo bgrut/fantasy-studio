@@ -1,0 +1,10 @@
+import puppeteer from 'puppeteer-core';
+const b = await puppeteer.launch({ headless:'new', executablePath:'C:/Program Files/Google/Chrome/Application/chrome.exe', args:['--use-angle=d3d11','--enable-unsafe-swiftshader','--window-size=1280,760'] });
+const p = await b.newPage(); await p.setViewport({ width:1280, height:760 });
+await p.goto(process.env.URL + '?fresh=1&nointro=1', { waitUntil:'domcontentloaded', timeout:90000 });
+await new Promise(r => setTimeout(r, 6000));
+await p.evaluate(() => { document.getElementById('tutor')?.classList.remove('on'); });
+await p.keyboard.press('Tab');
+await new Promise(r => setTimeout(r, 1500));
+await p.screenshot({ path: process.env.OUT || 'overhead.png' });
+await b.close();

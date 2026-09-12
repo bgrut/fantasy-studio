@@ -1370,7 +1370,7 @@ const _ps = new THREE.Vector3(1, 1, 1);
 // own accent: the structure is dark, the panels carry the colour, the parts
 // a hand would touch are warm metal. A part names its tone with `col`; a
 // machine names its accent with opts.base; a part with neither is accent.
-const PAINT = { chassis: 0x272b35, dark: 0x15171d, trim: 0xd9ad55, steel: 0xb6bfcc };
+const PAINT = { chassis: 0x272b35, dark: 0x15171d, trim: 0xd9ad55, steel: 0xb6bfcc, rail: 0x8f96a3, roller: 0x5f6673 };
 const _pc = new THREE.Color();
 function mergeParts(parts, opts) {
   const pos = [], nor = [], uvs = [], tint = [], hue = [];
@@ -1771,10 +1771,15 @@ const GEO = {
   // plate, and a separate deck that carries the moving tread.
   beltFrame: mergeParts([
     { g: _box(T * 0.96, 0.05, T * 0.82), y: 0.03 },
-    { g: _box(T * 0.96, 0.14, 0.09), y: 0.15, z: T * 0.37 },
-    { g: _box(T * 0.96, 0.14, 0.09), y: 0.15, z: -T * 0.37 },
-    { g: _cyl(0.105, 0.105, T * 0.70, 8), y: 0.13, x: T * 0.41, rx: Math.PI / 2 },
-    { g: _cyl(0.105, 0.105, T * 0.70, 8), y: 0.13, x: -T * 0.41, rx: Math.PI / 2 },
+    { g: _box(T * 0.96, 0.14, 0.09), y: 0.15, z: T * 0.37, col: PAINT.rail },
+    { g: _box(T * 0.96, 0.14, 0.09), y: 0.15, z: -T * 0.37, col: PAINT.rail },
+    { g: _cyl(0.105, 0.105, T * 0.70, 8), y: 0.13, x: T * 0.41, rx: Math.PI / 2, col: PAINT.roller },
+    { g: _cyl(0.105, 0.105, T * 0.70, 8), y: 0.13, x: -T * 0.41, rx: Math.PI / 2, col: PAINT.roller },
+    // stanchions at each end of each rail: bolted to the deck, not laid on it
+    { g: _box(0.10, 0.24, 0.12), y: 0.12, x: T * 0.42, z: T * 0.37, col: PAINT.rail },
+    { g: _box(0.10, 0.24, 0.12), y: 0.12, x: -T * 0.42, z: T * 0.37, col: PAINT.rail },
+    { g: _box(0.10, 0.24, 0.12), y: 0.12, x: T * 0.42, z: -T * 0.37, col: PAINT.rail },
+    { g: _box(0.10, 0.24, 0.12), y: 0.12, x: -T * 0.42, z: -T * 0.37, col: PAINT.rail },
   ]),
   beltDeck: _box(T * 0.86, 0.06, T * 0.60),
 
@@ -1788,9 +1793,9 @@ const GEO = {
     { g: new THREE.RingGeometry(ARC_R - ARC_W - 0.11, ARC_R + ARC_W + 0.11, 14, 1,
                                 Math.PI / 2, Math.PI / 2),
       rx: -Math.PI / 2, x: T / 2, z: T / 2, y: 0.03 },
-    { g: _cyl(0.105, 0.105, T * 0.70, 8), y: 0.13, x: T * 0.41, rx: Math.PI / 2 },
+    { g: _cyl(0.105, 0.105, T * 0.70, 8), y: 0.13, x: T * 0.41, rx: Math.PI / 2, col: PAINT.roller },
     { g: _cyl(0.105, 0.105, T * 0.70, 8), y: 0.13, z: T * 0.41,
-      rx: Math.PI / 2, ry: Math.PI / 2 },
+      rx: Math.PI / 2, ry: Math.PI / 2, col: PAINT.roller },
   ]),
   // A MERGE. Straight run with a ramp on each flank: it does not try to say
   // WHICH side is feeding — with two or three inputs there is no single answer
@@ -1798,10 +1803,10 @@ const GEO = {
   // this is where lines join, which is the thing worth seeing from a distance.
   beltFrameJ: mergeParts([
     { g: _box(T * 0.96, 0.05, T * 0.94), y: 0.03 },
-    { g: _box(T * 0.96, 0.14, 0.09), y: 0.15, z: T * 0.37, tint: 0.85 },
-    { g: _box(T * 0.96, 0.14, 0.09), y: 0.15, z: -T * 0.37, tint: 0.85 },
-    { g: _cyl(0.105, 0.105, T * 0.70, 8), y: 0.13, x: T * 0.41, rx: Math.PI / 2 },
-    { g: _cyl(0.105, 0.105, T * 0.70, 8), y: 0.13, x: -T * 0.41, rx: Math.PI / 2 },
+    { g: _box(T * 0.96, 0.14, 0.09), y: 0.15, z: T * 0.37, col: PAINT.rail },
+    { g: _box(T * 0.96, 0.14, 0.09), y: 0.15, z: -T * 0.37, col: PAINT.rail },
+    { g: _cyl(0.105, 0.105, T * 0.70, 8), y: 0.13, x: T * 0.41, rx: Math.PI / 2, col: PAINT.roller },
+    { g: _cyl(0.105, 0.105, T * 0.70, 8), y: 0.13, x: -T * 0.41, rx: Math.PI / 2, col: PAINT.roller },
     { g: _box(T * 0.34, 0.05, T * 0.30), y: 0.13, z: T * 0.44, rx: 0.32, tint: 0.7 },
     { g: _box(T * 0.34, 0.05, T * 0.30), y: 0.13, z: -T * 0.44, rx: -0.32, tint: 0.7 },
   ]),
@@ -1809,9 +1814,9 @@ const GEO = {
     { g: new THREE.RingGeometry(ARC_R - ARC_W - 0.11, ARC_R + ARC_W + 0.11, 14, 1,
                                 Math.PI, Math.PI / 2),
       rx: -Math.PI / 2, x: T / 2, z: -T / 2, y: 0.03 },
-    { g: _cyl(0.105, 0.105, T * 0.70, 8), y: 0.13, x: T * 0.41, rx: Math.PI / 2 },
+    { g: _cyl(0.105, 0.105, T * 0.70, 8), y: 0.13, x: T * 0.41, rx: Math.PI / 2, col: PAINT.roller },
     { g: _cyl(0.105, 0.105, T * 0.70, 8), y: 0.13, z: -T * 0.41,
-      rx: Math.PI / 2, ry: Math.PI / 2 },
+      rx: Math.PI / 2, ry: Math.PI / 2, col: PAINT.roller },
   ]),
 
   // a rig with legs, cross-braces, a motor over the shaft it drives, and a
@@ -2762,12 +2767,72 @@ function stepWeather(dt) {
 // the face rather than up in the world — smoke that rises toward +Y on the
 // underside of the cube would fall into the ground.
 let emitClock = 0;
+// ── THE LIGHT POOL ─────────────────────────────────────────────────────────
+// Four point lights, always in the scene so no material ever recompiles,
+// handed every quarter second to the four nearest machines that are doing
+// something. A cooking smelter throws furnace orange on the plating, a forge
+// its pink, a hub with a sale landing its gold, a rig on a rich seam a faint
+// wash of its ore. Warm pools around working machines are most of what
+// separates a lit factory from a shaded one; the sun cannot do it alone.
+const LIGHT_POOL = [];
+for (let k = 0; k < 4; k++) {
+  const l = new THREE.PointLight(0xffffff, 0, 9.0, 2.0);
+  l.name = 'pool' + k; scene.add(l); LIGHT_POOL.push(l);   // ALWAYS visible: a change in the visible light count recompiles every material
+}
+let poolClock = 0;
+const _pool = [];
+function stepLightPool(dt) {
+  poolClock += dt;
+  if (poolClock < 0.25) return;
+  poolClock = 0;
+  _pool.length = 0;
+  const px = player.pos.x, py = player.pos.y, pz = player.pos.z;
+  eachTile((c, f, i, j) => {
+    if (!c.build) return;
+    let col = 0, amt = 0, h = 0.7;
+    if (c.t === SMELTER && c.cook > 0) { col = 0xff7a22; amt = 1.6; h = 0.55; }
+    else if (c.t === FORGE && c.cook > 0) { col = 0xff5ad9; amt = 1.5; h = 1.3; }
+    else if (c.t === ASSEMBLER && c.cook > 0) { col = 0xffd27a; amt = 1.0; h = 0.9; }
+    else if (c.t === HUB && c.pulse > 0.05) { col = 0xffd479; amt = 0.9 + c.pulse * 1.4; h = 1.2; }
+    else if (c.t === MINER && (c.rich === undefined ? 1 : c.rich) > 0.3) { col = MIN_COL[c.min || CRYSTAL]; amt = 0.45; h = 0.5; }
+    else return;
+    const w = tileWorld(f, i, j), n = FACES[f].n;
+    const x = w[0] + n[0] * h, y = w[1] + n[1] * h, z = w[2] + n[2] * h;
+    const d2 = (x - px) * (x - px) + (y - py) * (y - py) + (z - pz) * (z - pz);
+    if (d2 > 34 * 34) return;
+    _pool.push({ x, y, z, col, amt, d2 });
+  });
+  _pool.sort((a, b) => a.d2 - b.d2);
+  for (let k = 0; k < LIGHT_POOL.length; k++) {
+    const l = LIGHT_POOL[k], e = _pool[k];
+    if (!e) { l.intensity = 0; continue; }
+    l.position.set(e.x, e.y, e.z);
+    l.color.setHex(e.col);
+    l.intensity = e.amt * 4.0;
+  }
+}
+const _lw = new THREE.Vector3(), _ld = new THREE.Vector3();
 function stepEmitters(dt) {
   emitClock += dt;
   if (emitClock < 0.055) return;
   emitClock = 0;
   eachTile((c, f, i, j) => {
     if (c.t === SMELTER && c.cook > 0) {
+      // EMBERS AT THE DOOR: the heat is where the door is. The door lamp
+      // knows where that is in the world, whichever way the smelter faces.
+      if (c.build && Math.random() < 0.30) {
+        const lamp = c.build.getObjectByName('lamp');
+        if (lamp) {
+          lamp.getWorldPosition(_lw);
+          _ld.set(1, 0, 0).applyQuaternion(c.build.quaternion);       // out of the door
+          const n2 = FACES[f].n;
+          emit(_lw.x + _ld.x * 0.10, _lw.y + _ld.y * 0.10, _lw.z + _ld.z * 0.10,
+               _ld.x * 0.9 + n2[0] * 0.6 + (Math.random() - 0.5) * 0.5,
+               _ld.y * 0.9 + n2[1] * 0.6 + (Math.random() - 0.5) * 0.5,
+               _ld.z * 0.9 + n2[2] * 0.6 + (Math.random() - 0.5) * 0.5,
+               1.0, 0.52, 0.16, -0.035, 1.6, [-n2[0] * 4, -n2[1] * 4, -n2[2] * 4]);
+        }
+      }
       if (Math.random() > 0.34) return;
       const n = FACES[f].n, w = tileWorld(f, i, j), u = FACES[f].u, v = FACES[f].v;
       // the flue sits at (+0.22T, -0.22T) in the machine's own frame
@@ -4965,7 +5030,7 @@ function tutStart(k) {
   // the step puts the tool in your hand: nothing during the first two steps,
   // so the world is seen without a ghost over it; the rig, then the belt
   if (k <= 1) { tool = null; if (typeof setHolo === 'function') setHolo(null); document.querySelectorAll('.tool').forEach(o => o.classList.remove('on')); }
-  else if (tutAct === 1 && k === 2) { pickTool('miner'); tutBase.lineRate = rateNow; }   // what one line did
+  else if (tutAct === 1 && k === 2) { pickTool('miner'); tutBase.lineRate = Math.max(rateNow, 180); }   // what one line does at steady state: a line still ramping when the rig step begins would set the finish bar too low and clear it at once
   else if (tutAct === 1 && k === 3) pickTool('belt');
   else if (tutAct === 2 && TUT[k] && TUT[k].tool && UNLOCKED[TUT[k].tool]) pickTool(TUT[k].tool);
   tutBase.rate = rateNow; tutBase.rigs = countType(MINER); tutBase.belts = countType(BELT);
@@ -5399,6 +5464,7 @@ renderer.setAnimationLoop(() => {
   last = now;
   if (skyDome) skyDome.material.uniforms.uTime.value = now * 0.001;   // the nebula drifts, the aurora ripples
   if (AUDIO.bed) AUDIO.bed.step(dt);
+  stepLightPool(dt);
 
   stepMarket(dt);
   stepSpores(dt);
@@ -6167,6 +6233,7 @@ window.__game = {
     prices: TRADED.map(t => +PRICE[t].toFixed(3)),
     restored,
     intro: +intro.toFixed(2),
+    lights: LIGHT_POOL.filter(l => l.intensity > 0).map(l => ({ col: '#' + l.color.getHexString(), i: +l.intensity.toFixed(2) })),
     audio: { ready: AUDIO.ready, muted: AUDIO.muted,
              state: AUDIO.ctx ? AUDIO.ctx.state : null,
              bed: AUDIO.bed ? { fam: AUDIO.bed.fam, chord: AUDIO.bed.chord, voices: AUDIO.bed.voices.length, level: AUDIO.bed.key.level, on: AUDIO.bed.on } : null },

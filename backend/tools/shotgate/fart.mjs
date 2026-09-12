@@ -169,8 +169,10 @@ const sky = await p.evaluate(()=>{
 });
 await new Promise(r => setTimeout(r, 400));
 sky.t1 = await p.evaluate(() => { const d = window.__scene.getObjectByName('sky'); return d ? d.material.uniforms.uTime.value : -1; });
+// and the light pool: a working line has at least one machine light on it
+sky.lights = await p.evaluate(() => (window.__game.facts().lights || []).filter(l => l.i > 0).length);
 console.log('starfield :', sky.found ? sky.stars + ' stars at r=' + sky.radius +
-            ', camera far ' + sky.far + ' | nebula ' + sky.nebula + ' aurora ' + sky.aurora + ' | sky clock ' + (sky.t1 > sky.t0 ? 'runs' : 'STOPPED') : 'MISSING');
+            ', camera far ' + sky.far + ' | nebula ' + sky.nebula + ' aurora ' + sky.aurora + ' | sky clock ' + (sky.t1 > sky.t0 ? 'runs' : 'STOPPED') + ' | machine lights ' + sky.lights : 'MISSING');
 console.log('errors    :', errs.length ? errs.join(' | ') : 'none');
 await p.screenshot({ path: process.env.OUT || 'art.png' });
 await b.close();
@@ -178,7 +180,7 @@ const ok = icons.withIcon === icons.tools && icons.tools >= 9
   && icons.rendered >= 8            // every machine; ERASE stays a glyph
   && inst.belts > 60 && inst.calls < 120     // a 20-grid lays 72; a 40-grid 199
   && moving.moved
-  && sky.found && sky.radius < sky.far && sky.stars > 500 && sky.nebula > 0 && sky.t1 > sky.t0
+  && sky.found && sky.radius < sky.far && sky.stars > 500 && sky.nebula > 0 && sky.t1 > sky.t0 && sky.lights >= 1
   && post.on && post.lum > 6 && post.lum < 250   // lit, not black, not blown
   && smoke.alive > 0 && sil.edges === 1 && sil.sun === 1
   && held.hasRig && held.hasHolo && held.changed && held.fpVisible && !held.orbitVisible
