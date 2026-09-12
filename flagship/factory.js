@@ -1056,7 +1056,7 @@ function buildSky(topHex, deepHex, bandHex, planet, nebula) {
 const PLATE_PX = 256;
 const PLATE_DEFAULT = { base: '#8792c4', tint: '#6a74a6', seam: 'rgba(90,100,150,0.75)',
                         rivet: 'rgba(190,200,235,0.55)', overlay: null };
-function plateCanvas(pl) {
+function plateCanvas(pl, noGrain) {
   pl = pl || PLATE_DEFAULT;
   const c = document.createElement('canvas');
   c.width = c.height = PLATE_PX;
@@ -1121,7 +1121,8 @@ function plateCanvas(pl) {
       g.fillRect(rr() * P, rr() * P, 2 + rr() * 4, 2);
     }
   }
-  // grain
+  // grain (skipped for the height map: grain as relief is sandpaper, not plating)
+  if (noGrain) return c;
   const d = g.getImageData(0, 0, P, P);
   for (let k = 0; k < d.data.length; k += 4) {
     const v = (rr() - 0.5) * 26;
@@ -1192,7 +1193,43 @@ function skinCanvas(rough) {
   return t;
 }
 const SKIN = skinCanvas(false), SKIN_ROUGH = skinCanvas(true);
+const SKIN_NORMAL = normalFrom(SKIN.image, 2.2, 0.5);   // the same seams and rivets, as relief
 
+// RELIEF (2026-09-12). A normal map from a canvas: luminance is height, a
+// Sobel pair gives the slope, and the result is a tangent-space normal in
+// the usual encoding. Dark seams read as grooves, bright rivets as bumps.
+function normalFrom(src, strength, blur) {
+  const P = src.width, c = document.createElement('canvas');
+  c.width = c.height = P;
+  const g = c.getContext('2d');
+  g.filter = blur ? 'blur(' + blur + 'px)' : 'none';
+  g.drawImage(src, 0, 0);
+  g.filter = 'none';
+  const d = g.getImageData(0, 0, P, P).data;
+  const h = new Float32Array(P * P);
+  for (let k = 0; k < P * P; k++) h[k] = (d[k * 4] * 0.30 + d[k * 4 + 1] * 0.59 + d[k * 4 + 2] * 0.11) / 255;
+  const out = g.createImageData(P, P), o = out.data;
+  const at = (x, y) => h[((y + P) % P) * P + ((x + P) % P)];
+  for (let y = 0; y < P; y++) for (let x = 0; x < P; x++) {
+    const dx = (at(x + 1, y - 1) + 2 * at(x + 1, y) + at(x + 1, y + 1)) - (at(x - 1, y - 1) + 2 * at(x - 1, y) + at(x - 1, y + 1));
+    const dy = (at(x - 1, y + 1) + 2 * at(x, y + 1) + at(x + 1, y + 1)) - (at(x - 1, y - 1) + 2 * at(x, y - 1) + at(x + 1, y - 1));
+    let nx = -dx * strength, ny = -dy * strength, nz = 1;
+    const l = Math.hypot(nx, ny, nz); nx /= l; ny /= l; nz /= l;
+    const k = (y * P + x) * 4;
+    o[k] = (nx * 0.5 + 0.5) * 255; o[k + 1] = (ny * 0.5 + 0.5) * 255; o[k + 2] = (nz * 0.5 + 0.5) * 255; o[k + 3] = 255;
+  }
+  g.putImageData(out, 0, 0);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.NoColorSpace;
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.anisotropy = 8;
+  return t;
+}
+function plateNormal(pl) {
+  const t = normalFrom(plateCanvas(pl, true), 3.2, 0.9);   // seams and rivets in relief, no grain
+  t.repeat.set(N / 5, N / 5);
+  return t;
+}
 function plateTexture(pl) {
   const t = new THREE.CanvasTexture(plateCanvas(pl));
   t.wrapS = t.wrapT = THREE.RepeatWrapping;
@@ -1230,6 +1267,7 @@ const cube = new THREE.Mesh(
   new THREE.BoxGeometry(N * T, N * T, N * T),
   new THREE.MeshStandardMaterial({ color: 0x36406a, roughness: 0.9,
     metalness: 0.3, map: plateTexture(), roughnessMap: plateRoughness(),
+    normalMap: plateNormal(), normalScale: new THREE.Vector2(0.75, 0.75),
     // dialled back once there WAS an environment: at 0.75 the floor read wet,
     // and a ground plane competing with the machines for attention is a value
     // hierarchy problem, not a lighting one
@@ -1647,6 +1685,21 @@ for (let k = 0; k < 320; k++) {
                       d: Math.floor(rnd() * 4), s: 0.75 + rnd() * 0.6 });
 }
 
+// MORE ON THE FLOOR (2026-09-12): a second pass of ground detail on its own
+// clock, so the seeded rng that everything after this reads is untouched and
+// every layout stays exactly what it was.
+{
+  let sd = 5150 + (SPEC.seed | 0);
+  const r2 = () => (sd = (sd * 1664525 + 1013904223) % 4294967296) / 4294967296;
+  for (let k = 0; k < 260; k++) {
+    const f = Math.floor(r2() * 6);
+    const i = 1 + Math.floor(r2() * (N - 2));
+    const j = 1 + Math.floor(r2() * (N - 2));
+    if (cells[f][i][j].t !== EMPTY) continue;
+    scatterSpots.push({ f, i, j, kind: r2() < 0.45 ? 0 : 1, d: Math.floor(r2() * 4), s: 0.75 + r2() * 0.6 });
+  }
+}
+
 // ── build meshes ───────────────────────────────────────────────────────────
 const MAT = {
   // EVERY MACHINE IS A LITTLE BIT ON. A dark object in a dark scene has no
@@ -1939,6 +1992,7 @@ for (const k in GEO) ensureColors(GEO[k]);
 // hot ones and cold on the rest, because a single white rim on everything looks
 // like a shader and not like light.
 for (const k in MAT) MAT[k].vertexColors = true;
+for (const k in MAT) if (MAT[k].map === SKIN) { MAT[k].normalMap = SKIN_NORMAL; MAT[k].normalScale = new THREE.Vector2(0.55, 0.55); }
 // the machines' colour is in their vertices (see PAINT); the material is a
 // white base so the paint reads true. Belts keep their own colour: the
 // world tints them.
@@ -4576,6 +4630,8 @@ function applyWorld(k) {
   if (cube.material.roughnessMap) cube.material.roughnessMap.dispose();
   cube.material.map = plateTexture(w.plate);
   cube.material.roughnessMap = plateRoughness(w.plate);
+  if (cube.material.normalMap) cube.material.normalMap.dispose();
+  cube.material.normalMap = plateNormal(w.plate);
   cube.material.needsUpdate = true;
   // and the belts: rust on the cinder, steel-blue on the ice, brass in the
   // green. The tread texture is shared and scrolls the same under every tint.
