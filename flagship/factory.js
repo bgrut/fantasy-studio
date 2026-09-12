@@ -1334,8 +1334,15 @@ const _pq = new THREE.Quaternion();
 const _pe = new THREE.Euler();
 const _pv = new THREE.Vector3();
 const _ps = new THREE.Vector3(1, 1, 1);
+// THE PAINT (2026-09-12). Three tones every machine is built from, plus its
+// own accent: the structure is dark, the panels carry the colour, the parts
+// a hand would touch are warm metal. A part names its tone with `col`; a
+// machine names its accent with opts.base; a part with neither is accent.
+const PAINT = { chassis: 0x272b35, dark: 0x15171d, trim: 0xd9ad55, steel: 0xb6bfcc };
+const _pc = new THREE.Color();
 function mergeParts(parts, opts) {
-  const pos = [], nor = [], uvs = [], tint = [];
+  const pos = [], nor = [], uvs = [], tint = [], hue = [];
+  const base = opts && opts.base !== undefined ? opts.base : 0xffffff;
   for (const p of parts) {
     const g = p.g.clone().toNonIndexed();
     _pe.set(p.rx || 0, p.ry || 0, p.rz || 0);
@@ -1352,7 +1359,8 @@ function mergeParts(parts, opts) {
     // Carrying a per-part multiplier into the vertex colours buys that for
     // nothing — no second material, no second draw call.
     const tv = p.tint === undefined ? 1 : p.tint;
-    for (let k = 0; k < a.position.count; k++) tint.push(tv);
+    _pc.setHex(p.col === undefined ? base : p.col);
+    for (let k = 0; k < a.position.count; k++) { tint.push(tv); hue.push(_pc.r, _pc.g, _pc.b); }
     g.dispose();
   }
   const out = new THREE.BufferGeometry();
@@ -1364,10 +1372,19 @@ function mergeParts(parts, opts) {
   const col = out.attributes.color;
   for (let k = 0; k < col.count; k++) {
     const t = tint[k] === undefined ? 1 : tint[k];
-    col.setXYZ(k, col.getX(k) * t, col.getY(k) * t, col.getZ(k) * t);
+    col.setXYZ(k, col.getX(k) * t * hue[k * 3], col.getY(k) * t * hue[k * 3 + 1], col.getZ(k) * t * hue[k * 3 + 2]);
   }
   out.computeBoundingSphere();
   return out;
+}
+/** A plain geometry painted one colour, for the parts that are their own mesh. */
+function painted(geo, hex) {
+  const g = geo.index ? geo.toNonIndexed() : geo;
+  const n = g.attributes.position.count, arr = new Float32Array(n * 3);
+  _pc.setHex(hex);
+  for (let k = 0; k < n; k++) { arr[k * 3] = _pc.r; arr[k * 3 + 1] = _pc.g; arr[k * 3 + 2] = _pc.b; }
+  g.setAttribute('color', new THREE.BufferAttribute(arr, 3));
+  return g;
 }
 
 /**
@@ -1434,7 +1451,12 @@ function addRim(mat, color, power, strength) {
         // fails to compile on exactly the materials most likely to BE flat shaded.
         // three has already computed `normal` by the time this include runs.
         'float _rim = pow(1.0 - abs(dot(normal, normalize(vViewPosition))), uRimP);\n' +
-        'totalEmissiveRadiance += uRimCol * _rim * uRimS;');
+        // THE RIM FOLLOWS THE PAINT (2026-09-12): a dark chassis part takes a
+        // faint cool-grey rim, a coloured panel its own; before this the
+        // accent rim on gunmetal legs and skirts gave the one-colour look back
+        'float _lum = dot(diffuseColor.rgb, vec3(0.30, 0.59, 0.11));\n' +
+        'float _pf = clamp(_lum * 2.2 + 0.12, 0.12, 1.0);\n' +
+        'totalEmissiveRadiance += mix(vec3(0.45, 0.50, 0.60), uRimCol, _pf) * _rim * uRimS * _pf;');
   };
   mat.needsUpdate = true;
   return mat;
@@ -1748,142 +1770,147 @@ const GEO = {
   // a rig with legs, cross-braces, a motor over the shaft it drives, and a
   // control box on one side, so a miner reads as MINING rather than as a table
   miner: mergeParts([
-    { g: _box(T * 0.86, 0.14, T * 0.86), y: 0.07, tint: 0.6 },   // skirt
+    { g: _box(T * 0.86, 0.14, T * 0.86), y: 0.07, col: PAINT.chassis },   // skirt
     { g: _box(T * 0.74, 0.24, T * 0.74), y: 0.24 },              // deck
-    { g: _box(0.13, 0.95, 0.13), y: 0.68, x: T * 0.28, z: T * 0.28 },
-    { g: _box(0.13, 0.95, 0.13), y: 0.68, x: -T * 0.28, z: T * 0.28 },
-    { g: _box(0.13, 0.95, 0.13), y: 0.68, x: T * 0.28, z: -T * 0.28 },
-    { g: _box(0.13, 0.95, 0.13), y: 0.68, x: -T * 0.28, z: -T * 0.28 },
-    { g: _box(T * 0.62, 0.07, 0.09), y: 0.66, z: T * 0.28, rz: 0.55 },  // braces
-    { g: _box(T * 0.62, 0.07, 0.09), y: 0.66, z: -T * 0.28, rz: -0.55 },
+    { g: _box(0.13, 0.95, 0.13), y: 0.68, x: T * 0.28, z: T * 0.28, col: PAINT.chassis },
+    { g: _box(0.13, 0.95, 0.13), y: 0.68, x: -T * 0.28, z: T * 0.28, col: PAINT.chassis },
+    { g: _box(0.13, 0.95, 0.13), y: 0.68, x: T * 0.28, z: -T * 0.28, col: PAINT.chassis },
+    { g: _box(0.13, 0.95, 0.13), y: 0.68, x: -T * 0.28, z: -T * 0.28, col: PAINT.chassis },
+    { g: _box(T * 0.62, 0.07, 0.09), y: 0.66, z: T * 0.28, rz: 0.55, col: PAINT.chassis },  // braces
+    { g: _box(T * 0.62, 0.07, 0.09), y: 0.66, z: -T * 0.28, rz: -0.55, col: PAINT.chassis },
     { g: _box(T * 0.70, 0.13, T * 0.70), y: 1.18 },              // head plate
-    { g: _box(T * 0.80, 0.07, T * 0.80), y: 0.40, tint: 0.55 },  // a band round the deck
-    { g: _box(T * 0.78, 0.05, 0.06), y: 1.26, z: T * 0.36, tint: 0.62 },  // a lip on the head
-    { g: _box(T * 0.78, 0.05, 0.06), y: 1.26, z: -T * 0.36, tint: 0.62 },
-    { g: _cyl(0.10, 0.10, 0.86, 6), y: 0.74 },                   // shaft
-    { g: _cyl(0.19, 0.19, 0.30, 8), y: 1.38, rz: Math.PI / 2, tint: 0.72 }, // motor
-    { g: _box(0.20, 0.30, 0.24), y: 0.52, x: T * 0.36, tint: 0.62 }, // control box
-  ]),
-  minerBit: _cyl(0.02, 0.28, 0.5, 6),
+    { g: _box(T * 0.80, 0.07, T * 0.80), y: 0.40, col: PAINT.chassis },  // a band round the deck
+    { g: _box(T * 0.78, 0.05, 0.06), y: 1.26, z: T * 0.36, col: PAINT.trim },  // a lip on the head
+    { g: _box(T * 0.78, 0.05, 0.06), y: 1.26, z: -T * 0.36, col: PAINT.trim },
+    { g: _cyl(0.10, 0.10, 0.86, 6), y: 0.74, col: PAINT.steel },                   // shaft
+    { g: _cyl(0.19, 0.19, 0.30, 8), y: 1.38, rz: Math.PI / 2, col: PAINT.trim }, // motor
+    { g: _box(0.20, 0.30, 0.24), y: 0.52, x: T * 0.36, col: PAINT.dark }, // control box
+  ], { base: 0xff5d73 }),
+  minerBit: painted(_cyl(0.02, 0.28, 0.5, 6), PAINT.steel),
 
-  arrow: new THREE.ConeGeometry(0.2, 0.5, 4),
+  arrow: painted(new THREE.ConeGeometry(0.2, 0.5, 4), PAINT.steel),
 
   // a landing pad with ribs, a collar and a mast: the place everything is
   // going to should look like a destination, not another box
   hub: mergeParts((() => {
     const parts = [
-      { g: _cyl(T * 0.66, T * 0.70, 0.10, 12), y: 0.05, tint: 0.6 }, // skirt
+      { g: _cyl(T * 0.66, T * 0.70, 0.10, 12), y: 0.05, col: PAINT.chassis }, // skirt
       { g: _cyl(T * 0.54, T * 0.62, 0.26, 12), y: 0.20 },          // pad
-      { g: new THREE.TorusGeometry(T * 0.46, 0.06, 6, 18), y: 0.36, rx: Math.PI / 2 },
-      { g: _cyl(0.09, 0.09, 0.85, 6), y: 0.78 },                   // mast
-      { g: _cyl(0.16, 0.16, 0.10, 8), y: 1.06 },                   // collar
+      { g: new THREE.TorusGeometry(T * 0.46, 0.06, 6, 18), y: 0.36, rx: Math.PI / 2, col: PAINT.trim },
+      { g: _cyl(0.09, 0.09, 0.85, 6), y: 0.78, col: PAINT.chassis },                   // mast
+      { g: _cyl(0.16, 0.16, 0.10, 8), y: 1.06, col: PAINT.trim },                   // collar
     ];
     // radiating ribs, so the pad has a direction to it under the landing ring
     for (let k = 0; k < 6; k++) {
       const a = (k / 6) * Math.PI * 2;
       parts.push({ g: _box(T * 0.30, 0.07, 0.10), y: 0.35,
-                   x: Math.cos(a) * T * 0.30, z: Math.sin(a) * T * 0.30, ry: -a });
+                   x: Math.cos(a) * T * 0.30, z: Math.sin(a) * T * 0.30, ry: -a, col: PAINT.trim });
       // bollards round the skirt, so the pad has an edge you would not walk off
       parts.push({ g: _cyl(0.06, 0.07, 0.30, 6), y: 0.22,
-                   x: Math.cos(a + Math.PI / 6) * T * 0.66, z: Math.sin(a + Math.PI / 6) * T * 0.66, tint: 0.6 });
+                   x: Math.cos(a + Math.PI / 6) * T * 0.66, z: Math.sin(a + Math.PI / 6) * T * 0.66, col: PAINT.chassis });
     }
     return parts;
-  })()),
+  })(), { base: 0xffc75a }),
 
   // a furnace with a door facing its output, vents facing away, and a flue.
   // Detail that explains the machine reads as design; detail scattered for
   // texture's sake reads as noise.
   smelt: mergeParts([
-    { g: _box(T * 0.90, 0.13, T * 0.90), y: 0.065, tint: 0.6 },  // skirt
+    { g: _box(T * 0.90, 0.13, T * 0.90), y: 0.065, col: PAINT.chassis },  // skirt
     { g: _box(T * 0.78, 0.92, T * 0.78), y: 0.58 },              // body
     { g: _box(T * 0.90, 0.11, T * 0.90), y: 1.09 },              // cap
     // corner posts and a mid band: a box with a frame is a machine, a box is
     // a box
-    { g: _box(0.10, 1.0, 0.10), y: 0.58, x: T * 0.40, z: T * 0.40, tint: 0.62 },
-    { g: _box(0.10, 1.0, 0.10), y: 0.58, x: -T * 0.40, z: T * 0.40, tint: 0.62 },
-    { g: _box(0.10, 1.0, 0.10), y: 0.58, x: T * 0.40, z: -T * 0.40, tint: 0.62 },
-    { g: _box(0.10, 1.0, 0.10), y: 0.58, x: -T * 0.40, z: -T * 0.40, tint: 0.62 },
-    { g: _box(T * 0.82, 0.08, T * 0.82), y: 0.92, tint: 0.55 },
-    { g: _box(T * 0.42, 0.46, 0.10), y: 0.50, x: T * 0.40, tint: 0.72 }, // frame
-    { g: _box(T * 0.30, 0.34, 0.07), y: 0.50, x: T * 0.44, tint: 0.34 }, // door
-    { g: _box(0.09, 0.09, T * 0.50), y: 0.86, z: -T * 0.40, tint: 0.5 }, // vents
-    { g: _box(0.09, 0.09, T * 0.50), y: 0.70, z: -T * 0.40, tint: 0.5 },
+    { g: _box(0.10, 1.0, 0.10), y: 0.58, x: T * 0.40, z: T * 0.40, col: PAINT.chassis },
+    { g: _box(0.10, 1.0, 0.10), y: 0.58, x: -T * 0.40, z: T * 0.40, col: PAINT.chassis },
+    { g: _box(0.10, 1.0, 0.10), y: 0.58, x: T * 0.40, z: -T * 0.40, col: PAINT.chassis },
+    { g: _box(0.10, 1.0, 0.10), y: 0.58, x: -T * 0.40, z: -T * 0.40, col: PAINT.chassis },
+    { g: _box(T * 0.82, 0.08, T * 0.82), y: 0.92, col: PAINT.chassis },
+    { g: _box(T * 0.42, 0.46, 0.10), y: 0.50, x: T * 0.40, col: PAINT.trim }, // frame
+    { g: _box(T * 0.30, 0.34, 0.07), y: 0.50, x: T * 0.44, col: PAINT.dark }, // door
+    // grilles on the flank and the back, and a brass band under the cap, so a
+    // furnace reads as a furnace from the sides you actually see it from
+    { g: _box(T * 0.34, 0.26, 0.06), y: 0.56, z: T * 0.40, col: PAINT.dark },     // flank grille
+    { g: _box(T * 0.34, 0.04, 0.08), y: 0.72, z: T * 0.40, col: PAINT.trim },     // its sill
+    { g: _box(0.06, 0.26, T * 0.34), y: 0.56, x: -T * 0.40, col: PAINT.dark },    // back grille
+    { g: _box(T * 0.82, 0.045, T * 0.82), y: 1.005, col: PAINT.trim },            // the band under the cap
+    { g: _box(0.09, 0.09, T * 0.50), y: 0.86, z: -T * 0.40, col: PAINT.chassis }, // vents
+    { g: _box(0.09, 0.09, T * 0.50), y: 0.70, z: -T * 0.40, col: PAINT.chassis },
     { g: _box(0.09, 0.09, T * 0.50), y: 0.54, z: -T * 0.40, tint: 0.5 },
-    { g: _cyl(0.13, 0.17, 0.62, 6), y: 1.42, x: T * 0.22, z: -T * 0.22 },
-    { g: new THREE.TorusGeometry(0.16, 0.035, 5, 10), y: 1.62,
-      x: T * 0.22, z: -T * 0.22, rx: Math.PI / 2 },              // flue lip
-  ]),
+    { g: _cyl(0.13, 0.17, 0.62, 6), y: 1.42, x: T * 0.22, z: -T * 0.22, col: PAINT.chassis },
+    { g: new THREE.TorusGeometry(0.16, 0.035, 5, 10), y: 1.62, x: T * 0.22, z: -T * 0.22, rx: Math.PI / 2, col: PAINT.trim },  // flue lip
+  ], { base: 0x8c6bff }),
 
   split: mergeParts([
-    { g: _cyl(T * 0.50, T * 0.50, 0.09, 8), y: 0.045, tint: 0.6 }, // skirt
+    { g: _cyl(T * 0.50, T * 0.50, 0.09, 8), y: 0.045, col: PAINT.chassis }, // skirt
     { g: _cyl(T * 0.42, T * 0.42, 0.26, 4), y: 0.20, ry: Math.PI / 4 },
     { g: _box(T * 0.88, 0.15, 0.20), y: 0.40 },
     { g: _box(T * 0.88, 0.15, 0.20), y: 0.40, ry: Math.PI / 2 },
-    { g: _cyl(0.17, 0.13, 0.14, 8), y: 0.52 },                   // hub cap
+    { g: _cyl(0.17, 0.13, 0.14, 8), y: 0.52, col: PAINT.trim },                   // hub cap
     // corner posts and a lip on each arm, so the cross reads as built
-    { g: _box(0.09, 0.34, 0.09), y: 0.17, x: T * 0.30, z: T * 0.30, tint: 0.6 },
-    { g: _box(0.09, 0.34, 0.09), y: 0.17, x: -T * 0.30, z: T * 0.30, tint: 0.6 },
-    { g: _box(0.09, 0.34, 0.09), y: 0.17, x: T * 0.30, z: -T * 0.30, tint: 0.6 },
-    { g: _box(0.09, 0.34, 0.09), y: 0.17, x: -T * 0.30, z: -T * 0.30, tint: 0.6 },
-    { g: _box(T * 0.88, 0.04, 0.26), y: 0.49, tint: 0.55 },
-    { g: _box(T * 0.88, 0.04, 0.26), y: 0.49, ry: Math.PI / 2, tint: 0.55 },
-  ]),
+    { g: _box(0.09, 0.34, 0.09), y: 0.17, x: T * 0.30, z: T * 0.30, col: PAINT.chassis },
+    { g: _box(0.09, 0.34, 0.09), y: 0.17, x: -T * 0.30, z: T * 0.30, col: PAINT.chassis },
+    { g: _box(0.09, 0.34, 0.09), y: 0.17, x: T * 0.30, z: -T * 0.30, col: PAINT.chassis },
+    { g: _box(0.09, 0.34, 0.09), y: 0.17, x: -T * 0.30, z: -T * 0.30, col: PAINT.chassis },
+    { g: _box(T * 0.88, 0.04, 0.26), y: 0.49, col: PAINT.chassis },
+    { g: _box(T * 0.88, 0.04, 0.26), y: 0.49, ry: Math.PI / 2, col: PAINT.chassis },
+  ], { base: 0x4bb5ff }),
 
   // taller and eight-sided, so a forge is not mistaken for a smelter
   // from across the worldlet
   forge: mergeParts((() => {
     const parts = [
-      { g: _cyl(T * 0.56, T * 0.58, 0.11, 8), y: 0.055, tint: 0.6 }, // skirt
+      { g: _cyl(T * 0.56, T * 0.58, 0.11, 8), y: 0.055, col: PAINT.chassis }, // skirt
       { g: _cyl(T * 0.42, T * 0.50, 1.22, 8), y: 0.72 },         // drum
-      { g: new THREE.TorusGeometry(T * 0.40, 0.08, 6, 16), y: 1.30, rx: Math.PI / 2 },
-      { g: new THREE.TorusGeometry(T * 0.46, 0.05, 5, 16), y: 0.42, rx: Math.PI / 2 },
-      { g: _cyl(T * 0.34, T * 0.40, 0.10, 8), y: 1.38, tint: 0.7 },      // cap plate
-      { g: _cyl(T * 0.52, T * 0.52, 0.10, 8), y: 0.16, tint: 0.55 },     // base band
+      { g: new THREE.TorusGeometry(T * 0.40, 0.08, 6, 16), y: 1.30, rx: Math.PI / 2, col: PAINT.trim },
+      { g: new THREE.TorusGeometry(T * 0.46, 0.05, 5, 16), y: 0.42, rx: Math.PI / 2, col: PAINT.chassis },
+      { g: _cyl(T * 0.34, T * 0.40, 0.10, 8), y: 1.38, col: PAINT.trim },      // cap plate
+      { g: _cyl(T * 0.52, T * 0.52, 0.10, 8), y: 0.16, col: PAINT.chassis },     // base band
     ];
     // vertical ribs: an eight-sided drum with nothing on it reads as a barrel
     for (let k = 0; k < 4; k++) {
       const a = (k / 4) * Math.PI * 2 + Math.PI / 8;
       parts.push({ g: _box(0.09, 1.0, 0.13), y: 0.75,
-                   x: Math.cos(a) * T * 0.46, z: Math.sin(a) * T * 0.46, ry: -a });
+                   x: Math.cos(a) * T * 0.46, z: Math.sin(a) * T * 0.46, ry: -a, col: PAINT.chassis });
     }
     return parts;
-  })()),
-  rift: new THREE.TorusGeometry(T * 0.38, 0.16, 6, 12),
+  })(), { base: 0xd94fb0 }),
+  rift: painted(new THREE.TorusGeometry(T * 0.38, 0.16, 6, 12), 0x6a3cff),
   riftBase: mergeParts([
-    { g: _cyl(T * 0.54, T * 0.56, 0.09, 8), y: 0.045, tint: 0.6 }, // skirt
+    { g: _cyl(T * 0.54, T * 0.56, 0.09, 8), y: 0.045, col: PAINT.chassis }, // skirt
     { g: _cyl(T * 0.44, T * 0.50, 0.20, 8), y: 0.16 },
-    { g: _box(0.12, 0.62, 0.12), y: 0.50, x: T * 0.30 },         // supports
-    { g: _box(0.12, 0.62, 0.12), y: 0.50, x: -T * 0.30 },
-  ]),
+    { g: _box(0.12, 0.62, 0.12), y: 0.50, x: T * 0.30, col: PAINT.chassis },         // supports
+    { g: _box(0.12, 0.62, 0.12), y: 0.50, x: -T * 0.30, col: PAINT.chassis },
+  ], { base: 0x6a3cff }),
   riftCore: new THREE.OctahedronGeometry(0.34, 0),
   filter: mergeParts([
-    { g: _box(T * 0.96, 0.10, T * 0.96), y: 0.05, tint: 0.6 },    // skirt
+    { g: _box(T * 0.96, 0.10, T * 0.96), y: 0.05, col: PAINT.chassis },    // skirt
     { g: _box(T * 0.88, 0.20, T * 0.88), y: 0.18 },
     { g: _box(T * 0.16, 0.34, T * 0.66), y: 0.40, x: T * 0.34 }, // sorter housing
-    { g: _box(0.10, 0.26, 0.10), y: 0.36, x: -T * 0.36, z: T * 0.36 },
-    { g: _box(0.10, 0.26, 0.10), y: 0.36, x: -T * 0.36, z: -T * 0.36 },
+    { g: _box(0.10, 0.26, 0.10), y: 0.36, x: -T * 0.36, z: T * 0.36, col: PAINT.chassis },
+    { g: _box(0.10, 0.26, 0.10), y: 0.36, x: -T * 0.36, z: -T * 0.36, col: PAINT.chassis },
     // a band round the deck and posts on the housing's corners
-    { g: _box(T * 0.92, 0.05, T * 0.92), y: 0.30, tint: 0.55 },
-    { g: _box(0.08, 0.42, 0.08), y: 0.44, x: T * 0.40, z: T * 0.34, tint: 0.62 },
-    { g: _box(0.08, 0.42, 0.08), y: 0.44, x: T * 0.40, z: -T * 0.34, tint: 0.62 },
-  ]),
+    { g: _box(T * 0.92, 0.05, T * 0.92), y: 0.30, col: PAINT.chassis },
+    { g: _box(0.08, 0.42, 0.08), y: 0.44, x: T * 0.40, z: T * 0.34, col: PAINT.chassis },
+    { g: _box(0.08, 0.42, 0.08), y: 0.44, x: T * 0.40, z: -T * 0.34, col: PAINT.chassis },
+  ], { base: 0x2f8f7d }),
   filterGate: new THREE.BoxGeometry(T * 0.16, 0.5, T * 0.62),
   // an assembler: a low bench with two intake ports on the sides, a gantry
   // over the middle and a press head under it, so it reads as a machine that
   // puts two things together rather than a furnace that melts one
   assembler: mergeParts([
-    { g: _box(T * 0.92, 0.12, T * 0.92), y: 0.06, tint: 0.6 },                // skirt
+    { g: _box(T * 0.92, 0.12, T * 0.92), y: 0.06, col: PAINT.chassis },                // skirt
     { g: _box(T * 0.80, 0.34, T * 0.80), y: 0.29 },                           // bench
-    { g: _box(0.14, 0.26, T * 0.30), y: 0.20, z: T * 0.44, tint: 0.55 },      // port
-    { g: _box(0.14, 0.26, T * 0.30), y: 0.20, z: -T * 0.44, tint: 0.55 },     // port
-    { g: _box(0.10, 0.92, 0.10), y: 0.75, x: -T * 0.28, z: T * 0.30, tint: 0.62 },
-    { g: _box(0.10, 0.92, 0.10), y: 0.75, x: -T * 0.28, z: -T * 0.30, tint: 0.62 },
-    { g: _box(0.10, 0.92, 0.10), y: 0.75, x: T * 0.28, z: T * 0.30, tint: 0.62 },
-    { g: _box(0.10, 0.92, 0.10), y: 0.75, x: T * 0.28, z: -T * 0.30, tint: 0.62 },
-    { g: _box(T * 0.72, 0.12, T * 0.76), y: 1.22, tint: 0.7 },                // gantry
-    { g: _cyl(0.16, 0.16, 0.40, 8), y: 0.96 },                                // press
-    { g: _box(T * 0.30, 0.10, T * 0.30), y: 0.74, tint: 0.45 },               // the head
-  ]),
+    { g: _box(0.14, 0.26, T * 0.30), y: 0.20, z: T * 0.44, col: PAINT.chassis },      // port
+    { g: _box(0.14, 0.26, T * 0.30), y: 0.20, z: -T * 0.44, col: PAINT.chassis },     // port
+    { g: _box(0.10, 0.92, 0.10), y: 0.75, x: -T * 0.28, z: T * 0.30, col: PAINT.chassis },
+    { g: _box(0.10, 0.92, 0.10), y: 0.75, x: -T * 0.28, z: -T * 0.30, col: PAINT.chassis },
+    { g: _box(0.10, 0.92, 0.10), y: 0.75, x: T * 0.28, z: T * 0.30, col: PAINT.chassis },
+    { g: _box(0.10, 0.92, 0.10), y: 0.75, x: T * 0.28, z: -T * 0.30, col: PAINT.chassis },
+    { g: _box(T * 0.72, 0.12, T * 0.76), y: 1.22, col: PAINT.trim },                // gantry
+    { g: _cyl(0.16, 0.16, 0.40, 8), y: 0.96, col: PAINT.steel },                                // press
+    { g: _box(T * 0.30, 0.10, T * 0.30), y: 0.74, col: PAINT.dark },               // the head
+  ], { base: 0xe0b451 }),
 
   // Ground detail. Nothing here is interactive; it exists so the floor has a
   // size. Two kinds is enough — one flat and wide, one small and clustered —
@@ -1912,6 +1939,14 @@ for (const k in GEO) ensureColors(GEO[k]);
 // hot ones and cold on the rest, because a single white rim on everything looks
 // like a shader and not like light.
 for (const k in MAT) MAT[k].vertexColors = true;
+// the machines' colour is in their vertices (see PAINT); the material is a
+// white base so the paint reads true. Belts keep their own colour: the
+// world tints them.
+for (const k of ['miner', 'hub', 'smelt', 'forge', 'filt', 'rift', 'assem', 'split']) MAT[k].color.setHex(0xffffff);
+// and the body-wide glow drops to a trace: with the paint doing the work, an
+// emissive at a third tinted the dark chassis with the accent and gave the
+// one-colour look back. The lamps carry the glow.
+for (const k of ['miner', 'hub', 'smelt', 'forge', 'filt', 'assem', 'split']) { MAT[k].emissive.setHex(0x232733); MAT[k].emissiveIntensity = 0.5; }   // neutral: a shadowed chassis lifts to grey, not to the accent
 addRim(MAT.miner, 0xff9aa8, 2.6, 0.55);
 addRim(MAT.beltFrame, 0x7fffd8, 2.8, 0.40);
 addRim(MAT.hub, 0xffe4a8, 2.4, 0.60);
