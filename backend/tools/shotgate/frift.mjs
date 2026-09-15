@@ -32,7 +32,9 @@ const lend = await p.evaluate(async () => {
     F.place(0, i, j, TY.RIFT, 0);
     F.place(out.face, out.i, out.j, TY.BELT, out.d);   // catches the loan
     F.place(back.face, back.i, back.j, TY.BELT, 0);    // points back INTO the rift
-    await new Promise(r => setTimeout(r, 1800));
+    // the first loan lands on the rift's own clock: wait for it, up to five
+    // seconds, rather than a fixed pause that a slow frame after boot misses
+    for (let k = 0; k < 25 && !F.cells[out.face][out.i][out.j].item; k++) await new Promise(r => setTimeout(r, 200));
     const f = window.__game.facts().rift;
     return { at: [i,j], back: [back.face, back.i, back.j], rift: f,
              onBelt: F.cells[out.face][out.i][out.j].item };

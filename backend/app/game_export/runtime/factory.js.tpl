@@ -203,7 +203,8 @@ function faceOfPoint(px, py, pz) {
 const BASE_TICK = 0.42;
 let TICK = BASE_TICK;
 const EMPTY = 0, MINER = 1, BELT = 2, HUB = 3, NODE = 4, SMELTER = 5,
-      SPLITTER = 6, FORGE = 7, FILTER = 8, RIFT = 9, ASSEMBLER = 10;
+      SPLITTER = 6, FORGE = 7, FILTER = 8, RIFT = 9, ASSEMBLER = 10,
+      PROP = 11;                     // scenery: the outpost's habitat, masts and crates; blocks, sells nothing, is never saved
 const DIRS = [[1, 0], [0, 1], [-1, 0], [0, -1]];        // E S W N
 
 // Items now have a TYPE, and that is the whole point of the smelter. Until
@@ -512,6 +513,7 @@ let glowPools = null;             // built with the decals; the seams index into
 // capabilities the chain hands out; declared here because applyUpgrades
 // reads CAPS.stable and applyUpgrades runs at boot
 const CAPS = { heated: 0, scrubber: 0, stable: 0 };
+const PROP_LIST = [];                  // the outpost's groups, for the look ray (hoisted: filled at seeding, read by cellUnder)
 let picksOn = false;                    // the boot reveal lists the worlds a demo ships; a crossing's card does not (hoisted: set at boot, read in playIntro)
 // creative is read from the URL here, in the early block: hubCost() reads it,
 // and the starter line's seeding calls that before the save block runs
@@ -1727,6 +1729,13 @@ const MAT = {
   rift: new THREE.MeshStandardMaterial({ color: 0x6a3cff, emissive: 0x3a1c9c,
     emissiveIntensity: 0.5, roughness: 0.35, metalness: 0.5, flatShading: true,
     map: SKIN, roughnessMap: SKIN_ROUGH }),
+  // the outpost: the machines' skin, in the world's plate colour; the mast's
+  // lamp face and the habitat's dome carry a little light of their own
+  prop: new THREE.MeshStandardMaterial({ color: 0x9aa6c8, roughness: 0.5, metalness: 0.35,
+    emissive: 0x2a3050, emissiveIntensity: 0.25, map: SKIN, roughnessMap: SKIN_ROUGH, vertexColors: true }),
+  propLit: new THREE.MeshBasicMaterial({ color: 0xfff1c8 }),   // the lamp face: a light, not a surface
+  propCrate: new THREE.MeshStandardMaterial({ color: 0x8f7a58, roughness: 0.75, metalness: 0.1,
+    map: SKIN, roughnessMap: SKIN_ROUGH, vertexColors: true }),
   smelt: new THREE.MeshStandardMaterial({ color: 0x8c6bff, roughness: 0.45,
     metalness: 0.4, emissive: 0x2a1470, emissiveIntensity: 0.3,
     map: SKIN, roughnessMap: SKIN_ROUGH }),
@@ -1867,6 +1876,35 @@ const GEO = {
   // a furnace with a door facing its output, vents facing away, and a flue.
   // Detail that explains the machine reads as design; detail scattered for
   // texture's sake reads as noise.
+  // THE OUTPOST. A habitat drum with a dome, a lit door and a porthole ring;
+  // a lamp mast; a stack of three crates. The same paint as the machines:
+  // gunmetal skirt and ribs, the panel colour on the shell, brass where a
+  // hand would go, near-black in the door.
+  habitat: mergeParts([
+    { g: _cyl(0.70, 0.74, 0.14, 12), y: 0.07, col: PAINT.chassis },                      // skirt
+    { g: _cyl(0.60, 0.63, 0.84, 12), y: 0.56 },                                          // drum
+    { g: new THREE.SphereGeometry(0.60, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2), y: 0.98, tint: 1.06 },  // dome
+    { g: _box(0.09, 0.86, 0.09), y: 0.56, x: 0.58, col: PAINT.chassis },                 // ribs
+    { g: _box(0.09, 0.86, 0.09), y: 0.56, x: -0.58, col: PAINT.chassis },
+    { g: _box(0.09, 0.86, 0.09), y: 0.56, z: 0.58, col: PAINT.chassis },
+    { g: _box(0.36, 0.56, 0.10), y: 0.42, z: -0.58, col: PAINT.dark },                   // the door, recessed dark
+    { g: _box(0.44, 0.06, 0.12), y: 0.73, z: -0.59, col: PAINT.trim },                   // its lintel, brass
+    { g: _cyl(0.04, 0.04, 0.34, 6), y: 1.60, x: 0.24, col: PAINT.steel },                // an aerial
+    { g: new THREE.SphereGeometry(0.06, 6, 4), y: 1.79, x: 0.24, col: PAINT.trim },
+  ], { floor: 0.72, reach: 0.5 }),
+  mast: mergeParts([
+    { g: _cyl(0.16, 0.20, 0.10, 8), y: 0.05, col: PAINT.chassis },                       // foot
+    { g: _cyl(0.045, 0.06, 1.75, 6), y: 0.92, col: PAINT.steel },                        // pole
+    { g: _box(0.30, 0.10, 0.18), y: 1.80, x: 0.10, col: PAINT.chassis },                 // head
+  ], { floor: 0.75, reach: 0.4 }),
+  mastLamp: _box(0.22, 0.03, 0.12).translate(0.12, 1.74, 0),                             // the lamp face alone, lit
+  crates: mergeParts([
+    { g: _box(0.56, 0.50, 0.56), y: 0.25, x: -0.12, z: 0.10, ry: 0.15 },
+    { g: _box(0.48, 0.44, 0.48), y: 0.72, x: -0.08, z: 0.06, ry: -0.35, tint: 0.92 },
+    { g: _box(0.40, 0.40, 0.40), y: 0.28, x: 0.40, z: -0.30, ry: 0.5, tint: 0.85 },
+    { g: _box(0.60, 0.04, 0.04), y: 0.50, x: -0.12, z: 0.10, ry: 0.15, col: PAINT.trim },     // strapping
+    { g: _box(0.04, 0.04, 0.60), y: 0.50, x: -0.12, z: 0.10, ry: 0.15, col: PAINT.trim },
+  ], { floor: 0.7, reach: 0.5 }),
   smelt: mergeParts([
     { g: _box(T * 0.90, 0.13, T * 0.90), y: 0.065, col: PAINT.chassis },  // skirt
     { g: _box(T * 0.78, 0.92, T * 0.78), y: 0.58 },              // body
@@ -2172,6 +2210,7 @@ function refreshCounts() {
 
 function removeAt(face, i, j) {
   const c = cells[face][i][j];
+  if (c.t === PROP) return;                  // the crew's things stay
   beltsDirty = true;
   if (c.build) { scene.remove(c.build); c.build = null; }
   c.t = c.mesh ? NODE : EMPTY;               // a node outlives its miner
@@ -2189,6 +2228,7 @@ function place(face, i, j, type, dir) {
   if (!TYPE_NAME[type]) return false;
   c.buf = 0; c.bt = 0; c.fa = 0; c.fb = 0; c.cook = 0;
   if (type !== MINER && c.t === NODE) return false;      // keep nodes clear
+  if (c.t === PROP) return false;                        // the outpost is not a build site
   if (c.build) { scene.remove(c.build); c.build = null; }
   const g = new THREE.Group();
   if (type === MINER) {
@@ -2540,6 +2580,7 @@ function stepLampPools() {
     else if (c.t === ASSEMBLER) { const lamp = c.build.getObjectByName('lamp'); if (lamp) lamp.material.color.setHex(c.cook > 0 ? 0xffe27a : 0x3a2a08);
                                   if (c.cook > 0) poolAt(lampPools, k++, f, i, j, T * 1.6, 0xffe27a, 0.6); }
     else if (c.t === HUB) poolAt(lampPools, k++, f, i, j, T * 2.2, 0xffd479, breathe + (c.pulse || 0) * 0.9);
+    else if (c.t === PROP) { if (c.prop === 'mast') poolAt(lampPools, k++, f, i, j, T * 1.4, 0xffe6b0, 0.5); }   // the night shift's light
     else if (c.t === RIFT) { if (c.dbt > 0) poolAt(lampPools, k++, f, i, j, T * 1.7, MIN_COL[c.dmin] || 0xff5ad9, 0.6); }
   });
   lampPools.count = k;
@@ -3799,6 +3840,15 @@ function cellUnder(ev) {
   // inside of. Raycasting the cube itself means you build on the surface you
   // are actually looking at, whichever of the six it is.
   const hit = ray.intersectObject(cube, false)[0];
+  // THE OUTPOST IS TALL. A ray through the habitat lands on the plating
+  // behind it, so the look label named the wrong tile or nothing; the few
+  // props are tested too and win when they are nearer than the ground.
+  const ph = PROP_LIST.length ? ray.intersectObjects(PROP_LIST, true)[0] : null;
+  if (ph && (!hit || ph.distance < hit.distance)) {
+    if (!overhead && ph.distance > REACH) return null;
+    let o = ph.object; while (o && !(o.userData && o.userData.fsTag)) o = o.parent;
+    if (o) return { face: o.userData.fsTag.face, i: o.userData.fsTag.i, j: o.userData.fsTag.j };
+  }
   if (!hit) return null;
   hitPt.copy(hit.point);
   if (!overhead && hitPt.distanceTo(camera.position) > REACH) return null;
@@ -3837,10 +3887,10 @@ function updateGhost() {
   const t = cellUnder(overhead ? lastPtr : null);
   if (!t || !tool) { ghost.visible = false; return; }   // no tool in hand, no ghost
   const c = cellOf(t);
-  const legal = tool === 'erase' ? (c.t !== EMPTY && c.t !== NODE)
+  const legal = tool === 'erase' ? (c.t !== EMPTY && c.t !== NODE && c.t !== PROP)
     : tool === 'miner' ? c.t === NODE
     : tool === 'blueprint' ? (blueprint ? bpCells().some(b => { const x = cells_at(t.face, t.i + b.di, t.j + b.dj); return x && (b.t === MINER ? x.t === NODE : x.t === EMPTY); }) : true)
-    : c.t !== NODE;
+    : c.t !== NODE && c.t !== PROP;
   ghost.visible = true;
   // the machine's own shape, seated the way the machine would be; the box for
   // erase, lifted to sit over whatever it is about to remove
@@ -4110,7 +4160,7 @@ addEventListener('resize', () => {
 // the grid is something you walk around. An ore seam counts — it is a metre of
 // crystal standing out of the ground, and phasing through one looked worse
 // than phasing through a machine.
-const SOLID_T = { 1: 1, 3: 1, 4: 1, 5: 1, 6: 1, 7: 1, 9: 1 };
+const SOLID_T = { 1: 1, 3: 1, 4: 1, 5: 1, 6: 1, 7: 1, 9: 1, 11: 1 };
 const PLAYER_R = 0.4;
 
 /** Is the player's circle, at face-local (a,b), overlapping a solid tile? */
@@ -4161,7 +4211,7 @@ function postShare(req) {
     thumb = cv.toDataURL('image/jpeg', 0.72);
   } catch (e) {}
   let machines = 0;
-  eachTile(c => { if (c.t !== EMPTY && c.t !== NODE) machines++; });
+  eachTile(c => { if (c.t !== EMPTY && c.t !== NODE && c.t !== PROP) machines++; });
   const w = WORLDS[worldIdx] || WORLDS[0];
   try {
     window.parent.postMessage({ type: 'fs-share', link: req.link, bytes: req.bytes, thumb,
@@ -4402,6 +4452,53 @@ function seedLine(placePlayer) {
   player.fwd.set(0, 0, -1);
 }
 seedLine(true);
+
+// ── THE OUTPOST ────────────────────────────────────────────────────────────
+// A place at spawn. The first frame of a new world used to be a line on a
+// plate; now there is somewhere the crew lives, beside the hub, on the far
+// side of the line so it frames the hub rather than blocking it. Scenery:
+// PROP tiles that build nothing, sell nothing, and are re-derived at boot
+// from whichever hub stands on the home face, so a save never carries them
+// and a world that moved its hub gets its outpost moved with it.
+const PROP_KIND = { habitat: { name: 'habitat', detail: 'the crew lives here' },
+                    mast: { name: 'lamp mast', detail: 'light for the night shift' },
+                    crates: { name: 'supply crates', detail: 'rations, spares, the mail' } };
+function placeProp(f, i, j, kind, ry) {
+  if (i < 1 || j < 1 || i > N - 2 || j > N - 2) return false;
+  const c = cells[f][i][j];
+  if (c.t !== EMPTY) return false;
+  const g = new THREE.Group();
+  const m = new THREE.Mesh(GEO[kind], kind === 'crates' ? MAT.propCrate : MAT.prop);
+  m.castShadow = true; m.receiveShadow = true;
+  g.add(m);
+  if (kind === 'mast') g.add(new THREE.Mesh(GEO.mastLamp, MAT.propLit));   // only the lamp face is lit
+  seat(g, f, i, j, 0, 0);
+  g.rotateOnAxis(new THREE.Vector3(0, 1, 0), ry || 0);
+  g.userData.fsTag = { type: 'machine', name: PROP_KIND[kind].name, detail: PROP_KIND[kind].detail, face: f, i, j };
+  scene.add(g);
+  c.t = PROP; c.build = g; c.prop = kind; PROP_LIST.push(g);
+  return true;
+}
+function seedOutpost() {
+  // the hub: the starter line's, or on a restored world the first on the home face
+  let hub = null;
+  for (let i = 0; i < N && !hub; i++) for (let j = 0; j < N && !hub; j++) if (cells[0][i][j].t === HUB) hub = [i, j];
+  if (!hub) return 0;
+  const [hi, hj] = hub;
+  // BEYOND THE LINE'S END, not behind the hub. The first cut stood the
+  // outpost two rows behind the hub, which is exactly where the foreman's
+  // second line runs from a near seam to the hub's feed; the masts blocked
+  // it. Past the hub, along the line's own axis, nothing is ever built
+  // through, and the outpost closes the line like a full stop.
+  let n = 0;
+  const hx = cells[0][hi + 2] && cells[0][hi + 2][hj] && cells[0][hi + 2][hj].t === EMPTY ? hi + 2 : hi + 3;
+  n += placeProp(0, hx, hj, 'habitat', Math.PI * 0.5) ? 1 : 0;        // its door faces the hub
+  n += placeProp(0, hx, hj - 1, 'mast', Math.PI) ? 1 : 0;
+  n += placeProp(0, hx + 1, hj + 1, 'mast', 0) ? 1 : 0;
+  n += placeProp(0, hx + 1, hj, 'crates', 0.3) ? 1 : 0;
+  return n;
+}
+seedOutpost();
 
 // ── THE CHRONOS RIFT ───────────────────────────────────────────────────────
 // A rift lends you ore and names its price on the HUD: this much of THAT ore,
@@ -5119,6 +5216,7 @@ function stepTutorial(dt) {
 let lookClock = 0;
 const ORE_NAME = { [CRYSTAL]: 'crystal', [EMBER]: 'ember', [SALT]: 'salt' };
 function describeCell(c, t) {
+  if (c.t === PROP) return (PROP_KIND[c.prop] || { name: 'outpost', detail: '' }).name.toUpperCase() + '  ·  ' + (PROP_KIND[c.prop] || {}).detail;
   const heading = ['east', 'south', 'west', 'north'][c.d] || '';
   const item = !c.item ? null : IS_BAR(c.item) ? contractName(c.item, 1) : (ORE_NAME[c.item] || 'ore') + ' ore';
   switch (c.t) {
@@ -5227,7 +5325,7 @@ function clearFactory() {
 function saveState() {
   const m = [];
   eachTile((c, f, i, j) => {
-    if (c.t === EMPTY || c.t === NODE) return;
+    if (c.t === EMPTY || c.t === NODE || c.t === PROP) return;   // the outpost is re-derived at boot
     m.push([f, i, j, c.t, c.d, c.item | 0, c.buf | 0, c.bt | 0, c.fa | 0,
             c.fb | 0, c.cook | 0, c.rr | 0, c.filt | 0, c.dbt | 0, c.dmin | 0,
             c.emit | 0, Math.round(c.left || 0), Math.round(c.cool || 0)]);
@@ -5376,6 +5474,7 @@ function shareLink() {
 }
 // the starter line is what a NEW world looks like; a save replaces it whole
 const restored = FRESH ? false : (SHARED ? !!loadState(SHARED) : load());
+if (restored) seedOutpost();               // the save carries no props; the outpost stands by whatever hub the save has
 
 let saveClock = 0;
 // beforeunload is not reliable on mobile or when a tab is discarded, so the
@@ -6224,7 +6323,7 @@ window.__game = {
     value: ore,
     ingots,
     machines: (() => { let n = 0;
-      eachTile(c => { if (c.t !== EMPTY && c.t !== NODE) n++; });
+      eachTile(c => { if (c.t !== EMPTY && c.t !== NODE && c.t !== PROP) n++; });   // scenery is not a machine
       return n; })(),
     items_on_belts: items.count,
     particles: (() => { let n = 0; for (let k = 0; k < PMAX; k++) if (pLife[k] > 0) n++;
@@ -6234,6 +6333,7 @@ window.__game = {
     restored,
     intro: +intro.toFixed(2),
     lights: LIGHT_POOL.filter(l => l.intensity > 0).map(l => ({ col: '#' + l.color.getHexString(), i: +l.intensity.toFixed(2) })),
+    props: (() => { let n = 0; eachTile(c => { if (c.t === PROP) n++; }); return n; })(),
     audio: { ready: AUDIO.ready, muted: AUDIO.muted,
              state: AUDIO.ctx ? AUDIO.ctx.state : null,
              bed: AUDIO.bed ? { fam: AUDIO.bed.fam, chord: AUDIO.bed.chord, voices: AUDIO.bed.voices.length, level: AUDIO.bed.key.level, on: AUDIO.bed.on } : null },
@@ -6307,7 +6407,7 @@ window.__factory = {
   cells, items, N, T, player, HALF, FACES,
   stepTile, tileWorld, faceOfPoint,
   TYPES: { EMPTY, MINER, BELT, HUB, NODE, SMELTER, SPLITTER, FORGE, FILTER,
-           RIFT, CRYSTAL, EMBER, SALT, INGOT, INGOT_E, INGOT_S, ALLOY, ASSEMBLER, COMPONENT },
+           RIFT, CRYSTAL, EMBER, SALT, INGOT, INGOT_E, INGOT_S, ALLOY, ASSEMBLER, COMPONENT , PROP},
   MINERAL_OF_FACE, get alloys() { return alloys; }, cycleFilter,
   riftOpen, riftStorm, RIFT_COUNT, RIFT_WINDOW,
   save, load, wipe, saveState, SAVE_KEY, CREATIVE, TREAD, beltFrames, beltDecks, POST,
