@@ -514,6 +514,7 @@ let glowPools = null;             // built with the decals; the seams index into
 // capabilities the chain hands out; declared here because applyUpgrades
 // reads CAPS.stable and applyUpgrades runs at boot
 const CAPS = { heated: 0, scrubber: 0, stable: 0 };
+let idleClock = 0, idleNudges = 0, idleMark = null, idleMarkAt = 0;   // the idle cue's clock (hoisted: apply() resets it)
 const PROP_LIST = [];                  // the outpost's groups, for the look ray (hoisted: filled at seeding, read by cellUnder)
 let outpost = null;                    // { hub, hab }: where the drone flies between
 let picksOn = false;                    // the boot reveal lists the worlds a demo ships; a crossing's card does not (hoisted: set at boot, read in playIntro)
@@ -541,7 +542,7 @@ const PERKS = [
 ];
 const perk = k => rank >= k;
 // the whole run, for the ending
-const lifetime = { value: 0, contracts: 0, longestHold: 0, worlds: [], works: false };
+const lifetime = { value: 0, contracts: 0, longestHold: 0, worlds: [], works: false, first: false };   // first: the first sale has had its moment
 let visitedWorlds = new Set([0]);
 // standing orders: a rate to be HELD, offered after three contracts kept in a row
 const STANDING_STREAK = 3, STANDING_GRACE = 10;
@@ -3970,6 +3971,7 @@ function renderHubChip() {
 }
 function apply(t, dir) {
   if (!UNLOCKED[tool]) return;      // hotkeys and drags go through here too
+  idleClock = 0;                    // doing anything is not being idle
   const d = dir == null ? 0 : dir;
   const c0 = cellOf(t), was = c0 ? c0.t : -1;
   if (tool === 'hub' && c0 && c0.t !== HUB && c0.t !== NODE) {
@@ -4379,7 +4381,14 @@ function crossEdge(nf) {
     captionAt = 1.6;
   }
   if (typeof sfxCross === 'function') sfxCross();
+  // THE FACE LIGHTS UP: its seams pulse one after another, nearest first, so
+  // the new face reads as a set of places to go before the caption fades
+  const seams = [];
+  eachTile((c, f, i, j) => { if (f === nf && c.t === NODE && c.mesh) seams.push(c.mesh); });
+  seams.sort((m1, m2) => m1.position.distanceToSquared(player.pos) - m2.position.distanceToSquared(player.pos));
+  seams.slice(0, 12).forEach((m, k) => setTimeout(() => { m.userData.pulse = 1; crossLit++; }, 120 + k * 90));
 }
+let crossLit = 0;                              // seams lit by crossings, for the gate
 
 // Sit exactly eye-height (plus any jump) above the current face, inside its
 // square. This is the only place the player's world position is written from
@@ -5283,6 +5292,16 @@ function spawnTag(f, i, j, v) {
   const w = tileWorld(f, i, j), n = FACES[f].n;
   const el = document.createElement('b');
   el.className = 'tag'; el.textContent = '+' + Math.round(v);
+  // THE FIRST SALE has a moment: the tag is twice its size, the hub's pulse
+  // goes wide, and two sentences say what happened. Once per world.
+  if (!lifetime.first && !CREATIVE) {
+    lifetime.first = true;
+    el.classList.add('first');
+    const hc = cells[f][i][j]; if (hc) hc.pulse = 2.4;
+    // a toast already up (ice, a contract, the foreman) keeps the slot; the tag and the pulse still land
+    const t = toastAt > 0 ? null : document.getElementById('toast');
+    if (t) { t.textContent = WORD('FIRST SALE. Something reached the hub and sold for ' + Math.round(v) + ' credits. Anything that reaches a hub is money, and the number in the corner is what you have banked.'); t.classList.add('on'); toastAt = 7; }
+  }
   el.style.opacity = '0';                           // placed by the first step, never flashed at the origin
   host.appendChild(el);
   liveTags.push({ key, el, v, age: 0, x: w[0] + n[0] * 1.3, y: w[1] + n[1] * 1.3, z: w[2] + n[2] * 1.3, nx: n[0], ny: n[1], nz: n[2] });
@@ -5355,6 +5374,39 @@ function stepDrone(dt) {
   const blink = Math.floor(performance.now() / 500) % 2 === 0;
   const lr = drone.getObjectByName('lampR'), lg = drone.getObjectByName('lampG');
   if (lr) lr.visible = flying && blink; if (lg) lg.visible = flying && !blink;
+}
+// ── THE IDLE CUE. Ninety seconds without building, and the goal card pulses
+// while a ring lands on the nearest free seam: the card is the plan, the
+// ring is a place. Once a minute after that, while the stillness lasts. ────
+function stepIdle(dt) {
+  if (intro > 0 || photo || overhead || CREATIVE || tutActive()) { idleClock = 0; return; }
+  idleClock += dt;
+  if (idleMarkAt > 0) { idleMarkAt -= dt; if (idleMarkAt <= 0 && idleMark) idleMark.visible = false; }
+  if (idleClock < 90) return;
+  idleClock = 30;                                    // the next nudge comes a minute on
+  idleNudges++;
+  const goal = document.getElementById('goal');
+  if (goal) { goal.classList.remove('nudge'); void goal.offsetWidth; goal.classList.add('nudge'); }
+  // the nearest free seam on the player's face
+  let best = null, bd = 1e9;
+  eachTile((c, f, i, j) => {
+    if (f !== player.face || c.t !== NODE || !c.mesh) return;
+    const d = c.mesh.position.distanceToSquared(player.pos);
+    if (d < bd) { bd = d; best = { f, i, j, c }; }
+  });
+  if (best) {
+    if (!idleMark) {
+      idleMark = new THREE.Mesh(new THREE.TorusGeometry(T * 0.55, 0.07, 8, 28),
+        new THREE.MeshBasicMaterial({ color: 0x7df9ff, transparent: true, opacity: 0.85, depthWrite: false }));
+      idleMark.name = 'idleMark'; scene.add(idleMark);
+    }
+    seat(idleMark, best.f, best.i, best.j, 0, 0.12);
+    idleMark.rotation.x += Math.PI / 2;
+    idleMark.visible = true; idleMarkAt = 8;
+    best.c.mesh.userData.pulse = 1;
+  }
+  const t = document.getElementById('toast');
+  if (t) { t.textContent = WORD('STILL HERE. The goal card says what is worth doing next' + (best ? ', and the ring marks a free seam: press 1 there for a rig.' : '.')); t.classList.add('on'); toastAt = 6; }
 }
 // ── THE HINTS STEP BACK. Read once, then gone; H brings them back. ──────────
 let hintClock = 0, hintBack = 0;
@@ -5485,7 +5537,7 @@ function saveState() {
          fwd: player.fwd.toArray(), pitch: player.pitch },
     g: goalIdx, u: Object.keys(UNLOCKED), vf: [...visitedFaces], w: worldIdx,
     sh: soldHigh, rp: riftsPaid, cs: shards, rk: rank, cf: contractsFilled, sk: streak, tu: tutIdx, ta: tutAct, t2: act2Done ? 1 : 0,
-    lt: { v: Math.round(lifetime.value), c: lifetime.contracts, h: Math.round(lifetime.longestHold), w: [...visitedWorlds], k: lifetime.works ? 1 : 0 },
+    lt: { v: Math.round(lifetime.value), c: lifetime.contracts, h: Math.round(lifetime.longestHold), w: [...visitedWorlds], k: lifetime.works ? 1 : 0, f: lifetime.first ? 1 : 0 },
     // seams come back from the RNG; how worked each one is does not
     r: (() => { const out = [];
       eachTile((c, f, i, j) => { if (c.mesh && c.rich < 0.999)
@@ -5542,7 +5594,7 @@ function loadState(d) {
   // a returning player is past the foreman unless the save says otherwise
   tutAct = d.ta === 2 ? 2 : 1; TUT = tutAct === 2 ? ACT2 : ACT1; act2Done = !!d.t2 || d.tu === undefined;
   tutIdx = d.tu === undefined ? TUT.length : Math.min(TUT.length, d.tu | 0);
-  if (d.lt) { lifetime.value = +d.lt.v || 0; lifetime.contracts = d.lt.c | 0; lifetime.longestHold = +d.lt.h || 0; lifetime.works = !!d.lt.k;
+  if (d.lt) { lifetime.value = +d.lt.v || 0; lifetime.contracts = d.lt.c | 0; lifetime.longestHold = +d.lt.h || 0; lifetime.works = !!d.lt.k; lifetime.first = !!d.lt.f;
               visitedWorlds = new Set(Array.isArray(d.lt.w) ? d.lt.w.map(x => x | 0) : [0]); }
   visitedWorlds.add(worldIdx);
   if (lifetime.works && cubeEdges) cubeEdges.material.color.setHex(0xffd479);
@@ -5574,7 +5626,7 @@ function wipe() {
   for (const k in UPGRADES) UPGRADES[k].lvl = 0;
   goalIdx = 0; soldHigh = 0; riftsPaid = 0; shards = 0; rank = 0; contractsFilled = 0;
   tutIdx = 0; tutAct = 1; TUT = ACT1; act2Done = false;
-  lifetime.value = 0; lifetime.contracts = 0; lifetime.longestHold = 0; lifetime.works = false; visitedWorlds = new Set([0]);
+  lifetime.value = 0; lifetime.contracts = 0; lifetime.longestHold = 0; lifetime.works = false; lifetime.first = false; visitedWorlds = new Set([0]);
   contract = null; contractClock = 40; standing = null; streak = 0; rival = null; rivalClock = 60; renderContract(); renderStanding(); renderRival(); renderRank();
   for (const g of GOALS) if (g.rate) g.held = 0;
   applyWorld(0);
@@ -5721,6 +5773,7 @@ renderer.setAnimationLoop(() => {
   stepTags(dt);
   stepHint(dt);
   stepDrone(dt);
+  stepIdle(dt);
   stepRival(dt);
   if (contract && (performance.now() % 500) < 20) renderContract();
   // seams grow back on their own, and wear their richness as their size
@@ -6486,6 +6539,7 @@ window.__game = {
     tagsSeen, tagsLive: liveTags.length,
     hintGone: !!document.getElementById('hint')?.classList.contains('gone'),
     ao: POST.ao,
+    firstSale: lifetime.first, idleNudges, idleRing: !!(idleMark && idleMark.visible), crossLit,
     drone: drone.visible ? { t: +droneT.toFixed(1), flights: droneFlights, pos: drone.position.toArray().map(v => +v.toFixed(2)) } : null,
     audio: { ready: AUDIO.ready, muted: AUDIO.muted,
              state: AUDIO.ctx ? AUDIO.ctx.state : null,
@@ -6590,6 +6644,7 @@ window.__factory = {
   liveTags,
   ageHints: () => { hintClock = 100; },     // the gate cannot wait forty-five seconds
   droneAt: (t) => { droneT = t; },          // the gate sets the drone's clock
+  idleAt: (t) => { idleClock = t; },        // and the idle clock
   screenOf: (f, i, j) => { const w = tileWorld(f, i, j); const v = new THREE.Vector3(w[0], w[1], w[2]).project(camera);
                            return [(v.x + 1) / 2 * innerWidth, (1 - v.y) / 2 * innerHeight, v.z]; },
   FAR_PREMIUM, MINERAL_OF_INGOT,

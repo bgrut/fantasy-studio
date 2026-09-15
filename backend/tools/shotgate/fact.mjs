@@ -74,6 +74,9 @@ const fin = await p.evaluate(()=>window.__game.facts());
 console.log('faces     :', startFace, '->', (crossed||fin).player_face,
             '| up', JSON.stringify((crossed||fin).player_up));
 console.log('on surface:', offCube === 0 ? 'always' : offCube + ' samples off the cube');
+await new Promise(r => setTimeout(r, 1400));
+const lit = await p.evaluate(() => window.__game.facts().crossLit);
+console.log('the face  : seams lit by the crossing', lit);
 // AND THE SIM SIDE OF THE SAME MECHANIC: a belt that runs off an edge has to
 // hand its crystal to the belt on the next face. The player walking over an
 // edge and the items doing it are different code paths; a gate that only
@@ -207,7 +210,7 @@ const meltOk = mid.debris >= preMachines && post.debris === 0
 console.log('produced  :', t1.value - t0.value, 'value in 12s |', 'ingots', t1.ingots);
 console.log('errors    :', errs.length ? errs.join(' | ') : 'none');
 await b.close();
-process.exit((errs.length || t1.value <= t0.value || !crossed || offCube
+process.exit((errs.length || t1.value <= t0.value || !crossed || !(lit > 0) || offCube
   || !wrap.arrived || !wrap.left || !meltOk
   || forge.distinct !== 3 || !(forge.made > 0) || !filtOk
   || mkt.moved !== mkt.n || !mkt.inRange) ? 1 : 0);

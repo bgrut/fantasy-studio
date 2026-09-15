@@ -189,6 +189,8 @@
   #tick .u{color:#5ce0a0}
   #tick .d{color:#e8697d}
   /* the objective sits directly under the counters it is asking you to move */
+  @keyframes nudge{0%,100%{box-shadow:0 0 0 0 rgba(255,212,121,0)}30%{box-shadow:0 0 0 7px rgba(255,212,121,.55)}}
+  #goal.nudge{animation:nudge 1.1s ease-out 3}
   #goal{margin-top:9px;border:1px solid rgba(255,212,121,.34);border-radius:10px;
         padding:8px 10px;
         background:linear-gradient(180deg,rgba(255,212,121,.12),rgba(255,212,121,.04))}
@@ -278,6 +280,7 @@
   #title .worlds span{display:block;margin-top:3px;font-family:var(--f-ui);font-size:10.5px;line-height:1.3;color:#b9c4dc}
   /* credit tags: a sale's number rising off the hub */
   #tags{position:fixed;inset:0;z-index:5;pointer-events:none;overflow:hidden}
+  #tags .tag.first{font-size:34px;font-weight:700}
   #tags .tag{position:absolute;left:0;top:0;font-family:var(--f-mono);font-size:17px;font-weight:500;letter-spacing:.04em;
              color:#ffd479;text-shadow:0 0 12px rgba(255,212,121,.7),0 2px 6px rgba(0,0,0,.8);will-change:transform,opacity}
   /* the face caption after a crossing */

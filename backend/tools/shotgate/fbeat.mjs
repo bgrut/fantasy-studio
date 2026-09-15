@@ -107,6 +107,17 @@ console.log('sound     : before click ready=' + snd.before.ready,
             '| after click ready=' + snd.woke.ready, 'state=' + snd.woke.state,
             '| belt layer', snd.beltGain, '| ping ok', snd.pinged,
             '| M mutes:', snd.muted, 'master', snd.masterGain);
+// ninety seconds of stillness: the goal card pulses, a ring lands on a free seam, a toast says so
+const idle = await p.evaluate(async () => {
+  const F = window.__factory, f = () => window.__game.facts();
+  // the foreman has to be gone for the cue to count: skip the guide
+  if (f().tutorial) { dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyG', key: 'g' })); await new Promise(r => setTimeout(r, 300)); }
+  const before = f().idleNudges;
+  F.idleAt(95); await new Promise(r => setTimeout(r, 500));
+  const g = document.getElementById('goal');
+  return { before, after: f().idleNudges, ring: f().idleRing, nudged: !!g && g.classList.contains('nudge'), said: document.getElementById('toast').textContent };
+});
+console.log('idle      : nudges', idle.before, '->', idle.after, '| ring on a seam', idle.ring, '| goal card pulsing', idle.nudged, '| said', JSON.stringify(idle.said).slice(0, 60));
 // the key hints step back once read, and H brings them back
 const hints = await p.evaluate(async () => {
   const F = window.__factory, f = () => window.__game.facts().hintGone;
@@ -130,4 +141,5 @@ const ok = mid.card && mid.intro > 0 && mid.camDist > mid.HALF * 2 && mid.hudDim
   && snd.pinged && snd.muted && snd.masterGain === 0
   && errs.length === 0;
 if (hints.before || !hints.gone || hints.back) { console.log('FAIL: the hints'); process.exit(1); }
+if (idle.after !== idle.before + 1 || !idle.ring || !idle.nudged || !/STILL HERE|unlocked|FIRST SALE/.test(idle.said)   /* the cue's toast, unless an unlock or the first sale landed on it */) { console.log('FAIL: the idle cue'); process.exit(1); }
 process.exit(ok ? 0 : 1);

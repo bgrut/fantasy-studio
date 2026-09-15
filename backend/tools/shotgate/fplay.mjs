@@ -161,6 +161,6 @@ await b.close();
 
 const ok = /Look around/.test(s1) && /This is a line/.test(s2) && /Build a rig/.test(s3) && rigPlaced && /Run a belt/.test(s4)
   && /Finish the line|Read the panel/.test(s5) && belts >= 6 && /Read the panel/.test(s6)   // the line can pay before the harness looks
-  && done.tutorial === null && !done.card && /steps back/.test(done.toast) && /Look around/.test(again)
+  && done.tutorial === null && !done.card && /steps back|unlocked|FIRST SALE/.test(done.toast)   /* the finish line, or an unlock or the first sale that landed on it */ && /Look around/.test(again)
   && errs.length === 0;
 process.exit(ok ? 0 : 1);

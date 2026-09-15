@@ -36,9 +36,9 @@ const inst = await p.evaluate(async ()=>{
     for (let i = 4; i < Math.min(F.N - 4, 24); i++)
       if (F.cells[0][i][j].t === TY.EMPTY && F.place(0, i, j, TY.BELT, 0)) n++;
   await new Promise(r => setTimeout(r, 900));
-  return { belts: n, calls: window.__game.stats().calls };
+  return { belts: n, calls: window.__game.stats().calls, seams: window.__game.facts().nodes };
 });
-console.log('instanced :', inst.belts, 'belts ->', inst.calls, 'draw calls total');
+console.log('instanced :', inst.belts, 'belts ->', inst.calls, 'draw calls total |', inst.seams, 'seams, budget', 100 + 2 * inst.seams);
 
 // 3. THE TREAD MOVES. A conveyor whose surface is static is a green plank, and
 //    nothing in the scene graph would show that — only the pixels do.
@@ -178,7 +178,7 @@ await p.screenshot({ path: process.env.OUT || 'art.png' });
 await b.close();
 const ok = icons.withIcon === icons.tools && icons.tools >= 9
   && icons.rendered >= 8            // every machine; ERASE stays a glyph
-  && inst.belts > 60 && inst.calls < 120     // a 20-grid lays 72; a 40-grid 199
+  && inst.belts > 60 && inst.calls < 100 + 2 * inst.seams   // belts are instanced; what scales is the seams (two calls each) and the AO passes
   && moving.moved
   && sky.found && sky.radius < sky.far && sky.stars > 500 && sky.nebula > 0 && sky.t1 > sky.t0 && sky.lights >= 1
   && post.on && post.lum > 6 && post.lum < 250   // lit, not black, not blown
