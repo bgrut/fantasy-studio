@@ -30,8 +30,11 @@ const s1 = await p.evaluate(async () => {
   // walk: four metres along the face
   const u = F.FACES[F.player.face].u;
   F.player.pos.x += u[0] * 4.2; F.player.pos.y += u[1] * 4.2; F.player.pos.z += u[2] * 4.2;
-  await new Promise(r => setTimeout(r, 600));
-  const g = window.__game.facts();
+  // the step clears on the foreman's quarter-second clock and the ring lands
+  // on the next one; the first frames after boot also compile the AO pass.
+  // Wait for the ring, up to two seconds, rather than a fixed pause.
+  let g = window.__game.facts();
+  for (let k = 0; k < 10 && !(g.tutorial && g.tutorial.step === 2 && g.tutorial.marker); k++) { await new Promise(r => setTimeout(r, 200)); g = window.__game.facts(); }
   return { before, after: { step: g.tutorial && g.tutorial.step, title: g.tutorial && g.tutorial.title, marker: g.tutorial && g.tutorial.marker } };
 });
 console.log('step 1    :', JSON.stringify(s1.before));

@@ -114,6 +114,7 @@ const ACCENT = _hex(_pal.accent, HOME.accent);
 // every crystal in the world and the tick writes matrices into it, so a
 // thousand items across a hundred belts cost a single draw call.
 import * as THREE from 'three';
+import { N8AOPass } from './vendor/n8ao.module.js';               // ambient occlusion (MIT), shared with the adventure runtime
 import { Bed as KitBed, end as KitEnd } from './vendor/kit/kit.js';   // the music bed and the end card, shared with every runtime
 
 // grid resolution follows the prompt's world size: a bigger island is a
@@ -680,12 +681,26 @@ function buildEnv(skyHex, groundHex) {
 // sits well above 1.0 there, and a lit floor sits well below it, which is
 // exactly the separation bloom wants.
 const POST = { on: true, threshold: 0.55, knee: 0.5, strength: 1.0,
-               vignette: 0.3, tint: 0.14 };
+               vignette: 0.3, tint: 0.14,
+               ao: !/[?&]ao=0/.test(location.search) };   // ambient occlusion: off with ?ao=0
 
 const _rtOpts = { type: THREE.HalfFloatType, depthBuffer: true };
 let rtScene = new THREE.WebGLRenderTarget(1, 1, _rtOpts);
 let rtA = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType });
 let rtB = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType });
+// AMBIENT OCCLUSION IS THE ANTI-FLOAT. Without it a machine on the plating
+// and a machine a hand above it look the same; with it corners darken, a
+// belt sits on the deck and the outpost's crates stack. N8AO renders the
+// scene itself with a true depth-and-normal pass and writes the occluded
+// beauty into rtScene, where the bloom and the grade pick it up unchanged.
+// Half resolution: the factory's machines are a metre tall and the plating
+// is flat, so the radius is short and the cost is small.
+const n8ao = new N8AOPass(scene, camera, innerWidth, innerHeight);
+n8ao.configuration.aoRadius = 1.5;
+n8ao.configuration.distanceFalloff = 0.6;
+n8ao.configuration.intensity = 3.0;
+n8ao.configuration.halfRes = true;
+n8ao.configuration.gammaCorrection = false;     // the composite owns the grade
 for (const rt of [rtScene, rtA, rtB]) {
   rt.texture.minFilter = THREE.LinearFilter;
   rt.texture.magFilter = THREE.LinearFilter;
@@ -807,6 +822,7 @@ function sizePost() {
   const w = Math.max(2, Math.floor(innerWidth * dpr));
   const h = Math.max(2, Math.floor(innerHeight * dpr));
   rtScene.setSize(w, h);
+  n8ao.setSize(w, h);
   rtA.setSize(Math.max(1, w >> 1), Math.max(1, h >> 1));
   rtB.setSize(Math.max(1, w >> 1), Math.max(1, h >> 1));
 }
@@ -822,7 +838,14 @@ function noteSceneCost() {
   sceneTris = renderer.info.render.triangles;
 }
 
+// THE COST IS COUNTED BY HAND. three resets its counters on every render()
+// call, and the AO pass renders several times a frame, so the last of them
+// (one quad) was all the budget gates could see. Reset once per frame here
+// and read after the scene and its occlusion are in: that is the scene's
+// cost, and it is what the gates hold to.
+renderer.info.autoReset = false;
 function renderFrame() {
+  renderer.info.reset();
   if (!POST.on) {
     renderer.setRenderTarget(null);
     renderer.render(scene, camera);
@@ -831,7 +854,8 @@ function renderFrame() {
   }
   renderer.setRenderTarget(rtScene);
   renderer.clear();
-  renderer.render(scene, camera);
+  if (POST.ao) n8ao.render(renderer, rtScene, null, 0, false);   // the scene, occluded, into rtScene
+  else renderer.render(scene, camera);
   noteSceneCost();
 
   matBright.uniforms.tDiffuse.value = rtScene.texture;
@@ -6467,6 +6491,7 @@ window.__game = {
     props: (() => { let n = 0; eachTile(c => { if (c.t === PROP) n++; }); return n; })(),
     tagsSeen, tagsLive: liveTags.length,
     hintGone: !!document.getElementById('hint')?.classList.contains('gone'),
+    ao: POST.ao,
     drone: drone.visible ? { t: +droneT.toFixed(1), flights: droneFlights, pos: drone.position.toArray().map(v => +v.toFixed(2)) } : null,
     audio: { ready: AUDIO.ready, muted: AUDIO.muted,
              state: AUDIO.ctx ? AUDIO.ctx.state : null,

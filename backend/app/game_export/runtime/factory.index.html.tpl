@@ -471,5 +471,5 @@
 <div id="tutor"><em></em><b></b><small></small><p></p><span class="next">next step</span><span class="skip">skip the guide</span><i class="keys"></i></div>
 <div id="cross"></div>
 <div id="hint">WASD to walk, Shift to run, Space to jump, click to look around.<br>Hold the left button and sweep to draw belts. TAB opens the overhead view.<br>Point at a filter and press F to change which ore it passes.<br>Walk over any edge: each side of the world grows a different ore.<br>Your factory saves itself. These hints fade; H brings them back.</div>
-<script type="importmap">{"imports":{"three":"./vendor/three.module.js"}}</script>
+<script type="importmap">{"imports":{"three":"./vendor/three.module.js","three/examples/jsm/postprocessing/Pass.js":"./vendor/jsm/postprocessing/Pass.js","postprocessing":"./vendor/postprocessing-stub.js"}}</script>
 <script type="module" src="./game.js"></script>

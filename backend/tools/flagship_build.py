@@ -119,15 +119,18 @@ def sync_fonts(check: bool) -> bool:
     file is missing or differs."""
     import shutil
     ok = True
-    for sub in ("fonts", "kit"):
+    # a subdirectory ships whole; a single file ships alone (the AO library
+    # and the two shims it imports)
+    for sub in ("fonts", "kit", "jsm/postprocessing", "n8ao.module.js", "postprocessing-stub.js"):
         src = RUNTIME / "vendor" / sub
-        dst = OUT / "vendor" / sub
         if not src.exists():
             continue
+        if src.is_file():
+            files, dst = [src], OUT / "vendor" / pathlib.Path(sub).parent
+        else:
+            files, dst = [x for x in sorted(src.iterdir()) if x.is_file()], OUT / "vendor" / sub
         dst.mkdir(parents=True, exist_ok=True)
-        for f in sorted(src.iterdir()):
-            if not f.is_file():
-                continue
+        for f in files:
             d = dst / f.name
             same = d.exists() and d.read_bytes() == f.read_bytes()
             if same:
