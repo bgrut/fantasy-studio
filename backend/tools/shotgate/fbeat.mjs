@@ -107,6 +107,17 @@ console.log('sound     : before click ready=' + snd.before.ready,
             '| after click ready=' + snd.woke.ready, 'state=' + snd.woke.state,
             '| belt layer', snd.beltGain, '| ping ok', snd.pinged,
             '| M mutes:', snd.muted, 'master', snd.masterGain);
+// the key hints step back once read, and H brings them back
+const hints = await p.evaluate(async () => {
+  const F = window.__factory, f = () => window.__game.facts().hintGone;
+  const before = f();
+  F.ageHints(); await new Promise(r => setTimeout(r, 400));
+  const gone = f();
+  return { before, gone };
+});
+await p.keyboard.press('KeyH'); await new Promise(r => setTimeout(r, 350));
+hints.back = await p.evaluate(() => window.__game.facts().hintGone);
+console.log('hints     : at start gone', hints.before, '| after 45 s gone', hints.gone, '| H brings them back', !hints.back);
 console.log('errors    :', errs.length ? errs.join(' | ') : 'none');
 await p.screenshot({ path: process.env.OUT || 'beat.png' });
 await b.close();
@@ -118,4 +129,5 @@ const ok = mid.card && mid.intro > 0 && mid.camDist > mid.HALF * 2 && mid.hudDim
   && !snd.before.ready && snd.woke.ready && snd.beltGain !== null && snd.beltGain > 0
   && snd.pinged && snd.muted && snd.masterGain === 0
   && errs.length === 0;
+if (hints.before || !hints.gone || hints.back) { console.log('FAIL: the hints'); process.exit(1); }
 process.exit(ok ? 0 : 1);

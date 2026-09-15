@@ -4129,6 +4129,7 @@ function frameOverhead() {
 const keys = Object.create(null);
 addEventListener('keydown', e => {
   keys[e.code] = true;
+  if (e.code === 'KeyH') { hintBack = 8; }              // the hints, back for a moment
   if (e.code === 'Tab') {
     e.preventDefault(); overhead = !overhead; overheadSeen++;
     // THE OVERHEAD FREES THE MOUSE (2026-09-10). Clicking into the game locks
@@ -5267,6 +5268,16 @@ function spawnTag(f, i, j, v) {
   tagsSeen++;
   stepTags(0);
 }
+// ── THE HINTS STEP BACK. Read once, then gone; H brings them back. ──────────
+let hintClock = 0, hintBack = 0;
+function stepHint(dt) {
+  const el = document.getElementById('hint');
+  if (!el) return;
+  if (intro > 0) return;                              // the reveal does not count as reading
+  hintClock += dt;
+  if (hintBack > 0) { hintBack -= dt; el.classList.remove('gone'); return; }
+  el.classList.toggle('gone', hintClock > 45);
+}
 function stepTags(dt) {
   if (!liveTags.length) return;
   for (let k = liveTags.length - 1; k >= 0; k--) {
@@ -5620,6 +5631,7 @@ renderer.setAnimationLoop(() => {
   stepTutorial(dt);
   stepLook(dt);
   stepTags(dt);
+  stepHint(dt);
   stepRival(dt);
   if (contract && (performance.now() % 500) < 20) renderContract();
   // seams grow back on their own, and wear their richness as their size
@@ -6383,6 +6395,7 @@ window.__game = {
     lights: LIGHT_POOL.filter(l => l.intensity > 0).map(l => ({ col: '#' + l.color.getHexString(), i: +l.intensity.toFixed(2) })),
     props: (() => { let n = 0; eachTile(c => { if (c.t === PROP) n++; }); return n; })(),
     tagsSeen, tagsLive: liveTags.length,
+    hintGone: !!document.getElementById('hint')?.classList.contains('gone'),
     audio: { ready: AUDIO.ready, muted: AUDIO.muted,
              state: AUDIO.ctx ? AUDIO.ctx.state : null,
              bed: AUDIO.bed ? { fam: AUDIO.bed.fam, chord: AUDIO.bed.chord, voices: AUDIO.bed.voices.length, level: AUDIO.bed.key.level, on: AUDIO.bed.on } : null },
@@ -6484,6 +6497,7 @@ window.__factory = {
   worksDone, playWorks, hubCost, hubCount, HUB_INTAKE, apply, pickTool, accepts, cellUnder, get overhead() { return overhead; }, get components() { return components; },
   // where a tile is on screen, for a harness that clicks like a player
   liveTags,
+  ageHints: () => { hintClock = 100; },     // the gate cannot wait forty-five seconds
   screenOf: (f, i, j) => { const w = tileWorld(f, i, j); const v = new THREE.Vector3(w[0], w[1], w[2]).project(camera);
                            return [(v.x + 1) / 2 * innerWidth, (1 - v.y) / 2 * innerHeight, v.z]; },
   FAR_PREMIUM, MINERAL_OF_INGOT,

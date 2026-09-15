@@ -403,6 +403,8 @@
   /* above the bar, not beside it — at seven tools there is no room beside it */
   /* centred above the bar: at bottom-right it sat on top of the held tool's hologram */
   #hint{font-family:var(--f-mono);position:fixed;left:50%;transform:translateX(-50%);bottom:84px;z-index:5;color:#6d7590;text-align:center;white-space:nowrap}
+  #hint{transition:opacity 1.4s}
+  #hint.gone{opacity:0}
   /* the crosshair IS the cursor once the pointer is locked */
   #cross{position:fixed;left:50%;top:50%;width:16px;height:16px;margin:-8px 0 0 -8px;
          z-index:4;pointer-events:none;opacity:.85}
@@ -468,6 +470,6 @@
 <div id="tags"></div>
 <div id="tutor"><em></em><b></b><small></small><p></p><span class="next">next step</span><span class="skip">skip the guide</span><i class="keys"></i></div>
 <div id="cross"></div>
-<div id="hint">WASD to walk, Shift to run, Space to jump, click to look around.<br>Hold the left button and sweep to draw belts. TAB opens the overhead view.<br>Point at a filter and press F to change which ore it passes.<br>Walk over any edge: each side of the world grows a different ore.<br>Your factory saves itself.</div>
+<div id="hint">WASD to walk, Shift to run, Space to jump, click to look around.<br>Hold the left button and sweep to draw belts. TAB opens the overhead view.<br>Point at a filter and press F to change which ore it passes.<br>Walk over any edge: each side of the world grows a different ore.<br>Your factory saves itself. These hints fade; H brings them back.</div>
 <script type="importmap">{"imports":{"three":"./vendor/three.module.js"}}</script>
 <script type="module" src="./factory.js"></script>
