@@ -3474,6 +3474,7 @@ function bank(type, face) {
   if (standing && type === standing.item) standing.log.push(performance.now());
   if (IS_INGOT(type)) ingots++;
   if (type === ALLOY) alloys++;
+  return v;
 }
 
 // One acceptance rule, asked by belts, miners and splitters alike. Having each
@@ -3518,7 +3519,8 @@ function deliver(dst, to, type) {
            col.r, col.g, col.b, -0.035, 3.1);
   }
   if (dst.t === HUB) {
-    bank(type, to ? to.face : undefined);
+    const paid = bank(type, to ? to.face : undefined);
+    if (to) spawnTag(to.face, to.i, to.j, paid);
     dst.pulse = 1;
     sfxSold(type);
     if (to) {
@@ -3555,7 +3557,7 @@ function step() {
         const out = c.t === ASSEMBLER ? COMPONENT : c.t === FORGE ? ALLOY : (INGOT_OF[c.bt] || INGOT);
         sfxClank();
         const dst = cellOf(stepTile(f, i, j, c.d));
-        if (dst && dst.t === HUB) bank(out, stepTile(f, i, j, c.d).face);
+        if (dst && dst.t === HUB) { const ht = stepTile(f, i, j, c.d); spawnTag(ht.face, ht.i, ht.j, bank(out, ht.face)); }
         else if (dst && dst.t === BELT && !dst.item) dst.item = out;
         else c.cook = 1;                  // output blocked: hold it, retry
       }
@@ -3658,7 +3660,7 @@ function step() {
       const h = cellOf(mv[2]);
       if (!h || (h.took | 0) >= HUB_INTAKE) continue;
       h.took = (h.took | 0) + 1;
-      bank(c.item, mv[2].face); c.item = 0; continue;
+      spawnTag(mv[2].face, mv[2].i, mv[2].j, bank(c.item, mv[2].face)); h.pulse = 1; c.item = 0; continue;
     }
     const dst = cellOf(mv[2]);
     if (!accepts(dst, c.item)) continue;   // another input reached it first
@@ -4442,7 +4444,7 @@ function seedLine(placePlayer) {
   // tile "in front of" the player is j+1; standing at j+4 put the spawn four
   // tiles PAST the line and, on a line near the far edge, off the face
   // entirely — where the clamp pinned it and W did nothing at all.
-  const w = tileWorld(F, x + RUN / 2, Math.max(1, Math.min(N - 2, z - 4)));
+  const w = tileWorld(F, x + RUN / 2 + 1, Math.max(1, Math.min(N - 2, z - 4)));   // a tile toward the hub: the outpost past it is in the first frame
   player.pos.set(w[0], HALF + EYE, w[2]);
   player.face = F;
   player.up.set(0, 1, 0);
@@ -5235,6 +5237,45 @@ function describeCell(c, t) {
   }
   return '';
 }
+// ── CREDIT TAGS: money you can see ──────────────────────────────────────────
+// A sale lifts its number from the hub. Sales on the same hub within half a
+// second add into the one tag, so a busy hub reads one honest sum.
+const TAG_MAX = 12, TAG_LIFE = 1.5;
+const liveTags = [];
+let tagsSeen = 0;
+const _tv = new THREE.Vector3();
+function spawnTag(f, i, j, v) {
+  if (intro > 0 || photo) return;
+  const host = document.getElementById('tags');
+  if (!host) return;
+  const key = f + ':' + i + ':' + j;
+  const same = liveTags.find(t => t.key === key && t.age < 0.5);
+  if (same) { same.v += v; same.el.textContent = '+' + Math.round(same.v); same.age = Math.min(same.age, 0.25); return; }
+  while (liveTags.length >= TAG_MAX) { const old = liveTags.shift(); old.el.remove(); }
+  const w = tileWorld(f, i, j), n = FACES[f].n;
+  const el = document.createElement('b');
+  el.className = 'tag'; el.textContent = '+' + Math.round(v);
+  el.style.opacity = '0';                           // placed by the first step, never flashed at the origin
+  host.appendChild(el);
+  liveTags.push({ key, el, v, age: 0, x: w[0] + n[0] * 1.3, y: w[1] + n[1] * 1.3, z: w[2] + n[2] * 1.3, nx: n[0], ny: n[1], nz: n[2] });
+  tagsSeen++;
+  stepTags(0);
+}
+function stepTags(dt) {
+  if (!liveTags.length) return;
+  for (let k = liveTags.length - 1; k >= 0; k--) {
+    const t = liveTags[k];
+    t.age += dt;
+    if (t.age >= TAG_LIFE) { t.el.remove(); liveTags.splice(k, 1); continue; }
+    const rise = t.age * 0.35;                        // it floats up off the hub, half a metre in its life, and stays a hub's number
+    _tv.set(t.x + t.nx * rise, t.y + t.ny * rise, t.z + t.nz * rise).project(camera);
+    const behind = _tv.z > 1;
+    const sx = (_tv.x * 0.5 + 0.5) * innerWidth, sy = (-_tv.y * 0.5 + 0.5) * innerHeight;
+    const fade = t.age < 0.15 ? t.age / 0.15 : 1 - Math.max(0, (t.age - 0.9) / (TAG_LIFE - 0.9));   // readable for most of a second, then gone
+    t.el.style.transform = 'translate(' + sx.toFixed(0) + 'px,' + sy.toFixed(0) + 'px) translate(-50%,-50%) scale(' + (0.9 + Math.min(1, t.age * 4) * 0.2).toFixed(2) + ')';
+    t.el.style.opacity = behind || overhead ? 0 : fade.toFixed(2);
+  }
+}
 function stepLook(dt) {
   lookClock += dt;
   if (lookClock < 0.15) return;
@@ -5572,6 +5613,7 @@ renderer.setAnimationLoop(() => {
   stepStanding(dt);
   stepTutorial(dt);
   stepLook(dt);
+  stepTags(dt);
   stepRival(dt);
   if (contract && (performance.now() % 500) < 20) renderContract();
   // seams grow back on their own, and wear their richness as their size
@@ -6334,6 +6376,7 @@ window.__game = {
     intro: +intro.toFixed(2),
     lights: LIGHT_POOL.filter(l => l.intensity > 0).map(l => ({ col: '#' + l.color.getHexString(), i: +l.intensity.toFixed(2) })),
     props: (() => { let n = 0; eachTile(c => { if (c.t === PROP) n++; }); return n; })(),
+    tagsSeen, tagsLive: liveTags.length,
     audio: { ready: AUDIO.ready, muted: AUDIO.muted,
              state: AUDIO.ctx ? AUDIO.ctx.state : null,
              bed: AUDIO.bed ? { fam: AUDIO.bed.fam, chord: AUDIO.bed.chord, voices: AUDIO.bed.voices.length, level: AUDIO.bed.key.level, on: AUDIO.bed.on } : null },
@@ -6434,6 +6477,7 @@ window.__factory = {
   set rank(v) { rank = v; renderRank(); gildEdge(); applyUpgrades(); }, PERKS, lifetime, get visitedWorlds() { return visitedWorlds; },
   worksDone, playWorks, hubCost, hubCount, HUB_INTAKE, apply, pickTool, accepts, cellUnder, get overhead() { return overhead; }, get components() { return components; },
   // where a tile is on screen, for a harness that clicks like a player
+  liveTags,
   screenOf: (f, i, j) => { const w = tileWorld(f, i, j); const v = new THREE.Vector3(w[0], w[1], w[2]).project(camera);
                            return [(v.x + 1) / 2 * innerWidth, (1 - v.y) / 2 * innerHeight, v.z]; },
   FAR_PREMIUM, MINERAL_OF_INGOT,

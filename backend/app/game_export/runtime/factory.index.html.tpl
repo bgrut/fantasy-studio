@@ -276,6 +276,10 @@
   #title .worlds a.here{border-color:var(--rule);box-shadow:0 0 18px var(--tglow)}
   #title .worlds b{display:block;font-family:var(--f-head);font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--tcol)}
   #title .worlds span{display:block;margin-top:3px;font-family:var(--f-ui);font-size:10.5px;line-height:1.3;color:#b9c4dc}
+  /* credit tags: a sale's number rising off the hub */
+  #tags{position:fixed;inset:0;z-index:5;pointer-events:none;overflow:hidden}
+  #tags .tag{position:absolute;left:0;top:0;font-family:var(--f-mono);font-size:17px;font-weight:500;letter-spacing:.04em;
+             color:#ffd479;text-shadow:0 0 12px rgba(255,212,121,.7),0 2px 6px rgba(0,0,0,.8);will-change:transform,opacity}
   /* the face caption after a crossing */
   /* high, above the placement ghost, and big enough to read in the beat it is up */
   #facecap{position:fixed;left:0;right:0;top:12%;text-align:center;z-index:6;pointer-events:none;
@@ -461,6 +465,7 @@
 <div id="title"><b></b><small></small></div>
 <div id="facecap"></div>
 <div id="look"></div>
+<div id="tags"></div>
 <div id="tutor"><em></em><b></b><small></small><p></p><span class="next">next step</span><span class="skip">skip the guide</span><i class="keys"></i></div>
 <div id="cross"></div>
 <div id="hint">WASD to walk, Shift to run, Space to jump, click to look around.<br>Hold the left button and sweep to draw belts. TAB opens the overhead view.<br>Point at a filter and press F to change which ore it passes.<br>Walk over any edge: each side of the world grows a different ore.<br>Your factory saves itself.</div>

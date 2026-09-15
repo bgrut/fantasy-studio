@@ -45,6 +45,9 @@ const intake = await p.evaluate(async () => {
   const label = (() => { const F2 = window.__factory; return F2.lookLabel ? F2.lookLabel(hub) : null; })();
   return { perTick, intake: F.HUB_INTAKE, heldAfter: feeders.filter(c => c.item).length, acceptsNow: F.accepts ? F.accepts(hub, TY.CRYSTAL) : null };
 });
+// money you can see: the sales above lifted their numbers from the hub
+const tags = await p.evaluate(() => ({ seen: window.__game.facts().tagsSeen, host: !!document.getElementById('tags') }));
+console.log('tags      : seen', tags.seen, '| host', tags.host);
 console.log('intake    :', intake.perTick.map(t => t.took + ' taken, ' + t.left + ' held').join(' | '), '| cap', intake.intake);
 
 // 2. cost: the second hub costs 200, is refused without it, paid with it, and the ladder climbs
@@ -104,6 +107,7 @@ await p.screenshot({ path: process.env.OUT || 'hub.png' });
 await b.close();
 
 const ok = intake.intake === 2 && intake.perTick.every(t => t.took <= 2) && intake.perTick.slice(1).every(t => t.took === 2 && t.left >= 1)
+  && tags.seen > 0 && tags.host
   && cost.hubs === 1 && cost.c1 === 200 && /200 credits/.test(cost.chip) && cost.refused && /costs 200 credits/.test(cost.said)
   && cost.placed && cost.paid === 200 && cost.c2 === 500 && cost.ladder.join(',') === '0,200,500,1200,2400'
   && bp.cells && bp.hasHub === false
