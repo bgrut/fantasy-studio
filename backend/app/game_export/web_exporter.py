@@ -138,7 +138,15 @@ def export_web_game(spec: GameSpec, out_dir: str | Path, verbose: bool = True) -
         tex_dst = dist / "textures"
         if tex_dst.exists():
             shutil.rmtree(tex_dst)
-        shutil.copytree(tex_src, tex_dst)
+        # TOP-LEVEL FILES ONLY (2026-09-15). The runtime loads textures as
+        # textures/<name>.jpg and <name>_n.jpg; the subfolders hold the SDXL
+        # sources (a 36 MB EXR normal, a 32 MB height map) that nothing in a
+        # build reads, and copying the tree whole made a 60 MB city a 144 MB
+        # download.
+        tex_dst.mkdir(parents=True, exist_ok=True)
+        for f in sorted(tex_src.iterdir()):
+            if f.is_file() and f.suffix.lower() in (".jpg", ".jpeg", ".png", ".webp"):
+                shutil.copy2(f, tex_dst / f.name)
 
     # ── interior furniture props (Phase 95): rooms load props/<name>.glb ────
     lvl_d = (spec.world.level or {}) if getattr(spec.world, "level", None) else {}
