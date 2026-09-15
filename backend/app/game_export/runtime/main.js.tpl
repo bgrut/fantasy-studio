@@ -2,7 +2,7 @@
 // exporter injects __GAME_SPEC__ and never edits logic. three.js r170 (MIT) +
 // Rapier 0.14 (Apache-2.0), all vendored locally: works fully offline.
 import * as THREE from 'three';
-import { moodOf as __kitMoodOf, setMood as __kitSetMood, Bed as __KitBed } from './vendor/kit/kit.js';
+import { moodOf as __kitMoodOf, setMood as __kitSetMood, Bed as __KitBed, title as __KitTitle, end as __KitEnd } from './vendor/kit/kit.js';
 import { GLTFLoader } from './vendor/jsm/loaders/GLTFLoader.js';
 import { clone as skClone } from './vendor/jsm/utils/SkeletonUtils.js';
 import { mergeGeometries } from './vendor/jsm/utils/BufferGeometryUtils.js';
@@ -530,7 +530,7 @@ async function main() {
     d.style.cssText = 'position:fixed;inset:0;display:flex;align-items:center;'
       + 'justify-content:center;background:#0d0b16;color:#cfcbe6;z-index:99;'
       + 'font:600 16px system-ui;';
-    d.textContent = 'Graphics context recovered — reloading…';
+    d.textContent = 'Graphics context recovered. Reloading…';
     document.body.appendChild(d);
     setTimeout(() => location.reload(), 600);
   });
@@ -6302,13 +6302,17 @@ async function main() {
     } catch (e) {}
     document.getElementById('startbtn').addEventListener('click', () => {
       ov.remove();
+      // THE REVEAL (2026-09-15): the kit's title card, as the factory opens.
+      // The name in the display face and, under it, the sentence that made
+      // the world, in the mood the prompt chose.
+      try { __KitTitle.show(SPEC.title || 'Your World', SPEC.prompt ? '\u201c' + SPEC.prompt + '\u201d' : ((SPEC.world && SPEC.world.name) || ''), { mood: document.body.dataset.mood, secs: 2.8 }); } catch (e) {}
       gameStarted = true;
       runT0 = performance.now();
       sfx('step');                        // gesture unlocks WebAudio + confirms start
       startAmbient();                     // Phase 69: wind bed (+ night crickets)
       audioInit();                        // engine / footsteps / tyres / city bed
       if (window.__restoreProg) window.__restoreProg();   // saved upgrades return
-      if (IS_RACE) startCountdown();
+      if (IS_RACE) setTimeout(startCountdown, 2600);   // the reveal first, then the count
     });
   }
 
@@ -6910,7 +6914,7 @@ async function main() {
             n.lostT += dt;
             if (n.lostT > 3) {
               n.mode = 'patrol'; n.alert = 0; n.lostT = 0; n.vjit = 0.55;
-              popText(`${n.name || 'guard'} lost you — stay low`, '#9fd8a2');
+              popText(`${n.name || 'guard'} lost you. Stay low`, '#9fd8a2');
             }
           } else n.lostT = 0;
         } else if (n.beat) {
@@ -7725,7 +7729,7 @@ async function main() {
         renderHearts();
         sfx('pickup');
         burst(c.position.clone(), 0xffb347);
-        popText('SUPPLY CRATE — double damage!', '#ffd9a8');
+        popText('SUPPLY CRATE: double damage!', '#ffd9a8');
       }
     }
     storm.hurtCd -= dt;
@@ -7864,7 +7868,7 @@ async function main() {
     if (best !== readable) {
       readable = best;
       intEl.style.display = best ? 'block' : 'none';
-      if (best) intEl.textContent = `E — read the ${best.label}`;
+      if (best) intEl.textContent = `E: read the ${best.label}`;
     }
   }
   if (interactables.length) {
@@ -7983,25 +7987,25 @@ async function main() {
     // block, and nothing else on screen tells you the glow is a way in
     if (st.kind === 'collect' && ENTERABLES.length > 1)
       return `${n} ${l}, spread across ${ENTERABLES.length} buildings on this `
-        + `block. Walk into a glowing doorway to get inside — the amber dots `
+        + `block. Walk into a glowing doorway to get inside. The amber dots `
         + `on the map are the ways in. Same doorway takes you back out.`;
     if (st.kind === 'collect') return HAS_GUARDS
-      ? `Take ${n} ${l} — and mind the patrols. Crouch with C, and if a guard `
+      ? `Take ${n} ${l}. And mind the patrols. Crouch with C, and if a guard `
         + `is in your way, throw something with Q to pull him off it.`
-      : `Find ${n} ${l} for me. They are scattered — look around.`;
-    if (st.kind === 'defeat') return `You will have to fight. Put down ${n} ${l} — press F to strike.`;
+      : `Find ${n} ${l} for me. They are scattered. Look around.`;
+    if (st.kind === 'defeat') return `You will have to fight. Put down ${n} ${l}. Press F to strike.`;
     if (st.kind === 'escort')
       return `${l ? l[0].toUpperCase() + l.slice(1) : 'Your charge'} walks the road `
-        + `on his own — STAY CLOSE or he stops and waits for you. The wolves will `
+        + `on his own. STAY CLOSE or he stops and waits for you. The wolves will `
         + `go for HIM, not you. Keep them off him until he reaches the beacon.`;
     if (st.kind === 'survive') return `Just stay alive. Keep moving and do not let them corner you.`;
     if (st.kind === 'race') return `Beat all ${n} of them to the finish. Shift for speed.`;
-    if (st.kind === 'hunt') return `Track ${n} ${l}. Move slow — they bolt if they hear you.`;
+    if (st.kind === 'hunt') return `Track ${n} ${l}. Move slow: they bolt if they hear you.`;
     if (st.kind === 'eliminate') return `Last one standing. ${n} rivals, one winner.`;
     if (st.kind === 'score') return `Put ${n} away and it is yours.`;
     if (st.kind === 'capture') return `Hold ${n} ground. Eight seconds each, and do not step off.`;
     return HAS_GUARDS
-      ? `You have what you came for. Get to ${l} — that is your way out.`
+      ? `You have what you came for. Get to ${l}. That is your way out.`
       : `Make for ${l}. That is where this ends.`;
   }
   function sayGuide(n) {
@@ -8018,11 +8022,11 @@ async function main() {
     if (st.kind === 'defeat') return `Defeat ${st.count} ${st.label || 'enemies'}`;
     if (st.kind === 'race') return `Win the race (${st.count} ${st.label || 'rivals'})`;
     if (st.kind === 'survive') return `Survive ${st.label || 'the onslaught'}`;
-    if (st.kind === 'eliminate') return `Last one standing — eliminate ${st.count} ${st.label || 'rivals'}`;
+    if (st.kind === 'eliminate') return `Last one standing. Eliminate ${st.count} ${st.label || 'rivals'}`;
     if (st.kind === 'hunt') return `Hunt ${st.count} ${st.label || 'prey'} (approach quietly)`;
     if (st.kind === 'score') return `Score ${st.count} ${st.label || 'goals'}`;
     if (st.kind === 'capture') return `Capture ${st.count} zone${st.count > 1 ? 's' : ''} (hold 8s each)`;
-    if (st.kind === 'escort') return `Escort ${st.label || 'your charge'} to the beacon — keep them alive`;
+    if (st.kind === 'escort') return `Escort ${st.label || 'your charge'} to the beacon. Keep them alive`;
     return `Reach ${st.label || 'the beacon'}`;
   }
   function stepProgress(st) {
@@ -8062,7 +8066,7 @@ async function main() {
     if (st) {
       objEl.style.display = 'block';
       const p = stepProgress(st);
-      objEl.textContent = stepLabel(st) + (p ? ` — ${p}` : '');
+      objEl.textContent = stepLabel(st) + (p ? `  ·  ${p}` : '');
     }
   }
   function advanceStep() {
@@ -8119,14 +8123,25 @@ async function main() {
                   : secs <= par * 2.6 ? '🥉 BRONZE' : '';
       document.getElementById('wintime').textContent =
         (medal ? medal + ' · ' : '') + `time ${fmtT(secs)}`
-        + (isPB ? ' — new personal best!' : ` · best ${fmtT(prev)}`);
+        + (isPB ? ' · a new personal best' : ` · best ${fmtT(prev)}`);
     } catch (e) {}
     // the take is the heist's score — a number worth beating on a rerun
     document.getElementById('wintext').textContent = window.__take
       ? `${text}  ·  took $${window.__take.toLocaleString()}` : text;
-    document.getElementById('win').style.display = 'flex';
-    // Game Projects: hub passes ?next=<url> for level progression
+    // THE KIT'S END CARD (2026-09-15): the same card the factory closes on.
+    // The run's medal, time and best as stats; play again as a button; the
+    // next level as a link when a hub passed one. The old panel stays as
+    // the fallback if the kit is missing.
     const nxt = new URLSearchParams(location.search).get('next');
+    try {
+      const _wtime = document.getElementById('wintime').textContent;
+      __KitEnd.show({ title: 'You win', text: document.getElementById('wintext').textContent,
+        stats: _wtime ? _wtime.split(' · ').map(x => x.trim()).filter(Boolean) : [],
+        mood: document.body.dataset.mood,
+        links: (nxt && /^[\w./?=-]+$/.test(nxt)) ? [{ text: 'next level', href: nxt, target: '_self' }] : [],
+        buttons: [{ text: 'play again', onClick: () => location.reload() }] });
+    } catch (e) { document.getElementById('win').style.display = 'flex'; }
+    // Game Projects: hub passes ?next=<url> for level progression
     if (nxt && /^[\w./?=-]+$/.test(nxt)) {
       const a = document.getElementById('nextlvl');
       a.href = nxt; a.style.display = 'inline-block';
@@ -8222,7 +8237,7 @@ async function main() {
     const title = document.createElement('div');
     title.style.cssText = 'position:fixed;top:18%;left:50%;transform:translateX(-50%);'
       + 'color:#ffd257;font:800 22px system-ui;text-shadow:0 2px 8px #000';
-    title.textContent = 'LEVEL ' + plvl + ' — choose an upgrade';
+    title.textContent = 'LEVEL ' + plvl + ': choose an upgrade';
     wrap.appendChild(title);
     wrap.appendChild(mk('❤️', '+1 Heart', 'more health',
       () => { _applyPick('heart'); renderHearts(); }));
@@ -8350,7 +8365,7 @@ async function main() {
         window.__evTimerEl = el;
       }
       window.__evTimerEl.textContent =
-        evTimer.label + ' — ' + Math.max(0, evTimer.left).toFixed(0) + 's';
+        evTimer.label + ': ' + Math.max(0, evTimer.left).toFixed(0) + 's';
       if (evTimer.left <= 0) {
         const z = evTimer; evTimer = null;
         window.__evTimerEl.remove(); window.__evTimerEl = null;
@@ -8394,7 +8409,8 @@ async function main() {
     } catch (e) {}
     sfx('lose');
     document.getElementById('losetext').textContent = text;
-    document.getElementById('lose').style.display = 'flex';
+    try { __KitEnd.show({ title: 'Defeated', text, mood: document.body.dataset.mood, buttons: [{ text: 'retry', onClick: () => location.reload() }] }); }
+    catch (e) { document.getElementById('lose').style.display = 'flex'; }
     console.log('[game] LOSE — ' + text);
   }
   const dmgEl = document.getElementById('dmg');
@@ -9676,7 +9692,7 @@ async function main() {
   {
     const cb = document.createElement('button');
     cb.id = 'cinebtn'; cb.textContent = '🎥';
-    cb.title = 'Cinematic camera (V) — stays on until toggled off';
+    cb.title = 'Cinematic camera (V). Stays on until toggled off';
     cb.style.cssText = 'position:fixed;right:14px;bottom:14px;z-index:6;font-size:20px;'
       + 'background:rgba(16,14,28,0.6);border:1px solid rgba(255,255,255,0.2);'
       + 'border-radius:10px;padding:6px 10px;cursor:pointer;opacity:0.55';
@@ -9712,7 +9728,7 @@ async function main() {
     { id: 'pistol', name: 'Pistol', icon: '🔫', reach: 46, dmg: 1,
       cd: 0.32, desc: 'hold F to aim, release to fire' },
     { id: 'launcher', name: 'Launcher', icon: '🧨', reach: 60, dmg: 3,
-      cd: 1.5, blast: 7.0, desc: 'lobbed shell — everything nearby goes down' },
+      cd: 1.5, blast: 7.0, desc: 'lobbed shell: everything nearby goes down' },
   ];
   let weaponIdx = 0, aimT = 0;
   const shells = [], blasts = [];
@@ -9759,7 +9775,7 @@ async function main() {
       WEAPONS.forEach((w, i) => rows.push([w.icon, w.name, String(i + 1), w.desc, i]));
     }
     if (typeof HAS_GUARDS !== 'undefined' && HAS_GUARDS) {
-      rows.push(['🥫', 'Distraction', 'Q', 'thrown — pulls a guard to the noise']);
+      rows.push(['🥫', 'Distraction', 'Q', 'thrown: pulls a guard to the noise']);
       rows.push(['🐈', 'Crouch', 'C', 'halves how far a guard can see you']);
     }
     if (window.__doors && window.__doors.length) {
@@ -10078,7 +10094,7 @@ async function main() {
       const cap = document.createElement('div');
       cap.style.cssText = 'position:absolute;bottom:6%;left:0;right:0;text-align:center;'
         + 'color:#5b9fd6;letter-spacing:.04em';
-      cap.textContent = 'BLUEPRINT — B to close · guards shown where you have seen them';
+      cap.textContent = 'BLUEPRINT: B to close · guards shown where you have seen them';
       bp.appendChild(cap);
       document.body.appendChild(bp);
       const g = cv.getContext('2d');
@@ -10163,7 +10179,7 @@ async function main() {
           if (k >= 1) {
             scene.remove(stone);
             sfx('step'); burst(new THREE.Vector3(lx, 0.2, lz), 0xbdb6a4);
-            popText('🪨 clatter — something moved over there', '#bdb6a4');
+            popText('🪨 clatter: something moved over there', '#bdb6a4');
             let best = null, bd = 26;
             for (const n of npcs) {
               if (n.behavior !== 'guard' || n.dead || n.dormant || n.mode === 'chase') continue;
@@ -10205,6 +10221,7 @@ async function main() {
     pos: () => playerObj.position.toArray(), keys, ready: true,
     tp: (x, z) => body.setTranslation({ x, y: spawnHeight(x, z), z }, true),
     attack: doAttack,
+    win: (t) => doWin(t || 'the gate called it'), lose: (t) => doLose(t || 'the gate called it'),   // the end card, reachable by a gate
     combat: () => ({ hp: php, kills, mode: ATTACK, lost,
                      hostiles: npcs.filter(n => n.behavior === 'hostile' && !n.dead).length }),
     quest: () => ({ step: stepIdx, total: steps.length,
@@ -10498,7 +10515,7 @@ async function main() {
     body.setTranslation({ x: c.x, y: ey, z: c.z }, true);
     body.setNextKinematicTranslation({ x: c.x, y: ey, z: c.z });
     sfx('go');
-    popText('Engine on — W to drive, E to get out', '#7fd4ff');
+    popText('Engine on: W to drive, E to get out', '#7fd4ff');
   }
   function exitCar() {
     if (!DRIVING || !heldCar) return;
@@ -10582,7 +10599,7 @@ async function main() {
       }
       nearCar = null;
       window.__nearTraffic = null;
-      carPrompt.textContent = 'E — get out';
+      carPrompt.textContent = 'E: get out';
       carPrompt.style.display = 'block';
       if (window.__speedEl) {
         const kph = Math.round(Math.hypot(carVX, carVZ) * 3.6);
@@ -10622,8 +10639,8 @@ async function main() {
     nearCar = best;
     window.__nearTraffic = bt;
     carPrompt.style.display = (best || bt) ? 'block' : 'none';
-    if (best) carPrompt.textContent = 'E — drive';
-    else if (bt) carPrompt.textContent = 'E — steal car';
+    if (best) carPrompt.textContent = 'E: drive';
+    else if (bt) carPrompt.textContent = 'E: steal car';
   }
   window.__game.cars = () => window.__cars.map(c => ({ x: c.x, z: c.z }));
   window.__game.driving = () => DRIVING;
@@ -10725,7 +10742,7 @@ async function main() {
           g9.position.set(q.x, gy9, q.z);
           g9.traverse(o => { if (o.isMesh) { o.castShadow = true; o.frustumCulled = false; } });
           g9.userData.fsTag = { type: 'placed', name: kind, kind,
-                                detail: kind + ' (live — apply the edit to keep it)' };
+                                detail: kind + ' (live: apply the edit to keep it)' };
           scene.add(g9);
           // a live drop gets the same collider a built one would, or you
           // could walk through the building you just placed
@@ -11802,7 +11819,7 @@ varying vec2 vUvRaw;
     if (hint) {
       hint.textContent = 'W throttle · S brake/reverse · A/D steer · Shift boost'
         + ((SPEC.objectives || []).some(o => o.kind === 'race')
-           ? ' — follow the orange gates to the checkered finish' : '');
+           ? ': follow the orange gates to the checkered finish' : '');
     }
   }
   // SPINNING WHEELS (Phase 85 v3): find the BAKED wheels from the mesh
@@ -12092,7 +12109,7 @@ varying vec2 vUvRaw;
           c.style.cssText = 'position:fixed;left:50%;bottom:64px;transform:translateX(-50%);'
             + 'padding:4px 12px;border-radius:999px;background:rgba(10,12,20,.72);'
             + 'color:#9fd8a2;font:600 12px system-ui;z-index:40;pointer-events:none';
-          c.textContent = '🤫 sneaking — guards see half as far';
+          c.textContent = '🤫 sneaking: guards see half as far';
           document.body.appendChild(c);
           window.__sneakChip = c;
         }
@@ -12362,12 +12379,12 @@ varying vec2 vUvRaw;
           const ahead = raceFinishers + rivals.filter(n => !n.finished &&
             Math.hypot(goalPos.x - n.obj.position.x, goalPos.z - n.obj.position.z) < gd).length;
           objEl.style.display = 'block';
-          objEl.textContent = `Race to the beacon — position ${ahead + 1} / ${rivals.length + 1}`;
+          objEl.textContent = `Race to the beacon. Position ${ahead + 1} / ${rivals.length + 1}`;
         }
         if (gd < 2.6) {
           const rank = raceFinishers + 1;
           if (rank === 1) advanceStep();
-          else doLose(`Finished #${rank} — the ${st.label || 'cars'} beat you. Try again!`);
+          else doLose(`Finished #${rank}: the ${st.label || 'cars'} beat you. Try again!`);
         }
       }
     }

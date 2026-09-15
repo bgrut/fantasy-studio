@@ -39,11 +39,22 @@ if (ADV) {
   await wait(9000);
   adv = await probe();
   console.log('adventure : kit linked', JSON.stringify(adv.link), '| faces', JSON.stringify(adv.faces), '| mood', adv.mood, '| start card in', JSON.stringify(adv.startH1).slice(0, 40), '| win card in', JSON.stringify(adv.winH2).slice(0, 40));
+  // START plays the kit's reveal: the title, the sentence that made the world
+  const btn = await p.$('#startbtn'); if (btn) await btn.click();
+  await wait(700);
+  adv.reveal = await p.evaluate(() => { const t = document.getElementById('fs-title'); return t && t.classList.contains('on') ? { name: t.querySelector('b').textContent, sub: t.querySelector('small').textContent } : null; });
   await p.screenshot({ path: process.env.OUT || 'kit.png' });
+  // and a win closes on the kit's end card
+  await p.evaluate(() => { if (window.__game && window.__game.win) window.__game.win('the gate called it'); });   // an older build has no hook: the end card check then fails honestly
+  await wait(500);
+  adv.end = await p.evaluate(() => { const e = document.getElementById('fs-end'); return e && e.classList.contains('on') ? { title: e.querySelector('h2').textContent, buttons: [...e.querySelectorAll('button')].map(b => b.textContent), font: getComputedStyle(e.querySelector('h2')).fontFamily } : null; });
+  console.log('adventure : reveal', JSON.stringify(adv.reveal), '| end card', JSON.stringify(adv.end));
+  await p.screenshot({ path: 'kit_end.png' });
 }
 console.log('errors    :', errs.length ? errs.join(' | ') : 'none');
 await b.close();
 
 const okF = !fac || (fac.link && fac.faces.head && fac.faces.ui && fac.faces.mono && /Bricolage/.test(fac.title || '') && /Bricolage/.test(fac.hudH1 || ''));
-const okA = !adv || (adv.link && adv.faces.head && adv.faces.ui && adv.faces.mono && !!adv.mood && /Bricolage|DM Mono/.test(adv.startH1 || '') && /Bricolage|DM Mono/.test(adv.winH2 || ''));
+const okA = !adv || (adv.link && adv.faces.head && adv.faces.ui && adv.faces.mono && !!adv.mood && /Bricolage|DM Mono/.test(adv.startH1 || '') && /Bricolage|DM Mono/.test(adv.winH2 || '')
+  && adv.reveal && adv.reveal.name && /^\u201c.+\u201d$/.test(adv.reveal.sub) && adv.end && /win/i.test(adv.end.title) && adv.end.buttons.includes('play again') && /Bricolage|DM Mono/.test(adv.end.font));
 process.exit(okF && okA && (fac || adv) && errs.length === 0 ? 0 : 1);
