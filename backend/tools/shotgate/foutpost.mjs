@@ -87,6 +87,22 @@ const s5 = await p.evaluate((spot) => {
   return { hub, props: window.__game.facts().props, byNewHub: hc.t === TY.PROP && hc.prop === 'habitat' };
 }, s4.spot);
 console.log('moved hub :', JSON.stringify(s4.old), '->', JSON.stringify(s5.hub), '| props', s5.props, '| habitat by the new hub', s5.byNewHub);
+// 4. the supply drone: at rest on the habitat, out over the hub mid-flight, home again at the end of its day
+const fly = await p.evaluate(async () => {
+  const F = window.__factory, f = () => window.__game.facts().drone;
+  F.droneAt(2); await new Promise(r => setTimeout(r, 300));
+  const rest = f();
+  F.droneAt(29); await new Promise(r => setTimeout(r, 300));
+  const mid = f();
+  F.droneAt(34); await new Promise(r => setTimeout(r, 300));   // mid-hover: rest 26 + out 6 = 32, hover to 36
+  const hover = f();
+  F.droneAt(41.9); await new Promise(r => setTimeout(r, 300));
+  const home = f();
+  const d = (a, b) => Math.hypot(a.pos[0] - b.pos[0], a.pos[1] - b.pos[1], a.pos[2] - b.pos[2]);
+  let hub = null; const TY = F.TYPES; for (let i = 0; i < F.N && !hub; i++) for (let j = 0; j < F.N && !hub; j++) if (F.cells[0][i][j].t === TY.HUB) hub = F.tileWorld(0, i, j);
+  return { rest, mid, hover, home, moved: rest && mid ? d(rest, mid) : 0, overHub: hover ? Math.hypot(hover.pos[0] - hub[0], hover.pos[2] - hub[2]) : 99, back: rest && home ? d(rest, home) : 99 };
+});
+console.log('the drone :', fly.rest ? 'rests on the habitat' : 'MISSING', '| moved', fly.moved.toFixed(1), 'm by mid-flight | over the hub within', fly.overHub.toFixed(2), 'm | home within', fly.back.toFixed(2), 'm');
 console.log('errors    :', errs.length ? errs.join(' | ') : 'none');
 await b.close();
 
@@ -95,5 +111,6 @@ const ok = s1.props === 4 && s1.kinds.join(',') === 'crates,habitat,mast,mast' &
   && s2.bpCells > 0 && s2.inBp === 0 && s2.inSave === 0
   && s3.props === 4 && s3.byHub
   && s5.props >= 1 && s5.byNewHub
+  && fly.rest && fly.moved > 2 && fly.overHub < 0.3 && fly.back < 0.3
   && errs.length === 0;
 process.exit(ok ? 0 : 1);

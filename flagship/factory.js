@@ -520,6 +520,7 @@ let glowPools = null;             // built with the decals; the seams index into
 // reads CAPS.stable and applyUpgrades runs at boot
 const CAPS = { heated: 0, scrubber: 0, stable: 0 };
 const PROP_LIST = [];                  // the outpost's groups, for the look ray (hoisted: filled at seeding, read by cellUnder)
+let outpost = null;                    // { hub, hab }: where the drone flies between
 let picksOn = false;                    // the boot reveal lists the worlds a demo ships; a crossing's card does not (hoisted: set at boot, read in playIntro)
 // creative is read from the URL here, in the early block: hubCost() reads it,
 // and the starter line's seeding calls that before the save block runs
@@ -4501,7 +4502,9 @@ function seedOutpost() {
   // through, and the outpost closes the line like a full stop.
   let n = 0;
   const hx = cells[0][hi + 2] && cells[0][hi + 2][hj] && cells[0][hi + 2][hj].t === EMPTY ? hi + 2 : hi + 3;
-  n += placeProp(0, hx, hj, 'habitat', Math.PI * 0.5) ? 1 : 0;        // its door faces the hub
+  const habOk = placeProp(0, hx, hj, 'habitat', Math.PI * 0.5);   // its door faces the hub
+  n += habOk ? 1 : 0;
+  if (habOk) outpost = { hub: [hi, hj], hab: [hx, hj] };            // the drone flies between these
   n += placeProp(0, hx, hj - 1, 'mast', Math.PI) ? 1 : 0;
   n += placeProp(0, hx + 1, hj + 1, 'mast', 0) ? 1 : 0;
   n += placeProp(0, hx + 1, hj, 'crates', 0.3) ? 1 : 0;
@@ -5268,6 +5271,73 @@ function spawnTag(f, i, j, v) {
   tagsSeen++;
   stepTags(0);
 }
+// ── THE SUPPLY DRONE. Every half minute it lifts off the habitat, flies to
+// the hub, hovers, and comes home. Nothing in the game reads it; it is the
+// outpost breathing. ────────────────────────────────────────────────────────
+const drone = new THREE.Group();
+{
+  const body = new THREE.Mesh(mergeParts([
+    { g: _box(0.44, 0.12, 0.30), y: 0.10 },                                      // hull
+    { g: _box(0.30, 0.08, 0.20), y: 0.20, tint: 1.08 },                          // canopy
+    { g: _box(0.58, 0.03, 0.05), y: 0.13, ry: 0.6, col: PAINT.chassis },         // arms
+    { g: _box(0.58, 0.03, 0.05), y: 0.13, ry: -0.6, col: PAINT.chassis },
+    { g: _box(0.05, 0.10, 0.05), y: 0.02, x: 0.14, z: 0.10, col: PAINT.chassis }, // legs
+    { g: _box(0.05, 0.10, 0.05), y: 0.02, x: -0.14, z: 0.10, col: PAINT.chassis },
+    { g: _box(0.05, 0.10, 0.05), y: 0.02, x: 0.14, z: -0.10, col: PAINT.chassis },
+    { g: _box(0.05, 0.10, 0.05), y: 0.02, x: -0.14, z: -0.10, col: PAINT.chassis },
+  ], { floor: 0.72, reach: 0.4, base: 0xd9ad55 }), MAT.prop);
+  body.castShadow = true; drone.add(body);
+  for (const [x, z] of [[0.24, 0.16], [-0.24, 0.16], [0.24, -0.16], [-0.24, -0.16]]) {
+    const r = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.012, 12),
+      new THREE.MeshBasicMaterial({ color: 0x9aa6c8, transparent: true, opacity: 0.35, depthWrite: false }));
+    r.position.set(x, 0.17, z); r.name = 'rotor'; drone.add(r);
+  }
+  const lamp = (x, col) => { const m = new THREE.Mesh(new THREE.SphereGeometry(0.03, 6, 4), new THREE.MeshBasicMaterial({ color: col })); m.position.set(x, 0.12, 0.17); m.name = x > 0 ? 'lampG' : 'lampR'; drone.add(m); };
+  lamp(0.2, 0x3af07a); lamp(-0.2, 0xff4a4a);
+  const crate = new THREE.Mesh(_box(0.18, 0.16, 0.18), MAT.propCrate);
+  crate.position.y = -0.09; crate.name = 'crate'; drone.add(crate);
+  drone.visible = false; drone.name = 'drone';
+  scene.add(drone);
+}
+// its day: rest 26 s, out 6 s, hover 4 s, back 6 s
+const DRONE = { rest: 26, out: 6, hover: 4, back: 6 };
+let droneT = -8;                     // the first flight comes early: someone new is watching
+let droneFlights = 0;
+const _dA = new THREE.Vector3(), _dB = new THREE.Vector3(), _dP = new THREE.Vector3(), _dPrev = new THREE.Vector3();
+function stepDrone(dt) {
+  if (!outpost) { drone.visible = false; return; }
+  droneT += dt;
+  const total = DRONE.rest + DRONE.out + DRONE.hover + DRONE.back;
+  if (droneT >= total) { droneT -= total; droneFlights++; }
+  const hab = tileWorld(0, outpost.hab[0], outpost.hab[1]), hub = tileWorld(0, outpost.hub[0], outpost.hub[1]);
+  const n = FACES[0].n;
+  _dA.set(hab[0] + n[0] * 1.62, hab[1] + n[1] * 1.62, hab[2] + n[2] * 1.62);   // on the dome
+  _dB.set(hub[0] + n[0] * 2.4, hub[1] + n[1] * 2.4, hub[2] + n[2] * 2.4);      // above the beacon
+  let k = 0, lift = 0, going = 0;
+  const ease = x => x < 0.5 ? 2 * x * x : 1 - Math.pow(-2 * x + 2, 2) / 2;
+  if (droneT < DRONE.rest) { k = 0; lift = 0; }
+  else if (droneT < DRONE.rest + DRONE.out) { const u = (droneT - DRONE.rest) / DRONE.out; k = ease(u); lift = Math.sin(u * Math.PI) * 1.2; going = 1; }
+  else if (droneT < DRONE.rest + DRONE.out + DRONE.hover) { k = 1; lift = 0; }
+  else { const u = (droneT - DRONE.rest - DRONE.out - DRONE.hover) / DRONE.back; k = 1 - ease(u); lift = Math.sin(u * Math.PI) * 1.2; going = -1; }
+  _dPrev.copy(drone.position);
+  _dP.lerpVectors(_dA, _dB, k);
+  const bob = k > 0 && k < 1 || droneT >= DRONE.rest ? Math.sin(performance.now() * 0.006) * 0.05 : 0;
+  drone.position.set(_dP.x + n[0] * (lift + bob), _dP.y + n[1] * (lift + bob), _dP.z + n[2] * (lift + bob));
+  drone.visible = true;
+  // it faces its way and banks into the move
+  if (going) {
+    const dx = (_dB.x - _dA.x) * going, dz = (_dB.z - _dA.z) * going;
+    drone.rotation.y = Math.atan2(dx, dz);
+    drone.rotation.x = -Math.sin(((droneT - (going > 0 ? DRONE.rest : DRONE.rest + DRONE.out + DRONE.hover)) / DRONE.out) * Math.PI) * 0.22;
+  } else { drone.rotation.x = 0; }
+  const flying = droneT >= DRONE.rest;
+  const spin = flying ? 42 : 0;
+  drone.children.forEach(ch => { if (ch.name === 'rotor') ch.rotation.y += spin * dt; });
+  const crate = drone.getObjectByName('crate'); if (crate) crate.visible = droneT < DRONE.rest + DRONE.out + DRONE.hover * 0.5;
+  const blink = Math.floor(performance.now() / 500) % 2 === 0;
+  const lr = drone.getObjectByName('lampR'), lg = drone.getObjectByName('lampG');
+  if (lr) lr.visible = flying && blink; if (lg) lg.visible = flying && !blink;
+}
 // ── THE HINTS STEP BACK. Read once, then gone; H brings them back. ──────────
 let hintClock = 0, hintBack = 0;
 function stepHint(dt) {
@@ -5632,6 +5702,7 @@ renderer.setAnimationLoop(() => {
   stepLook(dt);
   stepTags(dt);
   stepHint(dt);
+  stepDrone(dt);
   stepRival(dt);
   if (contract && (performance.now() % 500) < 20) renderContract();
   // seams grow back on their own, and wear their richness as their size
@@ -6396,6 +6467,7 @@ window.__game = {
     props: (() => { let n = 0; eachTile(c => { if (c.t === PROP) n++; }); return n; })(),
     tagsSeen, tagsLive: liveTags.length,
     hintGone: !!document.getElementById('hint')?.classList.contains('gone'),
+    drone: drone.visible ? { t: +droneT.toFixed(1), flights: droneFlights, pos: drone.position.toArray().map(v => +v.toFixed(2)) } : null,
     audio: { ready: AUDIO.ready, muted: AUDIO.muted,
              state: AUDIO.ctx ? AUDIO.ctx.state : null,
              bed: AUDIO.bed ? { fam: AUDIO.bed.fam, chord: AUDIO.bed.chord, voices: AUDIO.bed.voices.length, level: AUDIO.bed.key.level, on: AUDIO.bed.on } : null },
@@ -6498,6 +6570,7 @@ window.__factory = {
   // where a tile is on screen, for a harness that clicks like a player
   liveTags,
   ageHints: () => { hintClock = 100; },     // the gate cannot wait forty-five seconds
+  droneAt: (t) => { droneT = t; },          // the gate sets the drone's clock
   screenOf: (f, i, j) => { const w = tileWorld(f, i, j); const v = new THREE.Vector3(w[0], w[1], w[2]).project(camera);
                            return [(v.x + 1) / 2 * innerWidth, (1 - v.y) / 2 * innerHeight, v.z]; },
   FAR_PREMIUM, MINERAL_OF_INGOT,
