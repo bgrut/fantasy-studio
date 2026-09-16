@@ -16105,6 +16105,13 @@
       "home": false,
       "file": "",
       "href": "drift/"
+    },
+    {
+      "name": "Firefly Dawn",
+      "prompt": "a moonlit forest walk to gather lost fireflies before dawn",
+      "home": false,
+      "file": "",
+      "href": "forest/"
     }
   ],
   "style": "illustrated",
