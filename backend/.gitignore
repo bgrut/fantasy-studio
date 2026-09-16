@@ -49,6 +49,7 @@ venv_triposg/
 
 vendor/blosm/
 tools/*
+!tools/flagship_pack.py
 !tools/shotgate/
 tools/shotgate/node_modules/
 # Car Lab: source is tracked, its vendored three.js copy is not (copy it from

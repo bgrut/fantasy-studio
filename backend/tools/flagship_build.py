@@ -136,7 +136,7 @@ def sync_fonts(check: bool) -> bool:
     ok = True
     # a subdirectory ships whole; a single file ships alone (the AO library
     # and the two shims it imports)
-    for sub in ("fonts", "kit", "jsm/postprocessing", "n8ao.module.js", "postprocessing-stub.js"):
+    for sub in ("fonts", "kit", "jsm/postprocessing", "n8ao.module.js", "n8ao.LICENSE", "postprocessing-stub.js", "three.LICENSE"):
         src = RUNTIME / "vendor" / sub
         if not src.exists():
             continue

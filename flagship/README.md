@@ -28,6 +28,15 @@ The runtime asks for `drift/index.html` at boot and hides the pick when nothing
 answers, so a clone shows the factories only and a packaged download shows the
 race too. The gate for all of it is `backend/tools/shotgate/fworlds.mjs`.
 
+## One download
+
+    python backend/tools/flagship_pack.py --adv <job id>   # dist/crystal-works-<date>.zip, the race inside
+
+Rebuilds the demo, writes `LICENSES.md`, and zips this folder with a single
+top-level folder. Unzip anywhere, `python -m http.server 8123` inside it, and
+play; or upload the zip to itch.io as an HTML game. Without `--adv` the zip
+holds the factories only.
+
 Do not edit them — edit
 `backend/app/game_export/runtime/factory.js.tpl` and re-run the builder.
 
