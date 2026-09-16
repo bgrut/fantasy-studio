@@ -711,8 +711,20 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             "papercraft": "side",  # Tengami's folding pages
             "dunescape": "side",   # Alto's Odyssey
             "pixel": "topdown",    # the 2D Zelda lineage
-            "storybook": "topdown",
+            # storybook no longer binds to overhead (2026-09-16): a "forest walk"
+            # asked for storybook and got a top-down field of inked leaves
         }
+        # A PAPER LOOK OWNS ITS SKY (2026-09-16). The illustration looks paint a
+        # paper daylight over the world; on a prompt that asked for night
+        # light they erase the one thing the prompt was about. The extractor
+        # is told so; when it still picks one, the night wins.
+        _PAPER = {"illustrated", "storybook", "watercolor", "dunescape", "papercraft"}
+        _sky = str(getattr(spec.world, "sky", "") or "").lower()
+        if not req.style and spec.style in _PAPER and _sky in ("night", "dusk"):
+            job.setdefault("notes", []).append(
+                f"art direction: {spec.style} would paint daylight over a {_sky} sky; kept the night with 'default' "
+                "(pick a style in the studio to override)")
+            spec.style = "default"
         _sv = _STYLE_VIEW.get(spec.style or "default")
         if _sv and not req.view:
             spec.view = _sv

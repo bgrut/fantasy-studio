@@ -53,6 +53,8 @@ DEMO_WORLDS = [
     # and the runtime hides the pick when the folder is not served.
     {"slug": "drift", "href": "drift/", "name": "Tokyo Drift Nights",
      "prompt": "a tokyo drift racing game through neon streets at night"},
+    {"slug": "forest", "href": "forest/", "name": "Firefly Dawn",
+     "prompt": "a moonlit forest walk to gather lost fireflies before dawn"},
 ]
 
 DEMO_SPEC = {
@@ -162,20 +164,36 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--adv", type=int, default=None,
                     help="copy backend/renders/game_jobs/job_N/dist into flagship/drift/ (the race beside the demo)")
+    ap.add_argument("--ship", action="append", default=[], metavar="JOB:SLUG",
+                    help="copy job JOB's dist into flagship/SLUG/ (repeatable; --adv N is --ship N:drift)")
     ap.add_argument("--check", action="store_true",
                     help="exit 1 if the demo is stale instead of rewriting it")
     args = ap.parse_args()
 
-    if args.adv is not None:
+    ships = list(args.ship) + ([f"{args.adv}:drift"] if args.adv is not None else [])
+    for item in ships:
         import shutil
-        src = ROOT / "backend" / "renders" / "game_jobs" / f"job_{args.adv}" / "dist"
+        job, _, slug = item.partition(":")
+        if not job.isdigit() or not slug or "/" in slug or ".." in slug:
+            raise SystemExit(f"--ship wants JOB:SLUG, got {item!r}")
+        src = ROOT / "backend" / "renders" / "game_jobs" / f"job_{job}" / "dist"
         if not (src / "index.html").exists():
             raise SystemExit(f"no build at {src}")
-        dst = OUT / "drift"
+        # a factory ships as worlds/<slug>.json, never as a folder: job ids
+        # restart with the backend, and shipping the wrong job once put a
+        # moon in the race's folder
+        try:
+            sp = json.loads((src / "spec.json").read_text(encoding="utf-8"))
+        except Exception:
+            sp = {}
+        if sp.get("genre") == "factory":
+            raise SystemExit(f"job_{job} is a factory ({sp.get('title')!r}); ship factories as worlds/<slug>.json, not folders")
+        print(f"  shipping job_{job}: {sp.get('title')!r} ({sp.get('genre')})")
+        dst = OUT / slug
         if dst.exists():
             shutil.rmtree(dst)
         shutil.copytree(src, dst, ignore=shutil.ignore_patterns("_shot.png", "audit_fixes.json"))
-        print(f"  flagship/drift  <- job_{args.adv}  ({sum(p.stat().st_size for p in dst.rglob('*') if p.is_file()) // 1_000_000} MB)")
+        print(f"  flagship/{slug}  <- job_{job}  ({sum(p.stat().st_size for p in dst.rglob('*') if p.is_file()) // 1_000_000} MB)")
 
     files = render()
     fonts_ok = sync_fonts(args.check)

@@ -100,6 +100,12 @@ Output ONLY the JSON object, no markdown, no commentary. Schema (all fields opti
  "anime"; a gritty city heist, a wildlife documentary, or a NIGHT STREET RACE
  under neon reads "default" (neon is light, not resolution: it wants real
  reflections and a night palette with a hot accent, not a low-res filter).
+ THE ILLUSTRATION LOOKS OWN THEIR SKY: "illustrated", "storybook",
+ "watercolor", "dunescape" and "papercraft" paint a paper daylight over the
+ world, so a prompt whose whole point is night light (moonlit, fireflies,
+ lanterns, candles, stars, dawn, dusk, aurora, bioluminescent) MUST be
+ "default" or "anime" with a night "sky" in "world"; a paper look on a night
+ prompt is WRONG and will be overridden.
  ALWAYS EMIT "style". Every prompt carries a genre and every genre implies a
  look, so "default" is a CHOICE meaning "photoreal", never a way to skip the
  question. A prompt naming retro, 8-bit, 16-bit, pixel art or "arcade cabinet"

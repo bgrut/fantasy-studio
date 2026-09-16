@@ -10,7 +10,7 @@ itself or dedicated to the public domain.
 | N8AO ambient occlusion | CC0 (vendor/n8ao.LICENSE) |
 | Bricolage Grotesque, Instrument Sans, DM Mono | SIL Open Font License 1.1 (vendor/fonts/OFL-*.txt) |
 | Machines, plating, sky, sounds | Drawn and synthesised by the runtime at load; no assets shipped |
-| The race beside the demo (drift/, when present) | Its own LICENSES.md inside that folder |
+| The worlds shipped beside the demo (drift/, forest/, when present) | Each carries its own LICENSES.md |
 
 No cloud services were used to build this demo. No third party holds rights
 over its content. You may sell it, publish it, or modify it freely.

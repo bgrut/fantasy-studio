@@ -7994,7 +7994,7 @@ async function main() {
     if (st.kind === 'collect') return HAS_GUARDS
       ? `Take ${n} ${l}. And mind the patrols. Crouch with C, and if a guard `
         + `is in your way, throw something with Q to pull him off it.`
-      : `Find ${n} ${l} for me. They are scattered. Look around.`;
+      : `Find ${cnt(n, l)} for me. ${n === 1 ? 'It is out there somewhere' : 'They are scattered'}. Look around.`;
     if (st.kind === 'defeat') return `You will have to fight. Put down ${n} ${l}. Press F to strike.`;
     if (st.kind === 'escort')
       return `${l ? l[0].toUpperCase() + l.slice(1) : 'Your charge'} walks the road `
@@ -8019,9 +8019,12 @@ async function main() {
       : 'Guide';
     say(role, guideLine(steps[stepIdx]), '#ffd166');
   }
+  // "Collect 1 the woodcutter's stash": a label that carries its own article
+  // takes no count when the count is one
+  const cnt = (n, l) => (n === 1 && /^(the|a|an|your|his|her|their)\s/i.test(l || '')) ? l : `${n} ${l}`;
   function stepLabel(st) {
-    if (st.kind === 'collect') return `Collect ${st.count} ${st.label || 'items'}`;
-    if (st.kind === 'defeat') return `Defeat ${st.count} ${st.label || 'enemies'}`;
+    if (st.kind === 'collect') return `Collect ${cnt(st.count, st.label || 'items')}`;
+    if (st.kind === 'defeat') return `Defeat ${cnt(st.count, st.label || 'enemies')}`;
     if (st.kind === 'race') return `Win the race (${st.count} ${st.label || 'rivals'})`;
     if (st.kind === 'survive') return `Survive ${st.label || 'the onslaught'}`;
     if (st.kind === 'eliminate') return `Last one standing. Eliminate ${st.count} ${st.label || 'rivals'}`;
@@ -11661,7 +11664,10 @@ varying vec2 vUvRaw;
                inkTh: 0, inkW: 0 },
     sketch:  { bands: 5, sat: 1.35, exposure: 1.05, grain: 0, edge: 2.4, gamma: 1.0 },
     anime:   { bands: 8, sat: 1.18, exposure: 1.08, grain: 0, edge: 1.1, gamma: 1.0 },
-    horror:  { bands: 0, sat: 0.32, exposure: 0.7, grain: 0.13, edge: 0, gamma: 1.7 },
+    // A LOOK, NOT A BLINDFOLD (2026-09-16): 0.7 exposure under a 1.7 gamma with
+    // the lights halved turned a night moor into a black field of grain. The
+    // crush stays; the floor rises so a shape is still a shape.
+    horror:  { bands: 0, sat: 0.32, exposure: 0.88, grain: 0.07, edge: 0, gamma: 1.32 },
     pixel:   { bands: 6, sat: 1.12, exposure: 1.0, grain: 0, edge: 0, gamma: 1.0 },
     lowpoly: { bands: 7, sat: 1.15, exposure: 1.02, grain: 0, edge: 0, gamma: 1.0 },
     // THE ILLUSTRATION LOOKS. Their palette and atmosphere are set up top in
@@ -11676,7 +11682,7 @@ varying vec2 vUvRaw;
     // Limbo: near-monochrome, crushed, grainy, everything a silhouette
     noir:        { bands: 0, sat: 0.05, exposure: 0.74, grain: 0.11, edge: 0, gamma: 1.45 },
     // Don't Starve: inked linework over muted paper
-    storybook:   { bands: 5, sat: 0.82, exposure: 1.0, grain: 0.03, edge: 2.6, gamma: 1.02 },
+    storybook:   { bands: 5, sat: 0.82, exposure: 1.0, grain: 0.03, edge: 1.5, gamma: 1.02 },   // edge 2.6 inked every leaf into noise
     // cute: bright, sweet, no crush anywhere. gamma under 1 lifts the midtones
     // so nothing reads heavy, which is most of what makes a look "cute".
     kawaii:      { bands: 0, sat: 1.24, exposure: 1.10, grain: 0, edge: 0, gamma: 0.86 },
@@ -11769,15 +11775,18 @@ varying vec2 vUvRaw;
   if (STYLE === 'horror') {
     // horror must be DARK regardless of the world's sky: crush the sky and
     // fog toward black, dim the lights, let the vignette close in
+    // a world that is already night is not darkened again: the crush is for
+    // daylight worlds asked to be dreadful
+    const _night = ['night', 'dusk'].includes(SPEC.world.sky);
     if (scene.fog) {
-      scene.fog.near *= 0.45;
-      scene.fog.far *= 0.55;
-      scene.fog.color.multiplyScalar(0.4);
+      scene.fog.near *= _night ? 0.8 : 0.45;
+      scene.fog.far *= _night ? 0.85 : 0.55;
+      scene.fog.color.multiplyScalar(_night ? 0.8 : 0.4);
     }
-    if (scene.background && scene.background.isColor) scene.background.multiplyScalar(0.3);
-    scene.traverse(o => { if (o.isLight) o.intensity *= 0.5; });
+    if (scene.background && scene.background.isColor) scene.background.multiplyScalar(_night ? 0.8 : 0.3);
+    scene.traverse(o => { if (o.isLight) o.intensity *= _night ? 0.85 : 0.6; });
     bloom.strength = 0.12;
-    vignette.uniforms.strength.value = 0.9;
+    vignette.uniforms.strength.value = 0.7;
   }
   if (STYLE === 'anime') bloom.strength = 0.45;   // dreamy glow
   if (STYLE === 'lowpoly') {

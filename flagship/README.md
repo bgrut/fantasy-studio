@@ -19,18 +19,18 @@ Three are factories the studio built from a prompt each; their specs ride in
 `worlds/*.json` (copied from a job's `dist/spec.json`, never hand-written) and
 open under their own saves via `?spec=worlds/<name>.json`.
 
-The fourth is a race, not a factory. It is a whole studio build, 60 MB, and it
-stays out of the repository. Ship it beside the demo with
+The others are not factories: a race and a forest walk, each a whole studio
+build that stays out of the repository. Ship them beside the demo with
 
-    python backend/tools/flagship_build.py --adv <job id>   # copies the job's dist into flagship/drift/
+    python backend/tools/flagship_build.py --ship <job id>:drift --ship <job id>:forest   # a job's dist into flagship/<slug>/
 
-The runtime asks for `drift/index.html` at boot and hides the pick when nothing
-answers, so a clone shows the factories only and a packaged download shows the
-race too. The gate for all of it is `backend/tools/shotgate/fworlds.mjs`.
+The runtime asks for each shipped world's `index.html` at boot and hides the
+pick when nothing answers, so a clone shows the factories only and a packaged
+download shows the race and the forest too. The gate for all of it is `backend/tools/shotgate/fworlds.mjs`.
 
 ## One download
 
-    python backend/tools/flagship_pack.py --adv <job id>   # dist/crystal-works-<date>.zip, the race inside
+    python backend/tools/flagship_pack.py --ship <job id>:drift --ship <job id>:forest   # dist/crystal-works-<date>.zip
 
 Rebuilds the demo, writes `LICENSES.md`, and zips this folder with a single
 top-level folder. Unzip anywhere, `python -m http.server 8123` inside it, and
