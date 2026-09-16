@@ -5316,6 +5316,7 @@ function spawnTag(f, i, j, v) {
     const hc = cells[f][i][j]; if (hc) hc.pulse = 2.4;
     // a toast already up (ice, a contract, the foreman) keeps the slot; the tag and the pulse still land
     const t = toastAt > 0 ? null : document.getElementById('toast');
+    sfxFirstSale();
     if (t) { t.textContent = WORD('FIRST SALE. Something reached the hub and sold for ' + Math.round(v) + ' credits. Anything that reaches a hub is money, and the number in the corner is what you have banked.'); t.classList.add('on'); toastAt = 7; }
   }
   el.style.opacity = '0';                           // placed by the first step, never flashed at the origin
@@ -5384,6 +5385,11 @@ function stepDrone(dt) {
     drone.rotation.x = -Math.sin(((droneT - (going > 0 ? DRONE.rest : DRONE.rest + DRONE.out + DRONE.hover)) / DRONE.out) * Math.PI) * 0.22;
   } else { drone.rotation.x = 0; }
   const flying = droneT >= DRONE.rest;
+  if (AUDIO.ready && AUDIO.drone) {
+    const dist = drone.position.distanceTo(player.pos);
+    const lvl = flying ? Math.max(0, 0.10 * (1 - dist / 30)) * (photo ? 0 : 1) : 0;
+    AUDIO.drone.gain.setTargetAtTime(lvl, AUDIO.ctx.currentTime, 0.25);
+  }
   const spin = flying ? 42 : 0;
   drone.children.forEach(ch => { if (ch.name === 'rotor') ch.rotation.y += spin * dt; });
   const crate = drone.getObjectByName('crate'); if (crate) crate.visible = droneT < DRONE.rest + DRONE.out + DRONE.hover * 0.5;
@@ -5401,6 +5407,7 @@ function stepIdle(dt) {
   if (idleClock < 90) return;
   idleClock = 30;                                    // the next nudge comes a minute on
   idleNudges++;
+  sfxIdle();
   const goal = document.getElementById('goal');
   if (goal) { goal.classList.remove('nudge'); void goal.offsetWidth; goal.classList.add('nudge'); }
   // the nearest free seam on the player's face
@@ -6229,7 +6236,17 @@ function audioStart() {
   const flp = ctx.createBiquadFilter(); flp.type = 'lowpass'; flp.frequency.value = 120;
   fSrc.connect(flp); flp.connect(fGain); fGain.connect(master); fSrc.start();
 
-  Object.assign(AUDIO, { ctx, master, hum: humGain, belts: bGain, furnace: fGain,
+  // the drone: two close saws through a lowpass, a rotor's beat in the
+  // difference tone; its level follows the flight and the distance
+  const dGain = ctx.createGain(); dGain.gain.value = 0;
+  const dlp = ctx.createBiquadFilter(); dlp.type = 'lowpass'; dlp.frequency.value = 520;
+  for (const f of [112, 113.8]) {
+    const o = ctx.createOscillator(); o.type = 'sawtooth'; o.frequency.value = f;
+    o.connect(dlp); o.start();
+  }
+  dlp.connect(dGain); dGain.connect(master);
+
+  Object.assign(AUDIO, { ctx, master, hum: humGain, belts: bGain, furnace: fGain, drone: dGain,
                          ready: true });
   // THE MUSIC BED. The world's room tone, from the kit, in the world's family.
   try { AUDIO.bed = new KitBed(ctx, master); AUDIO.bed.family(WORLDS[worldIdx] ? WORLDS[worldIdx].fam : 'void', true); } catch (e) { AUDIO.bed = null; }
@@ -6250,6 +6267,14 @@ function tone(freq, dur, type, vol, when) {
 
 const SOLD_PITCH = { 1: 660, 2: 587, 3: 740, 4: 880, 5: 784, 6: 988, 7: 1175 };
 function sfxSold(type) { tone(SOLD_PITCH[type] || 660, 0.16, 'sine', 0.16); }
+// THE FIRST SALE: a rising triad with a sparkle on top. Once per world.
+function sfxFirstSale() {
+  AUDIO.last = 'firstSale';
+  tone(523, 0.20, 'triangle', 0.15); tone(659, 0.20, 'triangle', 0.13, 0.11);
+  tone(784, 0.42, 'sine', 0.17, 0.22); tone(1568, 0.55, 'sine', 0.045, 0.34);
+}
+// THE IDLE CUE: a soft double chime, the sound of someone clearing their throat.
+function sfxIdle() { AUDIO.last = 'idle'; tone(660, 0.14, 'sine', 0.09); tone(880, 0.20, 'sine', 0.08, 0.15); }
 function sfxUnlock() { tone(523, 0.22, 'triangle', 0.18); tone(784, 0.36, 'triangle', 0.18, 0.13); }
 function sfxMelt() {
   if (!AUDIO.ready || AUDIO.muted) return;
@@ -6556,6 +6581,7 @@ window.__game = {
     tagsSeen, tagsLive: liveTags.length,
     hintGone: !!document.getElementById('hint')?.classList.contains('gone'),
     ao: POST.ao,
+    sfxLast: AUDIO.last || null, droneGain: AUDIO.drone ? +AUDIO.drone.gain.value.toFixed(3) : 0,
     picks: Array.isArray(SPEC.worlds) ? SPEC.worlds.filter(w => !(w.href && pickMissing[w.href])).length : 0,
     firstSale: lifetime.first, idleNudges, idleRing: !!(idleMark && idleMark.visible), crossLit,
     drone: drone.visible ? { t: +droneT.toFixed(1), flights: droneFlights, pos: drone.position.toArray().map(v => +v.toFixed(2)) } : null,
@@ -6663,6 +6689,7 @@ window.__factory = {
   ageHints: () => { hintClock = 100; },     // the gate cannot wait forty-five seconds
   droneAt: (t) => { droneT = t; },          // the gate sets the drone's clock
   idleAt: (t) => { idleClock = t; },        // and the idle clock
+  playSfx: (name) => ({ firstSale: sfxFirstSale, idle: sfxIdle, sold: () => sfxSold(1), cross: sfxCross }[name] || (() => {}))(),
   screenOf: (f, i, j) => { const w = tileWorld(f, i, j); const v = new THREE.Vector3(w[0], w[1], w[2]).project(camera);
                            return [(v.x + 1) / 2 * innerWidth, (1 - v.y) / 2 * innerHeight, v.z]; },
   FAR_PREMIUM, MINERAL_OF_INGOT,

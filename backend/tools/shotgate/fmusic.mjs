@@ -84,6 +84,20 @@ console.log('rendered  : rms', s5.rms, '| peak', s5.peak);
 
 // 6. the adventure runtime plays the same bed after START, in its own family
 let adv = null;
+// the three sounds: the first sale's triad, the idle chime, and the drone's hum that swells as it flies past
+const three = await p.evaluate(async () => {
+  const F = window.__factory, f = () => window.__game.facts();
+  F.playSfx('firstSale'); const a = f().sfxLast;
+  F.playSfx('idle'); const b = f().sfxLast;
+  F.droneAt(2); await new Promise(r => setTimeout(r, 600)); const rest = f().droneGain;
+  // put the player under the flight path and start the outbound leg
+  const hub = (() => { const TY = F.TYPES; for (let i = 0; i < F.N; i++) for (let j = 0; j < F.N; j++) if (F.cells[0][i][j].t === TY.HUB) return F.tileWorld(0, i, j); })();
+  if (hub) F.player.pos.set(hub[0], F.HALF + 1.6, hub[2] + 2);
+  F.droneAt(30); await new Promise(r => setTimeout(r, 900)); const fly = f().droneGain;
+  return { a, b, rest, fly };
+});
+console.log('sounds    : first sale ->', three.a, '| idle ->', three.b, '| drone at rest', three.rest, '-> in flight', three.fly);
+if (!(three.a === 'firstSale' && three.b === 'idle' && three.fly > three.rest && three.fly > 0.02)) { console.log('FAIL: the sounds'); process.exit(1); }
 if (process.env.A) {
   await p.goto('http://127.0.0.1:8789/games/job_' + process.env.A + '/dist/', { waitUntil:'domcontentloaded', timeout:120000 });
   await wait(8000);
