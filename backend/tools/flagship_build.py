@@ -47,6 +47,12 @@ DEMO_WORLDS = [
      "prompt": "an ice refinery on a frozen moon"},
     {"slug": "bakery", "name": "Skybound Bakery",
      "prompt": "a bakery on a floating island where grain is milled into flour and baked into loaves"},
+    # NOT A FACTORY (2026-09-15). The claim is one sentence, one playable
+    # world, so the row holds a race. Its build rides in flagship/drift/
+    # (60 MB, outside the repository; `--adv N` copies a studio job there)
+    # and the runtime hides the pick when the folder is not served.
+    {"slug": "drift", "href": "drift/", "name": "Tokyo Drift Nights",
+     "prompt": "a tokyo drift racing game through neon streets at night"},
 ]
 
 DEMO_SPEC = {
@@ -87,15 +93,24 @@ def render() -> dict[str, str]:
     worlds_dir = OUT / "worlds"
     spec_for_demo = dict(DEMO_SPEC)
     spec_for_demo["prompt"] = DEMO_WORLDS[0]["prompt"]
-    shipped = [w for w in DEMO_WORLDS if w["slug"] is None or (worlds_dir / (w["slug"] + ".json")).exists()]
+    shipped = [w for w in DEMO_WORLDS if w["slug"] is None or w.get("href") or (worlds_dir / (w["slug"] + ".json")).exists()]
     def named(w):                             # a shipped world goes by the title the studio gave it
         if not w["slug"]:
             return w["name"]
+        if w.get("href"):
+            sp = OUT / w["href"] / "spec.json"
+            if sp.exists():
+                try:
+                    return json.loads(sp.read_text(encoding="utf-8")).get("title") or w["name"]
+                except Exception:
+                    return w["name"]
+            return w["name"]
         return json.loads((worlds_dir / (w["slug"] + ".json")).read_text(encoding="utf-8")).get("title") or w["name"]
     spec_for_demo["worlds"] = [{"name": named(w), "prompt": w["prompt"], "home": bool(w.get("home")),
-                                "file": ("worlds/" + w["slug"] + ".json") if w["slug"] else ""} for w in shipped]
+                                "file": ("worlds/" + w["slug"] + ".json") if (w["slug"] and not w.get("href")) else "",
+                                **({"href": w["href"]} if w.get("href") else {})} for w in shipped]
     for w in shipped:
-        if not w["slug"]:
+        if not w["slug"] or w.get("href"):
             continue
         wp = worlds_dir / (w["slug"] + ".json")
         d = json.loads(wp.read_text(encoding="utf-8"))
@@ -145,9 +160,22 @@ def sync_fonts(check: bool) -> bool:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--adv", type=int, default=None,
+                    help="copy backend/renders/game_jobs/job_N/dist into flagship/drift/ (the race beside the demo)")
     ap.add_argument("--check", action="store_true",
                     help="exit 1 if the demo is stale instead of rewriting it")
     args = ap.parse_args()
+
+    if args.adv is not None:
+        import shutil
+        src = ROOT / "backend" / "renders" / "game_jobs" / f"job_{args.adv}" / "dist"
+        if not (src / "index.html").exists():
+            raise SystemExit(f"no build at {src}")
+        dst = OUT / "drift"
+        if dst.exists():
+            shutil.rmtree(dst)
+        shutil.copytree(src, dst, ignore=shutil.ignore_patterns("_shot.png", "audit_fixes.json"))
+        print(f"  flagship/drift  <- job_{args.adv}  ({sum(p.stat().st_size for p in dst.rglob('*') if p.is_file()) // 1_000_000} MB)")
 
     files = render()
     fonts_ok = sync_fonts(args.check)

@@ -20,7 +20,7 @@
 const SPEC = await (async () => {
   const m = location.search.match(/[?&]spec=([\w./-]+\.json)/);
   if (m) { try { const r = await fetch(m[1]); if (r.ok) return await r.json(); } catch (e) {} }
-  return {"title": "Crystal Works", "genre": "factory", "style": "lowpoly", "world": {"name": "a floating worldlet of six mining faces", "size_m": 200, "palette": {"sky": "#0b0d18", "fog": "#0b0d18", "accent": "#39e6ff"}}, "objectives": [{"kind": "produce", "text": "automate an alloy line across two faces"}], "prompt": "a crystal works on a worldlet adrift in the void, six faces of ore and one sky", "worlds": [{"name": "Crystal Works", "prompt": "a crystal works on a worldlet adrift in the void, six faces of ore and one sky", "home": true, "file": ""}, {"name": "Red Moon Outpost", "prompt": "a rusted mining outpost on a dead red moon", "home": false, "file": "worlds/moon.json"}, {"name": "Frozen Extraction", "prompt": "an ice refinery on a frozen moon", "home": false, "file": "worlds/frost.json"}, {"name": "Skybound Bakery", "prompt": "a bakery on a floating island where grain is milled into flour and baked into loaves", "home": false, "file": "worlds/bakery.json"}]};
+  return {"title": "Crystal Works", "genre": "factory", "style": "lowpoly", "world": {"name": "a floating worldlet of six mining faces", "size_m": 200, "palette": {"sky": "#0b0d18", "fog": "#0b0d18", "accent": "#39e6ff"}}, "objectives": [{"kind": "produce", "text": "automate an alloy line across two faces"}], "prompt": "a crystal works on a worldlet adrift in the void, six faces of ore and one sky", "worlds": [{"name": "Crystal Works", "prompt": "a crystal works on a worldlet adrift in the void, six faces of ore and one sky", "home": true, "file": ""}, {"name": "Red Moon Outpost", "prompt": "a rusted mining outpost on a dead red moon", "home": false, "file": "worlds/moon.json"}, {"name": "Frozen Extraction", "prompt": "an ice refinery on a frozen moon", "home": false, "file": "worlds/frost.json"}, {"name": "Skybound Bakery", "prompt": "a bakery on a floating island where grain is milled into flour and baked into loaves", "home": false, "file": "worlds/bakery.json"}, {"name": "Tokyo Drift Nights", "prompt": "a tokyo drift racing game through neon streets at night", "home": false, "file": "", "href": "drift/"}]};
 })();
 window.__SPEC = SPEC;
 
@@ -523,7 +523,15 @@ const CAPS = { heated: 0, scrubber: 0, stable: 0 };
 let idleClock = 0, idleNudges = 0, idleMark = null, idleMarkAt = 0;   // the idle cue's clock (hoisted: apply() resets it)
 const PROP_LIST = [];                  // the outpost's groups, for the look ray (hoisted: filled at seeding, read by cellUnder)
 let outpost = null;                    // { hub, hab }: where the drone flies between
-let picksOn = false;                    // the boot reveal lists the worlds a demo ships; a crossing's card does not (hoisted: set at boot, read in playIntro)
+let picksOn = false;
+// A PICK THAT IS ANOTHER BUILD (the race beside the demo) is data in the
+// spec; whether its folder is served is asked at boot, and a pick nothing
+// answers for is not shown. A clone without the 60 MB build shows three.
+const pickMissing = {};
+if (Array.isArray(SPEC.worlds)) for (const w of SPEC.worlds) if (w.href) {
+  fetch(w.href + 'index.html', { method: 'HEAD' }).then(r => { if (!r.ok) pickMissing[w.href] = true; }, () => { pickMissing[w.href] = true; })
+    .then(() => { const row = document.querySelector('#title .worlds'); if (row) renderWorldPicks(true); });
+}                    // the boot reveal lists the worlds a demo ships; a crossing's card does not (hoisted: set at boot, read in playIntro)
 // creative is read from the URL here, in the early block: hubCost() reads it,
 // and the starter line's seeding calls that before the save block runs
 const CREATIVE = /[?&]creative=1/.test(location.search);
@@ -4807,7 +4815,9 @@ function applyWorld(k) {
   // reads, and the shadow on it has something to subtract from.
   const pb = new THREE.Color((w.plate && w.plate.base) || '#8792c4');
   const plum = 0.2126 * pb.r + 0.7152 * pb.g + 0.0722 * pb.b;
-  const floor = Math.max(1, Math.min(2.0, 0.30 / Math.max(0.05, plum)));
+  // a fifth more since the occlusion pass (2026-09-15): AO darkens ambient, and
+  // the soot underside had fallen to 21/255 with a shadow of under four counts
+  const floor = Math.max(1, Math.min(2.3, 0.36 / Math.max(0.05, plum)));
   hemi.intensity = 0.95 * floor;
   // AND THE FILL IS THE WORLD'S TOO. The fill from the far quadrant is what
   // lights a face the sun never reaches, and it was a fixed blue: a red soot
@@ -6323,8 +6333,9 @@ function renderWorldPicks(on) {
   if (!list.length) { if (row) row.remove(); return; }
   if (!row) { row = document.createElement('div'); row.className = 'worlds'; card.appendChild(row); }
   const here = (location.search.match(/[?&]spec=([\w./-]+\.json)/) || [])[1] || null;
-  row.innerHTML = '<i>three prompts, one system</i>' + list.map(w =>
-    '<a href="' + (w.file ? '?spec=' + w.file : './') + '" class="' + (w.file === here || (!here && w.home) ? 'here' : '') + '">' +
+  const shown = list.filter(w => !(w.href && pickMissing[w.href]));
+  row.innerHTML = '<i>' + (['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven'][shown.length] || shown.length) + (shown.length === 1 ? ' prompt' : ' prompts') + ', one system</i>' + shown.map(w =>
+    '<a href="' + (w.href ? w.href : w.file ? '?spec=' + w.file : './') + '" class="' + (w.href ? 'adv' : (w.file === here || (!here && w.home) ? 'here' : '')) + '">' +
     '<b>' + w.name + '</b><span>\u201c' + w.prompt + '\u201d</span></a>').join('');
   row.querySelectorAll('a').forEach(a => a.addEventListener('pointerdown', e => e.stopPropagation()));
 }
@@ -6545,6 +6556,7 @@ window.__game = {
     tagsSeen, tagsLive: liveTags.length,
     hintGone: !!document.getElementById('hint')?.classList.contains('gone'),
     ao: POST.ao,
+    picks: Array.isArray(SPEC.worlds) ? SPEC.worlds.filter(w => !(w.href && pickMissing[w.href])).length : 0,
     firstSale: lifetime.first, idleNudges, idleRing: !!(idleMark && idleMark.visible), crossLit,
     drone: drone.visible ? { t: +droneT.toFixed(1), flights: droneFlights, pos: drone.position.toArray().map(v => +v.toFixed(2)) } : null,
     audio: { ready: AUDIO.ready, muted: AUDIO.muted,

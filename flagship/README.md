@@ -1,4 +1,4 @@
-# Crystal Works — 3D incremental automation
+# Crystal Works: 3D incremental automation
 
 Flagship demo. Runs standalone in a browser; no build step.
 
@@ -11,6 +11,22 @@ Flagship demo. Runs standalone in a browser; no build step.
 
     python backend/tools/flagship_build.py          # rewrite the demo
     python backend/tools/flagship_build.py --check  # fail if it is stale
+
+## The worlds on the title card
+
+The card lists the worlds the demo ships as the sentences that made them.
+Three are factories the studio built from a prompt each; their specs ride in
+`worlds/*.json` (copied from a job's `dist/spec.json`, never hand-written) and
+open under their own saves via `?spec=worlds/<name>.json`.
+
+The fourth is a race, not a factory. It is a whole studio build, 60 MB, and it
+stays out of the repository. Ship it beside the demo with
+
+    python backend/tools/flagship_build.py --adv <job id>   # copies the job's dist into flagship/drift/
+
+The runtime asks for `drift/index.html` at boot and hides the pick when nothing
+answers, so a clone shows the factories only and a packaged download shows the
+race too. The gate for all of it is `backend/tools/shotgate/fworlds.mjs`.
 
 Do not edit them — edit
 `backend/app/game_export/runtime/factory.js.tpl` and re-run the builder.

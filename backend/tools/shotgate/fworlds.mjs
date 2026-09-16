@@ -33,6 +33,17 @@ if (URL) {
   console.log('demo card  :', JSON.stringify(home.name), '|', JSON.stringify(home.sub).slice(0, 70), '| picks', home.picks.length, home.picks.map(w => w.name + (w.here ? '*' : '')).join(', '));
   checks.homeQuoted = /^\u201c.+\u201d$/.test(home.sub);
   checks.homePicks = home.picks.length >= 3 && home.picks.every(w => w.name && /^\u201c.+\u201d$/.test(w.prompt)) && home.picks.filter(w => w.here).length === 1;
+  // the race beside the demo: a pick that opens another build, if it is served
+  const race = home.picks.find(w => w.href && !w.href.startsWith('?') && w.href !== './');
+  if (race) {
+    await p.goto(URL + race.href, { waitUntil:'domcontentloaded', timeout:120000 });
+    await wait(6000);
+    const r = await p.evaluate(() => ({ start: !!document.getElementById('startbtn'), title: (document.querySelector('.fs-start') || document.querySelector('#hud h1') || {}).textContent || '' }));
+    console.log('the race   :', JSON.stringify(race.name), 'at', race.href, '| start card', r.start, '| title', JSON.stringify(r.title));
+    checks.raceOpens = r.start && r.title.trim().length > 0;
+    await p.goto(URL + '?fresh=1', { waitUntil:'domcontentloaded', timeout:90000 });
+    await wait(5000);
+  } else console.log('the race   : not served here (a clone without flagship/drift shows the factories only)');
   const other = home.picks.find(w => !w.here && w.href.startsWith('?spec='));
   checks.otherLinked = !!other;
   if (other) {

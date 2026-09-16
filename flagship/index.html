@@ -267,15 +267,17 @@
   #title[data-mood="green"] b{font-family:var(--f-head);
            font-weight:500;text-transform:none;letter-spacing:.08em;font-size:58px}
   /* the worlds a demo ships, on the title card: the sentences that made them */
-  #title .worlds{margin-top:26px;pointer-events:auto;display:flex;gap:10px;justify-content:center;flex-wrap:wrap;
+  #title .worlds{margin:26px 24px 0;pointer-events:auto;display:flex;gap:10px;justify-content:center;flex-wrap:wrap;
                  opacity:0;transition:opacity .6s .9s}
   #title.on .worlds{opacity:1}
   #title .worlds i{display:block;width:100%;font-style:normal;font-family:var(--f-mono);font-size:9px;letter-spacing:.3em;
                    text-transform:uppercase;color:var(--sub);margin-bottom:6px;opacity:.8}
-  #title .worlds a{display:block;width:210px;padding:9px 12px;border-radius:10px;text-decoration:none;text-align:left;
+  #title .worlds a{display:block;flex:0 1 196px;min-width:150px;padding:9px 12px;border-radius:10px;text-decoration:none;text-align:left;
                    background:rgba(8,10,20,.72);border:1px solid rgba(255,255,255,.12);transition:border-color .2s,transform .2s}
   #title .worlds a:hover{border-color:var(--rule);transform:translateY(-2px)}
   #title .worlds a.here{border-color:var(--rule);box-shadow:0 0 18px var(--tglow)}
+  #title .worlds a.adv{border-color:rgba(255,154,92,.55)}
+  #title .worlds a.adv b{color:#ffb27a}
   #title .worlds b{display:block;font-family:var(--f-head);font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--tcol)}
   #title .worlds span{display:block;margin-top:3px;font-family:var(--f-ui);font-size:10.5px;line-height:1.3;color:#b9c4dc}
   /* credit tags: a sale's number rising off the hub */

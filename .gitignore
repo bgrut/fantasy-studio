@@ -186,3 +186,5 @@ backend/tools/colmap/
 backend/tools/brush.zip
 backend/tools/colmap.zip
 backend/assets/hdri/
+# the race beside the demo: a 60 MB studio build, copied in by flagship_build.py --adv N
+flagship/drift/
