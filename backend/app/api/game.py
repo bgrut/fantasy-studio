@@ -1278,10 +1278,13 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             if any(w in _en for w in _GHOST_WORDS):
                 ent.spectral = True
                 ent.speed = min(float(ent.speed or 1.2), 1.2)
+                if ent.count > 3:                      # a haunting is two or three, arriving one at a time; eleven is a crowd
+                    job.setdefault("notes", []).append(f"{ent.count} {_en}s is a crowd: a haunting keeps three")
+                    ent.count = 3
             elif _haunting and ent.behavior == "hostile" and _en in _ANIMALS and _en not in (req.prompt or "").lower():
                 job.setdefault("notes", []).append(
                     f"a haunting has ghosts: the {ent.count} {_en} the AI cast are played as ghosts")
-                ent.name = "ghost"; ent.spectral = True; ent.speed = 1.0
+                ent.name = "ghost"; ent.spectral = True; ent.speed = 1.0; ent.count = min(ent.count, 3)
         kept = []
         for ent in spec.entities:
             if ent.name.lower().strip() in _AMBIENT:

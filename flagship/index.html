@@ -287,7 +287,7 @@
              color:#ffd479;text-shadow:0 0 12px rgba(255,212,121,.7),0 2px 6px rgba(0,0,0,.8);will-change:transform,opacity}
   /* the face caption after a crossing */
   /* high, above the placement ghost, and big enough to read in the beat it is up */
-  #facecap{position:fixed;left:0;right:0;top:12%;text-align:center;z-index:6;pointer-events:none;
+  #facecap{position:fixed;left:0;right:0;top:58%;text-align:center;z-index:6;pointer-events:none;
            font-family:var(--f-mono);font-size:13px;letter-spacing:.42em;
            color:#eef4ff;text-shadow:0 0 18px rgba(92,224,208,.6),0 2px 12px rgba(0,0,0,.95);opacity:0;transform:translateY(6px);
            transition:opacity .35s,transform .35s}

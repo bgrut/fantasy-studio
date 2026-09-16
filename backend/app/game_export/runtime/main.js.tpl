@@ -5839,7 +5839,26 @@ async function main() {
           wall((hw + gap) / 2, hd, (hw - gap) / 2, T);                 // front right: from gap to hw
           wall(0, -hd, hw, T);                                        // back
           wall(hw, 0, T, hd); wall(-hw, 0, T, hd);                    // sides
-          window.__landmark = { kit, at: [cx, cz], yaw, w: FK.w, d: FK.d, h: H, door: [doorX, doorZ] };
+          // A LAMP OVER THE DOOR AND LIGHT AT THE EAVES (2026-09-16): the body
+          // read as a black block behind lit windows. A porch lamp on the
+          // lintel and two small lights at the front corners give the wall
+          // its edge; all three ride the torch budget with the door's glow.
+          const lampGeo = new THREE.BoxGeometry(0.34, 0.22, 0.26);
+          const lampMat = new THREE.MeshStandardMaterial({ color: 0x2a2620, emissive: 0xffc27a, emissiveIntensity: 1.6 });
+          const porch = new THREE.Mesh(lampGeo, lampMat);
+          porch.position.set(doorX + nx * 0.55, doorY + 2.75, doorZ + nz * 0.55);
+          scene.add(porch);
+          const porchL = new THREE.PointLight(0xffc27a, 9, 16, 1.6);
+          porchL.position.set(doorX + nx * 0.9, doorY + 2.9, doorZ + nz * 0.9);
+          scene.add(porchL); window.__torches.push(porchL);
+          const ux = Math.cos(yaw), uz = -Math.sin(yaw);               // along the front wall
+          for (const sgn of [-1, 1]) {
+            const ex = cx + nx * (FK.d / 2 + 0.6) + ux * sgn * (FK.w / 2 - 0.6), ez = cz + nz * (FK.d / 2 + 0.6) + uz * sgn * (FK.w / 2 - 0.6);
+            const eave = new THREE.PointLight(0xffd9a0, 4, 12, 1.8);
+            eave.position.set(ex, doorY + H - 0.4, ez);
+            scene.add(eave); window.__torches.push(eave);
+          }
+          window.__landmark = { kit, at: [cx, cz], yaw, w: FK.w, d: FK.d, h: H, door: [doorX, doorZ], lamps: 3 };
         };
         if (window.__facadeKitReady) { try { __buildBody(); } catch (e) { console.warn('[game] building', e); } }
         else (window.__lateBuildings = window.__lateBuildings || []).push(__buildBody);
@@ -9705,6 +9724,14 @@ async function main() {
   // game looking anywhere else means the first thing you see is invented
   // filler — 'walking into the image' starts by FACING it.
   let yaw = SPEC.world.pano ? Math.PI : 0;
+  // FACE THE THING (2026-09-16). The spawn looked along +Z whatever the
+  // world held; the factory opens looking down its line, and a walk opens
+  // looking at its landmark's door, or at its goal when there is none.
+  {
+    const _lm = (LVL && LVL.enterable && LVL.enterable.door) || null;
+    const _tgt = _lm || (LVL && LVL.goal) || null;
+    if (_tgt && !SPEC.world.pano) { const dx = _tgt[0] - 0, dz = _tgt[1] - 0; if (Math.hypot(dx, dz) > 4) yaw = Math.atan2(dx, dz) + Math.PI; }
+  }
   let pitch = SPEC.world.pano ? 0.16 : 0.35;
   let dragging = false, px = 0, py = 0;
   let camZoom = 1, freeLookT = 0;   // wheel zoom · seconds of free-look after a drag
@@ -10383,6 +10410,7 @@ async function main() {
     guide: () => ({ step: __fm.k, total: __fmSteps.length, active: __fm.active, done: __fm.done, title: __fm.step ? __fm.step.title : null, guided: __fmGuided }),
     landmark: () => window.__landmark || null,
     look: (y) => { yaw = y; },                 // the gate turns the camera
+    heading: () => yaw,
     combat: () => ({ hp: php, kills, mode: ATTACK, lost,
                      hostiles: npcs.filter(n => n.behavior === 'hostile' && !n.dead).length }),
     quest: () => ({ step: stepIdx, total: steps.length,

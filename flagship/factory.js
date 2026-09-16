@@ -765,6 +765,7 @@ const matComposite = new THREE.ShaderMaterial({
     uGain: { value: new THREE.Vector3(1, 1, 1) },
     uSat: { value: 1.0 },
     uFlash: { value: 0.0 },        // the meltdown's white
+    uWash: { value: new THREE.Color(0x7df9ff) }, uWashAmt: { value: 0.0 },   // the crossing: the new face's ore washes in
   },
   vertexShader: QUAD_VS,
   fragmentShader: `
@@ -772,6 +773,7 @@ const matComposite = new THREE.ShaderMaterial({
     uniform sampler2D tDiffuse; uniform sampler2D tBloom;
     uniform float uStrength; uniform float uVignette;
     uniform vec3 uTint; uniform float uTintAmt; uniform float uExposure;
+    uniform vec3 uWash; uniform float uWashAmt;
     uniform vec3 uLift; uniform vec3 uGamma; uniform vec3 uGain; uniform float uSat;
     uniform float uFlash;
 
@@ -808,6 +810,8 @@ const matComposite = new THREE.ShaderMaterial({
       float l2 = dot(c, vec3(0.2126, 0.7152, 0.0722));
       c = clamp(mix(vec3(l2), c, uSat), 0.0, 1.0);
       c = mix(c, vec3(1.0, 0.96, 0.9), uFlash);
+      // the crossing's wash: the new face's colour, strongest in the shadows
+      c = mix(c, uWash * (0.55 + 0.45 * l2), uWashAmt * (0.45 + 0.55 * (1.0 - l2)));
       vec2 d = vUv - 0.5;
       c *= 1.0 - uVignette * dot(d, d) * 2.0;
       gl_FragColor = vec4(toSRGB(c), 1.0);
@@ -4232,7 +4236,7 @@ const FLASH_COL = { place: 0xffffff, erase: 0xff6b7d, switch: 0x9dffe8 };
 function rigPulse(kind) { rigKick = 1; rigKind = kind; }
 // THE CROSSING. crossFlash runs 1 -> 0 after an edge: field of view, vignette,
 // a caption naming the face and its ore.
-let crossFlash = 0, BASE_FOV = null, captionAt = 0, crossVig = 0;
+let crossFlash = 0, BASE_FOV = null, captionAt = 0, crossVig = 0, crossWash = 0;
 // PHOTO MODE. P hides the chrome and leaves you free to frame; Enter saves
 // the frame; P again brings the chrome back.
 let photo = false, shotRequest = false, shotCount = 0;
@@ -4388,6 +4392,8 @@ function movePlayer(dt) {
 // exactly that moment
 function crossEdge(nf) {
   crossFlash = 1;
+  crossWash = 1;
+  matComposite.uniforms.uWash.value.setHex(MIN_COL[MINERAL_OF_FACE[nf]] || 0x7df9ff);   // arriving somewhere: its ore's colour
   const fc = document.getElementById('facecap');
   if (fc) {
     fc.textContent = WORD(FACES[nf].name.toUpperCase() + ' FACE  ·  ' + (MINERAL_NAME[MINERAL_OF_FACE[nf]] || ''));
@@ -6082,6 +6088,8 @@ renderer.setAnimationLoop(() => {
     const fov = BASE_FOV + 7 * mo * Math.sin(Math.min(1, cf) * Math.PI);
     if (Math.abs(camera.fov - fov) > 0.01) { camera.fov = fov; camera.updateProjectionMatrix(); }
     crossVig = 0.4 * cf * mo;               // renderFrame adds it to the vignette
+    crossWash *= Math.exp(-dt * 2.2);
+    matComposite.uniforms.uWashAmt.value = (crossWash < 0.004 ? 0 : 0.30 * Math.sin(Math.min(1, crossWash) * Math.PI * 0.5)) * mo;
     if (captionAt > 0) { captionAt -= dt; if (captionAt <= 0) { const fc = document.getElementById('facecap'); if (fc) fc.classList.remove('on'); } }
     updateGhost();
   }
@@ -6583,6 +6591,7 @@ window.__game = {
     ao: POST.ao,
     sfxLast: AUDIO.last || null, droneGain: AUDIO.drone ? +AUDIO.drone.gain.value.toFixed(3) : 0,
     picks: Array.isArray(SPEC.worlds) ? SPEC.worlds.filter(w => !(w.href && pickMissing[w.href])).length : 0,
+    crossWash: +crossWash.toFixed(3),
     firstSale: lifetime.first, idleNudges, idleRing: !!(idleMark && idleMark.visible), crossLit,
     drone: drone.visible ? { t: +droneT.toFixed(1), flights: droneFlights, pos: drone.position.toArray().map(v => +v.toFixed(2)) } : null,
     audio: { ready: AUDIO.ready, muted: AUDIO.muted,

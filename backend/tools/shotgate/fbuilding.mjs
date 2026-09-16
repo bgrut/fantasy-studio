@@ -16,6 +16,7 @@ await p.goto('http://127.0.0.1:8789/games/job_' + process.env.B + '/dist/?noguid
 await wait(9000);
 const btn = await p.$('#startbtn'); if (btn) await btn.click();
 await wait(4000);
+await p.evaluate(() => { window.__game.heading0 = window.__game.heading ? window.__game.heading() : undefined; });
 const r = await p.evaluate(async () => {
   const L = window.__game.landmark();
   if (!L) return { landmark: null };
@@ -55,9 +56,14 @@ if (r.landmark) {
   await p.screenshot({ path: process.env.OUT || 'building.png' });
 }
 const cast = await p.evaluate(() => { const ns = window.__game.npcs(); return { ghosts: ns.filter(n => n.spectral).length, animals: ns.filter(n => /wolf|bear|boar/.test(n.name || '')).length, total: ns.length }; });
+// the spawn faced the door: the heading at boot points within a third of a turn of it
+const faced = await p.evaluate(() => { const L = window.__game.landmark(); const y0 = window.__game.heading0; if (!L || y0 === undefined) return null;
+  const want = Math.atan2(L.door[0], L.door[1]) + Math.PI; let d = Math.abs(((y0 - want) % (Math.PI * 2) + Math.PI * 3) % (Math.PI * 2) - Math.PI); return { off: +d.toFixed(2), lamps: L.lamps || 0 }; });
+console.log('the spawn :', faced ? 'faced the door within ' + faced.off + ' rad | lamps ' + faced.lamps : 'no heading');
 console.log('the cast  :', cast.ghosts, 'ghosts,', cast.animals, 'animals of', cast.total);
 console.log('walked    :', JSON.stringify(blocked));
 console.log('errors    :', errs.length ? errs.join(' | ') : 'none');
 await b.close();
-const ok = r.landmark && r.landmark.w > 5 && r.landmark.h > 5 && errs.length === 0 && cast.ghosts > 0 && cast.animals === 0;   // a haunting has ghosts, not wolves
+const ok = r.landmark && r.landmark.w > 5 && r.landmark.h > 5 && errs.length === 0 && cast.ghosts > 0 && cast.ghosts <= 3 && cast.animals === 0   // a haunting has ghosts, not wolves, and not a crowd
+  && faced && faced.off < 1.05 && faced.lamps === 3;
 process.exit(ok ? 0 : 1);

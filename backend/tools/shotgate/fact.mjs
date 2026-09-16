@@ -56,7 +56,7 @@ console.log('walked    :', Math.hypot(c[0]-a[0], c[2]-a[2]).toFixed(2)+'m');
 // and reported that the world had no edges. Turn around first.
 await p.evaluate(()=>{ window.__factory.player.fwd.negate(); });
 const startFace = t1.player_face;
-let crossed = null, offCube = 0;
+let crossed = null, offCube = 0, washPeak = 0;
 await p.keyboard.down('KeyW');
 // far enough to cross from anywhere on the face. Turning away from the line
 // means the near edge is now behind the factory and the far one is up to 65m
@@ -68,6 +68,7 @@ for (let k = 0; k < 46; k++) {
   const d = Math.max(...(await p.evaluate(()=>window.__game.pos())).map(Math.abs));
   if (d < H - 1 || d > H + 4) offCube++;          // must stay ON the surface
   if (f.player_face !== startFace && !crossed) crossed = f;
+  if (f.crossWash > washPeak) washPeak = f.crossWash;
 }
 await p.keyboard.up('KeyW');
 const fin = await p.evaluate(()=>window.__game.facts());
@@ -76,7 +77,7 @@ console.log('faces     :', startFace, '->', (crossed||fin).player_face,
 console.log('on surface:', offCube === 0 ? 'always' : offCube + ' samples off the cube');
 await new Promise(r => setTimeout(r, 1400));
 const lit = await p.evaluate(() => window.__game.facts().crossLit);
-console.log('the face  : seams lit by the crossing', lit);
+console.log('the face  : seams lit by the crossing', lit, '| wash peaked at', washPeak.toFixed(2));
 // AND THE SIM SIDE OF THE SAME MECHANIC: a belt that runs off an edge has to
 // hand its crystal to the belt on the next face. The player walking over an
 // edge and the items doing it are different code paths; a gate that only
@@ -210,7 +211,7 @@ const meltOk = mid.debris >= preMachines && post.debris === 0
 console.log('produced  :', t1.value - t0.value, 'value in 12s |', 'ingots', t1.ingots);
 console.log('errors    :', errs.length ? errs.join(' | ') : 'none');
 await b.close();
-process.exit((errs.length || t1.value <= t0.value || !crossed || !(lit > 0) || offCube
+process.exit((errs.length || t1.value <= t0.value || !crossed || !(lit > 0) || !(washPeak > 0.3) || offCube
   || !wrap.arrived || !wrap.left || !meltOk
   || forge.distinct !== 3 || !(forge.made > 0) || !filtOk
   || mkt.moved !== mkt.n || !mkt.inRange) ? 1 : 0);

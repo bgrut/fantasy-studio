@@ -49,8 +49,9 @@ if (ADV) {
   const g0 = await p.evaluate(() => ({ ...window.__game.guide(), card: !!document.querySelector('#fs-card.on') }));
   await p.keyboard.press('Enter'); await wait(250);                      // past 'Look around'
   const g1 = await p.evaluate(() => window.__game.guide());
-  await p.keyboard.down('KeyW'); await wait(1600); await p.keyboard.up('KeyW'); await wait(400);   // the throttle step clears itself
-  const g2 = await p.evaluate(() => window.__game.guide());
+  await p.keyboard.down('KeyW');                                          // the throttle step clears itself after 1.2 s held
+  let g2 = null; for (let k = 0; k < 15; k++) { await wait(200); g2 = await p.evaluate(() => window.__game.guide()); if (g2.step >= 2) break; }
+  await p.keyboard.up('KeyW');
   await p.keyboard.press('KeyG'); await wait(300);
   const g3 = await p.evaluate(() => ({ ...window.__game.guide(), card: !!document.querySelector('#fs-card.on') }));
   console.log('the guide : after the reveal', JSON.stringify({ step: g0.step, title: g0.title, card: g0.card }), '| Enter ->', g1.step, '| W held ->', g2.step, JSON.stringify(g2.title), '| G -> done', g3.done, '| card', g3.card);
