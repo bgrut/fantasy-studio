@@ -190,6 +190,18 @@ const sunDrift = await p.evaluate(async () => {
   return { angle: f.sunAngle, moved: p0 && disc ? +p0.distanceTo(disc.position).toFixed(1) : null };
 });
 console.log('the light :', 'sun angle', sunDrift.angle, 'rad at a quarter period | disc moved', sunDrift.moved, 'm');
+// a machine lands: placed at eight-tenths, settling for a third of a second
+const land = await p.evaluate(async () => {
+  const F = window.__factory, TY = F.TYPES; let spot = null;
+  for (let i = 3; i < F.N - 3 && !spot; i++) for (let j = 3; j < F.N - 3 && !spot; j++) if (F.cells[0][i][j].t === TY.EMPTY) spot = [i, j];
+  F.addValue(500); F.place(0, spot[0], spot[1], TY.SMELTER, 0);   // a smelter has a body; belts are instanced
+  const s0 = F.cells[0][spot[0]][spot[1]].build ? F.cells[0][spot[0]][spot[1]].build.scale.x : null;
+  const l0 = window.__game.facts().landing;
+  await new Promise(r => setTimeout(r, 700));
+  const s1 = F.cells[0][spot[0]][spot[1]].build ? F.cells[0][spot[0]][spot[1]].build.scale.x : null;
+  return { s0: s0 === null ? null : +s0.toFixed(2), landing: l0, s1: s1 === null ? null : +s1.toFixed(2) };
+});
+console.log('landing   :', JSON.stringify(land));
 console.log('errors    :', errs.length ? errs.join(' | ') : 'none');
 await p.screenshot({ path: process.env.OUT || 'art.png' });
 await b.close();
@@ -203,6 +215,7 @@ const ok = icons.withIcon === icons.tools && icons.tools >= 9
   && held.hasRig && held.hasHolo && held.changed && held.fpVisible && !held.orbitVisible
   && sweep && sweep.turned > 0.15
   && sunDrift.angle > 0.3 && sunDrift.moved > 50
+  && land.landing > 0 && land.s1 === 1
   && jam.stuck && jam.col && jam.col[0] > 1.2 && jam.col[2] < 0.5   // amber
   && errs.length === 0;
 process.exit(ok ? 0 : 1);

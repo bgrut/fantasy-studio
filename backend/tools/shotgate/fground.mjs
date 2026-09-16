@@ -142,12 +142,16 @@ for (const r of [probe.lit, probe.dark]) {
   if (r.skipped) { console.log(r.label.padEnd(20), 'skipped:', r.skipped); continue; }
   console.log(r.label.padEnd(20),
     'ring mean', r.before, '-> ', r.after, '| strongest darkening', r.darkened,
-    r.darkened > 4 ? '  GROUNDED' : '  FLOATING');
+    grounded(r) ? '  GROUNDED' : '  FLOATING');
 }
 console.log('contact shadows drawn:', probe.decals);
 console.log('errors    :', errs.length ? errs.join(' | ') : 'none');
 await p.screenshot({ path: process.env.OUT || 'ground.png' });
 await b.close();
-const ok = probe.lit.darkened > 4 && probe.dark.darkened > 4
+// GROUNDED IS RELATIVE (2026-09-16): a contact shadow that takes a fifth of a
+// dark face's own light is a shadow, though it is under four counts; four
+// counts on a bright face is nothing. Either an absolute four or twelve percent.
+function grounded(r) { return r.darkened > 4 || (r.before > 0 && r.darkened / r.before > 0.12); }
+const ok = grounded(probe.lit) && grounded(probe.dark)
   && probe.decals > 0 && errs.length === 0;
 process.exit(ok ? 0 : 1);

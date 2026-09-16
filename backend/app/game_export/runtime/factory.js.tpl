@@ -516,6 +516,7 @@ let glowPools = null;             // built with the decals; the seams index into
 // capabilities the chain hands out; declared here because applyUpgrades
 // reads CAPS.stable and applyUpgrades runs at boot
 const CAPS = { heated: 0, scrubber: 0, stable: 0 };
+const landing = []; let landingOn = false;   // machines settling after a build (hoisted: place() runs at boot, before the loop)
 let idleClock = 0, idleNudges = 0, idleMark = null, idleMarkAt = 0;   // the idle cue's clock (hoisted: apply() resets it)
 const PROP_LIST = [];                  // the outpost's groups, for the look ray (hoisted: filled at seeding, read by cellUnder)
 let outpost = null;                    // { hub, hab }: where the drone flies between
@@ -2366,6 +2367,9 @@ function place(face, i, j, type, dir) {
     g.add(lamp);
   }
   seat(g, face, i, j, dir, 0);
+  // A MACHINE LANDS (2026-09-16): eight-tenths scale, an overshoot to one
+  // over a third of a second, and a puff of dust from its skirt
+  if (landingOn && !REDUCED) { g.userData.land = 0.34; g.scale.setScalar(0.8); landing.push(g); landDust(face, i, j); }   // in play, not at boot
   if (typeof sfxPlace === 'function') sfxPlace();
   // what the studio's inspector reads when you click this. Same shape the
   // adventure runtime uses, so one panel renders picks from either genre.
@@ -5443,6 +5447,29 @@ function stepIdle(dt) {
   const t = document.getElementById('toast');
   if (t) { t.textContent = WORD('STILL HERE. The goal card says what is worth doing next' + (best ? ', and the ring marks a free seam: press 1 there for a rig.' : '.')); t.classList.add('on'); toastAt = 6; }
 }
+// ── A MACHINE LANDS. The build groups still settling, stepped each frame. ─
+function stepLanding(dt) {
+  for (let k = landing.length - 1; k >= 0; k--) {
+    const g = landing[k];
+    g.userData.land -= dt;
+    const u = 1 - Math.max(0, g.userData.land) / 0.34;              // 0 -> 1 over the landing
+    // eight-tenths to one with a small overshoot near the end, then settled
+    const sc = u >= 1 ? 1 : 0.8 + 0.2 * Math.sin(u * Math.PI * 0.5) + 0.07 * Math.sin(u * Math.PI) * u;
+    g.scale.setScalar(sc);
+    if (u >= 1) { g.scale.setScalar(1); g.userData.land = 0; landing.splice(k, 1); }
+  }
+}
+function landDust(f, i, j) {
+  const n = FACES[f].n, w = tileWorld(f, i, j), u = FACES[f].u, v = FACES[f].v;
+  const pl = (WORLDS[worldIdx] && WORLDS[worldIdx].plate) || {};
+  const c = new THREE.Color(pl.base || '#8792c4');
+  for (let k = 0; k < 10; k++) {
+    const a = k / 10 * Math.PI * 2, r = 0.9;
+    const dx = u[0] * Math.cos(a) + v[0] * Math.sin(a), dy = u[1] * Math.cos(a) + v[1] * Math.sin(a), dz = u[2] * Math.cos(a) + v[2] * Math.sin(a);
+    emit(w[0] + dx * r + n[0] * 0.15, w[1] + dy * r + n[1] * 0.15, w[2] + dz * r + n[2] * 0.15,
+         dx * 1.6, dy * 1.6, dz * 1.6, c.r, c.g, c.b, 0.05, 2.6);
+  }
+}
 // ── THE LIGHT MOVES. The key light swings about the worldlet, twenty-four
 // degrees each way over seven minutes; the disc and the sky follow. ─────
 const _sunAxis = new THREE.Vector3(0, 1, 0);
@@ -5803,6 +5830,7 @@ if (!restored && !/[?&]nointro=1/.test(location.search)) {
 
 // ── frame ──────────────────────────────────────────────────────────────────
 let last = performance.now();
+landingOn = true;                           // from here on a placed machine lands
 renderer.setAnimationLoop(() => {
   const now = performance.now();
   const dt = Math.min(0.1, (now - last) / 1000);
@@ -5822,6 +5850,7 @@ renderer.setAnimationLoop(() => {
   stepHint(dt);
   stepDrone(dt);
   stepSun(dt);
+  stepLanding(dt);
   stepIdle(dt);
   stepRival(dt);
   if (contract && (performance.now() % 500) < 20) renderContract();
@@ -6615,6 +6644,7 @@ window.__game = {
     picks: Array.isArray(SPEC.worlds) ? SPEC.worlds.filter(w => !(w.href && pickMissing[w.href])).length : 0,
     crossWash: +crossWash.toFixed(3),
     sunAngle: +sunAngle.toFixed(3),
+    landing: landing.length,
     firstSale: lifetime.first, idleNudges, idleRing: !!(idleMark && idleMark.visible), crossLit,
     drone: drone.visible ? { t: +droneT.toFixed(1), flights: droneFlights, pos: drone.position.toArray().map(v => +v.toFixed(2)) } : null,
     audio: { ready: AUDIO.ready, muted: AUDIO.muted,
