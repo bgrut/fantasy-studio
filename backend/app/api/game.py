@@ -136,7 +136,7 @@ def _expand_design_doc(prompt: str) -> str | None:
               "ENEMIES: kinds, counts, behavior.\n"
               "FEEL: one line on pacing and atmosphere.\n"
               "HARD RULES: never contradict or drop anything the player "
-              "stated — every noun, number, and place they wrote must appear "
+              "stated: every noun, number, and place they wrote must appear "
               "unchanged. Add vivid, specific detail only where they were "
               "silent. Plain text, no markdown headers beyond the section "
               "names."},
@@ -341,7 +341,7 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                     base_spec = _json.loads(p.read_text(encoding="utf-8"))
             if base_spec is None:
                 raise RuntimeError(
-                    f"game #{req.base_job_id} has no saved spec to edit — rebuild it once first")
+                    f"game #{req.base_job_id} has no saved spec to edit. Rebuild it once first")
 
         if base_spec is not None:
             stage("applying your edit")
@@ -480,13 +480,13 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                         f"'here'/'this spot'/'this one' refer to that selection; "
                         f"use these exact coordinates for any placed_items you add.")
                 elif req.at_target:
-                    change += (f"\n\nCONTEXT: the user clicked the {req.at_target} — "
+                    change += (f"\n\nCONTEXT: the user clicked the {req.at_target}. "
                                f"'this'/'it' refers to that.")
                 # Pivot Move 1 — LOCKED LAYERS: tell the LLM what is frozen…
                 _locked = list(req.locked if req.locked is not None
                                else (base_spec.get("locked") or []))
                 if _locked:
-                    change += ("\n\nLOCKED (approved by the user — copy these "
+                    change += ("\n\nLOCKED (approved by the user. Copy these "
                                "sections from the base spec VERBATIM, never "
                                "modify them): " + ", ".join(_locked))
                 spec = patch_game_spec(base_spec, change, verbose=False)
@@ -685,14 +685,14 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         # extractor now picks one; an explicit user choice below still wins.
         if not req.style and spec.style and spec.style != "default":
             job.setdefault("notes", []).append(
-                f"art direction: {spec.style} (chosen from your prompt — "
-                f"pick a style in the studio to override)")
+                f"art direction: {spec.style} (chosen from your prompt. "
+                f"Pick a style in the studio to override)")
         if req.style:
             try:
                 spec.style = req.style        # pydantic validates the literal
             except Exception:
                 job.setdefault("notes", []).append(
-                    f"unknown style '{req.style}' — kept {spec.style}")
+                    f"unknown style '{req.style}': kept {spec.style}")
         # A STYLE IS A GAME, NOT A COAT OF PAINT (2026-09-05). Every world we
         # made was a heightfield seen from a third-person follow camera, so
         # seventeen styles were seventeen paint jobs on ONE game — "always on
@@ -729,20 +729,20 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         if _sv and not req.view:
             spec.view = _sv
             job.setdefault("notes", []).append(
-                f"{spec.style} plays as a {_sv} game — this look's camera is "
+                f"{spec.style} plays as a {_sv} game. This look's camera is "
                 f"part of it (pick a view in the studio to override)")
         if req.view:
             try:
                 spec.view = req.view
             except Exception:
                 job.setdefault("notes", []).append(
-                    f"unknown view '{req.view}' — kept {spec.view}")
+                    f"unknown view '{req.view}': kept {spec.view}")
         if req.grade:
             try:
                 spec.grade = req.grade        # pydantic validates the literal
             except Exception:
                 job.setdefault("notes", []).append(
-                    f"unknown grade '{req.grade}' — kept {spec.grade}")
+                    f"unknown grade '{req.grade}': kept {spec.grade}")
         if req.locked is not None and base_spec is None:
             spec.locked = req.locked          # fresh build with locks pre-set
         # "a cat with 9 lives" → 9 HP: numbers the user wrote are game facts
@@ -847,9 +847,37 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                         "attack": "attack-melee-right", "die": "die",
                     }
                     job.setdefault("notes", []).append(
-                        f"cast recast to the blocky {spec.style} look — a "
+                        f"cast recast to the blocky {spec.style} look. A "
                         f"scanned human in a flat world is a style clash "
                         f"(name a specific character to keep a detailed one)")
+        except Exception:  # noqa: BLE001
+            pass
+        # DRESSED FOR THE PROMPT (2026-09-16). The bare default bake ("man")
+        # stands in briefs; a generic human in a photoreal world is recast to
+        # a dressed character from the roster by the prompt's own words. A
+        # named character keeps its name.
+        try:
+            if (want or "").strip().lower() in _GENERIC_HUMAN | {"hero", "protagonist", "player", "you", "someone", "stranger", "visitor"} \
+                    and spec.style not in _FLAT_LOOKS:
+                _pw = (req.prompt or "").lower()
+                _ROLES = [
+                    (r"\b(haunt|ghost|manor|mansion|murder|mystery|detective|noir|crime|clue|relic|cursed|asylum)", "detective"),
+                    (r"\b(forest|wood|moor|wild|ranger|trail|mountain|hike|hunt|deer|elk|track)", "ranger"),
+                    (r"\b(lab|laboratory|science|scientist|space|station|reactor|research|specimen)", "scientist"),
+                    (r"\b(engine|machine|factory|robot|mech|repair|wrench|mine)", "engineer"),
+                    (r"\b(castle|kingdom|knight|medieval|dragon|sword|siege|joust)", "knight"),
+                    (r"\b(war|battle|soldier|trench|army|enemy lines|patrol)", "soldier"),
+                    (r"\b(viking|norse|fjord|longship|raid)", "viking"),
+                    (r"\b(samurai|shogun|dojo|ronin)", "samurai"),
+                ]
+                import re as _re4                      # _re3 is imported further down
+                _role = next((r for pat, r in _ROLES if _re4.search(pat, _pw)), "explorer")
+                if library.resolve(_role) and _role != want:
+                    job.setdefault("notes", []).append(
+                        f"hero cast: '{want}' is played by the {_role}, dressed for this world "
+                        f"(name a character in the prompt to choose)")
+                    want = _role
+                    spec.player.name = _role
         except Exception:  # noqa: BLE001
             pass
         cast = want
@@ -870,7 +898,7 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             spec.player.height_m = 1.15
             spec.player.mode = spec.player.mode or "drive"
             job.setdefault("notes", []).append(
-                f"hero is a sculpted proc module ({player_glb}) — wheels steer "
+                f"hero is a sculpted proc module ({player_glb}). Wheels steer "
                 "and spin on real pivots (img2threejs lane)")
         # A FACTORY HAS NO HERO TO GENERATE (2026-09-08). Its player is a
         # first-person projector rig drawn by the runtime; the spec's player
@@ -882,7 +910,7 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         _factory_genre = getattr(spec, "genre", "adventure") == "factory"
         if not player_glb and _factory_genre:
             job.setdefault("notes", []).append(
-                f"factory: '{want}' is not generated — a factory draws its own "
+                f"factory: '{want}' is not generated. A factory draws its own "
                 "machines and its player is the camera")
         if not player_glb and not _factory_genre:
             # THE VISION PATH (primary): unknown hero → SDXL image → 3D mesh →
@@ -896,7 +924,7 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                 from app.game_export.generate import ensure_asset, gpu_available
                 _eta = ("~6 min on your GPU" if gpu_available()
                         else "~25-30 min on CPU")
-                stage(f"creating '{want}' — image → 3D mesh "
+                stage(f"creating '{want}': image → 3D mesh "
                       f"(first time only; {_eta}, then cached forever)")
                 ensure_asset(want, verbose=False)
                 player_glb = (library.resolve(want)
@@ -907,8 +935,8 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                         f"'{want}' was CREATED for this game and saved to your library")
             except Exception as ge:
                 job.setdefault("notes", []).append(
-                    f"player '{want}' generation failed ({type(ge).__name__}) — "
-                    f"using a stand-in for now; re-run to try again")
+                    f"player '{want}' generation failed ({type(ge).__name__}). "
+                    f"Using a stand-in for now; re-run to try again")
         # A RACE PUTS YOU IN A CAR (2026-08-25): "a courier races 5 rivals"
         # cast a human, so the player stood at the start line on foot while
         # the rivals drove past (user report: "i wasnt even in the car??").
@@ -924,7 +952,7 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             pattern = "vehicle"
             _race_seated = True
             job.setdefault("notes", []).append(
-                f"'{spec.player.name}' races on wheels — a race objective "
+                f"'{spec.player.name}' races on wheels. A race objective "
                 "implies a driver's seat, so the hero starts in a car")
         if player_glb and pattern == "vehicle":
             spec.player.mode = "drive"
@@ -974,7 +1002,7 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                     spec.player.height_m = round(
                         _cp["bodyY"] + _cp["bodyH"] * 0.75 + _cp["cabinH"], 2)
                     job.setdefault("notes", []).append(
-                        f"parametric {_cls} built in code — crisp panels, "
+                        f"parametric {_cls} built in code. Crisp panels, "
                         f"round wheels, real glass (no mesh generation)")
             except Exception:
                 pass
@@ -1032,7 +1060,7 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             stand_in = library.nearest(want, pattern)
             if stand_in != want:
                 job.setdefault("notes", []).append(
-                    f"Couldn't build '{want}' yet — brand-new characters need a GPU "
+                    f"Couldn't build '{want}' yet: brand-new characters need a GPU "
                     f"(coming soon). Cast the closest match, '{stand_in}', as a "
                     f"stand-in so your game plays now; re-run this prompt once your "
                     f"GPU is in to get the real '{want}'.")
@@ -1053,7 +1081,7 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             if _hero.exists():
                 player_glb = str(_hero)
                 job.setdefault("notes", []).append(
-                    f"hero uses the JPEG bake ({_hero.name}) — PNG-embedded "
+                    f"hero uses the JPEG bake ({_hero.name}). PNG-embedded "
                     f"characters render untextured in the web runtime")
         spec.player.asset = player_glb
         spec.player.name = cast
@@ -1165,7 +1193,7 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         if req.splat:
             spec.world.splat = req.splat
             job.setdefault("notes", []).append(
-                "Gaussian-splat world attached — the splat is the scenery, "
+                "Gaussian-splat world attached. The splat is the scenery, "
                 "the mesh terrain stays as the physics floor")
         job["player"] = cast
         if not spec.world.scatter:
@@ -1211,7 +1239,7 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                 name=_gname, behavior="guide", count=1, speed=0.0,
                 height_m=library.default_height(_gname), hp=3))
             job.setdefault("notes", []).append(
-                "a guide was added — they greet you and explain each objective")
+                "a guide was added. They greet you and explain each objective")
 
         # A HEIST WITH NO GUARDS IS AN EMPTY BLOCK (2026-08-06).
         # Casting is LLM-luck: one build cast a noun that was neither in the
@@ -1241,7 +1269,7 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         for ent in spec.entities:
             if ent.name.lower().strip() in _AMBIENT:
                 job.setdefault("notes", []).append(
-                    f"'{ent.name}' is atmosphere — rendered by the weather/sky system")
+                    f"'{ent.name}' is atmosphere: rendered by the weather/sky system")
                 continue
             ekind = "man" if ent.name.lower() in _HUMAN_ALIASES else ent.name
             # prefer the ANIMATED variant (real gait — no gliding); static fallback
@@ -1256,13 +1284,13 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                 sub, glb = _understudy(ent.behavior)
                 if not glb:
                     job.setdefault("notes", []).append(
-                        f"the AI imagined '{ekind}' for this world — it's not in "
+                        f"the AI imagined '{ekind}' for this world. It's not in "
                         f"your library yet, so it was skipped. Mention '{ekind}' in "
                         f"a prompt or edit to create it once (then it's free forever)")
                     continue
                 job.setdefault("notes", []).append(
                     f"'{ekind}' isn't in your library, so the {ent.behavior} is "
-                    f"played by '{sub}' — the level keeps its {ent.behavior}s")
+                    f"played by '{sub}': the level keeps its {ent.behavior}s")
                 ekind = sub
             # a factory draws its own machines: nothing here is generated for it
             if not glb and not _factory_genre:
@@ -1272,7 +1300,7 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                 # forever. This is what makes "anything at scale" true.
                 try:
                     from app.game_export.generate import ensure_asset
-                    stage(f"creating '{ekind}' — image → 3D mesh "
+                    stage(f"creating '{ekind}': image → 3D mesh "
                           f"(first time only; slow without a GPU)")
                     ensure_asset(ekind, verbose=True)
                     glb = ensure_playable(ekind, verbose=False) or library.resolve(ekind)
@@ -1281,7 +1309,7 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                             f"'{ekind}' was CREATED for this game and saved to your library")
                 except Exception as ge:
                     job.setdefault("notes", []).append(
-                        f"entity '{ekind}' generation failed ({type(ge).__name__}) — skipped")
+                        f"entity '{ekind}' generation failed ({type(ge).__name__}). Skipped")
             if glb:
                 ent.name = ekind
                 # NPCs GET THE LIGHT BAKE (2026-08-07). man_anim.glb is 49MB:
@@ -1299,7 +1327,7 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                     glb = str(_light)
                     job.setdefault("notes", []).append(
                         f"{ent.behavior} uses the light walker bake "
-                        f"(man_anim is 49MB — too heavy for a background NPC)")
+                        f"(man_anim is 49MB. Too heavy for a background NPC)")
                 ent.asset = glb
                 if ent.height_m == 1.0:
                     ent.height_m = library.default_height(ekind)
@@ -1316,10 +1344,10 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                     kept.append(ent)
                     job.setdefault("notes", []).append(
                         f"'{ekind}' could not be cast, so the {ent.behavior} is "
-                        f"played by '{sub}' — the level keeps its {ent.behavior}s")
+                        f"played by '{sub}': the level keeps its {ent.behavior}s")
                 else:
                     job.setdefault("notes", []).append(
-                        f"entity '{ekind}' not in library yet — skipped")
+                        f"entity '{ekind}' not in library yet. Skipped")
         spec.entities = kept
 
         # PLACED ITEMS (Phase 42 Inspector): explicit-coordinate objects from
@@ -1379,7 +1407,7 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             if not glb and not _factory_genre:
                 try:
                     from app.game_export.generate import ensure_asset
-                    stage(f"creating '{k}' — image → 3D mesh "
+                    stage(f"creating '{k}': image → 3D mesh "
                           f"(first time only; slow without a GPU)")
                     ensure_asset(k, verbose=True)
                     glb = library.resolve(k) or ensure_playable(k, verbose=False)
@@ -1388,7 +1416,7 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                             f"'{k}' was CREATED for this game and saved to your library")
                 except Exception as ge:
                     job.setdefault("notes", []).append(
-                        f"placed '{k}' generation failed ({type(ge).__name__}) — skipped")
+                        f"placed '{k}' generation failed ({type(ge).__name__}). Skipped")
             if glb:
                 it.asset = glb
                 if not it.height_m:
@@ -1396,7 +1424,7 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                 kept_items.append(it)
             else:
                 job.setdefault("notes", []).append(
-                    f"placed item '{k}' could not be resolved — skipped")
+                    f"placed item '{k}' could not be resolved. Skipped")
         # DEFAULT RULES (Phase 44): props ship with their honest behaviors on —
         # firelight repels hostiles, solid things block them. Chips can toggle.
         for it in kept_items:
@@ -1456,14 +1484,14 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                 continue
             if sing.split()[-1] in _GENERIC_COLLECT:
                 job.setdefault("notes", []).append(
-                    f"'{ob.label}' renders as glowing pickups — name a specific "
+                    f"'{ob.label}' renders as glowing pickups. Name a specific "
                     f"thing ('fish', 'bones', 'apples') to generate a real mesh for it")
                 continue
             glb = library.resolve(sing)
             if not glb and not _factory_genre:
                 try:
                     from app.game_export.generate import ensure_asset
-                    stage(f"creating '{sing}' — image → 3D mesh "
+                    stage(f"creating '{sing}': image → 3D mesh "
                           f"(first time only; slow without a GPU)")
                     ensure_asset(sing, verbose=True)
                     glb = library.resolve(sing)
@@ -1473,7 +1501,7 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                 except Exception as ge:
                     job.setdefault("notes", []).append(
                         f"collectible '{sing}' generation failed "
-                        f"({type(ge).__name__}) — glowing orbs used")
+                        f"({type(ge).__name__}). Glowing orbs used")
             if glb:
                 ob.asset = glb
 
@@ -1520,7 +1548,7 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                     ob.count = min(ob.count, 8)
                     converted = True
                     job.setdefault("notes", []).append(
-                        f"'{prey}' is HUNTED, not collected — your words beat the AI's pick")
+                        f"'{prey}' is HUNTED, not collected. Your words beat the AI's pick")
                     break
             if not converted:
                 spec.objectives.insert(0, ObjectiveSpec(
@@ -1555,7 +1583,7 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             spec.objectives.insert(0, ObjectiveSpec(
                 kind="capture", label="zones", count=max(1, min(_nz, 5))))
             job.setdefault("notes", []).append(
-                "capture-the-zone mode added — your words beat the AI's pick")
+                "capture-the-zone mode added. Your words beat the AI's pick")
 
         # BATTLE ROYALE SANITY (Phase 61): an 'eliminate' step is last-one-
         # standing — the rivals are HOSTILE copies of the player's own kind
@@ -1591,19 +1619,19 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             if ob.kind in ("defeat", "eliminate"):
                 if total_hostiles <= 0:
                     job.setdefault("notes", []).append(
-                        f"'defeat {ob.label}' dropped — no enemies could be cast")
+                        f"'defeat {ob.label}' dropped: no enemies could be cast")
                     continue
                 ob.count = min(ob.count, total_hostiles)
             if ob.kind == "hunt":
                 total_prey = sum(e.count for e in spec.entities if e.behavior == "flee")
                 if total_prey <= 0:
                     job.setdefault("notes", []).append(
-                        f"'hunt {ob.label}' dropped — no prey could be cast")
+                        f"'hunt {ob.label}' dropped: no prey could be cast")
                     continue
                 ob.count = min(ob.count, total_prey)
             if ob.kind == "survive" and total_hostiles <= 0:
                 job.setdefault("notes", []).append(
-                    f"'survive {ob.label}' dropped — waves need at least one hostile")
+                    f"'survive {ob.label}' dropped: waves need at least one hostile")
                 continue
             sane.append(ob)
         spec.objectives = sane
@@ -1748,7 +1776,7 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             archetype=_arch, terrain_form=_tf)
         if _tf != "natural" or _gm != 1.0:
             job.setdefault("notes", []).append(
-                f"terrain form: {_tf} ({_gn}x{_gn}) — the ground is shaped by "
+                f"terrain form: {_tf} ({_gn}x{_gn}). The ground is shaped by "
                 f"the art direction, not just coloured by it")
         job.setdefault("notes", []).append(
             f"terrain {_gn}x{_gn} "
@@ -1812,7 +1840,7 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             spec.world.ground_color = _ARCH_GROUND[_arch]
         if _arch != "plain":
             job.setdefault("notes", []).append(
-                f"landform: {_arch} (from your prompt — the ground itself, "
+                f"landform: {_arch} (from your prompt. The ground itself, "
                 f"not just its colour)")
         if _arch == "archipelago" and spec.world.water_level is None:
             # an archipelago without a sea is just lumpy ground: this landform
@@ -1837,7 +1865,7 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                 if _ck in _base_level:
                     spec.world.level[_ck] = _base_level[_ck]
             job.setdefault("notes", []).append(
-                "kept the base game's real-city map (%d buildings) — an edit "
+                "kept the base game's real-city map (%d buildings). An edit "
                 "does not re-scan" % len((_base_level.get("osm") or {}).get("buildings", [])))
         # INTERIOR LEVELS (Phase 95): 'inside a castle/house/dungeon' builds
         # ROOMS — walls with colliders, doorways, furniture, torchlight. The
@@ -1931,7 +1959,7 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                 [_far[0], _far[1]]]
             spec.world.level["landmarks"] = []
             job.setdefault("notes", []).append(
-                f"interior level: {_ik} — rooms, doorways, torchlight")
+                f"interior level: {_ik}. Rooms, doorways, torchlight")
         # QUEST CHAINS (moon plan 3.1): a single-objective prompt becomes a
         # 3-step story — scout a Point of Interest, do the deed, reach the
         # beacon. The scout step is a collect(1) staged AT the POI (collect
@@ -1974,15 +2002,34 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         # a structure gets a real door — outside stays the level, the door
         # teleports into a generated interior past the map edge and back.
         if "interior" not in spec.world.level and not is_city:
-            _sm = _re3.search(
-                r"\b(castle|fortress|palace|mansion|house|cottage|tavern|"
-                r"temple|cabin|dungeon)\b", _pl)
+            # BUILDINGS FOR BUILDING PROMPTS (2026-09-16). Ten words used to
+            # earn a door; "a haunted manor" earned nothing and stood on a
+            # bare moor. Every structure a prompt is likely to name maps to
+            # an interior kind (house, castle, dungeon) and a facade kit the
+            # runtime stands around the door.
+            _BLD = {
+                "manor": ("house", "manor"), "mansion": ("house", "manor"), "estate": ("house", "manor"),
+                "villa": ("house", "manor"), "hall": ("house", "manor"), "hotel": ("house", "manor"),
+                "cottage": ("house", "cottage"), "cabin": ("house", "cottage"), "hut": ("house", "cottage"),
+                "shack": ("house", "cottage"), "lodge": ("house", "cottage"), "farmhouse": ("house", "cottage"),
+                "house": ("house", "cottage"), "home": ("house", "cottage"), "homestead": ("house", "cottage"),
+                "inn": ("house", "inn"), "tavern": ("house", "inn"), "pub": ("house", "inn"), "saloon": ("house", "inn"),
+                "castle": ("castle", "keep"), "fortress": ("castle", "keep"), "keep": ("castle", "keep"),
+                "palace": ("castle", "keep"), "citadel": ("castle", "keep"), "fort": ("castle", "keep"),
+                "temple": ("castle", "chapel"), "church": ("castle", "chapel"), "chapel": ("castle", "chapel"),
+                "cathedral": ("castle", "chapel"), "monastery": ("castle", "chapel"), "abbey": ("castle", "chapel"),
+                "shrine": ("castle", "chapel"), "tower": ("castle", "tower"), "lighthouse": ("castle", "tower"),
+                "watchtower": ("castle", "tower"), "observatory": ("castle", "tower"),
+                "warehouse": ("dungeon", "warehouse"), "bunker": ("dungeon", "warehouse"), "vault": ("dungeon", "warehouse"),
+                "dungeon": ("dungeon", "keep"), "mill": ("dungeon", "warehouse"), "station": ("dungeon", "warehouse"),
+                "laboratory": ("dungeon", "warehouse"), "lab": ("dungeon", "warehouse"), "barn": ("dungeon", "warehouse"),
+                "library": ("castle", "limestone"), "museum": ("castle", "limestone"), "bank": ("castle", "limestone"),
+            }
+            _sm = _re3.search(r"\b(" + "|".join(sorted(_BLD, key=len, reverse=True)) + r")s?\b", _pl)
             if _sm:
                 from app.game_export.level import build_interior
                 _ek_raw = _sm.group(1)
-                _ek = {"mansion": "house", "cottage": "house", "cabin": "house",
-                       "tavern": "house", "temple": "castle",
-                       "fortress": "castle", "palace": "castle"}.get(_ek_raw, _ek_raw)
+                _ek, _kit = _BLD[_ek_raw]
                 _eplan = build_interior(spec.seed + 7, _ek)
                 import random as _rnd2
                 _er = _rnd2.Random(spec.seed + 13)
@@ -1992,9 +2039,9 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                 else:
                     _half2 = spec.world.size_m / 2
                     _door = [round(_half2 * 0.5, 2), round(_half2 * _er.uniform(-0.3, 0.3), 2)]
-                spec.world.level["enterable"] = {"plan": _eplan, "door": _door}
+                spec.world.level["enterable"] = {"plan": _eplan, "door": _door, "facade": _kit, "label": "the " + _ek_raw}
                 job.setdefault("notes", []).append(
-                    f"the {_ek_raw} has a real door — step through the glow to go inside")
+                    f"the {_ek_raw} stands at its door ({_kit} facade, {_ek} inside): step through the glow to go inside")
         def _use_city(osm, label):
             spec.world.level["osm"] = osm
             # streets are the level: the mission path FOLLOWS the road
@@ -2023,7 +2070,7 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                 _use_city(osm, f"real-city map: {place} (© OpenStreetMap contributors)")
             else:
                 job.setdefault("notes", []).append(
-                    f"OSM fetch for '{place}' unavailable — a procedural district stands in")
+                    f"OSM fetch for '{place}' unavailable: a procedural district stands in")
         if is_city and not osm and not spec.world.level.get("interior"):
             from app.game_export.level import build_proc_city
             stage("laying out the district")
@@ -2063,10 +2110,10 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                 job.setdefault("notes", []).append(
                     "city heist: " + str(len(_ents)) + " enterable buildings ("
                     + ", ".join(e["label"] for e in _ents)
-                    + ") — walk to a glowing door to go inside")
+                    + "): walk to a glowing door to go inside")
             else:
                 job.setdefault("notes", []).append(
-                    "no footprint suited an enterable door — street-level heist")
+                    "no footprint suited an enterable door. Street-level heist")
 
         stage("building")
         # RESOLVED spec (absolute asset paths) — lets Game Projects re-export
@@ -2129,7 +2176,7 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                 _miss = check_brief(spec, _facts)
                 job["facts"] = _facts
                 for _m in _miss:
-                    job.setdefault("notes", []).append(f"⚠ off-brief — {_m}")
+                    job.setdefault("notes", []).append(f"⚠ off-brief: {_m}")
                 if _miss:
                     job["brief_errors"] = _miss
             if r.returncode == 0 and shot.exists():
@@ -2137,8 +2184,8 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                 job.setdefault("notes", []).append(
                     "visual gate: rendered clean, no runtime errors"
                     + ("" if not _facts else
-                       " — and matches the brief" if not job.get("brief_errors")
-                       else f" — but {len(job['brief_errors'])} thing(s) off-brief"))
+                       ": and matches the brief" if not job.get("brief_errors")
+                       else f": but {len(job['brief_errors'])} thing(s) off-brief"))
                 job["checks"] = job.get("checks", 0) + 1
             elif r.returncode == 2:
                 # LOUD, NOT BURIED (2026-08-05): a shader link failure
@@ -2152,8 +2199,8 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                           or "is not a function" in _det
                           or "before initialization" in _det)
                 job.setdefault("notes", []).append(
-                    ("⚠ VISUAL GATE FAILED — the game renders broken: "
-                     if _fatal else "⚠ visual gate: runtime errors — ")
+                    ("⚠ VISUAL GATE FAILED: the game renders broken: "
+                     if _fatal else "⚠ visual gate: runtime errors. ")
                     + _det[:220])
                 if shot.exists():
                     job["shot"] = f"/games/job_{job_id}/dist/_shot.png"
@@ -2209,7 +2256,7 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                     job.setdefault("notes", []).append(
                         "scene audit: fixed "
                         + ", ".join(f"{v} {k}" for k, v in _kinds.items())
-                        + (f" — {_left} remaining after apply"
+                        + (f": {_left} remaining after apply"
                            if _left is not None else ""))
                     if _left == 0:
                         job["checks"] = job.get("checks", 0) + 1
@@ -2218,7 +2265,7 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                                     "found": 0, "fixed": 0}
                     job.setdefault("notes", []).append(
                         f"scene audit: {_rep.get('checked', 0)} objects checked"
-                        " — nothing floating, buried or inside a wall")
+                        ": nothing floating, buried or inside a wall")
                     job["checks"] = job.get("checks", 0) + 1
         except Exception:  # noqa: BLE001
             pass
@@ -2234,7 +2281,7 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
 
 def open_spec_as_job(spec_dict: dict, title: str = "", prompt: str = "",
                      player: str | None = None) -> int:
-    """Phase 43: open a SAVED level spec as a live job — exact deterministic
+    """Phase 43: open a SAVED level spec as a live job. Exact deterministic
     re-export (no LLM, no re-casting), so project levels are playable,
     Inspectable and editable again in seconds. The job carries spec_resolved,
     which is what the edit bar and 'save back to level' need."""
@@ -2361,7 +2408,7 @@ def get_library():
 @router.get("/api/game/library/thumb/{kind}")
 def library_thumb(kind: str):
     """Character thumbnail = its SDXL reference image (the exact picture the
-    3D mesh was built from — the most honest preview possible)."""
+    3D mesh was built from. The most honest preview possible)."""
     import hashlib as _hl
     from fastapi.responses import FileResponse
     key = _hl.md5(kind.lower().encode("utf-8")).hexdigest()[:12]
@@ -2412,7 +2459,7 @@ def reroll_asset(req: RerollAssetRequest):
     finally:
         _os.environ.pop("FS_REF_SEED", None)
     if not ok:
-        raise HTTPException(500, f"reroll failed for '{kind}' — the previous "
+        raise HTTPException(500, f"reroll failed for '{kind}': the previous "
                                  "hero was purged; generate any game with it to retry")
     return {"ok": True, "kind": kind}
 
@@ -2491,7 +2538,7 @@ _splat_seq = {"n": 0}
 async def train_splat(request: __import__("fastapi").Request):
     """Phase 137 Tier 2: upload a walkthrough VIDEO (raw body, X-Filename),
     train a Gaussian-splat world from it (ffmpeg -> COLMAP -> Brush).
-    Long-running (20-60 min) — returns a job id to poll."""
+    Long-running (20-60 min). Returns a job id to poll."""
     import re as _re
     name = _re.sub(r"[^A-Za-z0-9._-]", "_",
                    request.headers.get("x-filename", "capture.mp4"))[-80:]
@@ -3105,7 +3152,7 @@ def get_splat_job(job_id: int):
 
 @router.get("/api/game/health")
 def game_health():
-    """Game mode works without a GPU — report what's available."""
+    """Game mode works without a GPU. Report what's available."""
     from app.game_export import library as lib
     kinds = []
     try:

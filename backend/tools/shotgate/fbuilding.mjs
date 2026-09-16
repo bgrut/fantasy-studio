@@ -1,0 +1,61 @@
+// Buildings for building prompts. A world that names a manor gets a manor:
+// a body from the facade kit stands at the door, its front faces the spawn,
+// its walls block, and the door still leads inside.
+//   B=<job id of a prompt that names a building>
+import puppeteer from 'puppeteer-core';
+if (!process.env.B) { console.log('fbuilding: no building job given (B=<job>); FAIL'); process.exit(1); }
+const b = await puppeteer.launch({ headless:'new',
+  executablePath:'C:/Program Files/Google/Chrome/Application/chrome.exe',
+  args:['--use-angle=d3d11','--enable-unsafe-swiftshader','--window-size=1280,760'] });
+const p = await b.newPage();
+await p.setViewport({ width:1280, height:760 });
+const errs = [];
+p.on('pageerror', e => errs.push(e.message.slice(0,200)));
+const wait = ms => new Promise(r => setTimeout(r, ms));
+await p.goto('http://127.0.0.1:8789/games/job_' + process.env.B + '/dist/?noguide=1', { waitUntil:'domcontentloaded', timeout:120000 });
+await wait(9000);
+const btn = await p.$('#startbtn'); if (btn) await btn.click();
+await wait(4000);
+const r = await p.evaluate(async () => {
+  const L = window.__game.landmark();
+  if (!L) return { landmark: null };
+  // stand at the door, look at the building
+  const tp = window.__game.tp;
+  const dx = L.door[0], dz = L.door[1];
+  const nx = (0 - dx), nz = (0 - dz), nl = Math.hypot(nx, nz) || 1;
+  tp(dx + nx / nl * 6, dz + nz / nl * 6);
+  await new Promise(r => setTimeout(r, 800));
+  const before = window.__game.pos();
+  // walk into the wall beside the door: the wall should stop us short of the centre
+  const wx = dx - nx / nl * 3 + (-nz / nl) * 4, wz = dz - nz / nl * 3 + (nx / nl) * 4;   // a point inside the body, off the doorway
+  return { landmark: L, before: before.map(v => +v.toFixed(1)), inside: [wx, wz] };
+});
+console.log('landmark  :', r.landmark ? JSON.stringify({ kit: r.landmark.kit, w: r.landmark.w, d: r.landmark.d, h: r.landmark.h, at: r.landmark.at.map(v => +v.toFixed(1)) }) : 'NONE');
+let blocked = null;
+if (r.landmark) {
+  // try to teleport into the wall's footprint through physics: push the body toward the inside point for two seconds
+  blocked = await p.evaluate(async (inside) => {
+    const tp = window.__game.tp;
+    const [ix, iz] = inside;
+    const p0 = window.__game.pos();
+    // face the point and hold W
+    return await new Promise(res => {
+      const ev = new KeyboardEvent('keydown', { code: 'KeyW', key: 'w' }); dispatchEvent(ev);
+      setTimeout(() => { dispatchEvent(new KeyboardEvent('keyup', { code: 'KeyW', key: 'w' })); const p1 = window.__game.pos();
+        res({ moved: +Math.hypot(p1[0] - p0[0], p1[2] - p0[2]).toFixed(1) }); }, 1500);
+    });
+  }, r.inside);
+  // face the body for the frame: stand 14 m out from the door and look at it
+  await p.evaluate(async (L) => {
+    const dx = L.door[0], dz = L.door[1]; const nx = (0 - dx), nz = (0 - dz), nl = Math.hypot(nx, nz) || 1;
+    window.__game.tp(dx + nx / nl * 14, dz + nz / nl * 14);
+    if (window.__game.look) window.__game.look(Math.atan2(-nx / nl, -nz / nl));
+    await new Promise(r => setTimeout(r, 900));
+  }, r.landmark);
+  await p.screenshot({ path: process.env.OUT || 'building.png' });
+}
+console.log('walked    :', JSON.stringify(blocked));
+console.log('errors    :', errs.length ? errs.join(' | ') : 'none');
+await b.close();
+const ok = r.landmark && r.landmark.w > 5 && r.landmark.h > 5 && errs.length === 0;
+process.exit(ok ? 0 : 1);

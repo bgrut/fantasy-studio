@@ -911,8 +911,21 @@ async function main() {
   // (the AAA contrast ratio), with the HDRI env carrying more of the fill.
   // ground bounce joins the palette family — a fixed moss-grey underside
   // is why authored worlds still lit like the default one from below
-  const hemi = new THREE.HemisphereLight(pal.sky,
-    SPEC.world.palette ? new THREE.Color(pal.fog).multiplyScalar(0.45).getHex()
+  // A FILL NEEDS A COLOUR TO FILL WITH (2026-09-16). The hemisphere took the
+  // palette's sky verbatim, and a night palette's sky is near-black (#0a0618
+  // on a haunted moor): the fill went to nothing and the whole world with
+  // it, whatever the ambient number said. The fill's sky keeps the
+  // palette's hue but never drops under a moonlit floor of lightness.
+  const _fillFloor = (hex, minL) => { const c = new THREE.Color(hex), h = {}; c.getHSL(h); if (h.l < minL) c.setHSL(h.h, Math.max(h.s, 0.25), minL); return c.getHex(); };
+  // NIGHT IS NOT BLACK (2026-09-16). An authored night palette put a moor at
+  // three percent brightness: the sky #0a0618, the exposure 0.85, the fill
+  // fed that sky. A moonlit night on a screen is a low mid-tone, so the
+  // night skies get floors: ambient 0.9, exposure 0.9, a fill sky at 0.28
+  // lightness, and a cool bounce from the moon's far side.
+  const _isNightSky = ['night', 'dusk'].includes(SPEC.world.sky);
+  if (_isNightSky) { pal.amb = Math.max(pal.amb, 0.9); pal.exp = Math.max(pal.exp || 0.8, 0.9); pal.sun = Math.max(pal.sun, 1.1); }
+  const hemi = new THREE.HemisphereLight(_fillFloor(pal.sky, _isNightSky ? 0.28 : 0.16),
+    SPEC.world.palette ? _fillFloor(new THREE.Color(pal.fog).multiplyScalar(0.45).getHex(), 0.07)
                        : 0x3a3f35,
     pal.amb * 0.85);
   scene.add(hemi);
@@ -926,6 +939,11 @@ async function main() {
   Object.assign(sun.shadow.camera, { left: -sc, right: sc, top: sc, bottom: -sc, far: 400 });
   sun.shadow.camera.updateProjectionMatrix();
   scene.add(sun);
+  if (_isNightSky) {                            // the moon's bounce: a cool fill from the far quadrant
+    const moonFill = new THREE.DirectionalLight(0x9fb4ff, 0.45);
+    moonFill.position.set(-pal.sunPos[0], Math.max(20, pal.sunPos[1] * 0.6), -pal.sunPos[2]);
+    scene.add(moonFill);
+  }
   // CASCADED SHADOWS (Arc A round 3, 2026-07-28): big worlds/cities get
   // 3-cascade sun shadows — crisp near the camera AND still shadowed at
   // distance, instead of one 48m fitted box with a bare horizon. Small
@@ -5789,6 +5807,43 @@ async function main() {
       const glow2 = new THREE.PointLight(0xffb347, 6, 9, 1.8);
       glow2.position.set(dx2, dy2 + 2.0, dz2);
       scene.add(glow2);
+      // THE BUILDING (2026-09-16). The door used to stand alone in a field.
+      // A body from the facade kit stands behind it now: its front wall
+      // faces the spawn, the door sits in that wall, and four colliders
+      // with a gap at the door make it a thing you walk round. Built late,
+      // once the kit below is defined (it is a const, and this runs first).
+      if (!OSM) {
+        const kit = E.facade || ({ house: 'cottage', castle: 'keep', dungeon: 'warehouse' }[(E.plan && E.plan.kind) || 'house'] || 'cottage');
+        const doorX = dx2, doorZ = dz2, doorY = dy2;
+        const __buildBody = () => {
+          const FK = (typeof FACADE_KIT !== 'undefined') && FACADE_KIT[kit];
+          if (!FK) return;
+          const built = buildFacadeBox(kit);
+          const body = built && built.g ? built.g : built;            // the kit's builders return { g, h }
+          let nx = 0 - doorX, nz = 0 - doorZ;                        // front faces the spawn
+          const nl = Math.hypot(nx, nz) || 1; nx /= nl; nz /= nl;
+          const cx = doorX - nx * (FK.d / 2 + 0.3), cz = doorZ - nz * (FK.d / 2 + 0.3);
+          const yaw = Math.atan2(nx, nz);
+          body.rotation.y = yaw;
+          body.position.set(cx, doorY - 0.25, cz);
+          scene.add(body);
+          // colliders: four walls, the front one in two halves with a doorway between
+          const H = FK.st * FK.storeys, hw = FK.w / 2, hd = FK.d / 2, T = 0.45;
+          const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
+          const wall = (lx, lz, sx, sz) => {
+            const wx = cx + (lx * Math.cos(yaw) + lz * Math.sin(yaw)), wz = cz + (-lx * Math.sin(yaw) + lz * Math.cos(yaw));
+            world.createCollider(RAPIER.ColliderDesc.cuboid(sx, H / 2, sz).setTranslation(wx, doorY - 0.25 + H / 2, wz).setRotation({ x: q.x, y: q.y, z: q.z, w: q.w }));
+          };
+          const gap = 1.4;                                            // half the doorway
+          wall(-(hw + gap) / 2, hd, (hw - gap) / 2, T);                // front left: from -hw to -gap
+          wall((hw + gap) / 2, hd, (hw - gap) / 2, T);                 // front right: from gap to hw
+          wall(0, -hd, hw, T);                                        // back
+          wall(hw, 0, T, hd); wall(-hw, 0, T, hd);                    // sides
+          window.__landmark = { kit, at: [cx, cz], yaw, w: FK.w, d: FK.d, h: H, door: [doorX, doorZ] };
+        };
+        if (window.__facadeKitReady) { try { __buildBody(); } catch (e) { console.warn('[game] building', e); } }
+        else (window.__lateBuildings = window.__lateBuildings || []).push(__buildBody);
+      }
       // the porch lamps ride the SAME budget list as the torches: four doors
       // plus four lit interiors is well past the shader's light slots, and
       // over-budget renders black rather than warning (see buildRooms).
@@ -7378,7 +7433,24 @@ async function main() {
                   w: 10, d: 8,  storeys: 3, tone: 0xb0a99b, roof: 0x4a4640 },
     limestone:  { tex: 'plaster',  st: 4.2, bay: 3.8, pier: 1.9, spand: 1.6,
                   w: 14, d: 11, storeys: 6, tone: 0xbdb5a4, roof: 0x55524c },
+    // THE COUNTRY (2026-09-16): what a prompt names when it is not a city
+    manor:      { tex: 'stone',    st: 3.6, bay: 3.4, pier: 1.6, spand: 1.4,
+                  w: 18, d: 12, storeys: 2, tone: 0x9d9484, roof: 0x3e3a36 },
+    cottage:    { tex: 'plaster',  st: 2.9, bay: 2.8, pier: 1.3, spand: 1.0,
+                  w: 10, d: 8,  storeys: 2, tone: 0xc9bfa6, roof: 0x5a3d2e },
+    inn:        { tex: 'planks',   st: 3.1, bay: 3.0, pier: 1.3, spand: 1.1,
+                  w: 14, d: 10, storeys: 2, tone: 0x9a7a55, roof: 0x4a3a2c },
+    keep:       { tex: 'stone',    st: 4.2, bay: 4.0, pier: 2.4, spand: 2.2,
+                  w: 16, d: 16, storeys: 3, tone: 0x8b8780, roof: 0x3a3835 },
+    chapel:     { tex: 'stone',    st: 5.0, bay: 3.6, pier: 1.8, spand: 2.6,
+                  w: 9,  d: 16, storeys: 2, tone: 0xa9a396, roof: 0x3e3a36 },
+    tower:      { tex: 'stone',    st: 3.4, bay: 3.0, pier: 1.9, spand: 1.7,
+                  w: 6,  d: 6,  storeys: 7, tone: 0x9a958c, roof: 0x3a3835 },
   };
+  // the bodies the enterable block asked for, built now that the kit exists
+  for (const f of (window.__lateBuildings || [])) { try { f(); } catch (e) { console.warn('[game] building', e); } }
+  window.__lateBuildings = [];
+  window.__facadeKitReady = true;                 // a door block that runs after this builds at once
   function buildFacadeBox(kind) {
     const F = FACADE_KIT[kind] || FACADE_KIT.brownstone;
     const g = new THREE.Group();
@@ -7469,8 +7541,19 @@ async function main() {
       const glassM2 = new THREE.MeshStandardMaterial({ color: 0x2b3440,
         roughness: 0.26, metalness: 0.0, envMapIntensity: 0.45 });
       glassM2.userData.noAutoTex = true;
-      const gm = new THREE.Mesh(mergeGeometries(panes, false), glassM2);
-      g.add(gm);
+      // LIT WINDOWS AT NIGHT (2026-09-16). A stone body on a night moor read
+      // as a black block behind a glowing door. Someone is home: about half
+      // the panes carry a warm lamp behind them, chosen by a fixed hash so a
+      // building keeps its lit rooms between visits.
+      const night = ['night', 'dusk'].includes(SPEC.world.sky);
+      const lit = [], dark = [];
+      panes.forEach((q, k) => ((night && ((k * 7919 + 13) % 10) < 5) ? lit : dark).push(q));
+      if (dark.length) { const gm = new THREE.Mesh(mergeGeometries(dark, false), glassM2); g.add(gm); }
+      if (lit.length) {
+        const lampM = new THREE.MeshStandardMaterial({ color: 0x3a2a12, roughness: 0.5, emissive: 0xffc27a, emissiveIntensity: 0.9 });
+        lampM.userData.noAutoTex = true;
+        g.add(new THREE.Mesh(mergeGeometries(lit, false), lampM));
+      }
       for (const q of panes) q.dispose();
     }
     const cap = new THREE.Mesh(new THREE.BoxGeometry(F.w + 0.5, 0.5, F.d + 0.5),
@@ -10274,6 +10357,8 @@ async function main() {
     attack: doAttack,
     win: (t) => doWin(t || 'the gate called it'), lose: (t) => doLose(t || 'the gate called it'),   // the end card, reachable by a gate
     guide: () => ({ step: __fm.k, total: __fmSteps.length, active: __fm.active, done: __fm.done, title: __fm.step ? __fm.step.title : null, guided: __fmGuided }),
+    landmark: () => window.__landmark || null,
+    look: (y) => { yaw = y; },                 // the gate turns the camera
     combat: () => ({ hp: php, kills, mode: ATTACK, lost,
                      hostiles: npcs.filter(n => n.behavior === 'hostile' && !n.dead).length }),
     quest: () => ({ step: stepIdx, total: steps.length,
@@ -10357,7 +10442,7 @@ async function main() {
   // material change from screenshots alone is guesswork, and the city's
   // night look is decided by numbers (fog density, env intensity) that a
   // picture cannot report.
-  window.__scene = scene;
+  window.__scene = scene; window.__renderer = renderer;
   window.__camera = camera;   // harness: fov punches are assertable, not vibes window.__renderer = renderer;
 
   // ── PARKED CARS YOU CAN STEAL ────────────────────────────────────────────
@@ -11787,6 +11872,13 @@ varying vec2 vUvRaw;
     scene.traverse(o => { if (o.isLight) o.intensity *= _night ? 0.85 : 0.6; });
     bloom.strength = 0.12;
     vignette.uniforms.strength.value = 0.7;
+    // a night world under horror keeps the grade of a night, not a crush on
+    // top of a night: the dread is in the fog and the silence
+    if (_night && stylePass) {
+      stylePass.uniforms.exposure.value = 1.05;
+      stylePass.uniforms.gamma.value = 1.12;
+      stylePass.uniforms.grain.value = 0.05;
+    }
   }
   if (STYLE === 'anime') bloom.strength = 0.45;   // dreamy glow
   if (STYLE === 'lowpoly') {
