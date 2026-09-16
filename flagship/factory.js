@@ -486,6 +486,8 @@ scene.add(hemi);
 const CORNER = HALF * Math.SQRT2 * 1.2;      // a little past the true corner
 const sun = new THREE.DirectionalLight(0xfff0d8, 3.1);
 sun.position.set(HALF * 2.4, HALF * 3.2, HALF * 1.8);
+const SUN0 = sun.position.clone();          // where the day starts; the drift swings about this
+let sunClock = 0, sunAngle = 0;
 sun.castShadow = true;
 sun.shadow.mapSize.set(TIER.shadow, TIER.shadow);
 sun.shadow.camera.left = -CORNER;
@@ -5447,6 +5449,19 @@ function stepIdle(dt) {
   const t = document.getElementById('toast');
   if (t) { t.textContent = WORD('STILL HERE. The goal card says what is worth doing next' + (best ? ', and the ring marks a free seam: press 1 there for a rig.' : '.')); t.classList.add('on'); toastAt = 6; }
 }
+// ── THE LIGHT MOVES. The key light swings about the worldlet, twenty-four
+// degrees each way over seven minutes; the disc and the sky follow. ─────
+const _sunAxis = new THREE.Vector3(0, 1, 0);
+function stepSun(dt) {
+  if (REDUCED) return;
+  sunClock += dt;
+  const a = Math.sin(sunClock / 420 * Math.PI * 2) * 0.42;
+  if (Math.abs(a - sunAngle) < 0.002) return;
+  sunAngle = a;
+  sun.position.copy(SUN0).applyAxisAngle(_sunAxis, a);
+  if (sunDisc) sunDisc.position.copy(sun.position).normalize().multiplyScalar(370);
+  if (skyDome) skyDome.material.uniforms.uSunDir.value.copy(sun.position).normalize();
+}
 // ── THE HINTS STEP BACK. Read once, then gone; H brings them back. ──────────
 let hintClock = 0, hintBack = 0;
 function stepHint(dt) {
@@ -5812,6 +5827,7 @@ renderer.setAnimationLoop(() => {
   stepTags(dt);
   stepHint(dt);
   stepDrone(dt);
+  stepSun(dt);
   stepIdle(dt);
   stepRival(dt);
   if (contract && (performance.now() % 500) < 20) renderContract();
@@ -6604,6 +6620,7 @@ window.__game = {
     sfxLast: AUDIO.last || null, droneGain: AUDIO.drone ? +AUDIO.drone.gain.value.toFixed(3) : 0,
     picks: Array.isArray(SPEC.worlds) ? SPEC.worlds.filter(w => !(w.href && pickMissing[w.href])).length : 0,
     crossWash: +crossWash.toFixed(3),
+    sunAngle: +sunAngle.toFixed(3),
     firstSale: lifetime.first, idleNudges, idleRing: !!(idleMark && idleMark.visible), crossLit,
     drone: drone.visible ? { t: +droneT.toFixed(1), flights: droneFlights, pos: drone.position.toArray().map(v => +v.toFixed(2)) } : null,
     audio: { ready: AUDIO.ready, muted: AUDIO.muted,
@@ -6709,6 +6726,7 @@ window.__factory = {
   liveTags,
   ageHints: () => { hintClock = 100; },     // the gate cannot wait forty-five seconds
   droneAt: (t) => { droneT = t; },          // the gate sets the drone's clock
+  sunAt: (t) => { sunClock = t; },          // and the sun's
   idleAt: (t) => { idleClock = t; },        // and the idle clock
   playSfx: (name) => ({ firstSale: sfxFirstSale, idle: sfxIdle, sold: () => sfxSold(1), cross: sfxCross }[name] || (() => {}))(),
   screenOf: (f, i, j) => { const w = tileWorld(f, i, j); const v = new THREE.Vector3(w[0], w[1], w[2]).project(camera);

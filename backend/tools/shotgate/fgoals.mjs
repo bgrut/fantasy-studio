@@ -58,7 +58,9 @@ const t2 = await p.evaluate(async () => {
   const money = window.__game.facts().goal_index;
   F.rateNow = g.rate - 50; await w(1500);
   const under = g.held;
-  F.rateNow = g.rate + 100; await w(2200);
+  F.rateNow = g.rate + 100;
+  // the hold is game time, which runs slow under a loaded machine: wait for it, up to six seconds
+  for (let k = 0; k < 30 && g.held < 1.5; k++) await w(200);
   const over = g.held;
   const readout = document.querySelector('#goal .held') && document.querySelector('#goal .held').textContent;
   F.rateNow = 10; await w(700);

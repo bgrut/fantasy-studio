@@ -181,6 +181,15 @@ const sweep = await p.evaluate(async () => {
   const r0 = sw.rotation.y; await new Promise(r => setTimeout(r, 600)); return { turned: +(sw.rotation.y - r0).toFixed(3), length: sw.geometry.boundingSphere ? +sw.geometry.boundingSphere.radius.toFixed(1) : null };
 });
 console.log('the sweep :', sweep ? 'turned ' + sweep.turned + ' rad in 0.6 s' : 'MISSING');
+// the light moves: set the sun's clock to a quarter period and the disc is elsewhere
+const sunDrift = await p.evaluate(async () => {
+  const F = window.__factory, disc = window.__scene.getObjectByName('sun');
+  const p0 = disc ? disc.position.clone() : null;
+  F.sunAt(105); await new Promise(r => setTimeout(r, 400));
+  const f = window.__game.facts();
+  return { angle: f.sunAngle, moved: p0 && disc ? +p0.distanceTo(disc.position).toFixed(1) : null };
+});
+console.log('the light :', 'sun angle', sunDrift.angle, 'rad at a quarter period | disc moved', sunDrift.moved, 'm');
 console.log('errors    :', errs.length ? errs.join(' | ') : 'none');
 await p.screenshot({ path: process.env.OUT || 'art.png' });
 await b.close();
@@ -193,6 +202,7 @@ const ok = icons.withIcon === icons.tools && icons.tools >= 9
   && smoke.alive > 0 && sil.edges === 1 && sil.sun === 1
   && held.hasRig && held.hasHolo && held.changed && held.fpVisible && !held.orbitVisible
   && sweep && sweep.turned > 0.15
+  && sunDrift.angle > 0.3 && sunDrift.moved > 50
   && jam.stuck && jam.col && jam.col[0] > 1.2 && jam.col[2] < 0.5   // amber
   && errs.length === 0;
 process.exit(ok ? 0 : 1);
