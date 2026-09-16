@@ -72,5 +72,5 @@ def check_brief(spec, facts: dict) -> list[str]:
         if down:
             out.append(f"the player is lying down: {dims[0]:.2f} x "
                        f"{dims[1]:.2f} x {dims[2]:.2f} (w x h x d)"
-                       f"{'' if biped else ' — and a quadruped that flat has fallen over'}")
+                       f"{'' if biped else ': and a quadruped that flat has fallen over'}")
     return out

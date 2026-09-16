@@ -275,7 +275,7 @@ def export_web_game(spec: GameSpec, out_dir: str | Path, verbose: bool = True) -
     # carries receipts — the full license chain proving the game is the
     # user's to sell. This is a product feature: no competitor can print it.
     (dist / "LICENSES.md").write_text(
-        f"""# {spec.title or 'Your Game'} — License Manifest
+        f"""# {spec.title or 'Your Game'}: License Manifest
 
 This game was generated with Fantasy Studio. **Everything in this folder is
 yours** — the runtime is open source and every bundled asset is either
