@@ -173,6 +173,14 @@ sky.t1 = await p.evaluate(() => { const d = window.__scene.getObjectByName('sky'
 sky.lights = await p.evaluate(() => (window.__game.facts().lights || []).filter(l => l.i > 0).length);
 console.log('starfield :', sky.found ? sky.stars + ' stars at r=' + sky.radius +
             ', camera far ' + sky.far + ' | nebula ' + sky.nebula + ' aurora ' + sky.aurora + ' | sky clock ' + (sky.t1 > sky.t0 ? 'runs' : 'STOPPED') + ' | machine lights ' + sky.lights : 'MISSING');
+// the hub's beacon sweeps: a beam that turns
+const sweep = await p.evaluate(async () => {
+  const F = window.__factory, TY = F.TYPES; let hub = null;
+  for (let i = 0; i < F.N && !hub; i++) for (let j = 0; j < F.N && !hub; j++) if (F.cells[0][i][j].t === TY.HUB) hub = F.cells[0][i][j];
+  const sw = hub && hub.build && hub.build.getObjectByName('sweep'); if (!sw) return null;
+  const r0 = sw.rotation.y; await new Promise(r => setTimeout(r, 600)); return { turned: +(sw.rotation.y - r0).toFixed(3), length: sw.geometry.boundingSphere ? +sw.geometry.boundingSphere.radius.toFixed(1) : null };
+});
+console.log('the sweep :', sweep ? 'turned ' + sweep.turned + ' rad in 0.6 s' : 'MISSING');
 console.log('errors    :', errs.length ? errs.join(' | ') : 'none');
 await p.screenshot({ path: process.env.OUT || 'art.png' });
 await b.close();
@@ -184,6 +192,7 @@ const ok = icons.withIcon === icons.tools && icons.tools >= 9
   && post.on && post.lum > 6 && post.lum < 250   // lit, not black, not blown
   && smoke.alive > 0 && sil.edges === 1 && sil.sun === 1
   && held.hasRig && held.hasHolo && held.changed && held.fpVisible && !held.orbitVisible
+  && sweep && sweep.turned > 0.15
   && jam.stuck && jam.col && jam.col[0] > 1.2 && jam.col[2] < 0.5   // amber
   && errs.length === 0;
 process.exit(ok ? 0 : 1);

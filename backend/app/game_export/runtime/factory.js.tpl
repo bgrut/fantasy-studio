@@ -2284,6 +2284,16 @@ function place(face, i, j, type, dir) {
     const beacon = new THREE.Mesh(new THREE.SphereGeometry(0.15, 8, 6),
       new THREE.MeshBasicMaterial({ color: 0xffd479 }));
     beacon.position.y = 1.22; beacon.name = 'lamp'; g.add(beacon);
+    // THE SWEEP (2026-09-16): a lighthouse's beam from the beacon, a long
+    // soft cone of the hub's gold turning once every twelve seconds, so a
+    // hub can be found from any face. Additive, no depth write, no light.
+    const sweep = new THREE.Mesh(new THREE.ConeGeometry(0.42, 9.0, 12, 1, true),
+      new THREE.MeshBasicMaterial({ color: 0xffd479, transparent: true, opacity: 0.13, blending: THREE.AdditiveBlending,
+                                    depthWrite: false, side: THREE.DoubleSide }));
+    sweep.geometry.rotateX(Math.PI / 2);          // the cone lies along +z, apex at the beacon
+    sweep.geometry.translate(0, 0, 4.5);
+    sweep.position.y = 1.22; sweep.name = 'sweep'; sweep.frustumCulled = false;
+    g.add(sweep);
     // the price board, on the mast, facing the way the hub faces: the thing
     // that pays the prices is the thing that displays them
     const board = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.45),
@@ -5918,6 +5928,8 @@ renderer.setAnimationLoop(() => {
     } else if (c.t === HUB) {
       if (c.pulse > 0) c.pulse = Math.max(0, c.pulse - dt * 2.6);
       const beacon = c.build.getObjectByName('lamp');
+      const sweep = c.build.getObjectByName('sweep');
+      if (sweep) { sweep.rotation.y += dt * 0.52; sweep.material.opacity = 0.10 + (c.pulse || 0) * 0.12; }
       // at idle the beacon breathes, so a hub with nothing arriving still
       // reads as on; a delivery pulse rides on top of it
       const breathe = 1 + Math.sin(performance.now() * 0.0028) * 0.07;
