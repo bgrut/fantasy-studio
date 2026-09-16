@@ -2,7 +2,7 @@
 // exporter injects __GAME_SPEC__ and never edits logic. three.js r170 (MIT) +
 // Rapier 0.14 (Apache-2.0), all vendored locally: works fully offline.
 import * as THREE from 'three';
-import { moodOf as __kitMoodOf, setMood as __kitSetMood, Bed as __KitBed, title as __KitTitle, end as __KitEnd } from './vendor/kit/kit.js';
+import { moodOf as __kitMoodOf, setMood as __kitSetMood, Bed as __KitBed, title as __KitTitle, end as __KitEnd, Foreman as __KitForeman } from './vendor/kit/kit.js';
 import { GLTFLoader } from './vendor/jsm/loaders/GLTFLoader.js';
 import { clone as skClone } from './vendor/jsm/utils/SkeletonUtils.js';
 import { mergeGeometries } from './vendor/jsm/utils/BufferGeometryUtils.js';
@@ -6306,6 +6306,8 @@ async function main() {
       // The name in the display face and, under it, the sentence that made
       // the world, in the mood the prompt chose.
       try { __KitTitle.show(SPEC.title || 'Your World', SPEC.prompt ? '\u201c' + SPEC.prompt + '\u201d' : ((SPEC.world && SPEC.world.name) || ''), { mood: document.body.dataset.mood, secs: 2.8 }); } catch (e) {}
+      // the guide steps in once the reveal is down, and only on a first run
+      if (!__fmGuided && !/[?&]noguide=1/.test(location.search)) setTimeout(() => { try { __fm.start(0); } catch (e) {} }, 3100);
       gameStarted = true;
       runT0 = performance.now();
       sfx('step');                        // gesture unlocks WebAudio + confirms start
@@ -9596,6 +9598,52 @@ async function main() {
   let pitch = SPEC.world.pano ? 0.16 : 0.35;
   let dragging = false, px = 0, py = 0;
   let camZoom = 1, freeLookT = 0;   // wheel zoom · seconds of free-look after a drag
+  // ── THE GUIDE (2026-09-16): the kit's Foreman, in the player's mode. ──────
+  // Four things a hand has to learn, each cleared by doing it, then the
+  // objective card takes over. Once per game: a guided game stays guided.
+  const __fmMode = SPEC.player.mode || 'walk';
+  const __fmKey = 'fs-adv-guide-' + String(SPEC.title || 'game').toLowerCase().replace(/[^a-z0-9]+/g, '-');
+  let __fmYaw0 = null, __fmMove = 0, __fmTurn = 0, __fmBoost = 0, __fmJump = 0;
+  const __fmLooked = () => __fmYaw0 !== null && Math.abs(yaw - __fmYaw0) > 0.22;
+  const __fmSteps = __fmMode === 'drive' ? [
+    { title: 'Look around', text: 'Drag with the mouse to look. The car is yours.', why: 'The camera rides behind the car; a drag looks away for a moment and comes back.', check: __fmLooked },
+    { title: 'Throttle', text: 'Hold W to drive.', why: 'Speed is the whole race. The orange gates ahead mark the route.', check: () => __fmMove > 1.2 },
+    { title: 'Steer', text: 'A and D steer. Ease off the throttle into a corner.', why: 'A drift starts when the rear lets go, and the throttle brings it back.', check: () => __fmTurn > 0.8 },
+    { title: 'Boost', text: 'Hold Shift on a straight.', why: 'Boost is the difference between fourth place and first.', check: () => __fmBoost > 0.5 },
+    { title: 'The gates', text: 'Follow the orange gates to the checkered finish.', why: 'The card at the top keeps your position. That is the whole race.', gotit: true },
+  ] : __fmMode === 'fly' ? [
+    { title: 'Look around', text: 'Drag with the mouse to look.', why: 'The camera rides behind you.', check: __fmLooked },
+    { title: 'Glide', text: 'W, A, S and D glide.', why: 'You are already in the air; the ground is the one thing to avoid.', check: () => __fmMove > 1.2 },
+    { title: 'Rise and dive', text: 'Space rises, C dives.', why: 'Height is speed you have not spent yet.', check: () => __fmJump > 0 },
+    { title: 'Boost', text: 'Hold Shift.', why: 'A burst for the gap you cannot glide across.', check: () => __fmBoost > 0.4 },
+    { title: 'The objective', text: 'The card at the top says what to do next.', why: 'Everything else is the world.', gotit: true },
+  ] : __fmMode === 'swim' ? [
+    { title: 'Look around', text: 'Drag with the mouse to look.', why: 'The camera rides behind you.', check: __fmLooked },
+    { title: 'Swim', text: 'W, A, S and D swim.', why: 'The current is slow; you are not.', check: () => __fmMove > 1.2 },
+    { title: 'Surface and dive', text: 'Space surfaces, C dives.', why: 'Depth is where the things worth finding are.', check: () => __fmJump > 0 },
+    { title: 'Burst', text: 'Hold Shift.', why: 'A burst for the gap you cannot swim across.', check: () => __fmBoost > 0.4 },
+    { title: 'The objective', text: 'The card at the top says what to do next.', why: 'Everything else is the world.', gotit: true },
+  ] : [
+    { title: 'Look around', text: 'Drag with the mouse to look.', why: 'The camera rides behind you; a drag looks around and settles back.', check: __fmLooked },
+    { title: 'Walk', text: 'W, A, S and D walk.', why: 'Most of what is worth seeing is a short walk away.', check: () => __fmMove > 1.2 },
+    { title: 'Run', text: 'Hold Shift to run.', why: 'Running is louder. Some things hear you.', check: () => __fmBoost > 0.5 },
+    { title: 'Jump', text: 'Space jumps. E uses what you stand by.', why: 'A ledge, a door, a thing on the ground: all of them want one of these.', check: () => __fmJump > 0 },
+    { title: 'The objective', text: 'The card at the top says what to do next.', why: 'Everything else is the world.', gotit: true },
+  ];
+  const __fm = new __KitForeman(__fmSteps, {
+    name: __fmMode === 'drive' ? 'the crew chief' : 'the guide',
+    save: k => { try { if (k >= __fmSteps.length) localStorage.setItem(__fmKey, '1'); } catch (e) {} },
+  });
+  const __fmGuided = (() => { try { return localStorage.getItem(__fmKey) === '1'; } catch (e) { return false; } })();
+  function __fmTick(dt) {
+    if (!gameStarted) return;
+    if (__fmYaw0 === null) __fmYaw0 = yaw;
+    if (keys['KeyW'] || keys['ArrowUp'] || keys['KeyS'] || keys['KeyA'] || keys['KeyD']) __fmMove += dt;
+    if (keys['KeyA'] || keys['KeyD'] || keys['ArrowLeft'] || keys['ArrowRight']) __fmTurn += dt;
+    if (keys['ShiftLeft'] || keys['ShiftRight']) __fmBoost += dt;
+    if (keys['Space'] || keys['KeyE'] || keys['KeyC']) __fmJump = 1;
+    __fm.tick(dt);
+  }
   addEventListener('wheel', e => {
     camZoom = THREE.MathUtils.clamp(camZoom * (1 + Math.sign(e.deltaY) * 0.09), 0.45, 2.6);
   }, { passive: true });
@@ -10222,6 +10270,7 @@ async function main() {
     tp: (x, z) => body.setTranslation({ x, y: spawnHeight(x, z), z }, true),
     attack: doAttack,
     win: (t) => doWin(t || 'the gate called it'), lose: (t) => doLose(t || 'the gate called it'),   // the end card, reachable by a gate
+    guide: () => ({ step: __fm.k, total: __fmSteps.length, active: __fm.active, done: __fm.done, title: __fm.step ? __fm.step.title : null, guided: __fmGuided }),
     combat: () => ({ hp: php, kills, mode: ATTACK, lost,
                      hostiles: npcs.filter(n => n.behavior === 'hostile' && !n.dead).length }),
     quest: () => ({ step: stepIdx, total: steps.length,
@@ -11971,6 +12020,7 @@ varying vec2 vUvRaw;
     if (window.__hitStop > 0) { window.__hitStop -= dt; dt *= 0.08; }
     else if (window.__slowMo > 0) { window.__slowMo -= dt; dt *= 0.35; }
     WIND_U.value = performance.now() / 1000;   // wind clock (Phase 81)
+    __fmTick(rdt);                             // the guide, on real time
     for (const w of wheels) {                  // roll with speed, steer in front
       w.tire.rotation.x += ((window.__pSpeed || 0) / w.wr) * dt;
       if (w.front) w.g.rotation.y = THREE.MathUtils.damp(w.g.rotation.y,

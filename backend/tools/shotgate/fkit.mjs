@@ -44,6 +44,17 @@ if (ADV) {
   await wait(700);
   adv.reveal = await p.evaluate(() => { const t = document.getElementById('fs-title'); return t && t.classList.contains('on') ? { name: t.querySelector('b').textContent, sub: t.querySelector('small').textContent } : null; });
   await p.screenshot({ path: process.env.OUT || 'kit.png' });
+  // the guide steps in after the reveal, in the player's mode; a step clears by doing it; G skips and is remembered
+  await wait(3200);
+  const g0 = await p.evaluate(() => ({ ...window.__game.guide(), card: !!document.querySelector('#fs-card.on') }));
+  await p.keyboard.press('Enter'); await wait(250);                      // past 'Look around'
+  const g1 = await p.evaluate(() => window.__game.guide());
+  await p.keyboard.down('KeyW'); await wait(1600); await p.keyboard.up('KeyW'); await wait(400);   // the throttle step clears itself
+  const g2 = await p.evaluate(() => window.__game.guide());
+  await p.keyboard.press('KeyG'); await wait(300);
+  const g3 = await p.evaluate(() => ({ ...window.__game.guide(), card: !!document.querySelector('#fs-card.on') }));
+  console.log('the guide : after the reveal', JSON.stringify({ step: g0.step, title: g0.title, card: g0.card }), '| Enter ->', g1.step, '| W held ->', g2.step, JSON.stringify(g2.title), '| G -> done', g3.done, '| card', g3.card);
+  adv.guide = { started: g0.card && g0.step === 0 && g0.active, enter: g1.step === 1, held: g2.step === 2, skipped: g3.done && !g3.card };
   // and a win closes on the kit's end card
   await p.evaluate(() => { if (window.__game && window.__game.win) window.__game.win('the gate called it'); });   // an older build has no hook: the end card check then fails honestly
   await wait(500);
@@ -56,5 +67,6 @@ await b.close();
 
 const okF = !fac || (fac.link && fac.faces.head && fac.faces.ui && fac.faces.mono && /Bricolage/.test(fac.title || '') && /Bricolage/.test(fac.hudH1 || ''));
 const okA = !adv || (adv.link && adv.faces.head && adv.faces.ui && adv.faces.mono && !!adv.mood && /Bricolage|DM Mono/.test(adv.startH1 || '') && /Bricolage|DM Mono/.test(adv.winH2 || '')
-  && adv.reveal && adv.reveal.name && /^\u201c.+\u201d$/.test(adv.reveal.sub) && adv.end && /win/i.test(adv.end.title) && adv.end.buttons.includes('play again') && /Bricolage|DM Mono/.test(adv.end.font));
+  && adv.reveal && adv.reveal.name && /^\u201c.+\u201d$/.test(adv.reveal.sub) && adv.end && /win/i.test(adv.end.title) && adv.end.buttons.includes('play again') && /Bricolage|DM Mono/.test(adv.end.font)
+  && adv.guide && adv.guide.started && adv.guide.enter && adv.guide.held && adv.guide.skipped);
 process.exit(okF && okA && (fac || adv) && errs.length === 0 ? 0 : 1);
