@@ -6408,7 +6408,12 @@ async function main() {
             const dark = pal.sun < 1.0;
             const ms = Array.isArray(o.material) ? o.material : [o.material];
             for (let mi = 0; mi < ms.length; mi++) {
-              const m = ms[mi].clone();
+              // A GHOST IS A MATERIAL (2026-09-16): whatever mesh plays it, a
+              // spectral entity is a translucent cold figure that flickers
+              const m = ent.spectral
+                ? new THREE.MeshStandardMaterial({ color: 0xdfe8ff, emissive: 0x9fb4ff, emissiveIntensity: 0.9, transparent: true, opacity: 0.38, depthWrite: false, roughness: 0.6 })
+                : ms[mi].clone();
+              if (ent.spectral) { m.userData.noAutoTex = true; o.castShadow = false; }
               if (Array.isArray(o.material)) o.material[mi] = m; else o.material = m;
               m.side = THREE.DoubleSide;    // no hollow heads on NPCs either
               if (m.map) { if (_flatStyle) cartoonizeTexture(m); else despeckleTexture(m); }
@@ -6625,7 +6630,7 @@ async function main() {
                     h: ent.height_m || 1.0, name: ent.name,
                     beat: holder.userData.fsBeat || null,   // heist patrol circuit
                     pen: holder.userData.fsPen || null,     // venue he never leaves
-                    hp: ent.hp || 3, cd: 0, dead: false, dieT: 0, mats, anim, dormant });
+                    hp: ent.hp || 3, cd: 0, dead: false, dieT: 0, mats, anim, dormant, spectral: !!ent.spectral });
       }
     } catch (e) { fail(e.message); }
   }
@@ -7465,10 +7470,18 @@ async function main() {
       if (!sfx) t.colorSpace = THREE.SRGBColorSpace;
       return t;
     };
-    const wallM = new THREE.MeshStandardMaterial({
-      map: mtex(F.tex), normalMap: mtex(F.tex, '_n'),
-      normalScale: new THREE.Vector2(1.1, 1.1),
-      color: new THREE.Color(F.tone), roughness: 0.93, metalness: 0.02 });
+    // FLAT LOOKS GET FLAT WALLS (2026-09-16): photo stone in an illustrated
+    // world is the character style clash again, on a building. The tone
+    // alone, no photo, no relief, and the same faceting the world has.
+    const flatLook = ['illustrated', 'noir', 'watercolor', 'storybook', 'papercraft', 'comic',
+                      'cartoon', 'kawaii', 'lowpoly', 'dunescape', 'claymation', 'synthwave'].includes(SPEC.style || 'default');
+    const wallM = flatLook
+      ? new THREE.MeshStandardMaterial({ color: new THREE.Color(F.tone).offsetHSL(0, 0.04, 0.06), roughness: 0.95, metalness: 0.0, flatShading: true })
+      : new THREE.MeshStandardMaterial({
+          map: mtex(F.tex), normalMap: mtex(F.tex, '_n'),
+          normalScale: new THREE.Vector2(1.1, 1.1),
+          color: new THREE.Color(F.tone), roughness: 0.93, metalness: 0.02 });
+    wallM.userData.noAutoTex = true;
     // backing: what you see down every reveal, so it stays dark and matte
     const backM2 = new THREE.MeshStandardMaterial({ color: 0x27241f, roughness: 0.97 });
     backM2.userData.noAutoTex = true;
@@ -7522,11 +7535,22 @@ async function main() {
         if (y1 - y0 < 0.6) continue;
         for (let k = 0; k < nb; k++) {
           const al = (k + 0.5) * bw;
-          const pane = new THREE.PlaneGeometry(ww, y1 - y0);
+          // WINDOWS, NOT SLABS (2026-09-16): a window is glass in the upper
+          // part of the bay, a sill under it, a lintel over it. The wall
+          // between windows is wall, so the facade reads as rooms.
+          const gw = Math.min(1.5, ww * 0.62), gh = Math.min(1.7, (y1 - y0) * 0.62);
+          const gy = y0 + (y1 - y0) * 0.58;                          // the glass sits high in the storey
+          const pane = new THREE.PlaneGeometry(gw, gh);
           pane.rotateY(yaw);
-          pane.translate(ax + ux * al - nx * (WTP - 0.04), (y0 + y1) / 2,
-                         az + uz * al - nz * (WTP - 0.04));
+          pane.translate(ax + ux * al - nx * (WTP - 0.06), gy, az + uz * al - nz * (WTP - 0.06));
           panes.push(pane);
+          // the wall around the glass: a sill, a lintel and the reveals, as boxes in the wall's own material
+          emit(al, gy - gh / 2 - 0.08, gw + 0.34, 0.16);                                 // sill
+          emit(al, gy + gh / 2 + 0.10, gw + 0.34, 0.20);                                 // lintel
+          const side = (ww - gw) / 2;
+          if (side > 0.08) { emit(al - gw / 2 - side / 2, (y0 + y1) / 2, side, y1 - y0); emit(al + gw / 2 + side / 2, (y0 + y1) / 2, side, y1 - y0); }
+          if (gy - gh / 2 - y0 > 0.2) emit(al, (y0 + gy - gh / 2) / 2, gw, gy - gh / 2 - y0);   // wall under the sill
+          if (y1 - (gy + gh / 2) > 0.2) emit(al, (y1 + gy + gh / 2) / 2, gw, y1 - (gy + gh / 2)); // wall over the lintel
         }
       }
     }
@@ -10365,7 +10389,7 @@ async function main() {
                     active: steps[stepIdx] ? stepLabel(steps[stepIdx]) : null, won }),
     objectives: () => ({ collected: steps.filter(s => s.kind === 'collect').reduce((a, s) => a + (s._got || 0), 0),
                          left: collectibles.filter(c => c.mesh.parent).map(c => c.mesh.position.toArray()) }),
-    npcs: () => npcs.filter(n => !n.gone).map(n => ({ behavior: n.behavior, dead: !!n.dead, pos: n.obj.position.toArray(),
+    npcs: () => npcs.filter(n => !n.gone).map(n => ({ behavior: n.behavior, dead: !!n.dead, pos: n.obj.position.toArray(), spectral: !!n.spectral, name: n.name,
                                                       mode: n.mode, alert: n.alert, playT })),
     placed: () => placedItems.map(p => ({ kind: p.it.kind, x: p.it.x, z: p.it.z,
                                           interact: !!p.it.interact, alive: !!p.anim })),
@@ -12442,6 +12466,12 @@ varying vec2 vUvRaw;
         window.__flights = window.__flights.filter(f => !f.step());
       }
       stepNPCs(dt, nt, performance.now() / 1000);
+      for (const n of npcs) if (n.spectral && !n.dead) {          // a ghost hovers and flickers
+        const tt = performance.now() / 1000;
+        n.obj.position.y += 0.45 + Math.sin(tt * 2.1 + n.phase) * 0.12;
+        const op = 0.30 + Math.max(0, Math.sin(tt * 3.7 + n.phase)) * 0.14 + (Math.random() < 0.02 ? 0.25 : 0);
+        for (const mm of (n.mats || [])) if (mm.transparent) mm.opacity = op;
+      }
       // SUSPICION HUD (heist kit): an eye that opens as a guard grows sure
       // of you, and goes red the moment you're made.
       if (HAS_GUARDS) {

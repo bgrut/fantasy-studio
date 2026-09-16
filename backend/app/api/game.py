@@ -1265,13 +1265,30 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                     return cand, glb2
             return None, None
 
+        # A HAUNTING HAS GHOSTS (2026-09-16). The extractor cast four wolves
+        # for a haunted manor. Where the prompt reads as a haunting, an
+        # animal hostile the prompt never named becomes a ghost, and any
+        # ghost-word entity is marked spectral so the runtime draws it so.
+        import re as _re5
+        _GHOST_WORDS = ("ghost", "spirit", "spectre", "specter", "phantom", "wraith", "apparition", "shade", "poltergeist")
+        _haunting = bool(_re5.search(r"\b(haunt\w*|ghost\w*|spirit\w*|spectr\w*|phantom\w*|wraith\w*|cursed|undead|poltergeist|seance|apparition)\b", (req.prompt or "").lower()))
+        _ANIMALS = {"wolf", "wolves", "bear", "bears", "boar", "tiger", "lion", "fox", "dog", "dogs", "hound", "hounds", "rat", "rats", "spider", "spiders", "snake", "snakes", "bat", "bats", "crow", "crows"}
+        for ent in spec.entities:
+            _en = ent.name.lower().strip()
+            if any(w in _en for w in _GHOST_WORDS):
+                ent.spectral = True
+                ent.speed = min(float(ent.speed or 1.2), 1.2)
+            elif _haunting and ent.behavior == "hostile" and _en in _ANIMALS and _en not in (req.prompt or "").lower():
+                job.setdefault("notes", []).append(
+                    f"a haunting has ghosts: the {ent.count} {_en} the AI cast are played as ghosts")
+                ent.name = "ghost"; ent.spectral = True; ent.speed = 1.0
         kept = []
         for ent in spec.entities:
             if ent.name.lower().strip() in _AMBIENT:
                 job.setdefault("notes", []).append(
                     f"'{ent.name}' is atmosphere: rendered by the weather/sky system")
                 continue
-            ekind = "man" if ent.name.lower() in _HUMAN_ALIASES else ent.name
+            ekind = "man" if (ent.name.lower() in _HUMAN_ALIASES or getattr(ent, "spectral", False)) else ent.name   # a ghost is played by the walker, drawn spectral
             # prefer the ANIMATED variant (real gait — no gliding); static fallback
             glb = ensure_playable(ekind, verbose=False) or library.resolve(ekind)
             if not glb and not any(w in req.prompt.lower()

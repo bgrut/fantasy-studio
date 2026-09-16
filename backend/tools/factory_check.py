@@ -75,6 +75,11 @@ def _node() -> str:
 
 
 def main() -> int:
+    # a gate prints curly quotes and arrows; a Windows console in cp1252 must not take the runner down with it
+    try:
+        sys.stdout.reconfigure(errors="replace")
+    except Exception:
+        pass
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--job", help="game job id to gate (the studio build)")
     ap.add_argument("--demo", default="http://127.0.0.1:8790/",

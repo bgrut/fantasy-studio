@@ -54,8 +54,10 @@ if (r.landmark) {
   }, r.landmark);
   await p.screenshot({ path: process.env.OUT || 'building.png' });
 }
+const cast = await p.evaluate(() => { const ns = window.__game.npcs(); return { ghosts: ns.filter(n => n.spectral).length, animals: ns.filter(n => /wolf|bear|boar/.test(n.name || '')).length, total: ns.length }; });
+console.log('the cast  :', cast.ghosts, 'ghosts,', cast.animals, 'animals of', cast.total);
 console.log('walked    :', JSON.stringify(blocked));
 console.log('errors    :', errs.length ? errs.join(' | ') : 'none');
 await b.close();
-const ok = r.landmark && r.landmark.w > 5 && r.landmark.h > 5 && errs.length === 0;
+const ok = r.landmark && r.landmark.w > 5 && r.landmark.h > 5 && errs.length === 0 && cast.ghosts > 0 && cast.animals === 0;   // a haunting has ghosts, not wolves
 process.exit(ok ? 0 : 1);

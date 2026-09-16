@@ -153,6 +153,8 @@ class EntitySpec(BaseModel):
     # mission shape in open-world games: protect someone who moves.
     behavior: Literal["static", "wander", "follow", "hostile", "vehicle",
                       "flee", "guard", "guide", "escort"] = "wander"
+    # spectral (2026-09-16): drawn as a ghost, whatever mesh plays it; hovers, flickers, slow
+    spectral: bool = False
     count: int = Field(1, ge=1, le=64)
     speed: float = Field(1.5, ge=0.0, le=40.0)
     height_m: float = Field(1.0, gt=0.1, le=10.0)

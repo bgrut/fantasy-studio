@@ -76,6 +76,9 @@ Output ONLY the JSON object, no markdown, no commentary. Schema (all fields opti
  (what moves things: "cart"). Give a plural after a slash when it is not the
  singular plus s: "flour/flour", "dough/dough", "loaf/loaves", "grain/grain".
  A rusted mining outpost needs no theme: omit it.
+ A HAUNTING HAS GHOSTS: a prompt about a haunting, a curse, spirits or the
+ undead casts its hostiles as "ghost" (or "spirit", "wraith", "phantom"), never as
+ wolves or bears, and gives them "spectral": true and a speed under 1.2.
  "style": A TOP-LEVEL FIELD, a sibling of "world" and "player" — NOT a key
  inside "world". Put it at the root of the object: {"title":..., "style":"pixel",
  "world":{...}}. It is THE ART DIRECTION, and the single biggest lever on
