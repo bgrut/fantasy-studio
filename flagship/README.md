@@ -59,7 +59,7 @@ seconds at 120/minute, 3 items in transit, 60fps, no runtime errors.
 
 Measured on the card players have: PERF.md holds the frame rate, frame times,
 draw calls and triangles for six phases of a session on a real GPU, written
-by backend/tools/perfpass.mjs.
+by backend/tools/shotgate/perfpass.mjs.
 
 ## Shape
 
