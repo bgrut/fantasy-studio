@@ -26,7 +26,7 @@ const r = await p.evaluate(()=>{
                                             && o.geometry.parameters.width === window.__factory.N * window.__factory.T);
   return { title: S.title, palette: S.world && S.world.palette, mood: f.mood, text,
            sky: [sky.r, sky.g, sky.b].map(v => +v.toFixed(3)),
-           ground: '#' + cube.material.color.getHexString(),
+           ground: '#' + (Array.isArray(cube.material) ? cube.material[2] : cube.material).color.getHexString(),   // the top face carries the ground colour as authored
            overlay: (window.__factory.WORLDS[0].plate || {}).overlay || null };
 });
 const warmWords = /\b(red|rust|ember|cinder|lava|ash|crimson|copper|desert)/i.test(r.text);

@@ -38,7 +38,7 @@ const inst = await p.evaluate(async ()=>{
   await new Promise(r => setTimeout(r, 900));
   return { belts: n, calls: window.__game.stats().calls, seams: window.__game.facts().nodes };
 });
-console.log('instanced :', inst.belts, 'belts ->', inst.calls, 'draw calls total |', inst.seams, 'seams, budget', 100 + 2 * inst.seams);
+console.log('instanced :', inst.belts, 'belts ->', inst.calls, 'draw calls total |', inst.seams, 'seams, budget', 108 + 2 * inst.seams);
 
 // 3. THE TREAD MOVES. A conveyor whose surface is static is a green plank, and
 //    nothing in the scene graph would show that — only the pixels do.
@@ -202,12 +202,20 @@ const land = await p.evaluate(async () => {
   return { s0: s0 === null ? null : +s0.toFixed(2), landing: l0, s1: s1 === null ? null : +s1.toFixed(2) };
 });
 console.log('landing   :', JSON.stringify(land));
+// every face its own ground: six materials on the cube, four platings among them
+const plating = await p.evaluate(() => {
+  const cube = window.__scene.getObjectByName('cube');
+  const mats = Array.isArray(cube && cube.material) ? cube.material : [];
+  const maps = new Set(mats.map(m => m.map && m.map.uuid));
+  return { faces: mats.length, platings: window.__game.facts().plating, maps: maps.size };
+});
+console.log('plating   :', plating.faces, 'faces |', JSON.stringify(plating.platings), '|', plating.maps, 'distinct maps');
 console.log('errors    :', errs.length ? errs.join(' | ') : 'none');
 await p.screenshot({ path: process.env.OUT || 'art.png' });
 await b.close();
 const ok = icons.withIcon === icons.tools && icons.tools >= 9
   && icons.rendered >= 8            // every machine; ERASE stays a glyph
-  && inst.belts > 60 && inst.calls < 100 + 2 * inst.seams   // belts are instanced; what scales is the seams (two calls each) and the AO passes
+  && inst.belts > 60 && inst.calls < 108 + 2 * inst.seams   // belts are instanced; what scales is the seams (two calls each) and the AO passes; the cube is six faces now (+5)
   && moving.moved
   && sky.found && sky.radius < sky.far && sky.stars > 500 && sky.nebula > 0 && sky.t1 > sky.t0 && sky.lights >= 1
   && post.on && post.lum > 6 && post.lum < 250   // lit, not black, not blown
@@ -216,6 +224,7 @@ const ok = icons.withIcon === icons.tools && icons.tools >= 9
   && sweep && sweep.turned > 0.15
   && sunDrift.angle > 0.3 && sunDrift.moved > 50
   && land.landing > 0 && land.s1 === 1
+  && plating.faces === 6 && plating.platings.length === 4 && plating.maps === 4
   && jam.stuck && jam.col && jam.col[0] > 1.2 && jam.col[2] < 0.5   // amber
   && errs.length === 0;
 process.exit(ok ? 0 : 1);

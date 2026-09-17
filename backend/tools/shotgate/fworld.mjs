@@ -81,11 +81,13 @@ const plate = await p.evaluate(()=>{
   const F = window.__factory;
   const cube = window.__scene.children.find(o => o.isMesh && o.geometry.type === 'BoxGeometry'
                                             && o.geometry.parameters.width === F.N * F.T);
-  const here = cube.material.map.uuid;
+  // six materials since every face got its own ground (2026-09-17): the top face is group 2 (+y)
+  const top = () => (Array.isArray(cube.material) ? cube.material[2] : cube.material).map.uuid;
+  const here = top();
   F.travelTo(0); F.endIntro();
-  const home = cube.material.map.uuid;
+  const home = top();
   F.travelTo(1); F.endIntro();
-  return { here, home, back: cube.material.map.uuid };
+  return { here, home, back: top() };
 });
 console.log('plating   : ember', plate.here.slice(0, 8), '| home', plate.home.slice(0, 8),
             '| rebuilt per world:', plate.here !== plate.home && plate.back !== plate.home);

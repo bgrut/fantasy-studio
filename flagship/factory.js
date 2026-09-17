@@ -1129,8 +1129,9 @@ function plateCanvas(pl, noGrain) {
                         [P / 2, 10], [P / 2, P - 10], [10, P / 2], [P - 10, P / 2]]) {
     g.beginPath(); g.arc(x, y, 2.6, 0, 6.3); g.fill();
   }
-  // wear: a few soft streaks, so no two quadrants look identical
-  for (let k = 0; k < 14; k++) {
+  // wear: a few soft streaks, so no two quadrants look identical (the
+  // underside carries more of them: pl.wear scales the count)
+  for (let k = 0; k < Math.round(14 * (pl.wear || 1)); k++) {
     const x = rr() * P, y = rr() * P, w = 12 + rr() * 40, h = 2 + rr() * 5;
     g.fillStyle = 'rgba(' + (rr() < 0.5 ? '70,78,120' : '175,185,220') + ',0.10)';
     g.fillRect(x, y, w, h);
@@ -1163,6 +1164,22 @@ function plateCanvas(pl, noGrain) {
     for (let k = 0; k < 5; k++) {          // a few embers still in the cracks
       g.fillStyle = 'rgba(255,120,50,0.55)';
       g.fillRect(rr() * P, rr() * P, 2 + rr() * 4, 2);
+    }
+  }
+  // RIME (2026-09-17): a pale crust that has grown along the seams of the
+  // salt faces, thickest where two seams meet, and nowhere on the panels
+  if (pl.rime) {
+    for (let k = 0; k < 160; k++) {
+      const along = rr() < 0.5, t = rr() * P, off = (rr() - 0.5) * 9;
+      const line = rr() < 0.5 ? 0 : P / 2;
+      g.fillStyle = 'rgba(232,240,250,' + (0.22 + rr() * 0.5) + ')';
+      const r = 0.8 + rr() * 2.2;
+      g.beginPath(); g.arc(along ? t : line + off, along ? line + off : t, r, 0, 6.3); g.fill();
+    }
+    for (const [x, y] of [[P / 2, P / 2], [0, P / 2], [P, P / 2], [P / 2, 0], [P / 2, P]]) {
+      const grd = g.createRadialGradient(x, y, 1, x, y, 22);
+      grd.addColorStop(0, 'rgba(236,244,255,0.55)'); grd.addColorStop(1, 'rgba(236,244,255,0)');
+      g.fillStyle = grd; g.beginPath(); g.arc(x, y, 22, 0, 6.3); g.fill();
     }
   }
   // grain (skipped for the height map: grain as relief is sandpaper, not plating)
@@ -1307,15 +1324,57 @@ function plateRoughness(pl) {
   t.anisotropy = 8;
   return t;
 }
-const cube = new THREE.Mesh(
-  new THREE.BoxGeometry(N * T, N * T, N * T),
-  new THREE.MeshStandardMaterial({ color: 0x36406a, roughness: 0.9,
-    metalness: 0.3, map: plateTexture(), roughnessMap: plateRoughness(),
-    normalMap: plateNormal(), normalScale: new THREE.Vector2(0.75, 0.75),
-    // dialled back once there WAS an environment: at 0.75 the floor read wet,
-    // and a ground plane competing with the machines for attention is a value
-    // hierarchy problem, not a lighting one
-    envMapIntensity: 0.5 }));
+// EVERY FACE ITS OWN GROUND (2026-09-17). One plating on all six faces
+// meant crossing an edge changed the sky and not the ground. The plate is
+// varied by the mineral of the face: the ember faces sooted and warmed, the
+// salt faces paler with rime along their seams, the underside darker and
+// more worn, the top the world's plate as authored. Four variants, cached,
+// on a box with six material groups: five more draw calls for the world.
+const _hx = h => { const n = parseInt(String(h).replace('#', ''), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
+const _mixHex = (h, to, k) => { const a = _hx(h), b = _hx(to);
+  return '#' + a.map((v, i) => Math.round(v + (b[i] - v) * k).toString(16).padStart(2, '0')).join(''); };
+const FACE_LOOK = {                       // by the mineral of the face; 'under' for the bottom
+  [CRYSTAL]: { key: 'crystal', tint: null },
+  [EMBER]:   { key: 'ember',   tint: 0xff9a5c, k: 0.32 },
+  [SALT]:    { key: 'salt',    tint: 0xdfe8ff, k: 0.22 },
+  under:     { key: 'under',   tint: 0x000000, k: 0.22 },
+};
+function facePlate(pl, f) {
+  pl = pl || PLATE_DEFAULT;
+  if (f === 1) return Object.assign({}, pl, { base: _mixHex(pl.base, '#000000', 0.16), tint: _mixHex(pl.tint, '#000000', 0.16), wear: 2.2 });
+  const m = MINERAL_OF_FACE[f];
+  if (m === EMBER) return Object.assign({}, pl, { base: _mixHex(pl.base, '#7a4e38', 0.45), tint: _mixHex(pl.tint, '#4e3228', 0.45),
+                                                  rivet: 'rgba(205,150,120,0.5)', overlay: 'soot' });
+  if (m === SALT)  return Object.assign({}, pl, { base: _mixHex(pl.base, '#dde5ef', 0.30), tint: _mixHex(pl.tint, '#b8c4d4', 0.30), rime: true });
+  return pl;
+}
+const faceLookOf = f => f === 1 ? FACE_LOOK.under : FACE_LOOK[MINERAL_OF_FACE[f]];
+// BoxGeometry's groups run +x, -x, +y, -y, +z, -z; each is the face whose normal that is
+const GROUP_FACE = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]]
+  .map(n => FACES.findIndex(f => _eqv(f.n, n)));
+function buildPlating(pl, ground) {
+  const byKey = {};
+  return GROUP_FACE.map(f => {
+    const look = faceLookOf(f);
+    if (byKey[look.key]) return byKey[look.key];
+    const fp = facePlate(pl, f);
+    const m = new THREE.MeshStandardMaterial({ color: ground, roughness: 0.9,
+      metalness: 0.3, map: plateTexture(fp), roughnessMap: plateRoughness(fp),
+      normalMap: plateNormal(fp), normalScale: new THREE.Vector2(0.75, 0.75),
+      // dialled back once there WAS an environment: at 0.75 the floor read wet,
+      // and a ground plane competing with the machines for attention is a value
+      // hierarchy problem, not a lighting one
+      envMapIntensity: 0.5 });
+    if (look.tint !== null) m.color.lerp(new THREE.Color(look.tint), look.k);
+    m.userData.plating = look.key;
+    return (byKey[look.key] = m);
+  });
+}
+function disposePlating(mats) {
+  for (const m of new Set(mats)) { if (m.map) m.map.dispose(); if (m.roughnessMap) m.roughnessMap.dispose(); if (m.normalMap) m.normalMap.dispose(); m.dispose(); }
+}
+const cube = new THREE.Mesh(new THREE.BoxGeometry(N * T, N * T, N * T), buildPlating(PLATE_DEFAULT, 0x36406a));
+cube.name = 'cube';
 cube.receiveShadow = true;
 scene.add(cube);
 {
@@ -4131,6 +4190,7 @@ document.querySelectorAll('.tool').forEach(el => {
   el.addEventListener('pointerdown', ev => { ev.stopPropagation(); pickTool(el.dataset.tool); });
 });
 addEventListener('keydown', e => {
+  if (e.target && e.target.tagName === 'INPUT') return;    // a name being typed is not a hotkey
   const k = { '1': 'miner', '2': 'belt', '3': 'smelter', '4': 'splitter',
               '5': 'hub', '6': 'forge', '7': 'filter', '8': 'rift', 'q': 'assembler', 'Q': 'assembler',
               '9': 'erase', '0': 'blueprint' }[e.key];
@@ -4195,6 +4255,7 @@ function frameOverhead() {
 
 const keys = Object.create(null);
 addEventListener('keydown', e => {
+  if (e.target && e.target.tagName === 'INPUT') return;
   keys[e.code] = true;
   if (e.code === 'KeyH') { hintBack = 8; }              // the hints, back for a moment
   if (e.code === 'Tab') {
@@ -4833,7 +4894,6 @@ function applyWorld(k) {
   worldIdx = WORLDS[k] ? k : 0;
   scene.background.setHex(w.sky);
   worldFog.color.setHex(w.fog);
-  cube.material.color.setHex(w.ground);
   gridLines.material.color.setHex(w.grid);
   // THE BOUNCE IS THE WORLD'S (2026-09-09). The hemisphere was a fixed blue
   // sky over a fixed navy ground; on a soot-plated red world the unlit faces
@@ -4871,13 +4931,8 @@ function applyWorld(k) {
   scene.environment = buildEnv(w.edge || w.grid, w.ground);
   // the plating is rebuilt for the world, not recoloured: frost, moss and
   // soot are things drawn ON it, and a tint cannot draw
-  if (cube.material.map) cube.material.map.dispose();
-  if (cube.material.roughnessMap) cube.material.roughnessMap.dispose();
-  cube.material.map = plateTexture(w.plate);
-  cube.material.roughnessMap = plateRoughness(w.plate);
-  if (cube.material.normalMap) cube.material.normalMap.dispose();
-  cube.material.normalMap = plateNormal(w.plate);
-  cube.material.needsUpdate = true;
+  disposePlating(cube.material);
+  cube.material = buildPlating(w.plate, w.ground);
   // and the belts: rust on the cinder, steel-blue on the ice, brass in the
   // green. The tread texture is shared and scrolls the same under every tint.
   const bt = w.belt || WORLDS[0].belt;
@@ -5839,6 +5894,97 @@ function shareLink() {
   if (fc) { fc.textContent = 'LINK COPIED  ·  ' + Math.round(link.length / 1024) + ' KB'; fc.classList.add('on'); captionAt = 2.2; }
   return link;
 }
+// ── A SAVE YOU CAN NAME (2026-09-17). The autosave is the run you are in;
+// a kept run is a copy under its own key, with a picture, listed in the
+// panel. Open one and it replaces the run you are in; forget one and it is
+// gone. Eight per world, the oldest dropped, so storage stays small. ────
+const RUNS_KEY = SAVE_KEY + '-runs';
+const runKey = id => SAVE_KEY + '-run-' + id;
+function readRuns() {
+  try { const r = JSON.parse(localStorage.getItem(RUNS_KEY) || '[]'); return Array.isArray(r) ? r : []; }
+  catch (e) { return []; }
+}
+function writeRuns(list) { try { localStorage.setItem(RUNS_KEY, JSON.stringify(list)); } catch (e) {} }
+function runsToast(msg, secs) {
+  const t = document.getElementById('toast');
+  if (t) { t.textContent = WORD(msg); t.classList.add('on'); toastAt = secs || 4; }
+}
+let keepRequest = null;
+function keepRun(name) {
+  name = String(name || '').trim().slice(0, 40);
+  keepRequest = { name: name || ('run ' + (readRuns().length + 1)) };   // the picture is taken after the next composite
+}
+function finishKeep(req) {
+  let thumb = null;
+  try {
+    const src = renderer.domElement, cv = document.createElement('canvas');
+    cv.width = 192; cv.height = Math.round(192 * src.height / src.width);
+    cv.getContext('2d').drawImage(src, 0, 0, cv.width, cv.height);
+    thumb = cv.toDataURL('image/jpeg', 0.6);
+  } catch (e) {}
+  const id = Date.now().toString(36) + Math.floor(Math.random() * 1e4).toString(36);
+  let machines = 0;
+  eachTile(c => { if (c.t !== EMPTY && c.t !== NODE && c.t !== PROP) machines++; });
+  const w = WORLDS[worldIdx] || WORLDS[0];
+  try { localStorage.setItem(runKey(id), JSON.stringify(saveState())); }
+  catch (e) { runsToast('The run could not be kept: this browser has no room for it.'); return; }
+  const list = readRuns();
+  list.unshift({ id, name: req.name, at: Date.now(), thumb, value: Math.round(lifetime.value), rank, world: w.name, machines });
+  while (list.length > 8) { const d = list.pop(); try { localStorage.removeItem(runKey(d.id)); } catch (e) {} }
+  writeRuns(list); renderRuns();
+  runsToast('Kept as ' + req.name + '. It is in the runs list in the panel, and opening it brings this factory back.', 5);
+}
+function openRun(id) {
+  let raw = null;
+  try { raw = localStorage.getItem(runKey(id)); } catch (e) {}
+  if (!raw) { runsToast('That run is gone from this browser.'); return false; }
+  let ok = false;
+  try { ok = loadState(JSON.parse(raw)); } catch (e) { ok = false; }
+  if (!ok) { runsToast('That run would not open.'); return false; }
+  seedOutpost();                          // a save carries no props
+  save();
+  const r = readRuns().find(x => x.id === id);
+  runsToast('Back in ' + ((r && r.name) || 'the run') + '. The factory is as you kept it.', 4);
+  return true;
+}
+function forgetRun(id) {
+  try { localStorage.removeItem(runKey(id)); } catch (e) {}
+  writeRuns(readRuns().filter(x => x.id !== id));
+  renderRuns();
+}
+function renderRuns() {
+  const el = document.getElementById('runs');
+  if (!el) return;
+  const list = readRuns();
+  const when = t => { try { return new Date(t).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }); } catch (e) { return ''; } };
+  const esc = x => String(x).replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
+  el.innerHTML = '<div class="sec">RUNS <span>keep this factory, come back to it</span></div>'
+    + '<div class="keep"><input placeholder="name this run" maxlength="40" spellcheck="false"><span>keep</span></div>'
+    + (list.length ? list.map(r =>
+        '<div class="run" data-id="' + esc(r.id) + '">'
+        + (r.thumb ? '<img src="' + r.thumb + '" alt="">' : '<img alt="">')
+        + '<div><b>' + esc(r.name) + '</b><small>' + Number(r.value || 0).toLocaleString() + ' credits \u00b7 ' + (r.machines | 0)
+        + (r.machines === 1 ? ' machine' : ' machines') + ' \u00b7 ' + esc(r.world || '') + ' \u00b7 ' + when(r.at) + '</small></div>'
+        + '<i data-open>open</i><i data-forget>forget</i></div>').join('')
+      : '<div class="none">' + WORD('nothing kept yet: name the run you are in and keep it') + '</div>');
+  const inp = el.querySelector('.keep input');
+  const stop = ev => ev.stopPropagation();
+  if (inp) { inp.addEventListener('pointerdown', stop); inp.addEventListener('keydown', ev => { stop(ev); if (ev.key === 'Enter') { keepRun(inp.value); inp.value = ''; inp.blur(); } }); inp.addEventListener('keyup', stop); }
+  const kb = el.querySelector('.keep span');
+  if (kb) kb.addEventListener('pointerdown', ev => { ev.stopPropagation(); keepRun(inp ? inp.value : ''); if (inp) { inp.value = ''; inp.blur(); } });
+  el.querySelectorAll('.run').forEach(row => {
+    const id = row.dataset.id;
+    row.querySelector('[data-open]').addEventListener('pointerdown', ev => { ev.stopPropagation(); openRun(id); });
+    const fg = row.querySelector('[data-forget]');
+    // a forget is not undoable, so it asks once: the second click within a few seconds does it
+    fg.addEventListener('pointerdown', ev => {
+      ev.stopPropagation();
+      if (fg.classList.contains('armed')) { forgetRun(id); return; }
+      fg.classList.add('armed'); fg.textContent = 'sure?';
+      setTimeout(() => { fg.classList.remove('armed'); fg.textContent = 'forget'; }, 3500);
+    });
+  });
+}
 // the starter line is what a NEW world looks like; a save replaces it whole
 const restored = FRESH ? false : (SHARED ? !!loadState(SHARED) : load());
 if (restored) seedOutpost();               // the save carries no props; the outpost stands by whatever hub the save has
@@ -5903,6 +6049,7 @@ addEventListener('visibilitychange', () => { if (document.hidden) save(); });
 applyUpgrades();
 renderUpgrades();
 renderTicker();
+renderRuns();
 // after the world exists, so the icons are lit by the same environment it is
 buildToolIcons();
 themeNode(document.body);                 // the chips, the tool bar, the hint, the panel's headers
@@ -6244,6 +6391,7 @@ renderer.setAnimationLoop(() => {
   renderFrame();
   if (shotRequest) { shotRequest = false; takeShot(); }
   if (shareRequest) { const r = shareRequest; shareRequest = null; postShare(r); }
+  if (keepRequest) { const r = keepRequest; keepRequest = null; finishKeep(r); }
 });
 
 // ── THE TIER, LIVE ─────────────────────────────────────────────────────────
@@ -6741,6 +6889,8 @@ window.__game = {
     crossWash: +crossWash.toFixed(3),
     sunAngle: +sunAngle.toFixed(3),
     landing: landing.length,
+    plating: [...new Set(cube.material.map(m => m.userData.plating))],
+    runs: readRuns().map(r => ({ name: r.name, machines: r.machines, thumb: !!r.thumb })),
     worksShow: +worksShow.toFixed(1),
     plan: (() => { const el = document.getElementById('plan'); return el && el.classList.contains('on') ? el.textContent : null; })(),
     hubRates: [...hubLabels.values()].map(el => el.textContent),
@@ -6823,6 +6973,7 @@ window.__factory = {
   MINERAL_OF_FACE, get alloys() { return alloys; }, cycleFilter,
   riftOpen, riftStorm, RIFT_COUNT, RIFT_WINDOW,
   save, load, wipe, saveState, SAVE_KEY, CREATIVE, TREAD, beltFrames, beltDecks, POST,
+  keepRun, openRun, forgetRun, readRuns, RUNS_KEY,
   beltShape, scatterVent, scatterBolt, scatterSpots, renderThumb, GEO, MAT,
   SEAM_COST, SEAM_REGROW, SEAM_FLOOR,
   step,                 // one simulation tick, for a harness that cannot wait
@@ -6850,6 +7001,11 @@ window.__factory = {
   ageHints: () => { hintClock = 100; },     // the gate cannot wait forty-five seconds
   droneAt: (t) => { droneT = t; },          // the gate sets the drone's clock
   hover: (x, y) => { lastPtr = { clientX: x, clientY: y }; },   // the gate moves the cursor
+  goFace: (f, i, j, h) => {                 // and stands the player on a face, for a shot
+    const w = tileWorld(f, i, j), n = FACES[f].n, u = FACES[f].u;
+    player.face = f; player.pos.set(w[0] + n[0] * (h || 2.2), w[1] + n[1] * (h || 2.2), w[2] + n[2] * (h || 2.2));
+    player.up.set(n[0], n[1], n[2]); camUp.copy(player.up); player.fwd.set(u[0], u[1], u[2]); player.pitch = -0.3;
+  },
   sunAt: (t) => { sunClock = t; },          // and the sun's
   idleAt: (t) => { idleClock = t; },        // and the idle clock
   playSfx: (name) => ({ firstSale: sfxFirstSale, idle: sfxIdle, sold: () => sfxSold(1), cross: sfxCross }[name] || (() => {}))(),

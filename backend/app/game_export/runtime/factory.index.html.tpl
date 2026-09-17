@@ -151,6 +151,24 @@
   #rift.on{display:block}
   #rift b{display:block;font-size:13px;letter-spacing:.06em;color:#b39cff;font-family:var(--f-head);font-weight:700}
   #rift small{display:block;color:#8f88b8;font-size:10px}
+  /* the runs: keep the factory you are in under a name, come back to it */
+  #runs{margin-top:9px;border-top:1px solid rgba(120,200,255,.14);padding-top:8px}
+  #runs .keep{display:flex;gap:6px;margin:4px 0 2px}
+  #runs .keep input{flex:1;min-width:0;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.14);border-radius:6px;
+                    color:#e8ecf7;font-family:var(--f-ui);font-size:10px;padding:4px 7px;outline:none}
+  #runs .keep input:focus{border-color:#5cffc9}
+  #runs .keep span,#runs .run i{cursor:pointer;padding:4px 8px;border-radius:6px;border:1px solid rgba(255,255,255,.14);color:#d7dcec;
+                                font-size:10px;letter-spacing:.08em;user-select:none;font-style:normal;white-space:nowrap}
+  #runs .keep span:hover{border-color:#5cffc9;color:#5cffc9}
+  #runs .run{display:grid;grid-template-columns:46px 1fr auto auto;grid-template-rows:auto auto;column-gap:6px;row-gap:2px;align-items:center;margin-top:7px;font-size:10px}
+  #runs .run img{grid-row:1/3;width:46px;height:30px;object-fit:cover;border-radius:4px;border:1px solid rgba(255,255,255,.12);background:#0a0c16}
+  #runs .run div{display:contents}
+  #runs .run b{grid-row:1;grid-column:2;min-width:0;font-family:var(--f-head);font-size:11px;letter-spacing:.04em;color:#e8ecf7;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  #runs .run small{grid-row:2;grid-column:2/5;color:#6d7590;font-size:9px;line-height:1.3}
+  #runs .run i{grid-row:1;padding:2px 6px}
+  #runs .run i[data-open]:hover{border-color:#5cffc9;color:#5cffc9}
+  #runs .run i[data-forget]:hover,#runs .run i.armed{border-color:#e8697d;color:#e8697d}
+  #runs .none{color:#5d6480;font-size:9px;margin-top:4px}
   /* the factory saves itself; this is the only way back to an empty one */
   #wipe{margin-top:8px;text-align:center;font-size:10px;color:#5d6480;
         cursor:pointer;user-select:none;letter-spacing:.05em}
@@ -457,6 +475,7 @@
   <div id="world"></div>
   <div id="rift"></div>
   <div id="melt"><b>MELTDOWN</b><small>throw the whole factory to the sky for a permanent core</small></div>
+  <div id="runs"></div>
   <div id="wipe">new world</div>
   <div id="motion">motion: full</div>
   <div id="share">share link</div>

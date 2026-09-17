@@ -1,0 +1,21 @@
+// The runs panel: two kept runs with their pictures, the name box, one forget armed.
+import puppeteer from 'puppeteer-core';
+const b = await puppeteer.launch({ headless:'new', executablePath:'C:/Program Files/Google/Chrome/Application/chrome.exe', args:['--use-angle=d3d11','--enable-unsafe-swiftshader','--window-size=1280,760'] });
+const p = await b.newPage(); await p.setViewport({ width:1280, height:760 });
+await p.goto(process.env.URL + '?fresh=1&nointro=1', { waitUntil:'domcontentloaded', timeout:90000 });
+await new Promise(r => setTimeout(r, 6000));
+await p.evaluate(() => { document.getElementById('tutor')?.classList.remove('on'); window.__factory.ageHints(); });
+await p.evaluate(() => window.__factory.keepRun('the first line')); await new Promise(r => setTimeout(r, 700));
+await p.evaluate(() => { const F = window.__factory, TY = F.TYPES; F.addValue(900); let n = 0;
+  for (let i = 4; i < F.N - 4 && n < 3; i++) for (let j = 6; j < F.N - 6 && n < 3; j += 3) if (F.cells[0][i][j].t === TY.EMPTY && F.place(0, i, j, TY.SMELTER, 0)) n++; });
+await new Promise(r => setTimeout(r, 900));
+await p.keyboard.press('Tab'); await new Promise(r => setTimeout(r, 1200));
+await p.evaluate(() => window.__factory.keepRun('three furnaces, overhead')); await new Promise(r => setTimeout(r, 700));
+await p.keyboard.press('Tab'); await new Promise(r => setTimeout(r, 800));
+await p.evaluate(() => { document.querySelector('#runs .run i[data-forget]').dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+  document.querySelector('#runs .keep input').value = 'the one I am proud of'; document.getElementById('runs').scrollIntoView(); });
+await new Promise(r => setTimeout(r, 500));
+await p.screenshot({ path: 'runs.png' });
+const el = await p.$('#runs'); await el.screenshot({ path: 'runs_panel.png' });
+console.log('shot');
+await b.close();

@@ -53,6 +53,7 @@ GATES = [
     ("fplay.mjs", "a played session with real keys, clicks and drags walks the foreman's six steps through the game's own handlers"),
     ("ftheme.mjs", "a theme reskins every word a player reads, singular and plural, and touches nothing else"),
     ("fworks.mjs", "rank perks change the machines; the works play once when the whole game is done and survive a reload"),
+    ("fslots.mjs", "a run can be kept under a name with a picture, survives a reload, opens back over a wipe, and is forgotten on a second click"),
     ("fkit.mjs", "the build links the shared kit, loads the studio's three faces, and sets its title in the display face"),
     ("fworlds.mjs", "the reveal reads the prompt that made the world; the demo lists the worlds it ships and opens each under its own save"),
     ("foutpost.mjs", "a starter outpost stands by the hub: unbuildable, unerasable, named by the look label, never saved or blueprinted, re-derived by whatever hub the save has"),

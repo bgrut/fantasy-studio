@@ -57,6 +57,10 @@ runs without you. Mine, move, deliver, watch the number climb.
 Measured in a headless browser: 1 miner, 5 belts, a hub, ore 0 -> 11 in nine
 seconds at 120/minute, 3 items in transit, 60fps, no runtime errors.
 
+Measured on the card players have: PERF.md holds the frame rate, frame times,
+draw calls and triangles for six phases of a session on a real GPU, written
+by backend/tools/perfpass.mjs.
+
 ## Shape
 
 - `cells[x][z]` is the whole simulation. Type, direction, and at most one item.
@@ -80,6 +84,9 @@ seconds at 120/minute, 3 items in transit, 60fps, no runtime errors.
     1..6          miner / belt / smelter / splitter / hub / erase
     TAB           overhead build view (routing a junction from eye level is
                   genuinely worse than seeing it from above)
+    RUNS          in the panel: name the factory you are in and keep it, with
+                  a picture; open a kept run to bring it back, forget with a
+                  second click
 
 ## Recipes
 
