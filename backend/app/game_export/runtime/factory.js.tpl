@@ -4061,6 +4061,11 @@ renderer.domElement.addEventListener('pointermove', e => {
   // the drag arrives on the new tile heading the same way it left the old one,
   // which across an edge is NOT the direction the mouse moved
   const sd = stepTile(lastCell.face, lastCell.i, lastCell.j, d);
+  // A SWEEP FEEDS A MACHINE, IT DOES NOT REPLACE IT (2026-09-17). Dragging
+  // belts across a smelter used to lay a belt where the smelter stood. The
+  // tile before it already points into the machine; the sweep steps over.
+  const tc = cellOf(c);
+  if (tool === 'belt' && tc && tc.t !== EMPTY && tc.t !== BELT && tc.t !== NODE) { lastCell = c; return; }
   apply(c, sd ? sd.d : d);
   lastCell = c;
 });
