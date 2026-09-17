@@ -2968,10 +2968,14 @@ const MAX_ITEMS = 4000;
 // ORE IS A CHUNK: two crystals grown together, so it reads as something dug
 // out rather than as a game token. Dark glass like the seams it came from;
 // the instance colour carries the ore.
+// ORE IS DUG OUT OF ROCK (2026-09-17). Two crystals grown together read as
+// a gem; a chunk carries its matrix now, a dark flattened lump under the
+// crystals in the wall's grey and a dim wash of the ore's own colour.
 const items = new THREE.InstancedMesh(
   mergeParts([
-    { g: new THREE.OctahedronGeometry(0.24, 0), ry: 0.3 },
-    { g: new THREE.OctahedronGeometry(0.15, 0), x: 0.16, y: -0.06, z: 0.10, rz: 0.5, ry: 0.9, tint: 0.8 },
+    { g: new THREE.DodecahedronGeometry(0.26, 0).scale(1.15, 0.55, 1.0), y: -0.10, ry: 0.7, col: 0x6b6f7a, tint: 0.42 },   // the rock
+    { g: new THREE.OctahedronGeometry(0.22, 0), y: 0.02, ry: 0.3 },
+    { g: new THREE.OctahedronGeometry(0.14, 0), x: 0.16, y: -0.04, z: 0.10, rz: 0.5, ry: 0.9, tint: 0.8 },
   ], { floor: 0.7, reach: 0.4 }),
   new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xffffff,
     emissiveIntensity: 0.55, roughness: 0.22, metalness: 0.1, flatShading: true,
@@ -2983,13 +2987,15 @@ items.count = 0;
 // and the other two ores on the belt, each in its own silhouette
 const itemsEmber = new THREE.InstancedMesh(
   mergeParts([
-    { g: new THREE.BoxGeometry(0.30, 0.26, 0.30), ry: 0.4 },
-    { g: new THREE.BoxGeometry(0.17, 0.2, 0.17), x: 0.17, y: -0.05, z: 0.08, ry: 0.9, rz: 0.2, tint: 0.8 },
+    { g: new THREE.DodecahedronGeometry(0.27, 0).scale(1.1, 0.5, 1.0), y: -0.10, ry: 1.3, col: 0x4a3a34, tint: 0.45 },   // cinder crust
+    { g: new THREE.BoxGeometry(0.28, 0.24, 0.28), y: 0.02, ry: 0.4 },
+    { g: new THREE.BoxGeometry(0.16, 0.18, 0.16), x: 0.17, y: -0.03, z: 0.08, ry: 0.9, rz: 0.2, tint: 0.8 },
   ], { floor: 0.7, reach: 0.4 }), items.material, MAX_ITEMS);
 const itemsSalt = new THREE.InstancedMesh(
   mergeParts([
-    { g: new THREE.CylinderGeometry(0.25, 0.27, 0.08, 6) },
-    { g: new THREE.CylinderGeometry(0.14, 0.16, 0.07, 6), x: 0.12, y: 0.07, z: 0.05, ry: 0.5, tint: 0.85 },
+    { g: new THREE.DodecahedronGeometry(0.26, 0).scale(1.15, 0.45, 1.0), y: -0.09, ry: 0.4, col: 0x8a8f98, tint: 0.5 },   // a pale slab
+    { g: new THREE.CylinderGeometry(0.24, 0.26, 0.08, 6), y: 0.01 },
+    { g: new THREE.CylinderGeometry(0.14, 0.16, 0.07, 6), x: 0.12, y: 0.08, z: 0.05, ry: 0.5, tint: 0.85 },
   ], { floor: 0.7, reach: 0.3 }), items.material, MAX_ITEMS);
 for (const m of [itemsEmber, itemsSalt]) {
   m.instanceMatrix.setUsage(THREE.DynamicDrawUsage); m.frustumCulled = false; m.count = 0; scene.add(m);
