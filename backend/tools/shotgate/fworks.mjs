@@ -96,6 +96,18 @@ console.log('            after: played', works.played, '| card', JSON.stringify(
 console.log('            goal card', JSON.stringify(works.goal), '| edge', works.edge, '| said:', JSON.stringify(works.toast).slice(0, 80) + '...');
 console.log('the card  :', JSON.stringify(works.endCard), '| share ->', JSON.stringify(works.linkCap), '| play on ->', works.playedOn ? 'away' : 'STILL UP', '| facts', works.worksCard);
 
+// the works' minute: the world celebrates and then settles (read before the reload; the show is not saved)
+const show = await p.evaluate(async () => {
+  const f = () => window.__game.facts();
+  const at = f().worksShow;
+  const F = window.__factory, TY = F.TYPES; let hub = null;
+  for (let i = 0; i < F.N && !hub; i++) for (let j = 0; j < F.N && !hub; j++) if (F.cells[0][i][j].t === TY.HUB) hub = F.cells[0][i][j];
+  const sw = hub && hub.build && hub.build.getObjectByName('sweep');
+  const r0 = sw ? sw.rotation.y : 0; await new Promise(r => setTimeout(r, 500)); const turned = sw ? +(sw.rotation.y - r0).toFixed(2) : 0;
+  return { at, turned, particles: f().particles_alive || null };
+});
+console.log('the show  : worksShow', show.at, 's left | sweep turned', show.turned, 'rad in 0.5 s (racing)');
+if (!(show.at > 0 && show.turned > 0.6)) { console.log('FAIL: the works\' minute'); process.exit(1); }
 await p.goto(URL + q + 'nointro=1', { waitUntil:'domcontentloaded', timeout:90000 });
 await wait(4500);
 const back = await p.evaluate(() => { const f = window.__game.facts(); return { works: f.lifetime.works, contracts: f.lifetime.contracts, hold: f.lifetime.longest_hold, worlds: f.lifetime.worlds.length, rank: f.rank, perks: f.perks.length, goal: document.querySelector('#goal b').textContent }; });

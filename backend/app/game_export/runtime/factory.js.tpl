@@ -516,7 +516,8 @@ let glowPools = null;             // built with the decals; the seams index into
 // capabilities the chain hands out; declared here because applyUpgrades
 // reads CAPS.stable and applyUpgrades runs at boot
 const CAPS = { heated: 0, scrubber: 0, stable: 0 };
-const landing = []; let landingOn = false;   // machines settling after a build (hoisted: place() runs at boot, before the loop)
+const landing = []; let landingOn = false;
+let worksShow = 0, worksBurst = 0, worksWave = 0;   // the works' minute (hoisted: playWorks sets it, the loop reads it)   // machines settling after a build (hoisted: place() runs at boot, before the loop)
 let idleClock = 0, idleNudges = 0, idleMark = null, idleMarkAt = 0;   // the idle cue's clock (hoisted: apply() resets it)
 const PROP_LIST = [];                  // the outpost's groups, for the look ray (hoisted: filled at seeding, read by cellUnder)
 let outpost = null;                    // { hub, hab }: where the drone flies between
@@ -5114,6 +5115,8 @@ function playWorks() {
   playIntro('THE WORKS', Math.round(lifetime.value).toLocaleString() + ' credits banked  \u00b7  ' + lifetime.contracts + (lifetime.contracts === 1 ? ' contract kept  ' : ' contracts kept  ') + '\u00b7  longest order ' + m + ':' + sec
             + '  \u00b7  ' + visitedWorlds.size + ' worlds', 11, false, 'void');
   if (cubeEdges) cubeEdges.material.color.setHex(0xffd479);
+  worksShow = 60; worksBurst = 0; worksWave = 0;                 // a minute of the world celebrating
+  droneT = DRONE.rest - 0.5;                                     // and the drone flies at once
   sfxUnlock(); setTimeout(sfxUnlock, 400); setTimeout(sfxUnlock, 800);
   const t = document.getElementById('toast');
   if (t) { t.textContent = WORD('THE WORKS ARE YOURS. The run carries on, and the card says what you did.'); t.classList.add('on'); toastAt = 10; }
@@ -5316,6 +5319,36 @@ function describeCell(c, t) {
     case RIFT: return 'RIFT  ·  ' + (c.dbt > 0 ? 'lent ' + c.dbt + ' to repay, ' + Math.ceil(c.left || 0) + 's left' : 'lends ore against a deadline');
   }
   return '';
+}
+// ── THE WORKS' MINUTE. Sparks from the hubs, the sweeps racing, the seams
+// pulsing in waves across every face, the nebula swelling; then it settles.
+function stepWorksShow(dt) {
+  if (worksShow <= 0) return;
+  worksShow -= dt;
+  const k = Math.min(1, worksShow / 8);              // eases out over the last eight seconds
+  worksBurst -= dt;
+  if (worksBurst <= 0) {
+    worksBurst = 0.5;
+    const hubs = []; eachTile((c, f, i, j) => { if (c.t === HUB) hubs.push([f, i, j]); });
+    if (hubs.length) {
+      const [f, i, j] = hubs[Math.floor(Math.random() * hubs.length)];
+      const n = FACES[f].n, w = tileWorld(f, i, j), u = FACES[f].u, v = FACES[f].v;
+      for (let q = 0; q < 14; q++) {
+        const a = Math.random() * Math.PI * 2, sp = 2.2 + Math.random() * 2.4;
+        const dx = u[0] * Math.cos(a) + v[0] * Math.sin(a), dy = u[1] * Math.cos(a) + v[1] * Math.sin(a), dz = u[2] * Math.cos(a) + v[2] * Math.sin(a);
+        emit(w[0] + n[0] * 1.4, w[1] + n[1] * 1.4, w[2] + n[2] * 1.4,
+             dx * sp * 0.5 + n[0] * sp, dy * sp * 0.5 + n[1] * sp, dz * sp * 0.5 + n[2] * sp,
+             1.0, 0.83, 0.47, -0.04, 1.2, [-n[0] * 5, -n[1] * 5, -n[2] * 5]);
+      }
+    }
+  }
+  worksWave += dt;
+  if (worksWave >= 0.35) {                           // a wave: the seams of one face after another
+    worksWave = 0;
+    const f = Math.floor(performance.now() / 350) % 6;
+    eachTile((c, ff) => { if (ff === f && c.t === NODE && c.mesh) c.mesh.userData.pulse = 1; });
+  }
+  if (skyDome) skyDome.material.uniforms.uNebAmt.value = ((WORLDS[worldIdx] && WORLDS[worldIdx].nebula) || MOOD_LOOK.void.nebula).amt * (1 + 0.7 * k);
 }
 // ── THE PLANNING SCREEN. In the overhead, the tile under the cursor reads
 // out at the cursor, and every hub wears its rate. ──────────────────────
@@ -5903,6 +5936,7 @@ renderer.setAnimationLoop(() => {
   stepLook(dt);
   stepTags(dt);
   stepPlan();
+  stepWorksShow(dt);
   stepHint(dt);
   stepDrone(dt);
   stepSun(dt);
@@ -6030,7 +6064,7 @@ renderer.setAnimationLoop(() => {
       if (c.pulse > 0) c.pulse = Math.max(0, c.pulse - dt * 2.6);
       const beacon = c.build.getObjectByName('lamp');
       const sweep = c.build.getObjectByName('sweep');
-      if (sweep) { sweep.rotation.y += dt * 0.52; sweep.material.opacity = 0.10 + (c.pulse || 0) * 0.12; }
+      if (sweep) { const show = worksShow > 0 ? 1 : 0; sweep.rotation.y += dt * (0.52 + show * 1.2); sweep.material.opacity = 0.10 + (c.pulse || 0) * 0.12 + show * 0.16; }
       // at idle the beacon breathes, so a hub with nothing arriving still
       // reads as on; a delivery pulse rides on top of it
       const breathe = 1 + Math.sin(performance.now() * 0.0028) * 0.07;
@@ -6701,6 +6735,7 @@ window.__game = {
     crossWash: +crossWash.toFixed(3),
     sunAngle: +sunAngle.toFixed(3),
     landing: landing.length,
+    worksShow: +worksShow.toFixed(1),
     plan: (() => { const el = document.getElementById('plan'); return el && el.classList.contains('on') ? el.textContent : null; })(),
     hubRates: [...hubLabels.values()].map(el => el.textContent),
     firstSale: lifetime.first, idleNudges, idleRing: !!(idleMark && idleMark.visible), crossLit,
