@@ -285,6 +285,13 @@
   #tags .tag.first{font-size:34px;font-weight:700}
   #tags .tag{position:absolute;left:0;top:0;font-family:var(--f-mono);font-size:17px;font-weight:500;letter-spacing:.04em;
              color:#ffd479;text-shadow:0 0 12px rgba(255,212,121,.7),0 2px 6px rgba(0,0,0,.8);will-change:transform,opacity}
+  /* the planning screen: a readout at the cursor, a rate over every hub */
+  #plan{position:fixed;left:0;top:0;z-index:7;pointer-events:none;font-family:var(--f-mono);font-size:11px;letter-spacing:.06em;
+        color:#eef4ff;background:rgba(8,10,20,.82);border:1px solid rgba(255,255,255,.14);border-radius:6px;padding:5px 8px;
+        white-space:nowrap;opacity:0;transition:opacity .15s}
+  #plan.on{opacity:1}
+  #tags .rate{position:absolute;left:0;top:0;font-family:var(--f-mono);font-size:11px;letter-spacing:.08em;color:#ffd479;
+              background:rgba(8,10,20,.7);border-radius:5px;padding:3px 7px;opacity:0;transition:opacity .2s;will-change:transform}
   /* the face caption after a crossing */
   /* high, above the placement ghost, and big enough to read in the beat it is up */
   #facecap{position:fixed;left:0;right:0;top:58%;text-align:center;z-index:6;pointer-events:none;
@@ -473,6 +480,7 @@
 <div id="facecap"></div>
 <div id="look"></div>
 <div id="tags"></div>
+<div id="plan"></div>
 <div id="tutor"><em></em><b></b><small></small><p></p><span class="next">next step</span><span class="skip">skip the guide</span><i class="keys"></i></div>
 <div id="cross"></div>
 <div id="hint">WASD to walk, Shift to run, Space to jump, click to look around.<br>Hold the left button and sweep to draw belts. TAB opens the overhead view.<br>Point at a filter and press F to change which ore it passes.<br>Walk over any edge: each side of the world grows a different ore.<br>Your factory saves itself. These hints fade; H brings them back.</div>

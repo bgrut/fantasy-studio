@@ -1,0 +1,12 @@
+import puppeteer from 'puppeteer-core';
+const b = await puppeteer.launch({ headless:'new', executablePath:'C:/Program Files/Google/Chrome/Application/chrome.exe', args:['--use-angle=d3d11','--enable-unsafe-swiftshader','--window-size=1280,760'] });
+const p = await b.newPage(); await p.setViewport({ width:1280, height:760 });
+await p.goto(process.env.URL + '?fresh=1&nointro=1', { waitUntil:'domcontentloaded', timeout:90000 });
+await new Promise(r => setTimeout(r, 8000));
+await p.evaluate(() => { document.getElementById('tutor')?.classList.remove('on'); window.__factory.ageHints(); });
+await p.keyboard.press('Tab'); await new Promise(r => setTimeout(r, 900));
+const sc = await p.evaluate(() => { const F = window.__factory, TY = F.TYPES; let sm = null; for (let i = 0; i < F.N && !sm; i++) for (let j = 0; j < F.N && !sm; j++) if (F.cells[0][i][j].t === TY.SMELTER) sm = [i, j]; return F.screenOf(0, sm[0], sm[1]); });
+await p.mouse.move(sc[0], sc[1]); await new Promise(r => setTimeout(r, 500));
+await p.screenshot({ path: 'plan.png' });
+console.log(JSON.stringify(await p.evaluate(() => ({ plan: window.__game.facts().plan, rates: window.__game.facts().hubRates }))));
+await b.close();

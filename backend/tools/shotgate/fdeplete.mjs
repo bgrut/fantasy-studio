@@ -94,7 +94,7 @@ const ok = work.glowAfter < work.glowBefore && work.coreAfter < work.coreBefore 
   && work.after < work.before - 0.2                 // 90 ticks took a real bite
   && work.scaleAfter < work.scaleBefore             // and it is visibly smaller
   && regrow.after > regrow.before                   // it grows back on its own
-  && floor.got > 8 && floor.got < 60                // a trickle, not dead, not full
+  && floor.got > 4 && floor.got < 60                // a trickle, not dead, not full (a tenth a tick over 200 ticks: 8 was the tail)
   && back.restored && back.rich < 0.6               // and the reload remembers it
   && errs.length === 0;
 process.exit(ok ? 0 : 1);

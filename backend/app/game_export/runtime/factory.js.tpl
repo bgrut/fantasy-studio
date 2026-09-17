@@ -3580,7 +3580,7 @@ function deliver(dst, to, type) {
   }
   if (dst.t === HUB) {
     const paid = bank(type, to ? to.face : undefined);
-    if (to) spawnTag(to.face, to.i, to.j, paid);
+    if (to) { spawnTag(to.face, to.i, to.j, paid); noteSale(dst); }
     dst.pulse = 1;
     sfxSold(type);
     if (to) {
@@ -3617,7 +3617,7 @@ function step() {
         const out = c.t === ASSEMBLER ? COMPONENT : c.t === FORGE ? ALLOY : (INGOT_OF[c.bt] || INGOT);
         sfxClank();
         const dst = cellOf(stepTile(f, i, j, c.d));
-        if (dst && dst.t === HUB) { const ht = stepTile(f, i, j, c.d); spawnTag(ht.face, ht.i, ht.j, bank(out, ht.face)); }
+        if (dst && dst.t === HUB) { const ht = stepTile(f, i, j, c.d); spawnTag(ht.face, ht.i, ht.j, bank(out, ht.face)); noteSale(dst); }
         else if (dst && dst.t === BELT && !dst.item) dst.item = out;
         else c.cook = 1;                  // output blocked: hold it, retry
       }
@@ -3720,7 +3720,7 @@ function step() {
       const h = cellOf(mv[2]);
       if (!h || (h.took | 0) >= HUB_INTAKE) continue;
       h.took = (h.took | 0) + 1;
-      spawnTag(mv[2].face, mv[2].i, mv[2].j, bank(c.item, mv[2].face)); h.pulse = 1; c.item = 0; continue;
+      spawnTag(mv[2].face, mv[2].i, mv[2].j, bank(c.item, mv[2].face)); h.pulse = 1; noteSale(h); c.item = 0; continue;
     }
     const dst = cellOf(mv[2]);
     if (!accepts(dst, c.item)) continue;   // another input reached it first
@@ -5317,6 +5317,50 @@ function describeCell(c, t) {
   }
   return '';
 }
+// ── THE PLANNING SCREEN. In the overhead, the tile under the cursor reads
+// out at the cursor, and every hub wears its rate. ──────────────────────
+function noteSale(h) {
+  const now = performance.now();
+  (h.sales = h.sales || []).push(now);
+  while (h.sales.length && now - h.sales[0] > 60000) h.sales.shift();
+}
+const hubLabels = new Map();
+const _pv3 = new THREE.Vector3();
+function stepPlan() {
+  const plan = document.getElementById('plan');
+  const host = document.getElementById('tags');
+  if (!plan || !host) return;
+  if (!overhead || intro > 0 || photo) {
+    plan.classList.remove('on');
+    for (const [, el] of hubLabels) el.style.opacity = '0';
+    return;
+  }
+  // the readout at the cursor
+  const t = lastPtr ? cellUnder(lastPtr) : null;
+  const c = t && cellOf(t);
+  if (t && c) {
+    const what = c.t === EMPTY ? 'open plating' : describeCell(c, t) || '';
+    plan.textContent = WORD(FACES[t.face].name + ' ' + t.i + ',' + t.j + '  \u00b7  ' + what);
+    plan.style.transform = 'translate(' + (lastPtr.clientX + 16) + 'px,' + (lastPtr.clientY + 18) + 'px)';
+    plan.classList.add('on');
+  } else plan.classList.remove('on');
+  // every hub wears its rate
+  const seen = new Set();
+  eachTile((h, f, i, j) => {
+    if (h.t !== HUB) return;
+    const key = f + ':' + i + ':' + j; seen.add(key);
+    let el = hubLabels.get(key);
+    if (!el) { el = document.createElement('b'); el.className = 'rate'; host.appendChild(el); hubLabels.set(key, el); }
+    const n = (h.sales || []).length;
+    el.textContent = n + (n === 1 ? ' sale' : ' sales') + ' a minute';
+    const w = tileWorld(f, i, j), nn = FACES[f].n;
+    _pv3.set(w[0] + nn[0] * 1.6, w[1] + nn[1] * 1.6, w[2] + nn[2] * 1.6).project(camera);
+    const sx = (_pv3.x * 0.5 + 0.5) * innerWidth, sy = (-_pv3.y * 0.5 + 0.5) * innerHeight;
+    el.style.transform = 'translate(' + sx.toFixed(0) + 'px,' + sy.toFixed(0) + 'px) translate(-50%,-100%)';
+    el.style.opacity = _pv3.z > 1 ? '0' : '1';
+  });
+  for (const [key, el] of hubLabels) if (!seen.has(key)) { el.remove(); hubLabels.delete(key); }
+}
 // ── CREDIT TAGS: money you can see ──────────────────────────────────────────
 // A sale lifts its number from the hub. Sales on the same hub within half a
 // second add into the one tag, so a busy hub reads one honest sum.
@@ -5858,6 +5902,7 @@ renderer.setAnimationLoop(() => {
   stepTutorial(dt);
   stepLook(dt);
   stepTags(dt);
+  stepPlan();
   stepHint(dt);
   stepDrone(dt);
   stepSun(dt);
@@ -6656,6 +6701,8 @@ window.__game = {
     crossWash: +crossWash.toFixed(3),
     sunAngle: +sunAngle.toFixed(3),
     landing: landing.length,
+    plan: (() => { const el = document.getElementById('plan'); return el && el.classList.contains('on') ? el.textContent : null; })(),
+    hubRates: [...hubLabels.values()].map(el => el.textContent),
     firstSale: lifetime.first, idleNudges, idleRing: !!(idleMark && idleMark.visible), crossLit,
     drone: drone.visible ? { t: +droneT.toFixed(1), flights: droneFlights, pos: drone.position.toArray().map(v => +v.toFixed(2)) } : null,
     audio: { ready: AUDIO.ready, muted: AUDIO.muted,
@@ -6761,6 +6808,7 @@ window.__factory = {
   liveTags,
   ageHints: () => { hintClock = 100; },     // the gate cannot wait forty-five seconds
   droneAt: (t) => { droneT = t; },          // the gate sets the drone's clock
+  hover: (x, y) => { lastPtr = { clientX: x, clientY: y }; },   // the gate moves the cursor
   sunAt: (t) => { sunClock = t; },          // and the sun's
   idleAt: (t) => { idleClock = t; },        // and the idle clock
   playSfx: (name) => ({ firstSale: sfxFirstSale, idle: sfxIdle, sold: () => sfxSold(1), cross: sfxCross }[name] || (() => {}))(),

@@ -48,6 +48,18 @@ const intake = await p.evaluate(async () => {
 // money you can see: the sales above lifted their numbers from the hub
 const tags = await p.evaluate(() => ({ seen: window.__game.facts().tagsSeen, host: !!document.getElementById('tags'), first: window.__game.facts().firstSale, said: document.getElementById('toast').textContent }));
 console.log('tags      : seen', tags.seen, '| host', tags.host, '| first sale had its moment', tags.first);
+// the planning screen: TAB, the cursor over the hub reads it out, and the hub wears its rate
+await p.keyboard.press('Tab'); await new Promise(r => setTimeout(r, 900));
+const plan = await p.evaluate(async () => {
+  const F = window.__factory, TY = F.TYPES; let hub = null;
+  for (let i = 0; i < F.N && !hub; i++) for (let j = 0; j < F.N && !hub; j++) if (F.cells[0][i][j].t === TY.HUB) hub = [i, j];
+  const sc = F.screenOf(0, hub[0], hub[1]); F.hover(sc[0], sc[1]);
+  await new Promise(r => setTimeout(r, 400));
+  const f = window.__game.facts();
+  return { readout: f.plan, rates: f.hubRates };
+});
+await p.keyboard.press('Tab'); await new Promise(r => setTimeout(r, 300));
+console.log('planning  : readout', JSON.stringify(plan.readout), '| hub rates', JSON.stringify(plan.rates));
 console.log('intake    :', intake.perTick.map(t => t.took + ' taken, ' + t.left + ' held').join(' | '), '| cap', intake.intake);
 
 // 2. cost: the second hub costs 200, is refused without it, paid with it, and the ladder climbs
@@ -108,6 +120,7 @@ await b.close();
 
 const ok = intake.intake === 2 && intake.perTick.every(t => t.took <= 2) && intake.perTick.slice(1).every(t => t.took === 2 && t.left >= 1)
   && tags.seen > 0 && tags.host && tags.first
+  && plan.readout && /HUB/.test(plan.readout) && plan.rates.length >= 1 && /a minute/.test(plan.rates[0])
   && cost.hubs === 1 && cost.c1 === 200 && /200 credits/.test(cost.chip) && cost.refused && /costs 200 credits/.test(cost.said)
   && cost.placed && cost.paid === 200 && cost.c2 === 500 && cost.ladder.join(',') === '0,200,500,1200,2400'
   && bp.cells && bp.hasHub === false
