@@ -301,14 +301,15 @@
   /* credit tags: a sale's number rising off the hub */
   #tags{position:fixed;inset:0;z-index:5;pointer-events:none;overflow:hidden}
   #tags .tag.first{font-size:34px;font-weight:700}
-  #tags .tag{position:absolute;left:0;top:0;font-family:var(--f-mono);font-size:17px;font-weight:500;letter-spacing:.04em;
+  #tags .tag,#tags .warm{position:absolute;left:0;top:0;font-family:var(--f-mono);font-size:17px;font-weight:500;letter-spacing:.04em;
              color:#ffd479;text-shadow:0 0 12px rgba(255,212,121,.7),0 2px 6px rgba(0,0,0,.8);will-change:transform,opacity}
   /* the planning screen: a readout at the cursor, a rate over every hub */
   #plan{position:fixed;left:0;top:0;z-index:7;pointer-events:none;font-family:var(--f-mono);font-size:11px;letter-spacing:.06em;
         color:#eef4ff;background:rgba(8,10,20,.82);border:1px solid rgba(255,255,255,.14);border-radius:6px;padding:5px 8px;
         white-space:nowrap;opacity:0;transition:opacity .15s}
   #plan.on{opacity:1}
-  #tags .rate{position:absolute;left:0;top:0;font-family:var(--f-mono);font-size:11px;letter-spacing:.08em;color:#ffd479;
+  #tags .warm{opacity:0}   /* the warm-up's stand-ins: the layers exist before the first tag does */
+  #tags .rate,#tags .warm.r{position:absolute;left:0;top:0;font-family:var(--f-mono);font-size:11px;letter-spacing:.08em;color:#ffd479;
               background:rgba(8,10,20,.7);border-radius:5px;padding:3px 7px;opacity:0;transition:opacity .2s;will-change:transform}
   /* the face caption after a crossing */
   /* high, above the placement ghost, and big enough to read in the beat it is up */

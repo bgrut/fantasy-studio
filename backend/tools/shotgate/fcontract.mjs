@@ -28,6 +28,7 @@ const posted = await p.evaluate(async () => {
   const w = ms => new Promise(r => setTimeout(r, ms));
   const before = window.__game.facts().contract;
   F.addValue(60); await w(400);                       // tier 1: the market opens
+  F.hold = true;                                       // from here the starter line sells nothing into the count
   const c = F.offerContract(TY.INGOT);
   await w(300);
   const f = window.__game.facts();
@@ -45,6 +46,7 @@ const filled = await p.evaluate(async () => {
   const F = window.__factory, TY = F.TYPES;
   const w = ms => new Promise(r => setTimeout(r, ms));
   const c = F.contract;
+  F.hold = true;                                       // the starter line must not sell into the count
   F.bank(TY.ALLOY); F.bank(TY.INGOT_E);               // the wrong things
   await w(200);
   const wrong = window.__game.facts().contract.have;
@@ -54,6 +56,7 @@ const filled = await p.evaluate(async () => {
   const almost = window.__game.facts().contract;
   F.bank(TY.INGOT);
   await w(300);
+  F.hold = false;
   const f = window.__game.facts();
   return { need: c.need, bonus: c.bonus, wrong, almost: almost && almost.have, after: f.contract,
            gained: +(f.value - ore0).toFixed(1), shards: f.shards, shards0, filled: f.contracts_filled,
@@ -76,8 +79,10 @@ const lapse = await p.evaluate(async () => {
   F.shards = 2;
   const cores0 = window.__game.facts().cores;
   const c = F.offerContract(TY.INGOT);
+  F.hold = true;
   for (let k = 0; k < c.need; k++) F.bank(TY.INGOT);
   await w(300);
+  F.hold = false;
   const f = window.__game.facts();
   return { gone, lapsedToast, cores0, cores: f.cores, shards: f.shards, toast: document.getElementById('toast').textContent };
 });

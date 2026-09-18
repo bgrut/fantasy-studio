@@ -193,6 +193,14 @@ export default function GameStudio() {
                  mode: string; machines: number; value: number; rank: number; cores: number; at: number }
   const [shares, setShares] = useState<Share[]>([])
   const [openLink, setOpenLink] = useState<string | null>(null)
+  // KEPT RUNS. The runtime keeps named runs in its own storage and tells the
+  // studio about them; the studio shows them as cards and asks the frame to
+  // open, keep or forget one. It never touches the frame's storage itself.
+  type Run = { id: string; name: string; thumb: string | null; value: number; machines: number; world: string; at: number; rank: number }
+  const [runs, setRuns] = useState<Run[]>([])
+  const [runName, setRunName] = useState('')
+  const [forgetArmed, setForgetArmed] = useState<string | null>(null)
+  const askFrame = (m: Record<string, unknown>) => { gameFrameRef.current?.contentWindow?.postMessage(m, '*') }
   const sharesKey = (id: number | string) => 'fs_shares_' + id
   const [quality, setQuality] = useState<string>(() => {
     try { return localStorage.getItem('fs_quality') || 'ultra' } catch { return 'ultra' }
@@ -458,6 +466,13 @@ export default function GameStudio() {
         })
         return
       }
+      if (d && d.type === 'fs-runs' && Array.isArray(d.runs)) {
+        setRuns(d.runs.filter((r: unknown) => r && typeof (r as Run).id === 'string' && typeof (r as Run).name === 'string').slice(0, 8)
+          .map((r: Run) => ({ id: r.id, name: r.name, thumb: typeof r.thumb === 'string' && r.thumb.startsWith('data:image/') ? r.thumb : null,
+                              value: Number(r.value) || 0, machines: Number(r.machines) || 0, world: String(r.world || ''), at: Number(r.at) || 0, rank: Number(r.rank) || 0 })))
+        setForgetArmed(null)
+        return
+      }
       if (d && d.type === 'fs-shot' && typeof d.dataUrl === 'string' && d.dataUrl.startsWith('data:image/png')) {
         setLastShot({ name: String(d.name || 'shot.png'), dataUrl: d.dataUrl })
         return
@@ -555,6 +570,7 @@ export default function GameStudio() {
   useEffect(() => {
     setLastShot(null)
     setOpenLink(null)
+    setRuns([]); setRunName(''); setForgetArmed(null)
     try { const raw = job?.id != null ? localStorage.getItem(sharesKey(job.id)) : null; setShares(raw ? JSON.parse(raw) : []) } catch { setShares([]) }
     if (!job || job.genre !== 'factory' || !job.play_url) { setFirstRun(false); return }
     try { setFirstRun(localStorage.getItem('fs_seen_' + job.id) !== '1') } catch { setFirstRun(true) }
@@ -1369,6 +1385,47 @@ export default function GameStudio() {
                   </div>
                 ))}
               </div>
+            </div>
+          )}
+          {/* KEPT RUNS: the frame's named saves, as cards; every action is a message the frame answers */}
+          {job!.genre === 'factory' && playing && (
+            <div className="mt-3">
+              <div className="mb-1.5 flex items-center justify-between gap-2 text-[11px] tracking-wide text-[#807d99]">
+                <span>Kept runs · {runs.length}</span>
+                <span className="flex items-center gap-1">
+                  <input value={runName} onChange={e => setRunName(e.target.value)} maxLength={40} placeholder="name the run in the frame"
+                         onKeyDown={e => { if (e.key === 'Enter' && runName.trim()) { askFrame({ type: 'fs-keep-run', name: runName.trim() }); setRunName('') } }}
+                         className="w-[190px] rounded-md border border-white/[0.08] bg-black/30 px-2 py-1 text-[11px] text-[#dfe6f5] outline-none focus:border-[#5cffc9]/60" />
+                  <button onClick={() => { askFrame({ type: 'fs-keep-run', name: runName.trim() }); setRunName('') }}
+                          className="rounded-md bg-[#5cffc9]/15 px-2 py-1 text-[#5cffc9] hover:bg-[#5cffc9]/25">Keep</button>
+                </span>
+              </div>
+              {runs.length === 0 ? (
+                <div className="text-[11px] text-[#4a4764]">Nothing kept yet. Name the run in the frame and keep it, here or in the game's panel.</div>
+              ) : (
+                <div className="flex gap-2 overflow-x-auto pb-1">
+                  {runs.map(r => (
+                    <div key={r.id} className="flex w-[220px] flex-none flex-col overflow-hidden rounded-xl border border-white/[0.08] bg-[rgba(10,9,18,0.85)]">
+                      <div className="relative h-[92px] bg-black">
+                        {r.thumb && <img src={r.thumb} alt="" className="h-full w-full object-cover" />}
+                        <span className="absolute left-2 top-2 max-w-[190px] truncate rounded px-1.5 py-0.5 text-[10px] tracking-wide"
+                              style={{ background: 'rgba(10,9,18,0.8)', color: '#ffd479' }}>{r.name}</span>
+                      </div>
+                      <div className="px-2.5 py-1.5 text-[10px] text-[#aeb6cd]">
+                        {r.machines} machines · {r.value.toLocaleString()} credits{r.world ? ` · ${r.world}` : ''}
+                      </div>
+                      <div className="flex gap-1 px-2 pb-2 text-[11px]">
+                        <button onClick={() => askFrame({ type: 'fs-open-run', id: r.id })}
+                                className="flex-1 rounded-md bg-[#5cffc9]/15 px-2 py-1 text-[#5cffc9] hover:bg-[#5cffc9]/25">Open</button>
+                        <button onClick={() => { if (forgetArmed === r.id) { askFrame({ type: 'fs-forget-run', id: r.id }); setForgetArmed(null) } else setForgetArmed(r.id) }}
+                                className={cn('flex-1 rounded-md border px-2 py-1', forgetArmed === r.id ? 'border-[#e8697d]/60 text-[#e8697d]' : 'border-white/[0.08] text-[#807d99] hover:text-[#e8697d]')}>
+                          {forgetArmed === r.id ? 'sure?' : 'Forget'}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
           {/* THE TRUTH TABLE (Phase 44): every rule this game ENFORCES, derived

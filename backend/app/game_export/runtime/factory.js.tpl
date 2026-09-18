@@ -517,6 +517,7 @@ let glowPools = null;             // built with the decals; the seams index into
 // reads CAPS.stable and applyUpgrades runs at boot
 const CAPS = { heated: 0, scrubber: 0, stable: 0 };
 const landing = []; let landingOn = false;
+let warmed = false;                                // the warm-up ran (hoisted: set at boot, read by facts)
 let worksShow = 0, worksBurst = 0, worksWave = 0;   // the works' minute (hoisted: playWorks sets it, the loop reads it)   // machines settling after a build (hoisted: place() runs at boot, before the loop)
 let idleClock = 0, idleNudges = 0, idleMark = null, idleMarkAt = 0;   // the idle cue's clock (hoisted: apply() resets it)
 const PROP_LIST = [];                  // the outpost's groups, for the look ray (hoisted: filled at seeding, read by cellUnder)
@@ -2313,12 +2314,42 @@ function removeAt(face, i, j) {
   const c = cells[face][i][j];
   if (c.t === PROP) return;                  // the crew's things stay
   beltsDirty = true;
-  if (c.build) { scene.remove(c.build); c.build = null; }
+  dropBuild(c);
   c.t = c.mesh ? NODE : EMPTY;               // a node outlives its miner
   c.item = 0;
   refreshCounts();
 }
 
+// ── WEATHER ON THE MACHINES (2026-09-18). The ground carries its mineral's
+// story; so does what stands on it. Soot darkens and warms the paint on the
+// ember faces, rime settles on the upward surfaces on the salt faces, the
+// underside is dimmer. The type's geometry is shared, so a weathered machine
+// takes a clone with its vertex colours reworked: no new material, no new
+// draw call. The clone goes when the machine does. ──────────────────────
+function weather(g, face) {
+  const m = MINERAL_OF_FACE[face];
+  const soot = m === EMBER, rime = m === SALT, under = face === 1;
+  if (!soot && !rime && !under) return;
+  g.traverse(o => {
+    if (!o.isMesh || !o.geometry || !o.geometry.attributes.color) return;
+    const geo = o.geometry.clone(); o.geometry = geo;
+    const col = geo.attributes.color, nor = geo.attributes.normal;
+    for (let k = 0; k < col.count; k++) {
+      let r = col.getX(k), gg = col.getY(k), b = col.getZ(k);
+      if (soot) { r *= 0.72; gg *= 0.60; b *= 0.54; }
+      if (under) { r *= 0.82; gg *= 0.82; b *= 0.86; }
+      if (rime && nor && nor.getY(k) > 0.55) { r += (0.88 - r) * 0.55; gg += (0.93 - gg) * 0.55; b += (1.0 - b) * 0.55; }
+      col.setXYZ(k, r, gg, b);
+    }
+    col.needsUpdate = true;
+    o.userData.weathered = soot ? 'soot' : rime ? 'rime' : 'under';
+  });
+}
+function dropBuild(c) {
+  if (!c.build) return;
+  c.build.traverse(o => { if (o.userData.weathered && o.geometry) o.geometry.dispose(); });
+  scene.remove(c.build); c.build = null;
+}
 function place(face, i, j, type, dir) {
   const c = cells[face][i][j];
   if (type === MINER && c.t !== NODE && c.t !== MINER) return false;
@@ -2330,7 +2361,7 @@ function place(face, i, j, type, dir) {
   c.buf = 0; c.bt = 0; c.fa = 0; c.fb = 0; c.cook = 0;
   if (type !== MINER && c.t === NODE) return false;      // keep nodes clear
   if (c.t === PROP) return false;                        // the outpost is not a build site
-  if (c.build) { scene.remove(c.build); c.build = null; }
+  dropBuild(c);
   const g = new THREE.Group();
   if (type === MINER) {
     const b = new THREE.Mesh(GEO.miner, MAT.miner);
@@ -2426,6 +2457,7 @@ function place(face, i, j, type, dir) {
     lamp.name = 'lamp';
     g.add(lamp);
   }
+  weather(g, face);                         // soot on the ember faces, rime on the salt, dimmer below
   seat(g, face, i, j, dir, 0);
   // A MACHINE LANDS (2026-09-16): eight-tenths scale, an overshoot to one
   // over a third of a second, and a puff of dust from its skirt
@@ -3136,6 +3168,7 @@ const PRICE = {}, LAST_PRICE = {};
 for (const t of TRADED) { PRICE[t] = 1; LAST_PRICE[t] = 1; }
 const PRICE_MIN = 0.55, PRICE_MAX = 1.85;
 let priceClock = 0;
+let simHold = false;      // a gate's hold: no simulation ticks and no market ticks while it does its own accounting
 
 // ── SPORES ─────────────────────────────────────────────────────────────────
 // Active on a green world once the filter exists (the pressure never arrives
@@ -3465,7 +3498,7 @@ function stepSpores(dt) {
 }
 
 function stepMarket(dt) {
-  if (CREATIVE) return;                // the board sits at 1.0
+  if (CREATIVE || simHold) return;     // the board sits at 1.0; a held gate keeps its pinned prices
   priceClock += dt;
   if (priceClock < 3.5) return;
   priceClock = 0;
@@ -5730,7 +5763,7 @@ function clearFactory() {
   beltsDirty = true;
   eachTile(c => {
     c.rich = 1;                       // a new factory gets fresh ground
-    if (c.build) { scene.remove(c.build); c.build = null; }
+    dropBuild(c);
     c.t = c.mesh ? NODE : EMPTY;
     c.item = 0; c.buf = 0; c.bt = 0; c.fa = 0; c.fb = 0; c.cook = 0; c.rr = 0;
     c.dbt = 0; c.dmin = 0; c.emit = 0; c.left = 0; c.cool = 0;
@@ -5946,7 +5979,14 @@ function forgetRun(id) {
   writeRuns(readRuns().filter(x => x.id !== id));
   renderRuns();
 }
+function postRuns() {
+  try {
+    window.parent.postMessage({ type: 'fs-runs', runs: readRuns().map(r => ({ id: r.id, name: r.name, thumb: r.thumb || null,
+      value: r.value | 0, machines: r.machines | 0, world: r.world || '', at: r.at | 0, rank: r.rank | 0 })) }, '*');
+  } catch (e) {}
+}
 function renderRuns() {
+  postRuns();                               // the studio's cards follow the panel
   const el = document.getElementById('runs');
   if (!el) return;
   const list = readRuns();
@@ -6065,6 +6105,60 @@ if (!restored && !/[?&]nointro=1/.test(location.search)) {
 
 // ── frame ──────────────────────────────────────────────────────────────────
 let last = performance.now();
+// ── THE WARM-UP (2026-09-18). The first sale cost a 300 ms frame, and so
+// did the first flight. Not the game: on the d3d11 backend the driver
+// builds a shader's executable at its first draw, per program and per
+// vertex layout, and every GL command waits behind it; the main thread saw
+// it as a blocked buffer update. renderer.compile links programs but does
+// not draw, so it did not help. This draws: every geometry with every
+// machine material and the inline variants a build creates, everything in
+// the scene forced visible and unculled with instanced counts at one, once,
+// into an eight-pixel target, while the reveal covers it. The tag and rate
+// stand-ins in the host cost nothing and keep the chrome's layers ready.
+(function warmUp() {
+  const host = document.getElementById('tags');
+  if (host) {
+    for (const cls of ['warm', 'warm r']) {
+      const w = document.createElement('b'); w.className = cls; w.textContent = '+0';
+      w.style.transform = 'translate(-300px,-300px)'; host.appendChild(w);
+    }
+  }
+  try {
+    // 1. every geometry with every machine material, and the inline variants
+    // a build creates: the driver builds an executable per program AND per
+    // vertex layout, so the real geometries stand in, not a box
+    const warm = new THREE.Group(); warm.name = 'warm';
+    const geos = Object.values(GEO).filter(g => g && g.isBufferGeometry);
+    const mats = Object.values(MAT).filter(m => m && m.isMaterial).concat([
+      new THREE.MeshBasicMaterial({ color: 0xffd479 }),
+      new THREE.MeshBasicMaterial({ color: 0xffd479, transparent: true, opacity: 0.13, blending: THREE.AdditiveBlending, depthWrite: false }),
+      new THREE.MeshBasicMaterial({ color: 0x9aa6c8, transparent: true, opacity: 0.35, depthWrite: false }),
+      new THREE.MeshBasicMaterial({ map: TICK_TEX, transparent: false }),
+      new THREE.MeshStandardMaterial({ color: 0x7df9ff, emissive: 0x7df9ff, emissiveIntensity: 0.6 }),
+    ]);
+    for (const g of geos) for (const m of mats) { const w = new THREE.Mesh(g, m); w.castShadow = true; w.scale.setScalar(0.01); warm.add(w); }
+    scene.add(warm);
+    // 2. one real frame with nothing hidden and nothing culled, into a tiny target
+    const shown = [], unculled = [], counted = [];
+    scene.traverse(o => {
+      if (!o.visible) { o.visible = true; shown.push(o); }
+      if (o.frustumCulled) { o.frustumCulled = false; unculled.push(o); }
+      if (o.isInstancedMesh && o.count === 0) { o.count = 1; counted.push(o); }
+    });
+    const rt = new THREE.WebGLRenderTarget(8, 8, { depthBuffer: true });
+    const prev = renderer.getRenderTarget();
+    renderer.setRenderTarget(rt);
+    renderer.render(scene, camera);
+    renderer.setRenderTarget(prev);
+    rt.dispose();
+    for (const o of shown) o.visible = false;
+    for (const o of unculled) o.frustumCulled = true;
+    for (const o of counted) o.count = 0;
+    scene.remove(warm);
+    for (const m of mats.slice(-5)) m.dispose();
+    warmed = true;
+  } catch (e) { warmed = false; }
+})();
 landingOn = true;                           // from here on a placed machine lands
 renderer.setAnimationLoop(() => {
   const now = performance.now();
@@ -6134,7 +6228,7 @@ renderer.setAnimationLoop(() => {
   // the tick stops while the factory is still in the air — a meltdown that
   // kept banking value would read as though nothing had been given up
   let ticked = false;
-  while (sinceTick >= TICK) { sinceTick -= TICK; if (!melting) { step(); ticked = true; } }
+  while (sinceTick >= TICK) { sinceTick -= TICK; if (!melting && !simHold) { step(); ticked = true; } }
   if (ticked) { paintBeltLoad(); audioFollow(); }
   minedWindow += ore - before;
   if (rateWindow >= 1) {
@@ -6781,6 +6875,10 @@ function setInspectOn(on) {
     const d = e.data;
     if (!d || !d.type) return;
     if (d.type === 'fs-inspect') { setInspectOn(!!d.on); return; }
+    if (d.type === 'fs-runs-ask') { postRuns(); return; }                      // the studio asks for the list (a different word from the answer: a page that is its own parent must not echo)
+    if (d.type === 'fs-keep-run') { keepRun(d.name); return; }                  // keep the run the frame is in
+    if (d.type === 'fs-open-run') { openRun(String(d.id || '')); return; }
+    if (d.type === 'fs-forget-run') { forgetRun(String(d.id || '')); return; }
     if (d.type === 'fs-dropat') { pickAt(d.cx, d.cy, 'drop'); return; }
     if (d.type === 'fs-spawn') {
       const kind = String(d.kind || '').toLowerCase().replace(/[^a-z]/g, '');
@@ -6884,6 +6982,8 @@ window.__game = {
     sunAngle: +sunAngle.toFixed(3),
     landing: landing.length,
     plating: [...new Set(cube.material.map(m => m.userData.plating))],
+    weathered: (() => { const w = { soot: 0, rime: 0, under: 0 }; eachTile(c => { if (c.build) { let k = null; c.build.traverse(o => { if (o.userData.weathered) k = o.userData.weathered; }); if (k) w[k]++; } }); return w; })(),
+    warmed, warmLayers: document.querySelectorAll('#tags .warm').length,
     runs: readRuns().map(r => ({ name: r.name, machines: r.machines, thumb: !!r.thumb })),
     worksShow: +worksShow.toFixed(1),
     plan: (() => { const el = document.getElementById('plan'); return el && el.classList.contains('on') ? el.textContent : null; })(),
@@ -7013,6 +7113,8 @@ window.__factory = {
   captureBlueprint, stampBlueprint, dropBlueprint, bpCells, get blueprint() { return blueprint; }, set bpRot(v) { bpRot = v & 3; },
   sporeStrike, sporeShielded, sporesActive, SPORE_REACH, SPORE_CLOG,
   set riftsPaid(v) { riftsPaid = v; },
+  get hold() { return simHold; }, set hold(v) { simHold = !!v; },   // a gate's hold on the simulation and the market
+  set priceClock(v) { priceClock = +v || 0; },
   set rateNow(v) { rateForce = v; rateNow = v === null ? rateNow : v; }, set goalIdx(v) { goalIdx = v; applyRewards(); renderGoal(); renderWorlds(); },
   WORLDS, travelTo, applyWorld, get worldIdx() { return worldIdx; },
   // aim the overhead camera, so a harness can look at a chosen face

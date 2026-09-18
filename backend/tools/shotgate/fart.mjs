@@ -35,7 +35,9 @@ const inst = await p.evaluate(async ()=>{
   for (let j = 4; j < Math.min(F.N - 4, 24); j += 2)
     for (let i = 4; i < Math.min(F.N - 4, 24); i++)
       if (F.cells[0][i][j].t === TY.EMPTY && F.place(0, i, j, TY.BELT, 0)) n++;
-  await new Promise(r => setTimeout(r, 900));
+  // the settled cost, not the placement's: a build pulses every seam's heart
+  // for a second and a half (31 more draws a frame while it decays)
+  await new Promise(r => setTimeout(r, 2600));
   return { belts: n, calls: window.__game.stats().calls, seams: window.__game.facts().nodes };
 });
 console.log('instanced :', inst.belts, 'belts ->', inst.calls, 'draw calls total |', inst.seams, 'seams, budget', 108 + 2 * inst.seams);
@@ -210,6 +212,22 @@ const plating = await p.evaluate(() => {
   return { faces: mats.length, platings: window.__game.facts().plating, maps: maps.size };
 });
 console.log('plating   :', plating.faces, 'faces |', JSON.stringify(plating.platings), '|', plating.maps, 'distinct maps');
+// weather on the machines: a smelter at home, one on the ember face, one on the salt face
+const wx = await p.evaluate(async () => {
+  const F = window.__factory, TY = F.TYPES; F.addValue(3000);
+  const read = (f) => {
+    let spot = null;
+    for (let i = 3; i < F.N - 3 && !spot; i++) for (let j = 3; j < F.N - 3 && !spot; j++) if (F.cells[f][i][j].t === TY.EMPTY) spot = [i, j];
+    if (!F.place(f, spot[0], spot[1], TY.SMELTER, 0)) return null;
+    const b = F.cells[f][spot[0]][spot[1]].build; let s = [0, 0, 0], n = 0, top = [0, 0, 0], tn = 0, tag = null;
+    b.traverse(o => { if (o.isMesh && o.geometry.attributes.color) { const c = o.geometry.attributes.color, nr = o.geometry.attributes.normal; tag = o.userData.weathered || tag;
+      for (let k = 0; k < c.count; k++) { s[0] += c.getX(k); s[1] += c.getY(k); s[2] += c.getZ(k); n++; if (nr.getY(k) > 0.55) { top[0] += c.getX(k); top[1] += c.getY(k); top[2] += c.getZ(k); tn++; } } } });
+    const lum = v => 0.3 * v[0] + 0.59 * v[1] + 0.11 * v[2];
+    return { lum: +(lum(s) / n).toFixed(3), top: +(lum(top) / tn).toFixed(3), topBlue: +(top[2] / tn).toFixed(3), tag };
+  };
+  return { home: read(0), ember: read(2), salt: read(4), counts: window.__game.facts().weathered };
+});
+console.log('weather   : home', JSON.stringify(wx.home), '| ember', JSON.stringify(wx.ember), '| salt', JSON.stringify(wx.salt), '|', JSON.stringify(wx.counts));
 console.log('errors    :', errs.length ? errs.join(' | ') : 'none');
 await p.screenshot({ path: process.env.OUT || 'art.png' });
 await b.close();
@@ -225,6 +243,8 @@ const ok = icons.withIcon === icons.tools && icons.tools >= 9
   && sunDrift.angle > 0.3 && sunDrift.moved > 50
   && land.landing > 0 && land.s1 === 1
   && plating.faces === 6 && plating.platings.length === 4 && plating.maps === 4
+  && wx.home && wx.ember && wx.salt && wx.home.tag === null && wx.ember.tag === 'soot' && wx.salt.tag === 'rime'
+  && wx.ember.lum < wx.home.lum * 0.8 && wx.salt.top > wx.home.top * 1.15 && wx.salt.topBlue > wx.home.topBlue * 1.15
   && jam.stuck && jam.col && jam.col[0] > 1.2 && jam.col[2] < 0.5   // amber
   && errs.length === 0;
 process.exit(ok ? 0 : 1);

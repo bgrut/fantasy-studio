@@ -26,6 +26,7 @@ const r = await p.evaluate(async () => {
   // a baseline sale of each, then the buyer arrives for ember ingots
   const unit = t => (F.VALUE ? F.VALUE[t] : 0);
   const v0 = window.__game.facts().value;
+  F.hold = true;                                       // the market and the line stand still while the prices are pinned
   F.PRICE[TY.INGOT_E] = 1.0; F.PRICE[TY.INGOT] = 1.0;
   F.bank(TY.INGOT_E); const plainEmber = window.__game.facts().value - v0;
   const v1 = window.__game.facts().value;
@@ -41,6 +42,7 @@ const r = await p.evaluate(async () => {
   const v3 = window.__game.facts().value;
   F.bank(TY.INGOT); const rivalCrystal = window.__game.facts().value - v3;
   await w(300);
+  F.hold = false;
   const mid = window.__game.facts().rival;
   const offerToast = document.getElementById('toast').textContent;
   F.rivalLeft = 0.2;

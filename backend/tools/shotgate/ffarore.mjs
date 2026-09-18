@@ -22,6 +22,7 @@ await wait(4500);
 const r = await p.evaluate(async () => {
   const F = window.__factory, TY = F.TYPES;
   const w = ms => new Promise(r => setTimeout(r, ms));
+  F.hold = true;                                       // the market and the line stand still while the prices are pinned
   for (const t of F.TRADED) F.PRICE[t] = 1.0;
   // the top face's own ore, and a face that grows a different one
   const home = F.MINERAL_OF_FACE[0];
@@ -38,6 +39,7 @@ const r = await p.evaluate(async () => {
   const farAgainOnItsOwnFace = (() => { const a = window.__game.facts().value; F.bank(far, other); return +(window.__game.facts().value - a).toFixed(2); })();
   const alloy = (() => { const a = window.__game.facts().value; F.bank(TY.ALLOY, 0); return +(window.__game.facts().value - a).toFixed(2); })();
   const alloyElsewhere = (() => { const a = window.__game.facts().value; F.bank(TY.ALLOY, other); return +(window.__game.facts().value - a).toFixed(2); })();
+  F.hold = false;
   // the label on the starter hub
   let hub = null; F.cells[0].forEach((col, i) => col.forEach((c, j) => { if (c.t === TY.HUB && !hub) hub = c; }));
   const label = F.lookLabel ? F.lookLabel(hub) : (document.getElementById('look') ? '' : '');
