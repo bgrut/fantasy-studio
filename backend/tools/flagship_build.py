@@ -33,28 +33,11 @@ OUT = ROOT / "flagship"
 # The demo's spec. Every field here is one the studio itself fills in from a
 # prompt — this is a hand-written example of the same document, not a special
 # case in the runtime.
-# THREE PROMPTS, ONE SYSTEM. The demo opens on Crystal Works and ships three
-# more worlds the studio built from a sentence each: their spec.json files ride
-# in flagship/worlds and the title card lists them. Each shipped file is a real
-# studio export copied from a job's dist, never hand-written; a world whose
-# file is missing is simply not listed.
+# ONE GAME (2026-09-18). The demo is Crystal Works and nothing else: the card
+# lists no other builds. The studio's range is shown in the studio.
 DEMO_WORLDS = [
     {"slug": None, "home": True, "name": "Crystal Works",
      "prompt": "a crystal works on a worldlet adrift in the void, six faces of ore and one sky"},
-    {"slug": "moon", "name": "Red Moon Outpost",
-     "prompt": "a rusted mining outpost on a dead red moon"},
-    {"slug": "frost", "name": "Frostline Refinery",
-     "prompt": "an ice refinery on a frozen moon"},
-    {"slug": "bakery", "name": "Skybound Bakery",
-     "prompt": "a bakery on a floating island where grain is milled into flour and baked into loaves"},
-    # NOT A FACTORY (2026-09-15). The claim is one sentence, one playable
-    # world, so the row holds a race. Its build rides in flagship/drift/
-    # (60 MB, outside the repository; `--adv N` copies a studio job there)
-    # and the runtime hides the pick when the folder is not served.
-    {"slug": "drift", "href": "drift/", "name": "Tokyo Drift Nights",
-     "prompt": "a tokyo drift racing game through neon streets at night"},
-    {"slug": "forest", "href": "forest/", "name": "Firefly Dawn",
-     "prompt": "a moonlit forest walk to gather lost fireflies before dawn"},
 ]
 
 DEMO_SPEC = {
@@ -90,37 +73,11 @@ def render() -> dict[str, str]:
     if "__TITLE__" not in html:
         raise SystemExit("factory.index.html.tpl has no __TITLE__ placeholder")
 
-    # the demo's own spec carries the sentence that made it and the list of
-    # the worlds it ships; every shipped world carries the same list
-    worlds_dir = OUT / "worlds"
+    # the demo's own spec carries the sentence that made it, and lists no
+    # other worlds: the demo is one game
     spec_for_demo = dict(DEMO_SPEC)
     spec_for_demo["prompt"] = DEMO_WORLDS[0]["prompt"]
-    shipped = [w for w in DEMO_WORLDS if w["slug"] is None or w.get("href") or (worlds_dir / (w["slug"] + ".json")).exists()]
-    def named(w):                             # a shipped world goes by the title the studio gave it
-        if not w["slug"]:
-            return w["name"]
-        if w.get("href"):
-            sp = OUT / w["href"] / "spec.json"
-            if sp.exists():
-                try:
-                    return json.loads(sp.read_text(encoding="utf-8")).get("title") or w["name"]
-                except Exception:
-                    return w["name"]
-            return w["name"]
-        return json.loads((worlds_dir / (w["slug"] + ".json")).read_text(encoding="utf-8")).get("title") or w["name"]
-    spec_for_demo["worlds"] = [{"name": named(w), "prompt": w["prompt"], "home": bool(w.get("home")),
-                                "file": ("worlds/" + w["slug"] + ".json") if (w["slug"] and not w.get("href")) else "",
-                                **({"href": w["href"]} if w.get("href") else {})} for w in shipped]
-    for w in shipped:
-        if not w["slug"] or w.get("href"):
-            continue
-        wp = worlds_dir / (w["slug"] + ".json")
-        d = json.loads(wp.read_text(encoding="utf-8"))
-        d["worlds"] = spec_for_demo["worlds"]
-        d.setdefault("prompt", w["prompt"])
-        text = json.dumps(d, indent=2)
-        if wp.read_text(encoding="utf-8") != text:      # --check stays a read unless a list is stale
-            wp.write_text(text, encoding="utf-8")
+    spec_for_demo["worlds"] = []
     js = BANNER + js.replace("__GAME_SPEC__", json.dumps(spec_for_demo))
     html = html.replace("__TITLE__", DEMO_SPEC["title"] + " — Fantasy Studio")
     # the demo keeps its historical filename; everything else is byte-identical
@@ -162,38 +119,9 @@ def sync_fonts(check: bool) -> bool:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--adv", type=int, default=None,
-                    help="copy backend/renders/game_jobs/job_N/dist into flagship/drift/ (the race beside the demo)")
-    ap.add_argument("--ship", action="append", default=[], metavar="JOB:SLUG",
-                    help="copy job JOB's dist into flagship/SLUG/ (repeatable; --adv N is --ship N:drift)")
     ap.add_argument("--check", action="store_true",
                     help="exit 1 if the demo is stale instead of rewriting it")
     args = ap.parse_args()
-
-    ships = list(args.ship) + ([f"{args.adv}:drift"] if args.adv is not None else [])
-    for item in ships:
-        import shutil
-        job, _, slug = item.partition(":")
-        if not job.isdigit() or not slug or "/" in slug or ".." in slug:
-            raise SystemExit(f"--ship wants JOB:SLUG, got {item!r}")
-        src = ROOT / "backend" / "renders" / "game_jobs" / f"job_{job}" / "dist"
-        if not (src / "index.html").exists():
-            raise SystemExit(f"no build at {src}")
-        # a factory ships as worlds/<slug>.json, never as a folder: job ids
-        # restart with the backend, and shipping the wrong job once put a
-        # moon in the race's folder
-        try:
-            sp = json.loads((src / "spec.json").read_text(encoding="utf-8"))
-        except Exception:
-            sp = {}
-        if sp.get("genre") == "factory":
-            raise SystemExit(f"job_{job} is a factory ({sp.get('title')!r}); ship factories as worlds/<slug>.json, not folders")
-        print(f"  shipping job_{job}: {sp.get('title')!r} ({sp.get('genre')})")
-        dst = OUT / slug
-        if dst.exists():
-            shutil.rmtree(dst)
-        shutil.copytree(src, dst, ignore=shutil.ignore_patterns("_shot.png", "audit_fixes.json"))
-        print(f"  flagship/{slug}  <- job_{job}  ({sum(p.stat().st_size for p in dst.rglob('*') if p.is_file()) // 1_000_000} MB)")
 
     files = render()
     fonts_ok = sync_fonts(args.check)

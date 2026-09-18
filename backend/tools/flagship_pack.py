@@ -1,11 +1,10 @@
 """Package the flagship demo as one download.
 
     python backend/tools/flagship_pack.py                 # the demo, zipped
-    python backend/tools/flagship_pack.py --adv 7         # ...with the race beside it (job 7's build)
     python backend/tools/flagship_pack.py --out C:/itch   # somewhere else than dist/
 
-Rebuilds the demo from the runtime first (flagship_build.py, with --adv when
-given), writes flagship/LICENSES.md, and zips flagship/ as
+Rebuilds the demo from the runtime first (flagship_build.py), writes
+flagship/LICENSES.md, and zips flagship/ as
 <out>/crystal-works-<date>.zip with a single top-level folder, so what a
 stranger unzips is a folder they can serve or drop on itch.io. Dev files
 (the grid unit test, the roadmap) stay out. Prints the file count and size.
@@ -33,7 +32,6 @@ itself or dedicated to the public domain.
 | N8AO ambient occlusion | CC0 (vendor/n8ao.LICENSE) |
 | Bricolage Grotesque, Instrument Sans, DM Mono | SIL Open Font License 1.1 (vendor/fonts/OFL-*.txt) |
 | Machines, plating, sky, sounds | Drawn and synthesised by the runtime at load; no assets shipped |
-| The worlds shipped beside the demo (drift/, forest/, when present) | Each carries its own LICENSES.md |
 
 No cloud services were used to build this demo. No third party holds rights
 over its content. You may sell it, publish it, or modify it freely.
@@ -42,16 +40,10 @@ over its content. You may sell it, publish it, or modify it freely.
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--adv", type=int, default=None, help="ship job N's adventure build beside the demo")
-    ap.add_argument("--ship", action="append", default=[], metavar="JOB:SLUG", help="ship job JOB's build as flagship/SLUG/ (repeatable)")
     ap.add_argument("--out", default=str(ROOT / "dist"), help="where the zip goes (default: dist/, not tracked)")
     args = ap.parse_args()
 
     build = [sys.executable, str(ROOT / "backend" / "tools" / "flagship_build.py")]
-    if args.adv is not None:
-        build += ["--adv", str(args.adv)]
-    for item in args.ship:
-        build += ["--ship", item]
     r = subprocess.run(build, cwd=str(ROOT))
     if r.returncode != 0:
         return r.returncode
@@ -69,9 +61,7 @@ def main() -> int:
             z.write(p, "crystal-works/" + p.relative_to(OUT).as_posix())
             n += 1
     mb = zpath.stat().st_size / 1_000_000
-    shipped = [d.name for d in OUT.iterdir() if d.is_dir() and (d / "index.html").exists() and d.name not in ("vendor", "worlds")]
-    print(f"packed {n} files into {zpath.relative_to(ROOT) if zpath.is_relative_to(ROOT) else zpath}  ({mb:.1f} MB)"
-          + ("  with " + ", ".join(shipped) + " beside the demo" if shipped else "  (factories only: nothing shipped beside the demo)"))
+    print(f"packed {n} files into {zpath.relative_to(ROOT) if zpath.is_relative_to(ROOT) else zpath}  ({mb:.1f} MB)  (one game)")
     print("unzip, then: cd crystal-works && python -m http.server 8123  ->  http://127.0.0.1:8123/")
     return 0
 

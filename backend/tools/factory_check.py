@@ -57,7 +57,7 @@ GATES = [
     ("fruns.mjs", "the runtime tells the studio its kept runs at boot and on every change, and answers keep, open and forget"),
     ("fhitch.mjs", "the warm-up: a fresh boot across the first sale and the drone's first flight has no frame over 120 ms on the card"),
     ("fkit.mjs", "the build links the shared kit, loads the studio's three faces, and sets its title in the display face"),
-    ("fworlds.mjs", "the reveal reads the prompt that made the world; the demo lists the worlds it ships and opens each under its own save"),
+    ("fworlds.mjs", "the reveal reads the prompt that made the world; the demo is one game and lists no other builds, on either target"),
     ("foutpost.mjs", "a starter outpost stands by the hub: unbuildable, unerasable, named by the look label, never saved or blueprinted, re-derived by whatever hub the save has"),
     ("fmusic.mjs", "the kit's music bed plays in the world's family after the first gesture, moves on its clock, changes key with the world, and makes sound"),
     ("fcity.mjs", "a city prompt gets a district with or without a map, drawn as a city at full resolution, with a race route on its streets (needs --adv)"),

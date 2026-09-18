@@ -12,21 +12,14 @@ Flagship demo. Runs standalone in a browser; no build step.
     python backend/tools/flagship_build.py          # rewrite the demo
     python backend/tools/flagship_build.py --check  # fail if it is stale
 
-## The worlds on the title card
+## One game, and the studio beside it
 
-The card lists the worlds the demo ships as the sentences that made them.
-Three are factories the studio built from a prompt each; their specs ride in
-`worlds/*.json` (copied from a job's `dist/spec.json`, never hand-written) and
-open under their own saves via `?spec=worlds/<name>.json`.
-
-The others are not factories: a race and a forest walk, each a whole studio
-build that stays out of the repository. Ship them beside the demo with
-
-    python backend/tools/flagship_build.py --ship <job id>:drift --ship <job id>:forest   # a job's dist into flagship/<slug>/
-
-The runtime asks for each shipped world's `index.html` at boot and hides the
-pick when nothing answers, so a clone shows the factories only and a packaged
-download shows the race and the forest too. The gate for all of it is `backend/tools/shotgate/fworlds.mjs`.
+The demo is Crystal Works and nothing else. The title card names it and
+quotes the sentence that made it; it lists no other builds. The studio's
+range, any prompt into a game of this standard, is shown in the studio, where
+every job is its own game with its own card. The gate for the split is
+`backend/tools/shotgate/fworlds.mjs`: no picks on the demo, no picks on a
+studio build, and nothing served beside the demo's folder.
 
 ## One download
 
