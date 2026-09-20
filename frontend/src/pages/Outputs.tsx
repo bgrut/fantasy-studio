@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react'
+import { listGameJobs, type GameJob } from '@/lib/gameApi'
 import {
   Download,
   Eye,
@@ -31,6 +32,9 @@ type SortMode = 'newest' | 'oldest' | 'template'
 
 export default function Outputs() {
   const [outputs, setOutputs] = useState<any[]>([])
+  // GAMES FIRST (2026-09-20): every game the studio has built, as a card with
+  // its sentence and its picture, linking into the studio by job
+  const [games, setGames] = useState<GameJob[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [sort, setSort] = useState<SortMode>('newest')
@@ -52,6 +56,25 @@ export default function Outputs() {
     fetchOutputs()
     const interval = setInterval(fetchOutputs, 5000)
     return () => clearInterval(interval)
+  }, [])
+  useEffect(() => {
+    const fetchGames = async () => {
+      try {
+        const { jobs } = await listGameJobs()
+        // one card per sentence: the newest build of it; empty sentences skipped
+        const seen = new Map<string, GameJob>()
+        for (const j of jobs || []) {
+          if (j.status !== 'complete' || !j.play_url || !String(j.prompt || '').trim()) continue
+          const key = String(j.prompt).trim().toLowerCase()
+          if (!seen.has(key)) seen.set(key, j)
+        }
+        setGames([...seen.values()])
+      }
+      catch { setGames([]) }
+    }
+    fetchGames()
+    const t = setInterval(fetchGames, 8000)
+    return () => clearInterval(t)
   }, [])
 
   // B1 — derive per-template counts so the filter dropdown shows "name (count)"
@@ -100,6 +123,34 @@ export default function Outputs() {
 
   return (
     <div className="space-y-8 animate-reveal">
+      {/* GAMES: the studio's range, one card per sentence */}
+      {games.length > 0 && (
+        <div className="space-y-3">
+          <div className="flex items-end justify-between gap-4">
+            <div>
+              <span className="section-tag section-tag--primary font-mono text-xs">// games</span>
+              <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-white mt-2">Games you have built</h2>
+              <p className="text-sm text-[#807d99] mt-1">Every sentence became a game. Open one to play it in the studio.</p>
+            </div>
+            <span className="text-xs font-mono text-[#4a4764]">{games.length} games</span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+            {games.map(g => (
+              <Link key={g.id} to={`/studio?mode=game&job=${g.id}`}
+                    className="group flex flex-col overflow-hidden rounded-xl border border-white/[0.08] bg-[rgba(10,9,18,0.85)] hover:border-[#5cffc9]/40 transition-colors">
+                <div className="relative h-[140px] bg-black">
+                  {g.shot ? <img src={g.shot} alt="" className="h-full w-full object-cover" loading="lazy" />
+                          : <div className="flex h-full items-center justify-center text-[11px] text-[#4a4764]">no picture yet</div>}
+                  <span className="absolute left-2 top-2 rounded px-1.5 py-0.5 text-[9px] uppercase tracking-wider"
+                        style={{ background: 'rgba(10,9,18,0.8)', color: g.genre === 'factory' ? '#ffd479' : '#8fd8ff' }}>{g.genre || 'adventure'}</span>
+                </div>
+                <div className="px-3 pt-2 text-[13px] font-semibold text-[#e8ecf7] truncate group-hover:text-white">{g.title || g.spec_resolved?.title || `game ${g.id}`}</div>
+                <div className="px-3 pb-3 text-[11px] leading-4 text-[#807d99] line-clamp-2">“{g.prompt}”</div>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
         <div className="space-y-3">

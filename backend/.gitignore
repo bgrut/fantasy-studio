@@ -50,6 +50,9 @@ venv_triposg/
 vendor/blosm/
 tools/*
 !tools/flagship_pack.py
+# the studio's proof of the promise: ten sentences scored against their games
+!tools/prompt_check.py
+!tools/PROMPT_FIDELITY.md
 !tools/shotgate/
 tools/shotgate/node_modules/
 # Car Lab: source is tracked, its vendored three.js copy is not (copy it from

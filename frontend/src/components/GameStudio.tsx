@@ -12,6 +12,7 @@ import {
   cancelJob, getGameJob, listProjects, openLevel, removeLevelFromProject, revealProjectZip, uploadSplat, listSplats, trainSplat, getSplatJob, imagineSplat, uploadScene,
   rerollAsset, updateLevel,
   type GameHealth, type GameJob, type GameProject,
+  listGameJobs,
 } from '@/lib/gameApi'
 import OnboardingTour, { type TourStep } from '@/components/OnboardingTour'
 
@@ -61,16 +62,16 @@ const GAME_PROMPTS: { icon: string; text: string }[] = [
   // Every chip here is a VERIFIED SHAPE: each one exercises systems that have
   // shipped and been screenshot-checked (OSM heists, relational terrain
   // anchors, guard patrols, getaway cars, weather, crowds). Detail sells the
-  // product — a rich prompt that works teaches users what to ask for.
+  // product: a rich prompt that works teaches users what to ask for.
   { icon: '🕵️', text: 'A detective works the streets of New York City at night: steal 4 jewels from 3 buildings, then drive the getaway car to escape' },
   { icon: '🐈', text: 'A cat burglar infiltrates a moonlit mansion: steal 4 jewels while 3 guards patrol, then escape to the getaway car' },
   { icon: '⚔️', text: 'A knight quests through a misty valley: collect 4 relics. A lake in the north, a pine forest to the west, a village in the south' },
   { icon: '🏎️', text: 'A red sports car races 5 rivals through New York City at night' },
   { icon: '🏹', text: 'A hunter tracks wolves at dawn: a lake in the north and a village on its southern shore' },
   { icon: '📦', text: 'A courier delivers 3 packages across a rainy city at dusk while 2 thugs give chase' },
-  { icon: '🧙', text: 'A wizard defends a windswept meadow — defeat 4 wolves with magic bolts' },
-  { icon: '🚕', text: 'A taxi weaving through Tokyo streets — race 4 rivals before midnight' },
-  { icon: '🐉', text: 'A dragon soaring over the mountains — collect 5 fire flames between the peaks' },
+  { icon: '🧙', text: 'A wizard defends a windswept meadow: defeat 4 wolves with magic bolts' },
+  { icon: '🚕', text: 'A taxi weaving through Tokyo streets: race 4 rivals before midnight' },
+  { icon: '🐉', text: 'A dragon soaring over the mountains: collect 5 fire flames between the peaks' },
   { icon: '🌊', text: 'A whale in the deep ocean: dive for 5 pearls, then surface at the beacon' },
   { icon: '🛡️', text: 'Outlast 8 rivals as the storm closes in on a ruined village' },
   { icon: '🦊', text: 'A fox on a snowy night quest: collect 6 fireflies, then reach the glowing beacon' },
@@ -125,6 +126,10 @@ const BUILD_STAGES: Record<string, string> = {
 
 export default function GameStudio() {
   const [prompt, setPrompt] = useState('')
+  // YOUR GAMES (2026-09-20). Every game the studio has built, newest first,
+  // as cards with the sentence and the picture: the studio's range is shown
+  // here, not in the demo.
+  const [games, setGames] = useState<(GameJob & { builds: number })[]>([])
   const [job, setJob] = useState<GameJob | null>(null)
   const [building, setBuilding] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -305,6 +310,25 @@ export default function GameStudio() {
     }
   }, [project, exporting])
 
+  // one card per sentence: the newest build of it, and how many times it was built
+  const dedupeGames = (jobs: GameJob[]) => {
+    const seen = new Map<string, GameJob & { builds: number }>()
+    for (const j of jobs) {
+      if (j.status !== 'complete' || !j.play_url || !String(j.prompt || '').trim()) continue
+      const key = String(j.prompt).trim().toLowerCase()
+      const have = seen.get(key)
+      if (have) have.builds += 1
+      else seen.set(key, { ...j, builds: 1 })
+    }
+    return [...seen.values()]
+  }
+  const refreshGames = useCallback(async () => {
+    try {
+      const { jobs } = await listGameJobs()
+      setGames(dedupeGames(jobs || []).slice(0, 12))
+    } catch { /* the strip is a convenience; a failed list is an empty strip */ }
+  }, [])
+  useEffect(() => { refreshGames(); const t = setInterval(refreshGames, 8000); return () => clearInterval(t) }, [refreshGames])
   const pollJob = useCallback((job_id: number) => {
     if (pollRef.current) window.clearInterval(pollRef.current)
     let misses = 0
@@ -399,6 +423,13 @@ export default function GameStudio() {
     }
   }, [project, openedLevel, job])
 
+  // a job named in the URL opens once (the gallery links here by job)
+  const openedFromUrl = useRef(false)
+  useEffect(() => {
+    if (openedFromUrl.current) return
+    const id = Number(new URLSearchParams(window.location.search).get('job'))
+    if (id > 0) { openedFromUrl.current = true; pollJob(id) }
+  }, [pollJob])
   const build = useCallback(() => {
     const p = prompt.trim()
     if (!p || building) return
@@ -680,6 +711,40 @@ export default function GameStudio() {
             </button>
           ))}
         </div>
+
+        {/* YOUR GAMES: what the studio has built, as cards with the sentence and the picture */}
+        {games.length > 0 && (
+          <div data-tour-id="game-gallery" className="mx-auto max-w-4xl w-full space-y-2">
+            <div className="flex items-center justify-between text-[11px] tracking-wide text-[#807d99]">
+              <span>Your games · {games.length}</span>
+              <span className="text-[#4a4764]">every sentence you typed, as a game; Play opens it here</span>
+            </div>
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              {games.map(g => (
+                <div key={g.id} className={cn('flex w-[236px] flex-none flex-col overflow-hidden rounded-xl border bg-[rgba(10,9,18,0.85)]',
+                                              job?.id === g.id ? 'border-[#5cffc9]/60' : 'border-white/[0.08]')}>
+                  <div className="relative h-[104px] bg-black">
+                    {g.shot ? <img src={g.shot} alt="" className="h-full w-full object-cover" loading="lazy" />
+                            : <div className="flex h-full items-center justify-center text-[10px] text-[#4a4764]">no picture yet</div>}
+                    <span className="absolute left-2 top-2 rounded px-1.5 py-0.5 text-[9px] uppercase tracking-wider"
+                          style={{ background: 'rgba(10,9,18,0.8)', color: g.genre === 'factory' ? '#ffd479' : '#8fd8ff' }}>{g.genre || 'adventure'}</span>
+                  </div>
+                  <div className="flex items-baseline gap-2 px-2.5 pt-2">
+                    <span className="min-w-0 flex-1 truncate text-[12px] font-semibold text-[#e8ecf7]">{g.title || g.spec_resolved?.title || `game ${g.id}`}</span>
+                    {g.builds > 1 && <span className="flex-none text-[9px] text-[#4a4764]">built {g.builds} times</span>}
+                  </div>
+                  <div className="px-2.5 pb-2 text-[10px] leading-4 text-[#807d99] line-clamp-2">“{g.prompt}”</div>
+                  <div className="flex gap-1 px-2 pb-2 text-[11px]">
+                    <button onClick={() => pollJob(g.id)}
+                            className="flex-1 rounded-md bg-[#5cffc9]/15 px-2 py-1 text-[#5cffc9] hover:bg-[#5cffc9]/25">Play</button>
+                    <button onClick={() => setPrompt(g.prompt)} title="put this sentence back in the box"
+                            className="rounded-md border border-white/[0.08] px-2 py-1 text-[#807d99] hover:text-white">Reuse</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* LOOK & FEEL card: style / view / quality grouped in one place */}
         <div data-tour-id="game-look" className="mx-auto max-w-4xl w-full rounded-xl border border-white/[0.06] bg-white/[0.015] px-5 py-4 space-y-2.5">

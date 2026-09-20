@@ -17,10 +17,13 @@ export interface GameJob {
   created_at: number
   updated_at: number
   spec_resolved?: GameSpecResolved       // full resolved spec — the Truth Table reads it
+  shot?: string                          // the visual gate's frame, /games/job_N/dist/_shot.png
+  restored?: boolean                     // came back from disk after a restart
 }
 
 // the slice of the resolved spec the studio UI actually reads
 export interface GameSpecResolved {
+  title?: string
   style?: string
   world?: {
     name?: string; sky?: string; weather?: string; health_packs?: number

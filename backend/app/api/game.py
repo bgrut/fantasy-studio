@@ -25,6 +25,55 @@ GAME_JOBS_DIR = BACKEND_ROOT / "renders" / "game_jobs"
 
 _jobs: dict[int, dict] = {}
 _next_id = 1
+
+
+def _rescan_jobs_from_disk() -> None:
+    """THE GALLERY REMEMBERS (2026-09-20). Jobs lived only in memory and ids
+    restarted at one, so a restart forgot every game the studio had built and
+    the next build overwrote job_1's folder. Every finished build on disk
+    comes back as a complete job (its spec, its sentence, its picture), and
+    the id count continues past them."""
+    global _next_id
+    if not GAME_JOBS_DIR.exists():
+        return
+    import json as _json
+    found = []
+    for d in GAME_JOBS_DIR.iterdir():
+        if not d.is_dir() or not d.name.startswith("job_") or not d.name[4:].isdigit():
+            continue
+        dist = d / "dist"
+        if not (dist / "index.html").exists():
+            continue
+        spec_path = dist / "spec.json"
+        try:
+            spec = _json.loads(spec_path.read_text(encoding="utf-8")) if spec_path.exists() else {}
+        except Exception:
+            spec = {}
+        jid = int(d.name[4:])
+        if jid in _jobs:
+            continue
+        try:
+            at = spec_path.stat().st_mtime if spec_path.exists() else d.stat().st_mtime
+        except Exception:
+            at = 0.0
+        job = {
+            "id": jid, "prompt": spec.get("prompt") or "", "status": "complete", "stage": "done",
+            "title": spec.get("title") or "", "genre": spec.get("genre") or "adventure",
+            "player": (spec.get("player") or {}).get("name") if isinstance(spec.get("player"), dict) else None,
+            "seed": spec.get("seed"), "created_at": at, "updated_at": at,
+            "play_url": f"/games/job_{jid}/dist/", "spec_resolved": spec, "restored": True,
+            "notes": ["restored from disk after a restart"],
+        }
+        if (dist / "_shot.png").exists():
+            job["shot"] = f"/games/job_{jid}/dist/_shot.png"
+        found.append(job)
+    for job in found:
+        _jobs[job["id"]] = job
+    if _jobs:
+        _next_id = max(_next_id, max(_jobs) + 1)
+
+
+_rescan_jobs_from_disk()
 _lock = threading.Lock()
 
 
@@ -857,12 +906,21 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         # a dressed character from the roster by the prompt's own words. A
         # named character keeps its name.
         try:
-            if (want or "").strip().lower() in _GENERIC_HUMAN | {"hero", "protagonist", "player", "you", "someone", "stranger", "visitor"} \
+            # AN UNKNOWN HUMAN ROLE IS PLAYED BY THE ROSTER (2026-09-20). "a
+            # moonlit forest walk" made the hero a "walker": not a generic
+            # human, so this recast never fired, the library had no walker, and
+            # the build went to image-to-3D generation and hung for an hour. A
+            # human role the library cannot resolve is recast like a generic
+            # one; generation stays for what it is for, a new creature.
+            _w = (want or "").strip().lower()
+            _unknown_human = (bool(_w) and library.resolve(_w) is None
+                              and guess_pattern(_w) == "biped")
+            if (_w in _GENERIC_HUMAN | {"hero", "protagonist", "player", "you", "someone", "stranger", "visitor"} or _unknown_human) \
                     and spec.style not in _FLAT_LOOKS:
                 _pw = (req.prompt or "").lower()
                 _ROLES = [
                     (r"\b(haunt|ghost|manor|mansion|murder|mystery|detective|noir|crime|clue|relic|cursed|asylum)", "detective"),
-                    (r"\b(forest|wood|moor|wild|ranger|trail|mountain|hike|hunt|deer|elk|track)", "ranger"),
+                    (r"\b(forest|wood|moor|wild|ranger|trail|mountain|hike|hunt|deer|elk|track|walk|walker|stroll|wander|gather|firefl)", "ranger"),
                     (r"\b(lab|laboratory|science|scientist|space|station|reactor|research|specimen)", "scientist"),
                     (r"\b(engine|machine|factory|robot|mech|repair|wrench|mine)", "engineer"),
                     (r"\b(castle|kingdom|knight|medieval|dragon|sword|siege|joust)", "knight"),

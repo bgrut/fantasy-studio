@@ -144,6 +144,7 @@ export default function SceneStudio() {
   // Persisted so the app reopens where the user works.
   const [mode, setMode] = useState<'video' | 'game'>(() => {
     try {
+      if (new URLSearchParams(window.location.search).get('mode') === 'game') return 'game'   // the gallery links here by job
       return localStorage.getItem('fs.mode') === 'game' ? 'game' : 'video'
     } catch {
       return 'video'
