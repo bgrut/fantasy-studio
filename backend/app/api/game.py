@@ -1310,6 +1310,32 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         # identical men standing in for birds.
         _STRUCTURAL = {"guard", "guide", "hostile", "vehicle"}
 
+        _KIN = {"crocodile": "snake", "alligator": "snake", "gator": "snake", "lizard": "snake", "komodo": "snake", "eel": "snake", "serpent": "snake",
+                "hyena": "wolf", "jackal": "wolf", "coyote": "wolf", "dingo": "wolf", "hound": "dog", "puppy": "dog",
+                "panther": "tiger", "leopard": "tiger", "jaguar": "tiger", "cougar": "tiger", "puma": "tiger", "lion": "tiger", "lynx": "cat", "kitten": "cat",
+                "ape": "gorilla", "chimp": "monkey", "chimpanzee": "monkey", "baboon": "monkey", "lemur": "monkey",
+                "bison": "moose", "buffalo": "moose", "ox": "moose", "yak": "moose", "stag": "deer", "doe": "deer", "reindeer": "elk", "caribou": "elk", "antelope": "gazelle",
+                "pony": "horse", "mule": "horse", "donkey": "horse", "camel": "horse", "zebra": "horse",
+                "orca": "whale", "dolphin": "whale", "piranha": "fish", "trout": "fish", "salmon": "fish", "barracuda": "shark",
+                "hawk": "dragon", "eagle": "dragon", "bat": "firefly", "moth": "firefly", "butterfly": "firefly", "bee": "firefly", "wasp": "firefly",
+                "ghoul": "shadow wraith", "wraith": "shadow wraith", "spectre": "shadow wraith", "specter": "shadow wraith"}
+        _KIN_BY_PATTERN = {"quadruped": ("wolf", "deer"), "aquatic": ("shark", "fish"), "flying": ("dragon", "firefly")}
+
+        def _creature_kin(kind: str, behavior: str):
+            """The nearest library creature for a noun the library lacks: by name
+            first, then by movement pattern (a hostile gets the fiercer kin)."""
+            k = (kind or "").lower().strip()
+            for word, kin in _KIN.items():
+                if word in k and (ensure_playable(kin, verbose=False) or library.resolve(kin)):
+                    return kin
+            pair = _KIN_BY_PATTERN.get(guess_pattern(k))
+            if not pair:
+                return None
+            for kin in (pair if behavior == "hostile" else pair[::-1]):
+                if ensure_playable(kin, verbose=False) or library.resolve(kin):
+                    return kin
+            return None
+
         def _understudy(behavior: str):
             """(kind, glb) for a structural role whose own noun could not be
             cast, or (None, None) if even the fallbacks are missing."""
@@ -1352,6 +1378,19 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             ekind = "man" if (ent.name.lower() in _HUMAN_ALIASES or getattr(ent, "spectral", False)) else ent.name   # a ghost is played by the walker, drawn spectral
             # prefer the ANIMATED variant (real gait — no gliding); static fallback
             glb = ensure_playable(ekind, verbose=False) or library.resolve(ekind)
+            # A CREATURE TAKES ITS KIN (2026-09-21). A crocodile the library
+            # lacked went to image-to-3D generation, which can hang a build for
+            # an hour, and came out as a man. A creature is played by its
+            # nearest kin in the library first (a crocodile by the snake, a
+            # hyena by the wolf), with a note; generation is the last resort.
+            if not glb and guess_pattern(ekind) != "biped":
+                kin = _creature_kin(ekind, ent.behavior)
+                if kin:
+                    job.setdefault("notes", []).append(
+                        f"the {ekind} is played by the {kin} for now: your library has no {ekind} "
+                        f"(a prompt that is only about a {ekind} creates one, then it is free forever)")
+                    ekind = kin
+                    glb = ensure_playable(ekind, verbose=False) or library.resolve(ekind)
             if not glb and not any(w in req.prompt.lower()
                                    for w in ekind.lower().split()):
                 # INVITED NOUNS ONLY (2026-07-07): the LLM sometimes invents

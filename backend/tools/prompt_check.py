@@ -171,13 +171,14 @@ def main() -> int:
         if job is None:                                # --reuse and nothing finished with this sentence: a miss, never a rebuild
             job = {"status": "unfinished", "error": "no finished build with this sentence"}
         if job.get("status") != "complete":
-            rows.append({"prompt": prompt, "job": job.get("id"), "title": None, "genre": None, "hits": [], "misses": [f"build {job.get('status')}: {job.get('error') or ''}"], "brief": [], "secs": secs})
+            rows.append({"prompt": prompt, "job": job.get("id"), "title": None, "genre": None, "hits": [], "misses": [f"build {job.get('status')}: {job.get('error') or ''}"], "brief": [], "standins": [], "secs": secs})
             print(f"  {prompt[:60]:60} -> FAILED {job.get('status')}", flush=True)
             continue
         hits, misses = score(job, want)
         brief = list(job.get("brief_errors") or [])
+        standins = [n.split(" for now")[0] for n in (job.get("notes") or []) if "is played by" in n]   # the studio's own stand-in notes
         rows.append({"prompt": prompt, "job": job.get("id"), "title": (job.get("spec_resolved") or {}).get("title"), "genre": job.get("genre"),
-                     "hits": hits, "misses": misses, "brief": brief, "secs": secs})
+                     "hits": hits, "misses": misses, "brief": brief, "standins": standins, "secs": secs})
         n, t = len(hits), len(hits) + len(misses)
         print(f"  {prompt[:60]:60} -> job {job.get('id')} {n}/{t}" + (" | " + "; ".join(misses) if misses else "") + (f" | off-brief: {'; '.join(brief)}" if brief else ""), flush=True)
 
@@ -192,10 +193,10 @@ def main() -> int:
     md = ["# Prompt fidelity", "",
           f"Scored on {time.strftime('%Y-%m-%d')} by `backend/tools/prompt_check.py`: each sentence carries what a careful reader would expect from it, and the build is scored on how many of those it delivered, read from the resolved spec the studio wrote. The studio's own off-brief notes ride along.", "",
           f"**{total_hits} of {total} expectations met ({mean:.0%}).** " + ("Pass." if ok else "Below the line (0.85, no genre missed, every build finished).") + (f" {len(unfinished)} build(s) did not finish." if unfinished else ""), "",
-          "| the sentence | title | genre | score | missed | off-brief |", "|---|---|---|---:|---|---|"]
+          "| the sentence | title | genre | score | missed | stand-ins | off-brief |", "|---|---|---|---:|---|---|---|"]
     for r in rows:
         n, t = len(r["hits"]), len(r["hits"]) + len(r["misses"])
-        md.append(f"| {r['prompt']} | {r['title'] or ''} | {r['genre'] or ''} | {n}/{t} | {'; '.join(r['misses']) or ''} | {'; '.join(r['brief']) or ''} |")
+        md.append(f"| {r['prompt']} | {r['title'] or ''} | {r['genre'] or ''} | {n}/{t} | {'; '.join(r['misses']) or ''} | {'; '.join(r['standins']) or ''} | {'; '.join(r['brief']) or ''} |")
     md += ["", "## What each sentence is held to", ""]
     for item in PROMPTS:
         md.append(f"- {item['prompt']}: " + ", ".join(f"{k} {v}" if not isinstance(v, bool) else k for k, v in item["want"].items()))

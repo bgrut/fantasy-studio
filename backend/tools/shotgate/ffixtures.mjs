@@ -48,7 +48,7 @@ const manor = await p.evaluate(async () => {
   window.__game.tp(dx + nx / nl * 9, dz + nz / nl * 9);
   window.__game.look(Math.atan2(dx - (dx + nx / nl * 9), dz - (dz + nz / nl * 9)) + Math.PI);
   await new Promise(r => setTimeout(r, 900));
-  const n = window.__game.npcs();
+  const n = window.__game.npcs().filter(x => !x.dormant);   // the dormant wave of a survive objective is not on the moor yet
   return { landmark: { kit: L.kit, w: L.w, d: L.d, h: L.h, lamps: L.lamps }, ghosts: n.filter(x => x.spectral).length, npcs: n.length };
 });
 await shot('manor_door');

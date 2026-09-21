@@ -9568,7 +9568,9 @@ async function main() {
   (() => {
     const atkMode = (SPEC.player.attack && SPEC.player.attack !== 'none')
       ? SPEC.player.attack
-      : ((SPEC.entities || []).some(e => e.behavior === 'hostile') ? 'melee' : 'none');
+      : ((SPEC.entities || []).some(e => e.behavior === 'hostile')
+          ? (/^(ranger|hunter)$/.test(String((SPEC.player && SPEC.player.name) || '').toLowerCase().trim()) ? 'ranged' : 'melee')
+          : 'none');
     if (atkMode === 'none') return;
     let handBone = null;
     pg.scene.traverse(o => { if (!handBone && o.isBone && /hand_R/i.test(o.name)) handBone = o; });
@@ -9836,7 +9838,8 @@ async function main() {
 
   // ── player ATTACK: melee arc (sword and claws) or ranged projectiles ──────
   const ATTACK = SPEC.player.attack && SPEC.player.attack !== 'none'
-    ? SPEC.player.attack : (hostilesExist ? 'melee' : 'none');
+    ? SPEC.player.attack
+    : (hostilesExist ? (/^(ranger|hunter)$/.test(String((SPEC.player && SPEC.player.name) || '').toLowerCase().trim()) ? 'ranged' : 'melee') : 'none');
   if (ATTACK !== 'none') {
     const hint = document.querySelector('#hud .hint');
     if (hint) hint.textContent += ` · F to ${ATTACK === 'ranged' ? 'shoot' : 'attack'}`;
@@ -9915,7 +9918,14 @@ async function main() {
     { id: 'launcher', name: 'Launcher', icon: '🧨', reach: 60, dmg: 3,
       cd: 1.5, blast: 7.0, desc: 'lobbed shell: everything nearby goes down' },
   ];
-  let weaponIdx = 0, aimT = 0;
+  // THE ROLE CHOOSES THE WEAPON (2026-09-21). Every hero with hostiles about
+  // held a blade; a detective with a sword reads wrong. The role picks the
+  // starting slot; the spec's own attack setting still decides melee/ranged.
+  const ROLE_WEAPON = { detective: 'pistol', soldier: 'pistol', scientist: 'pistol', explorer: 'pistol', engineer: 'pistol',
+                        ranger: 'bow', hunter: 'bow', knight: 'blade', samurai: 'blade', viking: 'blade', wizard: 'blade' };
+  const HERO_ROLE = String((SPEC.player && SPEC.player.name) || '').toLowerCase().trim();
+  const ROLE_PICK = ROLE_WEAPON[HERO_ROLE] || null;
+  let weaponIdx = (ATTACK !== 'none' && ROLE_PICK === 'pistol') ? 1 : 0, aimT = 0;
   const shells = [], blasts = [];
   // BLAST FX ARE POOLED, NOT CREATED (2026-08-07). Adding a PointLight
   // changes the scene's light COUNT, which invalidates every
@@ -10022,9 +10032,10 @@ async function main() {
         + 'color:#e8e2ff;background:rgba(10,9,18,.72);'
         + 'border:1px solid rgba(167,139,250,.35);border-radius:9px;'
         + 'padding:5px 12px;pointer-events:none;';
-      wl.textContent = WEAPONS[0].icon + ' ' + WEAPONS[0].name;
+      wl.textContent = WEAPONS[weaponIdx].icon + ' ' + WEAPONS[weaponIdx].name;
       document.body.appendChild(wl);
       window.__wpnEl = wl;
+      if (window.__wpnModels) window.__wpnModels.forEach((g4, i) => { g4.visible = (i === weaponIdx); });   // the hand holds the role's weapon from the first frame
       // AIM RETICLE. Only the pistol has one — a blade has nothing to aim
       // and the launcher is lobbed, so a crosshair on either would be
       // lying about how they work.
@@ -10417,7 +10428,7 @@ async function main() {
                     active: steps[stepIdx] ? stepLabel(steps[stepIdx]) : null, won }),
     objectives: () => ({ collected: steps.filter(s => s.kind === 'collect').reduce((a, s) => a + (s._got || 0), 0),
                          left: collectibles.filter(c => c.mesh.parent).map(c => c.mesh.position.toArray()) }),
-    npcs: () => npcs.filter(n => !n.gone).map(n => ({ behavior: n.behavior, dead: !!n.dead, pos: n.obj.position.toArray(), spectral: !!n.spectral, name: n.name,
+    npcs: () => npcs.filter(n => !n.gone).map(n => ({ behavior: n.behavior, dead: !!n.dead, dormant: !!n.dormant, pos: n.obj.position.toArray(), spectral: !!n.spectral, name: n.name,
                                                       mode: n.mode, alert: n.alert, playT })),
     placed: () => placedItems.map(p => ({ kind: p.it.kind, x: p.it.x, z: p.it.z,
                                           interact: !!p.it.interact, alive: !!p.anim })),
@@ -10442,6 +10453,8 @@ async function main() {
         style: SPEC.style || 'default',
         archetype: (SPEC.world && SPEC.world.archetype) || 'plain',
         mode: P.mode || 'walk',
+        hero: (SPEC.player && SPEC.player.name) || null,
+        weapon: (typeof WEAPONS !== 'undefined' && ATTACK !== 'none') ? (WEAPONS[weaponIdx] || WEAPONS[0]).id : null,
         buoyant: !!P.buoyant,
         water_level: SPEC.world.water_level == null ? null : +SPEC.world.water_level,
       };
@@ -10452,7 +10465,12 @@ async function main() {
         f.ground_color = '#' + gmat.color.getHexString();
       } catch (e) { f.ground_tex = null; }
       try {
-        const bb = new THREE.Box3().setFromObject(holder);
+        // THE POSE THE PLAYER SEES (2026-09-21): the loose box read the bind pose, arms
+        // out, 2.2 m wide, and the brief check called a standing hero lying down
+        // and the body alone: the weapon groups on the hand point forward and
+        // made a standing hero two metres deep
+        let body = null; holder.traverse(o => { if (!body && o.isSkinnedMesh) body = o; });
+        const bb = new THREE.Box3().setFromObject(body || holder, true);
         f.player_dims = [bb.max.x - bb.min.x, bb.max.y - bb.min.y,
                          bb.max.z - bb.min.z].map(v => +v.toFixed(3));
         f.player_y = +playerObj.position.y.toFixed(3);

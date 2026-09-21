@@ -55,15 +55,21 @@ if (r.landmark) {
   }, r.landmark);
   await p.screenshot({ path: process.env.OUT || 'building.png' });
 }
-const cast = await p.evaluate(() => { const ns = window.__game.npcs(); return { ghosts: ns.filter(n => n.spectral).length, animals: ns.filter(n => /wolf|bear|boar/.test(n.name || '')).length, total: ns.length }; });
+// a survive objective keeps a dormant wave that wakes later; only the ghosts present count
+const cast = await p.evaluate(() => { const ns = window.__game.npcs().filter(n => !n.dormant); return { ghosts: ns.filter(n => n.spectral).length, animals: ns.filter(n => /wolf|bear|boar/.test(n.name || '')).length, total: ns.length }; });
 // the spawn faced the door: the heading at boot points within a third of a turn of it
 const faced = await p.evaluate(() => { const L = window.__game.landmark(); const y0 = window.__game.heading0; if (!L || y0 === undefined) return null;
   const want = Math.atan2(L.door[0], L.door[1]) + Math.PI; let d = Math.abs(((y0 - want) % (Math.PI * 2) + Math.PI * 3) % (Math.PI * 2) - Math.PI); return { off: +d.toFixed(2), lamps: L.lamps || 0 }; });
 console.log('the spawn :', faced ? 'faced the door within ' + faced.off + ' rad | lamps ' + faced.lamps : 'no heading');
 console.log('the cast  :', cast.ghosts, 'ghosts,', cast.animals, 'animals of', cast.total);
 console.log('walked    :', JSON.stringify(blocked));
+// the hero: measured standing in the pose the player sees, holding the role's weapon
+const hero = await p.evaluate(() => { const f = window.__game.facts(); return { dims: f.player_dims, hero: f.hero, weapon: f.weapon }; });
+const standing = hero.dims && hero.dims[1] >= Math.max(hero.dims[0], hero.dims[2]) * 0.9;
+console.log('the hero  :', hero.hero, '| box', JSON.stringify(hero.dims), '| standing', standing, '| holds', hero.weapon);
 console.log('errors    :', errs.length ? errs.join(' | ') : 'none');
 await b.close();
-const ok = r.landmark && r.landmark.w > 5 && r.landmark.h > 5 && errs.length === 0 && cast.ghosts > 0 && cast.ghosts <= 3 && cast.animals === 0   // a haunting has ghosts, not wolves, and not a crowd
+const ok = r.landmark && r.landmark.w > 5 && r.landmark.h > 5 && errs.length === 0
+  && standing && (hero.hero !== 'detective' || hero.weapon === null || hero.weapon === 'pistol')   // a detective with a weapon holds the pistol; a build with no hostiles holds nothing && cast.ghosts > 0 && cast.ghosts <= 3 && cast.animals === 0   // a haunting has ghosts, not wolves, and not a crowd
   && faced && faced.off < 1.05 && faced.lamps === 3;
 process.exit(ok ? 0 : 1);
