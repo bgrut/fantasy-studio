@@ -498,8 +498,15 @@ try:
     rw,rh=rimg.size
     rp=np.array(rimg.pixels[:],dtype=np.float32).reshape(rh,rw,4)[::-1,:,:3]
     mx=rp.max(2); mn=rp.min(2); sat=(mx-mn)/(mx+1e-6)
-    rm=((sat>0.18)|(mx<0.32))
     by=int(rh*0.04); bx=int(rw*0.04)
+    # THE BACKDROP RULE (2026-09-25). Saturated-or-dark missed a white lab
+    # coat on the grey studio backdrop: the mask held the badge and the hair,
+    # every orientation scored near zero, and the scientist shipped lying on
+    # her back. The subject is whatever differs from the backdrop, whose
+    # colour is the median of the border ring; the old rule stays as a union.
+    ring=np.concatenate([rp[:by].reshape(-1,3),rp[rh-by:].reshape(-1,3),rp[:,:bx].reshape(-1,3),rp[:,rw-bx:].reshape(-1,3)])
+    bgc=np.median(ring,0)
+    rm=((sat>0.18)|(mx<0.32)|(np.abs(rp-bgc).max(2)>0.10))
     tmpm=np.zeros_like(rm); tmpm[by:rh-by,bx:rw-bx]=rm[by:rh-by,bx:rw-bx]; rm=tmpm
     refc=canvas(rm)
     if refc is None: raise RuntimeError("empty reference mask")
@@ -587,7 +594,23 @@ try:
     bpy.data.objects.remove(co,do_unlink=True); bpy.data.cameras.remove(cam)
     bpy.data.objects.remove(so,do_unlink=True); bpy.data.lights.remove(sun)
 
-    if best_eu is None or best_iou < MIN_IOU:
+    geo_fallback=False
+    if (best_eu is None or best_iou < MIN_IOU) and __UPRIGHTBIPED__:
+        # THE GEOMETRIC FALLBACK (2026-09-25). When no silhouette matches the
+        # photo, a biped is still stood up rather than left as it came: the
+        # candidate that makes the figure tallest wins (a standing person is
+        # taller than wide), and the leg-gap prior below turns it head-up.
+        # Facing stays a guess; lying down is not a guess anyone should ship.
+        best_t=-1.0
+        for eu in cands:
+            o.rotation_euler=(math.radians(eu[0]),math.radians(eu[1]),math.radians(eu[2]))
+            bpy.context.view_layer.update()
+            ws=[o.matrix_world@Vector(c) for c in o.bound_box]
+            ex=max(p.x for p in ws)-min(p.x for p in ws); ey=max(p.y for p in ws)-min(p.y for p in ws); ez=max(p.z for p in ws)-min(p.z for p in ws)
+            t=ez/max(ex,ey,1e-6)
+            if t>best_t: best_t=t; best_eu=eu
+        geo_fallback=True; best_cc=0.0
+    if best_eu is None or (best_iou < MIN_IOU and not geo_fallback):
         out={"ok":False,"reason":"low_iou","iou":round(max(best_iou,0),3),"tried":len(cands)}
     else:
         # apply best, then azimuth-normalize (long horizontal -> Y) + ground
@@ -669,7 +692,7 @@ try:
                 zsq=[(o.matrix_world@Vector(c)).z for c in o.bound_box]; o.location.z-=min(zsq)
                 bpy.context.view_layer.update(); flipped=2
         out={"ok":True,"euler":list(best_eu),"iou":round(best_iou,3),"tried":len(cands),
-             "color_corr":round(best_cc,3),
+             "color_corr":round(best_cc,3),"fallback":"geometry" if geo_fallback else "",
              "wheels_flip":flipped,"post_dims":[round(d,3) for d in o.dimensions]}
     __result__=json.dumps(out)
 except Exception as e:

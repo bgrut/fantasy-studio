@@ -2558,6 +2558,16 @@ def get_library():
     except Exception:
         data = {}
     import hashlib as _hl
+    # THE JUDGE'S VIEW (2026-09-25): each entry carries the manifest's verdict
+    # (good / fair / poor), the reasons, how much the judge believes it looks
+    # like its name, and the triangle count, so the Assets page is the
+    # library's quality board and not only its list.
+    by_file = {}
+    try:
+        for r in _json.loads((BACKEND_ROOT / "assets" / "library_manifest.json").read_text(encoding="utf-8")).get("assets", []):
+            by_file[r.get("file", "").lower()] = r
+    except Exception:
+        by_file = {}
     # NEWEST FIRST: library.json preserves insertion order — reverse it so
     # freshly created characters top the Assets page
     for kind, entry in list(data.items())[::-1]:
@@ -2565,6 +2575,13 @@ def get_library():
         p = lib.BACKEND_ROOT / rel
         key = _hl.md5(kind.lower().encode("utf-8")).hexdigest()[:12]
         has_thumb = (BACKEND_ROOT / "renders" / "_actor_cache" / f"{key}_ref.png").exists()
+        stem = "".join(ch if ch.isalnum() else "_" for ch in kind)
+        has_render = (BACKEND_ROOT / "tools" / "shotgate" / "renders" / f"{stem}_shaded.png").exists()
+        rec = by_file.get(Path(rel).name.lower(), {}) if rel else {}
+        rd = rec.get("render") or {}
+        # the rig lives in <kind>_anim.glb, a record of its own: its bones say what body this is
+        arec = by_file.get(Path(rel).stem.lower() + "_anim.glb", {}) if rel else {}
+        bones = arec.get("bones") or rec.get("bones") or 0
         out.append({
             "kind": kind,
             "ready": isinstance(entry, str),
@@ -2572,8 +2589,28 @@ def get_library():
             "size_mb": round(p.stat().st_size / 1e6, 1) if p.exists() else None,
             "source": "generated",
             "thumb": f"/api/game/library/thumb/{kind}" if has_thumb else None,
+            "render": f"/api/game/library/render/{kind}" if has_render else None,
+            "verdict": rec.get("verdict"),
+            "reasons": rec.get("quality_reasons") or [],
+            "looks_like": rd.get("looks_like"),
+            "tris": (rec.get("mesh") or {}).get("tris"),
+            "rigged": bool(arec) or bool(rec.get("skinned")) or bool(rec.get("clips")),
+            "body": "biped" if (rec.get("biped") or arec.get("biped")) else ("quadruped" if bones and bones <= 14 else None),
         })
-    return {"ok": True, "assets": out, "count": len(out)}
+    return {"ok": True, "assets": out, "count": len(out),
+            "verdicts": {v: sum(1 for a in out if a["verdict"] == v) for v in ("good", "fair", "poor")}}
+
+
+@router.get("/api/game/library/render/{kind}")
+def library_render(kind: str):
+    """The judge's picture: the shaded three-quarter render assetview.mjs made
+    of the model itself, which is what the verdict was scored on."""
+    from fastapi.responses import FileResponse
+    stem = "".join(ch if ch.isalnum() else "_" for ch in kind)
+    p = BACKEND_ROOT / "tools" / "shotgate" / "renders" / f"{stem}_shaded.png"
+    if not p.exists():
+        raise HTTPException(status_code=404, detail="no render for this asset")
+    return FileResponse(str(p), media_type="image/png")
 
 
 @router.get("/api/game/library/thumb/{kind}")
@@ -2599,40 +2636,37 @@ def reroll_asset(req: RerollAssetRequest):
     with a random seed offset — a different take on the same character.
     Blocking (~6 min GPU); the frontend shows progress and then rebuilds
     the game so the new hero ships."""
-    import hashlib as _hl
-    import os as _os
-    import random as _rd
-    from pathlib import Path as _Pth
+    # WITH THE JUDGE IN THE LOOP (2026-09-25): a reroll is tools/regen.py,
+    # the same path the library's poor models are remade by. The old model
+    # is retired (kept under assets/library/_retired), two seeds are tried,
+    # each rendered and judged, and a good or fair result is kept; a kind
+    # that is still poor is left out, where a stand-in plays it honestly.
+    import json as _j
+    import subprocess as _sp
+    import sys as _sys
     from app.game_export import library as _lib
-    from app.game_export.generate import ensure_asset, guess_pattern
-    from app.game_export.bake import ensure_playable
     kind = req.kind.strip().lower()
-    h = _hl.md5(kind.encode()).hexdigest()[:12]
-    for f in _Pth(BACKEND_ROOT / "renders" / "_actor_cache").glob(h + "*"):
-        f.unlink(missing_ok=True)
-    safe = kind.replace(" ", "_")
-    for pat in (safe + ".glb", safe + "_anim.glb", safe + "_atlas.png"):
-        (_Pth(BACKEND_ROOT / "assets" / "library") / pat).unlink(missing_ok=True)
+    log = BACKEND_ROOT / "renders" / "reroll_last.log"
     try:
-        import json as _j
-        _lj = _j.loads(_lib.LIBRARY_JSON.read_text(encoding="utf-8"))
-        _lj.pop(kind, None)
-        _lib.LIBRARY_JSON.write_text(_j.dumps(_lj, indent=2), encoding="utf-8")
+        with open(log, "w", encoding="utf-8") as fh:
+            _sp.run([_sys.executable, "-u", str(BACKEND_ROOT / "tools" / "regen.py"), "--attempts", "2", kind],
+                    cwd=str(BACKEND_ROOT), stdout=fh, stderr=_sp.STDOUT, timeout=3600, check=False,
+                    env={**__import__("os").environ, "PYTHONIOENCODING": "utf-8"})
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(500, f"reroll failed for '{kind}': {type(e).__name__}")
+    _lib._MANIFEST = None
+    verdict = "unknown"
+    try:
+        entry = _j.loads(_lib.LIBRARY_JSON.read_text(encoding="utf-8")).get(kind)
+        rel = entry if isinstance(entry, str) else (entry or {}).get("raw", "")
+        rec = _lib._manifest().get(Path(rel).name.lower()) if rel else None
+        verdict = (rec or {}).get("verdict", "unknown" if rel else "left out")
     except Exception:
         pass
-    _os.environ["FS_REF_SEED"] = str(_rd.randint(1000, 999999))
-    try:
-        ensure_asset(kind, verbose=False)
-        if guess_pattern(kind) in ("vehicle", "flying", "aquatic", "static"):
-            ok = bool(_lib.resolve(kind))
-        else:
-            ok = bool(ensure_playable(kind, verbose=False))
-    finally:
-        _os.environ.pop("FS_REF_SEED", None)
-    if not ok:
-        raise HTTPException(500, f"reroll failed for '{kind}': the previous "
-                                 "hero was purged; generate any game with it to retry")
-    return {"ok": True, "kind": kind}
+    if verdict not in ("good", "fair"):
+        raise HTTPException(500, f"reroll of '{kind}' came out {verdict}; the old model is retired and a "
+                                 "stand-in plays the part until a better seed lands (renders/reroll_last.log)")
+    return {"ok": True, "kind": kind, "verdict": verdict}
 
 
 @router.post("/api/game/jobs/{job_id}/cancel")

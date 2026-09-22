@@ -131,11 +131,29 @@ def _gen_trellis2(pil_image, output_path: Path, seed: int = 42) -> Path:
            "--output-path", str(output_path),
            "--seed", str(seed)]
     print(f"[trellis2] running subprocess (isolated venv)…")
-    proc = subprocess.run(cmd, cwd=str(_BACKEND_ROOT), capture_output=True, text=True,
+    proc = subprocess.run(cmd, cwd=str(_BACKEND_ROOT), capture_output=True, text=True, encoding="utf-8", errors="replace",
                           timeout=1800)
+    if proc.returncode == 3221225477 and not output_path.exists():
+        # an access violation at pipeline load is the card being handed over
+        # (a bridge Blender or a judge's Chrome just closed); the same call
+        # ten seconds later has worked every time it was tried (2026-09-25)
+        print("[trellis2] access violation at load; one retry after the card settles", flush=True)
+        time.sleep(10)
+        proc = subprocess.run(cmd, cwd=str(_BACKEND_ROOT), capture_output=True, text=True, encoding="utf-8", errors="replace",
+                              timeout=1800)
+    # the whole transcript, every run: an exit 1 after "Sampling attributes"
+    # with an 800-byte tail showed the loader's harmless first miss and not
+    # the CUDA error that mattered (2026-09-25)
+    try:
+        (_BACKEND_ROOT / "renders" / "trellis2_last.log").write_text(
+            (proc.stdout or "") + "\n--- stderr ---\n" + (proc.stderr or ""), encoding="utf-8", errors="replace")
+    except OSError:
+        pass
     if proc.returncode != 0 or not output_path.exists():
-        tail = (proc.stderr or proc.stdout or "")[-800:]
-        raise RuntimeError(f"TRELLIS.2 failed (exit {proc.returncode}):\n{tail}")
+        err = proc.stderr or ""
+        lines = [ln for ln in err.splitlines() if any(k in ln for k in ("Error", "error", "OutOfMemory", "out of memory", "Traceback", "Exception"))]
+        tail = ("\n".join(lines[-6:]) + "\n" if lines else "") + (err or proc.stdout or "")[-1200:]
+        raise RuntimeError(f"TRELLIS.2 failed (exit {proc.returncode}, see renders/trellis2_last.log):\n{tail}")
     return output_path
 
 
@@ -184,7 +202,7 @@ def _gen_triposg(pil_image, output_path: Path, faces: int = 60000,
         cmd += ["--faces", str(faces)]
 
     print(f"[triposg] running subprocess (isolated venv)…")
-    proc = subprocess.run(cmd, cwd=str(_TRIPOSG_DIR), capture_output=True, text=True,
+    proc = subprocess.run(cmd, cwd=str(_TRIPOSG_DIR), capture_output=True, text=True, encoding="utf-8", errors="replace",
                           timeout=600)
     if proc.returncode != 0 or not output_path.exists():
         tail = (proc.stderr or proc.stdout or "")[-800:]

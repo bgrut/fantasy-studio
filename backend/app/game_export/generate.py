@@ -195,6 +195,27 @@ def ensure_asset(kind: str, pattern: str | None = None, target_tris: int = 45000
         Render front+back and compare: near-identical = mirrored artifact."""
         import subprocess as _sp
         import tempfile as _tf
+        # ONLY A STANDING MESH CAN BE TWO-FACED (2026-09-25). TRELLIS.2 rests
+        # a figure in its own frame, and the bake stands it up later; judged
+        # raw, a figure lying flat is seen from above and below, two views
+        # that match at 0.78 whatever the texture, and a good mesh was thrown
+        # away for it. A raw mesh whose tallest axis is not Y is left to the
+        # bake's orientation gate, and the comparison itself now asks the head
+        # band as well: a white coat is alike front and back, a face is not.
+        try:
+            import sys as _sys2
+            _tp = str(BACKEND_ROOT / "tools")
+            if _tp not in _sys2.path:
+                _sys2.path.insert(0, _tp)
+            from assetmeta import measure as _measure
+            _dm = (_measure(Path(glb_path)).get("dims_m") or {})
+            if _dm and _dm.get("y", 0) < max(_dm.get("x", 0), _dm.get("z", 0)):
+                if verbose:
+                    print("[game] two-faced gate skipped: the raw mesh is not standing in its own frame; the bake orients it")
+                return False
+        except Exception as _me:  # noqa: BLE001
+            if verbose:
+                print(f"[game] two-faced gate: could not measure the raw mesh ({type(_me).__name__}); judging anyway")
         try:
             import numpy as _np
             from PIL import Image as _Im
@@ -219,9 +240,12 @@ def ensure_asset(kind: str, pattern: str | None = None, target_tris: int = 45000
                 f = _norm(_P(td) / "front.png")
                 b = _norm(_P(td) / "back.png")
                 sim = float((f * b).mean())
+                _hb = max(4, int(f.shape[0] * 0.25))            # the head band: a mirrored face shows here
+                _fh, _bh = f[:_hb], b[:_hb]
+                sim_head = float(((_fh - _fh.mean()) * (_bh - _bh.mean())).mean() / (_fh.std() * _bh.std() + 1e-6))
                 if verbose:
-                    print(f"[game] two-faced gate: front/back similarity {sim:.2f}")
-                return sim > 0.55
+                    print(f"[game] two-faced gate: front/back similarity {sim:.2f}, head {sim_head:.2f}")
+                return sim > 0.55 and sim_head > 0.5
         except Exception:
             return False
 
@@ -291,9 +315,22 @@ def ensure_asset(kind: str, pattern: str | None = None, target_tris: int = 45000
                         _t2.cuda.empty_cache()
                 except Exception:
                     pass
-                generate_mesh(ref_png, output_path=raw_glb,
-                              engine="trellis2" if not cpu_gen else "triposr",
-                              tier="fast", base_pattern=pattern)
+                # THE SAME CHAIN AS THE FIRST ROLL (2026-09-25): this retry
+                # called TRELLIS.2 alone, so when it was down every retry died
+                # after TripoSG had already made a perfectly good mesh
+                _last2 = None
+                for _eng2 in _chain:
+                    try:
+                        generate_mesh(ref_png, output_path=raw_glb, engine=_eng2,
+                                      tier="fast", base_pattern=pattern)
+                        _last2 = None
+                        break
+                    except Exception as ge2:
+                        _last2 = ge2
+                        if verbose:
+                            print(f"[game] retry: {_eng2} failed ({type(ge2).__name__}: {str(ge2)[:100]})")
+                if _last2 is not None:
+                    raise _last2
             finally:
                 _os2.environ.pop("FS_REF_SEED", None)
     elif verbose:

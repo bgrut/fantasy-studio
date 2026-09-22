@@ -34,7 +34,14 @@ def main():
     ap.add_argument("--output-path", required=True)
     ap.add_argument("--seed", type=int, default=42)
     ap.add_argument("--texture-size", type=int,
-                    default=int(os.environ.get("FS_TRELLIS_TEXSIZE", "4096")))
+                    default=int(os.environ.get("FS_TRELLIS_TEXSIZE", "2048")))   # 2026-09-25: the 4096 atlas ran the 30 GB machine out of RAM at export; the bake resamples anyway
+    # THE RESOLUTION FITS THE CARD (2026-09-25): the 1024 cascade decoded a
+    # mesh whose edge pass ran out of video memory on a 16 GB card sharing
+    # the desktop, and every TRELLIS.2 run had been failing over to TripoSG,
+    # untextured. 512 fits with room to spare; 1024_cascade when the card is
+    # free (FS_TRELLIS_PIPE=1024_cascade).
+    ap.add_argument("--pipeline-type", default=os.environ.get("FS_TRELLIS_PIPE", "512"),
+                    choices=["512", "1024", "1024_cascade", "1536_cascade"])
     args = ap.parse_args()
 
     import torch  # noqa: E402
@@ -81,7 +88,8 @@ def main():
     t1 = time.time()
     # NOTE: run() calls torch.manual_seed(seed) internally with its OWN default,
     # so the seed MUST be passed here — seeding beforehand is silently ignored.
-    mesh = pipeline.run(image, seed=args.seed)[0]
+    print(f"[trellis2] pipeline type {args.pipeline_type}", flush=True)
+    mesh = pipeline.run(image, seed=args.seed, pipeline_type=args.pipeline_type)[0]
     mesh.simplify(16777216)  # nvdiffrast limit
     print(f"[trellis2] mesh generated in {time.time()-t1:.1f}s", flush=True)
 

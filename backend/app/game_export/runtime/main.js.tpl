@@ -6665,7 +6665,13 @@ async function main() {
           type: 'npc', name: ent.name || 'creature',
           detail: `${ent.behavior || 'wander'} · speed ${ent.speed || 1.5}`
                   + (hostile ? ` · hp ${ent.hp || 3}` : '') };
-        npcs.push({ obj: holder, down: 0, kx: 0, kz: 0,
+        // THE BODY CLASS (2026-09-25): the rig says what walks here. A biped
+        // carries 19-20 joints, a quadruped 12; an unrigged model is judged
+        // by its box, longer than tall being four-legged.
+        let _bones = 0; inst.traverse(m => { if (m.isSkinnedMesh && m.skeleton) _bones = Math.max(_bones, m.skeleton.bones.length); });
+        const _bx = new THREE.Box3().setFromObject(inst).getSize(new THREE.Vector3());
+        const quad = _bones > 0 ? _bones <= 14 : Math.max(_bx.x, _bx.z) > _bx.y * 1.15;
+        npcs.push({ obj: holder, down: 0, kx: 0, kz: 0, quad,
                 speed: ent.speed || 1.5, behavior: ent.behavior || 'wander',
                     target: null, yaw: startYaw, phase: rngN() * Math.PI * 2,
                     h: ent.height_m || 1.0, name: ent.name,
@@ -6706,7 +6712,17 @@ async function main() {
       n._roll = THREE.MathUtils.damp(n._roll, THREE.MathUtils.clamp(-yawRate * 0.04 * Math.min(v / 1.5, 1.5), -0.14, 0.14), 6, dt);
       n._pitch = THREE.MathUtils.damp(n._pitch, THREE.MathUtils.clamp((v - n._wv) / Math.max(dt, 1e-3) * 0.015, -0.08, 0.08), 6, dt);
       n._wv = v;
-      if (!(n.down > 0) && !n.spectral) { o.rotation.z = n._roll; o.rotation.x = n._pitch; }   // a knockdown owns the tilt; a ghost floats
+      // GROUND UNDER EVERY CREATURE (2026-09-25): the ground fore and aft
+      // and side to side of the body's own length gives the slope; a
+      // quadruped's spine follows it, a biped leans a little into the hill.
+      if (n._gP === undefined) { n._gP = 0; n._gR = 0; }
+      const _gl = Math.max(0.3, (n.h || 1) * (n.quad ? 0.55 : 0.28));
+      const _sy = Math.sin(yawNow), _cy = Math.cos(yawNow);
+      const _slopeP = Math.atan2(hAt(px + _sy * _gl, pz + _cy * _gl) - hAt(px - _sy * _gl, pz - _cy * _gl), 2 * _gl);
+      const _slopeR = Math.atan2(hAt(px + _cy * _gl, pz - _sy * _gl) - hAt(px - _cy * _gl, pz + _sy * _gl), 2 * _gl);
+      n._gP = THREE.MathUtils.damp(n._gP, THREE.MathUtils.clamp(-_slopeP * (n.quad ? 1.0 : 0.5), -0.55, 0.55), 8, dt);
+      n._gR = THREE.MathUtils.damp(n._gR, THREE.MathUtils.clamp(_slopeR * (n.quad ? 0.7 : 0.0), -0.4, 0.4), 8, dt);
+      if (!(n.down > 0) && !n.spectral) { o.rotation.z = n._roll + n._gR; o.rotation.x = n._pitch + n._gP; }   // a knockdown owns the tilt; a ghost floats
       if (n.anim && n.anim.cur && n.anim.cur !== n.anim.idle) {
         const nominal = n.anim.cur === n.anim.run ? 3.4 : 1.4;                  // what a walk or run clip depicts, roughly
         n.anim.cur.timeScale = v > 0.05 ? THREE.MathUtils.clamp(v / nominal, 0.6, 2.4) : 1;
@@ -9525,13 +9541,19 @@ async function main() {
   // generated material
   if (P.car_params && P.car_params.library) {
     const paint = new THREE.Color(P.car_params.paint || 0xb5202a).multiplyScalar(0.72);   // deeper than the flat hex: a white albedo times a light red reads salmon under the night fill
+    // WEAR (2026-09-25): the same per-car finish the parametric fleet has, from
+    // a hash of the paint, so a library car is not a showroom respray every time
+    const _h7 = ((P.car_params.paint || 0xb5202a) * 2654435761) % 1000 / 1000;
+    const _wear = 0.2 + _h7 * 0.6;
     pRoot.traverse(o => {
       if (!o.isMesh) return;
       for (const m of Array.isArray(o.material) ? o.material : [o.material]) {
         if (!m || !m.color) continue;
         m.color.copy(paint);
         if ('metalness' in m) m.metalness = Math.max(m.metalness || 0, 0.3);
-        if ('roughness' in m) m.roughness = Math.min(m.roughness === undefined ? 1 : m.roughness, 0.42);
+        if ('roughness' in m) m.roughness = 0.22 + _wear * 0.36;
+        if ('clearcoat' in m) { m.clearcoat = 1.0 - _wear * 0.45; m.clearcoatRoughness = 0.03 + _wear * 0.22; }
+        if ('envMapIntensity' in m) m.envMapIntensity = 1.15 - _wear * 0.5;
         if (m.emissive) { m.emissive.setScalar(0); m.emissiveMap = null; }
         m.userData.noAutoTex = true; m.needsUpdate = true;
       }
@@ -10660,7 +10682,8 @@ async function main() {
         car: (pg.scene && pg.scene.userData && pg.scene.userData.car) || ((DRIVE || DRIVING) && P.asset && (!P.car_params || P.car_params.library) ? { model: 'library', file: String(P.asset).split(/[\/]/).pop(), paint: P.car_params ? P.car_params.paint : null } : null),
         crowd: { near: (window.__peds || []).filter(q => q.obj.visible).length, impostors: window.__pedImpostor ? window.__pedImpostor.n : 0, total: (window.__peds || []).length },
         light: { night: _isNightSky, moon: +pal.sun.toFixed(2), amb: +pal.amb.toFixed(2), exposure: +renderer.toneMappingExposure.toFixed(2), hero_fill: +heroFill.intensity.toFixed(1) },
-        npc_weight: npcs.filter(n => n._v !== undefined && !n.dead && !n.dormant).map(n => ({ v: +n._v.toFixed(2), roll: +(n._roll || 0).toFixed(3), rate: n.anim && n.anim.cur ? +n.anim.cur.timeScale.toFixed(2) : null })).slice(0, 12),
+        npc_weight: npcs.filter(n => n._v !== undefined && !n.dead && !n.dormant).map(n => ({ v: +n._v.toFixed(2), roll: +(n._roll || 0).toFixed(3), rate: n.anim && n.anim.cur ? +n.anim.cur.timeScale.toFixed(2) : null, quad: !!n.quad, ground: +(n._gP || 0).toFixed(3) })).slice(0, 12),
+        bodies: { quad: npcs.filter(n => n.quad && !n.dead).length, biped: npcs.filter(n => !n.quad && !n.dead).length, sloped: npcs.filter(n => Math.abs(n._gP || 0) > 0.02 || Math.abs(n._gR || 0) > 0.02).length },
         drive: (DRIVE || DRIVING) ? { speed: +Math.hypot(carVX, carVZ).toFixed(2), slip: +(window.__slip || 0).toFixed(3), drifting: !!window.__drifting, handbrake: !!window.__handbrake, steer_ease: +(window.__steerEase === undefined ? 1 : window.__steerEase).toFixed(3), top: +(P.run_speed || 0),
                                       skids: _skidLife ? Array.from(_skidLife).filter(v => v > 0).length : 0, smoke: _smoke ? _smoke.filter(x => x.visible).length : 0,
                                       peds_visible: (window.__peds || []).filter(q => q.obj.visible).length, peds_casting: (window.__peds || []).filter(q => q._cast).length } : null,

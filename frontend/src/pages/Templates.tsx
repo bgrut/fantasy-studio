@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { rerollAsset } from '../lib/gameApi'
 import {
   Loader2,
   Layers,
@@ -73,12 +74,27 @@ export default function Templates() {
   // YOUR CHARACTERS (2026-07-06): the generated library — every character
   // created from a prompt, newest first. These ARE the marketplace seed;
   // the curated CC-BY set below is the fallback catalog.
-  type LibChar = { kind: string; ready: boolean; size_mb: number | null; thumb: string | null }
+  // THE JUDGE'S VIEW (2026-09-25): each card carries the library's verdict
+  // (good, fair, poor), the judge's belief that it looks like its name, and
+  // the judge's own render of the model on hover; a poor one offers a reroll.
+  type LibChar = { kind: string; ready: boolean; size_mb: number | null; thumb: string | null; render: string | null
+    verdict: 'good' | 'fair' | 'poor' | null; reasons: string[]; looks_like: number | null; tris: number | null; rigged: boolean; body: string | null }
   const [libChars, setLibChars] = useState<LibChar[]>([])
+  const [libVerdicts, setLibVerdicts] = useState<{ good: number; fair: number; poor: number } | null>(null)
+  const [rerolling, setRerolling] = useState<string | null>(null)
+  const reroll = useCallback(async (kind: string) => {
+    setRerolling(kind)
+    try {
+      await rerollAsset(kind)
+      const d = await fetch('/api/game/library').then(r => r.json())
+      setLibChars(d.assets ?? []); setLibVerdicts(d.verdicts ?? null)
+    } catch { /* the card keeps its old verdict; the backend log has the reason */ }
+    finally { setRerolling(null) }
+  }, [])
   useEffect(() => {
     fetch('/api/game/library')
       .then(r => r.json())
-      .then(d => setLibChars(d.assets ?? []))
+      .then(d => { setLibChars(d.assets ?? []); setLibVerdicts(d.verdicts ?? null) })
       .catch(() => setLibChars([]))
   }, [])
 
@@ -184,9 +200,12 @@ export default function Templates() {
         <div className="space-y-3">
           <div className="flex items-center gap-2">
             <Sparkles className="w-4 h-4 text-[#5cffc9]" />
-            <h2 className="text-lg font-semibold text-white">Your characters</h2>
+            <h2 className="text-lg font-semibold text-white">Your assets</h2>
             <span className="text-xs font-mono text-[#807d99]">
               {libChars.length} created · playable in games &amp; castable in videos
+              {libVerdicts && (
+                <> · judged <span className="text-[#5cffc9]">{libVerdicts.good} good</span>, <span className="text-amber-300">{libVerdicts.fair} fair</span>, <span className="text-red-300">{libVerdicts.poor} poor</span></>
+              )}
             </span>
           </div>
           <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-3">
@@ -200,7 +219,18 @@ export default function Templates() {
                 className="group rounded-xl overflow-hidden border border-white/[0.06] bg-white/[0.02] hover:border-[#5cffc9]/40 transition-colors text-left"
                 title={`use ${c.kind} in a new prompt`}
               >
-                <div className="aspect-square bg-[#141220] flex items-center justify-center overflow-hidden">
+                <div className="aspect-square bg-[#141220] flex items-center justify-center overflow-hidden relative">
+                  {c.verdict && (
+                    <span className={`absolute top-1.5 left-1.5 z-10 px-1.5 py-0.5 rounded text-[10px] font-mono uppercase tracking-wide ${
+                      c.verdict === 'good' ? 'bg-[#5cffc9]/20 text-[#5cffc9]' : c.verdict === 'fair' ? 'bg-amber-400/20 text-amber-300' : 'bg-red-500/25 text-red-300'}`}
+                      title={c.reasons.length ? c.reasons.join(', ') : 'passed every check'}>
+                      {c.verdict}{c.looks_like != null ? ` ${Math.round(c.looks_like * 100)}%` : ''}
+                    </span>
+                  )}
+                  {c.render && (
+                    <img src={c.render} alt={`${c.kind}, the judge's render`} loading="lazy"
+                         className="absolute inset-0 w-full h-full object-cover opacity-0 group-hover:opacity-100 transition-opacity z-[5]" />
+                  )}
                   {c.thumb ? (
                     <img src={c.thumb} alt={c.kind} loading="lazy"
                          className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
@@ -213,7 +243,18 @@ export default function Templates() {
                 </div>
                 <div className="px-2 py-1.5">
                   <p className="text-xs font-mono text-[#c9c6dd] truncate">{c.kind}</p>
-                  <p className="text-[10px] text-[#4a4764]">generated{c.size_mb ? ` · ${c.size_mb} MB` : ''}</p>
+                  <p className="text-[10px] text-[#4a4764]">
+                    {c.body ?? 'generated'}{c.rigged ? ', rigged' : ''}{c.tris ? ` · ${Math.round(c.tris / 1000)}k tris` : ''}{c.size_mb ? ` · ${c.size_mb} MB` : ''}
+                  </p>
+                  {c.verdict === 'poor' && (
+                    <span role="button" tabIndex={0}
+                      onClick={(e) => { e.stopPropagation(); if (!rerolling) reroll(c.kind) }}
+                      onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); if (!rerolling) reroll(c.kind) } }}
+                      className="mt-1 inline-block text-[10px] text-red-300 hover:text-white underline underline-offset-2"
+                      title={`the judge marked this ${c.reasons.join(', ') || 'poor'}; make it again on a new seed (a few minutes on the GPU)`}>
+                      {rerolling === c.kind ? 'making it again...' : 'make it again'}
+                    </span>
+                  )}
                 </div>
               </button>
             ))}

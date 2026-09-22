@@ -46,7 +46,7 @@ CONTROLNET_CONDITIONING_SCALE = float(_os.environ.get("FS_CONTROLNET_SCALE", "0.
 
 REFERENCE_STYLES: Dict[str, Dict[str, str]] = {
     "photoreal": {
-        "positive": "studio photograph, single subject centered, plain neutral background, sharp focus, even lighting, vibrant natural color, high detail, 8k",
+        "positive": "studio photograph, single subject centered, plain neutral background, sharp focus, even lighting, natural color, high detail",
         "negative": "multiple subjects, busy background, blurry, cropped, partial view, watermark, text, "
                     # anti-anatomy-artifact (fixes the 5-legs / fused-limb issue from ControlNet)
                     "extra legs, extra limbs, too many legs, fused limbs, duplicate limbs, "
@@ -92,7 +92,7 @@ PATTERN_REFERENCE_FRAMING: Dict[str, str] = {
     # disagrees with it, so the character keeps its arms out through every
     # clip — idle, walk and run alike. Fixing this means authoring an
     # arms-down biped_depth.png, NOT editing these strings.
-    "biped":     "standing upright, both arms relaxed hanging straight down at sides, open empty hands, nothing held, neutral A-pose, full body in frame, feet flat on ground, fully clothed in a complete outfit, shirt and trousers and footwear, clothing covers the torso and legs",
+    "biped":     "standing upright, arms relaxed hanging straight down at sides, open empty hands, neutral A-pose, full body in frame, feet flat on ground, fully clothed",
     # seamless studio cyclorama (2026-07-22): SDXL loves posing trucks in
     # FORESTS — the busy background then projects onto the body as camo
     # blotch whenever the texture falls back to projection
@@ -431,6 +431,21 @@ def _build_reference_prompt(slots: Dict[str, Any], style: str) -> tuple[str, str
             "angel":     "angel, white robe, large feathered wings",
             "demon":     "demon, horns, dark menacing armor, fantasy",
             "astronaut": "astronaut, white space suit, helmet with visor",
+            # THE ROSTER (2026-09-25): the studio's own hero roles were missing
+            # here, so a "scientist" rendered as a woman in a futuristic sport
+            # suit and became a flayed mesh. Each role gets the wardrobe a
+            # reader expects, in the same voice as the entries above.
+            "scientist": "scientist wearing a white lab coat over a collared shirt and dark trousers, safety glasses, id badge, plain shoes",
+            "detective": "detective in a beige trench coat over a shirt and tie, fedora hat, dark trousers, leather shoes",
+            "ranger":    "forest ranger in a green field jacket and khaki trousers, wide-brimmed hat, hiking boots",
+            "engineer":  "engineer in an orange hi-vis work jacket, white hard hat, cargo trousers, work boots, tool belt",
+            "explorer":  "explorer in a khaki safari shirt and trousers, wide-brimmed hat, leather boots, backpack straps",
+            "hunter":    "hunter in a camouflage jacket and trousers, baseball cap, boots",
+            "courier":   "bicycle courier in a cycling jersey, cap, messenger bag strap across the chest, trainers",
+            "thug":      "street thug in a dark hoodie and jeans, sneakers, tough expression",
+            "driver":    "racing driver in a fireproof racing suit with sponsor patches, no helmet",
+            "guard":     "security guard in a dark uniform shirt with a badge and epaulettes, dark trousers",
+            "walker":    "pedestrian in casual street clothes, jacket, jeans, trainers",
             # generic humans need CLOTHES spelled out or SDXL renders a shirtless
             # anatomy/muscle-suit figure. Order: woman/person before "man" (which
             # is a substring of "woman") so the right one matches first.
@@ -479,12 +494,25 @@ def _build_reference_prompt(slots: Dict[str, Any], style: str) -> tuple[str, str
                 species = desc; vehicle_neg = neg
                 break
 
-    positive_parts = [preset["positive"], f"a {subject_phrase}", species, framing]
+    # THE SUBJECT LEADS (2026-09-25). SDXL's text encoders read 77 tokens and
+    # weigh the first ones most. With the studio boilerplate first, the
+    # wardrobe sat at token forty and the pose framing fell off the end; the
+    # scientist came out in a futuristic jumpsuit. Subject and costume first,
+    # then the framing, then the studio, and the whole thing kept under 77.
+    if species and core and species.lower().startswith(core):   # "a scientist, scientist wearing..." reads as two people
+        positive_parts = [f"a {species}", framing, preset["positive"]]
+    else:
+        positive_parts = [f"a {subject_phrase}", species, framing, preset["positive"]]
     positive = ", ".join(p for p in positive_parts if p)
 
     # Append pattern-specific negative directives so SDXL avoids action poses
     pattern_neg = PATTERN_NEGATIVE.get(base_pattern, "")
-    negative_parts = [preset["negative"], pattern_neg, vehicle_neg]
+    cloth_neg = ""
+    if base_pattern == "biped":
+        _cq = " ".join((identity, name, library_query))
+        if not any(w in _cq for w in ("suit", "armor", "armour", "hero", "astronaut", "space", "racer", "diver", "robot", "cyborg", "pilot", "knight", "samurai", "viking")):
+            cloth_neg = "futuristic bodysuit, skin-tight suit, spandex, spacesuit, superhero costume, sci-fi armor, racing suit, wetsuit, blotchy pattern, printed pattern, camouflage print, paint splashes"
+    negative_parts = [preset["negative"], pattern_neg, vehicle_neg, cloth_neg]
     negative = ", ".join(p for p in negative_parts if p)
     return positive, negative
 
@@ -585,12 +613,25 @@ def generate_reference(
                 species = desc; vehicle_neg = neg
                 break
 
-    positive_parts = [preset["positive"], f"a {subject_phrase}", species, framing]
+    # THE SUBJECT LEADS (2026-09-25). SDXL's text encoders read 77 tokens and
+    # weigh the first ones most. With the studio boilerplate first, the
+    # wardrobe sat at token forty and the pose framing fell off the end; the
+    # scientist came out in a futuristic jumpsuit. Subject and costume first,
+    # then the framing, then the studio, and the whole thing kept under 77.
+    if species and core and species.lower().startswith(core):   # "a scientist, scientist wearing..." reads as two people
+        positive_parts = [f"a {species}", framing, preset["positive"]]
+    else:
+        positive_parts = [f"a {subject_phrase}", species, framing, preset["positive"]]
     positive = ", ".join(p for p in positive_parts if p)
 
     # Append pattern-specific negative directives so SDXL avoids action poses
     pattern_neg = PATTERN_NEGATIVE.get(base_pattern, "")
-    negative_parts = [preset["negative"], pattern_neg, vehicle_neg]
+    cloth_neg = ""
+    if base_pattern == "biped":
+        _cq = " ".join((identity, name, library_query))
+        if not any(w in _cq for w in ("suit", "armor", "armour", "hero", "astronaut", "space", "racer", "diver", "robot", "cyborg", "pilot", "knight", "samurai", "viking")):
+            cloth_neg = "futuristic bodysuit, skin-tight suit, spandex, spacesuit, superhero costume, sci-fi armor, racing suit, wetsuit, blotchy pattern, printed pattern, camouflage print, paint splashes"
+    negative_parts = [preset["negative"], pattern_neg, vehicle_neg, cloth_neg]
     negative = ", ".join(p for p in negative_parts if p)
     return positive, negative
 

@@ -213,6 +213,8 @@ Full detail lives in **[ROADMAP.md](ROADMAP.md)** and **[CHANGELOG.md](CHANGELOG
 
 **Business Source License 1.1** — free for personal and non-commercial use, source visible, attribution required, auto-converts to Apache 2.0 four years after first commit. Commercial licensing available from FantasyLab AI. Full terms in **[LICENSE](LICENSE)**.
 
+Every model and tool the generation pipeline calls, and what each allows, is listed in [backend/PIPELINE_LICENSES.md](backend/PIPELINE_LICENSES.md): the answer for every part in use is that a game made with it can be sold.
+
 ## Acknowledgments
 
 Fantasy Studio stands on a giant pile of generous open work:

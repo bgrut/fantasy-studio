@@ -55,6 +55,8 @@ tools/*
 !tools/PROMPT_FIDELITY.md
 # the asset judge and its render check
 !tools/assetjudge.py
+!tools/regen.py
+assets/library/_retired/
 tools/shotgate/renders/
 !tools/shotgate/
 tools/shotgate/node_modules/
@@ -72,3 +74,4 @@ tools/carlab/vendor/
 # imports Poly Haven CC0 props and packs them into single self-contained GLBs
 !tools/phimport.py
 tools/facadelab/vendor/
+ckpts/

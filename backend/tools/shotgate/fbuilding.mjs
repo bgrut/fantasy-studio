@@ -110,7 +110,8 @@ const lum = await lumOf(p, box);
 console.log('the light :', JSON.stringify(lightF), '| frame', lum.frame, '| sky', lum.sky, '| hero', lum.box);
 // and the cast moves with weight: any npc that moved carries a roll or a clip rate that followed it
 const npcW = await p.evaluate(() => (window.__game.facts().npc_weight || []).filter(x => x.v > 0.3));
-console.log('the cast  : moving', npcW.length, '| rates', npcW.map(x => x.rate).join(' '));
+const bodies = await p.evaluate(() => window.__game.facts().bodies);
+console.log('the cast  : moving', npcW.length, '| rates', npcW.map(x => x.rate).join(' '), '| bodies', JSON.stringify(bodies), '| ground', npcW.map(x => x.ground).join(' '));
 // the hero: measured standing in the pose the player sees, holding the role's weapon
 const hero = await p.evaluate(() => { const f = window.__game.facts(); return { dims: f.player_dims, hero: f.hero, weapon: f.weapon }; });
 const standing = hero.dims && hero.dims[1] >= Math.max(hero.dims[0], hero.dims[2]) * 0.9;
@@ -122,5 +123,6 @@ const ok = r.landmark && r.landmark.w > 5 && r.landmark.h > 5 && errs.length ===
   && feel.early > 0.2 && feel.early < feel.full * 0.85 && feel.full > 1.5 && feel.runFov > feel.base + 2 && feel.dip > 0.03 && feel.stopped < 0.05
   && (!lightF.night || (lightF.moon <= 0.6 && lightF.hero_fill > 0 && lum.box >= 22 && lum.box > lum.frame * 1.15 && lum.sky < 70))
   && feel.gaitW.gait.walk > 0.5 && feel.gaitW.gait.idle < 0.5 && feel.gaitW.gait.rate >= 0.5 && feel.gaitW.gait.rate <= 5.5 && feel.idleW.idle > 0.9 && Math.abs(feel.turning.roll) > 0.01 && !!feel.gaitW.lean.head_bone   // a detective with a weapon holds the pistol; a build with no hostiles holds nothing && cast.ghosts > 0 && cast.ghosts <= 3 && cast.animals === 0   // a haunting has ghosts, not wolves, and not a crowd
-  && faced && faced.off < 1.05 && faced.lamps === 3;
+  && faced && faced.off < 1.05 && faced.lamps === 3
+  && bodies && bodies.quad + bodies.biped > 0 && npcW.every(x => Number.isFinite(x.ground));   // every body knows its class and the ground under it
 process.exit(ok ? 0 : 1);

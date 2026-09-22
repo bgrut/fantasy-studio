@@ -46,15 +46,18 @@ def main() -> int:
         noun = kind.replace("_", " ")
         pos = [f"a photo of a {noun}", f"a clean 3D render of a {noun}", f"a {noun}"]
         neg = ["a broken 3D model with torn fragments and holes", "a pile of shattered debris",
-               "a corrupted mesh, glitch art", "an unrecognizable abstract shape"]
+               "a corrupted mesh, glitch art", "an unrecognizable abstract shape",
+               f"a {noun} with black patches and missing textures"]   # texture damage: a good shape can still wear a torn skin
         with torch.no_grad():
             inputs = proc(text=pos + neg, images=Image.open(png).convert("RGB"), return_tensors="pt", padding=True).to(dev)
             out = model(**inputs)
             logits = out.logits_per_image[0].float().cpu()
             probs = torch.softmax(logits, dim=0)
             p_pos = float(probs[: len(pos)].sum())
+            p_patchy = float(probs[len(pos) + 4])
             best = pos[int(torch.argmax(logits[: len(pos)]))]
         rec["looks_like"] = round(p_pos, 3)
+        rec["patchy"] = round(p_patchy, 3)
         rec["looks_like_best"] = best
         rows.append((kind, p_pos, best))
         print(f"  {kind:22} looks like it: {p_pos:5.2f}   ({best})", flush=True)

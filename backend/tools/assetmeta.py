@@ -186,7 +186,9 @@ def quality_score(rec: dict) -> tuple[float, str]:
         # render is the kind it claims, against torn debris. Pixel statistics
         # could not tell a mangled ferrari from a good corvette; this can.
         if "looks_like" in rd:
-            if rd["looks_like"] < 0.35:
+            # one half is a coin toss, and a coin-toss scientist was a garish
+            # anatomy figure: below a half is poor, below six tenths doubtful
+            if rd["looks_like"] < 0.5:
                 reasons.append("does not look like it")
             elif rd["looks_like"] < 0.6:
                 reasons.append("doubtful")

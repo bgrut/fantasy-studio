@@ -840,15 +840,10 @@
   "looks_like_best": "a clean 3D render of a scavenger"
  },
  "scientist.glb": {
-  "cull_loss": 0.061,
-  "solidity": 0.665,
-  "edges": 0.0884,
-  "coverage": 0.087,
-  "dark_share": 0,
-  "damage_share": 0,
-  "shaded_png": "backend/tools/shotgate/renders/scientist_shaded.png",
   "kind": "scientist",
-  "looks_like": 0.035,
+  "shaded_png": "backend/tools/shotgate/renders/scientist_shaded.png",
+  "looks_like": 0.732,
+  "patchy": 0.267,
   "looks_like_best": "a clean 3D render of a scientist"
  },
  "lake.glb": {

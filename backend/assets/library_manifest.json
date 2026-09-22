@@ -4871,29 +4871,31 @@
   {
    "file": "rival.glb",
    "dims_m": {
-    "x": 0.2452,
-    "y": 1.0,
+    "x": 1.0,
+    "y": 0.2452,
     "z": 0.9455
    },
-   "min_y": -0.0,
+   "min_y": 0.3719,
    "skinned": false,
    "clips": [],
    "bones": 0,
    "biped": true,
-   "tallest_axis": "y",
+   "tallest_axis": "x",
    "aspect": {
-    "w_h": 0.245,
-    "d_h": 0.946
+    "w_h": 4.078,
+    "d_h": 3.856
    },
-   "upright": true,
-   "height_ratio": 1.0,
+   "upright": false,
+   "height_ratio": 0.245,
    "mesh": {
     "tris": 44995,
     "largest_share": 1.0,
     "fragments": 1,
     "degenerate": 0.0001,
     "textures": 2,
-    "textures_ok": true
+    "textures_ok": true,
+    "nose": "+x",
+    "roof_peak_bin": 2
    },
    "render": {
     "looks_like": 0.152,
@@ -4906,7 +4908,8 @@
     "coverage": 0.166
    },
    "quality_reasons": [
-    "does not look like it"
+    "does not look like it",
+    "lying down"
    ],
    "quality": 0.2,
    "verdict": "poor"
@@ -5194,53 +5197,43 @@
   {
    "file": "scientist.glb",
    "dims_m": {
-    "x": 0.9097,
-    "y": 1.0004,
-    "z": 0.1737
+    "x": 0.8617,
+    "y": 1.002,
+    "z": 0.185
    },
-   "min_y": 0.0,
+   "min_y": -0.0004,
    "skinned": false,
    "clips": [],
    "bones": 0,
    "biped": true,
    "tallest_axis": "y",
    "aspect": {
-    "w_h": 0.909,
-    "d_h": 0.174
+    "w_h": 0.86,
+    "d_h": 0.185
    },
    "upright": true,
    "height_ratio": 1.0,
    "mesh": {
     "tris": 45000,
-    "largest_share": 0.0113,
-    "fragments": 53,
-    "degenerate": 0.0001,
+    "largest_share": 0.7943,
+    "fragments": 12,
+    "degenerate": 0.0,
     "textures": 3,
     "textures_ok": true
    },
    "render": {
-    "looks_like": 0.035,
-    "looks_like_best": "a clean 3D render of a scientist",
-    "damage_share": 0,
-    "dark_share": 0,
-    "cull_loss": 0.061,
-    "solidity": 0.665,
-    "edges": 0.0884,
-    "coverage": 0.087
+    "looks_like": 0.732,
+    "looks_like_best": "a clean 3D render of a scientist"
    },
-   "quality_reasons": [
-    "does not look like it",
-    "dust"
-   ],
-   "quality": 0.2,
-   "verdict": "poor"
+   "quality": 0.84,
+   "verdict": "good"
   },
   {
    "file": "scientist_anim.glb",
    "dims_m": {
-    "x": 1.6369,
-    "y": 1.8,
-    "z": 0.3125
+    "x": 0.86,
+    "y": 1.0,
+    "z": 0.1847
    },
    "min_y": 0.0,
    "skinned": true,
@@ -5255,24 +5248,21 @@
    "biped": true,
    "tallest_axis": "y",
    "aspect": {
-    "w_h": 0.909,
-    "d_h": 0.174
+    "w_h": 0.86,
+    "d_h": 0.185
    },
    "upright": true,
    "height_ratio": 1.0,
    "mesh": {
     "tris": 45000,
-    "largest_share": 0.0113,
-    "fragments": 53,
-    "degenerate": 0.0001,
+    "largest_share": 0.7922,
+    "fragments": 12,
+    "degenerate": 0.0,
     "textures": 3,
     "textures_ok": true
    },
-   "quality_reasons": [
-    "dust"
-   ],
-   "quality": 0.5,
-   "verdict": "fair"
+   "quality": 1.0,
+   "verdict": "good"
   },
   {
    "file": "shadow_wraith.glb",
