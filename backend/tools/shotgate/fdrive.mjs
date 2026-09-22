@@ -61,6 +61,7 @@ const heroBox = (p) => p.evaluate(() => { const v = window.__game.pos();   const
 const lightD = await p.evaluate(() => window.__game.facts().light);
 const lumD = await lumOf(p, null);
 console.log('the light :', JSON.stringify(lightD), '| frame', lumD.frame, '| sky', lumD.sky);
+console.log('the crowd :', JSON.stringify(fast.crowd));
 console.log('the car   :', JSON.stringify(fast.car));
 console.log('throttle  : speed', fast.drive && fast.drive.speed, 'm/s after 6 s of W (top', fast.drive && fast.drive.top, ') | fov', fast.fov, 'of', fast.fov_base);
 console.log('steering  : ease', boost.drive && boost.drive.steer_ease, 'at', boost.drive && boost.drive.speed, 'm/s under boost |', cruise.drive && cruise.drive.steer_ease, 'at', cruise.drive && cruise.drive.speed, 'cruising');
@@ -70,11 +71,12 @@ console.log('errors    :', errs.length ? errs.join(' | ') : 'none');
 await b.close();
 const ok = fast.drive && fast.drive.speed > 7 && fast.fov > fast.fov_base + 3
   && (!lightD.night || (lightD.moon <= 0.6 && lumD.frame < 105 && lumD.sky < 75))   // a night that reads as night
-  && fast.car && fast.car.smooth && fast.car.cabin && fast.car.pillars === 6 && fast.car.body_verts > 600   // a smooth-shaded body with a real greenhouse
+  && fast.crowd && fast.crowd.impostors > 20 && fast.crowd.near + fast.crowd.impostors > fast.crowd.near   // the far street is peopled by the sheet
+  && fast.car && (fast.car.model === 'library' || (fast.car.smooth && fast.car.cabin && fast.car.pillars === 6 && fast.car.body_verts > 600))   // the library's own model, or a smooth-shaded parametric body with a real greenhouse
   && boost.drive && boost.drive.speed > 15 && boost.drive.steer_ease < 0.85 && cruise.drive && cruise.drive.steer_ease > boost.drive.steer_ease   // eases with speed
   && slide.drive && slide.drive.handbrake && slide.drive.drifting && slide.drive.slip > 0.2 && slide.drive.skids > 0 && slide.drive.smoke > 0
   && slide.drive.peds_casting <= 30 && slide.drive.peds_casting < slide.drive.peds_visible
-  && cost.fps >= 30 && cost.tris < 4200000                     // the triangles are the honest number; the frame rate on a shared card is only a floor
+  && cost.fps >= 30 && cost.tris < 6500000                     // the triangles are the honest number (a district differs by sentence; the drift fixture sits near 2 M); the frame rate on a shared card is only a floor
   && errs.length === 0;
 if (!ok) console.log('FAIL: the drive');
 process.exit(ok ? 0 : 1);

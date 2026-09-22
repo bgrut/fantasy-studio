@@ -27,8 +27,18 @@
     "textures": 3,
     "textures_ok": true
    },
-   "quality": 0.62,
-   "verdict": "fair"
+   "render": {
+    "looks_like": 0.92,
+    "looks_like_best": "a clean 3D render of a bandit",
+    "damage_share": 0.025,
+    "dark_share": 0.104,
+    "cull_loss": 0.062,
+    "solidity": 0.752,
+    "edges": 0.0675,
+    "coverage": 0.087
+   },
+   "quality": 0.95,
+   "verdict": "good"
   },
   {
    "file": "bandit_anim.glb",
@@ -95,6 +105,16 @@
     "nose": "-z",
     "roof_peak_bin": 9
    },
+   "render": {
+    "looks_like": 1.0,
+    "looks_like_best": "a clean 3D render of a barrel",
+    "damage_share": 0,
+    "dark_share": 0,
+    "cull_loss": 0,
+    "solidity": 1,
+    "edges": 0.0078,
+    "coverage": 0.497
+   },
    "quality": 1.0,
    "verdict": "good"
   },
@@ -127,8 +147,18 @@
     "nose": "+z",
     "roof_peak_bin": 3
    },
-   "quality": 0.81,
-   "verdict": "fair"
+   "render": {
+    "looks_like": 1.0,
+    "looks_like_best": "a clean 3D render of a bear",
+    "damage_share": 0.005,
+    "dark_share": 0.035,
+    "cull_loss": 0.069,
+    "solidity": 0.873,
+    "edges": 0.0265,
+    "coverage": 0.191
+   },
+   "quality": 1.0,
+   "verdict": "good"
   },
   {
    "file": "bear_anim.glb",
@@ -196,8 +226,21 @@
     "nose": "+z",
     "roof_peak_bin": 1
    },
-   "quality": 1.0,
-   "verdict": "good"
+   "render": {
+    "looks_like": 0.917,
+    "looks_like_best": "a clean 3D render of a berry",
+    "damage_share": 0,
+    "dark_share": 0.616,
+    "cull_loss": 0.148,
+    "solidity": 0.998,
+    "edges": 0.0336,
+    "coverage": 0.076
+   },
+   "quality_reasons": [
+    "mostly dark"
+   ],
+   "quality": 0.5,
+   "verdict": "fair"
   },
   {
    "file": "burglar.glb",
@@ -226,8 +269,18 @@
     "textures": 3,
     "textures_ok": true
    },
-   "quality": 0.81,
-   "verdict": "fair"
+   "render": {
+    "looks_like": 0.826,
+    "looks_like_best": "a clean 3D render of a burglar",
+    "damage_share": 0.088,
+    "dark_share": 0.166,
+    "cull_loss": 0.073,
+    "solidity": 0.703,
+    "edges": 0.089,
+    "coverage": 0.093
+   },
+   "quality": 0.9,
+   "verdict": "good"
   },
   {
    "file": "burglar_anim.glb",
@@ -294,8 +347,18 @@
     "nose": "-z",
     "roof_peak_bin": 8
    },
-   "quality": 0.61,
-   "verdict": "fair"
+   "render": {
+    "looks_like": 0.999,
+    "looks_like_best": "a clean 3D render of a car",
+    "damage_share": 0.172,
+    "dark_share": 0.211,
+    "cull_loss": 0.014,
+    "solidity": 0.992,
+    "edges": 0.0169,
+    "coverage": 0.18
+   },
+   "quality": 1.0,
+   "verdict": "good"
   },
   {
    "file": "cask.glb",
@@ -323,6 +386,16 @@
     "degenerate": 0.0,
     "textures": 2,
     "textures_ok": true
+   },
+   "render": {
+    "looks_like": 0.997,
+    "looks_like_best": "a clean 3D render of a cask",
+    "damage_share": 0,
+    "dark_share": 0,
+    "cull_loss": 0,
+    "solidity": 0.999,
+    "edges": 0.0119,
+    "coverage": 0.288
    },
    "quality": 1.0,
    "verdict": "good"
@@ -356,8 +429,18 @@
     "nose": "-z",
     "roof_peak_bin": 8
    },
-   "quality": 0.84,
-   "verdict": "fair"
+   "render": {
+    "looks_like": 1.0,
+    "looks_like_best": "a clean 3D render of a cat",
+    "damage_share": 0,
+    "dark_share": 0.001,
+    "cull_loss": 0.036,
+    "solidity": 0.813,
+    "edges": 0.0319,
+    "coverage": 0.171
+   },
+   "quality": 1.0,
+   "verdict": "good"
   },
   {
    "file": "cat_anim.glb",
@@ -462,8 +545,18 @@
     "nose": "-z",
     "roof_peak_bin": 8
    },
-   "quality": 0.67,
-   "verdict": "fair"
+   "render": {
+    "looks_like": 1.0,
+    "looks_like_best": "a clean 3D render of a cheetah",
+    "damage_share": 0.046,
+    "dark_share": 0.114,
+    "cull_loss": 0.053,
+    "solidity": 0.768,
+    "edges": 0.0386,
+    "coverage": 0.16
+   },
+   "quality": 1.0,
+   "verdict": "good"
   },
   {
    "file": "cheetah_anim.glb",
@@ -529,8 +622,22 @@
     "textures": 2,
     "textures_ok": true
    },
-   "quality": 1.0,
-   "verdict": "good"
+   "render": {
+    "looks_like": 0.073,
+    "looks_like_best": "a clean 3D render of a clue",
+    "damage_share": 0,
+    "dark_share": 0.954,
+    "cull_loss": 0.01,
+    "solidity": 0.637,
+    "edges": 0.0712,
+    "coverage": 0.166
+   },
+   "quality_reasons": [
+    "does not look like it",
+    "mostly dark"
+   ],
+   "quality": 0.2,
+   "verdict": "poor"
   },
   {
    "file": "corvette.glb",
@@ -561,8 +668,18 @@
     "nose": "-x",
     "roof_peak_bin": 5
    },
-   "quality": 0.63,
-   "verdict": "fair"
+   "render": {
+    "looks_like": 0.998,
+    "looks_like_best": "a clean 3D render of a corvette",
+    "damage_share": 0.185,
+    "dark_share": 0.221,
+    "cull_loss": 0.024,
+    "solidity": 0.985,
+    "edges": 0.0206,
+    "coverage": 0.184
+   },
+   "quality": 1.0,
+   "verdict": "good"
   },
   {
    "file": "courier.glb",
@@ -591,7 +708,17 @@
     "textures": 3,
     "textures_ok": true
    },
-   "quality": 1.0,
+   "render": {
+    "looks_like": 0.751,
+    "looks_like_best": "a clean 3D render of a courier",
+    "damage_share": 0,
+    "dark_share": 0,
+    "cull_loss": 0.052,
+    "solidity": 0.791,
+    "edges": 0.0609,
+    "coverage": 0.091
+   },
+   "quality": 0.85,
    "verdict": "good"
   },
   {
@@ -659,8 +786,21 @@
     "nose": "-z",
     "roof_peak_bin": 5
    },
-   "quality": 1.0,
-   "verdict": "good"
+   "render": {
+    "looks_like": 0.176,
+    "looks_like_best": "a clean 3D render of a crate",
+    "damage_share": 0,
+    "dark_share": 0,
+    "cull_loss": 0.003,
+    "solidity": 0.997,
+    "edges": 0.0073,
+    "coverage": 0.727
+   },
+   "quality_reasons": [
+    "does not look like it"
+   ],
+   "quality": 0.2,
+   "verdict": "poor"
   },
   {
    "file": "crystal.glb",
@@ -688,6 +828,16 @@
     "degenerate": 0.0001,
     "textures": 2,
     "textures_ok": true
+   },
+   "render": {
+    "looks_like": 0.992,
+    "looks_like_best": "a clean 3D render of a crystal",
+    "damage_share": 0,
+    "dark_share": 0,
+    "cull_loss": 0.001,
+    "solidity": 0.946,
+    "edges": 0.0483,
+    "coverage": 0.102
    },
    "quality": 1.0,
    "verdict": "good"
@@ -721,8 +871,18 @@
     "nose": "-z",
     "roof_peak_bin": 8
    },
-   "quality": 0.88,
-   "verdict": "fair"
+   "render": {
+    "looks_like": 1.0,
+    "looks_like_best": "a clean 3D render of a deer",
+    "damage_share": 0.02,
+    "dark_share": 0.127,
+    "cull_loss": 0.027,
+    "solidity": 0.728,
+    "edges": 0.0407,
+    "coverage": 0.139
+   },
+   "quality": 1.0,
+   "verdict": "good"
   },
   {
    "file": "deer_anim.glb",
@@ -788,8 +948,18 @@
     "textures": 3,
     "textures_ok": true
    },
-   "quality": 0.65,
-   "verdict": "fair"
+   "render": {
+    "looks_like": 0.616,
+    "looks_like_best": "a clean 3D render of a detective",
+    "damage_share": 0.007,
+    "dark_share": 0.355,
+    "cull_loss": 0.079,
+    "solidity": 0.864,
+    "edges": 0.0548,
+    "coverage": 0.094
+   },
+   "quality": 0.77,
+   "verdict": "good"
   },
   {
    "file": "detective_anim.glb",
@@ -891,8 +1061,18 @@
     "nose": "-z",
     "roof_peak_bin": 8
    },
-   "quality": 0.79,
-   "verdict": "fair"
+   "render": {
+    "looks_like": 1.0,
+    "looks_like_best": "a clean 3D render of a dog",
+    "damage_share": 0.007,
+    "dark_share": 0.053,
+    "cull_loss": 0.074,
+    "solidity": 0.748,
+    "edges": 0.0394,
+    "coverage": 0.147
+   },
+   "quality": 1.0,
+   "verdict": "good"
   },
   {
    "file": "dog_anim.glb",
@@ -958,6 +1138,16 @@
     "textures": 2,
     "textures_ok": true
    },
+   "render": {
+    "looks_like": 0.999,
+    "looks_like_best": "a clean 3D render of a dragon",
+    "damage_share": 0,
+    "dark_share": 0,
+    "cull_loss": 0,
+    "solidity": 0.631,
+    "edges": 0.0529,
+    "coverage": 0.162
+   },
    "quality": 1.0,
    "verdict": "good"
   },
@@ -990,8 +1180,18 @@
     "nose": "+x",
     "roof_peak_bin": 4
    },
-   "quality": 0.59,
-   "verdict": "fair"
+   "render": {
+    "looks_like": 0.977,
+    "looks_like_best": "a clean 3D render of a driver",
+    "damage_share": 0.133,
+    "dark_share": 0.24,
+    "cull_loss": 0.01,
+    "solidity": 0.996,
+    "edges": 0.015,
+    "coverage": 0.192
+   },
+   "quality": 0.99,
+   "verdict": "good"
   },
   {
    "file": "elk.glb",
@@ -1022,8 +1222,18 @@
     "nose": "-z",
     "roof_peak_bin": 8
    },
-   "quality": 0.69,
-   "verdict": "fair"
+   "render": {
+    "looks_like": 1.0,
+    "looks_like_best": "a clean 3D render of a elk",
+    "damage_share": 0.018,
+    "dark_share": 0.316,
+    "cull_loss": 0.067,
+    "solidity": 0.751,
+    "edges": 0.0443,
+    "coverage": 0.144
+   },
+   "quality": 1.0,
+   "verdict": "good"
   },
   {
    "file": "elk_anim.glb",
@@ -1089,8 +1299,18 @@
     "textures": 3,
     "textures_ok": true
    },
-   "quality": 0.8,
-   "verdict": "fair"
+   "render": {
+    "looks_like": 0.969,
+    "looks_like_best": "a clean 3D render of a engineer",
+    "damage_share": 0,
+    "dark_share": 0.014,
+    "cull_loss": 0.048,
+    "solidity": 0.818,
+    "edges": 0.0531,
+    "coverage": 0.1
+   },
+   "quality": 0.98,
+   "verdict": "good"
   },
   {
    "file": "engineer_anim.glb",
@@ -1155,8 +1375,18 @@
     "textures": 3,
     "textures_ok": true
    },
-   "quality": 0.85,
-   "verdict": "fair"
+   "render": {
+    "looks_like": 0.911,
+    "looks_like_best": "a clean 3D render of a explorer",
+    "damage_share": 0.021,
+    "dark_share": 0.039,
+    "cull_loss": 0.054,
+    "solidity": 0.811,
+    "edges": 0.0586,
+    "coverage": 0.088
+   },
+   "quality": 0.95,
+   "verdict": "good"
   },
   {
    "file": "explorer_anim.glb",
@@ -1221,7 +1451,17 @@
     "textures": 2,
     "textures_ok": true
    },
-   "quality": 1.0,
+   "render": {
+    "looks_like": 0.757,
+    "looks_like_best": "a clean 3D render of a fence",
+    "damage_share": 0,
+    "dark_share": 0,
+    "cull_loss": 0,
+    "solidity": 0.979,
+    "edges": 0.0101,
+    "coverage": 0.511
+   },
+   "quality": 0.85,
    "verdict": "good"
   },
   {
@@ -1253,7 +1493,20 @@
     "nose": "+x",
     "roof_peak_bin": 3
    },
-   "quality": 0.62,
+   "render": {
+    "looks_like": 0.997,
+    "looks_like_best": "a clean 3D render of a ferrari",
+    "damage_share": 0.044,
+    "dark_share": 0.743,
+    "cull_loss": 0.038,
+    "solidity": 0.98,
+    "edges": 0.0179,
+    "coverage": 0.223
+   },
+   "quality_reasons": [
+    "mostly dark"
+   ],
+   "quality": 0.5,
    "verdict": "fair"
   },
   {
@@ -1283,7 +1536,17 @@
     "textures": 2,
     "textures_ok": true
    },
-   "quality": 1.0,
+   "render": {
+    "looks_like": 0.682,
+    "looks_like_best": "a clean 3D render of a fire flame",
+    "damage_share": 0,
+    "dark_share": 0,
+    "cull_loss": 0,
+    "solidity": 0.984,
+    "edges": 0.0129,
+    "coverage": 0.352
+   },
+   "quality": 0.81,
    "verdict": "good"
   },
   {
@@ -1315,7 +1578,17 @@
     "nose": "-x",
     "roof_peak_bin": 8
    },
-   "quality": 1.0,
+   "render": {
+    "looks_like": 0.971,
+    "looks_like_best": "a clean 3D render of a firefly",
+    "damage_share": 0,
+    "dark_share": 0,
+    "cull_loss": 0,
+    "solidity": 0.547,
+    "edges": 0.1263,
+    "coverage": 0.032
+   },
+   "quality": 0.98,
    "verdict": "good"
   },
   {
@@ -1347,8 +1620,18 @@
     "nose": "-z",
     "roof_peak_bin": 5
    },
-   "quality": 0.86,
-   "verdict": "fair"
+   "render": {
+    "looks_like": 1.0,
+    "looks_like_best": "a clean 3D render of a fish",
+    "damage_share": 0,
+    "dark_share": 0.005,
+    "cull_loss": 0.016,
+    "solidity": 0.862,
+    "edges": 0.0376,
+    "coverage": 0.117
+   },
+   "quality": 1.0,
+   "verdict": "good"
   },
   {
    "file": "food.glb",
@@ -1379,7 +1662,17 @@
     "nose": "+z",
     "roof_peak_bin": 2
    },
-   "quality": 1.0,
+   "render": {
+    "looks_like": 0.972,
+    "looks_like_best": "a clean 3D render of a food",
+    "damage_share": 0,
+    "dark_share": 0,
+    "cull_loss": 0.001,
+    "solidity": 0.819,
+    "edges": 0.0415,
+    "coverage": 0.203
+   },
+   "quality": 0.98,
    "verdict": "good"
   },
   {
@@ -1411,8 +1704,18 @@
     "nose": "+x",
     "roof_peak_bin": 3
    },
-   "quality": 0.58,
-   "verdict": "fair"
+   "render": {
+    "looks_like": 0.725,
+    "looks_like_best": "a clean 3D render of a ford f-150",
+    "damage_share": 0.225,
+    "dark_share": 0.406,
+    "cull_loss": 0.031,
+    "solidity": 0.983,
+    "edges": 0.0162,
+    "coverage": 0.223
+   },
+   "quality": 0.83,
+   "verdict": "good"
   },
   {
    "file": "fox.glb",
@@ -1443,8 +1746,18 @@
     "nose": "-z",
     "roof_peak_bin": 8
    },
-   "quality": 0.63,
-   "verdict": "fair"
+   "render": {
+    "looks_like": 1.0,
+    "looks_like_best": "a clean 3D render of a fox",
+    "damage_share": 0.094,
+    "dark_share": 0.311,
+    "cull_loss": 0.078,
+    "solidity": 0.795,
+    "edges": 0.0388,
+    "coverage": 0.148
+   },
+   "quality": 1.0,
+   "verdict": "good"
   },
   {
    "file": "fox_anim.glb",
@@ -1509,6 +1822,16 @@
     "degenerate": 0.0,
     "textures": 3,
     "textures_ok": true
+   },
+   "render": {
+    "looks_like": 0.998,
+    "looks_like_best": "a clean 3D render of a gazelle",
+    "damage_share": 0.028,
+    "dark_share": 0.202,
+    "cull_loss": 0.106,
+    "solidity": 0.685,
+    "edges": 0.046,
+    "coverage": 0.173
    },
    "quality": 1.0,
    "verdict": "good"
@@ -1577,7 +1900,17 @@
     "nose": "-z",
     "roof_peak_bin": 8
    },
-   "quality": 1.0,
+   "render": {
+    "looks_like": 0.86,
+    "looks_like_best": "a clean 3D render of a glowing crystal",
+    "damage_share": 0,
+    "dark_share": 0,
+    "cull_loss": 0,
+    "solidity": 0.82,
+    "edges": 0.0358,
+    "coverage": 0.116
+   },
+   "quality": 0.92,
    "verdict": "good"
   },
   {
@@ -1607,8 +1940,18 @@
     "textures": 3,
     "textures_ok": true
    },
-   "quality": 0.73,
-   "verdict": "fair"
+   "render": {
+    "looks_like": 1.0,
+    "looks_like_best": "a clean 3D render of a goblin",
+    "damage_share": 0.002,
+    "dark_share": 0.005,
+    "cull_loss": 0.172,
+    "solidity": 0.706,
+    "edges": 0.0732,
+    "coverage": 0.091
+   },
+   "quality": 1.0,
+   "verdict": "good"
   },
   {
    "file": "goblin_anim.glb",
@@ -1708,8 +2051,18 @@
     "textures": 3,
     "textures_ok": true
    },
-   "quality": 0.78,
-   "verdict": "fair"
+   "render": {
+    "looks_like": 0.998,
+    "looks_like_best": "a clean 3D render of a gorilla",
+    "damage_share": 0.028,
+    "dark_share": 0.236,
+    "cull_loss": 0.103,
+    "solidity": 0.849,
+    "edges": 0.0499,
+    "coverage": 0.114
+   },
+   "quality": 1.0,
+   "verdict": "good"
   },
   {
    "file": "gorilla_anim.glb",
@@ -1774,6 +2127,16 @@
     "textures_ok": true,
     "nose": "+z",
     "roof_peak_bin": 4
+   },
+   "render": {
+    "looks_like": 1.0,
+    "looks_like_best": "a clean 3D render of a grizzly",
+    "damage_share": 0.002,
+    "dark_share": 0.072,
+    "cull_loss": 0.109,
+    "solidity": 0.856,
+    "edges": 0.0278,
+    "coverage": 0.189
    },
    "quality": 1.0,
    "verdict": "good"
@@ -1844,8 +2207,18 @@
     "nose": "-z",
     "roof_peak_bin": 5
    },
-   "quality": 0.79,
-   "verdict": "fair"
+   "render": {
+    "looks_like": 1.0,
+    "looks_like_best": "a clean 3D render of a grizzly bear",
+    "damage_share": 0.095,
+    "dark_share": 0.398,
+    "cull_loss": 0.065,
+    "solidity": 0.926,
+    "edges": 0.0218,
+    "coverage": 0.23
+   },
+   "quality": 1.0,
+   "verdict": "good"
   },
   {
    "file": "grizzly_bear_anim.glb",
@@ -1911,7 +2284,17 @@
     "textures": 2,
     "textures_ok": true
    },
-   "quality": 1.0,
+   "render": {
+    "looks_like": 0.609,
+    "looks_like_best": "a clean 3D render of a guide",
+    "damage_share": 0,
+    "dark_share": 0.007,
+    "cull_loss": 0,
+    "solidity": 0.998,
+    "edges": 0.0176,
+    "coverage": 0.213
+   },
+   "quality": 0.77,
    "verdict": "good"
   },
   {
@@ -1942,6 +2325,16 @@
     "textures_ok": true,
     "nose": "-z",
     "roof_peak_bin": 8
+   },
+   "render": {
+    "looks_like": 0.998,
+    "looks_like_best": "a clean 3D render of a handcart",
+    "damage_share": 0,
+    "dark_share": 0.001,
+    "cull_loss": 0,
+    "solidity": 0.999,
+    "edges": 0.013,
+    "coverage": 0.281
    },
    "quality": 1.0,
    "verdict": "good"
@@ -1975,8 +2368,18 @@
     "nose": "+x",
     "roof_peak_bin": 4
    },
-   "quality": 0.75,
-   "verdict": "fair"
+   "render": {
+    "looks_like": 0.989,
+    "looks_like_best": "a clean 3D render of a healing herb",
+    "damage_share": 0,
+    "dark_share": 0,
+    "cull_loss": 0,
+    "solidity": 0.201,
+    "edges": 0.5521,
+    "coverage": 0.021
+   },
+   "quality": 0.99,
+   "verdict": "good"
   },
   {
    "file": "health_pack.glb",
@@ -2007,8 +2410,18 @@
     "nose": "+x",
     "roof_peak_bin": 2
    },
-   "quality": 0.72,
-   "verdict": "fair"
+   "render": {
+    "looks_like": 0.638,
+    "looks_like_best": "a photo of a health pack",
+    "damage_share": 0,
+    "dark_share": 0,
+    "cull_loss": 0,
+    "solidity": 1,
+    "edges": 0.004,
+    "coverage": 0.892
+   },
+   "quality": 0.78,
+   "verdict": "good"
   },
   {
    "file": "horse.glb",
@@ -2039,8 +2452,18 @@
     "nose": "-z",
     "roof_peak_bin": 8
    },
-   "quality": 0.61,
-   "verdict": "fair"
+   "render": {
+    "looks_like": 0.999,
+    "looks_like_best": "a clean 3D render of a horse",
+    "damage_share": 0.003,
+    "dark_share": 0.098,
+    "cull_loss": 0.083,
+    "solidity": 0.814,
+    "edges": 0.1144,
+    "coverage": 0.244
+   },
+   "quality": 1.0,
+   "verdict": "good"
   },
   {
    "file": "horse_anim.glb",
@@ -2106,8 +2529,18 @@
     "textures": 3,
     "textures_ok": true
    },
-   "quality": 0.73,
-   "verdict": "fair"
+   "render": {
+    "looks_like": 0.98,
+    "looks_like_best": "a clean 3D render of a hunter",
+    "damage_share": 0,
+    "dark_share": 0.187,
+    "cull_loss": 0.104,
+    "solidity": 0.812,
+    "edges": 0.057,
+    "coverage": 0.096
+   },
+   "quality": 0.99,
+   "verdict": "good"
   },
   {
    "file": "hunter_anim.glb",
@@ -2211,8 +2644,21 @@
     "nose": "+x",
     "roof_peak_bin": 3
    },
-   "quality": 1.0,
-   "verdict": "good"
+   "render": {
+    "looks_like": 0.561,
+    "looks_like_best": "a clean 3D render of a jewel",
+    "damage_share": 0,
+    "dark_share": 0,
+    "cull_loss": 0,
+    "solidity": 0.665,
+    "edges": 0.0352,
+    "coverage": 0.211
+   },
+   "quality_reasons": [
+    "doubtful"
+   ],
+   "quality": 0.5,
+   "verdict": "fair"
   },
   {
    "file": "kc_a.glb",
@@ -2269,8 +2715,18 @@
     "textures": 1,
     "textures_ok": true
    },
-   "quality": 0.8,
-   "verdict": "fair"
+   "render": {
+    "looks_like": 1.0,
+    "looks_like_best": "a clean 3D render of a blocky villager",
+    "damage_share": 0,
+    "dark_share": 0,
+    "cull_loss": 0,
+    "solidity": 1,
+    "edges": 0.016,
+    "coverage": 0.24
+   },
+   "quality": 1.0,
+   "verdict": "good"
   },
   {
    "file": "kc_b.glb",
@@ -2327,8 +2783,18 @@
     "textures": 1,
     "textures_ok": true
    },
-   "quality": 0.8,
-   "verdict": "fair"
+   "render": {
+    "looks_like": 1.0,
+    "looks_like_best": "a clean 3D render of a blocky farmer",
+    "damage_share": 0,
+    "dark_share": 0,
+    "cull_loss": 0,
+    "solidity": 1,
+    "edges": 0.016,
+    "coverage": 0.24
+   },
+   "quality": 1.0,
+   "verdict": "good"
   },
   {
    "file": "kc_c.glb",
@@ -2385,8 +2851,18 @@
     "textures": 1,
     "textures_ok": true
    },
-   "quality": 0.8,
-   "verdict": "fair"
+   "render": {
+    "looks_like": 1.0,
+    "looks_like_best": "a clean 3D render of a blocky adventurer",
+    "damage_share": 0,
+    "dark_share": 0,
+    "cull_loss": 0,
+    "solidity": 1,
+    "edges": 0.016,
+    "coverage": 0.24
+   },
+   "quality": 1.0,
+   "verdict": "good"
   },
   {
    "file": "kc_d.glb",
@@ -2443,8 +2919,18 @@
     "textures": 1,
     "textures_ok": true
    },
-   "quality": 0.8,
-   "verdict": "fair"
+   "render": {
+    "looks_like": 0.995,
+    "looks_like_best": "a clean 3D render of a blocky traveller",
+    "damage_share": 0,
+    "dark_share": 0,
+    "cull_loss": 0,
+    "solidity": 1,
+    "edges": 0.016,
+    "coverage": 0.24
+   },
+   "quality": 1.0,
+   "verdict": "good"
   },
   {
    "file": "kc_e.glb",
@@ -2501,8 +2987,18 @@
     "textures": 1,
     "textures_ok": true
    },
-   "quality": 0.8,
-   "verdict": "fair"
+   "render": {
+    "looks_like": 1.0,
+    "looks_like_best": "a clean 3D render of a blocky hiker",
+    "damage_share": 0,
+    "dark_share": 0,
+    "cull_loss": 0,
+    "solidity": 1,
+    "edges": 0.016,
+    "coverage": 0.24
+   },
+   "quality": 1.0,
+   "verdict": "good"
   },
   {
    "file": "kc_f.glb",
@@ -2559,8 +3055,18 @@
     "textures": 1,
     "textures_ok": true
    },
-   "quality": 0.8,
-   "verdict": "fair"
+   "render": {
+    "looks_like": 1.0,
+    "looks_like_best": "a clean 3D render of a blocky settler",
+    "damage_share": 0,
+    "dark_share": 0,
+    "cull_loss": 0,
+    "solidity": 1,
+    "edges": 0.016,
+    "coverage": 0.24
+   },
+   "quality": 1.0,
+   "verdict": "good"
   },
   {
    "file": "kc_g.glb",
@@ -2617,8 +3123,18 @@
     "textures": 1,
     "textures_ok": true
    },
-   "quality": 0.8,
-   "verdict": "fair"
+   "render": {
+    "looks_like": 0.983,
+    "looks_like_best": "a clean 3D render of a blocky trader",
+    "damage_share": 0,
+    "dark_share": 0,
+    "cull_loss": 0,
+    "solidity": 1,
+    "edges": 0.016,
+    "coverage": 0.24
+   },
+   "quality": 0.99,
+   "verdict": "good"
   },
   {
    "file": "kc_h.glb",
@@ -2675,8 +3191,18 @@
     "textures": 1,
     "textures_ok": true
    },
-   "quality": 0.8,
-   "verdict": "fair"
+   "render": {
+    "looks_like": 0.999,
+    "looks_like_best": "a clean 3D render of a blocky guard",
+    "damage_share": 0,
+    "dark_share": 0,
+    "cull_loss": 0,
+    "solidity": 1,
+    "edges": 0.016,
+    "coverage": 0.24
+   },
+   "quality": 1.0,
+   "verdict": "good"
   },
   {
    "file": "kc_i.glb",
@@ -2733,8 +3259,18 @@
     "textures": 1,
     "textures_ok": true
    },
-   "quality": 0.8,
-   "verdict": "fair"
+   "render": {
+    "looks_like": 1.0,
+    "looks_like_best": "a clean 3D render of a blocky scout",
+    "damage_share": 0,
+    "dark_share": 0,
+    "cull_loss": 0,
+    "solidity": 1,
+    "edges": 0.016,
+    "coverage": 0.24
+   },
+   "quality": 1.0,
+   "verdict": "good"
   },
   {
    "file": "kc_j.glb",
@@ -2791,8 +3327,18 @@
     "textures": 1,
     "textures_ok": true
    },
-   "quality": 0.8,
-   "verdict": "fair"
+   "render": {
+    "looks_like": 1.0,
+    "looks_like_best": "a clean 3D render of a blocky worker",
+    "damage_share": 0,
+    "dark_share": 0,
+    "cull_loss": 0,
+    "solidity": 1,
+    "edges": 0.016,
+    "coverage": 0.24
+   },
+   "quality": 1.0,
+   "verdict": "good"
   },
   {
    "file": "kc_k.glb",
@@ -2849,8 +3395,18 @@
     "textures": 1,
     "textures_ok": true
    },
-   "quality": 0.8,
-   "verdict": "fair"
+   "render": {
+    "looks_like": 1.0,
+    "looks_like_best": "a clean 3D render of a blocky miner",
+    "damage_share": 0,
+    "dark_share": 0,
+    "cull_loss": 0,
+    "solidity": 1,
+    "edges": 0.016,
+    "coverage": 0.24
+   },
+   "quality": 1.0,
+   "verdict": "good"
   },
   {
    "file": "kc_l.glb",
@@ -2907,8 +3463,18 @@
     "textures": 1,
     "textures_ok": true
    },
-   "quality": 0.8,
-   "verdict": "fair"
+   "render": {
+    "looks_like": 0.998,
+    "looks_like_best": "a clean 3D render of a blocky sailor",
+    "damage_share": 0,
+    "dark_share": 0,
+    "cull_loss": 0,
+    "solidity": 1,
+    "edges": 0.016,
+    "coverage": 0.24
+   },
+   "quality": 1.0,
+   "verdict": "good"
   },
   {
    "file": "kc_m.glb",
@@ -2965,8 +3531,18 @@
     "textures": 1,
     "textures_ok": true
    },
-   "quality": 0.8,
-   "verdict": "fair"
+   "render": {
+    "looks_like": 1.0,
+    "looks_like_best": "a clean 3D render of a blocky hunter",
+    "damage_share": 0,
+    "dark_share": 0,
+    "cull_loss": 0,
+    "solidity": 1,
+    "edges": 0.016,
+    "coverage": 0.24
+   },
+   "quality": 1.0,
+   "verdict": "good"
   },
   {
    "file": "kc_n.glb",
@@ -3023,8 +3599,18 @@
     "textures": 1,
     "textures_ok": true
    },
-   "quality": 0.8,
-   "verdict": "fair"
+   "render": {
+    "looks_like": 0.988,
+    "looks_like_best": "a clean 3D render of a blocky ranger",
+    "damage_share": 0,
+    "dark_share": 0,
+    "cull_loss": 0,
+    "solidity": 1,
+    "edges": 0.016,
+    "coverage": 0.24
+   },
+   "quality": 0.99,
+   "verdict": "good"
   },
   {
    "file": "kc_o.glb",
@@ -3081,8 +3667,18 @@
     "textures": 1,
     "textures_ok": true
    },
-   "quality": 0.8,
-   "verdict": "fair"
+   "render": {
+    "looks_like": 0.979,
+    "looks_like_best": "a clean 3D render of a blocky knight",
+    "damage_share": 0,
+    "dark_share": 0,
+    "cull_loss": 0,
+    "solidity": 1,
+    "edges": 0.016,
+    "coverage": 0.24
+   },
+   "quality": 0.99,
+   "verdict": "good"
   },
   {
    "file": "kc_p.glb",
@@ -3139,8 +3735,18 @@
     "textures": 1,
     "textures_ok": true
    },
-   "quality": 0.8,
-   "verdict": "fair"
+   "render": {
+    "looks_like": 0.999,
+    "looks_like_best": "a clean 3D render of a blocky wanderer",
+    "damage_share": 0,
+    "dark_share": 0,
+    "cull_loss": 0,
+    "solidity": 1,
+    "edges": 0.016,
+    "coverage": 0.24
+   },
+   "quality": 1.0,
+   "verdict": "good"
   },
   {
    "file": "kc_q.glb",
@@ -3197,8 +3803,18 @@
     "textures": 1,
     "textures_ok": true
    },
-   "quality": 0.8,
-   "verdict": "fair"
+   "render": {
+    "looks_like": 0.995,
+    "looks_like_best": "a clean 3D render of a blocky climber",
+    "damage_share": 0,
+    "dark_share": 0,
+    "cull_loss": 0,
+    "solidity": 1,
+    "edges": 0.016,
+    "coverage": 0.24
+   },
+   "quality": 1.0,
+   "verdict": "good"
   },
   {
    "file": "kc_r.glb",
@@ -3255,8 +3871,18 @@
     "textures": 1,
     "textures_ok": true
    },
-   "quality": 0.8,
-   "verdict": "fair"
+   "render": {
+    "looks_like": 0.991,
+    "looks_like_best": "a blocky camper",
+    "damage_share": 0,
+    "dark_share": 0,
+    "cull_loss": 0,
+    "solidity": 1,
+    "edges": 0.016,
+    "coverage": 0.24
+   },
+   "quality": 0.99,
+   "verdict": "good"
   },
   {
    "file": "knight.glb",
@@ -3285,8 +3911,18 @@
     "textures": 3,
     "textures_ok": true
    },
-   "quality": 0.57,
-   "verdict": "fair"
+   "render": {
+    "looks_like": 0.995,
+    "looks_like_best": "a clean 3D render of a knight",
+    "damage_share": 0.17,
+    "dark_share": 0.296,
+    "cull_loss": 0.08,
+    "solidity": 0.908,
+    "edges": 0.0419,
+    "coverage": 0.123
+   },
+   "quality": 1.0,
+   "verdict": "good"
   },
   {
    "file": "knight_anim.glb",
@@ -3353,8 +3989,21 @@
     "nose": "-x",
     "roof_peak_bin": 8
    },
-   "quality": 0.92,
-   "verdict": "fair"
+   "render": {
+    "looks_like": 0.034,
+    "looks_like_best": "a clean 3D render of a lake",
+    "damage_share": 0,
+    "dark_share": 0,
+    "cull_loss": 0.003,
+    "solidity": 0.899,
+    "edges": 0.0227,
+    "coverage": 0.336
+   },
+   "quality_reasons": [
+    "does not look like it"
+   ],
+   "quality": 0.2,
+   "verdict": "poor"
   },
   {
    "file": "lantern.glb",
@@ -3385,8 +4034,21 @@
     "nose": "+x",
     "roof_peak_bin": 2
    },
-   "quality": 0.92,
-   "verdict": "fair"
+   "render": {
+    "looks_like": 0.003,
+    "looks_like_best": "a clean 3D render of a lantern",
+    "damage_share": 0,
+    "dark_share": 0,
+    "cull_loss": 0,
+    "solidity": 0.801,
+    "edges": 0.0315,
+    "coverage": 0.153
+   },
+   "quality_reasons": [
+    "does not look like it"
+   ],
+   "quality": 0.2,
+   "verdict": "poor"
   },
   {
    "file": "log.glb",
@@ -3417,8 +4079,21 @@
     "nose": "+x",
     "roof_peak_bin": 0
    },
-   "quality": 1.0,
-   "verdict": "good"
+   "render": {
+    "looks_like": 0.202,
+    "looks_like_best": "a clean 3D render of a log",
+    "damage_share": 0,
+    "dark_share": 0.01,
+    "cull_loss": 0.162,
+    "solidity": 0.721,
+    "edges": 0.6387,
+    "coverage": 0.001
+   },
+   "quality_reasons": [
+    "does not look like it"
+   ],
+   "quality": 0.2,
+   "verdict": "poor"
   },
   {
    "file": "man.glb",
@@ -3487,6 +4162,16 @@
     "textures": 2,
     "textures_ok": true
    },
+   "render": {
+    "looks_like": 0.999,
+    "looks_like_best": "a clean 3D render of a man",
+    "damage_share": 0,
+    "dark_share": 0,
+    "cull_loss": 0,
+    "solidity": 0.794,
+    "edges": 0.0616,
+    "coverage": 0.088
+   },
    "quality": 1.0,
    "verdict": "good"
   },
@@ -3552,7 +4237,17 @@
     "textures": 2,
     "textures_ok": true
    },
-   "quality": 1.0,
+   "render": {
+    "looks_like": 0.988,
+    "looks_like_best": "a clean 3D render of a monkey",
+    "damage_share": 0,
+    "dark_share": 0.011,
+    "cull_loss": 0,
+    "solidity": 0.793,
+    "edges": 0.0276,
+    "coverage": 0.207
+   },
+   "quality": 0.99,
    "verdict": "good"
   },
   {
@@ -3619,7 +4314,20 @@
     "nose": "-z",
     "roof_peak_bin": 5
    },
-   "quality": 0.68,
+   "render": {
+    "looks_like": 1.0,
+    "looks_like_best": "a clean 3D render of a moose",
+    "damage_share": 0.069,
+    "dark_share": 0.565,
+    "cull_loss": 0.088,
+    "solidity": 0.815,
+    "edges": 0.0619,
+    "coverage": 0.216
+   },
+   "quality_reasons": [
+    "mostly dark"
+   ],
+   "quality": 0.5,
    "verdict": "fair"
   },
   {
@@ -3688,8 +4396,21 @@
     "nose": "-z",
     "roof_peak_bin": 5
    },
-   "quality": 0.77,
-   "verdict": "fair"
+   "render": {
+    "looks_like": 0.301,
+    "looks_like_best": "a clean 3D render of a mushroom",
+    "damage_share": 0.085,
+    "dark_share": 0.359,
+    "cull_loss": 0.4,
+    "solidity": 0.787,
+    "edges": 0.0395,
+    "coverage": 0.116
+   },
+   "quality_reasons": [
+    "does not look like it"
+   ],
+   "quality": 0.2,
+   "verdict": "poor"
   },
   {
    "file": "package.glb",
@@ -3718,8 +4439,21 @@
     "textures": 2,
     "textures_ok": true
    },
-   "quality": 1.0,
-   "verdict": "good"
+   "render": {
+    "looks_like": 0.057,
+    "looks_like_best": "a clean 3D render of a package",
+    "damage_share": 0,
+    "dark_share": 0,
+    "cull_loss": 0,
+    "solidity": 0.795,
+    "edges": 0.0845,
+    "coverage": 0.162
+   },
+   "quality_reasons": [
+    "does not look like it"
+   ],
+   "quality": 0.2,
+   "verdict": "poor"
   },
   {
    "file": "pearl.glb",
@@ -3750,8 +4484,21 @@
     "nose": "+x",
     "roof_peak_bin": 2
    },
-   "quality": 1.0,
-   "verdict": "good"
+   "render": {
+    "looks_like": 0.204,
+    "looks_like_best": "a clean 3D render of a pearl",
+    "damage_share": 0,
+    "dark_share": 0,
+    "cull_loss": 0,
+    "solidity": 0.891,
+    "edges": 0.1607,
+    "coverage": 0.01
+   },
+   "quality_reasons": [
+    "does not look like it"
+   ],
+   "quality": 0.2,
+   "verdict": "poor"
   },
   {
    "file": "penguin.glb",
@@ -3780,7 +4527,20 @@
     "textures": 3,
     "textures_ok": true
    },
-   "quality": 0.87,
+   "render": {
+    "looks_like": 1.0,
+    "looks_like_best": "a clean 3D render of a penguin",
+    "damage_share": 0.01,
+    "dark_share": 0.734,
+    "cull_loss": 0.076,
+    "solidity": 0.86,
+    "edges": 0.0429,
+    "coverage": 0.134
+   },
+   "quality_reasons": [
+    "mostly dark"
+   ],
+   "quality": 0.5,
    "verdict": "fair"
   },
   {
@@ -3848,8 +4608,21 @@
     "nose": "-z",
     "roof_peak_bin": 9
    },
-   "quality": 1.0,
-   "verdict": "good"
+   "render": {
+    "looks_like": 0.201,
+    "looks_like_best": "a clean 3D render of a pine",
+    "damage_share": 0,
+    "dark_share": 0,
+    "cull_loss": 0.142,
+    "solidity": 0.992,
+    "edges": 0.0165,
+    "coverage": 0.324
+   },
+   "quality_reasons": [
+    "does not look like it"
+   ],
+   "quality": 0.2,
+   "verdict": "poor"
   },
   {
    "file": "polar_bear.glb",
@@ -3880,8 +4653,18 @@
     "nose": "-z",
     "roof_peak_bin": 7
    },
-   "quality": 0.85,
-   "verdict": "fair"
+   "render": {
+    "looks_like": 1.0,
+    "looks_like_best": "a clean 3D render of a polar bear",
+    "damage_share": 0,
+    "dark_share": 0,
+    "cull_loss": 0.209,
+    "solidity": 0.871,
+    "edges": 0.0275,
+    "coverage": 0.18
+   },
+   "quality": 1.0,
+   "verdict": "good"
   },
   {
    "file": "polar_bear_anim.glb",
@@ -3947,8 +4730,18 @@
     "textures": 3,
     "textures_ok": true
    },
-   "quality": 0.9,
-   "verdict": "fair"
+   "render": {
+    "looks_like": 0.974,
+    "looks_like_best": "a clean 3D render of a ranger",
+    "damage_share": 0.103,
+    "dark_share": 0.324,
+    "cull_loss": 0.084,
+    "solidity": 0.815,
+    "edges": 0.0546,
+    "coverage": 0.096
+   },
+   "quality": 0.98,
+   "verdict": "good"
   },
   {
    "file": "ranger_anim.glb",
@@ -4013,8 +4806,21 @@
     "textures": 3,
     "textures_ok": true
    },
-   "quality": 0.93,
-   "verdict": "fair"
+   "render": {
+    "looks_like": 0.109,
+    "looks_like_best": "a clean 3D render of a ration",
+    "damage_share": 0,
+    "dark_share": 0,
+    "cull_loss": 0.002,
+    "solidity": 1,
+    "edges": 0.0048,
+    "coverage": 0.852
+   },
+   "quality_reasons": [
+    "does not look like it"
+   ],
+   "quality": 0.2,
+   "verdict": "poor"
   },
   {
    "file": "relic.glb",
@@ -4045,11 +4851,22 @@
     "nose": "-x",
     "roof_peak_bin": 6
    },
+   "render": {
+    "looks_like": 0.332,
+    "looks_like_best": "a clean 3D render of a relic",
+    "damage_share": 0,
+    "dark_share": 0,
+    "cull_loss": 0.318,
+    "solidity": 0.244,
+    "edges": 0.9059,
+    "coverage": 0.014
+   },
    "quality_reasons": [
+    "does not look like it",
     "dust"
    ],
-   "quality": 0.5,
-   "verdict": "fair"
+   "quality": 0.2,
+   "verdict": "poor"
   },
   {
    "file": "rival.glb",
@@ -4078,8 +4895,21 @@
     "textures": 2,
     "textures_ok": true
    },
-   "quality": 1.0,
-   "verdict": "good"
+   "render": {
+    "looks_like": 0.152,
+    "looks_like_best": "a clean 3D render of a rival",
+    "damage_share": 0,
+    "dark_share": 0,
+    "cull_loss": 0,
+    "solidity": 0.779,
+    "edges": 0.1067,
+    "coverage": 0.166
+   },
+   "quality_reasons": [
+    "does not look like it"
+   ],
+   "quality": 0.2,
+   "verdict": "poor"
   },
   {
    "file": "rock.glb",
@@ -4108,8 +4938,18 @@
     "textures": 3,
     "textures_ok": true
    },
-   "quality": 0.84,
-   "verdict": "fair"
+   "render": {
+    "looks_like": 0.903,
+    "looks_like_best": "a clean 3D render of a rock",
+    "damage_share": 0,
+    "dark_share": 0,
+    "cull_loss": 0.037,
+    "solidity": 0.997,
+    "edges": 0.0471,
+    "coverage": 0.085
+   },
+   "quality": 0.94,
+   "verdict": "good"
   },
   {
    "file": "rune.glb",
@@ -4140,7 +4980,17 @@
     "nose": "-x",
     "roof_peak_bin": 5
    },
-   "quality": 1.0,
+   "render": {
+    "looks_like": 0.926,
+    "looks_like_best": "a clean 3D render of a rune",
+    "damage_share": 0,
+    "dark_share": 0,
+    "cull_loss": 0,
+    "solidity": 1,
+    "edges": 0.0085,
+    "coverage": 0.474
+   },
+   "quality": 0.96,
    "verdict": "good"
   },
   {
@@ -4170,8 +5020,18 @@
     "textures": 3,
     "textures_ok": true
    },
-   "quality": 0.73,
-   "verdict": "fair"
+   "render": {
+    "looks_like": 1.0,
+    "looks_like_best": "a clean 3D render of a sailboat",
+    "damage_share": 0.013,
+    "dark_share": 0.054,
+    "cull_loss": 0.134,
+    "solidity": 0.922,
+    "edges": 0.0386,
+    "coverage": 0.181
+   },
+   "quality": 1.0,
+   "verdict": "good"
   },
   {
    "file": "samurai.glb",
@@ -4200,7 +5060,20 @@
     "textures": 3,
     "textures_ok": true
    },
-   "quality": 0.58,
+   "render": {
+    "looks_like": 0.991,
+    "looks_like_best": "a clean 3D render of a samurai",
+    "damage_share": 0.002,
+    "dark_share": 0.768,
+    "cull_loss": 0.082,
+    "solidity": 0.893,
+    "edges": 0.0531,
+    "coverage": 0.12
+   },
+   "quality_reasons": [
+    "mostly dark"
+   ],
+   "quality": 0.5,
    "verdict": "fair"
   },
   {
@@ -4268,8 +5141,18 @@
     "nose": "-z",
     "roof_peak_bin": 8
    },
-   "quality": 0.85,
-   "verdict": "fair"
+   "render": {
+    "looks_like": 0.98,
+    "looks_like_best": "a clean 3D render of a scavenger",
+    "damage_share": 0.066,
+    "dark_share": 0.187,
+    "cull_loss": 0.048,
+    "solidity": 0.74,
+    "edges": 0.0391,
+    "coverage": 0.152
+   },
+   "quality": 0.99,
+   "verdict": "good"
   },
   {
    "file": "scavenger_anim.glb",
@@ -4335,11 +5218,22 @@
     "textures": 3,
     "textures_ok": true
    },
+   "render": {
+    "looks_like": 0.035,
+    "looks_like_best": "a clean 3D render of a scientist",
+    "damage_share": 0,
+    "dark_share": 0,
+    "cull_loss": 0.061,
+    "solidity": 0.665,
+    "edges": 0.0884,
+    "coverage": 0.087
+   },
    "quality_reasons": [
+    "does not look like it",
     "dust"
    ],
-   "quality": 0.5,
-   "verdict": "fair"
+   "quality": 0.2,
+   "verdict": "poor"
   },
   {
    "file": "scientist_anim.glb",
@@ -4409,8 +5303,18 @@
     "nose": "+z",
     "roof_peak_bin": 2
    },
-   "quality": 0.57,
-   "verdict": "fair"
+   "render": {
+    "looks_like": 0.992,
+    "looks_like_best": "a clean 3D render of a shadow wraith",
+    "damage_share": 0.002,
+    "dark_share": 0.272,
+    "cull_loss": 0.212,
+    "solidity": 0.734,
+    "edges": 0.0548,
+    "coverage": 0.136
+   },
+   "quality": 1.0,
+   "verdict": "good"
   },
   {
    "file": "shark.glb",
@@ -4441,8 +5345,18 @@
     "nose": "+z",
     "roof_peak_bin": 4
    },
-   "quality": 0.8,
-   "verdict": "fair"
+   "render": {
+    "looks_like": 1.0,
+    "looks_like_best": "a clean 3D render of a shark",
+    "damage_share": 0.015,
+    "dark_share": 0.085,
+    "cull_loss": 0.017,
+    "solidity": 0.725,
+    "edges": 0.0288,
+    "coverage": 0.204
+   },
+   "quality": 1.0,
+   "verdict": "good"
   },
   {
    "file": "snake.glb",
@@ -4471,7 +5385,17 @@
     "textures": 2,
     "textures_ok": true
    },
-   "quality": 1.0,
+   "render": {
+    "looks_like": 0.9,
+    "looks_like_best": "a clean 3D render of a snake",
+    "damage_share": 0,
+    "dark_share": 0.08,
+    "cull_loss": 0,
+    "solidity": 1,
+    "edges": 0.0307,
+    "coverage": 0.087
+   },
+   "quality": 0.94,
    "verdict": "good"
   },
   {
@@ -4501,8 +5425,18 @@
     "textures": 3,
     "textures_ok": true
    },
-   "quality": 0.86,
-   "verdict": "fair"
+   "render": {
+    "looks_like": 1.0,
+    "looks_like_best": "a clean 3D render of a snow weasels",
+    "damage_share": 0.004,
+    "dark_share": 0.005,
+    "cull_loss": 0.164,
+    "solidity": 0.885,
+    "edges": 0.0378,
+    "coverage": 0.175
+   },
+   "quality": 1.0,
+   "verdict": "good"
   },
   {
    "file": "snow_weasels_anim.glb",
@@ -4566,7 +5500,17 @@
     "textures": 2,
     "textures_ok": true
    },
-   "quality": 1.0,
+   "render": {
+    "looks_like": 0.965,
+    "looks_like_best": "a clean 3D render of a snowflakes",
+    "damage_share": 0,
+    "dark_share": 0,
+    "cull_loss": 0,
+    "solidity": 0.986,
+    "edges": 0.0106,
+    "coverage": 0.629
+   },
+   "quality": 0.98,
    "verdict": "good"
   },
   {
@@ -4596,8 +5540,18 @@
     "textures": 3,
     "textures_ok": true
    },
-   "quality": 0.78,
-   "verdict": "fair"
+   "render": {
+    "looks_like": 1.0,
+    "looks_like_best": "a clean 3D render of a soccer player",
+    "damage_share": 0.001,
+    "dark_share": 0.01,
+    "cull_loss": 0.028,
+    "solidity": 0.838,
+    "edges": 0.0498,
+    "coverage": 0.104
+   },
+   "quality": 1.0,
+   "verdict": "good"
   },
   {
    "file": "soccer_player_anim.glb",
@@ -4662,8 +5616,18 @@
     "textures": 3,
     "textures_ok": true
    },
-   "quality": 0.75,
-   "verdict": "fair"
+   "render": {
+    "looks_like": 1.0,
+    "looks_like_best": "a clean 3D render of a soldier",
+    "damage_share": 0.002,
+    "dark_share": 0.223,
+    "cull_loss": 0.057,
+    "solidity": 0.855,
+    "edges": 0.0594,
+    "coverage": 0.112
+   },
+   "quality": 1.0,
+   "verdict": "good"
   },
   {
    "file": "soldier_anim.glb",
@@ -4730,8 +5694,18 @@
     "nose": "-z",
     "roof_peak_bin": 8
    },
-   "quality": 0.59,
-   "verdict": "fair"
+   "render": {
+    "looks_like": 0.794,
+    "looks_like_best": "a clean 3D render of a striker",
+    "damage_share": 0.293,
+    "dark_share": 0.344,
+    "cull_loss": 0.015,
+    "solidity": 0.985,
+    "edges": 0.0183,
+    "coverage": 0.183
+   },
+   "quality": 0.88,
+   "verdict": "good"
   },
   {
    "file": "taxi.glb",
@@ -4761,6 +5735,16 @@
     "textures_ok": true,
     "nose": "+x",
     "roof_peak_bin": 4
+   },
+   "render": {
+    "looks_like": 0.934,
+    "looks_like_best": "a clean 3D render of a taxi",
+    "damage_share": 0.107,
+    "dark_share": 0.292,
+    "cull_loss": 0.014,
+    "solidity": 0.791,
+    "edges": 0.0294,
+    "coverage": 0.182
    },
    "quality_reasons": [
     "proportions"
@@ -4797,6 +5781,16 @@
     "nose": "-z",
     "roof_peak_bin": 7
    },
+   "render": {
+    "looks_like": 0.992,
+    "looks_like_best": "a clean 3D render of a the woodcutter' stash",
+    "damage_share": 0.001,
+    "dark_share": 0.004,
+    "cull_loss": 0.757,
+    "solidity": 1,
+    "edges": 0.0137,
+    "coverage": 0.285
+   },
    "quality": 1.0,
    "verdict": "good"
   },
@@ -4829,8 +5823,21 @@
     "nose": "-x",
     "roof_peak_bin": 9
    },
-   "quality": 0.74,
-   "verdict": "fair"
+   "render": {
+    "looks_like": 0.132,
+    "looks_like_best": "a clean 3D render of a then",
+    "damage_share": 0,
+    "dark_share": 0,
+    "cull_loss": 0.063,
+    "solidity": 1,
+    "edges": 0.005,
+    "coverage": 0.856
+   },
+   "quality_reasons": [
+    "does not look like it"
+   ],
+   "quality": 0.2,
+   "verdict": "poor"
   },
   {
    "file": "thug.glb",
@@ -4859,8 +5866,18 @@
     "textures": 3,
     "textures_ok": true
    },
-   "quality": 0.86,
-   "verdict": "fair"
+   "render": {
+    "looks_like": 0.988,
+    "looks_like_best": "a clean 3D render of a thug",
+    "damage_share": 0,
+    "dark_share": 0.005,
+    "cull_loss": 0.095,
+    "solidity": 0.797,
+    "edges": 0.0563,
+    "coverage": 0.097
+   },
+   "quality": 0.99,
+   "verdict": "good"
   },
   {
    "file": "thug_anim.glb",
@@ -4927,8 +5944,18 @@
     "nose": "-z",
     "roof_peak_bin": 8
    },
-   "quality": 0.78,
-   "verdict": "fair"
+   "render": {
+    "looks_like": 1.0,
+    "looks_like_best": "a clean 3D render of a tiger",
+    "damage_share": 0.037,
+    "dark_share": 0.14,
+    "cull_loss": 0.038,
+    "solidity": 0.791,
+    "edges": 0.0368,
+    "coverage": 0.15
+   },
+   "quality": 1.0,
+   "verdict": "good"
   },
   {
    "file": "tiger_anim.glb",
@@ -4996,7 +6023,20 @@
     "nose": "+z",
     "roof_peak_bin": 4
    },
-   "quality": 0.58,
+   "render": {
+    "looks_like": 0.998,
+    "looks_like_best": "a clean 3D render of a truck",
+    "damage_share": 0.087,
+    "dark_share": 0.534,
+    "cull_loss": 0.039,
+    "solidity": 0.992,
+    "edges": 0.0195,
+    "coverage": 0.198
+   },
+   "quality_reasons": [
+    "mostly dark"
+   ],
+   "quality": 0.5,
    "verdict": "fair"
   },
   {
@@ -5025,6 +6065,16 @@
     "degenerate": 0.0,
     "textures": 2,
     "textures_ok": true
+   },
+   "render": {
+    "looks_like": 0.999,
+    "looks_like_best": "a clean 3D render of a tub",
+    "damage_share": 0,
+    "dark_share": 0.003,
+    "cull_loss": 0,
+    "solidity": 1,
+    "edges": 0.0074,
+    "coverage": 0.634
    },
    "quality": 1.0,
    "verdict": "good"
@@ -5056,8 +6106,18 @@
     "textures": 3,
     "textures_ok": true
    },
-   "quality": 0.64,
-   "verdict": "fair"
+   "render": {
+    "looks_like": 0.982,
+    "looks_like_best": "a clean 3D render of a viking",
+    "damage_share": 0.004,
+    "dark_share": 0.183,
+    "cull_loss": 0.061,
+    "solidity": 0.921,
+    "edges": 0.0536,
+    "coverage": 0.108
+   },
+   "quality": 0.99,
+   "verdict": "good"
   },
   {
    "file": "viking_anim.glb",
@@ -5262,7 +6322,20 @@
     "textures": 3,
     "textures_ok": true
    },
-   "quality": 0.8,
+   "render": {
+    "looks_like": 0.569,
+    "looks_like_best": "a clean 3D render of a water bender",
+    "damage_share": 0,
+    "dark_share": 0.001,
+    "cull_loss": 0.025,
+    "solidity": 0.986,
+    "edges": 0.0442,
+    "coverage": 0.083
+   },
+   "quality_reasons": [
+    "doubtful"
+   ],
+   "quality": 0.5,
    "verdict": "fair"
   },
   {
@@ -5292,8 +6365,18 @@
     "textures": 3,
     "textures_ok": true
    },
-   "quality": 0.89,
-   "verdict": "fair"
+   "render": {
+    "looks_like": 0.965,
+    "looks_like_best": "a clean 3D render of a waterbender",
+    "damage_share": 0,
+    "dark_share": 0.015,
+    "cull_loss": 0.07,
+    "solidity": 0.803,
+    "edges": 0.0604,
+    "coverage": 0.088
+   },
+   "quality": 0.98,
+   "verdict": "good"
   },
   {
    "file": "waterbender_anim.glb",
@@ -5360,6 +6443,16 @@
     "nose": "-z",
     "roof_peak_bin": 6
    },
+   "render": {
+    "looks_like": 1.0,
+    "looks_like_best": "a clean 3D render of a whale",
+    "damage_share": 0,
+    "dark_share": 0,
+    "cull_loss": 0,
+    "solidity": 0.587,
+    "edges": 0.0476,
+    "coverage": 0.057
+   },
    "quality": 1.0,
    "verdict": "good"
   },
@@ -5390,8 +6483,18 @@
     "textures": 3,
     "textures_ok": true
    },
-   "quality": 0.66,
-   "verdict": "fair"
+   "render": {
+    "looks_like": 0.975,
+    "looks_like_best": "a clean 3D render of a wizard",
+    "damage_share": 0.005,
+    "dark_share": 0.404,
+    "cull_loss": 0.113,
+    "solidity": 0.813,
+    "edges": 0.065,
+    "coverage": 0.095
+   },
+   "quality": 0.98,
+   "verdict": "good"
   },
   {
    "file": "wizard_anim.glb",
@@ -5458,8 +6561,18 @@
     "nose": "+z",
     "roof_peak_bin": 4
    },
-   "quality": 0.68,
-   "verdict": "fair"
+   "render": {
+    "looks_like": 0.999,
+    "looks_like_best": "a clean 3D render of a wolf",
+    "damage_share": 0.033,
+    "dark_share": 0.211,
+    "cull_loss": 0.035,
+    "solidity": 0.796,
+    "edges": 0.0339,
+    "coverage": 0.175
+   },
+   "quality": 1.0,
+   "verdict": "good"
   },
   {
    "file": "wolf_anim.glb",

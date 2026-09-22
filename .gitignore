@@ -186,3 +186,5 @@ backend/tools/colmap/
 backend/tools/brush.zip
 backend/tools/colmap.zip
 backend/assets/hdri/
+# the render check's transient page
+_assetview.html

@@ -175,6 +175,25 @@ def quality_score(rec: dict) -> tuple[float, str]:
     if mq.get("error"):
         return 0.0, "poor"
     reasons = []
+    # THE RENDER CHECK (2026-09-24): assetview.mjs renders each kind shaded and
+    # measures the dark share of its silhouette (torn generations show black
+    # where faces point inward or the texture never landed). Merged when the
+    # render file exists; a torn model is poor, a patchy one fair.
+    rd = _render_record(rec.get("file", ""))
+    if rd:
+        rec["render"] = {k: rd[k] for k in ("looks_like", "looks_like_best", "damage_share", "dark_share", "cull_loss", "solidity", "edges", "coverage") if k in rd}
+        # THE JUDGE (assetjudge.py): a vision model's belief that the shaded
+        # render is the kind it claims, against torn debris. Pixel statistics
+        # could not tell a mangled ferrari from a good corvette; this can.
+        if "looks_like" in rd:
+            if rd["looks_like"] < 0.35:
+                reasons.append("does not look like it")
+            elif rd["looks_like"] < 0.6:
+                reasons.append("doubtful")
+        # a torn ferrari still reads as a ferrari to the judge; what gives it
+        # away is that three quarters of its silhouette renders black
+        if rd.get("dark_share", 0.0) > 0.45:
+            reasons.append("mostly dark")
     if not mq.get("textures_ok", True):
         reasons.append("textures")
     if mq.get("degenerate", 0.0) > 0.05:
@@ -192,7 +211,7 @@ def quality_score(rec: dict) -> tuple[float, str]:
     # dust and proportions are suspicions, not proof (a scaled mesh defeats the
     # weld, a Z-up car defeats the height): they mark the model fair with a
     # reason, and only what cannot be right marks it poor
-    hard = [r for r in reasons if r in ("textures", "degenerate", "lying down")]
+    hard = [r for r in reasons if r in ("textures", "degenerate", "lying down", "does not look like it")]
     if reasons:
         rec["quality_reasons"] = reasons
     if hard:
@@ -200,8 +219,30 @@ def quality_score(rec: dict) -> tuple[float, str]:
     if reasons:
         return 0.5, "fair"
     share = mq.get("largest_share", 1.0)
+    looks = rd.get("looks_like") if rd else None
+    if looks is not None:
+        # with a judge, the verdict is the judge's: good when the render is
+        # believed and not mostly dark, fair otherwise; the geometry informs
+        q = 0.4 + 0.6 * looks
+        return round(q, 2), ("good" if (looks >= 0.6 and "mostly dark" not in reasons) else "fair")
     q = 0.55 + 0.45 * min(1.0, share / 0.6)
     return round(q, 2), ("good" if share >= 0.6 else "fair")
+
+
+_RENDER: dict | None = None
+
+
+def _render_record(file: str) -> dict:
+    """assetview.mjs's measurements for a library file, by file name."""
+    global _RENDER
+    if _RENDER is None:
+        _RENDER = {}
+        p = ROOT / "assets" / "library_render.json"
+        try:
+            _RENDER = {k.lower(): v for k, v in json.loads(p.read_text(encoding="utf-8")).items()}
+        except Exception:
+            _RENDER = {}
+    return _RENDER.get((file or "").lower(), {})
 
 
 CAR_NAMES = ("car", "corvette", "ferrari", "taxi", "truck", "sedan", "van", "pickup", "jeep", "coupe")

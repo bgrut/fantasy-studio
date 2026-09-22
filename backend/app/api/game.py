@@ -1076,6 +1076,9 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                         player_glb = _mglb
                         spec.player.asset = _mglb
                         spec.player.mode = "drive"
+                        # the sentence's paint still applies: the model is tinted in the runtime
+                        _pc2 = _infer_car_params(req.prompt, spec.player.name or "") or {}
+                        spec.player.car_params = {"library": True, "paint": _pc2.get("paint", 0xb5202a)}
                         try:
                             _rec = library._manifest().get(Path(_mglb).name.lower(), {})
                             _nose = (_rec.get("mesh") or {}).get("nose")

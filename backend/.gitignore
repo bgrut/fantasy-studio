@@ -53,6 +53,9 @@ tools/*
 # the studio's proof of the promise: ten sentences scored against their games
 !tools/prompt_check.py
 !tools/PROMPT_FIDELITY.md
+# the asset judge and its render check
+!tools/assetjudge.py
+tools/shotgate/renders/
 !tools/shotgate/
 tools/shotgate/node_modules/
 # Car Lab: source is tracked, its vendored three.js copy is not (copy it from

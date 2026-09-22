@@ -9028,7 +9028,7 @@ async function main() {
   }
   const pg = procRoot
     ? { scene: procRoot, animations: [] }
-    : P.car_params
+    : (P.car_params && !P.car_params.library)
     ? { scene: buildCar(P.car_params), animations: [] }
     : await loadGLB(P.asset);            // hard fail = visible error
   const { holder, root: pRoot, radius } =
@@ -9309,6 +9309,65 @@ async function main() {
           } catch (e) { /* a missing variant must not empty the street */ }
         }
         if (!_models.length) return;
+        // THE IMPOSTOR ATLAS (2026-09-24). Each variant, mid-stride, from eight
+        // angles and in two walk phases, rendered once into a 16-column strip;
+        // one atlas holds every variant as a row. Far pedestrians draw from it.
+        const IMP_W = 96, IMP_H = 192, IMP_ANG = 8, IMP_PH = 2;
+        let impostor = null;
+        try {
+          const rt = new THREE.WebGLRenderTarget(IMP_W * IMP_ANG * IMP_PH, IMP_H * _models.length, { depthBuffer: true });
+          const isc = new THREE.Scene();
+          isc.add(new THREE.HemisphereLight(0xe8eeff, 0x2a2a30, 2.2));
+          const ikey = new THREE.DirectionalLight(0xfff2e0, 2.0); ikey.position.set(2, 5, 3); isc.add(ikey);
+          const icam = new THREE.OrthographicCamera(-0.55, 0.55, 1.1, -0.0, 0.1, 20);
+          const prevRT = renderer.getRenderTarget(), prevClear = renderer.getClearAlpha(), prevCol = renderer.getClearColor(new THREE.Color());
+          renderer.setRenderTarget(rt); renderer.setClearColor(0x000000, 0); renderer.clear();
+          for (let vi = 0; vi < _models.length; vi++) {
+            const inst = skClone(_models[vi].scene);
+            const bb = new THREE.Box3().setFromObject(inst); const hgt = Math.max(bb.max.y - bb.min.y, 1e-3);
+            inst.scale.setScalar(1.8 / hgt); const bb2 = new THREE.Box3().setFromObject(inst); inst.position.y = -bb2.min.y;
+            const wrap = new THREE.Group(); wrap.add(inst); isc.add(wrap);
+            let mx = null;
+            if (_models[vi].walk) { mx = new THREE.AnimationMixer(inst); mx.clipAction(_models[vi].walk).play(); }
+            for (let ph = 0; ph < IMP_PH; ph++) {
+              if (mx) { mx.setTime((_models[vi].walk.duration || 1) * (0.15 + 0.5 * ph)); }
+              for (let ai = 0; ai < IMP_ANG; ai++) {
+                wrap.rotation.y = ai / IMP_ANG * Math.PI * 2;
+                icam.position.set(Math.sin(0) * 10, 0.9, 10); icam.lookAt(0, 0.9, 0);
+                renderer.setViewport((ph * IMP_ANG + ai) * IMP_W, vi * IMP_H, IMP_W, IMP_H);
+                renderer.setScissor((ph * IMP_ANG + ai) * IMP_W, vi * IMP_H, IMP_W, IMP_H); renderer.setScissorTest(true);
+                renderer.render(isc, icam);
+              }
+            }
+            isc.remove(wrap);
+          }
+          renderer.setScissorTest(false);
+          renderer.setRenderTarget(prevRT); renderer.setClearColor(prevCol, prevClear);
+          renderer.setViewport(0, 0, renderer.domElement.width, renderer.domElement.height);
+          // one instanced quad per far pedestrian, billboarded in the shader,
+          // the atlas cell chosen per instance
+          const N_IMP = 220;
+          const igeo = new THREE.InstancedBufferGeometry();
+          const quad = new THREE.PlaneGeometry(0.9, 1.8); igeo.index = quad.index; igeo.attributes.position = quad.attributes.position; igeo.attributes.uv = quad.attributes.uv;
+          const iPos = new THREE.InstancedBufferAttribute(new Float32Array(N_IMP * 3), 3);
+          const iCell = new THREE.InstancedBufferAttribute(new Float32Array(N_IMP * 3), 3);   // angle, phase, variant
+          igeo.setAttribute('iPos', iPos); igeo.setAttribute('iCell', iCell);
+          const imat = new THREE.ShaderMaterial({
+            uniforms: { tAtlas: { value: rt.texture }, uCols: { value: IMP_ANG * IMP_PH }, uRows: { value: _models.length }, uTint: { value: new THREE.Color(0xffffff) } },
+            vertexShader: `attribute vec3 iPos; attribute vec3 iCell; varying vec2 vUv; uniform float uCols, uRows;
+              void main() { vec2 cell = vec2(iCell.y * 8.0 + iCell.x, iCell.z); vUv = (uv + cell) / vec2(uCols, uRows);
+                vec3 right = vec3(viewMatrix[0][0], viewMatrix[1][0], viewMatrix[2][0]);
+                vec3 world = iPos + right * position.x + vec3(0.0, position.y + 0.9, 0.0);
+                gl_Position = projectionMatrix * viewMatrix * vec4(world, 1.0); }`,
+            fragmentShader: `uniform sampler2D tAtlas; uniform vec3 uTint; varying vec2 vUv;
+              void main() { vec4 c = texture2D(tAtlas, vUv); if (c.a < 0.5) discard; gl_FragColor = vec4(c.rgb * uTint, 1.0); }`,
+            transparent: false });
+          const imesh = new THREE.Mesh(igeo, imat); imesh.frustumCulled = false; imesh.name = 'pedImpostors'; imesh.renderOrder = 1;
+          scene.add(imesh);
+          impostor = { mesh: imesh, iPos, iCell, n: 0, N: N_IMP, ang: IMP_ANG, ph: IMP_PH, tint: imat.uniforms.uTint.value };
+          window.__pedImpostor = impostor;
+          console.log('[game] pedestrian impostors: ' + _models.length + ' variants, ' + IMP_ANG + ' angles, ' + IMP_PH + ' phases');
+        } catch (e) { console.warn('[game] impostors skipped: ' + e.message); }
         console.log('[game] walker variants: ' + _models.length
                     + ' (' + _wlist.join(', ') + ')');
         const g = { scene: _models[0].scene };
@@ -9430,7 +9489,7 @@ async function main() {
             mixer2.update(rngP() * 2.5);      // phase-shift: no synchronized march
           }
           const _pdir = rngP() < 0.5 ? 1 : -1;
-          window.__peds.push({ obj: holder2, mixer: mixer2, pts: r.pts,
+          window.__peds.push({ obj: holder2, mixer: mixer2, pts: r.pts, variant: i % _models.length,
             down: 0, kx: 0, kz: 0, spin: 0, _act: _pedAct,
             seg: Math.max(0, Math.floor(rngP() * (r.pts.length - 1))), t: rngP(),
             speed: spd, dir: _pdir,
@@ -9460,6 +9519,24 @@ async function main() {
       if (m && m.map) { if (_flatStyle) cartoonizeTexture(m); else despeckleTexture(m); }
     }
   });
+  // THE LIBRARY CAR WEARS THE SENTENCE'S PAINT (2026-09-24): a generated
+  // model comes in whatever colour it was born; the prompt's colour tints it,
+  // and its paint gets a clearcoat's metal and gloss instead of the flat
+  // generated material
+  if (P.car_params && P.car_params.library) {
+    const paint = new THREE.Color(P.car_params.paint || 0xb5202a).multiplyScalar(0.72);   // deeper than the flat hex: a white albedo times a light red reads salmon under the night fill
+    pRoot.traverse(o => {
+      if (!o.isMesh) return;
+      for (const m of Array.isArray(o.material) ? o.material : [o.material]) {
+        if (!m || !m.color) continue;
+        m.color.copy(paint);
+        if ('metalness' in m) m.metalness = Math.max(m.metalness || 0, 0.3);
+        if ('roughness' in m) m.roughness = Math.min(m.roughness === undefined ? 1 : m.roughness, 0.42);
+        if (m.emissive) { m.emissive.setScalar(0); m.emissiveMap = null; }
+        m.userData.noAutoTex = true; m.needsUpdate = true;
+      }
+    });
+  }
   const procShaders = [];
   if (P.mode === 'fly' || P.mode === 'swim') {
     pRoot.traverse(o => {
@@ -10580,7 +10657,8 @@ async function main() {
         walk_v: +walkV.toFixed(2), land_dip_peak: +landDipPeak.toFixed(3), run_k: +runK.toFixed(2), fov: +camera.fov.toFixed(1), fov_base: SPEC.camera.fov_deg,
         gait: { idle: +_gaitW.idle.toFixed(2), walk: +_gaitW.walk.toFixed(2), run: +_gaitW.run.toFixed(2), rate: actions.__walk ? +actions.__walk.timeScale.toFixed(2) : null, top: current && current.getClip ? current.getClip().name : null },
         lean: { roll: +turnRoll.toFixed(3), pitch: +accelP.toFixed(3), head: +headYawK.toFixed(3), head_bone: headBone ? headBone.name : null },
-        car: (pg.scene && pg.scene.userData && pg.scene.userData.car) || null,
+        car: (pg.scene && pg.scene.userData && pg.scene.userData.car) || ((DRIVE || DRIVING) && P.asset && (!P.car_params || P.car_params.library) ? { model: 'library', file: String(P.asset).split(/[\/]/).pop(), paint: P.car_params ? P.car_params.paint : null } : null),
+        crowd: { near: (window.__peds || []).filter(q => q.obj.visible).length, impostors: window.__pedImpostor ? window.__pedImpostor.n : 0, total: (window.__peds || []).length },
         light: { night: _isNightSky, moon: +pal.sun.toFixed(2), amb: +pal.amb.toFixed(2), exposure: +renderer.toneMappingExposure.toFixed(2), hero_fill: +heroFill.intensity.toFixed(1) },
         npc_weight: npcs.filter(n => n._v !== undefined && !n.dead && !n.dormant).map(n => ({ v: +n._v.toFixed(2), roll: +(n._roll || 0).toFixed(3), rate: n.anim && n.anim.cur ? +n.anim.cur.timeScale.toFixed(2) : null })).slice(0, 12),
         drive: (DRIVE || DRIVING) ? { speed: +Math.hypot(carVX, carVZ).toFixed(2), slip: +(window.__slip || 0).toFixed(3), drifting: !!window.__drifting, handbrake: !!window.__handbrake, steer_ease: +(window.__steerEase === undefined ? 1 : window.__steerEase).toFixed(3), top: +(P.run_speed || 0),
@@ -13131,6 +13209,7 @@ varying vec2 vUvRaw;
         }
       }
     }
+    if (window.__pedImpostor) window.__pedImpostor.n = 0;
     for (const pd of window.__peds || []) {
       // DOWNED: fly back, tumble flat, lie still, then get up. The walk
       // path is frozen meanwhile so they resume where they were hit rather
@@ -13182,14 +13261,34 @@ varying vec2 vUvRaw;
         pd.obj.rotation.y += dy * Math.min(1, dt * 6);
       }
       const _pd2 = (pd.obj.position.x - _pcam.x) ** 2 + (pd.obj.position.z - _pcam.z) ** 2;
-      const _vis = _pd2 < 72 * 72;    // 2026-09-22: 72 m, not 95: a pedestrian at 36 k triangles is a hero-grade mesh
+      // THE CROWD AT A DISTANCE (2026-09-24): within forty metres a mesh,
+      // beyond it one billboarded quad from the atlas, out to 160 m
+      const _imp = window.__pedImpostor;
+      const _near = _pd2 < (_imp ? 40 * 40 : 72 * 72);
+      const _vis = _near;
       if (pd.obj.visible !== _vis) pd.obj.visible = _vis;
+      if (_imp && !_near && _pd2 < 160 * 160 && _imp.n < _imp.N) {
+        const k = _imp.n++;
+        _imp.iPos.setXYZ(k, pd.obj.position.x, pd.obj.position.y, pd.obj.position.z);
+        // the atlas angle: the walker's heading against the line to the camera
+        const toCam = Math.atan2(_pcam.x - pd.obj.position.x, _pcam.z - pd.obj.position.z);
+        let rel = pd.obj.rotation.y - toCam; rel = ((rel % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
+        const ai = Math.round(rel / (Math.PI * 2) * _imp.ang) % _imp.ang;
+        const ph = Math.floor((performance.now() / 1000 * pd.speed * 1.7 + pd.seg) % _imp.ph);
+        _imp.iCell.setXYZ(k, ai, ph, pd.variant || 0);
+      }
       // A SHADOW ONLY UP CLOSE (2026-09-22): 58 pedestrians at 36 k triangles
       // each cast into three cascades, 15 M triangles a frame for shadows no
       // one could see. Within 38 m a pedestrian casts; beyond, it does not.
       const _cast = _vis && _pd2 < 26 * 26;
       if (pd._cast !== _cast) { pd._cast = _cast; pd.obj.traverse(o => { if (o.isMesh) o.castShadow = _cast; }); }
       if (pd.mixer && _vis && _pd2 < 62 * 62) pd.mixer.update(dt);
+    }
+    if (window.__pedImpostor) {
+      const im = window.__pedImpostor;
+      im.mesh.geometry.instanceCount = im.n; im.iPos.needsUpdate = true; im.iCell.needsUpdate = true;
+      im.mesh.visible = im.n > 0;
+      im.tint.setScalar(_isNightSky ? 0.42 : 1.0);           // the sheet is lit at boot by day; the night dims it
     }
     if (window.__torches) {
       const tt = performance.now() / 1000;
