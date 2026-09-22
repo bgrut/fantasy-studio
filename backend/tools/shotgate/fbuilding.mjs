@@ -83,6 +83,34 @@ const feel = await (async () => {
 })();
 console.log('the gait  : walking', JSON.stringify(feel.gaitW.gait), '| idle again', JSON.stringify(feel.idleW), '| turning roll', feel.turning.roll, '| head bone', feel.gaitW.lean.head_bone);
 console.log('on foot   : 60 ms in', feel.early, '| 760 ms in', feel.full, '| run fov', feel.runFov, 'of', feel.base, '| landing dip', feel.dip, '| stopped', feel.stopped);
+
+// the frame's luminance, read back in the page from a screenshot (the canvas
+// itself is not preserved): the whole frame, the sky band, and a box around a screen point
+const lumOf = async (p, box) => {
+  const b64 = await p.screenshot({ encoding: 'base64' });
+  return p.evaluate(async (b64, box) => {
+    const img = new Image(); img.src = 'data:image/png;base64,' + b64; await img.decode();
+    const c = document.createElement('canvas'); c.width = img.width; c.height = img.height;
+    const g = c.getContext('2d'); g.drawImage(img, 0, 0);
+    const stat = (x, y, w, h) => { const d = g.getImageData(Math.max(0, x | 0), Math.max(0, y | 0), Math.max(1, w | 0), Math.max(1, h | 0)).data; let s = 0; for (let i = 0; i < d.length; i += 4) s += 0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2]; return +(s / (d.length / 4)).toFixed(1); };
+    return { frame: stat(0, 0, c.width, c.height), sky: stat(0, 0, c.width, c.height * 0.12), box: box ? stat(box[0], box[1], box[2], box[3]) : null };
+  }, b64, box);
+};
+const heroBox = (p) => p.evaluate(() => { const v = window.__game.pos();   const pr = { x: v[0], y: v[1] + 0.9, z: v[2] }; const cam = window.__camera; const m = cam.matrixWorldInverse; const pm = cam.projectionMatrix;
+  const x = pr.x * m.elements[0] + pr.y * m.elements[4] + pr.z * m.elements[8] + m.elements[12];
+  const y = pr.x * m.elements[1] + pr.y * m.elements[5] + pr.z * m.elements[9] + m.elements[13];
+  const z = pr.x * m.elements[2] + pr.y * m.elements[6] + pr.z * m.elements[10] + m.elements[14];
+  const w = pr.x * m.elements[3] + pr.y * m.elements[7] + pr.z * m.elements[11] + m.elements[15];
+  const cx = (x * pm.elements[0] + z * pm.elements[8]) / -z, cy = (y * pm.elements[5] + z * pm.elements[9]) / -z;
+  const sx = (cx * 0.5 + 0.5) * innerWidth, sy = (1 - (cy * 0.5 + 0.5)) * innerHeight; return [sx - 35, sy - 70, 70, 140]; });
+// the light: a night on a moor, and the hero still reads on it (the fill), with the sky dark
+const lightF = await p.evaluate(() => window.__game.facts().light);
+const box = await heroBox(p);
+const lum = await lumOf(p, box);
+console.log('the light :', JSON.stringify(lightF), '| frame', lum.frame, '| sky', lum.sky, '| hero', lum.box);
+// and the cast moves with weight: any npc that moved carries a roll or a clip rate that followed it
+const npcW = await p.evaluate(() => (window.__game.facts().npc_weight || []).filter(x => x.v > 0.3));
+console.log('the cast  : moving', npcW.length, '| rates', npcW.map(x => x.rate).join(' '));
 // the hero: measured standing in the pose the player sees, holding the role's weapon
 const hero = await p.evaluate(() => { const f = window.__game.facts(); return { dims: f.player_dims, hero: f.hero, weapon: f.weapon }; });
 const standing = hero.dims && hero.dims[1] >= Math.max(hero.dims[0], hero.dims[2]) * 0.9;
@@ -92,6 +120,7 @@ await b.close();
 const ok = r.landmark && r.landmark.w > 5 && r.landmark.h > 5 && errs.length === 0
   && standing && (hero.hero !== 'detective' || hero.weapon === null || hero.weapon === 'pistol')
   && feel.early > 0.2 && feel.early < feel.full * 0.85 && feel.full > 1.5 && feel.runFov > feel.base + 2 && feel.dip > 0.03 && feel.stopped < 0.05
+  && (!lightF.night || (lightF.moon <= 0.6 && lightF.hero_fill > 0 && lum.box >= 22 && lum.box > lum.frame * 1.15 && lum.sky < 70))
   && feel.gaitW.gait.walk > 0.5 && feel.gaitW.gait.idle < 0.5 && feel.gaitW.gait.rate >= 0.5 && feel.gaitW.gait.rate <= 5.5 && feel.idleW.idle > 0.9 && Math.abs(feel.turning.roll) > 0.01 && !!feel.gaitW.lean.head_bone   // a detective with a weapon holds the pistol; a build with no hostiles holds nothing && cast.ghosts > 0 && cast.ghosts <= 3 && cast.animals === 0   // a haunting has ghosts, not wolves, and not a crowd
   && faced && faced.off < 1.05 && faced.lamps === 3;
 process.exit(ok ? 0 : 1);

@@ -285,6 +285,28 @@ def classify_hot_edit(prompt: str) -> dict | None:
     return patch or None
 
 
+_GEN_POOL = None
+
+
+def _ensure_asset_limited(kind: str, secs: float, verbose: bool = False) -> bool:
+    """GENERATION HAS A CLOCK (2026-09-23). A hero the library lacked once went
+    to image-to-3D generation and hung a build for an hour. The generation
+    runs on its own thread; the build waits `secs`, then carries on with the
+    stand-in. The thread finishes in the background and registers the asset
+    in the library, so the next build of that noun gets the real thing."""
+    global _GEN_POOL
+    import concurrent.futures as _cf
+    from app.game_export.generate import ensure_asset
+    if _GEN_POOL is None:
+        _GEN_POOL = _cf.ThreadPoolExecutor(max_workers=1, thread_name_prefix="assetgen")
+    fut = _GEN_POOL.submit(ensure_asset, kind, None, 45000, verbose)
+    try:
+        fut.result(timeout=secs)
+        return True
+    except _cf.TimeoutError:
+        return False
+
+
 def _infer_car_params(prompt: str, cast: str) -> dict | None:
     """Parametric-car params from the user's words (2026-08-04). Research
     verdict: cars are hard-surface parametric objects — image-to-3D melts
@@ -984,7 +1006,10 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                         else "~25-30 min on CPU")
                 stage(f"creating '{want}': image → 3D mesh "
                       f"(first time only; {_eta}, then cached forever)")
-                ensure_asset(want, verbose=False)
+                if not _ensure_asset_limited(want, 8 * 60, verbose=False):
+                    job.setdefault("notes", []).append(
+                        f"'{want}' is still being created in the background (it took longer than eight minutes); "
+                        f"this build uses a stand-in, the next one gets the real thing")
                 player_glb = (library.resolve(want)
                               if pattern in ("vehicle", "flying", "aquatic", "static")
                               else ensure_playable(want, verbose=False))
@@ -1036,6 +1061,30 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                 # side, so the seat promotion overrides the procedural opt-in
                 _cp = _infer_car_params(req.prompt, spec.player.name or "") \
                     if (req.procedural or _race_seated) else None
+                # A NAMED CAR IS THE LIBRARY'S MODEL WHEN IT IS GOOD (2026-09-23).
+                # The parametric car has a ceiling; a generated corvette does
+                # not, when it is a real corvette. assetmeta.py measured every
+                # model; a named car kind whose model is 'good' is driven as
+                # that model, nose the way the measurement found it.
+                import re as _re6
+                _named_car = next((k for k in ("corvette", "ferrari", "taxi", "truck", "sedan", "coupe", "van", "pickup", "car")
+                                   if _re6.search(r"\b" + k + r"s?\b", (req.prompt or "").lower())), None)
+                if _named_car and library.verdict(_named_car) == "good":
+                    _mglb = library.resolve(_named_car)
+                    if _mglb:
+                        _cp = None
+                        player_glb = _mglb
+                        spec.player.asset = _mglb
+                        spec.player.mode = "drive"
+                        try:
+                            _rec = library._manifest().get(Path(_mglb).name.lower(), {})
+                            _nose = (_rec.get("mesh") or {}).get("nose")
+                            if _nose in ("-x", "-z"):
+                                spec.player.yaw_offset_deg = 180.0
+                        except Exception:
+                            pass
+                        job.setdefault("notes", []).append(
+                            f"the {_named_car} is the library's own model, measured good; the parametric car stands down")
                 # The fallback fires for BOTH failure paths: the promoted
                 # racer (human hero, race objective) AND the misclassified
                 # one — 'courier' classifies as a vehicle (courier van), takes
@@ -1419,7 +1468,9 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                     from app.game_export.generate import ensure_asset
                     stage(f"creating '{ekind}': image → 3D mesh "
                           f"(first time only; slow without a GPU)")
-                    ensure_asset(ekind, verbose=True)
+                    if not _ensure_asset_limited(ekind, 4 * 60, verbose=True):
+                        job.setdefault("notes", []).append(
+                            f"'{ekind}' is still being created in the background (over four minutes); skipped in this build")
                     glb = ensure_playable(ekind, verbose=False) or library.resolve(ekind)
                     if glb:
                         job.setdefault("notes", []).append(

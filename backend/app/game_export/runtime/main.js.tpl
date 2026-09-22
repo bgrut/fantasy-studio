@@ -923,8 +923,18 @@ async function main() {
   // night skies get floors: ambient 0.9, exposure 0.9, a fill sky at 0.28
   // lightness, and a cool bounce from the moon's far side.
   const _isNightSky = ['night', 'dusk'].includes(SPEC.world.sky);
-  if (_isNightSky) { pal.amb = Math.max(pal.amb, 0.9); pal.exp = Math.max(pal.exp || 0.8, 0.9); pal.sun = Math.max(pal.sun, 1.1); }
-  const hemi = new THREE.HemisphereLight(_fillFloor(pal.sky, _isNightSky ? 0.28 : 0.16),
+  // NIGHT IS NIGHT (2026-09-23). The floors above forced a night's sun to
+  // 1.1 and its ambient to 0.9: a city at night was lit like noon. The night
+  // keeps a moon instead, a cool key at a third of a day's sun, an ambient
+  // that leaves shadow in the shadows, and the hero fill below so the
+  // character reads on the darkest ground.
+  if (_isNightSky) {
+    pal.amb = Math.min(Math.max(pal.amb, 0.5), 0.62);
+    pal.exp = Math.max(pal.exp || 0.8, 0.95);
+    pal.sun = Math.min(Math.max(pal.sun, 0.34), 0.52);
+    pal.sunCol = 0xc6d4ff;
+  }
+  const hemi = new THREE.HemisphereLight(_fillFloor(pal.sky, _isNightSky ? 0.22 : 0.16),
     SPEC.world.palette ? _fillFloor(new THREE.Color(pal.fog).multiplyScalar(0.45).getHex(), 0.07)
                        : 0x3a3f35,
     pal.amb * 0.85);
@@ -940,10 +950,17 @@ async function main() {
   sun.shadow.camera.updateProjectionMatrix();
   scene.add(sun);
   if (_isNightSky) {                            // the moon's bounce: a cool fill from the far quadrant
-    const moonFill = new THREE.DirectionalLight(0x9fb4ff, 0.45);
+    const moonFill = new THREE.DirectionalLight(0x9fb4ff, 0.30);
     moonFill.position.set(-pal.sunPos[0], Math.max(20, pal.sunPos[1] * 0.6), -pal.sunPos[2]);
     scene.add(moonFill);
   }
+  // THE HERO FILL (2026-09-23): a soft warm pool that follows the hero, on
+  // at night and at dusk, off by day. The one light that guarantees the
+  // character reads on a black moor. Added at boot so the light count never
+  // changes in play (a changed count recompiles every material).
+  const heroFill = new THREE.PointLight(0xfff0dc, _isNightSky ? 4.0 : 0.0, 9, 2);
+  heroFill.name = 'heroFill';
+  scene.add(heroFill);
   // CASCADED SHADOWS (Arc A round 3, 2026-07-28): big worlds/cities get
   // 3-cascade sun shadows — crisp near the camera AND still shadowed at
   // distance, instead of one 48m fitted box with a bare horizon. Small
@@ -6673,6 +6690,29 @@ async function main() {
   }
   function stepNPCs(dt, playerPos, t) {
     window.__alertPeak = 0;             // recomputed by the guards each frame
+    // WEIGHT FOR EVERYONE (2026-09-23): the same lean the hero got. Ground
+    // speed from the last frame's move, a roll into turns by the turn rate,
+    // a pitch with acceleration, and the clip rate following the speed.
+    for (const n of npcs) {
+      if (n.gone || n.dead || n.dormant || !n.obj) continue;
+      const o = n.obj, px = o.position.x, pz = o.position.z;
+      const yawNow = n.yaw !== undefined ? n.yaw : o.rotation.y;
+      if (n._wp === undefined) { n._wp = [px, pz]; n._wy = yawNow; n._wv = 0; n._roll = 0; n._pitch = 0; }
+      const v = Math.hypot(px - n._wp[0], pz - n._wp[1]) / Math.max(dt, 1e-3);
+      n._wp = [px, pz];
+      let dY = yawNow - n._wy; while (dY > Math.PI) dY -= Math.PI * 2; while (dY < -Math.PI) dY += Math.PI * 2;
+      n._wy = yawNow;
+      const yawRate = dY / Math.max(dt, 1e-3);
+      n._roll = THREE.MathUtils.damp(n._roll, THREE.MathUtils.clamp(-yawRate * 0.04 * Math.min(v / 1.5, 1.5), -0.14, 0.14), 6, dt);
+      n._pitch = THREE.MathUtils.damp(n._pitch, THREE.MathUtils.clamp((v - n._wv) / Math.max(dt, 1e-3) * 0.015, -0.08, 0.08), 6, dt);
+      n._wv = v;
+      if (!(n.down > 0) && !n.spectral) { o.rotation.z = n._roll; o.rotation.x = n._pitch; }   // a knockdown owns the tilt; a ghost floats
+      if (n.anim && n.anim.cur && n.anim.cur !== n.anim.idle) {
+        const nominal = n.anim.cur === n.anim.run ? 3.4 : 1.4;                  // what a walk or run clip depicts, roughly
+        n.anim.cur.timeScale = v > 0.05 ? THREE.MathUtils.clamp(v / nominal, 0.6, 2.4) : 1;
+      }
+      n._v = v;
+    }
     for (const n of npcs) {
       if (n.dormant) continue;           // wave-pool members sleep until woken
       // STRUCK BY A CAR (2026-08-07 r2). The first cut only knocked down
@@ -10541,6 +10581,8 @@ async function main() {
         gait: { idle: +_gaitW.idle.toFixed(2), walk: +_gaitW.walk.toFixed(2), run: +_gaitW.run.toFixed(2), rate: actions.__walk ? +actions.__walk.timeScale.toFixed(2) : null, top: current && current.getClip ? current.getClip().name : null },
         lean: { roll: +turnRoll.toFixed(3), pitch: +accelP.toFixed(3), head: +headYawK.toFixed(3), head_bone: headBone ? headBone.name : null },
         car: (pg.scene && pg.scene.userData && pg.scene.userData.car) || null,
+        light: { night: _isNightSky, moon: +pal.sun.toFixed(2), amb: +pal.amb.toFixed(2), exposure: +renderer.toneMappingExposure.toFixed(2), hero_fill: +heroFill.intensity.toFixed(1) },
+        npc_weight: npcs.filter(n => n._v !== undefined && !n.dead && !n.dormant).map(n => ({ v: +n._v.toFixed(2), roll: +(n._roll || 0).toFixed(3), rate: n.anim && n.anim.cur ? +n.anim.cur.timeScale.toFixed(2) : null })).slice(0, 12),
         drive: (DRIVE || DRIVING) ? { speed: +Math.hypot(carVX, carVZ).toFixed(2), slip: +(window.__slip || 0).toFixed(3), drifting: !!window.__drifting, handbrake: !!window.__handbrake, steer_ease: +(window.__steerEase === undefined ? 1 : window.__steerEase).toFixed(3), top: +(P.run_speed || 0),
                                       skids: _skidLife ? Array.from(_skidLife).filter(v => v > 0).length : 0, smoke: _smoke ? _smoke.filter(x => x.visible).length : 0,
                                       peds_visible: (window.__peds || []).filter(q => q.obj.visible).length, peds_casting: (window.__peds || []).filter(q => q._cast).length } : null,
@@ -13317,6 +13359,7 @@ varying vec2 vUvRaw;
       }
       camera.position.lerp(new THREE.Vector3(cx, cy, cz), 1 - Math.exp(-(8 + (_drv ? Math.min(_spdNow * 0.25, 8) : 0)) * dt));   // tighter at speed
       camera.lookAt(camTarget);
+      heroFill.position.set(fX + Math.sin(yaw) * 1.4, fY + 2.3, fZ + Math.cos(yaw) * 1.4);   // between the hero and the camera, above
     }
     if (cineOn) {                        // CINEMATIC CAMERA override
       cineT += dt;

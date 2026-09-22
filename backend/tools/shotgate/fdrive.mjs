@@ -38,6 +38,29 @@ const cost = await p.evaluate(async () => { const d = []; let last = performance
   const tr = [];   // the cascades take turns, so the triangles are averaged over the window, not read off one frame
   await new Promise(done => { const tick = (t) => { d.push(t - last); last = t; tr.push(window.__renderer.info.render.triangles); if (t - t0 < 4000) requestAnimationFrame(tick); else done(); }; requestAnimationFrame(tick); });
   d.shift(); d.sort((a, b) => a - b); return { fps: +(1000 / (d.reduce((a, b) => a + b, 0) / d.length)).toFixed(0), p95: +d[Math.floor(d.length * 0.95)].toFixed(1), tris: Math.round(tr.reduce((a, b) => a + b, 0) / tr.length) }; });
+
+// the frame's luminance, read back in the page from a screenshot (the canvas
+// itself is not preserved): the whole frame, the sky band, and a box around a screen point
+const lumOf = async (p, box) => {
+  const b64 = await p.screenshot({ encoding: 'base64' });
+  return p.evaluate(async (b64, box) => {
+    const img = new Image(); img.src = 'data:image/png;base64,' + b64; await img.decode();
+    const c = document.createElement('canvas'); c.width = img.width; c.height = img.height;
+    const g = c.getContext('2d'); g.drawImage(img, 0, 0);
+    const stat = (x, y, w, h) => { const d = g.getImageData(Math.max(0, x | 0), Math.max(0, y | 0), Math.max(1, w | 0), Math.max(1, h | 0)).data; let s = 0; for (let i = 0; i < d.length; i += 4) s += 0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2]; return +(s / (d.length / 4)).toFixed(1); };
+    return { frame: stat(0, 0, c.width, c.height), sky: stat(0, 0, c.width, c.height * 0.12), box: box ? stat(box[0], box[1], box[2], box[3]) : null };
+  }, b64, box);
+};
+const heroBox = (p) => p.evaluate(() => { const v = window.__game.pos();   const pr = { x: v[0], y: v[1] + 0.9, z: v[2] }; const cam = window.__camera; const m = cam.matrixWorldInverse; const pm = cam.projectionMatrix;
+  const x = pr.x * m.elements[0] + pr.y * m.elements[4] + pr.z * m.elements[8] + m.elements[12];
+  const y = pr.x * m.elements[1] + pr.y * m.elements[5] + pr.z * m.elements[9] + m.elements[13];
+  const z = pr.x * m.elements[2] + pr.y * m.elements[6] + pr.z * m.elements[10] + m.elements[14];
+  const w = pr.x * m.elements[3] + pr.y * m.elements[7] + pr.z * m.elements[11] + m.elements[15];
+  const cx = (x * pm.elements[0] + z * pm.elements[8]) / -z, cy = (y * pm.elements[5] + z * pm.elements[9]) / -z;
+  const sx = (cx * 0.5 + 0.5) * innerWidth, sy = (1 - (cy * 0.5 + 0.5)) * innerHeight; return [sx - 35, sy - 70, 70, 140]; });
+const lightD = await p.evaluate(() => window.__game.facts().light);
+const lumD = await lumOf(p, null);
+console.log('the light :', JSON.stringify(lightD), '| frame', lumD.frame, '| sky', lumD.sky);
 console.log('the car   :', JSON.stringify(fast.car));
 console.log('throttle  : speed', fast.drive && fast.drive.speed, 'm/s after 6 s of W (top', fast.drive && fast.drive.top, ') | fov', fast.fov, 'of', fast.fov_base);
 console.log('steering  : ease', boost.drive && boost.drive.steer_ease, 'at', boost.drive && boost.drive.speed, 'm/s under boost |', cruise.drive && cruise.drive.steer_ease, 'at', cruise.drive && cruise.drive.speed, 'cruising');
@@ -46,6 +69,7 @@ console.log('the cost  : fps', cost.fps, '| p95', cost.p95, 'ms | tris', cost.tr
 console.log('errors    :', errs.length ? errs.join(' | ') : 'none');
 await b.close();
 const ok = fast.drive && fast.drive.speed > 7 && fast.fov > fast.fov_base + 3
+  && (!lightD.night || (lightD.moon <= 0.6 && lumD.frame < 105 && lumD.sky < 75))   // a night that reads as night
   && fast.car && fast.car.smooth && fast.car.cabin && fast.car.pillars === 6 && fast.car.body_verts > 600   // a smooth-shaded body with a real greenhouse
   && boost.drive && boost.drive.speed > 15 && boost.drive.steer_ease < 0.85 && cruise.drive && cruise.drive.steer_ease > boost.drive.steer_ease   // eases with speed
   && slide.drive && slide.drive.handbrake && slide.drive.drifting && slide.drive.slip > 0.2 && slide.drive.skids > 0 && slide.drive.smoke > 0

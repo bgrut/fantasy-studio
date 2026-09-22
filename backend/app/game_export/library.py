@@ -68,7 +68,47 @@ _PROC_MODULES = {
 }
 
 
-def resolve(kind: str) -> str | None:
+_MANIFEST: dict | None = None
+
+
+def _manifest() -> dict:
+    """assetmeta.py's measurements, by file name; empty when it has not run."""
+    global _MANIFEST
+    if _MANIFEST is None:
+        _MANIFEST = {}
+        try:
+            import json as _json
+            d = _json.loads((BACKEND_ROOT / "assets" / "library_manifest.json").read_text(encoding="utf-8"))
+            for r in d.get("assets", []):
+                if r.get("file"):
+                    _MANIFEST[r["file"].lower()] = r
+        except Exception:
+            _MANIFEST = {}
+    return _MANIFEST
+
+
+def verdict(kind_or_path) -> str:
+    """good, fair, poor, or unknown: what assetmeta.py made of the model."""
+    p = kind_or_path if isinstance(kind_or_path, str) and kind_or_path.lower().endswith(".glb") else resolve(str(kind_or_path), any_quality=True)
+    if not p:
+        return "unknown"
+    rec = _manifest().get(Path(p).name.lower())
+    return (rec or {}).get("verdict", "unknown")
+
+
+def resolve(kind: str, any_quality: bool = False) -> str | None:
+    """THE QUALITY GATE (2026-09-23): a model assetmeta.py measured as poor
+    (a mangled generation) is treated as missing, so the kin fallback or the
+    parametric build takes its place; any_quality=True hands it out anyway."""
+    p = _resolve(kind)
+    if p and not any_quality:
+        rec = _manifest().get(Path(p).name.lower())
+        if rec and rec.get("verdict") == "poor":
+            return None
+    return p
+
+
+def _resolve(kind: str) -> str | None:
     """Return an absolute path to a game-ready GLB for `kind`, or None.
     Raw (unoptimized) generated entries are decimated to game budget on first
     use via the CPU-Blender optimizer, then cached as ready."""

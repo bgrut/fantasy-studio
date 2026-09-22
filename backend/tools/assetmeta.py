@@ -30,6 +30,183 @@ LIB = ROOT / "assets" / "library"
 OUT = ROOT / "assets" / "library_manifest.json"
 
 
+def glb_chunks(path: Path):
+    """(json, bin bytes or None) for a GLB."""
+    with open(path, "rb") as f:
+        magic, _ver, total = struct.unpack("<III", f.read(12))
+        if magic != 0x46546C67:
+            raise ValueError("not a GLB")
+        clen, ctype = struct.unpack("<II", f.read(8))
+        if ctype != 0x4E4F534A:
+            raise ValueError("first chunk is not JSON")
+        g = json.loads(f.read(clen))
+        binb = None
+        rest = f.read()
+        if len(rest) >= 8:
+            blen, btype = struct.unpack("<II", rest[:8])
+            if btype == 0x004E4942:
+                binb = rest[8:8 + blen]
+        return g, binb
+
+
+def _accessor(g: dict, binb: bytes, idx: int):
+    """A numpy view of an accessor (POSITION or indices) in the BIN chunk."""
+    import numpy as np
+    acc = g["accessors"][idx]
+    bv = g["bufferViews"][acc["bufferView"]]
+    ctype = {5120: np.int8, 5121: np.uint8, 5122: np.int16, 5123: np.uint16, 5125: np.uint32, 5126: np.float32}[acc["componentType"]]
+    ncomp = {"SCALAR": 1, "VEC2": 2, "VEC3": 3, "VEC4": 4, "MAT4": 16}[acc["type"]]
+    start = bv.get("byteOffset", 0) + acc.get("byteOffset", 0)
+    stride = bv.get("byteStride", 0)
+    itemsize = np.dtype(ctype).itemsize * ncomp
+    if stride and stride != itemsize:
+        raw = np.frombuffer(binb, dtype=np.uint8, count=stride * (acc["count"] - 1) + itemsize, offset=start)
+        rows = np.lib.stride_tricks.as_strided(raw, shape=(acc["count"], itemsize), strides=(stride, 1))
+        return np.ascontiguousarray(rows).view(ctype).reshape(acc["count"], ncomp)
+    return np.frombuffer(binb, dtype=ctype, count=acc["count"] * ncomp, offset=start).reshape(acc["count"], ncomp)
+
+
+def mesh_quality(g: dict, binb, rec: dict) -> dict:
+    """THE QUALITY GATE (2026-09-23). Reads the mesh itself: the share of
+    triangles in the largest welded component (a mangled generation is many
+    shards), the count of real fragments, the share of degenerate triangles,
+    whether the textures decode, and for a car which end is the nose."""
+    import numpy as np
+    out = {"tris": 0, "largest_share": 0.0, "fragments": 0, "degenerate": 0.0, "textures": 0, "textures_ok": True}
+    if binb is None:
+        out["error"] = "no BIN chunk"
+        return out
+    faces_all, verts_all, base = [], [], 0
+    for mesh in g.get("meshes", []):
+        for pr in mesh.get("primitives", []):
+            pi = pr.get("attributes", {}).get("POSITION")
+            if pi is None or pr.get("mode", 4) != 4:
+                continue
+            try:
+                pos = _accessor(g, binb, pi).astype(np.float64)
+                if "indices" in pr:
+                    idx = _accessor(g, binb, pr["indices"]).reshape(-1).astype(np.int64)
+                else:
+                    idx = np.arange(pos.shape[0], dtype=np.int64)
+            except Exception:
+                continue
+            idx = idx[: (idx.shape[0] // 3) * 3].reshape(-1, 3)
+            faces_all.append(idx + base)
+            verts_all.append(pos)
+            base += pos.shape[0]
+    if not faces_all:
+        out["error"] = "no triangles"
+        return out
+    F = np.concatenate(faces_all)
+    V = np.concatenate(verts_all)
+    out["tris"] = int(F.shape[0])
+    # weld by position: generated meshes are unwelded, so every triangle would be its own island
+    ext = float(np.max(np.ptp(V, axis=0))) or 1.0
+    q = np.round(V / (ext * 2e-4)).astype(np.int64)
+    _, weld = np.unique(q, axis=0, return_inverse=True)
+    weld = weld.reshape(-1)
+    Fw = weld[F]
+    # degenerate: near-zero area against the model's scale
+    e1 = V[F[:, 1]] - V[F[:, 0]]
+    e2 = V[F[:, 2]] - V[F[:, 0]]
+    area = 0.5 * np.linalg.norm(np.cross(e1, e2), axis=1)
+    out["degenerate"] = round(float(np.mean(area < (ext * ext) * 1e-9)), 4)
+    # connected components over welded vertices, union-find vectorised by label propagation
+    nverts = int(weld.max()) + 1
+    label = np.arange(nverts)
+    for _ in range(64):
+        m = np.minimum.reduce([label[Fw[:, 0]], label[Fw[:, 1]], label[Fw[:, 2]]])
+        new = label.copy()
+        np.minimum.at(new, Fw[:, 0], m); np.minimum.at(new, Fw[:, 1], m); np.minimum.at(new, Fw[:, 2], m)
+        new = new[new]
+        if np.array_equal(new, label):
+            break
+        label = new
+    comp = label[Fw[:, 0]]
+    _, counts = np.unique(comp, return_counts=True)
+    out["largest_share"] = round(float(counts.max() / F.shape[0]), 4)
+    out["fragments"] = int(np.sum(counts >= max(40, F.shape[0] * 0.002)))
+    # textures: every image decodes
+    imgs = g.get("images", [])
+    out["textures"] = len(imgs)
+    try:
+        from PIL import Image
+        import io
+        for im in imgs:
+            if "bufferView" not in im:
+                continue
+            bv = g["bufferViews"][im["bufferView"]]
+            data = binb[bv.get("byteOffset", 0): bv.get("byteOffset", 0) + bv["byteLength"]]
+            Image.open(io.BytesIO(data)).verify()
+    except Exception:
+        out["textures_ok"] = False
+    # the nose of a car: the roofline peaks over the cabin, which sits behind the
+    # bonnet, so the nose is the end farther from the tallest bin along the length
+    dims = rec.get("dims_m") or {}
+    axis = "xyz".index(rec.get("tallest_axis", "x")) if False else int(np.argmax([dims.get("x", 0), dims.get("y", 0), dims.get("z", 0)]))
+    if axis in (0, 2) and dims.get("y", 0) > 0:
+        coord = V[:, axis]
+        lo, hi = float(coord.min()), float(coord.max())
+        bins = np.clip(((coord - lo) / max(hi - lo, 1e-6) * 10).astype(int), 0, 9)
+        top = np.zeros(10)
+        for bi in range(10):
+            sel = V[bins == bi, 1]
+            top[bi] = float(np.percentile(sel, 98)) if sel.size else 0.0
+        peak = int(np.argmax(top))
+        out["nose"] = ("-" if peak >= 5 else "+") + "xyz"[axis]
+        out["roof_peak_bin"] = peak
+    return out
+
+
+def quality_score(rec: dict) -> tuple[float, str]:
+    """A number and a verdict from the measurements: good, fair or poor.
+
+    CONSERVATIVE BY DESIGN (2026-09-23). The first calibration called 70 of
+    153 assets poor, every hero character among them: this pipeline's meshes
+    are unwelded shards by construction, so the largest-component share does
+    not separate a good corvette (0.10) from a mangled ferrari (0.09). Only
+    clear failures are poor: textures that do not decode, a swarm of
+    degenerate triangles, a character lying down, a car with the proportions
+    of a brick, or a mesh that is dust. A well-joined mesh is good; the rest
+    is fair, and a fair model is used but never preferred over a parametric
+    build. Telling a good generation from a mangled one needs a rendered
+    check against its own reference image, which is the next tool."""
+    mq = rec.get("mesh") or {}
+    if mq.get("error"):
+        return 0.0, "poor"
+    reasons = []
+    if not mq.get("textures_ok", True):
+        reasons.append("textures")
+    if mq.get("degenerate", 0.0) > 0.05:
+        reasons.append("degenerate")
+    if is_characterish(rec) and not rec.get("upright", True):
+        reasons.append("lying down")
+    nm = rec.get("file", "").lower()
+    dims = rec.get("dims_m") or {}
+    if any(k in nm for k in CAR_NAMES) and dims:
+        length = max(dims.get("x", 0), dims.get("z", 0)); height = dims.get("y", 1e-6)
+        if not (1.6 <= length / max(height, 1e-6) <= 4.5):
+            reasons.append("proportions")
+    if mq.get("largest_share", 1.0) < 0.02 and mq.get("tris", 0) > 2000:
+        reasons.append("dust")
+    # dust and proportions are suspicions, not proof (a scaled mesh defeats the
+    # weld, a Z-up car defeats the height): they mark the model fair with a
+    # reason, and only what cannot be right marks it poor
+    hard = [r for r in reasons if r in ("textures", "degenerate", "lying down")]
+    if reasons:
+        rec["quality_reasons"] = reasons
+    if hard:
+        return 0.2, "poor"
+    if reasons:
+        return 0.5, "fair"
+    share = mq.get("largest_share", 1.0)
+    q = 0.55 + 0.45 * min(1.0, share / 0.6)
+    return round(q, 2), ("good" if share >= 0.6 else "fair")
+
+
+CAR_NAMES = ("car", "corvette", "ferrari", "taxi", "truck", "sedan", "van", "pickup", "jeep", "coupe")
+
+
 def glb_json(path: Path) -> dict:
     with open(path, "rb") as f:
         magic, _ver, total = struct.unpack("<III", f.read(12))
@@ -157,6 +334,12 @@ def measure(path: Path) -> dict:
     else:
         rec["upright"] = (dims[1] / tallest) >= 0.35
     rec["height_ratio"] = round(dims[1] / tallest, 3)
+    try:
+        _g2, binb = glb_chunks(path)
+        rec["mesh"] = mesh_quality(_g2, binb, rec)
+    except Exception as e:  # noqa: BLE001
+        rec["mesh"] = {"error": f"{type(e).__name__}: {e}"[:120]}
+    rec["quality"], rec["verdict"] = quality_score(rec)
     return rec
 
 
