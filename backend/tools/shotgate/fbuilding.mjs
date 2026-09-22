@@ -72,8 +72,16 @@ const feel = await (async () => {
   await p.keyboard.down('Space'); await new Promise(r => setTimeout(r, 120)); await p.keyboard.up('Space');   // held a few frames: the loop reads keys, a press shorter than a frame is missed
   await new Promise(r => setTimeout(r, 1500)); const landed = await F2();
   await p.keyboard.up('ShiftLeft'); await p.keyboard.up('KeyW'); await new Promise(r => setTimeout(r, 900)); const stopped = await F2();
-  return { early: early.v, full: full.v, runFov: run.fov, base: run.base, runK: run.run, dip: landed.dip, stopped: stopped.v };
+  // the gait blend and the weight: walking, the walk clip carries the pose at its own stride rate; turning, the body rolls; the head has a bone to turn
+  await p.keyboard.down('KeyW'); await new Promise(r => setTimeout(r, 900));
+  const gaitW = await p.evaluate(() => { const f = window.__game.facts(); return { gait: f.gait, lean: f.lean }; });
+  await p.keyboard.down('KeyA'); await new Promise(r => setTimeout(r, 350));
+  const turning = await p.evaluate(() => window.__game.facts().lean);
+  await p.keyboard.up('KeyA'); await p.keyboard.up('KeyW'); await new Promise(r => setTimeout(r, 1200));
+  const idleW = await p.evaluate(() => window.__game.facts().gait);
+  return { early: early.v, full: full.v, runFov: run.fov, base: run.base, runK: run.run, dip: landed.dip, stopped: stopped.v, gaitW, turning, idleW };
 })();
+console.log('the gait  : walking', JSON.stringify(feel.gaitW.gait), '| idle again', JSON.stringify(feel.idleW), '| turning roll', feel.turning.roll, '| head bone', feel.gaitW.lean.head_bone);
 console.log('on foot   : 60 ms in', feel.early, '| 760 ms in', feel.full, '| run fov', feel.runFov, 'of', feel.base, '| landing dip', feel.dip, '| stopped', feel.stopped);
 // the hero: measured standing in the pose the player sees, holding the role's weapon
 const hero = await p.evaluate(() => { const f = window.__game.facts(); return { dims: f.player_dims, hero: f.hero, weapon: f.weapon }; });
@@ -83,6 +91,7 @@ console.log('errors    :', errs.length ? errs.join(' | ') : 'none');
 await b.close();
 const ok = r.landmark && r.landmark.w > 5 && r.landmark.h > 5 && errs.length === 0
   && standing && (hero.hero !== 'detective' || hero.weapon === null || hero.weapon === 'pistol')
-  && feel.early > 0.2 && feel.early < feel.full * 0.85 && feel.full > 1.5 && feel.runFov > feel.base + 2 && feel.dip > 0.03 && feel.stopped < 0.05   // a detective with a weapon holds the pistol; a build with no hostiles holds nothing && cast.ghosts > 0 && cast.ghosts <= 3 && cast.animals === 0   // a haunting has ghosts, not wolves, and not a crowd
+  && feel.early > 0.2 && feel.early < feel.full * 0.85 && feel.full > 1.5 && feel.runFov > feel.base + 2 && feel.dip > 0.03 && feel.stopped < 0.05
+  && feel.gaitW.gait.walk > 0.5 && feel.gaitW.gait.idle < 0.5 && feel.gaitW.gait.rate >= 0.5 && feel.gaitW.gait.rate <= 5.5 && feel.idleW.idle > 0.9 && Math.abs(feel.turning.roll) > 0.01 && !!feel.gaitW.lean.head_bone   // a detective with a weapon holds the pistol; a build with no hostiles holds nothing && cast.ghosts > 0 && cast.ghosts <= 3 && cast.animals === 0   // a haunting has ghosts, not wolves, and not a crowd
   && faced && faced.off < 1.05 && faced.lamps === 3;
 process.exit(ok ? 0 : 1);

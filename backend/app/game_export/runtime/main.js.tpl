@@ -5,7 +5,7 @@ import * as THREE from 'three';
 import { moodOf as __kitMoodOf, setMood as __kitSetMood, Bed as __KitBed, title as __KitTitle, end as __KitEnd, Foreman as __KitForeman } from './vendor/kit/kit.js';
 import { GLTFLoader } from './vendor/jsm/loaders/GLTFLoader.js';
 import { clone as skClone } from './vendor/jsm/utils/SkeletonUtils.js';
-import { mergeGeometries } from './vendor/jsm/utils/BufferGeometryUtils.js';
+import { mergeGeometries, mergeVertices } from './vendor/jsm/utils/BufferGeometryUtils.js';
 import { Sky } from './vendor/jsm/objects/Sky.js';
 import { EffectComposer } from './vendor/jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from './vendor/jsm/postprocessing/RenderPass.js';
@@ -8728,12 +8728,11 @@ async function main() {
     s.moveTo(xAt(0.02), yb + NOSE_FALL * 0.5);        // nose, low
     s.quadraticCurveTo(xAt(0.15), yt - 0.13, xAt(0.30), yt - 0.02);
     s.lineTo(xAt(cabF), yt);                          // beltline
-    s.quadraticCurveTo(xAt(cabF + (wsT - cabF) * 0.5), yt + cabH * 0.74,
-                       xAt(wsT), yt + cabH);          // windscreen
-    s.lineTo(xAt(rrT), yt + cabH);                    // roof
-    s.quadraticCurveTo(xAt(rrT + (Math.min(cabR + 0.06, 0.95) - rrT) * 0.55),
-                       yt + cabH * 0.5,
-                       xAt(Math.min(cabR + 0.06, 0.95)), yt);   // backlight
+    // THE GREENHOUSE IS ITS OWN PIECE (2026-09-23): the cabin used to be
+    // painted into the body with a glass brick set over it. The body now
+    // runs flat along the beltline under the cabin; the cabin is a glass
+    // extrusion of the same rake with a paint roof and pillars, built below.
+    s.lineTo(xAt(Math.min(cabR + 0.06, 0.95)), yt);   // the beltline under the cabin
     s.quadraticCurveTo(xAt(0.93), yt + TAIL_RISE,
                        xAt(0.97), yt - 0.04 + TAIL_RISE);       // tail
     s.lineTo(xAt(0.97), yb);                          // rear valance
@@ -8759,8 +8758,8 @@ async function main() {
     s.closePath();
     const depth = Wd - TRACK_INSET * 2;
     const bg = new THREE.ExtrudeGeometry(s, {
-      depth, bevelEnabled: true, bevelSize: 0.075,
-      bevelThickness: 0.06, bevelSegments: 4, curveSegments: 18 });
+      depth, bevelEnabled: true, bevelSize: 0.10,
+      bevelThickness: 0.075, bevelSegments: 7, curveSegments: 28 });
     bg.translate(0, 0, -depth / 2);            // straddle the centreline
     // ── THE CAR IS STILL A BOX IN PLAN (2026-08-06 r6) ──────────────────
     // The profile curve fixed the SIDE view, but an extrusion is a constant
@@ -8790,17 +8789,74 @@ async function main() {
         }
       }
       bp.needsUpdate = true;
-      bg.computeVertexNormals();
     }
-    const body = new THREE.Mesh(bg, paint);
+    // SMOOTH (2026-09-23): an extrusion is flat-shaded per face, so the bevel
+    // read as seven visible steps; merged vertices and averaged normals make
+    // one continuous panel. The sharp creases at the arches stay sharp
+    // because those faces meet at a real angle.
+    const bgS = mergeVertices(bg, 1e-4); bgS.computeVertexNormals();
+    const body = new THREE.Mesh(bgS, paint);
+    body.userData.smooth = 1;
     body.castShadow = body.receiveShadow = true;
     g.add(body);
-    // GREENHOUSE: inset glass box so windows read as openings, not decals
-    const gh = new THREE.Mesh(new THREE.BoxGeometry(
-      (cabR - cabF) * L * 0.82, cabH * 0.86, Wd - 0.16), glass);
-    gh.position.set(xAt((cabF + cabR) * 0.5), yt + cabH * 0.52, 0);
-    gh.userData.noShadow = 1;
-    g.add(gh);
+    // THE GREENHOUSE: the cabin's own profile (windscreen rake, roof,
+    // backlight rake) extruded in glass, narrower than the body and leaning
+    // inboard above the beltline, under a paint roof with A, B and C pillars.
+    const cabBack = Math.min(cabR + 0.06, 0.95);
+    const cs = new THREE.Shape();
+    cs.moveTo(xAt(cabF), yt - 0.01);
+    cs.quadraticCurveTo(xAt(cabF + (wsT - cabF) * 0.5), yt + cabH * 0.74, xAt(wsT), yt + cabH);   // windscreen
+    cs.lineTo(xAt(rrT), yt + cabH);                                                             // roof
+    cs.quadraticCurveTo(xAt(rrT + (cabBack - rrT) * 0.55), yt + cabH * 0.5, xAt(cabBack), yt - 0.01);   // backlight
+    cs.closePath();
+    const depthCab = depth * 0.90;
+    const cg = new THREE.ExtrudeGeometry(cs, { depth: depthCab, bevelEnabled: true, bevelSize: 0.03, bevelThickness: 0.02, bevelSegments: 3, curveSegments: 24 });
+    cg.translate(0, 0, -depthCab / 2);
+    {
+      const cp2 = cg.attributes.position;
+      for (let i = 0; i < cp2.count; i++) {
+        const y = cp2.getY(i), z = cp2.getZ(i);
+        const above = Math.min(1, Math.max(0, (y - yt) / Math.max(cabH, 1e-3)));
+        cp2.setZ(i, z * (1 - 0.22 * above * above));            // tumblehome
+        if (y > yt + cabH - 0.02) cp2.setY(i, y + 0.03 * (1 - Math.pow(Math.abs(z) / (depthCab * 0.5), 2)));   // crowned roof
+      }
+      cp2.needsUpdate = true;
+    }
+    const cgS = mergeVertices(cg, 1e-4); cgS.computeVertexNormals();
+    const cabin = new THREE.Mesh(cgS, glass);
+    cabin.userData.noShadow = 1; cabin.name = 'cabin';
+    g.add(cabin);
+    // the roof skin and the pillars, one trim draw
+    const trimG = [];
+    {
+      const roofLen = (rrT - wsT) * L + 0.10;
+      const roofG = new THREE.BoxGeometry(roofLen, 0.045, depthCab * (1 - 0.22) + 0.02, 1, 1, 8);
+      { const rp = roofG.attributes.position; for (let i = 0; i < rp.count; i++) { const z = rp.getZ(i); rp.setY(i, rp.getY(i) + 0.03 * (1 - Math.pow(Math.abs(z) / (depthCab * 0.4), 2))); } rp.needsUpdate = true; }
+      const roofM = new THREE.Mesh(roofG, paint);
+      roofM.position.set(xAt((wsT + rrT) * 0.5), yt + cabH + 0.02, 0);
+      roofM.castShadow = true; roofM.name = 'roof'; g.add(roofM);
+      const pillar = (x0, y0, x1, y1, z) => {
+        const len = Math.hypot(x1 - x0, y1 - y0), ang = Math.atan2(y1 - y0, x1 - x0);
+        const pg2 = new THREE.BoxGeometry(len, 0.075, 0.065);
+        pg2.rotateZ(ang); pg2.translate((x0 + x1) / 2, (y0 + y1) / 2, z);
+        trimG.push(pg2);
+      };
+      const zEdge = depthCab * 0.5 * 0.80;
+      for (const sz of [1, -1]) {
+        pillar(xAt(cabF) - 0.02, yt, xAt(wsT), yt + cabH, sz * zEdge);                 // A
+        pillar(xAt((wsT + rrT) * 0.5 - 0.02), yt, xAt((wsT + rrT) * 0.5 - 0.02), yt + cabH, sz * zEdge);   // B
+        pillar(xAt(cabBack) + 0.02, yt, xAt(rrT), yt + cabH, sz * zEdge);              // C
+        // a mirror on a stalk at the base of each A-pillar
+        const stalk = new THREE.BoxGeometry(0.05, 0.03, 0.10); stalk.translate(xAt(cabF) + 0.05, yt + 0.10, sz * (depth * 0.5 + 0.05)); trimG.push(stalk);
+        const mir = new THREE.BoxGeometry(0.09, 0.07, 0.15); mir.translate(xAt(cabF) + 0.05, yt + 0.11, sz * (depth * 0.5 + 0.13)); trimG.push(mir);
+        // door seams: two hairline grooves in the flank
+        for (const tx of [cabF - 0.01, (cabF + cabBack) * 0.5]) { const seam = new THREE.BoxGeometry(0.012, bodyH * 0.86, 0.02); seam.translate(xAt(tx), yb + bodyH * 0.5, sz * (depth * 0.5)); trimG.push(seam); }
+        // an exhaust tip
+        const ex = new THREE.CylinderGeometry(0.035, 0.035, 0.14, 12); ex.rotateZ(Math.PI / 2); ex.translate(-L * 0.5 + 0.02, yb + 0.05, sz * Wd * 0.28); trimG.push(ex);
+      }
+      const splitter = new THREE.BoxGeometry(0.10, 0.03, Wd * 0.78); splitter.translate(L * 0.5 - 0.06, yb + 0.02, 0); trimG.push(splitter);
+      const plate = new THREE.BoxGeometry(0.01, 0.11, 0.42); plate.translate(-L * 0.5 + 0.005, yb + bodyH * 0.35, 0); trimG.push(plate);
+    }
     // WHEELS sit OUTBOARD of the bodyside, not inside it (carlab): a wheel's
     // inner face meets the flank and the tyre stands slightly proud of it.
     // Placed inboard they are simply swallowed by the extrusion.
@@ -8819,14 +8875,23 @@ async function main() {
     const tyG = [], hubG = [], arG = [];
     for (const t of [0.5 - wb, 0.5 + wb]) {
       for (const side of [-1, 1]) {
-        const wg = new THREE.CylinderGeometry(wr, wr, wheelW, 18);
+        const wg = new THREE.CylinderGeometry(wr, wr, wheelW, 32);
         wg.rotateX(Math.PI / 2);
         wg.translate(xAt(t), wr, side * trackZ);
         tyG.push(wg);
-        const hg = new THREE.CylinderGeometry(wr * 0.56, wr * 0.56, wheelW * 0.55, 14);
+        // the rim: a shallow dish, five spokes and a hub cap, one merged draw
+        const hg = new THREE.CylinderGeometry(wr * 0.60, wr * 0.56, wheelW * 0.30, 24);
         hg.rotateX(Math.PI / 2);
-        hg.translate(xAt(t), wr, side * (trackZ + wheelW * 0.26));
+        hg.translate(xAt(t), wr, side * (trackZ + wheelW * 0.40));
         hubG.push(hg);
+        for (let k = 0; k < 5; k++) {
+          const sp = new THREE.BoxGeometry(wr * 0.10, wr * 1.05, wheelW * 0.22);
+          sp.rotateZ(k * Math.PI * 2 / 5);
+          sp.translate(xAt(t), wr, side * (trackZ + wheelW * 0.44));
+          hubG.push(sp);
+        }
+        const cap = new THREE.CylinderGeometry(wr * 0.16, wr * 0.16, wheelW * 0.30, 12);
+        cap.rotateX(Math.PI / 2); cap.translate(xAt(t), wr, side * (trackZ + wheelW * 0.50)); hubG.push(cap);
         // dark disc behind the wheel: reads as a wheel well, which is what
         // stops a cylinder looking stuck onto a flat flank
         const ag = new THREE.CircleGeometry(wr * 1.16, 16);
@@ -8863,22 +8928,26 @@ async function main() {
     }
     // lights + grille: the small reads that sell 'car' at a glance. Same
     // convention as everything else — length on X, lateral on Z.
+    // LENSES AND BARS (2026-09-23): a headlight is a lens set into the nose,
+    // a tail light a thin bar across the tail; each side merged into one draw
+    const hlG = [], tlG = [];
     for (const sz of [1, -1]) {
-      const hlm = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.16, Wd * 0.22),
-        new THREE.MeshStandardMaterial({ color: 0xfff6e0, emissive: 0xffeec2,
-                                         emissiveIntensity: 0.55 }));
-      hlm.position.set(L * 0.5 - 0.10, yb + bodyH * 0.62, sz * Wd * 0.28);
-      g.add(hlm);
-      const tl = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.13, Wd * 0.2),
-        new THREE.MeshStandardMaterial({ color: 0x8c1414, emissive: 0xd11a1a,
-                                         emissiveIntensity: 0.5 }));
-      tl.position.set(-L * 0.5 + 0.08, yb + bodyH * 0.72, sz * Wd * 0.28);
-      g.add(tl);
+      const lens = new THREE.SphereGeometry(0.11, 18, 12);
+      lens.scale(0.55, 0.85, 1.55); lens.translate(L * 0.5 - 0.08, yb + bodyH * 0.62, sz * Wd * 0.30);
+      hlG.push(lens);
+      const bar = new THREE.CapsuleGeometry(0.035, Wd * 0.22, 4, 10);
+      bar.rotateX(Math.PI / 2); bar.translate(-L * 0.5 + 0.06, yb + bodyH * 0.72, sz * Wd * 0.27);
+      tlG.push(bar);
     }
-    const grille = new THREE.Mesh(
-      new THREE.BoxGeometry(0.07, bodyH * 0.3, Wd * 0.55), trim);
-    grille.position.set(L * 0.5 - 0.06, yb + bodyH * 0.34, 0);
-    g.add(grille);
+    const heads = new THREE.Mesh(mergeGeometries(hlG, false), new THREE.MeshStandardMaterial({ color: 0xfff6e0, emissive: 0xffeec2, emissiveIntensity: 0.6, roughness: 0.15 }));
+    heads.userData.noShadow = 1; heads.name = 'headlights'; g.add(heads);
+    const tails = new THREE.Mesh(mergeGeometries(tlG, false), new THREE.MeshStandardMaterial({ color: 0x8c1414, emissive: 0xd11a1a, emissiveIntensity: 0.6, roughness: 0.2 }));
+    tails.userData.noShadow = 1; tails.name = 'taillights'; g.add(tails);
+    const grilleG = new THREE.BoxGeometry(0.07, bodyH * 0.3, Wd * 0.55);
+    grilleG.translate(L * 0.5 - 0.06, yb + bodyH * 0.34, 0); trimG.push(grilleG);
+    const trims = new THREE.Mesh(mergeGeometries(trimG, false), trim);
+    trims.castShadow = true; trims.name = 'trim'; g.add(trims);
+    g.userData.car = { parts: g.children.length, body_verts: bgS.attributes.position.count, smooth: true, cabin: true, pillars: 6 };
     // THE WOODEN CAR, FINALLY (2026-08-25). Every buildCar material is
     // map-less by design — paint is colour under clearcoat, glass is smoked.
     // The auto-texture sweep claims any untextured standard material, and
@@ -9544,6 +9613,12 @@ async function main() {
     console.warn('[game] player GLB has no animations — static fallback');
   }
   let attackUntil = 0;                 // swing overlay suppresses the locomotion FSM
+  // A BLEND, NOT A SWITCH (2026-09-23): idle, walk and run all play; their
+  // weights follow the ground speed and each keeps its own stride rate.
+  const _gaitW = { idle: 1, walk: 0, run: 0, sneak: 0 };
+  for (const k of ['idle', 'walk', 'run', 'sneak']) { const a2 = actions['__' + k]; if (a2) { a2.play(); a2.setEffectiveWeight(k === 'idle' ? 1 : 0); } }
+  let _prevYaw = 0, _prevWalkV = 0, turnRoll = 0, accelP = 0, headBone = null, headYawK = 0;
+  const _hq = new THREE.Quaternion(), _hpq = new THREE.Quaternion(), _hup = new THREE.Vector3(0, 1, 0);
   function setAnim(next) {
     if (!mixer || !next || next === current) return;
     if (performance.now() < attackUntil) return;
@@ -10463,6 +10538,9 @@ async function main() {
         archetype: (SPEC.world && SPEC.world.archetype) || 'plain',
         mode: P.mode || 'walk',
         walk_v: +walkV.toFixed(2), land_dip_peak: +landDipPeak.toFixed(3), run_k: +runK.toFixed(2), fov: +camera.fov.toFixed(1), fov_base: SPEC.camera.fov_deg,
+        gait: { idle: +_gaitW.idle.toFixed(2), walk: +_gaitW.walk.toFixed(2), run: +_gaitW.run.toFixed(2), rate: actions.__walk ? +actions.__walk.timeScale.toFixed(2) : null, top: current && current.getClip ? current.getClip().name : null },
+        lean: { roll: +turnRoll.toFixed(3), pitch: +accelP.toFixed(3), head: +headYawK.toFixed(3), head_bone: headBone ? headBone.name : null },
+        car: (pg.scene && pg.scene.userData && pg.scene.userData.car) || null,
         drive: (DRIVE || DRIVING) ? { speed: +Math.hypot(carVX, carVZ).toFixed(2), slip: +(window.__slip || 0).toFixed(3), drifting: !!window.__drifting, handbrake: !!window.__handbrake, steer_ease: +(window.__steerEase === undefined ? 1 : window.__steerEase).toFixed(3), top: +(P.run_speed || 0),
                                       skids: _skidLife ? Array.from(_skidLife).filter(v => v > 0).length : 0, smoke: _smoke ? _smoke.filter(x => x.visible).length : 0,
                                       peds_visible: (window.__peds || []).filter(q => q.obj.visible).length, peds_casting: (window.__peds || []).filter(q => q._cast).length } : null,
@@ -12542,7 +12620,19 @@ varying vec2 vUvRaw;
       const slopeP = Math.atan2(hB - hF, 2 * ahead) * 0.7;
       leanP = THREE.MathUtils.damp(leanP,
         THREE.MathUtils.clamp(slopeP, -0.35, 0.35), 5, dt);
-      holder.rotation.x = leanP;
+      // WEIGHT ON FOOT (2026-09-23): the body rolls into a turn by the turn
+      // rate and pitches with acceleration, both scaled by how fast it moves
+      {
+        let dY = modelYaw - _prevYaw; while (dY > Math.PI) dY -= Math.PI * 2; while (dY < -Math.PI) dY += Math.PI * 2;
+        _prevYaw = modelYaw;
+        const yawRate = dY / Math.max(dt, 1e-3);
+        const moveK = Math.min(walkV / Math.max(P.walk_speed || 1, 0.5), 1.5);
+        turnRoll = THREE.MathUtils.damp(turnRoll, THREE.MathUtils.clamp(-yawRate * 0.05 * moveK, -0.16, 0.16), 6, dt);
+        accelP = THREE.MathUtils.damp(accelP, THREE.MathUtils.clamp((walkV - _prevWalkV) / Math.max(dt, 1e-3) * 0.02, -0.10, 0.10), 6, dt);
+        _prevWalkV = walkV;
+      }
+      holder.rotation.x = leanP + accelP;
+      holder.rotation.z = turnRoll;
     }
 
     // animation state machine
@@ -12561,29 +12651,44 @@ varying vec2 vUvRaw;
       const _wr = _strideRate.get(actions.__walk) || P.walk_speed || 1;
       const _rr = _strideRate.get(actions.__run) || P.run_speed || 1;
       const _wantRun = (mv.run && mv.mag > 0.3) || (_rr > _wr && speed / _wr > 3.0);
-      setAnim(speed < 0.1 ? actions.__idle
-            : (window.__sneak && actions.__sneak) ? actions.__sneak
-            : (_wantRun ? actions.__run : actions.__walk));
-      if (current && current.getClip()) {
-        // the clip's OWN stride rate when we could measure it; the
-        // configured speed only as a fallback for rigs with no foot bone
-        const base = _strideRate.get(current)
-          || (current === actions.__run ? P.run_speed
-              : current === actions.__sneak ? P.walk_speed * 0.45
-              : P.walk_speed);
-        // Ceiling raised 3.0 -> 5.5 because it, not the clips, was the
-        // binding constraint. The run clip strides ~0.67m per cycle — a
-        // perfectly normal stride — over a 1.67s cycle, which is simply a
-        // slow cadence; selling 2.5 m/s of travel needs ~4.6x, and the old
-        // 3.0 clamped it to 1.6 m/s, leaving the character to slide the
-        // difference. Fast legs that match the ground read as sprinting;
-        // correct-cadence legs that do not read as broken, which is far
-        // worse. 5.5 covers the observed range with headroom and still
-        // stops a degenerate speed from becoming a blur.
-        current.timeScale = speed > 0.1
-          ? THREE.MathUtils.clamp(speed / base, 0.5, 5.5) : 1.0;
+      if (performance.now() >= attackUntil && !(DRIVE || DRIVING)) {
+        // the blend: how much of "moving" and how much of that is a run
+        const vWalk = Math.max(P.walk_speed || 1, 0.3);
+        const kMove = THREE.MathUtils.clamp(speed / (vWalk * 0.45), 0, 1);
+        const kRun = _wantRun ? THREE.MathUtils.clamp((speed - vWalk * 0.6) / Math.max((P.run_speed || vWalk * 2) - vWalk * 0.6, 0.2), 0.35, 1) : 0;
+        const sneaking = !!(window.__sneak && actions.__sneak);
+        const want = { idle: 1 - kMove, walk: sneaking ? 0 : kMove * (1 - kRun), run: kMove * kRun, sneak: sneaking ? kMove * (1 - kRun) : 0 };
+        let top = 'idle', topW = -1;
+        for (const k of ['idle', 'walk', 'run', 'sneak']) {
+          const a2 = actions['__' + k]; if (!a2) continue;
+          _gaitW[k] = THREE.MathUtils.damp(_gaitW[k], want[k], 9, dt);
+          a2.setEffectiveWeight(_gaitW[k]);
+          if (_gaitW[k] > topW) { topW = _gaitW[k]; top = k; }
+          // each gait at its own stride rate: the clip's measured rate when we
+          // have it, the configured speed as the fallback; idle never cranks
+          if (k !== 'idle') {
+            const base = _strideRate.get(a2) || (k === 'run' ? P.run_speed : k === 'sneak' ? P.walk_speed * 0.45 : P.walk_speed) || 1;
+            a2.timeScale = speed > 0.1 ? THREE.MathUtils.clamp(speed / base, 0.5, 5.5) : 1.0;
+          }
+        }
+        current = actions['__' + top] || current;   // the dominant gait, for the attack's crossfade
       }
       mixer.update(dt);
+      // THE HEAD LOOKS WHERE THE CAMERA LOOKS (2026-09-23): after the pose, the
+      // head turns up to fifty degrees toward the view direction, about the
+      // world's up so the rig's bone axes do not matter.
+      if (!headBone && pg.scene) pg.scene.traverse(o => { if (!headBone && o.isBone && /head/i.test(o.name) && !/top|end|tip/i.test(o.name)) headBone = o; });
+      if (headBone && !(DRIVE || DRIVING)) {
+        let d = (yaw + Math.PI) - modelYaw;
+        while (d > Math.PI) d -= Math.PI * 2; while (d < -Math.PI) d += Math.PI * 2;
+        const target = THREE.MathUtils.clamp(d, -0.9, 0.9) * (Math.abs(d) > 2.2 ? 0 : 0.85);
+        headYawK = THREE.MathUtils.damp(headYawK, target, 5, dt);
+        if (Math.abs(headYawK) > 0.002 && headBone.parent) {
+          headBone.parent.getWorldQuaternion(_hpq);
+          _hq.setFromAxisAngle(_hup, headYawK);
+          headBone.quaternion.premultiply(_hpq.clone().invert().multiply(_hq).multiply(_hpq));
+        }
+      }
     }
 
     // Inspect mode is a SOFT FREEZE: NPCs, damage and timers hold still so

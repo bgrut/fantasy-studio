@@ -1,0 +1,21 @@
+<!doctype html><html><body style="margin:0;background:#202430"><script type="importmap">{"imports":{"three":"/backend/renders/game_jobs/job_103/dist/vendor/three.module.js","three/addons/":"/backend/renders/game_jobs/job_103/dist/vendor/jsm/"}}</script>
+<script type="module">
+import * as THREE from 'three'; import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+const r = new THREE.WebGLRenderer({ antialias: true }); r.setSize(1280, 760); r.outputColorSpace = THREE.SRGBColorSpace; r.toneMapping = THREE.ACESFilmicToneMapping; document.body.appendChild(r.domElement);
+const sc = new THREE.Scene(); sc.background = new THREE.Color(0x20242e);
+sc.add(new THREE.HemisphereLight(0xdfe8ff, 0x2a2a30, 1.6)); const sun = new THREE.DirectionalLight(0xfff2dd, 3.2); sun.position.set(4, 6, 5); sc.add(sun);
+const cam = new THREE.PerspectiveCamera(38, 1280 / 760, 0.1, 100);
+const names = (new URLSearchParams(location.search).get('k') || 'car,corvette,ferrari').split(',');
+const L = new GLTFLoader(); let x = -(names.length - 1) * 2.6; window.__info = [];
+for (const n of names) {
+  try {
+    const g = await L.loadAsync('/backend/assets/library/' + encodeURIComponent(n) + '.glb');
+    const o = g.scene; const bb = new THREE.Box3().setFromObject(o); const size = bb.getSize(new THREE.Vector3()); const s = 4.4 / Math.max(size.x, size.y, size.z);
+    o.scale.setScalar(s); const bb2 = new THREE.Box3().setFromObject(o); const c = bb2.getCenter(new THREE.Vector3()); o.position.set(x - c.x, -bb2.min.y, -c.z); sc.add(o);
+    let tris = 0; o.traverse(m => { if (m.isMesh) tris += m.geometry.index ? m.geometry.index.count / 3 : m.geometry.attributes.position.count / 3; });
+    window.__info.push(n + ': ' + Math.round(tris / 1000) + 'k tris, ' + size.x.toFixed(1) + 'x' + size.y.toFixed(1) + 'x' + size.z.toFixed(1));
+  } catch (e) { window.__info.push(n + ': failed ' + e.message); }
+  x += 5.2;
+}
+cam.position.set(4.5, 3.2, 10.5); cam.lookAt(0, 0.6, 0); r.render(sc, cam); window.__done = true;
+</script></body></html>

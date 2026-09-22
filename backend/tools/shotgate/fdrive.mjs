@@ -38,6 +38,7 @@ const cost = await p.evaluate(async () => { const d = []; let last = performance
   const tr = [];   // the cascades take turns, so the triangles are averaged over the window, not read off one frame
   await new Promise(done => { const tick = (t) => { d.push(t - last); last = t; tr.push(window.__renderer.info.render.triangles); if (t - t0 < 4000) requestAnimationFrame(tick); else done(); }; requestAnimationFrame(tick); });
   d.shift(); d.sort((a, b) => a - b); return { fps: +(1000 / (d.reduce((a, b) => a + b, 0) / d.length)).toFixed(0), p95: +d[Math.floor(d.length * 0.95)].toFixed(1), tris: Math.round(tr.reduce((a, b) => a + b, 0) / tr.length) }; });
+console.log('the car   :', JSON.stringify(fast.car));
 console.log('throttle  : speed', fast.drive && fast.drive.speed, 'm/s after 6 s of W (top', fast.drive && fast.drive.top, ') | fov', fast.fov, 'of', fast.fov_base);
 console.log('steering  : ease', boost.drive && boost.drive.steer_ease, 'at', boost.drive && boost.drive.speed, 'm/s under boost |', cruise.drive && cruise.drive.steer_ease, 'at', cruise.drive && cruise.drive.speed, 'cruising');
 console.log('handbrake :', JSON.stringify(slide.drive), '| after', after.drive && after.drive.drifting);
@@ -45,6 +46,7 @@ console.log('the cost  : fps', cost.fps, '| p95', cost.p95, 'ms | tris', cost.tr
 console.log('errors    :', errs.length ? errs.join(' | ') : 'none');
 await b.close();
 const ok = fast.drive && fast.drive.speed > 7 && fast.fov > fast.fov_base + 3
+  && fast.car && fast.car.smooth && fast.car.cabin && fast.car.pillars === 6 && fast.car.body_verts > 600   // a smooth-shaded body with a real greenhouse
   && boost.drive && boost.drive.speed > 15 && boost.drive.steer_ease < 0.85 && cruise.drive && cruise.drive.steer_ease > boost.drive.steer_ease   // eases with speed
   && slide.drive && slide.drive.handbrake && slide.drive.drifting && slide.drive.slip > 0.2 && slide.drive.skids > 0 && slide.drive.smoke > 0
   && slide.drive.peds_casting <= 30 && slide.drive.peds_casting < slide.drive.peds_visible
