@@ -2,7 +2,7 @@
 
 Shot by `ffixtures.mjs` on every check from the same views, held to the facts below. A change to the adventure side shows here as a picture, not only as a number.
 
-Last shot: 2026-09-21
+Last shot: 2026-09-22
 
 | fixture | the sentence | facts | pictures |
 |---|---|---|---|

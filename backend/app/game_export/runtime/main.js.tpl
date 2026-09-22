@@ -1032,6 +1032,11 @@ async function main() {
   // system, and a `let` read inside its temporal dead zone takes the whole
   // runtime down (three times, one morning — see ENTERABLES above).
   let DRIVING = false;
+  // MOVEMENT FEEL (2026-09-22): the walk ramps, a landing dips, a slide leaves marks
+  let walkV = 0, landDipA = 0, landDipPeak = 0, _wasG = true, runK = 0, driveFovK = 0;
+  const _wdir = new THREE.Vector3(0, 0, 1);
+  window.__slip = 0; window.__handbrake = false;
+  let _skid = null, _skidLife = null, _skidHead = 0, _skidLast = [0, 0], _smoke = null, _smokeI = 0;
   window.__cars = [];        // parked, drivable — the minimap reads it lazily
   window.__inCar = null;
   // A BURGLAR STARTS AT THE DOOR (2026-08-05): interiors spawned the player
@@ -8675,9 +8680,13 @@ async function main() {
           envMapIntensity: 1.15 - wear * 0.5,
         };
       })() });
+    // NO TRANSMISSION (2026-09-22): one transmissive material anywhere makes
+    // three.js redraw the whole scene into a texture every frame, a fifth of
+    // the race's frame for glass no one looks through at 19 m/s. Tinted,
+    // clearcoated, reflective glass reads the same from the chase camera.
     const glass = new THREE.MeshPhysicalMaterial({
-      color: 0x101418, metalness: 0.1, roughness: 0.06,
-      transmission: 0.55, thickness: 0.4, transparent: true, opacity: 0.72 });
+      color: 0x0e1218, metalness: 0.25, roughness: 0.05, clearcoat: 1.0, clearcoatRoughness: 0.04,
+      transparent: true, opacity: 0.62, envMapIntensity: 1.4 });
     const trim = new THREE.MeshStandardMaterial({
       color: 0x1b1d20, metalness: 0.7, roughness: 0.42 });
     // ── ONE AXIS FOR THE WHOLE CAR (2026-08-06 rewrite) ──────────────────
@@ -10453,6 +10462,10 @@ async function main() {
         style: SPEC.style || 'default',
         archetype: (SPEC.world && SPEC.world.archetype) || 'plain',
         mode: P.mode || 'walk',
+        walk_v: +walkV.toFixed(2), land_dip_peak: +landDipPeak.toFixed(3), run_k: +runK.toFixed(2), fov: +camera.fov.toFixed(1), fov_base: SPEC.camera.fov_deg,
+        drive: (DRIVE || DRIVING) ? { speed: +Math.hypot(carVX, carVZ).toFixed(2), slip: +(window.__slip || 0).toFixed(3), drifting: !!window.__drifting, handbrake: !!window.__handbrake, steer_ease: +(window.__steerEase === undefined ? 1 : window.__steerEase).toFixed(3), top: +(P.run_speed || 0),
+                                      skids: _skidLife ? Array.from(_skidLife).filter(v => v > 0).length : 0, smoke: _smoke ? _smoke.filter(x => x.visible).length : 0,
+                                      peds_visible: (window.__peds || []).filter(q => q.obj.visible).length, peds_casting: (window.__peds || []).filter(q => q._cast).length } : null,
         hero: (SPEC.player && SPEC.player.name) || null,
         weapon: (typeof WEAPONS !== 'undefined' && ATTACK !== 'none') ? (WEAPONS[weaponIdx] || WEAPONS[0]).id : null,
         buoyant: !!P.buoyant,
@@ -11539,6 +11552,10 @@ varying vec2 vUvRaw;
   n8ao.configuration.distanceFalloff = 0.7;
   n8ao.configuration.intensity = 3.1;   // r15: deeper crevice shading
   n8ao.configuration.halfRes = true;
+  // the transparency-aware mode redraws every transparent object three times a
+  // frame (a third of the race's frame); the occlusion under a window pane is
+  // not worth that
+  n8ao.configuration.transparencyAware = false;
   n8ao.configuration.gammaCorrection = false;   // later passes own the grade
   if (QUALITY === 'performance') n8ao.configuration.aoSamples = 8;
   // AO IS THE ANTI-PAPER (2026-09-04). Ambient occlusion is the cue that says
@@ -12250,14 +12267,24 @@ varying vec2 vUvRaw;
       // 6 m/s and grip drops: momentum carries while the nose swings.
       // That one number is the whole drift model (and it feels better
       // than a half-tuned rigid-body vehicle).
-      const sliding = !!mv.run && Math.abs(vSpeed) > 6;
+      // THE HANDBRAKE (2026-09-22): Space over 4 m/s locks the rear; the
+      // car scrubs speed, the grip goes, and steering swings the tail out.
+      const handbrake = raceGo && !!keys.Space && Math.abs(vSpeed) > 4;
+      window.__handbrake = handbrake;
+      if (handbrake) vSpeed *= Math.max(0, 1 - 1.3 * dt);
+      const sliding = (!!mv.run || handbrake) && Math.abs(vSpeed) > 6;
       window.__drifting = sliding;
-      modelYaw -= steer * (sliding ? 2.6 : 1.9) * steerAuth
+      // steering eases with speed: as sharp at 30 m/s as at 8, the car was a
+      // twitch away from the kerb at every straight
+      const steerEase = 1 / (1 + Math.max(0, Math.abs(vSpeed) - 12) / 16);
+      window.__steerEase = steerEase;
+      modelYaw -= steer * (sliding ? 2.6 : 1.9) * steerAuth * steerEase
                   * Math.sign(vSpeed || 1) * dt;
       dir.set(Math.sin(modelYaw), 0, Math.cos(modelYaw));
       const fwdV = carVX * dir.x + carVZ * dir.z;
       const latVX = carVX - fwdV * dir.x, latVZ = carVZ - fwdV * dir.z;
-      const keepLat = Math.exp(-(sliding ? 0.9 : 9.5) * dt);
+      window.__slip = Math.atan2(Math.hypot(latVX, latVZ), Math.abs(fwdV) + 0.1);
+      const keepLat = Math.exp(-(handbrake ? 0.55 : sliding ? 0.9 : 9.5) * dt);
       carVX = dir.x * vSpeed + latVX * keepLat;
       carVZ = dir.z * vSpeed + latVZ * keepLat;
       speed = Math.hypot(carVX, carVZ);
@@ -12352,14 +12379,27 @@ varying vec2 vUvRaw;
       holder.rotation.x = leanP;
       // aiming is a walk, not a sprint — the price of the reticle
       const _aimK = 1 - aimT * 0.62;
-      var desired = { x: dir.x * speed * _aimK * dt, y: vy * dt,
-                      z: dir.z * speed * _aimK * dt };
+      // THE WALK RAMPS (2026-09-22): full speed in the first frame and a dead
+      // stop in the next read as a puppet. Speed eases up over a third of a
+      // second and down a little faster, along the last direction held.
+      if (dir.lengthSq() > 1e-4) _wdir.copy(dir);
+      const wantV = speed * _aimK;
+      walkV = THREE.MathUtils.damp(walkV, wantV, wantV > walkV ? 9 : 14, dt);
+      if (walkV < 0.02 && wantV === 0) walkV = 0;
+      speed = walkV;
+      var desired = { x: _wdir.x * walkV * dt, y: vy * dt,
+                      z: _wdir.z * walkV * dt };
       if (VIEW === 'side') {              // hold the hero on the gameplay lane
         desired.z = (0 - body.translation().z) * Math.min(6 * dt, 1);
       }
     }
     kcc.computeColliderMovement(collider, desired);
     const cm = kcc.computedMovement();
+    {   // a hard landing has weight: the camera dips by how hard, and springs back
+      const _gNow = kcc.computedGrounded();
+      if (_gNow && !_wasG && vy < -4.5) { landDipA = Math.min(0.30, -vy * 0.028); landDipPeak = Math.max(landDipPeak, landDipA); }
+      _wasG = _gNow;
+    }
     if (kcc.computedGrounded()) vy = 0;
     const t = body.translation();
     body.setNextKinematicTranslation({ x: t.x + cm.x, y: t.y + cm.y, z: t.z + cm.z });
@@ -12434,6 +12474,63 @@ varying vec2 vUvRaw;
       holder.rotation.x = leanP; holder.rotation.z = leanR;
       if (window.__drifting) {          // exaggerate the lean into a slide
         leanR = THREE.MathUtils.clamp(leanR * 1.6, -0.17, 0.17);
+      }
+      // SKID MARKS AND TYRE SMOKE (2026-09-22): a slide that leaves nothing
+      // behind it did not happen. A pool of dark quads under the rear wheels,
+      // laid every half metre while sliding and fading over ten seconds, and
+      // a few soft sprites lifting from the same spot.
+      {
+        if (!_skid) {
+          const N = 160;
+          _skid = new THREE.InstancedMesh(new THREE.PlaneGeometry(0.24, 0.62),
+            new THREE.MeshBasicMaterial({ color: 0x0c0c10, transparent: true, opacity: 0.55, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 }), N);
+          _skid.frustumCulled = false; _skid.renderOrder = 2;
+          _skidLife = new Float32Array(N);
+          const _z = new THREE.Matrix4().makeScale(0, 0, 0);
+          for (let i = 0; i < N; i++) _skid.setMatrixAt(i, _z);
+          scene.add(_skid);
+          const cv = document.createElement('canvas'); cv.width = cv.height = 64;
+          const g2 = cv.getContext('2d'); const gr = g2.createRadialGradient(32, 32, 2, 32, 32, 30);
+          gr.addColorStop(0, 'rgba(230,230,240,0.55)'); gr.addColorStop(1, 'rgba(230,230,240,0)');
+          g2.fillStyle = gr; g2.fillRect(0, 0, 64, 64);
+          const tex = new THREE.CanvasTexture(cv);
+          _smoke = [];
+          for (let i = 0; i < 14; i++) {
+            const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, opacity: 0, depthWrite: false }));
+            sp.visible = false; sp.userData.life = 0; scene.add(sp); _smoke.push(sp);
+          }
+        }
+        const px = playerObj.position.x, pz = playerObj.position.z;
+        const rx = -Math.sin(modelYaw) * 1.25, rz = -Math.cos(modelYaw) * 1.25;     // the rear axle
+        const sx = Math.cos(modelYaw) * 0.78, sz = -Math.sin(modelYaw) * 0.78;      // half the track
+        const spd = Math.hypot(carVX, carVZ);
+        if (window.__drifting && spd > 6 && Math.hypot(px - _skidLast[0], pz - _skidLast[1]) > 0.5) {
+          _skidLast = [px, pz];
+          for (const sgn of [1, -1]) {
+            const wx = px + rx + sx * sgn, wz = pz + rz + sz * sgn;
+            const m = new THREE.Matrix4().compose(new THREE.Vector3(wx, hAt(wx, wz) + 0.025, wz),
+              new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.PI / 2, 0, -Math.atan2(carVX, carVZ), 'YXZ')), new THREE.Vector3(1, 1, 1));
+            _skid.setMatrixAt(_skidHead, m); _skidLife[_skidHead] = 10; _skidHead = (_skidHead + 1) % _skid.count;
+            const smk = _smoke[_smokeI = (_smokeI + 1) % _smoke.length];
+            smk.position.set(wx, hAt(wx, wz) + 0.25, wz); smk.scale.setScalar(0.9); smk.visible = true; smk.userData.life = 0.9; smk.material.opacity = 0.5;
+          }
+          _skid.instanceMatrix.needsUpdate = true;
+        }
+        let dirty = false;
+        for (let i = 0; i < _skid.count; i++) {
+          if (_skidLife[i] <= 0) continue;
+          _skidLife[i] -= dt;
+          if (_skidLife[i] < 3) { const m = new THREE.Matrix4(); _skid.getMatrixAt(i, m); const k = Math.max(0, _skidLife[i] / 3);
+            const p3 = new THREE.Vector3(), q3 = new THREE.Quaternion(), s3 = new THREE.Vector3(); m.decompose(p3, q3, s3); s3.x = k; if (_skidLife[i] <= 0) s3.set(0, 0, 0);
+            _skid.setMatrixAt(i, m.compose(p3, q3, s3)); dirty = true; }
+        }
+        if (dirty) _skid.instanceMatrix.needsUpdate = true;
+        for (const smk of _smoke) {
+          if (!smk.visible) continue;
+          smk.userData.life -= dt; smk.position.y += dt * 0.8; smk.scale.addScalar(dt * 2.2);
+          smk.material.opacity = Math.max(0, smk.userData.life / 0.9) * 0.5;
+          if (smk.userData.life <= 0) smk.visible = false;
+        }
       }
     } else if (!FLY && !SWIM) {
       // FOOT-PLANT LITE (Phase 74): align the body to the terrain slope so
@@ -12938,8 +13035,13 @@ varying vec2 vUvRaw;
         pd.obj.rotation.y += dy * Math.min(1, dt * 6);
       }
       const _pd2 = (pd.obj.position.x - _pcam.x) ** 2 + (pd.obj.position.z - _pcam.z) ** 2;
-      const _vis = _pd2 < 95 * 95;
+      const _vis = _pd2 < 72 * 72;    // 2026-09-22: 72 m, not 95: a pedestrian at 36 k triangles is a hero-grade mesh
       if (pd.obj.visible !== _vis) pd.obj.visible = _vis;
+      // A SHADOW ONLY UP CLOSE (2026-09-22): 58 pedestrians at 36 k triangles
+      // each cast into three cascades, 15 M triangles a frame for shadows no
+      // one could see. Within 38 m a pedestrian casts; beyond, it does not.
+      const _cast = _vis && _pd2 < 26 * 26;
+      if (pd._cast !== _cast) { pd._cast = _cast; pd.obj.traverse(o => { if (o.isMesh) o.castShadow = _cast; }); }
       if (pd.mixer && _vis && _pd2 < 62 * 62) pd.mixer.update(dt);
     }
     if (window.__torches) {
@@ -13057,7 +13159,14 @@ varying vec2 vUvRaw;
     } else {
       // Phase 69 look-ahead: the camera peeks ~0.9 m into the travel direction
       // at speed, so fast movement reads as intent instead of chase-cam lag
-      const lookAhead = Math.min((window.__pSpeed || 0) / Math.max(P.run_speed, 1), 1) * 0.9;
+      // in a car the camera looks further down the road the faster you go,
+      // and a shade toward where a slide is carrying you
+      const _drv = (DRIVE || DRIVING);
+      const _spdNow = _drv ? Math.hypot(carVX, carVZ) : (window.__pSpeed || 0);
+      const lookAhead = _drv ? Math.min(1.0 + _spdNow * 0.13, 5.0)
+                             : Math.min(_spdNow / Math.max(P.run_speed, 1), 1) * 0.9;
+      const _slideYaw = _drv ? Math.atan2(carVX, carVZ) : modelYaw;
+      const _aheadYaw = _drv ? modelYaw + (_slideYaw - modelYaw) * 0.5 : modelYaw;
       // STICKY-CAM FIX (2026-07-20): lookAt() is instant, so a raw look-ahead
       // point SNAPS sideways on every turn — damp the target like the
       // position, and the pan is glass again
@@ -13067,9 +13176,9 @@ varying vec2 vUvRaw;
       // lift so short heroes are looked DOWN at, like every third-person
       // game with a small character.
       const _lift = Math.max(SPEC.camera.height_m, 1.5);
-      _camWant.set(fX + Math.sin(modelYaw) * lookAhead,
+      _camWant.set(fX + Math.sin(_aheadYaw) * lookAhead,
                    fY + _lift * 0.5,
-                   fZ + Math.cos(modelYaw) * lookAhead);
+                   fZ + Math.cos(_aheadYaw) * lookAhead);
       if (camTarget.lengthSq() === 0) camTarget.copy(_camWant);
       camTarget.lerp(_camWant, 1 - Math.exp(-7 * dt));
       camera.up.set(0, 1, 0);              // never let lookAt roll-flip
@@ -13079,7 +13188,7 @@ varying vec2 vUvRaw;
       const cd = SPEC.camera.distance_m * camZoom * camDistMul * (inspectOn ? 1.5 : 1);
       let cx = fX + Math.sin(yaw) * Math.cos(pitch) * cd;     // camera BEHIND
       let cz = fZ + Math.cos(yaw) * Math.cos(pitch) * cd;     // (W walks away)
-      let cy = fY + Math.sin(pitch) * cd + _lift * 0.55;
+      let cy = fY + Math.sin(pitch) * cd + _lift * 0.55 - landDipA;
       // INTERIOR (2026-07-23): never rise above the ceiling — the camera
       // outside the roof showed a void where the player should be
       if (INTERIOR) cy = Math.min(cy, (INTERIOR.wall_h || 4.0) * (INTERIOR.floors || 1) - 0.35);
@@ -13101,7 +13210,7 @@ varying vec2 vUvRaw;
           cx = hx + ddx * t; cy = hy + ddy * t; cz = hz + ddz * t;
         }
       }
-      camera.position.lerp(new THREE.Vector3(cx, cy, cz), 1 - Math.exp(-8 * dt));
+      camera.position.lerp(new THREE.Vector3(cx, cy, cz), 1 - Math.exp(-(8 + (_drv ? Math.min(_spdNow * 0.25, 8) : 0)) * dt));   // tighter at speed
       camera.lookAt(camTarget);
     }
     if (cineOn) {                        // CINEMATIC CAMERA override
@@ -13202,6 +13311,16 @@ varying vec2 vUvRaw;
     if (_legacySSAO) renderDepthPrepass();   // retired: N8AO owns depth now
     if (csm) {
       csm.update();
+      // THE CASCADES TAKE TURNS (2026-09-22): three shadow maps redrew the whole
+      // city every frame, four passes of the street in all. The near cascade
+      // is drawn every frame, the middle every second, the far every fourth:
+      // shadows a hundred metres away do not need sixty updates a second.
+      window.__csmFrame = (window.__csmFrame || 0) + 1;
+      for (let ci = 0; ci < csm.lights.length; ci++) {
+        const sh = csm.lights[ci].shadow;
+        sh.autoUpdate = false;
+        if (window.__csmFrame % [1, 2, 4][Math.min(ci, 2)] === 0) sh.needsUpdate = true;
+      }
       window.__csmFrame = (window.__csmFrame || 0) + 1;
       if (window.__csmFrame % 60 === 1) window.__csmPatch();  // catch spawns
     }
@@ -13228,13 +13347,17 @@ varying vec2 vUvRaw;
       camera.lookAt(juicePOV.lx, juicePOV.ly, juicePOV.lz);
       if (juicePOV.t > 1.6) juicePOV = null;
     }
-    if (juicePunch > 0.001) {
-      camera.fov = SPEC.camera.fov_deg * (1 - 0.16 * juicePunch);
-      camera.updateProjectionMatrix();
-      juicePunch = Math.max(0, juicePunch - rdt * 4.2);
-    } else if (camera.fov !== SPEC.camera.fov_deg) {
-      camera.fov = SPEC.camera.fov_deg;
-      camera.updateProjectionMatrix();
+    // THE VIEW WIDENS WITH SPEED (2026-09-22): a run opens the field a
+    // little, a fast car a lot; the punch still bites over either.
+    {
+      landDipA *= Math.exp(-rdt * 7);
+      const _drv2 = (DRIVE || DRIVING);
+      const _spd2 = _drv2 ? Math.hypot(carVX, carVZ) : (window.__pSpeed || 0);
+      runK = THREE.MathUtils.damp(runK, (!_drv2 && _spd2 > Math.max(P.walk_speed, 0.1) * 1.25) ? 1 : 0, 4, rdt);
+      driveFovK = THREE.MathUtils.damp(driveFovK, _drv2 ? Math.min(_spd2 / 28, 1) : 0, 3, rdt);
+      const wantFov = SPEC.camera.fov_deg * (1 - 0.16 * juicePunch) + 5 * runK + 14 * driveFovK;
+      if (juicePunch > 0.001) juicePunch = Math.max(0, juicePunch - rdt * 4.2);
+      if (Math.abs(camera.fov - wantFov) > 0.01) { camera.fov = wantFov; camera.updateProjectionMatrix(); }
     }
     renderer.info.autoReset = false;
     renderer.info.reset();

@@ -714,6 +714,7 @@ n8ao.configuration.aoRadius = 1.5;
 n8ao.configuration.distanceFalloff = 0.6;
 n8ao.configuration.intensity = 3.0;
 n8ao.configuration.halfRes = true;
+n8ao.configuration.transparencyAware = false;   // 2026-09-22: the seam cores and sweeps are transparent; redrawing them three times for the occlusion pass was 13% of the frame
 n8ao.configuration.gammaCorrection = false;     // the composite owns the grade
 for (const rt of [rtScene, rtA, rtB]) {
   rt.texture.minFilter = THREE.LinearFilter;
@@ -4409,6 +4410,8 @@ let meltFlash = 0, meltShake = 0, shockwave = null, shockAge = 0;
 // where the body has caught up to; the difference leans the camera. landDip
 // is how hard the last landing was, springing back.
 const playerVel = new THREE.Vector3(), velLag = new THREE.Vector3(), _lean = new THREE.Vector3();
+const moveVel = new THREE.Vector3(), _wantVel = new THREE.Vector3();   // THE WALK RAMPS (2026-09-22): the body eases up to speed and eases down
+let sprintK = 0;
 let landDip = 0, wasGround = true, prevVy = 0;
 const _n3 = new THREE.Vector3(), _oldN = new THREE.Vector3();
 const _qr = new THREE.Quaternion();
@@ -4435,7 +4438,12 @@ function movePlayer(dt) {
   moveMag = _wish.length();
   if (_wish.lengthSq() > 0) _wish.normalize();
   const speed = keys['ShiftLeft'] ? 11 : 6.2;
-  playerVel.copy(_wish).multiplyScalar(speed);
+  // the body eases up to speed over a sixth of a second and eases down a
+  // little quicker: a first-person camera that stops dead reads as a cut
+  _wantVel.copy(_wish).multiplyScalar(speed);
+  moveVel.lerp(_wantVel, 1 - Math.exp(-dt * (_wantVel.lengthSq() > moveVel.lengthSq() ? 18 : 26)));
+  if (moveVel.lengthSq() < 1e-4 && _wantVel.lengthSq() === 0) moveVel.set(0, 0, 0);
+  playerVel.copy(_wantVel);
 
   // gravity points at the face you are on, so "down" is a different world
   // direction depending on where you are standing
@@ -4456,8 +4464,8 @@ function movePlayer(dt) {
   const fc = FACES[player.face];
   let pa = player.pos.x * fc.u[0] + player.pos.y * fc.u[1] + player.pos.z * fc.u[2];
   let pb = player.pos.x * fc.v[0] + player.pos.y * fc.v[1] + player.pos.z * fc.v[2];
-  const da = (_wish.x * fc.u[0] + _wish.y * fc.u[1] + _wish.z * fc.u[2]) * speed * dt;
-  const db = (_wish.x * fc.v[0] + _wish.y * fc.v[1] + _wish.z * fc.v[2]) * speed * dt;
+  const da = (moveVel.x * fc.u[0] + moveVel.y * fc.u[1] + moveVel.z * fc.u[2]) * dt;
+  const db = (moveVel.x * fc.v[0] + moveVel.y * fc.v[1] + moveVel.z * fc.v[2]) * dt;
   // If you are ALREADY inside something — a machine placed on top of you, a
   // save restored under a smelter — collision is skipped entirely this frame.
   // A player who cannot move is a bug report; a player who can walk out of a
@@ -6473,7 +6481,9 @@ renderer.setAnimationLoop(() => {
     if (BASE_FOV === null) BASE_FOV = camera.fov;
     crossFlash *= Math.exp(-dt * 3.2);
     const cf = crossFlash < 0.003 ? 0 : crossFlash;
-    const fov = BASE_FOV + 7 * mo * Math.sin(Math.min(1, cf) * Math.PI);
+    // A SPRINT WIDENS THE VIEW (2026-09-22): five degrees, eased, so running reads as running
+    sprintK += (((keys['ShiftLeft'] && moveMag > 0.01 && player.onGround) ? 1 : 0) - sprintK) * Math.min(1, dt * 4);
+    const fov = BASE_FOV + 7 * mo * Math.sin(Math.min(1, cf) * Math.PI) + 5 * sprintK * mo;
     if (Math.abs(camera.fov - fov) > 0.01) { camera.fov = fov; camera.updateProjectionMatrix(); }
     crossVig = 0.4 * cf * mo;               // renderFrame adds it to the vignette
     crossWash *= Math.exp(-dt * 2.2);
@@ -6988,6 +6998,7 @@ window.__game = {
     sunAngle: +sunAngle.toFixed(3),
     landing: landing.length,
     plating: [...new Set(cube.material.map(m => m.userData.plating))],
+    moveVel: +moveVel.length().toFixed(2), sprintK: +sprintK.toFixed(2), fov: +camera.fov.toFixed(1), fovBase: BASE_FOV,
     weathered: (() => { const w = { soot: 0, rime: 0, under: 0 }; eachTile(c => { if (c.build) { let k = null; c.build.traverse(o => { if (o.userData.weathered) k = o.userData.weathered; }); if (k) w[k]++; } }); return w; })(),
     warmed, warmLayers: document.querySelectorAll('#tags .warm').length,
     runs: readRuns().map(r => ({ name: r.name, machines: r.machines, thumb: !!r.thumb })),

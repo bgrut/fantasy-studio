@@ -55,6 +55,7 @@ GATES = [
     ("fworks.mjs", "rank perks change the machines; the works play once when the whole game is done and survive a reload"),
     ("fslots.mjs", "a run can be kept under a name with a picture, survives a reload, opens back over a wipe, and is forgotten on a second click"),
     ("fruns.mjs", "the runtime tells the studio its kept runs at boot and on every change, and answers keep, open and forget"),
+    ("fwalk.mjs", "the walk eases up to speed and down; a sprint widens the view"),
     ("fhitch.mjs", "the warm-up: a fresh boot across the first sale and the drone's first flight has no frame over 120 ms on the card"),
     ("fkit.mjs", "the build links the shared kit, loads the studio's three faces, and sets its title in the display face"),
     ("fworlds.mjs", "the reveal reads the prompt that made the world; the demo is one game and lists no other builds, on either target"),
@@ -62,6 +63,7 @@ GATES = [
     ("fmusic.mjs", "the kit's music bed plays in the world's family after the first gesture, moves on its clock, changes key with the world, and makes sound"),
     ("fcity.mjs", "a city prompt gets a district with or without a map, drawn as a city at full resolution, with a race route on its streets (needs --adv)"),
     ("fbuilding.mjs", "a prompt that names a building gets a body from the facade kit at its door, facing the spawn, with lit windows at night (needs --bld)"),
+    ("fdrive.mjs", "the drive: steering eases with speed, the handbrake slides and leaves marks and smoke, the view widens with speed, pedestrians cast shadows only up close, the street runs at speed (needs --adv)"),
     ("ffixtures.mjs", "the drift race and the haunted manor, shot from the same views on every check and held to their facts, pictures tracked beside the gates (needs --adv and --bld)"),
 ]
 

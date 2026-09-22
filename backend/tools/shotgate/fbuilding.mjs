@@ -63,6 +63,18 @@ const faced = await p.evaluate(() => { const L = window.__game.landmark(); const
 console.log('the spawn :', faced ? 'faced the door within ' + faced.off + ' rad | lamps ' + faced.lamps : 'no heading');
 console.log('the cast  :', cast.ghosts, 'ghosts,', cast.animals, 'animals of', cast.total);
 console.log('walked    :', JSON.stringify(blocked));
+// on foot: the speed ramps, a landing dips the camera, a run widens the view
+const feel = await (async () => {
+  const F2 = () => p.evaluate(() => { const f = window.__game.facts(); return { v: f.walk_v, dip: f.land_dip_peak, fov: f.fov, base: f.fov_base, run: f.run_k }; });
+  await p.keyboard.down('KeyW'); await new Promise(r => setTimeout(r, 60)); const early = await F2();
+  await new Promise(r => setTimeout(r, 700)); const full = await F2();
+  await p.keyboard.down('ShiftLeft'); await new Promise(r => setTimeout(r, 1500)); const run = await F2();
+  await p.keyboard.down('Space'); await new Promise(r => setTimeout(r, 120)); await p.keyboard.up('Space');   // held a few frames: the loop reads keys, a press shorter than a frame is missed
+  await new Promise(r => setTimeout(r, 1500)); const landed = await F2();
+  await p.keyboard.up('ShiftLeft'); await p.keyboard.up('KeyW'); await new Promise(r => setTimeout(r, 900)); const stopped = await F2();
+  return { early: early.v, full: full.v, runFov: run.fov, base: run.base, runK: run.run, dip: landed.dip, stopped: stopped.v };
+})();
+console.log('on foot   : 60 ms in', feel.early, '| 760 ms in', feel.full, '| run fov', feel.runFov, 'of', feel.base, '| landing dip', feel.dip, '| stopped', feel.stopped);
 // the hero: measured standing in the pose the player sees, holding the role's weapon
 const hero = await p.evaluate(() => { const f = window.__game.facts(); return { dims: f.player_dims, hero: f.hero, weapon: f.weapon }; });
 const standing = hero.dims && hero.dims[1] >= Math.max(hero.dims[0], hero.dims[2]) * 0.9;
@@ -70,6 +82,7 @@ console.log('the hero  :', hero.hero, '| box', JSON.stringify(hero.dims), '| sta
 console.log('errors    :', errs.length ? errs.join(' | ') : 'none');
 await b.close();
 const ok = r.landmark && r.landmark.w > 5 && r.landmark.h > 5 && errs.length === 0
-  && standing && (hero.hero !== 'detective' || hero.weapon === null || hero.weapon === 'pistol')   // a detective with a weapon holds the pistol; a build with no hostiles holds nothing && cast.ghosts > 0 && cast.ghosts <= 3 && cast.animals === 0   // a haunting has ghosts, not wolves, and not a crowd
+  && standing && (hero.hero !== 'detective' || hero.weapon === null || hero.weapon === 'pistol')
+  && feel.early > 0.2 && feel.early < feel.full * 0.85 && feel.full > 1.5 && feel.runFov > feel.base + 2 && feel.dip > 0.03 && feel.stopped < 0.05   // a detective with a weapon holds the pistol; a build with no hostiles holds nothing && cast.ghosts > 0 && cast.ghosts <= 3 && cast.animals === 0   // a haunting has ghosts, not wolves, and not a crowd
   && faced && faced.off < 1.05 && faced.lamps === 3;
 process.exit(ok ? 0 : 1);
