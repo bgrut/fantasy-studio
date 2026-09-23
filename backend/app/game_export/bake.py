@@ -357,7 +357,7 @@ else:
 # per clip (walk vs run); root bob + spine sway match the video-side gait.
 _QUAD_CLIP_CODE = r'''
 import bpy, math, json
-TOTAL=__TOTAL__; STRIDE=__STRIDE__; AMP=__AMP__
+TOTAL=__TOTAL__; STRIDE=__STRIDE__; AMP=__AMP__; GAIT="__GAIT__"
 rig=bpy.data.objects.get("HeroRig"); o=bpy.data.objects.get("Hero")
 import numpy as np
 mw=o.matrix_world
@@ -370,7 +370,19 @@ try: bpy.context.preferences.edit.keyframe_new_interpolation_type="LINEAR"
 except Exception: pass
 pb=rig.pose.bones
 for b in pb: b.rotation_mode="XYZ"
-phase={"FL":0.0,"BR":0.0,"FR":math.pi,"BL":math.pi}
+# THE GAITS (2026-09-26, LOCOMOTION.md). A walking quadruped is a lateral
+# sequence in four beats: a hind foot, then the fore on the same side, then
+# the other hind, then its fore, evenly spaced, two or three feet always
+# down, the head bobbing twice a stride. A trot is diagonal pairs in two
+# beats. A gallop gathers the hinds and then the fores with the spine
+# flexing and extending and one suspension a stride. The old generator
+# trotted for walk and run alike.
+if GAIT=="walk":
+    phase={"BL":0.0,"FL":0.5*math.pi,"BR":math.pi,"FR":1.5*math.pi}
+elif GAIT=="gallop":
+    phase={"BL":0.0,"BR":0.25*math.pi,"FL":math.pi,"FR":1.25*math.pi}
+else:
+    phase={"FL":0.0,"BR":0.0,"FR":math.pi,"BL":math.pi}
 legs={k.split("_")[1]:None for k in pb.keys() if k.startswith("thigh_")}
 for f in range(1, TOTAL+1):
     t=2*math.pi*(f-1)/STRIDE
@@ -381,12 +393,25 @@ for f in range(1, TOTAL+1):
         pb[thn].keyframe_insert("rotation_euler",frame=f)
         pb[shn].rotation_euler=(-0.5*AMP*(1+math.cos(t+ph)),0,0)
         pb[shn].keyframe_insert("rotation_euler",frame=f)
-    pb["root"].location=(0,0,0.03*H*abs(math.sin(t)))
+    if GAIT=="walk":
+        pb["root"].location=(0,0,0.012*H*abs(math.sin(2*t)))                 # a small ride, four footfalls a stride
+        pb["spine"].rotation_euler=(0,0,0.06*math.sin(t))                     # the lateral bend of a walking spine
+        if "neck" in pb:
+            pb["neck"].rotation_euler=(0.06*math.sin(2*t),0,0)                # the head bobs twice a stride
+            pb["neck"].keyframe_insert("rotation_euler",frame=f)
+    elif GAIT=="gallop":
+        pb["root"].location=(0,0,0.05*H*max(0.0,math.sin(t)))                # the suspension, once a stride
+        pb["spine"].rotation_euler=(0.22*math.sin(t+0.5*math.pi),0,0.02*math.sin(t))   # the spine flexes and extends
+        if "neck" in pb:
+            pb["neck"].rotation_euler=(-0.12*math.sin(t+0.5*math.pi),0,0)     # the head answers the spine
+            pb["neck"].keyframe_insert("rotation_euler",frame=f)
+    else:
+        pb["root"].location=(0,0,0.03*H*abs(math.sin(t)))
+        pb["spine"].rotation_euler=(0,0,0.05*math.sin(t))
     pb["root"].keyframe_insert("location",frame=f)
-    pb["spine"].rotation_euler=(0,0,0.05*math.sin(t))
     pb["spine"].keyframe_insert("rotation_euler",frame=f)
     if "tail" in pb:
-        pb["tail"].rotation_euler=(0,0,0.18*math.sin(t*0.5))
+        pb["tail"].rotation_euler=(0,0,0.18*math.sin(t*0.5)) if GAIT!="gallop" else (0.10*math.sin(t+0.5*math.pi),0,0.06*math.sin(t*0.5))
         pb["tail"].keyframe_insert("rotation_euler",frame=f)
 bpy.ops.object.mode_set(mode="OBJECT")
 __result__=json.dumps({"ok":True,"frames":TOTAL,"legs":sorted(legs)})
@@ -963,13 +988,14 @@ __result__=json.dumps({"ok":True,"frames":T})
     # GAIT-SCALE (2026-07-15): big animals lope, small ones scurry — a 1.4 m
     # bear at cat cadence "moved kinda funny". Cycle length grows ~size^0.35.
     _gk = min(max((height_m / 0.6) ** 0.35, 0.8), 1.6)
-    for name, total, stride, amp in (
-            ("walk", int(40 * _gk), max(int(20 * _gk), 8), 0.50),
-            ("run", int(36 * _gk), max(int(12 * _gk), 6), 0.72)):
+    for name, gait, total, stride, amp in (
+            ("walk", "walk", int(40 * _gk), max(int(20 * _gk), 8), 0.50),
+            ("run", "gallop", int(36 * _gk), max(int(12 * _gk), 6), 0.72)):
         r = _call(registry, name, (_QUAD_CLIP_CODE
                                    .replace("__TOTAL__", str(total))
                                    .replace("__STRIDE__", str(stride))
-                                   .replace("__AMP__", f"{amp:.2f}")))
+                                   .replace("__AMP__", f"{amp:.2f}")
+                                   .replace("__GAIT__", gait)))
         if not (r and r.get("ok")):
             raise RuntimeError(f"quad clip '{name}' failed: {r}")
         p = _call(registry, "push", _PUSH_NLA.replace("__NAME__", name))
@@ -1249,7 +1275,7 @@ def bake_anim_set(hero_glb: str | Path, out_glb: str | Path,
     if not (a and a.get("ok")):
         raise RuntimeError(f"autorig failed: {a}")
     if verbose:
-        print(f"[bake] rig: {a.get('bones')} bones, skin={a.get('skin')}")
+        print(f"[bake] rig: {a.get('bones')} bones, skin={a.get('skin')}, arm sleeves {a.get('armfix')}, arm line {a.get('armline')}")
 
     # idle first (procedural), then each mocap clip — every one to its own track
     # A MOCAP IDLE WINS OVER THE PROCEDURAL ONE (2026-09-04). This always

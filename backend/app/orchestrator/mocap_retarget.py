@@ -131,26 +131,94 @@ mk("head",pt(0,0.86),pt(0,1.0),neck)
 # shoulders); a flat-T skeleton bound to drooping arms is exactly what sheared
 # the geometry into "string arms". zf=height frac, latS=signed lateral offset.
 _zf=(Z-zmin)/H; _latS=(SA-smid)
-_sb=(_zf>=0.76)&(_zf<0.82)
-_shoff=float(np.percentile(np.abs(_latS[_sb]),85)) if int(_sb.sum())>5 else 0.12*H
-_shoff=max(_shoff,0.06*H)
+# THE SHOULDER IS WHERE THE BODY THINS (2026-09-26). The 85th percentile
+# of width in the shoulder band put the joint far out on the arm whenever
+# the arms were held level (every T-posed reference), so the clavicle spanned
+# the real upper arm and held it level while only the outer half hung: the
+# marionette arm. A torso is thick front to back and an arm is thin, so the
+# joint is where the depth of the band, walked outward from the centre,
+# drops below half of the torso's; the percentile stays as the fallback.
+_sb=(_zf>=0.70)&(_zf<0.85)
+_shoff=0.12*H
+try:
+    _dep0=(Y-cy) if sx else (X-cx)
+    _la0=np.abs(_latS[_sb]); _d0=_dep0[_sb]
+    if int(_sb.sum())>60:
+        _bins=np.arange(0.0,float(_la0.max())+0.01*H,0.01*H); _thick=[]
+        for _k in range(len(_bins)-1):
+            _m=(_la0>=_bins[_k])&(_la0<_bins[_k+1])
+            _thick.append(float(np.percentile(_d0[_m],95)-np.percentile(_d0[_m],5)) if int(_m.sum())>=8 else 0.0)
+        _thick=np.array(_thick); _core=_thick[:max(2,int(0.05*H/(0.01*H)))]
+        _T0=float(np.median(_core[_core>0])) if (_core>0).any() else 0.0
+        _edge=None
+        for _k in range(len(_thick)):
+            if _bins[_k]>=0.07*H and _thick[_k]<0.5*_T0: _edge=float(_bins[_k]); break
+        if _T0>0 and _edge is not None: _shoff=_edge
+        else: _shoff=float(np.percentile(_la0,85))
+except Exception:
+    pass
+_shoff=min(max(_shoff,0.06*H),0.20*H)
+_armline={"shoulder_lat":round(float(_shoff)/H,3)}
 for s in ("L","R"):
     sgn=LSGN if s=="L" else -LSGN; lg=sgn*0.10*H
     sh_lat=sgn*_shoff
-    # detect the hand: lowest vertex that is clearly OUTBOARD on this side
-    _side=(np.sign(_latS)==sgn)&(np.abs(_latS)>0.55*_shoff)&(_zf<0.80)&(_zf>0.28)
-    if int(_side.sum())>8:
-        _zz=Z[_side]; _jl=int(np.argmin(_zz))
-        hand_lat=float(_latS[_side][_jl]); hand_zf=float((_zz[_jl]-zmin)/H)
-        if abs(hand_lat)<0.5*_shoff or hand_zf>0.78 or hand_zf<0.30:
-            hand_lat=sgn*0.40*H; hand_zf=0.52     # detection unreliable -> A-pose default
-    else:
-        hand_lat=sgn*0.40*H; hand_zf=0.52
+    # THE BONE RUNS THROUGH THE ARM (2026-09-26). The hand used to be the
+    # lowest outboard vertex, so a drooping fingertip pulled the whole chain
+    # 42 to 55 degrees below horizontal under an arm the mesh held at 20; the
+    # bone ran beneath the sleeve, and when the walk hung it straight down the
+    # sleeve, off-axis, hung out sideways: the forty-five-degree arm that
+    # survived every runtime fix. The arm is sliced along its length and a
+    # line is fitted through each slice's median height, weighted by count;
+    # the chain follows that line from the shoulder to the outermost slice.
+    sh_zf=0.80; _fit=False; el_zf=None; sh_fw=0.0; el_fw=0.0; hand_fw=0.0
+    _dep=(Y-cy) if sx else (X-cx)                  # depth: forward of the body's centre plane
+    _side=(np.sign(_latS)==sgn)&(np.abs(_latS)>1.15*_shoff)&(_zf<0.92)&(_zf>0.28)
+    if int(_side.sum())>40:
+        _la=np.abs(_latS[_side]); _za=_zf[_side]; _da=_dep[_side]
+        _ed=np.linspace(float(_la.min()),float(_la.max()),9); _cs=[]
+        for _k in range(8):
+            _m=(_la>=_ed[_k])&(_la<_ed[_k+1]+(1e-9 if _k==7 else 0))
+            if int(_m.sum())>=6: _cs.append((0.5*(_ed[_k]+_ed[_k+1]),float(np.median(_za[_m])),float(_m.sum()),float(np.median(_da[_m]))))
+        if len(_cs)>=3:
+            _L=np.array([c[0] for c in _cs]); _Zc=np.array([c[1] for c in _cs]); _Wc=np.sqrt(np.array([c[2] for c in _cs]))
+            _A=np.vstack([_L,np.ones_like(_L)]).T*_Wc[:,None]
+            _slope,_icpt=np.linalg.lstsq(_A,_Zc*_Wc,rcond=None)[0]
+            _shz=float(_slope*_shoff+_icpt); _hl=float(_L.max()); _hz=float(_slope*_hl+_icpt)
+            if 0.62<_shz<0.90 and 0.30<_hz<0.88 and _hl>0.9*_shoff:
+                sh_zf=_shz; hand_lat=sgn*_hl; hand_zf=_hz; _fit=True
+                # THE ELBOW IS ON THE ARM (2026-09-26): a reference holds its
+                # arms a little bent, so one straight line from shoulder to
+                # hand runs beside the upper arm, not through it, and a sleeve
+                # bound off-axis swung fifteen degrees wide of its bone. The
+                # elbow sits on the measured centreline at 45% of the reach.
+                _elL=_shoff+0.45*(_hl-_shoff); _elz=float(np.interp(_elL,_L,_Zc))
+                if 0.40<_elz<0.90: el_zf=_elz
+                # THE ARM'S DEPTH (2026-09-26): the chain sat on the body's
+                # centre plane while the reference held its arms forward of
+                # it; a sleeve bound a quarter of a bone length off-axis swung
+                # fifteen degrees wide once the bone hung. Each joint takes the
+                # depth of the arm's own slice, capped at a fifth of the height.
+                _Dc=np.array([c[3] for c in _cs]); _cap=0.2*H
+                sh_fw=float(max(-_cap,min(_cap,np.interp(_shoff,_L,_Dc)))); el_fw=float(max(-_cap,min(_cap,np.interp(_elL,_L,_Dc)))); hand_fw=float(max(-_cap,min(_cap,_Dc[int(np.argmax(_L))])))
+    if not _fit:
+        # the old detection: lowest vertex clearly outboard, else the A-pose default
+        _side=(np.sign(_latS)==sgn)&(np.abs(_latS)>0.55*_shoff)&(_zf<0.80)&(_zf>0.28)
+        if int(_side.sum())>8:
+            _zz=Z[_side]; _jl=int(np.argmin(_zz))
+            hand_lat=float(_latS[_side][_jl]); hand_zf=float((_zz[_jl]-zmin)/H)
+            if abs(hand_lat)<0.5*_shoff or hand_zf>0.78 or hand_zf<0.30:
+                hand_lat=sgn*0.40*H; hand_zf=0.52     # detection unreliable -> A-pose default
+        else:
+            hand_lat=sgn*0.40*H; hand_zf=0.52
+    if el_zf is None: el_zf=sh_zf+(hand_zf-sh_zf)*0.45
+    _armline[s]={"fit":_fit,"shoulder_zf":round(sh_zf,3),"elbow_zf":round(el_zf,3),"hand_zf":round(hand_zf,3),"hand_lat":round(abs(hand_lat)/H,3),"depth":[round(sh_fw/H,3),round(el_fw/H,3),round(hand_fw/H,3)]}
     _al=lambda t: sh_lat+(hand_lat-sh_lat)*t      # lateral along shoulder->hand
-    _az=lambda t: 0.80+(hand_zf-0.80)*t           # height  along shoulder->hand
-    cl=mk("clav_"+s,pt(0,0.80),pt(sh_lat,0.80),chest)
-    ua=mk("uparm_"+s,pt(_al(0.0),_az(0.0)),pt(_al(0.45),_az(0.45)),cl)
-    fa=mk("lowarm_"+s,pt(_al(0.45),_az(0.45)),pt(_al(0.85),_az(0.85)),ua)
+    if el_zf is None: el_zf=sh_zf+(hand_zf-sh_zf)*0.45
+    _az=lambda t: (sh_zf+(el_zf-sh_zf)*(t/0.45)) if t<=0.45 else (el_zf+(hand_zf-el_zf)*((t-0.45)/0.55))   # height along shoulder->elbow->hand, on the arm's own centreline
+    _af=lambda t: (sh_fw+(el_fw-sh_fw)*(t/0.45)) if t<=0.45 else (el_fw+(hand_fw-el_fw)*((t-0.45)/0.55))   # depth along the same chain
+    cl=mk("clav_"+s,pt(0,0.80),pt(sh_lat,sh_zf,sh_fw),chest)
+    ua=mk("uparm_"+s,pt(_al(0.0),_az(0.0),_af(0.0)),pt(_al(0.45),_az(0.45),_af(0.45)),cl)
+    fa=mk("lowarm_"+s,pt(_al(0.45),_az(0.45),_af(0.45)),pt(_al(0.85),_az(0.85),_af(0.85)),ua)
     # HANDS CARRY ALMOST NO WEIGHT, AND IT IS NOT THE BONE LENGTH
     # (2026-09-04). Measured on a shipped character, the outermost arm
     # vertices carry lowarm 56.8% and hand 2.6%, so hands never articulate.
@@ -161,7 +229,7 @@ for s in ("L","R"):
     # Bone-heat simply never assigns these hands anything, whatever the bone
     # length, so the fix has to be a deterministic post-pass that reassigns
     # vertices past the wrist plane. Left at 1.0; the note is the result.
-    mk("hand_"+s,pt(_al(0.85),_az(0.85)),pt(_al(1.0),_az(1.0)),fa)
+    mk("hand_"+s,pt(_al(0.85),_az(0.85),_af(0.85)),pt(_al(1.0),_az(1.0),_af(1.0)),fa)
     # NOTE (2026-08-05, tested + rejected): a rest "knee bend hint" (knee offset
     # 1.8cm forward) was tried to give the hinge a preferred fold direction.
     # It is a NO-OP here and was reverted — aim() points each bone AT the source
@@ -266,7 +334,48 @@ if not skin_mode.startswith("voxel"):
         q=np.round(wv[lv]*63).astype(np.int64)
         for L in np.unique(q):
             if L: vg.add(lv[q==L].tolist(),float(L)/63.0,"REPLACE")
-__result__=json.dumps({"ok":True,"H":round(float(H),3),"side":"X" if sx else "Y","bones":len(arm.bones),"skin":skin_mode})
+# THE ARM OWNS ITS SLEEVE (2026-09-26). Bone heat on the voxel proxy left the
+# upper arm's own vertices part-owned by the clavicle (17% on a scientist's
+# left arm) and the deltoid cap owned by the clavicle and chest outright. The
+# skeleton hung the arm at 6 degrees; the skin followed to 25 and the
+# shoulder cap stayed where the T-pose put it, which reads as arms held out.
+# A deterministic pass: every vertex inside the upper arm's own cylinder,
+# from a little inboard of the shoulder joint to the elbow, belongs to the
+# upper arm, easing in across the shoulder cap so the deltoid turns with the
+# arm and the chest does not; the elbow keeps the forearm's share.
+_armfix={"L":0,"R":0}
+try:
+    _segd={n:(h,t) for n,h,t in segs}
+    _LSa=LSGN*(SA-smid); _zfa=(Z-zmin)/H
+    _vgn={vg.name:vg for vg in o.vertex_groups}
+    for s in ("L","R"):
+        if "uparm_"+s not in _segd or "clav_"+s not in _vgn: continue
+        h,t=_segd["uparm_"+s]; seg=t-h; L2=max(float(seg@seg),1e-9); u=((V-h)@seg)/L2
+        proj=h[None,:]+np.clip(u,0,1)[:,None]*seg[None,:]; d=np.linalg.norm(V-proj,axis=1)
+        sgn=1.0 if s=="L" else -1.0
+        core=(u>0.30)&(u<0.70)&(d<0.12*H)&(sgn*_LSa>0)
+        r=max(float(np.percentile(d[core],75)) if int(core.sum())>20 else 0.05*H, 0.03*H)
+        sel=np.where((sgn*_LSa>0)&(_zfa>0.55)&(d<1.7*r)&(u>-0.25)&(u<0.85))[0]
+        up=_vgn.get("uparm_"+s); cl=_vgn.get("clav_"+s); lo=_vgn.get("lowarm_"+s)
+        if up is None or cl is None: continue
+        keep={up.index, cl.index, (lo.index if lo else -1)}
+        for i in sel.tolist():
+            v=me.vertices[i]; ui=float(u[i])
+            x=min(max((ui+0.25)/0.35,0.0),1.0); w_up=x*x*(3-2*x)          # 0 at the inboard edge, 1 from a tenth along the bone
+            w_lo=0.0
+            for g in v.groups:
+                if lo and g.group==lo.index and ui>0.70: w_lo=float(g.weight)
+            w_up=min(w_up, 1.0-w_lo); w_cl=max(0.0,1.0-w_up-w_lo)
+            for g in list(v.groups):
+                if g.group not in keep: o.vertex_groups[g.group].remove([i])
+            up.add([i],w_up,"REPLACE"); cl.add([i],w_cl,"REPLACE")
+            if lo:
+                if w_lo>0: lo.add([i],w_lo,"REPLACE")
+                else: lo.remove([i])
+        _armfix[s]=int(len(sel))
+except Exception as _ae:
+    _armfix={"error":type(_ae).__name__}
+__result__=json.dumps({"ok":True,"H":round(float(H),3),"side":"X" if sx else "Y","bones":len(arm.bones),"skin":skin_mode,"armfix":_armfix,"armline":_armline})
 '''
 
 
@@ -331,11 +440,14 @@ else:
     _lat=(Vector(_lu.translation)-Vector(_ru.translation)) if (_lu and _ru) else Vector((0,0,0))
     _lat.z=0
     sc.frame_set(hi); bpy.context.view_layer.update(); hip_hi=swm("Hips").translation.copy()
-    samp=[]
+    samp=[]; lats=[]
     for i in range(TOTAL):
         sc.frame_set(lo+(i*step)%win); bpy.context.view_layer.update()
         dirs={c:((swm(b).to_3x3()@Vector((0,1,0))).normalized() if swm(b) else None) for c,b in MAP.items()}
         samp.append((dirs, swm("Hips").translation.copy()))
+        _pl=(swm("LeftUpLeg").translation-swm("RightUpLeg").translation) if (swm("LeftUpLeg") and swm("RightUpLeg")) else None
+        _sl=(swm("LeftArm").translation-swm("RightArm").translation) if (swm("LeftArm") and swm("RightArm")) else None
+        lats.append((_pl,_sl))
     hip0=samp[0][1]
     slu=swm("LeftUpLeg"); slf=swm("LeftFoot")
     sleg=(Vector(slu.translation)-Vector(slf.translation)).length or 1.0
@@ -369,6 +481,29 @@ else:
     try: bpy.context.preferences.edit.keyframe_new_interpolation_type="LINEAR"
     except Exception: pass
     base=rig.location.copy(); baseo=o.location.copy()
+    # THE PELVIS TURNS, THE THORAX ANSWERS, THE HIPS RIDE (2026-09-26).
+    # Measured walking (LOCOMOTION.md): the pelvis rotates about the vertical
+    # by some four degrees each way, the thorax counter-rotates by three to
+    # eight, and the centre of mass rises and falls three to five centimetres
+    # twice a stride. The hips were pinned to the rest orientation and, in
+    # game clips, to a fixed height, so the legs swung under a frozen pelvis
+    # and the feet hovered and slid. From the source: the yaw of the hip line
+    # and of the shoulder line about the vertical, each relative to its mean,
+    # and the hip height relative to its mean, all in the aligned frame.
+    def _yaw_delta(vs):
+        vs=[(Rz@v) for v in vs if v is not None]
+        if len(vs)<2: return [0.0]*len(lats)
+        mv=Vector((sum(v.x for v in vs),sum(v.y for v in vs),0.0))
+        if mv.length<1e-6: return [0.0]*len(lats)
+        mv.normalize(); out=[]
+        for v in vs:
+            w=Vector((v.x,v.y,0.0))
+            if w.length<1e-6: out.append(0.0); continue
+            w.normalize(); out.append(max(-0.21,min(0.21,math.atan2(mv.cross(w).z, mv.dot(w)))))   # twelve degrees at most
+        return out
+    _pyaw=_yaw_delta([l[0] for l in lats]); _tyaw=_yaw_delta([l[1] for l in lats])
+    _hz=[hp.z for _,hp in samp]; _hzm=sum(_hz)/max(len(_hz),1)
+    twist=[(_pyaw[i] if i<len(_pyaw) else 0.0, _tyaw[i] if i<len(_tyaw) else 0.0, max(-0.06,min(0.06,(_hz[i]-_hzm)*scale))) for i in range(TOTAL)]
     # CLAVICLE CONE (2026-08-05, #ARMS): the clavicle is the only purely LATERAL
     # bone in the chain and it carries ~7% of the skin weight, so any error in
     # the source-to-hero frame lands on it amplified — a bad frame flips it ~180
@@ -400,8 +535,15 @@ else:
             rig.location=(base.x+dx,base.y+dy,base.z+dz); rig.keyframe_insert("location",frame=f)
             o.location=(baseo.x+dx,baseo.y+dy,baseo.z+dz); o.keyframe_insert("location",frame=f)
         bpy.context.view_layer.update()
-        # hips stays at REST orientation (= reference facing); we do NOT retarget
-        # the root rotation, so the torso never flips away from the reference.
+        # the hips keep the reference facing (the root rotation is never
+        # retargeted, which is what flipped torsos) and take only the small
+        # pelvic yaw about the vertical, and in game clips the vertical ride
+        _py,_ty,_hzi=twist[i]
+        _hb=rig.pose.bones["hips"]; _hrest=_hb.bone.matrix_local
+        _hhead=_hrest.translation.copy()+(Vector((0,0,_hzi)) if INPLACE else Vector((0,0,0)))
+        _hb.matrix=Matrix.Translation(_hhead)@(Matrix.Rotation(_py,3,'Z')@_hrest.to_3x3()).to_4x4(); bpy.context.view_layer.update()
+        _hb.keyframe_insert("rotation_quaternion",frame=f)
+        if INPLACE: _hb.keyframe_insert("location",frame=f)
         for c in ORDER:
             d=dirs.get(c)
             # ARM STRAIGHTEN: the T-pose->arms-down retarget over-bends the elbow
@@ -417,7 +559,11 @@ else:
                 d=(dirs["uparm_R"]*0.35+d*0.65).normalized()
             if d is None: continue
             d=cone(c,d)
-            aim(c,d); rig.pose.bones[c].keyframe_insert("rotation_quaternion",frame=f)
+            aim(c,d)
+            if c=="chest" and abs(_ty)>1e-4:      # the thorax counter-rotation, a twist about the chest's own axis
+                _cb=rig.pose.bones["chest"]; _ch=_cb.matrix.translation.copy()
+                _cb.matrix=Matrix.Translation(_ch)@(Matrix.Rotation(_ty,3,d)@_cb.matrix.to_3x3()).to_4x4(); bpy.context.view_layer.update()
+            rig.pose.bones[c].keyframe_insert("rotation_quaternion",frame=f)
         path.append((base.x+dx, base.y+dy, baseo.z))
     # DE-CHOPPER: gaussian-smooth the baked bone curves to kill the small
     # frame-to-frame twist jitter the per-bone aim introduces, so the motion

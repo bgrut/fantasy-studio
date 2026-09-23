@@ -977,7 +977,7 @@
     "idle",
     "sneak"
    ],
-   "bones": 19,
+   "bones": 20,
    "biped": true,
    "tallest_axis": "y",
    "aspect": {
@@ -1010,9 +1010,10 @@
     "attack",
     "idle",
     "run",
+    "sneak",
     "walk"
    ],
-   "bones": 19,
+   "bones": 20,
    "biped": true,
    "tallest_axis": "y",
    "aspect": {
@@ -4133,11 +4134,11 @@
   {
    "file": "man_anim.glb",
    "dims_m": {
-    "x": 1.5643,
-    "y": 1.8,
-    "z": 0.353
+    "x": 1.5208,
+    "y": 1.75,
+    "z": 0.3432
    },
-   "min_y": -0.0,
+   "min_y": 0.0,
    "skinned": true,
    "clips": [
     "walk",
@@ -4189,6 +4190,7 @@
     "attack",
     "idle",
     "run",
+    "sneak",
     "walk"
    ],
    "bones": 19,
@@ -6148,31 +6150,32 @@
   {
    "file": "walker.glb",
    "dims_m": {
-    "x": 1.5305,
-    "y": 1.751,
-    "z": 0.3201
+    "x": 1.5218,
+    "y": 1.7502,
+    "z": 0.3442
    },
-   "min_y": -0.0012,
+   "min_y": -0.0,
    "skinned": true,
    "clips": [
     "attack",
     "idle",
     "run",
+    "sneak",
     "walk"
    ],
    "bones": 19,
    "biped": true,
    "tallest_axis": "y",
    "aspect": {
-    "w_h": 0.874,
-    "d_h": 0.183
+    "w_h": 0.87,
+    "d_h": 0.197
    },
    "upright": true,
    "height_ratio": 1.0,
    "mesh": {
-    "tris": 106312,
-    "largest_share": 0.9593,
-    "fragments": 1,
+    "tris": 105249,
+    "largest_share": 0.7619,
+    "fragments": 3,
     "degenerate": 0.0,
     "textures": 2,
     "textures_ok": true
@@ -6193,6 +6196,7 @@
     "attack",
     "idle",
     "run",
+    "sneak",
     "walk"
    ],
    "bones": 19,
@@ -6228,9 +6232,10 @@
     "attack",
     "idle",
     "run",
+    "sneak",
     "walk"
    ],
-   "bones": 19,
+   "bones": 20,
    "biped": true,
    "tallest_axis": "y",
    "aspect": {
@@ -6263,6 +6268,7 @@
     "attack",
     "idle",
     "run",
+    "sneak",
     "walk"
    ],
    "bones": 19,

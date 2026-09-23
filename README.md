@@ -158,6 +158,8 @@ Deep dives: **[docs/PIPELINE_V2.md](docs/PIPELINE_V2.md)** (video pipeline) · *
 
 ---
 
+The way characters and creatures move is held to measured biomechanics, not taste: [backend/LOCOMOTION.md](backend/LOCOMOTION.md) collects the numbers (gait phases, cadence, arm swing and elbow flexion, pelvic rotation, quadruped footfall orders, gallop suspension, and the rest) with sources, and the gates read against them.
+
 ## How Fantasy Studio compares
 
 | | Fantasy Studio | Diffusion video (Sora/Runway/Pika) | AI game tools (cloud) |

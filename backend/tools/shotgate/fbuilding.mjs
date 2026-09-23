@@ -74,14 +74,14 @@ const feel = await (async () => {
   await p.keyboard.up('ShiftLeft'); await p.keyboard.up('KeyW'); await new Promise(r => setTimeout(r, 900)); const stopped = await F2();
   // the gait blend and the weight: walking, the walk clip carries the pose at its own stride rate; turning, the body rolls; the head has a bone to turn
   await p.keyboard.down('KeyW'); await new Promise(r => setTimeout(r, 900));
-  const gaitW = await p.evaluate(() => { const f = window.__game.facts(); return { gait: f.gait, lean: f.lean, arms: f.arms }; });
+  const gaitW = await p.evaluate(() => { const f = window.__game.facts(); return { gait: f.gait, lean: f.lean, arms: f.arms, ride: f.ride }; });
   await p.keyboard.down('KeyA'); await new Promise(r => setTimeout(r, 350));
   const turning = await p.evaluate(() => window.__game.facts().lean);
   await p.keyboard.up('KeyA'); await p.keyboard.up('KeyW'); await new Promise(r => setTimeout(r, 1200));
   const idleW = await p.evaluate(() => window.__game.facts().gait);
   return { early: early.v, full: full.v, runFov: run.fov, base: run.base, runK: run.run, dip: landed.dip, stopped: stopped.v, gaitW, turning, idleW };
 })();
-console.log('the gait  : walking', JSON.stringify(feel.gaitW.gait), '| idle again', JSON.stringify(feel.idleW), '| turning roll', feel.turning.roll, '| head bone', feel.gaitW.lean.head_bone, '| arms from down', JSON.stringify(feel.gaitW.arms));
+console.log('the gait  : walking', JSON.stringify(feel.gaitW.gait), '| idle again', JSON.stringify(feel.idleW), '| turning roll', feel.turning.roll, '| head bone', feel.gaitW.lean.head_bone, '| arms from down', JSON.stringify(feel.gaitW.arms), '| hip ride', feel.gaitW.ride);
 console.log('on foot   : 60 ms in', feel.early, '| 760 ms in', feel.full, '| run fov', feel.runFov, 'of', feel.base, '| landing dip', feel.dip, '| stopped', feel.stopped);
 
 // the frame's luminance, read back in the page from a screenshot (the canvas
@@ -122,7 +122,7 @@ const ok = r.landmark && r.landmark.w > 5 && r.landmark.h > 5 && errs.length ===
   && standing && (hero.hero !== 'detective' || hero.weapon === null || hero.weapon === 'pistol')
   && feel.early > 0.2 && feel.early < feel.full * 0.85 && feel.full > 1.5 && feel.runFov > feel.base + 2 && feel.dip > 0.03 && feel.stopped < 0.05
   && (!lightF.night || (lightF.moon <= 0.6 && lightF.hero_fill > 0 && lum.box >= 22 && lum.box > lum.frame * 1.15 && lum.sky < 70))
-  && feel.gaitW.gait.walk > 0.5 && feel.gaitW.gait.idle < 0.5 && feel.gaitW.gait.rate >= 0.5 && feel.gaitW.gait.rate <= 5.5 && feel.idleW.idle > 0.9 && Math.abs(feel.turning.roll) > 0.01 && !!feel.gaitW.lean.head_bone && feel.gaitW.arms && feel.gaitW.arms.L !== null && feel.gaitW.arms.L < 32 && feel.gaitW.arms.R < 32   // the arms hang and swing, no chicken wings   // a detective with a weapon holds the pistol; a build with no hostiles holds nothing && cast.ghosts > 0 && cast.ghosts <= 3 && cast.animals === 0   // a haunting has ghosts, not wolves, and not a crowd
+  && feel.gaitW.gait.walk > 0.5 && feel.gaitW.gait.idle < 0.5 && feel.gaitW.gait.rate >= 0.5 && feel.gaitW.gait.rate <= 5.5 && feel.idleW.idle > 0.9 && Math.abs(feel.turning.roll) > 0.01 && !!feel.gaitW.lean.head_bone && feel.gaitW.arms && feel.gaitW.arms.L !== null && feel.gaitW.arms.L < 32 && feel.gaitW.arms.R < 32 && feel.gaitW.ride >= 0.015 && feel.gaitW.ride <= 0.09   // the arms hang and swing, no chicken wings; the pelvis rides three to six centimetres   // a detective with a weapon holds the pistol; a build with no hostiles holds nothing && cast.ghosts > 0 && cast.ghosts <= 3 && cast.animals === 0   // a haunting has ghosts, not wolves, and not a crowd
   && faced && faced.off < 1.05 && faced.lamps === 3
   && bodies && bodies.quad + bodies.biped > 0 && npcW.every(x => Number.isFinite(x.ground));   // every body knows its class and the ground under it
 process.exit(ok ? 0 : 1);

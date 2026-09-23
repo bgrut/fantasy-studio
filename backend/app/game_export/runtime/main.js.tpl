@@ -9880,16 +9880,33 @@ async function main() {
   // forty-five-degree arm. The bones are left to the clip; the angle they
   // make with the vertical is reported in the facts and held by the gates.
   const _armBones = { L: null, R: null, Lc: null, Rc: null };
-  let _armScanned = false;
+  let _armScanned = false, _hipsBone = null;
+  // THE RIDE (2026-09-26): a walking pelvis rises and falls three to five
+  // centimetres twice a stride (LOCOMOTION.md); the hips bone carries it in
+  // the clip, and its height over the last second and a half is reported
+  // so the gate can tell a walk that rides from one that glides.
+  const _ride = { buf: new Float32Array(120), i: 0, n: 0 };   // a rolling second and a half, never reset mid-read
   function scanArms() {
     _armScanned = true;
-    scene.traverse(o => {
+    holder.traverse(o => {                      // the hero's own skin, never the first NPC the scene happens to list
       if (!o.isSkinnedMesh || !o.skeleton) return;
       for (const bn of o.skeleton.bones) {
         const m = /^uparm_([LR])$/i.exec(bn.name);
         if (m && !_armBones[m[1]]) { _armBones[m[1]] = bn; _armBones[m[1] + 'c'] = bn.children.find(c => c.isBone) || null; }
+        if (/^hips$/i.test(bn.name) && !_hipsBone) _hipsBone = bn;
       }
     });
+  }
+  function trackRide() {
+    if (!_armScanned) scanArms();
+    if (!_hipsBone) return;
+    _ride.buf[_ride.i] = _hipsBone.position.y; _ride.i = (_ride.i + 1) % _ride.buf.length; if (_ride.n < _ride.buf.length) _ride.n++;
+  }
+  function rideSpan() {
+    if (!_hipsBone || _ride.n < 10) return null;
+    let lo = Infinity, hi = -Infinity;
+    for (let k = 0; k < _ride.n; k++) { const v = _ride.buf[k]; if (v < lo) lo = v; if (v > hi) hi = v; }
+    return +(hi - lo).toFixed(4);
   }
   const _aA = new THREE.Vector3(), _aB = new THREE.Vector3();
   function armAngles() {
@@ -10683,6 +10700,7 @@ async function main() {
         gait: { idle: +_gaitW.idle.toFixed(2), walk: +_gaitW.walk.toFixed(2), run: +_gaitW.run.toFixed(2), rate: actions.__walk ? +actions.__walk.timeScale.toFixed(2) : null, top: current && current.getClip ? current.getClip().name : null },
         lean: { roll: +turnRoll.toFixed(3), pitch: +accelP.toFixed(3), head: +headYawK.toFixed(3), head_bone: headBone ? headBone.name : null },
         arms: armAngles(),       // the upper arms' angle from straight down, in degrees: a walk swings them 4 to 20
+        ride: rideSpan(),        // the hips bone's height span over the last ninety frames, metres: a walk rides 0.03 to 0.06
         car: (pg.scene && pg.scene.userData && pg.scene.userData.car) || ((DRIVE || DRIVING) && P.asset && (!P.car_params || P.car_params.library) ? { model: 'library', file: String(P.asset).split(/[\/]/).pop(), paint: P.car_params ? P.car_params.paint : null } : null),
         crowd: { near: (window.__peds || []).filter(q => q.obj.visible).length, impostors: window.__pedImpostor ? window.__pedImpostor.n : 0, total: (window.__peds || []).length },
         light: { night: _isNightSky, moon: +pal.sun.toFixed(2), amb: +pal.amb.toFixed(2), exposure: +renderer.toneMappingExposure.toFixed(2), hero_fill: +heroFill.intensity.toFixed(1) },
@@ -13310,6 +13328,7 @@ varying vec2 vUvRaw;
       if (pd._cast !== _cast) { pd._cast = _cast; pd.obj.traverse(o => { if (o.isMesh) o.castShadow = _cast; }); }
       if (pd.mixer && _vis && _pd2 < 62 * 62) pd.mixer.update(dt);
     }
+    trackRide();
     if (window.__pedImpostor) {
       const im = window.__pedImpostor;
       im.mesh.geometry.instanceCount = im.n; im.iPos.needsUpdate = true; im.iCell.needsUpdate = true;
