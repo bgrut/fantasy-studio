@@ -407,10 +407,14 @@ else:
             # ARM STRAIGHTEN: the T-pose->arms-down retarget over-bends the elbow
             # into a stubby 'T-rex' pose. Bias the forearm/hand toward the UPPER
             # arm direction so the arm swings as a natural near-straight line.
+            # THE ELBOW BENDS (2026-09-25): at 0.7 toward the upper arm the
+            # walk's elbows measured 4 to 18 degrees, a straight arm; a walking
+            # human's elbow holds 20 to 40. The bias stays, at a third, so the
+            # source's flexion survives and the T-rex fold it was made for does not.
             if c in ("lowarm_L","hand_L") and dirs.get("uparm_L") is not None and d is not None:
-                d=(dirs["uparm_L"]*0.7+d*0.3).normalized()
+                d=(dirs["uparm_L"]*0.35+d*0.65).normalized()
             elif c in ("lowarm_R","hand_R") and dirs.get("uparm_R") is not None and d is not None:
-                d=(dirs["uparm_R"]*0.7+d*0.3).normalized()
+                d=(dirs["uparm_R"]*0.35+d*0.65).normalized()
             if d is None: continue
             d=cone(c,d)
             aim(c,d); rig.pose.bones[c].keyframe_insert("rotation_quaternion",frame=f)

@@ -9869,36 +9869,39 @@ async function main() {
     window.__wpnModels = wGroups;
   })();
 
-  // ── ARMS SWING FORWARD, NOT OUTWARD (2026-08-07) ─────────────────────
-  // Measured on the running rig: uparm_L.y = +0.82 and uparm_R.y = -0.81,
-  // a symmetric 47 degrees of SPLAY carried in every clip. It is baked in
-  // because the meshes are bound in a T-pose (pose_templates/biped_depth.png
-  // is a flat T) while mocap_retarget builds its arm chain expecting an
-  // A-pose — the clip then rotates from a rest position that already had the
-  // arms out, so the swing comes out lateral instead of sagittal.
-  //
-  // The real fix is an A-pose template and re-baked rigs, and that is still
-  // the right one. This is the standard interim: a REST-POSE CORRECTION,
-  // applied after the mixer writes each frame. It scales down only the splay
-  // axis and leaves X — which carries the actual forward swing — untouched,
-  // so the walk keeps its motion and loses its chicken wings.
-  const _armBones = [];
+  // THE ARMS HANG (2026-09-25). A rest-pose correction used to scale the
+  // upper arms' local Y rotation by 0.22 after the mixer wrote each frame,
+  // from a time when the retarget bound arms to a flat T and every clip
+  // splayed. The retarget has aimed each bone at the clip's world direction
+  // since; measured on the shipped rigs, the walk's upper arms point 4 to 20
+  // degrees from straight down, swinging fore and aft. Scaling one Euler
+  // component of a quaternion that carries the T-to-down rotation does not
+  // "remove splay": it half-undoes the whole rotation, and that was the
+  // forty-five-degree arm. The bones are left to the clip; the angle they
+  // make with the vertical is reported in the facts and held by the gates.
+  const _armBones = { L: null, R: null, Lc: null, Rc: null };
   let _armScanned = false;
   function scanArms() {
     _armScanned = true;
     scene.traverse(o => {
       if (!o.isSkinnedMesh || !o.skeleton) return;
       for (const bn of o.skeleton.bones) {
-        if (/^uparm_[LR]$/i.test(bn.name)) _armBones.push(bn);
+        const m = /^uparm_([LR])$/i.exec(bn.name);
+        if (m && !_armBones[m[1]]) { _armBones[m[1]] = bn; _armBones[m[1] + 'c'] = bn.children.find(c => c.isBone) || null; }
       }
     });
   }
-  function fixArmSplay() {
+  const _aA = new THREE.Vector3(), _aB = new THREE.Vector3();
+  function armAngles() {
     if (!_armScanned) scanArms();
-    for (const bn of _armBones) {
-      // 0.22 leaves ~10 degrees, which is what a relaxed arm actually does
-      bn.rotation.y *= 0.22;
+    const out = {};
+    for (const side of ['L', 'R']) {
+      const a = _armBones[side], c = _armBones[side + 'c'];
+      if (!a || !c) { out[side] = null; continue; }
+      a.getWorldPosition(_aA); c.getWorldPosition(_aB); _aB.sub(_aA).normalize();
+      out[side] = +THREE.MathUtils.radToDeg(Math.acos(THREE.MathUtils.clamp(-_aB.y, -1, 1))).toFixed(1);   // from straight down
     }
+    return out;
   }
 
   const capR = Math.min(Math.max(radius * 0.6, 0.22), 0.6);
@@ -10679,6 +10682,7 @@ async function main() {
         walk_v: +walkV.toFixed(2), land_dip_peak: +landDipPeak.toFixed(3), run_k: +runK.toFixed(2), fov: +camera.fov.toFixed(1), fov_base: SPEC.camera.fov_deg,
         gait: { idle: +_gaitW.idle.toFixed(2), walk: +_gaitW.walk.toFixed(2), run: +_gaitW.run.toFixed(2), rate: actions.__walk ? +actions.__walk.timeScale.toFixed(2) : null, top: current && current.getClip ? current.getClip().name : null },
         lean: { roll: +turnRoll.toFixed(3), pitch: +accelP.toFixed(3), head: +headYawK.toFixed(3), head_bone: headBone ? headBone.name : null },
+        arms: armAngles(),       // the upper arms' angle from straight down, in degrees: a walk swings them 4 to 20
         car: (pg.scene && pg.scene.userData && pg.scene.userData.car) || ((DRIVE || DRIVING) && P.asset && (!P.car_params || P.car_params.library) ? { model: 'library', file: String(P.asset).split(/[\/]/).pop(), paint: P.car_params ? P.car_params.paint : null } : null),
         crowd: { near: (window.__peds || []).filter(q => q.obj.visible).length, impostors: window.__pedImpostor ? window.__pedImpostor.n : 0, total: (window.__peds || []).length },
         light: { night: _isNightSky, moon: +pal.sun.toFixed(2), amb: +pal.amb.toFixed(2), exposure: +renderer.toneMappingExposure.toFixed(2), hero_fill: +heroFill.intensity.toFixed(1) },
@@ -12975,7 +12979,6 @@ varying vec2 vUvRaw;
     audioFrame(dt, Math.hypot(playerObj.position.x - _audPX,
                               playerObj.position.z - _audPZ));
     _audPX = playerObj.position.x; _audPZ = playerObj.position.z;
-    fixArmSplay();          // after the mixers, before the frame is drawn
     // ── AIMING (2026-08-07) ───────────────────────────────────────────
     // Holding F with the pistol out slows you to a walk, pulls the camera
     // in, and raises a reticle that turns red when a target is actually
