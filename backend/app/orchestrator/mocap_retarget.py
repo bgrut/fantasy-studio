@@ -411,13 +411,36 @@ try:
         _armfix[s]=int(len(sel))
 except Exception as _ae:
     _armfix={"error":type(_ae).__name__}
-__result__=json.dumps({"ok":True,"H":round(float(H),3),"side":"X" if sx else "Y","bones":len(arm.bones),"skin":skin_mode,"armfix":_armfix,"armline":_armline,"facing":facing})
+# THE PALM (2026-09-26). A reference holds its hands open to the camera, so
+# when the arm hangs the palm faces forward; a person's palms face the
+# thigh. The palm is the flat of the hand: the least-variance axis of the
+# hand's vertices. Its bind-pose normal is stored on the rig, and the
+# retarget turns the forearm and hand each frame so it faces the body.
+_palm={}
+try:
+    for s in ("L","R"):
+        if "hand_"+s not in _segd: continue
+        h,t=_segd["hand_"+s]; seg=t-h; L2=max(float(seg@seg),1e-9); u=((V-h)@seg)/L2
+        proj=h[None,:]+np.clip(u,0,1)[:,None]*seg[None,:]; d=np.linalg.norm(V-proj,axis=1)
+        sel=(u>-0.15)&(u<1.35)&(d<0.09*H)
+        if int(sel.sum())<40: continue
+        P=V[sel]-V[sel].mean(0); w,vec=np.linalg.eigh(P.T@P); n=vec[:,0]
+        # sign: the palms of a reference face the camera, which is the body's front (+Y); flat hands face down
+        if abs(n[1])>=abs(n[2]): n=n if n[1]>0 else -n
+        else: n=n if n[2]<0 else -n
+        rig["palm_"+s]=[float(n[0]),float(n[1]),float(n[2])]
+        _palm[s]=[round(float(x),3) for x in n]
+except Exception as _pe:
+    _palm={"error":type(_pe).__name__}
+__result__=json.dumps({"ok":True,"H":round(float(H),3),"side":"X" if sx else "Y","bones":len(arm.bones),"skin":skin_mode,"armfix":_armfix,"armline":_armline,"facing":facing,"palm":_palm})
 '''
 
 
 # ── BLOCK 2: import BVH, frame-align, retarget (loop to TOTAL), camera, bake.
 _RETARGET_CODE = r'''
 BVHPATH=r"__BVH__"; TOTAL=__TOTAL__; FPS=__FPS__; TRACK=__TRACK__; WIDE=__WIDE__
+LEAN=float("__LEAN__" if "__LEAN__"[0] in "0123456789." else "0.0")        # forward trunk lean, radians, per clip
+ELBOW=float("__ELBOW__" if "__ELBOW__"[0] in "0123456789." else "0.35")   # the forearm's bias toward the upper arm
 # INPLACE: game-export mode — no root/object translation keyframes (the game's
 # physics controller moves the character) and no rest ease-in (clips must loop
 # cleanly). False for the video pipeline = behavior unchanged.
@@ -558,6 +581,26 @@ else:
         d0=(rest.to_3x3()@Vector((0,1,0))).normalized()
         basis=(d0.rotation_difference(dirv).to_matrix()@rest.to_3x3())
         pb.matrix=Matrix.Translation(head)@basis.to_4x4(); bpy.context.view_layer.update()
+    # the palm turns to the body: the bind-pose palm normal carried through the
+    # bone's current basis, then the twist about the bone's own axis that
+    # points it at the torso's centre line; the forearm and the hand take the
+    # whole twist, the upper arm two fifths so the sleeve does not crease
+    _palmW={s:(Vector(rig["palm_"+s]) if rig.get("palm_"+s) else None) for s in ("L","R")}
+    def palm_twist(c, dirv, s):
+        pw=_palmW.get(s)
+        if pw is None: return 0.0
+        pb=rig.pose.bones[c]; B=pb.matrix.to_3x3(); rest=RB[c]
+        n_now=(B@(rest.inverted()@pw)).normalized(); axis=dirv.normalized()
+        tc=rig.pose.bones["hips"].matrix.translation; hp=pb.matrix.translation
+        target=Vector((tc.x-hp.x,tc.y-hp.y,0.0)); target=target-axis*target.dot(axis)
+        n_perp=n_now-axis*n_now.dot(axis)
+        if target.length<1e-4 or n_perp.length<1e-4: return 0.0
+        target.normalize(); n_perp.normalize()
+        return math.atan2(n_perp.cross(target).dot(axis), n_perp.dot(target))
+    def roll(c, angle, dirv):
+        if abs(angle)<1e-4: return
+        pb=rig.pose.bones[c]; head=pb.matrix.translation.copy()
+        pb.matrix=Matrix.Translation(head)@(Matrix.Rotation(angle,3,dirv.normalized())@pb.matrix.to_3x3()).to_4x4(); bpy.context.view_layer.update()
     def aim_full(name, R3, frame):
         pb=rig.pose.bones[name]; head=pb.matrix.translation.copy()
         pb.matrix=Matrix.Translation(head)@R3.to_4x4(); bpy.context.view_layer.update()
@@ -577,10 +620,11 @@ else:
         # the hips keep the reference facing (the root rotation is never
         # retargeted, which is what flipped torsos) and take only the small
         # pelvic yaw about the vertical, and in game clips the vertical ride
-        _py,_ty,_hzi=twist[i]; _lowdir={}
+        _py,_ty,_hzi=twist[i]; _lowdir={}; _twist_arm={}
         _hb=rig.pose.bones["hips"]; _hrest=_hb.bone.matrix_local
         _hhead=_hrest.translation.copy()+(Vector((0,0,_hzi)) if INPLACE else Vector((0,0,0)))
-        _hb.matrix=Matrix.Translation(_hhead)@(Matrix.Rotation(_py,3,'Z')@_hrest.to_3x3()).to_4x4(); bpy.context.view_layer.update()
+        _hlean=(Matrix.Rotation(LEAN,3,_latv) if (LEAN and _latv is not None) else Matrix.Identity(3))
+        _hb.matrix=Matrix.Translation(_hhead)@(_hlean@Matrix.Rotation(_py,3,'Z')@_hrest.to_3x3()).to_4x4(); bpy.context.view_layer.update()
         _hb.keyframe_insert("rotation_quaternion",frame=f)
         if INPLACE: _hb.keyframe_insert("location",frame=f)
         for c in ORDER:
@@ -593,9 +637,12 @@ else:
             # human's elbow holds 20 to 40. The bias stays, at a third, so the
             # source's flexion survives and the T-rex fold it was made for does not.
             if c in ("lowarm_L",) and dirs.get("uparm_L") is not None and d is not None:
-                d=(dirs["uparm_L"]*0.35+d*0.65).normalized(); _lowdir["L"]=d
+                d=(dirs["uparm_L"]*ELBOW+d*(1-ELBOW)).normalized(); _lowdir["L"]=d
             elif c in ("lowarm_R",) and dirs.get("uparm_R") is not None and d is not None:
-                d=(dirs["uparm_R"]*0.35+d*0.65).normalized(); _lowdir["R"]=d
+                d=(dirs["uparm_R"]*ELBOW+d*(1-ELBOW)).normalized(); _lowdir["R"]=d
+            # the trunk leans into a run: spine, chest, neck and head tilt forward together
+            if LEAN and c in ("spine","chest","neck","head") and d is not None and _latv is not None:
+                d=(Matrix.Rotation(LEAN,3,_latv)@d).normalized()
             # THE HAND CONTINUES THE FOREARM (2026-09-26). Aimed at the mocap
             # hand marker the wrist bent 63 to 70 degrees and the hands cocked
             # outward and up; a relaxed walking wrist holds within about
@@ -621,6 +668,13 @@ else:
             if c in ("clav_L","clav_R") and d.z>-0.05:
                 d=Vector((d.x,d.y,-0.05)).normalized()
             aim(c,d)
+            if c in ("lowarm_L","lowarm_R"):
+                _tw=palm_twist(c, d, c[-1]); _twist_arm[c[-1]]=_tw; roll(c,_tw,d)
+                # the upper arm shares two fifths of the turn, applied to the bone already aimed this frame
+                _ua=rig.pose.bones["uparm_"+c[-1]]; _uad=(_ua.matrix.to_3x3()@Vector((0,1,0)))
+                roll("uparm_"+c[-1], 0.4*_tw, _uad)
+            elif c in ("hand_L","hand_R") and _twist_arm.get(c[-1]):
+                roll(c,_twist_arm[c[-1]],d)
             if c=="chest" and abs(_ty)>1e-4:      # the thorax counter-rotation, a twist about the chest's own axis
                 _cb=rig.pose.bones["chest"]; _ch=_cb.matrix.translation.copy()
                 _cb.matrix=Matrix.Translation(_ch)@(Matrix.Rotation(_ty,3,d)@_cb.matrix.to_3x3()).to_4x4(); bpy.context.view_layer.update()

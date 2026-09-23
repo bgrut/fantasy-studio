@@ -1311,7 +1311,12 @@ def bake_anim_set(hero_glb: str | Path, out_glb: str | Path,
                 .replace("__FPS__", str(int(fps)))
                 .replace("__TRACK__", "False")
                 .replace("__WIDE__", "1.00")
-                .replace("__INPLACE__", "True"))
+                .replace("__INPLACE__", "True")
+                # THE GAIT'S OWN POSTURE (2026-09-26, LOCOMOTION.md): a run
+                # leans the trunk five to eight degrees and carries the elbows
+                # near ninety; a sneak leans further; a walk stands upright.
+                .replace("__LEAN__", {"run": "0.11", "sneak": "0.22", "attack": "0.06"}.get(name, "0.0"))
+                .replace("__ELBOW__", {"run": "0.12"}.get(name, "0.35")))
         _lo, _hi = M.state_window(name)
         code = code.replace("__LOF__", f"{_lo:.4f}").replace("__HIF__", f"{_hi:.4f}")
         r = _call(registry, name, code)
