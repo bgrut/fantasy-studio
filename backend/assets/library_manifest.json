@@ -43,9 +43,9 @@
   {
    "file": "bandit_anim.glb",
    "dims_m": {
-    "x": 1.5514,
-    "y": 1.8,
-    "z": 0.3697
+    "x": 0.8619,
+    "y": 1.0,
+    "z": 0.2054
    },
    "min_y": 0.0,
    "skinned": true,
@@ -285,9 +285,9 @@
   {
    "file": "burglar_anim.glb",
    "dims_m": {
-    "x": 1.5998,
-    "y": 1.8,
-    "z": 0.3565
+    "x": 0.8888,
+    "y": 1.0,
+    "z": 0.1981
    },
    "min_y": 0.0,
    "skinned": true,
@@ -724,9 +724,9 @@
   {
    "file": "courier_anim.glb",
    "dims_m": {
-    "x": 1.5196,
-    "y": 1.8,
-    "z": 0.3032
+    "x": 0.8442,
+    "y": 1.0,
+    "z": 0.1684
    },
    "min_y": 0.0,
    "skinned": true,
@@ -964,9 +964,9 @@
   {
    "file": "detective_anim.glb",
    "dims_m": {
-    "x": 1.5709,
-    "y": 1.8,
-    "z": 0.3295
+    "x": 0.8727,
+    "y": 1.0,
+    "z": 0.1831
    },
    "min_y": 0.0,
    "skinned": true,
@@ -1391,9 +1391,9 @@
   {
    "file": "explorer_anim.glb",
    "dims_m": {
-    "x": 1.5718,
-    "y": 1.8,
-    "z": 0.3287
+    "x": 0.8732,
+    "y": 1.0,
+    "z": 0.1826
    },
    "min_y": 0.0,
    "skinned": true,
@@ -1404,7 +1404,7 @@
     "idle",
     "sneak"
    ],
-   "bones": 19,
+   "bones": 20,
    "biped": true,
    "tallest_axis": "y",
    "aspect": {
@@ -1956,9 +1956,9 @@
   {
    "file": "goblin_anim.glb",
    "dims_m": {
-    "x": 1.6399,
-    "y": 1.8,
-    "z": 0.3494
+    "x": 0.9111,
+    "y": 1.0,
+    "z": 0.1941
    },
    "min_y": 0.0,
    "skinned": true,
@@ -1999,10 +1999,11 @@
    "min_y": 0.0,
    "skinned": true,
    "clips": [
-    "idle",
     "walk",
     "run",
-    "attack"
+    "attack",
+    "idle",
+    "sneak"
    ],
    "bones": 19,
    "biped": true,
@@ -2545,9 +2546,9 @@
   {
    "file": "hunter_anim.glb",
    "dims_m": {
-    "x": 1.5532,
-    "y": 1.8,
-    "z": 0.3663
+    "x": 0.8629,
+    "y": 1.0,
+    "z": 0.2035
    },
    "min_y": 0.0,
    "skinned": true,
@@ -2563,19 +2564,19 @@
    "tallest_axis": "y",
    "aspect": {
     "w_h": 0.863,
-    "d_h": 0.204
+    "d_h": 0.203
    },
    "upright": true,
    "height_ratio": 1.0,
    "mesh": {
     "tris": 45000,
-    "largest_share": 0.2819,
-    "fragments": 36,
+    "largest_share": 0.2677,
+    "fragments": 35,
     "degenerate": 0.0,
     "textures": 3,
     "textures_ok": true
    },
-   "quality": 0.76,
+   "quality": 0.75,
    "verdict": "fair"
   },
   {
@@ -3927,9 +3928,9 @@
   {
    "file": "knight_anim.glb",
    "dims_m": {
-    "x": 1.5686,
-    "y": 1.8,
-    "z": 0.4308
+    "x": 1.525,
+    "y": 1.75,
+    "z": 0.4188
    },
    "min_y": 0.0,
    "skinned": true,
@@ -4546,11 +4547,11 @@
   {
    "file": "penguin_anim.glb",
    "dims_m": {
-    "x": 1.6187,
-    "y": 1.8,
-    "z": 0.7885
+    "x": 0.7194,
+    "y": 0.8,
+    "z": 0.3504
    },
-   "min_y": -0.0,
+   "min_y": 0.0,
    "skinned": true,
    "clips": [
     "walk",
@@ -4746,9 +4747,9 @@
   {
    "file": "ranger_anim.glb",
    "dims_m": {
-    "x": 1.509,
-    "y": 1.8,
-    "z": 0.3447
+    "x": 0.8383,
+    "y": 1.0,
+    "z": 0.1915
    },
    "min_y": 0.0,
    "skinned": true,
@@ -4825,31 +4826,31 @@
   {
    "file": "relic.glb",
    "dims_m": {
-    "x": 1.0003,
-    "y": 0.1956,
-    "z": 0.2787
+    "x": 0.885,
+    "y": 0.9884,
+    "z": 0.9999
    },
-   "min_y": 0.4081,
+   "min_y": -0.0817,
    "skinned": false,
    "clips": [],
    "bones": 0,
    "biped": false,
-   "tallest_axis": "x",
+   "tallest_axis": "z",
    "aspect": {
-    "w_h": 5.114,
-    "d_h": 1.425
+    "w_h": 0.895,
+    "d_h": 1.012
    },
-   "upright": false,
-   "height_ratio": 0.196,
+   "upright": true,
+   "height_ratio": 0.988,
    "mesh": {
     "tris": 45000,
-    "largest_share": 0.007,
-    "fragments": 40,
+    "largest_share": 1.0,
+    "fragments": 1,
     "degenerate": 0.0,
-    "textures": 3,
+    "textures": 2,
     "textures_ok": true,
-    "nose": "-x",
-    "roof_peak_bin": 6
+    "nose": "-z",
+    "roof_peak_bin": 8
    },
    "render": {
     "looks_like": 0.332,
@@ -4862,8 +4863,7 @@
     "coverage": 0.014
    },
    "quality_reasons": [
-    "does not look like it",
-    "dust"
+    "does not look like it"
    ],
    "quality": 0.2,
    "verdict": "poor"
@@ -5082,9 +5082,9 @@
   {
    "file": "samurai_anim.glb",
    "dims_m": {
-    "x": 1.4221,
-    "y": 1.8,
-    "z": 0.5315
+    "x": 0.79,
+    "y": 1.0,
+    "z": 0.2953
    },
    "min_y": 0.0,
    "skinned": true,
@@ -5546,9 +5546,9 @@
   {
    "file": "soccer_player_anim.glb",
    "dims_m": {
-    "x": 1.6285,
-    "y": 1.8,
-    "z": 0.3531
+    "x": 0.9047,
+    "y": 1.0,
+    "z": 0.1962
    },
    "min_y": 0.0,
    "skinned": true,
@@ -5622,9 +5622,9 @@
   {
    "file": "soldier_anim.glb",
    "dims_m": {
-    "x": 1.5664,
-    "y": 1.8,
-    "z": 0.3439
+    "x": 0.8702,
+    "y": 1.0,
+    "z": 0.1911
    },
    "min_y": 0.0,
    "skinned": true,
@@ -5872,9 +5872,9 @@
   {
    "file": "thug_anim.glb",
    "dims_m": {
-    "x": 1.6581,
-    "y": 1.8,
-    "z": 0.323
+    "x": 0.9212,
+    "y": 1.0,
+    "z": 0.1795
    },
    "min_y": 0.0,
    "skinned": true,
@@ -5896,8 +5896,8 @@
    "height_ratio": 1.0,
    "mesh": {
     "tris": 44999,
-    "largest_share": 0.4187,
-    "fragments": 14,
+    "largest_share": 0.4078,
+    "fragments": 15,
     "degenerate": 0.0,
     "textures": 3,
     "textures_ok": true
@@ -6112,9 +6112,9 @@
   {
    "file": "viking_anim.glb",
    "dims_m": {
-    "x": 1.5547,
-    "y": 1.8,
-    "z": 0.3643
+    "x": 0.8637,
+    "y": 1.0,
+    "z": 0.2024
    },
    "min_y": 0.0,
    "skinned": true,
@@ -6125,7 +6125,7 @@
     "idle",
     "sneak"
    ],
-   "bones": 19,
+   "bones": 20,
    "biped": true,
    "tallest_axis": "y",
    "aspect": {
@@ -6371,9 +6371,9 @@
   {
    "file": "waterbender_anim.glb",
    "dims_m": {
-    "x": 1.4843,
-    "y": 1.8,
-    "z": 0.3005
+    "x": 0.8246,
+    "y": 1.0,
+    "z": 0.167
    },
    "min_y": 0.0,
    "skinned": true,
@@ -6489,9 +6489,9 @@
   {
    "file": "wizard_anim.glb",
    "dims_m": {
-    "x": 1.5711,
-    "y": 1.8,
-    "z": 0.3857
+    "x": 1.5275,
+    "y": 1.75,
+    "z": 0.375
    },
    "min_y": 0.0,
    "skinned": true,
