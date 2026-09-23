@@ -526,6 +526,9 @@ else:
         pb=rig.pose.bones[name]; head=pb.matrix.translation.copy()
         pb.matrix=Matrix.Translation(head)@R3.to_4x4(); bpy.context.view_layer.update()
         pb.keyframe_insert("rotation_quaternion",frame=frame)
+    _fwdv=None; _latv=None
+    if hero_fwd.length>1e-3:
+        _fwdv=Vector((hero_fwd.x,hero_fwd.y,0.0)).normalized(); _latv=Vector((0,0,1)).cross(_fwdv).normalized()
     path=[]
     for i in range(TOTAL):
         f=1+i; dirs,hp=samp[i]
@@ -538,7 +541,7 @@ else:
         # the hips keep the reference facing (the root rotation is never
         # retargeted, which is what flipped torsos) and take only the small
         # pelvic yaw about the vertical, and in game clips the vertical ride
-        _py,_ty,_hzi=twist[i]
+        _py,_ty,_hzi=twist[i]; _lowdir={}
         _hb=rig.pose.bones["hips"]; _hrest=_hb.bone.matrix_local
         _hhead=_hrest.translation.copy()+(Vector((0,0,_hzi)) if INPLACE else Vector((0,0,0)))
         _hb.matrix=Matrix.Translation(_hhead)@(Matrix.Rotation(_py,3,'Z')@_hrest.to_3x3()).to_4x4(); bpy.context.view_layer.update()
@@ -553,12 +556,34 @@ else:
             # walk's elbows measured 4 to 18 degrees, a straight arm; a walking
             # human's elbow holds 20 to 40. The bias stays, at a third, so the
             # source's flexion survives and the T-rex fold it was made for does not.
-            if c in ("lowarm_L","hand_L") and dirs.get("uparm_L") is not None and d is not None:
-                d=(dirs["uparm_L"]*0.35+d*0.65).normalized()
-            elif c in ("lowarm_R","hand_R") and dirs.get("uparm_R") is not None and d is not None:
-                d=(dirs["uparm_R"]*0.35+d*0.65).normalized()
+            if c in ("lowarm_L",) and dirs.get("uparm_L") is not None and d is not None:
+                d=(dirs["uparm_L"]*0.35+d*0.65).normalized(); _lowdir["L"]=d
+            elif c in ("lowarm_R",) and dirs.get("uparm_R") is not None and d is not None:
+                d=(dirs["uparm_R"]*0.35+d*0.65).normalized(); _lowdir["R"]=d
+            # THE HAND CONTINUES THE FOREARM (2026-09-26). Aimed at the mocap
+            # hand marker the wrist bent 63 to 70 degrees and the hands cocked
+            # outward and up; a relaxed walking wrist holds within about
+            # fifteen degrees of the forearm. The hand keeps a sixth of its
+            # own direction for life and takes the rest from the forearm.
+            elif c in ("hand_L","hand_R") and d is not None and _lowdir.get(c[-1]) is not None:
+                d=(_lowdir[c[-1]]*0.85+d*0.15).normalized()
             if d is None: continue
+            # THE SWING READS (2026-09-26): this clip sweeps the upper arm 13 to
+            # 19 degrees fore and aft; a walk at this pace sweeps about 25
+            # (LOCOMOTION.md). The upper arm's sagittal angle is scaled 1.4,
+            # capped at 32 degrees, the lateral part left alone, so the swing
+            # against the opposite leg can be seen and not only measured.
+            if c in ("uparm_L","uparm_R") and _fwdv is not None:
+                _lat=d.dot(_latv); _fw=d.dot(_fwdv); _up=d.z
+                _th=math.atan2(_fw,-_up)*1.4; _th=max(-0.56,min(0.56,_th))
+                _r=math.sqrt(max(0.0,1.0-_lat*_lat))
+                d=(_latv*_lat+_fwdv*(_r*math.sin(_th))+Vector((0,0,-_r*math.cos(_th)))).normalized()
             d=cone(c,d)
+            # RELAXED SHOULDERS (2026-09-26): the mocap clavicles tilt 9 to 15
+            # degrees upward (a suit's shrug); a relaxed shoulder line is level
+            # or drooping, so the clavicle is never aimed above the horizontal
+            if c in ("clav_L","clav_R") and d.z>-0.05:
+                d=Vector((d.x,d.y,-0.05)).normalized()
             aim(c,d)
             if c=="chest" and abs(_ty)>1e-4:      # the thorax counter-rotation, a twist about the chest's own axis
                 _cb=rig.pose.bones["chest"]; _ch=_cb.matrix.translation.copy()

@@ -9920,6 +9920,21 @@ async function main() {
     }
     return out;
   }
+  // RELAXED SHOULDERS (2026-09-26): the clavicle's tilt above horizontal, from
+  // its root to the shoulder joint; a shrug reads positive, a relaxed line
+  // level or a little below (LOCOMOTION.md)
+  function shoulderTilt() {
+    if (!_armScanned) scanArms();
+    const out = {};
+    for (const side of ['L', 'R']) {
+      const a = _armBones[side]; const cl = a && a.parent && a.parent.isBone ? a.parent : null;
+      if (!a || !cl) { out[side] = null; continue; }
+      cl.getWorldPosition(_aA); a.getWorldPosition(_aB); _aB.sub(_aA);
+      const len = _aB.length() || 1e-6;
+      out[side] = +THREE.MathUtils.radToDeg(Math.asin(THREE.MathUtils.clamp(_aB.y / len, -1, 1))).toFixed(1);
+    }
+    return out;
+  }
 
   const capR = Math.min(Math.max(radius * 0.6, 0.22), 0.6);
   const capHalf = Math.max(P.height_m / 2 - capR, 0.1);
@@ -10701,6 +10716,7 @@ async function main() {
         lean: { roll: +turnRoll.toFixed(3), pitch: +accelP.toFixed(3), head: +headYawK.toFixed(3), head_bone: headBone ? headBone.name : null },
         arms: armAngles(),       // the upper arms' angle from straight down, in degrees: a walk swings them 4 to 20
         ride: rideSpan(),        // the hips bone's height span over the last ninety frames, metres: a walk rides 0.03 to 0.06
+        shoulders: shoulderTilt(),   // the clavicles' tilt above horizontal, degrees: relaxed is level or below
         car: (pg.scene && pg.scene.userData && pg.scene.userData.car) || ((DRIVE || DRIVING) && P.asset && (!P.car_params || P.car_params.library) ? { model: 'library', file: String(P.asset).split(/[\/]/).pop(), paint: P.car_params ? P.car_params.paint : null } : null),
         crowd: { near: (window.__peds || []).filter(q => q.obj.visible).length, impostors: window.__pedImpostor ? window.__pedImpostor.n : 0, total: (window.__peds || []).length },
         light: { night: _isNightSky, moon: +pal.sun.toFixed(2), amb: +pal.amb.toFixed(2), exposure: +renderer.toneMappingExposure.toFixed(2), hero_fill: +heroFill.intensity.toFixed(1) },
