@@ -1123,11 +1123,19 @@ if ratio < 1.3:
     __result__ = json.dumps({"ok": True, "skipped": "ambiguous"})
 else:
     fb = 0 if ext_x < ext_y else 1
-    feet = Vw[z < zmin + 0.08*H]
-    sign = 1.0 if float(feet[:,fb].mean()) > float(np.median(torso[:,fb])) else -1.0
+    # THE FEET SAY WHERE THE FRONT IS (2026-09-26): toes reach farther from the
+    # ankle than heels do, so the foot cloud's extents along the depth axis,
+    # against the shank's centre, give front and back with a wide margin
+    # (a scientist measured toe 0.131 of height, heel 0.034). The feet's mean
+    # against the torso's median, the old test, was a coin toss and every
+    # 180-degree call was deferred to a photo match that is log-only.
+    feet = Vw[z < zmin + 0.07*H]; shank = Vw[(z > zmin + 0.10*H) & (z < zmin + 0.22*H)]
+    c = float(np.median(shank[:,fb])) if len(shank) > 30 else float(np.median(torso[:,fb]))
+    toe = float(np.percentile(feet[:,fb], 97)) - c; heel = c - float(np.percentile(feet[:,fb], 3))
+    sign = 1.0 if toe > heel else -1.0
     v = (sign, 0.0) if fb == 0 else (0.0, sign)
-    __result__ = json.dumps({"ok": True,
-                             "forward_deg": math.degrees(math.atan2(v[1], v[0]))})
+    __result__ = json.dumps({"ok": True, "forward_deg": math.degrees(math.atan2(v[1], v[0])),
+                             "toe": round(toe/H, 3), "heel": round(heel/H, 3), "margin": round(abs(toe-heel)/H, 3)})
 """
 
 
@@ -1158,10 +1166,12 @@ def fix_facing_on_disk(hero_glb: Path, verbose: bool = True) -> None:
     # from evidence — render the mesh from both front/back candidates and
     # pick the side that matches the character's own front-facing reference
     # photo. The axis part of the detector is still trusted for +/-90.
-    if abs(abs(rot) - 180.0) < 45.0:
+    if abs(abs(rot) - 180.0) < 45.0 and float(r.get("margin", 0.0)) < 0.02:
         if verbose:
-            print(f"[bake] disk facing: {rot:.0f} deg is a SIGN call — deferring to ref-match")
-        rot = 0.0        # axis is fine; ref-match below decides front/back
+            print(f"[bake] disk facing: {rot:.0f} deg is a sign call the feet cannot settle (margin {r.get('margin')}); left as is")
+        rot = 0.0
+    elif verbose:
+        print(f"[bake] disk facing: toes {r.get('toe')} heel {r.get('heel')} of height; forward at {r.get('forward_deg'):.0f} deg")
     exe = r"C:\Program Files\Blender Foundation\Blender 5.1\\blender.exe"
     try:
         from app.main import get_setting
@@ -1278,7 +1288,7 @@ def bake_anim_set(hero_glb: str | Path, out_glb: str | Path,
     if not (a and a.get("ok")):
         raise RuntimeError(f"autorig failed: {a}")
     if verbose:
-        print(f"[bake] rig: {a.get('bones')} bones, skin={a.get('skin')}, arm sleeves {a.get('armfix')}, arm line {a.get('armline')}")
+        print(f"[bake] rig: {a.get('bones')} bones, skin={a.get('skin')}, arm sleeves {a.get('armfix')}, arm line {a.get('armline')}, facing {a.get('facing')}")
 
     # idle first (procedural), then each mocap clip — every one to its own track
     # A MOCAP IDLE WINS OVER THE PROCEDURAL ONE (2026-09-04). This always

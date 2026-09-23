@@ -68,7 +68,7 @@
    "mesh": {
     "tris": 44999,
     "largest_share": 0.0982,
-    "fragments": 74,
+    "fragments": 73,
     "degenerate": 0.0,
     "textures": 3,
     "textures_ok": true
@@ -1329,7 +1329,7 @@
     "idle",
     "sneak"
    ],
-   "bones": 19,
+   "bones": 20,
    "biped": true,
    "tallest_axis": "y",
    "aspect": {
@@ -1340,14 +1340,14 @@
    "height_ratio": 1.0,
    "mesh": {
     "tris": 45000,
-    "largest_share": 0.6185,
-    "fragments": 28,
+    "largest_share": 0.56,
+    "fragments": 29,
     "degenerate": 0.0,
     "textures": 3,
     "textures_ok": true
    },
-   "quality": 1.0,
-   "verdict": "good"
+   "quality": 0.97,
+   "verdict": "fair"
   },
   {
    "file": "explorer.glb",
@@ -1970,7 +1970,7 @@
     "idle",
     "sneak"
    ],
-   "bones": 19,
+   "bones": 20,
    "biped": true,
    "tallest_axis": "y",
    "aspect": {
@@ -1981,13 +1981,13 @@
    "height_ratio": 1.0,
    "mesh": {
     "tris": 45000,
-    "largest_share": 0.3002,
-    "fragments": 48,
+    "largest_share": 0.2739,
+    "fragments": 49,
     "degenerate": 0.0,
     "textures": 3,
     "textures_ok": true
    },
-   "quality": 0.78,
+   "quality": 0.76,
    "verdict": "fair"
   },
   {
@@ -2006,7 +2006,7 @@
     "idle",
     "sneak"
    ],
-   "bones": 19,
+   "bones": 20,
    "biped": true,
    "tallest_axis": "y",
    "aspect": {
@@ -2017,13 +2017,13 @@
    "height_ratio": 1.0,
    "mesh": {
     "tris": 45000,
-    "largest_share": 0.3002,
-    "fragments": 48,
+    "largest_share": 0.2739,
+    "fragments": 49,
     "degenerate": 0.0,
     "textures": 3,
     "textures_ok": true
    },
-   "quality": 0.78,
+   "quality": 0.76,
    "verdict": "fair"
   },
   {
@@ -2571,13 +2571,13 @@
    "height_ratio": 1.0,
    "mesh": {
     "tris": 45000,
-    "largest_share": 0.2677,
-    "fragments": 35,
+    "largest_share": 0.2809,
+    "fragments": 34,
     "degenerate": 0.0,
     "textures": 3,
     "textures_ok": true
    },
-   "quality": 0.75,
+   "quality": 0.76,
    "verdict": "fair"
   },
   {
@@ -4158,7 +4158,7 @@
    "height_ratio": 1.0,
    "mesh": {
     "tris": 478407,
-    "largest_share": 0.6376,
+    "largest_share": 0.4717,
     "fragments": 3,
     "degenerate": 0.0,
     "textures": 2,
@@ -4204,14 +4204,14 @@
    "height_ratio": 1.0,
    "mesh": {
     "tris": 478407,
-    "largest_share": 0.6376,
+    "largest_share": 0.4717,
     "fragments": 3,
     "degenerate": 0.0,
     "textures": 2,
     "textures_ok": true
    },
-   "quality": 1.0,
-   "verdict": "good"
+   "quality": 0.9,
+   "verdict": "fair"
   },
   {
    "file": "monkey.glb",
@@ -5203,7 +5203,7 @@
     "y": 1.002,
     "z": 0.185
    },
-   "min_y": -0.0004,
+   "min_y": 0.0,
    "skinned": false,
    "clips": [],
    "bones": 0,
@@ -5648,13 +5648,13 @@
    "height_ratio": 1.0,
    "mesh": {
     "tris": 45000,
-    "largest_share": 0.2229,
-    "fragments": 30,
+    "largest_share": 0.1836,
+    "fragments": 31,
     "degenerate": 0.0,
     "textures": 3,
     "textures_ok": true
    },
-   "quality": 0.72,
+   "quality": 0.69,
    "verdict": "fair"
   },
   {
@@ -5898,13 +5898,13 @@
    "height_ratio": 1.0,
    "mesh": {
     "tris": 44999,
-    "largest_share": 0.4078,
-    "fragments": 15,
+    "largest_share": 0.432,
+    "fragments": 14,
     "degenerate": 0.0,
     "textures": 3,
     "textures_ok": true
    },
-   "quality": 0.86,
+   "quality": 0.87,
    "verdict": "fair"
   },
   {
@@ -6174,7 +6174,7 @@
    "height_ratio": 1.0,
    "mesh": {
     "tris": 105249,
-    "largest_share": 0.7619,
+    "largest_share": 0.7756,
     "fragments": 3,
     "degenerate": 0.0,
     "textures": 2,

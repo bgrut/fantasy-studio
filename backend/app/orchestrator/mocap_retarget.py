@@ -97,9 +97,45 @@ ab=(Z>zmin+0.68*H)&(Z<zmin+0.95*H)
 ax=float(X[ab].max()-X[ab].min()) if ab.sum()>20 else (X.max()-X.min())
 ay=float(Y[ab].max()-Y[ab].min()) if ab.sum()>20 else (Y.max()-Y.min())
 sx = not (ay>=ax); SA=(X if sx else Y); smid=(cx if sx else cy)
+# THE FEET SAY WHERE THE FRONT IS (2026-09-26). The runtime authors a
+# character's front on local -Z (FRONT_IS_MINUS_Z in main.js.tpl turns the
+# holder by pi), which is Blender +Y, and the rig has always put its forward
+# there. The meshes did not all agree: TRELLIS.2 figures came out facing the
+# other way, so the chase camera saw the scientist's face while he walked
+# away and his knees read as bending backward. Toes reach farther from the
+# ankle than heels do, so the foot cloud's depth against the shank's says
+# which way a figure faces; the mesh is turned so the arms lie along X and
+# the toes point +Y, and the turn is applied to the mesh itself.
+import math as _mth
+def _measure(o, me):
+    mw=o.matrix_world
+    V=np.array([list(mw@v.co) for v in me.vertices], dtype=np.float64); X,Y,Z=V[:,0],V[:,1],V[:,2]
+    zmin,zmax=Z.min(),Z.max(); H=zmax-zmin; cx=(X.min()+X.max())/2; cy=(Y.min()+Y.max())/2
+    ab=(Z>zmin+0.68*H)&(Z<zmin+0.95*H)
+    ax=float(X[ab].max()-X[ab].min()) if ab.sum()>20 else (X.max()-X.min())
+    ay=float(Y[ab].max()-Y[ab].min()) if ab.sum()>20 else (Y.max()-Y.min())
+    sx = not (ay>=ax); SA=(X if sx else Y); smid=(cx if sx else cy)
+    return V,X,Y,Z,zmin,zmax,H,cx,cy,ab,ax,ay,sx,SA,smid
+def _turn(o, deg):
+    bpy.ops.object.select_all(action='DESELECT'); bpy.context.view_layer.objects.active=o; o.select_set(True)
+    o.rotation_euler[2]+=_mth.radians(deg); bpy.context.view_layer.update()
+    bpy.ops.object.transform_apply(location=False, rotation=True, scale=False)
+# The turn itself happens on the FILE before import (fix_facing_on_disk in
+# bake.py): an in-session rotation does not survive the export. Here the
+# feet are only read back, so the rig result says which way the mesh faces.
+facing={"toe":None,"heel":None,"faces":"?"}
+try:
+    _zfv=(Z-zmin)/H; _foot=_zfv<0.07; _shank=(_zfv>0.10)&(_zfv<0.22)
+    if int(_foot.sum())>30 and int(_shank.sum())>30:
+        _dax=Y if sx else X
+        _c=float(np.median(_dax[_shank])); _toe=float(np.percentile(_dax[_foot],97))-_c; _heel=_c-float(np.percentile(_dax[_foot],3))
+        facing["toe"]=round(_toe/H,3); facing["heel"]=round(_heel/H,3)
+        facing["faces"]="+fwd (right)" if _toe>_heel else "-fwd (BACKWARD)"
+except Exception as _fe:
+    facing["error"]=type(_fe).__name__
 def pt(so,zf,fwd=0.0):
     z=zmin+zf*H
-    return (smid+so,cy+fwd,z) if sx else (cx+fwd,smid+so,z)
+    return (smid+so,cy+fwd,z) if sx else (cx+fwd,smid+so,z)   # forward is +Y (glTF -Z, the runtime's front)
 # HANDEDNESS (2026-08-05, #ARMS): pt() puts FORWARD on +Y when the side axis is
 # X but on +X when it is Y. Anatomical left is (up x forward), which is -X in
 # the first case and +Y in the second — the sign FLIPS with the axis swap. The
@@ -171,7 +207,7 @@ for s in ("L","R"):
     # line is fitted through each slice's median height, weighted by count;
     # the chain follows that line from the shoulder to the outermost slice.
     sh_zf=0.80; _fit=False; el_zf=None; sh_fw=0.0; el_fw=0.0; hand_fw=0.0
-    _dep=(Y-cy) if sx else (X-cx)                  # depth: forward of the body's centre plane
+    _dep=(Y-cy) if sx else (X-cx)                  # depth: forward (+Y) of the body's centre plane, in pt()'s fwd units
     _side=(np.sign(_latS)==sgn)&(np.abs(_latS)>1.15*_shoff)&(_zf<0.92)&(_zf>0.28)
     if int(_side.sum())>40:
         _la=np.abs(_latS[_side]); _za=_zf[_side]; _da=_dep[_side]
@@ -375,7 +411,7 @@ try:
         _armfix[s]=int(len(sel))
 except Exception as _ae:
     _armfix={"error":type(_ae).__name__}
-__result__=json.dumps({"ok":True,"H":round(float(H),3),"side":"X" if sx else "Y","bones":len(arm.bones),"skin":skin_mode,"armfix":_armfix,"armline":_armline})
+__result__=json.dumps({"ok":True,"H":round(float(H),3),"side":"X" if sx else "Y","bones":len(arm.bones),"skin":skin_mode,"armfix":_armfix,"armline":_armline,"facing":facing})
 '''
 
 
