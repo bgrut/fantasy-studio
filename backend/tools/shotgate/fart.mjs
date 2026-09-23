@@ -40,7 +40,9 @@ const inst = await p.evaluate(async ()=>{
   await new Promise(r => setTimeout(r, 2600));
   return { belts: n, calls: window.__game.stats().calls, seams: window.__game.facts().nodes };
 });
-console.log('instanced :', inst.belts, 'belts ->', inst.calls, 'draw calls total |', inst.seams, 'seams, budget', 108 + 2 * inst.seams);
+console.log('instanced :', inst.belts, 'belts ->', inst.calls, 'draw calls total |', inst.seams, 'seams, budget', 111 + 2 * inst.seams);
+const outcrops = await p.evaluate(() => window.__game.facts().outcrops);
+console.log('outcrops  :', outcrops === undefined ? 'not in this runtime' : outcrops + ' rock-and-ore clusters on the faces');
 
 // 3. THE TREAD MOVES. A conveyor whose surface is static is a green plank, and
 //    nothing in the scene graph would show that — only the pixels do.
@@ -233,7 +235,7 @@ await p.screenshot({ path: process.env.OUT || 'art.png' });
 await b.close();
 const ok = icons.withIcon === icons.tools && icons.tools >= 9
   && icons.rendered >= 8            // every machine; ERASE stays a glyph
-  && inst.belts > 60 && inst.calls < 108 + 2 * inst.seams   // belts are instanced; what scales is the seams (two calls each) and the AO passes; the cube is six faces now (+5)
+  && inst.belts > 60 && inst.calls < 111 + 2 * inst.seams && (outcrops === undefined || outcrops >= 60)   // the faces have a grain   // belts are instanced; what scales is the seams (two calls each) and the AO passes; the cube is six faces now (+5)
   && moving.moved
   && sky.found && sky.radius < sky.far && sky.stars > 500 && sky.nebula > 0 && sky.t1 > sky.t0 && sky.lights >= 1
   && post.on && post.lum > 6 && post.lum < 250   // lit, not black, not blown

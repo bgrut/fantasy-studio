@@ -12,7 +12,7 @@ const html = `<!doctype html><body style="margin:0;background:#8a8f99"><script t
 <script type="module">
 import * as THREE from 'three'; import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 const W = 1200, H = 520; const r = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true }); r.setSize(W, H); r.setClearColor(0x8a8f99, 1); document.body.appendChild(r.domElement);
-const sc = new THREE.Scene(); sc.add(new THREE.HemisphereLight(0xdfe8ff, 0x33302c, 1.4)); const key = new THREE.DirectionalLight(0xfff2e0, 2.4); key.position.set(2, 5, 6); sc.add(key);
+const sc = new THREE.Scene(); sc.add(new THREE.HemisphereLight(0xdfe8ff, 0x33302c, 1.4)); const key = new THREE.DirectionalLight(0xfff2e0, 2.4); key.position.set(${process.env.SIDE ? 6 : 2}, 5, ${process.env.SIDE ? 1 : -6}); sc.add(key);   // the key on the camera's side
 const g = await new GLTFLoader().loadAsync('/backend/${rel}'); const o = g.scene; sc.add(o);
 const bb = new THREE.Box3().setFromObject(o); const h = bb.max.y - bb.min.y; o.position.y = -bb.min.y;
 const span = Math.max(h, bb.max.x - bb.min.x, bb.max.z - bb.min.z);   // a long animal is framed by its length, not its height
@@ -22,7 +22,7 @@ window.__shoot = () => {
   r.setScissorTest(true);
   for (let k = 0; k < 4; k++) {
     mixer.setTime(c.duration * (k / 4 + 0.05)); o.updateMatrixWorld(true);
-    if (${process.env.SIDE ? 1 : 0}) cam.position.set(span * 3.4, h * 0.55, 0); else cam.position.set(0, h * 0.55, span * 2.6);   // SIDE=1 shoots the profile, the view that tells a gait
+    if (${process.env.SIDE ? 1 : 0}) cam.position.set(span * 3.4, h * 0.55, 0); else cam.position.set(0, h * 0.55, -span * 2.6);   // the runtime's front is -Z, so the front view stands there   // SIDE=1 shoots the profile, the view that tells a gait
     cam.lookAt(0, h * 0.5, 0);
     r.setViewport(k * W / 4, 0, W / 4, H); r.setScissor(k * W / 4, 0, W / 4, H); r.render(sc, cam);
   }

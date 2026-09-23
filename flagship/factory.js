@@ -1639,8 +1639,13 @@ for (const m of MINERALS) nodeMats[m] = new THREE.MeshStandardMaterial({
   // body keeps the facets, the emissive carries the hue, and the core and the
   // pool on the ground carry the brightness — which is what lets a thin seam
   // go dark instead of just small.
-  color: new THREE.Color(MIN_COL[m]).multiplyScalar(0.34), emissive: MIN_COL[m],
-  emissiveIntensity: 0.62, roughness: 0.2, metalness: 0.1, flatShading: true });
+  // SEAMS THAT READ (2026-09-26). At a third of the colour with a 0.62
+  // emissive the seam was a grey lump in daylight, the one thing on the
+  // face a player could not tell was ore. The body keeps half the colour so
+  // the sun still finds facets, and the emissive carries the hue at a
+  // strength the composite does not flatten; richness scales it below.
+  color: new THREE.Color(MIN_COL[m]).multiplyScalar(0.45), emissive: MIN_COL[m],
+  emissiveIntensity: 0.8, roughness: 0.18, metalness: 0.05, flatShading: true });
 const nodeMat = nodeMats[CRYSTAL];
 // A SEAM IS A CLUSTER. One floating diamond per tile read as a placeholder
 // token; three crystals of different sizes leaning out of the ground read as
@@ -1720,7 +1725,7 @@ function makeSeam(f, i, j) {
                            nodeMats[c.min].clone());
   // the core: a small bright heart in the ore's colour, additive so it reads
   // as light rather than as a second crystal; it shrinks as the seam thins
-  const core = new THREE.Mesh(new THREE.OctahedronGeometry(0.22, 0),
+  const core = new THREE.Mesh(new THREE.OctahedronGeometry(0.30, 0),
     new THREE.MeshBasicMaterial({ color: MIN_COL[c.min], transparent: true, opacity: 0.85,
                                   blending: THREE.AdditiveBlending, depthWrite: false }));
   core.name = 'core'; core.position.y = 0.05;
@@ -1733,7 +1738,7 @@ function makeSeam(f, i, j) {
     glowPools.instanceColor.needsUpdate = true;
   }
   seat(m, f, i, j, Math.floor(rnd() * 4), 0.66 + rnd() * 0.12);
-  m.scale.setScalar(0.82 + rnd() * 0.42);
+  m.scale.setScalar(1.15 + rnd() * 0.5);      // a seam is a landmark: half again the size it was, seen from across the face
   m.userData.base = m.scale.x;      // the pulse scales relative to this
   m.userData.fsTag = { type: 'ore', name: MINERAL_NAME[c.min] + ' seam',
                        detail: FACES[f].name + ' face · tile ' + i + ',' + j,
@@ -1802,6 +1807,35 @@ for (let k = 0; k < 320; k++) {
     const j = 1 + Math.floor(r2() * (N - 2));
     if (cells[f][i][j].t !== EMPTY) continue;
     scatterSpots.push({ f, i, j, kind: r2() < 0.45 ? 0 : 1, d: Math.floor(r2() * 4), s: 0.75 + r2() * 0.6 });
+  }
+}
+
+// OUTCROPS (2026-09-26). Past the starter line a face was a bare plane with
+// hatches on it, and the hatches read as ore because nothing else was there.
+// Small rock-and-crystal clusters in the face's own ore now gather around
+// each seam, where ore is about to show, with a sparse field elsewhere so
+// the ground has a grain from a distance. Purely scenery: a tile with an
+// outcrop is still empty, still a build site, and the outcrop steps aside
+// under anything built. Its own clock, so every layout stays what it was.
+const outcrops = [];
+{
+  let so = 9091 + (SPEC.seed | 0);
+  const r3 = () => (so = (so * 1664525 + 1013904223) % 4294967296) / 4294967296;
+  eachTile((c, f, i, j) => {
+    if (c.t !== NODE) return;
+    const n = 2 + Math.floor(r3() * 3);
+    for (let k = 0; k < n; k++) {
+      const di = Math.round((r3() - 0.5) * 5), dj = Math.round((r3() - 0.5) * 5);
+      const ii = i + di, jj = j + dj;
+      if ((di === 0 && dj === 0) || ii < 1 || jj < 1 || ii > N - 2 || jj > N - 2) continue;
+      if (cells[f][ii][jj].t !== EMPTY) continue;
+      outcrops.push({ f, i: ii, j: jj, d: Math.floor(r3() * 4), s: 0.5 + r3() * 0.45 });
+    }
+  });
+  for (let k = 0; k < 260; k++) {
+    const f = Math.floor(r3() * 6), i = 1 + Math.floor(r3() * (N - 2)), j = 1 + Math.floor(r3() * (N - 2));
+    if (cells[f][i][j].t !== EMPTY) continue;
+    outcrops.push({ f, i, j, d: Math.floor(r3() * 4), s: 0.32 + r3() * 0.3 });
   }
 }
 
@@ -2588,6 +2622,19 @@ function rebuildBelts() {
   scatterVent.count = sv; scatterBolt.count = sb;
   scatterVent.instanceMatrix.needsUpdate = true;
   scatterBolt.instanceMatrix.needsUpdate = true;
+  const oc = {};
+  for (const m of MINERALS) oc[m] = 0;
+  for (const o of outcrops) {
+    const c = cells[o.f][o.i][o.j];
+    if (c.t !== EMPTY) continue;
+    const m = MINERAL_OF_FACE[o.f];
+    if (oc[m] >= MAX_OUTCROP) continue;
+    seatMatrix(o.f, o.i, o.j, o.d, 0.0, _dm);
+    _dpos.setFromMatrixPosition(_dm); _dq.setFromRotationMatrix(_dm); _dscale.setScalar(o.s);
+    _dm.compose(_dpos, _dq, _dscale);
+    outcropMesh[m].setMatrixAt(oc[m]++, _dm);
+  }
+  for (const m of MINERALS) { outcropMesh[m].count = oc[m]; outcropMesh[m].instanceMatrix.needsUpdate = true; }
 
   for (let k = 0; k < BELT_KIND.length; k++) {
     beltFrames[k].count = n[k]; beltDecks[k].count = n[k];
@@ -2654,6 +2701,26 @@ for (const m of [scatterVent, scatterBolt]) {
   m.receiveShadow = true;
   m.count = 0;
   scene.add(m);
+}
+// the outcrops: a dark flattened rock with the ore growing out of it, in the
+// ore's own silhouette (octahedra, blocks, plates), one draw per ore
+const MAX_OUTCROP = 420;
+const outcropMesh = {};
+for (const m of MINERALS) {
+  const col = MIN_COL[m];
+  const parts = [{ g: new THREE.DodecahedronGeometry(0.5, 0).scale(1.25, 0.5, 1.0), y: -0.12, ry: 0.6, col: 0x5a5e6a, tint: 0.55 }];
+  if (m === CRYSTAL) parts.push({ g: new THREE.OctahedronGeometry(0.34, 0).scale(0.7, 1.4, 0.7), y: 0.16, rz: 0.25, col },
+                                { g: new THREE.OctahedronGeometry(0.2, 0).scale(0.7, 1.3, 0.7), x: 0.3, y: 0.02, z: 0.14, rz: -0.6, col, tint: 0.85 });
+  else if (m === EMBER) parts.push({ g: new THREE.BoxGeometry(0.42, 0.44, 0.42), y: 0.1, ry: 0.5, rz: 0.2, col },
+                                   { g: new THREE.BoxGeometry(0.24, 0.3, 0.24), x: 0.3, y: 0.0, z: -0.2, ry: 0.9, col, tint: 0.8 });
+  else parts.push({ g: new THREE.CylinderGeometry(0.36, 0.4, 0.14, 6), y: 0.06, col },
+                  { g: new THREE.CylinderGeometry(0.2, 0.24, 0.12, 6), x: 0.26, y: 0.2, z: 0.1, ry: 0.4, col, tint: 0.85 });
+  const om = new THREE.InstancedMesh(mergeParts(parts),
+    new THREE.MeshStandardMaterial({ color: 0xffffff, vertexColors: true, emissive: col, emissiveIntensity: 0.34,
+                                     roughness: 0.55, metalness: 0.05, flatShading: true }), MAX_OUTCROP);
+  om.instanceMatrix.setUsage(THREE.DynamicDrawUsage); om.frustumCulled = false;
+  om.castShadow = true; om.receiveShadow = true; om.count = 0; om.name = 'outcrops';
+  scene.add(om); outcropMesh[m] = om;
 }
 
 // THE POOLS. One instanced additive disc per seam, in the ore's colour,
@@ -6207,12 +6274,12 @@ renderer.setAnimationLoop(() => {
     c.mesh.userData.rich = c.rich;
     // the glow follows the richness: emissive, core, and the pool on the ground
     // a light, not a blowout: the core and the pool carry the brightness now
-    c.mesh.material.emissiveIntensity = 0.12 + 0.5 * c.rich;
+    c.mesh.material.emissiveIntensity = 0.18 + 0.62 * c.rich;    // lit from inside, facets still the sun's
     const core = c.mesh.children[0];
-    if (core) { core.scale.setScalar(0.35 + 0.95 * c.rich); core.material.opacity = 0.12 + 0.38 * c.rich; }
+    if (core) { core.scale.setScalar(0.45 + 1.15 * c.rich); core.material.opacity = 0.18 + 0.5 * c.rich; }
     if (c.glow !== undefined && glowPools) {
       const F_ = FACES[f], w = tileWorld(f, i, j);
-      const sz = T * (1.1 + 2.6 * c.rich);
+      const sz = T * (1.4 + 3.2 * c.rich);
       _gbx.set(F_.u[0], F_.u[1], F_.u[2]); _gby.set(F_.v[0], F_.v[1], F_.v[2]); _gbz.set(F_.n[0], F_.n[1], F_.n[2]);
       _gm.makeBasis(_gbx, _gby, _gbz);
       _gm.scale(_gs.set(sz, sz, 1));
@@ -6998,6 +7065,7 @@ window.__game = {
     sunAngle: +sunAngle.toFixed(3),
     landing: landing.length,
     plating: [...new Set(cube.material.map(m => m.userData.plating))],
+    outcrops: MINERALS.reduce((a, m) => a + (outcropMesh[m] ? outcropMesh[m].count : 0), 0),
     moveVel: +moveVel.length().toFixed(2), sprintK: +sprintK.toFixed(2), fov: +camera.fov.toFixed(1), fovBase: BASE_FOV,
     weathered: (() => { const w = { soot: 0, rime: 0, under: 0 }; eachTile(c => { if (c.build) { let k = null; c.build.traverse(o => { if (o.userData.weathered) k = o.userData.weathered; }); if (k) w[k]++; } }); return w; })(),
     warmed, warmLayers: document.querySelectorAll('#tags .warm').length,
