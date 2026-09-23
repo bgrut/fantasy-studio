@@ -406,7 +406,7 @@ for f in range(1, TOTAL+1):
         pb["root"].location=(0,0,0.05*H*max(0.0,math.sin(t)))                # the suspension, once a stride
         pb["spine"].rotation_euler=(0.22*math.sin(t+0.5*math.pi),0,0.02*math.sin(t))   # the spine flexes and extends
         if "neck" in pb:
-            pb["neck"].rotation_euler=(-0.12*math.sin(t+0.5*math.pi),0,0)     # the head answers the spine
+            pb["neck"].rotation_euler=(-0.05*math.sin(t+0.5*math.pi),0,0)     # the head stays level and forward; at 0.12 it flung up at every extension
             pb["neck"].keyframe_insert("rotation_euler",frame=f)
     else:
         pb["root"].location=(0,0,0.03*H*abs(math.sin(t)))

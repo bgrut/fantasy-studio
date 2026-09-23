@@ -22,7 +22,7 @@ window.__shoot = () => {
   r.setScissorTest(true);
   for (let k = 0; k < 4; k++) {
     mixer.setTime(c.duration * (k / 4 + 0.05)); o.updateMatrixWorld(true);
-    if (${process.env.SIDE ? 1 : 0}) cam.position.set(span * 2.6, h * 0.55, 0); else cam.position.set(0, h * 0.55, span * 2.6);   // SIDE=1 shoots the profile, the view that tells a gait
+    if (${process.env.SIDE ? 1 : 0}) cam.position.set(span * 3.4, h * 0.55, 0); else cam.position.set(0, h * 0.55, span * 2.6);   // SIDE=1 shoots the profile, the view that tells a gait
     cam.lookAt(0, h * 0.5, 0);
     r.setViewport(k * W / 4, 0, W / 4, H); r.setScissor(k * W / 4, 0, W / 4, H); r.render(sc, cam);
   }
