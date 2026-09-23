@@ -378,7 +378,10 @@ for b in pb: b.rotation_mode="XYZ"
 # flexing and extending and one suspension a stride. The old generator
 # trotted for walk and run alike.
 if GAIT=="walk":
-    phase={"BL":0.0,"FL":0.5*math.pi,"BR":math.pi,"FR":1.5*math.pi}
+    # measured on the first bake: a fore that leads its own hind is a primate's
+    # diagonal sequence; a dog's or horse's hind lands first, the same side's
+    # fore a quarter stride later (the thigh's forward peak lags its phase by a quarter)
+    phase={"BL":0.0,"FL":1.5*math.pi,"BR":math.pi,"FR":0.5*math.pi}
 elif GAIT=="gallop":
     phase={"BL":0.0,"BR":0.25*math.pi,"FL":math.pi,"FR":1.25*math.pi}
 else:
