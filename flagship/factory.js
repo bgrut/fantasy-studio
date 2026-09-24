@@ -910,7 +910,13 @@ function renderFrame() {
 let skyDome = null;
 // where the companion hangs: one fixed world direction, low, so it rides over
 // a different part of each face's sky and walking round an edge has a landmark
-const PLANET_DIR = new THREE.Vector3(0.82, 0.26, -0.51).normalize();
+// THE OPENING FRAME HAS A LANDMARK (2026-09-26): the spawn looks down -Z
+// along the starter line, and the companion used to hang fifty-eight
+// degrees to the right, past the edge of the view, with the nebula behind.
+// It now sits twenty-eight degrees right of the first heading and four
+// up, just over the face's far edge in the frame the player first sees; the nebula keeps its third of a
+// turn round from it, found on the first turn of the head.
+const PLANET_DIR = new THREE.Vector3(0.463, 0.07, -0.884).normalize();   // four degrees up: the spawn camera pitches down, so the sky's first frame is the band just over the far edge
 function buildSky(topHex, deepHex, bandHex, planet, nebula) {
   if (skyDome) { scene.remove(skyDome); skyDome.geometry.dispose();
                  skyDome.material.dispose(); }
