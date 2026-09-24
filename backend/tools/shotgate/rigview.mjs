@@ -23,7 +23,10 @@ window.__shoot = () => {
   for (let k = 0; k < 4; k++) {
     mixer.setTime(c.duration * (k / 4 + 0.05)); o.updateMatrixWorld(true);
     if (${process.env.SIDE ? 1 : 0}) cam.position.set(span * 3.4, h * 0.55, 0); else cam.position.set(0, h * 0.55, -span * 2.6);   // the runtime's front is -Z, so the front view stands there   // SIDE=1 shoots the profile, the view that tells a gait
-    cam.lookAt(0, h * 0.5, 0);
+    if (${process.env.ZOOM ? 1 : 0}) {   // ZOOM=1: the upper body at close range, for skinning
+      const zd = span * 1.15; if (${process.env.SIDE ? 1 : 0}) cam.position.set(zd, h * 0.72, 0); else cam.position.set(0, h * 0.72, -zd);
+      cam.lookAt(0, h * 0.66, 0);
+    } else cam.lookAt(0, h * 0.5, 0);
     r.setViewport(k * W / 4, 0, W / 4, H); r.setScissor(k * W / 4, 0, W / 4, H); r.render(sc, cam);
   }
   r.setScissorTest(false); return r.domElement.toDataURL('image/png');
@@ -36,6 +39,6 @@ const p = await b.newPage(); await p.setViewport({ width: 1200, height: 520 }); 
 await p.goto('http://127.0.0.1:8791/_rigview.html', { waitUntil: 'domcontentloaded', timeout: 60000 });
 for (let i = 0; i < 80; i++) { if (await p.evaluate(() => !!window.__ready)) break; await new Promise(r => setTimeout(r, 500)); }
 const png = await p.evaluate(() => window.__shoot());
-const out = path.join(HERE, 'renders', 'rig_' + path.basename(rel, '.glb') + '_' + clip + (process.env.SIDE ? '_side' : '') + '.png'); fs.writeFileSync(out, Buffer.from(png.split(',')[1], 'base64'));
+const out = path.join(HERE, 'renders', 'rig_' + path.basename(rel, '.glb') + '_' + clip + (process.env.SIDE ? '_side' : '') + (process.env.ZOOM ? '_zoom' : '') + '.png'); fs.writeFileSync(out, Buffer.from(png.split(',')[1], 'base64'));
 console.log('wrote', out, errs.length ? '| errors: ' + errs.join(' | ') : '');
 fs.unlinkSync(path.join(ROOT, '_rigview.html')); await b.close();

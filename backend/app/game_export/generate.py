@@ -157,7 +157,7 @@ def _register(kind: str, rel_path: str) -> None:
     library.LIBRARY_JSON.write_text(json.dumps(lib, indent=2) + "\n", encoding="utf-8")
 
 
-def ensure_asset(kind: str, pattern: str | None = None, target_tris: int = 45000,
+def ensure_asset(kind: str, pattern: str | None = None, target_tris: int | None = None,
                  verbose: bool = True) -> str:
     """Return a game-ready GLB path for `kind`, generating it if the library
     misses. Raises GPUUnavailable (clean gate) when generation would be needed
@@ -341,6 +341,11 @@ def ensure_asset(kind: str, pattern: str | None = None, target_tris: int = 45000
     # onto them so the library asset ships real colors, not ghost-white.
     out = LIB_DIR / f"{kind.lower().replace(' ', '_')}.glb"
     ref_png = CACHE_DIR / f"{key}_ref.png"
+    # THE BUDGET FITS THE BODY (2026-09-26): a character is skinned and
+    # seen up close, and at 45 k triangles its sleeves tore at the elbow
+    # under the walk; 80 k keeps the folds. Props and vehicles keep 45 k.
+    if target_tris is None:
+        target_tris = 80000 if pattern in ("biped", "quadruped") else 45000
     try:
         optimize_asset(raw_glb, out, target_tris=target_tris,
                        height_m=library.default_height(kind), verbose=verbose,

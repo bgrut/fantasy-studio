@@ -56,7 +56,7 @@
     "idle",
     "sneak"
    ],
-   "bones": 19,
+   "bones": 21,
    "biped": true,
    "tallest_axis": "y",
    "aspect": {
@@ -298,7 +298,7 @@
     "idle",
     "sneak"
    ],
-   "bones": 19,
+   "bones": 21,
    "biped": true,
    "tallest_axis": "y",
    "aspect": {
@@ -737,7 +737,7 @@
     "idle",
     "sneak"
    ],
-   "bones": 19,
+   "bones": 21,
    "biped": true,
    "tallest_axis": "y",
    "aspect": {
@@ -977,7 +977,7 @@
     "idle",
     "sneak"
    ],
-   "bones": 20,
+   "bones": 22,
    "biped": true,
    "tallest_axis": "y",
    "aspect": {
@@ -1013,7 +1013,7 @@
     "sneak",
     "walk"
    ],
-   "bones": 20,
+   "bones": 22,
    "biped": true,
    "tallest_axis": "y",
    "aspect": {
@@ -1329,7 +1329,7 @@
     "idle",
     "sneak"
    ],
-   "bones": 20,
+   "bones": 22,
    "biped": true,
    "tallest_axis": "y",
    "aspect": {
@@ -1405,7 +1405,7 @@
     "idle",
     "sneak"
    ],
-   "bones": 20,
+   "bones": 22,
    "biped": true,
    "tallest_axis": "y",
    "aspect": {
@@ -1970,7 +1970,7 @@
     "idle",
     "sneak"
    ],
-   "bones": 20,
+   "bones": 22,
    "biped": true,
    "tallest_axis": "y",
    "aspect": {
@@ -2006,7 +2006,7 @@
     "idle",
     "sneak"
    ],
-   "bones": 20,
+   "bones": 22,
    "biped": true,
    "tallest_axis": "y",
    "aspect": {
@@ -2560,7 +2560,7 @@
     "idle",
     "sneak"
    ],
-   "bones": 19,
+   "bones": 21,
    "biped": true,
    "tallest_axis": "y",
    "aspect": {
@@ -3942,7 +3942,7 @@
     "idle",
     "sneak"
    ],
-   "bones": 20,
+   "bones": 22,
    "biped": true,
    "tallest_axis": "y",
    "aspect": {
@@ -4147,7 +4147,7 @@
     "idle",
     "sneak"
    ],
-   "bones": 19,
+   "bones": 21,
    "biped": true,
    "tallest_axis": "y",
    "aspect": {
@@ -4193,7 +4193,7 @@
     "sneak",
     "walk"
    ],
-   "bones": 19,
+   "bones": 21,
    "biped": true,
    "tallest_axis": "y",
    "aspect": {
@@ -4562,7 +4562,7 @@
     "idle",
     "sneak"
    ],
-   "bones": 19,
+   "bones": 21,
    "biped": true,
    "tallest_axis": "y",
    "aspect": {
@@ -4762,7 +4762,7 @@
     "idle",
     "sneak"
    ],
-   "bones": 19,
+   "bones": 21,
    "biped": true,
    "tallest_axis": "y",
    "aspect": {
@@ -5097,7 +5097,7 @@
     "idle",
     "sneak"
    ],
-   "bones": 19,
+   "bones": 21,
    "biped": true,
    "tallest_axis": "y",
    "aspect": {
@@ -5200,8 +5200,8 @@
    "file": "scientist.glb",
    "dims_m": {
     "x": 0.8617,
-    "y": 1.002,
-    "z": 0.185
+    "y": 1.0009,
+    "z": 0.1857
    },
    "min_y": 0.0,
    "skinned": false,
@@ -5210,15 +5210,15 @@
    "biped": true,
    "tallest_axis": "y",
    "aspect": {
-    "w_h": 0.86,
-    "d_h": 0.185
+    "w_h": 0.861,
+    "d_h": 0.186
    },
    "upright": true,
    "height_ratio": 1.0,
    "mesh": {
-    "tris": 45000,
-    "largest_share": 0.7943,
-    "fragments": 12,
+    "tris": 80000,
+    "largest_share": 0.9126,
+    "fragments": 4,
     "degenerate": 0.0,
     "textures": 3,
     "textures_ok": true
@@ -5233,9 +5233,9 @@
   {
    "file": "scientist_anim.glb",
    "dims_m": {
-    "x": 0.86,
+    "x": 0.8609,
     "y": 1.0,
-    "z": 0.1847
+    "z": 0.1855
    },
    "min_y": 0.0,
    "skinned": true,
@@ -5246,19 +5246,19 @@
     "idle",
     "sneak"
    ],
-   "bones": 19,
+   "bones": 21,
    "biped": true,
    "tallest_axis": "y",
    "aspect": {
-    "w_h": 0.86,
+    "w_h": 0.861,
     "d_h": 0.185
    },
    "upright": true,
    "height_ratio": 1.0,
    "mesh": {
-    "tris": 45000,
-    "largest_share": 0.7922,
-    "fragments": 12,
+    "tris": 80000,
+    "largest_share": 0.9128,
+    "fragments": 4,
     "degenerate": 0.0,
     "textures": 3,
     "textures_ok": true
@@ -5561,7 +5561,7 @@
     "idle",
     "sneak"
    ],
-   "bones": 19,
+   "bones": 21,
    "biped": true,
    "tallest_axis": "y",
    "aspect": {
@@ -5637,7 +5637,7 @@
     "idle",
     "sneak"
    ],
-   "bones": 19,
+   "bones": 21,
    "biped": true,
    "tallest_axis": "y",
    "aspect": {
@@ -5887,7 +5887,7 @@
     "idle",
     "sneak"
    ],
-   "bones": 19,
+   "bones": 21,
    "biped": true,
    "tallest_axis": "y",
    "aspect": {
@@ -6127,7 +6127,7 @@
     "idle",
     "sneak"
    ],
-   "bones": 20,
+   "bones": 22,
    "biped": true,
    "tallest_axis": "y",
    "aspect": {
@@ -6163,7 +6163,7 @@
     "sneak",
     "walk"
    ],
-   "bones": 19,
+   "bones": 21,
    "biped": true,
    "tallest_axis": "y",
    "aspect": {
@@ -6174,7 +6174,7 @@
    "height_ratio": 1.0,
    "mesh": {
     "tris": 105249,
-    "largest_share": 0.7756,
+    "largest_share": 0.7755,
     "fragments": 3,
     "degenerate": 0.0,
     "textures": 2,
@@ -6199,7 +6199,7 @@
     "sneak",
     "walk"
    ],
-   "bones": 19,
+   "bones": 21,
    "biped": true,
    "tallest_axis": "y",
    "aspect": {
@@ -6235,7 +6235,7 @@
     "sneak",
     "walk"
    ],
-   "bones": 20,
+   "bones": 22,
    "biped": true,
    "tallest_axis": "y",
    "aspect": {
@@ -6271,7 +6271,7 @@
     "sneak",
     "walk"
    ],
-   "bones": 19,
+   "bones": 21,
    "biped": true,
    "tallest_axis": "y",
    "aspect": {
@@ -6390,7 +6390,7 @@
     "idle",
     "sneak"
    ],
-   "bones": 19,
+   "bones": 21,
    "biped": true,
    "tallest_axis": "y",
    "aspect": {
@@ -6508,7 +6508,7 @@
     "idle",
     "sneak"
    ],
-   "bones": 19,
+   "bones": 21,
    "biped": true,
    "tallest_axis": "y",
    "aspect": {

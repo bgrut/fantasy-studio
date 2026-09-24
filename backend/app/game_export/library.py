@@ -131,7 +131,8 @@ def _resolve(kind: str) -> str | None:
         out = BACKEND_ROOT / "assets" / "library" / f"{key.replace(' ', '_')}.glb"
         try:
             from .bake import optimize_asset
-            optimize_asset(raw, out, target_tris=45000,
+            from .generate import guess_pattern
+            optimize_asset(raw, out, target_tris=(80000 if guess_pattern(key) in ('biped', 'quadruped') else 45000),
                            height_m=default_height(key), verbose=False)
             lib[key] = str(out.relative_to(BACKEND_ROOT)).replace("\\", "/")
             _save(lib)

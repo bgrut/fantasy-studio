@@ -255,6 +255,12 @@ for s in ("L","R"):
     cl=mk("clav_"+s,pt(0,0.80),pt(sh_lat,sh_zf,sh_fw),chest)
     ua=mk("uparm_"+s,pt(_al(0.0),_az(0.0),_af(0.0)),pt(_al(0.45),_az(0.45),_af(0.45)),cl)
     fa=mk("lowarm_"+s,pt(_al(0.45),_az(0.45),_af(0.45)),pt(_al(0.85),_az(0.85),_af(0.85)),ua)
+    # THE FOREARM TWISTS ALONG ITS LENGTH (2026-09-26). The palm's turn used
+    # to be a rigid roll of the whole forearm against an upper arm that
+    # turned less, and the sleeve creased at the elbow. A twist bone lies
+    # along the forearm; the forearm bone bends, the twist bone turns, and
+    # the skin's share of the turn ramps from the elbow to the wrist.
+    mk("lowarm_tw_"+s,pt(_al(0.45),_az(0.45),_af(0.45)),pt(_al(0.85),_az(0.85),_af(0.85)),fa)
     # HANDS CARRY ALMOST NO WEIGHT, AND IT IS NOT THE BONE LENGTH
     # (2026-09-04). Measured on a shipped character, the outermost arm
     # vertices carry lowarm 56.8% and hand 2.6%, so hands never articulate.
@@ -391,24 +397,45 @@ try:
         sgn=1.0 if s=="L" else -1.0
         core=(u>0.30)&(u<0.70)&(d<0.12*H)&(sgn*_LSa>0)
         r=max(float(np.percentile(d[core],75)) if int(core.sum())>20 else 0.05*H, 0.03*H)
-        sel=np.where((sgn*_LSa>0)&(_zfa>0.55)&(d<1.7*r)&(u>-0.25)&(u<0.85))[0]
+        sel=np.where((sgn*_LSa>0)&(_zfa>0.55)&(d<1.7*r)&(u>-0.10)&(u<0.85))[0]
         up=_vgn.get("uparm_"+s); cl=_vgn.get("clav_"+s); lo=_vgn.get("lowarm_"+s)
         if up is None or cl is None: continue
-        keep={up.index, cl.index, (lo.index if lo else -1)}
+        def _blend(i, target, k):
+            # (1-k) of what bone heat gave, k of the pass, over every group the vertex touches
+            v=me.vertices[i]; old={g.group:float(g.weight) for g in v.groups}
+            groups=set(old)|set(target)
+            for gi in groups:
+                w=(1.0-k)*old.get(gi,0.0)+k*target.get(gi,0.0)
+                vg=o.vertex_groups[gi]
+                if w>1e-3: vg.add([i],w,"REPLACE")
+                elif gi in old: vg.remove([i])
         for i in sel.tolist():
-            v=me.vertices[i]; ui=float(u[i])
-            x=min(max((ui+0.25)/0.35,0.0),1.0); w_up=x*x*(3-2*x)          # 0 at the inboard edge, 1 from a tenth along the bone
+            v=me.vertices[i]; ui=float(u[i]); di=float(d[i])
+            x=min(max((ui+0.10)/0.26,0.0),1.0); w_up=x*x*(3-2*x)          # 0 just inboard of the joint, 1 from a sixth along the bone
             w_lo=0.0
             for g in v.groups:
                 if lo and g.group==lo.index and ui>0.70: w_lo=float(g.weight)
             w_up=min(w_up, 1.0-w_lo); w_cl=max(0.0,1.0-w_up-w_lo)
-            for g in list(v.groups):
-                if g.group not in keep: o.vertex_groups[g.group].remove([i])
-            up.add([i],w_up,"REPLACE"); cl.add([i],w_cl,"REPLACE")
-            if lo:
-                if w_lo>0: lo.add([i],w_lo,"REPLACE")
-                else: lo.remove([i])
+            kd=min(max((1.7*r-di)/(0.45*r),0.0),1.0); kd=kd*kd*(3-2*kd)   # full inside 1.25 r, fading to the heat's own weights at 1.7 r
+            target={up.index:w_up, cl.index:w_cl}
+            if lo and w_lo>0: target[lo.index]=w_lo
+            _blend(i, target, kd)
         _armfix[s]=int(len(sel))
+        # the forearm: its weight shared between the bending bone and the twist bone, by the distance from the elbow
+        tw=_vgn.get("lowarm_tw_"+s)
+        if lo is not None and tw is not None and "lowarm_"+s in _segd:
+            h2,t2=_segd["lowarm_"+s]; seg2=t2-h2; L22=max(float(seg2@seg2),1e-9); u2=((V-h2)@seg2)/L22
+            proj2=h2[None,:]+np.clip(u2,0,1)[:,None]*seg2[None,:]; d2=np.linalg.norm(V-proj2,axis=1)
+            sel2=np.where((sgn*_LSa>0)&(d2<1.7*r)&(u2>0.0)&(u2<1.15))[0]
+            for i in sel2.tolist():
+                v=me.vertices[i]; wl=0.0
+                for g in v.groups:
+                    if g.group==lo.index: wl=float(g.weight)
+                if wl<=1e-3: continue
+                f=min(max((float(u2[i])-0.08)/0.85,0.0),1.0); f=f*f*(3-2*f)
+                lo.add([i],wl*(1.0-f),"REPLACE") if wl*(1.0-f)>1e-3 else lo.remove([i])
+                if wl*f>1e-3: tw.add([i],wl*f,"REPLACE")
+            _armfix[s+"_twist"]=int(len(sel2))
 except Exception as _ae:
     _armfix={"error":type(_ae).__name__}
 # THE PALM (2026-09-26). A reference holds its hands open to the camera, so
@@ -669,10 +696,18 @@ else:
                 d=Vector((d.x,d.y,-0.05)).normalized()
             aim(c,d)
             if c in ("lowarm_L","lowarm_R"):
-                _tw=palm_twist(c, d, c[-1]); _twist_arm[c[-1]]=_tw; roll(c,_tw,d)
-                # the upper arm shares two fifths of the turn, applied to the bone already aimed this frame
+                _tw=palm_twist(c, d, c[-1]); _twist_arm[c[-1]]=_tw
+                # the forearm bends only; the twist bone beside it turns, the skin's share
+                # ramping from the elbow to the wrist; the upper arm takes a quarter
+                _twb=rig.pose.bones.get("lowarm_tw_"+c[-1])
+                if _twb is not None:
+                    _twb.matrix=rig.pose.bones[c].matrix.copy(); bpy.context.view_layer.update()
+                    roll("lowarm_tw_"+c[-1], _tw, d)
+                    _twb.keyframe_insert("rotation_quaternion",frame=f)
+                else:
+                    roll(c,_tw,d)
                 _ua=rig.pose.bones["uparm_"+c[-1]]; _uad=(_ua.matrix.to_3x3()@Vector((0,1,0)))
-                roll("uparm_"+c[-1], 0.4*_tw, _uad)
+                roll("uparm_"+c[-1], 0.25*_tw, _uad)
             elif c in ("hand_L","hand_R") and _twist_arm.get(c[-1]):
                 roll(c,_twist_arm[c[-1]],d)
             if c=="chest" and abs(_ty)>1e-4:      # the thorax counter-rotation, a twist about the chest's own axis
