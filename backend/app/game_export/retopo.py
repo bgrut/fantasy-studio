@@ -100,12 +100,18 @@ try:
                     stack.append(w)
         seen |= comp; comps.append(comp)
     islands = len(comps)
+    big = max(comps, key=len) if comps else set()
+    kept = len(big) / max(1, sum(len(c) for c in comps))
     if islands > 1:
-        big = max(comps, key=len)
         doomed = [bm.verts[i] for c in comps if c is not big for i in c]
         bmesh.ops.delete(bm, geom=doomed, context="VERTS")
         bm.to_mesh(o.data); o.data.update()
     bm.free()
+    # THE SHELL MUST BE ONE BODY (2026-09-27): an open surface voxelizes into
+    # layered slices, hundreds of islands with the largest a sliver of the
+    # whole; that is not a body and the original is restored instead
+    if islands > 40 or kept < 0.6:
+        raise RuntimeError("shredded: %d islands, largest %.2f of the shell" % (islands, kept))
 
     # 4) QuadriFlow, BEST-EFFORT (see module docstring): keep voxel mesh on
     # CANCELLED — it already carries the keystone value.
@@ -153,9 +159,13 @@ try:
         sc.render.bake.cage_extrusion = float(max(0.006, diag * 0.006))
         sc.render.bake.max_ray_distance = float(max(0.02, diag * 0.02))
         sc.render.bake.use_pass_direct = False; sc.render.bake.use_pass_indirect = False; sc.render.bake.use_pass_color = True
-        sc.render.bake.margin = 8
+        sc.render.bake.margin = 16
         src.select_set(True); o.select_set(True); bpy.context.view_layer.objects.active = o
-        bpy.ops.object.bake(type="DIFFUSE", use_selected_to_active=True, margin=8)
+        bpy.ops.object.bake(type="DIFFUSE", use_selected_to_active=True, margin=16)
+        # a bake that found no colour is a black figure: restore the original
+        _px = np.array(img.pixels[:], dtype=np.float32).reshape(-1, 4)[::97, :3]
+        if float(_px.mean()) < 0.04:
+            raise RuntimeError("bake found no colour (mean %.3f)" % float(_px.mean()))
         img.pack()
         sc.render.engine = prev_engine
         bake = "ok"
@@ -194,7 +204,10 @@ __result__ = json.dumps(out)
 
 
 def enabled() -> bool:
-    return os.environ.get("FS_RETOPO", "0") == "1"
+    # ON BY DEFAULT (2026-09-27): trialled on the scientist, the dense shell
+    # with the baked texture deformed with no tears where the raw surface
+    # tore at every joint; FS_RETOPO=0 turns it off.
+    return os.environ.get("FS_RETOPO", "1") == "1"
 
 
 def code(hero: str = "Hero", target_faces: int = 12000, target_tris: int = 80000) -> str:

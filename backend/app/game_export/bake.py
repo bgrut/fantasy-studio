@@ -949,7 +949,11 @@ def bake_quadruped_anim_set(hero_glb: str | Path, out_glb: str | Path,
     # KEYSTONE (Phase 58, FS_RETOPO=1): rebuild the hero as even manifold
     # quads BEFORE rigging — clean joint loops for the skinning. Any failure
     # leaves the original mesh untouched.
-    if retopo.enabled():
+    # QUADRUPEDS KEEP THEIR RAW SURFACE (2026-09-27): the voxel remesh turned
+    # every animal's open shell into layered slices with no colour (the wolf
+    # came out a striped black husk); FS_RETOPO_QUAD=1 turns it on once the
+    # pass handles open shells. Bipeds take the pass by default.
+    if retopo.enabled() and os.environ.get("FS_RETOPO_QUAD", "0") == "1":
         rr = retopo.run("Hero")            # long-timeout bridge call
         if verbose:
             print(f"[bake] retopo: {rr}")
