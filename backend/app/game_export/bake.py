@@ -1316,7 +1316,9 @@ def bake_anim_set(hero_glb: str | Path, out_glb: str | Path,
                 # leans the trunk five to eight degrees and carries the elbows
                 # near ninety; a sneak leans further; a walk stands upright.
                 .replace("__LEAN__", {"run": "0.11", "sneak": "0.22", "attack": "0.06"}.get(name, "0.0"))
-                .replace("__ELBOW__", {"run": "0.12"}.get(name, "0.35")))
+                .replace("__ELBOW__", {"run": "0.12"}.get(name, "0.35"))
+                .replace("__ABDUCT__", {"attack": "0"}.get(name, "0.17"))
+                .replace("__STAND__", {"idle": "0.85"}.get(name, "0")))
         _lo, _hi = M.state_window(name)
         code = code.replace("__LOF__", f"{_lo:.4f}").replace("__HIF__", f"{_hi:.4f}")
         r = _call(registry, name, code)

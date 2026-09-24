@@ -279,9 +279,21 @@ for s in ("L","R"):
     # resulting direction. Re-baked clips were bit-identical with and without it
     # (attack knee offset -0.0750..-0.0216 either way). Keep the legs straight;
     # knee direction is inherited from the source clip, so fix knees there.
-    th=mk("upleg_"+s,pt(lg,0.50),pt(lg,0.28),hips)
-    sh=mk("lowleg_"+s,pt(lg,0.28),pt(lg,0.05),th)
-    mk("foot_"+s,pt(lg,0.05),pt(lg,0.0,0.12),sh)
+    # THE LEG BONES RUN THROUGH THE LEG (2026-09-27). A fixed tenth of the
+    # height put the shin bone three to five centimetres behind the shin's
+    # own centre; the hip, knee and ankle now take the lateral and depth
+    # medians of this side's leg cloud at their heights, so the knee sits
+    # forward of the hip-ankle line as a knee does.
+    _legside=(sgn*_latS>0.02*H)&(_zf<0.52)
+    def _jc(zlo,zhi,default_lat,default_fw=0.0):
+        m=_legside&(_zf>=zlo)&(_zf<zhi)
+        if int(m.sum())<20: return default_lat, default_fw
+        return float(np.median(_latS[m])), float(np.median(_dep[m]))
+    _dep=(Y-cy) if sx else (X-cx)
+    hip_l,hip_f=_jc(0.44,0.52,lg); kne_l,kne_f=_jc(0.25,0.31,lg); ank_l,ank_f=_jc(0.03,0.08,lg)
+    th=mk("upleg_"+s,pt(hip_l,0.50,hip_f),pt(kne_l,0.28,kne_f),hips)
+    sh=mk("lowleg_"+s,pt(kne_l,0.28,kne_f),pt(ank_l,0.05,ank_f),th)
+    mk("foot_"+s,pt(ank_l,0.05,ank_f),pt(ank_l,0.0,ank_f+0.12),sh)
 bpy.ops.object.mode_set(mode="OBJECT")
 amod=o.modifiers.get("HeroArmature") or o.modifiers.new("HeroArmature","ARMATURE"); amod.object=rig
 # ── SMOOTH SKIN via a watertight VOXEL PROXY + bone-heat, weights transferred to
@@ -326,6 +338,41 @@ for _vox in (max(0.012,H/110.0), max(0.02,H/70.0), max(0.03,H/45.0)):
         if _p: bpy.data.objects.remove(_p, do_unlink=True)
         bpy.ops.object.select_all(action='DESELECT')
     if skin_mode.startswith("voxel"): break
+if skin_mode.startswith("voxel"):
+    # THE WEIGHTS ARE CLEANED (2026-09-27). Bone heat on the proxy, carried
+    # over by nearest interpolation, left the right thigh holding a fifth of
+    # the shin's middle and the ankle an even split over four centimetres,
+    # and nothing kept a left bone off the right leg. Same-side mask, a
+    # prune, a few passes of smoothing over the mesh's own edges, and a
+    # renormalize; the arm and leg passes below then shape the joints.
+    try:
+        _names=[sg[0] for sg in segs]; _gidx={vg.name:vg.index for vg in o.vertex_groups}
+        _nb=len(o.vertex_groups); _W=np.zeros((len(V),_nb),dtype=np.float64)
+        for _v in me.vertices:
+            for _g in _v.groups: _W[_v.index,_g.group]=float(_g.weight)
+        _LSm=LSGN*(SA-smid); _mar=0.05*H; _mask=np.ones_like(_W)
+        for _gn,_gi in _gidx.items():
+            if _gn.endswith("_L"): _mask[_LSm<-_mar,_gi]=0.0
+            elif _gn.endswith("_R"): _mask[_LSm>_mar,_gi]=0.0
+        _W*=_mask
+        _ecount=len(me.edges); _ev=np.empty(_ecount*2,dtype=np.int64); me.edges.foreach_get("vertices",_ev); _ev=_ev.reshape(-1,2)
+        _cnt=np.zeros(len(V)); np.add.at(_cnt,_ev[:,0],1); np.add.at(_cnt,_ev[:,1],1); _cnt=np.maximum(_cnt,1)[:,None]
+        _acc=np.zeros_like(_W)
+        for _it in range(3):
+            _acc[:]=0.0; np.add.at(_acc,_ev[:,0],_W[_ev[:,1]]); np.add.at(_acc,_ev[:,1],_W[_ev[:,0]])
+            _W=0.5*_W+0.5*(_acc/_cnt); _W*=_mask
+        _W[_W<0.02]=0.0
+        _top=np.argsort(-_W,axis=1)[:,4:]; np.put_along_axis(_W,_top,0.0,axis=1)   # four influences at most
+        _W/=np.maximum(_W.sum(1,keepdims=True),1e-9)
+        for _gn,_gi in _gidx.items():
+            _vg=o.vertex_groups[_gi]; _col=_W[:,_gi]; _on=np.where(_col>1e-4)[0]; _off=np.where(_col<=1e-4)[0]
+            if len(_off): _vg.remove(_off.tolist())
+            _q=np.round(_col[_on]*127).astype(np.int64)
+            for _L in np.unique(_q):
+                if _L: _vg.add(_on[_q==_L].tolist(),float(_L)/127.0,"REPLACE")
+        skin_mode+="+clean"
+    except Exception as _ce:
+        skin_mode+="+clean_failed("+type(_ce).__name__+")"
 if not skin_mode.startswith("voxel"):
     # ── MANUAL nearest-bone fallback (proven). SAME-SIDE limb constraint: a vertex
     # clearly on one side of the centreline must NOT bind to the opposite side's
@@ -385,6 +432,15 @@ if not skin_mode.startswith("voxel"):
 # from a little inboard of the shoulder joint to the elbow, belongs to the
 # upper arm, easing in across the shoulder cap so the deltoid turns with the
 # arm and the chest does not; the elbow keeps the forearm's share.
+def _blend(i, target, k):
+    # (1-k) of what bone heat gave, k of the pass, over every group the vertex touches
+    v=me.vertices[i]; old={g.group:float(g.weight) for g in v.groups}
+    groups=set(old)|set(target)
+    for gi in groups:
+        w=(1.0-k)*old.get(gi,0.0)+k*target.get(gi,0.0)
+        vg=o.vertex_groups[gi]
+        if w>1e-3: vg.add([i],w,"REPLACE")
+        elif gi in old: vg.remove([i])
 _armfix={"L":0,"R":0}
 try:
     _segd={n:(h,t) for n,h,t in segs}
@@ -400,15 +456,6 @@ try:
         sel=np.where((sgn*_LSa>0)&(_zfa>0.55)&(d<1.7*r)&(u>-0.10)&(u<0.85))[0]
         up=_vgn.get("uparm_"+s); cl=_vgn.get("clav_"+s); lo=_vgn.get("lowarm_"+s)
         if up is None or cl is None: continue
-        def _blend(i, target, k):
-            # (1-k) of what bone heat gave, k of the pass, over every group the vertex touches
-            v=me.vertices[i]; old={g.group:float(g.weight) for g in v.groups}
-            groups=set(old)|set(target)
-            for gi in groups:
-                w=(1.0-k)*old.get(gi,0.0)+k*target.get(gi,0.0)
-                vg=o.vertex_groups[gi]
-                if w>1e-3: vg.add([i],w,"REPLACE")
-                elif gi in old: vg.remove([i])
         for i in sel.tolist():
             v=me.vertices[i]; ui=float(u[i]); di=float(d[i])
             x=min(max((ui+0.10)/0.26,0.0),1.0); w_up=x*x*(3-2*x)          # 0 just inboard of the joint, 1 from a sixth along the bone
@@ -438,6 +485,44 @@ try:
             _armfix[s+"_twist"]=int(len(sel2))
 except Exception as _ae:
     _armfix={"error":type(_ae).__name__}
+# THE KNEE AND THE ANKLE BLEND (2026-09-27). Inside each leg's cylinder the
+# thigh, shin and foot weights follow the height: a smoothstep three
+# hundredths of the height either side of the knee, two either side of
+# the ankle, blended radially into what the heat gave, as the sleeve is.
+_legfix={}
+try:
+    _vgn={vg.name:vg for vg in o.vertex_groups}
+    for s in ("L","R"):
+        th_=_vgn.get("upleg_"+s); sh_=_vgn.get("lowleg_"+s); ft_=_vgn.get("foot_"+s); hp_=_vgn.get("hips")
+        if not (th_ and sh_ and ft_ and "upleg_"+s in _segd and "lowleg_"+s in _segd): continue
+        sgn=1.0 if s=="L" else -1.0
+        h,t=_segd["upleg_"+s]; h2,t2=_segd["lowleg_"+s]
+        # the leg's axis from hip to ankle, the radius from the thigh's middle
+        ax=t2-h; L2=max(float(ax@ax),1e-9); u=((V-h)@ax)/L2
+        proj=h[None,:]+np.clip(u,0,1)[:,None]*ax[None,:]; d=np.linalg.norm(V-proj,axis=1)
+        core=(u>0.2)&(u<0.5)&(d<0.14*H)&(sgn*_LSa>0)
+        r=max(float(np.percentile(d[core],80)) if int(core.sum())>20 else 0.07*H, 0.04*H)
+        zk=0.28; za=0.05
+        sel=np.where((sgn*_LSa>0)&(_zfa<0.50)&(d<1.6*r))[0]
+        def _ss(x): x=min(max(x,0.0),1.0); return x*x*(3-2*x)
+        n=0
+        for i in sel.tolist():
+            zi=float(_zfa[i]); di=float(d[i])
+            k_th=_ss((zi-(zk-0.03))/0.06); k_sh=_ss((zi-(za-0.02))/0.04)
+            w_th=k_th; w_sh=(1.0-k_th)*k_sh; w_ft=(1.0-k_th)*(1.0-k_sh)
+            # the hips keep their share at the very top of the thigh, from the heat
+            v=me.vertices[i]; w_hp=0.0
+            if hp_ is not None and zi>0.44:
+                for g in v.groups:
+                    if g.group==hp_.index: w_hp=float(g.weight)
+            sc=1.0-w_hp
+            target={th_.index:w_th*sc, sh_.index:w_sh*sc, ft_.index:w_ft*sc}
+            if w_hp>0: target[hp_.index]=w_hp
+            kd=min(max((1.6*r-di)/(0.4*r),0.0),1.0); kd=kd*kd*(3-2*kd)
+            _blend(i, target, kd); n+=1
+        _legfix[s]=n
+except Exception as _le:
+    _legfix={"error":type(_le).__name__}
 # THE PALM (2026-09-26). A reference holds its hands open to the camera, so
 # when the arm hangs the palm faces forward; a person's palms face the
 # thigh. The palm is the flat of the hand: the least-variance axis of the
@@ -459,7 +544,7 @@ try:
         _palm[s]=[round(float(x),3) for x in n]
 except Exception as _pe:
     _palm={"error":type(_pe).__name__}
-__result__=json.dumps({"ok":True,"H":round(float(H),3),"side":"X" if sx else "Y","bones":len(arm.bones),"skin":skin_mode,"armfix":_armfix,"armline":_armline,"facing":facing,"palm":_palm})
+__result__=json.dumps({"ok":True,"H":round(float(H),3),"side":"X" if sx else "Y","bones":len(arm.bones),"skin":skin_mode,"armfix":_armfix,"legfix":_legfix,"armline":_armline,"facing":facing,"palm":_palm})
 '''
 
 
@@ -468,6 +553,8 @@ _RETARGET_CODE = r'''
 BVHPATH=r"__BVH__"; TOTAL=__TOTAL__; FPS=__FPS__; TRACK=__TRACK__; WIDE=__WIDE__
 LEAN=float("__LEAN__" if "__LEAN__"[0] in "0123456789." else "0.0")        # forward trunk lean, radians, per clip
 ELBOW=float("__ELBOW__" if "__ELBOW__"[0] in "0123456789." else "0.35")   # the forearm's bias toward the upper arm
+ABDUCT=float("__ABDUCT__" if "__ABDUCT__"[0] in "0123456789." else "0.17")   # the upper arm's outboard lateral cap, sin of the angle; 0 = free
+STAND=float("__STAND__" if "__STAND__"[0] in "0123456789." else "0.0")       # how far the legs are drawn toward straight down: an idle stands, a walk keeps its stride
 # INPLACE: game-export mode — no root/object translation keyframes (the game's
 # physics controller moves the character) and no rest ease-in (clips must loop
 # cleanly). False for the video pipeline = behavior unchanged.
@@ -632,7 +719,7 @@ else:
         pb=rig.pose.bones[name]; head=pb.matrix.translation.copy()
         pb.matrix=Matrix.Translation(head)@R3.to_4x4(); bpy.context.view_layer.update()
         pb.keyframe_insert("rotation_quaternion",frame=frame)
-    _fwdv=None; _latv=None
+    _fwdv=None; _latv=None; LSGN_W=1.0        # _latv = up x forward is the anatomical left, so left's outboard is +_latv
     if hero_fwd.length>1e-3:
         _fwdv=Vector((hero_fwd.x,hero_fwd.y,0.0)).normalized(); _latv=Vector((0,0,1)).cross(_fwdv).normalized()
     path=[]
@@ -667,6 +754,20 @@ else:
                 d=(dirs["uparm_L"]*ELBOW+d*(1-ELBOW)).normalized(); _lowdir["L"]=d
             elif c in ("lowarm_R",) and dirs.get("uparm_R") is not None and d is not None:
                 d=(dirs["uparm_R"]*ELBOW+d*(1-ELBOW)).normalized(); _lowdir["R"]=d
+            # A STAND, NOT A STANCE (2026-09-27): the idle clip's actor stood
+            # knees bent and feet wide, a ready stance; a person waiting stands
+            # nearly straight with the feet under the hips. For the idle the
+            # thigh and shin are drawn most of the way toward vertical and the
+            # thigh's outboard spread is capped at six degrees.
+            if STAND>0 and c in ("upleg_L","upleg_R","lowleg_L","lowleg_R") and d is not None:
+                d=(d*(1.0-STAND)+Vector((0,0,-1))*STAND).normalized()
+            # and the trunk: the same clip stooped thirty degrees forward; a person waiting stands up
+            if STAND>0 and c in ("spine","chest","neck","head") and d is not None:
+                d=(d*(1.0-STAND)+Vector((0,0,1))*STAND).normalized()
+                if c.startswith("upleg") and _latv is not None:
+                    _outb=(1.0 if c.endswith("_L") else -1.0)*LSGN_W; _lat=d.dot(_latv)
+                    if _lat*_outb>0.10:
+                        _rest=d-_latv*_lat; d=(_rest.normalized()*math.sqrt(1-0.01)+_latv*(0.10*_outb)).normalized()
             # the trunk leans into a run: spine, chest, neck and head tilt forward together
             if LEAN and c in ("spine","chest","neck","head") and d is not None and _latv is not None:
                 d=(Matrix.Rotation(LEAN,3,_latv)@d).normalized()
@@ -686,6 +787,13 @@ else:
             if c in ("uparm_L","uparm_R") and _fwdv is not None:
                 _lat=d.dot(_latv); _fw=d.dot(_fwdv); _up=d.z
                 _th=math.atan2(_fw,-_up)*1.4; _th=max(-0.56,min(0.56,_th))
+                # ARMS AGAINST THE TORSO (2026-09-27, LOCOMOTION.md): a standing
+                # or walking arm abducts ten degrees at most; the idle clip's
+                # actor held his twenty-five to thirty-four out. The lateral
+                # part is capped at sin(10 deg) on the outboard side (the
+                # inboard side is free, an arm may cross); the attack keeps its own.
+                _outb=(1.0 if c.endswith("_L") else -1.0)*LSGN_W
+                if ABDUCT>0 and _lat*_outb>ABDUCT: _lat=ABDUCT*_outb
                 _r=math.sqrt(max(0.0,1.0-_lat*_lat))
                 d=(_latv*_lat+_fwdv*(_r*math.sin(_th))+Vector((0,0,-_r*math.cos(_th)))).normalized()
             d=cone(c,d)

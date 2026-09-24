@@ -4147,7 +4147,7 @@
     "idle",
     "sneak"
    ],
-   "bones": 21,
+   "bones": 22,
    "biped": true,
    "tallest_axis": "y",
    "aspect": {
@@ -4184,7 +4184,7 @@
     "y": 1.75,
     "z": 0.3432
    },
-   "min_y": -0.0,
+   "min_y": 0.0,
    "skinned": true,
    "clips": [
     "attack",
@@ -4193,7 +4193,7 @@
     "sneak",
     "walk"
    ],
-   "bones": 21,
+   "bones": 22,
    "biped": true,
    "tallest_axis": "y",
    "aspect": {
@@ -6163,7 +6163,7 @@
     "sneak",
     "walk"
    ],
-   "bones": 21,
+   "bones": 22,
    "biped": true,
    "tallest_axis": "y",
    "aspect": {
@@ -6174,7 +6174,7 @@
    "height_ratio": 1.0,
    "mesh": {
     "tris": 105249,
-    "largest_share": 0.7755,
+    "largest_share": 0.7837,
     "fragments": 3,
     "degenerate": 0.0,
     "textures": 2,
