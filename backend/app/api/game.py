@@ -791,9 +791,15 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         # is told so; when it still picks one, the night wins.
         _PAPER = {"illustrated", "storybook", "watercolor", "dunescape", "papercraft"}
         _sky = str(getattr(spec.world, "sky", "") or "").lower()
-        if not req.style and spec.style in _PAPER and _sky in ("night", "dusk"):
+        _wx = str(getattr(spec.world, "weather", "") or "").lower()
+        # 2026-09-28: the same for a storm. "A lighthouse keeper on a stormy
+        # island" asked for overcast and rain and got paper daylight over an
+        # orange desert; the weather the sentence asked for outranks a look
+        # the extractor chose on its own.
+        if not req.style and spec.style in _PAPER and (_sky in ("night", "dusk", "overcast") or _wx in ("rain", "storm", "snow")):
+            _why = _sky if _sky in ("night", "dusk", "overcast") else _wx
             job.setdefault("notes", []).append(
-                f"art direction: {spec.style} would paint daylight over a {_sky} sky; kept the night with 'default' "
+                f"art direction: {spec.style} would paint daylight over {_why}; kept the weather with 'default' "
                 "(pick a style in the studio to override)")
             spec.style = "default"
         _sv = _STYLE_VIEW.get(spec.style or "default")
@@ -949,6 +955,7 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                     (r"\b(war|battle|soldier|trench|army|enemy lines|patrol)", "soldier"),
                     (r"\b(viking|norse|fjord|longship|raid)", "viking"),
                     (r"\b(samurai|shogun|dojo|ronin)", "samurai"),
+                    (r"\b(lighthouse|harbour|harbor|coast|shore|storm|sea|island|lantern|beacon)", "keeper"),   # 2026-09-28: generated once, cast by the sea's words since
                 ]
                 import re as _re4                      # _re3 is imported further down
                 _role = next((r for pat, r in _ROLES if _re4.search(pat, _pw)), "explorer")
@@ -2021,6 +2028,36 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         if (spec.world.water_level is None
                 and spec.world.level.get("water_suggest") is not None):
             spec.world.water_level = spec.world.level["water_suggest"]
+        # RAIN DARKENS THE GROUND (2026-09-29). A stormy island came out the
+        # dry orange-brown of a desert, because the ground colour is chosen
+        # from the world's words and the weather is chosen separately. Wet
+        # earth is darker and less saturated than dry earth; the rule is
+        # physical, so it can be applied to whatever colour was picked.
+        try:
+            if str(getattr(spec.world, "weather", "") or "").lower() == "rain" and spec.world.ground_color:
+                import colorsys as _cs
+                _r, _g, _b = [float(c) for c in spec.world.ground_color[:3]]
+                _h, _l, _sat = _cs.rgb_to_hls(_r, _g, _b)
+                _wet = _cs.hls_to_rgb(_h, _l * 0.72, _sat * 0.75)
+                spec.world.ground_color = [round(c, 4) for c in _wet]
+                job.setdefault("notes", []).append(
+                    "the ground is wet: rain darkens it by a quarter and takes the dust out of the colour")
+        except Exception:  # noqa: BLE001
+            pass
+        # NOTHING THAT SWIMS ON DRY LAND (2026-09-29). A stormy island cast a
+        # fish, and with no water in the world it lay on the soil at the
+        # player's feet, the first thing in frame. A swimmer belongs in water:
+        # with none, it goes, and the note says so rather than leaving a
+        # player to wonder. Decided after the water level is final.
+        if spec.world.water_level is None and spec.entities:
+            _wet = [e for e in spec.entities
+                    if guess_pattern((e.name or "").lower()) == "aquatic"]
+            if _wet:
+                _names = sorted({(e.name or "").lower() for e in _wet})
+                spec.entities = [e for e in spec.entities if e not in _wet]
+                job.setdefault("notes", []).append(
+                    ("the " + ", ".join(_names) + " could not be placed: this world has no water "
+                     "(say a lake, a river or a coast and they will have somewhere to swim)"))
         if _regions:
             _dirname = {(0, -1): "north", (0, 1): "south",
                         (1, 0): "east", (-1, 0): "west", (0, 0): "center"}

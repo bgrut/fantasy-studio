@@ -28,9 +28,14 @@ const _hex = (v, d) => {
 // Read from the spec's own words. Four families, matched by the first family
 // whose words appear; a prompt that names none of them gets the void.
 const MOODS = [
-  { id: 'warm', words: /\b(red|rust|rusted|ember|cinder|lava|magma|volcan|scorch|burn|fire|ash|crimson|copper|desert|sun-?baked|inferno|forge)\w*/i },
+  // 2026-09-28: a chocolate factory and a bakery named none of these and got
+  // the void; the words of heat and brass belong to warm, the field's words
+  // to green. Cold and green are asked first: a bakery on a floating island
+  // where grain is milled is a green place with an oven in it, not a furnace
+  // world, so the words of a PLACE outrank the words of a machine.
   { id: 'cold', words: /\b(ice|icy|frost|frozen|snow|glacier|arctic|tundra|winter|polar|blizzard|cryo|white)\w*/i },
-  { id: 'green', words: /\b(jungle|forest|moss|verdant|overgrown|swamp|fungal|spore|garden|bloom|vine|toxic|acid)\w*/i },
+  { id: 'green', words: /\b(jungle|forest|moss|verdant|overgrown|swamp|fungal|spore|garden|bloom|vine|toxic|acid|grain|wheat|farm|orchard|meadow|herb|leaf|grove|island|sky|cloud|floating)\w*/i },
+  { id: 'warm', words: /\b(red|rust|rusted|ember|cinder|lava|magma|volcan|scorch|burn|fire|ash|crimson|copper|desert|sun-?baked|inferno|forge|chocolate|cocoa|coffee|bread|oven|kiln|caramel|honey|amber|brass|clockwork|candle|hearth|autumn)\w*/i },
 ];
 const MOOD_LOOK = {
   void:  { nebula: { a: 0x2a3a8c, b: 0x9a3a9c, amt: 0.85, aurora: 0.30, auroraA: 0x39e6ff, auroraB: 0x8a5cff },
@@ -4872,6 +4877,8 @@ function meltdown() {
   const won = Math.max(1, coresFor(runValue)) * ((WORLDS[worldIdx] && WORLDS[worldIdx].coreMult) || 1);
   cores += won;
   sfxMelt();
+  // the foreman's open step was about the factory now in the sky (2026-09-28)
+  if (tutIdx < TUT.length) { tutIdx = TUT.length; if (tutAct === 2) act2Done = true; renderTutor(); }
   // the most filmable moment in the game, shown from where it can be seen
   playIntro('MELTDOWN', '+' + won + (won === 1 ? ' core' : ' cores') +
             ' \u00b7 the factory is thrown to the sky', 2.6, true);
@@ -5115,6 +5122,11 @@ function travelTo(k) {
   applyWorld(k);
   seedLine(true);
   refreshCounts();
+  // THE FOREMAN STAYS BEHIND (2026-09-28): his card about the factory just
+  // left ("bring a second ore home") rode along to Frostline and sat over
+  // the arrival. A step still open when the player travels is closed; the
+  // second act counts as done, since travelling is past what it teaches.
+  if (tutIdx < TUT.length) { tutIdx = TUT.length; if (tutAct === 2) act2Done = true; renderTutor(); }
   const t = document.getElementById('toast');
   if (t) { t.textContent = w.name.toUpperCase() + ': ' + w.blurb + '.';
            t.classList.add('on'); toastAt = 3.5; }
@@ -7156,6 +7168,7 @@ window.__factory = {
   beltShape, scatterVent, scatterBolt, scatterSpots, renderThumb, GEO, MAT,
   SEAM_COST, SEAM_REGROW, SEAM_FLOOR,
   step,                 // one simulation tick, for a harness that cannot wait
+  place, removeAt,      // and the placement itself, so a harness can build a factory the way a player would (2026-09-28)
   playIntro, endIntro, showWorksCard, KitEnd,
   get nudgeClock() { return nudgeClock; }, set nudgeClock(v) { nudgeClock = v; }, get edgeNudged() { return edgeNudged; },
   audioStart, audioMute, sfxSold, sfxUnlock, sfxMelt, AUDIO,

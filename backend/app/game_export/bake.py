@@ -666,6 +666,156 @@ for mt in (o.data.materials if o else []):
 __result__=json.dumps({"ok":True,"normal_maps":made})
 '''
 
+# ── ATLAS GUTTERS (2026-09-25) ──────────────────────────────────────────────
+# A generated atlas is a crowd of small UV islands with bare BLACK between
+# them. Nothing samples that black at full resolution, so the asset looks
+# right in a close-up and wrong everywhere else: every mip level averages
+# island colour with the void, so each island darkens at its edge, and the
+# result reads as dirt on a white coat and as gaps across a face. Worse, the
+# normal map is DERIVED from this albedo, so each gutter becomes a cliff in
+# the relief as well — a blotch you can light. The fix is the oldest one in
+# texturing: push each island's colour outward into the empty space, so the
+# average never finds black. Run BEFORE derive_normals.
+_PAD_ATLAS_CODE = r'''
+import bpy, json
+import numpy as np
+o=bpy.data.objects.get('Hero')
+padded=0; imgs=0; before=[]
+seen=set()
+for mt in (o.data.materials if o else []):
+    if not (mt and mt.use_nodes): continue
+    for nd in mt.node_tree.nodes:
+        if nd.type!='TEX_IMAGE' or not nd.image or nd.image.name in seen: continue
+        img=nd.image; seen.add(img.name)
+        # a normal map's flat blue is not a gutter; only colour is padded here
+        if (nd.image.colorspace_settings.name or '').lower() not in ('srgb','') : continue
+        w,h=img.size
+        if w*h==0 or w<64 or h<64: continue
+        px=np.empty(w*h*4, dtype=np.float32)
+        img.pixels.foreach_get(px)
+        px=px.reshape(h,w,4)
+        rgb=px[:,:,:3]
+        used=rgb.max(2) > (8.0/255.0)      # pure black is the void, not content
+        share=float(used.mean()); before.append(round(share,3))
+        if used.all() or share < 0.02: continue
+        # 16 passes of four-neighbour spread: enough to cover any gutter a
+        # mip chain can reach, short enough to leave real black content alone
+        for _ in range(16):
+            if used.all(): break
+            acc=np.zeros_like(rgb); cnt=np.zeros((h,w), dtype=np.float32)
+            for dy,dx in ((1,0),(-1,0),(0,1),(0,-1)):
+                sy0,sy1=(max(dy,0), h+min(dy,0)); sx0,sx1=(max(dx,0), w+min(dx,0))
+                ty0,ty1=(max(-dy,0), h+min(-dy,0)); tx0,tx1=(max(-dx,0), w+min(-dx,0))
+                um=used[sy0:sy1, sx0:sx1]
+                acc[ty0:ty1, tx0:tx1] += rgb[sy0:sy1, sx0:sx1] * um[:,:,None]
+                cnt[ty0:ty1, tx0:tx1] += um
+            grow=(~used) & (cnt > 0)
+            if not grow.any(): break
+            rgb[grow]=acc[grow] / cnt[grow][:,None]
+            used |= grow
+            padded+=int(grow.sum())
+        px[:,:,:3]=rgb
+        img.pixels.foreach_set(px.ravel())
+        img.update()
+        imgs+=1
+__result__=json.dumps({"ok":True,"padded_px":padded,"images":imgs,"coverage_before":before})
+'''
+
+
+# --- FLECKS ARE A MAPPING MISTAKE, NOT A PAINTING ONE (2026-09-25) ---------
+# The generator does not paint a picture of the character; it packs one small
+# patch per triangle into a sheet, and a few in every hundred point at the
+# wrong patch. Skin lands on a triangle of coat, white shirt lands on a
+# sleeve, and the body ends up with a rash of flecks that no image filter can
+# see, because in the sheet each patch sits among strangers. On the BODY it
+# has neighbours. A triangle whose colour disagrees with everything it
+# touches, where those neighbours agree with each other, is one of the
+# mistakes, and it is pointed at the patch its neighbour uses instead. The
+# atlas itself is never edited, so nothing bleeds and nothing is resampled.
+_FLECK_CODE = r'''
+import bpy, json
+import numpy as np
+o = bpy.data.objects.get('Hero')
+out = {"ok": False}
+me = o.data if o and o.type == 'MESH' else None
+img = None
+for mt in (me.materials if me else []):
+    if not (mt and mt.use_nodes):
+        continue
+    for nd in mt.node_tree.nodes:
+        if nd.type == 'BSDF_PRINCIPLED':
+            li = nd.inputs['Base Color'].links
+            if li and li[0].from_node.type == 'TEX_IMAGE':
+                img = li[0].from_node.image
+    if img is None:
+        for nd in mt.node_tree.nodes:
+            if nd.type == 'TEX_IMAGE' and nd.image and (nd.image.colorspace_settings.name or '').lower() in ('srgb', ''):
+                img = nd.image; break
+    if img is not None:
+        break
+if me is None or img is None or not me.uv_layers or img.size[0] < 8:
+    out = {"ok": True, "flecks": 0, "why": "no colour map to read"}
+else:
+    me.calc_loop_triangles()
+    lt = me.loop_triangles
+    nt = len(lt)
+    W, H = img.size
+    px = np.empty(W * H * 4, dtype=np.float32); img.pixels.foreach_get(px)
+    px = px.reshape(H, W, 4)[:, :, :3]
+    tv = np.empty(nt * 3, dtype=np.int32); lt.foreach_get("vertices", tv); tv = tv.reshape(-1, 3)
+    tl = np.empty(nt * 3, dtype=np.int32); lt.foreach_get("loops", tl); tl = tl.reshape(-1, 3)
+    ua = np.empty(len(me.loops) * 2); me.uv_layers.active.data.foreach_get("uv", ua)
+    ua = ua.reshape(-1, 2)
+    co = np.empty(len(me.vertices) * 3); me.vertices.foreach_get("co", co); co = co.reshape(-1, 3)
+
+    cuv = ua[tl].mean(axis=1)
+    # blender's V runs up the image, numpy's row index runs down it
+    cx = np.clip((cuv[:, 0] % 1.0 * W).astype(np.int64), 0, W - 1)
+    cy = np.clip(((1.0 - cuv[:, 1] % 1.0) * H).astype(np.int64), 0, H - 1)
+    col = px[cy, cx] * 255.0
+
+    span = float(np.linalg.norm(co.max(axis=0) - co.min(axis=0))) or 1.0
+    q = np.round(co / max(span * 1e-4, 1e-9)).astype(np.int64)
+    _, weld = np.unique(q, axis=0, return_inverse=True)
+    wt = weld.reshape(-1)[tv]
+    e = np.sort(np.concatenate([wt[:, [0, 1]], wt[:, [1, 2]], wt[:, [2, 0]]]), axis=1)
+    own = np.tile(np.arange(nt), 3)
+    order = np.lexsort((own, e[:, 1], e[:, 0]))
+    e, own = e[order], own[order]
+    same = np.all(e[1:] == e[:-1], axis=1)
+    pairs = np.concatenate([np.stack([own[:-1][same], own[1:][same]], 1),
+                            np.stack([own[1:][same], own[:-1][same]], 1)]) if same.any() else np.zeros((0, 2), np.int64)
+    flecks = 0
+    if len(pairs):
+        s1 = np.zeros((nt, 3), np.float32); c1 = np.zeros(nt, np.float32)
+        np.add.at(s1, pairs[:, 0], col[pairs[:, 1]]); np.add.at(c1, pairs[:, 0], 1.0)
+        ring1 = np.where(c1[:, None] > 0, s1 / np.maximum(c1, 1)[:, None], col)
+        s2 = np.zeros((nt, 3), np.float32); c2 = np.zeros(nt, np.float32)
+        np.add.at(s2, pairs[:, 0], ring1[pairs[:, 1]]); np.add.at(c2, pairs[:, 0], 1.0)
+        ring2 = np.where(c2[:, None] > 0, s2 / np.maximum(c2, 1)[:, None], ring1)
+        off = np.abs(col - ring2).max(axis=1)
+        flat = np.abs(ring1 - ring2).max(axis=1)
+        bad = (off > __THRESH__) & (flat < __FLAT__) & (c1 >= 2)
+        if bad.any():
+            # for each fleck, the neighbour that agrees most with the ring
+            best = np.full(nt, -1, dtype=np.int64)
+            score = np.full(nt, 1e9, dtype=np.float32)
+            nd_ = np.abs(col[pairs[:, 1]] - ring2[pairs[:, 0]]).max(axis=1)
+            for k in np.argsort(-nd_):                       # smallest wins, written last
+                a_ = pairs[k, 0]
+                if nd_[k] <= score[a_]:
+                    score[a_] = nd_[k]; best[a_] = pairs[k, 1]
+            uvl = me.uv_layers.active.data
+            for t in np.nonzero(bad & (best >= 0))[0]:
+                tgt = cuv[best[t]]
+                for li in tl[t]:
+                    uvl[int(li)].uv = (float(tgt[0]), float(tgt[1]))
+                flecks += 1
+            me.update()
+    out = {"ok": True, "flecks": int(flecks), "triangles": int(nt)}
+__result__ = json.dumps(out)
+'''
+
 _DESPECKLE_CODE = r'''
 import bpy, json
 import numpy as np
@@ -911,6 +1061,19 @@ def optimize_asset(src_glb: str | Path, out_glb: str | Path, target_tris: int = 
         if verbose and d:
             print(f"[bake] despeckle: healed {d.get('healed_px', 0)} px "
                   f"across {d.get('images', 0)} image(s)")
+    if pattern in ("biped", "quadruped"):
+        fl = _call(registry, "flecks",
+                   _FLECK_CODE.replace("__THRESH__", "56").replace("__FLAT__", "44"))
+        if verbose and fl:
+            print(f"[bake] flecks: {fl.get('flecks', 0):,} of "
+                  f"{fl.get('triangles', 0):,} triangles pointed at their neighbour")
+    # gutters first: the normal map below is derived from this albedo, so a
+    # black gutter left here becomes permanent relief in the lighting.
+    pa = _call(registry, "pad_atlas", _PAD_ATLAS_CODE)
+    if verbose and pa:
+        print(f"[bake] atlas padding: filled {pa.get('padded_px', 0):,} texels "
+              f"across {pa.get('images', 0)} image(s), coverage was "
+              f"{pa.get('coverage_before')}")
     if derive_normals:
         # PHOTOREAL LADDER step 4 (2026-07-06): derive a tangent-space normal
         # map from the albedo (blur -> sobel -> normal). Approximate but
@@ -928,8 +1091,39 @@ def optimize_asset(src_glb: str | Path, out_glb: str | Path, target_tris: int = 
     if verbose:
         mb = out_glb.stat().st_size / 1e6
         print(f"[bake] optimized {Path(src_glb).name}: {r['tris'][0]:,} -> {r['tris'][1]:,} tris, {mb:.1f} MB")
+    r["textures"] = repair_textures(out_glb, pattern, verbose=verbose)
     # ORIENTATION GUARANTEE (Phase 57): never ship an unverified orientation.
     r["orientation"] = verify_glb_orientation(out_glb, pattern, verbose=verbose)
+    return r
+
+
+def repair_textures(glb: str | Path, pattern: str | None = None,
+                    verbose: bool = True) -> dict:
+    """Last pass over the written file: gutters filled, specks healed, and a
+    character made solid. A person is never meant to be see-through, and a
+    generated one always arrives with a not-quite-solid alpha channel, so the
+    camera finds its way through the odd patch of cheek into the inside of the
+    head. Props keep their transparency: a window needs it."""
+    from .glbedit import health, pad_glb
+    solid = pattern in ("biped", "quadruped")
+    try:
+        r = pad_glb(Path(glb), check=False, opaque=solid, normals=solid, shrink=True)
+    except Exception as exc:                       # never lose an export to a texture fix
+        if verbose:
+            print(f"[bake] texture repair skipped ({type(exc).__name__}: {exc})")
+        return {"ok": False}
+    if verbose and r.get("written"):
+        filled = sum(i.get("filled") or 0 for i in r["images"])
+        specks = sum(i.get("specks") or 0 for i in r["images"])
+        print(f"[bake] texture repair: {filled:,} gutter texels filled, "
+              f"{specks:,} specks healed, {r.get('opaque', 0)} material(s) made solid, "
+              f"{r.get('normals', 0):,} normals recomputed")
+        try:
+            h = health(Path(glb))
+            print(f"[bake] health: {h['normals_off'] * 100:.1f}% of normals adrift, "
+                  f"{h['blend']} see-through material(s)")
+        except Exception:
+            pass
     return r
 
 
@@ -949,11 +1143,11 @@ def bake_quadruped_anim_set(hero_glb: str | Path, out_glb: str | Path,
     # KEYSTONE (Phase 58, FS_RETOPO=1): rebuild the hero as even manifold
     # quads BEFORE rigging — clean joint loops for the skinning. Any failure
     # leaves the original mesh untouched.
-    # QUADRUPEDS KEEP THEIR RAW SURFACE (2026-09-27): the voxel remesh turned
-    # every animal's open shell into layered slices with no colour (the wolf
-    # came out a striped black husk); FS_RETOPO_QUAD=1 turns it on once the
-    # pass handles open shells. Bipeds take the pass by default.
-    if retopo.enabled() and os.environ.get("FS_RETOPO_QUAD", "0") == "1":
+    # QUADRUPEDS TAKE THE PASS TOO (2026-09-28): with the voxel sized by the
+    # largest dimension and a solidify retry for open shells, the wolf came
+    # out one closed body with its coat baked on; FS_RETOPO_QUAD=0 turns it
+    # off for animals alone.
+    if retopo.enabled() and os.environ.get("FS_RETOPO_QUAD", "1") == "1":
         rr = retopo.run("Hero")            # long-timeout bridge call
         if verbose:
             print(f"[bake] retopo: {rr}")
@@ -1018,6 +1212,7 @@ __result__=json.dumps({"ok":True,"frames":T})
     if verbose:
         mb = out_glb.stat().st_size / 1e6 if out_glb.exists() else 0
         print(f"[bake] exported {out_glb.name} ({mb:.1f} MB, tracks={e.get('tracks')})")
+    repair_textures(out_glb, "quadruped", verbose=verbose)
     # ORIENTATION GUARANTEE (Phase 57): verify the final animated artifact.
     ov = verify_glb_orientation(out_glb, "quadruped", verbose=verbose)
     return {"ok": True, "tracks": e.get("tracks"), "orientation": ov}
@@ -1342,6 +1537,7 @@ def bake_anim_set(hero_glb: str | Path, out_glb: str | Path,
     if verbose:
         mb = out_glb.stat().st_size / 1e6 if out_glb.exists() else 0
         print(f"[bake] exported {out_glb.name} ({mb:.1f} MB, tracks={e.get('tracks')})")
+    repair_textures(out_glb, "biped", verbose=verbose)
     # ORIENTATION GUARANTEE (Phase 57): verify the final animated artifact.
     ov = verify_glb_orientation(out_glb, "biped", verbose=verbose)
     return {"ok": True, "tracks": e.get("tracks"), "skin": a.get("skin"),

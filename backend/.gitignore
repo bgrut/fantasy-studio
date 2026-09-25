@@ -73,5 +73,11 @@ tools/carlab/vendor/
 !tools/bvhwindow.py
 # imports Poly Haven CC0 props and packs them into single self-contained GLBs
 !tools/phimport.py
+# the texture and mesh repairs the bake itself runs, and the sweep that says
+# which assets still need them: pipeline, not scratch
+!tools/texpad.py
+!tools/meshaudit.py
+# scores every character's cached reference for paint splashes
+!tools/refaudit.py
 tools/facadelab/vendor/
 ckpts/

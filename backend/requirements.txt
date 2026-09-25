@@ -49,3 +49,9 @@ jsonschema>=4.20
 # ── Image processing (lazy-imported by user_asset_ingestor) ───────
 # Used to generate / verify thumbnails outside the Blender subprocess.
 Pillow>=10.0
+
+# ── Texture repair (already present through the diffusion stack) ──
+# BSD-3. distance_transform_edt fills an atlas's black gutters and
+# median_filter takes the salt and pepper out of a generated texture;
+# app/game_export/glbedit.py falls back to plain numpy when it is absent.
+scipy>=1.11

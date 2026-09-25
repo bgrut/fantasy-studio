@@ -2,7 +2,6 @@
   "dog": "assets/library/dog.glb",
   "man": "assets/library/man_anim.glb",
   "fox": "assets/library/fox.glb",
-  "horse": "assets/library/horse.glb",
   "truck": "assets/library/truck.glb",
   "wizard": "assets/library/wizard.glb",
   "dragon": "assets/library/dragon.glb",
@@ -142,6 +141,8 @@
   "healing herb": "assets/library/healing_herb.glb",
   "glowing crystal": "assets/library/glowing_crystal.glb",
   "crystal": "assets/library/crystal.glb",
-  "engineer": "assets/library/engineer.glb",
-  "scientist": "assets/library/scientist.glb"
+  "keeper": "assets/library/keeper.glb",
+  "horse": "assets/library/horse.glb",
+  "scientist": "assets/library/scientist.glb",
+  "engineer": "assets/library/engineer.glb"
 }

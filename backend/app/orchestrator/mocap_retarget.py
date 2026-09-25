@@ -458,7 +458,7 @@ try:
         if up is None or cl is None: continue
         for i in sel.tolist():
             v=me.vertices[i]; ui=float(u[i]); di=float(d[i])
-            x=min(max((ui+0.10)/0.26,0.0),1.0); w_up=x*x*(3-2*x)          # 0 just inboard of the joint, 1 from a sixth along the bone
+            x=min(max((ui+0.10)/0.40,0.0),1.0); w_up=x*x*(3-2*x)          # 0 just inboard of the joint, 1 from three tenths along the bone: the deltoid cap turns with the arm without a crease (2026-09-28, was a sixth)
             w_lo=0.0
             for g in v.groups:
                 if lo and g.group==lo.index and ui>0.70: w_lo=float(g.weight)

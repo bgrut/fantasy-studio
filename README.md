@@ -160,6 +160,8 @@ Deep dives: **[docs/PIPELINE_V2.md](docs/PIPELINE_V2.md)** (video pipeline) · *
 
 The way characters and creatures move is held to measured biomechanics, not taste: [backend/LOCOMOTION.md](backend/LOCOMOTION.md) collects the numbers (gait phases, cadence, arm swing and elbow flexion, pelvic rotation, quadruped footfall orders, gallop suspension, and the rest) with sources, and the gates read against them.
 
+A generated character also arrives with faults that have nothing to do with how it moves, and every one of them reads as bad skin: vertex normals that disagree with the mesh's own triangles, a material that says the body is see-through, an atlas with bare black between its islands, and inner layers modelled under the clothes that cross the outer surface. The bake repairs all four on the way out and prints what it found; `python backend/tools/meshaudit.py --all` reports the same numbers for anything already on disk, and `python backend/tools/texpad.py --opaque --normals --shrink <glb>` applies the repairs to it.
+
 ## How Fantasy Studio compares
 
 | | Fantasy Studio | Diffusion video (Sora/Runway/Pika) | AI game tools (cloud) |

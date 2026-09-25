@@ -67,6 +67,16 @@ def _retire(kind: str, why: str) -> list[str]:
             moved.append(dest.name)
     entry = lib.pop(kind, None)
     _save_lib(lib)
+    # THE RETIRED SHELF IS SHORT (2026-09-28): a day of rebakes left 460
+    # retired files, fifteen gigabytes, and the drive at zero; every kept
+    # rig is in git, so only the two most recent retirements of a kind stay
+    for stem in (kind.replace(" ", "_"), kind.replace(" ", "_") + "_anim"):
+        olds = sorted(RETIRED.glob(stem + "_*.glb"), key=lambda f: f.stat().st_mtime)
+        for f in olds[:-2]:
+            try:
+                f.unlink()
+            except OSError:
+                pass
     # the generation cache for this noun, so the next attempt is a fresh roll
     from app.game_export.generate import CACHE_DIR
     key = hashlib.md5(kind.lower().encode("utf-8")).hexdigest()[:12]

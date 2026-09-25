@@ -210,10 +210,15 @@ def quality_score(rec: dict) -> tuple[float, str]:
             reasons.append("proportions")
     if mq.get("largest_share", 1.0) < 0.02 and mq.get("tris", 0) > 2000:
         reasons.append("dust")
+    # SHARDS (2026-09-28): a horse whose largest welded piece was 7 % of the
+    # mesh in 35 fragments scored 0.999 with the judge and shipped in pieces
+    # at every joint; a character or animal this broken cannot be rigged
+    if is_characterish(rec) and mq.get("largest_share", 1.0) < 0.08 and mq.get("tris", 0) > 2000:
+        reasons.append("shards")
     # dust and proportions are suspicions, not proof (a scaled mesh defeats the
     # weld, a Z-up car defeats the height): they mark the model fair with a
     # reason, and only what cannot be right marks it poor
-    hard = [r for r in reasons if r in ("textures", "degenerate", "lying down", "does not look like it")]
+    hard = [r for r in reasons if r in ("textures", "degenerate", "lying down", "does not look like it", "shards")]
     if reasons:
         rec["quality_reasons"] = reasons
     if hard:

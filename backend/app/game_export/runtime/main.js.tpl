@@ -10182,7 +10182,13 @@ async function main() {
   const ROLE_WEAPON = { detective: 'pistol', soldier: 'pistol', scientist: 'pistol', explorer: 'pistol', engineer: 'pistol',
                         ranger: 'bow', hunter: 'bow', knight: 'blade', samurai: 'blade', viking: 'blade', wizard: 'blade' };
   const HERO_ROLE = String((SPEC.player && SPEC.player.name) || '').toLowerCase().trim();
+  // EMPTY HANDS FOR A SEARCH (2026-09-28): a keeper looking for a lantern
+  // walked out holding a blade, the table's fallback for an unlisted role;
+  // a role the table does not name carries nothing unless the world has
+  // hostiles to meet, and a keeper, a sailor or a farmer never draws by default.
+  const _hostile = (SPEC.entities || []).some(e => e.behavior === 'hostile');
   const ROLE_PICK = ROLE_WEAPON[HERO_ROLE] || null;
+  const NO_ARMS = !ROLE_PICK && !_hostile;
   let weaponIdx = (ATTACK !== 'none' && ROLE_PICK === 'pistol') ? 1 : 0, aimT = 0;
   const shells = [], blasts = [];
   // BLAST FX ARE POOLED, NOT CREATED (2026-08-07). Adding a PointLight
@@ -10291,9 +10297,10 @@ async function main() {
         + 'border:1px solid rgba(167,139,250,.35);border-radius:9px;'
         + 'padding:5px 12px;pointer-events:none;';
       wl.textContent = WEAPONS[weaponIdx].icon + ' ' + WEAPONS[weaponIdx].name;
+      if (NO_ARMS) wl.style.display = 'none';        // a search carries nothing, so the label says nothing
       document.body.appendChild(wl);
       window.__wpnEl = wl;
-      if (window.__wpnModels) window.__wpnModels.forEach((g4, i) => { g4.visible = (i === weaponIdx); });   // the hand holds the role's weapon from the first frame
+      if (window.__wpnModels) window.__wpnModels.forEach((g4, i) => { g4.visible = !NO_ARMS && (i === weaponIdx); });   // the hand holds the role's weapon from the first frame, or nothing
       // AIM RETICLE. Only the pistol has one — a blade has nothing to aim
       // and the launcher is lobbed, so a crosshair on either would be
       // lying about how they work.
@@ -10726,7 +10733,7 @@ async function main() {
                                       skids: _skidLife ? Array.from(_skidLife).filter(v => v > 0).length : 0, smoke: _smoke ? _smoke.filter(x => x.visible).length : 0,
                                       peds_visible: (window.__peds || []).filter(q => q.obj.visible).length, peds_casting: (window.__peds || []).filter(q => q._cast).length } : null,
         hero: (SPEC.player && SPEC.player.name) || null,
-        weapon: (typeof WEAPONS !== 'undefined' && ATTACK !== 'none') ? (WEAPONS[weaponIdx] || WEAPONS[0]).id : null,
+        weapon: (typeof WEAPONS !== 'undefined' && ATTACK !== 'none' && !(typeof NO_ARMS !== 'undefined' && NO_ARMS)) ? (WEAPONS[weaponIdx] || WEAPONS[0]).id : null,
         buoyant: !!P.buoyant,
         water_level: SPEC.world.water_level == null ? null : +SPEC.world.water_level,
       };

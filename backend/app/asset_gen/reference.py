@@ -446,6 +446,16 @@ def _build_reference_prompt(slots: Dict[str, Any], style: str) -> tuple[str, str
             "driver":    "racing driver in a fireproof racing suit with sponsor patches, no helmet",
             "guard":     "security guard in a dark uniform shirt with a badge and epaulettes, dark trousers",
             "walker":    "pedestrian in casual street clothes, jacket, jeans, trainers",
+            "lighthouse keeper": "lighthouse keeper in a thick wool sweater, oilskin coat, flat cap, sea boots, weathered face",
+            "keeper":    "lighthouse keeper in a thick wool sweater, oilskin coat, flat cap, sea boots, weathered face",
+            "sailor":    "sailor in a navy peacoat, knitted cap, canvas trousers, deck boots",
+            "fisherman": "fisherman in a yellow oilskin jacket, waders, knitted cap",
+            "farmer":    "farmer in a checked shirt, denim overalls, straw hat, work boots",
+            "miner":     "miner in a helmet with a headlamp, dusty overalls, heavy boots",
+            "pilot":     "pilot in a leather flight jacket, aviator cap, goggles on the forehead, trousers and boots",
+            "chef":      "chef in a white double-breasted jacket, tall toque, checked trousers",
+            "nurse":     "nurse in blue scrubs, comfortable shoes, a stethoscope",
+            "mechanic":  "mechanic in stained grey coveralls, a rag in the pocket, work boots",
             # generic humans need CLOTHES spelled out or SDXL renders a shirtless
             # anatomy/muscle-suit figure. Order: woman/person before "man" (which
             # is a substring of "woman") so the right one matches first.
@@ -515,6 +525,29 @@ def _build_reference_prompt(slots: Dict[str, Any], style: str) -> tuple[str, str
     negative_parts = [preset["negative"], pattern_neg, vehicle_neg, cloth_neg]
     negative = ", ".join(p for p in negative_parts if p)
     return positive, negative
+
+
+def _blotchiness(img) -> float:
+    """CLIP's belief that the figure's clothes are splashed or blotchy rather
+    than plain; the same model the asset judge uses (openai/clip-vit-base-patch32, MIT)."""
+    import torch
+    from transformers import CLIPModel, CLIPProcessor
+    global _CLIP_JUDGE
+    try:
+        model, proc = _CLIP_JUDGE
+    except NameError:
+        dev = "cuda" if torch.cuda.is_available() else "cpu"
+        model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32").to(dev).eval()
+        proc = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
+        _CLIP_JUDGE = (model, proc)
+    dev = next(model.parameters()).device
+    pos = ["a person in plain clean clothes", "a person wearing a plain outfit with no pattern"]
+    neg = ["a person with paint splashes on their clothes", "clothes covered in blotchy yellow stains",
+           "a person in a loud printed pattern outfit"]
+    with torch.no_grad():
+        inputs = proc(text=pos + neg, images=img.convert("RGB"), return_tensors="pt", padding=True).to(dev)
+        probs = torch.softmax(model(**inputs).logits_per_image[0].float(), dim=0)
+    return float(probs[len(pos):].sum())
 
 
 def generate_reference(
@@ -734,6 +767,26 @@ def generate_reference(
     # gate on it — the clean template is the guarantee.
     t0 = time.time()
     img, mode_tag = _gen_once(seed)
+    # THE REFERENCE IS JUDGED BEFORE THE MESH IS MADE (2026-09-28). A
+    # scientist's coat came out splashed with paint, and every bake since
+    # carried the splashes; the judge only ever saw the finished model. The
+    # same CLIP scores the picture for paint splashes and blotchy prints on a
+    # plainly dressed figure; a blotchy one is rolled again on a new seed,
+    # twice at most, and the least blotchy of the tries is kept.
+    if base_pattern == "biped":
+        try:
+            tries = [(img, mode_tag, _blotchiness(img))]
+            for k in (1, 2):
+                if tries[-1][2] < 0.45:
+                    break
+                s2 = (int(seed) if seed is not None else 1000) + 101 * k
+                img2, tag2 = _gen_once(s2)
+                tries.append((img2, tag2, _blotchiness(img2)))
+            best = min(tries, key=lambda t: t[2])
+            print(f"[reference] blotchiness " + ", ".join(f"{t[2]:.2f}" for t in tries) + f"; kept {best[2]:.2f}")
+            img, mode_tag = best[0], best[1]
+        except Exception as _je:  # noqa: BLE001
+            print(f"[reference] blotch judge skipped ({type(_je).__name__})")
     elapsed = time.time() - t0
     img.save(output_path)
     print(f"[reference] saved → {output_path.name} ({width}×{height}, "

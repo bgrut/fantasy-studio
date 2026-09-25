@@ -14,14 +14,18 @@ import * as THREE from 'three'; import { GLTFLoader } from 'three/addons/loaders
 const W = 1200, H = 520; const r = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true }); r.setSize(W, H); r.setClearColor(0x8a8f99, 1); document.body.appendChild(r.domElement);
 const sc = new THREE.Scene(); sc.add(new THREE.HemisphereLight(0xdfe8ff, 0x33302c, 1.4)); const key = new THREE.DirectionalLight(0xfff2e0, 2.4); key.position.set(${process.env.SIDE ? 6 : 2}, 5, ${process.env.SIDE ? 1 : -6}); sc.add(key);   // the key on the camera's side
 const g = await new GLTFLoader().loadAsync('/backend/${rel}'); const o = g.scene; sc.add(o);
+if (${process.env.NOROUGH ? 1 : 0}) o.traverse(m => { if (m.isMesh && m.material) { const mm = Array.isArray(m.material) ? m.material : [m.material]; mm.forEach(x => { x.roughnessMap = null; x.metalnessMap = null; x.aoMap = null; x.roughness = 0.85; x.metalness = 0; x.needsUpdate = true; }); } });   // NOROUGH=1: is the speck in the colour, or in the shine?
+if (${process.env.RENORM ? 1 : 0}) o.traverse(m => { if (m.isMesh) { m.geometry.deleteAttribute('normal'); m.geometry.computeVertexNormals(); } });   // RENORM=1: throw away the file's normals and derive them from the shape
+if (${process.env.FLAT ? 1 : 0}) o.traverse(m => { if (m.isMesh) m.material = new THREE.MeshStandardMaterial({ color: 0xcfcfcf, roughness: 0.85 }); });   // FLAT=1: no texture at all, so a speck on screen can only be the shape
+if (${process.env.NONORMAL ? 1 : 0}) o.traverse(m => { if (m.isMesh && m.material) { const mm = Array.isArray(m.material) ? m.material : [m.material]; mm.forEach(x => { x.normalMap = null; x.needsUpdate = true; }); } });   // NONORMAL=1: is the fleck in the albedo or in the derived normal map?
 const bb = new THREE.Box3().setFromObject(o); const h = bb.max.y - bb.min.y; o.position.y = -bb.min.y;
 const span = Math.max(h, bb.max.x - bb.min.x, bb.max.z - bb.min.z);   // a long animal is framed by its length, not its height
-const mixer = new THREE.AnimationMixer(o); const c = g.animations.find(a => a.name === '${clip}') || g.animations[0]; const act = mixer.clipAction(c); act.play();
+const mixer = g.animations.length ? new THREE.AnimationMixer(o) : null; const c = g.animations.find(a => a.name === '${clip}') || g.animations[0]; if (mixer && c) mixer.clipAction(c).play();   // a static mesh is shown as it is, for comparing a rig against its source
 const cam = new THREE.PerspectiveCamera(28, (W / 4) / H, 0.05, 100);
 window.__shoot = () => {
   r.setScissorTest(true);
   for (let k = 0; k < 4; k++) {
-    mixer.setTime(c.duration * (k / 4 + 0.05)); o.updateMatrixWorld(true);
+    if (mixer && c) mixer.setTime(c.duration * (k / 4 + 0.05)); o.updateMatrixWorld(true);
     if (${process.env.SIDE ? 1 : 0}) cam.position.set(span * 3.4, h * 0.55, 0); else cam.position.set(0, h * 0.55, -span * 2.6);   // the runtime's front is -Z, so the front view stands there   // SIDE=1 shoots the profile, the view that tells a gait
     if (${process.env.ZOOM ? 1 : 0}) {   // ZOOM=1: the upper body at close range, for skinning
       const zd = span * 1.15, zy = ${process.env.LEGS ? 0.32 : 0.72}, ly = ${process.env.LEGS ? 0.3 : 0.66};   // LEGS=1: hips and knees
@@ -40,6 +44,6 @@ const p = await b.newPage(); await p.setViewport({ width: 1200, height: 520 }); 
 await p.goto('http://127.0.0.1:8791/_rigview.html', { waitUntil: 'domcontentloaded', timeout: 60000 });
 for (let i = 0; i < 80; i++) { if (await p.evaluate(() => !!window.__ready)) break; await new Promise(r => setTimeout(r, 500)); }
 const png = await p.evaluate(() => window.__shoot());
-const out = path.join(HERE, 'renders', 'rig_' + path.basename(rel, '.glb') + '_' + clip + (process.env.SIDE ? '_side' : '') + (process.env.ZOOM ? '_zoom' : '') + (process.env.LEGS ? '_legs' : '') + '.png'); fs.writeFileSync(out, Buffer.from(png.split(',')[1], 'base64'));
+const out = path.join(HERE, 'renders', 'rig_' + path.basename(rel, '.glb') + '_' + clip + (process.env.SIDE ? '_side' : '') + (process.env.ZOOM ? '_zoom' : '') + (process.env.LEGS ? '_legs' : '') + (process.env.NONORMAL ? '_nonrm' : '') + (process.env.FLAT ? '_flat' : '') + (process.env.RENORM ? '_renorm' : '') + (process.env.NOROUGH ? '_norough' : '') + '.png'); fs.writeFileSync(out, Buffer.from(png.split(',')[1], 'base64'));
 console.log('wrote', out, errs.length ? '| errors: ' + errs.join(' | ') : '');
 fs.unlinkSync(path.join(ROOT, '_rigview.html')); await b.close();
