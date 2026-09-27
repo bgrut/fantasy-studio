@@ -23,6 +23,17 @@ await new Promise(r=>setTimeout(r,6000));
 const probe = await p.evaluate(async () => {
   const F = window.__factory, TY = F.TYPES;
   const THREE_V = F.player.pos.constructor;               // Vector3
+  // END THE REVEAL FIRST (2026-09-29). While the opening flight is running the
+  // camera belongs to it, and every aim this gate asks for is ignored: the
+  // ring of ground projects wherever the reveal happens to be looking, which
+  // for the first face was off the side of the frame. The reveal ends on any
+  // input, as a player's would, so the gate presses a key and waits for the
+  // clock to read zero before it measures anything.
+  for (let k = 0; k < 40 && window.__game.facts().intro > 0; k++) {
+    dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyW' }));
+    dispatchEvent(new KeyboardEvent('keyup', { code: 'KeyW' }));
+    await new Promise(r => setTimeout(r, 100));
+  }
   window.__game.inspect(true);                            // orbit, so a face fills frame
   await new Promise(r => setTimeout(r, 900));
 
