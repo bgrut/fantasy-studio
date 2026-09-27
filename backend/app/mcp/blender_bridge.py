@@ -147,12 +147,25 @@ def call(op: str, params: Optional[dict] = None, timeout: float = DEFAULT_TIMEOU
 
     req = {"id": str(uuid.uuid4()), "op": op, "params": params or {}}
 
+    # RESYNC (2026-09-27). A request that times out is not cancelled in
+    # Blender: it finishes later and its reply arrives on the stream, where
+    # the NEXT caller read it as its own. From then on every call got the
+    # answer to the one before ("response id mismatch", a whole build's
+    # asset steps failing in turn and meshes registered raw). Replies come
+    # back in order, so a reply that is not ours is a leftover and is skipped.
+    def _own(first: dict) -> dict:
+        r, n = first, 0
+        while r.get("id") != req["id"] and n < 8:
+            n += 1
+            r = _recv_frame(_sock)
+        return r
+
     with _lock:
         try:
             assert _sock is not None
             _sock.settimeout(timeout)
             _send_frame(_sock, req)
-            resp = _recv_frame(_sock)
+            resp = _own(_recv_frame(_sock))
         except (ConnectionError, BrokenPipeError, ConnectionResetError, socket.timeout) as e:
             # Connection died. Try once to reconnect + retry.
             _force_reset()
@@ -163,7 +176,7 @@ def call(op: str, params: Optional[dict] = None, timeout: float = DEFAULT_TIMEOU
                 assert _sock is not None
                 _sock.settimeout(timeout)
                 _send_frame(_sock, req)
-                resp = _recv_frame(_sock)
+                resp = _own(_recv_frame(_sock))
             except Exception as e2:
                 raise BridgeConnectionError(f"reconnect failed for op={op}: {e2}")
 

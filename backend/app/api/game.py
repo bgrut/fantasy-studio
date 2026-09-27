@@ -288,6 +288,17 @@ def classify_hot_edit(prompt: str) -> dict | None:
 _GEN_POOL = None
 
 
+def _gen_eta() -> str:
+    """How long a first-time generation takes on this machine, for the stage
+    line. Three of the four stage lines said "slow without a GPU" whatever the
+    machine had; this is the one the hero's line already used."""
+    try:
+        from app.game_export.generate import gpu_available
+        return "~6 min on your GPU" if gpu_available() else "~25-30 min on CPU"
+    except Exception:
+        return "a few minutes"
+
+
 def _ensure_asset_limited(kind: str, secs: float, verbose: bool = False) -> bool:
     """GENERATION HAS A CLOCK (2026-09-23). A hero the library lacked once went
     to image-to-3D generation and hung a build for an hour. The generation
@@ -708,10 +719,109 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             spec = extract_game_spec(req.prompt, verbose=False)
             try: spec.prompt = req.prompt            # the sentence that made it rides with the spec
             except Exception: pass
-            if _reads_as_factory(req.prompt) and getattr(spec, "genre", "") != "factory":
+            # a tower defence or a platformer names what it is; neither is a
+            # production system, however much building the sentence mentions
+            try:
+                from app.game_export.extractor import TD_WORDS as _TDW, PLATFORMER_WORDS as _PFW
+                import re as _gre
+                _named_genre = bool(_gre.search(_TDW, (req.prompt or "").lower())
+                                    or _gre.search(_PFW, (req.prompt or "").lower()))
+            except Exception:
+                _named_genre = False
+            if _named_genre and getattr(spec, "genre", "") == "factory":
+                spec.genre = "adventure"
+                spec.theme = None
+                job.setdefault("notes", []).append(
+                    "genre held to adventure: the prompt names a tower defence or a platformer")
+            if _reads_as_factory(req.prompt) and not _named_genre and getattr(spec, "genre", "") != "factory":
                 spec.genre = "factory"
                 job.setdefault("notes", []).append(
                     "genre held to factory: the prompt names a production system")
+            # A TOWER DEFENCE IS HELD TO ITS SHAPE (2026-09-27). "Goblins march
+            # down a road and I build archer towers" came out as a ten-second
+            # survive timer with the player cast AS a goblin and nothing to
+            # build. The build verb names the genre, so when the sentence has
+            # it the game becomes one defend step, the attackers stay hostile,
+            # and the hero is a defender with a bow.
+            try:
+                import re as _tdre
+                from app.game_export.extractor import TD_WORDS, defended_noun
+                from app.game_export.spec import EntitySpec, ObjectiveSpec
+                _tp = (req.prompt or "").lower()
+                if _tdre.search(TD_WORDS, _tp):
+                    _old = next((o for o in spec.objectives if o.kind == "defend"), None)
+                    _mw = _tdre.search(r"\b(\d+)\s+waves?\b", _tp)
+                    _waves = max(3, min(int(_mw.group(1)) if _mw else ((_old.count if _old else 5) or 5), 8))
+                    _what = (_old.label if _old and _old.label else "") or defended_noun(_tp)
+                    spec.objectives = [ObjectiveSpec(kind="defend", label=_what, count=_waves)]
+                    _foes = [e for e in spec.entities if e.behavior == "hostile"]
+                    if not _foes:
+                        spec.entities.append(EntitySpec(name="goblin", behavior="hostile", count=8, speed=2.2))
+                        _foes = spec.entities[-1:]
+                    for e in _foes:
+                        e.speed = min(max(e.speed, 1.6), 2.8)    # a march, not a sprint: towers need time
+                    _foe_names = {(e.name or "").lower().rstrip("s") for e in _foes}
+                    if (spec.player.name or "").lower().rstrip("s") in _foe_names or not spec.player.name:
+                        spec.player.name = "ranger"
+                        spec.player.asset = ""
+                    if spec.player.attack == "none":
+                        spec.player.attack = "ranged"
+                    job.setdefault("notes", []).append(
+                        f"tower defence: hold the {_what} through {_waves} waves; T raises a tower")
+            except Exception as _tde:
+                job.setdefault("notes", []).append(f"tower defence rule skipped: {_tde}")
+            # THE PLAYER IS THE CRAFT (2026-09-27). "Fly a fighter through an
+            # asteroid field": the verb says what the player is, and it flies.
+            _flown = False
+            try:
+                import re as _fre2
+                from app.game_export.extractor import FLY_WORDS
+                _fm = _fre2.search(FLY_WORDS, (req.prompt or "").lower())
+                _space = bool(_fre2.search(r"\b(space|asteroids?|galaxy|stars?|orbit|planet|nebula|cosmic)\b", (req.prompt or "").lower()))
+                _craft = " ".join(_fm.group(1).split()) if _fm else ""
+                # a bare "ship" or "craft" flies only in space; on Earth it sails
+                if _craft in ("ship", "craft") and not _space:
+                    _fm = None
+                if _fm and getattr(spec, "genre", "") != "factory":
+                    if _craft == "fighter":                  # a bare word: say which kind
+                        _craft = "space fighter" if _space else "fighter jet"
+                    elif _craft in ("ship", "craft"):
+                        _craft = "space" + _craft
+                    if (spec.player.name or "").lower() != _craft:
+                        job.setdefault("notes", []).append(f"you fly: the player is the {_craft}")
+                    spec.player.name = _craft
+                    spec.player.asset = ""
+                    spec.player.mode = "fly"
+                    if _space and spec.world.sky not in ("space",):
+                        spec.world.sky = "space"
+                    _flown = True
+            except Exception as _fe:
+                job.setdefault("notes", []).append(f"flying rule skipped: {_fe}")
+            # THE PLAYER IS THE SHIP (2026-09-27). "Sail a pirate ship across the
+            # ocean" cast a pirate on foot and gave him dry islands. A sentence
+            # whose verb is sailing puts the player in the vessel it names; the
+            # vessel is a swimmer, the swim rule gives the world its sea, and
+            # the surface-vessel rule keeps the hull on the waterline.
+            try:
+                import re as _sre
+                from app.game_export.extractor import SAIL_WORDS
+                _sm = _sre.search(SAIL_WORDS, (req.prompt or "").lower())
+                if _sm and not _flown and getattr(spec, "genre", "") != "factory":
+                    _vessel = " ".join(_sm.group(1).split())
+                    if (spec.player.name or "").lower() != _vessel:
+                        job.setdefault("notes", []).append(
+                            f"you sail: the player is the {_vessel}, not whoever is aboard")
+                    spec.player.name = _vessel
+                    spec.player.asset = ""
+                    spec.player.mode = "swim"
+                    spec.player.buoyant = True
+                    # a hull does not swing a blade: it fires only if the
+                    # sentence gave it guns, otherwise it outsails what hunts it
+                    spec.player.attack = ("ranged" if _sre.search(
+                        r"\b(cannons?|guns?|broadsides?|fire|shoot|battle|fight|war|navy|naval)\b",
+                        (req.prompt or "").lower()) else "none")
+            except Exception as _se:
+                job.setdefault("notes", []).append(f"sailing rule skipped: {_se}")
             if _doc:
                 try:
                     import re as _re2
@@ -808,6 +918,21 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             job.setdefault("notes", []).append(
                 f"{spec.style} plays as a {_sv} game. This look's camera is "
                 f"part of it (pick a view in the studio to override)")
+        # A PLATFORMER PLAYS SIDE-ON, ON LEDGES (2026-09-27). "A 2D platformer
+        # where a fox jumps between floating islands" came out as a third-person
+        # walk over flat grass. The genre fixes the camera and the level: side
+        # view, and floating islands along the lane with the pickups on them.
+        try:
+            import re as _pfre
+            from app.game_export.extractor import PLATFORMER_WORDS
+            if _pfre.search(PLATFORMER_WORDS, (req.prompt or "").lower()):
+                spec.world.platforms = True
+                if not req.view:
+                    spec.view = "side"
+                job.setdefault("notes", []).append(
+                    "platformer: side view, floating islands along the lane, the pickups on them")
+        except Exception as _pfe:
+            job.setdefault("notes", []).append(f"platformer rule skipped: {_pfe}")
         if req.view:
             try:
                 spec.view = req.view
@@ -947,6 +1072,9 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                     and spec.style not in _FLAT_LOOKS:
                 _pw = (req.prompt or "").lower()
                 _ROLES = [
+                    # a sports sentence is about its sport: "score three goals against a
+                    # robot goalkeeper" cast an engineer because of the robot (2026-09-27)
+                    (r"\b(soccer|football|goals?|goalkeeper|goalie|pitch|striker|penalty|penalties|kick-?off)", "soccer player"),
                     (r"\b(haunt|ghost|manor|mansion|murder|mystery|detective|noir|crime|clue|relic|cursed|asylum)", "detective"),
                     (r"\b(forest|wood|moor|wild|ranger|trail|mountain|hike|hunt|deer|elk|track|walk|walker|stroll|wander|gather|firefl)", "ranger"),
                     (r"\b(lab|laboratory|science|scientist|space|station|reactor|research|specimen)", "scientist"),
@@ -1158,6 +1286,14 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                 spec.player.walk_speed = _wmax
             if spec.player.run_speed > _rmax:
                 spec.player.run_speed = _rmax
+        # A PLATFORMER RUNS (2026-09-27). The anatomical ceiling above held a
+        # half-metre fox to 1.9 m/s flat out, and a running jump at that pace
+        # clears under three metres: the islands were out of reach. A
+        # platformer hero moves at the genre's pace, not a nature film's; the
+        # clip rate follows the speed, so the legs keep up.
+        if player_glb and spec.player.mode == "walk" and getattr(spec.world, "platforms", False):
+            spec.player.walk_speed = max(spec.player.walk_speed, 3.2)
+            spec.player.run_speed = max(spec.player.run_speed, 6.0)
         if player_glb and pattern == "flying":
             spec.player.mode = "fly"
             if spec.player.walk_speed < 4.5:                 # floor, see 'drive'
@@ -1175,12 +1311,14 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             # degrades to the CLOSEST asset of the SAME kind: a polar bear plays
             # as a wolf, NEVER a man-with-a-sword. Loud, self-healing note.
             stand_in = library.nearest(want, pattern)
-            if stand_in != want:
+            # the reason is already in the notes above (a timeout or a failed
+            # generation); this line says only what happened as a result. A
+            # factory has no hero to stand in for, so it says nothing.
+            if stand_in != want and not _factory_genre:
                 job.setdefault("notes", []).append(
-                    f"Couldn't build '{want}' yet: brand-new characters need a GPU "
-                    f"(coming soon). Cast the closest match, '{stand_in}', as a "
-                    f"stand-in so your game plays now; re-run this prompt once your "
-                    f"GPU is in to get the real '{want}'.")
+                    f"'{want}' is not in your library yet, so the closest match, "
+                    f"'{stand_in}', plays this build; building the same prompt "
+                    f"again uses the real '{want}' once it has been made.")
             player_glb = library.resolve(stand_in)
             cast = stand_in
         if not player_glb:
@@ -1345,7 +1483,10 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         # a guide is added deterministically whenever a game has a mission and
         # nobody to explain it. The LLM may still name one; this only fills a
         # gap it left. Locked entities and pano worlds are left alone.
+        # (2026-09-27) only on foot: a guide is someone you walk up to, and a
+        # sailing game put one standing in the open sea beside the ship
         if (spec.objectives and not spec.world.pano
+                and (spec.player.mode or "walk") == "walk"
                 and "entities" not in (spec.locked or [])
                 and not any(e.behavior == "guide" for e in spec.entities)
                 and len(spec.entities) < 8):
@@ -1450,8 +1591,11 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                         f"(a prompt that is only about a {ekind} creates one, then it is free forever)")
                     ekind = kin
                     glb = ensure_playable(ekind, verbose=False) or library.resolve(ekind)
-            if not glb and not any(w in req.prompt.lower()
-                                   for w in ekind.lower().split()):
+            # (2026-09-27) a name the planner joined with underscores is still
+            # the prompt's words: "robot_goalkeeper" was skipped as imagined in
+            # a prompt that said "a robot goalkeeper" outright
+            if not glb and not any(w and w in req.prompt.lower()
+                                   for w in ekind.lower().replace("_", " ").replace("-", " ").split()):
                 # INVITED NOUNS ONLY (2026-07-07): the LLM sometimes invents
                 # ambience entities (an owl for a night forest). Lovely when
                 # cached, but an uninvited noun must never cost 35 CPU-minutes
@@ -1477,7 +1621,7 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                 try:
                     from app.game_export.generate import ensure_asset
                     stage(f"creating '{ekind}': image → 3D mesh "
-                          f"(first time only; slow without a GPU)")
+                          f"(first time only; {_gen_eta()})")
                     if not _ensure_asset_limited(ekind, 4 * 60, verbose=True):
                         job.setdefault("notes", []).append(
                             f"'{ekind}' is still being created in the background (over four minutes); skipped in this build")
@@ -1586,7 +1730,7 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                 try:
                     from app.game_export.generate import ensure_asset
                     stage(f"creating '{k}': image → 3D mesh "
-                          f"(first time only; slow without a GPU)")
+                          f"(first time only; {_gen_eta()})")
                     ensure_asset(k, verbose=True)
                     glb = library.resolve(k) or ensure_playable(k, verbose=False)
                     if glb:
@@ -1670,7 +1814,7 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                 try:
                     from app.game_export.generate import ensure_asset
                     stage(f"creating '{sing}': image → 3D mesh "
-                          f"(first time only; slow without a GPU)")
+                          f"(first time only; {_gen_eta()})")
                     ensure_asset(sing, verbose=True)
                     glb = library.resolve(sing)
                     if glb:
@@ -1807,7 +1951,7 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                         f"'hunt {ob.label}' dropped: no prey could be cast")
                     continue
                 ob.count = min(ob.count, total_prey)
-            if ob.kind == "survive" and total_hostiles <= 0:
+            if ob.kind in ("survive", "defend") and total_hostiles <= 0:
                 job.setdefault("notes", []).append(
                     f"'survive {ob.label}' dropped: waves need at least one hostile")
                 continue
@@ -1885,13 +2029,28 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         # plane, no swim handling.
         if _water and any(k in req.prompt.lower() for k in ("frozen", "ice", "icy")):
             _water = False
+        # AN ARCHIPELAGO'S SEA IS AT ZERO (2026-09-27). That landform puts most
+        # of the map below zero on purpose; the default 8 m sea drowned every
+        # island of "sail a pirate ship to the treasure island", and the ship
+        # sailed over a pale cyan nothing looking down through the water.
+        _arch_sea = getattr(spec.world, "archetype", "plain") == "archipelago"
         if _water:
             amp = max(amp, 3.0)                     # seabed dunes
-            spec.world.water_level = 8.0 if "lake" not in _wname else 4.0
+            spec.world.water_level = 0.0 if _arch_sea else (8.0 if "lake" not in _wname else 4.0)
         elif spec.player.mode == "swim":
             # aquatic player in a non-water world: give them water anyway
-            spec.world.water_level = 8.0
+            spec.world.water_level = 0.0 if _arch_sea else 8.0
             amp = max(amp, 3.0)
+        # A SEA HAS AN EARTHLY SKY (2026-09-27). "An underwater game as a dolphin
+        # on a coral reef" was given a space sky: stars and black above a
+        # tropical sea. Water under a space or Mars sky needs the sentence to
+        # have asked for another world; otherwise it is daylight.
+        if (spec.world.water_level is not None and spec.world.sky in ("space", "mars")
+                and not _fre.search(r"\b(space|planet|alien|mars|moon|galaxy|star|stars|cosmic|orbit|nebula)\b",
+                                    (req.prompt or "").lower())):
+            job.setdefault("notes", []).append(
+                f"sky {spec.world.sky} -> day: a sea under it needs the sentence to name another world")
+            spec.world.sky = "day"
         # ARCHETYPE (2026-08-30): the landform the prompt asked for. Applied
         # before regions and before the corridor, so it changes the SHAPE of
         # the world rather than its dressing — and the corridor still flattens
@@ -1914,6 +2073,26 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                     "surface vessel: rides the waterline (boats float, they "
                     "don't dive)")
         _arch = getattr(spec.world, "archetype", "plain") or "plain"
+        # A PLATFORMER'S ISLANDS FLOAT (2026-09-27). "Jumps between floating
+        # islands" also read as an archipelago, and the side view filled with
+        # the edge of a sea. In a platformer the islands are the platforms;
+        # the ground under them stays land unless the sentence asks for sea.
+        if (getattr(spec.world, "platforms", False) and _arch == "archipelago"
+                and not _fre.search(r"\b(sea|ocean|water|lake|river|beach|coast|shore)\b", (req.prompt or "").lower())):
+            _arch = "plain"
+            spec.world.archetype = "plain"
+        # SPACE HAS NO SEA (2026-09-27). "Fly a fighter through an asteroid field"
+        # read the field as an archipelago, and the fighter flew top-down over
+        # an ocean. Under a space sky the ground is dark rock unless the
+        # sentence put water there.
+        if (spec.world.sky == "space"
+                and not _fre.search(r"\b(sea|ocean|water|lake|river|beach|coast|shore|underwater)\b", (req.prompt or "").lower())):
+            if _arch == "archipelago":
+                _arch = "plain"
+                spec.world.archetype = "plain"
+            spec.world.water_level = None
+            if list(spec.world.ground_color) == [0.35, 0.52, 0.28]:
+                spec.world.ground_color = [0.20, 0.19, 0.22]      # regolith, not a meadow
         # TERRAIN RESOLUTION SCALES WITH THE WORLD (2026-09-04). grid_n was a
         # flat 48 whatever the world's size, so a 150m map had 3.1m polygons
         # and a 350m map 7.3m ones. At that size a hillside is a handful of

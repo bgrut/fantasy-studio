@@ -40,7 +40,7 @@ const MOODS = [
   // where grain is milled is a green place with an oven in it, not a furnace
   // world, so the words of a PLACE outrank the words of a machine.
   { id: 'cold', words: /\b(ice|icy|frost|frozen|snow|glacier|arctic|tundra|winter|polar|blizzard|cryo|white)\w*/i },
-  { id: 'green', words: /\b(jungle|forest|moss|verdant|overgrown|swamp|fungal|spore|garden|bloom|vine|toxic|acid|grain|wheat|farm|orchard|meadow|herb|leaf|grove|island|sky|cloud|floating)\w*/i },
+  { id: 'green', words: /\b(jungle|forest|moss|verdant|overgrown|swamp|fungal|spore|garden|bloom|vine|toxic|acid|grain|wheat|farm|orchard|meadow|herb|leaf|grove|island|sky|cloud|floating|countryside|village|harvest|crop|pasture|barn|ranch|cottage|vegetable|turnip|potato|carrot|vineyard|hamlet|cozy)\w*/i },
   { id: 'warm', words: /\b(red|rust|rusted|ember|cinder|lava|magma|volcan|scorch|burn|fire|ash|crimson|copper|desert|sun-?baked|inferno|forge|chocolate|cocoa|coffee|bread|oven|kiln|caramel|honey|amber|brass|clockwork|candle|hearth|autumn)\w*/i },
 ];
 const MOOD_LOOK = {
@@ -79,8 +79,12 @@ const MOOD_LOOK = {
            belt: { frame: 0x6a7a3a, glow: 0x16220a, deck: 0xd0f0c0 },
            weather: { col: [0.55, 0.95, 0.60], rate: 9, size: 0.046, fall: -0.30, drift: 0.45, life: 0.10 } },
 };
+// THE PROMPT IS READ TOO (2026-09-27). "A cozy farming game where I plant
+// turnips" was planned as "Turnip Harvest" in "countryside", none of which
+// named a family, and the farm opened on the void's navy plating under a
+// planet. The sentence the player typed is the strongest word there is.
 const _moodText = [SPEC.title, SPEC.world && SPEC.world.name, SPEC.world && SPEC.world.description,
-                   SPEC.world && SPEC.world.setting].filter(Boolean).join(' ');
+                   SPEC.world && SPEC.world.setting, SPEC.prompt].filter(Boolean).join(' ');
 const MOOD = (MOODS.find(m => m.words.test(_moodText)) || { id: 'void' }).id;
 const HOME = MOOD_LOOK[MOOD];
 

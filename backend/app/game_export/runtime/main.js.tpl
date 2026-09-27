@@ -898,11 +898,17 @@ async function main() {
   // an ORTHOGRAPHIC camera — the honest "2D game" feel on the same 3D world
   const VIEW = SPEC.view || '3d';
   let camera;
+  // A PLATFORMER IS FRAMED ON ITS HERO (2026-09-27). The side view showed 18 m of
+  // height whoever was playing, and a half-metre fox was a speck among its
+  // islands. A platformer frames a few body heights around the hero; other
+  // side-on games keep the wide view their scenery is composed for.
+  const SIDE_OS = (SPEC.world && SPEC.world.platforms)
+    ? Math.min(9, Math.max(4.5, 3.2 * ((SPEC.player && SPEC.player.height_m) || 1.8) + 2.5)) : 9;
   if (VIEW === '3d') {
     camera = new THREE.PerspectiveCamera(SPEC.camera.fov_deg, innerWidth / innerHeight, 0.1, 1000);
   } else {
     const oa = innerWidth / innerHeight;
-    const os = VIEW === 'side' ? 9 : 16;      // world units of half-height on screen
+    const os = VIEW === 'side' ? SIDE_OS : 16;      // world units of half-height on screen
     camera = new THREE.OrthographicCamera(-os * oa, os * oa, os, -os, 0.1, 1000);
   }
 
@@ -1473,9 +1479,70 @@ async function main() {
   // names a structure ("reach the cat shelter", "reach the cabin"), a real
   // WALK-IN building stands at the goal — door open, windows warm, hearth
   // lit. You win by stepping inside. Abstract goals keep the classic beacon.
+  // ── PLATFORMS (2026-09-27): THE PLATFORMER ─────────────────────────────
+  // "A 2D platformer where a fox jumps between floating islands" came out as
+  // a third-person walk over flat grass: the side view existed, the jump
+  // existed, and nothing to jump ONTO. A platformer's level is its ledges,
+  // so a side-scroller that asks for them gets a run of floating islands
+  // along the lane, every one inside a jump of the last (the jump reaches
+  // 2.6 m up and about 7 m across at a run), and the pickups sit on top of
+  // them, so the verb the game is about is the one that collects them.
+  window.__platforms = 0;
+  if (VIEW === 'side' && SPEC.world && SPEC.world.platforms) {
+    const rp = mulberry32((SPEC.seed || 7) + 4242);
+    // the lane has to be long enough to be a level: a goal that projected
+    // onto the lane near the spawn is moved out along it
+    const gx0 = LVL && LVL.goal ? LVL.goal[0] : 60;
+    const dir = gx0 < 0 ? -1 : 1;
+    const laneLen = Math.min(Math.max(Math.abs(gx0), 70), gsize * 0.42);
+    if (LVL && LVL.goal) { LVL.goal[0] = dir * laneLen; LVL.goal[1] = 0; }
+    const grassM = new THREE.MeshStandardMaterial({ color: new THREE.Color(...(SPEC.world.ground_color || [0.35, 0.52, 0.28])), roughness: 0.9 });
+    const rockM = new THREE.MeshStandardMaterial({ color: 0x6d6258, roughness: 0.95 });
+    const tops = [], spans = [];
+    // a running jump carries the hero run_speed x 1.47 s at the same height;
+    // a gap takes a little over half of that, so a jump never needs to be perfect
+    const runV = Math.max(1, (SPEC.player && SPEC.player.run_speed) || 5);
+    const gapMax = Math.min(3.3, Math.max(1.2, 0.55 * runV * 1.47));
+    window.__platformReach = +gapMax.toFixed(2);
+    let x = 7, prevTop = 0;
+    while (x < laneLen - 8) {
+      const w = 3.4 + rp() * 2.6;
+      const cx = dir * (x + w / 2);
+      const g0 = hAt(cx, 0);
+      // up steps stay under the jump's reach; down steps can be anything
+      const lo = g0 + 1.1, hi = g0 + 6.2;
+      let top = tops.length === 0 ? g0 + 1.3 : prevTop + (rp() < 0.62 ? 0.6 + rp() * 1.1 : -(0.6 + rp() * 1.8));
+      top = Math.min(Math.max(top, lo), Math.min(hi, (tops.length ? prevTop : g0) + 1.8));
+      const isl = new THREE.Group();
+      const slab = new THREE.Mesh(new THREE.CylinderGeometry(w / 2, w / 2 * 0.93, 0.55, 16), grassM);
+      slab.scale.z = 2.6 / w; slab.castShadow = true; slab.receiveShadow = true;
+      isl.add(slab);
+      const under = new THREE.Mesh(new THREE.ConeGeometry(w / 2 * 0.9, 1.3 + w * 0.28, 9), rockM);
+      under.rotation.x = Math.PI; under.scale.z = 2.6 / w;
+      under.position.y = -0.27 - (1.3 + w * 0.28) / 2; under.castShadow = true;
+      isl.add(under);
+      isl.position.set(cx, top - 0.275, 0);
+      isl.rotation.y = (rp() - 0.5) * 0.2;
+      scene.add(isl);
+      world.createCollider(RAPIER.ColliderDesc.cuboid(w / 2 * 0.92, 0.275, 1.3)
+        .setTranslation(cx, top - 0.275, 0));
+      tops.push([cx, 0, top]);
+      spans.push([dir * x, dir * (x + w), top]);
+      prevTop = top;
+      x += w + Math.min(gapMax, 1.0 + rp() * (gapMax - 0.6));   // a gap you have to jump, never one you cannot
+    }
+    window.__platforms = tops.length;
+    window.__platformTops = tops;
+    window.__platformSpans = spans;
+    // the pickups go on the islands, highest first when there are fewer
+    if (LVL && tops.length) LVL.collect_points = tops.slice();
+  }
   let goalPos = null, goalMesh = null;
-  const _reachOb = (SPEC.objectives || []).find(o => o.kind === 'reach');
-  const _structHit = _reachOb && (_reachOb.label || '').toLowerCase().match(
+  const _defOb = (SPEC.objectives || []).find(o => o.kind === 'defend');
+  const _reachOb = _defOb || (SPEC.objectives || []).find(o => o.kind === 'reach');
+  const _structHit = _defOb ? (((_defOb.label || '').toLowerCase().match(
+    /\b(shelter|cabin|house|home|hut|shrine|castle|tower|barn|cottage|inn|temple|church|fort|lodge|den|village|camp|outpost|lighthouse|station)\b/))
+    || ['castle', 'castle']) : _reachOb && (_reachOb.label || '').toLowerCase().match(
     /\b(shelter|cabin|house|home|hut|shrine|castle|tower|barn|cottage|inn|temple|church|fort|lodge|den|village|camp|outpost|lighthouse|station)\b/);
   if (LVL && LVL.goal) {
     goalPos = new THREE.Vector3(LVL.goal[0], hAt(LVL.goal[0], LVL.goal[1]), LVL.goal[1]);
@@ -5187,7 +5254,7 @@ async function main() {
       const _sbb = new THREE.Box3().setFromObject(gltf.scene);
       const _sH = (_sbb.max.y - _sbb.min.y) * (sct.scale || 1);
       const _corr = _sH <= 1.5 ? CORR * 0.22 : CORR;
-      const N = sct.count;
+      let N = sct.count;
       const places = [];
       // Phase 65 CLUSTERING: real vegetation grows in patches, not an even
       // sprinkle. A low-frequency seeded value noise gates placement — dense
@@ -5214,6 +5281,12 @@ async function main() {
                   || _regReject(x, z, sct)
                   || (clusterN(x, z) < 0.45 && !_regForce(x, z, sct)
                       && tries < 22)) && tries < 30);
+        // a cart, a fence or a tree does not stand on the seabed: in a world
+        // with a sea, a land prop that could only be placed under it is left
+        // out; coral, kelp, shells and rock belong there
+        if (WATER !== null && hAt(x, z) < WATER + 0.2
+            && !/(coral|seaweed|kelp|anemone|shell|reef|buoy|rock|stone|boulder|pebble)/i.test(String(sct.asset || '')))
+          continue;
         places.push({ x, z,
                       // base scale from the recipe (asset kits have their own
                       // unit scale), jittered around it rather than around 1
@@ -5223,6 +5296,8 @@ async function main() {
                       // perfectly plumb forest is the #1 'toy world' tell
                       lx: (rng() - 0.5) * 0.10, lz: (rng() - 0.5) * 0.10 });
       }
+      N = places.length;                  // what the sea left room for
+      if (!N) continue;
       const M = new THREE.Matrix4(), T = new THREE.Matrix4(), SV = new THREE.Vector3();
       const LR = new THREE.Matrix4(), _eul = new THREE.Euler();
       const jitC = new THREE.Color();
@@ -6021,6 +6096,9 @@ async function main() {
         if (inBldg(x, z, 0.5)) continue;                             // not through floors
         const _rg = window.__regionAt && window.__regionAt(x, z);
         if (_rg && _rg.kind === 'water' && _rg.w > 0.2) continue;    // no grass in the lake
+        // NOR UNDER THE SEA (2026-09-27): a coral reef came out as a flooded
+        // meadow, grass blades waving on the seabed between parked carts
+        if (WATER !== null && hAt(x, z) < WATER + 0.1) continue;
         if (_rg && (_rg.kind === 'rock' || _rg.kind === 'sand')
             && _rg.w > 0.4 && rngG() < 0.85) continue;
         const s = 0.7 + rngG() * 0.8;
@@ -6349,6 +6427,7 @@ async function main() {
       if (o.kind === 'collect') return `Collect ${o.count} ${o.label}`;
       if (o.kind === 'defeat') return `Defeat ${o.count} ${o.label}`;
       if (o.kind === 'survive') return `Survive ${o.count} seconds of ${o.label || 'the onslaught'}`;
+      if (o.kind === 'defend') return `Hold the ${o.label || 'keep'} through ${o.count} waves. T builds a tower`;
       return `Reach the ${o.label || 'beacon'}`;
     });
     if (!objLines.length) objLines.push('Reach the glowing beacon');
@@ -6425,6 +6504,14 @@ async function main() {
     .reduce((a, o) => a + (o.count || 0), 0);
   let wavePoolLeft = surviveSecs > 0
     ? Math.min(10, Math.ceil(surviveSecs / 20) * 2 + 1) : 0;
+  // DEFEND (2026-09-27): every wave of a tower defence is built at load and
+  // sleeps until its wave is called, the same no-hitch rule as the survive
+  // pool. Nothing hostile is awake at the start: the first minute is for
+  // building.
+  const _defObj = (SPEC.objectives || []).find(o => o.kind === 'defend') || null;
+  const DEF_WAVES = _defObj ? Math.max(1, Math.min(12, (_defObj.count | 0) || 5)) : 0;
+  const DEF_TOTAL = _defObj ? Math.min(20, 2 * DEF_WAVES + 3) : 0;
+  let _defHostileN = 0;
   for (const ent of SPEC.entities || []) {
     try {
       const gltf = await loadGLB(ent.asset);
@@ -6433,8 +6520,10 @@ async function main() {
       const baseN = ent.count || 1;
       let extraN = 0;
       if (hostile && wavePoolLeft > 0) { extraN = wavePoolLeft; wavePoolLeft = 0; }
+      if (hostile && _defObj && _defHostileN === 0) extraN = Math.max(extraN, DEF_TOTAL - baseN);
+      if (hostile && _defObj) _defHostileN += baseN + extraN;
       for (let i = 0; i < baseN + extraN; i++) {
-        const dormant = i >= baseN;      // wave-pool member: hidden until woken
+        const dormant = i >= baseN || (hostile && !!_defObj);   // wave-pool member: hidden until woken
         // SkeletonUtils.clone — plain clone() breaks skinned meshes (gliding)
         const inst = skClone(gltf.scene);
         hardenAlpha(inst);
@@ -6750,6 +6839,8 @@ async function main() {
         continue;
       }
       // death animation: keel over + sink, then remove
+      // a defender's kill topples, sinks and rejoins the pool for a later wave
+      if (n.dead && n._route && window.__defend) { window.__defend.fall(n, dt); continue; }
       if (n.dead) {
         // A BODY FALLS, IT DOES NOT PIVOT (2026-09-04). Death used to be
         // rotation.x driven to 90 degrees over 0.4s — a felled plank, hinged
@@ -6857,6 +6948,9 @@ async function main() {
       }
       if (n.behavior === 'hostile' && !won && !lost) {
         const d = Math.hypot(playerPos.x - n.obj.position.x, playerPos.z - n.obj.position.z);
+        if (window.__defend && n._route && d > 4.5) {
+          if (window.__defend.march(n, dt)) continue;
+        }
         // BATTLE ROYALE (Phase 70): rivals fight EACH OTHER, not just the
         // player — each hostile hunts its nearest living rival when that
         // rival is closer than the player. Kills by rivals still count
@@ -7196,7 +7290,9 @@ async function main() {
   const questEl = document.getElementById('quest');
   let steps = (SPEC.objectives || []).map(o => ({ ...o }));
   if (!steps.length && goalPos) steps = [{ kind: 'reach', label: 'the beacon', count: 1 }];
-  else if (goalPos && steps.length && steps[steps.length - 1].kind !== 'reach')
+  // a defence ends when the last wave falls: the keep IS the goal, and a
+  // beacon to walk to afterwards would be a chore after the game is won
+  else if (goalPos && steps.length && !['reach', 'defend'].includes(steps[steps.length - 1].kind))
     steps.push({ kind: 'reach', label: 'the beacon', count: 1 });
   let stepIdx = -1, kills = 0, won = false, lost = false, raceFinishers = 0;
   const collectibles = [];
@@ -7305,15 +7401,16 @@ async function main() {
           color: 0xfff2b0, emissive: 0xffd54a, emissiveIntensity: 2.6, roughness: 0.4 });
         s = new THREE.Mesh(cgeo, m);
       }
-      let cx, cz;
-      if (pts && cpUsed < pts.length) { cx = pts[cpUsed][0]; cz = pts[cpUsed][1]; cpUsed++; }
+      let cx, cz, cy = null;
+      // a third coordinate is the ground the pickup stands on (a platform's top)
+      if (pts && cpUsed < pts.length) { cx = pts[cpUsed][0]; cz = pts[cpUsed][1]; cy = pts[cpUsed].length > 2 ? pts[cpUsed][2] : null; cpUsed++; }
       else {
         const ang = rngC() * Math.PI * 2;
         const d = 5 + rngC() * gsize * 0.32;
         cx = Math.cos(ang) * d; cz = Math.sin(ang) * d;
       }
       if (VIEW === 'side') cz = 0;        // side-scroller: pickups on the lane
-      const baseY = hAt(cx, cz) + 1.0 + rngC() * 0.6;
+      const baseY = (cy !== null ? cy : hAt(cx, cz)) + 1.0 + rngC() * 0.6;
       s.position.set(cx, baseY, cz);
       s.userData.fsTag = { type: 'collectible', name: step.label || 'item',
                            detail: 'collect it' };
@@ -8188,6 +8285,7 @@ async function main() {
         + `on his own. STAY CLOSE or he stops and waits for you. The wolves will `
         + `go for HIM, not you. Keep them off him until he reaches the beacon.`;
     if (st.kind === 'survive') return `Just stay alive. Keep moving and do not let them corner you.`;
+    if (st.kind === 'defend') return `They come up the road for the ${l || 'keep'}. Press T to raise a tower beside it: towers shoot on their own, and every kill pays for the next one.`;
     if (st.kind === 'race') return `Beat all ${n} of them to the finish. Shift for speed.`;
     if (st.kind === 'hunt') return `Track ${n} ${l}. Move slow: they bolt if they hear you.`;
     if (st.kind === 'eliminate') return `Last one standing. ${n} rivals, one winner.`;
@@ -8214,6 +8312,7 @@ async function main() {
     if (st.kind === 'defeat') return `Defeat ${cnt(st.count, st.label || 'enemies')}`;
     if (st.kind === 'race') return `Win the race (${st.count} ${st.label || 'rivals'})`;
     if (st.kind === 'survive') return `Survive ${st.label || 'the onslaught'}`;
+    if (st.kind === 'defend') return `Hold the ${st.label || 'keep'}`;
     if (st.kind === 'eliminate') return `Last one standing. Eliminate ${st.count} ${st.label || 'rivals'}`;
     if (st.kind === 'hunt') return `Hunt ${st.count} ${st.label || 'prey'} (approach quietly)`;
     if (st.kind === 'score') return `Score ${st.count} ${st.label || 'goals'}`;
@@ -8237,6 +8336,10 @@ async function main() {
     if (st.kind === 'capture') {
       const pct = st._hold ? ` · ${Math.min(99, Math.round(st._hold / 8 * 100))}%` : '';
       return `${st._zi || 0}/${st.count}${pct}`;
+    }
+    if (st.kind === 'defend' && window.__defend) {
+      const q = window.__defend.state();
+      return `wave ${Math.min(q.wave, q.waves)}/${q.waves}`;
     }
     if (st.kind === 'survive') {
       const left = st._t0 === undefined ? st.count
@@ -9942,12 +10045,19 @@ async function main() {
   // worlds a flat spawn embeds the capsule in the ground and the character
   // controller blocks EVERY move (whale glued to the seabed, dragon molded
   // into the hillside — the "keys turn but nothing moves" bug)
+  // A HULL DRAWS A LITTLE WATER, NOT HALF ITS HEIGHT (2026-09-27). The body is
+  // a capsule and the waterline held its CENTRE, so a six-metre pirate ship
+  // sat with its keel three metres down: the hull under the sea, the masts
+  // above it, and the camera looking up through the water at a pale cyan
+  // world. The keel sits a draft below the line instead, an eighth of the
+  // height and never more than 0.8 m.
+  function hullY(w) { return w + P.height_m / 2 - Math.min(0.8, 0.12 * P.height_m); }
   function spawnHeight(x, z) {
     const g = hAt(x, z) + P.height_m / 2 + 0.15;
     if (SPEC.player.mode === 'fly') return g + 6;              // airborne start
     if (SPEC.player.mode === 'swim' && SPEC.world.water_level != null) {
       // a hull sits ON the waterline; a whale hangs somewhere below it
-      if (P.buoyant) return SPEC.world.water_level;
+      if (P.buoyant) return hullY(SPEC.world.water_level);
       return Math.max(g + 0.4,                                  // clear of seabed,
         Math.min((hAt(x, z) + SPEC.world.water_level) / 2,      // mid-water,
                  SPEC.world.water_level - P.height_m / 2 - 0.2)); // under surface
@@ -10097,7 +10207,9 @@ async function main() {
   // ── player ATTACK: melee arc (sword and claws) or ranged projectiles ──────
   const ATTACK = SPEC.player.attack && SPEC.player.attack !== 'none'
     ? SPEC.player.attack
-    : (hostilesExist ? (/^(ranger|hunter)$/.test(String((SPEC.player && SPEC.player.name) || '').toLowerCase().trim()) ? 'ranged' : 'melee') : 'none');
+    // a hull is not handed a blade because sharks swim nearby: a ship fights
+    // only when its spec gave it guns, and otherwise it outsails them
+    : (hostilesExist && !SPEC.player.buoyant ? (/^(ranger|hunter|archer)$/.test(String((SPEC.player && SPEC.player.name) || '').toLowerCase().trim()) ? 'ranged' : 'melee') : 'none');
   if (ATTACK !== 'none') {
     const hint = document.querySelector('#hud .hint');
     if (hint) hint.textContent += ` · F to ${ATTACK === 'ranged' ? 'shoot' : 'attack'}`;
@@ -10180,7 +10292,7 @@ async function main() {
   // held a blade; a detective with a sword reads wrong. The role picks the
   // starting slot; the spec's own attack setting still decides melee/ranged.
   const ROLE_WEAPON = { detective: 'pistol', soldier: 'pistol', scientist: 'pistol', explorer: 'pistol', engineer: 'pistol',
-                        ranger: 'bow', hunter: 'bow', knight: 'blade', samurai: 'blade', viking: 'blade', wizard: 'blade' };
+                        ranger: 'bow', hunter: 'bow', archer: 'bow', bowman: 'bow', knight: 'blade', samurai: 'blade', viking: 'blade', wizard: 'blade' };
   const HERO_ROLE = String((SPEC.player && SPEC.player.name) || '').toLowerCase().trim();
   // EMPTY HANDS FOR A SEARCH (2026-09-28): a keeper looking for a lantern
   // walked out holding a blade, the table's fallback for an unlisted role;
@@ -10188,6 +10300,20 @@ async function main() {
   // hostiles to meet, and a keeper, a sailor or a farmer never draws by default.
   const _hostile = (SPEC.entities || []).some(e => e.behavior === 'hostile');
   const ROLE_PICK = ROLE_WEAPON[HERO_ROLE] || null;
+  // A BOW IS NOT A BLADE (2026-09-27). A shooting hero's first slot fires
+  // arrows (the ranged branch of the attack), but the chip under him read
+  // "Blade" because the first slot was only ever named for a sword. When the
+  // hero shoots and his role is not a gunman, that slot is named for a bow.
+  const _craft = SPEC.player && ['fly', 'drive', 'swim'].includes(SPEC.player.mode) && !/^(dragon|eagle|hawk|owl|bird|phoenix|griffin|bat|dolphin|shark|orca|whale|fish)s?$/.test(HERO_ROLE);
+  if (SPEC.player && SPEC.player.attack === 'ranged' && _craft) {
+    // a fighter, a gunship or a warship fires guns, not arrows
+    Object.assign(WEAPONS[0], { name: 'Guns', icon: '💥', desc: 'hold F to fire' });
+  } else if (SPEC.player && SPEC.player.attack === 'ranged' && ROLE_PICK !== 'pistol') {
+    Object.assign(WEAPONS[0], { name: 'Bow', icon: '🏹', desc: 'hold F to draw, release to loose' });
+  } else if (SPEC.player && (SPEC.player.mode === 'swim' || /^(wolf|fox|bear|tiger|lion|dog|cat|shark|dolphin|orca|whale|dragon|eagle|hawk|owl|bird|horse|deer|boar|panther|leopard|cheetah|crocodile|alligator|snake|spider|scorpion|raptor|dinosaur)s?$/.test(HERO_ROLE))) {
+    // a dolphin with sharks about was handed a "Blade": an animal bites
+    Object.assign(WEAPONS[0], { name: 'Bite', icon: '🦷', desc: 'lunge at whatever is in front of you' });
+  }
   const NO_ARMS = !ROLE_PICK && !_hostile;
   let weaponIdx = (ATTACK !== 'none' && ROLE_PICK === 'pistol') ? 1 : 0, aimT = 0;
   const shells = [], blasts = [];
@@ -10240,6 +10366,7 @@ async function main() {
     if (window.__doors && window.__doors.length) {
       rows.push(['📐', 'Blueprint', 'B', 'overlay of the block and its ways in']);
     }
+    if (_defObj) rows.push(['🏰', 'Tower', 'T', 'raised beside the road: it shoots on its own, and every kill pays for the next']);
     if (mode === 'walk') rows.push(['🏃', 'Sprint', 'Shift', 'faster on foot, louder too']);
     rows.push(['🚗', 'Hotwire', 'E', 'any car you are standing beside']);
     lo.innerHTML = '<div style="max-width:560px;width:88%;padding:26px 30px;'
@@ -10419,19 +10546,23 @@ async function main() {
       }
     } catch (e) { /* no haptics */ }
   }
-  function dmgEnemy(n, dmg) {
+  function dmgEnemy(n, dmg, quiet) {
     if (n.dead || n.dormant) return;
     n.hp -= dmg;
-    window.__hitStop = 0.08;                       // weight: the world flinches
+    // a tower firing twice a second must not freeze the world each time: the
+    // flinch and the rumble belong to the player's own hits
+    if (!quiet) { window.__hitStop = 0.08; rumble(80, 0.7); }
     dmgNumber(n.obj.position, dmg);
-    rumble(80, 0.7);
     for (const m of n.mats) { if (m.emissive) m.emissive.setHex(0xff4444); }
     setTimeout(() => { for (const m of n.mats) {
       if (m.emissive) m.emissive.setRGB(0.30, 0.16, 0.16); } }, 120);
     if (n.hp <= 0) {
       n.dead = true; kills++; sfx('hit');
-      juiceSlow = Math.max(juiceSlow, 0.32 * FEEL.slow);
-      juicePunch = Math.max(juicePunch, 0.5 * FEEL.punch);
+      if (window.__defend) window.__defend.paid(n, !!quiet);
+      if (!quiet) {
+        juiceSlow = Math.max(juiceSlow, 0.32 * FEEL.slow);
+        juicePunch = Math.max(juicePunch, 0.5 * FEEL.punch);
+      }
       addXP(10);
       const _st2 = steps[stepIdx];
       if (_st2 && ['defeat', 'eliminate', 'hunt'].includes(_st2.kind)
@@ -10681,6 +10812,7 @@ async function main() {
     ...__evHooks,
     pos: () => playerObj.position.toArray(), keys, ready: true,
     tp: (x, z) => body.setTranslation({ x, y: spawnHeight(x, z), z }, true),
+    tpy: (x, y, z) => body.setTranslation({ x, y, z }, true),     // a drop from a height: does a ledge hold you
     attack: doAttack,
     win: (t) => doWin(t || 'the gate called it'), lose: (t) => doLose(t || 'the gate called it'),   // the end card, reachable by a gate
     guide: () => ({ step: __fm.k, total: __fmSteps.length, active: __fm.active, done: __fm.done, title: __fm.step ? __fm.step.title : null, guided: __fmGuided }),
@@ -10715,10 +10847,12 @@ async function main() {
     // plane as a capsized boat more than once.
     facts: () => {
       const f = {
+        defend: window.__defend ? window.__defend.state() : null,
+        platforms: window.__platforms || 0,
         style: SPEC.style || 'default',
         archetype: (SPEC.world && SPEC.world.archetype) || 'plain',
         mode: P.mode || 'walk',
-        walk_v: +walkV.toFixed(2), land_dip_peak: +landDipPeak.toFixed(3), run_k: +runK.toFixed(2), fov: +camera.fov.toFixed(1), fov_base: SPEC.camera.fov_deg,
+        walk_v: +walkV.toFixed(2), land_dip_peak: +landDipPeak.toFixed(3), run_k: +runK.toFixed(2), fov: camera.fov !== undefined ? +camera.fov.toFixed(1) : null, fov_base: SPEC.camera.fov_deg,   // a side or top view is orthographic: no fov
         gait: { idle: +_gaitW.idle.toFixed(2), walk: +_gaitW.walk.toFixed(2), run: +_gaitW.run.toFixed(2), rate: actions.__walk ? +actions.__walk.timeScale.toFixed(2) : null, top: current && current.getClip ? current.getClip().name : null },
         lean: { roll: +turnRoll.toFixed(3), pitch: +accelP.toFixed(3), head: +headYawK.toFixed(3), head_bone: headBone ? headBone.name : null },
         arms: armAngles(),       // the upper arms' angle from straight down, in degrees: a walk swings them 4 to 20
@@ -10809,6 +10943,10 @@ async function main() {
                   && (P.mode || 'walk') === 'walk'
                   && !!(OSM && OSM.roads && OSM.roads.length);
   let carPrompt = null, nearCar = null, heldCar = null, camDistMul = 1, carCool = 0;
+  // A LONG BODY IS FRAMED BY ITS LENGTH (2026-09-27). The follow camera stood a
+  // fixed 4.5 m back whatever it followed, and a dolphin filled the bottom
+  // half of the screen with its own back. Measured once the hero is in.
+  let _heroSpan = null;
   // ── JUICE (2026-08-25): the camera reacts to what you did ─────────────
   // The lesson from every hand-crafted three.js toy that feels better than
   // an engine twenty times its size: interactions deserve MOMENTS. A pickup
@@ -12465,6 +12603,267 @@ varying vec2 vUvRaw;
   const camTarget = new THREE.Vector3();
   const _camWant = new THREE.Vector3();
 
+  // ── DEFEND (2026-09-27): THE TOWER DEFENCE ─────────────────────────────
+  // "Goblins march down a road and I build archer towers" used to come out
+  // as a survive timer, with the player cast AS a goblin and no way to build
+  // anything. A defence is its own shape: a keep with a health bar at the
+  // end of the road, waves that walk the road to it and ignore you unless
+  // you stand in the way, gold for every kill, and towers you raise with T
+  // that pick their own targets. The road is the level's mission path, spawn
+  // to goal: the worn trail the ground already paints IS the lane, the keep
+  // stands at its end, and the player is moved to the keep to defend it.
+  if (DEF_WAVES && goalPos) {
+    const KEEP = { x: goalPos.x, z: goalPos.z, r: 3.2 };
+    const route = (PATH && PATH.length > 1 ? PATH.slice() : [[0, 0], [KEEP.x, KEEP.z]])
+      .map(q => [q[0], q[1]]);
+    route[route.length - 1] = [KEEP.x, KEEP.z];
+    const gate = route[0];
+    const roadIn = route[route.length - 2];
+    // the player starts BESIDE the keep, off the road, facing down it: in the
+    // road he is the first thing every wave meets, and a wave that stops to
+    // fight him never tests a tower (the first build lost that way)
+    {
+      const a = Math.atan2(roadIn[0] - KEEP.x, roadIn[1] - KEEP.z);
+      const sx = KEEP.x + Math.sin(a) * 3 + Math.cos(a) * 8, sz = KEEP.z + Math.cos(a) * 3 - Math.sin(a) * 8;
+      try { body.setTranslation({ x: sx, y: spawnHeight(sx, sz), z: sz }, true); } catch (e) {}
+      modelYaw = a;
+    }
+    const st = { keepHp: 12, keepMax: 12, gold: 60, wave: 0, waves: DEF_WAVES, towers: [],
+                 towerKills: 0, breaches: 0, next: 25, calling: false, done: false };
+    const pool = npcs.filter(n => n.behavior === 'hostile');
+    for (const n of pool) { n._route = route; n._ri = 0; n._hp0 = n.hp; }
+    const waveSize = w => Math.max(1, Math.min(pool.length, 3 + 2 * w));
+    // back to sleep at full strength, ready for the next wave
+    function rest(n) {
+      n.dead = false; n.dormant = true; n.hp = n._hp0; n._ri = 0; n._fallT = undefined;
+      n.obj.visible = false; n.obj.rotation.x = 0; n.obj.rotation.z = 0;
+      if (!n.obj.parent) scene.add(n.obj);
+      for (const m of n.mats || []) { if (m.emissive) m.emissive.setHex(0x000000); }
+    }
+    const cost = () => 30 + 10 * st.towers.length;
+    // the enemy's gate: a dark arch at the far end of the road
+    {
+      const g = new THREE.Group();
+      const stone = new THREE.MeshStandardMaterial({ color: 0x3b3440, roughness: 0.9 });
+      for (const sgn of [-1, 1]) {
+        const post = new THREE.Mesh(new THREE.BoxGeometry(0.9, 4.2, 0.9), stone);
+        post.position.set(sgn * 2.2, 2.1, 0); post.castShadow = true; g.add(post);
+      }
+      const lintel = new THREE.Mesh(new THREE.BoxGeometry(5.3, 0.8, 1.0), stone);
+      lintel.position.y = 4.5; lintel.castShadow = true; g.add(lintel);
+      const maw = new THREE.Mesh(new THREE.PlaneGeometry(3.5, 4.0),
+        new THREE.MeshBasicMaterial({ color: 0x3a0a14, transparent: true, opacity: 0.85, side: THREE.DoubleSide }));
+      maw.position.y = 2.0; g.add(maw);
+      g.position.set(gate[0], hAt(gate[0], gate[1]), gate[1]);
+      g.rotation.y = Math.atan2(route[1][0] - gate[0], route[1][1] - gate[1]);
+      g.traverse(o => { if (o.isMesh) o.userData.noAutoTex = true; });
+      scene.add(g);
+    }
+    // a tower: a stone drum, a timber crown, and a lamp that is its eye
+    const towerMats = {
+      stone: new THREE.MeshStandardMaterial({ color: 0x8d8778, roughness: 0.92 }),
+      wood: new THREE.MeshStandardMaterial({ color: 0x6b4a2e, roughness: 0.85 }),
+      eye: new THREE.MeshStandardMaterial({ color: 0xffd27a, emissive: 0xffa640, emissiveIntensity: 1.6 }),
+    };
+    function raise(x, z) {
+      const g = new THREE.Group();
+      const drum = new THREE.Mesh(new THREE.CylinderGeometry(0.95, 1.2, 3.2, 10), towerMats.stone);
+      drum.position.y = 1.6; drum.castShadow = true; drum.receiveShadow = true; g.add(drum);
+      const crown = new THREE.Mesh(new THREE.CylinderGeometry(1.35, 1.1, 0.6, 10), towerMats.wood);
+      crown.position.y = 3.5; crown.castShadow = true; g.add(crown);
+      for (let k = 0; k < 5; k++) {
+        const m = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.5, 0.4), towerMats.stone);
+        const a = k / 5 * Math.PI * 2;
+        m.position.set(Math.sin(a) * 1.15, 4.05, Math.cos(a) * 1.15); m.castShadow = true; g.add(m);
+      }
+      const eye = new THREE.Mesh(new THREE.SphereGeometry(0.32, 12, 10), towerMats.eye);
+      eye.position.y = 4.2; g.add(eye);
+      g.traverse(o => { if (o.isMesh) o.userData.noAutoTex = true; });
+      const y = hAt(x, z);
+      g.position.set(x, y, z);
+      scene.add(g);
+      try { world.createCollider(RAPIER.ColliderDesc.cylinder(1.6, 1.1).setTranslation(x, y + 1.6, z)); } catch (e) {}
+      const t = { x, z, y: y + 4.2, g, cd: 0.6, range: 15, kills: 0 };
+      st.towers.push(t);
+      return t;
+    }
+    // shots are tracers from a small pool: a line that flashes and fades
+    const tracers = [];
+    for (let k = 0; k < 10; k++) {
+      const geo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]);
+      const ln = new THREE.Line(geo, new THREE.LineBasicMaterial({ color: 0xffd27a, transparent: true, opacity: 0 }));
+      ln.frustumCulled = false; scene.add(ln);
+      tracers.push({ ln, life: 0 });
+    }
+    let _tk = 0;
+    function shoot(t, n) {
+      const tr = tracers[_tk++ % tracers.length];
+      const a = tr.ln.geometry.attributes.position;
+      a.setXYZ(0, t.x, t.y, t.z);
+      a.setXYZ(1, n.obj.position.x, n.obj.position.y + (n.h || 1) * 0.6, n.obj.position.z);
+      a.needsUpdate = true;
+      tr.life = 0.14; tr.ln.material.opacity = 1;
+      const before = n.dead;
+      dmgEnemy(n, 1, true);
+      if (!before && n.dead) { t.kills++; st.towerKills++; }
+    }
+    function tryBuild(x, z) {
+      if (st.done) return false;
+      const c = cost();
+      if (st.gold < c) { popText(`A tower costs ${c} gold`, '#ffb28a'); return false; }
+      if (Math.hypot(x - KEEP.x, z - KEEP.z) < KEEP.r + 1.6) { popText('Too close to the keep', '#ffb28a'); return false; }
+      if (st.towers.some(t => Math.hypot(t.x - x, t.z - z) < 3.0)) { popText('Too close to another tower', '#ffb28a'); return false; }
+      st.gold -= c; raise(x, z); sfx('beep');
+      popText(`Tower raised · ${st.gold} gold left`, '#ffd27a');
+      drawChip();
+      return true;
+    }
+    const buildHere = () => {
+      if (!gameStarted || won || lost) return;
+      const px = playerObj.position.x, pz = playerObj.position.z;
+      tryBuild(px + Math.sin(modelYaw) * 3.2, pz + Math.cos(modelYaw) * 3.2);
+    };
+    addEventListener('keydown', e => {
+      if (e.code !== 'KeyT') return;
+      e.preventDefault(); buildHere();
+    });
+    // a phone has no T and a pad has no keyboard: a TOWER button beside the
+    // attack button on touch, and Y / Triangle on a gamepad (read in tick)
+    if (matchMedia('(pointer:coarse)').matches) {
+      const tb = document.createElement('div');
+      tb.id = 'towerbtn'; tb.textContent = 'TOWER';
+      tb.style.cssText = 'position:fixed;right:110px;bottom:30px;width:76px;height:76px;border-radius:50%;'
+        + 'display:flex;align-items:center;justify-content:center;z-index:30;user-select:none;'
+        + 'background:rgba(40,30,12,.72);border:2px solid rgba(255,210,122,.6);color:#ffe2a6;font:800 12px system-ui';
+      tb.addEventListener('pointerdown', e => { e.preventDefault(); buildHere(); });
+      document.body.appendChild(tb);
+    }
+    let _padY = false;
+    // the chip: keep, gold, wave, and what the next tower costs
+    const chip = document.createElement('div');
+    chip.id = 'fsdefend';
+    chip.style.cssText = 'position:fixed;left:50%;top:80px;transform:translateX(-50%);z-index:20;'
+      + 'display:flex;gap:16px;align-items:center;padding:8px 16px;border-radius:12px;'
+      + 'background:rgba(14,12,24,.78);border:1px solid rgba(255,210,122,.35);'
+      + 'font:700 14px system-ui;color:#f3ead6;pointer-events:none;letter-spacing:.02em';
+    document.body.appendChild(chip);
+    function drawChip() {
+      const hp = Math.max(0, st.keepHp), pct = hp / st.keepMax;
+      const bar = '<span style="display:inline-block;width:90px;height:8px;border-radius:4px;background:#3a2a2a;vertical-align:middle;overflow:hidden">'
+        + `<span style="display:block;height:100%;width:${Math.round(pct * 100)}%;background:${pct > 0.5 ? '#7ed57e' : pct > 0.25 ? '#e8c25a' : '#e8616c'}"></span></span>`;
+      const next = st.done ? 'held' : st.calling ? `wave ${st.wave}/${st.waves}` : `wave ${st.wave + 1} in ${Math.max(0, Math.ceil(st.next))}s`;
+      chip.innerHTML = `<span>KEEP ${bar}</span><span style="color:#ffd27a">${st.gold} gold</span>`
+        + `<span>${next}</span><span style="color:#b8b0cf;font-weight:600">T: tower (${cost()})</span>`;
+    }
+    function callWave() {
+      const k = waveSize(st.wave);
+      let woke = 0;
+      for (const n of pool) {
+        if (!n.dormant || n.dead) continue;
+        const j = (woke % 3 - 1) * 1.4;
+        n.obj.position.set(gate[0] + j, 0, gate[1] + j * 0.6);
+        n.obj.position.y = hAt(n.obj.position.x, n.obj.position.z);
+        n.obj.visible = true; n.dormant = false; n._ri = 1;
+        if (++woke >= k) break;
+      }
+      st.wave++; st.calling = true;
+      popText(`Wave ${st.wave} of ${st.waves}`, '#ff8fa0'); sfx('beep');
+      drawChip();
+      return woke;
+    }
+    window.__defend = {
+      // one creature's walk along the road; true when it moved (the chase is skipped)
+      march(n, dt) {
+        const r = n._route; let w = r[Math.min(n._ri, r.length - 1)];
+        if (Math.hypot(w[0] - n.obj.position.x, w[1] - n.obj.position.z) < 1.4 && n._ri < r.length - 1) { n._ri++; w = r[n._ri]; }
+        if (Math.hypot(KEEP.x - n.obj.position.x, KEEP.z - n.obj.position.z) < KEEP.r + 0.6) {
+          // through the gate: the keep takes the blow and the creature is spent
+          st.keepHp -= 1; st.breaches++;
+          rest(n);
+          shakeT = Math.max(shakeT, 0.25);
+          popText(st.keepHp > 0 ? `The keep is hit · ${st.keepHp} left` : 'The keep has fallen', '#ff6f7d');
+          if (st.keepHp <= 0) { st.done = true; doLose(`The ${(_defObj.label || 'keep')} fell on wave ${st.wave}.`); }
+          drawChip();
+          return true;
+        }
+        const dx = w[0] - n.obj.position.x, dz = w[1] - n.obj.position.z;
+        n.yaw = THREE.MathUtils.damp(n.yaw || 0, Math.atan2(dx, dz), 6, dt);
+        n.obj.rotation.y = n.yaw;
+        const sp = n.speed * dt;
+        n.obj.position.x += Math.sin(n.yaw) * sp;
+        n.obj.position.z += Math.cos(n.yaw) * sp;
+        n.obj.position.y = hAt(n.obj.position.x, n.obj.position.z);
+        if (n.anim) {
+          const want = n.anim.walk || n.anim.run;
+          if (want && want !== n.anim.cur) {
+            want.reset(); if (n.anim.cur) want.crossFadeFrom(n.anim.cur, 0.2, true); want.play();
+            n.anim.cur = want;
+          }
+          n.anim.mixer.update(dt);
+        }
+        return true;
+      },
+      paid(n) { if (n._route) { st.gold += 8; drawChip(); } },
+      // the fallen tip over, sink into the ground, and go back to the pool
+      fall(n, dt) {
+        n._fallT = (n._fallT || 0) + dt;
+        const k = Math.min(1, n._fallT / 0.35);
+        n.obj.rotation.x = -1.45 * k * k;
+        if (n._fallT > 1.0) n.obj.position.y -= dt * 0.9;
+        if (n._fallT > 2.2) rest(n);
+      },
+      tick(dt) {
+        if (st.done || won || lost || !gameStarted || paused) return;
+        for (const gp of (navigator.getGamepads ? navigator.getGamepads() : [])) {
+          if (!gp) continue;
+          const y = !!(gp.buttons[3] && gp.buttons[3].pressed);   // Y / Triangle
+          if (y && !_padY) buildHere();
+          _padY = y;
+        }
+        const alive = pool.filter(n => !n.dead && !n.dormant).length;
+        if (st.calling && alive === 0) {
+          st.calling = false;
+          if (st.wave >= st.waves) {
+            st.done = true; drawChip();
+            const s2 = steps[stepIdx];
+            if (s2 && s2.kind === 'defend') advanceStep();
+            return;
+          }
+          st.gold += 15; st.next = 14;
+          popText(`Wave ${st.wave} held · +15 gold`, '#9fe6a0');
+        }
+        if (!st.calling) { st.next -= dt; if (st.next <= 0) callWave(); }
+        for (const t of st.towers) {
+          t.cd -= dt;
+          if (t.cd > 0) continue;
+          let best = null, bd = t.range;
+          for (const n of pool) {
+            if (n.dead || n.dormant) continue;
+            const d = Math.hypot(n.obj.position.x - t.x, n.obj.position.z - t.z);
+            if (d < bd) { bd = d; best = n; }
+          }
+          if (best) { t.cd = 0.55; shoot(t, best); }
+        }
+        for (const tr of tracers) if (tr.life > 0) {
+          tr.life -= dt; tr.ln.material.opacity = Math.max(0, tr.life / 0.14);
+        }
+        this._c = (this._c || 0) + dt;
+        if (this._c > 0.25) { this._c = 0; drawChip(); }
+      },
+      state() {
+        return { keep: st.keepHp, keep_max: st.keepMax, gold: st.gold, wave: st.wave, waves: st.waves,
+                 towers: st.towers.length, tower_kills: st.towerKills, breaches: st.breaches,
+                 alive: pool.filter(n => !n.dead && !n.dormant).length, pool: pool.length,
+                 next_in: +Math.max(0, st.next).toFixed(1), done: st.done,
+                 keep_at: [+KEEP.x.toFixed(1), +KEEP.z.toFixed(1)], gate_at: [+gate[0].toFixed(1), +gate[1].toFixed(1)],
+                 road_in: [+roadIn[0].toFixed(1), +roadIn[1].toFixed(1)] };
+      },
+      build: (x, z) => tryBuild(x, z),
+      call: () => { st.next = 0; },
+      gold: v => { st.gold = v; drawChip(); },
+    };
+    drawChip();
+  }
   renderer.setAnimationLoop(() => {
     let dt = Math.min(clock.getDelta(), 0.05);
     const rdt = dt;                       // real dt: camera + juice decay
@@ -12706,7 +13105,7 @@ varying vec2 vUvRaw;
       // BOATS RIDE, SWIMMERS SUBMERGE. The old rule pushed every swim-mode
       // player under the surface; a sailboat pinned 15cm below the waterline
       // is a shipwreck. A buoyant hull is held ON the line instead.
-      const _wy = BUOYANT ? WATER : WATER - 0.15;
+      const _wy = BUOYANT ? hullY(WATER) : WATER - 0.15;
       if (BUOYANT ? Math.abs(nt.y - _wy) > 0.01 : nt.y > _wy) {
         body.setNextKinematicTranslation({ x: nt.x, y: _wy, z: nt.z });
         nt = { x: nt.x, y: _wy, z: nt.z };
@@ -12960,6 +13359,7 @@ varying vec2 vUvRaw;
     grade.uniforms.uT.value = performance.now() / 1000;
     sharpen.uniforms.uT.value = grade.uniforms.uT.value;  // live film grain
 
+    if (window.__defend) window.__defend.tick(dt);
     // SURVIVE verb: hold out while escalating waves close in
     {
       const st = steps[stepIdx];
@@ -13499,7 +13899,15 @@ varying vec2 vUvRaw;
       // camDistMul eases 1 -> 1.75 on entering a car: a walking-distance
       // camera sat on the roof at 19 m/s. Damped, so it reads as the camera
       // pulling back with you rather than a cut.
-      const cd = SPEC.camera.distance_m * camZoom * camDistMul * (inspectOn ? 1.5 : 1);
+      if (_heroSpan === null && SPEC.player.mode !== 'drive') {
+        let _bd = null; holder.traverse(o => { if (!_bd && (o.isSkinnedMesh || o.isMesh)) _bd = o; });
+        if (_bd) {
+          const _bb = new THREE.Box3().setFromObject(holder, true);
+          if (isFinite(_bb.min.x)) _heroSpan = Math.max(_bb.max.x - _bb.min.x, _bb.max.z - _bb.min.z);
+        }
+      }
+      const _spanD = _heroSpan && _heroSpan > SPEC.camera.distance_m * 0.4 ? _heroSpan * 2.2 : 0;
+      const cd = Math.max(SPEC.camera.distance_m, _spanD) * camZoom * camDistMul * (inspectOn ? 1.5 : 1);
       let cx = fX + Math.sin(yaw) * Math.cos(pitch) * cd;     // camera BEHIND
       let cz = fZ + Math.cos(yaw) * Math.cos(pitch) * cd;     // (W walks away)
       let cy = fY + Math.sin(pitch) * cd + _lift * 0.55 - landDipA;
@@ -13711,7 +14119,7 @@ varying vec2 vUvRaw;
       camera.aspect = innerWidth / innerHeight;
     } else {
       const oa = innerWidth / innerHeight;
-      const os = VIEW === 'side' ? 9 : 16;
+      const os = VIEW === 'side' ? SIDE_OS : 16;
       camera.left = -os * oa; camera.right = os * oa;
       camera.top = os; camera.bottom = -os;
     }

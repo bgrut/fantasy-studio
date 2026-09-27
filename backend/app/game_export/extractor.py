@@ -75,6 +75,9 @@ Output ONLY the JSON object, no markdown, no commentary. Schema (all fields opti
  "assembler" ("oven"), "outlet" (where things are sold: "stall"), "carrier"
  (what moves things: "cart"). Give a plural after a slash when it is not the
  singular plus s: "flour/flour", "dough/dough", "loaf/loaves", "grain/grain".
+ EVERY WORD NAMES A DIFFERENT THING: never reuse the resource as "refined",
+ "combined" or "product". A turnip farm is turnip -> washed turnip -> turnip
+ crate -> turnip stew, never turnip -> turnip -> turnip.
  A rusted mining outpost needs no theme: omit it.
  A HAUNTING HAS GHOSTS: a prompt about a haunting, a curse, spirits or the
  undead casts its hostiles as "ghost" (or "spirit", "wraith", "phantom"), never as
@@ -150,6 +153,11 @@ Output ONLY the JSON object, no markdown, no commentary. Schema (all fields opti
                racing/catching/passing N cars -> {"kind":"race","label":"cars","count":N};
                "survive"/"hold out"/"last N minutes against waves" -> {"kind":"survive",
                "label":"the wolf waves","count": SECONDS 30..300} (needs hostile entities);
+               TOWER DEFENCE ("build towers/turrets", "defend the castle/base/village from
+               waves", "tower defense") -> {"kind":"defend","label": what is defended
+               ("castle","village","base"),"count": WAVES 3..8} AND the attackers as ONE
+               hostile entity {"name": creature noun,"behavior":"hostile","count": 6..12}.
+               The PLAYER is the DEFENDER ("archer","knight","ranger"), never the attacker;
                "battle royale"/"last one standing"/"eliminate all N rivals" ->
                {"kind":"eliminate","label":"rivals","count": N rivals 2..12};
                soccer/football/"score N goals" -> {"kind":"score","label":"goals","count": N 1..10};
@@ -199,6 +207,88 @@ _JSON_RE = re.compile(r"\{.*\}", re.DOTALL)
 _PLAYER_KINDS = ("samurai", "wizard", "knight", "viking", "dragon", "eagle",
                  "bird", "fox", "dog", "cat", "horse", "wolf", "bear",
                  "woman", "man")
+
+
+# PLATFORMER (2026-09-27). Named outright, or described by its verb: jumping
+# between, across or onto ledges, islands, platforms or rooftops.
+PLATFORMER_WORDS = (r"\bplatform(?:er|ing)\b|\bside[\s-]?scroll(?:er|ing)?\b|\bjump\s*(?:'n'|n|and)\s*run\b"
+                    r"|\bjump(?:s|ing)?\s+(?:\w+\s+){0,3}(?:between|across|from|onto|over|up)\s+(?:\w+\s+){0,3}"
+                    r"(?:platforms?|islands?|ledges?|rooftops?|clouds?|pillars?|blocks?|rocks?|stones?)\b")
+
+# FLYING A CRAFT (2026-09-27). "Fly a fighter through an asteroid field" names
+# the player by its verb: the thing flown is the player, and it flies. Read
+# before the sailing rule, so "pilot a space ship" is a flight, not a voyage.
+FLY_WORDS = (r"\b(?:fly|flies|flying|pilot|pilots|piloting)\s+(?:a|an|the|my|your|his|her|their)?\s*"
+             r"((?:[a-z-]+\s+){0,2}(?:fighter|jet|plane|airplane|spaceship|starship|spacecraft|starfighter|"
+             r"x-wing|helicopter|glider|rocket|gunship|biplane|airship|shuttle|drone|ship|craft))\b")
+
+# SAILING (2026-09-27). "Sail a pirate ship across the ocean" cast a pirate
+# on foot: the verb says the player IS the vessel. The captured group is the
+# vessel as the sentence names it ("pirate ship"), which is what gets built.
+SAIL_WORDS = (r"\b(?:sail|sails|sailing|captain|captains|steer|steers|pilot|pilots|row|rows|rowing|paddle|paddles)"
+              r"\s+(?:a|an|the|my|your|his|her|their)?\s*((?:[a-z]+\s+){0,2}"
+              r"(?:ship|boat|sailboat|galleon|schooner|yacht|raft|canoe|kayak|frigate|dinghy|ferry|longboat|junk|"
+              r"gondola|trawler|warship|catamaran|clipper))\b")
+
+# TOWER DEFENCE (2026-09-27). The genre is named by its build verb: towers or
+# turrets raised against waves, or a place defended from them. Shared with the
+# export pipeline so the extractor and the studio's hold rule agree.
+TD_WORDS = (r"\btower[\s-]?defen[cs]e\b"
+            r"|\b(?:build|builds|building|place|places|placing|raise|raises|raising|put|set\s+up)\s+"
+            r"(?:\w+\s+){0,2}(?:towers?|turrets?|cannons?|ballistas?|defen[cs]es)\b"
+            r"|\bdefend\s+(?:the|our|my|a|your)\s+(?:\w+\s+)?(?:base|castle|keep|village|fort|fortress|gate|walls?|"
+            r"kingdom|town|tower|outpost|camp|citadel|farm|city)\b")
+_DEFENDED = ("castle", "keep", "village", "base", "fort", "fortress", "citadel", "town",
+             "kingdom", "outpost", "camp", "farm", "gate", "city", "tower")
+
+
+def defended_noun(text: str) -> str:
+    """What a tower defence protects, from its own words; a castle when unsaid."""
+    import re as _re
+    t = (text or "").lower()
+    m = _re.search(r"\b(?:defend|protect|guard|hold|save)\s+(?:the|our|my|a|your)\s+(?:\w+\s+)?("
+                   + "|".join(_DEFENDED) + r")\b", t)
+    if m:
+        return m.group(1)
+    for w in _DEFENDED:
+        if _re.search(r"\b" + w + r"\b", t) and w != "tower":
+            return w
+    return "castle"
+
+
+def distinct_theme(theme: dict) -> dict:
+    """A factory's chain must name a different thing at every stage.
+
+    "A cozy farming game" came back as turnip -> turnip -> turnip -> turnip:
+    resource, refined, combined and product all one word, so the panel read
+    "14 turnip, 0 turnip, 0 turnip" and a player could not tell a raw crop
+    from the thing it became. Each stage that repeats an earlier one is named
+    as that stage of the earlier thing; the singular/plural pair the runtime
+    reads ("loaf/loaves") is respected on both sides.
+    """
+    if not isinstance(theme, dict):
+        return theme
+    t = dict(theme)
+
+    def base(v):
+        return str(v or "").split("/")[0].strip().lower()
+
+    seen = set()
+    r = base(t.get("resource"))
+    if r:
+        seen.add(r)
+    for key, make in (("refined", lambda w: "washed " + w),
+                      ("combined", lambda w: w + " bundle"),
+                      ("product", lambda w: w + " crate")):
+        v = base(t.get(key))
+        if not v:
+            continue
+        if v in seen:
+            root = r or v
+            t[key] = make(root)
+            v = base(t[key])
+        seen.add(v)
+    return t
 
 
 def _keyword_fallback(text: str) -> dict:
@@ -261,6 +351,11 @@ def _keyword_fallback(text: str) -> dict:
         obs.append({"kind": "defeat", "count": n, "label": m.group(2).strip()})
         ents.append({"name": _sing1(m.group(2).strip()), "behavior": "hostile",
                      "count": max(n, 2), "speed": 2.6})
+    # tower defence (2026-09-27): the build verb, not a timer
+    if _re.search(TD_WORDS, t) and not any(o.get("kind") == "defend" for o in obs):
+        mw = _re.search(r"\b(\d+)\s+waves?\b", t)
+        obs.append({"kind": "defend", "count": max(3, min(int(mw.group(1)) if mw else 5, 8)),
+                    "label": defended_noun(t)})
     m = _re.search(r"\bsurvive\b(?:\s+for)?\s*(\d+)?\s*(minute|min|second|sec)?", t)
     if m and "survive" in t and not any(o.get("kind") == "survive" for o in obs):
         secs = int(m.group(1) or 60) * (60 if (m.group(2) or "").startswith("min") else 1)
@@ -382,6 +477,8 @@ def extract_game_spec(text: str, model: str | None = None, verbose: bool = True)
         if isinstance(_w, dict) and "style" in _w and "style" not in over:
             over["style"] = _w.pop("style")
     spec = spec_from_dict(_merge(base, over))
+    if getattr(spec, "theme", None):
+        spec.theme = distinct_theme(spec.theme)
     if verbose:
         src = "ollama" if llm_out is not None else "keywords"
         print(f"[game] spec via {src}: '{spec.title}' — world={spec.world.name}, "
@@ -400,7 +497,8 @@ Output ONLY the complete updated JSON object, no markdown. Rules:
   EXAMPLE: request "add 2 wolves as enemies" -> append to "entities":
   {"name": "wolf", "behavior": "hostile", "count": 2, "speed": 3.0}
 - If the change replaces the player, update player.name (assets re-resolve).
-- objectives kinds: collect, defeat, reach, race, survive. entity behaviors:
+- objectives kinds: collect, defeat, reach, race, survive, defend (tower
+  defence: count = waves). entity behaviors:
   wander, follow, static, hostile, vehicle, guard (patrolling vision-cone
   sentry for stealth/heist — attacks only when it sees the player).
 - world.sky one of day,sunset,night,overcast,mars,space,dusk; weather none,rain,snow.

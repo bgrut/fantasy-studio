@@ -176,7 +176,7 @@ export class Foreman {
 export const MOODS = [
   { id: 'warm', words: /\b(red|rust|rusted|ember|cinder|lava|magma|volcan|scorch|burn|fire|ash|crimson|copper|desert|sun-?baked|inferno|forge|neon|tokyo|night ?city)\w*/i },
   { id: 'cold', words: /\b(ice|icy|frost|frozen|snow|glacier|arctic|tundra|winter|polar|blizzard|cryo|white|moon(?:lit)?)\w*/i },
-  { id: 'green', words: /\b(jungle|forest|moss|verdant|overgrown|swamp|fungal|spore|garden|bloom|vine|toxic|acid|meadow)\w*/i },
+  { id: 'green', words: /\b(jungle|forest|moss|verdant|overgrown|swamp|fungal|spore|garden|bloom|vine|toxic|acid|meadow|grain|wheat|farm|orchard|countryside|village|harvest|crop|pasture|barn|ranch|cottage|vineyard|hamlet)\w*/i },
 ];
 export function moodOf(text) { return (MOODS.find(m => m.words.test(text || '')) || { id: 'void' }).id; }
 export function setMood(mood) { document.body.dataset.mood = mood || 'void'; }

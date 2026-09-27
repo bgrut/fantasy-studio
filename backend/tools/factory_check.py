@@ -65,6 +65,8 @@ GATES = [
     ("fbuilding.mjs", "a prompt that names a building gets a body from the facade kit at its door, facing the spawn, with lit windows at night (needs --bld)"),
     ("fdrive.mjs", "the drive: steering eases with speed, the handbrake slides and leaves marks and smoke, the view widens with speed, pedestrians cast shadows only up close, the street runs at speed (needs --adv)"),
     ("ffixtures.mjs", "the drift race and the haunted manor, shot from the same views on every check and held to their facts, pictures tracked beside the gates (needs --adv and --bld)"),
+    ("toolfit.mjs", "the build bar sits inside the screen at every common width, 1024 to 1920"),
+    ("fgenres.mjs", "a tower defence builds towers that shoot and a keep that falls; a platformer's islands are all inside a jump and hold what lands on them (needs --td and --pf)"),
 ]
 
 
@@ -94,6 +96,10 @@ def main() -> int:
                     help="an adventure job id built from a city prompt; gates that need one (fcity) skip without it")
     ap.add_argument("--bld", type=int, default=None,
                     help="an adventure job id built from a prompt that names a building (fbuilding)")
+    ap.add_argument("--td", type=int, default=None,
+                    help="an adventure job id built from a tower-defence prompt (fgenres)")
+    ap.add_argument("--pf", type=int, default=None,
+                    help="an adventure job id built from a platformer prompt (fgenres)")
     ap.add_argument("-v", "--verbose", action="store_true")
     args = ap.parse_args()
 
@@ -115,6 +121,10 @@ def main() -> int:
     if args.bld is not None:                  # and the building job
         for _, env in targets:
             env["B"] = str(args.bld)
+    for key, val in (("TD", args.td), ("PF", args.pf)):   # and the two genre jobs
+        if val is not None:
+            for _, env in targets:
+                env[key] = str(val)
     if not targets:
         print("nothing to check: pass --job and/or --demo")
         return 1

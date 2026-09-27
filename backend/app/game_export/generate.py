@@ -44,6 +44,19 @@ _VEHICLE = ("car", "truck", "bus", "van", "jeep", "tank", "motorcycle")
 _FLYING = ("dragon", "bird", "eagle", "hawk", "owl", "phoenix", "griffin",
            "pegasus", "bat", "butterfly", "bee", "plane", "airplane", "jet",
            "helicopter", "spaceship", "rocket", "drone", "ufo")
+# THE THING IS THE LAST WORD (2026-09-27). "pirate ship" was cast as a biped
+# because "pirate" is a human role and that list is read first; in a noun
+# phrase the modifiers come first and the head comes last, and a pirate ship
+# is a ship. A head noun that names a vessel decides before anything else.
+_VESSELS = ("ship", "boat", "sailboat", "galleon", "schooner", "yacht", "raft",
+            "canoe", "kayak", "frigate", "dinghy", "ferry", "longboat", "junk",
+            "gondola", "trawler", "warship", "submarine", "catamaran", "clipper")
+# the same for aircraft: "space fighter" and "starfighter" were asked of the
+# model and came back "vehicle", a car on the ground; a fighter alone is a
+# person, a fighter with space, star or jet in front of it flies
+_CRAFT = ("jet", "plane", "airplane", "spaceship", "starship", "spacecraft",
+          "starfighter", "x-wing", "helicopter", "glider", "rocket", "gunship",
+          "biplane", "airship", "ufo", "shuttle", "drone", "zeppelin")
 _AQUATIC = ("whale", "shark", "fish", "dolphin", "orca", "mermaid", "octopus",
             "squid", "turtle", "seal", "stingray", "eel", "submarine", "boat",
             "ship", "kayak")
@@ -98,6 +111,12 @@ def _classify_with_ollama(kind: str) -> str | None:
 
 def guess_pattern(kind: str) -> str:
     k = (kind or "").lower()
+    _wk = k.split()
+    if _wk and _wk[-1] in _VESSELS and not (len(_wk) > 1 and _wk[-2] in ("space", "star", "air")):
+        return "aquatic"
+    if _wk and (_wk[-1] in _CRAFT or (_wk[-1] in ("fighter", "ship") and len(_wk) > 1
+                                      and _wk[-2] in ("space", "star", "jet", "tie", "air"))):
+        return "flying"
     # flightless upright birds WADDLE on two legs — the quadruped guess gave
     # the 2026-07-08 penguin four legs in its SDXL reference (and its mesh)
     if any(w in k for w in ("penguin", "ostrich", "emu", "kiwi", "dodo")):

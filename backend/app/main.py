@@ -1,6 +1,19 @@
 ﻿from __future__ import annotations
 
+import sys
 import threading
+
+# A PRINT MUST NEVER FAIL A BUILD (2026-09-27). Started with its output going
+# to a file, Python on Windows writes in the ANSI code page, and the first
+# progress line carrying an arrow raised UnicodeEncodeError inside character
+# generation: "player 'pirate' generation failed", and the game shipped a
+# stand-in. The server now writes UTF-8 however it is launched, and anything
+# it still cannot write is replaced rather than raised.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException

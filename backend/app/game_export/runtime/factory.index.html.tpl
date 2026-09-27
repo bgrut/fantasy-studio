@@ -98,7 +98,17 @@
               font-size:9.5px;letter-spacing:0;color:#7b86a6}
   /* nine tools have to fit: the descriptions step out below 1360px and the
      names carry the bar on their own */
-  @media (max-width:1360px){.tool small{display:none}.tool b{grid-row:1 / span 2}}
+  /* eleven tools only fit with their descriptions on a wide screen: below
+     1640px the descriptions step out and the names carry the bar */
+  @media (max-width:1640px){.tool small{display:none}.tool b{grid-row:1 / span 2}}
+  /* twelve tools do not fit a 1280 screen even without the descriptions: the
+     blueprint chip ran off the right edge. A tool you cannot use yet does not
+     need its name spelled out, so a locked one shrinks to its icon first, and
+     on a narrow screen every tool does. The key badge still names the key. */
+  @media (max-width:1480px){.tool.locked{grid-template-columns:34px;padding:8px}
+                            .tool.locked b{display:none}}
+  @media (max-width:1180px){.tool{grid-template-columns:34px;padding:8px}
+                            .tool b{display:none}}
   /* the shortcut is a badge in the corner, not part of the machine's name */
   .tool .key{position:absolute;top:-6px;left:-6px;width:17px;height:17px;
              border-radius:6px;background:#1b2340;border:1px solid rgba(120,200,255,.3);
@@ -400,7 +410,10 @@
                border-radius:2px;transition:width .4s;box-shadow:0 0 8px rgba(255,212,121,.6)}
   /* the market is four bars, not four numbers */
   /* five products since the assembler: the board and the panel show them all */
-  #tick{display:grid;grid-template-columns:repeat(5,1fr);gap:4px;align-items:end;height:64px}
+  /* a theme's two-word names ("turnip crate") wrapped out of a 64 px box and
+     into the upgrades header below it; every name gets a two-line slot and the
+     box grows to hold it, so the bars stay on one baseline */
+  #tick{display:grid;grid-template-columns:repeat(5,1fr);gap:4px;align-items:end;height:78px}
   #tick .mk{display:flex;flex-direction:column;align-items:center;justify-content:flex-end;
             height:100%;gap:3px;font-size:9.5px;
             font-family:var(--f-ui)}
@@ -414,7 +427,8 @@
   #tick .mk .bar.neg{top:20px;opacity:.7}
   #tick .mk .px{font-family:var(--f-mono);font-variant-numeric:tabular-nums;
                 font-size:10px;color:#c9d2e8}
-  #tick .mk .nm{color:#6d7590;letter-spacing:.04em}
+  #tick .mk .nm{color:#6d7590;letter-spacing:.04em;height:2.3em;line-height:1.15;
+                text-align:center;overflow:hidden;overflow-wrap:anywhere}
   #tick .mk.u .px{color:#5ce0a0}
   #tick .mk.d .px{color:#e8697d}
   /* upgrades are a row of three; level is pips */

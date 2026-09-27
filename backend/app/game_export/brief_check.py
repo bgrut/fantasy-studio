@@ -48,9 +48,12 @@ def check_brief(spec, facts: dict) -> list[str]:
     depth = facts.get("depth_below_water")
     if depth is not None:
         if facts.get("buoyant"):
-            if abs(depth) > 0.6:
-                out.append(f"the boat is not on the waterline: {depth:+.2f}m "
-                           f"(negative is above the water, positive is under)")
+            # the depth is measured at the keel, and a hull draws water: the
+            # keel sits up to a metre under the line (an eighth of the height,
+            # at most 0.8 m, in the runtime), never above it and never deeper
+            if depth < -0.2 or depth > 1.0:
+                out.append(f"the boat is not on the waterline: its keel is {depth:+.2f}m "
+                           f"under the line (a hull draws 0 to 1 m; negative is above the water)")
         elif mode == "swim" and depth < 0:
             out.append(f"the swimmer is out of the water: {-depth:.2f}m above "
                        f"the surface")
