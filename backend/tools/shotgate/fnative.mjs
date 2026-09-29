@@ -19,7 +19,13 @@ async function open(native, keep) {
     const w = { setFullscreen: v => { window.__nativeCalls.push(['full', v]); return Promise.resolve(); },
                 isFullscreen: () => Promise.resolve(false),
                 close: () => { window.__nativeCalls.push(['close']); return Promise.resolve(); } };
-    window.__TAURI__ = { window: { getCurrentWindow: () => w } };
+    window.__TAURI__ = { window: { getCurrentWindow: () => w },
+                         core: { invoke: (cmd, args) => {
+                           window.__nativeCalls.push(['invoke', cmd, args && (args.id || args.dialog)]);
+                           // Steam, as the Steam build answers when Steam is running
+                           return Promise.resolve(cmd === 'steam_state'
+                             ? { built_in: true, running: true, app_id: 480, player: 'Tester', overlay: true } : undefined);
+                         } } };
   });
   await p.goto(URL + '?nointro=1' + (keep ? '' : '&fresh=1'), { waitUntil: 'domcontentloaded', timeout: 90000 });
   for (let i = 0; i < 40; i++) { if (await p.evaluate(() => !!(window.__factory && window.__pad))) break; await wait(500); }
@@ -43,6 +49,12 @@ async function open(native, keep) {
   await p.evaluate(() => window.__pad.pause(true));
   const has = await p.evaluate(() => ({ q: !!document.getElementById('pz-quit'), f: !!document.getElementById('pz-full') }));
   check(has.q && has.f, 'the desktop window pauses into a fullscreen switch and a quit button');
+  const st = await p.evaluate(() => ({ who: (document.getElementById('pz-steam') || {}).textContent || '', ach: !!document.getElementById('pz-ach') }));
+  check(st.who === 'Steam: Tester' && st.ach, `with Steam running the pause menu says who is playing ("${st.who}") and offers the achievements`);
+  await p.evaluate(() => { const a = document.getElementById('pz-ach'); if (a) a.click(); });
+  await wait(150);
+  check(await p.evaluate(() => window.__nativeCalls.some(c => c[0] === 'invoke' && c[1] === 'steam_overlay' && c[2] === 'Achievements')),
+        'ACHIEVEMENTS opens the Steam overlay on its achievements page');
   await p.evaluate(() => window.__pad.pause(false));
   await p.keyboard.press('F11'); await wait(200);
   const c1 = await p.evaluate(() => window.__nativeCalls.slice());
@@ -65,9 +77,25 @@ async function open(native, keep) {
   const { p: p2, errs: e2 } = await open(true, true);
   const c3 = await p2.evaluate(() => window.__nativeCalls.slice());
   check(c3.some(c => c[0] === 'full' && c[1] === true), 'the next launch opens fullscreen, as it was left');
-  await p2.evaluate(() => { try { const s = JSON.parse(localStorage.getItem('fs-factory-settings') || '{}'); delete s.full; localStorage.setItem('fs-factory-settings', JSON.stringify(s)); } catch (e) {} });
+  // achievements: the first sale reaches Steam, and what was earned before is sent again at launch
+  let sale = false;
+  for (let i = 0; i < 40 && !sale; i++) {
+    sale = await p2.evaluate(() => window.__nativeCalls.some(c => c[0] === 'invoke' && c[1] === 'steam_achieve' && c[2] === 'CW_FIRST_SALE'));
+    if (!sale) await wait(1000);
+  }
+  const ach = await p2.evaluate(() => window.__game.facts().achievements);
+  check(sale && ach.includes('CW_FIRST_SALE'), `the first sale is an achievement, handed to Steam (${ach.join(', ')})`);
   check(e2.length === 0, 'no page errors on the next launch' + (e2.length ? ': ' + e2[0] : ''));
   await p2.close();
+  const { p: p3, errs: e3 } = await open(true, true);
+  const resent = await p3.evaluate(() => window.__nativeCalls.filter(c => c[0] === 'invoke' && c[1] === 'steam_achieve').map(c => c[2]));
+  check(resent.includes('CW_FIRST_SALE'), 'achievements earned before are sent to Steam again at launch');
+  check(e3.length === 0, 'no page errors on the third launch' + (e3.length ? ': ' + e3[0] : ''));
+  await p3.evaluate(() => { try {
+    localStorage.removeItem('fs-factory-ach');
+    const s = JSON.parse(localStorage.getItem('fs-factory-settings') || '{}'); delete s.full;
+    localStorage.setItem('fs-factory-settings', JSON.stringify(s)); } catch (e) {} });
+  await p3.close();
 }
 await b.close();
 console.log(fails.length ? `${fails.length} failed; FAIL` : 'PASS');

@@ -753,6 +753,18 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             spec = extract_game_spec(req.prompt, verbose=False)
             try: spec.prompt = req.prompt            # the sentence that made it rides with the spec
             except Exception: pass
+            # THE STEPS ARE THE SENTENCE'S (2026-09-29): a collect or defeat step
+            # the model made up, with no word of the prompt in it, is dropped
+            try:
+                from app.game_export.extractor import ground_objectives
+                _kept, _dropped = ground_objectives(list(spec.objectives), req.prompt)
+                if _dropped:
+                    spec.objectives = _kept
+                    for _d in _dropped:
+                        job.setdefault("notes", []).append(
+                            f"the step '{_d.kind} {_d.label}' was left out: the prompt did not ask for it")
+            except Exception as _ge:
+                job.setdefault("notes", []).append(f"objective grounding skipped: {_ge}")
             # a tower defence or a platformer names what it is; neither is a
             # production system, however much building the sentence mentions
             try:
@@ -2574,7 +2586,14 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         # PANO GATE (2026-08-04): image worlds skip quest-chain injection —
         # 'the woodcutter's stash' materializing on a user's beach photo
         # reads as rules-gone-wrong; their prompt is the whole contract.
-        if (_pois2 and _questy and len(_gameplay) == 1
+        # NO INVENTED STEPS (2026-09-29): even gated, the scout step was a
+        # step the sentence never asked for ("find the three lanterns" opened
+        # on "collect the abandoned camp's supplies"). The point of interest
+        # stays in the world as a place to find, with its reward, and adds no
+        # objective. The block is kept, switched off, for a prompt-driven
+        # quest chain later.
+        _QUEST_CHAINS = False
+        if (_QUEST_CHAINS and _pois2 and _questy and len(_gameplay) == 1
                 and spec.player.mode == "walk"
                 and not spec.world.pano
                 and "interior" not in spec.world.level):

@@ -1259,6 +1259,20 @@ def ensure_playable(kind: str, verbose: bool = True) -> str | None:
             bake_anim_set(static, anim, height_m=h, verbose=verbose)
         else:
             return None                      # vehicles: wheeled players are future work
+        # ONE CLEAN COAT (2026-09-29): a generated character's atlas is
+        # confetti and its normal map is embossed from it; the fox and the
+        # guide played mottled. The coat rebuilds the colour on the surface and
+        # ships it smooth (app/game_export/coat.py); an unsound result keeps
+        # the rig as baked.
+        try:
+            from . import coat as _coat
+            if _coat.enabled() and anim.exists():
+                ok, msg = _coat.coat(anim)
+                if verbose:
+                    print(f"[bake] coat {anim.name}: {msg}")
+        except Exception as _ce:
+            if verbose:
+                print(f"[bake] coat skipped ({type(_ce).__name__}: {_ce})")
         return str(anim)
     except Exception as e:
         if verbose:

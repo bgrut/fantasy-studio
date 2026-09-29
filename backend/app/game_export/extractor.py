@@ -262,6 +262,63 @@ _DEFENDED = ("castle", "keep", "village", "base", "fort", "fortress", "citadel",
              "kingdom", "outpost", "camp", "farm", "gate", "city", "tower")
 
 
+_GROUND_STOP = {"the", "a", "an", "of", "and", "or", "to", "in", "on", "at", "for", "from", "with",
+                "his", "her", "their", "your", "my", "our", "its", "all", "some", "any", "lost",
+                "old", "hidden", "ancient", "secret", "missing", "golden", "magic", "item", "items",
+                "thing", "things", "object", "objects", "enemies", "enemy", "foes", "foe", "stuff"}
+
+
+def _stem(w: str) -> str:
+    w = w.lower().strip()
+    if w.endswith("'s"):
+        w = w[:-2]
+    w = w.strip("'")
+    if len(w) > 4 and w.endswith("ves"):
+        return w[:-3] + "f"                   # wolves, wolf; leaves, leaf
+    for suf in ("ies", "es", "s"):
+        if len(w) > 4 and w.endswith(suf):
+            return w[: -len(suf)]
+    return w
+
+
+def ground_objectives(objectives: list, prompt: str) -> tuple[list, list]:
+    """Keep the collect and defeat steps the sentence asked for (2026-09-29).
+
+    "A horror game in a graveyard at night, find the three lanterns" came out
+    with a first step nobody asked for: collect the abandoned camp's supplies.
+    A collect or defeat step is the prompt's when a word of its label is a word
+    of the prompt (plurals and the first five letters forgiven: lantern and
+    lanterns, skeleton and skeletons, wolf and wolves); a step the model made
+    up from nothing is dropped. Other kinds are verbs the prompt said out loud
+    (race, survive, hunt...) or the ending, and are left alone. If dropping
+    would leave no step to play, nothing is dropped: a paraphrase ("treasure"
+    as "gold coins") is better than an empty game.
+    Returns (kept, dropped)."""
+    import re as _r
+    words = {_stem(w) for w in _r.findall(r"[a-z']+", (prompt or "").lower()) if len(w) > 2}
+    heads = {w[:5] for w in words if len(w) >= 5}
+
+    def grounded(label: str) -> bool:
+        toks = [_stem(t) for t in _r.findall(r"[a-z']+", (label or "").lower())]
+        toks = [t for t in toks if len(t) > 2 and t not in _GROUND_STOP]
+        if not toks:
+            return True                       # a label with no words of its own names nothing new
+        return any(t in words or (len(t) >= 5 and t[:5] in heads) for t in toks)
+
+    kept, dropped = [], []
+    for o in objectives:
+        kind = getattr(o, "kind", None) or (o.get("kind") if isinstance(o, dict) else None)
+        label = getattr(o, "label", None) if not isinstance(o, dict) else o.get("label")
+        if kind in ("collect", "defeat") and not grounded(label or ""):
+            dropped.append(o)
+        else:
+            kept.append(o)
+    playable = [o for o in kept if (getattr(o, "kind", None) or (o.get("kind") if isinstance(o, dict) else None)) != "reach"]
+    if dropped and not playable:
+        return list(objectives), []
+    return kept, dropped
+
+
 def defended_noun(text: str) -> str:
     """What a tower defence protects, from its own words; a castle when unsaid."""
     import re as _re

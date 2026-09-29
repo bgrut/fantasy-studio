@@ -37,7 +37,31 @@ installer, no server, saves kept in the WebView2 profile. In that window F11
 goes fullscreen and is remembered, and the pause menu quits to the desktop
 after saving. It needs the Rust toolchain to build and the WebView2 runtime to
 run, which Windows 11 has and Steam can install on Windows 10. A Steam depot
-is that one file; Steamworks itself (achievements, overlay) is not wired yet.
+is that one file.
+
+Achievements are earned in the game and kept with the save; the desktop
+build's `steam_achieve` command is where they reach Steam. The API names to
+create on the Steamworks app page are CW_FIRST_SALE, CW_TIER_3, CW_TIER_6,
+CW_ALL_TIERS, CW_MELTDOWN, CW_NEW_WORLD, CW_THE_WORKS and CW_TOWN_GROWN.
+
+    python backend/tools/flagship_pack.py --steam --app-id <your app id>   # dist/crystal-works-steam/
+
+The Steam build links the Steamworks client (steamworks-rs, MIT/Apache-2.0)
+and ships Valve's redistributable `steam_api64.dll` beside the executable,
+which Valve's SDK agreement allows for a game released on Steam; the plain
+`--desktop` build carries none of it. Launched by Steam, the client knows
+its app; run by hand, it reads `steam_appid.txt` (480, Valve's Spacewar test
+app, until `--app-id` names yours). Without Steam running the game plays the
+same and its achievements wait in the save. The pause menu names the Steam
+player and opens the overlay's achievements page when the overlay is
+available; Steam's overlay does not always draw over a WebView2 window, so
+achievements and the player's name are the part to rely on.
+
+    dist/crystal-works-steam/CrystalWorks.exe --steam-selftest
+
+writes `steam_selftest.json` beside it: whether Steam answered, for which
+app, and whether a stats call reaches it (it asks for an achievement no app
+has, so nothing on the account changes).
 
 Do not edit them — edit
 `backend/app/game_export/runtime/factory.js.tpl` and re-run the builder.

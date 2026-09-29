@@ -4485,6 +4485,27 @@ pauseBtn.addEventListener('pointerdown', e => { e.stopPropagation(); setPaused(!
 // and the pause menu can quit to the desktop, saving first. In a browser none
 // of this exists.
 const NATIVE = (() => { try { return window.__TAURI__ && window.__TAURI__.window ? window.__TAURI__.window.getCurrentWindow() : null; } catch (e) { return null; } })();
+// ACHIEVEMENTS (2026-09-29): the moments of a run, kept with the save and
+// handed to Steam when the desktop build runs under it (the shell's
+// steam_achieve command; a build without Steam answers with an error that is
+// ignored). The API names are the ones to create on the Steamworks app page:
+// CW_FIRST_SALE, CW_TIER_3, CW_TIER_6, CW_ALL_TIERS, CW_MELTDOWN,
+// CW_NEW_WORLD, CW_THE_WORKS, CW_TOWN_GROWN.
+const ACH_KEY = 'fs-factory-ach';
+const ACH = (() => { try { return new Set(JSON.parse(localStorage.getItem(ACH_KEY) || '[]')); } catch (e) { return new Set(); } })();
+function steamSend(id) {
+  try {
+    const inv = window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke;
+    if (inv) inv('steam_achieve', { id }).catch(() => {});
+  } catch (e) {}
+}
+function achieve(id) {
+  if (CREATIVE || ACH.has(id)) return;
+  ACH.add(id);
+  try { localStorage.setItem(ACH_KEY, JSON.stringify([...ACH])); } catch (e) {}
+  steamSend(id);
+}
+for (const id of ACH) steamSend(id);    // earned while Steam was not running: Steam hears of it now
 if (NATIVE) {
   const box = pauseEl.firstElementChild;
   const full = document.createElement('label');
@@ -4502,6 +4523,27 @@ if (NATIVE) {
   addEventListener('keydown', e => { if (e.code === 'F11') { e.preventDefault(); setFull(!SETTINGS.full); } });
   pauseBtn.addEventListener('pointerdown', () => { const cb = document.getElementById('pz-full'); if (cb) cb.checked = !!SETTINGS.full; });
   if (SETTINGS.full) setFull(true);
+  // STEAM IN THE PAUSE MENU: who is playing, and the overlay's achievements
+  // page, when the build carries the Steam client and Steam is running
+  const inv = window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke;
+  if (inv) {
+    inv('steam_state').then(s => {
+      window.__steam = s;
+      if (!s || !s.running) return;
+      const who = document.createElement('div');
+      who.id = 'pz-steam';
+      who.style.cssText = 'font-size:12px;color:#7b86a6;margin:-10px 0 14px';
+      who.textContent = 'Steam: ' + s.player;
+      box.insertBefore(who, box.querySelector('label'));
+      if (s.overlay) {
+        const ach = document.createElement('button');
+        ach.id = 'pz-ach'; ach.textContent = 'ACHIEVEMENTS';
+        ach.style.cssText = quit.style.cssText;
+        ach.addEventListener('click', e => { e.stopPropagation(); inv('steam_overlay', { dialog: 'Achievements' }).catch(() => {}); });
+        box.insertBefore(ach, quit);
+      }
+    }).catch(() => {});
+  }
 }
 // the first Esc belongs to the browser (it frees the mouse for the panel);
 // Esc with the mouse already free is the pause
@@ -5007,6 +5049,7 @@ function cityTick(dt) {
   ore = Math.max(0, ore + cityS.income * dt);
   if (!cityS.won && pop >= CITY_TARGET) {
     cityS.won = true;
+    achieve('CW_TOWN_GROWN');
     cityToast(CITY_TARGET.toLocaleString() + ' people live in your ' + CITY_NOUN + ' now. That was the goal; the ' + CITY_NOUN + ' is yours to keep growing.', 9);
     if (typeof sfxUnlock === 'function') sfxUnlock();
   }
@@ -5370,6 +5413,7 @@ function meltdown() {
   if (ore < MELT_MIN || melting > 0) return;
   const won = Math.max(1, coresFor(runValue)) * ((WORLDS[worldIdx] && WORLDS[worldIdx].coreMult) || 1);
   cores += won;
+  achieve('CW_MELTDOWN');
   sfxMelt();
   // the foreman's open step was about the factory now in the sky (2026-09-28)
   if (tutIdx < TUT.length) { tutIdx = TUT.length; if (tutAct === 2) act2Done = true; renderTutor(); }
@@ -5608,6 +5652,7 @@ function travelTo(k) {
   const w = WORLDS[k];
   if (!w || k === worldIdx || (!CREATIVE && cores < w.cores) || !worldCapOk(w)) return;
   visitedWorlds.add(k);
+  achieve('CW_NEW_WORLD');
   playIntro(w.name, w.blurb, undefined, false, w.fam);   // arriving is the payoff; show the place
   clearFactory();
   ore = 0; ingots = 0; alloys = 0; runValue = 0;
@@ -5785,6 +5830,7 @@ function showWorksCard() {
 }
 function playWorks() {
   lifetime.works = true;
+  achieve('CW_THE_WORKS');
   worksCardPending = true;
   const m = Math.floor(lifetime.longestHold / 60), sec = String(Math.floor(lifetime.longestHold % 60)).padStart(2, '0');
   playIntro('THE WORKS', Math.round(lifetime.value).toLocaleString() + ' credits banked  \u00b7  ' + lifetime.contracts + (lifetime.contracts === 1 ? ' contract kept  ' : ' contracts kept  ') + '\u00b7  longest order ' + m + ':' + sec
@@ -6092,6 +6138,7 @@ function spawnTag(f, i, j, v) {
   // goes wide, and two sentences say what happened. Once per world.
   if (!lifetime.first && !CREATIVE) {
     lifetime.first = true;
+    achieve('CW_FIRST_SALE');
     el.classList.add('first');
     const hc = cells[f][i][j]; if (hc) hc.pulse = 2.4;
     // a toast already up (ice, a contract, the foreman) keeps the slot; the tag and the pulse still land
@@ -6310,6 +6357,9 @@ function stepGoals(dt) {
   while (goalIdx < GOALS.length && GOALS[goalIdx].done()) {
     const g = GOALS[goalIdx];
     goalIdx++;
+    if (goalIdx === 3) achieve('CW_TIER_3');
+    if (goalIdx === 6) achieve('CW_TIER_6');
+    if (goalIdx === GOALS.length) achieve('CW_ALL_TIERS');
     applyRewards();
     renderUpgrades();
     renderWorlds();
@@ -7552,6 +7602,7 @@ window.__game = {
                   geometries: renderer.info.memory.geometries }),
   facts: () => ({
     city: CITY ? cityFacts() : null,
+    achievements: [...ACH],
     genre: 'factory',
     style: SPEC.style || 'default',
     grid: N,
