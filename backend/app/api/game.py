@@ -156,6 +156,40 @@ _FACTORY_WORDS = _fre.compile(
     r"idle game|incremental game)\b", _fre.I)
 
 
+# A LOOK IS ASKED FOR, NOT GUESSED (2026-09-29). Since 2026-08-30 the
+# extractor chose a stylised look for nearly every prompt so no two games
+# looked alike, and it overshot: of eleven different games, eight came out
+# pixel, low-poly, cartoon, noir or horror when their sentences asked for none
+# of it, and pixel and noir also moved the camera (a space shooter became a
+# top-down 8-bit map). A stylised look is kept when the prompt's own words ask
+# for it; otherwise the game is photoreal, and the studio's style chips still
+# choose anything.
+_STYLE_ASKED = {
+    "cartoon": r"\b(cartoon\w*|toon|cel[- ]?shad\w*|cute|kids?|children|playful|whimsical|goofy|silly|pixar|disney)\b",
+    "sketch": r"\b(sketch\w*|pencil|hand[- ]?drawn|doodle\w*)\b",
+    "anime": r"\b(anime|manga|ghibli|chibi|shonen)\b",
+    "horror": r"\b(horror|creepy|scary|terrifying|haunt\w*|nightmare\w*|dread|cursed|undead|asylum|eerie)\b",
+    "pixel": r"\b(pixel\w*|8[- ]?bit|16[- ]?bit|retro|arcade|sprites?)\b",
+    "lowpoly": r"\b(low[- ]?poly|polygonal|faceted|minimalist|flat[- ]?shaded)\b",
+    "illustrated": r"\b(illustrat\w*|poster|painted|painterly|firewatch)\b",
+    "dunescape": r"\b(dunes?|pilgrim\w*|journey)\b",
+    "watercolor": r"\b(watercolou?r\w*|pastel|fairy ?tales?|gentle)\b",
+    "claymation": r"\b(clay\w*|plasticine|stop[- ]?motion|toys?)\b",
+    "noir": r"\b(noir|black[- ]and[- ]white|monochrome|limbo|1940s|silhouettes?)\b",
+    "storybook": r"\b(storybook|picture ?book|gothic|tim burton|bedtime)\b",
+    "kawaii": r"\b(kawaii|cute|adorable)\b",
+    "comic": r"\b(comic\w*|graphic novel)\b",
+    "papercraft": r"\b(paper\w*|origami|cardboard)\b",
+    "synthwave": r"\b(synthwave|retrowave|vaporwave|outrun|80s)\b",
+}
+
+
+def _style_asked(style: str, prompt: str) -> bool:
+    """Whether the sentence itself asks for this look."""
+    pat = _STYLE_ASKED.get(style or "")
+    return bool(pat and _fre.search(pat, (prompt or "").lower()))
+
+
 def _reads_as_factory(prompt: str) -> bool:
     return bool(_FACTORY_WORDS.search(prompt or ""))
 
@@ -722,17 +756,40 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             # a tower defence or a platformer names what it is; neither is a
             # production system, however much building the sentence mentions
             try:
-                from app.game_export.extractor import TD_WORDS as _TDW, PLATFORMER_WORDS as _PFW
+                from app.game_export.extractor import (TD_WORDS as _TDW, PLATFORMER_WORDS as _PFW,
+                                                       MYSTERY_WORDS as _MYW)
                 import re as _gre
                 _named_genre = bool(_gre.search(_TDW, (req.prompt or "").lower())
-                                    or _gre.search(_PFW, (req.prompt or "").lower()))
+                                    or _gre.search(_PFW, (req.prompt or "").lower())
+                                    or _gre.search(_MYW, (req.prompt or "").lower()))
             except Exception:
                 _named_genre = False
             if _named_genre and getattr(spec, "genre", "") == "factory":
                 spec.genre = "adventure"
                 spec.theme = None
                 job.setdefault("notes", []).append(
-                    "genre held to adventure: the prompt names a tower defence or a platformer")
+                    "genre held to adventure: the prompt names a tower defence, a platformer or a mystery")
+            # A CITY IS BUILT ON THE WORLDLET (2026-09-29). "A city builder where
+            # I lay roads, zone houses and grow the population to 500" came out
+            # as a quarry with its words swapped. The factory engine builds it:
+            # the same grid, the same hands, roads and zones instead of belts
+            # and rigs, and a population to grow instead of credits to bank.
+            try:
+                import re as _cre
+                from app.game_export.extractor import CITY_WORDS
+                _cp = (req.prompt or "").lower()
+                if _cre.search(CITY_WORDS, _cp) and not _named_genre:
+                    _cm = _cre.search(r"\bpopulation\s+(?:of|to)\s+(\d[\d,]*)|(\d[\d,]*)\s+(?:people|citizens|residents|population)\b", _cp)
+                    _tgt = int((_cm.group(1) or _cm.group(2)).replace(",", "")) if _cm else 500
+                    _tgt = max(100, min(_tgt, 5000))
+                    _noun = next((w for w in ("village", "town", "metropolis", "city") if _cre.search(r"\b" + w + r"\b", _cp)), "city")
+                    spec.genre = "factory"
+                    spec.theme = None
+                    spec.city = {"target": _tgt, "noun": _noun}
+                    job.setdefault("notes", []).append(
+                        f"city builder: lay roads, zone homes, shops and works, and grow the {_noun} to {_tgt} people")
+            except Exception as _ce:
+                job.setdefault("notes", []).append(f"city rule skipped: {_ce}")
             if _reads_as_factory(req.prompt) and not _named_genre and getattr(spec, "genre", "") != "factory":
                 spec.genre = "factory"
                 job.setdefault("notes", []).append(
@@ -770,6 +827,97 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                         f"tower defence: hold the {_what} through {_waves} waves; T raises a tower")
             except Exception as _tde:
                 job.setdefault("notes", []).append(f"tower defence rule skipped: {_tde}")
+            # A MYSTERY IS A DEDUCTION (2026-09-29). "A murder at the manor:
+            # question the suspects and name the killer" came out as collect five
+            # orbs and walk to a beacon. A whodunit has clues that say what the
+            # killer is like, suspects who show you what they are like, and one
+            # name to say out loud. The case itself is dealt by the runtime from
+            # the seed; this casts the people and sets the two steps.
+            try:
+                import re as _myre
+                from app.game_export.extractor import MYSTERY_WORDS
+                from app.game_export.bake import ensure_playable as _myep
+                from app.game_export.spec import EntitySpec, ObjectiveSpec
+                _mp = (req.prompt or "").lower()
+                if _myre.search(MYSTERY_WORDS, _mp) and getattr(spec, "genre", "") != "factory":
+                    _NUM = {"two": 2, "three": 3, "four": 4, "five": 5, "six": 6}
+                    _ms = _myre.search(r"\b(\d+|two|three|four|five|six)\s+suspects\b", _mp)
+                    _nsus = max(3, min(5, int(_NUM.get(_ms.group(1), _ms.group(1))) if _ms else 4))
+                    _mc = _myre.search(r"\b(\d+|two|three|four)\s+clues\b", _mp)
+                    _nclue = max(2, min(4, int(_NUM.get(_mc.group(1), _mc.group(1))) if _mc else 3))
+                    _crime = ("the thief" if _myre.search(r"\b(thief|theft|stole|stolen|robbery|missing)\b", _mp)
+                              else "the killer")
+                    # the people the sentence names come first, then the setting's usual cast
+                    _ROLE_WORDS = ("butler", "maid", "gardener", "cook", "chef", "chauffeur", "driver",
+                                   "doctor", "nurse", "priest", "vicar", "banker", "baker", "captain",
+                                   "engineer", "pilot", "medic", "professor", "heir", "heiress", "widow",
+                                   "widower", "nephew", "niece", "lawyer", "colonel", "actress", "actor",
+                                   "singer", "mayor", "sheriff", "bartender", "blacksmith", "scientist",
+                                   "conductor", "porter", "housekeeper", "secretary", "governess",
+                                   "groundskeeper", "mechanic", "navigator", "stranger", "neighbour", "neighbor")
+                    _roles = [w for w in _ROLE_WORDS if _myre.search(r"\b" + w + r"s?\b", _mp)]
+                    if _myre.search(r"\b(manor|mansion|estate|country house|dinner|party|castle|house)\b", _mp):
+                        _usual = ["butler", "gardener", "housekeeper", "chauffeur", "heir"]
+                    elif _myre.search(r"\b(ship|station|space|colony|starship|spaceship|base)\b", _mp):
+                        _usual = ["captain", "engineer", "medic", "pilot", "navigator"]
+                    elif _myre.search(r"\b(train|express|carriage|railway)\b", _mp):
+                        _usual = ["conductor", "porter", "banker", "actress", "doctor"]
+                    elif _myre.search(r"\b(town|village|saloon|western|frontier)\b", _mp):
+                        _usual = ["sheriff", "bartender", "blacksmith", "banker", "vicar"]
+                    else:
+                        _usual = ["neighbour", "business partner", "nephew", "stranger", "doctor"]
+                    for w in _usual:
+                        if len(_roles) >= _nsus:
+                            break
+                        if w not in _roles:
+                            _roles.append(w)
+                    _roles = _roles[:_nsus]
+                    # each suspect is played by a different body the library already has
+                    _BODY_FOR = {"chauffeur": "courier", "driver": "courier", "scientist": "scientist",
+                                 "professor": "scientist", "doctor": "scientist", "medic": "scientist",
+                                 "engineer": "engineer", "mechanic": "engineer", "captain": "explorer",
+                                 "pilot": "explorer", "navigator": "explorer", "sheriff": "soldier",
+                                 "colonel": "soldier", "gardener": "keeper", "groundskeeper": "keeper",
+                                 "blacksmith": "keeper", "porter": "courier", "conductor": "courier"}
+                    # clothed people only: "man" is the bare base body and "driver" is a car
+                    _POOL = ["courier", "keeper", "scientist", "engineer", "explorer", "thug",
+                             "hunter", "ranger", "detective", "soldier"]
+                    _pl = (spec.player.name or "").lower().strip()
+                    if not _pl or _pl in _roles or _pl in ("man", "woman", "person", "guide"):
+                        spec.player.name = "detective"
+                        spec.player.asset = ""
+                        _pl = "detective"
+                    _used = {_pl}
+                    _sus = []
+                    for r in _roles:
+                        body = None
+                        for cand in [_BODY_FOR.get(r)] + _POOL:
+                            if cand and cand not in _used and (_myep(cand, verbose=False) or library.resolve(cand)):
+                                body = cand
+                                break
+                        body = body or "courier"
+                        _used.add(body)
+                        _sus.append(EntitySpec(name=body, behavior="suspect", role="the " + r, count=1,
+                                               speed=0.0, height_m=library.default_height(body), hp=3))
+                    # the LLM's own suspects, and anyone it cast in a role now taken, give way
+                    _rset = set(_roles)
+                    _BYSTANDERS = {"man", "woman", "person", "people", "villager", "npc", "guest", "servant",
+                                   "figure", "stranger", "suspect"}
+                    spec.entities = [e for e in spec.entities
+                                     if not (e.behavior in ("wander", "follow", "static")
+                                             and (e.name or "").lower().rstrip("s") in _BYSTANDERS)
+                                     and e.behavior != "suspect" and (e.name or "").lower().rstrip("s") != "suspect"
+                                     and (e.name or "").lower().rstrip("s") not in _rset] + _sus
+                    _clue_asset = None                # the runtime stands numbered evidence markers
+                    spec.objectives = [ObjectiveSpec(kind="collect", label="clues", count=_nclue, asset=_clue_asset),
+                                       ObjectiveSpec(kind="accuse", label=_crime, count=1)]
+                    if not any(e.behavior == "hostile" for e in spec.entities):
+                        spec.player.attack = "none"
+                    job.setdefault("notes", []).append(
+                        f"mystery: find {_nclue} clues, question {len(_sus)} suspects ("
+                        + ", ".join("the " + r for r in _roles) + f"), and name {_crime}")
+            except Exception as _mye:
+                job.setdefault("notes", []).append(f"mystery rule skipped: {_mye}")
             # THE PLAYER IS THE CRAFT (2026-09-27). "Fly a fighter through an
             # asteroid field": the verb says what the player is, and it flies.
             _flown = False
@@ -864,9 +1012,15 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         # game built without touching that control shipped identical art
         # direction, and "they all look the same" was structurally true. The
         # extractor now picks one; an explicit user choice below still wins.
+        if (not req.style and spec.style and spec.style != "default"
+                and not _style_asked(spec.style, req.prompt)):
+            job.setdefault("notes", []).append(
+                f"art direction: photoreal (the planner suggested {spec.style}, but "
+                f"the prompt did not ask for a look; pick a style in the studio to choose one)")
+            spec.style = "default"
         if not req.style and spec.style and spec.style != "default":
             job.setdefault("notes", []).append(
-                f"art direction: {spec.style} (chosen from your prompt. "
+                f"art direction: {spec.style} (your prompt asked for it. "
                 f"Pick a style in the studio to override)")
         if req.style:
             try:
@@ -1508,7 +1662,7 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         # Ambience entities keep the old behaviour: they are meant to be
         # skippable, and substituting for them is how you get a crowd of
         # identical men standing in for birds.
-        _STRUCTURAL = {"guard", "guide", "hostile", "vehicle"}
+        _STRUCTURAL = {"guard", "guide", "hostile", "vehicle", "suspect"}
 
         _KIN = {"crocodile": "snake", "alligator": "snake", "gator": "snake", "lizard": "snake", "komodo": "snake", "eel": "snake", "serpent": "snake",
                 "hyena": "wolf", "jackal": "wolf", "coyote": "wolf", "dingo": "wolf", "hound": "dog", "puppy": "dog",
@@ -1518,15 +1672,25 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                 "pony": "horse", "mule": "horse", "donkey": "horse", "camel": "horse", "zebra": "horse",
                 "orca": "whale", "dolphin": "whale", "piranha": "fish", "trout": "fish", "salmon": "fish", "barracuda": "shark",
                 "hawk": "dragon", "eagle": "dragon", "bat": "firefly", "moth": "firefly", "butterfly": "firefly", "bee": "firefly", "wasp": "firefly",
-                "ghoul": "shadow wraith", "wraith": "shadow wraith", "spectre": "shadow wraith", "specter": "shadow wraith"}
+                "ghoul": "shadow wraith", "wraith": "shadow wraith", "spectre": "shadow wraith", "specter": "shadow wraith",
+                # A MACHINE IS PLAYED BY A MACHINE (2026-09-29): enemy drones in an
+                # asteroid field were played by dragons, the flying pattern's kin
+                "drone": "space fighter", "fighter": "space fighter", "spaceship": "space fighter",
+                "starship": "space fighter", "ufo": "space fighter", "saucer": "space fighter",
+                "jet": "space fighter", "plane": "space fighter", "helicopter": "space fighter",
+                "gunship": "space fighter", "satellite": "space fighter",
+                "galleon": "pirate ship", "warship": "pirate ship", "frigate": "pirate ship",
+                "ship": "pirate ship", "boat": "sailboat", "raft": "sailboat", "canoe": "sailboat"}
         _KIN_BY_PATTERN = {"quadruped": ("wolf", "deer"), "aquatic": ("shark", "fish"), "flying": ("dragon", "firefly")}
 
         def _creature_kin(kind: str, behavior: str):
             """The nearest library creature for a noun the library lacks: by name
             first, then by movement pattern (a hostile gets the fiercer kin)."""
-            k = (kind or "").lower().strip()
+            k = (kind or "").lower().strip().replace("_", " ")
+            import re as _kre
             for word, kin in _KIN.items():
-                if word in k and (ensure_playable(kin, verbose=False) or library.resolve(kin)):
+                # whole words: "combat drone" is a drone, not a bat
+                if _kre.search(r"\b" + _kre.escape(word) + r"\b", k) and (ensure_playable(kin, verbose=False) or library.resolve(kin)):
                     return kin
             pair = _KIN_BY_PATTERN.get(guess_pattern(k))
             if not pair:
@@ -1557,19 +1721,35 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         _GHOST_WORDS = ("ghost", "spirit", "spectre", "specter", "phantom", "wraith", "apparition", "shade", "poltergeist")
         _haunting = bool(_re5.search(r"\b(haunt\w*|ghost\w*|spirit\w*|spectr\w*|phantom\w*|wraith\w*|cursed|undead|poltergeist|seance|apparition)\b", (req.prompt or "").lower()))
         _ANIMALS = {"wolf", "wolves", "bear", "bears", "boar", "tiger", "lion", "fox", "dog", "dogs", "hound", "hounds", "rat", "rats", "spider", "spiders", "snake", "snakes", "bat", "bats", "crow", "crows"}
+        _unasked = []
         for ent in spec.entities:
             _en = ent.name.lower().strip()
-            if any(w in _en for w in _GHOST_WORDS):
+            if any(w in _en for w in _GHOST_WORDS) and not _haunting:
+                # (2026-09-29) the planner cast a ghost for the fog of "a foggy
+                # victorian manor": a ghost the sentence never asked for leaves
+                _unasked.append(ent)
+                job.setdefault("notes", []).append(
+                    f"the {_en} was left out: the prompt asked for no haunting")
+            elif any(w in _en for w in _GHOST_WORDS):
                 ent.spectral = True
                 ent.speed = min(float(ent.speed or 1.2), 1.2)
                 if ent.count > 3:                      # a haunting is two or three, arriving one at a time; eleven is a crowd
                     job.setdefault("notes", []).append(f"{ent.count} {_en}s is a crowd: a haunting keeps three")
                     ent.count = 3
+            elif getattr(ent, "spectral", False) and not _haunting:
+                # (2026-09-29) "a detective mystery in a foggy victorian manor"
+                # came with three white ghosts wandering the lawn: the planner
+                # set the flag for the fog. No ghost word, no ghost.
+                ent.spectral = False
+                job.setdefault("notes", []).append(
+                    f"the {_en} is a person, not a ghost: the prompt asked for no haunting")
             elif _haunting and ent.behavior == "hostile" and _en in _ANIMALS and _en not in (req.prompt or "").lower():
                 job.setdefault("notes", []).append(
                     f"a haunting has ghosts: the {ent.count} {_en} the AI cast are played as ghosts")
                 ent.name = "ghost"; ent.spectral = True; ent.speed = 1.0; ent.count = min(ent.count, 3)
+        spec.entities = [e for e in spec.entities if e not in _unasked]
         kept = []
+        _dress_i = 0
         for ent in spec.entities:
             if ent.name.lower().strip() in _AMBIENT:
                 job.setdefault("notes", []).append(
@@ -1586,9 +1766,24 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             if not glb and guess_pattern(ekind) != "biped":
                 kin = _creature_kin(ekind, ent.behavior)
                 if kin:
+                    # THE PROMPT'S OWN CREATURE IS MADE (2026-09-29). A kin stands in
+                    # for this build, but a creature the sentence named is queued
+                    # for generation in the background, so the next build casts the
+                    # real one instead of the dragon standing in for a drone.
+                    _named = any(w and w in (req.prompt or "").lower()
+                                 for w in ekind.lower().replace("_", " ").split())
+                    _queued = False
+                    if _named:
+                        try:
+                            _ensure_asset_limited(ekind, 0.5, verbose=False)
+                            _queued = True
+                        except Exception:
+                            _queued = False
                     job.setdefault("notes", []).append(
-                        f"the {ekind} is played by the {kin} for now: your library has no {ekind} "
-                        f"(a prompt that is only about a {ekind} creates one, then it is free forever)")
+                        f"the {ekind} is played by the {kin} in this build: your library has no {ekind}"
+                        + (f"; the real {ekind} is being made in the background and the next build casts it"
+                           if _queued else
+                           f" (a prompt that names a {ekind} creates one, then it is free forever)"))
                     ekind = kin
                     glb = ensure_playable(ekind, verbose=False) or library.resolve(ekind)
             # (2026-09-27) a name the planner joined with underscores is still
@@ -1646,9 +1841,22 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                 # character the camera ever gets close to.
                 _light = BACKEND_ROOT / "assets" / "library" / "walker.glb"
                 if str(glb).endswith("man_anim.glb") and _light.exists():
-                    glb = str(_light)
+                    # DRESSED (2026-09-29): walker.glb is the base body in its
+                    # underwear, and it was every guide, guard and villager in
+                    # every game. The clothed walkers are the same rig and the
+                    # same clips; a background person takes one of those, in
+                    # turn, and never the one the player is wearing.
+                    _wl = BACKEND_ROOT / "assets" / "library"
+                    _dressed = [w for w in ("walker_courier.glb", "walker_thug.glb", "walker_detective.glb")
+                                if (_wl / w).exists()
+                                and w[len("walker_"):-4] != (spec.player.name or "").lower().strip()]
+                    if _dressed:
+                        glb = str(_wl / _dressed[_dress_i % len(_dressed)])
+                        _dress_i += 1
+                    else:
+                        glb = str(_light)
                     job.setdefault("notes", []).append(
-                        f"{ent.behavior} uses the light walker bake "
+                        f"{ent.behavior} uses a light walker bake, {Path(glb).stem} "
                         f"(man_anim is 49MB. Too heavy for a background NPC)")
                 ent.asset = glb
                 if ent.height_m == 1.0:

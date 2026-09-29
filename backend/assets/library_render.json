@@ -1661,5 +1661,19 @@
   "kind": "engineer",
   "looks_like": 0.969,
   "looks_like_best": "a clean 3D render of a engineer"
+ },
+ "gem.glb": {
+  "kind": "gem",
+  "shaded_png": "backend/tools/shotgate/renders/gem_shaded.png",
+  "looks_like": 0.972,
+  "patchy": 0.024,
+  "looks_like_best": "a clean 3D render of a gem"
+ },
+ "diamond.glb": {
+  "kind": "diamond",
+  "shaded_png": "backend/tools/shotgate/renders/diamond_shaded.png",
+  "looks_like": 0.9,
+  "patchy": 0.1,
+  "looks_like_best": "a clean 3D render of a diamond"
  }
 }

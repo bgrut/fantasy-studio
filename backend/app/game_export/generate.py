@@ -387,6 +387,23 @@ def ensure_asset(kind: str, pattern: str | None = None, target_tris: int | None 
                      capture_output=True, timeout=300)
             if verbose:
                 print(f"[game] biped default flip applied to '{kind}' (TRELLIS faces -Y)")
+        # A SWIMMER LIES LEVEL (2026-09-29): a dolphin's reference leapt on a
+        # diagonal and the player swam a dolphin standing on its tail. Its
+        # long axis is rotated into the horizontal plane, heading kept.
+        if pattern == "aquatic":
+            try:
+                import subprocess
+                _lv = subprocess.run(
+                    [str(BLENDER_EXE), "--background", "--python",
+                     str(BACKEND_ROOT / "scripts" / "_level_swimmer.py"), "--",
+                     str(out), str(out)],
+                    capture_output=True, text=True, timeout=180, check=True)
+                if verbose:
+                    _m = [l for l in (_lv.stdout or "").splitlines() if l.startswith("LEVEL")]
+                    print(f"[game] swimmer levelled: {(_m or ['LEVEL ?'])[-1][6:]} degrees")
+            except Exception as _le:
+                if verbose:
+                    print(f"[game] swimmer level skip: {type(_le).__name__}")
         # VEHICLE ORIENTATION (2026-07-22): vehicles never pass through the
         # rig bake, so the bake-time orientation gate never sees them — the
         # regenerated car shipped lying on its side, the corvette nose-down.

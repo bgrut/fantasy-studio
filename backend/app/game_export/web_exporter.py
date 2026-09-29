@@ -222,6 +222,10 @@ def export_web_game(spec: GameSpec, out_dir: str | Path, verbose: bool = True) -
                 _wnames.append(_wsrc.name)
             # the runtime cannot list a directory over HTTP, so the manifest
             # is what tells it which variants are actually there
+            # (2026-09-29) walker.glb is the base body in its underwear: it
+            # ships as the fallback, but a crowd draws from the dressed ones
+            if len(_wnames) > 1 and "walker.glb" in _wnames:
+                _wnames.remove("walker.glb")
             if _wnames:
                 (dist / "assets" / "walkers.json").write_text(
                     json.dumps(_wnames), encoding="utf-8")

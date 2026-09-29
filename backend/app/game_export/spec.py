@@ -155,7 +155,12 @@ class EntitySpec(BaseModel):
     # waits when the player falls behind, and can be killed — the most common
     # mission shape in open-world games: protect someone who moves.
     behavior: Literal["static", "wander", "follow", "hostile", "vehicle",
-                      "flee", "guard", "guide", "escort"] = "wander"
+                      "flee", "guard", "guide", "escort", "suspect"] = "wander"
+    # suspect (2026-09-29): a mystery's person of interest. Stands where the
+    # scene put them, answers when questioned (E), and can be named (Y).
+    # role: who a person IS in the story ("the butler"), shown over their head
+    # and in their testimony; the name stays the body that plays them.
+    role: Optional[str] = None
     # spectral (2026-09-16): drawn as a ghost, whatever mesh plays it; hovers, flickers, slow
     spectral: bool = False
     count: int = Field(1, ge=1, le=64)
@@ -171,10 +176,12 @@ class ObjectiveSpec(BaseModel):
     shrinking storm zone hurts anyone outside it); score = sports (drive the
     ball into the goal N times). defend (2026-09-27) = tower defence: hold the
     keep named by `label` through `count` WAVES that walk the road to it,
-    raising towers with the gold their kills pay."""
+    raising towers with the gold their kills pay. accuse (2026-09-29) = a
+    mystery's last step: name `label` (the killer) among the suspects, after
+    the clues of the collect step before it."""
     kind: Literal["collect", "defeat", "reach", "race", "survive",
                   "eliminate", "score", "hunt", "capture", "escort",
-                  "defend"] = "collect"
+                  "defend", "accuse"] = "collect"
     label: str = "stars"
     count: int = Field(5, ge=1, le=600)   # survive: SECONDS to hold out (waves escalate)
     asset: Optional[str] = None   # collect steps: generated mesh spawned instead of the orb
@@ -227,6 +234,10 @@ class GameSpec(BaseModel):
     # THE SENTENCE THAT MADE IT (2026-09-10): shown on the reveal, so the first
     # thing a player reads is the prompt itself
     prompt: Optional[str] = None
+    # A CITY (2026-09-29): the factory's worldlet built as a town instead of a
+    # production line. {"target": population to reach, "noun": "city"|"town"|
+    # "village"}. None keeps the factory.
+    city: Optional[dict] = None
     worlds: Optional[list] = None            # a demo that ships several worlds lists them here
     style: Literal["default", "cartoon", "sketch", "anime", "horror", "pixel",
                    "lowpoly", "illustrated", "dunescape", "watercolor",

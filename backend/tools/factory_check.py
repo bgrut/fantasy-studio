@@ -66,7 +66,10 @@ GATES = [
     ("fdrive.mjs", "the drive: steering eases with speed, the handbrake slides and leaves marks and smoke, the view widens with speed, pedestrians cast shadows only up close, the street runs at speed (needs --adv)"),
     ("ffixtures.mjs", "the drift race and the haunted manor, shot from the same views on every check and held to their facts, pictures tracked beside the gates (needs --adv and --bld)"),
     ("toolfit.mjs", "the build bar sits inside the screen at every common width, 1024 to 1920"),
+    ("fpad.mjs", "a controller walks, looks, changes tool, builds and erases and looks from above; Start pauses everything and the settings it pauses into are kept"),
     ("fgenres.mjs", "a tower defence builds towers that shoot and a keep that falls; a platformer's islands are all inside a jump and hold what lands on them (needs --td and --pf)"),
+    ("fmystery.mjs", "a mystery is a sound case: one suspect fits every clue; E questions, J opens the casebook, a wrong name loses and the right one wins (needs --my)"),
+    ("ftown.mjs", "a city builder: roads that reach the hall serve, homes need work, a works keeps homes small and a park grows them, a planned town reaches its population (needs --town)"),
 ]
 
 
@@ -100,6 +103,10 @@ def main() -> int:
                     help="an adventure job id built from a tower-defence prompt (fgenres)")
     ap.add_argument("--pf", type=int, default=None,
                     help="an adventure job id built from a platformer prompt (fgenres)")
+    ap.add_argument("--my", type=int, default=None,
+                    help="an adventure job id built from a mystery prompt (fmystery)")
+    ap.add_argument("--town", type=int, default=None,
+                    help="a factory job id built from a city-builder prompt (ftown)")
     ap.add_argument("-v", "--verbose", action="store_true")
     args = ap.parse_args()
 
@@ -121,7 +128,7 @@ def main() -> int:
     if args.bld is not None:                  # and the building job
         for _, env in targets:
             env["B"] = str(args.bld)
-    for key, val in (("TD", args.td), ("PF", args.pf)):   # and the two genre jobs
+    for key, val in (("TD", args.td), ("PF", args.pf), ("MY", args.my), ("TOWN", args.town)):   # and the genre jobs
         if val is not None:
             for _, env in targets:
                 env[key] = str(val)

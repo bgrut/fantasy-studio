@@ -145,13 +145,13 @@
   "horse": "assets/library/horse.glb",
   "scientist": "assets/library/scientist.glb",
   "engineer": "assets/library/engineer.glb",
-  "gem": "assets/library/gem.glb",
   "pirate ship": "assets/library/pirate_ship.glb",
   "archer": "assets/library/archer.glb",
   "dolphin": "assets/library/dolphin.glb",
   "space fighter": "assets/library/space_fighter.glb",
-  "diamond": "assets/library/diamond.glb",
   "skeleton": "assets/library/skeleton.glb",
   "golden key": "assets/library/golden_key.glb",
-  "zombie": "assets/library/zombie.glb"
+  "zombie": "assets/library/zombie.glb",
+  "gem": "assets/library/gem.glb",
+  "diamond": "assets/library/diamond.glb"
 }

@@ -6428,6 +6428,7 @@ async function main() {
       if (o.kind === 'defeat') return `Defeat ${o.count} ${o.label}`;
       if (o.kind === 'survive') return `Survive ${o.count} seconds of ${o.label || 'the onslaught'}`;
       if (o.kind === 'defend') return `Hold the ${o.label || 'keep'} through ${o.count} waves. T builds a tower`;
+      if (o.kind === 'accuse') return `Name ${o.label || 'the killer'}. E questions a suspect, Y accuses them`;
       return `Reach the ${o.label || 'beacon'}`;
     });
     if (!objLines.length) objLines.push('Reach the glowing beacon');
@@ -6497,6 +6498,7 @@ async function main() {
   const rngN = mulberry32(SPEC.seed + 31);
   let vehIdx = 0;                       // starting-grid slot for vehicle rivals
   let gIdx = 0;                         // heist: which room each guard owns
+  let sIdx = 0;                         // mystery: where each suspect waits
   // WAVE POOL (survive verb): extra hostiles are pre-built DORMANT at load
   // time — waking one costs nothing, so waves never cause loading hitches
   // (same no-mid-game-spikes philosophy as the collectible glow sprites)
@@ -6629,6 +6631,21 @@ async function main() {
           startYaw = hd + (ent.asset === SPEC.player.asset
             ? THREE.MathUtils.degToRad(SPEC.player.yaw_offset_deg || 0) : 0);
           vehIdx++;
+        } else if (ent.behavior === 'suspect') {
+          // MYSTERY: each suspect waits somewhere of their own, a short walk
+          // apart, so questioning them is a round of the scene; indoors they
+          // take the rooms past the entry hall, like the guards do
+          if (INTERIOR && INTERIOR.rooms && INTERIOR.rooms.length > 1) {
+            const rms = INTERIOR.rooms.slice(1);
+            const home = rms[sIdx % rms.length];
+            holder.position.set(home[0] + 0.8, 0, home[1] - 0.6);
+          } else {
+            const a = 0.9 + sIdx * 1.55 + rngN() * 0.3, r = 10 + (sIdx % 3) * 4;
+            holder.position.set(_sp.x + Math.sin(a) * r, 0, _sp.z + Math.cos(a) * r);
+          }
+          holder.position.y = hAt(holder.position.x, holder.position.z);
+          startYaw = rngN() * Math.PI * 2;
+          sIdx++;
         } else if (ent.behavior === 'guide') {
           // a guide you never meet is a guide who never guides: stand them
           // just ahead of the spawn point, in plain sight, facing the player
@@ -6763,7 +6780,7 @@ async function main() {
         npcs.push({ obj: holder, down: 0, kx: 0, kz: 0, quad,
                 speed: ent.speed || 1.5, behavior: ent.behavior || 'wander',
                     target: null, yaw: startYaw, phase: rngN() * Math.PI * 2,
-                    h: ent.height_m || 1.0, name: ent.name,
+                    h: ent.height_m || 1.0, name: ent.name, role: ent.role || null,
                     beat: holder.userData.fsBeat || null,   // heist patrol circuit
                     pen: holder.userData.fsPen || null,     // venue he never leaves
                     hp: ent.hp || 3, cd: 0, dead: false, dieT: 0, mats, anim, dormant, spectral: !!ent.spectral });
@@ -7197,6 +7214,14 @@ async function main() {
           }
           tx = n.target[0]; tz = n.target[1];
         }
+      } else if (n.behavior === 'suspect') {
+        const d = Math.hypot(playerPos.x - n.obj.position.x, playerPos.z - n.obj.position.z);
+        if (d < 9) {
+          n.yaw = THREE.MathUtils.damp(
+            n.yaw, Math.atan2(playerPos.x - n.obj.position.x,
+                              playerPos.z - n.obj.position.z), 4, dt);
+          n.obj.rotation.y = n.yaw;
+        }
       } else if (n.behavior === 'guide') {
         // THE GUIDE: stands their ground, turns to face you, and speaks when
         // you come near. A game should explain itself through a person, not
@@ -7292,7 +7317,7 @@ async function main() {
   if (!steps.length && goalPos) steps = [{ kind: 'reach', label: 'the beacon', count: 1 }];
   // a defence ends when the last wave falls: the keep IS the goal, and a
   // beacon to walk to afterwards would be a chore after the game is won
-  else if (goalPos && steps.length && !['reach', 'defend'].includes(steps[steps.length - 1].kind))
+  else if (goalPos && steps.length && !['reach', 'defend', 'accuse'].includes(steps[steps.length - 1].kind))
     steps.push({ kind: 'reach', label: 'the beacon', count: 1 });
   let stepIdx = -1, kills = 0, won = false, lost = false, raceFinishers = 0;
   const collectibles = [];
@@ -7392,10 +7417,32 @@ async function main() {
   function spawnCollectibles(step) {
     const pts = LVL && LVL.collect_points;
     const tpl = collectTpl[steps.indexOf(step)];   // generated mesh, if the spec baked one
+    // EVIDENCE MARKERS (2026-09-29): a mystery's clues are the yellow numbered
+    // tents a crime scene is dressed with, standing on the ground, not orbs in
+    // the air. The library's "clue" was a dark card the quality gate refuses.
+    const _evidence = !tpl && (SPEC.objectives || []).some(o => o.kind === 'accuse');
     for (let i = 0; i < step.count; i++) {
       let s;
       if (tpl) {
         s = tpl.clone(true);
+      } else if (_evidence) {
+        const cv = document.createElement('canvas'); cv.width = 128; cv.height = 128;
+        const g = cv.getContext('2d');
+        g.fillStyle = '#f2c230'; g.fillRect(0, 0, 128, 128);
+        g.fillStyle = '#16140f'; g.font = '800 84px system-ui'; g.textAlign = 'center'; g.textBaseline = 'middle';
+        g.fillText(String(i + 1), 64, 70);
+        const tx = new THREE.CanvasTexture(cv); tx.colorSpace = THREE.SRGBColorSpace;
+        const face = new THREE.MeshStandardMaterial({ map: tx, roughness: 0.5, emissive: 0x3a2a00, emissiveIntensity: 0.6 });
+        const edge = new THREE.MeshStandardMaterial({ color: 0xf2c230, roughness: 0.5 });
+        s = new THREE.Group();
+        const W = 0.42, H = 0.46, lean = 0.36;
+        for (const sd of [1, -1]) {
+          const pl = new THREE.Mesh(new THREE.BoxGeometry(W, H, 0.012), [edge, edge, edge, edge, sd > 0 ? face : edge, sd > 0 ? edge : face]);
+          pl.position.set(0, H / 2 * Math.cos(lean), sd * H / 2 * Math.sin(lean));
+          pl.rotation.x = -sd * lean;
+          pl.castShadow = true;
+          s.add(pl);
+        }
       } else {
         const m = new THREE.MeshStandardMaterial({
           color: 0xfff2b0, emissive: 0xffd54a, emissiveIntensity: 2.6, roughness: 0.4 });
@@ -7410,13 +7457,14 @@ async function main() {
         cx = Math.cos(ang) * d; cz = Math.sin(ang) * d;
       }
       if (VIEW === 'side') cz = 0;        // side-scroller: pickups on the lane
-      const baseY = (cy !== null ? cy : hAt(cx, cz)) + 1.0 + rngC() * 0.6;
+      const baseY = (cy !== null ? cy : hAt(cx, cz)) + (_evidence ? 0.0 : 1.0 + rngC() * 0.6);
       s.position.set(cx, baseY, cz);
+      if (_evidence) s.rotation.y = rngC() * Math.PI * 2;
       s.userData.fsTag = { type: 'collectible', name: step.label || 'item',
                            detail: 'collect it' };
-      s.add(makeGlow(1.7));
+      s.add(makeGlow(_evidence ? 1.1 : 1.7));
       scene.add(s);
-      collectibles.push({ mesh: s, baseY, phase: rngC() * Math.PI * 2 });
+      collectibles.push({ mesh: s, baseY, phase: rngC() * Math.PI * 2, still: _evidence });
     }
   }
   // ── HEALTH PACKS: heart pickups on the ground — restore 1 HP on touch,
@@ -8138,6 +8186,7 @@ async function main() {
       // door handle, not a signpost. Hooked through `window` on purpose —
       // this listener is built ~1300 lines before the car system exists.
       if (gameStarted && window.__carE && window.__carE()) return;
+      if (gameStarted && window.__mysteryE && window.__mysteryE()) return;
       if (readable && gameStarted) setReading(true, readable);
     }
   });
@@ -8271,6 +8320,14 @@ async function main() {
     const n = st.count, l = st.label || 'them';
     // a city heist has to say WHERE: the loot is behind four doors on the
     // block, and nothing else on screen tells you the glow is a way in
+    if ((SPEC.objectives || []).some(o => o.kind === 'accuse')) {
+      if (st.kind === 'collect')
+        return `Someone here did it. Find ${cnt(n, l)}: each one tells you something about the killer. `
+          + `Then walk up to each suspect and press E. What you see of them is what you match against the clues. J opens your casebook.`;
+      if (st.kind === 'accuse')
+        return `You have everything the scene will give you. Read your casebook with J, find the one suspect who fits every clue, `
+          + `question them with E and press Y to name them. Name the wrong one and the real killer walks.`;
+    }
     if (st.kind === 'collect' && ENTERABLES.length > 1)
       return `${n} ${l}, spread across ${ENTERABLES.length} buildings on this `
         + `block. Walk into a glowing doorway to get inside. The amber dots `
@@ -8299,6 +8356,7 @@ async function main() {
     // a role, not a species: "MAN" as a speaker name reads like placeholder
     // text. The job the character is doing is what the player should see.
     const role = HAS_GUARDS ? 'Informant'
+      : (SPEC.objectives || []).some(o => o.kind === 'accuse') ? 'Inspector'
       : (SPEC.objectives || []).some(o => o.kind === 'race') ? 'Crew Chief'
       : (SPEC.objectives || []).some(o => o.kind === 'hunt') ? 'Tracker'
       : 'Guide';
@@ -8313,6 +8371,7 @@ async function main() {
     if (st.kind === 'race') return `Win the race (${st.count} ${st.label || 'rivals'})`;
     if (st.kind === 'survive') return `Survive ${st.label || 'the onslaught'}`;
     if (st.kind === 'defend') return `Hold the ${st.label || 'keep'}`;
+    if (st.kind === 'accuse') return `Name ${st.label || 'the killer'}`;
     if (st.kind === 'eliminate') return `Last one standing. Eliminate ${st.count} ${st.label || 'rivals'}`;
     if (st.kind === 'hunt') return `Hunt ${st.count} ${st.label || 'prey'} (approach quietly)`;
     if (st.kind === 'score') return `Score ${st.count} ${st.label || 'goals'}`;
@@ -8336,6 +8395,10 @@ async function main() {
     if (st.kind === 'capture') {
       const pct = st._hold ? ` · ${Math.min(99, Math.round(st._hold / 8 * 100))}%` : '';
       return `${st._zi || 0}/${st.count}${pct}`;
+    }
+    if (st.kind === 'accuse' && window.__mystery) {
+      const q = window.__mystery.state();
+      return `${q.questioned.length}/${q.suspects.length} questioned`;
     }
     if (st.kind === 'defend' && window.__defend) {
       const q = window.__defend.state();
@@ -10848,6 +10911,7 @@ async function main() {
     facts: () => {
       const f = {
         defend: window.__defend ? window.__defend.state() : null,
+        mystery: window.__mystery ? window.__mystery.state() : null,
         platforms: window.__platforms || 0,
         style: SPEC.style || 'default',
         archetype: (SPEC.world && SPEC.world.archetype) || 'plain',
@@ -12603,6 +12667,220 @@ varying vec2 vUvRaw;
   const camTarget = new THREE.Vector3();
   const _camWant = new THREE.Vector3();
 
+  // ── MYSTERY (2026-09-29): QUESTION THE SUSPECTS, NAME THE KILLER ──────
+  // "A murder at the manor: question the suspects and name the killer" came
+  // out as collect five orbs and walk to a beacon, with nobody to question and
+  // nobody to name. A whodunit is a deduction: the clues each say one thing
+  // about the killer (which hand, what shoes, what smell, what coat), and
+  // questioning a suspect shows you those same four things about them. Exactly
+  // one suspect fits every clue; every innocent misses at least one, so the
+  // case is solvable from what the game shows and nothing else. The case is
+  // dealt from the seed: the same game is the same case, a new seed a new one.
+  // E questions whoever is in front of you, J opens the casebook, and in the
+  // last step Y names the one you questioned last. Right wins, wrong loses and
+  // says who it was.
+  {
+    const _accStep = steps.find(o => o.kind === 'accuse');
+    const SUS = npcs.filter(n => n.behavior === 'suspect' && !n.dead);
+    if (_accStep && SUS.length >= 2) {
+      const rngM = mulberry32((SPEC.seed || 7) * 131 + 17);
+      const pick = a => a[Math.floor(rngM() * a.length) % a.length];
+      const TRAITS = [
+        { vals: ['left', 'right'],
+          seen: v => `writes with the ${v} hand`,
+          clue: v => `The blow came from the ${v}. Whoever struck it leads with the ${v} hand.` },
+        { vals: ['mud', 'polish', 'sawdust'],
+          seen: v => ({ mud: 'mud caked on the shoes', polish: 'freshly polished shoes', sawdust: 'sawdust on the shoes' })[v],
+          clue: v => ({ mud: 'Footprints by the body, pressed in wet mud.', polish: 'A clean heel print by the body, from a freshly polished shoe.', sawdust: 'A trail of sawdust leads away from the body.' })[v] },
+        { vals: ['pipe tobacco', 'lavender', 'lamp oil'],
+          seen: v => `smells of ${v}`,
+          clue: v => `The air where it happened still smells of ${v}.` },
+        { vals: ['red', 'grey', 'green'],
+          seen: v => `wears a ${v} coat`,
+          clue: v => `A thread of ${v} wool is caught on the door frame.` },
+      ];
+      const clueStep = steps.find(o => o.kind === 'collect');
+      const K = Math.max(1, Math.min(TRAITS.length, clueStep ? clueStep.count : 3));
+      const ALIBIS = [
+        'I was in the kitchen all evening. Ask anyone who came through.',
+        'I heard a shout and came running. That is all I know.',
+        'I never left the garden. I had no reason to go inside.',
+        'We argued, yes. Everyone argues. I would never hurt anyone.',
+        'I was asleep. I only woke when the screaming started.',
+        'I was reading until late, alone. I know how that sounds.',
+        'I was out on the road. I came back to find all of this.',
+        'I barely knew the victim. Why would I want them dead?',
+      ];
+      const ROLES = ['the stranger', 'the neighbour', 'the partner', 'the heir', 'the cook', 'the driver'];
+      const titleOf = (n, i) => {
+        const r = String(n.role || '').trim();
+        if (r) return /^(the|a|an)\s/i.test(r) ? r.replace(/^(a|an)\s/i, 'the ') : 'the ' + r;
+        const same = SUS.filter(m => m.name === n.name).length > 1;
+        return same ? ROLES[i % ROLES.length] : 'the ' + String(n.name || 'suspect').replace(/_/g, ' ');
+      };
+      const cul = Math.floor(rngM() * SUS.length) % SUS.length;
+      const cv = TRAITS.map(t => pick(t.vals));
+      const alibis = ALIBIS.slice().sort(() => rngM() - 0.5);
+      const people = SUS.map((n, i) => ({ n, who: titleOf(n, i), tv: cv.slice(), alibi: alibis[i % alibis.length] }));
+      // every innocent misses at least one clue, and every clue rules someone out
+      const inn = people.filter((_, i) => i !== cul);
+      const differ = (q, c) => { const o = TRAITS[c].vals.filter(v => v !== cv[c]); q.tv[c] = pick(o); };
+      inn.forEach((q, j) => {
+        differ(q, j % K);
+        for (let c = 0; c < TRAITS.length; c++) {
+          if (c === j % K) continue;
+          if (c < K && c % inn.length === j) differ(q, c);
+          else if (rngM() < 0.35) differ(q, c);
+        }
+      });
+      const found = [], asked = new Set();
+      let target = null, pendT = 0, verdict = null;
+      // a name over each head: the player has to know who is who from across the room
+      for (const q of people) {
+        const cv2 = document.createElement('canvas'); cv2.width = 256; cv2.height = 56;
+        const g = cv2.getContext('2d');
+        g.fillStyle = 'rgba(12,12,22,0.72)'; g.beginPath();
+        if (g.roundRect) g.roundRect(4, 6, 248, 44, 12); else g.rect(4, 6, 248, 44);
+        g.fill();
+        g.font = '700 26px system-ui'; g.fillStyle = '#ffe6a8'; g.textAlign = 'center'; g.textBaseline = 'middle';
+        g.fillText(q.who.replace(/^the /i, '').toUpperCase(), 128, 29);
+        const tx = new THREE.CanvasTexture(cv2); tx.colorSpace = THREE.SRGBColorSpace;
+        const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tx, transparent: true, depthWrite: false }));
+        sp.scale.set(1.9, 0.42, 1);
+        sp.position.set(q.n.obj.position.x, q.n.obj.position.y + (q.n.h || 1.8) + 0.5, q.n.obj.position.z);
+        scene.add(sp); q.tag = sp;
+      }
+      const seenOf = q => TRAITS.slice(0, K).map((t, c) => t.seen(q.tv[c])).join(', ');
+      const near = () => {
+        let best = null, bd = 4.2;
+        for (const q of people) {
+          if (q.n.dead) continue;
+          const d = Math.hypot(playerObj.position.x - q.n.obj.position.x, playerObj.position.z - q.n.obj.position.z);
+          if (d < bd) { bd = d; best = q; }
+        }
+        return best;
+      };
+      const accusing = () => { const s2 = steps[stepIdx]; return !!(s2 && s2.kind === 'accuse'); };
+      function question(q) {
+        asked.add(q.who);
+        target = q; pendT = 10;
+        const tail = accusing() ? `  Press Y to name ${q.who} as the killer.` : '';
+        say(q.who, `"${q.alibi}"  You notice: ${seenOf(q)}.${tail}`, '#ffd166');
+        renderQuest();
+        return true;
+      }
+      function accuse(q) {
+        if (!q || won || lost || !accusing()) return;
+        const killer = people[cul];
+        const fits = TRAITS.slice(0, K).map((t, c) => t.seen(killer.tv[c])).join(', ');
+        if (q === killer) {
+          verdict = `It was ${killer.who}. Every clue fits: ${fits}.`;
+          doWin(verdict);
+        } else {
+          const miss = TRAITS.slice(0, K).map((t, c) => (q.tv[c] !== killer.tv[c] ? t.seen(q.tv[c]) : null)).filter(Boolean);
+          verdict = `${q.who[0].toUpperCase() + q.who.slice(1)} did not do it (${miss.join(', ')}). It was ${killer.who}: ${fits}.`;
+          doLose(verdict);
+        }
+      }
+      window.__mysteryE = () => {
+        const q = near();
+        return q ? question(q) : false;
+      };
+      function casebook() {
+        const lines = ['CLUES'];
+        if (!found.length) lines.push('  none found yet');
+        found.forEach((c, i) => lines.push(`  ${i + 1}. ${c}`));
+        lines.push('', 'SUSPECTS');
+        for (const q of people) {
+          lines.push(asked.has(q.who) ? `  ${q.who}: ${seenOf(q)}` : `  ${q.who}: not yet questioned`);
+        }
+        lines.push('', accusing() ? 'Question the one who fits every clue, then press Y.'
+          : `Find the rest of the ${clueStep ? clueStep.label || 'clues' : 'clues'}, and question everyone.`);
+        setReading(true, { label: 'casebook', text: lines.join('\n') });
+      }
+      addEventListener('keydown', e => {
+        if (!gameStarted || won || lost) return;
+        if (e.code === 'KeyJ') { e.preventDefault(); if (reading) setReading(false); else casebook(); }
+        if (e.code === 'KeyY' && target && pendT > 0) { e.preventDefault(); accuse(target); }
+      });
+      const hint = document.querySelector('#hud .hint');
+      if (hint) hint.textContent += ' · E question · J casebook';
+      // the prompt that says who you are standing in front of, and a phone's buttons
+      const chip = document.createElement('div');
+      chip.id = 'fsmystery';
+      chip.style.cssText = 'position:fixed;left:50%;bottom:150px;transform:translateX(-50%);z-index:21;'
+        + 'padding:7px 14px;border-radius:10px;background:rgba(12,12,22,.8);border:1px solid rgba(255,214,140,.35);'
+        + 'font:700 13px system-ui;color:#ffe6a8;pointer-events:none;display:none';
+      document.body.appendChild(chip);
+      let askBtn = null, accBtn = null, caseBtn = null;
+      if (matchMedia('(pointer:coarse)').matches) {
+        const mk = (id, txt, right, bottom, fn) => {
+          const b = document.createElement('div');
+          b.id = id; b.textContent = txt;
+          b.style.cssText = `position:fixed;right:${right}px;bottom:${bottom}px;width:70px;height:70px;border-radius:50%;`
+            + 'display:none;align-items:center;justify-content:center;z-index:30;user-select:none;'
+            + 'background:rgba(30,26,14,.74);border:2px solid rgba(255,214,140,.6);color:#ffe6a8;font:800 11px system-ui';
+          b.addEventListener('pointerdown', e => { e.preventDefault(); fn(); });
+          document.body.appendChild(b); return b;
+        };
+        askBtn = mk('askbtn', 'ASK', 110, 30, () => window.__mysteryE());
+        accBtn = mk('accbtn', 'ACCUSE', 110, 110, () => accuse(target));
+        caseBtn = mk('casebtn', 'CASE', 190, 30, () => (reading ? setReading(false) : casebook()));
+        caseBtn.style.display = 'flex';
+      }
+      const padWas = [false, false, false];
+      window.__mystery = {
+        clue(st) {
+          if (found.length >= K) { say('Clue', 'Nothing new here. It only repeats what you know.', '#ffd166'); return; }
+          const c = found.length;
+          const txt = TRAITS[c].clue(cv[c]);
+          found.push(txt);
+          say(`Clue ${found.length}/${K}`, txt + '  (J: casebook)', '#ffd166');
+        },
+        tick(dt) {
+          if (won || lost || !gameStarted) return;
+          pendT = Math.max(0, pendT - dt);
+          const q = near();
+          if (target && pendT > 0 && q !== target) pendT = Math.min(pendT, 1.5);   // walked off: the moment passes
+          const canAcc = accusing() && target && pendT > 0 && q === target;
+          chip.style.display = q ? 'block' : 'none';
+          if (q) chip.textContent = canAcc ? `Y: name ${q.who} as the killer` : `E: question ${q.who}`;
+          if (askBtn) askBtn.style.display = q ? 'flex' : 'none';
+          if (accBtn) accBtn.style.display = canAcc ? 'flex' : 'none';
+          for (const p2 of people) if (p2.tag) p2.tag.position.set(p2.n.obj.position.x, p2.n.obj.position.y + (p2.n.h || 1.8) + 0.5, p2.n.obj.position.z);
+          // a pad: X questions, Y names, Back opens the casebook
+          for (const gp of (navigator.getGamepads ? navigator.getGamepads() : [])) {
+            if (!gp) continue;
+            const b = [2, 3, 8].map(i => !!(gp.buttons[i] && gp.buttons[i].pressed));
+            if (b[0] && !padWas[0] && q) question(q);
+            if (b[1] && !padWas[1] && canAcc) accuse(target);
+            if (b[2] && !padWas[2]) { if (reading) setReading(false); else casebook(); }
+            b.forEach((v, i) => { padWas[i] = v; });
+            break;
+          }
+        },
+        state: () => ({
+          suspects: people.map(q => q.who),
+          questioned: [...asked],
+          clues: found.slice(),
+          clueCount: K,
+          accusing: accusing(),
+          target: target ? target.who : null,
+          over: won ? 'won' : lost ? 'lost' : null,
+          verdict,
+          // for the gate only: where each suspect stands, and who fits
+          where: people.map(q => [q.n.obj.position.x, q.n.obj.position.z]),
+          culprit: people[cul].who,
+          traits: people.map(q => q.tv.slice(0, K)),
+          killerTraits: cv.slice(0, K),
+        }),
+        question: i => question(people[i]),
+        accuse: i => accuse(people[i]),
+        casebook,
+      };
+    }
+  }
+
   // ── DEFEND (2026-09-27): THE TOWER DEFENCE ─────────────────────────────
   // "Goblins march down a road and I build archer towers" used to come out
   // as a survive timer, with the player cast AS a goblin and no way to build
@@ -13360,6 +13638,7 @@ varying vec2 vUvRaw;
     sharpen.uniforms.uT.value = grade.uniforms.uT.value;  // live film grain
 
     if (window.__defend) window.__defend.tick(dt);
+    if (window.__mystery) window.__mystery.tick(dt);
     // SURVIVE verb: hold out while escalating waves close in
     {
       const st = steps[stepIdx];
@@ -13802,8 +14081,10 @@ varying vec2 vUvRaw;
       const t = performance.now() / 1000;
       for (const c of collectibles) {
         if (!c.mesh.parent) continue;
-        c.mesh.position.y = c.baseY + Math.sin(t * 2.2 + c.phase) * 0.22;
-        c.mesh.rotation.y += dt * 2;
+        if (!c.still) {                    // an evidence marker stands where it was put
+          c.mesh.position.y = c.baseY + Math.sin(t * 2.2 + c.phase) * 0.22;
+          c.mesh.rotation.y += dt * 2;
+        }
         const dx = c.mesh.position.x - nt.x, dz = c.mesh.position.z - nt.z;
         const pickR = Math.max(1.4, (P.height_m || 1) * 0.9);  // big heroes reach further
         if (dx * dx + dz * dz < pickR * pickR) {
@@ -13814,6 +14095,7 @@ varying vec2 vUvRaw;
             addXP(6);
             sfx('pickup');
             burst(c.mesh.position, 0xffd54a);
+            if (window.__mystery) window.__mystery.clue(st);
             juicePunch = FEEL.punch;
             juiceSlow = Math.max(juiceSlow, 0.09 * FEEL.slow);
             if (HAS_GUARDS) {

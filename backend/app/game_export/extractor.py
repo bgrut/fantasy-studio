@@ -99,11 +99,10 @@ Output ONLY the JSON object, no markdown, no commentary. Schema (all fields opti
  under real light, toy-like and tactile), "noir" (near-monochrome silhouettes
  in grey haze, grain, dread; horror, mystery, the unsettling), "storybook"
  (inked linework over muted paper, spindly and hand-drawn; gothic whimsy,
- survival, the eerie). CHOOSE ONE that fits
- the subject and mood, do not default to photoreal out of habit: a shark-hunting
- sailboat adventure reads "lowpoly" or "cartoon"; a haunted asylum reads
- "horror"; a retro 8-bit arcade racer reads "pixel"; a Ghibli-ish forest walk reads
- "anime"; a gritty city heist, a wildlife documentary, or a NIGHT STREET RACE
+ survival, the eerie). USE "default" (photoreal) UNLESS THE PROMPT ASKS FOR
+ A LOOK in its own words: a shark-hunting sailboat adventure is "default"; a
+ haunted asylum reads "horror"; a retro 8-bit arcade racer reads "pixel"; a
+ Ghibli-ish forest walk reads "anime"; a gritty city heist, a wildlife documentary, or a NIGHT STREET RACE
  under neon reads "default" (neon is light, not resolution: it wants real
  reflections and a night palette with a hot accent, not a low-res filter).
  THE ILLUSTRATION LOOKS OWN THEIR SKY: "illustrated", "storybook",
@@ -161,6 +160,11 @@ Output ONLY the JSON object, no markdown, no commentary. Schema (all fields opti
                "battle royale"/"last one standing"/"eliminate all N rivals" ->
                {"kind":"eliminate","label":"rivals","count": N rivals 2..12};
                soccer/football/"score N goals" -> {"kind":"score","label":"goals","count": N 1..10};
+               MYSTERY / WHODUNIT ("question the suspects", "name the killer", "solve the
+               murder") -> [{"kind":"collect","label":"clues","count":3,"asset":"clue"},
+               {"kind":"accuse","label":"the killer","count":1}] AND 3-5 people with
+               "behavior":"suspect", each {"name": a human body ("man","scientist"),
+               "role": who they are in the story ("the butler","the gardener")};
                "hunt N elk/deer..." -> {"kind":"hunt","label":prey noun,"count": N 1..8}
                (prey = entity behavior "flee" - it runs when it hears the player);
                "escort/protect/lead/guide NAME to PLACE" -> {"kind":"escort",
@@ -238,6 +242,22 @@ TD_WORDS = (r"\btower[\s-]?defen[cs]e\b"
             r"(?:\w+\s+){0,2}(?:towers?|turrets?|cannons?|ballistas?|defen[cs]es)\b"
             r"|\bdefend\s+(?:the|our|my|a|your)\s+(?:\w+\s+)?(?:base|castle|keep|village|fort|fortress|gate|walls?|"
             r"kingdom|town|tower|outpost|camp|citadel|farm|city)\b")
+# MYSTERY (2026-09-29). A whodunit names itself by its deduction: suspects to
+# question, a culprit to name, a murder to solve. A killer whale or a mysterious
+# forest is not one; "suspects", "who killed", "name the killer" are.
+MYSTERY_WORDS = (r"\bwhodunn?it\b|\bmurder\s+myster(?:y|ies)\b|\bsuspects\b|\bculprit\b|\baccus(?:e|es|ing|ation)\b"
+                 r"|\b(?:question|questions|questioning|interrogate|interrogating|interview|interviewing)\s+(?:the\s+|a\s+|each\s+|every\s+)?(?:\w+\s+)?suspects?\b"
+                 r"|\bwho\s+(?:killed|murdered|poisoned|stabbed|shot|did\s+it|done\s+it)\b"
+                 r"|\b(?:find|name|catch|unmask|identify|expose|figure\s+out)\s+(?:the\s+|who\s+the\s+)?(?:killer|murderer|thief|culprit|poisoner)\b"
+                 r"|\bsolve\s+(?:the|a|this)\s+(?:\w+\s+)?(?:murder|crime|case|mystery|killing|theft)\b")
+# CITY BUILDER (2026-09-29). Named outright, or by its verbs: zoning, growing a
+# population, laying out a town. A city street to race down is not one.
+CITY_WORDS = (r"\bcity[\s-]?build(?:er|ing)\b|\btown[\s-]?build(?:er|ing)\b|\bsim[\s-]?city\b"
+              r"|\bzon(?:e|es|ed|ing)\s+(?:\w+\s+)?(?:houses|homes|residential|commercial|industrial|shops|districts?)\b"
+              r"|\b(?:residential|commercial|industrial)\s+(?:zones?|zoning|districts?)\b"
+              r"|\b(?:grow|grows|growing)\s+(?:the\s+|a\s+|my\s+|your\s+)?(?:population|city|town|village)\b"
+              r"|\b(?:build|builds|building|found|plan|lay\s+out)\s+(?:a|my|the|your)\s+(?:own\s+)?(?:city|town|village|metropolis)\b"
+              r"|\bpopulation\s+(?:of|to)\s+\d+")
 _DEFENDED = ("castle", "keep", "village", "base", "fort", "fortress", "citadel", "town",
              "kingdom", "outpost", "camp", "farm", "gate", "city", "tower")
 
@@ -498,7 +518,9 @@ Output ONLY the complete updated JSON object, no markdown. Rules:
   {"name": "wolf", "behavior": "hostile", "count": 2, "speed": 3.0}
 - If the change replaces the player, update player.name (assets re-resolve).
 - objectives kinds: collect, defeat, reach, race, survive, defend (tower
-  defence: count = waves). entity behaviors:
+  defence: count = waves), accuse (a mystery's last step: name the killer
+  among the "suspect" entities). entity behaviors: suspect (a mystery's
+  person of interest, with "role" saying who they are),
   wander, follow, static, hostile, vehicle, guard (patrolling vision-cone
   sentry for stealth/heist — attacks only when it sees the player).
 - world.sky one of day,sunset,night,overcast,mars,space,dusk; weather none,rain,snow.

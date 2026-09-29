@@ -116,7 +116,12 @@ PATTERN_NEGATIVE: Dict[str, str] = {
     "biped":     "T-pose, t pose, arms outstretched, arms straight out, arms horizontal, arms spread wide, wingspan, jumping jack, holding weapon, holding object, aiming, raised arm, bent elbow, crossed arms, hands on hips, dynamic pose, motion blur, running, jumping, tilted, perspective distortion, cropped, anatomy figure, ecorche, flayed, skinless, exposed muscle, muscle suit, x-ray, medical illustration, red and blue veins, nude, naked, underwear, briefs, boxers, swimsuit, swim trunks, bare chest, shirtless, topless, bare legs, loincloth, undressed, partially clothed",
     "vehicle":   "moving, motion blur, tilted, perspective distortion, forest, trees, outdoor scene, road, landscape, buildings, sky",
     "flying":    "flying, mid-air, coiled, curled, head close-up, portrait, tattoo style, line art, illustration, logo, emblem, circular composition, cropped body, motion blur, dynamic pose",
-    "aquatic":   "pattern, wallpaper, multiple animals, many, group, pod, school of fish, repeated, tiled, seamless pattern, illustration, cartoon, drawing, logo, fabric print, cropped body, top view",
+    "aquatic":   "pattern, wallpaper, multiple animals, many, group, pod, school of fish, repeated, tiled, seamless pattern, illustration, cartoon, drawing, logo, fabric print, cropped body, top view, leaping, jumping out of the water, diagonal body, vertical body, arched body, splash",
+    # ONE THING, WHOLE (2026-09-29): "a gem" came back as a wallpaper of forty
+    # grey gem icons and meshed into a flat grey slab; "a diamond" as one stone
+    # in a scatter of small ones. A prop's reference is a single object.
+    "static":    "pattern, wallpaper, collage, grid of many items, many objects, multiple items, repeated icons, sticker sheet, scattered pieces, several copies, seamless pattern, tiled, background clutter",
+    "primitive_geo": "pattern, wallpaper, collage, grid of many items, many objects, multiple items, repeated icons, sticker sheet, scattered pieces, several copies, seamless pattern, tiled, background clutter",
 }
 
 
@@ -527,6 +532,44 @@ def _build_reference_prompt(slots: Dict[str, Any], style: str) -> tuple[str, str
     return positive, negative
 
 
+def _not_one_thing(img, noun: str, pattern: str) -> float:
+    """CLIP's belief that a reference is NOT one whole, level subject.
+
+    The failures it catches are the ones that reached a game: a sheet of many
+    small copies instead of one object (the gem), one object in a scatter of
+    smaller ones (the diamond), and a swimmer leaping on a diagonal (the
+    dolphin, which meshed standing on its tail). Same model as the blotch and
+    asset judges."""
+    import torch
+    _blotchiness_model_ready()
+    model, proc = _CLIP_JUDGE
+    dev = next(model.parameters()).device
+    n = (noun or "object").strip()
+    pos = [f"a single {n} on a plain background", f"one {n}, whole, centered"]
+    neg = [f"a pattern of many small {n}s", "a collage of many small objects", "a wallpaper of repeated icons",
+           f"one {n} surrounded by many smaller ones"]
+    if pattern in ("aquatic", "quadruped"):
+        pos.append(f"a {n} seen from the side, body level")
+        neg.append(f"a {n} leaping diagonally, body tilted up")
+    with torch.no_grad():
+        inputs = proc(text=pos + neg, images=img.convert("RGB"), return_tensors="pt", padding=True).to(dev)
+        probs = torch.softmax(model(**inputs).logits_per_image[0].float(), dim=0)
+    return float(probs[len(pos):].sum())
+
+
+def _blotchiness_model_ready():
+    """Load the shared CLIP judge once."""
+    import torch
+    from transformers import CLIPModel, CLIPProcessor
+    global _CLIP_JUDGE
+    try:
+        _CLIP_JUDGE
+    except NameError:
+        dev = "cuda" if torch.cuda.is_available() else "cpu"
+        _CLIP_JUDGE = (CLIPModel.from_pretrained("openai/clip-vit-base-patch32").to(dev).eval(),
+                       CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32"))
+
+
 def _blotchiness(img) -> float:
     """CLIP's belief that the figure's clothes are splashed or blotchy rather
     than plain; the same model the asset judge uses (openai/clip-vit-base-patch32, MIT)."""
@@ -787,6 +830,24 @@ def generate_reference(
             img, mode_tag = best[0], best[1]
         except Exception as _je:  # noqa: BLE001
             print(f"[reference] blotch judge skipped ({type(_je).__name__})")
+    # ONE WHOLE THING, LEVEL (2026-09-29): the same reroll for props, animals and
+    # swimmers, judged for being a single subject instead of a sheet or a
+    # scatter, and for lying level instead of leaping on a diagonal
+    elif base_pattern != "vehicle":
+        try:
+            _noun = subj.get("name") or subj.get("identity_phrase") or ""
+            tries = [(img, mode_tag, _not_one_thing(img, _noun, base_pattern))]
+            for k in (1, 2):
+                if tries[-1][2] < 0.5:
+                    break
+                s2 = (int(seed) if seed is not None else 1000) + 101 * k
+                img2, tag2 = _gen_once(s2)
+                tries.append((img2, tag2, _not_one_thing(img2, _noun, base_pattern)))
+            best = min(tries, key=lambda t: t[2])
+            print(f"[reference] not-one-thing " + ", ".join(f"{t[2]:.2f}" for t in tries) + f"; kept {best[2]:.2f}")
+            img, mode_tag = best[0], best[1]
+        except Exception as _oe:  # noqa: BLE001
+            print(f"[reference] single-subject judge skipped ({type(_oe).__name__})")
     elapsed = time.time() - t0
     img.save(output_path)
     print(f"[reference] saved → {output_path.name} ({width}×{height}, "

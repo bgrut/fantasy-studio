@@ -80,6 +80,13 @@ by backend/tools/shotgate/perfpass.mjs.
     RUNS          in the panel: name the factory you are in and keep it, with
                   a picture; open a kept run to bring it back, forget with a
                   second click
+    Esc / II      pause: volume, look speed, invert look, and the controls;
+                  kept between visits
+
+A controller plays it too (standard mapping): left stick walks, right stick
+looks, RT builds and holds to drag, LT erases, LB and RB change tool, A jumps,
+Y looks from above (where the left stick moves a cursor), B comes back down,
+X sets a filter, Start pauses.
 
 ## Recipes
 

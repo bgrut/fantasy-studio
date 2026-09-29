@@ -79,8 +79,15 @@ const MOOD_LOOK = {
 // planet. The sentence the player typed is the strongest word there is.
 const _moodText = [SPEC.title, SPEC.world && SPEC.world.name, SPEC.world && SPEC.world.description,
                    SPEC.world && SPEC.world.setting, SPEC.prompt].filter(Boolean).join(' ');
-const MOOD = (MOODS.find(m => m.words.test(_moodText)) || { id: 'void' }).id;
-const HOME = MOOD_LOOK[MOOD];
+// a town is built on grass, whatever its sentence called it
+const MOOD = SPEC.city ? 'green' : (MOODS.find(m => m.words.test(_moodText)) || { id: 'void' }).id;
+// A TOWN IS UNDER A DAY SKY (2026-09-29): the green family's grass and grid,
+// with a blue sky, a pale moon and no aurora, instead of an alien world's
+const HOME = SPEC.city ? Object.assign({}, MOOD_LOOK.green, {
+  nebula: { a: 0x5d8fc8, b: 0xa9cde9, amt: 0.55, aurora: 0.0, auroraA: 0xffffff, auroraB: 0xffffff },
+  sky: 0x78a6d6, fog: 0xa9c4de, star: 0xc9dcf0, sun: 0xfff4e0, spores: false,
+  planet: { col: 0xe4ebf2, size: 0.05, bands: 0.15 },
+  grade: { lift: [0.0, 0.0, 0.01], gamma: [1.0, 1.0, 1.0], gain: [1.0, 1.02, 1.0], sat: 1.02 } }) : MOOD_LOOK[MOOD];
 
 // a committed palette still wins for the three colours it carries; the mood
 // fills in everything a palette does not say
@@ -214,7 +221,11 @@ const BASE_TICK = 0.42;
 let TICK = BASE_TICK;
 const EMPTY = 0, MINER = 1, BELT = 2, HUB = 3, NODE = 4, SMELTER = 5,
       SPLITTER = 6, FORGE = 7, FILTER = 8, RIFT = 9, ASSEMBLER = 10,
-      PROP = 11;                     // scenery: the outpost's habitat, masts and crates; blocks, sells nothing, is never saved
+      PROP = 11,                     // scenery: the outpost's habitat, masts and crates; blocks, sells nothing, is never saved
+      ROAD = 12, HOMES = 13, SHOP = 14, WORKS = 15, PARK = 16, HALL = 17;   // the city's (2026-09-29)
+// A CITY (2026-09-29): the same worldlet built as a town. Set by the studio when
+// the prompt asks for a city builder; everything quarry-shaped stands down.
+const CITY = SPEC.city || null;
 const DIRS = [[1, 0], [0, 1], [-1, 0], [0, -1]];        // E S W N
 
 // Items now have a TYPE, and that is the whole point of the smelter. Until
@@ -308,7 +319,8 @@ function themeNode(root) {
 }
 const TYPE_NAME = { 1: 'miner', 2: 'belt', 3: 'hub', 4: 'ore node',
                     5: 'smelter', 6: 'splitter', 7: 'forge', 8: 'filter',
-                    9: 'chronos rift', 10: 'assembler' };
+                    9: 'chronos rift', 10: 'assembler',
+                    12: 'road', 13: 'homes', 14: 'shops', 15: 'works', 16: 'park', 17: 'town hall' };
 
 const VALUE = { [CRYSTAL]: 1, [INGOT]: 6 };   // an ingot is worth the detour
 const SMELT_IN = 2;                            // ore of one kind per ingot
@@ -1721,7 +1733,7 @@ const nodeGeos = [
 const nodeGeo = nodeGeos[0];      // the shape a thumbnail or a fallback uses
 let rngState = +((location.search.match(/[?&]seed=(\d+)/) || [])[1]) || 1337;   // ?seed= is a debug override
 const rnd = () => (rngState = (rngState * 1664525 + 1013904223) % 4294967296) / 4294967296;
-const NODE_COUNT = Math.max(6, Math.min(40, Math.round(N * N * 0.028)));
+const NODE_COUNT = CITY ? 0 : Math.max(6, Math.min(40, Math.round(N * N * 0.028)));   // a town has no seams
 // a seam on a tile: the cell becomes a NODE and grows its crystal
 function makeSeam(f, i, j) {
   const c = cells[f][i][j];
@@ -1818,6 +1830,8 @@ for (let k = 0; k < 320; k++) {
     scatterSpots.push({ f, i, j, kind: r2() < 0.45 ? 0 : 1, d: Math.floor(r2() * 4), s: 0.75 + r2() * 0.6 });
   }
 }
+
+if (typeof SPEC !== 'undefined' && SPEC.city) scatterSpots.length = 0;   // a town's ground is its own: no vents or bolts
 
 // OUTCROPS (2026-09-26). Past the starter line a face was a bare plane with
 // hatches on it, and the hatches read as ore because nothing else was there.
@@ -2304,6 +2318,9 @@ function buildToolIcons() {
                      (() => { const r = mk(GEO.rift, MAT.rift);
                               r.position.y = 0.95; r.rotation.x = Math.PI / 2;
                               return r; })()]),
+    ...(CITY ? { road: () => cityDress(new THREE.Group(), ROAD, 0), home: () => cityDress(new THREE.Group(), HOMES, 2),
+                 shop: () => cityDress(new THREE.Group(), SHOP, 2), works: () => cityDress(new THREE.Group(), WORKS, 1),
+                 park: () => cityDress(new THREE.Group(), PARK, 0) } : {}),
   };
   // the stat chips too: a miner is the same picture everywhere it appears.
   // Items and cores are not machines, so they get their own small renders.
@@ -2362,7 +2379,7 @@ function refreshCounts() {
 
 function removeAt(face, i, j) {
   const c = cells[face][i][j];
-  if (c.t === PROP) return;                  // the crew's things stay
+  if (c.t === PROP || c.t === HALL) return;  // the crew's things stay, and so does the town hall
   beltsDirty = true;
   dropBuild(c);
   c.t = c.mesh ? NODE : EMPTY;               // a node outlives its miner
@@ -2413,7 +2430,10 @@ function place(face, i, j, type, dir) {
   if (c.t === PROP) return false;                        // the outpost is not a build site
   dropBuild(c);
   const g = new THREE.Group();
-  if (type === MINER) {
+  if (CITY_T.has(type)) {
+    c.lvl = 0; c.served = false;
+    cityDress(g, type, 0);
+  } else if (type === MINER) {
     const b = new THREE.Mesh(GEO.miner, MAT.miner);
     b.castShadow = true; g.add(b);
     // the bit turns while the rig is on a seam: the only moving part on a
@@ -2507,7 +2527,7 @@ function place(face, i, j, type, dir) {
     lamp.name = 'lamp';
     g.add(lamp);
   }
-  weather(g, face);                         // soot on the ember faces, rime on the salt, dimmer below
+  if (!CITY_T.has(type)) weather(g, face);   // soot on the ember faces, rime on the salt, dimmer below
   seat(g, face, i, j, dir, 0);
   // A MACHINE LANDS (2026-09-16): eight-tenths scale, an overshoot to one
   // over a third of a second, and a puff of dust from its skirt
@@ -2765,7 +2785,7 @@ eachTile((c, f, i, j) => {
   _gc.setHex(MIN_COL[c.min]);
   glowPools.setColorAt(c.glow, _gc);
 });
-glowPools.instanceColor.needsUpdate = true;
+if (glowPools.instanceColor) glowPools.instanceColor.needsUpdate = true;   // a town has no seams, so no colours yet
 
 // LAMPS LIGHT THE GROUND. A furnace door glowed and the floor under it did
 // not, so the lamp read as a sticker. Every lit lamp has a pool of its light
@@ -4058,7 +4078,7 @@ function tileOfPoint(p) {
   if (i < 0 || j < 0 || i >= N || j >= N) return null;
   return { face, i, j };
 }
-let tool = 'miner';
+let tool = CITY ? 'road' : 'miner';
 let drawing = false;
 let lastCell = null;
 
@@ -4125,7 +4145,8 @@ function updateGhost() {
   const t = cellUnder(overhead ? lastPtr : null);
   if (!t || !tool) { ghost.visible = false; return; }   // no tool in hand, no ghost
   const c = cellOf(t);
-  const legal = tool === 'erase' ? (c.t !== EMPTY && c.t !== NODE && c.t !== PROP)
+  const legal = tool === 'erase' ? (c.t !== EMPTY && c.t !== NODE && c.t !== PROP && c.t !== HALL)
+    : CITY ? c.t === EMPTY
     : tool === 'miner' ? c.t === NODE
     : tool === 'blueprint' ? (blueprint ? bpCells().some(b => { const x = cells_at(t.face, t.i + b.di, t.j + b.dj); return x && (b.t === MINER ? x.t === NODE : x.t === EMPTY); }) : true)
     : c.t !== NODE && c.t !== PROP;
@@ -4197,17 +4218,38 @@ function apply(t, dir) {
   }
   if (tool === 'erase') { removeAt(t.face, t.i, t.j); if (c0 && c0.t !== was) rigPulse('erase'); return; }
   const TOOL_TYPE = { miner: MINER, hub: HUB, smelter: SMELTER, splitter: SPLITTER,
-                      forge: FORGE, filter: FILTER, rift: RIFT, belt: BELT, assembler: ASSEMBLER };
+                      forge: FORGE, filter: FILTER, rift: RIFT, belt: BELT, assembler: ASSEMBLER,
+                      road: ROAD, home: HOMES, shop: SHOP, works: WORKS, park: PARK };
   const ty = TOOL_TYPE[tool];
   if (ty === undefined) return;
+  // a town builds on open ground, and every tile costs: a street is cheap, a
+  // works is not, and the money is what the people living here pay
+  if (CITY && CCOST[tool]) {
+    if (!c0 || c0.t !== EMPTY) return;
+    if (ore < CCOST[tool]) {
+      cityToast('A ' + tool + ' tile costs ' + CCOST[tool] + ' and there is ' + Math.floor(ore) + '. Money comes from the people who live and work here: zone homes beside a road, and give them work.', 4);
+      const el = document.querySelector('.tool[data-tool="' + tool + '"]');
+      if (el) { el.classList.add('deny'); setTimeout(() => el.classList.remove('deny'), 320); }
+      return;
+    }
+  }
   place(t.face, t.i, t.j, ty, (ty === HUB || ty === SPLITTER) ? 0 : d);
+  if (CITY && CCOST[tool] && c0 && c0.t === ty && was !== ty) ore -= CCOST[tool];
   // the projector recoils only when something actually went down
   if (c0 && c0.t === ty && was !== ty) rigPulse('place');
   if (ty === HUB) { renderHubChip(); renderUpgrades(); }
 }
 
+// THE PRIMARY ACTION IS A FUNCTION (2026-09-29): the mouse and the controller
+// both build through these three, so a trigger and a click cannot drift apart.
+// ev is a pointer event, a {clientX, clientY} for the overhead cursor, or null
+// for the crosshair.
 renderer.domElement.addEventListener('pointerdown', e => {
   if (e.button !== 0) return;
+  primaryDown(e);
+});
+function primaryDown(e) {
+  if (PAUSED) return;
   // INSPECTING IS LOOKING, NOT BUILDING (2026-09-07). The studio arms Inspect
   // to let someone click things and read what they are; with the build path
   // still live, every one of those clicks dropped a machine on the world they
@@ -4224,9 +4266,12 @@ renderer.domElement.addEventListener('pointerdown', e => {
   drawing = true;
   lastCell = c;
   apply(c, null);
-});
+}
 renderer.domElement.addEventListener('pointermove', e => {
   lastPtr = { clientX: e.clientX, clientY: e.clientY };
+  primaryMove(e);
+});
+function primaryMove(e) {
   if (tool === 'blueprint' && bpStart) { const c = cellUnder(e); if (c && c.face === bpStart.face) bpEnd = c; return; }
   if (inspectOn || !drawing || !lastCell) return;
   const c = cellUnder(e);
@@ -4250,15 +4295,16 @@ renderer.domElement.addEventListener('pointermove', e => {
   if (tool === 'belt' && tc && tc.t !== EMPTY && tc.t !== BELT && tc.t !== NODE) { lastCell = c; return; }
   apply(c, sd ? sd.d : d);
   lastCell = c;
-});
-addEventListener('pointerup', () => {
+}
+addEventListener('pointerup', () => primaryUp());
+function primaryUp() {
   drawing = false; lastCell = null;
   if (tool === 'blueprint' && bpStart && !blueprint) {
     const a = bpStart, b = bpEnd || bpStart;
     captureBlueprint(a.face, a.i, a.j, b.i, b.j);
   }
   bpStart = null; bpEnd = null;
-});
+}
 
 // Point at a filter and press F. A short cycle rather than a text box: the
 // same decision space as a script, with nothing to parse, nothing to corrupt a
@@ -4301,7 +4347,8 @@ document.querySelectorAll('.tool').forEach(el => {
 });
 addEventListener('keydown', e => {
   if (e.target && e.target.tagName === 'INPUT') return;    // a name being typed is not a hotkey
-  const k = { '1': 'miner', '2': 'belt', '3': 'smelter', '4': 'splitter',
+  if (PAUSED) return;                                       // a paused game buys and builds nothing
+  const k = CITY ? { '1': 'road', '2': 'home', '3': 'shop', '4': 'works', '5': 'park', '9': 'erase' }[e.key] : { '1': 'miner', '2': 'belt', '3': 'smelter', '4': 'splitter',
               '5': 'hub', '6': 'forge', '7': 'filter', '8': 'rift', 'q': 'assembler', 'Q': 'assembler',
               '9': 'erase', '0': 'blueprint' }[e.key];
   if (k === 'blueprint' && tool === 'blueprint' && blueprint) { dropBlueprint(); return; }
@@ -4317,7 +4364,7 @@ addEventListener('keydown', e => {
   if (tutActive() && e.code === 'KeyG') { tutIdx = TUT.length; renderTutor(); if (!tool) pickTool('miner'); save();
     const t = document.getElementById('toast'); if (t) { t.textContent = WORD('The foreman steps back. The goal card leads from here; "the guide" in the panel brings him back.'); t.classList.add('on'); toastAt = 4; } return; }
   const u = { 'KeyZ': 'tick', 'KeyX': 'yield', 'KeyC': 'smelt' }[e.code];
-  if (u) buy(u);
+  if (u && !CITY) buy(u);
 });
 
 // ── YOU ARE ON THE ISLAND ───────────────────────────────────────────────────
@@ -4363,6 +4410,155 @@ function frameOverhead() {
   orbDist = HALF * 3.1;                 // the whole face in view, so a ringed tile is never off the edge
 }
 
+// ── SETTINGS, PAUSE AND THE CONTROLLER (2026-09-29) ─────────────────────────
+// A game on a shelf is played on a sofa: it pauses, it remembers how loud and
+// how fast you like it, and it takes a controller. Settings live per browser.
+const SETTINGS = (() => {
+  const d = { vol: 1, sens: 1, invertY: false };
+  try { return Object.assign(d, JSON.parse(localStorage.getItem('fs-factory-settings') || '{}')); }
+  catch (e) { return d; }
+})();
+function saveSettings() { try { localStorage.setItem('fs-factory-settings', JSON.stringify(SETTINGS)); } catch (e) {} }
+function masterLevel() { return AUDIO.muted ? 0 : 0.7 * SETTINGS.vol; }
+let PAUSED = false;
+const pauseEl = document.createElement('div');
+pauseEl.id = 'pause';
+pauseEl.style.cssText = 'position:fixed;inset:0;z-index:60;display:none;align-items:center;justify-content:center;'
+  + 'background:rgba(6,8,16,.62);backdrop-filter:blur(4px);font-family:var(--f-ui),system-ui,sans-serif;color:#dfe6f5;accent-color:#5ce0d0';
+pauseEl.innerHTML = '<div style="width:min(520px,92vw);padding:26px 30px;border-radius:14px;'
+  + 'background:linear-gradient(180deg,rgba(24,30,52,.97),rgba(10,13,26,.97));border:1px solid rgba(120,200,255,.22)">'
+  + '<div style="font:700 22px var(--f-head),system-ui;letter-spacing:.06em;color:#a8f6e6">PAUSED</div>'
+  + '<div id="pz-world" style="font-size:12px;color:#7b86a6;margin:2px 0 18px"></div>'
+  + '<label style="display:flex;justify-content:space-between;align-items:center;margin:10px 0">Volume'
+  + '<input id="pz-vol" type="range" min="0" max="1" step="0.05" style="width:58%"></label>'
+  + '<label style="display:flex;justify-content:space-between;align-items:center;margin:10px 0">Look speed'
+  + '<input id="pz-sens" type="range" min="0.3" max="2.5" step="0.05" style="width:58%"></label>'
+  + '<label style="display:flex;justify-content:space-between;align-items:center;margin:10px 0">Invert look'
+  + '<input id="pz-inv" type="checkbox"></label>'
+  + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 18px;margin:18px 0 6px;font-size:12px;color:#aeb6cd">'
+  + '<b style="color:#dfe6f5">Keyboard and mouse</b><b style="color:#dfe6f5">Controller</b>'
+  + '<span>WASD move, mouse look</span><span>left stick move, right stick look</span>'
+  + '<span>click build, drag a line</span><span>RT build, hold to drag</span>'
+  + '<span>9 erase</span><span>LT erase</span>'
+  + '<span>1 to 0 choose a tool</span><span>LB and RB change tool</span>'
+  + '<span>Space jump, Shift run</span><span>A jump, left stick click run</span>'
+  + '<span>Tab overhead</span><span>Y overhead</span>'
+  + '<span>F set a filter</span><span>X set a filter</span>'
+  + '<span>Esc twice pause</span><span>Start pause</span></div>'
+  + '<button id="pz-go" style="margin-top:16px;width:100%;padding:11px;border-radius:10px;cursor:pointer;'
+  + 'font:700 14px var(--f-head),system-ui;letter-spacing:.06em;color:#06201c;background:#5ce0d0;border:0">RESUME</button>'
+  + '</div>';
+document.body.appendChild(pauseEl);
+const pauseBtn = document.createElement('div');
+pauseBtn.id = 'pausebtn';
+pauseBtn.textContent = 'II';
+pauseBtn.title = 'Pause (Esc twice, or Start on a controller)';
+pauseBtn.style.cssText = 'position:fixed;right:14px;top:12px;z-index:30;width:30px;height:30px;border-radius:8px;'
+  + 'display:flex;align-items:center;justify-content:center;cursor:pointer;font:800 12px system-ui;color:#aeb6cd;'
+  + 'background:rgba(10,13,26,.72);border:1px solid rgba(120,200,255,.2);letter-spacing:1px';
+document.body.appendChild(pauseBtn);
+function setPaused(on) {
+  PAUSED = !!on;
+  pauseEl.style.display = PAUSED ? 'flex' : 'none';
+  if (PAUSED) {
+    const w = document.getElementById('pz-world');
+    if (w) w.textContent = (WORLDS[worldIdx] && WORLDS[worldIdx].name) || '';
+    pauseEl.querySelector('#pz-vol').value = SETTINGS.vol;
+    pauseEl.querySelector('#pz-sens').value = SETTINGS.sens;
+    pauseEl.querySelector('#pz-inv').checked = !!SETTINGS.invertY;
+    if (document.pointerLockElement) document.exitPointerLock();
+    if (AUDIO.ctx && AUDIO.ctx.state === 'running') AUDIO.ctx.suspend();
+  } else if (AUDIO.ctx && AUDIO.ctx.state === 'suspended') AUDIO.ctx.resume();
+}
+pauseEl.addEventListener('pointerdown', e => e.stopPropagation());
+pauseEl.addEventListener('input', e => {
+  if (e.target.id === 'pz-vol') { SETTINGS.vol = +e.target.value; if (AUDIO.master) AUDIO.master.gain.value = masterLevel(); }
+  if (e.target.id === 'pz-sens') SETTINGS.sens = +e.target.value;
+  if (e.target.id === 'pz-inv') SETTINGS.invertY = !!e.target.checked;
+  saveSettings();
+});
+pauseEl.querySelector('#pz-go').addEventListener('click', e => { e.stopPropagation(); setPaused(false); });
+pauseBtn.addEventListener('pointerdown', e => { e.stopPropagation(); setPaused(!PAUSED); });
+// the first Esc belongs to the browser (it frees the mouse for the panel);
+// Esc with the mouse already free is the pause
+addEventListener('keydown', e => {
+  if (e.code !== 'Escape' || (e.target && e.target.tagName === 'INPUT')) return;
+  if (PAUSED) { setPaused(false); return; }
+  if (!document.pointerLockElement) setPaused(true);
+});
+
+// the pad: read once a frame, standard mapping
+const PAD = { active: false, lx: 0, ly: 0, rx: 0, ry: 0, sprint: false, jump: false, prev: [], cur: null,
+              erasing: null, building: false };
+const padCursor = document.createElement('div');
+padCursor.style.cssText = 'position:fixed;width:18px;height:18px;margin:-9px 0 0 -9px;border-radius:50%;'
+  + 'border:2px solid #5ce0d0;box-shadow:0 0 8px rgba(92,224,208,.7);z-index:25;pointer-events:none;display:none';
+document.body.appendChild(padCursor);
+const padAt = { x: innerWidth / 2, y: innerHeight / 2 };
+function dz(v) { return Math.abs(v) < 0.16 ? 0 : (v - Math.sign(v) * 0.16) / 0.84; }
+function unlockedTools() {
+  return [...document.querySelectorAll('.tool')].map(o => o.dataset.tool).filter(t => UNLOCKED[t]);
+}
+function stepTool(dir) {
+  const list = unlockedTools();
+  if (!list.length) return;
+  const k = list.indexOf(tool);
+  pickTool(list[(k + dir + list.length) % list.length]);
+}
+addEventListener('gamepadconnected', () => {
+  const t = document.getElementById('toast');
+  if (t) { t.textContent = 'Controller connected: RT builds, LT erases, bumpers change tool, Y looks from above, Start pauses.';
+           t.classList.add('on'); toastAt = 5; }
+});
+function pollPad(rdt) {
+  const gps = navigator.getGamepads ? [...navigator.getGamepads()].filter(Boolean) : [];
+  const gp = gps[0];
+  PAD.active = !!gp;
+  if (!gp) { padCursor.style.display = 'none'; return; }
+  const b = i => !!(gp.buttons[i] && (gp.buttons[i].pressed || gp.buttons[i].value > 0.5));
+  const hit = i => b(i) && !PAD.prev[i];
+  PAD.lx = dz(gp.axes[0] || 0); PAD.ly = dz(gp.axes[1] || 0);
+  PAD.rx = dz(gp.axes[2] || 0); PAD.ry = dz(gp.axes[3] || 0);
+  PAD.sprint = b(10); PAD.jump = b(0);
+  if (hit(9)) setPaused(!PAUSED);                              // Start
+  if (PAUSED) { if (hit(1)) setPaused(false); PAD.prev = gp.buttons.map((_, i) => b(i)); return; }
+  audioStart();
+  if (hit(8) && tutActive()) tutAdvance();                     // Back / Select
+  if (hit(3)) { overhead = !overhead; overheadSeen++; if (overhead) frameOverhead(); }   // Y
+  if (hit(1) && overhead) overhead = false;                    // B leaves the overhead
+  if (hit(4) || hit(14)) stepTool(-1);                         // LB, d-pad left
+  if (hit(5) || hit(15)) stepTool(+1);                         // RB, d-pad right
+  if (hit(2)) { if (tool === 'blueprint' && blueprint) { bpRot = (bpRot + 1) & 3; updateGhost(); } else cycleFilter(); }  // X
+  const sens = SETTINGS.sens, inv = SETTINGS.invertY ? -1 : 1;
+  let ev = null;
+  if (overhead) {
+    // the left stick drives a cursor over the plan; the right stick orbits
+    padAt.x = Math.max(4, Math.min(innerWidth - 4, padAt.x + PAD.lx * rdt * 620));
+    padAt.y = Math.max(4, Math.min(innerHeight - 4, padAt.y + PAD.ly * rdt * 620));
+    padCursor.style.display = 'block';
+    padCursor.style.left = padAt.x + 'px'; padCursor.style.top = padAt.y + 'px';
+    orbYaw -= PAD.rx * rdt * 1.6 * sens;
+    orbPitch = Math.max(-1.45, Math.min(1.45, orbPitch - PAD.ry * rdt * 1.2 * sens * inv));
+    ev = { clientX: padAt.x, clientY: padAt.y };
+    lastPtr = ev;
+  } else {
+    padCursor.style.display = 'none';
+    player.fwd.applyAxisAngle(player.up, -PAD.rx * rdt * 2.6 * sens).normalize();
+    player.pitch = Math.max(-1.45, Math.min(1.35, player.pitch - PAD.ry * rdt * 2.0 * sens * inv));
+  }
+  // RT builds (held, it drags a line); LT erases, whatever the tool
+  const rt = b(7), lt = b(6);
+  if (rt && !PAD.building) { PAD.building = true; primaryDown(ev); }
+  else if (rt && PAD.building) primaryMove(ev);
+  else if (!rt && PAD.building) { PAD.building = false; primaryUp(); }
+  if (lt && !PAD.erasing && !PAD.building) { PAD.erasing = tool || 'miner'; pickTool('erase'); primaryDown(ev); }
+  else if (lt && PAD.erasing) primaryMove(ev);
+  else if (!lt && PAD.erasing) { primaryUp(); pickTool(PAD.erasing); PAD.erasing = null; }
+  PAD.prev = gp.buttons.map((_, i) => b(i));
+}
+window.__pad = { state: () => ({ active: PAD.active, paused: PAUSED, tool, overhead, settings: { ...SETTINGS } }),
+                 pause: on => setPaused(on) };
+
 const keys = Object.create(null);
 addEventListener('keydown', e => {
   if (e.target && e.target.tagName === 'INPUT') return;
@@ -4383,15 +4579,16 @@ addEventListener('contextmenu', e => e.preventDefault());
 // pointer lock is what makes it feel embodied rather than operated
 renderer.domElement.addEventListener('click', () => {
   audioStart();                       // the browser wants a gesture; this is it
-  if (!overhead && document.pointerLockElement !== renderer.domElement) {
+  if (!overhead && !PAUSED && document.pointerLockElement !== renderer.domElement) {
     renderer.domElement.requestPointerLock();
   }
 });
 addEventListener('mousemove', e => {
-  if (document.pointerLockElement !== renderer.domElement) return;
+  if (document.pointerLockElement !== renderer.domElement || PAUSED) return;
   // turning is a rotation about whichever way is up HERE
-  player.fwd.applyAxisAngle(player.up, -e.movementX * 0.0022).normalize();
-  player.pitch = Math.max(-1.45, Math.min(1.35, player.pitch - e.movementY * 0.0022));
+  const _s = 0.0022 * SETTINGS.sens;
+  player.fwd.applyAxisAngle(player.up, -e.movementX * _s).normalize();
+  player.pitch = Math.max(-1.45, Math.min(1.35, player.pitch - e.movementY * _s * (SETTINGS.invertY ? -1 : 1)));
 });
 addEventListener('wheel', e => {
   if (overhead) orbDist = Math.max(HALF * 1.5, Math.min(HALF * 6, orbDist * (1 + Math.sign(e.deltaY) * 0.09)));
@@ -4511,9 +4708,14 @@ function movePlayer(dt) {
   if (keys['KeyS']) _wish.sub(player.fwd);
   if (keys['KeyD']) _wish.add(_rt);
   if (keys['KeyA']) _wish.sub(_rt);
+  let _analog = 1;
+  if (PAD.active && !overhead && (PAD.lx || PAD.ly)) {
+    _wish.addScaledVector(player.fwd, -PAD.ly).addScaledVector(_rt, PAD.lx);
+    _analog = Math.min(1, Math.hypot(PAD.lx, PAD.ly));
+  }
   moveMag = _wish.length();
   if (_wish.lengthSq() > 0) _wish.normalize();
-  const speed = keys['ShiftLeft'] ? 11 : 6.2;
+  const speed = (keys['ShiftLeft'] || PAD.sprint ? 11 : 6.2) * _analog;
   // the body eases up to speed over a sixth of a second and eases down a
   // little quicker: a first-person camera that stops dead reads as a cut
   _wantVel.copy(_wish).multiplyScalar(speed);
@@ -4523,7 +4725,7 @@ function movePlayer(dt) {
 
   // gravity points at the face you are on, so "down" is a different world
   // direction depending on where you are standing
-  if (keys['Space'] && player.onGround) { player.vy = 6.4; player.onGround = false; }
+  if ((keys['Space'] || (PAD.jump && !overhead)) && player.onGround) { player.vy = 6.4; player.onGround = false; }
   player.vy -= 19 * dt;
   player.h += player.vy * dt;
   if (player.h <= 0) { player.h = 0; player.vy = 0; player.onGround = true; }
@@ -4602,7 +4804,7 @@ function crossEdge(nf) {
   matComposite.uniforms.uWash.value.setHex(MIN_COL[MINERAL_OF_FACE[nf]] || 0x7df9ff);   // arriving somewhere: its ore's colour
   const fc = document.getElementById('facecap');
   if (fc) {
-    fc.textContent = WORD(FACES[nf].name.toUpperCase() + ' FACE  ·  ' + (MINERAL_NAME[MINERAL_OF_FACE[nf]] || ''));
+    fc.textContent = CITY ? FACES[nf].name.toUpperCase() + ' SIDE' : WORD(FACES[nf].name.toUpperCase() + ' FACE  ·  ' + (MINERAL_NAME[MINERAL_OF_FACE[nf]] || ''));
     fc.classList.add('on');
     captionAt = 1.6;
   }
@@ -4636,7 +4838,271 @@ function seatPlayer() {
 // ── a starter line, so the loop is legible the moment it loads ─────────────
 // Called again after every meltdown: a prestige that drops you onto an empty
 // cube with no line running is indistinguishable from having lost.
+// ── THE CITY (2026-09-29): ROADS, ZONES AND PEOPLE ───────────────────────
+// "A city builder where I lay roads, zone houses and grow the population to
+// 500" came out as the quarry with its words swapped: rigs on seams, belts, a
+// market. The worldlet builds a town now. A town hall stands where the starter
+// line would; a road that reaches the hall serves the tiles beside it; homes
+// grow when there is work for the people in them, shops when there are people
+// to buy, works when there are hands to hire; a works keeps the homes around it
+// small and a park lets them grow into flats. Everyone living here pays, and
+// everyone working pays again. The rules were proved on a test town before they
+// were wired in: a road that misses the hall serves nobody, and homes with no
+// work stay cottages.
+const CITY_T = new Set([ROAD, HOMES, SHOP, WORKS, PARK, HALL]);
+const CPOP = [0, 8, 20, 40];                         // people a home holds, by level
+const CJOB = { [SHOP]: [0, 4, 9, 16], [WORKS]: [0, 14, 14, 14] };
+const CCOST = { road: 5, home: 20, shop: 30, works: 40, park: 25 };
+const CITY_TARGET = CITY ? Math.max(100, (CITY.target | 0) || 500) : 0;
+const CITY_NOUN = CITY ? String(CITY.noun || 'city') : 'city';
+const cityS = { pop: 0, jobs: 0, employed: 0, income: 0, demand: { [HOMES]: 0, [SHOP]: 0, [WORKS]: 0 },
+                reach: 0, served: 0, clock: 0, won: false, n: {}, hudT: 0 };
+let cityRate = 1;                                    // the gate's clock: the town grows this many seconds a second
+const cMat = (hex, o) => new THREE.MeshStandardMaterial(Object.assign({ color: hex, roughness: 0.82, flatShading: true }, o || {}));
+const lotMat = hex => new THREE.MeshBasicMaterial({ color: hex, transparent: true, opacity: 0.38, depthWrite: false });
+const CMAT = {
+  road: cMat(0x34373c, { roughness: 0.95 }), line: cMat(0x9c9786, { roughness: 0.9 }),
+  wall: cMat(0xe2d5bb), wall2: cMat(0xd2bd9b), wall3: cMat(0xb9bcc3), roof: cMat(0xa9503a), roof2: cMat(0x6e4c3c),
+  glass: cMat(0x8fb6d6, { roughness: 0.2, metalness: 0.35, emissive: 0x1e3650, emissiveIntensity: 0.3 }),
+  shop: cMat(0x5f86b5), awning: cMat(0xd9564a), works: cMat(0x8e9094), worksRoof: cMat(0x5c5f65), stack: cMat(0x7c3d2d),
+  grass: cMat(0x5f9d49), leaf: cMat(0x3e7c38), trunk: cMat(0x6b4a2e), path: cMat(0xcdbb95),
+  hall: cMat(0xf2ede3), dome: cMat(0xd7aa45, { metalness: 0.45, roughness: 0.38 }),
+  lot: { [HOMES]: lotMat(0x7ee08a), [SHOP]: lotMat(0x7ab8ff), [WORKS]: lotMat(0xffc466) },
+};
+const _cb = (w, h, d, y) => { const g = new THREE.BoxGeometry(w, h, d); g.translate(0, (y || 0) + h / 2, 0); return g; };
+const _roof = (r, h, y) => { const g = new THREE.ConeGeometry(r, h, 4); g.rotateY(Math.PI / 4); g.translate(0, y + h / 2, 0); return g; };
+const CGEO = {
+  road: _cb(T, 0.05, T), dash: _cb(T * 0.08, 0.012, T * 0.34, 0.05), lot: _cb(T * 0.92, 0.03, T * 0.92),
+  cottage: _cb(T * 0.46, 0.62, T * 0.42), cottageRoof: _roof(T * 0.36, 0.42, 0.62),
+  house: _cb(T * 0.6, 1.1, T * 0.5), houseRoof: _roof(T * 0.45, 0.5, 1.1),
+  flats: _cb(T * 0.72, 2.6, T * 0.72), band: _cb(T * 0.74, 0.14, T * 0.74),
+  shop1: _cb(T * 0.72, 0.62, T * 0.56), awning: _cb(T * 0.76, 0.05, T * 0.2, 0.52),
+  shop2: _cb(T * 0.76, 1.05, T * 0.66), shop3: _cb(T * 0.7, 2.0, T * 0.7),
+  works: _cb(T * 0.84, 0.72, T * 0.66), worksRoof: _cb(T * 0.88, 0.08, T * 0.7, 0.72),
+  stack: (() => { const g = new THREE.CylinderGeometry(0.09, 0.13, 1.6, 8); g.translate(T * 0.26, 0.8, -T * 0.18); return g; })(),
+  park: _cb(T * 0.98, 0.05, T * 0.98), walk: _cb(T * 0.16, 0.012, T * 0.98, 0.05),
+  trunk: (() => { const g = new THREE.CylinderGeometry(0.05, 0.07, 0.4, 6); g.translate(0, 0.25, 0); return g; })(),
+  crown: (() => { const g = new THREE.ConeGeometry(0.34, 0.85, 7); g.translate(0, 0.85, 0); return g; })(),
+  hall: _cb(T * 0.86, 1.0, T * 0.8), steps: _cb(T * 0.6, 0.12, T * 0.16, 0), col: _cb(0.1, 0.9, 0.1, 0.1),
+  dome: (() => { const g = new THREE.SphereGeometry(0.46, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2); g.translate(0, 1.0, 0); return g; })(),
+};
+// the hologram in your hand and the ghost on the ground know the city's shapes too
+Object.assign(GEO, { cityRoad: CGEO.road, cityHome: CGEO.house, cityShop: CGEO.shop2, cityWorks: CGEO.works, cityPark: CGEO.park });
+const _cm = (geo, mat, x, z, shadow) => { const m = new THREE.Mesh(geo, mat); m.position.set(x || 0, 0, z || 0); if (shadow !== false) { m.castShadow = true; m.receiveShadow = true; } return m; };
+function cityDress(g, type, lvl) {
+  for (let k = g.children.length - 1; k >= 0; k--) g.remove(g.children[k]);
+  if (type === ROAD) { g.add(_cm(CGEO.road, CMAT.road, 0, 0, false)); g.add(_cm(CGEO.dash, CMAT.line, 0, 0, false)); return g; }
+  if (type === PARK) {
+    g.add(_cm(CGEO.park, CMAT.grass, 0, 0, false)); g.add(_cm(CGEO.walk, CMAT.path, 0, 0, false));
+    for (const [x, z] of [[-0.5, -0.45], [0.52, 0.2], [-0.42, 0.55]]) { g.add(_cm(CGEO.trunk, CMAT.trunk, x, z)); g.add(_cm(CGEO.crown, CMAT.leaf, x, z)); }
+    return g;
+  }
+  if (type === HALL) {
+    g.add(_cm(CGEO.hall, CMAT.hall)); g.add(_cm(CGEO.dome, CMAT.dome));
+    g.add(_cm(CGEO.steps, CMAT.hall, 0, T * 0.46));
+    for (const x of [-0.45, -0.15, 0.15, 0.45]) g.add(_cm(CGEO.col, CMAT.hall, x, T * 0.44));
+    return g;
+  }
+  if (!lvl) { g.add(_cm(CGEO.lot, CMAT.lot[type], 0, 0, false)); return g; }      // zoned, waiting
+  if (type === HOMES) {
+    if (lvl === 1) { g.add(_cm(CGEO.cottage, CMAT.wall)); g.add(_cm(CGEO.cottageRoof, CMAT.roof)); }
+    else if (lvl === 2) { g.add(_cm(CGEO.house, CMAT.wall2)); g.add(_cm(CGEO.houseRoof, CMAT.roof2)); }
+    else { g.add(_cm(CGEO.flats, CMAT.wall3)); for (const y of [0.55, 1.15, 1.75, 2.3]) { const b = _cm(CGEO.band, CMAT.glass); b.position.y = y; g.add(b); } }
+  } else if (type === SHOP) {
+    if (lvl === 1) { g.add(_cm(CGEO.shop1, CMAT.shop)); const a = _cm(CGEO.awning, CMAT.awning, 0, T * 0.34); g.add(a); }
+    else if (lvl === 2) { g.add(_cm(CGEO.shop2, CMAT.shop)); const a = _cm(CGEO.awning, CMAT.awning, 0, T * 0.4); g.add(a); const b = _cm(CGEO.band, CMAT.glass); b.position.y = 0.72; b.scale.set(1.03, 1, 0.9); g.add(b); }
+    else { g.add(_cm(CGEO.shop3, CMAT.glass)); const b = _cm(CGEO.band, CMAT.shop); b.position.y = 1.0; b.scale.set(0.97, 1, 0.97); g.add(b); }
+  } else if (type === WORKS) {
+    g.add(_cm(CGEO.works, CMAT.works)); g.add(_cm(CGEO.worksRoof, CMAT.worksRoof)); g.add(_cm(CGEO.stack, CMAT.stack));
+  }
+  return g;
+}
+const cityKey = (f, i, j) => (f * N + i) * N + j;
+let cityReach = new Set();
+function cityTick(dt) {
+  // 1. the roads that reach the hall, over the edges of the worldlet too
+  const reach = new Set(), q = [];
+  eachTile((c, f, i, j) => { if (c.t === HALL) { reach.add(cityKey(f, i, j)); q.push([f, i, j]); } });
+  while (q.length) {
+    const [f, i, j] = q.pop();
+    for (let d = 0; d < 4; d++) {
+      const s2 = stepTile(f, i, j, d);
+      if (!s2) continue;
+      const k = cityKey(s2.face, s2.i, s2.j), c2 = cells[s2.face][s2.i][s2.j];
+      if (c2.t === ROAD && !reach.has(k)) { reach.add(k); q.push([s2.face, s2.i, s2.j]); }
+    }
+  }
+  cityReach = reach;
+  const near = (f, i, j, r, t) => { for (let a = -r; a <= r; a++) for (let b = -r; b <= r; b++) { const c2 = cells_at(f, i + a, j + b); if (c2 && c2.t === t) return true; } return false; };
+  // 2. the totals, and what the town wants more of
+  let pop = 0, shopJobs = 0, worksJobs = 0, roads = 0, served = 0;
+  const n = { roads: 0, homes: 0, shops: 0, works: 0, parks: 0 };
+  eachTile(c => {
+    if (c.t === HOMES) { pop += CPOP[c.lvl | 0]; n.homes++; }
+    else if (c.t === SHOP) { shopJobs += CJOB[SHOP][c.lvl | 0]; n.shops++; }
+    else if (c.t === WORKS) { worksJobs += CJOB[WORKS][c.lvl | 0]; n.works++; }
+    else if (c.t === ROAD) { roads++; n.roads++; }
+    else if (c.t === PARK) n.parks++;
+  });
+  const jobs = shopJobs + worksJobs;
+  const dem = { [HOMES]: Math.round(jobs * 2.0 + 40 - pop), [SHOP]: Math.round(pop * 0.25 - shopJobs + 4), [WORKS]: Math.round(pop * 0.45 - worksJobs + 6) };
+  cityS.demand = { home: dem[HOMES], shop: dem[SHOP], works: dem[WORKS] };
+  // 3. each zone grows when it is served and wanted, and empties when cut off
+  eachTile((c, f, i, j) => {
+    if (c.t === ROAD) { c.served = reach.has(cityKey(f, i, j)); return; }
+    if (c.t !== HOMES && c.t !== SHOP && c.t !== WORKS) return;
+    let ok = false;
+    for (let d = 0; d < 4 && !ok; d++) { const s2 = stepTile(f, i, j, d); if (s2 && reach.has(cityKey(s2.face, s2.i, s2.j))) ok = true; }
+    c.served = ok;
+    if (ok) served++;
+    let cap = 3;
+    if (c.t === HOMES) cap = near(f, i, j, 2, WORKS) ? 1 : near(f, i, j, 3, PARK) ? 3 : 2;
+    if (c.t === WORKS) cap = 1;
+    c.cap = cap;
+    const l0 = c.lvl | 0;
+    let l1 = l0;
+    if (!ok) { if (l0 > 0 && Math.random() < 0.3 * dt) l1 = l0 - 1; }
+    else if (l0 > cap) l1 = cap;
+    else if (l0 < cap && dem[c.t] > 0 && Math.random() < 0.15 * dt) {
+      l1 = l0 + 1;
+      // a level spends the demand it met, so one step cannot overshoot it
+      dem[c.t] -= c.t === HOMES ? CPOP[l1] - CPOP[l0] : CJOB[c.t][l1] - CJOB[c.t][l0];
+    }
+    if (l1 !== l0) {
+      c.lvl = l1;
+      if (c.build) cityDress(c.build, c.t, l1);
+      if (l1 > l0 && typeof landDust === 'function' && !REDUCED) landDust(f, i, j);
+      if (c.t === HOMES) pop += CPOP[l1] - CPOP[l0];
+    }
+  });
+  // 4. the money: everyone living here pays, everyone working pays again
+  const employed = Math.min(pop, jobs);
+  cityS.pop = pop; cityS.jobs = jobs; cityS.employed = employed; cityS.n = n;
+  cityS.reach = reach.size; cityS.served = served;
+  cityS.income = +(pop * 0.012 + employed * 0.01 - roads * 0.01).toFixed(2);
+  ore = Math.max(0, ore + cityS.income * dt);
+  if (!cityS.won && pop >= CITY_TARGET) {
+    cityS.won = true;
+    cityToast(CITY_TARGET.toLocaleString() + ' people live in your ' + CITY_NOUN + ' now. That was the goal; the ' + CITY_NOUN + ' is yours to keep growing.', 9);
+    if (typeof sfxUnlock === 'function') sfxUnlock();
+  }
+}
+function cityToast(text, secs) {
+  const t = document.getElementById('toast');
+  if (t) { t.textContent = text; t.classList.add('on'); toastAt = secs || 4; }
+}
+function cityDescribe(c) {
+  const lvl = c.lvl | 0;
+  if (c.t === HALL) return 'TOWN HALL  ·  every road that reaches it serves the tiles beside it';
+  if (c.t === ROAD) return 'ROAD  ·  ' + (c.served ? 'reaches the town hall' : 'does not reach the town hall yet: join it up');
+  if (c.t === PARK) return 'PARK  ·  homes within three tiles can grow into flats';
+  const nm = { [HOMES]: 'HOMES', [SHOP]: 'SHOPS', [WORKS]: 'WORKS' }[c.t];
+  if (!c.served) return nm + '  ·  no road to the town hall beside it, so nobody comes';
+  if (c.t === HOMES) {
+    const why = lvl < (c.cap || 2) ? (cityS.demand.home > 0 ? 'growing' : 'waiting for jobs: build shops or works')
+      : c.cap === 1 ? 'a works within two tiles keeps it small' : c.cap === 2 ? 'a park within three tiles would let it grow' : 'as big as it gets';
+    return 'HOMES  ·  ' + CPOP[lvl] + ' people  ·  ' + why;
+  }
+  const jobs = CJOB[c.t][lvl];
+  const why = lvl >= (c.cap || 3) ? 'full' : (cityS.demand[c.t === SHOP ? 'shop' : 'works'] > 0 ? 'hiring' : 'waiting for more people');
+  return nm + '  ·  ' + jobs + ' jobs  ·  ' + why;
+}
+function cityFacts() {
+  // counted now, not at the last tick: what was just built is in the count
+  const levels = { 0: 0, 1: 0, 2: 0, 3: 0 }, n = { roads: 0, homes: 0, shops: 0, works: 0, parks: 0 };
+  const NK = { [ROAD]: 'roads', [HOMES]: 'homes', [SHOP]: 'shops', [WORKS]: 'works', [PARK]: 'parks' };
+  eachTile(c => { if (NK[c.t]) n[NK[c.t]]++; if (c.t === HOMES || c.t === SHOP || c.t === WORKS) levels[c.lvl | 0]++; });
+  return { pop: cityS.pop, target: CITY_TARGET, noun: CITY_NOUN, jobs: cityS.jobs, employed: cityS.employed,
+           income: cityS.income, cash: Math.floor(ore), demand: cityS.demand, reach: cityS.reach, served: cityS.served,
+           n, levels, won: cityS.won, tool };
+}
+function stepCity(dt) {
+  cityS.clock += dt * cityRate;
+  let k = 0;
+  while (cityS.clock >= 1 && k++ < 50) { cityS.clock -= 1; cityTick(1); }
+  cityS.hudT -= dt;
+  if (cityS.hudT <= 0) { cityS.hudT = 0.25; renderCityHud(); }
+  if (toastAt > 0) { toastAt -= dt; if (toastAt <= 0) { const t = document.getElementById('toast'); if (t) t.classList.remove('on'); } }
+}
+function renderCityHud() {
+  const r = document.getElementById('rate'); if (r) r.textContent = cityS.pop.toLocaleString();
+  const g = document.getElementById('citygoal');
+  if (g) {
+    const pct = Math.min(100, Math.round(cityS.pop / CITY_TARGET * 100));
+    const bar = (v, col) => '<span class="dm"><i style="width:' + Math.max(0, Math.min(100, v * 2)) + '%;background:' + col + '"></i></span>';
+    g.innerHTML = '<b>' + (cityS.won ? 'YOUR ' + CITY_NOUN.toUpperCase() + ' IS GROWN' : 'GROW THE ' + CITY_NOUN.toUpperCase() + ' TO ' + CITY_TARGET.toLocaleString()) + '</b>'
+      + '<div class="bar"><i style="width:' + pct + '%"></i></div>'
+      + '<small>' + cityS.pop.toLocaleString() + ' people, ' + cityS.jobs + ' jobs, ' + (cityS.income >= 0 ? '+' : '') + cityS.income.toFixed(1) + ' money a second</small>'
+      + '<div class="dem"><span>wanted</span>'
+      + '<em>homes</em>' + bar(cityS.demand.home, '#7ee08a')
+      + '<em>shops</em>' + bar(cityS.demand.shop, '#7ab8ff')
+      + '<em>works</em>' + bar(cityS.demand.works, '#ffc466') + '</div>';
+  }
+  const n = cityS.n || {};
+  const put = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };
+  put('c-homes', n.homes || 0); put('c-shops', n.shops || 0); put('c-works', n.works || 0);
+  put('c-parks', n.parks || 0); put('c-roads', n.roads || 0); put('c-jobs', cityS.jobs);
+}
+function citySeed(placePlayer) {
+  const F = 0, hi = Math.floor(N / 2), hj = Math.floor(N / 2);
+  place(F, hi, hj, HALL, 0);
+  for (let k = 1; k <= 3; k++) place(F, hi + k, hj, ROAD, 0);     // a street out of the hall's door to start from
+  if (ore < 400) ore = 400;                                          // the town's first budget
+  const w = tileWorld(F, hi + 2, Math.max(1, hj - 4));
+  player.pos.set(w[0], HALF + EYE, w[2]);
+  player.face = F;
+  player.up.set(0, 1, 0);
+  camUp.set(0, 1, 0);
+  if (placePlayer) player.fwd.set(0, 0, -1);
+  cityTick(0);
+}
+// the bar, the panel and the hint say what a town is
+if (CITY) {
+  document.body.classList.add('city');
+  const css = document.createElement('style');
+  css.textContent = 'body.city #rank,body.city #spark,body.city #hud>.stats:not(#citystats),body.city #goal,body.city #contract,'
+    + 'body.city #standing,body.city #rival,body.city #hud>.sec,body.city #tick,body.city #ups,body.city #world,body.city #rift,'
+    + 'body.city #melt,body.city #runs,body.city #guide,body.city #tutor{display:none!important}'
+    + '#citygoal{margin:10px 0 4px}#citygoal b{display:block;font:700 13px var(--f-head),system-ui;letter-spacing:.05em}'
+    + '#citygoal .bar{height:6px;border-radius:3px;background:rgba(255,255,255,.12);margin:6px 0;overflow:hidden}'
+    + '#citygoal .bar i{display:block;height:100%;background:#7ee08a}#citygoal small{opacity:.8}'
+    + '#citygoal .dem{display:grid;grid-template-columns:auto 1fr;gap:3px 8px;align-items:center;margin-top:8px;font-size:11px}'
+    + '#citygoal .dem>span:first-child{grid-column:1/3;opacity:.7;text-transform:uppercase;letter-spacing:.08em;font-size:10px}'
+    + '#citygoal .dem em{font-style:normal;opacity:.85}#citygoal .dm{height:5px;border-radius:3px;background:rgba(255,255,255,.1);overflow:hidden}'
+    + '#citygoal .dm i{display:block;height:100%}'
+    + '#citystats{grid-template-columns:repeat(3,minmax(0,1fr))}#citystats .st i{display:none}#citystats .st{justify-content:center}';
+  document.head.appendChild(css);
+  const big = document.querySelector('#hud .hero .big small'); if (big) big.textContent = 'money';
+  const big0 = document.querySelector('#hud .hero .big'); if (big0) big0.title = 'Money comes from the people who live here, and again from the ones who work.';
+  const rt = document.querySelector('#hud .hero .rate small'); if (rt) rt.textContent = 'people live here';
+  const rt0 = document.querySelector('#hud .hero .rate'); if (rt0) rt0.title = 'Everyone living in a home you zoned.';
+  const stats = document.createElement('div');
+  stats.className = 'stats'; stats.id = 'citystats';
+  stats.innerHTML = [['c-homes', 'homes'], ['c-shops', 'shops'], ['c-works', 'works'], ['c-parks', 'parks'], ['c-roads', 'roads'], ['c-jobs', 'jobs']]
+    .map(([id, l]) => '<div class="st"><i></i><b id="' + id + '">0</b><small>' + l + '</small></div>').join('');
+  const goalEl = document.getElementById('goal');
+  const cg = document.createElement('div'); cg.id = 'citygoal';
+  if (goalEl) { goalEl.parentNode.insertBefore(stats, goalEl); goalEl.parentNode.insertBefore(cg, goalEl); }
+  const CT = [['road', '1', 'ROAD', 'a street, 5', '<path d="M8 3L6 21M16 3l2 18M12 4v3M12 10v3M12 16v3" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linecap="round"/>'],
+              ['home', '2', 'HOMES', 'people live here, 20', '<path d="M4 11l8-7 8 7M6 10v10h12V10M10 20v-5h4v5" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linejoin="round"/>'],
+              ['shop', '3', 'SHOPS', 'jobs and trade, 30', '<path d="M4 9h16l-1-4H5zM5 9v11h14V9M9 20v-6h6v6" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linejoin="round"/>'],
+              ['works', '4', 'WORKS', 'many jobs, noisy, 40', '<path d="M3 20V11l5 3v-3l5 3v-3l5 3V4h3v16z" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linejoin="round"/>'],
+              ['park', '5', 'PARK', 'homes near it grow, 25', '<path d="M12 3l-5 9h3l-3 5h10l-3-5h3zM12 17v4" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linejoin="round"/>'],
+              ['erase', '9', 'ERASE', 'clear a tile', '<path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>']];
+  const bar = document.getElementById('tools');
+  if (bar) {
+    bar.innerHTML = CT.map(([k, key, b, sm, svg], n) => '<div class="tool' + (n === 0 ? ' on' : '') + '" data-tool="' + k + '"><svg viewBox="0 0 24 24">' + svg + '</svg><i class="key">' + key + '</i><b>' + b + '</b><small>' + sm + '</small></div>').join('');
+    bar.querySelectorAll('.tool').forEach(el => el.addEventListener('pointerdown', ev => { ev.stopPropagation(); pickTool(el.dataset.tool); }));
+  }
+  Object.assign(HOLO_GEO, { road: 'cityRoad', home: 'cityHome', shop: 'cityShop', works: 'cityWorks', park: 'cityPark' });
+  const hint = document.getElementById('hint');
+  if (hint) hint.innerHTML = 'WASD to walk, Shift to run, Space to jump, click to look around.<br>'
+    + 'Hold the left button and sweep to lay a road out from the town hall. Zone homes, shops and works beside it.<br>'
+    + 'Homes grow when there is work; a works keeps homes next to it small, a park lets them grow.<br>TAB looks down from above, the easiest way to plan streets.';
+}
+
 function seedLine(placePlayer) {
+  if (CITY) { citySeed(placePlayer); return; }
   // Pick a node with a CLEAR run east of it. The first version just took the
   // first node it found and drew six tiles east regardless — a second node
   // sitting in that line silently refused two placements, so the demo line
@@ -5145,7 +5611,7 @@ function travelTo(k) {
 // is a goal rather than a hope.
 const visitedFaces = new Set();
 let nudgeClock = 0, edgeNudged = false;   // the one nudge toward the edge, between the acts
-const START_TOOLS = ['miner', 'belt', 'smelter', 'hub', 'erase'];
+const START_TOOLS = CITY ? ['road', 'home', 'shop', 'works', 'park', 'erase'] : ['miner', 'belt', 'smelter', 'hub', 'erase'];
 const UNLOCKED = {};
 for (const k of START_TOOLS) UNLOCKED[k] = 1;
 let goalIdx = 0;
@@ -5486,6 +5952,7 @@ function stepTutorial(dt) {
 let lookClock = 0;
 const ORE_NAME = { [CRYSTAL]: 'crystal', [EMBER]: 'ember', [SALT]: 'salt' };
 function describeCell(c, t) {
+  if (CITY_T.has(c.t)) return cityDescribe(c);
   if (c.t === PROP) return (PROP_KIND[c.prop] || { name: 'outpost', detail: '' }).name.toUpperCase() + '  ·  ' + (PROP_KIND[c.prop] || {}).detail;
   const heading = ['east', 'south', 'west', 'north'][c.d] || '';
   const item = !c.item ? null : IS_BAR(c.item) ? contractName(c.item, 1) : (ORE_NAME[c.item] || 'ore') + ' ore';
@@ -6259,28 +6726,33 @@ let last = performance.now();
 landingOn = true;                           // from here on a placed machine lands
 renderer.setAnimationLoop(() => {
   const now = performance.now();
-  const dt = Math.min(0.1, (now - last) / 1000);
+  const _rdt = Math.min(0.1, (now - last) / 1000);
+  try { pollPad(_rdt); } catch (e) { /* a pad that reports nonsense must not stop the game */ }
+  // PAUSED: the frame still draws, but no time passes in it, so every system
+  // (belts, market, rifts, contracts, the walk) holds exactly where it was
+  const dt = PAUSED ? 0 : _rdt;
   last = now;
   if (skyDome) skyDome.material.uniforms.uTime.value = now * 0.001;   // the nebula drifts, the aurora ripples
   if (AUDIO.bed) AUDIO.bed.step(dt);
   stepLightPool(dt);
 
-  stepMarket(dt);
-  stepSpores(dt);
-  stepIce(dt);
-  stepContracts(dt);
-  stepStanding(dt);
-  stepTutorial(dt);
+  if (!CITY) {                        // a town has no market, weather on its seams, orders or foreman
+    stepMarket(dt);
+    stepSpores(dt);
+    stepIce(dt);
+    stepContracts(dt);
+    stepStanding(dt);
+    stepTutorial(dt);
+  }
   stepLook(dt);
   stepTags(dt);
   stepPlan();
-  stepWorksShow(dt);
+  if (!CITY) stepWorksShow(dt);
   stepHint(dt);
-  stepDrone(dt);
+  if (!CITY) stepDrone(dt);
   stepSun(dt);
   stepLanding(dt);
-  stepIdle(dt);
-  stepRival(dt);
+  if (!CITY) { stepIdle(dt); stepRival(dt); }
   if (contract && (performance.now() % 500) < 20) renderContract();
   // seams grow back on their own, and wear their richness as their size
   eachTile((c, f, i, j) => {
@@ -6306,8 +6778,8 @@ renderer.setAnimationLoop(() => {
   if (glowPools) glowPools.instanceMatrix.needsUpdate = true;
   stepLampPools();
   visitedFaces.add(player.face);
-  stepGoals(dt);
-  if (!melting) stepRifts(dt);
+  if (CITY) stepCity(dt); else stepGoals(dt);
+  if (!melting && !CITY) stepRifts(dt);
   saveClock += dt;
   if (saveClock >= 10) { saveClock = 0; save(); }
   if (melting > 0) {
@@ -6325,7 +6797,7 @@ renderer.setAnimationLoop(() => {
   // the tick stops while the factory is still in the air — a meltdown that
   // kept banking value would read as though nothing had been given up
   let ticked = false;
-  while (sinceTick >= TICK) { sinceTick -= TICK; if (!melting && !simHold) { step(); ticked = true; } }
+  while (sinceTick >= TICK) { sinceTick -= TICK; if (!melting && !simHold && !CITY) { step(); ticked = true; } }
   if (ticked) { paintBeltLoad(); audioFollow(); }
   minedWindow += ore - before;
   if (rateWindow >= 1) {
@@ -6342,7 +6814,7 @@ renderer.setAnimationLoop(() => {
     drawSpark();
     const perSec = rateBuckets.reduce((a, b) => a + b, 0) / rateBuckets.length;
     rateNow = rateForce === null ? Math.round(perSec * 60) : rateForce;
-    document.getElementById('rate').textContent = rateNow;
+    if (!CITY) document.getElementById('rate').textContent = rateNow;
     minedWindow = 0;
     rateWindow = 0;
   }
@@ -6674,7 +7146,8 @@ setHolo(tool);      // here, AFTER HOLO_GEO exists — not up by the tool bar
 // a restored save mid-guide STARTS its step, so the step's checks have their
 // baseline; drawing the card alone left the first step with no starting
 // point and nothing could clear it
-if (!restored && !CREATIVE && !SHARED) tutStart(0);
+if (CITY) tutIdx = TUT.length;                                   // the foreman teaches a quarry, not a town
+else if (!restored && !CREATIVE && !SHARED) tutStart(0);
 else if (tutActive()) tutStart(tutIdx);
 else renderTutor();
 
@@ -6699,7 +7172,7 @@ function audioStart() {
   if (!AC) return;
   const ctx = new AC();
   const master = ctx.createGain();
-  master.gain.value = AUDIO.muted ? 0 : 0.7;
+  master.gain.value = masterLevel();
   master.connect(ctx.destination);
 
   // the hum: two detuned lows, lowpassed, barely there
@@ -6799,7 +7272,7 @@ function sfxClog() { if (throttled('clog', 300)) { tone(96, 0.22, 'sine', 0.12);
 
 function audioMute(on) {
   AUDIO.muted = on;
-  if (AUDIO.master) AUDIO.master.gain.value = on ? 0 : 0.7;
+  if (AUDIO.master) AUDIO.master.gain.value = masterLevel();
   try { localStorage.setItem('fs-factory-muted', on ? '1' : '0'); } catch (e) {}
 }
 
@@ -7054,6 +7527,7 @@ window.__game = {
                   textures: renderer.info.memory.textures,
                   geometries: renderer.info.memory.geometries }),
   facts: () => ({
+    city: CITY ? cityFacts() : null,
     genre: 'factory',
     style: SPEC.style || 'default',
     grid: N,
@@ -7161,6 +7635,8 @@ window.__renderer = renderer;
 window.__camera = camera;
 
 window.__factory = {
+  city: CITY ? { state: () => cityFacts(), run: secs => { for (let k = 0; k < secs; k++) cityTick(1); return cityFacts(); },
+                 rate: v => { cityRate = v; }, cash: v => { ore = v; }, COST: CCOST, TYPES: { ROAD, HOMES, SHOP, WORKS, PARK, HALL } } : null,
   cells, items, N, T, player, HALF, FACES,
   stepTile, tileWorld, faceOfPoint,
   TYPES: { EMPTY, MINER, BELT, HUB, NODE, SMELTER, SPLITTER, FORGE, FILTER,
