@@ -1,0 +1,19 @@
+[package]
+name = "crystal-works"
+version = "0.1.0"
+description = "Crystal Works, the Fantasy Studio flagship, as a desktop game"
+edition = "2021"
+
+# the same crates as the studio shell (desktop/src-tauri), pinned by the same
+# lock, so the flagship builds from what is already vetted and cached
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[profile.release]
+strip = true
+lto = true

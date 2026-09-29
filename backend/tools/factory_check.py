@@ -68,6 +68,7 @@ GATES = [
     ("toolfit.mjs", "the build bar sits inside the screen at every common width, 1024 to 1920"),
     ("fpad.mjs", "a controller walks, looks, changes tool, builds and erases and looks from above; Start pauses everything and the settings it pauses into are kept"),
     ("fgenres.mjs", "a tower defence builds towers that shoot and a keep that falls; a platformer's islands are all inside a jump and hold what lands on them (needs --td and --pf)"),
+    ("fnative.mjs", "in the desktop window F11 goes fullscreen and is remembered, and the pause menu quits to the desktop after saving; a browser shows none of it"),
     ("fmystery.mjs", "a mystery is a sound case: one suspect fits every clue; E questions, J opens the casebook, a wrong name loses and the right one wins (needs --my)"),
     ("ftown.mjs", "a city builder: roads that reach the hall serve, homes need work, a works keeps homes small and a park grows them, a planned town reaches its population (needs --town)"),
 ]

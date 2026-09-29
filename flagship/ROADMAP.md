@@ -186,6 +186,8 @@ says so.
 | **everyone is dressed** | the light walker every guide, guard and villager wore was the base body in its underwear; background people take the clothed walkers in turn (never the player's own), crowds draw only from the dressed ones, and a mystery's suspects are cast from clothed bodies (the library's "driver" is a car) |
 | **no ghost the sentence did not ask for** | a foggy manor came with white ghosts wandering the lawn; a ghost or a spectral flag without a haunting in the prompt is left out, and a whodunit sheds bystanders who would be mistaken for suspects |
 | **a city the studio can make** | "a city builder where I lay roads, zone houses and grow the population to 500" was a quarry with its words swapped; the worldlet builds a town under a day sky: a town hall with a street, roads that serve only when they reach the hall (across edges too), homes that grow when there is work, shops when there are people, works that keep the homes beside them small, parks that let them grow into flats, money from everyone living and working there, and the sentence's population as the goal; the market, seams, foreman and contracts stand down |
+| **the kit props have their colours** | 486 props from five CC0 Kenney kits (fantasy town, graveyard, survival, castle, pirate) pointed at a colormap atlas that was never vendored, so every noir, cartoon, claymation or survival world was dressed in plain white models and logged a stream of 404s; each kit's atlas is embedded in its own props (every prop's UVs were checked against the kit first, 486 of 486 identical), with the kits' licences beside them |
+| **a desktop game** | `flagship_pack.py --desktop` builds Crystal Works into one executable (flagship-desktop, Tauri 2, the studio shell's crates, offline from the cache): the packed game embedded, WebView2's crash blocklist switched off, F11 fullscreen kept between launches, and a pause menu that saves and quits to the desktop |
 | **one type system** | Bricolage Grotesque for what is named (a variable face whose width and optical size set the three title voices from one file), Instrument Sans for what is read, DM Mono for what is counted; all SIL OFL, shipped in vendor/fonts |
 | **copy that tells you** | every toast, tip, unlock line, tool label and the hint says what happened, what it means and what to do, in sentences, with no em dashes |
 | **contracts** | every seventy seconds the market posts one sized to the current rate; deliveries of its item count at the hub; filled pays a bonus and a shard, lapsed comes again |
@@ -348,7 +350,7 @@ clock starts when the loan lands.
 5. ~~Chronos~~ — shipped, as a debt with a clock rather than replayed ghosts
 
 All five differentiators from the brief are in, and the factory now saves.
-What is left is the Tauri/Steam packaging path.
+The Tauri/Steam packaging path shipped 2026-09-29: `flagship_pack.py --desktop` builds one executable (see README, One download).
 
 ## Worlds
 
@@ -474,4 +476,4 @@ a 250-machine factory, and world unlocking.
 - Art uplift — placeholder boxes; the Kenney space kit (already vendored in
   `backend/assets/props`, CC0) is the right visual language for this
 - Levels / progression frame: goals, unlocks, a reason to expand
-- Steam packaging path (Tauri), per the brief
+- Steamworks: achievements and the overlay, on top of the desktop build that now exists

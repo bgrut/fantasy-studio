@@ -23,12 +23,21 @@ studio build, and nothing served beside the demo's folder.
 
 ## One download
 
-    python backend/tools/flagship_pack.py --ship <job id>:drift --ship <job id>:forest   # dist/crystal-works-<date>.zip
+    python backend/tools/flagship_pack.py             # dist/crystal-works-<date>.zip
+    python backend/tools/flagship_pack.py --desktop   # and dist/crystal-works-desktop/CrystalWorks.exe
 
 Rebuilds the demo, writes `LICENSES.md`, and zips this folder with a single
 top-level folder. Unzip anywhere, `python -m http.server 8123` inside it, and
-play; or upload the zip to itch.io as an HTML game. Without `--adv` the zip
-holds the factories only.
+play; or upload the zip to itch.io as an HTML game.
+
+`--desktop` is the Steam path. The same files are staged in
+`dist/crystal-works/` and built by `flagship-desktop/` (Tauri 2, the studio
+shell's crates and CLI) into one executable with the game embedded in it: no
+installer, no server, saves kept in the WebView2 profile. In that window F11
+goes fullscreen and is remembered, and the pause menu quits to the desktop
+after saving. It needs the Rust toolchain to build and the WebView2 runtime to
+run, which Windows 11 has and Steam can install on Windows 10. A Steam depot
+is that one file; Steamworks itself (achievements, overlay) is not wired yet.
 
 Do not edit them — edit
 `backend/app/game_export/runtime/factory.js.tpl` and re-run the builder.

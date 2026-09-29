@@ -4485,6 +4485,30 @@ pauseEl.addEventListener('input', e => {
 });
 pauseEl.querySelector('#pz-go').addEventListener('click', e => { e.stopPropagation(); setPaused(false); });
 pauseBtn.addEventListener('pointerdown', e => { e.stopPropagation(); setPaused(!PAUSED); });
+// THE DESKTOP BUILD (2026-09-29): in its own window (flagship-desktop, the
+// Steam path) there is no browser to leave by and no browser key for full
+// screen, so F11 goes fullscreen, the choice is kept with the other settings,
+// and the pause menu can quit to the desktop, saving first. In a browser none
+// of this exists.
+const NATIVE = (() => { try { return window.__TAURI__ && window.__TAURI__.window ? window.__TAURI__.window.getCurrentWindow() : null; } catch (e) { return null; } })();
+if (NATIVE) {
+  const box = pauseEl.firstElementChild;
+  const full = document.createElement('label');
+  full.style.cssText = 'display:flex;justify-content:space-between;align-items:center;margin:10px 0';
+  full.innerHTML = 'Fullscreen <span style="font-size:11px;color:#7b86a6">F11</span><input id="pz-full" type="checkbox">';
+  box.insertBefore(full, box.querySelector('div[style*="grid-template-columns"]'));
+  const quit = document.createElement('button');
+  quit.id = 'pz-quit'; quit.textContent = 'QUIT TO DESKTOP';
+  quit.style.cssText = 'margin-top:8px;width:100%;padding:10px;border-radius:10px;cursor:pointer;'
+    + 'font:700 13px var(--f-head),system-ui;letter-spacing:.06em;color:#dfe6f5;background:transparent;border:1px solid rgba(120,200,255,.3)';
+  box.appendChild(quit);
+  const setFull = on => { SETTINGS.full = !!on; saveSettings(); try { NATIVE.setFullscreen(!!on); } catch (e) {} const cb = document.getElementById('pz-full'); if (cb) cb.checked = !!on; };
+  full.querySelector('input').addEventListener('change', e => setFull(e.target.checked));
+  quit.addEventListener('click', e => { e.stopPropagation(); try { save(); } catch (er) {} try { NATIVE.close(); } catch (er) {} });
+  addEventListener('keydown', e => { if (e.code === 'F11') { e.preventDefault(); setFull(!SETTINGS.full); } });
+  pauseBtn.addEventListener('pointerdown', () => { const cb = document.getElementById('pz-full'); if (cb) cb.checked = !!SETTINGS.full; });
+  if (SETTINGS.full) setFull(true);
+}
 // the first Esc belongs to the browser (it frees the mouse for the panel);
 // Esc with the mouse already free is the pause
 addEventListener('keydown', e => {
