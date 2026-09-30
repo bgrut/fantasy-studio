@@ -270,6 +270,18 @@ def install_character(req: InstallCharacter):
         if a.status_code == 200:
             (dest_dir / f"{kind}_anim.glb").write_bytes(a.content)
         library.register(kind, dest, ready=True)
+        # PROVENANCE (2026-09-30): a community character is someone else's work
+        # under CC-BY-4.0. Recorded here, so every game that ships it credits
+        # its author in LICENSES.md (web_exporter reads this file).
+        try:
+            import json as _json
+            _src = BACKEND_ROOT / "assets" / "library_sources.json"
+            _d = _json.loads(_src.read_text(encoding="utf-8")) if _src.exists() else {}
+            _d[kind] = {"source": "Fantasy Studio community hub", "license": "CC-BY-4.0",
+                        "author": man.get("author", "anonymous"), "id": req.id, "url": f"{url}/c/{req.id}"}
+            _src.write_text(_json.dumps(_d, indent=1, sort_keys=True), encoding="utf-8")
+        except Exception:
+            pass
         return {"ok": True, "kind": kind,
                 "note": f"'{kind}' installed — it's castable in prompts now "
                         f"(shared by {man.get('author', 'anonymous')}, CC-BY-4.0)"}

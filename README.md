@@ -71,7 +71,7 @@ This is what makes Fantasy Studio different from every other "AI game" tool: **y
 - **Walk-in destinations & interiors.** "Reach the shelter / cabin / lighthouse / castle" builds a real structure — open door, warm windows, a lit hearth — that you win by stepping inside. Indoor prompts ("inside a torchlit castle great hall") generate full multi-room, multi-floor interiors with stairs.
 - **Real cities.** Name a city — *New York, Tokyo, London* — and the level is built from its actual OpenStreetMap street grid: real blocks, night-lit facades, rooftop water towers, crosswalks, traffic lights, parked cars, ambient drivers, neon and distant sirens.
 - **🎥 Cinematic mode.** Press V (or the 🎥 chip) for a persistent low chase camera — FPV drone-style banking behind cars, motion blur, film grade — the "how is this real" look, until you toggle it off. Cars get clearcoat paint and working night headlights.
-- **Progression built in.** Kills and pickups earn XP; level-ups offer 3-choice upgrades (heart / swift / power) that persist between runs. Quest chains turn one objective into a story of steps.
+- **Progression built in.** Kills and pickups earn XP; level-ups offer 3-choice upgrades (heart / swift / power) that persist between runs. A game's steps are the ones the sentence asked for: nothing is added that it did not say.
 - **Console-grade image.** 4× MSAA, 4K shadows, image-based lighting, adaptive sharpening — with ultra/balanced/performance presets, one click.
 - **🧪 Splat worlds (experimental).** Attach a Gaussian-splat scene (.ply/.splat) as your world's scenery — upload one, pick a bundled sample, train one from your own walkthrough video, or ✨ imagine one from your prompt.
 - **Levels & projects.** Stack levels into one game via clickable level tiles (click to play, inspect, and edit any level, then save it back), and export the whole thing as a hub-menu game.
@@ -81,7 +81,7 @@ This is what makes Fantasy Studio different from every other "AI game" tool: **y
 | | |
 |---|---|
 | <img src=".github/assets/games/nyc-night-race.png" width="390"/><br/><sub>*"A red sports car races 5 rivals through New York City at night"* — real OSM street grid, night facades, working headlights</sub> | <img src=".github/assets/games/castle-brawl.png" width="390"/><br/><sub>*"A knight fights 6 hostile goblins inside a torchlit castle great hall"* — generated interior, torchlight, live combat</sub> |
-| <img src=".github/assets/games/cartoon-wizard.png" width="390"/><br/><sub>*"A wizard defends a windswept meadow from 8 hostile wolves"* — same world, one click to full cel-shaded cartoon</sub> | <img src=".github/assets/games/fox-snowy-night.png" width="390"/><br/><sub>*"A fox on a snowy night quest"* — photoreal terrain, falling snow, quest chain with XP and level-ups</sub> |
+| <img src=".github/assets/games/cartoon-wizard.png" width="390"/><br/><sub>*"A wizard defends a windswept meadow from 8 hostile wolves"* — same world, one click to full cel-shaded cartoon</sub> | <img src=".github/assets/games/fox-snowy-night.png" width="390"/><br/><sub>*"A fox on a snowy night quest"* — photoreal terrain, falling snow, XP and level-ups</sub> |
 
 <sub>All four are unedited in-game captures of real builds from the prompts shown.</sub>
 </div>
@@ -228,7 +228,7 @@ Fantasy Studio stands on a giant pile of generous open work:
 - [**Blender**](https://blender.org) — the video renderer and the foundation
 - [**Godot**](https://godotengine.org) (MIT) — the game export target
 - [**Ollama**](https://ollama.com) + [**Google Gemma**](https://ai.google.dev/gemma) — the local director
-- [**Microsoft TRELLIS**](https://github.com/microsoft/TRELLIS) (MIT) — image-to-3D character generation
+- [**Microsoft TRELLIS**](https://github.com/microsoft/TRELLIS) (MIT) — image-to-3D character generation. Built with DINOv3 (Meta, DINOv3 License), the image encoder inside TRELLIS.2
 - [**CMU Motion Capture Database**](http://mocap.cs.cmu.edu) — real character motion
 - [**OpenStreetMap**](https://www.openstreetmap.org) contributors — real-world city data
 - The broader open-source 3D + AI community

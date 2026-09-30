@@ -1,0 +1,8 @@
+Poly Haven models (prefix ph_)
+
+	Source: https://polyhaven.com (imported by backend/tools/phimport.py)
+
+	License: CC0 1.0 Universal, public domain dedication
+	https://polyhaven.com/license
+
+	Free for any purpose, including commercial use, with no attribution required.

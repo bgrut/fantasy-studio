@@ -50,6 +50,8 @@ venv_triposg/
 vendor/blosm/
 tools/*
 !tools/flagship_pack.py
+# the desktop build's third-party notices, written from cargo's own metadata
+!tools/rust_notices.py
 # the studio's proof of the promise: ten sentences scored against their games
 !tools/prompt_check.py
 !tools/PROMPT_FIDELITY.md

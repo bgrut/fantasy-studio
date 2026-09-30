@@ -68,7 +68,7 @@ export async function uploadSplat(file: File): Promise<{ ok: boolean; path: stri
 }
 
 // Phase 137: splat worlds on disk (uploads + trained + samples)
-export interface SplatFile { name: string; path: string; mb: number }
+export interface SplatFile { name: string; path: string; mb: number; provenance?: string; licence_note?: string | null }
 export async function listSplats(): Promise<{ ok: boolean; splats: SplatFile[] }> {
   return j(await fetch('/api/game/splats'))
 }

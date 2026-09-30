@@ -1,0 +1,9 @@
+Kenney Blocky Characters (library entries kc_a to kc_r)
+
+	Created/distributed by Kenney (www.kenney.nl)
+	Source: https://kenney.nl/assets/blocky-characters
+
+	License: (Creative Commons Zero, CC0)
+	http://creativecommons.org/publicdomain/zero/1.0/
+
+	You can use this content for personal, educational, and commercial purposes.

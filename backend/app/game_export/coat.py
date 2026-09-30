@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import struct
 import subprocess
@@ -46,15 +47,37 @@ def facts(p: Path) -> dict:
                             for pr in prims)}
 
 
-def coat(path, backup_dir: Path | None = None) -> tuple[bool, str]:
-    """Coat one GLB in place. Returns (kept_a_sound_file, what_happened)."""
+def source_for(path) -> str | None:
+    """The static model a rigged character was baked from (fox_anim -> fox),
+    whose coat survives when the rig bake's sheet came out black."""
+    name = Path(path).name
+    for suf in ("_anim.glb", "_hero.glb"):
+        if name.endswith(suf):
+            kind = name[: -len(suf)].replace("_", " ")
+            try:
+                from . import library
+                p = library.resolve(kind, any_quality=True)
+            except Exception:
+                p = None
+            if p and Path(p).exists() and Path(p).resolve() != Path(path).resolve():
+                return str(p)
+    return None
+
+
+def coat(path, backup_dir: Path | None = None, source: str | None = None) -> tuple[bool, str]:
+    """Coat one GLB in place. Returns (kept_a_sound_file, what_happened).
+    source: the static model it was rigged from; its colour is used when the
+    rig's own sheet is far darker (a bake that lost the coat)."""
     path = Path(path)
     before = facts(path)
     if before["color"] and not before["textured"]:
         return True, "already coated"
+    if source is None:
+        source = source_for(path)
     with tempfile.TemporaryDirectory() as td:
         out = Path(td) / path.name
-        r = subprocess.run([_blender(), "--background", "--python", str(SCRIPT), "--", str(path), str(out)],
+        extra = [f"--from={source}"] if source else []
+        r = subprocess.run([_blender(), "--background", "--python", str(SCRIPT), "--", str(path), str(out)] + extra,
                            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=900)
         line = next((l for l in (r.stdout or "").splitlines() if l.startswith("COAT")), None)
         if not out.exists() or not line:
@@ -69,4 +92,8 @@ def coat(path, backup_dir: Path | None = None) -> tuple[bool, str]:
                 shutil.copy2(path, backup_dir / path.name)
         mb0 = path.stat().st_size / 1e6
         shutil.copy2(out, path)
-        return True, f"{line}  {mb0:.1f} -> {path.stat().st_size / 1e6:.1f} MB, clips {len(after['anims'])}"
+        how = " (colour from the source model)" if "FROM SOURCE" in (r.stdout or "") else ""
+        clear = re.search(r"CLEAR cut (\d+)", r.stdout or "")
+        if clear:
+            how += f" ({clear.group(1)} see-through faces removed)"
+        return True, f"{line}  {mb0:.1f} -> {path.stat().st_size / 1e6:.1f} MB, clips {len(after['anims'])}{how}"

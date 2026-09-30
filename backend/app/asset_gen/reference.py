@@ -239,9 +239,27 @@ def is_t2i_available() -> bool:
         return False
 
 
+def _evict_llms():
+    """Unload every resident Ollama model from the GPU (2026-09-30).
+
+    The director's 12B model (8 GB) was unloaded before generation began, and
+    reloaded by the next planning call in the same build before SDXL ran; SDXL
+    then sat at step 0 of 28 with the card oversubscribed. Called each time an
+    SDXL pipeline is asked for, so whatever reloaded it in between goes."""
+    try:
+        import requests as _rq
+        for _m in _rq.get("http://localhost:11434/api/ps", timeout=3).json().get("models", []):
+            _rq.post("http://localhost:11434/api/generate",
+                     json={"model": _m["name"], "keep_alive": 0}, timeout=5)
+            print(f"[reference] unloaded '{_m['name']}' from VRAM for SDXL", flush=True)
+    except Exception:
+        pass
+
+
 def _load_t2i_pipeline():
     """Construct or return cached SDXL text-to-image pipeline."""
     global _T2I_PIPELINE
+    _evict_llms()
     if _T2I_PIPELINE is not None:
         return _T2I_PIPELINE
 
@@ -297,6 +315,7 @@ def _load_t2i_controlnet_pipeline():
     pipeline loader (which must run first via _load_t2i_pipeline).
     """
     global _T2I_CONTROLNET_PIPELINE
+    _evict_llms()
     if _T2I_CONTROLNET_PIPELINE is not None:
         return _T2I_CONTROLNET_PIPELINE
 
@@ -350,6 +369,17 @@ def unload_reference_pipeline():
         if _T2I_CONTROLNET_PIPELINE is not None:
             del _T2I_CONTROLNET_PIPELINE
             _T2I_CONTROLNET_PIPELINE = None
+        # (2026-09-30) the judge goes too, and the memory is actually handed
+        # back: TRELLIS.2 loads its checkpoints in a subprocess right after
+        # this, and on a machine whose paging file cannot grow it crashed
+        # (0xC0000005) while SDXL and CLIP still held system memory here
+        global _CLIP_JUDGE
+        try:
+            del _CLIP_JUDGE
+        except NameError:
+            pass
+        import gc
+        gc.collect()
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
             torch.cuda.synchronize()

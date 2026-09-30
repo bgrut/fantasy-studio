@@ -278,28 +278,65 @@ def export_web_game(spec: GameSpec, out_dir: str | Path, verbose: bool = True) -
     # ── OWNERSHIP MANIFEST (best-in-class plan, 2026-07-28): every export
     # carries receipts — the full license chain proving the game is the
     # user's to sell. This is a product feature: no competitor can print it.
+    # (2026-09-30) THE MANIFEST LISTS WHAT SHIPPED: the kits whose props are in
+    # the folder, community characters with their authors, material the user
+    # supplied, and the exact credit lines the licences ask for.
+    _rows = [
+        "| three.js (renderer) | MIT |",
+        "| Physics (Rapier) | Apache-2.0 |",
+        "| N8AO ambient occlusion | CC0 |",
+        "| Fonts: Bricolage Grotesque, Instrument Sans, DM Mono | SIL Open Font License 1.1 |",
+        "| PBR textures | Generated locally (Stable Diffusion XL); yours |",
+        "| Characters and 3D assets | Generated locally (SDXL, Microsoft TRELLIS.2 or TripoSR, all permissive); yours |",
+        "| Character motion | CMU Graphics Lab Motion Capture Database (free for commercial products; credit below) |",
+    ]
+    _credits = ["The motion data used in this product was obtained from mocap.cs.cmu.edu. "
+                "The database was created with funding from NSF EIA-0196217."]
+    try:
+        _kits = {"k_": "Kenney Nature Kit", "sp_": "Kenney Space Kit", "tw_": "Kenney Fantasy Town Kit",
+                 "gy_": "Kenney Graveyard Kit", "sv_": "Kenney Survival Kit", "ca_": "Kenney Castle Kit",
+                 "pr_": "Kenney Pirate Kit", "kc_": "Kenney Blocky Characters", "ph_": "Poly Haven models"}
+        _shipped = [p.name for d_ in (dist / "props", dist / "assets") if d_.exists() for p in d_.glob("*.glb")]
+        for _pre, _kit in _kits.items():
+            if any(n.startswith(_pre) for n in _shipped):
+                _rows.append(f"| {_kit} | CC0, public domain |")
+        if (dist / "vendor" / "gaussian-splats-3d.module.js").exists() and any(
+                p.suffix.lower() in (".splat", ".ply", ".ksplat") for p in (dist / "assets").glob("*")):
+            _rows.append("| Gaussian-splat renderer | MIT |")
+            _rows.append("| Splat scenery | supplied by you: its rights are yours to check |")
+        if getattr(spec.world, "pano", None):
+            _rows.append("| Panorama scenery | supplied by you: its rights are yours to check |")
+        if (dist / "hdri").exists() or any((dist / "assets").glob("*.hdr")):
+            _rows.append("| HDRI environment | Poly Haven, CC0 |")
+        _lv = getattr(spec.world, "level", None) or {}
+        if isinstance(_lv, dict) and _lv.get("osm"):
+            _rows.append("| City street layout | OpenStreetMap data, ODbL 1.0 (credit below) |")
+            _credits.append("Map data © OpenStreetMap contributors, available under the Open Database "
+                            "License (openstreetmap.org/copyright).")
+        _srcf = RUNTIME.parent.parent.parent / "assets" / "library_sources.json"
+        if _srcf.exists():
+            _src = json.loads(_srcf.read_text(encoding="utf-8"))
+            for n in _shipped:
+                _k = n[:-4]
+                for _suf in ("_anim", "_hero"):
+                    if _k.endswith(_suf):
+                        _k = _k[: -len(_suf)]
+                _k = _k.replace("_", " ")
+                if _k in _src:
+                    _s = _src[_k]
+                    _rows.append(f"| {_k} (character) | {_s.get('license', 'CC-BY-4.0')}, by {_s.get('author', 'anonymous')} ({_s.get('source', '')}) |")
+                    _credits.append(f"\"{_k}\" by {_s.get('author', 'anonymous')}, {_s.get('license', 'CC-BY-4.0')}, {_s.get('url', '')}")
+    except Exception:  # noqa: BLE001
+        pass
     (dist / "LICENSES.md").write_text(
-        f"""# {spec.title or 'Your Game'}: License Manifest
-
-This game was generated with Fantasy Studio. **Everything in this folder is
-yours** — the runtime is open source and every bundled asset is either
-generated locally on your machine or dedicated to the public domain.
-
-| Component | License |
-|---|---|
-| Game code & runtime (three.js) | MIT |
-| Physics (Rapier) | Apache-2.0 |
-| Gaussian-splat renderer (when present) | MIT |
-| N8AO ambient occlusion | CC0 |
-| HDRI environment (Poly Haven, when present) | CC0 — public domain |
-| PBR textures | Generated locally (Stable Diffusion XL, user output) |
-| Characters & 3D assets | Generated locally (SDXL + Microsoft TRELLIS, MIT) |
-| Character motion | CMU Motion Capture Database (free for commercial products) |
-| City street layouts (when present) | OpenStreetMap contributors, ODbL (data attribution: openstreetmap.org/copyright) |
-
-No cloud services were used to build this game. No third party holds rights
-over its content. You may sell it, publish it, or modify it freely.
-""", encoding="utf-8")
+        f"# {spec.title or 'Your Game'}: License Manifest\n\n"
+        "This game was generated with Fantasy Studio, locally, on your machine. The third-party\n"
+        "parts in this folder are open source or public domain, listed below with the credit\n"
+        "lines their licences ask for; keep this file with the game.\n\n"
+        "| Component | License |\n|---|---|\n" + "\n".join(dict.fromkeys(_rows)) + "\n\n"
+        "## Credits\n\n" + "\n\n".join(dict.fromkeys(_credits)) + "\n\n"
+        "No cloud services were used to build this game.\n",
+        encoding="utf-8")
 
     # ── HDRI IBL (Arc B slice, 2026-07-28): bundle the CC0 Poly Haven HDRI
     # matching the sky mood — real captured light for every PBR material.

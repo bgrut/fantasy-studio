@@ -450,6 +450,18 @@ import numpy as np
 o=bpy.data.objects.get("Hero")
 TARGET=__TARGET__
 me=o.data
+# ONE SURFACE FIRST (2026-09-30). glTF arrives split at every UV seam, about
+# 1,300 of them on a TRELLIS atlas, so the shard cleanup below read the body
+# as 14,000 "pieces" and the decimation collapsed each fragment on its own:
+# a clean 497k-face horse came out in 6,848 pieces with pits all over its
+# flank and slivers the height of the animal. Seam duplicates sit at exactly
+# the same point; welding them makes one surface again, and UVs, which live
+# on the corners, are kept.
+import bmesh as _bmw
+_b0=_bmw.new(); _b0.from_mesh(me)
+_c0=np.array([v.co[:] for v in _b0.verts]) if len(_b0.verts) else np.zeros((1,3))
+_bmw.ops.remove_doubles(_b0, verts=_b0.verts[:], dist=float(max(_c0.max(0)-_c0.min(0)))*1e-6)
+_b0.to_mesh(me); _b0.free(); me.update()
 # SHARD CLEANUP (video-side trellis2_clean port): TRELLIS meshes carry small
 # disconnected islands ("strings"/floaters). Rigging them binds junk to bones
 # and they smear in motion. Union-find on edges; keep only components >= 1.5%
@@ -547,6 +559,48 @@ if tris0>TARGET:
     m=o.modifiers.new("dec","DECIMATE"); m.ratio=max(TARGET/float(tris0),0.02)
     bpy.context.view_layer.objects.active=o; o.select_set(True)
     bpy.ops.object.modifier_apply(modifier="dec")
+# NO SLIVERS (2026-09-30). Decimating thin hair sheets (a mane, a tail) leaves
+# triangles as long as the animal and a hair wide: the black lines standing
+# over the horse. No real surface has one, so a triangle longer than a few
+# percent of the model and many times thinner than it is long is cut, and
+# whatever the cut leaves floating goes with it; three passes, stricter
+# each time. Measured on the horse: 3,617 slivers up to 77% of its length
+# became one piece with none longer than 11%, mane and tail intact.
+n_sliver=0
+for _L, _R in ((0.06, 20.0), (0.025, 15.0), (0.025, 15.0)):
+    _b1=_bmw.new(); _b1.from_mesh(me); _b1.faces.ensure_lookup_table()
+    if not len(_b1.verts):
+        _b1.free(); break
+    _c1=np.array([v.co[:] for v in _b1.verts]); _span1=float(max(_c1.max(0)-_c1.min(0))) or 1.0
+    _kill=[]
+    for _fc in _b1.faces:
+        _es=[e.calc_length() for e in _fc.edges]; _Lf=max(_es); _A=_fc.calc_area()
+        _h=2.0*_A/max(_Lf,1e-12)
+        if _Lf>_L*_span1 and _Lf/max(_h,1e-12)>_R:
+            _kill.append(_fc)
+    if len(_kill) > 0.2*len(_b1.faces):
+        _b1.free(); break                     # a model made of slivers is not this problem: leave it
+    _bmw.ops.delete(_b1, geom=_kill, context="FACES")
+    n_sliver+=len(_kill)
+    # what the cut left floating: loose pieces under half a percent of the model
+    _b1.faces.ensure_lookup_table()
+    _seen=set(); _small=[]
+    _minp=max(40, int(0.005*len(_b1.faces)))
+    for _fc in _b1.faces:
+        if _fc.index in _seen: continue
+        _st=[_fc]; _comp=[]
+        while _st:
+            _g=_st.pop()
+            if _g.index in _seen: continue
+            _seen.add(_g.index); _comp.append(_g)
+            for _e in _g.edges:
+                for _h2 in _e.link_faces:
+                    if _h2.index not in _seen: _st.append(_h2)
+        if len(_comp)<_minp: _small.extend(_comp)
+    if len(_small) < 0.3*len(_b1.faces):
+        _bmw.ops.delete(_b1, geom=_small, context="FACES")
+    _bmw.ops.delete(_b1, geom=[v for v in _b1.verts if not v.link_faces], context="VERTS")
+    _b1.to_mesh(me); _b1.free(); me.update()
 tris1=sum(len(p.vertices)-2 for p in o.data.polygons)
 # ALPHA REWIRE: TRELLIS hair/fringe strips rely on texture transparency; the
 # import/export round-trip can drop the image->Alpha link, rendering the
@@ -591,7 +645,7 @@ except Exception:
     except Exception: pass
 bpy.ops.object.select_all(action='DESELECT'); o.select_set(True)
 bpy.ops.export_scene.gltf(filepath=r"__OUT__", use_selection=True, export_yup=True)
-__result__=json.dumps({"ok":True,"tris":[tris0,tris1],"shard_verts_dropped":int(dropped),
+__result__=json.dumps({"ok":True,"tris":[tris0,tris1],"shard_verts_dropped":int(dropped),"slivers_cut":int(n_sliver),
                        "alpha_wired":alpha_wired})
 '''
 
@@ -1148,7 +1202,7 @@ def bake_quadruped_anim_set(hero_glb: str | Path, out_glb: str | Path,
     # out one closed body with its coat baked on; FS_RETOPO_QUAD=0 turns it
     # off for animals alone.
     if retopo.enabled() and os.environ.get("FS_RETOPO_QUAD", "1") == "1":
-        rr = retopo.run("Hero")            # long-timeout bridge call
+        rr = retopo.run("Hero", layers=False)            # long-timeout bridge call
         if verbose:
             print(f"[bake] retopo: {rr}")
     a = _call(registry, "quad_rig", skin_v2.wrap(_QUAD_RIG_CODE))
@@ -1267,7 +1321,7 @@ def ensure_playable(kind: str, verbose: bool = True) -> str | None:
         try:
             from . import coat as _coat
             if _coat.enabled() and anim.exists():
-                ok, msg = _coat.coat(anim)
+                ok, msg = _coat.coat(anim, source=static)
                 if verbose:
                     print(f"[bake] coat {anim.name}: {msg}")
         except Exception as _ce:

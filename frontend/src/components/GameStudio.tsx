@@ -150,7 +150,7 @@ export default function GameStudio() {
   // Photoreal sent undefined and the extractor overrode it.
   const [style, setStyle] = useState('auto')               // Phase 44 style preset
   const [splatPath, setSplatPath] = useState<string | null>(null)
-  const [splatList, setSplatList] = useState<{ name: string; path: string; mb: number }[] | null>(null)
+  const [splatList, setSplatList] = useState<{ name: string; path: string; mb: number; licence_note?: string | null }[] | null>(null)
   const [splatTrain, setSplatTrain] = useState<string | null>(null)  // splat job stage text
   const [panoPath, setPanoPath] = useState<string | null>(null)      // Phase 140: scene-image world
 
@@ -921,8 +921,9 @@ export default function GameStudio() {
             {splatList.map((s) => (
               <button key={s.path}
                 onClick={() => { setSplatPath(s.path); setSplatList(null) }}
+                title={s.licence_note || undefined}
                 className="px-2 py-0.5 rounded-full text-[10px] border border-[#c86bff]/25 text-[#a58cc9] hover:text-[#c86bff] hover:bg-[#c86bff]/10 transition-all">
-                {s.name} · {s.mb}MB
+                {s.name} · {s.mb}MB{s.licence_note ? ' · origin unknown' : ''}
               </button>
             ))}
           </div>

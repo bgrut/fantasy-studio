@@ -40,6 +40,12 @@ class _Whole(Exception):
 
 
 HERO = "__HERO__"; TARGET_FACES = __FACES__
+# LAYERS ARE A FIGURE'S (2026-09-30): the inner-layer and colour cuts below
+# look for a shirt under a coat. An animal is one layer of fur with flakes
+# standing off it; the flakes swell the ruler hull, the real body reads as
+# buried, and the moose walked with the sky showing through its flank. For
+# a quadruped only the loose scraps are removed.
+LAYERS = __LAYERS__
 o = bpy.data.objects.get(HERO)
 out = {"ok": False, "reason": ""}
 try:
@@ -176,7 +182,7 @@ try:
                             _img = _nd.image; break
                 if _img is not None:
                     break
-            if _img is not None and _img.size[0] >= 8 and o.data.uv_layers:
+            if LAYERS and _img is not None and _img.size[0] >= 8 and o.data.uv_layers:
                 _W, _H = _img.size
                 _px = np.empty(_W * _H * 4, dtype=np.float32); _img.pixels.foreach_get(_px)
                 _px = _px.reshape(_H, _W, 4)[:, :, :3]
@@ -253,6 +259,8 @@ try:
 
         _inner = 0
         try:
+            if not LAYERS:
+                raise StopIteration  # an animal: no layers to find
             # the ruler: a watertight hull of the whole stack, coarse enough to
             # bridge the gaps between layers and never shipped anywhere
             _hull = o.copy(); _hull.data = o.data.copy(); _hull.name = HERO + "_hull"
@@ -296,6 +304,8 @@ try:
                 _b.to_mesh(o.data); _b.free(); o.data.update()
                 _inner = len(_inside)
             bpy.data.objects.remove(_hull, do_unlink=True)
+        except StopIteration:
+            pass
         except Exception as _he:
             _inner = -1
 
@@ -599,21 +609,22 @@ def enabled() -> bool:
     return os.environ.get("FS_RETOPO", "1") == "1"
 
 
-def code(hero: str = "Hero", target_faces: int = 12000, target_tris: int = 80000) -> str:
+def code(hero: str = "Hero", target_faces: int = 12000, target_tris: int = 80000, layers: bool = True) -> str:
     return (RETOPO_CODE
             .replace("__HERO__", hero)
             .replace("__FACES__", str(int(target_faces)))
             .replace("__FLECK__", os.environ.get("FS_RETOPO_FLECK", "56"))
-            .replace("__TRIS__", str(int(target_tris))))
+            .replace("__TRIS__", str(int(target_tris)))
+            .replace("__LAYERS__", "True" if layers else "False"))
 
 
-def run(hero: str = "Hero", target_faces: int = 12000, timeout: float = 900.0):
+def run(hero: str = "Hero", target_faces: int = 12000, timeout: float = 900.0, layers: bool = True):
     """Execute the retopo pass over the bridge with a LONG timeout —
     QuadriFlow/voxel work is CPU-heavy and the registry's default 60 s once
     cut it off mid-crunch."""
     import json as _json
     from app.mcp import blender_bridge as _bb
-    res = _bb.call("execute_python", {"code": code(hero, target_faces)},
+    res = _bb.call("execute_python", {"code": code(hero, target_faces, layers=layers)},
                    timeout=timeout)
     raw = res.get("result") if isinstance(res, dict) else None
     try:

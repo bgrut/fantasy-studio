@@ -1,0 +1,12 @@
+Kenney Space Kit
+
+	Created/distributed by Kenney (www.kenney.nl)
+	Source: https://kenney.nl/assets/space-kit
+
+	License: (Creative Commons Zero, CC0)
+	http://creativecommons.org/publicdomain/zero/1.0/
+
+	You can use this content for personal, educational, and commercial purposes.
+	Support by crediting Kenney or www.kenney.nl (this is not a requirement)
+
+	Provenance note (2026-09-30): the props prefixed sp_ in this folder come from this kit.

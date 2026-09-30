@@ -64,20 +64,15 @@ def base_image(mat):
     return None
 
 
-nv_all = nf_all = 0
-for o in meshes:
-    me = o.data
-    # EVERY MATERIAL ITS OWN SHEET: a hero carries a head material beside the
-    # body's, and sampling every face from the first sheet painted the faces
-    # with a patch of hair. Each slot is read from its own image, or its flat
-    # colour when it has none.
-    sheets = []
+def read_sheets(me):
+    """Every material slot's colour: its sheet as stored (sRGB), or a flat colour."""
+    out = []
     for mslot in me.materials:
         im = base_image(mslot)
         if im is not None and im.size[0] > 0:
             a_ = np.empty(im.size[0] * im.size[1] * 4, dtype=np.float32)
             im.pixels.foreach_get(a_)
-            sheets.append(("img", a_.reshape(im.size[1], im.size[0], 4)[:, :, :3]))
+            out.append(("img", a_.reshape(im.size[1], im.size[0], 4)[:, :, :3]))
         else:
             col = (0.6, 0.6, 0.6)
             try:
@@ -86,8 +81,175 @@ for o in meshes:
                 col = tuple(np.where(lc <= 0.0031308, lc * 12.92, 1.055 * lc ** (1 / 2.4) - 0.055))
             except Exception:
                 pass
-            sheets.append(("flat", np.array(col)))
-    if not any(k == "img" for k, _ in sheets) or not me.uv_layers:
+            out.append(("flat", np.array(col)))
+    return out
+
+
+def read_alpha(me):
+    """Every material slot's transparency sheet, or None where the slot has none."""
+    out = []
+    for mslot in me.materials:
+        im = base_image(mslot)
+        if im is None or im.size[0] == 0 or im.depth != 32:
+            out.append(None); continue
+        a_ = np.empty(im.size[0] * im.size[1] * 4, dtype=np.float32)
+        im.pixels.foreach_get(a_)
+        al = a_.reshape(im.size[1], im.size[0], 4)[:, :, 3]
+        out.append(al if (al < 0.5).any() else None)
+    return out
+
+
+def sample_alpha(alphas, which, uv):
+    """Transparency at uv (n,2) from sheet index which (n,); 1.0 where there is no sheet."""
+    res = np.ones(len(uv))
+    for si, al in enumerate(alphas):
+        sel = which == si
+        if al is None or not sel.any():
+            continue
+        Hs, Ws = al.shape
+        x = np.clip((uv[sel, 0] % 1.0) * Ws, 0, Ws - 1).astype(np.int64)
+        y = np.clip((uv[sel, 1] % 1.0) * Hs, 0, Hs - 1).astype(np.int64)
+        res[sel] = al[y, x]
+    return res
+
+
+def sample(sheets, which, uv):
+    """Colours at uv (n,2) from sheet index which (n,)."""
+    res = np.zeros((len(uv), 3))
+    for si, (kind, sheet) in enumerate(sheets):
+        sel = which == si
+        if not sel.any():
+            continue
+        if kind == "flat":
+            res[sel] = sheet
+            continue
+        Hs, Ws = sheet.shape[0], sheet.shape[1]
+        x = np.clip((uv[sel, 0] % 1.0) * Ws, 0, Ws - 1).astype(np.int64)
+        y = np.clip((uv[sel, 1] % 1.0) * Hs, 0, Hs - 1).astype(np.int64)
+        res[sel] = sheet[y, x]
+    return res
+
+
+# THE SOURCE'S COLOUR (2026-09-30). Eight animals (the tiger, the cheetah, the
+# ice wolf, the gazelle...) played as black silhouettes: the rig bake had
+# written a near-black sheet, while the model it was rigged from still has
+# its full coat. With --from=<static.glb> the coat can be read from that
+# source instead, surface to surface: the rigged mesh's rest shape is the
+# source's shape moved, scaled and turned, so both are normalised, the
+# axis-aligned turn under which they coincide is found, and each face reads
+# the source's texture at the nearest point of the source's surface. It is
+# used when the rig's own sheet is far darker than the source's.
+FROM = next((a.split("=", 1)[1] for a in argv if a.startswith("--from=")), None)
+SRC = None
+if FROM:
+    from mathutils.bvhtree import BVHTree
+    before = set(bpy.data.objects)
+    acts_before = set(bpy.data.actions)
+    bpy.ops.import_scene.gltf(filepath=FROM)
+    new_objs = [ob for ob in bpy.data.objects if ob not in before]
+    # a source that is itself animated brings its clips with it; only its
+    # surface is wanted, so they go before the export can pick them up
+    for act in [a for a in bpy.data.actions if a not in acts_before]:
+        bpy.data.actions.remove(act)
+    tris, tuv, tsh, ssheets, salpha = [], [], [], [], []
+    for so in [ob for ob in new_objs if ob.type == "MESH"]:
+        base = len(ssheets)
+        ssheets.extend(read_sheets(so.data))
+        salpha.extend(read_alpha(so.data))
+        bm = bmesh.new(); bm.from_mesh(so.data)
+        bm.transform(so.matrix_world)
+        bmesh.ops.triangulate(bm, faces=bm.faces[:])
+        uvl = bm.loops.layers.uv.active
+        if uvl is None:
+            bm.free(); continue
+        for f in bm.faces:
+            tris.append([l.vert.co[:] for l in f.loops])
+            tuv.append([l[uvl].uv[:] for l in f.loops])
+            tsh.append(base + f.material_index)
+        bm.free()
+    for ob in new_objs:
+        bpy.data.objects.remove(ob, do_unlink=True)
+    if tris and any(k == "img" for k, _ in ssheets):
+        T = np.array(tris); U = np.array(tuv)
+        flat = T.reshape(-1, 3)
+        SRC = {"tris": T, "uv": U, "sheet": np.array(tsh, dtype=np.int64), "sheets": ssheets, "alpha": salpha,
+               "bvh": BVHTree.FromPolygons([Vector(p) for p in flat.tolist()],
+                                           [(3 * i, 3 * i + 1, 3 * i + 2) for i in range(len(T))],
+                                           all_triangles=True),
+               "verts": flat}
+
+
+def cube_rotations():
+    import itertools
+    rots = []
+    for perm in itertools.permutations(range(3)):
+        for signs in itertools.product((1, -1), repeat=3):
+            R = np.zeros((3, 3))
+            for r, (c, s) in enumerate(zip(perm, signs)):
+                R[r, c] = s
+            if np.linalg.det(R) > 0:
+                rots.append(R)
+    return rots
+
+
+def align(A):
+    """The turn under which points A (world) lie on the source: (gap, map to the source's frame)."""
+    S = SRC["verts"]
+    cA, sA = (A.min(0) + A.max(0)) / 2, float(np.linalg.norm(A.max(0) - A.min(0))) or 1.0
+    cS, sS = (S.min(0) + S.max(0)) / 2, float(np.linalg.norm(S.max(0) - S.min(0))) or 1.0
+    kdS = KDTree(min(len(S), 30000))
+    step = max(1, len(S) // 30000)
+    for i, v in enumerate(((S[::step][:30000] - cS) / sS).tolist()):
+        kdS.insert(v, i)
+    kdS.balance()
+    probe = ((A[:: max(1, len(A) // 2500)] - cA) / sA)
+    best = None
+    for R in cube_rotations():
+        d = float(np.mean([kdS.find(p)[2] for p in (probe @ R.T).tolist()]))
+        if best is None or d < best[0]:
+            best = (d, R)
+    R = best[1]
+    return best[0], (lambda Pw: ((Pw - cA) / sA) @ R.T * sS + cS)
+
+
+def source_colours(world_pts):
+    """Colour of the source's surface nearest each point (already in the source's frame)."""
+    which, out_uv = source_uv(world_pts)
+    return sample(SRC["sheets"], which, out_uv)
+
+
+def source_uv(world_pts):
+    """Sheet index and uv of the source's surface nearest each point (in the source's frame)."""
+    T, U, bvh = SRC["tris"], SRC["uv"], SRC["bvh"]
+    out_uv = np.zeros((len(world_pts), 2)); which = np.zeros(len(world_pts), dtype=np.int64)
+    for i, p in enumerate(world_pts.tolist()):
+        hit = bvh.find_nearest(Vector(p))
+        if hit is None or hit[2] is None:
+            continue
+        ti = hit[2]; q = np.array(hit[0][:])
+        a_, b_, c_ = T[ti]
+        v0, v1, v2 = b_ - a_, c_ - a_, q - a_
+        d00, d01, d11 = v0 @ v0, v0 @ v1, v1 @ v1
+        d20, d21 = v2 @ v0, v2 @ v1
+        den = d00 * d11 - d01 * d01 or 1e-12
+        w1 = (d11 * d20 - d01 * d21) / den; w2 = (d00 * d21 - d01 * d20) / den
+        w1, w2 = min(max(w1, 0.0), 1.0), min(max(w2, 0.0), 1.0)
+        if w1 + w2 > 1.0:
+            s_ = w1 + w2; w1 /= s_; w2 /= s_
+        out_uv[i] = U[ti, 0] * (1 - w1 - w2) + U[ti, 1] * w1 + U[ti, 2] * w2
+        which[i] = SRC["sheet"][ti]
+    return which, out_uv
+
+
+nv_all = nf_all = 0
+for o in meshes:
+    me = o.data
+    # EVERY MATERIAL ITS OWN SHEET: a hero carries a head material beside the
+    # body's, and sampling every face from the first sheet painted the faces
+    # with a patch of hair. Each slot is read from its own image, or its flat
+    # colour when it has none.
+    sheets = read_sheets(me)
+    if (not any(k == "img" for k, _ in sheets) or not me.uv_layers) and SRC is None:
         continue
 
     # ONE SURFACE, FACING OUT: glTF splits a mesh at every UV seam, so a body
@@ -101,6 +263,85 @@ for o in meshes:
     bmesh.ops.remove_doubles(bmw, verts=bmw.verts[:], dist=_span0 * 2e-5)
     # (the winding is kept as generated: recalculating it on a layered,
     # non-manifold shell turned whole patches of a guide inside out)
+    # NOTHING THE TEXTURE HID (2026-09-30). The black lines standing over the
+    # horse were its mane's fringe: sheets of geometry the generator draws and
+    # then makes invisible with its texture's transparency, 14,000 of the
+    # horse's 75,000 faces. A textured model hides them; the coat has no
+    # texture, so it painted them solid. A face the texture shows as clear is
+    # removed. The rig bake writes its sheet without transparency, so a rigged
+    # model reads it from the model it was rigged from, like its colour.
+    n_clear = 0
+    own_a = read_alpha(me)
+    has_own = any(a_ is not None for a_ in own_a) and bmw.loops.layers.uv.active is not None
+    has_src = SRC is not None and any(a_ is not None for a_ in SRC["alpha"])
+    if has_own or has_src:
+        bmw.faces.ensure_lookup_table()
+        fl = list(bmw.faces)
+        pick = [(0, 1, min(2, len(f.loops) - 1)) for f in fl]
+        W4 = ((1 / 3, 1 / 3, 1 / 3), (0.6, 0.2, 0.2), (0.2, 0.6, 0.2), (0.2, 0.2, 0.6))
+        fa = None
+        if has_own:
+            uvw = bmw.loops.layers.uv.active
+            tuv_ = np.array([[f.loops[i][uvw].uv[:] for i in p] for f, p in zip(fl, pick)])
+            fm_ = np.array([f.material_index for f in fl], dtype=np.int64)
+            fa = np.median([sample_alpha(own_a, fm_, tuv_[:, 0] * wa + tuv_[:, 1] * wb + tuv_[:, 2] * wc)
+                            for wa, wb, wc in W4], axis=0)
+        else:
+            Mw = np.array(o.matrix_world)
+            wco = lambda P: P @ Mw[:3, :3].T + Mw[:3, 3]
+            gap_a, map_a = align(wco(np.array([v.co[:] for v in bmw.verts])))
+            if gap_a < 0.03:
+                tco_ = np.array([[f.loops[i].vert.co[:] for i in p] for f, p in zip(fl, pick)])
+                fa = np.median([sample_alpha(SRC["alpha"], *source_uv(map_a(wco(
+                    tco_[:, 0] * wa + tco_[:, 1] * wb + tco_[:, 2] * wc)))) for wa, wb, wc in W4], axis=0)
+        if fa is not None:
+            clear = [f for f, a_ in zip(fl, fa) if a_ < 0.5]
+            # a model that is mostly clear is not this problem: leave it
+            if 0 < len(clear) < 0.35 * len(fl):
+                bmesh.ops.delete(bmw, geom=clear, context="FACES")
+                n_clear = len(clear)
+                print("CLEAR cut %d of %d" % (n_clear, len(fl)))
+    # NO SLIVERS (2026-09-30): the old optimiser stretched thin hair sheets
+    # into triangles as long as the animal (611 on the moose, the black lines
+    # over the horse). The same cut the optimiser now makes: a triangle longer
+    # than a few percent of the model and many times thinner than it is long
+    # is removed, twice, stricter the second time; then what it left floating.
+    n_cut = 0
+    for _L, _R in ((0.06, 20.0), (0.025, 15.0)):
+        bmw.faces.ensure_lookup_table()
+        kill = []
+        for f in bmw.faces:
+            es = [e.calc_length() for e in f.edges]; Lf = max(es); A = f.calc_area()
+            if Lf > _L * _span0 and Lf / max(2.0 * A / max(Lf, 1e-12), 1e-12) > _R:
+                kill.append(f)
+        if len(kill) > 0.2 * len(bmw.faces):
+            break
+        bmesh.ops.delete(bmw, geom=kill, context="FACES")
+        n_cut += len(kill)
+    if n_cut or n_clear:
+        bmw.faces.ensure_lookup_table()
+        seen = set(); small = []
+        minp = max(40, int(0.005 * len(bmw.faces)))
+        for f in bmw.faces:
+            if f.index in seen:
+                continue
+            st = [f]; comp = []
+            while st:
+                g = st.pop()
+                if g.index in seen:
+                    continue
+                seen.add(g.index); comp.append(g)
+                for e in g.edges:
+                    for h in e.link_faces:
+                        if h.index not in seen:
+                            st.append(h)
+            if len(comp) < minp:
+                small.extend(comp)
+        if len(small) < 0.3 * len(bmw.faces):
+            bmesh.ops.delete(bmw, geom=small, context="FACES")
+        bmesh.ops.delete(bmw, geom=[v for v in bmw.verts if not v.link_faces], context="VERTS")
+        if n_cut:
+            print("SLIVERS cut %d" % n_cut)
     bmw.to_mesh(me); bmw.free()
     try:
         bpy.ops.object.select_all(action="DESELECT")
@@ -119,13 +360,15 @@ for o in meshes:
     bm0 = bmesh.new(); bm0.from_mesh(me)
     uvl0 = bm0.loops.layers.uv.active
     nf = len(bm0.faces); nv = len(bm0.verts)
-    tri_uv = np.empty((nf, 3, 2)); lv_l = []; lt_l = []
+    tri_uv = np.zeros((nf, 3, 2)); tri_co = np.zeros((nf, 3, 3)); lv_l = []; lt_l = []
     fmat = np.array([f.material_index for f in bm0.faces], dtype=np.int64)
     for fi, f in enumerate(bm0.faces):
         ls_ = f.loops
         k = len(ls_)
         for ci, li in enumerate((0, 1, min(2, k - 1))):
-            tri_uv[fi, ci] = ls_[li][uvl0].uv
+            if uvl0 is not None:
+                tri_uv[fi, ci] = ls_[li][uvl0].uv
+            tri_co[fi, ci] = ls_[li].vert.co
         lv_l.extend(l.vert.index for l in ls_); lt_l.append(k)
     co = np.array([v.co[:] for v in bm0.verts])
     bm0.free()
@@ -156,6 +399,29 @@ for o in meshes:
     # fur or cloth agrees with itself; a face mapped into the atlas's confetti
     # is a scatter of unrelated colours and is not to be believed
     face_var = ((stack - face_col[None]) ** 2).sum(2).mean(0)
+
+    if SRC is not None:
+        # the rigged rest shape in the source's frame: normalise both, and keep
+        # the axis-aligned turn under which the two surfaces coincide
+        M = np.array(o.matrix_world)
+        gap, _map = align(co @ M[:3, :3].T + M[:3, 3])
+        best = (gap,)
+        print("ALIGN mean gap %.4f of the size" % gap)
+
+        def to_src(P):
+            return _map(P @ M[:3, :3].T + M[:3, 3])
+        spts = []
+        for wa, wb, wc in ((1 / 3, 1 / 3, 1 / 3), (0.6, 0.2, 0.2), (0.2, 0.6, 0.2), (0.2, 0.2, 0.6)):
+            spts.append(source_colours(to_src(tri_co[:, 0] * wa + tri_co[:, 1] * wb + tri_co[:, 2] * wc)))
+        sstack = np.stack(spts, 0)
+        s_col = np.median(sstack, axis=0)
+        lum = lambda x: float((x @ np.array([0.2126, 0.7152, 0.0722])).mean())
+        own_l, src_l = lum(face_col), lum(s_col)
+        print("LUMINANCE own %.3f, source %.3f" % (own_l, src_l))
+        if best[0] < 0.03 and (own_l < 0.55 * src_l or not any(k == "img" for k, _ in sheets)):
+            print("FROM SOURCE")
+            face_col = s_col
+            face_var = ((sstack - s_col[None]) ** 2).sum(2).mean(0)
 
     # 2. onto the vertices, then cleaned in space
     lf = np.repeat(np.arange(nf), lt)

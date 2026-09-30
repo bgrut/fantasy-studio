@@ -30,19 +30,18 @@ SKIP = {"cubegrid.test.mjs", "ROADMAP.md", ".gitignore", "_shot.png", "audit_fix
 
 MANIFEST = """# Crystal Works: License Manifest
 
-This demo was built with Fantasy Studio. Everything in this folder is yours:
-the runtime is open source and every asset in it is drawn by the runtime
-itself or dedicated to the public domain.
+Crystal Works is made by FantasyLab AI with Fantasy Studio. The third-party
+parts inside it are open source or public domain, listed below with their
+licences; every asset in the game is drawn by the game itself at load.
 
 | Component | License |
 |---|---|
-| Game code and runtime (three.js) | MIT (vendor/three.LICENSE) |
+| three.js (renderer) | MIT (vendor/three.LICENSE) |
 | N8AO ambient occlusion | CC0 (vendor/n8ao.LICENSE) |
 | Bricolage Grotesque, Instrument Sans, DM Mono | SIL Open Font License 1.1 (vendor/fonts/OFL-*.txt) |
-| Machines, plating, sky, sounds | Drawn and synthesised by the runtime at load; no assets shipped |
+| Machines, plating, sky, sounds | Drawn and synthesised by the game at load; no assets shipped |
 
-No cloud services were used to build this demo. No third party holds rights
-over its content. You may sell it, publish it, or modify it freely.
+No cloud services were used to build it.
 """
 
 
@@ -109,11 +108,16 @@ def desktop(n_files: int, steam: bool = False, app_id: int = 480) -> int:
     out = ROOT / "dist" / ("crystal-works-steam" if steam else "crystal-works-desktop")
     out.mkdir(parents=True, exist_ok=True)
     shutil.copy2(exe, out / exe.name)
-    shell = "| Desktop shell (Tauri 2, WebView2) | MIT / Apache-2.0 |"
+    shell = ("| Desktop shell (Tauri 2 and the Rust crates it is built from) | MIT, Apache-2.0, MPL-2.0, Unicode-3.0 (THIRD_PARTY_NOTICES.md) |"
+             "\n| WebView2 runtime | Microsoft's, part of Windows; not included |")
     if steam:
         shell += ("\n| Steamworks bindings (steamworks-rs) | MIT / Apache-2.0 |"
                   "\n| steam_api64.dll | Valve's Steamworks SDK redistributable, shipped under the Steamworks SDK Access Agreement with a game released on Steam |")
-    (out / "LICENSES.md").write_text(MANIFEST.replace("| Game code and runtime", shell + "\n| Game code and runtime"), encoding="utf-8")
+    (out / "LICENSES.md").write_text(MANIFEST.replace("| three.js (renderer)", shell + "\n| three.js (renderer)"), encoding="utf-8")
+    # the crates inside the executable, with the notices their licences ask for
+    subprocess.run([sys.executable, str(ROOT / "backend" / "tools" / "rust_notices.py"),
+                    str(ROOT / "flagship-desktop" / "src-tauri"), str(out / "THIRD_PARTY_NOTICES.md")]
+                   + (["--features", "steam"] if steam else []))
     if steam:
         # the Steam build links Valve's DLL, which has to sit beside the game
         dll = rel / "steam_api64.dll"

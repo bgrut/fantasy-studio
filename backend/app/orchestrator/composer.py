@@ -1932,12 +1932,13 @@ def _run_asset_gen(slots: Dict[str, Any], scene: Dict[str, Any], subj: Dict[str,
     elif is_mesh_gen_available("trellis2"):
         engine = "trellis2"  # DEFAULT since the 2026-06 A/B sweep (4/4 wins):
         #                      MIT, crisper geometry, natively textured output
-    elif is_mesh_gen_available("triposg"):
-        engine = "triposg"   # MIT, higher-fidelity, isolated venv
-    elif is_mesh_gen_available("triposr"):
-        engine = "triposr"
+    # (2026-09-30) TripoSG runs RMBG-1.4 and diso (non-commercial) and
+    # InstantMesh runs nvdiffrast (non-commercial) and zero123plus (licence
+    # unverified), so neither is chosen on its own any more: a render made
+    # with them could not be sold. TRELLIS.2 (MIT, with the permissive
+    # rasteriser) and TripoSR (MIT) are the engines.
     else:
-        engine = "instantmesh"
+        engine = "triposr"
     try:
         if verbose:
             print(f"[composer] asset-gen: generating mesh via {engine}")

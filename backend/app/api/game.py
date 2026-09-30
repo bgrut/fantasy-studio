@@ -344,7 +344,21 @@ def _ensure_asset_limited(kind: str, secs: float, verbose: bool = False) -> bool
     from app.game_export.generate import ensure_asset
     if _GEN_POOL is None:
         _GEN_POOL = _cf.ThreadPoolExecutor(max_workers=1, thread_name_prefix="assetgen")
-    fut = _GEN_POOL.submit(ensure_asset, kind, None, 45000, verbose)
+
+    def _generate_then_let_go():
+        # (2026-09-30) the server kept SDXL and the judge resident after a
+        # generation, 15.6 GB of a 30 GB machine, and the next build's planner
+        # and TRELLIS.2 could not load beside it; the memory goes back when the
+        # generation ends, whichever way it ends
+        try:
+            return ensure_asset(kind, None, 45000, verbose)
+        finally:
+            try:
+                from app.asset_gen.reference import unload_reference_pipeline
+                unload_reference_pipeline()
+            except Exception:
+                pass
+    fut = _GEN_POOL.submit(_generate_then_let_go)
     try:
         fut.result(timeout=secs)
         return True
@@ -756,13 +770,27 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             # THE STEPS ARE THE SENTENCE'S (2026-09-29): a collect or defeat step
             # the model made up, with no word of the prompt in it, is dropped
             try:
-                from app.game_export.extractor import ground_objectives
+                from app.game_export.extractor import ground_objectives, sought_object, label_grounded
+                from app.game_export.spec import ObjectiveSpec as _GOS
                 _kept, _dropped = ground_objectives(list(spec.objectives), req.prompt)
                 if _dropped:
                     spec.objectives = _kept
                     for _d in _dropped:
                         job.setdefault("notes", []).append(
                             f"the step '{_d.kind} {_d.label}' was left out: the prompt did not ask for it")
+                # THE SENTENCE NAMES WHAT IT SEEKS (2026-09-30): "searching a
+                # rainy city for a stolen painting" was planned as three clues.
+                # When no collect step is the prompt's own, the thing the
+                # sentence is looking for becomes the step.
+                _sought = sought_object(req.prompt)
+                _col = [o for o in spec.objectives if o.kind == "collect"]
+                if _sought and _col and not any(label_grounded(o.label, req.prompt) for o in _col):
+                    _first = spec.objectives.index(_col[0])
+                    spec.objectives = [o for o in spec.objectives if o not in _col]
+                    spec.objectives.insert(_first, _GOS(kind="collect", label=_sought[0], count=_sought[1]))
+                    job.setdefault("notes", []).append(
+                        f"the step is the sentence's own: collect {_sought[1]} {_sought[0]} "
+                        f"(the planner had written {', '.join(o.label for o in _col)})")
             except Exception as _ge:
                 job.setdefault("notes", []).append(f"objective grounding skipped: {_ge}")
             # a tower defence or a platformer names what it is; neither is a
@@ -1232,7 +1260,12 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             # human role the library cannot resolve is recast like a generic
             # one; generation stays for what it is for, a new creature.
             _w = (want or "").strip().lower()
+            # (2026-09-30) "a samurai crossing a bamboo forest" was played by
+            # the ranger: the samurai's static model is marked poor, so the
+            # samurai counted as unknown, and "forest" matched before
+            # "samurai" did. A character with a playable rig is known.
             _unknown_human = (bool(_w) and library.resolve(_w) is None
+                              and not ensure_playable(_w, verbose=False)
                               and guess_pattern(_w) == "biped")
             if (_w in _GENERIC_HUMAN | {"hero", "protagonist", "player", "you", "someone", "stranger", "visitor"} or _unknown_human) \
                     and spec.style not in _FLAT_LOOKS:
@@ -1252,7 +1285,10 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                     (r"\b(lighthouse|harbour|harbor|coast|shore|storm|sea|island|lantern|beacon)", "keeper"),   # 2026-09-28: generated once, cast by the sea's words since
                 ]
                 import re as _re4                      # _re3 is imported further down
-                _role = next((r for pat, r in _ROLES if _re4.search(pat, _pw)), "explorer")
+                # a role the sentence names outright is that role, whatever
+                # scenery words come first
+                _named_role = next((r for _, r in _ROLES if r == _w), None)
+                _role = _named_role or next((r for pat, r in _ROLES if _re4.search(pat, _pw)), "explorer")
                 if library.resolve(_role) and _role != want:
                     job.setdefault("notes", []).append(
                         f"hero cast: '{want}' is played by the {_role}, dressed for this world "
@@ -2448,9 +2484,34 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         # player's feet, the first thing in frame. A swimmer belongs in water:
         # with none, it goes, and the note says so rather than leaving a
         # player to wonder. Decided after the water level is final.
+        # A SWAMP IS STANDING WATER (2026-09-30). "A toxic swamp full of
+        # crocodiles" was dry ground, so the crocodiles (and their stand-in)
+        # had nowhere to be and were dropped. A wetland floods its low ground:
+        # the water stands at the height below which about a third of the
+        # terrain lies, pools and channels between dry hummocks.
+        try:
+            if (spec.world.water_level is None and spec.world.sky != "space"
+                    and _fre.search(r"\b(swamps?|marsh(?:es|land)?|bogs?|wetlands?|bayous?|mangroves?|fens?|mires?|everglades)\b",
+                                    (req.prompt or "").lower())):
+                _hs = (spec.world.level or {}).get("heights") or []
+                if _hs:
+                    import numpy as _np5
+                    spec.world.water_level = round(float(_np5.quantile(_np5.array(_hs, dtype=float), 0.3)), 3)
+                    job.setdefault("notes", []).append(
+                        "a swamp stands in water: the low third of the ground is flooded")
+        except Exception as _swe:  # noqa: BLE001
+            job.setdefault("notes", []).append(f"swamp water skipped: {_swe}")
+        # (2026-09-30) "aquatic" is the class of anything legless or swimming,
+        # so a desert's snakes and a riverbank's crocodiles counted as fish and
+        # were dropped from dry land. Only what lives in water goes; what also
+        # lives on land stays, on the land.
+        _AMPHIB = _fre.compile(r"\b(snakes?|serpents?|cobras?|vipers?|pythons?|adders?|rattlesnakes?|crocodiles?|"
+                               r"alligators?|caimans?|turtles?|tortoises?|frogs?|toads?|newts?|salamanders?|"
+                               r"lizards?|iguanas?|otters?|seals?|walrus(?:es)?|penguins?|crabs?|beavers?|platypus)\b")
         if spec.world.water_level is None and spec.entities:
             _wet = [e for e in spec.entities
-                    if guess_pattern((e.name or "").lower()) == "aquatic"]
+                    if guess_pattern((e.name or "").lower()) == "aquatic"
+                    and not _AMPHIB.search((e.name or "").lower())]
             if _wet:
                 _names = sorted({(e.name or "").lower() for e in _wet})
                 spec.entities = [e for e in spec.entities if e not in _wet]
@@ -3173,8 +3234,21 @@ def list_splats():
     if d.exists():
         for f in sorted(d.iterdir()):
             if f.suffix.lower() in (".ply", ".splat", ".ksplat") and f.is_file():
+                # PROVENANCE (2026-09-30): a splat the studio made (imagined or
+                # trained) says so in its .meta.json; anything else (a sample
+                # someone downloaded) is flagged, since it ships in the game
+                src = None
+                try:
+                    _m = f.with_name(f.name + ".meta.json")
+                    if _m.exists():
+                        src = json.loads(_m.read_text(encoding="utf-8")).get("source")
+                except Exception:
+                    src = None
                 items.append({"name": f.name, "path": f"assets/splats/{f.name}",
-                              "mb": round(f.stat().st_size / 1e6, 1)})
+                              "mb": round(f.stat().st_size / 1e6, 1),
+                              "provenance": src or "unknown",
+                              "licence_note": None if src else
+                              "origin not recorded: check its licence before selling a game made with it"})
     return {"ok": True, "splats": items}
 
 

@@ -73,7 +73,10 @@ def _engine_for_tier(tier: str) -> str:
     standard:     TripoSR (still cost-effective)
     cinematic:    InstantMesh (higher detail, worth the wait at this tier)
     """
-    return "instantmesh" if tier == "cinematic" else "triposr"
+    # (2026-09-30) cinematic no longer routes to InstantMesh: it rasterises
+    # with nvdiffrast (NVIDIA, non-commercial). TRELLIS.2 (MIT) is the detailed
+    # engine, TripoSR the quick one.
+    return "trellis2" if tier == "cinematic" else "triposr"
 
 
 def is_mesh_gen_available(engine: str = "triposr") -> bool:

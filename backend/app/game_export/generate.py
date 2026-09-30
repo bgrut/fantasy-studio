@@ -180,10 +180,26 @@ def ensure_asset(kind: str, pattern: str | None = None, target_tris: int | None 
                  verbose: bool = True) -> str:
     """Return a game-ready GLB path for `kind`, generating it if the library
     misses. Raises GPUUnavailable (clean gate) when generation would be needed
-    but no CUDA device is present."""
+    but no CUDA device is present.
+
+    (2026-09-30) Whatever happens, SDXL and the judge are let go when it ends:
+    the server kept them resident after generating, 15.6 GB of a 30 GB machine,
+    and the next build's planner and TRELLIS.2 could not load beside them."""
     hit = library.resolve(kind)
     if hit:
         return hit
+    try:
+        return _ensure_asset_generate(kind, pattern, target_tris, verbose)
+    finally:
+        try:
+            from app.asset_gen.reference import unload_reference_pipeline
+            unload_reference_pipeline()
+        except Exception:
+            pass
+
+
+def _ensure_asset_generate(kind: str, pattern: str | None, target_tris: int | None,
+                           verbose: bool) -> str:
     # THE VISION GATE, UNLOCKED (2026-07-05): generation used to hard-require
     # CUDA, so every new character fell back to "man". SDXL + TripoSR both run
     # on CPU — slowly (~30-60 min) but ONCE: the result registers in the
@@ -201,6 +217,21 @@ def ensure_asset(kind: str, pattern: str | None = None, target_tris: int | None 
 
     from app.asset_gen import generate_reference, generate_mesh
     from app.asset_gen.reference import unload_reference_pipeline
+
+    # THE LLM LEAVES BEFORE THE PICTURE (2026-09-30): the director's 12B model
+    # stays resident after planning, and SDXL starved beside it (a horse sat
+    # at step 0 of 28 for minutes with the card full). It was only unloaded
+    # before the 3D stage; it goes before the reference image too.
+    if not cpu_gen:
+        try:
+            import requests as _rq0
+            for _m in _rq0.get("http://localhost:11434/api/ps", timeout=3).json().get("models", []):
+                _rq0.post("http://localhost:11434/api/generate",
+                          json={"model": _m["name"], "keep_alive": 0}, timeout=5)
+                if verbose:
+                    print(f"[game] evicted '{_m['name']}' from VRAM for the reference image", flush=True)
+        except Exception:
+            pass
 
     pattern = pattern or guess_pattern(kind)
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
@@ -301,7 +332,11 @@ def ensure_asset(kind: str, pattern: str | None = None, target_tris: int | None 
             pass
         # engine order: CUDA gets the quality chain; CPU goes straight to
         # TripoSR (the only CPU-capable engine — TRELLIS.2/TripoSG need CUDA)
-        _chain = ["triposr"] if cpu_gen else ["trellis2", "triposg", "triposr"]
+        # (2026-09-30) TripoSG left the chain: its script downloads and runs
+        # RMBG-1.4 ("non-commercial use") and its decoder imports diso (CC
+        # BY-NC 4.0), so an asset it made could not go into a game that is
+        # sold. TRELLIS.2 falls back to TripoSR (MIT) instead.
+        _chain = ["triposr"] if cpu_gen else ["trellis2", "triposr"]
         _last: Exception | None = None
         for _eng in _chain:
             try:
@@ -366,14 +401,30 @@ def ensure_asset(kind: str, pattern: str | None = None, target_tris: int | None 
     if target_tris is None:
         target_tris = 80000 if pattern in ("biped", "quadruped") else 45000
     try:
-        optimize_asset(raw_glb, out, target_tris=target_tris,
-                       height_m=library.default_height(kind), verbose=verbose,
-                       ref_png=ref_png if ref_png.exists() else None,
-                       # vehicles grow "strings"; bipeds grow rod hallucinations
-                       # (a 2m spike off a huntress fooled the orientation gate
-                       # on 2026-07-15) — both are the same de-spike class
-                       despeckle=(pattern in ("vehicle", "biped")),
-                       pattern=pattern)
+        # ONE MORE TRY ON A FRESH BRIDGE (2026-09-30): the bridge is often
+        # still relaunching when TRELLIS.2 hands its mesh over, the first
+        # call times out, and the raw 485 k-face mesh was rigged instead: the
+        # heat weights came out empty and the monkey and the horse each lost
+        # a ten-minute attempt. A dropped bridge is brought back and asked
+        # again before the raw mesh is settled for.
+        for _opt_try in (1, 2):
+            try:
+                optimize_asset(raw_glb, out, target_tris=target_tris,
+                               height_m=library.default_height(kind), verbose=verbose,
+                               ref_png=ref_png if ref_png.exists() else None,
+                               # vehicles grow "strings"; bipeds grow rod hallucinations
+                               # (a 2m spike off a huntress fooled the orientation gate
+                               # on 2026-07-15) — both are the same de-spike class
+                               despeckle=(pattern in ("vehicle", "biped")),
+                               pattern=pattern)
+                break
+            except Exception as _be:
+                if _opt_try == 2 or "Bridge" not in type(_be).__name__:
+                    raise
+                if verbose:
+                    print(f"[game] optimize: bridge dropped ({type(_be).__name__}); relaunching and trying again")
+                from .bake import ensure_bridge
+                ensure_bridge(verbose=verbose)
         # BIPED DEFAULT FLIP (2026-07-24): every recent TRELLIS biped came out
         # facing -Y (soldier, knight, ranger — 3/3); photo-correlation sign
         # detection failed calibration (would flip the correct hunter), so

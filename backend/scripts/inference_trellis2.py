@@ -21,11 +21,28 @@ from pathlib import Path
 os.environ.setdefault("ATTN_BACKEND", "sdpa")          # no flash-attn needed
 os.environ.setdefault("OPENCV_IO_ENABLE_OPENEXR", "1")
 os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
+# LOCAL FIRST (2026-09-30): once the weights are cached, they load from the
+# cache and nothing is asked of the Hub. Hugging Face began answering file
+# lookups with a redirect this venv's hub client does not follow, and every
+# online lookup failed even for files already on disk. A first install, with
+# nothing cached yet, still downloads.
+if (Path.home() / ".cache" / "huggingface" / "hub" / "models--microsoft--TRELLIS.2-4B" / "snapshots").exists():
+    os.environ.setdefault("HF_HUB_OFFLINE", "1")
 
 BACKEND = Path(__file__).resolve().parent.parent
 TRELLIS2_DIR = BACKEND / "vendor" / "TRELLIS.2"
 if str(TRELLIS2_DIR) not in sys.path:
     sys.path.insert(0, str(TRELLIS2_DIR))
+
+# ── LICENSE GUARD (2026-09-30): nvdiffrast is NVIDIA-licensed for
+# non-commercial use only, and TRELLIS.2 bakes every texture with it. A
+# PyTorch rasteriser with the same interface (scripts/_permissive_raster.py,
+# matched against nvdiffrast on a real atlas: 99.8% of texels, the same
+# triangle on 99.6%, positions within a millionth of the model) is registered
+# under its name first, so NVIDIA's library is never imported.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import _permissive_raster  # noqa: E402
+_permissive_raster.install()
 
 
 def main():
@@ -69,6 +86,21 @@ def main():
 
     from trellis2.pipelines import Trellis2ImageTo3DPipeline  # noqa: E402
     import o_voxel  # noqa: E402
+
+    # ONLY THE MODELS THIS PIPELINE RUNS (2026-09-30). Every checkpoint was
+    # loaded whatever the pipeline, the 1024 flows included, and on a machine
+    # with a nearly full disk the paging file could not grow for them: "The
+    # paging file is too small" (os error 1455), and every generation fell
+    # back to TripoSR. The 512 pipeline never touches the 1024 models.
+    _need = {
+        "512": {"shape_slat_flow_model_512", "tex_slat_flow_model_512"},
+        "1024": {"shape_slat_flow_model_1024", "tex_slat_flow_model_1024"},
+        "1024_cascade": {"shape_slat_flow_model_512", "shape_slat_flow_model_1024", "tex_slat_flow_model_1024"},
+        "1536_cascade": {"shape_slat_flow_model_512", "shape_slat_flow_model_1024", "tex_slat_flow_model_1024"},
+    }[args.pipeline_type]
+    Trellis2ImageTo3DPipeline.model_names_to_load = [
+        n for n in Trellis2ImageTo3DPipeline.model_names_to_load
+        if "_512" not in n and "_1024" not in n or n in _need]
 
     t0 = time.time()
     print(f"[trellis2] loading pipeline (TRELLIS.2-4B)…", flush=True)

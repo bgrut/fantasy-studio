@@ -36,15 +36,10 @@
   "looks_like_best": "a clean 3D render of a fox"
  },
  "horse.glb": {
-  "cull_loss": 0.083,
-  "solidity": 0.814,
-  "edges": 0.1144,
-  "coverage": 0.244,
-  "dark_share": 0.098,
-  "damage_share": 0.003,
-  "shaded_png": "backend/tools/shotgate/renders/horse_shaded.png",
   "kind": "horse",
-  "looks_like": 0.999,
+  "shaded_png": "backend/tools/shotgate/renders/horse_shaded.png",
+  "looks_like": 0.934,
+  "patchy": 0.066,
   "looks_like_best": "a clean 3D render of a horse"
  },
  "truck.glb": {
@@ -192,15 +187,10 @@
   "looks_like_best": "a clean 3D render of a relic"
  },
  "moose.glb": {
-  "cull_loss": 0.088,
-  "solidity": 0.815,
-  "edges": 0.0619,
-  "coverage": 0.216,
-  "dark_share": 0.565,
-  "damage_share": 0.069,
-  "shaded_png": "backend/tools/shotgate/renders/moose_shaded.png",
   "kind": "moose",
-  "looks_like": 1.0,
+  "shaded_png": "backend/tools/shotgate/renders/moose_shaded.png",
+  "looks_like": 0.733,
+  "patchy": 0.267,
   "looks_like_best": "a clean 3D render of a moose"
  },
  "elk.glb": {
@@ -348,15 +338,10 @@
   "looks_like_best": "a clean 3D render of a gazelle"
  },
  "gorilla.glb": {
-  "cull_loss": 0.103,
-  "solidity": 0.849,
-  "edges": 0.0499,
-  "coverage": 0.114,
-  "dark_share": 0.236,
-  "damage_share": 0.028,
-  "shaded_png": "backend/tools/shotgate/renders/gorilla_shaded.png",
   "kind": "gorilla",
-  "looks_like": 0.998,
+  "shaded_png": "backend/tools/shotgate/renders/gorilla_shaded.png",
+  "looks_like": 0.667,
+  "patchy": 0.333,
   "looks_like_best": "a clean 3D render of a gorilla"
  },
  "penguin.glb": {
@@ -456,15 +441,10 @@
   "looks_like_best": "a clean 3D render of a polar bear"
  },
  "monkey.glb": {
-  "cull_loss": 0,
-  "solidity": 0.793,
-  "edges": 0.0276,
-  "coverage": 0.207,
-  "dark_share": 0.011,
-  "damage_share": 0,
-  "shaded_png": "backend/tools/shotgate/renders/monkey_shaded.png",
   "kind": "monkey",
-  "looks_like": 0.988,
+  "shaded_png": "backend/tools/shotgate/renders/monkey_shaded.png",
+  "looks_like": 0.921,
+  "patchy": 0.079,
   "looks_like_best": "a clean 3D render of a monkey"
  },
  "samurai.glb": {
@@ -660,15 +640,10 @@
   "looks_like_best": "a clean 3D render of a thug"
  },
  "snow_weasels.glb": {
-  "cull_loss": 0.164,
-  "solidity": 0.885,
-  "edges": 0.0378,
-  "coverage": 0.175,
-  "dark_share": 0.005,
-  "damage_share": 0.004,
-  "shaded_png": "backend/tools/shotgate/renders/snow_weasels_shaded.png",
   "kind": "snow weasels",
-  "looks_like": 1.0,
+  "shaded_png": "backend/tools/shotgate/renders/snow_weasels_shaded.png",
+  "looks_like": 0.873,
+  "patchy": 0.125,
   "looks_like_best": "a clean 3D render of a snow weasels"
  },
  "waterbender.glb": {
@@ -1675,5 +1650,19 @@
   "looks_like": 0.9,
   "patchy": 0.1,
   "looks_like_best": "a clean 3D render of a diamond"
+ },
+ "f1bdf5ed1d7a.glb": {
+  "kind": "horse",
+  "shaded_png": "backend/tools/shotgate/renders/horse_shaded.png",
+  "looks_like": 0.934,
+  "patchy": 0.066,
+  "looks_like_best": "a clean 3D render of a horse"
+ },
+ "d0763edaa9d9.glb": {
+  "kind": "monkey",
+  "shaded_png": "backend/tools/shotgate/renders/monkey_shaded.png",
+  "looks_like": 0.921,
+  "patchy": 0.079,
+  "looks_like_best": "a clean 3D render of a monkey"
  }
 }

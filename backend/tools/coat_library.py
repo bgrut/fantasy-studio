@@ -22,11 +22,17 @@ LIB = BACKEND / "assets" / "library"
 
 
 def main() -> int:
-    names = sys.argv[1:]
+    redo = "--redo" in sys.argv                # coat again from the pre-coat originals
+    names = [a for a in sys.argv[1:] if not a.startswith("--")]
     files = ([LIB / (n if n.endswith(".glb") else n + ".glb") for n in names] if names else
              sorted(p for p in LIB.glob("*.glb")
                     if p.name.endswith("_anim.glb") or p.name.endswith("_hero.glb") or p.name.startswith("walker")))
     backup = BACKEND / "renders" / "_coat_backup"
+    if redo:
+        import shutil
+        for p in files:
+            if (backup / p.name).exists():
+                shutil.copy2(backup / p.name, p)
     bad = 0
     for p in files:
         ok, msg = coat(p, backup)

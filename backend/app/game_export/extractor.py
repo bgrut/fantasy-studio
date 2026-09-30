@@ -265,7 +265,8 @@ _DEFENDED = ("castle", "keep", "village", "base", "fort", "fortress", "citadel",
 _GROUND_STOP = {"the", "a", "an", "of", "and", "or", "to", "in", "on", "at", "for", "from", "with",
                 "his", "her", "their", "your", "my", "our", "its", "all", "some", "any", "lost",
                 "old", "hidden", "ancient", "secret", "missing", "golden", "magic", "item", "items",
-                "thing", "things", "object", "objects", "enemies", "enemy", "foes", "foe", "stuff"}
+                "thing", "things", "object", "objects", "enemies", "enemy", "foes", "foe", "stuff",
+                "beacon", "exit", "goal", "finish", "end", "safety", "escape", "home"}
 
 
 def _stem(w: str) -> str:
@@ -281,12 +282,59 @@ def _stem(w: str) -> str:
     return w
 
 
+_NUMS = {"a": 1, "an": 1, "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6,
+         "seven": 7, "eight": 8, "nine": 9, "ten": 10, "twelve": 12}
+
+
+def sought_object(prompt: str):
+    """What the sentence is looking for, as (label, count), or None (2026-09-30).
+
+    "a detective searching a rainy city for a stolen painting" was planned as
+    collect three clues, a step it never named; the sentence names its own
+    object. Read from the verbs of seeking: find, search for, look for,
+    recover, retrieve, steal, rescue, track down."""
+    import re as _r
+    t = (prompt or "").lower()
+    m = _r.search(r"\b(?:find|finds|finding|search(?:es|ing)?(?:\s+\w+){0,3}?\s+for|look(?:s|ing)?\s+for|"
+                  r"recover(?:s|ing)?|retriev(?:e|es|ing)|steal(?:s|ing)?|rescu(?:e|es|ing)|"
+                  r"track(?:s|ing)?\s+down|hunt(?:s|ing)?\s+for|collect(?:s|ing)?|gather(?:s|ing)?)\s+"
+                  r"(?:(the|a|an|his|her|their|my|your)\s+)?(?:(\d+|one|two|three|four|five|six|seven|eight|nine|ten|twelve)\s+)?"
+                  r"((?:[a-z'-]+\s+){0,2}?[a-z'-]+?)(?=\s+(?:in|on|at|from|before|while|and|to|with|across|inside|through|of|near|under|that|which|who)\b|[,.;:!?]|$)", t)
+    if not m:
+        return None
+    label = m.group(3).strip()
+    if not label or label in ("it", "them", "him", "her", "out", "way", "home"):
+        return None
+    art = (m.group(1) or "").strip()
+    plural = label.endswith("s") and not label.endswith("ss")
+    if m.group(2):
+        n = int(m.group(2)) if m.group(2).isdigit() else _NUMS.get(m.group(2), 1)
+    elif art in ("a", "an"):
+        n = 1
+    else:
+        n = 3 if plural else 1
+    return label, max(1, min(n, 50))
+
+
+def label_grounded(label: str, prompt: str) -> bool:
+    """A step's label is the prompt's when one of its words is a word of the
+    prompt (plurals and the first five letters forgiven)."""
+    import re as _r
+    words = {_stem(w) for w in _r.findall(r"[a-z']+", (prompt or "").lower()) if len(w) > 2}
+    heads = {w[:5] for w in words if len(w) >= 5}
+    toks = [_stem(t) for t in _r.findall(r"[a-z']+", (label or "").lower())]
+    toks = [t for t in toks if len(t) > 2 and t not in _GROUND_STOP]
+    if not toks:
+        return True                           # a label with no words of its own names nothing new
+    return any(t in words or (len(t) >= 5 and t[:5] in heads) for t in toks)
+
+
 def ground_objectives(objectives: list, prompt: str) -> tuple[list, list]:
     """Keep the collect and defeat steps the sentence asked for (2026-09-29).
 
     "A horror game in a graveyard at night, find the three lanterns" came out
     with a first step nobody asked for: collect the abandoned camp's supplies.
-    A collect or defeat step is the prompt's when a word of its label is a word
+    A collect, defeat or reach step is the prompt's when a word of its label is a word
     of the prompt (plurals and the first five letters forgiven: lantern and
     lanterns, skeleton and skeletons, wolf and wolves); a step the model made
     up from nothing is dropped. Other kinds are verbs the prompt said out loud
@@ -294,22 +342,14 @@ def ground_objectives(objectives: list, prompt: str) -> tuple[list, list]:
     would leave no step to play, nothing is dropped: a paraphrase ("treasure"
     as "gold coins") is better than an empty game.
     Returns (kept, dropped)."""
-    import re as _r
-    words = {_stem(w) for w in _r.findall(r"[a-z']+", (prompt or "").lower()) if len(w) > 2}
-    heads = {w[:5] for w in words if len(w) >= 5}
-
     def grounded(label: str) -> bool:
-        toks = [_stem(t) for t in _r.findall(r"[a-z']+", (label or "").lower())]
-        toks = [t for t in toks if len(t) > 2 and t not in _GROUND_STOP]
-        if not toks:
-            return True                       # a label with no words of its own names nothing new
-        return any(t in words or (len(t) >= 5 and t[:5] in heads) for t in toks)
+        return label_grounded(label, prompt)
 
     kept, dropped = [], []
     for o in objectives:
         kind = getattr(o, "kind", None) or (o.get("kind") if isinstance(o, dict) else None)
         label = getattr(o, "label", None) if not isinstance(o, dict) else o.get("label")
-        if kind in ("collect", "defeat") and not grounded(label or ""):
+        if kind in ("collect", "defeat", "reach") and not grounded(label or ""):
             dropped.append(o)
         else:
             kept.append(o)

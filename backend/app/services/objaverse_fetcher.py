@@ -587,6 +587,13 @@ def search_objaverse(query: str, max_results: int = 20) -> list[dict]:
     for uid, ann in annotations.items():
         if not isinstance(ann, dict):
             continue
+        # (2026-09-30) CC0 only: Objaverse mixes non-commercial (BY-NC) and
+        # share-alike objects with free ones, and a render made with one of
+        # them could not be sold. An object with no readable licence is skipped.
+        _lic = ann.get("license")
+        _lic = (_lic.get("label") if isinstance(_lic, dict) else _lic) or ""
+        if str(_lic).strip().lower() not in ("cc0", "cc0-1.0", "cc0 1.0", "cc0 public domain"):
+            continue
         s, reasons = _score_annotation(ann, query, tokens)
         if s > 0:
             scored.append((s, uid, ann, reasons))

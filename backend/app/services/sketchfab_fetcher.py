@@ -69,12 +69,11 @@ DEFAULT_DOWNLOAD_TIMEOUT = float(os.environ.get("SKETCHFAB_DOWNLOAD_TIMEOUT", "3
 
 # Compatible licenses (slugs returned by the Sketchfab API).
 # These are the only ones we will download from.
+# (2026-09-30) CC0 only. Share-alike (BY-SA) would bind anything made with the
+# model to the same licence, and attribution (BY) is not tracked to the
+# renders it ends up in; a model whose licence could not be read is refused.
 ALLOWED_LICENSES = {
     "cc0",
-    "cc-by",
-    "cc-by-sa",
-    "by",
-    "by-sa",
 }
 
 
@@ -459,7 +458,7 @@ def search_models(
         if not model.get("isDownloadable"):
             continue
         lic_slug = _license_slug(model)
-        if lic_slug and lic_slug not in ALLOWED_LICENSES:
+        if lic_slug not in ALLOWED_LICENSES:      # an unreadable licence is not a permission
             continue
         scored.append({
             "uid": model.get("uid"),
