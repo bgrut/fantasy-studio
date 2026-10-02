@@ -54,9 +54,12 @@ export function buildCarHQ(cp, T = {}) {
     color: new THREE.Color(paintHex), metalness: 0.28,
     roughness: 0.22 + wear * 0.36, clearcoat: 1.0 - wear * 0.45,
     clearcoatRoughness: 0.03 + wear * 0.22, envMapIntensity: 1.15 - wear * 0.5 });
+  // TINTED, NOT PAINTED (2026-10-02): the glass was an opaque black mirror,
+  // so every car was a shell with nobody in it. It is tinted glass now, and
+  // there is a cabin behind it.
   const glass = new THREE.MeshPhysicalMaterial({
-    color: 0x0b0f15, metalness: 0.1, roughness: 0.04, clearcoat: 1.0, clearcoatRoughness: 0.02,
-    envMapIntensity: 1.5 });
+    color: 0x1a222c, metalness: 0.1, roughness: 0.04, clearcoat: 1.0, clearcoatRoughness: 0.02,
+    envMapIntensity: 1.3, transparent: true, opacity: 0.62, depthWrite: false });
   const black = new THREE.MeshStandardMaterial({ color: 0x0d0e10, roughness: 0.55, metalness: 0.2 });
   const chrome = new THREE.MeshStandardMaterial({ color: 0xd2d6dc, metalness: 0.95, roughness: 0.16 });
 
@@ -263,6 +266,41 @@ export function buildCarHQ(cp, T = {}) {
   body.castShadow = body.receiveShadow = true;
   body.name = 'body';
   g.add(body);
+
+  // ── the cabin: seats, a dashboard, a wheel ───────────────────────────────
+  {
+    const trimTone = [0x1c1b1e, 0x3a2a20, 0x8a7458][Math.floor(hashPaint(paintHex + 19) * 3)];
+    const inM = new THREE.MeshStandardMaterial({ color: trimTone, roughness: 0.85 });
+    const dashM = new THREE.MeshStandardMaterial({ color: 0x141416, roughness: 0.6 });
+    const parts = [], dparts = [];
+    const tF = cabF + 0.03, tR = cabR - 0.04;
+    const xF = xAt(tF), xR = xAt(tR);
+    const floorY = yb + 0.12, cush = Math.max(floorY + 0.12, yt - 0.34);
+    const hwC = half(lerp(tF, tR, 0.4)) * 0.78;
+    const seat = (x, z, w) => {
+      const base = new THREE.BoxGeometry(0.5, 0.14, w); base.translate(x, cush, z); parts.push(base);
+      const backH = Math.min(0.62, roofY - cush - 0.12);
+      const back = new THREE.BoxGeometry(0.12, backH, w * 0.92);
+      back.translate(0, backH / 2, 0); back.rotateZ(-0.22); back.translate(x - 0.24, cush + 0.05, z); parts.push(back);
+      if (w < 0.7) { const hr = new THREE.BoxGeometry(0.1, 0.16, w * 0.55); hr.rotateZ(-0.22); hr.translate(x - 0.24 - backH * 0.22 - 0.02, cush + backH + 0.1, z); parts.push(hr); }
+    };
+    const span = xF - xR;
+    const frontX = xF - Math.min(0.75, span * 0.42);
+    seat(frontX, hwC * 0.48, 0.5); seat(frontX, -hwC * 0.48, 0.5);
+    if (span > 1.45 && !T.bed) seat(frontX - Math.min(0.9, span * 0.45), 0, hwC * 1.6);
+    // the dashboard under the screen, a wheel on the driver's side
+    const dash = new THREE.BoxGeometry(0.4, 0.22, hwC * 2); dash.translate(xF - 0.16, yt - 0.06, 0); dparts.push(dash);
+    const wheel = new THREE.TorusGeometry(0.17, 0.022, 6, 20); wheel.rotateY(Math.PI / 2); wheel.rotateZ(0.45);
+    wheel.translate(xF - 0.42, yt + 0.06, hwC * 0.48); dparts.push(wheel);
+    const col = new THREE.CylinderGeometry(0.03, 0.03, 0.3, 6); col.rotateZ(Math.PI / 2 + 0.45); col.translate(xF - 0.3, yt, hwC * 0.48); dparts.push(col);
+    const cabin = new THREE.Mesh(mergeGeometries(parts.map(q => q.index ? q.toNonIndexed() : q), false), inM);
+    cabin.name = 'cabin'; cabin.userData.noShadow = 1; g.add(cabin);
+    const dashMesh = new THREE.Mesh(mergeGeometries(dparts.map(q => q.index ? q.toNonIndexed() : q), false), dashM);
+    dashMesh.userData.noShadow = 1; g.add(dashMesh);
+    // the inside of the shell: dark, so the cabin is a room and not the paint's back
+    const shellIn = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: 0x0e0e10, roughness: 0.9, side: THREE.BackSide }));
+    shellIn.userData.noShadow = 1; shellIn.scale.setScalar(0.995); g.add(shellIn);
+  }
 
   // ── wheels: turned tyre, dished rim, spokes, a disc behind ──────────────
   const wheelW = Math.max(0.19, Wd * 0.125);

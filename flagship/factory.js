@@ -2798,24 +2798,55 @@ for (const m of MINERALS) {
 // its moss, as it hides the bolts and vents. Its own random stream, so the
 // world's generation is untouched.
 let mossMesh = null, mossSpots = null;
+const MOSS_CAP = 22000;
 if (MOOD === 'green' && !SPEC.city) {
-  const pos = [], col = [];
-  const cTop = new THREE.Color(0x8fd36a), cBot = new THREE.Color(0x1c3a1a);
-  for (let b = 0; b < 7; b++) {
-    const a = (b / 7) * Math.PI * 2 + b * 0.37, lean = 0.12 + (b % 3) * 0.06;
-    const h = 0.22 + (b % 4) * 0.07, w = 0.035;
+  // GRASS, NOT CLAWS (2026-10-02): seven flat bright triangles with a green
+  // glow read as neon spikes. A tuft is ten fine blades now, each bent in
+  // two joints and tapered to a point, dark at the root and only lighter at
+  // the tip, in the greens of grass rather than of a highlighter, and the
+  // wind moves them.
+  const pos = [], col = [], idx = [];
+  const cTop = new THREE.Color(0x7fae55), cMid = new THREE.Color(0x45702f), cBot = new THREE.Color(0x16290f);
+  let rs = 911;
+  const rr = () => (rs = (rs * 1664525 + 1013904223) % 4294967296) / 4294967296;
+  for (let b = 0; b < 10; b++) {
+    const a = rr() * Math.PI * 2, lean = 0.06 + rr() * 0.16;
+    const h = 0.16 + rr() * 0.22, w = 0.012 + rr() * 0.01;
     const ca = Math.cos(a), sa = Math.sin(a);
-    const bx = ca * 0.05, bz = sa * 0.05;
+    const bx = ca * rr() * 0.07, bz = sa * rr() * 0.07;
     const px = -sa * w, pz = ca * w;
-    pos.push(bx + px, 0, bz + pz, bx - px, 0, bz - pz, bx + ca * lean, h, bz + sa * lean);
-    col.push(cBot.r, cBot.g, cBot.b, cBot.r, cBot.g, cBot.b, cTop.r, cTop.g, cTop.b);
+    const base = pos.length / 3;
+    for (let s2 = 0; s2 <= 2; s2++) {
+      const t = s2 / 3, bow = lean * t * t, ww = 1 - t * 0.85;
+      pos.push(bx + px * ww + ca * bow, h * t, bz + pz * ww + sa * bow,
+               bx - px * ww + ca * bow, h * t, bz - pz * ww + sa * bow);
+      const c = s2 === 0 ? cBot : s2 === 1 ? cMid : cMid.clone().lerp(cTop, 0.5);
+      col.push(c.r, c.g, c.b, c.r, c.g, c.b);
+    }
+    pos.push(bx + ca * lean, h, bz + sa * lean); col.push(cTop.r, cTop.g, cTop.b);
+    for (let s2 = 0; s2 < 2; s2++) { const i0 = base + s2 * 2; idx.push(i0, i0 + 1, i0 + 2, i0 + 1, i0 + 3, i0 + 2); }
+    idx.push(base + 4, base + 5, base + 6);
   }
   const mg = new THREE.BufferGeometry();
   mg.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   mg.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  mg.setIndex(idx);
   mg.computeVertexNormals();
-  mossMesh = new THREE.InstancedMesh(mg, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9,
-    side: THREE.DoubleSide, emissive: 0x0d2a10, emissiveIntensity: 0.4 }), 16000);
+  const mossMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95,
+    side: THREE.DoubleSide });
+  const mossT = { value: 0 };
+  mossMat.onBeforeCompile = sh => {
+    sh.uniforms.uMossT = mossT;
+    sh.vertexShader = 'uniform float uMossT;\n' + sh.vertexShader.replace('#include <begin_vertex>',
+      `#include <begin_vertex>
+       vec4 mw = instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0);
+       float mk = position.y * position.y * 9.0;
+       transformed.x += sin(uMossT * 1.9 + mw.x * 0.7 + mw.z * 0.4) * 0.03 * mk;
+       transformed.z += cos(uMossT * 1.4 + mw.y * 0.6 + mw.x * 0.3) * 0.025 * mk;`);
+  };
+  mossMat.customProgramCacheKey = () => 'mossWind';
+  mossMesh = new THREE.InstancedMesh(mg, mossMat, MOSS_CAP);
+  mossMesh.onBeforeRender = () => { mossT.value = performance.now() / 1000; };
   mossMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
   mossMesh.frustumCulled = false; mossMesh.receiveShadow = true; mossMesh.count = 0; mossMesh.name = 'moss';
   scene.add(mossMesh);
@@ -2829,14 +2860,14 @@ function fillMoss() {
     const mr = () => (st = (st * 1664525 + 1013904223) % 4294967296) / 4294967296;
     mossSpots = [];
     for (let f = 0; f < 6; f++) for (let i = 1; i < N - 1; i++) for (let j = 1; j < N - 1; j++) {
-      if (mr() > 0.62) continue;                       // patches, not a lawn
-      const k = 1 + Math.floor(mr() * 3);
+      if (mr() > 0.66) continue;                       // patches, not a lawn
+      const k = 2 + Math.floor(mr() * 4);
       for (let q = 0; q < k; q++) mossSpots.push({ f, i, j, ox: (mr() - 0.5) * T * 0.9, oz: (mr() - 0.5) * T * 0.9, ry: mr() * Math.PI * 2, s: 0.7 + mr() * 0.8 });
     }
   }
   let n = 0;
   for (const sp of mossSpots) {
-    if (n >= 16000) break;
+    if (n >= MOSS_CAP) break;
     if (cells[sp.f][sp.i][sp.j].t !== EMPTY) continue;
     seatMatrix(sp.f, sp.i, sp.j, 0, 0.0, _mossM);
     _mossQ.setFromAxisAngle(_mossY, sp.ry);

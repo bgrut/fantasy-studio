@@ -6579,6 +6579,68 @@ async function main() {
           body.rotation.y = yaw;
           body.position.set(cx, doorY - 0.25, cz);
           scene.add(body);
+          // A DOORWAY, NOT A GLOWING CARD (2026-10-02). The entrance was a
+          // translucent amber plane floating unturned in front of a solid
+          // wall. It is built now: a stone surround with a lintel, panelled
+          // double doors with one leaf standing open on a lit hall, a lit
+          // transom over them and steps up to the threshold. Local +Z is out
+          // of the wall; the wall's face lies 0.3 m behind the door point.
+          try {
+            const dg = new THREE.Group();
+            dg.position.set(doorX, doorY, doorZ);
+            dg.rotation.y = yaw;
+            const WZ = -0.3, DW = 1.8, DH = 2.55, SY = 0.24;
+            const stoneM = new THREE.MeshStandardMaterial({ color: new THREE.Color(FK.tone).lerp(new THREE.Color(0xffffff), 0.45), roughness: 0.8 });
+            const paint = new THREE.MeshStandardMaterial({ color: [0x1f3a2c, 0x5a1d1d, 0x1d2a44, 0x2a2420][Math.abs(Math.round(doorX * 7 + doorZ * 3)) % 4],
+                                                          roughness: 0.45, metalness: 0.05 });
+            const brass = new THREE.MeshStandardMaterial({ color: 0xc9a24a, metalness: 1, roughness: 0.3 });
+            for (const m of [stoneM, paint, brass]) m.userData.noAutoTex = true;
+            const box = (w, h, d, x, y, z, m, ry) => {
+              const o = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m);
+              o.position.set(x, y, z); if (ry) o.rotation.y = ry;
+              o.castShadow = o.receiveShadow = true; dg.add(o); return o;
+            };
+            // the hall beyond: a lit room seen through the open leaf
+            const hall = new THREE.Mesh(new THREE.PlaneGeometry(DW, DH),
+              new THREE.MeshStandardMaterial({ color: 0x2a1a0c, emissive: 0xffffff, emissiveMap: window.__roomGlowTex || null,
+                                               emissiveIntensity: window.__roomGlowTex ? 0.5 : 0.3 }));
+            hall.material.userData.noAutoTex = true;
+            hall.position.set(0, SY + DH / 2, WZ + 0.03); dg.add(hall);
+            // surround: pilasters, lintel, cornice
+            for (const sx of [-1, 1]) box(0.34, DH + 0.75, 0.26, sx * (DW / 2 + 0.17), SY + (DH + 0.75) / 2, WZ + 0.13, stoneM);
+            box(DW + 1.0, 0.36, 0.32, 0, SY + DH + 0.75 + 0.18, WZ + 0.16, stoneM);
+            box(DW + 1.2, 0.1, 0.4, 0, SY + DH + 0.75 + 0.41, WZ + 0.2, stoneM);
+            // transom: a lit light over the doors, barred
+            const tr = new THREE.Mesh(new THREE.PlaneGeometry(DW, 0.6),
+              new THREE.MeshStandardMaterial({ color: 0x3a2a12, emissive: 0xffc27a, emissiveIntensity: 1.5 }));
+            tr.material.userData.noAutoTex = true;
+            tr.position.set(0, SY + DH + 0.38, WZ + 0.05); dg.add(tr);
+            for (const bx of [-0.45, 0, 0.45]) box(0.04, 0.6, 0.04, bx, SY + DH + 0.38, WZ + 0.08, paint);
+            box(DW, 0.08, 0.1, 0, SY + DH + 0.06, WZ + 0.08, paint);
+            // the leaves: panelled; the left shut, the right standing ajar
+            const leaf = (hingeX, open) => {
+              const lg = new THREE.Group();
+              lg.position.set(hingeX, SY, WZ + 0.06);
+              lg.rotation.y = open;
+              const dir = hingeX < 0 ? 1 : -1, lw = DW / 2 - 0.02;
+              const slab = new THREE.Mesh(new THREE.BoxGeometry(lw, DH, 0.07), paint);
+              slab.position.set(dir * lw / 2, DH / 2, 0); slab.castShadow = true; lg.add(slab);
+              for (const [py, ph] of [[0.55, 0.75], [1.55, 0.95]]) {
+                const pn = new THREE.Mesh(new THREE.BoxGeometry(lw - 0.22, ph, 0.03), paint);
+                pn.position.set(dir * lw / 2, py + ph / 2 - 0.1, 0.05); lg.add(pn);
+              }
+              const knob = new THREE.Mesh(new THREE.SphereGeometry(0.045, 12, 8), brass);
+              knob.position.set(dir * (lw - 0.1), 1.05, 0.07); lg.add(knob);
+              dg.add(lg);
+            };
+            leaf(-DW / 2, 0);
+            leaf(DW / 2, 0.42);                    // ajar, light at the gap
+            // steps up to the threshold
+            box(DW + 1.4, 0.12, 0.9, 0, 0.06, WZ + 0.45, stoneM);
+            box(DW + 1.0, 0.12, 0.55, 0, 0.18, WZ + 0.28, stoneM);
+            scene.add(dg);
+            doorM.visible = false;                 // the glowing card is retired where a door stands
+          } catch (e) { console.warn('[game] doorway', e); }
           // colliders: four walls, the front one in two halves with a doorway between
           const H = FK.st * FK.storeys, hw = FK.w / 2, hd = FK.d / 2, T = 0.45;
           const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
@@ -8472,7 +8534,7 @@ async function main() {
     back.position.y = H / 2;
     back.castShadow = back.receiveShadow = true;
     g.add(back);
-    const boxes = [], panes = [];
+    const boxes = [], panes = [], bars = [];
     const B1 = new THREE.BoxGeometry(1, 1, 1);
     const M = new THREE.Matrix4(), Q = new THREE.Quaternion();
     const E = new THREE.Euler(), V = new THREE.Vector3(), S = new THREE.Vector3();
@@ -8526,6 +8588,21 @@ async function main() {
           pane.rotateY(yaw);
           pane.translate(ax + ux * al - nx * (WTP - 0.06), gy, az + uz * al - nz * (WTP - 0.06));
           panes.push(pane);
+          // GLAZING BARS (2026-10-02): a window is a frame of panes, not one
+          // sheet; the bars are what the eye reads as "a window" at any range
+          const barD = WTP - 0.04, cols = gw > 1.0 ? 3 : 2, rows = gh > 1.2 ? 3 : 2;
+          const bar = (along, y, w, hh) => {
+            const b2 = B1.clone();
+            E.set(0, yaw, 0); Q.setFromEuler(E);
+            V.set(ax + ux * along - nx * barD, y, az + uz * along - nz * barD);
+            S.set(w, hh, 0.05);
+            b2.applyMatrix4(M.compose(V, Q, S));
+            bars.push(b2);
+          };
+          bar(al, gy - gh / 2 + 0.03, gw + 0.06, 0.07); bar(al, gy + gh / 2 - 0.03, gw + 0.06, 0.07);
+          bar(al - gw / 2 + 0.03, gy, 0.07, gh); bar(al + gw / 2 - 0.03, gy, 0.07, gh);
+          for (let c = 1; c < cols; c++) bar(al - gw / 2 + gw * c / cols, gy, 0.035, gh);
+          for (let r = 1; r < rows; r++) bar(al, gy - gh / 2 + gh * r / rows, gw, 0.035);
           // the wall around the glass: a sill, a lintel and the reveals, as boxes in the wall's own material
           emit(al, gy - gh / 2 - 0.08, gw + 0.34, 0.16);                                 // sill
           emit(al, gy + gh / 2 + 0.10, gw + 0.34, 0.20);                                 // lintel
@@ -8556,17 +8633,148 @@ async function main() {
       panes.forEach((q, k) => ((night && ((k * 7919 + 13) % 10) < 5) ? lit : dark).push(q));
       if (dark.length) { const gm = new THREE.Mesh(mergeGeometries(dark, false), glassM2); g.add(gm); }
       if (lit.length) {
-        const lampM = new THREE.MeshStandardMaterial({ color: 0x3a2a12, roughness: 0.5, emissive: 0xffc27a, emissiveIntensity: 0.9 });
+        // a room behind the glass: brighter low and in the middle where the
+        // lamp is, falling off to the corners and the ceiling
+        if (!window.__roomGlowTex) {
+          const cv = document.createElement('canvas'); cv.width = 64; cv.height = 64;
+          const x = cv.getContext('2d');
+          const gr = x.createRadialGradient(32, 40, 2, 32, 40, 44);
+          gr.addColorStop(0, '#fff1cf'); gr.addColorStop(0.45, '#e9a95a'); gr.addColorStop(1, '#3b2410');
+          x.fillStyle = gr; x.fillRect(0, 0, 64, 64);
+          window.__roomGlowTex = new THREE.CanvasTexture(cv);
+          window.__roomGlowTex.colorSpace = THREE.SRGBColorSpace;
+        }
+        const lampM = new THREE.MeshStandardMaterial({ color: 0x3a2a12, roughness: 0.5, emissive: 0xffffff,
+          emissiveMap: window.__roomGlowTex, emissiveIntensity: 1.1 });
         lampM.userData.noAutoTex = true;
         g.add(new THREE.Mesh(mergeGeometries(lit, false), lampM));
       }
       for (const q of panes) q.dispose();
     }
-    const cap = new THREE.Mesh(new THREE.BoxGeometry(F.w + 0.5, 0.5, F.d + 0.5),
-      new THREE.MeshStandardMaterial({ color: F.roof, roughness: 0.94 }));
-    cap.position.y = H + 0.25;
-    cap.castShadow = true;
-    g.add(cap);
+    if (bars.length) {
+      const frameM = new THREE.MeshStandardMaterial({ color: ['manor', 'cottage', 'inn', 'chapel', 'brownstone'].includes(kind) ? 0xe8e2d4 : 0x2a2c30,
+        roughness: 0.6 });
+      frameM.userData.noAutoTex = true;
+      const fm = new THREE.Mesh(mergeGeometries(bars, false), frameM);
+      g.add(fm);
+      for (const b2 of bars) b2.dispose();
+    }
+    // ── THE ROOF (2026-10-02) ─────────────────────────────────────────────
+    // Every kit building wore the same flat lid, so a manor on a moor read as
+    // a stone shed. A building's roof is most of its silhouette: a manor is
+    // hipped, a cottage, an inn and a chapel are gabled (steeper the humbler
+    // or holier), a keep is battlemented, a tower ends in a spire, and the
+    // city kinds keep a flat roof behind a parapet. Tiles are the roof photo
+    // in metre UVs along the slope; eaves overhang, a cornice runs under them.
+    const ROOF = { manor: ['hip', 0.62], cottage: ['gable', 0.95], inn: ['gable', 0.75], chapel: ['gable', 1.15],
+                   keep: ['battle', 0], tower: ['spire', 2.4] }[kind] || ['flat', 0];
+    const roofM = flatLook
+      ? new THREE.MeshStandardMaterial({ color: new THREE.Color(F.roof).offsetHSL(0, 0.05, 0.05), roughness: 0.9, flatShading: true })
+      : new THREE.MeshStandardMaterial({ map: mtex('roof'), normalMap: mtex('roof', '_n'), color: new THREE.Color(F.roof).lerp(new THREE.Color(0xffffff), 0.35),
+          roughness: 0.82, side: THREE.DoubleSide });
+    roofM.userData.noAutoTex = true;
+    const OV = 0.45;                                    // eaves overhang
+    const roofGeo = (type, pitch) => {
+      // long axis on X; RW, RD the plan with overhang; ridge height from pitch
+      const long = F.w >= F.d, RW = (long ? F.w : F.d) + OV * 2, RD = (long ? F.d : F.w) + OV * 2;
+      const rh = (RD / 2) * pitch;
+      const hx = type === 'hip' ? Math.max(0.2, RW / 2 - RD / 2) : RW / 2;   // ridge half-length
+      const P = [], U = [];
+      const tri = (a, b, c) => {
+        P.push(...a, ...b, ...c);
+        // uv in metres: along the eave, and up the slope
+        const e1 = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+        const ln = Math.hypot(e1[0], e1[2]) || 1, ex = e1[0] / ln, ez = e1[2] / ln;
+        for (const q of [a, b, c]) {
+          const along = (q[0] - a[0]) * ex + (q[2] - a[2]) * ez;
+          const up = Math.hypot(q[1] - a[1], (q[0] - a[0]) * -ez + (q[2] - a[2]) * ex);
+          U.push(along, up);
+        }
+      };
+      const A = [-RW / 2, 0, RD / 2], B = [RW / 2, 0, RD / 2], C = [RW / 2, 0, -RD / 2], D = [-RW / 2, 0, -RD / 2];
+      const R1 = [-hx, rh, 0], R2 = [hx, rh, 0];
+      // the two long slopes
+      tri(A, B, R2); tri(A, R2, R1);
+      tri(C, D, R1); tri(C, R1, R2);
+      if (type === 'hip') { tri(B, C, R2); tri(D, A, R1); }
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(P, 3));
+      geo.setAttribute('uv', new THREE.Float32BufferAttribute(U, 2));
+      geo.computeVertexNormals();
+      if (!long) geo.rotateY(Math.PI / 2);
+      return { geo, rh, long, RW, RD };
+    };
+    const corniceM = flatLook ? wallM : new THREE.MeshStandardMaterial({ color: new THREE.Color(F.tone).lerp(new THREE.Color(0xffffff), 0.45), roughness: 0.85 });
+    corniceM.userData.noAutoTex = true;
+    const cornice = new THREE.Mesh(new THREE.BoxGeometry(F.w + 0.36, 0.32, F.d + 0.36), corniceM);
+    cornice.position.y = H - 0.02; cornice.castShadow = true; g.add(cornice);
+    if (ROOF[0] === 'hip' || ROOF[0] === 'gable') {
+      const r = roofGeo(ROOF[0], ROOF[1]);
+      const rm = new THREE.Mesh(r.geo, roofM);
+      rm.position.y = H + 0.14; rm.castShadow = rm.receiveShadow = true; g.add(rm);
+      if (ROOF[0] === 'gable') {
+        // the gable ends are wall, closing the triangle under the roof
+        const gw2 = (r.long ? F.d : F.w), gh2 = (gw2 / 2 + OV) * ROOF[1];
+        const tg = new THREE.BufferGeometry();
+        tg.setAttribute('position', new THREE.Float32BufferAttribute([-gw2 / 2, 0, 0, gw2 / 2, 0, 0, 0, gh2 * (gw2 / 2) / (gw2 / 2 + OV), 0], 3));
+        tg.setAttribute('uv', new THREE.Float32BufferAttribute([0, 0, gw2, 0, gw2 / 2, gh2], 2));
+        tg.computeVertexNormals();
+        for (const sgn of [1, -1]) {
+          const gm2 = new THREE.Mesh(tg, wallM);
+          const along = (r.long ? F.w : F.d) / 2 - 0.02;
+          if (r.long) { gm2.position.set(sgn * along, H + 0.14, 0); gm2.rotation.y = sgn * Math.PI / 2; }
+          else { gm2.position.set(0, H + 0.14, sgn * along); gm2.rotation.y = sgn > 0 ? 0 : Math.PI; }
+          gm2.material = wallM.clone(); gm2.material.side = THREE.DoubleSide;
+          gm2.castShadow = true; g.add(gm2);
+        }
+      }
+      // chimneys: stone stacks through the roof, with pots
+      if (kind !== 'chapel') {
+        const stackM = wallM;
+        const potM = new THREE.MeshStandardMaterial({ color: 0x8a4a32, roughness: 0.8 });
+        potM.userData.noAutoTex = true;
+        const n = kind === 'manor' ? 2 : 1;
+        for (let i = 0; i < n; i++) {
+          const fx = n === 1 ? 0.28 : (i ? 0.32 : -0.32);
+          const cx = (r.long ? F.w : F.d) * fx, cz = (r.long ? F.d : F.w) * 0.12;
+          const ch = r.rh + 1.4;
+          const st = new THREE.Mesh(new THREE.BoxGeometry(0.9, ch, 0.7), stackM);
+          st.position.set(r.long ? cx : cz, H + ch / 2, r.long ? cz : cx); st.castShadow = true; g.add(st);
+          const capS = new THREE.Mesh(new THREE.BoxGeometry(1.06, 0.14, 0.86), corniceM);
+          capS.position.set(st.position.x, H + ch + 0.07, st.position.z); g.add(capS);
+          for (const o of [-0.2, 0.2]) {
+            const pot = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.13, 0.42, 10), potM);
+            pot.position.set(st.position.x + (r.long ? o : 0), H + ch + 0.35, st.position.z + (r.long ? 0 : o)); g.add(pot);
+          }
+        }
+      }
+    } else if (ROOF[0] === 'spire') {
+      const sp = new THREE.Mesh(new THREE.ConeGeometry(Math.max(F.w, F.d) * 0.62, Math.max(F.w, F.d) * ROOF[1], 8, 1), roofM);
+      sp.rotation.y = Math.PI / 8;
+      sp.position.y = H + 0.14 + Math.max(F.w, F.d) * ROOF[1] / 2; sp.castShadow = true; g.add(sp);
+    } else {
+      // flat: a roof deck behind a parapet; a keep's parapet is battlemented
+      const deck = new THREE.Mesh(new THREE.BoxGeometry(F.w - 0.2, 0.2, F.d - 0.2),
+        new THREE.MeshStandardMaterial({ color: F.roof, roughness: 0.94 }));
+      deck.position.y = H + 0.1; g.add(deck);
+      const pH = ROOF[0] === 'battle' ? 1.1 : 0.8, pT = 0.35;
+      const par = [];
+      for (const [px, pz, lw, ld] of [[0, F.d / 2 - pT / 2, F.w, pT], [0, -F.d / 2 + pT / 2, F.w, pT],
+                                       [F.w / 2 - pT / 2, 0, pT, F.d], [-F.w / 2 + pT / 2, 0, pT, F.d]]) {
+        const b3 = new THREE.BoxGeometry(lw, pH, ld); b3.translate(px, H + pH / 2, pz); par.push(b3);
+        if (ROOF[0] === 'battle') {
+          // merlons: teeth along the wall top, a crenel between each
+          const L3 = Math.max(lw, ld), n3 = Math.max(2, Math.floor(L3 / 1.4));
+          for (let k = 0; k < n3; k++) {
+            const t3 = (k + 0.5) / n3 - 0.5;
+            const m3 = new THREE.BoxGeometry(lw > ld ? 0.75 : pT, 0.7, lw > ld ? pT : 0.75);
+            m3.translate(px + (lw > ld ? t3 * L3 : 0), H + pH + 0.35, pz + (lw > ld ? 0 : t3 * L3)); par.push(m3);
+          }
+        }
+      }
+      const pm = new THREE.Mesh(mergeGeometries(par.map(q => q.toNonIndexed()), false), wallM);
+      pm.castShadow = true; g.add(pm);
+    }
     return { g, h: H };
   }
   function procProp(kind) {
