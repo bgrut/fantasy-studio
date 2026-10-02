@@ -425,6 +425,17 @@ def _ensure_asset_generate(kind: str, pattern: str | None, target_tris: int | No
                     print(f"[game] optimize: bridge dropped ({type(_be).__name__}); relaunching and trying again")
                 from .bake import ensure_bridge
                 ensure_bridge(verbose=verbose)
+                # the relaunch returns before Blender listens: the woman's
+                # first attempt asked again into a bridge still starting
+                # (2026-10-01), so wait until it answers, up to a minute
+                import time as _t
+                from app.mcp import bridge as _br
+                for _w in range(20):
+                    try:
+                        _br.connect(timeout=3)
+                        break
+                    except Exception:  # noqa: BLE001
+                        _t.sleep(3)
         # BIPED DEFAULT FLIP (2026-07-24): every recent TRELLIS biped came out
         # facing -Y (soldier, knight, ranger — 3/3); photo-correlation sign
         # detection failed calibration (would flip the correct hunter), so

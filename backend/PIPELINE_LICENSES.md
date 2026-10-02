@@ -24,7 +24,7 @@ runs now. The question is one question: can a game made with this be sold.
 | the refiner's depth hint | MiDaS via lllyasviel/Annotators | MIT | yes |
 | the director | Gemma 3 via Ollama | Gemma Terms of Use | yes, with Google's use restrictions |
 | the runtime | three.js, N8AO, Rapier, gaussian-splats-3d | MIT, CC0, Apache-2.0, MIT | yes |
-| fonts | Bricolage Grotesque, Instrument Sans, DM Mono | SIL OFL 1.1 | yes |
+| fonts | Bricolage Grotesque, Instrument Sans, DM Mono; the skins' faces (2026-10-01, from github.com/google/fonts with the owner's approval): Cinzel, IM Fell English, Share Tech Mono, Bebas Neue, Bangers, Fredoka, Creepster, Russo One, Lora, Josefin Sans; Special Elite | SIL OFL 1.1; Special Elite Apache-2.0 | yes; licence files beside each in `vendor/fonts` |
 | props | Kenney kits (Nature, Space, Fantasy Town, Graveyard, Survival, Castle, Pirate, Blocky Characters), Poly Haven models and HDRIs | CC0 | yes; licence files in `assets/props/LICENSES` and `assets/library/LICENSES` |
 | city streets | OpenStreetMap data | ODbL 1.0 | yes, with the credit every city game's LICENSES.md carries |
 | asset search (video pipeline) | Sketchfab, Objaverse | per object | **CC0 objects only** since 2026-09-30; an object with an unreadable licence is refused |

@@ -70,6 +70,7 @@ GATES = [
     ("fgenres.mjs", "a tower defence builds towers that shoot and a keep that falls; a platformer's islands are all inside a jump and hold what lands on them (needs --td and --pf)"),
     ("fnative.mjs", "in the desktop window F11 goes fullscreen and is remembered, and the pause menu quits to the desktop after saving; a browser shows none of it"),
     ("fmystery.mjs", "a mystery is a sound case: one suspect fits every clue; E questions, J opens the casebook, a wrong name loses and the right one wins (needs --my)"),
+    ("fcombat.mjs",  "a fight has more than one answer: hostiles come as different kinds, a boss shows its bar, a dodge is untouchable (needs --fight)"),
     ("ftown.mjs", "a city builder: roads that reach the hall serve, homes need work, a works keeps homes small and a park grows them, a planned town reaches its population (needs --town)"),
 ]
 
@@ -104,6 +105,8 @@ def main() -> int:
                     help="an adventure job id built from a tower-defence prompt (fgenres)")
     ap.add_argument("--pf", type=int, default=None,
                     help="an adventure job id built from a platformer prompt (fgenres)")
+    ap.add_argument("--fight", type=int, default=None,
+                    help="an adventure job id built from a fighting prompt (fcombat)")
     ap.add_argument("--my", type=int, default=None,
                     help="an adventure job id built from a mystery prompt (fmystery)")
     ap.add_argument("--town", type=int, default=None,
@@ -129,7 +132,7 @@ def main() -> int:
     if args.bld is not None:                  # and the building job
         for _, env in targets:
             env["B"] = str(args.bld)
-    for key, val in (("TD", args.td), ("PF", args.pf), ("MY", args.my), ("TOWN", args.town)):   # and the genre jobs
+    for key, val in (("TD", args.td), ("PF", args.pf), ("MY", args.my), ("TOWN", args.town), ("FIGHT", args.fight)):   # and the genre jobs
         if val is not None:
             for _, env in targets:
                 env[key] = str(val)

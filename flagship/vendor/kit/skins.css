@@ -16,6 +16,22 @@
    ══════════════════════════════════════════════════════════════════════════ */
 
 :root{ --f-serif: Georgia, "Times New Roman", serif; }
+/* the skins' own faces (2026-10-01, vendor/fonts; SIL OFL 1.1 except
+   Special Elite, Apache 2.0; licence files beside each) */
+@font-face{font-family:"Cinzel";font-weight:400 900;font-display:swap;src:url(../fonts/Cinzel-Variable.ttf) format("truetype")}
+@font-face{font-family:"IM Fell English";font-style:normal;font-display:swap;src:url(../fonts/IMFellEnglish-Regular.ttf) format("truetype")}
+@font-face{font-family:"IM Fell English";font-style:italic;font-display:swap;src:url(../fonts/IMFellEnglish-Italic.ttf) format("truetype")}
+@font-face{font-family:"Share Tech Mono";font-display:swap;src:url(../fonts/ShareTechMono-Regular.ttf) format("truetype")}
+@font-face{font-family:"Special Elite";font-display:swap;src:url(../fonts/SpecialElite-Regular.ttf) format("truetype")}
+@font-face{font-family:"Bebas Neue";font-display:swap;src:url(../fonts/BebasNeue-Regular.ttf) format("truetype")}
+@font-face{font-family:"Bangers";font-display:swap;src:url(../fonts/Bangers-Regular.ttf) format("truetype")}
+@font-face{font-family:"Fredoka";font-weight:300 700;font-stretch:75% 125%;font-display:swap;src:url(../fonts/Fredoka-Variable.ttf) format("truetype")}
+@font-face{font-family:"Creepster";font-display:swap;src:url(../fonts/Creepster-Regular.ttf) format("truetype")}
+@font-face{font-family:"Russo One";font-display:swap;src:url(../fonts/RussoOne-Regular.ttf) format("truetype")}
+@font-face{font-family:"Lora";font-style:normal;font-weight:400 700;font-display:swap;src:url(../fonts/Lora-Variable.ttf) format("truetype")}
+@font-face{font-family:"Lora";font-style:italic;font-weight:400 700;font-display:swap;src:url(../fonts/Lora-Italic-Variable.ttf) format("truetype")}
+@font-face{font-family:"Josefin Sans";font-weight:100 700;font-display:swap;src:url(../fonts/JosefinSans-Variable.ttf) format("truetype")}
+
 .fs-startcard{position:relative}
 #fsdlg{position:fixed}
 
@@ -206,3 +222,21 @@ body[data-skin="frost"] #fsban.on #fsbantxt{animation:sk-frost .8s ease-out}
 @keyframes sk-frost{from{filter:blur(8px);opacity:0;letter-spacing:.8em}to{filter:blur(0);opacity:1}}
 
 body.reduced[data-skin] *{animation:none !important}
+
+/* ── each skin speaks in its own faces ─────────────────────────────────── */
+body[data-skin="parchment"]{--f-serif:"IM Fell English",Georgia,serif}
+body[data-skin="parchment"] .fs-startcard h1,body[data-skin="parchment"] #fsbantxt,body[data-skin="parchment"] #win h2,
+body[data-skin="parchment"] #lose h2,body[data-skin="parchment"] .fs-title b,body[data-skin="parchment"] #hud h1{
+  font-family:"Cinzel",var(--f-serif) !important;font-variant:normal !important;font-weight:600 !important}
+body[data-skin="terminal"]{--f-mono:"Share Tech Mono",ui-monospace,monospace}
+body[data-skin="noir"]{--f-head:"Bebas Neue","Bricolage Grotesque",sans-serif;--f-mono:"Special Elite","DM Mono",monospace}
+body[data-skin="noir"] .fs-startcard h1,body[data-skin="noir"] #fsbantxt{font-family:"Bebas Neue",sans-serif !important;font-weight:400 !important;letter-spacing:.06em !important}
+body[data-skin="comic"]{--f-head:"Bangers","Bricolage Grotesque",sans-serif;--f-ui:"Fredoka","Instrument Sans",sans-serif}
+body[data-skin="comic"] .fs-startcard h1,body[data-skin="comic"] #fsbantxt{font-family:"Bangers",sans-serif !important;font-weight:400 !important;letter-spacing:.06em !important}
+body[data-skin="comic"] #fsdlg,body[data-skin="comic"] .fs-startcard div{font-family:"Fredoka",sans-serif !important}
+body[data-skin="horror"]{--f-serif:"IM Fell English",Georgia,serif}
+body[data-skin="horror"] .fs-startcard h1,body[data-skin="horror"] #fsbantxt,body[data-skin="horror"] #lose h2{font-family:"Creepster",var(--f-serif) !important;letter-spacing:.12em !important}
+body[data-skin="racing"]{--f-head:"Russo One","Bricolage Grotesque",sans-serif}
+body[data-skin="racing"] .fs-startcard h1,body[data-skin="racing"] #fsbantxt{font-family:"Russo One",sans-serif !important;font-weight:400 !important}
+body[data-skin="storybook"]{--f-serif:"Lora",Georgia,serif}
+body[data-skin="frost"]{--f-head:"Josefin Sans",sans-serif;--f-ui:"Josefin Sans",sans-serif}

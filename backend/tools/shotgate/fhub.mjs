@@ -73,10 +73,18 @@ const cost = await p.evaluate(async () => {
   let spot = null;
   for (let i = 4; i < F.N - 4 && !spot; i++) for (let j = 4; j < F.N - 4 && !spot; j++) if (F.cells[0][i][j].t === TY.EMPTY) spot = [i, j];
   F.pickTool('hub');
+  // every toast shown during the attempt, not only the last one standing:
+  // an unlock toast can land in the same 200 ms and cover the refusal
+  // (the gate failed on exactly that race, 2026-10-01)
+  const toastEl = document.getElementById('toast');
+  const heard = [toastEl.textContent];
+  const mo = new MutationObserver(() => heard.push(toastEl.textContent));
+  mo.observe(toastEl, { childList: true, characterData: true, subtree: true });
   F.apply({ face: 0, i: spot[0], j: spot[1] }, 0);
   await w(200);
+  mo.disconnect();
   const refused = F.cells[0][spot[0]][spot[1]].t !== TY.HUB;
-  const said = document.getElementById('toast').textContent;
+  const said = heard.find(t => /costs \d+ credits/.test(t)) || toastEl.textContent;
   F.addValue(300);
   const ore0 = window.__game.facts().value;
   F.apply({ face: 0, i: spot[0], j: spot[1] }, 0);

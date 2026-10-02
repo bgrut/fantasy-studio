@@ -157,5 +157,11 @@
   "monkey": "assets/library/monkey.glb",
   "snow weasels": "assets/library/snow_weasels.glb",
   "gorilla": "assets/library/gorilla.glb",
-  "the painting": "assets/library/the_painting.glb"
+  "the painting": "assets/library/the_painting.glb",
+  "woman": "assets/library/woman.glb",
+  "owl": "assets/library/owl.glb",
+  "nomad": "assets/library/nomad.glb",
+  "cacti": "assets/library/cacti.glb",
+  "castaway": "assets/library/castaway.glb",
+  "driftwood": "assets/library/driftwood.glb"
 }

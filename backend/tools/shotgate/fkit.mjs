@@ -67,7 +67,9 @@ console.log('errors    :', errs.length ? errs.join(' | ') : 'none');
 await b.close();
 
 const okF = !fac || (fac.link && fac.faces.head && fac.faces.ui && fac.faces.mono && /Bricolage/.test(fac.title || '') && /Bricolage/.test(fac.hudH1 || ''));
-const okA = !adv || (adv.link && adv.faces.head && adv.faces.ui && adv.faces.mono && !!adv.mood && /Bricolage|DM Mono/.test(adv.startH1 || '') && /Bricolage|DM Mono/.test(adv.winH2 || '')
-  && adv.reveal && adv.reveal.name && /^\u201c.+\u201d$/.test(adv.reveal.sub) && adv.end && /win/i.test(adv.end.title) && adv.end.buttons.includes('play again') && /Bricolage|DM Mono/.test(adv.end.font)
+// a skinned game sets its cards in its skin's face (2026-10-01): any face the build ships counts, a system fallback does not
+const SHIPPED = /Bricolage|DM Mono|Instrument|Cinzel|IM Fell|Share Tech|Bebas|Bangers|Fredoka|Creepster|Russo One|Lora|Josefin|Special Elite/;
+const okA = !adv || (adv.link && adv.faces.head && adv.faces.ui && adv.faces.mono && !!adv.mood && SHIPPED.test(adv.startH1 || '') && SHIPPED.test(adv.winH2 || '')
+  && adv.reveal && adv.reveal.name && /^\u201c.+\u201d$/.test(adv.reveal.sub) && adv.end && /win/i.test(adv.end.title) && adv.end.buttons.includes('play again') && SHIPPED.test(adv.end.font)
   && adv.guide && adv.guide.started && adv.guide.enter && adv.guide.held && adv.guide.skipped);
 process.exit(okF && okA && (fac || adv) && errs.length === 0 ? 0 : 1);

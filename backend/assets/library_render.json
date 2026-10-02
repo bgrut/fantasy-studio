@@ -1664,5 +1664,19 @@
   "looks_like": 0.921,
   "patchy": 0.079,
   "looks_like_best": "a clean 3D render of a monkey"
+ },
+ "woman.glb": {
+  "kind": "woman",
+  "shaded_png": "backend/tools/shotgate/renders/woman_shaded.png",
+  "looks_like": 0.985,
+  "patchy": 0.014,
+  "looks_like_best": "a clean 3D render of a woman"
+ },
+ "owl.glb": {
+  "kind": "owl",
+  "shaded_png": "backend/tools/shotgate/renders/owl_shaded.png",
+  "looks_like": 0.883,
+  "patchy": 0.115,
+  "looks_like_best": "a clean 3D render of a owl"
  }
 }

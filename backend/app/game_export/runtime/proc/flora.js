@@ -425,7 +425,151 @@ function growBush(r, P) {
   return { bark: bark.geometry(true), leaf: leaf.geometry(true) };
 }
 
+// ── stone, cactus, crystal (2026-10-01): the forest's detail for every world ─
+// a 3D value noise from the variant's own seed
+function noise3(r) {
+  const P = new Uint8Array(512);
+  for (let i = 0; i < 256; i++) P[i] = i;
+  for (let i = 255; i > 0; i--) { const j = Math.floor(r() * (i + 1)); const t = P[i]; P[i] = P[j]; P[j] = t; }
+  for (let i = 0; i < 256; i++) P[i + 256] = P[i];
+  const h = (x, y, z) => P[(P[(P[x & 255] + y) & 255] + z) & 255] / 127.5 - 1;
+  const s = t => t * t * (3 - 2 * t);
+  return (x, y, z) => {
+    const xi = Math.floor(x), yi = Math.floor(y), zi = Math.floor(z);
+    const u = s(x - xi), v = s(y - yi), w = s(z - zi);
+    const l = (a, b, t) => a + (b - a) * t;
+    return l(l(l(h(xi, yi, zi), h(xi + 1, yi, zi), u), l(h(xi, yi + 1, zi), h(xi + 1, yi + 1, zi), u), v),
+             l(l(h(xi, yi, zi + 1), h(xi + 1, yi, zi + 1), u), l(h(xi, yi + 1, zi + 1), h(xi + 1, yi + 1, zi + 1), u), v), w);
+  };
+}
+
+// a rock: a displaced sphere, flattened where it sits, with a few facets cut
+// in so it reads as stone and not as a potato; strata for canyon country
+function growRock(r, P) {
+  const n3 = noise3(r);
+  const g = new THREE.IcosahedronGeometry(1, P.detail || 4);
+  const pos = g.attributes.position;
+  const sx = P.size * (0.8 + r() * 0.5), sy = P.size * P.flat * (0.7 + r() * 0.5), sz = P.size * (0.8 + r() * 0.5);
+  const cuts = [];
+  for (let c = 0; c < (P.facets || 5); c++) {
+    const nrm = new THREE.Vector3(r() - 0.5, r() * 0.8 - 0.2, r() - 0.5).normalize();
+    cuts.push([nrm, 0.62 + r() * 0.25]);
+  }
+  const v = new THREE.Vector3();
+  for (let i = 0; i < pos.count; i++) {
+    v.fromBufferAttribute(pos, i);
+    let d = 1 + 0.32 * n3(v.x * 1.6 + 7, v.y * 1.6, v.z * 1.6) + 0.12 * n3(v.x * 4.5, v.y * 4.5 + 3, v.z * 4.5)
+              + 0.04 * n3(v.x * 11, v.y * 11, v.z * 11 + 5);
+    if (P.strata) d += 0.05 * Math.sin(v.y * P.strata * 6.0 + n3(v.x * 2, 0, v.z * 2) * 2);
+    v.multiplyScalar(d);
+    for (const [nrm, k] of cuts) { const e = v.dot(nrm); if (e > k) v.addScaledVector(nrm, k - e); }
+    v.set(v.x * sx, v.y * sy, v.z * sz);
+    if (v.y < -sy * 0.25) v.y = -sy * 0.25 + (v.y + sy * 0.25) * 0.15;   // seated in the ground
+    pos.setXYZ(i, v.x, v.y + sy * 0.2, v.z);
+  }
+  g.computeVertexNormals();
+  const n = pos.count;
+  g.setAttribute('sway', new THREE.Float32BufferAttribute(new Float32Array(n), 1));
+  const sh = new Float32Array(n);
+  for (let i = 0; i < n; i++) sh[i] = 0.7 + 0.3 * Math.min(1, Math.max(0, (pos.getY(i) + sy * 0.2) / (sy * 0.8)));
+  g.setAttribute('shade', new THREE.Float32BufferAttribute(sh, 1));
+  return { bark: g, leaf: null };
+}
+
+// a saguaro: a ribbed column with arms that turn up
+function growCactus(r, P) {
+  const bark = new Builder();
+  const ribs = 12;
+  const column = (path, rad) => {
+    const base = bark.vc;
+    const sides = ribs * 2;
+    for (let k = 0; k < path.length; k++) {
+      const pk = path[k].p, t = k / (path.length - 1);
+      const tipR = rad * (t > 0.9 ? Math.sqrt(Math.max(0, 1 - (t - 0.9) / 0.1)) * 0.9 + 0.1 : 1);
+      for (let s = 0; s <= sides; s++) {
+        const a = (s / sides) * TAU;
+        const rib = 1 + 0.09 * Math.cos(a * ribs);
+        const ca = Math.cos(a), sa = Math.sin(a);
+        const dir = path[k].d;
+        // a frame around the column's own direction
+        const nx = new THREE.Vector3(1, 0, 0); if (Math.abs(dir.x) > 0.9) nx.set(0, 0, 1);
+        const N = nx.sub(dir.clone().multiplyScalar(nx.dot(dir))).normalize(), B = new THREE.Vector3().crossVectors(dir, N);
+        const ox = (N.x * ca + B.x * sa), oy = (N.y * ca + B.y * sa), oz = (N.z * ca + B.z * sa);
+        bark.p.push(pk.x + ox * tipR * rib, pk.y + oy * tipR * rib, pk.z + oz * tipR * rib);
+        bark.n.push(ox, oy, oz); bark.u.push(s / sides, t * 3); bark.c.push(0.05);
+        bark.s.push(0.72 + 0.28 * (0.5 + 0.5 * Math.cos(a * ribs)));
+      }
+    }
+    const row = sides + 1;
+    for (let k = 0; k < path.length - 1; k++) for (let s = 0; s < sides; s++) {
+      const a = base + k * row + s, c = a + row;
+      bark.i.push(a, c, a + 1, a + 1, c, c + 1);
+    }
+  };
+  const H = P.height, R0 = P.r;
+  const main = [];
+  for (let k = 0; k <= 12; k++) main.push({ p: new THREE.Vector3(0, -0.2 + H * k / 12, 0), d: new THREE.Vector3(0, 1, 0) });
+  column(main, R0);
+  const arms = P.arms;
+  for (let a = 0; a < arms; a++) {
+    const az = r() * TAU, y0 = H * (0.35 + r() * 0.3), out = R0 * (2.2 + r() * 1.2), up = H * (0.25 + r() * 0.25);
+    const arm = [];
+    const dirOut = new THREE.Vector3(Math.cos(az), 0, Math.sin(az));
+    for (let k = 0; k <= 10; k++) {
+      const t = k / 10;
+      const bend = Math.min(1, t * 1.8);
+      const p = new THREE.Vector3(0, y0, 0).addScaledVector(dirOut, out * Math.sin(bend * Math.PI / 2))
+        .add(new THREE.Vector3(0, Math.max(0, t - 0.35) / 0.65 * up, 0));
+      const d = dirOut.clone().multiplyScalar(Math.cos(bend * Math.PI / 2) + 0.05).add(new THREE.Vector3(0, Math.sin(bend * Math.PI / 2), 0)).normalize();
+      arm.push({ p, d });
+    }
+    column(arm, R0 * 0.62);
+  }
+  return { bark: bark.geometry(), leaf: null };
+}
+
+// a crystal cluster: hexagonal prisms with pointed ends, leaning out
+function growCrystal(r, P) {
+  const parts = [];
+  const n = 4 + Math.floor(r() * 5);
+  for (let i = 0; i < n; i++) {
+    const h = P.size * (0.6 + r() * 1.2), w = h * (0.12 + r() * 0.08);
+    const c = new THREE.CylinderGeometry(w, w, h, 6, 1); c.translate(0, h / 2, 0);
+    const tip = new THREE.ConeGeometry(w, w * 2.4, 6); tip.translate(0, h + w * 1.2, 0);
+    const m = new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler((r() - 0.5) * 0.9, r() * TAU, (r() - 0.5) * 0.9));
+    m.setPosition((r() - 0.5) * P.size * 0.3, -0.1, (r() - 0.5) * P.size * 0.3);
+    parts.push(c.toNonIndexed().applyMatrix4(m), tip.toNonIndexed().applyMatrix4(m));
+  }
+  const g = mergeAll(parts);
+  const cnt = g.attributes.position.count;
+  g.setAttribute('sway', new THREE.Float32BufferAttribute(new Float32Array(cnt), 1));
+  g.setAttribute('shade', new THREE.Float32BufferAttribute(new Float32Array(cnt).fill(1), 1));
+  return { bark: g, leaf: null };
+}
+function mergeAll(gs) {
+  let total = 0; for (const g of gs) total += g.attributes.position.count;
+  const p = new Float32Array(total * 3), nm = new Float32Array(total * 3), uv = new Float32Array(total * 2);
+  let o = 0;
+  for (const g of gs) {
+    g.computeVertexNormals();
+    p.set(g.attributes.position.array, o * 3); nm.set(g.attributes.normal.array, o * 3);
+    if (g.attributes.uv) uv.set(g.attributes.uv.array, o * 2);
+    o += g.attributes.position.count;
+  }
+  const out = new THREE.BufferGeometry();
+  out.setAttribute('position', new THREE.BufferAttribute(p, 3));
+  out.setAttribute('normal', new THREE.BufferAttribute(nm, 3));
+  out.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+  const idx = []; for (let i = 0; i < total; i++) idx.push(i); out.setIndex(idx);
+  return out;
+}
+
 const KINDS = {
+  rock: (r) => ({ grow: growRock, size: 0.9 + r() * 0.8, flat: 0.6, facets: 5, detail: 4 }),
+  boulder: (r) => ({ grow: growRock, size: 2.2 + r() * 1.6, flat: 0.55, facets: 6, detail: 4 }),
+  mesa: (r) => ({ grow: growRock, size: 4 + r() * 3, flat: 0.9, facets: 7, detail: 4, strata: 2.5 }),
+  cactus: (r) => ({ grow: growCactus, height: 4.5 + r() * 3.5, r: 0.3 + r() * 0.08, arms: Math.floor(r() * 4) }),
+  crystal: (r) => ({ grow: growCrystal, size: 1.4 + r() * 1.2 }),
   broadleaf: (r) => ({ grow: growBroadleaf, height: 9 + r() * 6, trunkFrac: 0.5, trunkR: 0.28 + r() * 0.1, depth: 3,
     limbs: 6 + Math.floor(r() * 3), twigs: 4, crownStart: 0.42, spread: [0.55, 1.05], lenRatio: 0.62, radRatio: 0.55,
     kink: 0.16, lift: 0.07, droop: 0.05, leafFrom: 2, leaves: true, cardsPer: 5, card: 1.5 }),
@@ -450,12 +594,13 @@ const KINDS = {
 // opts.live: wind and the near/far dissolve (the trees in the world);
 // opts.foliage: one normal for both faces of a card, and light through it
 function patchTree(mat, U, opts) {
-  const live = !!opts.live, fol = !!opts.foliage;
+  const live = !!opts.live, fol = !!opts.foliage, tri = !!opts.triplanar;
   mat.onBeforeCompile = (sh) => {
     sh.uniforms.uWind = U.wind;
     sh.uniforms.uNear = U.near;
     sh.uniforms.uSunDir = U.sunDir;
     sh.uniforms.uSunCol = U.sunCol;
+    sh.uniforms.uSnow = U.snow;
     sh.vertexShader = sh.vertexShader
       .replace('#include <common>', `#include <common>
         attribute float sway;
@@ -463,9 +608,13 @@ function patchTree(mat, U, opts) {
         uniform float uWind;
         varying vec3 vBase;
         varying vec3 vWPos;
+        varying vec3 vWN;
+        varying vec3 vObjP;
+        varying vec3 vObjN;
         varying float vShade;`)
       .replace('#include <begin_vertex>', `#include <begin_vertex>
         vShade = shade;
+        vObjP = position; vObjN = objectNormal;
         {
           #ifdef USE_INSTANCING
             mat4 im = modelMatrix * instanceMatrix;
@@ -482,17 +631,36 @@ function patchTree(mat, U, opts) {
           transformed.z += bend * 0.6 - flutter * 0.5;
           transformed.y += flutter * 0.4;` : ''}
           vWPos = (im * vec4(transformed, 1.0)).xyz;
+          vWN = normalize(mat3(im) * objectNormal);
         }`);
     let fs = sh.fragmentShader
       .replace('#include <common>', `#include <common>
         uniform float uNear;
         uniform vec3 uSunDir, uSunCol;
+        uniform float uSnow;
         varying vec3 vBase;
         varying vec3 vWPos;
+        varying vec3 vWN;
+        varying vec3 vObjP;
+        varying vec3 vObjN;
         varying float vShade;
         float ign(vec2 p) { return fract(52.9829189 * fract(dot(p, vec2(0.06711056, 0.00583715)))); }`)
-      .replace('#include <map_fragment>', `#include <map_fragment>
-        diffuseColor.rgb *= vShade;`);
+      .replace('#include <map_fragment>', (tri ? `
+        #ifdef USE_MAP
+        {
+          // triplanar: stone is textured by where it is, not by UVs it lacks
+          vec3 bw = pow(abs(normalize(vObjN)), vec3(4.0)); bw /= (bw.x + bw.y + bw.z + 1e-5);
+          vec3 tp = vObjP * 0.45;
+          vec4 tx = texture2D(map, tp.yz) * bw.x + texture2D(map, tp.xz) * bw.y + texture2D(map, tp.xy) * bw.z;
+          diffuseColor *= tx;
+        }
+        #endif` : `#include <map_fragment>`) + `
+        diffuseColor.rgb *= vShade;
+        {
+          // snow settles on whatever faces up, in a snowy world
+          float sn = uSnow * smoothstep(0.38, 0.78, normalize(vWN).y + 0.08 * sin(vWPos.x * 3.1) * cos(vWPos.z * 2.7));
+          diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.9, 0.93, 0.98), sn);
+        }`);
     if (live) {
       fs = fs.replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>
         {
@@ -526,10 +694,27 @@ function patchTree(mat, U, opts) {
     }
     sh.fragmentShader = fs;
   };
-  mat.customProgramCacheKey = () => 'flora-' + (live ? 'L' : 'B') + (fol ? 'F' : 'W');
+  mat.customProgramCacheKey = () => 'flora-' + (live ? 'L' : 'B') + (fol ? 'F' : 'W') + (tri ? 'T' : '');
 }
 
-function makeMaterials(kind, leafHSL, barkTex, barkN, seed, U) {
+const STONE = new Set(['rock', 'boulder', 'mesa']);
+function makeMaterials(kind, leafHSL, barkTex, barkN, seed, U, extra = {}) {
+  if (STONE.has(kind) || kind === 'cactus' || kind === 'crystal') {
+    let m;
+    if (STONE.has(kind)) {
+      m = new THREE.MeshStandardMaterial({ map: extra.rockTex || null, normalMap: extra.rockN || null,
+        color: extra.rockTint || new THREE.Color(0x8a8580), roughness: 0.92 });
+      m.normalMap = null;
+    } else if (kind === 'cactus') {
+      m = new THREE.MeshStandardMaterial({ color: 0x3f6e38, roughness: 0.62 });
+    } else {
+      const c = extra.crystalTint || new THREE.Color(0x8fd8ff);
+      m = new THREE.MeshStandardMaterial({ color: c, emissive: c, emissiveIntensity: 0.55, roughness: 0.18, metalness: 0.1 });
+    }
+    m.userData.noAutoTex = true;
+    patchTree(m, U, { live: true, triplanar: STONE.has(kind) });
+    return { bark: m, leaf: null };
+  }
   const barkTint = kind === 'birch' ? new THREE.Color(0xe8e4dc) : kind === 'dead' ? new THREE.Color(0x9c8f84) : new THREE.Color(0xffffff);
   const bark = new THREE.MeshStandardMaterial({ map: barkTex, normalMap: barkN, color: barkTint, roughness: 0.95 });
   if (kind === 'birch') bark.map = null;
@@ -701,19 +886,20 @@ function farGeometry(list) {
 export function plantForest(o) {
   const U = { wind: o.windU || { value: 0 }, near: { value: o.near || 50 },
               sunDir: { value: (o.sunDir || new THREE.Vector3(0.4, 0.8, 0.3)).clone().normalize() },
-              sunCol: { value: o.sunCol || new THREE.Color(1, 0.95, 0.85) } };
+              sunCol: { value: o.sunCol || new THREE.Color(1, 0.95, 0.85) },
+              snow: { value: o.snow || 0 } };
   const rng = mulberry(o.seed >>> 0);
   const kinds = o.kinds;
   const varPer = o.variants || 3;
   // grow the variants
   const variants = [];   // {kind, ki, bark, leaf, mats, matsBake}
   kinds.forEach((K, ki) => {
-    const mats = makeMaterials(K.kind, o.leaf, o.barkTex, o.barkN, (o.seed + ki * 97) >>> 0, U);
+    const mats = makeMaterials(K.kind, o.leaf, o.barkTex, o.barkN, (o.seed + ki * 97) >>> 0, U, o);
     const matsBake = {
-      bark: new THREE.MeshStandardMaterial({ map: mats.bark.map, normalMap: mats.bark.normalMap, color: mats.bark.color, roughness: 0.95 }),
+      bark: mats.bark.clone(),
       leaf: mats.leaf ? new THREE.MeshStandardMaterial({ map: mats.leaf.map, alphaTest: 0.42, side: THREE.DoubleSide, roughness: 1.0, envMapIntensity: 0.45 }) : null,
     };
-    patchTree(matsBake.bark, U, {});
+    patchTree(matsBake.bark, U, { triplanar: STONE.has(K.kind) });
     if (matsBake.leaf) patchTree(matsBake.leaf, U, { foliage: true });
     for (let v = 0; v < varPer; v++) {
       const vr = mulberry((o.seed + ki * 1013 + v * 7919) >>> 0);
@@ -803,7 +989,10 @@ export function plantForest(o) {
   return {
     group, update, count: n, near: U.near,
     variants: variants.map(v => v.kind),
-    tris: variants.map(v => (v.bark.index.count + (v.leaf ? v.leaf.index.count : 0)) / 3),
+    tris: variants.map(v => {
+      const c = g => g ? (g.index ? g.index.count : g.attributes.position.count) : 0;   // stone is not indexed
+      return (c(v.bark) + c(v.leaf)) / 3;
+    }),
   };
 }
 
@@ -832,4 +1021,36 @@ export function kindsFor(arch, words) {
   if (arch === 'dead') return [{ kind: 'dead', weight: 1 }, { kind: 'bush', weight: 0.15 }];
   if (arch === 'cypress') return [{ kind: 'spruce', weight: 0.5 }, { kind: 'palm', weight: 0.3 }, { kind: 'bush', weight: 0.5 }];
   return [{ kind: 'broadleaf', weight: 0.7 }, { kind: 'oak', weight: 0.35 }, { kind: 'birch', weight: 0.2 }, { kind: 'bush', weight: 0.7 }];
+}
+
+// ── THE WORLD'S OWN GROWTH (2026-10-01) ────────────────────────────────────
+// What stands on the land, for any sentence: the forest's detail, turned to
+// whatever the place is. Words first (a desert has cacti and stone, the moon
+// has rock to the horizon, a glacier is boulders under snow), the tree
+// archetype the seed chose otherwise. dens scales the counts; snow settles
+// on everything facing up.
+export function biomeFor(words, arch, groundHSL) {
+  const w = (words || '').toLowerCase();
+  const has = re => re.test(w);
+  const K = (...pairs) => pairs.map(([kind, weight]) => ({ kind, weight }));
+  const T = (hex) => new THREE.Color(hex);
+  const crystal = has(/crystal|gem|geode|amethyst/);
+  const out = { snow: 0, rockTint: T(0x8a8580), crystalTint: T(0x8fd8ff), leaf: leafFor(w, groundHSL) };
+  if (has(/\bmoon\b|lunar|asteroid|space|orbit|comet/)) Object.assign(out, { kinds: K(['rock', 1], ['boulder', 0.35], ...(crystal ? [['crystal', 0.15]] : [])), dens: 0.1, rockTint: T(0x8d8c8a) });
+  else if (has(/mars|red planet|martian/)) Object.assign(out, { kinds: K(['rock', 1], ['boulder', 0.4], ...(crystal ? [['crystal', 0.12]] : [])), dens: 0.1, rockTint: T(0xa0573a) });
+  else if (has(/volcan|lava|magma|ash\b|obsidian/)) Object.assign(out, { kinds: K(['rock', 1], ['boulder', 0.4], ['dead', 0.2]), dens: 0.14, rockTint: T(0x3a3634), crystalTint: T(0xff7a3a) });
+  else if (has(/canyon|mesa|badlands|butte/)) Object.assign(out, { kinds: K(['mesa', 0.25], ['rock', 0.8], ['boulder', 0.4], ['cactus', 0.15]), dens: 0.12, rockTint: T(0xb5643c) });
+  else if (has(/desert|dune|sahara|wasteland|arid/)) Object.assign(out, { kinds: K(['cactus', 0.5], ['rock', 0.8], ['boulder', 0.2], ['dead', 0.25], ['bush', 0.2]), dens: 0.14, rockTint: T(0xb08a5e), leaf: { h: 0.16, s: 0.32, l: 0.3 } });
+  else if (has(/glacier|tundra|ice field|polar/)) Object.assign(out, { kinds: K(['boulder', 0.6], ['rock', 1], ['spruce', 0.15]), dens: 0.16, snow: 0.85, rockTint: T(0x7d8794) });
+  else if (has(/snow|arctic|frozen|winter|blizzard|frost/)) Object.assign(out, { kinds: K(['spruce', 0.6], ['pine', 0.5], ['rock', 0.35], ['boulder', 0.15]), dens: 0.75, snow: 0.75, rockTint: T(0x7d8794) });
+  else if (has(/jungle|rainforest/)) Object.assign(out, { kinds: K(['broadleaf', 1], ['palm', 0.4], ['oak', 0.3], ['bush', 1], ['rock', 0.1]), dens: 1.2 });
+  else if (has(/beach|tropical|island|palm|lagoon|coast/)) Object.assign(out, { kinds: K(['palm', 0.8], ['bush', 0.5], ['rock', 0.3]), dens: 0.35, rockTint: T(0x9a8f80) });
+  else if (has(/swamp|marsh|bayou|bog|toxic/)) Object.assign(out, { kinds: K(['dead', 0.6], ['broadleaf', 0.4], ['bush', 0.6], ['rock', 0.15]), dens: 0.6 });
+  else if (has(/meadow|farm|village|plain|field|prairie|pasture|orchard/)) Object.assign(out, { kinds: K(['oak', 0.5], ['broadleaf', 0.3], ['bush', 0.8], ['rock', 0.25]), dens: 0.35 });
+  else {
+    out.kinds = kindsFor(arch, w).concat([{ kind: 'rock', weight: 0.15 }]);
+    out.dens = arch === 'dead' ? 0.12 : arch === 'cypress' ? 0.45 : 1.0;
+  }
+  if (crystal && !out.kinds.some(k => k.kind === 'crystal')) out.kinds.push({ kind: 'crystal', weight: 0.25 });
+  return out;
 }

@@ -664,29 +664,31 @@
   {
    "file": "clue.glb",
    "dims_m": {
-    "x": 1.0031,
-    "y": 1.0088,
-    "z": 1.0017
+    "x": 0.993,
+    "y": 0.9885,
+    "z": 1.0006
    },
-   "min_y": -0.0065,
+   "min_y": 0.0028,
    "skinned": false,
    "clips": [],
    "bones": 0,
    "biped": false,
-   "tallest_axis": "y",
+   "tallest_axis": "z",
    "aspect": {
-    "w_h": 0.994,
-    "d_h": 0.993
+    "w_h": 1.005,
+    "d_h": 1.012
    },
    "upright": true,
-   "height_ratio": 1.0,
+   "height_ratio": 0.988,
    "mesh": {
-    "tris": 44999,
-    "largest_share": 0.0238,
-    "fragments": 33,
+    "tris": 33452,
+    "largest_share": 0.3892,
+    "fragments": 15,
     "degenerate": 0.0,
     "textures": 3,
-    "textures_ok": true
+    "textures_ok": true,
+    "nose": "-z",
+    "roof_peak_bin": 6
    },
    "render": {
     "looks_like": 0.073,
@@ -4699,6 +4701,40 @@
    "verdict": "poor"
   },
   {
+   "file": "owl.glb",
+   "dims_m": {
+    "x": 0.2224,
+    "y": 0.4999,
+    "z": 0.4667
+   },
+   "min_y": -0.0003,
+   "skinned": false,
+   "clips": [],
+   "bones": 0,
+   "biped": false,
+   "tallest_axis": "y",
+   "aspect": {
+    "w_h": 0.445,
+    "d_h": 0.934
+   },
+   "upright": true,
+   "height_ratio": 1.0,
+   "mesh": {
+    "tris": 44086,
+    "largest_share": 1.0,
+    "fragments": 1,
+    "degenerate": 0.0,
+    "textures": 3,
+    "textures_ok": true
+   },
+   "render": {
+    "looks_like": 0.883,
+    "looks_like_best": "a clean 3D render of a owl"
+   },
+   "quality": 0.93,
+   "verdict": "good"
+  },
+  {
    "file": "package.glb",
    "dims_m": {
     "x": 0.3064,
@@ -5158,7 +5194,7 @@
    "upright": true,
    "height_ratio": 0.988,
    "mesh": {
-    "tris": 45000,
+    "tris": 44922,
     "largest_share": 1.0,
     "fragments": 1,
     "degenerate": 0.0,
@@ -6181,6 +6217,38 @@
    "verdict": "fair"
   },
   {
+   "file": "the_painting.glb",
+   "dims_m": {
+    "x": 0.6406,
+    "y": 0.6203,
+    "z": 0.9996
+   },
+   "min_y": 0.0,
+   "skinned": false,
+   "clips": [],
+   "bones": 0,
+   "biped": false,
+   "tallest_axis": "z",
+   "aspect": {
+    "w_h": 1.033,
+    "d_h": 1.611
+   },
+   "upright": true,
+   "height_ratio": 0.621,
+   "mesh": {
+    "tris": 43721,
+    "largest_share": 1.0,
+    "fragments": 1,
+    "degenerate": 0.0,
+    "textures": 3,
+    "textures_ok": true,
+    "nose": "+z",
+    "roof_peak_bin": 4
+   },
+   "quality": 1.0,
+   "verdict": "good"
+  },
+  {
    "file": "the_woodcutter'_stash.glb",
    "dims_m": {
     "x": 0.9855,
@@ -7039,6 +7107,76 @@
     "textures_ok": true,
     "nose": "-z",
     "roof_peak_bin": 8
+   },
+   "quality": 1.0,
+   "verdict": "good"
+  },
+  {
+   "file": "woman.glb",
+   "dims_m": {
+    "x": 1.5782,
+    "y": 1.7502,
+    "z": 0.3101
+   },
+   "min_y": -0.0,
+   "skinned": false,
+   "clips": [],
+   "bones": 0,
+   "biped": true,
+   "tallest_axis": "y",
+   "aspect": {
+    "w_h": 0.902,
+    "d_h": 0.177
+   },
+   "upright": true,
+   "height_ratio": 1.0,
+   "mesh": {
+    "tris": 79935,
+    "largest_share": 0.8985,
+    "fragments": 3,
+    "degenerate": 0.0,
+    "textures": 3,
+    "textures_ok": true
+   },
+   "render": {
+    "looks_like": 0.985,
+    "looks_like_best": "a clean 3D render of a woman"
+   },
+   "quality": 0.99,
+   "verdict": "good"
+  },
+  {
+   "file": "woman_anim.glb",
+   "dims_m": {
+    "x": 1.578,
+    "y": 1.75,
+    "z": 0.31
+   },
+   "min_y": -0.0,
+   "skinned": true,
+   "clips": [
+    "attack",
+    "idle",
+    "run",
+    "sneak",
+    "walk"
+   ],
+   "bones": 21,
+   "biped": true,
+   "tallest_axis": "y",
+   "aspect": {
+    "w_h": 0.902,
+    "d_h": 0.177
+   },
+   "upright": true,
+   "height_ratio": 1.0,
+   "mesh": {
+    "tris": 76172,
+    "largest_share": 0.9103,
+    "fragments": 3,
+    "degenerate": 0.0,
+    "textures": 0,
+    "textures_ok": true
    },
    "quality": 1.0,
    "verdict": "good"

@@ -16,6 +16,7 @@ import { UnrealBloomPass } from './vendor/jsm/postprocessing/UnrealBloomPass.js'
 import { OutputPass } from './vendor/jsm/postprocessing/OutputPass.js';
 import RAPIER from './vendor/rapier.es.js';
 import { buildCarHQ as __buildCarHQ } from './proc/car.js';
+import * as __FLORA from './proc/flora.js';
 
 const SPEC = __GAME_SPEC__;
 
@@ -452,22 +453,37 @@ async function main() {
       .filter(Boolean).join(' ').toLowerCase();
     if (L0.osm || L0.interior || W.pano) return null;
     if (new URLSearchParams(location.search).get('flora') === '0') return null;   // A/B and debugging
-    if (/space|asteroid|lunar|\bmoon\b|mars|orbit|station|underwater|undersea|ocean floor|reef|cyber|neon|metropolis|downtown|city street/.test(words)) return null;
+    // (2026-10-01) the moon, Mars and every barren place grow stone now, not nothing
+    if (/station|underwater|undersea|ocean floor|reef|cyber|neon|metropolis|downtown|city street/.test(words)) return null;
     if (['pixel', 'lowpoly', 'papercraft', 'synthwave'].includes(SPEC.style)) return null;
     const q = {
       ultra:       { R: 1400, n: 420000, near: 46, inner: 6000, cap: 700 },
       balanced:    { R: 1000, n: 160000, near: 40, inner: 3500, cap: 600 },
       performance: { R: 650,  n: 45000,  near: 28, inner: 1500, cap: 300 },
     }[QUALITY] || { R: 1400, n: 420000, near: 46, inner: 6000, cap: 700 };
-    const dens = SIL.arch === 'dead' ? 0.12 : SIL.arch === 'cypress' ? 0.45 : 1.0;
-    const outer = (SPEC.view || '3d') !== 'topdown' && !/desert|dune|canyon|wasteland|tundra|glacier/.test(words);
-    const out = Object.assign({ words, dens, outer }, q);
+    const biome = __FLORA.biomeFor(words, SIL.arch, null);
+    const dens = biome.dens;
+    // the land beyond is every open world's; trees on it only where things grow
+    const outer = (SPEC.view || '3d') !== 'topdown';
+    // barren: no meadow under it (the outer land keeps its colour), and the
+    // outer scatter is stone and the odd cactus, sparse
+    const barren = !biome.kinds.some(k => ['broadleaf', 'oak', 'birch', 'pine', 'spruce', 'palm', 'bush'].includes(k.kind) && k.weight >= 0.3);
+    const out = Object.assign({ words, dens, outer, barren, biome }, q);
     window.__flora = { on: true, outer, R: q.R, planned: q.n };
     return out;
   })();
   // the planted forest and how many of its trees stand in the playfield;
   // declared up here, before the render loop that reads them can start
   let FLORA_LIVE = null, _floraInner = 0;
+  // COMBAT STATE (2026-10-01): on window, not in a let, because playerHit,
+  // stepNPCs and the upgrade cards are all declared thousands of lines before
+  // the combat block that drives them, and a let read early is a black page
+  window.__cbt = {
+    iframes: 0, blink: 0, dodgeT: 0, dodgeDur: 0.28, dodgeCd: 0, dx: 0, dz: 1,
+    coins: 0, kills: 0, shopCost: 40,
+    vamp: 0, crit: 0, dash: 0, thorns: 0, second: 0, usedSecond: false, reachK: 1, regen: 0, greed: 0,
+    calm: 0, checkpoint: null, boss: null,
+  };
   // ── STYLE IDENTITY (2026-08-25): the UI is part of the art direction ─
   // A style was a post-shader — the same HUD font, the same rounded chrome,
   // whether the game was a watercolor cartoon or a horror crawl. The frame
@@ -1557,7 +1573,10 @@ async function main() {
     // pass reads every blade), so the same colour bare reads far paler: a
     // meadow seen from afar is the ground darkened by what grows on it, and
     // a forest floor darker again
-    const base = gcol.clone().offsetHSL(0, 0.02, -0.02).multiplyScalar(0.5);
+    const base = gcol.clone().offsetHSL(0, 0.02, -0.02).multiplyScalar(FLORA.barren ? 0.6 : 0.5);   // sand has no grass, but the playfield's own ground reads darker than its colour
+    // bare land is the colour of its sand and stone (the playfield shows a
+    // sand or rock texture, not its plain ground colour)
+    if (FLORA.barren && FLORA.biome && FLORA.biome.rockTint) base.lerp(FLORA.biome.rockTint.clone().multiplyScalar(0.8), 0.85).offsetHSL(0, 0.14, 0);
     const under = base.clone().lerp(new THREE.Color(0x1a2213), 0.6);
     for (let r = 0; r <= ROWS; r++) {
       const t = Math.pow(r / ROWS, 1.8);
@@ -4394,7 +4413,40 @@ async function main() {
             }
           }
         }
-        if (spots.length) {
+        // GROWN STREET TREES (2026-10-01): the avenue's trees are the same
+        // grown broadleaves as a forest's (proc/flora.js), city-sized, each
+        // trunk still solid; the lobed canopies below are the fallback
+        let _floraCity = false;
+        if (spots.length && !FLORA_LIVE) {
+          try {
+            const _rC = mulberry32(SPEC.seed + 5151);
+            const trees = [];
+            for (const [tx3, tz3, sc] of spots) trees.push(tx3, hAt(tx3, tz3), tz3, sc * 0.62, _rC() * Math.PI * 2, 0);
+            const barkTex = new THREE.TextureLoader().load('textures/bark.jpg');
+            barkTex.wrapS = barkTex.wrapT = THREE.RepeatWrapping; barkTex.colorSpace = THREE.SRGBColorSpace;
+            const barkN = new THREE.TextureLoader().load('textures/bark_n.jpg');
+            barkN.wrapS = barkN.wrapT = THREE.RepeatWrapping;
+            const sunB = new THREE.DirectionalLight(pal.sunCol || 0xffffff, pal.sun * 1.12);
+            sunB.position.set(...pal.sunPos).normalize().multiplyScalar(50);
+            sunB.target.updateMatrixWorld();
+            FLORA_LIVE = __FLORA.plantForest({
+              renderer, scene, seed: (SPEC.seed + 77) >>> 0, kinds: [{ kind: 'broadleaf', weight: 1 }],
+              leaf: __FLORA.leafFor('', null), barkTex, barkN,
+              lightRig: { lights: [sunB, hemi.clone()], environment: scene.environment, environmentIntensity: scene.environmentIntensity },
+              windU: WIND_U, near: QUALITY === 'performance' ? 28 : 46, nearCap: 300, variants: 4,
+              sunDir: new THREE.Vector3(...pal.sunPos).normalize(),
+              sunCol: new THREE.Color(pal.sunCol || 0xffffff).multiplyScalar(pal.sun * 1.12),
+              trees: new Float32Array(trees), shadows: true,
+            });
+            for (const [tx3, tz3, sc] of spots) {
+              const gy3 = hAt(tx3, tz3);
+              world.createCollider(RAPIER.ColliderDesc.cylinder(1.7 * sc, 0.26 * sc).setTranslation(tx3, gy3 + 1.7 * sc, tz3));
+            }
+            window.__flora = { on: true, city: true, total: FLORA_LIVE.count, variants: FLORA_LIVE.variants };
+            _floraCity = true;
+          } catch (e) { console.warn('[game] grown street trees unavailable: ' + e.message); FLORA_LIVE = null; }
+        }
+        if (spots.length && !_floraCity) {
           const trkG = new THREE.CylinderGeometry(0.14, 0.22, 3.4, 7);
           trkG.translate(0, 1.7, 0);
           const trk = new THREE.InstancedMesh(trkG,
@@ -5265,9 +5317,11 @@ async function main() {
   if (FLORA && !PURE_SCENE && !INTERIOR) {
     try {
       const FL = await import('./proc/flora.js');
-      const kinds = FL.kindsFor(SIL.arch, FLORA.words);
       const _gh = {}; gcol.getHSL(_gh);
-      const leaf = FL.leafFor(FLORA.words, _gh);
+      const BIO = FL.biomeFor(FLORA.words, SIL.arch, _gh);
+      const kinds = BIO.kinds;
+      const leaf = BIO.leaf;
+      const STONEK = new Set(['rock', 'boulder', 'mesa', 'crystal']);
       const rT = mulberry32(SPEC.seed + 9191);
       const treeK = kinds.map((k, i) => i).filter(i => kinds[i].kind !== 'bush');
       const bushK = kinds.findIndex(k => k.kind === 'bush');
@@ -5300,7 +5354,7 @@ async function main() {
         if (clear(x, z)) continue;
         let isBush = false, p = 0;
         if (rk === 'forest') p = 0.25 + reg.w * 0.75;
-        else if (rk === 'rock' || rk === 'sand') p = 0.015;
+        else if (rk === 'rock' || rk === 'sand') p = kinds.some(k => STONEK.has(k.kind) || k.kind === 'cactus') ? 0.1 : 0.015;   // stony ground grows stone
         else p = 0.07;
         p *= FLORA.dens;
         if (rT() > p) {
@@ -5318,7 +5372,7 @@ async function main() {
         const s = isBush ? 0.8 + rT() * 0.7 : 0.75 + rT() * 0.55;
         const y = hAt(x, z);
         T.push(x, y, z, s, rT() * Math.PI * 2, ki);
-        if (!isBush && colliders.length < 1500) colliders.push([x, y, z, s]);
+        if (!isBush && colliders.length < 1500) colliders.push([x, y, z, s, kinds[ki].kind]);
         _floraInner++;
       }
       // beyond it, to the horizon
@@ -5342,10 +5396,16 @@ async function main() {
         }
       }
       if (T.length) {
-        const barkTex = new THREE.TextureLoader().load('textures/bark.jpg');
-        barkTex.wrapS = barkTex.wrapT = THREE.RepeatWrapping; barkTex.colorSpace = THREE.SRGBColorSpace;
-        const barkN = new THREE.TextureLoader().load('textures/bark_n.jpg');
-        barkN.wrapS = barkN.wrapT = THREE.RepeatWrapping;
+        // LOADED BEFORE THE BAKE (2026-10-01): the impostors photograph the
+        // trees and stones once; a texture still on its way was photographed
+        // black, and every far rock in a desert stayed a black blob
+        const _TL = new THREE.TextureLoader();
+        const [barkTex, barkN, rockTex] = await Promise.all(['textures/bark.jpg', 'textures/bark_n.jpg', 'textures/rock.jpg']
+          .map(u => _TL.loadAsync(u).catch(() => null)));
+        for (const t of [barkTex, barkN, rockTex]) if (t) t.wrapS = t.wrapT = THREE.RepeatWrapping;
+        if (barkTex) barkTex.colorSpace = THREE.SRGBColorSpace;
+        if (rockTex) rockTex.colorSpace = THREE.SRGBColorSpace;
+        const rockN = null;   // stone is triplanar: an icosphere's UVs would scatter a normal map
         // the impostors are lit by this world's own light: a copy of its
         // sun where the sun is, its sky fill and its environment
         const sunB = new THREE.DirectionalLight(pal.sunCol || 0xffffff, pal.sun * 1.12);
@@ -5356,12 +5416,17 @@ async function main() {
           renderer, scene, seed: (SPEC.seed + 31) >>> 0, kinds, leaf, barkTex, barkN,
           lightRig: { lights: [sunB, hemiB], environment: scene.environment, environmentIntensity: scene.environmentIntensity },
           windU: WIND_U, near: FLORA.near, nearCap: FLORA.cap, variants: 3,
+          rockTex, rockN, rockTint: BIO.rockTint, crystalTint: BIO.crystalTint,
+          snow: BIO.snow || (SPEC.world.weather === 'snow' ? 0.6 : 0),
           sunDir: new THREE.Vector3(...pal.sunPos).normalize(),
           sunCol: new THREE.Color(pal.sunCol || 0xffffff).multiplyScalar(pal.sun * 1.12),
           trees: new Float32Array(T), shadows: true,
         });
-        for (const [x, y, z, s] of colliders) {
-          world.createCollider(RAPIER.ColliderDesc.cylinder(1.6 * s, 0.32 * s).setTranslation(x, y + 1.6 * s, z));
+        // each kind is as solid as it is big: [half height, radius] per scale
+        const SOLID = { rock: [0.5, 0.8], boulder: [1.4, 2.2], mesa: [3.2, 4.5], cactus: [2.4, 0.35], crystal: [1.0, 0.7] };
+        for (const [x, y, z, s, kk] of colliders) {
+          const [hh, rr] = SOLID[kk] || [1.6, 0.32];
+          world.createCollider(RAPIER.ColliderDesc.cylinder(hh * s, rr * s).setTranslation(x, y + hh * s, z));
         }
         window.__flora = Object.assign(window.__flora || {}, {
           inner: _floraInner, outer: outerN, total: FLORA_LIVE.count, kinds: kinds.map(k => k.kind),
@@ -7370,10 +7435,18 @@ async function main() {
           tx = pSafe.x + Math.sin(ang) * (pSafe.r + 3.0);
           tz = pSafe.z + Math.cos(ang) * (pSafe.r + 3.0);
         }
+        // EVERY FIGHT IS NOT THE SAME FIGHT (2026-10-01): a hostile with a
+        // role (a brute's telegraphed slam, a skirmisher's quick bites, a
+        // spitter keeping its distance, the boss) runs its own step; one
+        // without (a clone an event spawned) chases and bites as before
+        else if (n.role && typeof window.__roleStep === 'function' && d < (n.role === 'boss' ? 26 : 15)) {
+          const r9 = window.__roleStep(n, d, dt, playerPos);
+          if (r9) { tx = r9[0]; tz = r9[1]; }
+        }
         else if (d < 14 && d > 1.7) { tx = playerPos.x; tz = playerPos.z; }   // chase
         else if (d <= 1.7) {                                                  // attack
           n.cd -= dt;
-          if (n.cd <= 0) { n.cd = 1.2; playerHit(1); }
+          if (n.cd <= 0) { n.cd = 1.2; playerHit(1, n); }
         } else if (!n.target || Math.hypot(n.target[0] - n.obj.position.x, n.target[1] - n.obj.position.z) < 0.6) {
           n.target = [(rngN() - 0.5) * gsize * 0.6, (rngN() - 0.5) * gsize * 0.6];
           tx = n.target[0]; tz = n.target[1];
@@ -8473,6 +8546,8 @@ async function main() {
   addEventListener('keydown', e => {
     if (e.code === 'KeyE') {
       if (reading) { setReading(false); return; }
+      // a chest within reach opens; a shrine sells an upgrade (combat block)
+      if (gameStarted && window.__cbtE && window.__cbtE()) return;
       // a car beats a readable note on the same key: you are standing at a
       // door handle, not a signpost. Hooked through `window` on purpose —
       // this listener is built ~1300 lines before the car system exists.
@@ -8734,6 +8809,8 @@ async function main() {
     // NEW-OBJECTIVE BANNER: every step change announces itself, and any
     // guide in the level re-briefs you on the new one next time you pass.
     banner(stepLabel(st));
+    // a reached objective is where a fall picks up again
+    try { const _pp = body.translation(); window.__cbt.checkpoint = [_pp.x, _pp.z]; } catch (e) {}
     for (const g of npcs) { if (g.behavior === 'guide') g._said = false; }
     if (st.kind === 'collect') { st._got = 0; spawnCollectibles(st); }
     if (st.kind === 'defeat' || st.kind === 'eliminate' || st.kind === 'hunt') { st._k0 = kills; }
@@ -8838,6 +8915,9 @@ async function main() {
     if (k === 'heart') { P.hp = (P.hp || 5) + 1; php += 1; }
     else if (k === 'swift') { P.walk_speed *= 1.12; P.run_speed *= 1.12; }
     else if (k === 'power') { atkDmg += 1; }
+    else if (k in window.__cbt && typeof window.__cbt[k] === 'number') {
+      if (k === 'reachK') window.__cbt.reachK += 0.3; else window.__cbt[k] += 1;
+    }
     _picks.push(k);
     if (!silent) _saveProg();
   }
@@ -8890,14 +8970,29 @@ async function main() {
     const title = document.createElement('div');
     title.style.cssText = 'position:fixed;top:18%;left:50%;transform:translateX(-50%);'
       + 'color:#ffd257;font:800 22px system-ui;text-shadow:0 2px 8px #000';
-    title.textContent = 'LEVEL ' + plvl + ': choose an upgrade';
+    title.textContent = (arguments[0] || ('LEVEL ' + plvl)) + ': choose an upgrade';
     wrap.appendChild(title);
-    wrap.appendChild(mk('❤️', '+1 Heart', 'more health',
-      () => { _applyPick('heart'); renderHearts(); }));
-    wrap.appendChild(mk('⚡', 'Swift', '+12% speed',
-      () => { _applyPick('swift'); }));
-    wrap.appendChild(mk('⚔️', 'Power', '+1 damage',
-      () => { _applyPick('power'); }));
+    // A POOL, NOT THE SAME THREE (2026-10-01): three were the whole tree, so
+    // every run built the same hero. Three of eleven are offered each time;
+    // the rarer ones change how a fight is played, not only its numbers.
+    const POOL = [
+      ['heart', '❤️', '+1 Heart', 'more health'],
+      ['swift', '⚡', 'Swift', '+12% speed'],
+      ['power', '⚔️', 'Power', '+1 damage'],
+      ['vamp', '🩸', 'Vampire', 'every 4th kill heals a heart'],
+      ['crit', '🎯', 'Keen Edge', '1 hit in 5 lands for triple'],
+      ['dash', '💨', 'Quick Feet', 'dodge (R) recovers twice as fast'],
+      ['thorns', '🌵', 'Thorns', 'whatever hurts you is hurt back'],
+      ['second', '✨', 'Second Wind', 'once a level: rise again at 2 hearts'],
+      ['reachK', '📏', 'Long Arm', '+30% reach, faster shots'],
+      ['regen', '🌿', 'Mending', 'a heart back after 20 s out of a fight'],
+      ['greed', '🪙', 'Prospector', '+50% coins'],
+    ].filter(c => ATTACK !== 'none' || !['power', 'crit', 'reachK', 'thorns', 'vamp'].includes(c[0]))
+     .filter(c => c[0] !== 'second' || !window.__cbt.second);
+    for (let i = POOL.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [POOL[i], POOL[j]] = [POOL[j], POOL[i]]; }
+    for (const [k, icon, name, desc] of POOL.slice(0, 3)) {
+      wrap.appendChild(mk(icon, name, desc, () => { _applyPick(k); renderHearts(); }));
+    }
     document.body.appendChild(wrap);
   }
   function renderHearts() {
@@ -9062,7 +9157,31 @@ async function main() {
     } catch (e) {}
     sfx('lose');
     document.getElementById('losetext').textContent = text;
-    try { __KitEnd.show({ title: 'Defeated', text, mood: document.body.dataset.mood, buttons: [{ text: 'retry', onClick: () => location.reload() }] }); }
+    // A FALL IS NOT THE START AGAIN (2026-10-01): when the hero ran out of
+    // hearts (not when a race was lost or a keep fell) the card offers to go
+    // on from the last objective reached, for a quarter of the coins
+    const _cb = window.__cbt;
+    const _canGoOn = php <= 0 && _cb.checkpoint;
+    const _goOn = () => {
+      lost = false;
+      php = maxHp; renderHearts();
+      const [cx, cz] = _cb.checkpoint;
+      body.setTranslation({ x: cx, y: spawnHeight(cx, cz), z: cz }, true);
+      _cb.iframes = 2.5; _cb.blink = 2.5; _cb.usedSecond = false;
+      _cb.coins = Math.floor(_cb.coins * 0.75);
+      if (window.__cbtCoins) window.__cbtCoins();
+      for (const n of npcs) {
+        if (n.dead || n.dormant || n.behavior !== 'hostile') continue;
+        const dx = n.obj.position.x - cx, dz = n.obj.position.z - cz, dd = Math.hypot(dx, dz);
+        if (dd < 12) { n.down = 1.4; n.kx = dx / (dd || 1) * 9; n.kz = dz / (dd || 1) * 9; }
+      }
+      try { __KitEnd.hide(); } catch (e) {}
+      document.getElementById('lose').style.display = 'none';
+      popText('Back on your feet', '#ffe08a');
+    };
+    const _btns = [{ text: 'retry', onClick: () => location.reload() }];
+    if (_canGoOn) _btns.unshift({ text: 'continue from the last objective', onClick: _goOn });
+    try { __KitEnd.show({ title: 'Defeated', text, mood: document.body.dataset.mood, buttons: _btns }); }
     catch (e) { document.getElementById('lose').style.display = 'flex'; }
     console.log('[game] LOSE — ' + text);
   }
@@ -9110,9 +9229,21 @@ async function main() {
       playerHit(1);
     }
   }
-  function playerHit(dmg) {
+  function playerHit(dmg, from) {
     if (won || lost) return;
+    // A HIT GIVES YOU A MOMENT (2026-10-01): a dodge is untouchable, and after
+    // a hit nothing lands for 0.6 s, so a pack cannot drain a full bar in one
+    // breath; whatever bit you pays for it if you took Thorns
+    const cb = window.__cbt;
+    if (cb.iframes > 0) return;
+    cb.iframes = 0.6; cb.blink = 0.6; cb.calm = 0;
+    if (cb.thorns && from && !from.dead && typeof window.__cbtHurt === 'function') window.__cbtHurt(from, cb.thorns);
     php = Math.max(0, php - dmg);
+    if (php <= 0 && cb.second && !cb.usedSecond) {
+      cb.usedSecond = true; php = 2; cb.iframes = 2.0; cb.blink = 2.0;
+      renderHearts(); sfx('win'); popText('Second wind!', '#ffe08a');
+      return;
+    }
     sfx('hurt');
     shakeT = 0.3;                        // impact you can FEEL
     renderHearts();
@@ -10913,7 +11044,11 @@ async function main() {
   }
   function dmgEnemy(n, dmg, quiet) {
     if (n.dead || n.dormant) return;
+    const _cb = window.__cbt;
+    // Keen Edge: one of your own hits in five lands for triple
+    if (!quiet && _cb.crit && Math.random() < 0.2 * _cb.crit) { dmg *= 3; popText('Critical!', '#ffe08a'); }
     n.hp -= dmg;
+    if (n.role === 'boss' && typeof window.__bossHit === 'function') window.__bossHit(n);
     // a tower firing twice a second must not freeze the world each time: the
     // flinch and the rumble belong to the player's own hits
     if (!quiet) { window.__hitStop = 0.08; rumble(80, 0.7); }
@@ -10924,6 +11059,7 @@ async function main() {
     if (n.hp <= 0) {
       n.dead = true; kills++; sfx('hit');
       if (window.__defend) window.__defend.paid(n, !!quiet);
+      if (typeof window.__cbtKill === 'function') window.__cbtKill(n);
       if (!quiet) {
         juiceSlow = Math.max(juiceSlow, 0.32 * FEEL.slow);
         juicePunch = Math.max(juicePunch, 0.5 * FEEL.punch);
@@ -10970,12 +11106,14 @@ async function main() {
     // the SPEC picked once at build time — so in a melee-cast game choosing
     // the pistol still ran a sword swing and nothing left the barrel. The
     // arsenal decides what F does; ATTACK only decides whether F exists.
-    const _isRanged = WPN.id === 'pistol';
+    // (2026-10-01: the branch below still read ATTACK, so this was computed and
+    // ignored. The first slot is a bow or guns in a game cast as ranged.)
+    const _isRanged = WPN.id === 'pistol' || (WPN.id === 'blade' && ATTACK === 'ranged');
     // AIM ASSIST: swings snap toward the marked target — you committed to
     // the attack, the game commits to the hit (reach was 2.3m and the angle
     // check punished honest inputs; now 3.2m + auto-face)
     if (!_isRanged) {
-      const tn = nearestHostile(MELEE_REACH);
+      const tn = nearestHostile(MELEE_REACH * window.__cbt.reachK);
       if (tn) {
         modelYaw = Math.atan2(tn.obj.position.x - playerObj.position.x,
                               tn.obj.position.z - playerObj.position.z);
@@ -10991,14 +11129,14 @@ async function main() {
     }
     playAttackAnim();                          // the actual katana/claw motion
     const dir = new THREE.Vector3(Math.sin(modelYaw), 0, Math.cos(modelYaw));
-    if (ATTACK === 'ranged') {
+    if (_isRanged) {
       const m = projPool.find(pm => !pm.visible)
         || projPool[0];                        // spam beyond 6: reuse the oldest
       m.visible = true;
       m.position.copy(playerObj.position).add(new THREE.Vector3(0, P.height_m * 0.6, 0))
         .add(dir.clone().multiplyScalar(0.5));
       projLight.intensity = 1.6;               // one shared glow tracks the newest shot
-      projectiles.push({ mesh: m, vel: dir.clone().multiplyScalar(24), life: 2 });
+      projectiles.push({ mesh: m, vel: dir.clone().multiplyScalar(24 * (1 + (window.__cbt.reachK - 1))), life: 2 });
     } else {
       // melee: damage lands MID-SWING (180ms in) so the hit matches the motion
       setTimeout(() => {
@@ -11013,7 +11151,7 @@ async function main() {
           const dx = n.obj.position.x - playerObj.position.x;
           const dz = n.obj.position.z - playerObj.position.z;
           const d = Math.hypot(dx, dz);
-          if (d > MELEE_REACH) continue;
+          if (d > MELEE_REACH * window.__cbt.reachK * Math.max(1, (n._sizeK || 1) * 0.8)) continue;   // a big body is reached sooner
           let a = Math.atan2(dx, dz) - modelYaw;
           while (a > Math.PI) a -= 2 * Math.PI;
           while (a < -Math.PI) a += 2 * Math.PI;
@@ -11169,7 +11307,313 @@ async function main() {
                       (gp.buttons[7] && gp.buttons[7].pressed);     // RT / R2
       if (pressed && !gpAtkHeld) doAttack();
       gpAtkHeld = pressed;
+      const dodgeB = !!(gp.buttons[1] && gp.buttons[1].pressed);   // B / Circle
+      if (dodgeB && !window.__cbt._gpB && window.__cbtDodge) window.__cbtDodge();
+      window.__cbt._gpB = dodgeB;
     }
+  }
+
+  // ── COMBAT DEPTH (2026-10-01) ─────────────────────────────────────────
+  // The owner asked for games with more to them. Every hostile walked up and
+  // bit for one heart; the hero could only swing back. Now: a dodge with a
+  // moment of safety in it; four kinds of enemy that each ask for a different
+  // answer (a brute's slam is telegraphed and can be stepped out of, a
+  // spitter keeps its distance and has to be chased down or out-dodged, a
+  // skirmisher is quick and frail); a boss with a bar and a second wind of
+  // its own; chests worth opening, some hidden off the path; coins that buy
+  // upgrades at a shrine. Everything hangs off window.__cbt (see its note).
+  {
+    const CB = window.__cbt;
+    const _hostileNow = () => npcs.filter(n => n.behavior === 'hostile' && !n.dead);
+    // the dodge
+    window.__cbtDodge = () => {
+      if (!gameStarted || won || lost || DRIVING || downT > 0) return false;
+      if ((SPEC.player.mode || 'walk') !== 'walk' || CB.dodgeCd > 0 || CB.dodgeT > 0) return false;
+      let dx = _wdir.x, dz = _wdir.z;
+      if (walkV < 0.3 || Math.hypot(dx, dz) < 0.1) { dx = Math.sin(modelYaw); dz = Math.cos(modelYaw); }
+      const l = Math.hypot(dx, dz) || 1;
+      CB.dx = dx / l; CB.dz = dz / l;
+      CB.dodgeT = CB.dodgeDur; CB.iframes = Math.max(CB.iframes, 0.34);
+      CB.dodgeCd = 0.85 / (1 + CB.dash);
+      sfx('step');
+      try { const p0 = playerObj.position; puffDust(p0.x, p0.y, p0.z); } catch (e) {}
+      return true;
+    };
+    addEventListener('keydown', e => { if (e.code === 'KeyR' && gameStarted) { e.preventDefault(); window.__cbtDodge(); } });
+    {
+      const hintD = document.querySelector('#hud .hint');
+      if (hintD && (SPEC.player.mode || 'walk') === 'walk' && SPEC.entities && SPEC.entities.some(e => e.behavior === 'hostile')) hintD.textContent += ' · R dodge';
+    }
+    // coins on the HUD
+    const coinEl = document.createElement('div');
+    coinEl.id = 'fscoins';
+    coinEl.style.cssText = 'position:fixed;right:14px;top:30px;z-index:5;font:700 14px var(--f-mono);color:var(--fs-gold);'
+      + 'text-shadow:0 1px 4px rgba(0,0,0,.8);display:none;transition:transform .15s';
+    document.body.appendChild(coinEl);
+    window.__cbtCoins = (gain) => {
+      coinEl.style.display = 'block';
+      coinEl.textContent = '🪙 ' + CB.coins;
+      if (gain) { coinEl.style.transform = 'scale(1.35)'; setTimeout(() => { coinEl.style.transform = 'scale(1)'; }, 150); }
+    };
+    const addCoins = (n) => { const g = Math.round(n * (1 + 0.5 * CB.greed)); CB.coins += g; window.__cbtCoins(g); };
+    // spitter orbs: pooled, glowing, slow enough to see and step out of
+    const orbs = [];
+    const orbMat = new THREE.MeshBasicMaterial({ color: 0xb6ff5a, toneMapped: false });
+    for (let i = 0; i < 12; i++) {
+      const m = new THREE.Mesh(new THREE.SphereGeometry(0.2, 10, 8), orbMat);
+      m.visible = false; m.userData.noAutoTex = true; scene.add(m);
+      orbs.push({ m, vx: 0, vy: 0, vz: 0, life: 0 });
+    }
+    const fireOrb = (n, pp, spread = 0) => {
+      const o = orbs.find(q => q.life <= 0) || orbs[0];
+      const sx = n.obj.position.x, sy = n.obj.position.y + 1.2 * (n._sizeK || 1), sz = n.obj.position.z;
+      let dx = pp.x - sx, dz = pp.z - sz;
+      const dd = Math.hypot(dx, dz) || 1;
+      const a = Math.atan2(dx, dz) + spread;
+      const spd = 10.5;
+      o.m.position.set(sx, sy, sz); o.m.visible = true;
+      o.vx = Math.sin(a) * spd; o.vz = Math.cos(a) * spd;
+      o.vy = ((pp.y + 1.0) - sy) / (dd / spd);
+      o.life = 2.6;
+      sfx('attack');
+    };
+    // the brute's ground ring: where the slam will land
+    const ringGeo = new THREE.RingGeometry(0.86, 1.0, 40); ringGeo.rotateX(-Math.PI / 2);
+    const ringFor = (n) => {
+      if (!n._ring) {
+        n._ring = new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({ color: 0xff3a2a, transparent: true, opacity: 0, depthWrite: false, toneMapped: false }));
+        n._ring.userData.noAutoTex = true; n._ring.renderOrder = 4; scene.add(n._ring);
+      }
+      return n._ring;
+    };
+    const tint = (n, k) => {
+      for (const m of n.mats || []) {
+        if (!m.emissive) continue;
+        if (!m.userData._e0) m.userData._e0 = m.emissive.clone();
+        m.emissive.copy(m.userData._e0).lerp(new THREE.Color(0.95, 0.12, 0.04), k);
+      }
+    };
+    window.__cbtHurt = (n, amt) => { dmgEnemy(n, amt, true); };
+    // what each kind does once it has seen you
+    window.__roleStep = (n, d, dt, pp) => {
+      const role = n.role;
+      n.cd = (n.cd || 0) - dt;
+      if (role === 'brute' || role === 'boss') {
+        const R0 = role === 'boss' ? 3.9 : 2.9;
+        if (n._wind > 0) {
+          n._wind -= dt;
+          const k = 1 - Math.max(0, n._wind) / n._windDur;
+          tint(n, k);
+          const r = ringFor(n);
+          r.position.set(n.obj.position.x, hAt(n.obj.position.x, n.obj.position.z) + 0.06, n.obj.position.z);
+          r.scale.setScalar(R0 * (0.3 + 0.7 * k)); r.material.opacity = 0.25 + 0.55 * k;
+          if (n._wind <= 0) {
+            const dd = Math.hypot(pp.x - n.obj.position.x, pp.z - n.obj.position.z);
+            if (dd < R0) playerHit(2, n);
+            shakeT = Math.max(shakeT, role === 'boss' ? 0.5 : 0.32);
+            burst(n.obj.position.clone().add(new THREE.Vector3(0, 0.3, 0)), 0xffa060);
+            sfx('hit');
+            tint(n, 0); r.material.opacity = 0;
+            n.cd = role === 'boss' ? (n._enr ? 1.3 : 1.9) : 2.4;
+          }
+          return null;                       // planted for the wind-up: the moment to step away
+        }
+        if (d < R0 * 0.8 && n.cd <= 0) {
+          n._windDur = role === 'boss' ? (n._enr ? 0.55 : 0.75) : 0.85;
+          n._wind = n._windDur;
+          return null;
+        }
+        if (role === 'boss' && n._enr) {
+          n._vol = (n._vol || 0) - dt;
+          if (d > 6 && n._vol <= 0) { fireOrb(n, pp, -0.25); fireOrb(n, pp, 0); fireOrb(n, pp, 0.25); n._vol = 3.0; }
+        }
+        return d > 1.5 ? [pp.x, pp.z] : null;
+      }
+      if (role === 'spitter') {
+        if (n._wind > 0) {
+          n._wind -= dt;
+          tint(n, 1 - Math.max(0, n._wind) / n._windDur);
+          if (n._wind <= 0) { tint(n, 0); fireOrb(n, pp); n.cd = 2.6; }
+          return null;
+        }
+        if (d < 14 && d > 3 && n.cd <= 0) { n._windDur = n._wind = 0.55; return null; }
+        const ox = n.obj.position.x, oz = n.obj.position.z;
+        if (d < 6.5) return [ox + (ox - pp.x), oz + (oz - pp.z)];          // backs off
+        if (d > 12) return [pp.x, pp.z];
+        const a = Math.atan2(ox - pp.x, oz - pp.z) + 0.7;                    // circles at range
+        return [pp.x + Math.sin(a) * 9, pp.z + Math.cos(a) * 9];
+      }
+      // grunt and skirmisher: close in and bite
+      if (d > 1.7) return [pp.x, pp.z];
+      if (n.cd <= 0) { n.cd = role === 'skirmisher' ? 0.8 : 1.2; playerHit(1, n); }
+      return null;
+    };
+    // the boss's bar
+    const bossEl = document.createElement('div');
+    bossEl.id = 'fsboss';
+    bossEl.style.cssText = 'position:fixed;left:50%;top:78px;transform:translateX(-50%);z-index:6;width:min(460px,70vw);'
+      + 'display:none;text-align:center;pointer-events:none';
+    bossEl.innerHTML = '<div id="fsbossname" style="font:700 13px var(--f-head);letter-spacing:.14em;text-transform:uppercase;color:var(--tcol);'
+      + 'text-shadow:0 2px 8px rgba(0,0,0,.8);margin-bottom:4px"></div>'
+      + '<div style="height:8px;background:rgba(0,0,0,.55);border:1px solid rgba(255,255,255,.25);border-radius:4px;overflow:hidden">'
+      + '<i id="fsbossfill" style="display:block;height:100%;width:100%;background:linear-gradient(90deg,#c21d1d,#ff6a3a);transition:width .2s"></i></div>';
+    document.body.appendChild(bossEl);
+    window.__bossHit = (n) => {
+      document.getElementById('fsbossfill').style.width = Math.max(0, n.hp / n._maxHp * 100) + '%';
+      if (!n._enr && n.hp > 0 && n.hp <= n._maxHp * 0.5) {
+        n._enr = true; n.speed *= 1.3;
+        banner(n.name + ' is enraged', 'the fight turns');
+        shakeT = Math.max(shakeT, 0.4);
+      }
+    };
+    window.__cbtKill = (n) => {
+      CB.kills++;
+      if (n._ring) n._ring.material.opacity = 0;
+      const pay = { boss: 40, brute: 6, spitter: 4, skirmisher: 2 }[n.role] || 3;
+      addCoins(pay);
+      if (CB.vamp && CB.kills % Math.max(1, 5 - CB.vamp) === 0 && php < maxHp) { php++; renderHearts(); popText('+1 ♥', '#ff8fa0'); }
+      if (n.role === 'boss') {
+        bossEl.style.display = 'none';
+        banner(n.name + ' falls', 'boss defeated');
+        window.__slowMo = 0.8;
+        for (let k = 0; k < 4; k++) setTimeout(() => burst(n.obj.position.clone().add(new THREE.Vector3((Math.random() - 0.5) * 2, 1 + Math.random() * 2, (Math.random() - 0.5) * 2)), 0xffd257), k * 120);
+      }
+    };
+    // chests: the spec's own, and a few hidden off the path in open worlds
+    const chests = [];
+    for (const p of placedItems) if ((p.it.kind || '').toLowerCase() === 'chest') chests.push({ obj: p.obj, x: p.it.x, z: p.it.z, open: false });
+    if (!INTERIOR && !OSM && LVL && typeof procProp === 'function') {
+      const rC = mulberry32(SPEC.seed + 4040);
+      const want = Math.min(5, 2 + Math.floor(gsize / 100));
+      for (let t = 0, placed = 0; t < 400 && placed < want; t++) {
+        const x = (rC() - 0.5) * gsize * 0.88, z = (rC() - 0.5) * gsize * 0.88;
+        if (Math.hypot(x - _sp.x, z - _sp.z) < 28) continue;
+        try { if (pathDist(x, z) < 10) continue; } catch (e) {}
+        const reg = (LVL.regions && window.__regionAt) ? window.__regionAt(x, z) : null;
+        if (reg && (reg.kind === 'water' || reg.kind === 'village')) continue;
+        if (chests.some(c => Math.hypot(c.x - x, c.z - z) < 30)) continue;
+        try {
+          const pc = procProp('chest');
+          pc.g.position.set(x, hAt(x, z), z); pc.g.rotation.y = rC() * Math.PI * 2;
+          pc.g.traverse(o => { if (o.isMesh) { o.castShadow = true; o.userData.noAutoTex = true; } });
+          scene.add(pc.g);
+          chests.push({ obj: pc.g, x, z, open: false, hidden: true });
+          placed++;
+        } catch (e) { break; }
+      }
+    }
+    const shrines = (LVL && LVL.pois ? LVL.pois : []).filter(p => ['shrine', 'circle', 'camp', 'ruin'].includes(p.kind)).map(p => ({ x: p.x, z: p.z }));
+    const promptEl = document.createElement('div');
+    promptEl.style.cssText = 'position:fixed;left:50%;bottom:150px;transform:translateX(-50%);z-index:23;font:600 13px var(--f-ui);'
+      + 'color:var(--fs-gold);background:rgba(10,9,18,.72);border-radius:9px;padding:5px 12px;display:none;pointer-events:none';
+    document.body.appendChild(promptEl);
+    let near = null;
+    const openChest = (c) => {
+      c.open = true;
+      sfx('pickup');
+      burst(new THREE.Vector3(c.x, hAt(c.x, c.z) + 0.8, c.z), 0xffd257);
+      c.obj.traverse(o => { if (o.isMesh && o.material && o.material.color) { o.material = o.material.clone(); o.material.color.multiplyScalar(0.55); } });
+      const r = Math.random();
+      addCoins(c.hidden ? 18 + Math.floor(r * 18) : 8 + Math.floor(r * 10));
+      if (r < 0.35 && php < maxHp) { php++; renderHearts(); popText('+1 ♥ and coins', '#ffd257'); }
+      else if (r > 0.82) { popText('A relic inside!', '#ffe08a'); levelCard('A RELIC'); }
+      else popText(c.hidden ? 'A hidden cache!' : 'Coins!', '#ffd257');
+    };
+    window.__cbtE = () => {
+      if (!near) return false;
+      if (near.kind === 'chest') { openChest(near.c); near = null; return true; }
+      if (near.kind === 'shrine') {
+        if (CB.coins < CB.shopCost) { popText(`An offering of ${CB.shopCost} coins is asked`, '#ffb3a0'); return true; }
+        CB.coins -= CB.shopCost; window.__cbtCoins();
+        CB.shopCost += 25;
+        levelCard('THE SHRINE');
+        return true;
+      }
+      return false;
+    };
+    let assigned = false;
+    window.__cbtStep = (dt) => {
+      if (!gameStarted) return;
+      if (!assigned) {
+        assigned = true;
+        CB.checkpoint = CB.checkpoint || [_sp.x, _sp.z];
+        // roles: a deterministic mix, so a sentence always plays the same
+        const hs = npcs.filter(n => n.behavior === 'hostile' && !n._route && !HAS_BR);
+        const cyc = ['grunt', 'brute', 'skirmisher', 'spitter', 'grunt'];   // a pack of three already has three kinds
+        hs.forEach((n, i) => {
+          let role = cyc[i % cyc.length];
+          if (role === 'spitter' && n.quad) role = 'skirmisher';    // a wolf does not spit
+          n.role = role;
+          n.hp = n.hp || 1;
+          if (role === 'brute') { n._sizeK = 1.3; n.obj.scale.multiplyScalar(1.3); n.hp = Math.max(4, n.hp * 3); n.speed *= 0.75; }
+          if (role === 'skirmisher') { n.hp = Math.max(1, Math.round(n.hp * 0.6)); n.speed *= 1.35; }
+        });
+        // the boss: where the sentence asks for a fight, the one furthest out
+        const fightStep = steps.some(s => ['defeat', 'eliminate', 'hunt'].includes(s.kind));
+        const awake = hs.filter(n => !n.dormant);
+        if (awake.length && (fightStep || awake.length >= 4)) {
+          let b = awake[0], bd = -1;
+          for (const n of awake) { const dd = Math.hypot(n.obj.position.x - _sp.x, n.obj.position.z - _sp.z); if (dd > bd) { bd = dd; b = n; } }
+          b.role = 'boss';
+          b.obj.scale.multiplyScalar(1.75 / (b._sizeK || 1)); b._sizeK = 1.75;
+          b.hp = Math.max(14, (b.hp || 1) * 8); b._maxHp = b.hp; b.speed = (b.speed || 2) * 0.95;
+          b.name = 'Alpha ' + String(b.name || 'beast').replace(/^an? /i, '');
+          CB.boss = b;
+          document.getElementById('fsbossname').textContent = b.name;
+        }
+        CB.roles = hs.map(n => n.role);
+        CB.chests = chests.length;
+        if (chests.some(c => c.hidden)) setTimeout(() => popText('Somewhere off the path: hidden caches', '#ffd257'), 6000);
+      }
+      CB.iframes = Math.max(0, CB.iframes - dt);
+      CB.dodgeCd = Math.max(0, CB.dodgeCd - dt);
+      // the hurt flash: a pulse of light on the hero, not a blink out of
+      // sight (a hidden hero is a hole in the picture, and in the gate's)
+      if (CB.blink > 0 || CB._flashOn) {
+        if (!CB._pm) {
+          CB._pm = [];
+          playerObj.traverse(o => { if (o.isMesh) for (const m of [].concat(o.material)) if (m && m.emissive) CB._pm.push([m, m.emissive.clone()]); });
+        }
+        CB.blink = Math.max(0, CB.blink - dt);
+        const on = CB.blink > 0;
+        const k = on ? 0.18 + 0.18 * Math.sin(performance.now() / 45) : 0;
+        for (const [m, e0] of CB._pm) m.emissive.copy(e0).addScalar(k);
+        CB._flashOn = on;
+      }
+      // Mending
+      CB.calm += dt;
+      if (CB.regen && CB.calm > 20 / CB.regen && php < maxHp && !won && !lost) { php++; renderHearts(); CB.calm = 0; popText('+1 ♥', '#8de06c'); }
+      // orbs
+      const pp = playerObj.position;
+      for (const o of orbs) {
+        if (o.life <= 0) continue;
+        o.life -= dt;
+        o.vy -= 2.5 * dt;
+        o.m.position.x += o.vx * dt; o.m.position.y += o.vy * dt; o.m.position.z += o.vz * dt;
+        const hit = Math.hypot(o.m.position.x - pp.x, o.m.position.z - pp.z) < 0.75 && Math.abs(o.m.position.y - (pp.y + 1.0)) < 1.1;
+        if (hit) { playerHit(1); o.life = 0; burst(o.m.position.clone(), 0xb6ff5a); }
+        if (o.life <= 0 || o.m.position.y < hAt(o.m.position.x, o.m.position.z)) { o.life = 0; o.m.visible = false; }
+      }
+      // the boss bar shows when the boss is near
+      if (CB.boss && !CB.boss.dead) {
+        const bd2 = Math.hypot(CB.boss.obj.position.x - pp.x, CB.boss.obj.position.z - pp.z);
+        bossEl.style.display = bd2 < 30 ? 'block' : 'none';
+        if (bd2 < 30 && !CB._bossSeen) { CB._bossSeen = true; banner(CB.boss.name, 'a boss'); }
+      }
+      // what is within reach: a closed chest, or a shrine to buy at
+      near = null;
+      for (const c of chests) {
+        if (c.open) continue;
+        if (Math.hypot(c.x - pp.x, c.z - pp.z) < 2.4) { near = { kind: 'chest', c }; break; }
+      }
+      if (!near && CB.coins > 0) {
+        for (const s of shrines) if (Math.hypot(s.x - pp.x, s.z - pp.z) < 5) { near = { kind: 'shrine', s }; break; }
+      }
+      if (near) {
+        promptEl.style.display = 'block';
+        promptEl.textContent = near.kind === 'chest' ? 'E: open the chest' : `E: make an offering (${CB.shopCost} coins) for an upgrade`;
+      } else promptEl.style.display = 'none';
+    };
   }
 
   // exposed for the verify harness (synthetic input, position probes, dev teleport)
@@ -13458,6 +13902,7 @@ varying vec2 vUvRaw;
     else if (window.__slowMo > 0) { window.__slowMo -= dt; dt *= 0.35; }
     WIND_U.value = performance.now() / 1000;   // wind clock (Phase 81)
     if (FLORA_LIVE) FLORA_LIVE.update(camera);  // which trees are near enough to be trees
+    if (window.__cbtStep) window.__cbtStep(dt);
     __fmTick(rdt);                             // the guide, on real time
     for (const w of wheels) {                  // roll with speed, steer in front
       w.tire.rotation.x += ((window.__pSpeed || 0) / w.wr) * dt;
@@ -13639,6 +14084,19 @@ varying vec2 vUvRaw;
       speed = walkV;
       var desired = { x: _wdir.x * walkV * dt, y: vy * dt,
                       z: _wdir.z * walkV * dt };
+      // THE DODGE (R / pad B, 2026-10-01): a quick burst along the stick, or
+      // the facing when idle, untouchable for most of it; the walk resumes
+      // from rest, so a dodge is a commitment, not free speed
+      if (window.__cbt.dodgeT > 0) {
+        const cb = window.__cbt;
+        cb.dodgeT -= dt;
+        const k = Math.max(0, cb.dodgeT) / cb.dodgeDur;
+        const sp = 12.5 * (0.35 + 0.65 * k);
+        desired.x = cb.dx * sp * dt; desired.z = cb.dz * sp * dt;
+        modelYaw = Math.atan2(cb.dx, cb.dz);
+        holder.rotation.x = 0.42 * Math.sin(Math.PI * (1 - k));
+        walkV = 0;
+      }
       if (VIEW === 'side') {              // hold the hero on the gameplay lane
         desired.z = (0 - body.translation().z) * Math.min(6 * dt, 1);
       }
@@ -14369,8 +14827,9 @@ varying vec2 vUvRaw;
       for (const n of npcs) {
         // Phase 68: prey ('flee') is shootable — hunting needs a kill
         if (!(n.behavior === 'hostile' || n.behavior === 'flee' || n.behavior === 'guard') || n.dead) continue;
-        const dd = pr.mesh.position.distanceTo(n.obj.position.clone().add(new THREE.Vector3(0, 0.5, 0)));
-        if (dd < 0.9) { dmgEnemy(n, atkDmg); hit = true; break; }
+        const _big = n._sizeK || 1;   // a brute or a boss is a bigger target, centred higher
+        const dd = pr.mesh.position.distanceTo(n.obj.position.clone().add(new THREE.Vector3(0, 0.5 * _big, 0)));
+        if (dd < 0.9 * _big) { dmgEnemy(n, atkDmg); hit = true; break; }
       }
       if (hit || pr.life <= 0 || pr.mesh.position.y < hAt(pr.mesh.position.x, pr.mesh.position.z) - 0.2) {
         pr.mesh.visible = false;               // back to the pool
