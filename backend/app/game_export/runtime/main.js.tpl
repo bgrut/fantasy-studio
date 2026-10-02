@@ -17,6 +17,7 @@ import { OutputPass } from './vendor/jsm/postprocessing/OutputPass.js';
 import RAPIER from './vendor/rapier.es.js';
 import { buildCarHQ as __buildCarHQ } from './proc/car.js';
 import * as __FLORA from './proc/flora.js';
+import * as __GRASS from './proc/grass.js';
 
 const SPEC = __GAME_SPEC__;
 
@@ -475,6 +476,7 @@ async function main() {
   // the planted forest and how many of its trees stand in the playfield;
   // declared up here, before the render loop that reads them can start
   let FLORA_LIVE = null, _floraInner = 0;
+  let GRASS_LIVE = null;            // the grass field that travels with the camera
   // COMBAT STATE (2026-10-01): on window, not in a let, because playerHit,
   // stepNPCs and the upgrade cards are all declared thousands of lines before
   // the combat block that drives them, and a let read early is a black page
@@ -1276,7 +1278,7 @@ async function main() {
   // lawn green, and the ripple texture the word "beach" picks came out as
   // green dunes; on a beach the ground is pulled most of the way to sand
   if (FLORA && FLORA.biome && FLORA.biome.island && /beach|sand|shore|castaway|driftwood/.test(FLORA.words || ''))
-    gcol.lerp(new THREE.Color(0xd2bd92), 0.88);
+    gcol.lerp(new THREE.Color(0xe2d5b4), 0.9);
   // 2048 for ANY level (2026-08-25): nature worlds ran 1024 over 220m+ —
   // ~4.7 px/m, the giant green blur behind every 'looks like 2003' read.
   const TEXN = LVL ? 2048 : 256;
@@ -3771,7 +3773,10 @@ async function main() {
         // building's tint (a shade lighter, the way real stone trim sits
         // against brick), so the courses belong to the wall they grow out of.
         const stoneM = new THREE.MeshStandardMaterial({ color: 0xffffff,
-          roughness: 0.95, metalness: 0.02 });
+          roughness: 0.78, metalness: 0.02 });
+        // dressed stone, not fieldstone: the auto-texture pass gave every
+        // course and plinth the rubble photo, so trim read as dry-stone walling
+        stoneM.userData.noAutoTex = true;
         const finM = new THREE.MeshStandardMaterial({ color: 0xffffff,
           roughness: 0.42, metalness: 0.72 });
         const U1 = new THREE.BoxGeometry(1, 1, 1);
@@ -3803,7 +3808,11 @@ async function main() {
           // full-height plinth boarded the shopfronts up and the street lost
           // its ground floor. Real buildings have a water table around knee
           // to waist height and glass above it.
-          const PB = _FACADE[bkt7] ? 1.05 : Math.min(Math.max(stH, 3.2), 5.5);
+          // ...and a glass tower's ground floor is its lobby (2026-10-02): a
+          // storey-high plinth under every curtain wall read from the street
+          // as a rubble wall a car's height, a fence along the kerb. Towers
+          // stand on a low granite base and their glazing runs down to it.
+          const PB = glassy ? 0.55 : _FACADE[bkt7] ? 1.05 : Math.min(Math.max(stH * 0.45, 1.2), 1.8);
           let ccx = 0, ccz = 0;
           for (const q of pts) { ccx += q[0]; ccz += q[1]; }
           ccx /= pts.length; ccz /= pts.length;
@@ -4988,7 +4997,32 @@ async function main() {
           }
         }
         if (roadGeos.length) {
-          const at = new THREE.TextureLoader().load('textures/asphalt.jpg');
+          // ASPHALT IS AGGREGATE (2026-10-02): the photo was a crazed, cracked
+          // surface whose cracks, tiled every five metres, made every street
+          // read as dried mud. A road is fine stone in tar: drawn here, grain
+          // by grain, with the odd darker patch where it has been repaired.
+          const at = (() => {
+            const S = 1024, cv = document.createElement('canvas'); cv.width = cv.height = S;
+            const x = cv.getContext('2d'), ra = mulberry32(SPEC.seed + 4040);
+            x.fillStyle = '#7d7f84'; x.fillRect(0, 0, S, S);
+            for (let i = 0; i < 9; i++) {            // repairs and wear, soft and wide
+              const cx = ra() * S, cy = ra() * S, r = 60 + ra() * 180;
+              const gr = x.createRadialGradient(cx, cy, 0, cx, cy, r);
+              const a = 0.05 + ra() * 0.08;
+              gr.addColorStop(0, `rgba(20,20,24,${a})`); gr.addColorStop(1, 'rgba(20,20,24,0)');
+              x.fillStyle = gr; x.fillRect(cx - r, cy - r, r * 2, r * 2);
+            }
+            const img = x.getImageData(0, 0, S, S), d = img.data;
+            for (let i = 0; i < d.length; i += 4) {   // the aggregate: every pixel a little different
+              const n = (ra() - 0.5) * 34 + (ra() < 0.05 ? (ra() - 0.3) * 70 : 0);
+              d[i] = Math.max(0, Math.min(255, d[i] + n));
+              d[i + 1] = Math.max(0, Math.min(255, d[i + 1] + n));
+              d[i + 2] = Math.max(0, Math.min(255, d[i + 2] + n * 1.05));
+            }
+            x.putImageData(img, 0, 0);
+            const t = new THREE.CanvasTexture(cv);
+            return t;
+          })();
           at.wrapS = at.wrapT = THREE.RepeatWrapping;
           at.colorSpace = THREE.SRGBColorSpace;
           at.anisotropy = renderer.capabilities.getMaxAnisotropy();
@@ -5242,9 +5276,51 @@ async function main() {
       if (['night', 'dusk', 'sunset'].includes(SPEC.world.sky)) {
         const rngNe = mulberry32(SPEC.seed + 606);
         const neonCols = [0xff3d7a, 0x35d0ff, 0xffd23d, 0x7cff4a, 0xc86bff];
-        const NEON_WORDS = ['BAR', 'HOTEL', 'LIQUOR', 'OPEN', 'PIZZA', 'DINER',
-          'JAZZ', 'TATTOO', 'PAWN', 'MOTEL', 'COFFEE', 'DELI', 'BOOKS', 'LAUNDRY'];
+        // A NEON CITY IS SIGNS ALL THE WAY UP (2026-10-02): "Tokyo drift through
+        // neon streets" got a handful of plates on the few shop buildings; the
+        // towers that make up such a district stood dark to the kerb. Where the
+        // sentence names a neon city every building may carry signs, most of
+        // them projecting blades at different heights, and its towers wear
+        // light lines up their corners (below).
+        const _nw9 = [SPEC.prompt, SPEC.title, SPEC.world && SPEC.world.name].filter(Boolean).join(' ').toLowerCase();
+        const _neonCity = /tokyo|japan|shinjuku|shibuya|akihabara|osaka|kyoto|neon|cyber|seoul|hong kong|kowloon|vegas|night market|blade runner/.test(_nw9);
+        const _jp = /tokyo|japan|shinjuku|shibuya|akihabara|osaka|kyoto/.test(_nw9);
+        const NEON_WORDS = _jp
+          ? ['\u30e9\u30fc\u30e1\u30f3', '\u30ab\u30e9\u30aa\u30b1', '\u30db\u30c6\u30eb', '\u5bff\u53f8', '\u5c45\u9152\u5c4b', '\u30b2\u30fc\u30e0',
+             'BAR', '24H', 'RAMEN', 'KARAOKE', '\u55ab\u8336', 'HOTEL', 'GAME', '\u85ac']
+          : ['BAR', 'HOTEL', 'LIQUOR', 'OPEN', 'PIZZA', 'DINER',
+             'JAZZ', 'TATTOO', 'PAWN', 'MOTEL', 'COFFEE', 'DELI', 'BOOKS', 'LAUNDRY'];
         let placedN = 0;
+        // ONE DRAW FOR EVERY SIGN (2026-10-02): each sign was its own mesh,
+        // texture and material (two for a blade), so a neon district of a
+        // hundred signs doubled the city's draw calls. Every sign face is
+        // painted into one atlas and every quad merged into one mesh.
+        const SG_CELL = 256, SG_N = 12;
+        const sgAtlas = document.createElement('canvas');
+        sgAtlas.width = sgAtlas.height = SG_CELL * SG_N;
+        const sgA = sgAtlas.getContext('2d');
+        sgA.fillStyle = '#0c0c11'; sgA.fillRect(0, 0, sgAtlas.width, sgAtlas.height);
+        const sgGeos = [];
+        let sgCell = 0;
+        // paint a sign canvas into the next cell; returns its uv rect
+        const sgPaint = (cn) => {
+          const i = sgCell++, cx = (i % SG_N) * SG_CELL, cy = Math.floor(i / SG_N) * SG_CELL;
+          const k = Math.min(SG_CELL / cn.width, SG_CELL / cn.height);
+          const w = cn.width * k, h = cn.height * k;
+          sgA.drawImage(cn, cx, cy, w, h);
+          const A = sgAtlas.width;
+          return [cx / A, 1 - (cy + h) / A, (cx + w) / A, 1 - cy / A];
+        };
+        const sgPush = (mesh, uvr) => {
+          mesh.updateMatrixWorld(true);
+          const g = mesh.geometry.clone().toNonIndexed();
+          const uv = g.attributes.uv;
+          for (let q = 0; q < uv.count; q++) {
+            uv.setXY(q, uvr[0] + uv.getX(q) * (uvr[2] - uvr[0]), uvr[1] + uv.getY(q) * (uvr[3] - uvr[1]));
+          }
+          g.applyMatrix4(mesh.matrixWorld);
+          sgGeos.push(g);
+        };
         // 2026-08-06: these were placed on BOUNDING-BOX faces, so on every
         // building whose footprint is not an axis-aligned rectangle the sign
         // hung in mid-air over the street — a 10m magenta slab floating in
@@ -5252,21 +5328,28 @@ async function main() {
         // Same edge picker as everything else that hangs on a facade.
         // ...and the same built-buildings-only rule: the edge picker cannot
         // save a sign whose building does not exist. (2026-08-06)
-        for (const [b3pts, , , , , , , , , prog3n] of feCand) {
+        for (const [b3pts, , , , b3h, , , , , prog3n] of feCand) {
           const b3 = { pts: b3pts };
-          if (placedN >= 36) break;
-          if (!prog3n) continue;                   // no shopfront here
-          if (rngNe() < 0.45) continue;
+          if (placedN >= (_neonCity ? 110 : 36) || sgCell >= SG_N * SG_N) break;
+          if (!prog3n && !_neonCity) continue;     // no shopfront here
+          if (rngNe() < (_neonCity ? 0.08 : 0.45)) continue;
           let n3x = 1e9, n3z = 1e9, x3x = -1e9, x3z = -1e9;
           for (const q of b3.pts) {
             n3x = Math.min(n3x, q[0]); x3x = Math.max(x3x, q[0]);
             n3z = Math.min(n3z, q[1]); x3z = Math.max(x3z, q[1]);
           }
           const c3x = (n3x + x3x) / 2, c3z = (n3z + x3z) / 2;
+          // the nearest point on any road SEGMENT, not the nearest road vertex:
+          // a district of a dozen long roads has its vertices far apart, and
+          // every building measured too far from the street to be signed
           let d3 = 1e9, r3x = 0, r3z = 0;
-          for (const r of OSM.roads || []) for (const q of r.pts) {
-            const dd = (q[0] - c3x) ** 2 + (q[1] - c3z) ** 2;
-            if (dd < d3) { d3 = dd; r3x = q[0]; r3z = q[1]; }
+          for (const r of OSM.roads || []) for (let qi = 0; qi < r.pts.length - 1; qi++) {
+            const [ax, az] = r.pts[qi], [bx, bz] = r.pts[qi + 1];
+            const ex = bx - ax, ez = bz - az, el2 = ex * ex + ez * ez || 1;
+            const tt = Math.max(0, Math.min(1, ((c3x - ax) * ex + (c3z - az) * ez) / el2));
+            const px = ax + ex * tt, pz = az + ez * tt;
+            const dd = (px - c3x) ** 2 + (pz - c3z) ** 2;
+            if (dd < d3) { d3 = dd; r3x = px; r3z = pz; }
           }
           if (d3 > 40 * 40) continue;
           const fe4 = faceEdge(b3.pts, c3x, c3z, r3x, r3z, 3.2);
@@ -5281,7 +5364,9 @@ async function main() {
           const col = neonCols[Math.floor(rngNe() * neonCols.length)];
           const hexN = '#' + col.toString(16).padStart(6, '0');
           const word = NEON_WORDS[Math.floor(rngNe() * NEON_WORDS.length)];
-          const blade = rngNe() < 0.34 && fe4.len > 4;
+          const blade = rngNe() < (_neonCity ? 0.62 : 0.34) && fe4.len > 4;
+          // signs climb the building: in a neon district some hang storeys up
+          const _lift = _neonCity ? (rngNe() < 0.4 ? rngNe() * Math.max(0, Math.min((b3h || 10) - 10, 28)) : rngNe() * 4) : 0;
           const cn = document.createElement('canvas');
           const gx = () => cn.getContext('2d');
           let sgn;
@@ -5293,9 +5378,10 @@ async function main() {
             g6.shadowColor = hexN; g6.shadowBlur = 16;
             g6.strokeRect(11, 11, 106, 298);
             g6.fillStyle = '#fff6ff';
-            g6.font = 'bold 42px Arial';
+            const letters = Array.from(word).slice(0, 6);
+            // the fewer the letters, the bigger they are: a two-glyph blade fills its tube
+            g6.font = `bold ${Math.min(84, Math.floor(250 / letters.length))}px Arial, 'Hiragino Sans', 'Yu Gothic', 'Meiryo', 'Noto Sans CJK JP', 'MS Gothic', sans-serif`;
             g6.textAlign = 'center'; g6.textBaseline = 'middle';
-            const letters = word.slice(0, 6).split('');
             letters.forEach((ch, li) =>
               g6.fillText(ch, 64, 52 + li * (216 / Math.max(letters.length - 1, 1))));
           } else {
@@ -5306,28 +5392,22 @@ async function main() {
             g6.shadowColor = hexN; g6.shadowBlur = 16;
             g6.strokeRect(11, 11, 298, 106);
             g6.fillStyle = '#fff6ff';
-            g6.font = 'bold 56px Arial';
+            g6.font = "bold 56px Arial, 'Hiragino Sans', 'Yu Gothic', 'Meiryo', 'Noto Sans CJK JP', 'MS Gothic', sans-serif";
             g6.textAlign = 'center'; g6.textBaseline = 'middle';
             g6.fillText(word, 160, 68);
           }
-          const tn = new THREE.CanvasTexture(cn);
-          tn.colorSpace = THREE.SRGBColorSpace;
-          tn.anisotropy = renderer.capabilities.getMaxAnisotropy();
-          // emissive is driven by the MAP, so the dark plate stays dark and
-          // only the tube and the letters throw light. A flat `emissive`
-          // colour is what made the whole slab glow.
-          const mn = new THREE.MeshStandardMaterial({ map: tn, color: 0xffffff,
-            side: THREE.DoubleSide, roughness: 0.55,
-            emissive: 0xffffff, emissiveMap: tn, emissiveIntensity: 1.9 });
-          const nw = blade ? 0.86 : Math.min(1.9 + rngNe() * 1.5, fe4.len * 0.55);
-          const nh = blade ? 2.15 : nw * 0.4;
+          const _uvr = sgPaint(cn);
+          const mn = null;
+          const _nk = _neonCity ? 1.6 : 1;
+          const nw = (blade ? 0.86 : Math.min(1.9 + rngNe() * 1.5, fe4.len * 0.55 / _nk)) * _nk;
+          const nh = (blade ? 2.15 : nw / _nk * 0.4) * _nk;
           sgn = new THREE.Mesh(new THREE.PlaneGeometry(nw, nh), mn);
           const yaw6 = Math.atan2(fe4.nx, fe4.nz);
           if (blade) {
             // projecting blade: hangs off the wall face, read down the street
             const outN = 0.10 + nw / 2;
             const sx3 = fe4.x + fe4.nx * outN, sz3 = fe4.z + fe4.nz * outN;
-            sgn.position.set(sx3, hAt(sx3, sz3) + 4.3, sz3);
+            sgn.position.set(sx3, hAt(sx3, sz3) + 4.3 + _lift, sz3);
             sgn.rotation.y = yaw6 + Math.PI / 2;
             // A blade is meant to be read from BOTH ends of the block, and a
             // DoubleSide plane shows one set of UVs to both faces — so the far
@@ -5337,16 +5417,77 @@ async function main() {
             back6.position.copy(sgn.position);
             back6.rotation.y = yaw6 - Math.PI / 2;
             back6.translateZ(-0.02);
-            scene.add(back6);
+            sgPush(back6, _uvr);
           } else {
             const slideN = (rngNe() - 0.5) * Math.max(0, fe4.len - nw - 0.4);
             const sx3 = fe4.x + fe4.nx * 0.12 - fe4.nz * slideN;
             const sz3 = fe4.z + fe4.nz * 0.12 + fe4.nx * slideN;
-            sgn.position.set(sx3, hAt(sx3, sz3) + 3.35, sz3);
+            sgn.position.set(sx3, hAt(sx3, sz3) + 3.35 + _lift * 0.5, sz3);
             sgn.rotation.y = yaw6;
           }
-          scene.add(sgn);
+          sgPush(sgn, _uvr);
           placedN++;
+        }
+        if (sgGeos.length) {
+          const tn = new THREE.CanvasTexture(sgAtlas);
+          tn.colorSpace = THREE.SRGBColorSpace;
+          tn.anisotropy = renderer.capabilities.getMaxAnisotropy();
+          // emissive is driven by the MAP, so the dark plate stays dark and
+          // only the tube and the letters throw light. A flat `emissive`
+          // colour is what made the whole slab glow.
+          const mn = new THREE.MeshStandardMaterial({ map: tn, color: 0xffffff,
+            side: THREE.DoubleSide, roughness: 0.55,
+            emissive: 0xffffff, emissiveMap: tn, emissiveIntensity: 1.9 });
+          mn.userData.noAutoTex = true;
+          const signs = new THREE.Mesh(mergeGeometries(sgGeos, false), mn);
+          signs.name = 'neonSigns';
+          scene.add(signs);
+          for (const g of sgGeos) g.dispose();
+        }
+        if (_neonCity) {
+          // LIGHT LINES: tubes up a tower's corners and round its crown, in
+          // the street's neon colours, one instanced draw for the district
+          const CAPN = 900;
+          const lineM = new THREE.MeshBasicMaterial({ color: 0xffffff, toneMapped: false });
+          const lines = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), lineM, CAPN);
+          const ML = new THREE.Matrix4(), QL = new THREE.Quaternion(), VL = new THREE.Vector3(), SL = new THREE.Vector3();
+          const CL = new THREE.Color(), UPL = new THREE.Vector3(0, 1, 0);
+          let nl = 0;
+          for (const [lpts, , , lgy, lh] of feCand) {
+            if (nl >= CAPN - 12) break;
+            if (!(lh > 14) || rngNe() < 0.45) continue;
+            let lcx = 0, lcz = 0;
+            for (const q of lpts) { lcx += q[0]; lcz += q[1]; }
+            lcx /= lpts.length; lcz /= lpts.length;
+            CL.setHex(neonCols[Math.floor(rngNe() * neonCols.length)]).multiplyScalar(4.0);
+            const both = rngNe() < 0.5;
+            for (let i = 0; i < lpts.length && nl < CAPN - 2; i++) {
+              const q = lpts[i];
+              const ox = q[0] - lcx, oz = q[1] - lcz, ol = Math.hypot(ox, oz) || 1;
+              // proud of the corner pier, not buried in it
+              const px = q[0] + ox / ol * 0.5, pz = q[1] + oz / ol * 0.5;
+              if (both || i % 2 === 0) {          // a corner tube, full height
+                ML.compose(VL.set(px, lgy + lh / 2 + 0.6, pz), QL.identity(), SL.set(0.24, lh - 1.2, 0.24));
+                lines.setMatrixAt(nl, ML); lines.setColorAt(nl, CL); nl++;
+              }
+              // the crown: a tube along each roof edge
+              const c2 = lpts[(i + 1) % lpts.length];
+              const ex = c2[0] - q[0], ez = c2[1] - q[1], el = Math.hypot(ex, ez);
+              if (el > 1.5) {
+                QL.setFromAxisAngle(UPL, Math.atan2(-ez, ex));
+                const mxL = (q[0] + c2[0]) / 2, mzL = (q[1] + c2[1]) / 2, mlL = Math.hypot(mxL - lcx, mzL - lcz) || 1;
+                ML.compose(VL.set(mxL + (mxL - lcx) / mlL * 0.45, lgy + lh + 0.15, mzL + (mzL - lcz) / mlL * 0.45),
+                           QL, SL.set(el + 0.6, 0.24, 0.24));
+                lines.setMatrixAt(nl, ML); lines.setColorAt(nl, CL); nl++;
+              }
+            }
+          }
+          lines.count = nl;
+          lines.instanceMatrix.needsUpdate = true;
+          if (lines.instanceColor) lines.instanceColor.needsUpdate = true;
+          lines.name = 'neonLines';
+          if (nl) scene.add(lines);
+          window.__neon = { signs: placedN, lines: nl };
         }
       }
       // DISTANT SKYLINE (Phase 122): silhouette towers past the map edge —
@@ -6493,9 +6634,66 @@ async function main() {
     }
   }
 
+  // GRASS THAT GROWS LIKE THE FOREST (2026-10-02): on a photoreal green
+  // world the meadow is a GPU field that travels with the camera
+  // (proc/grass.js): hundreds of thousands of shaped blades, dense at your
+  // feet, thinning to the edge of the near view, laid on the terrain, kept
+  // off paths, water, floors, rock and sand, growing in clumps and bare
+  // patches, lit like the forest's leaves, and parted by the hero. The
+  // scattered tufts below remain for stylised looks and dry ground.
+  {
+    const _gh0 = {}; gcol.getHSL(_gh0);
+    const _green0 = _gh0.h > 0.16 && _gh0.h < 0.45 && _gh0.s > 0.12;
+    const _photo0 = (SPEC.style || 'default') === 'default';
+    if (!PURE_SCENE && !INTERIOR && _green0 && _photo0 && SPEC.world.grass !== false
+        && (SPEC.world.scatter || []).length && new URLSearchParams(location.search).get('grass') !== 'tufts') {
+      try {
+        const A0 = new THREE.Color(...SPEC.world.ground_color).lerp(new THREE.Color(0x46752c), 0.6).offsetHSL(0, 0.1, -0.03);
+        const B0 = A0.clone().offsetHSL(0.03, 0.04, -0.08);
+        const D0 = A0.clone().lerp(new THREE.Color(0xb3a46c), 0.7);
+        // a small value noise for clumps and patches
+        const _gp = new Uint8Array(512);
+        { const r0 = mulberry32(SPEC.seed + 777); for (let i = 0; i < 256; i++) _gp[i] = i;
+          for (let i = 255; i > 0; i--) { const j = Math.floor(r0() * (i + 1)); const t = _gp[i]; _gp[i] = _gp[j]; _gp[j] = t; }
+          for (let i = 0; i < 256; i++) _gp[i + 256] = _gp[i]; }
+        const _vn = (x, z) => {
+          const xi = Math.floor(x), zi = Math.floor(z), xf = x - xi, zf = z - zi;
+          const h = (a, b) => _gp[(_gp[a & 255] + b) & 511] / 127.5 - 1;
+          const u = xf * xf * (3 - 2 * xf), v = zf * zf * (3 - 2 * zf);
+          const a = h(xi, zi), b = h(xi + 1, zi), c = h(xi, zi + 1), d = h(xi + 1, zi + 1);
+          return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
+        };
+        const _ss = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+        const maskAt = (x, z) => {
+          const n1 = _vn(x * 0.08, z * 0.08) * 0.7 + _vn(x * 0.21 + 11, z * 0.21 - 5) * 0.3;
+          const n2 = _vn(x * 0.37 - 3, z * 0.37 + 9);
+          let d = _ss(-0.62, -0.18, n1);                 // bare patches here and there
+          let h = 0.45 + 0.55 * (0.5 + 0.5 * n2);         // taller in the hollows of the noise
+          let dry = Math.max(0, Math.min(1, 0.25 - n1 * 0.7)) * 0.7;
+          const pd = pathDist(x, z);
+          if (pd < CORR * 0.45) { d *= 0.06; h *= 0.4; dry = Math.max(dry, 0.6); }
+          else if (pd < CORR * 0.95) { d *= 0.5; h *= 0.7; }
+          if (inBldg(x, z, 0.6)) d = 0;
+          const rg = window.__regionAt && window.__regionAt(x, z);
+          if (rg && rg.kind === 'water' && rg.w > 0.2) d = 0;
+          if (rg && (rg.kind === 'rock' || rg.kind === 'sand') && rg.w > 0.4) { d *= 0.12; dry = 0.85; }
+          if (WATER !== null && hAt(x, z) < WATER + 0.1) d = 0;
+          return [d, dry, h];
+        };
+        GRASS_LIVE = __GRASS.plantGrass({
+          scene, seed: SPEC.seed + 91, hAt, maskAt, center: [0, 0], size: gsize,
+          colA: A0, colB: B0, colDry: D0, height: 0.46, quality: QUALITY, wind: WIND_U,
+          windK: Math.min(0.7, 0.2 + (SPEC.world.wind ?? 0.5) * 0.4),
+          sunDir: new THREE.Vector3(...pal.sunPos).normalize(),
+          sunCol: new THREE.Color(pal.sunCol || 0xffffff),
+        });
+        window.__grass = { blades: GRASS_LIVE.blades, coverage: +GRASS_LIVE.coverage.toFixed(3) };
+      } catch (e) { console.warn('[game] grass field skipped: ' + e.message); GRASS_LIVE = null; }
+    }
+  }
   // GRASS: instanced cross-blades on the terrain, thinned along the walking
   // path — the "flat green plane" is gone. (Gated off for cities/snow.)
-  if (!PURE_SCENE && (SPEC.world.scatter || []).length && SPEC.world.grass !== false) {
+  if (!PURE_SCENE && !GRASS_LIVE && (SPEC.world.scatter || []).length && SPEC.world.grass !== false) {
     // undergrowth stays PLANT-colored: pull toward green so brown forest
     // floors get living tufts, not floating tan cards
     // Blades are instance-coloured, so THIS is the lever, not bmat.color: a
@@ -6971,14 +7169,14 @@ async function main() {
       const has = re => re.test(words);
       const st = SPEC.style || 'default';
       let skin = 'glass';
-      if (st === 'horror' || has(/haunt|ghost|zombie|graveyard|cursed|undead|horror|crypt|demon|vampire/)) skin = 'horror';
-      else if (st === 'cartoon' || st === 'anime' || has(/cartoon|toy|kids|cute|candy|platformer|bouncy|jelly|bunny/)) skin = 'comic';
-      else if (has(/detective|mystery|heist|noir|murder|crime|stolen|museum|spy|thief|burglar/)) skin = 'noir';
-      else if (has(/race|racing|drift|rally|kart|soccer|football|arena|stadium|grand prix|speedway/)) skin = 'racing';
-      else if (st === 'pixel' || st === 'synthwave' || has(/space|station|robot|cyber|colony|mars|orbit|alien|lab\b|laborator|reactor|hacker|starship|asteroid/)) skin = 'terminal';
-      else if (has(/knight|castle|dragon|wizard|kingdom|medieval|quest|sword|dungeon|temple|samurai|viking|ruin/)) skin = 'parchment';
-      else if (has(/snow|ice\b|frozen|arctic|glacier|blizzard|tundra|winter/)) skin = 'frost';
-      else if (st === 'sketch' || has(/farm|village|cozy|meadow|garden|bakery|picnic|orchard|forest|firefl|cottage|island/)) skin = 'storybook';
+      if (st === 'horror' || has(/\b(haunt|ghost|zombie|graveyard|cursed|undead|horror|crypt|demon|vampire)/)) skin = 'horror';
+      else if (st === 'cartoon' || st === 'anime' || has(/\b(cartoon|toys?\b|kids|cute|candy|platformer|bouncy|jelly|bunny)/)) skin = 'comic';
+      else if (has(/\b(detective|mystery|heist|noir|murder|crime|stolen|museum|spy\b|spies|thief|burglar)/)) skin = 'noir';
+      else if (has(/\b(races?|racing|racer|drift|drifting|rally|kart|karting|soccer|football|arena|stadium|grand prix|speedway)\b/)) skin = 'racing';
+      else if (st === 'pixel' || st === 'synthwave' || has(/\b(space|station|robot|cyber|colony|mars|orbit|alien|lab\b|laborator|reactor|hacker|starship|asteroid)/)) skin = 'terminal';
+      else if (has(/\b(knight|castle|dragon|wizard|kingdom|medieval|quest|sword|dungeon|temple|samurai|viking|ruin)/)) skin = 'parchment';
+      else if (has(/\b(snow|ice\b|frozen|arctic|glacier|blizzard|tundra|winter)/)) skin = 'frost';
+      else if (st === 'sketch' || has(/\b(farm|village|cozy|meadow|garden|bakery|picnic|orchard|forest|firefl|cottage|island|beach|castaway|lagoon|jungle)/)) skin = 'storybook';
       const q9 = new URLSearchParams(location.search).get('skin');
       if (q9) skin = q9;
       document.body.dataset.skin = skin;
@@ -6990,8 +7188,16 @@ async function main() {
       + 'justify-content:center;background:rgba(8,7,14,.62);z-index:40;backdrop-filter:blur(3px);';
     // narrative layer: the LLM-written quest intro turns "collect 6 fireflies"
     // into a game with a WORLD — content, not code, so it can't break a build
-    const introHtml = SPEC.intro
-      ? `<div style="font:400 15px var(--f-ui);color:#b9b4d8;margin-bottom:14px;max-width:44ch;margin-left:auto;margin-right:auto;line-height:1.5;">${SPEC.intro}</div>`
+    // a card ends on a whole sentence: builds before 2026-10-02 cut the
+    // intro at 280 characters, mid-word ("Lush jungle fringes the b")
+    const _introT = (() => {
+      const t = String(SPEC.intro || '').trim();
+      if (!t || /[.!?\u2026"')]$/.test(t)) return t;
+      const k = Math.max(t.lastIndexOf('. '), t.lastIndexOf('! '), t.lastIndexOf('? '));
+      return k > 40 ? t.slice(0, k + 1) : t.replace(/\s+\S*$/, '') + '\u2026';
+    })();
+    const introHtml = _introT
+      ? `<div style="font:400 15px var(--f-ui);color:#b9b4d8;margin-bottom:14px;max-width:44ch;margin-left:auto;margin-right:auto;line-height:1.5;">${_introT}</div>`
       : '';
     ov.innerHTML = '<div class="fs-startcard" style="text-align:center;max-width:520px;padding:36px;">'
       + `<h1 class="fs-start" style="font:700 44px var(--f-head);letter-spacing:.08em;text-transform:uppercase;color:var(--tcol);text-shadow:0 0 34px var(--tglow),0 6px 22px rgba(0,0,0,.85);margin:0 0 12px;">${SPEC.title || 'Your World'}</h1>`
@@ -8039,7 +8245,11 @@ async function main() {
   // ── POINTS OF INTEREST (moon plan 2.1): templated micro-locations off the
   // path — ruined tower, campsite, shrine, stone circle, lumber camp. Each
   // is a prop cluster + a heart reward. Open worlds read as DESIGNED.
-  if (!INTERIOR && LVL && LVL.pois && LVL.pois.length) {
+  // NOT IN A CITY (2026-10-02): the templates are wilderness places (a ruined
+  // tower, a stone circle, a lumber camp), and dropped into a Tokyo street
+  // their fieldstone walls stood along the kerb like a fence; a district
+  // has its own places, its shops and signs
+  if (!INTERIOR && !OSM && LVL && LVL.pois && LVL.pois.length) {
     const stoneT = new THREE.TextureLoader().load('textures/stone.jpg');
     stoneT.wrapS = stoneT.wrapT = THREE.RepeatWrapping;
     stoneT.colorSpace = THREE.SRGBColorSpace;
@@ -14098,6 +14308,7 @@ varying vec2 vUvRaw;
     else if (window.__slowMo > 0) { window.__slowMo -= dt; dt *= 0.35; }
     WIND_U.value = performance.now() / 1000;   // wind clock (Phase 81)
     if (FLORA_LIVE) FLORA_LIVE.update(camera);  // which trees are near enough to be trees
+    if (GRASS_LIVE) GRASS_LIVE.update(camera, playerObj.position);
     if (window.__cbtStep) window.__cbtStep(dt);
     __fmTick(rdt);                             // the guide, on real time
     for (const w of wheels) {                  // roll with speed, steer in front
@@ -15336,6 +15547,7 @@ varying vec2 vUvRaw;
       camera.position.set(...window.__camPin.pos);
       camera.lookAt(...window.__camPin.look);
       if (FLORA_LIVE) FLORA_LIVE.update(camera);
+      if (GRASS_LIVE) GRASS_LIVE.update(camera, playerObj.position);
     }
     renderer.info.autoReset = false;
     renderer.info.reset();

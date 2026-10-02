@@ -1020,7 +1020,19 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                                      for s in ((mW.group(1) if mW else ""),
                                                (mF.group(1) if mF else "")) if s.strip())
                     if intro and not getattr(spec, "intro", None):
-                        spec.intro = intro[:280]
+                        # WHOLE SENTENCES (2026-10-02): a hard cut at 280
+                        # characters ended a castaway's card on "Lush jungle
+                        # fringes the b". The intro keeps every sentence that
+                        # fits; a first sentence too long alone ends on a word.
+                        if len(intro) > 280:
+                            sents = _re2.findall(r"[^.!?]+[.!?]+", intro)
+                            kept = ""
+                            for snt in sents:
+                                if len(kept) + len(snt) > 280:
+                                    break
+                                kept += snt
+                            intro = kept.strip() or (intro[:279].rsplit(" ", 1)[0] + "…")
+                        spec.intro = intro
                 except Exception:
                     pass
         # ── ABILITY VFX (2026-07-29): element aura inferred from the THEME —
