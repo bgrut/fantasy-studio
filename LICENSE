@@ -11,7 +11,12 @@ Plain English summary (not legally binding):
 - Four years after the date of first commit, this code automatically
   becomes Apache License, Version 2.0 — fully open source forever.
 - Attribution to "Fantasy Studio by FantasyLab AI" is required in any
-  derivative work.
+  derivative work of the studio itself.
+- What you MAKE with Fantasy Studio is yours: the games, characters,
+  worlds and other assets it generates for you can be used, changed,
+  sold and published however you like, with no attribution and no
+  royalty. The game code the studio copies into each game you export
+  is MIT licensed, so a game can ship anywhere.
 
 ------------------------------------------------------------------------
 
@@ -61,10 +66,21 @@ Additional Use Grant:
     into a commercial product, requires a separate commercial license
     from FantasyLab AI.
 
-Change Date:     Four years from the date of first commit.
-                 (e.g. if first commit is 2026-05-15, Change Date is
-                 2030-05-15. Update this value once the first commit
-                 lands.)
+    OUTPUTS ARE YOURS. Whatever the Licensed Work generates for you
+    (games, levels, characters, models, textures, images, music, text
+    and any other output) is not a derivative work of the Licensed Work
+    for the purposes of this License. You may use, modify, distribute,
+    sell and sublicense it for any purpose, commercial or not, without
+    attribution and without a commercial license. The runtime files the
+    Licensed Work copies into an exported game (its game engine
+    templates, shaders, interface kit and their compiled forms), as
+    copied into that game, are additionally licensed to you under the
+    MIT License, reproduced in the exported game's LICENSES.md.
+    Third-party components shipped inside an exported game stay under
+    their own licenses, which that file lists.
+
+Change Date:     2030-04-29 (four years from the first commit,
+                 2026-04-29).
 
 Change License:  Apache License, Version 2.0
 
@@ -79,7 +95,9 @@ https://fantasylab.ai (or the canonical Fantasy Studio repository at
 https://github.com/bgrut/fantasy-studio). Attribution must appear in
 any documentation, about screens, or credits associated with the
 derivative or hosted instance. Removing or obscuring this attribution
-is a violation of these license terms.
+is a violation of these license terms. This requirement does not
+apply to outputs (see "OUTPUTS ARE YOURS" above): a game or asset made
+with Fantasy Studio needs no attribution.
 
 
 Notice

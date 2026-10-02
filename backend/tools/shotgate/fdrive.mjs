@@ -72,7 +72,9 @@ await b.close();
 const ok = fast.drive && fast.drive.speed > 7 && fast.fov > fast.fov_base + 3
   && (!lightD.night || (lightD.moon <= 0.6 && lumD.frame < 105 && lumD.sky < 75))   // a night that reads as night
   && fast.crowd && fast.crowd.impostors > 20 && fast.crowd.near + fast.crowd.impostors > fast.crowd.near   // the far street is peopled by the sheet
-  && fast.car && (fast.car.model === 'library' || (fast.car.smooth && fast.car.cabin && fast.car.pillars === 6 && fast.car.body_verts > 600))   // the library's own model, or a smooth-shaded parametric body with a real greenhouse
+  && fast.car && (fast.car.model === 'library'
+      || (fast.car.lofted && fast.car.stations >= 48 && fast.car.glassFaces > 200)   // the lofted body: one skin with its glass in it (2026-10-01)
+      || (fast.car.smooth && fast.car.cabin && fast.car.pillars === 6 && fast.car.body_verts > 600))   // the library's own model, or a smooth-shaded parametric body with a real greenhouse
   && boost.drive && boost.drive.speed > 15 && boost.drive.steer_ease < 0.85 && cruise.drive && cruise.drive.steer_ease > boost.drive.steer_ease   // eases with speed
   && slide.drive && slide.drive.handbrake && slide.drive.drifting && slide.drive.slip > 0.2 && slide.drive.skids > 0 && slide.drive.smoke > 0
   && slide.drive.peds_casting <= 30 && slide.drive.peds_casting < slide.drive.peds_visible

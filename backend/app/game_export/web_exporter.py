@@ -282,6 +282,7 @@ def export_web_game(spec: GameSpec, out_dir: str | Path, verbose: bool = True) -
     # the folder, community characters with their authors, material the user
     # supplied, and the exact credit lines the licences ask for.
     _rows = [
+        "| Game engine (the Fantasy Studio runtime, interface kit and shaders) | MIT, text below |",
         "| three.js (renderer) | MIT |",
         "| Physics (Rapier) | Apache-2.0 |",
         "| N8AO ambient occlusion | CC0 |",
@@ -330,12 +331,15 @@ def export_web_game(spec: GameSpec, out_dir: str | Path, verbose: bool = True) -
         pass
     (dist / "LICENSES.md").write_text(
         f"# {spec.title or 'Your Game'}: License Manifest\n\n"
-        "This game was generated with Fantasy Studio, locally, on your machine. The third-party\n"
-        "parts in this folder are open source or public domain, listed below with the credit\n"
-        "lines their licences ask for; keep this file with the game.\n\n"
+        "This game was generated with Fantasy Studio, locally, on your machine, and it is yours:\n"
+        "use it, change it, sell it and publish it however you like, with no royalty and no\n"
+        "credit owed to Fantasy Studio. The third-party parts in this folder are open source or\n"
+        "public domain, listed below with the credit lines their licences ask for; keep this\n"
+        "file with the game.\n\n"
         "| Component | License |\n|---|---|\n" + "\n".join(dict.fromkeys(_rows)) + "\n\n"
         "## Credits\n\n" + "\n\n".join(dict.fromkeys(_credits)) + "\n\n"
-        "No cloud services were used to build this game.\n",
+        "No cloud services were used to build this game.\n\n"
+        "## The game engine's licence (MIT)\n\n" + _MIT_RUNTIME + "\n",
         encoding="utf-8")
 
     # ── HDRI IBL (Arc B slice, 2026-07-28): bundle the CC0 Poly Haven HDRI
@@ -466,7 +470,28 @@ def export_web_game(spec: GameSpec, out_dir: str | Path, verbose: bool = True) -
     return dist
 
 
-_SLIM_LIMIT = 3_000_000        # embedded images above this get re-encoded
+# The runtime copied into every exported game is the maker's to ship: the
+# studio's LICENSE grants it under MIT as part of an exported game.
+_MIT_RUNTIME = """Copyright (c) 2026 Brandon Grutkowski / FantasyLab AI
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of
+this software and associated documentation files (the "Software"), to deal in
+the Software without restriction, including without limitation the rights to
+use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+the Software, and to permit persons to whom the Software is furnished to do so,
+subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE."""
+
+_SLIM_LIMIT = 3_000_000       # embedded images above this get re-encoded
 _SLIM_MAXDIM = 2048
 
 

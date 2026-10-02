@@ -1,0 +1,208 @@
+/* ══════════════════════════════════════════════════════════════════════════
+   SKINS (2026-10-01). Every game wore the same chrome: dark glass panels, one
+   grotesque face, the same fade. A tint per mood was the only difference, so
+   a knight's quest and a neon heist opened on the same screen. The owner
+   asked for games that feel new across the board, the instructions included.
+
+   A skin is the whole frame around the picture: the shape of a panel, the
+   face a word is set in, the colours, and the way a message ARRIVES (a
+   scroll unrolls, a terminal types, a case file is stamped, a comic panel
+   pops, a racing banner slides in on a slant). The runtime picks one from
+   the game's own words and sets <body data-skin="...">; nothing here is
+   chosen at random, so the same sentence always gets the same frame.
+
+   Faces: the kit's three variable faces carry most skins through weight,
+   width and tracking; the serif skins use Georgia, which every desktop has.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+:root{ --f-serif: Georgia, "Times New Roman", serif; }
+.fs-startcard{position:relative}
+#fsdlg{position:fixed}
+
+/* ── PARCHMENT: knights, castles, dragons, wizards. Ink on a scroll. ───── */
+body[data-skin="parchment"]{--fs-accent:#c8902e;--tcol:#f6e7c4;--tglow:rgba(214,160,72,.55);--rule:rgba(200,144,46,.9);--sub:#e9cf98}
+body[data-skin="parchment"] #fsstart{background:radial-gradient(ellipse at center,rgba(40,24,10,.55),rgba(14,8,4,.86)) !important}
+body[data-skin="parchment"] .fs-startcard{background:linear-gradient(180deg,#f1e3c2,#e2cc9c);color:#3a2812 !important;
+  border-radius:4px;padding:38px 44px !important;box-shadow:0 0 0 2px #8a6a36,0 0 0 7px #e8d6ac,0 0 0 9px #7a5a2a,0 24px 60px rgba(0,0,0,.6);
+  font-family:var(--f-serif)}
+body[data-skin="parchment"] .fs-startcard h1{font:400 44px var(--f-serif) !important;letter-spacing:.06em !important;color:#5a1d0e !important;
+  text-shadow:none !important;font-variant:small-caps}
+body[data-skin="parchment"] .fs-startcard h1::after{content:"\2766";display:block;font-size:22px;color:#8a6a36;margin-top:6px}
+body[data-skin="parchment"] .fs-startcard div{color:#4a3518 !important;font-family:var(--f-serif) !important}
+body[data-skin="parchment"] #startbtn{background:#6b2312 !important;color:#f6e7c4 !important;border-radius:3px !important;
+  font:400 18px var(--f-serif) !important;letter-spacing:.2em !important;box-shadow:inset 0 0 0 2px #c8902e}
+body[data-skin="parchment"] #fsdlg{background:linear-gradient(180deg,#efe0bc,#dcc490) !important;border:0 !important;border-radius:3px !important;
+  color:#3a2812 !important;font-family:var(--f-serif) !important;font-size:16px !important;
+  box-shadow:0 0 0 2px #8a6a36,0 14px 40px rgba(0,0,0,.55) !important}
+body[data-skin="parchment"] #fsdlgwho{font-family:var(--f-serif) !important;color:#6b2312 !important;font-variant:small-caps;letter-spacing:.12em !important}
+body[data-skin="parchment"] #fsdlg.on{animation:sk-unroll .45s cubic-bezier(.2,.8,.2,1)}
+body[data-skin="parchment"] #fsbantxt{font:400 34px var(--f-serif) !important;font-variant:small-caps;color:#f6e7c4 !important;letter-spacing:.1em !important}
+body[data-skin="parchment"] #fsbansub::before,body[data-skin="parchment"] #fsbansub::after{content:" \2014\2766\2014 ";color:#c8902e}
+body[data-skin="parchment"] #fsban.on #fsbantxt{animation:sk-unroll .6s cubic-bezier(.2,.8,.2,1)}
+body[data-skin="parchment"] #hud h1,body[data-skin="parchment"] #obj{font-family:var(--f-serif) !important;font-variant:small-caps;letter-spacing:.1em}
+body[data-skin="parchment"] .fs-card{background:linear-gradient(180deg,#efe0bc,#dcc490);border-color:#8a6a36;border-radius:3px}
+body[data-skin="parchment"] .fs-card b{font-family:var(--f-serif);color:#6b2312}
+body[data-skin="parchment"] .fs-card small,body[data-skin="parchment"] .fs-card p{color:#4a3518;font-family:var(--f-serif)}
+body[data-skin="parchment"] .fs-title b{font-family:var(--f-serif);font-weight:400;font-variant:small-caps;text-transform:none;letter-spacing:.08em}
+body[data-skin="parchment"] #win .card,body[data-skin="parchment"] #lose .card,body[data-skin="parchment"] .fs-end .card{
+  background:linear-gradient(180deg,#f1e3c2,#e2cc9c) !important;color:#3a2812 !important;border-radius:4px !important;border:0 !important;
+  box-shadow:0 0 0 2px #8a6a36,0 0 0 7px #e8d6ac,0 0 0 9px #7a5a2a,0 24px 60px rgba(0,0,0,.6) !important}
+body[data-skin="parchment"] #win h2,body[data-skin="parchment"] #lose h2,body[data-skin="parchment"] .fs-end h2{font-family:var(--f-serif) !important;color:#5a1d0e !important;text-shadow:none !important;font-variant:small-caps}
+@keyframes sk-unroll{from{clip-path:inset(0 0 100% 0);opacity:0}to{clip-path:inset(0 0 0 0);opacity:1}}
+
+/* ── TERMINAL: stations, robots, colonies, ships. A console that types. ── */
+body[data-skin="terminal"]{--fs-accent:#4dffb0;--tcol:#c9ffe6;--tglow:rgba(77,255,176,.5);--rule:rgba(77,255,176,.7);--sub:#7fe8c0;--f-head:var(--f-mono);--f-ui:var(--f-mono)}
+body[data-skin="terminal"] #fsstart{background:rgba(2,8,6,.9) !important;
+  background-image:repeating-linear-gradient(0deg,rgba(77,255,176,.05) 0 1px,transparent 1px 3px) !important}
+body[data-skin="terminal"] .fs-startcard{border:1px solid rgba(77,255,176,.55);background:rgba(0,14,9,.85);border-radius:0;text-align:left !important;
+  font-family:var(--f-mono)}
+body[data-skin="terminal"] .fs-startcard h1{font:500 30px var(--f-mono) !important;letter-spacing:.04em !important;text-transform:none !important}
+body[data-skin="terminal"] .fs-startcard h1::before{content:"> ";color:#4dffb0}
+body[data-skin="terminal"] .fs-startcard h1::after{content:"_";animation:sk-caret 1s steps(1) infinite}
+body[data-skin="terminal"] .fs-startcard div{font-family:var(--f-mono) !important;color:#9fe9c9 !important;margin-left:0 !important}
+body[data-skin="terminal"] #startbtn{border-radius:0 !important;background:transparent !important;color:#4dffb0 !important;
+  border:1px solid #4dffb0 !important;font:500 16px var(--f-mono) !important}
+body[data-skin="terminal"] #startbtn::before{content:"[ "}body[data-skin="terminal"] #startbtn::after{content:" ]"}
+body[data-skin="terminal"] #fsdlg{border-radius:0 !important;background:rgba(0,12,8,.92) !important;border:1px solid rgba(77,255,176,.5) !important;
+  font-family:var(--f-mono) !important;font-size:14px !important;color:#c9ffe6 !important}
+body[data-skin="terminal"] #fsdlgwho{font-family:var(--f-mono) !important;color:#4dffb0 !important}
+body[data-skin="terminal"] #fsdlgwho::before{content:"// "}
+body[data-skin="terminal"] #fsdlg.on #fsdlgtxt{animation:sk-type .9s steps(30) both}
+body[data-skin="terminal"] #fsbantxt{font:500 26px var(--f-mono) !important;text-transform:none !important;color:#c9ffe6 !important}
+body[data-skin="terminal"] #fsbantxt::before{content:"> "}
+body[data-skin="terminal"] #fsban.on #fsbantxt{animation:sk-type .7s steps(24) both}
+body[data-skin="terminal"] .fs-card{border-radius:0;background:rgba(0,14,9,.94);border-color:rgba(77,255,176,.5)}
+body[data-skin="terminal"] .fs-card b{color:#4dffb0;font-family:var(--f-mono)}
+body[data-skin="terminal"] .fs-card small,body[data-skin="terminal"] .fs-card p{color:#9fe9c9;font-family:var(--f-mono)}
+body[data-skin="terminal"] #win .card,body[data-skin="terminal"] #lose .card,body[data-skin="terminal"] .fs-end .card{border-radius:0 !important;
+  background:rgba(0,14,9,.95) !important;border:1px solid rgba(77,255,176,.55) !important;font-family:var(--f-mono) !important}
+@keyframes sk-type{from{clip-path:inset(0 100% 0 0)}to{clip-path:inset(0 0 0 0)}}
+@keyframes sk-caret{50%{opacity:0}}
+
+/* ── NOIR: detectives, heists, rain. Typewriter on a case file, stamped. ── */
+body[data-skin="noir"]{--fs-accent:#e23b3b;--tcol:#f2efe8;--tglow:rgba(255,255,255,.18);--rule:rgba(226,59,59,.8);--sub:#c9c4b8}
+body[data-skin="noir"] #fsstart{background:rgba(6,6,6,.82) !important;backdrop-filter:grayscale(.85) blur(2px) !important}
+body[data-skin="noir"] .fs-startcard{background:#ece6d8;color:#1a1a1a !important;border-radius:0;transform:rotate(-1.2deg);
+  padding:34px 40px !important;box-shadow:0 18px 50px rgba(0,0,0,.7)}
+body[data-skin="noir"] .fs-startcard h1{font:800 46px var(--f-head) !important;font-stretch:75% !important;color:#141414 !important;text-shadow:none !important;letter-spacing:.02em !important}
+body[data-skin="noir"] .fs-startcard div{color:#2a2a2a !important;font-family:var(--f-mono) !important}
+body[data-skin="noir"] .fs-startcard::after{content:"CASE OPEN";position:absolute;right:26px;top:22px;transform:rotate(9deg);
+  font:700 13px var(--f-mono);letter-spacing:.2em;color:#c22;border:2px solid #c22;padding:3px 8px;opacity:.8}
+body[data-skin="noir"] #startbtn{background:#141414 !important;color:#ece6d8 !important;border-radius:0 !important;font-stretch:75%}
+body[data-skin="noir"] #fsdlg{background:#ece6d8 !important;color:#1a1a1a !important;border-radius:0 !important;border:0 !important;
+  font-family:var(--f-mono) !important;font-size:14px !important}
+body[data-skin="noir"] #fsdlgwho{color:#b81d1d !important;font-stretch:75%}
+body[data-skin="noir"] #fsdlg.on{animation:sk-stamp .3s cubic-bezier(.3,1.6,.5,1)}
+body[data-skin="noir"] #fsbantxt{font-stretch:75% !important;font-weight:800 !important;font-size:38px !important;color:#f2efe8 !important}
+body[data-skin="noir"] #fsbansub{color:#e23b3b !important}
+body[data-skin="noir"] #fsban.on #fsbantxt{animation:sk-stamp2 .35s cubic-bezier(.3,1.6,.5,1)}
+@keyframes sk-stamp2{from{transform:scale(1.25) rotate(-2deg);opacity:0}to{transform:scale(1) rotate(0);opacity:1}}
+body[data-skin="noir"] .fs-card{background:#ece6d8;border-radius:0;border:0}
+body[data-skin="noir"] .fs-card b{color:#141414;font-stretch:75%}
+body[data-skin="noir"] .fs-card small,body[data-skin="noir"] .fs-card p{color:#333;font-family:var(--f-mono)}
+body[data-skin="noir"] #win .card,body[data-skin="noir"] #lose .card,body[data-skin="noir"] .fs-end .card{background:#ece6d8 !important;color:#1a1a1a !important;border-radius:0 !important;border:0 !important}
+body[data-skin="noir"] #win h2,body[data-skin="noir"] #lose h2,body[data-skin="noir"] .fs-end h2{color:#141414 !important;text-shadow:none !important;font-stretch:75%}
+@keyframes sk-stamp{from{transform:translateX(-50%) scale(1.25) rotate(-2deg);opacity:0}to{transform:translateX(-50%) scale(1) rotate(0);opacity:1}}
+
+/* ── COMIC: cartoons, toys, kids' worlds, platformers. Panels that pop. ── */
+body[data-skin="comic"]{--fs-accent:#ffcf1f;--tcol:#fff;--tglow:rgba(255,207,31,.4);--rule:#111;--sub:#fff3b0}
+body[data-skin="comic"] #fsstart{background:radial-gradient(circle at center,rgba(255,170,40,.35),rgba(30,10,60,.7)) !important}
+body[data-skin="comic"] .fs-startcard{background:#fffdf3;color:#111 !important;border:4px solid #111;border-radius:22px;
+  box-shadow:8px 8px 0 #111;animation:sk-pop .45s cubic-bezier(.3,1.7,.5,1)}
+body[data-skin="comic"] .fs-startcard h1{font:800 50px var(--f-head) !important;color:#ffcf1f !important;
+  -webkit-text-stroke:2px #111;text-shadow:4px 4px 0 #111 !important;letter-spacing:.02em !important}
+body[data-skin="comic"] .fs-startcard div{color:#222 !important}
+body[data-skin="comic"] #startbtn{background:#ff4f6d !important;color:#fff !important;border:3px solid #111 !important;border-radius:999px !important;
+  box-shadow:4px 4px 0 #111;font-weight:800 !important}
+body[data-skin="comic"] #fsdlg{background:#fffdf3 !important;color:#111 !important;border:3px solid #111 !important;border-radius:18px !important;
+  box-shadow:6px 6px 0 #111 !important;font-weight:600}
+body[data-skin="comic"] #fsdlg::after{content:"";position:absolute;left:36px;top:-16px;border:9px solid transparent;border-bottom:13px solid #111}
+body[data-skin="comic"] #fsdlgwho{color:#ff4f6d !important;font-weight:800 !important}
+body[data-skin="comic"] #fsdlg.on{animation:sk-popx .4s cubic-bezier(.3,1.7,.5,1)}
+body[data-skin="comic"] #fsbantxt{font-weight:800 !important;font-size:40px !important;color:#ffcf1f !important;-webkit-text-stroke:2px #111;text-shadow:4px 4px 0 #111 !important}
+body[data-skin="comic"] #fsban.on #fsbantxt{animation:sk-pop .45s cubic-bezier(.3,1.7,.5,1)}
+body[data-skin="comic"] .fs-card{background:#fffdf3;border:3px solid #111;border-radius:16px;box-shadow:5px 5px 0 #111}
+body[data-skin="comic"] .fs-card b{color:#ff4f6d}
+body[data-skin="comic"] .fs-card small,body[data-skin="comic"] .fs-card p{color:#222}
+body[data-skin="comic"] #win .card,body[data-skin="comic"] #lose .card,body[data-skin="comic"] .fs-end .card{background:#fffdf3 !important;color:#111 !important;
+  border:4px solid #111 !important;border-radius:22px !important;box-shadow:8px 8px 0 #111 !important}
+body[data-skin="comic"] #win h2,body[data-skin="comic"] #lose h2{color:#ffcf1f !important;-webkit-text-stroke:2px #111;text-shadow:4px 4px 0 #111 !important}
+@keyframes sk-pop{0%{transform:scale(.6);opacity:0}100%{transform:scale(1);opacity:1}}
+@keyframes sk-popx{0%{transform:translateX(-50%) scale(.6);opacity:0}100%{transform:translateX(-50%) scale(1);opacity:1}}
+
+/* ── HORROR: haunted, cursed, the dead. Words that flicker like bad light. */
+body[data-skin="horror"]{--fs-accent:#c21d1d;--tcol:#e8d8d0;--tglow:rgba(190,20,20,.6);--rule:rgba(160,20,20,.8);--sub:#a89088}
+body[data-skin="horror"] #fsstart{background:radial-gradient(ellipse at center,rgba(20,0,0,.6),rgba(0,0,0,.95)) !important}
+body[data-skin="horror"] .fs-startcard{background:transparent}
+body[data-skin="horror"] .fs-startcard h1{font:400 50px var(--f-serif) !important;letter-spacing:.3em !important;color:#d9c8be !important;
+  text-shadow:0 0 22px rgba(190,20,20,.8),0 0 2px #000 !important;animation:sk-flicker 4s infinite}
+body[data-skin="horror"] .fs-startcard div{color:#9a8a84 !important;font-family:var(--f-serif) !important;font-style:italic}
+body[data-skin="horror"] #startbtn{background:transparent !important;color:#c21d1d !important;border:1px solid #6a1010 !important;border-radius:0 !important;
+  font:400 16px var(--f-serif) !important;letter-spacing:.4em !important}
+body[data-skin="horror"] #fsdlg{background:linear-gradient(180deg,rgba(10,0,0,.92),rgba(0,0,0,.96)) !important;border:0 !important;border-top:1px solid #4a0a0a !important;
+  border-radius:0 !important;font-family:var(--f-serif) !important;font-style:italic;color:#d8c8c0 !important}
+body[data-skin="horror"] #fsdlgwho{color:#c21d1d !important;font-family:var(--f-serif) !important;font-style:normal;letter-spacing:.3em !important}
+body[data-skin="horror"] #fsbantxt{font:400 34px var(--f-serif) !important;letter-spacing:.32em !important;color:#d9c8be !important;text-shadow:0 0 22px rgba(190,20,20,.8) !important}
+body[data-skin="horror"] #fsban.on #fsbantxt{animation:sk-flicker 1.4s 1}
+body[data-skin="horror"] .fs-card{background:rgba(8,0,0,.94);border-color:#4a0a0a;border-radius:0}
+body[data-skin="horror"] .fs-card b{color:#c21d1d;font-family:var(--f-serif)}
+body[data-skin="horror"] #win .card,body[data-skin="horror"] #lose .card{border-radius:0 !important;background:rgba(8,0,0,.96) !important;border:1px solid #4a0a0a !important}
+@keyframes sk-flicker{0%,100%{opacity:1}8%{opacity:.35}10%{opacity:1}52%{opacity:.85}54%{opacity:.2}57%{opacity:1}}
+
+/* ── RACING: races, drifts, arenas, sport. Everything leans forward. ──── */
+body[data-skin="racing"]{--fs-accent:#ff3d6e;--tcol:#fff;--tglow:rgba(255,61,110,.55);--rule:rgba(255,61,110,.9);--sub:#ffb3c6}
+body[data-skin="racing"] #fsstart{background:linear-gradient(115deg,rgba(10,6,20,.85) 40%,rgba(255,61,110,.25)) !important}
+body[data-skin="racing"] .fs-startcard{transform:skewX(-8deg);border-left:6px solid #ff3d6e;background:rgba(10,8,18,.8);text-align:left !important}
+body[data-skin="racing"] .fs-startcard h1{font:800 54px var(--f-head) !important;font-style:italic;font-stretch:75% !important;letter-spacing:0 !important}
+body[data-skin="racing"] .fs-startcard div{margin-left:0 !important}
+body[data-skin="racing"] #startbtn{border-radius:0 !important;transform:skewX(-12deg);background:#ff3d6e !important;color:#fff !important;font-style:italic;font-weight:800 !important}
+body[data-skin="racing"] #fsdlg{border-radius:0 !important;transform:translateX(-50%) skewX(-8deg) !important;border:0 !important;border-left:5px solid #ff3d6e !important;
+  background:rgba(10,8,18,.9) !important}
+body[data-skin="racing"] #fsdlgwho{color:#ff3d6e !important;font-style:italic}
+body[data-skin="racing"] #fsbantxt{font-style:italic;font-weight:800 !important;font-stretch:75% !important;font-size:44px !important;
+  background:linear-gradient(90deg,transparent,rgba(255,61,110,.85) 20%,rgba(255,61,110,.85) 80%,transparent);padding:2px 60px;display:inline-block}
+body[data-skin="racing"] #fsban.on #fsbantxt{animation:sk-slide .35s cubic-bezier(.2,.9,.2,1)}
+body[data-skin="racing"] #hud h1,body[data-skin="racing"] #obj{font-style:italic;font-stretch:75%}
+body[data-skin="racing"] .fs-card{border-radius:0;border-left:4px solid #ff3d6e;background:rgba(10,8,18,.94)}
+body[data-skin="racing"] .fs-card b{color:#ff3d6e;font-style:italic}
+@keyframes sk-slide{from{transform:translateX(-60vw) skewX(-20deg);opacity:0}to{transform:translateX(0) skewX(0);opacity:1}}
+
+/* ── STORYBOOK: cozy farms, villages, meadows, gentle walks. ──────────── */
+body[data-skin="storybook"]{--fs-accent:#7fbf6a;--tcol:#fffaf0;--tglow:rgba(255,236,190,.55);--rule:rgba(255,236,190,.8);--sub:#fff1cf}
+body[data-skin="storybook"] #fsstart{background:radial-gradient(ellipse at center,rgba(40,60,30,.35),rgba(20,26,14,.72)) !important}
+body[data-skin="storybook"] .fs-startcard{background:rgba(255,250,236,.93);color:#3e3424 !important;border-radius:28px;box-shadow:0 18px 50px rgba(0,0,0,.35)}
+body[data-skin="storybook"] .fs-startcard h1{font:italic 400 46px var(--f-serif) !important;text-transform:none !important;letter-spacing:.01em !important;
+  color:#3f6b2e !important;text-shadow:none !important}
+body[data-skin="storybook"] .fs-startcard div{color:#5a4c34 !important}
+body[data-skin="storybook"] #startbtn{background:#7fbf6a !important;color:#fff !important;border-radius:999px !important;font:italic 400 20px var(--f-serif) !important;
+  letter-spacing:.04em !important;text-transform:none !important}
+body[data-skin="storybook"] #fsdlg{background:rgba(255,250,236,.95) !important;color:#3e3424 !important;border:0 !important;border-radius:22px !important;
+  font-family:var(--f-serif) !important;font-size:16px !important}
+body[data-skin="storybook"] #fsdlgwho{color:#3f6b2e !important;font:italic 400 13px var(--f-serif) !important;text-transform:none !important;letter-spacing:.02em !important}
+body[data-skin="storybook"] #fsdlg.on{animation:sk-rise .5s ease-out}
+body[data-skin="storybook"] #fsbantxt{font:italic 400 38px var(--f-serif) !important;text-transform:none !important;letter-spacing:.01em !important;color:#fffaf0 !important}
+body[data-skin="storybook"] #fsban.on #fsbantxt{animation:sk-rise .7s ease-out}
+body[data-skin="storybook"] #hud h1{font-family:var(--f-serif);font-style:italic;text-transform:none;letter-spacing:.02em}
+body[data-skin="storybook"] .fs-card{background:rgba(255,250,236,.95);border:0;border-radius:20px}
+body[data-skin="storybook"] .fs-card b{color:#3f6b2e;font-family:var(--f-serif);font-style:italic;font-weight:400}
+body[data-skin="storybook"] .fs-card small,body[data-skin="storybook"] .fs-card p{color:#5a4c34}
+body[data-skin="storybook"] #win .card,body[data-skin="storybook"] #lose .card{background:rgba(255,250,236,.96) !important;color:#3e3424 !important;border:0 !important;border-radius:28px !important}
+body[data-skin="storybook"] #win h2,body[data-skin="storybook"] #lose h2{font-family:var(--f-serif) !important;font-style:italic;text-transform:none !important;color:#3f6b2e !important;text-shadow:none !important}
+@keyframes sk-rise{from{transform:translate(-50%,14px);opacity:0}to{transform:translate(-50%,0);opacity:1}}
+body[data-skin="storybook"] #fsban.on #fsbantxt{animation-name:sk-rise2}
+@keyframes sk-rise2{from{transform:translateY(14px);opacity:0}to{transform:translateY(0);opacity:1}}
+
+/* ── FROST: snow, ice, the far north. Thin type on frosted glass. ──────── */
+body[data-skin="frost"]{--fs-accent:#bfe6ff;--tcol:#f4fbff;--tglow:rgba(180,225,255,.65);--rule:rgba(220,240,255,.85);--sub:#d6efff}
+body[data-skin="frost"] #fsstart{background:rgba(200,225,245,.18) !important;backdrop-filter:blur(8px) !important}
+body[data-skin="frost"] .fs-startcard{background:rgba(14,34,54,.55);border:1px solid rgba(255,255,255,.45);border-radius:6px}
+body[data-skin="frost"] .fs-startcard div{color:#e6f3ff !important;text-shadow:0 1px 6px rgba(0,10,25,.8)}
+body[data-skin="frost"] .fs-startcard h1{font-weight:200 !important;letter-spacing:.45em !important}
+body[data-skin="frost"] #startbtn{background:rgba(255,255,255,.85) !important;color:#16314a !important;border-radius:4px !important;font-weight:300 !important;letter-spacing:.3em !important}
+body[data-skin="frost"] #fsdlg{background:rgba(220,238,255,.16) !important;backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,.4) !important;border-radius:6px !important}
+body[data-skin="frost"] #fsdlgwho{color:#bfe6ff !important;font-weight:300 !important;letter-spacing:.3em !important}
+body[data-skin="frost"] #fsbantxt{font-weight:200 !important;letter-spacing:.4em !important}
+body[data-skin="frost"] #fsban.on #fsbantxt{animation:sk-frost .8s ease-out}
+@keyframes sk-frost{from{filter:blur(8px);opacity:0;letter-spacing:.8em}to{filter:blur(0);opacity:1}}
+
+body.reduced[data-skin] *{animation:none !important}

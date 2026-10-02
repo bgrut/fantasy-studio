@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
 <title>__TITLE__</title>
 <link rel="stylesheet" href="./vendor/kit/kit.css">
+<link rel="stylesheet" href="./vendor/kit/skins.css">
 <style>
   html,body{margin:0;padding:0;height:100%;overflow:hidden;background:#0b0e12;
             font-family:var(--f-ui)}

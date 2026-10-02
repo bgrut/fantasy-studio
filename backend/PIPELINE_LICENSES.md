@@ -47,6 +47,33 @@ Cached but not called by any code path: Depth-Anything-V2-Small and -Base,
 sentence-transformers mpnet, RMBG-1.4 under `vendor/TripoSG/pretrained_weights`.
 They can be deleted without effect.
 
+The zero123plus and InstantMesh weights and the unused SDXL copies (the two
+single-file checkpoints and the OpenVINO exports) were deleted from the cache
+on 2026-10-01 with the owner's approval.
+
+## Who owns what
+
+- **What users make is theirs.** The studio's LICENSE (BSL 1.1) grants every
+  output (games, characters, models, textures, music, text) free of any
+  restriction, and the runtime copied into an exported game under MIT. Each
+  exported game's LICENSES.md says so and carries the MIT text.
+- **The studio is the owner's to sell.** BSL keeps anyone else from offering
+  Fantasy Studio, or a modified copy, as a paid product or hosted service, and
+  the owner may sell it however they choose, a subscription included.
+
+## Before selling Fantasy Studio as a subscription
+
+Every part above allows a paid service. What each one asks of the operator:
+
+| part | what selling it as a service requires |
+|---|---|
+| SDXL and its ControlNet (OpenRAIL++-M) | the terms of service carry the licence's use restrictions (its Attachment A) and bind subscribers to them; outputs stay the subscriber's |
+| Gemma 3 (Gemma Terms of Use) | the terms of service carry Google's Prohibited Use Policy and a copy of, or link to, the Gemma terms; the model is not offered to subscribers as a general chatbot |
+| DINOv3 (DINOv3 License) | "Built with DINOv3" stays visible in the product's credits; a copy of the licence ships with the studio; no military, weapons or surveillance customers |
+| Blender scripts (`scripts/*.py` run inside Blender) | none while the studio runs on the owner's servers. A downloadable studio carrying them should license those scripts as GPL-3.0-or-later, since they use Blender's GPL API; they talk to the rest of the studio only through files and a socket, so the studio itself stays BSL |
+| CMU motion | none beyond the credit line every game already carries |
+| brand-named library models (ferrari, corvette, ford f-150) | a trademark risk for subscribers who sell their games; renaming them to generic kinds (sports car, pickup) before launch removes it |
+
 Rules this file exists to keep:
 
 - A model with a non-commercial licence never enters a code path, even as a

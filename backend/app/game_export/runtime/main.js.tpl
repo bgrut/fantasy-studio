@@ -15,6 +15,7 @@ import { CSM } from './vendor/jsm/csm/CSM.js';
 import { UnrealBloomPass } from './vendor/jsm/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from './vendor/jsm/postprocessing/OutputPass.js';
 import RAPIER from './vendor/rapier.es.js';
+import { buildCarHQ as __buildCarHQ } from './proc/car.js';
 
 const SPEC = __GAME_SPEC__;
 
@@ -438,6 +439,35 @@ async function main() {
     balanced:    { dpr: Math.min(devicePixelRatio, 1.5), msaa: 4, shadow: 2048 },
     performance: { dpr: 1,                               msaa: 0, shadow: 2048 },
   }[QUALITY] || { dpr: Math.min(devicePixelRatio, 2), msaa: 4, shadow: 4096 };
+  // FOREST TO THE HORIZON (2026-10-01). A nature world ended at its own
+  // edge: a few hundred cylinder-and-blob trees, then an empty apron and a
+  // ring of cones. Here a growing world carries grown trees (proc/flora.js)
+  // through the playfield and a land beyond it to the horizon, as many as
+  // the machine can draw: near trees are geometry, far ones are pictures of
+  // themselves. Decided up here because the fog, the mountain ring and the
+  // camera's reach all move outward to make room for it.
+  const FLORA = (() => {
+    const W = SPEC.world || {}, L0 = W.level || {};
+    const words = [W.name, W.sky, W.flora, W.weather, W.setting, SPEC.title, SPEC.description]
+      .filter(Boolean).join(' ').toLowerCase();
+    if (L0.osm || L0.interior || W.pano) return null;
+    if (new URLSearchParams(location.search).get('flora') === '0') return null;   // A/B and debugging
+    if (/space|asteroid|lunar|\bmoon\b|mars|orbit|station|underwater|undersea|ocean floor|reef|cyber|neon|metropolis|downtown|city street/.test(words)) return null;
+    if (['pixel', 'lowpoly', 'papercraft', 'synthwave'].includes(SPEC.style)) return null;
+    const q = {
+      ultra:       { R: 1400, n: 420000, near: 46, inner: 6000, cap: 700 },
+      balanced:    { R: 1000, n: 160000, near: 40, inner: 3500, cap: 600 },
+      performance: { R: 650,  n: 45000,  near: 28, inner: 1500, cap: 300 },
+    }[QUALITY] || { R: 1400, n: 420000, near: 46, inner: 6000, cap: 700 };
+    const dens = SIL.arch === 'dead' ? 0.12 : SIL.arch === 'cypress' ? 0.45 : 1.0;
+    const outer = (SPEC.view || '3d') !== 'topdown' && !/desert|dune|canyon|wasteland|tundra|glacier/.test(words);
+    const out = Object.assign({ words, dens, outer }, q);
+    window.__flora = { on: true, outer, R: q.R, planned: q.n };
+    return out;
+  })();
+  // the planted forest and how many of its trees stand in the playfield;
+  // declared up here, before the render loop that reads them can start
+  let FLORA_LIVE = null, _floraInner = 0;
   // ── STYLE IDENTITY (2026-08-25): the UI is part of the art direction ─
   // A style was a post-shader — the same HUD font, the same rounded chrome,
   // whether the game was a watercolor cartoon or a horror crawl. The frame
@@ -592,8 +622,15 @@ async function main() {
     // were 60% fog. Default air is now CRISP (near 0.55 of world, full fog
     // well past the far edge); prompted "thick fog" still closes right in.
     const near = SPEC.world.size_m * (0.80 - fd * 0.72);   // 0.80..0.08 of world
-    const far  = SPEC.world.size_m * (2.20 - fd * 1.55);   // 2.20..0.65 of world
+    let far  = SPEC.world.size_m * (2.20 - fd * 1.55);   // 2.20..0.65 of world
+    // a forest to the horizon needs air to see it through: ordinary and
+    // clear air carry the eye out to the land's far edge, with the haze
+    // deepening on the way (aerial perspective); thick fog stays thick
+    if (FLORA && FLORA.outer && fd <= 0.6) far = Math.max(far, FLORA.R * 0.95);
     scene.fog = new THREE.Fog(pal.fog, Math.max(near, 2), Math.max(far, near + 20));
+  } else if (FLORA && FLORA.outer) {
+    // no fog asked for: still a far haze, or the forest would stop at a line
+    scene.fog = new THREE.Fog(pal.fog, FLORA.R * 0.3, FLORA.R * 1.0);
   }
   if (LOOK) {
     // A LOOK OWNS ITS ATMOSPHERE. The prompt's fog_density describes weather;
@@ -815,7 +852,9 @@ async function main() {
       const rock = new THREE.Color(snowy ? 0x9aa4ad : 0x6b6f66)
         .lerp(new THREE.Color(pal.sky), 0.22);
       const capC = new THREE.Color(0xf4f7fa);
-      const mmat = new THREE.MeshStandardMaterial({ roughness: 1.0, vertexColors: true });
+      // diffuse only, like the land beyond: at a grazing view the rough
+      // physical surface mirrored the sky and every ridge read as pale ice
+      const mmat = new THREE.MeshLambertMaterial({ vertexColors: true });
       // the auto-texture sweep was draping 'stone' slabs over these cones'
       // 0-1 UVs — a 300m ridge wearing a 3m slab photo stretched 100x is
       // the single most "2003" surface in every valley shot. Sculpted
@@ -825,15 +864,23 @@ async function main() {
       const NPK = 11;
       for (let i = 0; i < NPK; i++) {
         const a = (i / NPK) * Math.PI * 2 + rngM() * 0.35;
-        const dist = gsizeM * (0.78 + rngM() * 0.28);
-        const hgt = gsizeM * (0.10 + rngM() * 0.14);
+        // with a forest to the horizon the ridges stand BEHIND it, at the
+        // land's far edge, as tall as distance asks; otherwise just past the
+        // playfield, as before
+        const far9 = !!(FLORA && FLORA.outer);
+        const dist = far9 ? FLORA.R * (0.66 + rngM() * 0.26) : gsizeM * (0.78 + rngM() * 0.28);
+        const hgt = far9 ? FLORA.R * (0.08 + rngM() * 0.09) : gsizeM * (0.10 + rngM() * 0.14);
         const rad = hgt * (1.5 + rngM() * 0.9);
-        const geo = new THREE.ConeGeometry(rad, hgt, SIL.mtnSeg + Math.floor(rngM() * 3), 3);
+        const geo = new THREE.ConeGeometry(rad, hgt, (SIL.mtnSeg + Math.floor(rngM() * 3)) * (far9 ? 2 : 1), far9 ? 6 : 3);
+        (window.__mtnRing = window.__mtnRing || []).push([Math.cos(a) * dist, Math.sin(a) * dist, rad]);
         const posA = geo.attributes.position;
         const col = new Float32Array(posA.count * 3);
         for (let v = 0; v < posA.count; v++) {
           const vx = posA.getX(v), vy = posA.getY(v), vz = posA.getZ(v);
-          const n = Math.sin(vx * 0.9 + i * 7) * Math.cos(vz * 1.1 + i * 3);
+          const n = far9
+            ? Math.sin(vx / rad * 5 + i * 7) * Math.cos(vz / rad * 6 + i * 3)
+              + 0.45 * Math.sin(vy / hgt * 9 + vx / rad * 11 + i)
+            : Math.sin(vx * 0.9 + i * 7) * Math.cos(vz * 1.1 + i * 3);
           posA.setX(v, vx * (1 + n * SIL.mtnJag));
           posA.setZ(v, vz * (1 + n * SIL.mtnJag));
           const t = (vy / hgt + 0.5);
@@ -905,7 +952,8 @@ async function main() {
   const SIDE_OS = (SPEC.world && SPEC.world.platforms)
     ? Math.min(9, Math.max(4.5, 3.2 * ((SPEC.player && SPEC.player.height_m) || 1.8) + 2.5)) : 9;
   if (VIEW === '3d') {
-    camera = new THREE.PerspectiveCamera(SPEC.camera.fov_deg, innerWidth / innerHeight, 0.1, 1000);
+    camera = new THREE.PerspectiveCamera(SPEC.camera.fov_deg, innerWidth / innerHeight, 0.1,
+                                         FLORA && FLORA.outer ? Math.max(1000, FLORA.R * 1.25) : 1000);
   } else {
     const oa = innerWidth / innerHeight;
     const os = VIEW === 'side' ? SIDE_OS : 16;      // world units of half-height on screen
@@ -964,7 +1012,10 @@ async function main() {
   // at night and at dusk, off by day. The one light that guarantees the
   // character reads on a black moor. Added at boot so the light count never
   // changes in play (a changed count recompiles every material).
-  const heroFill = new THREE.PointLight(0xfff0dc, _isNightSky ? 4.0 : 0.0, 9, 2);
+  // 14, not 4 (2026-10-01): the fill was tuned while every big world was lit
+  // by three cascade suns (see the CSM patch); with the one true moon the
+  // hero on a black moor fell back under the readable line
+  const heroFill = new THREE.PointLight(0xfff0dc, _isNightSky ? 14.0 : 0.0, 9, 2);
   heroFill.name = 'heroFill';
   scene.add(heroFill);
   // CASCADED SHADOWS (Arc A round 3, 2026-07-28): big worlds/cities get
@@ -995,7 +1046,24 @@ async function main() {
         for (const m of ms) {
           if ((m.isMeshStandardMaterial || m.isMeshPhysicalMaterial
                || m.isMeshLambertMaterial || m.isMeshPhongMaterial)
-              && !_csmSeen.has(m)) { csm.setupMaterial(m); _csmSeen.add(m); }
+              && !_csmSeen.has(m)) {
+            // CSM REPLACES onBeforeCompile (2026-10-01): the grass's wind and
+            // the forest's wind and near/far dissolve were silently dropped
+            // on every level big enough for cascades. Its hook runs first,
+            // then whatever the material already had.
+            const _prevOBC = m.onBeforeCompile;
+            const _prevKey = m.customProgramCacheKey;
+            csm.setupMaterial(m);
+            if (_prevOBC && _prevOBC !== THREE.Material.prototype.onBeforeCompile) {
+              const _csmOBC = m.onBeforeCompile;
+              m.onBeforeCompile = (sh, r) => { _csmOBC.call(m, sh, r); _prevOBC.call(m, sh, r); };
+              m.customProgramCacheKey = () => 'csm+' + (_prevKey ? _prevKey.call(m) : '');
+            }
+            // new defines mean nothing to a material already compiled: it
+            // has to be built again, or it keeps lighting with three suns
+            m.needsUpdate = true;
+            _csmSeen.add(m);
+          }
         }
       });
     } catch (e) { console.warn('[game] CSM unavailable: ' + e.message); csm = null; }
@@ -1435,7 +1503,7 @@ async function main() {
     // HORIZON SKIRT (Phase 122): beyond the painted map, a vast apron in
     // the same ground tone runs to 6x the world size — fog fades it into
     // the sky, so every outdoor world ends gracefully instead of at a cliff
-    if (!INTERIOR && !SPEC.world.pano) {   // pano worlds: photo floor ends at its own horizon
+    if (!INTERIOR && !SPEC.world.pano && !(FLORA && FLORA.outer)) {   // pano worlds: photo floor ends at its own horizon; a forest world has the land beyond instead
       const skirtC = gcol.clone().offsetHSL(0, -0.04, -0.02);
       const skirt = new THREE.Mesh(
         new THREE.RingGeometry(gsize * 0.495, gsize * 6, 48, 1),
@@ -1447,6 +1515,83 @@ async function main() {
     }
     world.createCollider(RAPIER.ColliderDesc.cuboid(gsize / 2, 0.05, gsize / 2)
       .setTranslation(0, -0.05, 0));
+  }
+
+  // THE LAND BEYOND (2026-10-01): past the playfield the world goes on, as
+  // far as the forest does. A polar sheet starts exactly on the level's
+  // edge (its first ring samples the level's own heights) and rolls into
+  // hills that grow with distance; it is scenery, never walked on, so it
+  // has no collider. hOut answers for any point, inside the level or out.
+  let hOut = (x, z) => hAt(x, z);
+  let forestAt = () => 0;
+  if (FLORA && FLORA.outer && !INTERIOR) {
+    const H2 = gsize / 2;
+    const rN = mulberry32(SPEC.seed + 4242);
+    const P0 = new Uint8Array(512);
+    for (let i = 0; i < 256; i++) P0[i] = i;
+    for (let i = 255; i > 0; i--) { const j = Math.floor(rN() * (i + 1)); const t = P0[i]; P0[i] = P0[j]; P0[j] = t; }
+    for (let i = 0; i < 256; i++) P0[i + 256] = P0[i];
+    const vn = (x, z) => {                               // value noise, -1..1
+      const xi = Math.floor(x), zi = Math.floor(z), xf = x - xi, zf = z - zi;
+      const h = (a, b) => P0[(P0[a & 255] + b) & 511] / 127.5 - 1;
+      const u = xf * xf * (3 - 2 * xf), v = zf * zf * (3 - 2 * zf);
+      const a = h(xi, zi), b = h(xi + 1, zi), c = h(xi, zi + 1), d = h(xi + 1, zi + 1);
+      return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
+    };
+    const fbm = (x, z) => vn(x, z) * 0.55 + vn(x * 2.1, z * 2.1) * 0.28 + vn(x * 4.3, z * 4.3) * 0.17;
+    hOut = (x, z) => {
+      const cx = Math.max(-H2, Math.min(H2, x)), cz = Math.max(-H2, Math.min(H2, z));
+      const e = hAt(cx, cz);
+      const d = Math.hypot(x - cx, z - cz);
+      if (d <= 0) return e;
+      const k = Math.min(1, d / 260);
+      const amp = FLORA.R * 0.035 * k * k;
+      return e + (fbm(x / 300, z / 300) * 0.8 + 0.35) * amp - Math.min(d, 6) * 0.05;
+    };
+    // where the forest stands, outside the playfield: big stands and glades
+    forestAt = (x, z) => Math.max(0, Math.min(1, (fbm(x / 210 + 17, z / 210 - 9) + 0.12) * 2.4));
+    const SEG = QUALITY === 'performance' ? 128 : 256, ROWS = QUALITY === 'performance' ? 32 : 56;
+    const pos = new Float32Array((SEG + 1) * (ROWS + 1) * 3);
+    const col = new Float32Array((SEG + 1) * (ROWS + 1) * 3);
+    // the playfield's ground is grassed and shaded by its own grass (the AO
+    // pass reads every blade), so the same colour bare reads far paler: a
+    // meadow seen from afar is the ground darkened by what grows on it, and
+    // a forest floor darker again
+    const base = gcol.clone().offsetHSL(0, 0.02, -0.02).multiplyScalar(0.5);
+    const under = base.clone().lerp(new THREE.Color(0x1a2213), 0.6);
+    for (let r = 0; r <= ROWS; r++) {
+      const t = Math.pow(r / ROWS, 1.8);
+      for (let s = 0; s <= SEG; s++) {
+        const a = (s / SEG) * Math.PI * 2, ca = Math.cos(a), sa = Math.sin(a);
+        const b = H2 / Math.max(Math.abs(ca), Math.abs(sa));      // on the square's edge
+        const d = b + (FLORA.R * 1.08 - b) * t;
+        const x = ca * d, z = sa * d;
+        const k = (r * (SEG + 1) + s) * 3;
+        pos[k] = x; pos[k + 1] = hOut(x, z) - (r === 0 ? 0.08 : 0); pos[k + 2] = z;
+        const c = base.clone().lerp(under, forestAt(x, z) * FLORA.dens)
+          .multiplyScalar(0.85 + 0.3 * (fbm(x / 90 - 31, z / 90 + 7) * 0.5 + 0.5));
+        col[k] = c.r; col[k + 1] = c.g; col[k + 2] = c.b;
+      }
+    }
+    const idx = [];
+    for (let r = 0; r < ROWS; r++) for (let s = 0; s < SEG; s++) {
+      const a = r * (SEG + 1) + s, b = a + 1, c = a + SEG + 1, d = c + 1;
+      idx.push(a, b, c, b, d, c);
+    }
+    const og = new THREE.BufferGeometry();
+    og.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    og.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    og.setIndex(idx);
+    og.computeVertexNormals();
+    // diffuse only: seen from a hilltop the land lies at a grazing angle,
+    // where even the roughest physical surface mirrors the sky, and the
+    // glades between the trees read as snow
+    const om = new THREE.MeshLambertMaterial({ vertexColors: true });
+    om.userData.noAutoTex = true;
+    const outerLand = new THREE.Mesh(og, om);
+    outerLand.receiveShadow = true;
+    outerLand.name = 'outerLand';
+    scene.add(outerLand);
   }
 
   // WATER (ocean/lake worlds): translucent plane at world.water_level with a
@@ -5111,7 +5256,125 @@ async function main() {
   // empty green field — which is exactly how the first build shipped. The
   // same procedural trunk+canopy kit the city plants along streets grows
   // here wherever the region mask says forest: no asset, no LLM, no luck.
-  if (!PURE_SCENE && !OSM && LVL && LVL.regions
+  // GROWN FORESTS (2026-10-01): where FLORA is on, the playfield's forests
+  // and the land beyond carry grown trees (proc/flora.js). Inside the level
+  // a forest region is dense, open land holds a scattering, and paths,
+  // water, villages, the spawn and every objective stay clear; each trunk
+  // in the level is solid. Outside, the forest mask lays big stands and
+  // glades out to the horizon. The region forest below is the fallback.
+  if (FLORA && !PURE_SCENE && !INTERIOR) {
+    try {
+      const FL = await import('./proc/flora.js');
+      const kinds = FL.kindsFor(SIL.arch, FLORA.words);
+      const _gh = {}; gcol.getHSL(_gh);
+      const leaf = FL.leafFor(FLORA.words, _gh);
+      const rT = mulberry32(SPEC.seed + 9191);
+      const treeK = kinds.map((k, i) => i).filter(i => kinds[i].kind !== 'bush');
+      const bushK = kinds.findIndex(k => k.kind === 'bush');
+      const tW = treeK.reduce((s, i) => s + kinds[i].weight, 0);
+      const pickTree = () => {
+        let u = rT() * tW;
+        for (const i of treeK) { u -= kinds[i].weight; if (u <= 0) return i; }
+        return treeK[0];
+      };
+      const keepClear = [];
+      if (LVL) {
+        if (LVL.goal) keepClear.push([LVL.goal[0], LVL.goal[1], 7]);
+        for (const p of (LVL.collect_points || [])) keepClear.push([p[0], p[1], 4]);
+        for (const p of (LVL.landmarks || [])) keepClear.push([p[0], p[1], 9]);
+      }
+      keepClear.push([_sp.x, _sp.z, 12]);     // the hero starts in a clearing, the camera behind them too
+      const clear = (x, z) => keepClear.some(([cx, cz, r]) => (x - cx) * (x - cx) + (z - cz) * (z - cz) < r * r);
+      const T = [];
+      const H2 = gsize / 2;
+      // inside the playfield
+      const occ = new Set();
+      const cellOf = (x, z) => Math.floor(x / 2.2) + ',' + Math.floor(z / 2.2);
+      const colliders = [];
+      for (let t = 0; t < FLORA.inner * 14 && _floraInner < FLORA.inner; t++) {
+        const x = (rT() - 0.5) * gsize * 0.97, z = (rT() - 0.5) * gsize * 0.97;
+        const reg = (LVL && LVL.regions) ? regionAt(x, z) : null;
+        const rk = reg ? reg.kind : 'land';
+        if (rk === 'water' || rk === 'village') continue;
+        if (LVL && pathDist(x, z) < CORR * 1.25) continue;
+        if (clear(x, z)) continue;
+        let isBush = false, p = 0;
+        if (rk === 'forest') p = 0.25 + reg.w * 0.75;
+        else if (rk === 'rock' || rk === 'sand') p = 0.015;
+        else p = 0.07;
+        p *= FLORA.dens;
+        if (rT() > p) {
+          if (bushK >= 0 && rT() < p * 1.6 + 0.04) isBush = true; else continue;
+        }
+        const key = cellOf(x, z);
+        if (occ.has(key)) continue;
+        occ.add(key);
+        if (!isBush) {
+          // a trunk needs room: block the eight cells around it too
+          const cx = Math.floor(x / 2.2), cz = Math.floor(z / 2.2);
+          for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) occ.add((cx + a) + ',' + (cz + b));
+        }
+        const ki = isBush ? bushK : pickTree();
+        const s = isBush ? 0.8 + rT() * 0.7 : 0.75 + rT() * 0.55;
+        const y = hAt(x, z);
+        T.push(x, y, z, s, rT() * Math.PI * 2, ki);
+        if (!isBush && colliders.length < 1500) colliders.push([x, y, z, s]);
+        _floraInner++;
+      }
+      // beyond it, to the horizon
+      let outerN = 0;
+      if (FLORA.outer) {
+        const mtn = window.__mtnRing || [];
+        const R = FLORA.R, target = Math.round(FLORA.n * FLORA.dens);
+        for (let t = 0; t < target * 4 && outerN < target; t++) {
+          // area-uniform over the disc, then rejected inside the playfield
+          const rr = Math.sqrt(rT()) * R, a = rT() * Math.PI * 2;
+          const x = Math.cos(a) * rr, z = Math.sin(a) * rr;
+          if (Math.abs(x) < H2 + 1.5 && Math.abs(z) < H2 + 1.5) continue;
+          const f = forestAt(x, z);
+          if (rT() > f * 0.97 + 0.03) continue;
+          if (mtn.some(([mx, mz, mr]) => (x - mx) * (x - mx) + (z - mz) * (z - mz) < mr * mr * 0.5)) continue;
+          const isBush = bushK >= 0 && rT() < 0.18;
+          const ki = isBush ? bushK : pickTree();
+          const s = (isBush ? 0.9 + rT() * 0.6 : 0.8 + rT() * 0.6) * (1 + Math.min(1, rr / R) * 0.25);
+          T.push(x, hOut(x, z), z, s, rT() * Math.PI * 2, ki);
+          outerN++;
+        }
+      }
+      if (T.length) {
+        const barkTex = new THREE.TextureLoader().load('textures/bark.jpg');
+        barkTex.wrapS = barkTex.wrapT = THREE.RepeatWrapping; barkTex.colorSpace = THREE.SRGBColorSpace;
+        const barkN = new THREE.TextureLoader().load('textures/bark_n.jpg');
+        barkN.wrapS = barkN.wrapT = THREE.RepeatWrapping;
+        // the impostors are lit by this world's own light: a copy of its
+        // sun where the sun is, its sky fill and its environment
+        const sunB = new THREE.DirectionalLight(pal.sunCol || 0xffffff, pal.sun * 1.12);
+        sunB.position.set(...pal.sunPos).normalize().multiplyScalar(50);
+        sunB.target.position.set(0, 0, 0); sunB.target.updateMatrixWorld();
+        const hemiB = hemi.clone();
+        FLORA_LIVE = FL.plantForest({
+          renderer, scene, seed: (SPEC.seed + 31) >>> 0, kinds, leaf, barkTex, barkN,
+          lightRig: { lights: [sunB, hemiB], environment: scene.environment, environmentIntensity: scene.environmentIntensity },
+          windU: WIND_U, near: FLORA.near, nearCap: FLORA.cap, variants: 3,
+          sunDir: new THREE.Vector3(...pal.sunPos).normalize(),
+          sunCol: new THREE.Color(pal.sunCol || 0xffffff).multiplyScalar(pal.sun * 1.12),
+          trees: new Float32Array(T), shadows: true,
+        });
+        for (const [x, y, z, s] of colliders) {
+          world.createCollider(RAPIER.ColliderDesc.cylinder(1.6 * s, 0.32 * s).setTranslation(x, y + 1.6 * s, z));
+        }
+        window.__flora = Object.assign(window.__flora || {}, {
+          inner: _floraInner, outer: outerN, total: FLORA_LIVE.count, kinds: kinds.map(k => k.kind),
+          variants: FLORA_LIVE.variants, tris: FLORA_LIVE.tris,
+        });
+        console.log('[game] grown forest: ' + _floraInner + ' in the playfield, ' + outerN + ' to the horizon');
+      }
+    } catch (e) {
+      console.warn('[game] grown forest unavailable: ' + e.message);
+      FLORA_LIVE = null; _floraInner = 0;
+    }
+  }
+  if (!FLORA_LIVE && !PURE_SCENE && !OSM && LVL && LVL.regions
       && LVL.regions.palette.some(q => q.kind === 'forest')) {
     const rngF2 = mulberry32(SPEC.seed + 6464);
     const spots2 = [];
@@ -5226,6 +5489,9 @@ async function main() {
     return !!(r && r.kind === 'forest' && r.w > 0.3 && _isTreeAsset(sct.asset));
   };
   for (const sct of PURE_SCENE ? [] : (SPEC.world.scatter || [])) {
+    // a grown forest replaces the kit's low-poly trees and bushes: two tree
+    // languages side by side read as a mistake, and the kit's are blocky
+    if (FLORA_LIVE && _floraInner > 40 && _isTreeAsset(sct.asset)) continue;
     try {
       const gltf = await loadGLB(sct.asset);
       if (!landmarkAsset) landmarkAsset = gltf;
@@ -6446,7 +6712,32 @@ async function main() {
     // THE KIT'S VOICE (2026-09-10): the start card is set in the studio's faces and
     // takes the mood of the prompt's own words, the way the factory's title does
     try { __kitSetMood(__kitMoodOf([SPEC.title, SPEC.world && SPEC.world.name, SPEC.world && SPEC.world.description, SPEC.world && SPEC.world.setting].filter(Boolean).join(' '))); } catch (e) {}
+    // A FRAME OF ITS OWN (2026-10-01): every game opened on the same dark
+    // glass. The game's own words choose its skin (vendor/kit/skins.css):
+    // the panels, the faces, and how a message arrives. The style the
+    // planner chose speaks first, then the sentence; ?skin= overrides.
+    {
+      const W9 = SPEC.world || {};
+      const words = [SPEC.prompt, SPEC.title, SPEC.intro, W9.name, W9.description, W9.setting, W9.sky, W9.weather]
+        .filter(Boolean).join(' ').toLowerCase();
+      const has = re => re.test(words);
+      const st = SPEC.style || 'default';
+      let skin = 'glass';
+      if (st === 'horror' || has(/haunt|ghost|zombie|graveyard|cursed|undead|horror|crypt|demon|vampire/)) skin = 'horror';
+      else if (st === 'cartoon' || st === 'anime' || has(/cartoon|toy|kids|cute|candy|platformer|bouncy|jelly|bunny/)) skin = 'comic';
+      else if (has(/detective|mystery|heist|noir|murder|crime|stolen|museum|spy|thief|burglar/)) skin = 'noir';
+      else if (has(/race|racing|drift|rally|kart|soccer|football|arena|stadium|grand prix|speedway/)) skin = 'racing';
+      else if (st === 'pixel' || st === 'synthwave' || has(/space|station|robot|cyber|colony|mars|orbit|alien|lab\b|laborator|reactor|hacker|starship|asteroid/)) skin = 'terminal';
+      else if (has(/knight|castle|dragon|wizard|kingdom|medieval|quest|sword|dungeon|temple|samurai|viking|ruin/)) skin = 'parchment';
+      else if (has(/snow|ice\b|frozen|arctic|glacier|blizzard|tundra|winter/)) skin = 'frost';
+      else if (st === 'sketch' || has(/farm|village|cozy|meadow|garden|bakery|picnic|orchard|forest|firefl|cottage|island/)) skin = 'storybook';
+      const q9 = new URLSearchParams(location.search).get('skin');
+      if (q9) skin = q9;
+      document.body.dataset.skin = skin;
+      window.__skin = skin;
+    }
     const ov = document.createElement('div');
+    ov.id = 'fsstart';
     ov.style.cssText = 'position:fixed;inset:0;display:flex;align-items:center;'
       + 'justify-content:center;background:rgba(8,7,14,.62);z-index:40;backdrop-filter:blur(3px);';
     // narrative layer: the LLM-written quest intro turns "collect 6 fireflies"
@@ -6454,7 +6745,7 @@ async function main() {
     const introHtml = SPEC.intro
       ? `<div style="font:400 15px var(--f-ui);color:#b9b4d8;margin-bottom:14px;max-width:44ch;margin-left:auto;margin-right:auto;line-height:1.5;">${SPEC.intro}</div>`
       : '';
-    ov.innerHTML = '<div style="text-align:center;max-width:520px;padding:36px;">'
+    ov.innerHTML = '<div class="fs-startcard" style="text-align:center;max-width:520px;padding:36px;">'
       + `<h1 class="fs-start" style="font:700 44px var(--f-head);letter-spacing:.08em;text-transform:uppercase;color:var(--tcol);text-shadow:0 0 34px var(--tglow),0 6px 22px rgba(0,0,0,.85);margin:0 0 12px;">${SPEC.title || 'Your World'}</h1>`
       + introHtml
       + `<div style="font:500 15px var(--f-ui);color:#cfcbe6;margin-bottom:6px;">`
@@ -8283,6 +8574,8 @@ async function main() {
     w.style.color = tint || '#5cffc9';
     document.getElementById('fsdlgtxt').textContent = text;
     d.style.opacity = '1';
+    // the skin's entrance plays again for every line, not only the first
+    d.classList.remove('on'); void d.offsetWidth; d.classList.add('on');
     clearTimeout(window.__dlgT);
     window.__dlgT = setTimeout(() => { d.style.opacity = '0'; },
                                Math.min(9000, 2600 + text.length * 45));
@@ -8309,9 +8602,11 @@ async function main() {
     document.getElementById('fsbansub').textContent = sub || 'new objective';
     document.getElementById('fsbantxt').textContent = text;
     b.style.opacity = '1'; b.style.letterSpacing = '.06em';
+    b.classList.remove('on'); void b.offsetWidth; b.classList.add('on');
     clearTimeout(window.__banT);
     window.__banT = setTimeout(() => {
       b.style.opacity = '0'; b.style.letterSpacing = '.02em';
+      b.classList.remove('on');
     }, 2400);
   }
   // what the guide says about the step you are actually on
@@ -8864,6 +9159,13 @@ async function main() {
     'coupe', 'suv', 'suv', 'wagon', 'pickup', 'van', 'taxi', 'taxi',
     'sports', 'box'];
   function buildCar(cp) {
+    // LOFTED CARS (2026-10-01): proc/car.js builds the body as one skin with
+    // flush glass, turned wheels and real lamps; this extruded build stays as
+    // the fallback (?car=extrude, or if the module ever fails)
+    if (__buildCarHQ && new URLSearchParams(location.search).get('car') !== 'extrude') {
+      try { return __buildCarHQ(cp, CAR_TYPES[cp.type] || {}); }
+      catch (e) { console.warn('[game] lofted car failed, extruding: ' + e.message); }
+    }
     const g = new THREE.Group();
     const T = CAR_TYPES[cp.type] || {};
     const L = cp.length || T.length || 4.4, Wd = cp.width || T.width || 1.85;
@@ -12011,6 +12313,7 @@ varying vec2 vUvRaw;
   const _msaaRT = new THREE.WebGLRenderTarget(1, 1, {
     samples: QCFG.msaa, type: THREE.HalfFloatType });
   const composer = new EffectComposer(renderer, _msaaRT);
+  window.__composer = composer;   // harness: passes can be inspected and isolated
   // N8AO (Arc A round 2, 2026-07-28): ground-truth ambient occlusion (CC0
   // lib) REPLACES both the RenderPass and the homemade 8-tap SSAO — it
   // renders the scene itself with a true depth+normal AO pass. Half-res is
@@ -13142,6 +13445,9 @@ varying vec2 vUvRaw;
     };
     drawChip();
   }
+  // the cascades take every material there is before the first frame, not
+  // a second into play (late spawns are caught by the loop)
+  if (window.__csmPatch) window.__csmPatch();
   renderer.setAnimationLoop(() => {
     let dt = Math.min(clock.getDelta(), 0.05);
     const rdt = dt;                       // real dt: camera + juice decay
@@ -13151,6 +13457,7 @@ varying vec2 vUvRaw;
     if (window.__hitStop > 0) { window.__hitStop -= dt; dt *= 0.08; }
     else if (window.__slowMo > 0) { window.__slowMo -= dt; dt *= 0.35; }
     WIND_U.value = performance.now() / 1000;   // wind clock (Phase 81)
+    if (FLORA_LIVE) FLORA_LIVE.update(camera);  // which trees are near enough to be trees
     __fmTick(rdt);                             // the guide, on real time
     for (const w of wheels) {                  // roll with speed, steer in front
       w.tire.rotation.x += ((window.__pSpeed || 0) / w.wr) * dt;
@@ -14326,7 +14633,11 @@ varying vec2 vUvRaw;
         sh.autoUpdate = false;
         if (window.__csmFrame % [1, 2, 4][Math.min(ci, 2)] === 0) sh.needsUpdate = true;
       }
-      window.__csmFrame = (window.__csmFrame || 0) + 1;
+      // ONE COUNT A FRAME (2026-10-01): the frame was counted twice here
+      // since 2026-09-22, so the count was always even and "% 60 === 1" never
+      // came true: no material was ever set up for the cascades, and every
+      // big world was lit by all three cascade lights at full strength, three
+      // suns, washing out everything past the near ground.
       if (window.__csmFrame % 60 === 1) window.__csmPatch();  // catch spawns
     }
     // PERF GATE (2026-08-05): renderer.info resets on every render call, and
@@ -14363,6 +14674,13 @@ varying vec2 vUvRaw;
       const wantFov = SPEC.camera.fov_deg * (1 - 0.16 * juicePunch) + 5 * runK + 14 * driveFovK;
       if (juicePunch > 0.001) juicePunch = Math.max(0, juicePunch - rdt * 4.2);
       if (Math.abs(camera.fov - wantFov) > 0.01) { camera.fov = wantFov; camera.updateProjectionMatrix(); }
+    }
+    // A PINNED VIEW for shot tools and fixtures: {pos:[x,y,z], look:[x,y,z]}
+    // holds the camera where a picture needs it, whatever the game is doing
+    if (window.__camPin) {
+      camera.position.set(...window.__camPin.pos);
+      camera.lookAt(...window.__camPin.look);
+      if (FLORA_LIVE) FLORA_LIVE.update(camera);
     }
     renderer.info.autoReset = false;
     renderer.info.reset();
