@@ -77,3 +77,17 @@ Notation: LH left hind, LF left fore, RH, RF. Duty factor > 50% is a walk, < 50%
 | Fish | tail beat vs speed | V ~ 0.7-1.0 x L x f, amplitude ~0.2 L |
 | Elephant | no aerial phase, walk order at all speeds | <= 6.8 m/s |
 | Bear | plantigrade, walk / running walk / canter, no trot | transitions 2.0 and 3.0 m/s |
+
+## 5. How the runtime applies this (proc/gait.js, 2026-10-02)
+
+| Problem found by filming | What the gait engine does |
+|---|---|
+| a baked clip holds 1.7 cycles, so the loop pops mid-stride | autocorrelates the thighs' left-minus-right swing to find the true period and plays one whole cycle |
+| walk and run blended on separate clocks | one gait phase drives both, aligned on left-foot contact (a sync group) |
+| speed matched by play rate alone | play rate takes the square root of the speed ratio, clamped to 0.72-1.45; stride warping (two-bone leg IK along travel) takes the rest, up to 1.95 |
+| a walk clip used at jogging speed | the clip follows speed: past 1.2x the walk's natural pace the body breaks into the jog |
+| arms swing only behind the body | each upper arm aimed in the sagittal plane at the opposite thigh's angle, abduction capped near 10 degrees, elbow 20-45 deg walking and ~90 running; a hand holding something swings at 40% |
+| trunk reclined in the jog clip | the trunk's lean is measured (head over hips, averaged ~0.5 s) and corrected to 1.5-6 degrees forward; the head is counter-rotated to stay level |
+| a rig whose legs walk against its travel | the clip's forward is read from the planted foot's motion; a body carried against it for a third of a second turns round once |
+
+Measure with `tools/shotgate/gaitlab.mjs` (J=<job> OUT=<dir>): planted-foot slide as a share of body speed (healthy under ~0.3), pelvis ride, trunk lean, stop glide.

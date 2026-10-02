@@ -184,6 +184,35 @@ _STYLE_ASKED = {
 }
 
 
+# what a sentence NAMES as its look, for deciding against a chip: the style
+# words themselves, never the incidental ones (a game "for kids" is not a
+# request to overrule the chip). "default" is photoreal.
+_STYLE_NAMED = [
+    ("default", r"\b(photo-?real\w*|realistic|realism|lifelike|life-like|hyper-?real\w*|cinematic|gritty)\b"),
+    ("cartoon", r"\b(cartoon\w*|toon|cel[- ]?shad\w*|pixar)\b"),
+    ("horror", r"\b(horror|creepy|scary|terrifying|haunt\w*|nightmare\w*|eerie)\b"),
+    ("pixel", r"\b(pixel[- ]?art|pixel\w*|8[- ]?bit|16[- ]?bit)\b"),
+    ("lowpoly", r"\b(low[- ]?poly)\b"),
+    ("anime", r"\b(anime|manga|ghibli)\b"),
+    ("noir", r"\b(noir|black[- ]and[- ]white|monochrome)\b"),
+    ("watercolor", r"\b(watercolou?r\w*)\b"),
+    ("claymation", r"\b(claymation|plasticine|stop[- ]?motion)\b"),
+    ("papercraft", r"\b(papercraft|origami)\b"),
+    ("synthwave", r"\b(synthwave|retrowave|vaporwave|outrun)\b"),
+    ("sketch", r"\b(sketch\w*|pencil[- ]drawn|hand[- ]?drawn)\b"),
+    ("comic", r"\b(comic[- ]book|graphic novel)\b"),
+    ("kawaii", r"\b(kawaii)\b"),
+]
+
+
+def _prompt_names_style(prompt: str):
+    t = (prompt or "").lower()
+    for st, pat in _STYLE_NAMED:
+        if _fre.search(pat, t):
+            return st
+    return None
+
+
 def _style_asked(style: str, prompt: str) -> bool:
     """Whether the sentence itself asks for this look."""
     pat = _STYLE_ASKED.get(style or "")
@@ -262,6 +291,20 @@ _CAR_PAINT = {
 }
 
 
+def _singular(w: str) -> str:
+    """wolves -> wolf, boxes -> box, benches -> bench, berries -> berry, glass stays."""
+    w = (w or "").lower()
+    if w.endswith("ies") and len(w) > 4:
+        return w[:-3] + "y"
+    if w.endswith("ves") and len(w) > 4 and w not in ("eaves", "olives", "caves", "graves", "waves", "doves", "stoves", "groves", "coves"):
+        return w[:-3] + "f"
+    if w.endswith(("ches", "shes", "xes", "sses", "zes")):
+        return w[:-2]
+    if w.endswith("s") and not w.endswith("ss") and len(w) > 3:
+        return w[:-1]
+    return w
+
+
 def classify_hot_edit(prompt: str) -> dict | None:
     """HOT EDITS (2026-08-05, the studio unlock): an edit that only moves
     runtime dials should never rebuild the world. Rebuilding two minutes to
@@ -288,15 +331,25 @@ def classify_hot_edit(prompt: str) -> dict | None:
         m = _re.search(r"(\d+(?:\.\d+)?)", p)
         return float(m.group(1)) if m else default
 
-    more = bool(_re.search(r"\b(more|faster|higher|increase|up|stronger|"
-                           r"brighter|tougher|thicker|heavier|denser|"
-                           r"harder|bigger)\b", p))
-    less = bool(_re.search(r"\b(less|slower|lower|decrease|down|weaker|"
-                           r"darker|easier|thinner|lighter|clearer|"
-                           r"softer|smaller)\b", p))
-    if not (more or less or _re.search(r"\bset\b", p)):
+    # MISREADS FIXED (2026-10-02): "up"/"down" matched "pick up" and "slow
+    # down"; "set ... to N" ignored N for speeds and enemy health and scaled
+    # by 0.72 instead; "stronger"/"weaker" enemies changed their SPEED. The
+    # direction words are now "turn up"/"turn down" style phrases, a stated
+    # number is used as the value wherever one is given, and strength words
+    # mean health.
+    more = bool(_re.search(r"\b(more|faster|quicker|higher|increase|raise|boost|"
+                           r"(turn|crank|bump) (it )?up|stronger|brighter|tougher|"
+                           r"thicker|heavier|denser|harder|bigger)\b", p))
+    less = bool(_re.search(r"\b(less|fewer|slower|slow down|lower|decrease|reduce|"
+                           r"(turn|tone) (it )?down|weaker|darker|easier|thinner|"
+                           r"lighter|clearer|softer|smaller)\b", p))
+    _set = bool(_re.search(r"\b(set|make)\b.*\b(to|=|at)\s*\d", p)) or bool(_re.search(r"\bset\b", p))
+    if not (more or less or _set):
         return None
+    if more and less:
+        return None              # "faster but weaker" is two edits; the planner reads it whole
     k = 1.35 if more else 0.72
+    _given = _num(None) if _set else None
 
     if _re.search(r"\b(fog|haze|mist)\b", p):
         patch["fog_density"] = round(_num(6.0) if _re.search(r"\bset\b", p)
@@ -305,17 +358,22 @@ def classify_hot_edit(prompt: str) -> dict | None:
         patch["sun_intensity"] = round(2.2 * k, 2)
     if _re.search(r"\b(exposure|contrast|dark|bright)\b", p) and "sun" not in p:
         patch["exposure"] = round(1.0 * k, 2)
-    if _re.search(r"\b(enemy|enemies|wolves|wolf|hostile|guard|rival)\b", p):
-        if _re.search(r"\b(hp|health|tough|strong)\b", p):
-            patch["enemy_hp"] = int(max(1, round(3 * k)))
-        else:
-            patch["enemy_speed"] = round(2.6 * k, 2)
+    if _re.search(r"\b(enemy|enemies|wolves|wolf|hostiles?|guards?|rivals?|monsters?|zombies?)\b", p):
+        if _re.search(r"\b(hp|health|tough\w*|strong\w*|weak\w*|harder|easier|durable)\b", p):
+            patch["enemy_hp"] = int(max(1, round(_given if _given is not None else 3 * k)))
+        elif _re.search(r"\b(speed|fast\w*|slow\w*|quick\w*)\b", p):
+            patch["enemy_speed"] = round(_given if _given is not None else 2.6 * k, 2)
     elif _re.search(r"\b(hp|health|lives|tough)\b", p):
         patch["player_hp"] = int(max(1, round(_num(5) if _re.search(r"\bset\b", p)
                                               else 5 * k)))
-    elif _re.search(r"\b(speed|run|walk|move|fast|slow)\b", p):
-        patch["walk_speed"] = round(2.0 * k, 2)
-        patch["run_speed"] = round(5.0 * k, 2)
+    elif _re.search(r"\b(speed|run\w*|walk\w*|mov\w*|fast\w*|slow\w*|quick\w*)\b", p):
+        if _given is not None:
+            # a number given is the walking speed; the run keeps its ratio
+            patch["walk_speed"] = round(_given, 2)
+            patch["run_speed"] = round(_given * 2.5, 2)
+        else:
+            patch["walk_speed"] = round(2.0 * k, 2)
+            patch["run_speed"] = round(5.0 * k, 2)
     return patch or None
 
 
@@ -505,6 +563,17 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                     r"^\s*(?:please\s+)?(?:place|put|add|drop|spawn)\s+"
                     r"(?:an|a|the|another|some)?\b\s*(.+)$",
                     req.prompt.strip(), _re.IGNORECASE)
+                # LIVING THINGS ARE CAST, NOT PLACED (2026-10-02): "add two
+                # wolves" with a click attached became one static prop called
+                # "wolve". A count, or a creature or person, is a change to
+                # the cast, which the planner makes (it still reads the spot).
+                if m and _re.search(r"\b(two|three|four|five|six|several|some|many|a few|\d+)\s+\w+|"
+                                    r"\b(wolf|wolves|bear|bears|deer|fox|foxes|dragon|dragons|zombie|zombies|"
+                                    r"skeleton|skeletons|goblin|goblins|guard|guards|enemy|enemies|monster|monsters|"
+                                    r"villager|villagers|npc|npcs|soldier|soldiers|knight|knights|horse|horses|"
+                                    r"dog|dogs|cat|cats|bird|birds|spider|spiders|rat|rats|boar|boars|ghost|ghosts)\b",
+                                    m.group(1), _re.IGNORECASE):
+                    m = None
                 if m:
                     rest = m.group(1)
                     interact = None
@@ -543,8 +612,9 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                     noun = noun.strip(" .!,\"'")
                     if noun and len(noun.split()) <= 3:
                         w = noun.split()[-1].lower()
-                        kind = (w[:-3] + "y") if w.endswith("ies") else \
-                               (w[:-1] if w.endswith("s") and not w.endswith("ss") else w)
+                        # wolves -> wolf, boxes -> box, benches -> bench (2026-10-02:
+                        # a bare trailing-s cut made "wolve", "boxe", "benche")
+                        kind = _singular(w)
                         cur = _copy.deepcopy(base_spec)
                         items = cur.setdefault("world", {}).setdefault("placed_items", [])
                         if req.at_x2 is not None and req.at_z2 is not None:
@@ -665,6 +735,7 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                 # the SEED carry forward from the base game; only placed_items
                 # (LLM may add) and the deterministic sky/weather/style word
                 # overrides below may differ.
+                import re as _re0
                 _wl = req.prompt.lower()
                 _world_words = (
                     "world", "setting", "scene", "scenery", "environment",
@@ -674,7 +745,7 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                     "mountain", "cave", "indoor", "outdoor", "outside",
                     "inside", "interior", "sky", "weather", "night", "day",
                     "sunset", "snow", "rain", "storm", "fog")
-                if not any(w in _wl for w in _world_words):
+                if not any(_re0.search(r"\b" + _re0.escape(w) + r"\b", _wl) for w in _world_words):
                     _keep_items = spec.world.placed_items
                     for k, v in (base_spec.get("world") or {}).items():
                         if k == "placed_items":
@@ -698,10 +769,14 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                                ("midnight", "night"), ("sunrise", "sunset"),
                                ("dawn", "sunset"), ("sunset", "sunset"),
                                ("dusk", "dusk"), ("twilight", "dusk"),
-                               ("noon", "day"), ("daytime", "day"), ("day", "day"),
+                               ("noon", "day"), ("daytime", "day"), ("daylight", "day"),
                                ("overcast", "overcast"), ("cloudy", "overcast"),
                                ("mars", "mars"), ("outer space", "space")):
-                    if _re.search(rf"\b{_re.escape(w)}\b", _cl):
+                    # "in one day", "a night watchman" are not the time of day:
+                    # a sky word counts when the edit sets it ("make it night",
+                    # "at night", "to dusk", "night time") or names little else
+                    _skyset = rf"\b(make it|turn it|switch to|change to|set to|set it to|at|into|to|it'?s)\s+(a\s+|an\s+)?(\w+\s+)?{_re.escape(w)}\b|\b{_re.escape(w)}\s*(time|sky)\b"
+                    if _re.search(_skyset, _cl) or (_re.search(rf"\b{_re.escape(w)}\b", _cl) and len(_cl.split()) <= 3):
                         if spec.world.sky != sky:
                             job.setdefault("notes", []).append(
                                 f"sky set to {sky} (your words beat the AI's pick)")
@@ -709,12 +784,18 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                         break
                 for w, wx in (("blizzard", "snow"), ("snowstorm", "snow"),
                               ("snow", "snow"), ("rain", "rain"),
-                              ("drizzle", "rain"), ("storm", "rain"),
+                              ("drizzle", "rain"), ("rainstorm", "rain"), ("thunderstorm", "rain"),
                               ("clear sky", "none"), ("clear skies", "none")):
                     if _re.search(rf"\b{_re.escape(w)}\b", _cl):
                         spec.world.weather = wx
                         break
                 # style words in edits are deterministic too ("make it horror")
+                # ...but only when the edit is about the look of the game: "make
+                # the boss scary" and "more realistic enemies" are about one
+                # character, and switched the whole game to horror or photoreal
+                _look_edit = bool(_re.search(r"\b(make|turn|switch|change|convert|restyle|re-?style)\b.*\b(it|game|world|everything|whole thing|the look|style|art)\b"
+                                             r"|\b(style|art style|look|aesthetic|graphics)\b", _cl)) \
+                    or len(_cl.split()) <= 3
                 for w, st in (("horror", "horror"), ("scary", "horror"),
                               ("spooky", "horror"), ("anime", "anime"),
                               ("cartoon", "cartoon"), ("toon", "cartoon"),
@@ -722,7 +803,7 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                               ("retro", "pixel"), ("8-bit", "pixel"),
                               ("low-poly", "lowpoly"), ("low poly", "lowpoly"),
                               ("photoreal", "default"), ("realistic", "default")):
-                    if _re.search(rf"\b{_re.escape(w)}\b", _cl):
+                    if _look_edit and _re.search(rf"\b{_re.escape(w)}\b", _cl):
                         spec.style = st
                         job.setdefault("notes", []).append(f"style set to {st}")
                         break
@@ -733,6 +814,12 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                               ("sidescroller", "side"), ("platformer", "side"),
                               ("side view", "side"), ("2d", "topdown"),
                               ("3d", "3d"), ("third person", "3d")):
+                    # a camera word counts when the edit is about the camera or
+                    # the view ("a lamp overhead" is not a request for top-down)
+                    if w == "overhead" and not _re.search(r"\b(camera|view|overhead (view|camera))\b", _cl):
+                        continue
+                    if w in ("2d", "3d") and not _re.search(r"\b(make|turn|switch|change|convert)\b|\b(camera|view)\b", _cl):
+                        continue
                     if _re.search(rf"\b{_re.escape(w)}\b", _cl):
                         spec.view = vw
                         job.setdefault("notes", []).append(f"view set to {vw}")
@@ -1074,12 +1161,30 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             job.setdefault("notes", []).append(
                 f"art direction: {spec.style} (your prompt asked for it. "
                 f"Pick a style in the studio to override)")
-        if req.style:
+        # THE SENTENCE OUTRANKS THE CHIP (2026-10-02). A style chip clicked
+        # once stays selected for the session and rode every later build, so
+        # "a dark horror forest" built after a cartoon game came out a cartoon
+        # town. When a new prompt names a look itself (or asks for realism),
+        # the prompt wins and the chip stands down for that build; a chip
+        # still decides every prompt that names no look.
+        _chip = req.style
+        if _chip and base_spec is None:
+            _said = _prompt_names_style(req.prompt)
+            if _said and _said != _chip:
+                job.setdefault("notes", []).append(
+                    f"art direction: {'photoreal' if _said == 'default' else _said} (your prompt names it; "
+                    f"the {_chip} chip stands down for this build)")
+                _chip = None
+                try:
+                    spec.style = _said
+                except Exception:
+                    pass
+        if _chip:
             try:
-                spec.style = req.style        # pydantic validates the literal
+                spec.style = _chip            # pydantic validates the literal
             except Exception:
                 job.setdefault("notes", []).append(
-                    f"unknown style '{req.style}': kept {spec.style}")
+                    f"unknown style '{_chip}': kept {spec.style}")
         # A STYLE IS A GAME, NOT A COAT OF PAINT (2026-09-05). Every world we
         # made was a heightfield seen from a third-person follow camera, so
         # seventeen styles were seventeen paint jobs on ONE game — "always on
@@ -3046,6 +3151,59 @@ def export_game(req: GameExportRequest):
     t = threading.Thread(target=_run_job, args=(job_id, req), daemon=True)
     t.start()
     return {"ok": True, "job_id": job_id}
+
+
+@router.post("/api/game/jobs/{job_id}/godot")
+def export_job_godot(job_id: int):
+    """Emit a Godot 4 project for THIS game, from its saved spec.
+
+    THE GAME YOU HAVE, NOT A NEW ONE (2026-10-02). The studio's Godot button
+    started a fresh generation from job.prompt, which after an edit is the
+    edit's own sentence ("place a fence here"), so the Godot build was a
+    different world made from the wrong words, and a level opened from a
+    project (prompt "") failed outright. It now exports the resolved spec the
+    web build was made from, which carries the original prompt.
+    """
+    import json as _json
+    from app.game_export.spec import spec_from_dict as _sfd
+    from app.game_export.godot_exporter import export_godot_game
+    job = _jobs.get(job_id)
+    out_dir = GAME_JOBS_DIR / f"job_{job_id}"
+    # the full saved spec first (absolute asset paths); a job restored from
+    # disk only knows its dist/spec.json, whose assets are relative to dist
+    data = None
+    sp = out_dir / "spec_full.json"
+    if sp.exists():
+        data = _json.loads(sp.read_text(encoding="utf-8"))
+    if data is None:
+        data = (job or {}).get("spec_resolved")
+    if not data:
+        raise HTTPException(status_code=404, detail="this game has no saved spec to export; rebuild it once first")
+    data = _json.loads(_json.dumps(data))
+    _dist = out_dir / "dist"
+
+    def _abs(a):
+        if isinstance(a, str) and a.startswith("./"):
+            return str((_dist / a[2:]).resolve())
+        return a
+    if isinstance(data.get("player"), dict):
+        data["player"]["asset"] = _abs(data["player"].get("asset"))
+    for e in data.get("entities") or []:
+        if isinstance(e, dict):
+            e["asset"] = _abs(e.get("asset"))
+    for sc in ((data.get("world") or {}).get("scatter") or []):
+        if isinstance(sc, dict):
+            sc["asset"] = _abs(sc.get("asset"))
+    try:
+        spec = _sfd(dict(data))
+        if data.get("prompt") and not getattr(spec, "prompt", None):
+            spec.prompt = data.get("prompt")
+        proj = export_godot_game(spec, out_dir, verbose=False)
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(status_code=500, detail=f"godot export failed: {type(e).__name__}: {e}")
+    if job is not None:
+        job["godot_path"] = str(proj)
+    return {"ok": True, "godot_path": str(proj), "prompt": getattr(spec, "prompt", None)}
 
 
 @router.get("/api/game/jobs/{job_id}")

@@ -114,6 +114,12 @@ export async function gameHealth(): Promise<GameHealth> {
 // carry real world coordinates ("place a book HERE")
 export interface PickPoint { x: number; z: number; target?: string }
 
+// THIS game to Godot, from its saved spec: no new generation, the original
+// prompt rides into the project (2026-10-02)
+export async function exportGodot(jobId: number): Promise<{ ok: boolean; godot_path: string; prompt?: string }> {
+  return j(await fetch(`/api/game/jobs/${jobId}/godot`, { method: 'POST' }))
+}
+
 export async function exportGame(prompt: string, opts?: {
   godot?: boolean; player?: string; baseJobId?: number; at?: PickPoint
   at2?: { x: number; z: number }                     // line tool second point

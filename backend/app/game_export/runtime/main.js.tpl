@@ -18,6 +18,7 @@ import RAPIER from './vendor/rapier.es.js';
 import { buildCarHQ as __buildCarHQ } from './proc/car.js';
 import * as __FLORA from './proc/flora.js';
 import * as __GRASS from './proc/grass.js';
+import { createGait as __createGait } from './proc/gait.js';
 
 const SPEC = __GAME_SPEC__;
 
@@ -9736,6 +9737,12 @@ async function main() {
     const wrap = document.createElement('div');
     wrap.style.cssText = 'position:fixed;inset:0;display:flex;align-items:center;'
       + 'justify-content:center;gap:14px;z-index:40;background:rgba(8,6,14,0.45)';
+    // THE CARD WAITS FOR INSPECT (2026-10-02): a full-screen card over the
+    // canvas swallowed every Inspect click, and a click meant to pick a spot
+    // bought an upgrade instead. While Inspect is on the card is hidden and
+    // returns, untouched, when Inspect ends.
+    wrap.className = 'fs-levelcard';
+    if (inspectOn) wrap.style.display = 'none';
     const mk = (icon, name, desc, fn) => {
       const c = document.createElement('button');
       c.style.cssText = 'width:150px;padding:18px 10px;border-radius:12px;border:1px solid '
@@ -11129,6 +11136,20 @@ async function main() {
   } else {
     console.warn('[game] player GLB has no animations — static fallback');
   }
+  // THE GAIT ENGINE (2026-10-02, proc/gait.js): one whole cycle per clip,
+  // one shared phase, cadence and stride split like stride warping, legs by
+  // IK, arms counter-swinging, the trunk leaning into speed. ?gait=0 is the
+  // old per-clip clock.
+  let GAIT = null;
+  try {
+    if (mixer && pg && pg.scene && new URLSearchParams(location.search).get('gait') !== '0')
+      GAIT = __createGait({ root: pg.scene, actions, mixer, rates: _strideRate });
+    if (GAIT) console.log('[game] gait engine: ' + JSON.stringify(GAIT.facts()));
+  } catch (e) { console.warn('[game] gait engine skipped: ' + e.message); GAIT = null; }
+  let _gaitPrevV = 0, _gaitPrevP = null;
+  const _gaitFwd = new THREE.Vector3(0, 0, 1);
+  const _gaitCF = new THREE.Vector3();
+  let _legYawFix = 0, _legYawVote = 0, _legYawChecked = false;
   let attackUntil = 0;                 // swing overlay suppresses the locomotion FSM
   // A BLEND, NOT A SWITCH (2026-09-23): idle, walk and run all play; their
   // weights follow the ground speed and each keeps its own stride rate.
@@ -12442,6 +12463,7 @@ async function main() {
         archetype: (SPEC.world && SPEC.world.archetype) || 'plain',
         mode: P.mode || 'walk',
         walk_v: +walkV.toFixed(2), land_dip_peak: +landDipPeak.toFixed(3), run_k: +runK.toFixed(2), fov: camera.fov !== undefined ? +camera.fov.toFixed(1) : null, fov_base: SPEC.camera.fov_deg,   // a side or top view is orthographic: no fov
+        gait_engine: GAIT ? GAIT.facts() : null,
         gait: { idle: +_gaitW.idle.toFixed(2), walk: +_gaitW.walk.toFixed(2), run: +_gaitW.run.toFixed(2), rate: actions.__walk ? +actions.__walk.timeScale.toFixed(2) : null, top: current && current.getClip ? current.getClip().name : null },
         lean: { roll: +turnRoll.toFixed(3), pitch: +accelP.toFixed(3), head: +headYawK.toFixed(3), head_bone: headBone ? headBone.name : null },
         arms: armAngles(),       // the upper arms' angle from straight down, in degrees: a walk swings them 4 to 20
@@ -12867,6 +12889,7 @@ async function main() {
     on = !!on;
     if (on === inspectOn) return;
     inspectOn = on;
+    for (const c of document.querySelectorAll('.fs-levelcard')) c.style.display = on ? 'none' : 'flex';
     // death heatmap markers (H4): red discs where players have died
     if (on && !window.__deathMarks) {
       window.__deathMarks = [];
@@ -14964,7 +14987,7 @@ varying vec2 vUvRaw;
     }
     playerObj.position.set(nt.x, nt.y - (capHalf + capR), nt.z);
     holder.rotation.y = modelYaw + FRONT_IS_MINUS_Z
-                      + THREE.MathUtils.degToRad(P.yaw_offset_deg || 0);
+                      + THREE.MathUtils.degToRad(P.yaw_offset_deg || 0) + _legYawFix;
     if (DRIVE || DRIVING) {
       // suspension feel: pitch under accel/brake, roll into turns
       const accel = (vSpeed - prevV) / Math.max(dt, 1e-3); prevV = vSpeed;
@@ -15078,7 +15101,12 @@ varying vec2 vUvRaw;
         // the blend: how much of "moving" and how much of that is a run
         const vWalk = Math.max(P.walk_speed || 1, 0.3);
         const kMove = THREE.MathUtils.clamp(speed / (vWalk * 0.45), 0, 1);
-        const kRun = _wantRun ? THREE.MathUtils.clamp((speed - vWalk * 0.6) / Math.max((P.run_speed || vWalk * 2) - vWalk * 0.6, 0.2), 0.35, 1) : 0;
+        // with the gait engine the clip follows the SPEED, as a person's gait
+        // does: past a brisk walk the body breaks into a jog whatever key is
+        // held (a walk clip cranked to twice its pace is the mince it made)
+        const kRun = GAIT
+          ? THREE.MathUtils.smoothstep(speed, _wr * 1.2, Math.max(_wr * 1.2 + 0.4, _rr * 0.9))
+          : (_wantRun ? THREE.MathUtils.clamp((speed - vWalk * 0.6) / Math.max((P.run_speed || vWalk * 2) - vWalk * 0.6, 0.2), 0.35, 1) : 0);
         const sneaking = !!(window.__sneak && actions.__sneak);
         const want = { idle: 1 - kMove, walk: sneaking ? 0 : kMove * (1 - kRun), run: kMove * kRun, sneak: sneaking ? kMove * (1 - kRun) : 0 };
         let top = 'idle', topW = -1;
@@ -15089,14 +15117,43 @@ varying vec2 vUvRaw;
           if (_gaitW[k] > topW) { topW = _gaitW[k]; top = k; }
           // each gait at its own stride rate: the clip's measured rate when we
           // have it, the configured speed as the fallback; idle never cranks
-          if (k !== 'idle') {
+          if (k !== 'idle' && !(GAIT && (k === 'walk' || k === 'run'))) {
             const base = _strideRate.get(a2) || (k === 'run' ? P.run_speed : k === 'sneak' ? P.walk_speed * 0.45 : P.walk_speed) || 1;
             a2.timeScale = speed > 0.1 ? THREE.MathUtils.clamp(speed / base, 0.5, 5.5) : 1.0;
           }
         }
+        if (GAIT) GAIT.drive(dt, speed, _gaitW);
         current = actions['__' + top] || current;   // the dominant gait, for the attack's crossfade
       }
       mixer.update(dt);
+      if (GAIT && performance.now() >= attackUntil && !(DRIVE || DRIVING) && !window.__sneak) {
+        const _acc = (speed - _gaitPrevV) / Math.max(dt, 1e-3); _gaitPrevV = speed;
+        // forward is where the body is going, read off its own motion (the
+        // yaw convention differs by rig); standing, the last heading holds
+        const _gp = playerObj.position;
+        if (_gaitPrevP) {
+          const gx = _gp.x - _gaitPrevP.x, gz = _gp.z - _gaitPrevP.z, gl = Math.hypot(gx, gz);
+          if (gl > 0.25 * dt) _gaitFwd.set(gx / gl, 0, gz / gl);
+        }
+        _gaitPrevP = (_gaitPrevP || new THREE.Vector3()).copy(_gp);
+        // FACING FROM THE LEGS (2026-10-02): a heading table turned five rigs
+        // round in August; the knight was re-rigged since and the stale entry
+        // set him walking backwards, legs against his travel. The clips know
+        // their own forward: if the body is being carried against it for a
+        // third of a second of steady walking, the body turns round, once.
+        if (!_legYawChecked && speed > 0.8 && _gaitPrevP) {
+          const cf = GAIT.clipForward(_gaitCF);
+          if (cf) {
+            _legYawVote += (cf.dot(_gaitFwd) < -0.5 ? 1 : cf.dot(_gaitFwd) > 0.5 ? -1 : 0) * dt;
+            if (_legYawVote > 0.35) { _legYawFix += Math.PI; _legYawChecked = true; console.log('[game] facing corrected from the walk: the body turned to match its legs'); }
+            else if (_legYawVote < -0.35) _legYawChecked = true;
+          }
+        }
+        try {
+          GAIT.post(dt, { speed, forward: _gaitFwd,
+                          moving: 1 - _gaitW.idle, grounded: kcc.computedGrounded(), accel: _acc });
+        } catch (e) { console.warn('[game] gait post: ' + e.message); GAIT = null; }
+      }
       // THE HEAD LOOKS WHERE THE CAMERA LOOKS (2026-09-23): after the pose, the
       // head turns up to fifty degrees toward the view direction, about the
       // world's up so the rig's bone axes do not matter.

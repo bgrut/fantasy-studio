@@ -844,8 +844,20 @@ def export_godot_game(spec: GameSpec, out_dir: str | Path, verbose: bool = True)
     for i, sct in enumerate(spec.world.scatter):
         bring(sct.asset, f"sct{i}")
 
-    (proj / "project.godot").write_text(
-        _PROJECT.replace("__TITLE__", spec.title.replace('"', "'")), encoding="utf-8")
+    # THE SENTENCE TRAVELS WITH THE GAME (2026-10-02): the Godot project
+    # carried the title and nothing of what the user asked for; the prompt
+    # is now the project's description and the head of its README
+    _prompt = (getattr(spec, "prompt", None) or "").strip()
+    _proj_txt = _PROJECT.replace("__TITLE__", spec.title.replace('"', "'"))
+    if _prompt:
+        _desc = _prompt.replace('"', "'").replace(chr(10), " ")
+        _proj_txt = _proj_txt.replace("run/main_scene=", 'config/description="' + _desc + '"' + chr(10) + "run/main_scene=", 1)
+    (proj / "project.godot").write_text(_proj_txt, encoding="utf-8")
+    _readme = [f"# {spec.title}", ""]
+    _readme += (["Made with Fantasy Studio from the prompt:", "", "> " + _prompt, ""] if _prompt else ["Made with Fantasy Studio.", ""])
+    _readme += ["Open this folder with Godot 4.x (free, godotengine.org) and press Play. "
+                "STEAM_GUIDE.md and MULTIPLAYER_GUIDE.md cover shipping it.", ""]
+    (proj / "README.md").write_text(chr(10).join(_readme), encoding="utf-8")
     (proj / "player.gd").write_text(
         _PLAYER_GD.replace("__WALK__", f"{spec.player.walk_speed:.2f}")
                   .replace("__RUN__", f"{spec.player.run_speed:.2f}")

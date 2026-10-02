@@ -8,7 +8,7 @@ import { cn } from '@/lib/utils'
 import AssetPalette, { type PaletteAsset } from '@/components/AssetPalette'
 import EnginePanel from '@/components/EnginePanel'
 import {
-  addLevelToProject, createProject, exportGame, exportProject, gameHealth,
+  addLevelToProject, createProject, exportGame, exportGodot, exportProject, gameHealth,
   cancelJob, getGameJob, listProjects, openLevel, removeLevelFromProject, revealProjectZip, uploadSplat, listSplats, trainSplat, getSplatJob, imagineSplat, uploadScene,
   rerollAsset, updateLevel,
   type GameHealth, type GameJob, type GameProject,
@@ -552,25 +552,29 @@ export default function GameStudio() {
         setDropToast(`${a.subject} placed live — Apply edit to keep it`)
         return
       }
-      // LINE TOOL: first click anchors A, second closes the run A→B
-      setPlaceMode(mode => {
-        if (mode === 'line') {
-          setLineA(a => {
-            if (!a) return p
-            setSelLine({ a, b: p })
-            setSelPick(null)
-            return null
-          })
-        } else {
-          setSelPick(p)
-          setSelLine(null)
-        }
-        return mode
-      })
+      // LINE TOOL: first click anchors A, second closes the run A→B.
+      // Read from refs and set plainly (2026-10-02): this ran as side effects
+      // inside state-updater functions, which React may call twice (StrictMode,
+      // or a pending hover update), so one click set A and then closed the
+      // line on itself, a zero-length run that placed a single item.
+      if (placeModeRef.current === 'line') {
+        const a = lineARef.current
+        if (!a) { lineARef.current = p; setLineA(p) }
+        else { lineARef.current = null; setLineA(null); setSelLine({ a, b: p }); setSelPick(null) }
+      } else {
+        setSelPick(p)
+        setSelLine(null)
+      }
     }
     window.addEventListener('message', onMsg)
     return () => window.removeEventListener('message', onMsg)
   }, [])
+
+  // the line tool's state, readable from the once-mounted message listener
+  const placeModeRef = useRef(placeMode)
+  const lineARef = useRef<Pick | null>(lineA)
+  useEffect(() => { placeModeRef.current = placeMode }, [placeMode])
+  useEffect(() => { lineARef.current = lineA }, [lineA])
 
   // the fs-pick listener is mounted once and must not capture a stale job or
   // a stale startJob; refs keep it correct without re-subscribing every render
@@ -1253,20 +1257,19 @@ export default function GameStudio() {
                 <RotateCcw className="w-3 h-3" /> New level
               </button>
               <button
-                title="Rebuild this game as a Godot 4 project (open-source engine - full editor access)"
+                title="Export this game as a Godot 4 project (open-source engine - full editor access)"
                 onClick={async () => {
                   if (!job || building) return
                   setBuilding(true)
                   try {
-                    const { job_id } = await exportGame(job.prompt, {
-                      godot: true,
-                      style: style !== 'auto' ? style : undefined,
-                      view: view !== 'auto' ? view : undefined,
-                    })
-                    pollJob(job_id)
+                    // the game on screen, exported as it is: not a fresh
+                    // generation from the last edit's sentence
+                    const r = await exportGodot(job.id)
+                    setJob(prev => (prev && prev.id === job.id ? { ...prev, godot_path: r.godot_path } : prev))
                   } catch (e) {
-                    setBuilding(false)
                     setError(e instanceof Error ? e.message : String(e))
+                  } finally {
+                    setBuilding(false)
                   }
                 }}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs border border-white/[0.08] text-[#807d99] hover:text-white transition-colors"

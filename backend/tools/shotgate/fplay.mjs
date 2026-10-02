@@ -142,7 +142,10 @@ const s5 = await step();
 // 5. the finish step clears on its own once the new ore sells: back to first person and wait
 await p.keyboard.press('Tab'); await wait(300);
 let s6 = s5, waited = 0;
-while (waited < 40000 && !/Read the panel/.test(s6)) { await wait(2000); waited += 2000; s6 = await step(); }
+// the rate has to rise sixty a minute over the line's starting rate; on a
+// loaded test machine that has taken just over forty seconds (rounds 43 and
+// 49, 2026-10-02, at a steady 60 fps), so the window is seventy-five
+while (waited < 75000 && !/Read the panel/.test(s6)) { await wait(2000); waited += 2000; s6 = await step(); }
 const rate = await p.evaluate(() => window.__game.facts().rate_now);
 
 // 6. Enter clears the last card; the foreman steps back
