@@ -454,7 +454,7 @@ async function main() {
     if (L0.osm || L0.interior || W.pano) return null;
     if (new URLSearchParams(location.search).get('flora') === '0') return null;   // A/B and debugging
     // (2026-10-01) the moon, Mars and every barren place grow stone now, not nothing
-    if (/station|underwater|undersea|ocean floor|reef|cyber|neon|metropolis|downtown|city street/.test(words)) return null;
+    if (/station|cyber|neon|metropolis|downtown|city street/.test(words)) return null;   // (the sea grows kelp and coral now)
     if (['pixel', 'lowpoly', 'papercraft', 'synthwave'].includes(SPEC.style)) return null;
     const q = {
       ultra:       { R: 1400, n: 420000, near: 46, inner: 6000, cap: 700 },
@@ -464,7 +464,7 @@ async function main() {
     const biome = __FLORA.biomeFor(words, SIL.arch, null);
     const dens = biome.dens;
     // the land beyond is every open world's; trees on it only where things grow
-    const outer = (SPEC.view || '3d') !== 'topdown';
+    const outer = (SPEC.view || '3d') !== 'topdown' && !biome.underwater;   // under the sea the water is the horizon
     // barren: no meadow under it (the outer land keeps its colour), and the
     // outer scatter is stone and the odd cactus, sparse
     const barren = !biome.kinds.some(k => ['broadleaf', 'oak', 'birch', 'pine', 'spruce', 'palm', 'bush'].includes(k.kind) && k.weight >= 0.3);
@@ -797,7 +797,19 @@ async function main() {
     // visible background so the horizon art direction is unchanged).
     if (SPEC.world.hdri && !SPEC.world.pano) {
       import('./vendor/jsm/loaders/RGBELoader.js').then(({ RGBELoader }) => {
-        new RGBELoader().load(SPEC.world.hdri, (tex) => {
+        new RGBELoader().setDataType(THREE.FloatType).load(SPEC.world.hdri, (tex) => {
+          // THE SUN BROKE THE SKY (2026-10-02). A captured sunset puts the sun
+          // in the frame at tens of thousands of times paper white; through
+          // the bloom chain that one disc washed the whole picture to fog
+          // white, or, once a value overflowed, to black. A real camera
+          // clips too: the hot spot is capped (hue kept) before it is used
+          // as background or light, so the sky reads as the photograph it is.
+          const hd = tex.image.data, CAP = 48;
+          for (let i = 0; i < hd.length; i += 4) {
+            const m = Math.max(hd[i], hd[i + 1], hd[i + 2]);
+            if (m > CAP) { const k = CAP / m; hd[i] *= k; hd[i + 1] *= k; hd[i + 2] *= k; }
+          }
+          tex.needsUpdate = true;
           tex.mapping = THREE.EquirectangularReflectionMapping;
           const pmH = new THREE.PMREMGenerator(renderer);
           const envH = pmH.fromEquirectangular(tex).texture;
@@ -878,17 +890,95 @@ async function main() {
       mmat.userData.noAutoTex = true;
       const ring = new THREE.Group();
       const NPK = 11;
+      // SCULPTED RANGES (2026-10-02): behind a forest to the horizon a cone
+      // with jittered sides read as a party hat. A range is a heightfield:
+      // ridged noise (sharp crests, soft gullies) over a dome that falls to
+      // the land, coloured by height and slope: forest or scrub low, bare
+      // rock on the steeps, snow above the snowline where the world is cold
+      // enough and the slope gentle enough to hold it.
+      const _rv = (() => {
+        const P = new Uint8Array(512), rr = mulberry32(SPEC.seed + 1777);
+        for (let i = 0; i < 256; i++) P[i] = i;
+        for (let i = 255; i > 0; i--) { const j = Math.floor(rr() * (i + 1)); const t = P[i]; P[i] = P[j]; P[j] = t; }
+        for (let i = 0; i < 256; i++) P[i + 256] = P[i];
+        return (x, z) => {
+          const xi = Math.floor(x), zi = Math.floor(z), xf = x - xi, zf = z - zi;
+          const h = (a, b) => P[(P[a & 255] + b) & 511] / 127.5 - 1;
+          const u = xf * xf * (3 - 2 * xf), v = zf * zf * (3 - 2 * zf);
+          const A = h(xi, zi), B = h(xi + 1, zi), C = h(xi, zi + 1), D = h(xi + 1, zi + 1);
+          return A + (B - A) * u + (C - A) * v + (A - B - C + D) * u * v;
+        };
+      })();
+      const _ridged = (x, z) => {
+        let s = 0, a = 0.55, f = 1;
+        for (let o = 0; o < 5; o++) { const n = 1 - Math.abs(_rv(x * f + o * 17.3, z * f - o * 9.1)); s += n * n * a; a *= 0.5; f *= 2.05; }
+        return s;
+      };
+      const _words9 = (FLORA && FLORA.words) || '';
+      const _dry = /desert|dune|canyon|mars|moon|lunar|volcan|wasteland|arid/.test(_words9);
+      const _green = FLORA && !FLORA.barren;
+      // one height function for the mesh and for the trees that climb it
+      const ridgeH = (x, z, rad, hgt, seedK) => {
+        const d = Math.hypot(x, z) / rad;
+        const fall = Math.max(0, 1 - d * d);
+        if (fall <= 0) return -hgt * 0.06;
+        return hgt * Math.pow(fall, 1.25) * (0.45 + 0.75 * _ridged(x / rad * 1.4 + seedK * 3.7, z / rad * 1.4 + seedK * 5.3));
+      };
+      const ridgeGeo = (rad, hgt, seedK) => {
+        const N = 80, S = rad * 2.3;
+        const g = new THREE.PlaneGeometry(S, S, N, N); g.rotateX(-Math.PI / 2);
+        const pa = g.attributes.position;
+        for (let v = 0; v < pa.count; v++) pa.setY(v, ridgeH(pa.getX(v), pa.getZ(v), rad, hgt, seedK));
+        g.computeVertexNormals();
+        const na = g.attributes.normal, col = new Float32Array(pa.count * 3);
+        const rockC = (FLORA && FLORA.biome && FLORA.barren) ? FLORA.biome.rockTint.clone().multiplyScalar(0.7) : rock.clone();
+        const greenC = new THREE.Color(0x26331f), snowC = capC;
+        const snowLine = snowy ? 0.32 : (_dry || (FLORA && FLORA.biome && FLORA.biome.island)) ? 9 : 0.62;   // no snow on a tropical island
+        for (let v = 0; v < pa.count; v++) {
+          const y = pa.getY(v) / hgt, up = na.getY(v);
+          const jit = _rv(pa.getX(v) * 0.05, pa.getZ(v) * 0.05) * 0.06;
+          let c = rockC.clone().offsetHSL(0, 0, (y - 0.4) * 0.08 + jit);
+          if (_green && y < 0.42 + jit && up > 0.55) c.lerp(greenC, Math.min(1, (0.42 - y) * 4) * 0.85);
+          if (y > snowLine + jit && up > 0.45) c.lerp(snowC, Math.min(1, (y - snowLine) * 6) * Math.min(1, (up - 0.45) * 4));
+          col[v * 3] = c.r; col[v * 3 + 1] = c.g; col[v * 3 + 2] = c.b;
+        }
+        g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+        return g;
+      };
       for (let i = 0; i < NPK; i++) {
         const a = (i / NPK) * Math.PI * 2 + rngM() * 0.35;
         // with a forest to the horizon the ridges stand BEHIND it, at the
         // land's far edge, as tall as distance asks; otherwise just past the
         // playfield, as before
-        const far9 = !!(FLORA && FLORA.outer);
+        // a sea has no land beyond, but its islands are sculpted the same way
+        const far9 = !!(FLORA && (FLORA.outer || (FLORA.biome && FLORA.biome.underwater)));
         const dist = far9 ? FLORA.R * (0.66 + rngM() * 0.26) : gsizeM * (0.78 + rngM() * 0.28);
-        const hgt = far9 ? FLORA.R * (0.08 + rngM() * 0.09) : gsizeM * (0.10 + rngM() * 0.14);
+        const hgt = (far9 ? FLORA.R * (0.08 + rngM() * 0.09) : gsizeM * (0.10 + rngM() * 0.14))
+          * (far9 && (!FLORA.outer || (FLORA.biome && FLORA.biome.island)) ? 0.35 : 1);   // islands at sea stand lower than ranges on land
         const rad = hgt * (1.5 + rngM() * 0.9);
-        const geo = new THREE.ConeGeometry(rad, hgt, (SIL.mtnSeg + Math.floor(rngM() * 3)) * (far9 ? 2 : 1), far9 ? 6 : 3);
-        (window.__mtnRing = window.__mtnRing || []).push([Math.cos(a) * dist, Math.sin(a) * dist, rad]);
+        (window.__mtnRing = window.__mtnRing || []).push([Math.cos(a) * dist, Math.sin(a) * dist, rad * (far9 ? 1.3 : 1)]);
+        if (far9) {
+          const m9 = new THREE.Mesh(ridgeGeo(rad * 1.25, hgt * 1.15, i), mmat);
+          const mx = Math.cos(a) * dist, mz = Math.sin(a) * dist, ry = rngM() * Math.PI;
+          m9.position.set(mx, 0, mz);
+          m9.rotation.y = ry;
+          m9.receiveShadow = false;
+          ring.add(m9);
+          // FORESTED FOOTHILLS (2026-10-02): a green range wears its forest
+          // up the lower slopes instead of standing in a bare clearing. The
+          // planter asks this for the slope's height in world space; the
+          // mesh's own rotation is undone to land in its local frame.
+          if (_green) {
+            const cR = Math.cos(ry), sR = Math.sin(ry), R9 = rad * 1.25, H9 = hgt * 1.15, k9 = i;
+            const ent = window.__mtnRing[window.__mtnRing.length - 1];
+            ent.push((x, z) => {
+              const dx = x - mx, dz = z - mz;
+              return ridgeH(dx * cR - dz * sR, dx * sR + dz * cR, R9, H9, k9);
+            }, H9);
+          }
+          continue;
+        }
+        const geo = new THREE.ConeGeometry(rad, hgt, SIL.mtnSeg + Math.floor(rngM() * 3), 3);
         const posA = geo.attributes.position;
         const col = new Float32Array(posA.count * 3);
         for (let v = 0; v < posA.count; v++) {
@@ -1182,6 +1272,11 @@ async function main() {
     const _h = {}; gcol.getHSL(_h);
     if (_h.s > 0.08 && _h.s < 0.3) gcol.setHSL(_h.h, 0.34, Math.min(_h.l, 0.42));
   }
+  // A BEACH IS SAND (2026-10-02): the planner painted a castaway's beach
+  // lawn green, and the ripple texture the word "beach" picks came out as
+  // green dunes; on a beach the ground is pulled most of the way to sand
+  if (FLORA && FLORA.biome && FLORA.biome.island && /beach|sand|shore|castaway|driftwood/.test(FLORA.words || ''))
+    gcol.lerp(new THREE.Color(0xd2bd92), 0.88);
   // 2048 for ANY level (2026-08-25): nature worlds ran 1024 over 220m+ —
   // ~4.7 px/m, the giant green blur behind every 'looks like 2003' read.
   const TEXN = LVL ? 2048 : 256;
@@ -1540,6 +1635,7 @@ async function main() {
   // has no collider. hOut answers for any point, inside the level or out.
   let hOut = (x, z) => hAt(x, z);
   let forestAt = () => 0;
+  let SEA_Y = null;            // an island's sea level; null where the land runs on
   if (FLORA && FLORA.outer && !INTERIOR) {
     const H2 = gsize / 2;
     const rN = mulberry32(SPEC.seed + 4242);
@@ -1564,6 +1660,28 @@ async function main() {
       const amp = FLORA.R * 0.035 * k * k;
       return e + (fbm(x / 300, z / 300) * 0.8 + 0.35) * amp - Math.min(d, 6) * 0.05;
     };
+    // AN ISLAND ENDS AT THE SEA (2026-10-02). "A castaway on a tropical beach
+    // island" stood in a palm savanna that ran on to snowy ranges. Under an
+    // island, beach or coast the land past the level now falls away to a
+    // shore within a hundred metres or so (the line wanders with noise, so
+    // the coast is not the level's square), and the sea runs to the horizon
+    if (FLORA.biome && FLORA.biome.island) {
+      const hs = [];
+      for (let i = -8; i <= 8; i++) for (let j = -8; j <= 8; j++) hs.push(hAt(i * gsize / 16, j * gsize / 16));
+      hs.sort((a, b) => a - b);
+      SEA_Y = hs[Math.floor(hs.length * 0.08)] - 0.7;
+      const land = hOut;
+      hOut = (x, z) => {
+        const cx = Math.max(-H2, Math.min(H2, x)), cz = Math.max(-H2, Math.min(H2, z));
+        const d = Math.hypot(x - cx, z - cz);
+        if (d <= 0) return hAt(x, z);
+        const dd = d + fbm(x / 140 + 5, z / 140 - 3) * 55;          // a wandering coastline
+        const fall = Math.max(0, Math.min(1, (dd - 25) / 110));
+        const sm = fall * fall * (3 - 2 * fall);
+        const e = Math.min(land(x, z), hAt(cx, cz) + 3);
+        return e + (SEA_Y - 9 - e) * sm;
+      };
+    }
     // where the forest stands, outside the playfield: big stands and glades
     forestAt = (x, z) => Math.max(0, Math.min(1, (fbm(x / 210 + 17, z / 210 - 9) + 0.12) * 2.4));
     const SEG = QUALITY === 'performance' ? 128 : 256, ROWS = QUALITY === 'performance' ? 32 : 56;
@@ -1578,6 +1696,7 @@ async function main() {
     // sand or rock texture, not its plain ground colour)
     if (FLORA.barren && FLORA.biome && FLORA.biome.rockTint) base.lerp(FLORA.biome.rockTint.clone().multiplyScalar(0.8), 0.85).offsetHSL(0, 0.14, 0);
     const under = base.clone().lerp(new THREE.Color(0x1a2213), 0.6);
+    const _sandC = new THREE.Color(0xd9c498);
     for (let r = 0; r <= ROWS; r++) {
       const t = Math.pow(r / ROWS, 1.8);
       for (let s = 0; s <= SEG; s++) {
@@ -1589,6 +1708,10 @@ async function main() {
         pos[k] = x; pos[k + 1] = hOut(x, z) - (r === 0 ? 0.08 : 0); pos[k + 2] = z;
         const c = base.clone().lerp(under, forestAt(x, z) * FLORA.dens)
           .multiplyScalar(0.85 + 0.3 * (fbm(x / 90 - 31, z / 90 + 7) * 0.5 + 0.5));
+        if (SEA_Y !== null) {        // a sand shore, wet below the line
+          const hy = pos[k + 1] - SEA_Y;
+          if (hy < 2.2) c.lerp(_sandC, Math.min(1, (2.2 - hy) / 1.4)).multiplyScalar(hy < 0 ? 0.72 : 1);
+        }
         col[k] = c.r; col[k + 1] = c.g; col[k + 2] = c.b;
       }
     }
@@ -1611,16 +1734,47 @@ async function main() {
     outerLand.receiveShadow = true;
     outerLand.name = 'outerLand';
     scene.add(outerLand);
+    if (SEA_Y !== null) {
+      // the island's sea: clear over the sand, so the shallows show the
+      // shore under them, and deep blue where the bed has fallen away
+      const seaG = new THREE.PlaneGeometry(FLORA.R * 2.6, FLORA.R * 2.6);
+      seaG.rotateX(-Math.PI / 2);
+      const sea = new THREE.Mesh(seaG, new THREE.MeshStandardMaterial({ color: 0x1f6f96, transparent: true, opacity: 0.74,
+        roughness: 0.1, metalness: 0.1, depthWrite: false }));
+      sea.material.userData.noAutoTex = true;
+      sea.position.y = SEA_Y;
+      sea.name = 'islandSea';
+      scene.add(sea);
+      window.__islandSea = sea;
+    }
   }
 
   // WATER (ocean/lake worlds): translucent plane at world.water_level with a
   // gentle tide bob; the camera dipping below it switches to underwater fog
-  const WATER = (SPEC.world.water_level ?? null);
+  // A REEF NEEDS DEPTH (2026-10-02). A sea prompt's water sat at the level
+  // the planner wrote (0 m) over ground that rolls about 0 m, so the "sea"
+  // was a puddle the kelp grew straight through. Under a sea biome the
+  // surface stands well over the bed: half the ground lies 4.5 m under or
+  // more, and the swimmer dives (C) for what lies on the bottom.
+  const WATER = (() => {
+    const w = SPEC.world.water_level ?? null;
+    if (w === null || !(FLORA && FLORA.biome && FLORA.biome.underwater)) return w;
+    const hs = [];
+    for (let i = -8; i <= 8; i++) for (let j = -8; j <= 8; j++) hs.push(hAt(i * gsize / 16, j * gsize / 16));
+    hs.sort((a, b) => a - b);
+    return Math.max(w, hs[Math.floor(hs.length * 0.5)] + 4.5);
+  })();
   let waterMesh = null, underwater = false;
   const origFog = scene.fog;
   if (WATER !== null) {
+    // THE SEA GOES TO THE HORIZON (2026-10-02). Under a reef prompt the
+    // water was a square the size of the level, floating in haze with the
+    // void around it; the surface now runs to the edge of sight, and a deep
+    // bed lies under it, so beyond the reef the water reads as open ocean
+    const _sea = !!(FLORA && FLORA.biome && FLORA.biome.underwater);
+    const _wS = _sea ? Math.max(gsize * 1.3, FLORA.R * 2.6) : gsize * 1.3;
     waterMesh = new THREE.Mesh(
-      new THREE.PlaneGeometry(gsize * 1.3, gsize * 1.3),
+      new THREE.PlaneGeometry(_wS, _wS),
       new THREE.MeshStandardMaterial({ color: 0x1d5d8e, transparent: true, opacity: 0.7,
                                        roughness: 0.12, metalness: 0.1, side: THREE.DoubleSide,
                                        depthWrite: false }));
@@ -1634,9 +1788,17 @@ async function main() {
         for (let j = -8; j <= 8; j++) hs.push(hAt(i * gsize / 16, j * gsize / 16));
       }
       hs.sort((a, b) => a - b);
-      waterMesh.position.y = Math.min(WATER, hs[Math.floor(hs.length * 0.12)] + 0.05);
+      waterMesh.position.y = _sea ? WATER : Math.min(WATER, hs[Math.floor(hs.length * 0.12)] + 0.05);
     }
     scene.add(waterMesh);
+    if (_sea) {
+      const bedG = new THREE.PlaneGeometry(_wS, _wS);
+      bedG.rotateX(-Math.PI / 2);
+      const bed = new THREE.Mesh(bedG, new THREE.MeshLambertMaterial({ color: 0x0a2b45 }));
+      bed.position.y = waterMesh.position.y - 28;
+      bed.name = 'deepBed';
+      scene.add(bed);
+    }
   }
 
   // THE GOAL IS A PLACE, NOT A LIGHT (Phase 47): when the reach objective
@@ -5349,7 +5511,7 @@ async function main() {
         const x = (rT() - 0.5) * gsize * 0.97, z = (rT() - 0.5) * gsize * 0.97;
         const reg = (LVL && LVL.regions) ? regionAt(x, z) : null;
         const rk = reg ? reg.kind : 'land';
-        if (rk === 'water' || rk === 'village') continue;
+        if ((rk === 'water' && !BIO.underwater) || rk === 'village') continue;   // under the sea, the water is where it all grows
         if (LVL && pathDist(x, z) < CORR * 1.25) continue;
         if (clear(x, z)) continue;
         let isBush = false, p = 0;
@@ -5369,8 +5531,16 @@ async function main() {
           for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) occ.add((cx + a) + ',' + (cz + b));
         }
         const ki = isBush ? bushK : pickTree();
-        const s = isBush ? 0.8 + rT() * 0.7 : 0.75 + rT() * 0.55;
+        let s = isBush ? 0.8 + rT() * 0.7 : 0.75 + rT() * 0.55;
         const y = hAt(x, z);
+        // kelp stands in the water, not through it: the tallest stalk is
+        // ten metres, so in shallows it is grown shorter, and skipped where
+        // there is not depth enough for a stalk at all
+        if (BIO.underwater && waterMesh && kinds[ki].kind === 'kelp') {
+          const room = (WATER - y - 0.6) / 10;
+          if (room < 0.25) continue;
+          s = Math.min(s, room);
+        }
         T.push(x, y, z, s, rT() * Math.PI * 2, ki);
         if (!isBush && colliders.length < 1500) colliders.push([x, y, z, s, kinds[ki].kind]);
         _floraInner++;
@@ -5387,11 +5557,23 @@ async function main() {
           if (Math.abs(x) < H2 + 1.5 && Math.abs(z) < H2 + 1.5) continue;
           const f = forestAt(x, z);
           if (rT() > f * 0.97 + 0.03) continue;
-          if (mtn.some(([mx, mz, mr]) => (x - mx) * (x - mx) + (z - mz) * (z - mz) < mr * mr * 0.5)) continue;
+          // a bare range keeps its clearing; a green one is climbed to its
+          // treeline, thinning as the slope steepens
+          let y = hOut(x, z), bare = false;
+          for (const [mx, mz, mr, hf, mh] of mtn) {
+            if ((x - mx) * (x - mx) + (z - mz) * (z - mz) >= mr * mr * 0.5) continue;
+            if (!hf) { bare = true; break; }
+            const h = hf(x, z), e = mh * 0.012;
+            const slope = Math.hypot(hf(x + e, z) - h, hf(x, z + e) - h) / e;
+            if (h > mh * (0.3 + rT() * 0.12) || slope > 1.1 + rT() * 0.4) { bare = true; break; }
+            y = Math.max(y, h - 0.4);
+          }
+          if (bare) continue;
+          if (SEA_Y !== null && y < SEA_Y + 1.2) continue;   // nothing grows on the wet sand or under the sea
           const isBush = bushK >= 0 && rT() < 0.18;
           const ki = isBush ? bushK : pickTree();
           const s = (isBush ? 0.9 + rT() * 0.6 : 0.8 + rT() * 0.6) * (1 + Math.min(1, rr / R) * 0.25);
-          T.push(x, hOut(x, z), z, s, rT() * Math.PI * 2, ki);
+          T.push(x, y, z, s, rT() * Math.PI * 2, ki);
           outerN++;
         }
       }
@@ -5417,6 +5599,7 @@ async function main() {
           lightRig: { lights: [sunB, hemiB], environment: scene.environment, environmentIntensity: scene.environmentIntensity },
           windU: WIND_U, near: FLORA.near, nearCap: FLORA.cap, variants: 3,
           rockTex, rockN, rockTint: BIO.rockTint, crystalTint: BIO.crystalTint,
+          coralTint: BIO.coralTint, coralTint2: BIO.coralTint2,
           snow: BIO.snow || (SPEC.world.weather === 'snow' ? 0.6 : 0),
           sunDir: new THREE.Vector3(...pal.sunPos).normalize(),
           sunCol: new THREE.Color(pal.sunCol || 0xffffff).multiplyScalar(pal.sun * 1.12),
@@ -12843,11 +13026,12 @@ varying vec2 vUvRaw;
                    || window.__darkWorld) ? new ShaderPass({
     uniforms: { tDiffuse: { value: null },
                 uSun: { value: new THREE.Vector2(0.5, 0.8) },
-                uStr: { value: 0 } },
+                uStr: { value: 0 },
+                res: { value: new THREE.Vector2(innerWidth, innerHeight) } },
     vertexShader: `varying vec2 vUv;
       void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
     fragmentShader: `uniform sampler2D tDiffuse; uniform vec2 uSun;
-      uniform float uStr; varying vec2 vUv;
+      uniform float uStr; uniform vec2 res; varying vec2 vUv;
       void main(){
         vec4 c = texture2D(tDiffuse, vUv);
         if (uStr <= 0.001) { gl_FragColor = c; return; }
@@ -12855,14 +13039,26 @@ varying vec2 vUvRaw;
         vec3 acc = vec3(0.0);
         vec2 p = vUv;
         float w = 1.0;
+        // SHAFTS COME FROM THE SUN (2026-10-02). This buffer is HDR: a
+        // photographed sunset sky sits well above 1.0 from edge to edge, so
+        // a plain brightness threshold took the WHOLE sky as the source and
+        // smeared it over the frame as white fog. Only light near the sun's
+        // disc casts shafts now, and each sample is capped so one hot pixel
+        // cannot flood the sum.
+        float asp = res.x / res.y;
         for (int i = 0; i < 22; i++) {
           p += dir;
-          vec3 s = texture2D(tDiffuse, p).rgb;
+          vec3 s = min(texture2D(tDiffuse, p).rgb, vec3(3.0));
           float l = dot(s, vec3(0.299, 0.587, 0.114));
-          acc += s * smoothstep(0.62, 1.0, l) * w;
+          vec2 ds = (p - uSun) * vec2(asp, 1.0);
+          float nearSun = exp(-dot(ds, ds) * 12.0);
+          acc += s * smoothstep(0.62, 1.4, l) * nearSun * w;
           w *= 0.94;
         }
-        c.rgb += acc / 22.0 * uStr;
+        // every pixel's march ends at the sun, so without this falloff the
+        // whole frame received the same glow: shafts fade with distance
+        vec2 dp = (vUv - uSun) * vec2(asp, 1.0);
+        c.rgb += acc / 22.0 * uStr * exp(-dot(dp, dp) * 2.2);
         gl_FragColor = c;
       }`,
   }) : null;
@@ -15192,6 +15388,7 @@ varying vec2 vUvRaw;
     _dRT.setSize(innerWidth >> 1, innerHeight >> 1);
     ssao.uniforms.res.value.set(innerWidth, innerHeight);
     if (stylePass) stylePass.uniforms.res.value.set(innerWidth, innerHeight);
+    if (godray) godray.uniforms.res.value.set(innerWidth, innerHeight);
   });
   // FIT AFTER LAYOUT SETTLES (2026-07-08): the first frame can capture a stale
   // innerWidth (Firefox measured the canvas smaller than the window → black

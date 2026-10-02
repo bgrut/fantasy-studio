@@ -25,13 +25,29 @@ def ensure_bridge(verbose: bool = True) -> bool:
     relaunch the headless instance and wait for it. The wolf of 2026-07-06
     took 40 CPU-minutes to generate and then vanished because of this."""
     from app.mcp import bridge
+    # ALIVE IS NOT ENOUGH (2026-10-02). A socket that accepts is not a Blender
+    # that answers: after a heavy optimise timed out, Blender went on grinding
+    # through it, the bridge "came back up", and every op behind it timed out
+    # in turn, so the woman's and the castaway's rigs never baked. The test is
+    # an answered ping; a Blender that is up but will not answer is our own
+    # headless one stuck on abandoned work, and it is restarted.
     try:
         bridge.connect(timeout=8)
-        return True
+        if bridge.ping(timeout=30):
+            return True
+        stuck = True
+    except Exception:
+        stuck = False
+    if stuck:
+        killed = _kill_headless_blender()
+        if verbose:
+            print(f"[bake] blender bridge up but not answering: restarted ({killed} stuck instance(s) stopped)")
+    elif verbose:
+        print("[bake] blender bridge down — relaunching headless instance")
+    try:
+        bridge.disconnect()
     except Exception:
         pass
-    if verbose:
-        print("[bake] blender bridge down — relaunching headless instance")
     import subprocess
     import time
     exe = r"C:\Program Files\Blender Foundation\Blender 5.1\blender.exe"
@@ -46,20 +62,37 @@ def ensure_bridge(verbose: bool = True) -> bool:
              str(BACKEND_ROOT / "scripts" / "headless_bridge_startup.py")],
             cwd=str(BACKEND_ROOT),
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        for _ in range(12):                      # up to ~60 s for addon boot
-            time.sleep(5)
-            try:
-                bridge.connect(timeout=8)
-                if verbose:
-                    print("[bake] bridge back up")
-                return True
-            except Exception:
-                continue
+        # back means answering, not listening (up to ~90 s for addon boot)
+        if bridge.wait_until_ready(timeout=90, poll_interval=2.0):
+            if verbose:
+                print("[bake] bridge back up")
+            return True
     except Exception:
         pass
     if verbose:
         print("[bake] bridge relaunch FAILED — bake cannot proceed")
     return False
+
+
+def _kill_headless_blender() -> int:
+    """Stop the headless Blender instances this backend launched (and only
+    those: a Blender the user has open never runs the startup script)."""
+    n = 0
+    try:
+        import psutil
+        for p in psutil.process_iter(["name", "cmdline"]):
+            try:
+                if "blender" in (p.info["name"] or "").lower() and any(
+                        "headless_bridge_startup" in (c or "") for c in (p.info["cmdline"] or [])):
+                    p.kill(); n += 1
+            except Exception:  # noqa: BLE001
+                continue
+        if n:
+            import time
+            time.sleep(2)
+    except Exception:  # noqa: BLE001
+        pass
+    return n
 
 # default game clip set: state name -> (CMU bvh, frames at 24fps). Derived
 # from assets/mocap/catalog.json so this and the retargeter's action table
@@ -1272,6 +1305,29 @@ __result__=json.dumps({"ok":True,"frames":T})
     return {"ok": True, "tracks": e.get("tracks"), "orientation": ov}
 
 
+def _is_bust(glb: str | Path) -> bool:
+    """True when a mesh meant to be a standing person is not much taller than
+    its narrowest horizontal extent. Whole bodies in the library measure 2.3
+    (a penguin) to 5.8; the castaway bust measured 1.34. It also catches the
+    other way a person's name goes wrong: "nomad" and "striker" were made as
+    cars (a Chevy Nomad), 0.9 and 0.4. Either way the mesh is the wrong thing
+    for a person, and retiring it lets the name be made again as one.
+    Unreadable meshes are given the benefit of the doubt."""
+    try:
+        import trimesh
+        e = [float(v) for v in trimesh.load(str(glb), force="scene").extents]
+        return e[1] / max(min(e[0], e[2]), 1e-6) < 1.8
+    except Exception:
+        return False
+
+
+def _retire(p: Path, why: str) -> None:
+    import time
+    dst = p.parent / "_retired"
+    dst.mkdir(exist_ok=True)
+    p.rename(dst / f"{p.stem}_{time.strftime('%Y%m%d')}_{why}{p.suffix}")
+
+
 def ensure_playable(kind: str, verbose: bool = True) -> str | None:
     """Return a PLAYER-grade (rigged+animated) GLB for `kind`, baking it on
     first use from the static library asset. Bipeds get the CMU mocap set,
@@ -1292,6 +1348,14 @@ def ensure_playable(kind: str, verbose: bool = True) -> str | None:
         except OSError:
             fresh = True
         if fresh:
+            # a cached rig of a bust is retired with its mesh (see below)
+            if _is_bust(anim) and guess_pattern(kind) == "biped":
+                for f in (anim, Path(static) if static else None):
+                    if f is not None and f.exists():
+                        _retire(f, "bust")
+                if verbose:
+                    print(f"[bake] ensure_playable('{kind}'): the cached rig is not a standing body; retired for regeneration")
+                return None
             return str(anim)
     if not static:
         return str(anim) if anim.exists() else None
@@ -1304,6 +1368,20 @@ def ensure_playable(kind: str, verbose: bool = True) -> str | None:
         pass
     pattern = guess_pattern(kind)
     h = library.default_height(kind)
+    if pattern == "biped" and _is_bust(static):
+        # A BUST IS NOT A BODY (2026-10-02). "castaway" was generated while the
+        # classifier still called it an object, so the picture was a portrait
+        # and the mesh a head and shoulders; a later build rigged that bust as
+        # the hero and the player was a head sliding over the sand. A standing
+        # person is far taller than they are deep; a mesh that is not is
+        # retired (kept in _retired, not deleted) so the next build that names
+        # the kind generates it again as a whole body.
+        _retire(Path(static), "bust")
+        if anim.exists():
+            _retire(anim, "bust")
+        if verbose:
+            print(f"[bake] ensure_playable('{kind}'): the library mesh is not a standing body; retired for regeneration")
+        return None
     if pattern in ("quadruped", "biped") and not ensure_bridge(verbose):
         return static                       # honest fallback: static mesh > no mesh
     try:

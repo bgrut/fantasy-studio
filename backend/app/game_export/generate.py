@@ -39,7 +39,20 @@ _BIPED = ("hunter", "archer", "soldier", "warrior", "ranger", "ninja",
           "pilot", "doctor", "police", "officer", "firefighter", "explorer",
           "adventurer", "assassin", "thief", "rogue", "monk", "paladin",
           "barbarian", "gladiator", "spy", "detective", "scientist", "miner",
-          "lumberjack", "fisherman", "shepherd", "guard", "sniper", "medic")
+          "lumberjack", "fisherman", "shepherd", "guard", "sniper", "medic",
+          # PEOPLE THE MODEL MISREAD (2026-10-02): the cached answers had a
+          # castaway as a statue, a nomad and a guide as cars, a hermit and a
+          # wanderer on four legs, an informant and a ghost as objects; the
+          # castaway's hero was then never rigged and the build failed
+          "castaway", "nomad", "hermit", "survivor", "wanderer", "traveller", "traveler",
+          "drifter", "exile", "outlaw", "bandit", "trader", "merchant", "scout", "climber",
+          "camper", "informant", "guide", "villager", "sailor", "captain", "courier",
+          "keeper", "engineer", "bender", "mage", "wizard", "sorcerer", "knight", "samurai",
+          "viking", "chef", "baker", "priest", "nun", "striker", "goalkeeper", "player",
+          "ghost", "spirit", "child", "kid", "boy", "girl", "man", "woman", "person",
+          "stranger", "pilgrim", "hiker", "tourist", "student", "teacher", "nurse",
+          "mechanic", "smith", "blacksmith", "hunter", "huntress", "princess", "rider",
+          "warden", "jailer", "prisoner", "thug", "burglar", "heir", "noble", "peasant")
 _VEHICLE = ("car", "truck", "bus", "van", "jeep", "tank", "motorcycle")
 _FLYING = ("dragon", "bird", "eagle", "hawk", "owl", "phoenix", "griffin",
            "pegasus", "bat", "butterfly", "bee", "plane", "airplane", "jet",
@@ -123,7 +136,9 @@ def guess_pattern(kind: str) -> str:
         return "biped"
     # exact-word match for human roles (substring would hit 'king' in
     # 'viking'; split on spaces so 'zombie pirate' still works)
-    if any(w in k.split() for w in _BIPED):
+    # (2026-10-02) the HEAD noun decides here too: a hermit crab is a crab
+    # and a king cobra a snake, while a zombie pirate is still a pirate
+    if _wk and _wk[-1] in _BIPED:
         return "biped"
     if any(w in k for w in _FLYING):
         return "flying"                   # fly mode; static mesh + hover (wing

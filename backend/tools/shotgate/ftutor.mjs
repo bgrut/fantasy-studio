@@ -103,10 +103,18 @@ console.log('reloaded  : tutorial', JSON.stringify(back.tutorial), '| card on', 
 // the nudge toward the edge: between the acts, three minutes on one face
 const nudge = await p.evaluate(async () => {
   const F = window.__factory;
-  const before = { nudged: F.edgeNudged, toast: document.getElementById('toast').textContent };
+  const toastEl = document.getElementById('toast');
+  const before = { nudged: F.edgeNudged, toast: toastEl.textContent };
+  // every toast in the window, not the last one standing: an unlock toast
+  // ("Splitter unlocked") can land in the same moment and cover the nudge
+  // (the gate failed on exactly that race, 2026-10-02, as fhub did the day before)
+  const heard = [];
+  const mo = new MutationObserver(() => heard.push(toastEl.textContent));
+  mo.observe(toastEl, { childList: true, characterData: true, subtree: true });
   F.nudgeClock = 181;
   await new Promise(r => setTimeout(r, 400));
-  return { before, nudged: F.edgeNudged, toast: document.getElementById('toast').textContent };
+  mo.disconnect();
+  return { before, nudged: F.edgeNudged, toast: heard.find(t => /Walk over any edge/.test(t)) || toastEl.textContent };
 });
 console.log('the nudge :', 'before', nudge.before.nudged, '| after three minutes on one face:', nudge.nudged, JSON.stringify(nudge.toast).slice(0, 70));
 

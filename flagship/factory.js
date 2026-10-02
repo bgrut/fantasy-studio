@@ -132,6 +132,7 @@ const ACCENT = _hex(_pal.accent, HOME.accent);
 import * as THREE from 'three';
 import { N8AOPass } from './vendor/n8ao.module.js';               // ambient occlusion (MIT), shared with the adventure runtime
 import { Bed as KitBed, end as KitEnd } from './vendor/kit/kit.js';   // the music bed and the end card, shared with every runtime
+import { sculptStone } from './proc/flora.js';                     // the adventure's stone, lent to the worldlet's outcrops (2026-10-02)
 
 // grid resolution follows the prompt's world size: a bigger island is a
 // bigger factory, not the same factory further apart
@@ -1920,7 +1921,36 @@ const MAT = {
 };
 // Each machine is authored as parts and merged into one geometry. Local +X is
 // the heading and local +Y is up off the face, which is what seat() promises.
-const _box = (w, h, d) => new THREE.BoxGeometry(w, h, d);
+// EDGES THAT CATCH THE LIGHT (2026-10-02). A machine of sharp boxes reads
+// as a placeholder however it is painted: no edge in the world is a perfect
+// ninety degrees, and the thin highlight a real bevel throws is the cue that
+// says "made". Every part thick enough to carry one is a rounded box: three
+// segments a side, the inner rows pulled out to where the round begins, the
+// outer ring wrapped onto a radius. Thin plates and rails stay sharp; the
+// round would be smaller than a pixel and cost triangles for nothing.
+function _bevelBox(w, h, d) {
+  const r = Math.min(0.05, Math.min(w, h, d) * 0.14);
+  const g = new THREE.BoxGeometry(w, h, d, 3, 3, 3);
+  const pa = g.attributes.position, na = g.attributes.normal;
+  const H = [w / 2, h / 2, d / 2], v = [0, 0, 0], inn = [0, 0, 0];
+  for (let k = 0; k < pa.count; k++) {
+    v[0] = pa.getX(k); v[1] = pa.getY(k); v[2] = pa.getZ(k);
+    let dx = 0, dy = 0, dz = 0;
+    for (let a = 0; a < 3; a++) {
+      // the grid's inner lines (at a third of the half-extent) move out to
+      // where the round starts, so the flat of each face stays flat
+      if (Math.abs(Math.abs(v[a]) - H[a]) > 1e-6) v[a] = Math.sign(v[a]) * (H[a] - r);
+      inn[a] = Math.max(-(H[a] - r), Math.min(H[a] - r, v[a]));
+    }
+    dx = v[0] - inn[0]; dy = v[1] - inn[1]; dz = v[2] - inn[2];
+    const L = Math.hypot(dx, dy, dz) || 1;
+    dx /= L; dy /= L; dz /= L;
+    pa.setXYZ(k, inn[0] + dx * r, inn[1] + dy * r, inn[2] + dz * r);
+    na.setXYZ(k, dx, dy, dz);
+  }
+  return g;
+}
+const _box = (w, h, d) => Math.min(w, h, d) >= 0.1 ? _bevelBox(w, h, d) : new THREE.BoxGeometry(w, h, d);
 const _cyl = (rt, rb, h, n) => new THREE.CylinderGeometry(rt, rb, h, n);
 
 // A quarter-turn deck. Ring sectors live in the XY plane, so laying one flat
@@ -2670,6 +2700,7 @@ function rebuildBelts() {
     outcropMesh[m].setMatrixAt(oc[m]++, _dm);
   }
   for (const m of MINERALS) { outcropMesh[m].count = oc[m]; outcropMesh[m].instanceMatrix.needsUpdate = true; }
+  fillMoss();
 
   for (let k = 0; k < BELT_KIND.length; k++) {
     beltFrames[k].count = n[k]; beltDecks[k].count = n[k];
@@ -2743,7 +2774,9 @@ const MAX_OUTCROP = 420;
 const outcropMesh = {};
 for (const m of MINERALS) {
   const col = MIN_COL[m];
-  const parts = [{ g: new THREE.DodecahedronGeometry(0.5, 0).scale(1.25, 0.5, 1.0), y: -0.12, ry: 0.6, col: 0x5a5e6a, tint: 0.55 }];
+  // the rock is sculpted (proc/flora.js): noise and cut facets, not a
+  // flattened dodecahedron, the blockiest thing left on the ground
+  const parts = [{ g: sculptStone(911 + MINERALS.indexOf(m) * 37, { size: 0.55, flat: 0.5, detail: 2 }).scale(1.2, 1, 1), y: -0.1, ry: 0.6, col: 0x5a5e6a, tint: 0.55 }];
   if (m === CRYSTAL) parts.push({ g: new THREE.OctahedronGeometry(0.34, 0).scale(0.7, 1.4, 0.7), y: 0.16, rz: 0.25, col },
                                 { g: new THREE.OctahedronGeometry(0.2, 0).scale(0.7, 1.3, 0.7), x: 0.3, y: 0.02, z: 0.14, rz: -0.6, col, tint: 0.85 });
   else if (m === EMBER) parts.push({ g: new THREE.BoxGeometry(0.42, 0.44, 0.42), y: 0.1, ry: 0.5, rz: 0.2, col },
@@ -2756,6 +2789,63 @@ for (const m of MINERALS) {
   om.instanceMatrix.setUsage(THREE.DynamicDrawUsage); om.frustumCulled = false;
   om.castShadow = true; om.receiveShadow = true; om.count = 0; om.name = 'outcrops';
   scene.add(om); outcropMesh[m] = om;
+}
+
+// MOSS ON A GREEN WORLD (2026-10-02). The owner wants the forest's detail in
+// every world; a plated worldlet takes no forest, but a green one has moss
+// in its seams. Tufts of blades on the empty plates, two or three a tile,
+// seated on whichever face they grow from; anything built over a tile hides
+// its moss, as it hides the bolts and vents. Its own random stream, so the
+// world's generation is untouched.
+let mossMesh = null, mossSpots = null;
+if (MOOD === 'green' && !SPEC.city) {
+  const pos = [], col = [];
+  const cTop = new THREE.Color(0x8fd36a), cBot = new THREE.Color(0x1c3a1a);
+  for (let b = 0; b < 7; b++) {
+    const a = (b / 7) * Math.PI * 2 + b * 0.37, lean = 0.12 + (b % 3) * 0.06;
+    const h = 0.22 + (b % 4) * 0.07, w = 0.035;
+    const ca = Math.cos(a), sa = Math.sin(a);
+    const bx = ca * 0.05, bz = sa * 0.05;
+    const px = -sa * w, pz = ca * w;
+    pos.push(bx + px, 0, bz + pz, bx - px, 0, bz - pz, bx + ca * lean, h, bz + sa * lean);
+    col.push(cBot.r, cBot.g, cBot.b, cBot.r, cBot.g, cBot.b, cTop.r, cTop.g, cTop.b);
+  }
+  const mg = new THREE.BufferGeometry();
+  mg.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  mg.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  mg.computeVertexNormals();
+  mossMesh = new THREE.InstancedMesh(mg, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9,
+    side: THREE.DoubleSide, emissive: 0x0d2a10, emissiveIntensity: 0.4 }), 16000);
+  mossMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+  mossMesh.frustumCulled = false; mossMesh.receiveShadow = true; mossMesh.count = 0; mossMesh.name = 'moss';
+  scene.add(mossMesh);
+}
+const _mossM = new THREE.Matrix4(), _mossL = new THREE.Matrix4(), _mossQ = new THREE.Quaternion();
+const _mossY = new THREE.Vector3(0, 1, 0), _mossP = new THREE.Vector3(), _mossS = new THREE.Vector3();
+function fillMoss() {
+  if (!mossMesh) return;
+  if (!mossSpots) {
+    let st = 7177;
+    const mr = () => (st = (st * 1664525 + 1013904223) % 4294967296) / 4294967296;
+    mossSpots = [];
+    for (let f = 0; f < 6; f++) for (let i = 1; i < N - 1; i++) for (let j = 1; j < N - 1; j++) {
+      if (mr() > 0.62) continue;                       // patches, not a lawn
+      const k = 1 + Math.floor(mr() * 3);
+      for (let q = 0; q < k; q++) mossSpots.push({ f, i, j, ox: (mr() - 0.5) * T * 0.9, oz: (mr() - 0.5) * T * 0.9, ry: mr() * Math.PI * 2, s: 0.7 + mr() * 0.8 });
+    }
+  }
+  let n = 0;
+  for (const sp of mossSpots) {
+    if (n >= 16000) break;
+    if (cells[sp.f][sp.i][sp.j].t !== EMPTY) continue;
+    seatMatrix(sp.f, sp.i, sp.j, 0, 0.0, _mossM);
+    _mossQ.setFromAxisAngle(_mossY, sp.ry);
+    _mossL.compose(_mossP.set(sp.ox, 0, sp.oz), _mossQ, _mossS.setScalar(sp.s));
+    _mossM.multiply(_mossL);
+    mossMesh.setMatrixAt(n++, _mossM);
+  }
+  mossMesh.count = n;
+  mossMesh.instanceMatrix.needsUpdate = true;
 }
 
 // THE POOLS. One instanced additive disc per seam, in the ore's colour,

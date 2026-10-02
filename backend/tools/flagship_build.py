@@ -114,6 +114,20 @@ def sync_fonts(check: bool) -> bool:
                 print(f"  stale: flagship/vendor/{sub}/{f.name}")
             else:
                 shutil.copyfile(f, d)
+    # the worldlet's outcrops are sculpted by the adventure's stone module
+    # (2026-10-02): proc/flora.js ships beside vendor/, as in a studio build
+    for name in ("flora.js",):
+        f, d = RUNTIME / "proc" / name, OUT / "proc" / name
+        if not f.exists():
+            continue
+        d.parent.mkdir(parents=True, exist_ok=True)
+        if d.exists() and d.read_bytes() == f.read_bytes():
+            continue
+        if check:
+            ok = False
+            print(f"  stale: flagship/proc/{name}")
+        else:
+            shutil.copyfile(f, d)
     return ok
 
 
