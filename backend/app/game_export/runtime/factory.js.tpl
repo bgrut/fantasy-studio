@@ -1506,7 +1506,7 @@ const _ps = new THREE.Vector3(1, 1, 1);
 const PAINT = { chassis: 0x272b35, dark: 0x15171d, trim: 0xd9ad55, steel: 0xb6bfcc, rail: 0x8f96a3, roller: 0x5f6673 };
 const _pc = new THREE.Color();
 function mergeParts(parts, opts) {
-  const pos = [], nor = [], uvs = [], tint = [], hue = [];
+  const pos = [], nor = [], uvs = [], tint = [], hue = [], wear = [];
   const base = opts && opts.base !== undefined ? opts.base : 0xffffff;
   for (const p of parts) {
     const g = p.g.clone().toNonIndexed();
@@ -1525,7 +1525,8 @@ function mergeParts(parts, opts) {
     // nothing — no second material, no second draw call.
     const tv = p.tint === undefined ? 1 : p.tint;
     _pc.setHex(p.col === undefined ? base : p.col);
-    for (let k = 0; k < a.position.count; k++) { tint.push(tv); hue.push(_pc.r, _pc.g, _pc.b); }
+    const wv = p.g.userData && p.g.userData.bevel ? 1 : 0;   // only bevelled boxes wear at their corners
+    for (let k = 0; k < a.position.count; k++) { tint.push(tv); hue.push(_pc.r, _pc.g, _pc.b); wear.push(wv); }
     g.dispose();
   }
   const out = new THREE.BufferGeometry();
@@ -1535,9 +1536,21 @@ function mergeParts(parts, opts) {
     out.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
   bakeOcclusion(out, opts);
   const col = out.attributes.color;
+  // WORN EDGES (2026-10-02): where a bevel turns a corner its normal leans
+  // off every axis; paint wears through there first, so those vertices
+  // are lifted toward bare metal. Upward-facing edges, the ones hands and
+  // boots touch, wear most. Vertex colour only: no texture, no draw.
+  const nrm = out.attributes.normal;
   for (let k = 0; k < col.count; k++) {
     const t = tint[k] === undefined ? 1 : tint[k];
-    col.setXYZ(k, col.getX(k) * t * hue[k * 3], col.getY(k) * t * hue[k * 3 + 1], col.getZ(k) * t * hue[k * 3 + 2]);
+    let r = col.getX(k) * t * hue[k * 3], g = col.getY(k) * t * hue[k * 3 + 1], b = col.getZ(k) * t * hue[k * 3 + 2];
+    const nx = Math.abs(nrm.getX(k)), ny = nrm.getY(k), nz = Math.abs(nrm.getZ(k));
+    const edge = 1 - Math.max(nx, Math.abs(ny), nz);           // 0 on a flat face, ~0.4 on a corner
+    if (wear[k] && edge > 0.06) {
+      const w = Math.min(1, (edge - 0.06) * 4.5) * (ny > 0.2 ? 0.85 : 0.55);
+      r += (0.95 - r) * w; g += (0.95 - g) * w; b += (0.97 - b) * w;
+    }
+    col.setXYZ(k, r, g, b);
   }
   out.computeBoundingSphere();
   return out;
@@ -1942,6 +1955,7 @@ function _bevelBox(w, h, d) {
     pa.setXYZ(k, inn[0] + dx * r, inn[1] + dy * r, inn[2] + dz * r);
     na.setXYZ(k, dx, dy, dz);
   }
+  g.userData.bevel = true;
   return g;
 }
 const _box = (w, h, d) => Math.min(w, h, d) >= 0.1 ? _bevelBox(w, h, d) : new THREE.BoxGeometry(w, h, d);

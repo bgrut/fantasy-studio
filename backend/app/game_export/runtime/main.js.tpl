@@ -1901,7 +1901,162 @@ async function main() {
         S.add(m);
         return m;
       };
+      // A CABIN IS BUILT, NOT BOXED (2026-10-02). The goal of "find the lost
+      // cabin" was five untextured boxes under a four-sided cone. A cabin,
+      // hut or lodge is now a log house: round logs stacked course on
+      // course, crossing at the corners; a house, cottage or inn is plaster
+      // between timber posts on a stone plinth. Both have a gabled shingle
+      // roof that overhangs, a stone chimney, framed windows lit from
+      // inside, a plank door standing ajar and a porch. The footprint, the
+      // doorway and the colliders below are the ones they always were.
+      const _isLog = /^(cabin|hut|lodge|shelter|den|camp|outpost)$/.test(_kindWord);
+      const _builtHouse = !isCastle && !isLighthouse;
+      if (_builtHouse) {
+        const flat9 = (SPEC.style || 'default') !== 'default' && SPEC.style !== 'realistic';
+        const TL = new THREE.TextureLoader();
+        const tx9 = (n, nrm) => { const t = TL.load('textures/' + n + (nrm ? '_n' : '') + '.jpg'); t.wrapS = t.wrapT = THREE.RepeatWrapping; if (!nrm) t.colorSpace = THREE.SRGBColorSpace; return t; };
+        const mat9 = (n, col, rough) => {
+          const m = flat9 ? new THREE.MeshStandardMaterial({ color: col, roughness: rough || 0.9, flatShading: true })
+                          : new THREE.MeshStandardMaterial({ map: tx9(n), normalMap: tx9(n, true), color: col, roughness: rough || 0.9 });
+          m.userData.noAutoTex = true; return m;
+        };
+        // metre UVs on any box-like geometry: each face takes its own plane
+        const metric = (geo, k) => {
+          const ps = geo.attributes.position, nr = geo.attributes.normal, uv = geo.attributes.uv;
+          for (let i = 0; i < ps.count; i++) {
+            const ax = Math.abs(nr.getX(i)), ay = Math.abs(nr.getY(i));
+            const x = ps.getX(i), y = ps.getY(i), z = ps.getZ(i);
+            if (ay > 0.6) uv.setXY(i, x * k, z * k); else if (ax > 0.6) uv.setXY(i, z * k, y * k); else uv.setXY(i, x * k, y * k);
+          }
+          return geo;
+        };
+        const logM = mat9('planks', 0xb08660, 0.8), plankM = mat9('planks', 0x8a6a4c, 0.85);
+        const plasterM = mat9('plaster', 0xe4dccb, 0.95), stoneM9 = mat9('stone', 0xa49c90, 0.95);
+        const shingleM = mat9('roof', _isLog ? 0x6b5242 : 0x7a4a3a, 0.85);
+        shingleM.side = THREE.DoubleSide;
+        const timberM = new THREE.MeshStandardMaterial({ color: 0x3e2c20, roughness: 0.85 }); timberM.userData.noAutoTex = true;
+        const glow9 = (() => {
+          const cv = document.createElement('canvas'); cv.width = cv.height = 64;
+          const x = cv.getContext('2d'), gr = x.createRadialGradient(32, 40, 2, 32, 40, 44);
+          gr.addColorStop(0, '#fff1cf'); gr.addColorStop(0.45, '#e9a95a'); gr.addColorStop(1, '#3b2410');
+          x.fillStyle = gr; x.fillRect(0, 0, 64, 64);
+          const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; return t;
+        })();
+        const winM = new THREE.MeshStandardMaterial({ color: 0x2a1c0c, emissive: 0xffffff, emissiveMap: glow9, emissiveIntensity: 0.9 });
+        winM.userData.noAutoTex = true;
+        const put = (geo, mat, x, y, z, ry) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); if (ry) m.rotation.y = ry; m.castShadow = m.receiveShadow = true; S.add(m); return m; };
+        const W = 6.4, D = 5.4, WH = 3.1, hw = W / 2, hd = D / 2;
+        put(metric(new THREE.BoxGeometry(W + 0.5, 0.36, D + 0.5), 0.45), stoneM9, 0, 0.12, 0);     // plinth
+        put(metric(new THREE.BoxGeometry(W - 0.4, 0.06, D - 0.4), 0.5), plankM, 0, 0.32, 0);       // floor
+        // walls: [centre x, centre z, length, along X?], the front split round the door
+        const walls = [[0, -hd, W, true], [-hw, 0, D, false], [hw, 0, D, false],
+                       [-(hw + 0.9) / 2, hd, hw - 0.9, true], [(hw + 0.9) / 2, hd, hw - 0.9, true]];
+        if (_isLog) {
+          const logs = [];
+          const R = 0.17, n = Math.round((WH - 0.3) / (R * 1.85));
+          for (const [cx, cz, L, alongX] of walls) {
+            const front = Math.abs(cz - hd) < 0.01 && alongX;
+            for (let k = 0; k < n; k++) {
+              const y = 0.3 + R + k * R * 1.85 + (alongX ? 0 : R * 0.92);   // courses interleave at the corners
+              if (front && y > 2.3) continue;                                // the lintel log spans it below
+              const over = front ? 0.0 : 0.32;                               // ends cross past the corner
+              const lg = new THREE.CylinderGeometry(R, R * 1.04, L + over * 2, 10, 1);
+              lg.rotateZ(Math.PI / 2);
+              if (!alongX) lg.rotateY(Math.PI / 2);
+              lg.translate(cx, y, cz);
+              logs.push(lg.toNonIndexed());
+            }
+          }
+          for (let k = 0; ; k++) {                                         // over the door, full width
+            const y = 0.3 + R + k * R * 1.85; if (y < 2.3) continue; if (y > WH) break;
+            const lg = new THREE.CylinderGeometry(R, R, W + 0.64, 10, 1); lg.rotateZ(Math.PI / 2); lg.translate(0, y, hd); logs.push(lg.toNonIndexed());
+          }
+          // peeled logs: the grain runs along each log, round it once
+          const merged = mergeGeometries(logs, false);
+          const ps = merged.attributes.position, uvs = merged.attributes.uv;
+          for (let i = 0; i < ps.count; i++) uvs.setXY(i, uvs.getX(i) * 0.9 + ps.getY(i) * 0.37, (ps.getX(i) + ps.getZ(i)) * 0.22);
+          put(merged, logM, 0, 0, 0);
+        } else {
+          for (const [cx, cz, L, alongX] of walls) {
+            const g9 = new THREE.BoxGeometry(alongX ? L : 0.24, WH - 0.3, alongX ? 0.24 : L);
+            g9.translate(cx, 0.3 + (WH - 0.3) / 2, cz);
+            put(metric(g9, 0.4), plasterM, 0, 0, 0);
+          }
+          const lin = new THREE.BoxGeometry(1.8, WH - 2.3, 0.24); lin.translate(0, 2.3 + (WH - 2.3) / 2, hd);
+          put(metric(lin, 0.4), plasterM, 0, 0, 0);
+          // timber frame: corner posts, a sill beam and a wall plate
+          for (const [px, pz] of [[-hw, -hd], [hw, -hd], [-hw, hd], [hw, hd], [-0.98, hd], [0.98, hd]])
+            put(new THREE.BoxGeometry(0.22, WH - 0.3, 0.22), timberM, px, 0.3 + (WH - 0.3) / 2, pz + (pz > 0 ? 0.03 : -0.03));
+          for (const [y, h] of [[0.36, 0.14], [WH - 0.07, 0.16], [1.55, 0.1]]) {
+            put(new THREE.BoxGeometry(W + 0.06, h, 0.06), timberM, 0, y, hd + 0.13);
+            put(new THREE.BoxGeometry(W + 0.06, h, 0.06), timberM, 0, y, -hd - 0.13);
+          }
+        }
+        // the roof: gabled across the width, overhanging every side
+        const OV = 0.55, pitch = _isLog ? 0.78 : 0.95, RW = W + OV * 2, RD = D + OV * 2, RH = (RD / 2) * pitch;
+        {
+          const P = [], U = [];
+          const A = [-RW / 2, 0, RD / 2], B = [RW / 2, 0, RD / 2], C = [RW / 2, 0, -RD / 2], Dd = [-RW / 2, 0, -RD / 2];
+          const R1 = [-RW / 2, RH, 0], R2 = [RW / 2, RH, 0], sl = Math.hypot(RD / 2, RH);
+          const quad = (a, b, c, d) => { P.push(...a, ...b, ...c, ...a, ...c, ...d); U.push(0, 0, RW, 0, RW, sl, 0, 0, RW, sl, 0, sl); };
+          quad(A, B, R2, R1); quad(C, Dd, R1, R2);
+          const rg = new THREE.BufferGeometry();
+          rg.setAttribute('position', new THREE.Float32BufferAttribute(P, 3));
+          rg.setAttribute('uv', new THREE.Float32BufferAttribute(U.map(v => v * 0.45), 2));
+          rg.computeVertexNormals();
+          put(rg, shingleM, 0, WH, 0);
+          // a ridge board and barge boards along the gables
+          put(new THREE.BoxGeometry(RW + 0.05, 0.12, 0.2), timberM, 0, WH + RH + 0.03, 0);
+          for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+            const bb = new THREE.BoxGeometry(0.08, 0.22, sl + 0.05);
+            const m = put(bb, timberM, sx * (RW / 2 + 0.03), WH + RH / 2, sz * RD / 4);
+            m.rotation.x = sz * Math.atan2(RH, RD / 2);
+          }
+          // the gable ends, closed in the wall's own stuff
+          const tg = new THREE.BufferGeometry();
+          tg.setAttribute('position', new THREE.Float32BufferAttribute([0, 0, -hd, 0, 0, hd, 0, RH * (hd / (RD / 2)), 0], 3));
+          tg.setAttribute('uv', new THREE.Float32BufferAttribute([0, 0, D * 0.45, 0, D * 0.22, RH * 0.45], 2));
+          tg.computeVertexNormals();
+          const gm9 = (_isLog ? plankM : plasterM).clone(); gm9.side = THREE.DoubleSide;
+          for (const sx of [-1, 1]) put(tg, gm9, sx * (hw - 0.02), WH, 0);
+        }
+        // the chimney: a stone stack up the side wall, through the eaves
+        {
+          const ch = WH + RH + 0.9;
+          put(metric(new THREE.BoxGeometry(0.95, ch, 1.15), 0.5), stoneM9, hw + 0.42, ch / 2, -0.9);
+          put(new THREE.BoxGeometry(1.1, 0.14, 1.3), stoneM9, hw + 0.42, ch + 0.07, -0.9);
+        }
+        // windows: a frame, glazing bars, the room's light behind
+        for (const [wx, wz, ry] of [[-2.05, hd, 0], [2.05, hd, 0], [-hw, -0.6, -Math.PI / 2], [0, -hd, Math.PI]]) {
+          const wg = new THREE.Group(); wg.position.set(wx, 1.75, wz); wg.rotation.y = ry; S.add(wg);
+          const pane = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.95), winM); pane.position.z = 0.2; wg.add(pane);
+          for (const [bw, bh, bx, by] of [[1.1, 0.1, 0, 0.52], [1.1, 0.12, 0, -0.53], [0.1, 1.1, -0.5, 0], [0.1, 1.1, 0.5, 0], [0.05, 0.95, 0, 0], [0.9, 0.05, 0, 0]]) {
+            const f = new THREE.Mesh(new THREE.BoxGeometry(bw, bh, 0.08), timberM); f.position.set(bx, by, 0.23); wg.add(f);
+          }
+          if (!_isLog) for (const sx of [-1, 1]) {                         // shutters, folded back
+            const sh = new THREE.Mesh(new THREE.BoxGeometry(0.46, 1.05, 0.04), new THREE.MeshStandardMaterial({ color: 0x3d5a3a, roughness: 0.7 }));
+            sh.position.set(sx * 0.8, 0, 0.24); wg.add(sh);
+          }
+        }
+        // the door: planks with a ledge and brace, standing ajar on the lit room
+        {
+          const back = new THREE.Mesh(new THREE.PlaneGeometry(1.8, 2.0), winM); back.position.set(0, 1.3, hd - 0.05); S.add(back);
+          const dg9 = new THREE.Group(); dg9.position.set(0.88, 0.33, hd + 0.02); dg9.rotation.y = 0.5; S.add(dg9);
+          const leaf = new THREE.Mesh(metric(new THREE.BoxGeometry(1.0, 1.98, 0.07), 0.6), plankM); leaf.position.set(-0.5, 0.99, 0); leaf.castShadow = true; dg9.add(leaf);
+          for (const y of [0.35, 1.6]) { const l2 = new THREE.Mesh(new THREE.BoxGeometry(0.92, 0.12, 0.05), timberM); l2.position.set(-0.5, y, 0.06); dg9.add(l2); }
+          const fr = (w, h, x, y) => put(new THREE.BoxGeometry(w, h, 0.3), timberM, x, y, hd + 0.04);
+          fr(0.14, 2.0, -0.97, 1.3); fr(0.14, 2.0, 0.97, 1.3); fr(2.08, 0.16, 0, 2.32);
+        }
+        // the porch: a plank deck, two posts and a lean-to roof over the door
+        {
+          put(metric(new THREE.BoxGeometry(3.6, 0.12, 1.5), 0.6), plankM, 0, 0.3, hd + 0.85);
+          for (const sx of [-1.65, 1.65]) put(new THREE.BoxGeometry(0.16, 2.35, 0.16), timberM, sx, 0.3 + 1.17, hd + 1.5);
+          const pr = put(new THREE.BoxGeometry(3.9, 0.08, 1.9), shingleM, 0, 2.75, hd + 0.85);
+          pr.rotation.x = 0.28;
+        }
+      } else
       addBox(6.4, 0.16, 5.4, 0, 0.08, 0, roofMat);            // floor slab
+      if (!_builtHouse) {
       addBox(6.4, 3.1, 0.28, 0, 1.63, -2.55);                 // back wall
       addBox(0.28, 3.1, 5.4, -3.06, 1.63, 0);                 // side walls
       addBox(0.28, 3.1, 5.4, 3.06, 1.63, 0);
@@ -1922,12 +2077,13 @@ async function main() {
         const parapet = new THREE.Mesh(new THREE.BoxGeometry(6.6, 0.5, 5.6), roofMat);
         parapet.position.y = 3.4;
         S.add(parapet);
-      } else {
+      } else if (!_builtHouse) {
         const roof = new THREE.Mesh(new THREE.ConeGeometry(4.9, 2.2, 4), roofMat);
         roof.rotation.y = Math.PI / 4;
         roof.position.y = 4.28;
         roof.castShadow = true;
         S.add(roof);
+      }
       }
       if (isLighthouse) {
         // the light column: striped tower + a bright lamp visible for miles
@@ -1949,7 +2105,7 @@ async function main() {
         beam.position.y = 10.2;
         S.add(beam);
       }
-      for (const wx of [-2.05, 2.05]) {                       // warm windows
+      for (const wx of (_builtHouse ? [] : [-2.05, 2.05])) {   // warm windows
         const w = new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.85, 0.1), warmMat);
         w.position.set(wx, 1.8, 2.62);
         S.add(w);
@@ -1965,7 +2121,7 @@ async function main() {
         new THREE.MeshStandardMaterial({ color: 0xb9a0ff, emissive: 0x7c5cff,
                                          emissiveIntensity: 1.2 }));
       mat2.rotation.x = -Math.PI / 2;
-      mat2.position.set(0, 0.18, 0.4);
+      mat2.position.set(0, _builtHouse ? 0.37 : 0.18, 0.4);   // on the floorboards where there are any
       S.add(mat2);
       scene.add(S);
       S.updateMatrixWorld(true);
@@ -5032,11 +5188,31 @@ async function main() {
           // r15 WET NIGHT ASPHALT: at night the road turns glossy and picks
           // up the HDRI/neon environment — the SSR wet-street look without
           // SSR. Day stays matte.
-          const _wetN = SPEC.world.sky === 'night' || SPEC.world.sky === 'dusk';
+          const _wetN = SPEC.world.sky === 'night' || SPEC.world.sky === 'dusk' || SPEC.world.weather === 'rain';
+          // PUDDLES (2026-10-02): a wet street is not evenly glossy. Where the
+          // road dips the water stands and mirrors the sky and the signs; the
+          // crown of the road and the tyre lines dry first. A roughness map
+          // carries both: mostly a damp satin, with mirror-still pools.
+          let _wetR = null;
+          if (_wetN) {
+            const S2 = 512, cv = document.createElement('canvas'); cv.width = cv.height = S2;
+            const x = cv.getContext('2d'), rp = mulberry32(SPEC.seed + 4141);
+            x.fillStyle = 'rgb(150,150,150)'; x.fillRect(0, 0, S2, S2);
+            for (let i = 0; i < 26; i++) {
+              const cx = rp() * S2, cy = rp() * S2, r = 18 + rp() * 70;
+              const gr = x.createRadialGradient(cx, cy, r * 0.35, cx, cy, r);
+              gr.addColorStop(0, 'rgb(14,14,14)'); gr.addColorStop(1, 'rgba(14,14,14,0)');
+              x.save(); x.translate(cx, cy); x.scale(1, 0.45 + rp() * 0.5); x.translate(-cx, -cy);
+              x.fillStyle = gr; x.beginPath(); x.arc(cx, cy, r, 0, Math.PI * 2); x.fill(); x.restore();
+            }
+            _wetR = new THREE.CanvasTexture(cv);
+            _wetR.wrapS = _wetR.wrapT = THREE.RepeatWrapping;
+            _wetR.repeat.set(0.35, 0.35);
+          }
           const road = new THREE.Mesh(mergeGeometries(roadGeos, false),
             new THREE.MeshStandardMaterial({ map: at, color: 0x686b73,
-              roughness: _wetN ? 0.42 : 0.96, metalness: _wetN ? 0.12 : 0.0,
-              envMapIntensity: _wetN ? 1.5 : 1.0, side: THREE.DoubleSide }));
+              roughness: _wetN ? 1.0 : 0.96, roughnessMap: _wetR, metalness: _wetN ? 0.12 : 0.0,
+              envMapIntensity: _wetN ? 1.7 : 1.0, side: THREE.DoubleSide }));
           road.receiveShadow = true;
           scene.add(road);
           // 2026-08-06: the world ground is shared with forests and deserts,
@@ -5435,8 +5611,10 @@ async function main() {
           // emissive is driven by the MAP, so the dark plate stays dark and
           // only the tube and the letters throw light. A flat `emissive`
           // colour is what made the whole slab glow.
+          // front faces only: a blade carries its own turned copy for the far
+          // side, and a double-sided face showed through it letter-mirrored
           const mn = new THREE.MeshStandardMaterial({ map: tn, color: 0xffffff,
-            side: THREE.DoubleSide, roughness: 0.55,
+            side: THREE.FrontSide, roughness: 0.55,
             emissive: 0xffffff, emissiveMap: tn, emissiveIntensity: 1.9 });
           mn.userData.noAutoTex = true;
           const signs = new THREE.Mesh(mergeGeometries(sgGeos, false), mn);

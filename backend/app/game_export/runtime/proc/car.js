@@ -365,7 +365,35 @@ export function buildCarHQ(cp, T = {}) {
       liners.push(lg);
     }
   }
-  const tyreM = new THREE.MeshStandardMaterial({ color: 0x141518, roughness: 0.9, side: THREE.DoubleSide });
+  // TREAD AND SIDEWALL (2026-10-02): a tyre was one smooth black lathe. The
+  // lathe's v runs across the profile (lip, sidewall, tread, sidewall, lip)
+  // and u round the wheel, so one small drawing gives it a block tread
+  // across its face and a band of raised lettering on each wall.
+  let tyreMap = null;
+  if (typeof document !== 'undefined') {
+    const cv = document.createElement('canvas'); cv.width = 512; cv.height = 64;
+    const x = cv.getContext('2d');
+    x.fillStyle = '#2a2b2e'; x.fillRect(0, 0, 512, 64);
+    // the profile: 14 points; tread spans roughly the middle third
+    const v0 = 64 * 5 / 14, v1 = 64 * 9 / 14;
+    x.fillStyle = '#18191b'; x.fillRect(0, v0, 512, v1 - v0);
+    x.fillStyle = '#0b0b0c';
+    for (let i = 0; i < 64; i++) {                       // blocks and a centre groove
+      const u = i * 8;
+      x.fillRect(u, v0, 2, (v1 - v0) * 0.42);
+      x.fillRect(u + 4, v0 + (v1 - v0) * 0.58, 2, (v1 - v0) * 0.42);
+    }
+    x.fillRect(0, (v0 + v1) / 2 - 1.5, 512, 3);
+    x.fillStyle = '#3a3b3f';                              // raised lettering on the walls
+    for (const vv of [64 * 2.6 / 14, 64 * 11.4 / 14]) {
+      for (let i = 0; i < 6; i++) x.fillRect(i * 85 + 10, vv - 1.5, 46, 3);
+    }
+    tyreMap = new THREE.CanvasTexture(cv);
+    tyreMap.colorSpace = THREE.SRGBColorSpace;
+    tyreMap.anisotropy = 4;
+  }
+  const tyreM = new THREE.MeshStandardMaterial({ color: 0xffffff, map: tyreMap, roughness: 0.88, side: THREE.DoubleSide });
+  if (!tyreMap) tyreM.color.set(0x141518);
   chrome.side = THREE.DoubleSide;
   const tyreMesh = new THREE.Mesh(mergeGeometries(tyres.map(q => q.toNonIndexed ? (q.index ? q.toNonIndexed() : q) : q), false), tyreM);
   tyreMesh.castShadow = true; tyreMesh.name = 'tyres'; g.add(tyreMesh);
