@@ -1,0 +1,99 @@
+<!doctype html>
+<!-- MOTION MATCHING LAB (2026-10-03): a character driven through a scripted
+     session by the motion matcher (proc/mm.js), simulated at 60 Hz with the
+     game's controller springs, filmed as a strip of frames from a chase
+     camera, with numbers: planted-foot slide, jumps, search cost and time.
+     Copy into a job's dist root next to proc/ (with mm.js) and mm/ (the
+     database), put the GLB in assets/, serve the dist, open
+     mmlab.html?f=<file.glb>&run=6&walk=2.2&n=24 -->
+<html><head><meta charset="utf-8"><style>html,body{margin:0;background:#888}</style>
+<script type="importmap">{ "imports": { "three": "./vendor/three.module.js" } }</script></head><body>
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from './vendor/jsm/loaders/GLTFLoader.js';
+import { loadMotionDB, createMotionMatcher } from './proc/mm.js';
+const q = new URLSearchParams(location.search);
+const F = q.get('f'), RUN = +(q.get('run') || 6), WALK = +(q.get('walk') || 2.2), N = +(q.get('n') || 24);
+const COLS = 8, ROWS = Math.ceil(N / COLS), CW = 240, CH = 300;
+const r = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+r.setSize(CW * COLS, CH * ROWS); document.body.appendChild(r.domElement);
+const s = new THREE.Scene(); s.background = new THREE.Color(0xb8c4cc);
+s.add(new THREE.HemisphereLight(0xffffff, 0x556655, 1.8));
+const d = new THREE.DirectionalLight(0xffffff, 2); d.position.set(3, 5, 4); s.add(d);
+const grid = new THREE.GridHelper(200, 200, 0x334433, 0x445544); s.add(grid);
+const fl = new THREE.Mesh(new THREE.PlaneGeometry(200, 200), new THREE.MeshStandardMaterial({ color: 0x7a8a70 }));
+fl.rotation.x = -Math.PI / 2; fl.position.y = -0.002; s.add(fl);
+const db = await loadMotionDB('./mm/');
+const g = await new GLTFLoader().loadAsync('./assets/' + F);
+const holder = new THREE.Group(); s.add(holder); holder.add(g.scene);
+const mm = createMotionMatcher({ root: g.scene, db });
+// speeds are a full-size person's: a rig built smaller moves proportionally slower
+const SC = mm.calibration.scale / 0.945;
+const B = {}; g.scene.traverse(o => { if (o.isBone) B[o.name.toLowerCase()] = o; });
+// the script: [seconds, wanted direction in world (x, z) or null, speed, label]
+const S = [
+  [1.2, null, 0, 'stand'], [2.0, [0, 1], WALK * SC, 'walk off'], [2.0, [0, 1], RUN * SC, 'run'],
+  [1.6, [1, 0], RUN * SC, 'run 90 left'], [1.4, null, 0, 'stop'], [1.6, [-1, 0], WALK * SC, 'walk back the way'],
+  [2.0, [0, -1], RUN * SC, 'run, turn'], [1.2, null, 0, 'stop'], [1.6, [0, 1], WALK * 0.6 * SC, 'stroll'],
+];
+const total = S.reduce((a, x) => a + x[0], 0);
+const dt = 1 / 60;
+const pos = new THREE.Vector3(), vel = new THREE.Vector3(), want = new THREE.Vector3();
+let yaw = 0, wantYaw = 0;
+const cam = new THREE.PerspectiveCamera(40, CW / CH, 0.1, 100);
+r.setScissorTest(true);
+const rec = []; let tile = 0, t = 0;
+const fp = { l: new THREE.Vector3(), r: new THREE.Vector3() }, pfp = { l: null, r: null };
+const POPB = ['upleg_l', 'upleg_r', 'lowleg_l', 'lowleg_r', 'uparm_l', 'uparm_r', 'lowarm_l', 'lowarm_r', 'spine', 'head'], prevQ = {};
+for (const [dur, dir, sp, label] of S) {
+  for (let k = 0; k < Math.round(dur / dt); k++, t += dt) {
+    if (dir) { want.set(dir[0], 0, dir[1]).normalize().multiplyScalar(sp); wantYaw = Math.atan2(dir[0], dir[1]); }
+    else want.set(0, 0, 0);
+    const vr = want.lengthSq() > vel.lengthSq() ? 7 : 10; vel.x = THREE.MathUtils.damp(vel.x, want.x, vr, dt); vel.z = THREE.MathUtils.damp(vel.z, want.z, vr, dt);
+    pos.addScaledVector(vel, dt);
+    const dy = Math.atan2(Math.sin(wantYaw - yaw), Math.cos(wantYaw - yaw)); yaw += dy * (1 - Math.exp(-10 * dt));
+    holder.position.copy(pos); holder.rotation.y = yaw + Math.PI;
+    holder.updateMatrixWorld(true);
+    mm.update(dt, { vel, wantVel: want, yaw, wantYaw, velRate: 7, turnRate: 10 });
+    g.scene.updateMatrixWorld(true);
+    B.foot_l.getWorldPosition(fp.l); B.foot_r.getWorldPosition(fp.r);
+    // the largest turn any limb bone made since the last frame: a pop shows as a spike
+    let pop = 0;
+    const hq = holder.quaternion.clone().invert(); for (const n of POPB) { const bq = hq.clone().multiply(B[n].getWorldQuaternion(new THREE.Quaternion())); if (prevQ[n]) pop = Math.max(pop, 2 * Math.acos(Math.min(1, Math.abs(bq.dot(prevQ[n])))) * 57.3); prevQ[n] = bq; }
+    const c = mm.contacts();
+    const tv = B.neck.getWorldPosition(new THREE.Vector3()).sub(B.hips.getWorldPosition(new THREE.Vector3()));
+    const trunk = Math.atan2(tv.x * Math.sin(yaw) + tv.z * Math.cos(yaw), tv.y) * 57.3;   // forward lean, degrees
+    const row = { ...mm.facts(), t: +t.toFixed(3), phase: label, speed: +vel.length().toFixed(2), pop, trunk };
+    for (const [side, i] of [['l', 0], ['r', 1]]) {
+      if (pfp[side] && c[i]) row['slide_' + side] = +(Math.hypot(fp[side].x - pfp[side].x, fp[side].z - pfp[side].z) / dt).toFixed(3);
+      row['h_' + side] = +fp[side].y.toFixed(3);
+      pfp[side] = fp[side].clone();
+    }
+    rec.push(row);
+    if (tile < N && t >= tile * total / N) {
+      const cx = (tile % COLS) * CW, cy = (ROWS - 1 - Math.floor(tile / COLS)) * CH;
+      // a chase camera at the body's side-rear, so the legs read
+      const sa = yaw + Math.PI * 0.62;
+      cam.position.set(pos.x + Math.sin(sa) * 2.6, 0.95, pos.z + Math.cos(sa) * 2.6);
+      cam.lookAt(pos.x, 0.55, pos.z);
+      r.setViewport(cx, cy, CW, CH); r.setScissor(cx, cy, CW, CH);
+      r.render(s, cam); tile++;
+    }
+  }
+}
+// the numbers per phase
+const out = {};
+for (const [, , , label] of S) {
+  const rs = rec.filter(x => x.phase === label);
+  const sl = rs.flatMap(x => [x.slide_l, x.slide_r]).filter(v => v !== undefined);
+  const sp = rs.reduce((a, x) => a + x.speed, 0) / rs.length;
+  const takes = [...new Set(rs.map(x => x.take))];
+  out[label] = { speed: +sp.toFixed(2), slide_med: sl.length ? +sl.sort((a, b) => a - b)[Math.floor(sl.length / 2)].toFixed(2) : null,
+                 slide_p90: sl.length ? +sl[Math.floor(sl.length * 0.9)].toFixed(2) : null, takes: takes.slice(0, 4),
+                 foot_low: +Math.min(...rs.map(x => Math.min(x.h_l, x.h_r))).toFixed(3),
+                 pop_p50: +[...rs.map(x => x.pop)].sort((a, b) => a - b)[Math.floor(rs.length / 2)].toFixed(1),
+                 pop_max: +Math.max(...rs.map(x => x.pop)).toFixed(1), jumps: new Set(rs.map(x => x.jumps)).size - 1,
+                 trunk_max: +Math.max(...rs.map(x => x.trunk)).toFixed(1), trunk_med: +[...rs.map(x => x.trunk)].sort((a, b) => a - b)[Math.floor(rs.length / 2)].toFixed(1) };
+}
+const DBG = q.get('dbg'); window.__mm = { trace: DBG ? rec.filter(x => x.phase === DBG).filter((x, i) => i % 6 === 0).map(x => [x.t, x.take, x.frame, +x.trunk.toFixed(1), x.speed, x.cost]) : null, calibration: mm.calibration, phases: out, jumps: mm.facts().jumps, search_ms: Math.max(...rec.map(x => x.search_ms)) };
+</script></body></html>

@@ -19,6 +19,7 @@ import { buildCarHQ as __buildCarHQ } from './proc/car.js';
 import * as __FLORA from './proc/flora.js';
 import * as __GRASS from './proc/grass.js';
 import { createGait as __createGait } from './proc/gait.js';
+import { loadMotionDB as __loadMotionDB, createMotionMatcher as __createMotionMatcher } from './proc/mm.js';
 
 const SPEC = __GAME_SPEC__;
 
@@ -11147,6 +11148,22 @@ async function main() {
     if (GAIT) console.log('[game] gait engine: ' + JSON.stringify(GAIT.facts()));
   } catch (e) { console.warn('[game] gait engine skipped: ' + e.message); GAIT = null; }
   let _gaitPrevV = 0, _gaitPrevP = null;
+  // MOTION MATCHING (2026-10-03, proc/mm.js): the hero plays real captured
+  // starts, stops, turns, jogs and sprints, chosen ten times a second by
+  // where the stick is taking the body, with inertialized blends between
+  // them; the clip blend above stays as the fallback (and the sneak, swim
+  // and fly paths). ?mm=0 turns it off.
+  let MM = null, _mmDrive = false, _mmAtk = false, _mmWantYaw = 0;
+  const _mmV = new THREE.Vector3(), _mmWant = new THREE.Vector3();
+  if (GAIT && new URLSearchParams(location.search).get('mm') !== '0') {
+    __loadMotionDB('./mm/').then(db => {
+      try {
+        MM = __createMotionMatcher({ root: pg.scene, db });
+        if (MM) console.log('[game] motion matching: ' + db.F + ' frames, rig scale ' + MM.calibration.scale);
+      } catch (e) { console.warn('[game] motion matching skipped: ' + e.message); MM = null; }
+    }).catch(e => console.warn('[game] motion matching unavailable: ' + e.message));
+  }
+  window.__mm = () => (MM ? { on: _mmDrive, ...MM.facts() } : null);
   window.__hAt = hAt;               // the terrain's height, for the gait lab's ground checks
   const _gaitFwd = new THREE.Vector3(0, 0, 1);
   const _gaitCF = new THREE.Vector3();
@@ -14894,10 +14911,24 @@ varying vec2 vUvRaw;
       // THE WALK RAMPS (2026-09-22): full speed in the first frame and a dead
       // stop in the next read as a puppet. Speed eases up over a third of a
       // second and down a little faster, along the last direction held.
-      if (dir.lengthSq() > 1e-4) _wdir.copy(dir);
+      if (dir.lengthSq() > 1e-4) { _wdir.copy(dir); _mmWantYaw = Math.atan2(dir.x, dir.z); }
       const wantV = speed * _aimK;
-      walkV = THREE.MathUtils.damp(walkV, wantV, wantV > walkV ? 9 : 14, dt);
-      if (walkV < 0.02 && wantV === 0) walkV = 0;
+      if (MM) {
+        // THE BODY CURVES (2026-10-03): with motion matching the velocity
+        // eases as a vector, so a change of direction is an arc a person
+        // could run (and the database has run), not a turn on a dime; the
+        // pace eases as before
+        _mmWant.set(dir.lengthSq() > 1e-4 ? dir.x : 0, 0, dir.lengthSq() > 1e-4 ? dir.z : 0).multiplyScalar(wantV);
+        const _mr = wantV > walkV ? 7 : 10;
+        _mmV.x = THREE.MathUtils.damp(_mmV.x, _mmWant.x, _mr, dt);
+        _mmV.z = THREE.MathUtils.damp(_mmV.z, _mmWant.z, _mr, dt);
+        walkV = Math.hypot(_mmV.x, _mmV.z);
+        if (walkV > 1e-3) _wdir.set(_mmV.x / walkV, 0, _mmV.z / walkV);
+        if (walkV < 0.02 && wantV === 0) { walkV = 0; _mmV.set(0, 0, 0); }
+      } else {
+        walkV = THREE.MathUtils.damp(walkV, wantV, wantV > walkV ? 9 : 14, dt);
+        if (walkV < 0.02 && wantV === 0) walkV = 0;
+      }
       speed = walkV;
       var desired = { x: _wdir.x * walkV * dt, y: vy * dt,
                       z: _wdir.z * walkV * dt };
@@ -14912,7 +14943,7 @@ varying vec2 vUvRaw;
         desired.x = cb.dx * sp * dt; desired.z = cb.dz * sp * dt;
         modelYaw = Math.atan2(cb.dx, cb.dz);
         holder.rotation.x = 0.42 * Math.sin(Math.PI * (1 - k));
-        walkV = 0;
+        walkV = 0; _mmV.set(0, 0, 0);
       }
       if (VIEW === 'side') {              // hold the hero on the gameplay lane
         desired.z = (0 - body.translation().z) * Math.min(6 * dt, 1);
@@ -15126,10 +15157,36 @@ varying vec2 vUvRaw;
             a2.timeScale = speed > 0.1 ? THREE.MathUtils.clamp(speed / base, 0.5, 5.5) : 1.0;
           }
         }
-        if (GAIT) GAIT.drive(dt, speed, _gaitW);
+        if (GAIT && !_mmDrive) GAIT.drive(dt, speed, _gaitW);
         current = actions['__' + top] || current;   // the dominant gait, for the attack's crossfade
       }
+      // motion matching drives a grounded walker on its feet; the clips keep
+      // their weights underneath (so a hand-back is already blended) but are
+      // silenced while it does
+      const _mmWant2 = !!MM && !(DRIVE || DRIVING) && !SWIM && !FLY && !window.__sneak;
+      if (_mmWant2 && performance.now() >= attackUntil) {
+        for (const k of ['idle', 'walk', 'run', 'sneak', 'attack']) {
+          const a2 = actions['__' + k]; if (a2) { a2.stopFading(); a2.setEffectiveWeight(0); }
+        }
+      }
       mixer.update(dt);
+      if (MM) {
+        const _atk = performance.now() < attackUntil;
+        if (_mmWant2 && !_atk) {
+          if (!_mmDrive || _mmAtk) MM.resume();
+          _mmDrive = true; _mmAtk = false;
+          const _yo = THREE.MathUtils.degToRad(P.yaw_offset_deg || 0) + _legYawFix;
+          MM.update(dt, { vel: _mmV, wantVel: _mmWant, yaw: modelYaw + _yo, wantYaw: (_mmWant.lengthSq() > 1e-4 ? _mmWantYaw : modelYaw) + _yo,
+                          velRate: 7, turnRate: P.turn_speed || 10 });
+        } else {
+          // a swing, a sneak or a ride: the clip poses the body and the last
+          // matched pose blends away into it
+          if (_mmDrive) MM.handoff();
+          if (_atk && _mmWant2) _mmAtk = true;
+          _mmDrive = false;
+          MM.overlay(dt);
+        }
+      }
       if (GAIT && performance.now() >= attackUntil && !(DRIVE || DRIVING) && !window.__sneak) {
         const _acc = (speed - _gaitPrevV) / Math.max(dt, 1e-3); _gaitPrevV = speed;
         // forward is where the body is going, read off its own motion (the
@@ -15155,7 +15212,8 @@ varying vec2 vUvRaw;
         }
         try {
           GAIT.post(dt, { speed, forward: _gaitFwd, groundY: playerObj.position.y, groundAt: hAt,
-                          moving: 1 - _gaitW.idle, grounded: kcc.computedGrounded(), accel: _acc });
+                          moving: 1 - _gaitW.idle, grounded: kcc.computedGrounded(), accel: _acc,
+                          noLean: _mmDrive });       // captured motion already leans into speed and turns
         } catch (e) { console.warn('[game] gait post: ' + e.message); GAIT = null; }
       }
       // THE HEAD LOOKS WHERE THE CAMERA LOOKS (2026-09-23): after the pose, the

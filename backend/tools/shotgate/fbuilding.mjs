@@ -126,11 +126,13 @@ await b.close();
 const __eng = feel.gaitW.engine;
 const __rate = __eng ? __eng.rate : feel.gaitW.gait.rate;
 const __armMax = (feel.gaitW.gait.run > 0.5) ? 48 : 32;
+// a run rides higher than a walk: 6 to 10 cm of vertical travel (2026-10-03, motion matching plays real runs)
+const __rideMax = (feel.gaitW.gait.run > 0.5) ? 0.12 : 0.09;
 const ok = r.landmark && r.landmark.w > 5 && r.landmark.h > 5 && errs.length === 0
   && standing && (hero.hero !== 'detective' || hero.weapon === null || hero.weapon === 'pistol')
   && feel.early > 0.2 && feel.early < feel.full * 0.85 && feel.full > 1.5 && feel.runFov > feel.base + 2 && feel.dip > 0.03 && feel.stopped < 0.05
   && (!lightF.night || (lightF.moon <= 0.6 && lightF.hero_fill > 0 && lum.box >= 22 && lum.box > lum.frame * 1.15 && lum.sky < 70))
-  && (feel.gaitW.gait.walk + feel.gaitW.gait.run) > 0.5 && feel.gaitW.gait.idle < 0.5 && __rate >= 0.5 && __rate <= 5.5 && feel.idleW.idle > 0.9 && Math.abs(feel.turning.roll) > 0.01 && !!feel.gaitW.lean.head_bone && feel.gaitW.arms && feel.gaitW.arms.L !== null && feel.gaitW.arms.L < __armMax && feel.gaitW.arms.R < __armMax && feel.gaitW.ride >= 0.015 && feel.gaitW.ride <= 0.09 && feel.gaitW.shoulders && feel.gaitW.shoulders.L !== null && feel.gaitW.shoulders.L < 6 && feel.gaitW.shoulders.R < 6   // no shrug   // the arms hang and swing, no chicken wings; the pelvis rides three to six centimetres   // a detective with a weapon holds the pistol; a build with no hostiles holds nothing && cast.ghosts > 0 && cast.ghosts <= 3 && cast.animals === 0   // a haunting has ghosts, not wolves, and not a crowd
+  && (feel.gaitW.gait.walk + feel.gaitW.gait.run) > 0.5 && feel.gaitW.gait.idle < 0.5 && __rate >= 0.5 && __rate <= 5.5 && feel.idleW.idle > 0.9 && Math.abs(feel.turning.roll) > 0.01 && !!feel.gaitW.lean.head_bone && feel.gaitW.arms && feel.gaitW.arms.L !== null && feel.gaitW.arms.L < __armMax && feel.gaitW.arms.R < __armMax && feel.gaitW.ride >= 0.015 && feel.gaitW.ride <= __rideMax && feel.gaitW.shoulders && feel.gaitW.shoulders.L !== null && feel.gaitW.shoulders.L < 6 && feel.gaitW.shoulders.R < 6   // no shrug   // the arms hang and swing, no chicken wings; the pelvis rides three to six centimetres   // a detective with a weapon holds the pistol; a build with no hostiles holds nothing && cast.ghosts > 0 && cast.ghosts <= 3 && cast.animals === 0   // a haunting has ghosts, not wolves, and not a crowd
   && faced && faced.off < 1.05 && faced.lamps === 3
   && bodies && bodies.quad + bodies.biped > 0 && npcW.every(x => Number.isFinite(x.ground));   // every body knows its class and the ground under it
 process.exit(ok ? 0 : 1);

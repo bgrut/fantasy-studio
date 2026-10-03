@@ -56,3 +56,14 @@ RightShoulder→clav_R · RightArm→uparm_R · RightForeArm→lowarm_R · Right
 LeftUpLeg→upleg_L · LeftLeg→lowleg_L · LeftFoot→foot_L
 RightUpLeg→upleg_R · RightLeg→lowleg_R · RightFoot→foot_R
 (LHipJoint/RHipJoint = connector bones; fingers/thumbs ignored in v1.)
+
+## The motion-matching database (2026-10-03)
+
+`assets/mocap/mm/mm_db.bin` is built by `tools/mmdb.py` from 111 CMU takes
+(running, jogging, sprinting, turning, starting, stopping, backpedalling and
+sidestepping; subjects 2, 7, 8, 9, 16, 35, 36, 41, 69, 83, 104, 127, 128,
+131, 134, 136, 139, 141, 143) and 6 windows of 100STYLE (see
+`../100style/ATTRIBUTION.md`). The raw CMU files, from the same cgspeed
+mirror (github.com/una-dinosauria/cmu-mocap), live in `../_cmu_src/`, which
+git ignores; only the retargeted database ships, inside games, never as data
+for sale. The credit line above appears in every exported game's LICENSES.md.

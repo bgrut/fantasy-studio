@@ -399,6 +399,17 @@ def export_web_game(spec: GameSpec, out_dir: str | Path, verbose: bool = True) -
         if _proc_dst.exists():
             shutil.rmtree(_proc_dst)
         shutil.copytree(_proc_src, _proc_dst)
+    # THE MOTION DATABASE (2026-10-03): a hero who walks is moved by motion
+    # matching (proc/mm.js) over one shared database of captured locomotion
+    # (tools/mmdb.py, ~6 MB); a factory or a car, a swimmer or a flyer never
+    # loads it, so only a walking player's game carries it
+    _mm_src = RUNTIME.parent.parent.parent / "assets" / "mocap" / "mm"
+    _mm_dst = dist / "mm"
+    if _mm_dst.exists():
+        shutil.rmtree(_mm_dst)
+    if (not _factory and (getattr(spec.player, "mode", "walk") or "walk") == "walk"
+            and (_mm_src / "mm_db.bin").exists()):
+        shutil.copytree(_mm_src, _mm_dst)
 
     # ── copy assets, rewrite spec paths to dist-relative ────────────────────
     rt = spec.runtime_json()

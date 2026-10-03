@@ -1,1 +1,2 @@
 backend/assets/library/*.glb filter=lfs diff=lfs merge=lfs -text
+backend/assets/mocap/mm/*.bin filter=lfs diff=lfs merge=lfs -text

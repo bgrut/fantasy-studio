@@ -245,7 +245,7 @@ export function createGait({ root, actions, mixer, rates }) {
     const rollT = THREE.MathUtils.clamp(0.4 * Math.atan(st.aLat / g), -0.1, 0.1) * mvK;
     st.lean = THREE.MathUtils.damp(st.lean, (typeof window !== 'undefined' && window.__gaitLean != null) ? window.__gaitLean : pitchT, 5, dt);
     st.bank = THREE.MathUtils.damp(st.bank || 0, rollT, 5, dt);
-    if (!OFF.lean && (Math.abs(st.lean) > 1e-4 || Math.abs(st.bank) > 1e-4)) {
+    if (!OFF.lean && !o.noLean && (Math.abs(st.lean) > 1e-4 || Math.abs(st.bank) > 1e-4)) {
       // pitch about the body's left axis, roll about its forward axis (into
       // the turn: a left turn tips the body left)
       _q1.setFromAxisAngle(_lat, st.lean);
@@ -315,6 +315,29 @@ export function createGait({ root, actions, mixer, rates }) {
           if (L.rel && L.w < 0.03) { L.pos = null; L.rel = false; }
         } else if (L.rel) { L.rel = false; }
         legIK(s, t);
+      }
+    }
+
+    // A HAND THAT HOLDS SOMETHING CARRIES IT (2026-10-03). Captured runs pump
+    // the arms 60-70 degrees, and a pistol pumped like a fist reads wrong; a
+    // shooter's upper-body layer holds the weapon arm in a carry instead:
+    // upper arm near the body and a little forward, elbow bent about 80
+    // degrees, forearm forward and in. A quarter of the captured motion is
+    // kept so the arm still moves with the body.
+    if (!OFF.carry && hasArms) {
+      for (const s of ['l', 'r']) {
+        const key = 'carry_' + s;
+        st[key] = THREE.MathUtils.damp(st[key] || 0, armed[s] ? 1 : 0, 6, dt);
+        const k = st[key];
+        if (k < 0.01) continue;
+        const out = _v1.copy(_lat).multiplyScalar(s === 'l' ? 1 : -1);          // outboard
+        const up = B['uparm_' + s], lo = B['lowarm_' + s], hd = B['hand_' + s];
+        const cur = wp(lo).sub(wp(up)).normalize();
+        const carry = _v2.copy(UP).multiplyScalar(-0.93).addScaledVector(_fw, 0.3).addScaledVector(out, 0.12).normalize();
+        aimSegment(up, lo, carry.multiplyScalar(0.75).addScaledVector(cur, 0.25).normalize(), k);
+        const cf = wp(hd).sub(wp(lo)).normalize();
+        const fore = _v2.copy(_fw).multiplyScalar(0.85).addScaledVector(UP, -0.35).addScaledVector(out, -0.25).normalize();
+        aimSegment(lo, hd, fore.multiplyScalar(0.75).addScaledVector(cf, 0.25).normalize(), k);
       }
     }
   }

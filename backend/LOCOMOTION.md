@@ -122,3 +122,65 @@ Next: motion matching over the 100STYLE Neutral takes (forward, backward and
 sidestep walks and runs, which include curved paths) so turns, starts and
 stops come from real motion rather than one looping cycle, with inertialized
 transitions instead of crossfades.
+
+## 7. Motion matching (2026-10-03)
+
+The hero no longer plays one walk loop and one run loop. `runtime/proc/mm.js`
+plays real captured locomotion out of one shared database and chooses where
+to play from ten times a second, the method Clavet and Zadziuk introduced at
+GDC 2016 and Fortnite and The Last of Us ship; the implementation follows
+Daniel Holden's MIT reference (orangeduck/Motion-Matching).
+
+**The database** (`tools/mmdb.py` -> `assets/mocap/mm/mm_db.bin`, 5.7 MB,
+26,638 frames = 14.8 minutes at 30 fps with every take mirrored): 117 takes
+from CMU (163 downloaded into `assets/mocap/_cmu_src`, ignored by git) and
+100STYLE: straight runs, jogs and sprints up to 7.8 m/s (subjects 9, 16, 35,
+127, 141, 143), running turns and veers, starts and stops (16, 104, 127, 128,
+131, 133, 134, 143), walking turns and turning on the spot (16, 36, 69, 83),
+backpedal and sidestep, the 100STYLE standing idle, walk, jog, backward and
+sidestep. Per frame: 19 bone rotations against one canonical T-pose (so
+skeletons from different capture rigs share one rest pose), the hips over the
+root, and Holden's 27 features (both ankles' positions and velocities, the
+hips' velocity, the root's position and facing 1/3, 2/3 and 1 s ahead).
+
+**The runtime:** the controller's velocity eases as a vector (so a change of
+direction is an arc a person could run) and its future is predicted with the
+same spring; the query is the playing frame's pose features plus that future;
+a brute-force search over all frames takes under 1 ms. A jump needs a clear
+margin (cost under 0.85 x the current) and is inertialized: the difference
+between the last pose shown and the new one decays with a 0.1 s half-life.
+The pose goes onto each rig by rotation transfer, calibrated once per rig from
+its bind pose. gait.js keeps the foot locks and slope IK on top; its lean and
+bank are off while motion matching drives (the capture already leans). An
+attack clip takes the bones with a blend in and out; sneak, swim, fly and
+drive keep the clip blend. `?mm=0` turns it off; `window.__mm()` reports the
+take playing, its rate, jumps and search time.
+
+**Lessons:**
+- CMU takes are 1 to 2 s long. A future clamped at a take's last frame reads
+  as a stop, so short sprints never matched running on; the builder carries
+  the root past the end at its last velocity instead.
+- A capture skeleton's rest is a T-pose, not a stance: CMU's upper spine
+  rests ~10 degrees behind a natural back (a walk read 9-17 degrees of chest
+  pitch), its collarbones 16-38 degrees up (an 18 degree shrug), 100STYLE's
+  neck bent back (a relaxed head read 25-38 degrees down). The torso bones
+  (hips to head, collarbones) are re-referenced to each ACTOR's own average
+  standing pose (the dataset's where an actor never stood still), so only
+  the lean away from standing transfers: standing -2, walking ~2, a 6.4 m/s
+  run 7-8 degrees (the 5-8 a run should have). CMU 133's stooped walk is
+  left out.
+- Holden's character is carried by its animation, so the playing frame's hip
+  velocity is the body's; here the game carries the body, and the query's
+  hip velocity must be the body's real velocity, or a run start's pace
+  persists while the hero strolls.
+- The hero accelerated at ~8 m/s^2 (a sprint start), so jog-offs matched
+  sprint starts leaning 30 degrees; the walk eases at 7/s up, 10/s down.
+- Measure at the rig's true size: a lab rig built 1 m tall moving at a
+  human's 2.4 m/s is, for its legs, running at 4.5 m/s.
+- Pops are measured relative to the body (`mmlab.html`): the largest per-frame
+  limb turn in each phase stays within that motion's own range.
+
+Measured in the game (ranger, gaitlab): planted-foot slide 0.04-0.06 of body
+speed at a 6.4 m/s run (was 0.06-0.31 with the clip loops). Tools:
+`tools/shotgate/mmlab.html` (a scripted session through the matcher, frames
+and numbers) and `tools/mmdb.py --list`.
