@@ -633,6 +633,12 @@ else:
     # the torso (re-orienting it was what flipped the torso vs the legs/feet).
     Rz=Matrix.Identity(3)
     hero_fwd=(RB["foot_L"]@Vector((0,1,0))); hero_fwd.z=0
+    # FORWARD OVERRIDE (2026-10-03): the foot bone is the rig's guess at where
+    # the toes are; on a boot with a heavy heel it points to the heel and the
+    # whole clip walks toward the character's back (the knight, the viking,
+    # the wizard). A caller that knows better passes -1 (or a fixed axis).
+    _FS=float("__FWDSIGN__" if "__FWDSIGN__"[0] in "-0123456789." else "1")
+    hero_fwd=hero_fwd*_FS
     src_tr=(hip_hi-hip_lo).copy(); src_tr.z=0
     # SOURCE FORWARD (2026-08-05, #KNEES): net hip travel only means "forward"
     # for a LOCOMOTION clip. The fight clip is performed in place — measured

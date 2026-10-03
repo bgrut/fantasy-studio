@@ -83,3 +83,6 @@ tools/carlab/vendor/
 !tools/refaudit.py
 tools/facadelab/vendor/
 ckpts/
+
+# 100STYLE raw download (1.5 GB, CC BY 4.0): kept out of git; curated clips are baked from it
+assets/mocap/_100style_src/

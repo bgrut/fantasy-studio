@@ -291,9 +291,14 @@ def export_web_game(spec: GameSpec, out_dir: str | Path, verbose: bool = True) -
         "| PBR textures | Generated locally (Stable Diffusion XL); yours |",
         "| Characters and 3D assets | Generated locally (SDXL, Microsoft TRELLIS.2 or TripoSR, all permissive); yours |",
         "| Character motion | CMU Graphics Lab Motion Capture Database (free for commercial products; credit below) |",
+        "| Character motion (standing, locomotion) | 100STYLE dataset, CC BY 4.0 (credit below) |",
     ]
     _credits = ["The motion data used in this product was obtained from mocap.cs.cmu.edu. "
-                "The database was created with funding from NSF EIA-0196217."]
+                "The database was created with funding from NSF EIA-0196217.",
+                "Motion from the 100STYLE dataset by Ian Mason, Sebastian Starke and Taku Komura "
+                "(https://www.ianxmason.com/100style/, doi:10.5281/zenodo.8127870), licensed under "
+                "CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/). Retargeted to these "
+                "characters and trimmed."]
     try:
         _kits = {"k_": "Kenney Nature Kit", "sp_": "Kenney Space Kit", "tw_": "Kenney Fantasy Town Kit",
                  "gy_": "Kenney Graveyard Kit", "sv_": "Kenney Survival Kit", "ca_": "Kenney Castle Kit",

@@ -166,6 +166,31 @@ def gpu_available() -> bool:
         return False
 
 
+
+def _dress_reference(kind: str, pattern: str, ref_png, verbose: bool = True) -> None:
+    """DRESSED, CHECKED (2026-10-03): the prompt and its negative were not
+    enough; six library people came out in briefs or bare-chested. A person's
+    reference is judged (CLIP, the reference judge's own model) and made again
+    with another seed while it reads undressed. Every reference a person is
+    made from passes here, the two-faced retry's too (the thug's retry was
+    shirtless when only the first roll was checked)."""
+    if pattern != "biped":
+        return
+    try:
+        from app.asset_gen.dressed import undressed_belief
+        from app.asset_gen.reference import generate_reference as _gr
+        for _seed in (43, 44, 45, 46):
+            _ub = undressed_belief(ref_png)
+            # bare chests scored 0.48-0.79, every clothed figure under 0.06
+            if _ub is None or _ub <= 0.25:
+                return
+            if verbose:
+                print(f"[game] reference for '{kind}' reads undressed ({_ub:.2f}); making it again (seed {_seed})")
+            _gr(copy.deepcopy(_minimal_slots(kind, pattern)), output_path=ref_png, style="photoreal", seed=_seed)
+    except Exception as _de:  # noqa: BLE001
+        if verbose:
+            print(f"[game] dressed check skipped ({type(_de).__name__}: {_de})")
+
 def _minimal_slots(kind: str, pattern: str) -> dict:
     """The slot skeleton generate_reference() expects — mirrors the composer's
     extra-actor slots2 construction."""
@@ -321,11 +346,13 @@ def _ensure_asset_generate(kind: str, pattern: str | None, target_tris: int | No
             # 20-min SDXL repaint and go straight to image→3D
             if verbose:
                 print(f"[game] reference cache hit for '{kind}' — meshing only")
+            _dress_reference(kind, pattern, ref_png, verbose)
         else:
             if verbose:
                 print(f"[game] generating '{kind}' ({pattern}) via SDXL + TRELLIS.2 ...")
             generate_reference(copy.deepcopy(_minimal_slots(kind, pattern)),
                                output_path=ref_png, style="photoreal", seed=42)
+            _dress_reference(kind, pattern, ref_png, verbose)
             try:
                 unload_reference_pipeline()
                 import torch as _t
@@ -377,6 +404,7 @@ def _ensure_asset_generate(kind: str, pattern: str | None, target_tris: int | No
             try:
                 generate_reference(copy.deepcopy(_minimal_slots(kind, pattern)),
                                    output_path=ref_png, style="photoreal", seed=42)
+                _dress_reference(kind, pattern, ref_png, verbose)
                 try:
                     unload_reference_pipeline()
                     import torch as _t2

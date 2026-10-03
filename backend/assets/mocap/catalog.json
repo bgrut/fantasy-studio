@@ -52,17 +52,18 @@
     },
     "idle": {
       "clips": [
+        "../100style/Neutral_ID.bvh",
         "140_06.bvh"
       ],
       "game_state": "idle",
-      "frames": 72,
+      "frames": 120,
       "window": [
-        0.5,
-        0.6
+        0.3,
+        0.72
       ],
       "cyclic": true,
       "verified": true,
-      "note": "29.7s standing trial; energy lowest 0.48-0.62 so the window sits in its calmest stretch. WATCHED 2026-09-04: relaxed stance, arms hanging with a natural bend, weight on one leg. This is the fix for the flared arms \u2014 the old idle was a PROCEDURAL breathing sway over a T-pose rest, which is what put the shrug in every screenshot."
+      "note": "100STYLE Neutral standing take (CC BY 4.0, ../100style/ATTRIBUTION.md), window MEASURED 2026-10-03 with a Blender probe: knees 2 deg, trunk 1 deg across 0.25-0.75, the performer still between walking in and out. 120 frames (5 s) with the first half-second crossfaded from the frames after the slice, so it loops without a pop. The previous source, CMU 140_06, holds a CROUCH (knees 57 deg, trunk bent 33 deg) from 10% of the trial on: the aim retarget hid it by never driving legs or spine, the rotation transfer showed it. 140_06 stays second for the legacy aim path (FS_RETARGET=aim), which only knows CMU names."
     },
     "jump": {
       "clips": [
@@ -76,7 +77,7 @@
       ],
       "cyclic": false,
       "verified": false,
-      "note": "root height peaks at 0.295 of the trial (26.04 vs a 17.5 standing baseline) so 0.18-0.44 holds take-off, apex and landing. WATCHED 2026-09-04 and REJECTED: mid-clip reads as standing \u2014 no tuck, no extension, limbs barely differ from idle. The vertical is stripped by INPLACE (correct \u2014 the controller supplies the arc) but the limb motion in this trial is too subtle to read as a jump without it. Needs a tighter window around the apex, or a more athletic trial."
+      "note": "root height peaks at 0.295 of the trial (26.04 vs a 17.5 standing baseline) so 0.18-0.44 holds take-off, apex and landing. WATCHED 2026-09-04 and REJECTED: mid-clip reads as standing — no tuck, no extension, limbs barely differ from idle. The vertical is stripped by INPLACE (correct — the controller supplies the arc) but the limb motion in this trial is too subtle to read as a jump without it. Needs a tighter window around the apex, or a more athletic trial."
     },
     "sneak": {
       "clips": [
@@ -90,7 +91,7 @@
       ],
       "cyclic": true,
       "verified": true,
-      "note": "Walk Crouched, steady energy. WATCHED 2026-09-04: genuinely crouched \u2014 hips-to-head measures 0.481 against 0.645 standing, so it is leaning, not just walking slowly. The heist kit's sneak had no animation at all."
+      "note": "Walk Crouched, steady energy. WATCHED 2026-09-04: genuinely crouched — hips-to-head measures 0.481 against 0.645 standing, so it is leaning, not just walking slowly. The heist kit's sneak had no animation at all."
     },
     "swim": {
       "clips": [
@@ -104,7 +105,7 @@
       ],
       "cyclic": true,
       "verified": false,
-      "note": "swim mode has no swim clip; energy steady from 0.25 on. Not baked yet \u2014 unwatched, so it does not ship."
+      "note": "swim mode has no swim clip; energy steady from 0.25 on. Not baked yet — unwatched, so it does not ship."
     },
     "die": {
       "clips": [

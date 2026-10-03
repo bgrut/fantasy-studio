@@ -1,0 +1,48 @@
+<!doctype html>
+<!-- CLIP LAB (2026-10-03): a rig's clips as strips of frames, side view by
+     default. Copy into a job's dist root (it imports ./vendor/three), put the
+     GLB in assets/, serve the dist, open
+     cliplab.html?f=<file.glb>&c=walk,run,idle&n=8&az=<camera degrees>&bones=1 -->
+<html><head><meta charset="utf-8"><style>html,body{margin:0;background:#888}</style>
+<script type="importmap">{ "imports": { "three": "./vendor/three.module.js" } }</script></head><body>
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from './vendor/jsm/loaders/GLTFLoader.js';
+const q = new URLSearchParams(location.search), F = q.get('f'), CL = (q.get('c') || 'walk').split(','), N = +(q.get('n') || 8);
+const W = 1600, H = 300 * CL.length;
+const r = new THREE.WebGLRenderer({ antialias: true }); r.setSize(W, H); document.body.appendChild(r.domElement);
+const s = new THREE.Scene(); s.background = new THREE.Color(0xb8c4cc);
+s.add(new THREE.HemisphereLight(0xffffff, 0x556655, 1.8)); const d = new THREE.DirectionalLight(0xffffff, 2); d.position.set(3, 5, 4); s.add(d);
+const fl = new THREE.Mesh(new THREE.PlaneGeometry(40, 40), new THREE.MeshStandardMaterial({ color: 0x7a8a70 })); fl.rotation.x = -Math.PI / 2; s.add(fl);
+// a metre grid on the floor so foot travel can be read
+const grid = new THREE.GridHelper(40, 40, 0x334433, 0x445544); grid.position.y = 0.002; s.add(grid);
+const g = await new GLTFLoader().loadAsync('./assets/' + F);
+const o = g.scene; s.add(o);
+if (q.get('bones')) {
+  o.traverse(m => { if (m.isMesh) { m.material = m.material.clone(); m.material.transparent = true; m.material.opacity = 0.35; m.material.depthWrite = false; } });
+  const sh = new THREE.SkeletonHelper(o); sh.material.depthTest = false; sh.material.linewidth = 3; s.add(sh);
+}
+const mixer = new THREE.AnimationMixer(o);
+const cam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 50);
+r.setScissorTest(true);
+const box = new THREE.Box3().setFromObject(o), hh = box.max.y - box.min.y;
+const info = {};
+CL.forEach((cn, row) => {
+  const clip = g.animations.find(a => a.name === cn); if (!clip && cn !== 'rest') return;
+  mixer.stopAllAction();
+  if (clip) { mixer.clipAction(clip).reset().play(); info[cn] = clip.duration; } else info[cn] = 0;   // c=rest: the bind pose
+
+  for (let k = 0; k < N; k++) {
+    if (clip) mixer.setTime(clip.duration * k / N);
+    o.updateMatrixWorld(true);
+    // side view: the model faces +Z in game convention; look from +X
+    const vw = (hh * 1.12) * (W / N) / 300;
+    cam.left = -vw / 2; cam.right = vw / 2; cam.top = box.max.y + hh * 0.08; cam.bottom = box.min.y - hh * 0.04; cam.updateProjectionMatrix();
+    { const az = THREE.MathUtils.degToRad(+(q.get('az') || 0)); cam.position.set(6 * Math.cos(az), 0, 6 * Math.sin(az)); cam.lookAt(0, 0, 0); }
+    const x0 = k * W / N, y0 = H - (row + 1) * 300;
+    r.setViewport(x0, y0, W / N, 300); r.setScissor(x0, y0, W / N, 300);
+    r.render(s, cam);
+  }
+});
+window.__info = info;
+</script></body></html>

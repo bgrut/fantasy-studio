@@ -1,8 +1,3 @@
 {
- "dragon": 90,
- "knight": 180,
- "man": 180,
- "hunter": 180,
- "soldier": 180,
- "thug": 180
+ "dragon": 90
 }

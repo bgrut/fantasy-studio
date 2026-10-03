@@ -332,6 +332,19 @@ try:
     # live object scale/rotation flips normals downstream; game-bake textures
     # are UV-mapped (transform-independent) so applying here is safe.
     bpy.ops.object.transform_apply(location=False, rotation=True, scale=True)
+    # THE COPY TAKES THE SAME TRANSFORM (2026-10-03). It was copied before the
+    # apply, so its mesh stayed in import units: every retry restored the
+    # body from it at the import's size (the knight came back 58% tall,
+    # centred on his waist, and was rigged that way: ankles at knee height),
+    # and the UV hand-over below measured the remesh against a body of a
+    # different size. Both now share one space.
+    bpy.ops.object.select_all(action="DESELECT")
+    bpy.context.view_layer.objects.active = src
+    src.select_set(True)
+    bpy.ops.object.transform_apply(location=False, rotation=True, scale=True)
+    bpy.ops.object.select_all(action="DESELECT")
+    bpy.context.view_layer.objects.active = o
+    o.select_set(True)
 
     # 1) voxel remesh -> manifold watertight shell. Density guard: huge voxel
     # outputs once blew the bridge timeout — re-voxel coarser until tractable.

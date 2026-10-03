@@ -1359,6 +1359,18 @@ def ensure_playable(kind: str, verbose: bool = True) -> str | None:
             return str(anim)
     if not static:
         return str(anim) if anim.exists() else None
+    # A STAND-IN NEVER REPLACES A RIG (2026-10-03). resolve() falls back on a
+    # kin by its words, so "cat burglar" resolves to cat.glb and "goblin king"
+    # to goblin.glb. A rebake of the cat burglar turned the CAT's mesh on disk
+    # and rigged it as a biped over the burglar's own rig. A kind's rig is
+    # only ever rebuilt from that kind's own mesh, and a stand-in of another
+    # body plan is never rigged at all.
+    _slug = kind.lower().replace(" ", "_")
+    if Path(static).stem.lower() != _slug:
+        if anim.exists():
+            return str(anim)
+        if guess_pattern(Path(static).stem.replace("_", " ")) != guess_pattern(kind):
+            return static
     try:                       # already rigged+animated (e.g. the man player)?
         from .verify_game import _glb_json
         g = _glb_json(Path(static))
@@ -1597,7 +1609,7 @@ def _refmatch_wants_flip(hero_glb: Path, exe: str, verbose: bool = True) -> bool
 
 def bake_anim_set(hero_glb: str | Path, out_glb: str | Path,
                   clips: dict | None = None, height_m: float = 1.75,
-                  fps: int = 24, verbose: bool = True) -> dict:
+                  fps: int = 24, verbose: bool = True, fwd_sign: float = 1.0) -> dict:
     """Returns {"ok": bool, "tracks": [...], "skin": "..."}; raises on bridge
     failure (a bake with no bridge is a hard setup error, not a fallback)."""
     from app.mcp import registry, bridge
@@ -1648,7 +1660,46 @@ def bake_anim_set(hero_glb: str | Path, out_glb: str | Path,
             raise RuntimeError(f"idle bake failed: {r}")
         _call(registry, "push", _PUSH_NLA.replace("__NAME__", "idle"))
 
+    # ROTATION TRANSFER (2026-10-03, app/orchestrator/retarget_rot.py) is the
+    # default: joint rotations against a matched reference pose, one whole
+    # gait cycle per loop, no corrections layered on. FS_RETARGET=aim keeps
+    # the old bone-aiming retarget for comparison.
+    _rot = os.environ.get("FS_RETARGET", "rot").lower() != "aim"
+    if _rot:
+        from app.orchestrator.retarget_rot import RETARGET_ROT_CODE as _ROT
+        _fc = (a or {}).get("facing") or {}
+        _rigface = (f"{_fc['toe']},{_fc['heel']}"
+                    if isinstance(_fc.get("toe"), (int, float)) and isinstance(_fc.get("heel"), (int, float)) else "-")
     for name, (bvh, frames) in clips.items():
+        if _rot:
+            _bvhp = Path(bvh) if Path(bvh).is_absolute() else (M.MOCAP_DIR / bvh)
+            _cyc = name in ("walk", "run", "sneak", "jog", "sprint", "idle")
+            _lo, _hi = M.state_window(name)
+            code = (_ROT.replace("__HERO__", "Hero")
+                        .replace("__BVH__", str(_bvhp).replace("\\", "/"))
+                        .replace("__TOTAL__", str(int(frames)))
+                        .replace("__FPS__", str(int(fps)))
+                        .replace("__CYCLIC__", "True" if (_cyc and name != "idle") else "False")
+                        .replace("__FWDSIGN__", f"{fwd_sign:.1f}")
+                        .replace("__RIGFACE__", _rigface)
+                        .replace("__LOOPBLEND__", "1" if name == "idle" else "0")
+                        .replace("__LOF__", f"{_lo:.4f}").replace("__HIF__", f"{_hi:.4f}"))
+            r = _call(registry, name, code)
+            if not (r and r.get("ok")):
+                raise RuntimeError(f"retarget '{name}' failed: {r}")
+            p = _call(registry, "push", _PUSH_NLA.replace("__NAME__", name))
+            if not (p and p.get("ok")):
+                raise RuntimeError(f"NLA push '{name}' failed: {p}")
+            if verbose:
+                print(f"[bake] clip '{name}' (rotation transfer): {r.get('frames')}f from {Path(bvh).name}, "
+                      f"src {r.get('src_fps')} fps, period {r.get('period_s')} s, {r.get('mapped')} bones, yaw {r.get('yaw_deg')}, toes {r.get('fwd_auto')}")
+            continue
+        # the legacy aim retarget only knows CMU joint names: a clip from
+        # another dataset falls back to the action's first CMU candidate
+        if "/" in str(bvh) or "\\" in str(bvh):
+            for _a in M.ACTIONS.values():
+                if _a.get("game_state") == name and _a.get("clips"):
+                    bvh = next((c for c in _a["clips"] if "/" not in c), bvh)
         code = (M._RETARGET_CODE
                 .replace("__HERO__", "Hero")
                 .replace("__BVH__", str((M.MOCAP_DIR / bvh)).replace("\\", "/"))
@@ -1657,6 +1708,7 @@ def bake_anim_set(hero_glb: str | Path, out_glb: str | Path,
                 .replace("__TRACK__", "False")
                 .replace("__WIDE__", "1.00")
                 .replace("__INPLACE__", "True")
+                .replace("__FWDSIGN__", f"{fwd_sign:.1f}")
                 # THE GAIT'S OWN POSTURE (2026-09-26, LOCOMOTION.md): a run
                 # leans the trunk five to eight degrees and carries the elbows
                 # near ninety; a sneak leans further; a walk stands upright.

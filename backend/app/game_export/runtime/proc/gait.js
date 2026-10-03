@@ -22,10 +22,10 @@
 //   limits, stride length takes the rest, and a two-bone leg IK stretches
 //   each foot's reach along the direction of travel so a planted foot holds.
 //
-//   THE BODY OVER THE LEGS. The arms only ever swung behind the body; they
-//   now counter-swing against the opposite leg (about 25 degrees each way in
-//   a walk, driven with a 90-degree elbow in a run), the trunk leans forward
-//   with speed (5 to 8 degrees in a run) and the head stays level.
+//   THE BODY IS THE MOCAP'S (2026-10-03). Arm swing, trunk lean and head
+//   carriage come from the clip itself now that the retarget transfers
+//   rotations (retarget_rot.py); this layer only adds what a looping clip
+//   cannot know, a lean into a change of speed and a bank into a turn.
 import * as THREE from 'three';
 
 const _v1 = new THREE.Vector3(), _v2 = new THREE.Vector3(), _v3 = new THREE.Vector3();
@@ -174,9 +174,13 @@ export function createGait({ root, actions, mixer, rates }) {
     // cadence: the square root of the speed ratio, inside a human's range
     // (a walk 0.75-1.35 of its clip, a run up to 1.45), stride takes the rest
     const ratio = speed / vn;
-    const rate = THREE.MathUtils.clamp(Math.sqrt(Math.max(ratio, 0.01)), 0.72, 1.35 + 0.1 * rk);
+    // STRIDE WARP STAYS SMALL (2026-10-03): past about 0.8-1.4 of the clip's
+    // own stride a warped leg reads as a different, wrong gait (the research
+    // ranges UE5 ships use); cadence carries more of the change instead, and
+    // past both the planted foot's lock holds it while the body travels on
+    const rate = THREE.MathUtils.clamp(Math.sqrt(Math.max(ratio, 0.01)), 0.72, 1.35 + 0.15 * rk);
     st.rate = rate;
-    st.warp = THREE.MathUtils.clamp(ratio / rate, 0.55, 1.95);
+    st.warp = THREE.MathUtils.clamp(ratio / rate, 0.8, 1.4);
     st.cadence = 2 * 60 * rate / per;              // steps a minute, for the facts
     phase = (phase + dt * rate / per) % 1;
     for (const k of ['walk', 'run']) {
@@ -220,41 +224,40 @@ export function createGait({ root, actions, mixer, rates }) {
     _lat.crossVectors(UP, _fw).normalize();             // anatomical left
     root.updateMatrixWorld(true);
 
-    // TRUNK LEAN, MEASURED: a walk stands nearly upright, a run leans 5-8
-    // degrees forward, more while it accelerates. Clips disagree (the CMU jog
-    // retargets reclined fifteen degrees), so the trunk's own lean is read,
-    // averaged over about half a second so the stride's sway survives, and
-    // only the difference to the target is applied; the head is held level.
+    // THE MOCAP CARRIES THE BODY (2026-10-03). This used to correct the
+    // trunk toward a target lean, level the head and drive the arms from the
+    // legs, because the old aim retarget lost the source's own posture and
+    // swing. The rotation-transfer retarget keeps them, so the overrides only
+    // fought real motion ('too much lean', 'too robotic'). What is added now is
+    // what a looping clip cannot know: the body leaning into a change of speed
+    // and banking into a turn, each k*atan(a/g) with k 0.4 and a few degrees
+    // at most, as the motion-matching references do it.
     const rk = st.runK;
-    const target = THREE.MathUtils.degToRad(1.5 + 4.5 * rk) * mvK + THREE.MathUtils.clamp(o.accel || 0, -3, 6) * 0.01;
-    // the TRUNK is hips to chest: a head tipped back or forward must not
-    // read as the whole body leaning
+    const g = 9.81;
+    const aFwd = THREE.MathUtils.clamp(o.accel || 0, -12, 12);
+    if (st.prevFw) {
+      const turn = Math.atan2(st.prevFw.clone().cross(_fw).y, st.prevFw.dot(_fw));
+      const yawRate = turn / Math.max(dt, 1e-3);
+      st.aLat = THREE.MathUtils.damp(st.aLat || 0, THREE.MathUtils.clamp((o.speed || 0) * yawRate, -15, 15), 8, dt);
+    } else st.aLat = 0;
+    st.prevFw = (st.prevFw || new THREE.Vector3()).copy(_fw);
+    const pitchT = THREE.MathUtils.clamp(0.4 * Math.atan(aFwd / g), -0.07, 0.1) * mvK;
+    const rollT = THREE.MathUtils.clamp(0.4 * Math.atan(st.aLat / g), -0.1, 0.1) * mvK;
+    st.lean = THREE.MathUtils.damp(st.lean, (typeof window !== 'undefined' && window.__gaitLean != null) ? window.__gaitLean : pitchT, 5, dt);
+    st.bank = THREE.MathUtils.damp(st.bank || 0, rollT, 5, dt);
+    if (!OFF.lean && (Math.abs(st.lean) > 1e-4 || Math.abs(st.bank) > 1e-4)) {
+      // pitch about the body's left axis, roll about its forward axis (into
+      // the turn: a left turn tips the body left)
+      _q1.setFromAxisAngle(_lat, st.lean);
+      _q3.setFromAxisAngle(_fw, -st.bank);
+      _q1.multiply(_q3);
+      rotateWorld(B.spine, _q1);
+    }
     const top = B.chest || B.neck || B.head;
     if (top) {
       const tr = wp(top).sub(wp(B.hips));
       const cur = Math.atan2(tr.dot(_fw), tr.y);
       st.trunkAvg = st.trunkAvg === undefined ? cur : THREE.MathUtils.damp(st.trunkAvg, cur, 2.5, dt);
-    }
-    const wantCorr = (typeof window !== 'undefined' && window.__gaitLean != null) ? window.__gaitLean
-      : THREE.MathUtils.clamp(target - (st.trunkAvg || 0), -0.45, 0.45) * mvK;
-    st.lean = THREE.MathUtils.damp(st.lean, wantCorr, 6, dt);
-    if (!OFF.lean && Math.abs(st.lean) > 1e-4) {
-      _q1.setFromAxisAngle(_lat, st.lean);
-      rotateWorld(B.spine, _q1);
-    }
-    // THE HEAD STAYS LEVEL (LOCOMOTION.md: the head barely pitches in space
-    // while walking or running): the neck-to-head line is measured after the
-    // trunk has leant and turned back to a few degrees forward of vertical,
-    // whatever the clip and the lean did to it
-    if (!OFF.lean && B.head && mvK > 0.02) {
-      // the skull's own axis (the head bone's +Y, up through the crown)
-      B.head.getWorldQuaternion(_q2);
-      const hv = _v3.set(0, 1, 0).applyQuaternion(_q2);
-      const cur = Math.atan2(hv.dot(_fw), hv.y);
-      const fix = THREE.MathUtils.clamp(THREE.MathUtils.degToRad(4) - cur, -0.6, 0.6) * mvK;
-      st.headFix = THREE.MathUtils.damp(st.headFix || 0, fix, 10, dt);
-      _q1.setFromAxisAngle(_lat, st.headFix);
-      rotateWorld(B.head, _q1);
     }
 
     // THE LEGS (2026-10-02, second pass): one IK target per foot, built from
@@ -314,56 +317,6 @@ export function createGait({ root, actions, mixer, rates }) {
         legIK(s, t);
       }
     }
-
-    // ARM SWING, AS MEASURED (2026-10-02, second pass). Each arm moves with
-    // the OPPOSITE leg, but not by copying its angle: the thigh's swing is
-    // normalised to -1..1 (its own running peak) and mapped onto a human
-    // arm's range, which is asymmetric: the arm goes further BACK than
-    // forward (walk about 17 forward / 24 back; jog 22 / 35). The elbow is
-    // 20-35 degrees in a walk; in a jog about 70 at the back of the swing,
-    // closing to about 90 in front, where the forearm also angles in toward
-    // the body's midline, so the hands travel hip to mid-chest and never up
-    // to the face. The upper arm stays against the torso (abduction under
-    // about 7 degrees).
-    if (!OFF.arms && hasArms && mvK > 0.02) {
-      for (const [s, o2] of [['l', 'r'], ['r', 'l']]) {
-        const th = wp(B['lowleg_' + o2]).sub(wp(B['upleg_' + o2]));
-        const legAng = Math.atan2(th.dot(_fw), -th.y);           // + = that thigh forward
-        st.legPk = Math.max(0.12, Math.abs(legAng), (st.legPk || 0.4) - 0.25 * dt);   // a peak that eases down over seconds
-        const legN = THREE.MathUtils.clamp(legAng / st.legPk, -1, 1);
-        const fwdMax = THREE.MathUtils.lerp(0.30, 0.40, rk), backMax = THREE.MathUtils.lerp(0.42, 0.68, rk);
-        let armAng = legN > 0 ? legN * fwdMax : legN * backMax;
-        if (armed[s]) armAng *= 0.4;
-        const key = 'arm_' + s;
-        st[key] = st[key] === undefined ? armAng : THREE.MathUtils.damp(st[key], armAng, 18, dt);
-        armAng = st[key];
-        st['dbg_' + s] = [+legN.toFixed(2), +armAng.toFixed(2)];
-        const sh = wp(B['uparm_' + s]), el = wp(B['lowarm_' + s]);
-        const cur = el.clone().sub(sh).normalize();
-        const side = s === 'l' ? 1 : -1;
-        let lat = cur.dot(_lat) * side;                           // outboard positive
-        lat = THREE.MathUtils.clamp(lat, -0.03, 0.12);
-        const r = Math.sqrt(1 - lat * lat);
-        const want = _v1.copy(_lat).multiplyScalar(lat * side)
-          .addScaledVector(_fw, r * Math.sin(armAng)).addScaledVector(UP, -r * Math.cos(armAng));
-        aimSegment(B['uparm_' + s], B['lowarm_' + s], want, mvK);
-        // the elbow, bent forward in the arm's swing plane
-        const n = wp(B['lowarm_' + s]).sub(wp(B['uparm_' + s])).normalize();
-        const front = (legN + 1) / 2;                             // 0 at the back of the swing, 1 in front
-        const eWalk = 0.35 + 0.26 * Math.max(0, legN);
-        const eRun = THREE.MathUtils.lerp(0.78, 1.3, front * front);    // ~45 deg behind, ~75 in front
-        const e = armed[s] ? THREE.MathUtils.lerp(0.45, 0.8, rk) : THREE.MathUtils.lerp(eWalk, eRun, rk);
-        const pf = _v2.copy(_fw).addScaledVector(n, -_fw.dot(n));
-        if (pf.lengthSq() > 1e-6) {
-          pf.normalize();
-          const fdir = n.clone().multiplyScalar(Math.cos(e)).addScaledVector(pf, Math.sin(e));
-          // in front of the body the forearm angles in toward the midline
-          const inward = rk * 0.32 * Math.max(0, legN) * (armed[s] ? 0.3 : 1);
-          fdir.addScaledVector(_lat, -side * inward).normalize();
-          aimSegment(B['lowarm_' + s], B['hand_' + s], fdir, mvK);
-        }
-      }
-    }
   }
 
   const _clipFwdLocal = (C.walk && C.walk.fwd.lengthSq() > 0.5) ? C.walk.fwd : (C.run ? C.run.fwd : null);
@@ -376,8 +329,8 @@ export function createGait({ root, actions, mixer, rates }) {
       root.getWorldQuaternion(_rq);
       return out.copy(_clipFwdLocal).applyQuaternion(_rq).setY(0).normalize();
     },
-    facts: () => ({ phase: +phase.toFixed(3), rate: +st.rate.toFixed(2), warp: +st.warp.toFixed(2), lean_deg: +THREE.MathUtils.radToDeg(st.lean).toFixed(1), head_fix_deg: +THREE.MathUtils.radToDeg(st.headFix || 0).toFixed(1), pelvis: +(st.pelvis || 0).toFixed(3), locks: [!!(st.lock_l && st.lock_l.pos), !!(st.lock_r && st.lock_r.pos)], trunk_deg: st.trunkAvg === undefined ? null : +THREE.MathUtils.radToDeg(st.trunkAvg).toFixed(1),
-                    cadence_spm: Math.round(st.cadence), armed, dbg: [st.dbg_l, st.dbg_r, +(st.legPk || 0).toFixed(2)],
+    facts: () => ({ phase: +phase.toFixed(3), rate: +st.rate.toFixed(2), warp: +st.warp.toFixed(2), lean_deg: +THREE.MathUtils.radToDeg(st.lean).toFixed(1), bank_deg: +THREE.MathUtils.radToDeg(st.bank || 0).toFixed(1), pelvis: +(st.pelvis || 0).toFixed(3), locks: [!!(st.lock_l && st.lock_l.pos), !!(st.lock_r && st.lock_r.pos)], trunk_deg: st.trunkAvg === undefined ? null : +THREE.MathUtils.radToDeg(st.trunkAvg).toFixed(1),
+                    cadence_spm: Math.round(st.cadence), armed,
                     walk_period: C.walk ? +C.walk.period.toFixed(3) : null, run_period: C.run ? +C.run.period.toFixed(3) : null }),
   };
 }

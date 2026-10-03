@@ -497,9 +497,9 @@ def _build_reference_prompt(slots: Dict[str, Any], style: str) -> tuple[str, str
             "woman":     "a woman wearing a casual t-shirt and jeans, fully clothed, everyday outfit",
             "girl":      "a girl wearing casual everyday clothes, fully clothed",
             "boy":       "a boy wearing casual everyday clothes, fully clothed",
-            "person":    "a person wearing a casual t-shirt and jeans, fully clothed, everyday outfit",
-            "human":     "a person wearing a casual t-shirt and jeans, fully clothed, everyday outfit",
-            "man":       "a man wearing a casual t-shirt and jeans, fully clothed, everyday outfit",
+            "person":    "a person wearing a long-sleeved navy blue button-up shirt, dark jeans and brown boots, fully clothed",
+            "human":     "a person wearing a long-sleeved navy blue button-up shirt, dark jeans and brown boots, fully clothed",
+            "man":       "a man wearing a long-sleeved navy blue button-up shirt, dark jeans and brown boots, fully clothed",
             "guy":       "a man wearing casual everyday clothes, fully clothed",
         }
         cq = " ".join((identity, name, library_query))

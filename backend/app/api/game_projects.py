@@ -80,7 +80,7 @@ def _hub_html(name: str, levels: list[dict]) -> str:
             f'<div class="wrap"><h1>{html.escape(name)}</h1>'
             f'<div class="sub">{len(levels)} level{"s" if len(levels) != 1 else ""} · made with Fantasy Studio</div>'
             f'<div class="grid">{"".join(cards)}</div>'
-            f'<div class="foot">Motion data from mocap.cs.cmu.edu · engine: three.js (MIT) + Rapier (Apache-2.0)</div>'
+            f'<div class="foot">Motion data from mocap.cs.cmu.edu and 100STYLE (CC BY 4.0) · engine: three.js (MIT) + Rapier (Apache-2.0)</div>'
             f'</div></body></html>')
 
 

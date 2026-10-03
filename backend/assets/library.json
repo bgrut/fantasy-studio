@@ -1,6 +1,6 @@
 {
   "dog": "assets/library/dog.glb",
-  "man": "assets/library/man_anim.glb",
+  "man": "assets/library/man.glb",
   "fox": "assets/library/fox.glb",
   "truck": "assets/library/truck.glb",
   "wizard": "assets/library/wizard.glb",

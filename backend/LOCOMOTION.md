@@ -91,3 +91,34 @@ Notation: LH left hind, LF left fore, RH, RF. Duty factor > 50% is a walk, < 50%
 | a rig whose legs walk against its travel | the clip's forward is read from the planted foot's motion; a body carried against it for a third of a second turns round once |
 
 Measure with `tools/shotgate/gaitlab.mjs` (J=<job> OUT=<dir>): planted-foot slide as a share of body speed (healthy under ~0.3), pelvis ride, trunk lean, stop glide.
+
+## 6. Retarget by rotation, and let the mocap carry the body (2026-10-03)
+
+The owner's verdict on section 5: too much lean, the knight's arms inverted,
+still robotic. Research into how shipped games do it (Clavet/Zadziuk GDC 2016
+motion matching, UE5 Pose Search and stride warping, Holden's MIT
+Motion-Matching reference, Bollo's inertialization) agreed on one point: good
+mocap carries the arms, trunk and head itself, and procedural layers only add
+what a looping clip cannot know. The overrides in section 5 existed because
+the old retarget lost that motion. What changed:
+
+| Problem | Fix |
+|---|---|
+| the aim retarget pointed each bone at the source joint and lost the bone's twist and the body's carriage | `retarget_rot.py`: rotation transfer. Each target bone's world rotation is the source's, re-expressed through the minimal arc between their rest directions: W_t = W_s (C R_s)^-1 R_t. Bone directions match the source exactly and the twist is kept. Now the default; `FS_RETARGET=aim` restores the old path |
+| the knight's legs were 49 cm long with his ankles at knee height | `retopo.py` restored the mesh from a copy taken before the object's scale was applied, so any retry (here the solidify path) brought the body back at import size: 58% tall, centred on the waist, and rigged that way. The copy now takes the same transform. The knight was never facing backward: the shrunken body fooled the toe test |
+| a rig facing the wrong way walks its clips backwards (knees and elbows bend the wrong way round) | the retarget turns the source onto the mesh's own front: the rigger's toe-against-heel reading about the shank centre when it is clear (ratio over 1.5), the toe reach about the ankle otherwise |
+| the idle (CMU 140_06) is a crouch, knees 57 deg and trunk 33 deg, which the aim retarget hid by never driving legs or spine | the idle is 100STYLE Neutral_ID (CC BY 4.0), its still standing stretch (knees 2 deg, trunk 1 deg), 5 s with the first half-second crossfaded from the frames after the slice so it loops without a pop |
+| the pelvis was held at standing height (+-8 cm), so the sneak floated 30 cm off the floor | the source pelvis height above its planted ankles sets ours, then the lowest ankle is placed exactly where the source's is above its ground: walk, idle and sneak plant at rest foot height, the run keeps its flight |
+| 'too much lean', 'robotic' | gait.js no longer corrects the trunk, levels the head or drives the arms. It adds a lean into acceleration and a bank into turns, each 0.4*atan(a/g), a few degrees at most |
+| stride warp up to 1.95 turned a walk into a different, wrong gait | warp limited to 0.8-1.4; cadence takes up to 1.5x on a run; past both, the foot lock holds the planted foot |
+
+Measured on the ranger (rotation transfer): walk knees 14-72 deg over the
+cycle, trunk 3-5 deg; idle knees 2-6 deg, trunk 1-3 deg; sneak pelvis
+0.68-0.74 m against 0.875 standing, lowest ankle at rest height throughout.
+Tools: `tools/shotgate/cliplab.html` (a rig's clips as frame strips) and
+`tools/shotgate/clipmeasure.mjs` (knee angles, trunk tilt, foot contact per clip).
+
+Next: motion matching over the 100STYLE Neutral takes (forward, backward and
+sidestep walks and runs, which include curved paths) so turns, starts and
+stops come from real motion rather than one looping cycle, with inertialized
+transitions instead of crossfades.
