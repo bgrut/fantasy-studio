@@ -19,7 +19,7 @@ const p = await b.newPage();
 await p.setViewport({ width: 960, height: 540 });
 const errs = [];
 p.on('pageerror', e => errs.push(e.message));
-await p.goto(`http://127.0.0.1:8789/games/job_${J}/dist/index.html?noguide=1&camturn=${process.env.CAMTURN || 0}`, { waitUntil: 'domcontentloaded', timeout: 90000 });
+await p.goto(`http://127.0.0.1:8789/games/job_${J}/dist/index.html?noguide=1&camturn=${process.env.CAMTURN || 0}&camd=${process.env.CAMD || 4.2}`, { waitUntil: 'domcontentloaded', timeout: 90000 });
 await new Promise(r => setTimeout(r, 9000));
 await p.click('#startbtn').catch(() => {});
 await new Promise(r => setTimeout(r, 2500));
@@ -68,7 +68,7 @@ await p.evaluate(() => {
   window.__camFollow = () => {
     const q = window.__game.pos();
     const sx = Math.cos(y0), sz = -Math.sin(y0);
-    window.__camPin = { pos: [q[0] + sx * 4.2, q[1] + 1.0, q[2] + sz * 4.2], look: [q[0], q[1] + 0.95, q[2]] };
+    const cd = +(new URLSearchParams(location.search).get('camd') || 4.2); window.__camPin = { pos: [q[0] + sx * cd, q[1] + 1.0 + (cd < 3 ? 0.35 : 0), q[2] + sz * cd], look: [q[0], q[1] + (cd < 3 ? 1.25 : 0.95), q[2]] };
   };
   (function f() { if (window.__camFollow) window.__camFollow(); requestAnimationFrame(f); })();
 });

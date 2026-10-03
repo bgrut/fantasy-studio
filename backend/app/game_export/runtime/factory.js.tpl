@@ -4824,7 +4824,7 @@ function solidAt(face, a, b) {
 }
 
 const _rt = new THREE.Vector3(), _wish = new THREE.Vector3();
-let bobPhase = 0, bobAmt = 0, moveMag = 0;
+let bobPhase = 0, bobAmt = 0, moveMag = 0, _stepPrev = 0, _stepPrev2 = 0, _stepFoot = 0;
 // THE PROJECTOR REACTS. rigKick runs 1 -> 0 after a place, an erase or a
 // tool switch; rigKind says which, so the hologram flashes the right colour.
 let rigKick = 0, rigKind = 'place', holoBaseScale = 1;
@@ -7218,10 +7218,19 @@ renderer.setAnimationLoop(() => {
     // After the basis, so it can use the camera's OWN right vector — _rt is a
     // scratch the edge-crossing loop overwrites with a face axis, and swaying
     // along whatever that happened to be is not a bob.
-    bobPhase += dt * (moveMag > 0.01 ? 9.5 : 0) * (keys['ShiftLeft'] ? 1.35 : 1);
+    // a run steps about 180 times a minute and a sprint about 200 (LOCOMOTION.md);
+    // the sprint was 1.35x, 245 a minute, legs nobody has
+    bobPhase += dt * (moveMag > 0.01 ? 9.5 : 0) * (keys['ShiftLeft'] ? 1.12 : 1);
     bobAmt += (((moveMag > 0.01 && player.onGround && !REDUCED) ? 1 : 0) - bobAmt) *
               Math.min(1, dt * 7);
     camera.position.addScaledVector(_by, Math.sin(bobPhase * 2) * 0.045 * bobAmt);
+    // FOOTSTEPS (2026-10-02): the bob had a step in it and no sound; each
+    // down-beat of the bob is a foot landing, heard
+    {
+      const sv = Math.sin(bobPhase * 2);
+      if (bobAmt > 0.5 && _stepPrev < _stepPrev2 && sv > _stepPrev) sfxStep(keys['ShiftLeft'] ? 1 : 0.7);
+      _stepPrev2 = _stepPrev; _stepPrev = sv;
+    }
     camera.position.addScaledVector(_bx, Math.sin(bobPhase) * 0.035 * bobAmt);
     // the rig rides the camera, so it only needs a little sway of its own —
     // a held object that is perfectly rigid to the view reads as painted on
@@ -7460,6 +7469,28 @@ function sfxMelt() {
   o.connect(g); g.connect(AUDIO.master); o.start(t0); o.stop(t0 + 2.4);
 }
 function sfxPlace() { tone(330, 0.07, 'square', 0.06); }
+// A FOOTSTEP: a short band of noise for the scuff and a low sine for the
+// weight, with a faint ring off metal plating; on a mossy worldlet the ring
+// is gone and the scuff is softer. Left and right differ a little in pitch.
+let _stepNoise = null;
+function sfxStep(k) {
+  if (!AUDIO.ready || AUDIO.muted) return;
+  const ctx = AUDIO.ctx, t0 = ctx.currentTime;
+  if (!_stepNoise) {
+    _stepNoise = ctx.createBuffer(1, Math.floor(ctx.sampleRate * 0.12), ctx.sampleRate);
+    const d = _stepNoise.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / d.length, 3);
+  }
+  _stepFoot ^= 1;
+  const soft = MOOD === 'green';
+  const src = ctx.createBufferSource(); src.buffer = _stepNoise;
+  src.playbackRate.value = (_stepFoot ? 1.0 : 0.92) * (soft ? 0.7 : 1);
+  const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = soft ? 900 : 1800;
+  const g = ctx.createGain(); g.gain.value = 0.11 * k * (soft ? 0.7 : 1);
+  src.connect(lp); lp.connect(g); g.connect(AUDIO.master); src.start(t0);
+  tone(_stepFoot ? 74 : 68, 0.08, 'sine', 0.10 * k);
+  if (!soft) tone(_stepFoot ? 1320 : 1240, 0.05, 'triangle', 0.012 * k, 0.005);
+}
 // throttled transients: a factory with forty rigs must not become a drum kit
 const _sfxAt = {};
 function throttled(name, ms) {

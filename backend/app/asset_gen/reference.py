@@ -557,6 +557,11 @@ def _build_reference_prompt(slots: Dict[str, Any], style: str) -> tuple[str, str
         _cq = " ".join((identity, name, library_query))
         if not any(w in _cq for w in ("suit", "armor", "armour", "hero", "astronaut", "space", "racer", "diver", "robot", "cyborg", "pilot", "knight", "samurai", "viking")):
             cloth_neg = "futuristic bodysuit, skin-tight suit, spandex, spacesuit, superhero costume, sci-fi armor, racing suit, wetsuit, blotchy pattern, printed pattern, camouflage print, paint splashes"
+    # NOBODY UNDRESSED (2026-10-02): the library's ranger was generated
+    # shirtless in briefs and played that way in every game that cast him;
+    # a person is always dressed for the part
+    if base_pattern == "biped":
+        cloth_neg = ", ".join(x for x in ("shirtless, bare chest, naked, nude, underwear, briefs, swimsuit, swimwear, bikini", cloth_neg) if x)
     negative_parts = [preset["negative"], pattern_neg, vehicle_neg, cloth_neg]
     negative = ", ".join(p for p in negative_parts if p)
     return positive, negative
@@ -737,6 +742,11 @@ def generate_reference(
         _cq = " ".join((identity, name, library_query))
         if not any(w in _cq for w in ("suit", "armor", "armour", "hero", "astronaut", "space", "racer", "diver", "robot", "cyborg", "pilot", "knight", "samurai", "viking")):
             cloth_neg = "futuristic bodysuit, skin-tight suit, spandex, spacesuit, superhero costume, sci-fi armor, racing suit, wetsuit, blotchy pattern, printed pattern, camouflage print, paint splashes"
+    # NOBODY UNDRESSED (2026-10-02): the library's ranger was generated
+    # shirtless in briefs and played that way in every game that cast him;
+    # a person is always dressed for the part
+    if base_pattern == "biped":
+        cloth_neg = ", ".join(x for x in ("shirtless, bare chest, naked, nude, underwear, briefs, swimsuit, swimwear, bikini", cloth_neg) if x)
     negative_parts = [preset["negative"], pattern_neg, vehicle_neg, cloth_neg]
     negative = ", ".join(p for p in negative_parts if p)
     return positive, negative

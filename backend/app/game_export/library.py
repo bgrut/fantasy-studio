@@ -49,8 +49,11 @@ def register(kind: str, glb_path: str | Path, ready: bool = False) -> None:
     cur = lib.get(k)
     if ready:
         lib[k] = rel
-    elif isinstance(cur, str):
+    elif isinstance(cur, str) and (BACKEND_ROOT / cur).exists():
         return                      # a ready optimized asset already wins
+    # ...but an entry whose file is gone (retired as a bust, a car under a
+    # person's name, or undressed) wins nothing: it silently blocked the
+    # regenerated ranger from ever registering (2026-10-02)
     else:
         lib[k] = {"raw": rel}
     _save(lib)

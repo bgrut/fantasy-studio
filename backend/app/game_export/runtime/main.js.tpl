@@ -11147,6 +11147,7 @@ async function main() {
     if (GAIT) console.log('[game] gait engine: ' + JSON.stringify(GAIT.facts()));
   } catch (e) { console.warn('[game] gait engine skipped: ' + e.message); GAIT = null; }
   let _gaitPrevV = 0, _gaitPrevP = null;
+  window.__hAt = hAt;               // the terrain's height, for the gait lab's ground checks
   const _gaitFwd = new THREE.Vector3(0, 0, 1);
   const _gaitCF = new THREE.Vector3();
   let _legYawFix = 0, _legYawVote = 0, _legYawChecked = false;
@@ -15063,7 +15064,10 @@ varying vec2 vUvRaw;
       const ahead = Math.max(0.45 * (P.height_m || 1), 0.3);
       const hF = hAt(nt.x + Math.sin(modelYaw) * ahead, nt.z + Math.cos(modelYaw) * ahead);
       const hB = hAt(nt.x - Math.sin(modelYaw) * ahead, nt.z - Math.cos(modelYaw) * ahead);
-      const slopeP = Math.atan2(hB - hF, 2 * ahead) * 0.7;
+      // with the gait engine the feet meet the slope themselves (leg IK and
+      // a lowered pelvis), so the body only leans a little into the hill
+      // instead of the whole figure, feet and all, tilting with it
+      const slopeP = Math.atan2(hB - hF, 2 * ahead) * (GAIT ? 0.15 : 0.7);
       leanP = THREE.MathUtils.damp(leanP,
         THREE.MathUtils.clamp(slopeP, -0.35, 0.35), 5, dt);
       // WEIGHT ON FOOT (2026-09-23): the body rolls into a turn by the turn
@@ -15150,7 +15154,7 @@ varying vec2 vUvRaw;
           }
         }
         try {
-          GAIT.post(dt, { speed, forward: _gaitFwd,
+          GAIT.post(dt, { speed, forward: _gaitFwd, groundY: playerObj.position.y, groundAt: hAt,
                           moving: 1 - _gaitW.idle, grounded: kcc.computedGrounded(), accel: _acc });
         } catch (e) { console.warn('[game] gait post: ' + e.message); GAIT = null; }
       }

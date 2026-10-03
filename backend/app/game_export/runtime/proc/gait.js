@@ -133,12 +133,22 @@ export function createGait({ root, actions, mixer, rates }) {
     try { C[k] = analyse(a); C[k].v = rates.get(a) || 0; } catch (e) { /* the clip keeps its own clock */ }
   }
   if (!C.walk && !C.run) return null;
-  // A HAND THAT HOLDS SOMETHING SWINGS LESS: a weapon or a torch hung on a
-  // hand bone is carried, close and steady, not pumped overhead
+  // A HAND THAT HOLDS SOMETHING SWINGS LESS: a weapon or a torch on a hand
+  // is carried, close and steady, not pumped overhead. Weapons are attached
+  // after the engine starts and change with the loadout, so the hands are
+  // looked at again every half second for a visible held mesh.
   const armed = { l: false, r: false };
-  for (const s of ['l', 'r']) {
-    const h = B['hand_' + s];
-    if (h) h.traverse(o => { if (o !== h && !o.isBone && (o.isMesh || o.isGroup || o.isObject3D) && o.children !== undefined && !o.isBone) { if (o.isMesh || (o.children && o.children.some(c => c.isMesh))) armed[s] = true; } });
+  let _armedT = 0;
+  function checkArmed(dt) {
+    _armedT -= dt;
+    if (_armedT > 0) return;
+    _armedT = 0.5;
+    for (const s of ['l', 'r']) {
+      const h = B['hand_' + s];
+      let held = false;
+      if (h) h.traverse(o => { if (!held && o !== h && o.isMesh && !o.isSkinnedMesh) { let v = true, q = o; while (q && q !== h) { if (!q.visible) { v = false; break; } q = q.parent; } if (v) held = true; } });
+      armed[s] = held;
+    }
   }
   mixer.update(0);
 
@@ -204,8 +214,8 @@ export function createGait({ root, actions, mixer, rates }) {
   function post(dt, o) {
     // o: { speed, forward (world unit), moving 0..1, grounded, accel }
     const OFF = (typeof window !== 'undefined' && window.__gaitOff) || {};
+    checkArmed(dt);
     const mvK = THREE.MathUtils.clamp(o.moving, 0, 1);
-    if (mvK < 0.02) { st.lean = THREE.MathUtils.damp(st.lean, 0, 6, dt); return; }
     _fw.copy(o.forward).setY(0).normalize();
     _lat.crossVectors(UP, _fw).normalize();             // anatomical left
     root.updateMatrixWorld(true);
@@ -217,60 +227,139 @@ export function createGait({ root, actions, mixer, rates }) {
     // only the difference to the target is applied; the head is held level.
     const rk = st.runK;
     const target = THREE.MathUtils.degToRad(1.5 + 4.5 * rk) * mvK + THREE.MathUtils.clamp(o.accel || 0, -3, 6) * 0.01;
-    const top = B.head || B.neck || B.chest;
+    // the TRUNK is hips to chest: a head tipped back or forward must not
+    // read as the whole body leaning
+    const top = B.chest || B.neck || B.head;
     if (top) {
       const tr = wp(top).sub(wp(B.hips));
       const cur = Math.atan2(tr.dot(_fw), tr.y);
       st.trunkAvg = st.trunkAvg === undefined ? cur : THREE.MathUtils.damp(st.trunkAvg, cur, 2.5, dt);
     }
     const wantCorr = (typeof window !== 'undefined' && window.__gaitLean != null) ? window.__gaitLean
-      : THREE.MathUtils.clamp(target - (st.trunkAvg || 0), -0.45, 0.45);
+      : THREE.MathUtils.clamp(target - (st.trunkAvg || 0), -0.45, 0.45) * mvK;
     st.lean = THREE.MathUtils.damp(st.lean, wantCorr, 6, dt);
     if (!OFF.lean && Math.abs(st.lean) > 1e-4) {
       _q1.setFromAxisAngle(_lat, st.lean);
       rotateWorld(B.spine, _q1);
-      if (B.head) { _q1.setFromAxisAngle(_lat, -target * 0.8); rotateWorld(B.head, _q1); }
+    }
+    // THE HEAD STAYS LEVEL (LOCOMOTION.md: the head barely pitches in space
+    // while walking or running): the neck-to-head line is measured after the
+    // trunk has leant and turned back to a few degrees forward of vertical,
+    // whatever the clip and the lean did to it
+    if (!OFF.lean && B.head && mvK > 0.02) {
+      // the skull's own axis (the head bone's +Y, up through the crown)
+      B.head.getWorldQuaternion(_q2);
+      const hv = _v3.set(0, 1, 0).applyQuaternion(_q2);
+      const cur = Math.atan2(hv.dot(_fw), hv.y);
+      const fix = THREE.MathUtils.clamp(THREE.MathUtils.degToRad(4) - cur, -0.6, 0.6) * mvK;
+      st.headFix = THREE.MathUtils.damp(st.headFix || 0, fix, 10, dt);
+      _q1.setFromAxisAngle(_lat, st.headFix);
+      rotateWorld(B.head, _q1);
     }
 
-    // STRIDE WARPING: each foot's reach along the direction of travel,
-    // measured from under its own hip, scaled by the warp; heights kept
-    if (!OFF.ik && o.grounded !== false && Math.abs(st.warp - 1) > 0.02) {
+    // THE LEGS (2026-10-02, second pass): one IK target per foot, built from
+    //   stride warping - the foot's reach along travel scaled by the warp;
+    //   the ground     - each foot reaches the terrain under it, and the
+    //                    pelvis lowers so the downhill foot can (slopes);
+    //   foot locking   - a planted foot is pinned where it landed until the
+    //                    gait lifts it; standing or turning on the spot, a
+    //                    pinned foot that falls too far behind where the body
+    //                    wants it releases and takes a small lifted step
+    //                    (stops and turns no longer slide or twist the feet)
+    if (!OFF.ik && o.grounded !== false) {
       const w = 1 + (st.warp - 1) * mvK;
+      const g0 = o.groundY !== undefined ? o.groundY : 0;
+      const ga = (typeof o.groundAt === 'function') ? o.groundAt : null;
+      // the terrain is only trusted where the body stands on it (not a floor,
+      // a platform or a deck above it)
+      const onTerrain = ga && Math.abs(ga(wp(B.hips).x, wp(B.hips).z) - g0) < 0.2;
+      const T = {}, off = {}, stance = {};
       for (const s of ['l', 'r']) {
         wp(B['upleg_' + s], _H); wp(B['foot_' + s], _A);
         const along = _v3.copy(_A).sub(_H).dot(_fw);
-        _T.copy(_A).addScaledVector(_fw, along * (w - 1));
-        legIK(s, _T.clone());
+        const t = _A.clone().addScaledVector(_fw, along * (w - 1));
+        off[s] = onTerrain ? THREE.MathUtils.clamp(ga(t.x, t.z) - g0, -0.5, 0.5) : 0;
+        t.y += off[s];
+        T[s] = t;
+        // stance: the foot near its lowest height over the ground this gait
+        const fh = _A.y - g0;
+        const fk = 'fmin_' + s;
+        st[fk] = st[fk] === undefined ? fh : Math.min(fh, st[fk] + 0.05 * dt);
+        stance[s] = fh < st[fk] + 0.04;
+      }
+      // the pelvis lowers by the deeper foot's drop, smoothly
+      const drop = THREE.MathUtils.clamp(Math.min(0, off.l, off.r), -0.4, 0);
+      st.pelvis = THREE.MathUtils.damp(st.pelvis || 0, drop, 10, dt);
+      if (Math.abs(st.pelvis) > 1e-3 && B.hips.parent) {
+        const hw = wp(B.hips); hw.y += st.pelvis;
+        B.hips.parent.worldToLocal(hw);
+        B.hips.position.copy(hw);
+        B.hips.updateMatrixWorld(true);
+      }
+      const still = (o.speed || 0) < 0.35;
+      for (const s of ['l', 'r']) {
+        const L = st['lock_' + s] || (st['lock_' + s] = { pos: null, w: 0, rel: false });
+        const t = T[s];
+        if (stance[s] && !L.pos && !L.rel) { L.pos = t.clone(); L.w = 0; }
+        if (L.pos) {
+          const d = Math.hypot(t.x - L.pos.x, t.z - L.pos.z);
+          if (!L.rel && (!stance[s] || d > (still ? 0.13 : 0.45))) L.rel = true;
+          L.w = THREE.MathUtils.damp(L.w, L.rel ? 0 : 1, L.rel ? (still ? 9 : 16) : 28, dt);
+          t.x = THREE.MathUtils.lerp(t.x, L.pos.x, L.w);
+          t.z = THREE.MathUtils.lerp(t.z, L.pos.z, L.w);
+          // a recovery step lifts the foot on its way to the new spot
+          if (L.rel && still) t.y += Math.sin(Math.min(1, L.w) * Math.PI) * 0.07;
+          if (L.rel && L.w < 0.03) { L.pos = null; L.rel = false; }
+        } else if (L.rel) { L.rel = false; }
+        legIK(s, t);
       }
     }
 
-    // ARM SWING: each arm swings with the OPPOSITE leg, in the sagittal
-    // plane, close against the body; the elbow holds 20-45 degrees in a
-    // walk, bending more on the forward swing, and near 90 in a run
-    if (!OFF.arms && hasArms) {
+    // ARM SWING, AS MEASURED (2026-10-02, second pass). Each arm moves with
+    // the OPPOSITE leg, but not by copying its angle: the thigh's swing is
+    // normalised to -1..1 (its own running peak) and mapped onto a human
+    // arm's range, which is asymmetric: the arm goes further BACK than
+    // forward (walk about 17 forward / 24 back; jog 22 / 35). The elbow is
+    // 20-35 degrees in a walk; in a jog about 70 at the back of the swing,
+    // closing to about 90 in front, where the forearm also angles in toward
+    // the body's midline, so the hands travel hip to mid-chest and never up
+    // to the face. The upper arm stays against the torso (abduction under
+    // about 7 degrees).
+    if (!OFF.arms && hasArms && mvK > 0.02) {
       for (const [s, o2] of [['l', 'r'], ['r', 'l']]) {
         const th = wp(B['lowleg_' + o2]).sub(wp(B['upleg_' + o2]));
         const legAng = Math.atan2(th.dot(_fw), -th.y);           // + = that thigh forward
-        const amp = (0.85 + 0.35 * rk) * Math.min(1.25, 0.6 + 0.4 * st.warp) * (armed[s] ? 0.4 : 1);
-        const armAng = THREE.MathUtils.clamp(legAng * amp, -0.62, 0.7) + 0.05;   // a hair forward of plumb
+        st.legPk = Math.max(0.12, Math.abs(legAng), (st.legPk || 0.4) - 0.25 * dt);   // a peak that eases down over seconds
+        const legN = THREE.MathUtils.clamp(legAng / st.legPk, -1, 1);
+        const fwdMax = THREE.MathUtils.lerp(0.30, 0.40, rk), backMax = THREE.MathUtils.lerp(0.42, 0.68, rk);
+        let armAng = legN > 0 ? legN * fwdMax : legN * backMax;
+        if (armed[s]) armAng *= 0.4;
+        const key = 'arm_' + s;
+        st[key] = st[key] === undefined ? armAng : THREE.MathUtils.damp(st[key], armAng, 18, dt);
+        armAng = st[key];
+        st['dbg_' + s] = [+legN.toFixed(2), +armAng.toFixed(2)];
         const sh = wp(B['uparm_' + s]), el = wp(B['lowarm_' + s]);
         const cur = el.clone().sub(sh).normalize();
         const side = s === 'l' ? 1 : -1;
         let lat = cur.dot(_lat) * side;                           // outboard positive
-        lat = THREE.MathUtils.clamp(lat, -0.1, 0.16 + 0.1 * rk);
+        lat = THREE.MathUtils.clamp(lat, -0.03, 0.12);
         const r = Math.sqrt(1 - lat * lat);
         const want = _v1.copy(_lat).multiplyScalar(lat * side)
           .addScaledVector(_fw, r * Math.sin(armAng)).addScaledVector(UP, -r * Math.cos(armAng));
         aimSegment(B['uparm_' + s], B['lowarm_' + s], want, mvK);
-        // the elbow: bent forward in the arm's own swing plane
+        // the elbow, bent forward in the arm's swing plane
         const n = wp(B['lowarm_' + s]).sub(wp(B['uparm_' + s])).normalize();
-        const fwdBend = Math.max(0, armAng) / 0.6;
-        const e = armed[s] ? THREE.MathUtils.lerp(0.45, 0.8, rk)
-          : THREE.MathUtils.lerp(0.4 + 0.35 * fwdBend, 1.45 + 0.15 * fwdBend, rk);
+        const front = (legN + 1) / 2;                             // 0 at the back of the swing, 1 in front
+        const eWalk = 0.35 + 0.26 * Math.max(0, legN);
+        const eRun = THREE.MathUtils.lerp(0.78, 1.3, front * front);    // ~45 deg behind, ~75 in front
+        const e = armed[s] ? THREE.MathUtils.lerp(0.45, 0.8, rk) : THREE.MathUtils.lerp(eWalk, eRun, rk);
         const pf = _v2.copy(_fw).addScaledVector(n, -_fw.dot(n));
         if (pf.lengthSq() > 1e-6) {
           pf.normalize();
           const fdir = n.clone().multiplyScalar(Math.cos(e)).addScaledVector(pf, Math.sin(e));
+          // in front of the body the forearm angles in toward the midline
+          const inward = rk * 0.32 * Math.max(0, legN) * (armed[s] ? 0.3 : 1);
+          fdir.addScaledVector(_lat, -side * inward).normalize();
           aimSegment(B['lowarm_' + s], B['hand_' + s], fdir, mvK);
         }
       }
@@ -287,8 +376,8 @@ export function createGait({ root, actions, mixer, rates }) {
       root.getWorldQuaternion(_rq);
       return out.copy(_clipFwdLocal).applyQuaternion(_rq).setY(0).normalize();
     },
-    facts: () => ({ phase: +phase.toFixed(3), rate: +st.rate.toFixed(2), warp: +st.warp.toFixed(2), lean_deg: +THREE.MathUtils.radToDeg(st.lean).toFixed(1), trunk_deg: st.trunkAvg === undefined ? null : +THREE.MathUtils.radToDeg(st.trunkAvg).toFixed(1),
-                    cadence_spm: Math.round(st.cadence), armed,
+    facts: () => ({ phase: +phase.toFixed(3), rate: +st.rate.toFixed(2), warp: +st.warp.toFixed(2), lean_deg: +THREE.MathUtils.radToDeg(st.lean).toFixed(1), head_fix_deg: +THREE.MathUtils.radToDeg(st.headFix || 0).toFixed(1), pelvis: +(st.pelvis || 0).toFixed(3), locks: [!!(st.lock_l && st.lock_l.pos), !!(st.lock_r && st.lock_r.pos)], trunk_deg: st.trunkAvg === undefined ? null : +THREE.MathUtils.radToDeg(st.trunkAvg).toFixed(1),
+                    cadence_spm: Math.round(st.cadence), armed, dbg: [st.dbg_l, st.dbg_r, +(st.legPk || 0).toFixed(2)],
                     walk_period: C.walk ? +C.walk.period.toFixed(3) : null, run_period: C.run ? +C.run.period.toFixed(3) : null }),
   };
 }

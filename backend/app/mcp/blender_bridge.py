@@ -166,7 +166,14 @@ def call(op: str, params: Optional[dict] = None, timeout: float = DEFAULT_TIMEOU
             _sock.settimeout(timeout)
             _send_frame(_sock, req)
             resp = _own(_recv_frame(_sock))
-        except (ConnectionError, BrokenPipeError, ConnectionResetError, socket.timeout) as e:
+        except socket.timeout as e:
+            # A TIMEOUT IS NOT A DEAD LINE (2026-10-02): the op is still
+            # running in Blender, so sending it again doubled the work and
+            # timed out the same way. Drop the socket (a late reply is skipped
+            # by the resync above) and report it; do not resend.
+            _force_reset()
+            raise BridgeConnectionError(f"op={op} timed out after {timeout:.0f}s (still running in Blender; not resent)")
+        except (ConnectionError, BrokenPipeError, ConnectionResetError) as e:
             # Connection died. Try once to reconnect + retry.
             _force_reset()
             if not auto_reconnect:

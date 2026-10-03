@@ -34,4 +34,11 @@ from ..registry import register_fn
     category="escape_hatch",
 )
 def execute_python(params: dict) -> dict:
-    return bridge.call("execute_python", params)
+    # BLENDER SCRIPTS TAKE THEIR TIME (2026-10-02): rigging, retargeting and
+    # optimising a half-million-face generated mesh run for minutes, and the
+    # bridge's 60 s default timed every one out (the new ranger was
+    # registered raw three times). Scripts get ten minutes unless the caller
+    # names its own with "_timeout".
+    params = dict(params or {})
+    t = float(params.pop("_timeout", 600.0))
+    return bridge.call("execute_python", params, timeout=t)
