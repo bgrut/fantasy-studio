@@ -45,13 +45,15 @@ Output ONLY the JSON object, no markdown, no commentary. Schema (all fields opti
  with cliff edges), "dunes" (long parallel desert ridges), "basin" (a sheltered
  bowl inside a raised rim), "peaks" (alpine, sharp summits and deep valleys),
  "archipelago" (open sea with islands rising out of it), "volcano" (a lava
- field on a volcano's flank, lava channels to cross, the smoking cone ahead).
+ field on a volcano's flank, lava channels to cross, the smoking cone ahead),
+ "cave" (underground: a tunnel through rock opening into chambers, under a roof).
  Pick the one the text
  describes or implies: sailing/diving/island-hopping -> archipelago; desert or
  sand -> dunes; a gorge, ravine or river-cut -> canyon; badlands or a
  southwestern butte country -> mesa; a crater, valley floor or sheltered
  hollow -> basin; mountains, climbing or snowy summits -> peaks; a volcano,
- lava, magma or an eruption -> volcano. Use "plain"
+ lava, magma or an eruption -> volcano; a cave, cavern, grotto, mine tunnel or
+ anything underground -> cave. Use "plain"
  for ordinary fields, forests, towns and city streets.
  ANY world set ON or UNDER water — sailing, a boat or ship, the sea, the ocean,
  diving, reefs, islands, pirates — MUST use "archetype":"archipelago" and set

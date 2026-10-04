@@ -22,6 +22,7 @@ import { createVolcano as __createVolcano } from './proc/volcano.js';
 import { waterMaterial as __waterMaterial, waterKind as __waterKind, groundMist as __groundMist } from './proc/water.js';
 import { snowTextures as __snowTextures } from './proc/ground.js';
 import { createWaterfall as __createWaterfall } from './proc/waterfall.js';
+import { createCave as __createCave } from './proc/cave.js';
 import { createGait as __createGait } from './proc/gait.js';
 import { loadMotionDB as __loadMotionDB, createMotionMatcher as __createMotionMatcher } from './proc/mm.js';
 
@@ -112,6 +113,8 @@ async function main() {
   // the entire system.
   // a volcano world draws its own sky, cone and lava (proc/volcano.js)
   const _volcLava = (((SPEC.world || {}).level || {}).lava) || null;
+  // and a cave hangs a roof over its tunnel and has no sky at all (proc/cave.js)
+  const _caveLvl = (((SPEC.world || {}).level || {}).cave) || null;
   const pal = (() => {
     const base = Object.assign({}, SKY[SPEC.world.sky] || SKY.day);
     const PW = SPEC.world.palette || {};
@@ -461,7 +464,7 @@ async function main() {
     const W = SPEC.world || {}, L0 = W.level || {};
     const words = [W.name, W.sky, W.flora, W.weather, W.setting, SPEC.title, SPEC.description]
       .filter(Boolean).join(' ').toLowerCase();
-    if (L0.osm || L0.interior || W.pano) return null;
+    if (L0.osm || L0.interior || W.pano || L0.cave) return null;
     if (new URLSearchParams(location.search).get('flora') === '0') return null;   // A/B and debugging
     // (2026-10-01) the moon, Mars and every barren place grow stone now, not nothing
     if (/station|cyber|neon|metropolis|downtown|city street/.test(words)) return null;   // (the sea grows kelp and coral now)
@@ -884,7 +887,7 @@ async function main() {
     // horizon. Fog tints them into the distance automatically; snow weather
     // and cold skies get white caps via vertex color.
     if (!(((SPEC.world || {}).level || {}).osm) && !(((SPEC.world || {}).level || {}).interior)
-        && !SPEC.world.pano) {   // image worlds: the PANORAMA is the horizon
+        && !SPEC.world.pano && !_caveLvl) {   // image worlds: the PANORAMA is the horizon; a cave has none
       const gsizeM = SPEC.world.size_m;
       const rngM = mulberry32(SPEC.seed + 777);
       const snowy = SPEC.world.weather === 'snow';
@@ -1057,6 +1060,7 @@ async function main() {
       color: 0xcdd6ff, size: 1.6, sizeAttenuation: false, fog: false,
       transparent: true, opacity: 0.9 }));
     stars.frustumCulled = false;
+    stars.visible = !_caveLvl;                  // no stars underground
     scene.add(stars);
   }
 
@@ -1893,6 +1897,18 @@ async function main() {
         window.__falls = FALLS.facts();
       } catch (e) { console.warn('[game] waterfall skipped', e); }
     }
+  }
+  // THE CAVE (2026-10-03): the roof, the crystals, the glow-worms, the drips
+  let CAVE = null;
+  if (_caveLvl && LVL && !INTERIOR) {
+    try {
+      if (window.__skyDome) window.__skyDome.visible = false;
+      if (window.__clouds) for (const sp of window.__clouds) sp.visible = false;
+      CAVE = __createCave({ scene, level: LVL, gsize, hAt, camera, seed: SPEC.seed || 1, clock: WIND_U,
+        words: [SPEC.prompt, SPEC.title, SPEC.world.name].filter(Boolean).join(' ').toLowerCase(),
+        lights: { hemi, sun, csm, heroFill } });
+      window.__cave = CAVE.facts();
+    } catch (e) { console.warn('[game] cave skipped', e); }
   }
 
   // THE GOAL IS A PLACE, NOT A LIGHT (Phase 47): when the reach objective
@@ -6160,6 +6176,7 @@ async function main() {
   const _isRockAsset = a => /rock|boulder|stone|crag/i.test(a || '');
   const _regReject = (x, z, sct) => {
     if (VOLC && VOLC.edgeDist(x, z) < 2.0) return true;     // nothing stands in the lava
+    if (CAVE && hAt(x, z) > 1.4) return true;               // underground, things lie on the floor, not on the rock
     if (FALLS && Math.hypot(x - FALLS.at[0], z - FALLS.at[1]) < 34) return true;   // nor in the waterfall's glade
     const r = window.__regionAt && window.__regionAt(x, z);
     if (!r) return false;
@@ -12625,6 +12642,7 @@ async function main() {
         water_kind: window.__waterKind || null,
         mist: window.__mist || 0,
         waterfall: window.__falls || null,
+        cave: window.__cave || null,
       };
       try {
         const im = gmat.map && gmat.map.image;
@@ -13617,7 +13635,7 @@ async function main() {
       // peaks was 'stone', and stone.jpg is MASONRY — an alpine ridge came
       // out paved in cobblestones. Bare mountain is rock.
       const ARCH_TEX = { canyon: 'rock', mesa: 'rock', peaks: 'rock',
-                         dunes: 'sand', basin: 'soil', archipelago: 'sand', volcano: 'rock' };
+                         dunes: 'sand', basin: 'soil', archipelago: 'sand', volcano: 'rock', cave: 'rock' };
       const _arch2 = SPEC.world.archetype || 'plain';
       const gname = SNOW_GROUND ? 'snow'
         : ARCH_TEX[_arch2] ? ARCH_TEX[_arch2]
@@ -13672,21 +13690,40 @@ async function main() {
         .offsetHSL(0, 0.10, 0);
       if (gname === 'snow') gmat.color.set(0xeef1f5);     // snow is white; the light colours it
       const worldTint = gtex;                        // the painted canvas
+      // ROCK IN BEDS (2026-10-03): a canyon's walls were the floor's cracked
+      // photo stretched up a cliff. Sandstone is laid down in beds: on the
+      // steep faces of a canyon or a mesa the rock bands red and cream with
+      // thin rust seams, the beds warped a little as real strata are, and
+      // the flats keep the ground's own colour.
+      const STRATA = (_arch2 === 'canyon' || _arch2 === 'mesa');
       gmat.onBeforeCompile = (sh) => {
         sh.uniforms.uWorld = { value: worldTint };
         sh.vertexShader = `varying vec2 vUvRaw;
+varying vec3 vWPosG; varying vec3 vWNrmG;
 ` + sh.vertexShader.replace(
           '#include <uv_vertex>',
           `#include <uv_vertex>
-  vUvRaw = uv;`);
+  vUvRaw = uv;
+  vWPosG = (modelMatrix * vec4(position, 1.0)).xyz;
+  vWNrmG = normalize(mat3(modelMatrix) * normal);`);
         sh.fragmentShader = `uniform sampler2D uWorld;
 varying vec2 vUvRaw;
+varying vec3 vWPosG; varying vec3 vWNrmG;
 `
           + sh.fragmentShader.replace(
             '#include <map_fragment>',
             `#include <map_fragment>
   vec3 wTint = texture2D(uWorld, vUvRaw).rgb * 2.0;
-  diffuseColor.rgb *= clamp(wTint, 0.12, 1.45);`);
+  diffuseColor.rgb *= clamp(wTint, 0.12, 1.45);
+  ${STRATA ? `{
+    float steep = smoothstep(0.35, 0.75, 1.0 - normalize(vWNrmG).y);
+    float sy = vWPosG.y + sin(vWPosG.x * 0.05) * 1.5 + sin(vWPosG.z * 0.043 + 1.3) * 1.2;
+    float band = fract(sy * 0.38 + 0.22 * sin(sy * 0.83) + 0.12 * sin(sy * 2.1)), seam = fract(sy * 1.27 + 0.37);   // beds of uneven thickness
+    vec3 bed = mix(vec3(0.70, 0.29, 0.15), vec3(0.88, 0.66, 0.46), smoothstep(0.42, 0.55, band) * smoothstep(0.9, 0.78, band));
+    bed = mix(bed, vec3(0.50, 0.20, 0.12), smoothstep(0.86, 0.96, seam) * 0.65);
+    float lum = dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114));
+    diffuseColor.rgb = mix(diffuseColor.rgb, bed * (0.45 + 0.75 * lum), steep * 0.88);   // the bed sets the hue, the photo keeps its shading
+  }` : ''}`);
       };
       }
       gmat.needsUpdate = true;
@@ -14875,6 +14912,7 @@ varying vec2 vUvRaw;
     if (VOLC) VOLC.update(rdt, camera, playerObj.position);
     if (MIST) MIST.update(camera);
     if (FALLS) FALLS.update(rdt);
+    if (CAVE) CAVE.update(rdt, camera, playerObj.position);
     if (window.__cbtStep) window.__cbtStep(dt);
     __fmTick(rdt);                             // the guide, on real time
     for (const w of wheels) {                  // roll with speed, steer in front
@@ -16208,7 +16246,7 @@ varying vec2 vUvRaw;
       camera.lookAt(...window.__camPin.look);
       if (FLORA_LIVE) FLORA_LIVE.update(camera);
       if (GRASS_LIVE) GRASS_LIVE.update(camera, playerObj.position);
-    }
+    } else if (CAVE && gameStarted) CAVE.clampCamera(camera, playerObj.position);   // under the roof, out of the walls
     renderer.info.autoReset = false;
     renderer.info.reset();
     composer.render();

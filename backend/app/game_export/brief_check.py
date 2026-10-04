@@ -15,7 +15,7 @@ from __future__ import annotations
 # the runtime. Keep the two in step: they answer the same question.
 ARCH_TEX = {"canyon": "rock", "mesa": "rock", "peaks": "rock",
             "dunes": "sand", "basin": "soil", "archipelago": "sand",
-            "volcano": "rock"}
+            "volcano": "rock", "cave": "rock"}
 
 
 def check_brief(spec, facts: dict) -> list[str]:

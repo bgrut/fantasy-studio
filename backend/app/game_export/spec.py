@@ -107,7 +107,7 @@ class WorldSpec(BaseModel):
     # gently-rolling playfield ringed by mountains — the sameness that survived
     # both. This is the structural axis.
     archetype: Literal["plain", "canyon", "mesa", "dunes", "basin",
-                       "peaks", "archipelago", "volcano"] = "plain"
+                       "peaks", "archipelago", "volcano", "cave"] = "plain"
     placed_items: List[PlacedItemSpec] = Field(default_factory=list)  # Inspector placements
     palette: Optional[PaletteSpec] = None   # film-grade color script
     flora: Optional[str] = None    # prompt's tree word: silhouettes obey it

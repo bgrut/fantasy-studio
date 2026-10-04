@@ -454,6 +454,21 @@ def build_level(seed: int, size_m: float, n_objectives: int = 0,
                         _rid < 0 or raster["palette"][_rid]["kind"] != "water"):
                     h = -0.35            # nothing but the lake dips below water
             d = min(_seg_dist(x, z, *path[k], *path[k + 1]) for k in range(len(path) - 1))
+            if _arch == "cave":
+                # UNDERGROUND (2026-10-03): the route is a tunnel through rock
+                # that opens into chambers where the hero starts and where the
+                # goal waits; everywhere else the floor rises into walls that
+                # meet the ceiling the runtime hangs over it (proc/cave.js).
+                # The walls are the ground itself, so they are solid for free.
+                wid = 10.0 + 6.0 * (hgrid[i2][j2] - 0.5)          # tunnel half-width, 7 to 13 m
+                open_d = min(d - wid, math.hypot(x, z) - 17.0,
+                             math.hypot(x - goal[0], z - goal[1]) - 18.0)
+                if open_d > 0:
+                    wall = min(1.0, open_d / 6.0)
+                    wall = wall * wall * (3 - 2 * wall)
+                    h = h * 0.3 + wall * (13.0 + 6.0 * hgrid[i][j]) + (hgrid[i2][j2] - 0.5) * 1.4 * wall
+                else:
+                    h *= 0.35                                      # a rubbly floor, not hills
             d = min(d, math.hypot(x, z), math.hypot(x - goal[0], z - goal[1]))
             if d < corridor:
                 h = 0.0
@@ -461,7 +476,7 @@ def build_level(seed: int, size_m: float, n_objectives: int = 0,
                 t = (d - corridor) / (corridor * 1.2)
                 h *= t * t * (3 - 2 * t)
             edge = max(abs(x), abs(z)) / half        # settle flat at the walls
-            if edge > 0.92:
+            if edge > 0.92 and _arch != "cave":      # a cave is walled to its edge
                 h *= max(0.0, (1.0 - edge) / 0.08)
             if lava_segs and not _ch:
                 h = max(h, LAVA_LEVEL + 0.25)   # only a channel lies under the lava
@@ -536,6 +551,11 @@ def build_level(seed: int, size_m: float, n_objectives: int = 0,
         "collect_points": collect_points,
         "landmarks": landmarks,                # [x, z, scale]
     }
+    if _arch == "cave":
+        out_level["cave"] = {"ceiling": 11.0}     # the roof's mean height over the floor (m)
+        # no thirty-metre landmark tree and no campsite: off the route is rock
+        out_level["landmarks"] = []
+        out_level["pois"] = []
     if lava:
         gl = math.hypot(goal[0], goal[1]) or 1.0
         out_level["lava"] = {"level": LAVA_LEVEL, "channels": lava,

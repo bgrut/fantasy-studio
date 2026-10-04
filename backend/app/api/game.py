@@ -1346,6 +1346,30 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             job.setdefault("notes", []).append(
                 "volcano: lava runs in channels across your route, the cone smokes "
                 "past the goal" + (f" (drawn by the world, not generated: {', '.join(_gone)})" if _gone else ""))
+        # A CAVE IS UNDERGROUND (2026-10-03). "Explore a glowing crystal cave
+        # deep underground" built an open field at night under the stars. A
+        # cave is its own landform: a tunnel through rock opening into
+        # chambers, under a roof, lit by its crystals and the hero's lamp
+        # (level.py carves it, proc/cave.js roofs and lights it).
+        if (base_spec is None and getattr(spec.world, "archetype", "plain") not in ("volcano", "archipelago")
+                and spec.world.sky != "space"
+                and _fre.search(r"\b(caves?|caverns?|grottos?|grottoes|underground|subterranean|catacombs?)\b", _ptl)):
+            spec.world.archetype = "cave"
+            spec.world.sky = "night"
+            spec.world.weather = "none"
+            spec.world.water_level = None
+            from app.game_export.spec import PaletteSpec as _PS2
+            _pc = spec.world.palette or _PS2()
+            if isinstance(_pc, dict):
+                _pc = _PS2(**_pc)
+            _pc.sky, _pc.fog, _pc.sun_intensity, _pc.ambient = "#05060a", "#080a10", 0.2, 0.12
+            spec.world.palette = _pc
+            spec.world.ground_color = [0.25, 0.24, 0.26]     # wet dark stone
+            _rockish = _fre.compile(r"\b(stalactites?|stalagmites?|cave|cavern|rock wall)\b", _fre.I)
+            spec.entities = [e for e in spec.entities
+                             if not (e.behavior == "static" and _rockish.search(e.name or ""))]
+            job.setdefault("notes", []).append(
+                "cave: a tunnel through rock opening into chambers, under a roof, lit by its crystals")
         stage("resolving assets")
         # SUBJECT IS THE HERO (2026-07-08): the prompt's own words outrank
         # the LLM's cast — "a wolf roaming the mountains" once played as a
