@@ -23,6 +23,7 @@ import { waterMaterial as __waterMaterial, waterKind as __waterKind, groundMist 
 import { snowTextures as __snowTextures } from './proc/ground.js';
 import { createWaterfall as __createWaterfall } from './proc/waterfall.js';
 import { createCave as __createCave } from './proc/cave.js';
+import { makeRagdoll as __makeRagdoll, makeFlinch as __makeFlinch } from './proc/ragdoll.js';
 import { createGait as __createGait } from './proc/gait.js';
 import { loadMotionDB as __loadMotionDB, createMotionMatcher as __createMotionMatcher } from './proc/mm.js';
 
@@ -7996,7 +7997,17 @@ async function main() {
         // whatever pose it died in rather than playing on underneath.
         if (!n._rag) {
           n._rag = true;
+          // A BODY FALLS AT ITS JOINTS (2026-10-04): an articulated ragdoll
+          // over the shared rig (proc/ragdoll.js), thrown away from the blow
+          // that killed it; the single tumbling capsule below is the fallback
+          // for a body without that rig
           try {
+            const _fy0 = n.obj.rotation.y;
+            const _push = n._hitDir ? n._hitDir.clone() : new THREE.Vector3(-Math.sin(_fy0), 0, -Math.cos(_fy0));
+            n._ragdoll = __makeRagdoll({ RAPIER, world, root: n.obj, push: _push, rng });
+            if (n._ragdoll && n.anim && n.anim.mixer) { n.anim.mixer.stopAllAction(); n.anim.mixer.timeScale = 0; }
+          } catch (e) { n._ragdoll = null; console.warn('[game] ragdoll: ' + e.message); }
+          if (!n._ragdoll) try {
             const _bb = new THREE.Box3().setFromObject(n.obj);
             const _h = Math.max(0.3, _bb.max.y - _bb.min.y);
             const _r = Math.max(0.1, Math.min(0.45,
@@ -8022,8 +8033,9 @@ async function main() {
             if (n.anim && n.anim.mixer) n.anim.mixer.timeScale = 0;
           } catch (e) { /* no physics for this one; it just lies where it fell */ }
         }
+        if (n._ragdoll) n._ragdoll.sync();
         n.dieT += dt;
-        if (n.dieT > 6.0) { scene.remove(n.obj); n.gone = true; }
+        if (n.dieT > 6.0) { if (n._ragdoll) n._ragdoll.dispose(); scene.remove(n.obj); n.gone = true; }
         continue;
       }
       let tx = null, tz = null;
@@ -8427,6 +8439,7 @@ async function main() {
           n.anim.cur.timeScale = Math.min(Math.max(n.speed / base, 0.55), 1.7);
         }
         n.anim.mixer.update(dt);
+        if (n._flinch) n._flinch.apply(dt);
       }
       // stay inside the walls — or, for a heist sentry, inside HIS building.
       // (2026-08-05: this world-bounds clamp yanked every venue guard from
@@ -10165,6 +10178,13 @@ async function main() {
     cb.iframes = 0.6; cb.blink = 0.6; cb.calm = 0;
     if (cb.thorns && from && !from.dead && typeof window.__cbtHurt === 'function') window.__cbtHurt(from, cb.thorns);
     php = Math.max(0, php - dmg);
+    try {
+      if (!window.__heroFlinch && pg && pg.scene) window.__heroFlinch = __makeFlinch(pg.scene);
+      const _src = from && from.obj ? from.obj.position : null;
+      const _d = _src ? playerObj.position.clone().sub(_src).setY(0) : new THREE.Vector3(Math.sin(modelYaw), 0, Math.cos(modelYaw)).negate();
+      if (_d.lengthSq() < 1e-6) _d.set(0, 0, 1);
+      if (window.__heroFlinch) window.__heroFlinch.hit(_d.normalize(), 1.0);
+    } catch (e) { /* no recoil */ }
     if (php <= 0 && cb.second && !cb.usedSecond) {
       cb.usedSecond = true; php = 2; cb.iframes = 2.0; cb.blink = 2.0;
       renderHearts(); sfx('win'); popText('Second wind!', '#ffe08a');
@@ -12006,6 +12026,16 @@ async function main() {
     if (!quiet && _cb.crit && Math.random() < 0.2 * _cb.crit) { dmg *= 3; popText('Critical!', '#ffe08a'); }
     n.hp -= dmg;
     if (n.role === 'boss' && typeof window.__bossHit === 'function') window.__bossHit(n);
+    // A BLOW MOVES A BODY (2026-10-04): the trunk and head recoil away from
+    // the hit and spring back, on top of whatever the animation is doing
+    try {
+      const _pp = playerObj.position;
+      n._hitDir = n.obj.position.clone().sub(_pp).setY(0);
+      if (n._hitDir.lengthSq() < 1e-6) n._hitDir.set(0, 0, 1);
+      n._hitDir.normalize();
+      if (!n._flinch) n._flinch = __makeFlinch(n.obj);
+      n._flinch.hit(n._hitDir, 0.7 + Math.min(dmg, 3) * 0.2);
+    } catch (e) { /* before the player exists: no recoil */ }
     // a tower firing twice a second must not freeze the world each time: the
     // flinch and the rumble belong to the player's own hits
     if (!quiet) { window.__hitStop = 0.08; rumble(80, 0.7); }
@@ -12579,6 +12609,7 @@ async function main() {
     pos: () => playerObj.position.toArray(), keys, ready: true,
     tp: (x, z) => body.setTranslation({ x, y: spawnHeight(x, z), z }, true),
     tpy: (x, y, z) => body.setTranslation({ x, y, z }, true),     // a drop from a height: does a ledge hold you
+    hurt: (i, d) => { const n = npcs.filter(x => !x.gone)[i]; if (n) dmgEnemy(n, d || 1); },   // a blow to the i-th body in npcs(): gates test recoil and ragdolls
     attack: doAttack,
     win: (t) => doWin(t || 'the gate called it'), lose: (t) => doLose(t || 'the gate called it'),   // the end card, reachable by a gate
     guide: () => ({ step: __fm.k, total: __fmSteps.length, active: __fm.active, done: __fm.done, title: __fm.step ? __fm.step.title : null, guided: __fmGuided }),
@@ -13667,6 +13698,14 @@ async function main() {
       gmat.map = pbr(gname, grep2, true);
       gmat.normalMap = pbr(gname + '_n', grep2, false);
       gmat.normalScale = new THREE.Vector2(0.65, 0.65);
+      // PHOTOGRAPHED GROUND (2026-10-04): rock, soil and forest floor are
+      // Poly Haven scans (CC0) now, not generated pictures, and carry their
+      // own roughness: wet-looking pebbles and dry dust differ in the light
+      if (['rock', 'soil', 'forest'].includes(gname) && !_toonGround) {
+        gmat.roughnessMap = pbr(gname + '_r', grep2, false);
+        gmat.roughness = 1.0;
+        gmat.normalScale.set(1.0, 1.0);
+      }
       // SNOW IS DRAWN (2026-10-03): the photo is a close-up of wind ripples,
       // and tiled underfoot it read as blue rippled sand; fresh snow is soft
       // drifts a few metres across with a fine grain (proc/ground.js)
@@ -13696,8 +13735,18 @@ async function main() {
       // thin rust seams, the beds warped a little as real strata are, and
       // the flats keep the ground's own colour.
       const STRATA = (_arch2 === 'canyon' || _arch2 === 'mesa');
+      // GROUND WITHOUT A GRID OR A SMEAR (2026-10-04). A tiled photo repeats
+      // every few metres in plain sight, and on a cliff the top-down UVs
+      // stretch it into vertical streaks (a canyon wall, a cave wall). The
+      // ground samples its photo twice, at two scales and turned against
+      // each other, and lets a slow world-space noise choose between them,
+      // so no repeat lines up; and on a steep face it projects the photo
+      // from the side as well (triplanar), so a wall is rock, not a smear.
+      const _tileM = (gname === 'snow' && !_toonGround) ? gsize / Math.max(8, Math.round(gsize / 14))   // drawn snow tiles at 14 m
+        : gsize / grep2;                               // metres per tile of the photo
       gmat.onBeforeCompile = (sh) => {
         sh.uniforms.uWorld = { value: worldTint };
+        sh.uniforms.uTileM = { value: _tileM };
         sh.vertexShader = `varying vec2 vUvRaw;
 varying vec3 vWPosG; varying vec3 vWNrmG;
 ` + sh.vertexShader.replace(
@@ -13707,12 +13756,40 @@ varying vec3 vWPosG; varying vec3 vWNrmG;
   vWPosG = (modelMatrix * vec4(position, 1.0)).xyz;
   vWNrmG = normalize(mat3(modelMatrix) * normal);`);
         sh.fragmentShader = `uniform sampler2D uWorld;
+uniform float uTileM;
 varying vec2 vUvRaw;
 varying vec3 vWPosG; varying vec3 vWNrmG;
+float gh1(vec2 p){ p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
+float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 * f);
+  return mix(mix(gh1(i), gh1(i + vec2(1.0, 0.0)), u.x), mix(gh1(i + vec2(0.0, 1.0)), gh1(i + vec2(1.0, 1.0)), u.x), u.y); }
 `
           + sh.fragmentShader.replace(
+            '#include <normal_fragment_maps>',
+            `vec3 _gN0 = normal;
+#include <normal_fragment_maps>
+  // on a cliff the top-down normal map is stretched: lean on the true surface there
+  normal = normalize(mix(normal, _gN0, smoothstep(0.45, 0.8, 1.0 - normalize(vWNrmG).y) * 0.6));`)
+          .replace(
             '#include <map_fragment>',
-            `#include <map_fragment>
+            `#ifdef USE_MAP
+  {
+    vec3 gN = normalize(vWNrmG);
+    vec2 uvA = vWPosG.xz / uTileM;
+    vec2 uvB = mat2(0.8, -0.6, 0.6, 0.8) * vWPosG.xz / (uTileM * 2.7) + vec2(0.37, 0.71);
+    float pick = smoothstep(0.3, 0.7, gn1(vWPosG.xz * 0.045) * 0.7 + gn1(vWPosG.xz * 0.17) * 0.3);
+    vec4 top = mix(texture2D(map, uvA), texture2D(map, uvB), pick);
+    // a little light and dark at the scale of a few tens of metres: ground is never even
+    top.rgb *= 0.86 + 0.28 * gn1(vWPosG.xz * 0.021 + 7.0);
+    float steepT = smoothstep(0.45, 0.8, 1.0 - gN.y);
+    vec4 col = top;
+    if (steepT > 0.0) {
+      vec2 bw = abs(gN.xz) + 0.001; bw /= (bw.x + bw.y);
+      vec4 side = texture2D(map, vWPosG.zy / uTileM) * bw.x + texture2D(map, vWPosG.xy / uTileM) * bw.y;
+      col = mix(top, side, steepT);
+    }
+    diffuseColor *= col;
+  }
+#endif
   vec3 wTint = texture2D(uWorld, vUvRaw).rgb * 2.0;
   diffuseColor.rgb *= clamp(wTint, 0.12, 1.45);
   ${STRATA ? `{
@@ -15409,6 +15486,7 @@ varying vec3 vWPosG; varying vec3 vWNrmG;
                           noLean: _mmDrive });       // captured motion already leans into speed and turns
         } catch (e) { console.warn('[game] gait post: ' + e.message); GAIT = null; }
       }
+      if (window.__heroFlinch) window.__heroFlinch.apply(dt);   // a blow lands on the pose
       // THE HEAD LOOKS WHERE THE CAMERA LOOKS (2026-09-23): after the pose, the
       // head turns up to fifty degrees toward the view direction, about the
       // world's up so the rig's bone axes do not matter.

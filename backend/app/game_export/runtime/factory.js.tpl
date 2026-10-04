@@ -2926,7 +2926,8 @@ function grassMaskFor(f) {
   };
 }
 if (GRASS_ON) {
-  const colA = new THREE.Color(0x4a7a2c), colB = new THREE.Color(0x8aac4c), colDry = new THREE.Color(0xb3a35e);
+  // a meadow's greens, not a toy's: deeper at the root, olive to straw at the tips
+  const colA = new THREE.Color(0x3d6428), colB = new THREE.Color(0x7d9a48), colDry = new THREE.Color(0xa99a5c);
   for (let f = 0; f < 6; f++) {
     const F_ = FACES[f];
     const frame = new THREE.Group();
@@ -2938,7 +2939,12 @@ if (GRASS_ON) {
     const g = __GRASS.plantGrass({
       scene: frame, seed: 4100 + f * 17, hAt: () => 0, maskAt: grassMaskFor(f), maskRes: 128,
       center: [0, 0], size: N * T, colA, colB, colDry, height: 0.17, windK: 0.3,
-      layers: [{ L: 24, R: 13, n: 60000, w: 0.035, thin: 0.4 }, { L: 80, R: 40, n: 70000, w: 0.06, thin: 0.55 }],
+      // FINE GRASS AT YOUR FEET (2026-10-04): first person looks straight down
+      // into the nearest few metres, where a hundred blades a square metre
+      // read as a handful of fat spikes; a third field, fine and dense, fills
+      // the ground around the camera the way a real lawn does
+      layers: [{ L: 9, R: 4.5, n: 36000, w: 0.022, thin: 0.2 }, { L: 24, R: 13, n: 60000, w: 0.03, thin: 0.4 },
+               { L: 80, R: 40, n: 70000, w: 0.06, thin: 0.55 }],
       wind: grassClock, sunDir: sun.position.clone().normalize(), sunCol: sun.color.clone(),
     });
     g.group.traverse(o => { if (o.isMesh) o.userData.noAutoTex = true; });
