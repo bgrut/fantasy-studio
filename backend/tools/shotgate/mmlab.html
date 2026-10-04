@@ -54,7 +54,7 @@ for (const [dur, dir, sp, label] of S) {
     const dy = Math.atan2(Math.sin(wantYaw - yaw), Math.cos(wantYaw - yaw)); yaw += dy * (1 - Math.exp(-10 * dt));
     holder.position.copy(pos); holder.rotation.y = yaw + Math.PI;
     holder.updateMatrixWorld(true);
-    mm.update(dt, { vel, wantVel: want, yaw, wantYaw, velRate: 7, turnRate: 10 });
+    mm.update(dt, { vel, wantVel: want, yaw, wantYaw, velRate: 4, turnRate: 10 });   // the game shows the matcher a gentler start than the body makes
     g.scene.updateMatrixWorld(true);
     B.foot_l.getWorldPosition(fp.l); B.foot_r.getWorldPosition(fp.r);
     // the largest turn any limb bone made since the last frame: a pop shows as a spike

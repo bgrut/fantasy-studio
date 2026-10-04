@@ -397,13 +397,29 @@ def build(list_only: bool = False):
     hip_i16 = np.round(np.clip(hip, -3.2, 3.2) * 10000).astype(np.int16)
     feat_n = ((feat - mean) / std).astype(np.float32)
     con_u8 = (con[:, 0].astype(np.uint8) | (con[:, 1].astype(np.uint8) << 1))
-    blob = rot_i16.tobytes() + hip_i16.tobytes() + feat_n.astype(np.float16).tobytes() + con_u8.tobytes()
+    # THE LEAN OF EACH FRAME (2026-10-03): the features say where the feet
+    # and the path go, nothing about posture, so a jog-off after a stop could
+    # play an athlete's explosive restart, 22 degrees over. Each frame's trunk
+    # lean (spine and chest up-axes, pitched forward in the root's frame) is
+    # stored, and the runtime only takes frames whose lean the speed asked for
+    # can carry (mm.js leanBudget).
+    def _up(q):
+        u = q[..., :3]; w = q[..., 3:]
+        v = np.array([0.0, 1.0, 0.0])
+        t = 2 * np.cross(u, v)
+        return v + w * t + np.cross(u, t)
+    tv = 0.4 * _up(rot[:, BONES.index("spine")]) + 0.6 * _up(rot[:, BONES.index("chest")])
+    lean = np.degrees(np.arctan2(tv[:, 2], tv[:, 1]))
+    lean_i8 = np.clip(np.round(lean), -100, 100).astype(np.int8)
+    blob = (rot_i16.tobytes() + hip_i16.tobytes() + feat_n.astype(np.float16).tobytes() + con_u8.tobytes()
+            + lean_i8.tobytes())
     (OUT / "mm_db.bin").write_bytes(blob)
     head = {"version": 1, "fps": FPS, "frames": F, "bones": BONES, "leg": LEG,
             "rest_dirs": {t: list(map(float, DC[t])) for t in BONES},
             "layout": {"rot_i16": [0, F * len(BONES) * 4], "hips_i16": F * len(BONES) * 4 * 2,
                        "feat_f16": F * len(BONES) * 4 * 2 + F * 3 * 2,
-                       "contact_u8": F * len(BONES) * 4 * 2 + F * 3 * 2 + F * 27 * 2},
+                       "contact_u8": F * len(BONES) * 4 * 2 + F * 3 * 2 + F * 27 * 2,
+                       "lean_i8": F * len(BONES) * 4 * 2 + F * 3 * 2 + F * 27 * 2 + F},
             "feature": {"mean": mean.round(5).tolist(), "std": std.round(5).tolist(), "weight": weight.tolist(),
                         "names": "footL xyz, footR xyz, footL vel, footR vel, hips vel, traj pos 10/20/30 xz, traj dir 10/20/30 xz"},
             "ranges": ranges, "takes": info,

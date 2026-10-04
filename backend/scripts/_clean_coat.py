@@ -22,8 +22,10 @@ neighbours, and carried by the vertices instead of a sheet:
 3. The model ships that colour as vertex colour (glTF COLOR_0) and no texture:
    no islands, no gutters, no mip level that can reach a stranger's colour,
    and colour that can only change smoothly across the body.
-4. The embossed normal map and the roughness map go with the sheet: the
-   geometry's own smooth normals light it, with one roughness, evenly.
+4. The embossed normal map goes with the sheet: the geometry's own smooth
+   normals light it. Metal and roughness are read from the metal-roughness
+   sheet like the colour and ship per vertex as the attribute _MR (the game
+   runtime reads it; the material's single values are the body's averages).
 
 The armature, the weights and the animations are not touched.
 
@@ -83,6 +85,65 @@ def read_sheets(me):
                 pass
             out.append(("flat", np.array(col)))
     return out
+
+
+# METAL STAYS METAL (2026-10-03). The coat shipped one roughness (0.8) and no
+# metal for every character, so a knight's steel, whose colour map is a
+# bright metal grey, came out as pale matte plaster. Each material's
+# metal-roughness sheet is read too (glTF: metal in blue, roughness in green),
+# sampled and cleaned exactly like the colour, and shipped per vertex as the
+# custom attribute _MR (the runtime reads it); the material's single values
+# are the body's averages, for anything that does not.
+def _upstream_image(sock):
+    seen, todo = set(), [l.from_node for l in sock.links]
+    while todo:
+        n = todo.pop()
+        if n in seen:
+            continue
+        seen.add(n)
+        if n.type == "TEX_IMAGE" and n.image is not None:
+            return n.image
+        for i in n.inputs:
+            todo.extend(l.from_node for l in i.links)
+    return None
+
+
+def read_mr(me):
+    """Every material slot's (metal, rough): its sheet as (H, W, 2), or flat values."""
+    out = []
+    for mslot in me.materials:
+        metal, rough, im = 0.0, 0.8, None
+        try:
+            bs = next(n for n in mslot.node_tree.nodes if n.type == "BSDF_PRINCIPLED")
+            metal = float(bs.inputs["Metallic"].default_value)
+            rough = float(bs.inputs["Roughness"].default_value)
+            im = _upstream_image(bs.inputs["Metallic"]) or _upstream_image(bs.inputs["Roughness"])
+        except Exception:
+            pass
+        if im is not None and im.size[0] > 0:
+            a_ = np.empty(im.size[0] * im.size[1] * 4, dtype=np.float32)
+            im.pixels.foreach_get(a_)
+            px = a_.reshape(im.size[1], im.size[0], 4)
+            out.append(("img", np.stack([px[:, :, 2], px[:, :, 1]], -1)))
+        else:
+            out.append(("flat", np.array([metal, rough])))
+    return out
+
+
+def sample_mr(mrs, which, uv):
+    res = np.zeros((len(uv), 2)); res[:, 1] = 0.8
+    for si, (kind, sheet) in enumerate(mrs):
+        sel = which == si
+        if not sel.any():
+            continue
+        if kind == "flat":
+            res[sel] = sheet
+            continue
+        Hs, Ws = sheet.shape[0], sheet.shape[1]
+        x = np.clip((uv[sel, 0] % 1.0) * Ws, 0, Ws - 1).astype(np.int64)
+        y = np.clip((uv[sel, 1] % 1.0) * Hs, 0, Hs - 1).astype(np.int64)
+        res[sel] = sheet[y, x]
+    return res
 
 
 def read_alpha(me):
@@ -151,11 +212,12 @@ if FROM:
     # surface is wanted, so they go before the export can pick them up
     for act in [a for a in bpy.data.actions if a not in acts_before]:
         bpy.data.actions.remove(act)
-    tris, tuv, tsh, ssheets, salpha = [], [], [], [], []
+    tris, tuv, tsh, ssheets, salpha, smr = [], [], [], [], [], []
     for so in [ob for ob in new_objs if ob.type == "MESH"]:
         base = len(ssheets)
         ssheets.extend(read_sheets(so.data))
         salpha.extend(read_alpha(so.data))
+        smr.extend(read_mr(so.data))
         bm = bmesh.new(); bm.from_mesh(so.data)
         bm.transform(so.matrix_world)
         bmesh.ops.triangulate(bm, faces=bm.faces[:])
@@ -172,7 +234,7 @@ if FROM:
     if tris and any(k == "img" for k, _ in ssheets):
         T = np.array(tris); U = np.array(tuv)
         flat = T.reshape(-1, 3)
-        SRC = {"tris": T, "uv": U, "sheet": np.array(tsh, dtype=np.int64), "sheets": ssheets, "alpha": salpha,
+        SRC = {"tris": T, "uv": U, "sheet": np.array(tsh, dtype=np.int64), "sheets": ssheets, "alpha": salpha, "mr": smr,
                "bvh": BVHTree.FromPolygons([Vector(p) for p in flat.tolist()],
                                            [(3 * i, 3 * i + 1, 3 * i + 2) for i in range(len(T))],
                                            all_triangles=True),
@@ -249,6 +311,7 @@ for o in meshes:
     # with a patch of hair. Each slot is read from its own image, or its flat
     # colour when it has none.
     sheets = read_sheets(me)
+    mrs = read_mr(me)
     if (not any(k == "img" for k, _ in sheets) or not me.uv_layers) and SRC is None:
         continue
 
@@ -395,6 +458,8 @@ for o in meshes:
         pts.append(smp)
     stack = np.stack(pts, 0)                     # (7, faces, 3)
     face_col = np.median(stack, axis=0)
+    face_mr = np.median(np.stack([sample_mr(mrs, fmat, a * wa + b * wb + c * wc)
+                                  for wa, wb, wc in ((1 / 3, 1 / 3, 1 / 3), (0.6, 0.2, 0.2), (0.2, 0.6, 0.2), (0.2, 0.2, 0.6))], 0), axis=0)
     # how far a face's own seven points agree: a face inside a clean chart of
     # fur or cloth agrees with itself; a face mapped into the atlas's confetti
     # is a scatter of unrelated colours and is not to be believed
@@ -410,24 +475,31 @@ for o in meshes:
 
         def to_src(P):
             return _map(P @ M[:3, :3].T + M[:3, 3])
-        spts = []
+        spts, smrs = [], []
         for wa, wb, wc in ((1 / 3, 1 / 3, 1 / 3), (0.6, 0.2, 0.2), (0.2, 0.6, 0.2), (0.2, 0.2, 0.6)):
-            spts.append(source_colours(to_src(tri_co[:, 0] * wa + tri_co[:, 1] * wb + tri_co[:, 2] * wc)))
+            _w, _uv = source_uv(to_src(tri_co[:, 0] * wa + tri_co[:, 1] * wb + tri_co[:, 2] * wc))
+            spts.append(sample(SRC["sheets"], _w, _uv))
+            smrs.append(sample_mr(SRC["mr"], _w, _uv))
         sstack = np.stack(spts, 0)
         s_col = np.median(sstack, axis=0)
         lum = lambda x: float((x @ np.array([0.2126, 0.7152, 0.0722])).mean())
         own_l, src_l = lum(face_col), lum(s_col)
         print("LUMINANCE own %.3f, source %.3f" % (own_l, src_l))
+        if best[0] < 0.03 and all(k == "flat" for k, _ in mrs):
+            face_mr = np.median(np.stack(smrs, 0), axis=0)     # the rig carries no metal sheet; the source does
         if best[0] < 0.03 and (own_l < 0.55 * src_l or not any(k == "img" for k, _ in sheets)):
             print("FROM SOURCE")
             face_col = s_col
+            face_mr = np.median(np.stack(smrs, 0), axis=0)
             face_var = ((sstack - s_col[None]) ** 2).sum(2).mean(0)
 
     # 2. onto the vertices, then cleaned in space
     lf = np.repeat(np.arange(nf), lt)
-    acc = np.zeros((nv, 3)); cnt = np.zeros(nv); vvar = np.zeros(nv)
+    acc = np.zeros((nv, 3)); cnt = np.zeros(nv); vvar = np.zeros(nv); acc_mr = np.zeros((nv, 2))
     np.add.at(acc, lv, face_col[lf]); np.add.at(cnt, lv, 1); np.add.at(vvar, lv, face_var[lf])
+    np.add.at(acc_mr, lv, face_mr[lf])
     vcol = acc / np.maximum(cnt, 1)[:, None]
+    vmr = acc_mr / np.maximum(cnt, 1)[:, None]
     vvar = vvar / np.maximum(cnt, 1)
 
     span = float(np.ptp(co, axis=0).max()) or 1.0
@@ -478,6 +550,7 @@ for o in meshes:
     # themselves are detail (an eye, a mouth, a buckle) and are kept
     if good.mean() >= 0.7:
         good[:] = True
+    vcol = np.concatenate([vcol, vmr], axis=1)   # metal and roughness ride along as two more channels
     known = good.copy()
     for _ in range(80):
         if known.all():
@@ -498,6 +571,7 @@ for o in meshes:
     for _ in range(3):                           # then even it
         vcol = (w[:, :, None] * vcol[idx]).sum(1) / np.maximum(w.sum(1), 1e-9)[:, None]
     vcol = np.clip(vcol, 0.0, 1.0)
+    vmr = vcol[:, 3:5]; vcol = vcol[:, :3]
     lin = np.where(vcol <= 0.04045, vcol / 12.92, ((vcol + 0.055) / 1.055) ** 2.4)
 
     # 3. the coat: vertex colour, no sheet, no UVs, one roughness
@@ -516,12 +590,15 @@ for o in meshes:
     # one-sided, like the originals: a generated shell has pinholes, and a
     # double-sided coat shows its own dark inside through every one of them
     coat.use_backface_culling = True
-    bsdf.inputs["Roughness"].default_value = 0.8
-    bsdf.inputs["Metallic"].default_value = 0.0
+    mra = me.attributes.new(name="_MR", type="FLOAT_VECTOR", domain="POINT")
+    mra.data.foreach_set("vector", np.concatenate([vmr, np.zeros((nv, 1))], axis=1).astype(np.float32).ravel())
+    bsdf.inputs["Roughness"].default_value = float(np.clip(vmr[:, 1].mean(), 0.3, 1.0))
+    bsdf.inputs["Metallic"].default_value = float(np.clip(vmr[:, 0].mean(), 0.0, 1.0))
+    print("MR metal mean %.2f (%.0f%% over 0.5), rough mean %.2f" % (vmr[:, 0].mean(), 100 * (vmr[:, 0] > 0.5).mean(), vmr[:, 1].mean()))
     me.materials.clear(); me.materials.append(coat)
     while len(me.uv_layers):                     # no UVs: the runtime's auto-texturer leaves it alone
         me.uv_layers.remove(me.uv_layers[0])
     nv_all += nv; nf_all += nf
 
-bpy.ops.export_scene.gltf(filepath=dst, export_yup=True, export_vertex_color="ACTIVE")
+bpy.ops.export_scene.gltf(filepath=dst, export_yup=True, export_vertex_color="ACTIVE", export_attributes=True)
 print("COAT %d %d %.1f" % (nv_all, nf_all, time.time() - t0))

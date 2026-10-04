@@ -174,7 +174,15 @@ take playing, its rate, jumps and search time.
   hip velocity must be the body's real velocity, or a run start's pace
   persists while the hero strolls.
 - The hero accelerated at ~8 m/s^2 (a sprint start), so jog-offs matched
-  sprint starts leaning 30 degrees; the walk eases at 7/s up, 10/s down.
+  sprint starts leaning 30 degrees; the walk eases at 7/s up, 10/s down,
+  and the matcher is shown a gentler start still (4/s): the body answers
+  the stick at once, the actor sets off at a jog (trunk 3-5 degrees), and
+  the foot locks cover the difference.
+- The features describe feet and path, never posture, so a jog-off after a
+  stop played an athlete's explosive restart (22 degrees). Each frame now
+  carries its trunk lean, and the search only takes frames whose lean the
+  pace can carry: 10 degrees plus 3 per m/s of the larger of the body's
+  speed and the wished one. The restart now peaks at 12 and settles at 4.
 - Measure at the rig's true size: a lab rig built 1 m tall moving at a
   human's 2.4 m/s is, for its legs, running at 4.5 m/s.
 - Pops are measured relative to the body (`mmlab.html`): the largest per-frame

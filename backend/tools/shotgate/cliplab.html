@@ -16,7 +16,29 @@ s.add(new THREE.HemisphereLight(0xffffff, 0x556655, 1.8)); const d = new THREE.D
 const fl = new THREE.Mesh(new THREE.PlaneGeometry(40, 40), new THREE.MeshStandardMaterial({ color: 0x7a8a70 })); fl.rotation.x = -Math.PI / 2; s.add(fl);
 // a metre grid on the floor so foot travel can be read
 const grid = new THREE.GridHelper(40, 40, 0x334433, 0x445544); grid.position.y = 0.002; s.add(grid);
+// as the game shows it: an environment to reflect, and per-vertex metal (_MR)
+{ // a dim room with three bright panels, enough for metal to show what it is
+  const env = new THREE.Scene();
+  env.add(new THREE.Mesh(new THREE.BoxGeometry(20, 12, 20), new THREE.MeshBasicMaterial({ color: 0x3a3f48, side: THREE.BackSide })));
+  for (const [x, y, z, w, h, c] of [[0, 5.9, 0, 8, 8, 0xffffff], [9.9, 2, -3, 0.1, 5, 0xc8d8ff], [-9.9, 1, 4, 0.1, 4, 0xffe2c0]]) {
+    const pnl = new THREE.Mesh(new THREE.BoxGeometry(w || 0.1, x ? h : 0.1, x ? 6 : h), new THREE.MeshBasicMaterial({ color: c }));
+    pnl.position.set(x, y, z); env.add(pnl);
+  }
+  s.environment = new THREE.PMREMGenerator(r).fromScene(env, 0.04).texture;
+}
 const g = await new GLTFLoader().loadAsync('./assets/' + F);
+g.scene.traverse(o => {
+  if (!o.isMesh || !o.geometry.attributes._mr) return;
+  const m = o.material;
+  m.onBeforeCompile = sh => {
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute vec3 _mr;\nvarying vec2 vMR;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvMR = _mr.xy;');
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec2 vMR;')
+      .replace('#include <metalnessmap_fragment>', '#include <metalnessmap_fragment>\nmetalnessFactor = vMR.x;')
+      .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = clamp(vMR.y, 0.06, 1.0);');
+  };
+  m.needsUpdate = true;
+});
 const o = g.scene; s.add(o);
 if (q.get('bones')) {
   o.traverse(m => { if (m.isMesh) { m.material = m.material.clone(); m.material.transparent = true; m.material.opacity = 0.35; m.material.depthWrite = false; } });

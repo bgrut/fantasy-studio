@@ -64,13 +64,13 @@ def source_for(path) -> str | None:
     return None
 
 
-def coat(path, backup_dir: Path | None = None, source: str | None = None) -> tuple[bool, str]:
+def coat(path, backup_dir: Path | None = None, source: str | None = None, force: bool = False) -> tuple[bool, str]:
     """Coat one GLB in place. Returns (kept_a_sound_file, what_happened).
     source: the static model it was rigged from; its colour is used when the
     rig's own sheet is far darker (a bake that lost the coat)."""
     path = Path(path)
     before = facts(path)
-    if before["color"] and not before["textured"]:
+    if before["color"] and not before["textured"] and not force:
         return True, "already coated"
     if source is None:
         source = source_for(path)

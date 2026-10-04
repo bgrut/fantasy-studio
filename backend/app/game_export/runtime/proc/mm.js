@@ -40,6 +40,7 @@ export async function loadMotionDB(base) {
   const hips = new Int16Array(buf, L.hips_i16, F * 3);
   const fh = new Uint16Array(buf, L.feat_f16, F * 27);
   const con = new Uint8Array(buf, L.contact_u8, F);
+  const lean = L.lean_i8 !== undefined ? new Int8Array(buf, L.lean_i8, F) : null;   // trunk lean per frame, degrees
   const w = head.feature.weight;
   const featW = new Float32Array(F * 27);          // normalised features times their weights
   for (let i = 0; i < F * 27; i++) featW[i] = half(fh[i]) * w[i % 27];
@@ -50,7 +51,7 @@ export async function loadMotionDB(base) {
   head.ranges.forEach(([a, e], r) => {
     for (let i = a; i < e; i++) { rangeOf[i] = r; valid[i] = i + 6 < e ? 1 : 0; }
   });
-  return { head, F, NB, rot, hips, featW, con, rangeOf, valid, ranges: head.ranges };
+  return { head, F, NB, rot, hips, featW, con, lean, rangeOf, valid, ranges: head.ranges };
 }
 
 // the child that gives each bone its direction (leaves use their own +Y)
@@ -204,14 +205,21 @@ export function createMotionMatcher({ root, db, halflife = 0.1, searchEvery = 0.
     for (let j = 0; j < 27; j++) { const d = q[j] - f[o + j]; c += d * d; }
     return c;
   }
+  // A LEAN THE SPEED CAN CARRY (2026-10-03): the features describe feet and
+  // path, not posture, so a jog-off after a stop played an athlete's
+  // explosive restart, 22 degrees over. A frame is a candidate only if its
+  // trunk lean fits the pace: 10 degrees standing, 3 more per m/s.
+  let leanMax = 99;
   function search(force) {
     const t0 = performance.now();
     const cur = Math.floor(st.frame);
-    const curCost = (!force && db.valid[cur]) ? costAt(cur) : Infinity;
+    const L = db.lean;
+    let curCost = (!force && db.valid[cur]) ? costAt(cur) : Infinity;
+    if (L && L[cur] > leanMax) curCost = Infinity;
     let best = -1, bestCost = curCost;
     const f = db.featW, F = db.F, v = db.valid;
     for (let i = 0; i < F; i++) {
-      if (!v[i]) continue;
+      if (!v[i] || (L && L[i] > leanMax)) continue;
       let c = 0; const o = i * 27;
       for (let j = 0; j < 27 && c < bestCost; j++) { const d = q[j] - f[o + j]; c += d * d; }
       if (c < bestCost) { bestCost = c; best = i; }
@@ -274,6 +282,8 @@ export function createMotionMatcher({ root, db, halflife = 0.1, searchEvery = 0.
       st.timer -= dt;
       if (st.timer <= 0 || force) {
         st.timer = searchEvery;
+        const sp = Math.max(Math.hypot(ctl.wantVel.x, ctl.wantVel.z), Math.hypot(ctl.vel.x, ctl.vel.z)) / scale;
+        leanMax = 10 + 3 * sp;
         query(ctl);
         search(force);
       }

@@ -2233,8 +2233,36 @@ async function main() {
 
   // ── asset loading ────────────────────────────────────────────────────────
   const loader = new GLTFLoader();
+  // METAL WHERE THE MODEL IS METAL (2026-10-03). A coated character carries
+  // its metalness and roughness per vertex (the custom glTF attribute _MR,
+  // written by scripts/_clean_coat.py): a knight's plate is steel and his
+  // gambeson cloth on one body, with one material. The standard material
+  // reads the attribute in place of its single values.
+  function vertexPBR(root) {
+    root.traverse(o => {
+      if (!o.isMesh || !o.geometry || !o.geometry.attributes._mr) return;
+      for (const m of (Array.isArray(o.material) ? o.material : [o.material])) {
+        if (!m || !m.isMeshStandardMaterial || m.userData.vpbr) continue;
+        m.userData.vpbr = true;
+        const prev = m.onBeforeCompile, prevKey = m.customProgramCacheKey;
+        m.onBeforeCompile = (sh, r) => {
+          if (prev) prev.call(m, sh, r);
+          sh.vertexShader = sh.vertexShader
+            .replace('#include <common>', '#include <common>\nattribute vec3 _mr;\nvarying vec2 vMR;')
+            .replace('#include <begin_vertex>', '#include <begin_vertex>\nvMR = _mr.xy;');
+          sh.fragmentShader = sh.fragmentShader
+            .replace('#include <common>', '#include <common>\nvarying vec2 vMR;')
+            .replace('#include <metalnessmap_fragment>', '#include <metalnessmap_fragment>\nmetalnessFactor = vMR.x;')
+            .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = clamp(vMR.y, 0.06, 1.0);');
+        };
+        m.customProgramCacheKey = () => (prevKey ? prevKey.call(m) : '') + '|vpbr';
+        m.needsUpdate = true;
+      }
+    });
+  }
   const loadGLB = url => new Promise((res, rej) =>
-    loader.load(url, res, undefined, () => rej(new Error('failed to load ' + url))));
+    loader.load(url, g => { try { vertexPBR(g.scene); } catch (e) { /* the model still loads */ } res(g); },
+                undefined, () => rej(new Error('failed to load ' + url))));
 
   // belt-and-suspenders vs "string" strips: any alpha-aware material gets a
   // hard alphaTest so low-alpha fringe fragments DISCARD in three.js too
@@ -15177,7 +15205,10 @@ varying vec2 vUvRaw;
           _mmDrive = true; _mmAtk = false;
           const _yo = THREE.MathUtils.degToRad(P.yaw_offset_deg || 0) + _legYawFix;
           MM.update(dt, { vel: _mmV, wantVel: _mmWant, yaw: modelYaw + _yo, wantYaw: (_mmWant.lengthSq() > 1e-4 ? _mmWantYaw : modelYaw) + _yo,
-                          velRate: 7, turnRate: P.turn_speed || 10 });
+                          // the matcher is shown a gentler start than the body makes (the
+                          // body answers the stick at once; the actor sets off at a jog, not
+                          // a sprint start, and the foot locks cover the difference)
+                          velRate: 4, turnRate: P.turn_speed || 10 });
         } else {
           // a swing, a sneak or a ride: the clip poses the body and the last
           // matched pose blends away into it

@@ -64,11 +64,16 @@ const MOOD_LOOK = {
            plate: { base: '#c4d2e6', tint: '#a8b8cf', seam: 'rgba(120,140,170,0.6)', rivet: 'rgba(255,255,255,0.7)', overlay: 'frost' },
            belt: { frame: 0x5a7590, glow: 0x0f1a2a, deck: 0xd8e8ff },
            weather: { col: [0.92, 0.96, 1.00], rate: 18, size: 0.034, fall: 0.40, drift: 0.90, life: 0.12 } },
-  green: { nebula: { a: 0x0e3a2a, b: 0x6a8a2a, amt: 0.65, aurora: 0.55, auroraA: 0x8fe6a0, auroraB: 0xe6d48f },
+  // A GREEN WORLD, NOT A GREEN SCREEN (2026-10-03): a yellow-green nebula, a
+  // green aurora, green plating, a green sun and a grade that pushed green on
+  // top made every frame one hue. The sky goes deep teal with the aurora
+  // quieter, the sun warm white, the grade nearly neutral: the moss and the
+  // crystals are the green now, and they read against something.
+  green: { nebula: { a: 0x0b2a2a, b: 0x2c5a4c, amt: 0.5, aurora: 0.38, auroraA: 0x8fe6a0, auroraB: 0xe6d48f },
            sky: 0x08170f, fog: 0x0f2418, accent: 0x8fe6a0, ground: 0x3f6b4a, grid: 0x63a072, spores: true,
            planet: { col: 0x5f9a6a, size: 0.13, bands: 0.8 }, ambience: 'fireflies',
-           grade: { lift: [0.0, 0.018, 0.008], gamma: [0.98, 1.03, 0.98], gain: [0.96, 1.06, 0.95], sat: 1.0 },
-           star: 0xd6ffe0, edge: 0x8fe6a0, sun: 0xdfffe6,
+           grade: { lift: [0.0, 0.006, 0.006], gamma: [1.0, 1.01, 0.99], gain: [1.0, 1.02, 0.98], sat: 1.0 },
+           star: 0xd6ffe0, edge: 0x8fe6a0, sun: 0xfff2dc,
            plate: { base: '#7c8a78', tint: '#5f6e5a', seam: 'rgba(50,64,48,0.75)', rivet: 'rgba(170,190,160,0.5)', overlay: 'moss' },
            belt: { frame: 0x6a7a3a, glow: 0x16220a, deck: 0xd0f0c0 },
            weather: { col: [0.55, 0.95, 0.60], rate: 9, size: 0.046, fall: -0.30, drift: 0.45, life: 0.10 } },
@@ -1121,7 +1126,10 @@ function buildSky(topHex, deepHex, bandHex, planet, nebula) {
 // what repeats at any one of them is hidden by the others. Low contrast
 // throughout, because plating should be something noticed underfoot rather
 // than a second grid competing with the one that means something.
-const PLATE_PX = 256;
+// HIGH DEFINITION UNDERFOOT (2026-10-03): 256 px over five tiles was 50 px a
+// tile, soft as felt in first person; 512 doubles it, and every mark below
+// is drawn in units of K so the plate keeps its proportions
+const PLATE_PX = 512, PK = PLATE_PX / 256;
 const PLATE_DEFAULT = { base: '#8792c4', tint: '#6a74a6', seam: 'rgba(90,100,150,0.75)',
                         rivet: 'rgba(190,200,235,0.55)', overlay: null };
 function plateCanvas(pl, noGrain) {
@@ -1133,77 +1141,112 @@ function plateCanvas(pl, noGrain) {
   let seed = 7717;
   const rr = () => (seed = (seed * 1664525 + 1013904223) % 4294967296) / 4294967296;
 
+  const K = PK;
   g.fillStyle = pl.base; g.fillRect(0, 0, P, P);
   // four sub-panels, each very slightly a different shade of the world's own
   for (let a = 0; a < 2; a++) for (let b = 0; b < 2; b++) {
     g.fillStyle = pl.tint;
     g.globalAlpha = 0.25 + rr() * 0.35;
-    g.fillRect(a * P / 2 + 2, b * P / 2 + 2, P / 2 - 4, P / 2 - 4);
+    g.fillRect(a * P / 2 + 2 * K, b * P / 2 + 2 * K, P / 2 - 4 * K, P / 2 - 4 * K);
   }
   g.globalAlpha = 1;
+  // grime gathers at a seam: a soft dark band either side, so each panel
+  // reads as a plate set into the floor rather than a square painted on it
+  for (const [x0, y0, horiz] of [[0, 0, true], [0, P / 2, true], [0, P, true], [0, 0, false], [P / 2, 0, false], [P, 0, false]]) {
+    for (const sgn of [-1, 1]) {
+      const w = 9 * K;
+      const gr = horiz ? g.createLinearGradient(0, y0, 0, y0 + sgn * w) : g.createLinearGradient(x0, 0, x0 + sgn * w, 0);
+      gr.addColorStop(0, 'rgba(10,12,16,0.30)'); gr.addColorStop(1, 'rgba(10,12,16,0)');
+      g.fillStyle = gr;
+      if (horiz) g.fillRect(0, sgn > 0 ? y0 : y0 - w, P, w); else g.fillRect(sgn > 0 ? x0 : x0 - w, 0, w, P);
+    }
+  }
+  // a lit lip one line inside each panel edge: the bevel the normal map raises
+  g.strokeStyle = 'rgba(255,255,255,0.10)'; g.lineWidth = K;
+  for (let a = 0; a < 2; a++) for (let b = 0; b < 2; b++) g.strokeRect(a * P / 2 + 5 * K, b * P / 2 + 5 * K, P / 2 - 10 * K, P / 2 - 10 * K);
   // seams
-  g.strokeStyle = pl.seam; g.lineWidth = 3;
-  g.strokeRect(1.5, 1.5, P - 3, P - 3);
-  g.lineWidth = 2;
+  g.strokeStyle = pl.seam; g.lineWidth = 3 * K;
+  g.strokeRect(1.5 * K, 1.5 * K, P - 3 * K, P - 3 * K);
+  g.lineWidth = 2 * K;
   g.beginPath(); g.moveTo(P / 2, 0); g.lineTo(P / 2, P);
   g.moveTo(0, P / 2); g.lineTo(P, P / 2); g.stroke();
-  // rivets at the panel corners
-  g.fillStyle = pl.rivet;
-  for (const [x, y] of [[10, 10], [P - 10, 10], [10, P - 10], [P - 10, P - 10],
-                        [P / 2, 10], [P / 2, P - 10], [10, P / 2], [P - 10, P / 2]]) {
-    g.beginPath(); g.arc(x, y, 2.6, 0, 6.3); g.fill();
+  // rivets at the panel corners, each with a highlight and a shadow side
+  for (const [x, y] of [[10, 10], [P / K - 10, 10], [10, P / K - 10], [P / K - 10, P / K - 10],
+                        [P / K / 2, 10], [P / K / 2, P / K - 10], [10, P / K / 2], [P / K - 10, P / K / 2]]) {
+    g.fillStyle = 'rgba(0,0,0,0.35)'; g.beginPath(); g.arc(x * K + 0.8 * K, y * K + 0.8 * K, 2.8 * K, 0, 6.3); g.fill();
+    g.fillStyle = pl.rivet; g.beginPath(); g.arc(x * K, y * K, 2.6 * K, 0, 6.3); g.fill();
+    g.fillStyle = 'rgba(255,255,255,0.35)'; g.beginPath(); g.arc(x * K - 0.8 * K, y * K - 0.8 * K, 0.9 * K, 0, 6.3); g.fill();
   }
   // wear: a few soft streaks, so no two quadrants look identical (the
-  // underside carries more of them: pl.wear scales the count)
+  // underside carries more of them: pl.wear scales the count), and fine
+  // scratches that only show up close
   for (let k = 0; k < Math.round(14 * (pl.wear || 1)); k++) {
-    const x = rr() * P, y = rr() * P, w = 12 + rr() * 40, h = 2 + rr() * 5;
+    const x = rr() * P, y = rr() * P, w = (12 + rr() * 40) * K, h = (2 + rr() * 5) * K;
     g.fillStyle = 'rgba(' + (rr() < 0.5 ? '70,78,120' : '175,185,220') + ',0.10)';
     g.fillRect(x, y, w, h);
+  }
+  for (let k = 0; k < 60; k++) {
+    const x = rr() * P, y = rr() * P, l = (4 + rr() * 22) * K, an = rr() * Math.PI;
+    g.strokeStyle = rr() < 0.5 ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.10)'; g.lineWidth = 0.6 * K;
+    g.beginPath(); g.moveTo(x, y); g.lineTo(x + Math.cos(an) * l, y + Math.sin(an) * l); g.stroke();
   }
   // WHAT THE WORLD HAS DONE TO THE PLATING. Snow on bare steel reads as a
   // bug; snow on plating that has frosted over reads as a place.
   if (pl.overlay === 'frost') {
-    for (let k = 0; k < 900; k++) {
+    for (let k = 0; k < 900 * K * K; k++) {
       g.fillStyle = 'rgba(255,255,255,' + (0.18 + rr() * 0.5) + ')';
-      const r = 0.6 + rr() * 1.6;
+      const r = (0.6 + rr() * 1.6) * K;
       g.beginPath(); g.arc(rr() * P, rr() * P, r, 0, 6.3); g.fill();
     }
     for (let k = 0; k < 7; k++) {          // drifts along seams
       g.fillStyle = 'rgba(235,245,255,0.28)';
-      g.fillRect(rr() * P, rr() < 0.5 ? 0 : P / 2 - 6, 30 + rr() * 60, 10);
+      g.fillRect(rr() * P, rr() < 0.5 ? 0 : P / 2 - 6 * K, (30 + rr() * 60) * K, 10 * K);
     }
   } else if (pl.overlay === 'moss') {
+    // MOSS LIVES IN THE CRACKS (2026-10-03): soft round blobs on the panels
+    // read as stains. Moss is thousands of tiny cushions, densest in the
+    // seams where water sits, thinning out onto the panel, in several greens
     for (let k = 0; k < 26; k++) {
-      const x = rr() * P, y = rr() * P, r = 8 + rr() * 26;
+      const x = rr() * P, y = rr() * P, r = (8 + rr() * 26) * K;
       const grd = g.createRadialGradient(x, y, 1, x, y, r);
-      grd.addColorStop(0, 'rgba(96,150,88,0.55)');
-      grd.addColorStop(1, 'rgba(96,150,88,0)');
+      grd.addColorStop(0, 'rgba(80,120,64,0.30)');
+      grd.addColorStop(1, 'rgba(80,120,64,0)');
       g.fillStyle = grd; g.beginPath(); g.arc(x, y, r, 0, 6.3); g.fill();
+    }
+    const greens = ['74,112,52', '96,140,64', '58,92,44', '120,160,78', '84,124,40'];
+    for (let k = 0; k < 5200; k++) {
+      // a point near a seam line, falling off away from it
+      const horiz = rr() < 0.5, line = [0, P / 2, P][Math.floor(rr() * 3)];
+      const off = (rr() - 0.5) * (rr() < 0.7 ? 14 : 46) * K;
+      const t = rr() * P;
+      const x = horiz ? t : line + off, y = horiz ? line + off : t;
+      g.fillStyle = 'rgba(' + greens[Math.floor(rr() * greens.length)] + ',' + (0.35 + rr() * 0.5).toFixed(2) + ')';
+      g.beginPath(); g.arc(x, y, (0.7 + rr() * 1.8) * K, 0, 6.3); g.fill();
     }
   } else if (pl.overlay === 'soot') {
     for (let k = 0; k < 18; k++) {
       g.fillStyle = 'rgba(20,12,10,' + (0.15 + rr() * 0.25) + ')';
-      g.fillRect(rr() * P, rr() * P, 10 + rr() * 50, 3 + rr() * 9);
+      g.fillRect(rr() * P, rr() * P, (10 + rr() * 50) * K, (3 + rr() * 9) * K);
     }
     for (let k = 0; k < 5; k++) {          // a few embers still in the cracks
       g.fillStyle = 'rgba(255,120,50,0.55)';
-      g.fillRect(rr() * P, rr() * P, 2 + rr() * 4, 2);
+      g.fillRect(rr() * P, rr() * P, (2 + rr() * 4) * K, 2 * K);
     }
   }
   // RIME (2026-09-17): a pale crust that has grown along the seams of the
   // salt faces, thickest where two seams meet, and nowhere on the panels
   if (pl.rime) {
     for (let k = 0; k < 160; k++) {
-      const along = rr() < 0.5, t = rr() * P, off = (rr() - 0.5) * 9;
+      const along = rr() < 0.5, t = rr() * P, off = (rr() - 0.5) * 9 * K;
       const line = rr() < 0.5 ? 0 : P / 2;
       g.fillStyle = 'rgba(232,240,250,' + (0.22 + rr() * 0.5) + ')';
-      const r = 0.8 + rr() * 2.2;
+      const r = (0.8 + rr() * 2.2) * K;
       g.beginPath(); g.arc(along ? t : line + off, along ? line + off : t, r, 0, 6.3); g.fill();
     }
     for (const [x, y] of [[P / 2, P / 2], [0, P / 2], [P, P / 2], [P / 2, 0], [P / 2, P]]) {
-      const grd = g.createRadialGradient(x, y, 1, x, y, 22);
+      const grd = g.createRadialGradient(x, y, 1, x, y, 22 * K);
       grd.addColorStop(0, 'rgba(236,244,255,0.55)'); grd.addColorStop(1, 'rgba(236,244,255,0)');
-      g.fillStyle = grd; g.beginPath(); g.arc(x, y, 22, 0, 6.3); g.fill();
+      g.fillStyle = grd; g.beginPath(); g.arc(x, y, 22 * K, 0, 6.3); g.fill();
     }
   }
   // grain (skipped for the height map: grain as relief is sandpaper, not plating)
@@ -1311,7 +1354,7 @@ function normalFrom(src, strength, blur) {
   return t;
 }
 function plateNormal(pl) {
-  const t = normalFrom(plateCanvas(pl, true), 3.2, 0.9);   // seams and rivets in relief, no grain
+  const t = normalFrom(plateCanvas(pl, true), 3.2 * PK, 0.9 * PK);   // seams and rivets in relief, no grain (a seam spans PK times the pixels, so its slope per pixel is that much shallower)
   t.repeat.set(N / 5, N / 5);
   return t;
 }
@@ -1320,7 +1363,7 @@ function plateTexture(pl) {
   t.wrapS = t.wrapT = THREE.RepeatWrapping;
   t.repeat.set(N / 5, N / 5);      // panels bigger than tiles, so they read as panels
   t.colorSpace = THREE.SRGBColorSpace;
-  t.anisotropy = 8;
+  t.anisotropy = 16;
   return t;
 }
 
@@ -1682,68 +1725,91 @@ for (const m of MINERALS) nodeMats[m] = new THREE.MeshStandardMaterial({
   color: new THREE.Color(MIN_COL[m]).multiplyScalar(0.45), emissive: MIN_COL[m],
   emissiveIntensity: 0.8, roughness: 0.18, metalness: 0.05, flatShading: true });
 const nodeMat = nodeMats[CRYSTAL];
-// A SEAM IS A CLUSTER. One floating diamond per tile read as a placeholder
-// token; three crystals of different sizes leaning out of the ground read as
-// something growing there. Merged, so it is still one draw call per seam.
-// Three clusters, not one rotated four ways: with a dozen seams on a face the
-// repeat is obvious the moment two of them are in frame together. Different
-// counts and different leans, so they differ in silhouette and not only in
-// orientation.
-// EACH ORE HAS A SILHOUETTE. Crystal: octahedra. Ember: blocky clusters.
-// Salt: flat hexagonal plates. Colour-blind or not, the seam and the item say
-// which ore they are by shape.
-const nodeGeosEmber = [
-  mergeParts([
-    { g: new THREE.BoxGeometry(0.72, 0.62, 0.72), y: 0.2, ry: 0.4 },
-    { g: new THREE.BoxGeometry(0.42, 0.5, 0.42), x: 0.42, y: 0.05, z: -0.2, ry: 0.9, rz: 0.25, tint: 0.85 },
-  ]),
-  mergeParts([
-    { g: new THREE.BoxGeometry(0.56, 0.9, 0.56), y: 0.3, ry: 0.7, rz: 0.18 },
-    { g: new THREE.BoxGeometry(0.36, 0.34, 0.36), x: -0.38, y: 0.02, z: 0.22, ry: 0.2 },
-    { g: new THREE.BoxGeometry(0.28, 0.42, 0.28), x: 0.36, y: 0.1, z: 0.3, ry: 1.1, tint: 0.8 },
-  ]),
-  mergeParts([
-    { g: new THREE.BoxGeometry(0.9, 0.46, 0.7), y: 0.12, ry: 0.3, rx: 0.15 },
-    { g: new THREE.BoxGeometry(0.34, 0.58, 0.34), x: 0.2, y: 0.4, z: 0.1, ry: 0.8, tint: 0.85 },
-  ]),
-];
-const nodeGeosSalt = [
-  mergeParts([
-    { g: new THREE.CylinderGeometry(0.58, 0.62, 0.16, 6), y: 0.08 },
-    { g: new THREE.CylinderGeometry(0.34, 0.38, 0.14, 6), x: 0.3, y: 0.24, z: 0.1, ry: 0.5, tint: 0.85 },
-  ]),
-  mergeParts([
-    { g: new THREE.CylinderGeometry(0.5, 0.56, 0.18, 6), y: 0.09, rx: 0.2 },
-    { g: new THREE.CylinderGeometry(0.42, 0.46, 0.12, 6), x: -0.3, y: 0.28, z: -0.2, rx: -0.3, ry: 0.6, tint: 0.85 },
-    { g: new THREE.CylinderGeometry(0.22, 0.26, 0.10, 6), x: 0.36, y: 0.14, z: 0.32, tint: 0.8 },
-  ]),
-  mergeParts([
-    { g: new THREE.CylinderGeometry(0.66, 0.70, 0.12, 6), y: 0.06 },
-    { g: new THREE.CylinderGeometry(0.30, 0.34, 0.22, 6), x: 0.1, y: 0.22, z: -0.1, ry: 0.3, tint: 0.85 },
-  ]),
-];
-const nodeGeos = [
-  mergeParts([
-    { g: new THREE.OctahedronGeometry(0.58, 0) },
-    { g: new THREE.OctahedronGeometry(0.30, 0), x: 0.44, y: -0.22, z: 0.20,
-      rz: 0.5, ry: 0.8 },
-    { g: new THREE.OctahedronGeometry(0.23, 0), x: -0.38, y: -0.26, z: -0.30,
-      rz: -0.6, ry: 0.3 },
-  ]),
-  mergeParts([
-    { g: new THREE.OctahedronGeometry(0.44, 0), rz: 0.34 },
-    { g: new THREE.OctahedronGeometry(0.40, 0), x: -0.30, y: -0.10, z: 0.34,
-      rz: -0.42, ry: 1.1 },
-    { g: new THREE.OctahedronGeometry(0.26, 0), x: 0.36, y: -0.20, z: -0.24,
-      rz: 0.7 },
-    { g: new THREE.OctahedronGeometry(0.17, 0), x: 0.10, y: -0.30, z: 0.44 },
-  ]),
-  mergeParts([
-    { g: new THREE.OctahedronGeometry(0.66, 0), rz: -0.22, ry: 0.4 },
-    { g: new THREE.OctahedronGeometry(0.20, 0), x: 0.46, y: -0.30, z: -0.10,
-      rz: 0.9 },
-  ]),
-];
+// A SEAM IS A CLUSTER, AND IT GROWS OUT OF ROCK (2026-10-03). Octahedra,
+// boxes and discs read as tokens once the rest of the world had detail. A
+// seam is now sculpted the way the mineral grows, rooted in the ground and
+// still: crystal is a druse of six-sided quartz points with pyramid tips,
+// leaning out from one root; ember is rough faceted blocks, every face cut at
+// its own angle; salt is terraced hexagonal plates. Each ore keeps its own
+// silhouette (pointed, blocky, flat) so it still reads without its colour.
+// Three seeded variants of each, merged, one draw call per seam.
+function _sr(seed) {
+  let s = seed >>> 0;
+  return () => (s = (s * 1664525 + 1013904223) % 4294967296) / 4294967296;
+}
+function quartzPoint(r, h, tip) {
+  const body = new THREE.CylinderGeometry(r * 0.94, r, h, 6, 1, false).translate(0, h / 2, 0);
+  const cap = new THREE.ConeGeometry(r * 0.94, tip, 6, 1, false).translate(0, h + tip / 2, 0);
+  const g = mergeParts([{ g: body }, { g: cap, tint: 1.08 }]);
+  return g;
+}
+function crystalDruse(seed) {
+  const r = _sr(seed), parts = [];
+  // the leader: tall, nearly upright
+  parts.push({ g: quartzPoint(0.15, 0.62 + r() * 0.2, 0.26), rx: (r() - 0.5) * 0.16, rz: (r() - 0.5) * 0.16, y: -0.06 });
+  const n = 6 + Math.floor(r() * 4);
+  for (let k = 0; k < n; k++) {
+    const a = (k / n) * Math.PI * 2 + r() * 0.5, lean = 0.32 + r() * 0.62;
+    const s = 0.45 + r() * 0.5;
+    parts.push({ g: quartzPoint(0.07 + 0.07 * s, (0.22 + 0.42 * s), 0.12 + 0.1 * s),
+                 x: Math.cos(a) * (0.08 + r() * 0.14), z: Math.sin(a) * (0.08 + r() * 0.14), y: -0.05,
+                 rx: Math.sin(a) * lean, rz: -Math.cos(a) * lean, tint: 0.82 + r() * 0.2 });
+  }
+  return mergeParts(parts);
+}
+function roughBlock(w, h, d, rnd, amt) {
+  // a box whose corners and edge midpoints are pushed about; jitter is keyed
+  // to the position, so the faces that share a corner still meet
+  const g = new THREE.BoxGeometry(w, h, d, 2, 2, 2);
+  const p = g.attributes.position, key = new Map();
+  for (let i = 0; i < p.count; i++) {
+    const k = p.getX(i).toFixed(3) + ',' + p.getY(i).toFixed(3) + ',' + p.getZ(i).toFixed(3);
+    if (!key.has(k)) key.set(k, [(rnd() - 0.5) * amt * w, (rnd() - 0.5) * amt * h, (rnd() - 0.5) * amt * d]);
+    const o = key.get(k);
+    p.setXYZ(i, p.getX(i) + o[0], p.getY(i) + o[1], p.getZ(i) + o[2]);
+  }
+  g.computeVertexNormals();
+  return g.translate(0, h / 2, 0);
+}
+function emberHeap(seed) {
+  const r = _sr(seed), parts = [];
+  const n = 3 + Math.floor(r() * 3);
+  for (let k = 0; k < n; k++) {
+    const s = k === 0 ? 1 : 0.45 + r() * 0.4;
+    const a = r() * Math.PI * 2, d = k === 0 ? 0 : 0.22 + r() * 0.16;
+    parts.push({ g: k % 2 ? roughBlock(0.5 * s, 0.56 * s, 0.46 * s, r, 0.34)
+                          : sculptStone(seed + k * 29, { size: 0.36 * s, flat: 0.85, facets: 4, detail: 1 }).translate(0, 0.2 * s, 0),
+                 x: Math.cos(a) * d, z: Math.sin(a) * d, y: -0.04,
+                 rx: (r() - 0.5) * 0.5, ry: r() * Math.PI, rz: (r() - 0.5) * 0.5, tint: 0.8 + r() * 0.25 });
+  }
+  return mergeParts(parts);
+}
+function saltTerrace(seed) {
+  const r = _sr(seed), parts = [];
+  let y = 0, rad = 0.58 + r() * 0.1;
+  const n = 4 + Math.floor(r() * 3);
+  for (let k = 0; k < n; k++) {
+    const t = 0.07 + r() * 0.06;
+    parts.push({ g: new THREE.CylinderGeometry(rad * 0.96, rad, t, 6), y: y + t / 2,
+                 x: (r() - 0.5) * 0.12, z: (r() - 0.5) * 0.12, ry: r() * 1.05,
+                 rx: (r() - 0.5) * 0.12, rz: (r() - 0.5) * 0.12, tint: 0.86 + k * 0.05 });
+    y += t * 0.92; rad *= 0.7 + r() * 0.12;
+  }
+  // a second, smaller stack leaning off the first
+  const sx = (r() - 0.5) * 0.6, sz = (r() - 0.5) * 0.6;
+  parts.push({ g: new THREE.CylinderGeometry(0.26, 0.28, 0.1, 6), x: sx, z: sz, y: 0.05, rz: 0.25, tint: 0.9 });
+  parts.push({ g: new THREE.CylinderGeometry(0.17, 0.19, 0.09, 6), x: sx * 1.05, z: sz * 1.05, y: 0.14, rz: 0.3, ry: 0.4, tint: 0.96 });
+  return mergeParts(parts);
+}
+const nodeGeos = [crystalDruse(4101), crystalDruse(4177), crystalDruse(4243)];
+const nodeGeosEmber = [emberHeap(5101), emberHeap(5163), emberHeap(5227)];
+const nodeGeosSalt = [saltTerrace(6101), saltTerrace(6151), saltTerrace(6217)];
+// the bed each seam grows from: sculpted stone (proc/flora.js), dark, shared
+const seamRockGeos = [0, 1, 2].map(k => mergeParts([
+  { g: sculptStone(7311 + k * 53, { size: 0.6, flat: 0.62, detail: 2 }).scale(1.2, 0.9, 1.1), y: -0.1, col: 0x55565c, tint: 0.62 },
+  { g: sculptStone(7331 + k * 53, { size: 0.22, flat: 0.7, detail: 1 }), x: 0.62, y: -0.02, z: 0.3, col: 0x5d5e63, tint: 0.7 },
+  { g: sculptStone(7351 + k * 53, { size: 0.16, flat: 0.7, detail: 1 }), x: -0.5, y: -0.02, z: -0.46, col: 0x5d5e63, tint: 0.66 }]));
+const seamRockMat = new THREE.MeshStandardMaterial({ color: 0xffffff, vertexColors: true, roughness: 0.92, metalness: 0.04, envMapIntensity: 0.5 });
 const nodeGeo = nodeGeos[0];      // the shape a thumbnail or a fallback uses
 let rngState = +((location.search.match(/[?&]seed=(\d+)/) || [])[1]) || 1337;   // ?seed= is a debug override
 const rnd = () => (rngState = (rngState * 1664525 + 1013904223) % 4294967296) / 4294967296;
@@ -1763,8 +1829,13 @@ function makeSeam(f, i, j) {
   const core = new THREE.Mesh(new THREE.OctahedronGeometry(0.30, 0),
     new THREE.MeshBasicMaterial({ color: MIN_COL[c.min], transparent: true, opacity: 0.85,
                                   blending: THREE.AdditiveBlending, depthWrite: false }));
-  core.name = 'core'; core.position.y = 0.05;
+  core.name = 'core'; core.position.y = 0.3;
   m.add(core);
+  // the stone it grows from (child 1: the core stays child 0)
+  // chosen by the tile, not drawn from the world's stream (which lays the world out)
+  const bed = new THREE.Mesh(seamRockGeos[(f * 131 + i * 17 + j) % seamRockGeos.length], seamRockMat);
+  bed.name = 'bed'; bed.castShadow = true; bed.receiveShadow = true;
+  m.add(bed);
   // and a pool of its light on the ground
   if (glowPools && glowPools.count < MAX_POOLS) {
     c.glow = glowPools.count++;
@@ -1772,7 +1843,7 @@ function makeSeam(f, i, j) {
     glowPools.setColorAt(c.glow, _gc);
     glowPools.instanceColor.needsUpdate = true;
   }
-  seat(m, f, i, j, Math.floor(rnd() * 4), 0.66 + rnd() * 0.12);
+  seat(m, f, i, j, Math.floor(rnd() * 4), 0.0 * rnd());   // rooted on the plate, not hovering (the stream still advances as it did)
   m.scale.setScalar(1.15 + rnd() * 0.5);      // a seam is a landmark: half again the size it was, seen from across the face
   m.userData.base = m.scale.x;      // the pulse scales relative to this
   m.userData.fsTag = { type: 'ore', name: MINERAL_NAME[c.min] + ' seam',
@@ -1780,7 +1851,7 @@ function makeSeam(f, i, j) {
                        face: f, i, j,
                        get rich() { return Math.round(c.rich * 100) + '%'; } };
   m.castShadow = true;
-  m.userData.spin = 0.4 + rnd() * 0.6;
+  rnd(); m.userData.spin = 0;         // a druse grows; it does not turn (the stream still advances as it did)
   m.userData.axis = FACES[f].n;      // spin about the face's up, not the world's
   scene.add(m);
   c.mesh = m;
@@ -7112,10 +7183,12 @@ renderer.setAnimationLoop(() => {
   // a crystal on the west face spins about the west face's up, and one being
   // mined flexes as each crystal is pulled out of it
   scene.traverse(o => {
-    if (!o.userData.spin) return;
+    if (!o.userData.spin && o.userData.rich === undefined && !(o.userData.pulse > 0)) return;
     const ax = o.userData.axis;
-    if (ax) o.rotateOnAxis(_bx.set(0, 1, 0), dt * o.userData.spin);
-    else o.rotation.y += dt * o.userData.spin;
+    if (o.userData.spin) {
+      if (ax) o.rotateOnAxis(_bx.set(0, 1, 0), dt * o.userData.spin);
+      else o.rotation.y += dt * o.userData.spin;
+    }
     // size = richness, plus the extraction flex on top of it. A worked-out
     // seam is a small one, which is a thing you can see from orbit.
     if (o.userData.rich !== undefined || o.userData.pulse > 0) {
