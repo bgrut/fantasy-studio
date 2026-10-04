@@ -154,3 +154,27 @@ export function makeFlinch(root) {
     active: () => t < 0.6,
   };
 }
+
+/** arms up in front of the chest, holding something: apply(k, right) after the mixer, k 0..1 eases it in */
+export function makeCarryPose(root) {
+  const B = boneMap(root);
+  const arms = [['uparm_L', 'lowarm_L'], ['uparm_R', 'lowarm_R']].filter(([u, l]) => B[u] && B[l]).map(([u, l]) => [B[u], B[l]]);
+  const _pq = new THREE.Quaternion(), _wq = new THREE.Quaternion(), _lq = new THREE.Quaternion(), ax = new THREE.Vector3();
+  const turn = (b, axis, ang) => {
+    b.parent.updateMatrixWorld(true);
+    b.parent.getWorldQuaternion(_pq);
+    _wq.setFromAxisAngle(axis, ang);
+    _lq.copy(_pq).invert().multiply(_wq).multiply(_pq);
+    b.quaternion.premultiply(_lq);
+  };
+  return {
+    apply(k, right, sign = 1) {
+      if (!arms.length || k <= 0.001) return;
+      ax.copy(right).normalize();
+      for (const [up, low] of arms) {
+        turn(up, ax, -1.15 * k * sign);           // the upper arm swings forward and up
+        turn(low, ax, -0.75 * k * sign);          // the forearm comes up to hold
+      }
+    },
+  };
+}

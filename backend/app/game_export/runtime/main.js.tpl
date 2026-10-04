@@ -23,7 +23,7 @@ import { waterMaterial as __waterMaterial, waterKind as __waterKind, groundMist 
 import { snowTextures as __snowTextures } from './proc/ground.js';
 import { createWaterfall as __createWaterfall } from './proc/waterfall.js';
 import { createCave as __createCave } from './proc/cave.js';
-import { makeRagdoll as __makeRagdoll, makeFlinch as __makeFlinch } from './proc/ragdoll.js';
+import { makeRagdoll as __makeRagdoll, makeFlinch as __makeFlinch, makeCarryPose as __makeCarryPose } from './proc/ragdoll.js';
 import { createGait as __createGait } from './proc/gait.js';
 import { loadMotionDB as __loadMotionDB, createMotionMatcher as __createMotionMatcher } from './proc/mm.js';
 
@@ -9486,7 +9486,8 @@ async function main() {
       // this listener is built ~1300 lines before the car system exists.
       if (gameStarted && window.__carE && window.__carE()) return;
       if (gameStarted && window.__mysteryE && window.__mysteryE()) return;
-      if (readable && gameStarted) setReading(true, readable);
+      if (readable && gameStarted && !window.__carried) { setReading(true, readable); return; }
+      if (gameStarted && window.__carryE && window.__carryE()) return;
     }
   });
   addEventListener('keydown', e => {      // Esc closes the page, not the game
@@ -11554,6 +11555,34 @@ async function main() {
   kcc.enableAutostep(0.3, 0.15, true);
   kcc.enableSnapToGround(0.3);
   let vy = 0;
+  // CLIMBING ONTO THINGS (2026-10-04): jump at a ledge between knee and head
+  // height, or reach one at the top of a jump, and the hero pulls up onto it
+  // (rocks, crates, walls, platforms, building plinths). The body rises to
+  // the lip first and then rolls over it, leaning in.
+  let mantle = null;
+  window.__mantles = 0;
+  const _hitT = (h) => h ? (h.timeOfImpact !== undefined ? h.timeOfImpact : h.toi) : null;
+  function tryMantle(t, fwdX, fwdZ, jumping) {
+    const feet = t.y - (capHalf + capR);
+    const ray = new RAPIER.Ray({ x: t.x, y: feet + 0.55, z: t.z }, { x: fwdX, y: 0, z: fwdZ });
+    const wall = _hitT(world.castRay(ray, capR + 0.65, true, undefined, undefined, collider, body));
+    if (wall === null) return false;
+    const reach = capR + 0.6, top0 = feet + 2.6;
+    const ox = t.x + fwdX * reach, oz = t.z + fwdZ * reach;
+    const down = _hitT(world.castRay(new RAPIER.Ray({ x: ox, y: top0, z: oz }, { x: 0, y: -1, z: 0 }), 2.6, true, undefined, undefined, collider, body));
+    if (down === null) return false;
+    const topY = top0 - down, ledge = topY - feet;
+    // a step the controller climbs by itself is not a ledge; over head height is a wall
+    if (ledge < 0.65 || ledge > (jumping ? 2.25 : 1.7)) return false;
+    // room to stand up there
+    const head = _hitT(world.castRay(new RAPIER.Ray({ x: ox, y: topY + 0.05, z: oz }, { x: 0, y: 1, z: 0 }), P.height_m, true, undefined, undefined, collider, body));
+    if (head !== null) return false;
+    mantle = { t: 0, dur: 0.38 + ledge * 0.16, from: { x: t.x, y: t.y, z: t.z },
+               to: { x: ox, y: topY + capHalf + capR + 0.04, z: oz }, ledge };
+    window.__mantles++;
+    sfx('step');
+    return true;
+  }
 
   // ── input: keyboard + gamepad + touch stick ──────────────────────────────
   const keys = {};
@@ -12066,7 +12095,122 @@ async function main() {
       }
     }
   }
+  // PICK IT UP, THROW IT (2026-10-04): a crate, a barrel, a rock, anything
+  // small enough to shove is small enough to lift. E picks the nearest one up
+  // and holds it in front of the chest; E again sets it down, and attack
+  // throws it along the view. A thrown thing that hits a body hurts it, and a
+  // body it kills is knocked down the way it was thrown.
+  window.__carried = null;
+  const _thrown = [];
+  let _carryK = 0, _carryPose = null;
+  const _carryRight = new THREE.Vector3();
+  const CARRY_SIGN = 1;
+  const _cQ = new THREE.Quaternion(), _cY = new THREE.Vector3(0, 1, 0);
+  function _propPos(p) { const v = p.body.translation(); return v; }
+  function _propR(p) {
+    const c = p.body.collider(0);
+    const sh = c && c.shape;
+    return Math.max(0.15, sh && sh.radius ? sh.radius : 0.4);
+  }
+  function nearestProp() {
+    const pp = playerObj.position;
+    let best = null, bd = 2.3;
+    for (const p of _dynProps) {
+      if (!p.body || p.body.bodyType() !== RAPIER.RigidBodyType.Dynamic || _propR(p) > 0.95) continue;   // anything loose enough to shove
+      const v = _propPos(p);
+      const d = Math.hypot(v.x - pp.x, v.z - pp.z);
+      if (d < bd && Math.abs(v.y - pp.y) < 1.6) { bd = d; best = p; }
+    }
+    return best;
+  }
+  function pickUp(p) {
+    p.body.setBodyType(RAPIER.RigidBodyType.KinematicPositionBased, true);
+    const c = p.body.collider(0); if (c) c.setEnabled(false);      // it rides with you, it does not block you
+    window.__carried = p; window.__carryCount = (window.__carryCount || 0) + 1;
+    sfx('pickup');
+  }
+  function holdPoint(p) {
+    // in the hands: against the chest, held at its near side
+    const r = _propR(p), f = capR + r * 0.75 + 0.12;
+    return { x: playerObj.position.x + Math.sin(modelYaw) * f,
+             y: playerObj.position.y + P.height_m * 0.6,
+             z: playerObj.position.z + Math.cos(modelYaw) * f };
+  }
+  function letGo(throwIt) {
+    const p = window.__carried; if (!p) return;
+    window.__carried = null;
+    // along the view: the hero turns to throw, so the release is where it flies from
+    let fx = -Math.sin(yaw), fz = -Math.cos(yaw), aim = null;
+    if (throwIt) {
+      modelYaw = Math.atan2(fx, fz);
+      // a foe near the line of the throw draws it (twenty degrees, sixteen metres)
+      let best = 0.94;
+      for (const n of npcs) {
+        if (n.dead || n.dormant || !(n.behavior === 'hostile' || n.behavior === 'guard')) continue;
+        const dx = n.obj.position.x - playerObj.position.x, dz = n.obj.position.z - playerObj.position.z, d = Math.hypot(dx, dz);
+        if (d < 1 || d > 16) continue;
+        const c = (dx * fx + dz * fz) / d;
+        if (c > best) { best = c; aim = n; }
+      }
+      if (aim) { const dx = aim.obj.position.x - playerObj.position.x, dz = aim.obj.position.z - playerObj.position.z, d = Math.hypot(dx, dz);
+                 fx = dx / d; fz = dz / d; modelYaw = Math.atan2(fx, fz); }
+    }
+    const h = holdPoint(p);
+    p.body.setTranslation(h, true);
+    p.body.setBodyType(RAPIER.RigidBodyType.Dynamic, true);
+    const c = p.body.collider(0); if (c) c.setEnabled(true);
+    if (throwIt) {
+      const sp = 13;
+      let vy0 = 3.6;
+      if (aim) {
+        // a lob that arrives at the chest
+        const tx = aim.obj.position.x - h.x, tz = aim.obj.position.z - h.z, tt = Math.hypot(tx, tz) / sp;
+        vy0 = THREE.MathUtils.clamp((aim.obj.position.y + (aim.h || 1.7) * 0.6 - h.y + 4.9 * tt * tt) / Math.max(tt, 0.05), -2, 9);
+      }
+      p.body.setLinvel({ x: fx * sp, y: vy0, z: fz * sp }, true);
+      p.body.setAngvel({ x: (Math.random() - 0.5) * 6, y: (Math.random() - 0.5) * 4, z: (Math.random() - 0.5) * 6 }, true);
+      _thrown.push({ p, t: 2.2, hit: new Set() });
+      window.__throws = (window.__throws || 0) + 1;
+      sfx('attack');
+    } else {
+      p.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+    }
+  }
+  window.__carryE = () => {
+    if (window.__carried) { letGo(false); return true; }
+    const p = nearestProp();
+    if (!p) return false;
+    pickUp(p);
+    return true;
+  };
+  function stepCarry(dt) {
+    const p = window.__carried;
+    if (p) {
+      p.body.setNextKinematicTranslation(holdPoint(p));
+      _cQ.setFromAxisAngle(_cY, modelYaw);
+      p.body.setNextKinematicRotation({ x: _cQ.x, y: _cQ.y, z: _cQ.z, w: _cQ.w });
+    }
+    for (let i = _thrown.length - 1; i >= 0; i--) {
+      const th = _thrown[i];
+      th.t -= dt;
+      const v = th.p.body.linvel(), sp = Math.hypot(v.x, v.y, v.z);
+      if (th.t <= 0 || sp < 2.5) { _thrown.splice(i, 1); continue; }
+      const pos = th.p.body.translation(), r = _propR(th.p);
+      for (const n of npcs) {
+        if (n.dead || n.dormant || th.hit.has(n) || !(n.behavior === 'hostile' || n.behavior === 'guard')) continue;   // a throw is for a foe, not the escort
+        const o = n.obj.position;
+        if (Math.hypot(pos.x - o.x, pos.z - o.z) < r + 0.55 && pos.y > o.y - 0.2 && pos.y < o.y + (n.h || 1.8) + 0.3) {
+          th.hit.add(n);
+          dmgEnemy(n, 2);
+          n._hitDir = new THREE.Vector3(v.x, 0, v.z).normalize();   // knocked the way it was thrown
+          window.__throwHits = (window.__throwHits || 0) + 1;
+          th.p.body.setLinvel({ x: v.x * 0.35, y: Math.abs(v.y) * 0.3 + 1, z: v.z * 0.35 }, true);
+        }
+      }
+    }
+  }
   function doAttack() {
+    if (window.__carried) { letGo(true); return; }     // a thing in hand is thrown, not swung
     if (ATTACK === 'none' || atkCd > 0 || won || lost) return;
     const WPN = WEAPONS[weaponIdx] || WEAPONS[0];
     // LAUNCHER: a lobbed shell, not a hitscan. It has travel time and an
@@ -12609,6 +12753,13 @@ async function main() {
     pos: () => playerObj.position.toArray(), keys, ready: true,
     tp: (x, z) => body.setTranslation({ x, y: spawnHeight(x, z), z }, true),
     tpy: (x, y, z) => body.setTranslation({ x, y, z }, true),     // a drop from a height: does a ledge hold you
+    carryE: () => window.__carryE && window.__carryE(), throwIt: () => doAttack(),
+    // a box of a given height, solid, for a gate that needs a ledge where it stands
+    block: (x, z, w, h) => { const gy = hAt(x, z);
+      const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, w), new THREE.MeshStandardMaterial({ color: 0x8a7a6a, roughness: 0.9 }));
+      m.position.set(x, gy + h / 2, z); m.castShadow = m.receiveShadow = true; scene.add(m);
+      world.createCollider(RAPIER.ColliderDesc.cuboid(w / 2, h / 2, w / 2).setTranslation(x, gy + h / 2, z)); return gy; },
+    props: () => _dynProps.filter(p => p.body).map(p => { const v = p.body.translation(), c = p.body.collider(0), hh = c && c.shape && c.shape.halfHeight ? c.shape.halfHeight : 0; return [+v.x.toFixed(2), +v.y.toFixed(2), +v.z.toFixed(2), +(hh * 2).toFixed(2)]; }),
     hurt: (i, d) => { const n = npcs.filter(x => !x.gone)[i]; if (n) dmgEnemy(n, d || 1); },   // a blow to the i-th body in npcs(): gates test recoil and ragdolls
     attack: doAttack,
     win: (t) => doWin(t || 'the gate called it'), lose: (t) => doLose(t || 'the gate called it'),   // the end card, reachable by a gate
@@ -12674,6 +12825,8 @@ async function main() {
         mist: window.__mist || 0,
         waterfall: window.__falls || null,
         cave: window.__cave || null,
+        actions: { mantles: window.__mantles || 0, carries: window.__carryCount || 0, throws: window.__throws || 0,
+                   throw_hits: window.__throwHits || 0, carrying: !!window.__carried, climbing: !!mantle },
       };
       try {
         const im = gmat.map && gmat.map.image;
@@ -15209,6 +15362,27 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
       if (VIEW === 'side') {              // hold the hero on the gameplay lane
         desired.z = (0 - body.translation().z) * Math.min(6 * dt, 1);
       }
+      // the ledge: pressing jump into one, or reaching one on the way down
+      if (!mantle && gameStarted && !window.__carried && window.__cbt.dodgeT <= 0) {
+        const _t0 = body.translation();
+        const _in = dir.lengthSq() > 1e-4;
+        const _fx = _in ? _wdir.x : Math.sin(modelYaw), _fz = _in ? _wdir.z : Math.cos(modelYaw);
+        if ((keys.Space && _in) || (!kcc.computedGrounded() && _in && vy < 2.5)) tryMantle(_t0, _fx, _fz, !!keys.Space);
+      }
+      if (mantle) {
+        mantle.t += dt / mantle.dur;
+        const k = Math.min(1, mantle.t);
+        const up = Math.min(1, k / 0.62), ov = Math.max(0, (k - 0.42) / 0.58);
+        const eu = up * up * (3 - 2 * up), eo = ov * ov * (3 - 2 * ov);
+        const _t1 = body.translation();
+        desired = { x: mantle.from.x + (mantle.to.x - mantle.from.x) * eo - _t1.x,
+                    y: mantle.from.y + (mantle.to.y - mantle.from.y) * eu - _t1.y,
+                    z: mantle.from.z + (mantle.to.z - mantle.from.z) * eo - _t1.z };
+        vy = 0; walkV = 0; _mmV.set(0, 0, 0);
+        modelYaw = dampAngle(modelYaw, Math.atan2(mantle.to.x - mantle.from.x, mantle.to.z - mantle.from.z), 12, dt);
+        holder.rotation.x = 0.5 * Math.sin(Math.PI * k);        // the chest goes over the lip
+        if (k >= 1) mantle = null;
+      }
     }
     kcc.computeColliderMovement(collider, desired);
     const cm = kcc.computedMovement();
@@ -15233,6 +15407,7 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
         _lavaSafe = { x: lx, y: t.y + cm.y, z: lz };
       }
     }
+    stepCarry(dt);
     world.step();
     // DYNAMIC PROPS follow the solver. Written straight after the step so the
     // render never shows a frame of stale physics.
@@ -15494,6 +15669,13 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
         } catch (e) { console.warn('[game] gait post: ' + e.message); GAIT = null; }
       }
       if (window.__heroFlinch) window.__heroFlinch.apply(dt);   // a blow lands on the pose
+      // HOLDING IT (2026-10-04): the arms come up in front of the chest while a
+      // prop is carried, and go down again when it is set down or thrown
+      _carryK = THREE.MathUtils.damp(_carryK, window.__carried ? 1 : 0, 9, dt);
+      if (_carryK > 0.01 && pg && pg.scene) {
+        if (!_carryPose) _carryPose = __makeCarryPose(pg.scene);
+        _carryPose.apply(_carryK, _carryRight.set(Math.cos(modelYaw), 0, -Math.sin(modelYaw)), CARRY_SIGN);
+      }
       // THE HEAD LOOKS WHERE THE CAMERA LOOKS (2026-09-23): after the pose, the
       // head turns up to fifty degrees toward the view direction, about the
       // world's up so the rig's bone axes do not matter.

@@ -1831,6 +1831,39 @@ const seamRockGeos = [0, 1, 2].map(k => mergeParts([
   { g: sculptStone(7331 + k * 53, { size: 0.22, flat: 0.7, detail: 1 }), x: 0.62, y: -0.02, z: 0.3, col: 0x5d5e63, tint: 0.7 },
   { g: sculptStone(7351 + k * 53, { size: 0.16, flat: 0.7, detail: 1 }), x: -0.5, y: -0.02, z: -0.46, col: 0x5d5e63, tint: 0.66 }]));
 const seamRockMat = new THREE.MeshStandardMaterial({ color: 0xffffff, vertexColors: true, roughness: 0.92, metalness: 0.04, envMapIntensity: 0.5 });
+// REAL ROCK UNDER THE ORE (2026-10-04): the seam beds were sculpted stone in a
+// flat grey. They wear a photographed rock face now (Poly Haven rock_face_03,
+// CC0, 1K, shipped as textures/seamrock*.jpg), projected from all three axes
+// in world space so it sits right on every face of the worldlet; the stone's
+// own shading tints it. A missing file leaves the flat grey, as before.
+{
+  const _tl = new THREE.TextureLoader();
+  const _sm = _tl.load('textures/seamrock.jpg'), _sn = _tl.load('textures/seamrock_n.jpg');
+  _sm.colorSpace = THREE.SRGBColorSpace;
+  for (const t of [_sm, _sn]) { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 8; }
+  seamRockMat.userData.noAutoTex = true;
+  seamRockMat.onBeforeCompile = (sh) => {
+    sh.uniforms.uRock = { value: _sm }; sh.uniforms.uRockN = { value: _sn };
+    sh.vertexShader = 'varying vec3 vRkP; varying vec3 vRkN;\n' + sh.vertexShader.replace('#include <worldpos_vertex>',
+      '#include <worldpos_vertex>\nvRkP = (modelMatrix * vec4(transformed, 1.0)).xyz; vRkN = normalize(mat3(modelMatrix) * objectNormal);');
+    sh.fragmentShader = 'uniform sampler2D uRock; uniform sampler2D uRockN; varying vec3 vRkP; varying vec3 vRkN;\n' + sh.fragmentShader
+      .replace('#include <color_fragment>', `#include <color_fragment>
+  {
+    vec3 bw = pow(abs(normalize(vRkN)), vec3(4.0)); bw /= (bw.x + bw.y + bw.z);
+    float S = 0.9;
+    vec3 rk = texture2D(uRock, vRkP.yz * S).rgb * bw.x + texture2D(uRock, vRkP.xz * S).rgb * bw.y + texture2D(uRock, vRkP.xy * S).rgb * bw.z;
+    diffuseColor.rgb *= rk * 2.4;          // the stone's grey sets the value, the photo the grain and colour
+  }`)
+      .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
+  {
+    vec3 bw = pow(abs(normalize(vRkN)), vec3(4.0)); bw /= (bw.x + bw.y + bw.z);
+    float S = 0.9;
+    vec3 tn = (texture2D(uRockN, vRkP.yz * S).rgb * bw.x + texture2D(uRockN, vRkP.xz * S).rgb * bw.y + texture2D(uRockN, vRkP.xy * S).rgb * bw.z) * 2.0 - 1.0;
+    normal = normalize(normal + (viewMatrix * vec4(tn.x, 0.0, tn.y, 0.0)).xyz * 0.55);
+  }`);
+  };
+  seamRockMat.customProgramCacheKey = () => 'seam-rock-scan';
+}
 const nodeGeo = nodeGeos[0];      // the shape a thumbnail or a fallback uses
 let rngState = +((location.search.match(/[?&]seed=(\d+)/) || [])[1]) || 1337;   // ?seed= is a debug override
 const rnd = () => (rngState = (rngState * 1664525 + 1013904223) % 4294967296) / 4294967296;

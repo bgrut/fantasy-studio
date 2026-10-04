@@ -117,6 +117,18 @@ def sync_fonts(check: bool) -> bool:
     # the worldlet's outcrops are sculpted by the adventure's stone module
     # (2026-10-02): proc/flora.js ships beside vendor/, as in a studio build;
     # and its grass (2026-10-03), which grows on every face of a green world
+    # and the seam beds' rock (2026-10-04): two small photographed maps
+    tex = RUNTIME.parent.parent.parent / "assets" / "textures" / "factory"
+    for f in (sorted(tex.iterdir()) if tex.is_dir() else []):
+        d = OUT / "textures" / f.name
+        d.parent.mkdir(parents=True, exist_ok=True)
+        if d.exists() and d.read_bytes() == f.read_bytes():
+            continue
+        if check:
+            ok = False
+            print(f"  stale: flagship/textures/{f.name}")
+        else:
+            shutil.copyfile(f, d)
     for name in ("flora.js", "grass.js"):
         f, d = RUNTIME / "proc" / name, OUT / "proc" / name
         if not f.exists():

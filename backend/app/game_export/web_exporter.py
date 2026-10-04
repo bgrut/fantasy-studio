@@ -134,6 +134,14 @@ def export_web_game(spec: GameSpec, out_dir: str | Path, verbose: bool = True) -
 
     # ── PBR texture pack (Phase 77): SDXL-generated seamless surfaces ───────
     tex_src = RUNTIME.parent.parent.parent / "assets" / "textures"
+    # a factory carries only its own two small rock maps (the seam beds),
+    # not the adventure's ground set
+    if _factory and (tex_src / "factory").is_dir():
+        _fdst = dist / "textures"
+        _fdst.mkdir(parents=True, exist_ok=True)
+        for f in sorted((tex_src / "factory").iterdir()):
+            if f.is_file() and f.suffix.lower() in (".jpg", ".png"):
+                shutil.copy2(f, _fdst / f.name)
     if tex_src.is_dir() and not _factory:
         tex_dst = dist / "textures"
         if tex_dst.exists():
