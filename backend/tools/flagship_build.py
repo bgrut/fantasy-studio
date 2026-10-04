@@ -115,8 +115,9 @@ def sync_fonts(check: bool) -> bool:
             else:
                 shutil.copyfile(f, d)
     # the worldlet's outcrops are sculpted by the adventure's stone module
-    # (2026-10-02): proc/flora.js ships beside vendor/, as in a studio build
-    for name in ("flora.js",):
+    # (2026-10-02): proc/flora.js ships beside vendor/, as in a studio build;
+    # and its grass (2026-10-03), which grows on every face of a green world
+    for name in ("flora.js", "grass.js"):
         f, d = RUNTIME / "proc" / name, OUT / "proc" / name
         if not f.exists():
             continue

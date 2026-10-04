@@ -113,8 +113,20 @@ function agreesWithMood(hex) {
   return true;
 }
 const _paletteSky = _hex(_pal.sky, null), _paletteFog = _hex(_pal.fog, null);
-const SKY_COL = agreesWithMood(_paletteSky) ? _paletteSky : HOME.sky;
-const FOG_COL = agreesWithMood(_paletteFog) ? _paletteFog : HOME.fog;
+// THE VOID STAYS DARK (2026-10-03): the extractor reads "sky" as a day sky
+// (Crystal Works was handed a mid green, 0x2d5234), and the dome lifts its
+// top further still, so a worldlet adrift in the void sat under a green haze
+// that washed every frame. A palette's sky and fog keep their hue but no more
+// than a night sky's lightness; a town keeps its day.
+function nightCap(hex, maxL) {
+  if (hex === null || SPEC.city) return hex;
+  const c = new THREE.Color(hex), hsl = {};
+  c.getHSL(hsl);
+  if (hsl.l <= maxL) return hex;
+  return c.setHSL(hsl.h, Math.min(hsl.s, 0.6), maxL).getHex();
+}
+const SKY_COL = agreesWithMood(_paletteSky) ? nightCap(_paletteSky, 0.09) : HOME.sky;
+const FOG_COL = agreesWithMood(_paletteFog) ? nightCap(_paletteFog, 0.11) : HOME.fog;
 const ACCENT = _hex(_pal.accent, HOME.accent);
 
 // CRYSTAL WORKS — 3D incremental automation, core-loop prototype.
@@ -131,7 +143,8 @@ const ACCENT = _hex(_pal.accent, HOME.accent);
 import * as THREE from 'three';
 import { N8AOPass } from './vendor/n8ao.module.js';               // ambient occlusion (MIT), shared with the adventure runtime
 import { Bed as KitBed, end as KitEnd } from './vendor/kit/kit.js';   // the music bed and the end card, shared with every runtime
-import { sculptStone } from './proc/flora.js';                     // the adventure's stone, lent to the worldlet's outcrops (2026-10-02)
+import * as __GRASS from './proc/grass.js';                          // the adventure's grass, on every face (2026-10-03)
+import { sculptStone, growVariants } from './proc/flora.js';                     // the adventure's stone, lent to the worldlet's outcrops (2026-10-02)
 
 // grid resolution follows the prompt's world size: a bigger island is a
 // bigger factory, not the same factory further apart
@@ -1071,7 +1084,9 @@ function buildSky(topHex, deepHex, bandHex, planet, nebula) {
         // RESTRAINT. At half strength the band read as a planet's horizon glow
         // and the worldlet stopped looking like it was in space at all. It
         // should be something noticed on the second look.
-        c += uBand * (1.0 - smoothstep(0.0, 0.42, abs(vDir.y - 0.04))) * 0.16;
+        // (added in linear light: 0.16 of the mint edge was a green glow round
+        // the whole horizon; 0.05 is the second-look band it was meant to be)
+        c += uBand * (1.0 - smoothstep(0.0, 0.42, abs(vDir.y - 0.04))) * 0.05;
         gl_FragColor = vec4(c, 1.0);
       }`,
   });
@@ -2870,6 +2885,207 @@ for (const m of MINERALS) {
   scene.add(om); outcropMesh[m] = om;
 }
 
+// GRASS THAT GROWS LIKE THE FOREST, ON EVERY FACE (2026-10-03). The owner:
+// the flagship should have the foliage the adventures have. The adventures'
+// grass (proc/grass.js) is a field drawn on the GPU around the camera, well
+// over a hundred blades a square metre close in, thinning to the edge of the
+// view; it is built in its own plane, so each face of the worldlet gets one,
+// turned so the face's normal is its up (u, n, -v), and is told the camera
+// and the player in that plane. It grows only on empty tiles (a machine, a
+// belt or a seam keeps its tile bare), in clumps, drier and thinner on the
+// ember and salt faces and the underside; only the faces the camera is near
+// draw. It replaces the moss tufts on a green world and grows in a town.
+// built once; shown while the world standing in is a green one (every game
+// has one: its home, or The Verdant Fault) or a town
+const GRASS_ON = !/[?&]grass=0/.test(location.search);
+const grassFaces = [];
+const grassClock = { value: 0 };
+let grassDirty = new Set(), grassWait = 0;
+function grassMaskFor(f) {
+  const m = MINERAL_OF_FACE[f];
+  const dry = f === 1 ? 0.25 : m === EMBER ? 0.75 : m === SALT ? 0.45 : 0.05;
+  // a first-person floor, not a hay meadow: thick on the crystal faces, a
+  // scrub on the salt ones, a few dry tufts in the ember's cinders
+  const base = SPEC.city ? 0.75 : f === 1 ? 0.35 : m === EMBER ? 0.22 : m === SALT ? 0.4 : 0.85;
+  return (x, z) => {
+    const a = x, b = -z;                       // the field's x is u, its z is -v
+    const i = Math.floor(a / T + N / 2), j = Math.floor(b / T + N / 2);
+    if (i < 0 || j < 0 || i >= N || j >= N) return [0, 0, 0];
+    if (cells[f][i][j].t !== EMPTY) return [0, dry, 0];
+    // clumps and bare patches: two slow waves crossed
+    const nz = 0.5 + 0.5 * Math.sin(a * 0.37 + Math.sin(b * 0.23) * 2.1) * Math.cos(b * 0.31 - a * 0.11);
+    // and a little thinner right at a tile's edge, so built tiles have a margin
+    const fu = (a / T + N / 2) - i, fv = (b / T + N / 2) - j;
+    const edge = Math.min(fu, 1 - fu, fv, 1 - fv);
+    const nearBuilt = [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([di, dj]) => {
+      const c = cells[f][i + di] && cells[f][i + di][j + dj];
+      return c && c.t !== EMPTY;
+    });
+    const margin = nearBuilt ? Math.min(1, edge / 0.18) : 1;
+    return [base * (0.4 + 0.6 * nz) * margin, dry, 0.5 + 0.5 * nz];
+  };
+}
+if (GRASS_ON) {
+  const colA = new THREE.Color(0x4a7a2c), colB = new THREE.Color(0x8aac4c), colDry = new THREE.Color(0xb3a35e);
+  for (let f = 0; f < 6; f++) {
+    const F_ = FACES[f];
+    const frame = new THREE.Group();
+    frame.name = 'grassFace' + f;
+    frame.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(
+      new THREE.Vector3(...F_.u), new THREE.Vector3(...F_.n), new THREE.Vector3(...F_.v).negate()));
+    frame.position.set(F_.n[0] * (HALF + 0.01), F_.n[1] * (HALF + 0.01), F_.n[2] * (HALF + 0.01));
+    scene.add(frame);
+    const g = __GRASS.plantGrass({
+      scene: frame, seed: 4100 + f * 17, hAt: () => 0, maskAt: grassMaskFor(f), maskRes: 128,
+      center: [0, 0], size: N * T, colA, colB, colDry, height: 0.17, windK: 0.3,
+      layers: [{ L: 24, R: 13, n: 60000, w: 0.035, thin: 0.4 }, { L: 80, R: 40, n: 70000, w: 0.06, thin: 0.55 }],
+      wind: grassClock, sunDir: sun.position.clone().normalize(), sunCol: sun.color.clone(),
+    });
+    g.group.traverse(o => { if (o.isMesh) o.userData.noAutoTex = true; });
+    grassFaces.push({ f, frame, g });
+  }
+}
+const _gcam = new THREE.Vector3();
+function stepGrass(dt) {
+  if (!grassFaces.length) return;
+  const show = !!SPEC.city || (WORLDS[worldIdx] && WORLDS[worldIdx].fam === 'green');
+  if (!show) { for (const gf of grassFaces) gf.frame.visible = false; stepGrove(false); return; }
+  grassClock.value += dt;
+  // one face's mask a frame, a quarter second after the last change
+  if (grassDirty.size && (grassWait -= dt) <= 0) {
+    const f = grassDirty.values().next().value;
+    grassDirty.delete(f);
+    const gf = grassFaces.find(x => x.f === f);
+    if (gf) gf.g.setMask(grassMaskFor(f));
+  }
+  for (const gf of grassFaces) {
+    // drawn only when the camera is within the grass's reach of this face
+    gf.frame.worldToLocal(_gcam.copy(camera.position));
+    const dx = Math.max(Math.abs(_gcam.x) - HALF, 0), dz = Math.max(Math.abs(_gcam.z) - HALF, 0);
+    const near = _gcam.y > -0.5 && Math.hypot(dx, _gcam.y, dz) < 46;
+    gf.frame.visible = near;
+    if (near) gf.g.update(camera, player.pos);
+  }
+  stepGrove(true);
+}
+function grassChanged() {
+  if (!grassFaces.length) return;
+  for (let f = 0; f < 6; f++) grassDirty.add(f);
+  grassWait = 0.25;
+}
+
+// IT GREW BACK AROUND THE MACHINES (2026-10-03). The adventure's grown trees
+// (proc/flora.js) on a green world's faces: oak and birch on the crystal
+// faces, dead trunks standing in the ember faces' cinders, bushes on the salt
+// faces. Scaled to the worldlet (a third of a forest tree, four or five
+// metres against two-metre machines); never within two tiles of what was
+// built when the world was laid out, and on the home face only in its outer
+// ring, so the starter line keeps its view. Building on a tile clears what
+// grows there, as with the grass; a trunk is solid, a bush is not. Shown
+// with the grass, on the faces near the camera.
+const groveFaces = [];
+const groveSolid = new Set();
+let groveSpots = null;
+const GROVE_ON = GRASS_ON && !SPEC.city;
+function groveKindOf(f) {
+  const m = MINERAL_OF_FACE[f];
+  return m === EMBER ? ['dead', 'bush'] : m === SALT ? ['bush', 'bush'] : ['oak', 'birch', 'bush'];
+}
+if (GROVE_ON) {
+  const kinds = ['oak', 'birch', 'dead', 'bush'];
+  const grown = growVariants({ kinds, perKind: { oak: 2, birch: 1, dead: 1, bush: 1 }, seed: 9901, leaf: { h: 0.27, s: 0.48, l: 0.3 },
+    wind: grassClock, sunDir: sun.position.clone().normalize(), sunCol: sun.color.clone() });
+  // the spots: the world's own stream is not touched
+  let st = 60223;
+  const gr = () => (st = (st * 1664525 + 1013904223) % 4294967296) / 4294967296;
+  const busy = (f, i, j) => {
+    for (let di = -2; di <= 2; di++) for (let dj = -2; dj <= 2; dj++) {
+      const c = cells[f][i + di] && cells[f][i + di][j + dj];
+      if (c && c.t !== EMPTY) return true;
+    }
+    return false;
+  };
+  groveSpots = [];
+  for (let f = 0; f < 6; f++) {
+    const ks = groveKindOf(f);
+    for (let i = 1; i < N - 1; i++) for (let j = 1; j < N - 1; j++) {
+      const r = gr();
+      const ring = Math.max(Math.abs(i + 0.5 - N / 2), Math.abs(j + 0.5 - N / 2)) / (N / 2);
+      if (f === 0 && ring < 0.62) continue;
+      const kind = ks[Math.floor(gr() * ks.length)];
+      const p = kind === 'bush' ? 0.05 : 0.024;
+      if (r > p || busy(f, i, j)) continue;
+      const vs = grown.variants.map((v, k) => v.kind === kind ? k : -1).filter(k => k >= 0);
+      groveSpots.push({ f, i, j, kind, v: vs[Math.floor(gr() * vs.length)], ry: gr() * Math.PI * 2,
+                        ox: (gr() - 0.5) * T * 0.5, oz: (gr() - 0.5) * T * 0.5,
+                        s: kind === 'bush' ? 0.7 + gr() * 0.35 : (0.3 + gr() * 0.12) * (kind === 'birch' ? 0.85 : 1) });
+    }
+  }
+  // ONE MESH PER VARIANT FOR THE WHOLE WORLDLET: the instance matrices are
+  // already in world space, so splitting by face only multiplied draw calls
+  // (the 250-machine budget gate counted 322)
+  {
+    const f = -1;
+    const grp = new THREE.Group(); grp.name = 'grove'; scene.add(grp);
+    const meshes = grown.variants.map((v, k) => {
+      const n = groveSpots.filter(sp => sp.v === k).length;
+      if (!n) return null;
+      const bark = new THREE.InstancedMesh(v.bark, v.mats.bark, n);
+      bark.castShadow = v.kind !== 'bush';     // a bush's shadow is a draw call nobody sees bark.receiveShadow = true; bark.frustumCulled = false; grp.add(bark);
+      let leaf = null;
+      if (v.leaf && v.mats.leaf) {
+        leaf = new THREE.InstancedMesh(v.leaf, v.mats.leaf, n);
+        leaf.castShadow = v.kind !== 'bush'; leaf.receiveShadow = true; leaf.frustumCulled = false; grp.add(leaf);
+      }
+      return { bark, leaf };
+    });
+    groveFaces.push({ f, grp, meshes });
+  }
+}
+const _gvM = new THREE.Matrix4(), _gvL = new THREE.Matrix4(), _gvQ = new THREE.Quaternion();
+const _gvY = new THREE.Vector3(0, 1, 0), _gvP = new THREE.Vector3(), _gvS = new THREE.Vector3();
+function fillGrove() {
+  if (!groveFaces.length) return;
+  groveSolid.clear();
+  for (const gf of groveFaces) {
+    const cnt = gf.meshes.map(() => 0);
+    for (const sp of groveSpots) {
+      if (cells[sp.f][sp.i][sp.j].t !== EMPTY) continue;
+      const mm = gf.meshes[sp.v]; if (!mm) continue;
+      seatMatrix(sp.f, sp.i, sp.j, 0, 0.0, _gvM);
+      _gvQ.setFromAxisAngle(_gvY, sp.ry);
+      _gvL.compose(_gvP.set(sp.ox, -0.05, sp.oz), _gvQ, _gvS.setScalar(sp.s));
+      _gvM.multiply(_gvL);
+      mm.bark.setMatrixAt(cnt[sp.v], _gvM);
+      if (mm.leaf) mm.leaf.setMatrixAt(cnt[sp.v], _gvM);
+      cnt[sp.v]++;
+      if (sp.kind !== 'bush') groveSolid.add(sp.f * 1e6 + sp.i * 1e3 + sp.j);
+    }
+    gf.meshes.forEach((mm, k) => {
+      if (!mm) return;
+      mm.bark.count = cnt[k]; mm.bark.instanceMatrix.needsUpdate = true;
+      if (mm.leaf) { mm.leaf.count = cnt[k]; mm.leaf.instanceMatrix.needsUpdate = true; }
+    });
+  }
+}
+fillGrove();
+function stepGrove(show) {
+  for (const gf of groveFaces) gf.grp.visible = show;
+}
+/** a tree's trunk on this tile stands in the player's way (face-local a, b) */
+function groveBlocks(face, a, b) {
+  if (!groveSolid.size) return false;
+  const ci = Math.floor(a / T + N / 2), cj = Math.floor(b / T + N / 2);
+  for (const sp of groveSpots) {
+    if (sp.f !== face || sp.kind === 'bush' || Math.abs(sp.i - ci) > 1 || Math.abs(sp.j - cj) > 1) continue;
+    if (!groveSolid.has(sp.f * 1e6 + sp.i * 1e3 + sp.j)) continue;
+    // the seat's axes are u and -v, so the trunk sits at (+ox, -oz) in (a, b)
+    const cx = (sp.i + 0.5 - N / 2) * T + sp.ox, cz = (sp.j + 0.5 - N / 2) * T - sp.oz;
+    if (Math.hypot(a - cx, b - cz) < PLAYER_R + 0.3) return true;
+  }
+  return false;
+}
+
 // MOSS ON A GREEN WORLD (2026-10-02). The owner wants the forest's detail in
 // every world; a plated worldlet takes no forest, but a green one has moss
 // in its seams. Tufts of blades on the empty plates, two or three a tile,
@@ -2878,7 +3094,7 @@ for (const m of MINERALS) {
 // world's generation is untouched.
 let mossMesh = null, mossSpots = null;
 const MOSS_CAP = 22000;
-if (MOOD === 'green' && !SPEC.city) {
+if (MOOD === 'green' && !SPEC.city && !GRASS_ON) {
   // GRASS, NOT CLAWS (2026-10-02): seven flat bright triangles with a green
   // glow read as neon spikes. A tuft is ten fine blades now, each bent in
   // two joints and tapered to a point, dark at the root and only lighter at
@@ -2933,6 +3149,8 @@ if (MOOD === 'green' && !SPEC.city) {
 const _mossM = new THREE.Matrix4(), _mossL = new THREE.Matrix4(), _mossQ = new THREE.Quaternion();
 const _mossY = new THREE.Vector3(0, 1, 0), _mossP = new THREE.Vector3(), _mossS = new THREE.Vector3();
 function fillMoss() {
+  grassChanged();
+  fillGrove();
   if (!mossMesh) return;
   if (!mossSpots) {
     let st = 7177;
@@ -4891,7 +5109,7 @@ function solidAt(face, a, b) {
       if (Math.abs(a - cx) < lo && Math.abs(b - cz) < lo) return true;
     }
   }
-  return false;
+  return groveBlocks(face, a, b);      // and a tree's trunk
 }
 
 const _rt = new THREE.Vector3(), _wish = new THREE.Vector3();
@@ -5802,7 +6020,10 @@ function applyWorld(k) {
   MAT.belt.color.setHex(bt.frame);
   // a real vertical gradient: lifted overhead, deeper below, so the void has a
   // top and a bottom instead of being one flat value with a band painted on it
-  buildSky(new THREE.Color(w.sky).lerp(new THREE.Color(w.edge || w.grid), 0.16).getHex(),
+  // (three lerps colours in LINEAR light: 16% of a bright mint lifted a
+  // near-black void to 0x3d6645, a green haze over every frame; 4% linear is
+  // the lift the 16% was meant to be, 2026-10-03)
+  buildSky(new THREE.Color(w.sky).lerp(new THREE.Color(w.edge || w.grid), 0.04).getHex(),
            new THREE.Color(w.sky).lerp(new THREE.Color(0x000000), 0.55).getHex(),
            w.edge || w.grid, w.planet, w.nebula || (MOOD_LOOK[w.fam] || MOOD_LOOK.void).nebula);
   matComposite.uniforms.uTint.value.setHex(w.fog);
@@ -7057,6 +7278,7 @@ renderer.setAnimationLoop(() => {
   });
   if (glowPools) glowPools.instanceMatrix.needsUpdate = true;
   stepLampPools();
+  stepGrass(dt);
   visitedFaces.add(player.face);
   if (CITY) stepCity(dt); else stepGoals(dt);
   if (!melting && !CITY) stepRifts(dt);

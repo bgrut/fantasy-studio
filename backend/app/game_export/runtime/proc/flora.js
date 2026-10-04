@@ -1117,6 +1117,32 @@ export function biomeFor(words, arch, groundHSL) {
 // THE SCULPTOR, LENT OUT (2026-10-02): the flagship's worldlet is plated
 // metal, not land, so it takes no forest; it takes the stone. A sculpted rock
 // as a plain geometry (position, normal, uv) for any runtime to merge.
+// A FEW TREES, NOT A FOREST (2026-10-03): the factory's worldlet wants the
+// adventure's grown trees on its faces, but a forest's far pictures face a
+// world whose up is +Y and the worldlet has six ups. This hands over the
+// grown variants and their (live, wind-swayed) materials; the caller places
+// the instances. kinds: names from KINDS; leaf: {h, s, l}; perKind variants.
+export function growVariants(o) {
+  const U = { wind: o.wind || { value: 0 }, near: { value: o.near || 1e5 },
+              sunDir: { value: (o.sunDir || new THREE.Vector3(0.4, 0.8, 0.3)).clone().normalize() },
+              sunCol: { value: o.sunCol || new THREE.Color(1, 0.95, 0.85) }, snow: { value: 0 } };
+  const out = [];
+  o.kinds.forEach((kind, ki) => {
+    const mats = makeMaterials(kind, o.leaf, o.barkTex || null, o.barkN || null, (o.seed + ki * 97) >>> 0, U, o);
+    // without a bark sheet the trunk would take the tint alone (white): bark brown
+    if (!o.barkTex && mats.bark && !mats.bark.map && !['birch', 'cactus', 'crystal', 'rock', 'boulder', 'mesa'].includes(kind))
+      mats.bark.color.set(kind === 'dead' ? 0x5c514a : 0x5e4632);
+    const pk = typeof o.perKind === 'object' ? (o.perKind[kind] || 1) : (o.perKind || 2);
+    for (let v = 0; v < pk; v++) {
+      const vr = mulberry((o.seed + ki * 1013 + v * 7919) >>> 0);
+      const P = KINDS[kind](vr);
+      const geo = P.grow(vr, P);
+      out.push({ kind, bark: geo.bark, leaf: geo.leaf, mats, height: P.height || P.size || 1 });
+    }
+  });
+  return { variants: out, U };
+}
+
 export function sculptStone(seed, opts = {}) {
   const r = mulberry(seed >>> 0);
   const g = growRock(r, { size: opts.size || 1, flat: opts.flat || 0.6, facets: opts.facets ?? 5,
