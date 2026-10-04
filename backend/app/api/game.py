@@ -219,8 +219,27 @@ def _style_asked(style: str, prompt: str) -> bool:
     return bool(pat and _fre.search(pat, (prompt or "").lower()))
 
 
+# A PLACE YOU GO IS NOT A MACHINE YOU RUN (2026-10-04). "A shepherd crossing a
+# meadow to the windmill on the hill" built a factory: windmill is on the
+# factory list because "run a windmill that grinds grain" is one. A building
+# named as where the walk ends ("to the windmill", "reach the old bakery")
+# is a destination, and only counts when some other factory word is there.
+_DESTINATION = _fre.compile(
+    r"\b(to|reach|toward|towards|find|into|past|at|near|by|from|explore|visit|enter|inside)\s+"
+    r"(?:the |an? |old |abandoned |ruined |haunted |\w+'s )*"
+    r"(bakery|brewery|distillery|sawmill|cannery|shipyard|windmill|watermill|factory|foundry|refinery)\b", _fre.I)
+
+
 def _reads_as_factory(prompt: str) -> bool:
-    return bool(_FACTORY_WORDS.search(prompt or ""))
+    p = prompt or ""
+    hits = [m.group(0).lower() for m in _FACTORY_WORDS.finditer(p)]
+    if not hits:
+        return False
+    dest = {m.group(m.lastindex).lower() for m in _DESTINATION.finditer(p)}
+    if not dest:
+        return True
+    return any(h.split()[0].rstrip("s") not in {d.rstrip("s") for d in dest}
+               and h not in dest for h in hits)
 
 
 def _expand_design_doc(prompt: str) -> str | None:

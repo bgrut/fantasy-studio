@@ -82,7 +82,7 @@ export function createCave({ scene, level, gsize, hAt, camera, seed = 1, words =
 
   // ── the roof ──────────────────────────────────────────────────────────────
   const tl = new THREE.TextureLoader();
-  const rmap = tl.load('textures/rock.jpg'), rnrm = tl.load('textures/rock_n.jpg');
+  const rmap = tl.load('textures/cliff.jpg'), rnrm = tl.load('textures/cliff_n.jpg');
   rmap.colorSpace = THREE.SRGBColorSpace;
   for (const t of [rmap, rnrm]) { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 8; }
   {

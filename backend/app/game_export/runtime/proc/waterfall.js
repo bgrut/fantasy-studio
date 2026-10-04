@@ -91,7 +91,7 @@ export function createWaterfall({ scene, at, facing, hAt, clock, green = true, h
     }
     g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
     const tl = new THREE.TextureLoader();
-    const rmap = tl.load('textures/rock.jpg'), rnrm = tl.load('textures/rock_n.jpg');
+    const rmap = tl.load('textures/cliff.jpg'), rnrm = tl.load('textures/cliff_n.jpg');
     rmap.colorSpace = THREE.SRGBColorSpace;
     for (const t of [rmap, rnrm]) { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 8; }
     const m = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.88, map: rmap, normalMap: rnrm,

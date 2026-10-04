@@ -3060,7 +3060,7 @@ function fillGrove() {
       const mm = gf.meshes[sp.v]; if (!mm) continue;
       seatMatrix(sp.f, sp.i, sp.j, 0, 0.0, _gvM);
       _gvQ.setFromAxisAngle(_gvY, sp.ry);
-      _gvL.compose(_gvP.set(sp.ox, -0.05, sp.oz), _gvQ, _gvS.setScalar(sp.s));
+      _gvL.compose(_gvP.set(sp.ox, -0.05, sp.oz), _gvQ, _gvS.set(sp.s, sp.s * (sp.kind === 'bush' ? 1 : 1.22), sp.s));   // a tree on a worldlet stands a little taller than it is wide
       _gvM.multiply(_gvL);
       mm.bark.setMatrixAt(cnt[sp.v], _gvM);
       if (mm.leaf) mm.leaf.setMatrixAt(cnt[sp.v], _gvM);

@@ -289,7 +289,7 @@ def export_web_game(spec: GameSpec, out_dir: str | Path, verbose: bool = True) -
         "| Fonts: Bricolage Grotesque, Instrument Sans, DM Mono, Cinzel, IM Fell English, Share Tech Mono, Bebas Neue, Bangers, Fredoka, Creepster, Russo One, Lora, Josefin Sans | SIL Open Font License 1.1 (licence files in vendor/fonts) |",
         "| Font: Special Elite | Apache License 2.0 (vendor/fonts/Apache-SpecialElite.txt) |",
         "| PBR textures | Generated locally (Stable Diffusion XL); yours |",
-        "| Ground scans: rock (rocky_trail), soil (forest_ground_04), forest floor (forest_leaves_04) | Poly Haven, CC0 |",
+        "| Ground scans: rock (rocky_trail), soil (forest_ground_04), forest floor (forest_leaves_04), sand (sand_01), grass (leafy_grass), cliff (rock_face_03), sandstone (cliff_side) | Poly Haven, CC0 |",
         "| Characters and 3D assets | Generated locally (SDXL, Microsoft TRELLIS.2 or TripoSR, all permissive); yours |",
         "| Character motion | CMU Graphics Lab Motion Capture Database (free for commercial products; credit below) |",
         "| Character motion (standing, locomotion) | 100STYLE dataset, CC BY 4.0 (credit below) |",

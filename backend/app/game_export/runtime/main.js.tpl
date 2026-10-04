@@ -13701,7 +13701,7 @@ async function main() {
       // PHOTOGRAPHED GROUND (2026-10-04): rock, soil and forest floor are
       // Poly Haven scans (CC0) now, not generated pictures, and carry their
       // own roughness: wet-looking pebbles and dry dust differ in the light
-      if (['rock', 'soil', 'forest'].includes(gname) && !_toonGround) {
+      if (['rock', 'soil', 'forest', 'sand', 'grass'].includes(gname) && !_toonGround) {
         gmat.roughnessMap = pbr(gname + '_r', grep2, false);
         gmat.roughness = 1.0;
         gmat.normalScale.set(1.0, 1.0);
@@ -13742,11 +13742,17 @@ async function main() {
       // each other, and lets a slow world-space noise choose between them,
       // so no repeat lines up; and on a steep face it projects the photo
       // from the side as well (triplanar), so a wall is rock, not a smear.
+      // a cliff is its own rock (Poly Haven scans, CC0): layered sandstone in
+      // canyon and mesa country, weathered rock face everywhere else
+      const _cliffTex = _toonGround ? gmat.map : pbr(STRATA ? 'sandstone' : 'cliff', 1, true);
+      const _cliffM = STRATA ? 9.0 : 7.0;
       const _tileM = (gname === 'snow' && !_toonGround) ? gsize / Math.max(8, Math.round(gsize / 14))   // drawn snow tiles at 14 m
         : gsize / grep2;                               // metres per tile of the photo
       gmat.onBeforeCompile = (sh) => {
         sh.uniforms.uWorld = { value: worldTint };
         sh.uniforms.uTileM = { value: _tileM };
+        sh.uniforms.uCliff = { value: _cliffTex };
+        sh.uniforms.uCliffM = { value: _cliffM };
         sh.vertexShader = `varying vec2 vUvRaw;
 varying vec3 vWPosG; varying vec3 vWNrmG;
 ` + sh.vertexShader.replace(
@@ -13757,6 +13763,7 @@ varying vec3 vWPosG; varying vec3 vWNrmG;
   vWNrmG = normalize(mat3(modelMatrix) * normal);`);
         sh.fragmentShader = `uniform sampler2D uWorld;
 uniform float uTileM;
+uniform sampler2D uCliff; uniform float uCliffM;
 varying vec2 vUvRaw;
 varying vec3 vWPosG; varying vec3 vWNrmG;
 float gh1(vec2 p){ p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
@@ -13784,7 +13791,7 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
     vec4 col = top;
     if (steepT > 0.0) {
       vec2 bw = abs(gN.xz) + 0.001; bw /= (bw.x + bw.y);
-      vec4 side = texture2D(map, vWPosG.zy / uTileM) * bw.x + texture2D(map, vWPosG.xy / uTileM) * bw.y;
+      vec4 side = texture2D(uCliff, vWPosG.zy / uCliffM) * bw.x + texture2D(uCliff, vWPosG.xy / uCliffM) * bw.y;
       col = mix(top, side, steepT);
     }
     diffuseColor *= col;
@@ -13799,7 +13806,7 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
     vec3 bed = mix(vec3(0.70, 0.29, 0.15), vec3(0.88, 0.66, 0.46), smoothstep(0.42, 0.55, band) * smoothstep(0.9, 0.78, band));
     bed = mix(bed, vec3(0.50, 0.20, 0.12), smoothstep(0.86, 0.96, seam) * 0.65);
     float lum = dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114));
-    diffuseColor.rgb = mix(diffuseColor.rgb, bed * (0.45 + 0.75 * lum), steep * 0.88);   // the bed sets the hue, the photo keeps its shading
+    diffuseColor.rgb = mix(diffuseColor.rgb, bed * (0.45 + 0.75 * lum), steep * 0.38);   // the photographed beds lead; the drawn ones vary their hue
   }` : ''}`);
       };
       }
