@@ -254,6 +254,13 @@ def _archetype_height(kind: str, x: float, z: float, base: float,
         # summits are pointed and valleys are deep
         sgn = 1.0 if base >= 0 else -1.0
         return sgn * ((abs(base) / max(amp, 1e-6)) ** 1.9) * amp * 4.2
+    if kind == "volcano":
+        # a lava field on a volcano's flank: blocky aa and ropy pahoehoe,
+        # hummocks a person climbs over, never a smooth lawn. The channels
+        # the lava runs in are cut by build_level, which knows the route.
+        ridge = abs(_m.sin(x * 0.09 + rng_seed % 5 + _m.sin(z * 0.05) * 1.7)
+                    * _m.cos(z * 0.08 - rng_seed % 3 + _m.sin(x * 0.04)))
+        return base * 0.7 + ridge * amp * 0.9
     if kind == "archipelago":
         # sea level is the default state; islands are what rises out of it
         blob = _m.sin(x * 0.021 + rng_seed % 3) * _m.cos(z * 0.019 - rng_seed % 4)
@@ -314,6 +321,49 @@ def _apply_terrain_form(h: list[float], n: int, form: str, amp: float) -> list[f
     return h
 
 
+def _lava_channels(seed: int, half: float, goal: list[float]) -> list[dict]:
+    """THE LAVA RUNS ACROSS THE WAY UP (2026-10-03). Three flows come down
+    from the cone that stands past the goal, each crossing the line from the
+    spawn to the goal a set way along it (three tenths, a little over half,
+    four fifths) on a slant downhill, so every flow lies between the start and
+    the summit and the route has to cross all three. The path corridor is
+    flattened afterwards, which leaves a bridge of cooled crust where the
+    route meets each flow. Crossing the line that far along also keeps the
+    spawn and the goal on solid ground by construction: the first plan
+    fanned the flows out from the goal side, and the middle one ran along the
+    route, through the spawn and the shrine both."""
+    import math as _m
+    r = random.Random(seed * 7 + 91)       # its own stream: the rest of the level is unchanged
+    gl = _m.hypot(goal[0], goal[1]) or 1.0
+    ux, uz = goal[0] / gl, goal[1] / gl
+    out = []
+    for k, f in enumerate((0.3, 0.55, 0.8)):
+        f += r.uniform(-0.04, 0.04)
+        cx, cz = goal[0] * f, goal[1] * f
+        # downhill is away from the cone (-u), turned 40 to 60 degrees off it,
+        # alternately left and right, so the flows braid rather than run parallel
+        ang = _m.radians(r.uniform(40, 60)) * (1 if k % 2 == 0 else -1)
+        dx = -ux * _m.cos(ang) - (-uz) * _m.sin(ang)
+        dz = -ux * _m.sin(ang) - uz * _m.cos(ang)
+        nx, nz = -dz, dx
+        L = half * 1.7
+        amp = r.uniform(0.03, 0.06) * half
+        fr, ph = r.uniform(1.5, 2.6), r.uniform(0, 6.28)
+        pts = []
+        for i in range(37):
+            s = (i / 36 - 0.5) * 2 * L
+            t = i / 36
+            # the meander dies away where the flow crosses the route, so the
+            # crossing stays where it was put
+            m = _m.sin(t * _m.pi * fr + ph) * amp * min(1.0, abs(s) / (half * 0.35))
+            pts.append([round(cx + dx * s + nx * m, 2), round(cz + dz * s + nz * m, 2)])
+        out.append({"pts": pts, "w": round(r.uniform(2.4, 3.6), 2)})
+    return out
+
+
+LAVA_LEVEL = -0.45     # the lava's surface; a channel's floor lies at -1.4
+
+
 def build_level(seed: int, size_m: float, n_objectives: int = 0,
                 amplitude_m: float = 2.4, grid_n: int = 48,
                 regions: list[dict] | None = None,
@@ -344,6 +394,9 @@ def build_level(seed: int, size_m: float, n_objectives: int = 0,
     has_water = bool(raster) and any(
         p["kind"] == "water" for p in raster["palette"])
     hgrid = _value_noise_grid(rng, grid_n)
+    lava = _lava_channels(seed, half, goal) if _arch == "volcano" else []
+    lava_segs = [(c["w"], c["pts"][k], c["pts"][k + 1])
+                 for c in lava for k in range(len(c["pts"]) - 1)]
     heights: list[float] = []
     for i in range(grid_n):
         z = (i / (grid_n - 1) - 0.5) * size_m
@@ -357,6 +410,27 @@ def build_level(seed: int, size_m: float, n_objectives: int = 0,
             # track the detail for free.
             i2, j2 = (i * 3) % grid_n, (j * 3) % grid_n
             h += (hgrid[i2][j2] - 0.5) * 0.5 * min(amplitude_m, 1.2)
+            # LAVA CHANNELS: a flat floor under the flow, a raised levee of
+            # cooled rock along each bank (a real channel builds its own
+            # walls), then the field again
+            _ch = False
+            if lava_segs:
+                _best = 1e9
+                for (_w, _a, _b) in lava_segs:
+                    _d = _seg_dist(x, z, _a[0], _a[1], _b[0], _b[1]) - _w
+                    if _d < _best:
+                        _best = _d
+                if _best < 4.0:
+                    _ch = _best < 1.5
+                    if _best < 0:
+                        _cw = 1.0 + _best / 3.6           # 0 at the centre line .. 1 at the edge
+                        h = -1.4 + 0.4 * max(0.0, _cw) ** 4
+                    elif _best < 1.5:
+                        _s = _best / 1.5
+                        h = -1.0 + (h + 0.9 + 1.0) * (_s * _s * (3 - 2 * _s))
+                    else:
+                        _s = (_best - 1.5) / 2.5
+                        h = (h + 0.9) + (-0.9) * (_s * _s * (3 - 2 * _s))
             # REGION MODULATION, before the corridor flattens the path: the
             # route must stay walkable whatever the layout asked for, so the
             # corridor always has the last word.
@@ -389,6 +463,8 @@ def build_level(seed: int, size_m: float, n_objectives: int = 0,
             edge = max(abs(x), abs(z)) / half        # settle flat at the walls
             if edge > 0.92:
                 h *= max(0.0, (1.0 - edge) / 0.08)
+            if lava_segs and not _ch:
+                h = max(h, LAVA_LEVEL + 0.25)   # only a channel lies under the lava
             heights.append(round(h, 3))
 
     heights = _apply_terrain_form(heights, grid_n, terrain_form, amplitude_m)
@@ -460,6 +536,11 @@ def build_level(seed: int, size_m: float, n_objectives: int = 0,
         "collect_points": collect_points,
         "landmarks": landmarks,                # [x, z, scale]
     }
+    if lava:
+        gl = math.hypot(goal[0], goal[1]) or 1.0
+        out_level["lava"] = {"level": LAVA_LEVEL, "channels": lava,
+                             # the cone stands past the goal, beyond the playfield
+                             "cone_dir": [round(goal[0] / gl, 3), round(goal[1] / gl, 3)]}
     if raster is not None:
         out_level["regions"] = raster
         out_level["regions_src"] = regions     # edits re-parse from here

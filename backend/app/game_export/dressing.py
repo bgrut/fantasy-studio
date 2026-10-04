@@ -176,6 +176,9 @@ _ARCH_RECIPES_REAL = {
               (_PH_FLOWER, 10, 2, 0.9), (_PH_ROCK, 10, 2, 2.4)],
     "peaks": [(_PH_TREE, 18, 3, 7.0), (_PH_ROCK, 24, 3, 3.4),
               (_PH_CLIFF, 12, 2, 10.0), (_PH_DEAD, 8, 1, 4.0)],
+    # a lava field: black boulders, scorched snags, no green at all
+    "volcano": [(_PH_ROCK, 26, 3, 3.2), (_PH_SMALLROCK, 22, 3, 1.5),
+                (_PH_CLIFF, 8, 2, 9.0), (_PH_DEAD, 10, 2, 4.2)],
     "archipelago": [(_PH_TREE, 12, 2, 7.0), (_PH_ROCK, 14, 2, 2.6),
                     (_PH_SMALLROCK, 14, 2, 1.4)],
     "plain": [(_PH_TREE, 16, 3, 7.5), (_PH_UNDER, 14, 2, 1.4),
@@ -265,6 +268,8 @@ _ARCH_RECIPES = {
     "peaks": [(_T_CONE, 80, 7, 4.8), (_ROCK_L, 50, 5, 2.4),
               (_STONE_L, 34, 4, 2.2), (_STUMP, 12, 2, 2.0),
               (_LOG, 10, 1, 2.2)],
+    "volcano": [(_ROCK_L, 50, 5, 2.4), (_ROCK_S, 44, 4, 1.6),
+                (_CLIFF_R, 16, 2, 6.0), (_STUMP, 10, 2, 2.0)],
     # islands: low scrub and shore stone, few trees
     "archipelago": [(_T_BROAD, 18, 3, 4.2), (_BUSH, 30, 3, 2.2),
                     (_STONE_F, 34, 4, 1.6), (_GRASS, 30, 3, 2.2)],

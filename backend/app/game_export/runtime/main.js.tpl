@@ -18,10 +18,15 @@ import RAPIER from './vendor/rapier.es.js';
 import { buildCarHQ as __buildCarHQ } from './proc/car.js';
 import * as __FLORA from './proc/flora.js';
 import * as __GRASS from './proc/grass.js';
+import { createVolcano as __createVolcano } from './proc/volcano.js';
+import { waterMaterial as __waterMaterial, waterKind as __waterKind, groundMist as __groundMist } from './proc/water.js';
+import { snowTextures as __snowTextures } from './proc/ground.js';
+import { createWaterfall as __createWaterfall } from './proc/waterfall.js';
 import { createGait as __createGait } from './proc/gait.js';
 import { loadMotionDB as __loadMotionDB, createMotionMatcher as __createMotionMatcher } from './proc/mm.js';
 
 const SPEC = __GAME_SPEC__;
+window.__spec = SPEC;              // shot tools read the level from here
 
 const errBox = document.getElementById('err');
 function fail(msg) {
@@ -105,6 +110,8 @@ async function main() {
   // azimuth and hue so even two builds of one prompt light differently.
   // Every downstream consumer already reads `pal`, so this one intercept is
   // the entire system.
+  // a volcano world draws its own sky, cone and lava (proc/volcano.js)
+  const _volcLava = (((SPEC.world || {}).level || {}).lava) || null;
   const pal = (() => {
     const base = Object.assign({}, SKY[SPEC.world.sky] || SKY.day);
     const PW = SPEC.world.palette || {};
@@ -740,7 +747,7 @@ async function main() {
   const _palLum = (() => { const c = new THREE.Color(pal.sky);
     return 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b; })();
   const _darkWorld = SPEC.world.sky === 'night' || SPEC.world.sky === 'space'
-    || (!!SPEC.world.palette && _palLum < 0.22);
+    || (!!SPEC.world.palette && _palLum < 0.22 && !_volcLava);   // an ash sky is dark, and still not night
   window.__darkWorld = _darkWorld;
   if (!_darkWorld) {
     const sky = new Sky();
@@ -825,7 +832,7 @@ async function main() {
           // photoreal outdoor moods the real captured sky (actual clouds,
           // real horizon glow) IS the background now; the procedural dome
           // + cloud sprites hide so they don't occlude it.
-          if ((SPEC.style || 'default') === 'default'
+          if ((SPEC.style || 'default') === 'default' && !_volcLava
               && ['day', 'sunset', 'overcast', 'dusk'].includes(SPEC.world.sky)) {
             scene.background = tex;
             scene.backgroundIntensity = SPEC.world.sky === 'day' ? 1.0 : 0.9;
@@ -951,6 +958,8 @@ async function main() {
       };
       for (let i = 0; i < NPK; i++) {
         const a = (i / NPK) * Math.PI * 2 + rngM() * 0.35;
+        // the volcano's cone stands on this bearing: no range in front of it or behind it
+        if (_volcLava && Math.cos(a - Math.atan2(_volcLava.cone_dir[1], _volcLava.cone_dir[0])) > 0.82) continue;
         // with a forest to the horizon the ridges stand BEHIND it, at the
         // land's far edge, as tall as distance asks; otherwise just past the
         // playfield, as before
@@ -1196,6 +1205,12 @@ async function main() {
   // level path, and real asphalt roads when the level carries OSM data) ─────
   const gsize = SPEC.world.size_m;
   const LVL = SPEC.world.level || null;
+  // SNOW UNDERFOOT (2026-10-03): an arctic or frozen world stands on snow
+  // whether or not it is snowing; "a penguin sliding across a frozen lake in
+  // the arctic" stood on river pebbles because only the weather asked
+  const SNOW_GROUND = SPEC.world.weather === 'snow'
+    || /arctic|tundra|polar|glacier|frozen|snowy|snowfield|winter|blizzard|antarctic/.test(
+         [SPEC.world.name, SPEC.world.setting, SPEC.prompt].filter(Boolean).join(' ').toLowerCase());
   // SIDE-SCROLLER projection: gameplay lives on the z=0 plane — pull the
   // mission targets onto it so everything is actually reachable
   if (VIEW === 'side' && LVL) {
@@ -1235,6 +1250,7 @@ async function main() {
   let DRIVING = false;
   // MOVEMENT FEEL (2026-09-22): the walk ramps, a landing dips, a slide leaves marks
   let walkV = 0, landDipA = 0, landDipPeak = 0, _wasG = true, runK = 0, driveFovK = 0;
+  let _lavaSafe = null;             // the last ground clear of the lava (a volcano world)
   const _wdir = new THREE.Vector3(0, 0, 1);
   window.__slip = 0; window.__handbrake = false;
   let _skid = null, _skidLife = null, _skidHead = 0, _skidLast = [0, 0], _smoke = null, _smokeI = 0;
@@ -1416,6 +1432,10 @@ async function main() {
       }
     }
     ctx.globalAlpha = 1;
+  } else if (LVL && LVL.path && SNOW_GROUND) {  // a trail in snow is packed snow, not dirt
+    const c = LVL.corridor_m || 5.5;
+    drawTrail(LVL.path, c * 1.0, '#c7ced8', 0.35);
+    drawTrail(LVL.path, c * 0.45, '#b4bdc9', 0.45);
   } else if (LVL && LVL.path) {                // worn trail along the mission route
     const c = LVL.corridor_m || 5.5;
     drawTrail(LVL.path, c * 1.15, '#' + dirt.getHexString(), 0.5);
@@ -1743,8 +1763,7 @@ async function main() {
       // shore under them, and deep blue where the bed has fallen away
       const seaG = new THREE.PlaneGeometry(FLORA.R * 2.6, FLORA.R * 2.6);
       seaG.rotateX(-Math.PI / 2);
-      const sea = new THREE.Mesh(seaG, new THREE.MeshStandardMaterial({ color: 0x1f6f96, transparent: true, opacity: 0.74,
-        roughness: 0.1, metalness: 0.1, depthWrite: false }));
+      const sea = new THREE.Mesh(seaG, __waterMaterial('sea', WIND_U));
       sea.material.userData.noAutoTex = true;
       sea.position.y = SEA_Y;
       sea.name = 'islandSea';
@@ -1768,7 +1787,7 @@ async function main() {
     hs.sort((a, b) => a - b);
     return Math.max(w, hs[Math.floor(hs.length * 0.5)] + 4.5);
   })();
-  let waterMesh = null, underwater = false;
+  let waterMesh = null, underwater = false, WATER_Y = null, WATER_BOB = 0.12;
   const origFog = scene.fog;
   if (WATER !== null) {
     // THE SEA GOES TO THE HORIZON (2026-10-02). Under a reef prompt the
@@ -1777,11 +1796,17 @@ async function main() {
     // bed lies under it, so beyond the reef the water reads as open ocean
     const _sea = !!(FLORA && FLORA.biome && FLORA.biome.underwater);
     const _wS = _sea ? Math.max(gsize * 1.3, FLORA.R * 2.6) : gsize * 1.3;
+    // a lake, a swamp or a frozen pond has its own water (proc/water.js); the
+    // reef keeps the clear blue it is lit and fogged for from below
+    const _wWords = ((FLORA && FLORA.words) || [SPEC.world.name, SPEC.world.setting, SPEC.title].filter(Boolean).join(' ')).toLowerCase();
+    const _frozen = SPEC.player.mode !== 'swim' && (SPEC.world.weather === 'snow' || /frozen|\bice\b|icy|arctic|tundra/.test(_wWords));
     waterMesh = new THREE.Mesh(
       new THREE.PlaneGeometry(_wS, _wS),
-      new THREE.MeshStandardMaterial({ color: 0x1d5d8e, transparent: true, opacity: 0.7,
+      _sea ? new THREE.MeshStandardMaterial({ color: 0x1d5d8e, transparent: true, opacity: 0.7,
                                        roughness: 0.12, metalness: 0.1, side: THREE.DoubleSide,
-                                       depthWrite: false }));
+                                       depthWrite: false })
+           : __waterMaterial(__waterKind(_wWords, _frozen), WIND_U));
+    window.__waterKind = _sea ? 'reef' : waterMesh.material.userData.waterKind;
     waterMesh.rotation.x = -Math.PI / 2;
     // LAKE LEVEL FIX (Phase 88): a fixed height FLOATS above rolling terrain
     // (the penguin's frozen lake hovered over the ground). Water fills the
@@ -1793,6 +1818,21 @@ async function main() {
       }
       hs.sort((a, b) => a - b);
       waterMesh.position.y = _sea ? WATER : Math.min(WATER, hs[Math.floor(hs.length * 0.12)] + 0.05);
+      // STILL WATER STAYS OFF THE PATH (2026-10-03). The level the planner
+      // writes can stand a metre over the route ("a misty swamp" put every
+      // body knee-deep across the whole field), and the bob below used to
+      // reset the surface to that raw level every frame, so the clamp above
+      // never held. A walker's lake lies below the path, a swamp at most
+      // ankle-deep over it, ice just over it; a swimmer or a boat keeps the
+      // water it was given.
+      const _wk = waterMesh.material.userData.waterKind;
+      if (!_sea && SPEC.player.mode !== 'swim' && !SPEC.player.buoyant) {
+        // ice lies where it was put, over the path: it is ground, and the
+        // basin clamp above would sink it under the snow
+        waterMesh.position.y = _wk === 'ice' ? WATER : Math.min(waterMesh.position.y, _wk === 'swamp' ? 0.18 : -0.12);
+      }
+      WATER_Y = waterMesh.position.y;
+      WATER_BOB = _sea ? 0.12 : _wk === 'ice' ? 0 : 0.03;
     }
     scene.add(waterMesh);
     if (_sea) {
@@ -1802,6 +1842,56 @@ async function main() {
       bed.position.y = waterMesh.position.y - 28;
       bed.name = 'deepBed';
       scene.add(bed);
+    }
+  }
+
+  // THE VOLCANO (2026-10-03): lava in the level's channels, the cone past the
+  // goal, its plume, embers and ash, and an ash sky in place of the dome
+  let VOLC = null;
+  if (_volcLava && !INTERIOR) {
+    try {
+      VOLC = __createVolcano({ scene, lava: _volcLava, gsize, hAt, camera,
+                               sunDir: sun.position.clone().normalize(), seed: SPEC.seed || 1 });
+      if (window.__skyDome) window.__skyDome.visible = false;
+      if (window.__clouds) for (const sp of window.__clouds) sp.visible = false;
+      window.__volc = VOLC;
+    } catch (e) { console.warn('[game] volcano skipped', e); }
+  }
+  // GROUND MIST (2026-10-03): a swamp, a marsh, a misty moor has mist lying
+  // on it, not only distance fog (proc/water.js)
+  let MIST = null;
+  {
+    const _mw = ((FLORA && FLORA.words) || [SPEC.world.name, SPEC.world.setting, SPEC.title, SPEC.description].filter(Boolean).join(' ')).toLowerCase();
+    if (!INTERIOR && !OSM && !SPEC.world.pano && (SPEC.view || '3d') === '3d' && /swamp|marsh|bog|bayou|mire|misty|mist|foggy/.test(_mw)) {
+      try {
+        MIST = __groundMist(scene, { hAt, clock: WIND_U, density: /swamp|marsh|bog|bayou|mire/.test(_mw) ? 0.85 : 0.6,
+                                     color: new THREE.Color(pal.fog).lerp(new THREE.Color(0xffffff), 0.25) });
+        window.__mist = MIST.sheets;
+      } catch (e) { console.warn('[game] mist skipped', e); }
+    }
+  }
+  // THE WATERFALL (2026-10-03): a sentence that names one gets one, beside
+  // the goal on the far side from the spawn (proc/waterfall.js); its cliff
+  // is solid
+  let FALLS = null;
+  {
+    const _fw = [SPEC.prompt, SPEC.title, SPEC.world.name, SPEC.description].filter(Boolean).join(' ').toLowerCase();
+    if (LVL && LVL.goal && !INTERIOR && !OSM && !SPEC.world.pano && /waterfall|cascade/.test(_fw)) {
+      try {
+        const gx = LVL.goal[0], gz = LVL.goal[1], gl = Math.hypot(gx, gz) || 1;
+        const dx = gx / gl, dz = gz / gl, side = ((SPEC.seed || 1) % 2) ? 1 : -1;
+        const at = [gx - dz * 17 * side + dx * 6, gz + dx * 17 * side + dz * 6];
+        const tl = Math.hypot(at[0], at[1]) || 1;
+        FALLS = __createWaterfall({ scene, at, facing: [-at[0] / tl, -at[1] / tl], hAt, clock: WIND_U,
+                                    green: !(FLORA && FLORA.barren) });
+        FALLS.at = at;
+        const cl = FALLS.group.getObjectByName('waterfallCliff');
+        FALLS.group.updateMatrixWorld(true);
+        const pa = cl.geometry.attributes.position, v3 = new THREE.Vector3(), vv = new Float32Array(pa.count * 3);
+        for (let i = 0; i < pa.count; i++) { v3.fromBufferAttribute(pa, i).applyMatrix4(cl.matrixWorld); vv[i * 3] = v3.x; vv[i * 3 + 1] = v3.y; vv[i * 3 + 2] = v3.z; }
+        world.createCollider(RAPIER.ColliderDesc.trimesh(vv, new Uint32Array(cl.geometry.index.array)));
+        window.__falls = FALLS.facts();
+      } catch (e) { console.warn('[game] waterfall skipped', e); }
     }
   }
 
@@ -5849,7 +5939,9 @@ async function main() {
         for (const p of (LVL.landmarks || [])) keepClear.push([p[0], p[1], 9]);
       }
       keepClear.push([_sp.x, _sp.z, 12]);     // the hero starts in a clearing, the camera behind them too
-      const clear = (x, z) => keepClear.some(([cx, cz, r]) => (x - cx) * (x - cx) + (z - cz) * (z - cz) < r * r);
+      if (FALLS) keepClear.push([FALLS.at[0], FALLS.at[1], 36]);   // the fall stands in its own glade, seen from the path
+      const clear = (x, z) => keepClear.some(([cx, cz, r]) => (x - cx) * (x - cx) + (z - cz) * (z - cz) < r * r)
+        || (VOLC && Math.abs(x) < gsize / 2 && Math.abs(z) < gsize / 2 && VOLC.edgeDist(x, z) < 2.5);
       const T = [];
       const H2 = gsize / 2;
       // inside the playfield
@@ -6067,6 +6159,8 @@ async function main() {
   const _isTreeAsset = a => /tree|pine|fir|oak|bush|palm|birch|spruce|foliage/i.test(a || '');
   const _isRockAsset = a => /rock|boulder|stone|crag/i.test(a || '');
   const _regReject = (x, z, sct) => {
+    if (VOLC && VOLC.edgeDist(x, z) < 2.0) return true;     // nothing stands in the lava
+    if (FALLS && Math.hypot(x - FALLS.at[0], z - FALLS.at[1]) < 34) return true;   // nor in the waterfall's glade
     const r = window.__regionAt && window.__regionAt(x, z);
     if (!r) return false;
     if (r.kind === 'water' && r.w > 0.18) return true;
@@ -10044,7 +10138,7 @@ async function main() {
       playerHit(1);
     }
   }
-  function playerHit(dmg, from) {
+  function playerHit(dmg, from, why) {
     if (won || lost) return;
     // A HIT GIVES YOU A MOMENT (2026-10-01): a dodge is untouchable, and after
     // a hit nothing lands for 0.6 s, so a pack cannot drain a full bar in one
@@ -10064,9 +10158,9 @@ async function main() {
     renderHearts();
     dmgEl.style.opacity = '1';
     setTimeout(() => { dmgEl.style.opacity = '0'; }, 160);
-    if (php <= 0) doLose(HAS_GUARDS
+    if (php <= 0) doLose(why || (HAS_GUARDS
       ? 'Busted. The guards dragged you out.'   // a heist ends in cuffs
-      : 'Overwhelmed by enemies.');
+      : 'Overwhelmed by enemies.'));
   }
 
   // ── player: animated GLB + kinematic capsule ─────────────────────────────
@@ -12527,6 +12621,10 @@ async function main() {
         weapon: (typeof WEAPONS !== 'undefined' && ATTACK !== 'none' && !(typeof NO_ARMS !== 'undefined' && NO_ARMS)) ? (WEAPONS[weaponIdx] || WEAPONS[0]).id : null,
         buoyant: !!P.buoyant,
         water_level: SPEC.world.water_level == null ? null : +SPEC.world.water_level,
+        lava: VOLC ? VOLC.facts() : null,
+        water_kind: window.__waterKind || null,
+        mist: window.__mist || 0,
+        waterfall: window.__falls || null,
       };
       try {
         const im = gmat.map && gmat.map.image;
@@ -13519,9 +13617,9 @@ async function main() {
       // peaks was 'stone', and stone.jpg is MASONRY — an alpine ridge came
       // out paved in cobblestones. Bare mountain is rock.
       const ARCH_TEX = { canyon: 'rock', mesa: 'rock', peaks: 'rock',
-                         dunes: 'sand', basin: 'soil', archipelago: 'sand' };
+                         dunes: 'sand', basin: 'soil', archipelago: 'sand', volcano: 'rock' };
       const _arch2 = SPEC.world.archetype || 'plain';
-      const gname = (SPEC.world.weather === 'snow') ? 'snow'
+      const gname = SNOW_GROUND ? 'snow'
         : ARCH_TEX[_arch2] ? ARCH_TEX[_arch2]
         : /desert|beach|dune/.test(wn) ? 'sand'
         : /forest|wood|jungle/.test(wn) ? 'forest'
@@ -13551,6 +13649,15 @@ async function main() {
       gmat.map = pbr(gname, grep2, true);
       gmat.normalMap = pbr(gname + '_n', grep2, false);
       gmat.normalScale = new THREE.Vector2(0.65, 0.65);
+      // SNOW IS DRAWN (2026-10-03): the photo is a close-up of wind ripples,
+      // and tiled underfoot it read as blue rippled sand; fresh snow is soft
+      // drifts a few metres across with a fine grain (proc/ground.js)
+      if (gname === 'snow' && !_toonGround) {
+        const _sn = __snowTextures(Math.max(8, Math.round(gsize / 14)), renderer.capabilities.getMaxAnisotropy());
+        gmat.map = _sn.map; gmat.normalMap = _sn.normalMap;
+        gmat.normalScale.set(1, 1);
+        gmat.roughness = 0.82;
+      }
       // AND IT IS TINTED BY THE WORLD'S OWN COLOUR (2026-09-03). The tiled
       // photo below is a neutral grey rock / grey sand / green grass; the
       // world tint that is supposed to colour it rides in the shader patch
@@ -13563,6 +13670,7 @@ async function main() {
       // by a raw 0.6/0.3/0.1 would leave the canyon nearly black.
       gmat.color.copy(gcol).lerp(new THREE.Color(0xffffff), 0.28)
         .offsetHSL(0, 0.10, 0);
+      if (gname === 'snow') gmat.color.set(0xeef1f5);     // snow is white; the light colours it
       const worldTint = gtex;                        // the painted canvas
       gmat.onBeforeCompile = (sh) => {
         sh.uniforms.uWorld = { value: worldTint };
@@ -13688,7 +13796,7 @@ varying vec2 vUvRaw;
   // no godrays without an atmosphere: 'space' got sun shafts through a
   // starless void, which is what washed the neon test to fog-grey
   const godray = !(['night', 'space'].includes(SPEC.world.sky)
-                   || window.__darkWorld) ? new ShaderPass({
+                   || window.__darkWorld || _volcLava) ? new ShaderPass({
     uniforms: { tDiffuse: { value: null },
                 uSun: { value: new THREE.Vector2(0.5, 0.8) },
                 uStr: { value: 0 },
@@ -14764,6 +14872,9 @@ varying vec2 vUvRaw;
     WIND_U.value = performance.now() / 1000;   // wind clock (Phase 81)
     if (FLORA_LIVE) FLORA_LIVE.update(camera);  // which trees are near enough to be trees
     if (GRASS_LIVE) GRASS_LIVE.update(camera, playerObj.position);
+    if (VOLC) VOLC.update(rdt, camera, playerObj.position);
+    if (MIST) MIST.update(camera);
+    if (FALLS) FALLS.update(rdt);
     if (window.__cbtStep) window.__cbtStep(dt);
     __fmTick(rdt);                             // the guide, on real time
     for (const w of wheels) {                  // roll with speed, steer in front
@@ -14987,6 +15098,19 @@ varying vec2 vUvRaw;
     if (kcc.computedGrounded()) vy = 0;
     const t = body.translation();
     body.setNextKinematicTranslation({ x: t.x + cm.x, y: t.y + cm.y, z: t.z + cm.z });
+    // LAVA BURNS (2026-10-03): a step into a channel costs a heart and puts
+    // the hero back on the last solid ground they stood on, well clear of it
+    if (VOLC && gameStarted && !won && !lost) {
+      const lx = t.x + cm.x, lz = t.z + cm.z;
+      if (VOLC.inLava(lx, lz)) {
+        if (_lavaSafe) body.setNextKinematicTranslation({ x: _lavaSafe.x, y: _lavaSafe.y + 0.3, z: _lavaSafe.z });
+        vy = 0; walkV = 0;
+        playerHit(1, null, 'Swallowed by the lava.');
+        if (typeof popText === 'function') popText('Too hot!', '#ff9a4a');
+      } else if (kcc.computedGrounded() && VOLC.edgeDist(lx, lz) > 2.5) {
+        _lavaSafe = { x: lx, y: t.y + cm.y, z: lz };
+      }
+    }
     world.step();
     // DYNAMIC PROPS follow the solver. Written straight after the step so the
     // render never shows a frame of stale physics.
@@ -15031,7 +15155,7 @@ varying vec2 vUvRaw;
       }
     }
     if (WATER !== null) {     // tide bob + underwater fog when the camera dips
-      waterMesh.position.y = WATER + Math.sin(performance.now() / 1400) * 0.12;
+      waterMesh.position.y = WATER_Y + Math.sin(performance.now() / 1400) * WATER_BOB;
       const under = camera.position.y < waterMesh.position.y;
       if (under !== underwater) {
         underwater = under;

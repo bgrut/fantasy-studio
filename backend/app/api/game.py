@@ -1292,6 +1292,60 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             spec.seed = req.seed if req.seed is not None else _random.randint(1, 999_999)
         job["seed"] = spec.seed
 
+        # A CANYON IS A GORGE (2026-10-03): "a red desert canyon" was read as
+        # mesa country, stepped plateaus with no walls to walk between. The
+        # word decides it, as with the volcano below.
+        if (base_spec is None and _fre.search(r"\b(canyon|gorge|ravine)s?\b", (req.prompt or "").lower())
+                and getattr(spec.world, "archetype", "plain") in ("plain", "mesa", "dunes", "peaks", "basin")):
+            spec.world.archetype = "canyon"
+        # A FROZEN LAKE IS THERE TO BE CROSSED (2026-10-03). "A penguin sliding
+        # across a frozen lake" had no lake at all: water only came from a
+        # layout region the model did not draw. A frozen lake or pond fills
+        # the low ground with ice just over the path (the runtime draws it as
+        # ice, proc/water.js), and the hills stand out of it as snowy banks.
+        _frozen_ice = False
+        if (base_spec is None and spec.world.water_level is None and spec.player.mode != "swim"
+                and _fre.search(r"\b(frozen|icy|iced|ice)[ -](lake|pond|river|lagoon|bay|sea)s?\b|\bice rink\b",
+                                (req.prompt or "").lower())):
+            spec.world.water_level = 0.04
+            _frozen_ice = True              # ice is ground: nothing swims on it (see below)
+        # A VOLCANO IS A LANDFORM, NOT A PROP (2026-10-03). "Climb a smoking
+        # volcano and escape the lava flows" came back as night-black alpine
+        # peaks with a generated 'lava flow' statue standing on the ground.
+        # The prompt's own words decide the landform here (the model reached
+        # for peaks), and the runtime draws the lava, the cone, the smoke and
+        # the ash itself (proc/volcano.js), so nothing is generated for them.
+        _volc_words = r"\b(volcan\w*|lava|magma|erupt\w*|caldera)\b"
+        _sea_words = r"\b(underwater|ocean|sea|reef|diving|island)\b"
+        _ptl = (req.prompt or "").lower()
+        if (base_spec is None and _fre.search(_volc_words, _ptl)
+                and spec.world.sky != "space" and not _fre.search(_sea_words, _ptl)):
+            spec.world.archetype = "volcano"
+            _drawn = _fre.compile(r"\b(lava|magma|smoke|plume|erupt\w*|ember\w*|ash|volcano)\b", _fre.I)
+            _gone = [e.name for e in spec.entities if _drawn.search(e.name or "")]
+            if _gone:
+                spec.entities = [e for e in spec.entities if not _drawn.search(e.name or "")]
+                for ev in spec.events:
+                    ev.then = [a for a in ev.then
+                               if not (a.startswith("spawn:") and _drawn.search(a))]
+                spec.events = [ev for ev in spec.events if ev.then]
+            spec.world.scatter = [sc for sc in spec.world.scatter
+                                  if not _drawn.search(Path(sc.asset).stem.replace("_", " "))]
+            # under an ash sky: the low sun through smoke, never a black night
+            spec.world.sky = "sunset"
+            from app.game_export.spec import PaletteSpec as _PS
+            _pv = spec.world.palette or _PS()
+            if isinstance(_pv, dict):
+                _pv = _PS(**_pv)
+            _pv.sky, _pv.fog, _pv.sun_color = "#5e4a42", "#5e4a42", "#ffb27e"
+            _pv.ambient = 0.28            # the lava lights the rock; the sky barely does
+            spec.world.palette = _pv
+            spec.world.ground_color = [0.19, 0.165, 0.15]    # basalt
+            if spec.world.weather in ("snow", "rain"):
+                spec.world.weather = "none"
+            job.setdefault("notes", []).append(
+                "volcano: lava runs in channels across your route, the cone smokes "
+                "past the goal" + (f" (drawn by the world, not generated: {', '.join(_gone)})" if _gone else ""))
         stage("resolving assets")
         # SUBJECT IS THE HERO (2026-07-08): the prompt's own words outrank
         # the LLM's cast — "a wolf roaming the mountains" once played as a
@@ -1301,18 +1355,37 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         if base_spec is None and req.player is None and spec.player.name:
             _pl = spec.player.name.lower()
             _ptext = req.prompt.lower()
-            if _pl not in _ptext:
+            # A PROP IS NOT A HERO EITHER (2026-10-03): "explore a glowing
+            # crystal cave" came back with the crystal as the player, a word
+            # the prompt does contain, so the check above let it through and
+            # the build failed with nothing to rig. A walking hero that is a
+            # static thing is recast the same way.
+            from app.game_export.generate import guess_pattern as _gp_hero
+            _prop_hero = (spec.player.mode or "walk") == "walk" and _gp_hero(_pl) == "static"
+            if _pl not in _ptext or _prop_hero:
                 _skip = {"firefly", "fireflies", "snowflake", "snowflakes",
-                         "beacon", "beacons", "star", "stars"}
+                         "beacon", "beacons", "star", "stars",
+                         "planet", "planets", "moon", "moons", "sun", "sky"}
                 cand = None
                 for wd in _ptext.replace(",", " ").replace(".", " ").split():
                     w = (wd[:-3] + "y") if wd.endswith("ies") else \
                         (wd[:-1] if wd.endswith("s") and not wd.endswith("ss") else wd)
+                    if w.endswith("'s"):
+                        w = w[:-2]
                     if w in _skip or len(w) < 3:
+                        continue
+                    # A SUBJECT IS SOMETHING THAT CAN PLAY (2026-10-03): "a
+                    # glowing crystal cave" cast the crystal, a prop, as the
+                    # hero; nothing could rig it and the build failed. Only a
+                    # body (a person, an animal, a vehicle) can be promoted.
+                    from app.game_export.generate import guess_pattern as _gp_subj
+                    if _gp_subj(w) == "static":
                         continue
                     if library.resolve(w):
                         cand = w
                         break
+                if cand is None and _prop_hero:
+                    cand = "explorer" if ("explor" in _ptext and library.resolve("explorer")) else "man"
                 if cand and cand != _pl:
                     job.setdefault("notes", []).append(
                         f"hero cast corrected: '{cand}' is your prompt's subject "
@@ -2625,7 +2698,7 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         _AMPHIB = _fre.compile(r"\b(snakes?|serpents?|cobras?|vipers?|pythons?|adders?|rattlesnakes?|crocodiles?|"
                                r"alligators?|caimans?|turtles?|tortoises?|frogs?|toads?|newts?|salamanders?|"
                                r"lizards?|iguanas?|otters?|seals?|walrus(?:es)?|penguins?|crabs?|beavers?|platypus)\b")
-        if spec.world.water_level is None and spec.entities:
+        if (spec.world.water_level is None or _frozen_ice) and spec.entities:
             _wet = [e for e in spec.entities
                     if guess_pattern((e.name or "").lower()) == "aquatic"
                     and not _AMPHIB.search((e.name or "").lower())]

@@ -14,7 +14,8 @@ from __future__ import annotations
 # the ground photo each landform must be standing on — mirrors ARCH_TEX in
 # the runtime. Keep the two in step: they answer the same question.
 ARCH_TEX = {"canyon": "rock", "mesa": "rock", "peaks": "rock",
-            "dunes": "sand", "basin": "soil", "archipelago": "sand"}
+            "dunes": "sand", "basin": "soil", "archipelago": "sand",
+            "volcano": "rock"}
 
 
 def check_brief(spec, facts: dict) -> list[str]:
@@ -43,6 +44,16 @@ def check_brief(spec, facts: dict) -> list[str]:
     if want and tex and not tex.lower().startswith(want):
         out.append(f"ground: a {arch} should stand on {want}, the game built "
                    f"{tex}")
+
+    # ── a volcano has its lava ───────────────────────────────────────────
+    # The first volcano was black peaks and a statue called 'lava flow':
+    # alive, and nothing a volcano is.
+    if arch == "volcano" and "lava" in facts:
+        lv = facts.get("lava") or {}
+        if not lv.get("channels"):
+            out.append("volcano: no lava runs in the field")
+        if not lv.get("cone"):
+            out.append("volcano: no cone stands past the goal")
 
     # ── a hull floats, a swimmer is wet ──────────────────────────────────
     depth = facts.get("depth_below_water")
