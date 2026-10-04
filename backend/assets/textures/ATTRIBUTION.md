@@ -9,9 +9,10 @@
 | grass.jpg, grass_n.jpg, grass_r.jpg | Poly Haven "leafy_grass" (2K) | CC0 |
 | cliff.jpg, cliff_n.jpg, cliff_r.jpg | Poly Haven "rock_face_03" (2K) | CC0 |
 | sandstone.jpg, sandstone_n.jpg, sandstone_r.jpg | Poly Haven "cliff_side" (2K) | CC0 |
+| stone.jpg, stone_n.jpg, stone_r.jpg | Poly Haven "stone_wall" (2K) | CC0 |
 | everything else at this level | generated locally with Stable Diffusion XL | yours |
 
 The scans came from the Poly Haven pine forest scene already on disk
-(assets/cache/models/environments/pine_forest/textures); sand, grass, cliff and
-sandstone were downloaded from dl.polyhaven.org on 2026-10-04 (assets/cache/polyhaven). The generated
+(assets/cache/models/environments/pine_forest/textures); sand, grass, cliff,
+sandstone and stone were downloaded from dl.polyhaven.org on 2026-10-04 (assets/cache/polyhaven). The generated
 pictures they replaced are in _retired/sdxl_ground_2026-10-04.
