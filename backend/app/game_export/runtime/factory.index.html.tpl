@@ -22,6 +22,52 @@
        max-height:calc(100vh - 110px);overflow-y:auto;scrollbar-width:none;
        box-shadow:0 6px 24px rgba(0,0,0,.45),inset 0 1px 0 rgba(255,255,255,.05)}
   #hud::-webkit-scrollbar{display:none}
+
+  /* ── THE LEDGER AND THE READOUT (2026-10-05) ─────────────────────────────
+     The panel down the left held everything all the time: twenty numbers,
+     a market, upgrades, worlds and runs, over the factory you were looking
+     at. The world is the screen now. What you need every second (credits,
+     rate, rank) is type on the scene with no box; what you are working on
+     (the goal, a live contract, an order, a rival) sits under it as cards;
+     everything else lives in the LEDGER, a drawer that slides out with L,
+     with its tab, and by itself in the overhead view, where you plan. */
+  #readout{position:fixed;left:24px;top:16px;z-index:5;pointer-events:none;
+           text-shadow:0 1px 2px rgba(0,0,0,.9),0 0 22px rgba(0,0,0,.55)}
+  #readout em{display:block;font-style:normal;font-family:var(--f-head);font-size:10.5px;font-weight:700;
+              letter-spacing:.32em;color:var(--fs-accent);opacity:.9;text-transform:uppercase}
+  #readout .num{display:flex;align-items:baseline;gap:9px;margin-top:2px}
+  #readout .num b{font-family:var(--f-mono);font-size:38px;font-weight:500;letter-spacing:-.03em;line-height:1;
+                  color:var(--fs-gold);font-variant-numeric:tabular-nums;
+                  text-shadow:0 1px 2px rgba(0,0,0,.9),0 0 20px color-mix(in srgb,var(--fs-gold) 35%,transparent)}
+  #readout .num small{font-family:var(--f-ui);font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:#cfc6a4}
+  #readout .rate{margin-top:3px;font-family:var(--f-mono);font-size:12px;color:var(--fs-accent);font-variant-numeric:tabular-nums}
+  #readout .rate i{font-style:normal;font-family:var(--f-ui);color:#b9c2d8;letter-spacing:.04em;margin-left:5px}
+  #readout .rate s{text-decoration:none;color:var(--fs-gold);margin-left:10px;letter-spacing:.2em}
+  #brief{position:fixed;left:18px;top:104px;z-index:5;width:272px;display:flex;flex-direction:column;gap:7px}
+  #brief > div{backdrop-filter:blur(8px);box-shadow:0 6px 20px rgba(0,0,0,.35)}
+  #brief #goal{margin-top:0;background:linear-gradient(180deg,rgba(28,24,14,.72),rgba(14,12,8,.66))}
+  #brief #contract,#brief #standing,#brief #rival{margin-top:0;background-color:rgba(12,14,24,.72)}
+  #hud{z-index:9;transform:translateX(calc(-100% - 40px));opacity:0;pointer-events:none;
+       transition:transform .34s cubic-bezier(.2,.8,.2,1),opacity .24s}
+  body.ledger #hud{transform:none;opacity:1;pointer-events:auto}
+  #ledgerTab{position:fixed;left:0;top:50%;z-index:9;transform:translateY(-50%);cursor:pointer;user-select:none;
+             writing-mode:vertical-rl;padding:16px 7px 12px;border-radius:0 11px 11px 0;
+             background:linear-gradient(90deg,rgba(14,17,30,.92),rgba(20,25,44,.88));
+             border:1px solid rgba(120,200,255,.18);border-left:0;
+             font-family:var(--f-head);font-size:10px;font-weight:700;letter-spacing:.34em;color:#9fb0d6;
+             transition:left .34s cubic-bezier(.2,.8,.2,1),color .2s}
+  #ledgerTab:hover{color:var(--fs-accent)}
+  #ledgerTab .key{display:inline-block;margin-top:9px;writing-mode:horizontal-tb;font-style:normal;font-family:var(--f-mono);
+                  font-size:9px;letter-spacing:0;padding:1px 4px;border-radius:4px;border:1px solid rgba(255,255,255,.22);color:#c9d3ea}
+  #ledgerTab .dot{position:absolute;right:-4px;top:-4px;width:9px;height:9px;border-radius:50%;background:var(--fs-gold);
+                  box-shadow:0 0 10px var(--fs-gold);opacity:0;transform:scale(.4);transition:opacity .2s,transform .2s}
+  #ledgerTab.ping .dot{opacity:1;transform:scale(1);animation:ledgerPing 1.6s ease-in-out infinite}
+  @keyframes ledgerPing{0%,100%{box-shadow:0 0 0 0 color-mix(in srgb,var(--fs-gold) 60%,transparent)}50%{box-shadow:0 0 0 7px transparent}}
+  body.ledger #ledgerTab{left:276px}
+  body.ledger #readout,body.ledger #brief{opacity:0;transition:opacity .2s}
+  body.photo #readout,body.photo #brief,body.photo #ledgerTab{opacity:0;pointer-events:none}
+  body:has(#title.on) #readout,body:has(#title.on) #brief,body:has(#title.on) #ledgerTab{opacity:.12}
+  @media (max-width:900px){#brief{width:230px}#readout .num b{font-size:30px}}
   /* the panel says what it is */
   .st small{display:block;font-family:var(--f-ui);font-size:8px;letter-spacing:.04em;color:#6d7590;line-height:1;margin-top:1px}
   .sec{margin:10px 0 4px;font-family:var(--f-head);font-size:10px;font-weight:700;letter-spacing:.08em;color:#8d95b3}
@@ -462,7 +508,28 @@
   body.overhead #cross{display:none}
   /* while the studio is inspecting, the build bar is not what you are doing */
   body.inspect #tools,body.inspect #hint{opacity:.28;pointer-events:none}
+  /* ── THE HOTBAR (2026-10-05) ─────────────────────────────────────────────
+     Thirteen labelled chips, half of them dimmed and locked, made a strip of
+     web buttons across the bottom of the world. A tool you cannot use yet is
+     not on the bar at all (it arrives, with a small rise, the moment it is
+     unlocked, and its key still explains itself); the rest are icons with
+     their key, and only the one in your hand, or under the pointer, says
+     its name. */
+  .tool.locked{display:none}
+  .tool{grid-template-columns:34px;padding:8px;animation:toolIn .45s cubic-bezier(.2,.8,.2,1)}
+  .tool b,.tool small{display:none}
+  .tool.on,.tool:hover{grid-template-columns:34px auto;padding-right:13px}
+  .tool.on b,.tool:hover b{display:block;grid-row:1 / span 2}
+  @keyframes toolIn{from{opacity:0;transform:translateY(10px) scale(.86)}}
 </style>
+<div id="readout"><em id="ro-world"></em><div class="num"><b id="ro-ore">0</b><small id="ro-unit"></small></div><div class="rate"><span id="ro-rate">0</span><i>a minute</i><s id="ro-rank"></s></div></div>
+<div id="brief">
+  <div id="goal"></div>
+  <div id="contract"><b></b><small></small><div class="bar"><i style="width:0%"></i></div><span class="left"></span></div>
+  <div id="standing"><b></b><small></small><div class="bar"><i style="width:0%"></i></div><span class="left"></span></div>
+  <div id="rival"><b></b><small></small><div class="bar"><i style="width:100%"></i></div></div>
+</div>
+<div id="ledgerTab" title="The ledger: counts, the market, upgrades, worlds and runs. L opens and closes it; the overhead view opens it too.">LEDGER<i class="key">L</i><span class="dot"></span></div>
 <div id="hud">
   <h1>CRYSTAL WORKS</h1>
   <div class="hero">
@@ -481,10 +548,6 @@
     <div class="st" data-ico="component" title="Components sold this run. An assembler makes one from an alloy bar and an ingot."><i></i><b id="ncomp">0</b><small>parts</small></div>
     <div class="st core" data-ico="core" title="Cores are permanent. A meltdown or three shards earns one; they buy the trip to other worlds and multiply every yield."><i></i><b id="tok">0</b><small>cores</small></div>
   </div>
-  <div id="goal"></div>
-  <div id="contract"><b></b><small></small><div class="bar"><i style="width:0%"></i></div><span class="left"></span></div>
-  <div id="standing"><b></b><small></small><div class="bar"><i style="width:0%"></i></div><span class="left"></span></div>
-  <div id="rival"><b></b><small></small><div class="bar"><i style="width:100%"></i></div></div>
   <div class="sec" title="The board moves on its own. A price over 1.00 pays more than base; a rival buyer bids one product up for a minute.">MARKET <span>what a hub pays per unit; 1.00 is base</span></div>
   <div id="tick"></div>
   <div class="sec" title="Bought with credits. Each has a cap, and the chain raises some caps.">UPGRADES <span>bought with credits; click one to buy</span></div>

@@ -4495,6 +4495,36 @@ function updateDrones(frac, dt) {
   });
 }
 
+// ── THE LEDGER AND THE READOUT (2026-10-05) ───────────────────────────────
+// The panel is a drawer now (see the page's style): L, its tab, or the
+// overhead view open it. The readout over the scene copies its three numbers
+// a few times a second rather than every renderer learning a second target,
+// and the tab shows a gold dot while an upgrade is affordable and the ledger
+// is shut, so the one reason to open it is never missed.
+let ledgerOpen = false, roClock = 0;
+function setLedger(on) { ledgerOpen = !!on; syncLedger(); }
+function syncLedger() { document.body.classList.toggle('ledger', ledgerOpen || overhead); }
+function stepReadout(dt) {
+  roClock += dt;
+  if (roClock < 0.2) return;
+  roClock = 0;
+  syncLedger();
+  const g = id => document.getElementById(id);
+  const put = (id, v) => { const e = g(id); if (e && e.textContent !== v) e.textContent = v; };
+  put('ro-ore', (g('ore') || {}).textContent || '0');
+  put('ro-rate', (g('rate') || {}).textContent || '0');
+  const unit = document.querySelector('.hero .big small'); put('ro-unit', unit ? unit.textContent : '');
+  const rk = document.querySelector('#rank span'); put('ro-rank', rk ? rk.textContent : '');
+  const h = document.querySelector('#hud h1'); put('ro-world', h ? h.textContent : '');
+  const ready = !CITY && Object.values(UPGRADES).some(u => u.lvl < u.cap && ore >= costOf(u));
+  const tab = g('ledgerTab');
+  if (tab) tab.classList.toggle('ping', ready && !ledgerOpen && !overhead);
+}
+{
+  const tab = document.getElementById('ledgerTab');
+  if (tab) tab.addEventListener('pointerdown', ev => { ev.stopPropagation(); setLedger(!ledgerOpen); });
+}
+
 // ── THE SILO (2026-10-05) ─────────────────────────────────────────────────
 // Everything on a line moves the moment it is made, so a factory can only
 // sell at whatever the board pays right now. A silo is the other choice: it
@@ -5486,6 +5516,7 @@ addEventListener('keydown', e => {
   if (k) pickTool(k);
   if (e.code === 'KeyR' && tool === 'blueprint' && blueprint) { bpRot = (bpRot + 1) & 3; updateGhost(); }
   if (e.code === 'KeyF') cycleFilter();
+  if (e.code === 'KeyL') setLedger(!ledgerOpen);
   if (e.code === 'KeyM') audioMute(!AUDIO.muted);
   if (e.code === 'KeyP') setPhoto(!photo);
   if (photo && (e.code === 'Enter' || e.code === 'NumpadEnter')) shotRequest = true;
@@ -7969,6 +8000,8 @@ renderer.setAnimationLoop(() => {
   stepLook(dt);
   stepTags(dt);
   stepPlan();
+  stepReadout(_rdt);
+  drawWrist(_rdt);
   if (!CITY) stepWorksShow(dt);
   stepHint(dt);
   if (!CITY) stepDrone(dt);
@@ -8376,6 +8409,60 @@ function setHolo(name) {
   holoMat.color.copy(holoBase);
 }
 setHolo(tool);      // here, AFTER HOLO_GEO exists — not up by the tool bar
+
+// THE WRIST READOUT (2026-10-05): the projector on your forearm carries a
+// small screen, so the numbers you work for are on the thing in your hand:
+// credits, the rate, and how far the goal has come, in the world's accent.
+const wristCv = document.createElement('canvas');
+wristCv.width = 320; wristCv.height = 200;
+const wristTex = new THREE.CanvasTexture(wristCv);
+wristTex.colorSpace = THREE.SRGBColorSpace;
+wristTex.anisotropy = 4;
+const wristScreen = new THREE.Mesh(new THREE.PlaneGeometry(0.19, 0.119),
+  new THREE.MeshBasicMaterial({ map: wristTex, transparent: true, toneMapped: false, depthWrite: false }));
+// projected beside the hologram, above the wrist, turned square to your eye
+// (the rig is yawed and tipped; this undoes it); on the forearm itself it
+// sat under the tool bar
+wristScreen.position.set(-0.24, 0.2, -0.12);
+wristScreen.rotation.set(0.12, -0.34, -0.06, 'YXZ');
+wristScreen.renderOrder = 4;
+heldRig.add(wristScreen);
+let wristClock = 0, wristKey = '';
+function drawWrist(dt) {
+  wristClock += dt;
+  if (wristClock < 0.25) return;
+  wristClock = 0;
+  const cr = (document.getElementById('ore') || {}).textContent || '0';
+  const rate = (document.getElementById('rate') || {}).textContent || '0';
+  const bar = document.querySelector('#goal .bar i');
+  const pct = bar ? Math.max(0, Math.min(100, parseFloat(bar.style.width) || 0)) : 0;
+  const goalT = (document.querySelector('#goal b') || {}).textContent || '';
+  const key = cr + '|' + rate + '|' + pct + '|' + goalT;
+  if (key === wristKey) return;
+  wristKey = key;
+  const x = wristCv.getContext('2d'), W = wristCv.width, H = wristCv.height;
+  const acc = '#' + new THREE.Color(ACCENT).getHexString();
+  x.clearRect(0, 0, W, H);
+  // the glass: dark, rounded, a hairline in the accent and scanlines
+  x.fillStyle = 'rgba(4,10,16,0.88)';
+  x.beginPath(); x.roundRect(4, 4, W - 8, H - 8, 18); x.fill();
+  x.strokeStyle = acc; x.globalAlpha = 0.55; x.lineWidth = 2; x.stroke(); x.globalAlpha = 1;
+  x.fillStyle = 'rgba(255,255,255,0.035)';
+  for (let y = 8; y < H - 8; y += 4) x.fillRect(8, y, W - 16, 1);
+  // the top-left readout has the credits; the instrument on your arm has the
+  // goal: which one, how far along, and the rate that is moving it
+  const step = ((document.querySelector('#goal em') || {}).textContent || '').replace(/\s+/g, ' ').trim();
+  x.textBaseline = 'top';
+  x.fillStyle = acc; x.font = '600 17px monospace';
+  x.fillText('GOAL ' + step, 22, 20);
+  x.fillStyle = '#ffd479'; x.font = '600 64px monospace';
+  x.fillText(Math.round(pct) + '%', 22, 42);
+  x.fillStyle = 'rgba(255,212,121,0.18)'; x.fillRect(22, 116, W - 44, 10);
+  x.fillStyle = '#ffd479'; x.fillRect(22, 116, (W - 44) * pct / 100, 10);
+  x.fillStyle = acc; x.font = '500 22px monospace';
+  x.fillText(rate + ' a minute', 22, 142);
+  wristTex.needsUpdate = true;
+}
 // the foreman starts on a new survival world; here, after the hologram
 // exists, because its first step takes the tool out of your hand
 // a restored save mid-guide STARTS its step, so the step's checks have their

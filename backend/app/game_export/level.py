@@ -729,13 +729,24 @@ def build_interior(seed: int, kind: str = "castle") -> dict:
     """
     import random as _random
     rng = _random.Random(seed * 31 + 7)
-    H = 4.2 if kind in ("castle",) else 5.0 if kind == "mall" else 3.0   # wall height (m)
+    H = 4.2 if kind in ("castle",) else 5.0 if kind == "mall" else 4.0 if kind == "lab" \
+        else 3.4 if kind in ("hospital", "school") else 3.0   # wall height (m)
     T = 0.5                                          # wall thickness
     rooms = []                                       # [cx, cz, w, d]
     # PER-KIND LAYOUT (2026-07-23: 'the viking dungeon was the same style as
     # the mansion') — a castle is a grand pillared hall, a house is cosy
     # small rooms, a dungeon is a long narrow corridor-hall with cells.
-    if kind == "mall":
+    if kind in ("hospital", "school"):
+        # A HOSPITAL OR A SCHOOL (2026-10-05) is a corridor with rooms off
+        # both sides: wards, or classrooms. Wider than a dungeon's spine and
+        # lit like daytime.
+        hall_w = rng.uniform(5.0, 6.0) if kind == "hospital" else rng.uniform(5.5, 6.5)
+        hall_d = rng.uniform(46, 54)
+    elif kind == "lab":
+        # A LAB is one open floor of benches with a few rooms off it.
+        hall_w = rng.uniform(18, 22)
+        hall_d = rng.uniform(26, 32)
+    elif kind == "mall":
         # A MALL (2026-10-05) is a long, wide concourse lined both sides with
         # store units, each open to it through a broad front; one storey, so
         # the whole length reads down the middle the moment you step in.
@@ -767,9 +778,19 @@ def build_interior(seed: int, kind: str = "castle") -> dict:
                   kind, rng.randint(2, 4))
     if kind == "mall":                               # not drawn from rng: the other kinds' plans stay as they were
         n_side = 8 + 2 * (seed % 2)
+    elif kind in ("hospital", "school"):
+        n_side = 6 + 2 * (seed % 2)
+    elif kind == "lab":
+        n_side = 2 + (seed % 2)
     for k in range(n_side):
         side = 1 if k % 2 == 0 else -1
-        if kind == "mall":                           # a store unit, its width a fair share of the side
+        if kind in ("hospital", "school"):           # a ward or a classroom
+            rw = rng.uniform(7.5, 9.0)
+            rd = min(rng.uniform(8.0, 9.5), hall_d / n_side * 2 - 0.8)
+        elif kind == "lab":                          # a cold room, a server room, an office
+            rw = rng.uniform(6.5, 8.5)
+            rd = rng.uniform(7, 9)
+        elif kind == "mall":                           # a store unit, its width a fair share of the side
             rw = rng.uniform(9, 12)
             rd = min(rng.uniform(8.5, 10.5), hall_d / n_side * 2 - 0.8)
         elif kind == "dungeon":                        # cells off the corridor
@@ -787,7 +808,7 @@ def build_interior(seed: int, kind: str = "castle") -> dict:
         else:
             rw = rng.uniform(8, 12)
             rd = rng.uniform(8, 13)
-        if kind == "mall":                           # units in pairs facing across the concourse
+        if kind in ("mall", "hospital", "school"):   # rooms in pairs facing across the hall
             cz = -hall_d / 2 + (k // 2 + 0.5) * (hall_d / (n_side // 2))
         else:
             cz = -hall_d / 2 + (k + 0.5 + rng.uniform(0, 0.3)) * (hall_d / n_side)
@@ -823,7 +844,7 @@ def build_interior(seed: int, kind: str = "castle") -> dict:
     for side in (1, -1):
         if not any(w[3] == 90 and abs(w[0] - side * hw) < 0.1 for w in walls):
             _wall(side * hw, 0, hall_d, 90, -1)
-    if kind == "mall":
+    if kind in ("mall", "hospital", "school"):
         # every unit opens on the concourse: the long side walls are laid in
         # pieces, one with an opening at each unit's front and plain wall
         # between units (one door per wall is all a plan wall can carry)
@@ -856,10 +877,14 @@ def build_interior(seed: int, kind: str = "castle") -> dict:
         "shop": ["bookshelf", "crate", "table", "crate", "bookshelf"],
         # a mall's units: shelving and stock; the runtime draws the concourse
         "mall": ["bookshelf", "crate", "table", "bookshelf", "crate"],
-    }[kind if kind in ("castle", "house", "dungeon", "office", "shop", "mall") else "castle"]
+        # the runtime draws beds, desks and benches; these only keep a corner busy
+        "hospital": ["crate", "table", "chair"],
+        "school": ["bookshelf", "crate", "table"],
+        "lab": ["crate", "bookshelf", "crate"],
+    }[kind if kind in ("castle", "house", "dungeon", "office", "shop", "mall", "hospital", "school", "lab") else "castle"]
     furniture = []
-    for cx, cz, rw, rd in (rooms[1:] if kind == "mall" else rooms):   # a concourse stays clear to walk
-        for name in rng.sample(FURN, k=min(3, len(FURN))):
+    for cx, cz, rw, rd in (rooms[1:] if kind in ("mall", "hospital", "school", "lab") else rooms):   # a concourse stays clear to walk
+        for name in rng.sample(FURN, k=min(1 if kind in ("hospital", "school", "lab") else 3, len(FURN))):
             fx = cx + rng.uniform(-rw / 2 + 1.2, rw / 2 - 1.2)
             fz = cz + rng.uniform(-rd / 2 + 1.2, rd / 2 - 1.2)
             furniture.append([name, round(fx, 2), round(fz, 2),

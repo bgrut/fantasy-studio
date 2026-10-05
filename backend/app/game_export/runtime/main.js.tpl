@@ -6359,14 +6359,17 @@ async function main() {
       return t;
     };
     // an office floor is painted board and carpet tile, not keep masonry
-    const wallFile = (IK === 'house' || IK === 'office' || IK === 'shop' || IK === 'mall')
+    const _civic = IK === 'hospital' || IK === 'school' || IK === 'lab';
+    const wallFile = (IK === 'house' || IK === 'office' || IK === 'shop' || IK === 'mall' || _civic)
       ? 'plaster' : 'stone';
     const floorFile = IK === 'dungeon' ? 'stone'
-                    : (IK === 'office' || IK === 'shop' || IK === 'mall' ? 'concrete' : 'planks');
+                    : (IK === 'office' || IK === 'shop' || IK === 'mall' || IK === 'hospital' || IK === 'lab' ? 'concrete' : 'planks');
     const bx = PLAN.bounds[0], bz = PLAN.bounds[1];
     // a mall's floor is polished: pale and glossy, the skylights in it
-    const fmat = IK === 'mall'
-      ? new THREE.MeshStandardMaterial({ map: itex(floorFile, bx / 3, bz / 3), roughness: 0.22, metalness: 0.0, color: 0xd8d2c8 })
+    // a ward's floor is pale green vinyl, a lab's white resin: both polished
+    const fmat = IK === 'mall' || IK === 'hospital' || IK === 'lab'
+      ? new THREE.MeshStandardMaterial({ map: itex(floorFile, bx / 3, bz / 3), roughness: IK === 'mall' ? 0.22 : 0.3, metalness: 0.0,
+                                         color: IK === 'hospital' ? 0xb8cbbf : IK === 'lab' ? 0xe6e9ec : 0xd8d2c8 })
       : new THREE.MeshStandardMaterial({ map: itex(floorFile, bx / 4, bz / 4), roughness: 0.9 });
     const floor = new THREE.Mesh(new THREE.PlaneGeometry(bx, bz), fmat);
     floor.rotation.x = -Math.PI / 2; floor.position.set(OX, 0.02, 0);
@@ -6506,7 +6509,7 @@ async function main() {
     // suspended ceiling had orange flames guttering on its walls. Same
     // positions and the same light-budget behaviour, but cool, high, and
     // without the flame mesh — the fitting is the ceiling troffer instead.
-    const _fire = IK !== 'office' && IK !== 'mall' && IK !== 'shop';   // nobody lights a store with torches
+    const _fire = IK !== 'office' && IK !== 'mall' && IK !== 'shop' && !_civic;   // nobody lights a store or a ward with torches
     for (const [tx, tz] of (PLAN.torches || []).slice(0, 10)) {
       const pl = new THREE.PointLight(_fire ? 0xff9a3d : 0xdfeaff,
                                       _fire ? 14 : 11, 13, 1.8);
@@ -6628,6 +6631,228 @@ async function main() {
       addMerged(strips4, new THREE.MeshBasicMaterial({ color: 0xf4f8ff,
         toneMapped: false }), false);
     }
+    if (_civic) {
+      // ── WARDS, CLASSROOMS AND A LAB (2026-10-05) ────────────────────────
+      // A room reads as what it is by its fittings: a hospital by beds with
+      // curtains on rails, drip stands, a handrail and a coloured band down
+      // the corridor; a school by lockers between the doors, rows of desks
+      // and a chalkboard; a lab by white benches, fume hoods along a wall,
+      // glowing specimen tanks and racks of blinking servers. Abandoned (an
+      // asylum, a zombie school, anything haunted) is the same place gone
+      // wrong: beds turned over, desks scattered, the tanks dark and cracked.
+      const rngV = mulberry32((SPEC.seed || 1) + 5303);
+      const _vw = [SPEC.prompt, SPEC.title, SPEC.world && SPEC.world.name].filter(Boolean).join(' ').toLowerCase();
+      const BAD = /abandon|derelict|ruin|zombie|undead|apocalyp|haunted|asylum|deserted|overrun|outbreak|infect/.test(_vw);
+      const hwV = PLAN.rooms[0][2] / 2, hdV = PLAN.rooms[0][3] / 2;
+      const merged = {};
+      const put = (key, g) => (merged[key] = merged[key] || []).push(g);
+      const box = (key, w, h, d, x, y, z, ry, rz) => { const g = new THREE.BoxGeometry(w, h, d); if (rz) g.rotateZ(rz); if (ry) g.rotateY(ry); g.translate(x + OX, y, z); put(key, g); return g; };
+      const cyl = (key, r0, r1, h, x, y, z, seg) => { const g = new THREE.CylinderGeometry(r0, r1, h, seg || 12); g.translate(x + OX, y, z); put(key, g); return g; };
+      const solid = (w, h, d, x, y, z) => world.createCollider(RAPIER.ColliderDesc.cuboid(w / 2, h / 2, d / 2).setTranslation(x + OX, y, z));
+      const tint = (g, col0) => { const col = col0.clone().convertSRGBToLinear(); const n = g.attributes.position.count, a = new Float32Array(n * 3);
+        for (let v = 0; v < n; v++) { a[v * 3] = col.r; a[v * 3 + 1] = col.g; a[v * 3 + 2] = col.b; }
+        g.setAttribute('color', new THREE.BufferAttribute(a, 3)); return g; };
+      const rooms = PLAN.rooms.slice(1);
+      const sign = (text, x, z, ry, col, w) => {
+        const cv = document.createElement('canvas'); cv.width = 512; cv.height = 128;
+        const c2 = cv.getContext('2d'); c2.fillStyle = BAD ? '#3a3d38' : '#f2f4f2'; c2.fillRect(0, 0, 512, 128);
+        c2.fillStyle = BAD ? '#7a7d76' : col; c2.font = 'bold 58px Arial'; c2.textAlign = 'center'; c2.textBaseline = 'middle';
+        c2.fillText(text, 256, 68);
+        const tx = new THREE.CanvasTexture(cv); tx.colorSpace = THREE.SRGBColorSpace;
+        const m = new THREE.Mesh(new THREE.PlaneGeometry(w || 1.9, (w || 1.9) / 4), new THREE.MeshStandardMaterial({ map: tx, roughness: 0.6 }));
+        m.material.userData.noAutoTex = true;
+        m.position.set(x + OX, DOOR_H + 0.3, z); m.rotation.y = ry; scene.add(m);
+      };
+      // ceiling light panels down the hall (emissive; the torch list lights it)
+      const nL = Math.max(3, Math.round(hdV * 2 / 4));
+      for (let k = 0; k < nL; k++) {
+        if (BAD && rngV() < 0.4) continue;                            // dead tubes
+        box('lamp', Math.min(1.2, hwV * 0.5), 0.04, 0.6, 0, topY - 0.03, -hdV + (k + 0.5) * (hdV * 2 / nL));
+      }
+      if (IK === 'hospital' || IK === 'school') {
+        // the corridor: a handrail (hospital) or lockers (school) between the doors
+        for (const side of [-1, 1]) {
+          const wx = side * (hwV - WT / 2);
+          const doorsZ = rooms.filter(r => (r[0] > 0) === (side > 0)).map(r => r[1]).sort((a, b) => a - b);
+          const gaps = []; let cur = -hdV;
+          for (const dz of doorsZ) { gaps.push([cur + 0.4, dz - DOOR_W / 2 - 0.3]); cur = dz + DOOR_W / 2 + 0.3; }
+          gaps.push([cur, hdV - 0.4]);
+          for (const [z0, z1] of gaps) {
+            if (z1 - z0 < 0.8) continue;
+            if (IK === 'hospital') {
+              box('rail', 0.06, 0.06, z1 - z0, wx - side * 0.07, 0.92, (z0 + z1) / 2);
+              box('band', 0.02, 0.16, z1 - z0, wx - side * 0.012, 1.2, (z0 + z1) / 2);
+            } else {
+              const n = Math.floor((z1 - z0) / 0.42);
+              for (let q = 0; q < n; q++) {
+                const lz = z0 + (q + 0.5) * ((z1 - z0) / n);
+                const g = box('locker', 0.36, 1.8, 0.4, wx - side * 0.2, 0.9, lz);
+                tint(g, BAD && rngV() < 0.2 ? new THREE.Color(0x6b5a4a) : new THREE.Color().setHSL(0.58 + (Math.floor(q / 6) % 2) * 0.42, 0.42, 0.42));
+                box('lockerVent', 0.02, 0.18, 0.24, wx - side * 0.39, 1.55, lz);
+              }
+              solid(0.4, 1.8, z1 - z0, wx - side * 0.2, 0.9, (z0 + z1) / 2);
+            }
+          }
+        }
+        const NAMES_H = ['WARD 1', 'WARD 2', 'X-RAY', 'ICU', 'PHARMACY', 'THEATRE', 'WARD 3', 'LABS', 'MATERNITY', 'RECOVERY'];
+        const NAMES_S = ['MATHS', 'SCIENCE', 'ENGLISH', 'HISTORY', 'ART', 'MUSIC', 'LIBRARY', 'GEOGRAPHY', 'STAFF', 'LANGUAGES'];
+        rooms.forEach(([rcx, rcz, rrw, rrd], ri) => {
+          const side = rcx > 0 ? 1 : -1;
+          sign(IK === 'hospital' ? NAMES_H[ri % NAMES_H.length] : NAMES_S[ri % NAMES_S.length],
+               side * (hwV - WT / 2 - 0.03), rcz, side > 0 ? -Math.PI / 2 : Math.PI / 2, IK === 'hospital' ? '#1f6f8b' : '#7a3a1f');
+          if (IK === 'hospital') {
+            // two beds along the far wall, each with its curtain and drip stand
+            for (const bz of [-1, 1]) {
+              const x = rcx + side * (rrw / 2 - 1.3), z = rcz + bz * rrd * 0.24;
+              const tilt = BAD && rngV() < 0.4 ? (rngV() - 0.5) * 0.9 : 0;
+              const yaw = BAD ? (rngV() - 0.5) * 0.8 : 0;
+              box('bedFrame', 2.0, 0.08, 0.95, x, 0.55, z, yaw, tilt);
+              box('bedFrame', 0.06, 0.55, 0.95, x - side * 1.0, 0.5, z, yaw);
+              box('bedLeg', 0.05, 0.5, 0.05, x - 0.9, 0.25, z - 0.42); box('bedLeg', 0.05, 0.5, 0.05, x + 0.9, 0.25, z - 0.42);
+              box('bedLeg', 0.05, 0.5, 0.05, x - 0.9, 0.25, z + 0.42); box('bedLeg', 0.05, 0.5, 0.05, x + 0.9, 0.25, z + 0.42);
+              box('sheet', 1.9, 0.16, 0.9, x, 0.66, z, yaw, tilt);
+              box('sheet', 0.4, 0.12, 0.6, x - side * 0.72, 0.8, z, yaw);
+              solid(2.0, 0.7, 1.0, x, 0.35, z);
+              // the curtain rail and a half-drawn curtain
+              box('rail', 2.2, 0.03, 0.03, x, topY - 0.25, z - bz * 0.62);
+              const cur = box(BAD ? 'curtainBad' : 'curtain', 1.2 + rngV() * 0.8, topY - 0.55, 0.02, x + (rngV() - 0.5) * 0.6, (topY - 0.55) / 2 + 0.28, z - bz * 0.62);
+              cur.computeVertexNormals();
+              // drip stand
+              cyl('steel', 0.012, 0.012, 1.8, x - side * 0.7, 0.9, z + bz * 0.6, 6);
+              cyl('steel', 0.22, 0.22, 0.03, x - side * 0.7, 0.02, z + bz * 0.6, 10);
+              box('bag', 0.12, 0.2, 0.04, x - side * 0.7, 1.7, z + bz * 0.6);
+            }
+          } else {
+            // rows of desks facing a chalkboard on the back wall
+            const rows = 3, cols = 3;
+            for (let a = 0; a < rows; a++) for (let c = 0; c < cols; c++) {
+              const x = rcx - side * rrw * 0.22 + side * a * 1.5, z = rcz + (c - 1) * 2.2;
+              const yaw = BAD ? (rngV() - 0.5) * 1.6 : 0, tilt = BAD && rngV() < 0.25 ? 1.4 : 0;
+              box('desk', 0.6, 0.04, 1.1, x, 0.74, z, yaw, tilt);
+              if (!tilt) { box('steel', 0.04, 0.72, 0.04, x - 0.25, 0.37, z - 0.5); box('steel', 0.04, 0.72, 0.04, x + 0.25, 0.37, z - 0.5);
+                           box('steel', 0.04, 0.72, 0.04, x - 0.25, 0.37, z + 0.5); box('steel', 0.04, 0.72, 0.04, x + 0.25, 0.37, z + 0.5); }
+              box('chair', 0.42, 0.04, 0.42, x - side * 0.55, 0.45, z, yaw); box('chair', 0.04, 0.42, 0.42, x - side * 0.75, 0.66, z, yaw);
+              solid(0.7, 0.8, 1.1, x, 0.4, z);
+            }
+            // the chalkboard, written on
+            const bw = Math.min(rrd - 1.6, 4.2);
+            const cv = document.createElement('canvas'); cv.width = 1024; cv.height = 320;
+            const c2 = cv.getContext('2d'); c2.fillStyle = '#21352a'; c2.fillRect(0, 0, 1024, 320);
+            c2.strokeStyle = 'rgba(240,240,230,0.75)'; c2.fillStyle = 'rgba(240,240,230,0.8)'; c2.lineWidth = 3;
+            c2.font = '44px "Comic Sans MS", cursive';
+            const LINES = [['x\u00b2 + 2x - 3 = 0', '(x + 3)(x - 1) = 0'], ['photosynthesis', '6CO\u2082 + 6H\u2082O \u2192 C\u2086H\u2081\u2082O\u2086'], ['the rivers of europe', 'homework: p. 47']];
+            const L = LINES[ri % LINES.length];
+            c2.fillText(L[0], 60, 110); c2.fillText(L[1], 60, 200);
+            if (BAD) { c2.font = '64px "Comic Sans MS", cursive'; c2.fillStyle = 'rgba(200,40,30,0.85)'; c2.fillText('GET OUT', 560, 280); }
+            const tx = new THREE.CanvasTexture(cv); tx.colorSpace = THREE.SRGBColorSpace;
+            const brd = new THREE.Mesh(new THREE.PlaneGeometry(bw, bw * 0.31), new THREE.MeshStandardMaterial({ map: tx, roughness: 0.9 }));
+            brd.material.userData.noAutoTex = true;
+            brd.position.set(rcx + side * (rrw / 2 - WT / 2 - 0.03) + OX, 1.55, rcz); brd.rotation.y = side > 0 ? -Math.PI / 2 : Math.PI / 2;
+            scene.add(brd);
+            box('desk', 0.05, bw * 0.31 + 0.12, bw + 0.12, rcx + side * (rrw / 2 - WT / 2 - 0.01), 1.55, rcz);
+          }
+        });
+      } else {
+        // THE LAB FLOOR: rows of benches, hoods along one wall, tanks, racks
+        const rows = 3, per = 2;
+        for (let a = 0; a < rows; a++) for (let c = 0; c < per; c++) {
+          const x = (c - (per - 1) / 2) * hwV * 0.9, z = -hdV * 0.45 + a * (hdV * 0.5);
+          box('benchTop', 4.2, 0.06, 1.3, x, 0.92, z);
+          box('benchBase', 4.0, 0.88, 1.15, x, 0.44, z);
+          box('steel', 0.04, 0.7, 0.04, x, 1.3, z);            // the shelf post
+          box('shelfG', 3.6, 0.03, 0.4, x, 1.62, z);
+          solid(4.2, 0.95, 1.3, x, 0.47, z);
+          // monitors and glassware
+          for (let q = 0; q < 2; q++) {
+            const mx = x + (q ? 1.1 : -1.3);
+            box('steel', 0.42, 0.28, 0.03, mx, 1.15, z - 0.35);
+            box(BAD && rngV() < 0.6 ? 'screenOff' : 'screen', 0.38, 0.24, 0.01, mx, 1.15, z - 0.333);
+          }
+          for (let q = 0; q < 5; q++) cyl('glass', 0.04, 0.05, 0.14 + rngV() * 0.12, x - 0.6 + q * 0.32, 1.02, z + 0.3, 10);
+        }
+        // fume hoods along the back wall
+        for (let k = 0; k < 4; k++) {
+          const x = (k - 1.5) * (hwV * 0.45), z = hdV - 0.9;
+          box('benchBase', 1.6, 0.9, 1.0, x, 0.45, z);
+          box('hood', 1.6, 1.4, 0.06, x, 1.6, z - 0.47);
+          box('hoodBody', 1.6, 1.4, 0.06, x, 1.6, z + 0.47);
+          box('hoodBody', 0.06, 1.4, 1.0, x - 0.78, 1.6, z); box('hoodBody', 0.06, 1.4, 1.0, x + 0.78, 1.6, z);
+          box('hoodBody', 1.6, 0.5, 1.0, x, 2.55, z);
+          box('stripe', 1.7, 0.012, 0.4, x, 0.012, z - 0.85);
+          solid(1.6, 2.8, 1.0, x, 1.4, z);
+        }
+        // specimen tanks: glass columns of lit liquid
+        for (const [tx2, tz2] of [[-hwV * 0.75, 0], [hwV * 0.75, 0], [-hwV * 0.75, -hdV * 0.5], [hwV * 0.75, -hdV * 0.5]]) {
+          cyl('tankCap', 0.62, 0.62, 0.25, tx2, 0.12, tz2, 24);
+          cyl('tankCap', 0.62, 0.62, 0.2, tx2, 2.5, tz2, 24);
+          cyl(BAD ? 'liquidDark' : 'liquid', 0.5, 0.5, 2.1, tx2, 1.3, tz2, 24);
+          cyl('tankGlass', 0.56, 0.56, 2.2, tx2, 1.32, tz2, 24);
+          solid(1.2, 2.6, 1.2, tx2, 1.3, tz2);
+        }
+        // the side rooms: server racks with lights
+        for (const [rcx, rcz, rrw, rrd] of rooms) {
+          for (let q = 0; q < 3; q++) {
+            const x = rcx + (q - 1) * 1.2, z = rcz + rrd / 2 - 1.0;
+            box('rack', 0.8, 2.1, 0.9, x, 1.05, z);
+            solid(0.8, 2.1, 0.9, x, 1.05, z);
+            for (let l = 0; l < 10; l++) if (rngV() < (BAD ? 0.2 : 0.7))
+              box(rngV() < 0.8 ? 'ledG' : 'ledR', 0.03, 0.02, 0.01, x - 0.3 + rngV() * 0.5, 0.3 + l * 0.17, z - 0.456);
+          }
+        }
+      }
+      if (BAD) for (let q = 0; q < 60; q++) {
+        const g = new THREE.PlaneGeometry(0.2 + rngV() * 0.25, 0.25 + rngV() * 0.3); g.rotateX(-Math.PI / 2); g.rotateY(rngV() * 6);
+        g.translate((rngV() - 0.5) * hwV * 1.8 + OX, 0.03, (rngV() - 0.5) * hdV * 1.9);
+        put('paper', tint(g, new THREE.Color().setHSL(0.1, 0.1, 0.55 + rngV() * 0.3)));
+      }
+      const S = (o) => { const m = new THREE.MeshStandardMaterial(o); m.userData.noAutoTex = true; return m; };
+      const B = (o) => { const m = new THREE.MeshBasicMaterial(o); m.userData.noAutoTex = true; return m; };
+      const MATS = {
+        lamp: B({ color: BAD ? 0xb8c4bc : 0xf4f8ff, toneMapped: false }),
+        rail: S({ color: 0xc9ced4, roughness: 0.3, metalness: 0.7 }),
+        band: S({ color: IK === 'hospital' ? 0x2f8f9a : 0x9a3f2f, roughness: 0.6 }),
+        locker: S({ color: 0xffffff, vertexColors: true, roughness: 0.45, metalness: 0.5 }),
+        lockerVent: S({ color: 0x1b1f24, roughness: 0.6 }),
+        bedFrame: S({ color: 0xd9dde2, roughness: 0.35, metalness: 0.4 }),
+        bedLeg: S({ color: 0x8a9098, roughness: 0.3, metalness: 0.8 }),
+        sheet: S({ color: BAD ? 0xb9b39a : 0xf2f4f6, roughness: 0.9 }),
+        curtain: S({ color: 0x9fc4c9, roughness: 0.9, side: THREE.DoubleSide, transparent: true, opacity: 0.92 }),
+        curtainBad: S({ color: 0x8a9a88, roughness: 0.95, side: THREE.DoubleSide, transparent: true, opacity: 0.85 }),
+        steel: S({ color: 0xaab1b8, roughness: 0.3, metalness: 0.8 }),
+        bag: S({ color: 0xe8f0ff, roughness: 0.2, transparent: true, opacity: 0.7 }),
+        desk: S({ map: itex('planks', 1, 1), color: 0xc8a676, roughness: 0.6 }),
+        chair: S({ color: 0x2f5f8f, roughness: 0.5 }),
+        benchTop: S({ color: 0x2b2f33, roughness: 0.25, metalness: 0.1 }),
+        benchBase: S({ color: 0xe9ecef, roughness: 0.5 }),
+        shelfG: S({ color: 0xbcd6e0, roughness: 0.1, transparent: true, opacity: 0.45 }),
+        screen: B({ color: 0x6fe0ff, toneMapped: false }),
+        screenOff: S({ color: 0x0b0d10, roughness: 0.2 }),
+        glass: S({ color: 0xcfeaf2, roughness: 0.05, transparent: true, opacity: 0.45 }),
+        hood: S({ color: 0xbfe2ef, roughness: 0.05, transparent: true, opacity: 0.35, depthWrite: false }),
+        hoodBody: S({ color: 0xdfe3e7, roughness: 0.45, metalness: 0.2 }),
+        stripe: S({ color: 0xf2c230, roughness: 0.6 }),
+        tankCap: S({ color: 0x8c949c, roughness: 0.3, metalness: 0.8 }),
+        liquid: B({ color: 0x41f0b8, transparent: true, opacity: 0.6, toneMapped: false }),
+        liquidDark: S({ color: 0x2a3a24, roughness: 0.2, transparent: true, opacity: 0.8 }),
+        tankGlass: S({ color: 0xdff6ff, roughness: 0.02, transparent: true, opacity: 0.18, depthWrite: false }),
+        rack: S({ color: 0x1d2228, roughness: 0.4, metalness: 0.6 }),
+        ledG: B({ color: 0x5dff9a, toneMapped: false }),
+        ledR: B({ color: 0xff5050, toneMapped: false }),
+        paper: S({ color: 0xffffff, vertexColors: true, roughness: 0.95, side: THREE.DoubleSide }),
+      };
+      for (const k in merged) {
+        if (!MATS[k]) continue;
+        const list = merged[k];
+        // a merge needs every part to carry the same attributes: tinted ones carry colour
+        const m = new THREE.Mesh(mergeGeometries(list.map(g => g.index ? g : g), false), MATS[k]);
+        m.castShadow = !['lamp', 'screen', 'ledG', 'ledR', 'liquid', 'tankGlass', 'hood', 'paper', 'stripe'].includes(k);
+        m.receiveShadow = true;
+        if (MATS[k].transparent) m.renderOrder = 2;
+        scene.add(m);
+        for (const g of list) g.dispose();
+      }
+      window.__venue = { kind: IK, rooms: rooms.length, abandoned: BAD };
+    }
     if (IK === 'mall') {
       // ── WHAT MAKES A HALL READ AS A MALL (2026-10-05) ──────────────────
       // A polished floor, a long run of lit store signs over wide fronts,
@@ -6729,12 +6954,24 @@ async function main() {
           const px = sd * hwM * 0.42;
           box('planter', 1.5, 0.7, 1.5, px, 0.35, z);
           solid(1.5, 0.7, 1.5, px, 0.35, z);
-          // a shrub in it: a cluster of leafy balls (or a dead one)
-          for (let q = 0; q < 16; q++) {
-            const g = new THREE.IcosahedronGeometry(0.16 + rngM() * 0.14, 2);
-            const a2 = rngM() * 6.28, r2 = rngM() * 0.55, h2 = rngM();
-            g.translate(px + OX + Math.cos(a2) * r2, 0.85 + h2 * 0.9 * (1 - r2), z + Math.sin(a2) * r2);
-            put('leaf', tint(g, ABANDONED ? new THREE.Color().setHSL(0.1 + rngM() * 0.04, 0.35, 0.22) : new THREE.Color().setHSL(0.28 + rngM() * 0.05, 0.45, 0.24)));
+          // a shrub in it, leaf by leaf: small blades set round a dome, each
+          // turned its own way (balls of foliage read as stones up close);
+          // an abandoned mall's are dry and sparse
+          for (let q = 0; q < 4; q++) {
+            const g = new THREE.CylinderGeometry(0.012, 0.02, 0.7, 5);
+            g.rotateZ((rngM() - 0.5) * 0.7); g.rotateY(rngM() * 6.28);
+            g.translate(px + OX + (rngM() - 0.5) * 0.3, 1.0, z + (rngM() - 0.5) * 0.3);
+            put('leaf', tint(g, new THREE.Color(0x4a3a28)));
+          }
+          const nLeaf = ABANDONED ? 70 : 150;
+          for (let q = 0; q < nLeaf; q++) {
+            const th = rngM() * 6.28, ph = Math.acos(1 - rngM() * 1.1), r = 0.42 + rngM() * 0.22;
+            const dx = Math.sin(ph) * Math.cos(th), dy = Math.cos(ph), dz = Math.sin(ph) * Math.sin(th);
+            const g = new THREE.SphereGeometry(1, 5, 3).scale(0.1, 0.014, 0.036);
+            g.rotateZ(-0.5 - rngM() * 0.6 - (ABANDONED ? 0.6 : 0)); g.rotateY(-th + (rngM() - 0.5) * 0.8);
+            g.translate(px + OX + dx * r, 0.82 + dy * r * 0.9, z + dz * r);
+            put('leaf', tint(g, ABANDONED ? new THREE.Color().setHSL(0.08 + rngM() * 0.05, 0.3 + rngM() * 0.15, 0.2 + rngM() * 0.12)
+                                          : new THREE.Color().setHSL(0.26 + rngM() * 0.07, 0.42 + rngM() * 0.2, 0.18 + rngM() * 0.14)));
           }
           // a bench beside it, facing the middle
           const bz = z + 2.0;
@@ -6760,7 +6997,7 @@ async function main() {
         stock: new THREE.MeshStandardMaterial({ color: 0xffffff, vertexColors: true, roughness: 0.85 }),
         stone: new THREE.MeshStandardMaterial({ map: itex('concrete', 2, 1), color: 0xe4ded4, roughness: 0.35 }),
         planter: new THREE.MeshStandardMaterial({ map: itex('concrete', 1, 1), color: 0x8a8580, roughness: 0.7, metalness: 0.0 }),
-        leaf: new THREE.MeshStandardMaterial({ color: 0xffffff, vertexColors: true, roughness: 0.85 }),
+        leaf: new THREE.MeshStandardMaterial({ color: 0xffffff, vertexColors: true, roughness: 0.7, side: THREE.DoubleSide }),
         bench: new THREE.MeshStandardMaterial({ map: itex('planks', 1, 1), color: 0xb08a62, roughness: 0.7 }),
         benchLeg: new THREE.MeshStandardMaterial({ color: 0x2c3036, roughness: 0.4, metalness: 0.7 }),
         paper: new THREE.MeshStandardMaterial({ color: 0xffffff, vertexColors: true, roughness: 0.95, side: THREE.DoubleSide }),
@@ -7008,6 +7245,21 @@ async function main() {
     if (scene.fog) { scene.fog.near = 60; scene.fog.far = 160; }
     scene.background = new THREE.Color(0x0d0c0a);
     SPEC.camera.distance_m = Math.min(SPEC.camera.distance_m || 6, 4.6);
+    // GONE WRONG (2026-10-05): an abandoned ward, school, lab or mall is the
+    // same building with the lights failing: much less of the day gets in,
+    // what does is sickly, and the ceiling lights that still work run low.
+    // A clean hospital stays bright; this is what makes the asylum an asylum.
+    const _gk = INTERIOR && INTERIOR.kind;
+    const _gw = [SPEC.prompt, SPEC.title, SPEC.world && SPEC.world.name].filter(Boolean).join(' ').toLowerCase();
+    if (['hospital', 'school', 'lab', 'mall'].includes(_gk)
+        && /abandon|derelict|ruin|zombie|undead|apocalyp|haunted|asylum|deserted|overrun|outbreak|infect/.test(_gw)) {
+      sun.intensity *= 0.3;
+      hemi.intensity *= 0.42;
+      hemi.color.lerp(new THREE.Color(0x9fb59a), 0.5);
+      hemi.groundColor.lerp(new THREE.Color(0x2a2a22), 0.5);
+      renderer.toneMappingExposure *= 0.82;
+      window.__gloom = true;
+    }
   }
   // ── ENTERABLE BUILDING (moon plan 2.2): an exterior world with a castle/
   // house gets a REAL door — walk to the glowing doorway and step into a
@@ -11448,7 +11700,8 @@ async function main() {
   // for any orbit angle. The atmosphere stays; the character never vanishes.
   if (pal.sun < 1.0) {
     scene.add(camera);                       // camera needs to be in the graph
-    const fill = new THREE.PointLight(0xc3d6ff, pal.sun < 0.7 ? 120 : 40, 30, 1.9);
+    // (a failing building keeps only a little of it, or every wall near the lens goes white)
+    const fill = new THREE.PointLight(0xc3d6ff, window.__gloom ? 18 : pal.sun < 0.7 ? 120 : 40, 30, 1.9);
     fill.position.set(0, 0.6, 0.4);          // just above/behind the lens
     camera.add(fill);
     hemi.intensity = Math.max(hemi.intensity, 0.34);
@@ -16488,6 +16741,12 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
       for (let i = 0; i < window.__torches.length; i++) {
         window.__torches[i].intensity = 12.5 + Math.sin(tt * 9 + i * 2.1) * 1.6
           + Math.sin(tt * 23 + i * 5.7) * 0.9;
+        // a failing building's tubes run low and stutter: each light drops
+        // out for a moment now and then, on its own clock
+        if (window.__gloom) {
+          const st = Math.sin(tt * 1.3 + i * 7.1) + Math.sin(tt * 3.7 + i * 2.3);
+          window.__torches[i].intensity *= st > 1.55 ? 0.08 : 0.42;
+        }
       }
     }
     if (window.__clouds) {                          // slow downwind drift

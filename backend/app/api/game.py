@@ -2823,7 +2823,8 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         # ever a building's inside builds rooms, unless the sentence puts
         # you outside it (its car park, its roof) or names a real city.
         _venue = _re3.search(r"\b(shopping (?:mall|cent(?:re|er)|arcade)|mall|supermarket|"
-                             r"department store|hospital|asylum|office block|prison|bunker)\b", _pl)
+                             r"department store|hospital|asylum|sanatorium|office block|prison|bunker|"
+                             r"high school|school(?! of)|classroom|academy|laborator(?:y|ies)|lab|research (?:facility|station|base))\b", _pl)
         if _venue and (_re3.search(r"\b(?:outside|car ?park|parking|rooftop|roof of|street(?:s)? (?:of|around))\b", _pl)
                        or (is_city and place)):
             _venue = None
@@ -2832,9 +2833,11 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             from app.game_export.level import build_interior
             _ik_raw = (_im.group(1) if _im else None) \
                 or (_bld.group(1) if (_heist and _bld) else None) \
-                or ({"supermarket": "shop", "department store": "mall", "hospital": "office",
-                     "asylum": "dungeon", "office block": "office", "prison": "dungeon",
-                     "bunker": "dungeon"}.get(_venue.group(1), "mall") if _venue else None) \
+                or ({"supermarket": "shop", "department store": "mall", "hospital": "hospital",
+                     "asylum": "hospital", "sanatorium": "hospital", "office block": "office", "prison": "dungeon",
+                     "bunker": "dungeon", "high school": "school", "school": "school", "classroom": "school",
+                     "academy": "school"}.get(_venue.group(1),
+                     "lab" if _venue.group(1).startswith(("lab", "research")) else "mall") if _venue else None) \
                 or "dungeon"
             _ik = {"mansion": "house", "cottage": "house", "home": "house",
                    "room": "house", "tavern": "house", "temple": "castle",
