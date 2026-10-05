@@ -248,7 +248,8 @@ const EMPTY = 0, MINER = 1, BELT = 2, HUB = 3, NODE = 4, SMELTER = 5,
       SPLITTER = 6, FORGE = 7, FILTER = 8, RIFT = 9, ASSEMBLER = 10,
       PROP = 11,                     // scenery: the outpost's habitat, masts and crates; blocks, sells nothing, is never saved
       ROAD = 12, HOMES = 13, SHOP = 14, WORKS = 15, PARK = 16, HALL = 17,   // the city's (2026-09-29)
-      DRONEPAD = 18;                    // a drone pad (2026-10-04): what it is fed, its drone flies to another pad
+      DRONEPAD = 18,                    // a drone pad (2026-10-04): what it is fed, its drone flies to another pad
+      SILO = 19;                        // a silo (2026-10-05): stores one kind, holds it or lets it out
 // A CITY (2026-09-29): the same worldlet built as a town. Set by the studio when
 // the prompt asks for a city builder; everything quarry-shaped stands down.
 const CITY = SPEC.city || null;
@@ -345,7 +346,7 @@ function themeNode(root) {
 }
 const TYPE_NAME = { 1: 'miner', 2: 'belt', 3: 'hub', 4: 'ore node',
                     5: 'smelter', 6: 'splitter', 7: 'forge', 8: 'filter',
-                    9: 'chronos rift', 10: 'assembler', 18: 'drone pad',
+                    9: 'chronos rift', 10: 'assembler', 18: 'drone pad', 19: 'silo',
                     12: 'road', 13: 'homes', 14: 'shops', 15: 'works', 16: 'park', 17: 'town hall' };
 
 const VALUE = { [CRYSTAL]: 1, [INGOT]: 6 };   // an ingot is worth the detour
@@ -2492,6 +2493,7 @@ function buildToolIcons() {
     hub: () => mk(GEO.hub, MAT.hub),
     forge: () => mk(GEO.forge, MAT.forge),
     assembler: () => mk(GEO.assembler, MAT.assem),
+    silo: () => mk(siloGeo().body, siloMat().body),
     drone: () => grp([mk(droneGeo().pad, droneMat().pad),
                       (() => { const d = mk(droneGeo().body, droneMat().body); d.position.y = 0.32; return d; })()]),
     filter: () => mk(GEO.filter, MAT.filt),
@@ -2701,6 +2703,20 @@ function place(face, i, j, type, dir) {
     const a = new THREE.Mesh(GEO.arrow, MAT.filt);
     a.position.set(T * 0.36, 0.16, 0); a.rotation.z = -Math.PI / 2; g.add(a);
     c.pq = c.pq || []; c.inb = 0; c.away = false;
+  } else if (type === SILO) {
+    const G = siloGeo(), M = siloMat();
+    const b = new THREE.Mesh(G.body, M.body);
+    b.castShadow = true; b.receiveShadow = true; g.add(b);
+    const glass = new THREE.Mesh(G.glass, M.glass);
+    glass.position.set(0, 0.12 + G.H * 0.5, -G.R - 0.035); g.add(glass);
+    // and a second window round the other side, so the stock reads from either
+    const glass2 = glass.clone(); glass2.position.z = G.R + 0.035; g.add(glass2);
+    const lv = new THREE.Mesh(G.level, new THREE.MeshBasicMaterial({ color: 0xffffff }));
+    lv.name = 'level'; lv.position.set(0, 0.12 + G.H * 0.11, -G.R - 0.03); lv.visible = false; g.add(lv);
+    const lv2 = lv.clone(); lv2.name = 'level2'; lv2.material = lv.material; lv2.position.z = G.R + 0.03; g.add(lv2);
+    const lamp = new THREE.Mesh(G.lamp, new THREE.MeshBasicMaterial({ color: 0x2a4a36 }));
+    lamp.name = 'lamp'; lamp.position.set(0, 0.12 + G.H + 0.56, 0); g.add(lamp);
+    c.buf = 0; c.bt = 0; c.rr = 0;      // a new silo is empty and releasing (a load sets these after)
   } else if (type === SMELTER) {
     const b = new THREE.Mesh(GEO.smelt, MAT.smelt);
     b.castShadow = true; g.add(b);
@@ -4257,6 +4273,8 @@ function accepts(dst, type) {
   if (dst.t === RIFT) return dst.dbt > 0 && type === dst.dmin;
   // a drone pad holds eight, counting what is already flying in to it
   if (dst.t === DRONEPAD) return (dst.pq ? dst.pq.length : 0) + (dst.inb | 0) < DRONE_CAP;
+  // a silo stores one kind at a time, up to its brim
+  if (dst.t === SILO) return dst.buf < SILO_CAP && (dst.buf === 0 || dst.bt === type);
   return false;
 }
 // `to` is the tile it landed on. Passing it costs nothing and is what lets an
@@ -4296,6 +4314,7 @@ function deliver(dst, to, type) {
   else if (dst.t === ASSEMBLER) { if (type === ALLOY) dst.ha = 1; else dst.hb = 1; }
   else if (dst.t === RIFT) { if (--dst.dbt <= 0) riftSettle(dst, true); }
   else if (dst.t === DRONEPAD) { (dst.pq || (dst.pq = [])).push(type); dst.fed = droneTick; }
+  else if (dst.t === SILO) { dst.buf++; dst.bt = type; }
   else dst.item = type;
 }
 
@@ -4480,6 +4499,99 @@ function updateDrones(frac, dt) {
     cr.pod.visible = fl.load.length > 0;
     if (cr.pod.visible) cr.pod.material.color.copy(ITEM_COL[fl.load[0]] || ITEM_COL[CRYSTAL]);
   });
+}
+
+// ── THE SILO (2026-10-05) ─────────────────────────────────────────────────
+// Everything on a line moves the moment it is made, so a factory can only
+// sell at whatever the board pays right now. A silo is the other choice: it
+// takes one kind at a time, up to SILO_CAP, and F turns it between HOLDING
+// (it fills and lets nothing out) and RELEASING (one a tick out of its
+// front, two a tick into a hub). Fill it while alloy is cheap, open it when
+// the board pays over 1.20; fill it before a contract and open it when one
+// is posted. A window up its side shows the stock in the stock's colour and
+// a lamp on the roof says which way it is turned.
+const SILO_CAP = 48;
+var _SILO_GEO = null, _SILO_MAT = null;
+function siloGeo() {
+  if (_SILO_GEO) return _SILO_GEO;
+  const R = T * 0.34, H = 1.85, steel = 0x8e98a6, band = 0x5b6470, dark = 0x2c333d;
+  const parts = [
+    { g: new THREE.BoxGeometry(T * 0.9, 0.12, T * 0.9), y: 0.06, col: dark, tint: 1 },
+    { g: new THREE.CylinderGeometry(R, R, H, 28, 1, false), y: 0.12 + H / 2, col: steel, tint: 1 },
+    // the roof: a low cone with a hatch on it
+    { g: new THREE.CylinderGeometry(R * 0.18, R * 1.04, 0.42, 28), y: 0.12 + H + 0.21, col: band, tint: 1 },
+    { g: new THREE.CylinderGeometry(0.11, 0.11, 0.08, 12), y: 0.12 + H + 0.46, col: dark, tint: 1 },
+    // the hoops that hold the staves
+    ...[0.32, 0.78, 1.24, 1.7].map(y => ({ g: new THREE.CylinderGeometry(R * 1.035, R * 1.035, 0.07, 28, 1, true), y: 0.12 + y, col: band, tint: 1 })),
+    // a ladder up the back
+    { g: new THREE.BoxGeometry(0.035, H, 0.035), x: -R - 0.07, z: 0.13, y: 0.12 + H / 2, col: dark, tint: 1 },
+    { g: new THREE.BoxGeometry(0.035, H, 0.035), x: -R - 0.07, z: -0.13, y: 0.12 + H / 2, col: dark, tint: 1 },
+    ...[0.2, 0.45, 0.7, 0.95, 1.2, 1.45, 1.7].map(y => ({ g: new THREE.BoxGeometry(0.03, 0.03, 0.26), x: -R - 0.07, y: 0.12 + y, col: dark, tint: 1 })),
+    // the hopper and chute out of the front (+x), down to the belt
+    { g: new THREE.BoxGeometry(0.3, 0.3, 0.34), x: R + 0.04, y: 0.42, col: band, tint: 1 },
+    { g: new THREE.BoxGeometry(0.42, 0.06, 0.26), x: R + 0.3, y: 0.24, rz: -0.35, col: dark, tint: 1 },
+  ];
+  // the window's frame on the side that faces you most (-z)
+  parts.push({ g: new THREE.BoxGeometry(0.26, H * 0.82, 0.05), z: -R - 0.005, y: 0.12 + H * 0.5, col: dark, tint: 1 });
+  parts.push({ g: new THREE.BoxGeometry(0.26, H * 0.82, 0.05), z: R + 0.005, y: 0.12 + H * 0.5, col: dark, tint: 1 });
+  _SILO_GEO = {
+    body: mergeParts(parts),
+    level: new THREE.BoxGeometry(0.16, 1, 0.03).translate(0, 0.5, 0),   // grows up from its foot
+    glass: new THREE.BoxGeometry(0.17, H * 0.78, 0.02),
+    lamp: new THREE.SphereGeometry(0.08, 10, 8),
+    H, R,
+  };
+  return _SILO_GEO;
+}
+function siloMat() {
+  if (_SILO_MAT) return _SILO_MAT;
+  _SILO_MAT = {
+    body: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.42, metalness: 0.62 }),
+    glass: new THREE.MeshStandardMaterial({ color: 0x0b1218, roughness: 0.08, metalness: 0.2, transparent: true, opacity: 0.55 }),
+  };
+  return _SILO_MAT;
+}
+const stockName = (t, n) => !t ? 'nothing' : IS_BAR(t) ? contractName(t, n) : (ORE_NAME[t] || 'ore') + ' ore';
+function dressSilo(c) {
+  const g = c.build; if (!g) return;
+  const lamp = g.getObjectByName('lamp');
+  const G = siloGeo();
+  for (const lv of [g.getObjectByName('level'), g.getObjectByName('level2')]) {
+    if (!lv) continue;
+    const k = c.buf / SILO_CAP;
+    lv.visible = c.buf > 0;
+    lv.scale.y = Math.max(0.001, G.H * 0.76 * k);
+    if (c.buf > 0) lv.material.color.copy(ITEM_COL[c.bt] || ITEM_COL[CRYSTAL]);
+  }
+  if (lamp) lamp.material.color.setHex(c.rr ? 0xffb340 : c.buf > 0 ? 0x5dff9a : 0x2a4a36);
+}
+function stepSilos() {
+  eachTile((c, f, i, j) => {
+    if (c.t !== SILO) return;
+    if (!c.rr && c.buf > 0) {
+      const to = stepTile(f, i, j, c.d), dst = cellOf(to);
+      // a hub takes its fill (two a tick); anything else one a tick
+      let n = dst && dst.t === HUB ? 2 : 1;
+      while (n-- > 0 && c.buf > 0) {
+        if (dst && dst.t === HUB && (dst.took | 0) < HUB_INTAKE) {
+          dst.took = (dst.took | 0) + 1; dst.pulse = 1;
+          spawnTag(to.face, to.i, to.j, bank(c.bt, to.face)); noteSale(dst); sfxSold(c.bt);
+        } else if (dst && dst.t !== HUB && accepts(dst, c.bt)) deliver(dst, to, c.bt);
+        else break;
+        if (--c.buf === 0) c.bt = 0;
+      }
+    }
+    dressSilo(c);
+  });
+}
+function toggleSilo(c) {
+  c.rr = c.rr ? 0 : 1;
+  dressSilo(c);
+  sfxPlace();
+  const t = document.getElementById('toast');
+  if (t) { t.textContent = WORD(c.rr ? 'SILO HOLDING. It fills to ' + SILO_CAP + ' and lets nothing out. Press F on it again to release.'
+                                     : 'SILO RELEASING. One a tick out of the chute, two a tick straight into a hub. Press F to hold it again.');
+           t.classList.add('on'); toastAt = 3.5; }
 }
 
 // ── STARFALL (2026-10-04) ──────────────────────────────────────────────────
@@ -4949,6 +5061,7 @@ function step() {
     if (accepts(dst, c.dmin)) { deliver(dst, to, c.dmin); c.emit--; }
   });
   stepDrones();
+  stepSilos();
   eachTile((c, f, i, j) => {
     if (c.t !== MINER) return;
     // a miner digs whatever the seam under it is, which is the face's mineral
@@ -5139,10 +5252,11 @@ function cellUnder(ev) {
 // which geometry stands for which tool — the held hologram and the ghost
 // both read it, so it lives before either
 GEO.dronePad = droneGeo().pad;        // the build ghost takes its shape from GEO
+GEO.silo = siloGeo().body;
 const HOLO_GEO = {
   miner: 'miner', belt: 'beltFrame', smelter: 'smelt', splitter: 'split',
   hub: 'hub', forge: 'forge', filter: 'filter', rift: 'riftBase', assembler: 'assembler',
-  drone: 'dronePad',
+  drone: 'dronePad', silo: 'silo',
 };
 const GHOST_BOX = new THREE.BoxGeometry(T * 0.92, 0.5, T * 0.92);
 const ghost = new THREE.Mesh(GHOST_BOX,
@@ -5240,7 +5354,7 @@ function apply(t, dir) {
   }
   if (tool === 'erase') { removeAt(t.face, t.i, t.j); if (c0 && c0.t !== was) rigPulse('erase'); return; }
   const TOOL_TYPE = { miner: MINER, hub: HUB, smelter: SMELTER, splitter: SPLITTER,
-                      forge: FORGE, filter: FILTER, rift: RIFT, belt: BELT, assembler: ASSEMBLER, drone: DRONEPAD,
+                      forge: FORGE, filter: FILTER, rift: RIFT, belt: BELT, assembler: ASSEMBLER, drone: DRONEPAD, silo: SILO,
                       road: ROAD, home: HOMES, shop: SHOP, works: WORKS, park: PARK };
   const ty = TOOL_TYPE[tool];
   if (ty === undefined) return;
@@ -5335,6 +5449,7 @@ function cycleFilter() {
   const t = cellUnder(null);
   if (!t) return;
   const c = cellOf(t);
+  if (c.t === SILO) { toggleSilo(c); return; }
   if (c.t !== FILTER) return;
   const k = MINERALS.indexOf(c.filt);
   c.filt = MINERALS[(k + 1) % MINERALS.length];
@@ -5371,7 +5486,7 @@ addEventListener('keydown', e => {
   if (e.target && e.target.tagName === 'INPUT') return;    // a name being typed is not a hotkey
   if (PAUSED) return;                                       // a paused game buys and builds nothing
   const k = CITY ? { '1': 'road', '2': 'home', '3': 'shop', '4': 'works', '5': 'park', '9': 'erase' }[e.key] : { '1': 'miner', '2': 'belt', '3': 'smelter', '4': 'splitter',
-              '5': 'hub', '6': 'forge', '7': 'filter', '8': 'rift', 'q': 'assembler', 'Q': 'assembler', 'e': 'drone', 'E': 'drone',
+              '5': 'hub', '6': 'forge', '7': 'filter', '8': 'rift', 'q': 'assembler', 'Q': 'assembler', 'e': 'drone', 'E': 'drone', 't': 'silo', 'T': 'silo',
               '9': 'erase', '0': 'blueprint' }[e.key];
   if (k === 'blueprint' && tool === 'blueprint' && blueprint) { dropBlueprint(); return; }
   if (k) pickTool(k);
@@ -6734,7 +6849,8 @@ const GOALS = [
     done: () => visitedFaces.size >= 2, progress: () => (visitedFaces.size - 1) },
   { text: 'forge one alloy', unlock: 'filter',
     tip: 'No single face grows two ores, so a belt has to cross an edge to bring the second one to a forge.',
-    got: 'Filter unlocked. Matching ore carries straight on and everything else leaves out of the side. Point at one and press F to choose the ore.',
+    got: 'Filter unlocked. Matching ore carries straight on and everything else leaves out of the side. Point at one and press F to choose the ore. The Silo (T) comes with it: it stores one kind, and F on it holds the stock or lets it out, so you can sell when the board pays.',
+    also: 'silo',
     done: () => alloys >= 1, progress: () => alloys },
   { text: 'run three rigs on three seams', cap: 'yield',
     tip: 'A seam thins as it is worked and grows back when it rests. Spread three rigs over three seams so no single one runs dry.',
@@ -7059,6 +7175,8 @@ function describeCell(c, t) {
     case MINER: if (c.star > 0) return 'RIG  ·  on a fallen star of ' + (ORE_NAME[c.min] || 'ore') + ', ' + c.star + ' loads left  ·  ore leaves out of the front';
       return 'RIG  ·  on a ' + (ORE_NAME[c.min] || 'ore') + ' seam, ' + Math.round((c.rich === undefined ? 1 : c.rich) * 100) + '% rich'
       + (c.ice > 0 && !CAPS.heated ? '  ·  frozen, scraping at half rate' : '') + '  ·  ore leaves out of the front';
+    case SILO: return 'SILO  ·  ' + (c.buf ? c.buf + ' of ' + SILO_CAP + ', ' + stockName(c.bt, c.buf) : 'empty, takes one kind at a time')
+      + '  ·  ' + (c.rr ? 'holding, press F to release' : 'releasing out of the chute, press F to hold');
     case BELT: return 'BELT  ·  heading ' + heading + (item ? '  ·  carrying a ' + item : '  ·  empty') + (c.clog > 0 ? '  ·  clogged with spores' : '');
     case SMELTER: return 'SMELTER  ·  two ore in, one ingot out' + (c.cook > 0 ? '  ·  cooking' : c.buf > 0 ? '  ·  waiting for a second ore' : '  ·  waiting for ore');
     case ASSEMBLER: return 'ASSEMBLER  ·  an alloy bar and an ingot in, one component out' + (c.cook > 0 ? '  ·  assembling' : c.ha && c.hb ? '  ·  ready' : c.ha ? '  ·  has the alloy, needs an ingot' : c.hb ? '  ·  has an ingot, needs an alloy bar' : '  ·  waiting');
@@ -8797,7 +8915,9 @@ window.__factory = {
   drones: () => ({ pads: (() => { let n = 0; eachTile(c => { if (c.t === DRONEPAD) n++; }); return n; })(),
                    flying: flights.length, carrying: flights.reduce((s, f) => s + f.load.length, 0), delivered: dronesDelivered, crafts: crafts.size,
                    air: flights.map(f => { const cr = crafts.get(f.from.c); return cr ? { pos: cr.g.position.toArray(), loaded: f.load.length, back: f.back } : null; }).filter(Boolean) }),
-  DRONEPAD,
+  DRONEPAD, SILO, SILO_CAP,
+  silos: () => { const out = []; eachTile((c, f, i, j) => { if (c.t === SILO) out.push({ f, i, j, n: c.buf, kind: c.bt, hold: !!c.rr }); }); return out; },
+  toggleSilo: (f, i, j) => toggleSilo(cells[f][i][j]),
   starfall: () => ({ falling: star ? { f: star.f, i: star.i, j: star.j, phase: star.phase, t: +star.t.toFixed(2), pos: star.g.position.toArray(), from: star.from.toArray() } : null,
                      fell: starsFell, spent: starsSpent, clock: +starClock.toFixed(1), fx: starFx.length,
                      stars: (() => { const out = []; eachTile((c, f, i, j) => { if (c.star > 0) out.push({ f, i, j, left: c.star, t: c.t }); }); return out; })() }),

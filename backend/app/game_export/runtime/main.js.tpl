@@ -6359,13 +6359,15 @@ async function main() {
       return t;
     };
     // an office floor is painted board and carpet tile, not keep masonry
-    const wallFile = (IK === 'house' || IK === 'office' || IK === 'shop')
+    const wallFile = (IK === 'house' || IK === 'office' || IK === 'shop' || IK === 'mall')
       ? 'plaster' : 'stone';
     const floorFile = IK === 'dungeon' ? 'stone'
-                    : (IK === 'office' || IK === 'shop' ? 'concrete' : 'planks');
+                    : (IK === 'office' || IK === 'shop' || IK === 'mall' ? 'concrete' : 'planks');
     const bx = PLAN.bounds[0], bz = PLAN.bounds[1];
-    const fmat = new THREE.MeshStandardMaterial({
-      map: itex(floorFile, bx / 4, bz / 4), roughness: 0.9 });
+    // a mall's floor is polished: pale and glossy, the skylights in it
+    const fmat = IK === 'mall'
+      ? new THREE.MeshStandardMaterial({ map: itex(floorFile, bx / 3, bz / 3), roughness: 0.22, metalness: 0.0, color: 0xd8d2c8 })
+      : new THREE.MeshStandardMaterial({ map: itex(floorFile, bx / 4, bz / 4), roughness: 0.9 });
     const floor = new THREE.Mesh(new THREE.PlaneGeometry(bx, bz), fmat);
     floor.rotation.x = -Math.PI / 2; floor.position.set(OX, 0.02, 0);
     floor.receiveShadow = true;
@@ -6383,7 +6385,7 @@ async function main() {
     scene.add(ceil);
     const wmat = new THREE.MeshStandardMaterial({
       map: itex(wallFile, 3, 1.2), roughness: 0.95 });
-    const DOOR_W = 2.4, DOOR_H = Math.min(3.0, WH - 0.6);
+    const DOOR_W = IK === 'mall' ? 6.0 : 2.4, DOOR_H = IK === 'mall' ? 3.6 : Math.min(3.0, WH - 0.6);   // a storefront is wide open
     function seg(cx, cz, ln, rot, y0, hgt, thick) {
       // SIGHT-BLOCKERS (2026-08-05): remember every wall as a 2D segment so
       // guards can't see through them. Without this a sentry two rooms away
@@ -6504,7 +6506,7 @@ async function main() {
     // suspended ceiling had orange flames guttering on its walls. Same
     // positions and the same light-budget behaviour, but cool, high, and
     // without the flame mesh — the fitting is the ceiling troffer instead.
-    const _fire = IK !== 'office';
+    const _fire = IK !== 'office' && IK !== 'mall' && IK !== 'shop';   // nobody lights a store with torches
     for (const [tx, tz] of (PLAN.torches || []).slice(0, 10)) {
       const pl = new THREE.PointLight(_fire ? 0xff9a3d : 0xdfeaff,
                                       _fire ? 14 : 11, 13, 1.8);
@@ -6625,6 +6627,153 @@ async function main() {
       }
       addMerged(strips4, new THREE.MeshBasicMaterial({ color: 0xf4f8ff,
         toneMapped: false }), false);
+    }
+    if (IK === 'mall') {
+      // ── WHAT MAKES A HALL READ AS A MALL (2026-10-05) ──────────────────
+      // A polished floor, a long run of lit store signs over wide fronts,
+      // skylights down the middle of the ceiling, planters, benches and a
+      // fountain in the concourse, and shelving and stock inside each unit.
+      // An ABANDONED one (zombies, ruins, the end of the world) is the same
+      // mall gone dark: most signs off, stock spilled, the floor littered.
+      const rngM = mulberry32((SPEC.seed || 1) + 4211);
+      const _mw = [SPEC.prompt, SPEC.title, SPEC.world && SPEC.world.name].filter(Boolean).join(' ').toLowerCase();
+      const ABANDONED = /abandon|derelict|ruin|zombie|undead|apocalyp|haunted|deserted|empty|wreck|overrun/.test(_mw);
+      const hwM = PLAN.rooms[0][2] / 2, hdM = PLAN.rooms[0][3] / 2;
+      const merged = {};
+      const put = (key, g) => (merged[key] = merged[key] || []).push(g);
+      const box = (key, w, h, d, x, y, z, ry) => { const g = new THREE.BoxGeometry(w, h, d); if (ry) g.rotateY(ry); g.translate(x + OX, y, z); put(key, g); return g; };
+      const solid = (w, h, d, x, y, z) => world.createCollider(RAPIER.ColliderDesc.cuboid(w / 2, h / 2, d / 2).setTranslation(x + OX, y, z));
+      // vertex colours are linear light, and setHSL works in linear space, so a
+      // colour picked by eye as HSL is converted from sRGB first (a dark brown
+      // shrub came out as pale clay without it)
+      const tint = (g, col0) => { const col = col0.clone().convertSRGBToLinear();
+        const n = g.attributes.position.count, a = new Float32Array(n * 3);
+        for (let v = 0; v < n; v++) { a[v * 3] = col.r; a[v * 3 + 1] = col.g; a[v * 3 + 2] = col.b; }
+        g.setAttribute('color', new THREE.BufferAttribute(a, 3)); return g; };
+      // SKYLIGHTS: a long glazed run down the concourse ceiling
+      const nSky = Math.max(3, Math.round(hdM * 2 / 9));
+      for (let k = 0; k < nSky; k++) {
+        const z = -hdM + (k + 0.5) * (hdM * 2 / nSky);
+        box('sky', hwM * 0.7, 0.05, hdM * 2 / nSky - 1.6, 0, topY - 0.04, z);
+        box('trim', hwM * 0.74, 0.18, 0.18, 0, topY - 0.12, z - (hdM / nSky) + 0.7);
+      }
+      // STORE SIGNS over each unit's front, and the units' fittings
+      const NAMES = ['SHOES', 'BOOKS', 'TOYS', 'PHONES', 'COFFEE', 'FASHION', 'SPORTS', 'MUSIC', 'GAMES', 'PHARMACY',
+                     'BAKERY', 'JEWELLERY', 'OUTDOORS', 'ELECTRONICS', 'GIFTS', 'FOOD COURT'];
+      const SIGNC = ['#ffd98a', '#8fe3ff', '#ff9ab0', '#b6ff9a', '#ffb36b', '#d9b3ff'];
+      const units = PLAN.rooms.slice(1);
+      units.forEach(([ucx, ucz, urw, urd], ui) => {
+        const side = ucx > 0 ? 1 : -1;
+        const lit = !ABANDONED || rngM() < 0.25;
+        const cv = document.createElement('canvas'); cv.width = 512; cv.height = 112;
+        const cx2 = cv.getContext('2d');
+        cx2.fillStyle = '#0d1218'; cx2.fillRect(0, 0, 512, 112);
+        const name = NAMES[(ui * 7 + (SPEC.seed || 1)) % NAMES.length];
+        cx2.font = 'bold 64px Arial'; cx2.textAlign = 'center'; cx2.textBaseline = 'middle';
+        cx2.fillStyle = lit ? SIGNC[ui % SIGNC.length] : '#3a3f46';
+        cx2.fillText(name, 256, 60);
+        const tx = new THREE.CanvasTexture(cv); tx.colorSpace = THREE.SRGBColorSpace;
+        const sg = new THREE.Mesh(new THREE.PlaneGeometry(4.6, 1.0),
+          lit ? new THREE.MeshBasicMaterial({ map: tx, toneMapped: false }) : new THREE.MeshStandardMaterial({ map: tx, roughness: 0.6 }));
+        sg.position.set(side * (hwM - WT / 2 - 0.04) + OX, DOOR_H + 0.75, ucz);
+        sg.rotation.y = side > 0 ? -Math.PI / 2 : Math.PI / 2;
+        scene.add(sg);
+        // glass either side of the opening, on the concourse wall's face
+        const half = urd / 2, gw = Math.max(0, half - 3.0 - 0.15);
+        if (gw > 0.3) for (const sz of [-1, 1]) {
+          const gz = ucz + sz * (3.0 + gw / 2 + 0.05);
+          const g = new THREE.BoxGeometry(0.06, DOOR_H, gw); g.translate(side * (hwM - WT / 2 - 0.05) + OX, DOOR_H / 2, gz);
+          put(ABANDONED && rngM() < 0.4 ? 'glassBroken' : 'glass', g);
+        }
+        // inside: two runs of shelving along the unit's side walls, stocked
+        for (const wz of [-1, 1]) {
+          const sx = ucx + side * 0.6, sz = ucz + wz * (urd / 2 - 0.55), runL = urw - 2.2;
+          box('shelf', runL, 0.08, 0.5, sx, 0.15, sz, 0);
+          box('shelf', runL, 1.9, 0.06, sx, 0.95, sz + wz * 0.24, 0);
+          solid(runL, 1.9, 0.6, sx, 0.95, sz);
+          for (let d = 0; d < 4; d++) {
+            box('shelf', runL, 0.04, 0.46, sx, 0.42 + d * 0.45, sz, 0);
+            const nb = Math.round(runL / 0.5);
+            for (let b = 0; b < nb; b++) {
+              if (rngM() < (ABANDONED ? 0.55 : 0.18)) continue;
+              const bw = 0.18 + rngM() * 0.16, bh = 0.16 + rngM() * 0.18;
+              const g = new THREE.BoxGeometry(bw, bh, 0.26);
+              g.translate(sx - runL / 2 + (b + 0.5) * (runL / nb) + OX, 0.44 + d * 0.45 + bh / 2, sz);
+              put('stock', tint(g, new THREE.Color().setHSL(rngM(), 0.45 + rngM() * 0.3, 0.4 + rngM() * 0.22)));
+            }
+          }
+        }
+        // spilled stock on the floor of a looted unit
+        if (ABANDONED) for (let q = 0; q < 10; q++) {
+          const bw = 0.2 + rngM() * 0.2, bh = 0.14 + rngM() * 0.16;
+          const g = new THREE.BoxGeometry(bw, bh, 0.26); g.rotateY(rngM() * 6); g.rotateZ((rngM() - 0.5) * 1.2);
+          g.translate(ucx + (rngM() - 0.5) * (urw - 2) + OX, bh / 2, ucz + (rngM() - 0.5) * (urd - 2.4));
+          put('stock', tint(g, new THREE.Color().setHSL(rngM(), 0.35, 0.4)));
+        }
+      });
+      // THE CONCOURSE: a fountain at the middle, planters and benches down it
+      const fount = new THREE.CylinderGeometry(2.6, 2.75, 0.62, 40); fount.translate(OX, 0.31, 0); put('stone', fount);
+      const lip = new THREE.TorusGeometry(2.62, 0.12, 8, 48); lip.rotateX(Math.PI / 2); lip.translate(OX, 0.62, 0); put('stone', lip);
+      const bowl = new THREE.CylinderGeometry(0.5, 0.9, 1.1, 24); bowl.translate(OX, 1.1, 0); put('stone', bowl);
+      const cap = new THREE.CylinderGeometry(1.2, 0.5, 0.18, 24); cap.translate(OX, 1.72, 0); put('stone', cap);
+      solid(5.2, 0.7, 5.2, 0, 0.35, 0);
+      const water = new THREE.Mesh(new THREE.CircleGeometry(2.5, 40),
+        new THREE.MeshStandardMaterial({ color: ABANDONED ? 0x2f3a2a : 0x3d6f86, roughness: 0.04, metalness: 0.1,
+                                         transparent: true, opacity: 0.86 }));
+      water.material.userData.noAutoTex = true;
+      water.rotation.x = -Math.PI / 2; water.position.set(OX, 0.55, 0); scene.add(water);
+      for (let k = 0; k < 4; k++) {
+        for (const sd of [-1, 1]) {
+          const z = -hdM + (k + 0.5) * (hdM * 2 / 4);
+          if (Math.abs(z) < 4.5) continue;
+          const px = sd * hwM * 0.42;
+          box('planter', 1.5, 0.7, 1.5, px, 0.35, z);
+          solid(1.5, 0.7, 1.5, px, 0.35, z);
+          // a shrub in it: a cluster of leafy balls (or a dead one)
+          for (let q = 0; q < 16; q++) {
+            const g = new THREE.IcosahedronGeometry(0.16 + rngM() * 0.14, 2);
+            const a2 = rngM() * 6.28, r2 = rngM() * 0.55, h2 = rngM();
+            g.translate(px + OX + Math.cos(a2) * r2, 0.85 + h2 * 0.9 * (1 - r2), z + Math.sin(a2) * r2);
+            put('leaf', tint(g, ABANDONED ? new THREE.Color().setHSL(0.1 + rngM() * 0.04, 0.35, 0.22) : new THREE.Color().setHSL(0.28 + rngM() * 0.05, 0.45, 0.24)));
+          }
+          // a bench beside it, facing the middle
+          const bz = z + 2.0;
+          box('bench', 1.9, 0.08, 0.5, px - sd * 0.2, 0.46, bz);
+          box('bench', 1.9, 0.5, 0.06, px - sd * 0.2, 0.75, bz + 0.25);
+          box('benchLeg', 0.08, 0.44, 0.44, px - sd * 0.2 - 0.85, 0.22, bz);
+          box('benchLeg', 0.08, 0.44, 0.44, px - sd * 0.2 + 0.85, 0.22, bz);
+          solid(1.9, 0.5, 0.5, px - sd * 0.2, 0.25, bz);
+        }
+      }
+      // litter: paper and wrappers lying flat on the concourse
+      if (ABANDONED) for (let q = 0; q < 70; q++) {
+        const g = new THREE.PlaneGeometry(0.2 + rngM() * 0.25, 0.25 + rngM() * 0.3); g.rotateX(-Math.PI / 2); g.rotateY(rngM() * 6);
+        g.translate((rngM() - 0.5) * hwM * 1.8 + OX, 0.03, (rngM() - 0.5) * hdM * 1.9);
+        put('paper', tint(g, new THREE.Color().setHSL(0.1, 0.1, 0.55 + rngM() * 0.3)));
+      }
+      const MATS = {
+        sky: new THREE.MeshBasicMaterial({ color: ABANDONED ? 0x9aa6b0 : 0xeaf4ff, toneMapped: false }),
+        trim: new THREE.MeshStandardMaterial({ color: 0x8a9098, roughness: 0.4, metalness: 0.6 }),
+        glass: new THREE.MeshStandardMaterial({ color: 0x9fc4d6, roughness: 0.05, metalness: 0.2, transparent: true, opacity: 0.28, depthWrite: false }),
+        glassBroken: new THREE.MeshStandardMaterial({ color: 0x7d969f, roughness: 0.3, metalness: 0.1, transparent: true, opacity: 0.12, depthWrite: false }),
+        shelf: new THREE.MeshStandardMaterial({ color: 0xc4c7cc, roughness: 0.55, metalness: 0.35 }),
+        stock: new THREE.MeshStandardMaterial({ color: 0xffffff, vertexColors: true, roughness: 0.85 }),
+        stone: new THREE.MeshStandardMaterial({ map: itex('concrete', 2, 1), color: 0xe4ded4, roughness: 0.35 }),
+        planter: new THREE.MeshStandardMaterial({ map: itex('concrete', 1, 1), color: 0x8a8580, roughness: 0.7, metalness: 0.0 }),
+        leaf: new THREE.MeshStandardMaterial({ color: 0xffffff, vertexColors: true, roughness: 0.85 }),
+        bench: new THREE.MeshStandardMaterial({ map: itex('planks', 1, 1), color: 0xb08a62, roughness: 0.7 }),
+        benchLeg: new THREE.MeshStandardMaterial({ color: 0x2c3036, roughness: 0.4, metalness: 0.7 }),
+        paper: new THREE.MeshStandardMaterial({ color: 0xffffff, vertexColors: true, roughness: 0.95, side: THREE.DoubleSide }),
+      };
+      for (const k in MATS) MATS[k].userData.noAutoTex = true;
+      for (const k in merged) {
+        const m = new THREE.Mesh(mergeGeometries(merged[k], false), MATS[k]);
+        m.castShadow = !['sky', 'glass', 'glassBroken', 'paper'].includes(k); m.receiveShadow = true;
+        if (k === 'glass' || k === 'glassBroken') m.renderOrder = 2;
+        scene.add(m);
+        for (const g of merged[k]) g.dispose();
+      }
+      window.__mall = { units: units.length, abandoned: ABANDONED, signs: units.length };
     }
     if (IK === 'office') {
       // ── WHAT MAKES A ROOM READ AS AN OFFICE (2026-08-06 r7) ────────────
@@ -7117,6 +7266,17 @@ async function main() {
         else if (/desert|dune|canyon|mesa|mars|moon|beach|sand|wasteland|savanna/.test(_words) || ['canyon', 'mesa', 'dunes', 'archipelago'].includes(_arch)) dens = { pebble: 1.0, twig: 0.03 };
         else if (/forest|wood|jungle|swamp|grove|autumn|fall\b|orchard|park/.test(_words)) dens = { pebble: 0.5, twig: 0.35, leaf: 1.6 };
         else dens = { pebble: 0.7, twig: 0.08, leaf: green ? 0.35 : 0 };
+        // WILDFLOWERS (2026-10-05): a sentence that names flowers gets drifts of
+        // them; any other green open land a scattering
+        const _flw = /flower|blossom|bloom|garden|spring|poppy|poppies|tulip|lavender|daisy|daisies|bluebell|petal/.test(_words);
+        if (green && !SNOW_GROUND && !_caveLvl && (/meadow|field|valley|hill|pasture|farm|village|plain|prairie|garden|park|spring|flower|countryside|shepherd/.test(_words) || _flw))
+          dens.flower = _flw ? 3.2 : 0.5;
+        const flowerCols = /poppy|poppies/.test(_words) ? [0xd8322a, 0xe04a2c, 0xc42a24, 0xf4f1ea]
+          : /lavender/.test(_words) ? [0x8e6ad0, 0x9c7ce0, 0x7a58bc, 0xb79be6]
+          : /sunflower|buttercup|dandelion/.test(_words) ? [0xf2c230, 0xf5d24a, 0xe8b020, 0xf4f1ea]
+          : /bluebell/.test(_words) ? [0x5b6fd8, 0x6a7ee6, 0x4c5cc4, 0xf4f1ea]
+          : /tulip/.test(_words) ? [0xe0384a, 0xf2c94c, 0xe86aa0, 0xf08a2c]
+          : [0xf4f1ea, 0xf2c94c, 0xb07cd8, 0xe0607e, 0x6f8fe0, 0xf4f1ea];
         const rockCol = _arch === 'volcano' ? new THREE.Color(0x2c2826)
           : (FLORA && FLORA.biome && FLORA.biome.rockTint) ? FLORA.biome.rockTint.clone().lerp(gcol, 0.35).multiplyScalar(0.75)
           : gcol.clone().offsetHSL(0, -0.1, -0.12);       // a stone takes the colour of the ground it came out of
@@ -7136,6 +7296,7 @@ async function main() {
         const _ckTex = new THREE.TextureLoader().load('textures/cliff.jpg');
         _ckTex.colorSpace = THREE.SRGBColorSpace; _ckTex.wrapS = _ckTex.wrapT = THREE.RepeatWrapping;
         CLUTTER = __plantClutter({ scene, seed: SPEC.seed + 313, hAt, keepOut, density: dens, rockCol, leafCols, rockTex: _ckTex,
+                                   flowerCols: flowerCols.map(h => new THREE.Color(h)),
                                    radius: QUALITY === 'performance' ? 16 : 24 });
         window.__clutter = CLUTTER.facts;
       } catch (e) { console.warn('[game] ground clutter skipped: ' + e.message); CLUTTER = null; }

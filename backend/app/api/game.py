@@ -2817,11 +2817,25 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         # in a Manhattan heist collapsed the whole street grid into one
         # nameless dungeon. Only a named venue ("inside the vault") outranks
         # the block.
+        # THE PLACE IMPLIES THE WORLD SHAPE (2026-10-05): "zombie survival in
+        # an abandoned shopping mall" built an open field, because a mall
+        # never needs the word "inside" said about it. A venue that is only
+        # ever a building's inside builds rooms, unless the sentence puts
+        # you outside it (its car park, its roof) or names a real city.
+        _venue = _re3.search(r"\b(shopping (?:mall|cent(?:re|er)|arcade)|mall|supermarket|"
+                             r"department store|hospital|asylum|office block|prison|bunker)\b", _pl)
+        if _venue and (_re3.search(r"\b(?:outside|car ?park|parking|rooftop|roof of|street(?:s)? (?:of|around))\b", _pl)
+                       or (is_city and place)):
+            _venue = None
         if ((_im and (_im.group(1) or not _city_heist))
-                or " dungeon" in _pl or (_heist and _bld and not _city_heist)):
+                or " dungeon" in _pl or (_heist and _bld and not _city_heist) or _venue):
             from app.game_export.level import build_interior
             _ik_raw = (_im.group(1) if _im else None) \
-                or (_bld.group(1) if (_heist and _bld) else None) or "dungeon"
+                or (_bld.group(1) if (_heist and _bld) else None) \
+                or ({"supermarket": "shop", "department store": "mall", "hospital": "office",
+                     "asylum": "dungeon", "office block": "office", "prison": "dungeon",
+                     "bunker": "dungeon"}.get(_venue.group(1), "mall") if _venue else None) \
+                or "dungeon"
             _ik = {"mansion": "house", "cottage": "house", "home": "house",
                    "room": "house", "tavern": "house", "temple": "castle",
                    "fortress": "castle", "palace": "castle",

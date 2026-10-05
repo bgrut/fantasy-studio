@@ -100,7 +100,7 @@
      names carry the bar on their own */
   /* eleven tools only fit with their descriptions on a wide screen: below
      1640px the descriptions step out and the names carry the bar */
-  @media (max-width:1640px){.tool small{display:none}.tool b{grid-row:1 / span 2}}
+  @media (max-width:2200px){.tool small{display:none}.tool b{grid-row:1 / span 2}}
   /* twelve tools do not fit a 1280 screen even without the descriptions: the
      blueprint chip ran off the right edge. A tool you cannot use yet does not
      need its name spelled out, so a locked one shrinks to its icon first, and
@@ -125,6 +125,7 @@
   .tool[data-tool="filter"] svg{color:#2fd6b0}
   .tool[data-tool="rift"] svg{color:#9b7cff}
   .tool[data-tool="drone"] svg{color:#7df9ff}
+  .tool[data-tool="silo"] svg{color:#ffd27a}
   .tool[data-tool="erase"] svg{color:#e8697d}
   .tool.locked svg{color:#5b6480}
   #ups{margin-top:10px;border-top:1px solid rgba(120,200,255,.14);padding-top:9px;
@@ -508,6 +509,7 @@
   <div class="tool" data-tool="filter"><svg viewBox="0 0 24 24"><path d="M3 5h18l-7 8v6l-4 2v-8z" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linejoin="round"/></svg><i class="key">7</i><b>FILTER</b><small>sorts an ore, F picks</small></div>
   <div class="tool" data-tool="rift"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" stroke="currentColor" stroke-width="1.7" fill="none"/><circle cx="12" cy="12" r="3.4" stroke="currentColor" stroke-width="1.5" fill="none"/><path d="M12 4v3M12 17v3M4 12h3M17 12h3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg><i class="key">8</i><b>RIFT</b><small>lends ore, on a clock</small></div>
   <div class="tool" data-tool="drone"><svg viewBox="0 0 24 24"><rect x="8" y="10" width="8" height="4" rx="1" stroke="currentColor" stroke-width="1.6" fill="none"/><path d="M8 10L5 7M16 10l3-3M8 14l-3 3M16 14l3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="5" cy="7" r="2.2" stroke="currentColor" stroke-width="1.3" fill="none"/><circle cx="19" cy="7" r="2.2" stroke="currentColor" stroke-width="1.3" fill="none"/><circle cx="5" cy="17" r="2.2" stroke="currentColor" stroke-width="1.3" fill="none"/><circle cx="19" cy="17" r="2.2" stroke="currentColor" stroke-width="1.3" fill="none"/></svg><i class="key">E</i><b>DRONE PAD</b><small>flies cargo to another pad</small></div>
+  <div class="tool" data-tool="silo"><svg viewBox="0 0 24 24"><path d="M7 20V8M17 20V8M7 8l5-4 5 4" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linejoin="round"/><path d="M5 20h14" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><rect x="10.5" y="11" width="3" height="7" fill="currentColor"/></svg><i class="key">T</i><b>SILO</b><small>stores, F holds or lets out</small></div>
   <div class="tool" data-tool="erase"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg><i class="key">9</i><b>ERASE</b><small>remove</small></div>
   <div class="tool" data-tool="blueprint"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="10" height="10" rx="1.5" stroke="currentColor" stroke-width="1.7" fill="none" stroke-dasharray="3 2"/><rect x="10" y="10" width="10" height="10" rx="1.5" stroke="currentColor" stroke-width="1.7" fill="none"/></svg><i class="key">0</i><b>BLUEPRINT</b><small>copy a line, stamp it</small></div>
 </div>

@@ -71,19 +71,51 @@ function leafGeo(seed) {
   g.computeVertexNormals();
   return g;
 }
-function mergeSimple(geos) {
-  const pos = [], idx = [];
+function flowerGeo(seed) {
+  // WILDFLOWERS (2026-10-05): a bent stem with a leaf, and a head of five
+  // (or six) petals round a small disc, the head turned a little up toward
+  // the sky. One unit tall; the petals' vertex colour is white, which the
+  // shader lets each flower's own colour tint, while the stem and disc keep
+  // their colours.
+  const r = mulberry(seed);
+  const parts = [];
+  const stemC = [0.22, 0.42, 0.14], discC = [0.85, 0.66, 0.16], petalC = [1, 1, 1];
+  const bend = (r() - 0.5) * 0.16, phase = r() * 6;
+  const stem = new THREE.CylinderGeometry(0.010, 0.015, 1, 4, 5, false).translate(0, 0.5, 0);
+  const sp = stem.attributes.position;
+  for (let i = 0; i < sp.count; i++) { const y = sp.getY(i); sp.setX(i, sp.getX(i) + Math.sin(y * 2.2 + phase) * bend * y); }
+  parts.push([stem, stemC]);
+  const leaf = new THREE.SphereGeometry(1, 6, 3).scale(0.075, 0.006, 0.022).rotateZ(-0.5).translate(0.06, 0.32 + r() * 0.15, 0).rotateY(r() * 6);
+  parts.push([leaf, stemC]);
+  const top = new THREE.Vector3(Math.sin(1 * 2.2 + phase) * bend, 1, 0);
+  const n = r() < 0.5 ? 5 : 6, tilt = 0.35 + r() * 0.3;
+  const head = [];
+  for (let k = 0; k < n; k++) {
+    const a = k / n * Math.PI * 2;
+    head.push([new THREE.SphereGeometry(1, 6, 3).scale(0.1, 0.014, 0.048).translate(0.098, 0, 0).rotateZ(0.18).rotateY(a), petalC]);
+  }
+  head.push([new THREE.SphereGeometry(0.042, 6, 4).scale(1, 0.6, 1), discC]);
+  for (const [g, c] of head) { g.rotateX(tilt); g.translate(top.x, top.y, top.z); parts.push([g, c]); }
+  const g = mergeSimple(parts.map(([g]) => g), parts.map(([, c]) => c));
+  g.computeVertexNormals();
+  return g;
+}
+function mergeSimple(geos, cols) {
+  const pos = [], idx = [], col = [];
   let base = 0;
-  for (const g0 of geos) {
-    const g = g0.index ? g0 : g0;
+  geos.forEach((g, k) => {
     const p = g.attributes.position;
-    for (let i = 0; i < p.count; i++) pos.push(p.getX(i), p.getY(i), p.getZ(i));
+    for (let i = 0; i < p.count; i++) {
+      pos.push(p.getX(i), p.getY(i), p.getZ(i));
+      if (cols) col.push(...cols[k]);
+    }
     if (g.index) for (let i = 0; i < g.index.count; i++) idx.push(g.index.getX(i) + base);
     else for (let i = 0; i < p.count; i++) idx.push(i + base);
     base += p.count;
-  }
+  });
   const out = new THREE.BufferGeometry();
   out.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  if (cols) out.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
   out.setIndex(idx);
   return out;
 }
@@ -94,10 +126,11 @@ function mergeSimple(geos) {
  */
 export function plantClutter(o) {
   const radius = o.radius || 24, cell = o.cell || 6;
-  const D = Object.assign({ pebble: 0.8, twig: 0.1, leaf: 0 }, o.density || {});
+  const D = Object.assign({ pebble: 0.8, twig: 0.1, leaf: 0, flower: 0 }, o.density || {});
   const span = Math.ceil(radius / cell);
   const cells = (2 * span + 1) ** 2;
-  const per = { pebble: Math.ceil(D.pebble * cell * cell), twig: Math.ceil(D.twig * cell * cell), leaf: Math.ceil(D.leaf * cell * cell) };
+  const per = { pebble: Math.ceil(D.pebble * cell * cell), twig: Math.ceil(D.twig * cell * cell), leaf: Math.ceil(D.leaf * cell * cell),
+               flower: Math.ceil(D.flower * cell * cell) };
   const kinds = [];
   const mk = (name, geos, mat, n) => {
     if (n <= 0) return;
@@ -139,13 +172,30 @@ export function plantClutter(o) {
   }
   const twigMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.95 });
   const leafMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, side: THREE.DoubleSide });
-  for (const m of [stoneMat, twigMat, leafMat]) m.userData.noAutoTex = true;
+  // a flower's petals take its own colour; its stem and disc keep theirs
+  const flowerMat = new THREE.MeshStandardMaterial({ color: 0xffffff, vertexColors: true, roughness: 0.7, side: THREE.DoubleSide });
+  flowerMat.onBeforeCompile = (sh) => {
+    sh.vertexShader = sh.vertexShader.replace('#include <color_vertex>', `vColor = vec3(1.0);
+      #ifdef USE_COLOR
+        vColor *= color.rgb;
+      #endif
+      #ifdef USE_INSTANCING_COLOR
+        vColor *= mix(vec3(1.0), instanceColor.rgb, step(0.95, color.g));
+      #endif`);
+  };
+  flowerMat.customProgramCacheKey = () => 'clutter-flower';
+  for (const m of [stoneMat, twigMat, leafMat, flowerMat]) m.userData.noAutoTex = true;
   mk('pebble', [0, 1, 2, 3].map(k => pebbleGeo((o.seed || 1) * 7 + k)), stoneMat, per.pebble);
   mk('twig', [0, 1, 2].map(k => twigGeo((o.seed || 1) * 11 + k)), twigMat, per.twig);
   mk('leaf', [0, 1, 2].map(k => leafGeo((o.seed || 1) * 13 + k)), leafMat, per.leaf);
+  mk('flower', [0, 1, 2, 3].map(k => flowerGeo((o.seed || 1) * 17 + k)), flowerMat, per.flower);
 
   const rockCol = (o.rockCol || new THREE.Color(0x7d756c)).clone();
   const twigCol = (o.twigCol || new THREE.Color(0x5a4632)).clone();
+  const flowerCols = (o.flowerCols && o.flowerCols.length ? o.flowerCols : [0xf4f1ea, 0xf2c94c, 0xb07cd8, 0xe0607e, 0x6f8fe0].map(h => new THREE.Color(h)));
+  // flowers grow in drifts, not evenly: a slow pattern decides where, and
+  // which colour leads in each drift
+  const drift = (x, z) => 0.5 + 0.5 * Math.sin(x * 0.13 + Math.sin(z * 0.11) * 2.3) * Math.cos(z * 0.15 - x * 0.06);
   const leafCols = (o.leafCols && o.leafCols.length ? o.leafCols : [new THREE.Color(0x8a6a3a), new THREE.Color(0x6f7a3a), new THREE.Color(0xa0582c)]).map(c => c.clone());
   const M = new THREE.Matrix4(), Q = new THREE.Quaternion(), Qy = new THREE.Quaternion(), P = new THREE.Vector3(), S = new THREE.Vector3();
   const UP = new THREE.Vector3(0, 1, 0), N = new THREE.Vector3(), C = new THREE.Color();
@@ -165,6 +215,7 @@ export function plantClutter(o) {
         for (let n = 0; n < k.n; n++) {
           const x = (gx + r()) * cell, z = (gz + r()) * cell;
           const pick = Math.floor(r() * k.meshes.length), rot = r() * Math.PI * 2, u = r(), w = r(), w2 = r();
+          if (k.name === 'flower' && drift(x, z) < 0.2 + 0.45 * w) continue;      // thick in a drift, a few strays between
           if (o.keepOut && o.keepOut(x, z, k.name)) continue;
           const m = k.meshes[pick];
           if (m.count >= m.instanceMatrix.count) continue;
@@ -181,6 +232,13 @@ export function plantClutter(o) {
             s = 0.18 + u * 0.45;
             P.set(x, y + 0.008, z); S.set(s, 0.022 + w * 0.012, 0.022 + w * 0.012);
             C.copy(twigCol).offsetHSL(0, (w2 - 0.5) * 0.1, (u - 0.5) * 0.12);
+          } else if (k.name === 'flower') {
+            // stems stand up, whatever the slope, with a little lean
+            Q.setFromAxisAngle(UP, rot).multiply(Qy.setFromAxisAngle(N.set(1, 0, 0), (w2 - 0.5) * 0.3));
+            s = 0.5 + u * 0.38;                              // above the grass, as wildflowers stand
+            P.set(x, y - 0.02, z); S.setScalar(s);
+            const lead = Math.floor(drift(x * 0.3 + 40, z * 0.3) * flowerCols.length * 0.999);
+            C.copy(flowerCols[w2 < 0.7 ? lead : Math.floor(w2 * 97) % flowerCols.length]).offsetHSL((u - 0.5) * 0.03, 0, (w - 0.5) * 0.08);
           } else {
             s = 0.055 + u * 0.06;
             P.set(x, y + 0.006, z); S.setScalar(s);
@@ -203,6 +261,6 @@ export function plantClutter(o) {
       lastKey = key;
       rebuild(cx, cz);
     },
-    facts: () => ({ placed, kinds: kinds.map(k => k.name) }),
+    facts: () => ({ placed, kinds: kinds.map(k => k.name), counts: Object.fromEntries(kinds.map(k => [k.name, k.meshes.reduce((n, m) => n + m.count, 0)])) }),
   };
 }

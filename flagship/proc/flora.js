@@ -290,6 +290,11 @@ function growBroadleaf(r, P) {
     crown.multiplyScalar(1 / Math.max(nC, 1));
     crown.r = 0.5;
     for (const path of tips) for (const q of path) crown.r = Math.max(crown.r, q.p.distanceTo(crown));
+    // AN UMBRELLA, NOT A BALL (2026-10-05): an acacia's leaves lie in one flat
+    // layer over its spread limbs, so the cards are pressed up into a thin
+    // slab at the height of the highest twigs and turned to face the sky
+    let topY = -Infinity;
+    if (P.flat) for (const path of tips) for (const q of path) topY = Math.max(topY, q.p.y);
     for (const path of tips) {
       const n = P.cardsPer;
       for (let k = 0; k < n; k++) {
@@ -297,7 +302,13 @@ function growBroadleaf(r, P) {
         const fi = t * (path.length - 1), i0 = Math.min(Math.floor(fi), path.length - 2);
         const at = path[i0].p.clone().lerp(path[i0 + 1].p, fi - i0);
         at.add(new THREE.Vector3(r() - 0.5, r() - 0.5, r() - 0.5).multiplyScalar(P.card * 0.5));
-        const nrm = new THREE.Vector3(r() - 0.5, r() * 0.8, r() - 0.5).normalize();
+        if (P.flat) {
+          // the slab sags a little toward its rim, as a real crown does
+          const rim = Math.hypot(at.x - crown.x, at.z - crown.z) / Math.max(crown.r, 1);
+          at.y = topY - r() * P.flat - rim * rim * P.flat * 0.8;
+        }
+        const nrm = P.flat ? new THREE.Vector3((r() - 0.5) * 0.5, 1, (r() - 0.5) * 0.5).normalize()
+                           : new THREE.Vector3(r() - 0.5, r() * 0.8, r() - 0.5).normalize();
         const ax = randUnitPerp(nrm, r);
         const s = P.card * (0.75 + r() * 0.5);
         card(leaf, at, s, s, nrm, ax, Math.floor(r() * 4), crown, 1.0);
@@ -635,6 +646,11 @@ const KINDS = {
     limbs: 5, twigs: 3, crownStart: 0.4, spread: [0.6, 1.2], lenRatio: 0.6, radRatio: 0.5,
     kink: 0.38, lift: 0.05, droop: 0.04, leafFrom: 9, leaves: false, cardsPer: 0, card: 1 }),
   bush: (r) => ({ grow: growBush, height: 1.1 + r() * 0.8, cards: 46, card: 0.75 }),
+  // the savanna's tree: a short trunk that forks low into limbs reaching out
+  // and up, under one flat umbrella of leaves wider than the tree is tall
+  acacia: (r) => ({ grow: growBroadleaf, height: 7 + r() * 3, trunkFrac: 0.34, trunkR: 0.24 + r() * 0.08, depth: 3,
+    limbs: 4 + Math.floor(r() * 2), twigs: 4, crownStart: 0.6, spread: [0.75, 1.1], lenRatio: 0.95, radRatio: 0.6,
+    kink: 0.2, lift: 0.1, droop: 0.02, leafFrom: 2, leaves: true, cardsPer: 7, card: 1.5, flat: 0.75 }),
 };
 
 // ── materials ──────────────────────────────────────────────────────────────
@@ -1124,6 +1140,11 @@ export function biomeFor(words, arch, groundHSL) {
   else if (has(/desert|dune|sahara|wasteland|arid/)) Object.assign(out, { kinds: K(['cactus', 0.5], ['rock', 0.8], ['boulder', 0.2], ['dead', 0.25], ['bush', 0.2]), dens: 0.14, rockTint: T(0xb08a5e), leaf: { h: 0.16, s: 0.32, l: 0.3 } });
   else if (has(/glacier|tundra|ice field|polar/)) Object.assign(out, { kinds: K(['boulder', 0.6], ['rock', 1], ['spruce', 0.15]), dens: 0.16, snow: 0.85, rockTint: T(0x7d8794) });
   else if (has(/snow|arctic|frozen|winter|blizzard|frost/)) Object.assign(out, { kinds: K(['spruce', 0.6], ['pine', 0.5], ['rock', 0.35], ['boulder', 0.15]), dens: 0.75, snow: 0.75, rockTint: T(0x7d8794) });
+  // THE SAVANNA (2026-10-05) fell through to the seed's archetype, which for
+  // a dry ground colour was dead trees: a few flat-topped acacias standing
+  // far apart over the grass, bush and red stone between them
+  else if (has(/savann?ah?|serengeti|veld|safari|acacia/)) Object.assign(out, { kinds: K(['acacia', 0.7], ['bush', 0.45], ['rock', 0.25], ['boulder', 0.08], ['dead', 0.05]), dens: 0.14,
+    rockTint: T(0x9a6a4a), leaf: { h: 0.2, s: 0.42, l: 0.21 } });
   else if (has(/jungle|rainforest/)) Object.assign(out, { kinds: K(['broadleaf', 1], ['palm', 0.4], ['oak', 0.3], ['bush', 1], ['rock', 0.1]), dens: 1.2 });
   else if (has(/beach|tropical|island|palm|lagoon|coast/)) Object.assign(out, { kinds: K(['palm', 0.8], ['bush', 0.5], ['rock', 0.3]), dens: 0.35, rockTint: T(0x9a8f80),
     // an island, a beach, a coast: the land ends at a shore and the sea runs on
