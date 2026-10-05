@@ -737,7 +737,9 @@ function patchTree(mat, U, opts) {
           // and nothing grows in the lens: leaves and twigs within a few
           // metres of the camera dissolve, so a chase camera behind the hero
           // never films the inside of a crown
-          f *= smoothstep(1.6, 3.6, distance(vWPos, cameraPosition));
+          // (stone is solid: a rock dissolving into a screen door beside you
+          // reads as a fault, and a camera does not film the inside of one)
+          ${tri ? '' : 'f *= smoothstep(1.6, 3.6, distance(vWPos, cameraPosition));'}
           if (ign(gl_FragCoord.xy) > f) discard;
         }`);
     }
@@ -758,6 +760,14 @@ function patchTree(mat, U, opts) {
             float bl = pow(max(dot(-Vw, uSunDir), 0.0), 3.0);
             outgoingLight += diffuseColor.rgb * uSunCol * bl * 0.6 * vShade;
           }
+          #include <opaque_fragment>`);
+    }
+    if (!fol && !tri) {
+      // SKY UNDER THE CROWN (2026-10-05): a trunk in its own crown's shade went
+      // black at a few metres; under a real tree the open sky still reaches
+      // the bark from the sides, a little and cool. A small sky term so a
+      // shaded trunk keeps its bark.
+      fs = fs.replace('#include <opaque_fragment>', `outgoingLight += diffuseColor.rgb * vec3(0.16, 0.18, 0.21);
           #include <opaque_fragment>`);
     }
     if (triN) {

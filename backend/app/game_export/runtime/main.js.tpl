@@ -6141,6 +6141,8 @@ async function main() {
         window.__flora = Object.assign(window.__flora || {}, {
           inner: _floraInner, outer: outerN, total: FLORA_LIVE.count, kinds: kinds.map(k => k.kind),
           variants: FLORA_LIVE.variants, tris: FLORA_LIVE.tris,
+          // a sample of what stands where (trunks and stones), for a camera that wants to look at one
+          near: colliders.slice(0, 80).map(c => [+c[0].toFixed(2), +c[1].toFixed(2), +c[2].toFixed(2), +c[3].toFixed(2), c[4]]),
         });
         console.log('[game] grown forest: ' + _floraInner + ' in the playfield, ' + outerN + ' to the horizon');
       }
