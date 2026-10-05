@@ -4525,6 +4525,84 @@ function stepReadout(dt) {
   if (tab) tab.addEventListener('pointerdown', ev => { ev.stopPropagation(); setLedger(!ledgerOpen); });
 }
 
+// ── THE OTHER WORLDS, IN THE SKY (2026-10-05) ─────────────────────────────
+// The worlds you can travel to were rows in a list. They hang in the void
+// now, far off round the worldlet: each a small slowly turning cube in its
+// own plating, edged in its own light, with its name under it. One you can
+// reach glows; one you cannot yet is a dim shape with its price. The map is
+// the sky, and the next place to go is something you can see from here.
+const farWorlds = new THREE.Group();
+farWorlds.name = 'farWorlds';
+scene.add(farWorlds);
+function farLabel(text, sub, col) {
+  const cv = document.createElement('canvas'); cv.width = 512; cv.height = 160;
+  const x = cv.getContext('2d');
+  x.textAlign = 'center'; x.textBaseline = 'middle';
+  x.shadowColor = 'rgba(0,0,0,0.9)'; x.shadowBlur = 12;
+  x.font = '700 54px sans-serif'; x.fillStyle = col; x.fillText(text.toUpperCase(), 256, 62);
+  x.font = '500 34px sans-serif'; x.fillStyle = 'rgba(230,236,250,0.85)'; x.fillText(sub, 256, 122);
+  const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace;
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, transparent: true, depthWrite: false, fog: false }));
+  sp.scale.set(110, 34, 1);
+  return sp;
+}
+function buildFarWorlds() {
+  for (const o of [...farWorlds.children]) {
+    farWorlds.remove(o);
+    o.traverse(m => { if (m.geometry) m.geometry.dispose(); if (m.material) { if (m.material.map) m.material.map.dispose(); m.material.dispose(); } });
+  }
+  let n = 0;
+  WORLDS.forEach((w, k) => {
+    if (k === worldIdx) return;
+    const open = CREATIVE || (cores >= w.cores && worldCapOk(w));
+    // spread round the sky, clear of the companion, a little above the horizon
+    const dir = PLANET_DIR.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), 1.15 + n * 1.25);
+    dir.y = 0.16 + (n % 2) * 0.12; dir.normalize();
+    n++;
+    const g = new THREE.Group();
+    g.position.copy(dir.multiplyScalar(560));
+    const edgeCol = new THREE.Color(w.edge || w.grid);
+    const body = new THREE.Mesh(new THREE.BoxGeometry(40, 40, 40),
+      new THREE.MeshStandardMaterial({ color: new THREE.Color((w.plate && w.plate.base) || '#7f8aa8'), roughness: 0.6, metalness: 0.4,
+        emissive: edgeCol, emissiveIntensity: open ? 0.16 : 0.03, fog: false }));
+    body.name = 'body';
+    const edges = new THREE.LineSegments(new THREE.EdgesGeometry(body.geometry),
+      new THREE.LineBasicMaterial({ color: edgeCol, transparent: true, opacity: open ? 0.95 : 0.25, fog: false }));
+    body.add(edges);
+    body.rotation.set(0.5 + k, 0.7 * k, 0.3);
+    g.add(body);
+    // a soft halo of its own light
+    const cv = document.createElement('canvas'); cv.width = cv.height = 128;
+    const hx = cv.getContext('2d'), gr = hx.createRadialGradient(64, 64, 4, 64, 64, 64);
+    gr.addColorStop(0, 'rgba(255,255,255,0.9)'); gr.addColorStop(0.35, 'rgba(255,255,255,0.25)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+    hx.fillStyle = gr; hx.fillRect(0, 0, 128, 128);
+    const ht = new THREE.CanvasTexture(cv);
+    const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: ht, color: edgeCol, transparent: true, opacity: open ? 0.55 : 0.12,
+      blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
+    halo.scale.setScalar(170);
+    g.add(halo);
+    const lab = farLabel(w.name, open ? 'open: travel from the ledger' : w.cores + ' cores' + (w.needs ? ' and more' : ''),
+                         open ? '#' + edgeCol.getHexString() : '#9aa3b8');
+    lab.position.set(0, -54, 0);
+    g.add(lab);
+    g.userData = { k, open, spin: 0.05 + 0.03 * k };
+    farWorlds.add(g);
+  });
+}
+function spinFarWorlds(dt) {
+  if (!_farKey) { try { refreshFarWorlds(); } catch (e) { _farKey = 'x'; } }     // the first frame builds them, once everything exists
+  for (const g of farWorlds.children) {
+    const b = g.getObjectByName('body');
+    if (b) { b.rotation.y += dt * g.userData.spin; b.rotation.x += dt * g.userData.spin * 0.4; }
+  }
+}
+let _farKey = '';
+function refreshFarWorlds() {
+  // rebuilt only when what it shows changes: where you are, what is open
+  const key = worldIdx + '|' + WORLDS.map(w => (CREATIVE || (cores >= w.cores && worldCapOk(w))) ? 1 : 0).join('');
+  if (key !== _farKey) { _farKey = key; buildFarWorlds(); }
+}
+
 // ── THE SILO (2026-10-05) ─────────────────────────────────────────────────
 // Everything on a line moves the moment it is made, so a factory can only
 // sell at whatever the board pays right now. A silo is the other choice: it
@@ -6707,6 +6785,7 @@ let worldIdx = 0;
 function applyWorld(k) {
   const w = WORLDS[k] || WORLDS[0];
   worldIdx = WORLDS[k] ? k : 0;
+  if (typeof refreshFarWorlds === 'function') try { refreshFarWorlds(); } catch (e) {}
   scene.background.setHex(w.sky);
   worldFog.color.setHex(w.fog);
   gridLines.material.color.setHex(w.grid);
@@ -6779,6 +6858,7 @@ function applyWorld(k) {
 }
 
 function renderWorlds() {
+  try { refreshFarWorlds(); } catch (e) { /* the sky is a nicety; the list still works */ }
   const el = document.getElementById('world');
   if (!el) return;
   let html = '<b>' + WORLDS[worldIdx].name.toUpperCase() + '</b>'
@@ -8002,6 +8082,7 @@ renderer.setAnimationLoop(() => {
   stepPlan();
   stepReadout(_rdt);
   drawWrist(_rdt);
+  spinFarWorlds(_rdt);
   if (!CITY) stepWorksShow(dt);
   stepHint(dt);
   if (!CITY) stepDrone(dt);

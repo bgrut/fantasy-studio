@@ -1,0 +1,42 @@
+<!doctype html><html><body style="margin:0;background:#1c2028">
+<!-- The procedural car in a studio: four paints in a row under softboxes, for
+     judging paint, lamps and trim without a level around it. Serve the repo
+     root on 8791 and open /backend/tools/shotgate/proccar.html?view=front|rear -->
+<script type="importmap">{"imports":{"three":"/backend/app/game_export/runtime/vendor/three.module.js"}}</script>
+<script type="module">
+import * as THREE from 'three';
+import { buildCarHQ } from '/backend/app/game_export/runtime/proc/car.js';
+const W = 1400, H = 800;
+const r = new THREE.WebGLRenderer({ antialias: true }); r.setSize(W, H);
+r.outputColorSpace = THREE.SRGBColorSpace; r.toneMapping = THREE.ACESFilmicToneMapping; r.toneMappingExposure = 1.0;
+r.shadowMap.enabled = true;
+document.body.appendChild(r.domElement);
+const sc = new THREE.Scene(); sc.background = new THREE.Color(0x1c2028);
+// a studio for the reflections: a dark room with three long softboxes
+const env = new THREE.Scene();
+env.add(new THREE.Mesh(new THREE.BoxGeometry(60, 30, 60), new THREE.MeshBasicMaterial({ color: 0x2a2f38, side: THREE.BackSide })));
+for (const [x, y, z, w, h] of [[0, 12, 0, 30, 4], [-18, 6, 10, 2, 10], [18, 6, -10, 2, 10]]) {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w, 0.5, h), new THREE.MeshBasicMaterial({ color: 0xffffff }));
+  m.position.set(x, y, z); if (w < 5) m.rotation.z = Math.PI / 2; env.add(m);
+}
+const pm = new THREE.PMREMGenerator(r);
+sc.environment = pm.fromScene(env, 0.02).texture;
+sc.add(new THREE.HemisphereLight(0xdfe8ff, 0x22252c, 0.6));
+const sun = new THREE.DirectionalLight(0xfff2dd, 2.4); sun.position.set(6, 10, 7); sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048); Object.assign(sun.shadow.camera, { left: -14, right: 14, top: 8, bottom: -8 }); sc.add(sun);
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(80, 40), new THREE.MeshStandardMaterial({ color: 0x3a3f48, roughness: 0.55 }));
+floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; sc.add(floor);
+const paints = [0xb5202a, 0x1d4f8c, 0xd8d8d2, 0x2b2e33];
+paints.forEach((p, k) => {
+  const car = buildCarHQ({ paint: p, type: 'sedan' }, {});
+  car.position.set((k - 1.5) * 5.6, 0, 0);
+  car.traverse(o => { if (o.isMesh && !o.userData.noShadow) { o.castShadow = true; o.receiveShadow = true; } });
+  sc.add(car);
+});
+const view = new URLSearchParams(location.search).get('view') || 'front';
+const cam = new THREE.PerspectiveCamera(34, W / H, 0.1, 200);
+if (view === 'rear') cam.position.set(-13, 3.2, 12); else if (view === 'close') cam.position.set(2.2, 1.3, 4.6); else cam.position.set(14, 3.6, 13);
+cam.lookAt(view === 'close' ? 1.6 : 0, view === 'close' ? 0.6 : 0.5, 0);
+r.render(sc, cam);
+window.__done = true;
+</script></body></html>

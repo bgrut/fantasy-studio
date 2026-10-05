@@ -49,11 +49,30 @@ export function buildCarHQ(cp, T = {}) {
   const wr = cp.wheelR || T.wheelR || 0.34;
   const wb = cp.wheelBase || T.wheelBase || 0.31;
   const paintHex = cp.paint || 0xb5202a;
-  const wear = 0.25 + hashPaint(paintHex) * 0.75;
+  // most cars on a street are looked after: a little wear, now and then a lot
+  const wear = 0.05 + Math.pow(hashPaint(paintHex), 2.2) * 0.75;
   const paint = new THREE.MeshPhysicalMaterial({
     color: new THREE.Color(paintHex), metalness: 0.28,
     roughness: 0.22 + wear * 0.36, clearcoat: 1.0 - wear * 0.45,
     clearcoatRoughness: 0.03 + wear * 0.22, envMapIntensity: 1.15 - wear * 0.5 });
+  // METALLIC PAINT (2026-10-05): most cars are metallic, and metallic paint
+  // is what makes a car read as a car and not a toy: a fine flake under the
+  // lacquer that glitters as the light moves over it. The flake bends the
+  // base layer's normal only (the clearcoat stays mirror-smooth on top), in
+  // the body's own space, so it rides with the car.
+  const metallic = hashPaint(paintHex + 7) < 0.65 && wear < 0.5;
+  if (metallic) { paint.metalness = 0.62; paint.roughness = Math.max(paint.roughness, 0.3); }
+  paint.onBeforeCompile = (sh) => {
+    sh.vertexShader = 'varying vec3 vFlakeP;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvFlakeP = position;');
+    sh.fragmentShader = 'varying vec3 vFlakeP;\n' + sh.fragmentShader.replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
+      {
+        vec3 q = floor(vFlakeP * 520.0);
+        vec3 r = fract(sin(vec3(dot(q, vec3(127.1, 311.7, 74.7)), dot(q, vec3(269.5, 183.3, 246.1)), dot(q, vec3(113.5, 271.9, 124.6)))) * 43758.5453) - 0.5;
+        float fade = 1.0 - smoothstep(0.4, 1.2, length(fwidth(vFlakeP)) * 520.0);
+        normal = normalize(normal + r * ${metallic ? '0.42' : '0.12'} * fade);
+      }`);
+  };
+  paint.customProgramCacheKey = () => 'carpaint' + (metallic ? 'M' : 'S');
   // TINTED, NOT PAINTED (2026-10-02): the glass was an opaque black mirror,
   // so every car was a shell with nobody in it. It is tinted glass now, and
   // there is a cabin behind it.
@@ -417,7 +436,7 @@ export function buildCarHQ(cp, T = {}) {
     const x = xAt(t), y = lerp(bottom(t), top(t), yFrac);
     return new THREE.Vector3(x, y, zFrac * half(t));
   };
-  const lampG = [], tailG = [], trimG = [], mirG = [], plateG = [], chromeG = [];
+  const lampG = [], tailG = [], trimG = [], mirG = [], plateG = [], chromeG = [], lensG = [], tailHotG = [], lampAt = [];
   // A FACE ON THE CAR (2026-10-02): the lamps and grille were placed by
   // formula and sank inside the rounded nose, so the front was a blank bar
   // of soap. They are laid on the skin itself now: a ray from in front finds
@@ -446,14 +465,25 @@ export function buildCarHQ(cp, T = {}) {
     const hh = onEnd(true, yLamp, sz * half(0.02) * 0.6);
     if (hh) {
       // a headlamp unit: a flat lens in a dark bezel, wider than tall
-      const bez = new THREE.BoxGeometry(0.05, 0.13, Wd * 0.2); trimG.push(seat(bez, hh, 0.012));
-      const lens = new THREE.CapsuleGeometry(0.045, Wd * 0.13, 4, 10);
-      lens.rotateX(Math.PI / 2); lens.scale(0.55, 1, 1); lampG.push(seat(lens, hh, -0.004));
+      const bez = new THREE.BoxGeometry(0.05, 0.17, Wd * 0.27); trimG.push(seat(bez, hh, 0.012));
+      const lens = new THREE.CapsuleGeometry(0.06, Wd * 0.18, 4, 12);
+      lens.rotateX(Math.PI / 2); lens.scale(0.55, 1, 1); lensG.push(seat(lens, hh, -0.006));
+      // behind the lens: a chrome reflector and two bright projector eyes
+      const refl = new THREE.BoxGeometry(0.02, 0.11, Wd * 0.22); chromeG.push(seat(refl, hh, 0.004));
+      // one projector toward the outer corner (two round lamps side by side
+      // read as cartoon eyes) and a thin running-light strip along the top
+      const eye = new THREE.SphereGeometry(0.027, 12, 8); eye.scale(0.45, 1, 1); eye.translate(0, -0.01, sz * Wd * 0.06);
+      lampG.push(seat(eye, hh, -0.012));
+      const drl = new THREE.BoxGeometry(0.012, 0.012, Wd * 0.2); drl.translate(0, 0.055, 0);
+      lampG.push(seat(drl, hh, -0.016));
+      lampAt.push(hh);
     }
     const th = onEnd(false, yTail, sz * half(0.98) * 0.58);
     if (th) {
-      const bar = new THREE.CapsuleGeometry(0.05, Wd * 0.2, 4, 10);
+      const bar = new THREE.CapsuleGeometry(0.064, Wd * 0.27, 4, 12);
       bar.rotateX(Math.PI / 2); bar.scale(0.5, 1, 1); tailG.push(seat(bar, th, -0.004));
+      // a brighter strip inside the lamp, the way an LED tail lamp draws a line
+      const strip = new THREE.BoxGeometry(0.02, 0.02, Wd * 0.25); tailHotG.push(seat(strip, th, -0.03));
     }
     // mirror on a stalk at the base of the A pillar
     const mt = cabF + 0.035, mx = xAt(mt), mz = half(mt) * 0.93;
@@ -482,7 +512,37 @@ export function buildCarHQ(cp, T = {}) {
   const fb = new THREE.CapsuleGeometry(0.045, Math.max(0.2, fbW - 0.09), 4, 12); fb.rotateX(Math.PI / 2); fb.translate(xAt(0.03), bottom(0.03) + 0.07, 0); trimG.push(fb);
   const rbW = half(0.97) * 2 * (0.62 + 0.38 * endRound(0.97)) * 0.82;
   const rb = new THREE.CapsuleGeometry(0.045, Math.max(0.2, rbW - 0.09), 4, 12); rb.rotateX(Math.PI / 2); rb.translate(xAt(0.97), bottom(0.97) + 0.09, 0); trimG.push(rb);
-  const heads = new THREE.Mesh(mergeGeometries(lampG, false), new THREE.MeshStandardMaterial({ color: 0xfff6e0, emissive: 0xffeec2, emissiveIntensity: 0.6, roughness: 0.08, metalness: 0.1 }));
+  // exhaust tips under the rear bumper, and wipers parked at the screen's foot
+  for (const sz of [1, -1]) {
+    const ex = new THREE.CylinderGeometry(0.038, 0.034, 0.16, 14, 1, true); ex.rotateZ(Math.PI / 2);
+    ex.translate(xAt(0.985), bottom(0.97) + 0.07, sz * half(0.97) * 0.42); chromeG.push(ex);
+    const exIn = new THREE.CircleGeometry(0.03, 12); exIn.rotateY(Math.PI / 2 * Math.sign(xAt(0.985) - xAt(0.5)));
+    exIn.translate(xAt(0.985) + 0.02 * Math.sign(xAt(0.985) - xAt(0.5)), bottom(0.97) + 0.07, sz * half(0.97) * 0.42); trimG.push(exIn);
+    const wp = new THREE.BoxGeometry(0.018, 0.014, Wd * 0.34); wp.rotateY(sz * 0.12);
+    wp.translate(xAt(cabF) + 0.03 * Math.sign(xAt(0.5) - xAt(0.0)), yt + 0.03, sz * Wd * 0.16); trimG.push(wp);
+  }
+  const lens = new THREE.Mesh(mergeGeometries(lensG, false), new THREE.MeshPhysicalMaterial({ color: 0xffffff, roughness: 0.02, metalness: 0.0,
+    transmission: 0.0, transparent: true, opacity: 0.35, clearcoat: 1.0, depthWrite: false }));
+  lens.userData.noShadow = 1; lens.name = 'lampLenses'; lens.renderOrder = 2; g.add(lens);
+  if (tailHotG.length) {
+    const th2 = new THREE.Mesh(mergeGeometries(tailHotG.map(q => q.index ? q.toNonIndexed() : q), false),
+      new THREE.MeshBasicMaterial({ color: 0xff3a2a, toneMapped: false }));
+    th2.userData.noShadow = 1; th2.name = 'tailStrips'; g.add(th2);
+  }
+  // HEADLIGHT BEAMS (2026-10-05): two soft cones of light in the air ahead,
+  // additive and faint; the game shows them at night and hides them by day
+  const beams = new THREE.Group(); beams.name = 'headBeams'; beams.visible = false;
+  const fwd = Math.sign(xAt(0.0) - xAt(0.5)) || 1;
+  for (const hh of lampAt) {
+    const cone = new THREE.ConeGeometry(1.5, 9, 24, 1, true);
+    cone.translate(0, -4.5, 0); cone.rotateZ(fwd > 0 ? Math.PI / 2 : -Math.PI / 2); cone.rotateZ(fwd > 0 ? -0.06 : 0.06);
+    const cm = new THREE.Mesh(cone, new THREE.MeshBasicMaterial({ color: 0xfff2d0, transparent: true, opacity: 0.07,
+      blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+    cm.position.copy(hh.p); cm.userData.noShadow = 1;
+    beams.add(cm);
+  }
+  g.add(beams);
+  const heads = new THREE.Mesh(mergeGeometries(lampG, false), new THREE.MeshStandardMaterial({ color: 0xfff6e0, emissive: 0xffeec2, emissiveIntensity: 1.2, roughness: 0.08, metalness: 0.1 }));
   heads.userData.noShadow = 1; heads.name = 'headlights'; g.add(heads);
   const tails = new THREE.Mesh(mergeGeometries(tailG, false), new THREE.MeshStandardMaterial({ color: 0x8c1414, emissive: 0xd11a1a, emissiveIntensity: 0.6, roughness: 0.2 }));
   tails.userData.noShadow = 1; tails.name = 'taillights'; g.add(tails);
@@ -497,8 +557,23 @@ export function buildCarHQ(cp, T = {}) {
     ch.userData.noShadow = 1; ch.name = 'grilleSlats'; g.add(ch);
   }
   if (plateG.length) {
+    // A PLATE WITH A NUMBER ON IT (2026-10-05): a blank white tab reads as a
+    // placeholder; a registration, embossed dark on reflective white with a
+    // thin border, reads as a car somebody owns. One per car, from its paint.
+    let plateMap = null;
+    try {
+      const cv = document.createElement('canvas'); cv.width = 256; cv.height = 56;
+      const x = cv.getContext('2d');
+      x.fillStyle = '#ecebe4'; x.fillRect(0, 0, 256, 56);
+      x.strokeStyle = '#22262c'; x.lineWidth = 3; x.strokeRect(4, 4, 248, 48);
+      const h = Math.floor(hashPaint(paintHex + 19) * 1e6), L = 'ABCDEFGHJKLMNPRSTUVWXYZ';
+      const reg = L[h % 23] + L[(h >> 3) % 23] + ' ' + String(h % 90 + 10) + ' ' + L[(h >> 6) % 23] + L[(h >> 9) % 23] + L[(h >> 12) % 23];
+      x.fillStyle = '#16181c'; x.font = 'bold 38px monospace'; x.textAlign = 'center'; x.textBaseline = 'middle';
+      x.fillText(reg, 128, 30);
+      plateMap = new THREE.CanvasTexture(cv); plateMap.colorSpace = THREE.SRGBColorSpace; plateMap.anisotropy = 4;
+    } catch (e) { plateMap = null; }
     const pl = new THREE.Mesh(mergeGeometries(plateG.map(q => q.index ? q.toNonIndexed() : q), false),
-      new THREE.MeshStandardMaterial({ color: 0xe9e6dc, roughness: 0.5 }));
+      new THREE.MeshStandardMaterial({ color: 0xffffff, map: plateMap, roughness: 0.35, metalness: 0.1 }));
     pl.userData.noShadow = 1; pl.name = 'plates'; g.add(pl);
   }
 

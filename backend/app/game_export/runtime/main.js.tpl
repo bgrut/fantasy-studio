@@ -2347,7 +2347,41 @@ async function main() {
   // written by scripts/_clean_coat.py): a knight's plate is steel and his
   // gambeson cloth on one body, with one material. The standard material
   // reads the attribute in place of its single values.
+  // ── THE SURFACE UP CLOSE (2026-10-05) ────────────────────────────────────
+  // A coated character carries its colour on its vertices: even and clean,
+  // and soft, because a vertex is a few centimetres across ("character
+  // skinning ... right now it's very blurry"). The generated sheets hold no
+  // fine detail worth recovering (their fine band is the atlas's confetti),
+  // so the detail is made here, in the material, fixed to the body's rest
+  // shape so it moves with it: cloth gets a woven thread and fibre, skin a
+  // fine grain, an animal's coat short streaks of fur along its length. It
+  // bends the light (a bump from the detail's own slope), lifts and darkens
+  // the colour a touch, and fades out before it is too small to see, so
+  // nothing shimmers at a distance. Skin is told from cloth by its colour.
+  const DETAIL_GLSL = `
+    varying vec3 vDP; varying vec3 vDN;
+    uniform float uFur;
+    float dHash(vec3 p) { p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
+    float dNoise(vec3 x) {
+      vec3 i = floor(x), f = fract(x); f = f * f * (3.0 - 2.0 * f);
+      return mix(mix(mix(dHash(i + vec3(0,0,0)), dHash(i + vec3(1,0,0)), f.x), mix(dHash(i + vec3(0,1,0)), dHash(i + vec3(1,1,0)), f.x), f.y),
+                 mix(mix(dHash(i + vec3(0,0,1)), dHash(i + vec3(1,0,1)), f.x), mix(dHash(i + vec3(0,1,1)), dHash(i + vec3(1,1,1)), f.x), f.y), f.z);
+    }
+    float dWeave(vec2 q) {
+      q *= 150.0;
+      vec2 f = fract(q) - 0.5, c = floor(q);
+      float over = mod(c.x + c.y, 2.0);
+      return over > 0.5 ? 1.0 - abs(f.y) * 2.0 : 1.0 - abs(f.x) * 2.0;
+    }
+  `;
   function vertexPBR(root) {
+    // the rest shape's scale, so a thread is the same size on every body
+    let H = 1, LONG = false;
+    try {
+      const bb = new THREE.Box3().setFromObject(root), sz = bb.getSize(new THREE.Vector3());
+      H = Math.max(1e-3, sz.y); LONG = Math.max(sz.x, sz.z) > sz.y * 1.1;
+    } catch (e) {}
+    const dS = 1.8 / H;                 // a person's height in metres; an animal is near enough
     root.traverse(o => {
       if (!o.isMesh || !o.geometry || !o.geometry.attributes._mr) return;
       for (const m of (Array.isArray(o.material) ? o.material : [o.material])) {
@@ -2356,15 +2390,43 @@ async function main() {
         const prev = m.onBeforeCompile, prevKey = m.customProgramCacheKey;
         m.onBeforeCompile = (sh, r) => {
           if (prev) prev.call(m, sh, r);
+          sh.uniforms.uFur = { value: LONG ? 1 : 0 };
           sh.vertexShader = sh.vertexShader
-            .replace('#include <common>', '#include <common>\nattribute vec3 _mr;\nvarying vec2 vMR;')
-            .replace('#include <begin_vertex>', '#include <begin_vertex>\nvMR = _mr.xy;');
+            .replace('#include <common>', '#include <common>\nattribute vec3 _mr;\nvarying vec2 vMR;\nvarying vec3 vDP; varying vec3 vDN;')
+            .replace('#include <begin_vertex>', '#include <begin_vertex>\nvMR = _mr.xy;\nvDP = position * ' + dS.toFixed(5) + ';\nvDN = normal;');
           sh.fragmentShader = sh.fragmentShader
-            .replace('#include <common>', '#include <common>\nvarying vec2 vMR;')
+            .replace('#include <common>', '#include <common>\nvarying vec2 vMR;\n' + DETAIL_GLSL)
             .replace('#include <metalnessmap_fragment>', '#include <metalnessmap_fragment>\nmetalnessFactor = vMR.x;')
-            .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = clamp(vMR.y, 0.06, 1.0);');
+            .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = clamp(vMR.y, 0.06, 1.0);')
+            .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
+            {
+              vec3 bw = pow(abs(normalize(vDN)), vec3(4.0)); bw /= (bw.x + bw.y + bw.z + 1e-5);
+              vec3 dc = diffuseColor.rgb;
+              float mx = max(dc.r, max(dc.g, dc.b)), mn = min(dc.r, min(dc.g, dc.b));
+              float sat = (mx - mn) / max(mx, 1e-3);
+              // skin: warm (red over green over blue), neither grey nor vivid
+              float skin = smoothstep(0.03, 0.12, dc.r - dc.b) * step(dc.g, dc.r * 1.02) * smoothstep(0.02, 0.12, mx)
+                         * (1.0 - smoothstep(0.82, 0.97, sat)) * (1.0 - uFur);
+              float weave = dWeave(vDP.zy) * bw.x + dWeave(vDP.xz) * bw.y + dWeave(vDP.xy) * bw.z;
+              float fibre = dNoise(vDP * 420.0);
+              float cloth = weave * 0.7 + fibre * 0.3;
+              float pores = dNoise(vDP * 300.0) * 0.6 + dNoise(vDP * 90.0) * 0.4;
+              // fur: short streaks running along the body (stretched noise)
+              float fur = dNoise(vDP * vec3(26.0, 260.0, 260.0)) * 0.5 + dNoise(vDP * vec3(260.0, 260.0, 26.0)) * 0.5;
+              float h = uFur > 0.5 ? fur : mix(cloth, pores, skin);
+              float str = uFur > 0.5 ? 1.5 : mix(1.0, 0.35, skin);
+              // gone before it is smaller than a pixel
+              float fade = 1.0 - smoothstep(0.25, 0.8, length(fwidth(vDP)) * 150.0);
+              vec3 dpx = dFdx(-vViewPosition), dpy = dFdy(-vViewPosition);
+              float dhx = dFdx(h), dhy = dFdy(h);
+              vec3 r1 = cross(dpy, normal), r2 = cross(normal, dpx);
+              float det = dot(dpx, r1);
+              vec3 grad = sign(det) * (dhx * r1 + dhy * r2);
+              normal = normalize(abs(det) * normal - grad * 0.0016 * str * fade / max(abs(det), 1e-8) * abs(det));
+              diffuseColor.rgb *= 1.0 + (h - 0.5) * (uFur > 0.5 ? 0.26 : mix(0.16, 0.07, skin)) * fade;
+            }`);
         };
-        m.customProgramCacheKey = () => (prevKey ? prevKey.call(m) : '') + '|vpbr';
+        m.customProgramCacheKey = () => (prevKey ? prevKey.call(m) : '') + '|vpbr2';
         m.needsUpdate = true;
       }
     });
@@ -10796,7 +10858,11 @@ async function main() {
     // flush glass, turned wheels and real lamps; this extruded build stays as
     // the fallback (?car=extrude, or if the module ever fails)
     if (__buildCarHQ && new URLSearchParams(location.search).get('car') !== 'extrude') {
-      try { return __buildCarHQ(cp, CAR_TYPES[cp.type] || {}); }
+      try { const _car = __buildCarHQ(cp, CAR_TYPES[cp.type] || {});
+            // headlight beams in the air at night, in rain or fog; not by day
+            const _hb = _car.getObjectByName('headBeams');
+            if (_hb) _hb.visible = _isNightSky || ['rain', 'fog', 'storm'].includes(SPEC.world.weather);
+            return _car; }
       catch (e) { console.warn('[game] lofted car failed, extruding: ' + e.message); }
     }
     const g = new THREE.Group();
@@ -11701,7 +11767,11 @@ async function main() {
   if (pal.sun < 1.0) {
     scene.add(camera);                       // camera needs to be in the graph
     // (a failing building keeps only a little of it, or every wall near the lens goes white)
-    const fill = new THREE.PointLight(0xc3d6ff, window.__gloom ? 18 : pal.sun < 0.7 ? 120 : 40, 30, 1.9);
+    // A THIRD OF WHAT IT WAS (2026-10-05): at 120 the lens-mounted fill burnt
+    // out anything within a few metres of the camera, a car's paint to white
+    // pastel and a face to a glowing blob; the hero still reads at 40, with
+    // the moonlit emissive below doing the rest
+    const fill = new THREE.PointLight(0xc3d6ff, window.__gloom ? 14 : pal.sun < 0.7 ? 40 : 18, 22, 2.0);
     fill.position.set(0, 0.6, 0.4);          // just above/behind the lens
     camera.add(fill);
     hemi.intensity = Math.max(hemi.intensity, 0.34);
