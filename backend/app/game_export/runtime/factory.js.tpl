@@ -241,7 +241,8 @@ let TICK = BASE_TICK;
 const EMPTY = 0, MINER = 1, BELT = 2, HUB = 3, NODE = 4, SMELTER = 5,
       SPLITTER = 6, FORGE = 7, FILTER = 8, RIFT = 9, ASSEMBLER = 10,
       PROP = 11,                     // scenery: the outpost's habitat, masts and crates; blocks, sells nothing, is never saved
-      ROAD = 12, HOMES = 13, SHOP = 14, WORKS = 15, PARK = 16, HALL = 17;   // the city's (2026-09-29)
+      ROAD = 12, HOMES = 13, SHOP = 14, WORKS = 15, PARK = 16, HALL = 17,   // the city's (2026-09-29)
+      DRONEPAD = 18;                    // a drone pad (2026-10-04): what it is fed, its drone flies to another pad
 // A CITY (2026-09-29): the same worldlet built as a town. Set by the studio when
 // the prompt asks for a city builder; everything quarry-shaped stands down.
 const CITY = SPEC.city || null;
@@ -338,7 +339,7 @@ function themeNode(root) {
 }
 const TYPE_NAME = { 1: 'miner', 2: 'belt', 3: 'hub', 4: 'ore node',
                     5: 'smelter', 6: 'splitter', 7: 'forge', 8: 'filter',
-                    9: 'chronos rift', 10: 'assembler',
+                    9: 'chronos rift', 10: 'assembler', 18: 'drone pad',
                     12: 'road', 13: 'homes', 14: 'shops', 15: 'works', 16: 'park', 17: 'town hall' };
 
 const VALUE = { [CRYSTAL]: 1, [INGOT]: 6 };   // an ingot is worth the detour
@@ -898,6 +899,15 @@ function noteSceneCost() {
 // cost, and it is what the gates hold to.
 renderer.info.autoReset = false;
 function renderFrame() {
+  // A PINNED VIEW for shot tools: {pos:[x,y,z], look:[x,y,z], up?:[x,y,z]}
+  // holds the camera where a picture needs it (the adventure runtime has the same)
+  if (window.__camPin) {
+    // a pin may follow something that moves: a function returning the same shape
+    const cp = typeof window.__camPin === 'function' ? window.__camPin() : window.__camPin;
+    camera.position.set(...cp.pos);
+    if (cp.up) camera.up.set(...cp.up);
+    camera.lookAt(...cp.look);
+  }
   renderer.info.reset();
   if (!POST.on) {
     renderer.setRenderTarget(null);
@@ -2476,6 +2486,8 @@ function buildToolIcons() {
     hub: () => mk(GEO.hub, MAT.hub),
     forge: () => mk(GEO.forge, MAT.forge),
     assembler: () => mk(GEO.assembler, MAT.assem),
+    drone: () => grp([mk(droneGeo().pad, droneMat().pad),
+                      (() => { const d = mk(droneGeo().body, droneMat().body); d.position.y = 0.32; return d; })()]),
     filter: () => mk(GEO.filter, MAT.filt),
     rift: () => grp([mk(GEO.riftBase, MAT.rift),
                      (() => { const r = mk(GEO.rift, MAT.rift);
@@ -2676,6 +2688,13 @@ function place(face, i, j, type, dir) {
     lamp.position.set(0, 1.5, 0);
     lamp.name = 'lamp';
     g.add(lamp);
+  } else if (type === DRONEPAD) {
+    const b = new THREE.Mesh(droneGeo().pad, droneMat().pad);
+    b.receiveShadow = true; g.add(b);
+    // the side it unloads from, so a receiver's output is readable at a glance
+    const a = new THREE.Mesh(GEO.arrow, MAT.filt);
+    a.position.set(T * 0.36, 0.16, 0); a.rotation.z = -Math.PI / 2; g.add(a);
+    c.pq = c.pq || []; c.inb = 0; c.away = false;
   } else if (type === SMELTER) {
     const b = new THREE.Mesh(GEO.smelt, MAT.smelt);
     b.castShadow = true; g.add(b);
@@ -2955,7 +2974,15 @@ function grassMaskFor(f) {
       return c && c.t !== EMPTY;
     });
     const margin = nearBuilt ? Math.min(1, edge / 0.18) : 1;
-    return [base * (0.4 + 0.6 * nz) * margin, dry, 0.5 + 0.5 * nz];
+    // burnt off around a fallen star: bare scorched ground out to its rim
+    let burn = 1;
+    for (let di = -1; di <= 1; di++) for (let dj = -1; dj <= 1; dj++) {
+      const c = cells[f][i + di] && cells[f][i + di][j + dj];
+      if (!c || !(c.star > 0)) continue;
+      const d = Math.hypot(a / T + N / 2 - (i + di + 0.5), b / T + N / 2 - (j + dj + 0.5));
+      burn = Math.min(burn, Math.max(0, Math.min(1, (d - 0.95) / 0.5)));
+    }
+    return [base * (0.4 + 0.6 * nz) * margin * burn, burn < 1 ? 1 : dry, (0.5 + 0.5 * nz) * (0.4 + 0.6 * burn)];
   };
 }
 if (GRASS_ON) {
@@ -3556,8 +3583,9 @@ function stepLightPool(dt) {
     _pool.push({ x, y, z, col, amt, d2 });
   });
   _pool.sort((a, b) => a.d2 - b.d2);
-  for (let k = 0; k < LIGHT_POOL.length; k++) {
-    const l = LIGHT_POOL[k], e = _pool[k];
+  const k0 = typeof starLit !== 'undefined' && starLit ? 1 : 0;   // a falling star holds light 0
+  for (let k = k0; k < LIGHT_POOL.length; k++) {
+    const l = LIGHT_POOL[k], e = _pool[k - k0];
     if (!e) { l.intensity = 0; continue; }
     l.position.set(e.x, e.y, e.z);
     l.color.setHex(e.col);
@@ -4221,6 +4249,8 @@ function accepts(dst, type) {
   // a rift only takes back exactly what it lent — anything else rides past it,
   // which is what makes the filter tile the tool for repaying one
   if (dst.t === RIFT) return dst.dbt > 0 && type === dst.dmin;
+  // a drone pad holds eight, counting what is already flying in to it
+  if (dst.t === DRONEPAD) return (dst.pq ? dst.pq.length : 0) + (dst.inb | 0) < DRONE_CAP;
   return false;
 }
 // `to` is the tile it landed on. Passing it costs nothing and is what lets an
@@ -4259,7 +4289,525 @@ function deliver(dst, to, type) {
   else if (dst.t === FORGE) { if (dst.fa === 0) dst.fa = type; else dst.fb = type; }
   else if (dst.t === ASSEMBLER) { if (type === ALLOY) dst.ha = 1; else dst.hb = 1; }
   else if (dst.t === RIFT) { if (--dst.dbt <= 0) riftSettle(dst, true); }
+  else if (dst.t === DRONEPAD) { (dst.pq || (dst.pq = [])).push(type); dst.fed = droneTick; }
   else dst.item = type;
+}
+
+// ── CARGO DRONES (2026-10-04) ────────────────────────────────────────────
+// Belts solve distance one tile at a time, and over an edge, around a seam,
+// across the worldlet to the far face, that is a long chain to lay. A drone
+// pad is the other answer: a pad that is FED (a belt or a machine puts things
+// into it) loads its drone, four at a time, and the drone flies them over the
+// worldlet to the nearest pad that is NOT being fed and has room; that pad
+// puts them out of the side it faces, one a tick, like a miner. So a pad is a
+// sender or a receiver by what you connect to it, not by a setting. Flights
+// run in ticks (a harness stepping the sim gets the same result as a player
+// watching it); the craft is drawn between ticks. A pad holds eight.
+var droneTick = 0;                     // var: read by deliver() above the tick
+const DRONE_CAP = 8, DRONE_LOAD = 4, DRONE_SPEED = 16, DRONE_WAIT = 6;   // metres a second; ticks it waits for a full load
+const flights = [];
+let dronesDelivered = 0;
+const padSends = c => c.fed !== undefined && droneTick - c.fed < 30;
+function stepDrones() {
+  droneTick++;
+  const pads = [];
+  eachTile((c, f, i, j) => { if (c.t === DRONEPAD) pads.push({ c, f, i, j }); });
+  for (const p of pads) {
+    const c = p.c;
+    // a receiver unloads, one a tick, out of the side it faces
+    if (c.pq && c.pq.length && !padSends(c)) {
+      const to = stepTile(p.f, p.i, p.j, c.d), dst = cellOf(to);
+      if (dst && dst.t === HUB && (dst.took | 0) < HUB_INTAKE) {
+        dst.took = (dst.took | 0) + 1; dst.pulse = 1;
+        spawnTag(to.face, to.i, to.j, bank(c.pq.shift(), to.face)); noteSale(dst);
+      } else if (dst && dst.t !== DRONEPAD && accepts(dst, c.pq[0])) deliver(dst, to, c.pq.shift());
+    }
+    // a sender with cargo and its craft at home launches to the nearest receiver with room
+    // it waits a few ticks to fill up, so a trip carries a full load
+    if (c.pq && c.pq.length) { if (c.wait === undefined) c.wait = droneTick; } else c.wait = undefined;
+    if (padSends(c) && c.pq && c.pq.length && !c.away && (c.pq.length >= DRONE_LOAD || droneTick - c.wait >= DRONE_WAIT)) {
+      const w = tileWorld(p.f, p.i, p.j);
+      let best = null, bd = 1e9;
+      for (const q of pads) {
+        if (q === p || padSends(q.c)) continue;
+        const room = DRONE_CAP - (q.c.pq ? q.c.pq.length : 0) - (q.c.inb | 0);
+        if (room <= 0) continue;
+        const v = tileWorld(q.f, q.i, q.j), d = Math.hypot(v[0] - w[0], v[1] - w[1], v[2] - w[2]);
+        if (d < bd) { bd = d; best = q; }
+      }
+      if (best) {
+        const room = DRONE_CAP - (best.c.pq ? best.c.pq.length : 0) - (best.c.inb | 0);
+        const load = c.pq.splice(0, Math.min(DRONE_LOAD, c.pq.length, room));
+        best.c.inb = (best.c.inb | 0) + load.length;
+        c.away = true; c.wait = undefined;
+        const arcLen = bd * 1.35 + 4;
+        flights.push({ from: p, to: best, load, t: 0, dur: Math.max(4, Math.round(arcLen / DRONE_SPEED / TICK)), back: false });
+      }
+    }
+  }
+  // flights advance a tick; arrivals hand over and turn for home
+  for (let k = flights.length - 1; k >= 0; k--) {
+    const fl = flights[k];
+    fl.t++;
+    if (fl.t < fl.dur) continue;
+    if (!fl.back) {
+      const r = fl.to.c;
+      if (r.t === DRONEPAD) { r.inb = Math.max(0, (r.inb | 0) - fl.load.length); (r.pq || (r.pq = [])).push(...fl.load); dronesDelivered += fl.load.length; }
+      fl.load = []; fl.back = true; fl.t = 0;
+    } else {
+      fl.from.c.away = false;
+      flights.splice(k, 1);
+    }
+  }
+}
+// the craft: a body, four arms and rotors, a running light and a cargo pod in
+// the colour of what it carries; it rests on its pad and flies the arc
+var _DRONE_GEO = null;
+function droneGeo() {
+  if (_DRONE_GEO) return _DRONE_GEO;
+  const pad = mergeParts([
+    { g: new THREE.CylinderGeometry(T * 0.44, T * 0.47, 0.1, 24), y: 0.05, col: 0x2c333d, tint: 1 },
+    { g: new THREE.CylinderGeometry(T * 0.36, T * 0.36, 0.02, 24), y: 0.11, col: 0x3d4654, tint: 1 },
+    { g: new THREE.BoxGeometry(T * 0.5, 0.025, 0.07), y: 0.125, col: 0xe8b53a, tint: 1 },
+    { g: new THREE.BoxGeometry(0.07, 0.025, T * 0.5), y: 0.125, col: 0xe8b53a, tint: 1 },
+  ]);
+  const body = mergeParts([
+    { g: new THREE.BoxGeometry(0.42, 0.12, 0.42), y: 0, col: 0x39424f, tint: 1 },
+    { g: new THREE.BoxGeometry(0.9, 0.04, 0.06), y: 0.02, ry: Math.PI / 4, col: 0x2a3039, tint: 1 },
+    { g: new THREE.BoxGeometry(0.9, 0.04, 0.06), y: 0.02, ry: -Math.PI / 4, col: 0x2a3039, tint: 1 },
+    { g: new THREE.CylinderGeometry(0.05, 0.05, 0.1, 8), x: 0.32, z: 0.32, y: 0.06, col: 0x22272e, tint: 1 },
+    { g: new THREE.CylinderGeometry(0.05, 0.05, 0.1, 8), x: -0.32, z: 0.32, y: 0.06, col: 0x22272e, tint: 1 },
+    { g: new THREE.CylinderGeometry(0.05, 0.05, 0.1, 8), x: 0.32, z: -0.32, y: 0.06, col: 0x22272e, tint: 1 },
+    { g: new THREE.CylinderGeometry(0.05, 0.05, 0.1, 8), x: -0.32, z: -0.32, y: 0.06, col: 0x22272e, tint: 1 },
+  ]);
+  const rotor = new THREE.CylinderGeometry(0.2, 0.2, 0.012, 16);
+  const pod = new THREE.OctahedronGeometry(0.14, 0);
+  _DRONE_GEO = { pad, body, rotor, pod };
+  return _DRONE_GEO;
+}
+var _DRONE_MAT = null;
+function droneMat() {
+  if (_DRONE_MAT) return _DRONE_MAT;
+  _DRONE_MAT = {
+    pad: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.5, metalness: 0.55 }),
+    body: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.38, metalness: 0.6 }),
+    rotor: new THREE.MeshBasicMaterial({ color: 0xbfd6e6, transparent: true, opacity: 0.32, depthWrite: false }),
+  };
+  return _DRONE_MAT;
+}
+const crafts = new Map();            // pad cell -> its craft
+function craftFor(c) {
+  let cr = crafts.get(c);
+  if (cr) return cr;
+  const G = droneGeo(), Mt = droneMat();
+  const g = new THREE.Group();
+  const b = new THREE.Mesh(G.body, Mt.body); b.castShadow = true; g.add(b);
+  const rotors = [];
+  for (const [x, z] of [[0.32, 0.32], [-0.32, 0.32], [0.32, -0.32], [-0.32, -0.32]]) {
+    const r = new THREE.Mesh(G.rotor, Mt.rotor); r.position.set(x, 0.12, z); g.add(r); rotors.push(r);
+  }
+  const light = new THREE.Mesh(new THREE.SphereGeometry(0.035, 6, 4), new THREE.MeshBasicMaterial({ color: 0x7df9ff }));
+  light.position.set(0, 0.08, 0.22); g.add(light);
+  const pod = new THREE.Mesh(G.pod, new THREE.MeshBasicMaterial({ color: 0xffffff }));
+  pod.position.y = -0.17; pod.visible = false; g.add(pod);
+  g.name = 'cargoDrone';
+  scene.add(g);
+  cr = { g, rotors, light, pod, spin: 0 };
+  crafts.set(c, cr);
+  return cr;
+}
+const _cgA = new THREE.Vector3(), _cgB = new THREE.Vector3(), _cgP = new THREE.Vector3(), _cgQ = new THREE.Vector3(), _cgN = new THREE.Vector3();
+const _cgM = new THREE.Matrix4(), _cgX = new THREE.Vector3(), _cgZ = new THREE.Vector3();
+function padTop(p, out) {
+  const w = tileWorld(p.f, p.i, p.j), n = FACES[p.f].n;
+  return out.set(w[0] + n[0] * 0.32, w[1] + n[1] * 0.32, w[2] + n[2] * 0.32);
+}
+function arcAt(fl, s, out) {
+  // over the worldlet, not through it: the direction from the centre turns
+  // from the start pad to the end pad, and the craft climbs and descends
+  const A = padTop(fl.back ? fl.to : fl.from, _cgA), B = padTop(fl.back ? fl.from : fl.to, _cgB);
+  const ra = A.length(), rb = B.length();
+  _cgQ.copy(A).normalize(); _cgN.copy(B).normalize();
+  const om = Math.acos(THREE.MathUtils.clamp(_cgQ.dot(_cgN), -1, 1));
+  let dir;
+  if (om < 1e-3) dir = _cgQ.clone().lerp(_cgN, s);
+  else dir = _cgQ.clone().multiplyScalar(Math.sin((1 - s) * om) / Math.sin(om)).add(_cgN.clone().multiplyScalar(Math.sin(s * om) / Math.sin(om)));
+  const e = s * s * (3 - 2 * s);
+  const lift = Math.sin(Math.PI * s) * (2.2 + om * HALF * 0.6);
+  return out.copy(dir).normalize().multiplyScalar(ra + (rb - ra) * e + lift);
+}
+function updateDrones(frac, dt) {
+  // a craft whose pad is gone goes with it (erased, melted, a new world)
+  for (const [c, cr] of crafts) if (c.t !== DRONEPAD) { scene.remove(cr.g); crafts.delete(c); }
+  for (let k = flights.length - 1; k >= 0; k--) if (flights[k].from.c.t !== DRONEPAD) flights.splice(k, 1);
+  const flying = new Map();
+  for (const fl of flights) flying.set(fl.from.c, fl);
+  eachTile((c, f, i, j) => {
+    if (c.t !== DRONEPAD) return;
+    const cr = craftFor(c);
+    const fl = flying.get(c);
+    cr.spin += dt * (fl ? 40 : 6);
+    for (const r of cr.rotors) r.rotation.y = cr.spin;
+    cr.light.material.color.setHex(Math.sin(cr.spin * 0.3) > 0.6 ? 0xffffff : (fl ? 0xff5a5a : 0x7df9ff));
+    const n = FACES[f].n;
+    if (!fl) {
+      // at rest on its pad, idling
+      padTop({ f, i, j }, _cgP);
+      _cgP.x += n[0] * (0.08 + Math.sin(cr.spin * 0.2) * 0.02); _cgP.y += n[1] * (0.08 + Math.sin(cr.spin * 0.2) * 0.02); _cgP.z += n[2] * (0.08 + Math.sin(cr.spin * 0.2) * 0.02);
+      cr.g.position.copy(_cgP);
+      cr.g.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), _cgN.set(n[0], n[1], n[2]));
+      cr.pod.visible = !!(c.pq && c.pq.length && padSends(c));
+      if (cr.pod.visible) cr.pod.material.color.copy(ITEM_COL[c.pq[0]] || ITEM_COL[CRYSTAL]);
+      return;
+    }
+    const s = THREE.MathUtils.clamp((fl.t + frac) / fl.dur, 0, 1);
+    arcAt(fl, s, _cgP);
+    arcAt(fl, Math.min(1, s + 0.02), _cgQ);
+    cr.g.position.copy(_cgP);
+    // up is away from the worldlet; nose along the path, banked a little into it
+    const up = _cgN.copy(_cgP).normalize();
+    _cgZ.subVectors(_cgQ, _cgP); _cgZ.addScaledVector(up, -_cgZ.dot(up));
+    if (_cgZ.lengthSq() < 1e-8) _cgZ.set(1, 0, 0).addScaledVector(up, -up.x);
+    _cgZ.normalize(); _cgX.crossVectors(up, _cgZ).normalize();
+    _cgM.makeBasis(_cgX, up, _cgZ);
+    cr.g.quaternion.setFromRotationMatrix(_cgM);
+    cr.pod.visible = fl.load.length > 0;
+    if (cr.pod.visible) cr.pod.material.color.copy(ITEM_COL[fl.load[0]] || ITEM_COL[CRYSTAL]);
+  });
+}
+
+// ── STARFALL (2026-10-04) ──────────────────────────────────────────────────
+// Every few minutes, once drones can fetch from far away, a star falls on the
+// worldlet. Its target is marked first, a ring tightening on one empty tile
+// for a few seconds while a point brightens in the sky; then it comes in on a
+// long slant trailing sparks, strikes with a flash, a shockwave across the
+// plate and a spray of rock, and leaves a scorched crater with a fallen star
+// in it: a seam of the face's ore that yields on every tick and never thins,
+// and after STAR_LOADS loads gives up its heart as a core shard and stays on
+// as an ordinary seam. It picks ground with nothing built on or beside it; a
+// machine put down inside the closing ring is thrown, as a rift storm throws.
+const STAR_EVERY = CREATIVE ? 75 : 170, STAR_FIRST = CREATIVE ? 25 : 60;
+const STAR_WARN = 6, STAR_FALL = 1.7, STAR_LOADS = 60;
+const STAR_COL = 0xffe2a0;
+let starClock = 0, starsFell = 0, starsSpent = 0, starLit = 0;
+let star = null;          // the one coming down: { f, i, j, phase, t, from, to, g, ring, tail }
+const starFx = [];        // what a strike leaves for a while: flash, shock ring, rock, scorch
+const _stA = new THREE.Vector3(), _stV = new THREE.Vector3(), _stUp = new THREE.Vector3(0, 1, 0), _stN = new THREE.Vector3();
+var starGeo = null;
+function starParts() {
+  if (starGeo) return starGeo;
+  // the tail: a cone whose wide end is at the head (y 0) and whose point
+  // trails behind (y -1), white at the head and fading to nothing, additive
+  const tail = new THREE.CylinderGeometry(0.55, 0.0, 1, 12, 6, true).translate(0, -0.5, 0);
+  const tp = tail.attributes.position, tc = [];
+  for (let k = 0; k < tp.count; k++) { const c = Math.pow(1 + tp.getY(k), 1.6); tc.push(c, c * 0.86, c * 0.62); }
+  tail.setAttribute('color', new THREE.Float32BufferAttribute(tc, 3));
+  starGeo = {
+    head: new THREE.IcosahedronGeometry(0.42, 1),
+    halo: new THREE.IcosahedronGeometry(1.0, 1),
+    tail,
+    ring: new THREE.RingGeometry(0.82, 1.0, 56),
+    rock: new THREE.DodecahedronGeometry(0.16, 0),
+    scorch: new THREE.CircleGeometry(1, 40),
+    burn: burnTexture(),
+  };
+  return starGeo;
+}
+function pickStarTile() {
+  // the face the player is on half the time, so it is seen; otherwise any face
+  for (let k = 0; k < 120; k++) {
+    const f = Math.random() < 0.5 ? player.face : Math.floor(Math.random() * 6);
+    const i = 2 + Math.floor(Math.random() * (N - 4)), j = 2 + Math.floor(Math.random() * (N - 4));
+    const c = cells[f][i][j];
+    if (c.t !== EMPTY || c.mesh) continue;
+    // room for a rig and a belt: nothing built right beside it either
+    let busy = 0;
+    for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) { const d = cells[f][i + a][j + b]; if (d.t !== EMPTY && d.t !== NODE) busy++; }
+    if (!busy) return [f, i, j];
+  }
+  return null;
+}
+function burnTexture() {
+  // the scorch: black at the heart, ash and soot thinning out to nothing in
+  // a ragged edge, and a few streaks thrown outward by the strike
+  const S = 256, cv = document.createElement('canvas'); cv.width = cv.height = S;
+  const x = cv.getContext('2d'), id = x.createImageData(S, S);
+  for (let py = 0; py < S; py++) for (let px = 0; px < S; px++) {
+    const dx = px / S * 2 - 1, dy = py / S * 2 - 1, r = Math.hypot(dx, dy), a = Math.atan2(dy, dx);
+    const rag = 0.08 * Math.sin(a * 7 + 1.3) + 0.05 * Math.sin(a * 17 + 0.4) + 0.03 * Math.sin(a * 31);
+    const streak = Math.pow(Math.max(0, Math.sin(a * 11 + 2.1)), 12) * 0.25;
+    const edge = 0.78 + rag + streak;
+    let al = 1 - Math.min(1, Math.max(0, (r - 0.15) / (edge - 0.15)));
+    al = Math.pow(al, 0.45) * 0.96;
+    const grain = 0.75 + 0.25 * Math.sin(px * 1.7 + py * 2.3) * Math.sin(px * 0.37 - py * 0.91);
+    const k = (py * S + px) * 4, c = 8 + 46 * (1 - al) * grain;
+    id.data[k] = c * 1.1; id.data[k + 1] = c * 0.95; id.data[k + 2] = c * 0.8; id.data[k + 3] = Math.max(0, Math.min(255, al * 255 * grain));
+  }
+  x.putImageData(id, 0, 0);
+  const t = new THREE.CanvasTexture(cv);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+function flatOn(o, f, i, j, up) {
+  // a disc or ring lying on the plate: seated, then turned from xy into the face
+  seat(o, f, i, j, 0, up);
+  o.rotateX(-Math.PI / 2);
+}
+function dropStar(f, i, j) {
+  if (star || CITY) return null;
+  if (f === undefined) { const t = pickStarTile(); if (!t) return null; [f, i, j] = t; }
+  const P = starParts();
+  const w = tileWorld(f, i, j), F = FACES[f];
+  const to = new THREE.Vector3(w[0], w[1], w[2]);
+  // in from high over the face and off to one side: a long slant, not a drop
+  const side = Math.random() < 0.5 ? 1 : -1;
+  const from = to.clone().addScaledVector(_stN.set(...F.n), 70).addScaledVector(_stN.set(...F.u), 55 * side)
+                .addScaledVector(_stN.set(...F.v), 24 * (Math.random() - 0.5));
+  const g = new THREE.Group(); g.name = 'fallingStar';
+  const head = new THREE.Mesh(P.head, new THREE.MeshBasicMaterial({ color: 0xfff6e0 }));
+  const halo = new THREE.Mesh(P.halo, new THREE.MeshBasicMaterial({ color: 0xffa850, transparent: true, opacity: 0.4,
+    blending: THREE.AdditiveBlending, depthWrite: false }));
+  const tail = new THREE.Mesh(P.tail, new THREE.MeshBasicMaterial({ color: 0xffffff, vertexColors: true, transparent: true,
+    blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+  tail.scale.set(1, 0.01, 1);
+  g.add(head, halo, tail); g.visible = false;
+  for (const o of [head, halo, tail]) o.userData.noAutoTex = true;
+  scene.add(g);
+  const ring = new THREE.Mesh(P.ring, new THREE.MeshBasicMaterial({ color: STAR_COL, transparent: true, opacity: 0,
+    blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+  ring.name = 'starRing';
+  flatOn(ring, f, i, j, 0.06);
+  scene.add(ring);
+  star = { f, i, j, phase: 'warn', t: 0, from, to, g, ring, tail };
+  starsFell++;
+  const t = document.getElementById('toast');
+  if (t) { t.textContent = WORD('STARFALL. A star is coming down on the ' + F.name + ' face, where the ring is closing. It leaves a seam that never thins, and a core shard when it is spent.'); t.classList.add('on'); toastAt = 6; }
+  return { f, i, j };
+}
+function starLight(at, col, amt, dist) {
+  // the strike borrows the first pool light (it is always in the scene, so
+  // nothing recompiles); the pool hands out the other three meanwhile
+  const l = LIGHT_POOL[0];
+  if (!l) return;
+  if (!at) { starLit = 0; l.distance = 9; l.intensity = 0; return; }
+  starLit = 1; l.position.copy(at); l.color.setHex(col); l.intensity = amt; l.distance = dist;
+}
+function dressStar(c) {
+  // a fallen star wears its seam's ore with a white-gold heart, a size up
+  const m = c.mesh; if (!m) return;
+  const core = m.getObjectByName('core');
+  if (core) core.material.color.setHex(STAR_COL);
+  if (m.material.emissive) m.material.emissive.setHex(0xffb860);
+  m.scale.setScalar(m.userData.base * 1.3); m.userData.base = m.scale.x;
+  // its pool of light on the ground is a low amber, so the burn shows through it
+  if (glowPools && c.glow !== undefined) { _gc.setHex(0x6a3a14); glowPools.setColorAt(c.glow, _gc); glowPools.instanceColor.needsUpdate = true; }
+  if (m.userData.fsTag) m.userData.fsTag.name = 'fallen star';
+}
+function undressStar(c) {
+  const m = c.mesh; if (!m) return;
+  const core = m.getObjectByName('core');
+  if (core) core.material.color.setHex(MIN_COL[c.min]);
+  if (m.material.emissive) m.material.emissive.setHex(MIN_COL[c.min]);
+  if (glowPools && c.glow !== undefined) { _gc.setHex(MIN_COL[c.min]); glowPools.setColorAt(c.glow, _gc); glowPools.instanceColor.needsUpdate = true; }
+  if (m.userData.fsTag) m.userData.fsTag.name = MINERAL_NAME[c.min] + ' seam';
+}
+function starSeam(f, i, j, left) {
+  // the world's stream lays the world out; a star must not shift it
+  const c = cells[f][i][j];
+  if (c.mesh) return c;
+  const keep = rngState; makeSeam(f, i, j); rngState = keep;
+  c.star = left; c.rich = 1; c.sf = f;
+  if (left > 0) dressStar(c);
+  // the crater's rim: stones thrown up around it, children of the seam so
+  // they go where it goes
+  if (c.mesh) {
+    const sc = c.mesh.scale.x;
+    for (let q = 0; q < 9; q++) {
+      const a = q / 9 * Math.PI * 2 + (f * 7 + i * 3 + j) * 0.37, r = T * (0.78 + 0.12 * Math.sin(q * 5.3 + i));
+      const rk = new THREE.Mesh(seamRockGeos[(q + i + j) % seamRockGeos.length], seamRockMat);
+      rk.position.set(Math.cos(a) * r / sc, -0.05 / sc, Math.sin(a) * r / sc);
+      rk.rotation.set(0.3 * Math.sin(q * 2.1), a * 1.7, 0.3 * Math.cos(q * 1.3));
+      rk.scale.setScalar((0.22 + 0.12 * Math.abs(Math.sin(q * 3.7 + j))) / sc);
+      rk.castShadow = true; rk.receiveShadow = true; rk.name = 'rim';
+      c.mesh.add(rk);
+    }
+  }
+  if (typeof grassDirty !== 'undefined') { grassDirty.add(f); grassWait = 0.25; }
+  return c;
+}
+function starSpent(c) {
+  starsSpent++;
+  undressStar(c);
+  if (typeof grassDirty !== 'undefined' && c.sf !== undefined) { grassDirty.add(c.sf); grassWait = 0.25; }   // the grass grows back
+  shards++;
+  let msg = 'THE STAR IS SPENT. Its heart was a core shard, and the crater is an ordinary seam now.';
+  if (shards >= 3) { shards -= 3; cores++; document.getElementById('tok').textContent = cores; renderWorlds(); msg += ' That makes a core.'; }
+  renderRank();
+  sfxUnlock();
+  const t = document.getElementById('toast');
+  if (t) { t.textContent = WORD(msg); t.classList.add('on'); toastAt = 5; }
+}
+function starImpact(s) {
+  scene.remove(s.g); scene.remove(s.ring);
+  s.ring.material.dispose(); s.g.traverse(o => { if (o.material) o.material.dispose(); });
+  star = null;
+  const { f, i, j } = s, F = FACES[f], n = F.n, u = F.u, v = F.v;
+  const w = tileWorld(f, i, j);
+  const c = cells[f][i][j];
+  // something built inside the ring is thrown, the way a rift storm throws
+  if (c.t !== EMPTY && c.t !== NODE && !c.mesh) {
+    const piece = pieceFor(f, i, j, c);
+    if (piece) { throwPiece(piece); c.build = null; }
+    c.t = EMPTY; c.item = 0; c.buf = 0; c.bt = 0; c.fa = 0; c.fb = 0; c.cook = 0;
+    beltsDirty = true; refreshCounts();
+  }
+  if (c.t === EMPTY && !c.mesh) starSeam(f, i, j, STAR_LOADS);
+  const P = starParts();
+  starFx.push({ kind: 'flash', t: 0, life: 1.2, at: new THREE.Vector3(w[0] + n[0] * 1.4, w[1] + n[1] * 1.4, w[2] + n[2] * 1.4) });
+  const shock = new THREE.Mesh(P.ring, new THREE.MeshBasicMaterial({ color: 0xffd08a, transparent: true, opacity: 0.9,
+    blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+  flatOn(shock, f, i, j, 0.08); scene.add(shock);
+  starFx.push({ kind: 'shock', t: 0, life: 1.1, o: shock });
+  const scorch = new THREE.Mesh(P.scorch, new THREE.MeshBasicMaterial({ color: 0xffffff, map: P.burn, transparent: true, opacity: 1,
+    depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }));
+  flatOn(scorch, f, i, j, 0.025); scorch.scale.setScalar(T * 1.35); scorch.renderOrder = 3; scene.add(scorch);   // after the plate, which is drawn blended
+  starFx.push({ kind: 'scorch', t: 0, life: 90, o: scorch });
+  const nV = new THREE.Vector3(...n);
+  for (let q = 0; q < 16; q++) {
+    const r = new THREE.Mesh(P.rock, seamRockMat);
+    r.position.set(w[0] + n[0] * 0.4, w[1] + n[1] * 0.4, w[2] + n[2] * 0.4);
+    const a = Math.random() * Math.PI * 2, sp = 2.5 + Math.random() * 5, up = 4 + Math.random() * 7;
+    const vel = new THREE.Vector3(u[0] * Math.cos(a) * sp + v[0] * Math.sin(a) * sp + n[0] * up,
+                                  u[1] * Math.cos(a) * sp + v[1] * Math.sin(a) * sp + n[1] * up,
+                                  u[2] * Math.cos(a) * sp + v[2] * Math.sin(a) * sp + n[2] * up);
+    r.scale.setScalar(0.6 + Math.random() * 1.6);
+    r.castShadow = true;
+    scene.add(r);
+    starFx.push({ kind: 'rock', t: 0, life: 25 + Math.random() * 10, o: r, vel, n: nV,
+                  spin: new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).multiplyScalar(14) });
+  }
+  const gdown = [-n[0] * 9.8, -n[1] * 9.8, -n[2] * 9.8];
+  for (let q = 0; q < 80; q++) {
+    const a = Math.random() * Math.PI * 2, sp = 2 + Math.random() * 8, up = 2 + Math.random() * 8;
+    emit(w[0] + n[0] * 0.3, w[1] + n[1] * 0.3, w[2] + n[2] * 0.3,
+         u[0] * Math.cos(a) * sp + v[0] * Math.sin(a) * sp + n[0] * up,
+         u[1] * Math.cos(a) * sp + v[1] * Math.sin(a) * sp + n[1] * up,
+         u[2] * Math.cos(a) * sp + v[2] * Math.sin(a) * sp + n[2] * up,
+         1.0, 0.68 + 0.3 * Math.random(), 0.32, -0.05, 0.9 + Math.random() * 0.8, gdown);
+  }
+  for (let q = 0; q < 30; q++) {
+    const a = Math.random() * Math.PI * 2, sp = 0.4 + Math.random() * 1.8, up = 0.8 + Math.random() * 1.8;
+    emit(w[0] + n[0] * 0.5, w[1] + n[1] * 0.5, w[2] + n[2] * 0.5,
+         u[0] * Math.cos(a) * sp + v[0] * Math.sin(a) * sp + n[0] * up,
+         u[1] * Math.cos(a) * sp + v[1] * Math.sin(a) * sp + n[1] * up,
+         u[2] * Math.cos(a) * sp + v[2] * Math.sin(a) * sp + n[2] * up,
+         0.34, 0.28, 0.22, 0.10 + Math.random() * 0.07, 0.3);
+  }
+  // the ground jumps under you, harder the nearer you stood
+  const d = player.pos.distanceTo(_stA.set(w[0], w[1], w[2]));
+  if (d < 40) landDip = Math.max(landDip, 0.7 * (1 - d / 40));
+  sfxStarHit(d);
+  const t = document.getElementById('toast');
+  if (t && c.star > 0) { t.textContent = WORD('THE STAR IS DOWN. Put a rig on it: it yields as fast as its belt takes the ore, ' + STAR_LOADS + ' loads, then gives up a core shard. A drone pad beside it flies the ore home.'); t.classList.add('on'); toastAt = 6; }
+}
+function stepStarFx(dt) {
+  for (let k = starFx.length - 1; k >= 0; k--) {
+    const e = starFx[k]; e.t += dt;
+    const a = Math.min(1, e.t / e.life);
+    if (e.kind === 'flash') starLight(e.at, 0xffd9a0, 70 * Math.pow(1 - a, 2), 36);
+    else if (e.kind === 'shock') { e.o.scale.setScalar(T * (0.6 + 5.5 * Math.sqrt(a))); e.o.material.opacity = 0.9 * (1 - a); }
+    else if (e.kind === 'scorch') { if (a > 0.8) e.o.material.opacity = (1 - a) / 0.2; }
+    else if (e.kind === 'rock') {
+      const o = e.o;
+      if (!e.rest) {
+        e.vel.addScaledVector(e.n, -14 * dt);
+        o.position.addScaledVector(e.vel, dt);
+        o.rotation.x += e.spin.x * dt; o.rotation.y += e.spin.y * dt; o.rotation.z += e.spin.z * dt;
+        // on the plate it stops: a rock thrown out of a crater lies where it lands
+        const h = o.position.dot(e.n) - HALF;
+        if (h < 0.05 * o.scale.x && e.vel.dot(e.n) < 0) { o.position.addScaledVector(e.n, 0.05 * o.scale.x - h); e.rest = true; }
+      }
+      if (a > 0.8) o.scale.multiplyScalar(Math.max(0, 1 - dt * 6));
+    }
+    if (a >= 1) {
+      if (e.o) { scene.remove(e.o); if (e.kind !== 'rock') e.o.material.dispose(); }
+      if (e.kind === 'flash') starLight(null);
+      starFx.splice(k, 1);
+    }
+  }
+}
+let starGlint = 0;
+function stepStarfall(dt) {
+  if (CITY) return;
+  // a fallen star still has light in it: now and then a glint lifts off it
+  if ((starGlint += dt) > 0.12) {
+    starGlint = 0;
+    eachTile((c, f, i, j) => {
+      if (!(c.star > 0) || Math.random() > 0.5) return;
+      const w = tileWorld(f, i, j), n = FACES[f].n, u = FACES[f].u, v = FACES[f].v;
+      const du = (Math.random() - 0.5) * 1.6, dv = (Math.random() - 0.5) * 1.6, h = 0.6 + Math.random() * 1.6;
+      emit(w[0] + u[0] * du + v[0] * dv + n[0] * h, w[1] + u[1] * du + v[1] * dv + n[1] * h, w[2] + u[2] * du + v[2] * dv + n[2] * h,
+           n[0] * 0.5, n[1] * 0.5, n[2] * 0.5, 1.0, 0.9, 0.62, -0.03, 0.7);
+    });
+  }
+  if (!star && intro === 0 && (UNLOCKED.drone || CREATIVE)) {
+    starClock += dt;
+    if (starClock >= (starsFell ? STAR_EVERY : STAR_FIRST)) { starClock = 0; dropStar(); }
+  }
+  stepStarFx(dt);
+  if (!star) return;
+  const s = star; s.t += dt;
+  if (s.phase === 'warn') {
+    const k = Math.min(1, s.t / STAR_WARN);
+    s.ring.scale.setScalar(T * (2.8 - 2.1 * k));
+    s.ring.material.opacity = (0.35 + 0.5 * k) * (0.7 + 0.3 * Math.sin(s.t * 9));
+    // the star is already in the sky: a point that swells as it nears
+    const lead = STAR_WARN - 3;
+    if (s.t > lead) {
+      s.g.visible = true; s.g.position.copy(s.from);
+      s.g.scale.setScalar(0.35 + (s.t - lead) * 0.3);
+    }
+    if (s.t >= STAR_WARN) { s.phase = 'fall'; s.t = 0; sfxStarIn(); }
+    return;
+  }
+  // the fall: it speeds up as it comes in, the tail lengthening behind it
+  const k = Math.min(1, s.t / STAR_FALL), e = k * k;
+  _stA.copy(s.from).lerp(s.to, e);
+  _stV.copy(s.to).sub(s.from).normalize();
+  s.g.position.copy(_stA); s.g.scale.setScalar(1 + 0.3 * k);
+  s.g.quaternion.setFromUnitVectors(_stUp, _stV);
+  s.tail.scale.set(1 + 0.8 * k, 5 + 24 * k, 1 + 0.8 * k);
+  s.ring.material.opacity = 0.95;
+  for (let q = 0; q < 3; q++)
+    emit(_stA.x, _stA.y, _stA.z, (Math.random() - 0.5) * 2.5, (Math.random() - 0.5) * 2.5, (Math.random() - 0.5) * 2.5,
+         1.0, 0.8, 0.45, -0.06, 1.5);
+  starLight(_stA, 0xffc77a, 8 + 30 * k, 30);
+  if (k >= 1) starImpact(s);
+}
+function sfxStarIn() {
+  // a falling whistle under a rising roar
+  if (!AUDIO.ready || AUDIO.muted) return;
+  const ctx = AUDIO.ctx, t0 = ctx.currentTime;
+  const o = ctx.createOscillator(), g = ctx.createGain();
+  o.type = 'sine';
+  o.frequency.setValueAtTime(2200, t0);
+  o.frequency.exponentialRampToValueAtTime(380, t0 + STAR_FALL);
+  g.gain.setValueAtTime(0.0001, t0);
+  g.gain.exponentialRampToValueAtTime(0.10, t0 + STAR_FALL * 0.8);
+  g.gain.exponentialRampToValueAtTime(0.001, t0 + STAR_FALL + 0.05);
+  o.connect(g); g.connect(AUDIO.master); o.start(t0); o.stop(t0 + STAR_FALL + 0.1);
+}
+function sfxStarHit(d) {
+  if (!AUDIO.ready || AUDIO.muted) return;
+  const ctx = AUDIO.ctx, t0 = ctx.currentTime, near = Math.max(0.25, 1 - (d || 0) / 60);
+  const o = ctx.createOscillator(), g = ctx.createGain();
+  o.type = 'sine';
+  o.frequency.setValueAtTime(110, t0);
+  o.frequency.exponentialRampToValueAtTime(32, t0 + 1.4);
+  g.gain.setValueAtTime(0.38 * near, t0);
+  g.gain.exponentialRampToValueAtTime(0.001, t0 + 1.6);
+  o.connect(g); g.connect(AUDIO.master); o.start(t0); o.stop(t0 + 1.7);
+  tone(1600, 0.25, 'triangle', 0.06 * near, 0.02);
 }
 
 function step() {
@@ -4394,6 +4942,7 @@ function step() {
     const dst = cellOf(to);
     if (accepts(dst, c.dmin)) { deliver(dst, to, c.dmin); c.emit--; }
   });
+  stepDrones();
   eachTile((c, f, i, j) => {
     if (c.t !== MINER) return;
     // a miner digs whatever the seam under it is, which is the face's mineral
@@ -4404,12 +4953,14 @@ function step() {
     // which reads as a line that has slowed rather than a line that stops and
     // starts — and it needs no extra state to do it.
     // a frozen seam yields at half the floor: the rig is scraping ice
-    const chance = c.ice > 0 && !CAPS.heated ? SEAM_FLOOR * 0.5
+    const chance = c.star > 0 ? 1                                              // A FALLEN STAR
+                 : c.ice > 0 && !CAPS.heated ? SEAM_FLOOR * 0.5
                  : (perk(1) && c.rich > 0.8) ? 1                              // DEEP BITS
                  : Math.max(SEAM_FLOOR, c.rich);
     if (accepts(dst, m) && Math.random() < chance) {
       deliver(dst, to, m); sfxTick(m);
-      if (!CREATIVE) c.rich = Math.max(0, c.rich - SEAM_COST);
+      if (c.star > 0) { if (--c.star === 0) starSpent(c); }
+      else if (!CREATIVE) c.rich = Math.max(0, c.rich - SEAM_COST);
       // the seam flexes as the crystal leaves it: which rigs are actually
       // producing is readable from across the face
       if (c.mesh) c.mesh.userData.pulse = 1;
@@ -4581,9 +5132,11 @@ function cellUnder(ev) {
 // not a box that means "something goes here". The erase tool keeps the box.
 // which geometry stands for which tool — the held hologram and the ghost
 // both read it, so it lives before either
+GEO.dronePad = droneGeo().pad;        // the build ghost takes its shape from GEO
 const HOLO_GEO = {
   miner: 'miner', belt: 'beltFrame', smelter: 'smelt', splitter: 'split',
   hub: 'hub', forge: 'forge', filter: 'filter', rift: 'riftBase', assembler: 'assembler',
+  drone: 'dronePad',
 };
 const GHOST_BOX = new THREE.BoxGeometry(T * 0.92, 0.5, T * 0.92);
 const ghost = new THREE.Mesh(GHOST_BOX,
@@ -4681,7 +5234,7 @@ function apply(t, dir) {
   }
   if (tool === 'erase') { removeAt(t.face, t.i, t.j); if (c0 && c0.t !== was) rigPulse('erase'); return; }
   const TOOL_TYPE = { miner: MINER, hub: HUB, smelter: SMELTER, splitter: SPLITTER,
-                      forge: FORGE, filter: FILTER, rift: RIFT, belt: BELT, assembler: ASSEMBLER,
+                      forge: FORGE, filter: FILTER, rift: RIFT, belt: BELT, assembler: ASSEMBLER, drone: DRONEPAD,
                       road: ROAD, home: HOMES, shop: SHOP, works: WORKS, park: PARK };
   const ty = TOOL_TYPE[tool];
   if (ty === undefined) return;
@@ -4812,7 +5365,7 @@ addEventListener('keydown', e => {
   if (e.target && e.target.tagName === 'INPUT') return;    // a name being typed is not a hotkey
   if (PAUSED) return;                                       // a paused game buys and builds nothing
   const k = CITY ? { '1': 'road', '2': 'home', '3': 'shop', '4': 'works', '5': 'park', '9': 'erase' }[e.key] : { '1': 'miner', '2': 'belt', '3': 'smelter', '4': 'splitter',
-              '5': 'hub', '6': 'forge', '7': 'filter', '8': 'rift', 'q': 'assembler', 'Q': 'assembler',
+              '5': 'hub', '6': 'forge', '7': 'filter', '8': 'rift', 'q': 'assembler', 'Q': 'assembler', 'e': 'drone', 'E': 'drone',
               '9': 'erase', '0': 'blueprint' }[e.key];
   if (k === 'blueprint' && tool === 'blueprint' && blueprint) { dropBlueprint(); return; }
   if (k) pickTool(k);
@@ -6179,7 +6732,8 @@ const GOALS = [
     done: () => alloys >= 1, progress: () => alloys },
   { text: 'run three rigs on three seams', cap: 'yield',
     tip: 'A seam thins as it is worked and grows back when it rests. Spread three rigs over three seams so no single one runs dry.',
-    got: 'Rich Seams can now be bought to level 8. Every crystal that leaves a seam is worth more.',
+    got: 'Rich Seams can now be bought to level 8. Every crystal that leaves a seam is worth more. The Drone Pad (E) comes with it: feed a pad and its drone flies what it collects to the nearest pad nothing feeds, on any face.',
+    also: 'drone',
     done: () => rigsOnSeams() >= 3, progress: () => rigsOnSeams() / 3 },
   { text: 'hold 1200 a minute for 30s', rate: 1200, hold: 30, unlock: 'rift',
     tip: 'The board on the hub moves. Make whatever it is paying most for, and hold the rate for thirty seconds.',
@@ -6493,9 +7047,11 @@ function describeCell(c, t) {
   const heading = ['east', 'south', 'west', 'north'][c.d] || '';
   const item = !c.item ? null : IS_BAR(c.item) ? contractName(c.item, 1) : (ORE_NAME[c.item] || 'ore') + ' ore';
   switch (c.t) {
-    case NODE: return (ORE_NAME[c.min] || 'ore').toUpperCase() + ' SEAM  ·  ' + Math.round((c.rich === undefined ? 1 : c.rich) * 100) + '% rich'
+    case NODE: if (c.star > 0) return 'FALLEN STAR  ·  ' + (ORE_NAME[c.min] || 'ore') + ', ' + c.star + ' loads left as fast as a belt takes them, then a core shard  ·  press 1 to build a rig here';
+      return (ORE_NAME[c.min] || 'ore').toUpperCase() + ' SEAM  ·  ' + Math.round((c.rich === undefined ? 1 : c.rich) * 100) + '% rich'
       + (c.ice > 0 ? '  ·  frozen over' : '') + '  ·  press 1 to build a rig here';
-    case MINER: return 'RIG  ·  on a ' + (ORE_NAME[c.min] || 'ore') + ' seam, ' + Math.round((c.rich === undefined ? 1 : c.rich) * 100) + '% rich'
+    case MINER: if (c.star > 0) return 'RIG  ·  on a fallen star of ' + (ORE_NAME[c.min] || 'ore') + ', ' + c.star + ' loads left  ·  ore leaves out of the front';
+      return 'RIG  ·  on a ' + (ORE_NAME[c.min] || 'ore') + ' seam, ' + Math.round((c.rich === undefined ? 1 : c.rich) * 100) + '% rich'
       + (c.ice > 0 && !CAPS.heated ? '  ·  frozen, scraping at half rate' : '') + '  ·  ore leaves out of the front';
     case BELT: return 'BELT  ·  heading ' + heading + (item ? '  ·  carrying a ' + item : '  ·  empty') + (c.clog > 0 ? '  ·  clogged with spores' : '');
     case SMELTER: return 'SMELTER  ·  two ore in, one ingot out' + (c.cook > 0 ? '  ·  cooking' : c.buf > 0 ? '  ·  waiting for a second ore' : '  ·  waiting for ore');
@@ -6893,6 +7449,8 @@ function saveState() {
     g: goalIdx, u: Object.keys(UNLOCKED), vf: [...visitedFaces], w: worldIdx,
     sh: soldHigh, rp: riftsPaid, cs: shards, rk: rank, cf: contractsFilled, sk: streak, tu: tutIdx, ta: tutAct, t2: act2Done ? 1 : 0,
     lt: { v: Math.round(lifetime.value), c: lifetime.contracts, h: Math.round(lifetime.longestHold), w: [...visitedWorlds], k: lifetime.works ? 1 : 0, f: lifetime.first ? 1 : 0 },
+    // a fallen star is not in the RNG: where it lies and how much is left
+    ss: (() => { const out = []; eachTile((c, f, i, j) => { if (c.star !== undefined) out.push([f, i, j, c.star | 0]); }); return out; })(),
     // seams come back from the RNG; how worked each one is does not
     r: (() => { const out = [];
       eachTile((c, f, i, j) => { if (c.mesh && c.rich < 0.999)
@@ -6909,6 +7467,11 @@ function loadState(d) {
   // belts, with nothing to indicate why the factory had stopped earning.
   if (!d || !(d.v >= 1 && d.v <= SAVE_V) || d.n !== N) return false;
   clearFactory();
+  // fallen stars first, so a rig saved on one has its seam to stand on
+  if (Array.isArray(d.ss)) for (const r of d.ss) {
+    if (r[0] >= 0 && r[0] < 6 && r[1] >= 0 && r[2] >= 0 && r[1] < N && r[2] < N && cells[r[0]][r[1]][r[2]].t === EMPTY)
+      starSeam(r[0], r[1], r[2], Math.max(0, r[3] | 0));
+  }
   for (const r of d.m) {
     const [f, i, j, t, dir] = r;
     if (f < 0 || f > 5 || i < 0 || j < 0 || i >= N || j >= N) continue;
@@ -7282,6 +7845,7 @@ renderer.setAnimationLoop(() => {
     stepIce(dt);
     stepContracts(dt);
     stepStanding(dt);
+    stepStarfall(dt);
     stepTutorial(dt);
   }
   stepLook(dt);
@@ -7398,6 +7962,7 @@ renderer.setAnimationLoop(() => {
   // A belt whose surface moves at a speed unrelated to its throughput is worse
   // than one that does not move at all.
   if (!melting) TREAD.offset.x -= dt / TICK;
+  updateDrones(Math.min(1, sinceTick / TICK), dt);
   // A FACTORY WHOSE PARTS DO NOT MOVE IS A DIORAMA. Each machine says what it
   // is doing with the one part that would move if it were real.
   eachTile(c => {
@@ -8223,6 +8788,14 @@ window.__factory = {
   beltShape, scatterVent, scatterBolt, scatterSpots, renderThumb, GEO, MAT,
   SEAM_COST, SEAM_REGROW, SEAM_FLOOR,
   step,                 // one simulation tick, for a harness that cannot wait
+  drones: () => ({ pads: (() => { let n = 0; eachTile(c => { if (c.t === DRONEPAD) n++; }); return n; })(),
+                   flying: flights.length, carrying: flights.reduce((s, f) => s + f.load.length, 0), delivered: dronesDelivered, crafts: crafts.size,
+                   air: flights.map(f => { const cr = crafts.get(f.from.c); return cr ? { pos: cr.g.position.toArray(), loaded: f.load.length, back: f.back } : null; }).filter(Boolean) }),
+  DRONEPAD,
+  starfall: () => ({ falling: star ? { f: star.f, i: star.i, j: star.j, phase: star.phase, t: +star.t.toFixed(2), pos: star.g.position.toArray(), from: star.from.toArray() } : null,
+                     fell: starsFell, spent: starsSpent, clock: +starClock.toFixed(1), fx: starFx.length,
+                     stars: (() => { const out = []; eachTile((c, f, i, j) => { if (c.star > 0) out.push({ f, i, j, left: c.star, t: c.t }); }); return out; })() }),
+  dropStar,
   place, removeAt,      // and the placement itself, so a harness can build a factory the way a player would (2026-09-28)
   playIntro, endIntro, showWorksCard, KitEnd,
   get nudgeClock() { return nudgeClock; }, set nudgeClock(v) { nudgeClock = v; }, get edgeNudged() { return edgeNudged; },

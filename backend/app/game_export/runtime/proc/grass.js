@@ -27,20 +27,24 @@ import * as THREE from 'three';
 function bladeGeometry(SEG = 4) {
   // x across the blade (-0.5..0.5), y along it (0 root .. 1 tip); the
   // shader turns, bends and sizes it. Colour darkens toward the root.
+  // A BLADE HAS A MIDRIB (2026-10-04): three columns, not two, so the shader
+  // can fold the blade along its middle; the two halves then take the light
+  // differently, one bright and one in shade, which is what makes a real
+  // blade of grass read as a blade and not as a flat green cut-out.
   const pos = [], col = [], idx = [];
   for (let s = 0; s < SEG; s++) {
     const t = s / SEG;
-    pos.push(-0.5, t, 0, 0.5, t, 0);
+    pos.push(-0.5, t, 0, 0, t, 0, 0.5, t, 0);
     const c = 0.38 + 0.5 * Math.pow(t, 0.8);
-    col.push(c, c, c, c, c, c);
+    col.push(c, c, c, c, c, c, c, c, c);
   }
   pos.push(0, 1, 0); col.push(0.9, 0.9, 0.9);
   for (let s = 0; s < SEG - 1; s++) {
-    const a = s * 2;
-    idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2);
+    const a = s * 3;
+    idx.push(a, a + 1, a + 3, a + 1, a + 4, a + 3, a + 1, a + 2, a + 4, a + 2, a + 5, a + 4);
   }
-  const a = (SEG - 1) * 2;
-  idx.push(a, a + 1, a + 2);
+  const a = (SEG - 1) * 3, tip = SEG * 3;
+  idx.push(a, a + 1, tip, a + 1, a + 2, tip);
   const g = new THREE.InstancedBufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
@@ -132,6 +136,7 @@ export function plantGrass(o) {
       uHgt: { value: hTex }, uMask: { value: mTex },
       uMap: { value: new THREE.Vector4(cx - half, cz - half, size, 0) },
       uColA: { value: o.colA.clone() }, uColB: { value: o.colB.clone() }, uColDry: { value: o.colDry.clone() },
+      uDead: { value: o.dead ?? 0.05 }, uFold: { value: o.fold ?? 0.5 },
       uSunDir: { value: (o.sunDir || new THREE.Vector3(0.4, 0.8, 0.3)).clone().normalize() },
       uSunCol: { value: (o.sunCol || new THREE.Color(1, 1, 1)).clone() },
     };
@@ -141,7 +146,7 @@ export function plantGrass(o) {
         uniform vec3 uCamG; uniform vec3 uHero; uniform float uL; uniform float uR; uniform float uThin;
         uniform float uTime; uniform float uWindK; uniform float uH; uniform float uW;
         uniform sampler2D uHgt; uniform sampler2D uMask; uniform vec4 uMap;
-        uniform vec3 uColA; uniform vec3 uColB; uniform vec3 uColDry;
+        uniform vec3 uColA; uniform vec3 uColB; uniform vec3 uColDry; uniform float uDead; uniform float uFold;
         varying vec3 vGW; varying float vGT;
         ` + sh.vertexShader
         .replace('#include <color_vertex>', `#include <color_vertex>
@@ -179,9 +184,18 @@ export function plantGrass(o) {
           vec3 gTan = normalize(vec3(gLean.x * gH * 2.0 * gT, gH * (1.0 - 0.76 * gLL * gT) + 1e-4, gLean.y * gH * 2.0 * gT));
           vec3 gN = normalize(cross(gSide, gTan));
           if (gN.y < 0.0) gN = -gN;
-          gN = normalize(mix(gN, vec3(0.0, 1.0, 0.0), 0.5));
+          // the fold along the midrib: the middle stands proud of the edges
+          // and each half's normal turns away from the other
+          float gSx = position.x * 2.0;
+          gP += gN * (1.0 - abs(gSx)) * gWid * 0.22 * uFold * (1.0 - gT);
+          gN = normalize(gN + gSide * gSx * 0.9 * uFold);
+          gN = normalize(mix(gN, vec3(0.0, 1.0, 0.0), 0.4));
           vec3 gTint = mix(uColA, uColB, fract(aOff.w * 5.71));
           gTint = mix(gTint, uColDry, gK.g * (0.35 + 0.65 * fract(aOff.w * 3.31)));
+          // a few blades are last year's, straw from root to tip; many more
+          // are browning at the tip
+          gTint = mix(gTint, uColDry * 0.92, step(fract(aOff.w * 29.17), uDead));
+          gTint = mix(gTint, uColDry, smoothstep(0.62, 1.0, gT) * step(0.55, fract(aOff.w * 17.3)) * 0.55);
           #ifdef USE_COLOR
             vColor *= gTint;
           #endif

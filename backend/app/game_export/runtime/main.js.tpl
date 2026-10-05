@@ -23,6 +23,7 @@ import { waterMaterial as __waterMaterial, waterKind as __waterKind, groundMist 
 import { snowTextures as __snowTextures } from './proc/ground.js';
 import { createWaterfall as __createWaterfall } from './proc/waterfall.js';
 import { createCave as __createCave } from './proc/cave.js';
+import { plantClutter as __plantClutter } from './proc/clutter.js';
 import { makeRagdoll as __makeRagdoll, makeFlinch as __makeFlinch, makeCarryPose as __makeCarryPose } from './proc/ragdoll.js';
 import { createGait as __createGait } from './proc/gait.js';
 import { loadMotionDB as __loadMotionDB, createMotionMatcher as __createMotionMatcher } from './proc/mm.js';
@@ -490,6 +491,7 @@ async function main() {
   // declared up here, before the render loop that reads them can start
   let FLORA_LIVE = null, _floraInner = 0;
   let GRASS_LIVE = null;            // the grass field that travels with the camera
+  let CLUTTER = null;               // pebbles, twigs and leaves at your feet (proc/clutter.js)
   // COMBAT STATE (2026-10-01): on window, not in a let, because playerHit,
   // stepNPCs and the upgrade cards are all declared thousands of lines before
   // the combat block that drives them, and a let read early is a black page
@@ -7032,12 +7034,20 @@ async function main() {
     const _gh0 = {}; gcol.getHSL(_gh0);
     const _green0 = _gh0.h > 0.16 && _gh0.h < 0.45 && _gh0.s > 0.12;
     const _photo0 = (SPEC.style || 'default') === 'default';
-    if (!PURE_SCENE && !INTERIOR && _green0 && _photo0 && SPEC.world.grass !== false
+    // GOLDEN GRASS (2026-10-04): a savanna, a prairie or a steppe is a sea of
+    // tall dry grass, and its ground is not green, so it fell through to the
+    // sparse scatter and stood as a few brown claws on bare earth. It is the
+    // same field, in straw and gold, taller, the green kept to a few blades.
+    const _gw0 = [SPEC.world.name, SPEC.world.setting, SPEC.title, SPEC.prompt].filter(Boolean).join(' ').toLowerCase();
+    const _golden0 = /\b(savann?ah?|prairie|steppe|grassland|veld|pampas|plains)\b/.test(_gw0)
+      && !/\b(desert|dune|canyon|snow|ice|volcan|lava|mars|moon|city)\b/.test(_gw0);
+    if (!PURE_SCENE && !INTERIOR && (_green0 || _golden0) && _photo0 && SPEC.world.grass !== false
         && (SPEC.world.scatter || []).length && new URLSearchParams(location.search).get('grass') !== 'tufts') {
       try {
-        const A0 = new THREE.Color(...SPEC.world.ground_color).lerp(new THREE.Color(0x46752c), 0.6).offsetHSL(0, 0.1, -0.03);
-        const B0 = A0.clone().offsetHSL(0.03, 0.04, -0.08);
-        const D0 = A0.clone().lerp(new THREE.Color(0xb3a46c), 0.7);
+        const A0 = _golden0 ? new THREE.Color(0xa88f52)
+          : new THREE.Color(...SPEC.world.ground_color).lerp(new THREE.Color(0x46752c), 0.6).offsetHSL(0, 0.1, -0.03);
+        const B0 = _golden0 ? new THREE.Color(0x7d7a45) : A0.clone().offsetHSL(0.03, 0.04, -0.08);
+        const D0 = _golden0 ? new THREE.Color(0xcbb47a) : A0.clone().lerp(new THREE.Color(0xb3a46c), 0.7);
         // a small value noise for clumps and patches
         const _gp = new Uint8Array(512);
         { const r0 = mulberry32(SPEC.seed + 777); for (let i = 0; i < 256; i++) _gp[i] = i;
@@ -7069,13 +7079,66 @@ async function main() {
         };
         GRASS_LIVE = __GRASS.plantGrass({
           scene, seed: SPEC.seed + 91, hAt, maskAt, center: [0, 0], size: gsize,
-          colA: A0, colB: B0, colDry: D0, height: 0.46, quality: QUALITY, wind: WIND_U,
+          colA: A0, colB: B0, colDry: D0, height: _golden0 ? 0.78 : 0.46, quality: QUALITY, wind: WIND_U,
+          dead: _golden0 ? 0.12 : 0.05,
+          // FINE GRASS AT YOUR FEET (2026-10-04): the hero's camera looks
+          // down into the nearest few metres, where a hundred blades a square
+          // metre read as fat spikes; a third field, fine and dense, fills
+          // the ground right around the camera the way a real lawn does
+          // (the flagship's worldlet learned this first)
+          layers: (() => { const k = { ultra: 1.3, high: 1.0, balanced: 0.8, performance: 0.4 }[QUALITY] ?? 0.8;
+            return [{ L: 10, R: 5, n: Math.round(52000 * k), w: 0.026, thin: 0.25 },
+                    { L: 30, R: 15, n: Math.round(90000 * k), w: 0.05, thin: 0.4 },
+                    { L: 104, R: 48, n: Math.round(130000 * k), w: 0.1, thin: 0.55 }]; })(),
           windK: Math.min(0.7, 0.2 + (SPEC.world.wind ?? 0.5) * 0.4),
           sunDir: new THREE.Vector3(...pal.sunPos).normalize(),
           sunCol: new THREE.Color(pal.sunCol || 0xffffff),
         });
         window.__grass = { blades: GRASS_LIVE.blades, coverage: +GRASS_LIVE.coverage.toFixed(3) };
       } catch (e) { console.warn('[game] grass field skipped: ' + e.message); GRASS_LIVE = null; }
+    }
+  }
+  // WHAT LIES ON THE GROUND (2026-10-04): pebbles, twigs and fallen leaves in
+  // a window that travels with the camera (proc/clutter.js), chosen by the
+  // place: leaf litter under woods, stones in deserts and on a volcano, a few
+  // in snow; kept off buildings, water, lava and the walked middle of a trail
+  {
+    const _words = ((FLORA && FLORA.words) || [SPEC.world.name, SPEC.world.setting, SPEC.title, SPEC.prompt].filter(Boolean).join(' ')).toLowerCase();
+    const _arch = SPEC.world.archetype || 'plain';
+    if (!PURE_SCENE && !INTERIOR && !OSM && (SPEC.style || 'default') === 'default' && VIEW === '3d'
+        && new URLSearchParams(location.search).get('clutter') !== '0') {
+      try {
+        const _gh = {}; gcol.getHSL(_gh);
+        const green = _gh.h > 0.16 && _gh.h < 0.45 && _gh.s > 0.12;
+        let dens;
+        if (SNOW_GROUND) dens = { pebble: 0.12 };
+        else if (_caveLvl) dens = { pebble: 1.3 };
+        else if (_arch === 'volcano') dens = { pebble: 1.8 };
+        else if (/desert|dune|canyon|mesa|mars|moon|beach|sand|wasteland|savanna/.test(_words) || ['canyon', 'mesa', 'dunes', 'archipelago'].includes(_arch)) dens = { pebble: 1.0, twig: 0.03 };
+        else if (/forest|wood|jungle|swamp|grove|autumn|fall\b|orchard|park/.test(_words)) dens = { pebble: 0.5, twig: 0.35, leaf: 1.6 };
+        else dens = { pebble: 0.7, twig: 0.08, leaf: green ? 0.35 : 0 };
+        const rockCol = _arch === 'volcano' ? new THREE.Color(0x2c2826)
+          : (FLORA && FLORA.biome && FLORA.biome.rockTint) ? FLORA.biome.rockTint.clone().lerp(gcol, 0.35).multiplyScalar(0.75)
+          : gcol.clone().offsetHSL(0, -0.1, -0.12);       // a stone takes the colour of the ground it came out of
+        const autumn = /autumn|fall\b|october|harvest/.test(_words);
+        const leafCols = autumn ? [0xb5642a, 0xc98a2e, 0x8a3c1e, 0xa8792e].map(h => new THREE.Color(h))
+                                : [0x7a5a32, 0x6b6a34, 0x8c6a3c, 0x5c6b2e].map(h => new THREE.Color(h));
+        const keepOut = (x, z, kind) => {
+          if (inBldg(x, z, 0.3)) return true;
+          if (WATER !== null && hAt(x, z) < WATER + 0.05) return true;
+          if (VOLC && VOLC.edgeDist(x, z) < 0.8) return true;
+          if (FALLS && Math.hypot(x - FALLS.at[0], z - FALLS.at[1]) < 12) return true;
+          const rg = window.__regionAt && window.__regionAt(x, z);
+          if (rg && rg.kind === 'water' && rg.w > 0.2) return true;
+          if (kind !== 'pebble' && pathDist(x, z) < CORR * 0.35) return true;   // the walked middle of a trail is swept by feet
+          return false;
+        };
+        const _ckTex = new THREE.TextureLoader().load('textures/cliff.jpg');
+        _ckTex.colorSpace = THREE.SRGBColorSpace; _ckTex.wrapS = _ckTex.wrapT = THREE.RepeatWrapping;
+        CLUTTER = __plantClutter({ scene, seed: SPEC.seed + 313, hAt, keepOut, density: dens, rockCol, leafCols, rockTex: _ckTex,
+                                   radius: QUALITY === 'performance' ? 16 : 24 });
+        window.__clutter = CLUTTER.facts;
+      } catch (e) { console.warn('[game] ground clutter skipped: ' + e.message); CLUTTER = null; }
     }
   }
   // GRASS: instanced cross-blades on the terrain, thinned along the walking
@@ -12908,6 +12971,7 @@ async function main() {
         mist: window.__mist || 0,
         waterfall: window.__falls || null,
         cave: window.__cave || null,
+        clutter: window.__clutter ? window.__clutter() : null,
         actions: { mantles: window.__mantles || 0, carries: window.__carryCount || 0, throws: window.__throws || 0,
                    throw_hits: window.__throwHits || 0, carrying: !!window.__carried, climbing: !!mantle },
       };
@@ -15229,6 +15293,7 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
     WIND_U.value = performance.now() / 1000;   // wind clock (Phase 81)
     if (FLORA_LIVE) FLORA_LIVE.update(camera);  // which trees are near enough to be trees
     if (GRASS_LIVE) GRASS_LIVE.update(camera, playerObj.position);
+    if (CLUTTER) CLUTTER.update(camera);
     if (VOLC) VOLC.update(rdt, camera, playerObj.position);
     if (MIST) MIST.update(camera);
     if (FALLS) FALLS.update(rdt);
@@ -16596,6 +16661,7 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
       camera.lookAt(...window.__camPin.look);
       if (FLORA_LIVE) FLORA_LIVE.update(camera);
       if (GRASS_LIVE) GRASS_LIVE.update(camera, playerObj.position);
+      if (CLUTTER) CLUTTER.update(camera);
     } else if (CAVE && gameStarted) CAVE.clampCamera(camera, playerObj.position);   // under the roof, out of the walls
     renderer.info.autoReset = false;
     renderer.info.reset();
