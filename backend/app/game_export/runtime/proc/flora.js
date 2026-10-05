@@ -642,7 +642,9 @@ const KINDS = {
 // opts.foliage: one normal for both faces of a card, and light through it
 function patchTree(mat, U, opts) {
   const live = !!opts.live, fol = !!opts.foliage, tri = !!opts.triplanar;
+  const triN = tri && mat.userData.triN ? mat.userData.triN : null;
   mat.onBeforeCompile = (sh) => {
+    if (triN) sh.uniforms.uTriN = { value: triN };
     sh.uniforms.uWind = U.wind;
     sh.uniforms.uNear = U.near;
     sh.uniforms.uSunDir = U.sunDir;
@@ -691,13 +693,16 @@ function patchTree(mat, U, opts) {
         varying vec3 vObjP;
         varying vec3 vObjN;
         varying float vShade;
+        ${triN ? 'uniform sampler2D uTriN;' : ''}
         float ign(vec2 p) { return fract(52.9829189 * fract(dot(p, vec2(0.06711056, 0.00583715)))); }`)
       .replace('#include <map_fragment>', (tri ? `
         #ifdef USE_MAP
         {
           // triplanar: stone is textured by where it is, not by UVs it lacks
-          vec3 bw = pow(abs(normalize(vObjN)), vec3(4.0)); bw /= (bw.x + bw.y + bw.z + 1e-5);
-          vec3 tp = vObjP * 0.45;
+          // (in the world's frame when it carries relief, so colour and relief agree)
+          ${triN ? `vec3 bw = pow(abs(normalize(vWN)), vec3(4.0)); bw /= (bw.x + bw.y + bw.z + 1e-5);
+          vec3 tp = vWPos * 0.3;` : `vec3 bw = pow(abs(normalize(vObjN)), vec3(4.0)); bw /= (bw.x + bw.y + bw.z + 1e-5);
+          vec3 tp = vObjP * 0.45;`}
           vec4 tx = texture2D(map, tp.yz) * bw.x + texture2D(map, tp.xz) * bw.y + texture2D(map, tp.xy) * bw.z;
           diffuseColor *= tx;
         }
@@ -739,9 +744,23 @@ function patchTree(mat, U, opts) {
           }
           #include <opaque_fragment>`);
     }
+    if (triN) {
+      // the rock's relief, projected three ways in world space and bent into
+      // the shading normal (view space): cracks and ledges catch the light
+      fs = fs.replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
+        {
+          vec3 bwN = pow(abs(normalize(vWN)), vec3(4.0)); bwN /= (bwN.x + bwN.y + bwN.z + 1e-5);
+          vec3 tq = vWPos * 0.3;
+          vec2 nx = texture2D(uTriN, tq.zy).xy * 2.0 - 1.0;
+          vec2 ny = texture2D(uTriN, tq.xz).xy * 2.0 - 1.0;
+          vec2 nz = texture2D(uTriN, tq.xy).xy * 2.0 - 1.0;
+          vec3 off = bwN.x * vec3(0.0, nx.y, nx.x) + bwN.y * vec3(ny.x, 0.0, ny.y) + bwN.z * vec3(nz.x, nz.y, 0.0);
+          normal = normalize(normal + (viewMatrix * vec4(off, 0.0)).xyz * 0.9);
+        }`);
+    }
     sh.fragmentShader = fs;
   };
-  mat.customProgramCacheKey = () => 'flora-' + (live ? 'L' : 'B') + (fol ? 'F' : 'W') + (tri ? 'T' : '');
+  mat.customProgramCacheKey = () => 'flora-' + (live ? 'L' : 'B') + (fol ? 'F' : 'W') + (tri ? 'T' : '') + (triN ? 'N' : '');
 }
 
 const STONE = new Set(['rock', 'boulder', 'mesa']);
@@ -749,9 +768,14 @@ function makeMaterials(kind, leafHSL, barkTex, barkN, seed, U, extra = {}) {
   if (STONE.has(kind) || kind === 'cactus' || kind === 'crystal') {
     let m;
     if (STONE.has(kind)) {
-      m = new THREE.MeshStandardMaterial({ map: extra.rockTex || null, normalMap: extra.rockN || null,
-        color: extra.rockTint || new THREE.Color(0x8a8580), roughness: 0.92 });
-      m.normalMap = null;
+      // with a photographed rock the tint only steers its hue: at full
+      // strength a canyon's red multiplied the photo into smooth red plastic
+      const _tint = (extra.rockTint || new THREE.Color(0x8a8580)).clone();
+      if (extra.rockTex) _tint.lerp(new THREE.Color(0xffffff), 0.42);
+      m = new THREE.MeshStandardMaterial({ map: extra.rockTex || null, color: _tint, roughness: 0.92 });
+      // the relief rides the same three-way projection as the colour (an
+      // icosphere's own UVs would scatter it), read in patchTree
+      if (extra.rockN) m.userData.triN = extra.rockN;
     } else if (kind === 'cactus') {
       m = new THREE.MeshStandardMaterial({ color: 0x3f6e38, roughness: 0.62 });
     } else {

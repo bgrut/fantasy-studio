@@ -6040,12 +6040,17 @@ async function main() {
         // trees and stones once; a texture still on its way was photographed
         // black, and every far rock in a desert stayed a black blob
         const _TL = new THREE.TextureLoader();
-        const [barkTex, barkN, rockTex] = await Promise.all(['textures/bark.jpg', 'textures/bark_n.jpg', 'textures/rock.jpg']
+        // BOULDERS OF ROCK, NOT GRAVEL (2026-10-04): rock.jpg is a gravel trail
+        // scan now, and a boulder wearing it looked pebble-dashed; the stones
+        // wear the weathered rock face, with its relief, both projected from
+        // three sides in world space (proc/flora.js)
+        const [barkTex, barkN, rockTex0, rockN0] = await Promise.all(['textures/bark.jpg', 'textures/bark_n.jpg', 'textures/cliff.jpg', 'textures/cliff_n.jpg']
           .map(u => _TL.loadAsync(u).catch(() => null)));
-        for (const t of [barkTex, barkN, rockTex]) if (t) t.wrapS = t.wrapT = THREE.RepeatWrapping;
+        const rockTex = rockTex0 || await _TL.loadAsync('textures/rock.jpg').catch(() => null);
+        const rockN = rockTex0 ? rockN0 : null;
+        for (const t of [barkTex, barkN, rockTex, rockN]) if (t) { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 8; }
         if (barkTex) barkTex.colorSpace = THREE.SRGBColorSpace;
         if (rockTex) rockTex.colorSpace = THREE.SRGBColorSpace;
-        const rockN = null;   // stone is triplanar: an icosphere's UVs would scatter a normal map
         // the impostors are lit by this world's own light: a copy of its
         // sun where the sun is, its sky fill and its environment
         const sunB = new THREE.DirectionalLight(pal.sunCol || 0xffffff, pal.sun * 1.12);
@@ -7903,8 +7908,14 @@ async function main() {
         // by its box, longer than tall being four-legged.
         let _bones = 0; inst.traverse(m => { if (m.isSkinnedMesh && m.skeleton) _bones = Math.max(_bones, m.skeleton.bones.length); });
         const _bx = new THREE.Box3().setFromObject(inst).getSize(new THREE.Vector3());
-        const quad = _bones > 0 ? _bones <= 14 : Math.max(_bx.x, _bx.z) > _bx.y * 1.15;
-        npcs.push({ obj: holder, down: 0, kx: 0, kz: 0, quad,
+        // THINGS THAT FLY, FLY (2026-10-04): a firefly, a bird, a dragon was
+        // walked along the ground like a dog. A flyer cruises at the height
+        // its kind keeps, bobs on the air, banks into its turns and noses
+        // up into a climb; it has no legs to count as four of.
+        const _fk = flyKind(ent.name || '');
+        const quad = !_fk && (_bones > 0 ? _bones <= 14 : Math.max(_bx.x, _bx.z) > _bx.y * 1.15);
+        npcs.push({ obj: holder, down: 0, kx: 0, kz: 0, quad, gait: clipSpeeds(inst, anim, quad),
+                    fly: _fk ? { alt: _fk.alt[0] + rngN() * (_fk.alt[1] - _fk.alt[0]), bob: _fk.bob, bank: _fk.bank, cur: null } : null,
                 speed: ent.speed || 1.5, behavior: ent.behavior || 'wander',
                     target: null, yaw: startYaw, phase: rngN() * Math.PI * 2,
                     h: ent.height_m || 1.0, name: ent.name, role: ent.role || null,
@@ -7913,6 +7924,51 @@ async function main() {
                     hp: ent.hp || 3, cd: 0, dead: false, dieT: 0, mats, anim, dormant, spectral: !!ent.spectral });
       }
     } catch (e) { fail(e.message); }
+  }
+  // the table lives inside the function: spawning calls this hundreds of
+  // lines above where a const here would be initialised
+  function flyKind(name) {
+    const _FLY = [
+      [/firefl|lightning bug|glowworm|wisp|spark/i, { alt: [0.8, 2.6], bob: 0.35, bank: 1.5 }],
+      [/butterfl|moth|bee\b|bees|wasp|dragonfl/i, { alt: [0.6, 2.2], bob: 0.25, bank: 2.0 }],
+      [/dragon|wyvern|griffin|gryphon|phoenix/i, { alt: [9, 18], bob: 0.6, bank: 3.0 }],
+      [/eagle|hawk|falcon|vulture|condor|raven|crow|gull|seagull|albatross/i, { alt: [7, 16], bob: 0.3, bank: 3.2 }],
+      [/bird|owl|bat\b|bats|parrot|pigeon|sparrow|dove|swallow|songbird/i, { alt: [3, 8], bob: 0.25, bank: 2.6 }],
+      [/drone|ufo|saucer|wraith|ghost(?!.*ship)/i, { alt: [2, 5], bob: 0.2, bank: 1.6 }],
+    ];
+    for (const [rx, k] of _FLY) if (rx.test(name)) return k;
+    return null;
+  }
+  // WHAT EACH CLIP COVERS (2026-10-04). Every clip was played as if it had
+  // been authored at 2.5 m/s for a walk and 5 m/s for a run, whatever the
+  // body: a gazelle wandering at 4 m/s held its walk at the 1.7x cap and slid,
+  // a cat walked at a horse's cadence. A quadruped's clips are procedural
+  // (bake.py: each thigh swings a sine of AMP radians, walk two cycles,
+  // gallop three), so the ground a clip covers can be worked out from the
+  // rig itself: a planted foot sweeps 2 L sin(AMP) in half a cycle, L the hip
+  // height. A biped's clips are captured motion, scaled by the body's height.
+  function clipSpeeds(inst, anim, quad) {
+    const out = { walk: 2.5, run: 5.0 };
+    try {
+      if (!anim) return out;
+      inst.updateMatrixWorld(true);
+      const box = new THREE.Box3().setFromObject(inst);
+      const hgt = Math.max(0.05, box.max.y - box.min.y);
+      if (quad) {
+        let hip = 0, n = 0;
+        inst.traverse(o => { if (o.isBone && /^thigh_/.test(o.name)) { hip += o.getWorldPosition(new THREE.Vector3()).y - box.min.y; n++; } });
+        const L = n ? Math.max(0.05, hip / n) : hgt * 0.55;
+        const per = (a, cycles) => a && a.getClip() ? a.getClip().duration / cycles : 0;
+        const pw = per(anim.walk, 2), pr = per(anim.run, 3);
+        if (pw > 0) out.walk = 4 * L * Math.sin(0.50) / pw;
+        if (pr > 0) out.run = 4 * L * Math.sin(0.72) / pr;
+      } else {
+        const k = Math.sqrt(hgt / 1.75);                // a child's stride is shorter, a giant's longer
+        out.walk = 2.5 * k; out.run = 5.0 * k;
+      }
+      out.walk = THREE.MathUtils.clamp(out.walk, 0.25, 4); out.run = THREE.MathUtils.clamp(out.run, out.walk * 1.4, 12);
+    } catch (e) { /* keep the defaults */ }
+    return out;
   }
   function wakeWave(px, pz, k) {
     // survive verb: wake k dormant hostiles in a ring around the player
@@ -7955,12 +8011,15 @@ async function main() {
       const _slopeR = Math.atan2(hAt(px + _cy * _gl, pz - _sy * _gl) - hAt(px - _cy * _gl, pz + _sy * _gl), 2 * _gl);
       n._gP = THREE.MathUtils.damp(n._gP, THREE.MathUtils.clamp(-_slopeP * (n.quad ? 1.0 : 0.5), -0.55, 0.55), 8, dt);
       n._gR = THREE.MathUtils.damp(n._gR, THREE.MathUtils.clamp(_slopeR * (n.quad ? 0.7 : 0.0), -0.4, 0.4), 8, dt);
-      if (!(n.down > 0) && !n.spectral) { o.rotation.z = n._roll + n._gR; o.rotation.x = n._pitch + n._gP; }   // a knockdown owns the tilt; a ghost floats
-      if (n.anim && n.anim.cur && n.anim.cur !== n.anim.idle) {
-        const nominal = n.anim.cur === n.anim.run ? 3.4 : 1.4;                  // what a walk or run clip depicts, roughly
-        n.anim.cur.timeScale = v > 0.05 ? THREE.MathUtils.clamp(v / nominal, 0.6, 2.4) : 1;
-      }
-      n._v = v;
+      if (n.fly) {
+        // a turn is a bank: the roll scales with how hard it turns, and a climb lifts the nose
+        n._gP = 0; n._gR = 0;
+        const bank = THREE.MathUtils.clamp(-yawRate * 0.09 * n.fly.bank * Math.min(v / 2, 1.5), -0.7, 0.7);
+        n._fbank = THREE.MathUtils.damp(n._fbank || 0, bank, 4, dt);
+        o.rotation.z = n._fbank;
+        o.rotation.x = THREE.MathUtils.damp(o.rotation.x, THREE.MathUtils.clamp(-(n.fly.vy || 0) * 0.12, -0.35, 0.35), 4, dt);
+      } else if (!(n.down > 0) && !n.spectral) { o.rotation.z = n._roll + n._gR; o.rotation.x = n._pitch + n._gP; }   // a knockdown owns the tilt; a ghost floats
+      n._v = v;                                 // the clip rate follows it in the main pass (clipSpeeds)
     }
     for (const n of npcs) {
       if (n.dormant) continue;           // wave-pool members sleep until woken
@@ -8397,7 +8456,9 @@ async function main() {
         // vehicles steer smoothly (no pivot-in-place), creatures turn quicker
         n.yaw = THREE.MathUtils.damp(n.yaw, want, n.behavior === 'vehicle' ? 2.2 : 6, dt);
         n.obj.rotation.y = n.yaw;
-        const sp = n.speed * (n.vjit || 1) * (n._fleeing ? 1.9 : 1) * dt;  // prey bolts
+        // prey bolts; and no body outruns its own legs (its run clip played
+        // at twice its natural pace is as fast as those legs go)
+        const sp = Math.min(n.speed * (n.vjit || 1) * (n._fleeing ? 1.9 : 1), n.gait && n.anim ? n.gait.run * 2.0 : 1e9) * dt;
         n.obj.position.x += Math.sin(n.yaw) * sp;
         n.obj.position.z += Math.cos(n.yaw) * sp;
         n.obj.position.y = hAt(n.obj.position.x, n.obj.position.z)
@@ -8405,6 +8466,14 @@ async function main() {
       } else {
         n.obj.position.y = hAt(n.obj.position.x, n.obj.position.z)
                          + (n.anim ? 0 : Math.sin(t * 2 + n.phase) * 0.01 + 0.01);
+      }
+      if (n.fly && !n.spectral) {
+        const f = n.fly, gy = hAt(n.obj.position.x, n.obj.position.z);
+        const want = f.alt * (moving ? 1 : 0.85);
+        f.cur = f.cur === null ? want : THREE.MathUtils.damp(f.cur, want, 0.8, dt);
+        const prevY = n.obj.position.y;
+        n.obj.position.y = gy + f.cur + Math.sin(t * 1.3 + n.phase) * f.bob + Math.sin(t * 3.1 + n.phase * 2) * f.bob * 0.3;
+        f.vy = (n.obj.position.y - prevY) / Math.max(dt, 1e-3);
       }
       // side-scroller: creatures drift onto the gameplay lane too
       if (VIEW === 'side') {
@@ -8424,8 +8493,14 @@ async function main() {
       }
       // real gait: crossfade idle/walk/run with movement state (no more gliding)
       if (n.anim) {
+        // the clip follows the PACE: past the point where this body's walk
+        // would have to be played faster than it can step, it runs
+        const _pace = Math.min(n.speed * (n.vjit || 1) * (n._fleeing ? 1.9 : 1), n.gait ? n.gait.run * 2.0 : 1e9);
+        const _g = n.gait || { walk: 2.5, run: 5.0 };
+        const _runAbove = Math.min(_g.walk * 1.45, (_g.walk + _g.run) / 2);
         const want = moving ? ((n.behavior === 'hostile' && n.speed > 2.2) || n._fleeing
                                || (n.behavior === 'guard' && n.mode === 'chase')
+                               || _pace > _runAbove
                                ? n.anim.run : n.anim.walk)
                             : n.anim.idle;
         if (want && want !== n.anim.cur) {
@@ -8435,8 +8510,12 @@ async function main() {
         // Phase 66 anti-ice-skate: stride rate follows the NPC's ACTUAL speed
         // (clips are authored at ~2.5 m/s walk / ~5 m/s run cadence)
         if (moving && n.anim.cur) {
-          const base = n.anim.cur === n.anim.run ? 5.0 : 2.5;
-          n.anim.cur.timeScale = Math.min(Math.max(n.speed / base, 0.55), 1.7);
+          const base = n.anim.cur === n.anim.run ? _g.run : _g.walk;
+          // the ground actually covered last frame where there is one (a body
+          // pushed by the fence, or slowed on a hill, steps slower)
+          const vNow = n._v !== undefined && n._v > 0.05 ? n._v : _pace;
+          n.anim.cur.timeScale = Math.min(Math.max(vNow / base, 0.5), 2.0);
+          n._slip = Math.max(0, vNow / base - 2.0) + Math.max(0, 0.5 - vNow / base);   // > 0: the feet cannot keep up
         }
         n.anim.mixer.update(dt);
         if (n._flinch) n._flinch.apply(dt);
@@ -12753,6 +12832,7 @@ async function main() {
     pos: () => playerObj.position.toArray(), keys, ready: true,
     tp: (x, z) => body.setTranslation({ x, y: spawnHeight(x, z), z }, true),
     tpy: (x, y, z) => body.setTranslation({ x, y, z }, true),     // a drop from a height: does a ledge hold you
+    npcRefs: () => npcs,                    // the live bodies, for gates that measure how they move
     carryE: () => window.__carryE && window.__carryE(), throwIt: () => doAttack(),
     // a box of a given height, solid, for a gate that needs a ledge where it stands
     block: (x, z, w, h) => { const gy = hAt(x, z);
@@ -12812,6 +12892,9 @@ async function main() {
         crowd: { near: (window.__peds || []).filter(q => q.obj.visible).length, impostors: window.__pedImpostor ? window.__pedImpostor.n : 0, total: (window.__peds || []).length },
         light: { night: _isNightSky, moon: +pal.sun.toFixed(2), amb: +pal.amb.toFixed(2), exposure: +renderer.toneMappingExposure.toFixed(2), hero_fill: +heroFill.intensity.toFixed(1) },
         npc_weight: npcs.filter(n => n._v !== undefined && !n.dead && !n.dormant).map(n => ({ v: +n._v.toFixed(2), roll: +(n._roll || 0).toFixed(3), rate: n.anim && n.anim.cur ? +n.anim.cur.timeScale.toFixed(2) : null, quad: !!n.quad, ground: +(n._gP || 0).toFixed(3) })).slice(0, 12),
+        // each body's clip speeds and how badly its feet slip (0: they keep up)
+        gaits: npcs.filter(n => !n.dead && !n.dormant && n.gait).slice(0, 16).map(n => ({ name: n.name, walk: +n.gait.walk.toFixed(2), run: +n.gait.run.toFixed(2),
+          clip: n.anim && n.anim.cur ? n.anim.cur.getClip().name : null, slip: +(n._slip || 0).toFixed(2) })),
         bodies: { quad: npcs.filter(n => n.quad && !n.dead).length, biped: npcs.filter(n => !n.quad && !n.dead).length, sloped: npcs.filter(n => Math.abs(n._gP || 0) > 0.02 || Math.abs(n._gR || 0) > 0.02).length },
         drive: (DRIVE || DRIVING) ? { speed: +Math.hypot(carVX, carVZ).toFixed(2), slip: +(window.__slip || 0).toFixed(3), drifting: !!window.__drifting, handbrake: !!window.__handbrake, steer_ease: +(window.__steerEase === undefined ? 1 : window.__steerEase).toFixed(3), top: +(P.run_speed || 0),
                                       skids: _skidLife ? Array.from(_skidLife).filter(v => v > 0).length : 0, smoke: _smoke ? _smoke.filter(x => x.visible).length : 0,

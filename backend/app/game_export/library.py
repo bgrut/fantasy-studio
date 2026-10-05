@@ -177,8 +177,56 @@ def nearest(kind: str, pattern: str = "biped") -> str:
     return "man"
 
 
+# TRUE SIZES (2026-10-04). A wolf, a bear, a gazelle and a cheetah all came
+# out one metre tall because nothing in the old table named them, and a cat
+# stood as tall as a dog. Heights here are the model's standing height as the
+# runtime scales it (head included; a flyer's or swimmer's longest span, since
+# those are normalised by their longest dimension). Whole words, so a cat
+# burglar is a person; people are checked first for the same reason.
+_TRUE_HEIGHT = (
+    (("man", "woman", "person", "human", "knight", "wizard", "witch", "burglar", "thief", "girl", "boy",
+      "hunter", "ranger", "explorer", "detective", "soldier", "guard", "farmer", "shepherd", "pirate",
+      "astronaut", "scientist", "engineer", "keeper", "courier", "samurai", "ninja", "princess", "prince",
+      "king", "queen", "villager", "zombie", "skeleton", "vampire", "elf", "orc", "goblin"), 1.75),
+    (("child", "kid"), 1.2), (("dwarf",), 1.3), (("giant", "troll", "ogre"), 3.2),
+    (("mouse", "rat", "hamster", "frog", "toad"), 0.12), (("squirrel", "weasel", "ferret", "chipmunk", "lizard"), 0.2),
+    (("cat", "kitten", "rabbit", "bunny", "hare", "skunk"), 0.32), (("raccoon", "badger", "fox", "otter", "beaver"), 0.45),
+    (("dog", "puppy", "coyote", "jackal"), 0.62), (("wolf", "hyena", "husky"), 0.85),
+    (("sheep", "goat", "lamb", "boar", "pig"), 0.95), (("gazelle", "antelope", "impala"), 1.05),
+    (("cheetah", "leopard", "panther", "cougar", "puma", "jaguar", "lynx"), 0.9),
+    (("lion", "lioness", "tiger"), 1.2), (("bear", "panda"), 1.4), (("grizzly",), 1.5), (("gorilla",), 1.55),
+    (("deer", "reindeer", "caribou", "zebra", "donkey"), 1.45), (("horse", "pony", "stallion", "mare", "cow", "bull", "ox", "bison", "buffalo"), 1.7),
+    (("elk", "moose", "camel", "llama"), 2.2), (("rhino", "rhinoceros", "hippo", "hippopotamus"), 1.8),
+    (("elephant", "mammoth"), 3.2), (("giraffe",), 5.0), (("kangaroo",), 1.5), (("monkey", "chimp", "chimpanzee", "ape", "lemur"), 0.8),
+    (("crocodile", "alligator", "caiman"), 3.5), (("snake", "serpent", "cobra", "python", "viper"), 1.8),
+    (("chicken", "hen", "rooster", "duck"), 0.45), (("goose", "swan", "turkey"), 0.8), (("penguin",), 0.8),
+    (("firefly", "fireflie", "bee", "wasp", "fly", "moth"), 0.12), (("butterfly", "dragonfly"), 0.18),
+    (("sparrow", "songbird", "swallow", "finch", "robin"), 0.3), (("bat", "parrot", "pigeon", "dove"), 0.5),
+    (("crow", "raven", "owl", "gull", "seagull"), 1.0), (("eagle", "hawk", "falcon", "vulture", "condor"), 2.0),
+    (("dragon", "wyvern", "griffin", "gryphon", "pegasus", "phoenix"), 3.2),
+)
+
+
+def _true_height(kind: str) -> float | None:
+    # a noun phrase names its thing last: a pirate SHIP, a cat BURGLAR, an alpha WOLF
+    import re as _re
+    toks = _re.findall(r"[a-z]+", (kind or "").lower())
+    if not toks:
+        return None
+    t = toks[-1]
+    for cand in (t, t[:-1] if t.endswith("s") and len(t) > 3 and not t.endswith("ss") else t,
+                 t[:-3] + "y" if t.endswith("ies") else t, t[:-3] + "f" if t.endswith("ves") else t):
+        for words, h in _TRUE_HEIGHT:
+            if cand in words:
+                return h
+    return None
+
+
 def default_height(kind: str) -> float:
     k = (kind or "").lower()
+    th = _true_height(k)
+    if th is not None:
+        return th
     for words, h in ((("dog", "cat", "fox", "rabbit"), 0.6),
                      (("horse", "cow", "deer"), 1.7),
                      (("car", "truck", "vehicle"), 1.4),
