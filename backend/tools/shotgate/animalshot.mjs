@@ -19,19 +19,22 @@ const kinds = await p.evaluate(() => {
 const shot = [];
 for (const [name, idx] of kinds) {
   const ok = await p.evaluate((idx) => {
-    const r = window.__game.npcRefs()[idx], o = r.obj;
+    const r = window.__game.npcRefs()[idx], o = r && r.obj;
     if (!o) return false;
-    const q = o.position, yaw = o.rotation.y;
-    // its side: perpendicular to the way it faces
-    const sx = Math.cos(yaw), sz = -Math.sin(yaw);
-    // its size from its meshes' bounding spheres (THREE is not on the window)
-    let rad = 0.4;
-    o.updateMatrixWorld(true);
-    o.traverse(m => { if (m.isMesh && m.geometry) { m.geometry.computeBoundingSphere();
-      rad = Math.max(rad, m.geometry.boundingSphere.radius * m.matrixWorld.getMaxScaleOnAxis()); } });
-    const h = Math.min(3, rad * 1.1);
-    const d = Math.max(2.2, h * 2.2);
-    window.__camPin = { pos: [q.x + sx * d, q.y + h * 0.75, q.z + sz * d], look: [q.x, q.y + h * 0.5, q.z] };
+    // follow it: re-aimed every frame at its body (the meshes' world centre),
+    // side-on to the way it faces, above tall grass
+    window.__camPin = () => {
+      let rad = 0.4, cx = 0, cy = 0, cz = 0, nC = 0;
+      o.updateMatrixWorld(true);
+      o.traverse(m => { if (m.isMesh && m.geometry) { if (!m.geometry.boundingSphere) m.geometry.computeBoundingSphere();
+        const c = m.geometry.boundingSphere.center.clone().applyMatrix4(m.matrixWorld);
+        cx += c.x; cy += c.y; cz += c.z; nC++;
+        rad = Math.max(rad, m.geometry.boundingSphere.radius * m.matrixWorld.getMaxScaleOnAxis()); } });
+      const q = o.position, C = nC ? [cx / nC, cy / nC, cz / nC] : [q.x, q.y + 0.5, q.z];
+      const yaw = o.rotation.y, sx = Math.cos(yaw), sz = -Math.sin(yaw);
+      const h = Math.min(3, rad * 1.1), d = Math.max(2.4, h * 2.4);
+      return { pos: [C[0] + sx * d, Math.max(C[1] + h * 0.35, q.y + 1.3), C[2] + sz * d], look: C };
+    };
     return true;
   }, idx);
   if (!ok) continue;

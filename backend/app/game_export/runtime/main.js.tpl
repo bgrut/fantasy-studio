@@ -17152,8 +17152,10 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
     // A PINNED VIEW for shot tools and fixtures: {pos:[x,y,z], look:[x,y,z]}
     // holds the camera where a picture needs it, whatever the game is doing
     if (window.__camPin) {
-      camera.position.set(...window.__camPin.pos);
-      camera.lookAt(...window.__camPin.look);
+      // a pin may be a function, re-read every frame, to follow something moving
+      const _cp = typeof window.__camPin === 'function' ? window.__camPin() : window.__camPin;
+      camera.position.set(..._cp.pos);
+      camera.lookAt(..._cp.look);
       if (FLORA_LIVE) FLORA_LIVE.update(camera);
       if (GRASS_LIVE) GRASS_LIVE.update(camera, playerObj.position);
       if (CLUTTER) CLUTTER.update(camera);

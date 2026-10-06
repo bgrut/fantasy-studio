@@ -491,6 +491,19 @@ export function buildCarHQ(cp, T = {}) {
     const mir = new THREE.SphereGeometry(0.1, 14, 10); mir.scale(0.55, 0.62, 1.15); mir.translate(mx - 0.02, yt + 0.09, sz * (mz + 0.15));
     mirG.push(mir);
   }
+  // THE BELTLINE TRIM (2026-10-05): a thin bright strip along each side
+  // where the glass meets the paint, from the windscreen's foot to the back
+  // window's; found on the body itself by rays, so it follows its curve
+  for (const sz of [1, -1]) {
+    const pts = [];
+    for (let k = 0; k <= 16; k++) {
+      const t = wsTop + (blTop - wsTop) * (k / 16);
+      _ray.set(new THREE.Vector3(xAt(t), yt + 0.012, sz * (Wd + 1)), new THREE.Vector3(0, 0, -sz));
+      const h = _ray.intersectObject(_bodyProbe, false)[0];
+      if (h) pts.push(h.point.clone().add(new THREE.Vector3(0, 0, sz * 0.006)));
+    }
+    if (pts.length > 4) chromeG.push(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 40, 0.009, 5, false));
+  }
   // the grille: a dark opening low in the nose, slatted, and the plates
   const gh = onEnd(true, yb + bodyH * 0.36, 0);
   if (gh) {

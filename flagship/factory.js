@@ -249,7 +249,8 @@ const EMPTY = 0, MINER = 1, BELT = 2, HUB = 3, NODE = 4, SMELTER = 5,
       PROP = 11,                     // scenery: the outpost's habitat, masts and crates; blocks, sells nothing, is never saved
       ROAD = 12, HOMES = 13, SHOP = 14, WORKS = 15, PARK = 16, HALL = 17,   // the city's (2026-09-29)
       DRONEPAD = 18,                    // a drone pad (2026-10-04): what it is fed, its drone flies to another pad
-      SILO = 19;                        // a silo (2026-10-05): stores one kind, holds it or lets it out
+      SILO = 19,                        // a silo (2026-10-05): stores one kind, holds it or lets it out
+      LAUNCHER = 20;                    // a launcher (2026-10-05): sends a payload to a far world that wants it
 // A CITY (2026-09-29): the same worldlet built as a town. Set by the studio when
 // the prompt asks for a city builder; everything quarry-shaped stands down.
 const CITY = SPEC.city || null;
@@ -346,7 +347,7 @@ function themeNode(root) {
 }
 const TYPE_NAME = { 1: 'miner', 2: 'belt', 3: 'hub', 4: 'ore node',
                     5: 'smelter', 6: 'splitter', 7: 'forge', 8: 'filter',
-                    9: 'chronos rift', 10: 'assembler', 18: 'drone pad', 19: 'silo',
+                    9: 'chronos rift', 10: 'assembler', 18: 'drone pad', 19: 'silo', 20: 'launcher',
                     12: 'road', 13: 'homes', 14: 'shops', 15: 'works', 16: 'park', 17: 'town hall' };
 
 const VALUE = { [CRYSTAL]: 1, [INGOT]: 6 };   // an ingot is worth the detour
@@ -2494,6 +2495,7 @@ function buildToolIcons() {
     forge: () => mk(GEO.forge, MAT.forge),
     assembler: () => mk(GEO.assembler, MAT.assem),
     silo: () => mk(siloGeo().body, siloMat().body),
+    launch: () => mk(launchGeo().base, launchMat().base),
     drone: () => grp([mk(droneGeo().pad, droneMat().pad),
                       (() => { const d = mk(droneGeo().body, droneMat().body); d.position.y = 0.32; return d; })()]),
     filter: () => mk(GEO.filter, MAT.filt),
@@ -2717,6 +2719,11 @@ function place(face, i, j, type, dir) {
     const lamp = new THREE.Mesh(G.lamp, new THREE.MeshBasicMaterial({ color: 0x2a4a36 }));
     lamp.name = 'lamp'; lamp.position.set(0, 0.12 + G.H + 0.56, 0); g.add(lamp);
     c.buf = 0; c.bt = 0; c.rr = 0;      // a new silo is empty and releasing (a load sets these after)
+  } else if (type === LAUNCHER) {
+    const G = launchGeo(), M = launchMat();
+    const b = new THREE.Mesh(G.base, M.base); b.castShadow = true; b.receiveShadow = true; g.add(b);
+    const cap = new THREE.Mesh(G.cap, M.cap); cap.name = 'capsule'; cap.position.y = 0.17; cap.castShadow = true; cap.visible = false; g.add(cap);
+    c.pq = []; c.away = false;
   } else if (type === SMELTER) {
     const b = new THREE.Mesh(GEO.smelt, MAT.smelt);
     b.castShadow = true; g.add(b);
@@ -4275,6 +4282,8 @@ function accepts(dst, type) {
   if (dst.t === DRONEPAD) return (dst.pq ? dst.pq.length : 0) + (dst.inb | 0) < DRONE_CAP;
   // a silo stores one kind at a time, up to its brim
   if (dst.t === SILO) return dst.buf < SILO_CAP && (dst.buf === 0 || dst.bt === type);
+  // a launcher takes refined goods only, a payload at a time, and not while its capsule is away
+  if (dst.t === LAUNCHER) return IS_BAR(type) && !dst.away && (dst.pq ? dst.pq.length : 0) < PAYLOAD;
   return false;
 }
 // `to` is the tile it landed on. Passing it costs nothing and is what lets an
@@ -4315,6 +4324,7 @@ function deliver(dst, to, type) {
   else if (dst.t === RIFT) { if (--dst.dbt <= 0) riftSettle(dst, true); }
   else if (dst.t === DRONEPAD) { (dst.pq || (dst.pq = [])).push(type); dst.fed = droneTick; }
   else if (dst.t === SILO) { dst.buf++; dst.bt = type; }
+  else if (dst.t === LAUNCHER) { (dst.pq || (dst.pq = [])).push(type); }
   else dst.item = type;
 }
 
@@ -4541,15 +4551,15 @@ const farWorlds = new THREE.Group();
 farWorlds.name = 'farWorlds';
 scene.add(farWorlds);
 function farLabel(text, sub, col) {
-  const cv = document.createElement('canvas'); cv.width = 512; cv.height = 160;
+  const cv = document.createElement('canvas'); cv.width = 1024; cv.height = 160;
   const x = cv.getContext('2d');
   x.textAlign = 'center'; x.textBaseline = 'middle';
   x.shadowColor = 'rgba(0,0,0,0.9)'; x.shadowBlur = 12;
-  x.font = '700 54px sans-serif'; x.fillStyle = col; x.fillText(text.toUpperCase(), 256, 62);
-  x.font = '500 34px sans-serif'; x.fillStyle = 'rgba(230,236,250,0.85)'; x.fillText(sub, 256, 122);
+  x.font = '700 54px sans-serif'; x.fillStyle = col; x.fillText(text.toUpperCase(), 512, 62);
+  x.font = '500 32px sans-serif'; x.fillStyle = 'rgba(230,236,250,0.85)'; x.fillText(sub, 512, 122);
   const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace;
   const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, transparent: true, depthWrite: false, fog: false }));
-  sp.scale.set(110, 34, 1);
+  sp.scale.set(220, 34, 1);
   return sp;
 }
 function buildFarWorlds() {
@@ -4587,7 +4597,9 @@ function buildFarWorlds() {
       blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
     halo.scale.setScalar(170);
     g.add(halo);
-    const lab = farLabel(w.name, open ? 'open: travel from the ledger' : w.cores + ' cores' + (w.needs ? ' and more' : ''),
+    const _want = wantOf(w) ? 'wants ' + contractName(wantOf(w), 2) : '';
+    const lab = farLabel(w.name, open ? (_want ? _want + ' · travel from the ledger' : 'open: travel from the ledger')
+                                      : (_want ? _want + ' · ' : '') + w.cores + ' cores' + (w.needs ? ' and more' : ''),
                          open ? '#' + edgeCol.getHexString() : '#9aa3b8');
     lab.position.set(0, -54, 0);
     g.add(lab);
@@ -4607,6 +4619,140 @@ function refreshFarWorlds() {
   // rebuilt only when what it shows changes: where you are, what is open
   const key = worldIdx + '|' + WORLDS.map(w => (CREATIVE || (cores >= w.cores && worldCapOk(w))) ? 1 : 0).join('');
   if (key !== _farKey) { _farKey = key; buildFarWorlds(); }
+}
+
+// ── THE LAUNCHER (2026-10-05) ─────────────────────────────────────────────
+// The other worlds hang in the sky now, and each one is short of something:
+// Ember Reach of salt, Frostline of ember, the Verdant Fault of crystal, the
+// Long Drift of alloy. A launcher takes refined goods, ten to a payload, and
+// sends its capsule to whichever world wants the most of what it carries:
+// up off the pad on a column of fire, over the sky to the far cube, which
+// flares when it lands. What a world wanted pays LAUNCH_PREMIUM times; the
+// rest of the payload sells at four-fifths, the freight taken out of it.
+const PAYLOAD = 10, LAUNCH_PREMIUM = 1.75, LAUNCH_SECS = 4.2;
+const WANT_OF_FAM = () => ({ warm: INGOT_S, cold: INGOT_E, green: INGOT, void: ALLOY });
+const wantOf = w => WANT_OF_FAM()[w.fam];
+var _LAUNCH_GEO = null, _LAUNCH_MAT = null;
+function launchGeo() {
+  if (_LAUNCH_GEO) return _LAUNCH_GEO;
+  const dark = 0x2c333d, steel = 0x8e98a6, hazard = 0xe8b53a;
+  const parts = [
+    { g: new THREE.CylinderGeometry(T * 0.46, T * 0.48, 0.14, 28), y: 0.07, col: dark, tint: 1 },
+    { g: new THREE.CylinderGeometry(T * 0.3, T * 0.3, 0.03, 28), y: 0.155, col: 0x1b1f25, tint: 1 },
+    { g: new THREE.TorusGeometry(T * 0.38, 0.03, 6, 28), y: 0.16, rx: Math.PI / 2, col: hazard, tint: 1 },
+    // a gantry on one side: two posts, a crossbeam, an arm reaching in
+    { g: new THREE.BoxGeometry(0.08, 1.9, 0.08), x: -T * 0.36, z: 0.18, y: 1.1, col: steel, tint: 1 },
+    { g: new THREE.BoxGeometry(0.08, 1.9, 0.08), x: -T * 0.36, z: -0.18, y: 1.1, col: steel, tint: 1 },
+    { g: new THREE.BoxGeometry(0.1, 0.06, 0.48), x: -T * 0.36, y: 2.02, col: steel, tint: 1 },
+    { g: new THREE.BoxGeometry(0.42, 0.05, 0.06), x: -T * 0.18, y: 1.5, col: steel, tint: 1 },
+    { g: new THREE.BoxGeometry(0.42, 0.05, 0.06), x: -T * 0.18, y: 0.9, col: steel, tint: 1 },
+  ];
+  const cap = mergeParts([
+    { g: new THREE.CylinderGeometry(0.26, 0.3, 0.9, 18), y: 0.45, col: 0xe9edf2, tint: 1 },
+    { g: new THREE.ConeGeometry(0.26, 0.55, 18), y: 1.17, col: 0xe9edf2, tint: 1 },
+    { g: new THREE.CylinderGeometry(0.265, 0.265, 0.1, 18), y: 0.62, col: 0xd04a2a, tint: 1 },
+    { g: new THREE.CylinderGeometry(0.32, 0.38, 0.16, 18), y: 0.0, col: 0x3a4048, tint: 1 },
+  ]);
+  _LAUNCH_GEO = { base: mergeParts(parts), cap };
+  return _LAUNCH_GEO;
+}
+function launchMat() {
+  if (_LAUNCH_MAT) return _LAUNCH_MAT;
+  _LAUNCH_MAT = { base: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.45, metalness: 0.55 }),
+                  cap: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.35, metalness: 0.3 }) };
+  return _LAUNCH_MAT;
+}
+const launches = [];
+var launchGlowTex = null;
+let launchesLanded = 0, launchPaid = 0;
+function farTarget(c) {
+  // the far world that wants the most of this payload; failing that, the first
+  const counts = {};
+  for (const t of c.pq || []) counts[t] = (counts[t] || 0) + 1;
+  let best = null, bn = -1;
+  WORLDS.forEach((w, k) => { if (k === worldIdx) return; const n = counts[wantOf(w)] || 0; if (n > bn) { bn = n; best = k; } });
+  return best;
+}
+function farPos(k) {
+  for (const g of farWorlds.children) if (g.userData.k === k) return g.position;
+  return null;
+}
+function stepLaunchers() {
+  eachTile((c, f, i, j) => {
+    if (c.t !== LAUNCHER) return;
+    const cap = c.build && c.build.getObjectByName('capsule');
+    if (cap) cap.visible = !c.away && (c.pq ? c.pq.length : 0) > 0;
+    if (c.away || !c.pq || c.pq.length < PAYLOAD) return;
+    const k = farTarget(c), to = k !== null && farPos(k);
+    if (!to) return;
+    const w = tileWorld(f, i, j), n = FACES[f].n;
+    const from = new THREE.Vector3(w[0] + n[0] * 0.3, w[1] + n[1] * 0.3, w[2] + n[2] * 0.3);
+    const g = new THREE.Group(); g.name = 'capsuleFlight';
+    const m = new THREE.Mesh(launchGeo().cap, launchMat().cap); m.castShadow = true; g.add(m);
+    // the engine's glow: a soft white-hot core going orange, a sprite (a cone
+    // read as a solid yellow funnel); the particle trail is the plume
+    if (!launchGlowTex) {
+      const cv = document.createElement('canvas'); cv.width = cv.height = 128;
+      const x = cv.getContext('2d'), gr = x.createRadialGradient(64, 64, 2, 64, 64, 64);
+      gr.addColorStop(0, 'rgba(255,255,240,1)'); gr.addColorStop(0.18, 'rgba(255,214,140,0.9)');
+      gr.addColorStop(0.5, 'rgba(255,120,40,0.35)'); gr.addColorStop(1, 'rgba(255,80,20,0)');
+      x.fillStyle = gr; x.fillRect(0, 0, 128, 128);
+      launchGlowTex = new THREE.CanvasTexture(cv);
+    }
+    const flame = new THREE.Sprite(new THREE.SpriteMaterial({ map: launchGlowTex, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
+    flame.position.y = -0.35; flame.scale.setScalar(1.3); flame.name = 'flame'; g.add(flame);
+    g.position.copy(from); scene.add(g);
+    launches.push({ g, from, ctrl: from.clone().addScaledVector(new THREE.Vector3(...n), 160), to: to.clone(), k, t: 0, load: c.pq.slice(), c, n: new THREE.Vector3(...n) });
+    c.pq.length = 0; c.away = true;
+    sfxStarIn();
+    const t = document.getElementById('toast');
+    if (t) { t.textContent = WORD('LAUNCH. A payload of ' + PAYLOAD + ' is away to ' + WORLDS[k].name + ', which pays ' + LAUNCH_PREMIUM + ' times for ' + contractName(wantOf(WORLDS[k]), 2) + '.'); t.classList.add('on'); toastAt = 4.5; }
+  });
+}
+const _lA = new THREE.Vector3(), _lB = new THREE.Vector3(), _lUp = new THREE.Vector3(0, 1, 0);
+function updateLaunches(dt) {
+  for (let q = launches.length - 1; q >= 0; q--) {
+    const L = launches[q];
+    L.t += dt / LAUNCH_SECS;
+    const s = Math.min(1, L.t), e = s * s * (3 - 2 * s) * 0.6 + s * s * 0.4;
+    // a quadratic arc: straight up off the pad, then over to the far world
+    const a = 1 - e;
+    _lA.copy(L.from).multiplyScalar(a * a).addScaledVector(L.ctrl, 2 * a * e).addScaledVector(L.to, e * e);
+    _lB.copy(L.ctrl).sub(L.from).multiplyScalar(2 * a).addScaledVector(L.to.clone().sub(L.ctrl), 2 * e).normalize();
+    L.g.position.copy(_lA);
+    L.g.quaternion.setFromUnitVectors(_lUp, _lB);
+    L.g.scale.setScalar(1 + e * 6);                         // it keeps its size against the far sky
+    const fl = L.g.getObjectByName('flame'); if (fl) fl.scale.setScalar(1.1 + Math.random() * 0.5);
+    for (let k = 0; k < 2; k++)
+      emit(_lA.x - _lB.x * 0.8, _lA.y - _lB.y * 0.8, _lA.z - _lB.z * 0.8,
+           -_lB.x * 3 + (Math.random() - 0.5), -_lB.y * 3 + (Math.random() - 0.5), -_lB.z * 3 + (Math.random() - 0.5),
+           1.0, 0.7, 0.35, -0.08, 1.4);
+    if (s >= 1) {
+      scene.remove(L.g); L.g.traverse(o => { if (o.material && o.material !== launchMat().cap) o.material.dispose(); });
+      launches.splice(q, 1);
+      L.c.away = false;
+      // the far world flares, and the market pays
+      for (const g of farWorlds.children) if (g.userData.k === L.k) g.userData.flare = 1;
+      const want = wantOf(WORLDS[L.k]);
+      let paid = 0, wanted = 0;
+      for (const it of L.load) {
+        const v = bank(it);
+        const extra = it === want ? v * (LAUNCH_PREMIUM - 1) : -v * 0.2;
+        ore += extra; runValue += extra;
+        paid += v + extra; if (it === want) wanted++;
+      }
+      launchesLanded++; launchPaid += paid;
+      sfxUnlock();
+      const t = document.getElementById('toast');
+      if (t) { t.textContent = WORD('LANDED ON ' + WORLDS[L.k].name.toUpperCase() + '. +' + Math.round(paid) + ' credits: ' + wanted + ' of ' + L.load.length + ' were ' + contractName(want, 2) + ', at ' + LAUNCH_PREMIUM + ' times.'); t.classList.add('on'); toastAt = 5; }
+    }
+  }
+  for (const g of farWorlds.children) {
+    if (!(g.userData.flare > 0)) continue;
+    g.userData.flare = Math.max(0, g.userData.flare - dt * 0.6);
+    const b = g.getObjectByName('body'); if (b) b.material.emissiveIntensity = (g.userData.open ? 0.16 : 0.03) + g.userData.flare * 1.6;
+    for (const o of g.children) if (o.isSprite && o.material.blending === THREE.AdditiveBlending) o.material.opacity = (g.userData.open ? 0.55 : 0.12) + g.userData.flare * 0.45;
+  }
 }
 
 // ── THE SILO (2026-10-05) ─────────────────────────────────────────────────
@@ -5170,6 +5316,7 @@ function step() {
   });
   stepDrones();
   stepSilos();
+  stepLaunchers();
   eachTile((c, f, i, j) => {
     if (c.t !== MINER) return;
     // a miner digs whatever the seam under it is, which is the face's mineral
@@ -5361,10 +5508,11 @@ function cellUnder(ev) {
 // both read it, so it lives before either
 GEO.dronePad = droneGeo().pad;        // the build ghost takes its shape from GEO
 GEO.silo = siloGeo().body;
+GEO.launcher = launchGeo().base;
 const HOLO_GEO = {
   miner: 'miner', belt: 'beltFrame', smelter: 'smelt', splitter: 'split',
   hub: 'hub', forge: 'forge', filter: 'filter', rift: 'riftBase', assembler: 'assembler',
-  drone: 'dronePad', silo: 'silo',
+  drone: 'dronePad', silo: 'silo', launch: 'launcher',
 };
 const GHOST_BOX = new THREE.BoxGeometry(T * 0.92, 0.5, T * 0.92);
 const ghost = new THREE.Mesh(GHOST_BOX,
@@ -5462,7 +5610,7 @@ function apply(t, dir) {
   }
   if (tool === 'erase') { removeAt(t.face, t.i, t.j); if (c0 && c0.t !== was) rigPulse('erase'); return; }
   const TOOL_TYPE = { miner: MINER, hub: HUB, smelter: SMELTER, splitter: SPLITTER,
-                      forge: FORGE, filter: FILTER, rift: RIFT, belt: BELT, assembler: ASSEMBLER, drone: DRONEPAD, silo: SILO,
+                      forge: FORGE, filter: FILTER, rift: RIFT, belt: BELT, assembler: ASSEMBLER, drone: DRONEPAD, silo: SILO, launch: LAUNCHER,
                       road: ROAD, home: HOMES, shop: SHOP, works: WORKS, park: PARK };
   const ty = TOOL_TYPE[tool];
   if (ty === undefined) return;
@@ -5594,7 +5742,7 @@ addEventListener('keydown', e => {
   if (e.target && e.target.tagName === 'INPUT') return;    // a name being typed is not a hotkey
   if (PAUSED) return;                                       // a paused game buys and builds nothing
   const k = CITY ? { '1': 'road', '2': 'home', '3': 'shop', '4': 'works', '5': 'park', '9': 'erase' }[e.key] : { '1': 'miner', '2': 'belt', '3': 'smelter', '4': 'splitter',
-              '5': 'hub', '6': 'forge', '7': 'filter', '8': 'rift', 'q': 'assembler', 'Q': 'assembler', 'e': 'drone', 'E': 'drone', 't': 'silo', 'T': 'silo',
+              '5': 'hub', '6': 'forge', '7': 'filter', '8': 'rift', 'q': 'assembler', 'Q': 'assembler', 'e': 'drone', 'E': 'drone', 't': 'silo', 'T': 'silo', 'y': 'launch', 'Y': 'launch',
               '9': 'erase', '0': 'blueprint' }[e.key];
   if (k === 'blueprint' && tool === 'blueprint' && blueprint) { dropBlueprint(); return; }
   if (k) pickTool(k);
@@ -6970,7 +7118,8 @@ const GOALS = [
     done: () => rigsOnSeams() >= 3, progress: () => rigsOnSeams() / 3 },
   { text: 'hold 1200 a minute for 30s', rate: 1200, hold: 30, unlock: 'rift',
     tip: 'The board on the hub moves. Make whatever it is paying most for, and hold the rate for thirty seconds.',
-    got: 'Chronos Rift unlocked. It lends ore now against a repayment later; miss the deadline and it takes the machines around it.' },
+    got: 'Chronos Rift unlocked. It lends ore now against a repayment later; miss the deadline and it takes the machines around it. The Launcher (Y) comes with it: ten refined goods make a payload, and it flies to the world in the sky that wants them most.',
+    also: 'launch' },
   { text: 'sell an alloy above 1.20', cap: 'smelt',
     tip: 'Watch the alloy price on the hub board. Hold your alloy back until it pays over 1.20, then let it through.',
     unlock: 'assembler',
@@ -7286,6 +7435,8 @@ function describeCell(c, t) {
     case MINER: if (c.star > 0) return 'RIG  ·  on a fallen star of ' + (ORE_NAME[c.min] || 'ore') + ', ' + c.star + ' loads left  ·  ore leaves out of the front';
       return 'RIG  ·  on a ' + (ORE_NAME[c.min] || 'ore') + ' seam, ' + Math.round((c.rich === undefined ? 1 : c.rich) * 100) + '% rich'
       + (c.ice > 0 && !CAPS.heated ? '  ·  frozen, scraping at half rate' : '') + '  ·  ore leaves out of the front';
+    case LAUNCHER: return 'LAUNCHER  ·  ' + (c.away ? 'capsule away' : (c.pq ? c.pq.length : 0) + ' of ' + PAYLOAD + ' loaded')
+      + '  ·  takes ingots, alloy and parts; flies to the world that wants them';
     case SILO: return 'SILO  ·  ' + (c.buf ? c.buf + ' of ' + SILO_CAP + ', ' + stockName(c.bt, c.buf) : 'empty, takes one kind at a time')
       + '  ·  ' + (c.rr ? 'holding, press F to release' : 'releasing out of the chute, press F to hold');
     case BELT: return 'BELT  ·  heading ' + heading + (item ? '  ·  carrying a ' + item : '  ·  empty') + (c.clog > 0 ? '  ·  clogged with spores' : '');
@@ -8092,6 +8243,7 @@ renderer.setAnimationLoop(() => {
   stepReadout(_rdt);
   drawWrist(_rdt);
   spinFarWorlds(_rdt);
+  updateLaunches(dt);
   if (!CITY) stepWorksShow(dt);
   stepHint(dt);
   if (!CITY) stepDrone(dt);
@@ -9086,7 +9238,9 @@ window.__factory = {
   drones: () => ({ pads: (() => { let n = 0; eachTile(c => { if (c.t === DRONEPAD) n++; }); return n; })(),
                    flying: flights.length, carrying: flights.reduce((s, f) => s + f.load.length, 0), delivered: dronesDelivered, crafts: crafts.size,
                    air: flights.map(f => { const cr = crafts.get(f.from.c); return cr ? { pos: cr.g.position.toArray(), loaded: f.load.length, back: f.back } : null; }).filter(Boolean) }),
-  DRONEPAD, SILO, SILO_CAP,
+  DRONEPAD, SILO, SILO_CAP, LAUNCHER, PAYLOAD,
+  launches: () => ({ flying: launches.length, landed: launchesLanded, paid: Math.round(launchPaid),
+                     pads: (() => { const o = []; eachTile((c, f, i, j) => { if (c.t === LAUNCHER) o.push({ f, i, j, n: c.pq ? c.pq.length : 0, away: !!c.away }); }); return o; })() }),
   silos: () => { const out = []; eachTile((c, f, i, j) => { if (c.t === SILO) out.push({ f, i, j, n: c.buf, kind: c.bt, hold: !!c.rr }); }); return out; },
   toggleSilo: (f, i, j) => toggleSilo(cells[f][i][j]),
   starfall: () => ({ falling: star ? { f: star.f, i: star.i, j: star.j, phase: star.phase, t: +star.t.toFixed(2), pos: star.g.position.toArray(), from: star.from.toArray() } : null,
