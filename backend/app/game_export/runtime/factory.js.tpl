@@ -8011,6 +8011,9 @@ let last = performance.now();
 // the scene forced visible and unculled with instanced counts at one, once,
 // into an eight-pixel target, while the reveal covers it. The tag and rate
 // stand-ins in the host cost nothing and keep the chrome's layers ready.
+// the other worlds in the sky are built before the warm-up, so their first
+// draw is not the frame the player turns to look at them
+try { refreshFarWorlds(); } catch (e) { /* the frame loop tries again */ }
 (function warmUp() {
   const host = document.getElementById('tags');
   if (host) {

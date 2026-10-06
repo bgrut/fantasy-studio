@@ -2412,11 +2412,14 @@ async function main() {
               float cloth = weave * 0.7 + fibre * 0.3;
               float pores = dNoise(vDP * 300.0) * 0.6 + dNoise(vDP * 90.0) * 0.4;
               // fur: short streaks running along the body (stretched noise)
-              float fur = dNoise(vDP * vec3(26.0, 260.0, 260.0)) * 0.5 + dNoise(vDP * vec3(260.0, 260.0, 26.0)) * 0.5;
+              // coarse enough to read from a few metres: tufts and streaks, not a
+              // sub-millimetre grain that fades out before it is ever seen
+              float fur = dNoise(vDP * vec3(9.0, 70.0, 70.0)) * 0.35 + dNoise(vDP * vec3(70.0, 70.0, 9.0)) * 0.35
+                        + dNoise(vDP * 26.0) * 0.3;
               float h = uFur > 0.5 ? fur : mix(cloth, pores, skin);
               float str = uFur > 0.5 ? 1.5 : mix(1.0, 0.35, skin);
               // gone before it is smaller than a pixel
-              float fade = 1.0 - smoothstep(0.25, 0.8, length(fwidth(vDP)) * 150.0);
+              float fade = 1.0 - smoothstep(0.25, 0.8, length(fwidth(vDP)) * (uFur > 0.5 ? 60.0 : 150.0));
               vec3 dpx = dFdx(-vViewPosition), dpy = dFdy(-vViewPosition);
               float dhx = dFdx(h), dhy = dFdy(h);
               vec3 r1 = cross(dpy, normal), r2 = cross(normal, dpx);
