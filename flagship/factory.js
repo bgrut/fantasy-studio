@@ -2602,6 +2602,23 @@ function dropBuild(c) {
   c.build.traverse(o => { if (o.userData.weathered && o.geometry) o.geometry.dispose(); });
   scene.remove(c.build); c.build = null;
 }
+var _SWEEP_MAT = null;
+function SWEEP_MAT() {
+  // one material for every hub's beam: its opacity is a uniform the hub turns up
+  if (_SWEEP_MAT) return _SWEEP_MAT;
+  _SWEEP_MAT = new THREE.ShaderMaterial({
+    uniforms: { uCol: { value: new THREE.Color(0xffd479) }, uOp: { value: 0.13 } },
+    vertexShader: `varying float vAlong; varying vec3 vN; varying vec3 vV;
+      void main() { vAlong = clamp(position.z / 9.0, 0.0, 1.0);
+        vec4 mv = modelViewMatrix * vec4(position, 1.0); vN = normalize(normalMatrix * normal); vV = -mv.xyz;
+        gl_Position = projectionMatrix * mv; }`,
+    fragmentShader: `uniform vec3 uCol; uniform float uOp; varying float vAlong; varying vec3 vN; varying vec3 vV;
+      void main() { float face = abs(dot(normalize(vN), normalize(vV)));
+        float a = uOp * 2.2 * pow(face, 1.6) * pow(1.0 - vAlong, 1.4) * smoothstep(0.0, 0.06, vAlong);
+        gl_FragColor = vec4(uCol * a, a); }`,
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide });
+  return _SWEEP_MAT;
+}
 function place(face, i, j, type, dir) {
   const c = cells[face][i][j];
   if (type === MINER && c.t !== NODE && c.t !== MINER) return false;
@@ -2636,9 +2653,11 @@ function place(face, i, j, type, dir) {
     // THE SWEEP (2026-09-16): a lighthouse's beam from the beacon, a long
     // soft cone of the hub's gold turning once every twelve seconds, so a
     // hub can be found from any face. Additive, no depth write, no light.
-    const sweep = new THREE.Mesh(new THREE.ConeGeometry(0.42, 9.0, 12, 1, true),
-      new THREE.MeshBasicMaterial({ color: 0xffd479, transparent: true, opacity: 0.13, blending: THREE.AdditiveBlending,
-                                    depthWrite: false, side: THREE.DoubleSide }));
+    // A BEAM IS LIGHT IN THE AIR, NOT A TUBE (2026-10-06): at a few metres
+    // the flat cone read as a yellow pipe laid over the plate. It fades now
+    // where you see its side edge-on and along its length, brightest at the
+    // lamp, so it is a glow from any distance.
+    const sweep = new THREE.Mesh(new THREE.ConeGeometry(0.55, 9.0, 24, 1, true), SWEEP_MAT().clone());   // its own opacity, one program
     sweep.geometry.rotateX(Math.PI / 2);          // the cone lies along +z, apex at the beacon
     sweep.geometry.translate(0, 0, 4.5);
     sweep.position.y = 1.22; sweep.name = 'sweep'; sweep.frustumCulled = false;
@@ -4559,7 +4578,7 @@ function farLabel(text, sub, col) {
   x.font = '500 32px sans-serif'; x.fillStyle = 'rgba(230,236,250,0.85)'; x.fillText(sub, 512, 122);
   const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace;
   const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, transparent: true, depthWrite: false, fog: false }));
-  sp.scale.set(220, 34, 1);
+  sp.scale.set(168, 26, 1);
   return sp;
 }
 function buildFarWorlds() {
@@ -8432,7 +8451,7 @@ renderer.setAnimationLoop(() => {
       if (c.pulse > 0) c.pulse = Math.max(0, c.pulse - dt * 2.6);
       const beacon = c.build.getObjectByName('lamp');
       const sweep = c.build.getObjectByName('sweep');
-      if (sweep) { const show = worksShow > 0 ? 1 : 0; sweep.rotation.y += dt * (0.52 + show * 1.2); sweep.material.opacity = 0.10 + (c.pulse || 0) * 0.12 + show * 0.16; }
+      if (sweep) { const show = worksShow > 0 ? 1 : 0; sweep.rotation.y += dt * (0.52 + show * 1.2); sweep.material.uniforms.uOp.value = 0.10 + (c.pulse || 0) * 0.12 + show * 0.16; }
       // at idle the beacon breathes, so a hub with nothing arriving still
       // reads as on; a delivery pulse rides on top of it
       const breathe = 1 + Math.sin(performance.now() * 0.0028) * 0.07;

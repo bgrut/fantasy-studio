@@ -863,24 +863,54 @@ async function main() {
     // tuned per mood; they drift slowly downwind and always face the camera.
     {
       const cN = SPEC.world.sky === 'overcast' ? 26 : 14;
-      const ccnv = document.createElement('canvas'); ccnv.width = 256; ccnv.height = 128;
-      const cctx = ccnv.getContext('2d');
+      // CLOUDS WITH A TOP AND A BOTTOM (2026-10-06): one flat white puff for
+      // every sky put bright cartoon clouds over a volcano's ash and a night
+      // moor. Three shapes now, each built of many puffs lit from above (a
+      // bright crown, a shaded flat base), and the colour is the world's: the
+      // sky's own hue lifted toward the sun by day, ash-brown over lava, a
+      // dim grey-blue at night, warm at sunset.
       const rngCl = mulberry32(SPEC.seed + 313);
-      for (let i = 0; i < 26; i++) {                 // one puffy texture, many sprites
-        const x = 40 + rngCl() * 176, y = 34 + rngCl() * 56, r = 14 + rngCl() * 30;
-        const g2 = cctx.createRadialGradient(x, y, 0, x, y, r);
-        g2.addColorStop(0, 'rgba(255,255,255,0.16)');
-        g2.addColorStop(1, 'rgba(255,255,255,0)');
-        cctx.fillStyle = g2; cctx.beginPath(); cctx.arc(x, y, r, 0, 7); cctx.fill();
-      }
-      const ctex = new THREE.CanvasTexture(ccnv);
-      const cmat = new THREE.SpriteMaterial({
-        map: ctex, transparent: true, depthWrite: false, fog: false,
-        opacity: SPEC.world.sky === 'overcast' ? 0.9 : 0.75,
-        color: SPEC.world.sky === 'sunset' ? 0xffd9c4 : 0xffffff });
+      const mkCloud = (k) => {
+        const cv = document.createElement('canvas'); cv.width = 512; cv.height = 256;
+        const cx = cv.getContext('2d'), rr = mulberry32(SPEC.seed + 313 + k * 71);
+        const puffs = [];
+        for (let i = 0; i < 46; i++) {
+          const u = rr(), x = 70 + u * 372, base = 190 - Math.sin(u * Math.PI) * 70 * (0.6 + rr() * 0.6);
+          puffs.push([x, base + rr() * 40, 18 + rr() * 42 * Math.sin(u * Math.PI + 0.3)]);
+        }
+        // the shaded body first, then the lit crowns over it, offset upward
+        for (const [x, y, r] of puffs) {
+          const g = cx.createRadialGradient(x, y + r * 0.2, 0, x, y + r * 0.2, r);
+          g.addColorStop(0, 'rgba(178,186,200,0.30)'); g.addColorStop(1, 'rgba(178,186,200,0)');
+          cx.fillStyle = g; cx.beginPath(); cx.arc(x, y + r * 0.2, r, 0, 7); cx.fill();
+        }
+        for (const [x, y, r] of puffs) {
+          const g = cx.createRadialGradient(x - r * 0.15, y - r * 0.35, 0, x, y - r * 0.2, r * 0.85);
+          g.addColorStop(0, 'rgba(255,255,255,0.34)'); g.addColorStop(1, 'rgba(255,255,255,0)');
+          cx.fillStyle = g; cx.beginPath(); cx.arc(x, y - r * 0.2, r * 0.85, 0, 7); cx.fill();
+        }
+        // the base is flat: fade out the bottom edge
+        const fade = cx.createLinearGradient(0, 170, 0, 230);
+        fade.addColorStop(0, 'rgba(0,0,0,0)'); fade.addColorStop(1, 'rgba(0,0,0,1)');
+        cx.globalCompositeOperation = 'destination-out'; cx.fillStyle = fade; cx.fillRect(0, 170, 512, 86);
+        const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace;
+        return t;
+      };
+      const cTex = [mkCloud(0), mkCloud(1), mkCloud(2)];
+      const _sk = SPEC.world.sky;
+      const cCol = _volcLava ? new THREE.Color(0x6a5446)
+        : (_sk === 'night') ? new THREE.Color(0x5a6478)
+        : (_sk === 'sunset' || _sk === 'dusk') ? new THREE.Color(0xffc9a8)
+        : (_sk === 'overcast') ? new THREE.Color(0xc4c9d0)
+        : new THREE.Color(0xffffff).lerp(new THREE.Color(pal.sky || 0x9cc4ea), 0.12);
+      const cmats = cTex.map(t => new THREE.SpriteMaterial({
+        map: t, transparent: true, depthWrite: false, fog: false,
+        opacity: _sk === 'overcast' ? 0.92 : _volcLava ? 0.7 : _sk === 'night' ? 0.45 : 0.85,
+        color: cCol }));
+      const cmat = cmats[0];
       window.__clouds = [];
       for (let i = 0; i < cN; i++) {
-        const sp = new THREE.Sprite(cmat);
+        const sp = new THREE.Sprite(cmats[i % cmats.length]);
         const a = rngCl() * Math.PI * 2, d = 180 + rngCl() * 900;
         sp.position.set(Math.cos(a) * d, 130 + rngCl() * 160, Math.sin(a) * d);
         const s = 220 + rngCl() * 300;
@@ -2340,8 +2370,12 @@ async function main() {
   // ── SKY LIFE (Phase 48): drifting clouds + a distant bird flock — the sky
   // stops being an empty gradient. Day-family palettes only.
   const clouds = [], birds = [];
+  // (the low cartoon puffs belong to the drawn styles: in a photographed
+  // world they were white stickers under the real cloud layer, and over a
+  // volcano's ash they were the brightest thing in the sky)
   if (['day', 'sunset', 'overcast', 'dusk'].includes(SPEC.world.sky)
       && (SPEC.style || 'default') !== 'horror') {
+    const _toonPuffs = (SPEC.style || 'default') !== 'default' && !_volcLava;
     const cc = document.createElement('canvas');
     cc.width = 128; cc.height = 64;
     const cg = cc.getContext('2d');
@@ -2354,7 +2388,7 @@ async function main() {
     }
     const ctex = new THREE.CanvasTexture(cc);
     const rngS = mulberry32(SPEC.seed + 77);
-    for (let i = 0; i < 7; i++) {
+    for (let i = 0; i < (_toonPuffs ? 7 : 0); i++) {
       const sp = new THREE.Sprite(new THREE.SpriteMaterial({
         map: ctex, transparent: true, opacity: 0.45 + rngS() * 0.25, depthWrite: false }));
       sp.scale.set(26 + rngS() * 22, 9 + rngS() * 6, 1);
