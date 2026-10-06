@@ -7885,10 +7885,28 @@ async function main() {
     }
     const pg = new THREE.BufferGeometry();
     pg.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    // A FLAKE IS ROUND, A DROP IS A STREAK (2026-10-05): untextured points
+    // draw as squares, and a flake passing the lens was a white tile
+    // floating in the forest; snow wears a soft disc, rain a thin streak
+    const _pt = (() => {
+      const c = document.createElement('canvas'); c.width = c.height = 64;
+      const g = c.getContext('2d');
+      if (WEATHER === 'rain') {
+        const lg = g.createLinearGradient(0, 0, 0, 64);
+        lg.addColorStop(0, 'rgba(255,255,255,0)'); lg.addColorStop(0.5, 'rgba(255,255,255,0.9)'); lg.addColorStop(1, 'rgba(255,255,255,0)');
+        g.fillStyle = lg; g.fillRect(29, 0, 6, 64);
+      } else {
+        const r = g.createRadialGradient(32, 32, 1, 32, 32, 30);
+        r.addColorStop(0, 'rgba(255,255,255,1)'); r.addColorStop(0.35, 'rgba(255,255,255,0.8)'); r.addColorStop(1, 'rgba(255,255,255,0)');
+        g.fillStyle = r; g.beginPath(); g.arc(32, 32, 30, 0, 7); g.fill();
+      }
+      const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+      return t;
+    })();
     const pm = new THREE.PointsMaterial({
-      color: WEATHER === 'rain' ? 0x9db8d8 : 0xffffff,
-      size: WEATHER === 'rain' ? 0.055 : 0.12,
-      transparent: true, opacity: WEATHER === 'rain' ? 0.55 : 0.85,
+      color: WEATHER === 'rain' ? 0x9db8d8 : 0xffffff, map: _pt, alphaTest: 0.02,
+      size: WEATHER === 'rain' ? 0.22 : 0.15,
+      transparent: true, opacity: WEATHER === 'rain' ? 0.5 : 0.9,
       sizeAttenuation: true, depthWrite: false });
     precip = new THREE.Points(pg, pm);
     precip.frustumCulled = false;

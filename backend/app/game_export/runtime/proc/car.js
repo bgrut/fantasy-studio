@@ -436,7 +436,7 @@ export function buildCarHQ(cp, T = {}) {
     const x = xAt(t), y = lerp(bottom(t), top(t), yFrac);
     return new THREE.Vector3(x, y, zFrac * half(t));
   };
-  const lampG = [], tailG = [], trimG = [], mirG = [], plateG = [], chromeG = [], lensG = [], tailHotG = [], lampAt = [];
+  const lampG = [], tailG = [], trimG = [], mirG = [], plateG = [], chromeG = [], lensG = [], tailHotG = [], lampAt = [], repG = [];
   // A FACE ON THE CAR (2026-10-02): the lamps and grille were placed by
   // formula and sank inside the rounded nose, so the front was a blank bar
   // of soap. They are laid on the skin itself now: a ray from in front finds
@@ -504,6 +504,33 @@ export function buildCarHQ(cp, T = {}) {
     }
     if (pts.length > 4) chromeG.push(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 40, 0.009, 5, false));
   }
+  // SMALL THINGS A CAR HAS (2026-10-05): an amber repeater on each front
+  // wing, a fuel cap on one rear quarter, an aerial at the back of the roof,
+  // and a dark diffuser with fins under the rear bumper
+  const sideHit = (t, y, sz) => {
+    _ray.set(new THREE.Vector3(xAt(t), y, sz * (Wd + 1)), new THREE.Vector3(0, 0, -sz));
+    const h = _ray.intersectObject(_bodyProbe, false)[0];
+    if (!h) return null;
+    const n = h.face.normal.clone(); if (n.z * sz < 0) n.negate();
+    return { p: h.point, n };
+  };
+  for (const sz of [1, -1]) {
+    const rh = sideHit(0.2, yb + bodyH * 0.62, sz);
+    if (rh) { const rp = new THREE.CapsuleGeometry(0.018, 0.07, 3, 8); rp.rotateZ(Math.PI / 2); rp.rotateY(Math.PI / 2); repG.push(seat(rp, rh, -0.004)); }
+  }
+  const fh = sideHit(0.8, yb + bodyH * 0.72, 1);
+  if (fh) { const fc = new THREE.CylinderGeometry(0.07, 0.07, 0.012, 20); fc.rotateZ(Math.PI / 2); trimG.push(seat(fc, fh, 0.002)); }
+  {
+    const at = xAt(Math.max(blTop - 0.04, wsTop + 0.1));
+    const ae = new THREE.CylinderGeometry(0.004, 0.007, 0.42, 6); ae.rotateZ(0.35 * Math.sign(xAt(1) - xAt(0)));
+    ae.translate(at, roofY + 0.2, -Wd * 0.18); trimG.push(ae);
+    const ab = new THREE.CylinderGeometry(0.018, 0.022, 0.03, 10); ab.translate(at, roofY + 0.01, -Wd * 0.18); trimG.push(ab);
+  }
+  {
+    const dx = xAt(0.985), dw = half(0.97) * 1.2;
+    const df = new THREE.BoxGeometry(0.22, 0.03, dw); df.translate(dx, bottom(0.97) + 0.03, 0); trimG.push(df);
+    for (let k = -2; k <= 2; k++) { const fin = new THREE.BoxGeometry(0.2, 0.07, 0.014); fin.translate(dx, bottom(0.97) + 0.065, k * dw * 0.18); trimG.push(fin); }
+  }
   // the grille: a dark opening low in the nose, slatted, and the plates
   const gh = onEnd(true, yb + bodyH * 0.36, 0);
   if (gh) {
@@ -537,6 +564,11 @@ export function buildCarHQ(cp, T = {}) {
   const lens = new THREE.Mesh(mergeGeometries(lensG, false), new THREE.MeshPhysicalMaterial({ color: 0xffffff, roughness: 0.02, metalness: 0.0,
     transmission: 0.0, transparent: true, opacity: 0.35, clearcoat: 1.0, depthWrite: false }));
   lens.userData.noShadow = 1; lens.name = 'lampLenses'; lens.renderOrder = 2; g.add(lens);
+  if (repG.length) {
+    const rp = new THREE.Mesh(mergeGeometries(repG.map(q => q.index ? q.toNonIndexed() : q), false),
+      new THREE.MeshStandardMaterial({ color: 0xffa020, emissive: 0xff8a10, emissiveIntensity: 0.45, roughness: 0.2 }));
+    rp.userData.noShadow = 1; rp.name = 'repeaters'; g.add(rp);
+  }
   if (tailHotG.length) {
     const th2 = new THREE.Mesh(mergeGeometries(tailHotG.map(q => q.index ? q.toNonIndexed() : q), false),
       new THREE.MeshBasicMaterial({ color: 0xff3a2a, toneMapped: false }));

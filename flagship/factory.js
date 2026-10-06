@@ -4587,6 +4587,41 @@ function buildFarWorlds() {
     body.add(edges);
     body.rotation.set(0.5 + k, 0.7 * k, 0.3);
     g.add(body);
+    // EACH ONE LOOKS LIKE ITSELF (2026-10-05): a cinder world sheds glowing
+    // shards, a frozen one grows ice spires, a green one is tufted over, the
+    // void wears a ring; read across the sky before the name is
+    const dress = new THREE.Group(); dress.name = 'dress';
+    const glowM = (c, o) => new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: o, fog: false });
+    if (w.fam === 'warm') {
+      for (let q = 0; q < 14; q++) {
+        const sh = new THREE.Mesh(new THREE.TetrahedronGeometry(2.4 + (q % 3), 0), glowM(q % 2 ? 0xff7a2a : 0xffc04a, open ? 0.95 : 0.4));
+        const a = q / 14 * Math.PI * 2, r = 30 + (q % 4) * 3;
+        sh.position.set(Math.cos(a) * r, Math.sin(q * 1.7) * 10, Math.sin(a) * r); sh.userData.orbit = [a, r, 0.12 + (q % 3) * 0.04];
+        dress.add(sh);
+      }
+    } else if (w.fam === 'cold') {
+      for (let q = 0; q < 9; q++) {
+        const sp = new THREE.Mesh(new THREE.OctahedronGeometry(3, 0), new THREE.MeshStandardMaterial({ color: 0xe6f4ff, emissive: 0x9fd8ff,
+          emissiveIntensity: open ? 0.5 : 0.15, roughness: 0.15, metalness: 0.1, fog: false, transparent: true, opacity: 0.92 }));
+        sp.scale.set(0.7, 3 + (q % 3), 0.7);
+        sp.position.set((q % 3 - 1) * 12, 22 + (q % 3) * 4, (Math.floor(q / 3) - 1) * 12);
+        body.add(sp);
+      }
+    } else if (w.fam === 'green') {
+      for (let q = 0; q < 16; q++) {
+        const tf = new THREE.Mesh(new THREE.IcosahedronGeometry(4 + (q % 3) * 1.4, 0), new THREE.MeshStandardMaterial({ color: q % 2 ? 0x4f9a52 : 0x6fb85a,
+          emissive: 0x2a6a2c, emissiveIntensity: open ? 0.35 : 0.08, roughness: 0.9, flatShading: true, fog: false }));
+        tf.position.set((q % 4 - 1.5) * 9, 21, (Math.floor(q / 4) - 1.5) * 9);
+        body.add(tf);
+      }
+    } else {
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(42, 1.6, 8, 64), glowM(0x9fd8ff, open ? 0.75 : 0.25));
+      ring.rotation.set(1.2, 0.3, 0); ring.name = 'ring';
+      const ring2 = new THREE.Mesh(new THREE.TorusGeometry(50, 0.6, 6, 64), glowM(0x7f9fff, open ? 0.5 : 0.15));
+      ring2.rotation.set(1.25, 0.25, 0);
+      dress.add(ring, ring2);
+    }
+    g.add(dress);
     // a soft halo of its own light
     const cv = document.createElement('canvas'); cv.width = cv.height = 128;
     const hx = cv.getContext('2d'), gr = hx.createRadialGradient(64, 64, 4, 64, 64, 64);
@@ -4612,12 +4647,18 @@ function spinFarWorlds(dt) {
   for (const g of farWorlds.children) {
     const b = g.getObjectByName('body');
     if (b) { b.rotation.y += dt * g.userData.spin; b.rotation.x += dt * g.userData.spin * 0.4; }
+    const dr = g.getObjectByName('dress');
+    if (dr) for (const o of dr.children) {
+      if (o.userData.orbit) { const ob = o.userData.orbit; ob[0] += dt * ob[2];
+        o.position.x = Math.cos(ob[0]) * ob[1]; o.position.z = Math.sin(ob[0]) * ob[1]; o.rotation.x += dt; o.rotation.y += dt * 0.7; }
+      else if (o.name === 'ring') o.rotation.z += dt * 0.08;
+    }
   }
 }
 let _farKey = '';
 function refreshFarWorlds() {
   // rebuilt only when what it shows changes: where you are, what is open
-  const key = worldIdx + '|' + WORLDS.map(w => (CREATIVE || (cores >= w.cores && worldCapOk(w))) ? 1 : 0).join('');
+  const key = worldIdx + '|' + (typeof demandShift === 'number' ? demandShift : 0) + '|' + WORLDS.map(w => (CREATIVE || (cores >= w.cores && worldCapOk(w))) ? 1 : 0).join('');
   if (key !== _farKey) { _farKey = key; buildFarWorlds(); }
 }
 
@@ -4630,8 +4671,25 @@ function refreshFarWorlds() {
 // flares when it lands. What a world wanted pays LAUNCH_PREMIUM times; the
 // rest of the payload sells at four-fifths, the freight taken out of it.
 const PAYLOAD = 10, LAUNCH_PREMIUM = 1.75, LAUNCH_SECS = 4.2;
-const WANT_OF_FAM = () => ({ warm: INGOT_S, cold: INGOT_E, green: INGOT, void: ALLOY });
-const wantOf = w => WANT_OF_FAM()[w.fam];
+// DEMAND MOVES (2026-10-05): what each world is short of shifts every few
+// minutes, round the four refined goods, so a launch is a choice made now:
+// the board says where each one wants to send, and a silo full of the right
+// thing is worth waiting for. Each world starts on its own family's want.
+const WANT_LIST = () => [INGOT_S, INGOT_E, INGOT, ALLOY];
+const WANT_HOME = { warm: 0, cold: 1, green: 2, void: 3 };
+const DEMAND_EVERY = 180;
+let demandShift = 0, demandClock = 0;
+const wantOf = w => (WANT_HOME[w.fam] === undefined ? null : WANT_LIST()[(WANT_HOME[w.fam] + demandShift * (1 + (WANT_HOME[w.fam] % 2))) % 4]);
+function stepDemand(dt) {
+  if (CITY || intro > 0 || !UNLOCKED.launch) return;
+  demandClock += dt;
+  if (demandClock < DEMAND_EVERY) return;
+  demandClock = 0; demandShift++;
+  try { refreshFarWorlds(); } catch (e) {}
+  const lines = WORLDS.filter((w, k) => k !== worldIdx && wantOf(w)).map(w => w.name + ' ' + contractName(wantOf(w), 2));
+  const t = document.getElementById('toast');
+  if (t) { t.textContent = WORD('THE MARKETS IN THE SKY SHIFTED. Wanted now: ' + lines.join(', ') + '.'); t.classList.add('on'); toastAt = 6; }
+}
 var _LAUNCH_GEO = null, _LAUNCH_MAT = null;
 function launchGeo() {
   if (_LAUNCH_GEO) return _LAUNCH_GEO;
@@ -8244,6 +8302,7 @@ renderer.setAnimationLoop(() => {
   drawWrist(_rdt);
   spinFarWorlds(_rdt);
   updateLaunches(dt);
+  stepDemand(dt);
   if (!CITY) stepWorksShow(dt);
   stepHint(dt);
   if (!CITY) stepDrone(dt);
@@ -9239,6 +9298,7 @@ window.__factory = {
                    flying: flights.length, carrying: flights.reduce((s, f) => s + f.load.length, 0), delivered: dronesDelivered, crafts: crafts.size,
                    air: flights.map(f => { const cr = crafts.get(f.from.c); return cr ? { pos: cr.g.position.toArray(), loaded: f.load.length, back: f.back } : null; }).filter(Boolean) }),
   DRONEPAD, SILO, SILO_CAP, LAUNCHER, PAYLOAD,
+  shiftDemand: () => { demandClock = DEMAND_EVERY; stepDemand(0); return WORLDS.map(w => wantOf(w)); },
   launches: () => ({ flying: launches.length, landed: launchesLanded, paid: Math.round(launchPaid),
                      pads: (() => { const o = []; eachTile((c, f, i, j) => { if (c.t === LAUNCHER) o.push({ f, i, j, n: c.pq ? c.pq.length : 0, away: !!c.away }); }); return o; })() }),
   silos: () => { const out = []; eachTile((c, f, i, j) => { if (c.t === SILO) out.push({ f, i, j, n: c.buf, kind: c.bt, hold: !!c.rr }); }); return out; },
