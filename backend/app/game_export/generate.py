@@ -122,6 +122,9 @@ def _classify_with_ollama(kind: str) -> str | None:
     return None
 
 
+import re as _re_kw
+
+
 def guess_pattern(kind: str) -> str:
     k = (kind or "").lower()
     _wk = k.split()
@@ -140,14 +143,20 @@ def guess_pattern(kind: str) -> str:
     # and a king cobra a snake, while a zombie pirate is still a pirate
     if _wk and _wk[-1] in _BIPED:
         return "biped"
-    if any(w in k for w in _FLYING):
+    # A KEYWORD ENDS A WORD (2026-10-06): substring matching made a carrot a
+    # vehicle ("car"), a bush a bus, a scarecrow a car, and its reference image
+    # was an orange hatchback that the gardener collected ten of. A keyword
+    # now has to end a word (bulldog is still a dog, carrot is not a car);
+    # anything no list knows goes to the classifier below, as before.
+    _ends = lambda w: _re_kw.search(r"\b" + _re_kw.escape(w) + r"(?:s|es)?\b", k) is not None   # whole words: a dandelion is not a lion
+    if any(_ends(w) for w in _FLYING):
         return "flying"                   # fly mode; static mesh + hover (wing
         #                                   flap rig is the Phase 20 flying module)
-    if any(w in k for w in _AQUATIC):
+    if any(_ends(w) for w in _AQUATIC):
         return "aquatic"                  # swim mode
-    if any(w in k for w in _QUADRUPED):
+    if any(_ends(w) for w in _QUADRUPED):
         return "quadruped"
-    if any(w in k for w in _VEHICLE):
+    if any(_ends(w) for w in _VEHICLE):
         return "vehicle"
     # keyword lists are the fast path; UNKNOWN kinds ask Ollama how the thing
     # moves (cached) — a whale must never be rigged like a person again

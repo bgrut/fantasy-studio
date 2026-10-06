@@ -155,7 +155,10 @@ class EntitySpec(BaseModel):
     # waits when the player falls behind, and can be killed — the most common
     # mission shape in open-world games: protect someone who moves.
     behavior: Literal["static", "wander", "follow", "hostile", "vehicle",
-                      "flee", "guard", "guide", "escort", "suspect"] = "wander"
+                      "flee", "guard", "guide", "escort", "suspect", "customer"] = "wander"
+    # customer (2026-10-06): a service game's patron. Walks in, queues at the
+    # counter with an order over their head, waits as long as their patience
+    # lasts, and leaves happy (to a table) or not (out of the door).
     # suspect (2026-09-29): a mystery's person of interest. Stands where the
     # scene put them, answers when questioned (E), and can be named (Y).
     # role: who a person IS in the story ("the butler"), shown over their head
@@ -181,7 +184,9 @@ class ObjectiveSpec(BaseModel):
     the clues of the collect step before it."""
     kind: Literal["collect", "defeat", "reach", "race", "survive",
                   "eliminate", "score", "hunt", "capture", "escort",
-                  "defend", "accuse"] = "collect"
+                  "defend", "accuse", "serve"] = "collect"
+    # serve (2026-10-06): a service game. `count` orders filled for the
+    # customers at the counter, each brewed at its station first.
     label: str = "stars"
     count: int = Field(5, ge=1, le=600)   # survive: SECONDS to hold out (waves escalate)
     asset: Optional[str] = None   # collect steps: generated mesh spawned instead of the orb

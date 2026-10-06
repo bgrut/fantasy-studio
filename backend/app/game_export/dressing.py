@@ -15,6 +15,7 @@ from __future__ import annotations
 import json
 import zlib
 import random
+import re
 from pathlib import Path
 
 PROPS_DIR = Path(__file__).resolve().parents[2] / "assets" / "props"
@@ -237,6 +238,21 @@ _SIG_PIRATE = [
     (["pr_grass-patch", "pr_grass-plant"], 24, 2, 1.6),
 ]
 
+# A GARDEN IS NOT A MARKET SQUARE (2026-10-06): a cartoon vegetable garden
+# took the cartoon signature (carts, fountains, banners) and the plain's dark
+# forest. The runtime lays the plot out itself (beds, fence, shed); round it
+# go the things a garden has lying about: hay, pumpkins, pots, flowers, a log
+# pile, a few trees at the edge and hedging.
+_SIG_GARDEN = [
+    (["gy_hay-bale", "gy_hay-bale-bundled"], 5, 1, 1.6),
+    (["gy_pumpkin", "gy_pumpkin-tall"], 9, 2, 1.0),
+    (["k_pot_large", "k_pot_small"], 8, 2, 1.0),
+    (["k_log_stack"], 3, 1, 1.8),
+]
+_GARDEN_RECIPE = [(_T_BROAD, 12, 2, 4.5), (_BUSH, 30, 3, 2.2),
+                  (_FLOWER, 46, 4, 1.7), (_GRASS, 24, 3, 2.2),
+                  (_ROCK_S, 8, 1, 1.4)]
+
 _STYLE_SIGNATURE = {
     "noir": _SIG_GRAVE, "storybook": _SIG_GRAVE, "horror": _SIG_GRAVE,
     "kawaii": _SIG_TOWN, "watercolor": _SIG_TOWN, "comic": _SIG_TOWN,
@@ -313,8 +329,11 @@ def game_scatter(setting: str | None, archetype: str | None = None,
             return []
         rec = [(p, n, v, 1.0) for p, n, v in legacy]
     rnd = random.Random(seed)
+    _garden = arch == "plain" and bool(re.search(r"\b(gardens?|allotments?|veg(?:etable|gie)? (?:patch|plot))\b", (setting or "").lower()))
+    if _garden and table is _ARCH_RECIPES:
+        rec = _GARDEN_RECIPE
     # the style's own furniture, on top of whatever the landform grows
-    rec = list(rec) + list(_STYLE_SIGNATURE.get((style or "").lower(), []))
+    rec = list(rec) + list(_SIG_GARDEN if _garden else _STYLE_SIGNATURE.get((style or "").lower(), []))
     out = []
     for entry in rec:
         pool, game_n, _v, scale = entry

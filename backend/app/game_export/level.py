@@ -730,13 +730,18 @@ def build_interior(seed: int, kind: str = "castle") -> dict:
     import random as _random
     rng = _random.Random(seed * 31 + 7)
     H = 4.2 if kind in ("castle",) else 5.0 if kind == "mall" else 4.0 if kind == "lab" \
-        else 3.4 if kind in ("hospital", "school") else 3.0   # wall height (m)
+        else 3.4 if kind in ("hospital", "school") else 3.6 if kind == "cafe" else 3.0   # wall height (m)
     T = 0.5                                          # wall thickness
     rooms = []                                       # [cx, cz, w, d]
     # PER-KIND LAYOUT (2026-07-23: 'the viking dungeon was the same style as
     # the mansion') — a castle is a grand pillared hall, a house is cosy
     # small rooms, a dungeon is a long narrow corridor-hall with cells.
-    if kind in ("hospital", "school"):
+    if kind == "cafe":
+        # A CAFE (2026-10-06): one warm room, the counter across the back with
+        # the brewing stations behind it, tables in the front half
+        hall_w = rng.uniform(13, 15)
+        hall_d = rng.uniform(13, 15)
+    elif kind in ("hospital", "school"):
         # A HOSPITAL OR A SCHOOL (2026-10-05) is a corridor with rooms off
         # both sides: wards, or classrooms. Wider than a dungeon's spine and
         # lit like daytime.
@@ -782,6 +787,8 @@ def build_interior(seed: int, kind: str = "castle") -> dict:
         n_side = 6 + 2 * (seed % 2)
     elif kind == "lab":
         n_side = 2 + (seed % 2)
+    elif kind == "cafe":
+        n_side = 0
     for k in range(n_side):
         side = 1 if k % 2 == 0 else -1
         if kind in ("hospital", "school"):           # a ward or a classroom
@@ -881,9 +888,10 @@ def build_interior(seed: int, kind: str = "castle") -> dict:
         "hospital": ["crate", "table", "chair"],
         "school": ["bookshelf", "crate", "table"],
         "lab": ["crate", "bookshelf", "crate"],
-    }[kind if kind in ("castle", "house", "dungeon", "office", "shop", "mall", "hospital", "school", "lab") else "castle"]
+        "cafe": [],
+    }[kind if kind in ("castle", "house", "dungeon", "office", "shop", "mall", "hospital", "school", "lab", "cafe") else "castle"]
     furniture = []
-    for cx, cz, rw, rd in (rooms[1:] if kind in ("mall", "hospital", "school", "lab") else rooms):   # a concourse stays clear to walk
+    for cx, cz, rw, rd in ([] if kind == "cafe" else rooms[1:] if kind in ("mall", "hospital", "school", "lab") else rooms):   # a concourse stays clear to walk
         for name in rng.sample(FURN, k=min(1 if kind in ("hospital", "school", "lab") else 3, len(FURN))):
             fx = cx + rng.uniform(-rw / 2 + 1.2, rw / 2 - 1.2)
             fz = cz + rng.uniform(-rd / 2 + 1.2, rd / 2 - 1.2)
@@ -1166,7 +1174,7 @@ def _finish_city(place: str, blds: list[dict], roads: list[dict], half: float,
 
 
 def build_proc_city(seed: int, size_m: float, place: str = "city",
-                    max_buildings: int = 500) -> dict | None:
+                    max_buildings: int = 500, town: bool = False) -> dict | None:
     """A district with no network, in build_osm_city's shape. A jittered grid
     of avenues (12 m) and streets (8 m); every block cut into lots along its
     long side; heights fall from a tall core to low edges; one lot in eight is
@@ -1191,16 +1199,20 @@ def build_proc_city(seed: int, size_m: float, place: str = "city",
                 break
             out.append(x)
         return sorted(out)
-    xs = lines(52.0, 6.0)                          # avenues run north-south (constant x)
-    zs = lines(42.0, 5.0)                          # streets run east-west (constant z)
+    # A TOWN IS NOT A CITY (2026-10-06): "cats explore a cozy town" stood in
+    # a core of glass towers. A small town is narrow lanes, small lots, and
+    # houses and shops of two or three storeys, one taller building (a church,
+    # a town hall) here and there; no core, no curtain walls.
+    xs = lines(34.0 if town else 52.0, 4.0 if town else 6.0)   # avenues run north-south (constant x)
+    zs = lines(28.0 if town else 42.0, 3.5 if town else 5.0)   # streets run east-west (constant z)
     roads = []
     for x in xs:
-        roads.append({"pts": [(round(x, 1), round(-ext, 1)), (round(x, 1), round(ext, 1))], "w": 12.0 if abs(x) < 1.0 else 9.0})
+        roads.append({"pts": [(round(x, 1), round(-ext, 1)), (round(x, 1), round(ext, 1))], "w": (7.0 if abs(x) < 1.0 else 6.0) if town else (12.0 if abs(x) < 1.0 else 9.0)})
     for z in zs:
-        roads.append({"pts": [(round(-ext, 1), round(z, 1)), (round(ext, 1), round(z, 1))], "w": 12.0 if abs(z) < 1.0 else 8.0})
+        roads.append({"pts": [(round(-ext, 1), round(z, 1)), (round(ext, 1), round(z, 1))], "w": (7.0 if abs(z) < 1.0 else 5.5) if town else (12.0 if abs(z) < 1.0 else 8.0)})
     # blocks between the lines, inset by half a road plus a sidewalk
     blds = []
-    uses = ["commercial", "residential", "retail", "office", "apartments"]
+    uses = ["residential", "residential", "house", "retail", "shop"] if town else ["commercial", "residential", "retail", "office", "apartments"]
     for i in range(len(xs) - 1):
         for j in range(len(zs) - 1):
             x0, x1 = xs[i] + 5.0 + 3.0, xs[i + 1] - 5.0 - 3.0
@@ -1216,7 +1228,7 @@ def build_proc_city(seed: int, size_m: float, place: str = "city",
             length = bw if along_x else bd
             depth = bd if along_x else bw
             rows = 2 if depth >= 26 else 1
-            n = max(1, min(7, int(round(length / rnd.uniform(11.0, 17.0)))))
+            n = max(1, min(9 if town else 7, int(round(length / (rnd.uniform(6.5, 9.5) if town else rnd.uniform(11.0, 17.0))))))
             gap = 2.0
             lot = (length - gap * (n - 1)) / n
             row_d = (depth - 4.0) / 2 if rows == 2 else depth
@@ -1233,13 +1245,17 @@ def build_proc_city(seed: int, size_m: float, place: str = "city",
                     px0, px1, pz0, pz1 = x0 + a0, x0 + a1, z0 + d0 + inset, z0 + d1 - inset
                 else:
                     px0, px1, pz0, pz1 = x0 + d0 + inset, x0 + d1 - inset, z0 + a0, z0 + a1
-                if d < 0.30:
+                if town:
+                    h = rnd.uniform(6.5, 11.0)              # two or three storeys
+                    if rnd.random() < 0.04:
+                        h = rnd.uniform(14.0, 18.0)          # the church, the town hall
+                elif d < 0.30:
                     h = rnd.uniform(28.0, 72.0)
                 elif d < 0.62:
                     h = rnd.uniform(12.0, 32.0)
                 else:
                     h = rnd.uniform(6.0, 15.0)
-                if rnd.random() < 0.08:
+                if not town and rnd.random() < 0.08:
                     h *= 1.6                         # a landmark tower here and there
                 pts = [(round(px0, 1), round(pz0, 1)), (round(px1, 1), round(pz0, 1)),
                        (round(px1, 1), round(pz1, 1)), (round(px0, 1), round(pz1, 1))]
@@ -1266,4 +1282,4 @@ def build_proc_city(seed: int, size_m: float, place: str = "city",
             dense.append([round(ax + (bx - ax) * k / n, 1), round(az + (bz - az) * k / n, 1)])
     dense.append([round(route[-1][0], 1), round(route[-1][1], 1)])
     return {"place": place or "city", "buildings": blds[:max_buildings], "roads": roads,
-            "route": dense, "procedural": True}
+            "route": dense, "procedural": True, "town": bool(town)}

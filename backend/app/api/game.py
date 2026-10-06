@@ -230,6 +230,11 @@ _DESTINATION = _fre.compile(
     r"(bakery|brewery|distillery|sawmill|cannery|shipyard|windmill|watermill|factory|foundry|refinery)\b", _fre.I)
 
 
+# A SERVICE GAME (2026-10-06): brewing or cooking for customers at a counter
+SERVICE_RE = (r"\b(barista|caf[e\u00e9]s?|coffee ?(?:shop|house|bar|cart)|tea ?(?:room|shop|house)|"
+              r"diner|bistro|restaurant|food ?truck|waiter|waitress|bartender|"
+              r"serve (?:the )?(?:customers|orders|drinks|food|coffee))\b")
+
 def _reads_as_factory(prompt: str) -> bool:
     p = prompt or ""
     hits = [m.group(0).lower() for m in _FACTORY_WORDS.finditer(p)]
@@ -936,6 +941,84 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                         f"city builder: lay roads, zone homes, shops and works, and grow the {_noun} to {_tgt} people")
             except Exception as _ce:
                 job.setdefault("notes", []).append(f"city rule skipped: {_ce}")
+            # A SUPERHERO FLIES (2026-10-06): "a superhero game: fly over the
+            # city at night and stop the robbers" came out as an explorer on foot
+            # with a pistol, no robbers, and "reach the robbers". The hero is a
+            # superhero who flies; the robbers are people who run when they see
+            # you coming; stopping one is landing a blow (F).
+            try:
+                import re as _hre
+                _hp = (req.prompt or "").lower()
+                if _hre.search(r"\b(super ?hero(?:es|ine)?|superpowers?|caped (?:crusader|hero)|vigilante|crime[- ]?fighter)\b", _hp) \
+                        and getattr(spec, "genre", "") != "factory":
+                    from app.game_export.spec import ObjectiveSpec as _HOS, EntitySpec as _HES
+                    spec.player.name = "superhero"
+                    spec.player.asset = ""
+                    spec.player.mode = "fly"
+                    spec.player.walk_speed = max(spec.player.walk_speed, 7.0)
+                    spec.player.run_speed = max(spec.player.run_speed, 16.0)
+                    _bad = _hre.search(r"\b(robbers?|thieves|thief|criminals?|crooks?|bandits?|villains?|henchmen|gangsters?|muggers?)\b", _hp)
+                    _bw = _bad.group(1) if _bad else "robbers"
+                    _bw = _bw if _bw.endswith("s") or _bw.endswith("men") else ("thieves" if _bw == "thief" else _bw + "s")
+                    _nm = _hre.search(r"\b(\d+|two|three|four|five|six)\s+" + _bw[:4], _hp)
+                    _words = {"two": 2, "three": 3, "four": 4, "five": 5, "six": 6}
+                    _n = (_words.get(_nm.group(1)) or int(_nm.group(1))) if _nm and (_nm.group(1) in _words or _nm.group(1).isdigit()) else 4
+                    _n = max(2, min(_n, 8))
+                    spec.entities = [e for e in spec.entities if e.behavior not in ("hostile", "flee", "guard")]
+                    spec.entities.append(_HES(name="thug", behavior="flee", count=_n, speed=3.4, hp=1, height_m=1.75))
+                    spec.objectives = [_HOS(kind="defeat", label=_bw, count=_n)]
+                    job.setdefault("notes", []).append(f"superhero: you fly; {_n} {_bw} run when they see you; stop them with F")
+            except Exception as _he:
+                job.setdefault("notes", []).append(f"superhero rule skipped: {_he}")
+            # A CAFE SERVES PEOPLE (2026-10-06): "a barista game: brew coffee
+            # orders for customers" read as a production chain and became the
+            # crystal worldlet. Brewing for a customer at a counter is a
+            # service game; it is never the factory.
+            try:
+                import re as _sre
+                if _sre.search(SERVICE_RE, (req.prompt or "").lower()):
+                    _named_genre = True
+                    # the planner's "collect N orders" is replaced by the serve
+                    # step later; drop it now so no mesh is generated for it
+                    from app.game_export.extractor import MYSTERY_WORDS as _MYW3
+                    if not _sre.search(_MYW3, (req.prompt or "").lower()):
+                        spec.objectives = [o for o in spec.objectives if o.kind != "collect"]
+                    if getattr(spec, "genre", "") == "factory":
+                        spec.genre = "adventure"
+                        spec.theme = None
+                        job.setdefault("notes", []).append("genre held to adventure: a cafe serves customers, it is not a production line")
+                    # the one behind the counter is dressed for it (2026-10-06):
+                    # "a barista game" was played by the stock woman in a crop top
+                    _staff = _sre.search(r"\b(barista|waiter|waitress|bartender|chef|baker)\b", (req.prompt or "").lower())
+                    _sw = _staff.group(1) if _staff else "barista"
+                    if (spec.player.name or "").lower() != _sw:
+                        spec.player.name = _sw
+                        spec.player.asset = ""
+                        job.setdefault("notes", []).append(f"hero: the {_sw}, in the clothes of the job")
+            except Exception:
+                pass
+            # A GARDEN HAS NO DEER IN IT (2026-10-06): "a cute cartoon gardener
+            # picks carrots ... in a sunny vegetable garden" was cast three deer
+            # wandering the beds. Big wild animals the sentence never named
+            # leave a garden; if nothing is left pottering about, a cat is.
+            try:
+                import re as _gre
+                _gp = (req.prompt or "").lower()
+                if _gre.search(r"\b(gardens?|gardener|gardening|allotments?|veg(?:etable|gie)? (?:patch|plot))\b", _gp) \
+                        and not _gre.search(r"\b(zen|rock|beer|sky|underwater|coral|japanese|palace|botanical) gardens?\b", _gp):
+                    _BIG = ("deer", "elk", "moose", "horse", "bear", "wolf", "boar", "gazelle", "tiger", "gorilla", "stag")
+                    _kept = [e for e in spec.entities
+                             if not (e.behavior in ("wander", "follow", "flee")
+                                     and any(_gre.search(r"\b" + b + r"s?\b", (e.name or "").lower()) for b in _BIG)
+                                     and not _gre.search(r"\b" + _gre.escape((e.name or "").lower()) + r"s?\b", _gp))]
+                    if len(_kept) != len(spec.entities):
+                        job.setdefault("notes", []).append("garden: the wild animals the prompt never named were left out")
+                    spec.entities = _kept
+                    if not any(e.behavior == "wander" for e in spec.entities):
+                        from app.game_export.spec import EntitySpec as _GES
+                        spec.entities.append(_GES(name="cat", behavior="wander", count=1, speed=1.1, height_m=0.32))
+            except Exception as _ge:
+                job.setdefault("notes", []).append(f"garden rule skipped: {_ge}")
             if _reads_as_factory(req.prompt) and not _named_genre and getattr(spec, "genre", "") != "factory":
                 spec.genre = "factory"
                 job.setdefault("notes", []).append(
@@ -1500,8 +1583,15 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             _unknown_human = (bool(_w) and library.resolve(_w) is None
                               and not ensure_playable(_w, verbose=False)
                               and guess_pattern(_w) == "biped")
+            # A ROLE WITH ITS OWN OUTFIT IS MADE (2026-10-06): "a superhero"
+            # was recast as the explorer in safari khaki because no superhero
+            # was in the library; a role the reference generator can dress is
+            # generated (once) instead of handed a stand-in.
+            _dressable = _w in ("superhero", "barista", "gardener", "chef", "nurse", "farmer", "pilot",
+                                "waiter", "waitress", "bartender", "baker",
+                                "sailor", "fisherman", "miner", "mechanic", "astronaut", "pirate", "ninja")
             if (_w in _GENERIC_HUMAN | {"hero", "protagonist", "player", "you", "someone", "stranger", "visitor"} or _unknown_human) \
-                    and spec.style not in _FLAT_LOOKS:
+                    and spec.style not in _FLAT_LOOKS and not _dressable:
                 _pw = (req.prompt or "").lower()
                 _ROLES = [
                     # a sports sentence is about its sport: "score three goals against a
@@ -1516,6 +1606,8 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                     (r"\b(viking|norse|fjord|longship|raid)", "viking"),
                     (r"\b(samurai|shogun|dojo|ronin)", "samurai"),
                     (r"\b(lighthouse|harbour|harbor|coast|shore|storm|sea|island|lantern|beacon)", "keeper"),   # 2026-09-28: generated once, cast by the sea's words since
+                    # a cafe's barista, a diner's waitress: not an explorer in safari khaki (2026-10-06)
+                    (r"\b(barista|caf[eé]|coffee|diner|bistro|restaurant|waiter|waitress|bartender|baker|bakery)", "woman"),
                 ]
                 import re as _re4                      # _re3 is imported further down
                 # a role the sentence names outright is that role, whatever
@@ -1947,6 +2039,11 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
 
         _KIN = {"crocodile": "snake", "alligator": "snake", "gator": "snake", "lizard": "snake", "komodo": "snake", "eel": "snake", "serpent": "snake",
                 "hyena": "wolf", "jackal": "wolf", "coyote": "wolf", "dingo": "wolf", "hound": "dog", "puppy": "dog",
+                # A BUNNY IS NOT A DEER (2026-10-06): the garden's bunny went to the
+                # quadruped fallback and three deer grazed the carrot beds; a small
+                # animal is stood in for by a small one
+                "bunny": "cat", "rabbit": "cat", "hare": "cat", "squirrel": "cat", "hedgehog": "cat",
+                "chipmunk": "cat", "raccoon": "cat", "ferret": "cat", "guinea pig": "cat", "hamster": "cat",
                 "panther": "tiger", "leopard": "tiger", "jaguar": "tiger", "cougar": "tiger", "puma": "tiger", "lion": "tiger", "lynx": "cat", "kitten": "cat",
                 "ape": "gorilla", "chimp": "monkey", "chimpanzee": "monkey", "baboon": "monkey", "lemur": "monkey",
                 "bison": "moose", "buffalo": "moose", "ox": "moose", "yak": "moose", "stag": "deer", "doe": "deer", "reindeer": "elk", "caribou": "elk", "antelope": "gazelle",
@@ -2425,14 +2522,18 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         # MISSION SANITY: defeat steps need hostiles that actually resolved.
         # Clamp counts to what exists; drop unwinnable steps with a note.
         total_hostiles = sum(e.count for e in spec.entities if e.behavior == "hostile")
+        # (robbers who run are caught, not fought: a defeat step counts the
+        # people who flee too, as a hunt counts its prey)
+        total_quarry = total_hostiles + sum(e.count for e in spec.entities if e.behavior == "flee")
         sane = []
         for ob in spec.objectives:
             if ob.kind in ("defeat", "eliminate"):
-                if total_hostiles <= 0:
+                _have = total_quarry if ob.kind == "defeat" else total_hostiles
+                if _have <= 0:
                     job.setdefault("notes", []).append(
                         f"'defeat {ob.label}' dropped: no enemies could be cast")
                     continue
-                ob.count = min(ob.count, total_hostiles)
+                ob.count = min(ob.count, _have)
             if ob.kind == "hunt":
                 total_prey = sum(e.count for e in spec.entities if e.behavior == "flee")
                 if total_prey <= 0:
@@ -2822,7 +2923,8 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         # never needs the word "inside" said about it. A venue that is only
         # ever a building's inside builds rooms, unless the sentence puts
         # you outside it (its car park, its roof) or names a real city.
-        _venue = _re3.search(r"\b(shopping (?:mall|cent(?:re|er)|arcade)|mall|supermarket|"
+        _cafe = _re3.search(SERVICE_RE, _pl)
+        _venue = _cafe or _re3.search(r"\b(shopping (?:mall|cent(?:re|er)|arcade)|mall|supermarket|"
                              r"department store|hospital|asylum|sanatorium|office block|prison|bunker|"
                              r"high school|school(?! of)|classroom|academy|laborator(?:y|ies)|lab|research (?:facility|station|base))\b", _pl)
         if _venue and (_re3.search(r"\b(?:outside|car ?park|parking|rooftop|roof of|street(?:s)? (?:of|around))\b", _pl)
@@ -2833,11 +2935,11 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             from app.game_export.level import build_interior
             _ik_raw = (_im.group(1) if _im else None) \
                 or (_bld.group(1) if (_heist and _bld) else None) \
-                or ({"supermarket": "shop", "department store": "mall", "hospital": "hospital",
+                or (("cafe" if _cafe else {"supermarket": "shop", "department store": "mall", "hospital": "hospital",
                      "asylum": "hospital", "sanatorium": "hospital", "office block": "office", "prison": "dungeon",
                      "bunker": "dungeon", "high school": "school", "school": "school", "classroom": "school",
                      "academy": "school"}.get(_venue.group(1),
-                     "lab" if _venue.group(1).startswith(("lab", "research")) else "mall") if _venue else None) \
+                     "lab" if _venue.group(1).startswith(("lab", "research")) else "mall")) if _venue else None) \
                 or "dungeon"
             _ik = {"mansion": "house", "cottage": "house", "home": "house",
                    "room": "house", "tavern": "house", "temple": "castle",
@@ -2878,6 +2980,25 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             spec.world.level["landmarks"] = []
             job.setdefault("notes", []).append(
                 f"interior level: {_ik}. Rooms, doorways, torchlight")
+            # a mystery or a heist that happens in a cafe keeps its own story;
+            # only a sentence about the work itself becomes a service game
+            from app.game_export.extractor import MYSTERY_WORDS as _MYW2
+            if _ik == "cafe" and not _heist and not _re3.search(_MYW2, _pl):
+                from app.game_export.spec import ObjectiveSpec as _OS, EntitySpec as _ES
+                _nm = _re3.search(r"\b(\d+)\s+(?:orders?|drinks?|coffees?|customers?|cups?)\b", _pl)
+                _n = max(3, min(int(_nm.group(1)), 30)) if _nm else 8
+                spec.objectives = [_OS(kind="serve", label="orders", count=_n)]
+                spec.entities = [e for e in spec.entities if e.behavior not in ("hostile", "guard", "wander", "follow")]
+                # the people come in after the cast was resolved to meshes, so
+                # each takes a dressed walker (or the woman) directly
+                _wl2 = BACKEND_ROOT / "assets" / "library"
+                for _who, _f in (("woman", "woman_anim.glb"), ("courier", "walker_courier.glb"),
+                                 ("detective", "walker_detective.glb"), ("woman", "woman_anim.glb")):
+                    if (_wl2 / _f).exists():
+                        spec.entities.append(_ES(name=_who, asset=str(_wl2 / _f), behavior="customer",
+                                                 count=1, speed=1.2, height_m=1.7))
+                spec.world.weather = "none"
+                job.setdefault("notes", []).append(f"service game: serve {_n} orders at the counter")
         # QUEST CHAINS (moon plan 3.1): a single-objective prompt becomes a
         # 3-step story — scout a Point of Interest, do the deed, reach the
         # beacon. The scout step is a collect(1) staged AT the POI (collect
@@ -2999,9 +3120,15 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         if is_city and not osm and not spec.world.level.get("interior"):
             from app.game_export.level import build_proc_city
             stage("laying out the district")
-            osm = build_proc_city(int(spec.seed or 0), spec.world.size_m, place or (spec.world.name or "city"))
+            # a cozy town, a village, a quaint harbour town: low and narrow
+            _pt = (req.prompt or "").lower()
+            _town = bool(_fre.search(r"\b(cozy|cosy|quaint|village|hamlet|cottages?|small town|little town|market town|"
+                                     r"seaside town|old town|storybook|cute)\b", _pt)) \
+                or (bool(_fre.search(r"\btowns?\b", _pt)) and not _fre.search(r"\b(city|cities|downtown|metropolis|skyscrapers?|neon|cyberpunk|urban)\b", _pt))
+            osm = build_proc_city(int(spec.seed or 0), spec.world.size_m, place or (spec.world.name or "city"), town=_town)
             if osm:
-                _use_city(osm, "procedural district (no map needed): avenues, streets, a tall core")
+                _use_city(osm, "procedural town (no map needed): lanes, houses and shops of two or three storeys" if _town
+                          else "procedural district (no map needed): avenues, streets, a tall core")
 
         # ── MULTI-BUILDING CITY HEIST (2026-08-05) ──────────────────────────
         # The flagship shape: a burglar working a real block. Several OSM

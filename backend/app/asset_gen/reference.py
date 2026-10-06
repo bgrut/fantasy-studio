@@ -47,7 +47,7 @@ CONTROLNET_CONDITIONING_SCALE = float(_os.environ.get("FS_CONTROLNET_SCALE", "0.
 REFERENCE_STYLES: Dict[str, Dict[str, str]] = {
     "photoreal": {
         "positive": "studio photograph, single subject centered, plain neutral background, sharp focus, even lighting, natural color, high detail",
-        "negative": "multiple subjects, busy background, blurry, cropped, partial view, watermark, text, "
+        "negative": "multiple subjects, busy background, blurry, cropped, partial view, watermark, text, logo, emblem, insignia, trademark, "
                     # anti-anatomy-artifact (fixes the 5-legs / fused-limb issue from ControlNet)
                     "extra legs, extra limbs, too many legs, fused limbs, duplicate limbs, "
                     "missing legs, deformed, mutated, malformed anatomy, disfigured, "
@@ -433,8 +433,14 @@ def _build_reference_prompt(slots: Dict[str, Any], style: str) -> tuple[str, str
     }
     species = ""
     vehicle_neg = ""
+    # WHOLE WORDS (2026-10-06): "car" in "carrot" added "modern car, clean paint
+    # job" to a vegetable's prompt and SDXL drew an orange hatchback, twice;
+    # lion/dandelion, fox/foxglove, cat/caterpillar were the same trap
+    import re as _re_h
+    _hq = " ".join((library_query or "", name or "", identity or "")).lower()
+    _whole = lambda key, text: _re_h.search(r"\b" + _re_h.escape(key) + r"(?:s|es)?\b", text) is not None
     for key, hint in species_hints.items():
-        if key in library_query or key in name or key in identity:
+        if _whole(key, _hq):
             species = hint
             break
 
@@ -491,6 +497,17 @@ def _build_reference_prompt(slots: Dict[str, Any], style: str) -> tuple[str, str
             "chef":      "chef in a white double-breasted jacket, tall toque, checked trousers",
             "nurse":     "nurse in blue scrubs, comfortable shoes, a stethoscope",
             "mechanic":  "mechanic in stained grey coveralls, a rag in the pocket, work boots",
+            # NEW KINDS OF GAME (2026-10-06): a superhero, a barista, a gardener
+            # an ORIGINAL hero (commercially safe): no chest emblem, none of the
+            # famous red-and-blue suits; the first try came out a known hero's
+            # colours with another's bat on the chest
+            "superhero": "original superhero in a sleek teal and silver armoured flight suit with glowing amber seams, a short charcoal cape, silver boots and gauntlets, plain chest with no symbol, fully clothed",
+            "barista":   "barista in a dark brown apron over a white shirt with rolled sleeves, jeans, fully clothed",
+            "waiter":    "waiter in a black waistcoat over a white shirt, a long black apron, dark trousers, fully clothed",
+            "waitress":  "waitress in a black waistcoat over a white shirt, a long black apron, dark trousers, fully clothed",
+            "bartender": "bartender in a dark waistcoat over a white shirt with rolled sleeves, dark trousers, fully clothed",
+            "baker":     "baker in a white baker's jacket and a flour-dusted apron, a white cap, fully clothed",
+            "gardener":  "gardener in denim overalls over a checked shirt, a straw sun hat, gardening gloves, rubber boots, fully clothed",
             # generic humans need CLOTHES spelled out or SDXL renders a shirtless
             # anatomy/muscle-suit figure. Order: woman/person before "man" (which
             # is a substring of "woman") so the right one matches first.
@@ -507,7 +524,7 @@ def _build_reference_prompt(slots: Dict[str, Any], style: str) -> tuple[str, str
         _has_costume = any(w in cq for w in ("robe", "armor", "armour", "staff", "hat", "cloak", "helmet", "suit", "uniform", "wings"))
         if not _has_costume:
             for key, hint in char_hints.items():
-                if key in cq:
+                if _re_h.search(r"\b" + _re_h.escape(key) + r"s?\b", cq.lower()):   # whole words: "king" is not in "viking"
                     species = hint
                     break
 
