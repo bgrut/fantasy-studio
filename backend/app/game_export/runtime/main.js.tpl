@@ -6112,6 +6112,10 @@ async function main() {
         const ki = isBush ? bushK : pickTree();
         let s = isBush ? 0.8 + rT() * 0.7 : 0.75 + rT() * 0.55;
         const y = hAt(x, z);
+        // NOT IN THE LAKE (2026-10-05): the regions said where water was
+        // planned, but a lake fills whatever ground lies under its level, and
+        // a forest grew out of it; nothing but kelp roots below the water
+        if (!BIO.underwater && WATER_Y !== null && y < WATER_Y + 0.35) continue;   // the surface as drawn, not the planner's level
         // kelp stands in the water, not through it: the tallest stalk is
         // ten metres, so in shallows it is grown shorter, and skipped where
         // there is not depth enough for a stalk at all
@@ -7596,7 +7600,7 @@ async function main() {
           const rg = window.__regionAt && window.__regionAt(x, z);
           if (rg && rg.kind === 'water' && rg.w > 0.2) d = 0;
           if (rg && (rg.kind === 'rock' || rg.kind === 'sand') && rg.w > 0.4) { d *= 0.12; dry = 0.85; }
-          if (WATER !== null && hAt(x, z) < WATER + 0.1) d = 0;
+          if (WATER_Y !== null && hAt(x, z) < WATER_Y + 0.1) d = 0;   // (the planner's WATER can stand over the whole meadow)
           return [d, dry, h];
         };
         GRASS_LIVE = __GRASS.plantGrass({
@@ -7658,7 +7662,7 @@ async function main() {
                                 : [0x7a5a32, 0x6b6a34, 0x8c6a3c, 0x5c6b2e].map(h => new THREE.Color(h));
         const keepOut = (x, z, kind) => {
           if (inBldg(x, z, 0.3)) return true;
-          if (WATER !== null && hAt(x, z) < WATER + 0.05) return true;
+          if (WATER_Y !== null && hAt(x, z) < WATER_Y + 0.05) return true;
           if (VOLC && VOLC.edgeDist(x, z) < 0.8) return true;
           if (FALLS && Math.hypot(x - FALLS.at[0], z - FALLS.at[1]) < 12) return true;
           const rg = window.__regionAt && window.__regionAt(x, z);
