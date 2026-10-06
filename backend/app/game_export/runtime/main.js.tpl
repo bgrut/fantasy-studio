@@ -89,7 +89,11 @@ const SIL = (() => {
   else if (/dead|cactus/.test(flora)) arch = 'dead';
   else if (/desert|canyon|mars|volcano/.test(wname)) arch = r() < 0.55 ? 'dead' : 'cypress';
   else if (snowy) arch = r() < 0.8 ? 'pine' : 'dead';
-  else arch = ['pine', 'broadleaf', 'cypress', 'pine', 'broadleaf', 'dead'][Math.floor(r() * 6)];
+  // A DEAD FOREST IS SOMETHING A SENTENCE ASKS FOR (2026-10-05): a sixth of
+  // the seeds drew dead trees, so "a quiet mountain lake at sunrise" stood
+  // in a burnt-out wood; dead stays in the draw only for a grim place
+  else arch = (/haunt|grave|dead|ruin|wasteland|blight|apocalyp|cursed|swamp|zombie/.test(wname + ' ' + (SPEC.prompt || '').toLowerCase())
+    ? ['pine', 'broadleaf', 'cypress', 'pine', 'broadleaf', 'dead'] : ['pine', 'broadleaf', 'cypress', 'pine', 'broadleaf', 'broadleaf'])[Math.floor(r() * 6)];
   const out = {
     arch,
     trunkH: 2.0 + r() * 1.6,
@@ -894,8 +898,10 @@ async function main() {
       const gsizeM = SPEC.world.size_m;
       const rngM = mulberry32(SPEC.seed + 777);
       const snowy = SPEC.world.weather === 'snow';
-      const rock = new THREE.Color(snowy ? 0x9aa4ad : 0x6b6f66)
-        .lerp(new THREE.Color(pal.sky), 0.22);
+      // (a fifth of the sky's colour turned every sunrise range salmon pink;
+      // the haze already carries the sky, the rock keeps most of its own)
+      const rock = new THREE.Color(snowy ? 0x9aa4ad : 0x6a6d6c)
+        .lerp(new THREE.Color(pal.sky), 0.05);
       const capC = new THREE.Color(0xf4f7fa);
       // diffuse only, like the land beyond: at a grazing view the rough
       // physical surface mirrored the sky and every ridge read as pale ice
@@ -905,6 +911,43 @@ async function main() {
       // the single most "2003" surface in every valley shot. Sculpted
       // low-poly + vertex colour + distance fog is the intended look.
       mmat.userData.noAutoTex = true;
+      // ROCK YOU CAN READ (2026-10-05): vertex colour alone made a range a
+      // smooth coloured hump, the far mountains of every sunrise lake. The
+      // photographed cliff is laid over it three ways in world space at two
+      // scales (crags tens of metres across, ledges a few metres), lightening
+      // and darkening the colour it already has; snow and forest are left
+      // nearly alone, and the haze still fades it all into the distance.
+      try {
+        const rkT = new THREE.TextureLoader().load('textures/cliff.jpg');
+        rkT.wrapS = rkT.wrapT = THREE.RepeatWrapping; rkT.colorSpace = THREE.SRGBColorSpace;
+        rkT.anisotropy = renderer.capabilities.getMaxAnisotropy();
+        mmat.onBeforeCompile = (sh) => {
+          sh.uniforms.uRk = { value: rkT };
+          sh.vertexShader = 'varying vec3 vRP; varying vec3 vRN;\n' + sh.vertexShader.replace('#include <worldpos_vertex>',
+            '#include <worldpos_vertex>\n vRP = (modelMatrix * vec4(transformed, 1.0)).xyz; vRN = normalize(mat3(modelMatrix) * objectNormal);');
+          sh.fragmentShader = 'uniform sampler2D uRk; varying vec3 vRP; varying vec3 vRN;\n' + sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
+            {
+              vec3 bw = pow(abs(normalize(vRN)), vec3(3.0)); bw /= (bw.x + bw.y + bw.z + 1e-5);
+              vec3 pa = vRP / 42.0, pb = vRP / 9.0;
+              vec3 ta = texture2D(uRk, pa.zy).rgb * bw.x + texture2D(uRk, pa.xz).rgb * bw.y + texture2D(uRk, pa.xy).rgb * bw.z;
+              vec3 tb = texture2D(uRk, pb.zy).rgb * bw.x + texture2D(uRk, pb.xz).rgb * bw.y + texture2D(uRk, pb.xy).rgb * bw.z;
+              float l = dot(ta * 0.6 + tb * 0.4, vec3(0.333));
+              float bright = max(diffuseColor.r, max(diffuseColor.g, diffuseColor.b));
+              float keep = smoothstep(0.62, 0.85, bright);                     // snow
+              diffuseColor.rgb *= mix(clamp(0.3 + l * 1.9, 0.25, 1.7), 1.0, keep);
+            }`).replace('#include <fog_fragment>', `
+            #ifdef USE_FOG
+              // AERIAL PERSPECTIVE, NOT A WALL (2026-10-05): the world's fog ends
+              // where the ranges stand, so they drowned in it (flat haze shapes);
+              // a mountain keeps its form under the haze, and the haze thins as
+              // it climbs, so the peaks stand clearest
+              float fogFactor = smoothstep(fogNear, fogFar, vFogDepth);
+              fogFactor *= 0.62 * (1.0 - 0.4 * smoothstep(15.0, 180.0, vRP.y));
+              gl_FragColor.rgb = mix(gl_FragColor.rgb, fogColor, fogFactor);
+            #endif`);
+        };
+        mmat.customProgramCacheKey = () => 'ranges-rock';
+      } catch (e) { /* the ranges keep their colour */ }
       const ring = new THREE.Group();
       const NPK = 11;
       // SCULPTED RANGES (2026-10-02): behind a forest to the horizon a cone
@@ -942,7 +985,7 @@ async function main() {
         return hgt * Math.pow(fall, 1.25) * (0.45 + 0.75 * _ridged(x / rad * 1.4 + seedK * 3.7, z / rad * 1.4 + seedK * 5.3));
       };
       const ridgeGeo = (rad, hgt, seedK) => {
-        const N = 80, S = rad * 2.3;
+        const N = 128, S = rad * 2.3;
         const g = new THREE.PlaneGeometry(S, S, N, N); g.rotateX(-Math.PI / 2);
         const pa = g.attributes.position;
         for (let v = 0; v < pa.count; v++) pa.setY(v, ridgeH(pa.getX(v), pa.getZ(v), rad, hgt, seedK));
@@ -954,7 +997,9 @@ async function main() {
         for (let v = 0; v < pa.count; v++) {
           const y = pa.getY(v) / hgt, up = na.getY(v);
           const jit = _rv(pa.getX(v) * 0.05, pa.getZ(v) * 0.05) * 0.06;
-          let c = rockC.clone().offsetHSL(0, 0, (y - 0.4) * 0.08 + jit);
+          // gullies hold shade: the ridged field is low in them
+          const gul = _ridged(pa.getX(v) / rad * 1.4 + seedK * 3.7, pa.getZ(v) / rad * 1.4 + seedK * 5.3);
+          let c = rockC.clone().offsetHSL(0, 0, (y - 0.4) * 0.08 + jit - Math.max(0, 0.35 - gul) * 0.25);
           if (_green && y < 0.42 + jit && up > 0.55) c.lerp(greenC, Math.min(1, (0.42 - y) * 4) * 0.85);
           if (y > snowLine + jit && up > 0.45) c.lerp(snowC, Math.min(1, (y - snowLine) * 6) * Math.min(1, (up - 0.45) * 4));
           col[v * 3] = c.r; col[v * 3 + 1] = c.g; col[v * 3 + 2] = c.b;
@@ -995,6 +1040,15 @@ async function main() {
               return ridgeH(dx * cR - dz * sR, dx * sR + dz * cR, R9, H9, k9);
             }, H9);
           }
+          continue;
+        }
+        // SCULPTED EVERYWHERE (2026-10-05): the cone path below stays for the
+        // record; every world's ranges are heightfields now
+        {
+          const m8 = new THREE.Mesh(ridgeGeo(rad * 1.15, hgt * 1.1, i + 40), mmat);
+          m8.position.set(Math.cos(a) * dist, 0, Math.sin(a) * dist);
+          m8.rotation.y = rngM() * Math.PI;
+          ring.add(m8);
           continue;
         }
         const geo = new THREE.ConeGeometry(rad, hgt, SIL.mtnSeg + Math.floor(rngM() * 3), 3);
