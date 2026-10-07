@@ -3021,7 +3021,20 @@ function grassMaskFor(f) {
       const c = cells[f][i + di] && cells[f][i + di][j + dj];
       return c && c.t !== EMPTY;
     });
-    const margin = nearBuilt ? Math.min(1, edge / 0.18) : 1;
+    // TRODDEN ROUND THE WORK (2026-10-07): the grass grew right to a machine's
+    // edge and hid the worn ground under it. Within two tiles of anything
+    // built (a seam does not count: nobody works it on foot) the grass thins
+    // and shortens with the distance, so the packed earth reads as a ring.
+    let near2 = 9;
+    const fa = a / T + N / 2, fb = b / T + N / 2;
+    for (let di = -2; di <= 2; di++) for (let dj = -2; dj <= 2; dj++) {
+      const c = cells[f][i + di] && cells[f][i + di][j + dj];
+      if (!c || c.t === EMPTY || c.t === NODE) continue;
+      const dx = Math.max(0, Math.abs(fa - (i + di + 0.5)) - 0.5), dy = Math.max(0, Math.abs(fb - (j + dj + 0.5)) - 0.5);
+      near2 = Math.min(near2, Math.hypot(dx, dy));
+    }
+    const trod = near2 >= 1.6 ? 1 : 0.12 + 0.88 * Math.pow(near2 / 1.6, 1.5);
+    const margin = (nearBuilt ? Math.min(1, edge / 0.18) : 1) * trod;
     // burnt off around a fallen star: bare scorched ground out to its rim
     let burn = 1;
     for (let di = -1; di <= 1; di++) for (let dj = -1; dj <= 1; dj++) {
@@ -3030,7 +3043,7 @@ function grassMaskFor(f) {
       const d = Math.hypot(a / T + N / 2 - (i + di + 0.5), b / T + N / 2 - (j + dj + 0.5));
       burn = Math.min(burn, Math.max(0, Math.min(1, (d - 0.95) / 0.5)));
     }
-    return [base * (0.4 + 0.6 * nz) * margin * burn, burn < 1 ? 1 : dry, (0.5 + 0.5 * nz) * (0.4 + 0.6 * burn)];
+    return [base * (0.4 + 0.6 * nz) * margin * burn, burn < 1 ? 1 : Math.max(dry, (1 - trod) * 0.55), (0.5 + 0.5 * nz) * (0.4 + 0.6 * burn) * (0.45 + 0.55 * trod)];
   };
 }
 if (GRASS_ON) {
@@ -3082,7 +3095,92 @@ function stepGrass(dt) {
   }
   stepGrove(true);
 }
+
+// THE GROUND REMEMBERS THE WORK (2026-10-07). Machines stood in clean
+// grass on a clean plate, as if dropped there a second ago. Industry wears
+// the ground it stands on: packed earth and gravel under a rig and a smelter,
+// an oil stain where a machine has run, a trodden track along every belt,
+// all fading out over a tile into the grass. One canvas atlas for the six
+// faces (three across, two down) on one overlay mesh: a single draw call,
+// redrawn a moment after the factory changes. Earth on the crystal faces,
+// soot on the ember ones, pale gravel on the salt; on a world that is plated
+// rather than grown it is grime, fainter. ?wear=0 turns it off.
+const WEAR_ON = !/[?&]wear=0/.test(location.search) && !SPEC.city;
+const WPX = 16;                       // canvas pixels a tile
+let wearCv = null, wearTex = null, wearMesh = null, wearDirty = true, wearWait = 0;
+if (WEAR_ON) {
+  const S = N * WPX;
+  wearCv = document.createElement('canvas'); wearCv.width = S * 3; wearCv.height = S * 2;
+  wearTex = new THREE.CanvasTexture(wearCv); wearTex.flipY = false; wearTex.colorSpace = THREE.SRGBColorSpace;
+  wearTex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  const pos = [], uv = [], idx = [];
+  FACES.forEach((F, f) => {
+    const col = f % 3, row = Math.floor(f / 3), E = HALF + 0.008, b0 = pos.length / 3;
+    for (const [sa, sb] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
+      const a = sa * HALF, b = sb * HALF;
+      pos.push(F.n[0] * E + F.u[0] * a + F.v[0] * b, F.n[1] * E + F.u[1] * a + F.v[1] * b, F.n[2] * E + F.u[2] * a + F.v[2] * b);
+      uv.push((col + (sa + 1) / 2) / 3, (row + (sb + 1) / 2) / 2);
+    }
+    idx.push(b0, b0 + 1, b0 + 2, b0, b0 + 2, b0 + 3);
+  });
+  const wg = new THREE.BufferGeometry();
+  wg.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  wg.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  wg.setIndex(idx); wg.computeVertexNormals();
+  const wm = new THREE.MeshStandardMaterial({ map: wearTex, transparent: true, depthWrite: false, roughness: 0.97, metalness: 0,
+    side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+  wm.userData.noAutoTex = true;
+  wearMesh = new THREE.Mesh(wg, wm); wearMesh.name = 'wear'; wearMesh.receiveShadow = true; wearMesh.renderOrder = 1;
+  scene.add(wearMesh);
+}
+function drawWear() {
+  if (!wearCv) return;
+  const g = wearCv.getContext('2d'), S = N * WPX;
+  g.clearRect(0, 0, wearCv.width, wearCv.height);
+  let grown = true;                    // WORLDS is declared further down: never read it before it exists
+  try { grown = !!(WORLDS[worldIdx] && WORLDS[worldIdx].fam === 'green') || !!SPEC.city; } catch (e) {}
+  const hash = (a, b, c) => { let h = (a * 73856093) ^ (b * 19349663) ^ (c * 83492791); h = (h ^ (h >>> 13)) * 1274126177; return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
+  for (let f = 0; f < 6; f++) {
+    const col = f % 3, row = Math.floor(f / 3), m = MINERAL_OF_FACE[f];
+    // the ground under the work: earth, soot, gravel; grime on a plated world
+    const soil = !grown ? [26, 24, 22] : f === 1 ? [62, 54, 46] : m === EMBER ? [34, 28, 26] : m === SALT ? [168, 166, 158] : [96, 76, 54];
+    const k0 = grown ? 1 : 0.42;
+    for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) {
+      const c = cells[f][i][j];
+      if (c.t === EMPTY || c.t === NODE) continue;
+      const belt = c.t === BELT, cx = col * S + (i + 0.5) * WPX, cy = row * S + (j + 0.5) * WPX;
+      const R = (belt ? 1.25 : 2.1) * WPX, a = (belt ? 0.66 : 0.86) * k0;
+      const gr = g.createRadialGradient(cx, cy, R * 0.15, cx, cy, R);
+      gr.addColorStop(0, `rgba(${soil[0]},${soil[1]},${soil[2]},${a})`);
+      gr.addColorStop(0.55, `rgba(${soil[0]},${soil[1]},${soil[2]},${a * 0.6})`);
+      gr.addColorStop(1, `rgba(${soil[0]},${soil[1]},${soil[2]},0)`);
+      g.fillStyle = gr; g.fillRect(cx - R, cy - R, R * 2, R * 2);
+      // gravel and grit: lighter and darker grains, the same each time
+      for (let q = 0; q < (belt ? 7 : 14); q++) {
+        const u = hash(f * 4096 + i, j, q), v = hash(j, f * 4096 + i, q + 31), w = hash(q, i + 7, j + f);
+        const px = cx + (u - 0.5) * R * 1.5, py = cy + (v - 0.5) * R * 1.5, l = w < 0.5 ? 0.55 : 1.35;
+        g.fillStyle = `rgba(${Math.min(255, soil[0] * l + 20) | 0},${Math.min(255, soil[1] * l + 18) | 0},${Math.min(255, soil[2] * l + 14) | 0},${0.5 * k0})`;
+        g.fillRect(px, py, 1 + w * 1.6, 1 + w * 1.6);
+      }
+      // where a machine has run: an oil stain, off centre
+      if (!belt && c.t !== PROP && c.t !== HUB) {
+        const ox = cx + (hash(f, i, j) - 0.5) * WPX * 0.5, oy = cy + (hash(j, f, i) - 0.5) * WPX * 0.5, r2 = WPX * (0.35 + hash(i, j, f) * 0.3);
+        const og = g.createRadialGradient(ox, oy, 0, ox, oy, r2);
+        og.addColorStop(0, `rgba(10,8,7,${0.42 * k0})`); og.addColorStop(1, 'rgba(10,8,7,0)');
+        g.fillStyle = og; g.fillRect(ox - r2, oy - r2, r2 * 2, r2 * 2);
+      }
+    }
+  }
+  wearTex.needsUpdate = true;
+}
+function wearChanged() { wearDirty = true; wearWait = 0.3; }
+function stepWear(dt) {
+  if (!wearMesh || !wearDirty || (wearWait -= dt) > 0) return;
+  wearDirty = false; drawWear();
+  window.__wear = { drawn: (window.__wear ? window.__wear.drawn : 0) + 1 };
+}
 function grassChanged() {
+  wearChanged();
   if (!grassFaces.length) return;
   for (let f = 0; f < 6; f++) grassDirty.add(f);
   grassWait = 0.25;
@@ -8353,6 +8451,7 @@ renderer.setAnimationLoop(() => {
   if (glowPools) glowPools.instanceMatrix.needsUpdate = true;
   stepLampPools();
   stepGrass(dt);
+  stepWear(dt);
   visitedFaces.add(player.face);
   if (CITY) stepCity(dt); else stepGoals(dt);
   if (!melting && !CITY) stepRifts(dt);

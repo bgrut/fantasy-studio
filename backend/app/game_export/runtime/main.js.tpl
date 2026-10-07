@@ -1534,6 +1534,37 @@ async function main() {
         || (Math.abs(x - MAUS[0]) < 3.4 + (m || 0) && Math.abs(z - MAUS[1]) < 4.4 + (m || 0)),
     };
   })();
+  // ── A WRECK (2026-10-07) ────────────────────────────────────────────────
+  // "a deep sea diver explores a sunken pirate shipwreck and recovers four
+  // gold chests" was open seabed with chests on it. The wreck is the ship the
+  // naval games sail, sunk: listing on the bottom, masts snapped, sails gone,
+  // paint gone to weed; what was in its hold lies scattered round it.
+  const WRECK = (() => {
+    if (INTERIOR || OSM || VIEW === 'side') return null;
+    const w = String(SPEC.prompt || '').toLowerCase();
+    if (!/\b(ship ?wrecks?|wrecks?|sunken (?:ship|galleon|boat|vessel)|sunk(?:en)? pirate ship)\b/.test(w)) return null;
+    const r = mulberry32((SPEC.seed || 1) + 6161);
+    const pth = LVL && LVL.path && LVL.path.length > 2 ? LVL.path[Math.floor(LVL.path.length / 2)] : [0, 28];
+    const x = pth[0] + (r() - 0.5) * 6, z = pth[1] + (r() - 0.5) * 6, yaw = r() * Math.PI * 2;
+    let k = 0;
+    // x and z are settled by the build, on the deepest seabed near here (the
+    // heights do not exist yet): an archipelago put the first wreck on an island
+    const W = { x, z, yaw, roll: 0.34 + r() * 0.12,
+      // round the wreck, never inside it: the hull runs 7 m either way along its yaw
+      spot: () => { const a = (k++ / 5) * Math.PI * 2 + r() * 0.8, d = 6 + r() * 4, f = Math.abs(Math.cos(a - W.yaw)) < 0.5 ? 1 : 1.4;
+        return [W.x + Math.cos(a) * d * f, W.z + Math.sin(a) * d * f]; },
+      inHull: (px, pz, m) => { const dx = px - W.x, dz = pz - W.z, c = Math.cos(W.yaw), s2 = Math.sin(W.yaw);
+        const lx = dx * c - dz * s2, lz = dx * s2 + dz * c; return Math.abs(lx) < 3 + (m || 0) && Math.abs(lz) < 9 + (m || 0); },
+    };
+    // called once the ground exists (the keep-clear list and the build both ask)
+    W.settle = () => { if (W._settled) return; W._settled = true;
+      let best = [W.x, W.z], bh = hAt(W.x, W.z); const rS = mulberry32((SPEC.seed || 1) + 6163);
+      for (let i = 0; i < 90; i++) { const a = rS() * Math.PI * 2, d = 8 + rS() * 40, x = W.x + Math.cos(a) * d, z = W.z + Math.sin(a) * d;
+        if (Math.hypot(x, z) < 14 || Math.abs(x) > gsize * 0.42 || Math.abs(z) > gsize * 0.42) continue;
+        const h = Math.max(hAt(x, z), hAt(x + 6, z), hAt(x - 6, z), hAt(x, z + 6), hAt(x, z - 6)); if (h < bh) { bh = h; best = [x, z]; } }
+      W.x = best[0]; W.z = best[1]; };
+    return W;
+  })();
   // ENTERABLE VENUES (2026-08-05): the multi-building city heist. One entry
   // per building — {plan, door:[x,z], ox, label}. The legacy single
   // `enterable` is just a one-element list with no explicit offset.
@@ -2291,6 +2322,13 @@ async function main() {
     /\b(shelter|cabin|house|home|hut|shrine|castle|tower|barn|cottage|inn|temple|church|fort|lodge|den|village|camp|outpost|lighthouse|station)\b/))
     || ['castle', 'castle']) : _reachOb && (_reachOb.label || '').toLowerCase().match(
     /\b(shelter|cabin|house|home|hut|shrine|castle|tower|barn|cottage|inn|temple|church|fort|lodge|den|village|camp|outpost|lighthouse|station)\b/);
+  // THE GOAL IS THE BUILDING THAT IS ALREADY THERE (2026-10-07): "reach the
+  // temple entrance" put up a cottage at the goal while the temple itself, a
+  // pagoda, stood at its own door elsewhere. When the goal names a building
+  // that stands at a door, the walk ends in front of that door.
+  const _venueGoal = _structHit && ENTERABLES.find(E => E && E.door && String(E.label || '').toLowerCase().includes(_structHit[1]));
+  if (_venueGoal && LVL) { const dx = _venueGoal.door[0], dz = _venueGoal.door[1], dl = Math.hypot(dx, dz) || 1;
+    LVL.goal = [dx - dx / dl * 3.5, dz - dz / dl * 3.5]; }
   if (LVL && LVL.goal) {
     goalPos = new THREE.Vector3(LVL.goal[0], hAt(LVL.goal[0], LVL.goal[1]), LVL.goal[1]);
     // A HIVE AT THE END (2026-10-07): "brings it back to the hive" ended at a
@@ -2324,7 +2362,7 @@ async function main() {
       scene.add(H);
       world.createCollider(RAPIER.ColliderDesc.cylinder(1.0, 0.95).setTranslation(goalPos.x, goalPos.y + 1.0, goalPos.z));
     }
-    if (_structHit) {
+    if (_structHit && !_venueGoal) {
       // door faces the approach: back along the mission path, else the spawn
       const _pp = (LVL.path && LVL.path.length > 1) ? LVL.path[LVL.path.length - 2] : [0, 0];
       const doorYaw = Math.atan2(_pp[0] - goalPos.x, _pp[1] - goalPos.z);
@@ -2631,10 +2669,11 @@ async function main() {
       const halo = makeGoalHalo();                            // findable from afar
       halo.position.y = 6.2;
       S.add(halo);
+      const _accM = window.__accent || 0xffd08a;                // the world's own accent (2026-10-07), not one purple everywhere
       const mat2 = new THREE.Mesh(                            // welcome mat = win spot
         new THREE.CircleGeometry(0.9, 24),
-        new THREE.MeshStandardMaterial({ color: 0xb9a0ff, emissive: 0x7c5cff,
-                                         emissiveIntensity: 1.2 }));
+        new THREE.MeshStandardMaterial({ color: _accM, emissive: _accM,
+                                         emissiveIntensity: 0.8 }));
       mat2.rotation.x = -Math.PI / 2;
       mat2.position.set(0, _builtHouse ? 0.37 : 0.18, 0.4);   // on the floorboards where there are any
       S.add(mat2);
@@ -2658,18 +2697,30 @@ async function main() {
     } else if (!(SPEC.objectives || []).some(o => o.kind === 'serve' || o.kind === 'repair')) {   // a shift at a counter walks to no beacon
       // A HELICOPTER WAITS ON ITS PAD (2026-10-06): "reach the rescue
       // helicopter" ended at a purple beacon on bare ground
-      if (_reachOb && /helicopter|chopper|\bheli\b/.test(String(_reachOb.label || '').toLowerCase())) buildHeli(goalPos);
-      const pil = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.9, 0.9, 22, 20, 1, true),
-        new THREE.MeshBasicMaterial({ color: 0x9f7bff, transparent: true, opacity: 0.16,
-                                      side: THREE.DoubleSide, depthWrite: false }));
-      pil.position.set(goalPos.x, goalPos.y + 11, goalPos.z);
-      scene.add(pil);
+      const _heliGoal = _reachOb && /helicopter|chopper|\bheli\b/.test(String(_reachOb.label || '').toLowerCase());
+      if (_heliGoal) buildHeli(goalPos);
+      // NOT EVERY GAME HAS A PURPLE PILLAR (2026-10-07, the owner: "that purple
+      // beacon does not have to be in every game"). A goal that is a thing you
+      // can see (a door, a hive, a mausoleum, a helicopter, a site's own
+      // building) is its own marker and gets no light at all. An open-ground
+      // goal gets a slim shaft in the world's accent colour that shows from
+      // a distance and fades away as you come up to it; the ground ring stays.
       const _acc = window.__accent;
+      const _thing = _heliGoal || _venueGoal || GARDEN || WEST || GRAVE || VILLAGE
+        || (_reachOb && /\b(hive|beehive|skep|apiary|helipad)\b/.test(String(_reachOb.label || '').toLowerCase()));
+      if (!_thing) {
+        const pil = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.22, 0.55, 26, 16, 1, true),
+          new THREE.MeshBasicMaterial({ color: _acc || 0xffe0a0, transparent: true, opacity: 0.12, blending: THREE.AdditiveBlending,
+                                        side: THREE.DoubleSide, depthWrite: false }));
+        pil.position.set(goalPos.x, goalPos.y + 13, goalPos.z);
+        scene.add(pil);
+        window.__goalBeam = pil;
+      }
       const ring = new THREE.Mesh(
         new THREE.TorusGeometry(1.5, 0.09, 10, 40),
-        new THREE.MeshStandardMaterial({ color: _acc || 0xb9a0ff,
-          emissive: _acc || 0x7c5cff, emissiveIntensity: 2.2 }));
+        new THREE.MeshStandardMaterial({ color: _acc || 0xffd08a,
+          emissive: _acc || 0xffb050, emissiveIntensity: 1.6 }));
       ring.rotation.x = Math.PI / 2;
       ring.position.set(goalPos.x, goalPos.y + 0.25, goalPos.z);
       scene.add(ring);
@@ -6550,6 +6601,11 @@ async function main() {
       if (WEST) for (let wz = WEST.Z0 - 6; wz <= WEST.Z1 + 10; wz += 6) keepClear.push([0, wz, WEST.FX + 16]);
       if (VILLAGE) keepClear.push([VILLAGE.GC[0], VILLAGE.GC[1], 26], [0, 3, 6]);
       if (GRAVE) for (let gz = GRAVE.Z0; gz <= GRAVE.Z1; gz += 5) keepClear.push([0, gz, 20]);   // no wood inside the railings
+      if (WRECK) { WRECK.settle(); keepClear.push([WRECK.x, WRECK.z, 11]); }   // no kelp through the hull
+      // a building the sentence named stands in its own ground, not in a thicket (2026-10-07);
+      // a temple keeps its approach, torii and lanterns clear as well
+      for (const E of (typeof ENTERABLES !== 'undefined' ? ENTERABLES : [])) if (E && E.door)
+        keepClear.push([E.door[0], E.door[1], E.facade === 'pagoda' ? 26 : 16]);
       if (FALLS) keepClear.push([FALLS.at[0], FALLS.at[1], 36]);
       if (window.__castle && window.__castle.ward) keepClear.push(window.__castle.ward);   // a castle's ward is a courtyard, not a wood   // the fall stands in its own glade, seen from the path
       const clear = (x, z) => keepClear.some(([cx, cz, r]) => (x - cx) * (x - cx) + (z - cz) * (z - cz) < r * r)
@@ -8254,7 +8310,17 @@ async function main() {
             eave.position.set(ex, doorY + H - 0.4, ez);
             scene.add(eave); window.__torches.push(eave);
           }
-          window.__landmark = { kit, at: [cx, cz], yaw, w: FK.w, d: FK.d, h: H, door: [doorX, doorZ], lamps: 3 };
+          if (kit === 'pagoda') {
+            const ti = buildTorii(); const tx = doorX + nx * 16, tz = doorZ + nz * 16;
+            ti.position.set(tx, hAt(tx, tz), tz); ti.rotation.y = yaw; scene.add(ti);
+            for (const sx of [-1, 1]) { const px = tx + ux * sx * 2.6, pz = tz + uz * sx * 2.6;
+              world.createCollider(RAPIER.ColliderDesc.cylinder(2.6, 0.3).setTranslation(px, hAt(px, pz) + 2.6, pz)); }
+            for (const d of [4.5, 9.5]) for (const sx of [-1, 1]) {
+              const lx = doorX + nx * d + ux * sx * 2.4, lz = doorZ + nz * d + uz * sx * 2.4, t = buildToro();
+              t.position.set(lx, hAt(lx, lz), lz); t.rotation.y = yaw; scene.add(t);
+              world.createCollider(RAPIER.ColliderDesc.cylinder(1.0, 0.35).setTranslation(lx, hAt(lx, lz) + 1.0, lz)); }
+          }
+          window.__landmark = { kit, at: [cx, cz], yaw, w: FK.w, d: FK.d, h: kit === 'pagoda' ? 20 : H, gy: doorY, door: [doorX, doorZ], lamps: 3 };
         };
         if (window.__facadeKitReady) { try { __buildBody(); } catch (e) { console.warn('[game] building', e); } }
         else (window.__lateBuildings = window.__lateBuildings || []).push(__buildBody);
@@ -8886,6 +8952,7 @@ async function main() {
       if (o.kind === 'defend') return `Hold the ${o.label || 'keep'} through ${o.count} waves. T builds a tower`;
       if (o.kind === 'accuse') return `Name ${o.label || 'the killer'}. E questions a suspect, Y accuses them`;
       if (o.kind === 'serve') return `Serve ${o.count} ${o.label || 'orders'}. E makes a drink at a station and hands it over`;
+      if (o.kind === 'repair' && /\b(trees?|pines?|oaks?|logs?|timber)\b/.test(String(o.label || ''))) return `Chop down ${o.count} ${o.label}. Hold E at each marked trunk`;
       if (o.kind === 'repair') return /fire|flame|blaze|burn/.test(String(o.label || '')) ? `Put out ${o.count} ${o.label}. Hold E to spray each one`
         : /package|parcel|deliver|letter|mail|pizza|crate|box|supplies|medicine|food|meal/.test(String(o.label || '')) ? `Deliver ${o.count} ${o.label}. Hold E over each pad to drop one`
         : `Fix ${o.count} ${o.label || 'broken panels'}. Hold E at each one`;
@@ -9031,7 +9098,8 @@ async function main() {
         const dormant = i >= baseN || (hostile && !!_defObj);   // wave-pool member: hidden until woken
         // SkeletonUtils.clone — plain clone() breaks skinned meshes (gliding)
         const _shipNpc = /(^|\s)(pirate ship|ship|galleon|frigate|warship|man-o-war|brig)s?$/i.test(String(ent.name || '').trim());
-        const inst = _shipNpc ? buildShip({ seed: (SPEC.seed || 1) + npcs.length * 13 + 5, flag: /pirate/i.test(String(SPEC.player && SPEC.player.name || '')) ? 'navy' : 'pirate',
+        const _kartNpc = ent.behavior === 'vehicle' && SPEC.player && SPEC.player.car_params && SPEC.player.car_params.type === 'kart';
+        const inst = _kartNpc ? makeKart(null, npcs.length + 1) : _shipNpc ? buildShip({ seed: (SPEC.seed || 1) + npcs.length * 13 + 5, flag: /pirate/i.test(String(SPEC.player && SPEC.player.name || '')) ? 'navy' : 'pirate',
                                             hull: [0x4a3a30, 0x5a2e1e, 0x3e3a36][npcs.length % 3], band: [0x2a4a8a, 0x1e1e1e, 0xd8b030][npcs.length % 3] })
                                 : skClone(gltf.scene);
         hardenAlpha(inst);
@@ -9067,15 +9135,15 @@ async function main() {
         });
         const box = new THREE.Box3().setFromObject(inst);
         const h = Math.max(box.max.y - box.min.y, 1e-3);
-        inst.scale.multiplyScalar((_shipNpc ? Math.max(ent.height_m || 0, 13) : (ent.height_m || 1.0)) / h);   // a galleon stands 13 m to the masthead
+        if (!_kartNpc) inst.scale.multiplyScalar((_shipNpc ? Math.max(ent.height_m || 0, 13) : (ent.height_m || 1.0)) / h);   // a galleon stands 13 m to the masthead; a kart is built in metres
         const _rideR = ent.behavior === 'vehicle' && SPEC.player && SPEC.player.ride;   // rivals ride boards like the hero
         const _vessel = /(^|\s)(ship|boat|galleon|frigate|schooner|sloop|warship|brig|yacht|canoe|raft|sailboat)s?$/i.test(String(ent.name || '').trim());
         alignLongAxis(inst, (ent.behavior === 'vehicle' && !_rideR) || _vessel);   // rivals drive nose-first too, ships sail bow-first
-        polishVehiclePaint(inst, ent.behavior === 'vehicle' && !_rideR);
+        if (!_kartNpc) polishVehiclePaint(inst, ent.behavior === 'vehicle' && !_rideR);
         // DENSITY ARC (2026-07-29): kill the clone army — each rival vehicle
         // gets its own paint hue (racing-field palette), cloned materials so
-        // the player's car is untouched.
-        if (ent.behavior === 'vehicle') {
+        // the player's car is untouched. (A kart is painted at build: its own colours.)
+        if (ent.behavior === 'vehicle' && !_kartNpc) {
           // r6 FIX: TRELLIS cars carry paint in the TEXTURE (material.color
           // stays white) so the old HSL shift never fired — rivals stayed a
           // clone army. Hue-rotate the diffuse texture itself via a one-time
@@ -10112,8 +10180,15 @@ async function main() {
       if (_gslot && !tpl) s = makeVeg(step.label);
       const _bloom = /\b(nectar|pollen|honey ?dew)\b/.test(String(step.label || '').toLowerCase());
       if (_bloom) s = makeBloom(i);
+      // litter lies where it was dropped; a chest sits on the ground (2026-10-07)
+      const _litter = /\b(trash|litter|rubbish|garbage|junk|bottles?|cans?|waste)\b/.test(String(step.label || '').toLowerCase());
+      const _chest = !_litter && /\b(chests?|treasure|coffers?|strongbox(es)?|loot)\b/.test(String(step.label || '').toLowerCase());
+      if (_litter) s = makeLitter(i);
+      else if (_chest) s = makeChest(i);
       // a third coordinate is the ground the pickup stands on (a platform's top)
-      if (_cslot) {
+      if (_chest && WRECK) {
+        [cx, cz] = WRECK.spot();                       // what was in its hold, scattered round it
+      } else if (_cslot) {
         cx = _cslot.x; cz = _cslot.z; cy = _cslot.top ? _cslot.top.top - 0.6 : null;   // on a cupcake: just above the frosting
       } else if (_gslot) {
         const b = GARDEN.beds[_gslot.bed];
@@ -10135,13 +10210,13 @@ async function main() {
       if (VIEW === 'side') cz = 0;        // side-scroller: pickups on the lane
       // grown things sit where they grow: a carrot half in the soil, a clover
       // in the grass, not a metre up in the air (2026-10-06)
-      const _grown = planted || onLawn || _bloom;     // a flower stands in the grass
+      const _grown = planted || onLawn || _bloom || _litter || _chest;     // a flower stands in the grass, litter lies on it
       let baseY = (cy !== null ? cy : hAt(cx, cz)) + (_evidence || _grown ? 0.0 : 1.0 + rngC() * 0.6);
       if (_grown) {
         // a carrot the size of a carrot, not of the bed it grows in
         { const b0 = new THREE.Box3().setFromObject(s), sz = b0.getSize(new THREE.Vector3());
           const big = /pumpkin|squash|gourd|melon|cabbage/.test(String(step.label || '').toLowerCase());
-          const md = Math.max(sz.x, sz.y, sz.z); if (md > 0) s.scale.multiplyScalar((planted ? (big ? 0.55 : 0.3) : _bloom ? 0.72 : 0.26) / md); }
+          const md = Math.max(sz.x, sz.y, sz.z); if (md > 0) s.scale.multiplyScalar((planted ? (big ? 0.55 : 0.3) : _bloom ? 0.72 : _chest ? 0.85 : _litter ? 0.24 : 0.26) / md); }
         const bb = new THREE.Box3().setFromObject(s), hh = bb.max.y - bb.min.y;
         const _sits = /pumpkin|squash|gourd|melon|cabbage/.test(String(step.label || '').toLowerCase());
         baseY += -bb.min.y - (planted ? hh * (_sits ? 0.04 : 0.3) : 0) + (onLawn ? 0.02 : 0);
@@ -10194,6 +10269,45 @@ async function main() {
   // tower, a stone circle, a lumber camp), and dropped into a Tokyo street
   // their fieldstone walls stood along the kerb like a fence; a district
   // has its own places, its shops and signs
+  // ── THE WRECK, BUILT (see WRECK above) ──────────────────────────────────
+  if (WRECK) {
+    const g = buildShip({ seed: (SPEC.seed || 1) + 77, flag: 'pirate' });
+    const weed = new THREE.Color(0x46543c), silt = new THREE.Color(0x5a5a4a);
+    const kill = [];
+    g.traverse(o => {
+      if (!o.isMesh) return;
+      const m = o.material;
+      // sails, the jib and the flag rotted away; the rigging high up went with them
+      if (m && m.side === THREE.DoubleSide) { kill.push(o); return; }
+      if (o.position.y > 8.5) { kill.push(o); return; }
+      // the yards and the shrouds went with the masts' tops: only the stumps stand
+      const gq = o.geometry && o.geometry.parameters;
+      if (gq && gq.radiusTop !== undefined && (Math.abs(o.rotation.z) > 0.5 || gq.radiusTop < 0.05) && o.position.y > 3.5) { kill.push(o); return; }
+      // masts snapped a few metres above the deck
+      const gp = o.geometry && o.geometry.parameters;
+      if (gp && gp.height > 6 && gp.radiusTop !== undefined && Math.abs(o.rotation.z) < 0.01 && Math.abs(o.rotation.x) < 0.01) {
+        const keep = 0.25 + ((o.position.z * 7.3) % 1 + 1) % 1 * 0.3; o.scale.y = keep; o.position.y = 2.8 + gp.height * keep / 2; }
+      const mm = m.clone(); mm.userData.noAutoTex = true;
+      if (mm.color) mm.color.lerp(mm.vertexColors ? weed : silt, mm.vertexColors ? 0.45 : 0.55);
+      if (mm.emissive) { mm.emissive.setHex(0x000000); mm.emissiveIntensity = 0; }
+      mm.roughness = 0.95; mm.metalness = 0; o.material = mm;
+    });
+    for (const o of kill) o.parent.remove(o);
+    // on the deepest bed within forty metres: never on an island's shoulder
+    WRECK.settle();
+    const gy = hAt(WRECK.x, WRECK.z);
+    g.position.set(WRECK.x, gy - 1.9, WRECK.z);      // settled into the bed to the turn of the bilge
+    g.rotation.set(0.06, WRECK.yaw, WRECK.roll, 'YXZ');
+    scene.add(g);
+    // a broken spar lies across the deck where it fell
+    { const sparM = new THREE.MeshStandardMaterial({ color: 0x3e3a30, roughness: 0.95 }); sparM.userData.noAutoTex = true;
+      const sp = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.18, 7.5, 8), sparM); sp.position.set(0.6, 3.3, 1.2); sp.rotation.set(1.35, 0.4, 0.2);
+      sp.castShadow = true; g.add(sp); }
+    // solid: one long box along the hull
+    const c = Math.cos(WRECK.yaw / 2), s2 = Math.sin(WRECK.yaw / 2);
+    world.createCollider(RAPIER.ColliderDesc.cuboid(2.2, 2.0, 7.2).setTranslation(WRECK.x, gy + 0.5, WRECK.z).setRotation({ x: 0, y: s2, z: 0, w: c }));
+    window.__wreck = { at: [WRECK.x, WRECK.z] };
+  }
   // ── THE GRAVEYARD, BUILT (see GRAVE above) ──────────────────────────────
   if (GRAVE) {
     const G = GRAVE, rG = mulberry32((SPEC.seed || 1) + 9192);
@@ -10764,6 +10878,135 @@ async function main() {
     const drop = new THREE.Mesh(new THREE.SphereGeometry(0.035, 12, 8), M({ color: 0xffe9a0, emissive: 0xffc840, emissiveIntensity: 2.2, roughness: 0.2 }));
     drop.position.y = 0.04; head.add(drop);
     g.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+    return g;
+  }
+  // ── PROPS THAT ARE THE THING (2026-10-07) ──────────────────────────────
+  // A tree to fell: a pine with a red ribbon round it. tick() shakes it while
+  // the axe works, fell() topples it away from the axe and leaves a stump.
+  function makeChopTree(seed) {
+    const r = mulberry32(seed * 7 + 3), g = new THREE.Group();
+    const TL = new THREE.TextureLoader(), bark = TL.load('textures/bark.jpg'); bark.wrapS = bark.wrapT = THREE.RepeatWrapping; bark.repeat.set(1, 3); bark.colorSpace = THREE.SRGBColorSpace;
+    const M = (o) => { const m = new THREE.MeshStandardMaterial(o); m.userData.noAutoTex = true; return m; };
+    const barkM = M({ map: bark, color: 0x8a6e58, roughness: 0.95 }), cutM = M({ color: 0xd9b88a, roughness: 0.9 });
+    const needM = M({ color: 0x2f5a34, roughness: 0.85, flatShading: true }), ribM = M({ color: 0xc8241c, roughness: 0.6 });
+    const H = 7 + r() * 3;
+    const top = new THREE.Group(); g.add(top);                       // everything above the cut falls
+    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.28, H, 10), barkM); trunk.position.y = H / 2; top.add(trunk);
+    for (let k = 0; k < 5; k++) { const t = k / 5, cr = (1 - t) * 2.0 + 0.5, ch = 2.2 - t * 0.6;
+      const c = new THREE.Mesh(new THREE.ConeGeometry(cr, ch, 9), needM); c.position.y = H * 0.32 + t * H * 0.62 + ch / 2; c.rotation.y = r() * 3; top.add(c); }
+    const rib = new THREE.Mesh(new THREE.TorusGeometry(0.27, 0.045, 6, 18), ribM); rib.rotation.x = Math.PI / 2; rib.position.y = 1.35; top.add(rib);
+    const stump = new THREE.Mesh(new THREE.CylinderGeometry(0.27, 0.3, 0.45, 10), barkM); stump.position.y = 0.22; stump.visible = false; g.add(stump);
+    const ring = new THREE.Mesh(new THREE.CircleGeometry(0.26, 14), cutM); ring.rotation.x = -Math.PI / 2; ring.position.y = 0.455; ring.visible = false; g.add(ring);
+    g.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+    let shake = 0, fall = -1, fdir = 0;
+    g.userData.chop = {
+      H,
+      tick: (dt, held) => { shake = held ? 1 : Math.max(0, shake - dt * 3);
+        if (fall < 0) { top.rotation.z = Math.sin(performance.now() / 45) * 0.012 * shake; return; }
+        fall = Math.min(1, fall + dt / 1.5); const e = fall * fall;     // slow, then fast
+        top.rotation.set(0, 0, 0); top.rotateY(fdir); top.rotateX(e * Math.PI * 0.49); },
+      // falls away from the one who cut it
+      fell: (px, pz) => { fdir = Math.atan2(g.position.x - px, g.position.z - pz); fall = 0; stump.visible = true; ring.visible = true; rib.visible = false;
+        top.position.y = 0.45; trunk.scale.y = (H - 0.45) / H; trunk.position.y = (H - 0.45) / 2; },
+    };
+    return g;
+  }
+  // A letterbox at a gate: a box on a post, a door, a flag that goes up when
+  // the letter is in. The same interface as a delivery pad.
+  function makeLetterbox(seed) {
+    const g = new THREE.Group(), r = mulberry32(seed * 13 + 5);
+    const M = (o) => { const m = new THREE.MeshStandardMaterial(o); m.userData.noAutoTex = true; return m; };
+    const col = [0x2f5a8a, 0x7a2a22, 0x3a5a3a, 0x2a2a2e][Math.floor(r() * 4)];
+    const postM = M({ color: 0x6b4a30, roughness: 0.9 }), boxM = M({ color: col, roughness: 0.45, metalness: 0.4 }), flagM = M({ color: 0xd8302a, roughness: 0.5 });
+    const post = new THREE.Mesh(new THREE.BoxGeometry(0.1, 1.05, 0.1), postM); post.position.y = 0.52; g.add(post);
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.28, 0.48), boxM); body.position.y = 1.18; g.add(body);
+    const roof = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 0.48, 14, 1, false, 0, Math.PI), boxM); roof.rotation.x = Math.PI / 2; roof.rotation.z = Math.PI / 2; roof.position.y = 1.32; g.add(roof);
+    const slot = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.025, 0.01), M({ color: 0x0a0a0a })); slot.position.set(0, 1.24, 0.245); g.add(slot);
+    const arm = new THREE.Group(); arm.position.set(0.16, 1.16, 0.05); g.add(arm);
+    const stick = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.32, 0.02), flagM); stick.position.y = 0.16; arm.add(stick);
+    const flag = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.09, 0.12), flagM); flag.position.set(0, 0.28, 0.06); arm.add(flag);
+    arm.rotation.x = Math.PI / 2;                                    // down: nothing in it yet
+    const env = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.005, 0.1), M({ color: 0xf2ece0 })); env.position.set(0, 1.25, 0.26); env.rotation.x = 0.4; env.visible = false; g.add(env);
+    const beamM = new THREE.MeshBasicMaterial({ color: 0xffd860, transparent: true, opacity: 0.18, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+    const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.3, 14, 12, 1, true), beamM); beam.position.y = 8.4; g.add(beam);
+    g.traverse(o => { if (o.isMesh && o !== beam) { o.castShadow = true; o.receiveShadow = true; } });
+    let up = 0, done = false;
+    g.userData.pad = {
+      tick: (t, d) => { beam.visible = !d; if (done && up < 1) { up = Math.min(1, up + 0.04); arm.rotation.x = Math.PI / 2 * (1 - up); } },
+      done: () => { done = true; env.visible = true; },
+    };
+    return g;
+  }
+  // litter: a bottle, a crushed can, a carrier bag, a paper cup
+  function makeLitter(i) {
+    const g = new THREE.Group(), k = i % 4, r = mulberry32(i * 31 + 7);
+    const M = (o) => { const m = new THREE.MeshStandardMaterial(o); m.userData.noAutoTex = true; return m; };
+    if (k === 0) { const m = M({ color: 0x8fc8d8, roughness: 0.15, transparent: true, opacity: 0.75 });
+      const b = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.2, 12), m); b.rotation.z = Math.PI / 2; b.position.y = 0.035; g.add(b);
+      const n = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.03, 0.06, 10), m); n.rotation.z = Math.PI / 2; n.position.set(0.13, 0.035, 0); g.add(n);
+      const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.02, 10), M({ color: [0x2a6ad8, 0xd83a2a, 0xe8e8e8][Math.floor(r() * 3)] })); cap.rotation.z = Math.PI / 2; cap.position.set(0.17, 0.035, 0); g.add(cap); }
+    else if (k === 1) { const c = new THREE.Mesh(new THREE.CylinderGeometry(0.033, 0.033, 0.08, 14), M({ color: [0xc8202a, 0x2a7a3a, 0xd8d8dc][Math.floor(r() * 3)], roughness: 0.3, metalness: 0.7 }));
+      c.scale.set(1, 0.7, 1.25); c.rotation.z = Math.PI / 2 + 0.2; c.position.y = 0.03; g.add(c); }
+    else if (k === 2) { const b = new THREE.Mesh(new THREE.IcosahedronGeometry(0.1, 1), M({ color: 0xf0f0ea, roughness: 0.7, flatShading: true }));
+      const pa = b.geometry.attributes.position; for (let j = 0; j < pa.count; j++) pa.setXYZ(j, pa.getX(j) * (0.8 + r() * 0.5), pa.getY(j) * (0.3 + r() * 0.3), pa.getZ(j) * (0.8 + r() * 0.5));
+      b.geometry.computeVertexNormals(); b.position.y = 0.03; g.add(b); }
+    else { const c = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.03, 0.1, 12, 1, true), M({ color: 0xf2efe6, roughness: 0.8, side: THREE.DoubleSide }));
+      c.rotation.z = Math.PI / 2; c.position.y = 0.035; g.add(c);
+      const band = new THREE.Mesh(new THREE.CylinderGeometry(0.036, 0.034, 0.03, 12, 1, true), M({ color: 0x3a6a3a, side: THREE.DoubleSide })); band.rotation.z = Math.PI / 2; band.position.y = 0.035; g.add(band); }
+    g.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+    return g;
+  }
+  // a treasure chest: planked, iron-banded, a curved lid, a gold lock
+  function makeChest(i) {
+    const g = new THREE.Group();
+    const TL = new THREE.TextureLoader(), pl = TL.load('textures/planks.jpg'); pl.colorSpace = THREE.SRGBColorSpace;
+    const M = (o) => { const m = new THREE.MeshStandardMaterial(o); m.userData.noAutoTex = true; return m; };
+    const wood = M({ map: pl, color: 0x9a6a40, roughness: 0.85 }), iron = M({ color: 0x2a2826, roughness: 0.5, metalness: 0.7 }), gold = M({ color: 0xe8b830, roughness: 0.3, metalness: 0.9, emissive: 0x6a4a00, emissiveIntensity: 0.4 });
+    const box = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.45, 0.5), wood); box.position.y = 0.225; g.add(box);
+    const lid = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.25, 0.8, 16, 1, false, 0, Math.PI), wood); lid.rotation.z = Math.PI / 2; lid.rotation.x = Math.PI / 2; lid.rotation.y = 0; lid.position.y = 0.45; g.add(lid);
+    for (const x of [-0.3, 0.3]) { const b = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.47, 0.52), iron); b.position.set(x, 0.225, 0); g.add(b);
+      const lb = new THREE.Mesh(new THREE.CylinderGeometry(0.265, 0.265, 0.06, 16, 1, true, 0, Math.PI), iron); lb.rotation.z = Math.PI / 2; lb.rotation.x = Math.PI / 2; lb.position.set(x, 0.45, 0); g.add(lb); }
+    const lock = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.14, 0.04), gold); lock.position.set(0, 0.4, 0.27); g.add(lock);
+    g.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+    return g;
+  }
+  // someone lost, waiting to be found (2026-10-07): sitting hunched in a
+  // silver emergency blanket, a beanie, a red flare stuck in the ground
+  // beside them that you can see from across the slope. found() turns the
+  // flare green and they lift an arm.
+  function makeLost(i) {
+    const g = new THREE.Group(), r = mulberry32(i * 17 + 3);
+    const M = (o) => { const m = new THREE.MeshStandardMaterial(o); m.userData.noAutoTex = true; return m; };
+    const foil = M({ color: 0xd8dade, roughness: 0.18, metalness: 0.9, flatShading: true });
+    const coat = M({ color: [0xc8322a, 0x2a6ad8, 0xe8a020, 0x2f8a4a][i % 4], roughness: 0.7 });
+    const skin = M({ color: [0xe0b090, 0xa87850, 0x6a4a32][Math.floor(r() * 3)], roughness: 0.7 });
+    const hat = M({ color: [0x2a2a30, 0xd83a2a, 0x3a5a8a][i % 3], roughness: 0.9 });
+    const add = (geo, mat, x, y, z) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.castShadow = true; m.receiveShadow = true; g.add(m); return m; };
+    // the blanket: a crumpled cone round a sitting body
+    const bl = new THREE.ConeGeometry(0.48, 0.95, 14, 4, true), pa = bl.attributes.position;
+    for (let k = 0; k < pa.count; k++) { const n = 0.9 + r() * 0.2; pa.setXYZ(k, pa.getX(k) * n, pa.getY(k), pa.getZ(k) * n); }
+    bl.computeVertexNormals(); const blanket = add(bl, foil, 0, 0.48, 0); blanket.material.side = THREE.DoubleSide;
+    add(new THREE.CylinderGeometry(0.42, 0.5, 0.18, 14), foil, 0, 0.09, 0.05);
+    const head = add(new THREE.SphereGeometry(0.13, 16, 12), skin, 0, 1.02, 0.04);
+    add(new THREE.SphereGeometry(0.135, 16, 10, 0, Math.PI * 2, 0, Math.PI / 2), hat, 0, 1.05, 0.04);
+    const pack = add(new THREE.BoxGeometry(0.34, 0.42, 0.2), coat, 0, 0.32, -0.55); pack.rotation.x = 0.4;
+    const arm = new THREE.Group(); arm.position.set(0.22, 0.86, 0.05); g.add(arm);
+    const a1 = new THREE.Mesh(new THREE.CapsuleGeometry(0.05, 0.36, 4, 8), coat); a1.position.y = 0.2; a1.castShadow = true; arm.add(a1);
+    arm.rotation.z = -2.4; arm.visible = false;
+    // the flare: a stick, a red head, a light and a thread of smoke
+    const fx = 0.7, fz = 0.3;
+    add(new THREE.CylinderGeometry(0.02, 0.02, 0.5, 6), M({ color: 0x3a2a20 }), fx, 0.25, fz);
+    const flM = new THREE.MeshBasicMaterial({ color: 0xff3a2a });
+    const fl = new THREE.Mesh(new THREE.SphereGeometry(0.06, 10, 8), flM); fl.position.set(fx, 0.52, fz); g.add(fl);
+    const L = new THREE.PointLight(0xff4a30, 2.4, 9, 1.8); L.position.set(fx, 0.7, fz); g.add(L);
+    const beamM = new THREE.MeshBasicMaterial({ color: 0xff5a3a, transparent: true, opacity: 0.16, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+    const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.35, 22, 12, 1, true), beamM); beam.position.set(fx, 11.5, fz); g.add(beam);
+    let found = false;
+    g.userData.pad = {
+      tick: (t, d) => { const f = d ? 0.6 : 0.75 + Math.sin(t * 17 + i) * 0.25 * (Math.sin(t * 5.3) > 0 ? 1 : 0.4); L.intensity = 2.4 * f; fl.scale.setScalar(0.8 + f * 0.4);
+        if (found) arm.rotation.z = -2.4 + Math.sin(t * 6) * 0.35; },
+      done: () => { found = true; flM.color.setHex(0x4ae07a); L.color.setHex(0x4ae07a); beamM.color.setHex(0x4ae07a); beam.visible = false; arm.visible = true; head.rotation.y = 0.4; },
+    };
     return g;
   }
   // a delivery pad (2026-10-07): a marked disc on a roof or the ground, a
@@ -11346,12 +11589,95 @@ async function main() {
                   w: 9,  d: 16, storeys: 2, tone: 0xa9a396, roof: 0x3e3a36 },
     tower:      { tex: 'stone',    st: 3.4, bay: 3.0, pier: 1.9, spand: 1.7,
                   w: 6,  d: 6,  storeys: 7, tone: 0x9a958c, roof: 0x3a3835 },
+    // an East Asian temple or shrine (2026-10-07): built by buildPagoda, not the box
+    pagoda:     { tex: 'plaster',  st: 4.2, bay: 3.0, pier: 1.2, spand: 1.0,
+                  w: 11, d: 11, storeys: 1, tone: 0xd8cfbf, roof: 0x56605c },
   };
   // the bodies the enterable block asked for, built now that the kit exists
   for (const f of (window.__lateBuildings || [])) { try { f(); } catch (e) { console.warn('[game] building', e); } }
   window.__lateBuildings = [];
   window.__facadeKitReady = true;                 // a door block that runs after this builds at once
+  // A TEMPLE THAT IS A TEMPLE (2026-10-07): "a samurai defends a cherry
+  // blossom temple" stood a Gothic chapel front among the blossom. A pagoda:
+  // a stone plinth, a hall of white plaster between vermilion posts, three
+  // roofs of dark tile that sweep down and turn up at the corners, each
+  // storey smaller than the one below, a bronze spire with its rings on top.
+  // Local +z is the front, as for every kit; the hall is the kit's w by d.
+  function buildPagoda(F) {
+    const g = new THREE.Group(), TLp = new THREE.TextureLoader();
+    const tx = (n, rep) => { const t = TLp.load('textures/' + n + '.jpg'); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(rep, rep); t.colorSpace = THREE.SRGBColorSpace; return t; };
+    const M = (o) => { const m = new THREE.MeshStandardMaterial(o); m.userData.noAutoTex = true; return m; };
+    const plasterM = M({ map: tx('plaster', 2), color: 0xf0eadc, roughness: 0.95 }), redM = M({ color: 0xa3271c, roughness: 0.5 });
+    const darkM = M({ color: 0x2a1c16, roughness: 0.7 }), tileM = M({ map: tx('roof', 3), color: 0x56605c, roughness: 0.75, side: THREE.DoubleSide });
+    const stoneM = M({ map: tx('stone', 1.5), color: 0xa49c90, roughness: 0.95 }), bronzeM = M({ color: 0x8a6a2a, roughness: 0.35, metalness: 0.85 });
+    const add = (geo, mat, x, y, z) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.castShadow = true; m.receiveShadow = true; g.add(m); return m; };
+    const hw = F.w / 2, hd = F.d / 2;
+    add(new THREE.BoxGeometry(F.w + 2.4, 0.55, F.d + 2.4), stoneM, 0, 0.27, 0);
+    // a roof: a square sweep, concave, the corners lifted
+    const roof = (S, rise, lift, y) => {
+      const geo = new THREE.PlaneGeometry(2 * S, 2 * S, 28, 28); geo.rotateX(-Math.PI / 2);
+      const pa = geo.attributes.position;
+      for (let i = 0; i < pa.count; i++) { const u = pa.getX(i) / S, v = pa.getZ(i) / S, m = Math.max(Math.abs(u), Math.abs(v));
+        pa.setY(i, rise * Math.pow(Math.max(0, 1 - m), 1.7) + lift * Math.pow(Math.min(1, Math.abs(u) * Math.abs(v)), 4)); }
+      geo.computeVertexNormals(); add(geo, tileM, 0, y, 0);
+      // the eave has a thickness: a dark underside a hand below the tiles
+      add(geo.clone(), darkM, 0, y - 0.22, 0);
+      // the ridge caps run from the peak down each hip to its lifted corner
+      for (const [sx, sz] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) {
+        const pts = [];
+        for (let k = 0; k <= 12; k++) { const t = k / 12 * 0.98;
+          pts.push(new THREE.Vector3(sx * S * t, y + rise * Math.pow(1 - t, 1.7) + lift * Math.pow(t * t, 4) + 0.07, sz * S * t)); }
+        add(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 24, 0.085, 6, false), darkM, 0, 0, 0); }
+    };
+    const storey = (w, d, h, y) => {
+      add(new THREE.BoxGeometry(w, h, d), plasterM, 0, y + h / 2, 0);
+      const nx = Math.max(2, Math.round(w / 3));
+      for (let k = 0; k <= nx; k++) { const x = -w / 2 + k * w / nx;
+        for (const z of [-d / 2 - 0.05, d / 2 + 0.05]) add(new THREE.CylinderGeometry(0.2, 0.22, h, 10), redM, x, y + h / 2, z);
+        for (const sx of [-1, 1]) add(new THREE.CylinderGeometry(0.2, 0.22, h, 10), redM, sx * (w / 2 + 0.05), y + h / 2, -d / 2 + k * d / nx); }
+      // the lintel band and a sill rail all round, lacquered
+      for (const [bw, bd] of [[w + 0.5, 0.3], [0.3, d + 0.5]]) for (const sgn of [-1, 1]) {
+        const off = bw > 1 ? [0, sgn * (d / 2 + 0.06)] : [sgn * (w / 2 + 0.06), 0];
+        add(new THREE.BoxGeometry(bw, 0.34, bd), redM, off[0], y + h - 0.2, off[1]);
+        add(new THREE.BoxGeometry(bw, 0.16, bd), darkM, off[0], y + 0.9, off[1]); }
+    };
+    let y = 0.55;
+    storey(F.w, F.d, F.st, y); y += F.st;
+    roof(hw * 1.45, 2.2, 0.9, y);
+    const tiers = [[0.66, 2.6], [0.48, 2.2]];
+    for (const [k, h] of tiers) { y += 1.0; storey(F.w * k, F.d * k, h, y); y += h; roof(hw * k * 1.55, 1.8 * k + 0.6, 0.7, y); }
+    // the spire: a bronze mast, nine rings, a jewel
+    add(new THREE.CylinderGeometry(0.09, 0.12, 4.4, 10), bronzeM, 0, y + 2.6, 0);
+    for (let r = 0; r < 9; r++) { const t = new THREE.Mesh(new THREE.TorusGeometry(0.32 - r * 0.018, 0.05, 6, 18), bronzeM); t.rotation.x = Math.PI / 2; t.position.set(0, y + 1.3 + r * 0.32, 0); t.castShadow = true; g.add(t); }
+    add(new THREE.SphereGeometry(0.22, 14, 10), bronzeM, 0, y + 5.0, 0);
+    return { g, h: y + 5.2 };
+  }
+  // a torii and stone lanterns before an East Asian temple: the way in is marked
+  function buildTorii() {
+    const g = new THREE.Group();
+    const M = (o) => { const m = new THREE.MeshStandardMaterial(o); m.userData.noAutoTex = true; return m; };
+    const redM = M({ color: 0xc23a22, roughness: 0.45 }), blackM = M({ color: 0x1c1816, roughness: 0.6 });
+    const add = (geo, mat, x, y, z) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.castShadow = true; m.receiveShadow = true; g.add(m); return m; };
+    for (const sx of [-1, 1]) { add(new THREE.CylinderGeometry(0.26, 0.3, 5.2, 14), redM, sx * 2.6, 2.6, 0); add(new THREE.CylinderGeometry(0.36, 0.36, 0.4, 14), blackM, sx * 2.6, 0.2, 0); }
+    add(new THREE.BoxGeometry(6.4, 0.32, 0.34), redM, 0, 4.1, 0);                     // the nuki
+    add(new THREE.BoxGeometry(0.34, 0.75, 0.3), redM, 0, 4.6, 0);                     // the tablet post
+    const top = add(new THREE.BoxGeometry(8.0, 0.4, 0.55), redM, 0, 5.15, 0);         // the kasagi, upturned at its ends
+    const cap = add(new THREE.BoxGeometry(8.4, 0.22, 0.65), blackM, 0, 5.45, 0);
+    for (const m of [top, cap]) { const pa = m.geometry.attributes.position; for (let i = 0; i < pa.count; i++) { const x = pa.getX(i); pa.setY(i, pa.getY(i) + Math.pow(Math.abs(x) / 4.2, 3) * 0.45); } m.geometry.computeVertexNormals(); }
+    return g;
+  }
+  function buildToro() {
+    const g = new THREE.Group();
+    const st = new THREE.MeshStandardMaterial({ color: 0x8e8a80, roughness: 0.95 }); st.userData.noAutoTex = true;
+    const lit = new THREE.MeshStandardMaterial({ color: 0xffe0a0, emissive: 0xffb050, emissiveIntensity: 1.8 }); lit.userData.noAutoTex = true;
+    const add = (geo, mat, y) => { const m = new THREE.Mesh(geo, mat); m.position.y = y; m.castShadow = true; m.receiveShadow = true; g.add(m); return m; };
+    add(new THREE.CylinderGeometry(0.42, 0.5, 0.25, 6), st, 0.12); add(new THREE.CylinderGeometry(0.14, 0.18, 0.9, 10), st, 0.7);
+    add(new THREE.CylinderGeometry(0.36, 0.3, 0.16, 6), st, 1.22); add(new THREE.BoxGeometry(0.42, 0.38, 0.42), lit, 1.48);
+    add(new THREE.ConeGeometry(0.55, 0.42, 6), st, 1.86); add(new THREE.SphereGeometry(0.09, 8, 6), st, 2.12);
+    return g;
+  }
   function buildFacadeBox(kind) {
+    if (kind === 'pagoda') return buildPagoda(FACADE_KIT.pagoda);
     const F = FACADE_KIT[kind] || FACADE_KIT.brownstone;
     const g = new THREE.Group();
     const WTP = 0.42;
@@ -12184,6 +12510,12 @@ async function main() {
     if (st.kind === 'eliminate') return `Last one standing. ${n} rivals, one winner.`;
     if (st.kind === 'score') return `Put ${n} away and it is yours.`;
     if (st.kind === 'capture') return `Hold ${n} ground. Eight seconds each, and do not step off.`;
+    if (st.kind === 'repair' && /\b(hikers?|climbers?|skiers?|campers?|people|children|kids?|survivors?|villagers?|explorers?|walkers?|tourists?|scouts?|lost)\b/.test(String(l)))
+      return `${n} ${l} out there somewhere. Each has lit a red flare; follow the red light up the slope and get to them.`;
+    if (st.kind === 'repair' && /\b(trees?|pines?|oaks?|logs?|timber)\b/.test(String(l)))
+      return `${n} ${l} to fell. The ones to cut wear a red ribbon; stand at the trunk and hold E until it goes over.`;
+    if (st.kind === 'repair' && /letter|mail|post|card/.test(String(l)))
+      return `${n} ${l} to deliver. Each goes in a letterbox by a gate, under a gold light; stand at the box and hold E.`;
     if (st.kind === 'repair' && /package|parcel|deliver|letter|mail|pizza|crate|box|supplies|medicine|food|meal/.test(String(l)))
       return `${n} ${l} to deliver. Each drop is a pad with a gold beam over it; get over the pad and hold E to drop one.`;
     if (st.kind === 'repair') return /fire|flame|blaze|burn/.test(String(l))
@@ -12220,6 +12552,8 @@ async function main() {
     if (st.kind === 'capture') return `Capture ${st.count} zone${st.count > 1 ? 's' : ''} (hold 8s each)`;
     if (st.kind === 'escort') return `Escort ${st.label || 'your charge'} to the beacon. Keep them alive`;
     if (st.kind === 'serve') return `Serve ${st.count} ${st.label || 'orders'}`;
+    if (st.kind === 'repair' && /\b(trees?|pines?|oaks?|logs?|timber)\b/.test(String(st.label || ''))) return `Chop down ${st.count} ${st.label}`;
+    if (st.kind === 'repair' && /\b(hikers?|climbers?|skiers?|campers?|people|children|kids?|survivors?|villagers?|explorers?|walkers?|tourists?|scouts?|lost)\b/.test(String(st.label || ''))) return `Find ${st.count} ${st.label}`;
     if (st.kind === 'repair') return /fire|flame|blaze|burn/.test(String(st.label || '')) ? `Put out ${st.count} ${st.label}`
       : /package|parcel|deliver|letter|mail|pizza|crate|box|supplies|medicine|food|meal/.test(String(st.label || '')) ? `Deliver ${st.count} ${st.label}`
       : `Fix ${st.count} ${st.label || 'broken panels'}`;
@@ -12781,7 +13115,49 @@ async function main() {
   const CAR_TYPE_KEYS = ['sedan', 'sedan', 'sedan', 'compact', 'compact',
     'coupe', 'suv', 'suv', 'wagon', 'pickup', 'van', 'taxi', 'taxi',
     'sports', 'box'];
+  // A GO-KART (2026-10-07): a low tube frame on four fat tyres (the rears
+  // wider), side pods and a nose cone in the paint, a bucket seat, a steering
+  // wheel, a number board, a roll of bumper all round, and its driver sitting
+  // low in a helmet. Nose on +Z, as the finished car is; metres.
+  const KART_PAINTS = [0xd83a2a, 0x2a6ad8, 0xf2c230, 0x2fae5a, 0xe86a1a, 0x8a3ad8, 0xf2f2f2, 0x1a1a1e];
+  function makeKart(cp, idx) {
+    const g = new THREE.Group(), k = idx || 0;
+    const M = (o) => { const m = new THREE.MeshStandardMaterial(o); m.userData.noAutoTex = true; return m; };
+    const paint = M({ color: cp && cp.paint !== undefined ? cp.paint : KART_PAINTS[k % KART_PAINTS.length], roughness: 0.32, metalness: 0.15 });
+    const tube = M({ color: 0x2a2c30, roughness: 0.4, metalness: 0.8 }), rub = M({ color: 0x141414, roughness: 0.88 }), rim = M({ color: 0xc8ccd2, roughness: 0.3, metalness: 0.9 });
+    const seat = M({ color: 0x1e1e22, roughness: 0.6 }), suit = M({ color: KART_PAINTS[(k + 3) % KART_PAINTS.length], roughness: 0.7 });
+    const helm = M({ color: KART_PAINTS[(k + 5) % KART_PAINTS.length], roughness: 0.25, metalness: 0.1 }), visor = M({ color: 0x101820, roughness: 0.08, metalness: 0.6 });
+    const add = (geo, mat, x, y, z) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.castShadow = true; m.receiveShadow = true; g.add(m); return m; };
+    // the frame: two rails and the cross tubes
+    for (const sx of [-0.32, 0.32]) { const r = add(new THREE.CylinderGeometry(0.025, 0.025, 1.5, 8), tube, sx, 0.12, 0); r.rotation.x = Math.PI / 2; }
+    for (const z of [-0.6, -0.2, 0.3, 0.62]) { const r = add(new THREE.CylinderGeometry(0.022, 0.022, 0.7, 8), tube, 0, 0.12, z); r.rotation.z = Math.PI / 2; }
+    add(new THREE.BoxGeometry(0.7, 0.03, 1.3), tube, 0, 0.1, 0);                       // the floor tray
+    // wheels: axle, tyre, rim
+    const wheel = (x, z, w, r) => { const t = add(new THREE.CylinderGeometry(r, r, w, 20), rub, x, r, z); t.rotation.z = Math.PI / 2;
+      const h = add(new THREE.CylinderGeometry(r * 0.6, r * 0.6, w + 0.01, 14), rim, x, r, z); h.rotation.z = Math.PI / 2; };
+    for (const sx of [-1, 1]) { wheel(sx * 0.5, 0.62, 0.13, 0.13); wheel(sx * 0.55, -0.6, 0.2, 0.14); }
+    const ax = add(new THREE.CylinderGeometry(0.02, 0.02, 1.1, 8), tube, 0, 0.14, -0.6); ax.rotation.z = Math.PI / 2;
+    // bodywork in the paint: nose cone, side pods, a rear bumper
+    const nose = add(new THREE.BoxGeometry(0.62, 0.12, 0.42), paint, 0, 0.18, 0.86); nose.rotation.x = -0.18;
+    for (const sx of [-1, 1]) { const pod = add(new THREE.BoxGeometry(0.16, 0.16, 0.62), paint, sx * 0.48, 0.17, 0.0); pod.rotation.y = sx * 0.05; }
+    add(new THREE.BoxGeometry(1.1, 0.1, 0.12), paint, 0, 0.16, -0.86);
+    const plate = add(new THREE.BoxGeometry(0.34, 0.24, 0.02), M({ color: 0xf2f2ee, roughness: 0.6 }), 0, 0.36, 0.78); plate.rotation.x = -0.35;
+    // the seat, the column and the wheel
+    add(new THREE.BoxGeometry(0.38, 0.06, 0.38), seat, 0, 0.18, -0.25);
+    const back = add(new THREE.BoxGeometry(0.38, 0.4, 0.06), seat, 0, 0.38, -0.44); back.rotation.x = -0.25;
+    const col = add(new THREE.CylinderGeometry(0.018, 0.018, 0.5, 8), tube, 0, 0.32, 0.36); col.rotation.x = 0.9;
+    const sw = add(new THREE.TorusGeometry(0.13, 0.022, 8, 20), rub, 0, 0.5, 0.18); sw.rotation.x = 0.55;
+    // the driver, sitting low: legs forward, hands on the wheel, a helmet
+    const torso = add(new THREE.CapsuleGeometry(0.15, 0.3, 4, 10), suit, 0, 0.5, -0.27); torso.rotation.x = -0.25;
+    for (const sx of [-1, 1]) { const leg = add(new THREE.CapsuleGeometry(0.065, 0.42, 4, 8), suit, sx * 0.1, 0.26, 0.12); leg.rotation.x = Math.PI / 2 - 0.15;
+      const arm = add(new THREE.CapsuleGeometry(0.05, 0.3, 4, 8), suit, sx * 0.16, 0.56, -0.02); arm.rotation.x = 1.1; arm.rotation.z = -sx * 0.25; }
+    add(new THREE.SphereGeometry(0.15, 18, 14), helm, 0, 0.86, -0.25);
+    const vz = add(new THREE.SphereGeometry(0.152, 18, 12, -0.9, 1.8, 1.2, 0.75), visor, 0, 0.86, -0.25); vz.rotation.y = Math.PI / 2 * 0;
+    g.userData.kart = true;
+    return g;
+  }
   function buildCar(cp) {
+    if (cp && cp.type === 'kart') return makeKart(cp, 0);
     // LOFTED CARS (2026-10-01): proc/car.js builds the body as one skin with
     // flush glass, turned wheels and real lamps; this extruded build stays as
     // the fallback (?car=extrude, or if the module ever fails)
@@ -13900,7 +14276,8 @@ async function main() {
   // weights follow the ground speed and each keeps its own stride rate.
   const _gaitW = { idle: 1, walk: 0, run: 0, sneak: 0 };
   for (const k of ['idle', 'walk', 'run', 'sneak']) { const a2 = actions['__' + k]; if (a2) { a2.play(); a2.setEffectiveWeight(k === 'idle' ? 1 : 0); } }
-  let _prevYaw = 0, _prevWalkV = 0, turnRoll = 0, accelP = 0, headBone = null, headYawK = 0;
+  let _prevYaw = 0, _prevWalkV = 0, turnRoll = 0, accelP = 0, headBone = null, headYawK = 0, neckBone = null;
+  const _gaze = { pts: [], scanT: 0, cur: null, hold: 0, rest: 1.5, pitch: 0 }, _gv = new THREE.Vector3(), _gright = new THREE.Vector3(), _hq2 = new THREE.Quaternion();
   const _hq = new THREE.Quaternion(), _hpq = new THREE.Quaternion(), _hup = new THREE.Vector3(0, 1, 0);
   function setAnim(next) {
     if (!mixer || !next || next === current) return;
@@ -14041,9 +14418,17 @@ async function main() {
       }
     });
   }
+  // A STRIDE, NOT A STOP (2026-10-07): the window used to run straight through
+  // a stop and a fresh start, so a walk's ride read the step off from standing
+  // as well. It starts again, after a settling half second, whenever the body
+  // changes between standing, walking and running.
+  let _rideState = -1, _rideHold = 0;
   function trackRide() {
     if (!_armScanned) scanArms();
     if (!_hipsBone) return;
+    const rs = (window.__pSpeed || 0) > 0.3 ? (_gaitW.run > 0.5 ? 2 : 1) : 0, now = performance.now();
+    if (rs !== _rideState) { _rideState = rs; _rideHold = now + 500; _ride.n = 0; _ride.i = 0; }
+    if (now < _rideHold) return;
     _ride.buf[_ride.i] = _hipsBone.position.y; _ride.i = (_ride.i + 1) % _ride.buf.length; if (_ride.n < _ride.buf.length) _ride.n++;
   }
   function rideSpan() {
@@ -14408,8 +14793,9 @@ async function main() {
   } else if (SPEC.player && SPEC.player.attack === 'ranged' && ROLE_PICK !== 'pistol') {
     Object.assign(WEAPONS[0], { name: 'Bow', icon: '🏹', desc: 'hold F to draw, release to loose' });
   } else if (SPEC.player && (SPEC.player.mode === 'swim' || /^(wolf|fox|bear|tiger|lion|dog|cat|shark|dolphin|orca|whale|dragon|eagle|hawk|owl|bird|horse|deer|boar|panther|leopard|cheetah|crocodile|alligator|snake|spider|scorpion|raptor|dinosaur)s?$/.test(HERO_ROLE))) {
-    // a dolphin with sharks about was handed a "Blade": an animal bites
-    Object.assign(WEAPONS[0], { name: 'Bite', icon: '🦷', desc: 'lunge at whatever is in front of you' });
+    // a dolphin with sharks about was handed a "Blade": an animal bites; a diver carries a knife (2026-10-07)
+    if (/(^|\s)(diver|scuba diver|frogman|swimmer|snorkeler)s?$/.test(HERO_ROLE)) Object.assign(WEAPONS[0], { name: 'Dive knife', icon: '🔪', desc: 'strike at whatever is in front of you' });
+    else Object.assign(WEAPONS[0], { name: 'Bite', icon: '🦷', desc: 'lunge at whatever is in front of you' });
   }
   if (/^(sheriff|marshal|deputy|cowboy|cowgirl|gunslinger|outlaw|bandit)$/.test(HERO_ROLE))
     Object.assign(WEAPONS[1], { name: 'Revolver', desc: 'hold F to aim, release to fire' });
@@ -15404,7 +15790,8 @@ async function main() {
         walk_v: +walkV.toFixed(2), land_dip_peak: +landDipPeak.toFixed(3), run_k: +runK.toFixed(2), fov: camera.fov !== undefined ? +camera.fov.toFixed(1) : null, fov_base: SPEC.camera.fov_deg,   // a side or top view is orthographic: no fov
         gait_engine: GAIT ? GAIT.facts() : null,
         gait: { idle: +_gaitW.idle.toFixed(2), walk: +_gaitW.walk.toFixed(2), run: +_gaitW.run.toFixed(2), rate: actions.__walk ? +actions.__walk.timeScale.toFixed(2) : null, top: current && current.getClip ? current.getClip().name : null },
-        lean: { roll: +turnRoll.toFixed(3), pitch: +accelP.toFixed(3), head: +headYawK.toFixed(3), head_bone: headBone ? headBone.name : null },
+        lean: { roll: +turnRoll.toFixed(3), pitch: +accelP.toFixed(3), head: +headYawK.toFixed(3), head_bone: headBone ? headBone.name : null,
+                gaze: { pitch: +_gaze.pitch.toFixed(3), at: _gaze.cur ? (_gaze.cur.goal ? 'goal' : 'near') : null } },
         arms: armAngles(),       // the upper arms' angle from straight down, in degrees: a walk swings them 4 to 20
         ride: rideSpan(),        // the hips bone's height span over the last ninety frames, metres: a walk rides 0.03 to 0.06
         shoulders: shoulderTilt(),   // the clavicles' tilt above horizontal, degrees: relaxed is level or below
@@ -17324,7 +17711,27 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
       const FIRE = /fire|flame|blaze|inferno|burn/.test(String(_rpS.label || '').toLowerCase());
       // deliveries are dropped on a pad (2026-10-07): "a delivery drone drops packages on rooftops" was one "reach rooftop"
       const DELIVER = !FIRE && /package|parcel|deliver|letter|mail|pizza|crate|box|supplies|medicine|food|meal/.test(String(_rpS.label || '').toLowerCase());
-      if (DELIVER && window.__roofs && window.__roofs.length && SPEC.player.mode === 'fly') {
+      // (2026-10-07) letters go in letterboxes at the gates; trees are felled, not repaired
+      const POST = DELIVER && /letter|mail|post|card|newspaper/.test(String(_rpS.label || '').toLowerCase()) && SPEC.player.mode !== 'fly' && !INTERIOR;
+      const CHOP = !FIRE && !DELIVER && /\b(trees?|pines?|oaks?|birch(es)?|spruces?|logs?|timber)\b/.test(String(_rpS.label || '').toLowerCase()) && !INTERIOR;
+      // (2026-10-07) the lost are found by walking up to them: no key to hold
+      const FIND = !FIRE && !DELIVER && !CHOP && /\b(hikers?|climbers?|skiers?|campers?|people|persons?|children|kids?|survivors?|villagers?|explorers?|walkers?|travell?ers?|tourists?|scouts?|lost)\b/.test(String(_rpS.label || '').toLowerCase());
+      if (POST && VILLAGE) {
+        // a letterbox by each cottage's gate, out at the lane side of its front
+        const cs = VILLAGE.cot.slice().sort((a, b) => Math.hypot(a.x, a.z) - Math.hypot(b.x, b.z));
+        for (let k = 0; k < N && k < cs.length; k++) { const c = cs[Math.floor(k * cs.length / N)], [x, z] = VILLAGE.loc(c, c.w * 0.32, c.d / 2 + 2.2);
+          spots.push([x, hAt(x, z), z, c.ry, false, c, true]); }
+      } else if (FIND && !INTERIOR) {
+        // spread up the slopes, away from the start and from each other
+        for (let k = 0; k < N; k++) { let x = 0, z = 0;
+          for (let t = 0; t < 30; t++) { const a = k / N * Math.PI * 2 + rngR() * 1.2, d = 20 + rngR() * gsize * 0.28; x = Math.cos(a) * d; z = Math.sin(a) * d;
+            if (!spots.some(q => Math.hypot(q[0] - x, q[2] - z) < 18)) break; }
+          spots.push([x, hAt(x, z) - 0.02, z, rngR() * 6.28, false, null, true]); }
+      } else if (CHOP) {
+        // marked trees round the clearing, out along the way
+        for (let k = 0; k < N; k++) { const a = k / N * Math.PI * 2 + rngR() * 0.6, d = 12 + rngR() * gsize * 0.22; const x = Math.cos(a) * d, z = Math.sin(a) * d;
+          spots.push([x, hAt(x, z) - 0.05, z, 0, false]); }
+      } else if (DELIVER && window.__roofs && window.__roofs.length && SPEC.player.mode === 'fly') {
         const roofs = window.__roofs.map((r, i) => ({ r, i, d: Math.hypot(r[0], r[1]) })).filter(o => o.d > 25 && o.r[3] > 6 && o.r[4] > 6 && o.r[2] - hAt(o.r[0], o.r[1]) < 28)   // a plain roof: towers over 30 m step back and their recorded top is a setback
           .sort((a, b) => a.d - b.d);
         const pool = roofs.filter(o => o.i >= 120).length >= N ? roofs.filter(o => o.i >= 120) : roofs;
@@ -17374,6 +17781,26 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
       const panels = [];
       for (let i = 0; i < N && i < order.length; i++) {
         const [x, y, z, ry, standing, cot, pad] = order[i];
+        if (CHOP) {
+          const t = makeChopTree(i + 1); t.position.set(x, y, z); scene.add(t);
+          t.userData.fsTag = { type: 'objective', name: 'marked tree', detail: 'hold E to chop it down' };
+          const col = world.createCollider(RAPIER.ColliderDesc.cylinder(1.6, 0.3).setTranslation(x, y + 1.6, z));
+          panels.push({ g: t, chop: t.userData.chop, col, fixed: false, p: 0, x, z, ry: 0 });
+          continue;
+        }
+        if (FIND) {
+          const g2 = makeLost(i + 1); g2.position.set(x, y, z); g2.rotation.y = ry; scene.add(g2);
+          g2.userData.fsTag = { type: 'objective', name: String(_rpS.label || 'someone lost').replace(/s$/, ''), detail: 'go to them' };
+          panels.push({ g: g2, pad: g2.userData.pad, find: true, fixed: false, p: 0, x, z, ry });
+          continue;
+        }
+        if (POST) {
+          const g2 = makeLetterbox(i + 1); g2.position.set(x, y, z); g2.rotation.y = ry; scene.add(g2);
+          g2.userData.fsTag = { type: 'objective', name: 'letterbox', detail: 'hold E to post the ' + String(_rpS.label || 'letter').replace(/s$/, '') };
+          world.createCollider(RAPIER.ColliderDesc.cuboid(0.1, 0.65, 0.1).setTranslation(x, y + 0.65, z));
+          panels.push({ g: g2, pad: g2.userData.pad, post: true, fixed: false, p: 0, x, z, ry });
+          continue;
+        }
         if (pad || DELIVER) {
           const g2 = makePad(!!INTERIOR); g2.position.set(x, y, z); scene.add(g2);
           g2.userData.fsTag = { type: 'objective', name: 'delivery pad', detail: 'hold E over it to drop the ' + (_rpS.label || 'package') };
@@ -17425,8 +17852,9 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
         const tt = performance.now() / 1000;
         for (const q of panels) if (q.fire) q.fire.tick(dt, tt);
         for (const q of panels) if (q.pad) q.pad.tick(tt, q.fixed);
+        for (const q of panels) if (q.chop) q.chop.tick(dt, false);
         for (const s of spray) s.visible = false;
-        for (const q of panels) if (!q.fixed && !q.fire && !q.pad) {
+        for (const q of panels) if (!q.fixed && !q.fire && !q.pad && !q.chop) {
           q.spark.material.opacity = Math.random() < 0.3 ? 0.95 : 0.12; q.spark.scale.setScalar(0.25 + Math.random() * 0.45);
           q.scr.material.emissiveIntensity = Math.random() < 0.08 ? 0.2 : 1.4;
         }
@@ -17434,12 +17862,16 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
         const pp = playerObj.position; let near = null, nd = 2.4;
         for (const q of panels) { if (q.fixed) continue;
           if (q.pad && q.roofY !== undefined && Math.abs(pp.y - q.roofY) > 8) continue;     // fly down to the roof
-          const d = Math.hypot(q.x - pp.x, q.z - pp.z) - (q.pad ? 1.4 : 0); if (d < nd) { nd = d; near = q; } }
+          const d = Math.hypot(q.x - pp.x, q.z - pp.z) - (q.pad && !q.post && !q.find ? 1.4 : 0); if (d < nd) { nd = d; near = q; } }
         if (!near) { bar.style.display = 'none'; return; }
         bar.style.display = 'block';
-        const held = !!keys.KeyE;
-        near.p = held ? Math.min(1, near.p + dt / (near.fire ? 2.4 : near.pad ? 1.0 : 1.6)) : Math.max(0, near.p - dt * 0.6);
-        document.getElementById('fsrpT').textContent = near.fire ? (held ? 'Spraying\u2026' : 'Hold E to put it out')
+        const held = !!keys.KeyE || (near.find && nd < 1.9);      // the lost are found by reaching them
+        near.p = held ? Math.min(1, near.p + dt / (near.find ? 0.5 : near.fire ? 2.4 : near.chop ? 2.2 : near.pad ? 1.0 : 1.6)) : Math.max(0, near.p - dt * 0.6);
+        if (near.chop) { near.chop.tick(dt, held); if (held && Math.floor(near.p * 6) !== near._k) { near._k = Math.floor(near.p * 6); try { sfx('hit'); } catch (e) {} } }
+        document.getElementById('fsrpT').textContent = near.find ? (held ? 'Found them\u2026' : 'Get to them')
+          : near.chop ? (held ? 'Chopping\u2026' : 'Hold E to chop it down')
+          : near.post ? (held ? 'Posting\u2026' : 'Hold E to post the ' + String(_rpS.label || 'letter').replace(/s$/, ''))
+          : near.fire ? (held ? 'Spraying\u2026' : 'Hold E to put it out')
           : near.pad ? (held ? 'Dropping\u2026' : 'Hold E to drop the ' + String(_rpS.label || 'package').replace(/s$/, ''))
           : (held ? 'Repairing\u2026' : 'Hold E to repair');
         if (near.fire && held) {
@@ -17451,17 +17883,18 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
         document.getElementById('fsrpB').style.width = Math.round(near.p * 100) + '%';
         if (near.p >= 1) {
           near.fixed = true; fixed++; st._fixed = fixed;
-          if (near.fire) near.fire.douse();
+          if (near.chop) { near.chop.fell(pp.x, pp.z); try { world.removeCollider(near.col, false); } catch (e) {} }
+          else if (near.fire) near.fire.douse();
           else if (near.pad) near.pad.done();
           else { near.scr.material.emissive.setHex(0x2aff7a); near.scr.material.emissiveIntensity = 1.3; near.spark.visible = false; }
-          popText(near.fire ? (fixed >= st.count ? 'Every fire is out!' : 'Fire out!') : near.pad ? (fixed >= st.count ? 'Every delivery made!' : 'Delivered!') : (fixed >= st.count ? 'All fixed!' : 'Fixed!'), '#7fe08a'); sfx('pickup');
+          popText(near.find ? (fixed >= st.count ? 'Everyone is found!' : 'Found!') : near.chop ? (fixed >= st.count ? 'Every tree is down!' : 'Timber!') : near.post ? (fixed >= st.count ? 'Every letter posted!' : 'Posted!') : near.fire ? (fixed >= st.count ? 'Every fire is out!' : 'Fire out!') : near.pad ? (fixed >= st.count ? 'Every delivery made!' : 'Delivered!') : (fixed >= st.count ? 'All fixed!' : 'Fixed!'), '#7fe08a'); sfx('pickup');
           try { burst(near.g.position, 0x7fe08a); } catch (e) {}
           renderQuest(); bar.style.display = 'none';
           if (fixed >= st.count) advanceStep();
         }
       };
       const hintR = document.querySelector('#hud .hint');
-      if (hintR) hintR.textContent += FIRE ? ' \u00b7 hold E to spray' : DELIVER ? ' \u00b7 hold E to drop' : ' \u00b7 hold E to repair';
+      if (hintR && !FIND) hintR.textContent += CHOP ? ' \u00b7 hold E to chop' : POST ? ' \u00b7 hold E to post' : FIRE ? ' \u00b7 hold E to spray' : DELIVER ? ' \u00b7 hold E to drop' : ' \u00b7 hold E to repair';
     }
   }
   {
@@ -18560,8 +18993,11 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
         // with the gait engine the clip follows the SPEED, as a person's gait
         // does: past a brisk walk the body breaks into a jog whatever key is
         // held (a walk clip cranked to twice its pace is the mince it made)
+        // (2026-10-07) a walk at the game's own walking pace is a walk, whatever
+        // pace the walk clip was captured at: the break into a run starts past it
+        const _kr0 = Math.max(_wr * 1.2, vWalk * 1.08);
         const kRun = GAIT
-          ? THREE.MathUtils.smoothstep(speed, _wr * 1.2, Math.max(_wr * 1.2 + 0.4, _rr * 0.9))
+          ? THREE.MathUtils.smoothstep(speed, _kr0, Math.max(_kr0 + 0.4, _rr * 0.9))
           : (_wantRun ? THREE.MathUtils.clamp((speed - vWalk * 0.6) / Math.max((P.run_speed || vWalk * 2) - vWalk * 0.6, 0.2), 0.35, 1) : 0);
         const sneaking = !!(window.__sneak && actions.__sneak);
         const want = { idle: 1 - kMove, walk: sneaking ? 0 : kMove * (1 - kRun), run: kMove * kRun, sneak: sneaking ? kMove * (1 - kRun) : 0 };
@@ -18648,19 +19084,73 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
         if (!_carryPose) _carryPose = __makeCarryPose(pg.scene);
         _carryPose.apply(_carryK, _carryRight.set(Math.cos(modelYaw), 0, -Math.sin(modelYaw)), CARRY_SIGN);
       }
-      // THE HEAD LOOKS WHERE THE CAMERA LOOKS (2026-09-23): after the pose, the
-      // head turns up to fifty degrees toward the view direction, about the
-      // world's up so the rig's bone axes do not matter.
+      // WHERE THE HEAD LOOKS (2026-10-07, after the owner: "keep improving ...
+      // where the head is looking"). It used to follow the camera and nothing
+      // else. A person walking looks where they are going, a little down at the
+      // ground ahead; looks into a turn before the body takes it; glances at
+      // whoever and whatever is near and in front (a person, a pickup, the thing
+      // the job is about) for a second or two, then away; and standing still,
+      // looks where the camera looks. Yaw about the world's up and pitch about
+      // the body's right, so the rig's bone axes do not matter; the neck takes a
+      // third, the head the rest; a neck turns sixty degrees at most.
       if (!headBone && pg.scene) pg.scene.traverse(o => { if (!headBone && o.isBone && /head/i.test(o.name) && !/top|end|tip/i.test(o.name)) headBone = o; });
+      if (headBone && !neckBone && headBone.parent && headBone.parent.isBone && /neck/i.test(headBone.parent.name)) neckBone = headBone.parent;
       if (headBone && !(DRIVE || DRIVING)) {
-        let d = (yaw + Math.PI) - modelYaw;
-        while (d > Math.PI) d -= Math.PI * 2; while (d < -Math.PI) d += Math.PI * 2;
-        const target = THREE.MathUtils.clamp(d, -0.9, 0.9) * (Math.abs(d) > 2.2 ? 0 : 0.85);
-        headYawK = THREE.MathUtils.damp(headYawK, target, 5, dt);
-        if (Math.abs(headYawK) > 0.002 && headBone.parent) {
-          headBone.parent.getWorldQuaternion(_hpq);
-          _hq.setFromAxisAngle(_hup, headYawK);
-          headBone.quaternion.premultiply(_hpq.clone().invert().multiply(_hq).multiply(_hpq));
+        const sp = window.__pSpeed || 0, pp = playerObj.position, eyeY = pp.y + (SPEC.player.height_m || 1.8) * 0.93;
+        const fwdX = Math.sin(modelYaw), fwdZ = Math.cos(modelYaw);
+        const wrapA = a => { while (a > Math.PI) a -= Math.PI * 2; while (a < -Math.PI) a += Math.PI * 2; return a; };
+        // what there is to look at, refreshed twice a second
+        _gaze.scanT -= dt;
+        if (_gaze.scanT <= 0) {
+          _gaze.scanT = 0.5; _gaze.pts.length = 0;
+          for (const n of npcs) if (n && !n.dead && !n.dormant && n.obj && n.obj.visible !== false) _gaze.pts.push({ o: n.obj, h: n.quad ? 0.5 : 1.55 });
+          for (const c of collectibles) if (c && c.mesh && c.mesh.parent && c.mesh.visible !== false) _gaze.pts.push({ o: c.mesh, h: 0.2 });
+          if (goalMesh) _gaze.pts.push({ o: goalMesh, h: 1.2, goal: true });
+        }
+        // a glance: pick something near and in front, hold it, then look away
+        _gaze.hold -= dt; _gaze.rest -= dt;
+        if (_gaze.cur && (_gaze.hold <= 0 || !_gaze.cur.o.parent)) { _gaze.cur = null; _gaze.rest = 1.5 + Math.random() * 2.5; }
+        if (!_gaze.cur && _gaze.rest <= 0 && sp < 5) {
+          let best = null, bs = 0;
+          for (const q of _gaze.pts) { q.o.getWorldPosition(_gv); const dx = _gv.x - pp.x, dz = _gv.z - pp.z, d = Math.hypot(dx, dz);
+            if (d < 1.2 || d > (q.goal ? 30 : 14)) continue;
+            const front = (dx * fwdX + dz * fwdZ) / d; if (front < -0.2) continue;
+            const sc = (front + 0.4) / d * (q.goal ? 1.6 : 1); if (sc > bs) { bs = sc; best = q; } }
+          if (best) { _gaze.cur = best; _gaze.hold = 1.2 + Math.random() * 1.6; }
+        }
+        let wantYaw = 0, wantPitch = 0;
+        if (_gaze.cur) {
+          _gaze.cur.o.getWorldPosition(_gv); const dx = _gv.x - pp.x, dz = _gv.z - pp.z, d = Math.hypot(dx, dz) || 1;
+          wantYaw = wrapA(Math.atan2(dx, dz) - modelYaw);
+          wantPitch = -Math.atan2(_gv.y + _gaze.cur.h - eyeY, d);      // + is down
+        } else if (sp > 0.4) {
+          // moving: along the way, into the turn the player is asking for
+          const want = (typeof _mmWantYaw !== 'undefined' && _mmWant && _mmWant.lengthSq() > 1e-4) ? wrapA(_mmWantYaw - modelYaw) : 0;
+          wantYaw = THREE.MathUtils.clamp(want * 0.7, -0.8, 0.8);
+          wantPitch = sp > 3.5 ? 0.05 : 0.12;                           // the ground a few strides ahead
+        } else {
+          // standing: where the camera looks, unless it looks back at the face
+          const d = wrapA((yaw + Math.PI) - modelYaw);
+          wantYaw = Math.abs(d) > 2.2 ? 0 : THREE.MathUtils.clamp(d, -0.9, 0.9) * 0.85;
+          wantPitch = 0.04;
+        }
+        if (Math.abs(wantYaw) > 1.75) { wantYaw = 0; _gaze.cur = null; }  // behind: the body would have to turn
+        wantYaw = THREE.MathUtils.clamp(wantYaw, -1.05, 1.05);
+        wantPitch = THREE.MathUtils.clamp(wantPitch, -0.35, 0.52);
+        headYawK = THREE.MathUtils.damp(headYawK, wantYaw, _gaze.cur ? 7 : 4.5, dt);
+        _gaze.pitch = THREE.MathUtils.damp(_gaze.pitch, wantPitch, 4, dt);
+        _gright.set(Math.cos(modelYaw), 0, -Math.sin(modelYaw));
+        const turnBone = (bone, k) => {
+          if (!bone || !bone.parent) return;
+          bone.parent.getWorldQuaternion(_hpq);
+          _hq.setFromAxisAngle(_hup, headYawK * k);
+          _hq2.setFromAxisAngle(_gright, _gaze.pitch * k);
+          _hq.multiply(_hq2);
+          bone.quaternion.premultiply(_hpq.clone().invert().multiply(_hq).multiply(_hpq));
+        };
+        if (Math.abs(headYawK) > 0.002 || Math.abs(_gaze.pitch) > 0.002) {
+          if (neckBone) { turnBone(neckBone, 0.35); neckBone.updateMatrixWorld(true); turnBone(headBone, 0.65); }
+          else turnBone(headBone, 1);
         }
       }
     }
@@ -18694,6 +19184,9 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
       if (window.__growTick) window.__growTick(dt);
       if (window.__graveMist) window.__graveMist(performance.now() / 1000);
       if (window.__hiveTick) window.__hiveTick(performance.now() / 1000);
+      // the goal's light is for finding it: gone by the time you are close
+      if (window.__goalBeam && playerObj) { const b = window.__goalBeam, d = Math.hypot(b.position.x - playerObj.position.x, b.position.z - playerObj.position.z);
+        b.material.opacity = 0.12 * Math.min(1, Math.max(0, (d - 18) / 30)); b.visible = b.material.opacity > 0.005; }
       if (window.__heliTick) window.__heliTick(dt);
       for (const n of npcs) if (n.spectral && !n.dead) {          // a ghost hovers and flickers
         const tt = performance.now() / 1000;

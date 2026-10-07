@@ -388,6 +388,25 @@ def unload_reference_pipeline():
         _T2I_CONTROLNET_PIPELINE = None
 
 
+_WARDROBE_KEYS = None
+
+
+def has_wardrobe(kind: str) -> bool:
+    """True when the reference generator has an outfit written for this role
+    (2026-10-07): the planner used to keep its own list of roles it would
+    generate, and a lumberjack or a ghost hunter with an outfit written here
+    was still recast as the ranger. The outfits are read from this file's own
+    table, so there is one list."""
+    global _WARDROBE_KEYS
+    if _WARDROBE_KEYS is None:
+        import re as _rw
+        src = Path(__file__).read_text(encoding="utf-8")
+        i = src.find("char_hints = {")
+        j = src.find("\n        }", i)
+        _WARDROBE_KEYS = set(_rw.findall(r'^\s+"([a-z][a-z \-]*)":\s', src[i:j], _rw.M)) if i > 0 else set()
+    return (kind or "").strip().lower() in _WARDROBE_KEYS
+
+
 def _build_reference_prompt(slots: Dict[str, Any], style: str) -> tuple[str, str]:
     """Compose positive + negative prompts for a clean asset reference."""
     preset = REFERENCE_STYLES.get(style, REFERENCE_STYLES["photoreal"])
@@ -526,6 +545,13 @@ def _build_reference_prompt(slots: Dict[str, Any], style: str) -> tuple[str, str
             "surfer":    "surfer in a full-length wetsuit, barefoot, fully covered",
             "skateboarder": "skateboarder in a loose t-shirt over a long-sleeved top, baggy jeans, a cap, skate shoes, fully clothed",
             "gardener":  "gardener in denim overalls over a checked shirt, a straw sun hat, gardening gloves, rubber boots, fully clothed",
+            # (2026-10-07) the fourth wide test's people; original outfits, no logos or insignia
+            "lumberjack": "lumberjack in a red and black checked flannel shirt, braces, sturdy brown work trousers, heavy leather boots, a knitted beanie, a full beard, fully clothed",
+            "postman":   "postman in a plain navy blue uniform jacket and trousers, a peaked cap, a brown leather satchel strap across the chest, black shoes, no logos, fully clothed",
+            "postwoman": "postwoman in a plain navy blue uniform jacket and trousers, a peaked cap, a brown leather satchel strap across the chest, black shoes, no logos, fully clothed",
+            "mail carrier": "mail carrier in a plain navy blue uniform jacket and trousers, a peaked cap, a brown leather satchel strap across the chest, black shoes, no logos, fully clothed",
+            "diver":     "scuba diver in a full black wetsuit with blue side panels, a dive mask pushed up on the forehead, an air tank on the back, dive boots, fully covered",
+            "hiker":     "hiker in a red waterproof jacket, grey hiking trousers, walking boots, a small backpack, a knitted beanie, fully clothed",
             # generic humans need CLOTHES spelled out or SDXL renders a shirtless
             # anatomy/muscle-suit figure. Order: woman/person before "man" (which
             # is a substring of "woman") so the right one matches first.

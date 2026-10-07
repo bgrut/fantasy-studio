@@ -91,6 +91,7 @@ export function createMotionMatcher({ root, db, halflife = 0.1, searchEvery = 0.
   const restDirs = db.head.rest_dirs;
   const dirDbg = [];
   for (const t of tracks) {
+    t.bindLocal = t.bone.quaternion.clone();             // the bind pose's own wrist, for the hands below
     const bw = t.bone.getWorldQuaternion(new THREE.Quaternion());
     const Rt = toChar.clone().multiply(bw);
     let dt;
@@ -144,9 +145,15 @@ export function createMotionMatcher({ root, db, halflife = 0.1, searchEvery = 0.
       if (qa.dot(qb) < 0) qb.set(-qb.x, -qb.y, -qb.z, -qb.w);
       qa.slerp(qb, a);
       _wq.copy(fromChar).multiply(qa).multiply(t.K);                      // world rotation of this bone
-      worldQ.set(t.bone, _wq.clone());
       const p = t.bone.parent;
       if (p && worldQ.has(p)) _pw.copy(worldQ.get(p)); else if (p) p.getWorldQuaternion(_pw); else _pw.identity();
+      // A WRIST IN LINE (2026-10-07): the captured wrists (CMU's are noisy) bent
+      // every walking hand back, fingers up, like a waiter's tray. A walking
+      // wrist barely moves; the hand keeps its bind pose on the forearm and the
+      // arm carries the swing.
+      if (t.name === 'hand_l' || t.name === 'hand_r') {
+        outQ[k].copy(t.bindLocal); worldQ.set(t.bone, _pw.clone().multiply(t.bindLocal)); return; }
+      worldQ.set(t.bone, _wq.clone());
       outQ[k].copy(_pw.invert()).multiply(_wq);
     });
     // hips: the database's offset over the root, scaled to this rig
@@ -210,16 +217,26 @@ export function createMotionMatcher({ root, db, halflife = 0.1, searchEvery = 0.
   // explosive restart, 22 degrees over. A frame is a candidate only if its
   // trunk lean fits the pace: 10 degrees standing, 3 more per m/s.
   let leanMax = 99;
+  // A WALK IS PLAYED FROM WALKS (2026-10-07). The features describe the feet
+  // and the path, not the kind of gait, so at 1.75 m/s the matcher took
+  // 100STYLE's jog (its median pace is 1.46 m/s) and an athlete's crouched
+  // start from a run-stop-run take: the hips rode 17 cm in a walk. Each take is
+  // classed by its own label; below 2.2 m/s a running take is no candidate,
+  // above 3.4 a walking one is not, in between both are.
+  const rangeRun = (db.head.takes || []).map(t => (/\b(run|jog|sprint)/i.test(t.label || '') && !/walk/i.test(t.label || '')) ? 1 : 0);
+  let gaitGate = 0;
+  const gaitOk = r => !(gaitGate === 1 && rangeRun[r]) && !(gaitGate === 2 && !rangeRun[r]);
   function search(force) {
     const t0 = performance.now();
     const cur = Math.floor(st.frame);
     const L = db.lean;
     let curCost = (!force && db.valid[cur]) ? costAt(cur) : Infinity;
     if (L && L[cur] > leanMax) curCost = Infinity;
+    if (!gaitOk(db.rangeOf[cur])) curCost = Infinity;
     let best = -1, bestCost = curCost;
     const f = db.featW, F = db.F, v = db.valid;
     for (let i = 0; i < F; i++) {
-      if (!v[i] || (L && L[i] > leanMax)) continue;
+      if (!v[i] || (L && L[i] > leanMax) || !gaitOk(db.rangeOf[i])) continue;
       let c = 0; const o = i * 27;
       for (let j = 0; j < 27 && c < bestCost; j++) { const d = q[j] - f[o + j]; c += d * d; }
       if (c < bestCost) { bestCost = c; best = i; }
@@ -284,6 +301,7 @@ export function createMotionMatcher({ root, db, halflife = 0.1, searchEvery = 0.
         st.timer = searchEvery;
         const sp = Math.max(Math.hypot(ctl.wantVel.x, ctl.wantVel.z), Math.hypot(ctl.vel.x, ctl.vel.z)) / scale;
         leanMax = 10 + 3 * sp;
+        gaitGate = sp < 2.2 ? 1 : sp > 3.4 ? 2 : 0;
         query(ctl);
         search(force);
       }

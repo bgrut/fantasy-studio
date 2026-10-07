@@ -1037,7 +1037,9 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                 _rp = (req.prompt or "").lower()
                 _rm = _rre.search(r"\b(?:fix(?:es|ing)?|repair(?:s|ing)?|restore|mend|reactivate|reboot|power up|bring back online|"
                                   r"put(?:s|ting)? out|extinguish(?:es|ing)?|douse[sd]?|dousing|"
-                                  r"drop(?:s|ping)? off|drop(?:s|ping)?|deliver(?:s|ing)?)\s+"
+                                  r"drop(?:s|ping)? off|drop(?:s|ping)?|deliver(?:s|ing)?|"
+                                  r"chop(?:s|ping)? down|chop(?:s|ping)?|cut(?:s|ting)? down|fells|felling|"
+                                  r"find(?:s|ing)?|locate[sd]?|locating|track(?:s|ing)? down|search(?:es|ing)? for)\s+"
                                   r"(?:all\s+)?(?:of\s+)?(?:the\s+|every\s+)?(\d+|two|three|four|five|six|seven|eight|nine|ten)?\s*"
                                   r"((?:broken|damaged|dead|faulty|offline|burnt[- ]out|failing|leaking|busted)\s+)?([a-z]+)(?:\s+([a-z]+))?", _rp)
                 if _rm and getattr(spec, "genre", "") != "factory":
@@ -1048,6 +1050,16 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                     # a drop or a delivery is only this objective when what is dropped is a parcel of some kind
                     if _rre.match(r"(drop|deliver)", _rm.group(0)) and not _rre.search(r"package|parcel|letter|mail|pizza|crate|box|supplies|medicine|food|meal", _noun):
                         _noun = "it"
+                    # (2026-10-07) and felling is this objective only for wood
+                    if _rre.match(r"(chop|cut|fell)", _rm.group(0)) and not _rre.search(r"tree|pine|oak|birch|spruce|log|timber", _noun):
+                        _noun = "it"
+                    # finding is this objective only for people who are lost (2026-10-07):
+                    # "finds three lost hikers"; "find the three lanterns" stays a collect
+                    if _rre.match(r"(find|locat|track|search)", _rm.group(0)):
+                        if _rre.search(r"\b(hikers?|climbers?|skiers?|campers?|people|children|kids|survivors?|villagers?|explorers?|walkers?|tourists?|scouts?)\b", _noun):
+                            _noun = ("lost " + _noun) if not _noun.startswith(("lost", "missing", "stranded")) else _noun
+                        else:
+                            _noun = "it"
                     if _noun not in _STOP and _noun.split()[0] not in ("it", "them", "everything", "things", "power", "order",
                                                                        "peace", "balance", "hope", "faith", "harmony", "life", "magic",
                                                                        "light", "honor", "honour", "justice", "memory", "memories", "his", "her", "their", "my"):
@@ -1894,6 +1906,11 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                                 "child", "kid", "girl", "boy", "snowboarder", "skier", "surfer", "skateboarder",
                                 "firefighter", "fireman", "firewoman",
                                 "sailor", "fisherman", "miner", "mechanic", "astronaut", "pirate", "ninja")
+            try:                       # and any role the reference generator has an outfit for (2026-10-07)
+                from app.asset_gen.reference import has_wardrobe as _hw
+                _dressable = _dressable or (_hw(_w) and _w not in ("man", "woman", "person", "human", "guy", "boy", "girl", "walker"))
+            except Exception:
+                pass
             if (_w in _GENERIC_HUMAN | {"hero", "protagonist", "player", "you", "someone", "stranger", "visitor"} or _unknown_human) \
                     and spec.style not in _FLAT_LOOKS and not _dressable:
                 _pw = (req.prompt or "").lower()
@@ -2103,6 +2120,17 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                             and _infer_car_params(spec.player.name or "", "")
                             is None)):
                     _cp = _infer_car_params("car", "car")
+                # A KART IS A KART (2026-10-07): "kids race go-karts around a
+                # seaside track" put the kid in a 4.7 m sedan and five
+                # generated karts wandering the beach. The runtime builds a
+                # go-kart with its helmeted driver for the hero and every rival.
+                import re as _kre
+                if _cp is not None and _kre.search(r"\b(go-?karts?|karts?|karting)\b", (req.prompt or "").lower()):
+                    _cp = {"_class": "go-kart", "type": "kart", "length": 1.9, "width": 1.25, "bodyH": 0.3, "bodyY": 0.2,
+                           "cabinLen": 0.3, "cabinH": 0.6, "cabinX": 0.0, "wheelR": 0.14, "wheelBase": 0.6,
+                           "paint": _cp.get("paint", 0xd83a2a)}
+                    spec.entities = [e for e in spec.entities
+                                     if not (_kre.search(r"kart", (e.name or "").lower()) and e.behavior != "vehicle")]
                 if _cp:
                     _cls = _cp.pop("_class", "sedan")
                     spec.player.car_params = _cp
@@ -2144,7 +2172,12 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             # because a 1.2m fox and a 2.4m ogre do not walk at one speed.
             _h = max(0.4, float(spec.player.height_m or 1.8))
             _k = _h / 1.8
-            _wmax, _rmax = round(2.4 * _k, 2), round(7.0 * _k, 2)
+            # A WALK IS A WALK (2026-10-07): 2.4 m/s is a jog (people break into
+            # a run near 2 m/s), and the motion-matching database's walks sit
+            # at 1.4-1.75 m/s, so a 2.4 "walk" played a squashed jog: the hips
+            # rode 9-14 cm (a walk rides 3-5) and the planted feet skated at
+            # half the body's speed. A person walks at 1.75 m/s at most.
+            _wmax, _rmax = round((1.75 if pattern == "biped" else 2.4) * _k, 2), round(7.0 * _k, 2)
             if spec.player.walk_speed > _wmax:
                 job.setdefault("notes", []).append(
                     f"walk speed {spec.player.walk_speed:.1f} -> {_wmax:.1f} m/s "
@@ -2200,7 +2233,10 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         # individually already missed one.
         if player_glb and str(player_glb).endswith("_anim.glb"):
             _hero = Path(str(player_glb)[:-len("_anim.glb")] + "_hero.glb")
-            if _hero.exists():
+            # (2026-10-07) only while it is the newer file: the detective's hero
+            # bake was a week older than its rebaked rig and played the ghost
+            # hunter in a grey t-shirt instead of the trench coat
+            if _hero.exists() and _hero.stat().st_mtime >= Path(str(player_glb)).stat().st_mtime:
                 player_glb = str(_hero)
                 job.setdefault("notes", []).append(
                     f"hero uses the JPEG bake ({_hero.name}). PNG-embedded "
@@ -2377,11 +2413,16 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             _ghero = (spec.player.name or "").lower().strip()
             for _gpat, _groles in ((r"\b(farm\w*|garden\w*|harvest\w*|orchard|allotment|crops?|vegetables?|pumpkins?)\b", ("gardener", "farmer")),
                                    (r"\b(western|frontier|saloon|cowboys?|cowgirls?|outlaws?|ranch)\b", ("sheriff", "ranger")),
+                                   (r"\b(villages?|hamlet|cottages?|countryside|shire)\b", ("gardener", "farmer")),
+                                   # no air out there: whoever explains it wears a suit, the hero's own if need be
+                                   (r"\b(moons?|lunar|mars|martian|asteroids?|comet|planet|alien world|outer space|in space|crater)\b", ("astronaut*",)),
                                    (r"\b(space ?station|spaceship|starship|laboratory|lab)\b", ("scientist", "engineer")),
                                    (r"\b(forest|woods|woodland|wilderness|jungle|mountains?|canyon|national park)\b", ("ranger", "explorer"))):
                 if _gre.search(_gpat, _gset):
                     for _gr in _groles:
-                        if _gr != _ghero and (BACKEND_ROOT / "assets" / "library" / f"{_gr}_anim.glb").exists():
+                        _same_ok = _gr.endswith("*")
+                        _gr = _gr.rstrip("*")
+                        if (_gr != _ghero or _same_ok) and (BACKEND_ROOT / "assets" / "library" / f"{_gr}_anim.glb").exists():
                             _gname = _gr
                             break
                     break
@@ -3464,6 +3505,11 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                 else:
                     _half2 = spec.world.size_m / 2
                     _door = [round(_half2 * 0.5, 2), round(_half2 * _er.uniform(-0.3, 0.3), 2)]
+                # a temple in Japan or China is a pagoda, not a chapel (2026-10-07)
+                if _ek_raw in ("temple", "shrine", "monastery", "pagoda", "dojo") and _re3.search(
+                        r"\b(samurai|ninjas?|shinto|zen|pagodas?|kyoto|edo|shogun\w*|dojo|cherry blossoms?|sakura|japan\w*|"
+                        r"chin(a|ese)|kung fu|shaolin|monks?|bamboo|torii|koi|geisha|ronin)\b", _pl):
+                    _kit = "pagoda"
                 spec.world.level["enterable"] = {"plan": _eplan, "door": _door, "facade": _kit, "label": "the " + _ek_raw}
                 job.setdefault("notes", []).append(
                     f"the {_ek_raw} stands at its door ({_kit} facade, {_ek} inside): step through the glow to go inside")

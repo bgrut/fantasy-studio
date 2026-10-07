@@ -1,0 +1,46 @@
+<!doctype html>
+<!-- ARM LAB (2026-10-07): the upper arms of a rig, measured. For each GLB in
+     ?f= (comma separated, from backend/assets/library/), and each clip in ?c=,
+     the angle of each upper arm (shoulder to elbow) from straight down, at
+     rest and across the clip: mean and max. Served from the repo root (8791);
+     ?v= names a job dist whose vendor three.js to import. Read window.__arms. -->
+<html><head><meta charset="utf-8"></head><body>
+<script>
+  const q0 = new URLSearchParams(location.search), V = '/backend/renders/game_jobs/' + (q0.get('v') || 'job_829') + '/dist/vendor/';
+  const im = document.createElement('script'); im.type = 'importmap';
+  im.textContent = JSON.stringify({ imports: { three: V + 'three.module.js' } }); document.head.appendChild(im);
+  window.__V = V;
+</script>
+<script type="module">
+const THREE = await import('three');
+const { GLTFLoader } = await import(window.__V + 'jsm/loaders/GLTFLoader.js');
+const q = new URLSearchParams(location.search), FS = (q.get('f') || '').split(',').filter(Boolean), CL = (q.get('c') || 'walk,idle,run').split(',');
+const out = {};
+const A = new THREE.Vector3(), B = new THREE.Vector3();
+const ang = (a, b) => { a.getWorldPosition(A); b.getWorldPosition(B); B.sub(A).normalize(); return THREE.MathUtils.radToDeg(Math.acos(THREE.MathUtils.clamp(-B.y, -1, 1))); };
+for (const f of FS) {
+  try {
+    const g = await new GLTFLoader().loadAsync('/backend/assets/library/' + f);
+    const o = g.scene; o.updateMatrixWorld(true);
+    const bones = {}; o.traverse(b => { if (b.isBone) bones[b.name] = b; });
+    const pick = (re) => Object.keys(bones).find(n => re.test(n));
+    const uL = bones[pick(/^uparm_L$/) || pick(/up.*arm.*l|leftarm$/i)], lL = bones[pick(/^lowarm_L$/) || pick(/low.*arm.*l|leftforearm/i)];
+    const uR = bones[pick(/^uparm_R$/) || pick(/up.*arm.*r|rightarm$/i)], lR = bones[pick(/^lowarm_R$/) || pick(/low.*arm.*r|rightforearm/i)];
+    const hb = bones[Object.keys(bones).find(n => /^hips$/i.test(n))]; let hipH = null; if (hb) { hb.getWorldPosition(A); hipH = +A.y.toFixed(3); }
+    const res = { rest: { L: +ang(uL, lL).toFixed(1), R: +ang(uR, lR).toFixed(1), hipH } };
+    const mixer = new THREE.AnimationMixer(o);
+    for (const cn of CL) {
+      const clip = g.animations.find(a => a.name === cn); if (!clip) continue;
+      mixer.stopAllAction(); mixer.clipAction(clip).reset().play();
+      const L = [], R = [], HY = [];
+      const hips = bones[pick(/^hips$/i) || pick(/hip|pelvis/i)];
+      for (let k = 0; k < 24; k++) { mixer.setTime(clip.duration * k / 24); o.updateMatrixWorld(true); L.push(ang(uL, lL)); R.push(ang(uR, lR));
+        if (hips) { hips.getWorldPosition(A); HY.push(A.y); } }
+      const m = a => +(a.reduce((x, y) => x + y, 0) / a.length).toFixed(1), M = a => +Math.max(...a).toFixed(1);
+      res[cn] = { L: m(L), R: m(R), Lmax: M(L), Rmax: M(R), ride: HY.length ? +(Math.max(...HY) - Math.min(...HY)).toFixed(3) : null };
+    }
+    out[f] = res;
+  } catch (e) { out[f] = { error: String(e).slice(0, 120) }; }
+}
+window.__arms = out;
+</script></body></html>

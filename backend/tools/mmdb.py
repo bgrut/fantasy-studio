@@ -325,7 +325,7 @@ TORSO = ["hips", "spine", "chest", "neck", "head", "clav_L", "clav_R"]
 
 def build(list_only: bool = False):
     rots, hipss, feats, cons, ranges, info = [], [], [], [], [], []
-    dsets, stands = [], []
+    dsets, stands, walks = [], [], []
     start = 0
     for tag, t0, t1, label in TAKES:
         path, _ = _src(tag)
@@ -341,6 +341,7 @@ def build(list_only: bool = False):
             rots.append(rot); hipss.append(hip); feats.append(feat); cons.append(con)
             dsets.append("style" if tag.startswith("style") else "cmu:" + tag.split(":")[1].split("_")[0].lstrip("0"))
             stands.append((sp < 0.15) & con[:, 0] & con[:, 1])
+            walks.append((sp > 0.9) & (sp < 2.0))
             ranges.append([start, start + n]); start += n
             info.append({"take": tag + (" (mirrored)" if mir else ""), "label": label, "frames": n,
                          "speed_p50": round(float(np.median(sp)), 2), "speed_max": round(float(sp.max()), 2)})
@@ -368,12 +369,28 @@ def build(list_only: bool = False):
     stand_idx = {k: np.concatenate(v) for k, v in stand_idx.items()}
     pool = {"style": stand_idx.get("style", np.array([], int)),
             "cmu": np.concatenate([v for k, v in stand_idx.items() if k.startswith("cmu")])}
+    walk_idx = {}
+    for r, (a, e) in enumerate(ranges):
+        walk_idx.setdefault(dsets[r], []).append(np.arange(a, e)[walks[r]])
+    walk_idx = {k: np.concatenate(v) for k, v in walk_idx.items()}
+    walk_pool = {"style": walk_idx.get("style", np.array([], int)),
+                 "cmu": np.concatenate([v for k, v in walk_idx.items() if k.startswith("cmu")])}
     refs = {}
     for dname in sorted(set(dsets)):
         own = stand_idx.get(dname, np.array([], int))
         use = own if len(own) >= 30 else pool["style" if dname == "style" else "cmu"]
         standing_ref[dname] = "own %d" % len(own) if len(own) >= 30 else "dataset"
         refs[dname] = {t: _mean_q(use, BONES.index(t)) for t in TORSO}
+        # THE HEAD RIDES AS THE ACTOR WALKED (2026-10-07). Standing still, the
+        # actors look at the floor, so against a standing reference an
+        # eyes-front stroll read twenty degrees tipped back and every hero
+        # walked gazing at the sky. The head is referenced to the dataset's
+        # own walking carriage instead (0.9 to 2 m/s): eyes front at a stroll
+        # is the rig's rest.
+        wk = walk_idx.get(dname, np.array([], int))
+        wk = wk if len(wk) >= 60 else walk_pool["style" if dname == "style" else "cmu"]
+        if len(wk) >= 60:
+            refs[dname]["head"] = _mean_q(wk, BONES.index("head"))
     for r, (a, e) in enumerate(ranges):
         for t in TORSO:
             b = BONES.index(t)

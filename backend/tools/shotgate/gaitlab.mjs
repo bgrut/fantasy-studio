@@ -19,7 +19,7 @@ const p = await b.newPage();
 await p.setViewport({ width: 960, height: 540 });
 const errs = [];
 p.on('pageerror', e => errs.push(e.message));
-await p.goto(`http://127.0.0.1:8789/games/job_${J}/dist/index.html?noguide=1&camturn=${process.env.CAMTURN || 0}&camd=${process.env.CAMD || 4.2}`, { waitUntil: 'domcontentloaded', timeout: 90000 });
+await p.goto(`http://127.0.0.1:8789/games/job_${J}/dist/index.html?noguide=1&camturn=${process.env.CAMTURN || 0}&camd=${process.env.CAMD || 4.2}${process.env.Q ? '&' + process.env.Q : ''}`, { waitUntil: 'domcontentloaded', timeout: 90000 });
 await new Promise(r => setTimeout(r, 9000));
 await p.click('#startbtn').catch(() => {});
 await new Promise(r => setTimeout(r, 2500));

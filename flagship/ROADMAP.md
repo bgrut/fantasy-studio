@@ -286,6 +286,7 @@ says so.
 | **lanes** | every fifth grid line is a faint lit strip in the world's edge colour; the far plane widened to 1400 so the sky dome no longer clips from orbit |
 | **the starter line always exists** | seedLine grows a seam at the head of the first clear run when the scatter left none; `?grid=` and `?seed=` debug overrides let a gate prove it by size |
 | **factory reads as factory** | the pipeline holds prompts that name a production system to the factory genre, deterministically, before the 25-minute hero path can start |
+| **the ground remembers the work** | packed earth under a rig, soot on the ember faces, pale gravel on the salt, an oil stain where a machine has run and a trodden track along every belt, fading into the grass over two tiles, where the grass grows thinner and shorter the nearer it is to the work, as if trodden; one canvas atlas on one overlay mesh, redrawn a moment after the factory changes (`?wear=0` turns it off) |
 
 Measured on a prompt-built export: 40x40x6 grid, 40 nodes, 180 value/min,
 9 ingots in 12s, 18 draw calls, no console errors. The player walks top ->
