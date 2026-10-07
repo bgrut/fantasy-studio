@@ -3179,6 +3179,98 @@ function stepWear(dt) {
   wearDirty = false; drawWear();
   window.__wear = { drawn: (window.__wear ? window.__wear.drawn : 0) + 1 };
 }
+
+// THE WORKS ARE STAFFED (2026-10-07). A factory nobody tends reads as a
+// diagram. A dozen service drones (fewer on a lower tier) go about the
+// worldlet: each flies an arc to a machine, hovers over it with its lamp
+// lit, throws a few sparks down into it as if servicing it, and moves on;
+// most stay on the face you are on, now and then one crosses an edge. One
+// instanced body, one instanced lamp ring and one point cloud of sparks:
+// three draw calls for the whole crew. ?bots=0 turns them off; under
+// reduced motion they hover and throw no sparks.
+const BOTS_ON = !/[?&]bots=0/.test(location.search);
+const botCrew = [];
+let botBody = null, botRing = null, botSparks = null;
+if (BOTS_ON) {
+  const n = Math.max(4, Math.round(12 * TIER.budget));
+  const bodyG = new THREE.SphereGeometry(0.17, 16, 10); bodyG.scale(1, 0.62, 1);
+  const bodyM = new THREE.MeshStandardMaterial({ color: 0x3a4048, metalness: 0.75, roughness: 0.32 });
+  const ringM = new THREE.MeshStandardMaterial({ color: 0x2a3036, emissive: 0x8ff0ff, emissiveIntensity: 2.4, roughness: 0.4 });
+  botBody = new THREE.InstancedMesh(bodyG, bodyM, n); botBody.name = 'serviceBots'; botBody.castShadow = true; botBody.frustumCulled = false;
+  botRing = new THREE.InstancedMesh(new THREE.TorusGeometry(0.19, 0.026, 8, 28), ringM, n); botRing.name = 'serviceBotLamps'; botRing.frustumCulled = false;
+  scene.add(botBody); scene.add(botRing);
+  const SP = n * 6, sg = new THREE.BufferGeometry();
+  sg.setAttribute('position', new THREE.BufferAttribute(new Float32Array(SP * 3), 3));
+  sg.setAttribute('color', new THREE.BufferAttribute(new Float32Array(SP * 3), 3));
+  botSparks = new THREE.Points(sg, new THREE.PointsMaterial({ size: 0.09, vertexColors: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+  botSparks.name = 'serviceBotSparks'; botSparks.frustumCulled = false; scene.add(botSparks);
+  for (let k = 0; k < n; k++) {
+    const w = tileWorld(k % 6, Math.floor(Math.random() * N), Math.floor(Math.random() * N)), f = FACES[k % 6];
+    const p0 = new THREE.Vector3(w[0] + f.n[0] * 2.2, w[1] + f.n[1] * 2.2, w[2] + f.n[2] * 2.2);
+    botCrew.push({ pos: p0.clone(), from: p0.clone(), to: p0.clone(), t: 1, dur: 1, hold: Math.random() * 2, face: k % 6, up: new THREE.Vector3(...f.n), ph: Math.random() * 6.28 });
+  }
+}
+const _sbq = new THREE.Quaternion(), _sbm = new THREE.Matrix4(), _sbs = new THREE.Vector3(1, 1, 1), _sbv = new THREE.Vector3(), _sbfw = new THREE.Vector3(), _sbup = new THREE.Vector3();
+function botWork(b) {
+  // the machines, nearest the player first: a dozen drones over a dozen
+  // machines a field away read as nothing (2026-10-07)
+  const pf = player ? player.face : b.face, pw = player && player.pos ? player.pos : null, jobs = [];
+  for (const f of [pf, ...[0, 1, 2, 3, 4, 5].filter(x => x !== pf)]) {
+    for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) { const c = cells[f][i][j];
+      if (c.t === EMPTY || c.t === BELT || c.t === NODE || c.t === PROP || c.t === ROAD) continue;
+      const w = tileWorld(f, i, j); const d = pw ? Math.hypot(w[0] - pw.x, w[1] - pw.y, w[2] - pw.z) : 0;
+      jobs.push({ f, w, d: d + (f === pf ? 0 : 60) }); }
+    if (jobs.length >= 6 && f === pf) break;
+  }
+  if (jobs.length) {
+    jobs.sort((a, c) => a.d - c.d);
+    const pick = jobs[Math.min(jobs.length - 1, Math.floor(Math.pow(Math.random(), 1.6) * Math.min(jobs.length, 18)))];
+    const F = FACES[pick.f], h = 1.5 + Math.random() * 0.6, sx = (Math.random() - 0.5) * 1.2, sy = (Math.random() - 0.5) * 1.2;
+    return { f: pick.f, at: new THREE.Vector3(pick.w[0] + F.n[0] * h + F.u[0] * sx + F.v[0] * sy, pick.w[1] + F.n[1] * h + F.u[1] * sx + F.v[1] * sy, pick.w[2] + F.n[2] * h + F.u[2] * sx + F.v[2] * sy) };
+  }
+  const F = FACES[pf], w = tileWorld(pf, Math.floor(Math.random() * N), Math.floor(Math.random() * N));
+  return { f: pf, at: new THREE.Vector3(w[0] + F.n[0] * 2.6, w[1] + F.n[1] * 2.6, w[2] + F.n[2] * 2.6) };
+}
+function stepBots(dt) {
+  if (!botBody) return;
+  const now = performance.now() / 1000, sp = botSparks.geometry.attributes.position, sc = botSparks.geometry.attributes.color;
+  botCrew.forEach((b, k) => {
+    if (b.hold > 0) { b.hold -= dt; }
+    else if (b.t >= 1) {
+      const job = botWork(b); b.from.copy(b.pos); b.to.copy(job.at); b.face = job.f; b.t = 0;
+      b.dur = Math.max(1.4, b.from.distanceTo(b.to) / (REDUCED ? 2.2 : 4.5));
+    } else {
+      b.t = Math.min(1, b.t + dt / b.dur);
+      const e = b.t * b.t * (3 - 2 * b.t);
+      b.pos.lerpVectors(b.from, b.to, e);
+      // an arc out from the worldlet, so a crossing goes round the edge, not through it
+      _sbv.addVectors(b.from, b.to).multiplyScalar(0.5); const lift = Math.min(5, Math.max(1.0, b.from.distanceTo(b.to) * 0.2));
+      if (_sbv.lengthSq() > 1e-4) b.pos.addScaledVector(_sbv.normalize(), Math.sin(Math.PI * b.t) * lift);
+      if (b.t >= 1) b.hold = 1.4 + Math.random() * 2.2;
+    }
+    // up is the face below it; it noses along its travel
+    const ax = Math.abs(b.pos.x), ay = Math.abs(b.pos.y), az = Math.abs(b.pos.z);
+    _sbup.set(ax >= ay && ax >= az ? Math.sign(b.pos.x) : 0, ay > ax && ay >= az ? Math.sign(b.pos.y) : 0, az > ax && az > ay ? Math.sign(b.pos.z) : 0);
+    b.up.lerp(_sbup, Math.min(1, dt * 4)).normalize();
+    const bob = REDUCED ? 0 : Math.sin(now * 2.6 + b.ph) * 0.06;
+    _sbv.copy(b.pos).addScaledVector(b.up, bob);
+    _sbfw.subVectors(b.to, b.from); _sbfw.addScaledVector(b.up, -_sbfw.dot(b.up)); if (_sbfw.lengthSq() < 1e-4) _sbfw.set(b.up.y, b.up.z, b.up.x);
+    _sbq.setFromUnitVectors(_sbup.set(0, 1, 0), b.up);
+    _sbm.compose(_sbv, _sbq, _sbs); botBody.setMatrixAt(k, _sbm);
+    const rq = _sbq.clone().multiply(new THREE.Quaternion().setFromAxisAngle(_sbup.set(1, 0, 0), Math.PI / 2));
+    _sbm.compose(_sbv, rq, _sbs); botRing.setMatrixAt(k, _sbm);
+    // servicing: sparks fall from under it into the machine
+    for (let q = 0; q < 6; q++) { const o = (k * 6 + q) * 3;
+      const on = b.hold > 0 && !REDUCED && Math.random() < 0.55;
+      const d = 0.25 + Math.random() * 0.9;
+      sp.array[o] = _sbv.x - b.up.x * d + (Math.random() - 0.5) * 0.3; sp.array[o + 1] = _sbv.y - b.up.y * d + (Math.random() - 0.5) * 0.3; sp.array[o + 2] = _sbv.z - b.up.z * d + (Math.random() - 0.5) * 0.3;
+      const l = on ? 0.6 + Math.random() * 0.4 : 0; sc.array[o] = l; sc.array[o + 1] = l * 0.72; sc.array[o + 2] = l * 0.35; }
+  });
+  botBody.instanceMatrix.needsUpdate = true; botRing.instanceMatrix.needsUpdate = true;
+  sp.needsUpdate = true; sc.needsUpdate = true;
+  window.__bots = { n: botCrew.length, servicing: botCrew.filter(b => b.hold > 0).length, faces: botCrew.map(b => b.face), pf: player ? player.face : null,
+    at: botCrew.map(b => b.pos.toArray().map(v => +v.toFixed(1))) };
+}
 function grassChanged() {
   wearChanged();
   if (!grassFaces.length) return;
@@ -8452,6 +8544,7 @@ renderer.setAnimationLoop(() => {
   stepLampPools();
   stepGrass(dt);
   stepWear(dt);
+  stepBots(dt);
   visitedFaces.add(player.face);
   if (CITY) stepCity(dt); else stepGoals(dt);
   if (!melting && !CITY) stepRifts(dt);

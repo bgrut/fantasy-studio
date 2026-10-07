@@ -10269,6 +10269,132 @@ async function main() {
   // tower, a stone circle, a lumber camp), and dropped into a Tokyo street
   // their fieldstone walls stood along the kerb like a fence; a district
   // has its own places, its shops and signs
+  // ── LIFE IN THE AIR (2026-10-07) ────────────────────────────────────────
+  // A filmed world is judged by what moves in it when nothing is happening.
+  // The world's own words choose: petals drifting under blossom, butterflies
+  // over a meadow or a garden by day, leaves coming down in an autumn wood,
+  // fireflies on a warm night, bubbles rising under the sea, gulls wheeling
+  // over a coast. Each is one instanced mesh or one point cloud that lives in
+  // a box round the camera (what leaves it on one side comes back on the
+  // other), so it costs the same in any size of world.
+  {
+    const w = [SPEC.prompt, SPEC.world && SPEC.world.name, SPEC.world && SPEC.world.flora].filter(Boolean).join(' ').toLowerCase();
+    const has = re => re.test(w);
+    const night = ['night', 'dusk'].includes(SPEC.world.sky), wet = ['rain', 'storm', 'snow'].includes(SPEC.world.weather);
+    const under = !!(FLORA && FLORA.biome && FLORA.biome.underwater) || SPEC.player.mode === 'swim';
+    const kinds = [];
+    if (!INTERIOR && !OSM && VIEW !== 'side') {
+      if (under) kinds.push('bubbles');
+      else {
+        if (has(/cherry|blossom|sakura/)) kinds.push('petals');
+        if (!night && !wet && has(/meadow|garden|flower|farm|field|orchard|spring|\bbees?\b|butterfl|picnic|countryside|pasture|cherry|blossom/)) kinds.push('butterflies');
+        if (!has(/cherry|sakura|blossom/) && has(/autumn|\bfall\b|october|maple|harvest|pumpkin/)) kinds.push('leaves');
+        if (night && !wet && has(/forest|wood|meadow|swamp|marsh|garden|field|firefl|summer|village|farm|grave|bayou|cemeter/)) kinds.push('fireflies');
+        if (!night && !wet && has(/beach|coast|\bsea\b|shore|harbou?r|island|lagoon|pier|seaside|lighthouse/)) kinds.push('gulls');
+      }
+    }
+    const K = QUALITY === 'performance' ? 0.45 : QUALITY === 'balanced' ? 0.75 : 1;
+    const R = 26, rL = mulberry32((SPEC.seed || 1) + 7171);
+    const cam = () => camera.position;
+    const ground = (x, z) => (under ? hAt(x, z) : Math.max(hAt(x, z), WATER_Y !== null && WATER_Y !== undefined ? WATER_Y : -1e9));
+    const wrap = (P, i, r) => { r = r || R; const c = cam(); let dx = P[i] - c.x, dz = P[i + 2] - c.z;
+      if (dx > r) P[i] -= 2 * r; else if (dx < -r) P[i] += 2 * r; if (dz > r) P[i + 2] -= 2 * r; else if (dz < -r) P[i + 2] += 2 * r; };
+    // what is small is kept close: a petal or a butterfly is only seen within a few metres (2026-10-07)
+    const RN = 9;
+    const ticks = [];
+    const M4 = new THREE.Matrix4(), Q4 = new THREE.Quaternion(), E4 = new THREE.Euler(), V4 = new THREE.Vector3(), S4 = new THREE.Vector3();
+    const tex = (draw, sz) => { const c = document.createElement('canvas'); c.width = c.height = sz || 64; draw(c.getContext('2d'), c.width); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t; };
+    // falling flakes of something: petals or leaves
+    const fall = (n, size, cols, sink, flutter) => {
+      const g = new THREE.PlaneGeometry(size, size * 0.7);
+      const m = new THREE.MeshStandardMaterial({ side: THREE.DoubleSide, roughness: 0.7, map: tex((x, S) => { x.fillStyle = '#fff'; x.beginPath(); x.ellipse(S / 2, S / 2, S * 0.46, S * 0.3, 0, 0, 7); x.fill(); }), alphaTest: 0.5 });
+      m.userData.noAutoTex = true;
+      const im = new THREE.InstancedMesh(g, m, n); im.frustumCulled = false; im.castShadow = false;
+      const P = new Float32Array(n * 3), A = new Float32Array(n * 4);
+      for (let i = 0; i < n; i++) { const c = cam(); P[i * 3] = c.x + (rL() - 0.5) * 2 * RN; P[i * 3 + 2] = c.z + (rL() - 0.5) * 2 * RN;
+        P[i * 3 + 1] = ground(P[i * 3], P[i * 3 + 2]) + rL() * 8; A[i * 4] = rL() * 6.28; A[i * 4 + 1] = 0.6 + rL() * 0.8; A[i * 4 + 2] = rL() * 6.28; A[i * 4 + 3] = rL();
+        im.setColorAt(i, new THREE.Color(cols[Math.floor(rL() * cols.length)])); }
+      scene.add(im);
+      ticks.push((dt, t) => {
+        for (let i = 0; i < n; i++) { const j = i * 3;
+          P[j + 1] -= sink * A[i * 4 + 1] * dt; P[j] += (0.45 + Math.sin(t * 0.7 + A[i * 4]) * flutter) * dt; P[j + 2] += Math.cos(t * 0.9 + A[i * 4 + 2]) * flutter * 0.6 * dt;
+          wrap(P, j, RN);
+          const gy = ground(P[j], P[j + 2]);
+          if (P[j + 1] < gy + 0.02) { const c = cam(); P[j] = c.x + (rL() - 0.5) * 2 * RN; P[j + 2] = c.z + (rL() - 0.5) * 2 * RN; P[j + 1] = Math.max(ground(P[j], P[j + 2]) + 4, c.y + 1) + rL() * 4; }
+          E4.set(t * 1.7 * A[i * 4 + 1] + A[i * 4], t * 1.1 + A[i * 4 + 2], t * 2.3 * A[i * 4 + 3]); Q4.setFromEuler(E4);
+          M4.compose(V4.set(P[j], P[j + 1], P[j + 2]), Q4, S4.set(1, 1, 1)); im.setMatrixAt(i, M4); }
+        im.instanceMatrix.needsUpdate = true;
+      });
+    };
+    for (const k of kinds) {
+      if (k === 'petals') fall(Math.round(520 * K), 0.13, [0xf6c6d6, 0xf2b4c8, 0xfbe0ea, 0xffffff], 0.55, 0.5);
+      if (k === 'leaves') fall(Math.round(300 * K), 0.15, [0xc8541c, 0xe08a2a, 0xa8321a, 0xd8b030, 0x8a5a2a], 0.8, 0.7);
+      if (k === 'butterflies') {
+        const n = Math.round(22 * K);
+        const wingT = tex((x, S) => { x.fillStyle = '#fff';
+          for (const sx of [-1, 1]) { x.beginPath(); x.ellipse(S / 2 + sx * S * 0.22, S * 0.38, S * 0.22, S * 0.2, sx * 0.4, 0, 7); x.fill();
+            x.beginPath(); x.ellipse(S / 2 + sx * S * 0.16, S * 0.68, S * 0.14, S * 0.16, -sx * 0.3, 0, 7); x.fill(); }
+          x.fillStyle = '#222'; x.fillRect(S / 2 - 2, S * 0.25, 4, S * 0.55); }, 64);
+        const m = new THREE.MeshStandardMaterial({ map: wingT, side: THREE.DoubleSide, alphaTest: 0.5, roughness: 0.6 }); m.userData.noAutoTex = true;
+        const im = new THREE.InstancedMesh(new THREE.PlaneGeometry(0.22, 0.22), m, n); im.frustumCulled = false;
+        const H = new Float32Array(n * 3), A = new Float32Array(n * 3), cols = [0xf2f2ea, 0xf2d040, 0xe88a2a, 0x6aa0f0, 0xf0a0c8];
+        for (let i = 0; i < n; i++) { const c = cam(); H[i * 3] = c.x + (rL() - 0.5) * 2 * RN; H[i * 3 + 2] = c.z + (rL() - 0.5) * 2 * RN; A[i * 3] = rL() * 6.28; A[i * 3 + 1] = 0.6 + rL() * 0.8; A[i * 3 + 2] = rL();
+          im.setColorAt(i, new THREE.Color(cols[Math.floor(rL() * cols.length)])); }
+        scene.add(im);
+        ticks.push((dt, t) => {
+          for (let i = 0; i < n; i++) { const j = i * 3, a = A[j], sp = A[j + 1];
+            wrap(H, j, RN);
+            const x = H[j] + Math.sin(t * 0.5 * sp + a) * 2.2 + Math.sin(t * 1.3 + a * 2) * 0.4, z = H[j + 2] + Math.cos(t * 0.4 * sp + a) * 2.2;
+            const y = ground(x, z) + 0.5 + A[j + 2] * 1.1 + Math.sin(t * 2.2 + a) * 0.25;
+            const heading = Math.atan2(Math.cos(t * 0.5 * sp + a), -Math.sin(t * 0.4 * sp + a));
+            E4.set(-Math.PI / 2 + 0.5, heading, 0); Q4.setFromEuler(E4);
+            M4.compose(V4.set(x, y, z), Q4, S4.set(0.25 + 0.75 * Math.abs(Math.cos(t * 14 * sp + a)), 1, 1)); im.setMatrixAt(i, M4); }
+          im.instanceMatrix.needsUpdate = true;
+        });
+      }
+      if (k === 'fireflies' || k === 'bubbles') {
+        const fire = k === 'fireflies', n = Math.round((fire ? 160 : 320) * K);
+        const g = new THREE.BufferGeometry(), P = new Float32Array(n * 3), C = new Float32Array(n * 3), A = new Float32Array(n * 2);
+        for (let i = 0; i < n; i++) { const c = cam(); P[i * 3] = c.x + (rL() - 0.5) * 2 * R; P[i * 3 + 2] = c.z + (rL() - 0.5) * 2 * R;
+          P[i * 3 + 1] = ground(P[i * 3], P[i * 3 + 2]) + (fire ? 0.3 + rL() * 2.5 : rL() * 10); A[i * 2] = rL() * 6.28; A[i * 2 + 1] = 0.5 + rL(); }
+        g.setAttribute('position', new THREE.BufferAttribute(P, 3)); g.setAttribute('color', new THREE.BufferAttribute(C, 3));
+        const spr = tex((x, S) => { const gr = x.createRadialGradient(S / 2, S / 2, 0, S / 2, S / 2, S / 2); gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(fire ? 0.25 : 0.6, fire ? 'rgba(255,255,255,.5)' : 'rgba(255,255,255,.25)'); gr.addColorStop(fire ? 1 : 0.85, 'rgba(255,255,255,0)'); x.fillStyle = gr; x.fillRect(0, 0, S, S);
+          if (!fire) { x.strokeStyle = 'rgba(255,255,255,.9)'; x.lineWidth = 3; x.beginPath(); x.arc(S / 2, S / 2, S * 0.36, 0, 7); x.stroke(); } }, 64);
+        const m = new THREE.PointsMaterial({ size: fire ? 0.2 : 0.16, map: spr, vertexColors: true, transparent: true, depthWrite: false,
+          blending: fire ? THREE.AdditiveBlending : THREE.NormalBlending, sizeAttenuation: true });
+        const pts = new THREE.Points(g, m); pts.frustumCulled = false; scene.add(pts);
+        ticks.push((dt, t) => {
+          for (let i = 0; i < n; i++) { const j = i * 3, a = A[i * 2], sp = A[i * 2 + 1];
+            if (fire) { P[j] += Math.sin(t * 0.6 * sp + a) * 0.25 * dt; P[j + 2] += Math.cos(t * 0.5 * sp + a) * 0.25 * dt; P[j + 1] += Math.sin(t * 0.9 + a) * 0.12 * dt;
+              const blink = Math.max(0, Math.sin(t * 1.6 * sp + a * 3)); const v = blink * blink * blink;
+              C[j] = 0.75 * v; C[j + 1] = 1.0 * v; C[j + 2] = 0.35 * v; }
+            else { P[j + 1] += 0.55 * sp * dt; P[j] += Math.sin(t * 2 + a) * 0.08 * dt;
+              const top = WATER_Y !== null && WATER_Y !== undefined ? WATER_Y - 0.2 : ground(P[j], P[j + 2]) + 12;
+              if (P[j + 1] > top) { const c = cam(); P[j] = c.x + (rL() - 0.5) * 2 * R; P[j + 2] = c.z + (rL() - 0.5) * 2 * R; P[j + 1] = hAt(P[j], P[j + 2]) + 0.1; }
+              C[j] = 0.8; C[j + 1] = 0.92; C[j + 2] = 1.0; }
+            wrap(P, j); }
+          g.attributes.position.needsUpdate = true; g.attributes.color.needsUpdate = true;
+        });
+      }
+      if (k === 'gulls') {
+        const n = 7, gg = new THREE.BufferGeometry();
+        gg.setAttribute('position', new THREE.Float32BufferAttribute([0, 0, 0.1, -0.55, 0.12, -0.05, 0, 0, -0.08, 0, 0, 0.1, 0.55, 0.12, -0.05, 0, 0, -0.08], 3)); gg.computeVertexNormals();
+        const m = new THREE.MeshStandardMaterial({ color: 0xf2f2ee, side: THREE.DoubleSide, roughness: 0.6 }); m.userData.noAutoTex = true;
+        const im = new THREE.InstancedMesh(gg, m, n); im.frustumCulled = false; scene.add(im);
+        const A = Array.from({ length: n }, () => [rL() * 6.28, 18 + rL() * 26, 14 + rL() * 12, 0.25 + rL() * 0.2]);
+        const C0 = cam().clone();
+        ticks.push((dt, t) => {
+          for (let i = 0; i < n; i++) { const [a, rr, hh, sp] = A[i], ang = a + t * sp;
+            const x = C0.x + Math.cos(ang) * rr, z = C0.z + Math.sin(ang) * rr, y = Math.max(ground(x, z), 0) + hh + Math.sin(t * 0.7 + a) * 1.2;
+            E4.set(0, -ang, Math.sin(t * 6 + a) * 0.25); Q4.setFromEuler(E4);
+            M4.compose(V4.set(x, y, z), Q4, S4.set(1.3, 1 + Math.sin(t * 7 + a) * 0.5, 1.3)); im.setMatrixAt(i, M4); }
+          im.instanceMatrix.needsUpdate = true;
+        });
+      }
+    }
+    if (ticks.length) window.__lifeTick = (dt) => { const t = performance.now() / 1000; for (const f of ticks) f(Math.min(dt, 0.05), t); };
+    window.__life = kinds;
+  }
   // ── THE WRECK, BUILT (see WRECK above) ──────────────────────────────────
   if (WRECK) {
     const g = buildShip({ seed: (SPEC.seed || 1) + 77, flag: 'pirate' });
@@ -19184,6 +19310,7 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
       if (window.__growTick) window.__growTick(dt);
       if (window.__graveMist) window.__graveMist(performance.now() / 1000);
       if (window.__hiveTick) window.__hiveTick(performance.now() / 1000);
+      if (window.__lifeTick) window.__lifeTick(dt);
       // the goal's light is for finding it: gone by the time you are close
       if (window.__goalBeam && playerObj) { const b = window.__goalBeam, d = Math.hypot(b.position.x - playerObj.position.x, b.position.z - playerObj.position.z);
         b.material.opacity = 0.12 * Math.min(1, Math.max(0, (d - 18) / 30)); b.visible = b.material.opacity > 0.005; }
