@@ -1,0 +1,6 @@
+# Clones do not download Git LFS objects (each download is billed to the
+# repository owner). The 3D library comes from the release asset pack:
+#   python backend/tools/fetch_assets.py
+# To pull one LFS file anyway: git lfs pull --include="<path>"
+[lfs]
+	fetchexclude = *

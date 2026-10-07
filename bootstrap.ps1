@@ -36,6 +36,10 @@ if ($missing.Count -gt 0) {
 }
 
 # ── clone or update ──────────────────────────────────────────────────────────
+# The 3D library is NOT pulled from Git LFS (that bills the repository owner
+# per download): the clone takes small pointer files and fetch_assets.py
+# below fills them in from the release asset pack, which is free to download.
+$env:GIT_LFS_SKIP_SMUDGE = "1"
 if (Test-Path "fantasy-studio\setup.ps1") {
     Write-Host "  [ok] existing clone found — updating" -ForegroundColor Green
     Push-Location fantasy-studio; git pull --ff-only; Pop-Location
@@ -50,6 +54,9 @@ if (Test-Path "fantasy-studio") { Set-Location fantasy-studio }
 # ── setup + model ────────────────────────────────────────────────────────────
 Write-Host "  running setup.ps1 (venv + npm + env files, 2-4 min) ..." -ForegroundColor Cyan
 .\setup.ps1
+
+Write-Host "  fetching the 3D model library (~0.9 GB, first time only) ..." -ForegroundColor Cyan
+try { python backend/tools/fetch_assets.py } catch { Write-Host "  (model fetch failed - run later: python backend/tools/fetch_assets.py)" -ForegroundColor Yellow }
 
 Write-Host "  pulling local LLM (gemma3:12b, ~7 GB, first time only) ..." -ForegroundColor Cyan
 try { ollama pull gemma3:12b } catch { Write-Host "  (Ollama pull failed — start Ollama and run: ollama pull gemma3:12b)" -ForegroundColor Yellow }

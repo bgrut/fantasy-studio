@@ -136,9 +136,16 @@ Confirm with `Y`. This is a Windows default-restrictive setting; setting it once
 mkdir C:\Users\$env:USERNAME\Desktop\FantasyAI
 cd C:\Users\$env:USERNAME\Desktop\FantasyAI
 
+$env:GIT_LFS_SKIP_SMUDGE = "1"
 git clone https://github.com/bgrut/fantasy-studio
 cd fantasy-studio
+python backend/tools/fetch_assets.py     # the 3D model library (~0.9 GB), from the release asset pack
 ```
+
+The 3D models are published as a release asset pack instead of being pulled from Git LFS, so a clone
+leaves them as small pointer files until `fetch_assets.py` fills them in (it checks each file's
+sha256). A model added after the pack was made is listed with the one `git lfs pull --include=...`
+command that fetches just that file.
 
 The repo has two subdirectories: `backend/` (Python API + render pipeline) and `frontend/` (React/Vite UI).
 
