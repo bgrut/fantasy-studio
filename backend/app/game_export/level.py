@@ -367,8 +367,13 @@ LAVA_LEVEL = -0.45     # the lava's surface; a channel's floor lies at -1.4
 def build_level(seed: int, size_m: float, n_objectives: int = 0,
                 amplitude_m: float = 2.4, grid_n: int = 48,
                 regions: list[dict] | None = None,
-                archetype: str = "plain", terrain_form: str = "natural") -> dict:
-    """Deterministic LevelPlan. Returns a JSON-safe dict for the runtime."""
+                archetype: str = "plain", terrain_form: str = "natural", sea: bool = False) -> dict:
+    """Deterministic LevelPlan. Returns a JSON-safe dict for the runtime.
+
+    sea (2026-10-06): a sea battle sails, it does not walk. The islands sit
+    lower (open water is most of the map) and the route is a deep shipping
+    lane, not a strip flattened to the waterline: at sea level the walking
+    corridor came out as a beach running through the middle of the sea."""
     rng = random.Random(seed)
 
     # ── zones: spawn at origin; goal at a far edge; corridor between ────────
@@ -404,6 +409,8 @@ def build_level(seed: int, size_m: float, n_objectives: int = 0,
             x = (j / (grid_n - 1) - 0.5) * size_m
             h = (hgrid[i][j] - 0.45) * 2.0 * amplitude_m
             h = _archetype_height(archetype, x, z, h, amplitude_m, half, seed)
+            if sea:
+                h -= amplitude_m * 1.1                # fewer, smaller islands
             # MICRO-RELIEF (Phase 93): a second, higher-frequency octave —
             # real ground undulates at the metre scale, not only in big
             # hills. Mesh + collider share these heights, so feet/wheels
@@ -470,7 +477,10 @@ def build_level(seed: int, size_m: float, n_objectives: int = 0,
                 else:
                     h *= 0.35                                      # a rubbly floor, not hills
             d = min(d, math.hypot(x, z), math.hypot(x - goal[0], z - goal[1]))
-            if d < corridor:
+            if sea:
+                if d < corridor * 3.0:               # a deep lane for the hulls
+                    h = min(h, -3.5)
+            elif d < corridor:
                 h = 0.0
             elif d < corridor * 2.2:                 # smooth shoulder
                 t = (d - corridor) / (corridor * 1.2)
@@ -730,7 +740,7 @@ def build_interior(seed: int, kind: str = "castle") -> dict:
     import random as _random
     rng = _random.Random(seed * 31 + 7)
     H = 4.2 if kind in ("castle",) else 5.0 if kind == "mall" else 4.0 if kind == "lab" \
-        else 3.4 if kind in ("hospital", "school") else 3.6 if kind == "cafe" else 3.0   # wall height (m)
+        else 3.4 if kind in ("hospital", "school", "station") else 3.6 if kind == "cafe" else 3.0   # wall height (m)
     T = 0.5                                          # wall thickness
     rooms = []                                       # [cx, cz, w, d]
     # PER-KIND LAYOUT (2026-07-23: 'the viking dungeon was the same style as
@@ -747,6 +757,11 @@ def build_interior(seed: int, kind: str = "castle") -> dict:
         # lit like daytime.
         hall_w = rng.uniform(5.0, 6.0) if kind == "hospital" else rng.uniform(5.5, 6.5)
         hall_d = rng.uniform(46, 54)
+    elif kind == "station":
+        # A SPACE STATION (2026-10-06) is a pressurised spine with modules off
+        # both sides: crew quarters, a lab, an airlock, engineering
+        hall_w = rng.uniform(4.6, 5.4)
+        hall_d = rng.uniform(40, 48)
     elif kind == "lab":
         # A LAB is one open floor of benches with a few rooms off it.
         hall_w = rng.uniform(18, 22)
@@ -785,13 +800,15 @@ def build_interior(seed: int, kind: str = "castle") -> dict:
         n_side = 8 + 2 * (seed % 2)
     elif kind in ("hospital", "school"):
         n_side = 6 + 2 * (seed % 2)
+    elif kind == "station":
+        n_side = 6 + 2 * (seed % 2)
     elif kind == "lab":
         n_side = 2 + (seed % 2)
     elif kind == "cafe":
         n_side = 0
     for k in range(n_side):
         side = 1 if k % 2 == 0 else -1
-        if kind in ("hospital", "school"):           # a ward or a classroom
+        if kind in ("hospital", "school", "station"):   # a ward, a classroom, a module
             rw = rng.uniform(7.5, 9.0)
             rd = min(rng.uniform(8.0, 9.5), hall_d / n_side * 2 - 0.8)
         elif kind == "lab":                          # a cold room, a server room, an office

@@ -52,7 +52,12 @@ _BIPED = ("hunter", "archer", "soldier", "warrior", "ranger", "ninja",
           "ghost", "spirit", "child", "kid", "boy", "girl", "man", "woman", "person",
           "stranger", "pilgrim", "hiker", "tourist", "student", "teacher", "nurse",
           "mechanic", "smith", "blacksmith", "hunter", "huntress", "princess", "rider",
-          "warden", "jailer", "prisoner", "thug", "burglar", "heir", "noble", "peasant")
+          "warden", "jailer", "prisoner", "thug", "burglar", "heir", "noble", "peasant",
+          # (2026-10-06) the classifier made a snowboarder and a skateboarder
+          # vehicles and a surfer a fish; people who ride things are people
+          "snowboarder", "skateboarder", "skater", "surfer", "skier", "sledder", "cyclist",
+          "sheriff", "marshal", "deputy", "gunslinger", "superhero", "barista", "gardener",
+          "waiter", "waitress", "bartender", "cosmonaut", "spaceman", "racer", "athlete")
 _VEHICLE = ("car", "truck", "bus", "van", "jeep", "tank", "motorcycle")
 _FLYING = ("dragon", "bird", "eagle", "hawk", "owl", "phoenix", "griffin",
            "pegasus", "bat", "butterfly", "bee", "plane", "airplane", "jet",
@@ -195,10 +200,20 @@ def _dress_reference(kind: str, pattern: str, ref_png, verbose: bool = True) -> 
                 return
             if verbose:
                 print(f"[game] reference for '{kind}' reads undressed ({_ub:.2f}); making it again (seed {_seed})")
-            _gr(copy.deepcopy(_minimal_slots(kind, pattern)), output_path=ref_png, style="photoreal", seed=_seed)
+            _gr(copy.deepcopy(_minimal_slots(kind, pattern)), output_path=ref_png, style=_ref_style(kind), seed=_seed)
     except Exception as _de:  # noqa: BLE001
         if verbose:
             print(f"[game] dressed check skipped ({type(_de).__name__}: {_de})")
+
+def _ref_style(kind: str) -> str:
+    """A DRAWN WORLD HAS A DRAWN HERO (2026-10-06): a kind generated for a
+    toon, anime or clay game carries the look in its name ("toon gardener"),
+    so it is its own library entry and its reference is drawn in that look,
+    not photographed. Every other kind is photographed as before."""
+    k = (kind or "").lower()
+    return ("cartoon" if k.startswith("toon ") else "anime" if k.startswith("anime ")
+            else "claymation" if k.startswith("clay ") else "photoreal")
+
 
 def _minimal_slots(kind: str, pattern: str) -> dict:
     """The slot skeleton generate_reference() expects — mirrors the composer's
@@ -211,7 +226,7 @@ def _minimal_slots(kind: str, pattern: str) -> dict:
             "scale": 1.0, "location": [0, 0, 0],
         },
         "scene": {"mood": "daylight", "setting": None, "ground": True},
-        "style": "photoreal",
+        "style": _ref_style(kind),
     }
 
 
@@ -360,7 +375,7 @@ def _ensure_asset_generate(kind: str, pattern: str | None, target_tris: int | No
             if verbose:
                 print(f"[game] generating '{kind}' ({pattern}) via SDXL + TRELLIS.2 ...")
             generate_reference(copy.deepcopy(_minimal_slots(kind, pattern)),
-                               output_path=ref_png, style="photoreal", seed=42)
+                               output_path=ref_png, style=_ref_style(kind), seed=42)
             _dress_reference(kind, pattern, ref_png, verbose)
             try:
                 unload_reference_pipeline()
@@ -412,7 +427,7 @@ def _ensure_asset_generate(kind: str, pattern: str | None, target_tris: int | No
             _os2.environ["FS_REF_SEED"] = str(_rd2.randint(1000, 999999))
             try:
                 generate_reference(copy.deepcopy(_minimal_slots(kind, pattern)),
-                                   output_path=ref_png, style="photoreal", seed=42)
+                                   output_path=ref_png, style=_ref_style(kind), seed=42)
                 _dress_reference(kind, pattern, ref_png, verbose)
                 try:
                     unload_reference_pipeline()

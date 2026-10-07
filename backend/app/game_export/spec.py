@@ -35,6 +35,9 @@ class PlayerSpec(BaseModel):
     buoyant: bool = False
     vfx: Optional[str] = None            # Ability VFX element (water/fire/frost/…) — theme-inferred
     car_params: Optional[dict] = None    # 2026-08-04: parametric car built in code (crisp panels)
+    # 2026-10-06: a rider on a board: drive physics, the hero upright on a
+    # snowboard / skis / skateboard / surfboard / sled the runtime draws
+    ride: Optional[str] = None
     anims: dict = Field(default_factory=lambda: {
         "idle": "idle", "walk": "walk", "run": "run"})  # state -> glTF clip name
 
@@ -184,7 +187,9 @@ class ObjectiveSpec(BaseModel):
     the clues of the collect step before it."""
     kind: Literal["collect", "defeat", "reach", "race", "survive",
                   "eliminate", "score", "hunt", "capture", "escort",
-                  "defend", "accuse", "serve"] = "collect"
+                  "defend", "accuse", "serve", "repair"] = "collect"
+    # repair (2026-10-06): `count` broken things (`label`: "broken panels",
+    # "generators") stand about the level; hold E at one until it comes back.
     # serve (2026-10-06): a service game. `count` orders filled for the
     # customers at the counter, each brewed at its station first.
     label: str = "stars"

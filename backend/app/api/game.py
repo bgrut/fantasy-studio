@@ -177,7 +177,7 @@ _STYLE_ASKED = {
     "claymation": r"\b(clay\w*|plasticine|stop[- ]?motion|toys?)\b",
     "noir": r"\b(noir|black[- ]and[- ]white|monochrome|limbo|1940s|silhouettes?)\b",
     "storybook": r"\b(storybook|picture ?book|gothic|tim burton|bedtime)\b",
-    "kawaii": r"\b(kawaii|cute|adorable)\b",
+    "kawaii": r"\b(kawaii|cute|adorable|candy ?land|candyland|gumdrops?|lollipops?|sugar ?land)\b",
     "comic": r"\b(comic\w*|graphic novel)\b",
     "papercraft": r"\b(paper\w*|origami|cardboard)\b",
     "synthwave": r"\b(synthwave|retrowave|vaporwave|outrun|80s)\b",
@@ -213,6 +213,24 @@ def _prompt_names_style(prompt: str):
     return None
 
 
+def _glb_rigged(path) -> bool:
+    """Whether a .glb carries a skin or animation clips (reads only its JSON
+    chunk). A path that is not a readable glb counts as rigged: this is a
+    guard against one known failure, not a validator."""
+    try:
+        import json as _gj
+        import struct as _gs
+        with open(path, "rb") as fh:
+            head = fh.read(20)
+            if head[:4] != b"glTF":
+                return True
+            n = _gs.unpack("<I", head[12:16])[0]
+            doc = _gj.loads(fh.read(n).decode("utf-8", "replace"))
+        return bool(doc.get("skins") or doc.get("animations"))
+    except Exception:
+        return True
+
+
 def _style_asked(style: str, prompt: str) -> bool:
     """Whether the sentence itself asks for this look."""
     pat = _STYLE_ASKED.get(style or "")
@@ -230,6 +248,12 @@ _DESTINATION = _fre.compile(
     r"(bakery|brewery|distillery|sawmill|cannery|shipyard|windmill|watermill|factory|foundry|refinery)\b", _fre.I)
 
 
+# a frontier town (2026-10-06): the runtime lays out its own street (WEST)
+WEST_RE = r"\b(wild west|old west|western|frontier|cowboys?|cowgirls?|sheriffs?|saloons?|outlaws?|gunslingers?|high noon|desperados?)\b"
+# aboard a space station (2026-10-06): the level is its inside
+STATION_RE = (r"\b(space ?stations?|orbital (?:station|platform|outpost)|starships?|spaceships? interior|"
+              r"aboard (?:the |a |an )?(?:ship|station|starship|space ?ship)|zero[- ]?g(?:ravity)?|"
+              r"moon ?base|lunar base|mars ?base)\b")
 # A SERVICE GAME (2026-10-06): brewing or cooking for customers at a counter
 SERVICE_RE = (r"\b(barista|caf[e\u00e9]s?|coffee ?(?:shop|house|bar|cart)|tea ?(?:room|shop|house)|"
               r"diner|bistro|restaurant|food ?truck|waiter|waitress|bartender|"
@@ -997,6 +1021,150 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                         job.setdefault("notes", []).append(f"hero: the {_sw}, in the clothes of the job")
             except Exception:
                 pass
+            # A THING TO FIX IS FIXED, NOT VISITED (2026-10-06): "fix five broken
+            # panels" was planned as five steps of "reach broken panel N". Fixing
+            # is its own verb: the broken things stand about the level and you
+            # hold E at each until it comes back.
+            try:
+                import re as _rre
+                _rp = (req.prompt or "").lower()
+                _rm = _rre.search(r"\b(?:fix(?:es|ing)?|repair(?:s|ing)?|restore|mend|reactivate|reboot|power up|bring back online)\s+"
+                                  r"(?:all\s+)?(?:of\s+)?(?:the\s+|every\s+)?(\d+|two|three|four|five|six|seven|eight|nine|ten)?\s*"
+                                  r"((?:broken|damaged|dead|faulty|offline|burnt[- ]out|failing|leaking|busted)\s+)?([a-z]+)(?:\s+([a-z]+))?", _rp)
+                if _rm and getattr(spec, "genre", "") != "factory":
+                    _STOP = {"in", "on", "at", "before", "across", "around", "of", "to", "and", "so", "while", "for", "with", "the", "inside", "aboard"}
+                    _n1, _n2 = _rm.group(3), _rm.group(4)
+                    _noun = _n1 if (not _n2 or _n2 in _STOP) else (_n1 + " " + _n2)
+                    # "restore power", "restore order", "restore peace" are not things to fix
+                    if _noun not in _STOP and _noun.split()[0] not in ("it", "them", "everything", "things", "power", "order",
+                                                                       "peace", "balance", "hope", "faith", "harmony", "life", "magic",
+                                                                       "light", "honor", "honour", "justice", "memory", "memories", "his", "her", "their", "my"):
+                        _wd = {"two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10}
+                        _c = _rm.group(1)
+                        _cnt = (int(_c) if _c and _c.isdigit() else _wd.get(_c or "", 0)) or (4 if _noun.endswith("s") else 1)
+                        _lab = ((_rm.group(2) or "") + _noun).strip()
+                        from app.game_export.spec import ObjectiveSpec as _ROS
+                        _stem = _noun.split()[-1].rstrip("s")[:5]
+                        spec.objectives = [_ROS(kind="repair", label=_lab, count=max(1, min(_cnt, 10)))] + [
+                            o for o in spec.objectives
+                            if not (o.kind in ("reach", "collect", "repair") and _stem and _stem in (o.label or "").lower())]
+                        # the broken things are the runtime's own fixtures: the planner's
+                        # "panel" props were generated as a mesh and stood about besides
+                        spec.entities = [e for e in spec.entities
+                                         if not (e.behavior in ("static", "wander") and _stem and _stem in (e.name or "").lower())]
+                        job.setdefault("notes", []).append(f"repair: {_cnt} {_lab} to fix (hold E at each)")
+            except Exception as _re_e:
+                job.setdefault("notes", []).append(f"repair rule skipped: {_re_e}")
+            # A SEA BATTLE IS FOUGHT IN SHIPS (2026-10-06): "a pirate captain sails
+            # across a stormy sea and sinks three enemy ships" was a lighthouse
+            # keeper with a sword in a dark wood, no water, no ships. The hero
+            # is the ship: it sails (rides the waterline) and fires its guns;
+            # the enemy are ships on the same sea, and sinking them is the job.
+            try:
+                import re as _nre
+                _np = (req.prompt or "").lower()
+                if (_nre.search(r"\b(sails?|sailing|naval|sea battle|ship battle|broadside|cannons?|sinks?|sinking|galleons?|frigates?|warships?|fleet|armada)\b", _np)
+                        and _nre.search(r"\b(ships?|galleons?|frigates?|fleet|warships?|boats?|vessels?|navy|armada)\b", _np)
+                        and not _nre.search(r"\b(space|star|air|sky)\s?ships?\b", _np)
+                        and getattr(spec, "genre", "") != "factory"):
+                    from app.game_export.spec import ObjectiveSpec as _NOS, EntitySpec as _NES
+                    spec.player.name = "pirate ship"
+                    spec.player.asset = ""
+                    spec.player.mode = "swim"
+                    spec.player.buoyant = True
+                    spec.player.attack = "ranged"
+                    spec.player.walk_speed = max(spec.player.walk_speed, 6.0)
+                    spec.player.run_speed = max(spec.player.run_speed, 11.0)
+                    spec.world.archetype = "archipelago"
+                    if _nre.search(r"\b(storm\w*|tempest|squall|gale)\b", _np):
+                        spec.world.weather = "rain"
+                        if spec.world.sky == "night" and not _nre.search(r"\b(night|midnight|moon\w*|dark)\b", _np):
+                            spec.world.sky = "overcast"      # a storm at sea is grey, not black
+                    spec.player.height_m = 18.0               # a swimmer is sized by its length: a galleon
+                    job["_naval"] = True                       # build_level lays out open sea and a deep lane
+                    # palm islands in a sea that runs to the horizon (the flora's island
+                    # biome ends the land at a shore), not a jungle round a pond
+                    spec.world.flora = "palm island"
+                    _wd = {"two": 2, "three": 3, "four": 4, "five": 5, "six": 6}
+                    _nm = _nre.search(r"\b(\d+|two|three|four|five|six)\s+(?:enemy\s+|rival\s+|navy\s+|merchant\s+)?(?:ships?|galleons?|frigates?|boats?|vessels?)", _np)
+                    _n = (int(_nm.group(1)) if _nm.group(1).isdigit() else _wd[_nm.group(1)]) if _nm else 3
+                    _n = max(1, min(_n, 6))
+                    spec.entities = [e for e in spec.entities if e.behavior not in ("hostile", "guard", "flee", "vehicle")
+                                     and not _nre.search(r"\b(ships?|boats?|galleons?)\b", (e.name or "").lower())]
+                    spec.entities.append(_NES(name="enemy ship", behavior="hostile", count=_n, speed=2.6, hp=4, height_m=10.0))   # (the runtime sizes a galleon itself; 10 is the schema's ceiling)
+                    spec.objectives = [_NOS(kind="defeat", label="enemy ships", count=_n)]
+                    job.setdefault("notes", []).append(f"sea battle: you sail the ship and fire its guns; {_n} enemy ships")
+            except Exception as _ne:
+                job.setdefault("notes", []).append(f"naval rule skipped: {_ne}")
+            # ZERO G IS FLOATING (2026-10-06): "an astronaut floats through a space
+            # station in zero gravity" walked the corridors. Weightless, the hero
+            # drifts: flight, slow, kept under the ceiling by the runtime.
+            try:
+                import re as _zre
+                _zp = (req.prompt or "").lower()
+                if _zre.search(STATION_RE, _zp) and _zre.search(r"\b(zero[- ]?g(?:ravity)?|weightless\w*|floats?|floating|drifts?|drifting|microgravity)\b", _zp) \
+                        and getattr(spec, "genre", "") != "factory":
+                    spec.player.mode = "fly"
+                    spec.player.walk_speed = 2.4
+                    spec.player.run_speed = 4.8
+                    job.setdefault("notes", []).append("zero gravity: the hero floats (Space up, C down)")
+            except Exception as _ze:
+                job.setdefault("notes", []).append(f"zero-g rule skipped: {_ze}")
+            # A WESTERN HAS A SHERIFF (2026-10-06): "a wild west sheriff stops
+            # four bandits" was played by the ranger in a green field jacket
+            # with a blade. The hero is the role the sentence names, dressed
+            # for the frontier, and a frontier lawman carries a revolver.
+            try:
+                import re as _wre
+                _wp = (req.prompt or "").lower()
+                if _wre.search(WEST_RE, _wp) and getattr(spec, "genre", "") != "factory":
+                    _wr = _wre.search(r"\b(sheriff|marshal|deputy|cowboy|cowgirl|gunslinger|outlaw|bandit|ranger)\b", _wp)
+                    _role = _wr.group(1) if _wr else "cowboy"
+                    if _role == "ranger":
+                        _role = "cowboy"
+                    if (spec.player.name or "").lower() != _role:
+                        spec.player.name = _role
+                        spec.player.asset = ""
+                    if spec.player.attack != "ranged" and _wre.search(r"\b(sheriff|marshal|deputy|cowboy|cowgirl|gunslinger|outlaw|bandit)\b", _role):
+                        spec.player.attack = "ranged"
+                    if not spec.grade or spec.grade == "none":
+                        spec.grade = "golden"
+                    # the world is desert round a frontier street: named "town" it was
+                    # dressed with the city kit, brick apartment blocks round the saloon
+                    spec.world.name = "frontier desert"
+                    spec.world.scatter = []
+                    # horses tied at the rails: a frontier street is not empty (2026-10-06)
+                    if not any("horse" in (e.name or "").lower() for e in spec.entities):
+                        from app.game_export.spec import EntitySpec as _WES
+                        spec.entities.append(_WES(name="horse", behavior="static", count=3, speed=0.0, height_m=1.7))
+                    job.setdefault("notes", []).append(f"frontier town: the {_role}, a six-shooter, a dirt main street")
+            except Exception as _we:
+                job.setdefault("notes", []).append(f"western rule skipped: {_we}")
+            # A CANDY LAND IS MADE OF SWEETS (2026-10-06): the runtime builds the
+            # lollipops, canes, gumdrops and the cupcake staircase itself; the
+            # planner's job is the light (pastel sky), no meadow grass or oak
+            # wood, a hero who can jump, and no separate "cupcake" mesh to
+            # generate for four minutes and then skip.
+            try:
+                import re as _cre
+                _cp = (req.prompt or "").lower()
+                if _cre.search(r"\b(candy ?land|candyland|candy (?:world|kingdom|island|forest|planet|village|meadow)|sugar ?land|"
+                               r"sweets? (?:land|world|kingdom)|gumdrops?|lollipops?|cupcakes?|gingerbread|cotton candy)\b", _cp) \
+                        and getattr(spec, "genre", "") != "factory":
+                    from app.game_export.spec import PaletteSpec as _CPS
+                    spec.world.palette = _CPS(sky="#ffc4e4", fog="#ffe2f2", sun_color="#fff2dc")
+                    spec.world.fog_density = min(spec.world.fog_density or 0.3, 0.12)   # sugar air, not a fog bank
+                    spec.world.ground_color = [0.70, 0.93, 0.78]
+                    spec.world.grass = False
+                    spec.world.scatter = []
+                    spec.world.weather = "none"
+                    spec.world.sky = "day"
+                    spec.player.jump = True
+                    spec.entities = [e for e in spec.entities
+                                     if not _cre.search(r"\b(cupcakes?|lollipops?|gumdrops?|candy canes?|donuts?|sweets?)\b", (e.name or "").lower())]
+                    job.setdefault("notes", []).append("candy land: lollipop trees, gumdrops and a cupcake staircase, built in the runtime")
+            except Exception as _ce:
+                job.setdefault("notes", []).append(f"candy rule skipped: {_ce}")
             # A GARDEN HAS NO DEER IN IT (2026-10-06): "a cute cartoon gardener
             # picks carrots ... in a sunny vegetable garden" was cast three deer
             # wandering the beds. Big wild animals the sentence never named
@@ -1253,6 +1421,17 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         # game built without touching that control shipped identical art
         # direction, and "they all look the same" was structurally true. The
         # extractor now picks one; an explicit user choice below still wins.
+        # THE LOOK THE SENTENCE NAMES (2026-10-06): "a kawaii candy land" had
+        # its planner's "cartoon" refused as unasked and fell to photoreal,
+        # though the sentence asked for a look in so many words. When the
+        # planner's pick is not the one asked for, the asked one is used.
+        if not req.style and spec.style != "default" and not _style_asked(spec.style or "", req.prompt):
+            _asked = next((st for st in ("kawaii", "anime", "pixel", "lowpoly", "sketch", "watercolor", "claymation",
+                                         "noir", "storybook", "comic", "papercraft", "synthwave", "illustrated", "cartoon")
+                           if _style_asked(st, req.prompt)), None)
+            if _asked:
+                job.setdefault("notes", []).append(f"art direction: {_asked} (the sentence asked for it)")
+                spec.style = _asked
         if (not req.style and spec.style and spec.style != "default"
                 and not _style_asked(spec.style, req.prompt)):
             job.setdefault("notes", []).append(
@@ -1492,6 +1671,16 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                 _skip = {"firefly", "fireflies", "snowflake", "snowflakes",
                          "beacon", "beacons", "star", "stars",
                          "planet", "planets", "moon", "moons", "sun", "sky"}
+                # WHAT YOU ESCAPE IS NOT YOU (2026-10-06): "escape a hungry t-rex
+                # through a prehistoric jungle" promoted the t-rex, the prompt's
+                # first body, to hero. The thing escaped, fled, outrun, hidden
+                # from or chased by is the hunter; its words are not candidates.
+                import re as _pre
+                for _pm in _pre.finditer(r"\b(?:escape|escaping|escapes|flee|flees|fleeing|run from|running from|runs from|outrun|outrunning|"
+                                         r"evade|evading|avoid|avoiding|hide from|hiding from|chased by|hunted by|pursued by|stalked by)\s+"
+                                         r"(?:(?:a|an|the|from)\s+)?((?:[\w-]+\s+){0,2}[\w-]+)", _ptext):
+                    for _pw in _pm.group(1).split():
+                        _skip.add(_pw); _skip.add(_pw.rstrip("s"))
                 cand = None
                 for wd in _ptext.replace(",", " ").replace(".", " ").split():
                     w = (wd[:-3] + "y") if wd.endswith("ies") else \
@@ -1589,6 +1778,9 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             # generated (once) instead of handed a stand-in.
             _dressable = _w in ("superhero", "barista", "gardener", "chef", "nurse", "farmer", "pilot",
                                 "waiter", "waitress", "bartender", "baker",
+                                "sheriff", "marshal", "deputy", "cowboy", "cowgirl", "gunslinger", "outlaw",
+                                # (2026-10-06) a child in a candy land was recast as the safari explorer
+                                "child", "kid", "girl", "boy", "snowboarder", "skier", "surfer", "skateboarder",
                                 "sailor", "fisherman", "miner", "mechanic", "astronaut", "pirate", "ninja")
             if (_w in _GENERIC_HUMAN | {"hero", "protagonist", "player", "you", "someone", "stranger", "visitor"} or _unknown_human) \
                     and spec.style not in _FLAT_LOOKS and not _dressable:
@@ -1624,6 +1816,18 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             pass
         cast = want
         pattern = guess_pattern(want)
+        # A DRAWN WORLD HAS A DRAWN HERO (2026-10-06): "a cute cartoon gardener
+        # (not photorealistic)" played a photographed gardener in a cartoon
+        # garden. In a toon, anime or clay game a person is made in that look,
+        # once, under its own name ("toon gardener"); the role the runtime reads
+        # (weapons, flight, the guide's lines) stays the plain one.
+        _LOOK = {"cartoon": "toon", "kawaii": "toon", "comic": "toon", "storybook": "toon",
+                 "watercolor": "toon", "anime": "anime", "claymation": "clay"}.get(spec.style or "")
+        if (_LOOK and pattern == "biped" and want and not want.startswith(_LOOK + " ")
+                and not want.startswith("blocky ")                     # the blocky roster is already drawn in a flat look
+                and getattr(spec, "genre", "adventure") != "factory" and not (req.player_asset if hasattr(req, "player_asset") else None)):
+            want = f"{_LOOK} {want}"
+            job.setdefault("notes", []).append(f"hero drawn in the game's look: '{want}'")
         # vehicles DRIVE, flyers FLY, swimmers SWIM — all play as static
         # meshes (no rig); everything else needs the rigged+animated bake
         if pattern in ("vehicle", "flying", "aquatic", "static"):
@@ -1689,6 +1893,30 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         # is promoted to pattern "vehicle" so the whole hardened branch below
         # (drive mode, speed floors, parametric car, metric height) applies
         # unchanged. The hero's NAME survives for the HUD and intro.
+        # A SNOWBOARDER RIDES A BOARD, NOT A SEDAN (2026-10-06): "snowboard down
+        # a snowy mountain slope through the gates" put the snowboarder in a
+        # parametric red car and the rivals in go-karts. A rider keeps the
+        # car's arcade physics (carving is steering, a slide is a drift) and
+        # stands on the board the runtime draws under them.
+        try:
+            import re as _rdre
+            _rdm = _rdre.search(r"\b(snowboard\w*|ski(?:s|er|ers|ing)?|skateboard\w*|skater|skating|surf(?:er|ers|ing|board)?|"
+                                r"sled(?:s|ding|der)?|sledge|toboggan\w*)\b", (req.prompt or "").lower())
+            if _rdm and player_glb and pattern == "biped" and getattr(spec, "genre", "adventure") != "factory":
+                _w0 = _rdm.group(1)
+                spec.player.ride = ("snowboard" if _w0.startswith("snowboard") else "skis" if _w0.startswith("ski") and not _w0.startswith("skat")
+                                    else "skateboard" if _w0.startswith("skat") else "surfboard" if _w0.startswith("surf") else "sled")
+                spec.player.mode = "drive"
+                spec.player.car_params = None
+                spec.player.walk_speed = max(spec.player.walk_speed, 9.0)
+                spec.player.run_speed = max(spec.player.run_speed, 16.0)
+                for _o in spec.objectives:      # "through 20 gates" is a course, not twenty rivals
+                    if _o.kind == "race" and _rdre.search(r"\b(gates?|flags?|checkpoints?|rings?|laps?|poles?)\b", (_o.label or "").lower()):
+                        _o.count = min(_o.count, 5)
+                        _o.label = "rivals"
+                job.setdefault("notes", []).append(f"'{spec.player.name}' rides a {spec.player.ride}")
+        except Exception as _rde:
+            job.setdefault("notes", []).append(f"ride rule skipped: {_rde}")
         _race_seated = False
         if (any(o.kind == "race" for o in spec.objectives)
                 and pattern != "vehicle"
@@ -1978,7 +2206,10 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                 "Gaussian-splat world attached. The splat is the scenery, "
                 "the mesh terrain stays as the physics floor")
         job["player"] = cast
-        if not spec.world.scatter:
+        _candy_land = bool(_fre.search(r"\b(candy ?land|candyland|candy (?:world|kingdom|island|forest|planet|village|meadow)|sugar ?land|"
+                                       r"sweets? (?:land|world|kingdom)|gumdrops?|lollipops?|cupcakes?|gingerbread|cotton candy)\b",
+                                       (req.prompt or "").lower()))
+        if not spec.world.scatter and not _candy_land:      # a candy land's props are the runtime's own
             spec.world.scatter = [ScatterSpec(**s) for s in game_scatter(
                 spec.world.name, getattr(spec.world, 'archetype', 'plain'),
                 int(spec.seed or 0), spec.style)]
@@ -2560,6 +2791,15 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         # REAL CITIES (shared with video's OSM system): a named place in the
         # prompt swaps procedural building scatter for actual OSM footprints.
         # Real blocks are ~100-250m — the world grows to hold a real district.
+        _frontier = bool(_fre.search(WEST_RE, (req.prompt or "").lower()))
+        if _frontier:
+            is_city = False          # the runtime builds the frontier street itself, no asphalt grid
+            spec.world.archetype = "mesa"
+            spec.world.ground_color = [0.62, 0.47, 0.32]
+            if not spec.world.flora:
+                spec.world.flora = "cactus"          # desert round the town, not a green wood
+            if spec.world.weather == "rain":
+                spec.world.weather = "none"
         place = detect_place(req.prompt) if is_city else None
         # FLORA OBEYS THE PROMPT (2026-08-25): the silhouette pack rolls a
         # tree archetype from the seed, and its first field test planted dead
@@ -2582,6 +2822,8 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         _keep_city = (not place) and bool(_base_level.get("osm"))
         if place or _keep_city or is_city:
             spec.world.size_m = max(spec.world.size_m, 360.0)
+        if _frontier:
+            spec.world.size_m = max(spec.world.size_m, 150.0)   # an 88 m main street and the desert round it
         # SETTING-DRIVEN TERRAIN (2026-07-05): "mountains" means PEAKS, not a
         # flat plane — amplitude scales with the world class, scalably.
         _TERRAIN_AMP = {"mountain": 16.0, "alpine": 16.0, "volcano": 14.0,
@@ -2594,6 +2836,8 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         amp = next((v for k, v in _TERRAIN_AMP.items() if k in _wname), 2.4)
         if is_city:
             amp = 0.35                              # cities are near-flat
+        if _frontier:
+            amp = 0.9                               # a town is built where the ground is level
         if spec.player.mode == "fly":
             amp = max(amp, 8.0)                     # flyers deserve relief to soar over
         # WATER WORLDS: rolling seabed + a water plane the runtime renders;
@@ -2720,7 +2964,7 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         spec.world.level = build_level(
             spec.seed, spec.world.size_m, n_objectives=n_obj,
             amplitude_m=amp * _am, grid_n=_gn, regions=_regions,
-            archetype=_arch, terrain_form=_tf)
+            archetype=_arch, terrain_form=_tf, sea=bool(job.get("_naval")))
         if _tf != "natural" or _gm != 1.0:
             job.setdefault("notes", []).append(
                 f"terrain form: {_tf} ({_gn}x{_gn}). The ground is shaped by "
@@ -2924,7 +3168,8 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         # ever a building's inside builds rooms, unless the sentence puts
         # you outside it (its car park, its roof) or names a real city.
         _cafe = _re3.search(SERVICE_RE, _pl)
-        _venue = _cafe or _re3.search(r"\b(shopping (?:mall|cent(?:re|er)|arcade)|mall|supermarket|"
+        _station = _re3.search(STATION_RE, _pl)
+        _venue = _cafe or _station or _re3.search(r"\b(shopping (?:mall|cent(?:re|er)|arcade)|mall|supermarket|"
                              r"department store|hospital|asylum|sanatorium|office block|prison|bunker|"
                              r"high school|school(?! of)|classroom|academy|laborator(?:y|ies)|lab|research (?:facility|station|base))\b", _pl)
         if _venue and (_re3.search(r"\b(?:outside|car ?park|parking|rooftop|roof of|street(?:s)? (?:of|around))\b", _pl)
@@ -2935,7 +3180,7 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             from app.game_export.level import build_interior
             _ik_raw = (_im.group(1) if _im else None) \
                 or (_bld.group(1) if (_heist and _bld) else None) \
-                or (("cafe" if _cafe else {"supermarket": "shop", "department store": "mall", "hospital": "hospital",
+                or (("station" if _station else "cafe" if _cafe else {"supermarket": "shop", "department store": "mall", "hospital": "hospital",
                      "asylum": "hospital", "sanatorium": "hospital", "office block": "office", "prison": "dungeon",
                      "bunker": "dungeon", "high school": "school", "school": "school", "classroom": "school",
                      "academy": "school"}.get(_venue.group(1),
@@ -3176,6 +3421,26 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         # for — an edit chain keeps the earliest real prompt
         job["spec_resolved"]["prompt"] = (
             base_spec.get("prompt") if base_spec else None) or req.prompt
+        # A HERO WHO WALKS HAS A RIG (2026-10-06): "an astronaut floats through
+        # a space station" failed verification with skins=0 clips=0. The build
+        # had taken the stand-in, but the astronaut's background generation
+        # registered its bare mesh in the moment before export and that was
+        # shipped. A walking hero without a rig is swapped for a rigged
+        # stand-in here, and the next build gets the real one.
+        try:
+            if (spec.player.mode == "walk" and spec.player.asset
+                    and not str(spec.player.asset).startswith("proc:")
+                    and getattr(spec, "genre", "adventure") != "factory"
+                    and not _glb_rigged(spec.player.asset)):
+                for _cand in ("man", "walker", "woman"):
+                    _g2 = ensure_playable(_cand, verbose=False) or library.resolve(_cand)
+                    if _g2 and _glb_rigged(_g2):
+                        job.setdefault("notes", []).append(
+                            f"the hero's mesh arrived without its rig in time; '{_cand}' plays this build")
+                        spec.player.asset = str(_g2)
+                        break
+        except Exception as _rg:
+            job.setdefault("notes", []).append(f"rig guard skipped: {_rg}")
         out_dir = GAME_JOBS_DIR / f"job_{job_id}"
         dist = export_web_game(spec, out_dir, verbose=False)
         # persist the full spec so this game stays EDITABLE across restarts

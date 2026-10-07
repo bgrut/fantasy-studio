@@ -7,6 +7,12 @@ const J = process.env.J, OUT = process.env.OUT || '.', TAG = process.env.TAG || 
 const b = await puppeteer.launch({ headless: 'new', executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', args: ['--use-angle=d3d11'] });
 const p = await b.newPage(); await p.setViewport({ width: 1400, height: 800 });
 const errs = []; p.on('pageerror', e => errs.push(e.message)); p.on('console', m => { if (m.type() === 'error') errs.push(m.text().slice(0, 160)); });
+// SHADERDBG=1: the first shader that failed to compile, its error lines and the source around them
+let shaderErr = null;
+if (process.env.SHADERDBG === '1') p.on('console', m => { const t = m.text(); if (!shaderErr && /Shader Error/.test(t)) shaderErr = t; });
+process.on('exit', () => { if (!shaderErr) return; const L = shaderErr.split('\n');
+  console.log(L.filter(l => /ERROR|Info Log|Material/.test(l)).slice(0, 8).join('\n'));
+  const mm = shaderErr.match(/ERROR: 0:(\d+)/); if (mm) { const n = +mm[1]; console.log(L.filter(l => { const k = parseInt(l.trim(), 10); return k >= n - 3 && k <= n + 1; }).join('\n')); } });
 const base = `http://127.0.0.1:8789/games/${J}/dist/`;
 await p.goto(base + 'index.html', { waitUntil: 'domcontentloaded', timeout: 90000 });
 await new Promise(r => setTimeout(r, 12000));
@@ -38,7 +44,7 @@ if (ok && process.env.CLOSE === '1') {
   };
   await pin((H) => { const g = window.__game, pp = g.pos(), yaw = g.heading ? g.heading() : 0, fx = -Math.sin(yaw), fz = -Math.cos(yaw);
     const d = Math.max(1.6, H * 1.25);
-    window.__camPin = { pos: [pp[0] + fx * d + fz * 0.5, pp[1] + H * 0.78, pp[2] + fz * d - fx * 0.5], look: [pp[0], pp[1] + H * 0.62, pp[2]] }; return true; }, '4_hero');
+    window.__camPin = { pos: [pp[0] - fx * d + fz * 0.5, pp[1] + H * 0.78, pp[2] - fz * d - fx * 0.5], look: [pp[0], pp[1] + H * 0.62, pp[2]] }; return true; }, '4_hero');
   await pin((H) => { const g = window.__game, pp = g.pos(), yaw = g.heading ? g.heading() : 0, fx = -Math.sin(yaw), fz = -Math.cos(yaw);
     const sx = fz, sz = -fx, d = Math.max(3.2, H * 2.2);
     window.__camPin = { pos: [pp[0] - fx * d * 0.6 + sx * d * 0.8, pp[1] + H * 0.35, pp[2] - fz * d * 0.6 + sz * d * 0.8], look: [pp[0] + fx * 8, pp[1] + H * 0.5, pp[2] + fz * 8] }; return true; }, '5_low');

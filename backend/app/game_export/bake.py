@@ -885,19 +885,23 @@ else:
         bad = (off > __THRESH__) & (flat < __FLAT__) & (c1 >= 2)
         if bad.any():
             # for each fleck, the neighbour that agrees most with the ring
-            best = np.full(nt, -1, dtype=np.int64)
-            score = np.full(nt, 1e9, dtype=np.float32)
+            # VECTORISED (2026-10-06): this was a Python loop over every edge
+            # pair and then one uv_layers.data[i] write per corner; on a raw
+            # 470 k-triangle TRELLIS hero it ran past the bridge's ten-minute
+            # limit, the optimise was abandoned mid-way, every later call
+            # queued behind it and the hero shipped unrigged (barista,
+            # snowboarder). Same choice, done in numpy, written back once.
             nd_ = np.abs(col[pairs[:, 1]] - ring2[pairs[:, 0]]).max(axis=1)
-            for k in np.argsort(-nd_):                       # smallest wins, written last
-                a_ = pairs[k, 0]
-                if nd_[k] <= score[a_]:
-                    score[a_] = nd_[k]; best[a_] = pairs[k, 1]
-            uvl = me.uv_layers.active.data
-            for t in np.nonzero(bad & (best >= 0))[0]:
-                tgt = cuv[best[t]]
-                for li in tl[t]:
-                    uvl[int(li)].uv = (float(tgt[0]), float(tgt[1]))
-                flecks += 1
+            o2 = np.lexsort((nd_, pairs[:, 0]))              # by triangle, then by disagreement
+            first = np.ones(len(o2), dtype=bool); first[1:] = pairs[o2[1:], 0] != pairs[o2[:-1], 0]
+            best = np.full(nt, -1, dtype=np.int64)
+            best[pairs[o2[first], 0]] = pairs[o2[first], 1]
+            sel = np.nonzero(bad & (best >= 0))[0]
+            if len(sel):
+                uvs = ua.copy()
+                uvs[tl[sel].reshape(-1)] = np.repeat(cuv[best[sel]], 3, axis=0)
+                me.uv_layers.active.data.foreach_set("uv", uvs.reshape(-1))
+                flecks = int(len(sel))
             me.update()
     out = {"ok": True, "flecks": int(flecks), "triangles": int(nt)}
 __result__ = json.dumps(out)

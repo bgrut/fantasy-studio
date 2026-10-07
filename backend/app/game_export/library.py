@@ -224,6 +224,9 @@ def _true_height(kind: str) -> float | None:
 
 def default_height(kind: str) -> float:
     k = (kind or "").lower()
+    for _pre in ("toon ", "anime ", "clay "):     # a drawn gardener is as tall as a gardener
+        if k.startswith(_pre):
+            k = k[len(_pre):]
     th = _true_height(k)
     if th is not None:
         return th
