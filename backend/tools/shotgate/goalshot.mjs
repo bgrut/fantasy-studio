@@ -12,7 +12,9 @@ await p.click('#startbtn').catch(() => {}); await new Promise(r => setTimeout(r,
 const g = await p.evaluate(async () => { try { const s = await (await fetch('spec.json')).json(); return (s.world && s.world.level && s.world.level.goal) || null; } catch (e) { return null; } });
 if (g) {
   await p.evaluate(() => { for (const el of document.body.children) if (el.tagName !== 'CANVAS' && !el.querySelector('canvas')) el.style.visibility = 'hidden'; });
-  await p.evaluate(([x, z]) => { const y = 0; window.__camPin = { pos: [x - 9, 5.5, z - 12], look: [x + 4, 1.5, z + 1] }; }, g);
+  await p.evaluate(([x, z]) => { const y = 0; window.__camPin = { pos: [x - 9, 5.5, z - 12], look: [x + 4, 1.5, z + 1] };
+    // a castle is seen whole, from out in front of its gate
+    if (window.__castle && window.__castle.view) { const [vx, vz] = window.__castle.view; window.__camPin = { pos: [vx, 16, vz], look: [x, 6, z - 0] }; } }, g);
   await new Promise(r => setTimeout(r, 1800));
   await p.screenshot({ path: `${OUT}/${TAG}_goal.jpg`, type: 'jpeg', quality: 90 });
 }

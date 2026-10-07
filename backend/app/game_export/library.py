@@ -111,6 +111,11 @@ def resolve(kind: str, any_quality: bool = False) -> str | None:
     return p
 
 
+# compounds that have their own wardrobe in asset_gen/reference.py and must be
+# generated as themselves rather than played by their head noun's model
+_OWN_LOOK = {"ghost hunter"}
+
+
 def _resolve(kind: str) -> str | None:
     """Return an absolute path to a game-ready GLB for `kind`, or None.
     Raw (unoptimized) generated entries are decimated to game budget on first
@@ -119,7 +124,15 @@ def _resolve(kind: str) -> str | None:
     if k in _PROC_MODULES:
         return _PROC_MODULES[k]
     lib = _load()
-    for key in (k, _SYNONYMS.get(k, ""), *(w for w in k.split() if w in lib)):
+    # THE HEAD NOUN, NOT ANY WORD (2026-10-07): a kind the library lacks fell
+    # back to whichever of its words it had, first word first, so "ghost
+    # hunter" was played by the library's GHOST, rigged as a hero and walking
+    # upside down in its frame. A compound falls back to its head noun only
+    # (a ghost hunter is a hunter, a dragon egg an egg, a pirate ship a ship),
+    # and a compound with a look of its own is made, not stood in for.
+    _words = k.split()
+    _head = (_words[-1],) if len(_words) > 1 and _words[-1] in lib and k not in _OWN_LOOK else ()
+    for key in (k, _SYNONYMS.get(k, ""), *_head):
         entry = lib.get(key)
         if not entry:
             continue

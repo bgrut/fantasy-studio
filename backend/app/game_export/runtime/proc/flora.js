@@ -1160,6 +1160,10 @@ export function biomeFor(words, arch, groundHSL) {
     // an island, a beach, a coast: the land ends at a shore and the sea runs on
     island: has(/island|\bisle\b|islet|atoll|lagoon|archipelago|castaway|shipwreck|beach|coast|shore/) });
   else if (has(/swamp|marsh|bayou|bog|toxic/)) Object.assign(out, { kinds: K(['dead', 0.6], ['broadleaf', 0.4], ['bush', 0.6], ['rock', 0.15]), dens: 0.6 });
+  // OPEN GRASS IS OPEN (2026-10-07): "a bee in a sunny meadow" was a wood
+  // with a path through it. A meadow, a prairie, a pasture is grass to the
+  // horizon with the odd tree and hedge; a farm or a village keeps its copses.
+  else if (has(/meadow|prairie|pasture|grassland|wildflower|field of/) && !has(/forest|wood|grove/)) Object.assign(out, { kinds: K(['oak', 0.55], ['bush', 0.7], ['broadleaf', 0.15], ['rock', 0.2]), dens: 0.07 });
   else if (has(/meadow|farm|village|plain|field|prairie|pasture|orchard/)) Object.assign(out, { kinds: K(['oak', 0.5], ['broadleaf', 0.3], ['bush', 0.8], ['rock', 0.25]), dens: 0.35 });
   else {
     out.kinds = kindsFor(arch, w).concat([{ kind: 'rock', weight: 0.15 }]);

@@ -481,6 +481,8 @@ def _build_reference_prompt(slots: Dict[str, Any], style: str) -> tuple[str, str
             "ranger":    "forest ranger in a green field jacket and khaki trousers, wide-brimmed hat, hiking boots",
             "engineer":  "engineer in an orange hi-vis work jacket, white hard hat, cargo trousers, work boots, tool belt",
             "explorer":  "explorer in a khaki safari shirt and trousers, wide-brimmed hat, leather boots, backpack straps",
+            # (2026-10-07) an original Victorian investigator, nothing from any film
+            "ghost hunter": "victorian ghost hunter in a long dark wool greatcoat over a buttoned waistcoat and high-collared white shirt, dark trousers, tall leather boots, leather gloves, a brass lantern on a belt hook, short tidy hair, determined face",
             "hunter":    "hunter in a camouflage jacket and trousers, baseball cap, boots",
             "courier":   "bicycle courier in a cycling jersey, cap, messenger bag strap across the chest, trainers",
             "thug":      "street thug in a dark hoodie and jeans, sneakers, tough expression",
@@ -517,6 +519,8 @@ def _build_reference_prompt(slots: Dict[str, Any], style: str) -> tuple[str, str
             "bandit":    "frontier bandit in a long dusty brown duster coat, a red bandana over the lower face, a battered wide-brimmed hat, boots, fully clothed",
             "child":     "a cheerful child in a bright striped t-shirt, colourful dungarees and sneakers, fully clothed",
             "kid":       "a cheerful child in a bright striped t-shirt, colourful dungarees and sneakers, fully clothed",
+            "firefighter": "firefighter in a heavy tan turnout coat and trousers with reflective yellow stripes, a red helmet, thick gloves, black boots, fully clothed",
+            "fireman":   "firefighter in a heavy tan turnout coat and trousers with reflective yellow stripes, a red helmet, thick gloves, black boots, fully clothed",
             "snowboarder": "snowboarder in a baggy bright winter jacket and snow pants, a knitted beanie, goggles pushed up, thick gloves, snow boots, fully clothed",
             "skier":     "skier in a fitted padded ski jacket and ski pants, a helmet and goggles, gloves, ski boots, fully clothed",
             "surfer":    "surfer in a full-length wetsuit, barefoot, fully covered",

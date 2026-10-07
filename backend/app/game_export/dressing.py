@@ -330,10 +330,13 @@ def game_scatter(setting: str | None, archetype: str | None = None,
         rec = [(p, n, v, 1.0) for p, n, v in legacy]
     rnd = random.Random(seed)
     _garden = arch == "plain" and bool(re.search(r"\b(gardens?|allotments?|veg(?:etable|gie)? (?:patch|plot))\b", (setting or "").lower()))
+    # a graveyard has its stones whatever the style (2026-10-07): the grave kit
+    # only came with the noir and horror looks, and a photoreal graveyard was a field
+    _grave = bool(re.search(r"\b(graveyards?|cemeter(?:y|ies)|churchyards?|crypts?|tombs?|necropolis)\b", (setting or "").lower()))
     if _garden and table is _ARCH_RECIPES:
         rec = _GARDEN_RECIPE
     # the style's own furniture, on top of whatever the landform grows
-    rec = list(rec) + list(_SIG_GARDEN if _garden else _STYLE_SIGNATURE.get((style or "").lower(), []))
+    rec = list(rec) + list(_SIG_GARDEN if _garden else _SIG_GRAVE if _grave else _STYLE_SIGNATURE.get((style or "").lower(), []))
     out = []
     for entry in rec:
         pool, game_n, _v, scale = entry

@@ -413,10 +413,31 @@ def distinct_theme(theme: dict) -> dict:
     return t
 
 
+def _title_from(text: str) -> str:
+    """A title out of the sentence's subject (2026-10-07): the keyword path
+    used the whole sentence, so a bee's game was called "a little bee collects
+    nectar from flowers in a sunny mead". "a little bee collects ..." is The
+    Little Bee: the words before the first verb, at most three."""
+    words = re.findall(r"[a-z][a-z'-]*", (text or "").lower())
+    while words and words[0] in ("a", "an", "the", "my", "your", "our", "some"):
+        words = words[1:]
+    subj = []
+    for w in words:
+        if w in ("who", "that", "and", "in", "on", "at", "with", "from", "to", "is", "are", "must", "has", "tries", "wants",
+                 "put", "run", "fly", "go", "take", "make", "help", "save", "find", "climb", "stop", "defend",
+                 "explore", "escape", "race", "catch", "fight", "collect", "deliver", "sail", "drive", "ride") \
+                or (len(subj) > 0 and w.endswith("s") and not w.endswith("ss")):
+            break
+        subj.append(w)
+        if len(subj) == 3:
+            break
+    return ("The " + " ".join(x.capitalize() for x in subj)) if subj else "Fantasy Studio Game"
+
+
 def _keyword_fallback(text: str) -> dict:
     """No-LLM extraction: setting keywords + sky words. Always succeeds."""
     t = text.lower()
-    out: dict = {"title": text.strip()[:60] or "Fantasy Studio Game", "world": {}}
+    out: dict = {"title": _title_from(text), "world": {}}
     for k in _PLAYER_KINDS:              # first named subject = the player
         if k in t:
             out["player"] = {"name": k}

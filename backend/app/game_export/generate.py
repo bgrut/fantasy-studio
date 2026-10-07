@@ -57,7 +57,8 @@ _BIPED = ("hunter", "archer", "soldier", "warrior", "ranger", "ninja",
           # vehicles and a surfer a fish; people who ride things are people
           "snowboarder", "skateboarder", "skater", "surfer", "skier", "sledder", "cyclist",
           "sheriff", "marshal", "deputy", "gunslinger", "superhero", "barista", "gardener",
-          "waiter", "waitress", "bartender", "cosmonaut", "spaceman", "racer", "athlete")
+          "waiter", "waitress", "bartender", "cosmonaut", "spaceman", "racer", "athlete",
+          "firefighter", "fireman", "firewoman")
 _VEHICLE = ("car", "truck", "bus", "van", "jeep", "tank", "motorcycle")
 _FLYING = ("dragon", "bird", "eagle", "hawk", "owl", "phoenix", "griffin",
            "pegasus", "bat", "butterfly", "bee", "plane", "airplane", "jet",
