@@ -164,6 +164,13 @@ def regen(kind: str, attempts: int) -> str:
             lib = _lib(); lib[kind] = old_entry; _save_lib(lib)
         print(f"  {kind}: the previous model is put back", flush=True)
     _retire(kind, "poor")
+    # the old model's verdict must not judge the new one: the first attempt
+    # writes the same file name, and a "poor" left in the manifest made
+    # library.resolve refuse it before it was ever rigged (the monk, 10-08)
+    _m0 = json.loads(MANIFEST.read_text(encoding="utf-8"))
+    _m0["assets"] = [r for r in _m0.get("assets", []) if r.get("file", "").lower() not in (stem + ".glb", stem + "_anim.glb")]
+    MANIFEST.write_text(json.dumps(_m0, indent=1), encoding="utf-8")
+    library._MANIFEST = None
     for attempt in range(attempts):
         seed = 1000 + attempt * 7919
         os.environ["FS_TRELLIS_SEED"] = str(seed)

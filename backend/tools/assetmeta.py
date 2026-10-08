@@ -188,8 +188,15 @@ def quality_score(rec: dict) -> tuple[float, str]:
         if "looks_like" in rd:
             # one half is a coin toss, and a coin-toss scientist was a garish
             # anatomy figure: below a half is poor, below six tenths doubtful
-            if rd["looks_like"] < 0.5:
+            # A PERSON SEEN FROM BEHIND (2026-10-08): assetview photographs the
+            # back, and a scientist in a lab coat with a sharp face scored 0.43;
+            # regen's "fair" was wiped by the next rebuild of this file and the
+            # library refused the person outright. Between four and five tenths a
+            # person is doubtful, not disqualified.
+            if rd["looks_like"] < 0.5 and not (rec.get("biped") and rd["looks_like"] >= 0.40):
                 reasons.append("does not look like it")
+            elif rd["looks_like"] < 0.5:
+                reasons.append("doubtful")
             elif rd["looks_like"] < 0.6:
                 reasons.append("doubtful")
         # a torn ferrari still reads as a ferrari to the judge; what gives it
@@ -250,6 +257,21 @@ def _render_record(file: str) -> dict:
         except Exception:
             _RENDER = {}
     return _RENDER.get((file or "").lower(), {})
+
+
+def _pattern_of(nm: str) -> str:
+    """The body plan the games themselves give this kind (the short name lists
+    above miss a keeper, a sheriff, a buddhist monk), 2026-10-08."""
+    try:
+        import sys as _s
+        _s.path.insert(0, str(ROOT))
+        from app.game_export.generate import guess_pattern
+        stem = nm.rsplit(".", 1)[0]
+        if stem.endswith("_anim"):
+            stem = stem[:-5]
+        return guess_pattern(stem.replace("_", " "))
+    except Exception:  # noqa: BLE001
+        return ""
 
 
 CAR_NAMES = ("car", "corvette", "ferrari", "taxi", "truck", "sedan", "van", "pickup", "jeep", "coupe")
@@ -362,7 +384,7 @@ def measure(path: Path) -> dict:
     # longer than it is tall. When an asset is actually skinned its joint
     # count is ground truth; names only fill in for unrigged meshes.
     rec["biped"] = (rec["bones"] >= 15 if rec["skinned"]
-                    else any(k in nm for k in BIPED_NAMES))
+                    else any(k in nm for k in BIPED_NAMES) or _pattern_of(nm) == "biped")
     biggest = max(range(3), key=lambda i: dims[i])
     rec["tallest_axis"] = "xyz"[biggest]
     rec["aspect"] = {"w_h": round(dims[0] / max(dims[1], 1e-6), 3),
