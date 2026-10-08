@@ -216,6 +216,14 @@ def regen(kind: str, attempts: int) -> str:
         if v in ("good", "fair"):
             return v
         _retire(kind, f"poor_seed{seed}")
+        # and the verdict goes with it (2026-10-08): the next attempt writes the
+        # same file name, the manifest still called it poor, library.resolve
+        # refused it and every second attempt died with "no rig was baked"
+        m = json.loads(MANIFEST.read_text(encoding="utf-8"))
+        _st = kind.replace(" ", "_")
+        m["assets"] = [r for r in m.get("assets", []) if r.get("file", "").lower() not in (_st + ".glb", _st + "_anim.glb")]
+        MANIFEST.write_text(json.dumps(m, indent=1), encoding="utf-8")
+        library._MANIFEST = None
     print(f"  {kind}: still poor after {attempts} attempts", flush=True)
     if old_entry is not None:
         _restore()
