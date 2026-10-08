@@ -302,15 +302,10 @@
   "looks_like_best": "a clean 3D render of a striker"
  },
  "detective.glb": {
-  "cull_loss": 0.079,
-  "solidity": 0.864,
-  "edges": 0.0548,
-  "coverage": 0.094,
-  "dark_share": 0.355,
-  "damage_share": 0.007,
-  "shaded_png": "backend/tools/shotgate/renders/detective_shaded.png",
   "kind": "detective",
-  "looks_like": 0.616,
+  "shaded_png": "backend/tools/shotgate/renders/detective_shaded.png",
+  "looks_like": 0.311,
+  "patchy": 0.688,
   "looks_like_best": "a clean 3D render of a detective"
  },
  "soldier.glb": {
@@ -1678,5 +1673,12 @@
   "looks_like": 0.883,
   "patchy": 0.115,
   "looks_like_best": "a clean 3D render of a owl"
+ },
+ "farmer.glb": {
+  "kind": "farmer",
+  "shaded_png": "backend/tools/shotgate/renders/farmer_shaded.png",
+  "looks_like": 0.53,
+  "patchy": 0.47,
+  "looks_like_best": "a clean 3D render of a farmer"
  }
 }
