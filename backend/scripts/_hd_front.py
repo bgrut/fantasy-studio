@@ -335,7 +335,13 @@ CAMS = cams(mir)
 # search their own scale and offset about the head's middle, by the same
 # colour agreement, and the fit eases in over the neck. Kept only if it
 # agrees clearly better than the body's fit did.
+HEADZ = None
 if not SIDE and not FRONT_OFF:
+    HEADZ = (float(np.percentile(allP[:, 2], 99.7)) - 0.17 * Hm, float(np.percentile(allP[:, 2], 99.7)) - 0.125 * Hm)
+    _hm = allP[:, 2] > HEADZ[1]
+    _ha = ((allP[_hm] - MID) @ CAMS[0][0]) * CAMS[0][2]
+    HEADC = (float(np.median(_ha)), float(np.percentile(np.abs(_ha - np.median(_ha)), 95))) if len(_ha) > 100 else None
+    if HEADC is None: HEADZ = None
     try:
         ztop = float(np.percentile(allP[:, 2], 99.7))
         hm = (allP[:, 2] > ztop - 0.125 * Hm) & (allN @ CAMS[0][1] > 0.45)
@@ -496,6 +502,23 @@ for tob, nodes, C, P, N in bakes:
     # the photo's own studio light differs a little from the coat: carry its
     # detail at the coat's tone where the two disagree broadly
     out_m = base * (1 - w[:, None]) + photo * w[:, None]
+    # WHAT THE PHOTO CANNOT SEE ON A FACE (2026-10-08): the underside of the
+    # nose and the chin face away from the camera, so they kept the coat, and a
+    # generated coat has its shading baked in: a brown smear under every nose.
+    # On the front of the head the photo at the same place (the skin just in
+    # front) stands in for the coat; the back of the head is left to the views.
+    if HEADZ is not None:
+        th = np.clip((Pt[:, 2] - HEADZ[0]) / (HEADZ[1] - HEADZ[0]), 0, 1); th = th * th * (3 - 2 * th)
+        # only down the middle of the face (the nose and its hollows, the chin): a
+        # flank projects onto the photo's outline and belongs to the side views
+        _al = ((Pt - MID) @ CAMS[0][0]) * CAMS[0][2]
+        fr = np.clip((Nt @ CAMS[0][1] + 0.55) / 0.4, 0, 1) * np.clip((HEADC[1] * 0.42 - np.abs(_al - HEADC[0])) / (HEADC[1] * 0.12), 0, 1)
+        px0, py0, _ = project(Pt, CAMS[0], k, cx, cy)
+        inb0 = (px0 > 1) & (px0 < RW - 2) & (py0 > 1) & (py0 < RH - 2)
+        wf = th * fr * inb0 * (1 - w)
+        if (wf > 0.05).any():
+            out_m = out_m * (1 - wf[:, None]) + sample_photo(px0, py0) * wf[:, None]
+            w = np.maximum(w, wf)
     for e in EXTRA:
         px, py, depth = project_extra(Pt, e)
         facing = Nt @ e["dir"]
