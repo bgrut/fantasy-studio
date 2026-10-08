@@ -47,7 +47,7 @@ CONTROLNET_CONDITIONING_SCALE = float(_os.environ.get("FS_CONTROLNET_SCALE", "0.
 REFERENCE_STYLES: Dict[str, Dict[str, str]] = {
     "photoreal": {
         "positive": "studio photograph, single subject centered, plain neutral background, sharp focus, even lighting, natural color, high detail",
-        "negative": "multiple subjects, painting, illustration, drawing, artwork, busy background, blurry, cropped, partial view, watermark, text, logo, emblem, insignia, trademark, "
+        "negative": "multiple subjects, painting, illustration, drawing, artwork, shadow across the face, busy background, blurry, cropped, partial view, watermark, text, logo, emblem, insignia, trademark, "
                     # anti-anatomy-artifact (fixes the 5-legs / fused-limb issue from ControlNet)
                     "extra legs, extra limbs, too many legs, fused limbs, duplicate limbs, "
                     "missing legs, deformed, mutated, malformed anatomy, disfigured, "
@@ -92,7 +92,11 @@ PATTERN_REFERENCE_FRAMING: Dict[str, str] = {
     # disagrees with it, so the character keeps its arms out through every
     # clip — idle, walk and run alike. Fixing this means authoring an
     # arms-down biped_depth.png, NOT editing these strings.
-    "biped":     "standing upright, arms relaxed hanging straight down at sides, open empty hands, neutral A-pose, full body in frame, feet flat on ground, fully clothed",
+    # THE FACE IS LIT (2026-10-08): a reference under dramatic studio light
+    # threw a hat brim's shadow diagonally across the face, and that shadow
+    # was projected onto the face of every hatted character. Soft frontal
+    # light, early in the prompt where the encoder weighs it.
+    "biped":     "standing upright facing the camera, face evenly lit by soft frontal light, arms relaxed hanging straight down at sides, open empty hands, neutral A-pose, full body in frame, feet flat on ground, fully clothed",
     # seamless studio cyclorama (2026-07-22): SDXL loves posing trucks in
     # FORESTS — the busy background then projects onto the body as camo
     # blotch whenever the texture falls back to projection
@@ -407,6 +411,45 @@ def has_wardrobe(kind: str) -> bool:
     return (kind or "").strip().lower() in _WARDROBE_KEYS
 
 
+def _long_prompt_kwargs(pipe, positive: str, negative: str) -> Dict[str, Any]:
+    """THE WHOLE PROMPT, NOT ITS FIRST 77 TOKENS (2026-10-08). SDXL's text
+    encoders read 77 tokens and drop the rest, and a biped's negative prompt
+    runs to 286: everything after "sepia" never applied. That included
+    "monochrome, grayscale" (the farmer came out grey), the clothing guards
+    ("futuristic bodysuit, skin-tight suit", "shirtless, nude"; the scientist
+    came out in a white bodysuit) and "flayed, skinless". Both prompts are cut
+    into 75-token chunks, each chunk encoded by both encoders, and the chunks
+    joined along the sequence, which the UNet's cross-attention takes at any
+    length; the pooled embedding comes from the first chunk, where the
+    subject leads. Falls back to the plain strings on any failure."""
+    try:
+        import torch
+        tk = pipe.tokenizer
+
+        def chunks(t: str) -> list:
+            ids = tk(t or "", add_special_tokens=False).input_ids
+            return [tk.decode(ids[i:i + 75]) for i in range(0, len(ids), 75)] or [""]
+        pc, nc = chunks(positive), chunks(negative)
+        if len(pc) == 1 and len(nc) == 1:
+            return {"prompt": positive, "negative_prompt": negative}
+        n = max(len(pc), len(nc))
+        pc += [""] * (n - len(pc)); nc += [""] * (n - len(nc))
+        pe, ne, pool, npool = [], [], None, None
+        dev = getattr(pipe, "_execution_device", None) or ("cuda" if torch.cuda.is_available() else "cpu")
+        with torch.no_grad():
+            for a, b in zip(pc, nc):
+                e = pipe.encode_prompt(prompt=a, device=dev, num_images_per_prompt=1,
+                                       do_classifier_free_guidance=True, negative_prompt=b)
+                pe.append(e[0]); ne.append(e[1])
+                if pool is None:
+                    pool, npool = e[2], e[3]
+        return {"prompt_embeds": torch.cat(pe, 1), "negative_prompt_embeds": torch.cat(ne, 1),
+                "pooled_prompt_embeds": pool, "negative_pooled_prompt_embeds": npool}
+    except Exception as _lp:  # noqa: BLE001
+        print(f"[reference] long prompt fell back to 77 tokens ({type(_lp).__name__}: {_lp})")
+        return {"prompt": positive, "negative_prompt": negative}
+
+
 def _build_reference_prompt(slots: Dict[str, Any], style: str) -> tuple[str, str]:
     """Compose positive + negative prompts for a clean asset reference."""
     preset = REFERENCE_STYLES.get(style, REFERENCE_STYLES["photoreal"])
@@ -630,6 +673,11 @@ def _build_reference_prompt(slots: Dict[str, Any], style: str) -> tuple[str, str
         positive_parts = [f"a {species}", framing, preset["positive"]]
     else:
         positive_parts = [f"a {subject_phrase}", species, framing, preset["positive"]]
+    # A PHOTOGRAPH FIRST (2026-10-08): once the whole prompt was read, "studio
+    # photograph" sat sixty tokens in, and a frontier sheriff came out a
+    # Western cartoon. The medium leads.
+    if style == "photoreal" and positive_parts:
+        positive_parts[0] = "modern colour photograph of " + positive_parts[0]
     positive = ", ".join(p for p in positive_parts if p)
 
     # Append pattern-specific negative directives so SDXL avoids action poses
@@ -908,7 +956,7 @@ def generate_reference(
         if depth_image is not None:
             pipe = _load_t2i_controlnet_pipeline()
             img = pipe(
-                prompt=positive, negative_prompt=negative, image=depth_image,
+                **_long_prompt_kwargs(pipe, positive, negative), image=depth_image,
                 width=int(width), height=int(height),
                 guidance_scale=float(guidance_scale), num_inference_steps=int(steps),
                 controlnet_conditioning_scale=_cscale,
@@ -917,7 +965,7 @@ def generate_reference(
             return img, f"controlnet-depth(pattern={base_pattern})"
         pipe = _load_t2i_pipeline()
         img = pipe(
-            prompt=positive, negative_prompt=negative,
+            **_long_prompt_kwargs(pipe, positive, negative),
             width=int(width), height=int(height),
             guidance_scale=float(guidance_scale), num_inference_steps=int(steps),
             generator=gen,
