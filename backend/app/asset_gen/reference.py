@@ -403,7 +403,7 @@ def has_wardrobe(kind: str) -> bool:
         src = Path(__file__).read_text(encoding="utf-8")
         i = src.find("char_hints = {")
         j = src.find("\n        }", i)
-        _WARDROBE_KEYS = set(_rw.findall(r'^\s+"([a-z][a-z \-]*)":\s', src[i:j], _rw.M)) if i > 0 else set()
+        _WARDROBE_KEYS = set(_rw.findall(r'^\s+"([a-z][a-z \-]*)":\s*"', src[i:j], _rw.M)) if i > 0 else set()
     return (kind or "").strip().lower() in _WARDROBE_KEYS
 
 
@@ -559,8 +559,10 @@ def _build_reference_prompt(slots: Dict[str, Any], style: str) -> tuple[str, str
             "photographer": "photographer in an olive field jacket with many pockets, dark trousers, hiking boots, a camera on a strap round the neck, a beanie, fully clothed",
             "storm chaser": "storm chaser in a dark blue rain jacket, cargo trousers, hiking boots, a baseball cap with no logo, fully clothed",
             "chaser":    "storm chaser in a dark blue rain jacket, cargo trousers, hiking boots, a baseball cap with no logo, fully clothed",
-            "buddhist monk": "buddhist monk wearing long deep maroon robes that cover the body from the shoulders to the ankles, a saffron long-sleeved shirt underneath, a maroon shawl over both shoulders, a shaved head, sandals, fully clothed, chest covered",
-            "park ranger":"park ranger in a plain olive green uniform shirt and trousers, a wide-brimmed flat hat, hiking boots, no badges or logos, fully clothed",
+            "shepherd":  "shepherd in a heavy cream wool jumper under a waxed green jacket, a tweed flat cap, sturdy brown walking trousers, leather boots, fully clothed",
+            "shepherdess": "shepherdess in a heavy cream wool jumper under a waxed green jacket, a knitted hat, sturdy brown walking trousers, leather boots, fully clothed",
+            "buddhist monk": "man with a shaved head wearing a maroon long-sleeved tunic, loose maroon trousers, a saffron sash at the waist, a maroon shawl over both shoulders, simple sandals, fully clothed",
+            "park ranger": "park ranger in a plain olive green uniform shirt and trousers, a wide-brimmed flat hat, hiking boots, no badges or logos, fully clothed",
             # (2026-10-07) an anime sentence's heroes; generic uniforms, no school crest or logo
             "schoolgirl": "a teenage schoolgirl in a navy blazer over a white shirt with a red ribbon tie, a pleated navy skirt, knee socks and black school shoes, holding nothing, fully clothed",
             "schoolboy": "a teenage schoolboy in a navy blazer over a white shirt and a dark tie, grey trousers and black school shoes, fully clothed",
@@ -584,7 +586,9 @@ def _build_reference_prompt(slots: Dict[str, Any], style: str) -> tuple[str, str
         # skip if the user already described the outfit (robe/armor/etc. present)
         _has_costume = any(w in cq for w in ("robe", "armor", "armour", "staff", "hat", "cloak", "helmet", "suit", "uniform", "wings"))
         if not _has_costume:
-            for key, hint in char_hints.items():
+            # the longest name that fits wins (2026-10-08): "monk" sat above "buddhist
+            # monk" in the table and dressed the Himalayan monk as a hooded friar
+            for key, hint in sorted(char_hints.items(), key=lambda kv: -len(kv[0])):
                 if _re_h.search(r"\b" + _re_h.escape(key) + r"s?\b", cq.lower()):   # whole words: "king" is not in "viking"
                     species = hint
                     break

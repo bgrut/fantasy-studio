@@ -46,7 +46,7 @@ import { createWaterfall as __createWaterfall } from './proc/waterfall.js';
 import { createCave as __createCave } from './proc/cave.js';
 import { plantClutter as __plantClutter } from './proc/clutter.js';
 import { makeRagdoll as __makeRagdoll, makeFlinch as __makeFlinch, makeCarryPose as __makeCarryPose } from './proc/ragdoll.js';
-import { createGait as __createGait } from './proc/gait.js';
+import { createGait as __createGait, makePlanter as __makePlanter } from './proc/gait.js';
 import { loadMotionDB as __loadMotionDB, createMotionMatcher as __createMotionMatcher } from './proc/mm.js';
 
 const SPEC = __GAME_SPEC__;
@@ -497,7 +497,7 @@ async function main() {
     const W = SPEC.world || {}, L0 = W.level || {};
     // (2026-10-07) the sentence's own place words too: "a himalayan monastery" grew an
     // oak wood because the title, "Monk's Ascent", never said where it was
-    const placeWords = (String(SPEC.prompt || '').toLowerCase().match(/\b(redwoods?|sequoias?|himalaya\w*|tibet\w*|nepal\w*|bhutan\w*|monaster(?:y|ies)|gompa|lavender|vineyards?|provence|tuscan\w*|black sand|basalt|sea stacks?|iceland\w*|kansas|wheat|olive groves?|tea plantations?)\b/g) || []);
+    const placeWords = (String(SPEC.prompt || '').toLowerCase().match(/\b(redwoods?|sequoias?|himalaya\w*|tibet\w*|nepal\w*|bhutan\w*|monaster(?:y|ies)|gompa|lavender|vineyards?|provence|tuscan\w*|black sand|basalt|sea stacks?|iceland\w*|kansas|wheat|olive groves?|tea plantations?|bamboo|highlands?|glens?|moors?|heather)\b/g) || []);
     const words = [W.name, W.sky, W.flora, W.weather, W.setting, SPEC.title, SPEC.description, ...placeWords]
       .filter(Boolean).join(' ').toLowerCase();
     if (L0.osm || L0.interior || W.pano || L0.cave) return null;
@@ -517,7 +517,7 @@ async function main() {
     const outer = (SPEC.view || '3d') !== 'topdown' && !biome.underwater;   // under the sea the water is the horizon
     // barren: no meadow under it (the outer land keeps its colour), and the
     // outer scatter is stone and the odd cactus, sparse
-    const barren = !biome.kinds.some(k => ['broadleaf', 'oak', 'birch', 'pine', 'spruce', 'redwood', 'palm', 'bush'].includes(k.kind) && k.weight >= 0.3);
+    const barren = !biome.kinds.some(k => ['broadleaf', 'oak', 'birch', 'pine', 'spruce', 'redwood', 'bamboo', 'palm', 'bush'].includes(k.kind) && k.weight >= 0.3);
     const out = Object.assign({ words, dens, outer, barren, biome }, q);
     window.__flora = { on: true, outer, R: q.R, planned: q.n };
     return out;
@@ -1263,7 +1263,9 @@ async function main() {
   // 14, not 4 (2026-10-01): the fill was tuned while every big world was lit
   // by three cascade suns (see the CSM patch); with the one true moon the
   // hero on a black moor fell back under the readable line
-  const heroFill = new THREE.PointLight(0xfff0dc, _isNightSky ? 14.0 : 0.0, 9, 2);
+  // 17, not 14 (2026-10-08): a hero wearing its reference photo (a trench coat's
+  // real brown, not the coat's smoothed average) is darker, and fell under the line
+  const heroFill = new THREE.PointLight(0xfff0dc, _isNightSky ? 17.0 : 0.0, 9, 2);
   heroFill.name = 'heroFill';
   scene.add(heroFill);
   // CASCADED SHADOWS (Arc A round 3, 2026-07-28): big worlds/cities get
@@ -2971,6 +2973,9 @@ async function main() {
         m.onBeforeCompile = (sh, r) => {
           if (prev) prev.call(m, sh, r);
           sh.uniforms.uFur = { value: LONG ? 1 : 0 };
+          // (2026-10-08) a body that wears its reference photo (scripts/_hd_front.py)
+          // has real seams and weave of its own: the drawn-on cloth stays faint
+          const TEXK = m.map ? '0.35' : '1.0';
           sh.vertexShader = sh.vertexShader
             .replace('#include <common>', '#include <common>\nattribute vec3 _mr;\nvarying vec2 vMR;\nvarying vec3 vDP; varying vec3 vDN;')
             .replace('#include <begin_vertex>', '#include <begin_vertex>\nvMR = _mr.xy;\nvDP = position * ' + dS.toFixed(5) + ';\nvDN = normal;');
@@ -2997,7 +3002,7 @@ async function main() {
               float fur = dNoise(vDP * vec3(9.0, 70.0, 70.0)) * 0.35 + dNoise(vDP * vec3(70.0, 70.0, 9.0)) * 0.35
                         + dNoise(vDP * 26.0) * 0.3;
               float h = uFur > 0.5 ? fur : mix(cloth, pores, skin);
-              float str = uFur > 0.5 ? 1.5 : mix(1.0, 0.35, skin);
+              float str = (uFur > 0.5 ? 1.5 : mix(1.0, 0.35, skin)) * ${TEXK};
               // gone before it is smaller than a pixel
               float fade = 1.0 - smoothstep(0.25, 0.8, length(fwidth(vDP)) * (uFur > 0.5 ? 60.0 : 150.0));
               vec3 dpx = dFdx(-vViewPosition), dpy = dFdy(-vViewPosition);
@@ -3006,10 +3011,10 @@ async function main() {
               float det = dot(dpx, r1);
               vec3 grad = sign(det) * (dhx * r1 + dhy * r2);
               normal = normalize(abs(det) * normal - grad * 0.0016 * str * fade / max(abs(det), 1e-8) * abs(det));
-              diffuseColor.rgb *= 1.0 + (h - 0.5) * (uFur > 0.5 ? 0.26 : mix(0.16, 0.07, skin)) * fade;
+              diffuseColor.rgb *= 1.0 + (h - 0.5) * (uFur > 0.5 ? 0.26 : mix(0.16, 0.07, skin)) * fade * ${TEXK};
             }`);
         };
-        m.customProgramCacheKey = () => (prevKey ? prevKey.call(m) : '') + '|vpbr2';
+        m.customProgramCacheKey = () => (prevKey ? prevKey.call(m) : '') + '|vpbr3' + (m.map ? 't' : '');
         m.needsUpdate = true;
       }
     });
@@ -6860,7 +6865,7 @@ async function main() {
           trees: new Float32Array(T), shadows: true,
         });
         // each kind is as solid as it is big: [half height, radius] per scale
-        const SOLID = { rock: [0.5, 0.8], boulder: [1.4, 2.2], mesa: [3.2, 4.5], cactus: [2.4, 0.35], crystal: [1.0, 0.7], redwood: [8, 1.5] };
+        const SOLID = { rock: [0.5, 0.8], boulder: [1.4, 2.2], mesa: [3.2, 4.5], cactus: [2.4, 0.35], crystal: [1.0, 0.7], redwood: [8, 1.5], bamboo: [4, 0.6] };
         for (const [x, y, z, s, kk] of colliders) {
           const [hh, rr] = SOLID[kk] || [1.6, 0.32];
           world.createCollider(RAPIER.ColliderDesc.cylinder(hh * s, rr * s).setTranslation(x, y + hh * s, z));
@@ -9554,6 +9559,7 @@ async function main() {
         const _fk = flyKind(ent.name || '');
         const quad = !_fk && (_bones > 0 ? _bones <= 14 : Math.max(_bx.x, _bx.z) > _bx.y * 1.15);
         npcs.push({ obj: holder, down: 0, kx: 0, kz: 0, quad, gait: clipSpeeds(inst, anim, quad),
+                    body: inst, planter: quad ? __makePlanter(inst, ['shin_FL', 'shin_FR', 'shin_BL', 'shin_BR']) : null,
                     fly: _fk ? { alt: _fk.alt[0] + rngN() * (_fk.alt[1] - _fk.alt[0]), bob: _fk.bob, bank: _fk.bank, cur: null } : null,
                 speed: ent.speed || 1.5, behavior: ent.behavior || 'wander',
                     target: null, yaw: startYaw, phase: rngN() * Math.PI * 2,
@@ -9623,6 +9629,50 @@ async function main() {
     }
     return woke;
   }
+  // ALL FOUR FEET ON THE GROUND (2026-10-08, after the owner: "the dog's
+  // orientation is messed up, all 4 legs are not on the ground, accurate
+  // physics remember"). A four-legged body stood on its origin and pitched to
+  // the slope under it, and its angled hind legs, swinging, reached past the
+  // rest pose: measured, every dog's hind feet sank 8-11 cm into the ground.
+  // Each sole's closest approach to the ground over the last stride (the
+  // body's own correction taken back out) is fitted along the body's length;
+  // the body rises or sinks by the fit at its middle and pitches by its slope,
+  // so the planted feet meet the terrain front and back.
+  function plantQuad(n, dt) {
+    if (!n.planter || !n.body) return;
+    const ps = n.planter.soles();
+    const o = n.obj, yaw = n.yaw !== undefined ? n.yaw : o.rotation.y;
+    const fx = Math.sin(yaw), fz = Math.cos(yaw), cx = o.position.x, cz = o.position.z;
+    const P = n._plant || (n._plant = { dy: 0, dp: 0, dr: 0, mins: ps.map(() => undefined) });
+    // (2026-10-08) not a least-squares plane: a leg a generated rig holds up
+    // (the elephant's front foot never came down) dragged a fitted plane, and
+    // the body with it, a fifth of a metre into the ground. The pitch comes
+    // from the lower foot of the front pair against the lower of the back pair,
+    // the roll the same side to side, and the body sits so the lowest foot
+    // touches and no foot is under the ground.
+    const F = [];
+    for (let i = 0; i < ps.length; i++) {
+      const dx = ps[i].x - cx, dz = ps[i].z - cz;
+      const d = dx * fx + dz * fz, l = dx * fz - dz * fx;
+      const raw = ps[i].y - hAt(ps[i].x, ps[i].z) - P.dy + d * P.dp + l * P.dr;
+      P.mins[i] = P.mins[i] === undefined ? raw : Math.min(raw, P.mins[i] + 0.12 * dt);
+      F.push({ d, l, c: P.mins[i] });
+    }
+    if (F.length < 3) return;
+    const pair = (key, hi) => { const srt = F.slice().sort((p1, p2) => p1[key] - p2[key]); const half = srt.slice(hi ? Math.ceil(srt.length / 2) : 0, hi ? srt.length : Math.floor(srt.length / 2));
+      const lo = half.reduce((p1, p2) => (p2.c < p1.c ? p2 : p1)); return lo; };
+    const fr = pair('d', true), bk = pair('d', false), lf = pair('l', true), rt = pair('l', false);
+    const b = Math.abs(fr.d - bk.d) > 0.05 ? (fr.c - bk.c) / (fr.d - bk.d) : 0;
+    const e = Math.abs(lf.l - rt.l) > 0.05 ? (lf.c - rt.c) / (lf.l - rt.l) : 0;
+    let a = Infinity; for (const f of F) a = Math.min(a, f.c - b * f.d - e * f.l);
+    P.dy = THREE.MathUtils.damp(P.dy, THREE.MathUtils.clamp(-a, -0.3, 0.3), 4, dt);
+    P.dp = THREE.MathUtils.damp(P.dp, THREE.MathUtils.clamp(Math.atan(b), -0.3, 0.3), 4, dt);    // nose down when the front stands higher
+    P.dr = THREE.MathUtils.damp(P.dr, THREE.MathUtils.clamp(Math.atan(e), -0.25, 0.25), 4, dt);   // the higher side comes down
+    if (P.y0 === undefined) { P.y0 = n.body.position.y; P.x0 = n.body.rotation.x; P.z0 = n.body.rotation.z; }
+    n.body.position.y = P.y0 + P.dy;
+    n.body.rotation.x = P.x0 + P.dp;
+    n.body.rotation.z = P.z0 - P.dr;
+  }
   function stepNPCs(dt, playerPos, t) {
     window.__alertPeak = 0;             // recomputed by the guards each frame
     // WEIGHT FOR EVERYONE (2026-09-23): the same lean the hero got. Ground
@@ -9658,7 +9708,8 @@ async function main() {
         n._fbank = THREE.MathUtils.damp(n._fbank || 0, bank, 4, dt);
         o.rotation.z = n._fbank;
         o.rotation.x = THREE.MathUtils.damp(o.rotation.x, THREE.MathUtils.clamp(-(n.fly.vy || 0) * 0.12, -0.35, 0.35), 4, dt);
-      } else if (!(n.down > 0) && !n.spectral) { o.rotation.z = n._roll + n._gR; o.rotation.x = n._pitch + n._gP; }   // a knockdown owns the tilt; a ghost floats
+      } else if (!(n.down > 0) && !n.spectral) { if (o.rotation.order !== 'YXZ') o.rotation.order = 'YXZ'; o.rotation.z = n._roll + n._gR; o.rotation.x = n._pitch + n._gP; }   // a knockdown owns the tilt; a ghost floats
+      if (n.quad && !n.fly && !(n.down > 0)) plantQuad(n, dt);
       n._v = v;                                 // the clip rate follows it in the main pass (clipSpeeds)
     }
     for (const n of npcs) {
@@ -11790,7 +11841,48 @@ async function main() {
     // the monastery: battered white walls, a maroon band under a flat roof,
     // dark trapezoid windows, gold finials; a tower to one side
     const T = K.TOP, cz = K.Z1 + K.PL * 0.55;
-    for (const [bx, bw, bh, bd] of [[-6, 14, 9, 10], [3.5, 7, 13, 7]]) {
+    // A JAPANESE MOUNTAIN SHRINE (2026-10-08): "a samurai walks through a bamboo
+    // forest in the rain to the mountain shrine" climbed past Tibetan stupas
+    // under prayer flags to a whitewashed monastery. A Shinto mountain shrine
+    // is climbed through a tunnel of vermilion torii, past stone lanterns, to a
+    // hall under a deep dark roof.
+    const JP = /\b(samurai|ninja|shinto|torii|japan\w*|kyoto|shogun|ronin|bamboo)\b/.test(String(SPEC.prompt || '').toLowerCase());
+    parts.verm = []; parts.black = []; parts.glow = [];
+    const geo = (k, g) => { parts[k].push(g.index ? g.toNonIndexed() : g); return g; };
+    const torii = (x, z, w, h, yb, big) => {
+      const th = big ? 1.35 : 1.0;
+      for (const sx of [-1, 1]) {
+        geo('verm', new THREE.CylinderGeometry(0.13 * th, 0.16 * th, h, 10).translate(x + sx * w / 2, yb + h / 2, z));
+        geo('black', new THREE.CylinderGeometry(0.19 * th, 0.19 * th, 0.35, 10).translate(x + sx * w / 2, yb + 0.17, z));
+      }
+      geo('verm', new THREE.BoxGeometry(w + 0.5 * th, 0.2 * th, 0.18 * th).translate(x, yb + h * 0.8, z));        // nuki
+      geo('verm', new THREE.BoxGeometry(w + 1.0 * th, 0.24 * th, 0.36 * th).translate(x, yb + h - 0.02, z));      // shimaki
+      geo('black', new THREE.BoxGeometry(w + 1.4 * th, 0.2 * th, 0.42 * th).translate(x, yb + h + 0.2 * th, z));  // kasagi
+      if (big) world.createCollider(RAPIER.ColliderDesc.cylinder(h / 2, 0.2).setTranslation(x - w / 2, yb + h / 2, z)),
+               world.createCollider(RAPIER.ColliderDesc.cylinder(h / 2, 0.2).setTranslation(x + w / 2, yb + h / 2, z));
+    };
+    const lantern = (x, z, sc) => { const y = hAt(x, z);
+      box('stone', 0.9 * sc, 0.25 * sc, 0.9 * sc, x, y + 0.12 * sc, z);
+      geo('stone', new THREE.CylinderGeometry(0.16 * sc, 0.2 * sc, 1.1 * sc, 8).translate(x, y + 0.8 * sc, z));
+      box('stone', 0.72 * sc, 0.18 * sc, 0.72 * sc, x, y + 1.44 * sc, z);
+      box('glow', 0.44 * sc, 0.4 * sc, 0.44 * sc, x, y + 1.73 * sc, z);
+      geo('stone', new THREE.ConeGeometry(0.62 * sc, 0.42 * sc, 4).rotateY(Math.PI / 4).translate(x, y + 2.14 * sc, z));
+      geo('stone', new THREE.SphereGeometry(0.1 * sc, 8, 6).translate(x, y + 2.4 * sc, z));
+      world.createCollider(RAPIER.ColliderDesc.cuboid(0.45 * sc, 1.2 * sc, 0.45 * sc).setTranslation(x, y + 1.2 * sc, z)); };
+    if (JP) {
+      const hx = -4, hw = 13, hd = 9, hh = 4.4;
+      box('stone', hw + 2, 0.9, hd + 2, hx, T + 0.45, cz);
+      box('white', hw - 0.4, hh, hd - 0.4, hx, T + 0.9 + hh / 2, cz);
+      for (const sx of [-1, -0.5, 0, 0.5, 1]) for (const sz of [-1, 1]) box('verm', 0.36, hh + 0.3, 0.36, hx + sx * (hw / 2 - 0.2), T + 0.9 + hh / 2, cz + sz * (hd / 2 - 0.2));
+      box('black', hw + 0.3, 0.4, hd + 0.3, hx, T + 0.9 + hh + 0.15, cz);
+      geo('black', new THREE.ConeGeometry(1, 1, 4, 1).rotateY(Math.PI / 4).scale((hw + 5) / Math.SQRT2, 4.4, (hd + 5) / Math.SQRT2).translate(hx, T + 0.9 + hh + 0.35 + 2.2, cz));
+      box('black', hw * 0.55, 0.5, 0.55, hx, T + 0.9 + hh + 4.5, cz);
+      box('wood', 3.2, 2.8, 0.12, hx, T + 0.9 + 1.4, cz - hd / 2 + 0.15);
+      for (let k = 0; k < 4; k++) box('stone', 4.2, 0.22, 0.6, hx, T + 0.11 + k * 0.22, cz - hd / 2 - 1.6 + k * 0.5);
+      torii(hx, cz - hd / 2 - 6, 6.0, 5.6, T, true);
+      world.createCollider(RAPIER.ColliderDesc.cuboid(hw / 2, (hh + 0.9) / 2, hd / 2).setTranslation(hx, T + (hh + 0.9) / 2, cz));
+    }
+    if (!JP) for (const [bx, bw, bh, bd] of [[-6, 14, 9, 10], [3.5, 7, 13, 7]]) {
       const tapered = new THREE.BoxGeometry(bw, bh, bd); { const pa = tapered.attributes.position;
         for (let i = 0; i < pa.count; i++) if (pa.getY(i) > 0) { pa.setX(i, pa.getX(i) * 0.93); pa.setZ(i, pa.getZ(i) * 0.93); } }
       tapered.translate(bx, T + bh / 2, cz); parts.white.push(tapered.toNonIndexed());
@@ -11803,7 +11895,7 @@ async function main() {
       world.createCollider(RAPIER.ColliderDesc.cuboid(bw / 2, bh / 2, bd / 2).setTranslation(bx, T + bh / 2, cz));
     }
     // a door up the court's steps, with a maroon curtain
-    box('maroon', 2.0, 3.0, 0.15, -6, T + 1.5, cz - 10 * 0.965 / 2 - 0.1);
+    if (!JP) box('maroon', 2.0, 3.0, 0.15, -6, T + 1.5, cz - 10 * 0.965 / 2 - 0.1);
     // stupas: white bells on square plinths with a gold spire, at the foot, half way and at the top
     const stupa = (x, z, s) => { const y = hAt(x, z);
       box('white', 1.8 * s, 0.9 * s, 1.8 * s, x, y + 0.45 * s, z);
@@ -11811,10 +11903,12 @@ async function main() {
       const b = new THREE.LatheGeometry(prof, 16); b.translate(x, y + 0.9 * s, z); parts.white.push(b.toNonIndexed());
       const sp = new THREE.CylinderGeometry(0.04 * s, 0.24 * s, 1.6 * s, 8); sp.translate(x, y + 2.9 * s, z); parts.gold.push(sp.toNonIndexed());
       world.createCollider(RAPIER.ColliderDesc.cuboid(0.9 * s, 1.2 * s, 0.9 * s).setTranslation(x, y + 1.2 * s, z)); };
-    stupa(-3.6, K.Z0 - 3, 1.0); stupa(3.6, K.Z0 - 3, 1.0); stupa(-11, K.Z1 + 4, 1.3); stupa(11, K.Z1 + 4, 1.3);
+    if (JP) { lantern(-3.2, K.Z0 - 3, 1.0); lantern(3.2, K.Z0 - 3, 1.0); lantern(-11, K.Z1 + 4, 1.3); lantern(11, K.Z1 + 4, 1.3);
+      for (let z = K.Z0 + 8; z < K.Z1 - 4; z += 11) for (const sx of [-1, 1]) lantern(sx * 2.6, z, 0.75); }
+    else { stupa(-3.6, K.Z0 - 3, 1.0); stupa(3.6, K.Z0 - 3, 1.0); stupa(-11, K.Z1 + 4, 1.3); stupa(11, K.Z1 + 4, 1.3); }
     // the bell pavilion at the cliff edge: four red posts, a roof, a bronze bell
     const [blx, blz] = K.BELL;
-    for (const [px, pz] of [[-1.3, -1.3], [1.3, -1.3], [-1.3, 1.3], [1.3, 1.3]]) box('maroon', 0.24, 3.4, 0.24, blx + px, T + 1.7, blz + pz);
+    for (const [px, pz] of [[-1.3, -1.3], [1.3, -1.3], [-1.3, 1.3], [1.3, 1.3]]) box(JP ? 'verm' : 'maroon', 0.24, 3.4, 0.24, blx + px, T + 1.7, blz + pz);
     { const rf = new THREE.ConeGeometry(2.6, 1.4, 4, 1); rf.rotateY(Math.PI / 4); rf.translate(blx, T + 4.0, blz); parts.dark.push(rf.toNonIndexed());
       const fin = new THREE.CylinderGeometry(0.05, 0.16, 0.7, 8); fin.translate(blx, T + 5.0, blz); parts.gold.push(fin.toNonIndexed()); }
     box('wood', 2.8, 0.22, 0.22, blx, T + 3.25, blz);
@@ -11828,11 +11922,12 @@ async function main() {
     const string = (a, b) => { const L = a.distanceTo(b), n2 = Math.max(4, Math.floor(L / 0.55));
       for (let i = 1; i < n2; i++) { const t = i / n2, pnt = a.clone().lerp(b, t); pnt.y -= Math.sin(t * Math.PI) * L * 0.06;
         flags.push({ p: pnt, c: flagCols[i % 5], ry: Math.atan2(b.x - a.x, b.z - a.z) + Math.PI / 2 }); } };
-    for (let z = K.Z0 + 4; z < K.Z1 - 2; z += 8) { const ya = Math.max(K.crest(z), hAt(-1.7, z)), yb = Math.max(K.crest(z + 6), hAt(1.7, z + 6));
+    if (JP) for (let z = K.Z0 + 1; z < K.Z1 - 1; z += 2.2) torii(0, z, 3.6, 3.4, Math.max(K.crest(z), hAt(0, z)) + 0.05, false);
+    if (!JP) for (let z = K.Z0 + 4; z < K.Z1 - 2; z += 8) { const ya = Math.max(K.crest(z), hAt(-1.7, z)), yb = Math.max(K.crest(z + 6), hAt(1.7, z + 6));
       box('wood', 0.1, 3.4, 0.1, -1.75, ya + 1.7, z); box('wood', 0.1, 3.4, 0.1, 1.75, yb + 1.7, z + 6);
       string(new THREE.Vector3(-1.75, ya + 3.3, z), new THREE.Vector3(1.75, yb + 3.3, z + 6)); }
-    for (let k = 0; k < 6; k++) string(new THREE.Vector3(3.5, T + 9.5, cz), new THREE.Vector3(-14 + k * 5.6, T + 0.4, K.Z1 + 1 + (k % 2) * 3));
-    { const fg = new THREE.PlaneGeometry(0.34, 0.4); fg.translate(0, -0.2, 0);
+    if (!JP) for (let k = 0; k < 6; k++) string(new THREE.Vector3(3.5, T + 9.5, cz), new THREE.Vector3(-14 + k * 5.6, T + 0.4, K.Z1 + 1 + (k % 2) * 3));
+    if (flags.length) { const fg = new THREE.PlaneGeometry(0.34, 0.4); fg.translate(0, -0.2, 0);
       const fm = new THREE.InstancedMesh(fg, M({ color: 0xffffff, roughness: 0.9, side: THREE.DoubleSide }), flags.length);
       const MX = new THREE.Matrix4(), Q = new THREE.Quaternion(), E = new THREE.Euler(), S = new THREE.Vector3(1, 1, 1), C = new THREE.Color();
       flags.forEach((f, i) => { E.set((rk() - 0.5) * 0.4, f.ry, (rk() - 0.5) * 0.3); Q.setFromEuler(E); MX.compose(f.p, Q, S); fm.setMatrixAt(i, MX); fm.setColorAt(i, C.set(f.c)); });
@@ -11844,7 +11939,8 @@ async function main() {
         g.addColorStop(0, 'rgba(120,105,85,0.22)'); g.addColorStop(1, 'rgba(120,105,85,0)'); x.fillStyle = g; x.fillRect(sx, 0, 2 + rk() * 6, h); } }, true);
     plasterT.repeat.set(2, 1.5);
     const mats = { stone: stoneM, white: M({ map: plasterT, color: 0xffffff, roughness: 0.9 }), maroon: M({ color: 0x7a1e1a, roughness: 0.8 }),
-                   gold: M({ color: 0xd8a830, roughness: 0.3, metalness: 0.9 }), wood: M({ color: 0x5a3c24, roughness: 0.85 }), dark: M({ color: 0x2a2420, roughness: 0.9 }) };
+                   gold: M({ color: 0xd8a830, roughness: 0.3, metalness: 0.9 }), wood: M({ color: 0x5a3c24, roughness: 0.85 }), dark: M({ color: 0x2a2420, roughness: 0.9 }),
+                   verm: M({ color: 0xc23a1c, roughness: 0.55 }), black: M({ color: 0x1c1a19, roughness: 0.8 }), glow: M({ color: 0xfff0c8, emissive: 0xffb050, emissiveIntensity: 1.6 }) };
     for (const k of Object.keys(parts)) if (parts[k].length) { const mesh = new THREE.Mesh(mergeGeometries(parts[k]), mats[k]); mesh.castShadow = true; mesh.receiveShadow = true; scene.add(mesh); }
     // cloud lying across the slope below the summit
     const cloudT = (() => { const c = document.createElement('canvas'); c.width = c.height = 128; const x = c.getContext('2d');

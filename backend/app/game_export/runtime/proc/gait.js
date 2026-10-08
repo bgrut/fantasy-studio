@@ -52,6 +52,74 @@ function aimSegment(bone, child, dirWorld, k = 1) {
 }
 const wp = (b, out) => b.getWorldPosition(out || new THREE.Vector3());
 
+
+// ── WHERE A FOOT ACTUALLY IS (2026-10-08) ─────────────────────────────────
+// The legs were placed by their joints: a biped's IK held the ankle where the
+// clip put it and a quadruped's body stood on its origin. A generated body's
+// sole is wherever its mesh says, so the hero walked a few centimetres above
+// the ground and a dog's hind feet sank into it (measured: tools/shotgate
+// groundprobe). A planter finds each foot's sole once, the lowest vertex
+// bound to that foot's bone, kept in the bone's own space, and reports where
+// those soles are now. names: the bones, e.g. foot_l/foot_r or shin_FL...
+export function makePlanter(root, names) {
+  // (2026-10-08, third pass) contact points are real vertices of the body's
+  // bottom, skinned the way the renderer skins them: a generated rig can bind
+  // an elephant's foot to its thigh, and a point carried by one bone alone, or
+  // chosen by the bone it is bound to, missed the ground by a quarter metre
+  const meshes = [];
+  root.traverse(o => { if (o.isSkinnedMesh && o.skeleton && o.geometry && o.geometry.attributes.position) meshes.push(o); });
+  if (!meshes.length) return null;
+  const m = meshes.reduce((a, b) => (b.geometry.attributes.position.count > a.geometry.attributes.position.count ? b : a));
+  const sk = m.skeleton, pa = m.geometry.attributes.position;
+  // each leg's bone, where it stood at bind (in the mesh's bind space)
+  const inv = new THREE.Matrix4().copy(m.bindMatrix).invert();
+  const legs = [];
+  for (const nm of names) {
+    const bi = sk.bones.findIndex(b => b.name.toLowerCase() === nm.toLowerCase());
+    if (bi < 0) continue;
+    const at = new THREE.Vector3().setFromMatrixPosition(new THREE.Matrix4().copy(sk.boneInverses[bi]).invert()).applyMatrix4(inv);
+    legs.push({ name: nm, at, idx: [] });
+  }
+  if (legs.length < 2) return null;
+  let y0 = Infinity, y1 = -Infinity;
+  for (let i = 0; i < pa.count; i++) { const y = pa.getY(i); if (y < y0) y0 = y; if (y > y1) y1 = y; }
+  // how far apart the legs stand: a vertex further than half that from every leg is not a foot
+  let spread = Infinity;
+  for (let a = 0; a < legs.length; a++) for (let b = a + 1; b < legs.length; b++)
+    spread = Math.min(spread, Math.hypot(legs[a].at.x - legs[b].at.x, legs[a].at.z - legs[b].at.z));
+  const reach = Math.max(0.05, spread * 0.6);
+  const band = [];
+  for (let i = 0; i < pa.count; i++) if (pa.getY(i) < y0 + (y1 - y0) * 0.18) band.push(i);
+  band.sort((a, b) => pa.getY(a) - pa.getY(b));
+  for (const i of band) {
+    let best = null, bd = reach;
+    for (const L of legs) { const d = Math.hypot(pa.getX(i) - L.at.x, pa.getZ(i) - L.at.z); if (d < bd) { bd = d; best = L; } }
+    if (best && best.idx.length < 60) best.idx.push(i);
+  }
+  for (const L of legs) {                        // twenty of them, spread from the lowest up the band
+    const n = L.idx.length, keep = [];
+    for (let k = 0; k < Math.min(20, n); k++) keep.push(L.idx[Math.floor(k * n / Math.min(20, n))]);
+    L.idx = keep;
+  }
+  const live = legs.filter(L => L.idx.length);
+  if (live.length < 2) return null;
+  const outs = live.map(() => new THREE.Vector3()), tmp = new THREE.Vector3();
+  return {
+    legs: live.map(l => l.name),
+    soles() {
+      for (let k = 0; k < live.length; k++) {
+        let best = Infinity;
+        for (const i of live[k].idx) {
+          (m.getVertexPosition ? m.getVertexPosition(i, tmp) : m.boneTransform(i, tmp));
+          tmp.applyMatrix4(m.matrixWorld);
+          if (tmp.y < best) { best = tmp.y; outs[k].copy(tmp); }
+        }
+      }
+      return outs;
+    },
+  };
+}
+
 export function createGait({ root, actions, mixer, rates }) {
   let sk = null;
   root.traverse(o => { if (!sk && o.isSkinnedMesh && o.skeleton) sk = o.skeleton; });
@@ -61,6 +129,7 @@ export function createGait({ root, actions, mixer, rates }) {
   const need = ['hips', 'spine', 'upleg_l', 'lowleg_l', 'foot_l', 'upleg_r', 'lowleg_r', 'foot_r'];
   if (!need.every(n => B[n])) return null;
   const hasArms = ['uparm_l', 'lowarm_l', 'hand_l', 'uparm_r', 'lowarm_r', 'hand_r'].every(n => B[n]);
+  const planter = makePlanter(root, ['foot_l', 'foot_r']);
 
   // ── the clip's own cycle ────────────────────────────────────────────────
   // With the body still, sample a clip; the left thigh's fore-aft swing (in
@@ -290,8 +359,37 @@ export function createGait({ root, actions, mixer, rates }) {
         st[fk] = st[fk] === undefined ? fh : Math.min(fh, st[fk] + 0.05 * dt);
         stance[s] = fh < st[fk] + 0.04;
       }
+      // THE SOLE, NOT THE ANKLE (2026-10-08): the clip's ankle height is the
+      // actor's, not this body's, and the hero walked a few centimetres up in
+      // the air. Over the last stride, the lower sole's closest approach to
+      // the ground under it is how far the whole body is off; it comes down
+      // (or up) by that, slowly enough never to bob with the step.
+      const cNow = {};
+      if (planter) {
+        root.updateMatrixWorld(true);
+        const ps = planter.soles();
+        let mn = 1e9;
+        for (let k = 0; k < ps.length; k++) {
+          const gy = onTerrain ? ga(ps[k].x, ps[k].z) : g0;
+          const c = ps[k].y - gy, key = 'smin' + k;
+          cNow[k === 0 ? 'l' : 'r'] = c;
+          st[key] = st[key] === undefined ? c : Math.min(c, st[key] + 0.6 * dt);   // this stride's low, not an old dip
+          mn = Math.min(mn, st[key]);
+        }
+        if (mn < 1e8) st.sole = THREE.MathUtils.damp(st.sole || 0, THREE.MathUtils.clamp(-mn + 0.015, -0.2, 0.15), 3, dt);   // a sole rests on the ground, a hair above it
+      }
+      const soleK = st.sole || 0;
+      for (const s of ['l', 'r']) {
+        T[s].y += soleK;
+        // and a foot on the ground puts its sole on it, exactly: what the body's
+        // move leaves over (a heel strike's dip, a toe-off's lift) the leg takes up
+        const ff = 'ff_' + s;
+        const want = (stance[s] && cNow[s] !== undefined) ? THREE.MathUtils.clamp(0.012 - (cNow[s] + soleK), -0.06, 0.06) : 0;
+        st[ff] = THREE.MathUtils.damp(st[ff] || 0, want, stance[s] ? 18 : 10, dt);
+        T[s].y += st[ff];
+      }
       // the pelvis lowers by the deeper foot's drop, smoothly
-      const drop = THREE.MathUtils.clamp(Math.min(0, off.l, off.r), -0.4, 0);
+      const drop = THREE.MathUtils.clamp(Math.min(0, off.l, off.r), -0.4, 0) + soleK;
       st.pelvis = THREE.MathUtils.damp(st.pelvis || 0, drop, 10, dt);
       if (Math.abs(st.pelvis) > 1e-3 && B.hips.parent) {
         const hw = wp(B.hips); hw.y += st.pelvis;
@@ -352,7 +450,7 @@ export function createGait({ root, actions, mixer, rates }) {
       root.getWorldQuaternion(_rq);
       return out.copy(_clipFwdLocal).applyQuaternion(_rq).setY(0).normalize();
     },
-    facts: () => ({ phase: +phase.toFixed(3), rate: +st.rate.toFixed(2), warp: +st.warp.toFixed(2), lean_deg: +THREE.MathUtils.radToDeg(st.lean).toFixed(1), bank_deg: +THREE.MathUtils.radToDeg(st.bank || 0).toFixed(1), pelvis: +(st.pelvis || 0).toFixed(3), locks: [!!(st.lock_l && st.lock_l.pos), !!(st.lock_r && st.lock_r.pos)], trunk_deg: st.trunkAvg === undefined ? null : +THREE.MathUtils.radToDeg(st.trunkAvg).toFixed(1),
+    facts: () => ({ phase: +phase.toFixed(3), rate: +st.rate.toFixed(2), warp: +st.warp.toFixed(2), lean_deg: +THREE.MathUtils.radToDeg(st.lean).toFixed(1), bank_deg: +THREE.MathUtils.radToDeg(st.bank || 0).toFixed(1), pelvis: +(st.pelvis || 0).toFixed(3), sole: +(st.sole || 0).toFixed(3), planter: planter ? planter.legs.length : 0, smin: [st.smin0, st.smin1].map(x => x === undefined ? null : +x.toFixed(3)), solesY: planter ? planter.soles().map(v => +v.y.toFixed(3)) : null, locks: [!!(st.lock_l && st.lock_l.pos), !!(st.lock_r && st.lock_r.pos)], trunk_deg: st.trunkAvg === undefined ? null : +THREE.MathUtils.radToDeg(st.trunkAvg).toFixed(1),
                     cadence_spm: Math.round(st.cadence), armed,
                     walk_period: C.walk ? +C.walk.period.toFixed(3) : null, run_period: C.run ? +C.run.period.toFixed(3) : null }),
   };

@@ -85,6 +85,23 @@ function foliageAtlas(kind, leaf, seed) {
       }
       g.strokeStyle = hsl(0.07, 0.3, 0.16); g.lineWidth = 4;
       for (const [x0, y0, x1, y1] of shoots) { g.beginPath(); g.moveTo(x0, y0); g.lineTo(x0 + (x1 - x0) * 0.5, y0 + (y1 - y0) * 0.5); g.stroke(); }
+    } else if (kind === 'bamboo') {
+      // a bamboo spray: a thin twig with long slender leaves fanning off it and drooping
+      const bx = ox + Q * 0.08, by = cy + Q * 0.05;
+      g.strokeStyle = hsl(leaf.h + 0.03, leaf.s * 0.7, leaf.l * 0.9); g.lineWidth = 4;
+      g.beginPath(); g.moveTo(bx, by); g.lineTo(ox + Q * 0.9, cy - Q * 0.05); g.stroke();
+      for (let i = 0; i < 11; i++) {
+        const t = 0.15 + i / 11 * 0.8, px = bx + (Q * 0.82) * t, py = by - Q * 0.1 * t;
+        const side = i % 2 ? 1 : -1, L = Q * (0.32 + r() * 0.14), ang = side * (0.5 + r() * 0.5) + 0.35;
+        const ex = px + Math.cos(ang) * L, ey = py + Math.sin(ang) * L;
+        const sh = (r() - 0.5) * 0.1;
+        g.fillStyle = hsl(leaf.h + sh * 0.4, leaf.s + sh, leaf.l + sh + (side > 0 ? -0.04 : 0.03));
+        const nx = -(ey - py) / L * Q * 0.035, ny = (ex - px) / L * Q * 0.035;
+        g.beginPath(); g.moveTo(px, py);
+        g.quadraticCurveTo((px + ex) / 2 + nx, (py + ey) / 2 + ny, ex, ey);
+        g.quadraticCurveTo((px + ex) / 2 - nx, (py + ey) / 2 - ny, px, py);
+        g.fill();
+      }
     } else if (kind === 'palm') {
       // one frond: a rib with long leaflets falling off it
       const bx = ox + Q * 0.06, by = cy;
@@ -379,6 +396,42 @@ function growPine(r, P) {
   return { bark: bark.geometry(true), leaf: leaf.geometry(true) };
 }
 
+// A BAMBOO CLUMP (2026-10-08): "a samurai walks through a bamboo forest in the
+// rain" grew an oak wood. Bamboo is a clump of tall, thin, glossy green culms
+// ringed at every node, bare below and arching outward at the top under
+// sprays of slender drooping leaves.
+function growBamboo(r, P) {
+  const bark = new Builder(), leaf = new Builder();
+  const n = P.culms;
+  for (let c = 0; c < n; c++) {
+    const a = r() * TAU, d = Math.sqrt(r()) * 0.75;
+    const base = new THREE.Vector3(Math.cos(a) * d, -0.2, Math.sin(a) * d);
+    const H = P.height * (0.65 + r() * 0.35), R0 = 0.035 + r() * 0.03;
+    const out = new THREE.Vector3(Math.cos(a), 0, Math.sin(a)).multiplyScalar(0.06 + r() * 0.08);
+    const path = [];
+    const segs = Math.max(8, Math.round(H / 0.42));
+    const at = (t) => base.clone().add(new THREE.Vector3(0, H * t, 0)).addScaledVector(out, H * t * t * 1.4);
+    for (let i = 0; i <= segs; i++) {
+      const t = i / segs, node = i % 1 === 0 && i > 0 && i < segs;
+      path.push({ p: at(t), r: R0 * (1 - t * 0.55) * (node && i % 2 === 0 ? 1.12 : 1) });
+    }
+    tube(bark, path, 6, 0, 0.35);
+    // leaf sprays on the upper half, reaching out and drooping
+    const crown = at(0.8); crown.r = H * 0.25;
+    for (let k = 0; k < 9; k++) {
+      const t = 0.45 + r() * 0.52, p0 = at(t);
+      const az = r() * TAU, dir = new THREE.Vector3(Math.cos(az), -0.25 - r() * 0.3, Math.sin(az)).normalize();
+      const w2 = P.card * (0.8 + r() * 0.5);
+      const ctr = p0.clone().addScaledVector(dir, w2 * 0.5);
+      const nUp = new THREE.Vector3(0, 1, 0).sub(dir.clone().multiplyScalar(dir.y)).normalize();
+      card(leaf, ctr, w2 * 0.7, w2, nUp, dir, Math.floor(r() * 4), crown, 0.6 + t * 0.4, true);
+      const nS = new THREE.Vector3().crossVectors(dir, nUp).normalize().lerp(nUp, 0.4).normalize();
+      card(leaf, ctr, w2 * 0.55, w2, nS, dir, Math.floor(r() * 4), crown, 0.6 + t * 0.4, true);
+    }
+  }
+  return { bark: bark.geometry(true), leaf: leaf.geometry(true) };
+}
+
 function growPalm(r, P) {
   const bark = new Builder(), leaf = new Builder();
   const H = P.height;
@@ -649,6 +702,7 @@ const KINDS = {
   // boughs in a narrow crown far overhead.
   redwood: (r) => ({ grow: growPine, height: 40 + r() * 18, trunkR: 1.25 + r() * 0.5, taper: 0.82, flare: 1.45,
     crownStart: 0.48 + r() * 0.1, whorlGap: 1.5, branchLen: 3.4 + r() * 1.1, perWhorl: 5, droop: 0.32, card: 2.0 }),
+  bamboo: (r) => ({ grow: growBamboo, height: 9 + r() * 5, culms: 9 + Math.floor(r() * 6), card: 1.5 }),
   palm: (r) => ({ grow: growPalm, height: 8 + r() * 5, trunkR: 0.22, fronds: 11 + Math.floor(r() * 4), frondLen: 4.6, frondW: 2.2 }),
   dead: (r) => ({ grow: growBroadleaf, height: 7 + r() * 5, trunkFrac: 0.55, trunkR: 0.24 + r() * 0.1, depth: 3,
     limbs: 5, twigs: 3, crownStart: 0.4, spread: [0.6, 1.2], lenRatio: 0.6, radRatio: 0.5,
@@ -822,10 +876,12 @@ function makeMaterials(kind, leafHSL, barkTex, barkN, seed, U, extra = {}) {
   }
   const barkTint = kind === 'birch' ? new THREE.Color(0xe8e4dc) : kind === 'dead' ? new THREE.Color(0x9c8f84)
     : kind === 'redwood' ? new THREE.Color(0xa87866)
+    : kind === 'bamboo' ? new THREE.Color(0x7f9a3e)
     : kind === 'coral' ? (extra.coralTint || new THREE.Color(0xff7a8a)) : kind === 'coral2' ? (extra.coralTint2 || new THREE.Color(0xffa64a))
     : kind === 'kelp' ? new THREE.Color(0x5a6b2a) : new THREE.Color(0xffffff);
   const bark = new THREE.MeshStandardMaterial({ map: barkTex, normalMap: barkN, color: barkTint, roughness: 0.95 });
   if (kind === 'birch' || kind === 'coral' || kind === 'coral2' || kind === 'kelp') { bark.map = null; bark.roughness = 0.75; }
+  if (kind === 'bamboo') { bark.map = null; bark.normalMap = null; bark.roughness = 0.42; }   // a glossy culm, no bark
   if (kind === 'coral' || kind === 'coral2') { bark.emissive = barkTint.clone().multiplyScalar(0.25); bark.normalMap = null; }
   bark.userData.noAutoTex = true;
   patchTree(bark, U, { live: true });
@@ -1161,6 +1217,12 @@ export function biomeFor(words, arch, groundHSL) {
   // the high Himalaya: dark conifers thinning out over bare stone (2026-10-07)
   else if (has(/himalaya\w*|tibet\w*|nepal\w*|bhutan\w*|monaster(y|ies)|gompa/)) Object.assign(out, { kinds: K(['spruce', 0.45], ['pine', 0.3], ['rock', 0.6], ['boulder', 0.3], ['bush', 0.3]), dens: 0.28,
     rockTint: T(0x7a7670), leaf: { h: 0.33, s: 0.38, l: 0.16 } });
+  // A HIGHLAND GLEN IS OPEN MOOR (2026-10-08): "a shepherd ... across a misty
+  // scottish highland glen" grew a dense wood. A glen is bare hillside: heather,
+  // bracken, grey stone and the odd boulder, hardly a tree
+  else if (has(/highlands?|\bglens?\b|\bmoors?\b|moorland|heather|scottish/) && !has(/forest|woods?\b/)) Object.assign(out, { kinds: K(['bush', 0.7], ['rock', 0.6], ['boulder', 0.3], ['birch', 0.05]), dens: 0.06,
+    rockTint: T(0x7c7a74), leaf: { h: 0.88, s: 0.22, l: 0.27 } });
+  else if (has(/bamboo/)) Object.assign(out, { kinds: K(['bamboo', 1], ['bush', 0.25], ['broadleaf', 0.12]), dens: 1.35, leaf: { h: 0.25, s: 0.5, l: 0.3 } });
   else if (has(/redwood|sequoia/)) Object.assign(out, { kinds: K(['redwood', 1], ['spruce', 0.18], ['bush', 0.9], ['rock', 0.06]), dens: 0.55,
     leaf: { h: 0.31, s: 0.42, l: 0.16 } });
   else if (has(/canyon|mesa|badlands|butte/)) Object.assign(out, { kinds: K(['mesa', 0.25], ['rock', 0.8], ['boulder', 0.4], ['cactus', 0.15]), dens: 0.12, rockTint: T(0xb5643c) });

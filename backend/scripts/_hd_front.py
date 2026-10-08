@@ -197,20 +197,34 @@ sub = rng.choice(len(allP), size=min(len(allP), 160000), replace=False)
 
 
 # the body's own frame: its height and its middle, in metres
-zmid = float(np.percentile(allP[:, 2], 50)); xmid = float(np.percentile(allP[:, 0], 50))
+MID = np.median(allP, axis=0); zmid = float(MID[2])
 Hm = float(np.percentile(allP[:, 2], 99.7) - np.percentile(allP[:, 2], 0.3))
 
+# THE CAMERAS (2026-10-08). A person's photo is front-on: one camera on the
+# front (Blender +Y, the way every baked biped faces). An animal's photo is a
+# side view: two cameras, one on each flank (+X and -X), the far one seeing the
+# photo mirrored; which way the animal faces in the photo is searched (a
+# generated photo puts the head on either side).
+SIDE = "--side" in argv
+def cams(mir):
+    if SIDE:
+        return [(np.array([0.0, 1.0, 0.0]), np.array([1.0, 0.0, 0.0]), mir),
+                (np.array([0.0, -1.0, 0.0]), np.array([-1.0, 0.0, 0.0]), -mir)]
+    v = int(argv[argv.index("--view") + 1]) if "--view" in argv else 1
+    return [(np.array([-float(v), 0.0, 0.0]), np.array([0.0, float(v), 0.0]), mir)]
 
-def project(Pt, view, mirror, k, cx, cy):
-    """Texel positions -> reference pixels: a front camera on `view` (+1 looks from +Y, -1 from -Y),
-    `mirror` flips left and right, k pixels to the metre, the body's middle at (cx, cy)."""
-    a = (Pt[:, 0] - xmid) * (-view * mirror)
+
+def project(Pt, cam, k, cx, cy):
+    """Texel positions -> reference pixels for one camera (right R, toward-camera D, mirror),
+    k pixels to the metre, the body's middle at (cx, cy); and each texel's depth toward it."""
+    Rv, Dv, mir = cam
+    a = ((Pt - MID) @ Rv) * mir
     b = Pt[:, 2] - zmid
-    return cx + a * k, cy - b * k, Pt[:, 1] * view
+    return cx + a * k, cy - b * k, Pt @ Dv
 
 
-def weights(Nt, view, px, py, depth, zbuf, zscale):
-    facing = Nt[:, 1] * view
+def weights(Nt, cam, px, py, depth, zbuf, zscale):
+    facing = Nt @ cam[1]
     w = np.clip((facing - 0.25) / 0.45, 0, 1)
     ix = np.clip((px * zscale).astype(int), 0, zbuf.shape[1] - 1); iy = np.clip((py * zscale).astype(int), 0, zbuf.shape[0] - 1)
     vis = depth >= zbuf[iy, ix] - 0.012 * size
@@ -230,69 +244,100 @@ def zbuffer(px, py, depth, zscale):
     return zz
 
 
-# the search runs on surfaces squarely facing each candidate camera (those are
-# visible in a T- or A-pose almost everywhere), a cheap stand-in for the depth test
+# the search runs on surfaces squarely facing the first camera, a cheap
+# stand-in for the depth test
 small = rng.choice(len(allP), size=min(len(allP), 30000), replace=False)
 Ps, Ns, Cs = allP[small], allN[small], allC[small]
-Cl = lum(Cs)
 
 
-def agreement(view, mirror, k, cx, cy):
-    m = Ns[:, 1] * view > 0.6
-    px, py, _ = project(Ps[m], view, mirror, k, cx, cy)
+def agreement(cam, k, cx, cy):
+    m = Ns @ cam[1] > 0.6
+    px, py, _ = project(Ps[m], cam, k, cx, cy)
     inb = (px > 1) & (px < RW - 2) & (py > 1) & (py < RH - 2)
     if inb.sum() < 300:
         return -1.0
     ph = sample(R, px[inb], py[inb])
-    # colour agreement: the three channels, each correlated
     c = Cs[m][inb]
     return float(np.mean([np.corrcoef(ph[:, i], c[:, i])[0, 1] for i in range(3)]))
 
 
-# Every baked biped stands the same way round (its front on glTF -Z, Blender +Y:
-# the facing probe measures it in every game), and a photograph is never
-# mirrored. Leaving both free let a symmetric suit agree nearly as well with
-# the photo laid on its back; they are fixed, and only scale and place are searched.
-VIEWS = [(int(argv[argv.index("--view") + 1]), 1)] if "--view" in argv else [(1, 1)]
+# AN ANIMAL IS ALIGNED BY ITS OUTLINE (2026-10-08): a generated elephant came
+# out brown from a grey photo, and colour agreement found a wrong fit. Side-on,
+# the outline (legs, trunk, ears, tail) is the strong signal: the body's
+# projected silhouette is matched to the photo's figure, judged against each
+# row's own backdrop with a threshold set by the backdrop's grain.
+if SIDE:
+    _E = max(24, RW // 16)
+    _bg = np.median(np.concatenate([R[:, :_E], R[:, -_E:]], axis=1), axis=1)
+    _d = np.linalg.norm(R - _bg[:, None, :], axis=2)
+    _noise = float(np.median(np.abs(_d[:, :_E])) + 3 * np.std(_d[:, :_E]))
+    _m = _d > max(0.08, _noise)
+    QS = 4
+    PM = _m[:RH // QS * QS, :RW // QS * QS].reshape(RH // QS, QS, RW // QS, QS).mean(axis=(1, 3)) > 0.5
+    _sil = allP[rng.choice(len(allP), size=min(len(allP), 60000), replace=False)]
+
+    def agreement(cam, k, cx, cy):
+        px, py, _ = project(_sil, cam, k, cx, cy)
+        ix = (px / QS).astype(int); iy = (py / QS).astype(int)
+        ok = (ix >= 0) & (ix < PM.shape[1]) & (iy >= 0) & (iy < PM.shape[0])
+        if ok.sum() < len(ix) * 0.9:
+            return -1.0
+        M = np.zeros(PM.shape, bool); M[iy[ok], ix[ok]] = True
+        M = M | np.roll(M, 1, 0) | np.roll(M, 1, 1) | np.roll(M, -1, 0) | np.roll(M, -1, 1)
+        inter = float((M & PM).sum()); uni = float((M | PM).sum())
+        return inter / max(uni, 1.0)
+
+# a person's photo is never mirrored; an animal's head may face either way
+MIRS = (1, -1) if SIDE else (1,)
 best = (-2.0, None)
-for view, mirror in VIEWS:
-    if True:
-        for f in np.arange(0.62, 0.99, 0.04):
-            k = f * RH / Hm
-            for cx in np.arange(0.40, 0.61, 0.025) * RW:
-                for cy in np.arange(0.38, 0.63, 0.025) * RH:
-                    sc = agreement(view, mirror, k, cx, cy)
-                    if sc > best[0]:
-                        best = (sc, (view, mirror, k, cx, cy))
-view, mirror, k, cx, cy = best[1]
+for mir in MIRS:
+    cam0 = cams(mir)[0]
+    for f in np.arange(0.40 if SIDE else 0.62, 0.99, 0.04):
+        k = f * RH / Hm
+        for cx in np.arange(0.40, 0.61, 0.025) * RW:
+            for cy in np.arange(0.38, 0.63, 0.025) * RH:
+                sc = agreement(cam0, k, cx, cy)
+                if sc > best[0]:
+                    best = (sc, (mir, k, cx, cy))
+mir, k, cx, cy = best[1]
 for it in range(3):                       # refine: halve the steps around the best
     dk, dc = 0.02 * RH / Hm / (it + 1), 0.0125 * RW / (it + 1)
     for k2 in (k - dk, k, k + dk):
         for cx2 in (cx - dc, cx, cx + dc):
             for cy2 in (cy - dc, cy, cy + dc):
-                sc = agreement(view, mirror, k2, cx2, cy2)
+                sc = agreement(cams(mir)[0], k2, cx2, cy2)
                 if sc > best[0]:
-                    best = (sc, (view, mirror, k2, cx2, cy2))
-    view, mirror, k, cx, cy = best[1]
+                    best = (sc, (mir, k2, cx2, cy2))
+    mir, k, cx, cy = best[1]
 score = best[0]
-if score < 0.42:
+if score < (0.5 if SIDE else 0.42):
     print("HDFAIL the photo does not agree with the body (r=%.2f)" % score); sys.exit(5)
-
-pxA, pyA, dA = project(allP, view, mirror, k, cx, cy)
+CAMS = cams(mir)
+view = 1 if not SIDE else 0
+zs = 0.5
+ZB = []
+for cam in CAMS:
+    pxA, pyA, dA = project(allP, cam, k, cx, cy)
+    ZB.append(zbuffer(pxA, pyA, dA, zs))
 if "--debug" in argv:
     _dbg = argv[argv.index("--debug") + 1]
-    np.savez_compressed(_dbg, px=pxA[sub], py=pyA[sub], z=allP[sub][:, 2], fy=allN[sub][:, 1] * view, box=np.array([k, cx, cy, Hm]))
-zs = 0.5
-zbA = zbuffer(pxA, pyA, dA, zs)
+    pxA, pyA, _ = project(allP, CAMS[0], k, cx, cy)
+    np.savez_compressed(_dbg, px=pxA[sub], py=pyA[sub], z=allP[sub][:, 2], fy=allN[sub] @ CAMS[0][1], box=np.array([k, cx, cy, Hm]))
 
 for tob, nodes, C, P, N in bakes:
     mc = C[..., 3] > 0.5
     Pt, Nt = P[mc][:, :3], N[mc][:, :3]
-    px, py, depth = project(Pt, view, mirror, k, cx, cy)
-    w = weights(Nt, view, px, py, depth, zbA, zs)
     cs = to_s(C[..., :3])
-    photo = sample(R, px, py)
     base = cs[mc]
+    # each camera paints what faces it; where two reach the same texel (a flank's
+    # edge) their photos blend by how squarely each sees it
+    wsum = np.zeros(len(Pt), np.float32); acc = np.zeros((len(Pt), 3), np.float32)
+    for cam, zb in zip(CAMS, ZB):
+        px, py, depth = project(Pt, cam, k, cx, cy)
+        wc = weights(Nt, cam, px, py, depth, zb, zs)
+        acc += sample(R, px, py) * wc[:, None]; wsum += wc
+    photo = acc / np.maximum(wsum, 1e-6)[:, None]
+    w = np.clip(wsum, 0, 1)
     # the photo's own studio light differs a little from the coat: carry its
     # detail at the coat's tone where the two disagree broadly
     out_m = base * (1 - w[:, None]) + photo * w[:, None]
@@ -321,4 +366,4 @@ for o in objs:
         o.data.pose_position = "POSE"
 bpy.ops.export_scene.gltf(filepath=dst, export_yup=True, export_vertex_color="NONE", export_attributes=True,
                           export_image_format="JPEG", export_jpeg_quality=92)
-print("HDF %d %d %.3f %s %.1f" % (len(bakes), RES, score, "%+d%+d" % (view, mirror), time.time() - t0))
+print("HDF %d %d %.3f %s %.1f" % (len(bakes), RES, score, ("side%+d" % mir) if SIDE else "front", time.time() - t0))
