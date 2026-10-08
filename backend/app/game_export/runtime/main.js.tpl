@@ -1376,7 +1376,11 @@ async function main() {
       if (z < Z0 - 14 || z > Z1 + PL + 30) return -1e9;
       const c = z <= Z1 + PL ? crest(Math.min(z, Z1)) : TOP - (z - Z1 - PL) * 2.6;   // past the summit: the cliff falls away
       const wd = 9 + Math.max(0, z - Z0) * 0.14 + Math.sin(z * 0.11) * 2;
-      const dx = Math.max(0, Math.abs(x) - (z > Z1 - 2 && z < Z1 + PL ? 13 : 2.2));      // a flat stair crest, a broad summit
+      // a flat stair crest, a broad summit the court's own width, and a shoulder
+      // easing out to it over the last ten metres of the climb (2026-10-08: the
+      // court's walls stood forty metres tall over a summit narrower than it)
+      const sh = Math.min(1, Math.max(0, (z - (Z1 - 14)) / 10)), fw = z >= Z1 + PL ? 13 : 2.2 + (16.5 - 2.2) * sh * sh * (3 - 2 * sh);
+      const dx = Math.max(0, Math.abs(x) - fw);
       const lead = z < Z0 ? Math.max(0, 1 - (Z0 - z) / 14) : 1;
       return c * Math.exp(-Math.pow(dx / wd, 2)) * lead - (dx > 0 ? Math.pow(dx / wd, 2) * 0.6 : 0);
     };
@@ -8643,7 +8647,12 @@ async function main() {
       // worlds carry a real grass texture the tufts came out PALER than the
       // field and read as light-green claws standing on dark green. A blade
       // is the same plant as the ground cover, so it barely differs in tone.
-      .offsetHSL(0, _bGrassy ? 0.06 : -0.06, _bGrassy ? 0.02 : 0.08);
+      .offsetHSL(_bGrassy ? 0 : 0.03, _bGrassy ? 0.06 : 0.1, _bGrassy ? 0.02 : 0.0)
+      // DRY STALKS ARE NOT WHITE (2026-10-08): on a Himalayan path the scatter
+      // took the ground's tan eight points lighter, and blades lit from both
+      // sides with no shadow of their own stood out as white claws. A dry
+      // stalk is straw, a little yellower and darker than the sunlit dirt.
+      .multiplyScalar(_bGrassy ? 1.0 : 0.8);
     const gcolB = gcolA.clone().offsetHSL(0.02, 0.05, -0.07);
     // REAL blade shape: tapered to a tip, bowed forward, shaded dark at the
     // root — reads as grass, not floating rectangles
@@ -8725,7 +8734,7 @@ async function main() {
     // old count, with tufts on top.
     const GN = Math.floor(Math.min(QUALITY === 'ultra' ? 19000 : 12000,
                         Math.floor(GR * GR * (QUALITY === 'ultra' ? 2.9 : 2.0)))
-                        * (_grassy ? 1 : 0.10));
+                        * (_grassy ? 1 : 0.16));
     // (blade colour itself is handled at gcolA/gcolB above — instance colours
     // multiply the material, so tinting bmat here would double-darken)
     const rngG = mulberry32(SPEC.seed + 21);
@@ -8735,8 +8744,18 @@ async function main() {
       const M = new THREE.Matrix4(), RX = new THREE.Matrix4();
       const SV = new THREE.Vector3(), C = new THREE.Color();
       let placed = 0;
+      // DRY GRASS GROWS IN CLUMPS (2026-10-08): a lone three-blade tuft every
+      // few metres of bare dirt read as a scatter of sticks. Off a meadow the
+      // tufts gather, five to nine round a root a hand or two apart.
+      let clumpN = 0, ccx = 0, ccz = 0;
       for (let i = 0; i < GN * 2 && placed < GN; i++) {
-        const x = (rngG() - 0.5) * 2 * GR, z = (rngG() - 0.5) * 2 * GR;
+        let x, z;
+        if (_grassy) { x = (rngG() - 0.5) * 2 * GR; z = (rngG() - 0.5) * 2 * GR; }
+        else {
+          if (clumpN <= 0) { ccx = (rngG() - 0.5) * 2 * GR; ccz = (rngG() - 0.5) * 2 * GR; clumpN = 5 + Math.floor(rngG() * 5); }
+          clumpN--; const ca = rngG() * Math.PI * 2, cr = 0.06 + 0.3 * Math.sqrt(rngG());
+          x = ccx + Math.cos(ca) * cr; z = ccz + Math.sin(ca) * cr;
+        }
         if (pathDist(x, z) < CORR * 0.5 && rngG() < 0.7) continue;   // trodden path
         if (inBldg(x, z, 0.5)) continue;                             // not through floors
         if (GARDEN && GARDEN.inPlot(x, z, 0.3)) continue;              // a kept garden: no tufts in the plot
@@ -11837,7 +11856,24 @@ async function main() {
     }
     // the summit: a paved court
     { const y0 = K.TOP; box('stone', 30, 0.5, K.PL + 2, 0, y0 - 0.2, K.Z1 + K.PL / 2 - 1);
-      world.createCollider(RAPIER.ColliderDesc.cuboid(15, 0.25, K.PL / 2 + 1).setTranslation(0, y0 - 0.2, K.Z1 + K.PL / 2 - 1)); }
+      world.createCollider(RAPIER.ColliderDesc.cuboid(15, 0.25, K.PL / 2 + 1).setTranslation(0, y0 - 0.2, K.Z1 + K.PL / 2 - 1));
+      // THE COURT STANDS ON ITS WALLS (2026-10-08): the paved summit was a thin
+      // slab with its edge in the air over the slope. A hilltop gompa is raised
+      // on battered masonry: each two metres of the court's edge drops a wall
+      // to below the ground there, leaning back a little as it rises, and a
+      // knee-high parapet runs round the top, open where the stair arrives.
+      const za = K.Z1 - 2, zb = K.Z1 + K.PL, SEG = 2;
+      const wall = (x, z, alongX, outx, outz) => {
+        const g0 = Math.min(hAt(x + outx * 0.8, z + outz * 0.8), hAt(x, z)) - 0.8, hh = y0 + 0.05 - g0;
+        if (hh > 0.35) { const g = new THREE.BoxGeometry(alongX ? SEG + 0.04 : 0.7, hh, alongX ? 0.7 : SEG + 0.04);
+          const p = g.attributes.position; for (let i = 0; i < p.count; i++) if (p.getY(i) < 0) { p.setX(i, p.getX(i) + outx * Math.min(0.9, hh * 0.08)); p.setZ(i, p.getZ(i) + outz * Math.min(0.9, hh * 0.08)); }
+          g.computeVertexNormals(); g.translate(x + outx * 0.35, g0 + hh / 2, z + outz * 0.35); parts.stone.push(g.toNonIndexed()); }
+        box('stone', alongX ? SEG + 0.04 : 0.45, 0.5, alongX ? 0.45 : SEG + 0.04, x + outx * 0.2, y0 + 0.3, z + outz * 0.2); };
+      for (let z = za + SEG / 2; z < zb; z += SEG) { wall(-15, z, false, -1, 0); wall(15, z, false, 1, 0); }
+      for (let x = -15 + SEG / 2; x < 15; x += SEG) { wall(x, zb, true, 0, 1); if (Math.abs(x) > 2.4) wall(x, za, true, 0, -1); }
+      for (const sx of [-1, 1]) world.createCollider(RAPIER.ColliderDesc.cuboid(0.25, 0.3, (zb - za) / 2).setTranslation(sx * 15.2, y0 + 0.3, (za + zb) / 2));
+      world.createCollider(RAPIER.ColliderDesc.cuboid(15, 0.3, 0.25).setTranslation(0, y0 + 0.3, zb + 0.2));
+      for (const sx of [-1, 1]) world.createCollider(RAPIER.ColliderDesc.cuboid(6.2, 0.3, 0.25).setTranslation(sx * 8.8, y0 + 0.3, za - 0.2)); }
     // the monastery: battered white walls, a maroon band under a flat roof,
     // dark trapezoid windows, gold finials; a tower to one side
     const T = K.TOP, cz = K.Z1 + K.PL * 0.55;
@@ -11897,12 +11933,35 @@ async function main() {
     // a door up the court's steps, with a maroon curtain
     if (!JP) box('maroon', 2.0, 3.0, 0.15, -6, T + 1.5, cz - 10 * 0.965 / 2 - 0.1);
     // stupas: white bells on square plinths with a gold spire, at the foot, half way and at the top
-    const stupa = (x, z, s) => { const y = hAt(x, z);
-      box('white', 1.8 * s, 0.9 * s, 1.8 * s, x, y + 0.45 * s, z);
-      const prof = []; for (let i = 0; i <= 12; i++) { const t = i / 12; prof.push(new THREE.Vector2(0.88 * s * Math.sqrt(Math.max(0, 1 - t * t)) + 0.04 * s, t * 1.25 * s)); }   // a dome, broad at its foot
-      const b = new THREE.LatheGeometry(prof, 16); b.translate(x, y + 0.9 * s, z); parts.white.push(b.toNonIndexed());
-      const sp = new THREE.CylinderGeometry(0.04 * s, 0.24 * s, 1.6 * s, 8); sp.translate(x, y + 2.9 * s, z); parts.gold.push(sp.toNonIndexed());
-      world.createCollider(RAPIER.ColliderDesc.cuboid(0.9 * s, 1.2 * s, 0.9 * s).setTranslation(x, y + 1.2 * s, z)); };
+    // A CHORTEN, NOT A BLOB (2026-10-08): a white bell on one plinth read as
+    // an igloo. A Tibetan chorten climbs in parts: a stepped lion-throne base,
+    // the bell (bumpa) broader at its shoulder than its foot with a dark niche
+    // toward the path, a square harmika, the thirteen gilt rings of the spire
+    // narrowing to a parasol, and a sun-and-moon finial.
+    const stupa = (x, z, s) => { const y = Math.min(hAt(x - 1.1 * s, z - 1.1 * s), hAt(x + 1.1 * s, z + 1.1 * s), hAt(x, z)) - 0.15;
+      let yy = y;
+      for (const [w, h] of [[2.3, 0.5], [2.0, 0.3], [1.75, 0.28], [1.5, 0.26]]) { box('white', w * s, h * s, w * s, x, yy + h * s / 2, z); yy += h * s; }
+      box('maroon', 1.56 * s, 0.07 * s, 1.56 * s, x, yy - 0.03 * s, z);
+      const prof = [new THREE.Vector2(0.001, 0), new THREE.Vector2(0.6 * s, 0)];
+      for (let i = 0; i <= 14; i++) { const t = i / 14; const r = (0.6 + 0.18 * Math.sin(Math.min(1, t / 0.55) * Math.PI / 2)) * Math.cos(Math.max(0, t - 0.55) / 0.45 * Math.PI / 2 * 0.92);
+        prof.push(new THREE.Vector2(Math.max(0.2, r) * s, (0.06 + t * 1.15) * s)); }
+      prof.push(new THREE.Vector2(0.001, 1.22 * s));
+      const b = new THREE.LatheGeometry(prof, 24); b.translate(x, yy, z); parts.white.push(b.toNonIndexed());
+      const toward = x > 0 ? -1 : 1;                  // the niche looks at the path
+      box('dark', 0.1 * s, 0.42 * s, 0.32 * s, x + toward * 0.74 * s, yy + 0.52 * s, z);
+      box('gold', 0.06 * s, 0.5 * s, 0.42 * s, x + toward * 0.76 * s, yy + 0.53 * s, z);
+      yy += 1.18 * s;
+      box('white', 0.62 * s, 0.34 * s, 0.62 * s, x, yy + 0.17 * s, z);
+      box('maroon', 0.72 * s, 0.08 * s, 0.72 * s, x, yy + 0.38 * s, z);
+      yy += 0.42 * s;
+      for (let i = 0; i < 13; i++) { const r = (0.3 - i * 0.016) * s, h = 0.11 * s;
+        geo('gold', new THREE.CylinderGeometry(r * (i % 2 ? 0.86 : 1), r, h, 14).translate(x, yy + h / 2, z)); yy += h; }
+      geo('gold', new THREE.CylinderGeometry(0.36 * s, 0.4 * s, 0.05 * s, 18).translate(x, yy + 0.03 * s, z)); yy += 0.06 * s;
+      geo('gold', new THREE.SphereGeometry(0.1 * s, 12, 8).translate(x, yy + 0.12 * s, z));
+      geo('gold', new THREE.TorusGeometry(0.1 * s, 0.025 * s, 6, 12, Math.PI).rotateZ(Math.PI).translate(x, yy + 0.32 * s, z));
+      geo('gold', new THREE.ConeGeometry(0.04 * s, 0.22 * s, 8).translate(x, yy + 0.46 * s, z));
+      world.createCollider(RAPIER.ColliderDesc.cuboid(1.15 * s, 0.7 * s, 1.15 * s).setTranslation(x, y + 0.7 * s, z));
+      world.createCollider(RAPIER.ColliderDesc.cylinder(1.1 * s, 0.75 * s).setTranslation(x, y + 2.4 * s, z)); };
     if (JP) { lantern(-3.2, K.Z0 - 3, 1.0); lantern(3.2, K.Z0 - 3, 1.0); lantern(-11, K.Z1 + 4, 1.3); lantern(11, K.Z1 + 4, 1.3);
       for (let z = K.Z0 + 8; z < K.Z1 - 4; z += 11) for (const sx of [-1, 1]) lantern(sx * 2.6, z, 0.75); }
     else { stupa(-3.6, K.Z0 - 3, 1.0); stupa(3.6, K.Z0 - 3, 1.0); stupa(-11, K.Z1 + 4, 1.3); stupa(11, K.Z1 + 4, 1.3); }

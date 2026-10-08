@@ -17,6 +17,7 @@ The coated original is kept in renders/_coat_backup_hdfront/.
     python tools/hd_views.py [name ...] [--strength 0.62]
 """
 import hashlib
+import os
 import re
 import shutil
 import subprocess
@@ -77,6 +78,48 @@ def repaint(src: Path, dst: Path, prompt: str, strength: float, seed: int = 42):
     out.save(dst)
 
 
+def head_hr(ref: Path, outfit: str, dst: Path, strength: float = 0.5):
+    """THE FACE AT ITS OWN SIZE (2026-10-08, the user: close-ups of the
+    characters were blurry). In a full-length reference the head is forty or
+    fifty pixels across, so the front's projection had nothing finer to give
+    the face than that. The head is found at the top of the photo's figure,
+    cropped square, enlarged to 1024 and repainted at half strength as a
+    close-up portrait: the same face, pose and colouring, with skin, eyes and
+    hair at the size a close-up needs. Its colour is matched back to the crop's
+    so it lands at the photo's tone. Returns the box in reference pixels."""
+    import numpy as np
+    from PIL import Image
+    im = Image.open(ref).convert("RGB"); W, H = im.size
+    R = np.asarray(im, dtype=np.float32) / 255.0
+    E = max(24, W // 16)
+    bg = np.median(np.concatenate([R[:, :E], R[:, -E:]], axis=1), axis=1)
+    fig = np.linalg.norm(R - bg[:, None, :], axis=2) > 0.11
+    fig &= (fig.sum(1, keepdims=True) > 3) & (fig.sum(0, keepdims=True) > 3)
+    ys = np.where(fig.any(1))[0]
+    if len(ys) < 50:
+        return None
+    top, bot = int(ys[0]), int(ys[-1]); Hf = bot - top
+    band = fig[top:top + int(0.12 * Hf)]
+    bx = np.where(band)[1]
+    if len(bx) < 50 or Hf < 200:
+        return None
+    cx = float(np.median(bx)); cy = top + 0.075 * Hf; s = 0.17 * Hf
+    box = (int(round(cx - s / 2)), int(round(cy - s / 2)), int(round(cx + s / 2)), int(round(cy + s / 2)))
+    if box[0] < 0 or box[1] < 0 or box[2] > W or box[3] > H:
+        return None
+    crop = im.crop(box).resize((1024, 1024), Image.LANCZOS)
+    import torch
+    g = torch.Generator("cuda").manual_seed(7)
+    prompt = (f"close-up portrait photograph of the face of a {outfit}, looking at the camera, natural skin texture, "
+              f"detailed eyes, sharp focus, DSLR, 85mm, soft studio light, plain grey backdrop")
+    out = pipe()(prompt=prompt, negative_prompt="painting, illustration, drawing, " + NEG, image=crop, strength=strength,
+                 guidance_scale=6.0, num_inference_steps=40, generator=g).images[0]
+    a = np.asarray(out, dtype=np.float32); b = np.asarray(crop, dtype=np.float32)
+    a = (a - a.mean((0, 1))) / (a.std((0, 1)) + 1e-3) * b.std((0, 1)) + b.mean((0, 1))
+    Image.fromarray(np.clip(a, 0, 255).astype(np.uint8)).save(dst)
+    return box
+
+
 def upgrade(anim: Path, strength=0.62, verbose=True) -> str:
     from app.game_export.generate import BLENDER_EXE
     kind = anim.stem[:-len("_anim")].replace("_", " ")
@@ -106,6 +149,13 @@ def upgrade(anim: Path, strength=0.62, verbose=True) -> str:
                       f"soft studio light, plain grey backdrop, sharp focus, detailed fabric texture, seams and folds")
             repaint(tmp / f"v_{v}.png", tmp / f"r_{v}.png", prompt, strength)
             extras += ["--extra", f"{tmp / f'r_{v}.png'}|{tmp / 'v.json'}|{v}"]
+        if os.environ.get("FS_HDHEAD", "1") != "0":
+            try:
+                hb = head_hr(ref, outfit, tmp / "r_head.png")
+            except Exception:
+                hb = None
+            if hb:
+                extras += ["--headhr", "%s|%d|%d|%d|%d" % ((tmp / "r_head.png",) + tuple(hb))]
         out = anim.with_name(anim.stem + "_hdvtmp.glb")
         r = subprocess.run([str(BLENDER_EXE), "--background", "--python", str(FRONT), "--", str(coated), str(ref), str(out)] + extras,
                            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=900)

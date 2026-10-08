@@ -47,7 +47,7 @@ CONTROLNET_CONDITIONING_SCALE = float(_os.environ.get("FS_CONTROLNET_SCALE", "0.
 REFERENCE_STYLES: Dict[str, Dict[str, str]] = {
     "photoreal": {
         "positive": "studio photograph, single subject centered, plain neutral background, sharp focus, even lighting, natural color, high detail",
-        "negative": "multiple subjects, busy background, blurry, cropped, partial view, watermark, text, logo, emblem, insignia, trademark, "
+        "negative": "multiple subjects, painting, illustration, drawing, artwork, busy background, blurry, cropped, partial view, watermark, text, logo, emblem, insignia, trademark, "
                     # anti-anatomy-artifact (fixes the 5-legs / fused-limb issue from ControlNet)
                     "extra legs, extra limbs, too many legs, fused limbs, duplicate limbs, "
                     "missing legs, deformed, mutated, malformed anatomy, disfigured, "

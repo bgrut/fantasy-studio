@@ -214,13 +214,23 @@ def cams(mir):
     return [(np.array([-float(v), 0.0, 0.0]), np.array([0.0, float(v), 0.0]), mir)]
 
 
+HEADFIX = None
+
+
 def project(Pt, cam, k, cx, cy):
     """Texel positions -> reference pixels for one camera (right R, toward-camera D, mirror),
-    k pixels to the metre, the body's middle at (cx, cy); and each texel's depth toward it."""
+    k pixels to the metre, the body's middle at (cx, cy); and each texel's depth toward it.
+    Above the neck the head's own fit (HEADFIX) takes over, eased in across the neck."""
     Rv, Dv, mir = cam
     a = ((Pt - MID) @ Rv) * mir
     b = Pt[:, 2] - zmid
-    return cx + a * k, cy - b * k, Pt @ Dv
+    px, py = cx + a * k, cy - b * k
+    if HEADFIX is not None:
+        a0, b0, s, dx, dy, zlo, zhi = HEADFIX
+        t = np.clip((Pt[:, 2] - zlo) / (zhi - zlo), 0, 1); t = t * t * (3 - 2 * t)
+        hx = cx + dx + (a0 + (a - a0) * s) * k; hy = cy + dy - (b0 + (b - b0) * s) * k
+        px = px + (hx - px) * t; py = py + (hy - py) * t
+    return px, py, Pt @ Dv
 
 
 def weights(Nt, cam, px, py, depth, zbuf, zscale):
@@ -318,8 +328,61 @@ if score < (0.5 if SIDE else 0.42):
     FRONT_OFF = True
     print("HDNOTE the photo does not agree with the body (r=%.2f): views only" % score)
 CAMS = cams(mir)
+# THE HEAD HAS ITS OWN FIT (2026-10-08). One scale and centre for the whole
+# body leaves the head a few pixels off wherever the generated head's
+# proportions differ from the photo's: a woman's hair fell across her cheek
+# and the dark edge of her jaw lay on her neck. The front-facing head texels
+# search their own scale and offset about the head's middle, by the same
+# colour agreement, and the fit eases in over the neck. Kept only if it
+# agrees clearly better than the body's fit did.
+if not SIDE and not FRONT_OFF:
+    try:
+        ztop = float(np.percentile(allP[:, 2], 99.7))
+        hm = (allP[:, 2] > ztop - 0.125 * Hm) & (allN @ CAMS[0][1] > 0.45)
+        hidx = np.where(hm)[0]
+        if len(hidx) > 400:
+            hidx = rng.choice(hidx, size=min(len(hidx), 20000), replace=False)
+            Ph, Ch = allP[hidx], allC[hidx]
+            Rv0 = CAMS[0][0]
+            ah = ((Ph - MID) @ Rv0) * CAMS[0][2]; bh = Ph[:, 2] - zmid
+            a0, b0 = float(np.median(ah)), float(np.median(bh))
+
+            def hscore(s, dx, dy):
+                px = cx + dx + (a0 + (ah - a0) * s) * k; py = cy + dy - (b0 + (bh - b0) * s) * k
+                ok = (px > 1) & (px < RW - 2) & (py > 1) & (py < RH - 2)
+                if ok.sum() < 300:
+                    return -1.0
+                ph = sample(R, px[ok], py[ok]); c = Ch[ok]
+                return float(np.mean([np.corrcoef(ph[:, i], c[:, i])[0, 1] for i in range(3)]))
+
+            base_h = hscore(1.0, 0.0, 0.0)
+            hpx = 0.125 * Hm * k                      # the head's height in photo pixels
+            hb = (base_h, (1.0, 0.0, 0.0))
+            for s in np.arange(0.86, 1.15, 0.04):
+                for dx in np.arange(-0.12, 0.121, 0.02) * hpx:
+                    for dy in np.arange(-0.12, 0.121, 0.02) * hpx:
+                        sc = hscore(s, dx, dy)
+                        if sc > hb[0]:
+                            hb = (sc, (s, dx, dy))
+            s, dx, dy = hb[1]
+            for it in range(2):
+                ds, dd = 0.02 / (it + 1), 0.01 * hpx / (it + 1)
+                for s2 in (s - ds, s, s + ds):
+                    for dx2 in (dx - dd, dx, dx + dd):
+                        for dy2 in (dy - dd, dy, dy + dd):
+                            sc = hscore(s2, dx2, dy2)
+                            if sc > hb[0]:
+                                hb = (sc, (s2, dx2, dy2))
+                s, dx, dy = hb[1]
+            if hb[0] > base_h + 0.02:
+                HEADFIX = (a0, b0, s, dx, dy, ztop - 0.17 * Hm, ztop - 0.125 * Hm)
+                print("HDHEAD r %.3f -> %.3f scale %.3f shift %.1f %.1f px" % (base_h, hb[0], s, dx, dy))
+            else:
+                print("HDHEAD kept the body's fit (r %.3f, best %.3f)" % (base_h, hb[0]))
+    except Exception as _hx:
+        print("HDHEAD skipped (%s)" % type(_hx).__name__)
 view = 1 if not SIDE else 0
-zs = 0.5
+zs = 1.0                                  # the depth test at the photo's own resolution: at half, the line under the jaw stepped (2026-10-08)
 ZB = []
 for cam in CAMS:
     pxA, pyA, dA = project(allP, cam, k, cx, cy)
@@ -328,6 +391,39 @@ if "--debug" in argv:
     _dbg = argv[argv.index("--debug") + 1]
     pxA, pyA, _ = project(allP, CAMS[0], k, cx, cy)
     np.savez_compressed(_dbg, px=pxA[sub], py=pyA[sub], z=allP[sub][:, 2], fy=allN[sub] @ CAMS[0][1], box=np.array([k, cx, cy, Hm]))
+
+# THE FACE AT ITS OWN SIZE (2026-10-08): tools/hd_views.py passes the photo's
+# head, cropped and repainted at 1024 as a close-up, with its box in the
+# photo's pixels (--headhr <png>|x0|y0|x1|y1). Wherever the front camera lands
+# inside that box the close-up is sampled instead, fading to the photo over
+# the box's outer eighth, so a face gets twenty times the pixels it had.
+HEAD = None
+if "--headhr" in argv:
+    try:
+        _hp, _x0, _y0, _x1, _y1 = argv[argv.index("--headhr") + 1].split("|")
+        _hi = bpy.data.images.load(_hp); _HW, _HH = _hi.size
+        _HA = np.empty(_HW * _HH * 4, dtype=np.float32); _hi.pixels.foreach_get(_HA)
+        _HA = _HA.reshape(_HH, _HW, 4)[::-1, :, :3]
+        if _hi.colorspace_settings.name != "sRGB":
+            _HA = np.clip(to_s(_HA), 0, 1)
+        HEAD = (_HA, float(_x0), float(_y0), float(_x1), float(_y1))
+    except Exception as _he:
+        print("HDNOTE head close-up unreadable (%s)" % type(_he).__name__)
+
+
+def sample_photo(px, py):
+    base_ = sample(R, px, py)
+    if HEAD is None:
+        return base_
+    A_, x0_, y0_, x1_, y1_ = HEAD
+    u_ = (px - x0_) / (x1_ - x0_); v_ = (py - y0_) / (y1_ - y0_)
+    edge_ = np.minimum(np.minimum(u_, 1 - u_), np.minimum(v_, 1 - v_))
+    f_ = np.clip(edge_ / 0.125, 0, 1); f_ = f_ * f_ * (3 - 2 * f_)
+    if not (f_ > 0).any():
+        return base_
+    hi_ = sample(A_, np.clip(u_, 0, 1) * (A_.shape[1] - 1), np.clip(v_, 0, 1) * (A_.shape[0] - 1))
+    return base_ * (1 - f_[:, None]) + hi_ * f_[:, None]
+
 
 # EXTRA VIEWS (2026-10-08, the user: "improve character skinning too"). The
 # front came from the reference photo; the back and the flanks, which the
@@ -394,7 +490,7 @@ for tob, nodes, C, P, N in bakes:
     for cam, zb in zip(CAMS, ZB):
         px, py, depth = project(Pt, cam, k, cx, cy)
         wc = weights(Nt, cam, px, py, depth, zb, zs)
-        acc += sample(R, px, py) * wc[:, None]; wsum += wc
+        acc += sample_photo(px, py) * wc[:, None]; wsum += wc
     photo = acc / np.maximum(wsum, 1e-6)[:, None]
     w = np.zeros_like(wsum) if FRONT_OFF else np.clip(wsum, 0, 1)
     # the photo's own studio light differs a little from the coat: carry its

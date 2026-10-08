@@ -193,8 +193,42 @@ try:
         else: _shoff=float(np.percentile(_la0,85))
 except Exception:
     pass
+# THE ARMPIT CAPS IT (2026-10-08). A monk's shawl and loose sleeves are as
+# deep as his chest is, so the band never thinned to half until a third of
+# the height out; the clamp put the joint at a fifth of the height, halfway
+# down the upper arm, and the arm hung from the end of a shelf. Under the
+# arm there is air: in each slice below the shoulder, walked outward on the
+# surface (vertices leave gaps on flat cloth), the torso ends where the
+# first empty strip begins with arm beyond it. The highest such slice is
+# the armpit, and the joint sits no further out than its edge and a little.
+_armpit=None
+try:
+    me.calc_loop_triangles(); _nt=len(me.loop_triangles)
+    if _nt>100:
+        _tri=np.empty(_nt*3,np.int32); me.loop_triangles.foreach_get("vertices",_tri); _tri=_tri.reshape(-1,3)
+        _a,_b,_c=V[_tri[:,0]],V[_tri[:,1]],V[_tri[:,2]]
+        _ar=0.5*np.linalg.norm(np.cross(_b-_a,_c-_a),axis=1); _rng=np.random.default_rng(1)
+        _pick=_rng.choice(_nt,60000,p=_ar/max(float(_ar.sum()),1e-12))
+        _r1=np.sqrt(_rng.random(60000)); _r2=_rng.random(60000)
+        _P=(1-_r1)[:,None]*_a[_pick]+(_r1*(1-_r2))[:,None]*_b[_pick]+(_r1*_r2)[:,None]*_c[_pick]
+        _pz=(_P[:,2]-zmin)/H; _pl=(_P[:,0] if sx else _P[:,1])-smid
+        _eds=[]
+        for _sg in (1.0,-1.0):
+            _top=[]
+            for _z0 in np.arange(0.56,0.80,0.02):
+                _m=(_pz>=_z0)&(_pz<_z0+0.02)&(_sg*_pl>0); _la=_sg*_pl[_m]
+                if len(_la)<30: continue
+                _cnt,_=np.histogram(_la,np.arange(0.0,0.45*H,0.01*H))
+                _e=next((k for k in range(len(_cnt)) if _cnt[k]==0),None)
+                if _e is not None and _e>=5 and int((_la>(_e+1)*0.01*H).sum())>=10: _top.append(_e*0.01*H)
+            if _top: _eds.append(float(np.median(_top[-3:])))
+        if _eds: _armpit=float(np.mean(_eds))
+except Exception:
+    _armpit=None
+if _armpit is not None and _shoff>_armpit+0.02*H:
+    _shoff=_armpit+0.015*H
 _shoff=min(max(_shoff,0.06*H),0.20*H)
-_armline={"shoulder_lat":round(float(_shoff)/H,3)}
+_armline={"shoulder_lat":round(float(_shoff)/H,3),"armpit":(round(_armpit/H,3) if _armpit is not None else None)}
 for s in ("L","R"):
     sgn=LSGN if s=="L" else -LSGN; lg=sgn*0.10*H
     sh_lat=sgn*_shoff
