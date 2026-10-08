@@ -325,7 +325,9 @@ function growPine(r, P) {
   const path = [];
   for (let s = 0; s <= 10; s++) {
     const t = s / 10;
-    path.push({ p: lean.clone().multiplyScalar(-0.3 + H * t), r: Math.max(P.trunkR * (1 - t * 0.97), 0.015) });
+    // a redwood is a column, not a cone, and flares into its roots
+    const flare = P.flare ? 1 + (P.flare - 1) * Math.max(0, 1 - s / 1.6) : 1;
+    path.push({ p: lean.clone().multiplyScalar(-0.3 + H * t), r: Math.max(P.trunkR * (1 - t * (P.taper || 0.97)) * flare, 0.015) });
   }
   tube(bark, path, 8, 0, 0.25);
   const crown = lean.clone().multiplyScalar(H * 0.55);
@@ -641,6 +643,12 @@ const KINDS = {
     whorlGap: 1.05, branchLen: 3.4 + r() * 0.8, perWhorl: 6, droop: 0.22, card: 1.6 }),
   spruce: (r) => ({ grow: growPine, height: 16 + r() * 8, trunkR: 0.32 + r() * 0.08, crownStart: 0.12,
     whorlGap: 0.95, branchLen: 3.0 + r() * 0.6, perWhorl: 6, droop: 0.38, card: 1.45 }),
+  // A REDWOOD (2026-10-07): "a towering redwood forest" grew oaks you could
+  // see over. A coast redwood is a red-barked column forty to sixty metres
+  // tall, bare for half its height, flared at the foot, with short drooping
+  // boughs in a narrow crown far overhead.
+  redwood: (r) => ({ grow: growPine, height: 40 + r() * 18, trunkR: 1.25 + r() * 0.5, taper: 0.82, flare: 1.45,
+    crownStart: 0.48 + r() * 0.1, whorlGap: 1.5, branchLen: 3.4 + r() * 1.1, perWhorl: 5, droop: 0.32, card: 2.0 }),
   palm: (r) => ({ grow: growPalm, height: 8 + r() * 5, trunkR: 0.22, fronds: 11 + Math.floor(r() * 4), frondLen: 4.6, frondW: 2.2 }),
   dead: (r) => ({ grow: growBroadleaf, height: 7 + r() * 5, trunkFrac: 0.55, trunkR: 0.24 + r() * 0.1, depth: 3,
     limbs: 5, twigs: 3, crownStart: 0.4, spread: [0.6, 1.2], lenRatio: 0.6, radRatio: 0.5,
@@ -813,6 +821,7 @@ function makeMaterials(kind, leafHSL, barkTex, barkN, seed, U, extra = {}) {
     return { bark: m, leaf: null };
   }
   const barkTint = kind === 'birch' ? new THREE.Color(0xe8e4dc) : kind === 'dead' ? new THREE.Color(0x9c8f84)
+    : kind === 'redwood' ? new THREE.Color(0xa87866)
     : kind === 'coral' ? (extra.coralTint || new THREE.Color(0xff7a8a)) : kind === 'coral2' ? (extra.coralTint2 || new THREE.Color(0xffa64a))
     : kind === 'kelp' ? new THREE.Color(0x5a6b2a) : new THREE.Color(0xffffff);
   const bark = new THREE.MeshStandardMaterial({ map: barkTex, normalMap: barkN, color: barkTint, roughness: 0.95 });
@@ -1146,6 +1155,14 @@ export function biomeFor(words, arch, groundHSL) {
   if (has(/\bmoon\b|lunar|asteroid|space|orbit|comet/)) Object.assign(out, { kinds: K(['rock', 1], ['boulder', 0.35], ...(crystal ? [['crystal', 0.15]] : [])), dens: 0.1, rockTint: T(0x8d8c8a) });
   else if (has(/mars|red planet|martian/)) Object.assign(out, { kinds: K(['rock', 1], ['boulder', 0.4], ...(crystal ? [['crystal', 0.12]] : [])), dens: 0.1, rockTint: T(0xa0573a) });
   else if (has(/volcan|lava|magma|ash\b|obsidian/)) Object.assign(out, { kinds: K(['rock', 1], ['boulder', 0.4], ['dead', 0.2]), dens: 0.14, rockTint: T(0x3a3634), crystalTint: T(0xff7a3a) });
+  // a basalt coast grows nothing tall: dark stone, moss, the odd tussock (2026-10-07)
+  else if (has(/black sand|basalt|sea stacks?|reynisfjara|volcanic beach|iceland/)) Object.assign(out, { kinds: K(['rock', 1], ['boulder', 0.45], ['bush', 0.12]), dens: 0.07,
+    rockTint: T(0x3c3c3e), leaf: { h: 0.24, s: 0.28, l: 0.2 }, island: has(/beach|coast|shore|sea|island|stacks?/) });
+  // the high Himalaya: dark conifers thinning out over bare stone (2026-10-07)
+  else if (has(/himalaya\w*|tibet\w*|nepal\w*|bhutan\w*|monaster(y|ies)|gompa/)) Object.assign(out, { kinds: K(['spruce', 0.45], ['pine', 0.3], ['rock', 0.6], ['boulder', 0.3], ['bush', 0.3]), dens: 0.28,
+    rockTint: T(0x7a7670), leaf: { h: 0.33, s: 0.38, l: 0.16 } });
+  else if (has(/redwood|sequoia/)) Object.assign(out, { kinds: K(['redwood', 1], ['spruce', 0.18], ['bush', 0.9], ['rock', 0.06]), dens: 0.55,
+    leaf: { h: 0.31, s: 0.42, l: 0.16 } });
   else if (has(/canyon|mesa|badlands|butte/)) Object.assign(out, { kinds: K(['mesa', 0.25], ['rock', 0.8], ['boulder', 0.4], ['cactus', 0.15]), dens: 0.12, rockTint: T(0xb5643c) });
   else if (has(/desert|dune|sahara|wasteland|arid/)) Object.assign(out, { kinds: K(['cactus', 0.5], ['rock', 0.8], ['boulder', 0.2], ['dead', 0.25], ['bush', 0.2]), dens: 0.14, rockTint: T(0xb08a5e), leaf: { h: 0.16, s: 0.32, l: 0.3 } });
   else if (has(/glacier|tundra|ice field|polar/)) Object.assign(out, { kinds: K(['boulder', 0.6], ['rock', 1], ['spruce', 0.15]), dens: 0.16, snow: 0.85, rockTint: T(0x7d8794) });
@@ -1163,6 +1180,11 @@ export function biomeFor(words, arch, groundHSL) {
   // OPEN GRASS IS OPEN (2026-10-07): "a bee in a sunny meadow" was a wood
   // with a path through it. A meadow, a prairie, a pasture is grass to the
   // horizon with the odd tree and hedge; a farm or a village keeps its copses.
+  // FARMED COUNTRY IS OPEN (2026-10-07): a lavender field in Provence or a
+  // Tuscan vineyard stood in a dense wood; the land round them is open, an
+  // oak or an olive here and there, hedges and stone
+  else if (has(/lavender|vineyards?|provence|tuscan|tuscany|olive groves?|tulip fields?|sunflower fields?|tea plantations?|wheat|kansas|great plains|cornfields?/) && !has(/forest|woods?\b/))
+    Object.assign(out, { kinds: K(['oak', 0.5], ['bush', 0.7], ['broadleaf', 0.15], ['rock', 0.25]), dens: 0.08 });
   else if (has(/meadow|prairie|pasture|grassland|wildflower|field of/) && !has(/forest|wood|grove/)) Object.assign(out, { kinds: K(['oak', 0.55], ['bush', 0.7], ['broadleaf', 0.15], ['rock', 0.2]), dens: 0.07 });
   else if (has(/meadow|farm|village|plain|field|prairie|pasture|orchard/)) Object.assign(out, { kinds: K(['oak', 0.5], ['broadleaf', 0.3], ['bush', 0.8], ['rock', 0.25]), dens: 0.35 });
   else {

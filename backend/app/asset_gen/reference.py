@@ -552,6 +552,23 @@ def _build_reference_prompt(slots: Dict[str, Any], style: str) -> tuple[str, str
             "mail carrier": "mail carrier in a plain navy blue uniform jacket and trousers, a peaked cap, a brown leather satchel strap across the chest, black shoes, no logos, fully clothed",
             "diver":     "scuba diver in a full black wetsuit with blue side panels, a dive mask pushed up on the forehead, an air tank on the back, dive boots, fully covered",
             "hiker":     "hiker in a red waterproof jacket, grey hiking trousers, walking boots, a small backpack, a knitted beanie, fully clothed",
+            # (2026-10-07) the originality round's people: a beekeeper was played by the ranger
+            "beekeeper": "beekeeper in a loose white full-body bee suit, a round mesh veil hat, long white gauntlet gloves, rubber boots, fully covered",
+            "vintner":   "vintner in a rolled-sleeve linen shirt, a brown canvas apron, sturdy work trousers, leather boots, a straw hat, fully clothed",
+            "winemaker": "winemaker in a rolled-sleeve linen shirt, a brown canvas apron, sturdy work trousers, leather boots, a straw hat, fully clothed",
+            "photographer": "photographer in an olive field jacket with many pockets, dark trousers, hiking boots, a camera on a strap round the neck, a beanie, fully clothed",
+            "storm chaser": "storm chaser in a dark blue rain jacket, cargo trousers, hiking boots, a baseball cap with no logo, fully clothed",
+            "chaser":    "storm chaser in a dark blue rain jacket, cargo trousers, hiking boots, a baseball cap with no logo, fully clothed",
+            "buddhist monk": "buddhist monk wearing long deep maroon robes that cover the body from the shoulders to the ankles, a saffron long-sleeved shirt underneath, a maroon shawl over both shoulders, a shaved head, sandals, fully clothed, chest covered",
+            "park ranger":"park ranger in a plain olive green uniform shirt and trousers, a wide-brimmed flat hat, hiking boots, no badges or logos, fully clothed",
+            # (2026-10-07) an anime sentence's heroes; generic uniforms, no school crest or logo
+            "schoolgirl": "a teenage schoolgirl in a navy blazer over a white shirt with a red ribbon tie, a pleated navy skirt, knee socks and black school shoes, holding nothing, fully clothed",
+            "schoolboy": "a teenage schoolboy in a navy blazer over a white shirt and a dark tie, grey trousers and black school shoes, fully clothed",
+            "student":   "a teenage student in a navy blazer over a white shirt, a pleated navy skirt, knee socks and black school shoes, fully clothed",
+            "witch":     "a young witch in a long dark purple robe with a wide pointed hat, a belt with small pouches, boots, fully clothed",
+            "mage":      "a young mage in a flowing blue and silver robe with a hood down, a sash belt, soft boots, fully clothed",
+            "mountaineer": "mountaineer in a bright orange insulated down jacket, black climbing trousers, stiff mountaineering boots with gaiters, a climbing helmet, glacier glasses pushed up, a coil of rope over one shoulder, fully clothed",
+            "climber":   "mountaineer in a bright orange insulated down jacket, black climbing trousers, stiff mountaineering boots with gaiters, a climbing helmet, glacier glasses pushed up, a coil of rope over one shoulder, fully clothed",
             # generic humans need CLOTHES spelled out or SDXL renders a shirtless
             # anatomy/muscle-suit figure. Order: woman/person before "man" (which
             # is a substring of "woman") so the right one matches first.

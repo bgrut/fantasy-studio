@@ -16,6 +16,27 @@ import { UnrealBloomPass } from './vendor/jsm/postprocessing/UnrealBloomPass.js'
 import { OutputPass } from './vendor/jsm/postprocessing/OutputPass.js';
 import RAPIER from './vendor/rapier.es.js';
 import { buildCarHQ as __buildCarHQ } from './proc/car.js';
+const CAR_TYPES = {
+  sedan:  { length: 4.55, width: 1.83, bodyH: 0.60, bodyY: 0.52, cabinLen: 0.42, cabinH: 0.50, cabinX: -0.03, wheelR: 0.33, wheelBase: 0.31 },
+  coupe:  { length: 4.30, width: 1.86, bodyH: 0.55, bodyY: 0.47, cabinLen: 0.34, cabinH: 0.44, cabinX: -0.09, wheelR: 0.33, wheelBase: 0.32 },
+  suv:    { length: 4.85, width: 1.98, bodyH: 0.80, bodyY: 0.70, cabinLen: 0.50, cabinH: 0.60, cabinX: -0.02, wheelR: 0.41, wheelBase: 0.31 },
+  pickup: { length: 5.40, width: 2.00, bodyH: 0.74, bodyY: 0.68, cabinLen: 0.30, cabinH: 0.62, cabinX: 0.13, wheelR: 0.41, wheelBase: 0.33, bed: 1 },
+  van:    { length: 5.25, width: 2.02, bodyH: 1.08, bodyY: 0.80, cabinLen: 0.58, cabinH: 0.44, cabinX: -0.11, wheelR: 0.36, wheelBase: 0.33 },
+  taxi:   { length: 4.60, width: 1.86, bodyH: 0.62, bodyY: 0.54, cabinLen: 0.44, cabinH: 0.52, cabinX: -0.03, wheelR: 0.34, wheelBase: 0.31, taxi: 1 },
+  // 2026-08-07: six silhouettes repeated down a whole avenue still read as
+  // a fleet of the same car. These four are the shapes a New York street
+  // actually has that the set was missing — the long low one, the tall
+  // narrow one, the box truck and the wagon.
+  sports: { length: 4.35, width: 1.94, bodyH: 0.46, bodyY: 0.40, cabinLen: 0.30, cabinH: 0.34, cabinX: -0.12, wheelR: 0.34, wheelBase: 0.34 },
+  compact:{ length: 3.85, width: 1.70, bodyH: 0.62, bodyY: 0.54, cabinLen: 0.46, cabinH: 0.54, cabinX: -0.01, wheelR: 0.30, wheelBase: 0.30 },
+  box:    { length: 6.10, width: 2.18, bodyH: 1.35, bodyY: 0.92, cabinLen: 0.26, cabinH: 0.50, cabinX: 0.30, wheelR: 0.40, wheelBase: 0.34 },
+  wagon:  { length: 4.90, width: 1.88, bodyH: 0.66, bodyY: 0.56, cabinLen: 0.56, cabinH: 0.50, cabinX: -0.05, wheelR: 0.34, wheelBase: 0.31 },
+};
+// weighted so the street is mostly ordinary traffic with the odd truck —
+// an even mix reads as a car showroom, not a city
+const CAR_TYPE_KEYS = ['sedan', 'sedan', 'sedan', 'compact', 'compact',
+  'coupe', 'suv', 'suv', 'wagon', 'pickup', 'van', 'taxi', 'taxi',
+  'sports', 'box'];
 import * as __FLORA from './proc/flora.js';
 import * as __GRASS from './proc/grass.js';
 import { createVolcano as __createVolcano } from './proc/volcano.js';
@@ -29,6 +50,12 @@ import { createGait as __createGait } from './proc/gait.js';
 import { loadMotionDB as __loadMotionDB, createMotionMatcher as __createMotionMatcher } from './proc/mm.js';
 
 const SPEC = __GAME_SPEC__;
+// BLACK SAND IS BLACK (2026-10-07): "a black sand beach in iceland" came out
+// gold. Volcanic sand is near-black basalt grit; the ground takes that colour
+// before the terrain, the grass and the shore read it.
+const BASALT = /\b(black sand|black-sand|basalt|sea stacks?|reynisfjara|volcanic beach|iceland\w*)\b/.test(String(SPEC.prompt || '').toLowerCase());
+if (BASALT && /\b(black sand|black-sand|volcanic beach|reynisfjara|iceland\w*)\b/.test(String(SPEC.prompt || '').toLowerCase()) && SPEC.world)
+  SPEC.world.ground_color = [0.2, 0.192, 0.18];
 window.__spec = SPEC;              // shot tools read the level from here
 
 const errBox = document.getElementById('err');
@@ -468,7 +495,10 @@ async function main() {
   // camera's reach all move outward to make room for it.
   const FLORA = (() => {
     const W = SPEC.world || {}, L0 = W.level || {};
-    const words = [W.name, W.sky, W.flora, W.weather, W.setting, SPEC.title, SPEC.description]
+    // (2026-10-07) the sentence's own place words too: "a himalayan monastery" grew an
+    // oak wood because the title, "Monk's Ascent", never said where it was
+    const placeWords = (String(SPEC.prompt || '').toLowerCase().match(/\b(redwoods?|sequoias?|himalaya\w*|tibet\w*|nepal\w*|bhutan\w*|monaster(?:y|ies)|gompa|lavender|vineyards?|provence|tuscan\w*|black sand|basalt|sea stacks?|iceland\w*|kansas|wheat|olive groves?|tea plantations?)\b/g) || []);
+    const words = [W.name, W.sky, W.flora, W.weather, W.setting, SPEC.title, SPEC.description, ...placeWords]
       .filter(Boolean).join(' ').toLowerCase();
     if (L0.osm || L0.interior || W.pano || L0.cave) return null;
     if (new URLSearchParams(location.search).get('flora') === '0') return null;   // A/B and debugging
@@ -487,7 +517,7 @@ async function main() {
     const outer = (SPEC.view || '3d') !== 'topdown' && !biome.underwater;   // under the sea the water is the horizon
     // barren: no meadow under it (the outer land keeps its colour), and the
     // outer scatter is stone and the odd cactus, sparse
-    const barren = !biome.kinds.some(k => ['broadleaf', 'oak', 'birch', 'pine', 'spruce', 'palm', 'bush'].includes(k.kind) && k.weight >= 0.3);
+    const barren = !biome.kinds.some(k => ['broadleaf', 'oak', 'birch', 'pine', 'spruce', 'redwood', 'palm', 'bush'].includes(k.kind) && k.weight >= 0.3);
     const out = Object.assign({ words, dens, outer, barren, biome }, q);
     window.__flora = { on: true, outer, R: q.R, planned: q.n };
     return out;
@@ -1323,6 +1353,94 @@ async function main() {
   window.__isCity = !!OSM;
   if (OSM && LVL && LVL.landmarks) LVL.landmarks = [];   // no 30m trees on sidewalks                          // ambient (module scope) reads this
   const INTERIOR = (LVL && LVL.interior) || null;   // Phase 95: room levels
+  // ── A MONASTERY ON THE MOUNTAIN (2026-10-07) ────────────────────────────
+  // "a monk climbs the stone steps of a cliffside himalayan monastery above
+  // the clouds to ring the bell" was a red-earth wood with a giant blue disc
+  // in it. The place is a mountain: a steep ridge rising out of the valley,
+  // a stone stair up its crest under strings of prayer flags, white stupas
+  // at the landings, cloud lying across the slope below the summit, and on
+  // top a whitewashed monastery with a maroon band under its roof and a
+  // bell in a pavilion at the cliff's edge. The ridge is cut into the
+  // heightfield itself, so the ground, the grass and the collider all agree.
+  const MONK = (() => {
+    if (INTERIOR || OSM || VIEW === 'side' || SPEC.genre === 'factory') return null;
+    const w = [SPEC.prompt, SPEC.world && SPEC.world.name].filter(Boolean).join(' ').toLowerCase();
+    if (!/\b(monaster(?:y|ies)|lamaser(?:y|ies)|gompa|tiger'?s nest|cliffside temple|cliff temple|mountain temple|temple on the (?:mountain|cliff|peak)|mountain shrine|summit shrine|summit temple)\b/.test(w)) return null;
+    if (!LVL || !LVL.heights || LVL.heights.length !== LVL.grid_n * LVL.grid_n) return null;
+    const H2 = (SPEC.world.size_m || 200) * 0.45;
+    const Z0 = 10, Z1 = Math.max(44, Math.min(78, H2 - 30)), TOP = Math.min(40, (Z1 - Z0) * 0.62), PL = 20;   // the stair, its rise, the summit's depth
+    const crest = (z) => { if (z <= Z0) return 0; if (z >= Z1) return TOP; const t = (z - Z0) / (Z1 - Z0); return TOP * (t * t * (3 - 2 * t) * 0.55 + t * 0.45); };
+    const ridge = (x, z) => {
+      if (z < Z0 - 14 || z > Z1 + PL + 30) return -1e9;
+      const c = z <= Z1 + PL ? crest(Math.min(z, Z1)) : TOP - (z - Z1 - PL) * 2.6;   // past the summit: the cliff falls away
+      const wd = 9 + Math.max(0, z - Z0) * 0.14 + Math.sin(z * 0.11) * 2;
+      const dx = Math.max(0, Math.abs(x) - (z > Z1 - 2 && z < Z1 + PL ? 13 : 2.2));      // a flat stair crest, a broad summit
+      const lead = z < Z0 ? Math.max(0, 1 - (Z0 - z) / 14) : 1;
+      return c * Math.exp(-Math.pow(dx / wd, 2)) * lead - (dx > 0 ? Math.pow(dx / wd, 2) * 0.6 : 0);
+    };
+    const n = LVL.grid_n, gs = SPEC.world.size_m || 200;
+    for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
+      const x = (j / (n - 1) - 0.5) * gs, z = (i / (n - 1) - 0.5) * gs, r = ridge(x, z);
+      if (r > LVL.heights[i * n + j]) LVL.heights[i * n + j] = r;
+    }
+    const BELL = [8.5, Z1 + PL - 3.2];
+    if (LVL) { LVL.goal = [BELL[0] - 2.4, BELL[1] - 1.6]; LVL.enterable = null; LVL.enterables = []; }
+    return { Z0, Z1, TOP, PL, crest, BELL,
+      onStair: (x, z, m) => Math.abs(x) < 2.6 + (m || 0) && z > Z0 - 2 - (m || 0) && z < Z1 + 1 + (m || 0),
+      onTop: (x, z, m) => Math.abs(x) < 15 + (m || 0) && z > Z1 - 3 - (m || 0) && z < Z1 + PL + (m || 0) };
+  })();
+
+  // ── PLANTED ROWS (2026-10-07) ───────────────────────────────────────────
+  // "a beekeeper walks through rows of purple lavender in provence" was a
+  // dark wood with dead grass, and "a vintner harvests grapes in a tuscan
+  // vineyard" was going the same way. A field that is farmed is planted in
+  // rows: lavender in grey-green mounds under purple spikes, vines along
+  // posts and wires, sunflowers, tulips in bands of colour, tea in clipped
+  // hedges. A dirt track runs up the middle to a stone farmhouse (a winery,
+  // for vines) at the far end; a beekeeper's hives stand at the row ends
+  // along the track. The plan is numbers only, read by the scatter, the
+  // flora, the grass and the pickups long before the build further down.
+  const ROWS = (() => {
+    if (INTERIOR || OSM || VIEW === 'side' || SPEC.genre === 'factory' || MONK) return null;
+    const w = [SPEC.prompt, SPEC.world && SPEC.world.name].filter(Boolean).join(' ').toLowerCase();
+    const crop = /\blavender\b/.test(w) ? 'lavender'
+      : /\b(vineyards?|vines?|grapevines?|vintners?|winemakers?|winery|wineries|grape harvest|wine estate)\b/.test(w) ? 'vine'
+      : /\bsunflowers?\b/.test(w) && /\b(fields?|farms?|rows?|acres?)\b/.test(w) ? 'sunflower'
+      : /\btulips?\b/.test(w) && /\b(fields?|farms?|rows?|bulbs?)\b/.test(w) ? 'tulip'
+      : /\btea (?:plantations?|gardens?|estates?|terraces?|fields?|bushes)\b/.test(w) ? 'tea'
+      : /\b(wheat|barley|rye|oats|grain|cornfields?)\b/.test(w) && /\b(fields?|farms?|acres?|kansas|prairies?|plains?|harvest\w*|cornfields?)\b/.test(w) ? 'wheat' : null;
+    if (!crop) return null;
+    const GAP = { lavender: 1.75, vine: 2.6, sunflower: 1.1, tulip: 1.0, tea: 1.9, wheat: 0.62 }[crop];
+    const STEP = { lavender: 0.95, vine: 1.2, sunflower: 0.5, tulip: 0.26, tea: 0.9, wheat: 0.6 }[crop];
+    const H2 = (SPEC.world.size_m || 200) * 0.45;
+    const X1 = Math.min(34, H2 - 10), Z0 = 6, Z1 = Math.max(30, Math.min(74, H2 - 22)), TRACK = 1.9;
+    const rows = [];
+    for (let x = TRACK + GAP * 0.6; x < X1; x += GAP) rows.push(x, -x);
+    const hives = [];
+    for (let k = 0; k < 10; k++) { const side = k % 2 ? 1 : -1; hives.push([side * (TRACK + 0.85), Z0 + 5 + Math.floor(k / 2) * Math.min(12.5, (Z1 - Z0 - 8) / 5), side]); }
+    const r = mulberry32((SPEC.seed || 1) + 7272);
+    const picks = [];
+    const near = rows.filter(x => Math.abs(x) < 16);
+    for (let k = 0; k < 40; k++) { const x = near[Math.floor(r() * near.length)], z = Z0 + 4 + r() * (Z1 - Z0 - 8);
+      picks.push({ x: x + (r() < 0.5 ? -0.42 : 0.42), z }); }
+    picks.sort((a, b) => Math.hypot(a.x, a.z) - Math.hypot(b.x, b.z));
+    let pi = 0, hi = 0;
+    const BLD = [0, Z1 + 10];
+    if (LVL) LVL.goal = [BLD[0], BLD[1] - 5.6];       // the walk at the end is to the farmhouse door
+    // the field's own house is the one at the end of the track: a second, planned farmhouse elsewhere stands down
+    if (LVL) { LVL.enterable = null; LVL.enterables = []; }
+    return { crop, GAP, STEP, X1, Z0, Z1, TRACK, rows, hives, BLD,
+      soil: crop === 'lavender' || crop === 'sunflower' || crop === 'tulip' || crop === 'wheat',
+      // a Kansas farmhouse is white clapboard under a grey roof; a mas or a winery is stone and terracotta
+      clap: crop === 'wheat' || crop === 'sunflower',
+      inField: (x, z, m) => Math.abs(x) < X1 + (m || 0) && z > Z0 - (m || 0) && z < Z1 + (m || 0),
+      inYard: (x, z, m) => Math.abs(x - BLD[0]) < 10 + (m || 0) && Math.abs(z - BLD[1]) < 8 + (m || 0),
+      track: (x, z) => Math.abs(x) < TRACK && z > -4 && z < BLD[1] - 4,
+      nearHive: (x, z) => hives.some(h => Math.abs(h[0] - x) < 1.5 && Math.abs(h[1] - z) < 1.1),
+      take: () => (pi < picks.length ? picks[pi++] : null),
+      hiveSpot: () => hives[hi++ % hives.length] };
+  })();
+
   // ── A VEGETABLE GARDEN IS PLANTED, NOT SCATTERED (2026-10-06) ──────────
   // "a cute cartoon gardener picks carrots and four-leaf clovers in a sunny
   // vegetable garden" came out as a forest clearing with carts, fountains
@@ -1334,7 +1452,7 @@ async function main() {
   // plan (pure numbers, read by the scatter and the flora long before the
   // meshes are built further down).
   const GARDEN = (() => {
-    if (INTERIOR || OSM || VIEW === 'side' || SPEC.genre === 'factory') return null;
+    if (INTERIOR || OSM || VIEW === 'side' || SPEC.genre === 'factory' || ROWS || MONK) return null;
     const w = [SPEC.prompt, SPEC.world && SPEC.world.name].filter(Boolean).join(' ').toLowerCase();
     // (2026-10-07) a farm's crops are planted too: "a farmer plants seeds, waters them and harvests ten pumpkins" was an autumn wood of orbs
     if (!/\b(gardens?|gardener|gardening|allotments?|veg(?:etable|gie)? (?:patch|plot)|raised beds?|farms?|farmer|farming|farmyard|harvest\w*|homestead|pumpkin patch|crop fields?)\b/.test(w)) return null;
@@ -1382,7 +1500,7 @@ async function main() {
   // a water tower, desert all round. This is the plan (numbers only, read by
   // the scatter, the flora, the grass and the spawner before the build).
   const WEST = (() => {
-    if (INTERIOR || OSM || VIEW === 'side' || SPEC.genre === 'factory' || GARDEN) return null;
+    if (INTERIOR || OSM || VIEW === 'side' || SPEC.genre === 'factory' || GARDEN || ROWS) return null;
     const w = [SPEC.prompt, SPEC.world && SPEC.world.name].filter(Boolean).join(' ').toLowerCase();
     if (!/\b(wild west|old west|western|frontier|cowboys?|cowgirls?|sheriffs?|saloons?|outlaws?|gunslingers?|high noon|desperados?)\b/.test(w)) return null;
     const SW = 7, BW = 2.6, FX = SW + BW, Z0 = -44, Z1 = 44;
@@ -1435,7 +1553,7 @@ async function main() {
   // peppermint stepping stones, and a staircase of giant cupcakes to hop up,
   // a sweet on each. The plan here is numbers only; the build is further down.
   const CANDY = (() => {
-    if (INTERIOR || OSM || VIEW === 'side' || SPEC.genre === 'factory' || GARDEN || WEST) return null;
+    if (INTERIOR || OSM || VIEW === 'side' || SPEC.genre === 'factory' || GARDEN || WEST || ROWS) return null;
     const w = [SPEC.prompt, SPEC.world && SPEC.world.name].filter(Boolean).join(' ').toLowerCase();
     if (!/\b(candy ?land|candyland|candy (?:world|kingdom|island|forest|planet|village|meadow)|sugar ?land|sweets? (?:land|world|kingdom)|gumdrops?|lollipops?|cupcakes?|gingerbread|cotton candy)\b/.test(w)) return null;
     const r = mulberry32((SPEC.seed || 1) + 6161);
@@ -1474,7 +1592,7 @@ async function main() {
   // half-timbered and thatched, a well in the middle, a lane in from where
   // you start. Not a town grid (asphalt and brick); the plan is numbers only.
   const VILLAGE = (() => {
-    if (INTERIOR || OSM || VIEW === 'side' || SPEC.genre === 'factory' || GARDEN || WEST || CANDY) return null;
+    if (INTERIOR || OSM || VIEW === 'side' || SPEC.genre === 'factory' || GARDEN || WEST || CANDY || ROWS) return null;
     const w = [SPEC.prompt, SPEC.world && SPEC.world.name].filter(Boolean).join(' ').toLowerCase();
     if (!/\b(village|villages|hamlet|cottages?|thatched|farmstead|shire)\b/.test(w)) return null;
     if (/\b(city|downtown|skyscrapers?|neon|cyberpunk)\b/.test(w)) return null;
@@ -1511,7 +1629,7 @@ async function main() {
   // ground. The plan is numbers only, read by the scatter, the grass and the
   // spawner before the build.
   const GRAVE = (() => {
-    if (INTERIOR || OSM || VIEW === 'side' || SPEC.genre === 'factory' || GARDEN || WEST || CANDY || VILLAGE) return null;
+    if (INTERIOR || OSM || VIEW === 'side' || SPEC.genre === 'factory' || GARDEN || WEST || CANDY || VILLAGE || ROWS) return null;
     const w = [SPEC.prompt, SPEC.world && SPEC.world.name].filter(Boolean).join(' ').toLowerCase();
     if (!/\b(graveyards?|cemeter(?:y|ies)|churchyards?|necropolis|burial grounds?|boneyard)\b/.test(w)) return null;
     const r = mulberry32((SPEC.seed || 1) + 9191);
@@ -1637,7 +1755,7 @@ async function main() {
   // lawn green, and the ripple texture the word "beach" picks came out as
   // green dunes; on a beach the ground is pulled most of the way to sand
   if (FLORA && FLORA.biome && FLORA.biome.island && /beach|sand|shore|castaway|driftwood/.test(FLORA.words || ''))
-    gcol.lerp(new THREE.Color(0xe2d5b4), 0.9);
+    gcol.lerp(new THREE.Color(BASALT ? 0x5a5752 : 0xe2d5b4), 0.9);   // a basalt coast's sand is black (2026-10-07)
   // 2048 for ANY level (2026-08-25): nature worlds ran 1024 over 220m+ —
   // ~4.7 px/m, the giant green blur behind every 'looks like 2003' read.
   const TEXN = LVL ? 2048 : 256;
@@ -1701,7 +1819,7 @@ async function main() {
       village: gcol.clone().lerp(new THREE.Color(0x77664a), 0.72),
       meadow: gcol.clone().offsetHSL(-0.01, 0.05, 0.045),
       rock: new THREE.Color(0x86837a),
-      sand: new THREE.Color(0xc7b28a),
+      sand: new THREE.Color(BASALT ? 0x5a5752 : 0xc7b28a),   // black sand on a basalt coast (2026-10-07)
       hill: gcol.clone().lerp(new THREE.Color(0x8b8474), 0.55),
     };
     const nR = LVL.grid_n, cell = TEXN / nR;
@@ -2061,7 +2179,7 @@ async function main() {
     // sand or rock texture, not its plain ground colour)
     if (FLORA.barren && FLORA.biome && FLORA.biome.rockTint) base.lerp(FLORA.biome.rockTint.clone().multiplyScalar(0.8), 0.85).offsetHSL(0, 0.14, 0);
     const under = base.clone().lerp(new THREE.Color(0x1a2213), 0.6);
-    const _sandC = new THREE.Color(0xd9c498);
+    const _sandC = new THREE.Color(BASALT ? 0x5e5b56 : 0xd9c498);
     for (let r = 0; r <= ROWS; r++) {
       const t = Math.pow(r / ROWS, 1.8);
       for (let s = 0; s <= SEG; s++) {
@@ -2706,7 +2824,7 @@ async function main() {
       // goal gets a slim shaft in the world's accent colour that shows from
       // a distance and fades away as you come up to it; the ground ring stays.
       const _acc = window.__accent;
-      const _thing = _heliGoal || _venueGoal || GARDEN || WEST || GRAVE || VILLAGE
+      const _thing = _heliGoal || _venueGoal || GARDEN || WEST || GRAVE || VILLAGE || ROWS || MONK
         || (_reachOb && /\b(hive|beehive|skep|apiary|helipad)\b/.test(String(_reachOb.label || '').toLowerCase()));
       if (!_thing) {
         const pil = new THREE.Mesh(
@@ -5974,14 +6092,30 @@ async function main() {
           if (_wetN) {
             const S2 = 512, cv = document.createElement('canvas'); cv.width = cv.height = S2;
             const x = cv.getContext('2d'), rp = mulberry32(SPEC.seed + 4141);
-            x.fillStyle = 'rgb(150,150,150)'; x.fillRect(0, 0, S2, S2);
-            for (let i = 0; i < 26; i++) {
-              const cx = rp() * S2, cy = rp() * S2, r = 18 + rp() * 70;
-              const gr = x.createRadialGradient(cx, cy, r * 0.35, cx, cy, r);
-              gr.addColorStop(0, 'rgb(14,14,14)'); gr.addColorStop(1, 'rgba(14,14,14,0)');
-              x.save(); x.translate(cx, cy); x.scale(1, 0.45 + rp() * 0.5); x.translate(-cx, -cy);
-              x.fillStyle = gr; x.beginPath(); x.arc(cx, cy, r, 0, Math.PI * 2); x.fill(); x.restore();
+            // (2026-10-07) the pools were 26 soft ellipses, and on screen they
+            // read as stamped mirror discs. Water stands where the tarmac
+            // sags, which is a ragged shape: a tiling noise field, cut at a
+            // level, with a thin wet rim. The damp between pools is not even
+            // either; the same noise at a finer scale mottles it.
+            const lat = (g) => { const v = new Float32Array(g * g); for (let i = 0; i < v.length; i++) v[i] = rp(); return v; };
+            const oct = [[6, 0.5, lat(6)], [12, 0.27, lat(12)], [24, 0.15, lat(24)], [48, 0.08, lat(48)]];
+            const sm = (t) => t * t * (3 - 2 * t);
+            const noise = (u, v) => { let n = 0;
+              for (const [g, w, L] of oct) { const fx = u * g, fy = v * g, ix = Math.floor(fx), iy = Math.floor(fy), tx = sm(fx - ix), ty = sm(fy - iy);
+                const x0 = ix % g, y0 = iy % g, x1 = (x0 + 1) % g, y1 = (y0 + 1) % g;
+                const a = L[y0 * g + x0] + (L[y0 * g + x1] - L[y0 * g + x0]) * tx, b = L[y1 * g + x0] + (L[y1 * g + x1] - L[y1 * g + x0]) * tx;
+                n += w * (a + (b - a) * ty); }
+              return n / 1.0; };
+            const img = x.createImageData(S2, S2), d = img.data;
+            for (let yy = 0; yy < S2; yy++) for (let xx = 0; xx < S2; xx++) {
+              const n = noise(xx / S2, yy / S2);
+              const pool = Math.min(1, Math.max(0, (n - 0.6) / 0.035));          // standing water
+              const rim = Math.min(1, Math.max(0, (n - 0.53) / 0.07)) * (1 - pool); // the darker wet edge
+              const damp = 150 + (n - 0.5) * -90;                                   // mottled satin between
+              const r = damp * (1 - pool) * (1 - 0.35 * rim) + 62 * pool;          // still water, not a mirror: rain dimples it
+              const k = (yy * S2 + xx) * 4; d[k] = d[k + 1] = d[k + 2] = Math.max(0, Math.min(255, r)); d[k + 3] = 255;
             }
+            x.putImageData(img, 0, 0);
             _wetR = new THREE.CanvasTexture(cv);
             _wetR.wrapS = _wetR.wrapT = THREE.RepeatWrapping;
             _wetR.repeat.set(0.35, 0.35);
@@ -5989,7 +6123,7 @@ async function main() {
           const road = new THREE.Mesh(mergeGeometries(roadGeos, false),
             new THREE.MeshStandardMaterial({ map: at, color: 0x686b73,
               roughness: _wetN ? 1.0 : 0.96, roughnessMap: _wetR, metalness: _wetN ? 0.12 : 0.0,
-              envMapIntensity: _wetN ? 1.7 : 1.0, side: THREE.DoubleSide }));
+              envMapIntensity: _wetN ? 1.25 : 1.0, side: THREE.DoubleSide }));   // (2026-10-07) 1.7 laid the sky on the pools as pale clouds
           road.receiveShadow = true;
           scene.add(road);
           // 2026-08-06: the world ground is shared with forests and deserts,
@@ -6598,6 +6732,8 @@ async function main() {
       }
       keepClear.push([_sp.x, _sp.z, 12]);     // the hero starts in a clearing, the camera behind them too
       if (GARDEN) for (let gz = GARDEN.Z0; gz <= GARDEN.Z1; gz += 4) keepClear.push([0, gz, 11]);   // the plot and a margin round it
+      if (MONK) { for (let gz = MONK.Z0 - 6; gz <= MONK.Z1; gz += 3) keepClear.push([0, gz, 4.5]); for (let gz = MONK.Z1 - 4; gz <= MONK.Z1 + MONK.PL + 2; gz += 5) for (let gx = -15; gx <= 15; gx += 6) keepClear.push([gx, gz, 5]); }
+      if (ROWS) for (let gz = ROWS.Z0 - 2; gz <= ROWS.BLD[1] + 8; gz += 6) for (let gx = -ROWS.X1; gx <= ROWS.X1 + 0.1; gx += 7) keepClear.push([gx, gz, 6.5]);
       if (WEST) for (let wz = WEST.Z0 - 6; wz <= WEST.Z1 + 10; wz += 6) keepClear.push([0, wz, WEST.FX + 16]);
       if (VILLAGE) keepClear.push([VILLAGE.GC[0], VILLAGE.GC[1], 26], [0, 3, 6]);
       if (GRAVE) for (let gz = GRAVE.Z0; gz <= GRAVE.Z1; gz += 5) keepClear.push([0, gz, 20]);   // no wood inside the railings
@@ -6724,7 +6860,7 @@ async function main() {
           trees: new Float32Array(T), shadows: true,
         });
         // each kind is as solid as it is big: [half height, radius] per scale
-        const SOLID = { rock: [0.5, 0.8], boulder: [1.4, 2.2], mesa: [3.2, 4.5], cactus: [2.4, 0.35], crystal: [1.0, 0.7] };
+        const SOLID = { rock: [0.5, 0.8], boulder: [1.4, 2.2], mesa: [3.2, 4.5], cactus: [2.4, 0.35], crystal: [1.0, 0.7], redwood: [8, 1.5] };
         for (const [x, y, z, s, kk] of colliders) {
           const [hh, rr] = SOLID[kk] || [1.6, 0.32];
           world.createCollider(RAPIER.ColliderDesc.cylinder(hh * s, rr * s).setTranslation(x, y + hh * s, z));
@@ -6915,6 +7051,8 @@ async function main() {
           x = (rng() - 0.5) * gsize * 0.9; z = (rng() - 0.5) * gsize * 0.9; tries++;
         } while ((Math.hypot(x, z) < sct.min_dist_m || pathDist(x, z) < _corr
                   || inBldg(x, z) || (GARDEN && GARDEN.inPlot(x, z, 1.6)) || (WEST && WEST.inTown(x, z, 1))
+                  || (ROWS && (ROWS.inField(x, z, 1.5) || ROWS.inYard(x, z, 2) || ROWS.track(x, z)))
+                  || (MONK && (MONK.onStair(x, z, 1.5) || MONK.onTop(x, z, 2)))
                   || (VILLAGE && (VILLAGE.inCottage(x, z, 1.5) || VILLAGE.lane(x, z) || Math.hypot(x - VILLAGE.GC[0], z - VILLAGE.GC[1]) < 5))
                   || (GRAVE && (GRAVE.inYard(x, z, 2) || GRAVE.aisle(x, z)))
                   || roadDist(x, z) < 7.5
@@ -8394,6 +8532,8 @@ async function main() {
           if (inBldg(x, z, 0.6)) d = 0;
           if (GARDEN && GARDEN.inPlot(x, z, 0.2)) { if (GARDEN.bare(x, z)) d = 0; else { h *= 0.35; dry *= 0.3; } }   // a mown garden lawn
           if (WEST && WEST.inTown(x, z, 0)) d = 0;
+          if (MONK && (MONK.onStair(x, z, 0.2) || MONK.onTop(x, z, 0))) d = 0;
+          if (ROWS && (ROWS.inField(x, z, 0.3) || ROWS.track(x, z) || ROWS.inYard(x, z, 0))) { if (ROWS.soil || ROWS.track(x, z) || ROWS.inYard(x, z, 0)) d = 0; else { h *= 0.4; dry *= 0.4; } }
           if (VILLAGE && (VILLAGE.inCottage(x, z, 0.4) || VILLAGE.lane(x, z))) d = 0;
           if (GRAVE && (GRAVE.aisle(x, z) || GRAVE.onStone(x, z, 0.05))) d = 0;
           else if (GRAVE && GRAVE.inYard(x, z, 0)) { h *= 0.7; dry = Math.max(dry, 0.35); }     // rank, half-dead churchyard grass
@@ -8596,6 +8736,8 @@ async function main() {
         if (inBldg(x, z, 0.5)) continue;                             // not through floors
         if (GARDEN && GARDEN.inPlot(x, z, 0.3)) continue;              // a kept garden: no tufts in the plot
         if (WEST && WEST.inTown(x, z, 0)) continue;
+        if (ROWS && (ROWS.inField(x, z, 0.3) || ROWS.track(x, z) || ROWS.inYard(x, z, 0))) continue;
+        if (MONK && (MONK.onStair(x, z, 0.3) || MONK.onTop(x, z, 0))) continue;
         if (VILLAGE && (VILLAGE.inCottage(x, z, 0.4) || VILLAGE.lane(x, z))) continue;
         if (GRAVE && (GRAVE.aisle(x, z) || GRAVE.onStone(x, z, 0.1))) continue;
         const _rg = window.__regionAt && window.__regionAt(x, z);
@@ -8953,6 +9095,7 @@ async function main() {
       if (o.kind === 'accuse') return `Name ${o.label || 'the killer'}. E questions a suspect, Y accuses them`;
       if (o.kind === 'serve') return `Serve ${o.count} ${o.label || 'orders'}. E makes a drink at a station and hands it over`;
       if (o.kind === 'repair' && /\b(trees?|pines?|oaks?|logs?|timber)\b/.test(String(o.label || ''))) return `Chop down ${o.count} ${o.label}. Hold E at each marked trunk`;
+      if (o.kind === 'repair' && /\bhives?\b/.test(String(o.label || ''))) return `Check ${o.count} ${o.label}. Hold E at each one`;
       if (o.kind === 'repair') return /fire|flame|blaze|burn/.test(String(o.label || '')) ? `Put out ${o.count} ${o.label}. Hold E to spray each one`
         : /package|parcel|deliver|letter|mail|pizza|crate|box|supplies|medicine|food|meal/.test(String(o.label || '')) ? `Deliver ${o.count} ${o.label}. Hold E over each pad to drop one`
         : `Fix ${o.count} ${o.label || 'broken panels'}. Hold E at each one`;
@@ -9054,6 +9197,7 @@ async function main() {
       // the guide steps in once the reveal is down, and only on a first run
       if (!__fmGuided && !/[?&]noguide=1/.test(location.search)) setTimeout(() => { try { __fm.start(0); } catch (e) {} }, 3100);
       gameStarted = true;
+      window.__hostileGrace = performance.now() + 8000;   // eight seconds to look round before anything charges (2026-10-07)
       if (window.__banPend) { const bp = window.__banPend; window.__banPend = null; setTimeout(() => { try { window.__fsBanner(bp[0], bp[1]); } catch (e) {} }, 3200); }
       runT0 = performance.now();
       sfx('step');                        // gesture unlocks WebAudio + confirms start
@@ -9099,7 +9243,18 @@ async function main() {
         // SkeletonUtils.clone — plain clone() breaks skinned meshes (gliding)
         const _shipNpc = /(^|\s)(pirate ship|ship|galleon|frigate|warship|man-o-war|brig)s?$/i.test(String(ent.name || '').trim());
         const _kartNpc = ent.behavior === 'vehicle' && SPEC.player && SPEC.player.car_params && SPEC.player.car_params.type === 'kart';
-        const inst = _kartNpc ? makeKart(null, npcs.length + 1) : _shipNpc ? buildShip({ seed: (SPEC.seed || 1) + npcs.length * 13 + 5, flag: /pirate/i.test(String(SPEC.player && SPEC.player.name || '')) ? 'navy' : 'pirate',
+        // RIVAL CARS ARE BUILT LIKE YOURS (2026-10-07): a field of plain "cars"
+        // loaded the generated car.glb, a melted silver shell with a smeared
+        // seat for a windscreen and pink lamps, parked beside the player's
+        // built car. A rival named only as a car is built by the same code,
+        // its own shape and paint.
+        const _carNpc = ent.behavior === 'vehicle' && !_kartNpc && !(SPEC.player && SPEC.player.ride) && SPEC.player && SPEC.player.car_params
+          && /^(?:(?:rival|race|racing|sports|street|muscle|police)\s+)?(?:car|racer|rival|racecar)s?$/i.test(String(ent.name || '').trim());
+        const _carK = npcs.length;
+        const inst = _kartNpc ? makeKart(null, npcs.length + 1)
+                   : _carNpc ? buildCar({ type: ['sports', 'coupe', 'sedan', 'sports', 'compact', 'coupe'][_carK % 6],
+                                          paint: [0x1d4fd8, 0xf2c230, 0x1e1e22, 0xe8e8ea, 0x2fae5a, 0xe86a1a][_carK % 6] })
+                   : _shipNpc ? buildShip({ seed: (SPEC.seed || 1) + npcs.length * 13 + 5, flag: /pirate/i.test(String(SPEC.player && SPEC.player.name || '')) ? 'navy' : 'pirate',
                                             hull: [0x4a3a30, 0x5a2e1e, 0x3e3a36][npcs.length % 3], band: [0x2a4a8a, 0x1e1e1e, 0xd8b030][npcs.length % 3] })
                                 : skClone(gltf.scene);
         hardenAlpha(inst);
@@ -9135,15 +9290,15 @@ async function main() {
         });
         const box = new THREE.Box3().setFromObject(inst);
         const h = Math.max(box.max.y - box.min.y, 1e-3);
-        if (!_kartNpc) inst.scale.multiplyScalar((_shipNpc ? Math.max(ent.height_m || 0, 13) : (ent.height_m || 1.0)) / h);   // a galleon stands 13 m to the masthead; a kart is built in metres
+        if (!_kartNpc && !_carNpc) inst.scale.multiplyScalar((_shipNpc ? Math.max(ent.height_m || 0, 13) : (ent.height_m || 1.0)) / h);   // a galleon stands 13 m to the masthead; a kart is built in metres
         const _rideR = ent.behavior === 'vehicle' && SPEC.player && SPEC.player.ride;   // rivals ride boards like the hero
         const _vessel = /(^|\s)(ship|boat|galleon|frigate|schooner|sloop|warship|brig|yacht|canoe|raft|sailboat)s?$/i.test(String(ent.name || '').trim());
         alignLongAxis(inst, (ent.behavior === 'vehicle' && !_rideR) || _vessel);   // rivals drive nose-first too, ships sail bow-first
-        if (!_kartNpc) polishVehiclePaint(inst, ent.behavior === 'vehicle' && !_rideR);
+        if (!_kartNpc && !_carNpc) polishVehiclePaint(inst, ent.behavior === 'vehicle' && !_rideR);
         // DENSITY ARC (2026-07-29): kill the clone army — each rival vehicle
         // gets its own paint hue (racing-field palette), cloned materials so
         // the player's car is untouched. (A kart is painted at build: its own colours.)
-        if (ent.behavior === 'vehicle' && !_kartNpc) {
+        if (ent.behavior === 'vehicle' && !_kartNpc && !_carNpc) {
           // r6 FIX: TRELLIS cars carry paint in the TEXTURE (material.color
           // stays white) so the old HSL shift never fired — rivals stayed a
           // clone army. Hue-rotate the diffuse texture itself via a one-time
@@ -9190,7 +9345,21 @@ async function main() {
         const holder = new THREE.Group();
         inst.position.y = -b2.min.y;
         holder.add(inst);
-        if (_rideR) { holder.add(makeBoard(String(SPEC.player.ride), npcs.length + 1)); inst.position.y += 0.07;   // a rival on a board too
+        // THE CAST FACED BACKWARDS (2026-10-07). The hero was found walking
+        // backwards in August: these bodies are built with their front on
+        // local -Z, and the hero's holder took a half turn for it. The NPCs
+        // never did, so every person and animal that moved (ninjas charging,
+        // ghosts fleeing, guards on their beat, dogs, mice) went backwards, and
+        // a guide turning to greet you showed you their back. Measured with
+        // tools/shotgate/facingprobe.mjs: -1.00 on every one. Things built to
+        // face their travel (vehicles, ships, karts) keep their own heading.
+        // (later the same day) a four-legged rig is the exception: the quadruped
+        // bake builds its body head-first along +Z already (its bone labels are
+        // swapped front to back, its facing is right), so only people and
+        // unrigged bodies take the turn; a fox, a dog or a mouse keeps its own
+        let _quadRig = false; inst.traverse(o => { if (o.isBone && /^thigh_/i.test(o.name)) _quadRig = true; });
+        if (!((ent.behavior === 'vehicle' && !_rideR) || _vessel || _shipNpc || _kartNpc || _quadRig)) inst.rotation.y += Math.PI;
+        if (_rideR) { const _bdR = makeBoard(String(SPEC.player.ride), npcs.length + 1); _bdR.rotation.y = Math.PI; holder.add(_bdR); inst.position.y += 0.07;   // a rival on a board too
           if (!/ski|sled/.test(String(SPEC.player.ride))) inst.rotation.y += Math.PI / 2; }
         let startYaw = rngN() * Math.PI * 2;
         if (ent.behavior === 'vehicle' && PATH && PATH.length > 1) {
@@ -9740,7 +9909,18 @@ async function main() {
         }
         const pSafe = inSafeZone(playerPos.x, playerPos.z);
         const nSafe = inSafeZone(n.obj.position.x, n.obj.position.z);
-        if (pSafe && (d < 14 || nSafe)) {
+        // A GRACE AT THE START (2026-10-07): an anime game's boss charged from
+        // 22 m the moment play began and the hero was dead before the intro
+        // card faded. For the first eight seconds a hostile keeps to its own
+        // business unless the player comes within six metres or strikes first.
+        const _grace = window.__hostileGrace && performance.now() < window.__hostileGrace && d > 6 && !n._struck;
+        if (_grace) {
+          if (!n.target || Math.hypot(n.target[0] - n.obj.position.x, n.target[1] - n.obj.position.z) < 0.6) {
+            const a0 = Math.atan2(n.obj.position.x - playerPos.x, n.obj.position.z - playerPos.z) + (rngN() - 0.5) * 1.6;
+            n.target = [n.obj.position.x + Math.sin(a0) * 5, n.obj.position.z + Math.cos(a0) * 5]; }
+          tx = n.target[0]; tz = n.target[1];
+        }
+        else if (pSafe && (d < 14 || nSafe)) {
           // the firelight holds them: back off to the edge of the glow
           const ang = Math.atan2(n.obj.position.x - pSafe.x,
                                  n.obj.position.z - pSafe.z);
@@ -10034,7 +10214,7 @@ async function main() {
   // (and a shift at the counter ends when the last order is served)
   else if (goalPos && steps.length && !['reach', 'defend', 'accuse', 'serve', 'repair'].includes(steps[steps.length - 1].kind)
            && !(SPEC.player.mode === 'swim' && SPEC.player.buoyant && steps[steps.length - 1].kind === 'defeat'))
-    steps.push({ kind: 'reach', label: GARDEN ? 'the shed' : WEST ? "the sheriff's office" : GRAVE ? 'the mausoleum' : 'the beacon', count: 1 });
+    steps.push({ kind: 'reach', label: GARDEN ? 'the shed' : ROWS ? (ROWS.crop === 'vine' ? 'the winery' : 'the farmhouse') : WEST ? "the sheriff's office" : GRAVE ? 'the mausoleum' : 'the beacon', count: 1 });
   let stepIdx = -1, kills = 0, won = false, lost = false, raceFinishers = 0;
   const collectibles = [];
   const rngC = mulberry32(SPEC.seed + 77);
@@ -10176,6 +10356,9 @@ async function main() {
       let cx, cz, cy = null, planted = false, onLawn = false;
       const _gslot = GARDEN && GARDEN.VEG.test(String(step.label || '').toLowerCase()) ? GARDEN.take() : null;
       const _cslot = !_gslot && CANDY && CANDY.SWEET.test(String(step.label || '').toLowerCase()) ? CANDY.take() : null;
+      // (2026-10-07) grapes are picked off the vines, at the height they hang
+      const _rslot = !_gslot && !_cslot && ROWS && ROWS.crop === 'vine' && /\b(grapes?|bunch(?:es)?)\b/.test(String(step.label || '').toLowerCase()) ? ROWS.take() : null;
+      if (_rslot && !tpl) s = makeGrapes(i);
       if (CANDY && CANDY.SWEET.test(String(step.label || '').toLowerCase())) { s = makeSweet(i); }
       if (_gslot && !tpl) s = makeVeg(step.label);
       const _bloom = /\b(nectar|pollen|honey ?dew)\b/.test(String(step.label || '').toLowerCase());
@@ -10183,11 +10366,17 @@ async function main() {
       // litter lies where it was dropped; a chest sits on the ground (2026-10-07)
       const _litter = /\b(trash|litter|rubbish|garbage|junk|bottles?|cans?|waste)\b/.test(String(step.label || '').toLowerCase());
       const _chest = !_litter && /\b(chests?|treasure|coffers?|strongbox(es)?|loot)\b/.test(String(step.label || '').toLowerCase());
+      const _coin = !_chest && !_litter && /\b(coins?|doubloons?|gold pieces?|tokens?|medallions?)\b/.test(String(step.label || '').toLowerCase());
       if (_litter) s = makeLitter(i);
       else if (_chest) s = makeChest(i);
+      else if (_coin && !tpl) s = makeCoin(i);
+      const _mush = !tpl && /\b(mushrooms?|toadstools?|fung(?:i|us)|truffles?)\b/.test(String(step.label || '').toLowerCase());
+      if (_mush) s = makeMushroom(i);
       // a third coordinate is the ground the pickup stands on (a platform's top)
       if (_chest && WRECK) {
         [cx, cz] = WRECK.spot();                       // what was in its hold, scattered round it
+      } else if (_rslot) {
+        cx = _rslot.x; cz = _rslot.z; cy = hAt(cx, cz) + 0.6;
       } else if (_cslot) {
         cx = _cslot.x; cz = _cslot.z; cy = _cslot.top ? _cslot.top.top - 0.6 : null;   // on a cupcake: just above the frosting
       } else if (_gslot) {
@@ -10210,13 +10399,13 @@ async function main() {
       if (VIEW === 'side') cz = 0;        // side-scroller: pickups on the lane
       // grown things sit where they grow: a carrot half in the soil, a clover
       // in the grass, not a metre up in the air (2026-10-06)
-      const _grown = planted || onLawn || _bloom || _litter || _chest;     // a flower stands in the grass, litter lies on it
+      const _grown = planted || onLawn || _bloom || _litter || _chest || _mush || !!_rslot;     // a flower stands in the grass, litter lies on it
       let baseY = (cy !== null ? cy : hAt(cx, cz)) + (_evidence || _grown ? 0.0 : 1.0 + rngC() * 0.6);
       if (_grown) {
         // a carrot the size of a carrot, not of the bed it grows in
         { const b0 = new THREE.Box3().setFromObject(s), sz = b0.getSize(new THREE.Vector3());
           const big = /pumpkin|squash|gourd|melon|cabbage/.test(String(step.label || '').toLowerCase());
-          const md = Math.max(sz.x, sz.y, sz.z); if (md > 0) s.scale.multiplyScalar((planted ? (big ? 0.55 : 0.3) : _bloom ? 0.72 : _chest ? 0.85 : _litter ? 0.24 : 0.26) / md); }
+          const md = Math.max(sz.x, sz.y, sz.z); if (md > 0) s.scale.multiplyScalar((planted ? (big ? 0.55 : 0.3) : _rslot ? 0.26 : _bloom ? 0.72 : _chest ? 0.85 : _litter ? 0.24 : _mush ? 0.34 : 0.26) / md); }
         const bb = new THREE.Box3().setFromObject(s), hh = bb.max.y - bb.min.y;
         const _sits = /pumpkin|squash|gourd|melon|cabbage/.test(String(step.label || '').toLowerCase());
         baseY += -bb.min.y - (planted ? hh * (_sits ? 0.04 : 0.3) : 0) + (onLawn ? 0.02 : 0);
@@ -11039,6 +11228,57 @@ async function main() {
   }
   // A letterbox at a gate: a box on a post, a door, a flag that goes up when
   // the letter is in. The same interface as a delivery pad.
+  // a beehive (2026-10-07): a painted wooden box hive, a brood box and a
+  // super on a stand, a tin lid, bees at the entrance; checking it lifts
+  // the lid and the bees boil up out of it before it is closed again
+  function makeHiveBox(i) {
+    const g = new THREE.Group(), r = mulberry32(i * 17 + 3);
+    const M = (o) => { const m = new THREE.MeshStandardMaterial(o); m.userData.noAutoTex = true; return m; };
+    const tints = [0xf2efe6, 0x9cc3d8, 0xf0d470, 0xe8e2d0, 0xb8d4a8, 0xf2b8a0];
+    const boxM = M({ color: tints[i % tints.length], roughness: 0.75 }), woodM = M({ color: 0x6b5238, roughness: 0.9 }), lidM = M({ color: 0x9aa0a6, roughness: 0.45, metalness: 0.55 });
+    for (const x of [-0.2, 0.2]) { const rail = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.07, 0.64), woodM); rail.position.set(x, 0.32, 0); g.add(rail);
+      for (const z of [-0.26, 0.26]) { const leg = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.3, 0.07), woodM); leg.position.set(x, 0.15, z); g.add(leg); } }
+    const b1 = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.26, 0.56), boxM); b1.position.y = 0.49; g.add(b1);
+    const b2 = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.18, 0.56), boxM); b2.position.y = 0.715; g.add(b2);
+    const seam = new THREE.Mesh(new THREE.BoxGeometry(0.505, 0.012, 0.565), woodM); seam.position.y = 0.622; g.add(seam);
+    for (const sx of [-1, 1]) { const hh = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.03, 0.14), woodM); hh.position.set(sx * 0.255, 0.53, 0); g.add(hh); }
+    const ent = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.025, 0.02), M({ color: 0x14110c })); ent.position.set(0, 0.38, 0.285); g.add(ent);
+    const board = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.015, 0.1), woodM); board.position.set(0, 0.365, 0.33); g.add(board);
+    const lid = new THREE.Group(); lid.position.set(0, 0.805, -0.3); g.add(lid);
+    const top = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.06, 0.62), lidM); top.position.set(0, 0.03, 0.3); lid.add(top);
+    const beeM = new THREE.MeshBasicMaterial({ color: 0x1c160a });
+    const bees = [];
+    for (let k = 0; k < 12; k++) { const b = new THREE.Mesh(new THREE.SphereGeometry(0.011, 5, 4), beeM); b.scale.set(1, 0.8, 1.7); g.add(b);
+      bees.push({ b, w: 1.4 + r() * 2.2, p: r() * 6.28, rr: 0.12 + r() * 0.3, h: 0.3 + r() * 0.55 }); }
+    const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.3, 14, 12, 1, true),
+      new THREE.MeshBasicMaterial({ color: 0xffd860, transparent: true, opacity: 0.16, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+    beam.position.y = 8.2; g.add(beam);
+    g.traverse(o => { if (o.isMesh && o !== beam && o.material !== beeM) { o.castShadow = true; o.receiveShadow = true; } });
+    let open = 0, done = false;
+    g.userData.pad = {
+      tick: (t, d) => { beam.visible = !d;
+        const sw = done && open < 1 ? Math.sin(open * Math.PI) : 0;
+        if (done && open < 1) { open = Math.min(1, open + 0.012); lid.rotation.x = -1.05 * Math.sin(open * Math.PI); }
+        for (const q of bees) { const a = t * q.w + q.p, R0 = q.rr * (1 + sw * 2.2);
+          q.b.position.set(Math.cos(a) * R0, q.h + sw * (0.5 + q.rr), (sw > 0.05 ? 0 : 0.32) + Math.sin(a) * R0); q.b.rotation.y = -a; } },
+      done: () => { done = true; },
+    };
+    return g;
+  }
+  // a bunch of grapes to pick: dark (or green, if the sentence says white)
+  // berries in a hanging cone on a short woody stalk
+  function makeGrapes(i) {
+    const g = new THREE.Group(), r = mulberry32(i * 29 + 11);
+    const M = (o) => { const m = new THREE.MeshStandardMaterial(o); m.userData.noAutoTex = true; return m; };
+    const white = /\b(white|green) grapes?\b/.test(String(SPEC.prompt || '').toLowerCase());
+    const geo = [];
+    for (let row = 0; row < 7; row++) { const n = Math.max(1, 6 - row), r0 = 0.012 + (6 - row) * 0.009, y = -row * 0.032;
+      for (let j = 0; j < n; j++) { const a = j / n * 6.28 + row * 0.7 + r() * 0.3; const s = new THREE.SphereGeometry(0.019 + r() * 0.004, 8, 6); s.translate(Math.cos(a) * r0, y, Math.sin(a) * r0); geo.push(s); } }
+    const bunch = new THREE.Mesh(mergeGeometries(geo), M({ color: white ? 0xb4c060 : 0x3a2246, roughness: 0.28 })); bunch.position.y = 0.24; g.add(bunch);
+    const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.006, 0.06, 4), M({ color: 0x5a4a2a })); stem.position.y = 0.27; g.add(stem);
+    g.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+    return g;
+  }
   function makeLetterbox(seed) {
     const g = new THREE.Group(), r = mulberry32(seed * 13 + 5);
     const M = (o) => { const m = new THREE.MeshStandardMaterial(o); m.userData.noAutoTex = true; return m; };
@@ -11079,6 +11319,47 @@ async function main() {
     else { const c = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.03, 0.1, 12, 1, true), M({ color: 0xf2efe6, roughness: 0.8, side: THREE.DoubleSide }));
       c.rotation.z = Math.PI / 2; c.position.y = 0.035; g.add(c);
       const band = new THREE.Mesh(new THREE.CylinderGeometry(0.036, 0.034, 0.03, 12, 1, true), M({ color: 0x3a6a3a, side: THREE.DoubleSide })); band.rotation.z = Math.PI / 2; band.position.y = 0.035; g.add(band); }
+    g.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+    return g;
+  }
+  // a coin (2026-10-07): "collect ten golden coins" was ten glowing orbs.
+  // A thick gold disc with a raised rim and a stamped star, standing on edge
+  // so it turns in the light as it spins.
+  function makeCoin(i) {
+    const g = new THREE.Group();
+    const c = document.createElement('canvas'); c.width = c.height = 128; const x = c.getContext('2d');
+    const gr = x.createRadialGradient(64, 56, 6, 64, 64, 64); gr.addColorStop(0, '#fff2b0'); gr.addColorStop(0.6, '#e8b830'); gr.addColorStop(1, '#a87818');
+    x.fillStyle = gr; x.fillRect(0, 0, 128, 128);
+    x.strokeStyle = 'rgba(120,80,10,0.8)'; x.lineWidth = 6; x.beginPath(); x.arc(64, 64, 52, 0, 7); x.stroke();
+    x.fillStyle = 'rgba(150,100,15,0.85)'; x.beginPath();
+    for (let k = 0; k < 10; k++) { const a = -Math.PI / 2 + k * Math.PI / 5, r = k % 2 ? 14 : 32; x.lineTo(64 + Math.cos(a) * r, 64 + Math.sin(a) * r); }
+    x.closePath(); x.fill();
+    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+    const face = new THREE.MeshStandardMaterial({ map: t, metalness: 0.9, roughness: 0.25, emissive: 0x6a4a00, emissiveIntensity: 0.35 });
+    const rim = new THREE.MeshStandardMaterial({ color: 0xd8a828, metalness: 0.95, roughness: 0.3, emissive: 0x5a3c00, emissiveIntensity: 0.3 });
+    face.userData.noAutoTex = true; rim.userData.noAutoTex = true;
+    const disc = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 0.04, 32), [rim, face, face]);
+    disc.rotation.x = Math.PI / 2; disc.position.y = 0.26; disc.castShadow = true; g.add(disc);
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.215, 0.016, 8, 32), rim); ring.position.y = 0.26; ring.castShadow = true; g.add(ring);
+    return g;
+  }
+  // a mushroom (2026-10-07): a cluster of two or three, a cap on a stem, red
+  // with white spots or brown and tan, sitting in the grass (glowing orbs before)
+  function makeMushroom(i) {
+    const g = new THREE.Group(), r = mulberry32(i * 23 + 11), red = i % 3 !== 2;
+    const flat = ['lowpoly', 'pixel', 'papercraft'].includes(SPEC.style || '');
+    const M = (o) => { const m = new THREE.MeshStandardMaterial(Object.assign({ roughness: 0.75, flatShading: flat }, o)); m.userData.noAutoTex = true; return m; };
+    const capM = M({ color: red ? 0xc8281e : 0x8a5a32 }), stemM = M({ color: 0xece4d2 }), spotM = M({ color: 0xfaf6ee });
+    const n = 1 + Math.floor(r() * 3);
+    for (let k = 0; k < n; k++) {
+      const s = k === 0 ? 1 : 0.55 + r() * 0.3, ox = k === 0 ? 0 : (r() - 0.5) * 0.22, oz = k === 0 ? 0 : (r() - 0.5) * 0.22;
+      const st = new THREE.Mesh(new THREE.CylinderGeometry(0.035 * s, 0.05 * s, 0.16 * s, flat ? 6 : 12), stemM); st.position.set(ox, 0.08 * s, oz); g.add(st);
+      const cap = new THREE.Mesh(new THREE.SphereGeometry(0.11 * s, flat ? 7 : 18, flat ? 4 : 10, 0, Math.PI * 2, 0, Math.PI / 2), capM);
+      cap.scale.y = 0.75; cap.position.set(ox, 0.155 * s, oz); cap.rotation.z = (r() - 0.5) * 0.25; g.add(cap);
+      if (red) for (let q = 0; q < 6; q++) { const a = q * 1.05 + r(), el = 0.35 + r() * 0.7;
+        const sp = new THREE.Mesh(new THREE.SphereGeometry(0.014 * s, 6, 4), spotM);
+        sp.position.set(ox + Math.cos(a) * Math.cos(el) * 0.105 * s, 0.155 * s + Math.sin(el) * 0.08 * s, oz + Math.sin(a) * Math.cos(el) * 0.105 * s); g.add(sp); }
+    }
     g.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
     return g;
   }
@@ -11359,6 +11640,452 @@ async function main() {
     }
     window.__west = { buildings: Wt.bld.length, signs: signs.map(s => s.b.name) };
   }
+  // ── BASALT AND SEA STACKS (2026-10-07) ─────────────────────────────────
+  // "a photographer hikes a black sand beach under basalt cliffs in iceland
+  // to the sea stacks at dusk" was a yellow beach under umbrella pines. The
+  // Reynisfjara coast is basalt: black sand, a cliff of hexagonal columns
+  // stepping down to the beach like organ pipes, and offshore the stacks,
+  // dark pillars of rock standing out of the surf. They stand at the goal.
+  if (!INTERIOR && BASALT && LVL && LVL.goal) {
+    const rB = mulberry32((SPEC.seed || 1) + 6464);
+    const gx = LVL.goal[0], gz = LVL.goal[1], gl = Math.hypot(gx, gz) || 1, dx = gx / gl, dz = gz / gl, lx = -dz, lz = dx;
+    const basT = (() => { const c = document.createElement('canvas'); c.width = 64; c.height = 256; const x = c.getContext('2d');
+      x.fillStyle = '#3a3a3c'; x.fillRect(0, 0, 64, 256);
+      for (let i = 0; i < 1800; i++) { const l = 14 + rB() * 26; x.fillStyle = `rgba(${l},${l},${l + 2},0.5)`; x.fillRect(rB() * 64, rB() * 256, 1 + rB() * 2, 2 + rB() * 10); }
+      for (let i = 0; i < 9; i++) { x.fillStyle = 'rgba(0,0,0,0.35)'; x.fillRect(0, rB() * 256, 64, 1 + rB() * 2); }   // the cracks across a column
+      for (let i = 0; i < 120; i++) { x.fillStyle = `rgba(150,160,140,${rB() * 0.25})`; x.fillRect(rB() * 64, rB() * 256, 2, 2); }   // lichen
+      const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace; return t; })();
+    const basM = new THREE.MeshStandardMaterial({ map: basT, color: 0x9a9a9c, roughness: 0.82, flatShading: true }); basM.userData.noAutoTex = true;
+    const cols = [];
+    const prism = (x, z, r, h, y0, tilt) => { const g = new THREE.CylinderGeometry(r * 0.96, r, h, 6); g.translate(0, h / 2, 0);
+      if (tilt) g.rotateZ(tilt); g.rotateY(rB() * 1.05); g.translate(x, y0, z); const uv = g.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setY(i, uv.getY(i) * h / 6); cols.push(g); };
+    // the stacks: a few pillars beyond the goal. A sheaf of columns read as a
+    // city skyline; a stack is one weathered monolith, tapering, ragged, with
+    // a few fallen-off columns round its foot
+    const monos = [];
+    for (let k = 0; k < 4; k++) {
+      const off = (k - 1.5) * 13 + (rB() - 0.5) * 5, out = 16 + k % 2 * 9 + rB() * 6;
+      const cx = gx + dx * out + lx * off, cz = gz + dz * out + lz * off, base = hAt(cx, cz) - 3;
+      const H = 20 + rB() * 30, R0 = 3.4 + rB() * 2.6;
+      // a rough column: wider at the foot, ragged in plan, its top broken off, not a point
+      const g = new THREE.CylinderGeometry(R0 * 0.62, R0, H, 14, 16), pa = g.attributes.position;
+      const hs = (a, b2, c) => { const v = Math.sin(a * 12.9898 + b2 * 78.233 + c * 37.719 + k * 3.1) * 43758.5453; return v - Math.floor(v); };
+      const lean = (rB() - 0.5) * 0.1;
+      for (let i = 0; i < pa.count; i++) { const x = pa.getX(i), y = pa.getY(i), z = pa.getZ(i), t = (y + H / 2) / H, ang = Math.atan2(z, x);
+        const f = 1 + 0.22 * (hs(Math.round(ang * 4), Math.round(t * 16), 1) - 0.5) + 0.12 * Math.sin(ang * 3 + t * 7 + k) + 0.08 * Math.sin(ang * 7 - t * 13);
+        const top = t > 0.98 ? (hs(Math.round(x * 2), Math.round(z * 2), 2) - 0.5) * H * 0.12 : 0;
+        pa.setXYZ(i, x * f + lean * t * H, y + H / 2 + top, z * f); }
+      g.computeVertexNormals(); g.translate(cx, base, cz); monos.push(g);
+      for (let i = 0; i < 7; i++) { const a = rB() * 6.28, d = R0 * (0.9 + rB() * 0.5); prism(cx + Math.cos(a) * d, cz + Math.sin(a) * d, 0.6 + rB() * 0.4, 2 + rB() * 5, base, (rB() - 0.5) * 0.3); }
+      world.createCollider(RAPIER.ColliderDesc.cylinder(H / 2, R0 * 0.8).setTranslation(cx, base + H / 2, cz));
+    }
+    { const stoneM = new THREE.MeshStandardMaterial({ color: 0x4a4a4e, roughness: 0.92, flatShading: true }); stoneM.userData.noAutoTex = true;
+      const sm2 = new THREE.Mesh(mergeGeometries(monos.map(g => g.index ? g.toNonIndexed() : g)), stoneM); sm2.castShadow = true; sm2.receiveShadow = true; scene.add(sm2); }
+    // the organ: a stepped bank of columns on the land side of the goal, the tallest at the back
+    const ox = gx - dx * 4 + lx * 16, oz = gz - dz * 4 + lz * 16;
+    for (let i = 0; i < 90; i++) {
+      const u = (rB() - 0.5) * 22, v = rB() * 10;
+      const x = ox + lx * u - dx * v, z = oz + lz * u - dz * v, y = hAt(x, z) - 0.4;
+      const h = 0.35 + v * 0.22 + rB() * 0.7 - Math.abs(u) * 0.04;   // the basalt steps people stand on, knee to head high: a tall bank read as a skyline
+      if (h > 0.8) prism(x, z, 0.55 + rB() * 0.2, h, y, 0);
+    }
+    world.createCollider(RAPIER.ColliderDesc.cuboid(11, 6, 5).setTranslation(ox - dx * 5, hAt(ox, oz) + 4, oz - dz * 5)
+      .setRotation({ w: Math.cos(Math.atan2(lx, lz) / 2), x: 0, y: Math.sin(Math.atan2(lx, lz) / 2), z: 0 }));
+    const mesh = new THREE.Mesh(mergeGeometries(cols.map(g => g.index ? g.toNonIndexed() : g)), basM);
+    mesh.castShadow = true; mesh.receiveShadow = true; scene.add(mesh);
+    window.__basalt = { stacks: 4, columns: cols.length };
+  }
+
+  // ── A TORNADO (2026-10-07) ──────────────────────────────────────────────
+  // "a storm chaser crosses kansas wheat fields ... before the tornado" had
+  // no tornado at all: the planner had cast it as a creature. A tornado is
+  // the sky coming down: a dark funnel of turning cloud from the storm base
+  // to a churning skirt of dust and debris on the ground, far enough off to
+  // be the whole horizon's business, wandering slowly across the land.
+  if (!INTERIOR && /\b(tornado|twister|funnel cloud|cyclone)\b/.test(String(SPEC.prompt || '').toLowerCase())) {
+    const rT = mulberry32((SPEC.seed || 1) + 9393);
+    const cloudTex = (() => { const c = document.createElement('canvas'); c.width = 256; c.height = 512; const x = c.getContext('2d');
+      x.clearRect(0, 0, 256, 512);
+      for (let i = 0; i < 900; i++) { const px = rT() * 256, py = rT() * 512, r = 6 + rT() * 22, l = 30 + rT() * 30;
+        const g = x.createRadialGradient(px, py, 0, px, py, r); g.addColorStop(0, `rgba(${l + 10},${l + 12},${l + 10},0.35)`); g.addColorStop(1, `rgba(${l},${l},${l},0)`);
+        x.fillStyle = g; x.fillRect(px - r, py - r, r * 2, r * 2); }
+      // diagonal streaks: the cloud is turning
+      x.globalCompositeOperation = 'destination-out';
+      for (let i = 0; i < 60; i++) { x.strokeStyle = `rgba(0,0,0,${0.15 + rT() * 0.25})`; x.lineWidth = 2 + rT() * 6; x.beginPath(); const y0 = rT() * 512; x.moveTo(0, y0); x.lineTo(256, y0 + 60); x.stroke(); }
+      const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace; return t; })();
+    const TH = 120, H0 = 0;
+    const funnel = new THREE.Group();
+    const layers = [];
+    for (let k = 0; k < 3; k++) {
+      // a profile: narrow rope at the ground, flaring into the wall cloud
+      const pts = []; for (let i = 0; i <= 24; i++) { const t = i / 24, rad = 3.2 + k * 0.9 + Math.pow(t, 2.6) * (34 + k * 8) + Math.sin(t * 9 + k) * 0.8; pts.push(new THREE.Vector2(rad, t * TH)); }
+      const g = new THREE.LatheGeometry(pts, 40);
+      const m = new THREE.MeshBasicMaterial({ map: cloudTex.clone(), color: [0x6a6e68, 0x5a5e58, 0x4e524c][k], transparent: true, opacity: 0.78 - k * 0.12,
+        depthWrite: false, side: THREE.DoubleSide, fog: true });
+      m.map.needsUpdate = true; m.map.repeat.set(3 + k, 1.4);
+      const mesh = new THREE.Mesh(g, m); mesh.renderOrder = 3; funnel.add(mesh); layers.push(mesh);
+    }
+    // the debris skirt: dust kicked up round the foot of it
+    const dustTex = (() => { const c = document.createElement('canvas'); c.width = c.height = 64; const x = c.getContext('2d');
+      const g = x.createRadialGradient(32, 32, 0, 32, 32, 32); g.addColorStop(0, 'rgba(120,104,84,0.55)'); g.addColorStop(1, 'rgba(120,104,84,0)'); x.fillStyle = g; x.fillRect(0, 0, 64, 64);
+      return new THREE.CanvasTexture(c); })();
+    const dust = [];
+    for (let i = 0; i < 70; i++) { const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: dustTex, transparent: true, depthWrite: false, opacity: 0.6 }));
+      sp.userData = { a: rT() * 6.28, r: 4 + rT() * 14, h: rT() * 14, w: 0.6 + rT() * 1.2, s: 6 + rT() * 10 }; funnel.add(sp); dust.push(sp); }
+    // bits of the land going up with it
+    const bitG = new THREE.BoxGeometry(0.5, 0.06, 0.3), bitM = new THREE.MeshStandardMaterial({ color: 0x4a3e30, roughness: 0.9 });
+    const bits = new THREE.InstancedMesh(bitG, bitM, 60); bits.frustumCulled = false; funnel.add(bits);
+    const bitD = []; for (let i = 0; i < 60; i++) bitD.push({ a: rT() * 6.28, r: 5 + rT() * 10, h: rT() * 60, w: 0.8 + rT() * 1.4, sp: 3 + rT() * 6 });
+    scene.add(funnel);
+    // where it stands: off to one side of the way, far enough to loom, never on the spawn
+    const side = rT() < 0.5 ? -1 : 1;
+    const path0 = new THREE.Vector3(side * 95, 0, 60), path1 = new THREE.Vector3(side * 55, 0, 150);
+    const BM = new THREE.Matrix4(), BQ = new THREE.Quaternion(), BS = new THREE.Vector3(1, 1, 1), BV = new THREE.Vector3(), BE = new THREE.Euler();
+    let tt = 0;
+    window.__tornado = { obj: funnel, at: () => [+funnel.position.x.toFixed(1), +funnel.position.z.toFixed(1)] };
+    window.__tornadoTick = (dt) => {
+      tt += dt;
+      const u = 0.5 + 0.5 * Math.sin(tt * 0.015);
+      funnel.position.lerpVectors(path0, path1, u);
+      funnel.position.x += Math.sin(tt * 0.11) * 6;
+      funnel.position.y = hAt(funnel.position.x, funnel.position.z) + H0;
+      layers.forEach((l, k) => { l.rotation.y = tt * (0.9 - k * 0.22); l.material.map.offset.y = -tt * (0.05 + k * 0.02); l.rotation.z = Math.sin(tt * 0.3 + k) * 0.04; });
+      for (const sp of dust) { const d = sp.userData; d.a += dt * d.w; sp.position.set(Math.cos(d.a) * d.r, d.h + Math.sin(tt + d.a) * 1.5, Math.sin(d.a) * d.r); sp.scale.setScalar(d.s); }
+      bitD.forEach((d, i) => { d.a += dt * d.w; d.h += dt * d.sp; if (d.h > 70) d.h = 0;
+        const rr2 = d.r + d.h * 0.25;
+        BE.set(tt * d.w, tt * d.sp * 0.3, 0); BQ.setFromEuler(BE);
+        BM.compose(BV.set(Math.cos(d.a) * rr2, d.h, Math.sin(d.a) * rr2), BQ, BS); bits.setMatrixAt(i, BM); });
+      bits.instanceMatrix.needsUpdate = true;
+    };
+  }
+
+  // ── THE MONASTERY, BUILT (see MONK above) ──────────────────────────────
+  if (MONK) {
+    const K = MONK, rk = mulberry32((SPEC.seed || 1) + 5353);
+    const M = (o) => { const m = new THREE.MeshStandardMaterial(o); m.userData.noAutoTex = true; return m; };
+    const tex = (w, h, draw, rep) => { const c = document.createElement('canvas'); c.width = w; c.height = h; draw(c.getContext('2d'), w, h);
+      const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; if (rep) t.wrapS = t.wrapT = THREE.RepeatWrapping; return t; };
+    const stoneT = tex(256, 256, (x, w, h) => { x.fillStyle = '#8a857c'; x.fillRect(0, 0, w, h);
+      for (let yy = 0; yy < h; yy += 32) for (let xx = -(yy % 64); xx < w; xx += 64) { const l = 46 + rk() * 14; x.fillStyle = `hsl(35,${6 + rk() * 6}%,${l}%)`; x.fillRect(xx + 2, yy + 2, 60, 28); }
+      for (let i = 0; i < 3000; i++) { x.fillStyle = `rgba(30,28,24,${rk() * 0.15})`; x.fillRect(rk() * w, rk() * h, 2, 2); } }, true);
+    const stoneM = M({ map: stoneT, roughness: 0.92 });
+    const parts = { stone: [], white: [], maroon: [], gold: [], wood: [], dark: [] };
+    const box = (k, w, h, d, x, y, z, ry) => { const g = new THREE.BoxGeometry(w, h, d); if (ry) g.rotateY(ry); g.translate(x, y, z); parts[k].push(g.index ? g.toNonIndexed() : g); return g; };
+    // the stair: one step every 0.42 m up the crest, each a block on the ridge
+    const RUN = 0.42;
+    let steps = 0;
+    for (let z = K.Z0 - 1; z < K.Z1; z += RUN) {
+      const y = Math.max(K.crest(z + RUN), hAt(0, z + RUN * 0.5));
+      const yb = Math.min(hAt(-1.3, z), hAt(1.3, z), K.crest(z)) - 0.6;
+      const hgt = y + 0.06 - yb;
+      box('stone', 2.6, hgt, RUN + 0.02, 0, yb + hgt / 2, z + RUN / 2);
+      world.createCollider(RAPIER.ColliderDesc.cuboid(1.3, hgt / 2, RUN / 2 + 0.01).setTranslation(0, yb + hgt / 2, z + RUN / 2));
+      steps++;
+      // a parapet every few steps, and a post for the flags every eight metres
+      if (steps % 3 === 0) for (const sd of [-1, 1]) box('stone', 0.32, 0.55, RUN * 3 + 0.04, sd * 1.45, y + 0.22, z - RUN);
+    }
+    // the summit: a paved court
+    { const y0 = K.TOP; box('stone', 30, 0.5, K.PL + 2, 0, y0 - 0.2, K.Z1 + K.PL / 2 - 1);
+      world.createCollider(RAPIER.ColliderDesc.cuboid(15, 0.25, K.PL / 2 + 1).setTranslation(0, y0 - 0.2, K.Z1 + K.PL / 2 - 1)); }
+    // the monastery: battered white walls, a maroon band under a flat roof,
+    // dark trapezoid windows, gold finials; a tower to one side
+    const T = K.TOP, cz = K.Z1 + K.PL * 0.55;
+    for (const [bx, bw, bh, bd] of [[-6, 14, 9, 10], [3.5, 7, 13, 7]]) {
+      const tapered = new THREE.BoxGeometry(bw, bh, bd); { const pa = tapered.attributes.position;
+        for (let i = 0; i < pa.count; i++) if (pa.getY(i) > 0) { pa.setX(i, pa.getX(i) * 0.93); pa.setZ(i, pa.getZ(i) * 0.93); } }
+      tapered.translate(bx, T + bh / 2, cz); parts.white.push(tapered.toNonIndexed());
+      box('maroon', bw * 0.93 + 0.1, 1.3, bd * 0.93 + 0.1, bx, T + bh - 0.6, cz);
+      box('dark', bw * 0.95, 0.25, bd * 0.95, bx, T + bh + 0.1, cz);
+      for (let r = 0; r < Math.floor(bh / 3.4); r++) for (let c = 0; c < Math.floor(bw / 2.6); c++) {
+        const wx = bx - bw * 0.93 / 2 + 1.3 + c * 2.6, wy = T + 2 + r * 3.2, wz = cz - bd * (0.93 + (1 - 0.93) * (1 - (wy - T) / bh)) / 2 - 0.04;
+        box('dark', 1.0, 1.3, 0.12, wx, wy, wz); box('maroon', 1.3, 0.18, 0.16, wx, wy + 0.78, wz); }
+      for (const fx of [-1, 1]) { const g = new THREE.CylinderGeometry(0.12, 0.28, 1.4, 10); g.translate(bx + fx * bw * 0.36, T + bh + 0.9, cz - bd * 0.3); parts.gold.push(g.toNonIndexed()); }
+      world.createCollider(RAPIER.ColliderDesc.cuboid(bw / 2, bh / 2, bd / 2).setTranslation(bx, T + bh / 2, cz));
+    }
+    // a door up the court's steps, with a maroon curtain
+    box('maroon', 2.0, 3.0, 0.15, -6, T + 1.5, cz - 10 * 0.965 / 2 - 0.1);
+    // stupas: white bells on square plinths with a gold spire, at the foot, half way and at the top
+    const stupa = (x, z, s) => { const y = hAt(x, z);
+      box('white', 1.8 * s, 0.9 * s, 1.8 * s, x, y + 0.45 * s, z);
+      const prof = []; for (let i = 0; i <= 12; i++) { const t = i / 12; prof.push(new THREE.Vector2(0.88 * s * Math.sqrt(Math.max(0, 1 - t * t)) + 0.04 * s, t * 1.25 * s)); }   // a dome, broad at its foot
+      const b = new THREE.LatheGeometry(prof, 16); b.translate(x, y + 0.9 * s, z); parts.white.push(b.toNonIndexed());
+      const sp = new THREE.CylinderGeometry(0.04 * s, 0.24 * s, 1.6 * s, 8); sp.translate(x, y + 2.9 * s, z); parts.gold.push(sp.toNonIndexed());
+      world.createCollider(RAPIER.ColliderDesc.cuboid(0.9 * s, 1.2 * s, 0.9 * s).setTranslation(x, y + 1.2 * s, z)); };
+    stupa(-3.6, K.Z0 - 3, 1.0); stupa(3.6, K.Z0 - 3, 1.0); stupa(-11, K.Z1 + 4, 1.3); stupa(11, K.Z1 + 4, 1.3);
+    // the bell pavilion at the cliff edge: four red posts, a roof, a bronze bell
+    const [blx, blz] = K.BELL;
+    for (const [px, pz] of [[-1.3, -1.3], [1.3, -1.3], [-1.3, 1.3], [1.3, 1.3]]) box('maroon', 0.24, 3.4, 0.24, blx + px, T + 1.7, blz + pz);
+    { const rf = new THREE.ConeGeometry(2.6, 1.4, 4, 1); rf.rotateY(Math.PI / 4); rf.translate(blx, T + 4.0, blz); parts.dark.push(rf.toNonIndexed());
+      const fin = new THREE.CylinderGeometry(0.05, 0.16, 0.7, 8); fin.translate(blx, T + 5.0, blz); parts.gold.push(fin.toNonIndexed()); }
+    box('wood', 2.8, 0.22, 0.22, blx, T + 3.25, blz);
+    const bellProf = []; for (let i = 0; i <= 14; i++) { const t = i / 14; bellProf.push(new THREE.Vector2(0.22 + 0.42 * Math.pow(1 - t, 1.6) + (t < 0.08 ? 0.06 : 0), (1 - t) * -1.15)); }
+    const bell = new THREE.Mesh(new THREE.LatheGeometry(bellProf, 24), M({ color: 0x8a6430, roughness: 0.35, metalness: 0.85, side: THREE.DoubleSide }));
+    const bellPivot = new THREE.Group(); bellPivot.position.set(blx, T + 3.1, blz); bellPivot.add(bell); scene.add(bellPivot);
+    bell.castShadow = true;
+    // prayer flags: strings of small coloured cloths from post to post up the stair and across the court
+    const flagCols = [0x2a5ad8, 0xf4f2ea, 0xd83a2a, 0x2a9a4a, 0xf2c41a];
+    const flags = [];
+    const string = (a, b) => { const L = a.distanceTo(b), n2 = Math.max(4, Math.floor(L / 0.55));
+      for (let i = 1; i < n2; i++) { const t = i / n2, pnt = a.clone().lerp(b, t); pnt.y -= Math.sin(t * Math.PI) * L * 0.06;
+        flags.push({ p: pnt, c: flagCols[i % 5], ry: Math.atan2(b.x - a.x, b.z - a.z) + Math.PI / 2 }); } };
+    for (let z = K.Z0 + 4; z < K.Z1 - 2; z += 8) { const ya = Math.max(K.crest(z), hAt(-1.7, z)), yb = Math.max(K.crest(z + 6), hAt(1.7, z + 6));
+      box('wood', 0.1, 3.4, 0.1, -1.75, ya + 1.7, z); box('wood', 0.1, 3.4, 0.1, 1.75, yb + 1.7, z + 6);
+      string(new THREE.Vector3(-1.75, ya + 3.3, z), new THREE.Vector3(1.75, yb + 3.3, z + 6)); }
+    for (let k = 0; k < 6; k++) string(new THREE.Vector3(3.5, T + 9.5, cz), new THREE.Vector3(-14 + k * 5.6, T + 0.4, K.Z1 + 1 + (k % 2) * 3));
+    { const fg = new THREE.PlaneGeometry(0.34, 0.4); fg.translate(0, -0.2, 0);
+      const fm = new THREE.InstancedMesh(fg, M({ color: 0xffffff, roughness: 0.9, side: THREE.DoubleSide }), flags.length);
+      const MX = new THREE.Matrix4(), Q = new THREE.Quaternion(), E = new THREE.Euler(), S = new THREE.Vector3(1, 1, 1), C = new THREE.Color();
+      flags.forEach((f, i) => { E.set((rk() - 0.5) * 0.4, f.ry, (rk() - 0.5) * 0.3); Q.setFromEuler(E); MX.compose(f.p, Q, S); fm.setMatrixAt(i, MX); fm.setColorAt(i, C.set(f.c)); });
+      fm.instanceMatrix.needsUpdate = true; fm.instanceColor.needsUpdate = true; fm.frustumCulled = false; scene.add(fm); }
+    // limewash: never quite white, streaked where the rain runs off the roof
+    const plasterT = tex(256, 256, (x, w, h) => { x.fillStyle = '#efe9dc'; x.fillRect(0, 0, w, h);
+      for (let i = 0; i < 2600; i++) { const l = 82 + rk() * 12; x.fillStyle = `hsla(38,${10 + rk() * 10}%,${l}%,0.35)`; x.fillRect(rk() * w, rk() * h, 2 + rk() * 5, 2 + rk() * 5); }
+      for (let i = 0; i < 26; i++) { const sx = rk() * w, g = x.createLinearGradient(0, 0, 0, h * (0.3 + rk() * 0.5));
+        g.addColorStop(0, 'rgba(120,105,85,0.22)'); g.addColorStop(1, 'rgba(120,105,85,0)'); x.fillStyle = g; x.fillRect(sx, 0, 2 + rk() * 6, h); } }, true);
+    plasterT.repeat.set(2, 1.5);
+    const mats = { stone: stoneM, white: M({ map: plasterT, color: 0xffffff, roughness: 0.9 }), maroon: M({ color: 0x7a1e1a, roughness: 0.8 }),
+                   gold: M({ color: 0xd8a830, roughness: 0.3, metalness: 0.9 }), wood: M({ color: 0x5a3c24, roughness: 0.85 }), dark: M({ color: 0x2a2420, roughness: 0.9 }) };
+    for (const k of Object.keys(parts)) if (parts[k].length) { const mesh = new THREE.Mesh(mergeGeometries(parts[k]), mats[k]); mesh.castShadow = true; mesh.receiveShadow = true; scene.add(mesh); }
+    // cloud lying across the slope below the summit
+    const cloudT = (() => { const c = document.createElement('canvas'); c.width = c.height = 128; const x = c.getContext('2d');
+      for (let i = 0; i < 14; i++) { const px = 30 + rk() * 68, py = 40 + rk() * 48, r = 18 + rk() * 26, g = x.createRadialGradient(px, py, 0, px, py, r);
+        g.addColorStop(0, 'rgba(255,255,255,0.55)'); g.addColorStop(1, 'rgba(255,255,255,0)'); x.fillStyle = g; x.fillRect(0, 0, 128, 128); }
+      return new THREE.CanvasTexture(c); })();
+    const clouds = [];
+    for (let i = 0; i < 70; i++) { const a = rk() * 6.28, d = 18 + rk() * 120, x = Math.cos(a) * d, z = K.Z0 + 20 + Math.sin(a) * d * 0.8;
+      const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: cloudT, transparent: true, depthWrite: false, opacity: 0.55 + rk() * 0.3, color: 0xffffff }));
+      sp.position.set(x, K.TOP * (0.38 + rk() * 0.2), z); const sc = 18 + rk() * 26; sp.scale.set(sc * 1.8, sc * 0.7, 1); scene.add(sp); clouds.push(sp); }
+    let near = 0;
+    window.__monkTick = (t, dt) => {
+      for (let i = 0; i < clouds.length; i++) clouds[i].position.x += Math.sin(i) * dt * 0.4;
+      const pp = playerObj.position, d = Math.hypot(pp.x - blx, pp.z - blz);
+      near = Math.max(0, Math.min(1, near + (d < 4 ? dt : -dt * 0.3)));
+      bellPivot.rotation.x = Math.sin(t * 2.2) * (0.04 + near * 0.32);
+    };
+    window.__monk = { steps, top: T, bell: [blx, blz] };
+  }
+  // ── THE ROWS, PLANTED (see ROWS above) ─────────────────────────────────
+  if (ROWS) {
+    const R = ROWS, rr = mulberry32((SPEC.seed || 1) + 7273);
+    const M = (o) => { const m = new THREE.MeshStandardMaterial(o); m.userData.noAutoTex = true; return m; };
+    const gy = (x, z) => hAt(x, z);
+    const ni = (g) => (g.index ? g.toNonIndexed() : g);
+    // a jitter keyed on where a vertex is, so the corners faces share move together (no cracks)
+    const hsh = (x, y, z) => { const v = Math.sin(x * 12.9898 + y * 78.233 + z * 37.719) * 43758.5453; return v - Math.floor(v); };
+    const E = new THREE.Euler(), Q = new THREE.Quaternion(), P = new THREE.Vector3(), S = new THREE.Vector3(), MX = new THREE.Matrix4(), C = new THREE.Color();
+    // one instanced mesh per part: items {x,y,z, ry, rx, sx, sy, sz, c}
+    const inst = (geo, mat, list, cast) => {
+      if (!list.length) return null;
+      const im = new THREE.InstancedMesh(geo, mat, list.length);
+      list.forEach((q, i) => { E.set(q.rx || 0, q.ry || 0, 0); Q.setFromEuler(E);
+        MX.compose(P.set(q.x, q.y, q.z), Q, S.set(q.sx || 1, q.sy || q.sx || 1, q.sz || q.sx || 1)); im.setMatrixAt(i, MX);
+        if (q.c !== undefined) im.setColorAt(i, C.setScalar(1).set(q.c)); });
+      im.instanceMatrix.needsUpdate = true; if (im.instanceColor) im.instanceColor.needsUpdate = true;
+      im.frustumCulled = false; im.castShadow = !!cast; im.receiveShadow = true; scene.add(im); return im; };
+    const canvasTex = (n, draw, rep) => { const c = document.createElement('canvas'); c.width = c.height = n; draw(c.getContext('2d'), n);
+      const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8;
+      if (rep) { t.wrapS = t.wrapT = THREE.RepeatWrapping; } return t; };
+    // the ground of a field that is worked: pale stony earth, combed along the rows
+    const ground = (x0, x1, z0, z1, tex, lift, rx, rz) => {
+      const W = x1 - x0, D = z1 - z0, nx = Math.max(2, Math.ceil(W)), nz = Math.max(2, Math.ceil(D));
+      const g = new THREE.PlaneGeometry(W, D, nx, nz); g.rotateX(-Math.PI / 2); g.translate((x0 + x1) / 2, 0, (z0 + z1) / 2);
+      const pa = g.attributes.position, uv = g.attributes.uv;
+      for (let i = 0; i < pa.count; i++) { const x = pa.getX(i), z = pa.getZ(i); pa.setY(i, gy(x, z) + lift); uv.setXY(i, x / rx, z / rz); }
+      g.computeVertexNormals();
+      const m = M({ map: tex, roughness: 1, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+      const mesh = new THREE.Mesh(g, m); mesh.receiveShadow = true; scene.add(mesh); return mesh; };
+    const noiseFill = (x, n, base, spread, dots) => { x.fillStyle = base; x.fillRect(0, 0, n, n);
+      for (let i = 0; i < dots; i++) { const v = (rr() - 0.5) * spread; x.fillStyle = `rgba(${v > 0 ? 255 : 0},${v > 0 ? 245 : 0},${v > 0 ? 230 : 0},${Math.abs(v)})`;
+        const s2 = 1 + rr() * 3; x.fillRect(rr() * n, rr() * n, s2, s2); } };
+    if (R.soil) {
+      const soilT = canvasTex(512, (x, n) => { noiseFill(x, n, R.crop === 'tulip' ? '#5a4434' : '#86704f', 0.22, 9000);
+        // furrows along the rows: the texture's u runs across them
+        for (let i = 0; i < 8; i++) { const gr = x.createLinearGradient(i * n / 8, 0, (i + 1) * n / 8, 0);
+          gr.addColorStop(0, 'rgba(60,40,20,0.22)'); gr.addColorStop(0.5, 'rgba(255,240,220,0.05)'); gr.addColorStop(1, 'rgba(60,40,20,0.22)');
+          x.fillStyle = gr; x.fillRect(i * n / 8, 0, n / 8, n); } }, true);
+      ground(-R.X1 - 0.6, R.X1 + 0.6, R.Z0 - 0.6, R.Z1 + 0.6, soilT, 0.03, R.GAP * 8, 6);
+    }
+    // the track up the middle: two wheel ruts of pale dust with grass on the crown
+    const trackT = canvasTex(256, (x, n) => { noiseFill(x, n, '#94805e', 0.25, 4000);
+      x.fillStyle = 'rgba(88,104,52,0.55)'; x.fillRect(n * 0.44, 0, n * 0.12, n);
+      for (let i = 0; i < 300; i++) { x.fillStyle = 'rgba(70,92,40,0.6)'; x.fillRect(n * (0.42 + rr() * 0.16), rr() * n, 2, 4 + rr() * 6); }
+      // ragged verges: the edges fade into the grass instead of stopping at a line
+      x.globalCompositeOperation = 'destination-in';
+      const eg = x.createLinearGradient(0, 0, n, 0); eg.addColorStop(0, 'rgba(0,0,0,0)'); eg.addColorStop(0.14, 'rgba(0,0,0,1)'); eg.addColorStop(0.86, 'rgba(0,0,0,1)'); eg.addColorStop(1, 'rgba(0,0,0,0)');
+      x.fillStyle = eg; x.fillRect(0, 0, n, n); x.globalCompositeOperation = 'source-over'; }, true);
+    trackT.wrapS = THREE.ClampToEdgeWrapping;
+    const _trk = ground(-R.TRACK - 0.5, R.TRACK + 0.5, -4, R.BLD[1] - 3.6, trackT, 0.045, (R.TRACK + 0.5) * 2, 6);
+    _trk.material.transparent = true; _trk.material.depthWrite = false;
+    { const uv = _trk.geometry.attributes.uv, pa = _trk.geometry.attributes.position;
+      for (let i = 0; i < uv.count; i++) uv.setX(i, (pa.getX(i) + R.TRACK + 0.5) / ((R.TRACK + 0.5) * 2)); uv.needsUpdate = true; }
+
+    const plant = [];
+    for (const x of R.rows) for (let z = R.Z0 + 0.5; z < R.Z1 - 0.3; z += R.STEP) {
+      const jx = x + (rr() - 0.5) * 0.08, jz = z + (rr() - 0.5) * R.STEP * 0.3;
+      if (R.nearHive(jx, jz)) continue;
+      plant.push([jx, gy(jx, jz), jz]);
+    }
+    if (R.crop === 'lavender') {
+      // a lavender bush: a grey-green mound, and out of it a fan of stalks each
+      // carrying a purple spike of flowers
+      const green = [], purple = [], rb = mulberry32(991);
+      const mound = new THREE.IcosahedronGeometry(0.36, 1); mound.scale(1, 0.78, 0.92); mound.translate(0, 0.16, 0); green.push(ni(mound));
+      for (let k = 0; k < 84; k++) {
+        const a = rb() * Math.PI * 2, tilt = 0.05 + rb() * 0.55, L = 0.3 + rb() * 0.18, o = rb() * 0.2;
+        const st = new THREE.CylinderGeometry(0.004, 0.006, L, 3); st.translate(0, L / 2, 0); st.rotateX(tilt); st.rotateY(a); st.translate(Math.sin(a) * o, 0.14, Math.cos(a) * o); green.push(ni(st));
+        const hd = new THREE.CylinderGeometry(0.012, 0.022, 0.15, 5); hd.translate(0, L + 0.06, 0); hd.rotateX(tilt); hd.rotateY(a); hd.translate(Math.sin(a) * o, 0.14, Math.cos(a) * o); purple.push(ni(hd));
+      }
+      const gG = mergeGeometries(green), pG = mergeGeometries(purple);
+      const items = plant.map(([x, y, z]) => { const s2 = 0.85 + rr() * 0.35; return { x, y: y - 0.02, z, ry: rr() * 6.28, sx: s2 * 1.1, sy: s2, sz: s2 * 1.1, c: 0xffffff }; });
+      inst(gG, M({ color: 0x5f6d52, roughness: 0.92 }), items, true);
+      const pi2 = items.map(q => Object.assign({}, q, { c: new THREE.Color(0xffffff).multiplyScalar(0.82 + rr() * 0.3).getHex() }));
+      inst(pG, M({ color: 0x9470b0, roughness: 0.75 }), pi2, false);
+    } else if (R.crop === 'vine') {
+      // a vine row: a gnarled trunk to the wire every metre and a bit, posts
+      // with two wires, and the leaves trained along the wires above
+      const leafT = canvasTex(256, (x, n) => {
+        x.clearRect(0, 0, n, n);
+        for (let i = 0; i < 26; i++) { const cx = 20 + rr() * (n - 40), cy = 20 + rr() * (n - 40), R0 = 14 + rr() * 16, hue = 75 + rr() * 30, l = 22 + rr() * 16;
+          x.fillStyle = `hsl(${hue},${40 + rr() * 20}%,${l}%)`;
+          x.beginPath(); for (let k = 0; k < 5; k++) { const a = -Math.PI / 2 + (k - 2) * 0.75; x.moveTo(cx, cy); x.arc(cx + Math.cos(a) * R0 * 0.45, cy + Math.sin(a) * R0 * 0.45, R0 * 0.5, 0, 7); } x.fill();
+          x.strokeStyle = `hsla(${hue},30%,${l + 18}%,0.6)`; x.lineWidth = 1; x.beginPath();
+          for (let k = 0; k < 5; k++) { const a = -Math.PI / 2 + (k - 2) * 0.75; x.moveTo(cx, cy); x.lineTo(cx + Math.cos(a) * R0 * 0.8, cy + Math.sin(a) * R0 * 0.8); } x.stroke(); } });
+      const card = [];
+      for (const [ry, h, w2, y0] of [[0, 0.62, 1.35, 1.12], [0.55, 0.55, 1.3, 1.16], [-0.55, 0.55, 1.3, 1.16]]) {
+        const g = new THREE.PlaneGeometry(1.35, h); g.rotateY(Math.PI / 2 + ry * 0.4); g.rotateZ(ry * 0.5); g.translate(0, y0, 0); card.push(g); }
+      const top = new THREE.PlaneGeometry(0.62, 1.35); top.rotateX(-Math.PI / 2 + 0.25); top.translate(0, 1.42, 0); card.push(top);
+      const cG = mergeGeometries(card);
+      const leafM = M({ map: leafT, alphaTest: 0.45, side: THREE.DoubleSide, roughness: 0.85 });
+      inst(cG, leafM, plant.map(([x, y, z]) => ({ x, y, z, ry: (rr() - 0.5) * 0.15, sx: 0.9 + rr() * 0.25, c: new THREE.Color(0xffffff).multiplyScalar(0.8 + rr() * 0.35).getHex() })), true);
+      const trunkG = new THREE.CylinderGeometry(0.03, 0.055, 0.95, 5); trunkG.translate(0, 0.47, 0);
+      inst(trunkG, M({ color: 0x5a4632, roughness: 0.95 }), plant.map(([x, y, z]) => ({ x, y: y - 0.02, z, ry: rr() * 6.28, rx: (rr() - 0.5) * 0.18 })), true);
+      // grapes the vines carry, dark under the leaves
+      const bunch = [];
+      for (let row = 0; row < 6; row++) { const n2 = Math.max(1, 5 - row), r0 = 0.01 + (5 - row) * 0.009;
+        for (let j = 0; j < n2; j++) { const a = j / n2 * 6.28 + row * 0.7; const sp = new THREE.SphereGeometry(0.018, 6, 4); sp.translate(Math.cos(a) * r0, -row * 0.03, Math.sin(a) * r0); bunch.push(sp); } }
+      const bG = mergeGeometries(bunch);
+      const white = /\b(white|green) grapes?\b|\bchardonnay\b|\bsauvignon blanc\b/.test(String(SPEC.prompt || '').toLowerCase());
+      const bl = []; for (const [x, y, z] of plant) if (rr() < 0.55) for (const sd of [-1, 1]) if (rr() < 0.6) bl.push({ x: x + sd * (0.26 + rr() * 0.08), y: y + 0.82 + rr() * 0.12, z: z + (rr() - 0.5) * 0.8, ry: rr() * 6.28 });
+      inst(bG, M({ color: white ? 0xa8b45a : 0x34203e, roughness: 0.3 }), bl, false);
+      const posts = [], wires = [];
+      for (const x of R.rows) {
+        let last = null;
+        for (let z = R.Z0; z <= R.Z1 + 0.01; z += 5) { const y = gy(x, z); posts.push({ x, y: y + 0.8, z, ry: rr() * 0.2, rx: (rr() - 0.5) * 0.05 });
+          if (last) for (const h of [0.95, 1.38]) { const dy = (y - last[1]), L = Math.hypot(5, dy);
+            wires.push({ x, y: (y + last[1]) / 2 + h, z: z - 2.5, rx: -Math.atan2(dy, 5), sx: 0.006, sy: 0.006, sz: L }); }
+          last = [z, y]; }
+      }
+      inst(new THREE.BoxGeometry(0.09, 1.65, 0.09), M({ color: 0x7a6a58, roughness: 0.95 }), posts, true);
+      inst(new THREE.BoxGeometry(1, 1, 1), M({ color: 0x8a8a86, roughness: 0.4, metalness: 0.7 }), wires, false);
+    } else if (R.crop === 'sunflower') {
+      const headT = canvasTex(256, (x, n) => { x.clearRect(0, 0, n, n); const c = n / 2;
+        for (let k = 0; k < 34; k++) { const a = k / 34 * Math.PI * 2 + (k % 2) * 0.09, L = n * (0.44 + (k % 2) * 0.03);
+          x.save(); x.translate(c, c); x.rotate(a); x.fillStyle = `hsl(${44 + (k % 3) * 3},92%,${50 + (k % 2) * 6}%)`;
+          x.beginPath(); x.ellipse(L * 0.62, 0, L * 0.38, n * 0.035, 0, 0, 7); x.fill(); x.restore(); }
+        const gr = x.createRadialGradient(c, c, 2, c, c, n * 0.22); gr.addColorStop(0, '#3a2412'); gr.addColorStop(0.75, '#5a3a18'); gr.addColorStop(1, '#2a1a0c');
+        x.fillStyle = gr; x.beginPath(); x.arc(c, c, n * 0.22, 0, 7); x.fill();
+        for (let i = 0; i < 260; i++) { const a = i * 2.39996, rd = Math.sqrt(i / 260) * n * 0.21; x.fillStyle = 'rgba(20,12,4,0.5)'; x.fillRect(c + Math.cos(a) * rd, c + Math.sin(a) * rd, 2, 2); } });
+      const stem = [];
+      const sg = new THREE.CylinderGeometry(0.012, 0.02, 1.55, 5); sg.translate(0, 0.77, 0); stem.push(ni(sg));
+      for (const [h, a] of [[0.55, 0], [0.85, 2.4], [1.15, 4.4]]) { const l = new THREE.IcosahedronGeometry(0.11, 0); l.scale(1.5, 0.12, 1); l.translate(0.13, 0, 0); l.rotateY(a); l.translate(0, h, 0); stem.push(ni(l)); }
+      const head = new THREE.PlaneGeometry(0.46, 0.46); head.rotateX(0.35); head.translate(0, 1.58, 0.06);
+      const items = plant.map(([x, y, z]) => ({ x, y, z, ry: Math.PI + (rr() - 0.5) * 0.5, sx: 0.85 + rr() * 0.3 }));
+      inst(mergeGeometries(stem), M({ color: 0x5c7a32, roughness: 0.85 }), items, true);
+      inst(head, M({ map: headT, alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.8 }), items, true);
+    } else if (R.crop === 'wheat') {
+      const wT = canvasTex(256, (x, n) => { x.clearRect(0, 0, n, n);
+        for (let i = 0; i < 70; i++) { const bx = 6 + rr() * (n - 12), lean = (rr() - 0.5) * 18, top = n * (0.06 + rr() * 0.2), l = 52 + rr() * 18;
+          x.strokeStyle = `hsl(${40 + rr() * 8},${45 + rr() * 20}%,${l - 12}%)`; x.lineWidth = 1.4; x.beginPath(); x.moveTo(bx, n); x.quadraticCurveTo(bx + lean * 0.3, n * 0.5, bx + lean, top + 26); x.stroke();
+          x.fillStyle = `hsl(${42 + rr() * 6},${55 + rr() * 20}%,${l}%)`;
+          for (let k = 0; k < 9; k++) { const yy = top + k * 3.2; x.beginPath(); x.ellipse(bx + lean + (k % 2 ? 1.6 : -1.6), yy, 1.7, 3.0, (k % 2 ? 0.5 : -0.5), 0, 7); x.fill(); }
+          x.strokeStyle = `hsla(45,50%,${l + 10}%,0.7)`; x.lineWidth = 0.6; x.beginPath(); x.moveTo(bx + lean, top); x.lineTo(bx + lean + (rr() - 0.5) * 6, top - 12); x.stroke(); } });
+      const cards = [];
+      for (const a of [0, Math.PI / 3, 2 * Math.PI / 3]) { const g = new THREE.PlaneGeometry(0.9, 1.0); g.translate(0, 0.5, 0); g.rotateY(a); cards.push(g); }
+      inst(mergeGeometries(cards), M({ map: wT, alphaTest: 0.4, side: THREE.DoubleSide, roughness: 0.9 }),
+        plant.map(([x, y, z]) => ({ x: x + (rr() - 0.5) * 0.3, y: y - 0.04, z, ry: rr() * 6.28, sx: 0.85 + rr() * 0.35, sy: 0.85 + rr() * 0.3, c: new THREE.Color(0xffffff).multiplyScalar(0.8 + rr() * 0.3).getHex() })), false);
+    } else if (R.crop === 'tulip') {
+      const PAL = [0xd8202a, 0xf2c41a, 0xe86aa0, 0xf4efe6, 0xf07a1a, 0x8a2a8a];
+      const st = [];
+      const sg = new THREE.CylinderGeometry(0.004, 0.005, 0.32, 3); sg.translate(0, 0.16, 0); st.push(ni(sg));
+      const lf = new THREE.IcosahedronGeometry(0.05, 0); lf.scale(0.5, 2.2, 0.18); lf.rotateZ(0.25); lf.translate(0.02, 0.1, 0); st.push(ni(lf));
+      const hd = new THREE.CylinderGeometry(0.03, 0.017, 0.065, 6); hd.translate(0, 0.35, 0);
+      const items = plant.map(([x, y, z]) => ({ x, y, z, ry: rr() * 6.28, sx: 0.85 + rr() * 0.3, c: PAL[Math.floor((Math.abs(x) + 30) / (R.GAP * 3)) % PAL.length] }));
+      inst(mergeGeometries(st), M({ color: 0x5e8a3a, roughness: 0.8 }), items.map(q => Object.assign({}, q, { c: undefined })), false);
+      inst(hd, M({ color: 0xffffff, roughness: 0.55 }), items, false);
+    } else {
+      const hg = new THREE.IcosahedronGeometry(0.55, 2); { const pa = hg.attributes.position;
+        for (let i = 0; i < pa.count; i++) { const f = 0.9 + hsh(pa.getX(i), pa.getY(i), pa.getZ(i)) * 0.2; pa.setXYZ(i, pa.getX(i) * f, pa.getY(i) * f, pa.getZ(i) * f); } hg.computeVertexNormals(); }
+      hg.scale(0.95, 0.75, 1.25); hg.translate(0, 0.5, 0);
+      inst(hg, M({ color: 0x2f5a2a, roughness: 0.9 }), plant.map(([x, y, z]) => ({ x, y, z, ry: rr() * 0.3, sx: 0.9 + rr() * 0.2, c: new THREE.Color(0xffffff).multiplyScalar(0.85 + rr() * 0.3).getHex() })), true);
+    }
+    // cypresses along the lane to the house, as in every photograph of the place
+    if (R.crop === 'vine' || R.crop === 'lavender') {
+      const cg = new THREE.IcosahedronGeometry(1, 3); { const pa = cg.attributes.position;
+        for (let i = 0; i < pa.count; i++) { const f = 0.88 + hsh(pa.getX(i), pa.getY(i), pa.getZ(i)) * 0.24; pa.setXYZ(i, pa.getX(i) * f, pa.getY(i), pa.getZ(i) * f); } }
+      cg.scale(0.85, 5.2, 0.85); cg.translate(0, 5.0, 0); cg.computeVertexNormals();
+      const cy = [];
+      for (let z = R.Z1 - 2; z < R.BLD[1] - 5; z += 5.5) for (const sd of [-1, 1]) { const x = sd * (R.TRACK + 1.6); cy.push({ x, y: gy(x, z) - 0.3, z, ry: rr() * 6.28, sx: 0.9 + rr() * 0.25, sy: 0.85 + rr() * 0.3 }); }
+      for (let k = 0; k < 14; k++) { const sd = k % 2 ? 1 : -1, x = sd * (R.X1 + 6 + rr() * 30), z = R.Z0 + rr() * (R.Z1 - R.Z0 + 20); cy.push({ x, y: gy(x, z) - 0.3, z, ry: rr() * 6.28, sx: 0.9 + rr() * 0.3, sy: 0.8 + rr() * 0.35 }); }
+      inst(cg, M({ color: 0x24402a, roughness: 1 }), cy, true);
+      for (const q of cy.slice(0, 12)) world.createCollider(RAPIER.ColliderDesc.cylinder(3, 0.7).setTranslation(q.x, q.y + 3, q.z));
+    }
+    // the farmhouse at the head of the track: pale stone, a terracotta roof,
+    // shutters, an arched door; barrels at a winery, pots of lavender at a mas
+    {
+      const [bx, bz] = R.BLD, W = 13, D = 7.5, Hh = 5.6;
+      let y0 = 1e9; for (const [dx, dz] of [[-W / 2, -D / 2], [W / 2, -D / 2], [-W / 2, D / 2], [W / 2, D / 2], [0, 0]]) y0 = Math.min(y0, gy(bx + dx, bz + dz));
+      y0 -= 0.25;
+      const stoneT = canvasTex(512, (x, n) => { x.fillStyle = '#cbbb9c'; x.fillRect(0, 0, n, n);
+        let yy = 0; while (yy < n) { const bh = 22 + rr() * 16; let xx = -rr() * 40;
+          while (xx < n) { const bw = 40 + rr() * 50, l = 70 + rr() * 14; x.fillStyle = `hsl(${36 + rr() * 8},${18 + rr() * 12}%,${l}%)`; x.fillRect(xx + 2, yy + 2, bw - 4, bh - 4); xx += bw; }
+          yy += bh; }
+        for (let i = 0; i < 5000; i++) { x.fillStyle = `rgba(80,60,40,${rr() * 0.12})`; x.fillRect(rr() * n, rr() * n, 2, 2); } }, true);
+      const tileT = canvasTex(256, (x, n) => { x.fillStyle = '#b4583a'; x.fillRect(0, 0, n, n);
+        for (let j = 0; j < 16; j++) { const gr = x.createLinearGradient(j * n / 16, 0, (j + 1) * n / 16, 0);
+          gr.addColorStop(0, 'rgba(60,20,10,0.35)'); gr.addColorStop(0.5, 'rgba(255,200,160,0.12)'); gr.addColorStop(1, 'rgba(60,20,10,0.35)'); x.fillStyle = gr; x.fillRect(j * n / 16, 0, n / 16, n); }
+        for (let i = 0; i < 8; i++) { x.fillStyle = 'rgba(40,15,5,0.25)'; x.fillRect(0, i * n / 8, n, 3); }
+        for (let i = 0; i < 2500; i++) { x.fillStyle = `rgba(${rr() < 0.5 ? '30,20,10' : '230,200,170'},${rr() * 0.15})`; x.fillRect(rr() * n, rr() * n, 3, 3); } }, true);
+      stoneT.repeat.set(3, 1.4); tileT.repeat.set(4, 1.2);
+      const clapT = R.clap ? canvasTex(256, (x, n) => { x.fillStyle = '#e8e4da'; x.fillRect(0, 0, n, n);
+        for (let i = 0; i < 16; i++) { const y = i * n / 16; const gr = x.createLinearGradient(0, y, 0, y + n / 16);
+          gr.addColorStop(0, 'rgba(255,255,255,0.15)'); gr.addColorStop(0.85, 'rgba(0,0,0,0.04)'); gr.addColorStop(1, 'rgba(60,55,50,0.35)'); x.fillStyle = gr; x.fillRect(0, y, n, n / 16); }
+        for (let i = 0; i < 1500; i++) { x.fillStyle = `rgba(90,80,70,${rr() * 0.08})`; x.fillRect(rr() * n, rr() * n, 3, 1); } }, true) : null;
+      const shingleT = R.clap ? canvasTex(256, (x, n) => { x.fillStyle = '#4a4c50'; x.fillRect(0, 0, n, n);
+        for (let j = 0; j < 12; j++) for (let i = 0; i < 10; i++) { x.fillStyle = `hsl(220,4%,${24 + rr() * 12}%)`; x.fillRect(i * n / 10 + (j % 2) * n / 20, j * n / 12, n / 10 - 2, n / 12 - 2); } }, true) : null;
+      if (clapT) { clapT.repeat.set(3, 1.6); shingleT.repeat.set(4, 1.2); }
+      const wallM = M({ map: clapT || stoneT, roughness: 0.9 }), roofM = M({ map: shingleT || tileT, roughness: 0.85 });
+      const walls = new THREE.Mesh(new THREE.BoxGeometry(W, Hh, D), wallM); walls.position.set(bx, y0 + Hh / 2, bz); walls.castShadow = walls.receiveShadow = true; scene.add(walls);
+      const pitch = 0.42, half = D / 2 + 0.55, slope = half / Math.cos(pitch);
+      for (const sd of [-1, 1]) { const rf = new THREE.Mesh(new THREE.BoxGeometry(W + 0.9, 0.22, slope), roofM);
+        rf.rotation.x = sd * pitch; rf.position.set(bx, y0 + Hh + Math.tan(pitch) * half / 2 + 0.05, bz + sd * half / 2); rf.castShadow = rf.receiveShadow = true; scene.add(rf); }
+      const gab = new THREE.BufferGeometry(); const gh = Math.tan(pitch) * (D / 2);
+      gab.setAttribute('position', new THREE.Float32BufferAttribute([0, 0, -D / 2, 0, 0, D / 2, 0, gh, 0], 3)); gab.computeVertexNormals();
+      for (const sd of [-1, 1]) { const gm = new THREE.Mesh(gab, M({ color: 0xc4b292, roughness: 0.95, side: THREE.DoubleSide })); gm.position.set(bx + sd * W / 2, y0 + Hh, bz); scene.add(gm); }
+      const fz = bz - D / 2 - 0.02;
+      const woodM = M({ color: R.clap ? 0x8a2a22 : 0x5a3c26, roughness: 0.8 }), shutM = M({ color: R.clap ? 0xf2f0ea : R.crop === 'vine' ? 0x6a8468 : 0x8aaec4, roughness: 0.7 }), glassM = M({ color: 0x1a1e22, roughness: 0.15, metalness: 0.3 });
+      const door = new THREE.Mesh(new THREE.BoxGeometry(1.6, 2.6, 0.12), woodM); door.position.set(bx, y0 + 1.3 + 0.25, fz); scene.add(door);
+      if (!R.clap) { const arch = new THREE.Mesh(new THREE.TorusGeometry(0.85, 0.12, 6, 16, Math.PI), M({ color: 0xb8a684, roughness: 0.9 })); arch.position.set(bx, y0 + 2.85, fz - 0.02); scene.add(arch); }
+      else { // a porch: a deck, posts and a shallow roof along the front
+        const deck = new THREE.Mesh(new THREE.BoxGeometry(W - 1, 0.2, 2.2), M({ color: 0x8a7a64, roughness: 0.9 })); deck.position.set(bx, y0 + 0.35, fz - 1.1); deck.receiveShadow = true; scene.add(deck);
+        for (let k = 0; k < 6; k++) { const px = bx - (W - 1.6) / 2 + k * (W - 1.6) / 5; const po = new THREE.Mesh(new THREE.BoxGeometry(0.14, 2.6, 0.14), M({ color: 0xf2f0ea, roughness: 0.8 })); po.position.set(px, y0 + 1.75, fz - 2.1); po.castShadow = true; scene.add(po); }
+        const pr = new THREE.Mesh(new THREE.BoxGeometry(W - 0.6, 0.12, 2.6), roofM); pr.rotation.x = -0.18; pr.position.set(bx, y0 + 3.15, fz - 1.15); pr.castShadow = true; scene.add(pr);
+        world.createCollider(RAPIER.ColliderDesc.cuboid((W - 1) / 2, 0.1, 1.1).setTranslation(bx, y0 + 0.35, fz - 1.1)); }
+      for (const wx of [-4.4, -2.2, 2.2, 4.4]) for (const wy of (Math.abs(wx) > 3 ? [1.6, 4.0] : [4.0])) {
+        const gl = new THREE.Mesh(new THREE.BoxGeometry(0.85, 1.15, 0.06), glassM); gl.position.set(bx + wx, y0 + wy, fz); scene.add(gl);
+        for (const sd of [-1, 1]) { const sh = new THREE.Mesh(new THREE.BoxGeometry(0.46, 1.2, 0.05), shutM); sh.position.set(bx + wx + sd * 0.68, y0 + wy, fz - 0.03); scene.add(sh); } }
+      world.createCollider(RAPIER.ColliderDesc.cuboid(W / 2, Hh / 2, D / 2).setTranslation(bx, y0 + Hh / 2, bz));
+      if (R.crop === 'vine') {
+        const bg = new THREE.CylinderGeometry(0.34, 0.34, 0.95, 16); bg.rotateZ(Math.PI / 2);
+        const bl = []; for (let k = 0; k < 7; k++) { const x = bx - 5.6 + (k % 4) * 0.8 + (k > 3 ? 0.4 : 0), z = fz - 1.2; bl.push({ x, y: gy(x, z) + 0.34 + (k > 3 ? 0.6 : 0), z, ry: Math.PI / 2 }); }
+        inst(bg, M({ color: 0x7a4a2a, roughness: 0.7 }), bl, true);
+      } else {
+        const pot = new THREE.CylinderGeometry(0.28, 0.2, 0.42, 12); pot.translate(0, 0.21, 0);
+        const pl = []; for (const dx of [-1.6, 1.6, -3.0, 3.0]) { const x = bx + dx, z = fz - 0.7; pl.push({ x, y: gy(x, z), z }); }
+        inst(pot, M({ color: 0xb06a44, roughness: 0.8 }), pl, true);
+      }
+      window.__rows = { crop: R.crop, plants: plant.length, house: [bx, y0, bz] };
+    }
+  }
   // ── THE GARDEN, BUILT (see GARDEN above) ───────────────────────────────
   if (GARDEN) {
     const G = GARDEN, TOON = G.toon, rngB = mulberry32((SPEC.seed || 1) + 4418);
@@ -11531,7 +12258,7 @@ async function main() {
       scene.add(m);
     }
   }
-  if (!INTERIOR && !OSM && !GARDEN && !WEST && !CANDY && !VILLAGE && !GRAVE && LVL && LVL.pois && LVL.pois.length) {
+  if (!INTERIOR && !OSM && !GARDEN && !WEST && !CANDY && !VILLAGE && !GRAVE && !ROWS && !MONK && LVL && LVL.pois && LVL.pois.length) {
     const stoneT = new THREE.TextureLoader().load('textures/stone.jpg');
     stoneT.wrapS = stoneT.wrapT = THREE.RepeatWrapping;
     stoneT.colorSpace = THREE.SRGBColorSpace;
@@ -12638,6 +13365,8 @@ async function main() {
     if (st.kind === 'capture') return `Hold ${n} ground. Eight seconds each, and do not step off.`;
     if (st.kind === 'repair' && /\b(hikers?|climbers?|skiers?|campers?|people|children|kids?|survivors?|villagers?|explorers?|walkers?|tourists?|scouts?|lost)\b/.test(String(l)))
       return `${n} ${l} out there somewhere. Each has lit a red flare; follow the red light up the slope and get to them.`;
+    if (st.kind === 'repair' && /\bhives?\b/.test(String(l)))
+      return `${n} ${l} to check. Each stands under a gold light; stand at it and hold E while the lid comes up and the bees settle.`;
     if (st.kind === 'repair' && /\b(trees?|pines?|oaks?|logs?|timber)\b/.test(String(l)))
       return `${n} ${l} to fell. The ones to cut wear a red ribbon; stand at the trunk and hold E until it goes over.`;
     if (st.kind === 'repair' && /letter|mail|post|card/.test(String(l)))
@@ -12679,6 +13408,7 @@ async function main() {
     if (st.kind === 'escort') return `Escort ${st.label || 'your charge'} to the beacon. Keep them alive`;
     if (st.kind === 'serve') return `Serve ${st.count} ${st.label || 'orders'}`;
     if (st.kind === 'repair' && /\b(trees?|pines?|oaks?|logs?|timber)\b/.test(String(st.label || ''))) return `Chop down ${st.count} ${st.label}`;
+    if (st.kind === 'repair' && /\bhives?\b/.test(String(st.label || ''))) return `Check ${st.count} ${st.label}`;
     if (st.kind === 'repair' && /\b(hikers?|climbers?|skiers?|campers?|people|children|kids?|survivors?|villagers?|explorers?|walkers?|tourists?|scouts?|lost)\b/.test(String(st.label || ''))) return `Find ${st.count} ${st.label}`;
     if (st.kind === 'repair') return /fire|flame|blaze|burn/.test(String(st.label || '')) ? `Put out ${st.count} ${st.label}`
       : /package|parcel|deliver|letter|mail|pizza|crate|box|supplies|medicine|food|meal/.test(String(st.label || '')) ? `Deliver ${st.count} ${st.label}`
@@ -13220,27 +13950,7 @@ async function main() {
   // clone-army tell as a street of identical buildings, and every knob
   // these presets turn was already a buildCar parameter — the only new
   // geometry is the pickup bed and the taxi roof light.
-  const CAR_TYPES = {
-    sedan:  { length: 4.55, width: 1.83, bodyH: 0.60, bodyY: 0.52, cabinLen: 0.42, cabinH: 0.50, cabinX: -0.03, wheelR: 0.33, wheelBase: 0.31 },
-    coupe:  { length: 4.30, width: 1.86, bodyH: 0.55, bodyY: 0.47, cabinLen: 0.34, cabinH: 0.44, cabinX: -0.09, wheelR: 0.33, wheelBase: 0.32 },
-    suv:    { length: 4.85, width: 1.98, bodyH: 0.80, bodyY: 0.70, cabinLen: 0.50, cabinH: 0.60, cabinX: -0.02, wheelR: 0.41, wheelBase: 0.31 },
-    pickup: { length: 5.40, width: 2.00, bodyH: 0.74, bodyY: 0.68, cabinLen: 0.30, cabinH: 0.62, cabinX: 0.13, wheelR: 0.41, wheelBase: 0.33, bed: 1 },
-    van:    { length: 5.25, width: 2.02, bodyH: 1.08, bodyY: 0.80, cabinLen: 0.58, cabinH: 0.44, cabinX: -0.11, wheelR: 0.36, wheelBase: 0.33 },
-    taxi:   { length: 4.60, width: 1.86, bodyH: 0.62, bodyY: 0.54, cabinLen: 0.44, cabinH: 0.52, cabinX: -0.03, wheelR: 0.34, wheelBase: 0.31, taxi: 1 },
-    // 2026-08-07: six silhouettes repeated down a whole avenue still read as
-    // a fleet of the same car. These four are the shapes a New York street
-    // actually has that the set was missing — the long low one, the tall
-    // narrow one, the box truck and the wagon.
-    sports: { length: 4.35, width: 1.94, bodyH: 0.46, bodyY: 0.40, cabinLen: 0.30, cabinH: 0.34, cabinX: -0.12, wheelR: 0.34, wheelBase: 0.34 },
-    compact:{ length: 3.85, width: 1.70, bodyH: 0.62, bodyY: 0.54, cabinLen: 0.46, cabinH: 0.54, cabinX: -0.01, wheelR: 0.30, wheelBase: 0.30 },
-    box:    { length: 6.10, width: 2.18, bodyH: 1.35, bodyY: 0.92, cabinLen: 0.26, cabinH: 0.50, cabinX: 0.30, wheelR: 0.40, wheelBase: 0.34 },
-    wagon:  { length: 4.90, width: 1.88, bodyH: 0.66, bodyY: 0.56, cabinLen: 0.56, cabinH: 0.50, cabinX: -0.05, wheelR: 0.34, wheelBase: 0.31 },
-  };
-  // weighted so the street is mostly ordinary traffic with the odd truck —
-  // an even mix reads as a car showroom, not a city
-  const CAR_TYPE_KEYS = ['sedan', 'sedan', 'sedan', 'compact', 'compact',
-    'coupe', 'suv', 'suv', 'wagon', 'pickup', 'van', 'taxi', 'taxi',
-    'sports', 'box'];
+  // CAR_TYPES and CAR_TYPE_KEYS live at the top of the module (2026-10-07): rival cars are built before this line runs
   // A GO-KART (2026-10-07): a low tube frame on four fat tyres (the rears
   // wider), side pods and a nose cone in the paint, a bucket seat, a steering
   // wheel, a number board, a roll of bumper all round, and its driver sitting
@@ -13678,7 +14388,10 @@ async function main() {
   // were exactly 180: each was a hand-patch for this same bug. Those entries
   // are correspondingly reduced by 180, so a per-asset override once again
   // means "this asset is unusual", not "the default is broken".
-  const FRONT_IS_MINUS_Z = Math.PI;
+  // (2026-10-07) except a four-legged rig, which the quadruped bake builds
+  // head-first along +Z: a fox hero walked backwards under the half turn
+  let _quadHero = false; pRoot.traverse(o => { if (o.isBone && /^thigh_/i.test(o.name)) _quadHero = true; });
+  const FRONT_IS_MINUS_Z = _quadHero ? 0 : Math.PI;
   holder.rotation.y = FRONT_IS_MINUS_Z + THREE.MathUtils.degToRad(P.yaw_offset_deg || 0);
 
   // NIGHT HEADLIGHTS (Phase 134/D): driving after dark gets two real
@@ -13697,9 +14410,17 @@ async function main() {
       const coneG = new THREE.ConeGeometry(1.7, 9, 16, 1, true);
       coneG.translate(0, -4.5, 0);
       coneG.rotateX(-Math.PI / 2);
-      const cone = new THREE.Mesh(coneG, new THREE.MeshBasicMaterial({
-        color: 0xfff0c8, transparent: true, opacity: 0.055,
-        blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+      // soft beam: bright at the lamp, gone by its end, thin at its edges (2026-10-07)
+      const cone = new THREE.Mesh(coneG, new THREE.ShaderMaterial({
+        uniforms: { color: { value: new THREE.Color(0xfff0c8) }, strength: { value: 0.13 } },
+        vertexShader: `varying vec3 vN; varying vec3 vW; varying float vT;
+          void main(){ vT = 1.0 - uv.y; vN = normalize(mat3(modelMatrix) * normal);
+            vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }`,
+        fragmentShader: `uniform vec3 color; uniform float strength; varying vec3 vN; varying vec3 vW; varying float vT;
+          void main(){ float along = pow(1.0 - clamp(vT, 0.0, 1.0), 2.2) * smoothstep(0.0, 0.06, vT);
+            float edge = pow(abs(dot(normalize(vN), normalize(cameraPosition - vW))), 2.0);
+            gl_FragColor = vec4(color * strength * along * edge, 1.0); }`,
+        transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
       scene.add(cone);
       window.__headlights.push({ hl, cone, side: hside });
     }
@@ -14097,6 +14818,7 @@ async function main() {
           const bb2 = new THREE.Box3().setFromObject(inst);
           inst.position.y = -bb2.min.y;
           const holder2 = new THREE.Group();
+          inst.rotation.y += Math.PI;               // fronts are built on -Z: the crowd walked backwards too (2026-10-07)
           holder2.add(inst);
           holder2.traverse(o => { if (o.isMesh) { o.castShadow = true; o.frustumCulled = false; } });
           scene.add(holder2);
@@ -15165,6 +15887,7 @@ async function main() {
     // Keen Edge: one of your own hits in five lands for triple
     if (!quiet && _cb.crit && Math.random() < 0.2 * _cb.crit) { dmg *= 3; popText('Critical!', '#ffe08a'); }
     n.hp -= dmg;
+    n._struck = true; window.__hostileGrace = 0;    // the player started it: the grace is over
     if (n.role === 'boss' && typeof window.__bossHit === 'function') window.__bossHit(n);
     // A BLOW MOVES A BODY (2026-10-04): the trunk and head recoil away from
     // the hit and spring back, on top of whatever the animation is doing
@@ -17128,6 +17851,11 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
     n8ao.configuration.intensity = 4.4;
     n8ao.configuration.aoRadius = 2.8;
   }
+  // (2026-10-07) not under pixel art: rendered at a fifth of the resolution the
+  // occlusion's grain came up as coloured static once the palette banded it,
+  // and a dungeon read as noise. Pixel art is shaded flat; its blocks carry it.
+  // (the pass also draws the scene, so it stays on with no occlusion in it)
+  if ((SPEC.style || 'default') === 'pixel') { n8ao.configuration.halfRes = false; n8ao.configuration.intensity = 1.2; n8ao.configuration.denoiseRadius = 24; }
   composer.addPass(n8ao);
   const _legacySSAO = false;   // homemade SSAO retired; block kept for reference
   const _dMat = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking });
@@ -17415,7 +18143,7 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
     // the lights halved turned a night moor into a black field of grain. The
     // crush stays; the floor rises so a shape is still a shape.
     horror:  { bands: 0, sat: 0.32, exposure: 0.88, grain: 0.07, edge: 0, gamma: 1.32 },
-    pixel:   { bands: 6, sat: 1.12, exposure: 1.0, grain: 0, edge: 0, gamma: 1.0 },
+    pixel:   { bands: 7, sat: 1.12, exposure: 1.05, grain: 0, edge: 0, gamma: 1.0 },
     lowpoly: { bands: 7, sat: 1.15, exposure: 1.02, grain: 0, edge: 0, gamma: 1.0 },
     // THE ILLUSTRATION LOOKS. Their palette and atmosphere are set up top in
     // LOOK; this is only the grade that finishes them. Deliberately gentle —
@@ -17451,6 +18179,7 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
                   inkTh: { value: STYLE_CFG.inkTh || 0 },
                   inkW: { value: STYLE_CFG.inkW || 1.0 },
                   time: { value: 0 },
+                  block: { value: STYLE === 'pixel' ? 5.0 : 0.0 },
                   res: { value: new THREE.Vector2(innerWidth, innerHeight) } },
       vertexShader: `varying vec2 vUv;
         void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
@@ -17458,10 +18187,21 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
         uniform float bands; uniform float sat; uniform float exposure;
         uniform float grain; uniform float edge; uniform float time;
         uniform float gamma; uniform vec2 res; varying vec2 vUv;
-        uniform float celBands; uniform float inkTh; uniform float inkW;
+        uniform float celBands; uniform float inkTh; uniform float inkW; uniform float block;
         float lum(vec2 uv){ return dot(texture2D(tDiffuse, uv).rgb, vec3(.299,.587,.114)); }
         void main(){
           vec4 c = texture2D(tDiffuse, vUv);
+          // PIXEL ART IS AVERAGED, NOT SAMPLED (2026-10-07): the scene drawn at
+          // a fifth of the resolution took one point of a stone photo per
+          // block, and the dungeon read as salt and pepper. Drawn at full
+          // resolution, each block is the mean of the sixteen points in it.
+          if (block > 0.5) {
+            vec2 bs = block / res, uvB = (floor(vUv / bs) + 0.5) * bs;
+            vec4 acc = vec4(0.0);
+            for (int i = 0; i < 4; i++) for (int j = 0; j < 4; j++)
+              acc += texture2D(tDiffuse, uvB + (vec2(float(i), float(j)) - 1.5) / 4.0 * bs);
+            c = acc / 16.0;
+          }
           c.rgb *= exposure;
           if (gamma != 1.0) {                     // midtone crush (horror dark)
             c.rgb = pow(max(c.rgb, vec3(0.0)), vec3(gamma));
@@ -17499,7 +18239,17 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
             c.rgb *= (1.0 - e * 0.8);
           }
           if (bands > 0.5) {                      // cel / posterize
-            c.rgb = floor(c.rgb * bands + 0.5) / bands;
+            // BANDS OF LIGHT, NOT OF CHANNELS (2026-10-07): each channel was
+            // stepped on its own, so a stone texture's small colour shifts
+            // landed on different steps per channel and a pixel-art dungeon
+            // read as red, blue and grey static (a low-poly sky went cyan).
+            // The brightness is banded; the colour keeps its own hue, coarsened
+            // a little, so a block is one flat colour of the thing it shows.
+            float l0 = max(dot(c.rgb, vec3(.299, .587, .114)), 1e-4);
+            float lq = floor(sqrt(l0) * bands + 0.5) / bands; lq *= lq;   // steps even to the eye: shadows keep their levels
+            vec3 hue = c.rgb / l0;
+            hue = mix(vec3(1.0), floor(hue * 6.0 + 0.5) / 6.0, smoothstep(0.02, 0.12, l0));
+            c.rgb = clamp(hue * lq, 0.0, 1.0);
           }
           float l = dot(c.rgb, vec3(.299,.587,.114));
           c.rgb = mix(vec3(l), c.rgb, sat);       // saturation (or drain)
@@ -17513,7 +18263,7 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
     composer.addPass(stylePass);
   }
   // per-style scene setup beyond the post pass
-  const STYLE_PR = STYLE === 'pixel' ? 0.22 : null;   // chunky retro pixels
+  const STYLE_PR = null;   // (2026-10-07) pixel art is drawn full size and averaged into blocks by the style pass
   if (STYLE_PR) {
     renderer.setPixelRatio(STYLE_PR);
     composer.setPixelRatio && composer.setPixelRatio(STYLE_PR);
@@ -17841,7 +18591,9 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
       const POST = DELIVER && /letter|mail|post|card|newspaper/.test(String(_rpS.label || '').toLowerCase()) && SPEC.player.mode !== 'fly' && !INTERIOR;
       const CHOP = !FIRE && !DELIVER && /\b(trees?|pines?|oaks?|birch(es)?|spruces?|logs?|timber)\b/.test(String(_rpS.label || '').toLowerCase()) && !INTERIOR;
       // (2026-10-07) the lost are found by walking up to them: no key to hold
-      const FIND = !FIRE && !DELIVER && !CHOP && /\b(hikers?|climbers?|skiers?|campers?|people|persons?|children|kids?|survivors?|villagers?|explorers?|walkers?|travell?ers?|tourists?|scouts?|lost)\b/.test(String(_rpS.label || '').toLowerCase());
+      // (2026-10-07) a beekeeper checks hives: hold E at each, the lid comes up and the bees with it
+      const HIVE = !FIRE && !DELIVER && !CHOP && /\b(?:bee)?hives?\b/.test(String(_rpS.label || '').toLowerCase()) && !INTERIOR;
+      const FIND = !FIRE && !DELIVER && !CHOP && !HIVE && /\b(hikers?|climbers?|skiers?|campers?|people|persons?|children|kids?|survivors?|villagers?|explorers?|walkers?|travell?ers?|tourists?|scouts?|lost)\b/.test(String(_rpS.label || '').toLowerCase());
       if (POST && VILLAGE) {
         // a letterbox by each cottage's gate, out at the lane side of its front
         const cs = VILLAGE.cot.slice().sort((a, b) => Math.hypot(a.x, a.z) - Math.hypot(b.x, b.z));
@@ -17853,6 +18605,12 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
           for (let t = 0; t < 30; t++) { const a = k / N * Math.PI * 2 + rngR() * 1.2, d = 20 + rngR() * gsize * 0.28; x = Math.cos(a) * d; z = Math.sin(a) * d;
             if (!spots.some(q => Math.hypot(q[0] - x, q[2] - z) < 18)) break; }
           spots.push([x, hAt(x, z) - 0.02, z, rngR() * 6.28, false, null, true]); }
+      } else if (HIVE) {
+        // in a field, at the row ends along the track; elsewhere round the clearing
+        for (let k = 0; k < N; k++) {
+          if (ROWS) { const h = ROWS.hiveSpot(); spots.push([h[0], hAt(h[0], h[1]) - 0.02, h[1], h[2] > 0 ? -Math.PI / 2 : Math.PI / 2, false, null, true]); continue; }
+          const a = k / N * Math.PI * 2 + rngR() * 0.5, d = 10 + rngR() * gsize * 0.2, x = Math.cos(a) * d, z = Math.sin(a) * d;
+          spots.push([x, hAt(x, z) - 0.02, z, Math.atan2(-x, -z), false, null, true]); }
       } else if (CHOP) {
         // marked trees round the clearing, out along the way
         for (let k = 0; k < N; k++) { const a = k / N * Math.PI * 2 + rngR() * 0.6, d = 12 + rngR() * gsize * 0.22; const x = Math.cos(a) * d, z = Math.sin(a) * d;
@@ -17907,6 +18665,13 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
       const panels = [];
       for (let i = 0; i < N && i < order.length; i++) {
         const [x, y, z, ry, standing, cot, pad] = order[i];
+        if (HIVE) {
+          const g2 = makeHiveBox(i + 1); g2.position.set(x, y, z); g2.rotation.y = ry; scene.add(g2);
+          g2.userData.fsTag = { type: 'objective', name: 'beehive', detail: 'hold E to check it' };
+          world.createCollider(RAPIER.ColliderDesc.cuboid(0.3, 0.45, 0.33).setTranslation(x, y + 0.45, z));
+          panels.push({ g: g2, pad: g2.userData.pad, hive: true, fixed: false, p: 0, x: x + Math.sin(ry) * 0.95, z: z + Math.cos(ry) * 0.95, ry });
+          continue;
+        }
         if (CHOP) {
           const t = makeChopTree(i + 1); t.position.set(x, y, z); scene.add(t);
           t.userData.fsTag = { type: 'objective', name: 'marked tree', detail: 'hold E to chop it down' };
@@ -17988,14 +18753,15 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
         const pp = playerObj.position; let near = null, nd = 2.4;
         for (const q of panels) { if (q.fixed) continue;
           if (q.pad && q.roofY !== undefined && Math.abs(pp.y - q.roofY) > 8) continue;     // fly down to the roof
-          const d = Math.hypot(q.x - pp.x, q.z - pp.z) - (q.pad && !q.post && !q.find ? 1.4 : 0); if (d < nd) { nd = d; near = q; } }
+          const d = Math.hypot(q.x - pp.x, q.z - pp.z) - (q.pad && !q.post && !q.find && !q.hive ? 1.4 : 0); if (d < nd) { nd = d; near = q; } }
         if (!near) { bar.style.display = 'none'; return; }
         bar.style.display = 'block';
         const held = !!keys.KeyE || (near.find && nd < 1.9);      // the lost are found by reaching them
-        near.p = held ? Math.min(1, near.p + dt / (near.find ? 0.5 : near.fire ? 2.4 : near.chop ? 2.2 : near.pad ? 1.0 : 1.6)) : Math.max(0, near.p - dt * 0.6);
+        near.p = held ? Math.min(1, near.p + dt / (near.find ? 0.5 : near.hive ? 1.8 : near.fire ? 2.4 : near.chop ? 2.2 : near.pad ? 1.0 : 1.6)) : Math.max(0, near.p - dt * 0.6);
         if (near.chop) { near.chop.tick(dt, held); if (held && Math.floor(near.p * 6) !== near._k) { near._k = Math.floor(near.p * 6); try { sfx('hit'); } catch (e) {} } }
         document.getElementById('fsrpT').textContent = near.find ? (held ? 'Found them\u2026' : 'Get to them')
           : near.chop ? (held ? 'Chopping\u2026' : 'Hold E to chop it down')
+          : near.hive ? (held ? 'Checking the hive\u2026' : 'Hold E to check the hive')
           : near.post ? (held ? 'Posting\u2026' : 'Hold E to post the ' + String(_rpS.label || 'letter').replace(/s$/, ''))
           : near.fire ? (held ? 'Spraying\u2026' : 'Hold E to put it out')
           : near.pad ? (held ? 'Dropping\u2026' : 'Hold E to drop the ' + String(_rpS.label || 'package').replace(/s$/, ''))
@@ -18013,14 +18779,14 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
           else if (near.fire) near.fire.douse();
           else if (near.pad) near.pad.done();
           else { near.scr.material.emissive.setHex(0x2aff7a); near.scr.material.emissiveIntensity = 1.3; near.spark.visible = false; }
-          popText(near.find ? (fixed >= st.count ? 'Everyone is found!' : 'Found!') : near.chop ? (fixed >= st.count ? 'Every tree is down!' : 'Timber!') : near.post ? (fixed >= st.count ? 'Every letter posted!' : 'Posted!') : near.fire ? (fixed >= st.count ? 'Every fire is out!' : 'Fire out!') : near.pad ? (fixed >= st.count ? 'Every delivery made!' : 'Delivered!') : (fixed >= st.count ? 'All fixed!' : 'Fixed!'), '#7fe08a'); sfx('pickup');
+          popText(near.find ? (fixed >= st.count ? 'Everyone is found!' : 'Found!') : near.chop ? (fixed >= st.count ? 'Every tree is down!' : 'Timber!') : near.hive ? (fixed >= st.count ? 'Every hive checked!' : 'Hive checked!') : near.post ? (fixed >= st.count ? 'Every letter posted!' : 'Posted!') : near.fire ? (fixed >= st.count ? 'Every fire is out!' : 'Fire out!') : near.pad ? (fixed >= st.count ? 'Every delivery made!' : 'Delivered!') : (fixed >= st.count ? 'All fixed!' : 'Fixed!'), '#7fe08a'); sfx('pickup');
           try { burst(near.g.position, 0x7fe08a); } catch (e) {}
           renderQuest(); bar.style.display = 'none';
           if (fixed >= st.count) advanceStep();
         }
       };
       const hintR = document.querySelector('#hud .hint');
-      if (hintR && !FIND) hintR.textContent += CHOP ? ' \u00b7 hold E to chop' : POST ? ' \u00b7 hold E to post' : FIRE ? ' \u00b7 hold E to spray' : DELIVER ? ' \u00b7 hold E to drop' : ' \u00b7 hold E to repair';
+      if (hintR && !FIND) hintR.textContent += CHOP ? ' \u00b7 hold E to chop' : HIVE ? ' \u00b7 hold E to check' : POST ? ' \u00b7 hold E to post' : FIRE ? ' \u00b7 hold E to spray' : DELIVER ? ' \u00b7 hold E to drop' : ' \u00b7 hold E to repair';
     }
   }
   {
@@ -19310,6 +20076,8 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
       if (window.__growTick) window.__growTick(dt);
       if (window.__graveMist) window.__graveMist(performance.now() / 1000);
       if (window.__hiveTick) window.__hiveTick(performance.now() / 1000);
+      if (window.__tornadoTick) window.__tornadoTick(Math.min(0.05, dt));
+      if (window.__monkTick) window.__monkTick(performance.now() / 1000, Math.min(0.05, dt));
       if (window.__lifeTick) window.__lifeTick(dt);
       // the goal's light is for finding it: gone by the time you are close
       if (window.__goalBeam && playerObj) { const b = window.__goalBeam, d = Math.hypot(b.position.x - playerObj.position.x, b.position.z - playerObj.position.z);

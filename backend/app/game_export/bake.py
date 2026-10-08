@@ -1421,6 +1421,21 @@ def ensure_playable(kind: str, verbose: bool = True) -> str | None:
         except Exception as _ce:
             if verbose:
                 print(f"[bake] coat skipped ({type(_ce).__name__}: {_ce})")
+        # A SHARP FRONT (2026-10-08): the coat is smooth but a vertex is a few
+        # centimetres across, and close-ups read blurry. A person's reference
+        # photo is projected onto the front of the coated body, aligned by its
+        # agreement with the coat (scripts/_hd_front.py); FS_HDFRONT=0 skips it.
+        if pattern == "biped" and os.environ.get("FS_HDFRONT", "1") != "0":
+            try:
+                import importlib.util as _ilu
+                _spec = _ilu.spec_from_file_location("hd_front_library", str(Path(__file__).resolve().parents[2] / "tools" / "hd_front_library.py"))
+                _hdm = _ilu.module_from_spec(_spec); _spec.loader.exec_module(_hdm)
+                _msg = _hdm.upgrade(anim)
+                if verbose:
+                    print(f"[bake] hd front {anim.name}: {_msg}")
+            except Exception as _he:
+                if verbose:
+                    print(f"[bake] hd front skipped ({type(_he).__name__}: {_he})")
         return str(anim)
     except Exception as e:
         if verbose:

@@ -77,5 +77,6 @@ await p.keyboard.up('KeyW'); await p.keyboard.up('ShiftLeft');
 await b.close();
 try {
   execFileSync('ffmpeg', ['-y', '-loglevel', 'error', '-i', webm, '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-crf', '18', '-preset', 'slow', '-movflags', '+faststart', mp4]);
+  try { fs.unlinkSync(webm); } catch (e) {}           // the raw capture is three times the MP4
   console.log(TAG, 'reel', mp4, (fs.statSync(mp4).size / 1e6).toFixed(1) + ' MB', 'errors', JSON.stringify(errs.slice(0, 3)));
 } catch (e) { console.log(TAG, 'reel webm only', webm, 'ffmpeg:', String(e.message).slice(0, 200)); }

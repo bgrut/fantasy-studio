@@ -200,7 +200,9 @@ _TRUE_HEIGHT = (
     (("man", "woman", "person", "human", "knight", "wizard", "witch", "burglar", "thief", "girl", "boy",
       "hunter", "ranger", "explorer", "detective", "soldier", "guard", "farmer", "shepherd", "pirate",
       "astronaut", "scientist", "engineer", "keeper", "courier", "samurai", "ninja", "princess", "prince",
-      "king", "queen", "villager", "zombie", "skeleton", "vampire", "elf", "orc", "goblin"), 1.75),
+      "king", "queen", "villager", "zombie", "skeleton", "vampire", "elf", "orc", "goblin",
+      "monk", "nun", "priest", "chef", "cook", "nurse", "doctor", "carpenter", "catcher", "sheriff", "bandit",
+      "cowboy", "diver", "miner", "pilot", "sailor", "captain", "barista", "gardener", "firefighter"), 1.75),
     (("child", "kid"), 1.2), (("dwarf",), 1.3), (("giant", "troll", "ogre"), 3.2),
     (("mouse", "rat", "hamster", "frog", "toad"), 0.12), (("squirrel", "weasel", "ferret", "chipmunk", "lizard"), 0.2),
     (("cat", "kitten", "rabbit", "bunny", "hare", "skunk"), 0.32), (("raccoon", "badger", "fox", "otter", "beaver"), 0.45),
@@ -243,6 +245,12 @@ def default_height(kind: str) -> float:
     th = _true_height(k)
     if th is not None:
         return th
+    import re
+    _last = (re.findall(r"[a-z]+", k) or [""])[-1]
+    # (2026-10-07) a word for a person by what they do is a person's height:
+    # "fish" inside "fisherman" played a 0.8 m fisherman
+    if len(_last) > 4 and re.search(r"(?:man|woman|men|keeper|chaser|grapher|vintner|rider|walker|runner|seeker|worker|maker|monk|smith|herd|ist|ian)$", _last):
+        return 1.75
     for words, h in ((("dog", "cat", "fox", "rabbit"), 0.6),
                      (("horse", "cow", "deer"), 1.7),
                      (("car", "truck", "vehicle"), 1.4),
@@ -258,6 +266,8 @@ def default_height(kind: str) -> float:
                      (("bottle", "cup", "mug", "vase", "lantern"), 0.35),
                      (("crate", "barrel", "chest", "banana"), 0.6),
                      (("man", "woman", "person", "human", "knight", "wizard"), 1.75)):
-        if any(w in k for w in words):
+        # a compound names its thing last (a sailboat is a boat, a bobcat a
+        # cat), so a keyword has to END a word: a carpenter is not a car
+        if any(re.search(re.escape(w) + r"(?:s|es)?\b", k) for w in words):
             return h
     return 1.0

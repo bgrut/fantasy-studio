@@ -1039,7 +1039,8 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                                   r"put(?:s|ting)? out|extinguish(?:es|ing)?|douse[sd]?|dousing|"
                                   r"drop(?:s|ping)? off|drop(?:s|ping)?|deliver(?:s|ing)?|"
                                   r"chop(?:s|ping)? down|chop(?:s|ping)?|cut(?:s|ting)? down|fells|felling|"
-                                  r"find(?:s|ing)?|locate[sd]?|locating|track(?:s|ing)? down|search(?:es|ing)? for)\s+"
+                                  r"find(?:s|ing)?|locate[sd]?|locating|track(?:s|ing)? down|search(?:es|ing)? for|"
+                                  r"check(?:s|ing)?(?:\s+on)?|inspect(?:s|ing)?|tend(?:s|ing)?(?:\s+to)?)\s+"
                                   r"(?:all\s+)?(?:of\s+)?(?:the\s+|every\s+)?(\d+|two|three|four|five|six|seven|eight|nine|ten)?\s*"
                                   r"((?:broken|damaged|dead|faulty|offline|burnt[- ]out|failing|leaking|busted)\s+)?([a-z]+)(?:\s+([a-z]+))?", _rp)
                 if _rm and getattr(spec, "genre", "") != "factory":
@@ -1060,6 +1061,9 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                             _noun = ("lost " + _noun) if not _noun.startswith(("lost", "missing", "stranded")) else _noun
                         else:
                             _noun = "it"
+                    # (2026-10-07) a beekeeper checks hives: checking is this objective only for hives
+                    if _rre.match(r"(check|inspect|tend)", _rm.group(0)) and not _rre.search(r"\b(?:bee)?hives?\b", _noun):
+                        _noun = "it"
                     if _noun not in _STOP and _noun.split()[0] not in ("it", "them", "everything", "things", "power", "order",
                                                                        "peace", "balance", "hope", "faith", "harmony", "life", "magic",
                                                                        "light", "honor", "honour", "justice", "memory", "memories", "his", "her", "their", "my"):
@@ -1088,6 +1092,72 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                         job.setdefault("notes", []).append(f"repair: {_cnt} {_lab} to fix (hold E at each)")
             except Exception as _re_e:
                 job.setdefault("notes", []).append(f"repair rule skipped: {_re_e}")
+            # WEATHER IS NOT A CREATURE (2026-10-07): "reach the farmhouse before the
+            # tornado" cast the tornado as a half-metre hostile, a mesh was made of
+            # it and the storm chaser was handed a blade to fight it. A tornado, a
+            # storm, a blizzard is the world's own: the runtime draws it.
+            try:
+                import re as _wre
+                _wx = [e for e in spec.entities if _wre.search(r"\b(tornado|twister|hurricane|cyclone|typhoon|storm|thunderstorm|lightning|"
+                                                              r"blizzard|avalanche|tsunami|sandstorm|dust storm|waterspout|funnel cloud)s?\b", (e.name or "").lower())]
+                if _wx:
+                    spec.entities = [e for e in spec.entities if e not in _wx]
+                    job.setdefault("notes", []).append(
+                        f"weather is the world's, not a creature: {', '.join(sorted({e.name for e in _wx}))} drawn by the runtime")
+            except Exception:
+                pass
+            # A HARVEST IS PICKED (2026-10-07): "a vintner harvests grapes in a
+            # tuscan vineyard and carries them to the stone winery" came back as
+            # one step, "reach the stone": no grapes, and the winery cut short.
+            try:
+                import re as _hre
+                from app.game_export.spec import ObjectiveSpec as _HOS
+                _hp = (req.prompt or "").lower()
+                _hm = _hre.search(r"\b(?:harvest(?:s|ing)?|pick(?:s|ing)?|gather(?:s|ing)?)\s+(?:the\s+|some\s+)?(\d+|two|three|four|five|six|seven|eight|nine|ten|twelve|twenty)?\s*"
+                                  r"(?:ripe\s+|fresh\s+|wild\s+)?(grapes|apples|olives|oranges|lemons|cherries|pears|peaches|plums|berries|strawberries|"
+                                  r"tomatoes|pumpkins|melons|lavender|sunflowers|tulips|tea leaves|tea|corn|wheat|hops|figs|dates|coconuts)\b", _hp)
+                if _hm and getattr(spec, "genre", "") != "factory" and not any(o.kind in ("collect", "repair") for o in spec.objectives):
+                    _hw = {"two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10, "twelve": 12, "twenty": 20}
+                    _hc = _hm.group(1)
+                    _hn = (int(_hc) if _hc and _hc.isdigit() else _hw.get(_hc or "", 0)) or 8
+                    _hl = {"grapes": "bunches of grapes"}.get(_hm.group(2), _hm.group(2))
+                    spec.objectives = [_HOS(kind="collect", label=_hl, count=max(1, min(_hn, 20)))] + list(spec.objectives)
+                    job.setdefault("notes", []).append(f"harvest: {_hn} {_hl} to pick before the rest")
+                # a place the sentence names in full keeps its noun: "the stone" is "the stone winery"
+                _PLACE = r"(winery|farmhouse|farm|house|barn|cottage|cabin|hut|lodge|tower|lighthouse|temple|shrine|monastery|church|chapel|cathedral|castle|mill|windmill|market|harbour|harbor|dock|station|camp|village|inn|tavern|bell|gate|bridge|cave|summit)"
+                for _o in spec.objectives:
+                    if _o.kind != "reach" or not _o.label:
+                        continue
+                    _lab = _o.label.lower().strip()
+                    if _hre.search(r"\b" + _PLACE + r"s?\b", _lab):
+                        continue
+                    _mm = _hre.search(_hre.escape(_lab) + r"\s+" + _PLACE + r"\b", _hp)
+                    if _mm:
+                        _o.label = _o.label.strip() + " " + _mm.group(1)
+            except Exception as _he:
+                job.setdefault("notes", []).append(f"harvest rule skipped: {_he}")
+            # A HUNDRED IS A CHORE (2026-10-07): "harvests grapes" was planned as
+            # "collect 100 grapes". A count the sentence never said is held to a
+            # day's play; a number the sentence does say is kept.
+            try:
+                import re as _cre
+                for _o in spec.objectives:
+                    if _o.kind == "collect" and (_o.count or 0) > 24 and not _cre.search(r"\b" + str(_o.count) + r"\b", req.prompt or ""):
+                        job.setdefault("notes", []).append(f"collect {_o.count} {_o.label} -> 12 (the sentence did not ask for {_o.count})")
+                        _o.count = 12
+            except Exception:
+                pass
+            # a monk of the Himalaya wears maroon (2026-10-07): the stock monk is a
+            # hooded friar, and "a monk climbs a himalayan monastery" played one
+            try:
+                import re as _mre
+                if (spec.player.name or "").lower().strip() == "monk" and _mre.search(
+                        r"\b(himalaya\w*|tibet\w*|nepal\w*|bhutan\w*|buddhis\w*|shaolin|gompa|lamas?|lamaser\w*)\b", (req.prompt or "").lower()):
+                    spec.player.name = "buddhist monk"
+                    spec.player.asset = ""
+                    job.setdefault("notes", []).append("hero: a buddhist monk, in the robes of the place")
+            except Exception:
+                pass
             # A SEA BATTLE IS FOUGHT IN SHIPS (2026-10-06): "a pirate captain sails
             # across a stormy sea and sinks three enemy ships" was a lighthouse
             # keeper with a sword in a dark wood, no water, no ships. The hero
@@ -1143,6 +1213,43 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                     job.setdefault("notes", []).append("zero gravity: the hero floats (Space up, C down)")
             except Exception as _ze:
                 job.setdefault("notes", []).append(f"zero-g rule skipped: {_ze}")
+            # NOTHING TO REACH THAT IS ALREADY IN HAND (2026-10-07): "finds the
+            # missing diamond" ended on "reach the diamond" after collecting it.
+            try:
+                _got = [(o.label or "").lower().replace("the ", "").strip().split()[-1].rstrip("s") for o in spec.objectives if o.kind == "collect" and (o.label or "").strip()]
+                _kept2 = []
+                for _o in spec.objectives:
+                    _w = (_o.label or "").lower().replace("the ", "").strip().split()
+                    if _o.kind == "reach" and _w and _w[-1].rstrip("s") in _got:
+                        job.setdefault("notes", []).append(f"'reach {_o.label}' dropped: it is collected already")
+                        continue
+                    _kept2.append(_o)
+                spec.objectives = _kept2
+            except Exception:
+                pass
+            # ONE KIND OF THING IS ONE STEP (2026-10-07): "searches for three clues"
+            # came back as collect "clue 1", "clue 2", "clue 3", each its own
+            # generated model (nine minutes of a build) and three steps where the
+            # sentence had one. Collect steps whose labels differ only by a
+            # trailing number are one step of that many.
+            try:
+                import re as _mre
+                _merged, _seen = [], {}
+                for _o in spec.objectives:
+                    _m = _mre.match(r"^(.*?)[\s#_-]*(\d+)$", (_o.label or "").strip()) if _o.kind == "collect" else None
+                    if _m and _m.group(1).strip():
+                        _base = _m.group(1).strip()
+                        if _base in _seen:
+                            _seen[_base].count += max(1, _o.count or 1); continue
+                        _o.label = _base if _base.endswith("s") else _base + "s"
+                        _o.count = max(1, _o.count or 1)
+                        _seen[_base] = _o
+                    _merged.append(_o)
+                if len(_merged) < len(spec.objectives):
+                    job.setdefault("notes", []).append("numbered pickups merged: " + ", ".join(f"{o.count} {o.label}" for o in _merged if o.kind == "collect"))
+                    spec.objectives = _merged
+            except Exception as _me:
+                job.setdefault("notes", []).append(f"pickup merge skipped: {_me}")
             # THE SENTENCE'S OWN GOALS (2026-10-07): "a little bee collects nectar
             # from flowers ... and brings it back to the hive" came back with no
             # objectives at all and played as an empty meadow. When the planner
@@ -1559,6 +1666,18 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         # the prompt wins and the chip stands down for that build; a chip
         # still decides every prompt that names no look.
         _chip = req.style
+        # THE SENTENCE'S OWN LOOK WINS THE PLANNER TOO (2026-10-07): "a
+        # claymation snail races..." was built photoreal; the planner had said
+        # default and nothing promoted the look the sentence named.
+        if not _chip and base_spec is None:
+            try:
+                _said0 = _prompt_names_style(req.prompt)
+                if _said0 and _said0 != "horror" and _said0 != (spec.style or "default"):   # a mood word is not a named look
+                    job.setdefault("notes", []).append(
+                        f"art direction: {'photoreal' if _said0 == 'default' else _said0} (your prompt names it; the planner said {spec.style or 'default'})")
+                    spec.style = _said0
+            except Exception:
+                pass
         if _chip and base_spec is None:
             _said = _prompt_names_style(req.prompt)
             if _said and _said != _chip:
@@ -1777,7 +1896,10 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             # static thing is recast the same way.
             from app.game_export.generate import guess_pattern as _gp_hero
             _prop_hero = (spec.player.mode or "walk") == "walk" and _gp_hero(_pl) == "static"
-            if _pl not in _ptext or _prop_hero:
+            # (2026-10-07) a hero whose head noun is in the sentence is its subject:
+            # "buddhist monk" for "a monk climbs a himalayan monastery" was recast to "monk"
+            _head_in = bool(_pl.split()) and _pl.split()[-1] in _ptext.replace(",", " ").replace(".", " ").split()
+            if (_pl not in _ptext and not _head_in) or _prop_hero:
                 _skip = {"firefly", "fireflies", "snowflake", "snowflakes",
                          "beacon", "beacons", "star", "stars",
                          "planet", "planets", "moon", "moons", "sun", "sky"}
@@ -1804,7 +1926,8 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                     # hero; nothing could rig it and the build failed. Only a
                     # body (a person, an animal, a vehicle) can be promoted.
                     from app.game_export.generate import guess_pattern as _gp_subj
-                    if _gp_subj(w) == "static":
+                    # (2026-10-07) a crawler is a creature, though it has no legs to rig
+                    if _gp_subj(w) == "static" and w not in ("snail", "slug", "worm", "caterpillar", "leech"):
                         continue
                     if library.resolve(w):
                         cand = w
@@ -1819,7 +1942,13 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                         w = wd[:-1] if wd.endswith("s") and not wd.endswith("ss") else wd
                         if w in _skip or len(w) < 3 or not _bre.match(r"^[a-z-]+$", w):
                             continue
-                        if _gp_subj(w) in ("flying", "quadruped", "aquatic"):
+                        # a verb is never the subject: "a snail races" cast a creature called "race"
+                        if w in ("race", "run", "walk", "fly", "flie", "swim", "hunt", "climb", "collect", "chase", "find", "explore",
+                                 "escape", "jump", "dive", "glide", "crawl", "hop", "sprint", "dash", "rescue", "save", "deliver"):
+                            continue
+                        # only an animal the lists name: the LLM's guess called "three" a beast
+                        from app.game_export.generate import known_creature as _kc_subj
+                        if _kc_subj(w):
                             cand = w
                             break
                 if cand is None and _prop_hero:
@@ -1861,7 +1990,17 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                    "blocky farmer", "blocky scout", "blocky settler",
                    "blocky trader", "blocky worker", "blocky hiker"]
         try:
-            if (spec.style in _FLAT_LOOKS
+            # (2026-10-07) "a watercolor painting of a little girl" played a blocky
+            # worker: a person with an outfit written for them is drawn in the
+            # game's own look below ("toon girl"), where the look has one; the
+            # blocky roster is for the faceted looks and for a bare "man"
+            try:
+                from app.asset_gen.reference import has_wardrobe as _hw2
+                _drawn = spec.style in ("cartoon", "kawaii", "comic", "storybook", "watercolor") \
+                    and _hw2((want or "").strip().lower()) and (want or "").strip().lower() not in ("man", "person", "human", "guy")
+            except Exception:
+                _drawn = False
+            if (spec.style in _FLAT_LOOKS and not _drawn
                     and (want or "").strip().lower() in _GENERIC_HUMAN):
                 _pick = _BLOCKY[int(spec.seed or 0) % len(_BLOCKY)]
                 if library.resolve(_pick):
@@ -1959,7 +2098,23 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             job.setdefault("notes", []).append(f"hero drawn in the game's look: '{want}'")
         # vehicles DRIVE, flyers FLY, swimmers SWIM — all play as static
         # meshes (no rig); everything else needs the rigged+animated bake
-        if pattern in ("vehicle", "flying", "aquatic", "static"):
+        # A NAMED ROLE IS NOT ITS HEAD NOUN (2026-10-07): "buddhist monk", a role
+        # with its own outfit written, resolved to the library's "monk" and was
+        # baked under the new name: a friar's (and a broken) body in a
+        # Himalayan monastery. A role with its own wardrobe and no mesh of its
+        # own is made, not borrowed.
+        _own_missing = False
+        try:
+            from app.asset_gen.reference import has_wardrobe as _hw3
+            _lk = want.lower().strip().replace(" ", "_")
+            _ld = BACKEND_ROOT / "assets" / "library"
+            _own_missing = (" " in want.strip() and _hw3(want)
+                            and not (_ld / f"{_lk}.glb").exists() and not (_ld / f"{_lk}_anim.glb").exists())
+        except Exception:
+            pass
+        if _own_missing and pattern not in ("vehicle", "flying", "aquatic", "static"):
+            player_glb = None
+        elif pattern in ("vehicle", "flying", "aquatic", "static"):
             player_glb = library.resolve(want)
         else:
             # proc modules are code, not meshes — no rig bake to run
@@ -2047,7 +2202,11 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         except Exception as _rde:
             job.setdefault("notes", []).append(f"ride rule skipped: {_rde}")
         _race_seated = False
+        # (2026-10-07) only a person takes a driver's seat: "a claymation snail
+        # races three other snails" put the snail in a sedan. An animal races
+        # as itself, against its own kind (the rivals below)
         if (any(o.kind == "race" for o in spec.objectives)
+                and pattern == "biped"
                 and pattern != "vehicle"
                 and (spec.player.mode or "walk") == "walk"
                 and player_glb):
@@ -2273,6 +2432,29 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         if h < 0.35:
             spec.camera.distance_m = min(spec.camera.distance_m, 0.45 + 2.5 * h)
             spec.camera.height_m = min(spec.camera.height_m, 0.15 + 1.0 * h)
+        # THE SENTENCE'S HOUR AND AIR (2026-10-07): "a fox hunts in a misty
+        # autumn forest at dawn" was built under a plain midday sky with no
+        # mist. A time of day the sentence names sets the sky; misty, foggy
+        # and hazy thicken the air.
+        try:
+            import re as _hre
+            _hp = (req.prompt or "").lower()
+            if not req.pano and not (spec.world.level or {}).get("interior"):
+                for _hw, _hs in (("dawn", "sunset"), ("sunrise", "sunset"), ("daybreak", "sunset"), ("golden hour", "sunset"),
+                                 ("sunset", "sunset"), ("dusk", "dusk"), ("twilight", "dusk"), ("midnight", "night"),
+                                 ("night", "night"), ("moonlit", "night"), ("starry", "night"), ("noon", "day"), ("midday", "day")):
+                    if _hre.search(r"\b(at|by|during|before|after|in the)\s+" + _hw + r"\b|\b" + _hw + r"\s+(sky|light)\b", _hp) \
+                            or (_hw in ("moonlit", "starry") and _hw in _hp):
+                        if spec.world.sky != _hs and spec.world.sky not in ("space", "mars"):
+                            job.setdefault("notes", []).append(f"sky {spec.world.sky} -> {_hs} (the sentence says {_hw})")
+                            spec.world.sky = _hs
+                        break
+                if _hre.search(r"\b(misty|mist|foggy|fog|hazy|haze)\b", _hp) and (spec.world.fog_density or 0) < 0.7:
+                    spec.world.fog_density = 0.7
+                    spec.world.fog = True
+                    job.setdefault("notes", []).append("the air is misty: the sentence says so")
+        except Exception as _hwe:
+            job.setdefault("notes", []).append(f"hour and air skipped: {_hwe}")
         # FOG SANITY (2026-07-15): the LLM loves dramatic fog — unless the
         # prompt actually says fog/mist/haze, cap density so photoreal scenes
         # stay crisp (words-beat-AI, same rule as sky/hunt).
@@ -2539,6 +2721,12 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                 job.setdefault("notes", []).append(
                     f"'{ent.name}' is atmosphere: rendered by the weather/sky system")
                 continue
+            # (2026-10-07) scenery that is the thing to collect is the pickups
+            # already: five static "kites" stood beside five kite pickups
+            _stem = ent.name.lower().strip().rstrip("s")
+            if ent.behavior == "static" and _stem and any(o.kind == "collect" and _stem in (o.label or "").lower() for o in spec.objectives):
+                job.setdefault("notes", []).append(f"the {ent.name} scenery is left out: the pickups are the {ent.name}")
+                continue
             ekind = "man" if (ent.name.lower() in _HUMAN_ALIASES or getattr(ent, "spectral", False)) else ent.name   # a ghost is played by the walker, drawn spectral
             # prefer the ANIMATED variant (real gait — no gliding); static fallback
             glb = ensure_playable(ekind, verbose=False) or library.resolve(ekind)
@@ -2549,6 +2737,20 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             # hyena by the wolf), with a note; generation is the last resort.
             if not glb and guess_pattern(ekind) != "biped":
                 kin = _creature_kin(ekind, ent.behavior)
+                # AN INVENTED CREATURE IS LEFT OUT, NOT STOOD IN FOR (2026-10-07):
+                # the planner adds ambience the sentence never asked for, and the
+                # kin rule then put five deer in a rainy city alley for its rats,
+                # fireflies for its pigeons and a deer in a canyon for a scorpion.
+                # Only a creature the sentence names, or one a mission needs, may
+                # be played by a kin; the rest are dropped.
+                _said = any(w and _fre.search(r"\b" + _fre.escape(w) + r"s?\b", (req.prompt or "").lower())
+                            for w in ekind.lower().replace("_", " ").split() if len(w) > 2)
+                _needed = ent.behavior in ("hostile", "flee", "guard", "follow", "suspect", "customer", "vehicle") \
+                    or any(o.kind == "defeat" and (ekind.lower() in (o.label or "").lower()) for o in spec.objectives)
+                if kin and not _said and not _needed:
+                    job.setdefault("notes", []).append(
+                        f"the {ekind} the planner added is left out: the sentence did not ask for one and the library has none")
+                    continue
                 if kin:
                     # THE PROMPT'S OWN CREATURE IS MADE (2026-09-29). A kin stands in
                     # for this build, but a creature the sentence named is queued
@@ -2824,6 +3026,9 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         # "race" verb in the prompt must never conjure phantom cars.
         from app.game_export.spec import EntitySpec
         for ob in spec.objectives:
+            # the step names who you race (2026-10-07): "race 3 cars" against snails
+            if ob.kind == "race" and guess_pattern(cast) != "vehicle" and (ob.label or "").lower() in ("cars", "car", "racers", "rivals", ""):
+                ob.label = cast + ("" if cast.endswith("s") else "s")
             if ob.kind == "race" and not any(e.behavior == "vehicle" for e in spec.entities):
                 okind = cast
                 # ensure_playable = the RIGGED variant (legs actually move);
@@ -2845,11 +3050,13 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         # ARMS the hunter (claws for beasts, a ranged shot for people).
         import re as _re2
         # hunt(s|ed|ing) — "a wolf HUNTS 3 elk" must match, not just "hunt"
-        _hm = _re2.search(r"\bhunt(?:s|ed|ing)?\s+(?:down\s+)?(\d+)?\s*(?:the\s+)?"
+        # (2026-10-07) "a fox hunts for mice": hunting FOR something is a hunt too
+        _hm = _re2.search(r"\bhunt(?:s|ed|ing)?\s+(?:down\s+|for\s+)?(\d+)?\s*(?:the\s+|some\s+)?"
                           r"([a-z]+)", req.prompt.lower())
-        if _hm and _hm.group(2) not in ("for", "down"):
+        if _hm and _hm.group(2) not in ("for", "down", "a", "an", "food", "treasure", "clues", "answers"):
             from app.game_export.spec import ObjectiveSpec
-            prey = _hm.group(2)
+            prey_raw = prey = _hm.group(2)
+            prey = {"mice": "mouse", "geese": "goose", "deer": "deer", "sheep": "sheep", "fish": "fish"}.get(prey, prey)
             prey = (prey[:-3] + "f") if prey.endswith("ves") else                    (prey[:-3] + "y") if prey.endswith("ies") else                    (prey[:-1] if prey.endswith("s") and not prey.endswith("ss") else prey)
             n_prey = int(_hm.group(1) or 3)
             converted = False
@@ -2857,7 +3064,7 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                 if ob.kind == "hunt":
                     converted = True
                     break
-                if ob.kind in ("collect", "defeat") and prey in ob.label.lower():
+                if ob.kind in ("collect", "defeat") and (prey in ob.label.lower() or prey_raw in ob.label.lower()):
                     ob.kind = "hunt"
                     ob.count = min(ob.count, 8)
                     converted = True
@@ -3480,6 +3687,9 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                 "shack": ("house", "cottage"), "lodge": ("house", "cottage"), "farmhouse": ("house", "cottage"),
                 "house": ("house", "cottage"), "home": ("house", "cottage"), "homestead": ("house", "cottage"),
                 "inn": ("house", "inn"), "tavern": ("house", "inn"), "pub": ("house", "inn"), "saloon": ("house", "inn"),
+                # (2026-10-07) a night out is a building too
+                "club": ("house", "brownstone"), "nightclub": ("house", "brownstone"), "bar": ("house", "brownstone"),
+                "casino": ("castle", "limestone"), "theatre": ("castle", "limestone"), "theater": ("castle", "limestone"),
                 "castle": ("castle", "keep"), "fortress": ("castle", "keep"), "keep": ("castle", "keep"),
                 "palace": ("castle", "keep"), "citadel": ("castle", "keep"), "fort": ("castle", "keep"),
                 "temple": ("castle", "chapel"), "church": ("castle", "chapel"), "chapel": ("castle", "chapel"),
@@ -3610,6 +3820,7 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         try:
             if (spec.player.mode == "walk" and spec.player.asset
                     and not str(spec.player.asset).startswith("proc:")
+                    and (spec.player.name or "").lower().split()[-1:] not in (["snail"], ["slug"], ["worm"], ["caterpillar"], ["leech"])   # a crawler glides; no rig
                     and getattr(spec, "genre", "adventure") != "factory"
                     and not _glb_rigged(spec.player.asset)):
                 for _cand in ("man", "walker", "woman"):

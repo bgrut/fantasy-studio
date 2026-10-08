@@ -28,7 +28,13 @@ class GPUUnavailable(RuntimeError):
 
 
 _QUADRUPED = ("dog", "cat", "horse", "cow", "wolf", "fox", "deer", "lion",
-              "tiger", "bear", "pig", "sheep", "goat", "rabbit")
+              "tiger", "bear", "pig", "sheep", "goat", "rabbit",
+              # (2026-10-07) the animals a sentence names often enough to be made unasked
+              "mouse", "mice", "rat", "squirrel", "hedgehog", "raccoon", "badger", "otter",
+              "elephant", "giraffe", "zebra", "cheetah", "leopard", "panther", "jaguar",
+              "camel", "donkey", "bull", "ox", "bison", "buffalo", "moose", "elk", "reindeer",
+              "hyena", "coyote", "panda", "rhino", "hippo", "kangaroo", "boar", "lynx",
+              "puppy", "kitten", "pony", "lamb", "calf", "hamster", "ferret", "skunk", "llama", "alpaca")
 # Human roles/professions are ALWAYS biped — never ask the LLM. Ollama once
 # classified 'hunter' as a quadruped (cached!), so the player got a
 # four-legged rig and shipped looking like a dog (2026-07-15).
@@ -56,6 +62,8 @@ _BIPED = ("hunter", "archer", "soldier", "warrior", "ranger", "ninja",
           # (2026-10-06) the classifier made a snowboarder and a skateboarder
           # vehicles and a surfer a fish; people who ride things are people
           "snowboarder", "skateboarder", "skater", "surfer", "skier", "sledder", "cyclist",
+          # (2026-10-07) a storm chaser was generated on four legs
+          "chaser", "beekeeper", "vintner", "winemaker", "photographer", "gardener", "barista",
           "sheriff", "marshal", "deputy", "gunslinger", "superhero", "barista", "gardener",
           "waiter", "waitress", "bartender", "cosmonaut", "spaceman", "racer", "athlete",
           "firefighter", "fireman", "firewoman")
@@ -139,6 +147,10 @@ def guess_pattern(kind: str) -> str:
     if _wk and (_wk[-1] in _CRAFT or (_wk[-1] in ("fighter", "ship") and len(_wk) > 1
                                       and _wk[-2] in ("space", "star", "jet", "tie", "air"))):
         return "flying"
+    # (2026-10-07) a snail glides on its foot: no legs to rig and no water
+    # needed. It was classed a sea creature and could not be placed on land.
+    if _wk and _wk[-1].rstrip("s") in ("snail", "slug", "worm", "caterpillar", "leech"):
+        return "static"
     # flightless upright birds WADDLE on two legs — the quadruped guess gave
     # the 2026-07-08 penguin four legs in its SDXL reference (and its mesh)
     if any(w in k for w in ("penguin", "ostrich", "emu", "kiwi", "dodo")):
@@ -171,6 +183,25 @@ def guess_pattern(kind: str) -> str:
         if llm:
             return llm
     return "biped"
+
+
+def known_creature(kind: str) -> str | None:
+    """The pattern of an animal the keyword lists know by name, else None.
+    (2026-10-07) The planner made a creature for any word guess_pattern did
+    not call static, and guess_pattern asks the LLM about unknown words, which
+    called "three" a quadruped and "drift" a sea creature: the studio
+    generated a beast named "three" and cast it as the manor's hero. A
+    creature the studio makes unasked has to be one the lists name."""
+    k = (kind or "").lower().strip()
+    if not k:
+        return None
+    if k.rstrip("s") in ("snail", "slug", "worm", "caterpillar", "leech"):
+        return "static"
+    _ends = lambda w: _re_kw.search(r"\b" + _re_kw.escape(w) + r"(?:s|es)?\b", k) is not None
+    for pat, words in (("flying", _FLYING), ("aquatic", _AQUATIC), ("quadruped", _QUADRUPED)):
+        if any(_ends(w) for w in words):
+            return pat
+    return None
 
 
 def gpu_available() -> bool:
@@ -302,6 +333,22 @@ def _ensure_asset_generate(kind: str, pattern: str | None, target_tris: int | No
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
     key = hashlib.md5(kind.lower().encode("utf-8")).hexdigest()[:12]
     raw_glb = CACHE_DIR / f"{key}.glb"
+    # THE CACHE REMEMBERS THE BODY IT WAS MADE FOR (2026-10-07): "chaser" was
+    # once classed a quadruped and its reference was a dog; once it was
+    # classed a person, the cached dog picture and mesh were rigged with a
+    # person's skeleton and the storm chaser walked upright on its hind legs.
+    # A cached reference or mesh made for another body plan is thrown away.
+    _meta = CACHE_DIR / f"{key}_pattern.txt"
+    try:
+        _was = _meta.read_text(encoding="utf-8").strip() if _meta.exists() else None
+        if _was and _was != pattern:
+            if verbose:
+                print(f"[game] cache for '{kind}' was made as {_was or 'an animal'}, now {pattern}: regenerating")
+            raw_glb.unlink(missing_ok=True)
+            (CACHE_DIR / f"{key}_ref.png").unlink(missing_ok=True)
+        _meta.write_text(pattern, encoding="utf-8")
+    except Exception:
+        pass
 
     def _two_faced(glb_path) -> bool:
         """TWO-FACED GATE (Phase 110): TRELLIS sometimes mirrors the FRONT

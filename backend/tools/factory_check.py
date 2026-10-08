@@ -63,6 +63,7 @@ GATES = [
     ("fmusic.mjs", "the kit's music bed plays in the world's family after the first gesture, moves on its clock, changes key with the world, and makes sound"),
     ("fcity.mjs", "a city prompt gets a district with or without a map, drawn as a city at full resolution, with a race route on its streets (needs --adv)"),
     ("fbuilding.mjs", "a prompt that names a building gets a body from the facade kit at its door, facing the spawn, with lit windows at night (needs --bld)"),
+    ("ffacing.mjs", "every moving body faces the way it goes: the cast, the crowd and the hero, two legs or four (needs --adv and --bld)"),
     ("fdrive.mjs", "the drive: steering eases with speed, the handbrake slides and leaves marks and smoke, the view widens with speed, pedestrians cast shadows only up close, the street runs at speed (needs --adv)"),
     ("ffixtures.mjs", "the drift race and the haunted manor, shot from the same views on every check and held to their facts, pictures tracked beside the gates (needs --adv and --bld)"),
     ("toolfit.mjs", "the build bar sits inside the screen at every common width, 1024 to 1920"),

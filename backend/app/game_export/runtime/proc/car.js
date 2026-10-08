@@ -14,6 +14,23 @@
 // Y up, width on Z, wheels on the ground at y = 0. Same presets as before.
 import * as THREE from 'three';
 import { mergeGeometries, mergeVertices } from '../vendor/jsm/utils/BufferGeometryUtils.js';
+// A BEAM IS LIGHT IN THE AIR, NOT A CONE (2026-10-07): a flat additive cone
+// drew as a grey glass funnel with a hard rim, and where it met the road it
+// laid a pale wedge on the asphalt. Real beams are brightest at the lamp,
+// fade to nothing down their length, and thin out at their edges, where a
+// view crosses less of the lit air.
+function beamMaterial(color, strength) {
+  return new THREE.ShaderMaterial({
+    uniforms: { color: { value: new THREE.Color(color) }, strength: { value: strength } },
+    vertexShader: `varying vec3 vN; varying vec3 vW; varying float vT;
+      void main(){ vT = 1.0 - uv.y; vN = normalize(mat3(modelMatrix) * normal);
+        vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }`,
+    fragmentShader: `uniform vec3 color; uniform float strength; varying vec3 vN; varying vec3 vW; varying float vT;
+      void main(){ float along = pow(1.0 - clamp(vT, 0.0, 1.0), 2.2) * smoothstep(0.0, 0.06, vT);
+        float edge = pow(abs(dot(normalize(vN), normalize(cameraPosition - vW))), 2.0);
+        gl_FragColor = vec4(color * strength * along * edge, 1.0); }`,
+    transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+}
 
 const smooth = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 const lerp = (a, b, t) => a + (b - a) * t;
@@ -581,8 +598,7 @@ export function buildCarHQ(cp, T = {}) {
   for (const hh of lampAt) {
     const cone = new THREE.ConeGeometry(1.5, 9, 24, 1, true);
     cone.translate(0, -4.5, 0); cone.rotateZ(fwd > 0 ? Math.PI / 2 : -Math.PI / 2); cone.rotateZ(fwd > 0 ? -0.06 : 0.06);
-    const cm = new THREE.Mesh(cone, new THREE.MeshBasicMaterial({ color: 0xfff2d0, transparent: true, opacity: 0.07,
-      blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+    const cm = new THREE.Mesh(cone, beamMaterial(0xfff2d0, 0.16));
     cm.position.copy(hh.p); cm.userData.noShadow = 1;
     beams.add(cm);
   }

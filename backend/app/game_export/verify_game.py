@@ -131,7 +131,9 @@ def verify_dist(dist: str | Path) -> dict:
         if glb.exists():
             try:
                 g = _glb_json(glb)
-                if spec["player"].get("mode") in ("drive", "fly", "swim"):
+                # (2026-10-07) a crawler glides on its foot: a snail has no legs to rig
+                _crawl = str(spec["player"].get("name") or "").lower().split()[-1:] in (["snail"], ["slug"], ["worm"], ["caterpillar"], ["leech"])
+                if spec["player"].get("mode") in ("drive", "fly", "swim") or _crawl:
                     check(f"player mesh ({spec['player']['mode']} mode)", bool(g.get("meshes")),
                           f"meshes={len(g.get('meshes', []))}")
                 else:
