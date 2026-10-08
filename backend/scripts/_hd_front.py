@@ -310,8 +310,13 @@ for it in range(3):                       # refine: halve the steps around the b
                     best = (sc, (mir, k2, cx2, cy2))
     mir, k, cx, cy = best[1]
 score = best[0]
+FRONT_OFF = False
 if score < (0.5 if SIDE else 0.42):
-    print("HDFAIL the photo does not agree with the body (r=%.2f)" % score); sys.exit(5)
+    if "--extra" not in argv:
+        print("HDFAIL the photo does not agree with the body (r=%.2f)" % score); sys.exit(5)
+    # (2026-10-08) the repainted views still stand: the photo is left out, not the job
+    FRONT_OFF = True
+    print("HDNOTE the photo does not agree with the body (r=%.2f): views only" % score)
 CAMS = cams(mir)
 view = 1 if not SIDE else 0
 zs = 0.5
@@ -323,6 +328,60 @@ if "--debug" in argv:
     _dbg = argv[argv.index("--debug") + 1]
     pxA, pyA, _ = project(allP, CAMS[0], k, cx, cy)
     np.savez_compressed(_dbg, px=pxA[sub], py=pyA[sub], z=allP[sub][:, 2], fy=allN[sub] @ CAMS[0][1], box=np.array([k, cx, cy, Hm]))
+
+# EXTRA VIEWS (2026-10-08, the user: "improve character skinning too"). The
+# front came from the reference photo; the back and the flanks, which the
+# chase camera sees most, were still the soft coat. tools/hd_views.py renders
+# the coated body straight-on from those sides (orthographic, the camera
+# written to a JSON), repaints each render photographically with SDXL
+# img2img, and passes them here as --extra <png>|<json>|<view>. The camera is
+# known, so they project exactly; where the repaint's broad colour agrees with
+# the coat it is laid on whole, and where it does not (the repaint moved a
+# hood's edge) only its fine detail is, at the coat's own colour.
+import json as _json
+EXTRA = []
+for i_a, a_ in enumerate(argv):
+    if a_ == "--extra" and i_a + 1 < len(argv):
+        png, js, vname = argv[i_a + 1].split("|")          # <png>|<json>|<view>
+        meta = _json.load(open(js))
+        vimg = bpy.data.images.load(png)
+        VW, VH = vimg.size
+        A = np.empty(VW * VH * 4, dtype=np.float32); vimg.pixels.foreach_get(A)
+        A = A.reshape(VH, VW, 4)[::-1, :, :3]
+        if vimg.colorspace_settings.name != "sRGB":
+            A = np.clip(to_s(A), 0, 1)
+        vv = meta["views"][vname]
+        cam_e = {"img": A, "low": None, "dir": np.array(vv["dir"]), "right": np.array(vv["right"]), "up": np.array(vv["up"]),
+                 "centre": np.array(meta["centre"]), "ortho": float(meta["ortho"]), "W": VW, "H": VH}
+        # its broad colour: a box blur a few percent of the frame wide
+        rr_ = max(2, VW // 96)
+        def _box(img, r):
+            out = img
+            for ax in (0, 1):
+                c_ = np.cumsum(np.pad(out, [(r + 1, r) if i == ax else (0, 0) for i in range(out.ndim)], mode="edge"), axis=ax)
+                out = (np.take(c_, np.arange(2 * r + 1, c_.shape[ax]), axis=ax) - np.take(c_, np.arange(0, c_.shape[ax] - 2 * r - 1), axis=ax)) / (2 * r + 1)
+            return out
+        cam_e["low"] = _box(_box(A, rr_), rr_)
+        EXTRA.append(cam_e)
+
+
+def project_extra(Pt, e):
+    q = Pt - e["centre"]
+    px = (q @ e["right"]) / e["ortho"] * e["W"] + e["W"] / 2
+    py = e["H"] / 2 - (q @ e["up"]) / e["ortho"] * e["H"]
+    return px, py, Pt @ e["dir"]
+
+
+for e in EXTRA:
+    _px, _py, _d = project_extra(allP, e)
+    H_, W_ = e["H"] // 2 + 1, e["W"] // 2 + 1
+    zz_ = np.full((H_, W_), -1e9, np.float32)
+    np.maximum.at(zz_, (np.clip((_py / 2).astype(int), 0, H_ - 1), np.clip((_px / 2).astype(int), 0, W_ - 1)), _d)
+    z2 = zz_.copy()
+    for dy_ in (-1, 0, 1):
+        for dx_ in (-1, 0, 1):
+            z2 = np.maximum(z2, np.roll(zz_, (dy_, dx_), (0, 1)))
+    e["zb"] = z2
 
 for tob, nodes, C, P, N in bakes:
     mc = C[..., 3] > 0.5
@@ -337,10 +396,22 @@ for tob, nodes, C, P, N in bakes:
         wc = weights(Nt, cam, px, py, depth, zb, zs)
         acc += sample(R, px, py) * wc[:, None]; wsum += wc
     photo = acc / np.maximum(wsum, 1e-6)[:, None]
-    w = np.clip(wsum, 0, 1)
+    w = np.zeros_like(wsum) if FRONT_OFF else np.clip(wsum, 0, 1)
     # the photo's own studio light differs a little from the coat: carry its
     # detail at the coat's tone where the two disagree broadly
     out_m = base * (1 - w[:, None]) + photo * w[:, None]
+    for e in EXTRA:
+        px, py, depth = project_extra(Pt, e)
+        facing = Nt @ e["dir"]
+        we = np.clip((facing - 0.2) / 0.45, 0, 1)
+        we *= depth >= e["zb"][np.clip((py / 2).astype(int), 0, e["zb"].shape[0] - 1), np.clip((px / 2).astype(int), 0, e["zb"].shape[1] - 1)] - 0.012 * size
+        we *= (px > 1) & (px < e["W"] - 2) & (py > 1) & (py < e["H"] - 2)
+        we *= (1 - w)                                   # the true photo keeps what it covers
+        rep = sample(e["img"], px, py); low = sample(e["low"], px, py)
+        agree = np.exp(-np.sum((low - out_m) ** 2, axis=1) / 0.03)[:, None]
+        detail = np.clip(rep - low, -0.25, 0.25)
+        paint = out_m + agree * (rep - out_m) + (1 - agree) * detail
+        out_m = out_m * (1 - we[:, None]) + np.clip(paint, 0, 1) * we[:, None]
     out = cs.copy(); out[mc] = out_m
     out = dilate(np.clip(out, 0, 1), mc, 16)
     rgba = np.concatenate([out, np.ones(out.shape[:2] + (1,), np.float32)], axis=2)
@@ -366,4 +437,4 @@ for o in objs:
         o.data.pose_position = "POSE"
 bpy.ops.export_scene.gltf(filepath=dst, export_yup=True, export_vertex_color="NONE", export_attributes=True,
                           export_image_format="JPEG", export_jpeg_quality=92)
-print("HDF %d %d %.3f %s %.1f" % (len(bakes), RES, score, ("side%+d" % mir) if SIDE else "front", time.time() - t0))
+print("HDF %d %d %.3f %s %.1f" % (len(bakes), RES, score, ("side%+d" % mir) if SIDE else ("views" if FRONT_OFF else "front"), time.time() - t0))

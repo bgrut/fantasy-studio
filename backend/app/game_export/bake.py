@@ -1433,6 +1433,14 @@ def ensure_playable(kind: str, verbose: bool = True) -> str | None:
                 _msg = _hdm.upgrade(anim)
                 if verbose:
                     print(f"[bake] hd front {anim.name}: {_msg}")
+                # and the back and flanks, repainted from the body's own renders
+                # (tools/hd_views.py, its own process so SDXL leaves the card after)
+                if str(_msg).startswith("HDF ") and os.environ.get("FS_HDVIEWS", "1") != "0":
+                    import subprocess as _sp, sys as _sys
+                    _r = _sp.run([_sys.executable, str(Path(__file__).resolve().parents[2] / "tools" / "hd_views.py"), kind],
+                                 capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=1500)
+                    if verbose:
+                        print(f"[bake] hd views {anim.name}: {(_r.stdout or '').strip().splitlines()[-1:] or _r.stderr[-200:]}")
             except Exception as _he:
                 if verbose:
                     print(f"[bake] hd front skipped ({type(_he).__name__}: {_he})")

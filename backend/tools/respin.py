@@ -46,7 +46,13 @@ def respin(job: str) -> str:
     (dist / "index.html").write_text(
         (RUNTIME / page).read_text(encoding="utf-8").replace("__TITLE__", spec.get("title") or ""),
         encoding="utf-8")
-    return "job %s: game.js and index.html rewritten from %s (%d bytes)" % (job, tpl, len(out))
+    # and the procedural modules the runtime imports (2026-10-08): a respun game
+    # imported gait.js's new makePlanter from the build's old copy and died at load
+    import shutil
+    if (dist / "proc").is_dir():
+        for f in (RUNTIME / "proc").glob("*.js"):
+            shutil.copy2(f, dist / "proc" / f.name)
+    return "job %s: game.js, index.html and proc/ rewritten from %s (%d bytes)" % (job, tpl, len(out))
 
 
 def main(argv: list[str]) -> int:

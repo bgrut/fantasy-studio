@@ -62,6 +62,9 @@ def upgrade(anim: Path, force=False, dry=False, verbose=True) -> str:
         tmp.unlink(missing_ok=True)
         return line
     BACKUP.mkdir(parents=True, exist_ok=True)
+    static = LIB / (anim.stem[:-len("_anim")] + ".glb")
+    if (BACKUP / anim.name).exists() and static.exists() and static.stat().st_mtime > (BACKUP / anim.name).stat().st_mtime:
+        (BACKUP / anim.name).unlink()             # a backup of a body made before this one
     if not (BACKUP / anim.name).exists():
         shutil.copy2(anim, BACKUP / anim.name)
     shutil.move(str(tmp), str(anim))
