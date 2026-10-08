@@ -29,6 +29,7 @@ Usage: blender --background --python _hd_front.py -- coated.glb ref.png out.glb 
 Prints HDF <meshes> <res> <agreement> <front> <secs> on success, HDFAIL otherwise.
 """
 import math
+import os
 import sys
 import time
 
@@ -136,6 +137,64 @@ for ti, tob in enumerate(targets):
     bpy.ops.mesh.select_all(action="SELECT")
     bpy.ops.uv.smart_project(angle_limit=math.radians(60), island_margin=0.0025, area_weight=0.0, scale_to_bounds=True)
     bpy.ops.object.mode_set(mode="OBJECT")
+    # THE FACE GETS THE TEXELS (2026-10-08): smart UV gives every square
+    # centimetre the same share, so a face was about two hundred texels across
+    # while its close-up repaint had five hundred, and the face came out soft.
+    # The head's islands (a person's: the top eighth) are doubled before the
+    # atlas is packed again: four times the texels on the face, the same file.
+    try:
+        import bmesh as _bmh
+        _mw = tob.matrix_world
+        _zs = [(_mw @ v.co).z for v in me.vertices]
+        _zt, _zb = max(_zs), min(_zs); _Hh = _zt - _zb
+        _xs = [(_mw @ v.co).x for v in me.vertices]; _ys = [(_mw @ v.co).y for v in me.vertices]
+        if _Hh > 0 and max(max(_xs) - min(_xs), max(_ys) - min(_ys)) < 1.15 * _Hh and os.environ.get("FS_HDHEAD_TEXELS", "1") != "0":
+            _b = _bmh.new(); _b.from_mesh(me); _uvl = _b.loops.layers.uv.active; _b.faces.ensure_lookup_table()
+            _par = list(range(len(_b.faces)))
+
+            def _fd(i):
+                while _par[i] != i:
+                    _par[i] = _par[_par[i]]; i = _par[i]
+                return i
+            for _e in _b.edges:
+                lf = _e.link_faces
+                if len(lf) != 2:
+                    continue
+                f0, f1 = lf
+                l0 = {l.vert.index: l[_uvl].uv.copy() for l in f0.loops}
+                l1 = {l.vert.index: l[_uvl].uv.copy() for l in f1.loops}
+                if all((l0[v.index] - l1[v.index]).length < 1e-6 for v in _e.verts):
+                    a_, b_ = _fd(f0.index), _fd(f1.index)
+                    if a_ != b_:
+                        _par[a_] = b_
+            _isl = {}
+            for f in _b.faces:
+                _isl.setdefault(_fd(f.index), []).append(f)
+            _head = _zt - 0.135 * _Hh
+            _n = 0
+            for fs in _isl.values():
+                hz = sum(1 for f in fs if (_mw @ f.calc_center_median()).z > _head)
+                if hz * 2 < len(fs):
+                    continue
+                us = [l[_uvl].uv for f in fs for l in f.loops]
+                cu = sum((u.x for u in us)) / len(us); cv = sum((u.y for u in us)) / len(us)
+                for f in fs:
+                    for l in f.loops:
+                        uvv = l[_uvl].uv
+                        uvv.x = cu + (uvv.x - cu) * 2.0; uvv.y = cv + (uvv.y - cv) * 2.0
+                _n += 1
+            _b.to_mesh(me); _b.free(); me.update()
+            if _n:
+                bpy.ops.object.mode_set(mode="EDIT")
+                bpy.ops.mesh.select_all(action="SELECT")
+                bpy.ops.uv.select_all(action="SELECT")
+                bpy.ops.uv.pack_islands(rotate=True, margin=0.0025)
+                bpy.ops.object.mode_set(mode="OBJECT")
+                print("HDTEXELS head islands doubled: %d" % _n)
+    except Exception as _tx:
+        if bpy.context.object and bpy.context.object.mode != "OBJECT":
+            bpy.ops.object.mode_set(mode="OBJECT")
+        print("HDTEXELS skipped (%s: %s)" % (type(_tx).__name__, str(_tx)[:120]))
     if not me.materials:
         print("HDSKIP no material on", tob.name); continue
     nodes = []
@@ -327,6 +386,11 @@ if score < (0.5 if SIDE else 0.42):
     # (2026-10-08) the repainted views still stand: the photo is left out, not the job
     FRONT_OFF = True
     print("HDNOTE the photo does not agree with the body (r=%.2f): views only" % score)
+# NO PHOTO (2026-10-08): an animal is textured from its own repainted views
+# alone; its photo is a side view the body cannot be laid over (see --side)
+if "--nophoto" in argv:
+    FRONT_OFF = True
+HEADVIEWS = any(a_.split("|")[-1].startswith("head") for i_a, a_ in enumerate(argv) if i_a and argv[i_a - 1] == "--extra")
 CAMS = cams(mir)
 # THE HEAD HAS ITS OWN FIT (2026-10-08). One scale and centre for the whole
 # body leaves the head a few pixels off wherever the generated head's
@@ -466,7 +530,8 @@ for i_a, a_ in enumerate(argv):
             A = np.clip(to_s(A), 0, 1)
         vv = meta["views"][vname]
         cam_e = {"img": A, "low": None, "dir": np.array(vv["dir"]), "right": np.array(vv["right"]), "up": np.array(vv["up"]),
-                 "centre": np.array(meta["centre"]), "ortho": float(meta["ortho"]), "W": VW, "H": VH}
+                 "centre": np.array(vv.get("centre", meta["centre"])), "ortho": float(vv.get("ortho", meta["ortho"])), "W": VW, "H": VH,
+                 "head": vname.startswith("head")}
         # its broad colour: a box blur a few percent of the frame wide
         rr_ = max(2, VW // 96)
         def _box(img, r):
@@ -488,6 +553,8 @@ def project_extra(Pt, e):
 
 for e in EXTRA:
     _px, _py, _d = project_extra(allP, e)
+    _in = (_px >= 0) & (_px < e["W"]) & (_py >= 0) & (_py < e["H"])          # a head view sees the head: the rest of the body is not piled on its border
+    _px, _py, _d = _px[_in], _py[_in], _d[_in]
     H_, W_ = e["H"] // 2 + 1, e["W"] // 2 + 1
     zz_ = np.full((H_, W_), -1e9, np.float32)
     np.maximum.at(zz_, (np.clip((_py / 2).astype(int), 0, H_ - 1), np.clip((_px / 2).astype(int), 0, W_ - 1)), _d)
@@ -511,6 +578,13 @@ for tob, nodes, C, P, N in bakes:
         acc += sample_photo(px, py) * wc[:, None]; wsum += wc
     photo = acc / np.maximum(wsum, 1e-6)[:, None]
     w = np.zeros_like(wsum) if FRONT_OFF else np.clip(wsum, 0, 1)
+    # THE FACE IS THE BODY'S OWN (2026-10-08): with head views to come, the
+    # reference photo stays off the head. Laid on a head that is not quite the
+    # photo's, it gave two noses and a smeared mouth; the head views are
+    # repaints of the head itself, so every feature stays on its geometry.
+    if HEADVIEWS and HEADZ is not None:
+        _th = np.clip((Pt[:, 2] - HEADZ[0]) / (HEADZ[1] - HEADZ[0]), 0, 1)
+        w = w * (1 - _th * _th * (3 - 2 * _th))
     # the photo's own studio light differs a little from the coat: carry its
     # detail at the coat's tone where the two disagree broadly
     out_m = base * (1 - w[:, None]) + photo * w[:, None]
@@ -519,7 +593,7 @@ for tob, nodes, C, P, N in bakes:
     # generated coat has its shading baked in: a brown smear under every nose.
     # On the front of the head the photo at the same place (the skin just in
     # front) stands in for the coat; the back of the head is left to the views.
-    if HEADZ is not None:
+    if HEADZ is not None and not HEADVIEWS:
         th = np.clip((Pt[:, 2] - HEADZ[0]) / (HEADZ[1] - HEADZ[0]), 0, 1); th = th * th * (3 - 2 * th)
         # only down the middle of the face (the nose and its hollows, the chin): a
         # flank projects onto the photo's outline and belongs to the side views
@@ -531,18 +605,32 @@ for tob, nodes, C, P, N in bakes:
         if (wf > 0.05).any():
             out_m = out_m * (1 - wf[:, None]) + sample_photo(px0, py0) * wf[:, None]
             w = np.maximum(w, wf)
-    for e in EXTRA:
+    def _paint(e, base_m):
         px, py, depth = project_extra(Pt, e)
         facing = Nt @ e["dir"]
-        we = np.clip((facing - 0.2) / 0.45, 0, 1)
-        we *= depth >= e["zb"][np.clip((py / 2).astype(int), 0, e["zb"].shape[0] - 1), np.clip((px / 2).astype(int), 0, e["zb"].shape[1] - 1)] - 0.012 * size
-        we *= (px > 1) & (px < e["W"] - 2) & (py > 1) & (py < e["H"] - 2)
-        we *= (1 - w)                                   # the true photo keeps what it covers
+        tol = (0.004 if e["head"] else 0.012) * size
+        vis = depth >= e["zb"][np.clip((py / 2).astype(int), 0, e["zb"].shape[0] - 1), np.clip((px / 2).astype(int), 0, e["zb"].shape[1] - 1)] - tol
+        inb = (px > 1) & (px < e["W"] - 2) & (py > 1) & (py < e["H"] - 2)
         rep = sample(e["img"], px, py); low = sample(e["low"], px, py)
-        agree = np.exp(-np.sum((low - out_m) ** 2, axis=1) / 0.03)[:, None]
+        agree = np.exp(-np.sum((low - base_m) ** 2, axis=1) / 0.03)[:, None]
         detail = np.clip(rep - low, -0.25, 0.25)
-        paint = out_m + agree * (rep - out_m) + (1 - agree) * detail
-        out_m = out_m * (1 - we[:, None]) + np.clip(paint, 0, 1) * we[:, None]
+        return np.clip(base_m + agree * (rep - base_m) + (1 - agree) * detail, 0, 1), facing, vis & inb
+    for e in [e for e in EXTRA if not e["head"]]:
+        paint, facing, ok = _paint(e, out_m)
+        we = np.clip((facing - 0.2) / 0.45, 0, 1) * ok * (1 - w)     # the true photo keeps what it covers
+        out_m = out_m * (1 - we[:, None]) + paint * we[:, None]
+    # the head views together, not one over another: each texel takes the views
+    # that see it most squarely, weighted steeply by how squarely, so the
+    # front owns the face, the three-quarters the cheeks, the sides the ears
+    hv = [e for e in EXTRA if e["head"]]
+    if hv:
+        hacc = np.zeros_like(out_m); hsum = np.zeros(len(Pt), np.float32)
+        for e in hv:
+            paint, facing, ok = _paint(e, out_m)
+            wg = np.clip((facing - 0.25) / 0.75, 0, 1) ** 4 * ok
+            hacc += paint * wg[:, None]; hsum += wg
+        cov = np.clip(hsum * 6.0, 0, 1) * (1 - w)
+        out_m = out_m * (1 - cov[:, None]) + (hacc / np.maximum(hsum, 1e-6)[:, None]) * cov[:, None]
     out = cs.copy(); out[mc] = out_m
     out = dilate(np.clip(out, 0, 1), mc, 16)
     rgba = np.concatenate([out, np.ones(out.shape[:2] + (1,), np.float32)], axis=2)

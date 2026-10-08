@@ -36,6 +36,17 @@ VIEWS = {"front": "facing the camera, front view",
          "back": "seen from behind, back view, the back of the head",
          "left": "seen from the side, side view, profile",
          "right": "seen from the side, side view, profile"}
+HEAD_VIEWS = {"head_front": "facing the camera, front view",
+              "head_left34": "three-quarter view, turned slightly to the side",
+              "head_right34": "three-quarter view, turned slightly to the side",
+              "head_left": "side profile view",
+              "head_right": "side profile view"}
+HEAD_STRENGTH = float(os.environ.get("FS_HDHEAD_STRENGTH", "0.45"))
+ANIMAL_VIEWS = {"front": "photographed straight on", "back": "photographed straight on", "left": "photographed straight on", "right": "photographed straight on",
+                "head_front": "head seen from the front", "head_left34": "head in three-quarter view", "head_right34": "head in three-quarter view",
+                "head_left": "head in side profile", "head_right": "head in side profile"}
+NEG_ANIMAL = ("cartoon, illustration, painting, 3d render, cgi, plastic, toy, blurry, low detail, deformed, extra legs, extra eyes, "
+              "two heads, text, logo, watermark, person, human")
 NEG = ("cartoon, illustration, painting, 3d render, cgi, plastic, smooth, blurry, low detail, deformed, extra limbs, "
        "extra arms, face on the back of the head, text, logo, watermark, nude, bare skin, underwear")
 
@@ -68,12 +79,12 @@ def pipe():
     return _PIPE
 
 
-def repaint(src: Path, dst: Path, prompt: str, strength: float, seed: int = 42):
+def repaint(src: Path, dst: Path, prompt: str, strength: float, seed: int = 42, neg: str = None):
     import torch
     from PIL import Image
     img = Image.open(src).convert("RGB").resize((1024, 1024))
     g = torch.Generator("cuda").manual_seed(seed)
-    out = pipe()(prompt=prompt, negative_prompt=NEG, image=img, strength=strength, guidance_scale=6.5,
+    out = pipe()(prompt=prompt, negative_prompt=neg or NEG, image=img, strength=strength, guidance_scale=6.5,
                  num_inference_steps=36, generator=g).images[0]
     out.save(dst)
 
@@ -129,6 +140,8 @@ def upgrade(anim: Path, strength=0.62, verbose=True) -> str:
     # a drawn hero stays drawn: the repaint asks for a photograph
     if kind.split()[0] in ("toon", "anime", "clay", "blocky"):
         return "stylised, left as it is"
+    from app.game_export.generate import guess_pattern
+    animal = guess_pattern(kind) == "quadruped"
     # the coated original, unless the character was made again since (a stale backup is another body)
     static = LIB / (anim.stem[:-len("_anim")] + ".glb")
     bk = BACKUP / anim.name
@@ -139,17 +152,40 @@ def upgrade(anim: Path, strength=0.62, verbose=True) -> str:
     tmp = Path(tempfile.mkdtemp(prefix="hdv_"))
     try:
         r = subprocess.run([str(BLENDER_EXE), "--background", "--python", str(RENDER), "--", str(coated), str(tmp / "v"),
-                            ",".join(VIEWS)], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=600)
+                            ",".join(list(VIEWS) + list(HEAD_VIEWS))], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=900)
         if not (tmp / "v.json").exists():
             return "render failed"
-        outfit = wardrobe(kind)
+        outfit = wardrobe(kind) if not animal else f"real {kind}"
         extras = []
         for v, phrase in VIEWS.items():
-            prompt = (f"raw photograph, DSLR, of a real {outfit}, {phrase}, full body, standing with arms out, "
-                      f"soft studio light, plain grey backdrop, sharp focus, detailed fabric texture, seams and folds")
-            repaint(tmp / f"v_{v}.png", tmp / f"r_{v}.png", prompt, strength)
+            if animal:
+                prompt = (f"raw photograph, DSLR, of a {outfit}, {ANIMAL_VIEWS.get(v, phrase)}, whole animal standing, "
+                          f"natural light, plain grey backdrop, sharp focus, detailed fur, natural colouring")
+            else:
+                prompt = (f"raw photograph, DSLR, of a real {outfit}, {phrase}, full body, standing with arms out, "
+                          f"soft studio light, plain grey backdrop, sharp focus, detailed fabric texture, seams and folds")
+            repaint(tmp / f"v_{v}.png", tmp / f"r_{v}.png", prompt, strength, neg=NEG_ANIMAL if animal else NEG)
             extras += ["--extra", f"{tmp / f'r_{v}.png'}|{tmp / 'v.json'}|{v}"]
-        if os.environ.get("FS_HDHEAD", "1") != "0":
+        # THE HEAD FROM ITS OWN RENDERS (2026-10-08, the user: faces "smeared and
+        # smushed or a little duplicitive"). Each head view is a close render of
+        # the head itself, repainted lightly as a close-up photograph, so the
+        # eyes, nose and mouth stay exactly where the geometry put them, and
+        # projected back through the same camera. The reference photo stays off
+        # the head (see _hd_front.py, HEADVIEWS).
+        for v, phrase in HEAD_VIEWS.items():
+            if not (tmp / f"v_{v}.png").exists():
+                continue
+            if animal:
+                prompt = (f"close-up photograph of the head of a {outfit}, {ANIMAL_VIEWS.get(v, phrase)}, detailed fur, "
+                          f"clear bright eyes, sharp focus, natural light, plain grey backdrop")
+            else:
+                prompt = (f"close-up portrait photograph of a real {outfit}, {phrase}, natural skin texture, pores, "
+                          f"clear detailed eyes, sharp focus, 85mm, soft even studio light, plain grey backdrop")
+            repaint(tmp / f"v_{v}.png", tmp / f"r_{v}.png", prompt, HEAD_STRENGTH, neg=(NEG_ANIMAL if animal else NEG) + ", deformed face, asymmetric eyes, extra eyes, two noses, double face")
+            extras += ["--extra", f"{tmp / f'r_{v}.png'}|{tmp / 'v.json'}|{v}"]
+        if animal:
+            extras += ["--nophoto"]
+        if os.environ.get("FS_HDHEAD", "0") == "1" and not animal:
             try:
                 hb = head_hr(ref, outfit, tmp / "r_head.png")
             except Exception:
