@@ -252,6 +252,17 @@ try:
                     if _cut and len(_cut) < len(o.data.polygons) * 0.10:
                         _b = _bm.new(); _b.from_mesh(o.data); _b.faces.ensure_lookup_table()
                         _bm.ops.delete(_b, geom=[_b.faces[int(i)] for i in _cut], context="FACES")
+                        # AND THE HOLES ARE CLOSED HERE (2026-10-08). The stitch
+                        # promised above only ran on the remesh path; when the
+                        # original surface is kept the cuts stayed open, and the
+                        # monk shipped with three thousand holes in his face and
+                        # robe. The seams are welded so each cut is one closed
+                        # rim, and every small rim is filled; the coat colours
+                        # the patch from the surface around it.
+                        _bm.ops.remove_doubles(_b, verts=list(_b.verts), dist=_sp)
+                        _rim = [e for e in _b.edges if e.is_boundary]
+                        if _rim:
+                            _bm.ops.holes_fill(_b, edges=_rim, sides=48)
                         _b.to_mesh(o.data); _b.free(); o.data.update()
                         _flecked = len(_cut)
         except Exception as _fe:

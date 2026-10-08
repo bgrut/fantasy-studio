@@ -380,7 +380,10 @@ if not SIDE and not FRONT_OFF:
                             if sc > hb[0]:
                                 hb = (sc, (s2, dx2, dy2))
                 s, dx, dy = hb[1]
-            if hb[0] > base_h + 0.02:
+            # and only when the head's colours actually follow the photo's: a
+            # painted reference (the monk's) correlates at zero either way, and
+            # the best of noise moved his face up his forehead
+            if hb[0] > base_h + 0.02 and hb[0] >= 0.15:
                 HEADFIX = (a0, b0, s, dx, dy, ztop - 0.17 * Hm, ztop - 0.125 * Hm)
                 print("HDHEAD r %.3f -> %.3f scale %.3f shift %.1f %.1f px" % (base_h, hb[0], s, dx, dy))
             else:
