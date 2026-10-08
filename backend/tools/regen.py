@@ -137,6 +137,32 @@ def regen(kind: str, attempts: int) -> str:
     print(f"\n== {kind} ==", flush=True)
     before, rec = _verdict(kind)
     print(f"  before: {before} {rec.get('quality_reasons') or ''}", flush=True)
+    # THE OLD MODEL IS KEPT UNTIL A BETTER ONE EXISTS (2026-10-08). This
+    # retired the kind first and, when every attempt failed (TRELLIS.2 had
+    # run out of paging file and fallen back), left it out of the library:
+    # the scientist and the keeper vanished from every game that cast them.
+    # The model, its rig, its entry and its generation cache are set aside,
+    # and put back if no attempt is judged good or fair.
+    from app.game_export.generate import CACHE_DIR
+    keep = RETIRED / ("_keep_" + kind.replace(" ", "_"))
+    shutil.rmtree(keep, ignore_errors=True); keep.mkdir(parents=True, exist_ok=True)
+    stem = kind.replace(" ", "_")
+    for f in [*(BACKEND / "assets" / "library").glob(stem + ".glb"), *(BACKEND / "assets" / "library").glob(stem + "_anim.glb")]:
+        shutil.copy2(str(f), str(keep / f.name))
+    ckey = hashlib.md5(kind.lower().encode("utf-8")).hexdigest()[:12]
+    for f in CACHE_DIR.glob(ckey + "*"):
+        if f.is_file():
+            shutil.copy2(str(f), str(keep / ("cache__" + f.name)))
+    old_entry = _lib().get(kind)
+
+    def _restore() -> None:
+        for f in keep.glob("*.glb"):
+            shutil.copy2(str(f), str(BACKEND / "assets" / "library" / f.name))
+        for f in keep.glob("cache__*"):
+            shutil.copy2(str(f), str(CACHE_DIR / f.name[len("cache__"):]))
+        if old_entry is not None:
+            lib = _lib(); lib[kind] = old_entry; _save_lib(lib)
+        print(f"  {kind}: the previous model is put back", flush=True)
     _retire(kind, "poor")
     for attempt in range(attempts):
         seed = 1000 + attempt * 7919
@@ -173,7 +199,11 @@ def regen(kind: str, attempts: int) -> str:
         if v in ("good", "fair"):
             return v
         _retire(kind, f"poor_seed{seed}")
-    print(f"  {kind}: still poor after {attempts} attempts; left out of the library (a stand-in plays it)", flush=True)
+    print(f"  {kind}: still poor after {attempts} attempts", flush=True)
+    if old_entry is not None:
+        _restore()
+        return "kept"
+    print(f"  {kind}: there was no previous model; left out of the library (a stand-in plays it)", flush=True)
     return "poor"
 
 
