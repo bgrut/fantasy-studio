@@ -308,6 +308,8 @@
          font-weight:650;box-shadow:0 6px 24px rgba(0,0,0,.5);
          opacity:0;transition:opacity .25s;pointer-events:none}
   #toast.on{opacity:1}
+  /* the hints step aside while a message speaks: the two had been printed one over the other (2026-10-08) */
+  body:has(#toast.on) #hint{opacity:0!important;transition:opacity .2s}
   /* the name of the place, over the reveal. Large, centred, and gone the
      moment the player does anything — a title that lingers over play is a
      watermark. */

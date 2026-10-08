@@ -4840,14 +4840,31 @@ function buildFarWorlds() {
                                       : (_want ? _want + ' · ' : '') + w.cores + ' cores' + (w.needs ? ' and more' : ''),
                          open ? '#' + edgeCol.getHexString() : '#9aa3b8');
     lab.position.set(0, -54, 0);
+    lab.name = 'farlab'; lab.userData.op = 0;
     g.add(lab);
     g.userData = { k, open, spin: 0.05 + 0.03 * k };
     farWorlds.add(g);
   });
 }
+// A LABEL IS NOT CUT BY THE SCREEN (2026-10-08): the first view of the
+// demo put Ember Reach's name card in the top-left corner, half off the
+// screen and under the credits readout, reading as a broken HUD. A far
+// world's label shows only well inside the frame and clear of the HUD's
+// corners, and eases in and out as the view turns.
+const _flV = new THREE.Vector3();
+function fadeFarLabel(lab, dt) {
+  _flV.setFromMatrixPosition(lab.matrixWorld).project(camera);
+  const inside = _flV.z < 1 && Math.abs(_flV.x) < 0.72 && _flV.y < 0.62 && _flV.y > -0.55;
+  const t = inside ? 1 : 0, k = Math.min(1, dt * 4);
+  lab.userData.op += (t - lab.userData.op) * k;
+  lab.material.opacity = lab.userData.op;
+  lab.visible = lab.userData.op > 0.02;
+}
 function spinFarWorlds(dt) {
   if (!_farKey) { try { refreshFarWorlds(); } catch (e) { _farKey = 'x'; } }     // the first frame builds them, once everything exists
   for (const g of farWorlds.children) {
+    const fl = g.getObjectByName('farlab');
+    if (fl) fadeFarLabel(fl, dt);
     const b = g.getObjectByName('body');
     if (b) { b.rotation.y += dt * g.userData.spin; b.rotation.x += dt * g.userData.spin * 0.4; }
     const dr = g.getObjectByName('dress');

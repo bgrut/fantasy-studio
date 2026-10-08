@@ -96,7 +96,7 @@ PATTERN_REFERENCE_FRAMING: Dict[str, str] = {
     # threw a hat brim's shadow diagonally across the face, and that shadow
     # was projected onto the face of every hatted character. Soft frontal
     # light, early in the prompt where the encoder weighs it.
-    "biped":     "standing upright facing the camera, face evenly lit by soft frontal light, arms relaxed hanging straight down at sides, open empty hands, neutral A-pose, full body in frame, feet flat on ground, fully clothed",
+    "biped":     "a real person in loose everyday clothes, standing upright facing the camera, face evenly lit by soft frontal light, arms relaxed hanging straight down at sides, open empty hands, neutral A-pose, full body in frame, feet flat on ground, fully clothed",
     # seamless studio cyclorama (2026-07-22): SDXL loves posing trucks in
     # FORESTS — the busy background then projects onto the body as camo
     # blotch whenever the texture falls back to projection
@@ -686,7 +686,7 @@ def _build_reference_prompt(slots: Dict[str, Any], style: str) -> tuple[str, str
     if base_pattern == "biped":
         _cq = " ".join((identity, name, library_query))
         if not any(w in _cq for w in ("suit", "armor", "armour", "hero", "astronaut", "space", "racer", "diver", "robot", "cyborg", "pilot", "knight", "samurai", "viking")):
-            cloth_neg = "futuristic bodysuit, skin-tight suit, spandex, spacesuit, superhero costume, sci-fi armor, racing suit, wetsuit, blotchy pattern, printed pattern, camouflage print, paint splashes"
+            cloth_neg = "robot, android, mannequin, cyborg, leggings, tights, futuristic bodysuit, skin-tight suit, spandex, spacesuit, superhero costume, sci-fi armor, racing suit, wetsuit, blotchy pattern, printed pattern, camouflage print, paint splashes"
     # NOBODY UNDRESSED (2026-10-02): the library's ranger was generated
     # shirtless in briefs and played that way in every game that cast him;
     # a person is always dressed for the part
@@ -871,7 +871,7 @@ def generate_reference(
     if base_pattern == "biped":
         _cq = " ".join((identity, name, library_query))
         if not any(w in _cq for w in ("suit", "armor", "armour", "hero", "astronaut", "space", "racer", "diver", "robot", "cyborg", "pilot", "knight", "samurai", "viking")):
-            cloth_neg = "futuristic bodysuit, skin-tight suit, spandex, spacesuit, superhero costume, sci-fi armor, racing suit, wetsuit, blotchy pattern, printed pattern, camouflage print, paint splashes"
+            cloth_neg = "robot, android, mannequin, cyborg, leggings, tights, futuristic bodysuit, skin-tight suit, spandex, spacesuit, superhero costume, sci-fi armor, racing suit, wetsuit, blotchy pattern, printed pattern, camouflage print, paint splashes"
     # NOBODY UNDRESSED (2026-10-02): the library's ranger was generated
     # shirtless in briefs and played that way in every game that cast him;
     # a person is always dressed for the part

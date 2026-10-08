@@ -342,6 +342,12 @@ if not SIDE and not FRONT_OFF:
     _ha = ((allP[_hm] - MID) @ CAMS[0][0]) * CAMS[0][2]
     HEADC = (float(np.median(_ha)), float(np.percentile(np.abs(_ha - np.median(_ha)), 95))) if len(_ha) > 100 else None
     if HEADC is None: HEADZ = None
+# OFF BY DEFAULT (2026-10-08, later): colour agreement is the wrong measure for
+# a head. Widened, every fit ran to the edge of its search, and past it one
+# eye filled the face (scale 0.57): blowing a small patch of the photo up
+# always correlates better. The body's fit, with the depth test at full
+# resolution, gives the cleaner faces. FS_HDHEAD_FIT=1 brings it back.
+if not SIDE and not FRONT_OFF and __import__('os').environ.get('FS_HDHEAD_FIT', '0') == '1':
     try:
         ztop = float(np.percentile(allP[:, 2], 99.7))
         hm = (allP[:, 2] > ztop - 0.125 * Hm) & (allN @ CAMS[0][1] > 0.45)
@@ -364,9 +370,9 @@ if not SIDE and not FRONT_OFF:
             base_h = hscore(1.0, 0.0, 0.0)
             hpx = 0.125 * Hm * k                      # the head's height in photo pixels
             hb = (base_h, (1.0, 0.0, 0.0))
-            for s in np.arange(0.86, 1.15, 0.04):
-                for dx in np.arange(-0.12, 0.121, 0.02) * hpx:
-                    for dy in np.arange(-0.12, 0.121, 0.02) * hpx:
+            for s in np.arange(0.80, 1.21, 0.04):
+                for dx in np.arange(-0.20, 0.201, 0.025) * hpx:
+                    for dy in np.arange(-0.20, 0.201, 0.025) * hpx:
                         sc = hscore(s, dx, dy)
                         if sc > hb[0]:
                             hb = (sc, (s, dx, dy))
@@ -383,11 +389,14 @@ if not SIDE and not FRONT_OFF:
             # and only when the head's colours actually follow the photo's: a
             # painted reference (the monk's) correlates at zero either way, and
             # the best of noise moved his face up his forehead
-            if hb[0] > base_h + 0.02 and hb[0] >= 0.15:
+            # a fit pinned at the edge of its search has found the hat, not the face
+            # (the vintner's: scale 0.83, shift at the limit, his features doubled)
+            _edge = s <= 0.815 or s >= 1.185 or abs(dx) >= 0.19 * hpx or abs(dy) >= 0.19 * hpx
+            if hb[0] > base_h + 0.02 and hb[0] >= 0.15 and not _edge:
                 HEADFIX = (a0, b0, s, dx, dy, ztop - 0.17 * Hm, ztop - 0.125 * Hm)
                 print("HDHEAD r %.3f -> %.3f scale %.3f shift %.1f %.1f px" % (base_h, hb[0], s, dx, dy))
             else:
-                print("HDHEAD kept the body's fit (r %.3f, best %.3f)" % (base_h, hb[0]))
+                print("HDHEAD kept the body's fit (r %.3f, best %.3f%s)" % (base_h, hb[0], ", at the search edge" if _edge else ""))
     except Exception as _hx:
         print("HDHEAD skipped (%s)" % type(_hx).__name__)
 view = 1 if not SIDE else 0

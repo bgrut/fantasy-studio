@@ -9550,6 +9550,20 @@ async function main() {
         }
         else if (WEST && WEST.inBuilding(holder.position.x, holder.position.z, 0.6)) { holder.position.x = Math.sign(holder.position.x || 1) * 3.5; holder.position.y = hAt(holder.position.x, holder.position.z); }
         else if (GRAVE && GRAVE.onStone(holder.position.x, holder.position.z, 0.5)) { holder.position.x = (rngN() - 0.5) * GRAVE.AW; holder.position.y = hAt(holder.position.x, holder.position.z); }
+        // NOTHING HOSTILE AT THE DOOR (2026-10-08): the keep-clear above measured
+        // from the world's middle, and a dungeon that starts the player at
+        // (0, -17.7) put a skeleton 1.3 m from them: "Defeated" five seconds
+        // in, before a key was pressed. Whatever placed it, a hostile stands
+        // fourteen metres or more from where the player actually starts.
+        if (hostile && _sp && !dormant) {
+          const dx0 = holder.position.x - _sp.x, dz0 = holder.position.z - _sp.z, d0 = Math.hypot(dx0, dz0);
+          if (d0 < 14) {
+            const a0 = d0 > 0.5 ? Math.atan2(dx0, dz0) : rngN() * Math.PI * 2;
+            holder.position.x = _sp.x + Math.sin(a0) * (16 + rngN() * 6);
+            holder.position.z = _sp.z + Math.cos(a0) * (16 + rngN() * 6);
+            holder.position.y = hAt(holder.position.x, holder.position.z);
+          }
+        }
         scene.add(holder);
         // per-instance animation: idle/walk/run clips crossfade with movement
         let anim = null;
@@ -18150,12 +18164,22 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
         // the graded way: gentle S-contrast around mid-gray, saturation lift,
         // and a subtle teal-shadow / warm-highlight split tone (the classic
         // blockbuster grade, kept far below music-video strength).
-        c.rgb = mix(vec3(l), c.rgb, 1.12);               // saturation
-        c.rgb = clamp((c.rgb - 0.5) * 1.07 + 0.5, 0.0, 1.0);  // S-contrast
+        // THE GRADE RUNS ON LIGHT, NOT ON PIXELS (2026-10-08). This pass sits
+        // before the tone map, on linear HDR radiance, and the contrast was
+        // written for display values: (c - 0.5) * 1.07 + 0.5, clamped to 0..1.
+        // In linear light 0.5 is bright, so everything under 0.033 went to
+        // pure black (a moonlit moor rendered as a black screen with grain on
+        // it) and every highlight was clipped at 1.0 before AgX could roll it
+        // off. The contrast is now a power curve about linear mid-grey (0.18),
+        // which keeps black above black and leaves the highlights for the
+        // tone map; the split tone keys off a tone-mapped luminance.
+        c.rgb = max(mix(vec3(l), c.rgb, 1.12), 0.0);     // saturation
+        c.rgb = 0.18 * pow(max(c.rgb, 0.0) / 0.18, vec3(1.07));   // contrast about mid-grey
         float lu = dot(c.rgb, vec3(0.299, 0.587, 0.114));
+        lu = lu / (lu + 0.18);                           // 0.5 at mid-grey, like a display value
         vec3 shadowTone = vec3(0.94, 1.0, 1.06);         // teal shadows
         vec3 highTone   = vec3(1.05, 1.0, 0.95);         // warm highlights
-        c.rgb *= mix(shadowTone, highTone, smoothstep(0.18, 0.78, lu));
+        c.rgb *= mix(shadowTone, highTone, smoothstep(0.3, 0.8, lu));
         // FILM GRAIN MOVED AFTER THE SHARPEN (2026-09-04). It used to be
         // added here, and the CAS sharpen that runs next amplified it: that
         // sharpen weights itself as uAmt * (1 - contrast), so it applies its
@@ -18410,7 +18434,11 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
           c.rgb = mix(vec3(l), c.rgb, sat);       // saturation (or drain)
           if (grain > 0.0) {                      // film grain (horror)
             float g = fract(sin(dot(vUv * res + time, vec2(12.9898, 78.233))) * 43758.5453);
-            c.rgb += (g - 0.5) * grain;
+            // grain rides on the light (2026-10-08): this pass is before the tone
+            // map, and a fixed +/-0.035 of linear noise on a dark frame came out
+            // of the tone map as television static over a night moor. Film grain
+            // scales with the exposure it sits in.
+            c.rgb *= 1.0 + (g - 0.5) * grain * 2.2;
           }
           gl_FragColor = c;
         }`,
@@ -19571,6 +19599,31 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
   // the cascades take every material there is before the first frame, not
   // a second into play (late spawns are caught by the loop)
   if (window.__csmPatch) window.__csmPatch();
+  // eye adaptation (see the render call below): a dozen-frame sample of the
+  // finished frame, its median luminance, and a lift that eases toward it
+  const AE = (() => {
+    const off = new URLSearchParams(location.search).get('ae') === '0' || (SPEC.world && SPEC.world.auto_exposure === false);
+    const cv = document.createElement('canvas'); cv.width = 32; cv.height = 18;
+    const cx = cv.getContext('2d', { willReadFrequently: true });
+    const o = { on: !off, mul: 1, target: 1, n: 0, med: null };
+    o.step = (dt) => {
+      if (++o.n % 12 === 0) {
+        try {
+          cx.drawImage(renderer.domElement, 0, 0, 32, 18);
+          const d = cx.getImageData(0, 0, 32, 18).data, L = [];
+          for (let i = 0; i < d.length; i += 4) L.push((0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2]) / 255);
+          L.sort((a, b) => a - b);
+          // judged on what the eye sees without the lift: the sampled frame already carries it
+          const med = L[L.length >> 1] / Math.max(o.mul, 1e-3) ** 0.85;
+          o.med = med;
+          o.target = Math.min(2.4, Math.max(1, Math.pow(0.11 / Math.max(med, 0.012), 0.75)));
+        } catch (e) { o.on = false; }
+      }
+      o.mul += (o.target - o.mul) * Math.min(1, dt * 0.9);
+    };
+    window.__ae = o;
+    return o;
+  })();
   renderer.setAnimationLoop(() => {
     let dt = Math.min(clock.getDelta(), 0.05);
     const rdt = dt;                       // real dt: camera + juice decay
@@ -21048,7 +21101,19 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
     } else if (CAVE && gameStarted) CAVE.clampCamera(camera, playerObj.position);   // under the roof, out of the walls
     renderer.info.autoReset = false;
     renderer.info.reset();
+    // THE EYE ADAPTS (2026-10-08): a haunted manor on a rainy moor at night
+    // rendered as a black screen with grain on it (median luminance 0.05,
+    // the grain alone; a day scene sits near 0.35). Dark peat under a night
+    // sky is dark, but a game at night is lit so its shapes read, as film
+    // lights day for night. The frame is sampled every dozen frames and,
+    // only when it is darker than a night should be, the exposure is lifted
+    // toward it, at most 2.4 times, easing over a second or two the way an
+    // eye does. A bright frame is never darkened, and the authored exposure
+    // is put back after the frame so every grade and probe still reads it.
+    const _aeBase = renderer.toneMappingExposure;
+    if (AE.on) renderer.toneMappingExposure = _aeBase * AE.mul;
     composer.render();
+    if (AE.on) { renderer.toneMappingExposure = _aeBase; AE.step(rdt); }
     window.__frameCalls = renderer.info.render.calls;
     window.__frameTris = renderer.info.render.triangles;
     // live state for the verify harness (extends the __game probe object)
