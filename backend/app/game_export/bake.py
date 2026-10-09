@@ -1329,7 +1329,13 @@ def _retire(p: Path, why: str) -> None:
     import time
     dst = p.parent / "_retired"
     dst.mkdir(exist_ok=True)
-    p.rename(dst / f"{p.stem}_{time.strftime('%Y%m%d')}_{why}{p.suffix}")
+    # stamped to the second (2026-10-09): a day's stamp met an earlier
+    # retirement of the same model and the rename died, taking the regen with it
+    target = dst / f"{p.stem}_{time.strftime('%Y%m%d-%H%M%S')}_{why}{p.suffix}"
+    k = 1
+    while target.exists():
+        target = dst / f"{p.stem}_{time.strftime('%Y%m%d-%H%M%S')}_{why}_{k}{p.suffix}"; k += 1
+    p.rename(target)
 
 
 def ensure_playable(kind: str, verbose: bool = True) -> str | None:
