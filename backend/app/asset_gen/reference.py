@@ -96,7 +96,7 @@ PATTERN_REFERENCE_FRAMING: Dict[str, str] = {
     # threw a hat brim's shadow diagonally across the face, and that shadow
     # was projected onto the face of every hatted character. Soft frontal
     # light, early in the prompt where the encoder weighs it.
-    "biped":     "a real person in loose everyday clothes, standing upright facing the camera, face evenly lit by soft frontal light, arms relaxed hanging straight down at sides, open empty hands, neutral A-pose, full body in frame, feet flat on ground, fully clothed",
+    "biped":     "full body from head to boots, standing upright with both arms held out straight from the body, open empty hands, facing the camera, face evenly lit by soft frontal light, feet flat on ground, fully clothed",
     # seamless studio cyclorama (2026-07-22): SDXL loves posing trucks in
     # FORESTS — the busy background then projects onto the body as camo
     # blotch whenever the texture falls back to projection
@@ -581,7 +581,14 @@ def _build_reference_prompt(slots: Dict[str, Any], style: str) -> tuple[str, str
             "bandit":    "frontier bandit in a long dusty brown duster coat, a red bandana over the lower face, a battered wide-brimmed hat, boots, fully clothed",
             "child":     "a cheerful child in a bright striped t-shirt, colourful dungarees and sneakers, fully clothed",
             "kid":       "a cheerful child in a bright striped t-shirt, colourful dungarees and sneakers, fully clothed",
-            "firefighter": "firefighter in a heavy tan turnout coat and trousers with reflective yellow stripes, a red helmet, thick gloves, black boots, fully clothed",
+            # (2026-10-09) every one of these came out wrong without an entry: the
+            # archer shirtless, the soccer player in a branded kit, the burglar a
+            # chrome hood; plain, unbranded, fully clothed, faces showing
+            "archer":    "archer with a bare head and short hair, in a dark green wool tunic over a linen shirt, brown leather bracers, full-length brown wool trousers, leather boots, a quiver on the back, face fully visible, fully clothed",
+            "soccer player": "young athlete in a plain solid red cotton t-shirt, plain white cotton shorts, white socks, black trainers, fully clothed",
+            "footballer": "young athlete in a plain solid red cotton t-shirt, plain white cotton shorts, white socks, black trainers, fully clothed",
+            "burglar":   "man in a black knitted beanie pulled up above the ears, a dark grey roll-neck sweater, black trousers, black gloves, soft black shoes, face fully visible, fully clothed",
+            "firefighter": "firefighter in a heavy tan turnout coat and trousers with reflective yellow stripes, a plain red helmet with no lettering, thick gloves, black boots, fully clothed",
             "fireman":   "firefighter in a heavy tan turnout coat and trousers with reflective yellow stripes, a red helmet, thick gloves, black boots, fully clothed",
             "snowboarder": "snowboarder in a baggy bright winter jacket and snow pants, a knitted beanie, goggles pushed up, thick gloves, snow boots, fully clothed",
             "skier":     "skier in a fitted padded ski jacket and ski pants, a helmet and goggles, gloves, ski boots, fully clothed",
@@ -686,7 +693,7 @@ def _build_reference_prompt(slots: Dict[str, Any], style: str) -> tuple[str, str
     if base_pattern == "biped":
         _cq = " ".join((identity, name, library_query))
         if not any(w in _cq for w in ("suit", "armor", "armour", "hero", "astronaut", "space", "racer", "diver", "robot", "cyborg", "pilot", "knight", "samurai", "viking")):
-            cloth_neg = "robot, android, mannequin, cyborg, leggings, tights, futuristic bodysuit, skin-tight suit, spandex, spacesuit, superhero costume, sci-fi armor, racing suit, wetsuit, blotchy pattern, printed pattern, camouflage print, paint splashes"
+            cloth_neg = "bare legs, bare thighs, fashion model, catwalk, miniskirt, hands on hips, props on the floor, hay, face mask, hood over the face, robot, android, mannequin, cyborg, leggings, tights, futuristic bodysuit, skin-tight suit, spandex, spacesuit, superhero costume, sci-fi armor, racing suit, wetsuit, blotchy pattern, printed pattern, camouflage print, paint splashes"
     # NOBODY UNDRESSED (2026-10-02): the library's ranger was generated
     # shirtless in briefs and played that way in every game that cast him;
     # a person is always dressed for the part
@@ -720,6 +727,30 @@ def _not_one_thing(img, noun: str, pattern: str) -> float:
         inputs = proc(text=pos + neg, images=img.convert("RGB"), return_tensors="pt", padding=True).to(dev)
         probs = torch.softmax(model(**inputs).logits_per_image[0].float(), dim=0)
     return float(probs[len(pos):].sum())
+
+
+def _person_faults(img, who: str) -> tuple[float, float]:
+    """THE PICTURE IS JUDGED AS A PERSON (2026-10-09). One seed per character was
+    a lottery the prompt could not win: an archer came out shirtless in shorts,
+    a burglar naked, a soccer kit with a sports brand's stripes, a hooded face
+    with no face in it. CLIP is asked, against the wanted figure, how much of
+    the picture is each of those faults. Returns (fault share, undressed share);
+    a picture with any real undressed share is never kept."""
+    import torch
+    _blotchiness_model_ready()
+    model, proc = _CLIP_JUDGE
+    dev = next(model.parameters()).device
+    w = (who or "person").strip()
+    good = [f"a photo of a fully clothed {w}, face visible", "a fully clothed person in plain clean clothes, face visible"]
+    undressed = ["a naked person", "a shirtless man with a bare chest", "a person in underwear", "a person with bare legs wearing shorts"]
+    other = ["a shirt with a sports brand logo and a crest", "a person whose face is hidden inside a hood",
+             "a mannequin in a white skin-tight bodysuit", "a person with paint splashes on their clothes",
+             "a person with hands on their hips", "a person with hands in their pockets", "a person holding a bow or a weapon"]
+    with torch.no_grad():
+        inputs = proc(text=good + undressed + other, images=img.convert("RGB"), return_tensors="pt", padding=True).to(dev)
+        probs = torch.softmax(model(**inputs).logits_per_image[0].float(), dim=0)
+    und = float(probs[len(good):len(good) + len(undressed)].sum())
+    return float(probs[len(good):].sum()), und
 
 
 def _blotchiness_model_ready():
@@ -871,7 +902,7 @@ def generate_reference(
     if base_pattern == "biped":
         _cq = " ".join((identity, name, library_query))
         if not any(w in _cq for w in ("suit", "armor", "armour", "hero", "astronaut", "space", "racer", "diver", "robot", "cyborg", "pilot", "knight", "samurai", "viking")):
-            cloth_neg = "robot, android, mannequin, cyborg, leggings, tights, futuristic bodysuit, skin-tight suit, spandex, spacesuit, superhero costume, sci-fi armor, racing suit, wetsuit, blotchy pattern, printed pattern, camouflage print, paint splashes"
+            cloth_neg = "bare legs, bare thighs, fashion model, catwalk, miniskirt, hands on hips, props on the floor, hay, face mask, hood over the face, robot, android, mannequin, cyborg, leggings, tights, futuristic bodysuit, skin-tight suit, spandex, spacesuit, superhero costume, sci-fi armor, racing suit, wetsuit, blotchy pattern, printed pattern, camouflage print, paint splashes"
     # NOBODY UNDRESSED (2026-10-02): the library's ranger was generated
     # shirtless in briefs and played that way in every game that cast him;
     # a person is always dressed for the part
@@ -941,7 +972,11 @@ def generate_reference(
     # load-bearing downstream (mocap_retarget binds its arm chain against an
     # A-pose), so they get a scale that makes the template govern.
     if base_pattern == "biped":
-        _cscale = float(_os.environ.get("FS_CONTROLNET_SCALE_BIPED", "0.55"))
+        # 0.55 held the clothes to the template's mannequin: bare legs, white
+        # bodysuits, colours ignored. At 0.25 the wardrobe is worn as asked and
+        # the arms still stand out from the body, the pose said in words too
+        # (2026-10-09; the person judge below throws out what drifts).
+        _cscale = float(_os.environ.get("FS_CONTROLNET_SCALE_BIPED", "0.25"))
     if base_pattern == "vehicle" and _os.environ.get("FS_VEHICLE_DEPTH", "0") != "1":
         depth_image = None
 
@@ -988,18 +1023,23 @@ def generate_reference(
     # twice at most, and the least blotchy of the tries is kept.
     if base_pattern == "biped":
         try:
-            tries = [(img, mode_tag, _blotchiness(img))]
-            for k in (1, 2):
-                if tries[-1][2] < 0.45:
+            # four pictures, the least faulty kept; two more if even the best is undressed
+            _who = (subj.get("identity_phrase") or subj.get("name") or "person")
+            f0, u0 = _person_faults(img, _who)
+            tries = [(img, mode_tag, f0, u0)]
+            for k in range(1, 6):
+                if k >= 4 and min(t[3] for t in tries) < 0.15:
                     break
                 s2 = (int(seed) if seed is not None else 1000) + 101 * k
                 img2, tag2 = _gen_once(s2)
-                tries.append((img2, tag2, _blotchiness(img2)))
-            best = min(tries, key=lambda t: t[2])
-            print(f"[reference] blotchiness " + ", ".join(f"{t[2]:.2f}" for t in tries) + f"; kept {best[2]:.2f}")
+                f2, u2 = _person_faults(img2, _who)
+                tries.append((img2, tag2, f2, u2))
+            dressed = [t for t in tries if t[3] < 0.15] or tries
+            best = min(dressed, key=lambda t: t[2] + 2.0 * t[3])
+            print(f"[reference] person faults " + ", ".join(f"{t[2]:.2f}/{t[3]:.2f}" for t in tries) + f"; kept {best[2]:.2f}/{best[3]:.2f}")
             img, mode_tag = best[0], best[1]
         except Exception as _je:  # noqa: BLE001
-            print(f"[reference] blotch judge skipped ({type(_je).__name__})")
+            print(f"[reference] person judge skipped ({type(_je).__name__}: {_je})")
     # ONE WHOLE THING, LEVEL (2026-09-29): the same reroll for props, animals and
     # swimmers, judged for being a single subject instead of a sheet or a
     # scatter, and for lying level instead of leaping on a diagonal
