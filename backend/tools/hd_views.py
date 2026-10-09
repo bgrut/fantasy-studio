@@ -48,7 +48,11 @@ ANIMAL_VIEWS = {"front": "photographed straight on", "back": "photographed strai
                 "head_left": "head in side profile", "head_right": "head in side profile"}
 NEG_ANIMAL = ("cartoon, illustration, painting, 3d render, cgi, plastic, toy, blurry, low detail, deformed, extra legs, extra eyes, "
               "two heads, text, logo, watermark, person, human")
-NEG = ("cartoon, illustration, painting, 3d render, cgi, plastic, smooth, blurry, low detail, deformed, extra limbs, "
+# NO MARKS (2026-10-09): a soccer jersey came back with a sports brand's swoosh
+# and a crest, a firefighter's helmet with made-up letters; nothing that ships
+# may carry a mark, so the marks lead the negative, where SDXL weighs it most
+NEG = ("text, lettering, letters, words, logo, brand logo, swoosh, crest, emblem, badge, trademark, sponsor, "
+       "cartoon, illustration, painting, 3d render, cgi, plastic, smooth, blurry, low detail, deformed, extra limbs, "
        "extra arms, face on the back of the head, text, logo, watermark, nude, bare skin, underwear")
 
 
@@ -104,7 +108,9 @@ def repaint(src: Path, dst: Path, prompt: str, strength: float, seed: int = 42, 
     from PIL import Image
     img = Image.open(src).convert("RGB").resize((1024, 1024))
     g = torch.Generator("cuda").manual_seed(seed)
-    out = pipe()(prompt=prompt, negative_prompt=neg or NEG, image=img, strength=strength, guidance_scale=6.5,
+    from app.asset_gen.reference import _long_prompt_kwargs       # the whole negative, not its first 77 tokens
+    _p = pipe()
+    out = _p(**_long_prompt_kwargs(_p, prompt, neg or NEG), image=img, strength=strength, guidance_scale=6.5,
                  num_inference_steps=36, generator=g).images[0]
     out.save(dst)
 
