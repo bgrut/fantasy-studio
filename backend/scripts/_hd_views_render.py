@@ -31,7 +31,8 @@ scn = bpy.context.scene
 scn.render.engine = "BLENDER_WORKBENCH"
 # flat (4th argument): albedo only, for the head's refining steps, so a
 # studio light is not painted in once per step
-scn.display.shading.light = "FLAT" if (len(argv) > 3 and argv[3] == "flat") else "STUDIO"
+FLAGS = argv[3:]
+scn.display.shading.light = "FLAT" if "flat" in FLAGS else "STUDIO"
 scn.display.shading.color_type = "TEXTURE" if any(m.material_slots and any(s.material and s.material.use_nodes and any(n.type == "TEX_IMAGE" and n.image for n in s.material.node_tree.nodes) for s in m.material_slots) for m in meshes) and not any(m.data.color_attributes for m in meshes) else "VERTEX"
 w = bpy.data.worlds.new("w"); w.color = (0.42, 0.42, 0.43); scn.world = w
 scn.render.resolution_x = scn.render.resolution_y = RES
@@ -49,7 +50,9 @@ DIRS = {"front": Vector((0, 1, 0)), "back": Vector((0, -1, 0)), "left": Vector((
 # the head: a person's is the top eighth of the body; an animal's (longer than
 # tall) is the top of whichever end of the long axis stands higher
 H = mx.z - mn.z
-long_x = (mx.x - mn.x) > 1.15 * H or (mx.y - mn.y) > 1.15 * H
+# the caller knows the body plan (an elephant or a T-rex is not longer than it
+# is tall, and was framed as a person, 2026-10-09)
+long_x = "animal" in FLAGS or ("person" not in FLAGS and ((mx.x - mn.x) > 1.15 * H or (mx.y - mn.y) > 1.15 * H))
 if not long_x:
     hp = [p for p in pts if p.z > mx.z - 0.13 * H]
     hsize = max(0.13 * H, max(p.x for p in hp) - min(p.x for p in hp), max(p.y for p in hp) - min(p.y for p in hp)) * 1.5
@@ -62,6 +65,13 @@ else:
         ends.append((max(p.z for p in e) if e else -1e9, sgn, e))
     ends.sort(key=lambda t: -t[0])
     top, sgn, e = ends[0]
+    # THE HEAD IS WHERE THE RIG FACES (2026-10-09): "the higher end" took an
+    # elephant's back, a T-rex's tail and a gazelle's horns. A quadruped rig
+    # faces glTF +Z, which is Blender -Y: along Y the head is the -Y end.
+    if ax == 1:
+        e = [p for p in pts if (p.y - ctr.y) < -0.30 * L]
+        if e:
+            top, sgn = max(p.z for p in e), -1
     hp = [p for p in e if p.z > top - 0.35 * H]
     hsize = max(0.30 * H, max(p.z for p in hp) - min(p.z for p in hp)) * 1.5
     # the animal's own "front" is along its head end; head views turn with it

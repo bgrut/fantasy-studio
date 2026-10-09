@@ -175,6 +175,7 @@ def depth_face(depth_png: Path, dst: Path, prompt: str, neg: str, colour_ref=Non
     from app.asset_gen.reference import _long_prompt_kwargs
     c = cn_pipe()
     neg2 = ("illustration, drawing, line art, sketch, cartoon, anime, painting, vector art, flat colours, 3d render, cgi, "
+            "text, letters, lettering, words, logo, badge text, "
             "doll, mannequin, " + neg)
     kw = _long_prompt_kwargs(c, "RAW photo, " + prompt + ", photorealistic, real skin, natural colour", neg2)
     out = c(**kw, image=dimg, controlnet_conditioning_scale=0.7,
@@ -183,7 +184,13 @@ def depth_face(depth_png: Path, dst: Path, prompt: str, neg: str, colour_ref=Non
     mm = np.asarray(Image.fromarray(m.astype(np.uint8) * 255).resize((1024, 1024))) > 127
     if colour_ref is not None and mm.sum() > 1000:
         ref_mu, ref_sd = colour_ref
-        mu, sd = a[mm].mean(0), a[mm].std(0) + 1e-3
+        hp = a[mm]
+        # measured on the generated face's own skin (the reference is skin only),
+        # applied to the whole head
+        r_, g_, b_ = hp[:, 0], hp[:, 1], hp[:, 2]
+        sk = (r_ > g_) & (g_ >= b_ * 0.9) & (r_ - b_ > 12) & (r_ - b_ < 120) & (r_ > 50) & ((r_ - g_) < 70)
+        src = hp[sk] if sk.sum() > 500 else hp
+        mu, sd = src.mean(0), src.std(0) + 1e-3
         k = 0.8                                           # most of the way to the reference's colouring
         a[mm] = (a[mm] - mu) / sd * (sd + (ref_sd - sd) * k) + (mu + (ref_mu - mu) * k)
     Image.fromarray(np.clip(a, 0, 255).astype(np.uint8)).save(dst)
@@ -204,6 +211,12 @@ def photo_head_colour(ref: Path):
     top, bot = int(ys[0]), int(ys[-1]); Hf = bot - top
     band = fig[top:top + int(0.13 * Hf)]
     px = (R[top:top + int(0.13 * Hf)][band] * 255.0)
+    # SKIN ONLY (2026-10-09): the head's band holds the hat too, and a red
+    # helmet turned a firefighter's face red. Skin is warm (red over green over
+    # blue) and not grey; matched on that, or not matched at all.
+    r_, g_, b_ = px[:, 0], px[:, 1], px[:, 2]
+    skin = (r_ > g_) & (g_ >= b_ * 0.9) & (r_ - b_ > 12) & (r_ - b_ < 120) & (r_ > 50) & ((r_ - g_) < 70)
+    px = px[skin]
     if len(px) < 200:
         return None
     return px.mean(0), px.std(0)
@@ -242,10 +255,12 @@ def upgrade(anim: Path, strength=0.62, verbose=True) -> str:
     kind = anim.stem[:-len("_anim")].replace("_", " ")
     ref = CACHE / (hashlib.md5(kind.lower().encode("utf-8")).hexdigest()[:12] + "_ref.png")
     from app.game_export.generate import guess_pattern as _gp
-    if not ref.exists():
-        if _gp(kind) != "quadruped":
-            return "no reference"
-        ref = Path(__file__).resolve().parents[1] / "scripts" / "_hd_noref.png"     # an animal is painted from its own views (--nophoto)
+    noref = not ref.exists()
+    if noref:
+        # NO PHOTO, STILL A FACE (2026-10-09): an older person made before the
+        # references were kept (a knight, a viking, a wizard) is painted like an
+        # animal, from its own views and its own depth, its colour from its coat
+        ref = Path(__file__).resolve().parents[1] / "scripts" / "_hd_noref.png"
         if not ref.exists():
             from PIL import Image as _I
             _I.new("RGB", (64, 64), (110, 110, 112)).save(ref)
@@ -265,7 +280,7 @@ def upgrade(anim: Path, strength=0.62, verbose=True) -> str:
     try:
         def render(src, prefix, views, flat=False):
             subprocess.run([str(BLENDER_EXE), "--background", "--python", str(RENDER), "--", str(src), str(tmp / prefix),
-                            ",".join(views)] + (["flat"] if flat else []),
+                            ",".join(views)] + (["flat"] if flat else []) + (["animal"] if animal else ["person"]),
                            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=900)
             return (tmp / (prefix + ".json")).exists()
 
@@ -295,7 +310,7 @@ def upgrade(anim: Path, strength=0.62, verbose=True) -> str:
             repaint(tmp / f"v_{v}.png", tmp / f"r_{v}.png", prompt, strength, neg=NEG_ANIMAL if animal else NEG)
             extras += ["--extra", f"{tmp / f'r_{v}.png'}|{tmp / 'v.json'}|{v}"]
         stage = tmp / "s0.glb"
-        line = project(coated, stage, extras + (["--nophoto"] if animal else ["--nohead"]))
+        line = project(coated, stage, extras + (["--nophoto"] if (animal or noref) else ["--nohead"]))
         if not line.startswith("HDF "):
             return line
         # 2. THE HEAD IN STEPS, EACH FROM THE LAST (2026-10-08). Repainted
@@ -322,10 +337,18 @@ def upgrade(anim: Path, strength=0.62, verbose=True) -> str:
                     _m = _np.abs(_a - _np.array([107.0, 107.0, 110.0])).sum(2) > 18
                     cref = (_a[_m].mean(0), _a[_m].std(0)) if _m.sum() > 1000 else None
                 else:
-                    hair = photo_hair(ref)
+                    hair = "" if noref else photo_hair(ref)
                     prompt = (f"close-up portrait photograph of a real {outfit}, {hair + ', ' if hair else ''}facing the camera, natural skin texture, pores, "
                               f"clear detailed eyes, sharp focus, 85mm, soft even studio light, plain grey backdrop")
-                    cref = photo_head_colour(ref)
+                    if noref:
+                        import numpy as _np
+                        from PIL import Image as _I
+                        _a = _np.asarray(_I.open(tmp / f"{pre}_{v}.png").convert("RGB"), dtype=_np.float32).reshape(-1, 3)
+                        r_, g_, b_ = _a[:, 0], _a[:, 1], _a[:, 2]
+                        _sk = (r_ > g_) & (g_ >= b_ * 0.9) & (r_ - b_ > 12) & (r_ - b_ < 120) & (r_ > 50) & ((r_ - g_) < 70)
+                        cref = (_a[_sk].mean(0), _a[_sk].std(0)) if _sk.sum() > 800 else None
+                    else:
+                        cref = photo_head_colour(ref)
                 if depth_face(tmp / f"{pre}_{v}_depth.png", tmp / f"r_{v}.png", prompt, neg_head, cref):
                     ex += ["--extra", f"{tmp / f'r_{v}.png'}|{tmp / (pre + '.json')}|{v}"]
                 nxt = tmp / f"s{si + 1}.glb"
