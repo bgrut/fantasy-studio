@@ -590,6 +590,12 @@ for o in meshes:
     # one-sided, like the originals: a generated shell has pinholes, and a
     # double-sided coat shows its own dark inside through every one of them
     coat.use_backface_culling = True
+    # NOT EVERYONE IS METAL (2026-10-08): the generator's metal sheet said a
+    # woman, a scientist and a customer were 0.97 to 1.0 metal, and they
+    # rendered dark and muddy in every game, their skin mirroring the scene.
+    # Plate stays plate; a person or an animal (--matte) is capped at 0.15.
+    if "--matte" in argv:
+        vmr[:, 0] = np.minimum(vmr[:, 0], 0.15)
     mra = me.attributes.new(name="_MR", type="FLOAT_VECTOR", domain="POINT")
     mra.data.foreach_set("vector", np.concatenate([vmr, np.zeros((nv, 1))], axis=1).astype(np.float32).ravel())
     bsdf.inputs["Roughness"].default_value = float(np.clip(vmr[:, 1].mean(), 0.3, 1.0))

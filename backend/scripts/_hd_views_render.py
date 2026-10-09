@@ -29,7 +29,9 @@ mx = Vector((max(p.x for p in pts), max(p.y for p in pts), max(p.z for p in pts)
 ctr = (mn + mx) / 2
 scn = bpy.context.scene
 scn.render.engine = "BLENDER_WORKBENCH"
-scn.display.shading.light = "STUDIO"
+# flat (4th argument): albedo only, for the head's refining steps, so a
+# studio light is not painted in once per step
+scn.display.shading.light = "FLAT" if (len(argv) > 3 and argv[3] == "flat") else "STUDIO"
 scn.display.shading.color_type = "TEXTURE" if any(m.material_slots and any(s.material and s.material.use_nodes and any(n.type == "TEX_IMAGE" and n.image for n in s.material.node_tree.nodes) for s in m.material_slots) for m in meshes) and not any(m.data.color_attributes for m in meshes) else "VERTEX"
 w = bpy.data.worlds.new("w"); w.color = (0.42, 0.42, 0.43); scn.world = w
 scn.render.resolution_x = scn.render.resolution_y = RES
@@ -70,6 +72,8 @@ else:
 hc = Vector((sum(p.x for p in hp) / len(hp), sum(p.y for p in hp) / len(hp), sum(p.z for p in hp) / len(hp))) if hp else ctr
 
 meta = {"ortho": size, "centre": list(ctr), "res": RES, "views": {}, "animal": bool(long_x)}
+depth_views = [v for v in views if v.endswith("_depth")]
+views = [v for v in views if not v.endswith("_depth")]
 for v in views:
     d = DIRS[v]
     c, o_ = (hc, hsize) if v.startswith("head") else (ctr, size)
@@ -81,5 +85,38 @@ for v in views:
     meta["views"][v] = {"dir": list(d), "right": list(R), "up": list(U), "centre": list(c), "ortho": o_}
     scn.render.filepath = f"{out}_{v}.png"
     bpy.ops.render.render(write_still=True)
+# DEPTH (2026-10-08): <view>_depth renders the same camera's depth, near white
+# and far black, for the depth ControlNet that paints a face onto its own
+# geometry. An emission override of the camera's Z, through EEVEE.
+if depth_views:
+    eng = [e.identifier for e in bpy.types.RenderSettings.bl_rna.properties['engine'].enum_items]
+    scn.render.engine = "BLENDER_EEVEE_NEXT" if "BLENDER_EEVEE_NEXT" in eng else "BLENDER_EEVEE"
+    w.use_nodes = True
+    bgn = w.node_tree.nodes.get("Background")
+    if bgn:
+        bgn.inputs[0].default_value = (0, 0, 0, 1); bgn.inputs[1].default_value = 0.0
+    m = bpy.data.materials.new("depth"); m.use_nodes = True
+    nt = m.node_tree
+    for n in list(nt.nodes):
+        nt.nodes.remove(n)
+    cd = nt.nodes.new("ShaderNodeCameraData"); mr = nt.nodes.new("ShaderNodeMapRange")
+    em = nt.nodes.new("ShaderNodeEmission"); oo = nt.nodes.new("ShaderNodeOutputMaterial")
+    nt.links.new(cd.outputs["View Z Depth"], mr.inputs["Value"])
+    nt.links.new(mr.outputs["Result"], em.inputs["Color"])
+    nt.links.new(em.outputs["Emission"], oo.inputs["Surface"])
+    bpy.context.view_layer.material_override = m
+    for dv in depth_views:
+        v = dv[:-len("_depth")]
+        d = DIRS[v]
+        c, o_ = (hc, hsize) if v.startswith("head") else (ctr, size)
+        cam.data.ortho_scale = o_
+        cam.location = c + d * 10
+        cam.rotation_euler = (-d).to_track_quat("-Z", "Y").to_euler()
+        bpy.context.view_layer.update()
+        mr.inputs["From Min"].default_value = 10 - 0.55 * o_; mr.inputs["From Max"].default_value = 10 + 0.35 * o_
+        mr.inputs["To Min"].default_value = 1.0; mr.inputs["To Max"].default_value = 0.0
+        scn.render.filepath = f"{out}_{dv}.png"
+        bpy.ops.render.render(write_still=True)
+    bpy.context.view_layer.material_override = None
 json.dump(meta, open(out + ".json", "w"))
 print("VIEWS", json.dumps({k: v["dir"] for k, v in meta["views"].items()}), 'bbox', list(mn), list(mx), "animal", long_x)

@@ -107,8 +107,11 @@ fig = np.linalg.norm(R - bg_row[:, None, :], axis=2) > 0.11
 # a floor shadow is darker but not a figure: keep only pixels in rows/cols that hold enough figure
 fig &= (fig.sum(1, keepdims=True) > 3) & (fig.sum(0, keepdims=True) > 3)
 rows, cols = np.where(fig.any(1))[0], np.where(fig.any(0))[0]
-if len(rows) < 10 or len(cols) < 10:
+NOPHOTO = "--nophoto" in argv
+if (len(rows) < 10 or len(cols) < 10) and not NOPHOTO:
     print("HDFAIL no figure in the reference"); sys.exit(3)
+if NOPHOTO and (len(rows) < 10 or len(cols) < 10):
+    fig[:] = True
 ys, xs = np.where(fig)
 by0, by1 = np.percentile(ys, 0.3), np.percentile(ys, 99.7)
 bx0, bx1 = np.percentile(xs, 0.3), np.percentile(xs, 99.7)
@@ -128,14 +131,23 @@ def sample(img, px, py):
 bakes = []
 for ti, tob in enumerate(targets):
     me = tob.data
-    for uvl in list(me.uv_layers):
-        me.uv_layers.remove(uvl)
-    uv = me.uv_layers.new(name="HD")
-    me.uv_layers.active = uv
+    # A REFINING PASS KEEPS ITS ATLAS (2026-10-08): the head is painted in
+    # steps (front, then the three-quarters from the front's result, then the
+    # profiles), each pass taking the last one's texture as its coat. Re-
+    # unwrapping every step would resample the whole body each time.
+    _keep = "--keepuv" in argv and len(me.uv_layers) > 0      # glTF does not keep the layer's name
+    if _keep:
+        me.uv_layers.active = me.uv_layers[0]
+    else:
+        for uvl in list(me.uv_layers):
+            me.uv_layers.remove(uvl)
+        uv = me.uv_layers.new(name="HD")
+        me.uv_layers.active = uv
     select_only([tob], tob)
     bpy.ops.object.mode_set(mode="EDIT")
     bpy.ops.mesh.select_all(action="SELECT")
-    bpy.ops.uv.smart_project(angle_limit=math.radians(60), island_margin=0.0025, area_weight=0.0, scale_to_bounds=True)
+    if not _keep:
+        bpy.ops.uv.smart_project(angle_limit=math.radians(60), island_margin=0.0025, area_weight=0.0, scale_to_bounds=True)
     bpy.ops.object.mode_set(mode="OBJECT")
     # THE FACE GETS THE TEXELS (2026-10-08): smart UV gives every square
     # centimetre the same share, so a face was about two hundred texels across
@@ -148,7 +160,7 @@ for ti, tob in enumerate(targets):
         _zs = [(_mw @ v.co).z for v in me.vertices]
         _zt, _zb = max(_zs), min(_zs); _Hh = _zt - _zb
         _xs = [(_mw @ v.co).x for v in me.vertices]; _ys = [(_mw @ v.co).y for v in me.vertices]
-        if _Hh > 0 and max(max(_xs) - min(_xs), max(_ys) - min(_ys)) < 1.15 * _Hh and os.environ.get("FS_HDHEAD_TEXELS", "1") != "0":
+        if not _keep and _Hh > 0 and max(max(_xs) - min(_xs), max(_ys) - min(_ys)) < 1.15 * _Hh and os.environ.get("FS_HDHEAD_TEXELS", "1") != "0":
             _b = _bmh.new(); _b.from_mesh(me); _uvl = _b.loops.layers.uv.active; _b.faces.ensure_lookup_table()
             _par = list(range(len(_b.faces)))
 
@@ -237,7 +249,26 @@ for ti, tob in enumerate(targets):
             return px
         return pixels(im)
 
+    # THE COAT IS READ WITH THE METAL OFF (2026-10-08): the diffuse bake returns
+    # base x (1 - metallic), and a woman whose material said metallic 0.997 had
+    # her whole colour read as black, every pass, which every later step then
+    # painted from. Metallic is zeroed for the read and put back afterwards
+    # (or left at zero for a person, --matte).
+    _metal = []
+    for mat, tn in nodes:
+        _b = next((n for n in mat.node_tree.nodes if n.type == "BSDF_PRINCIPLED"), None)
+        if _b is not None:
+            _mi = _b.inputs["Metallic"]
+            _metal.append((mat.node_tree, _mi, _mi.default_value, [l.from_socket for l in _mi.links]))
+            for l in list(_mi.links):
+                mat.node_tree.links.remove(l)
+            _mi.default_value = 0.0
     C = bake_into("coat", "coat")
+    if "--matte" not in argv:
+        for _nt, _mi, _dv, _src in _metal:
+            _mi.default_value = _dv
+            for _s in _src:
+                _nt.links.new(_s, _mi)
     P = bake_into("pos", "pos")
     N = bake_into("nrm", "nrm")
     bakes.append((tob, nodes, C, P, N))
@@ -359,6 +390,8 @@ if SIDE:
 # a person's photo is never mirrored; an animal's head may face either way
 MIRS = (1, -1) if SIDE else (1,)
 best = (-2.0, None)
+if NOPHOTO:                                # painted from its views alone: no photo to fit
+    best = (0.0, (1, 0.8 * RH / Hm, RW / 2, RH / 2)); MIRS = ()
 for mir in MIRS:
     cam0 = cams(mir)[0]
     for f in np.arange(0.40 if SIDE else 0.62, 0.99, 0.04):
@@ -369,7 +402,7 @@ for mir in MIRS:
                 if sc > best[0]:
                     best = (sc, (mir, k, cx, cy))
 mir, k, cx, cy = best[1]
-for it in range(3):                       # refine: halve the steps around the best
+for it in (range(3) if not NOPHOTO else ()):   # refine: halve the steps around the best
     dk, dc = 0.02 * RH / Hm / (it + 1), 0.0125 * RW / (it + 1)
     for k2 in (k - dk, k, k + dk):
         for cx2 in (cx - dc, cx, cx + dc):
@@ -380,7 +413,7 @@ for it in range(3):                       # refine: halve the steps around the b
     mir, k, cx, cy = best[1]
 score = best[0]
 FRONT_OFF = False
-if score < (0.5 if SIDE else 0.42):
+if score < (0.5 if SIDE else 0.42) and not NOPHOTO:
     if "--extra" not in argv:
         print("HDFAIL the photo does not agree with the body (r=%.2f)" % score); sys.exit(5)
     # (2026-10-08) the repainted views still stand: the photo is left out, not the job
@@ -390,6 +423,7 @@ if score < (0.5 if SIDE else 0.42):
 # alone; its photo is a side view the body cannot be laid over (see --side)
 if "--nophoto" in argv:
     FRONT_OFF = True
+FRONTDIR = np.array([float(x) for x in argv[argv.index("--frontdir") + 1].split(",")]) if "--frontdir" in argv else None
 HEADVIEWS = any(a_.split("|")[-1].startswith("head") for i_a, a_ in enumerate(argv) if i_a and argv[i_a - 1] == "--extra")
 CAMS = cams(mir)
 # THE HEAD HAS ITS OWN FIT (2026-10-08). One scale and centre for the whole
@@ -582,7 +616,7 @@ for tob, nodes, C, P, N in bakes:
     # reference photo stays off the head. Laid on a head that is not quite the
     # photo's, it gave two noses and a smeared mouth; the head views are
     # repaints of the head itself, so every feature stays on its geometry.
-    if HEADVIEWS and HEADZ is not None:
+    if (HEADVIEWS or "--nohead" in argv) and HEADZ is not None:
         _th = np.clip((Pt[:, 2] - HEADZ[0]) / (HEADZ[1] - HEADZ[0]), 0, 1)
         w = w * (1 - _th * _th * (3 - 2 * _th))
     # the photo's own studio light differs a little from the coat: carry its
@@ -593,7 +627,7 @@ for tob, nodes, C, P, N in bakes:
     # generated coat has its shading baked in: a brown smear under every nose.
     # On the front of the head the photo at the same place (the skin just in
     # front) stands in for the coat; the back of the head is left to the views.
-    if HEADZ is not None and not HEADVIEWS:
+    if HEADZ is not None and not HEADVIEWS and "--nohead" not in argv:
         th = np.clip((Pt[:, 2] - HEADZ[0]) / (HEADZ[1] - HEADZ[0]), 0, 1); th = th * th * (3 - 2 * th)
         # only down the middle of the face (the nose and its hollows, the chin): a
         # flank projects onto the photo's outline and belongs to the side views
@@ -624,12 +658,32 @@ for tob, nodes, C, P, N in bakes:
     # front owns the face, the three-quarters the cheeks, the sides the ears
     hv = [e for e in EXTRA if e["head"]]
     if hv:
-        hacc = np.zeros_like(out_m); hsum = np.zeros(len(Pt), np.float32)
+        # A HEAD VIEW REPLACES (2026-10-08): the agreement rule keeps a body
+        # repaint to the coat's broad colour, and a generated face over a coat
+        # that had gone black kept only its detail, at black. Head views are the
+        # head's own paint: they replace, but only on a person's head (the top
+        # of the body, eased in over the neck), never the shoulders in frame.
+        zt_ = float(np.percentile(allP[:, 2], 99.7))
+        _ext = allP.max(0) - allP.min(0)
+        animal_ = max(_ext[0], _ext[1]) > 1.15 * _ext[2]
+        band = np.ones(len(Pt), np.float32) if animal_ else np.clip((Pt[:, 2] - (zt_ - 0.17 * Hm)) / (0.035 * Hm), 0, 1)
+        hacc = np.zeros_like(out_m); hsum = np.zeros(len(Pt), np.float32); hcov = np.zeros(len(Pt), np.float32)
         for e in hv:
-            paint, facing, ok = _paint(e, out_m)
-            wg = np.clip((facing - 0.25) / 0.75, 0, 1) ** 4 * ok
+            _, facing, ok = _paint(e, out_m)
+            px_, py_, _ = project_extra(Pt, e)
+            paint = sample(e["img"], px_, py_)
+            wg = np.clip((facing - 0.25) / 0.75, 0, 1) ** 4 * ok * band
+            # A LATER STEP PAINTS ONLY WHAT IT SEES BETTER (2026-10-08): the three-
+            # quarters see the front of the face at an angle too, and replaced the
+            # painted front with their own darker copy. With --frontdir, a view
+            # only takes the texels it faces more squarely than the front does.
+            side = np.clip((facing - Nt @ FRONTDIR - 0.05) / 0.15, 0, 1) if FRONTDIR is not None else 1.0
+            wg = wg * side
+            # how much of the texel this view may take: a broad ramp (the steep one
+            # above only decides between views)
+            hcov = np.maximum(hcov, np.clip((facing - 0.2) / 0.3, 0, 1) * ok * band * side)
             hacc += paint * wg[:, None]; hsum += wg
-        cov = np.clip(hsum * 6.0, 0, 1) * (1 - w)
+        cov = np.where(hsum > 1e-6, hcov, 0.0) * (1 - w)
         out_m = out_m * (1 - cov[:, None]) + (hacc / np.maximum(hsum, 1e-6)[:, None]) * cov[:, None]
     out = cs.copy(); out[mc] = out_m
     out = dilate(np.clip(out, 0, 1), mc, 16)
@@ -647,8 +701,22 @@ for tob, nodes, C, P, N in bakes:
         for l in list(bsdf.inputs["Base Color"].links):
             nt.links.remove(l)
         nt.links.new(tn.outputs["Color"], bsdf.inputs["Base Color"])
+        # SKIN IS NOT METAL (2026-10-08): the generator's metal/roughness map
+        # marked a woman's head metallic, and under soft light a metal face
+        # reflects the dark: her skin rendered black in every engine that reads
+        # the map, the game's included. A person is matte (--matte) unless the
+        # kind is plated; the roughness map is kept.
+        if "--matte" in argv:
+            for l in list(bsdf.inputs["Metallic"].links):
+                nt.links.remove(l)
+            bsdf.inputs["Metallic"].default_value = 0.0
     for ca in list(tob.data.color_attributes):
         tob.data.color_attributes.remove(ca)
+    if "--matte" in argv and "_MR" in tob.data.attributes:      # the runtime reads metal per vertex
+        _mra = tob.data.attributes["_MR"]
+        _v = np.empty(len(_mra.data) * 3, dtype=np.float32); _mra.data.foreach_get("vector", _v); _v = _v.reshape(-1, 3)
+        _v[:, 0] = np.minimum(_v[:, 0], 0.15)
+        _mra.data.foreach_set("vector", _v.ravel())
     print("MESH %s photo %.2f of the surface" % (tob.name, float((w > 0.5).mean())))
 
 for o in objs:

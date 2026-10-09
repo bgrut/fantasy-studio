@@ -64,6 +64,15 @@ def source_for(path) -> str | None:
     return None
 
 
+PLATED = ("robot", "knight", "astronaut", "android", "cyborg", "armor", "armour", "mech", "droid", "golem")
+
+
+def is_plated(stem: str) -> bool:
+    """Kinds whose surface really is metal; everyone else is matte (2026-10-08)."""
+    s = stem.lower().replace("_anim", "").replace("_", " ")
+    return any(w in s for w in PLATED)
+
+
 def coat(path, backup_dir: Path | None = None, source: str | None = None, force: bool = False) -> tuple[bool, str]:
     """Coat one GLB in place. Returns (kept_a_sound_file, what_happened).
     source: the static model it was rigged from; its colour is used when the
@@ -77,6 +86,8 @@ def coat(path, backup_dir: Path | None = None, source: str | None = None, force:
     with tempfile.TemporaryDirectory() as td:
         out = Path(td) / path.name
         extra = [f"--from={source}"] if source else []
+        if not is_plated(path.stem):
+            extra.append("--matte")
         r = subprocess.run([_blender(), "--background", "--python", str(SCRIPT), "--", str(path), str(out)] + extra,
                            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=900)
         line = next((l for l in (r.stdout or "").splitlines() if l.startswith("COAT")), None)

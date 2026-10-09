@@ -17,6 +17,7 @@ The coated original is kept in renders/_coat_backup_hdfront/.
     python tools/hd_views.py [name ...] [--strength 0.62]
 """
 import hashlib
+import json
 import os
 import re
 import shutil
@@ -65,8 +66,27 @@ def wardrobe(kind: str) -> str:
 _PIPE = None
 
 
+_CN = None
+
+
+def cn_pipe():
+    """SDXL with the depth ControlNet: a face painted onto its own geometry."""
+    global _CN
+    if _CN is None:
+        from app.asset_gen.reference import _load_t2i_controlnet_pipeline
+        _CN = _load_t2i_controlnet_pipeline()
+    return _CN
+
+
 def pipe():
     global _PIPE
+    if _PIPE is None and os.environ.get("FS_HDV_SHARED", "1") == "1":
+        # one set of SDXL weights for both: the img2img shares the ControlNet
+        # pipeline's (two copies did not fit the card beside TRELLIS's leftovers)
+        from diffusers import StableDiffusionXLImg2ImgPipeline
+        c = cn_pipe()
+        _PIPE = StableDiffusionXLImg2ImgPipeline(vae=c.vae, text_encoder=c.text_encoder, text_encoder_2=c.text_encoder_2,
+                                                 tokenizer=c.tokenizer, tokenizer_2=c.tokenizer_2, unet=c.unet, scheduler=c.scheduler)
     if _PIPE is None:
         import torch
         from app.asset_gen.reference import _evict_llms
@@ -131,12 +151,104 @@ def head_hr(ref: Path, outfit: str, dst: Path, strength: float = 0.5):
     return box
 
 
+def depth_face(depth_png: Path, dst: Path, prompt: str, neg: str, colour_ref=None, seed: int = 42):
+    """THE FACE ON ITS OWN GEOMETRY (2026-10-08). The front of the head is
+    painted by SDXL against the head's depth: every feature lands where the
+    geometry has it (eyes in the sockets, nose on the nose), sharp, whatever
+    the coat or the photo got wrong. The depth is stretched over its own
+    silhouette so the face's relief reads; the result is matched in colour to
+    colour_ref (the photo's head, or the coat's) inside the silhouette."""
+    import numpy as np
+    import torch
+    from PIL import Image
+    d = np.asarray(Image.open(depth_png).convert("L"), dtype=np.float32) / 255.0
+    m = d > 0.02
+    if m.sum() < 1000:
+        return False
+    lo, hi = np.percentile(d[m], 2), np.percentile(d[m], 99.5)
+    d2 = np.where(m, 0.25 + 0.75 * np.clip((d - lo) / max(hi - lo, 1e-3), 0, 1) ** 0.9, 0.0)
+    dimg = Image.fromarray((d2 * 255).astype(np.uint8)).convert("RGB").resize((1024, 1024))
+    g = torch.Generator("cuda").manual_seed(seed)
+    # a depth map alone pulled the engineer and the dog into line drawings: the
+    # medium leads, the negative opens against drawing, and both prompts are
+    # read whole (reference._long_prompt_kwargs), not cut at 77 tokens
+    from app.asset_gen.reference import _long_prompt_kwargs
+    c = cn_pipe()
+    neg2 = ("illustration, drawing, line art, sketch, cartoon, anime, painting, vector art, flat colours, 3d render, cgi, "
+            "doll, mannequin, " + neg)
+    kw = _long_prompt_kwargs(c, "RAW photo, " + prompt + ", photorealistic, real skin, natural colour", neg2)
+    out = c(**kw, image=dimg, controlnet_conditioning_scale=0.7,
+            guidance_scale=6.0, num_inference_steps=34, generator=g, width=1024, height=1024).images[0]
+    a = np.asarray(out, dtype=np.float32)
+    mm = np.asarray(Image.fromarray(m.astype(np.uint8) * 255).resize((1024, 1024))) > 127
+    if colour_ref is not None and mm.sum() > 1000:
+        ref_mu, ref_sd = colour_ref
+        mu, sd = a[mm].mean(0), a[mm].std(0) + 1e-3
+        k = 0.8                                           # most of the way to the reference's colouring
+        a[mm] = (a[mm] - mu) / sd * (sd + (ref_sd - sd) * k) + (mu + (ref_mu - mu) * k)
+    Image.fromarray(np.clip(a, 0, 255).astype(np.uint8)).save(dst)
+    return True
+
+
+def photo_head_colour(ref: Path):
+    """Mean and spread of the reference photo's head (top of the figure), for depth_face."""
+    import numpy as np
+    from PIL import Image
+    im = Image.open(ref).convert("RGB"); R = np.asarray(im, dtype=np.float32) / 255.0
+    W, H = im.size; E = max(24, W // 16)
+    bg = np.median(np.concatenate([R[:, :E], R[:, -E:]], axis=1), axis=1)
+    fig = np.linalg.norm(R - bg[:, None, :], axis=2) > 0.11
+    ys = np.where(fig.any(1))[0]
+    if len(ys) < 50:
+        return None
+    top, bot = int(ys[0]), int(ys[-1]); Hf = bot - top
+    band = fig[top:top + int(0.13 * Hf)]
+    px = (R[top:top + int(0.13 * Hf)][band] * 255.0)
+    if len(px) < 200:
+        return None
+    return px.mean(0), px.std(0)
+
+
+def photo_hair(ref: Path) -> str:
+    """The hair's tone from the top of the photo's figure, for the face prompt:
+    a freely painted face gave a woman with a black bun a pale hairline (2026-10-08)."""
+    import numpy as np
+    from PIL import Image
+    try:
+        im = Image.open(ref).convert("RGB"); R = np.asarray(im, dtype=np.float32) / 255.0
+        W, H = im.size; E = max(24, W // 16)
+        bg = np.median(np.concatenate([R[:, :E], R[:, -E:]], axis=1), axis=1)
+        fig = np.linalg.norm(R - bg[:, None, :], axis=2) > 0.11
+        ys = np.where(fig.any(1))[0]
+        top, bot = int(ys[0]), int(ys[-1]); Hf = bot - top
+        band = R[top:top + max(4, int(0.035 * Hf))][fig[top:top + max(4, int(0.035 * Hf))]]
+        if len(band) < 50:
+            return ""
+        l = float((band @ np.array([0.299, 0.587, 0.114])).mean())
+        sat = float((band.max(1) - band.min(1)).mean())
+        if l < 0.22:
+            return "black hair"
+        if l < 0.36:
+            return "dark brown hair"
+        if l > 0.62 and sat < 0.25:
+            return "blonde hair" if band[:, 0].mean() > band[:, 2].mean() + 0.03 else "grey hair"
+        return "brown hair"
+    except Exception:
+        return ""
+
+
 def upgrade(anim: Path, strength=0.62, verbose=True) -> str:
     from app.game_export.generate import BLENDER_EXE
     kind = anim.stem[:-len("_anim")].replace("_", " ")
     ref = CACHE / (hashlib.md5(kind.lower().encode("utf-8")).hexdigest()[:12] + "_ref.png")
+    from app.game_export.generate import guess_pattern as _gp
     if not ref.exists():
-        return "no reference"
+        if _gp(kind) != "quadruped":
+            return "no reference"
+        ref = Path(__file__).resolve().parents[1] / "scripts" / "_hd_noref.png"     # an animal is painted from its own views (--nophoto)
+        if not ref.exists():
+            from PIL import Image as _I
+            _I.new("RGB", (64, 64), (110, 110, 112)).save(ref)
     # a drawn hero stays drawn: the repaint asks for a photograph
     if kind.split()[0] in ("toon", "anime", "clay", "blocky"):
         return "stylised, left as it is"
@@ -151,11 +263,27 @@ def upgrade(anim: Path, strength=0.62, verbose=True) -> str:
         bk.unlink()
     tmp = Path(tempfile.mkdtemp(prefix="hdv_"))
     try:
-        r = subprocess.run([str(BLENDER_EXE), "--background", "--python", str(RENDER), "--", str(coated), str(tmp / "v"),
-                            ",".join(list(VIEWS) + list(HEAD_VIEWS))], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=900)
-        if not (tmp / "v.json").exists():
-            return "render failed"
+        def render(src, prefix, views, flat=False):
+            subprocess.run([str(BLENDER_EXE), "--background", "--python", str(RENDER), "--", str(src), str(tmp / prefix),
+                            ",".join(views)] + (["flat"] if flat else []),
+                           capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=900)
+            return (tmp / (prefix + ".json")).exists()
+
+        plated = any(w in kind for w in ("robot", "knight", "astronaut", "android", "cyborg", "armor", "armour", "mech"))
+
+        def project(src, dst, extras):
+            extras = extras + ([] if (animal or plated) else ["--matte"])
+            r = subprocess.run([str(BLENDER_EXE), "--background", "--python", str(FRONT), "--", str(src), str(ref), str(dst)] + extras,
+                               capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=900)
+            line = next((l for l in (r.stdout or "").splitlines() if l.startswith(("HDF ", "HDFAIL"))), "HDFAIL no result")
+            return line if (line.startswith("HDF ") and dst.exists()) else (line if not line.startswith("HDF ") else "HDFAIL no output")
+
         outfit = wardrobe(kind) if not animal else f"real {kind}"
+        neg_head = (NEG_ANIMAL if animal else NEG) + ", deformed face, asymmetric eyes, extra eyes, two noses, double face"
+        # 1. the body: the photo on the front (a person's), repaints on every side,
+        #    and nothing of the photo on the head, which is painted next
+        if not render(coated, "v", list(VIEWS)):
+            return "render failed"
         extras = []
         for v, phrase in VIEWS.items():
             if animal:
@@ -166,39 +294,65 @@ def upgrade(anim: Path, strength=0.62, verbose=True) -> str:
                           f"soft studio light, plain grey backdrop, sharp focus, detailed fabric texture, seams and folds")
             repaint(tmp / f"v_{v}.png", tmp / f"r_{v}.png", prompt, strength, neg=NEG_ANIMAL if animal else NEG)
             extras += ["--extra", f"{tmp / f'r_{v}.png'}|{tmp / 'v.json'}|{v}"]
-        # THE HEAD FROM ITS OWN RENDERS (2026-10-08, the user: faces "smeared and
-        # smushed or a little duplicitive"). Each head view is a close render of
-        # the head itself, repainted lightly as a close-up photograph, so the
-        # eyes, nose and mouth stay exactly where the geometry put them, and
-        # projected back through the same camera. The reference photo stays off
-        # the head (see _hd_front.py, HEADVIEWS).
-        for v, phrase in HEAD_VIEWS.items():
-            if not (tmp / f"v_{v}.png").exists():
-                continue
-            if animal:
-                prompt = (f"close-up photograph of the head of a {outfit}, {ANIMAL_VIEWS.get(v, phrase)}, detailed fur, "
-                          f"clear bright eyes, sharp focus, natural light, plain grey backdrop")
-            else:
-                prompt = (f"close-up portrait photograph of a real {outfit}, {phrase}, natural skin texture, pores, "
-                          f"clear detailed eyes, sharp focus, 85mm, soft even studio light, plain grey backdrop")
-            repaint(tmp / f"v_{v}.png", tmp / f"r_{v}.png", prompt, HEAD_STRENGTH, neg=(NEG_ANIMAL if animal else NEG) + ", deformed face, asymmetric eyes, extra eyes, two noses, double face")
-            extras += ["--extra", f"{tmp / f'r_{v}.png'}|{tmp / 'v.json'}|{v}"]
-        if animal:
-            extras += ["--nophoto"]
-        if os.environ.get("FS_HDHEAD", "0") == "1" and not animal:
-            try:
-                hb = head_hr(ref, outfit, tmp / "r_head.png")
-            except Exception:
-                hb = None
-            if hb:
-                extras += ["--headhr", "%s|%d|%d|%d|%d" % ((tmp / "r_head.png",) + tuple(hb))]
-        out = anim.with_name(anim.stem + "_hdvtmp.glb")
-        r = subprocess.run([str(BLENDER_EXE), "--background", "--python", str(FRONT), "--", str(coated), str(ref), str(out)] + extras,
-                           capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=900)
-        line = next((l for l in (r.stdout or "").splitlines() if l.startswith(("HDF ", "HDFAIL"))), "HDFAIL no result")
-        if not line.startswith("HDF ") or not out.exists():
-            out.unlink(missing_ok=True)
+        stage = tmp / "s0.glb"
+        line = project(coated, stage, extras + (["--nophoto"] if animal else ["--nohead"]))
+        if not line.startswith("HDF "):
             return line
+        # 2. THE HEAD IN STEPS, EACH FROM THE LAST (2026-10-08). Repainted
+        #    independently, the five head views came back as five slightly
+        #    different people (a cap in one, another skin in the next), and
+        #    blended they were mush. The front is painted first; the three-
+        #    quarters are rendered from the front's result, so they already
+        #    show this face and only their cheeks are new; the profiles last.
+        #    Rendered flat, so no light is painted in once per step.
+        steps = [(["head_front"], HEAD_STRENGTH), (["head_left34", "head_right34"], 0.36), (["head_left", "head_right"], 0.36)]
+        for si, (views, st) in enumerate(steps):
+            pre = f"h{si}"
+            if not render(stage, pre, views + ([v + "_depth" for v in views] if si == 0 else []), flat=(si > 0)):
+                break
+            ex = []
+            if si == 0 and os.environ.get("FS_HDV_DEPTHFACE", "1") == "1":
+                v = views[0]
+                if animal:
+                    prompt = (f"close-up photograph of the head of a {outfit}, head seen from the front, detailed fur, "
+                              f"clear bright eyes, sharp focus, natural light, plain grey backdrop")
+                    import numpy as _np
+                    from PIL import Image as _I
+                    _a = _np.asarray(_I.open(tmp / f"{pre}_{v}.png").convert("RGB"), dtype=_np.float32)
+                    _m = _np.abs(_a - _np.array([107.0, 107.0, 110.0])).sum(2) > 18
+                    cref = (_a[_m].mean(0), _a[_m].std(0)) if _m.sum() > 1000 else None
+                else:
+                    hair = photo_hair(ref)
+                    prompt = (f"close-up portrait photograph of a real {outfit}, {hair + ', ' if hair else ''}facing the camera, natural skin texture, pores, "
+                              f"clear detailed eyes, sharp focus, 85mm, soft even studio light, plain grey backdrop")
+                    cref = photo_head_colour(ref)
+                if depth_face(tmp / f"{pre}_{v}_depth.png", tmp / f"r_{v}.png", prompt, neg_head, cref):
+                    ex += ["--extra", f"{tmp / f'r_{v}.png'}|{tmp / (pre + '.json')}|{v}"]
+                nxt = tmp / f"s{si + 1}.glb"
+                if ex and project(stage, nxt, ex + ["--keepuv", "--nophoto"]).startswith("HDF "):
+                    stage = nxt
+                continue
+            for v in views:
+                phrase = HEAD_VIEWS[v]
+                if animal:
+                    prompt = (f"close-up photograph of the head of a {outfit}, {ANIMAL_VIEWS.get(v, phrase)}, detailed fur, "
+                              f"clear bright eyes, sharp focus, natural light, plain grey backdrop")
+                else:
+                    prompt = (f"close-up portrait photograph of a real {outfit}, {phrase}, natural skin texture, pores, "
+                              f"clear detailed eyes, sharp focus, 85mm, soft even studio light, plain grey backdrop")
+                repaint(tmp / f"{pre}_{v}.png", tmp / f"r_{v}.png", prompt, st, neg=neg_head)
+                ex += ["--extra", f"{tmp / f'r_{v}.png'}|{tmp / (pre + '.json')}|{v}"]
+            nxt = tmp / f"s{si + 1}.glb"
+            fd = []
+            try:
+                fdir = json.loads((tmp / "h0.json").read_text())["views"]["head_front"]["dir"]
+                fd = ["--frontdir", ",".join("%.6f" % x for x in fdir)]
+            except Exception:
+                pass
+            if project(stage, nxt, ex + ["--keepuv", "--nophoto"] + fd).startswith("HDF "):
+                stage = nxt
+        out = anim.with_name(anim.stem + "_hdvtmp.glb")
+        shutil.copy2(str(stage), str(out))
         BACKUP.mkdir(parents=True, exist_ok=True)
         if not (BACKUP / anim.name).exists():
             shutil.copy2(anim, BACKUP / anim.name)
@@ -209,7 +363,10 @@ def upgrade(anim: Path, strength=0.62, verbose=True) -> str:
             shutil.copy2(f, keep / f.name)
         return line + " +views"
     finally:
-        shutil.rmtree(tmp, ignore_errors=True)
+        if os.environ.get("FS_HDV_KEEP") == "1":
+            print("HDV kept", tmp, flush=True)
+        else:
+            shutil.rmtree(tmp, ignore_errors=True)
 
 
 def main():
