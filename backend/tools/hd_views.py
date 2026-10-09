@@ -157,7 +157,7 @@ def head_hr(ref: Path, outfit: str, dst: Path, strength: float = 0.5):
     return box
 
 
-def depth_face(depth_png: Path, dst: Path, prompt: str, neg: str, colour_ref=None, seed: int = 42):
+def depth_face(depth_png: Path, dst: Path, prompt: str, neg: str, colour_ref=None, seed: int = 42, skin_wanted: bool = True):
     """THE FACE ON ITS OWN GEOMETRY (2026-10-08). The front of the head is
     painted by SDXL against the head's depth: every feature lands where the
     geometry has it (eyes in the sockets, nose on the nose), sharp, whatever
@@ -174,20 +174,37 @@ def depth_face(depth_png: Path, dst: Path, prompt: str, neg: str, colour_ref=Non
     lo, hi = np.percentile(d[m], 2), np.percentile(d[m], 99.5)
     d2 = np.where(m, 0.25 + 0.75 * np.clip((d - lo) / max(hi - lo, 1e-3), 0, 1) ** 0.9, 0.0)
     dimg = Image.fromarray((d2 * 255).astype(np.uint8)).convert("RGB").resize((1024, 1024))
-    g = torch.Generator("cuda").manual_seed(seed)
     # a depth map alone pulled the engineer and the dog into line drawings: the
     # medium leads, the negative opens against drawing, and both prompts are
     # read whole (reference._long_prompt_kwargs), not cut at 77 tokens
     from app.asset_gen.reference import _long_prompt_kwargs
     c = cn_pipe()
-    neg2 = ("illustration, drawing, line art, sketch, cartoon, anime, painting, vector art, flat colours, 3d render, cgi, "
+    neg2 = ("black and white, monochrome, grayscale, sepia, desaturated, "
+            "illustration, drawing, line art, sketch, cartoon, anime, painting, vector art, flat colours, 3d render, cgi, "
             "text, letters, lettering, words, logo, badge text, "
             "doll, mannequin, " + neg)
-    kw = _long_prompt_kwargs(c, "RAW photo, " + prompt + ", photorealistic, real skin, natural colour", neg2)
-    out = c(**kw, image=dimg, controlnet_conditioning_scale=0.7,
-            guidance_scale=6.0, num_inference_steps=34, generator=g, width=1024, height=1024).images[0]
-    a = np.asarray(out, dtype=np.float32)
+    kw = _long_prompt_kwargs(c, "RAW colour photo, " + prompt + ", photorealistic, real skin, natural colour", neg2)
     mm = np.asarray(Image.fromarray(m.astype(np.uint8) * 255).resize((1024, 1024))) > 127
+
+    def _skin_share(arr):
+        hp_ = arr[mm]
+        r_, g_, b_ = hp_[:, 0], hp_[:, 1], hp_[:, 2]
+        return float(((r_ > g_) & (g_ >= b_ * 0.9) & (r_ - b_ > 12) & (r_ - b_ < 120) & (r_ > 50)).mean())
+    # A COLOUR FACE (2026-10-09): a scientist in a white coat with greying hair came
+    # out a black-and-white photograph, and colour matching cannot add colour that
+    # is not there. Up to three draws; the one with the most real skin is kept.
+    best_a, best_s = None, -1.0
+    for _t in range(3 if colour_ref is not None or skin_wanted else 1):
+        g = torch.Generator("cuda").manual_seed(seed + 977 * _t)
+        out = c(**kw, image=dimg, controlnet_conditioning_scale=0.7,
+                guidance_scale=6.0, num_inference_steps=34, generator=g, width=1024, height=1024).images[0]
+        _a = np.asarray(out, dtype=np.float32)
+        _s = _skin_share(_a) if skin_wanted else 1.0
+        if _s > best_s:
+            best_a, best_s = _a, _s
+        if _s >= 0.35:
+            break
+    a = best_a
     if colour_ref is not None and mm.sum() > 1000:
         ref_mu, ref_sd = colour_ref
         hp = a[mm]
@@ -208,13 +225,15 @@ def photo_head_colour(ref: Path):
     import numpy as np
     from PIL import Image
     im = Image.open(ref).convert("RGB"); R = np.asarray(im, dtype=np.float32) / 255.0
-    W, H = im.size; E = max(24, W // 16)
-    bg = np.median(np.concatenate([R[:, :E], R[:, -E:]], axis=1), axis=1)
-    fig = np.linalg.norm(R - bg[:, None, :], axis=2) > 0.11
+    fig, _ = _figure_mask(R)
     ys = np.where(fig.any(1))[0]
     if len(ys) < 50:
         return None
-    top, bot = int(ys[0]), int(ys[-1]); Hf = bot - top
+    top, bot = int(ys[0]), int(ys[-1])
+    _t = _figure_top(fig)
+    if _t is not None:
+        top = _t
+    Hf = bot - top
     band = fig[top:top + int(0.13 * Hf)]
     px = (R[top:top + int(0.13 * Hf)][band] * 255.0)
     # SKIN ONLY (2026-10-09): the head's band holds the hat too, and a red
@@ -228,6 +247,35 @@ def photo_head_colour(ref: Path):
     return px.mean(0), px.std(0)
 
 
+def _figure_mask(R):
+    """The figure against a studio backdrop that is lit brighter in the middle
+    than at its edges (2026-10-09): each row's level from its margins plus a
+    horizontal profile from the empty strip along the top of the frame."""
+    import numpy as np
+    H, W = R.shape[:2]; E = max(24, W // 16)
+    row = np.median(np.concatenate([R[:, :E], R[:, -E:]], axis=1), axis=1)          # (H, 3)
+    t = max(8, H // 40)
+    prof = np.median(R[:t], axis=0) - row[:t].mean(0)                                 # (W, 3)
+    B = row[:, None, :] + prof[None, :, :]
+    fig = np.linalg.norm(R - B, axis=2) > 0.11
+    fig &= (fig.sum(1, keepdims=True) > 3) & (fig.sum(0, keepdims=True) > 3)
+    return fig, B
+
+
+def _figure_top(fig):
+    """The crown of the figure: the first row whose central strip holds figure,
+    followed by a run of rows that also do. A vignetted backdrop marked the
+    wall's top rows as figure, and a scientist's hair was read off the wall
+    (2026-10-09)."""
+    import numpy as np
+    H, W = fig.shape
+    strip = fig[:, int(W * 0.35):int(W * 0.65)].mean(1)
+    for y in range(H - 25):
+        if strip[y] > 0.04 and (strip[y:y + 25] > 0.02).all():
+            return y
+    return None
+
+
 def photo_hair(ref: Path) -> str:
     """The hair's tone from the top of the photo's figure, for the face prompt:
     a freely painted face gave a woman with a black bun a pale hairline (2026-10-08)."""
@@ -236,11 +284,25 @@ def photo_hair(ref: Path) -> str:
     try:
         im = Image.open(ref).convert("RGB"); R = np.asarray(im, dtype=np.float32) / 255.0
         W, H = im.size; E = max(24, W // 16)
-        bg = np.median(np.concatenate([R[:, :E], R[:, -E:]], axis=1), axis=1)
-        fig = np.linalg.norm(R - bg[:, None, :], axis=2) > 0.11
+        fig, Bg = _figure_mask(R)
         ys = np.where(fig.any(1))[0]
-        top, bot = int(ys[0]), int(ys[-1]); Hf = bot - top
-        band = R[top:top + max(4, int(0.035 * Hf))][fig[top:top + max(4, int(0.035 * Hf))]]
+        top, bot = int(ys[0]), int(ys[-1])
+        _t = _figure_top(fig)
+        if _t is not None:
+            top = _t
+        Hf = bot - top
+        # inside the hair: a band a little below the crown, the middle of the head's
+        # width, and nothing near the backdrop's own colour (the anti-aliased rim
+        # of a brown-haired scientist against a pale wall read as grey hair)
+        y0, y1 = top + max(2, int(0.012 * Hf)), top + max(6, int(0.05 * Hf))
+        sub, msk = R[y0:y1], fig[y0:y1]
+        xs = np.where(msk.any(0))[0]
+        if len(xs) < 4:
+            return ""
+        cx_, hw_ = (xs.min() + xs.max()) / 2, (xs.max() - xs.min()) / 2
+        cols = np.abs(np.arange(sub.shape[1]) - cx_) < 0.45 * hw_
+        far = np.linalg.norm(sub - Bg[y0:y1], axis=2) > 0.18
+        band = sub[msk & cols[None, :] & far]
         if len(band) < 50:
             return ""
         l = float((band @ np.array([0.299, 0.587, 0.114])).mean())
@@ -355,7 +417,7 @@ def upgrade(anim: Path, strength=0.62, verbose=True) -> str:
                         cref = (_a[_sk].mean(0), _a[_sk].std(0)) if _sk.sum() > 800 else None
                     else:
                         cref = photo_head_colour(ref)
-                if depth_face(tmp / f"{pre}_{v}_depth.png", tmp / f"r_{v}.png", prompt, neg_head, cref):
+                if depth_face(tmp / f"{pre}_{v}_depth.png", tmp / f"r_{v}.png", prompt, neg_head, cref, skin_wanted=not animal):
                     ex += ["--extra", f"{tmp / f'r_{v}.png'}|{tmp / (pre + '.json')}|{v}"]
                 nxt = tmp / f"s{si + 1}.glb"
                 if ex and project(stage, nxt, ex + ["--keepuv", "--nophoto"]).startswith("HDF "):
