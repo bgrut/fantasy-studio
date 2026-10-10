@@ -1410,12 +1410,14 @@ def ensure_playable(kind: str, verbose: bool = True) -> str | None:
     # rotations shows the animal standing on its legs (tools/quad_upright.py);
     # a clear winner is applied to the static, turned to face -Y like every
     # other rig, before the rig is built. FS_QUAD_UPRIGHT=0 skips it.
-    if pattern == "quadruped" and os.environ.get("FS_QUAD_UPRIGHT", "1") != "0":
+    # People too: a firefighter and a ghost were rigged standing on their heads;
+    # for a biped only "as is" and "turned over" are weighed.
+    if pattern in ("quadruped", "biped") and os.environ.get("FS_QUAD_UPRIGHT", "1") != "0":
         try:
             import importlib.util as _ilu
             _sp = _ilu.spec_from_file_location("quad_upright", str(Path(__file__).resolve().parents[2] / "tools" / "quad_upright.py"))
             _qu = _ilu.module_from_spec(_sp); _sp.loader.exec_module(_qu)
-            _r = _qu.fix(Path(static), kind, apply=True)
+            _r = _qu.fix(Path(static), kind, apply=True, biped=(pattern == "biped"))
             if verbose:
                 print(f"[bake] upright check {Path(static).name}: {_r}")
         except Exception as _ue:

@@ -12,6 +12,7 @@ static GLB is rotated in place (Blender, texture kept) when another
 rotation wins clearly.
 
     python backend/tools/quad_upright.py [--fix] sheep elephant ...
+    python backend/tools/quad_upright.py --biped [--fix] firefighter ...
 """
 from __future__ import annotations
 
@@ -27,6 +28,10 @@ BACKEND = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BACKEND))
 
 ROTS = {"as_is": (0, 0, 0), "x+90": (90, 0, 0), "x-90": (-90, 0, 0), "y+90": (0, 90, 0), "y-90": (0, -90, 0), "x180": (180, 0, 0)}
+# A person only ever comes out on its head (a firefighter, 2026-10-09: gear and
+# boots at the top, rigged and coated that way). Turning it over about Y keeps
+# the face where it was, toward +Y.
+BIPED_ROTS = {"as_is": (0, 0, 0), "y180": (0, 180, 0)}
 
 _RENDER = r'''
 import bpy, sys, math, json
@@ -67,6 +72,7 @@ import bpy, sys, math, json
 from mathutils import Euler
 argv = sys.argv[sys.argv.index("--") + 1:]
 src, dst, e = argv[0], argv[1], json.loads(argv[2])
+biped = len(argv) > 3 and argv[3] == "biped"
 bpy.ops.wm.read_factory_settings(use_empty=True)
 bpy.ops.import_scene.gltf(filepath=src)
 ms = [o for o in bpy.data.objects if o.type == "MESH"]
@@ -84,7 +90,7 @@ bpy.ops.object.transform_apply(location=False, rotation=True, scale=False)
 import numpy as np
 P = np.array([list(o.matrix_world @ v.co) for o in ms for v in o.data.vertices])
 ext = P.max(0) - P.min(0)
-if ext[0] > ext[1]:
+if ext[0] > ext[1] and not biped:
     Rz = Euler((0, 0, math.radians(90))).to_matrix().to_4x4()
     for o in ms:
         o.matrix_world = Rz @ o.matrix_world
@@ -92,7 +98,7 @@ if ext[0] > ext[1]:
     P = np.array([list(o.matrix_world @ v.co) for o in ms for v in o.data.vertices])
 L = np.ptp(P[:, 1]); c = (P[:, 1].max() + P[:, 1].min()) / 2
 neg = P[P[:, 1] < c - 0.3 * L, 2]; pos = P[P[:, 1] > c + 0.3 * L, 2]
-if len(neg) and len(pos) and pos.max() > neg.max():         # the head (the higher end) belongs at -Y
+if not biped and len(neg) and len(pos) and pos.max() > neg.max():         # the head (the higher end) belongs at -Y
     Rz = Euler((0, 0, math.radians(180))).to_matrix().to_4x4()
     for o in ms:
         o.matrix_world = Rz @ o.matrix_world
@@ -118,19 +124,22 @@ def clip():
     return _CLIP
 
 
-def judge(glb: Path, kind: str) -> dict:
+def judge(glb: Path, kind: str, biped: bool = False) -> dict:
     from app.game_export.generate import BLENDER_EXE
     import torch
     from PIL import Image
     tmp = Path(tempfile.mkdtemp(prefix="upr_"))
     rs = tmp / "r.py"; rs.write_text(_RENDER, encoding="utf-8")
-    subprocess.run([str(BLENDER_EXE), "--background", "--python", str(rs), "--", str(glb), str(tmp / "v"), json.dumps(ROTS)],
+    subprocess.run([str(BLENDER_EXE), "--background", "--python", str(rs), "--", str(glb), str(tmp / "v"), json.dumps(BIPED_ROTS if biped else ROTS)],
                    capture_output=True, timeout=600)
     model, proc, dev = clip()
     texts = [f"a photo of a {kind} standing upright on its legs", f"a photo of a {kind} lying on its side",
              f"a photo of a {kind} upside down", f"a photo of a {kind} standing on its hind legs"]
+    if biped:
+        texts = [f"a photo of a {kind} standing upright, head at the top and feet on the ground",
+                 f"a photo of a {kind} upside down, standing on their head"]
     scores = {}
-    for name in ROTS:
+    for name in (BIPED_ROTS if biped else ROTS):
         ims = [Image.open(tmp / f"v_{name}_{s}.png").convert("RGB") for s in ("a", "b") if (tmp / f"v_{name}_{s}.png").exists()]
         if not ims:
             continue
@@ -141,22 +150,24 @@ def judge(glb: Path, kind: str) -> dict:
     return {"scores": scores, "tmp": str(tmp)}
 
 
-def fix(glb: Path, kind: str, margin: float = 0.15, apply: bool = False) -> str:
-    j = judge(glb, kind)
+def fix(glb: Path, kind: str, margin: float = 0.15, apply: bool = False, biped: bool = False) -> str:
+    j = judge(glb, kind, biped)
     sc = j["scores"]
     if not sc:
         return "render failed"
     best = max(sc, key=sc.get)
     msg = "%s %s" % (best, " ".join("%s:%.2f" % (k, v) for k, v in sorted(sc.items(), key=lambda t: -t[1])))
-    if os.environ.get("QU_FORCE_FACE") == "1" and apply and best == "as_is":
+    if biped:
+        margin = max(margin, 0.30)                                   # a person turned over is plain to CLIP
+    if os.environ.get("QU_FORCE_FACE") == "1" and apply and best == "as_is" and not biped:
         best = "as_is"; sc[best] = 9.0                               # face-only pass on an upright model
-    if (best != "as_is" and sc[best] - sc.get("as_is", 0) > margin) or (os.environ.get("QU_FORCE_FACE") == "1" and apply):
+    if (best != "as_is" and sc[best] - sc.get("as_is", 0) > margin) or (os.environ.get("QU_FORCE_FACE") == "1" and apply and not biped):
         if apply:
             from app.game_export.generate import BLENDER_EXE
             rs = Path(j["tmp"]) / "rot.py"; rs.write_text(_ROTATE, encoding="utf-8")
             out = glb.with_name(glb.stem + "_uprtmp.glb")
             r = subprocess.run([str(BLENDER_EXE), "--background", "--python", str(rs), "--", str(glb), str(out),
-                                json.dumps(ROTS[best])], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=600)
+                                json.dumps((BIPED_ROTS if biped else ROTS)[best])] + (["biped"] if biped else []), capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=600)
             if out.exists() and "ROTATED" in (r.stdout or ""):
                 out.replace(glb)
                 return "ROTATED " + msg
@@ -167,9 +178,10 @@ def fix(glb: Path, kind: str, margin: float = 0.15, apply: bool = False) -> str:
 
 def main() -> int:
     apply = "--fix" in sys.argv
+    biped = "--biped" in sys.argv
     for k in [a for a in sys.argv[1:] if not a.startswith("--")]:
         glb = BACKEND / "assets" / "library" / (k.replace(" ", "_") + ".glb")
-        print(k, ":", fix(glb, k, apply=apply) if glb.exists() else "missing", flush=True)
+        print(k, ":", fix(glb, k.replace("_", " "), apply=apply, biped=biped) if glb.exists() else "missing", flush=True)
     return 0
 
 
