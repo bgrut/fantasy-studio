@@ -1593,6 +1593,12 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                     intro = " ".join(s.strip().replace("\n", " ")
                                      for s in ((mW.group(1) if mW else ""),
                                                (mF.group(1) if mF else "")) if s.strip())
+                    # NO MARKDOWN ON THE CARD (2026-10-10): the design doc
+                    # bolds its names, and a jungle's card read "the island
+                    # of **Aethel**" to the player
+                    intro = _re2.sub(r"(\*\*|__)(.+?)\1", r"\2", intro)
+                    intro = _re2.sub(r"(?<![\w*])\*(?!\s)(.+?)(?<!\s)\*(?![\w*])", r"\1", intro)
+                    intro = _re2.sub(r"`([^`]*)`", r"\1", intro).replace("**", "").strip()
                     if intro and not getattr(spec, "intro", None):
                         # WHOLE SENTENCES (2026-10-02): a hard cut at 280
                         # characters ended a castaway's card on "Lush jungle
@@ -3596,7 +3602,7 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                    "room": "house", "tavern": "house", "temple": "castle",
                    "fortress": "castle", "palace": "castle",
                    # heist venues: grand halls read as castle, homes as house
-                   "museum": "castle", "gallery": "castle", "manor": "house",
+                   "museum": "museum", "gallery": "museum", "manor": "house",
                    "estate": "house", "villa": "house", "penthouse": "house",
                    "vault": "dungeon", "bank": "castle", "warehouse": "dungeon",
                    "tower": "castle"}.get(_ik_raw, _ik_raw)

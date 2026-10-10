@@ -299,7 +299,24 @@ function growBroadleaf(r, P) {
   }
   const lean = new THREE.Vector3((r() - 0.5) * 0.12, 1, (r() - 0.5) * 0.12).normalize();
   branch(new THREE.Vector3(0, -0.3, 0), lean, H * P.trunkFrac, P.trunkR, 0, r() * TAU);
-  // the crown: where the leaves are
+  // BUTTRESSES (2026-10-10): a rainforest giant stands on fins of root that
+  // run from a man's height up the trunk out across the floor; each is a
+  // root swept from the trunk down and out, thick where it leaves the trunk
+  if (P.buttress) {
+    let az = r() * TAU;
+    for (let k = 0; k < P.buttress; k++) {
+      az += TAU / P.buttress + (r() - 0.5) * 0.5;
+      const out = new THREE.Vector3(Math.cos(az), 0, Math.sin(az));
+      const hb = H * (0.045 + r() * 0.03), reach = P.trunkR * (2.0 + r() * 1.3);
+      const path = [];
+      for (let s = 0; s <= 7; s++) {
+        const t = s / 7, sweep = 1 - Math.pow(1 - t, 2.2);         // steep off the trunk, long along the floor
+        const p = lean.clone().multiplyScalar(hb * (1 - t) - 0.3 * t).addScaledVector(out, P.trunkR * 0.7 + reach * sweep);
+        path.push({ p, r: Math.max(P.trunkR * 0.5 * (1 - t * 0.8), 0.04) });
+      }
+      tube(bark, path, 5, 0, 0.05);
+    }
+  }
   if (P.leaves) {
     const crown = new THREE.Vector3();
     let nC = 0;
@@ -330,6 +347,24 @@ function growBroadleaf(r, P) {
         const s = P.card * (0.75 + r() * 0.5);
         card(leaf, at, s, s, nrm, ax, Math.floor(r() * 4), crown, 1.0);
       }
+    }
+  }
+  // LIANAS (2026-10-10): vines hang from the crown in a jungle, slack and
+  // swaying, some to the floor, some cut off part way
+  if (P.lianas && tips.length) {
+    for (let k = 0; k < P.lianas; k++) {
+      const tp = tips[Math.floor(r() * tips.length)];
+      const top = tp[Math.min(tp.length - 1, 1 + Math.floor(r() * (tp.length - 1)))].p.clone();
+      const bottom = r() < 0.6 ? -0.2 : top.y * (0.25 + r() * 0.4);
+      const drift = new THREE.Vector3(r() - 0.5, 0, r() - 0.5).multiplyScalar(1.6);
+      const path = [];
+      for (let s = 0; s <= 10; s++) {
+        const t = s / 10;
+        const p = top.clone().addScaledVector(drift, Math.sin(Math.PI * t) * 0.6 + t * 0.4);
+        p.y = top.y + (bottom - top.y) * t;
+        path.push({ p, r: 0.028 + r() * 0.012 });
+      }
+      tube(bark, path, 4, 0.35, 0.8);
     }
   }
   return { bark: bark.geometry(true), leaf: P.leaves ? leaf.geometry(true) : null };
@@ -708,6 +743,20 @@ const KINDS = {
     limbs: 5, twigs: 3, crownStart: 0.4, spread: [0.6, 1.2], lenRatio: 0.6, radRatio: 0.5,
     kink: 0.38, lift: 0.05, droop: 0.04, leafFrom: 9, leaves: false, cardsPer: 0, card: 1 }),
   bush: (r) => ({ grow: growBush, height: 1.1 + r() * 0.8, cards: 46, card: 0.75 }),
+  // THE RAINFOREST (2026-10-10): "a dense jungle" grew a temperate wood. An
+  // emergent kapok stands thirty metres and more on buttress roots, its
+  // trunk bare to a wide high crown; the canopy trees under it are hung with
+  // lianas; the floor is ferns, grown as a palm with no stem
+  kapok: (r) => ({ grow: growBroadleaf, height: 28 + r() * 10, trunkFrac: 0.72, trunkR: 0.75 + r() * 0.25, depth: 3,
+    limbs: 6, twigs: 4, crownStart: 0.78, spread: [0.95, 1.35], lenRatio: 0.85, radRatio: 0.5,
+    kink: 0.14, lift: 0.06, droop: 0.03, leafFrom: 2, leaves: true, cardsPer: 6, card: 2.2, flat: 1.2,
+    buttress: 5 + Math.floor(r() * 3), lianas: 5 + Math.floor(r() * 4) }),
+  canopy: (r) => ({ grow: growBroadleaf, height: 14 + r() * 7, trunkFrac: 0.6, trunkR: 0.34 + r() * 0.1, depth: 3,
+    limbs: 6 + Math.floor(r() * 3), twigs: 4, crownStart: 0.55, spread: [0.6, 1.1], lenRatio: 0.7, radRatio: 0.55,
+    kink: 0.18, lift: 0.06, droop: 0.06, leafFrom: 2, leaves: true, cardsPer: 6, card: 1.7,
+    buttress: r() < 0.5 ? 3 : 0, lianas: 3 + Math.floor(r() * 4) }),
+  // (the stem starts 0.3 m under the soil, so a fern's height is mostly buried)
+  fern: (r) => ({ grow: growPalm, height: 0.45 + r() * 0.12, trunkR: 0.03, fronds: 12 + Math.floor(r() * 6), frondLen: 1.5 + r() * 0.7, frondW: 0.62 }),
   // the savanna's tree: a short trunk that forks low into limbs reaching out
   // and up, under one flat umbrella of leaves wider than the tree is tall
   acacia: (r) => ({ grow: growBroadleaf, height: 7 + r() * 3, trunkFrac: 0.34, trunkR: 0.24 + r() * 0.08, depth: 3,
@@ -887,7 +936,7 @@ function makeMaterials(kind, leafHSL, barkTex, barkN, seed, U, extra = {}) {
   patchTree(bark, U, { live: true });
   let leaf = null;
   if (kind !== 'dead') {
-    const ak = kind === 'pine' || kind === 'spruce' ? 'pine' : (kind === 'palm' || kind === 'kelp') ? 'palm' : 'broad';
+    const ak = kind === 'pine' || kind === 'spruce' ? 'pine' : (kind === 'palm' || kind === 'kelp' || kind === 'fern') ? 'palm' : 'broad';
     // matte, and only half the sky's reflection: foliage is a scatterer,
     // and a glossy card under an open sky read as frosted
     leaf = new THREE.MeshStandardMaterial({
@@ -1059,7 +1108,7 @@ export function plantForest(o) {
   // grow the variants
   const variants = [];   // {kind, ki, bark, leaf, mats, matsBake}
   kinds.forEach((K, ki) => {
-    const mats = makeMaterials(K.kind, o.leaf, o.barkTex, o.barkN, (o.seed + ki * 97) >>> 0, U, o);
+    const mats = makeMaterials(K.as || K.kind, o.leaf, o.barkTex, o.barkN, (o.seed + ki * 97) >>> 0, U, o);
     const matsBake = {
       bark: mats.bark.clone(),
       leaf: mats.leaf ? new THREE.MeshStandardMaterial({ map: mats.leaf.map, alphaTest: 0.42, side: THREE.DoubleSide, roughness: 1.0, envMapIntensity: 0.45 }) : null,
@@ -1068,7 +1117,7 @@ export function plantForest(o) {
     if (matsBake.leaf) patchTree(matsBake.leaf, U, { foliage: true });
     for (let v = 0; v < varPer; v++) {
       const vr = mulberry((o.seed + ki * 1013 + v * 7919) >>> 0);
-      const P = KINDS[K.kind](vr);
+      const P = KINDS[K.as || K.kind](vr);
       const geo = P.grow(vr, P);
       variants.push({ kind: K.kind, ki, bark: geo.bark, leaf: geo.leaf, mats, matsBake, P });
     }
@@ -1197,7 +1246,7 @@ export function kindsFor(arch, words) {
 export function biomeFor(words, arch, groundHSL) {
   const w = (words || '').toLowerCase();
   const has = re => re.test(w);
-  const K = (...pairs) => pairs.map(([kind, weight]) => ({ kind, weight }));
+  const K = (...pairs) => pairs.map(([kind, weight, as]) => (as ? { kind, weight, as } : { kind, weight }));
   const T = (hex) => new THREE.Color(hex);
   const crystal = has(/crystal|gem|geode|amethyst/);
   const out = { snow: 0, rockTint: T(0x8a8580), crystalTint: T(0x8fd8ff), leaf: leafFor(w, groundHSL) };
@@ -1234,7 +1283,12 @@ export function biomeFor(words, arch, groundHSL) {
   // far apart over the grass, bush and red stone between them
   else if (has(/savann?ah?|serengeti|veld|safari|acacia/)) Object.assign(out, { kinds: K(['acacia', 0.7], ['bush', 0.45], ['rock', 0.25], ['boulder', 0.08], ['dead', 0.05]), dens: 0.14,
     rockTint: T(0x9a6a4a), leaf: { h: 0.2, s: 0.42, l: 0.21 } });
-  else if (has(/jungle|rainforest/)) Object.assign(out, { kinds: K(['broadleaf', 1], ['palm', 0.4], ['oak', 0.3], ['bush', 1], ['rock', 0.1]), dens: 1.2 });
+  // A JUNGLE IS LAYERED (2026-10-10): emergent kapoks on buttresses over a
+  // canopy hung with lianas, palms in the gaps, and a floor of ferns (the
+  // understory slot grows as fern), all in a deep wet green
+  else if (has(/jungle|rainforest|rain forest|amazon\w*|tropical forest/)) Object.assign(out, {
+    kinds: K(['kapok', 0.18], ['canopy', 1], ['palm', 0.5], ['broadleaf', 0.25], ['bush', 1.5, 'fern'], ['rock', 0.06]), dens: 1.35,
+    leaf: { h: 0.3, s: 0.52, l: 0.25 } });
   else if (has(/beach|tropical|island|palm|lagoon|coast/)) Object.assign(out, { kinds: K(['palm', 0.8], ['bush', 0.5], ['rock', 0.3]), dens: 0.35, rockTint: T(0x9a8f80),
     // an island, a beach, a coast: the land ends at a shore and the sea runs on
     island: has(/island|\bisle\b|islet|atoll|lagoon|archipelago|castaway|shipwreck|beach|coast|shore/) });

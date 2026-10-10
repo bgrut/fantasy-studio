@@ -6881,7 +6881,7 @@ async function main() {
           trees: new Float32Array(T), shadows: true,
         });
         // each kind is as solid as it is big: [half height, radius] per scale
-        const SOLID = { rock: [0.5, 0.8], boulder: [1.4, 2.2], mesa: [3.2, 4.5], cactus: [2.4, 0.35], crystal: [1.0, 0.7], redwood: [8, 1.5], bamboo: [4, 0.6] };
+        const SOLID = { rock: [0.5, 0.8], boulder: [1.4, 2.2], mesa: [3.2, 4.5], cactus: [2.4, 0.35], crystal: [1.0, 0.7], redwood: [8, 1.5], bamboo: [4, 0.6], kapok: [6, 1.2], canopy: [3, 0.42] };
         for (const [x, y, z, s, kk] of colliders) {
           const [hh, rr] = SOLID[kk] || [1.6, 0.32];
           world.createCollider(RAPIER.ColliderDesc.cylinder(hh * s, rr * s).setTranslation(x, y + hh * s, z));
@@ -7178,16 +7178,19 @@ async function main() {
     // an office floor is painted board and carpet tile, not keep masonry
     const _civic = IK === 'hospital' || IK === 'school' || IK === 'lab';
     const _cafe = IK === 'cafe';
-    const wallFile = (IK === 'house' || IK === 'office' || IK === 'shop' || IK === 'mall' || _civic || _cafe)
+    const _museum = IK === 'museum';
+    const wallFile = (IK === 'house' || IK === 'office' || IK === 'shop' || IK === 'mall' || _civic || _cafe || _museum)
       ? 'plaster' : 'stone';
-    const floorFile = IK === 'dungeon' ? 'stone'
+    const floorFile = IK === 'dungeon' ? 'stone' : _museum ? 'concrete'
                     : (IK === 'office' || IK === 'shop' || IK === 'mall' || IK === 'hospital' || IK === 'lab' ? 'concrete' : 'planks');
     const bx = PLAN.bounds[0], bz = PLAN.bounds[1];
     // a mall's floor is polished: pale and glossy, the skylights in it
     // a ward's floor is pale green vinyl, a lab's white resin: both polished
-    const fmat = IK === 'mall' || IK === 'hospital' || IK === 'lab'
-      ? new THREE.MeshStandardMaterial({ map: itex(floorFile, bx / 3, bz / 3), roughness: IK === 'mall' ? 0.22 : 0.3, metalness: 0.0,
-                                         color: IK === 'hospital' ? 0xb8cbbf : IK === 'lab' ? 0xe6e9ec : 0xd8d2c8 })
+    // a museum's floor is polished pale limestone that holds the lights in it
+    const fmat = IK === 'mall' || IK === 'hospital' || IK === 'lab' || _museum
+      ? new THREE.MeshStandardMaterial({ map: itex(floorFile, bx / (_museum ? 2.5 : 3), bz / (_museum ? 2.5 : 3)),
+                                         roughness: IK === 'mall' ? 0.22 : _museum ? 0.16 : 0.3, metalness: 0.0,
+                                         color: IK === 'hospital' ? 0xb8cbbf : IK === 'lab' ? 0xe6e9ec : _museum ? 0xeee8dc : 0xd8d2c8 })
       : new THREE.MeshStandardMaterial({ map: itex(floorFile, bx / 4, bz / 4), roughness: 0.9 });
     const floor = new THREE.Mesh(new THREE.PlaneGeometry(bx, bz), fmat);
     floor.rotation.x = -Math.PI / 2; floor.position.set(OX, 0.02, 0);
@@ -7204,8 +7207,10 @@ async function main() {
     const ceil = new THREE.Mesh(new THREE.PlaneGeometry(bx, bz), cmatI);
     ceil.rotation.x = Math.PI / 2; ceil.position.set(OX, topY, 0);
     scene.add(ceil);
-    const wmat = new THREE.MeshStandardMaterial({
-      map: itex(wallFile, 3, 1.2), roughness: 0.95 });
+    // a museum's walls are clean paint, not weathered plaster
+    const wmat = _museum ? new THREE.MeshStandardMaterial({ color: 0xece6da, roughness: 0.92 })
+      : new THREE.MeshStandardMaterial({ map: itex(wallFile, 3, 1.2), roughness: 0.95 });
+    if (_museum) { wmat.userData.noAutoTex = true; cmatI.map = null; cmatI.color.setHex(0xe8e3da); cmatI.userData.noAutoTex = true; }
     const DOOR_W = IK === 'mall' ? 6.0 : 2.4, DOOR_H = IK === 'mall' ? 3.6 : Math.min(3.0, WH - 0.6);   // a storefront is wide open
     function seg(cx, cz, ln, rot, y0, hgt, thick) {
       // SIGHT-BLOCKERS (2026-08-05): remember every wall as a 2D segment so
@@ -7240,7 +7245,22 @@ async function main() {
       const lx = rot ? cx : cx + dCenter, lz = rot ? cz + dCenter : cz;
       seg(lx, lz, DOOR_W, rot, DOOR_H, WH - DOOR_H, WT);
     }
+    // a museum's columns are round, pale stone, with a base and a capital
+    const _colM = _museum ? new THREE.MeshStandardMaterial({ map: itex('concrete', 1, 2), color: 0xf4efe6, roughness: 0.4 }) : null;
+    if (_colM) _colM.userData.noAutoTex = true;
     for (const [px2, pz2] of PLAN.pillars || []) {
+      if (_museum) {
+        const cg = [new THREE.CylinderGeometry(0.36, 0.4, WH - 0.7, 24).translate(0, WH / 2, 0),
+                    new THREE.BoxGeometry(0.95, 0.3, 0.95).translate(0, 0.15, 0),
+                    new THREE.CylinderGeometry(0.46, 0.46, 0.14, 24).translate(0, 0.37, 0),
+                    new THREE.CylinderGeometry(0.52, 0.38, 0.22, 24).translate(0, WH - 0.24, 0),
+                    new THREE.BoxGeometry(1.05, 0.14, 1.05).translate(0, WH - 0.07, 0)];
+        const cm = new THREE.Mesh(mergeGeometries(cg.map(g => g.index ? g.toNonIndexed() : g), false), _colM);
+        cm.position.set(px2 + OX, 0, pz2); cm.castShadow = cm.receiveShadow = true;
+        scene.add(cm);
+        world.createCollider(RAPIER.ColliderDesc.cylinder(WH / 2, 0.42).setTranslation(px2 + OX, WH / 2, pz2));
+        continue;
+      }
       const pm = new THREE.Mesh(new THREE.BoxGeometry(0.9, WH, 0.9), wmat);
       pm.position.set(px2 + OX, WH / 2, pz2);
       pm.castShadow = pm.receiveShadow = true;
@@ -7327,9 +7347,9 @@ async function main() {
     // suspended ceiling had orange flames guttering on its walls. Same
     // positions and the same light-budget behaviour, but cool, high, and
     // without the flame mesh — the fitting is the ceiling troffer instead.
-    const _fire = IK !== 'office' && IK !== 'mall' && IK !== 'shop' && !_civic && !_cafe && IK !== 'station';   // nobody lights a store or a ward with torches
+    const _fire = IK !== 'office' && IK !== 'mall' && IK !== 'shop' && !_civic && !_cafe && IK !== 'station' && !_museum;   // nobody lights a store or a ward with torches
     for (const [tx, tz] of (PLAN.torches || []).slice(0, 10)) {
-      const pl = new THREE.PointLight(_fire ? 0xff9a3d : _cafe ? 0xffcf96 : 0xdfeaff,
+      const pl = new THREE.PointLight(_fire ? 0xff9a3d : _cafe ? 0xffcf96 : _museum ? 0xfff1dc : 0xdfeaff,
                                       _fire ? 14 : 11, 13, 1.8);
       pl.position.set(tx + OX, _fire ? WH * 0.62 : WH * 0.92, tz);
       // OFF UNTIL YOU ARE IN THE ROOM (2026-08-05): an offset interior is a
@@ -8073,6 +8093,216 @@ async function main() {
         for (const g of merged[k]) g.dispose();
       }
       window.__mall = { units: units.length, abandoned: ABANDONED, signs: units.length };
+    }
+    if (IK === 'museum') {
+      // ── WHAT MAKES A HALL READ AS A MUSEUM (2026-10-10) ────────────────
+      // A heist "in a museum" was a stone cellar with a plank floor, because
+      // a museum was planned as a castle. A museum is pale and quiet: a
+      // polished stone floor, columns down the hall, glazed lights in the
+      // ceiling, gilt frames on every gallery wall each under its own lamp,
+      // glass cases on plinths with the collection inside, rope barriers
+      // before the best pieces, benches down the middle and a name over
+      // every gallery. Every painting is drawn here, from the seed: a
+      // landscape, a sea or a still life, varnished at the edges (the drawn
+      // portrait read as a cartoon and is not hung).
+      const rngM = mulberry32((SPEC.seed || 1) + 7717);
+      const hwM = PLAN.rooms[0][2] / 2, hdM = PLAN.rooms[0][3] / 2;
+      const merged = {};
+      const put = (key, g) => (merged[key] = merged[key] || []).push(g);
+      const box = (key, w, h, d, x, y, z, ry) => { const g = new THREE.BoxGeometry(w, h, d); if (ry) g.rotateY(ry); g.translate(x + OX, y, z); put(key, g); return g; };
+      const solid = (w, h, d, x, y, z) => world.createCollider(RAPIER.ColliderDesc.cuboid(w / 2, h / 2, d / 2).setTranslation(x + OX, y, z));
+      // a painting, drawn: the canvas the frame holds
+      const paintings = [];
+      const paint = (kind, W, H) => {
+        const cv = document.createElement('canvas'); cv.width = 256; cv.height = Math.round(256 * H / W);
+        const g = cv.getContext('2d'), w = cv.width, h = cv.height, r = rngM;
+        const hsl = (a, b, c) => 'hsl(' + Math.round(a) + ',' + Math.round(b) + '%,' + Math.round(c) + '%)';
+        if (kind === 0 || kind === 1) {                      // a landscape, or the sea
+          const hue = 190 + r() * 40, warm = r() < 0.4;
+          const sky = g.createLinearGradient(0, 0, 0, h * 0.6);
+          sky.addColorStop(0, hsl(hue, 45, 62)); sky.addColorStop(1, warm ? hsl(35, 60, 78) : hsl(hue - 10, 35, 82));
+          g.fillStyle = sky; g.fillRect(0, 0, w, h);
+          for (let c = 0; c < 5; c++) {                       // clouds
+            g.fillStyle = 'rgba(255,255,255,' + (0.25 + r() * 0.3).toFixed(2) + ')';
+            g.beginPath(); g.ellipse(r() * w, h * (0.1 + r() * 0.25), 20 + r() * 40, 6 + r() * 10, 0, 0, 6.3); g.fill();
+          }
+          if (kind === 1) {                                    // the sea, a far shore, a sail
+            const hz = h * (0.5 + r() * 0.1);
+            const sea = g.createLinearGradient(0, hz, 0, h);
+            sea.addColorStop(0, hsl(hue, 40, 45)); sea.addColorStop(1, hsl(hue + 10, 45, 22));
+            g.fillStyle = sea; g.fillRect(0, hz, w, h - hz);
+            g.fillStyle = 'rgba(255,255,255,0.35)';
+            for (let k = 0; k < 40; k++) g.fillRect(r() * w, hz + r() * (h - hz), 6 + r() * 14, 1);
+            g.fillStyle = hsl(30, 20, 30); g.beginPath(); g.moveTo(w * 0.62, hz); g.lineTo(w * 0.7, hz - 14); g.lineTo(w * 0.7, hz); g.fill();
+            g.fillStyle = hsl(40, 30, 88); g.beginPath(); g.moveTo(w * 0.7, hz - 2); g.lineTo(w * 0.7, hz - 30); g.lineTo(w * 0.78, hz - 4); g.fill();
+          } else {                                             // hills going blue into the distance, then a field
+            for (let L = 0; L < 4; L++) {
+              const y0 = h * (0.42 + L * 0.13), lum = 55 - L * 10, sat = 18 + L * 10;
+              g.fillStyle = hsl(L < 2 ? hue - 20 : 95 + r() * 30, sat, lum);
+              g.beginPath(); g.moveTo(0, h);
+              for (let x = 0; x <= w; x += 8) g.lineTo(x, y0 + Math.sin(x * 0.02 + L * 2 + r()) * 10 - L * 4);
+              g.lineTo(w, h); g.fill();
+            }
+            for (let t = 0; t < 3; t++) {                      // a few trees in the near field
+              const tx = r() * w, ty = h * 0.8 + r() * h * 0.1;
+              g.fillStyle = hsl(30, 30, 18); g.fillRect(tx - 2, ty - 18, 4, 18);
+              g.fillStyle = hsl(100 + r() * 30, 35, 22 + r() * 8); g.beginPath(); g.arc(tx, ty - 24, 12 + r() * 6, 0, 6.3); g.fill();
+            }
+          }
+        } else if (kind === 2) {                               // a still life: a vase and fruit on a dark table
+          g.fillStyle = hsl(30, 25, 14); g.fillRect(0, 0, w, h);
+          g.fillStyle = hsl(28, 30, 24); g.fillRect(0, h * 0.68, w, h);
+          g.fillStyle = hsl(r() * 360, 45, 38); g.beginPath(); g.ellipse(w * 0.42, h * 0.5, w * 0.11, h * 0.2, 0, 0, 6.3); g.fill();
+          g.fillRect(w * 0.38, h * 0.24, w * 0.08, h * 0.1);
+          for (let f = 0; f < 4; f++) {
+            g.fillStyle = hsl([10, 40, 90, 350][f], 65, 40 + r() * 15);
+            g.beginPath(); g.arc(w * (0.58 + f * 0.07), h * (0.66 - (f % 2) * 0.03), 9 + r() * 5, 0, 6.3); g.fill();
+          }
+          const lt = g.createRadialGradient(w * 0.3, h * 0.3, 2, w * 0.3, h * 0.3, w * 0.6);
+          lt.addColorStop(0, 'rgba(255,230,180,0.25)'); lt.addColorStop(1, 'rgba(0,0,0,0)');
+          g.fillStyle = lt; g.fillRect(0, 0, w, h);
+        } else {                                               // a portrait: a sitter in a dark coat against brown
+          g.fillStyle = hsl(28, 30, 16); g.fillRect(0, 0, w, h);
+          const cx = w / 2;
+          g.fillStyle = hsl(220, 15, 12); g.beginPath(); g.ellipse(cx, h * 0.95, w * 0.42, h * 0.38, 0, 0, 6.3); g.fill();
+          g.fillStyle = hsl(40, 30, 85); g.fillRect(cx - 10, h * 0.55, 20, 16);
+          g.fillStyle = hsl(22, 40, 62 + r() * 10); g.beginPath(); g.ellipse(cx, h * 0.42, w * 0.13, h * 0.16, 0, 0, 6.3); g.fill();
+          g.fillStyle = hsl(25, 30, 12 + r() * 25); g.beginPath(); g.ellipse(cx, h * 0.31, w * 0.15, h * 0.09, 0, 3.14, 6.3); g.fill();
+          g.fillStyle = 'rgba(40,25,15,0.5)'; g.beginPath(); g.arc(cx - 9, h * 0.41, 2.5, 0, 6.3); g.arc(cx + 9, h * 0.41, 2.5, 0, 6.3); g.fill();
+        }
+        // varnish: the edges darkened and warmed, as old oil reads
+        const vg = g.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.3, w / 2, h / 2, Math.max(w, h) * 0.75);
+        vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(40,25,5,0.45)');
+        g.fillStyle = vg; g.fillRect(0, 0, w, h);
+        const tx = new THREE.CanvasTexture(cv); tx.colorSpace = THREE.SRGBColorSpace; tx.anisotropy = 4;
+        return tx;
+      };
+      // hang one picture on a wall: frame, canvas, a brass lamp over it
+      const hang = (x, z, ry, W, H) => {
+        const nx = Math.sin(ry), nz = Math.cos(ry);        // the wall's outward normal (into the room)
+        const y = 1.75 + H / 2 * 0.15;
+        box('frame', W + 0.16, H + 0.16, 0.07, x, y, z, ry);
+        const m = new THREE.Mesh(new THREE.PlaneGeometry(W, H),
+          new THREE.MeshStandardMaterial({ map: paint(Math.floor(rngM() * 3), W, H), roughness: 0.55 }));
+        m.material.userData.noAutoTex = true;
+        m.position.set(x + nx * 0.04 + OX, y, z + nz * 0.04); m.rotation.y = ry;
+        scene.add(m); paintings.push(m);
+        box('brass', 0.5, 0.05, 0.05, x + nx * 0.18, y + H / 2 + 0.2, z + nz * 0.18, ry);
+        box('lamp', 0.42, 0.02, 0.03, x + nx * 0.19, y + H / 2 + 0.17, z + nz * 0.19, ry);
+      };
+      // a glass case on a plinth, with a piece of the collection inside
+      const glassCase = (x, z, big) => {
+        const pw = big ? 1.1 : 0.7, ph = 0.95;
+        box('plinth', pw, ph, pw, x, ph / 2, z);
+        box('plinthTop', pw + 0.08, 0.05, pw + 0.08, x, ph + 0.02, z);
+        const gh = big ? 0.8 : 0.6;
+        const gl = new THREE.BoxGeometry(pw - 0.04, gh, pw - 0.04); gl.translate(x + OX, ph + 0.05 + gh / 2, z); put('glass', gl);
+        box('brass', pw - 0.02, 0.03, pw - 0.02, x, ph + 0.06 + gh, z);
+        solid(pw, ph + gh, pw, x, (ph + gh) / 2, z);
+        const kind = Math.floor(rngM() * 3), base = ph + 0.07;
+        if (kind === 0) {                                   // an amphora
+          const pts = [];
+          for (let k = 0; k <= 12; k++) { const t = k / 12; pts.push(new THREE.Vector2(0.05 + Math.sin(t * Math.PI) * 0.13 * (1 - t * 0.3) + (t > 0.85 ? 0.03 : 0), t * 0.45)); }
+          const v = new THREE.LatheGeometry(pts, 20); v.translate(x + OX, base, z); put('terracotta', v);
+        } else if (kind === 1) {                            // a marble bust on a little socle
+          const s = new THREE.CylinderGeometry(0.07, 0.09, 0.08, 16); s.translate(x + OX, base + 0.04, z); put('marble', s);
+          const c = new THREE.SphereGeometry(0.14, 16, 10); c.scale(1.3, 0.55, 0.8); c.translate(x + OX, base + 0.16, z); put('marble', c);
+          const h = new THREE.SphereGeometry(0.1, 16, 12); h.scale(0.85, 1.1, 0.95); h.translate(x + OX, base + 0.36, z); put('marble', h);
+        } else {                                            // a gold piece: a crown, a cup, a mask
+          const t = new THREE.TorusGeometry(0.1, 0.025, 8, 24); t.rotateX(Math.PI / 2); t.translate(x + OX, base + 0.06, z); put('gold', t);
+          for (let k = 0; k < 6; k++) {
+            const sp = new THREE.ConeGeometry(0.02, 0.08, 6); const a = k / 6 * Math.PI * 2;
+            sp.translate(x + OX + Math.cos(a) * 0.1, base + 0.12, z + Math.sin(a) * 0.1); put('gold', sp);
+          }
+        }
+      };
+      // THE HALL: glazed lights down the ceiling, benches between the columns
+      const nSky = Math.max(3, Math.round(hdM * 2 / 8));
+      for (let k = 0; k < nSky; k++) {
+        const z = -hdM + (k + 0.5) * (hdM * 2 / nSky);
+        box('sky', hwM * 0.5, 0.05, hdM * 2 / nSky - 1.8, 0, topY - 0.04, z);
+        box('frame', hwM * 0.54, 0.16, 0.16, 0, topY - 0.11, z - (hdM / nSky) + 0.8);
+      }
+      for (let k = 0; k < 3; k++) {
+        const bz = -hdM * 0.55 + k * hdM * 0.55;
+        box('bench', 2.2, 0.1, 0.55, 0, 0.45, bz);
+        box('benchLeg', 0.1, 0.4, 0.5, -0.95, 0.2, bz); box('benchLeg', 0.1, 0.4, 0.5, 0.95, 0.2, bz);
+        solid(2.2, 0.5, 0.55, 0, 0.25, bz);
+      }
+      // the hall's centrepiece: a big case under its own light, a rope round it
+      const cz0 = hdM * 0.35;
+      glassCase(0, cz0, true);
+      for (let k = 0; k < 8; k++) {
+        const a = k / 8 * Math.PI * 2, px = Math.cos(a) * 1.6, pz = cz0 + Math.sin(a) * 1.6;
+        box('brass', 0.06, 0.95, 0.06, px, 0.48, pz); box('brass', 0.14, 0.04, 0.14, px, 0.02, pz);
+        const a2 = (k + 1) / 8 * Math.PI * 2, qx = Math.cos(a2) * 1.6, qz = cz0 + Math.sin(a2) * 1.6;
+        const L = Math.hypot(qx - px, qz - pz);
+        const rope = new THREE.CylinderGeometry(0.025, 0.025, L, 6); rope.rotateZ(Math.PI / 2);
+        rope.rotateY(-Math.atan2(qz - pz, qx - px)); rope.translate((px + qx) / 2 + OX, 0.86, (pz + qz) / 2); put('rope', rope);
+      }
+      const spot = new THREE.SpotLight(0xfff1dc, 40, 14, 0.42, 0.5, 1.6);
+      spot.position.set(OX, topY - 0.3, cz0); spot.target.position.set(OX, 1.0, cz0);
+      if (OX !== 0) spot.visible = false;
+      scene.add(spot); scene.add(spot.target);
+      // THE GALLERIES: a name over the opening, pictures on the three walls,
+      // cases down the middle, a bench to sit and look
+      const NAMES = ['ANTIQUITIES', 'OLD MASTERS', 'THE SEA', 'PORTRAITS', 'LANDSCAPES', 'TREASURY', 'SCULPTURE', 'THE EAST WING'];
+      const units = PLAN.rooms.slice(1);
+      units.forEach(([ucx, ucz, urw, urd], ui) => {
+        const side = ucx > 0 ? 1 : -1;
+        const cv = document.createElement('canvas'); cv.width = 512; cv.height = 96;
+        const c2 = cv.getContext('2d');
+        c2.fillStyle = '#efe8da'; c2.fillRect(0, 0, 512, 96);
+        c2.fillStyle = '#5b4a32'; c2.font = '600 46px Georgia, serif'; c2.textAlign = 'center'; c2.textBaseline = 'middle';
+        c2.fillText(NAMES[(ui + (SPEC.seed || 0)) % NAMES.length], 256, 50);
+        const tx = new THREE.CanvasTexture(cv); tx.colorSpace = THREE.SRGBColorSpace;
+        const sg = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 0.6), new THREE.MeshStandardMaterial({ map: tx, roughness: 0.8 }));
+        sg.material.userData.noAutoTex = true;
+        sg.position.set(side * (hwM - WT / 2 - 0.04) + OX, DOOR_H + 0.55, ucz);
+        sg.rotation.y = side > 0 ? -Math.PI / 2 : Math.PI / 2;
+        scene.add(sg);
+        // the far wall: two or three pictures
+        const fx = ucx + side * (urw / 2 - WT / 2 - 0.06), nf = urd > 10 ? 3 : 2;
+        for (let k = 0; k < nf; k++) {
+          const W = 1.2 + rngM() * 0.8, H = 0.9 + rngM() * 0.7;
+          hang(fx, ucz - urd / 2 + (k + 0.5) * (urd / nf), side > 0 ? -Math.PI / 2 : Math.PI / 2, W, H);
+        }
+        // the side walls: one picture each, roped off
+        for (const sz of [-1, 1]) {
+          const wz = ucz + sz * (urd / 2 - WT / 2 - 0.06), W = 1.6 + rngM() * 0.8, H = 1.1 + rngM() * 0.6;
+          hang(ucx + side * 0.4, wz, sz > 0 ? Math.PI : 0, W, H);
+          const rz = wz - sz * 0.9;
+          for (const dx of [-1, 1]) { box('brass', 0.06, 0.95, 0.06, ucx + side * 0.4 + dx * (W / 2 + 0.2), 0.48, rz); box('brass', 0.14, 0.04, 0.14, ucx + side * 0.4 + dx * (W / 2 + 0.2), 0.02, rz); }
+          const rope = new THREE.CylinderGeometry(0.025, 0.025, W + 0.4, 6); rope.rotateZ(Math.PI / 2); rope.translate(ucx + side * 0.4 + OX, 0.86, rz); put('rope', rope);
+        }
+        // cases down the gallery's middle
+        const nc = 2 + (ui % 2);
+        for (let k = 0; k < nc; k++) glassCase(ucx + side * 0.6, ucz - urd * 0.25 + k * (urd * 0.5 / Math.max(1, nc - 1)), false);
+      });
+      const MATS = {
+        sky: new THREE.MeshBasicMaterial({ color: 0xf4f6ff, toneMapped: false }),
+        frame: new THREE.MeshStandardMaterial({ color: 0xb08a3e, roughness: 0.35, metalness: 0.75 }),
+        brass: new THREE.MeshStandardMaterial({ color: 0xc9a65a, roughness: 0.3, metalness: 0.85 }),
+        lamp: new THREE.MeshBasicMaterial({ color: 0xfff0d0, toneMapped: false }),
+        glass: new THREE.MeshStandardMaterial({ color: 0xd8ecf4, roughness: 0.04, metalness: 0.1, transparent: true, opacity: 0.18, depthWrite: false }),
+        plinth: new THREE.MeshStandardMaterial({ color: 0xf1ede6, roughness: 0.6 }),
+        plinthTop: new THREE.MeshStandardMaterial({ color: 0x2a2724, roughness: 0.35 }),
+        terracotta: new THREE.MeshStandardMaterial({ color: 0xb4643a, roughness: 0.8 }),
+        marble: new THREE.MeshStandardMaterial({ color: 0xece8e0, roughness: 0.35 }),
+        gold: new THREE.MeshStandardMaterial({ color: 0xffcf5a, roughness: 0.2, metalness: 1.0 }),
+        rope: new THREE.MeshStandardMaterial({ color: 0x7a1020, roughness: 0.8 }),
+        bench: new THREE.MeshStandardMaterial({ map: itex('planks', 1, 1), color: 0x7a5236, roughness: 0.55 }),
+        benchLeg: new THREE.MeshStandardMaterial({ color: 0x2c2a28, roughness: 0.4, metalness: 0.6 }),
+      };
+      for (const k in MATS) MATS[k].userData.noAutoTex = true;
+      for (const k in merged) {
+        const m = new THREE.Mesh(mergeGeometries(merged[k], false), MATS[k]);
+        m.castShadow = !['sky', 'glass', 'lamp', 'rope'].includes(k); m.receiveShadow = true;
+        if (k === 'glass') m.renderOrder = 2;
+        scene.add(m);
+        for (const g of merged[k]) g.dispose();
+      }
+      window.__museum = { galleries: units.length, paintings: paintings.length };
     }
     if (IK === 'office') {
       // ── WHAT MAKES A ROOM READ AS AN OFFICE (2026-08-06 r7) ────────────
