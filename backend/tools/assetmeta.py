@@ -274,6 +274,19 @@ def _pattern_of(nm: str) -> str:
         return ""
 
 
+_OVR = None
+
+
+def _overrides() -> dict:
+    global _OVR
+    if _OVR is None:
+        try:
+            _OVR = {k.lower(): v for k, v in json.loads((ROOT / "assets" / "verdict_overrides.json").read_text(encoding="utf-8")).items()}
+        except Exception:  # noqa: BLE001
+            _OVR = {}
+    return _OVR
+
+
 CAR_NAMES = ("car", "corvette", "ferrari", "taxi", "truck", "sedan", "van", "pickup", "jeep", "coupe")
 
 
@@ -410,6 +423,13 @@ def measure(path: Path) -> dict:
     except Exception as e:  # noqa: BLE001
         rec["mesh"] = {"error": f"{type(e).__name__}: {e}"[:120]}
     rec["quality"], rec["verdict"] = quality_score(rec)
+    # A VERDICT GIVEN BY EYE STANDS (2026-10-09): the scientist and the burglar
+    # were checked by eye and installed, and the next rebuild judged them from
+    # behind again and the library refused them. assets/verdict_overrides.json
+    # holds {file: [verdict, why]} and wins over the measurement.
+    _ov = _overrides().get(rec.get("file", "").lower())
+    if _ov:
+        rec["verdict"] = _ov[0]; rec["quality_reasons"] = [_ov[1]]
     return rec
 
 
