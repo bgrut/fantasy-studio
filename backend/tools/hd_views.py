@@ -157,7 +157,7 @@ def head_hr(ref: Path, outfit: str, dst: Path, strength: float = 0.5):
     return box
 
 
-def depth_face(depth_png: Path, dst: Path, prompt: str, neg: str, colour_ref=None, seed: int = 42, skin_wanted: bool = True):
+def depth_face(depth_png: Path, dst: Path, prompt: str, neg: str, colour_ref=None, seed: int = 42, skin_wanted: bool = True, style: str = "photo"):
     """THE FACE ON ITS OWN GEOMETRY (2026-10-08). The front of the head is
     painted by SDXL against the head's depth: every feature lands where the
     geometry has it (eyes in the sockets, nose on the nose), sharp, whatever
@@ -179,11 +179,17 @@ def depth_face(depth_png: Path, dst: Path, prompt: str, neg: str, colour_ref=Non
     # read whole (reference._long_prompt_kwargs), not cut at 77 tokens
     from app.asset_gen.reference import _long_prompt_kwargs
     c = cn_pipe()
-    neg2 = ("black and white, monochrome, grayscale, sepia, desaturated, "
-            "illustration, drawing, line art, sketch, cartoon, anime, painting, vector art, flat colours, 3d render, cgi, "
-            "text, letters, lettering, words, logo, badge text, "
-            "doll, mannequin, " + neg)
-    kw = _long_prompt_kwargs(c, "RAW colour photo, " + prompt + ", photorealistic, real skin, natural colour", neg2)
+    if style == "anime":
+        # a drawn hero keeps its drawing: the face is drawn, onto its own geometry
+        neg2 = ("photo, photograph, photorealistic, realistic skin, 3d render, black and white, monochrome, "
+                "text, letters, logo, " + neg)
+        kw = _long_prompt_kwargs(c, prompt, neg2)
+    else:
+        neg2 = ("black and white, monochrome, grayscale, sepia, desaturated, "
+                "illustration, drawing, line art, sketch, cartoon, anime, painting, vector art, flat colours, 3d render, cgi, "
+                "text, letters, lettering, words, logo, badge text, "
+                "doll, mannequin, " + neg)
+        kw = _long_prompt_kwargs(c, "RAW colour photo, " + prompt + ", photorealistic, real skin, natural colour", neg2)
     mm = np.asarray(Image.fromarray(m.astype(np.uint8) * 255).resize((1024, 1024))) > 127
 
     def _skin_share(arr):
@@ -332,8 +338,12 @@ def upgrade(anim: Path, strength=0.62, verbose=True) -> str:
         if not ref.exists():
             from PIL import Image as _I
             _I.new("RGB", (64, 64), (110, 110, 112)).save(ref)
-    # a drawn hero stays drawn: the repaint asks for a photograph
-    if kind.split()[0] in ("toon", "anime", "clay", "blocky"):
+    # a drawn hero stays drawn: the repaint asks for a photograph. AN ANIME HERO
+    # STILL HAS A FACE (2026-10-09): the anime schoolgirl and explorer shipped
+    # with blank faces. Their heads are drawn onto their own geometry in the
+    # anime style, the body left as it was made.
+    anime = kind.split()[0] == "anime"
+    if kind.split()[0] in ("toon", "clay", "blocky"):
         return "stylised, left as it is"
     from app.game_export.generate import guess_pattern
     animal = guess_pattern(kind) == "quadruped"
@@ -363,12 +373,15 @@ def upgrade(anim: Path, strength=0.62, verbose=True) -> str:
 
         outfit = wardrobe(kind) if not animal else f"real {kind}"
         neg_head = (NEG_ANIMAL if animal else NEG) + ", deformed face, asymmetric eyes, extra eyes, two noses, double face"
+        if anime:
+            neg_head = ("photo, photograph, photorealistic, realistic skin, 3d render, text, letters, logo, blurry, "
+                        "deformed face, asymmetric eyes, extra eyes, two noses, double face, blank face")
         # 1. the body: the photo on the front (a person's), repaints on every side,
         #    and nothing of the photo on the head, which is painted next
         if not render(coated, "v", list(VIEWS)):
             return "render failed"
         extras = []
-        for v, phrase in VIEWS.items():
+        for v, phrase in (VIEWS.items() if not anime else ()):
             if animal:
                 prompt = (f"raw photograph, DSLR, of a {outfit}, {ANIMAL_VIEWS.get(v, phrase)}, whole animal standing, "
                           f"natural light, plain grey backdrop, sharp focus, detailed fur, natural colouring")
@@ -378,7 +391,7 @@ def upgrade(anim: Path, strength=0.62, verbose=True) -> str:
             repaint(tmp / f"v_{v}.png", tmp / f"r_{v}.png", prompt, strength, neg=NEG_ANIMAL if animal else NEG)
             extras += ["--extra", f"{tmp / f'r_{v}.png'}|{tmp / 'v.json'}|{v}"]
         stage = tmp / "s0.glb"
-        line = project(coated, stage, extras + (["--nophoto"] if (animal or noref) else ["--nohead"]))
+        line = project(coated, stage, extras + (["--nophoto"] if (animal or noref or anime) else ["--nohead"]))
         if not line.startswith("HDF "):
             return line
         # 2. THE HEAD IN STEPS, EACH FROM THE LAST (2026-10-08). Repainted
@@ -405,10 +418,13 @@ def upgrade(anim: Path, strength=0.62, verbose=True) -> str:
                     _m = _np.abs(_a - _np.array([107.0, 107.0, 110.0])).sum(2) > 18
                     cref = (_a[_m].mean(0), _a[_m].std(0)) if _m.sum() > 1000 else None
                 else:
-                    hair = "" if noref else photo_hair(ref)
+                    hair = "" if (noref or anime) else photo_hair(ref)
                     prompt = (f"close-up portrait photograph of a real {outfit}, {hair + ', ' if hair else ''}facing the camera, natural skin texture, pores, "
                               f"clear detailed eyes, sharp focus, 85mm, soft even studio light, plain grey backdrop")
-                    if noref:
+                    if anime:
+                        prompt = (f"anime style character portrait of {outfit}, facing the camera, big expressive detailed eyes, "
+                                  f"small nose, clean cel shading, crisp line art, high quality anime illustration, plain grey backdrop")
+                    if noref or anime:
                         import numpy as _np
                         from PIL import Image as _I
                         _a = _np.asarray(_I.open(tmp / f"{pre}_{v}.png").convert("RGB"), dtype=_np.float32).reshape(-1, 3)
@@ -417,7 +433,8 @@ def upgrade(anim: Path, strength=0.62, verbose=True) -> str:
                         cref = (_a[_sk].mean(0), _a[_sk].std(0)) if _sk.sum() > 800 else None
                     else:
                         cref = photo_head_colour(ref)
-                if depth_face(tmp / f"{pre}_{v}_depth.png", tmp / f"r_{v}.png", prompt, neg_head, cref, skin_wanted=not animal):
+                if depth_face(tmp / f"{pre}_{v}_depth.png", tmp / f"r_{v}.png", prompt, neg_head, cref,
+                              skin_wanted=not (animal or anime), style="anime" if anime else "photo"):
                     ex += ["--extra", f"{tmp / f'r_{v}.png'}|{tmp / (pre + '.json')}|{v}"]
                 nxt = tmp / f"s{si + 1}.glb"
                 if ex and project(stage, nxt, ex + ["--keepuv", "--nophoto"]).startswith("HDF "):
@@ -428,6 +445,9 @@ def upgrade(anim: Path, strength=0.62, verbose=True) -> str:
                 if animal:
                     prompt = (f"close-up photograph of the head of a {outfit}, {ANIMAL_VIEWS.get(v, phrase)}, detailed fur, "
                               f"clear bright eyes, sharp focus, natural light, plain grey backdrop")
+                elif anime:
+                    prompt = (f"anime style character portrait of {outfit}, {phrase}, expressive detailed eyes, clean cel shading, "
+                              f"crisp line art, high quality anime illustration, plain grey backdrop")
                 else:
                     prompt = (f"close-up portrait photograph of a real {outfit}, {phrase}, natural skin texture, pores, "
                               f"clear detailed eyes, sharp focus, 85mm, soft even studio light, plain grey backdrop")
