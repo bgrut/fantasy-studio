@@ -1965,6 +1965,24 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         # override > the prompt's extracted subject > man. Falls through the
         # ladder with a visible note whenever the cast changes.
         want = (req.player or spec.player.name or "man").strip().lower()
+        # THE HERO IS NOT THE MONSTER (2026-10-10): "zombie survival in an
+        # abandoned shopping mall" made the player a zombie among the zombies
+        # it was meant to hold out against. When the hero is the same kind as
+        # a hostile in the world and the sentence does not ask to play as one,
+        # the hero is a survivor: an ordinary person.
+        try:
+            _hostile = {(e.name or "").strip().lower() for e in spec.entities if e.behavior in ("hostile", "guard")}
+            if not req.player and want in _hostile:
+                import re as _re5
+                _p5 = (req.prompt or "").lower()
+                if not _re5.search(r"\b(play|playing) as an? " + _re5.escape(want) + r"|\byou are an? " + _re5.escape(want)
+                                   + r"|\bas an? " + _re5.escape(want) + r"\b", _p5):
+                    job.setdefault("notes", []).append(
+                        f"hero cast: the {want}s are the enemy here, so the hero is a survivor")
+                    want = "man"
+                    spec.player.name = "man"
+        except Exception:  # noqa: BLE001
+            pass
         from app.game_export.bake import ensure_playable
         from app.game_export.generate import guess_pattern
         # THE CAST HAS TO MATCH THE ART DIRECTION (2026-09-05). A photoreal
@@ -2057,7 +2075,13 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                     # a sports sentence is about its sport: "score three goals against a
                     # robot goalkeeper" cast an engineer because of the robot (2026-09-27)
                     (r"\b(soccer|football|goals?|goalkeeper|goalie|pitch|striker|penalty|penalties|kick-?off)", "soccer player"),
+                    # a heist is played by a thief, not an explorer (2026-10-10)
+                    (r"\b(heist|steal|stealing|thief|burglar|burgle|robbery|safecracker|sneak in|break in)", "burglar"),
+                    # holding out against the dead is an ordinary person's game, in
+                    # ordinary clothes, not the safari explorer's (2026-10-10)
+                    (r"\b(zombies?|undead|apocalypse|outbreak|infected|survive|survival|survivor|shopping mall|mall)", "man"),
                     (r"\b(haunt|ghost|manor|mansion|murder|mystery|detective|noir|crime|clue|relic|cursed|asylum)", "detective"),
+                    (r"\b(vault|museum|jewel|diamond|loot|bank)", "burglar"),
                     (r"\b(forest|wood|moor|wild|ranger|trail|mountain|hike|hunt|deer|elk|track|walk|walker|stroll|wander|gather|firefl)", "ranger"),
                     (r"\b(lab|laboratory|science|scientist|space|station|reactor|research|specimen)", "scientist"),
                     (r"\b(engine|machine|factory|robot|mech|repair|wrench|mine)", "engineer"),
