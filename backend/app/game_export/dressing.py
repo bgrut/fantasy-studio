@@ -335,6 +335,14 @@ def game_scatter(setting: str | None, archetype: str | None = None,
     _grave = bool(re.search(r"\b(graveyards?|cemeter(?:y|ies)|churchyards?|crypts?|tombs?|necropolis)\b", (setting or "").lower()))
     if _garden and table is _ARCH_RECIPES:
         rec = _GARDEN_RECIPE
+    # A SWAMP IS NOT A MEADOW (2026-10-10): "a misty swamp at dawn" took the
+    # plain's recipe, sixteen flat-crowned island trees and gazania flowers,
+    # and read as a savanna. Wetland is dead snags standing in it, ferns,
+    # fallen branches and low stones; the runtime grows its own trees.
+    if arch == "plain" and table is _ARCH_RECIPES_REAL and re.search(
+            r"\b(swamps?|marsh(?:es)?|marshland|bogs?|bayous?|mires?|fens?|wetlands?)\b", (setting or "").lower()):
+        rec = [e for e in [(_PH_DEAD, 14, 2, 5.0), (_PH_UNDER, 18, 2, 1.4), (_PH_LITTER, 10, 2, 1.6), (_PH_ROCK, 6, 1, 1.8)]
+               if any((PROPS_DIR / f"{n}.glb").exists() for n in e[0])] or rec
     # the style's own furniture, on top of whatever the landform grows
     rec = list(rec) + list(_SIG_GARDEN if _garden else _SIG_GRAVE if _grave else _STYLE_SIGNATURE.get((style or "").lower(), []))
     out = []

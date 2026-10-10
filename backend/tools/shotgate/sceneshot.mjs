@@ -34,7 +34,9 @@ const geo = await p.evaluate(() => {
 });
 const dx = geo.g[0] - geo.pp[0], dz = geo.g[1] - geo.pp[2], dl = Math.hypot(dx, dz) || 1;
 const shots = {
-  eye: { pos: [geo.pp[0], geo.pp[1] + 1.7, geo.pp[2]], look: [geo.pp[0] + dx / dl * 60, geo.pp[1] + 3, geo.pp[2] + dz / dl * 60] },
+  // a pace ahead of the hero: at the hero's own spot the camera sat inside
+  // their head, and their hair filled the frame like a tiled boulder
+  eye: { pos: [geo.pp[0] + dx / dl * 1.5, geo.pp[1] + 1.7, geo.pp[2] + dz / dl * 1.5], look: [geo.pp[0] + dx / dl * 60, geo.pp[1] + 3, geo.pp[2] + dz / dl * 60] },
   high: { pos: [geo.pp[0] - dx / dl * 20, geo.pp[1] + 40, geo.pp[2] - dz / dl * 20], look: [geo.g[0], 0, geo.g[1]] },
 };
 if (geo.falls) {

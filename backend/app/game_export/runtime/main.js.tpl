@@ -680,6 +680,18 @@ async function main() {
     pal.fog = LOOK.fog;
     if (LOOK.exp != null) pal.exp = LOOK.exp;
   }
+  // MIST IS GREY (2026-10-10): "a misty swamp at dawn" took the sunset sky's
+  // salmon for its fog, and at a swamp's density the whole world went pink.
+  // Mist scatters the light it sits in without taking its colour: a misty
+  // place keeps the sky's hue in its fog, a third of its saturation, leaning
+  // to the grey-green of wet air. The sky itself keeps its glow.
+  if (!LOOK && SPEC.world.fog && /\b(swamps?|marsh\w*|bogs?|bayous?|mires?|fens?|wetlands?|misty|mist|foggy|fog)\b/
+      .test(((SPEC.world.name || '') + ' ' + (SPEC.prompt || '')).toLowerCase())) {
+    const _mc = new THREE.Color(pal.fog), _mh = {};
+    _mc.getHSL(_mh);
+    _mc.setHSL(_mh.h, _mh.s * 0.33, _mh.l).lerp(new THREE.Color(0x96a097), 0.22);
+    pal.fog = _mc.getHex();
+  }
   scene.background = new THREE.Color(pal.sky);
   if (SPEC.world.fog) {
     // fog_density 0..1: 0.5 = default atmosphere, higher pulls the fog wall
@@ -17668,7 +17680,11 @@ async function main() {
       _pbrCache[key] = t;
       return t;
     }
-    const PBR_FILE = { bark: 'bark', stone: 'stone', roof: 'roof', brick: 'brick',
+    // A ROCK IS NOT A WALL (2026-10-10): stone.jpg is Poly Haven's stone_wall,
+    // masonry, and a material named rock, boulder or cliff wore it too.
+    // Natural rock wears the photographed rock face (cliff.jpg,
+    // rock_face_03); masonry and unnamed grey keep stone.
+    const PBR_FILE = { bark: 'bark', stone: 'stone', rock: 'cliff', roof: 'roof', brick: 'brick',
                        foliage: 'leaves', needles: 'needles', wall: 'facade_brick' };
     const _detailCache = {};
     function detailTex(cls, baseHex) {
@@ -17724,7 +17740,8 @@ async function main() {
       const n = (m.name || '').toLowerCase();
       if (/bark|trunk|wood|fence|branch/.test(n)) return 'bark';
       if (/wall|brick|facade/.test(n)) return 'brick';
-      if (/stone|rock|castle|slit/.test(n)) return 'stone';
+      if (/rock|boulder|cliff|crag|pebble|outcrop|scree/.test(n)) return 'rock';
+      if (/stone|castle|slit/.test(n)) return 'stone';
       if (/roof|shingle/.test(n)) return 'roof';
       if (/needle/.test(n)) return 'needles';
       if (/leaf|leaves|bush|foliage|lit|dark|mid/.test(n)) return 'foliage';

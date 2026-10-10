@@ -2365,6 +2365,20 @@ const GEO = {
     { g: _cyl(0.05, 0.05, 0.07, 6), y: 0.06, x: -0.06, z: 0.09, tint: 0.95 },
     { g: _cyl(0.05, 0.05, 0.07, 6), y: 0.06, x: -0.06, z: -0.09, tint: 0.95 },
   ], { floor: 0.55, reach: 0.2 }),
+  // STONES IN THE GRASS (2026-10-10): on a grown world the floor vents and
+  // bolt plates sat in the meadow as grey plastic. A green world's scatter is
+  // a half-buried boulder and a cluster of pebbles, sculpted like the
+  // outcrops and dressed in the seam beds' photographed rock.
+  detailStone: mergeParts([
+    { g: sculptStone(4411, { size: 0.34, flat: 0.62, detail: 2 }).scale(1.25, 0.8, 1), y: -0.06, col: 0x7a7b80, tint: 0.85 },
+    { g: sculptStone(4433, { size: 0.12, flat: 0.7, detail: 1 }), x: 0.34, y: -0.02, z: 0.16, col: 0x7d7e82, tint: 0.8 },
+  ], { floor: 0.6, reach: 0.3 }),
+  detailPebbles: mergeParts([
+    { g: sculptStone(4451, { size: 0.11, flat: 0.68, detail: 1 }), x: 0.1, y: -0.02, col: 0x84858a, tint: 0.85 },
+    { g: sculptStone(4463, { size: 0.08, flat: 0.7, detail: 1 }), x: -0.12, y: -0.015, z: 0.08, col: 0x7c7d82, tint: 0.8 },
+    { g: sculptStone(4477, { size: 0.065, flat: 0.72, detail: 1 }), x: -0.04, y: -0.012, z: -0.13, col: 0x8a8b8f, tint: 0.85 },
+    { g: sculptStone(4489, { size: 0.05, flat: 0.72, detail: 1 }), x: 0.2, y: -0.01, z: -0.1, col: 0x7f8085, tint: 0.8 },
+  ], { floor: 0.6, reach: 0.2 }),
 };
 // A vertexColors material draws garbage from a geometry with no colour
 // attribute, and the same material serves both merged parts and plain boxes —
@@ -2866,7 +2880,11 @@ function rebuildBelts() {
     beltIndex[k][n[k]] = { face: f, i, j };
     n[k]++;
   });
-  // ground detail, minus anything now standing on it
+  // ground detail, minus anything now standing on it: stones on a grown
+  // world, vents and bolt plates on a plated one
+  let stony = false;
+  try { stony = !!(WORLDS[worldIdx] && WORLDS[worldIdx].fam === 'green'); } catch (e) {}   // WORLDS is declared further down
+  let st = 0, sq = 0;
   for (const sp of scatterSpots) {
     const c = cells[sp.f][sp.i][sp.j];
     if (c.t !== EMPTY) continue;
@@ -2875,12 +2893,17 @@ function rebuildBelts() {
     _dq.setFromRotationMatrix(_dm);
     _dscale.setScalar(sp.s);
     _dm.compose(_dpos, _dq, _dscale);
-    if (sp.kind === 0) { if (sv < MAX_SCATTER) scatterVent.setMatrixAt(sv++, _dm); }
+    if (stony) {
+      if (sp.kind === 0) { if (st < MAX_SCATTER) scatterStone.setMatrixAt(st++, _dm); }
+      else if (sq < MAX_SCATTER) scatterPebble.setMatrixAt(sq++, _dm);
+    } else if (sp.kind === 0) { if (sv < MAX_SCATTER) scatterVent.setMatrixAt(sv++, _dm); }
     else if (sb < MAX_SCATTER) scatterBolt.setMatrixAt(sb++, _dm);
   }
-  scatterVent.count = sv; scatterBolt.count = sb;
-  scatterVent.instanceMatrix.needsUpdate = true;
-  scatterBolt.instanceMatrix.needsUpdate = true;
+  scatterVent.count = sv; scatterBolt.count = sb; scatterStone.count = st; scatterPebble.count = sq;
+  for (const m of [scatterVent, scatterBolt, scatterStone, scatterPebble]) {
+    m.instanceMatrix.needsUpdate = true;
+    m.visible = m.count > 0;             // an empty batch is not a draw call
+  }
   const oc = {};
   for (const m of MINERALS) oc[m] = 0;
   for (const o of outcrops) {
@@ -2955,7 +2978,12 @@ const scatterMats = new THREE.MeshStandardMaterial({
   vertexColors: true, envMapIntensity: 0.6 });
 const scatterVent = new THREE.InstancedMesh(GEO.detailVent, scatterMats, MAX_SCATTER);
 const scatterBolt = new THREE.InstancedMesh(GEO.detailBolts, scatterMats, MAX_SCATTER);
-for (const m of [scatterVent, scatterBolt]) {
+const scatterStone = new THREE.InstancedMesh(GEO.detailStone, seamRockMat, MAX_SCATTER);
+const scatterPebble = new THREE.InstancedMesh(GEO.detailPebbles, seamRockMat, MAX_SCATTER);
+// no cast shadow: every shadow pass (the sun's and each lit machine's) drew the
+// stones again, 90 draw calls a frame on a fresh world; their baked occlusion
+// already sits them in the ground
+for (const m of [scatterVent, scatterBolt, scatterStone, scatterPebble]) {
   m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
   m.frustumCulled = false;
   m.receiveShadow = true;
