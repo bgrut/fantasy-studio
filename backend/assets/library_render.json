@@ -55,15 +55,10 @@
   "looks_like_best": "a clean 3D render of a truck"
  },
  "wizard.glb": {
-  "cull_loss": 0.113,
-  "solidity": 0.813,
-  "edges": 0.065,
-  "coverage": 0.095,
-  "dark_share": 0.404,
-  "damage_share": 0.005,
-  "shaded_png": "backend/tools/shotgate/renders/wizard_shaded.png",
   "kind": "wizard",
-  "looks_like": 0.975,
+  "shaded_png": "backend/tools/shotgate/renders/wizard_shaded.png",
+  "looks_like": 0.694,
+  "patchy": 0.172,
   "looks_like_best": "a clean 3D render of a wizard"
  },
  "dragon.glb": {
@@ -443,15 +438,10 @@
   "looks_like_best": "a clean 3D render of a monkey"
  },
  "samurai.glb": {
-  "cull_loss": 0.082,
-  "solidity": 0.893,
-  "edges": 0.0531,
-  "coverage": 0.12,
-  "dark_share": 0.768,
-  "damage_share": 0.002,
-  "shaded_png": "backend/tools/shotgate/renders/samurai_shaded.png",
   "kind": "samurai",
-  "looks_like": 0.991,
+  "shaded_png": "backend/tools/shotgate/renders/samurai_shaded.png",
+  "looks_like": 0.457,
+  "patchy": 0.543,
   "looks_like_best": "a clean 3D render of a samurai"
  },
  "viking.glb": {
@@ -479,27 +469,17 @@
   "looks_like_best": "a clean 3D render of a clue"
  },
  "ranger.glb": {
-  "cull_loss": 0.084,
-  "solidity": 0.815,
-  "edges": 0.0546,
-  "coverage": 0.096,
-  "dark_share": 0.324,
-  "damage_share": 0.103,
-  "shaded_png": "backend/tools/shotgate/renders/ranger_shaded.png",
   "kind": "ranger",
-  "looks_like": 0.974,
+  "shaded_png": "backend/tools/shotgate/renders/ranger_shaded.png",
+  "looks_like": 0.498,
+  "patchy": 0.502,
   "looks_like_best": "a clean 3D render of a ranger"
  },
  "knight.glb": {
-  "cull_loss": 0.08,
-  "solidity": 0.908,
-  "edges": 0.0419,
-  "coverage": 0.123,
-  "dark_share": 0.296,
-  "damage_share": 0.17,
-  "shaded_png": "backend/tools/shotgate/renders/knight_shaded.png",
   "kind": "knight",
-  "looks_like": 0.995,
+  "shaded_png": "backend/tools/shotgate/renders/knight_shaded.png",
+  "looks_like": 0.463,
+  "patchy": 0.537,
   "looks_like_best": "a clean 3D render of a knight"
  },
  "health_pack.glb": {
@@ -575,15 +555,10 @@
   "looks_like_best": "a clean 3D render of a then"
  },
  "soccer_player.glb": {
-  "cull_loss": 0.028,
-  "solidity": 0.838,
-  "edges": 0.0498,
-  "coverage": 0.104,
-  "dark_share": 0.01,
-  "damage_share": 0.001,
-  "shaded_png": "backend/tools/shotgate/renders/soccer_player_shaded.png",
   "kind": "soccer player",
-  "looks_like": 1.0,
+  "shaded_png": "backend/tools/shotgate/renders/soccer_player_shaded.png",
+  "looks_like": 0.494,
+  "patchy": 0.506,
   "looks_like_best": "a clean 3D render of a soccer player"
  },
  "the_woodcutter'_stash.glb": {
@@ -786,15 +761,10 @@
   "looks_like_best": "a clean 3D render of a lantern"
  },
  "burglar.glb": {
-  "cull_loss": 0.073,
-  "solidity": 0.703,
-  "edges": 0.089,
-  "coverage": 0.093,
-  "dark_share": 0.166,
-  "damage_share": 0.088,
-  "shaded_png": "backend/tools/shotgate/renders/burglar_shaded.png",
   "kind": "burglar",
-  "looks_like": 0.826,
+  "shaded_png": "backend/tools/shotgate/renders/burglar_shaded.png",
+  "looks_like": 0.282,
+  "patchy": 0.717,
   "looks_like_best": "a clean 3D render of a burglar"
  },
  "scavenger.glb": {
@@ -812,8 +782,8 @@
  "scientist.glb": {
   "kind": "scientist",
   "shaded_png": "backend/tools/shotgate/renders/scientist_shaded.png",
-  "looks_like": 0.732,
-  "patchy": 0.267,
+  "looks_like": 0.432,
+  "patchy": 0.568,
   "looks_like_best": "a clean 3D render of a scientist"
  },
  "lake.glb": {
@@ -877,15 +847,10 @@
   "looks_like_best": "a clean 3D render of a driver"
  },
  "explorer.glb": {
-  "cull_loss": 0.054,
-  "solidity": 0.811,
-  "edges": 0.0586,
-  "coverage": 0.088,
-  "dark_share": 0.039,
-  "damage_share": 0.021,
-  "shaded_png": "backend/tools/shotgate/renders/explorer_shaded.png",
   "kind": "explorer",
-  "looks_like": 0.911,
+  "shaded_png": "backend/tools/shotgate/renders/explorer_shaded.png",
+  "looks_like": 0.23,
+  "patchy": 0.754,
   "looks_like_best": "a clean 3D render of a explorer"
  },
  "crate.glb": {
@@ -1621,15 +1586,10 @@
   "looks_like_best": "a clean 3D render of a crystal"
  },
  "engineer.glb": {
-  "cull_loss": 0.048,
-  "solidity": 0.818,
-  "edges": 0.0531,
-  "coverage": 0.1,
-  "dark_share": 0.014,
-  "damage_share": 0,
-  "shaded_png": "backend/tools/shotgate/renders/engineer_shaded.png",
   "kind": "engineer",
-  "looks_like": 0.969,
+  "shaded_png": "backend/tools/shotgate/renders/engineer_shaded.png",
+  "looks_like": 0.955,
+  "patchy": 0.045,
   "looks_like_best": "a clean 3D render of a engineer"
  },
  "gem.glb": {
@@ -1677,8 +1637,106 @@
  "farmer.glb": {
   "kind": "farmer",
   "shaded_png": "backend/tools/shotgate/renders/farmer_shaded.png",
-  "looks_like": 0.53,
-  "patchy": 0.47,
+  "looks_like": 0.939,
+  "patchy": 0.061,
   "looks_like_best": "a clean 3D render of a farmer"
+ },
+ "keeper.glb": {
+  "kind": "keeper",
+  "shaded_png": "backend/tools/shotgate/renders/keeper_shaded.png",
+  "looks_like": 0.406,
+  "patchy": 0.529,
+  "looks_like_best": "a clean 3D render of a keeper"
+ },
+ "archer.glb": {
+  "kind": "archer",
+  "shaded_png": "backend/tools/shotgate/renders/archer_shaded.png",
+  "looks_like": 0.671,
+  "patchy": 0.329,
+  "looks_like_best": "a clean 3D render of a archer"
+ },
+ "vintner.glb": {
+  "kind": "vintner",
+  "shaded_png": "backend/tools/shotgate/renders/vintner_shaded.png",
+  "looks_like": 0.583,
+  "patchy": 0.414,
+  "looks_like_best": "a clean 3D render of a vintner"
+ },
+ "buddhist_monk.glb": {
+  "kind": "buddhist monk",
+  "shaded_png": "backend/tools/shotgate/renders/buddhist_monk_shaded.png",
+  "looks_like": 0.413,
+  "patchy": 0.57,
+  "looks_like_best": "a clean 3D render of a buddhist monk"
+ },
+ "customer.glb": {
+  "kind": "customer",
+  "shaded_png": "backend/tools/shotgate/renders/customer_shaded.png",
+  "looks_like": 0.426,
+  "patchy": 0.376,
+  "looks_like_best": "a clean 3D render of a customer"
+ },
+ "princess.glb": {
+  "kind": "princess",
+  "shaded_png": "backend/tools/shotgate/renders/princess_shaded.png",
+  "looks_like": 0.946,
+  "patchy": 0.039,
+  "looks_like_best": "a clean 3D render of a princess"
+ },
+ "photographer.glb": {
+  "kind": "photographer",
+  "shaded_png": "backend/tools/shotgate/renders/photographer_shaded.png",
+  "looks_like": 0.815,
+  "patchy": 0.142,
+  "looks_like_best": "a clean 3D render of a photographer"
+ },
+ "sheriff.glb": {
+  "kind": "sheriff",
+  "shaded_png": "backend/tools/shotgate/renders/sheriff_shaded.png",
+  "looks_like": 0.443,
+  "patchy": 0.478,
+  "looks_like_best": "a clean 3D render of a sheriff"
+ },
+ "shepherd.glb": {
+  "kind": "shepherd",
+  "shaded_png": "backend/tools/shotgate/renders/shepherd_shaded.png",
+  "looks_like": 0.752,
+  "patchy": 0.239,
+  "looks_like_best": "a clean 3D render of a shepherd"
+ },
+ "sheep.glb": {
+  "kind": "sheep",
+  "shaded_png": "backend/tools/shotgate/renders/sheep_shaded.png",
+  "looks_like": 0.957,
+  "patchy": 0.041,
+  "looks_like_best": "a clean 3D render of a sheep"
+ },
+ "zombie.glb": {
+  "kind": "zombie",
+  "shaded_png": "backend/tools/shotgate/renders/zombie_shaded.png",
+  "looks_like": 0.703,
+  "patchy": 0.194,
+  "looks_like_best": "a clean 3D render of a zombie"
+ },
+ "elephant.glb": {
+  "kind": "elephant",
+  "shaded_png": "backend/tools/shotgate/renders/elephant_shaded.png",
+  "looks_like": 0.93,
+  "patchy": 0.004,
+  "looks_like_best": "a clean 3D render of a elephant"
+ },
+ "t-rex.glb": {
+  "kind": "t-rex",
+  "shaded_png": "backend/tools/shotgate/renders/t_rex_shaded.png",
+  "looks_like": 0.898,
+  "patchy": 0.102,
+  "looks_like_best": "a clean 3D render of a t-rex"
+ },
+ "firefighter.glb": {
+  "kind": "firefighter",
+  "shaded_png": "backend/tools/shotgate/renders/firefighter_shaded.png",
+  "looks_like": 0.921,
+  "patchy": 0.079,
+  "looks_like_best": "a clean 3D render of a firefighter"
  }
 }

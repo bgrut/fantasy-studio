@@ -157,7 +157,8 @@ def head_hr(ref: Path, outfit: str, dst: Path, strength: float = 0.5):
     return box
 
 
-def depth_face(depth_png: Path, dst: Path, prompt: str, neg: str, colour_ref=None, seed: int = 42, skin_wanted: bool = True, style: str = "photo"):
+def depth_face(depth_png: Path, dst: Path, prompt: str, neg: str, colour_ref=None, seed: int = 42, skin_wanted: bool = True, style: str = "photo",
+               cn_scale: float = 0.7):
     """THE FACE ON ITS OWN GEOMETRY (2026-10-08). The front of the head is
     painted by SDXL against the head's depth: every feature lands where the
     geometry has it (eyes in the sockets, nose on the nose), sharp, whatever
@@ -187,6 +188,8 @@ def depth_face(depth_png: Path, dst: Path, prompt: str, neg: str, colour_ref=Non
     else:
         neg2 = ("black and white, monochrome, grayscale, sepia, desaturated, "
                 "illustration, drawing, line art, sketch, cartoon, anime, painting, vector art, flat colours, 3d render, cgi, "
+                "low poly, polygonal, faceted, geometric shapes, triangles, wireframe, stained glass, mosaic, outlines, "
+                "construction lines, guide lines, concentric lines, contour lines, signature, watermark, "
                 "text, letters, lettering, words, logo, badge text, "
                 "doll, mannequin, " + neg)
         kw = _long_prompt_kwargs(c, "RAW colour photo, " + prompt + ", photorealistic, real skin, natural colour", neg2)
@@ -199,16 +202,33 @@ def depth_face(depth_png: Path, dst: Path, prompt: str, neg: str, colour_ref=Non
     # A COLOUR FACE (2026-10-09): a scientist in a white coat with greying hair came
     # out a black-and-white photograph, and colour matching cannot add colour that
     # is not there. Up to three draws; the one with the most real skin is kept.
+    # FUR, NOT FACETS (2026-10-09): a grizzly's head came out low-poly art, flat
+    # panels edged in lines, and was painted on as it was. Pixel statistics
+    # could not tell it from fur; CLIP can. Where no skin is wanted each draw
+    # is asked whether it is a photograph or drawn, faceted art.
+    def _fine(arr):
+        from transformers import CLIPModel, CLIPProcessor
+        global _CLIPF
+        if "_CLIPF" not in globals():
+            _CLIPF = (CLIPModel.from_pretrained("openai/clip-vit-base-patch32").to("cuda").eval(),
+                      CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32"))
+        cm, cp = _CLIPF
+        texts = ["a close-up photograph of a real animal's head with fur",
+                 "low poly geometric polygon art", "an illustration or drawing with outlines"]
+        with torch.no_grad():
+            inp = cp(text=texts, images=[Image.fromarray(arr.astype(np.uint8))], return_tensors="pt", padding=True).to("cuda")
+            return float(cm(**inp).logits_per_image.softmax(-1)[0, 0])
     best_a, best_s = None, -1.0
     for _t in range(3 if colour_ref is not None or skin_wanted else 1):
         g = torch.Generator("cuda").manual_seed(seed + 977 * _t)
-        out = c(**kw, image=dimg, controlnet_conditioning_scale=0.7,
+        out = c(**kw, image=dimg, controlnet_conditioning_scale=cn_scale,
                 guidance_scale=6.0, num_inference_steps=34, generator=g, width=1024, height=1024).images[0]
         _a = np.asarray(out, dtype=np.float32)
-        _s = _skin_share(_a) if skin_wanted else 1.0
+        _s = _skin_share(_a) if skin_wanted else (_fine(_a) if style != "anime" else 1.0)
+        print("DEPTHFACE draw %d score %.3f" % (_t, _s), flush=True)
         if _s > best_s:
             best_a, best_s = _a, _s
-        if _s >= 0.35:
+        if _s >= (0.35 if skin_wanted else 0.8):
             break
     a = best_a
     if colour_ref is not None and mm.sum() > 1000:
@@ -434,7 +454,10 @@ def upgrade(anim: Path, strength=0.62, verbose=True) -> str:
                     else:
                         cref = photo_head_colour(ref)
                 if depth_face(tmp / f"{pre}_{v}_depth.png", tmp / f"r_{v}.png", prompt, neg_head, cref,
-                              skin_wanted=not (animal or anime), style="anime" if anime else "photo"):
+                              skin_wanted=not (animal or anime), style="anime" if anime else "photo",
+                              # an animal's round, flat-faced head read as a drawing's guide
+                              # circles at 0.7 (a grizzly, 2026-10-09); at 0.5 it is fur
+                              cn_scale=0.5 if animal else 0.7):
                     ex += ["--extra", f"{tmp / f'r_{v}.png'}|{tmp / (pre + '.json')}|{v}"]
                 nxt = tmp / f"s{si + 1}.glb"
                 if ex and project(stage, nxt, ex + ["--keepuv", "--nophoto"]).startswith("HDF "):

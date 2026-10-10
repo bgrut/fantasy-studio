@@ -664,6 +664,20 @@ for tob, nodes, C, P, N in bakes:
         # head's own paint: they replace, but only on a person's head (the top
         # of the body, eased in over the neck), never the shoulders in frame.
         zt_ = float(np.percentile(allP[:, 2], 99.7))
+        # A CREST IS NOT THE HEAD (2026-10-09): a samurai's helmet crest stood
+        # the top a hand above the dome and the band ended at the mouth, which
+        # kept the coat's smear. The top is the highest slice still at least
+        # half as wide as the head.
+        _zz = np.linspace(zt_ - 0.20 * Hm, zt_, 41)
+        _wd = []
+        for _z in _zz:
+            _sel = np.abs(allP[:, 2] - _z) < 0.004 * Hm
+            _wd.append(float(np.percentile(allP[_sel, 0], 98) - np.percentile(allP[_sel, 0], 2)) if _sel.sum() >= 12 else 0.0)
+        _wd = np.array(_wd)
+        _hw = float(_wd[(_zz >= zt_ - 0.16 * Hm) & (_zz <= zt_ - 0.04 * Hm)].max())
+        if _hw > 0:
+            zt_ = float(_zz[np.nonzero(_wd >= 0.5 * _hw)[0].max()])
+            print("HEADTOP %.3f below the top" % ((float(np.percentile(allP[:, 2], 99.7)) - zt_) / Hm))
         _ext = allP.max(0) - allP.min(0)
         animal_ = max(_ext[0], _ext[1]) > 1.15 * _ext[2]
         band = np.ones(len(Pt), np.float32) if animal_ else np.clip((Pt[:, 2] - (zt_ - 0.17 * Hm)) / (0.035 * Hm), 0, 1)

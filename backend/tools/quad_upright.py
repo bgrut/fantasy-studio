@@ -28,10 +28,10 @@ BACKEND = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BACKEND))
 
 ROTS = {"as_is": (0, 0, 0), "x+90": (90, 0, 0), "x-90": (-90, 0, 0), "y+90": (0, 90, 0), "y-90": (0, -90, 0), "x180": (180, 0, 0)}
-# A person only ever comes out on its head (a firefighter, 2026-10-09: gear and
-# boots at the top, rigged and coated that way). Turning it over about Y keeps
-# the face where it was, toward +Y.
-BIPED_ROTS = {"as_is": (0, 0, 0), "y180": (0, 180, 0)}
+# A person comes out on its head (a firefighter, 2026-10-09: gear and boots at
+# the top, rigged and coated that way) or on its side (a samurai). Turning
+# about Y keeps the face where it was, toward +Y.
+BIPED_ROTS = {"as_is": (0, 0, 0), "y180": (0, 180, 0), "y+90": (0, 90, 0), "y-90": (0, -90, 0)}
 
 _RENDER = r'''
 import bpy, sys, math, json
@@ -137,7 +137,8 @@ def judge(glb: Path, kind: str, biped: bool = False) -> dict:
              f"a photo of a {kind} upside down", f"a photo of a {kind} standing on its hind legs"]
     if biped:
         texts = [f"a photo of a {kind} standing upright, head at the top and feet on the ground",
-                 f"a photo of a {kind} upside down, standing on their head"]
+                 f"a photo of a {kind} upside down, standing on their head",
+                 f"a photo of a {kind} lying down on their side"]
     scores = {}
     for name in (BIPED_ROTS if biped else ROTS):
         ims = [Image.open(tmp / f"v_{name}_{s}.png").convert("RGB") for s in ("a", "b") if (tmp / f"v_{name}_{s}.png").exists()]
