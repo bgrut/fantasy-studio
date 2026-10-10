@@ -467,6 +467,13 @@ def _build_reference_prompt(slots: Dict[str, Any], style: str) -> tuple[str, str
     # library_query/name so the reference depicts THE thing they asked for.
     descriptor_bits = []
     core = identity or library_query or name or "subject"
+    # SOME NAMES DRAW A BRAND OR A MASK (2026-10-09): "soccer player" brought a
+    # sports maker's swoosh and a crest onto every kit, whatever the wardrobe
+    # said; "burglar" pulled a mask over the face. The picture is asked for
+    # the person, not the word; the kind keeps its name everywhere else.
+    _ALIAS = {"soccer player": "young athlete", "footballer": "young athlete", "football player": "young athlete",
+              "basketball player": "young athlete", "burglar": "man", "cat burglar": "man", "robber": "man", "thief": "man"}
+    core = _ALIAS.get(core.lower().strip(), core)
     if color and color not in ("neutral", "") and color not in core:
         descriptor_bits.append(color)
     if material and material not in ("matte", "plastic") and material not in core:
@@ -587,7 +594,7 @@ def _build_reference_prompt(slots: Dict[str, Any], style: str) -> tuple[str, str
             "archer":    "archer with a bare head and short hair, in a dark green wool tunic over a linen shirt, brown leather bracers, full-length brown wool trousers, leather boots, a quiver on the back, face fully visible, fully clothed",
             "soccer player": "young athlete in a plain solid red cotton t-shirt, plain white cotton shorts, white socks, black trainers, fully clothed",
             "footballer": "young athlete in a plain solid red cotton t-shirt, plain white cotton shorts, white socks, black trainers, fully clothed",
-            "burglar":   "man in a black knitted beanie pulled up above the ears, a dark grey roll-neck sweater, black trousers, black gloves, soft black shoes, face fully visible, fully clothed",
+            "burglar":   "man with short dark hair and a bare head, in a dark grey roll-neck sweater, a black canvas jacket, black trousers, soft black shoes, face fully visible, fully clothed",
             "firefighter": "firefighter in a heavy tan turnout coat and trousers with reflective yellow stripes, a plain red helmet with no lettering, thick gloves, black boots, fully clothed",
             "fireman":   "firefighter in a heavy tan turnout coat and trousers with reflective yellow stripes, a red helmet, thick gloves, black boots, fully clothed",
             "snowboarder": "snowboarder in a baggy bright winter jacket and snow pants, a knitted beanie, goggles pushed up, thick gloves, snow boots, fully clothed",
@@ -750,7 +757,33 @@ def _person_faults(img, who: str) -> tuple[float, float]:
         inputs = proc(text=good + undressed + other, images=img.convert("RGB"), return_tensors="pt", padding=True).to(dev)
         probs = torch.softmax(model(**inputs).logits_per_image[0].float(), dim=0)
     und = float(probs[len(good):len(good) + len(undressed)].sum())
-    return float(probs[len(good):].sum()), und
+    return float(probs[len(good):].sum()) + _arms_in(img), und
+
+
+def _arms_in(img) -> float:
+    """How far the arms are from held out (2026-10-09). CLIP could not see a
+    firefighter's hands on his hips, and a rig binds arms out from the body.
+    With the arms out the figure is about as wide at the shoulders as half its
+    height or more; with hands on hips, a third. 0 when out, up to 1 when in."""
+    import numpy as np
+    R = np.asarray(img.convert("RGB"), dtype=np.float32) / 255.0
+    H, W = R.shape[:2]; E = max(16, W // 16)
+    row = np.median(np.concatenate([R[:, :E], R[:, -E:]], axis=1), axis=1)
+    t = max(8, H // 40)
+    B = row[:, None, :] + (np.median(R[:t], axis=0) - row[:t].mean(0))[None, :, :]    # a backdrop lit brighter in the middle
+    fig = np.linalg.norm(R - B, axis=2) > 0.18
+    fig &= (fig.sum(1, keepdims=True) > 3)
+    ys = np.where(fig[:, int(W * 0.3):int(W * 0.7)].any(1))[0]
+    if len(ys) < 50:
+        return 0.0
+    top, bot = int(ys[0]), int(ys[-1]); h = bot - top
+    band = fig[top + int(0.18 * h): top + int(0.40 * h)]
+    xs = np.where(band.sum(0) > 2)[0]
+    if len(xs) < 2:
+        return 0.0
+    span = (xs.max() - xs.min()) / max(h, 1)
+    # measured: arms out 0.81 to 1.0, hands on hips 0.48 to 0.54
+    return float(np.clip((0.70 - span) / 0.15, 0.0, 1.0))
 
 
 def _blotchiness_model_ready():
@@ -1028,7 +1061,7 @@ def generate_reference(
             f0, u0 = _person_faults(img, _who)
             tries = [(img, mode_tag, f0, u0)]
             for k in range(1, 6):
-                if k >= 4 and min(t[3] for t in tries) < 0.15:
+                if k >= 4 and min(t[3] for t in tries) < 0.15 and min(t[2] for t in tries) < 0.8:
                     break
                 s2 = (int(seed) if seed is not None else 1000) + 101 * k
                 img2, tag2 = _gen_once(s2)
