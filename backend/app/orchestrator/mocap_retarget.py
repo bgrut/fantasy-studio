@@ -92,7 +92,30 @@ from mathutils import Vector
 o=bpy.data.objects.get("__HERO__"); me=o.data; mw=o.matrix_world
 V=np.array([list(mw@v.co) for v in me.vertices], dtype=np.float64)
 X,Y,Z=V[:,0],V[:,1],V[:,2]
-zmin,zmax=Z.min(),Z.max(); H=zmax-zmin; cx=(X.min()+X.max())/2; cy=(Y.min()+Y.max())/2
+# A CREST IS NOT THE HEAD (2026-10-09): every joint is a fraction of the height,
+# and a samurai's helmet crest stood the top a hand above the dome, so the head
+# joint sat inside the helmet and the head turned about the chin. The top is
+# the highest slice still half as wide as the head, when that is clearly below
+# the highest vertex (a crest, a plume, a hat's point); otherwise unchanged.
+def _robust_top(X, Y, Z):
+    z0, z1 = float(Z.min()), float(Z.max()); h = z1 - z0
+    if h <= 0: return z1
+    zz = np.linspace(z1 - 0.20 * h, z1, 41); wd = []
+    for z in zz:
+        sel = np.abs(Z - z) < 0.004 * h
+        if sel.sum() < 12: wd.append(0.0); continue
+        # the body's own column: arms held out are not the head's width
+        xs, ys = X[sel], Y[sel]
+        xs = xs[np.abs(xs - np.median(xs)) < 0.10 * h]; ys = ys[np.abs(ys - np.median(ys)) < 0.10 * h]
+        wd.append(max(float(np.percentile(xs, 98) - np.percentile(xs, 2)) if len(xs) > 6 else 0.0,
+                      float(np.percentile(ys, 98) - np.percentile(ys, 2)) if len(ys) > 6 else 0.0))
+    wd = np.array(wd); win = (zz >= z1 - 0.12 * h) & (zz <= z1 - 0.04 * h)
+    hw = float(wd[win].max()) if win.any() else 0.0
+    if hw <= 0: return z1
+    top = float(zz[np.nonzero(wd >= 0.5 * hw)[0].max()])
+    # a round crown loses up to ~0.025 H to this rule; only a crest loses more
+    return top if (z1 - top) > 0.05 * h else z1
+zmin=Z.min(); zmax=_robust_top(X,Y,Z); H=zmax-zmin; cx=(X.min()+X.max())/2; cy=(Y.min()+Y.max())/2
 ab=(Z>zmin+0.68*H)&(Z<zmin+0.95*H)
 ax=float(X[ab].max()-X[ab].min()) if ab.sum()>20 else (X.max()-X.min())
 ay=float(Y[ab].max()-Y[ab].min()) if ab.sum()>20 else (Y.max()-Y.min())
@@ -110,7 +133,7 @@ import math as _mth
 def _measure(o, me):
     mw=o.matrix_world
     V=np.array([list(mw@v.co) for v in me.vertices], dtype=np.float64); X,Y,Z=V[:,0],V[:,1],V[:,2]
-    zmin,zmax=Z.min(),Z.max(); H=zmax-zmin; cx=(X.min()+X.max())/2; cy=(Y.min()+Y.max())/2
+    zmin=Z.min(); zmax=_robust_top(X,Y,Z); H=zmax-zmin; cx=(X.min()+X.max())/2; cy=(Y.min()+Y.max())/2
     ab=(Z>zmin+0.68*H)&(Z<zmin+0.95*H)
     ax=float(X[ab].max()-X[ab].min()) if ab.sum()>20 else (X.max()-X.min())
     ay=float(Y[ab].max()-Y[ab].min()) if ab.sum()>20 else (Y.max()-Y.min())

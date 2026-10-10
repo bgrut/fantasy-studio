@@ -651,6 +651,12 @@ for tob, nodes, C, P, N in bakes:
         return np.clip(base_m + agree * (rep - base_m) + (1 - agree) * detail, 0, 1), facing, vis & inb
     for e in [e for e in EXTRA if not e["head"]]:
         paint, facing, ok = _paint(e, out_m)
+        if "--bodyreplace" in argv:
+            # A DRAWN BODY TAKES ITS DRAWING (2026-10-10): the agreement rule kept
+            # an anime blouse at its blurred coat colour and the tie a pink glow;
+            # a drawn hero's repaint is its clothing, colour and all
+            _px, _py, _ = project_extra(Pt, e)
+            paint = sample(e["img"], _px, _py)
         we = np.clip((facing - 0.2) / 0.45, 0, 1) * ok * (1 - w)     # the true photo keeps what it covers
         out_m = out_m * (1 - we[:, None]) + paint * we[:, None]
     # the head views together, not one over another: each texel takes the views
@@ -672,12 +678,15 @@ for tob, nodes, C, P, N in bakes:
         _wd = []
         for _z in _zz:
             _sel = np.abs(allP[:, 2] - _z) < 0.004 * Hm
-            _wd.append(float(np.percentile(allP[_sel, 0], 98) - np.percentile(allP[_sel, 0], 2)) if _sel.sum() >= 12 else 0.0)
+            _xs = allP[_sel, 0]
+            _xs = _xs[np.abs(_xs - np.median(_xs)) < 0.10 * Hm] if _sel.sum() >= 12 else _xs[:0]
+            _wd.append(float(np.percentile(_xs, 98) - np.percentile(_xs, 2)) if len(_xs) > 6 else 0.0)  # arms out are not the head
         _wd = np.array(_wd)
-        _hw = float(_wd[(_zz >= zt_ - 0.16 * Hm) & (_zz <= zt_ - 0.04 * Hm)].max())
+        _hw = float(_wd[(_zz >= zt_ - 0.12 * Hm) & (_zz <= zt_ - 0.04 * Hm)].max())
         if _hw > 0:
-            zt_ = float(_zz[np.nonzero(_wd >= 0.5 * _hw)[0].max()])
-            print("HEADTOP %.3f below the top" % ((float(np.percentile(allP[:, 2], 99.7)) - zt_) / Hm))
+            _top = float(_zz[np.nonzero(_wd >= 0.5 * _hw)[0].max()])
+            if zt_ - _top > 0.05 * Hm:            # a round crown loses ~0.025 H; only a crest loses more
+                zt_ = _top
         _ext = allP.max(0) - allP.min(0)
         animal_ = max(_ext[0], _ext[1]) > 1.15 * _ext[2]
         band = np.ones(len(Pt), np.float32) if animal_ else np.clip((Pt[:, 2] - (zt_ - 0.17 * Hm)) / (0.035 * Hm), 0, 1)

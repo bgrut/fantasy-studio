@@ -158,7 +158,7 @@ def head_hr(ref: Path, outfit: str, dst: Path, strength: float = 0.5):
 
 
 def depth_face(depth_png: Path, dst: Path, prompt: str, neg: str, colour_ref=None, seed: int = 42, skin_wanted: bool = True, style: str = "photo",
-               cn_scale: float = 0.7):
+               cn_scale: float = 0.7, hair_rgb=None):
     """THE FACE ON ITS OWN GEOMETRY (2026-10-08). The front of the head is
     painted by SDXL against the head's depth: every feature lands where the
     geometry has it (eyes in the sockets, nose on the nose), sharp, whatever
@@ -219,12 +219,18 @@ def depth_face(depth_png: Path, dst: Path, prompt: str, neg: str, colour_ref=Non
             inp = cp(text=texts, images=[Image.fromarray(arr.astype(np.uint8))], return_tensors="pt", padding=True).to("cuda")
             return float(cm(**inp).logits_per_image.softmax(-1)[0, 0])
     best_a, best_s = None, -1.0
-    for _t in range(3 if colour_ref is not None or skin_wanted else 1):
+    # HER OWN HAIR (2026-10-10): a drawn head given "black hair" still came back
+    # silver; with the hair's colour known, the draw whose crown is nearest it wins
+    def _hair_score(arr):
+        c = _crown_rgb(arr)
+        return 0.0 if c is None else float(max(0.0, 1.0 - np.linalg.norm(c - np.asarray(hair_rgb)) / 160.0))
+    for _t in range(3 if (colour_ref is not None or skin_wanted or hair_rgb is not None) else 1):
         g = torch.Generator("cuda").manual_seed(seed + 977 * _t)
         out = c(**kw, image=dimg, controlnet_conditioning_scale=cn_scale,
                 guidance_scale=6.0, num_inference_steps=34, generator=g, width=1024, height=1024).images[0]
         _a = np.asarray(out, dtype=np.float32)
-        _s = _skin_share(_a) if skin_wanted else (_fine(_a) if style != "anime" else 1.0)
+        _s = (_skin_share(_a) if skin_wanted else (_fine(_a) if style != "anime" else
+              (_hair_score(_a) if hair_rgb is not None else 1.0)))
         print("DEPTHFACE draw %d score %.3f" % (_t, _s), flush=True)
         if _s > best_s:
             best_a, best_s = _a, _s
@@ -244,6 +250,52 @@ def depth_face(depth_png: Path, dst: Path, prompt: str, neg: str, colour_ref=Non
         a[mm] = (a[mm] - mu) / sd * (sd + (ref_sd - sd) * k) + (mu + (ref_mu - mu) * k)
     Image.fromarray(np.clip(a, 0, 255).astype(np.uint8)).save(dst)
     return True
+
+
+def _np_load(png: Path):
+    import numpy as np
+    from PIL import Image
+    return np.asarray(Image.open(png).convert("RGB"), dtype=np.float32)
+
+
+def _crown_rgb(a):
+    """Median colour of the crown (the top fifth of the head, above the face) of
+    an RGB array (0-255) on a studio backdrop, or None."""
+    import numpy as np
+    m, _ = _figure_mask(a / 255.0)                    # the backdrop is vignetted, not one grey
+    ys = np.nonzero(m.any(1))[0]
+    if len(ys) < 20:
+        return None
+    y0 = _figure_top(m)
+    y0 = int(ys[0]) if y0 is None else int(y0)
+    y1 = y0 + int(0.18 * (ys[-1] - y0))
+    px = a[y0:y1][m[y0:y1]]
+    return np.median(px, axis=0) if len(px) >= 200 else None
+
+
+def _hair_name(head_png: Path) -> str:
+    """A name for the hair colour at the top of a head render (the crown, above
+    the face), for a prompt: black, dark brown, brown, auburn, blonde, grey..."""
+    import colorsys
+    import numpy as np
+    from PIL import Image
+    c = _crown_rgb(np.asarray(Image.open(head_png).convert("RGB"), dtype=np.float32))
+    if c is None:
+        return ""
+    r, g, b = c / 255.0
+    h, sat, val = colorsys.rgb_to_hsv(r, g, b)
+    h *= 360
+    if val < 0.22:
+        return "black"
+    if sat < 0.18:
+        return "white" if val > 0.8 else ("silver grey" if val > 0.55 else "dark grey")
+    if h < 45 or h > 330:
+        if val < 0.42:
+            return "dark brown"
+        return "auburn" if (sat > 0.55 and h < 25) else ("blonde" if val > 0.7 and h > 30 else "brown")
+    if h < 70:
+        return "blonde"
+    return {True: "green"}.get(h < 170, "blue" if h < 260 else "purple")
 
 
 def photo_head_colour(ref: Path):
@@ -361,7 +413,7 @@ def upgrade(anim: Path, strength=0.62, verbose=True) -> str:
     # a drawn hero stays drawn: the repaint asks for a photograph. AN ANIME HERO
     # STILL HAS A FACE (2026-10-09): the anime schoolgirl and explorer shipped
     # with blank faces. Their heads are drawn onto their own geometry in the
-    # anime style, the body left as it was made.
+    # anime style, and their bodies repainted as anime too (below).
     anime = kind.split()[0] == "anime"
     if kind.split()[0] in ("toon", "clay", "blocky"):
         return "stylised, left as it is"
@@ -401,7 +453,18 @@ def upgrade(anim: Path, strength=0.62, verbose=True) -> str:
         if not render(coated, "v", list(VIEWS)):
             return "render failed"
         extras = []
-        for v, phrase in (VIEWS.items() if not anime else ()):
+        # AN ANIME BODY IS DRAWN SHARP (2026-10-10): left as it was made, the
+        # schoolgirl's sailor tie was a pink glow on a blurred blouse. The body
+        # is repainted too, as an anime illustration, lighter, so the design holds.
+        for v, phrase in VIEWS.items():
+            if anime:
+                prompt = (f"anime style full body character illustration of {outfit}, {phrase}, standing with arms out, "
+                          f"clean cel shading, crisp line art, sharp clothing details, high quality anime illustration, plain grey backdrop")
+                repaint(tmp / f"v_{v}.png", tmp / f"r_{v}.png", prompt, min(strength, 0.45),
+                        neg="photo, photograph, photorealistic, realistic skin, 3d render, text, letters, logo, blurry, smudge, "
+                            "smeared, glow, watercolour, extra limbs, extra arms, nude")
+                extras += ["--extra", f"{tmp / f'r_{v}.png'}|{tmp / 'v.json'}|{v}"]
+                continue
             if animal:
                 prompt = (f"raw photograph, DSLR, of a {outfit}, {ANIMAL_VIEWS.get(v, phrase)}, whole animal standing, "
                           f"natural light, plain grey backdrop, sharp focus, detailed fur, natural colouring")
@@ -411,7 +474,8 @@ def upgrade(anim: Path, strength=0.62, verbose=True) -> str:
             repaint(tmp / f"v_{v}.png", tmp / f"r_{v}.png", prompt, strength, neg=NEG_ANIMAL if animal else NEG)
             extras += ["--extra", f"{tmp / f'r_{v}.png'}|{tmp / 'v.json'}|{v}"]
         stage = tmp / "s0.glb"
-        line = project(coated, stage, extras + (["--nophoto"] if (animal or noref or anime) else ["--nohead"]))
+        line = project(coated, stage, extras + (["--nophoto"] if (animal or noref or anime) else ["--nohead"])
+                       + (["--bodyreplace"] if anime else []))
         if not line.startswith("HDF "):
             return line
         # 2. THE HEAD IN STEPS, EACH FROM THE LAST (2026-10-08). Repainted
@@ -435,16 +499,28 @@ def upgrade(anim: Path, strength=0.62, verbose=True) -> str:
                     import numpy as _np
                     from PIL import Image as _I
                     _a = _np.asarray(_I.open(tmp / f"{pre}_{v}.png").convert("RGB"), dtype=_np.float32)
-                    _m = _np.abs(_a - _np.array([107.0, 107.0, 110.0])).sum(2) > 18
+                    _m, _ = _figure_mask(_a / 255.0)       # the backdrop is vignetted, not one grey
                     cref = (_a[_m].mean(0), _a[_m].std(0)) if _m.sum() > 1000 else None
                 else:
                     hair = "" if (noref or anime) else photo_hair(ref)
                     prompt = (f"close-up portrait photograph of a real {outfit}, {hair + ', ' if hair else ''}facing the camera, natural skin texture, pores, "
                               f"clear detailed eyes, sharp focus, 85mm, soft even studio light, plain grey backdrop")
                     if anime:
-                        prompt = (f"anime style character portrait of {outfit}, facing the camera, big expressive detailed eyes, "
-                                  f"small nose, clean cel shading, crisp line art, high quality anime illustration, plain grey backdrop")
-                    if noref or anime:
+                        # HER OWN HAIR (2026-10-10): matched to skin, a dark-haired
+                        # schoolgirl's head came back grey-haired with magenta streaks.
+                        # The hair colour is read off her own head and asked for; the
+                        # drawing keeps its own palette, unmatched.
+                        _hat = any(w in outfit.lower() for w in ("hat", "cap", "helmet", "hood", "turban", "bandana", "beanie"))
+                        hc = "" if _hat else _hair_name(tmp / f"{pre}_{v}.png")      # a hat's crown is not hair
+                        hair_rgb = None if _hat else _crown_rgb(_np_load(tmp / f"{pre}_{v}.png"))
+                        if hc in ("black", "dark brown", "brown", "dark grey", "auburn"):
+                            neg_head = neg_head + ", white hair, silver hair, grey hair, light hair, purple tint, pink tint"
+                        prompt = (f"anime style character portrait of {outfit}, {hc + ' hair, ' if hc else ''}facing the camera, "
+                                  f"big expressive detailed eyes, small nose, clean cel shading, crisp line art, "
+                                  f"high quality anime illustration, plain grey backdrop")
+                    if anime:
+                        cref = None
+                    elif noref:
                         import numpy as _np
                         from PIL import Image as _I
                         _a = _np.asarray(_I.open(tmp / f"{pre}_{v}.png").convert("RGB"), dtype=_np.float32).reshape(-1, 3)
@@ -457,7 +533,8 @@ def upgrade(anim: Path, strength=0.62, verbose=True) -> str:
                               skin_wanted=not (animal or anime), style="anime" if anime else "photo",
                               # an animal's round, flat-faced head read as a drawing's guide
                               # circles at 0.7 (a grizzly, 2026-10-09); at 0.5 it is fur
-                              cn_scale=0.5 if animal else 0.7):
+                              cn_scale=0.5 if animal else 0.7,
+                              hair_rgb=hair_rgb if anime else None):
                     ex += ["--extra", f"{tmp / f'r_{v}.png'}|{tmp / (pre + '.json')}|{v}"]
                 nxt = tmp / f"s{si + 1}.glb"
                 if ex and project(stage, nxt, ex + ["--keepuv", "--nophoto"]).startswith("HDF "):
