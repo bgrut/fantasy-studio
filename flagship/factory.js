@@ -3126,10 +3126,33 @@ if (WEAR_ON) {
   const wg = new THREE.BufferGeometry();
   wg.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   wg.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  // EARTH YOU COULD PICK UP (2026-10-10). At 16 canvas pixels a tile the worn
+  // ground was a brown smear up close. A photographed soil (Poly Haven
+  // forest_ground_04, CC0, textures/worksoil*.jpg) now carries its grain and
+  // its relief, in face-local metres on a second UV set, under the painted
+  // wear: the canvas still says where the ground is worn and in what colour,
+  // the photo says what it is made of. A missing file leaves the paint alone.
+  const uv1 = [];
+  FACES.forEach(() => { for (const [sa, sb] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) uv1.push((sa + 1) * HALF / 2.4, (sb + 1) * HALF / 2.4); });
+  wg.setAttribute('uv1', new THREE.Float32BufferAttribute(uv1, 2));
   wg.setIndex(idx); wg.computeVertexNormals();
+  const _stl = new THREE.TextureLoader();
+  const soilC = _stl.load('textures/worksoil.jpg'), soilN = _stl.load('textures/worksoil_n.jpg');
+  soilC.colorSpace = THREE.SRGBColorSpace;
+  for (const t of [soilC, soilN]) { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 8; t.channel = 1; }
   const wm = new THREE.MeshStandardMaterial({ map: wearTex, transparent: true, depthWrite: false, roughness: 0.97, metalness: 0,
+    normalMap: soilN, normalScale: new THREE.Vector2(0.9, 0.9),
     side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
   wm.userData.noAutoTex = true;
+  wm.onBeforeCompile = (sh) => {
+    sh.uniforms.uSoil = { value: soilC };
+    sh.fragmentShader = 'uniform sampler2D uSoil;\n' + sh.fragmentShader.replace('#include <map_fragment>', `#include <map_fragment>
+  {
+    // the photo's detail about its own mean colour, so the paint keeps its hue
+    vec3 sp = texture2D(uSoil, vNormalMapUv).rgb;
+    diffuseColor.rgb *= clamp(sp / vec3(0.1526, 0.1091, 0.0642), 0.25, 2.6) * 0.85 + 0.15;
+  }`);
+  };
   wearMesh = new THREE.Mesh(wg, wm); wearMesh.name = 'wear'; wearMesh.receiveShadow = true; wearMesh.renderOrder = 1;
   scene.add(wearMesh);
 }
@@ -8886,29 +8909,74 @@ function watchFrames(dt) {
 // free and only needs a little lag of its own.
 const heldRig = new THREE.Group();
 {
-  const dark = new THREE.MeshStandardMaterial({ color: 0x2a3350, roughness: 0.5,
-    metalness: 0.65, vertexColors: true, envMapIntensity: 0.8 });
+  // A GAUNTLET, NOT A BOX (2026-10-10). The one model on screen for the whole
+  // game was a slab and three pegs. It is built the way the machines are:
+  // bevelled plates that wear at their edges, the shared panel skin with its
+  // seams and rivets as relief, an armoured fist at the end of the arm, a
+  // brass wrist ring, a cable, vents, and status lights in the world's accent.
+  const plate = new THREE.Color(0x3a4258).lerp(new THREE.Color(ACCENT), 0.22).getHex();
+  const dark = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.52,
+    metalness: 0.5, vertexColors: true, envMapIntensity: 0.55,
+    map: SKIN, roughnessMap: SKIN_ROUGH, normalMap: SKIN_NORMAL, normalScale: new THREE.Vector2(0.7, 0.7) });
   addRim(dark, 0x8fd8ff, 2.4, 0.5);
-  const body = new THREE.Mesh(mergeParts([
-    { g: _box(0.13, 0.10, 0.34), z: 0.10 },                    // forearm
-    { g: _box(0.16, 0.13, 0.16), z: -0.10, tint: 0.85 },       // wrist unit
-    { g: _cyl(0.018, 0.018, 0.10, 6), x: 0.055, y: 0.075, z: -0.14, tint: 1.2 },
-    { g: _cyl(0.018, 0.018, 0.10, 6), x: -0.055, y: 0.075, z: -0.14, tint: 1.2 },
-    { g: _cyl(0.018, 0.018, 0.10, 6), y: 0.075, z: -0.19, tint: 1.2 },
-  ], { floor: 0.55, reach: 0.25 }), dark);
+  const parts = [
+    // the sleeve under the armour, and the armour over it in two plates
+    { g: _cyl(0.056, 0.05, 0.40, 10), rx: Math.PI / 2, z: 0.12, col: PAINT.dark, tint: 0.9 },
+    { g: _box(0.135, 0.055, 0.13), y: 0.035, z: 0.215 },
+    { g: _box(0.13, 0.055, 0.12), y: 0.038, z: 0.075 },
+    { g: _box(0.026, 0.085, 0.25), x: 0.066, z: 0.14, col: PAINT.chassis },
+    { g: _box(0.026, 0.085, 0.25), x: -0.066, z: 0.14, col: PAINT.chassis },
+    { g: _box(0.11, 0.028, 0.27), y: -0.048, z: 0.13, col: PAINT.chassis, tint: 0.8 },
+    // the wrist: a brass ring, then the projector housing
+    { g: _cyl(0.084, 0.084, 0.03, 16), rx: Math.PI / 2, z: -0.012, col: PAINT.trim },
+    { g: _box(0.165, 0.125, 0.14), z: -0.1, col: PAINT.chassis },
+    { g: _box(0.12, 0.02, 0.1), y: 0.064, z: -0.1, tint: 0.95 },
+    { g: _cyl(0.06, 0.068, 0.032, 16), y: 0.084, z: -0.12, col: PAINT.rail },
+    { g: _cyl(0.016, 0.016, 0.1, 8), x: 0.05, y: 0.075, z: -0.125, col: PAINT.steel, tint: 1.1 },
+    { g: _cyl(0.016, 0.016, 0.1, 8), x: -0.05, y: 0.075, z: -0.125, col: PAINT.steel, tint: 1.1 },
+    { g: _cyl(0.016, 0.016, 0.1, 8), y: 0.075, z: -0.17, col: PAINT.steel, tint: 1.1 },
+    // the fist: palm, four curled fingers with knuckle plates, a thumb
+    { g: _box(0.12, 0.09, 0.075), y: -0.005, z: -0.205, col: PAINT.chassis },
+    { g: _box(0.13, 0.03, 0.06), y: 0.045, z: -0.21, col: PAINT.steel, tint: 0.9 },
+    { g: _box(0.032, 0.036, 0.034), x: 0.07, y: -0.02, z: -0.19, ry: 0.5, col: PAINT.chassis },
+  ];
+  for (let f = 0; f < 4; f++) {
+    const fx = -0.045 + f * 0.03;
+    parts.push({ g: new THREE.BoxGeometry(0.026, 0.04, 0.05), x: fx, y: 0.0, z: -0.262, rx: 0.55, col: PAINT.chassis, tint: 0.92 });
+    parts.push({ g: new THREE.BoxGeometry(0.028, 0.016, 0.026), x: fx, y: 0.03, z: -0.255, col: PAINT.steel, tint: 1.05 });
+  }
+  // vents along both side plates
+  for (let k = 0; k < 6; k++) for (const sx of [1, -1])
+    parts.push({ g: new THREE.BoxGeometry(0.004, 0.05, 0.007), x: sx * 0.08, y: 0.0, z: 0.06 + k * 0.03, col: PAINT.dark, tint: 0.6 });
+  // a cable from the elbow round into the housing
+  const cable = new THREE.TubeGeometry(new THREE.CatmullRomCurve3([
+    new THREE.Vector3(0.07, -0.03, 0.3), new THREE.Vector3(0.095, -0.01, 0.15),
+    new THREE.Vector3(0.09, 0.0, 0.02), new THREE.Vector3(0.075, 0.02, -0.06)]), 20, 0.011, 6, false);
+  parts.push({ g: cable, col: PAINT.dark, tint: 0.85 });
+  const body = new THREE.Mesh(mergeParts(parts, { base: plate, floor: 0.55, reach: 0.25 }), dark);
   heldRig.add(body);
+
+  // the status lights on the top plate and a strip down the outer side plate
+  const ledMat = new THREE.MeshBasicMaterial({ color: ACCENT });
+  const leds = new THREE.Mesh(mergeParts([
+    { g: new THREE.BoxGeometry(0.012, 0.006, 0.012), x: 0.042, y: 0.064, z: 0.04 },
+    { g: new THREE.BoxGeometry(0.012, 0.006, 0.012), x: 0.042, y: 0.064, z: 0.062 },
+    { g: new THREE.BoxGeometry(0.012, 0.006, 0.012), x: 0.042, y: 0.064, z: 0.084 },
+    { g: new THREE.BoxGeometry(0.004, 0.008, 0.2), x: 0.08, y: 0.034, z: 0.14 },
+  ], { floor: 1, reach: 1 }), ledMat);
+  heldRig.add(leds);
 
   // the emitter's own glow, so the projection has a source
   const emit3 = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.03, 0.02, 10),
     new THREE.MeshBasicMaterial({ color: ACCENT, transparent: true, opacity: 0.85 }));
-  emit3.position.set(0, 0.115, -0.155);
+  emit3.position.set(0, 0.104, -0.12);
   heldRig.add(emit3);
 
   // SMALL, AND IN THE CORNER. The first pass sat a forearm the size of a
   // smelter in the middle-right of the view; a held thing should be present
   // at the edge of attention, not competing with the factory for it.
-  heldRig.scale.setScalar(0.62);
-  heldRig.position.set(0.36, -0.25, -0.55);
+  heldRig.scale.setScalar(0.58);
+  heldRig.position.set(0.38, -0.27, -0.55);
   heldRig.rotation.set(-0.12, 0.34, 0.06);
   heldRig.renderOrder = 2;
   camera.add(heldRig);

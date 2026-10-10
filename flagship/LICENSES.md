@@ -9,7 +9,8 @@ itself or dedicated to the public domain.
 | Game code and runtime (three.js) | MIT (vendor/three.LICENSE) |
 | N8AO ambient occlusion | CC0 (vendor/n8ao.LICENSE) |
 | Bricolage Grotesque, Instrument Sans, DM Mono | SIL Open Font License 1.1 (vendor/fonts/OFL-*.txt) |
-| Machines, plating, sky, sounds | Drawn and synthesised by the runtime at load; no assets shipped |
+| Machines, plating, sky, sounds | Drawn and synthesised by the runtime at load |
+| Ground photographs: seam rock (rock_face_03), worked soil (forest_ground_04), textures/ | Poly Haven, CC0 (public domain) |
 
 No cloud services were used to build this demo. No third party holds rights
 over its content. You may sell it, publish it, or modify it freely.

@@ -10,6 +10,8 @@
 | cliff.jpg, cliff_n.jpg, cliff_r.jpg | Poly Haven "rock_face_03" (2K) | CC0 |
 | sandstone.jpg, sandstone_n.jpg, sandstone_r.jpg | Poly Haven "cliff_side" (2K) | CC0 |
 | stone.jpg, stone_n.jpg, stone_r.jpg | Poly Haven "stone_wall" (2K) | CC0 |
+| factory/seamrock.jpg, factory/seamrock_n.jpg | Poly Haven "rock_face_03" (1024) | CC0 |
+| factory/worksoil.jpg, factory/worksoil_n.jpg | Poly Haven "forest_ground_04" (the soil above, resized to 1024) | CC0 |
 | everything else at this level | generated locally with Stable Diffusion XL | yours |
 
 The scans came from the Poly Haven pine forest scene already on disk
