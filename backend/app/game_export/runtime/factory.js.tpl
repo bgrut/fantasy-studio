@@ -8295,7 +8295,9 @@ function shareLink() {
   const u = new URL(location.href);
   u.search = ''; u.searchParams.set('share', b64);
   const link = u.toString();
-  try { navigator.clipboard && navigator.clipboard.writeText(link); } catch (e) {}
+  // a refused clipboard is a rejected promise, not a throw: caught here, or a
+  // player whose browser says no saw an error in the console (fworks flaked on it)
+  try { navigator.clipboard && navigator.clipboard.writeText(link).catch(() => {}); } catch (e) {}
   // the studio's card wants a picture of the frame the link was taken from:
   // captured after the next composite, when the canvas holds it
   shareRequest = { link, bytes: raw.length };

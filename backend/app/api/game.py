@@ -3755,6 +3755,13 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                         r"\b(samurai|ninjas?|shinto|zen|pagodas?|kyoto|edo|shogun\w*|dojo|cherry blossoms?|sakura|japan\w*|"
                         r"chin(a|ese)|kung fu|shaolin|monks?|bamboo|torii|koi|geisha|ronin)\b", _pl):
                     _kit = "pagoda"
+                # AN ANCIENT TEMPLE IS A MONUMENT (2026-10-10): "reach an ancient
+                # temple" across a red canyon stood a chapel front, which at a
+                # canyon's scale read as a hut. A temple that is not a church
+                # and not East Asian is a stepped stone platform with a portal
+                elif _ek_raw in ("temple", "shrine") and not _re3.search(
+                        r"\b(church|chapel|cathedral|christian|priest|parish|gothic|bell ?tower)\b", _pl):
+                    _kit = "ancient"
                 spec.world.level["enterable"] = {"plan": _eplan, "door": _door, "facade": _kit, "label": "the " + _ek_raw}
                 job.setdefault("notes", []).append(
                     f"the {_ek_raw} stands at its door ({_kit} facade, {_ek} inside): step through the glow to go inside")

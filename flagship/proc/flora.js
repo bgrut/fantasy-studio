@@ -934,7 +934,7 @@ function makeMaterials(kind, leafHSL, barkTex, barkN, seed, U, extra = {}) {
       }
       const ct = new THREE.CanvasTexture(cv); ct.colorSpace = THREE.SRGBColorSpace;
       ct.wrapS = ct.wrapT = THREE.RepeatWrapping; ct.anisotropy = 4;
-      m = new THREE.MeshStandardMaterial({ map: ct, color: 0xd8e2cc, roughness: 0.68 });
+      m = new THREE.MeshStandardMaterial({ map: ct, color: 0xc2cdb2, roughness: 0.68 });
     } else {
       const c = extra.crystalTint || new THREE.Color(0x8fd8ff);
       m = new THREE.MeshStandardMaterial({ color: c, emissive: c, emissiveIntensity: 0.55, roughness: 0.18, metalness: 0.1 });

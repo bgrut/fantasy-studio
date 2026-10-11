@@ -2511,6 +2511,11 @@ async function main() {
       const _kindWord = _structHit[1];
       const isCastle = ['castle', 'fort', 'tower'].includes(_kindWord);
       const isLighthouse = ['lighthouse', 'station'].includes(_kindWord);
+      // an East Asian temple or shrine is a pagoda (buildPagoda); any other is the ancient one
+      const _tw = ((SPEC.prompt || '') + ' ' + (SPEC.world.name || '')).toLowerCase();
+      const isTemple = (_kindWord === 'temple' || _kindWord === 'shrine')
+        && !/japan|chinese|china|asian|zen|torii|pagoda|cherry|sakura|kyoto|shinto|buddhis|tibet|himalaya|monaster|korea|bamboo/.test(_tw);
+      let templeCols = null;
       const wallMat = new THREE.MeshStandardMaterial({
         color: isCastle ? 0x7d818c : isLighthouse ? 0xe8e4da : 0x9a8f7e,
         roughness: 0.9 });
@@ -2534,7 +2539,78 @@ async function main() {
       // inside, a plank door standing ajar and a porch. The footprint, the
       // doorway and the colliders below are the ones they always were.
       const _isLog = /^(cabin|hut|lodge|shelter|den|camp|outpost)$/.test(_kindWord);
-      const _builtHouse = !isCastle && !isLighthouse;
+      const _builtHouse = !isCastle && !isLighthouse && !isTemple;
+      // AN ANCIENT TEMPLE IS A MONUMENT (2026-10-10): "reach an ancient temple"
+      // across a red canyon ended at a cottage, the same house every goal got.
+      // A temple is a stepped platform of dressed sandstone, four tiers with a
+      // cornice each, a steep stair up the front, and a shrine on top with a
+      // dark doorway between two columns under a roof comb, braziers burning at
+      // the stair's foot. In a jungle the stone is green with moss. The goal
+      // stays where the walk ends: the temple stands behind it, the stair's
+      // foot on the goal, so nobody is asked to reach the inside of a pyramid.
+      if (isTemple) {
+        const TLt = new THREE.TextureLoader();
+        const txT = (n, nrm) => { const t = TLt.load('textures/' + n + (nrm ? '_n' : '') + '.jpg'); t.wrapS = t.wrapT = THREE.RepeatWrapping; if (!nrm) t.colorSpace = THREE.SRGBColorSpace; return t; };
+        const mossy = /jungle|rainforest|rain forest|amazon|tropical|overgrown|vine|moss/.test(_tw);
+        const flatT = (SPEC.style || 'default') !== 'default' && SPEC.style !== 'realistic';
+        const stoneT = flatT ? new THREE.MeshStandardMaterial({ color: mossy ? 0x8f9a78 : 0xc49a6c, roughness: 0.92, flatShading: true })
+          : new THREE.MeshStandardMaterial({ map: txT('sandstone'), normalMap: txT('sandstone', true), color: mossy ? 0x9fae8c : 0xe2c8a6, roughness: 0.94 });
+        const corniceT = stoneT.clone(); corniceT.color.multiplyScalar(0.78);
+        const darkT = new THREE.MeshStandardMaterial({ color: 0x0c0907, roughness: 1 });
+        for (const m of [stoneT, corniceT, darkT]) m.userData.noAutoTex = true;
+        const metricT = (geo, k) => {
+          const ps = geo.attributes.position, nr = geo.attributes.normal, uv = geo.attributes.uv;
+          for (let i = 0; i < ps.count; i++) {
+            const ax = Math.abs(nr.getX(i)), ay = Math.abs(nr.getY(i)), x = ps.getX(i), y = ps.getY(i), z = ps.getZ(i);
+            if (ay > 0.6) uv.setXY(i, x * k, z * k); else if (ax > 0.6) uv.setXY(i, z * k, y * k); else uv.setXY(i, x * k, y * k);
+          }
+          return geo;
+        };
+        const cols = [];                                 // [w, h, d, x, y, z] in the temple's own frame
+        const blk = (w, h, d, x, y, z, mat, solid) => {
+          const g = metricT(new THREE.BoxGeometry(w, h, d).translate(x, y, z), 0.32);
+          const m = new THREE.Mesh(g, mat); m.castShadow = m.receiveShadow = true; S.add(m);
+          if (solid) cols.push([w, h, d, x, y, z]);
+          return m;
+        };
+        const TIER = 1.6, N = 4, FOOT = 10.6;           // FOOT: the stair's foot, where the goal is
+        for (let k = 0; k < N; k++) {
+          const s = 16 - k * 3.2, y0 = k * TIER - (k === 0 ? 2.5 : 0), h = TIER + (k === 0 ? 2.5 : 0);
+          blk(s, h, s, 0, y0 + h / 2, -FOOT, stoneT, true);
+          blk(s + 0.34, 0.2, s + 0.34, 0, (k + 1) * TIER - 0.1, -FOOT, corniceT, false);
+        }
+        // the stair: 0.25 m risers (the controller steps 0.28), from the foot to the top tier
+        const topY = N * TIER, rise = 0.25, nSt = Math.round(topY / rise), z0 = 0, z1 = -FOOT + 3.2;
+        const run = (z0 - z1) / nSt;
+        for (let i = 0; i < nSt; i++) {
+          const top = (i + 1) * rise, zc = z0 - (i + 0.5) * run;
+          blk(4.2, top + 0.6, run + 0.02, 0, (top - 0.6) / 2, zc, i % 2 ? stoneT : corniceT, true);
+        }
+        for (const sx of [-2.35, 2.35]) blk(0.5, topY + 0.3, FOOT - 3.0, sx, (topY + 0.3) / 2 - 0.15, z0 - (FOOT - 3.0) / 2 - 0.2, corniceT, true);   // balustrades
+        // the shrine on top, its door facing down the stair
+        const sy = topY, sz = -FOOT;
+        blk(5.0, 3.4, 4.4, 0, sy + 1.7, sz - 0.3, stoneT, true);
+        blk(1.5, 2.4, 0.3, 0, sy + 1.2, sz + 1.95, darkT, false);                          // the doorway's dark
+        for (const cx of [-1.5, 1.5]) {
+          const c = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.36, 3.1, 16), stoneT);
+          c.position.set(cx, sy + 1.55, sz + 2.35); c.castShadow = true; S.add(c);
+        }
+        blk(5.6, 0.45, 5.4, 0, sy + 3.62, sz, corniceT, false);                             // roof slab
+        blk(3.0, 2.2, 0.5, 0, sy + 4.95, sz - 0.4, stoneT, false);                          // roof comb
+        for (let k = 0; k < 4; k++) blk(0.32, 1.0, 0.56, -1.05 + k * 0.7, sy + 5.0, sz - 0.4, darkT, false);   // its lattice
+        // braziers at the stair's foot
+        for (const bx of [-3.4, 3.4]) {
+          blk(0.9, 1.1, 0.9, bx, 0.55, 0.6, corniceT, true);
+          const bowl = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.35, 0.4, 16), corniceT); bowl.position.set(bx, 1.3, 0.6); S.add(bowl);
+          const fl = new THREE.Mesh(new THREE.ConeGeometry(0.26, 0.7, 10), new THREE.MeshBasicMaterial({ color: 0xffb347, toneMapped: false }));
+          fl.position.set(bx, 1.82, 0.6); S.add(fl);
+          const fp = new THREE.PointLight(0xff9a3d, 6, 11, 1.8); fp.position.set(bx, 2.0, 0.6); S.add(fp);
+        }
+        const inner = new THREE.PointLight(0xffb060, 3, 8, 1.8); inner.position.set(0, sy + 1.4, sz + 1.2); S.add(inner);
+        window.__temple = { tiers: N, steps: nSt, mossy, height: +(topY + 5.6).toFixed(1) };
+        templeCols = cols;
+      }
+
       if (_builtHouse) {
         const flat9 = (SPEC.style || 'default') !== 'default' && SPEC.style !== 'realistic';
         const TL = new THREE.TextureLoader();
@@ -2678,9 +2754,9 @@ async function main() {
           const pr = put(new THREE.BoxGeometry(3.9, 0.08, 1.9), shingleM, 0, 2.75, hd + 0.85);
           pr.rotation.x = 0.28;
         }
-      } else
+      } else if (!isTemple)
       addBox(6.4, 0.16, 5.4, 0, 0.08, 0, roofMat);            // floor slab
-      if (!_builtHouse) {
+      if (!_builtHouse && !isTemple) {
       addBox(6.4, 3.1, 0.28, 0, 1.63, -2.55);                 // back wall
       addBox(0.28, 3.1, 5.4, -3.06, 1.63, 0);                 // side walls
       addBox(0.28, 3.1, 5.4, 3.06, 1.63, 0);
@@ -2794,7 +2870,7 @@ async function main() {
         beam.position.y = 10.2;
         S.add(beam);
       }
-      for (const wx of (_builtHouse ? [] : [-2.05, 2.05])) {   // warm windows
+      for (const wx of ((_builtHouse || isTemple) ? [] : [-2.05, 2.05])) {   // warm windows
         const w = new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.85, 0.1), warmMat);
         w.position.set(wx, 1.8, 2.62);
         S.add(w);
@@ -2803,6 +2879,7 @@ async function main() {
       hearth.position.set(0, 1.6, -0.5);
       S.add(hearth);
       const halo = makeGoalHalo();                            // findable from afar
+      if (isTemple) halo.position.set(0, 14.5, -10.6); else
       halo.position.y = 6.2;
       S.add(halo);
       const _accM = window.__accent || 0xffd08a;                // the world's own accent (2026-10-07), not one purple everywhere
@@ -2811,13 +2888,13 @@ async function main() {
         new THREE.MeshStandardMaterial({ color: _accM, emissive: _accM,
                                          emissiveIntensity: 0.8 }));
       mat2.rotation.x = -Math.PI / 2;
-      mat2.position.set(0, _builtHouse ? 0.37 : 0.18, 0.4);   // on the floorboards where there are any
+      mat2.position.set(0, _builtHouse ? 0.37 : isTemple ? 0.06 : 0.18, isTemple ? 1.1 : 0.4);   // on the floorboards where there are any; a temple's at its stair foot
       S.add(mat2);
       scene.add(S);
       S.updateMatrixWorld(true);
       // colliders per wall segment — the DOORWAY stays open, you walk in
       const _v = new THREE.Vector3();
-      const wallCols = [[6.4, 3.1, 0.28, 0, 1.63, -2.55], [0.28, 3.1, 5.4, -3.06, 1.63, 0],
+      const wallCols = templeCols || [[6.4, 3.1, 0.28, 0, 1.63, -2.55], [0.28, 3.1, 5.4, -3.06, 1.63, 0],
                         [0.28, 3.1, 5.4, 3.06, 1.63, 0], [2.3, 3.1, 0.28, -2.05, 1.63, 2.55],
                         [2.3, 3.1, 0.28, 2.05, 1.63, 2.55]];
       for (const [w, h, d, x, y, z] of wallCols) {
@@ -6762,7 +6839,7 @@ async function main() {
       // a building the sentence named stands in its own ground, not in a thicket (2026-10-07);
       // a temple keeps its approach, torii and lanterns clear as well
       for (const E of (typeof ENTERABLES !== 'undefined' ? ENTERABLES : [])) if (E && E.door)
-        keepClear.push([E.door[0], E.door[1], E.facade === 'pagoda' ? 26 : 16]);
+        keepClear.push([E.door[0], E.door[1], E.facade === 'pagoda' ? 26 : E.facade === 'ancient' ? 24 : 16]);
       if (FALLS) keepClear.push([FALLS.at[0], FALLS.at[1], 36]);
       if (window.__castle && window.__castle.ward) keepClear.push(window.__castle.ward);   // a castle's ward is a courtyard, not a wood   // the fall stands in its own glade, seen from the path
       const clear = (x, z) => keepClear.some(([cx, cz, r]) => (x - cx) * (x - cx) + (z - cz) * (z - cz) < r * r)
@@ -8617,7 +8694,7 @@ async function main() {
             dg.position.set(doorX, doorY, doorZ);
             dg.rotation.y = yaw;
             const WZ = -0.3, DW = 1.8, DH = 2.55, SY = 0.24;
-            const stoneM = new THREE.MeshStandardMaterial({ color: new THREE.Color(FK.tone).lerp(new THREE.Color(0xffffff), 0.45), roughness: 0.8 });
+            const stoneM = new THREE.MeshStandardMaterial({ color: new THREE.Color(FK.tone).lerp(new THREE.Color(kit === 'ancient' ? 0x6a5a48 : 0xffffff), 0.45), roughness: 0.8 });
             const paint = new THREE.MeshStandardMaterial({ color: [0x1f3a2c, 0x5a1d1d, 0x1d2a44, 0x2a2420][Math.abs(Math.round(doorX * 7 + doorZ * 3)) % 4],
                                                           roughness: 0.45, metalness: 0.05 });
             const brass = new THREE.MeshStandardMaterial({ color: 0xc9a24a, metalness: 1, roughness: 0.3 });
@@ -8630,8 +8707,16 @@ async function main() {
             // the hall beyond: a lit room seen through the open leaf
             const hall = new THREE.Mesh(new THREE.PlaneGeometry(DW, DH),
               new THREE.MeshStandardMaterial({ color: 0x2a1a0c, emissive: 0xffffff, emissiveMap: window.__roomGlowTex || null,
-                                               emissiveIntensity: window.__roomGlowTex ? 0.5 : 0.3 }));
+                                               emissiveIntensity: kit === 'ancient' ? 0.1 : window.__roomGlowTex ? 0.5 : 0.3 }));   // a temple's dark goes back a long way
             hall.material.userData.noAutoTex = true;
+            if (kit === 'ancient') {               // a temple's way in is dark, a little fire far inside, unlit by the sky
+              const cvT = document.createElement('canvas'); cvT.width = 64; cvT.height = 96;
+              const xT = cvT.getContext('2d'), gT = xT.createRadialGradient(32, 80, 2, 32, 70, 60);
+              gT.addColorStop(0, '#5a2a0c'); gT.addColorStop(0.5, '#1a0c05'); gT.addColorStop(1, '#050302');
+              xT.fillStyle = gT; xT.fillRect(0, 0, 64, 96);
+              const tT = new THREE.CanvasTexture(cvT); tT.colorSpace = THREE.SRGBColorSpace;
+              hall.material = new THREE.MeshBasicMaterial({ map: tT }); hall.material.userData.noAutoTex = true;
+            }
             hall.position.set(0, SY + DH / 2, WZ + 0.03); dg.add(hall);
             // surround: pilasters, lintel, cornice
             for (const sx of [-1, 1]) box(0.34, DH + 0.75, 0.26, sx * (DW / 2 + 0.17), SY + (DH + 0.75) / 2, WZ + 0.13, stoneM);
@@ -8641,9 +8726,12 @@ async function main() {
             const tr = new THREE.Mesh(new THREE.PlaneGeometry(DW, 0.6),
               new THREE.MeshStandardMaterial({ color: 0x3a2a12, emissive: 0xffc27a, emissiveIntensity: 1.5 }));
             tr.material.userData.noAutoTex = true;
-            tr.position.set(0, SY + DH + 0.38, WZ + 0.05); dg.add(tr);
-            for (const bx of [-0.45, 0, 0.45]) box(0.04, 0.6, 0.04, bx, SY + DH + 0.38, WZ + 0.08, paint);
-            box(DW, 0.08, 0.1, 0, SY + DH + 0.06, WZ + 0.08, paint);
+            tr.position.set(0, SY + DH + 0.38, WZ + 0.05);
+            if (kit !== 'ancient') {               // a barred transom is a town house's, not a temple's
+              dg.add(tr);
+              for (const bx of [-0.45, 0, 0.45]) box(0.04, 0.6, 0.04, bx, SY + DH + 0.38, WZ + 0.08, paint);
+              box(DW, 0.08, 0.1, 0, SY + DH + 0.06, WZ + 0.08, paint);
+            }
             // the leaves: panelled; the left shut, the right standing ajar
             const leaf = (hingeX, open) => {
               const lg = new THREE.Group();
@@ -8660,8 +8748,10 @@ async function main() {
               knob.position.set(dir * (lw - 0.1), 1.05, 0.07); lg.add(knob);
               dg.add(lg);
             };
-            leaf(-DW / 2, 0);
-            leaf(DW / 2, 0.42);                    // ajar, light at the gap
+            if (kit !== 'ancient') {               // a temple's portal stands open: no panelled doors
+              leaf(-DW / 2, 0);
+              leaf(DW / 2, 0.42);                  // ajar, light at the gap
+            }
             // steps up to the threshold
             box(DW + 1.4, 0.12, 0.9, 0, 0.06, WZ + 0.45, stoneM);
             box(DW + 1.0, 0.12, 0.55, 0, 0.18, WZ + 0.28, stoneM);
@@ -12856,6 +12946,9 @@ async function main() {
     // an East Asian temple or shrine (2026-10-07): built by buildPagoda, not the box
     pagoda:     { tex: 'plaster',  st: 4.2, bay: 3.0, pier: 1.2, spand: 1.0,
                   w: 11, d: 11, storeys: 1, tone: 0xd8cfbf, roof: 0x56605c },
+    // an ancient temple (2026-10-10): a stepped sandstone platform, built by buildAncientTemple
+    ancient:    { tex: 'sandstone', st: 2.4, bay: 3.0, pier: 1.2, spand: 1.0,
+                  w: 16, d: 16, storeys: 3, tone: 0xc8a57a, roof: 0x8a6a4a },
   };
   // the bodies the enterable block asked for, built now that the kit exists
   for (const f of (window.__lateBuildings || [])) { try { f(); } catch (e) { console.warn('[game] building', e); } }
@@ -12940,8 +13033,85 @@ async function main() {
     add(new THREE.ConeGeometry(0.55, 0.42, 6), st, 1.86); add(new THREE.SphereGeometry(0.09, 8, 6), st, 2.12);
     return g;
   }
+  // AN ANCIENT TEMPLE IS A MONUMENT (2026-10-10): "reach an ancient temple"
+  // across a red canyon stood a chapel front that read as a hut at a canyon's
+  // scale. A stepped platform of dressed sandstone: a tall base course with a
+  // dark portal where the way in is, three tiers above it, each with a
+  // cornice, a steep stair from over the portal to a shrine on top between
+  // two columns under a roof comb, and braziers at the foot. Green with moss
+  // in a jungle. Local +Z is out of the front; the front face is at +d/2.
+  function buildAncientTemple(F) {
+    const g = new THREE.Group(), TLa = new THREE.TextureLoader();
+    const tx = (n, nrm) => { const t = TLa.load('textures/' + n + (nrm ? '_n' : '') + '.jpg'); t.wrapS = t.wrapT = THREE.RepeatWrapping; if (!nrm) t.colorSpace = THREE.SRGBColorSpace; return t; };
+    const words = ((SPEC.prompt || '') + ' ' + ((SPEC.world && SPEC.world.name) || '')).toLowerCase();
+    const mossy = /jungle|rainforest|rain forest|amazon|tropical|overgrown|vine|moss|lost/.test(words);
+    const flat = (SPEC.style || 'default') !== 'default' && SPEC.style !== 'realistic';
+    const M = (o) => { const m = new THREE.MeshStandardMaterial(o); m.userData.noAutoTex = true; return m; };
+    const stone = flat ? M({ color: mossy ? 0x8f9a78 : 0xc49a6c, roughness: 0.92, flatShading: true })
+      : M({ map: tx('sandstone'), normalMap: tx('sandstone', true), color: mossy ? 0xa9b897 : 0xfff0d8, roughness: 0.94 });
+    // the sandstone photo is dark: a desert temple's stone is lifted past white to read as sand
+    if (!flat && !mossy) stone.color.setRGB(1.55, 1.36, 1.1);
+    const cornice = stone.clone(); cornice.color.multiplyScalar(0.78); cornice.userData.noAutoTex = true;
+    const dark = M({ color: 0x0c0907, roughness: 1 });
+    const metric = (geo, k) => {
+      const ps = geo.attributes.position, nr = geo.attributes.normal, uv = geo.attributes.uv;
+      for (let i = 0; i < ps.count; i++) {
+        const ax = Math.abs(nr.getX(i)), ay = Math.abs(nr.getY(i)), x = ps.getX(i), y = ps.getY(i), z = ps.getZ(i);
+        if (ay > 0.6) uv.setXY(i, x * k, z * k); else if (ax > 0.6) uv.setXY(i, z * k, y * k); else uv.setXY(i, x * k, y * k);
+      }
+      return geo;
+    };
+    const blk = (w, h, d, x, y, z, mat) => {
+      const m = new THREE.Mesh(metric(new THREE.BoxGeometry(w, h, d).translate(x, y, z), 0.32), mat);
+      m.castShadow = m.receiveShadow = true; g.add(m); return m;
+    };
+    const hs = F.w / 2, BASE = 3.6, TIER = 1.6, N = 3;
+    blk(F.w, BASE + 2.5, F.d, 0, (BASE - 2.5) / 2, 0, stone);                   // the base course, sunk into the ground
+    blk(F.w + 0.34, 0.22, F.d + 0.34, 0, BASE - 0.11, 0, cornice);
+    for (let k = 0; k < N; k++) {
+      const s = F.w - (k + 1) * 3.0, y0 = BASE + k * TIER;
+      blk(s, TIER, s, 0, y0 + TIER / 2, 0, stone);
+      blk(s + 0.34, 0.2, s + 0.34, 0, y0 + TIER - 0.1, 0, cornice);
+    }
+    const topY = BASE + N * TIER, topS = F.w - N * 3.0;
+    // the stair, from the base's top over the portal up the front to the top tier
+    const nSt = Math.round((topY - BASE) / 0.25), zFront = hs, zTop = topS / 2, run = (zFront - zTop) / nSt;
+    for (let i = 0; i < nSt; i++) {
+      const top = BASE + (i + 1) * 0.25, zc = zFront - (i + 0.5) * run;
+      blk(4.2, 0.5, run + 0.02, 0, top - 0.25, zc, i % 2 ? stone : cornice);
+    }
+    for (const sx of [-2.35, 2.35]) {                                         // balustrades along the stair
+      const L = Math.hypot(zFront - zTop, topY - BASE), b = blk(0.5, 0.5, L, sx, 0, 0, cornice);
+      b.position.set(0, (BASE + topY) / 2 + 0.25, (zFront + zTop) / 2); b.rotation.x = Math.atan2(topY - BASE, zFront - zTop);
+      b.geometry.translate(0, 0, 0);
+    }
+    // the shrine on top, facing down the stair
+    blk(5.0, 3.4, 4.4, 0, topY + 1.7, -0.3, stone);
+    blk(1.5, 2.4, 0.3, 0, topY + 1.2, 1.95, dark);
+    for (const cx of [-1.5, 1.5]) {
+      const c = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.36, 3.1, 16), stone);
+      c.position.set(cx, topY + 1.55, 2.35); c.castShadow = true; g.add(c);
+    }
+    blk(5.6, 0.45, 5.4, 0, topY + 3.62, 0, cornice);
+    blk(3.0, 2.2, 0.5, 0, topY + 4.95, -0.4, stone);
+    for (let k = 0; k < 4; k++) blk(0.32, 1.0, 0.56, -1.05 + k * 0.7, topY + 5.0, -0.4, dark);
+    // the portal's frame in the base course: deep jambs and a heavy lintel (the
+    // doorway itself, its lit hall and the way in, is the enterable's own)
+    for (const sx of [-1.75, 1.75]) blk(0.9, 3.3, 0.5, sx, 1.65, hs + 0.1, cornice);
+    blk(4.6, 0.7, 0.6, 0, 3.6, hs + 0.15, cornice);
+    // braziers either side of the portal
+    for (const bx of [-4.4, 4.4]) {
+      blk(0.9, 1.1, 0.9, bx, 0.55, hs + 1.6, cornice);
+      const bowl = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.35, 0.4, 16), cornice); bowl.position.set(bx, 1.3, hs + 1.6); g.add(bowl);
+      const fl = new THREE.Mesh(new THREE.ConeGeometry(0.26, 0.7, 10), M({ color: 0xffb347, emissive: 0xff9a3d, emissiveIntensity: 2 }));
+      fl.position.set(bx, 1.82, hs + 1.6); g.add(fl);
+    }
+    window.__temple = { tiers: N + 1, steps: nSt, mossy, height: +(topY + 6).toFixed(1) };
+    return g;
+  }
   function buildFacadeBox(kind) {
     if (kind === 'pagoda') return buildPagoda(FACADE_KIT.pagoda);
+    if (kind === 'ancient') return buildAncientTemple(FACADE_KIT.ancient);
     const F = FACADE_KIT[kind] || FACADE_KIT.brownstone;
     const g = new THREE.Group();
     const WTP = 0.42;
