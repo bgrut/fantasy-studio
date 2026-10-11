@@ -206,7 +206,8 @@ export function createGait({ root, actions, mixer, rates }) {
   // is carried, close and steady, not pumped overhead. Weapons are attached
   // after the engine starts and change with the loadout, so the hands are
   // looked at again every half second for a visible held mesh.
-  const armed = { l: false, r: false };
+  const armed = { l: false, r: false }, armedLong = { l: false, r: false }, heldMesh = { l: null, r: null };
+  const _hb = new THREE.Box3(), _hs = new THREE.Vector3();
   let _armedT = 0;
   function checkArmed(dt) {
     _armedT -= dt;
@@ -215,8 +216,10 @@ export function createGait({ root, actions, mixer, rates }) {
     for (const s of ['l', 'r']) {
       const h = B['hand_' + s];
       let held = false;
-      if (h) h.traverse(o => { if (!held && o !== h && o.isMesh && !o.isSkinnedMesh) { let v = true, q = o; while (q && q !== h) { if (!q.visible) { v = false; break; } q = q.parent; } if (v) held = true; } });
-      armed[s] = held;
+      let long = false;
+      if (h) h.traverse(o => { if (o !== h && o.isMesh && !o.isSkinnedMesh) { let v = true, q = o; while (q && q !== h) { if (!q.visible) { v = false; break; } q = q.parent; }
+        if (v) { held = true; _hb.setFromObject(o).getSize(_hs); if (Math.max(_hs.x, _hs.y, _hs.z) > 0.55) { long = true; heldMesh[s] = o; } } } });
+      armed[s] = held; armedLong[s] = long; if (!long) heldMesh[s] = null;
     }
   }
   mixer.update(0);
@@ -431,11 +434,39 @@ export function createGait({ root, actions, mixer, rates }) {
         const out = _v1.copy(_lat).multiplyScalar(s === 'l' ? 1 : -1);          // outboard
         const up = B['uparm_' + s], lo = B['lowarm_' + s], hd = B['hand_' + s];
         const cur = wp(lo).sub(wp(up)).normalize();
-        const carry = _v2.copy(UP).multiplyScalar(-0.93).addScaledVector(_fw, 0.3).addScaledVector(out, 0.12).normalize();
-        aimSegment(up, lo, carry.multiplyScalar(0.75).addScaledVector(cur, 0.25).normalize(), k);
+        // A BLADE IS CARRIED LOW (2026-10-11): the pistol carry (elbow 80
+        // degrees, forearm level) stood a gladiator's sword upright before
+        // his face for the whole walk. A sword, an axe or a spear is carried
+        // at the side: the arm hangs, the elbow eases a little, the weapon
+        // slopes forward and down, and half the captured swing is kept.
+        const lw = armedLong[s], keep = lw ? 0.5 : 0.25;
+        const carry = lw ? _v2.copy(UP).multiplyScalar(-0.97).addScaledVector(_fw, 0.12).addScaledVector(out, 0.14).normalize()
+                         : _v2.copy(UP).multiplyScalar(-0.93).addScaledVector(_fw, 0.3).addScaledVector(out, 0.12).normalize();
+        aimSegment(up, lo, carry.multiplyScalar(1 - keep).addScaledVector(cur, keep).normalize(), k);
         const cf = wp(hd).sub(wp(lo)).normalize();
-        const fore = _v2.copy(_fw).multiplyScalar(0.85).addScaledVector(UP, -0.35).addScaledVector(out, -0.25).normalize();
-        aimSegment(lo, hd, fore.multiplyScalar(0.75).addScaledVector(cf, 0.25).normalize(), k);
+        const fore = lw ? _v2.copy(_fw).multiplyScalar(0.45).addScaledVector(UP, -0.88).addScaledVector(out, 0.05).normalize()
+                        : _v2.copy(_fw).multiplyScalar(0.85).addScaledVector(UP, -0.35).addScaledVector(out, -0.25).normalize();
+        aimSegment(lo, hd, fore.multiplyScalar(1 - keep).addScaledVector(cf, keep).normalize(), k);
+        // and the wrist turns the blade itself forward and down: its long axis,
+        // from the fist to the middle of the weapon, is aimed by the hand
+        const hm = lw && heldMesh[s];
+        if (hm) {
+          hd.updateMatrixWorld(true);
+          const hp = wp(hd), bc = _hb.setFromObject(hm).getCenter(_hs).sub(hp);
+          if (bc.lengthSq() > 1e-4) {
+            // the reach of the weapon from the fist (its middle is half way), and
+            // the fist's height over the feet: the slope keeps the tip 18 cm up
+            const reach = bc.length() * 2, handH = hp.y - root.getWorldPosition(_v3).y;
+            const sinD = THREE.MathUtils.clamp((handH - 0.18) / Math.max(reach, 0.1), 0.2, 0.8), cosD = Math.sqrt(1 - sinD * sinD);
+            bc.normalize();
+            const tgt = _v2.copy(_fw).multiplyScalar(cosD).addScaledVector(UP, -sinD).addScaledVector(out, 0.1).normalize();
+            const turn = new THREE.Quaternion().setFromUnitVectors(bc, tgt);
+            turn.slerp(new THREE.Quaternion(), 1 - k);
+            const hw = hd.getWorldQuaternion(new THREE.Quaternion()), pw = hd.parent.getWorldQuaternion(new THREE.Quaternion());
+            hd.quaternion.copy(pw.invert().multiply(turn.multiply(hw)));
+            hd.updateMatrixWorld(true);
+          }
+        }
       }
     }
   }
@@ -451,7 +482,7 @@ export function createGait({ root, actions, mixer, rates }) {
       return out.copy(_clipFwdLocal).applyQuaternion(_rq).setY(0).normalize();
     },
     facts: () => ({ phase: +phase.toFixed(3), rate: +st.rate.toFixed(2), warp: +st.warp.toFixed(2), lean_deg: +THREE.MathUtils.radToDeg(st.lean).toFixed(1), bank_deg: +THREE.MathUtils.radToDeg(st.bank || 0).toFixed(1), pelvis: +(st.pelvis || 0).toFixed(3), sole: +(st.sole || 0).toFixed(3), planter: planter ? planter.legs.length : 0, smin: [st.smin0, st.smin1].map(x => x === undefined ? null : +x.toFixed(3)), solesY: planter ? planter.soles().map(v => +v.y.toFixed(3)) : null, locks: [!!(st.lock_l && st.lock_l.pos), !!(st.lock_r && st.lock_r.pos)], trunk_deg: st.trunkAvg === undefined ? null : +THREE.MathUtils.radToDeg(st.trunkAvg).toFixed(1),
-                    cadence_spm: Math.round(st.cadence), armed,
+                    cadence_spm: Math.round(st.cadence), armed, armedLong,
                     walk_period: C.walk ? +C.walk.period.toFixed(3) : null, run_period: C.run ? +C.run.period.toFixed(3) : null }),
   };
 }

@@ -2470,6 +2470,17 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                     f"characters render untextured in the web runtime")
         spec.player.asset = player_glb
         spec.player.name = cast
+        # what the finished-character judge said of this hero (bake.ensure_playable)
+        try:
+            import json as _qj
+            _qv = _qj.loads((BACKEND_ROOT / "renders" / "_char_qa.json").read_text(encoding="utf-8")).get((cast or "").strip().lower())
+            if _qv and _qv.get("score") is not None:
+                job.setdefault("notes", []).append(
+                    f"character check: the {cast} scored {_qv['score']:.2f}"
+                    + (" and passed" if _qv.get("pass") else ", under the bar; it was painted again and the best kept")
+                    + (" (after a second painting)" if _qv.get("retried") and _qv.get("pass") else ""))
+        except Exception:
+            pass
         if abs(spec.player.height_m - 1.75) < 1e-6:      # untouched default -> species height
             spec.player.height_m = library.default_height(cast)
         else:

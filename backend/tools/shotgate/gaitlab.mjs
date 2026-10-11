@@ -98,6 +98,7 @@ await film('turn', 1800, 100);
 await p.keyboard.up('KeyS');
 await film('settle', 700);
 const rec = await p.evaluate(() => { window.__gaitOn = false; return window.__gaitRec; });
+if (process.env.REC) { (await import("fs")).writeFileSync(process.env.REC, JSON.stringify(rec)); }
 await b.close();
 
 // ── the numbers ──────────────────────────────────────────────────────────

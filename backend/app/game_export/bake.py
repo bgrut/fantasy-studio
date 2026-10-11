@@ -1475,6 +1475,37 @@ def ensure_playable(kind: str, verbose: bool = True) -> str | None:
             except Exception as _ve:
                 if verbose:
                     print(f"[bake] hd views skipped ({type(_ve).__name__}: {_ve})")
+        # THE FINISHED CHARACTER IS JUDGED (2026-10-11): every step above checks
+        # its own input; nothing looked at the result, so a blotchy character
+        # shipped and stayed in the library. It is rendered from four sides and
+        # scored (colour mottle, CLIP against "blotchy, smeared", its eyes asked
+        # about one at a time); under the bar it is painted again with other
+        # seeds and the best attempt is kept. The verdict is written beside the
+        # library (renders/_char_qa.json) for the build to report.
+        if pattern in ("biped", "quadruped") and os.environ.get("FS_CHARQA", "1") != "0" and anim.exists():
+            try:
+                import subprocess as _sp, sys as _sys, json as _json
+                _q = _sp.run([_sys.executable, "-c",
+                              "import sys,json; sys.path.insert(0, sys.argv[1]); sys.path.insert(0, sys.argv[1] + '/tools'); "
+                              "from char_qa import best_of; print('QAJSON ' + json.dumps(best_of(sys.argv[2])))",
+                              str(Path(__file__).resolve().parents[2]), kind],
+                             capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=6000)
+                _line = next((l for l in (_q.stdout or "").splitlines() if l.startswith("QAJSON ")), None)
+                if _line:
+                    _v = _json.loads(_line[7:])
+                    _qp = Path(__file__).resolve().parents[2] / "renders" / "_char_qa.json"
+                    try:
+                        _all = _json.loads(_qp.read_text(encoding="utf-8")) if _qp.exists() else {}
+                    except Exception:
+                        _all = {}
+                    _all[kind.strip().lower()] = {k: _v.get(k) for k in ("score", "pass", "mottle", "photo", "face", "eyes", "retried")}
+                    _qp.write_text(_json.dumps(_all, indent=1), encoding="utf-8")
+                    if verbose:
+                        print(f"[bake] character judged {anim.name}: {_v.get('score')} {'pass' if _v.get('pass') else 'UNDER THE BAR'}"
+                              f"{' after retries' if _v.get('retried') else ''}")
+            except Exception as _qe:
+                if verbose:
+                    print(f"[bake] character judge skipped ({type(_qe).__name__}: {_qe})")
         return str(anim)
     except Exception as e:
         if verbose:

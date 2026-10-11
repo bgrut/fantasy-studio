@@ -26,6 +26,11 @@ import sys
 import tempfile
 from pathlib import Path
 
+# A SECOND ATTEMPT IS ANOTHER ATTEMPT (2026-10-11): the finished-character
+# judge (tools/char_qa.py) sends a blotchy result back through this pass;
+# FS_HDV_SEED moves every painting seed so the retry is a different painting
+SEED_OFF = int(os.environ.get("FS_HDV_SEED", "0") or 0) * 1009
+
 BK = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BK))
 LIB = BK / "assets" / "library"
@@ -107,7 +112,7 @@ def repaint(src: Path, dst: Path, prompt: str, strength: float, seed: int = 42, 
     import torch
     from PIL import Image
     img = Image.open(src).convert("RGB").resize((1024, 1024))
-    g = torch.Generator("cuda").manual_seed(seed)
+    g = torch.Generator("cuda").manual_seed(seed + SEED_OFF)
     from app.asset_gen.reference import _long_prompt_kwargs       # the whole negative, not its first 77 tokens
     _p = pipe()
     out = _p(**_long_prompt_kwargs(_p, prompt, neg or NEG), image=img, strength=strength, guidance_scale=6.5,
@@ -146,7 +151,7 @@ def head_hr(ref: Path, outfit: str, dst: Path, strength: float = 0.5):
         return None
     crop = im.crop(box).resize((1024, 1024), Image.LANCZOS)
     import torch
-    g = torch.Generator("cuda").manual_seed(7)
+    g = torch.Generator("cuda").manual_seed(7 + SEED_OFF)
     prompt = (f"close-up portrait photograph of the face of a {outfit}, looking at the camera, natural skin texture, "
               f"detailed eyes, sharp focus, DSLR, 85mm, soft studio light, plain grey backdrop")
     out = pipe()(prompt=prompt, negative_prompt="painting, illustration, drawing, " + NEG, image=crop, strength=strength,
@@ -225,7 +230,7 @@ def depth_face(depth_png: Path, dst: Path, prompt: str, neg: str, colour_ref=Non
         c = _crown_rgb(arr)
         return 0.0 if c is None else float(max(0.0, 1.0 - np.linalg.norm(c - np.asarray(hair_rgb)) / 160.0))
     for _t in range(3 if (colour_ref is not None or skin_wanted or hair_rgb is not None) else 1):
-        g = torch.Generator("cuda").manual_seed(seed + 977 * _t)
+        g = torch.Generator("cuda").manual_seed(seed + 977 * _t + SEED_OFF)
         out = c(**kw, image=dimg, controlnet_conditioning_scale=cn_scale,
                 guidance_scale=6.0, num_inference_steps=34, generator=g, width=1024, height=1024).images[0]
         _a = np.asarray(out, dtype=np.float32)

@@ -17210,6 +17210,13 @@ async function main() {
     }
     wp2.visible = false; wp3.visible = false;
     window.__wpnModels = wGroups;
+    // A SWORD IS A SWORD'S LENGTH (2026-10-11): the weapons are made in
+    // metres, but the hand bone carries the rig's own scale, and a generated
+    // gladiator's 0.62 m blade came out 1.8 m, longer than his legs, dragging
+    // in the sand. Once the hero is sized, each weapon undoes its hand's scale.
+    const _wsz = () => { const v = new THREE.Vector3(); handBone.updateWorldMatrix(true, false); handBone.getWorldScale(v);
+      const s0 = (v.x + v.y + v.z) / 3; if (s0 > 1e-4) for (const g3 of wGroups) g3.scale.setScalar(1 / s0); };
+    setTimeout(_wsz, 300); setTimeout(_wsz, 1500); setTimeout(_wsz, 4000);
   })();
 
   // THE ARMS HANG (2026-09-25). A rest-pose correction used to scale the

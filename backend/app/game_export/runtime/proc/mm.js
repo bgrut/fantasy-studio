@@ -224,6 +224,30 @@ export function createMotionMatcher({ root, db, halflife = 0.1, searchEvery = 0.
   // classed by its own label; below 2.2 m/s a running take is no candidate,
   // above 3.4 a walking one is not, in between both are.
   const rangeRun = (db.head.takes || []).map(t => (/\b(run|jog|sprint)/i.test(t.label || '') && !/walk/i.test(t.label || '')) ? 1 : 0);
+  // A WALK THAT GOES ON (2026-10-11): the database's walks at a hero's pace
+  // (1.6-1.9 m/s) are 2.3-2.5 s takes. Near the end of one the frame is no
+  // longer a candidate, the search is forced, and it landed in the take's own
+  // mirror with the other foot forward; the blend between the two dragged
+  // the planted foot (gaitlab walk slide 0.6-1.3, a run 0.05). Each steady
+  // walking take is given a loop: the two frames one or two strides apart
+  // whose feet, hips and contacts agree best. Played past the second, it
+  // goes on from the first, so a short walk becomes an endless one with no
+  // forced jump and no foot swap.
+  const loops = (db.head.takes || []).map((t, r) => {
+    const lab = t.label || '';
+    if (!/walk/i.test(lab) || /backward|sideways|turn in place|stop|start|to run/i.test(lab)) return null;
+    const [a0, e] = db.ranges[r];
+    if (e - a0 < 50) return null;
+    let best = null, bd = Infinity;
+    for (let a = a0 + 2; a < e - 30; a++) for (let b = a + 26; b <= Math.min(e - 8, a + 72); b++) {
+      if (db.con[a] !== db.con[b]) continue;
+      let d = 0; const oa = a * 27, ob = b * 27;
+      for (let j = 0; j < 15; j++) { const x = db.featW[oa + j] - db.featW[ob + j]; d += x * x; }
+      if (d < bd) { bd = d; best = [a, b]; }
+    }
+    return best && bd < 0.6 ? { a: best[0], b: best[1], d: +bd.toFixed(3) } : null;
+  });
+  st.loops = loops.filter(Boolean).length;
   let gaitGate = 0;
   const gaitOk = r => !(gaitGate === 1 && rangeRun[r]) && !(gaitGate === 2 && !rangeRun[r]);
   function search(force) {
@@ -290,6 +314,8 @@ export function createMotionMatcher({ root, db, halflife = 0.1, searchEvery = 0.
       const want = (animV > 0.3 && bodyV > 0.3) ? THREE.MathUtils.clamp(bodyV / animV, 0.8, 1.3) : 1;
       st.rate = THREE.MathUtils.damp(st.rate, want, 6, dt);
       st.frame += dt * db.head.fps * st.rate;
+      { const lp = loops[st.range];                                       // round the walk's loop
+        if (lp && st.frame >= lp.b) { st.frame -= (lp.b - lp.a); st.wraps = (st.wraps || 0) + 1; st.pending = true; } }
       const end = db.ranges[st.range][1];
       let force = false;
       if (st.frame >= end - 1) { st.frame = end - 1.001; force = true; }
@@ -327,6 +353,6 @@ export function createMotionMatcher({ root, db, halflife = 0.1, searchEvery = 0.
     /** contacts of the frame playing: [left planted, right planted] */
     contacts() { const c = db.con[Math.floor(st.frame)]; return [!!(c & 1), !!(c & 2)]; },
     facts: () => ({ frame: Math.floor(st.frame), take: (db.head.takes[st.range] || {}).take, label: (db.head.takes[st.range] || {}).label,
-                    rate: +st.rate.toFixed(2), jumps: st.jumps, cost: +st.lastCost.toFixed(3), search_ms: +st.searchMs.toFixed(2) }),
+                    rate: +st.rate.toFixed(2), jumps: st.jumps, wraps: st.wraps || 0, loops: st.loops, cost: +st.lastCost.toFixed(3), search_ms: +st.searchMs.toFixed(2) }),
   };
 }
