@@ -183,7 +183,14 @@ def judge(kind: str, keep: Path | None = None, animal: bool | None = None) -> di
     face = None
     eyes = None
     hf = tmp / f"{slug}_head_front.png"
-    _faceless = any(w in kind.lower() for w in ("robot", "skeleton", "android", "astronaut", "knight", "diver", "ghost"))
+    # EYES MEANT TO BE HIDDEN (2026-10-11): a masked ninja, a samurai's or a
+    # gladiator's helmet, goggles, a beekeeper's veil cannot be judged by their
+    # eyes. Asking the vision model whether eyes were covered was right seven
+    # times in ten (a cap "covered" nine plain faces); the role says it surely.
+    _faceless = any(w in kind.lower() for w in ("robot", "skeleton", "android", "astronaut", "knight", "diver", "ghost",
+                                                "ninja", "samurai", "gladiator", "superhero", "beekeeper", "mountaineer",
+                                                "snowboarder", "skier", "zombie", "goblin", "cat", "welder", "firefighter",
+                                                "soldier", "pilot", "racer", "mummy", "alien", "creature", "scavenger"))
     if not animal and hf.exists() and not _faceless:
         eyes = _eyes(hf)
     if eyes is not None:
