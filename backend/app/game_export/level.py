@@ -269,6 +269,44 @@ def _archetype_height(kind: str, x: float, z: float, base: float,
     return base
 
 
+def _fjord_height(x: float, z: float, base: float, goal: list[float],
+                  goal_r: float, seed: int) -> float:
+    """A FJORD IS SEA BETWEEN WALLS (2026-10-11). "a viking rows a longship up
+    a misty norwegian fjord" was built as an archipelago: low green islands in
+    a lake. A fjord is one long arm of the sea running from behind the spawn to
+    its head below the village, a grass shelf along the near shore that the
+    route walks, and rock rising sheer on both sides to fifty metres and more.
+    u runs along the fjord toward the goal, s across it; the water lies on +s.
+    """
+    import math as _m
+    def ss(t: float) -> float:
+        t = max(0.0, min(1.0, t))
+        return t * t * (3 - 2 * t)
+    ux, uz = goal[0] / max(goal_r, 1e-6), goal[1] / max(goal_r, 1e-6)
+    u = x * ux + z * uz
+    s = -x * uz + z * ux
+    rock = base * 2.2 + _m.sin(u * 0.11 + seed % 7) * 3.0 + _m.sin(u * 0.043 - s * 0.05) * 5.0
+    head = goal_r - 22.0
+    # near shore: the shelf widens round the head, where the village stands
+    shelf = 11.0 + 26.0 * ss((u - (goal_r - 50.0)) / 30.0)
+    # the water: from behind the spawn to the head, its far shore wandering
+    wob = _m.sin(u * 0.031 + seed % 5) * 7.0 + _m.sin(u * 0.087) * 2.5
+    open_w = ss((head - u) / 18.0)                   # 1 open water .. 0 past the head
+    far = 7.0 + (52.0 + wob) * open_w                # the far shore's distance across
+    if s < -shelf:                                   # the near wall
+        return 0.6 + (46.0 + rock) * ss((-shelf - s) / 13.0)
+    if s < 6.0:                                      # the shelf the track walks
+        h = 0.5 + base * 0.25
+    elif s < far:                                    # beach, then the deep water
+        h = -4.2 * ss((s - 6.0) / 4.0) * ss((far - s) / 4.0) + 0.5 * (1 - ss((s - 6.0) / 4.0))
+    else:                                            # the far wall
+        h = 0.4 + (58.0 + rock) * ss((s - far - 2.0) / 15.0)
+    # the head wall closes the fjord behind the village
+    if u > goal_r + 34.0:
+        h = max(h, 0.6 + (50.0 + rock) * ss((u - goal_r - 34.0) / 16.0))
+    return h
+
+
 def _apply_terrain_form(h: list[float], n: int, form: str, amp: float) -> list[float]:
     """The SHAPE of the ground, as an art-direction decision.
 
@@ -367,7 +405,8 @@ LAVA_LEVEL = -0.45     # the lava's surface; a channel's floor lies at -1.4
 def build_level(seed: int, size_m: float, n_objectives: int = 0,
                 amplitude_m: float = 2.4, grid_n: int = 48,
                 regions: list[dict] | None = None,
-                archetype: str = "plain", terrain_form: str = "natural", sea: bool = False) -> dict:
+                archetype: str = "plain", terrain_form: str = "natural", sea: bool = False,
+                fjord: bool = False) -> dict:
     """Deterministic LevelPlan. Returns a JSON-safe dict for the runtime.
 
     sea (2026-10-06): a sea battle sails, it does not walk. The islands sit
@@ -389,6 +428,8 @@ def build_level(seed: int, size_m: float, n_objectives: int = 0,
         # jitter perpendicular to the spawn->goal axis
         px, pz = -goal[1] / max(goal_r, 1e-6), goal[0] / max(goal_r, 1e-6)
         j = rng.uniform(-0.22, 0.22) * goal_r
+        if fjord:
+            j *= 0.15                                # the shore track runs along the water
         path.append([mx + px * j, mz + pz * j])
     path.append(list(goal))
     corridor = 5.5                                   # flattened, prop-free (m)
@@ -408,7 +449,10 @@ def build_level(seed: int, size_m: float, n_objectives: int = 0,
         for j in range(grid_n):
             x = (j / (grid_n - 1) - 0.5) * size_m
             h = (hgrid[i][j] - 0.45) * 2.0 * amplitude_m
+            h0 = h
             h = _archetype_height(archetype, x, z, h, amplitude_m, half, seed)
+            if fjord:
+                h = _fjord_height(x, z, h0, goal, goal_r, seed)
             if sea:
                 h -= amplitude_m * 1.1                # fewer, smaller islands
             # MICRO-RELIEF (Phase 93): a second, higher-frequency octave —
@@ -486,7 +530,7 @@ def build_level(seed: int, size_m: float, n_objectives: int = 0,
                 t = (d - corridor) / (corridor * 1.2)
                 h *= t * t * (3 - 2 * t)
             edge = max(abs(x), abs(z)) / half        # settle flat at the walls
-            if edge > 0.92 and _arch != "cave":      # a cave is walled to its edge
+            if edge > 0.92 and _arch != "cave" and not fjord:   # a cave is walled to its edge, a fjord cut to it
                 h *= max(0.0, (1.0 - edge) / 0.08)
             if lava_segs and not _ch:
                 h = max(h, LAVA_LEVEL + 0.25)   # only a channel lies under the lava
@@ -566,6 +610,13 @@ def build_level(seed: int, size_m: float, n_objectives: int = 0,
         # no thirty-metre landmark tree and no campsite: off the route is rock
         out_level["landmarks"] = []
         out_level["pois"] = []
+    if fjord:
+        # the walls are sheer rock and the rest is sea: a thirty-metre tree or
+        # a campsite placed at random lands on a cliff face or in the water
+        out_level["landmarks"] = []
+        out_level["pois"] = []
+        gl = math.hypot(goal[0], goal[1]) or 1.0
+        out_level["fjord"] = {"axis": [round(goal[0] / gl, 3), round(goal[1] / gl, 3)], "head": round(gl - 22.0, 1)}
     if lava:
         gl = math.hypot(goal[0], goal[1]) or 1.0
         out_level["lava"] = {"level": LAVA_LEVEL, "channels": lava,

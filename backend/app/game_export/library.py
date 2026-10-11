@@ -270,4 +270,12 @@ def default_height(kind: str) -> float:
         # cat), so a keyword has to END a word: a carpenter is not a car
         if any(re.search(re.escape(w) + r"(?:s|es)?\b", k) for w in words):
             return h
+    # A PERSON NOBODY LISTED IS A PERSON'S HEIGHT (2026-10-11): a generated
+    # gladiator went into the arena at 1.0 m, the unknown default
+    try:
+        from app.game_export.generate import _BIPED
+        if _last in _BIPED:
+            return 1.75
+    except Exception:
+        pass
     return 1.0

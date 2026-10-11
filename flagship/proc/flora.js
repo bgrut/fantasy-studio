@@ -1295,6 +1295,10 @@ export function biomeFor(words, arch, groundHSL) {
   // the high Himalaya: dark conifers thinning out over bare stone (2026-10-07)
   else if (has(/himalaya\w*|tibet\w*|nepal\w*|bhutan\w*|monaster(y|ies)|gompa/)) Object.assign(out, { kinds: K(['spruce', 0.45], ['pine', 0.3], ['rock', 0.6], ['boulder', 0.3], ['bush', 0.3]), dens: 0.28,
     rockTint: T(0x7a7670), leaf: { h: 0.33, s: 0.38, l: 0.16 } });
+  // A FJORD IS SPRUCE AND BIRCH OVER GREY ROCK (2026-10-11): a viking's
+  // norwegian fjord grew round oaks on its islands
+  else if (has(/fjords?|norw\w*|vikings?|norse|scandinavia\w*|nordic/)) Object.assign(out, { kinds: K(['spruce', 0.8], ['pine', 0.35], ['birch', 0.3], ['rock', 0.45], ['boulder', 0.2]), dens: 0.6,
+    rockTint: T(0x6f6d69), leaf: { h: 0.3, s: 0.36, l: 0.17 } });
   // A HIGHLAND GLEN IS OPEN MOOR (2026-10-08): "a shepherd ... across a misty
   // scottish highland glen" grew a dense wood. A glen is bare hillside: heather,
   // bracken, grey stone and the odd boulder, hardly a tree
@@ -1303,6 +1307,12 @@ export function biomeFor(words, arch, groundHSL) {
   else if (has(/bamboo/)) Object.assign(out, { kinds: K(['bamboo', 1], ['bush', 0.25], ['broadleaf', 0.12]), dens: 1.35, leaf: { h: 0.25, s: 0.5, l: 0.3 } });
   else if (has(/redwood|sequoia/)) Object.assign(out, { kinds: K(['redwood', 1], ['spruce', 0.18], ['bush', 0.9], ['rock', 0.06]), dens: 0.55,
     leaf: { h: 0.31, s: 0.42, l: 0.16 } });
+  // THE OLD WORLD'S DESERT (2026-10-11): the pyramids of Giza stood (or would
+  // have) in brown scrub under dead trees, and a Sahara grew cactus, which is
+  // American. Sand and limestone, the odd boulder; date palms only by water.
+  else if (has(/egypt\w*|giza|pyramids?|pharaoh\w*|sphinx|sahara|arabia\w*|bedouin|oasis/) && !has(/jungle|rainforest|maya\w*|aztec|inca|mexic\w*/)) Object.assign(out, {
+    kinds: K(['rock', 1], ['boulder', 0.35], ...(has(/oasis|\bnile\b|river/) ? [['palm', 0.6]] : [])), dens: has(/oasis|\bnile\b/) ? 0.12 : 0.04,
+    rockTint: T(0xb89a6e), leaf: { h: 0.2, s: 0.4, l: 0.28 } });
   else if (has(/canyon|mesa|badlands|butte/)) Object.assign(out, { kinds: K(['mesa', 0.25], ['rock', 0.8], ['boulder', 0.4], ['cactus', 0.15]), dens: 0.12, rockTint: T(0xb5643c) });
   else if (has(/desert|dune|sahara|wasteland|arid/)) Object.assign(out, { kinds: K(['cactus', 0.5], ['rock', 0.8], ['boulder', 0.2], ['dead', 0.25], ['bush', 0.2]), dens: 0.14, rockTint: T(0xb08a5e), leaf: { h: 0.16, s: 0.32, l: 0.3 } });
   else if (has(/glacier|tundra|ice field|polar/)) Object.assign(out, { kinds: K(['boulder', 0.6], ['rock', 1], ['spruce', 0.15]), dens: 0.16, snow: 0.85, rockTint: T(0x7d8794) });

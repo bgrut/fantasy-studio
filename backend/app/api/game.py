@@ -2112,10 +2112,12 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                     (r"\b(forest|wood|moor|wild|ranger|trail|mountain|hike|hunt|deer|elk|track|walk|walker|stroll|wander|gather|firefl)", "ranger"),
                     (r"\b(lab|laboratory|science|scientist|space|station|reactor|research|specimen)", "scientist"),
                     (r"\b(engine|machine|factory|robot|mech|repair|wrench|mine)", "engineer"),
-                    (r"\b(castle|kingdom|knight|medieval|dragon|sword|siege|joust)", "knight"),
-                    (r"\b(war|battle|soldier|trench|army|enemy lines|patrol)", "soldier"),
+                    # a period names its warrior before any battle word does: "a viking
+                    # warrior" matched "war" and was the soldier with a pistol (2026-10-11)
                     (r"\b(viking|norse|fjord|longship|raid)", "viking"),
                     (r"\b(samurai|shogun|dojo|ronin)", "samurai"),
+                    (r"\b(castle|kingdom|knight|medieval|dragon|sword|siege|joust)", "knight"),
+                    (r"\b(war|battle|soldier|trench|army|enemy lines|patrol)", "soldier"),
                     (r"\b(lighthouse|harbour|harbor|coast|shore|storm|sea|island|lantern|beacon)", "keeper"),   # 2026-09-28: generated once, cast by the sea's words since
                     # a cafe's barista, a diner's waitress: not an explorer in safari khaki (2026-10-06)
                     (r"\b(barista|caf[eé]|coffee|diner|bistro|restaurant|waiter|waitress|bartender|baker|bakery)", "woman"),
@@ -2625,7 +2627,9 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         # generic-human aliases resolve to the man rig instead of generating
         # a new "npc" species from scratch
         _HUMAN_ALIASES = {"npc", "npcs", "guy", "person", "people", "villager",
-                          "enemy", "soldier", "guard", "human"}
+                          "enemy", "soldier", "guard", "human",
+                          # (2026-10-11) "three opponents" in the colosseum went to image-to-3D as a prop
+                          "opponent", "opponents", "challenger", "challengers", "foe", "foes", "combatant", "combatants"}
         # ambient phenomena are ATMOSPHERE, not assets — weather/sky systems
         # already render them; generating a "snowflake" mesh is 30 wasted
         # CPU-minutes (caught live 2026-07-07 on the snowy-fox prompt)
@@ -2792,6 +2796,28 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                 job.setdefault("notes", []).append(f"the {ent.name} scenery is left out: the pickups are the {ent.name}")
                 continue
             ekind = "man" if (ent.name.lower() in _HUMAN_ALIASES or getattr(ent, "spectral", False)) else ent.name   # a ghost is played by the walker, drawn spectral
+            # A SHOGUN'S GUARDS ARE SAMURAI (2026-10-11): a ninja crept past six
+            # men in jeans and hoodies in a feudal castle. In a period setting a
+            # generic guard or foe wears the period, from a figure the library
+            # has, never the hero's own.
+            if ekind == "man" and ent.behavior in ("guard", "hostile") and not getattr(ent, "spectral", False):
+                _era_s = ((req.prompt or "") + " " + str(getattr(spec.world, "name", "") or "") + " " + (spec.title or "")).lower()
+                for _epat, _efig in ((r"\b(japan\w*|samurai|ninjas?|shogun\w*|feudal|edo|ronin|daimyo|kyoto)\b", ("samurai", "ninja")),
+                                     (r"\b(vikings?|norse|longships?|fjords?)\b", ("viking",)),
+                                     # an arena's opponents are gladiators, the hero's own figure if need be
+                                     (r"\b(roman|rome|colosseum|coliseum|gladiators?|legion\w*|centurions?)\b", ("gladiator", "gladiator*")),
+                                     (r"\b(western|frontier|saloon|cowboys?|outlaws?|high noon|sheriff)\b", ("bandit", "cowboy")),
+                                     (r"\b(medieval|knights?|castles?|kingdom|crusade\w*)\b", ("knight", "knight*"))):   # the soldier is modern: camouflage and a rifle
+                    if _fre.search(_epat, _era_s):
+                        _hero_n = (spec.player.name or "").lower().strip()
+                        for _ef in _efig:
+                            _ef_same = _ef.endswith("*")
+                            _ef = _ef.rstrip("*")
+                            if (_ef != _hero_n or _ef_same) and (BACKEND_ROOT / "assets" / "library" / f"{_ef}_anim.glb").exists():
+                                ekind = _ef; ent.name = _ef
+                                job.setdefault("notes", []).append(f"the {ent.behavior}s are {_ef}s: they belong to the setting")
+                                break
+                        break
             # prefer the ANIMATED variant (real gait — no gliding); static fallback
             glb = ensure_playable(ekind, verbose=False) or library.resolve(ekind)
             # A CREATURE TAKES ITS KIN (2026-09-21). A crocodile the library
@@ -3353,6 +3379,30 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                     "surface vessel: rides the waterline (boats float, they "
                     "don't dive)")
         _arch = getattr(spec.world, "archetype", "plain") or "plain"
+        # A FJORD (2026-10-11): sea between sheer walls, built by build_level;
+        # it is the sea landform's world, so the water plane exists
+        _fjord = bool(_fre.search(r"\bfjords?\b", (req.prompt or "").lower())) and not getattr(spec.world, "platforms", False)
+        if _fjord:
+            _arch = "archipelago"
+            spec.world.archetype = "archipelago"
+        # THE PYRAMIDS STAND IN SAND (2026-10-11): "the pyramids of giza at
+        # sunrise" was planned as a mesa of brown soil under mountains. Egypt
+        # and the Sahara are sand: low dunes, the ground the colour of it.
+        _pw7 = (req.prompt or "").lower()
+        if (_fre.search(r"\b(egypt\w*|giza|pharaohs?|sphinx|sahara|pyramids? of)\b", _pw7)
+                and not _fre.search(r"\b(jungle|rainforest|maya\w*|aztec|inca|underwater|space)\b", _pw7)):
+            if _arch in ("plain", "mesa", "canyon", "peaks", "basin"):
+                _arch = "dunes"
+                spec.world.archetype = "dunes"
+            spec.world.ground_color = [0.78, 0.65, 0.46]
+        # A CITY ON THE WATER (2026-10-11): Venice stands in its lagoon, so the
+        # sea landform makes the water; the runtime cuts the canals (CANALS)
+        if (_fre.search(r"\b(venice|venezia|venetian|gondol\w*|grand canal|rialto|city of canals)\b", _pw7)
+                and not getattr(spec.world, "platforms", False)):
+            _arch = "archipelago"
+            spec.world.archetype = "archipelago"
+            if spec.world.water_level is None:
+                spec.world.water_level = 0.0
         # A PLATFORMER'S ISLANDS FLOAT (2026-09-27). "Jumps between floating
         # islands" also read as an archipelago, and the side view filled with
         # the edge of a sea. In a platformer the islands are the platforms;
@@ -3410,7 +3460,7 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         spec.world.level = build_level(
             spec.seed, spec.world.size_m, n_objectives=n_obj,
             amplitude_m=amp * _am, grid_n=_gn, regions=_regions,
-            archetype=_arch, terrain_form=_tf, sea=bool(job.get("_naval")))
+            archetype=_arch, terrain_form=_tf, sea=bool(job.get("_naval")) and not _fjord, fjord=_fjord)
         if _tf != "natural" or _gm != 1.0:
             job.setdefault("notes", []).append(
                 f"terrain form: {_tf} ({_gn}x{_gn}). The ground is shaped by "

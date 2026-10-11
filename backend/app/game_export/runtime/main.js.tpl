@@ -148,6 +148,9 @@ async function main() {
   const _volcLava = (((SPEC.world || {}).level || {}).lava) || null;
   // and a cave hangs a roof over its tunnel and has no sky at all (proc/cave.js)
   const _caveLvl = (((SPEC.world || {}).level || {}).cave) || null;
+  // the Old World's sand sea (Giza, the Sahara): a flat horizon, no grass (2026-10-11)
+  const SANDSEA = (() => { const w = [SPEC.prompt, SPEC.world && SPEC.world.name].filter(Boolean).join(' ').toLowerCase();
+    return /egypt|giza|pharaoh|sphinx|sahara|pyramids? of/.test(w) && !/jungle|rainforest|maya|aztec|inca|underwater|space/.test(w); })();
   const pal = (() => {
     const base = Object.assign({}, SKY[SPEC.world.sky] || SKY.day);
     const PW = SPEC.world.palette || {};
@@ -967,7 +970,7 @@ async function main() {
     // horizon. Fog tints them into the distance automatically; snow weather
     // and cold skies get white caps via vertex color.
     if (!(((SPEC.world || {}).level || {}).osm) && !(((SPEC.world || {}).level || {}).interior)
-        && !SPEC.world.pano && !_caveLvl) {   // image worlds: the PANORAMA is the horizon; a cave has none
+        && !SPEC.world.pano && !_caveLvl && !SANDSEA) {   // image worlds: the PANORAMA is the horizon; a cave has none, nor the open desert
       const gsizeM = SPEC.world.size_m;
       const rngM = mulberry32(SPEC.seed + 777);
       const snowy = SPEC.world.weather === 'snow';
@@ -1389,6 +1392,46 @@ async function main() {
     return { ux, uz, L, W,
              inside: (x, z, m) => { const [a, c] = local(x, z); return Math.abs(a) < L / 2 + (m || 0) && Math.abs(c) < W / 2 + (m || 0); } };
   })();
+  // ── THE COLOSSEUM (2026-10-11) ─────────────────────────────────────────
+  // "a gladiator fights three opponents in the roman colosseum before a
+  // roaring crowd" was fought on a woodland track among bushes. A gladiator
+  // fights on the sand of an amphitheatre: an oval floor inside a podium
+  // wall, gates at the two ends, tier on tier of seating full of people
+  // rising to an arcaded outer wall, the emperor's box on the long side.
+  // The plan levels the ground under it and moves the walk inside.
+  const ARENA = (() => {
+    if (INTERIOR || !LVL || !LVL.heights || SPEC.genre === 'factory' || VIEW === 'side' || PITCH) return null;
+    if (LVL.heights.length !== LVL.grid_n * LVL.grid_n) return null;
+    const w = [SPEC.prompt, SPEC.world && SPEC.world.name, SPEC.title].filter(Boolean).join(' ').toLowerCase();
+    if (!/\b(colosseum|coliseum|amphitheat\w*|gladiators?|gladiatorial)\b/.test(w) && !(/\barena\b/.test(w) && /\b(roman?|rome|ancient)\b/.test(w))) return null;
+    if (/\b(space|robots?|neon|cyber\w*|futur\w*|mech\w*|e-?sports?)\b/.test(w)) return null;
+    const g = LVL.goal || [0, 40], gl = Math.hypot(g[0], g[1]) || 1, ux = g[0] / gl, uz = g[1] / gl;
+    const A = 34, B = 22, D = 30, PH = 4, TH = 26;
+    const C = [ux * 14, uz * 14];                      // the spawn stands on the sand, near the west gate
+    const local = (x, z) => [(x - C[0]) * ux + (z - C[1]) * uz, -(x - C[0]) * uz + (z - C[1]) * ux];
+    const world = (a, c) => [C[0] + ux * a - uz * c, C[1] + uz * a + ux * c];
+    const ell = (x, z, a, b) => { const [p, q] = local(x, z); return (p / a) * (p / a) + (q / b) * (q / b); };
+    // the ground under it all is levelled to the floor's height, then eased out
+    const n = LVL.grid_n, S = LVL.size_m, hs = LVL.heights;
+    const gi = (x) => Math.max(0, Math.min(n - 1, Math.round((x / S + 0.5) * (n - 1))));
+    const H0 = hs[gi(C[1]) * n + gi(C[0])];
+    const RO = D + 4;
+    for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
+      const x = (j / (n - 1) - 0.5) * S, z = (i / (n - 1) - 0.5) * S;
+      const [p, q] = local(x, z);
+      const e = Math.sqrt((p / (A + RO)) * (p / (A + RO)) + (q / (B + RO)) * (q / (B + RO)));   // 1 at the outer wall
+      if (e <= 1.08) hs[i * n + j] = H0;
+      else if (e < 1.4) { const t = (e - 1.08) / 0.32, s = t * t * (3 - 2 * t); hs[i * n + j] = H0 * (1 - s) + hs[i * n + j] * s; }
+    }
+    LVL.goal = world(A - 7, 0);
+    LVL.path = [[0, 0], LVL.goal.slice()];
+    if (LVL.collect_points) LVL.collect_points = LVL.collect_points.map((_, k, arr) => world(-6 + (k + 1) * (A - 4) / (arr.length + 1), (k % 2 ? 1 : -1) * 6));
+    const inFoot = (x, z, m) => ell(x, z, A + RO + (m || 0), B + RO + (m || 0)) < 1;
+    if (LVL.pois) LVL.pois = LVL.pois.filter(p => !inFoot(p.x, p.z, 10));
+    if (LVL.landmarks) LVL.landmarks = LVL.landmarks.filter(l => !inFoot(l[0], l[1], 14));
+    return { C, ux, uz, A, B, D, PH, TH, H0, RO, local, world,
+             inside: (x, z, m) => ell(x, z, A + (m || 0), B + (m || 0)) < 1, inFoot };
+  })();
   // ── A MONASTERY ON THE MOUNTAIN (2026-10-07) ────────────────────────────
   // "a monk climbs the stone steps of a cliffside himalayan monastery above
   // the clouds to ring the bell" was a red-earth wood with a giant blue disc
@@ -1637,24 +1680,39 @@ async function main() {
     if (!/\b(village|villages|hamlet|cottages?|thatched|farmstead|shire)\b/.test(w)) return null;
     if (/\b(city|downtown|skyscrapers?|neon|cyberpunk)\b/.test(w)) return null;
     const r = mulberry32((SPEC.seed || 1) + 8181);
-    const GC = [0, 17];
+    // A VIKING VILLAGE IS LONGHOUSES AT THE FJORD'S HEAD (2026-10-11): the ring
+    // stood beside the spawn, and in a fjord that is the water's edge. In a
+    // fjord the green is on the shelf past the goal and the lane comes in from
+    // the goal; the houses are long, low, dark-boarded and roofed in turf.
+    const norse = /\b(vikings?|norse|fjords?|longhouses?|nordic|scandinavia\w*)\b/.test(w);
+    let GC = [0, 17], D = [0, -1];                 // the green, and the way from it toward the spawn
+    if (LVL && LVL.fjord && LVL.goal) {
+      const [ux, uz] = LVL.fjord.axis, g = LVL.goal;
+      GC = [g[0] + ux * 13 + uz * 13, g[1] + uz * 13 - ux * 13];
+      const dl = Math.hypot(g[0] - GC[0], g[1] - GC[1]) || 1; D = [(g[0] - GC[0]) / dl, (g[1] - GC[1]) / dl];
+    }
+    const P = [-D[1], D[0]], LL = 23;
+    const along = (x, z) => (x - GC[0]) * D[0] + (z - GC[1]) * D[1], across = (x, z) => Math.abs((x - GC[0]) * P[0] + (z - GC[1]) * P[1]);
     const cot = [];
-    const n = 11 + Math.floor(r() * 3);
+    const n = norse ? 7 + Math.floor(r() * 2) : 11 + Math.floor(r() * 3);
+    const aS = Math.atan2(D[1], D[0]);
     for (let i = 0; i < n; i++) {
       const a = (i / n) * Math.PI * 2 + (r() - 0.5) * 0.18;
-      // the lane comes in from the spawn (straight down -z from the green): leave it open
-      const da = Math.atan2(Math.sin(a + Math.PI / 2), Math.cos(a + Math.PI / 2));
-      if (Math.abs(da) < 0.38) continue;
-      const R = 14.5 + r() * 4.5, x = GC[0] + Math.cos(a) * R, z = GC[1] + Math.sin(a) * R;
-      cot.push({ x, z, ry: Math.atan2(GC[0] - x, GC[1] - z), w: 6.2 + r() * 2.2, d: 5.0 + r() * 1.4, h: 2.9 + r() * 0.7, tint: Math.floor(r() * 4), stone: r() < 0.3 });
+      // the lane comes in from the spawn side: leave it open
+      const da = Math.atan2(Math.sin(a - aS), Math.cos(a - aS));
+      if (Math.abs(da) < (norse ? 0.5 : 0.38)) continue;
+      const R = norse ? 17 + r() * 3.5 : 14.5 + r() * 4.5, x = GC[0] + Math.cos(a) * R, z = GC[1] + Math.sin(a) * R;
+      cot.push(norse
+        ? { x, z, ry: Math.atan2(GC[0] - x, GC[1] - z), w: 9.5 + r() * 3, d: 5.6 + r() * 0.9, h: 1.9 + r() * 0.4, tint: Math.floor(r() * 4), stone: false, norse: true }
+        : { x, z, ry: Math.atan2(GC[0] - x, GC[1] - z), w: 6.2 + r() * 2.2, d: 5.0 + r() * 1.4, h: 2.9 + r() * 0.7, tint: Math.floor(r() * 4), stone: r() < 0.3 });
     }
     const loc = (c, lx, lz) => [c.x + lx * Math.cos(c.ry) + lz * Math.sin(c.ry), c.z - lx * Math.sin(c.ry) + lz * Math.cos(c.ry)];
     let fi = 0;
-    return { GC, cot, loc,
-      inVillage: (x, z, m) => Math.hypot(x - GC[0], z - GC[1]) < 26 + (m || 0) || (Math.abs(x) < 3 + (m || 0) && z > -5 && z < GC[1]),
+    return { GC, D, P, LL, cot, loc, norse,
+      inVillage: (x, z, m) => Math.hypot(x - GC[0], z - GC[1]) < 26 + (m || 0) || (across(x, z) < 3 + (m || 0) && along(x, z) > 0 && along(x, z) < LL - 1),
       inCottage: (x, z, m) => cot.some(c => { const dx = x - c.x, dz = z - c.z, cs = Math.cos(c.ry), sn = Math.sin(c.ry);
         const lx = dx * cs - dz * sn, lz = dx * sn + dz * cs; return Math.abs(lx) < c.w / 2 + (m || 0) && Math.abs(lz) < c.d / 2 + (m || 0); }),
-      lane: (x, z) => Math.abs(x - GC[0]) < 1.6 && z > -6 && z < GC[1] - 3,
+      lane: (x, z) => across(x, z) < 1.6 && along(x, z) > 3 && along(x, z) < LL,
       // a fire on a cottage: on the front of the thatch, over the door side
       fireSpot: () => { const c = cot[(fi * 5) % cot.length]; fi++; const off = (fi % 2 ? -1 : 1) * c.w * 0.18;
         const [x, z] = loc(c, off, c.d * 0.28); return [x, c.h + 0.9 + c.d * 0.12, z, c.ry, c]; },
@@ -2514,9 +2572,9 @@ async function main() {
   const _defOb = (SPEC.objectives || []).find(o => o.kind === 'defend');
   const _reachOb = _defOb || (SPEC.objectives || []).find(o => o.kind === 'reach');
   const _structHit = _defOb ? (((_defOb.label || '').toLowerCase().match(
-    /\b(shelter|cabin|house|home|hut|shrine|castle|tower|barn|cottage|inn|temple|church|fort|lodge|den|village|camp|outpost|lighthouse|station)\b/))
+    /\b(shelter|cabin|house|home|hut|shrine|castle|tower|barn|cottage|inn|temple|church|fort|lodge|den|village|camp|outpost|lighthouse|station|pyramid)\b/))
     || ['castle', 'castle']) : _reachOb && (_reachOb.label || '').toLowerCase().match(
-    /\b(shelter|cabin|house|home|hut|shrine|castle|tower|barn|cottage|inn|temple|church|fort|lodge|den|village|camp|outpost|lighthouse|station)\b/);
+    /\b(shelter|cabin|house|home|hut|shrine|castle|tower|barn|cottage|inn|temple|church|fort|lodge|den|village|camp|outpost|lighthouse|station|pyramid)\b/);
   // THE GOAL IS THE BUILDING THAT IS ALREADY THERE (2026-10-07): "reach the
   // temple entrance" put up a cottage at the goal while the temple itself, a
   // pagoda, stood at its own door elsewhere. When the goal names a building
@@ -2557,7 +2615,7 @@ async function main() {
       scene.add(H);
       world.createCollider(RAPIER.ColliderDesc.cylinder(1.0, 0.95).setTranslation(goalPos.x, goalPos.y + 1.0, goalPos.z));
     }
-    if (_structHit && !_venueGoal) {
+    if (_structHit && !_venueGoal && !(VILLAGE && _structHit[1] === 'village')) {   // a village goal is the village itself, not one more cottage in its lane
       // door faces the approach: back along the mission path, else the spawn
       const _pp = (LVL.path && LVL.path.length > 1) ? LVL.path[LVL.path.length - 2] : [0, 0];
       const doorYaw = Math.atan2(_pp[0] - goalPos.x, _pp[1] - goalPos.z);
@@ -2572,8 +2630,11 @@ async function main() {
       const isLighthouse = ['lighthouse', 'station'].includes(_kindWord);
       // an East Asian temple or shrine is a pagoda (buildPagoda); any other is the ancient one
       const _tw = ((SPEC.prompt || '') + ' ' + (SPEC.world.name || '')).toLowerCase();
-      const isTemple = (_kindWord === 'temple' || _kindWord === 'shrine')
-        && !/japan|chinese|china|asian|zen|torii|pagoda|cherry|sakura|kyoto|shinto|buddhis|tibet|himalaya|monaster|korea|bamboo/.test(_tw);
+      const isTemple = ((_kindWord === 'temple' || _kindWord === 'shrine')
+        && !/japan|chinese|china|asian|zen|torii|pagoda|cherry|sakura|kyoto|shinto|buddhis|tibet|himalaya|monaster|korea|bamboo/.test(_tw))
+        || _kindWord === 'pyramid';
+      // an Egyptian goal is a pyramid of limestone courses, not a stepped temple
+      const _egy = isTemple && !/jungle|rainforest|maya\w*|aztec|inca|mexic\w*/.test(_tw) && (_kindWord === 'pyramid' || /egypt\w*|giza|pharaoh\w*|sphinx|\bnile\b|cairo|saqqara/.test(_tw));
       let templeCols = null;
       const wallMat = new THREE.MeshStandardMaterial({
         color: isCastle ? 0x7d818c : isLighthouse ? 0xe8e4da : 0x9a8f7e,
@@ -2607,7 +2668,59 @@ async function main() {
       // the stair's foot. In a jungle the stone is green with moss. The goal
       // stays where the walk ends: the temple stands behind it, the stair's
       // foot on the goal, so nobody is asked to reach the inside of a pyramid.
-      if (isTemple) {
+      if (isTemple && _egy) {
+        // THE PYRAMIDS OF GIZA (2026-10-11): "explores the pyramids of giza at
+        // sunrise" walked a brown scrubland to an open-ground beacon. The goal
+        // is the entrance at the foot of the great pyramid: courses of
+        // limestone a metre high, each set back, the casing long gone, so the
+        // faces read as the stepped rubble they are; a gabled portal of big
+        // blocks over a dark way in. The two lesser pyramids stand beyond it.
+        const rP = mulberry32((SPEC.seed || 1) + 4141);
+        const cv = document.createElement('canvas'); cv.width = cv.height = 512; const g = cv.getContext('2d');
+        g.fillStyle = '#7a6448'; g.fillRect(0, 0, 512, 512);
+        for (let row = 0; row < 8; row++) {                // 8 courses of a metre in the 8 m the tile spans
+          let x = -rP() * 80;
+          while (x < 512) { const bw = 70 + rP() * 90, l = 118 + Math.floor(rP() * 52);
+            g.fillStyle = `rgb(${l + 44},${l + 20},${l - 18})`; g.fillRect(x + 2, row * 64 + 3, bw - 4, 58);
+            for (let k = 0; k < 18; k++) { g.fillStyle = `rgba(${rP() < 0.5 ? '90,70,40' : '250,235,205'},${0.08 + rP() * 0.12})`; g.fillRect(x + rP() * bw, row * 64 + rP() * 60, 3 + rP() * 14, 2 + rP() * 6); }
+            x += bw; }
+          g.fillStyle = 'rgba(60,44,24,0.55)'; g.fillRect(0, row * 64 + 58, 512, 6);   // the shadowed tread under each course
+        }
+        const ct = new THREE.CanvasTexture(cv); ct.wrapS = ct.wrapT = THREE.RepeatWrapping; ct.colorSpace = THREE.SRGBColorSpace; ct.anisotropy = renderer.capabilities.getMaxAnisotropy();
+        const limeM = new THREE.MeshStandardMaterial({ map: ct, roughness: 0.95 }); limeM.userData.noAutoTex = true;
+        const darkP = new THREE.MeshStandardMaterial({ color: 0x0b0806, roughness: 1 }); darkP.userData.noAutoTex = true;
+        const metricP = (geo, k) => { const ps = geo.attributes.position, nr = geo.attributes.normal, uv = geo.attributes.uv;
+          for (let i = 0; i < ps.count; i++) { const ax = Math.abs(nr.getX(i)), ay = Math.abs(nr.getY(i)), x = ps.getX(i), y = ps.getY(i), z = ps.getZ(i);
+            if (ay > 0.6) uv.setXY(i, x * k, z * k); else if (ax > 0.6) uv.setXY(i, z * k, y * k); else uv.setXY(i, x * k, y * k); }
+          return geo; };
+        const cols = [];
+        const pyramid = (B, cx, cz, solid) => {
+          const NC = Math.round(B * 0.62), inset = B / 2 / NC, parts = [];
+          for (let k = 0; k < NC; k++) {
+            const sd = B - 2 * k * inset, h = k === 0 ? 3 : 1, y = k === 0 ? -1.5 + 1.5 : k + 0.5;
+            parts.push(metricP(new THREE.BoxGeometry(sd, h, sd).translate(cx, y, cz), 0.125));
+            if (solid && (k % 2 === 0)) cols.push([sd, k === 0 ? 3 : 2, sd, cx, k === 0 ? 0 : k + 1, cz]);
+          }
+          const m = new THREE.Mesh(mergeGeometries(parts.map(q => q.index ? q.toNonIndexed() : q), false), limeM);
+          m.castShadow = m.receiveShadow = true; S.add(m); for (const q of parts) q.dispose();
+          return NC;
+        };
+        const B0 = 84, cz0 = -1 - B0 / 2;
+        const NC0 = pyramid(B0, 0, cz0, true);
+        pyramid(80, -96, cz0 - 118, false);                 // Khafre's, nearly as tall
+        pyramid(40, -172, cz0 - 236, false);                // Menkaure's, much the smallest
+        // the portal at the foot: a block of masonry with two great gabled
+        // stones over a dark way in
+        const blkP = (w, h, d, x, y, z, m, solid) => { const o = new THREE.Mesh(metricP(new THREE.BoxGeometry(w, h, d).translate(x, y, z), 0.125), m); o.castShadow = o.receiveShadow = true; S.add(o); if (solid) cols.push([w, h, d, x, y, z]); return o; };
+        blkP(6.4, 5.2, 3.2, 0, 2.1, -2.1, limeM, false);
+        cols.push([2.2, 5.2, 3.2, -2.1, 2.1, -2.1], [2.2, 5.2, 3.2, 2.1, 2.1, -2.1]);
+        blkP(1.7, 2.5, 0.2, 0, 1.25, -0.42, darkP, false);
+        for (const s2 of [-1, 1]) { const gs = blkP(3.6, 0.8, 2.6, s2 * 0.95, 5.4, -2.0, limeM, false); gs.rotation.z = -s2 * 0.6; }
+        // the way in stays a way in: a passage of dark going down out of sight
+        blkP(1.7, 2.5, 6, 0, 1.25, -3.6, darkP, false);
+        window.__temple = { tiers: NC0, steps: 0, mossy: false, pyramid: true, height: NC0 };
+        templeCols = cols;
+      } else if (isTemple) {
         const TLt = new THREE.TextureLoader();
         const txT = (n, nrm) => { const t = TLt.load('textures/' + n + (nrm ? '_n' : '') + '.jpg'); t.wrapS = t.wrapT = THREE.RepeatWrapping; if (!nrm) t.colorSpace = THREE.SRGBColorSpace; return t; };
         const mossy = /jungle|rainforest|rain forest|amazon|tropical|overgrown|vine|moss/.test(_tw);
@@ -2938,7 +3051,7 @@ async function main() {
       hearth.position.set(0, 1.6, -0.5);
       S.add(hearth);
       const halo = makeGoalHalo();                            // findable from afar
-      if (isTemple) halo.position.set(0, 14.5, -10.6); else
+      if (isTemple && _egy) halo.position.set(0, 7.5, -1.5); else if (isTemple) halo.position.set(0, 14.5, -10.6); else
       halo.position.y = 6.2;
       S.add(halo);
       const _accM = window.__accent || 0xffd08a;                // the world's own accent (2026-10-07), not one purple everywhere
@@ -6890,6 +7003,8 @@ async function main() {
       keepClear.push([_sp.x, _sp.z, 12]);     // the hero starts in a clearing, the camera behind them too
       if (PITCH) for (let a = -PITCH.L / 2 - 8; a <= PITCH.L / 2 + 8; a += 7) for (let c = -PITCH.W / 2 - 8; c <= PITCH.W / 2 + 8; c += 7)
         keepClear.push([a * PITCH.ux - c * PITCH.uz, a * PITCH.uz + c * PITCH.ux, 7]);   // no wood on the pitch or its apron
+      if (ARENA) { const ea = ARENA.A + ARENA.RO + 6, eb = ARENA.B + ARENA.RO + 6;
+        for (let a = -ea; a <= ea; a += 8) for (let c = -eb; c <= eb; c += 8) { const [x, z] = ARENA.world(a, c); if (ARENA.inFoot(x, z, 6)) keepClear.push([x, z, 8]); } }   // no wood through the stands
       if (GARDEN) for (let gz = GARDEN.Z0; gz <= GARDEN.Z1; gz += 4) keepClear.push([0, gz, 11]);   // the plot and a margin round it
       if (MONK) { for (let gz = MONK.Z0 - 6; gz <= MONK.Z1; gz += 3) keepClear.push([0, gz, 4.5]); for (let gz = MONK.Z1 - 4; gz <= MONK.Z1 + MONK.PL + 2; gz += 5) for (let gx = -15; gx <= 15; gx += 6) keepClear.push([gx, gz, 5]); }
       if (ROWS) for (let gz = ROWS.Z0 - 2; gz <= ROWS.BLD[1] + 8; gz += 6) for (let gx = -ROWS.X1; gx <= ROWS.X1 + 0.1; gx += 7) keepClear.push([gx, gz, 6.5]);
@@ -7265,6 +7380,7 @@ async function main() {
                   || (VILLAGE && (VILLAGE.inCottage(x, z, 1.5) || VILLAGE.lane(x, z) || Math.hypot(x - VILLAGE.GC[0], z - VILLAGE.GC[1]) < 5))
                   || (GRAVE && (GRAVE.inYard(x, z, 2) || GRAVE.aisle(x, z)))
                   || (PITCH && PITCH.inside(x, z, 6))
+                  || (ARENA && ARENA.inFoot(x, z, 6))
                   || roadDist(x, z) < 7.5
                   || _regReject(x, z, sct)
                   || (clusterN(x, z) < 0.45 && !_regForce(x, z, sct)
@@ -7521,8 +7637,9 @@ async function main() {
         world.createCollider(RAPIER.ColliderDesc.cuboid(sw / 2, 0.15, sd / 2)
           .setTranslation(scx + OX, WH - 0.15, scz));
       }
-      const stepM = new THREE.MeshStandardMaterial({
-        map: itex('stone', 2, 0.5), roughness: 0.95 });
+      const stepM = _jp ? new THREE.MeshStandardMaterial({ map: itex('planks', 1, 0.5), color: 0x6a4a32, roughness: 0.75 })   // a Japanese stair is dark timber
+        : new THREE.MeshStandardMaterial({ map: itex('stone', 2, 0.5), roughness: 0.95 });
+      if (_jp) stepM.userData.noAutoTex = true;
       for (let k = 0; k < nSteps; k++) {
         const sh2 = (k + 1) * (WH / nSteps);
         const sm2 = new THREE.Mesh(new THREE.BoxGeometry(stW, sh2, 0.42), stepM);
@@ -8739,9 +8856,43 @@ async function main() {
         scene.add(rug);
       }
     }
+    // a Japanese room is not furnished with Western chairs and bookcases: a
+    // chair is a floor cushion (zabuton), a table the low chabudai, a
+    // bookcase a dark tansu chest with iron pulls
+    function jpFurn(name, fx, fz, fyaw) {
+      const wood = window.__jpWood = window.__jpWood || new THREE.MeshStandardMaterial({ map: itex('planks', 1, 1), color: 0x5a3c26, roughness: 0.6 });
+      wood.userData.noAutoTex = true;
+      const g = new THREE.Group(); let hx = 0.4, hz = 0.4, hy = 0.2;
+      if (name === 'chair') {
+        const cu = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.07, 0.6), window.__jpCush = window.__jpCush || new THREE.MeshStandardMaterial({ color: 0x2c3a5c, roughness: 0.95 }));
+        cu.position.y = 0.035; g.add(cu); hy = 0.07;
+        const cu2 = cu.clone(); cu2.position.set(0.9, 0.035, 0.1); cu2.rotation.y = 0.2; g.add(cu2); hx = 0.9;
+      } else if (name === 'table') {
+        const top = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.55, 0.04, 32), wood); top.position.y = 0.32; g.add(top);
+        for (const [lx, lz] of [[0.3, 0.3], [-0.3, 0.3], [0.3, -0.3], [-0.3, -0.3]]) {
+          const lg = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.3, 0.05), wood); lg.position.set(lx, 0.15, lz); g.add(lg);
+        }
+        const pot = new THREE.Mesh(new THREE.SphereGeometry(0.07, 16, 10), new THREE.MeshStandardMaterial({ color: 0x3c4038, roughness: 0.4, metalness: 0.2 }));
+        pot.scale.y = 0.85; pot.position.set(0.1, 0.4, 0); g.add(pot);
+        hx = hz = 0.55; hy = 0.34;
+      } else {
+        const body = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1.1, 0.45), wood); body.position.y = 0.55; g.add(body);
+        const iron = new THREE.MeshStandardMaterial({ color: 0x1c1c1e, roughness: 0.45, metalness: 0.8 });
+        for (let r = 0; r < 4; r++) {
+          const ln = new THREE.Mesh(new THREE.BoxGeometry(1.16, 0.012, 0.01), iron); ln.position.set(0, 0.2 + r * 0.26, 0.23); g.add(ln);
+          for (const sx of [-0.3, 0.3]) { const pu = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.05, 0.02), iron); pu.position.set(sx, 0.08 + r * 0.26 + 0.05, 0.235); g.add(pu); }
+        }
+        hx = 0.6; hz = 0.23; hy = 1.1;
+      }
+      g.position.set(fx + OX, 0, fz); g.rotation.y = fyaw;
+      g.traverse(o => { if (o.isMesh) o.castShadow = o.receiveShadow = true; });
+      scene.add(g);
+      if (hy > 0.2) world.createCollider(RAPIER.ColliderDesc.cuboid(hx, hy / 2, hz).setTranslation(fx + OX, hy / 2, fz).setRotation({ x: 0, y: Math.sin(fyaw / 2), z: 0, w: Math.cos(fyaw / 2) }));
+    }
     (async () => {
       const cache = {};
       for (const [name, fx, fz, fyaw] of PLAN.furniture || []) {
+        if (_jp && (name === 'chair' || name === 'table' || name === 'bookshelf')) { jpFurn(name, fx, fz, fyaw); continue; }
         try {
           if (!cache[name]) cache[name] = await loadGLB('props/' + name + '.glb');
           const inst = cache[name].scene.clone(true);
@@ -9026,6 +9177,7 @@ async function main() {
           if (inBldg(x, z, 0.6)) d = 0;
           if (GARDEN && GARDEN.inPlot(x, z, 0.2)) { if (GARDEN.bare(x, z)) d = 0; else { h *= 0.35; dry *= 0.3; } }   // a mown garden lawn
           if (PITCH && PITCH.inside(x, z, 0)) d = 0;                                                  // the pitch is its own mown surface
+          if (ARENA && ARENA.inFoot(x, z, 1)) d = 0;                                                  // sand and stone, no grass
           else if (PITCH && PITCH.inside(x, z, 4)) { h *= 0.3; d *= 0.6; dry = 0; }
           if (WEST && WEST.inTown(x, z, 0)) d = 0;
           if (MONK && (MONK.onStair(x, z, 0.2) || MONK.onTop(x, z, 0))) d = 0;
@@ -9102,6 +9254,7 @@ async function main() {
           if (WATER_Y !== null && hAt(x, z) < WATER_Y + 0.05) return true;
           if (VOLC && VOLC.edgeDist(x, z) < 0.8) return true;
           if (PITCH && PITCH.inside(x, z, 3)) return true;                       // nothing lies on a pitch
+          if (ARENA && ARENA.inFoot(x, z, 2)) return true;                       // nor on the sand or in the stands
           if (FALLS && Math.hypot(x - FALLS.at[0], z - FALLS.at[1]) < 12) return true;
           const rg = window.__regionAt && window.__regionAt(x, z);
           if (rg && rg.kind === 'water' && rg.w > 0.2) return true;
@@ -9119,7 +9272,7 @@ async function main() {
   }
   // GRASS: instanced cross-blades on the terrain, thinned along the walking
   // path — the "flat green plane" is gone. (Gated off for cities/snow.)
-  if (!PURE_SCENE && !ASTEROIDS && !window.__alien && !GRASS_LIVE && (SPEC.world.scatter || []).length && SPEC.world.grass !== false) {   // no Earth grass on another world
+  if (!PURE_SCENE && !ASTEROIDS && !window.__alien && !SANDSEA && !GRASS_LIVE && (SPEC.world.scatter || []).length && SPEC.world.grass !== false) {   // no Earth grass on another world, nor in the sand sea
     // undergrowth stays PLANT-colored: pull toward green so brown forest
     // floors get living tufts, not floating tan cards
     // Blades are instance-coloured, so THIS is the lever, not bmat.color: a
@@ -9253,6 +9406,8 @@ async function main() {
         if (MONK && (MONK.onStair(x, z, 0.3) || MONK.onTop(x, z, 0))) continue;
         if (VILLAGE && (VILLAGE.inCottage(x, z, 0.4) || VILLAGE.lane(x, z))) continue;
         if (GRAVE && (GRAVE.aisle(x, z) || GRAVE.onStone(x, z, 0.1))) continue;
+        if (ARENA && ARENA.inFoot(x, z, 1)) continue;                  // raked sand and stone seats
+        if (Math.hypot(hAt(x + 0.8, z) - hAt(x - 0.8, z), hAt(x, z + 0.8) - hAt(x, z - 0.8)) > 1.6) continue;   // nothing roots on a face steeper than 45 degrees
         const _rg = window.__regionAt && window.__regionAt(x, z);
         if (_rg && _rg.kind === 'water' && _rg.w > 0.2) continue;    // no grass in the lake
         // NOR UNDER THE SEA (2026-09-27): a coral reef came out as a flooded
@@ -9906,6 +10061,12 @@ async function main() {
           holder.position.y = hAt(holder.position.x, holder.position.z);
           startYaw = rngN() * Math.PI * 2;
           sIdx++;
+        } else if (ARENA && (ent.behavior === 'hostile' || ent.behavior === 'guard' || ent.behavior === 'wander' || ent.behavior === 'flee')) {
+          // the fighters wait on the sand at the far end, facing the gate you came in by
+          const [x, z] = ARENA.world(4 + rngN() * (ARENA.A * 0.6), (rngN() - 0.5) * ARENA.B * 1.1);
+          holder.position.set(x, 0, z);
+          holder.position.y = hAt(x, z);
+          startYaw = Math.atan2(-ARENA.ux, -ARENA.uz);
         } else if (PITCH && /\b(goal ?keeper|goalie|keeper)\b/i.test(ent.name || '')) {
           // the keeper keeps the goal: on its line, a step in front, facing the pitch (2026-10-11)
           holder.position.set(LVL.goal[0] - PITCH.ux * 1.2, 0, LVL.goal[1] - PITCH.uz * 1.2);
@@ -10040,7 +10201,8 @@ async function main() {
           const rs = WEST.railSpot(); if (rs) { holder.position.set(rs[0], 0, rs[1]); holder.position.y = hAt(rs[0], rs[1]); startYaw = 0; }
         }
         else if (VILLAGE && VILLAGE.inCottage(holder.position.x, holder.position.z, 0.8)) {
-          holder.position.x = VILLAGE.GC[0] + 4 + rngN() * 4; holder.position.z = VILLAGE.GC[1] - 5 - rngN() * 3; holder.position.y = hAt(holder.position.x, holder.position.z);
+          const _vs = 4 + rngN() * 4, _vt = 5 + rngN() * 3;
+          holder.position.x = VILLAGE.GC[0] + VILLAGE.P[0] * _vs + VILLAGE.D[0] * _vt; holder.position.z = VILLAGE.GC[1] + VILLAGE.P[1] * _vs + VILLAGE.D[1] * _vt; holder.position.y = hAt(holder.position.x, holder.position.z);
         }
         else if (WEST && WEST.inBuilding(holder.position.x, holder.position.z, 0.6)) { holder.position.x = Math.sign(holder.position.x || 1) * 3.5; holder.position.y = hAt(holder.position.x, holder.position.z); }
         else if (GRAVE && GRAVE.onStone(holder.position.x, holder.position.z, 0.5)) { holder.position.x = (rngN() - 0.5) * GRAVE.AW; holder.position.y = hAt(holder.position.x, holder.position.z); }
@@ -10240,7 +10402,10 @@ async function main() {
       n._v = v;                                 // the clip rate follows it in the main pass (clipSpeeds)
     }
     for (const n of npcs) {
-      if (n.dormant) continue;           // wave-pool members sleep until woken
+      // a body six seconds dead is gone: its ragdoll's bodies are freed, and
+      // reading one again panicked the physics (RuntimeError: unreachable,
+      // the viking raid 2026-10-11)
+      if (n.dormant || n.gone) continue;           // wave-pool members sleep until woken
       // STRUCK BY A CAR (2026-08-07 r2). The first cut only knocked down
       // ambient __peds, but guards, the informant and every wandering
       // entity are `npcs` — a different list on a different update path —
@@ -10312,7 +10477,7 @@ async function main() {
         }
         if (n._ragdoll) n._ragdoll.sync();
         n.dieT += dt;
-        if (n.dieT > 6.0) { if (n._ragdoll) n._ragdoll.dispose(); scene.remove(n.obj); n.gone = true; }
+        if (n.dieT > 6.0) { if (n._ragdoll) n._ragdoll.dispose(); n._ragdoll = null; scene.remove(n.obj); n.gone = true; }
         continue;
       }
       let tx = null, tz = null;
@@ -11370,10 +11535,55 @@ async function main() {
     const frameM = MAT({ color: 0xf4efe4, roughness: 0.7 }), shutterMs = [0x3f6f5a, 0x8a3a2e, 0x2f4f7a, 0x6a5a3a].map(c => MAT({ color: c, roughness: 0.75 }));
     const uvBox = (w, h, d, T) => { const g = new THREE.BoxGeometry(w, h, d), uv = g.attributes.uv; const dims = [[d, h], [d, h], [w, d], [w, d], [w, h], [w, h]];
       for (let f = 0; f < 6; f++) for (let k = 0; k < 4; k++) { const i = f * 4 + k; uv.setXY(i, uv.getX(i) * dims[f][0] / T, uv.getY(i) * dims[f][1] / T); } return g; };
+    // a longhouse: tarred upright boards, a turf roof down to head height,
+    // crossed bargeboards over each gable, one low door and no glass
+    const boards = V.norse ? cvT(256, 256, (g, W, H) => {
+      g.fillStyle = '#2e2119'; g.fillRect(0, 0, W, H);
+      for (let x = 0; x < W; x += 21) { const l = 34 + Math.floor(rV() * 22); g.fillStyle = `rgb(${l + 8},${l},${l - 6})`; g.fillRect(x + 1, 0, 19, H);
+        for (let k = 0; k < 14; k++) { g.fillStyle = `rgba(${rV() < 0.5 ? '15,10,6' : '90,72,52'},${0.12 + rV() * 0.15})`; g.fillRect(x + 2 + rV() * 15, rV() * H, 1 + rV() * 2, 10 + rV() * 50); } }
+    }) : null;
+    const turf = V.norse ? cvT(256, 256, (g, W, H) => {
+      g.fillStyle = '#4b5a2c'; g.fillRect(0, 0, W, H);
+      for (let i = 0; i < 3200; i++) { const gg = 70 + Math.floor(rV() * 60); g.strokeStyle = `rgba(${Math.floor(gg * 0.62)},${gg},${Math.floor(gg * 0.35)},0.6)`; g.lineWidth = 1;
+        const x = rV() * W, y = rV() * H; g.beginPath(); g.moveTo(x, y); g.lineTo(x + (rV() - 0.5) * 5, y - 4 - rV() * 7); g.stroke(); }
+      for (let i = 0; i < 160; i++) { g.fillStyle = `rgba(${rV() < 0.6 ? '74,56,36' : '120,110,90'},0.45)`; g.fillRect(rV() * W, rV() * H, 3 + rV() * 6, 2 + rV() * 4); }
+      // patches: dry straw-coloured grass, dark moss, bare sod where it has slipped
+      for (let i = 0; i < 46; i++) { const x = rV() * W, y = rV() * H, r = 8 + rV() * 26, q = rV();
+        const gr = g.createRadialGradient(x, y, 0, x, y, r); const c = q < 0.45 ? '150,138,78' : q < 0.8 ? '38,52,24' : '84,62,40';
+        gr.addColorStop(0, `rgba(${c},0.55)`); gr.addColorStop(1, `rgba(${c},0)`); g.fillStyle = gr; g.fillRect(x - r, y - r, r * 2, r * 2); }
+      // the sods are laid in courses: faint lines across the slope
+      for (let y = 0; y < H; y += 43) { g.fillStyle = 'rgba(30,24,14,0.22)'; g.fillRect(0, y + rV() * 4, W, 3); }
+    }) : null;
+    const boardM = boards ? MAT({ map: boards, roughness: 0.85 }) : null, turfM = turf ? MAT({ map: turf, roughness: 1 }) : null;
+    const bargeM = MAT({ color: 0x2a1c12, roughness: 0.75 });
     for (const c of V.cot) {
       const y0 = Math.min(...[[-1, -1], [1, -1], [-1, 1], [1, 1]].map(([a, b]) => { const [x, z] = V.loc(c, a * c.w / 2, b * c.d / 2); return hAt(x, z); })) - 0.05;
       const G = new THREE.Group(); G.position.set(c.x, y0, c.z); G.rotation.y = c.ry;
       const add = (geo, m, x, y, z, rx, rz) => { const o = new THREE.Mesh(geo, m); o.position.set(x, y, z); if (rx) o.rotation.x = rx; if (rz) o.rotation.z = rz; o.castShadow = true; o.receiveShadow = true; G.add(o); return o; };
+      if (c.norse) {
+        add(uvBox(c.w + 0.3, 0.5, c.d + 0.3, 2.4), stoneM, 0, 0.1, 0);                         // a dry-stone footing
+        add(uvBox(c.w, c.h, c.d, 2.2), boardM, 0, 0.35 + c.h / 2, 0);
+        const rise = c.d * 0.62, top = 0.35 + c.h, slope = Math.hypot(c.d / 2 + 0.9, rise + 0.5), ang = Math.atan2(rise, c.d / 2);
+        for (const s of [-1, 1]) add(uvBox(c.w + 0.9, 0.5, slope, 2.5), turfM, 0, top + rise / 2 - 0.12, s * (c.d / 4 + 0.12), s * ang);
+        add(new THREE.CylinderGeometry(0.34, 0.34, c.w + 0.9, 10), turfM, 0, top + rise + 0.06, 0, 0, Math.PI / 2);
+        for (const s of [-1, 1]) { const gb = new THREE.BufferGeometry();
+          gb.setAttribute('position', new THREE.Float32BufferAttribute([s * c.w / 2, top, -c.d / 2, s * c.w / 2, top, c.d / 2, s * c.w / 2, top + rise, 0], 3));
+          gb.setAttribute('uv', new THREE.Float32BufferAttribute([0, 0, c.d / 2.2, 0, c.d / 4.4, rise / 2.2], 2)); gb.computeVertexNormals();
+          add(gb, boardM, 0, 0, 0).material.side = THREE.DoubleSide;
+          // the bargeboards cross over the ridge and run on into a carved finial
+          for (const q of [-1, 1]) {                   // along the slab's gable edge, shifted 0.45 m up-slope and lifted onto the turf
+            const ca = Math.cos(ang), sa = Math.sin(ang);
+            add(new THREE.BoxGeometry(0.1, 0.24, slope + 0.9), bargeM, s * (c.w / 2 + 0.47), top + rise / 2 - 0.12 + 0.45 * sa + 0.3 * ca, q * (c.d / 4 + 0.12) - q * 0.45 * ca + q * 0.3 * sa, q * ang); }
+        }
+        const fz = c.d / 2 + 0.03, dx = (rV() - 0.5) * c.w * 0.25;
+        add(new THREE.BoxGeometry(1.0, 1.7, 0.1), bargeM, dx, 0.35 + 0.85, fz);
+        add(new THREE.BoxGeometry(1.3, 0.16, 0.16), bargeM, dx, 0.35 + 1.78, fz + 0.03);
+        scene.add(G);
+        const col = RAPIER.ColliderDesc.cuboid(c.w / 2, (c.h + 0.5) / 2, c.d / 2).setTranslation(c.x, y0 + (c.h + 0.5) / 2, c.z);
+        col.setRotation({ w: Math.cos(c.ry / 2), x: 0, y: Math.sin(c.ry / 2), z: 0 }); world.createCollider(col);
+        c.y0 = y0;
+        continue;
+      }
       add(uvBox(c.w + 0.2, 0.55, c.d + 0.2, 2.4), stoneM, 0, 0.12, 0);
       add(uvBox(c.w, c.h, c.d, 2.6), c.stone ? stoneM : wallMs[c.tint], 0, 0.4 + c.h / 2, 0);
       // the thatch: two thick slopes, ridge along the cottage, eaves well past the walls
@@ -11412,9 +11622,11 @@ async function main() {
       for (const s of [-1, 1]) { const rf = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.12, 1.15), thatchM); rf.position.set(x, y + 2.35, z + s * 0.45); rf.rotation.x = s * 0.55; rf.castShadow = true; scene.add(rf); }
       world.createCollider(RAPIER.ColliderDesc.cylinder(0.5, 1.05).setTranslation(x, y + 0.5, z)); }
     // the lane in from the spawn: packed earth that follows the ground
-    { const L = V.GC[1] + 4, g = new THREE.PlaneGeometry(3.2, L, 6, 40); g.rotateX(-Math.PI / 2);
+    { const L = V.LL - 2, g = new THREE.PlaneGeometry(3.2, L, 6, 40); g.rotateX(-Math.PI / 2);
       const pa = g.attributes.position;
-      for (let i = 0; i < pa.count; i++) { const x = pa.getX(i), z = pa.getZ(i) + L / 2 - 6; pa.setZ(i, z); pa.setY(i, hAt(x, z) + 0.03); }
+      for (let i = 0; i < pa.count; i++) { const lx = pa.getX(i), t = L / 2 + 2 - pa.getZ(i);
+        const x = V.GC[0] + V.D[0] * t + V.P[0] * lx, z = V.GC[1] + V.D[1] * t + V.P[1] * lx;
+        pa.setX(i, x); pa.setZ(i, z); pa.setY(i, hAt(x, z) + 0.03); }
       g.computeVertexNormals();
       const lt = cvT(128, 256, (gg, W, H) => { gg.fillStyle = '#7a6046'; gg.fillRect(0, 0, W, H);
         for (let i = 0; i < 600; i++) { gg.fillStyle = `rgba(${rV() < 0.5 ? '60,44,30' : '150,128,100'},${0.15 + rV() * 0.2})`; gg.fillRect(rV() * W, rV() * H, 2 + rV() * 4, 2 + rV() * 4); }
@@ -11422,6 +11634,152 @@ async function main() {
       lt.repeat.set(1, L / 6);
       const m = new THREE.Mesh(g, MAT({ map: lt, transparent: true, roughness: 1 })); m.receiveShadow = true; scene.add(m); }
     window.__village = { cottages: V.cot.length };
+  }
+  // ── THE COLOSSEUM, BUILT (see ARENA above) ─────────────────────────────
+  if (ARENA) {
+    const R = ARENA, rA = mulberry32((SPEC.seed || 1) + 7171), Y0 = R.H0;
+    const yaw = Math.atan2(R.ux, R.uz);                 // the frame whose +z is the long axis toward the goal
+    const G = new THREE.Group(); G.position.set(R.C[0], Y0, R.C[1]); G.rotation.y = yaw; scene.add(G);
+    // in G's frame the long axis is z (semi-axis A) and the short one x (B)
+    const cvT = (wd, ht, draw) => { const cv = document.createElement('canvas'); cv.width = wd; cv.height = ht; draw(cv.getContext('2d'), wd, ht);
+      const t = new THREE.CanvasTexture(cv); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace;
+      t.anisotropy = renderer.capabilities.getMaxAnisotropy(); return t; };
+    const MAT = (o) => { const m = new THREE.MeshStandardMaterial(o); m.userData.noAutoTex = true; return m; };
+    // travertine: warm cream stone, pitted, laid in courses
+    const travT = cvT(512, 512, (g, W, H) => {
+      g.fillStyle = '#cbb894'; g.fillRect(0, 0, W, H);
+      for (let row = 0; row < 8; row++) { let x = -rA() * 60;
+        while (x < W) { const bw = 90 + rA() * 110, l = 168 + Math.floor(rA() * 40); g.fillStyle = `rgb(${l + 22},${l + 8},${l - 22})`; g.fillRect(x + 2, row * 64 + 2, bw - 4, 60);
+          for (let k = 0; k < 40; k++) { g.fillStyle = `rgba(${rA() < 0.7 ? '110,92,64' : '240,228,200'},${0.1 + rA() * 0.25})`; g.fillRect(x + rA() * bw, row * 64 + rA() * 60, 1 + rA() * 6, 1 + rA() * 2); }
+          x += bw; }
+        g.fillStyle = 'rgba(90,72,48,0.45)'; g.fillRect(0, row * 64 + 61, W, 3); }
+    });
+    const travM = MAT({ map: travT, roughness: 0.9 });
+    const seatM = MAT({ map: travT, color: 0xe6dccb, roughness: 0.92 });
+    const darkM = MAT({ color: 0x120d09, roughness: 1 });
+    const sandT = cvT(512, 512, (g, W, H) => {
+      g.fillStyle = '#c9a874'; g.fillRect(0, 0, W, H);
+      for (let i = 0; i < 9000; i++) { const l = 150 + Math.floor(rA() * 70); g.fillStyle = `rgba(${l + 30},${l + 10},${l - 30},0.35)`; g.fillRect(rA() * W, rA() * H, 1 + rA() * 2, 1 + rA() * 2); }
+      for (let i = 0; i < 70; i++) { g.strokeStyle = `rgba(${rA() < 0.5 ? '120,92,58' : '230,206,160'},0.25)`; g.lineWidth = 1 + rA() * 2;   // raked and scuffed
+        const x = rA() * W, y = rA() * H; g.beginPath(); g.moveTo(x, y); g.quadraticCurveTo(x + (rA() - 0.5) * 80, y + (rA() - 0.5) * 80, x + (rA() - 0.5) * 140, y + (rA() - 0.5) * 140); g.stroke(); }
+    });
+    sandT.repeat.set(R.B / 3, R.A / 3);
+    // the sand floor
+    const fl = new THREE.Mesh(new THREE.CircleGeometry(1, 96), MAT({ map: sandT, roughness: 1 }));
+    fl.rotation.x = -Math.PI / 2; fl.scale.set(R.B, R.A, 1); fl.position.y = 0.03; fl.receiveShadow = true; G.add(fl);
+    // an elliptic band of wall: inner face at (a0,b0), top, outer face at (a1,b1)
+    const N = 160;
+    const ellP = (b, a, t) => [Math.sin(t) * b, Math.cos(t) * a];          // x across (b), z along (a)
+    const band = (b0, a0, b1, a1, y0, y1, k) => {
+      const pos = [], uv = [], idx = [];
+      let arc = 0;
+      for (let i = 0; i <= N; i++) {
+        const t = (i / N) * Math.PI * 2, [x0, z0] = ellP(b0, a0, t), [x1, z1] = ellP(b1, a1, t);
+        if (i) { const [px, pz] = ellP(b0, a0, ((i - 1) / N) * Math.PI * 2); arc += Math.hypot(x0 - px, z0 - pz); }
+        pos.push(x0, y0, z0, x0, y1, z0, x1, y1, z1, x1, y0, z1);
+        uv.push(arc * k, y0 * k, arc * k, y1 * k, arc * k, y1 * k + Math.hypot(x1 - x0, z1 - z0) * k, arc * k, y0 * k);
+      }
+      for (let i = 0; i < N; i++) { const a = i * 4, b = (i + 1) * 4;
+        idx.push(a, b, a + 1, a + 1, b, b + 1);               // the inner face
+        idx.push(a + 1, b + 1, a + 2, a + 2, b + 1, b + 2);   // the top
+        idx.push(a + 2, b + 2, a + 3, a + 3, b + 2, b + 3); } // the outer face
+      const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+      geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); geo.setIndex(idx); geo.computeVertexNormals(); return geo;
+    };
+    const podium = new THREE.Mesh(band(R.B, R.A, R.B + 1.4, R.A + 1.4, -0.5, R.PH, 0.125), travM);
+    podium.material.side = THREE.DoubleSide; podium.castShadow = podium.receiveShadow = true; G.add(podium);
+    // a marble parapet along its top, and the gates at the two ends of the long axis
+    const para = new THREE.Mesh(band(R.B + 0.1, R.A + 0.1, R.B + 0.45, R.A + 0.45, R.PH, R.PH + 1.0, 0.25), MAT({ color: 0xece6da, roughness: 0.55 }));
+    para.material.side = THREE.DoubleSide; G.add(para);
+    for (const s of [-1, 1]) {
+      const gate = new THREE.Mesh(new THREE.BoxGeometry(4.2, 3.6, 0.4), darkM); gate.position.set(0, 1.8, s * (R.A - 0.05)); G.add(gate);
+      const arch = new THREE.Mesh(new THREE.TorusGeometry(2.1, 0.32, 8, 24, Math.PI), travM); arch.position.set(0, 3.6, s * (R.A - 0.12)); G.add(arch);
+    }
+    // the cavea: tier on tier from the podium to the outer wall, broken by two walkways
+    const NT = 22, step = (R.D - 2) / NT, rise = (R.TH - R.PH) / NT;
+    const tierPos = [], tierUv = [], tierIdx = []; let vb = 0;
+    const tiers = [];
+    for (let k = 0; k < NT; k++) {
+      const r0 = 1.4 + k * step, r1 = r0 + step, y = R.PH + 0.6 + k * rise + (k >= 8 ? 0.9 : 0) + (k >= 16 ? 0.9 : 0), yN = y + rise + ((k === 7 || k === 15) ? 0.9 : 0);
+      tiers.push({ r0, r1, y });
+      for (let i = 0; i <= N; i++) {
+        const t = (i / N) * Math.PI * 2, [x0, z0] = ellP(R.B + r0, R.A + r0, t), [x1, z1] = ellP(R.B + r1, R.A + r1, t);
+        tierPos.push(x0, y, z0, x1, y, z1, x1, yN, z1);
+        tierUv.push(t * 30, 0, t * 30, step * 0.25, t * 30, step * 0.25 + (yN - y) * 0.25);
+      }
+      for (let i = 0; i < N; i++) { const a = vb + i * 3, b = vb + (i + 1) * 3;
+        tierIdx.push(a, a + 1, b, b, a + 1, b + 1, a + 1, a + 2, b + 1, b + 1, a + 2, b + 2); }
+      vb += (N + 1) * 3;
+    }
+    const tg = new THREE.BufferGeometry(); tg.setAttribute('position', new THREE.Float32BufferAttribute(tierPos, 3));
+    tg.setAttribute('uv', new THREE.Float32BufferAttribute(tierUv, 2)); tg.setIndex(tierIdx); tg.computeVertexNormals();
+    const cav = new THREE.Mesh(tg, seatM); cav.material.side = THREE.DoubleSide; cav.castShadow = cav.receiveShadow = true; G.add(cav);
+    // the gangways down through the seats: dark mouths (vomitoria) on the walkway walls
+    G.updateMatrixWorld(true);
+    for (const k of [7, 15]) for (let i = 0; i < 24; i++) {
+      const t = (i + 0.5) / 24 * Math.PI * 2, r = tiers[k].r1 + 0.02, [x, z] = ellP(R.B + r, R.A + r, t);
+      const v = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 1.9), darkM); v.position.set(x, tiers[k].y + rise + 0.95 - 0.2, z);
+      G.add(v); v.lookAt(G.localToWorld(new THREE.Vector3(0, v.position.y, 0))); v.translateZ(0.06);
+    }
+    // the outer wall: three storeys of arcades and an attic, inside and out
+    const outerB = R.B + R.D + 1.2, outerA = R.A + R.D + 1.2, OH = R.TH + 7;
+    const arcT = cvT(256, 1024, (g, W, H) => {
+      g.drawImage(travT.image, 0, 0, W, H);
+      const story = H * 0.25;
+      for (let s2 = 0; s2 < 3; s2++) { const y0 = H - (s2 + 1) * story;
+        g.fillStyle = '#16100b'; g.beginPath(); g.moveTo(W * 0.24, y0 + story * 0.94); g.lineTo(W * 0.24, y0 + story * 0.42);
+        g.arc(W * 0.5, y0 + story * 0.42, W * 0.26, Math.PI, 0); g.lineTo(W * 0.76, y0 + story * 0.94); g.fill();
+        g.fillStyle = 'rgba(70,52,30,0.55)'; g.fillRect(0, y0 + story * 0.02, W, story * 0.07);           // the entablature's shadow
+        g.fillStyle = 'rgba(255,245,220,0.25)'; g.fillRect(W * 0.04, y0 + story * 0.1, W * 0.08, story * 0.86); g.fillRect(W * 0.88, y0 + story * 0.1, W * 0.08, story * 0.86);   // the engaged columns
+      }
+      for (const x of [0.25, 0.75]) { g.fillStyle = '#1e160f'; g.fillRect(W * x - 10, H * 0.07, 20, story * 0.35); }   // the attic's small windows
+    });
+    const nBay = 64; arcT.repeat.set(1, 1);
+    const ow = band(outerB, outerA, outerB + 2.2, outerA + 2.2, -0.5, OH, 1);
+    { const uv = ow.attributes.uv, ps = ow.attributes.position;               // one bay per arcade, the full height once
+      for (let i = 0; i <= N; i++) for (let q = 0; q < 4; q++) { const vi = i * 4 + q; uv.setXY(vi, (i / N) * nBay, (ps.getY(vi) + 0.5) / (OH + 0.5)); } }
+    const outer = new THREE.Mesh(ow, MAT({ map: arcT, roughness: 0.9 })); outer.material.side = THREE.DoubleSide; outer.castShadow = outer.receiveShadow = true; G.add(outer);
+    // the top tier meets the outer wall at a covered gallery: a deck between them
+    const deck = new THREE.Mesh(band(R.B + tiers[NT - 1].r1, R.A + tiers[NT - 1].r1, outerB, outerA, R.TH + 2.4, R.TH + 2.6, 0.125), travM);
+    deck.material.side = THREE.DoubleSide; G.add(deck);
+    // the emperor's box on the long side: columns, a red canopy, purple hangings
+    { const bx = R.B + 1.0, by = R.PH;
+      const box = new THREE.Mesh(new THREE.BoxGeometry(2.6, 1.2, 9), MAT({ color: 0xf0ebe0, roughness: 0.5 })); box.position.set(bx + 0.4, by + 0.6, 0); G.add(box);
+      for (const z of [-4, -1.35, 1.35, 4]) { const c = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.18, 3.2, 12), MAT({ color: 0xf4efe6, roughness: 0.5 })); c.position.set(bx - 0.6, by + 2.8, z); G.add(c); }
+      const can = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.25, 9.6), MAT({ color: 0x9a1f1a, roughness: 0.8 })); can.position.set(bx + 0.2, by + 4.45, 0); can.rotation.z = -0.12; G.add(can);
+      const hang = new THREE.Mesh(new THREE.PlaneGeometry(8.6, 1.1), MAT({ color: 0x4a1a52, roughness: 0.85, side: THREE.DoubleSide })); hang.position.set(bx - 0.62, by - 0.1, 0); hang.rotation.y = -Math.PI / 2; G.add(hang); }
+    // THE CROWD: one figure a seat, tunics of wool and linen, on their feet and roaring
+    { const body = new THREE.CapsuleGeometry(0.2, 0.62, 1, 5).translate(0, 0.51, 0), head = new THREE.SphereGeometry(0.13, 6, 4).translate(0, 1.12, 0);
+      const fig = mergeGeometries([body.toNonIndexed(), head.toNonIndexed()], false);
+      const spots = [];
+      for (let k = 0; k < NT; k++) { const T = tiers[k], r = (T.r0 + T.r1) / 2, per = 2 * Math.PI * Math.sqrt(((R.B + r) ** 2 + (R.A + r) ** 2) / 2), nS = Math.floor(per / 0.8);
+        for (let i = 0; i < nS; i++) { if (rA() > 0.72) continue;
+          const t = (i + rA() * 0.3) / nS * Math.PI * 2, [x, z] = ellP(R.B + r, R.A + r, t);
+          if (Math.abs(z) < 5.6 && x > 0 && k < 3) continue;                  // the box keeps its own view
+          spots.push([x, T.y, z]); } }
+      const im = new THREE.InstancedMesh(fig, new THREE.MeshStandardMaterial({ roughness: 0.9 }), spots.length);
+      const TUN = [0xe9e2d0, 0xd8cdb4, 0x9b2d24, 0xc4882e, 0x5a6b8a, 0x7a6a50, 0xf2efe6, 0x6e3b2a, 0xb9a27a, 0x3f5a46].map(c => new THREE.Color(c));
+      const m4 = new THREE.Matrix4(), q4 = new THREE.Quaternion(), s4 = new THREE.Vector3(), e4 = new THREE.Euler();
+      spots.forEach(([x, y, z], i) => { const sc = 0.92 + rA() * 0.16; s4.set(sc, sc, sc); q4.setFromEuler(e4.set(0, Math.atan2(-x, -z), 0));
+        m4.compose(new THREE.Vector3(x, y, z), q4, s4); im.setMatrixAt(i, m4); im.setColorAt(i, TUN[Math.floor(rA() * TUN.length)]); });
+      const uT = { value: 0 };
+      im.material.onBeforeCompile = (sh) => { sh.uniforms.uT = uT;
+        sh.vertexShader = 'uniform float uT;\n' + sh.vertexShader.replace('#include <begin_vertex>',
+          '#include <begin_vertex>\n  { vec4 ip = instanceMatrix[3]; float ph = ip.x * 1.7 + ip.z * 2.3; transformed.y += max(0.0, sin(uT * 7.0 + ph)) * 0.16 * step(0.5, fract(ph * 0.37)); }'); };
+      im.onBeforeRender = () => { uT.value = performance.now() / 1000; };
+      im.frustumCulled = false; im.castShadow = false; im.receiveShadow = true; G.add(im);
+      window.__arena = { seats: spots.length, tiers: NT, A: R.A, B: R.B };
+    }
+    // colliders: the podium wall in segments (nobody climbs out into the seats)
+    G.updateMatrixWorld(true);
+    const v3 = new THREE.Vector3();
+    for (let i = 0; i < 72; i++) {
+      const t0 = (i / 72) * Math.PI * 2, t1 = ((i + 1) / 72) * Math.PI * 2, [x0, z0] = ellP(R.B + 0.7, R.A + 0.7, t0), [x1, z1] = ellP(R.B + 0.7, R.A + 0.7, t1);
+      const len = Math.hypot(x1 - x0, z1 - z0) + 0.2, ang = Math.atan2(x1 - x0, z1 - z0) + yaw;
+      v3.set((x0 + x1) / 2, R.PH / 2 + 1, (z0 + z1) / 2).applyMatrix4(G.matrixWorld);
+      world.createCollider(RAPIER.ColliderDesc.cuboid(0.7, R.PH / 2 + 1, len / 2).setTranslation(v3.x, v3.y, v3.z)
+        .setRotation({ x: 0, y: Math.sin(ang / 2), z: 0, w: Math.cos(ang / 2) }));
+    }
   }
   // ── THE CANDY LAND, BUILT (see CANDY above) ────────────────────────────
   if (CANDY) {
@@ -18605,7 +18963,8 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
   normal = normalize(mix(normal, _gN0, smoothstep(0.45, 0.8, 1.0 - normalize(vWNrmG).y) * 0.6));`)
           .replace(
             '#include <map_fragment>',
-            `#ifdef USE_MAP
+            `float steepG = 0.0;
+#ifdef USE_MAP
   {
     vec3 gN = normalize(vWNrmG);
     vec2 uvA = vWPosG.xz / uTileM;
@@ -18620,11 +18979,17 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
       vec2 bw = abs(gN.xz) + 0.001; bw /= (bw.x + bw.y);
       vec4 side = texture2D(uCliff, vWPosG.zy / uCliffM) * bw.x + texture2D(uCliff, vWPosG.xy / uCliffM) * bw.y;
       col = mix(top, side, steepT);
+      steepG = steepT;
     }
+    // A ROCK FACE IS ROCK-COLOURED (2026-10-11): a fjord's walls took the
+    // meadow's green from the ground colour and the painted canvas, and stood
+    // as green cliffs. Outside red-rock country a face keeps its own grey.
+    ${STRATA ? '' : 'diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.86), steepG * 0.8);'}
     diffuseColor *= col;
   }
 #endif
   vec3 wTint = texture2D(uWorld, vUvRaw).rgb * 2.0;
+  ${STRATA ? '' : 'wTint = mix(wTint, vec3(1.0), steepG * 0.8);'}
   diffuseColor.rgb *= clamp(wTint, 0.12, 1.45);
   ${STRATA ? `{
     float steep = smoothstep(0.35, 0.75, 1.0 - normalize(vWNrmG).y);
