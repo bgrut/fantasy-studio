@@ -2083,6 +2083,11 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                     (r"\b(soccer|football|goals?|goalkeeper|goalie|pitch|striker|penalty|penalties|kick-?off)", "soccer player"),
                     # a heist is played by a thief, not an explorer (2026-10-10)
                     (r"\b(heist|steal|stealing|thief|burglar|burgle|robbery|safecracker|sneak in|break in)", "burglar"),
+                    # a round of deliveries is the postman's; snow and winter dress the
+                    # hero for the cold: a christmas delivery was the explorer in
+                    # shorts in the snow (2026-10-10)
+                    (r"\b(deliver\w*|parcels?|mail|letters?|presents|post ?office|postman|courier)\b", "postman"),
+                    (r"\b(snow|snowy|snowfall|snowstorm|winter|wintry|christmas|xmas|arctic|alpine|ski|skiing|skier|blizzard|frozen|glacier|tundra|icy)\b", "mountaineer"),
                     # holding out against the dead is an ordinary person's game, in
                     # ordinary clothes, not the safari explorer's (2026-10-10)
                     (r"\b(zombies?|undead|apocalypse|outbreak|infected|survive|survival|survivor|shopping mall|mall)", "man"),

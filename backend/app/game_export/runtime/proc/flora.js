@@ -597,7 +597,9 @@ function growCactus(r, P) {
       const tipR = rad * (t > 0.9 ? Math.sqrt(Math.max(0, 1 - (t - 0.9) / 0.1)) * 0.9 + 0.1 : 1);
       for (let s = 0; s <= sides; s++) {
         const a = (s / sides) * TAU;
-        const rib = 1 + 0.09 * Math.cos(a * ribs);
+        // A RIBBED COLUMN, NOT A PIPE (2026-10-10): at nine per cent the ribs
+        // vanished at any distance; deeper, and sharp at the crest
+        const cr = Math.cos(a * ribs), rib = 1 + 0.16 * (Math.sign(cr) * Math.pow(Math.abs(cr), 0.6));
         const ca = Math.cos(a), sa = Math.sin(a);
         const dir = path[k].d;
         // a frame around the column's own direction
@@ -914,7 +916,25 @@ function makeMaterials(kind, leafHSL, barkTex, barkN, seed, U, extra = {}) {
       // icosphere's own UVs would scatter it), read in patchTree
       if (extra.rockN) m.userData.triN = extra.rockN;
     } else if (kind === 'cactus') {
-      m = new THREE.MeshStandardMaterial({ color: 0x3f6e38, roughness: 0.62 });
+      // the skin: each of the twelve ribs lighter at its crest than in its
+      // valley, with a row of pale areoles and their spines along the crest
+      const cv = document.createElement('canvas'); cv.width = cv.height = 256;
+      const g = cv.getContext('2d'), RB = 12, rw = 256 / RB;
+      const cr = mulberry((seed >>> 0) + 17);
+      for (let k = 0; k < RB; k++) {
+        const x0 = k * rw, gr = g.createLinearGradient(x0, 0, x0 + rw, 0);
+        gr.addColorStop(0, '#2c4527'); gr.addColorStop(0.5, '#6f8f5c'); gr.addColorStop(1, '#2c4527');
+        g.fillStyle = gr; g.fillRect(x0, 0, rw, 256);
+        for (let y = 4 + cr() * 8; y < 256; y += 14 + cr() * 6) {
+          const cx = x0 + rw / 2;
+          g.strokeStyle = 'rgba(230,220,190,0.55)'; g.lineWidth = 0.8;
+          for (let s = 0; s < 6; s++) { const an = s / 6 * Math.PI * 2 + cr(); g.beginPath(); g.moveTo(cx, y); g.lineTo(cx + Math.cos(an) * 5, y + Math.sin(an) * 5); g.stroke(); }
+          g.fillStyle = '#d9cfae'; g.beginPath(); g.arc(cx, y, 1.6, 0, Math.PI * 2); g.fill();
+        }
+      }
+      const ct = new THREE.CanvasTexture(cv); ct.colorSpace = THREE.SRGBColorSpace;
+      ct.wrapS = ct.wrapT = THREE.RepeatWrapping; ct.anisotropy = 4;
+      m = new THREE.MeshStandardMaterial({ map: ct, color: 0xd8e2cc, roughness: 0.68 });
     } else {
       const c = extra.crystalTint || new THREE.Color(0x8fd8ff);
       m = new THREE.MeshStandardMaterial({ color: c, emissive: c, emissiveIntensity: 0.55, roughness: 0.18, metalness: 0.1 });
