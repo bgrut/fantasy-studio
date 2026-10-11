@@ -500,7 +500,7 @@ async function main() {
     const W = SPEC.world || {}, L0 = W.level || {};
     // (2026-10-07) the sentence's own place words too: "a himalayan monastery" grew an
     // oak wood because the title, "Monk's Ascent", never said where it was
-    const placeWords = (String(SPEC.prompt || '').toLowerCase().match(/\b(redwoods?|sequoias?|himalaya\w*|tibet\w*|nepal\w*|bhutan\w*|monaster(?:y|ies)|gompa|lavender|vineyards?|provence|tuscan\w*|black sand|basalt|sea stacks?|iceland\w*|kansas|wheat|olive groves?|tea plantations?|bamboo|highlands?|glens?|moors?|heather|alien|xeno\w*|extraterrestrial|exoplanet|purple plants|fjords?|norw\w*|vikings?|norse|nordic|scandinavia\w*|egypt\w*|giza|pyramids?|pharaoh\w*|sphinx|sahara|oasis|alps|alpine|swiss|switzerland|tyrol\w*|dolomit\w*|sea ice|ice floes?|pack ice|polar bears?|icebergs?|beach|seaside|lifeguards?|surf\w*)\b/g) || []);   // (alien words, 2026-10-11; fjord, Egypt, Alps, sea ice the same day)
+    const placeWords = (String(SPEC.prompt || '').toLowerCase().match(/\b(redwoods?|sequoias?|himalaya\w*|tibet\w*|nepal\w*|bhutan\w*|monaster(?:y|ies)|gompa|lavender|vineyards?|provence|tuscan\w*|black sand|basalt|sea stacks?|iceland\w*|kansas|wheat|olive groves?|tea plantations?|bamboo|highlands?|glens?|moors?|heather|alien|xeno\w*|extraterrestrial|exoplanet|purple plants|fjords?|norw\w*|vikings?|norse|nordic|scandinavia\w*|egypt\w*|giza|pyramids?|pharaoh\w*|sphinx|sahara|oasis|alps|alpine|swiss|switzerland|tyrol\w*|dolomit\w*|sea ice|ice floes?|pack ice|polar bears?|icebergs?|beach|seaside|lifeguards?|surf\w*|scuba|deep blue|deep ocean|deep sea|humpback)\b/g) || []);   // (alien words, 2026-10-11; fjord, Egypt, Alps, sea ice the same day)
     const words = [W.name, W.sky, W.flora, W.weather, W.setting, SPEC.title, SPEC.description, ...placeWords]
       .filter(Boolean).join(' ').toLowerCase();
     if (L0.osm || L0.interior || W.pano || L0.cave) return null;
@@ -2830,7 +2830,7 @@ async function main() {
           g.fillStyle = 'rgba(60,44,24,0.55)'; g.fillRect(0, row * 64 + 58, 512, 6);   // the shadowed tread under each course
         }
         const ct = new THREE.CanvasTexture(cv); ct.wrapS = ct.wrapT = THREE.RepeatWrapping; ct.colorSpace = THREE.SRGBColorSpace; ct.anisotropy = renderer.capabilities.getMaxAnisotropy();
-        const limeM = new THREE.MeshStandardMaterial({ map: ct, roughness: 0.95 }); limeM.userData.noAutoTex = true;
+        const limeM = new THREE.MeshStandardMaterial({ map: ct, normalMap: HDN('sandstone', 4), normalScale: new THREE.Vector2(1.1, 1.1), roughness: 0.95 }); limeM.userData.noAutoTex = true;
         const darkP = new THREE.MeshStandardMaterial({ color: 0x0b0806, roughness: 1 }); darkP.userData.noAutoTex = true;
         const metricP = (geo, k) => { const ps = geo.attributes.position, nr = geo.attributes.normal, uv = geo.attributes.uv;
           for (let i = 0; i < ps.count; i++) { const ax = Math.abs(nr.getX(i)), ay = Math.abs(nr.getY(i)), x = ps.getX(i), y = ps.getY(i), z = ps.getZ(i);
@@ -7978,6 +7978,14 @@ async function main() {
       // the queue spots from window.__cafe.
       const rngC = mulberry32((SPEC.seed || 1) + 7101);
       const hwC = PLAN.rooms[0][2] / 2, hdC = PLAN.rooms[0][3] / 2;
+      // A CHEF WORKS A KITCHEN (2026-10-11): "a chef cooks five dishes for
+      // hungry diners in a busy restaurant kitchen" stood in a coffee shop
+      // pulling espressos. A kitchen keeps the same service (orders come to
+      // the pass, the diners wait at their tables) with a range line behind:
+      // burners under pans, a char grill, a prep station, an extraction hood,
+      // pans hung over the pass, white tile and a quarry-tiled floor.
+      const _kit = /\b(kitchens?|chefs?|cooks?|cooking|restaurant|bistro|brasserie|trattoria|grill|line cook|sous)\b/
+        .test([SPEC.prompt, SPEC.title, SPEC.world && SPEC.world.name].filter(Boolean).join(' ').toLowerCase());
       const merged = {};
       const put = (key, g) => (merged[key] = merged[key] || []).push(g);
       const box = (key, w, h, d, x, y, z, ry) => { const g = new THREE.BoxGeometry(w, h, d); if (ry) g.rotateY(ry); g.translate(x + OX, y, z); put(key, g); return g; };
@@ -7987,17 +7995,49 @@ async function main() {
       // the counter: a wood front, a stone top, a glass pastry case on it
       box('wood', cLen, 1.0, 0.7, cX, 0.5, cz); box('top', cLen + 0.1, 0.06, 0.85, cX, 1.03, cz);
       solid(cLen, 1.06, 0.8, cX, 0.53, cz);
+      if (!_kit) {
       box('glass', 1.4, 0.36, 0.5, cX - cLen * 0.25, 1.24, cz - 0.05);
       for (let q = 0; q < 6; q++) box('pastry', 0.14, 0.07, 0.14, cX - cLen * 0.25 - 0.55 + q * 0.22, 1.1, cz - 0.05);
+      }
       // the back bench and its stations
       const bz = hdC - 0.65;
       box('wood', hwC * 1.9, 0.92, 0.6, 0, 0.46, bz); box('top', hwC * 1.9 + 0.05, 0.05, 0.65, 0, 0.945, bz);
       solid(hwC * 1.9, 0.95, 0.6, 0, 0.47, bz);
-      const ST = [
+      const ST = _kit ? [
+        { name: 'range', drinks: ['pasta', 'soup', 'burger'], x: -hwC * 0.45, col: 0xc0c6cc },
+        { name: 'grill', drinks: ['steak', 'burger'], x: 0, col: 0x2a2a2a },
+        { name: 'prep station', drinks: ['salad', 'burger'], x: hwC * 0.45, col: 0x9a6a3a },
+      ] : [
         { name: 'espresso', drinks: ['espresso', 'latte', 'cappuccino'], x: -hwC * 0.45, col: 0xc0c6cc },
         { name: 'milk steamer', drinks: ['latte', 'cappuccino'], x: 0, col: 0xd8dde2 },
         { name: 'kettle', drinks: ['tea'], x: hwC * 0.45, col: 0x9a6a3a },
       ];
+      if (_kit) {
+        // the range: six burners, blue flames, a pan on three and a stock pot
+        for (let q = 0; q < 6; q++) { const x = ST[0].x - 0.6 + (q % 3) * 0.6, z = bz - 0.15 + Math.floor(q / 3) * 0.3 - 0.15;
+          cyl('dark', 0.13, 0.13, 0.03, x, 0.985, z, 20);
+          for (let f = 0; f < 6; f++) { const a = f / 6 * Math.PI * 2, g = new THREE.ConeGeometry(0.02, 0.06, 5); g.translate(x + OX + Math.cos(a) * 0.08, 1.03, z + Math.sin(a) * 0.08); put('flame', g); }
+          if (q % 2 === 0) { cyl('pan', 0.15, 0.13, 0.05, x, 1.06, z, 24); box('dark', 0.03, 0.03, 0.3, x, 1.08, z - 0.28); cyl(q === 0 ? 'sauce' : 'pasta', 0.13, 0.13, 0.01, x, 1.085, z, 20); }
+          else if (q === 3) { cyl('steel', 0.2, 0.2, 0.34, x, 1.17, z, 24); cyl('soup', 0.19, 0.19, 0.01, x, 1.33, z, 24); } }
+        // the char grill: bars over a bed of embers, two steaks on it
+        box('dark', 1.1, 0.06, 0.55, ST[1].x, 0.98, bz); const em = new THREE.PlaneGeometry(1.0, 0.45); em.rotateX(-Math.PI / 2); em.translate(ST[1].x + OX, 1.0, bz); put('ember', em);
+        for (let q = 0; q < 11; q++) box('steel', 0.02, 0.02, 0.5, ST[1].x - 0.5 + q * 0.1, 1.04, bz);
+        box('meat', 0.24, 0.04, 0.16, ST[1].x - 0.2, 1.07, bz - 0.05, 0.3); box('meat', 0.22, 0.04, 0.15, ST[1].x + 0.18, 1.07, bz + 0.07, -0.4);
+        // the prep station: a board, a knife, tomatoes, a lettuce, two bowls
+        box('board', 0.6, 0.03, 0.4, ST[2].x, 0.985, bz);
+        box('steel', 0.26, 0.005, 0.04, ST[2].x + 0.05, 1.005, bz - 0.06, 0.4); box('dark', 0.1, 0.02, 0.03, ST[2].x - 0.12, 1.008, bz + 0.0, 0.4);
+        for (let q = 0; q < 4; q++) { const g = new THREE.SphereGeometry(0.045, 10, 8); g.translate(ST[2].x + OX + 0.42 + (q % 2) * 0.1, 1.02, bz - 0.1 + Math.floor(q / 2) * 0.1); put('tomato', g); }
+        { const g = new THREE.SphereGeometry(0.11, 12, 8); g.scale(1, 0.8, 1); g.translate(ST[2].x + OX - 0.45, 1.05, bz); put('leaf', g); }
+        cyl('cup', 0.12, 0.08, 0.07, ST[2].x + 0.25, 1.0, bz + 0.17, 20); cyl('cup', 0.12, 0.08, 0.07, ST[2].x - 0.25, 1.0, bz + 0.17, 20);
+        // the hood over the line, and pans hung on a rail over the pass
+        { const hx0 = ST[0].x - 1.0, hx1 = ST[1].x + 0.8, hw = hx1 - hx0, hc = (hx0 + hx1) / 2;   // the hood over the range and the grill, the menu clear of it
+          box('steel', hw, 0.6, 1.0, hc, WH - 0.55, bz - 0.15); box('steel', hw, 0.04, 0.9, hc, WH - 0.86, bz - 0.2); }
+        { const rg = new THREE.CylinderGeometry(0.02, 0.02, cLen, 8); rg.rotateZ(Math.PI / 2); rg.translate(cX + OX, 2.25, cz); put('steel', rg); }
+        for (let q = 0; q < 7; q++) { const x = cX - cLen / 2 + 0.4 + q * (cLen - 0.8) / 6, g = new THREE.CylinderGeometry(0.13 + (q % 3) * 0.03, 0.11, 0.05, 20);
+          g.rotateX(Math.PI / 2); g.translate(x + OX, 1.95 - (q % 3) * 0.04, cz); put('copper', g); box('dark', 0.015, 0.3, 0.015, x, 2.1, cz); }
+        // heat lamps over the pass, plates waiting under them
+        for (let q = 0; q < 3; q++) { const x = cX - cLen * 0.3 + q * cLen * 0.3; box('dark', 0.5, 0.08, 0.3, x, 1.75, cz); box('heat', 0.42, 0.02, 0.22, x, 1.705, cz); cyl('cup', 0.13, 0.11, 0.02, x, 1.07, cz, 24); }
+      } else {
       // the espresso machine: a steel body, a group head, two cups under it
       box('steel', 1.0, 0.55, 0.5, ST[0].x, 1.25, bz); box('steel', 0.9, 0.06, 0.45, ST[0].x, 1.56, bz);
       cyl('dark', 0.06, 0.07, 0.12, ST[0].x - 0.2, 1.06, bz - 0.2); cyl('dark', 0.06, 0.07, 0.12, ST[0].x + 0.2, 1.06, bz - 0.2);
@@ -8010,6 +8050,7 @@ async function main() {
       // the kettle and a row of tea tins
       cyl('copper', 0.13, 0.15, 0.22, ST[2].x, 1.08, bz); cyl('copper', 0.03, 0.03, 0.14, ST[2].x + 0.16, 1.12, bz);
       for (let q = 0; q < 5; q++) cyl(q % 2 ? 'tin' : 'tin2', 0.06, 0.06, 0.16, ST[2].x + 0.4 + q * 0.15, 1.05, bz);
+      }
       // a shelf of cups and jars on the back wall
       box('wood', hwC * 1.6, 0.04, 0.25, 0, 2.05, hdC - 0.3);
       for (let q = 0; q < 14; q++) cyl(q % 3 ? 'cup' : 'jar', 0.05, 0.045, 0.1, -hwC * 0.75 + q * (hwC * 1.5 / 13), 2.12, hdC - 0.3);
@@ -8048,8 +8089,8 @@ async function main() {
       mx.strokeStyle = '#b08a5a'; mx.lineWidth = 18; mx.strokeRect(9, 9, 1006, 494);
       mx.fillStyle = '#f2ead8'; mx.font = 'bold 70px "Comic Sans MS", cursive'; mx.textAlign = 'center'; mx.fillText('MENU', 512, 100);
       mx.font = '48px "Comic Sans MS", cursive'; mx.textAlign = 'left';
-      [['Espresso', '2.50'], ['Latte', '3.40'], ['Cappuccino', '3.20'], ['Tea', '2.20']].forEach(([n, pr], k) => {
-        mx.fillText(n, 120, 190 + k * 78); mx.textAlign = 'right'; mx.fillText(pr, 900, 190 + k * 78); mx.textAlign = 'left'; });
+      (_kit ? [['Pasta', '14'], ['Steak', '24'], ['Burger', '16'], ['Salad', '11'], ['Soup', '9']] : [['Espresso', '2.50'], ['Latte', '3.40'], ['Cappuccino', '3.20'], ['Tea', '2.20']]).forEach(([n, pr], k) => {
+        mx.fillText(n, 120, (_kit ? 175 : 190) + k * (_kit ? 66 : 78)); mx.textAlign = 'right'; mx.fillText(pr, 900, (_kit ? 175 : 190) + k * (_kit ? 66 : 78)); mx.textAlign = 'left'; });
       const mt = new THREE.CanvasTexture(mc); mt.colorSpace = THREE.SRGBColorSpace;
       const menu = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 1.2), new THREE.MeshStandardMaterial({ map: mt, roughness: 0.9 }));
       menu.material.userData.noAutoTex = true;
@@ -8066,11 +8107,18 @@ async function main() {
         shade: S({ color: 0x2d3a34, roughness: 0.4, metalness: 0.5, side: THREE.DoubleSide }),
         bulb: new THREE.MeshBasicMaterial({ color: 0xffe2a8, toneMapped: false }),
         pot: S({ color: 0xb26a48, roughness: 0.85 }), leaf: S({ color: 0x3f7a3a, roughness: 0.8, side: THREE.DoubleSide }),
+        flame: new THREE.MeshBasicMaterial({ color: 0x6ab0ff, transparent: true, opacity: 0.8, toneMapped: false }),
+        ember: new THREE.MeshBasicMaterial({ color: 0xff5a14, toneMapped: false }), heat: new THREE.MeshBasicMaterial({ color: 0xff7a30, toneMapped: false }),
+        pan: S({ color: 0x3a3c40, roughness: 0.35, metalness: 0.8 }), sauce: S({ color: 0xa8281a, roughness: 0.4 }), pasta: S({ color: 0xe8c56a, roughness: 0.6 }),
+        soup: S({ color: 0xc87a2a, roughness: 0.2 }), meat: S({ color: 0x6a2a18, roughness: 0.7 }), tomato: S({ color: 0xc8261e, roughness: 0.35 }),
+        board: S({ map: itex('planks', 1, 1), color: 0xc89a6a, roughness: 0.7 }),
       };
+      for (const k of ['flame', 'ember', 'heat']) MATS[k].userData.noAutoTex = true;
+      if (_kit) { MATS.wood = MATS.steel; MATS.top = S({ color: 0xd8dde2, roughness: 0.2, metalness: 0.85 }); }   // a kitchen's benches are stainless
       MATS.bulb.userData.noAutoTex = true;
       for (const k in merged) {
         const m = new THREE.Mesh(mergeGeometries(merged[k], false), MATS[k]);
-        m.castShadow = !['glass', 'bulb'].includes(k); m.receiveShadow = true;
+        m.castShadow = !['glass', 'bulb', 'flame', 'ember', 'heat'].includes(k); m.receiveShadow = true;
         if (MATS[k].transparent) m.renderOrder = 2;
         scene.add(m);
         for (const g of merged[k]) g.dispose();
@@ -8117,6 +8165,21 @@ async function main() {
         scene.add(sp);
       }
       fmat.map = itex('planks', bx / 2.5, bz / 2.5); fmat.color.setHex(0xb07a50); fmat.roughness = 0.55; fmat.needsUpdate = true;
+      if (_kit) {
+        // white tile to the ceiling, a quarry-tiled floor, and the line lit hot
+        const tc = document.createElement('canvas'); tc.width = tc.height = 256; const tg = tc.getContext('2d');
+        tg.fillStyle = '#bdb8ae'; tg.fillRect(0, 0, 256, 256);
+        for (let r = 0; r < 8; r++) for (let c = 0; c < 4; c++) { const gr = tg.createLinearGradient(0, r * 32, 0, r * 32 + 30); gr.addColorStop(0, '#fbfaf7'); gr.addColorStop(1, '#ebe8e1'); tg.fillStyle = gr; tg.fillRect(c * 64 + 2, r * 32 + 2, 60, 28); }
+        const wt = new THREE.CanvasTexture(tc); wt.wrapS = wt.wrapT = THREE.RepeatWrapping; wt.colorSpace = THREE.SRGBColorSpace; wt.repeat.set(10, 4);
+        wmat.map = wt; wmat.roughness = 0.3; wmat.color.setHex(0xffffff); wmat.needsUpdate = true;
+        const qc = document.createElement('canvas'); qc.width = qc.height = 256; const qg = qc.getContext('2d'); const rq = mulberry32(7303);
+        qg.fillStyle = '#5a3a2a'; qg.fillRect(0, 0, 256, 256);
+        for (let r = 0; r < 4; r++) for (let c = 0; c < 4; c++) { const l = 120 + Math.floor(rq() * 30); qg.fillStyle = `rgb(${l + 36},${l - 30},${l - 60})`; qg.fillRect(c * 64 + 3, r * 64 + 3, 58, 58); }
+        const qt = new THREE.CanvasTexture(qc); qt.wrapS = qt.wrapT = THREE.RepeatWrapping; qt.colorSpace = THREE.SRGBColorSpace; qt.repeat.set(bx / 1.2, bz / 1.2);
+        fmat.map = qt; fmat.color.setHex(0xffffff); fmat.roughness = 0.45; fmat.needsUpdate = true;
+        const lineL = new THREE.PointLight(0xff9a50, 5, 6, 1.6); lineL.position.set(OX + ST[0].x, 1.4, bz - 0.4); scene.add(lineL);
+        const grillL = new THREE.PointLight(0xff6a20, 4, 4, 1.8); grillL.position.set(OX + ST[1].x, 1.2, bz - 0.2); scene.add(grillL);
+      }
       const dado = [];
       for (const [x, z, w, d] of [[0, -hdC + WT / 2 + 0.03, hwC * 2 - 0.1, 0.04], [0, hdC - WT / 2 - 0.03, hwC * 2 - 0.1, 0.04],
                                   [-hwC + WT / 2 + 0.03, 0, 0.04, hdC * 2 - 0.1], [hwC - WT / 2 - 0.03, 0, 0.04, hdC * 2 - 0.1]]) {
@@ -8128,7 +8191,7 @@ async function main() {
       window.__cafe = {
         stations: ST.map(t => ({ name: t.name, drinks: t.drinks, x: t.x + OX, z: bz - 0.55 })),
         queue: [0, 1, 2].map(q => [OX + (q - 1) * 1.1 - 0.3, cz - 0.95]),
-        door: [OX, -hdC + 0.8], tables: tables.map(([x, z]) => [x + OX, z + 0.9]),
+        door: [OX, -hdC + 0.8], tables: tables.map(([x, z]) => [x + OX, z + 0.9]), kitchen: _kit,
       };
     }
     if (IK === 'station') {
@@ -11729,7 +11792,7 @@ async function main() {
       // the sods are laid in courses: faint lines across the slope
       for (let y = 0; y < H; y += 43) { g.fillStyle = 'rgba(30,24,14,0.22)'; g.fillRect(0, y + rV() * 4, W, 3); }
     }) : null;
-    const boardM = boards ? MAT({ map: boards, roughness: 0.85 }) : null, turfM = turf ? MAT({ map: turf, roughness: 1 }) : null;
+    const boardM = boards ? MAT({ map: boards, normalMap: HDN('planks', 1), roughness: 0.85 }) : null, turfM = turf ? MAT({ map: turf, normalMap: HDN('grass', 1), normalScale: new THREE.Vector2(1.3, 1.3), roughness: 1 }) : null;
     const bargeM = MAT({ color: 0x2a1c12, roughness: 0.75 });
     for (const c of V.cot) {
       const y0 = Math.min(...[[-1, -1], [1, -1], [-1, 1], [1, 1]].map(([a, b]) => { const [x, z] = V.loc(c, a * c.w / 2, b * c.d / 2); return hAt(x, z); })) - 0.05;
@@ -11810,6 +11873,25 @@ async function main() {
       const m = new THREE.Mesh(g, MAT({ map: lt, transparent: true, roughness: 1 })); m.receiveShadow = true; scene.add(m); }
     window.__village = { cottages: V.cot.length };
   }
+  // ── HD SURFACES (2026-10-11) ───────────────────────────────────────────
+  // the site builders paint their pattern on canvas (courses, windows,
+  // boards); under a raking light a painted wall is flat. Each takes the
+  // photographed normal map of what it is made of, at its own real scale, so
+  // the stone has pores and the plaster its trowel marks.
+  function HDN(name, rx, ry) {
+    const c = HDN.c || (HDN.c = {}), key = name + ':' + rx + ':' + ry;
+    if (c[key]) return c[key];
+    const t = new THREE.TextureLoader().load('textures/' + name + '_n.jpg');
+    t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(rx, ry ?? rx); t.anisotropy = renderer.capabilities.getMaxAnisotropy();
+    return (c[key] = t);
+  }
+  function HDT(name, rx, ry) {
+    const c = HDT.c || (HDT.c = {}), key = name + ':' + rx + ':' + ry;
+    if (c[key]) return c[key];
+    const t = new THREE.TextureLoader().load('textures/' + name + '.jpg');
+    t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(rx, ry ?? rx); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = renderer.capabilities.getMaxAnisotropy();
+    return (c[key] = t);
+  }
   // ── THE COLOSSEUM, BUILT (see ARENA above) ─────────────────────────────
   if (ARENA) {
     const R = ARENA, rA = mulberry32((SPEC.seed || 1) + 7171), Y0 = R.H0;
@@ -11829,8 +11911,8 @@ async function main() {
           x += bw; }
         g.fillStyle = 'rgba(90,72,48,0.45)'; g.fillRect(0, row * 64 + 61, W, 3); }
     });
-    const travM = MAT({ map: travT, roughness: 0.9 });
-    const seatM = MAT({ map: travT, color: 0xe6dccb, roughness: 0.92 });
+    const travM = MAT({ map: travT, normalMap: HDN('sandstone', 4), normalScale: new THREE.Vector2(0.9, 0.9), color: 0xf6e2bc, roughness: 0.9 });
+    const seatM = MAT({ map: travT, normalMap: HDN('sandstone', 4), color: 0xe6dccb, roughness: 0.92 });
     const darkM = MAT({ color: 0x120d09, roughness: 1 });
     const sandT = cvT(512, 512, (g, W, H) => {
       g.fillStyle = '#c9a874'; g.fillRect(0, 0, W, H);
@@ -11840,7 +11922,7 @@ async function main() {
     });
     sandT.repeat.set(R.B / 3, R.A / 3);
     // the sand floor
-    const fl = new THREE.Mesh(new THREE.CircleGeometry(1, 96), MAT({ map: sandT, roughness: 1 }));
+    const fl = new THREE.Mesh(new THREE.CircleGeometry(1, 96), MAT({ map: sandT, normalMap: HDN('sand', 16, 24), roughness: 1 }));
     fl.rotation.x = -Math.PI / 2; fl.scale.set(R.B, R.A, 1); fl.position.y = 0.03; fl.receiveShadow = true; G.add(fl);
     // an elliptic band of wall: inner face at (a0,b0), top, outer face at (a1,b1)
     const N = 160;
@@ -11913,7 +11995,20 @@ async function main() {
     const ow = band(outerB, outerA, outerB + 2.2, outerA + 2.2, -0.5, OH, 1);
     { const uv = ow.attributes.uv, ps = ow.attributes.position;               // one bay per arcade, the full height once
       for (let i = 0; i <= N; i++) for (let q = 0; q < 4; q++) { const vi = i * 4 + q; uv.setXY(vi, (i / N) * nBay, (ps.getY(vi) + 0.5) / (OH + 0.5)); } }
-    const outer = new THREE.Mesh(ow, MAT({ map: arcT, roughness: 0.9 })); outer.material.side = THREE.DoubleSide; outer.castShadow = outer.receiveShadow = true; G.add(outer);
+    const outer = new THREE.Mesh(ow, MAT({ map: arcT, normalMap: HDN('sandstone', 3, 16), color: 0xf3dcb2, roughness: 0.9 })); outer.material.side = THREE.DoubleSide; outer.castShadow = outer.receiveShadow = true; G.add(outer);
+    // THE ORDERS IN STONE: engaged half-columns at every bay of the three
+    // arcades (Tuscan, Ionic, Corinthian upward), and a cornice ring between
+    // the storeys, so the wall has the relief the arcade only painted
+    { const parts = [], H0 = -0.5, HS = (OH + 0.5) * 0.25, rO = 2.2;
+      for (let k = 0; k < nBay; k++) { const t = (k / nBay) * Math.PI * 2, nx = Math.sin(t), nz = Math.cos(t);
+        for (let st = 0; st < 3; st++) { const yb = H0 + st * HS + 0.5, hgt = HS * 0.84, [x, z] = ellP(outerB + rO + 0.1, outerA + rO + 0.1, t);
+          parts.push(new THREE.CylinderGeometry(0.42, 0.46, hgt, 12).translate(x, yb + hgt / 2, z));
+          parts.push(new THREE.BoxGeometry(1.15, 0.3, 1.15).rotateY(t).translate(x, yb + hgt + 0.15, z));      // the capital
+          parts.push(new THREE.BoxGeometry(1.05, 0.35, 1.05).rotateY(t).translate(x, yb + 0.17, z)); } }       // the base
+      const colG = mergeGeometries(parts.map(q => q.index ? q.toNonIndexed() : q), false); for (const q of parts) q.dispose();
+      const colM = new THREE.Mesh(colG, MAT({ map: travT, normalMap: HDN('sandstone', 2), color: 0xf6e0b6, roughness: 0.88 })); colM.castShadow = colM.receiveShadow = true; G.add(colM);
+      for (let st = 1; st <= 4; st++) { const y = H0 + st * HS - (st === 4 ? 0.2 : 0);
+        const cr = new THREE.Mesh(band(outerB + rO - 0.05, outerA + rO - 0.05, outerB + rO + 0.75, outerA + rO + 0.75, y - 0.45, y + 0.3, 0.25), travM); cr.castShadow = true; G.add(cr); } }
     // the top tier meets the outer wall at a covered gallery: a deck between them
     const deck = new THREE.Mesh(band(R.B + tiers[NT - 1].r1, R.A + tiers[NT - 1].r1, outerB, outerA, R.TH + 2.4, R.TH + 2.6, 0.125), travM);
     deck.material.side = THREE.DoubleSide; G.add(deck);
@@ -11926,6 +12021,9 @@ async function main() {
     // THE CROWD: one figure a seat, tunics of wool and linen, on their feet and roaring
     { const body = new THREE.CapsuleGeometry(0.2, 0.62, 1, 5).translate(0, 0.51, 0), head = new THREE.SphereGeometry(0.13, 6, 4).translate(0, 1.12, 0);
       const fig = mergeGeometries([body.toNonIndexed(), head.toNonIndexed()], false);
+      // a third of them on their feet with both arms up: a crowd roars with its arms
+      const armL = new THREE.CapsuleGeometry(0.055, 0.5, 1, 4).rotateZ(-0.35).translate(-0.25, 1.22, 0), armR = new THREE.CapsuleGeometry(0.055, 0.5, 1, 4).rotateZ(0.35).translate(0.25, 1.22, 0);
+      const fig2 = mergeGeometries([body.toNonIndexed(), head.toNonIndexed(), armL.toNonIndexed(), armR.toNonIndexed()], false);
       const spots = [];
       for (let k = 0; k < NT; k++) { const T = tiers[k], r = (T.r0 + T.r1) / 2, per = 2 * Math.PI * Math.sqrt(((R.B + r) ** 2 + (R.A + r) ** 2) / 2), nS = Math.floor(per / 0.8);
         for (let i = 0; i < nS; i++) { if (rA() > 0.72) continue;
@@ -11933,16 +12031,21 @@ async function main() {
           if (Math.abs(z) < 5.6 && x > 0 && k < 3) continue;                  // the box keeps its own view
           spots.push([x, T.y, z]); } }
       const im = new THREE.InstancedMesh(fig, new THREE.MeshStandardMaterial({ roughness: 0.9 }), spots.length);
+      const im2 = new THREE.InstancedMesh(fig2, im.material, spots.length); let n2 = 0;
       const TUN = [0xe9e2d0, 0xd8cdb4, 0x9b2d24, 0xc4882e, 0x5a6b8a, 0x7a6a50, 0xf2efe6, 0x6e3b2a, 0xb9a27a, 0x3f5a46].map(c => new THREE.Color(c));
       const m4 = new THREE.Matrix4(), q4 = new THREE.Quaternion(), s4 = new THREE.Vector3(), e4 = new THREE.Euler();
-      spots.forEach(([x, y, z], i) => { const sc = 0.92 + rA() * 0.16; s4.set(sc, sc, sc); q4.setFromEuler(e4.set(0, Math.atan2(-x, -z), 0));
-        m4.compose(new THREE.Vector3(x, y, z), q4, s4); im.setMatrixAt(i, m4); im.setColorAt(i, TUN[Math.floor(rA() * TUN.length)]); });
+      let n1 = 0;
+      spots.forEach(([x, y, z]) => { const sc = 0.92 + rA() * 0.16; s4.set(sc, sc, sc); q4.setFromEuler(e4.set(0, Math.atan2(-x, -z), 0));
+        m4.compose(new THREE.Vector3(x, y, z), q4, s4); const tun = TUN[Math.floor(rA() * TUN.length)];
+        if (rA() < 0.34) { im2.setMatrixAt(n2, m4); im2.setColorAt(n2, tun); n2++; } else { im.setMatrixAt(n1, m4); im.setColorAt(n1, tun); n1++; } });
+      im.count = n1; im2.count = n2;
       const uT = { value: 0 };
       im.material.onBeforeCompile = (sh) => { sh.uniforms.uT = uT;
         sh.vertexShader = 'uniform float uT;\n' + sh.vertexShader.replace('#include <begin_vertex>',
           '#include <begin_vertex>\n  { vec4 ip = instanceMatrix[3]; float ph = ip.x * 1.7 + ip.z * 2.3; transformed.y += max(0.0, sin(uT * 7.0 + ph)) * 0.16 * step(0.5, fract(ph * 0.37)); }'); };
       im.onBeforeRender = () => { uT.value = performance.now() / 1000; };
       im.frustumCulled = false; im.castShadow = false; im.receiveShadow = true; G.add(im);
+      im2.onBeforeRender = im.onBeforeRender; im2.frustumCulled = false; im2.receiveShadow = true; G.add(im2);
       window.__arena = { seats: spots.length, tiers: NT, A: R.A, B: R.B };
     }
     // colliders: the podium wall in segments (nobody climbs out into the seats)
@@ -11986,19 +12089,19 @@ async function main() {
       if (col.charCodeAt(2) % 2) { g.fillStyle = '#3f5a3c'; g.fillRect(wx - 26, wy + 20, 20, wh - 20); g.fillRect(wx + ww + 6, wy + 20, 20, wh - 20); }
       g.fillStyle = 'rgba(60,40,30,0.25)'; g.fillRect(0, H - 6, W, 6);                               // the string course under each floor
     }));
-    const facM = facadeT.map(t => MAT({ map: t, roughness: 0.92 }));
+    const facM = facadeT.map(t => MAT({ map: t, normalMap: HDN('plaster', 1.3), normalScale: new THREE.Vector2(1.2, 1.2), roughness: 0.92 }));
     const stoneT = cvT(256, 256, (g, W, H) => { g.fillStyle = '#e8e2d4'; g.fillRect(0, 0, W, H);
       for (let i = 0; i < 700; i++) { g.fillStyle = `rgba(120,110,95,${0.04 + rV() * 0.08})`; g.fillRect(rV() * W, rV() * H, 1 + rV() * 5, 1 + rV() * 3); }
       for (let y = 0; y < H; y += 64) { g.fillStyle = 'rgba(90,80,70,0.35)'; g.fillRect(0, y, W, 2); for (let x = (y / 64 % 2) * 64; x < W; x += 128) g.fillRect(x, y, 2, 64); } });
-    const stoneM = MAT({ map: stoneT, roughness: 0.7 });
+    const stoneM = MAT({ map: stoneT, normalMap: HDN('stone', 1), normalScale: new THREE.Vector2(0.5, 0.5), roughness: 0.7 });
     const brickT = cvT(256, 256, (g, W, H) => { g.fillStyle = '#6e3a2a'; g.fillRect(0, 0, W, H);
       for (let r = 0; r < 32; r++) for (let c = 0; c < 9; c++) { const l = 90 + Math.floor(rV() * 50); g.fillStyle = `rgb(${l + 40},${l - 10},${l - 30})`; g.fillRect(c * 30 + (r % 2) * 15, r * 8, 28, 6); }
       const gr = g.createLinearGradient(0, H * 0.55, 0, H); gr.addColorStop(0, 'rgba(40,60,30,0)'); gr.addColorStop(1, 'rgba(40,60,30,0.75)'); g.fillStyle = gr; g.fillRect(0, 0, W, H); });   // weed at the waterline
-    const brickM = MAT({ map: brickT, roughness: 0.9 });
+    const brickM = MAT({ map: brickT, normalMap: HDN('brick', 1), roughness: 0.9 });
     const paveT = cvT(256, 256, (g, W, H) => { g.fillStyle = '#6f6c66'; g.fillRect(0, 0, W, H);
       for (let r = 0; r < 4; r++) for (let c = 0; c < 3; c++) { const l = 96 + Math.floor(rV() * 34); g.fillStyle = `rgb(${l},${l - 2},${l - 6})`; g.fillRect(c * 86 + (r % 2) * 43 + 2, r * 64 + 2, 82, 60); } });   // trachyte masegni
-    const paveM = MAT({ map: paveT, roughness: 0.8 });
-    const roofM = MAT({ color: 0x9a4a32, roughness: 0.85 }), darkM = MAT({ color: 0x14100d, roughness: 1 });
+    const paveM = MAT({ map: paveT, normalMap: HDN('stone', 1), normalScale: new THREE.Vector2(0.7, 0.7), roughness: 0.8 });
+    const roofM = MAT({ map: HDT('roof', 3, 2), normalMap: HDN('roof', 3, 2), color: 0xd9846a, roughness: 0.85 }), darkM = MAT({ color: 0x14100d, roughness: 1 });
     const QY = V.QY, CY = V.CY, WL = V.WL;
     // the palazzi: a row on each bank, shoulder to shoulder, their fronts on the water side
     const rows = [{ s0: -3.4, dir: -1, land: true }, { s0: V.CW1 + 3.2, dir: 1, land: false }];
@@ -12022,6 +12125,13 @@ async function main() {
           put(new THREE.CylinderGeometry(0.22, 0.22, 1.8, 8).translate(cx, QY + H + 1.6, cz), brickM);
           put(new THREE.CylinderGeometry(0.55, 0.2, 0.8, 10).translate(cx, QY + H + 2.8, cz), brickM);
         }
+        // WINDOWS IN STONE: a sill and a hood moulding at every window of the front,
+        // standing proud of the plaster (the window itself is in the paint)
+        for (let f = 0; f < flo; f++) for (let k = -6; k <= 6; k++) { const zc = (k + 0.5) * 2.6; if (Math.abs(zc) + 0.75 > wdt / 2) continue;
+          const yb = QY + 1.2 + f * fh, [sx2, sz2] = L(uc + zc, R.s0 - R.dir * 0.1);
+          put(new THREE.BoxGeometry(0.24, 0.1, 1.3).translate(sx2, yb + 0.2 * fh, sz2), stoneM);
+          put(new THREE.BoxGeometry(0.16, 0.12, 1.25).translate(sx2, yb + 0.86 * fh, sz2), stoneM);
+          for (const e of [-0.56, 0.56]) { const [jx, jz] = L(uc + zc + e, R.s0 - R.dir * 0.06); put(new THREE.BoxGeometry(0.12, 0.6 * fh, 0.1).translate(jx, yb + 0.53 * fh, jz), stoneM); } }
         // the door on the quay, or the water gate onto the canal, with a striped mooring pole or two
         const fs = R.s0 + R.dir * 0.02, [dx, dz] = L(uc, fs - R.dir * 0.05);
         put(new THREE.BoxGeometry(0.12, 2.6, 1.6).translate(dx, QY + 1.3, dz), darkM);
@@ -12031,7 +12141,9 @@ async function main() {
         // a balcony on the piano nobile
         if (rV() < 0.55) { const bw = Math.min(4, wdt * 0.5), [bx, bz] = L(uc, R.s0 - R.dir * 0.45), [rx, rz] = L(uc, R.s0 - R.dir * 0.86);
           put(metric(new THREE.BoxGeometry(0.9, 0.12, bw).translate(bx, QY + 1.2 + fh + 0.1, bz), 0.5, 0.5), stoneM);
-          put(new THREE.BoxGeometry(0.08, 0.9, bw).translate(rx, QY + 1.2 + fh + 0.6, rz), stoneM); }
+          put(new THREE.BoxGeometry(0.08, 0.12, bw).translate(rx, QY + 1.2 + fh + 1.05, rz), stoneM);                                   // the handrail
+          for (let b = -bw / 2 + 0.15; b < bw / 2; b += 0.24) { const [bx2, bz2] = L(uc + b, R.s0 - R.dir * 0.86);                         // and its balusters
+            put(new THREE.CylinderGeometry(0.035, 0.05, 0.85, 6).translate(bx2, QY + 1.2 + fh + 0.58, bz2), stoneM); } }
         u += wdt + 0.05;
         const col = RAPIER.ColliderDesc.cuboid(dep / 2, H / 2, wdt / 2), [wx, wz] = V.world(uc, sc);
         world.createCollider(col.setTranslation(wx, QY + H / 2, wz).setRotation({ x: 0, y: Math.sin(yaw / 2), z: 0, w: Math.cos(yaw / 2) }));
@@ -12197,7 +12309,7 @@ async function main() {
       for (let i = 0; i < 12; i++) { g.strokeStyle = 'rgba(30,28,26,0.08)'; g.lineWidth = 3 + rK() * 3; const x = rK() * W, y = rK() * H;   // wheel marks
         g.beginPath(); g.moveTo(x, y); g.quadraticCurveTo(x + (rK() - 0.5) * 200, y + (rK() - 0.5) * 200, x + (rK() - 0.5) * 300, y + (rK() - 0.5) * 300); g.stroke(); }
       g.fillStyle = 'rgba(60,58,55,0.5)'; g.fillRect(0, 0, W, 3); g.fillRect(0, 0, 3, H); });   // the expansion joints, a slab every 4 m
-    const concM = MAT({ map: concT, roughness: 0.82 }), steelM = MAT({ color: 0xb8bcc0, metalness: 0.9, roughness: 0.25 }), darkM = MAT({ color: 0x2a2a2c, roughness: 0.6 });
+    const concM = MAT({ map: concT, normalMap: HDN('concrete', 4), normalScale: new THREE.Vector2(0.6, 0.6), roughness: 0.82 }), steelM = MAT({ color: 0xb8bcc0, metalness: 0.9, roughness: 0.25 }), darkM = MAT({ color: 0x2a2a2c, roughness: 0.6 });
     const add = (geo, m, x, y, z) => { const o = new THREE.Mesh(geo, m); o.position.set(x, y, z); o.castShadow = o.receiveShadow = true; G.add(o); return o; };
     const col = (hx, hy, hz, a, c, y, pitch) => { const [wx, wz] = K.world(a, c), q = new THREE.Quaternion().setFromEuler(new THREE.Euler(pitch || 0, yaw, 0, 'YXZ'));
       world.createCollider(RAPIER.ColliderDesc.cuboid(hx, hy, hz).setTranslation(wx, Y + y, wz).setRotation({ x: q.x, y: q.y, z: q.z, w: q.w })); };
@@ -12272,7 +12384,7 @@ async function main() {
           plank = MAT({ map: txs('planks', 3, 1.5), normalMap: txs('planks', 3, 1.5, true), color: 0xa88a6c, roughness: 0.9 }),
           stone = MAT({ map: txs('stone', 2, 1.5), normalMap: txs('stone', 2, 1.5, true), color: 0xb0aaa0, roughness: 0.95 }),
           iron = MAT({ color: 0x2b2b2d, roughness: 0.45, metalness: 0.85 }), steel = MAT({ color: 0xc8ccd0, roughness: 0.2, metalness: 0.95 }),
-          thatch = MAT({ color: 0x8a6c3e, roughness: 1 }), leather = MAT({ color: 0x5a3a22, roughness: 0.7 });
+          thatch = MAT({ map: HDT('roof', 3, 1), normalMap: HDN('roof', 3, 1), color: 0xb08a5a, roughness: 1 }), leather = MAT({ color: 0x5a3a22, roughness: 0.7 });
     const coal = MAT({ color: 0x2a0a02, emissive: 0xff5a10, emissiveIntensity: 2.8, roughness: 0.9 });
     const add = (geo, m, x, y, z, rx, rz) => { const o = new THREE.Mesh(geo, m); o.position.set(x, y, z); if (rx) o.rotation.x = rx; if (rz) o.rotation.z = rz; o.castShadow = o.receiveShadow = true; G.add(o); return o; };
     add(new THREE.BoxGeometry(7.4, 0.2, 5.8), stone, 0, 0.1, 0);                                         // a flagged floor
@@ -20593,9 +20705,16 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
     const CUS = npcs.filter(n => n.behavior === 'customer' && !n.dead);
     if (_sv && CUS.length && window.__cafe) {
       const hintS = document.querySelector('#hud .hint');
-      if (hintS) hintS.textContent = 'WASD move · E make a drink at a station · E hand it over · Shift run · drag to look';
       const C = window.__cafe, rngS = mulberry32((SPEC.seed || 3) * 97 + 5);
-      const DRINKS = {
+      if (hintS) hintS.textContent = C.kitchen ? 'WASD move · E cook at a station · E take it to the table · Shift run · drag to look'
+                                               : 'WASD move · E make a drink at a station · E hand it over · Shift run · drag to look';
+      const DRINKS = C.kitchen ? {
+        pasta: { col: '#e8c56a', foam: '#a8281a', label: 'Pasta', station: 'range', plate: true },
+        soup: { col: '#c87a2a', foam: '#f4ead8', label: 'Soup', station: 'range', plate: true, bowl: true },
+        steak: { col: '#6a2a18', foam: '#3f7a3a', label: 'Steak', station: 'grill', plate: true },
+        burger: { col: '#a8642a', foam: '#3f7a3a', label: 'Burger', station: 'grill', plate: true },
+        salad: { col: '#4f8a3a', foam: '#c8261e', label: 'Salad', station: 'prep station', plate: true },
+      } : {
         espresso: { col: '#5a3a24', foam: null, label: 'Espresso', station: 'espresso' },
         latte: { col: '#c89a6a', foam: '#f4ead8', label: 'Latte', station: 'milk steamer' },
         cappuccino: { col: '#a8764a', foam: '#fbf6ee', label: 'Cappuccino', station: 'milk steamer' },
@@ -20603,7 +20722,9 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
       };
       const KEYS = Object.keys(DRINKS);
       // a latte or a cappuccino needs a shot first, then the milk: two stations
-      const NEEDS = { espresso: ['espresso'], latte: ['espresso', 'milk steamer'], cappuccino: ['espresso', 'milk steamer'], tea: ['kettle'] };
+      // a burger is grilled, then dressed at the prep station: two stations, like a latte
+      const NEEDS = C.kitchen ? { pasta: ['range'], soup: ['range'], steak: ['grill'], burger: ['grill', 'prep station'], salad: ['prep station'] }
+        : { espresso: ['espresso'], latte: ['espresso', 'milk steamer'], cappuccino: ['espresso', 'milk steamer'], tea: ['kettle'] };
       let held = null, heldSteps = [], served = 0, missed = 0, tips = 0;
       const PAT = 42;                                  // seconds a customer will wait
       const icon = (n) => {
@@ -20622,6 +20743,16 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
         if (state === 'happy') { x.font = 'bold 96px sans-serif'; x.textAlign = 'center'; x.fillStyle = '#3fbf6a'; x.fillText('\u2713', 128, 146); }
         else {
           const d = DRINKS[order];
+          if (d.plate) {
+            // the plate: a white rim, the dish on it, a garnish
+            x.fillStyle = '#e8e2d6'; x.beginPath(); x.ellipse(128, 126, 80, 30, 0, 0, 7); x.fill();
+            x.fillStyle = '#ffffff'; x.beginPath(); x.ellipse(128, 120, 76, 28, 0, 0, 7); x.fill();
+            if (d.bowl) { x.fillStyle = '#f4f0e8'; x.beginPath(); x.ellipse(128, 108, 44, 22, 0, 0, 7); x.fill(); }
+            x.fillStyle = d.col; x.beginPath(); x.ellipse(128, d.bowl ? 104 : 112, d.bowl ? 36 : 46, d.bowl ? 13 : 17, 0, 0, 7); x.fill();
+            x.fillStyle = d.foam; for (let q = 0; q < 5; q++) { x.beginPath(); x.arc(108 + q * 10, 106 + (q % 2) * 6, 4, 0, 7); x.fill(); }
+            x.font = 'bold 30px sans-serif'; x.textAlign = 'center'; x.fillStyle = '#3a2a1e'; x.fillText(d.label, 128, 52);
+            b.tex.needsUpdate = true; return;
+          }
           // the cup: a saucer, a white cup, the drink, foam where it has it
           x.fillStyle = '#e8e2d6'; x.beginPath(); x.ellipse(128, 150, 62, 12, 0, 0, 7); x.fill();
           x.fillStyle = '#ffffff'; x.beginPath(); x.moveTo(84, 82); x.lineTo(172, 82); x.lineTo(160, 146); x.lineTo(96, 146); x.closePath(); x.fill();
@@ -20679,7 +20810,7 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
         if (stn) {
           if (!held) {
             const want = (CUS.find(o => o._cs === 'wait' && NEEDS[o._order][0] === stn.name) || {})._order;
-            if (!want) { popText(stn.name === 'espresso' ? 'Nobody is waiting on a coffee' : 'Nothing to make here yet', '#cfd8e8'); return true; }
+            if (!want) { popText(stn.name === 'espresso' ? 'Nobody is waiting on a coffee' : C.kitchen ? 'No order needs the ' + stn.name + ' yet' : 'Nothing to make here yet', '#cfd8e8'); return true; }
             held = want; heldSteps = [stn.name];
           } else if (heldSteps.length < NEEDS[held].length && NEEDS[held][heldSteps.length] === stn.name) {
             heldSteps.push(stn.name);

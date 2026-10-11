@@ -3256,6 +3256,28 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                 continue
             sane.append(ob)
         spec.objectives = sane
+        # MORE THAN ONE IS PLURAL (2026-10-11): "Defeat 3 opponent", "Put down 3
+        # opponent": a counted label reads in the plural, last word only
+        _INVAR = {"fish", "sheep", "deer", "moose", "bison", "salmon", "trout", "aircraft", "people", "children",
+                  "police", "staff", "crew", "cattle", "swine", "species", "series", "elk", "squid", "shrimp", "cod"}
+        _IRREG = {"man": "men", "woman": "women", "child": "children", "person": "people", "mouse": "mice",
+                  "goose": "geese", "tooth": "teeth", "foot": "feet", "wolf": "wolves", "thief": "thieves",
+                  "knife": "knives", "leaf": "leaves", "elf": "elves", "dwarf": "dwarves", "loaf": "loaves", "shelf": "shelves"}
+        for ob in spec.objectives:
+            if ob.kind in ("defeat", "hunt", "capture", "collect", "eliminate", "repair", "escort") and (ob.count or 0) > 1 and (ob.label or "").strip():
+                _ws = ob.label.strip().split(" ")
+                _w = _ws[-1]; _lw = _w.lower()
+                if _lw.isalpha() and not _lw.endswith("s") and _lw not in _INVAR:
+                    if _lw in _IRREG:
+                        _p = _IRREG[_lw]
+                    elif _lw.endswith("y") and len(_lw) > 1 and _lw[-2] not in "aeiou":
+                        _p = _w[:-1] + "ies"
+                    elif _lw.endswith(("ch", "sh", "x", "z")):
+                        _p = _w + "es"
+                    else:
+                        _p = _w + "s"
+                    _ws[-1] = _p if not _w[:1].isupper() else _p[:1].upper() + _p[1:]
+                    ob.label = " ".join(_ws)
 
         stage("designing level")
         from app.game_export.level import build_level, build_osm_city, detect_place

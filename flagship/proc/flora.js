@@ -1270,7 +1270,7 @@ export function biomeFor(words, arch, groundHSL) {
   const T = (hex) => new THREE.Color(hex);
   const crystal = has(/crystal|gem|geode|amethyst/);
   const out = { snow: 0, rockTint: T(0x8a8580), crystalTint: T(0x8fd8ff), leaf: leafFor(w, groundHSL) };
-  if (has(/underwater|undersea|ocean floor|reef|seabed|sea floor|coral|kelp|submarine|dolphin|abyss/)) {
+  if (has(/underwater|undersea|ocean floor|reef|seabed|sea floor|coral|kelp|submarine|dolphin|abyss|scuba|deep blue|deep ocean|deep sea|humpback|whales? (?:song|shark)/)) {   // (scuba and whale words, 2026-10-11)
     // the sea: kelp and coral, stone on the bed; no land beyond (the water hides it)
     const hue = [0xff6f8a, 0xb07cff, 0xff9a3c, 0x5ad1c4][Math.abs(Math.round((w.length * 7919) % 4))];
     Object.assign(out, { kinds: K(['kelp', 0.6], ['coral', 0.6], ['coral2', 0.45], ['rock', 0.3]), dens: 0.55, underwater: true,
