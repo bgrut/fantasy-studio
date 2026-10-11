@@ -12447,6 +12447,84 @@ async function main() {
       for (const [hx, hz, x, z] of [[3.6, 0.1, 0, -2.7], [0.1, 2.7, -3.55, 0], [0.1, 2.7, 3.55, 0]]) { v.set(x, 1.5, z).applyMatrix4(G.matrixWorld);
         world.createCollider(RAPIER.ColliderDesc.cuboid(hx, 1.5, hz).setTranslation(v.x, v.y, v.z).setRotation({ x: 0, y: Math.sin(Sm.ry / 2), z: 0, w: Math.cos(Sm.ry / 2) })); } }
   }
+  // ── A FJORD'S WALLS RUN WITH WATER (2026-10-11) ────────────────────────
+  // the falls of a Norwegian fjord: thin cascades from the snowmelt above,
+  // white down the dark rock all the way to the sea, mist where they land.
+  // Each is a ribbon laid on the far wall's own surface, sampled from the
+  // ground, its streaks running down faster as they fall.
+  if (LVL && LVL.fjord && WATER_Y !== null) {
+    const [ux, uz] = LVL.fjord.axis, px = -uz, pz = ux, gl = Math.hypot(LVL.goal[0], LVL.goal[1]) || 80;
+    const cv = document.createElement('canvas'); cv.width = 64; cv.height = 512; const g = cv.getContext('2d'), rF = mulberry32((SPEC.seed || 1) + 5353);
+    g.clearRect(0, 0, 64, 512);
+    for (let i = 0; i < 90; i++) { const x = rF() * 64, w = 1 + rF() * 4, y = rF() * 512, l = 40 + rF() * 160;
+      const gr = g.createLinearGradient(0, y, 0, y + l); gr.addColorStop(0, 'rgba(255,255,255,0)'); gr.addColorStop(0.5, `rgba(240,246,250,${0.35 + rF() * 0.5})`); gr.addColorStop(1, 'rgba(255,255,255,0)');
+      g.fillStyle = gr; g.fillRect(x, y, w, l); g.fillRect(x, y - 512, w, l); }
+    const ft = new THREE.CanvasTexture(cv); ft.wrapS = ft.wrapT = THREE.RepeatWrapping; ft.colorSpace = THREE.SRGBColorSpace;
+    const fm = new THREE.MeshStandardMaterial({ map: ft, alphaMap: ft, transparent: true, depthWrite: false, color: 0xf2f6fa, emissive: 0x4a5560, emissiveIntensity: 0.4, roughness: 0.3, side: THREE.DoubleSide });
+    fm.userData.noAutoTex = true;
+    const mistT = (() => { const c = document.createElement('canvas'); c.width = c.height = 64; const x = c.getContext('2d'), gr = x.createRadialGradient(32, 32, 2, 32, 32, 30);
+      gr.addColorStop(0, 'rgba(235,240,245,0.6)'); gr.addColorStop(1, 'rgba(235,240,245,0)'); x.fillStyle = gr; x.fillRect(0, 0, 64, 64); return new THREE.CanvasTexture(c); })();
+    const mists = [], built = [];
+    for (const uf of [0.15, 0.42, 0.68, 0.9]) {
+      const u = -20 + uf * (gl + 10);
+      // walk out across the water to the far wall: its foot, then up the face to its lip
+      let sFoot = null, sTop = null;
+      for (let sv = 8; sv < 110; sv += 0.75) { const x = ux * u + px * sv, z = uz * u + pz * sv, h = hAt(x, z);
+        if (sFoot === null && h > WATER_Y + 0.6) sFoot = sv;
+        if (sFoot !== null && h > WATER_Y + 38) { sTop = sv; break; } }
+      if (sFoot === null || sTop === null) continue;
+      const W = 2.2 + rF() * 3.2, N = 40, pos = [], uv = [], idx = [];
+      for (let i = 0; i <= N; i++) { const t = i / N, sv = sTop - (sTop - sFoot + 1.2) * t, wob = Math.sin(t * 7 + u) * 0.8;
+        for (const side of [-1, 1]) { const a = u + side * W / 2 * (0.6 + t * 0.6) + wob, x = ux * a + px * sv, z = uz * a + pz * sv;
+          pos.push(x - px * 0.35, Math.max(WATER_Y, hAt(x, z)) + 0.15, z - pz * 0.35); uv.push(side < 0 ? 0 : 1, t * (sTop - sFoot) / 12); } }
+      for (let i = 0; i < N; i++) { const b = i * 2; idx.push(b, b + 2, b + 1, b + 1, b + 2, b + 3); }
+      const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); geo.setIndex(idx); geo.computeVertexNormals();
+      const m = new THREE.Mesh(geo, fm); m.renderOrder = 3; scene.add(m); built.push(m);
+      const fx = ux * u + px * sFoot, fz = uz * u + pz * sFoot;
+      for (let k = 0; k < 6; k++) { const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: mistT, transparent: true, depthWrite: false, opacity: 0 }));
+        scene.add(sp); mists.push({ sp, x: fx - px * 2, z: fz - pz * 2, t: k / 6, y: WATER_Y }); }
+    }
+    window.__fjordFalls = { n: built.length };
+    window.__fallsTick = (dt) => { ft.offset.y -= dt * 0.55;
+      for (const q of mists) { q.t += dt * 0.25; if (q.t > 1) q.t -= 1; q.sp.position.set(q.x + q.t * 1.5, q.y + 0.5 + q.t * 4, q.z); const sc = 3 + q.t * 7; q.sp.scale.set(sc, sc, 1); q.sp.material.opacity = 0.35 * Math.sin(q.t * Math.PI); } };
+  }
+  // ── SURF (2026-10-11) ───────────────────────────────────────────────────
+  // a beach without breaking water read as a lake shore: lines of white surf
+  // come in over the shallows, run up the sand and sink away, one after
+  // another, on the waterline sampled from the ground
+  if (BEACH && WATER_Y !== null) {
+    const Bs = BEACH, rS = mulberry32((SPEC.seed || 1) + 6464);
+    const cv = document.createElement('canvas'); cv.width = 512; cv.height = 64; const g = cv.getContext('2d');
+    // a band of foam, thick at its crest and lacing out behind it
+    { const gr = g.createLinearGradient(0, 0, 0, 64); gr.addColorStop(0, 'rgba(255,255,255,0)'); gr.addColorStop(0.35, 'rgba(255,255,255,0.95)');
+      gr.addColorStop(0.55, 'rgba(255,255,255,0.7)'); gr.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = gr; g.fillRect(0, 0, 512, 64); }
+    g.globalCompositeOperation = 'destination-out';
+    for (let i = 0; i < 900; i++) { const x = rS() * 512, y = 26 + rS() * 38, r = 1.5 + rS() * 6; g.fillStyle = `rgba(0,0,0,${0.3 + rS() * 0.6})`; g.beginPath(); g.ellipse(x, y, r * 1.8, r, 0, 0, 7); g.fill(); }
+    g.globalCompositeOperation = 'source-over';
+    for (let i = 0; i < 500; i++) { const x = rS() * 512, y = 14 + rS() * 18, r = 1 + rS() * 3; g.fillStyle = `rgba(255,255,255,${0.4 + rS() * 0.5})`; g.beginPath(); g.arc(x, y, r, 0, 7); g.fill(); }
+    const st = new THREE.CanvasTexture(cv); st.wrapS = THREE.RepeatWrapping; st.colorSpace = THREE.SRGBColorSpace;
+    // the waterline along the beach
+    const line = [];
+    for (let a = -40; a <= Bs.gl + 40; a += 2) { let c0 = null;
+      for (let c = -10; c < 60; c += 0.4) { const [x, z] = Bs.world(a, c); if (hAt(x, z) < WATER_Y) { c0 = c; break; } }
+      if (c0 !== null) line.push([a, c0]); }
+    const waves = [];
+    for (let k = 0; k < 5; k++) {
+      const pos = [], uv = [], idx = [];
+      line.forEach(([a, c], i) => { for (const o of [k === 4 ? -0.7 : -1.6, k === 4 ? 1.1 : 1.6]) { const [x, z] = Bs.world(a, c + o); pos.push(x, Math.max(WATER_Y + 0.3, hAt(x, z) + 0.06), z); uv.push(i * 0.12, o < 0 ? 0 : 1); } });
+      for (let i = 0; i < line.length - 1; i++) { const b = i * 2; idx.push(b, b + 2, b + 1, b + 1, b + 2, b + 3); }
+      const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); geo.setIndex(idx);
+      geo.computeVertexNormals();
+      const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ map: st, transparent: true, depthWrite: false, opacity: 0, color: 0xf4f8fa, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 }));
+      m.material.userData.noAutoTex = true; m.renderOrder = 4; scene.add(m); waves.push({ m, t: k / 4, edge: k === 4 });
+    }
+    const [nx, nz] = [-Bs.uz, Bs.ux];                    // toward the sea
+    window.__surfTick = (dt) => { for (const w of waves) { w.t += dt / 7; if (w.t > 1) w.t -= 1;
+      if (w.edge) { w.m.material.opacity = 0.55 + 0.25 * Math.sin(w.t * Math.PI * 2 * 2); w.m.material.map.offset.x = w.t * 0.3; continue; }   // the foam that always lies at the edge
+      const d = 9 * (1 - w.t) - 1.2, rise = Math.max(0, w.t - 0.75) * 0.5;      // in from nine metres out, up the sand at the end
+      w.m.position.set(nx * d, rise * 0.4, nz * d);
+      w.m.material.opacity = Math.min(1, w.t * 3) * (w.t > 0.82 ? Math.max(0, 1 - (w.t - 0.82) / 0.18) : 1); } };
+  }
   // ── THE CANDY LAND, BUILT (see CANDY above) ────────────────────────────
   if (CANDY) {
     const Cd = CANDY, rC = mulberry32((SPEC.seed || 1) + 6162);
@@ -22070,6 +22148,8 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
       if (window.__hiveTick) window.__hiveTick(performance.now() / 1000);
       if (window.__smithFire) window.__smithFire(performance.now() / 1000);
       if (window.__lhSmokeTick) window.__lhSmokeTick(typeof dt === 'number' ? Math.min(0.05, dt) : 0.016);
+      if (window.__fallsTick) window.__fallsTick(typeof dt === 'number' ? Math.min(0.05, dt) : 0.016);
+      if (window.__surfTick) window.__surfTick(typeof dt === 'number' ? Math.min(0.05, dt) : 0.016);
       if (window.__asteroidTick) window.__asteroidTick(Math.min(0.05, dt));
       if (window.__tornadoTick) window.__tornadoTick(Math.min(0.05, dt));
       if (window.__monkTick) window.__monkTick(performance.now() / 1000, Math.min(0.05, dt));
