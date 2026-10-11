@@ -1367,6 +1367,27 @@ async function main() {
   window.__isCity = !!OSM;
   if (OSM && LVL && LVL.landmarks) LVL.landmarks = [];   // no 30m trees on sidewalks                          // ambient (module scope) reads this
   const INTERIOR = (LVL && LVL.interior) || null;   // Phase 95: room levels
+  // ── A MATCH IS PLAYED ON A PITCH (2026-10-11) ─────────────────────────
+  // "score three goals against a robot goalkeeper on a sunny pitch" put the
+  // ball and one goal on a forest path among wildflowers. A football world is
+  // a pitch: its halfway line through the kick-off spot (where the ball is
+  // reset), the goal on its end line, two thirds as wide as it is long. The
+  // goal moves onto the end line; the wood keeps off it, the grass is mown.
+  const PITCH = (() => {
+    const sc = (SPEC.objectives || []).find(o => o.kind === 'score');
+    if (!sc || INTERIOR || !LVL) return null;
+    const w = ((SPEC.prompt || '') + ' ' + (SPEC.world.name || '') + ' ' + (sc.label || '')).toLowerCase();
+    if (!/\b(soccer|football|pitch|goalkeeper|goalie|keeper|penalt\w*|striker|five-a-side|world cup|goals?)\b/.test(w)) return null;
+    const g = LVL.goal || [0, 40], gl = Math.hypot(g[0], g[1]) || 1;
+    const ux = g[0] / gl, uz = g[1] / gl, half = Math.max(32, Math.min(52, gl));
+    LVL.goal = [ux * half, uz * half];
+    const L = half * 2, W = L * 0.64;
+    const inside0 = (x, z, m) => { const a = x * ux + z * uz, c = -x * uz + z * ux; return Math.abs(a) < L / 2 + (m || 0) && Math.abs(c) < W / 2 + (m || 0); };
+    if (LVL.pois) LVL.pois = LVL.pois.filter(p => !inside0(p.x, p.z, 12));   // no camp or log pile on the pitch
+    const local = (x, z) => [x * ux + z * uz, -x * uz + z * ux];   // [along, across]
+    return { ux, uz, L, W,
+             inside: (x, z, m) => { const [a, c] = local(x, z); return Math.abs(a) < L / 2 + (m || 0) && Math.abs(c) < W / 2 + (m || 0); } };
+  })();
   // ── A MONASTERY ON THE MOUNTAIN (2026-10-07) ────────────────────────────
   // "a monk climbs the stone steps of a cliffside himalayan monastery above
   // the clouds to ring the bell" was a red-earth wood with a giant blue disc
@@ -6836,6 +6857,8 @@ async function main() {
         for (const p of (LVL.landmarks || [])) keepClear.push([p[0], p[1], 9]);
       }
       keepClear.push([_sp.x, _sp.z, 12]);     // the hero starts in a clearing, the camera behind them too
+      if (PITCH) for (let a = -PITCH.L / 2 - 8; a <= PITCH.L / 2 + 8; a += 7) for (let c = -PITCH.W / 2 - 8; c <= PITCH.W / 2 + 8; c += 7)
+        keepClear.push([a * PITCH.ux - c * PITCH.uz, a * PITCH.uz + c * PITCH.ux, 7]);   // no wood on the pitch or its apron
       if (GARDEN) for (let gz = GARDEN.Z0; gz <= GARDEN.Z1; gz += 4) keepClear.push([0, gz, 11]);   // the plot and a margin round it
       if (MONK) { for (let gz = MONK.Z0 - 6; gz <= MONK.Z1; gz += 3) keepClear.push([0, gz, 4.5]); for (let gz = MONK.Z1 - 4; gz <= MONK.Z1 + MONK.PL + 2; gz += 5) for (let gx = -15; gx <= 15; gx += 6) keepClear.push([gx, gz, 5]); }
       if (ROWS) for (let gz = ROWS.Z0 - 2; gz <= ROWS.BLD[1] + 8; gz += 6) for (let gx = -ROWS.X1; gx <= ROWS.X1 + 0.1; gx += 7) keepClear.push([gx, gz, 6.5]);
@@ -7160,6 +7183,7 @@ async function main() {
                   || (MONK && (MONK.onStair(x, z, 1.5) || MONK.onTop(x, z, 2)))
                   || (VILLAGE && (VILLAGE.inCottage(x, z, 1.5) || VILLAGE.lane(x, z) || Math.hypot(x - VILLAGE.GC[0], z - VILLAGE.GC[1]) < 5))
                   || (GRAVE && (GRAVE.inYard(x, z, 2) || GRAVE.aisle(x, z)))
+                  || (PITCH && PITCH.inside(x, z, 6))
                   || roadDist(x, z) < 7.5
                   || _regReject(x, z, sct)
                   || (clusterN(x, z) < 0.45 && !_regForce(x, z, sct)
@@ -8879,6 +8903,8 @@ async function main() {
           else if (pd < CORR * 0.95) { d *= 0.5; h *= 0.7; }
           if (inBldg(x, z, 0.6)) d = 0;
           if (GARDEN && GARDEN.inPlot(x, z, 0.2)) { if (GARDEN.bare(x, z)) d = 0; else { h *= 0.35; dry *= 0.3; } }   // a mown garden lawn
+          if (PITCH && PITCH.inside(x, z, 0)) d = 0;                                                  // the pitch is its own mown surface
+          else if (PITCH && PITCH.inside(x, z, 4)) { h *= 0.3; d *= 0.6; dry = 0; }
           if (WEST && WEST.inTown(x, z, 0)) d = 0;
           if (MONK && (MONK.onStair(x, z, 0.2) || MONK.onTop(x, z, 0))) d = 0;
           if (ROWS && (ROWS.inField(x, z, 0.3) || ROWS.track(x, z) || ROWS.inYard(x, z, 0))) { if (ROWS.soil || ROWS.track(x, z) || ROWS.inYard(x, z, 0)) d = 0; else { h *= 0.4; dry *= 0.4; } }
@@ -8952,6 +8978,7 @@ async function main() {
           if (inBldg(x, z, 0.3)) return true;
           if (WATER_Y !== null && hAt(x, z) < WATER_Y + 0.05) return true;
           if (VOLC && VOLC.edgeDist(x, z) < 0.8) return true;
+          if (PITCH && PITCH.inside(x, z, 3)) return true;                       // nothing lies on a pitch
           if (FALLS && Math.hypot(x - FALLS.at[0], z - FALLS.at[1]) < 12) return true;
           const rg = window.__regionAt && window.__regionAt(x, z);
           if (rg && rg.kind === 'water' && rg.w > 0.2) return true;
@@ -9756,6 +9783,11 @@ async function main() {
           holder.position.y = hAt(holder.position.x, holder.position.z);
           startYaw = rngN() * Math.PI * 2;
           sIdx++;
+        } else if (PITCH && /\b(goal ?keeper|goalie|keeper)\b/i.test(ent.name || '')) {
+          // the keeper keeps the goal: on its line, a step in front, facing the pitch (2026-10-11)
+          holder.position.set(LVL.goal[0] - PITCH.ux * 1.2, 0, LVL.goal[1] - PITCH.uz * 1.2);
+          holder.position.y = hAt(holder.position.x, holder.position.z);
+          startYaw = Math.atan2(-PITCH.ux, -PITCH.uz);
         } else if (ent.behavior === 'static' && LVL && LVL.goal && (SPEC.objectives || []).some(o => o.kind === 'reach'
                    && new RegExp('\\b' + String(ent.name || '').toLowerCase() + '\\b').test(String(o.label || '').toLowerCase()))) {
           // the one to be rescued waits at the end of the climb, facing the way you come (2026-10-07)
@@ -13695,6 +13727,92 @@ async function main() {
                this.v.set(0, 0, 0);
              } };
     ball.reset();
+    if (PITCH) {
+      // THE PITCH ITSELF: a surface that follows the ground, mown in stripes,
+      // with every line a pitch has, metres true; a net in each goal, a second
+      // goal at the far end, corner flags and plain boards round it
+      const { ux, uz, L: PL, W: PW } = PITCH, M9 = 5;
+      const toW = (a, c) => [a * ux - c * uz, a * uz + c * ux];
+      const EA = PL / 2 + M9, EC = PW / 2 + M9;
+      const cv = document.createElement('canvas'); cv.width = 2048; cv.height = Math.round(2048 * EC / EA);
+      const g = cv.getContext('2d'), sx = cv.width / (2 * EA), sy = cv.height / (2 * EC);
+      const X = a => (a + EA) * sx, Y = c => (c + EC) * sy;
+      g.fillStyle = '#3d7a34'; g.fillRect(0, 0, cv.width, cv.height);
+      const nS = 18, sw = PL / nS;                                  // mown stripes across the length
+      for (let k = 0; k < nS; k++) { g.fillStyle = k % 2 ? '#3a7431' : '#4a8a3d'; g.fillRect(X(-PL / 2 + k * sw), Y(-PW / 2), sw * sx, PW * sy); }
+      g.strokeStyle = 'rgba(245,245,240,0.95)'; g.lineWidth = 0.12 * sx;
+      const rect = (a0, c0, a1, c1) => g.strokeRect(X(a0), Y(c0), (a1 - a0) * sx, (c1 - c0) * sy);
+      const arc = (a, c, r, t0, t1) => { g.beginPath(); g.ellipse(X(a), Y(c), r * sx, r * sy, 0, t0, t1); g.stroke(); };
+      const spot = (a, c) => { g.fillStyle = 'rgba(245,245,240,0.95)'; g.beginPath(); g.ellipse(X(a), Y(c), 0.2 * sx, 0.2 * sy, 0, 0, 6.3); g.fill(); };
+      rect(-PL / 2, -PW / 2, PL / 2, PW / 2);
+      g.beginPath(); g.moveTo(X(0), Y(-PW / 2)); g.lineTo(X(0), Y(PW / 2)); g.stroke();
+      arc(0, 0, 9.15, 0, 6.3); spot(0, 0);
+      for (const s of [-1, 1]) {
+        const e = s * PL / 2;
+        rect(Math.min(e, e - s * 16.5), -20.16, Math.max(e, e - s * 16.5), 20.16);   // the penalty area
+        rect(Math.min(e, e - s * 5.5), -9.16, Math.max(e, e - s * 5.5), 9.16);       // the goal area
+        spot(e - s * 11, 0);
+        const t = Math.acos(5.5 / 9.15);                                              // the arc outside the box
+        arc(e - s * 11, 0, 9.15, s > 0 ? Math.PI - t : -t, s > 0 ? Math.PI + t : t);
+        for (const cs of [-1, 1]) arc(e, cs * PW / 2, 1, 0, 6.3);                    // corner arcs (the outer half is off the pitch)
+      }
+      const tx9 = new THREE.CanvasTexture(cv); tx9.colorSpace = THREE.SRGBColorSpace; tx9.anisotropy = renderer.capabilities.getMaxAnisotropy();
+      const NA = 72, NC = 48, pos = [], uv = [], idx = [];
+      for (let i = 0; i <= NA; i++) for (let j = 0; j <= NC; j++) {
+        const a = -EA + 2 * EA * i / NA, c = -EC + 2 * EC * j / NC, [x, z] = toW(a, c);
+        pos.push(x, hAt(x, z) + 0.035, z); uv.push(i / NA, 1 - j / NC);
+      }
+      for (let i = 0; i < NA; i++) for (let j = 0; j < NC; j++) { const p0 = i * (NC + 1) + j, p1 = p0 + NC + 1; idx.push(p0, p0 + 1, p1, p1, p0 + 1, p1 + 1); }
+      const pg = new THREE.BufferGeometry();
+      pg.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); pg.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+      pg.setIndex(idx); pg.computeVertexNormals();
+      const pm = new THREE.MeshStandardMaterial({ map: tx9, roughness: 0.92, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+      pm.userData.noAutoTex = true;
+      const pitchMesh = new THREE.Mesh(pg, pm); pitchMesh.receiveShadow = true; pitchMesh.name = 'pitch'; scene.add(pitchMesh);
+      // the nets: a fine white mesh behind each mouth; the far goal has its own posts
+      const nc = document.createElement('canvas'); nc.width = nc.height = 64; const ng = nc.getContext('2d');
+      ng.strokeStyle = 'rgba(255,255,255,0.85)'; ng.lineWidth = 2; ng.strokeRect(0, 0, 64, 64);
+      const ntx = new THREE.CanvasTexture(nc); ntx.wrapS = ntx.wrapT = THREE.RepeatWrapping;
+      const netM = (rx, ry) => { const t = ntx.clone(); t.needsUpdate = true; t.repeat.set(rx, ry);
+        const m = new THREE.MeshBasicMaterial({ map: t, transparent: true, alphaTest: 0.3, side: THREE.DoubleSide, depthWrite: false }); m.userData.noAutoTex = true; return m; };
+      const D9 = 2.0;
+      for (const s of [1, -1]) {
+        const gg = new THREE.Group(), [gx, gz] = toW(s * PL / 2, 0);
+        gg.position.set(gx, hAt(gx, gz), gz); gg.rotation.y = Math.atan2(ux * s, uz * s);   // local +z points out behind the goal
+        if (s < 0) {
+          for (const px of [-W / 2, W / 2]) { const p = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, H, 10), postMat); p.position.set(px, H / 2, 0); gg.add(p); }
+          const b2 = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, W, 10), postMat); b2.rotation.z = Math.PI / 2; b2.position.y = H; gg.add(b2);
+        }
+        const back = new THREE.Mesh(new THREE.PlaneGeometry(W, H * 0.8), netM(W * 3, H * 2.4)); back.position.set(0, H * 0.4, D9); gg.add(back);
+        const roof = new THREE.Mesh(new THREE.PlaneGeometry(W, Math.hypot(D9, H * 0.2)), netM(W * 3, D9 * 3));
+        roof.rotation.x = Math.PI / 2 - Math.atan2(H * 0.2, D9); roof.position.set(0, H * 0.9, D9 / 2); gg.add(roof);
+        for (const px of [-W / 2, W / 2]) { const sd = new THREE.Mesh(new THREE.PlaneGeometry(D9, H * 0.9), netM(D9 * 3, H * 2.7)); sd.rotation.y = Math.PI / 2; sd.position.set(px, H * 0.45, D9 / 2); gg.add(sd); }
+        scene.add(gg);
+      }
+      // corner flags and the boards round the pitch, plain colours, no names
+      const flagPole = new THREE.MeshStandardMaterial({ color: 0xf2f2f2, roughness: 0.4 }), flagM = new THREE.MeshStandardMaterial({ color: 0xffd23f, roughness: 0.6, side: THREE.DoubleSide });
+      for (const s of [-1, 1]) for (const cs of [-1, 1]) {
+        const [fx, fz] = toW(s * PL / 2, cs * PW / 2), y0 = hAt(fx, fz);
+        const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 1.5, 6), flagPole); pole.position.set(fx, y0 + 0.75, fz); scene.add(pole);
+        const fl = new THREE.Mesh(new THREE.PlaneGeometry(0.4, 0.3), flagM); fl.position.set(fx + 0.2, y0 + 1.35, fz); scene.add(fl);
+      }
+      const BOARD = [0x1d3557, 0xe63946, 0xf1faee, 0x2a9d8f, 0xf4a261];
+      const boards = [];
+      const board = (a0, c0, a1, c1, k) => {
+        const [x0, z0] = toW(a0, c0), [x1, z1] = toW(a1, c1), len = Math.hypot(x1 - x0, z1 - z0);
+        const mx = (x0 + x1) / 2, mz = (z0 + z1) / 2, b = new THREE.Mesh(new THREE.BoxGeometry(len, 0.9, 0.12), new THREE.MeshStandardMaterial({ color: BOARD[k % BOARD.length], roughness: 0.55 }));
+        b.material.userData.noAutoTex = true;
+        b.position.set(mx, hAt(mx, mz) + 0.45, mz); b.rotation.y = -Math.atan2(z1 - z0, x1 - x0); b.castShadow = true; scene.add(b); boards.push(b);
+      };
+      const OFF = 4, seg = 10;
+      let k9 = 0;
+      for (const cs of [-1, 1]) for (let a = -PL / 2; a < PL / 2; a += seg) board(a, cs * (PW / 2 + OFF), Math.min(a + seg, PL / 2), cs * (PW / 2 + OFF), k9++);
+      for (const s of [-1, 1]) for (let c = -PW / 2; c < PW / 2; c += seg) {
+        if (Math.abs(c + seg / 2) < W / 2 + 4) continue;                                // open behind the goal
+        board(s * (PL / 2 + OFF), c, s * (PL / 2 + OFF), Math.min(c + seg, PW / 2), k9++);
+      }
+      window.__pitch = { L: +PL.toFixed(1), W: +PW.toFixed(1), boards: boards.length };
+    }
   }
   function stepBall(dt, nt) {
     if (!ball || won || lost) return;

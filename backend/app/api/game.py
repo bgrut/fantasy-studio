@@ -1987,6 +1987,20 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                         f"hero cast: the {want}s are the enemy here, so the hero is a survivor")
                     want = "man"
                     spec.player.name = "man"
+            # WHO YOU PLAY AGAINST IS NOT WHO YOU PLAY (2026-10-11): "score three
+            # goals against a robot goalkeeper" made the player the robot. A hero
+            # named only after "against" is the opponent; the hero is cast from
+            # the sentence's other words (a match casts the soccer player).
+            from app.game_export.generate import guess_pattern as _gp6
+            if not req.player and want and _gp6(want) in ("biped", "quadruped"):   # a car racing other cars is still the car
+                import re as _re6
+                _p6 = (req.prompt or "").lower()
+                _w6 = _re6.escape(want.split()[-1])
+                if (_re6.search(r"\bagainst (?:a|an|the|some|two|three|four|\d+)?\s*(?:\w+\s+){0,2}" + _w6 + r"s?\b", _p6)
+                        and not _re6.search(r"\b(?:play|playing) as an? (?:\w+\s+){0,2}" + _w6 + r"\b|\byou are an? (?:\w+\s+){0,2}" + _w6 + r"\b", _p6)):
+                    job.setdefault("notes", []).append(f"hero cast: the {want} is the opponent, not the hero")
+                    want = "man"
+                    spec.player.name = "man"
         except Exception:  # noqa: BLE001
             pass
         from app.game_export.bake import ensure_playable
@@ -2107,7 +2121,9 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                 import re as _re4                      # _re3 is imported further down
                 # a role the sentence names outright is that role, whatever
                 # scenery words come first
-                _named_role = next((r for _, r in _ROLES if r == _w), None)
+                # (a plain "man" is the table's ordinary-clothes answer, not a role the
+                # sentence named: counting it made every "man" hero un-recastable)
+                _named_role = next((r for _, r in _ROLES if r == _w and r not in ("man", "woman")), None)
                 _role = _named_role or next((r for pat, r in _ROLES if _re4.search(pat, _pw)), "explorer")
                 if library.resolve(_role) and _role != want:
                     job.setdefault("notes", []).append(
