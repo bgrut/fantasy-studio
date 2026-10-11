@@ -201,7 +201,9 @@ def judge(kind: str, keep: Path | None = None, animal: bool | None = None) -> di
     score = 0.30 * s_mottle + 0.15 * s_speckle + 0.35 * photo + (0.20 * face if face is not None else 0.20 * photo)
     out = {"kind": kind, "pattern": pat, "score": round(score, 3), "mottle": round(mottle, 4), "speckle": round(speckle, 4),
            "photo": round(photo, 3), "face": None if face is None else round(face, 3), "renders": str(tmp),
-           "src": src.name, "pass": score >= BAR, "eyes": eyes}
+           # a person with a smeared or missing eye fails whatever the rest scores:
+           # the face is where a player looks
+           "src": src.name, "pass": score >= BAR and (eyes is None or (eyes["eyes"] >= 1.0 and not eyes["stain"])), "eyes": eyes}
     return out
 
 
@@ -228,8 +230,16 @@ def best_of(kind: str, attempts: int = 2, verbose: bool = True) -> dict:
         r = judge(kind)
         if verbose:
             print(f"[qa] {kind} retry {k}: {r.get('score')} {r.get('eyes')}", flush=True)
-        if "error" not in r and r["score"] > best.get("score", 0):
-            best = r; shutil.copy2(anim, keep)
+        # BETTER MEANS BETTER (2026-10-11): a retry that changes who the
+        # character is must earn it. "Best" by total score swapped the bearded
+        # man for a clean-shaven stranger on a 0.006 edge while the bad eye
+        # stayed. A passing attempt wins; among failures the face decides, and
+        # anything else must beat the kept one clearly.
+        if "error" not in r:
+            rf, bf = (r.get("face") or 0), (best.get("face") or 0)
+            better = (r.get("pass") and not best.get("pass")) or rf > bf + 0.2 or (abs(rf - bf) <= 0.2 and r["score"] > best.get("score", 0) + 0.05)
+            if better:
+                best = r; shutil.copy2(anim, keep)
         if best.get("pass"):
             break
     shutil.copy2(keep, anim); keep.unlink(missing_ok=True)
