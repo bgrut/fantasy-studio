@@ -984,6 +984,7 @@ async function main() {
       // the single most "2003" surface in every valley shot. Sculpted
       // low-poly + vertex colour + distance fog is the intended look.
       mmat.userData.noAutoTex = true;
+      window.__skylineMat = mmat;                     // an asteroid field puts the far mountains away (2026-10-11)
       // ROCK YOU CAN READ (2026-10-05): vertex colour alone made a range a
       // smooth coloured hump, the far mountains of every sunrise lake. The
       // photographed cliff is laid over it three ways in world space at two
@@ -2147,6 +2148,7 @@ async function main() {
         new THREE.MeshStandardMaterial({ color: skirtC, roughness: 1.0 }));
       skirt.rotation.x = -Math.PI / 2;
       skirt.position.y = -0.06;
+      skirt.name = 'groundSkirt';
       skirt.receiveShadow = true;
       scene.add(skirt);
     }
@@ -7006,6 +7008,56 @@ async function main() {
       FLORA_LIVE = null; _floraInner = 0;
     }
   }
+  // ── AN ASTEROID FIELD IS IN SPACE (2026-10-11) ────────────────────────────
+  // "a space shooter, fly a fighter through an asteroid field shooting enemy
+  // drones" flew over a grey moon's ground with a trail across it. Out there
+  // is no ground: the land is put away (its collider stays, far below, as a
+  // floor nobody needs) and the flight space is filled with tumbling sculpted
+  // rocks, big and small, each solid, in the starfield the space sky draws.
+  const ASTEROIDS = SPEC.world.sky === 'space' && SPEC.player.mode === 'fly' && !INTERIOR
+    && /\b(asteroids?|space (?:battle|shooter|dogfight|fight)|starfighter|deep space|in space|nebula|orbit|outer space|meteors?)\b/
+      .test(((SPEC.prompt || '') + ' ' + (SPEC.world.name || '')).toLowerCase());
+  if (ASTEROIDS) {
+    try {
+      gmat.visible = false;                                   // the ground and the terrain wear it
+      scene.traverse(o => { if (o.name === 'groundSkirt' || o.name === 'skyline' || o.name === 'outerLand') o.visible = false; });
+      if (window.__skylineMat) window.__skylineMat.visible = false;
+      scene.traverse(o => { if (o.name === 'flora') o.visible = false; });   // no trees in space
+      const FL = await import('./proc/flora.js');
+      const rockT = new THREE.TextureLoader().load('textures/cliff.jpg');
+      rockT.colorSpace = THREE.SRGBColorSpace; rockT.wrapS = rockT.wrapT = THREE.RepeatWrapping;
+      const rockM = new THREE.MeshStandardMaterial({ map: rockT, color: 0x8a8580, roughness: 0.95, metalness: 0.05 });
+      rockM.userData.noAutoTex = true;
+      const rngA = mulberry32((SPEC.seed || 1) + 6061);
+      const kinds = [0, 1, 2, 3].map(k => FL.sculptStone(7101 + k * 37, { size: 1, flat: 0.15 + k * 0.1, detail: 3 }));
+      const PER = 26, half = gsize * 0.5;
+      const field = [];
+      kinds.forEach((geo, k) => {
+        const im = new THREE.InstancedMesh(geo, rockM, PER);
+        im.castShadow = true; im.receiveShadow = true; im.frustumCulled = false; im.name = 'asteroids';
+        for (let i = 0; i < PER; i++) {
+          let x, y, z, tries = 0;
+          do { x = (rngA() - 0.5) * 2 * half; z = (rngA() - 0.5) * 2 * half; y = 10 + rngA() * 70; tries++; }
+          while (Math.hypot(x - _sp.x, z - _sp.z) < 24 && tries < 20);   // a clear start
+          const s = 1.5 + Math.pow(rngA(), 2.2) * 14;                     // mostly small, a few huge
+          field.push({ im, i, p: new THREE.Vector3(x, y, z), s, q: new THREE.Quaternion().setFromEuler(new THREE.Euler(rngA() * 6, rngA() * 6, rngA() * 6)),
+                       w: new THREE.Vector3(rngA() - 0.5, rngA() - 0.5, rngA() - 0.5).normalize(), sp: (0.05 + rngA() * 0.2) / Math.sqrt(s) });
+          world.createCollider(RAPIER.ColliderDesc.ball(s * 0.85).setTranslation(x, y, z));
+        }
+        scene.add(im);
+      });
+      const _m4 = new THREE.Matrix4(), _dq = new THREE.Quaternion(), _sc = new THREE.Vector3();
+      window.__asteroidTick = (dt) => {
+        for (const a of field) {
+          _dq.setFromAxisAngle(a.w, a.sp * dt); a.q.premultiply(_dq);
+          _sc.setScalar(a.s); _m4.compose(a.p, a.q, _sc); a.im.setMatrixAt(a.i, _m4);
+        }
+        for (const k of new Set(field.map(a => a.im))) k.instanceMatrix.needsUpdate = true;
+      };
+      window.__asteroidTick(0);
+      window.__asteroids = { count: field.length };
+    } catch (e) { console.warn('[game] asteroid field skipped: ' + e.message); }
+  }
   if (!FLORA_LIVE && !PURE_SCENE && !OSM && LVL && LVL.regions
       && LVL.regions.palette.some(q => q.kind === 'forest')) {
     const rngF2 = mulberry32(SPEC.seed + 6464);
@@ -7123,7 +7175,7 @@ async function main() {
     const r = window.__regionAt && window.__regionAt(x, z);
     return !!(r && r.kind === 'forest' && r.w > 0.3 && _isTreeAsset(sct.asset));
   };
-  for (const sct of PURE_SCENE ? [] : (SPEC.world.scatter || [])) {
+  for (const sct of (PURE_SCENE || ASTEROIDS) ? [] : (SPEC.world.scatter || [])) {   // nothing is strewn about in space
     // a grown forest replaces the kit's low-poly trees and bushes: two tree
     // languages side by side read as a mistake, and the kit's are blocky
     if (FLORA_LIVE && _floraInner > 40 && _isTreeAsset(sct.asset)) continue;
@@ -8872,7 +8924,7 @@ async function main() {
     const _gw0 = [SPEC.world.name, SPEC.world.setting, SPEC.title, SPEC.prompt].filter(Boolean).join(' ').toLowerCase();
     const _golden0 = /\b(savann?ah?|prairie|steppe|grassland|veld|pampas|plains)\b/.test(_gw0)
       && !/\b(desert|dune|canyon|snow|ice|volcan|lava|mars|moon|city)\b/.test(_gw0);
-    if (!PURE_SCENE && !INTERIOR && (_green0 || _golden0) && _photo0 && SPEC.world.grass !== false
+    if (!PURE_SCENE && !INTERIOR && !ASTEROIDS && (_green0 || _golden0) && _photo0 && SPEC.world.grass !== false
         && (SPEC.world.scatter || []).length && new URLSearchParams(location.search).get('grass') !== 'tufts') {
       try {
         const A0 = _golden0 ? new THREE.Color(0xa88f52)
@@ -8975,6 +9027,7 @@ async function main() {
         const leafCols = autumn ? [0xb5642a, 0xc98a2e, 0x8a3c1e, 0xa8792e].map(h => new THREE.Color(h))
                                 : [0x7a5a32, 0x6b6a34, 0x8c6a3c, 0x5c6b2e].map(h => new THREE.Color(h));
         const keepOut = (x, z, kind) => {
+          if (ASTEROIDS) return true;                                            // nothing lies about in space
           if (inBldg(x, z, 0.3)) return true;
           if (WATER_Y !== null && hAt(x, z) < WATER_Y + 0.05) return true;
           if (VOLC && VOLC.edgeDist(x, z) < 0.8) return true;
@@ -8996,7 +9049,7 @@ async function main() {
   }
   // GRASS: instanced cross-blades on the terrain, thinned along the walking
   // path — the "flat green plane" is gone. (Gated off for cities/snow.)
-  if (!PURE_SCENE && !GRASS_LIVE && (SPEC.world.scatter || []).length && SPEC.world.grass !== false) {
+  if (!PURE_SCENE && !ASTEROIDS && !GRASS_LIVE && (SPEC.world.scatter || []).length && SPEC.world.grass !== false) {
     // undergrowth stays PLANT-colored: pull toward green so brown forest
     // floors get living tufts, not floating tan cards
     // Blades are instance-coloured, so THIS is the lever, not bmat.color: a
@@ -16034,7 +16087,7 @@ async function main() {
   function hullY(w) { return w + P.height_m / 2 - Math.min(0.8, 0.12 * P.height_m); }
   function spawnHeight(x, z) {
     const g = hAt(x, z) + P.height_m / 2 + 0.15;
-    if (SPEC.player.mode === 'fly') return g + 6;              // airborne start
+    if (SPEC.player.mode === 'fly') return g + (window.__asteroids ? 34 : 6);   // in an asteroid field, up among the rocks              // airborne start
     if (SPEC.player.mode === 'swim' && SPEC.world.water_level != null) {
       // a hull sits ON the waterline; a whale hangs somewhere below it
       if (P.buoyant) return hullY(SPEC.world.water_level);
@@ -20826,6 +20879,7 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
       if (window.__growTick) window.__growTick(dt);
       if (window.__graveMist) window.__graveMist(performance.now() / 1000);
       if (window.__hiveTick) window.__hiveTick(performance.now() / 1000);
+      if (window.__asteroidTick) window.__asteroidTick(Math.min(0.05, dt));
       if (window.__tornadoTick) window.__tornadoTick(Math.min(0.05, dt));
       if (window.__monkTick) window.__monkTick(performance.now() / 1000, Math.min(0.05, dt));
       if (window.__lifeTick) window.__lifeTick(dt);

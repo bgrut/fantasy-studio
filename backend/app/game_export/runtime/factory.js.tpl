@@ -35,7 +35,7 @@ const MOODS = [
   // world, so the words of a PLACE outrank the words of a machine.
   { id: 'cold', words: /\b(ice|icy|frost|frozen|snow|glacier|arctic|tundra|winter|polar|blizzard|cryo|white)\w*/i },
   { id: 'green', words: /\b(jungle|forest|moss|verdant|overgrown|swamp|fungal|spore|garden|bloom|vine|toxic|acid|grain|wheat|farm|orchard|meadow|herb|leaf|grove|island|sky|cloud|floating|countryside|village|harvest|crop|pasture|barn|ranch|cottage|vegetable|turnip|potato|carrot|vineyard|hamlet|cozy)\w*/i },
-  { id: 'warm', words: /\b(red|rust|rusted|ember|cinder|lava|magma|volcan|scorch|burn|fire|ash|crimson|copper|desert|sun-?baked|inferno|forge|chocolate|cocoa|coffee|bread|oven|kiln|caramel|honey|amber|brass|clockwork|candle|hearth|autumn)\w*/i },
+  { id: 'warm', words: /\b(red|rust|rusted|ember|cinder|lava|magma|volcan|scorch|burn|fire|ash|crimson|copper|desert|sun-?baked|inferno|forge|mars|martian|red planet|regolith|iron oxide|dust storm|chocolate|cocoa|coffee|bread|oven|kiln|caramel|honey|amber|brass|clockwork|candle|hearth|autumn)\w*/i },
 ];
 const MOOD_LOOK = {
   void:  { nebula: { a: 0x2a3a8c, b: 0x9a3a9c, amt: 0.85, aurora: 0.30, auroraA: 0x39e6ff, auroraB: 0x8a5cff },
