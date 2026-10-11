@@ -834,6 +834,7 @@ function patchTree(mat, U, opts) {
           vec3 tp = vObjP * 0.45;`}
           vec4 tx = texture2D(map, tp.yz) * bw.x + texture2D(map, tp.xz) * bw.y + texture2D(map, tp.xy) * bw.z;
           diffuseColor *= tx;
+          ${mat.userData.desat ? 'diffuseColor.rgb = mix(diffuseColor.rgb, vec3(dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114))), ' + mat.userData.desat.toFixed(2) + ');' : ''}
         }
         #endif` : `#include <map_fragment>`) + `
         diffuseColor.rgb *= vShade;
@@ -899,7 +900,7 @@ function patchTree(mat, U, opts) {
     }
     sh.fragmentShader = fs;
   };
-  mat.customProgramCacheKey = () => 'flora-' + (live ? 'L' : 'B') + (fol ? 'F' : 'W') + (tri ? 'T' : '') + (triN ? 'N' : '');
+  mat.customProgramCacheKey = () => 'flora-' + (live ? 'L' : 'B') + (fol ? 'F' : 'W') + (tri ? 'T' : '') + (triN ? 'N' : '') + (mat.userData.desat ? 'G' : '');
 }
 
 const STONE = new Set(['rock', 'boulder', 'mesa']);
@@ -915,6 +916,7 @@ function makeMaterials(kind, leafHSL, barkTex, barkN, seed, U, extra = {}) {
       // the relief rides the same three-way projection as the colour (an
       // icosphere's own UVs would scatter it), read in patchTree
       if (extra.rockN) m.userData.triN = extra.rockN;
+      if (extra.greyRock) m.userData.desat = 0.88;          // the moon's stone is grey
     } else if (kind === 'cactus') {
       // the skin: each of the twelve ribs lighter at its crest than in its
       // valley, with a row of pale areoles and their spines along the crest
@@ -1286,7 +1288,8 @@ export function biomeFor(words, arch, groundHSL) {
       coralTint: T(0xa04dff), coralTint2: T(0x2fe0c8), crystalTint: T(0x7affd4), rockTint: T(0x4a3f5c), leaf: { h: 0.78, s: 0.5, l: 0.3 } });
     return out;
   }
-  if (has(/\bmoon\b|lunar|asteroid|space|orbit|comet/)) Object.assign(out, { kinds: K(['rock', 1], ['boulder', 0.35], ...(crystal ? [['crystal', 0.15]] : [])), dens: 0.1, rockTint: T(0x8d8c8a) });
+  if (has(/\bmoon\b|lunar|asteroid|space|orbit|comet/)) Object.assign(out, { kinds: K(['rock', 1], ['boulder', 0.35], ...(crystal ? [['crystal', 0.15]] : [])), dens: 0.1, rockTint: T(0x8d8c8a),
+    greyRock: has(/\bmoon\b|lunar|apollo/) && !has(/\bred\b|rust|frozen|\bice\b|icy/) });
   else if (has(/mars|red planet|martian/)) Object.assign(out, { kinds: K(['rock', 1], ['boulder', 0.4], ...(crystal ? [['crystal', 0.12]] : [])), dens: 0.1, rockTint: T(0xa0573a) });
   else if (has(/volcan|lava|magma|ash\b|obsidian/)) Object.assign(out, { kinds: K(['rock', 1], ['boulder', 0.4], ['dead', 0.2]), dens: 0.14, rockTint: T(0x3a3634), crystalTint: T(0xff7a3a) });
   // a basalt coast grows nothing tall: dark stone, moss, the odd tussock (2026-10-07)

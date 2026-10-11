@@ -2851,6 +2851,11 @@ async function main() {
         const B0 = 84, cz0 = -1 - B0 / 2;
         const NC0 = pyramid(B0, 0, cz0, true);
         pyramid(80, -96, cz0 - 118, false);                 // Khafre's, nearly as tall
+        { // its casing survives near the apex: a smooth cap of white Tura limestone over the steps
+          const NC = Math.round(80 * 0.62), hgt = NC, capH = hgt * 0.24, base = 80 * capH / hgt;
+          const cap = new THREE.ConeGeometry(base / Math.SQRT2 + 0.6, capH + 0.4, 4, 1).rotateY(Math.PI / 4).translate(-96, hgt - capH / 2 + 0.25, cz0 - 118);
+          const cm = new THREE.Mesh(cap, new THREE.MeshStandardMaterial({ map: ct, normalMap: HDN('plaster', 6), color: 0xf2e8d4, roughness: 0.6 }));
+          cm.material.userData.noAutoTex = true; cm.castShadow = cm.receiveShadow = true; S.add(cm); }
         pyramid(40, -172, cz0 - 236, false);                // Menkaure's, much the smallest
         // the portal at the foot: a block of masonry with two great gabled
         // stones over a dark way in
@@ -7273,7 +7278,7 @@ async function main() {
           renderer, scene, seed: (SPEC.seed + 31) >>> 0, kinds, leaf, barkTex, barkN,
           lightRig: { lights: [sunB, hemiB], environment: scene.environment, environmentIntensity: scene.environmentIntensity },
           windU: WIND_U, near: FLORA.near, nearCap: FLORA.cap, variants: 3,
-          rockTex, rockN, rockTint: BIO.rockTint, crystalTint: BIO.crystalTint,
+          rockTex, rockN, rockTint: BIO.rockTint, greyRock: BIO.greyRock, crystalTint: BIO.crystalTint,
           coralTint: BIO.coralTint, coralTint2: BIO.coralTint2,
           snow: BIO.snow || (SPEC.world.weather === 'snow' ? 0.6 : 0),
           sunDir: new THREE.Vector3(...pal.sunPos).normalize(),
@@ -11813,6 +11818,11 @@ async function main() {
             const ca = Math.cos(ang), sa = Math.sin(ang);
             add(new THREE.BoxGeometry(0.1, 0.24, slope + 0.9), bargeM, s * (c.w / 2 + 0.47), top + rise / 2 - 0.12 + 0.45 * sa + 0.3 * ca, q * (c.d / 4 + 0.12) - q * 0.45 * ca + q * 0.3 * sa, q * ang); }
         }
+        for (const s of [-1, 1]) {                       // a carved beast's head where the bargeboards cross
+          const hd = add(new THREE.ConeGeometry(0.16, 0.9, 6).rotateX(Math.PI / 2 * 0.6), bargeM, s * (c.w / 2 + 0.55), top + rise + 0.85, 0);
+          hd.rotation.y = s > 0 ? Math.PI / 2 : -Math.PI / 2;
+          add(new THREE.SphereGeometry(0.14, 8, 6), bargeM, s * (c.w / 2 + 0.55), top + rise + 0.55, 0); }
+        (window.__lhSmoke = window.__lhSmoke || []).push([c.x, y0 + 0.35 + c.h + c.d * 0.62 + 0.4, c.z]);
         const fz = c.d / 2 + 0.03, dx = (rV() - 0.5) * c.w * 0.25;
         add(new THREE.BoxGeometry(1.0, 1.7, 0.1), bargeM, dx, 0.35 + 0.85, fz);
         add(new THREE.BoxGeometry(1.3, 0.16, 0.16), bargeM, dx, 0.35 + 1.78, fz + 0.03);
@@ -11872,6 +11882,16 @@ async function main() {
       lt.repeat.set(1, L / 6);
       const m = new THREE.Mesh(g, MAT({ map: lt, transparent: true, roughness: 1 })); m.receiveShadow = true; scene.add(m); }
     window.__village = { cottages: V.cot.length };
+    // hearth smoke rising from the longhouses' roof holes
+    if (window.__lhSmoke && window.__lhSmoke.length) {
+      const st = (() => { const c = document.createElement('canvas'); c.width = c.height = 64; const x = c.getContext('2d'), gr = x.createRadialGradient(32, 32, 2, 32, 32, 30);
+        gr.addColorStop(0, 'rgba(200,200,205,0.55)'); gr.addColorStop(1, 'rgba(200,200,205,0)'); x.fillStyle = gr; x.fillRect(0, 0, 64, 64); return new THREE.CanvasTexture(c); })();
+      const puffs = [];
+      for (const [x, y, z] of window.__lhSmoke) for (let k = 0; k < 7; k++) { const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: st, transparent: true, depthWrite: false, opacity: 0 }));
+        scene.add(sp); puffs.push({ sp, x, y, z, t: k / 7 }); }
+      window.__lhSmokeTick = (dt) => { for (const q of puffs) { q.t += dt * 0.12; if (q.t > 1) q.t -= 1;
+        q.sp.position.set(q.x + q.t * 2.2, q.y + q.t * 7, q.z + q.t * 0.8); const sc = 0.8 + q.t * 3.2; q.sp.scale.set(sc, sc, 1); q.sp.material.opacity = 0.32 * Math.sin(q.t * Math.PI); } };
+    }
   }
   // ── HD SURFACES (2026-10-11) ───────────────────────────────────────────
   // the site builders paint their pattern on canvas (courses, windows,
@@ -12009,6 +12029,11 @@ async function main() {
       const colM = new THREE.Mesh(colG, MAT({ map: travT, normalMap: HDN('sandstone', 2), color: 0xf6e0b6, roughness: 0.88 })); colM.castShadow = colM.receiveShadow = true; G.add(colM);
       for (let st = 1; st <= 4; st++) { const y = H0 + st * HS - (st === 4 ? 0.2 : 0);
         const cr = new THREE.Mesh(band(outerB + rO - 0.05, outerA + rO - 0.05, outerB + rO + 0.75, outerA + rO + 0.75, y - 0.45, y + 0.3, 0.25), travM); cr.castShadow = true; G.add(cr); } }
+    // the attic carried the velarium, the great awning: a mast at every bay
+    { const parts = []; for (let k = 0; k < nBay * 2; k++) { const t = (k / (nBay * 2)) * Math.PI * 2, [x, z] = ellP(outerB + 2.5, outerA + 2.5, t);
+        parts.push(new THREE.CylinderGeometry(0.11, 0.14, 7.5, 6).translate(x, OH + 2.6, z)); parts.push(new THREE.BoxGeometry(0.5, 0.35, 0.5).rotateY(t).translate(x, OH - 1.4, z)); }
+      const mg = mergeGeometries(parts.map(q => q.index ? q.toNonIndexed() : q), false); for (const q of parts) q.dispose();
+      const masts = new THREE.Mesh(mg, MAT({ color: 0x6a4a30, roughness: 0.8 })); masts.castShadow = true; G.add(masts); }
     // the top tier meets the outer wall at a covered gallery: a deck between them
     const deck = new THREE.Mesh(band(R.B + tiers[NT - 1].r1, R.A + tiers[NT - 1].r1, outerB, outerA, R.TH + 2.4, R.TH + 2.6, 0.125), travM);
     deck.material.side = THREE.DoubleSide; G.add(deck);
@@ -22044,6 +22069,7 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
       if (window.__graveMist) window.__graveMist(performance.now() / 1000);
       if (window.__hiveTick) window.__hiveTick(performance.now() / 1000);
       if (window.__smithFire) window.__smithFire(performance.now() / 1000);
+      if (window.__lhSmokeTick) window.__lhSmokeTick(typeof dt === 'number' ? Math.min(0.05, dt) : 0.016);
       if (window.__asteroidTick) window.__asteroidTick(Math.min(0.05, dt));
       if (window.__tornadoTick) window.__tornadoTick(Math.min(0.05, dt));
       if (window.__monkTick) window.__monkTick(performance.now() / 1000, Math.min(0.05, dt));
