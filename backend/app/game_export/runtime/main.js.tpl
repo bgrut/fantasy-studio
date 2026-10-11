@@ -500,7 +500,7 @@ async function main() {
     const W = SPEC.world || {}, L0 = W.level || {};
     // (2026-10-07) the sentence's own place words too: "a himalayan monastery" grew an
     // oak wood because the title, "Monk's Ascent", never said where it was
-    const placeWords = (String(SPEC.prompt || '').toLowerCase().match(/\b(redwoods?|sequoias?|himalaya\w*|tibet\w*|nepal\w*|bhutan\w*|monaster(?:y|ies)|gompa|lavender|vineyards?|provence|tuscan\w*|black sand|basalt|sea stacks?|iceland\w*|kansas|wheat|olive groves?|tea plantations?|bamboo|highlands?|glens?|moors?|heather|alien|xeno\w*|extraterrestrial|exoplanet|purple plants)\b/g) || []);   // (alien words, 2026-10-11)
+    const placeWords = (String(SPEC.prompt || '').toLowerCase().match(/\b(redwoods?|sequoias?|himalaya\w*|tibet\w*|nepal\w*|bhutan\w*|monaster(?:y|ies)|gompa|lavender|vineyards?|provence|tuscan\w*|black sand|basalt|sea stacks?|iceland\w*|kansas|wheat|olive groves?|tea plantations?|bamboo|highlands?|glens?|moors?|heather|alien|xeno\w*|extraterrestrial|exoplanet|purple plants|fjords?|norw\w*|vikings?|norse|nordic|scandinavia\w*|egypt\w*|giza|pyramids?|pharaoh\w*|sphinx|sahara|oasis|alps|alpine|swiss|switzerland|tyrol\w*|dolomit\w*|sea ice|ice floes?|pack ice|polar bears?|icebergs?)\b/g) || []);   // (alien words, 2026-10-11; fjord, Egypt, Alps, sea ice the same day)
     const words = [W.name, W.sky, W.flora, W.weather, W.setting, SPEC.title, SPEC.description, ...placeWords]
       .filter(Boolean).join(' ').toLowerCase();
     if (L0.osm || L0.interior || W.pano || L0.cave) return null;
@@ -1431,6 +1431,81 @@ async function main() {
     if (LVL.landmarks) LVL.landmarks = LVL.landmarks.filter(l => !inFoot(l[0], l[1], 14));
     return { C, ux, uz, A, B, D, PH, TH, H0, RO, local, world,
              inside: (x, z, m) => ell(x, z, A + (m || 0), B + (m || 0)) < 1, inFoot };
+  })();
+  // ── A CITY ON CANALS (2026-10-11) ───────────────────────────────────────
+  // "a gondolier steers through the canals of venice at dusk delivering four
+  // letters" swam a lake among wooded islands. Venice is a city of water: a
+  // canal down the middle with a stone quay along it, palazzi shoulder to
+  // shoulder on both banks in pink, ochre and terracotta plaster, side canals
+  // crossing under humped bridges, gondolas moored at striped poles, and the
+  // lagoon round it all. The plan levels the city to quay height and cuts the
+  // canals below the water.
+  const CANALS = (() => {
+    if (INTERIOR || !LVL || !LVL.heights || SPEC.genre === 'factory' || VIEW === 'side' || PITCH || ARENA) return null;
+    if (LVL.heights.length !== LVL.grid_n * LVL.grid_n || SPEC.world.water_level == null) return null;
+    const w = [SPEC.prompt, SPEC.world && SPEC.world.name, SPEC.title].filter(Boolean).join(' ').toLowerCase();
+    if (!/\b(venice|venezia|venetian|gondol\w*|grand canal|rialto|canal city|city of canals|amsterdam)\b/.test(w)) return null;
+    const WL = SPEC.world.water_level, QY = WL + 1.0, CY = WL - 2.6;
+    const g = LVL.goal || [0, 60], gl = Math.max(50, Math.min(110, Math.hypot(g[0], g[1]) || 60)), ux = g[0] / (Math.hypot(g[0], g[1]) || 1), uz = g[1] / (Math.hypot(g[0], g[1]) || 1);
+    const U0 = -34, U1 = gl + 30, CW0 = 2.4, CW1 = 14.4, SIDE = 46, SW = 7;   // main canal across s 2.4..14.4; side canals every 46 m, 7 m wide
+    const local = (x, z) => [x * ux + z * uz, -x * uz + z * ux];
+    const world = (a, c) => [ux * a - uz * c, uz * a + ux * c];
+    const sideAt = (u) => { const k = Math.round((u - 23) / SIDE); const c = 23 + k * SIDE; return Math.abs(u - c) < SW / 2 && c > 8 && c < gl - 8 ? c : null; };
+    const inCity = (x, z, m) => { const [a, c] = local(x, z); return a > U0 - (m || 0) && a < U1 + (m || 0) && c > -40 - (m || 0) && c < 56 + (m || 0); };
+    const isCanal = (a, c, m) => (c > CW0 + (m || 0) && c < CW1 - (m || 0) && a > U0 - 30 && a < U1 + 30)
+      || (sideAt(a) !== null && Math.abs(a - sideAt(a)) < SW / 2 - (m || 0) && c > -42 && c < CW0 + 1);
+    const n = LVL.grid_n, S = LVL.size_m, hs = LVL.heights, cell = S / (n - 1);
+    for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
+      const x = (j / (n - 1) - 0.5) * S, z = (i / (n - 1) - 0.5) * S, [a, c] = local(x, z);
+      if (!inCity(x, z, 0)) continue;
+      hs[i * n + j] = isCanal(a, c, cell * 0.5) ? CY : QY;
+    }
+    LVL.goal = world(gl, -0.6);
+    LVL.path = [[0, 0], LVL.goal.slice()];
+    if (LVL.pois) LVL.pois = [];
+    if (LVL.landmarks) LVL.landmarks = [];
+    window.__venice = { gl };
+    return { ux, uz, gl, U0, U1, CW0, CW1, SIDE, SW, QY, CY, WL, local, world, sideAt, inCity, isCanal, doors: [] };
+  })();
+  // ── A TRAIN RUNS ON RAILS (2026-10-11) ─────────────────────────────────
+  // "a train driver takes a steam locomotive through the swiss alps to the
+  // mountain station" drove an SUV through a broadleaf wood. A train is a
+  // locomotive on a track: the route becomes a railway graded at a few
+  // percent, cut into the hillside and banked up over the hollows, laid on
+  // ballast with sleepers and two rails, and the driver has a throttle and a
+  // brake, not a wheel. Tender and coaches follow on the same rails.
+  const RAIL = (() => {
+    if (INTERIOR || OSM || !LVL || !LVL.path || LVL.path.length < 2 || !LVL.heights || (SPEC.player || {}).mode !== 'drive') return null;
+    const w = [SPEC.prompt, SPEC.world && SPEC.world.name, SPEC.title, (SPEC.player || {}).name].filter(Boolean).join(' ').toLowerCase();
+    if (!/\b(trains?|locomotives?|railways?|railroads?|steam engines?|rail journey|railway line|tram|express train)\b/.test(w)) return null;
+    const n = LVL.grid_n, S = LVL.size_m, hs = LVL.heights;
+    const gridH = (x, z) => { const fx = (x / S + 0.5) * (n - 1), fz = (z / S + 0.5) * (n - 1);
+      const j = Math.max(0, Math.min(n - 2, Math.floor(fx))), i = Math.max(0, Math.min(n - 2, Math.floor(fz))), a = Math.min(1, Math.max(0, fx - j)), b = Math.min(1, Math.max(0, fz - i));
+      return (hs[i * n + j] * (1 - a) + hs[i * n + j + 1] * a) * (1 - b) + (hs[(i + 1) * n + j] * (1 - a) + hs[(i + 1) * n + j + 1] * a) * b; };
+    const P0 = LVL.path.map(p => new THREE.Vector3(p[0], 0, p[1]));
+    const d0 = P0[0].clone().sub(P0[1]).normalize(), d1 = P0[P0.length - 1].clone().sub(P0[P0.length - 2]).normalize();
+    P0.unshift(P0[0].clone().addScaledVector(d0, 34)); P0.push(P0[P0.length - 1].clone().addScaledVector(d1, 22));
+    const curve = new THREE.CatmullRomCurve3(P0, false, 'centripetal', 0.5);
+    const len = curve.getLength(), N = Math.max(40, Math.ceil(len / 2));
+    const pts = curve.getSpacedPoints(N).map(v => ({ x: v.x, z: v.z, y: gridH(v.x, v.z) }));
+    // the grade: smoothed hard, then held to 4 % between neighbours
+    let ys = pts.map(q => q.y);
+    for (let pass = 0; pass < 6; pass++) ys = ys.map((_, i) => { let a = 0, c = 0; for (let k = -8; k <= 8; k++) { const q = ys[Math.max(0, Math.min(ys.length - 1, i + k))]; a += q; c++; } return a / c; });
+    const step = len / N;
+    for (let i = 1; i < ys.length; i++) ys[i] = Math.max(ys[i - 1] - 0.04 * step, Math.min(ys[i - 1] + 0.04 * step, ys[i]));
+    pts.forEach((q, i) => { q.y = ys[i]; });
+    // cut and fill: the bed is level across, the ground eased into it either side
+    const nearest = (x, z) => { let bi = 0, bd = 1e9; for (let i = 0; i < pts.length; i++) { const d = (pts[i].x - x) ** 2 + (pts[i].z - z) ** 2; if (d < bd) { bd = d; bi = i; } } return [bi, Math.sqrt(bd)]; };
+    for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
+      const x = (j / (n - 1) - 0.5) * S, z = (i / (n - 1) - 0.5) * S, [bi, d] = nearest(x, z);
+      if (d < 3.6) hs[i * n + j] = pts[bi].y;
+      else if (d < 12) { const t = (d - 3.6) / 8.4, s2 = t * t * (3 - 2 * t); hs[i * n + j] = pts[bi].y * (1 - s2) + hs[i * n + j] * s2; }
+    }
+    // tangent at an arc length
+    const at = (sA) => { const u = Math.max(0, Math.min(1, sA / len)), v = curve.getPointAt(u), tg = curve.getTangentAt(u), k = Math.min(pts.length - 1, Math.round(u * N));
+      const k2 = Math.min(pts.length - 1, k + 1), f = u * N - k; return { x: v.x, z: v.z, y: pts[k].y + (pts[k2].y - pts[k].y) * Math.max(0, f), tx: tg.x, tz: tg.z }; };
+    const s0 = 34;                                    // the spawn stands 34 m along the line
+    return { curve, len, pts, at, s0, near: (x, z, m) => nearest(x, z)[1] < 2.8 + (m || 0), sNear: (x, z) => nearest(x, z)[0] / N * len };
   })();
   // ── A MONASTERY ON THE MOUNTAIN (2026-10-07) ────────────────────────────
   // "a monk climbs the stone steps of a cliffside himalayan monastery above
@@ -2615,7 +2690,7 @@ async function main() {
       scene.add(H);
       world.createCollider(RAPIER.ColliderDesc.cylinder(1.0, 0.95).setTranslation(goalPos.x, goalPos.y + 1.0, goalPos.z));
     }
-    if (_structHit && !_venueGoal && !(VILLAGE && _structHit[1] === 'village')) {   // a village goal is the village itself, not one more cottage in its lane
+    if (_structHit && !_venueGoal && !(VILLAGE && _structHit[1] === 'village') && !(RAIL && _structHit[1] === 'station')) {   // the railway builds its own station   // a village goal is the village itself, not one more cottage in its lane
       // door faces the approach: back along the mission path, else the spawn
       const _pp = (LVL.path && LVL.path.length > 1) ? LVL.path[LVL.path.length - 2] : [0, 0];
       const doorYaw = Math.atan2(_pp[0] - goalPos.x, _pp[1] - goalPos.z);
@@ -2627,7 +2702,7 @@ async function main() {
       // is a cottage
       const _kindWord = _structHit[1];
       const isCastle = ['castle', 'fort', 'tower'].includes(_kindWord);
-      const isLighthouse = ['lighthouse', 'station'].includes(_kindWord);
+      const isLighthouse = ['lighthouse', 'station'].includes(_kindWord) && !RAIL;
       // an East Asian temple or shrine is a pagoda (buildPagoda); any other is the ancient one
       const _tw = ((SPEC.prompt || '') + ' ' + (SPEC.world.name || '')).toLowerCase();
       const isTemple = ((_kindWord === 'temple' || _kindWord === 'shrine')
@@ -7003,6 +7078,8 @@ async function main() {
       keepClear.push([_sp.x, _sp.z, 12]);     // the hero starts in a clearing, the camera behind them too
       if (PITCH) for (let a = -PITCH.L / 2 - 8; a <= PITCH.L / 2 + 8; a += 7) for (let c = -PITCH.W / 2 - 8; c <= PITCH.W / 2 + 8; c += 7)
         keepClear.push([a * PITCH.ux - c * PITCH.uz, a * PITCH.uz + c * PITCH.ux, 7]);   // no wood on the pitch or its apron
+      if (CANALS) for (let a = CANALS.U0 - 4; a <= CANALS.U1 + 4; a += 8) for (let c = -44; c <= 60; c += 8) { const [x, z] = CANALS.world(a, c); keepClear.push([x, z, 8]); }   // a city of stone and water
+      if (RAIL) for (let sA = 0; sA < RAIL.len; sA += 5) { const q = RAIL.at(sA); keepClear.push([q.x, q.z, 6]); }   // no tree on the line
       if (ARENA) { const ea = ARENA.A + ARENA.RO + 6, eb = ARENA.B + ARENA.RO + 6;
         for (let a = -ea; a <= ea; a += 8) for (let c = -eb; c <= eb; c += 8) { const [x, z] = ARENA.world(a, c); if (ARENA.inFoot(x, z, 6)) keepClear.push([x, z, 8]); } }   // no wood through the stands
       if (GARDEN) for (let gz = GARDEN.Z0; gz <= GARDEN.Z1; gz += 4) keepClear.push([0, gz, 11]);   // the plot and a margin round it
@@ -7381,6 +7458,8 @@ async function main() {
                   || (GRAVE && (GRAVE.inYard(x, z, 2) || GRAVE.aisle(x, z)))
                   || (PITCH && PITCH.inside(x, z, 6))
                   || (ARENA && ARENA.inFoot(x, z, 6))
+                  || (RAIL && RAIL.near(x, z, 4))
+                  || (CANALS && CANALS.inCity(x, z, 6))
                   || roadDist(x, z) < 7.5
                   || _regReject(x, z, sct)
                   || (clusterN(x, z) < 0.45 && !_regForce(x, z, sct)
@@ -9178,6 +9257,8 @@ async function main() {
           if (GARDEN && GARDEN.inPlot(x, z, 0.2)) { if (GARDEN.bare(x, z)) d = 0; else { h *= 0.35; dry *= 0.3; } }   // a mown garden lawn
           if (PITCH && PITCH.inside(x, z, 0)) d = 0;                                                  // the pitch is its own mown surface
           if (ARENA && ARENA.inFoot(x, z, 1)) d = 0;                                                  // sand and stone, no grass
+          if (RAIL && RAIL.near(x, z, 0)) d = 0;
+          if (CANALS && CANALS.inCity(x, z, 1)) d = 0;
           else if (PITCH && PITCH.inside(x, z, 4)) { h *= 0.3; d *= 0.6; dry = 0; }
           if (WEST && WEST.inTown(x, z, 0)) d = 0;
           if (MONK && (MONK.onStair(x, z, 0.2) || MONK.onTop(x, z, 0))) d = 0;
@@ -9255,6 +9336,8 @@ async function main() {
           if (VOLC && VOLC.edgeDist(x, z) < 0.8) return true;
           if (PITCH && PITCH.inside(x, z, 3)) return true;                       // nothing lies on a pitch
           if (ARENA && ARENA.inFoot(x, z, 2)) return true;                       // nor on the sand or in the stands
+          if (RAIL && RAIL.near(x, z, 0.5)) return true;
+          if (CANALS && CANALS.inCity(x, z, 2)) return true;
           if (FALLS && Math.hypot(x - FALLS.at[0], z - FALLS.at[1]) < 12) return true;
           const rg = window.__regionAt && window.__regionAt(x, z);
           if (rg && rg.kind === 'water' && rg.w > 0.2) return true;
@@ -9407,6 +9490,8 @@ async function main() {
         if (VILLAGE && (VILLAGE.inCottage(x, z, 0.4) || VILLAGE.lane(x, z))) continue;
         if (GRAVE && (GRAVE.aisle(x, z) || GRAVE.onStone(x, z, 0.1))) continue;
         if (ARENA && ARENA.inFoot(x, z, 1)) continue;                  // raked sand and stone seats
+        if (RAIL && RAIL.near(x, z, 0)) continue;
+        if (CANALS && CANALS.inCity(x, z, 1)) continue;
         if (Math.hypot(hAt(x + 0.8, z) - hAt(x - 0.8, z), hAt(x, z + 0.8) - hAt(x, z - 0.8)) > 1.6) continue;   // nothing roots on a face steeper than 45 degrees
         const _rg = window.__regionAt && window.__regionAt(x, z);
         if (_rg && _rg.kind === 'water' && _rg.w > 0.2) continue;    // no grass in the lake
@@ -10067,6 +10152,12 @@ async function main() {
           holder.position.set(x, 0, z);
           holder.position.y = hAt(x, z);
           startYaw = Math.atan2(-ARENA.ux, -ARENA.uz);
+        } else if (CANALS && ent.behavior !== 'static' && ent.behavior !== 'vehicle') {
+          // nobody stands in a canal: the guide by the start, everyone else along the quay
+          let a = ent.behavior === 'guide' ? 3.5 : 10 + rngN() * (CANALS.gl - 14), c = ent.behavior === 'guide' ? -1.6 : -2.6 + rngN() * 4.4;
+          if (CANALS.sideAt(a) !== null) a += CANALS.SW;
+          const [x, z] = CANALS.world(a, c); holder.position.set(x, 0, z); holder.position.y = hAt(x, z);
+          startYaw = Math.atan2(-CANALS.ux, -CANALS.uz);
         } else if (PITCH && /\b(goal ?keeper|goalie|keeper)\b/i.test(ent.name || '')) {
           // the keeper keeps the goal: on its line, a step in front, facing the pitch (2026-10-11)
           holder.position.set(LVL.goal[0] - PITCH.ux * 1.2, 0, LVL.goal[1] - PITCH.uz * 1.2);
@@ -11779,6 +11870,201 @@ async function main() {
       v3.set((x0 + x1) / 2, R.PH / 2 + 1, (z0 + z1) / 2).applyMatrix4(G.matrixWorld);
       world.createCollider(RAPIER.ColliderDesc.cuboid(0.7, R.PH / 2 + 1, len / 2).setTranslation(v3.x, v3.y, v3.z)
         .setRotation({ x: 0, y: Math.sin(ang / 2), z: 0, w: Math.cos(ang / 2) }));
+    }
+  }
+  // ── THE CANAL CITY, BUILT (see CANALS above) ───────────────────────────
+  if (CANALS) {
+    const V = CANALS, rV = mulberry32((SPEC.seed || 1) + 5151), yaw = Math.atan2(V.ux, V.uz);
+    // in G's frame +z runs along the canal (u) and +x is -s: the canal lies at negative x
+    const G = new THREE.Group(); G.rotation.y = yaw; scene.add(G);
+    const L = (a, c) => [-c, a];                                     // (u, s) -> G's (x, z)
+    const cvT = (wd, ht, draw) => { const cv = document.createElement('canvas'); cv.width = wd; cv.height = ht; draw(cv.getContext('2d'), wd, ht);
+      const t = new THREE.CanvasTexture(cv); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace;
+      t.anisotropy = renderer.capabilities.getMaxAnisotropy(); return t; };
+    const MAT = (o) => { const m = new THREE.MeshStandardMaterial(o); m.userData.noAutoTex = true; return m; };
+    const buckets = new Map(); const put = (geo, mat) => { if (!buckets.has(mat)) buckets.set(mat, []); buckets.get(mat).push(geo.index ? geo.toNonIndexed() : geo); };
+    const metric = (geo, ku, kv) => { const ps = geo.attributes.position, nr = geo.attributes.normal, uv = geo.attributes.uv;
+      for (let i = 0; i < ps.count; i++) { const ax = Math.abs(nr.getX(i)), ay = Math.abs(nr.getY(i)), x = ps.getX(i), y = ps.getY(i), z = ps.getZ(i);
+        if (ay > 0.6) uv.setXY(i, x * ku, z * ku); else if (ax > 0.6) uv.setXY(i, z * ku, y * kv); else uv.setXY(i, x * ku, y * kv); }
+      return geo; };
+    // a facade bay: one storey of plaster round a pointed Venetian window in white
+    // Istrian stone, dark glass, green shutters on some
+    const PLASTER = ['#c98a6a', '#d8b27a', '#b5553f', '#e3c9a0', '#c46f5a', '#d9a88e', '#a8644a'];
+    const facadeT = PLASTER.map(col => cvT(256, 336, (g, W, H) => {
+      g.fillStyle = col; g.fillRect(0, 0, W, H);
+      for (let i = 0; i < 1400; i++) { g.fillStyle = `rgba(${rV() < 0.5 ? '255,240,220' : '70,40,25'},${0.03 + rV() * 0.07})`; g.fillRect(rV() * W, rV() * H, 2 + rV() * 10, 2 + rV() * 8); }
+      for (let i = 0; i < 6; i++) { g.fillStyle = 'rgba(120,80,60,0.12)'; g.fillRect(rV() * W, rV() * H * 0.4, 30 + rV() * 70, 10 + rV() * 40); }   // where the plaster has gone back to brick
+      const wx = W * 0.3, ww = W * 0.4, wy = H * 0.24, wh = H * 0.56;
+      g.fillStyle = '#efe9dc'; g.beginPath(); g.moveTo(wx - 8, wy + wh + 8); g.lineTo(wx - 8, wy + 22); g.quadraticCurveTo(wx + ww / 2, wy - 40, wx + ww + 8, wy + 22); g.lineTo(wx + ww + 8, wy + wh + 8); g.fill();
+      g.fillStyle = '#1d2226'; g.beginPath(); g.moveTo(wx, wy + wh); g.lineTo(wx, wy + 26); g.quadraticCurveTo(wx + ww / 2, wy - 26, wx + ww, wy + 26); g.lineTo(wx + ww, wy + wh); g.fill();
+      g.fillStyle = 'rgba(180,200,210,0.18)'; g.fillRect(wx + ww * 0.48, wy + 10, 3, wh - 10);
+      g.fillStyle = '#efe9dc'; g.fillRect(wx - 14, wy + wh + 6, ww + 28, 10);                        // the sill
+      if (col.charCodeAt(2) % 2) { g.fillStyle = '#3f5a3c'; g.fillRect(wx - 26, wy + 20, 20, wh - 20); g.fillRect(wx + ww + 6, wy + 20, 20, wh - 20); }
+      g.fillStyle = 'rgba(60,40,30,0.25)'; g.fillRect(0, H - 6, W, 6);                               // the string course under each floor
+    }));
+    const facM = facadeT.map(t => MAT({ map: t, roughness: 0.92 }));
+    const stoneT = cvT(256, 256, (g, W, H) => { g.fillStyle = '#e8e2d4'; g.fillRect(0, 0, W, H);
+      for (let i = 0; i < 700; i++) { g.fillStyle = `rgba(120,110,95,${0.04 + rV() * 0.08})`; g.fillRect(rV() * W, rV() * H, 1 + rV() * 5, 1 + rV() * 3); }
+      for (let y = 0; y < H; y += 64) { g.fillStyle = 'rgba(90,80,70,0.35)'; g.fillRect(0, y, W, 2); for (let x = (y / 64 % 2) * 64; x < W; x += 128) g.fillRect(x, y, 2, 64); } });
+    const stoneM = MAT({ map: stoneT, roughness: 0.7 });
+    const brickT = cvT(256, 256, (g, W, H) => { g.fillStyle = '#6e3a2a'; g.fillRect(0, 0, W, H);
+      for (let r = 0; r < 32; r++) for (let c = 0; c < 9; c++) { const l = 90 + Math.floor(rV() * 50); g.fillStyle = `rgb(${l + 40},${l - 10},${l - 30})`; g.fillRect(c * 30 + (r % 2) * 15, r * 8, 28, 6); }
+      const gr = g.createLinearGradient(0, H * 0.55, 0, H); gr.addColorStop(0, 'rgba(40,60,30,0)'); gr.addColorStop(1, 'rgba(40,60,30,0.75)'); g.fillStyle = gr; g.fillRect(0, 0, W, H); });   // weed at the waterline
+    const brickM = MAT({ map: brickT, roughness: 0.9 });
+    const paveT = cvT(256, 256, (g, W, H) => { g.fillStyle = '#6f6c66'; g.fillRect(0, 0, W, H);
+      for (let r = 0; r < 4; r++) for (let c = 0; c < 3; c++) { const l = 96 + Math.floor(rV() * 34); g.fillStyle = `rgb(${l},${l - 2},${l - 6})`; g.fillRect(c * 86 + (r % 2) * 43 + 2, r * 64 + 2, 82, 60); } });   // trachyte masegni
+    const paveM = MAT({ map: paveT, roughness: 0.8 });
+    const roofM = MAT({ color: 0x9a4a32, roughness: 0.85 }), darkM = MAT({ color: 0x14100d, roughness: 1 });
+    const QY = V.QY, CY = V.CY, WL = V.WL;
+    // the palazzi: a row on each bank, shoulder to shoulder, their fronts on the water side
+    const rows = [{ s0: -3.4, dir: -1, land: true }, { s0: V.CW1 + 3.2, dir: 1, land: false }];
+    for (const R of rows) {
+      let u = V.U0;
+      while (u < V.U1) {
+        const wdt = 9 + rV() * 7, dep = 12 + rV() * 6, flo = 3 + Math.floor(rV() * 3), fh = 3.4, H = flo * fh + 1.2;
+        const uc = u + wdt / 2;
+        if (V.sideAt(uc) !== null || V.sideAt(u + 0.5) !== null || V.sideAt(u + wdt - 0.5) !== null) { u += 2.5; continue; }
+        const sc = R.s0 + R.dir * dep / 2, [x, z] = L(uc, sc), fm = facM[Math.floor(rV() * facM.length)];
+        const body = new THREE.BoxGeometry(dep, H, wdt); const uvb = body.attributes.uv, pb = body.attributes.position, nb = body.attributes.normal;
+        for (let i = 0; i < pb.count; i++) { const ax = Math.abs(nb.getX(i)), y = pb.getY(i) + H / 2;   // a bay a window: 2.6 m wide, 3.4 m a storey, above a stone base
+          uvb.setXY(i, (ax > 0.6 ? pb.getZ(i) : pb.getX(i)) / 2.6, (y - 1.2) / fh); }
+        put(body.translate(x, QY + H / 2, z), fm);
+        put(metric(new THREE.BoxGeometry(dep + 0.12, 1.2, wdt + 0.12).translate(x, QY + 0.6, z), 0.25, 0.25), stoneM);        // the Istrian stone base
+        put(metric(new THREE.BoxGeometry(dep + 0.5, 0.35, wdt + 0.5).translate(x, QY + H + 0.1, z), 0.25, 0.25), stoneM);      // the cornice
+        const rf = new THREE.ConeGeometry(Math.hypot(dep, wdt) / 2 * 0.98, 2.2, 4, 1).rotateY(Math.PI / 4); rf.scale(dep / Math.hypot(dep, wdt) * 1.414, 1, wdt / Math.hypot(dep, wdt) * 1.414);
+        put(rf.translate(x, QY + H + 1.35, z), roofM);
+        for (let k = 0; k < 1 + Math.floor(rV() * 2); k++) {                                                                  // Venetian funnel chimneys
+          const cx = x + (rV() - 0.5) * dep * 0.6, cz = z + (rV() - 0.5) * wdt * 0.6;
+          put(new THREE.CylinderGeometry(0.22, 0.22, 1.8, 8).translate(cx, QY + H + 1.6, cz), brickM);
+          put(new THREE.CylinderGeometry(0.55, 0.2, 0.8, 10).translate(cx, QY + H + 2.8, cz), brickM);
+        }
+        // the door on the quay, or the water gate onto the canal, with a striped mooring pole or two
+        const fs = R.s0 + R.dir * 0.02, [dx, dz] = L(uc, fs - R.dir * 0.05);
+        put(new THREE.BoxGeometry(0.12, 2.6, 1.6).translate(dx, QY + 1.3, dz), darkM);
+        put(metric(new THREE.BoxGeometry(0.3, 0.3, 2.2).translate(dx, QY + 2.75, dz), 0.4, 0.4), stoneM);
+        if (R.land) V.doors.push([...V.world(uc, R.s0 + 1.3), yaw]);
+        if (!R.land) for (const o of [-1.6, 1.6]) { const [px, pz] = L(uc + o, V.CW1 - 0.9); window.__vPoles = (window.__vPoles || []).concat([[px, pz]]); }
+        // a balcony on the piano nobile
+        if (rV() < 0.55) { const bw = Math.min(4, wdt * 0.5), [bx, bz] = L(uc, R.s0 - R.dir * 0.45), [rx, rz] = L(uc, R.s0 - R.dir * 0.86);
+          put(metric(new THREE.BoxGeometry(0.9, 0.12, bw).translate(bx, QY + 1.2 + fh + 0.1, bz), 0.5, 0.5), stoneM);
+          put(new THREE.BoxGeometry(0.08, 0.9, bw).translate(rx, QY + 1.2 + fh + 0.6, rz), stoneM); }
+        u += wdt + 0.05;
+        const col = RAPIER.ColliderDesc.cuboid(dep / 2, H / 2, wdt / 2), [wx, wz] = V.world(uc, sc);
+        world.createCollider(col.setTranslation(wx, QY + H / 2, wz).setRotation({ x: 0, y: Math.sin(yaw / 2), z: 0, w: Math.cos(yaw / 2) }));
+      }
+    }
+    // the quays: paved, with a stone edge along the canal; the canal walls of brick
+    const quay = (s0, s1) => { for (let u = V.U0; u < V.U1; u += 4) { if (V.sideAt(u + 2) !== null) continue;
+      const [x, z] = L(u + 2, (s0 + s1) / 2); put(metric(new THREE.BoxGeometry(Math.abs(s1 - s0), 0.1, 4.02).translate(x, QY + 0.02, z), 0.3, 0.3), paveM); } };
+    quay(-3.4, V.CW0); quay(V.CW1, V.CW1 + 3.2);
+    const wallAlong = (s, face) => { for (let u = V.U0; u < V.U1; u += 4) { if (V.sideAt(u + 2) !== null) continue;
+      const [x, z] = L(u + 2, s + face * 0.3); put(metric(new THREE.BoxGeometry(0.6, QY - CY, 4.02).translate(x, (QY + CY) / 2, z), 0.25, 0.25), brickM);
+      const [ex, ez] = L(u + 2, s + face * 0.25); put(metric(new THREE.BoxGeometry(0.7, 0.18, 4.02).translate(ex, QY + 0.08, ez), 0.3, 0.3), stoneM);
+      const [cx, cz] = V.world(u + 2, s - face * 0.1);
+      world.createCollider(RAPIER.ColliderDesc.cuboid(0.35, 0.9, 2.05).setTranslation(cx, QY + 0.9, cz).setRotation({ x: 0, y: Math.sin(yaw / 2), z: 0, w: Math.cos(yaw / 2) })); } };
+    wallAlong(V.CW0, -1); wallAlong(V.CW1, 1);
+    // the bridges over the side canals: a hump of brick with stone steps and parapets
+    for (let k = -2; k < 8; k++) { const c = 23 + k * V.SIDE; if (!(c > 8 && c < V.gl - 8)) continue;
+      const span = V.SW + 3, rise = 1.3, wd = 4.2, sMid = (-3.4 + V.CW0) / 2;
+      const NS = 12;
+      for (let i = 0; i < NS; i++) { const t0 = i / NS, t1 = (i + 1) / NS, y0 = Math.sin(t0 * Math.PI) * rise, y1 = Math.sin(t1 * Math.PI) * rise, a0 = c - span / 2 + t0 * span, a1 = c - span / 2 + t1 * span;
+        const len = Math.hypot(a1 - a0, y1 - y0), [x, z] = L((a0 + a1) / 2, sMid);
+        const st = new THREE.BoxGeometry(wd, 0.35, len + 0.05).rotateX(-Math.atan2(y1 - y0, a1 - a0)).translate(x, QY + (y0 + y1) / 2 - 0.12, z);
+        put(metric(st, 0.4, 0.4), stoneM);
+        for (const q of [-1, 1]) { const [px, pz] = L((a0 + a1) / 2, sMid + q * wd / 2); put(new THREE.BoxGeometry(0.25, 0.9, len + 0.05).rotateX(-Math.atan2(y1 - y0, a1 - a0)).translate(px, QY + (y0 + y1) / 2 + 0.4, pz), brickM); }
+        const [wx, wz] = V.world((a0 + a1) / 2, sMid), pitch = Math.atan2(y1 - y0, a1 - a0);
+        const qv = new THREE.Quaternion().setFromEuler(new THREE.Euler(-pitch, yaw, 0, 'YXZ'));
+        world.createCollider(RAPIER.ColliderDesc.cuboid(wd / 2, 0.2, len / 2 + 0.05).setTranslation(wx, QY + (y0 + y1) / 2 - 0.05, wz).setRotation({ x: qv.x, y: qv.y, z: qv.z, w: qv.w }));
+      }
+      const arch = new THREE.TorusGeometry(V.SW / 2, 0.5, 8, 20, Math.PI).rotateY(Math.PI / 2); const [ax2, az2] = L(c, sMid);
+      for (const q of [-1, 1]) put(arch.clone().translate(ax2 + q * wd / 2 * -1, QY - 2.2, az2), brickM);
+    }
+    // striped mooring poles at the water gates, gondolas tied up along the quay
+    const poleT = cvT(64, 256, (g, W, H) => { g.fillStyle = '#f2efe8'; g.fillRect(0, 0, W, H); g.fillStyle = '#2a4f8a';
+      for (let y = -W; y < H + W; y += 48) { g.beginPath(); g.moveTo(0, y); g.lineTo(W, y + 30); g.lineTo(W, y + 54); g.lineTo(0, y + 24); g.fill(); } });
+    const poleM = MAT({ map: poleT, roughness: 0.6 });
+    for (const [px, pz] of window.__vPoles || []) { put(new THREE.CylinderGeometry(0.14, 0.16, 5.5, 10).translate(px, WL + 1.2, pz), poleM); put(new THREE.SphereGeometry(0.2, 8, 6).translate(px, WL + 4.0, pz), MAT({ color: 0xc9a227, metalness: 0.7, roughness: 0.3 })); }
+    const hullM = MAT({ color: 0x0c0c0e, roughness: 0.35, metalness: 0.1 }), ferroM = MAT({ color: 0xd9d9d6, metalness: 0.9, roughness: 0.25 });
+    for (let k = 0; k < 7; k++) { const u = V.U0 + 12 + k * (V.U1 - V.U0 - 24) / 7 + rV() * 4; if (V.sideAt(u) !== null) continue;
+      const sG = V.CW0 + 1.3 + (k % 2) * (V.CW1 - V.CW0 - 2.6), [x, z] = L(u, sG);
+      const hull = new THREE.SphereGeometry(1, 20, 10); hull.scale(0.7, 0.42, 5.4);
+      const ps = hull.attributes.position; for (let i = 0; i < ps.count; i++) { const zz = ps.getZ(i); if (Math.abs(zz) > 3.6) ps.setY(i, ps.getY(i) + (Math.abs(zz) - 3.6) * 0.45); }   // prow and stern rise
+      hull.computeVertexNormals(); put(hull.translate(x, WL + 0.1, z), hullM);
+      put(new THREE.BoxGeometry(0.06, 0.7, 0.45).translate(x, WL + 1.05, z + 5.2), ferroM);
+      put(new THREE.BoxGeometry(0.9, 0.3, 1.1).translate(x, WL + 0.45, z - 0.6), MAT({ color: 0x6a1420, roughness: 0.8 })); }
+    // lamps along the quay, lit at dusk
+    const lampM = MAT({ color: 0xffe2a8, emissive: 0xffc070, emissiveIntensity: 2.2 });
+    for (let u = V.U0 + 6, k = 0; u < V.U1; u += 14, k++) { if (V.sideAt(u) !== null) continue; const [x, z] = L(u, -2.6);
+      put(new THREE.CylinderGeometry(0.06, 0.08, 3.4, 8).translate(x, QY + 1.7, z), darkM); put(new THREE.BoxGeometry(0.34, 0.5, 0.34).translate(x, QY + 3.55, z), lampM);
+      if (k % 2 === 0) { const [wx, wz] = V.world(u, -2.6); const pl = new THREE.PointLight(0xffb866, 6, 16, 1.8); pl.position.set(wx, QY + 3.4, wz); scene.add(pl); } }
+    for (const [mat, list] of buckets) { const m = new THREE.Mesh(mergeGeometries(list, false), mat); m.castShadow = m.receiveShadow = true; G.add(m); for (const q of list) q.dispose(); }
+    window.__venice.palazzi = V.doors.length;
+  }
+  // ── THE RAILWAY, BUILT (see RAIL above) ────────────────────────────────
+  if (RAIL) {
+    const rR = mulberry32((SPEC.seed || 1) + 6262);
+    const MAT = (o) => { const m = new THREE.MeshStandardMaterial(o); m.userData.noAutoTex = true; return m; };
+    const cv = document.createElement('canvas'); cv.width = cv.height = 256; const g = cv.getContext('2d');
+    g.fillStyle = '#6b665e'; g.fillRect(0, 0, 256, 256);
+    for (let i = 0; i < 5000; i++) { const l = 70 + Math.floor(rR() * 90); g.fillStyle = `rgb(${l},${l - 4},${l - 10})`; g.beginPath(); g.arc(rR() * 256, rR() * 256, 1 + rR() * 2.6, 0, 7); g.fill(); }
+    const bt = new THREE.CanvasTexture(cv); bt.wrapS = bt.wrapT = THREE.RepeatWrapping; bt.colorSpace = THREE.SRGBColorSpace;
+    const ballastM = MAT({ map: bt, roughness: 1 }), sleeperM = MAT({ color: 0x3b2c22, roughness: 0.9 }), railM = MAT({ color: 0x8a8580, metalness: 0.85, roughness: 0.35 });
+    // the ballast: a ribbon 3.4 m wide on the bed, its shoulders sloping away
+    const pos = [], uv = [], idx = [];
+    const M = Math.ceil(RAIL.len / 1.0);
+    for (let i = 0; i <= M; i++) { const q = RAIL.at(i / M * RAIL.len), nx = -q.tz, nz = q.tx;
+      for (const [o, dy] of [[-2.4, -0.25], [-1.6, 0.18], [1.6, 0.18], [2.4, -0.25]]) { pos.push(q.x + nx * o, q.y + dy, q.z + nz * o); uv.push((o + 2.4) / 1.6, i / M * RAIL.len / 1.6); } }
+    for (let i = 0; i < M; i++) for (let k = 0; k < 3; k++) { const a = i * 4 + k, b = (i + 1) * 4 + k; idx.push(a, b, a + 1, a + 1, b, b + 1); }
+    const bg = new THREE.BufferGeometry(); bg.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); bg.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); bg.setIndex(idx); bg.computeVertexNormals();
+    const ball = new THREE.Mesh(bg, ballastM); ball.receiveShadow = true; ball.material.side = THREE.DoubleSide; scene.add(ball);
+    // sleepers every 0.65 m and two rails, standard gauge
+    const nS = Math.floor(RAIL.len / 0.65), sl = new THREE.InstancedMesh(new THREE.BoxGeometry(2.6, 0.14, 0.24), sleeperM, nS);
+    const m4 = new THREE.Matrix4(), q4 = new THREE.Quaternion(), e4 = new THREE.Euler(), one = new THREE.Vector3(1, 1, 1);
+    for (let i = 0; i < nS; i++) { const q = RAIL.at(i * 0.65 + 0.3); q4.setFromEuler(e4.set(0, Math.atan2(q.tx, q.tz), 0)); m4.compose(new THREE.Vector3(q.x, q.y + 0.25, q.z), q4, one); sl.setMatrixAt(i, m4); }
+    sl.receiveShadow = true; scene.add(sl);
+    for (const side of [-0.72, 0.72]) { const rp = [], ri = [];
+      for (let i = 0; i <= M; i++) { const q = RAIL.at(i / M * RAIL.len), nx = -q.tz, nz = q.tx;
+        for (const [o, dy] of [[-0.035, 0.32], [-0.035, 0.46], [0.035, 0.46], [0.035, 0.32]]) rp.push(q.x + nx * (side + o), q.y + dy, q.z + nz * (side + o)); }
+      for (let i = 0; i < M; i++) for (let k = 0; k < 3; k++) { const a = i * 4 + k, b = (i + 1) * 4 + k; ri.push(a, b, a + 1, a + 1, b, b + 1); }
+      const rg = new THREE.BufferGeometry(); rg.setAttribute('position', new THREE.Float32BufferAttribute(rp, 3)); rg.setIndex(ri); rg.computeVertexNormals();
+      const rail = new THREE.Mesh(rg, railM); rail.material.side = THREE.DoubleSide; scene.add(rail); }
+    // the coaches: two, varnished teak-red with cream windows, behind the tender
+    const coachM = MAT({ color: 0x7a1e1a, roughness: 0.45, metalness: 0.1 }), creamM = MAT({ color: 0xe9dfc4, roughness: 0.6 }), glassM = MAT({ color: 0x1b2328, roughness: 0.1, metalness: 0.4 }), blackM = MAT({ color: 0x141414, roughness: 0.6, metalness: 0.3 });
+    const coaches = [];
+    for (let k = 0; k < 2; k++) { const C = new THREE.Group();
+      const bd = new THREE.Mesh(new THREE.BoxGeometry(2.7, 2.5, 11), coachM); bd.position.y = 2.15; C.add(bd);
+      const bandM = new THREE.Mesh(new THREE.BoxGeometry(2.72, 0.9, 10.6), creamM); bandM.position.y = 2.55; C.add(bandM);
+      for (let wi = -4; wi <= 4; wi++) for (const sd of [-1, 1]) { const wn = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.7, 0.85), glassM); wn.position.set(sd * 1.37, 2.6, wi * 1.15); C.add(wn); }
+      const rf = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 1.5, 11.1, 16, 1, false, -0.75, 1.5).rotateX(Math.PI / 2).rotateZ(Math.PI / 2), MAT({ color: 0x3a3a3a, roughness: 0.7 })); rf.position.y = 2.75; C.add(rf);
+      for (const bz of [-3.6, 3.6]) for (const wz of [-0.7, 0.7]) for (const sd of [-0.72, 0.72]) { const wh = new THREE.Mesh(new THREE.CylinderGeometry(0.46, 0.46, 0.14, 16).rotateZ(Math.PI / 2), blackM); wh.position.set(sd, 0.78, bz + wz); C.add(wh); }
+      C.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } }); scene.add(C); coaches.push(C); }
+    // steam: puffs from the chimney, more when the regulator is open
+    const puffT = (() => { const c = document.createElement('canvas'); c.width = c.height = 64; const x = c.getContext('2d'), gr = x.createRadialGradient(32, 32, 2, 32, 32, 30);
+      gr.addColorStop(0, 'rgba(240,240,240,0.9)'); gr.addColorStop(1, 'rgba(240,240,240,0)'); x.fillStyle = gr; x.fillRect(0, 0, 64, 64); return new THREE.CanvasTexture(c); })();
+    const puffs = []; for (let i = 0; i < 40; i++) { const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: puffT, transparent: true, depthWrite: false, opacity: 0 })); scene.add(sp); puffs.push({ sp, t: 9 }); }
+    let pi = 0, pAcc = 0;
+    RAIL.tick = (sLoco, v, dt, loco) => {
+      [-9.6, -21.2].forEach((off, k) => { const a = RAIL.at(sLoco + off), b = RAIL.at(sLoco + off - 4);
+        coaches[k].position.set(a.x, a.y, a.z); coaches[k].lookAt(a.x + (a.x - b.x), a.y + (a.y - b.y), a.z + (a.z - b.z)); });
+      pAcc += dt * (1.5 + Math.abs(v) * 0.6);
+      if (loco && pAcc > 1) { pAcc = 0; const P2 = puffs[pi++ % puffs.length]; const c = loco.userData.chimney; if (c) { c.getWorldPosition(P2.sp.position); P2.t = 0; } }
+      for (const P2 of puffs) { if (P2.t > 4) { P2.sp.material.opacity = 0; continue; } P2.t += dt; P2.sp.position.y += dt * 1.6; P2.sp.position.x += dt * 0.4;
+        const sc = 0.8 + P2.t * 1.6; P2.sp.scale.set(sc, sc, 1); P2.sp.material.opacity = 0.55 * (1 - P2.t / 4); }
+      if (loco && loco.userData.wheels) for (const wh of loco.userData.wheels) wh.rotation.x += v * dt / wh.userData.r;
+    };
+    // the mountain station: a chalet of stone and timber beside a platform at the end of the line
+    { const q = RAIL.at(RAIL.len - 30), nx = -q.tz, nz = q.tx, yawS = Math.atan2(q.tx, q.tz), St = new THREE.Group();
+      St.position.set(q.x + nx * 7.5, q.y, q.z + nz * 7.5); St.rotation.y = yawS; scene.add(St);
+      const stoneS = MAT({ color: 0x9a948a, roughness: 0.95 }), woodS = MAT({ color: 0x6e4a2e, roughness: 0.8 }), roofS = MAT({ color: 0x4a4440, roughness: 0.8 });
+      const add = (geo, m, x, y, z) => { const o = new THREE.Mesh(geo, m); o.position.set(x, y, z); o.castShadow = o.receiveShadow = true; St.add(o); return o; };
+      add(new THREE.BoxGeometry(6, 3.2, 14), stoneS, 1.5, 1.6, 0); add(new THREE.BoxGeometry(6.2, 2.8, 14.2), woodS, 1.5, 4.6, 0);
+      for (const sd of [-1, 1]) { const r = add(new THREE.BoxGeometry(5.2, 0.3, 17), roofS, 1.5 + sd * 2.2, 6.9, 0); r.rotation.z = -sd * 0.5; }
+      for (let z = -5; z <= 5; z += 2.5) { add(new THREE.BoxGeometry(0.06, 1.4, 1.0), MAT({ color: 0x20262a, roughness: 0.2 }), -1.53, 1.9, z); add(new THREE.BoxGeometry(0.06, 1.2, 0.9), MAT({ color: 0x20262a, roughness: 0.2 }), -1.63, 4.7, z); }
+      add(new THREE.BoxGeometry(3.2, 0.9, 30), stoneS, -3.8, 0.45, 0);                                   // the platform
+      const sg = document.createElement('canvas'); sg.width = 512; sg.height = 96; const gx = sg.getContext('2d'); gx.fillStyle = '#1e3a6e'; gx.fillRect(0, 0, 512, 96);
+      gx.fillStyle = '#ffffff'; gx.font = 'bold 54px sans-serif'; gx.textAlign = 'center'; gx.fillText('BERGSTATION', 256, 68);
+      const sgn = add(new THREE.PlaneGeometry(4, 0.75), new THREE.MeshStandardMaterial({ map: new THREE.CanvasTexture(sg), roughness: 0.6 }), -1.6, 3.6, 0); sgn.rotation.y = -Math.PI / 2;
+      world.createCollider(RAPIER.ColliderDesc.cuboid(3, 3.2, 7).setTranslation(St.position.x + Math.cos(yawS) * 1.5, q.y + 3.2, St.position.z - Math.sin(yawS) * 1.5).setRotation({ x: 0, y: Math.sin(yawS / 2), z: 0, w: Math.cos(yawS / 2) }));
     }
   }
   // ── THE CANDY LAND, BUILT (see CANDY above) ────────────────────────────
@@ -15513,6 +15799,47 @@ async function main() {
     });
     return g;
   }
+  // THE LOCOMOTIVE (2026-10-11): a steam engine authored +Z forward: frame,
+  // boiler and smokebox, chimney and dome, cab, three coupled driving wheels a
+  // side with their rods, a leading bogie, buffers, and the tender behind
+  function buildLoco() {
+    const L = new THREE.Group(), MAT = (o) => { const m = new THREE.MeshStandardMaterial(o); m.userData.noAutoTex = true; return m; };
+    const green = MAT({ color: 0x1f3d2c, roughness: 0.35, metalness: 0.25 }), black = MAT({ color: 0x151515, roughness: 0.5, metalness: 0.4 }), red = MAT({ color: 0x9a1c18, roughness: 0.5 }),
+          brass = MAT({ color: 0xc9a23a, roughness: 0.25, metalness: 0.9 }), steel = MAT({ color: 0x9a9a98, roughness: 0.3, metalness: 0.9 });
+    const add = (geo, m, x, y, z) => { const o = new THREE.Mesh(geo, m); o.position.set(x, y, z); o.castShadow = o.receiveShadow = true; L.add(o); return o; };
+    add(new THREE.BoxGeometry(2.5, 0.3, 9.4), black, 0, 1.25, 1.4);                                              // the frame and footplate
+    add(new THREE.CylinderGeometry(0.86, 0.86, 5.0, 28).rotateX(Math.PI / 2), green, 0, 2.25, 2.6);                // the boiler
+    for (const z of [0.7, 2.2, 3.7]) add(new THREE.CylinderGeometry(0.875, 0.875, 0.06, 28).rotateX(Math.PI / 2), brass, 0, 2.25, z);   // its bands
+    add(new THREE.CylinderGeometry(0.92, 0.92, 1.2, 28).rotateX(Math.PI / 2), black, 0, 2.25, 5.6);                // the smokebox
+    add(new THREE.CylinderGeometry(0.7, 0.7, 0.08, 28).rotateX(Math.PI / 2), black, 0, 2.25, 6.22);
+    const ch = add(new THREE.CylinderGeometry(0.3, 0.24, 1.0, 16), black, 0, 3.55, 5.6); add(new THREE.CylinderGeometry(0.38, 0.3, 0.18, 16), black, 0, 4.1, 5.6);
+    const chTop = new THREE.Object3D(); chTop.position.set(0, 4.3, 5.6); L.add(chTop); L.userData.chimney = chTop;
+    add(new THREE.CylinderGeometry(0.42, 0.48, 0.6, 20), brass, 0, 3.3, 3.2); add(new THREE.SphereGeometry(0.42, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2), brass, 0, 3.6, 3.2);   // the dome
+    add(new THREE.BoxGeometry(2.6, 2.4, 2.4), green, 0, 2.6, -0.8);                                              // the cab
+    add(new THREE.BoxGeometry(2.9, 0.12, 3.0), black, 0, 3.86, -0.8);
+    for (const sd of [-1, 1]) add(new THREE.BoxGeometry(0.04, 0.8, 0.9), MAT({ color: 0x20262a, roughness: 0.15 }), sd * 1.31, 3.0, -0.5);
+    add(new THREE.BoxGeometry(2.7, 0.5, 0.25), red, 0, 1.3, 6.25);                                               // the buffer beam
+    for (const sd of [-0.85, 0.85]) add(new THREE.CylinderGeometry(0.18, 0.18, 0.5, 12).rotateX(Math.PI / 2), steel, sd, 1.3, 6.55);
+    add(new THREE.SphereGeometry(0.16, 12, 8), MAT({ color: 0xffeeb0, emissive: 0xffd070, emissiveIntensity: 2 }), 0, 2.7, 6.3);   // the headlamp
+    const wheels = [];
+    for (const z of [0.4, 2.0, 3.6]) for (const sd of [-1, 1]) {
+      const wh = new THREE.Group(); wh.position.set(sd * 1.0, 0.8, z); wh.userData.r = 0.8; L.add(wh); wheels.push(wh);
+      const tyre = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 0.8, 0.14, 28).rotateZ(Math.PI / 2), red); wh.add(tyre);
+      for (let k = 0; k < 6; k++) { const sp = new THREE.Mesh(new THREE.BoxGeometry(0.16, 1.4, 0.07), black); sp.rotation.x = k * Math.PI / 6; sp.position.x = sd * 0.04; wh.add(sp); }
+    }
+    for (const z of [5.0, 5.9]) for (const sd of [-1, 1]) { const wh = new THREE.Group(); wh.position.set(sd * 1.0, 0.45, z); wh.userData.r = 0.45; L.add(wh); wheels.push(wh);
+      wh.add(new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.45, 0.12, 20).rotateZ(Math.PI / 2), black)); }
+    for (const sd of [-1, 1]) add(new THREE.BoxGeometry(0.08, 0.14, 3.3), steel, sd * 1.12, 0.8, 2.0);             // the coupling rods
+    for (const sd of [-1, 1]) add(new THREE.CylinderGeometry(0.3, 0.3, 1.4, 16).rotateX(Math.PI / 2), black, sd * 1.05, 1.15, 5.1);   // the cylinders
+    // the tender: coal heaped in a box on its own wheels
+    add(new THREE.BoxGeometry(2.5, 1.9, 4.2), green, 0, 2.2, -4.4);
+    add(new THREE.BoxGeometry(2.3, 0.5, 3.6), MAT({ color: 0x0b0b0b, roughness: 0.95 }), 0, 3.25, -4.3);
+    for (const z of [-5.7, -3.1]) for (const sd of [-1, 1]) { const wh = new THREE.Group(); wh.position.set(sd * 1.0, 0.55, z); wh.userData.r = 0.55; L.add(wh); wheels.push(wh);
+      wh.add(new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.55, 0.12, 20).rotateZ(Math.PI / 2), black)); }
+    L.userData.wheels = wheels;
+    L.position.z = 1.0; L.rotation.y = Math.PI;            // centred, and turned: the hero's forward is the model's -Z
+    const W = new THREE.Group(); W.add(L); W.userData = L.userData; window.__loco = W; return W;
+  }
   // PROC HERO (2026-08-30): a proc: asset is a sculpted module, not a
   // mesh file. It arrives with named steer/spin pivots and a drive API —
   // the articulation contract the img2threejs lane exists to provide.
@@ -15541,7 +15868,9 @@ async function main() {
   const RIDE = ((P.mode || 'walk') === 'drive' && P.ride) ? String(P.ride).toLowerCase() : null;
   const SHIP_HERO = (P.mode || 'walk') === 'swim' && /\b(pirate ship|ship|galleon|frigate|warship|man-o-war|brig)\b/i.test(String(P.name || ''));
   if (SHIP_HERO) P.height_m = Math.max(P.height_m || 0, 18);   // a swimmer is sized by its length: a galleon, not a 6 m dinghy
-  const pg = procRoot
+  if (RAIL) P.height_m = 4.4;                     // a locomotive, to the top of its chimney
+  const pg = RAIL ? { scene: buildLoco(), animations: [] }
+    : procRoot
     ? { scene: procRoot, animations: [] }
     : SHIP_HERO ? { scene: buildShip({ seed: SPEC.seed || 1, flag: /navy|royal|warship/i.test(String(SPEC.prompt || '')) ? 'navy' : 'pirate' }), animations: [] }
     : (P.car_params && !P.car_params.library)
@@ -15558,8 +15887,8 @@ async function main() {
   //   Flyers keep their wingspan lateral — no rotation at all.
   // a sculpted module's orientation is authored, not inferred — the whole
   // point of the contract is that nothing downstream has to guess
-  if (!procRoot) alignLongAxis(pRoot, ['drive', 'swim'].includes(P.mode || 'walk') && !RIDE);
-  polishVehiclePaint(pRoot, (P.mode || 'walk') === 'drive' && !RIDE);
+  if (!procRoot && !RAIL) alignLongAxis(pRoot, ['drive', 'swim'].includes(P.mode || 'walk') && !RIDE);
+  polishVehiclePaint(pRoot, (P.mode || 'walk') === 'drive' && !RIDE && !RAIL);
   if (RIDE) {
     holder.add(makeBoard(RIDE, SPEC.seed || 0));
     pRoot.position.y += 0.07;
@@ -16623,6 +16952,11 @@ async function main() {
     { title: 'Carve', text: 'A and D carve. Lean into the turn and keep your speed.', why: 'Hold Shift through a turn and the board slides; let go to grip again.', check: () => __fmTurn > 0.8 },
     { title: 'Tuck', text: 'Hold Shift on a straight to tuck and go faster.', why: 'A tuck is the difference between fourth place and first.', check: () => __fmBoost > 0.5 },
     { title: 'The gates', text: 'Follow the orange gates to the finish.', why: 'The card at the top keeps your position. That is the whole race.', gotit: true },
+  ] : (__fmMode === 'drive' && RAIL) ? [
+    { title: 'Look around', text: 'Drag with the mouse to look. The engine is yours.', why: 'The camera rides behind the cab; a drag looks away for a moment and comes back.', check: __fmLooked },
+    { title: 'The regulator', text: 'Hold W to open the regulator.', why: 'Steam goes to the cylinders and she pulls away, slowly at first.', check: () => __fmMove > 1.2 },
+    { title: 'The brake', text: 'S is the brake.', why: 'A train is heavy. Start braking well before the platform.', gotit: true },
+    { title: 'The line', text: 'The rails do the steering. Bring her into the station.', why: 'The card at the top says where the line ends.', gotit: true },
   ] : __fmMode === 'drive' ? [
     { title: 'Look around', text: 'Drag with the mouse to look. The car is yours.', why: 'The camera rides behind the car; a drag looks away for a moment and comes back.', check: __fmLooked },
     { title: 'Throttle', text: 'Hold W to drive.', why: 'Speed is the whole race. The orange gates ahead mark the route.', check: () => __fmMove > 1.2 },
@@ -19592,7 +19926,7 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
   if (DRIVE) {                                   // driving instructions in the HUD
     const hint = document.querySelector('#hud .hint');
     if (hint) {
-      hint.textContent = 'W throttle · S brake/reverse · A/D steer · Shift boost'
+      hint.textContent = RAIL ? 'W open the regulator · S brake · the line does the steering' : 'W throttle · S brake/reverse · A/D steer · Shift boost'
         + ((SPEC.objectives || []).some(o => o.kind === 'race')
            ? ': follow the orange gates to the checkered finish' : '');
     }
@@ -19847,6 +20181,10 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
           for (let t = 0; t < pool.length && !sp; t++) { const o = pool[(at + t) % pool.length]; if (used.has(o.i)) continue;
             sp = clearSpot(o.r); if (sp) { used.add(o.i); spots.push([sp[0], o.r[2] + 0.06, sp[1], 0, false, null, true]); } }
         }
+      } else if (DELIVER && CANALS && CANALS.doors.length) {
+        // a letter to a door on the quay, spread down the canal
+        const ds = CANALS.doors.slice().sort((a, b) => Math.hypot(a[0], a[1]) - Math.hypot(b[0], b[1])).filter(d => Math.hypot(d[0], d[1]) > 12);
+        for (let k = 0; k < N && ds.length; k++) { const d = ds[Math.min(ds.length - 1, Math.floor((k + 0.5) / N * ds.length))]; spots.push([d[0], hAt(d[0], d[1]) + 0.02, d[1], d[2], false, null, true]); }
       } else if (DELIVER && !INTERIOR) {
         for (let k = 0; k < N; k++) { const a = k / N * Math.PI * 2 + rngR() * 0.5, d = 14 + rngR() * gsize * 0.25; const x = Math.cos(a) * d, z = Math.sin(a) * d;
           spots.push([x, hAt(x, z) + 0.02, z, 0, false, null, true]); }
@@ -20753,6 +21091,18 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
       speed = Math.hypot(carVX, carVZ);
       vy = Math.max(vy - 9.81 * dt, -25);
       var desired = { x: carVX * dt, y: vy * dt, z: carVZ * dt };
+      if (RAIL) {
+        // ON RAILS: the regulator and the brake move the engine along the line;
+        // the line, not the driver, decides where it points
+        if (RAIL.sT === undefined) RAIL.sT = RAIL.s0;
+        RAIL.sT = Math.max(6, Math.min(RAIL.len - 6, RAIL.sT + vSpeed * dt));
+        if (RAIL.sT >= RAIL.len - 6 || RAIL.sT <= 6) vSpeed = 0;
+        const q = RAIL.at(RAIL.sT), t0 = body.translation();
+        modelYaw = Math.atan2(q.tx, q.tz);
+        carVX = q.tx * vSpeed; carVZ = q.tz * vSpeed; speed = Math.abs(vSpeed);
+        desired = { x: q.x - t0.x, y: vy * dt, z: q.z - t0.z };
+        RAIL.tick(RAIL.sT, vSpeed, dt, window.__loco);
+      }
     } else if (FLY) {
       // FLIGHT: camera-relative glide, Space to rise, C to dive. The kinematic
       // body still collides with terrain/buildings, so landing just works.

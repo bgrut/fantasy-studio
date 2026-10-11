@@ -3395,6 +3395,11 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                 _arch = "dunes"
                 spec.world.archetype = "dunes"
             spec.world.ground_color = [0.78, 0.65, 0.46]
+        # THE ALPS ARE GREEN BELOW THE SNOW (2026-10-11): a steam train through
+        # the swiss alps ran over red-brown earth; alpine pasture is grass
+        if (_fre.search(r"\b(alps|alpine|swiss|switzerland|tyrol\w*|dolomites?)\b", _pw7)
+                and not _fre.search(r"\b(snow\w*|winter|blizzard|frozen|ski\w*|glacier)\b", _pw7)):
+            spec.world.ground_color = [0.33, 0.47, 0.25]
         # A CITY ON THE WATER (2026-10-11): Venice stands in its lagoon, so the
         # sea landform makes the water; the runtime cuts the canals (CANALS)
         if (_fre.search(r"\b(venice|venezia|venetian|gondol\w*|grand canal|rialto|city of canals)\b", _pw7)
@@ -3816,6 +3821,10 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                 "library": ("castle", "limestone"), "museum": ("castle", "limestone"), "bank": ("castle", "limestone"),
             }
             _sm = _re3.search(r"\b(" + "|".join(sorted(_BLD, key=len, reverse=True)) + r")s?\b", _pl)
+            # a railway's station is the platform at the end of the line, which
+            # the runtime builds (RAIL); a warehouse door in the woods is not it
+            if _sm and _sm.group(1) == "station" and _re3.search(r"\b(trains?|locomotives?|railways?|railroads?|steam engines?|tram)\b", _pl):
+                _sm = None
             if _sm:
                 from app.game_export.level import build_interior
                 _ek_raw = _sm.group(1)

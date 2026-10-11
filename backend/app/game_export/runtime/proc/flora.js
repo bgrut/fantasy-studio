@@ -1299,6 +1299,10 @@ export function biomeFor(words, arch, groundHSL) {
   // norwegian fjord grew round oaks on its islands
   else if (has(/fjords?|norw\w*|vikings?|norse|scandinavia\w*|nordic/)) Object.assign(out, { kinds: K(['spruce', 0.8], ['pine', 0.35], ['birch', 0.3], ['rock', 0.45], ['boulder', 0.2]), dens: 0.6,
     rockTint: T(0x6f6d69), leaf: { h: 0.3, s: 0.36, l: 0.17 } });
+  // THE ALPS (2026-10-11): a steam train through the swiss alps ran through
+  // an oak wood on red earth; the Alps are spruce and larch, grey rock above
+  else if (has(/\balps\b|alpine|swiss|switzerland|tyrol\w*|dolomit\w*|bavaria\w*/) && !has(/snow|winter|blizzard|frozen/)) Object.assign(out, { kinds: K(['spruce', 0.9], ['pine', 0.35], ['rock', 0.4], ['boulder', 0.2], ['bush', 0.2]), dens: 0.5,
+    rockTint: T(0x8a8782), leaf: { h: 0.29, s: 0.42, l: 0.2 } });
   // A HIGHLAND GLEN IS OPEN MOOR (2026-10-08): "a shepherd ... across a misty
   // scottish highland glen" grew a dense wood. A glen is bare hillside: heather,
   // bracken, grey stone and the odd boulder, hardly a tree
@@ -1315,6 +1319,11 @@ export function biomeFor(words, arch, groundHSL) {
     rockTint: T(0xb89a6e), leaf: { h: 0.2, s: 0.4, l: 0.28 } });
   else if (has(/canyon|mesa|badlands|butte/)) Object.assign(out, { kinds: K(['mesa', 0.25], ['rock', 0.8], ['boulder', 0.4], ['cactus', 0.15]), dens: 0.12, rockTint: T(0xb5643c) });
   else if (has(/desert|dune|sahara|wasteland|arid/)) Object.assign(out, { kinds: K(['cactus', 0.5], ['rock', 0.8], ['boulder', 0.2], ['dead', 0.25], ['bush', 0.2]), dens: 0.14, rockTint: T(0xb08a5e), leaf: { h: 0.16, s: 0.32, l: 0.3 } });
+  // SEA ICE GROWS NOTHING (2026-10-11): a polar bear hunting seals on
+  // drifting sea ice walked past a pine forest. The pack is ice and snow, a
+  // hummock of pressure ice here and there, and not one tree.
+  else if (has(/sea ice|ice floes?|pack ice|polar bears?|arctic ocean|north pole|icebergs?|seals? on/)) Object.assign(out, { kinds: K(['boulder', 0.5], ['rock', 0.3]), dens: 0.03, snow: 0.95,
+    rockTint: T(0xcfdbe6) });
   else if (has(/glacier|tundra|ice field|polar/)) Object.assign(out, { kinds: K(['boulder', 0.6], ['rock', 1], ['spruce', 0.15]), dens: 0.16, snow: 0.85, rockTint: T(0x7d8794) });
   else if (has(/snow|arctic|frozen|winter|blizzard|frost/)) Object.assign(out, { kinds: K(['spruce', 0.6], ['pine', 0.5], ['rock', 0.35], ['boulder', 0.15]), dens: 0.75, snow: 0.75, rockTint: T(0x7d8794) });
   // THE SAVANNA (2026-10-05) fell through to the seed's archetype, which for
