@@ -9374,6 +9374,15 @@ function setInspectOn(on) {
                           o = o.parent; }
       const t = tag && tag.face !== undefined
         ? { face: tag.face, i: tag.i, j: tag.j } : tileOfPoint(h.point);
+      // A TILE IS WHAT STANDS ON IT (2026-10-11): a ray that met grass, the
+      // worn ground or a stone first called a belt's tile bare ground, and a
+      // drop there replaced the belt. Untagged, the tile's own cell says.
+      if (!tag && t) {
+        const c0 = cells[t.face] && cells[t.face][t.i] && cells[t.face][t.i][t.j];
+        if (c0 && c0.t !== EMPTY && c0.t !== NODE && c0.t !== PROP && TYPE_NAME[c0.t])
+          tag = { type: 'machine', name: String(TYPE_NAME[c0.t]).toLowerCase(),
+                  detail: FACES[t.face].name + ' face · tile ' + t.i + ',' + t.j, face: t.face, i: t.i, j: t.j };
+      }
       lastPick = t;
       send({ type: 'fs-pick', kind: kindEv,
              x: +h.point.x.toFixed(2), y: +h.point.y.toFixed(2), z: +h.point.z.toFixed(2),
@@ -9429,6 +9438,15 @@ function setInspectOn(on) {
       const t = (d.tile && d.tile.face !== undefined) ? d.tile : lastPick;
       if (!t) { send({ type: 'fs-spawned', ok: false, kind: d.kind,
                        err: 'Nothing is picked yet. Click a tile first.' }); return; }
+      // A SPAWN DOES NOT BULLDOZE (2026-10-11): place() replaces what stands on
+      // a tile, and a smelter dropped from the studio silently ate a belt of
+      // the starter line. A taken tile is refused, and says what is on it.
+      const c1 = cells[t.face] && cells[t.face][t.i] && cells[t.face][t.i][t.j];
+      if (c1 && c1.t !== EMPTY && c1.t !== NODE && TYPE_NAME[c1.t]) {
+        send({ type: 'fs-spawned', ok: false, kind: d.kind,
+               err: 'that tile already has a ' + String(TYPE_NAME[c1.t]).toLowerCase() + '; pick an empty one' });
+        return;
+      }
       const ok = place(t.face, t.i, t.j, type, 0) !== false;
       send({ type: 'fs-spawned', ok, kind: d.kind,
              err: ok ? undefined : 'a miner only goes on an ore seam' });

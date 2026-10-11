@@ -41,11 +41,17 @@ const armed = await frame.evaluate(()=>window.__game.inspecting);
 console.log('inspect on     :', armed);
 
 // 2. a click reports what is under it, with a tile and a face
-await clear();
-await p.evaluate(()=>window.toGame({ type:'fs-dropat', cx:640, cy:400 }));
-await new Promise(r=>setTimeout(r,600));
-const picks = (await log()).filter(m => m.type === 'fs-pick');
-const pick = picks[picks.length - 1];
+// the spawn below needs an empty tile: a pick on a belt or a seam now says so
+// (2026-10-11), and a drop there is refused, so look round the centre for ground
+let pick = null;
+for (const [cx, cy] of [[640, 400], [560, 430], [720, 430], [640, 480], [500, 380], [780, 380], [600, 520], [690, 520]]) {
+  await clear();
+  await p.evaluate((v)=>window.toGame({ type:'fs-dropat', cx: v[0], cy: v[1] }), [cx, cy]);
+  await new Promise(r=>setTimeout(r,600));
+  const picks = (await log()).filter(m => m.type === 'fs-pick');
+  pick = picks[picks.length - 1];
+  if (pick && pick.target && pick.target.type === 'ground') break;
+}
 console.log('pick           :', JSON.stringify(pick && {
   kind: pick.kind, tile: pick.tile, target: pick.target }));
 

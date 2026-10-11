@@ -1762,6 +1762,10 @@ async function main() {
     return true;
   }
   const gcol = new THREE.Color(...SPEC.world.ground_color);
+  // A SEABED IS SAND (2026-10-10): a reef's floor took the planner's meadow
+  // green and the dolphin swam over a lawn among the coral. Under the sea the
+  // floor is pale sand, which also gives it the sand photograph for detail.
+  if (FLORA && FLORA.biome && FLORA.biome.underwater) gcol.setRGB(0.74, 0.68, 0.52);
   {
     // SATURATION FLOOR (Phase 76): LLM ground colors trend pastel — real
     // grass/soil is richer. Only colored grounds are lifted (snow/sand with
