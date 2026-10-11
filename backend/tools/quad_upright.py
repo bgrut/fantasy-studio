@@ -129,6 +129,7 @@ def judge(glb: Path, kind: str, biped: bool = False) -> dict:
     import torch
     from PIL import Image
     tmp = Path(tempfile.mkdtemp(prefix="upr_"))
+    _TMPS.append(str(tmp))
     rs = tmp / "r.py"; rs.write_text(_RENDER, encoding="utf-8")
     subprocess.run([str(BLENDER_EXE), "--background", "--python", str(rs), "--", str(glb), str(tmp / "v"), json.dumps(BIPED_ROTS if biped else ROTS)],
                    capture_output=True, timeout=600)
@@ -151,7 +152,21 @@ def judge(glb: Path, kind: str, biped: bool = False) -> dict:
     return {"scores": scores, "tmp": str(tmp)}
 
 
+_TMPS: list[str] = []
+
+
 def fix(glb: Path, kind: str, margin: float = 0.15, apply: bool = False, biped: bool = False) -> str:
+    """The upright check, and its renders cleared after (2026-10-10: every
+    bake left a folder of them in %TEMP%, 195 by the end of a day)."""
+    import shutil
+    try:
+        return _fix(glb, kind, margin, apply, biped)
+    finally:
+        while _TMPS:
+            shutil.rmtree(_TMPS.pop(), ignore_errors=True)
+
+
+def _fix(glb: Path, kind: str, margin: float = 0.15, apply: bool = False, biped: bool = False) -> str:
     j = judge(glb, kind, biped)
     sc = j["scores"]
     if not sc:

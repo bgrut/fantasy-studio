@@ -77,7 +77,10 @@ const ok = fast.drive && fast.drive.speed > 7 && fast.fov > fast.fov_base + 3
       || (fast.car.smooth && fast.car.cabin && fast.car.pillars === 6 && fast.car.body_verts > 600))   // the library's own model, or a smooth-shaded parametric body with a real greenhouse
   && boost.drive && boost.drive.speed > 15 && boost.drive.steer_ease < 0.85 && cruise.drive && cruise.drive.steer_ease > boost.drive.steer_ease   // eases with speed
   && slide.drive && slide.drive.handbrake && slide.drive.drifting && slide.drive.slip > 0.2 && slide.drive.skids > 0 && slide.drive.smoke > 0
-  && slide.drive.peds_casting <= 30 && slide.drive.peds_casting < slide.drive.peds_visible
+  // only the near ones cast; with nobody in view (the crowd walks where it
+  // likes, a third of runs) nothing may cast, and 0 < 0 used to fail it
+  && slide.drive.peds_casting <= 30
+  && (slide.drive.peds_visible === 0 ? slide.drive.peds_casting === 0 : slide.drive.peds_casting < slide.drive.peds_visible)
   && cost.fps >= 30 && cost.tris < 6500000                     // the triangles are the honest number (a district differs by sentence; the drift fixture sits near 2 M); the frame rate on a shared card is only a floor
   && errs.length === 0;
 if (!ok) console.log('FAIL: the drive');

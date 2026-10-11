@@ -153,6 +153,10 @@ _PH_ROCK = ["ph_boulder_01", "ph_moon_rock_01", "ph_coast_land_rocks_02"]
 _PH_SMALLROCK = ["ph_moon_rock_02", "ph_moon_rock_01"]
 _PH_CLIFF = ["ph_coastal_cliff_01", "ph_coast_land_rocks_02"]
 _PH_DEAD = ["ph_dead_tree_trunk", "ph_dead_quiver_trunk"]
+# NOT PLANTED (2026-10-10): the island tree is an umbrella-crowned acacia, and
+# laid at a dozen per world it made a swamp, a jungle and a treasure island all
+# read as savanna. The runtime grows each world's own trees from its words
+# (proc/flora.js: palms on islands, conifers on peaks, kapoks in a jungle).
 _PH_TREE = ["ph_island_tree_01", "ph_island_tree_02"]
 _PH_UNDER = ["ph_fern_02", "ph_grass_medium_01"]
 _PH_FLOWER = ["ph_flower_gazania"]
@@ -173,18 +177,18 @@ _ARCH_RECIPES_REAL = {
              (_PH_SMALLROCK, 16, 3, 1.4), (_PH_DEAD, 6, 1, 4.0)],
     "dunes": [(_PH_SMALLROCK, 12, 2, 1.6), (_PH_LITTER, 6, 1, 1.6),
               (_PH_ROCK, 6, 1, 3.0)],
-    "basin": [(_PH_TREE, 14, 2, 7.5), (_PH_UNDER, 12, 2, 1.4),
+    "basin": [(_PH_UNDER, 12, 2, 1.4),
               (_PH_FLOWER, 10, 2, 0.9), (_PH_ROCK, 10, 2, 2.4)],
-    "peaks": [(_PH_TREE, 18, 3, 7.0), (_PH_ROCK, 24, 3, 3.4),
+    "peaks": [(_PH_ROCK, 24, 3, 3.4),
               (_PH_CLIFF, 12, 2, 10.0), (_PH_DEAD, 8, 1, 4.0)],
     # a cave floor: fallen rock and rubble, nothing that grows in daylight
     "cave": [(_PH_ROCK, 22, 3, 2.6), (_PH_SMALLROCK, 30, 3, 1.3)],
     # a lava field: black boulders, scorched snags, no green at all
     "volcano": [(_PH_ROCK, 26, 3, 3.2), (_PH_SMALLROCK, 22, 3, 1.5),
                 (_PH_CLIFF, 8, 2, 9.0), (_PH_DEAD, 10, 2, 4.2)],
-    "archipelago": [(_PH_TREE, 12, 2, 7.0), (_PH_ROCK, 14, 2, 2.6),
+    "archipelago": [(_PH_ROCK, 14, 2, 2.6),
                     (_PH_SMALLROCK, 14, 2, 1.4)],
-    "plain": [(_PH_TREE, 16, 3, 7.5), (_PH_UNDER, 14, 2, 1.4),
+    "plain": [(_PH_UNDER, 14, 2, 1.4),
               (_PH_FLOWER, 12, 2, 0.9), (_PH_ROCK, 12, 2, 2.6),
               (_PH_LITTER, 6, 1, 1.6)],
 }

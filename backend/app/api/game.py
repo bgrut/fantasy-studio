@@ -2119,6 +2119,17 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             pass
         cast = want
         pattern = guess_pattern(want)
+        # A DOLPHIN IS A DOLPHIN'S LENGTH (2026-10-10): the planner sized the
+        # reef's dolphin at 1.5 m, smaller than the reef fish that swam over it
+        # and hid it from the camera. A swimmer the planner made much smaller
+        # than its kind is sized by its kind (library.default_height: length).
+        try:
+            if pattern == "aquatic" and not req.player:
+                _true = library.default_height(want)
+                if _true > 1.0 and (spec.player.height_m or 0) < _true * 0.75:
+                    spec.player.height_m = _true
+        except Exception:  # noqa: BLE001
+            pass
         # A DRAWN WORLD HAS A DRAWN HERO (2026-10-06): "a cute cartoon gardener
         # (not photorealistic)" played a photographed gardener in a cartoon
         # garden. In a toon, anime or clay game a person is made in that look,

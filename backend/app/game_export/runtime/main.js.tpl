@@ -2284,9 +2284,12 @@ async function main() {
     const _frozen = SPEC.player.mode !== 'swim' && (SPEC.world.weather === 'snow' || /frozen|\bice\b|icy|arctic|tundra/.test(_wWords));
     waterMesh = new THREE.Mesh(
       new THREE.PlaneGeometry(_wS, _wS),
-      _sea ? new THREE.MeshStandardMaterial({ color: 0x1d5d8e, transparent: true, opacity: 0.7,
-                                       roughness: 0.12, metalness: 0.1, side: THREE.DoubleSide,
-                                       depthWrite: false })
+      // CLEAR WATER OVER A REEF (2026-10-10): at 0.7 deep blue with a metal
+      // sheen the surface was a lid; a dolphin swimming just under it was
+      // invisible, and the reef with it. Tropical shallows are clear turquoise.
+      _sea ? new THREE.MeshStandardMaterial({ color: 0x2c9db4, transparent: true, opacity: 0.42,
+                                       roughness: 0.1, metalness: 0.0, side: THREE.DoubleSide,
+                                       depthWrite: false, envMapIntensity: 0.6 })
            : __waterMaterial(__waterKind(_wWords, _frozen), WIND_U));
     window.__waterKind = _sea ? 'reef' : waterMesh.material.userData.waterKind;
     waterMesh.rotation.x = -Math.PI / 2;
