@@ -115,7 +115,16 @@ const plan = await p.evaluate(t => {
 const A = await screen(plan.front), B = await screen(plan.b2);
 await p.mouse.move(A[0], A[1]); await p.mouse.down(); await p.mouse.move(B[0], B[1], { steps: 20 }); await p.mouse.up(); await wait(400);
 await p.keyboard.press('Digit3'); await wait(150);
-const S = await screen(plan.sm); await p.mouse.click(S[0], S[1]); await wait(400);
+// the smelter's tile can sit under the foreman's card in the overhead view: a
+// player would wheel the view until it is clear, and so does this (2026-10-11)
+let S = await screen(plan.sm);
+for (let k = 0; k < 8; k++) {
+  const clear = await p.evaluate(s => { const el = document.elementFromPoint(s[0], s[1]); return !!el && el.tagName === 'CANVAS'; }, S);
+  if (clear && S[0] > 0 && S[1] > 0 && S[0] < 1280 && S[1] < 760) break;
+  await p.mouse.move(640, 380); await p.mouse.wheel({ deltaY: k < 4 ? 120 : -240 }); await wait(250);
+  S = await screen(plan.sm);
+}
+await p.mouse.click(S[0], S[1]); await wait(400);
 const smDbg = await p.evaluate((t, S) => { const F = window.__factory, c = F.cells[t.face][t.i][t.j]; const el = document.elementFromPoint(S[0], S[1]);
   return { tool: F.tool, at: S.map(Math.round), on: el ? el.tagName + (el.id ? '#' + el.id : '') : null, cell: c.t, overhead: document.body.classList.contains('overhead'), under: (() => { const u = F.cellUnder({ clientX: S[0], clientY: S[1] }); return u ? [u.face, u.i, u.j] : null; })() }; }, plan.sm, S);
 console.log('smelter   :', JSON.stringify({ want: [plan.sm.i, plan.sm.j], ...smDbg }));
