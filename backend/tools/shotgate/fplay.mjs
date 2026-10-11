@@ -153,8 +153,9 @@ await p.keyboard.press('Tab'); await wait(300);
 let s6 = s5, waited = 0;
 // the rate has to rise sixty a minute over the line's starting rate; on a
 // loaded test machine that has taken just over forty seconds (rounds 43 and
-// 49, 2026-10-02, at a steady 60 fps), so the window is seventy-five
-while (waited < 75000 && !/Read the panel/.test(s6)) { await wait(2000); waited += 2000; s6 = await step(); }
+// 49, 2026-10-02, at a steady 60 fps), so the window is seventy-five;
+// at the end of a full gate run it missed by seconds (2026-10-11): 110
+while (waited < 110000 && !/Read the panel/.test(s6)) { await wait(2000); waited += 2000; s6 = await step(); }
 const rate = await p.evaluate(() => window.__game.facts().rate_now);
 
 // 6. Enter clears the last card; the foreman steps back

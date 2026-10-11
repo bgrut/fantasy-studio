@@ -339,6 +339,12 @@ def game_scatter(setting: str | None, archetype: str | None = None,
     _grave = bool(re.search(r"\b(graveyards?|cemeter(?:y|ies)|churchyards?|crypts?|tombs?|necropolis)\b", (setting or "").lower()))
     if _garden and table is _ARCH_RECIPES:
         rec = _GARDEN_RECIPE
+    # NO EARTH ON AN ALIEN WORLD (2026-10-11): "an alien planet with purple
+    # plants" was strewn with grass, gazanias and dry branches; another world
+    # gets stone, and the runtime grows its own strange flora
+    if table is _ARCH_RECIPES_REAL and re.search(r"\b(alien|xeno\w*|extraterrestrial|exoplanet|planet)\b", (setting or "").lower()):
+        rec = [e for e in [(_PH_ROCK, 10, 2, 2.6), (_PH_SMALLROCK, 14, 2, 1.4)]
+               if any((PROPS_DIR / f"{n}.glb").exists() for n in e[0])] or rec
     # A SWAMP IS NOT A MEADOW (2026-10-10): "a misty swamp at dawn" took the
     # plain's recipe, sixteen flat-crowned island trees and gazania flowers,
     # and read as a savanna. Wetland is dead snags standing in it, ferns,

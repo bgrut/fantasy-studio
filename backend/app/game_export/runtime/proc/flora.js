@@ -1277,6 +1277,15 @@ export function biomeFor(words, arch, groundHSL) {
       rockTint: T(0x7a7466), coralTint: T(hue), coralTint2: T(0xffb070), leaf: { h: 0.19, s: 0.5, l: 0.24 } });
     return out;
   }
+  // AN ALIEN WORLD GROWS ALIEN THINGS (2026-10-11): "an astronaut exploring an
+  // alien planet with purple plants" stood on brown earth among grass and
+  // gazanias. It grows branching, faintly glowing growths in violet and teal
+  // (the reef's coral forms, on land), glassy crystals and dark stone.
+  if (has(/\balien|xeno\w*|extraterrestrial|exoplanet|strange planet|other ?world|purple plants/)) {
+    Object.assign(out, { kinds: K(['coral', 0.7], ['coral2', 0.55], ['crystal', 0.35], ['rock', 0.45], ['boulder', 0.15]), dens: 0.32,
+      coralTint: T(0xa04dff), coralTint2: T(0x2fe0c8), crystalTint: T(0x7affd4), rockTint: T(0x4a3f5c), leaf: { h: 0.78, s: 0.5, l: 0.3 } });
+    return out;
+  }
   if (has(/\bmoon\b|lunar|asteroid|space|orbit|comet/)) Object.assign(out, { kinds: K(['rock', 1], ['boulder', 0.35], ...(crystal ? [['crystal', 0.15]] : [])), dens: 0.1, rockTint: T(0x8d8c8a) });
   else if (has(/mars|red planet|martian/)) Object.assign(out, { kinds: K(['rock', 1], ['boulder', 0.4], ...(crystal ? [['crystal', 0.12]] : [])), dens: 0.1, rockTint: T(0xa0573a) });
   else if (has(/volcan|lava|magma|ash\b|obsidian/)) Object.assign(out, { kinds: K(['rock', 1], ['boulder', 0.4], ['dead', 0.2]), dens: 0.14, rockTint: T(0x3a3634), crystalTint: T(0xff7a3a) });

@@ -497,7 +497,7 @@ async function main() {
     const W = SPEC.world || {}, L0 = W.level || {};
     // (2026-10-07) the sentence's own place words too: "a himalayan monastery" grew an
     // oak wood because the title, "Monk's Ascent", never said where it was
-    const placeWords = (String(SPEC.prompt || '').toLowerCase().match(/\b(redwoods?|sequoias?|himalaya\w*|tibet\w*|nepal\w*|bhutan\w*|monaster(?:y|ies)|gompa|lavender|vineyards?|provence|tuscan\w*|black sand|basalt|sea stacks?|iceland\w*|kansas|wheat|olive groves?|tea plantations?|bamboo|highlands?|glens?|moors?|heather)\b/g) || []);
+    const placeWords = (String(SPEC.prompt || '').toLowerCase().match(/\b(redwoods?|sequoias?|himalaya\w*|tibet\w*|nepal\w*|bhutan\w*|monaster(?:y|ies)|gompa|lavender|vineyards?|provence|tuscan\w*|black sand|basalt|sea stacks?|iceland\w*|kansas|wheat|olive groves?|tea plantations?|bamboo|highlands?|glens?|moors?|heather|alien|xeno\w*|extraterrestrial|exoplanet|purple plants)\b/g) || []);   // (alien words, 2026-10-11)
     const words = [W.name, W.sky, W.flora, W.weather, W.setting, SPEC.title, SPEC.description, ...placeWords]
       .filter(Boolean).join(' ').toLowerCase();
     if (L0.osm || L0.interior || W.pano || L0.cave) return null;
@@ -1788,6 +1788,35 @@ async function main() {
   // green and the dolphin swam over a lawn among the coral. Under the sea the
   // floor is pale sand, which also gives it the sand photograph for detail.
   if (FLORA && FLORA.biome && FLORA.biome.underwater) gcol.setRGB(0.74, 0.68, 0.52);
+  // AN ALIEN SOIL AND ITS MOONS (2026-10-11): "an alien planet with purple
+  // plants and two moons" stood on brown earth under an empty black sky. Its
+  // soil is a dusky violet; the moons it names hang in the sky, cratered,
+  // lit on one side, one pale and one amber, never fogged out.
+  const _alienW = ((SPEC.prompt || '') + ' ' + ((FLORA && FLORA.words) || '')).toLowerCase();
+  if (/\balien|xeno\w*|extraterrestrial|exoplanet|strange planet/.test(_alienW) && !(FLORA && FLORA.biome && FLORA.biome.underwater)) {
+    gcol.setRGB(0.3, 0.24, 0.34);
+    const nMoon = /\b(two|twin|2|double) moons\b/.test(_alienW) ? 2 : /\b(three|3|triple) moons\b/.test(_alienW) ? 3 : /\bmoons?\b/.test(_alienW) ? 1 : 0;
+    const moonCol = ['#d8cfe8', '#f0b070', '#9fe0d8'];
+    for (let k = 0; k < nMoon; k++) {
+      const cv = document.createElement('canvas'); cv.width = cv.height = 256; const g = cv.getContext('2d');
+      g.fillStyle = moonCol[k]; g.fillRect(0, 0, 256, 256);
+      const rr = mulberry32((SPEC.seed || 1) + 31 * k);
+      for (let c = 0; c < 70; c++) { const x = rr() * 256, y = rr() * 256, r = 3 + Math.pow(rr(), 2) * 26;
+        const gr = g.createRadialGradient(x, y, r * 0.2, x, y, r); gr.addColorStop(0, 'rgba(0,0,0,0.28)'); gr.addColorStop(0.8, 'rgba(0,0,0,0.1)'); gr.addColorStop(1, 'rgba(255,255,255,0.12)');
+        g.fillStyle = gr; g.beginPath(); g.arc(x, y, r, 0, 6.3); g.fill(); }
+      const tx = new THREE.CanvasTexture(cv); tx.colorSpace = THREE.SRGBColorSpace;
+      const mm = new THREE.MeshStandardMaterial({ map: tx, emissive: new THREE.Color(moonCol[k]), emissiveIntensity: 0.18, roughness: 1, fog: false });
+      mm.userData.noAutoTex = true;
+      const D = (camera && camera.far ? camera.far : 1000) * 0.82;     // inside the far plane, whatever the quality
+      const moon = new THREE.Mesh(new THREE.SphereGeometry((k === 0 ? 70 : 38) * D / 1300, 48, 32), mm);
+      // in the sky the player first looks at: toward the goal from the spawn
+      const _g0 = (LVL && LVL.goal) || [0, 1], _a0 = Math.atan2(_g0[0], _g0[1]);
+      const az = _a0 + (k === 0 ? -0.35 : k === 1 ? 0.3 : 0.75), el = 0.2 + k * 0.1;
+      moon.position.set(Math.sin(az) * Math.cos(el) * D, Math.sin(el) * D, Math.cos(az) * Math.cos(el) * D);
+      moon.name = 'moon' + k; moon.frustumCulled = false; scene.add(moon);
+    }
+    window.__alien = { moons: nMoon };
+  }
   {
     // SATURATION FLOOR (Phase 76): LLM ground colors trend pastel — real
     // grass/soil is richer. Only colored grounds are lifted (snow/sand with
@@ -9049,7 +9078,7 @@ async function main() {
   }
   // GRASS: instanced cross-blades on the terrain, thinned along the walking
   // path — the "flat green plane" is gone. (Gated off for cities/snow.)
-  if (!PURE_SCENE && !ASTEROIDS && !GRASS_LIVE && (SPEC.world.scatter || []).length && SPEC.world.grass !== false) {
+  if (!PURE_SCENE && !ASTEROIDS && !window.__alien && !GRASS_LIVE && (SPEC.world.scatter || []).length && SPEC.world.grass !== false) {   // no Earth grass on another world
     // undergrowth stays PLANT-colored: pull toward green so brown forest
     // floors get living tufts, not floating tan cards
     // Blades are instance-coloured, so THIS is the lever, not bmat.color: a
