@@ -500,7 +500,7 @@ async function main() {
     const W = SPEC.world || {}, L0 = W.level || {};
     // (2026-10-07) the sentence's own place words too: "a himalayan monastery" grew an
     // oak wood because the title, "Monk's Ascent", never said where it was
-    const placeWords = (String(SPEC.prompt || '').toLowerCase().match(/\b(redwoods?|sequoias?|himalaya\w*|tibet\w*|nepal\w*|bhutan\w*|monaster(?:y|ies)|gompa|lavender|vineyards?|provence|tuscan\w*|black sand|basalt|sea stacks?|iceland\w*|kansas|wheat|olive groves?|tea plantations?|bamboo|highlands?|glens?|moors?|heather|alien|xeno\w*|extraterrestrial|exoplanet|purple plants|fjords?|norw\w*|vikings?|norse|nordic|scandinavia\w*|egypt\w*|giza|pyramids?|pharaoh\w*|sphinx|sahara|oasis|alps|alpine|swiss|switzerland|tyrol\w*|dolomit\w*|sea ice|ice floes?|pack ice|polar bears?|icebergs?)\b/g) || []);   // (alien words, 2026-10-11; fjord, Egypt, Alps, sea ice the same day)
+    const placeWords = (String(SPEC.prompt || '').toLowerCase().match(/\b(redwoods?|sequoias?|himalaya\w*|tibet\w*|nepal\w*|bhutan\w*|monaster(?:y|ies)|gompa|lavender|vineyards?|provence|tuscan\w*|black sand|basalt|sea stacks?|iceland\w*|kansas|wheat|olive groves?|tea plantations?|bamboo|highlands?|glens?|moors?|heather|alien|xeno\w*|extraterrestrial|exoplanet|purple plants|fjords?|norw\w*|vikings?|norse|nordic|scandinavia\w*|egypt\w*|giza|pyramids?|pharaoh\w*|sphinx|sahara|oasis|alps|alpine|swiss|switzerland|tyrol\w*|dolomit\w*|sea ice|ice floes?|pack ice|polar bears?|icebergs?|beach|seaside|lifeguards?|surf\w*)\b/g) || []);   // (alien words, 2026-10-11; fjord, Egypt, Alps, sea ice the same day)
     const words = [W.name, W.sky, W.flora, W.weather, W.setting, SPEC.title, SPEC.description, ...placeWords]
       .filter(Boolean).join(' ').toLowerCase();
     if (L0.osm || L0.interior || W.pano || L0.cave) return null;
@@ -1507,6 +1507,71 @@ async function main() {
     const s0 = 34;                                    // the spawn stands 34 m along the line
     return { curve, len, pts, at, s0, near: (x, z, m) => nearest(x, z)[1] < 2.8 + (m || 0), sNear: (x, z) => nearest(x, z)[0] / N * len };
   })();
+  // ── A BEACH (2026-10-11) ───────────────────────────────────────────────
+  // a coast level (build_level coast=True): sand down to the sea on +s. The
+  // beach is dressed: umbrellas in rows of colour, towels, a lifeguard tower
+  // on its stilts; the swimmers are out in the water, not on the sand.
+  const BEACH = (() => {
+    if (INTERIOR || !LVL || !LVL.coast || !LVL.goal) return null;
+    const [ux, uz] = LVL.coast.axis, gl = Math.hypot(LVL.goal[0], LVL.goal[1]) || 60;
+    const local = (x, z) => [x * ux + z * uz, -x * uz + z * ux];
+    const world = (a, c) => [ux * a - uz * c, uz * a + ux * c];
+    const r = mulberry32((SPEC.seed || 1) + 3131), spots = [];
+    for (let a = -30; a < gl + 20; a += 5.5) for (const c0 of [-9, -4.5, 4.5]) {
+      if (r() < 0.3) continue;
+      const a1 = a + (r() - 0.5) * 2.5, c = c0 + (r() - 0.5) * 1.6;
+      spots.push({ a: a1, c, col: Math.floor(r() * 6), towel: Math.floor(r() * 6), rot: r() * 6.28 });
+    }
+    const tower = world(gl * 0.5, 6.5);
+    return { ux, uz, gl, local, world, spots, tower,
+      onKit: (x, z, m) => { const [a, c] = local(x, z); return spots.some(q => Math.hypot(q.a - a, q.c - c) < 1.6 + (m || 0)) || Math.hypot(x - tower[0], z - tower[1]) < 2.6 + (m || 0); },
+      sea: (k, n) => world(10 + (k + 1) * (gl - 10) / (n + 1), 18 + (k % 2) * 5) };
+  })();
+  // ── A SKATEPARK (2026-10-11) ───────────────────────────────────────────
+  // "a skateboarder lands five tricks in a city skatepark at sunset" rode an
+  // avenue between glass towers collecting orange cubes. A skatepark is a
+  // concrete plaza full of things to ride: a quarter pipe, a funbox with a
+  // rail, a ledge, a stair set with a handrail, a flat rail; murals on its
+  // wall, a fence, lights, and the city standing round it as a skyline. The
+  // tricks wait over the features.
+  const SKATE = (() => {
+    if (INTERIOR || OSM || !LVL || !LVL.heights || SPEC.genre === 'factory' || VIEW === 'side') return null;
+    if (LVL.heights.length !== LVL.grid_n * LVL.grid_n) return null;
+    const w = [SPEC.prompt, SPEC.world && SPEC.world.name, SPEC.title].filter(Boolean).join(' ').toLowerCase();
+    if (!/\b(skate ?parks?|skate ?plaza|half ?pipe|halfpipe|skate bowl)\b/.test(w)) return null;
+    const g = LVL.goal || [0, 50], gl = Math.hypot(g[0], g[1]) || 1, ux = g[0] / gl, uz = g[1] / gl;
+    const U0 = -10, U1 = 58, S0 = -20, S1 = 20;
+    const local = (x, z) => [x * ux + z * uz, -x * uz + z * ux];
+    const world = (a, c) => [ux * a - uz * c, uz * a + ux * c];
+    const n = LVL.grid_n, S = LVL.size_m, hs = LVL.heights;
+    const H0 = hs[Math.round((n - 1) / 2) * n + Math.round((n - 1) / 2)];
+    for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
+      const x = (j / (n - 1) - 0.5) * S, z = (i / (n - 1) - 0.5) * S, [a, c] = local(x, z);
+      const d = Math.max(U0 - a, a - U1, S0 - c, c - S1);
+      if (d <= 6) hs[i * n + j] = H0;
+      else if (d < 18) { const t = (d - 6) / 12, s2 = t * t * (3 - 2 * t); hs[i * n + j] = H0 * (1 - s2) + hs[i * n + j] * s2; }
+    }
+    LVL.goal = world(46, 0);
+    LVL.path = [[0, 0], LVL.goal.slice()];
+    const feats = [[12, 7, 0.9], [22, 0, 1.6], [30, -9, 1.2], [38, 10, 0.9], [52, 0, 3.3], [22, 0, 1.6]];
+    if (LVL.collect_points) LVL.collect_points = LVL.collect_points.map((_, k) => world(feats[k % feats.length][0] + (k >= feats.length ? 2 : 0), feats[k % feats.length][1]));
+    if (LVL.pois) LVL.pois = [];
+    if (LVL.landmarks) LVL.landmarks = [];
+    return { ux, uz, H0, U0, U1, S0, S1, local, world,
+      inPark: (x, z, m) => { const [a, c] = local(x, z); return a > U0 - (m || 0) && a < U1 + (m || 0) && c > S0 - (m || 0) && c < S1 + (m || 0); } };
+  })();
+  // ── A SMITHY (2026-10-11) ──────────────────────────────────────────────
+  // "a medieval blacksmith forges a sword in a village smithy" started on a
+  // dirt track with no forge anywhere. The smith starts at the forge: an
+  // open-fronted timber shop beside the spawn, a stone hearth of glowing coals
+  // under its hood, the bellows, the anvil on its stump with a blade on it.
+  const SMITHY = (() => {
+    if (INTERIOR || OSM || !LVL || SPEC.genre === 'factory' || VIEW === 'side') return null;
+    const w = [SPEC.prompt, SPEC.world && SPEC.world.name, SPEC.title, (SPEC.player || {}).name].filter(Boolean).join(' ').toLowerCase();
+    if (!/\b(blacksmiths?|smithy|smithies|anvil|swordsmith|forges? an?\b|forging)/.test(w)) return null;
+    const at = [-8.5, -4.5], ry = Math.PI / 2;            // beside the spawn, its open front to the track
+    return { at, ry, near: (x, z, m) => Math.hypot(x - at[0], z - at[1]) < 4.6 + (m || 0) };
+  })();
   // ── A MONASTERY ON THE MOUNTAIN (2026-10-07) ────────────────────────────
   // "a monk climbs the stone steps of a cliffside himalayan monastery above
   // the clouds to ring the bell" was a red-earth wood with a giant blue disc
@@ -1781,6 +1846,9 @@ async function main() {
         ? { x, z, ry: Math.atan2(GC[0] - x, GC[1] - z), w: 9.5 + r() * 3, d: 5.6 + r() * 0.9, h: 1.9 + r() * 0.4, tint: Math.floor(r() * 4), stone: false, norse: true }
         : { x, z, ry: Math.atan2(GC[0] - x, GC[1] - z), w: 6.2 + r() * 2.2, d: 5.0 + r() * 1.4, h: 2.9 + r() * 0.7, tint: Math.floor(r() * 4), stone: r() < 0.3 });
     }
+    // a village smithy is one of the village's own houses: the one nearest the start
+    if (SMITHY && cot.length) { let bi = 0; cot.forEach((c, i) => { if (Math.hypot(c.x, c.z) < Math.hypot(cot[bi].x, cot[bi].z)) bi = i; });
+      const c = cot.splice(bi, 1)[0]; SMITHY.at[0] = c.x; SMITHY.at[1] = c.z; SMITHY.ry = c.ry; }
     const loc = (c, lx, lz) => [c.x + lx * Math.cos(c.ry) + lz * Math.sin(c.ry), c.z - lx * Math.sin(c.ry) + lz * Math.cos(c.ry)];
     let fi = 0;
     return { GC, D, P, LL, cot, loc, norse,
@@ -7078,6 +7146,8 @@ async function main() {
       keepClear.push([_sp.x, _sp.z, 12]);     // the hero starts in a clearing, the camera behind them too
       if (PITCH) for (let a = -PITCH.L / 2 - 8; a <= PITCH.L / 2 + 8; a += 7) for (let c = -PITCH.W / 2 - 8; c <= PITCH.W / 2 + 8; c += 7)
         keepClear.push([a * PITCH.ux - c * PITCH.uz, a * PITCH.uz + c * PITCH.ux, 7]);   // no wood on the pitch or its apron
+      if (SMITHY) keepClear.push([SMITHY.at[0], SMITHY.at[1], 7]);   // no tree through the forge
+      if (SKATE) for (let a = SKATE.U0 - 4; a <= SKATE.U1 + 4; a += 7) for (let c = SKATE.S0 - 4; c <= SKATE.S1 + 4; c += 7) { const [x, z] = SKATE.world(a, c); keepClear.push([x, z, 7]); }   // no tree in the park
       if (CANALS) for (let a = CANALS.U0 - 4; a <= CANALS.U1 + 4; a += 8) for (let c = -44; c <= 60; c += 8) { const [x, z] = CANALS.world(a, c); keepClear.push([x, z, 8]); }   // a city of stone and water
       if (RAIL) for (let sA = 0; sA < RAIL.len; sA += 5) { const q = RAIL.at(sA); keepClear.push([q.x, q.z, 6]); }   // no tree on the line
       if (ARENA) { const ea = ARENA.A + ARENA.RO + 6, eb = ARENA.B + ARENA.RO + 6;
@@ -7460,6 +7530,9 @@ async function main() {
                   || (ARENA && ARENA.inFoot(x, z, 6))
                   || (RAIL && RAIL.near(x, z, 4))
                   || (CANALS && CANALS.inCity(x, z, 6))
+                  || (BEACH && BEACH.onKit(x, z, 1.5))
+                  || (SKATE && SKATE.inPark(x, z, 4))
+                  || (SMITHY && SMITHY.near(x, z, 2))
                   || roadDist(x, z) < 7.5
                   || _regReject(x, z, sct)
                   || (clusterN(x, z) < 0.45 && !_regForce(x, z, sct)
@@ -9259,6 +9332,8 @@ async function main() {
           if (ARENA && ARENA.inFoot(x, z, 1)) d = 0;                                                  // sand and stone, no grass
           if (RAIL && RAIL.near(x, z, 0)) d = 0;
           if (CANALS && CANALS.inCity(x, z, 1)) d = 0;
+          if (SKATE && SKATE.inPark(x, z, 0.5)) d = 0;
+          if (SMITHY && SMITHY.near(x, z, 0.3)) d = 0;
           else if (PITCH && PITCH.inside(x, z, 4)) { h *= 0.3; d *= 0.6; dry = 0; }
           if (WEST && WEST.inTown(x, z, 0)) d = 0;
           if (MONK && (MONK.onStair(x, z, 0.2) || MONK.onTop(x, z, 0))) d = 0;
@@ -9338,6 +9413,8 @@ async function main() {
           if (ARENA && ARENA.inFoot(x, z, 2)) return true;                       // nor on the sand or in the stands
           if (RAIL && RAIL.near(x, z, 0.5)) return true;
           if (CANALS && CANALS.inCity(x, z, 2)) return true;
+          if (SKATE && SKATE.inPark(x, z, 1)) return true;
+          if (SMITHY && SMITHY.near(x, z, 0.5)) return true;
           if (FALLS && Math.hypot(x - FALLS.at[0], z - FALLS.at[1]) < 12) return true;
           const rg = window.__regionAt && window.__regionAt(x, z);
           if (rg && rg.kind === 'water' && rg.w > 0.2) return true;
@@ -9492,6 +9569,8 @@ async function main() {
         if (ARENA && ARENA.inFoot(x, z, 1)) continue;                  // raked sand and stone seats
         if (RAIL && RAIL.near(x, z, 0)) continue;
         if (CANALS && CANALS.inCity(x, z, 1)) continue;
+        if (SKATE && SKATE.inPark(x, z, 0.5)) continue;
+        if (SMITHY && SMITHY.near(x, z, 0.3)) continue;
         if (Math.hypot(hAt(x + 0.8, z) - hAt(x - 0.8, z), hAt(x, z + 0.8) - hAt(x, z - 0.8)) > 1.6) continue;   // nothing roots on a face steeper than 45 degrees
         const _rg = window.__regionAt && window.__regionAt(x, z);
         if (_rg && _rg.kind === 'water' && _rg.w > 0.2) continue;    // no grass in the lake
@@ -10152,6 +10231,11 @@ async function main() {
           holder.position.set(x, 0, z);
           holder.position.y = hAt(x, z);
           startYaw = Math.atan2(-ARENA.ux, -ARENA.uz);
+        } else if (BEACH && /\b(swimmers?|bathers?|surfers?)\b/i.test(ent.name || '')) {
+          // a swimmer is in the water, out past the shallows, facing the beach
+          const k = (window.__beachSwim = (window.__beachSwim || 0) + 1) - 1, [x, z] = BEACH.sea(k % 3, 3);
+          holder.position.set(x + (rngN() - 0.5) * 4, 0, z); holder.position.y = hAt(holder.position.x, holder.position.z);
+          startYaw = Math.atan2(BEACH.uz, -BEACH.ux);
         } else if (CANALS && ent.behavior !== 'static' && ent.behavior !== 'vehicle') {
           // nobody stands in a canal: the guide by the start, everyone else along the quay
           let a = ent.behavior === 'guide' ? 3.5 : 10 + rngN() * (CANALS.gl - 14), c = ent.behavior === 'guide' ? -1.6 : -2.6 + rngN() * 4.4;
@@ -12066,6 +12150,165 @@ async function main() {
       const sgn = add(new THREE.PlaneGeometry(4, 0.75), new THREE.MeshStandardMaterial({ map: new THREE.CanvasTexture(sg), roughness: 0.6 }), -1.6, 3.6, 0); sgn.rotation.y = -Math.PI / 2;
       world.createCollider(RAPIER.ColliderDesc.cuboid(3, 3.2, 7).setTranslation(St.position.x + Math.cos(yawS) * 1.5, q.y + 3.2, St.position.z - Math.sin(yawS) * 1.5).setRotation({ x: 0, y: Math.sin(yawS / 2), z: 0, w: Math.cos(yawS / 2) }));
     }
+  }
+  // ── THE BEACH, BUILT (see BEACH above) ─────────────────────────────────
+  if (BEACH) {
+    const Bc = BEACH, MAT = (o) => { const m = new THREE.MeshStandardMaterial(o); m.userData.noAutoTex = true; return m; };
+    const stripeT = (a, b) => { const cv = document.createElement('canvas'); cv.width = 256; cv.height = 32; const g = cv.getContext('2d');
+      for (let i = 0; i < 8; i++) { g.fillStyle = i % 2 ? a : b; g.fillRect(i * 32, 0, 32, 32); } const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; return t; };
+    const PAIRS = [['#d8352a', '#f4f0e6'], ['#2a6fd8', '#f4f0e6'], ['#f2c12e', '#f4f0e6'], ['#2fa36b', '#f4f0e6'], ['#e86a2a', '#2a3a6a'], ['#c23a7a', '#f4f0e6']];
+    const canM = PAIRS.map(([a, b]) => MAT({ map: stripeT(a, b), roughness: 0.8, side: THREE.DoubleSide }));
+    const towM = ['#d8352a', '#2a6fd8', '#f2c12e', '#2fa36b', '#7a3fb0', '#f08aa8'].map(c => MAT({ color: c, roughness: 0.95 }));
+    const poleM = MAT({ color: 0xe8e4dc, roughness: 0.5 });
+    const canopy = new THREE.ConeGeometry(1.25, 0.55, 16, 1, true);
+    for (const q of Bc.spots) {
+      const [x, z] = Bc.world(q.a, q.c), y = hAt(x, z);
+      const po = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 2.3, 6), poleM); po.position.set(x, y + 1.1, z); po.rotation.z = 0.08; po.castShadow = true; scene.add(po);
+      const cn = new THREE.Mesh(canopy, canM[q.col]); cn.position.set(x + 0.09, y + 2.25, z); cn.castShadow = true; scene.add(cn);
+      const tw = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 1.8), towM[q.towel]); tw.rotation.x = -Math.PI / 2; tw.rotation.z = q.rot;
+      tw.position.set(x + Math.cos(q.rot) * 1.3, y + 0.03, z + Math.sin(q.rot) * 1.3); tw.receiveShadow = true; scene.add(tw);
+    }
+    // the lifeguard tower: a hut on four stilts, a ramp, a red flag and a rescue buoy
+    { const [x, z] = Bc.tower, y = hAt(x, z), T = new THREE.Group(); T.position.set(x, y, z); T.rotation.y = Math.atan2(-Bc.uz, Bc.ux) + Math.PI; scene.add(T);
+      const wood = MAT({ color: 0xd9c9a8, roughness: 0.8 }), red = MAT({ color: 0xc8261e, roughness: 0.6 }), white = MAT({ color: 0xf2efe8, roughness: 0.6 });
+      for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) { const st = new THREE.Mesh(new THREE.BoxGeometry(0.16, 2.2, 0.16), wood); st.position.set(sx * 1.0, 1.1, sz * 1.0); T.add(st); }
+      const deck = new THREE.Mesh(new THREE.BoxGeometry(2.8, 0.12, 2.8), wood); deck.position.y = 2.2; T.add(deck);
+      const hut = new THREE.Mesh(new THREE.BoxGeometry(2.2, 1.8, 2.0), white); hut.position.set(0, 3.1, -0.2); T.add(hut);
+      const band = new THREE.Mesh(new THREE.BoxGeometry(2.22, 0.35, 2.02), red); band.position.set(0, 3.6, -0.2); T.add(band);
+      const rf = new THREE.Mesh(new THREE.BoxGeometry(2.7, 0.12, 2.6), red); rf.position.set(0, 4.08, -0.2); T.add(rf);
+      const win = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.7, 0.04), MAT({ color: 0x1e2a30, roughness: 0.1 })); win.position.set(0, 3.15, 0.81); T.add(win);
+      const ramp = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.08, 3.4), wood); ramp.position.set(0, 1.1, 2.7); ramp.rotation.x = 0.7; T.add(ramp);
+      const fp = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 2.4, 6), white); fp.position.set(1.2, 5.2, -1.2); T.add(fp);
+      const fl = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.55), MAT({ color: 0xd8201a, side: THREE.DoubleSide })); fl.position.set(1.65, 6.05, -1.2); T.add(fl);
+      const buoy = new THREE.Mesh(new THREE.TorusGeometry(0.3, 0.09, 8, 16), MAT({ color: 0xff6a1a, roughness: 0.5 })); buoy.position.set(-1.05, 2.0, 1.12); T.add(buoy);
+      T.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+      world.createCollider(RAPIER.ColliderDesc.cuboid(1.4, 2.2, 1.4).setTranslation(x, y + 2.2, z)); }
+  }
+  // ── THE SKATEPARK, BUILT (see SKATE above) ─────────────────────────────
+  if (SKATE) {
+    const K = SKATE, rK = mulberry32((SPEC.seed || 1) + 4848), yaw = Math.atan2(K.ux, K.uz), Y = K.H0;
+    const G = new THREE.Group(); G.rotation.y = yaw; G.position.y = Y; scene.add(G);
+    const L = (a, c) => [-c, a];                                     // (u, s) -> G's (x, z)
+    const MAT = (o) => { const m = new THREE.MeshStandardMaterial(o); m.userData.noAutoTex = true; return m; };
+    const cvT = (wd, ht, draw) => { const cv = document.createElement('canvas'); cv.width = wd; cv.height = ht; draw(cv.getContext('2d'), wd, ht);
+      const t = new THREE.CanvasTexture(cv); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = renderer.capabilities.getMaxAnisotropy(); return t; };
+    const concT = cvT(512, 512, (g, W, H) => { g.fillStyle = '#a8a59f'; g.fillRect(0, 0, W, H);
+      for (let i = 0; i < 9000; i++) { const l = 140 + Math.floor(rK() * 50); g.fillStyle = `rgba(${l},${l},${l - 4},0.25)`; g.fillRect(rK() * W, rK() * H, 1 + rK() * 2, 1 + rK() * 2); }
+      for (let i = 0; i < 12; i++) { g.strokeStyle = 'rgba(30,28,26,0.08)'; g.lineWidth = 3 + rK() * 3; const x = rK() * W, y = rK() * H;   // wheel marks
+        g.beginPath(); g.moveTo(x, y); g.quadraticCurveTo(x + (rK() - 0.5) * 200, y + (rK() - 0.5) * 200, x + (rK() - 0.5) * 300, y + (rK() - 0.5) * 300); g.stroke(); }
+      g.fillStyle = 'rgba(60,58,55,0.5)'; g.fillRect(0, 0, W, 3); g.fillRect(0, 0, 3, H); });   // the expansion joints, a slab every 4 m
+    const concM = MAT({ map: concT, roughness: 0.82 }), steelM = MAT({ color: 0xb8bcc0, metalness: 0.9, roughness: 0.25 }), darkM = MAT({ color: 0x2a2a2c, roughness: 0.6 });
+    const add = (geo, m, x, y, z) => { const o = new THREE.Mesh(geo, m); o.position.set(x, y, z); o.castShadow = o.receiveShadow = true; G.add(o); return o; };
+    const col = (hx, hy, hz, a, c, y, pitch) => { const [wx, wz] = K.world(a, c), q = new THREE.Quaternion().setFromEuler(new THREE.Euler(pitch || 0, yaw, 0, 'YXZ'));
+      world.createCollider(RAPIER.ColliderDesc.cuboid(hx, hy, hz).setTranslation(wx, Y + y, wz).setRotation({ x: q.x, y: q.y, z: q.z, w: q.w })); };
+    // the slab
+    const PL = K.U1 - K.U0, PW = K.S1 - K.S0, slab = new THREE.PlaneGeometry(PW, PL); slab.rotateX(-Math.PI / 2);
+    concT.repeat.set(PW / 4, PL / 4);
+    add(slab, concM, 0, 0.04, (K.U0 + K.U1) / 2).castShadow = false;
+    // the quarter pipe across the far end: a curve of radius 3.2 m up to vertical, a deck, steel coping
+    { const R = 3.2, Wd = 16, a0 = K.U1 - 6, N = 10, pos = [], idx = [];
+      for (let i = 0; i <= N; i++) { const t = i / N * Math.PI / 2, a = a0 + Math.sin(t) * R, y = R - Math.cos(t) * R;
+        for (const c of [-Wd / 2, Wd / 2]) { const [x, z] = L(a, c); pos.push(x, y + 0.04, z); } }
+      for (let i = 0; i < N; i++) { const b = i * 2; idx.push(b, b + 1, b + 2, b + 1, b + 3, b + 2); }
+      const qg = new THREE.BufferGeometry(); qg.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); qg.setIndex(idx); qg.computeVertexNormals();
+      const uv = []; for (let i = 0; i <= N; i++) uv.push(0, i / N * 1.3, Wd / 4, i / N * 1.3); qg.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+      add(qg, concM, 0, 0, 0).material.side = THREE.DoubleSide;
+      const [dx, dz] = L(a0 + R + 1.5, 0); add(new THREE.BoxGeometry(Wd, R, 3), concM, dx, R / 2 + 0.04, dz);
+      const [cx, cz] = L(a0 + R, 0); add(new THREE.CylinderGeometry(0.05, 0.05, Wd, 10).rotateZ(Math.PI / 2), steelM, cx, R + 0.06, cz);
+      for (let i = 0; i < 6; i++) { const t0 = i / 6 * Math.PI / 2, t1 = (i + 1) / 6 * Math.PI / 2, a1 = a0 + Math.sin(t0) * R, a2 = a0 + Math.sin(t1) * R, y1 = R - Math.cos(t0) * R, y2 = R - Math.cos(t1) * R;
+        const len = Math.hypot(a2 - a1, y2 - y1); col(Wd / 2, 0.1, len / 2, (a1 + a2) / 2, 0, (y1 + y2) / 2 - 0.05, -Math.atan2(y2 - y1, a2 - a1)); }
+      col(Wd / 2, R / 2, 1.5, a0 + R + 1.5, 0, R / 2); }
+    // the funbox: ramps up both ends, a flat top, a rail down its middle
+    { const a = 22, len = 6, hgt = 0.9, wd = 4.4, rl = 2.6, pitch = Math.atan2(hgt, rl);
+      const [x, z] = L(a, 0); add(new THREE.BoxGeometry(wd, hgt, len), concM, x, hgt / 2 + 0.04, z); col(wd / 2, hgt / 2, len / 2, a, 0, hgt / 2);
+      for (const sd of [-1, 1]) { const am = a + sd * (len / 2 + rl / 2), [rx, rz] = L(am, 0);
+        const rp = add(new THREE.BoxGeometry(wd, 0.12, Math.hypot(rl, hgt)), concM, rx, hgt / 2, rz); rp.rotation.x = sd * pitch;
+        col(wd / 2, 0.08, Math.hypot(rl, hgt) / 2, am, 0, hgt / 2 - 0.03, sd * pitch); }
+      const [px, pz] = L(a, 0); add(new THREE.CylinderGeometry(0.04, 0.04, len + 1.2, 10).rotateX(Math.PI / 2), steelM, px, hgt + 0.45, pz);
+      for (const o of [-len / 2, len / 2]) { const [qx, qz] = L(a + o, 0); add(new THREE.CylinderGeometry(0.03, 0.03, 0.45, 8), steelM, qx, hgt + 0.25, qz); } }
+    // a ledge with steel coping, a flat rail, a stair set with its handrail
+    { const [x, z] = L(30, -9); add(new THREE.BoxGeometry(1.2, 0.45, 6), concM, x, 0.27, z); add(new THREE.BoxGeometry(0.08, 0.08, 6), steelM, x + 0.6, 0.5, z); col(0.6, 0.23, 3, 30, -9, 0.23); }
+    { const [x, z] = L(12, 7); add(new THREE.CylinderGeometry(0.04, 0.04, 7, 10).rotateX(Math.PI / 2), steelM, x, 0.42, z);
+      for (const o of [-3, 0, 3]) { const [qx, qz] = L(12 + o, 7); add(new THREE.CylinderGeometry(0.03, 0.03, 0.4, 8), steelM, qx, 0.22, qz); } }
+    { const top = 1.1, [x, z] = L(41, 14.5); add(new THREE.BoxGeometry(8, top, 6), concM, x, top / 2 + 0.04, z); col(4, top / 2, 3, 41, 14.5, top / 2);
+      for (let k = 0; k < 3; k++) { const hk = top - (k + 1) * top / 4, [sx, sz] = L(37.775 - k * 0.45, 14.5); add(new THREE.BoxGeometry(8, hk, 0.45), concM, sx, hk / 2 + 0.04, sz); col(4, hk / 2, 0.225, 37.775 - k * 0.45, 14.5, hk / 2); }
+      // the handrail down the steps: posts, and a rail sloped with the flight
+      const pitch = Math.atan2(top, 1.4), [hx, hz] = L(37.3, 11.2);
+      const hr = add(new THREE.CylinderGeometry(0.04, 0.04, 2.4, 10).rotateX(Math.PI / 2), steelM, hx, top / 2 + 0.85, hz); hr.rotation.x = -pitch;
+      for (const o of [-0.9, 0.9]) { const [qx, qz] = L(37.3 + o, 11.2); add(new THREE.CylinderGeometry(0.03, 0.03, 0.9, 8), steelM, qx, top / 2 + o * Math.tan(pitch) + 0.4, qz); } }
+    // the wall along one side, painted in big shapes (no words, no marks)
+    { const mur = cvT(1024, 256, (g, W, H) => { g.fillStyle = '#c9c4ba'; g.fillRect(0, 0, W, H);
+        const C = ['#e8452f', '#2a8bd8', '#f2c12e', '#36b37e', '#9a4fd0', '#ff7ab6', '#1d1d1f'];
+        for (let i = 0; i < 26; i++) { g.fillStyle = C[Math.floor(rK() * C.length)]; g.beginPath(); const x = rK() * W, y = H * 0.25 + rK() * H * 0.6, r = 20 + rK() * 70;
+          g.moveTo(x - r, y); g.bezierCurveTo(x - r, y - r * 1.3, x + r, y - r * 1.3, x + r, y); g.bezierCurveTo(x + r, y + r, x - r, y + r, x - r, y); g.fill(); }
+        for (let i = 0; i < 14; i++) { g.strokeStyle = C[Math.floor(rK() * C.length)]; g.lineWidth = 6 + rK() * 10; g.beginPath(); g.moveTo(rK() * W, rK() * H); g.bezierCurveTo(rK() * W, rK() * H, rK() * W, rK() * H, rK() * W, rK() * H); g.stroke(); } });
+      const [x, z] = L((K.U0 + K.U1) / 2, K.S0 - 0.3); const wl = add(new THREE.BoxGeometry(0.4, 3, PL), [concM, MAT({ map: mur, roughness: 0.85 }), concM, concM, concM, concM], x, 1.5, z);
+      mur.repeat.set(1, 1); col(0.2, 1.5, PL / 2, (K.U0 + K.U1) / 2, K.S0 - 0.3, 1.5); }
+    // the fence round the other sides, and four tall lights
+    { const fenceT = cvT(128, 128, (g, W, H) => { g.clearRect(0, 0, W, H); g.strokeStyle = 'rgba(180,184,188,0.9)'; g.lineWidth = 2;
+        for (let i = -W; i < W * 2; i += 16) { g.beginPath(); g.moveTo(i, 0); g.lineTo(i + H, H); g.stroke(); g.beginPath(); g.moveTo(i + H, 0); g.lineTo(i, H); g.stroke(); } });
+      const fM = MAT({ map: fenceT, transparent: true, alphaTest: 0.3, side: THREE.DoubleSide, metalness: 0.6, roughness: 0.4 });
+      for (const [a, c, len, along] of [[(K.U0 + K.U1) / 2, K.S1, PL, true], [K.U0, 0, PW, false]]) { const [x, z] = L(a, c), f = new THREE.Mesh(new THREE.PlaneGeometry(len, 2.4), fM);
+        f.position.set(x, 1.2, z); f.rotation.y = along ? Math.PI / 2 : 0; fenceT.repeat.set(len / 1.2, 2); G.add(f); }
+      const lampM = MAT({ color: 0xfff1d0, emissive: 0xffe2a0, emissiveIntensity: 2.4 });
+      for (const [a, c] of [[K.U0 + 2, K.S0 + 2], [K.U0 + 2, K.S1 - 2], [K.U1 - 2, K.S0 + 2], [K.U1 - 2, K.S1 - 2]]) { const [x, z] = L(a, c);
+        add(new THREE.CylinderGeometry(0.1, 0.14, 9, 8), darkM, x, 4.5, z); add(new THREE.BoxGeometry(0.9, 0.25, 0.5), lampM, x, 9, z); } }
+    // the city round it: towers standing back past the trees, lit windows at dusk
+    { const nT = 70, im = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), MAT({ color: 0x3a4250, roughness: 0.4, metalness: 0.3, emissive: 0x1a1408, emissiveIntensity: 0.6 }), nT);
+      const m4 = new THREE.Matrix4(), q4 = new THREE.Quaternion();
+      for (let i = 0; i < nT; i++) { const ang = rK() * Math.PI * 2, d = gsize * 0.62 + rK() * 160, h = 30 + rK() * 110, wd = 16 + rK() * 26;
+        m4.compose(new THREE.Vector3(Math.cos(ang) * d, Y + h / 2 - 2, Math.sin(ang) * d), q4.setFromAxisAngle(new THREE.Vector3(0, 1, 0), rK() * 3), new THREE.Vector3(wd, h, wd * (0.6 + rK() * 0.8))); im.setMatrixAt(i, m4); }
+      im.castShadow = false; scene.add(im); }
+    window.__skate = { features: 5 };
+  }
+  // ── THE SMITHY, BUILT (see SMITHY above) ───────────────────────────────
+  if (SMITHY) {
+    const Sm = SMITHY, MAT = (o) => { const m = new THREE.MeshStandardMaterial(o); m.userData.noAutoTex = true; return m; };
+    const G = new THREE.Group(); G.position.set(Sm.at[0], hAt(Sm.at[0], Sm.at[1]), Sm.at[1]); G.rotation.y = Sm.ry; scene.add(G);
+    window.__smithy = { at: Sm.at.slice(), ry: Sm.ry };
+    // in G's frame the open front faces +z; the shop is 7 wide (x) and 5.4 deep (z)
+    const TLs = new THREE.TextureLoader(), txs = (nm, rx, ry, nrm) => { const t = TLs.load('textures/' + nm + (nrm ? '_n' : '') + '.jpg'); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(rx, ry); if (!nrm) t.colorSpace = THREE.SRGBColorSpace; return t; };
+    const timber = MAT({ map: txs('planks', 0.5, 2), normalMap: txs('planks', 0.5, 2, true), color: 0x8a6a50, roughness: 0.85 }),
+          plank = MAT({ map: txs('planks', 3, 1.5), normalMap: txs('planks', 3, 1.5, true), color: 0xa88a6c, roughness: 0.9 }),
+          stone = MAT({ map: txs('stone', 2, 1.5), normalMap: txs('stone', 2, 1.5, true), color: 0xb0aaa0, roughness: 0.95 }),
+          iron = MAT({ color: 0x2b2b2d, roughness: 0.45, metalness: 0.85 }), steel = MAT({ color: 0xc8ccd0, roughness: 0.2, metalness: 0.95 }),
+          thatch = MAT({ color: 0x8a6c3e, roughness: 1 }), leather = MAT({ color: 0x5a3a22, roughness: 0.7 });
+    const coal = MAT({ color: 0x2a0a02, emissive: 0xff5a10, emissiveIntensity: 2.8, roughness: 0.9 });
+    const add = (geo, m, x, y, z, rx, rz) => { const o = new THREE.Mesh(geo, m); o.position.set(x, y, z); if (rx) o.rotation.x = rx; if (rz) o.rotation.z = rz; o.castShadow = o.receiveShadow = true; G.add(o); return o; };
+    add(new THREE.BoxGeometry(7.4, 0.2, 5.8), stone, 0, 0.1, 0);                                         // a flagged floor
+    for (const [x, z] of [[-3.5, -2.7], [3.5, -2.7], [-3.5, 2.7], [3.5, 2.7], [0, 2.7]]) add(new THREE.BoxGeometry(0.28, 3.2, 0.28), timber, x, 1.6, z);
+    add(new THREE.BoxGeometry(7.2, 2.9, 0.12), plank, 0, 1.55, -2.7);                                     // the back wall and the two sides
+    for (const sd of [-1, 1]) add(new THREE.BoxGeometry(0.12, 2.9, 5.4), plank, sd * 3.55, 1.55, 0);
+    for (const sd of [-1, 1]) add(new THREE.BoxGeometry(8.2, 0.3, 3.6), thatch, 0, 3.75, sd * 1.5, sd * 0.42);   // a thatched roof, eaves well out
+    add(new THREE.CylinderGeometry(0.25, 0.25, 8.2, 8).rotateZ(Math.PI / 2), thatch, 0, 4.42, 0);
+    // the forge: a waist-high stone hearth against the back wall, coals glowing, a hood and a chimney
+    add(new THREE.BoxGeometry(2.2, 0.95, 1.5), stone, -1.6, 0.58, -1.85);
+    const bed = add(new THREE.BoxGeometry(1.4, 0.12, 0.9), coal, -1.6, 1.08, -1.75); bed.castShadow = false;
+    add(new THREE.CylinderGeometry(0.35, 1.15, 1.2, 4, 1, true).rotateY(Math.PI / 4), stone, -1.6, 2.2, -1.9).material.side = THREE.DoubleSide;
+    add(new THREE.BoxGeometry(0.7, 2.6, 0.7), stone, -1.6, 4.0, -2.2);
+    const fire = new THREE.PointLight(0xff7a2a, 9, 9, 1.8); fire.position.set(-1.6, 1.5, -1.3); G.add(fire);
+    window.__smithFire = (t) => { fire.intensity = 8 + Math.sin(t * 11) * 1.2 + Math.sin(t * 23.7) * 0.8; coal.emissiveIntensity = 2.5 + Math.sin(t * 7.3) * 0.4; };
+    // the bellows beside it
+    { const b = add(new THREE.CylinderGeometry(0.42, 0.42, 0.18, 3).rotateZ(Math.PI / 2), leather, -3.0, 1.0, -1.7); b.scale.set(1, 1, 1.8);
+      add(new THREE.CylinderGeometry(0.04, 0.04, 0.9, 6).rotateZ(Math.PI / 2), timber, -2.5, 1.0, -1.7); }
+    // the anvil on its stump, a blade across it, the hammer
+    add(new THREE.CylinderGeometry(0.38, 0.42, 0.65, 14), timber, 0.6, 0.52, 0.2);
+    add(new THREE.BoxGeometry(0.34, 0.24, 0.62), iron, 0.6, 0.97, 0.2); add(new THREE.BoxGeometry(0.22, 0.12, 0.42), iron, 0.6, 0.8, 0.2);
+    add(new THREE.BoxGeometry(0.42, 0.14, 0.86), iron, 0.6, 1.16, 0.2);
+    const horn = add(new THREE.ConeGeometry(0.1, 0.42, 10).rotateX(Math.PI / 2), iron, 0.6, 1.16, 0.83); horn.rotation.x = Math.PI / 2;
+    add(new THREE.BoxGeometry(0.05, 0.012, 0.95), MAT({ color: 0xff8a3a, emissive: 0xff4a10, emissiveIntensity: 1.6, metalness: 0.8, roughness: 0.3 }), 0.6, 1.24, 0.15);   // the blade, still hot
+    add(new THREE.BoxGeometry(0.06, 0.06, 0.32), iron, 0.82, 1.27, 0.5); add(new THREE.CylinderGeometry(0.02, 0.025, 0.42, 6).rotateX(Math.PI / 2), timber, 0.82, 1.25, 0.25);
+    // the quench barrel, the tool rack, a grindstone, finished swords
+    add(new THREE.CylinderGeometry(0.4, 0.36, 0.85, 14), plank, 1.7, 0.53, -1.2);
+    add(new THREE.CylinderGeometry(0.36, 0.36, 0.02, 14), MAT({ color: 0x1b2328, roughness: 0.05, metalness: 0.3 }), 1.7, 0.92, -1.2);
+    add(new THREE.BoxGeometry(2.2, 0.08, 0.1), timber, 1.8, 1.9, -2.6);
+    for (let k = 0; k < 6; k++) { const x = 0.95 + k * 0.34; add(new THREE.BoxGeometry(0.04, 0.55, 0.04), iron, x, 1.6, -2.56); add(new THREE.BoxGeometry(0.12, 0.08, 0.06), iron, x, 1.33, -2.56); }
+    add(new THREE.CylinderGeometry(0.42, 0.42, 0.12, 20).rotateZ(Math.PI / 2), stone, 2.9, 0.75, 0.9); add(new THREE.BoxGeometry(0.5, 0.5, 0.3), timber, 2.9, 0.35, 0.9);
+    for (let k = 0; k < 3; k++) { add(new THREE.BoxGeometry(0.05, 0.95, 0.012), steel, -3.35, 1.25, -0.6 + k * 0.35); add(new THREE.BoxGeometry(0.06, 0.04, 0.2), iron, -3.35, 1.74, -0.6 + k * 0.35); }
+    world.createCollider(RAPIER.ColliderDesc.cuboid(1.1, 0.5, 0.75).setTranslation(G.position.x + 1.85, G.position.y + 0.5, G.position.z + 1.6));
+    { const v = new THREE.Vector3(); G.updateMatrixWorld(true);
+      for (const [hx, hz, x, z] of [[3.6, 0.1, 0, -2.7], [0.1, 2.7, -3.55, 0], [0.1, 2.7, 3.55, 0]]) { v.set(x, 1.5, z).applyMatrix4(G.matrixWorld);
+        world.createCollider(RAPIER.ColliderDesc.cuboid(hx, 1.5, hz).setTranslation(v.x, v.y, v.z).setRotation({ x: 0, y: Math.sin(Sm.ry / 2), z: 0, w: Math.cos(Sm.ry / 2) })); } }
   }
   // ── THE CANDY LAND, BUILT (see CANDY above) ────────────────────────────
   if (CANDY) {
@@ -19254,6 +19497,10 @@ async function main() {
       // thin rust seams, the beds warped a little as real strata are, and
       // the flats keep the ground's own colour.
       const STRATA = (_arch2 === 'canyon' || _arch2 === 'mesa');
+      // THE MOON IS GREY (2026-10-11): its rock photo is a brown mountain's,
+      // and a lunar landing stood on tan ground under a black sky
+      const _gw = [SPEC.prompt, SPEC.world.name, SPEC.title].filter(Boolean).join(' ').toLowerCase();
+      const GREYWORLD = SPEC.world.sky === 'space' && /moon|lunar|apollo|regolith/.test(_gw) && !/red|rust|mars|frozen|ice|icy/.test(_gw);
       // GROUND WITHOUT A GRID OR A SMEAR (2026-10-04). A tiled photo repeats
       // every few metres in plain sight, and on a cliff the top-down UVs
       // stretch it into vertical streaks (a canyon wall, a cave wall). The
@@ -19325,6 +19572,7 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
   vec3 wTint = texture2D(uWorld, vUvRaw).rgb * 2.0;
   ${STRATA ? '' : 'wTint = mix(wTint, vec3(1.0), steepG * 0.8);'}
   diffuseColor.rgb *= clamp(wTint, 0.12, 1.45);
+  ${GREYWORLD ? '{ float lmG = dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114)); diffuseColor.rgb = mix(diffuseColor.rgb, vec3(lmG), 0.9); }' : ''}
   ${STRATA ? `{
     float steep = smoothstep(0.35, 0.75, 1.0 - normalize(vWNrmG).y);
     float sy = vWPosG.y + sin(vWPosG.x * 0.05) * 1.5 + sin(vWPosG.z * 0.043 + 1.3) * 1.2;
@@ -21664,6 +21912,7 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
       if (window.__growTick) window.__growTick(dt);
       if (window.__graveMist) window.__graveMist(performance.now() / 1000);
       if (window.__hiveTick) window.__hiveTick(performance.now() / 1000);
+      if (window.__smithFire) window.__smithFire(performance.now() / 1000);
       if (window.__asteroidTick) window.__asteroidTick(Math.min(0.05, dt));
       if (window.__tornadoTick) window.__tornadoTick(Math.min(0.05, dt));
       if (window.__monkTick) window.__monkTick(performance.now() / 1000, Math.min(0.05, dt));

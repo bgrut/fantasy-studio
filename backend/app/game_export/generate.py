@@ -62,6 +62,7 @@ _BIPED = ("hunter", "archer", "soldier", "warrior", "ranger", "ninja",
           # (2026-10-11) the classifier made a gladiator's opponent a prop, which
           # went to image-to-3D, and a gondolier a fish
           "opponent", "rival", "challenger", "foe", "combatant", "gondolier", "patron",
+          "swimmer", "bather", "sunbather", "lifeguard", "skater", "diner", "spectator",
           "centurion", "legionary", "legionnaire", "raider", "berserker", "pharaoh", "archaeologist",
           # (2026-10-06) the classifier made a snowboarder and a skateboarder
           # vehicles and a surfer a fish; people who ride things are people

@@ -307,6 +307,30 @@ def _fjord_height(x: float, z: float, base: float, goal: list[float],
     return h
 
 
+def _coast_height(x: float, z: float, base: float, goal: list[float],
+                  goal_r: float, seed: int) -> float:
+    """A BEACH IS A COAST (2026-10-11). "a lifeguard rescues three swimmers at
+    a crowded summer beach" was a plain of acacias with the sea a far line.
+    The route walks the top of a sand beach; the sand runs down into the sea
+    on +s, shallow for twenty metres and then deep, and behind the beach the
+    ground rises through low dunes to grass. u runs along the coast."""
+    import math as _m
+    def ss(t: float) -> float:
+        t = max(0.0, min(1.0, t))
+        return t * t * (3 - 2 * t)
+    ux, uz = goal[0] / max(goal_r, 1e-6), goal[1] / max(goal_r, 1e-6)
+    u = x * ux + z * uz
+    s = -x * uz + z * ux
+    shore = 9.0 + _m.sin(u * 0.045 + seed % 5) * 3.0           # the waterline wanders a little
+    if s > shore:                                               # the sea: a gentle shelf, then the drop
+        d = s - shore
+        return -0.1 - 1.3 * ss(d / 18.0) - 3.5 * ss((d - 22.0) / 30.0)
+    if s > -14.0:                                               # the beach, falling gently to the water
+        return 0.55 * (shore - s) / (shore + 14.0) + 0.05
+    # behind it the dunes and then the grass
+    return 0.6 + (base * 0.6 + 1.6 + _m.sin(u * 0.13) * 0.6) * ss((-14.0 - s) / 16.0)
+
+
 def _apply_terrain_form(h: list[float], n: int, form: str, amp: float) -> list[float]:
     """The SHAPE of the ground, as an art-direction decision.
 
@@ -406,7 +430,7 @@ def build_level(seed: int, size_m: float, n_objectives: int = 0,
                 amplitude_m: float = 2.4, grid_n: int = 48,
                 regions: list[dict] | None = None,
                 archetype: str = "plain", terrain_form: str = "natural", sea: bool = False,
-                fjord: bool = False) -> dict:
+                fjord: bool = False, coast: bool = False) -> dict:
     """Deterministic LevelPlan. Returns a JSON-safe dict for the runtime.
 
     sea (2026-10-06): a sea battle sails, it does not walk. The islands sit
@@ -428,7 +452,7 @@ def build_level(seed: int, size_m: float, n_objectives: int = 0,
         # jitter perpendicular to the spawn->goal axis
         px, pz = -goal[1] / max(goal_r, 1e-6), goal[0] / max(goal_r, 1e-6)
         j = rng.uniform(-0.22, 0.22) * goal_r
-        if fjord:
+        if fjord or coast:
             j *= 0.15                                # the shore track runs along the water
         path.append([mx + px * j, mz + pz * j])
     path.append(list(goal))
@@ -453,6 +477,8 @@ def build_level(seed: int, size_m: float, n_objectives: int = 0,
             h = _archetype_height(archetype, x, z, h, amplitude_m, half, seed)
             if fjord:
                 h = _fjord_height(x, z, h0, goal, goal_r, seed)
+            elif coast:
+                h = _coast_height(x, z, h0, goal, goal_r, seed)
             if sea:
                 h -= amplitude_m * 1.1                # fewer, smaller islands
             # MICRO-RELIEF (Phase 93): a second, higher-frequency octave —
@@ -530,7 +556,7 @@ def build_level(seed: int, size_m: float, n_objectives: int = 0,
                 t = (d - corridor) / (corridor * 1.2)
                 h *= t * t * (3 - 2 * t)
             edge = max(abs(x), abs(z)) / half        # settle flat at the walls
-            if edge > 0.92 and _arch != "cave" and not fjord:   # a cave is walled to its edge, a fjord cut to it
+            if edge > 0.92 and _arch != "cave" and not fjord and not coast:   # a cave is walled to its edge, a fjord cut to it
                 h *= max(0.0, (1.0 - edge) / 0.08)
             if lava_segs and not _ch:
                 h = max(h, LAVA_LEVEL + 0.25)   # only a channel lies under the lava
@@ -610,6 +636,11 @@ def build_level(seed: int, size_m: float, n_objectives: int = 0,
         # no thirty-metre landmark tree and no campsite: off the route is rock
         out_level["landmarks"] = []
         out_level["pois"] = []
+    if coast:
+        gl = math.hypot(goal[0], goal[1]) or 1.0
+        out_level["coast"] = {"axis": [round(goal[0] / gl, 3), round(goal[1] / gl, 3)], "sea_s": 9.0}
+        out_level["pois"] = [q for q in out_level["pois"] if (-q["x"] * goal[1] + q["z"] * goal[0]) / gl < -24]
+        out_level["landmarks"] = []
     if fjord:
         # the walls are sheer rock and the rest is sea: a thirty-metre tree or
         # a campsite placed at random lands on a cliff face or in the water

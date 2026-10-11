@@ -2082,7 +2082,9 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                                 # (2026-10-06) a child in a candy land was recast as the safari explorer
                                 "child", "kid", "girl", "boy", "snowboarder", "skier", "surfer", "skateboarder",
                                 "firefighter", "fireman", "firewoman",
-                                "sailor", "fisherman", "miner", "mechanic", "astronaut", "pirate", "ninja")
+                                "sailor", "fisherman", "miner", "mechanic", "astronaut", "pirate", "ninja",
+                                # (2026-10-11) a blacksmith was the postman, a lifeguard the explorer
+                                "blacksmith", "smith", "lifeguard", "gondolier", "gladiator", "conductor")
             try:                       # and any role the reference generator has an outfit for (2026-10-07)
                 from app.asset_gen.reference import has_wardrobe as _hw
                 _dressable = _dressable or (_hw(_w) and _w not in ("man", "woman", "person", "human", "guy", "boy", "girl", "walker"))
@@ -3081,7 +3083,11 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         _GENERIC_COLLECT = {"food", "meal", "supply", "supplies", "item",
                             "thing", "treasure", "star", "coin", "point",
                             "orb", "token", "collectible", "pickup", "loot",
-                            "resource", "goodie", "snack"}
+                            "resource", "goodie", "snack",
+                            # (2026-10-11) a trick or a photograph is a thing you do, not a
+                            # thing you pick up: "land five tricks" collected five orange cubes
+                            "trick", "photograph", "photo", "picture", "snapshot", "shot",
+                            "selfie", "combo", "flip", "stunt", "jump", "move"}
         for ob in spec.objectives:
             if ob.kind != "collect" or ob.asset:
                 continue
@@ -3272,6 +3278,12 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                 spec.world.flora = "cactus"          # desert round the town, not a green wood
             if spec.world.weather == "rain":
                 spec.world.weather = "none"
+        # A SKATEPARK IS A PARK (2026-10-11): "a skateboarder lands five tricks in
+        # a city skatepark" rode an avenue between glass towers; the runtime
+        # builds the park (SKATE), with the city as its skyline
+        if _fre.search(r"\b(skate ?parks?|skate ?plaza|half ?pipe|halfpipe|skate bowl)\b", (req.prompt or "").lower()) and not detect_place(req.prompt):
+            is_city = False
+            spec.world.archetype = "plain"
         place = detect_place(req.prompt) if is_city else None
         # FLORA OBEYS THE PROMPT (2026-08-25): the silhouette pack rolls a
         # tree archetype from the seed, and its first field test planted dead
@@ -3395,6 +3407,20 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                 _arch = "dunes"
                 spec.world.archetype = "dunes"
             spec.world.ground_color = [0.78, 0.65, 0.46]
+        _coast = False
+        # A BEACH HAS A SEA (2026-10-11): "a lifeguard rescues three swimmers at
+        # a crowded summer beach" was a plain of acacias, the water a far line
+        if (_fre.search(r"\b(beach|beaches|seaside|lifeguards?|swimmers?|sunbathers?|surf|surfing|surfers?)\b", _pw7)
+                and not _fre.search(r"\b(desert|dune|space|moon|mars|city|street|underwater)\b", _pw7)
+                and not getattr(spec.world, "platforms", False) and _arch in ("plain", "dunes", "basin", "mesa")):
+            _arch = "archipelago"
+            spec.world.archetype = "archipelago"
+            _coast = not _fjord and not job.get("_naval")
+            if spec.world.water_level is None:
+                spec.world.water_level = 0.0
+        # THE MOON IS GREY (2026-10-11): a lunar landing stood on beige sand
+        if _fre.search(r"\b(moon|lunar|apollo)\b", _pw7) and not _fre.search(r"\b(honeymoon|moonlight|moonlit|moonrise|full moon|under the moon|red|rust\w*|frozen|ice|icy)\b", _pw7) and getattr(spec, "genre", "") != "factory":
+            spec.world.ground_color = [0.40, 0.39, 0.38]
         # THE ALPS ARE GREEN BELOW THE SNOW (2026-10-11): a steam train through
         # the swiss alps ran over red-brown earth; alpine pasture is grass
         if (_fre.search(r"\b(alps|alpine|swiss|switzerland|tyrol\w*|dolomites?)\b", _pw7)
@@ -3465,7 +3491,7 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         spec.world.level = build_level(
             spec.seed, spec.world.size_m, n_objectives=n_obj,
             amplitude_m=amp * _am, grid_n=_gn, regions=_regions,
-            archetype=_arch, terrain_form=_tf, sea=bool(job.get("_naval")) and not _fjord, fjord=_fjord)
+            archetype=_arch, terrain_form=_tf, sea=bool(job.get("_naval")) and not _fjord, fjord=_fjord, coast=_coast)
         if _tf != "natural" or _gm != 1.0:
             job.setdefault("notes", []).append(
                 f"terrain form: {_tf} ({_gn}x{_gn}). The ground is shaped by "
