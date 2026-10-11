@@ -449,7 +449,9 @@ def upgrade(anim: Path, strength=0.62, verbose=True) -> str:
             return line if (line.startswith("HDF ") and dst.exists()) else (line if not line.startswith("HDF ") else "HDFAIL no output")
 
         outfit = wardrobe(kind) if not animal else f"real {kind}"
-        neg_head = (NEG_ANIMAL if animal else NEG) + ", deformed face, asymmetric eyes, extra eyes, two noses, double face"
+        # EYES OPEN (2026-10-11): the keeper and the customer came out with
+        # their eyes shut, as if asleep; it leads the negative, where it weighs
+        neg_head = ("" if animal else "closed eyes, eyes closed, sleeping, looking down, ") +             (NEG_ANIMAL if animal else NEG) + ", deformed face, asymmetric eyes, extra eyes, two noses, double face"
         if anime:
             neg_head = ("photo, photograph, photorealistic, realistic skin, 3d render, text, letters, logo, blurry, "
                         "deformed face, asymmetric eyes, extra eyes, two noses, double face, blank face")
@@ -508,7 +510,7 @@ def upgrade(anim: Path, strength=0.62, verbose=True) -> str:
                     cref = (_a[_m].mean(0), _a[_m].std(0)) if _m.sum() > 1000 else None
                 else:
                     hair = "" if (noref or anime) else photo_hair(ref)
-                    prompt = (f"close-up portrait photograph of a real {outfit}, {hair + ', ' if hair else ''}facing the camera, natural skin texture, pores, "
+                    prompt = (f"close-up portrait photograph of a real {outfit}, eyes open looking straight at the camera, {hair + ', ' if hair else ''}natural skin texture, pores, "
                               f"clear detailed eyes, sharp focus, 85mm, soft even studio light, plain grey backdrop")
                     if anime:
                         # HER OWN HAIR (2026-10-10): matched to skin, a dark-haired

@@ -192,7 +192,14 @@ def judge(kind: str, keep: Path | None = None, animal: bool | None = None) -> di
                                                 "snowboarder", "skier", "zombie", "goblin", "cat", "welder", "firefighter",
                                                 "soldier", "pilot", "racer", "mummy", "alien", "creature", "scavenger"))
     if not animal and hf.exists() and not _faceless:
-        eyes = _eyes(hf)
+        # THE FACE AS IT IS PAINTED (2026-10-11): under Blender's studio light
+        # the man's left eye read milky, but in the game, and in a flat albedo
+        # render, both eyes are clear. The studio light was judging itself. The
+        # eyes are asked about in a flat render of the head: the paint's truth.
+        r2 = subprocess.run([str(BLENDER_EXE), "--background", "--python", str(RENDER), "--", str(src), str(tmp / ("flat_" + slug)),
+                             "head_front", "flat", "person"], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=600)
+        hff = tmp / f"flat_{slug}_head_front.png"
+        eyes = _eyes(hff if hff.exists() else hf)
     if eyes is not None:
         face = max(0.0, eyes["eyes"] - (0.35 if eyes["stain"] else 0.0))
     elif not animal and hf.exists():
