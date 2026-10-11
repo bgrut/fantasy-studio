@@ -2097,6 +2097,8 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                     (r"\b(soccer|football|goals?|goalkeeper|goalie|pitch|striker|penalty|penalties|kick-?off)", "soccer player"),
                     # a heist is played by a thief, not an explorer (2026-10-10)
                     (r"\b(heist|steal|stealing|thief|burglar|burgle|robbery|safecracker|sneak in|break in)", "burglar"),
+                    # a cyberpunk runner wears a dark hoodie, not safari khaki (2026-10-11)
+                    (r"\b(hacker|hacking|cyberpunk|netrunner|cyber ?city|neon city|dystopian city)\b", "thug"),
                     # a round of deliveries is the postman's; snow and winter dress the
                     # hero for the cold: a christmas delivery was the explorer in
                     # shorts in the snow (2026-10-10)

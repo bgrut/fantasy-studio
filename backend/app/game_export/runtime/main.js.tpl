@@ -7400,6 +7400,38 @@ async function main() {
     const wmat = _museum ? new THREE.MeshStandardMaterial({ color: 0xece6da, roughness: 0.92 })
       : new THREE.MeshStandardMaterial({ map: itex(wallFile, 3, 1.2), roughness: 0.95 });
     if (_museum) { wmat.userData.noAutoTex = true; cmatI.map = null; cmatI.color.setHex(0xe8e3da); cmatI.userData.noAutoTex = true; }
+    // A JAPANESE CASTLE IS NOT A KEEP (2026-10-11): "a ninja sneaking through a
+    // feudal japanese castle" walked a European hall of stone and plank under a
+    // red carpet. Inside a Japanese castle or house: tatami underfoot, shoji
+    // walls of paper in a dark lattice over a wooden base, dark timber posts
+    // and ceiling, paper lanterns for light.
+    const _jp = (IK === 'castle' || IK === 'house') && /\b(japan\w*|samurai|ninjas?|shogun\w*|feudal|edo|dojo|ronin|daimyo|tatami|shoji|kyoto)\b/
+      .test(((SPEC.prompt || '') + ' ' + (SPEC.title || '') + ' ' + ((SPEC.world && SPEC.world.name) || '')).toLowerCase());
+    if (_jp) {
+      const tat = document.createElement('canvas'); tat.width = tat.height = 512; const t = tat.getContext('2d');
+      // four mats in a 3.6 m square: two along, two across, as they are laid
+      const mat = (x, y, w, h, along) => {
+        t.fillStyle = '#b9b27a'; t.fillRect(x, y, w, h);
+        t.strokeStyle = 'rgba(120,112,60,0.35)'; t.lineWidth = 1;
+        for (let k = 0; k < (along ? h : w); k += 3) { t.beginPath(); if (along) { t.moveTo(x, y + k); t.lineTo(x + w, y + k); } else { t.moveTo(x + k, y); t.lineTo(x + k, y + h); } t.stroke(); }
+        t.fillStyle = '#1e1a16'; if (along) { t.fillRect(x, y, 10, h); t.fillRect(x + w - 10, y, 10, h); } else { t.fillRect(x, y, w, 10); t.fillRect(x, y + h - 10, w, 10); }
+      };
+      mat(0, 0, 256, 512, true); mat(256, 0, 256, 256, false); mat(256, 256, 256, 256, false);
+      const tt = new THREE.CanvasTexture(tat); tt.colorSpace = THREE.SRGBColorSpace; tt.wrapS = tt.wrapT = THREE.RepeatWrapping;
+      tt.repeat.set(bx / 3.6, bz / 3.6); tt.anisotropy = renderer.capabilities.getMaxAnisotropy();
+      fmat.map = tt; fmat.color.setHex(0xffffff); fmat.roughness = 0.85; fmat.userData.noAutoTex = true; fmat.needsUpdate = true;
+      const sh = document.createElement('canvas'); sh.width = 256; sh.height = 256; const s2 = sh.getContext('2d');
+      s2.fillStyle = '#f1ece0'; s2.fillRect(0, 0, 256, 256);                                   // rice paper
+      s2.fillStyle = '#2a1e16';
+      for (let x = 0; x <= 256; x += 42) s2.fillRect(x - 3, 0, 6, 200);                         // the lattice
+      for (let y = 0; y <= 200; y += 33) s2.fillRect(0, y - 3, 256, 6);
+      s2.fillRect(0, 196, 256, 60);                                                            // the wooden base panel
+      s2.fillStyle = 'rgba(255,255,255,0.08)'; for (let k = 0; k < 6; k++) s2.fillRect(0, 200 + k * 9, 256, 2);
+      const st = new THREE.CanvasTexture(sh); st.colorSpace = THREE.SRGBColorSpace; st.wrapS = st.wrapT = THREE.RepeatWrapping; st.repeat.set(3, 1.2);
+      wmat.map = st; wmat.color.setHex(0xffffff); wmat.roughness = 0.9; wmat.emissive = new THREE.Color(0x3a2a14); wmat.emissiveIntensity = 0.12;   // the paper holds a little light
+      wmat.userData.noAutoTex = true; wmat.needsUpdate = true;
+      cmatI.color.setHex(0x3a2a1c); cmatI.userData.noAutoTex = true;
+    }
     const DOOR_W = IK === 'mall' ? 6.0 : 2.4, DOOR_H = IK === 'mall' ? 3.6 : Math.min(3.0, WH - 0.6);   // a storefront is wide open
     function seg(cx, cz, ln, rot, y0, hgt, thick) {
       // SIGHT-BLOCKERS (2026-08-05): remember every wall as a 2D segment so
@@ -7450,7 +7482,7 @@ async function main() {
         world.createCollider(RAPIER.ColliderDesc.cylinder(WH / 2, 0.42).setTranslation(px2 + OX, WH / 2, pz2));
         continue;
       }
-      const pm = new THREE.Mesh(new THREE.BoxGeometry(0.9, WH, 0.9), wmat);
+      const pm = new THREE.Mesh(new THREE.BoxGeometry(_jp ? 0.32 : 0.9, WH, _jp ? 0.32 : 0.9), _jp ? (window.__jpPost = window.__jpPost || new THREE.MeshStandardMaterial({ color: 0x2e2018, roughness: 0.7 })) : wmat);   // a Japanese hall stands on slim dark posts
       pm.position.set(px2 + OX, WH / 2, pz2);
       pm.castShadow = pm.receiveShadow = true;
       scene.add(pm);
@@ -7536,7 +7568,7 @@ async function main() {
     // suspended ceiling had orange flames guttering on its walls. Same
     // positions and the same light-budget behaviour, but cool, high, and
     // without the flame mesh — the fitting is the ceiling troffer instead.
-    const _fire = IK !== 'office' && IK !== 'mall' && IK !== 'shop' && !_civic && !_cafe && IK !== 'station' && !_museum;   // nobody lights a store or a ward with torches
+    const _fire = IK !== 'office' && IK !== 'mall' && IK !== 'shop' && !_civic && !_cafe && IK !== 'station' && !_museum && !_jp;   // nobody lights a store or a ward with torches
     for (const [tx, tz] of (PLAN.torches || []).slice(0, 10)) {
       const pl = new THREE.PointLight(_fire ? 0xff9a3d : _cafe ? 0xffcf96 : _museum ? 0xfff1dc : 0xdfeaff,
                                       _fire ? 14 : 11, 13, 1.8);
@@ -7554,6 +7586,15 @@ async function main() {
         const fm = new THREE.Mesh(flameG, flameM);
         fm.position.copy(pl.position);
         scene.add(fm);
+      }
+      if (_jp) {                                     // a paper lantern (andon) on a dark frame, the light inside it
+        const an = new THREE.Group(); an.position.set(pl.position.x, 0, pl.position.z);
+        const paper = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.5, 0.34), new THREE.MeshStandardMaterial({ color: 0xfff0d0, emissive: 0xffb860, emissiveIntensity: 1.3, roughness: 0.9 }));
+        paper.position.y = 0.62; an.add(paper);
+        const fr = new THREE.MeshStandardMaterial({ color: 0x241a12, roughness: 0.6 });
+        for (const [fx, fz] of [[-0.18, -0.18], [0.18, -0.18], [-0.18, 0.18], [0.18, 0.18]]) { const leg = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.9, 0.035), fr); leg.position.set(fx, 0.45, fz); an.add(leg); }
+        scene.add(an);
+        pl.color.setHex(0xffc27a); pl.position.y = 0.9;
       }
       window.__torches.push(pl);
     }
@@ -8665,7 +8706,7 @@ async function main() {
         for (const g5 of glz.concat(mull)) g5.dispose();
       }
     }
-    if (IK === 'castle') {
+    if (IK === 'castle' && !_jp) {
       const rngD2 = mulberry32((SPEC.seed || 1) + 881);
       const bmatD = new THREE.MeshStandardMaterial({
         color: 0x7a1f24, roughness: 0.9, side: THREE.DoubleSide });
