@@ -136,6 +136,33 @@ for ti, tob in enumerate(targets):
     # profiles), each pass taking the last one's texture as its coat. Re-
     # unwrapping every step would resample the whole body each time.
     _keep = "--keepuv" in argv and len(me.uv_layers) > 0      # glTF does not keep the layer's name
+    # A HEAD FINE ENOUGH TO PAINT (2026-10-11): the buddhist monk's head held
+    # 2.3% of his vertices (his robe took the rest; other people 7-12%). His
+    # coat is colour per vertex, so on that coarse head it was a mosaic of flat
+    # triangles, and wherever the painted face was not taken over the coat it
+    # showed through as a faceted, washed face. A head under its share is
+    # subdivided before anything is baked (BMesh carries the skin weights and
+    # the coat's colours onto the new vertices), until it holds ~4000.
+    if not _keep and os.environ.get("FS_HDHEAD_SUB", "1") != "0":
+        try:
+            import bmesh as _bms
+            _mw0 = tob.matrix_world
+            _zz = [(_mw0 @ v.co).z for v in me.vertices]
+            _zt0, _zb0 = max(_zz), min(_zz)
+            _cut = _zt0 - 0.135 * (_zt0 - _zb0)
+            for _pass in range(2):
+                _nh = sum(1 for z in _zz if z > _cut)
+                if _nh >= 3500 or _nh < 50:
+                    break
+                _bm = _bms.new(); _bm.from_mesh(me)
+                _hv = {v for v in _bm.verts if (_mw0 @ v.co).z > _cut - 0.02 * (_zt0 - _zb0)}
+                _he = [e for e in _bm.edges if all(v in _hv for v in e.verts)]
+                _bms.ops.subdivide_edges(_bm, edges=_he, cuts=1, use_grid_fill=True, smooth=0.0)
+                _bm.to_mesh(me); _bm.free(); me.update()
+                _zz = [(_mw0 @ v.co).z for v in me.vertices]
+                print("HDSUB head subdivided: %d -> %d head verts" % (_nh, sum(1 for z in _zz if z > _cut)))
+        except Exception as _se:
+            print("HDSUB skipped (%s: %s)" % (type(_se).__name__, str(_se)[:120]))
     if _keep:
         me.uv_layers.active = me.uv_layers[0]
     else:
