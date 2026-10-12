@@ -1812,7 +1812,12 @@ function seat(obj, face, i, j, dir, up) {
 // hue left when it glows.
 const MIN_COL = { [CRYSTAL]: ACCENT, [EMBER]: 0xff8a3d, [SALT]: 0xb9cdf0 };
 const nodeMats = {};
-for (const m of MINERALS) nodeMats[m] = new THREE.MeshStandardMaterial({
+// GEMS, NOT PLASTIC (2026-10-11): close up a crystal point was a flat-lit,
+// glowing shard. It is clear-coated now: a hard varnish of reflection over
+// the coloured body, so each facet throws back the sky and the sun as a
+// sharp highlight the way cut stone does, and the light inside still shows.
+for (const m of MINERALS) nodeMats[m] = new THREE.MeshPhysicalMaterial({
+  clearcoat: 1.0, clearcoatRoughness: 0.06, ior: 1.54, specularIntensity: 1.0, envMapIntensity: 1.4,
   // THE BODY IS DARK GLASS, THE LIGHT IS INSIDE (2026-09-09). A saturated
   // full-strength colour under a 3.1 sun clipped to a white-cyan blob under
   // ACES no matter how low the emissive went; the facets were gone. A dark
@@ -8675,12 +8680,14 @@ renderer.setAnimationLoop(() => {
     c.mesh.userData.rich = c.rich;
     // the glow follows the richness: emissive, core, and the pool on the ground
     // a light, not a blowout: the core and the pool carry the brightness now
-    c.mesh.material.emissiveIntensity = 0.18 + 0.62 * c.rich;    // lit from inside, facets still the sun's
+    c.mesh.material.emissiveIntensity = 0.12 + 0.43 * c.rich;    // lit from inside, the clear-coated facets the sun's (less glow than before: the varnish carries the read)
     const core = c.mesh.children[0];
     if (core) { core.scale.setScalar(0.45 + 1.15 * c.rich); core.material.opacity = 0.18 + 0.5 * c.rich; }
     if (c.glow !== undefined && glowPools) {
       const F_ = FACES[f], w = tileWorld(f, i, j);
-      const sz = T * (1.4 + 3.2 * c.rich);
+      // a pool of light at its foot, not a disc flooding the grass (2026-10-11):
+      // at up to 4.6 tiles across it tinted the meadow cyan round every seam
+      const sz = T * (1.0 + 1.5 * c.rich);
       _gbx.set(F_.u[0], F_.u[1], F_.u[2]); _gby.set(F_.v[0], F_.v[1], F_.v[2]); _gbz.set(F_.n[0], F_.n[1], F_.n[2]);
       _gm.makeBasis(_gbx, _gby, _gbz);
       _gm.scale(_gs.set(sz, sz, 1));
