@@ -1643,7 +1643,7 @@ const _ps = new THREE.Vector3(1, 1, 1);
 // a hand would touch are warm metal. A part names its tone with `col`; a
 // machine names its accent with opts.base; a part with neither is accent.
 const PAINT = { chassis: 0x272b35, dark: 0x15171d, trim: 0xd9ad55, steel: 0xb6bfcc, rail: 0x8f96a3, roller: 0x5f6673 };
-const _pc = new THREE.Color();
+const _pc = new THREE.Color(), _pgrey = new THREE.Color(), _phsl = {};
 function mergeParts(parts, opts) {
   const pos = [], nor = [], uvs = [], tint = [], hue = [], wear = [];
   const base = opts && opts.base !== undefined ? opts.base : 0xffffff;
@@ -1664,6 +1664,12 @@ function mergeParts(parts, opts) {
     // nothing — no second material, no second draw call.
     const tv = p.tint === undefined ? 1 : p.tint;
     _pc.setHex(p.col === undefined ? base : p.col);
+    // INDUSTRIAL PAINT (2026-10-11): a machine's accent was a toy's colour (the
+    // smelter a saturated purple box); painted steel keeps its hue but not
+    // its candy, so the accent is pulled a third of the way to its own grey.
+    // The structure tones (PAINT) are already greys and are left alone.
+    // (brass and gold are metal, not paint: a hub keeps its gleam)
+    if (p.col === undefined && base !== 0xffffff && !(_pc.getHSL(_phsl).h > 0.07 && _phsl.h < 0.17 && _phsl.s > 0.45)) { const _l = _pc.r * 0.2126 + _pc.g * 0.7152 + _pc.b * 0.0722; _pc.lerp(_pgrey.setRGB(_l, _l, _l), 0.32); }
     const wv = p.g.userData && p.g.userData.bevel ? 1 : 0;   // only bevelled boxes wear at their corners
     for (let k = 0; k < a.position.count; k++) { tint.push(tv); hue.push(_pc.r, _pc.g, _pc.b); wear.push(wv); }
     g.dispose();

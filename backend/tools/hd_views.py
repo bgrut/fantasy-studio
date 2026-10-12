@@ -152,9 +152,11 @@ def head_hr(ref: Path, outfit: str, dst: Path, strength: float = 0.5):
     crop = im.crop(box).resize((1024, 1024), Image.LANCZOS)
     import torch
     g = torch.Generator("cuda").manual_seed(7 + SEED_OFF)
-    prompt = (f"close-up portrait photograph of the face of a {outfit}, looking at the camera, natural skin texture, "
+    prompt = (f"close-up portrait photograph of the face of a {outfit}, eyes open looking straight at the camera, natural skin texture, "
               f"detailed eyes, sharp focus, DSLR, 85mm, soft studio light, plain grey backdrop")
-    out = pipe()(prompt=prompt, negative_prompt="painting, illustration, drawing, " + NEG, image=crop, strength=strength,
+    # the photo's head is a few dozen pixels across, and enlarged it was read as
+    # shut eyes as often as open ones (the customer, 2026-10-11)
+    out = pipe()(prompt=prompt, negative_prompt="closed eyes, eyes closed, sleeping, looking down, painting, illustration, drawing, " + NEG, image=crop, strength=strength,
                  guidance_scale=6.0, num_inference_steps=40, generator=g).images[0]
     a = np.asarray(out, dtype=np.float32); b = np.asarray(crop, dtype=np.float32)
     a = (a - a.mean((0, 1))) / (a.std((0, 1)) + 1e-3) * b.std((0, 1)) + b.mean((0, 1))
