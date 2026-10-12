@@ -231,17 +231,37 @@ def depth_face(depth_png: Path, dst: Path, prompt: str, neg: str, colour_ref=Non
     def _hair_score(arr):
         c = _crown_rgb(arr)
         return 0.0 if c is None else float(max(0.0, 1.0 - np.linalg.norm(c - np.asarray(hair_rgb)) / 160.0))
-    for _t in range(3 if (colour_ref is not None or skin_wanted or hair_rgb is not None) else 1):
+    # EYES THE GEOMETRY CLOSED (2026-10-11): the depth guide follows the head,
+    # and a mesh with smooth lids where its eyes are drew the customer with
+    # her eyes shut at every seed, scored 0.96 on skin alone. A person's draw
+    # is also asked, by CLIP, whether its eyes are open; the open one wins and
+    # up to five draws are tried for it.
+    def _open(arr):
+        from transformers import CLIPModel, CLIPProcessor
+        global _CLIPF
+        if "_CLIPF" not in globals():
+            _CLIPF = (CLIPModel.from_pretrained("openai/clip-vit-base-patch32").to("cuda").eval(),
+                      CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32"))
+        cm, cp = _CLIPF
+        texts = ["a portrait photograph of a person with their eyes wide open", "a portrait photograph of a person with their eyes closed"]
+        with torch.no_grad():
+            inp = cp(text=texts, images=[Image.fromarray(arr.astype(np.uint8))], return_tensors="pt", padding=True).to("cuda")
+            return float(cm(**inp).logits_per_image.softmax(-1)[0, 0])
+    _person = skin_wanted and style != "anime"
+    for _t in range(5 if _person else 3 if (colour_ref is not None or skin_wanted or hair_rgb is not None) else 1):
         g = torch.Generator("cuda").manual_seed(seed + 977 * _t + SEED_OFF)
         out = c(**kw, image=dimg, controlnet_conditioning_scale=cn_scale,
                 guidance_scale=6.0, num_inference_steps=34, generator=g, width=1024, height=1024).images[0]
         _a = np.asarray(out, dtype=np.float32)
         _s = (_skin_share(_a) if skin_wanted else (_fine(_a) if style != "anime" else
               (_hair_score(_a) if hair_rgb is not None else 1.0)))
-        print("DEPTHFACE draw %d score %.3f" % (_t, _s), flush=True)
+        _po = _open(_a) if _person else 1.0
+        if _person:
+            _s = _s * (0.25 + 0.75 * _po)
+        print("DEPTHFACE draw %d score %.3f open %.2f" % (_t, _s, _po), flush=True)
         if _s > best_s:
             best_a, best_s = _a, _s
-        if _s >= (0.35 if skin_wanted else 0.8):
+        if _s >= (0.35 if skin_wanted else 0.8) and _po >= 0.6:
             break
     a = best_a
     if colour_ref is not None and mm.sum() > 1000:
