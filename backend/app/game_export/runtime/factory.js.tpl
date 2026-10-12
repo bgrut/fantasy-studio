@@ -1446,12 +1446,75 @@ const faceLookOf = f => f === 1 ? FACE_LOOK.under : FACE_LOOK[MINERAL_OF_FACE[f]
 // BoxGeometry's groups run +x, -x, +y, -y, +z, -z; each is the face whose normal that is
 const GROUP_FACE = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]]
   .map(n => FACES.findIndex(f => _eqv(f.n, n)));
-function buildPlating(pl, ground) {
+// A GROWN WORLD IS LAND, NOT GREEN PLATE (2026-10-11). On a green world the
+// grass grew only near the camera and every face was the metal plating,
+// tinted, so from any height the worldlet read as a board of green panels
+// with a seam round every five tiles. A grown face is ground: one painting
+// across the whole face (lush and dry grass in drifts, bare earth, a
+// darker hollow), the photographed soil's grain at its own 2.4 m in the
+// shader, its relief in the normal map, and the survey seams kept faint
+// so a builder still reads the grid. Still four looks and four maps.
+let _soilTex = null, _soilN = null;
+function meadowTexture(fp, look, ground, seed) {
+  const P = 1024, c = document.createElement('canvas'); c.width = c.height = P;
+  const g = c.getContext('2d');
+  let h = seed * 2654435761 >>> 0;
+  const rnd = () => { h ^= h << 13; h >>>= 0; h ^= h >> 17; h ^= h << 5; h >>>= 0; return h / 4294967296; };
+  const gc = new THREE.Color(ground || 0x3d5a2a); const hsl = {}; gc.getHSL(hsl);
+  // the face's own climate: an ember face drier and browner, a salt face paler, the underside dim
+  const dry = look.key === 'ember' ? 0.55 : look.key === 'salt' ? 0.25 : 0.12;
+  const pale = look.key === 'salt' ? 0.18 : 0, dim = look.key === 'under' ? 0.45 : 0;
+  const col = (dh, ds, dl) => { const c2 = new THREE.Color().setHSL(Math.max(0, hsl.h + dh - dry * 0.07), Math.max(0, Math.min(1, hsl.s + ds - dry * 0.15)), Math.max(0.02, Math.min(0.95, hsl.l + dl + pale - dim * hsl.l)));
+    return '#' + c2.getHexString(); };
+  g.fillStyle = col(0, 0, 0); g.fillRect(0, 0, P, P);
+  // drifts: big soft patches of lusher, drier and darker growth, wrapping at the edges
+  const blob = (x, y, r, fill, a) => { for (const ox of [-P, 0, P]) for (const oy of [-P, 0, P]) {
+    const gr = g.createRadialGradient(x + ox, y + oy, 0, x + ox, y + oy, r); gr.addColorStop(0, fill.replace(')', `,${a})`).replace('rgb', 'rgba')); gr.addColorStop(1, fill.replace(')', ',0)').replace('rgb', 'rgba'));
+    g.fillStyle = gr; g.fillRect(x + ox - r, y + oy - r, r * 2, r * 2); } };
+  const rgb = hex => { const c3 = new THREE.Color(hex); return `rgb(${Math.round(c3.r * 255)},${Math.round(c3.g * 255)},${Math.round(c3.b * 255)})`; };
+  for (let i = 0; i < 70; i++) blob(rnd() * P, rnd() * P, 60 + rnd() * 220, rgb(col(0.02 * (rnd() - 0.5), 0.08, 0.05 + rnd() * 0.06)), 0.45);     // lusher
+  for (let i = 0; i < 55; i++) blob(rnd() * P, rnd() * P, 50 + rnd() * 200, rgb(col(-0.05, -0.12, 0.06)), 0.35 + dry * 0.4);                  // dry, yellowed
+  for (let i = 0; i < 24; i++) blob(rnd() * P, rnd() * P, 30 + rnd() * 120, rgb(new THREE.Color(0x5a4630).getHex()), 0.30 + dry * 0.3);     // bare earth
+  for (let i = 0; i < 30; i++) blob(rnd() * P, rnd() * P, 80 + rnd() * 260, 'rgb(0,0,0)', 0.10);                                            // hollows
+  // fine mottling, so it is not airbrushed from above
+  for (let i = 0; i < 9000; i++) { const l = rnd(); g.fillStyle = l < 0.5 ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,220,0.05)'; g.fillRect(rnd() * P, rnd() * P, 2 + rnd() * 5, 2 + rnd() * 5); }
+  // the survey grid, faint: every fifth tile a thin worn line
+  g.strokeStyle = 'rgba(30,26,18,0.16)'; g.lineWidth = 2;
+  for (let k = 0; k <= N; k += 5) { const q = k / N * P; g.beginPath(); g.moveTo(q, 0); g.lineTo(q, P); g.moveTo(0, q); g.lineTo(P, q); g.stroke(); }
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 16;
+  return t;
+}
+function buildPlating(pl, ground, grown) {
   const byKey = {};
   return GROUP_FACE.map(f => {
     const look = faceLookOf(f);
     if (byKey[look.key]) return byKey[look.key];
     const fp = facePlate(pl, f);
+    if (grown) {
+      if (!_soilTex) {
+        const tl = new THREE.TextureLoader();
+        _soilTex = tl.load('textures/worksoil.jpg'); _soilN = tl.load('textures/worksoil_n.jpg');
+        _soilTex.colorSpace = THREE.SRGBColorSpace;
+        for (const t of [_soilTex, _soilN]) { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 8; }
+        _soilN.repeat.set(N * T / 2.4, N * T / 2.4);
+      }
+      const m = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.97, metalness: 0,
+        map: meadowTexture(fp, look, ground, 17 + Object.keys(byKey).length * 31),
+        normalMap: _soilN, normalScale: new THREE.Vector2(0.8, 0.8), envMapIntensity: 0.25 });
+      m.onBeforeCompile = (sh) => {
+        sh.uniforms.uSoil = { value: _soilTex }; sh.uniforms.uSoilK = { value: N * T / 2.4 };
+        sh.fragmentShader = 'uniform sampler2D uSoil; uniform float uSoilK;\n' + sh.fragmentShader.replace('#include <map_fragment>', `#include <map_fragment>
+  {
+    // the photographed earth's grain about its own mean, at its own size
+    vec3 sp = texture2D(uSoil, vMapUv * uSoilK).rgb;
+    diffuseColor.rgb *= clamp(sp / vec3(0.1526, 0.1091, 0.0642), 0.4, 2.2) * 0.55 + 0.45;
+  }`);
+      };
+      m.customProgramCacheKey = () => 'meadow';
+      m.userData.plating = look.key; m.userData.grown = true;
+      return (byKey[look.key] = m);
+    }
     const m = new THREE.MeshStandardMaterial({ color: ground, roughness: 0.9,
       metalness: 0.3, map: plateTexture(fp), roughnessMap: plateRoughness(fp),
       normalMap: plateNormal(fp), normalScale: new THREE.Vector2(0.75, 0.75),
@@ -1465,7 +1528,7 @@ function buildPlating(pl, ground) {
   });
 }
 function disposePlating(mats) {
-  for (const m of new Set(mats)) { if (m.map) m.map.dispose(); if (m.roughnessMap) m.roughnessMap.dispose(); if (m.normalMap) m.normalMap.dispose(); m.dispose(); }
+  for (const m of new Set(mats)) { if (m.map) m.map.dispose(); if (m.roughnessMap) m.roughnessMap.dispose(); if (m.normalMap && m.normalMap !== _soilN) m.normalMap.dispose(); m.dispose(); }
 }
 const cube = new THREE.Mesh(new THREE.BoxGeometry(N * T, N * T, N * T), buildPlating(PLATE_DEFAULT, 0x36406a));
 cube.name = 'cube';
@@ -7313,7 +7376,12 @@ function applyWorld(k) {
   // the plating is rebuilt for the world, not recoloured: frost, moss and
   // soot are things drawn ON it, and a tint cannot draw
   disposePlating(cube.material);
-  cube.material = buildPlating(w.plate, w.ground);
+  cube.material = buildPlating(w.plate, w.ground, w.fam === 'green' && !SPEC.city);
+  // on land the survey grid is a quiet aid, not graph paper: the cell lines and
+  // the lit lanes fade to a third on a grown world (2026-10-11)
+  { const _grown = w.fam === 'green' && !SPEC.city;
+    gridLines.material.opacity = _grown ? 0.06 : 0.14;
+    if (lanes && lanes.material) lanes.material.opacity = _grown ? 0.12 : 0.32; }
   // and the belts: rust on the cinder, steel-blue on the ice, brass in the
   // green. The tread texture is shared and scrolls the same under every tint.
   const bt = w.belt || WORLDS[0].belt;
