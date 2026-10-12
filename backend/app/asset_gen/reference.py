@@ -521,7 +521,10 @@ def _build_reference_prompt(slots: Dict[str, Any], style: str) -> tuple[str, str
     # "fantasy wizard with a staff" is left untouched.
     if base_pattern == "biped":
         char_hints = {
-            "wizard":    "elderly wizard, long flowing robe, tall pointed hat, long white beard, holding a wooden staff, fantasy character",
+            # a robe to the floor fights the arms-out pose and came out as bare
+            # legs in tights (2026-10-11); a heavy knee-length robe over
+            # trousers and boots keeps the wizard and gives the legs a shape
+            "wizard":    "elderly wizard, heavy deep blue knee-length wool robe with a leather belt, dark trousers, leather boots, tall pointed blue hat, long white beard, fully clothed, fantasy character",
             "sorcerer":  "sorcerer, ornate robe, arcane staff, fantasy character",
             "witch":     "witch, flowing dress, pointed hat, fantasy character",
             "mage":      "mage, hooded robe, glowing staff, fantasy character",

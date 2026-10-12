@@ -2109,6 +2109,8 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                     # holding out against the dead is an ordinary person's game, in
                     # ordinary clothes, not the safari explorer's (2026-10-10)
                     (r"\b(zombies?|undead|apocalypse|outbreak|infected|survive|survival|survivor|shopping mall|mall)", "man"),
+                    # magic is the wizard's: "a wizard's apprentice" was the lighthouse keeper (2026-10-11)
+                    (r"\b(wizard\w*|sorcer\w*|apprentice|mage|magic\w*|spell ?books?|spells?|warlock|enchant\w*)\b", "wizard"),
                     (r"\b(haunt|ghost|manor|mansion|murder|mystery|detective|noir|crime|clue|relic|cursed|asylum)", "detective"),
                     (r"\b(vault|museum|jewel|diamond|loot|bank)", "burglar"),
                     (r"\b(forest|wood|moor|wild|ranger|trail|mountain|hike|hunt|deer|elk|track|walk|walker|stroll|wander|gather|firefl)", "ranger"),
@@ -2936,7 +2938,10 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                     # same clips; a background person takes one of those, in
                     # turn, and never the one the player is wearing.
                     _wl = BACKEND_ROOT / "assets" / "library"
-                    _dressed = [w for w in ("walker_courier.glb", "walker_thug.glb", "walker_detective.glb")
+                    # (2026-10-11) the courier walker is a white cycling suit that reads
+                    # as a figure undressed, and stood as the guide in a candlelit
+                    # library; background people are the hoodie and the shirt-and-boots
+                    _dressed = [w for w in ("walker_thug.glb", "walker_detective.glb")
                                 if (_wl / w).exists()
                                 and w[len("walker_"):-4] != (spec.player.name or "").lower().strip()]
                     if _dressed:
@@ -3441,9 +3446,12 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                 spec.world.archetype = "dunes"
             spec.world.ground_color = [0.78, 0.65, 0.46]
         _coast = False
+        _harbor = False
         # A BEACH HAS A SEA (2026-10-11): "a lifeguard rescues three swimmers at
         # a crowded summer beach" was a plain of acacias, the water a far line
-        if (_fre.search(r"\b(beach|beaches|seaside|lifeguards?|swimmers?|sunbathers?|surf|surfing|surfers?)\b", _pw7)
+        # (a harbour, a quay, a fishing port: the coast ends in a stone quay, 2026-10-11)
+        _harbor = bool(_fre.search(r"\b(harbou?rs?|quays?|quayside|docks|dockside|wharf|wharves|piers?|fishing port|fishing village|fish market|marina)\b", _pw7))
+        if ((_fre.search(r"\b(beach|beaches|seaside|lifeguards?|swimmers?|sunbathers?|surf|surfing|surfers?)\b", _pw7) or _harbor)
                 and not _fre.search(r"\b(desert|dune|space|moon|mars|city|street|underwater)\b", _pw7)
                 and not getattr(spec.world, "platforms", False) and _arch in ("plain", "dunes", "basin", "mesa")):
             _arch = "archipelago"
@@ -3524,7 +3532,7 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         spec.world.level = build_level(
             spec.seed, spec.world.size_m, n_objectives=n_obj,
             amplitude_m=amp * _am, grid_n=_gn, regions=_regions,
-            archetype=_arch, terrain_form=_tf, sea=bool(job.get("_naval")) and not _fjord, fjord=_fjord, coast=_coast)
+            archetype=_arch, terrain_form=_tf, sea=bool(job.get("_naval")) and not _fjord, fjord=_fjord, coast=_coast, harbor=_coast and _harbor)
         if _tf != "natural" or _gm != 1.0:
             job.setdefault("notes", []).append(
                 f"terrain form: {_tf} ({_gn}x{_gn}). The ground is shaped by "
@@ -3731,7 +3739,8 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         _station = _re3.search(STATION_RE, _pl)
         _venue = _cafe or _station or _re3.search(r"\b(shopping (?:mall|cent(?:re|er)|arcade)|mall|supermarket|"
                              r"department store|hospital|asylum|sanatorium|office block|prison|bunker|"
-                             r"high school|school(?! of)|classroom|academy|laborator(?:y|ies)|lab|research (?:facility|station|base))\b", _pl)
+                             r"high school|school(?! of)|classroom|academy|laborator(?:y|ies)|lab|research (?:facility|station|base)|"
+                             r"library|libraries|archives?|reading room|scriptorium)\b", _pl)
         if _venue and (_re3.search(r"\b(?:outside|car ?park|parking|rooftop|roof of|street(?:s)? (?:of|around))\b", _pl)
                        or (is_city and place)):
             _venue = None
@@ -3743,7 +3752,8 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                 or (("station" if _station else "cafe" if _cafe else {"supermarket": "shop", "department store": "mall", "hospital": "hospital",
                      "asylum": "hospital", "sanatorium": "hospital", "office block": "office", "prison": "dungeon",
                      "bunker": "dungeon", "high school": "school", "school": "school", "classroom": "school",
-                     "academy": "school"}.get(_venue.group(1),
+                     "academy": "school", "library": "library", "libraries": "library", "archive": "library",
+                     "archives": "library", "reading room": "library", "scriptorium": "library"}.get(_venue.group(1),
                      "lab" if _venue.group(1).startswith(("lab", "research")) else "mall")) if _venue else None) \
                 or "dungeon"
             _ik = {"mansion": "house", "cottage": "house", "home": "house",
@@ -3797,7 +3807,7 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                 # the people come in after the cast was resolved to meshes, so
                 # each takes a dressed walker (or the woman) directly
                 _wl2 = BACKEND_ROOT / "assets" / "library"
-                for _who, _f in (("woman", "woman_anim.glb"), ("courier", "walker_courier.glb"),
+                for _who, _f in (("woman", "woman_anim.glb"), ("thug", "walker_thug.glb"),
                                  ("detective", "walker_detective.glb"), ("woman", "woman_anim.glb")):
                     if (_wl2 / _f).exists():
                         spec.entities.append(_ES(name=_who, asset=str(_wl2 / _f), behavior="customer",

@@ -26,6 +26,19 @@ import sys
 import tempfile
 from pathlib import Path
 
+# A NETWORK BLIP IS NOT A FAILED CHARACTER (2026-10-11): with the internet
+# down, diffusers asked huggingface.co whether SDXL had changed and the whole
+# painting pass failed, though every model was on disk. When the models this
+# tool uses are cached, it runs offline.
+def _offline_if_cached():
+    import os as _os
+    hub = Path(_os.environ.get("HF_HOME") or (Path.home() / ".cache" / "huggingface")) / "hub"
+    need = ["models--stabilityai--stable-diffusion-xl-base-1.0", "models--openai--clip-vit-base-patch32"]
+    if all((hub / n).exists() for n in need):
+        _os.environ.setdefault("HF_HUB_OFFLINE", "1")
+        _os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
+_offline_if_cached()
+
 # A SECOND ATTEMPT IS ANOTHER ATTEMPT (2026-10-11): the finished-character
 # judge (tools/char_qa.py) sends a blotchy result back through this pass;
 # FS_HDV_SEED moves every painting seed so the retry is a different painting

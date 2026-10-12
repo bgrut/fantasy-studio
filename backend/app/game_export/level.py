@@ -308,7 +308,7 @@ def _fjord_height(x: float, z: float, base: float, goal: list[float],
 
 
 def _coast_height(x: float, z: float, base: float, goal: list[float],
-                  goal_r: float, seed: int) -> float:
+                  goal_r: float, seed: int, harbor: bool = False) -> float:
     """A BEACH IS A COAST (2026-10-11). "a lifeguard rescues three swimmers at
     a crowded summer beach" was a plain of acacias with the sea a far line.
     The route walks the top of a sand beach; the sand runs down into the sea
@@ -321,6 +321,13 @@ def _coast_height(x: float, z: float, base: float, goal: list[float],
     ux, uz = goal[0] / max(goal_r, 1e-6), goal[1] / max(goal_r, 1e-6)
     u = x * ux + z * uz
     s = -x * uz + z * ux
+    if harbor:
+        # A HARBOUR HAS A QUAY (2026-10-11): a straight stone edge at s = 6, the
+        # quayside flat a metre over the water, deep water at its foot for the
+        # boats; behind it the ground climbs gently to the town
+        if s > 6.0:
+            return -3.6
+        return 1.1 + max(0.0, (-s - 26.0)) * 0.08 + base * 0.15 * ss((-s - 22.0) / 10.0)
     shore = 9.0 + _m.sin(u * 0.045 + seed % 5) * 3.0           # the waterline wanders a little
     if s > shore:                                               # the sea: a gentle shelf, then the drop
         d = s - shore
@@ -430,7 +437,7 @@ def build_level(seed: int, size_m: float, n_objectives: int = 0,
                 amplitude_m: float = 2.4, grid_n: int = 48,
                 regions: list[dict] | None = None,
                 archetype: str = "plain", terrain_form: str = "natural", sea: bool = False,
-                fjord: bool = False, coast: bool = False) -> dict:
+                fjord: bool = False, coast: bool = False, harbor: bool = False) -> dict:
     """Deterministic LevelPlan. Returns a JSON-safe dict for the runtime.
 
     sea (2026-10-06): a sea battle sails, it does not walk. The islands sit
@@ -478,7 +485,7 @@ def build_level(seed: int, size_m: float, n_objectives: int = 0,
             if fjord:
                 h = _fjord_height(x, z, h0, goal, goal_r, seed)
             elif coast:
-                h = _coast_height(x, z, h0, goal, goal_r, seed)
+                h = _coast_height(x, z, h0, goal, goal_r, seed, harbor)
             if sea:
                 h -= amplitude_m * 1.1                # fewer, smaller islands
             # MICRO-RELIEF (Phase 93): a second, higher-frequency octave —
@@ -487,6 +494,11 @@ def build_level(seed: int, size_m: float, n_objectives: int = 0,
             # track the detail for free.
             i2, j2 = (i * 3) % grid_n, (j * 3) % grid_n
             h += (hgrid[i2][j2] - 0.5) * 0.5 * min(amplitude_m, 1.2)
+            if coast and harbor:
+                # a quay is laid level: the metre-scale bumps came up through the cobbles
+                _sq = (-x * goal[1] + z * goal[0]) / max(goal_r, 1e-6)
+                if _sq > -24.0:
+                    h = _coast_height(x, z, h0, goal, goal_r, seed, True)
             # LAVA CHANNELS: a flat floor under the flow, a raised levee of
             # cooled rock along each bank (a real channel builds its own
             # walls), then the field again
@@ -638,7 +650,7 @@ def build_level(seed: int, size_m: float, n_objectives: int = 0,
         out_level["pois"] = []
     if coast:
         gl = math.hypot(goal[0], goal[1]) or 1.0
-        out_level["coast"] = {"axis": [round(goal[0] / gl, 3), round(goal[1] / gl, 3)], "sea_s": 9.0}
+        out_level["coast"] = {"axis": [round(goal[0] / gl, 3), round(goal[1] / gl, 3)], "sea_s": 6.0 if harbor else 9.0, "harbor": bool(harbor)}
         out_level["pois"] = [q for q in out_level["pois"] if (-q["x"] * goal[1] + q["z"] * goal[0]) / gl < -24]
         out_level["landmarks"] = []
     if fjord:
@@ -821,6 +833,11 @@ def build_interior(seed: int, kind: str = "castle") -> dict:
     """
     import random as _random
     rng = _random.Random(seed * 31 + 7)
+    # A LIBRARY (2026-10-11) is planned as a museum is, a tall hall with
+    # galleries off it; the runtime lines it with books instead of pictures
+    _lib = kind == "library"
+    if _lib:
+        kind = "museum"
     H = 4.2 if kind in ("castle",) else 5.0 if kind == "mall" else 5.4 if kind == "museum" else 4.0 if kind == "lab" \
         else 3.4 if kind in ("hospital", "school", "station") else 3.6 if kind == "cafe" else 3.0   # wall height (m)
     T = 0.5                                          # wall thickness
@@ -1029,7 +1046,7 @@ def build_interior(seed: int, kind: str = "castle") -> dict:
     # reached by real stairs (dungeons stay single-level crawls)
     floors = 2 if kind in ("castle", "house") else 1
     return {
-        "kind": kind, "wall_h": H, "wall_t": T, "pillars": pillars,
+        "kind": "library" if _lib else kind, "wall_h": H, "wall_t": T, "pillars": pillars,
         "floors": floors,
         "rooms": [[round(v, 2) for v in r] for r in rooms],
         "walls": walls, "furniture": furniture, "torches": torches,

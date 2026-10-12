@@ -326,6 +326,17 @@ def label_grounded(label: str, prompt: str) -> bool:
     prompt (plurals and the first five letters forgiven)."""
     import re as _r
     words = {_stem(w) for w in _r.findall(r"[a-z']+", (prompt or "").lower()) if len(w) > 2}
+    # A PLACE IMPLIES ITS PARTS (2026-10-11): "explores overgrown mayan ruins"
+    # lost its "reach the main temple" step, though a Mayan ruin IS its temples;
+    # the ruins were never built. A word of the place grounds the buildings it
+    # is made of.
+    _IMPLIED = {"ruin": ("temple", "pyramid", "shrine", "tower", "altar", "ziggurat"),
+                "maya": ("temple", "pyramid"), "mayan": ("temple", "pyramid"), "aztec": ("temple", "pyramid"),
+                "inca": ("temple",), "egypt": ("pyramid", "tomb", "temple"), "egyptian": ("pyramid", "tomb", "temple"),
+                "monastery": ("temple", "shrine", "bell"), "castle": ("tower", "keep", "gate"), "village": ("house", "well", "square")}
+    for _w in list(words):
+        for _x in _IMPLIED.get(_w, ()):
+            words.add(_stem(_x))
     heads = {w[:5] for w in words if len(w) >= 5}
     toks = [_stem(t) for t in _r.findall(r"[a-z']+", (label or "").lower())]
     toks = [t for t in toks if len(t) > 2 and t not in _GROUND_STOP]
