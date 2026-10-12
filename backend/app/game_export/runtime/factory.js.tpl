@@ -2019,9 +2019,13 @@ const MAT = {
   miner: new THREE.MeshStandardMaterial({ color: 0xff5d73, roughness: 0.45,
     metalness: 0.35, emissive: 0x4a0d1a, emissiveIntensity: 0.35,
     map: SKIN, roughnessMap: SKIN_ROUGH }),
+  // ROUND EDGES SHADE ROUND (2026-10-11): the belt frame, the forge and the
+  // rift were flat-shaded over bevelled geometry, so each bevel was a row of
+  // facets and the machines read low-poly; shaded smooth, a chamfer catches
+  // a soft highlight down its length, as machined metal does
   belt: new THREE.MeshStandardMaterial({ color: 0x3ad39a, roughness: 0.6, metalness: 0.2 }),
   beltFrame: new THREE.MeshStandardMaterial({ color: 0x2b7f68, roughness: 0.45,
-    metalness: 0.6, flatShading: true, emissive: 0x07271f,
+    metalness: 0.6, emissive: 0x07271f,
     emissiveIntensity: 0.9 }),
   // the tread carries a faint emissive, so a belt line reads from orbit;
   // the overhead turns it up
@@ -2032,13 +2036,13 @@ const MAT = {
     metalness: 0.45, emissive: 0x6b4a00, emissiveIntensity: 0.25,
     map: SKIN, roughnessMap: SKIN_ROUGH }),
   forge: new THREE.MeshStandardMaterial({ color: 0xd94fb0, roughness: 0.4,
-    metalness: 0.55, flatShading: true, emissive: 0x5c0f45,
+    metalness: 0.55, emissive: 0x5c0f45,
     emissiveIntensity: 0.35, map: SKIN, roughnessMap: SKIN_ROUGH }),
   filt: new THREE.MeshStandardMaterial({ color: 0x2f8f7d, roughness: 0.55,
     metalness: 0.25, emissive: 0x0a3329, emissiveIntensity: 0.35,
     map: SKIN, roughnessMap: SKIN_ROUGH }),
   rift: new THREE.MeshStandardMaterial({ color: 0x6a3cff, emissive: 0x3a1c9c,
-    emissiveIntensity: 0.5, roughness: 0.35, metalness: 0.5, flatShading: true,
+    emissiveIntensity: 0.5, roughness: 0.35, metalness: 0.5,
     map: SKIN, roughnessMap: SKIN_ROUGH }),
   // the outpost: the machines' skin, in the world's plate colour; the mast's
   // lamp face and the habitat's dome carry a little light of their own
