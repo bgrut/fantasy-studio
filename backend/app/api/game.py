@@ -3133,7 +3133,12 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                             # (2026-10-11) a trick or a photograph is a thing you do, not a
                             # thing you pick up: "land five tricks" collected five orange cubes
                             "trick", "photograph", "photo", "picture", "snapshot", "shot",
-                            "selfie", "combo", "flip", "stunt", "jump", "move"}
+                            "selfie", "combo", "flip", "stunt", "jump", "move",
+                            # (2026-10-13) evidence and readings are gathered, not modelled:
+                            # "gathering evidence of the entity" spent 25 minutes generating
+                            # an "evidence" mesh and timed the whole build out
+                            "evidence", "reading", "sample", "proof", "sign", "trace",
+                            "recording", "memory", "secret", "rumour", "rumor", "lead", "data"}
         for ob in spec.objectives:
             if ob.kind != "collect" or ob.asset:
                 continue
@@ -3305,7 +3310,9 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         # MORE THAN ONE IS PLURAL (2026-10-11): "Defeat 3 opponent", "Put down 3
         # opponent": a counted label reads in the plural, last word only
         _INVAR = {"fish", "sheep", "deer", "moose", "bison", "salmon", "trout", "aircraft", "people", "children",
-                  "police", "staff", "crew", "cattle", "swine", "species", "series", "elk", "squid", "shrimp", "cod"}
+                  "police", "staff", "crew", "cattle", "swine", "species", "series", "elk", "squid", "shrimp", "cod",
+                  # mass nouns: "gather 5 evidences" (2026-10-13)
+                  "evidence", "information", "equipment", "luggage", "gear", "ammo", "ammunition", "furniture", "data", "proof", "advice", "research", "mail", "gold", "treasure"}
         _IRREG = {"man": "men", "woman": "women", "child": "children", "person": "people", "mouse": "mice",
                   "goose": "geese", "tooth": "teeth", "foot": "feet", "wolf": "wolves", "thief": "thieves",
                   "knife": "knives", "leaf": "leaves", "elf": "elves", "dwarf": "dwarves", "loaf": "loaves", "shelf": "shelves"}
@@ -3324,6 +3331,9 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                         _p = _w + "s"
                     _ws[-1] = _p if not _w[:1].isupper() else _p[:1].upper() + _p[1:]
                     ob.label = " ".join(_ws)
+                # the model writes "evidences" too: a mass noun keeps no s
+                elif _lw.endswith("s") and _lw[:-1] in _INVAR:
+                    _ws[-1] = _w[:-1]; ob.label = " ".join(_ws)
 
         stage("designing level")
         from app.game_export.level import build_level, build_osm_city, detect_place

@@ -184,6 +184,9 @@ def write_story(spec, prompt: str, verbose: bool = True) -> dict:
             out["tagline"] = out["tagline"] if _ok(out["tagline"]) else ""
             out["beats"] = [b if _ok(b) else "" for b in out["beats"]]
             bad = [k for k in ("narrator", "chapter", "first_move") if not _ok(out[k])]
+            # a narrator is a who, not a sentence: "The sandstone remembers everything." (2026-10-13)
+            if out["narrator"] and (out["narrator"].rstrip().endswith((".", "!", "?")) or len(out["narrator"].split()) > 8):
+                bad.append("narrator")
             bad += ["prologue"] if len(out["prologue"]) < 2 else []
             if not bad or attempt == 2:
                 fb = _fallback(spec, prompt)

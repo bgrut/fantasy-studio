@@ -1,0 +1,12 @@
+import puppeteer from 'puppeteer-core';
+const b = await puppeteer.launch({ headless:'new', executablePath:'C:/Program Files/Google/Chrome/Application/chrome.exe', args:['--use-angle=d3d11','--enable-unsafe-swiftshader','--window-size=1600,900'] });
+const p = await b.newPage(); await p.setViewport({ width:1600, height:900 }); const errs=[]; p.on('pageerror', e=>errs.push(e.message.slice(0,200)));
+await p.goto(`http://127.0.0.1:8789/games/${process.env.J}/dist/?noguide=1`, { waitUntil:'domcontentloaded' });
+await new Promise(r=>setTimeout(r,12000)); await p.click('#startbtn').catch(()=>{}); await new Promise(r=>setTimeout(r,4000));
+const info = await p.evaluate(() => { const cs = []; window.__scene.traverse(o => { if (o.userData && o.userData.critter) cs.push([+o.position.x.toFixed(1), +o.position.z.toFixed(1), o.userData.critter.element]); }); return cs; });
+console.log('critters', JSON.stringify(info));
+await p.evaluate((k) => { let tgt = null; window.__scene.traverse(o => { if (!tgt && o.userData && o.userData.critter && o.userData.critter.element === k) tgt = o; });
+  const f = () => { if (tgt) { const x = tgt.position.x, z = tgt.position.z, y = tgt.position.y; const a = tgt.rotation.y + 0.9;
+    window.__camPin = { pos: [x + Math.sin(a) * 2.0, y + 0.8, z + Math.cos(a) * 2.0], look: [x, y + 0.35, z] }; } requestAnimationFrame(f); }; f(); }, process.env.EL || 'fire');
+await new Promise(r=>setTimeout(r,1500)); await p.screenshot({ path: process.env.OUT, type:'jpeg', quality:88 });
+console.log(errs.join(' | ') || 'ok'); await b.close();

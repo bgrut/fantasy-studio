@@ -11854,6 +11854,56 @@ async function main() {
       console.warn('[game] collect asset fell back to orb:', e.message);
     }
   }
+  // ── CREATURES TO CATCH (2026-10-13) ─────────────────────────────────────
+  // "catching wild elemental creatures that race alongside the cars" handed
+  // out five glowing wisps. A creature to catch is a creature: a small
+  // four-legged animal of its element (fire, water, storm, frost, moss,
+  // shadow), its fur and markings in the element's colours and its tail a
+  // flame or a crest of light, that gallops, bolts when you come close and
+  // keeps to its own ground; you catch it by getting to it.
+  const CRITTER_RE = /\b(creatures?|critters?|beasts?|monsters?|spirits?|elementals?|familiars?|sprites?|wild ones?|pets?|monstrous|mons?)\b/;
+  const ELEMENTS = [
+    { id: 'fire', body: 0xd8572a, belly: 0xffc27a, glow: 0xff6a1a },
+    { id: 'water', body: 0x2f78c8, belly: 0xa8e0ff, glow: 0x4ac8ff },
+    { id: 'storm', body: 0xe0c23a, belly: 0xfff4b0, glow: 0xfff06a },
+    { id: 'frost', body: 0xcfe4f2, belly: 0xffffff, glow: 0x9ae8ff },
+    { id: 'moss', body: 0x4f8a3a, belly: 0xc8e0a0, glow: 0x8aff7a },
+    { id: 'shadow', body: 0x3a2a52, belly: 0x8a72b8, glow: 0xb87aff },
+  ];
+  function makeCritter(i) {
+    const E = ELEMENTS[(i + (SPEC.seed || 0)) % ELEMENTS.length];
+    const fur = new THREE.MeshStandardMaterial({ color: E.body, roughness: 0.62, emissive: E.glow, emissiveIntensity: 0.08 });
+    const belly = new THREE.MeshStandardMaterial({ color: E.belly, roughness: 0.7 });
+    const glowM = new THREE.MeshStandardMaterial({ color: E.glow, emissive: E.glow, emissiveIntensity: 2.4, roughness: 0.4, toneMapped: false });
+    const eyeM = new THREE.MeshStandardMaterial({ color: 0x101010, roughness: 0.15, metalness: 0.2 });
+    const g = new THREE.Group(), rig = new THREE.Group(); g.add(rig);
+    const body = new THREE.Mesh(new THREE.SphereGeometry(0.26, 18, 12), fur); body.scale.set(0.9, 0.8, 1.35); body.position.y = 0.36; rig.add(body);
+    const bel = new THREE.Mesh(new THREE.SphereGeometry(0.2, 14, 10), belly); bel.scale.set(0.8, 0.6, 1.2); bel.position.set(0, 0.28, 0.02); rig.add(bel);
+    const head = new THREE.Group(); head.position.set(0, 0.56, 0.32); rig.add(head);
+    const hm = new THREE.Mesh(new THREE.SphereGeometry(0.17, 16, 12), fur); hm.scale.set(1, 0.92, 1.05); head.add(hm);
+    const snout = new THREE.Mesh(new THREE.SphereGeometry(0.08, 12, 8), belly); snout.scale.set(1, 0.8, 1.2); snout.position.set(0, -0.04, 0.14); head.add(snout);
+    for (const sd of [-1, 1]) {
+      const eye = new THREE.Mesh(new THREE.SphereGeometry(0.035, 10, 8), eyeM); eye.position.set(sd * 0.075, 0.03, 0.135); head.add(eye);
+      const ear = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.2, 8), fur); ear.position.set(sd * 0.09, 0.17, -0.02); ear.rotation.z = -sd * 0.35; head.add(ear);
+      const tip = new THREE.Mesh(new THREE.ConeGeometry(0.03, 0.08, 6), glowM); tip.position.set(sd * 0.115, 0.27, -0.02); tip.rotation.z = -sd * 0.35; head.add(tip);
+    }
+    const legs = [];
+    for (const [x, z] of [[-0.13, 0.2], [0.13, 0.2], [-0.13, -0.2], [0.13, -0.2]]) {
+      const hip = new THREE.Group(); hip.position.set(x, 0.3, z); rig.add(hip);
+      const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.035, 0.28, 8), fur); leg.position.y = -0.14; hip.add(leg);
+      const paw = new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 6), belly); paw.scale.set(1, 0.6, 1.3); paw.position.y = -0.28; hip.add(paw);
+      legs.push(hip);
+    }
+    // the tail: a curve of the element's light
+    const tail = new THREE.Group(); tail.position.set(0, 0.42, -0.34); rig.add(tail);
+    for (let k = 0; k < 5; k++) { const seg = new THREE.Mesh(new THREE.SphereGeometry(0.075 - k * 0.01, 10, 8), k < 2 ? fur : glowM);
+      seg.position.set(0, k * 0.07, -k * 0.06); tail.add(seg); }
+    const L = new THREE.PointLight(E.glow, 1.4, 4, 2); L.position.set(0, 0.6, -0.3); rig.add(L);
+    g.traverse(o => { if (o.isMesh) o.castShadow = true; });
+    g.userData.critter = { rig, legs, head, tail, element: E.id };
+    return g;
+  }
+
   function spawnCollectibles(step) {
     const pts = LVL && LVL.collect_points;
     const tpl = collectTpl[steps.indexOf(step)];   // generated mesh, if the spec baked one
@@ -11907,6 +11957,9 @@ async function main() {
       else if (_coin && !tpl) s = makeCoin(i);
       const _mush = !tpl && /\b(mushrooms?|toadstools?|fung(?:i|us)|truffles?)\b/.test(String(step.label || '').toLowerCase());
       if (_mush) s = makeMushroom(i);
+      // (the library's stand-in "creature" is a dog; a creature named by its kind keeps its own model)
+      const _critter = CRITTER_RE.test(String(step.label || '').toLowerCase()) && (!tpl || /\/(creature|monster|beast|spirit)s?\.glb$/.test(String(step.asset || '')));
+      if (_critter) s = makeCritter(i);
       // a third coordinate is the ground the pickup stands on (a platform's top)
       if (_chest && WRECK) {
         [cx, cz] = WRECK.spot();                       // what was in its hold, scattered round it
@@ -11950,9 +12003,12 @@ async function main() {
       s.userData.fsTag = { type: 'collectible', name: step.label || 'item',
                            detail: 'collect it' };
       if (_bloom) { const gl = makeGlow(0.6); gl.position.y = 0.66; s.add(gl); }       // the nectar glows in the flower's heart, not on the ground
+      else if (_critter) { /* a creature carries its own light */ }
       else if (!(planted && GARDEN && GARDEN.grow)) s.add(makeGlow(_evidence || _grown ? 1.1 : 1.7));   // a crop in its bed is found by its bed
       scene.add(s);
       const _c = { mesh: s, baseY, phase: rngC() * Math.PI * 2, still: _evidence || _grown };
+      if (_critter) { _c.still = true; _c.critter = { home: [cx, cz], vx: 0, vz: 0, heading: rngC() * 6.28, gait: 0, wander: 0 };
+        s.userData.fsTag.detail = 'catch it: it runs'; s.position.y = hAt(cx, cz); }
       if (planted && GARDEN && GARDEN.grow) {
         // a sprout to water first: two leaves where the crop will be
         const sp = new THREE.Group(), lm = new THREE.MeshStandardMaterial({ color: 0x5fae3a, roughness: 0.7 });
@@ -23620,8 +23676,35 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
           c.mesh.position.y = c.baseY + Math.sin(t * 2.2 + c.phase) * 0.22;
           c.mesh.rotation.y += dt * 2;
         }
+        if (c.critter) {
+          // wander; bolt from the player; keep to its own ground; outrun a
+          // walker, and race beside a car a little slower than it
+          const cr = c.critter, m = c.mesh, ud = m.userData.critter;
+          const px = m.position.x - nt.x, pz = m.position.z - nt.z, pd = Math.hypot(px, pz) || 1;
+          const _pl = window.__crPl || (window.__crPl = { t: -1, x: nt.x, z: nt.z, v: 0 }); if (_pl.t !== t) { const _d = t - _pl.t; if (_d > 0 && _d < 0.5) _pl.v = _pl.v * 0.8 + 0.2 * Math.hypot(nt.x - _pl.x, nt.z - _pl.z) / _d; _pl.t = t; _pl.x = nt.x; _pl.z = nt.z; } const pv = _pl.v;
+          let ax = 0, az = 0, top = 2.2;
+          cr.wander -= dt; if (cr.wander <= 0) { cr.heading += (Math.random() - 0.5) * 2.2; cr.wander = 1.2 + Math.random() * 2; }
+          ax += Math.sin(cr.heading) * 1.2; az += Math.cos(cr.heading) * 1.2;
+          if (pd < 12) { const k = (12 - pd) / 12 * 9; ax += px / pd * k; az += pz / pd * k; top = Math.max(5.2, pv * 0.82); }
+          const hx = cr.home[0] - m.position.x, hz = cr.home[1] - m.position.z, hd2 = Math.hypot(hx, hz);
+          if (hd2 > 26) { ax += hx / hd2 * (hd2 - 26) * 0.6; az += hz / hd2 * (hd2 - 26) * 0.6; }
+          cr.vx += ax * dt * 3; cr.vz += az * dt * 3;
+          const sp = Math.hypot(cr.vx, cr.vz); if (sp > top) { cr.vx *= top / sp; cr.vz *= top / sp; }
+          cr.vx *= 1 - Math.min(1, dt * 0.8); cr.vz *= 1 - Math.min(1, dt * 0.8);
+          const nx2 = m.position.x + cr.vx * dt, nz2 = m.position.z + cr.vz * dt, lim = gsize / 2 - 3;
+          // it runs round a building, not through it: a blocked step turns it away
+          if (inBldg(nx2, nz2, 0.6)) { cr.vx *= -0.5; cr.vz *= -0.5; cr.heading += Math.PI * (0.6 + Math.random() * 0.8); }
+          else { m.position.x = Math.max(-lim, Math.min(lim, nx2)); m.position.z = Math.max(-lim, Math.min(lim, nz2)); }
+          const spd = Math.hypot(cr.vx, cr.vz);
+          if (spd > 0.15) { let dy = Math.atan2(cr.vx, cr.vz) - m.rotation.y; while (dy > Math.PI) dy -= 6.2832; while (dy < -Math.PI) dy += 6.2832; m.rotation.y += dy * Math.min(1, dt * 8); }
+          cr.gait += dt * (3 + spd * 2.4);
+          const bound = Math.abs(Math.sin(cr.gait)) * Math.min(1, spd / 3) * 0.12;
+          m.position.y = hAt(m.position.x, m.position.z) + bound;
+          if (ud) { ud.legs.forEach((lg, k) => { lg.rotation.x = Math.sin(cr.gait + (k < 2 ? 0 : Math.PI) + (k % 2) * 0.4) * Math.min(0.9, 0.2 + spd * 0.15); });
+            ud.rig.rotation.x = -Math.min(0.25, spd * 0.04); ud.tail.rotation.x = 0.4 + Math.sin(t * 6 + c.phase) * 0.25; ud.head.rotation.y = Math.sin(t * 1.3 + c.phase) * 0.3 * (spd < 0.5 ? 1 : 0.2); }
+        }
         const dx = c.mesh.position.x - nt.x, dz = c.mesh.position.z - nt.z;
-        const pickR = Math.max(1.4, (P.height_m || 1) * 0.9);  // big heroes reach further
+        const pickR = Math.max(c.critter && SPEC.player.mode === 'drive' ? 2.6 : 1.4, (P.height_m || 1) * 0.9);  // big heroes reach further
         if (dx * dx + dz * dz < pickR * pickR) {
           scene.remove(c.mesh);
           const st = steps[stepIdx];
