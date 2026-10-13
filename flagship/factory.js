@@ -3073,8 +3073,10 @@ function contactTexture() {
   // measured darkening a tile out on the underside was seven percent, against
   // seventeen on top where the cast shadow helps. The ramp holds longer now.
   grd.addColorStop(0, 'rgba(0,0,0,0.86)');
-  grd.addColorStop(0.5, 'rgba(0,0,0,0.64)');
-  grd.addColorStop(0.85, 'rgba(0,0,0,0.36)');
+  // (2026-10-13) and held longer again: on a dark underside a seed can
+  // draw, the ring a tile out darkened 3.3 counts of 28, and read as floating
+  grd.addColorStop(0.5, 'rgba(0,0,0,0.72)');
+  grd.addColorStop(0.85, 'rgba(0,0,0,0.46)');
   grd.addColorStop(1, 'rgba(0,0,0,0)');
   g.fillStyle = grd; g.fillRect(0, 0, 64, 64);
   const t = new THREE.CanvasTexture(c);

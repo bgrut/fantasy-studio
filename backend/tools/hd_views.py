@@ -121,6 +121,37 @@ def pipe():
     return _PIPE
 
 
+def _band_match(src_png: Path, ref_png: Path, mask_png: Path) -> None:
+    """Move a body render's colour, band by band down its height, to the same
+    bands of the reference photo's figure; calm the variation, never raise it."""
+    import numpy as np
+    from PIL import Image
+    im = np.asarray(Image.open(src_png).convert("RGB")).astype(np.float32) / 255
+    rf = np.asarray(Image.open(ref_png).convert("RGB")).astype(np.float32) / 255
+    mk = np.asarray(Image.open(mask_png).convert("L").resize((rf.shape[1], rf.shape[0]))) > 127
+    corners = np.concatenate([im[:8, :8].reshape(-1, 3), im[:8, -8:].reshape(-1, 3)])
+    fm = np.linalg.norm(im - np.median(corners, axis=0), axis=2) > 0.06      # the figure against its backdrop
+
+    def rows(m):
+        ys = np.where(m.any(1))[0]
+        return (int(ys.min()), int(ys.max())) if len(ys) else None
+    ri, rr = rows(fm), rows(mk)
+    if not ri or not rr:
+        return
+    out = im.copy()
+    for b0, b1 in ((0.0, 0.14), (0.14, 0.5), (0.5, 0.88), (0.88, 1.0)):    # head, torso, legs, feet
+        def band(m, r):
+            y0 = int(r[0] + (r[1] - r[0]) * b0); y1 = int(r[0] + (r[1] - r[0]) * b1) + 1
+            bm = np.zeros_like(m); bm[y0:y1] = m[y0:y1]; return bm
+        bi, br = band(fm, ri), band(mk, rr)
+        if bi.sum() < 50 or br.sum() < 50:
+            continue
+        s, t = im[bi], rf[br]
+        k = np.clip((t.std(0) + 1e-3) / (s.std(0) + 1e-3), 0.3, 1.0)
+        out[bi] = np.clip((s - s.mean(0)) * k + t.mean(0), 0, 1)
+    Image.fromarray((out * 255).astype(np.uint8)).save(src_png)
+
+
 def repaint(src: Path, dst: Path, prompt: str, strength: float, seed: int = 42, neg: str = None):
     import torch
     from PIL import Image
@@ -476,8 +507,21 @@ def upgrade(anim: Path, strength=0.62, verbose=True) -> str:
 
         plated = any(w in kind for w in ("robot", "knight", "astronaut", "android", "cyborg", "armor", "armour", "mech"))
 
+        # the photo's figure (2026-10-13): a blotchy coat rejects its photo by
+        # colour, so _hd_front.py fits the body to this outline instead; the
+        # views pass ran without it and put the four rescued people back to
+        # views-only paint
+        _mask = ref.with_name(ref.stem + "_mask.png")
+        if not noref and not animal and not _mask.exists():
+            try:
+                from PIL import Image as _MI
+                from rembg import remove as _rm
+                _rm(_MI.open(ref).convert("RGB")).split()[-1].point(lambda a: 255 if a > 128 else 0).convert("RGB").save(_mask)
+            except Exception as _me:
+                print(f"[hdv] no mask for {kind}: {type(_me).__name__}: {_me}")
+
         def project(src, dst, extras):
-            extras = extras + ([] if (animal or plated) else ["--matte"])
+            extras = extras + ([] if (animal or plated) else ["--matte"]) + (["--mask", str(_mask)] if (not noref and not animal and _mask.exists()) else [])
             r = subprocess.run([str(BLENDER_EXE), "--background", "--python", str(FRONT), "--", str(src), str(ref), str(dst)] + extras,
                                capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=900)
             line = next((l for l in (r.stdout or "").splitlines() if l.startswith(("HDF ", "HDFAIL"))), "HDFAIL no result")
@@ -513,6 +557,17 @@ def upgrade(anim: Path, strength=0.62, verbose=True) -> str:
             else:
                 prompt = (f"raw photograph, DSLR, of a real {outfit}, {phrase}, full body, standing with arms out, "
                           f"soft studio light, plain grey backdrop, sharp focus, detailed fabric texture, seams and folds")
+                # THE BACK WEARS WHAT THE FRONT WEARS (2026-10-13): the repaint
+                # keeps ~40% of what it is given, and a blotchy coat's back went
+                # through as an orange-and-blue patchwork behind a clean photo
+                # front. Each band of the render (head, torso, legs, feet) is
+                # first moved to the colour of the same band of the photo's
+                # figure, its variation calmed, never raised.
+                if not noref and _mask.exists():
+                    try:
+                        _band_match(tmp / f"v_{v}.png", ref, _mask)
+                    except Exception as _be:
+                        print(f"[hdv] band match skipped ({type(_be).__name__}: {_be})")
             repaint(tmp / f"v_{v}.png", tmp / f"r_{v}.png", prompt, strength, neg=NEG_ANIMAL if animal else NEG)
             extras += ["--extra", f"{tmp / f'r_{v}.png'}|{tmp / 'v.json'}|{v}"]
         stage = tmp / "s0.glb"

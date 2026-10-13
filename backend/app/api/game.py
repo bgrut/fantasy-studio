@@ -2815,6 +2815,14 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                 job.setdefault("notes", []).append(f"the {ent.name} scenery is left out: the pickups are the {ent.name}")
                 continue
             ekind = "man" if (ent.name.lower() in _HUMAN_ALIASES or getattr(ent, "spectral", False)) else ent.name   # a ghost is played by the walker, drawn spectral
+            # A WOMAN IS NOT A THUG (2026-10-13): "woman" was folded into the
+            # generic man, and the man is swapped for the light walkers (the
+            # hoodie, the shirt and boots), so the lighthouse's guide, written
+            # as a woman, was a man in a hoodie. She keeps the woman's figure.
+            if ekind == "man" and not getattr(ent, "spectral", False) \
+                    and _fre.search(r"\b(woman|women|girl|lady|ladies|mother|grandmother|granny|sister|wife|aunt|daughter|widow|matron|nun|she)\b", ent.name.lower()) \
+                    and (BACKEND_ROOT / "assets" / "library" / "woman_anim.glb").exists():
+                ekind = "woman"
             # A SHOGUN'S GUARDS ARE SAMURAI (2026-10-11): a ninja crept past six
             # men in jeans and hoodies in a feudal castle. In a period setting a
             # generic guard or foe wears the period, from a figure the library

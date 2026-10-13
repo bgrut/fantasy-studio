@@ -1624,6 +1624,26 @@ def fix_facing_on_disk(hero_glb: Path, verbose: bool = True) -> None:
         exe = get_setting("blender_executable_path") or exe
     except Exception:
         pass
+    # A ROBE HIDES THE FEET (2026-10-13): the toes decide which way a body
+    # faces, and under a floor-length robe they were read off the hem at the
+    # back: the regenerated buddhist monk came out with his face on the back
+    # of his head. A kind whose facing has been seen to be wrong is turned by
+    # assets/facing_overrides.json after the toes have had their say.
+    try:
+        import json as _json
+        _ov = _json.loads((BACKEND_ROOT / "assets" / "facing_overrides.json").read_text(encoding="utf-8"))
+        _stem = hero_glb.stem.replace("_anim", "")
+        if _stem in _ov:
+            rot += float(_ov[_stem])
+            while rot > 180: rot -= 360
+            while rot < -180: rot += 360
+            if verbose:
+                print(f"[bake] disk facing: {_stem} turned a further {_ov[_stem]} deg (facing_overrides.json)")
+    except FileNotFoundError:
+        pass
+    except Exception as _oe:
+        if verbose:
+            print(f"[bake] facing overrides unread ({type(_oe).__name__})")
     if abs(rot) >= 1.0:
         subprocess.run([exe, "--background", "--python",
                         str(BACKEND_ROOT / "scripts" / "_apply_euler.py"), "--",

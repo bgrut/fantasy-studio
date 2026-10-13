@@ -10506,6 +10506,16 @@ async function main() {
         #fswpn::before{content:"";display:inline-block;width:18px;height:1px;background:var(--art-acc);vertical-align:middle;margin-right:8px}
         body[data-hud="tl"] #fswpn{left:16px;top:96px} body[data-hud="tr"] #fswpn{right:16px;top:96px} body[data-hud="bl"] #fswpn{left:16px;bottom:120px}
         #hearts{color:var(--art-acc) !important;letter-spacing:4px !important}
+        body[data-art] .fs-end{background:radial-gradient(ellipse at center,var(--art-paper) 0,transparent 80%) !important;backdrop-filter:none !important}
+        body[data-art] .fs-end .card{background:var(--art-paper) !important;border:0 !important;border-top:2px solid var(--art-acc) !important;border-radius:var(--art-rad) !important;
+          box-shadow:0 30px 80px rgba(0,0,0,.45) !important;max-width:min(560px,88vw) !important;padding:34px 40px !important}
+        body[data-art] .fs-end h2{font-family:var(--f-head) !important;font-weight:var(--art-hw) !important;font-style:var(--art-fs) !important;letter-spacing:var(--art-tr) !important;
+          text-transform:var(--art-tt) !important;font-variant:var(--art-fv) !important;color:var(--art-ink) !important;text-shadow:none !important;font-size:clamp(28px,4vw,46px) !important}
+        body[data-art] .fs-end p{font-family:var(--f-ui) !important;color:var(--art-ink) !important;font-size:15.5px !important;line-height:1.6 !important;white-space:pre-line}
+        body[data-art] .fs-end .stat{font-family:var(--f-ui) !important;color:var(--art-acc) !important;letter-spacing:.14em !important;text-transform:uppercase}
+        body[data-art] .fs-end a,body[data-art] .fs-end button{font-family:var(--f-head) !important;background:none !important;color:var(--art-ink) !important;
+          border:1px solid var(--art-acc) !important;border-radius:var(--art-rad) !important;letter-spacing:.12em;text-transform:uppercase}
+        body[data-art] .fs-end a:hover,body[data-art] .fs-end button:hover{background:var(--art-acc) !important;color:var(--art-paper) !important}
         .fs-title b{font-family:var(--f-head) !important;font-weight:var(--art-hw) !important;font-style:var(--art-fs) !important;text-transform:var(--art-tt) !important;letter-spacing:var(--art-tr) !important;color:var(--art-ink) !important}
         .fs-title small{color:var(--art-acc) !important;font-family:var(--f-ui) !important}
       `;
@@ -16290,8 +16300,9 @@ async function main() {
       let px = 0, pz = 0;
       for (const p of cps) { travel += Math.hypot(p[0] - px, p[1] - pz); px = p[0]; pz = p[1]; }
       const par = Math.max(20, travel / Math.max(P.walk_speed, 1) * 1.5);
-      const medal = secs <= par ? '🥇 GOLD' : secs <= par * 1.6 ? '🥈 SILVER'
-                  : secs <= par * 2.6 ? '🥉 BRONZE' : '';
+      // (2026-10-12) words in the game's face, not three stock emoji
+      const medal = secs <= par ? 'Gold' : secs <= par * 1.6 ? 'Silver'
+                  : secs <= par * 2.6 ? 'Bronze' : '';
       document.getElementById('wintime').textContent =
         (medal ? medal + ' · ' : '') + `time ${fmtT(secs)}`
         + (isPB ? ' · a new personal best' : ` · best ${fmtT(prev)}`);
@@ -16306,7 +16317,11 @@ async function main() {
     const nxt = new URLSearchParams(location.search).get('next');
     try {
       const _wtime = document.getElementById('wintime').textContent;
-      __KitEnd.show({ title: 'You win', text: document.getElementById('wintext').textContent,
+      // THE END IS THE STORY'S (2026-10-12): every game closed on the same
+      // "You win" card; a game with a story closes on its own name over its
+      // epilogue, signed by its narrator, in its own art direction
+      const _st = window.__story;
+      __KitEnd.show({ title: _st ? (SPEC.title || 'The end') : 'You win', text: document.getElementById('wintext').textContent + (_st && _st.narrator ? '\n\n' + _st.narrator : ''),
         stats: _wtime ? _wtime.split(' · ').map(x => x.trim()).filter(Boolean) : [],
         mood: document.body.dataset.mood,
         links: (nxt && /^[\w./?=-]+$/.test(nxt)) ? [{ text: 'next level', href: nxt, target: '_self' }] : [],
