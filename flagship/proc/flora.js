@@ -107,15 +107,18 @@ function foliageAtlas(kind, leaf, seed) {
       const bx = ox + Q * 0.06, by = cy;
       g.strokeStyle = hsl(leaf.h - 0.02, leaf.s * 0.6, leaf.l * 0.8); g.lineWidth = 6;
       g.beginPath(); g.moveTo(bx, by); g.lineTo(ox + Q * 0.97, cy); g.stroke();
-      for (let i = 0; i < 62; i++) {
-        const t = i / 62, px = bx + (Q * 0.9) * t;
+      // SEPARATE LEAFLETS (2026-10-13): sixty-two broad leaflets a side merged
+      // into one solid blade, and a palm read as a banana plant. Fewer, slim,
+      // swept toward the tip, with the sky between them.
+      for (let i = 0; i < 40; i++) {
+        const t = i / 40, px = bx + (Q * 0.9) * t;
         for (const side of [-1, 1]) {
-          const ll = Q * 0.42 * Math.sin(Math.PI * Math.min(1, t * 1.15 + 0.05));
-          const sh = (r() - 0.5) * 0.08;
+          const ll = Q * 0.44 * Math.sin(Math.PI * Math.min(1, t * 1.1 + 0.06)) * (0.85 + r() * 0.3);
+          const sh = (r() - 0.5) * 0.1;
           g.fillStyle = hsl(leaf.h + sh * 0.3, leaf.s + sh, leaf.l + sh);
           g.beginPath(); g.moveTo(px, by);
-          g.quadraticCurveTo(px + ll * 0.35, by + side * ll * 0.6, px + ll * 0.55, by + side * ll);
-          g.quadraticCurveTo(px + ll * 0.02, by + side * ll * 0.55, px + 13, by);   // a leaflet, not a sliver
+          g.quadraticCurveTo(px + ll * 0.3, by + side * ll * 0.55, px + ll * 0.62, by + side * ll * 0.95);
+          g.quadraticCurveTo(px + ll * 0.27, by + side * ll * 0.5, px + Q * 0.015, by);
           g.fill();
         }
       }
@@ -228,7 +231,7 @@ function tube(b, path, sides, sway0, sway1) {
 }
 
 // a foliage card: centre c, size w x h, facing n, long axis along ax, atlas quadrant q
-function card(b, c, w, h, n, ax, q, crown, sway, rotUV) {
+function card(b, c, w, h, n, ax, q, crown, sway, rotUV, seg) {
   const A = ax.clone().normalize();
   const S = new THREE.Vector3().crossVectors(n, A).normalize();
   const base = b.vc;
@@ -245,7 +248,10 @@ function card(b, c, w, h, n, ax, q, crown, sway, rotUV) {
     o.normalize();
     b.n.push(o.x, o.y, o.z);
     // a frond's rib is drawn across its quadrant: rotUV lays it along the card
-    if (rotUV) b.u.push(u0 + (sy + 0.5) * 0.5, v0 + (sx + 0.5) * 0.5);
+    // seg = [a, b]: this card shows only that stretch of the rib (a frond laid
+    // along its curve in pieces, one picture end to end, 2026-10-13)
+    if (rotUV && seg) b.u.push(u0 + (seg[0] + (sy + 0.5) * (seg[1] - seg[0])) * 0.5, v0 + (sx + 0.5) * 0.5);
+    else if (rotUV) b.u.push(u0 + (sy + 0.5) * 0.5, v0 + (sx + 0.5) * 0.5);
     else b.u.push(u0 + (sx + 0.5) * 0.5, v0 + (sy + 0.5) * 0.5);
     b.c.push(sway);
     const k = Math.min(1, Math.max(0, (dc - 0.25) / 0.75));
@@ -498,11 +504,15 @@ function growPalm(r, P) {
       const nrm = new THREE.Vector3().crossVectors(d, side).normalize();
       if (nrm.y < 0) nrm.negate();
       // a frond is a V of two cards along its rib, tilted either way, so it
-      // reads from the side and from above, and in the distance pictures
-      const fw = P.frondW * (1 - s / segs * 0.35);
-      for (const tilt of [0.65, -0.65]) {
+      // reads from the side and from above, and in the distance pictures.
+      // ONE FROND, END TO END (2026-10-13): every segment showed the whole
+      // frond picture, five overlapping, and a crown read as a lumpy
+      // broadleaf (a pirate's island looked like acacias); each segment now
+      // shows its own stretch of one frond, leaflets running unbroken to the tip
+      const fw = P.frondW;
+      for (const tilt of [0.5, -0.5]) {
         const nk = nrm.clone().applyAxisAngle(d, tilt);
-        card(leaf, mid, fw * 0.8, L / segs * 1.35, nk, d.clone(), f % 4, crown, 0.4 + s / segs, true);
+        card(leaf, mid, fw * 0.8, L / segs * 1.04, nk, d.clone(), f % 4, crown, 0.4 + s / segs, true, [s / segs, (s + 1) / segs]);
       }
       prev = next;
     }
@@ -965,8 +975,10 @@ function makeMaterials(kind, leafHSL, barkTex, barkN, seed, U, extra = {}) {
     const ak = kind === 'pine' || kind === 'spruce' ? 'pine' : (kind === 'palm' || kind === 'kelp' || kind === 'fern') ? 'palm' : 'broad';
     // matte, and only half the sky's reflection: foliage is a scatterer,
     // and a glossy card under an open sky read as frosted
+    // a conifer does not turn with the season: in an autumn world its needles stay green (2026-10-13)
+    const lh = (ak === 'pine' && leafHSL && leafHSL.h < 0.16 && leafHSL.s > 0.5) ? { h: 0.33, s: 0.4, l: 0.17 } : leafHSL;
     leaf = new THREE.MeshStandardMaterial({
-      map: foliageAtlas(ak, leafHSL, seed), alphaTest: 0.42, side: THREE.DoubleSide,
+      map: foliageAtlas(ak, lh, seed), alphaTest: 0.42, side: THREE.DoubleSide,
       roughness: 1.0, metalness: 0.0, envMapIntensity: 0.45,
     });
     leaf.alphaToCoverage = true;
@@ -1310,6 +1322,11 @@ export function biomeFor(words, arch, groundHSL) {
   // an oak wood on red earth; the Alps are spruce and larch, grey rock above
   else if (has(/\balps\b|alpine|swiss|switzerland|tyrol\w*|dolomit\w*|bavaria\w*/) && !has(/snow|winter|blizzard|frozen/)) Object.assign(out, { kinds: K(['spruce', 0.9], ['pine', 0.35], ['rock', 0.4], ['boulder', 0.2], ['bush', 0.2]), dens: 0.5,
     rockTint: T(0x8a8782), leaf: { h: 0.29, s: 0.42, l: 0.2 } });
+  // AN AUTUMN WOOD TURNS (2026-10-13): "a fox explores an autumn forest" stood
+  // in orange pines. In autumn the oaks, maples and birches colour; the few
+  // pines among them keep their needles green (makeMaterials, below)
+  else if (has(/autumn|\bfall\b|october|maples?|turning leaves/) && !has(/snow|winter|frozen/)) Object.assign(out, {
+    kinds: K(['oak', 0.6], ['broadleaf', 0.75], ['birch', 0.35], ['pine', 0.18], ['bush', 0.7]), dens: 0.8 });
   // AN ORCHARD (2026-10-12): apple trees, and round it the oaks and hedges of farmland
   else if (has(/orchards?|apple trees?|apples?|cider/)) Object.assign(out, { kinds: K(['apple', 0.6], ['oak', 0.35], ['bush', 0.6]), dens: 0.35,
     leaf: { h: 0.27, s: 0.48, l: 0.24 } });

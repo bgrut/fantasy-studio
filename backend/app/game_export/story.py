@@ -103,8 +103,17 @@ def _fallback(spec, prompt):
     pro = [s for s in re.split(r"(?<=[.?])\s+", intro) if s] or [_clean(prompt).capitalize() + "."]
     heads = ["Before First Light", "The Long Way In", "What the Weather Brought", "One Last Errand",
              "The Hour Before", "Where the Road Ends", "The Turning Tide", "Out Past the Lamps"]
-    return {"narrator": f"The {who}", "chapter": rng.choice(heads),
-            "tagline": _clean(getattr(spec, "win_text", "") or "", 80) or _clean(prompt, 80),
+    # (2026-10-13) the fallback had "The man" for a narrator and the win line
+    # ("The gold is yours!") for a tagline; it takes a name and a form from the
+    # seed like the model's story does, and the tagline is never the ending
+    seed = getattr(spec, "seed", 0) or 0
+    forms = ["field notes", "logbook", "last letter", "account", "journal", "notebook", "testimony", "diary"]
+    name = random.Random(seed * 7 + 1).choice(_NAMES)
+    narrator = f"{name}'s {random.Random(seed * 13 + 5).choice(forms)}"
+    tag = rng.choice(["Nobody else is coming.", "It has to be tonight.", "Further than it looks.", "Everyone else turned back.",
+                      "Not everyone comes back.", "There is still time, just.", "Someone has to go.", "It was never on any map."])
+    return {"narrator": narrator, "chapter": rng.choice(heads),
+            "tagline": tag,
             "prologue": pro[:4], "first_move": beats[0] if beats else "Go.",
             "beats": beats, "epilogue": _clean(getattr(spec, "win_text", "") or "")}
 

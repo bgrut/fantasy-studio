@@ -3475,6 +3475,12 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                 _arch = "dunes"
                 spec.world.archetype = "dunes"
             spec.world.ground_color = [0.78, 0.65, 0.46]
+        # A TROPICAL ISLAND IS SAND (2026-10-13): "a pirate captain searches a
+        # tropical island for buried treasure" stood on brown earth under
+        # acacias; the island's ground is pale sand (its palms come from flora)
+        if _fre.search(r"\b(tropical islands?|desert islands?|treasure islands?|pirate islands?|castaway|atoll|lagoon|palm beach)\b", _pw7) \
+                and not _fre.search(r"\b(jungle|rainforest|volcan\w*|snow|ice)\b", _pw7):
+            spec.world.ground_color = [0.82, 0.74, 0.57]
         _coast = False
         _harbor = False
         # A BEACH HAS A SEA (2026-10-11): "a lifeguard rescues three swimmers at

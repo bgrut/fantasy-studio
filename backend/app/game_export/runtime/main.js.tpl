@@ -500,7 +500,7 @@ async function main() {
     const W = SPEC.world || {}, L0 = W.level || {};
     // (2026-10-07) the sentence's own place words too: "a himalayan monastery" grew an
     // oak wood because the title, "Monk's Ascent", never said where it was
-    const placeWords = (String(SPEC.prompt || '').toLowerCase().match(/\b(redwoods?|sequoias?|himalaya\w*|tibet\w*|nepal\w*|bhutan\w*|monaster(?:y|ies)|gompa|lavender|vineyards?|provence|tuscan\w*|black sand|basalt|sea stacks?|iceland\w*|kansas|wheat|olive groves?|tea plantations?|bamboo|highlands?|glens?|moors?|heather|alien|xeno\w*|extraterrestrial|exoplanet|purple plants|fjords?|norw\w*|vikings?|norse|nordic|scandinavia\w*|egypt\w*|giza|pyramids?|pharaoh\w*|sphinx|sahara|oasis|alps|alpine|swiss|switzerland|tyrol\w*|dolomit\w*|sea ice|ice floes?|pack ice|polar bears?|icebergs?|orchards?|apples?|cider|beach|seaside|lifeguards?|surf\w*|scuba|deep blue|deep ocean|deep sea|humpback)\b/g) || []);   // (alien words, 2026-10-11; fjord, Egypt, Alps, sea ice the same day)
+    const placeWords = (String(SPEC.prompt || '').toLowerCase().match(/\b(redwoods?|sequoias?|himalaya\w*|tibet\w*|nepal\w*|bhutan\w*|monaster(?:y|ies)|gompa|lavender|vineyards?|provence|tuscan\w*|black sand|basalt|sea stacks?|iceland\w*|kansas|wheat|olive groves?|tea plantations?|bamboo|highlands?|glens?|moors?|heather|alien|xeno\w*|extraterrestrial|exoplanet|purple plants|fjords?|norw\w*|vikings?|norse|nordic|scandinavia\w*|egypt\w*|giza|pyramids?|pharaoh\w*|sphinx|sahara|oasis|alps|alpine|swiss|switzerland|tyrol\w*|dolomit\w*|sea ice|ice floes?|pack ice|polar bears?|icebergs?|orchards?|apples?|cider|tropical|islands?|isle|palms?|lagoon|atoll|pirates?|treasure|castaway|autumn|october|maples?|beach|seaside|lifeguards?|surf\w*|scuba|deep blue|deep ocean|deep sea|humpback)\b/g) || []);   // (alien words, 2026-10-11; fjord, Egypt, Alps, sea ice the same day)
     const words = [W.name, W.sky, W.flora, W.weather, W.setting, SPEC.title, SPEC.description, ...placeWords]
       .filter(Boolean).join(' ').toLowerCase();
     if (L0.osm || L0.interior || W.pano || L0.cave) return null;
@@ -3322,11 +3322,13 @@ async function main() {
       : /\b(shrine|altar|idol|statue|monolith|relic|tomb|grave|offering)\b/.test(lab) ? 'altar'
       : /\b(well|spring|fountain|pool|oasis)\b/.test(lab) ? 'well'
       : /\b(gate|portal|exit|escape|door|arch|pass|border)\b/.test(lab) ? 'arch'
+      : /\b(treasure|chest|hoard|loot|gold|booty|doubloons?|cache)\b/.test(lab) ? 'chest'
+      : /\b(oak|tree|yew|willow|elm|ash tree|beech|cedar|baobab|banyan|sequoia|redwood)\b/.test(lab) ? 'tree'
       : null;
     if (offworld) kind = 'mast';
     // a person to reach is the goal themself: a campfire on a lifeguard's
     // beach for "reach swimmer 1" was a thing that should not be there
-    if (!kind && /\b(swimmers?|man|woman|men|women|girl|boy|child|children|kids?|princess|prince|king|queen|survivors?|friends?|hikers?|climbers?|people|family|mother|father|brother|sister|captain|crew|villagers?|dog|cat|horse|guide|keeper|master|elder|monk|teacher|stranger|customer|rider|driver|player|team|rival|opponent)\b|\d/.test(lab)) { window.__goalMark = 'none'; return G; }
+    if (!kind && /\b(swimmers?|man|woman|men|women|girl|boy|child|children|kids?|princess|prince|king|queen|survivors?|friends?|hikers?|climbers?|people|family|mother|father|brother|sister|captain|crew|villagers?|dog|cat|horse|guide|keeper|master|elder|monk|teacher|stranger|customer|rider|driver|player|team|rival|opponent|cubs?|pups?|kits?|kittens?|puppies|puppy|chicks?|ducklings?|foals?|calf|calves|lambs?|fawns?|cygnets?|hatchlings?|eggs?|young|babies|baby|herd|flock|pack|litter)\b|\d/.test(lab)) { window.__goalMark = 'none'; return G; }
     if (!kind) kind = cold ? (r() < 0.5 ? 'cairn' : 'fire') : dry ? (r() < 0.5 ? 'arch' : 'well') : ['lantern', 'fire', 'cairn', 'altar'][Math.floor(r() * 4)];
     window.__goalMark = kind;
     const MS = (o) => { const m = new THREE.MeshStandardMaterial(o); m.userData.noAutoTex = true; return m; };
@@ -3427,6 +3429,50 @@ async function main() {
       for (let i = 0; i < lp.count; i++) { const x = lp.getX(i); lp.setY(i, lp.getY(i) + Math.sin(x * 2.3) * 0.04); }
       lg.computeVertexNormals(); add(lg, stoneM, 0, 3.6, 0);
       for (let i = 0; i < 6; i++) add(rock(0.15 + r() * 0.15, i * 2.3), stoneM, (r() - 0.5) * 4, 0.05, (r() - 0.5) * 2);
+    } else if (kind === 'chest') {
+      // THE TREASURE IS DUG FOR (2026-10-13): a pirate's buried treasure stood
+      // as a cairn and a flag. It is a chest half out of a pit, its lid up on
+      // coins, a spade stuck in the spoil heap, the X still in the ground.
+      const plankT = HDT('planks', 1, 1), wood = MS({ map: plankT, normalMap: HDN('planks', 1, 1), color: 0x8a5a34, roughness: 0.8 });
+      const brass = MS({ color: 0xb08a3a, metalness: 0.9, roughness: 0.35 });
+      const pit = add(new THREE.CircleGeometry(1.3, 28).rotateX(-Math.PI / 2), MS({ color: 0x3a2a1a, roughness: 1 }), 0, 0.015, 0);
+      const ch = new THREE.Group(); ch.position.set(0, -0.12, 0); ch.rotation.set(0.12, r() * 6.28, 0.05); G.add(ch);
+      const box = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.5, 0.6), wood); box.position.y = 0.25; ch.add(box);
+      for (const x of [-0.42, 0, 0.42]) { const b = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.52, 0.62), brass); b.position.set(x, 0.25, 0); ch.add(b); }
+      const lid = new THREE.Group(); lid.position.set(0, 0.5, -0.3); lid.rotation.x = -1.15; ch.add(lid);
+      const lg = new THREE.CylinderGeometry(0.3, 0.3, 0.95, 16, 1, false, 0, Math.PI); lg.rotateZ(Math.PI / 2); lg.translate(0, 0, 0.3);
+      lid.add(new THREE.Mesh(lg, wood));
+      const coinM = MS({ color: 0xe0b440, metalness: 1, roughness: 0.25, emissive: 0x3a2a00 });
+      const coin = new THREE.CylinderGeometry(0.035, 0.035, 0.008, 12), ci = new THREE.InstancedMesh(coin, coinM, 160), mx = new THREE.Matrix4(), q4 = new THREE.Quaternion(), e4 = new THREE.Euler();
+      for (let i = 0; i < 160; i++) { const inside = i < 110, x = inside ? (r() - 0.5) * 0.85 : (r() - 0.5) * 2.4, z = inside ? (r() - 0.5) * 0.5 : (r() - 0.5) * 2.4;
+        const y = inside ? 0.38 + r() * 0.14 - Math.hypot(x, z) * 0.12 : 0.13; q4.setFromEuler(e4.set((r() - 0.5) * 0.9, r() * 6.28, (r() - 0.5) * 0.9));
+        mx.compose(new THREE.Vector3(x, y, z), q4, new THREE.Vector3(1, 1, 1)); ci.setMatrixAt(i, mx); }
+      ch.add(ci);
+      const L = new THREE.PointLight(0xffc860, 2.2, 6, 2); L.position.set(0, 0.8, 0); G.add(L);
+      // the spoil heap and the spade in it
+      const heap = add(new THREE.SphereGeometry(0.75, 20, 10, 0, 6.29, 0, 1.2), MS({ map: HDT('sand', 1, 1), color: 0xc8b088, roughness: 1 }), 1.6, -0.18, 0.4); heap.scale.set(1.2, 0.55, 1);
+      const sp = new THREE.Group(); sp.position.set(1.55, 0.2, 0.35); sp.rotation.set(0.3, 0.4, -0.35); G.add(sp);
+      const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.025, 1.0, 8), woodM); shaft.position.y = 0.55; sp.add(shaft);
+      const blade = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.26, 0.02), ironM); blade.position.y = -0.02; sp.add(blade);
+      // the X, scored in the ground beside the pit
+      for (const a of [0.78, -0.78]) { const s2 = add(new THREE.BoxGeometry(1.4, 0.01, 0.1), MS({ color: 0x5a1a12, roughness: 1 }), -1.7, 0.02, -0.6); s2.rotation.y = a; }
+    } else if (kind === 'tree') {
+      // AN OLD TREE IS THE PLACE (2026-10-13): "follow the scent towards the old
+      // oak" ended at a lantern post. The goal is the tree itself, grown from the
+      // world's own flora, half again a forest tree's size, its roots in a ring
+      // of moss and fallen leaves, a hollow at its foot.
+      try {
+        const w9 = [SPEC.prompt, SPEC.world && SPEC.world.name].filter(Boolean).join(' ');
+        const tk = /\b(yew|cedar|redwood|sequoia)\b/.test(lab) ? 'pine' : /\bwillow\b/.test(lab) ? 'broadleaf' : 'oak';
+        const gv = __FLORA.growVariants({ kinds: [tk], leaf: __FLORA.leafFor(w9), seed: ((SPEC.seed || 1) * 31 + 7) >>> 0, perKind: 1 });
+        const v = gv.variants[0];
+        const tr = new THREE.Group(); tr.scale.setScalar(1.9); tr.rotation.y = r() * 6.28; G.add(tr);
+        const bm = new THREE.Mesh(v.bark, v.mats.bark); bm.castShadow = bm.receiveShadow = true; tr.add(bm);
+        if (v.leaf && v.mats.leaf) { const lm = new THREE.Mesh(v.leaf, v.mats.leaf); lm.castShadow = true; tr.add(lm); }
+      } catch (e) { console.warn('[game] goal tree: ' + e.message); }
+      add(new THREE.CircleGeometry(3.2, 32).rotateX(-Math.PI / 2), MS({ color: 0x3f4a24, roughness: 1, transparent: true, opacity: 0.55 }), 0, 0.02, 0);
+      for (let i = 0; i < 7; i++) { const a = i / 7 * 6.28 + r() * 0.4, root = add(new THREE.CylinderGeometry(0.06, 0.2, 1.6, 8), woodM, Math.cos(a) * 0.95, 0.08, Math.sin(a) * 0.95);
+        root.rotation.set(Math.sin(a) * 1.35, 0, -Math.cos(a) * 1.35); }
     } else if (kind === 'mast') {
       for (let i = 0; i < 3; i++) { const a = i * 2.09, lg = add(new THREE.CylinderGeometry(0.035, 0.045, 3.3, 8), MS({ color: 0xc8ccd2, metalness: 0.8, roughness: 0.35 }), Math.cos(a) * 0.55, 1.55, Math.sin(a) * 0.55);
         lg.rotation.set(Math.sin(a) * -0.17, 0, Math.cos(a) * 0.17); }
@@ -3438,7 +3484,7 @@ async function main() {
       ticks.push((t) => { const on = (t % 1.6) < 0.18 ? 1 : 0; bulbM.emissiveIntensity = 6 * on; L.intensity = 8 * on; });
     }
     G.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
-    world.createCollider(RAPIER.ColliderDesc.cylinder(1.2, kind === 'arch' ? 0.35 : 0.5).setTranslation(gp.x + (kind === 'arch' ? 1.4 : 0), gp.y + 1.2, gp.z));
+    world.createCollider(RAPIER.ColliderDesc.cylinder(1.2, kind === 'arch' ? 0.35 : kind === 'tree' ? 0.75 : 0.5).setTranslation(gp.x + (kind === 'arch' ? 1.4 : 0), gp.y + 1.2, gp.z));
     if (kind === 'arch') world.createCollider(RAPIER.ColliderDesc.cylinder(1.7, 0.35).setTranslation(gp.x - 1.4, gp.y + 1.7, gp.z));
     let tPrev = performance.now() / 1000;
     window.__goalMarkTick = () => { const t = performance.now() / 1000, dt = Math.min(0.05, t - tPrev); tPrev = t; for (const f of ticks) f(t, dt); };
