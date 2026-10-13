@@ -55,7 +55,20 @@ def upgrade(anim: Path, force=False, dry=False, verbose=True) -> str:
     if dry:
         return "would upgrade"
     tmp = anim.with_name(anim.stem + "_hdtmp.glb")
-    r = subprocess.run([str(BLENDER_EXE), "--background", "--python", str(SCRIPT), "--", str(anim), str(ref), str(tmp)],
+    # the photo's figure, cut out once (2026-10-12): when a blotchy coat will not
+    # agree with the photo by colour, _hd_front.py fits the body to this outline
+    mask = ref.with_name(ref.stem + "_mask.png")
+    if not mask.exists():
+        try:
+            from PIL import Image
+            from rembg import remove
+            cut = remove(Image.open(ref).convert("RGB"))
+            cut.split()[-1].point(lambda a: 255 if a > 128 else 0).convert("RGB").save(mask)
+        except Exception as _me:
+            if verbose:
+                print(f"[hdfront] no mask for {kind}: {type(_me).__name__}: {_me}")
+    extra = ["--mask", str(mask)] if mask.exists() else []
+    r = subprocess.run([str(BLENDER_EXE), "--background", "--python", str(SCRIPT), "--", str(anim), str(ref), str(tmp)] + extra,
                        capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=900)
     line = next((l for l in (r.stdout or "").splitlines() if l.startswith(("HDF ", "HDFAIL"))), "HDFAIL no result")
     if not line.startswith("HDF ") or not tmp.exists():

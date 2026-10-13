@@ -22901,7 +22901,7 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
           }
         }
         try {
-          GAIT.post(dt, { speed, forward: _gaitFwd, groundY: playerObj.position.y, groundAt: hAt,
+          GAIT.post(dt, { speed, forward: _gaitFwd, groundY: playerObj.position.y, groundAt: hAt, pos: playerObj.position,
                           moving: 1 - _gaitW.idle, grounded: kcc.computedGrounded(), accel: _acc,
                           noLean: _mmDrive });       // captured motion already leans into speed and turns
         } catch (e) { console.warn('[game] gait post: ' + e.message); GAIT = null; }

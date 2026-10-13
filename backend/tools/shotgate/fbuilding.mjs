@@ -64,6 +64,11 @@ console.log('the spawn :', faced ? 'faced the door within ' + faced.off + ' rad 
 console.log('the cast  :', cast.ghosts, 'ghosts,', cast.animals, 'animals of', cast.total);
 console.log('walked    :', JSON.stringify(blocked));
 // on foot: the speed ramps, a landing dips the camera, a run widens the view
+// (2026-10-12) from the spawn, which every layout keeps clear: the body was
+// left 14 m from the manor facing it, and since every build draws its own
+// seed, a run and a jump there could meet the wall and never land hard
+await p.evaluate(() => { if (window.__game.tp) window.__game.tp(0, 0); });
+await wait(700);
 const feel = await (async () => {
   const F2 = () => p.evaluate(() => { const f = window.__game.facts(); return { v: f.walk_v, dip: f.land_dip_peak, fov: f.fov, base: f.fov_base, run: f.run_k }; });
   await p.keyboard.down('KeyW'); await new Promise(r => setTimeout(r, 60)); const early = await F2();

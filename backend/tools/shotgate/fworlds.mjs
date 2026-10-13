@@ -1,7 +1,8 @@
-// One game. The demo's title card names Crystal Works and quotes the sentence
-// that made it, and lists no other builds: the studio's range is shown in the
-// studio, not in the demo. A build from the studio shows no list either, and
-// its reveal reads the prompt that made it.
+// One game. The demo's title card names Crystal Works and carries its house's
+// line (since 2026-10-12, not the sentence that made it in quotes), and lists
+// no other builds: the studio's range is shown in the studio, not in the demo.
+// A build from the studio shows no list either, and its reveal carries its
+// own house's line.
 //   URL=<demo>   J=<studio job id>   (either may be absent)
 import puppeteer from 'puppeteer-core';
 const b = await puppeteer.launch({ headless:'new',
@@ -30,7 +31,8 @@ if (URL) {
   const home = await card();
   console.log('demo card  :', JSON.stringify(home.name), '|', JSON.stringify(home.sub).slice(0, 70), '| picks', home.picks, '| row', home.row);
   checks.homeUp = home.up && /CRYSTAL WORKS/.test(home.name);
-  checks.homeQuoted = /^\u201c.+\u201d$/.test(home.sub);
+  // (2026-10-12) the card carries its house's line, "Halvard Assay Co. . Concession 6 ...", not the quoted prompt
+  checks.homeLine = /Assay|Extraction|Trust|Mining|Works/.test(home.sub) && !/^\u201c/.test(home.sub);
   checks.homeNoPicks = home.picks === 0 && !home.row;
   // nothing shipped beside the demo: no other build answers under the demo's folder
   const beside = await p.evaluate(async () => { const out = {}; for (const f of ['drift/', 'forest/', 'worlds/moon.json']) { try { out[f] = (await fetch(f, { method: 'HEAD' })).ok; } catch (e) { out[f] = false; } } return out; });
@@ -43,7 +45,7 @@ if (JOB) {
   const job = await card();
   console.log('studio card:', JSON.stringify(job.name), '|', JSON.stringify(job.sub).slice(0, 70), '| picks', job.picks);
   checks.jobNoPicks = job.picks === 0;
-  checks.jobQuoted = /^\u201c.+\u201d$/.test(job.sub);
+  checks.jobLine = /\u00b7/.test(job.sub) && !/^\u201c/.test(job.sub);
 }
 console.log('checks     :', JSON.stringify(checks));
 console.log('errors     :', errs.length ? errs.join(' | ') : 'none');

@@ -37,7 +37,7 @@ const s1 = await step();
 await p.keyboard.down('KeyW'); await wait(1500); await p.keyboard.up('KeyW'); await wait(600);
 let s2 = await step();
 // a small world can put the line right ahead; a player would back up or turn
-for (const key of ['KeyS', 'KeyD', 'KeyA']) { if (!/Look around/.test(s2)) break;
+for (const key of ['KeyS', 'KeyD', 'KeyA']) { if (!/Get your bearings|Look around/.test(s2)) break;
   await p.keyboard.down(key); await wait(1500); await p.keyboard.up(key); await wait(600); s2 = await step(); }
 
 // 2. walk to the hub: face it, then W until close
@@ -175,8 +175,8 @@ console.log('errors    :', errs.length ? errs.join(' | ') : 'none');
 await p.screenshot({ path: process.env.OUT || 'play.png' });
 await b.close();
 
-const ok = /Look around/.test(s1) && /This is a line/.test(s2) && /Build a rig/.test(s3) && rigPlaced && /Run a belt/.test(s4)
+const ok = /Get your bearings|Look around/.test(s1) && /This is a line/.test(s2) && /Build a rig/.test(s3) && rigPlaced && /Run a belt/.test(s4)
   && /Finish the line|Read the panel/.test(s5) && belts >= 6 && /Read the panel/.test(s6)   // the line can pay before the harness looks
-  && done.tutorial === null && !done.card && /steps back|unlocked|FIRST SALE/.test(done.toast)   /* the finish line, or an unlock or the first sale that landed on it */ && /Look around/.test(again)
+  && done.tutorial === null && !done.card && /steps back|unlocked|FIRST SALE/.test(done.toast)   /* the finish line, or an unlock or the first sale that landed on it */ && /Get your bearings|Look around/.test(again)
   && errs.length === 0;
 process.exit(ok ? 0 : 1);

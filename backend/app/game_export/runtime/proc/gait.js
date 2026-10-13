@@ -28,7 +28,7 @@
 //   cannot know, a lean into a change of speed and a bank into a turn.
 import * as THREE from 'three';
 
-const _v1 = new THREE.Vector3(), _v2 = new THREE.Vector3(), _v3 = new THREE.Vector3();
+const _v1 = new THREE.Vector3(), _v2 = new THREE.Vector3(), _v3 = new THREE.Vector3(), _v3w = new THREE.Vector3();
 const _q1 = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _q3 = new THREE.Quaternion();
 const UP = new THREE.Vector3(0, 1, 0);
 
@@ -218,7 +218,14 @@ export function createGait({ root, actions, mixer, rates }) {
       let held = false;
       let long = false;
       if (h) h.traverse(o => { if (o !== h && o.isMesh && !o.isSkinnedMesh) { let v = true, q = o; while (q && q !== h) { if (!q.visible) { v = false; break; } q = q.parent; }
-        if (v) { held = true; _hb.setFromObject(o).getSize(_hs); if (Math.max(_hs.x, _hs.y, _hs.z) > 0.55) { long = true; heldMesh[s] = o; } } } });
+        // ITS OWN LENGTH, NOT ITS SHADOW ON THE AXES (2026-10-12): the world
+        // box of a 0.8 m blade held on the diagonal is 0.46 m on its longest
+        // side, so the knight's sword was "long" one half-second and a pistol
+        // the next, and the arm flipped between the low carry and the pistol
+        // carry as it swung (the "inverted arms and hands"). The blade is
+        // measured in its own frame, at its world scale.
+        if (v) { held = true; const g = o.geometry; if (g) { if (!g.boundingBox) g.computeBoundingBox(); g.boundingBox.getSize(_hs).multiply(o.getWorldScale(_v3w)); }
+          if (Math.max(Math.abs(_hs.x), Math.abs(_hs.y), Math.abs(_hs.z)) > 0.55) { long = true; heldMesh[s] = o; } } } });
       armed[s] = held; armedLong[s] = long; if (!long) heldMesh[s] = null;
     }
   }
@@ -353,6 +360,15 @@ export function createGait({ root, actions, mixer, rates }) {
         wp(B['upleg_' + s], _H); wp(B['foot_' + s], _A);
         const along = _v3.copy(_A).sub(_H).dot(_fw);
         const t = _A.clone().addScaledVector(_fw, along * (w - 1));
+        // A WALK IS NOT A STRADDLE (2026-10-12): an armoured rig's hips sit
+        // wide under its skirt, and the captured legs, copied by rotation,
+        // set its feet 21-25 cm apart where a person walks on 10-16: the
+        // knight waddled from foot to foot. While moving, a foot set wider than
+        // about 9% of the leg from the body's line is drawn back toward it.
+        {
+          const hp = wp(B.hips, _v2), lat = _v1.copy(t).sub(hp).dot(_lat), half = 0.09 * (legLen[s][0] + legLen[s][1]);
+          if (Math.abs(lat) > half && mvK > 0.01) t.addScaledVector(_lat, -Math.sign(lat) * (Math.abs(lat) - half) * 0.85 * mvK);
+        }
         off[s] = onTerrain ? THREE.MathUtils.clamp(ga(t.x, t.z) - g0, -0.5, 0.5) : 0;
         t.y += off[s];
         T[s] = t;
@@ -399,6 +415,24 @@ export function createGait({ root, actions, mixer, rates }) {
         B.hips.parent.worldToLocal(hw);
         B.hips.position.copy(hw);
         B.hips.updateMatrixWorld(true);
+      }
+      // THE PELVIS RIDES THE LINE (2026-10-12): the knight's hips swung 5 cm
+      // side to side on the same captured walk that moves the keeper's 0.7, a
+      // rig whose pivot sits off its line under the armour, and with the chest
+      // over it the walk read as a waddle. While moving, the swing about its
+      // own running mean is taken down by 60%; the legs' IK below keeps the
+      // feet where they were.
+      if (mvK > 0.01 && B.hips.parent) {
+        const hw = wp(B.hips), base = (o.pos && o.pos.isVector3) ? o.pos : null;
+        const lat = base ? _v1.copy(hw).sub(base).dot(_lat) : null;
+        if (lat !== null) {
+          st.hipLat = st.hipLat === undefined ? lat : THREE.MathUtils.damp(st.hipLat, lat, 1.5, dt);
+          const dev = lat - st.hipLat;
+          hw.addScaledVector(_lat, -dev * 0.6 * mvK);
+          B.hips.parent.worldToLocal(hw);
+          B.hips.position.copy(hw);
+          B.hips.updateMatrixWorld(true);
+        }
       }
       const still = (o.speed || 0) < 0.35;
       for (const s of ['l', 'r']) {

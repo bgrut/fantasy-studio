@@ -66,7 +66,9 @@ if (ADV) {
 console.log('errors    :', errs.length ? errs.join(' | ') : 'none');
 await b.close();
 
-const okF = !fac || (fac.link && fac.faces.head && fac.faces.ui && fac.faces.mono && /Bricolage/.test(fac.title || '') && /Bricolage/.test(fac.hudH1 || ''));
+// (2026-10-12) a factory's title and HUD are set in its house's faces, any of the shipped ones
+const okF = !fac || (fac.link && fac.faces.head && fac.faces.ui && fac.faces.mono
+  && /Bricolage|Josefin|Bebas|IM Fell|Share Tech/.test(fac.title || '') && /Bricolage|Josefin|Bebas|IM Fell|Share Tech/.test(fac.hudH1 || ''));
 // a skinned game sets its cards in its skin's face (2026-10-01): any face the build ships counts, a system fallback does not
 const SHIPPED = /Bricolage|DM Mono|Instrument|Cinzel|IM Fell|Share Tech|Bebas|Bangers|Fredoka|Creepster|Russo One|Lora|Josefin|Special Elite/;
 const okA = !adv || (adv.link && adv.faces.head && adv.faces.ui && adv.faces.mono && !!adv.mood && SHIPPED.test(adv.startH1 || '') && SHIPPED.test(adv.winH2 || '')

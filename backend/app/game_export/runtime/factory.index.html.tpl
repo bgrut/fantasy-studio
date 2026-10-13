@@ -3,6 +3,12 @@
 <title>__TITLE__</title>
 <link rel="stylesheet" href="vendor/kit/kit.css">
 <style>
+  @font-face{font-family:"Josefin Sans";font-weight:100 700;font-display:swap;src:url(vendor/fonts/JosefinSans-Variable.ttf) format("truetype")}
+  @font-face{font-family:"Lora";font-style:normal;font-weight:400 700;font-display:swap;src:url(vendor/fonts/Lora-Variable.ttf) format("truetype")}
+  @font-face{font-family:"Lora";font-style:italic;font-weight:400 700;font-display:swap;src:url(vendor/fonts/Lora-Italic-Variable.ttf) format("truetype")}
+  @font-face{font-family:"IM Fell English";font-display:swap;src:url(vendor/fonts/IMFellEnglish-Regular.ttf) format("truetype")}
+  @font-face{font-family:"Bebas Neue";font-display:swap;src:url(vendor/fonts/BebasNeue-Regular.ttf) format("truetype")}
+  @font-face{font-family:"Share Tech Mono";font-display:swap;src:url(vendor/fonts/ShareTechMono-Regular.ttf) format("truetype")}
   html,body{margin:0;height:100%;overflow:hidden;background:#0a0a12;
             font:13px/1.45 ui-monospace,Menlo,Consolas,monospace;color:#dfe3ee}
   /* ONE LANGUAGE. The tool bar became chips with rendered icons and a sans face
@@ -524,6 +530,47 @@
   .tool.on,.tool:hover{grid-template-columns:34px auto;padding-right:13px}
   .tool.on b,.tool:hover b{display:block;grid-row:1 / span 2}
   @keyframes toolIn{from{opacity:0;transform:translateY(10px) scale(.86)}}
+
+  /* ── THE HOUSE'S CHROME (2026-10-12) ── every panel, number and card in
+     the house's faces and palette; the frame decides the panel's edges */
+  #title b{font-family:var(--h-head) !important;font-weight:var(--h-hw) !important;letter-spacing:var(--h-htr) !important;color:var(--h-ink) !important;text-shadow:0 2px 30px rgba(0,0,0,.55) !important}
+  #title small{font-family:var(--h-ui) !important;letter-spacing:.06em !important;text-transform:none !important;font-style:italic;color:var(--h-ink2) !important}
+  #title b::before,#title b::after{background:linear-gradient(90deg,transparent,var(--h-acc),transparent) !important}
+  #readout em{font-family:var(--h-head) !important;font-weight:max(var(--h-hw),400);letter-spacing:var(--h-htr) !important;color:var(--h-acc) !important;opacity:1 !important;text-shadow:0 1px 6px rgba(0,0,0,.9) !important}
+  #readout .num b{color:var(--h-num) !important;text-shadow:0 1px 2px rgba(0,0,0,.9) !important}
+  #readout .num small,#readout .rate i{font-family:var(--h-ui) !important;color:var(--h-ink2) !important}
+  #readout .rate,#readout .rate s{color:var(--h-acc) !important}
+  #tutor,#brief > div,#hud,#toast,#ledgerTab,.tool{background:var(--h-paper) !important;border-color:color-mix(in srgb,var(--h-acc) 30%,transparent) !important;box-shadow:0 10px 30px rgba(0,0,0,.35) !important}
+  #tutor{border-radius:2px !important;border:1px solid color-mix(in srgb,var(--h-acc) 35%,transparent) !important}
+  #tutor em{font-family:var(--h-ui) !important;font-size:10.5px !important;font-style:italic !important;letter-spacing:.02em !important;color:var(--h-acc) !important}
+  #tutor b{font-family:var(--h-head) !important;font-weight:var(--h-hw) !important;letter-spacing:var(--h-htr) !important;color:var(--h-ink) !important;font-size:19px !important;text-transform:uppercase}
+  #tutor small{font-family:var(--h-ui) !important;color:var(--h-ink) !important;font-size:13px !important}
+  #tutor p{font-family:var(--h-ui) !important;color:var(--h-ink2) !important;font-style:italic}
+  #tutor .skip,#tutor .next,#tutor .keys{font-family:var(--h-ui) !important;color:var(--h-ink2) !important}
+  #tutor .skip:hover,#tutor .next:hover{color:var(--h-acc) !important}
+  #brief #goal b,#brief b{font-family:var(--h-head) !important;font-weight:max(var(--h-hw),400) !important;letter-spacing:.12em !important;font-size:14px !important;padding-right:44px;color:var(--h-ink) !important}
+  #brief small,#brief .left{font-family:var(--h-ui) !important;color:var(--h-ink2) !important}
+  #brief .bar i{background:var(--h-acc) !important}
+  #toast{font-family:var(--h-ui) !important;color:var(--h-ink) !important;border-radius:2px !important}
+  #hint{font-family:var(--h-ui) !important;color:var(--h-ink2) !important;font-style:italic;letter-spacing:.01em}
+  #ledgerTab{font-family:var(--h-head) !important;color:var(--h-ink2) !important}
+  #hud h1,#hud b{font-family:var(--h-head) !important}
+  .tool b{font-family:var(--h-head) !important;color:var(--h-ink) !important}
+  .tool small{font-family:var(--h-ui) !important;color:var(--h-ink2) !important}
+  .tool.on{border-color:var(--h-acc) !important} .tool.on b{color:var(--h-acc) !important}
+  .tool.hint{border-color:var(--h-acc2) !important}
+  .tool .key{background:var(--h-paper) !important;border-color:var(--h-acc) !important;color:var(--h-acc) !important}
+  /* the frames */
+  body[data-frame="ticks"] #tutor,body[data-frame="ticks"] #brief > div{border-radius:0 !important;
+    background:linear-gradient(var(--h-acc),var(--h-acc)) top left/12px 1px no-repeat,linear-gradient(var(--h-acc),var(--h-acc)) top left/1px 12px no-repeat,
+      linear-gradient(var(--h-acc),var(--h-acc)) top right/12px 1px no-repeat,linear-gradient(var(--h-acc),var(--h-acc)) top right/1px 12px no-repeat,
+      linear-gradient(var(--h-acc),var(--h-acc)) bottom left/12px 1px no-repeat,linear-gradient(var(--h-acc),var(--h-acc)) bottom left/1px 12px no-repeat,
+      linear-gradient(var(--h-acc),var(--h-acc)) bottom right/12px 1px no-repeat,linear-gradient(var(--h-acc),var(--h-acc)) bottom right/1px 12px no-repeat,var(--h-paper) !important;
+    border:0 !important}
+  body[data-frame="bar"] #tutor,body[data-frame="bar"] #brief > div{border:0 !important;border-left:5px solid var(--h-acc) !important;border-radius:0 !important}
+  body[data-frame="ledger"] #tutor,body[data-frame="ledger"] #brief > div{border:0 !important;border-top:2px solid var(--h-acc) !important;border-bottom:1px solid var(--h-acc) !important;border-radius:0 !important}
+  body[data-frame="scan"] #tutor,body[data-frame="scan"] #brief > div{border-radius:0 !important;background:repeating-linear-gradient(0deg,rgba(255,255,255,.025) 0 1px,transparent 1px 3px),var(--h-paper) !important}
+  body[data-frame="slab"] #tutor,body[data-frame="slab"] #brief > div{border-radius:14px !important;border:2px solid var(--h-acc) !important}
 </style>
 <div id="readout"><em id="ro-world"></em><div class="num"><b id="ro-ore">0</b><small id="ro-unit"></small></div><div class="rate"><span id="ro-rate">0</span><i>a minute</i><s id="ro-rank"></s></div></div>
 <div id="brief">

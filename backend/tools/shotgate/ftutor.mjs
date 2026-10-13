@@ -208,11 +208,11 @@ const ok = s1.before.step === 1 && s1.before.on && s1.before.tool === null && !s
   && s1.after.step === 2 && s1.after.marker
   && s3.ringOnHub && s3.step === 3 && s3.tool === 'miner' && s3.hint
   && s5.onSeam && s5.s4.step === 4 && s5.s4.tool === 'belt' && s5.s4.hint && s5.step === 5
-  && done.step6 === 6 && done.gotit === 'got it' && done.after === null && !done.cardOn && !!done.tool && /foreman steps back/.test(done.toast)
+  && done.step6 === 6 && done.gotit === 'got it' && done.after === null && !done.cardOn && !!done.tool && /steps back/.test(done.toast)
   && back.tutorial === null && !back.cardOn
-  && act2.before.tutorial === null && act2.act === 2 && /second act/.test(act2.card) && act2.s1 === 'Bring a second ore home' && act2.marker
+  && act2.before.tutorial === null && act2.act === 2 && /second act|later that shift/.test(act2.card) && act2.s1 === 'Bring a second ore home' && act2.marker
   && act2.s2 === 'Forge an alloy' && act2.s3 === 'Sort with a filter' && act2.s4 === 'Plan from above'
-  && act2b.s5 === 'Keep a promise' && act2b.s6 === 'Copy a line' && act2b.after === null && act2b.act2Done && /leaves for good/.test(act2b.toast)
+  && act2b.s5 === 'Keep a promise' && act2b.s6 === 'Copy a line' && act2b.after === null && act2b.act2Done && /leaves for good|signs off for good/.test(act2b.toast)
   && back2.act2Done && back2.tutorial === null
   && look.none === null && look.creative && /^SMELTER/.test(look.smelter || '') && /SEAM/.test(look.seam || '') && /rich/.test(look.seam || '')
   && errs.length === 0;

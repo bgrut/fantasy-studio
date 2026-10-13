@@ -94,6 +94,42 @@ const _moodText = [SPEC.title, SPEC.world && SPEC.world.name, SPEC.world && SPEC
 const MOOD = SPEC.city ? 'green' : (MOODS.find(m => m.words.test(_moodText)) || { id: 'void' }).id;
 // A TOWN IS UNDER A DAY SKY (2026-09-29): the green family's grass and grid,
 // with a blue sky, a pale moon and no aurora, instead of an alien world's
+// THE HOUSES (2026-10-12). Every factory, the flagship among them, wore one
+// chrome: navy glass, gold numbers, a gold card from "the foreman . 2 / 6", and
+// the user's own sentence in quotes under the name. The owner: the flagship
+// "should have a new look and feel and artistic vibe to the guide/menu/game".
+// A factory now belongs to a HOUSE, the outfit that runs the concession: a
+// company with its own line, a foreman with a name who speaks on the radio, a
+// pair of faces, a palette and the shape of its panels. A build draws its
+// house from its seed; the flagship (Crystal Works) is Halvard's. ?house=id.
+const HOUSES = {
+  halvard: { co: 'Halvard Assay Co.', line: 'Concession 6 \u00b7 a worldlet adrift, surveyed and staked', foreman: 'Odile Brask', they: 'she', them: 'her', their: 'her',
+             head: '"Josefin Sans"', hw: 200, htr: '.42em', ui: '"Lora"', acc: '#4fb39a', acc2: '#e8553f', ink: '#ece6da', ink2: '#a9b3ad', paper: 'rgba(14,18,17,.86)', frame: 'ticks', num: '#ece6da' },
+  northline: { co: 'Northline Extraction', line: 'Claim 14 \u00b7 cut, haul, sell, repeat', foreman: 'Teodor Vasko', they: 'he', them: 'him', their: 'his',
+             head: '"Bebas Neue"', hw: 400, htr: '.12em', ui: '"Instrument Sans"', acc: '#ff7a3d', acc2: '#ffd1b8', ink: '#f2f2ef', ink2: '#a7abb3', paper: 'rgba(22,24,28,.9)', frame: 'bar', num: '#ffffff' },
+  saltmarsh: { co: 'Saltmarsh Mineral Trust', line: 'Est. under charter \u00b7 the sixth holding', foreman: 'Esme Calloway', they: 'she', them: 'her', their: 'her',
+             head: '"IM Fell English"', hw: 400, htr: '.04em', ui: '"Lora"', acc: '#b8463c', acc2: '#2f5d62', ink: '#efe4d0', ink2: '#b5a58f', paper: 'rgba(30,24,20,.9)', frame: 'ledger', num: '#efe4d0' },
+  kestrel: { co: 'Kestrel Orbital Mining', line: 'Station K-6 \u00b7 telemetry nominal, ore pending', foreman: 'Kai Mendes', they: 'they', them: 'them', their: 'their',
+             head: '"Share Tech Mono"', hw: 400, htr: '.24em', ui: '"DM Mono"', acc: '#5ad1e8', acc2: '#f2c14e', ink: '#dff6fb', ink2: '#86a7b0', paper: 'rgba(6,16,24,.88)', frame: 'scan', num: '#dff6fb' },
+  ninefold: { co: 'Ninefold Works', line: 'Nine hands, one line \u00b7 shift six', foreman: 'Adaeze Okafor', they: 'she', them: 'her', their: 'her',
+             head: '"Bricolage Grotesque"', hw: 800, htr: '-.01em', ui: '"Instrument Sans"', acc: '#b9d84f', acc2: '#ff5d8f', ink: '#f4f6ee', ink2: '#a9ae9e', paper: 'rgba(20,22,18,.88)', frame: 'slab', num: '#f4f6ee' },
+};
+const HOUSE = (() => {
+  const q = new URLSearchParams(location.search).get('house');
+  if (q && HOUSES[q]) return Object.assign({ id: q }, HOUSES[q]);
+  if (/crystal works/i.test(SPEC.title || '')) return Object.assign({ id: 'halvard' }, HOUSES.halvard);
+  const ids = Object.keys(HOUSES), k = ((SPEC.seed || 7) * 2654435761 >>> 0) % ids.length;
+  return Object.assign({ id: ids[k] }, HOUSES[ids[k]]);
+})();
+window.__house = { id: HOUSE.id, co: HOUSE.co, foreman: HOUSE.foreman };
+{
+  const B = document.body; B.dataset.house = HOUSE.id; B.dataset.frame = HOUSE.frame;
+  const v = { '--h-head': HOUSE.head + ',"Instrument Sans",sans-serif', '--h-ui': HOUSE.ui + ',"Instrument Sans",sans-serif', '--h-hw': String(HOUSE.hw), '--h-htr': HOUSE.htr,
+    '--h-acc': HOUSE.acc, '--h-acc2': HOUSE.acc2, '--h-ink': HOUSE.ink, '--h-ink2': HOUSE.ink2, '--h-paper': HOUSE.paper, '--h-num': HOUSE.num,
+    '--fs-accent': HOUSE.acc, '--fs-gold': HOUSE.num };
+  for (const k in v) B.style.setProperty(k, v[k]);
+}
+const FOREMAN_FIRST = HOUSE.foreman.split(' ')[0];
 const HOME = SPEC.city ? Object.assign({}, MOOD_LOOK.green, {
   nebula: { a: 0x5d8fc8, b: 0xa9cde9, amt: 0.55, aurora: 0.0, auroraA: 0xffffff, auroraB: 0xffffff },
   sky: 0x78a6d6, fog: 0xa9c4de, star: 0xc9dcf0, sun: 0xfff4e0, spores: false,
@@ -7324,7 +7360,7 @@ const WORLDS = [
   { id: 'prompt', plate: HOME.plate, belt: HOME.belt, weather: HOME.weather,
     edge: HOME.edge, sun: HOME.sun, name: SPEC.title || 'Crystal Isle', cores: 0, spores: !!HOME.spores,
     planet: HOME.planet, grade: HOME.grade, ambience: HOME.ambience, fam: MOOD, ice: !!HOME.ice, coreMult: 1,
-    blurb: SPEC.prompt ? '\u201c' + SPEC.prompt + '\u201d' : 'where the prompt dropped you',   // the sentence that made it
+    blurb: HOUSE.co + '  \u00b7  ' + HOUSE.line,   // (2026-10-12) the house's line; the user's sentence in quotes read as a demo
     sky: SKY_COL, fog: FOG_COL, ground: HOME.ground, grid: HOME.grid, star: HOME.star },
   // THE UNLOCKS ARE THE THREE FAMILIES HOME IS NOT (2026-09-08). A prompt
   // that reads warm used to be offered Ember Reach for two cores — the same
@@ -7696,7 +7732,7 @@ const ACT2 = [
     check: () => bpStamps > 0 },
 ];
 const ACT1 = [
-  { title: 'Look around', text: 'Move the mouse to look. W, A, S and D walk. Shift runs.',
+  { title: 'Get your bearings', text: 'Move the mouse to look. W, A, S and D walk. Shift runs.',
     why: 'This is a worldlet: a cube you can walk all the way around. Every face grows a different ore.',
     // "look around" clears on looking as much as on walking: a player who only
     // turns the mouse has done what the card asked, and on a small world the
@@ -7746,7 +7782,7 @@ const tutActive = () => !CREATIVE && !SHARED && tutIdx < TUT.length && intro ===
 function startAct2() {
   tutAct = 2; TUT = ACT2; tutStart(0);
   const t = document.getElementById('toast');
-  if (t) { t.textContent = WORD('The foreman is back, with the six things that come after a line. Enter moves on, G sends him away.'); t.classList.add('on'); toastAt = 5; }
+  if (t) { t.textContent = WORD(FOREMAN_FIRST + ' is back on the radio, with the six things that come after a line. Enter moves on, G signs ' + HOUSE.them + ' off.'); t.classList.add('on'); toastAt = 5; }
 }
 function tutStart(k) {
   tutIdx = k;
@@ -7773,13 +7809,13 @@ function _renderTutor() {
   if (tutIdx >= TUT.length || CREATIVE || SHARED) { el.classList.remove('on'); if (tutMark) tutMark.visible = false; return; }
   const t = TUT[tutIdx];
   el.classList.add('on');
-  el.querySelector('em').textContent = 'the foreman' + (tutAct === 2 ? ', second act' : '') + '  ·  ' + (tutIdx + 1) + ' / ' + TUT.length;
+  el.querySelector('em').textContent = HOUSE.foreman + ', ' + HOUSE.co + (tutAct === 2 ? '  \u00b7  later that shift' : '');
   el.querySelector('b').textContent = t.title;
   el.querySelector('small').textContent = t.text;
   el.querySelector('p').textContent = t.why;
-  el.querySelector('.skip').textContent = t.gotit ? 'got it' : 'skip the guide';
+  el.querySelector('.skip').textContent = t.gotit ? 'got it' : 'over and out';
   el.querySelector('.next').style.display = t.gotit ? 'none' : '';
-  el.querySelector('.keys').textContent = t.gotit ? 'Enter: got it  \u00b7  Esc frees the mouse' : 'Enter: next step  \u00b7  G: skip the guide  \u00b7  Esc frees the mouse to click';
+  el.querySelector('.keys').textContent = t.gotit ? 'Enter  \u00b7  Esc frees the mouse' : 'Enter next  \u00b7  G sign off  \u00b7  Esc frees the mouse';
   if (t.tool) { const chip = document.querySelector('.tool[data-tool="' + t.tool + '"]'); if (chip) chip.classList.add('hint'); }
 }
 function tutAdvance() {
@@ -7788,8 +7824,8 @@ function tutAdvance() {
     tutIdx = TUT.length; renderTutor();
     if (!tool) pickTool('miner');
     if (tutAct === 2) { act2Done = true;
-      if (t) { t.textContent = WORD('The foreman leaves for good. The goal card leads from here; "the guide" in the panel replays what he knew.'); t.classList.add('on'); toastAt = 5; } }
-    else if (t) { t.textContent = WORD('The foreman steps back. The goal card leads from here: bank 40 credits. He comes back when the forge unlocks.'); t.classList.add('on'); toastAt = 5; }
+      if (t) { t.textContent = WORD(FOREMAN_FIRST + ' signs off for good. The goal card leads from here; "the guide" in the panel replays what ' + HOUSE.they + ' told you.'); t.classList.add('on'); toastAt = 5; } }
+    else if (t) { t.textContent = WORD(FOREMAN_FIRST + ' steps back. The goal card leads from here: bank 40 credits. ' + HOUSE.they[0].toUpperCase() + HOUSE.they.slice(1) + (HOUSE.they === 'they' ? ' come' : ' comes') + ' back on the radio when the forge unlocks.'); t.classList.add('on'); toastAt = 5; }
     save();
     return;
   }

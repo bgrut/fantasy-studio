@@ -439,6 +439,57 @@ for it in (range(3) if not NOPHOTO else ()):   # refine: halve the steps around 
                     best = (sc, (mir, k2, cx2, cy2))
     mir, k, cx, cy = best[1]
 score = best[0]
+# A BLOTCHY COAT REJECTS ITS OWN CURE (2026-10-12): agreement is the photo's
+# colour against the coat's, so a coat bad enough to need the photo correlates
+# at 0.24 and the photo was left out: four of five regenerated people (the
+# mountaineer, the monk, the bandit, the superhero) stayed blotchy while their
+# references were clean studio photographs. Given the photo's figure as a mask
+# (cut by rembg in hd_front_library.py), a person is fitted by its outline.
+if score < 0.42 and not SIDE and not NOPHOTO and "--mask" in argv:
+    _mi = bpy.data.images.load(argv[argv.index("--mask") + 1])
+    _MW, _MH = _mi.size
+    _MA = np.empty(_MW * _MH * 4, dtype=np.float32); _mi.pixels.foreach_get(_MA)
+    _MA = _MA.reshape(_MH, _MW, 4)[::-1, :, 0] > 0.5
+    _yy = (np.arange(RH) * _MH / RH).astype(int); _xx = (np.arange(RW) * _MW / RW).astype(int)
+    _MA = _MA[_yy][:, _xx]
+    QS = 4
+    _PM = _MA[:RH // QS * QS, :RW // QS * QS].reshape(RH // QS, QS, RW // QS, QS).mean(axis=(1, 3)) > 0.5
+    _sil = allP[rng.choice(len(allP), size=min(len(allP), 60000), replace=False)]
+
+    def outline(cam, k, cx, cy):
+        px, py, _ = project(_sil, cam, k, cx, cy)
+        ix = (px / QS).astype(int); iy = (py / QS).astype(int)
+        ok = (ix >= 0) & (ix < _PM.shape[1]) & (iy >= 0) & (iy < _PM.shape[0])
+        if ok.sum() < len(ix) * 0.9:
+            return -1.0
+        M = np.zeros(_PM.shape, bool); M[iy[ok], ix[ok]] = True
+        M = M | np.roll(M, 1, 0) | np.roll(M, 1, 1) | np.roll(M, -1, 0) | np.roll(M, -1, 1)
+        return float((M & _PM).sum()) / max(float((M | _PM).sum()), 1.0)
+    bo = (-2.0, None)
+    for f in np.arange(0.62, 0.99, 0.04):
+        k_ = f * RH / Hm
+        for cx_ in np.arange(0.40, 0.61, 0.025) * RW:
+            for cy_ in np.arange(0.38, 0.63, 0.025) * RH:
+                sc = outline(cams(1)[0], k_, cx_, cy_)
+                if sc > bo[0]:
+                    bo = (sc, (1, k_, cx_, cy_))
+    if bo[1] is not None:
+        _m, k_, cx_, cy_ = bo[1]
+        for it in range(3):
+            dk, dc = 0.02 * RH / Hm / (it + 1), 0.0125 * RW / (it + 1)
+            for k2 in (k_ - dk, k_, k_ + dk):
+                for cx2 in (cx_ - dc, cx_, cx_ + dc):
+                    for cy2 in (cy_ - dc, cy_, cy_ + dc):
+                        sc = outline(cams(1)[0], k2, cx2, cy2)
+                        if sc > bo[0]:
+                            bo = (sc, (1, k2, cx2, cy2))
+            _m, k_, cx_, cy_ = bo[1]
+    if bo[0] >= 0.66:
+        print("HDNOTE aligned by the outline (iou=%.2f; colour r=%.2f)" % (bo[0], score))
+        mir, k, cx, cy = bo[1]
+        score = 0.42 + (bo[0] - 0.66)          # an outline fit passes the gate below
+    else:
+        print("HDNOTE the outline does not fit either (iou=%.2f)" % bo[0])
 FRONT_OFF = False
 if score < (0.5 if SIDE else 0.42) and not NOPHOTO:
     if "--extra" not in argv:
