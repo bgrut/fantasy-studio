@@ -2038,27 +2038,43 @@ for (let k = 0; k < NODE_COUNT; k++) {
 // on a 64px canvas, scrolled by the tick clock: one shared material animates
 // every belt on the worldlet, and the direction reads without an arrow
 // hovering over each tile.
-function treadTexture() {
+// A CONVEYOR, NOT A NEON SIGN (2026-10-13): the tread was green slats under
+// bright mint chevrons, glowing, and a line of belts read as a strip of
+// arcade lights. It is a rubber belt now: dark, a fine cleated grip pattern
+// worn paler down the middle, a seam every slat. The chevrons that tell the
+// direction are low on the surface and carried on their own glow sheet, so a
+// line still reads from orbit without lighting up the ground.
+function treadTexture(glow) {
   const c = document.createElement('canvas');
-  c.width = 64; c.height = 64;
+  c.width = 128; c.height = 128;
   const g = c.getContext('2d');
-  g.fillStyle = '#16362e'; g.fillRect(0, 0, 64, 64);
-  g.fillStyle = '#1f4f43';
-  for (let x = 0; x < 64; x += 16) g.fillRect(x, 0, 10, 64);   // slats across
-  g.strokeStyle = '#57e0b0'; g.lineWidth = 4; g.lineCap = 'round';
-  g.lineJoin = 'round';
-  for (let x = 4; x < 64; x += 16) {                            // chevrons -> +u
-    g.beginPath();
-    g.moveTo(x, 18); g.lineTo(x + 8, 32); g.lineTo(x, 46);
-    g.stroke();
+  let _sd = 7171; const R = () => ((_sd = (_sd * 16807) % 2147483647) / 2147483647);
+  if (!glow) {
+    g.fillStyle = '#1b1e1f'; g.fillRect(0, 0, 128, 128);
+    const wear = g.createLinearGradient(0, 0, 0, 128);              // the middle is walked by the load
+    wear.addColorStop(0, 'rgba(0,0,0,0.25)'); wear.addColorStop(0.5, 'rgba(120,120,115,0.16)'); wear.addColorStop(1, 'rgba(0,0,0,0.25)');
+    g.fillStyle = wear; g.fillRect(0, 0, 128, 128);
+    for (let x = 0; x < 128; x += 32) { g.fillStyle = 'rgba(0,0,0,0.55)'; g.fillRect(x, 0, 2, 128); }   // the slat seams
+    g.strokeStyle = 'rgba(70,72,72,0.85)'; g.lineWidth = 2;
+    for (let x = -128; x < 256; x += 8) { g.beginPath(); g.moveTo(x, 8); g.lineTo(x + 10, 120); g.stroke(); }   // the cleats
+    for (let k = 0; k < 900; k++) { const v = 30 + R() * 50; g.fillStyle = `rgba(${v},${v},${v - 2},0.35)`; g.fillRect(R() * 128, R() * 128, 1 + R() * 2, 1); }
+    g.fillStyle = 'rgba(0,0,0,0.6)'; g.fillRect(0, 0, 128, 6); g.fillRect(0, 122, 128, 6);   // the belt's edges
+  } else {
+    g.fillStyle = '#000'; g.fillRect(0, 0, 128, 128);
+  }
+  g.strokeStyle = glow ? '#6fd8bc' : 'rgba(120,200,180,0.35)'; g.lineWidth = glow ? 3 : 4; g.lineCap = 'round'; g.lineJoin = 'round';
+  for (let x = 12; x < 128; x += 32) {                                // chevrons -> +u
+    g.beginPath(); g.moveTo(x, 44); g.lineTo(x + 10, 64); g.lineTo(x, 84); g.stroke();
   }
   const t = new THREE.CanvasTexture(c);
   t.wrapS = t.wrapT = THREE.RepeatWrapping;
   t.colorSpace = THREE.SRGBColorSpace;
-  t.anisotropy = 4;
+  t.anisotropy = 8;
+  t.repeat.set(0.5, 1);                                               // one 64px tile of the old sheet per belt
   return t;
 }
-const TREAD = treadTexture();
+const TREAD = treadTexture(false);
+const TREAD_GLOW = treadTexture(true);
 
 // Scattered after the seams, so nothing lands on one: an ore seam is the only
 // thing on the ground a player is looking FOR.
@@ -2134,16 +2150,19 @@ const MAT = {
   // facets and the machines read low-poly; shaded smooth, a chamfer catches
   // a soft highlight down its length, as machined metal does
   belt: new THREE.MeshStandardMaterial({ color: 0x3ad39a, roughness: 0.6, metalness: 0.2 }),
-  beltFrame: new THREE.MeshStandardMaterial({ color: 0x2b7f68, roughness: 0.45,
-    metalness: 0.6, emissive: 0x07271f,
-    emissiveIntensity: 0.9 }),
+  // brushed steel rails, painted the house's green at the edge (2026-10-13)
+  beltFrame: new THREE.MeshStandardMaterial({ color: 0x55605c, roughness: 0.38,
+    metalness: 0.85, emissive: 0x06120f,
+    emissiveIntensity: 0.6 }),
   // the tread carries a faint emissive, so a belt line reads from orbit;
   // the overhead turns it up
-  beltDeck: new THREE.MeshStandardMaterial({ map: TREAD, emissiveMap: TREAD,
-    emissive: 0xffffff, emissiveIntensity: 0.14, roughness: 0.85,
-    metalness: 0.05 }),
-  hub: new THREE.MeshStandardMaterial({ color: 0xffc75a, roughness: 0.4,
-    metalness: 0.45, emissive: 0x6b4a00, emissiveIntensity: 0.25,
+  beltDeck: new THREE.MeshStandardMaterial({ map: TREAD, emissiveMap: TREAD_GLOW,
+    emissive: 0xffffff, emissiveIntensity: 0.22, roughness: 0.92,
+    metalness: 0.0 }),
+  // worn brass, not candy yellow (2026-10-13): a hub is the trading post's
+  // weighing ring, metal that has been handled, a little shine at the edges
+  hub: new THREE.MeshStandardMaterial({ color: 0xc8a466, roughness: 0.34,
+    metalness: 0.82, emissive: 0x2a1c04, emissiveIntensity: 0.2,
     map: SKIN, roughnessMap: SKIN_ROUGH }),
   forge: new THREE.MeshStandardMaterial({ color: 0xd94fb0, roughness: 0.4,
     metalness: 0.55, emissive: 0x5c0f45,
@@ -2161,8 +2180,11 @@ const MAT = {
   propLit: new THREE.MeshBasicMaterial({ color: 0xfff1c8 }),   // the lamp face: a light, not a surface
   propCrate: new THREE.MeshStandardMaterial({ color: 0x8f7a58, roughness: 0.75, metalness: 0.1,
     map: SKIN, roughnessMap: SKIN_ROUGH, vertexColors: true }),
-  smelt: new THREE.MeshStandardMaterial({ color: 0x8c6bff, roughness: 0.45,
-    metalness: 0.4, emissive: 0x2a1470, emissiveIntensity: 0.3,
+  // A FURNACE IS IRON (2026-10-13): the smelter was a violet box with a violet
+  // glow, a toy among the machines; it is heat-blackened iron now, warm at the
+  // seams, told apart by its chimney and its smoke (the overhead map keeps its colour)
+  smelt: new THREE.MeshStandardMaterial({ color: 0xc9bab2, roughness: 0.55,
+    metalness: 0.55, emissive: 0x2a1006, emissiveIntensity: 0.35,
     map: SKIN, roughnessMap: SKIN_ROUGH }),
   assem: new THREE.MeshStandardMaterial({ color: 0xe0b451, roughness: 0.42,
     metalness: 0.5, emissive: 0x4a3a08, emissiveIntensity: 0.3,
@@ -2384,7 +2406,7 @@ const GEO = {
     { g: _box(0.09, 0.09, T * 0.50), y: 0.54, z: -T * 0.40, tint: 0.5 },
     { g: _cyl(0.13, 0.17, 0.62, 6), y: 1.42, x: T * 0.22, z: -T * 0.22, col: PAINT.chassis },
     { g: new THREE.TorusGeometry(0.16, 0.035, 5, 10), y: 1.62, x: T * 0.22, z: -T * 0.22, rx: Math.PI / 2, col: PAINT.trim },  // flue lip
-  ], { base: 0x8c6bff }),
+  ], { base: 0x6e605a }),
 
   split: mergeParts([
     { g: _cyl(T * 0.50, T * 0.50, 0.09, 8), y: 0.045, col: PAINT.chassis }, // skirt
@@ -8811,7 +8833,7 @@ renderer.setAnimationLoop(() => {
   // the tread scrolls at the speed items actually travel: one tile per tick.
   // A belt whose surface moves at a speed unrelated to its throughput is worse
   // than one that does not move at all.
-  if (!melting) TREAD.offset.x -= dt / TICK;
+  if (!melting) { TREAD.offset.x -= dt / TICK * 0.5; TREAD_GLOW.offset.x = TREAD.offset.x; }
   updateDrones(Math.min(1, sinceTick / TICK), dt);
   // A FACTORY WHOSE PARTS DO NOT MOVE IS A DIORAMA. Each machine says what it
   // is doing with the one part that would move if it were real.

@@ -23494,10 +23494,17 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
       if (!a3 || !b3) { pd.seg = 0; continue; }
       const segL = Math.hypot(b3[0] - a3[0], b3[1] - a3[1]) || 1;
       pd.t += (pd.speed * dt * pd.dir) / segL;
-      if (pd.t >= 1) { pd.t = 0; pd.seg++;
-        if (pd.seg >= pd.pts.length - 1) { pd.seg = pd.pts.length - 2; pd.dir = -1; } }
-      else if (pd.t < 0) { pd.t = 1; pd.seg--;
-        if (pd.seg < 0) { pd.seg = 0; pd.dir = 1; } }
+      // TURNING ROUND AT THE END, NOT JUMPING BACK (2026-10-13): reaching the
+      // last point reset the walker to the START of its last segment (t = 0),
+      // so it jumped back along the street; on a two-point route it flicked
+      // between the ends several times a second and slid along the road
+      // sideways. At either end it now turns round where it stands.
+      if (pd.t >= 1) {
+        if (pd.seg + 1 >= pd.pts.length - 1) { pd.t = 1; pd.dir = -1; }
+        else { pd.t = 0; pd.seg++; } }
+      else if (pd.t < 0) {
+        if (pd.seg - 1 < 0) { pd.t = 0; pd.dir = 1; }
+        else { pd.t = 1; pd.seg--; } }
       const hd5 = Math.atan2(b3[0] - a3[0], b3[1] - a3[1]);
       // walk the SIDEWALK: offset perpendicular from the road centerline
       const px3 = a3[0] + (b3[0] - a3[0]) * pd.t + Math.cos(hd5) * pd.side;
@@ -23510,10 +23517,18 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
         pd.obj.rotation.y = wantY; pd._init = true;
       } else {
         const k = Math.min(1, dt * 5);
+        const _ox = pd.obj.position.x, _oz = pd.obj.position.z;
         pd.obj.position.x += (px3 - pd.obj.position.x) * k;
         pd.obj.position.z += (pz3 - pd.obj.position.z) * k;
         pd.obj.position.y = hAt(pd.obj.position.x, pd.obj.position.z);
-        let dy = wantY - pd.obj.rotation.y;
+        // A WALKER FACES WHERE IT GOES (2026-10-13): the facing came from the
+        // route's segment and the body from the damped sidewalk target, and on
+        // a short or kinked segment the two parted: a pedestrian crossed a
+        // street sideways, facing down it. While it is moving, the way it is
+        // actually going wins.
+        const _mvx = pd.obj.position.x - _ox, _mvz = pd.obj.position.z - _oz;
+        const _wy = Math.hypot(_mvx, _mvz) > pd.speed * dt * 0.35 ? Math.atan2(_mvx, _mvz) : wantY;
+        let dy = _wy - pd.obj.rotation.y;
         while (dy > Math.PI) dy -= Math.PI * 2;
         while (dy < -Math.PI) dy += Math.PI * 2;
         pd.obj.rotation.y += dy * Math.min(1, dt * 6);
