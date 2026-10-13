@@ -575,7 +575,7 @@ def _build_reference_prompt(slots: Dict[str, Any], style: str) -> tuple[str, str
             # an ORIGINAL hero (commercially safe): no chest emblem, none of the
             # famous red-and-blue suits; the first try came out a known hero's
             # colours with another's bat on the chest
-            "superhero": "original superhero in a teal and silver armoured flight suit of thick padded plates with glowing amber seams, a short charcoal cape, silver boots and gauntlets, plain chest with no symbol, an athletic broad-shouldered build, face showing, fully clothed",
+            "superhero": "an original superhero, a broad-shouldered man with his face uncovered and short dark hair, in a fitted charcoal flight suit with teal armoured panels on the chest, shoulders and shins, a short dark cape, silver gauntlets and boots, plain chest with no symbol or letter, an athletic build with normal proportions, fully clothed",
             "barista":   "barista in a dark brown apron over a white shirt with rolled sleeves, jeans, fully clothed",
             "waiter":    "waiter in a black waistcoat over a white shirt, a long black apron, dark trousers, fully clothed",
             "waitress":  "waitress in a black waistcoat over a white shirt, a long black apron, dark trousers, fully clothed",

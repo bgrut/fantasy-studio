@@ -725,6 +725,13 @@ for tob, nodes, C, P, N in bakes:
         inb = (px > 1) & (px < e["W"] - 2) & (py > 1) & (py < e["H"] - 2)
         rep = sample(e["img"], px, py); low = sample(e["low"], px, py)
         agree = np.exp(-np.sum((low - base_m) ** 2, axis=1) / 0.03)[:, None]
+        # TRUSTED VIEWS (2026-10-13): agreement keeps a repaint from changing who
+        # a character is, but against a blotchy coat it kept the blotches: a clean
+        # quilted back repaint went on as detail over blue and orange patches. When
+        # the views were first moved to the photo's own colours (hd_views band
+        # match), their colour is trusted on the body.
+        if "--trustviews" in argv and not e["head"]:
+            agree = np.maximum(agree, 0.85)
         detail = np.clip(rep - low, -0.25, 0.25)
         return np.clip(base_m + agree * (rep - base_m) + (1 - agree) * detail, 0, 1), facing, vis & inb
     for e in [e for e in EXTRA if not e["head"]]:

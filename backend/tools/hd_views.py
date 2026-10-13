@@ -571,7 +571,8 @@ def upgrade(anim: Path, strength=0.62, verbose=True) -> str:
             repaint(tmp / f"v_{v}.png", tmp / f"r_{v}.png", prompt, strength, neg=NEG_ANIMAL if animal else NEG)
             extras += ["--extra", f"{tmp / f'r_{v}.png'}|{tmp / 'v.json'}|{v}"]
         stage = tmp / "s0.glb"
-        line = project(coated, stage, extras + (["--nophoto"] if (animal or noref or anime) else ["--nohead"])
+        _trust = ["--trustviews"] if (not animal and not anime and not noref and _mask.exists()) else []
+        line = project(coated, stage, extras + _trust + (["--nophoto"] if (animal or noref or anime) else ["--nohead"])
                        + (["--bodyreplace"] if anime else []))
         if not line.startswith("HDF "):
             return line
