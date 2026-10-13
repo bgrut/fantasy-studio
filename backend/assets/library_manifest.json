@@ -103,6 +103,36 @@
    "verdict": "good"
   },
   {
+   "file": "apple.glb",
+   "dims_m": {
+    "x": 0.004,
+    "y": 1.0,
+    "z": 0.9995
+   },
+   "min_y": 0.0,
+   "skinned": false,
+   "clips": [],
+   "bones": 0,
+   "biped": false,
+   "tallest_axis": "y",
+   "aspect": {
+    "w_h": 0.004,
+    "d_h": 1.0
+   },
+   "upright": true,
+   "height_ratio": 1.0,
+   "mesh": {
+    "tris": 44991,
+    "largest_share": 1.0,
+    "fragments": 1,
+    "degenerate": 0.0,
+    "textures": 3,
+    "textures_ok": true
+   },
+   "quality": 1.0,
+   "verdict": "good"
+  },
+  {
    "file": "archer.glb",
    "dims_m": {
     "x": 0.8432,
@@ -168,6 +198,38 @@
     "degenerate": 0.0,
     "textures": 1,
     "textures_ok": true
+   },
+   "quality": 1.0,
+   "verdict": "good"
+  },
+  {
+   "file": "asteroid.glb",
+   "dims_m": {
+    "x": 0.8831,
+    "y": 0.9363,
+    "z": 1.0007
+   },
+   "min_y": -0.0002,
+   "skinned": false,
+   "clips": [],
+   "bones": 0,
+   "biped": false,
+   "tallest_axis": "z",
+   "aspect": {
+    "w_h": 0.943,
+    "d_h": 1.069
+   },
+   "upright": true,
+   "height_ratio": 0.936,
+   "mesh": {
+    "tris": 44908,
+    "largest_share": 1.0,
+    "fragments": 1,
+    "degenerate": 0.0,
+    "textures": 3,
+    "textures_ok": true,
+    "nose": "-z",
+    "roof_peak_bin": 5
    },
    "quality": 1.0,
    "verdict": "good"
@@ -239,53 +301,43 @@
    "verdict": "good"
   },
   {
-   "file": "bandit.glb",
+   "file": "baker.glb",
    "dims_m": {
-    "x": 0.8993,
-    "y": 1.0001,
-    "z": 0.2315
+    "x": 0.6444,
+    "y": 1.0002,
+    "z": 0.2746
    },
-   "min_y": 0.0,
+   "min_y": -0.0,
    "skinned": false,
    "clips": [],
    "bones": 0,
    "biped": true,
    "tallest_axis": "y",
    "aspect": {
-    "w_h": 0.899,
-    "d_h": 0.231
+    "w_h": 0.644,
+    "d_h": 0.275
    },
    "upright": true,
    "height_ratio": 1.0,
    "mesh": {
-    "tris": 79604,
-    "largest_share": 0.9653,
-    "fragments": 2,
+    "tris": 44910,
+    "largest_share": 0.8283,
+    "fragments": 3,
     "degenerate": 0.0,
     "textures": 3,
     "textures_ok": true
    },
-   "render": {
-    "looks_like": 0.92,
-    "looks_like_best": "a clean 3D render of a bandit",
-    "damage_share": 0.025,
-    "dark_share": 0.104,
-    "cull_loss": 0.062,
-    "solidity": 0.752,
-    "edges": 0.0675,
-    "coverage": 0.087
-   },
-   "quality": 0.95,
+   "quality": 1.0,
    "verdict": "good"
   },
   {
-   "file": "bandit_anim.glb",
+   "file": "baker_anim.glb",
    "dims_m": {
-    "x": 0.8993,
+    "x": 0.4764,
     "y": 1.0,
-    "z": 0.2315
+    "z": 0.262
    },
-   "min_y": 0.0,
+   "min_y": -0.0,
    "skinned": true,
    "clips": [
     "attack",
@@ -294,19 +346,89 @@
     "sneak",
     "walk"
    ],
-   "bones": 22,
+   "bones": 21,
    "biped": true,
    "tallest_axis": "y",
    "aspect": {
-    "w_h": 0.899,
-    "d_h": 0.232
+    "w_h": 0.476,
+    "d_h": 0.262
    },
    "upright": true,
    "height_ratio": 1.0,
    "mesh": {
-    "tris": 76840,
+    "tris": 37197,
     "largest_share": 1.0,
     "fragments": 1,
+    "degenerate": 0.0,
+    "textures": 1,
+    "textures_ok": true
+   },
+   "quality": 1.0,
+   "verdict": "good"
+  },
+  {
+   "file": "bandit.glb",
+   "dims_m": {
+    "x": 1.5706,
+    "y": 1.75,
+    "z": 0.5878
+   },
+   "min_y": -0.0,
+   "skinned": false,
+   "clips": [],
+   "bones": 0,
+   "biped": true,
+   "tallest_axis": "y",
+   "aspect": {
+    "w_h": 0.897,
+    "d_h": 0.336
+   },
+   "upright": true,
+   "height_ratio": 1.0,
+   "mesh": {
+    "tris": 80000,
+    "largest_share": 0.8924,
+    "fragments": 4,
+    "degenerate": 0.0,
+    "textures": 2,
+    "textures_ok": true
+   },
+   "render": {
+    "looks_like": 0.6,
+    "looks_like_best": "a clean 3D render of a bandit"
+   },
+   "quality": 0.76,
+   "verdict": "good"
+  },
+  {
+   "file": "bandit_anim.glb",
+   "dims_m": {
+    "x": 1.5706,
+    "y": 1.75,
+    "z": 0.5878
+   },
+   "min_y": -0.0,
+   "skinned": true,
+   "clips": [
+    "attack",
+    "idle",
+    "run",
+    "sneak",
+    "walk"
+   ],
+   "bones": 21,
+   "biped": true,
+   "tallest_axis": "y",
+   "aspect": {
+    "w_h": 0.897,
+    "d_h": 0.336
+   },
+   "upright": true,
+   "height_ratio": 1.0,
+   "mesh": {
+    "tris": 80000,
+    "largest_share": 0.7831,
+    "fragments": 2,
     "degenerate": 0.0,
     "textures": 1,
     "textures_ok": true
@@ -643,6 +765,72 @@
    "verdict": "fair"
   },
   {
+   "file": "blacksmith.glb",
+   "dims_m": {
+    "x": 1.399,
+    "y": 1.75,
+    "z": 0.34
+   },
+   "min_y": -0.0,
+   "skinned": false,
+   "clips": [],
+   "bones": 0,
+   "biped": true,
+   "tallest_axis": "y",
+   "aspect": {
+    "w_h": 0.799,
+    "d_h": 0.194
+   },
+   "upright": true,
+   "height_ratio": 1.0,
+   "mesh": {
+    "tris": 44963,
+    "largest_share": 0.7834,
+    "fragments": 2,
+    "degenerate": 0.0,
+    "textures": 3,
+    "textures_ok": true
+   },
+   "quality": 1.0,
+   "verdict": "good"
+  },
+  {
+   "file": "blacksmith_anim.glb",
+   "dims_m": {
+    "x": 1.399,
+    "y": 1.75,
+    "z": 0.34
+   },
+   "min_y": -0.0,
+   "skinned": true,
+   "clips": [
+    "attack",
+    "idle",
+    "run",
+    "sneak",
+    "walk"
+   ],
+   "bones": 21,
+   "biped": true,
+   "tallest_axis": "y",
+   "aspect": {
+    "w_h": 0.799,
+    "d_h": 0.194
+   },
+   "upright": true,
+   "height_ratio": 1.0,
+   "mesh": {
+    "tris": 34771,
+    "largest_share": 0.6996,
+    "fragments": 2,
+    "degenerate": 0.0,
+    "textures": 1,
+    "textures_ok": true
+   },
+   "quality": 1.0,
+   "verdict": "good"
+  },
+  {
    "file": "boat.glb",
    "dims_m": {
     "x": 1.8598,
@@ -746,9 +934,9 @@
   {
    "file": "buddhist_monk.glb",
    "dims_m": {
-    "x": 1.491,
-    "y": 1.7502,
-    "z": 0.4541
+    "x": 1.4657,
+    "y": 1.75,
+    "z": 0.4884
    },
    "min_y": -0.0,
    "skinned": false,
@@ -757,37 +945,34 @@
    "biped": true,
    "tallest_axis": "y",
    "aspect": {
-    "w_h": 0.852,
-    "d_h": 0.259
+    "w_h": 0.838,
+    "d_h": 0.279
    },
    "upright": true,
    "height_ratio": 1.0,
    "mesh": {
-    "tris": 79410,
+    "tris": 64952,
     "largest_share": 1.0,
     "fragments": 1,
     "degenerate": 0.0,
-    "textures": 3,
+    "textures": 2,
     "textures_ok": true
    },
    "render": {
-    "looks_like": 0.413,
+    "looks_like": 0.927,
     "looks_like_best": "a clean 3D render of a buddhist monk"
    },
-   "quality_reasons": [
-    "doubtful"
-   ],
-   "quality": 0.5,
-   "verdict": "fair"
+   "quality": 0.96,
+   "verdict": "good"
   },
   {
    "file": "buddhist_monk_anim.glb",
    "dims_m": {
-    "x": 1.4908,
+    "x": 1.4657,
     "y": 1.75,
-    "z": 0.454
+    "z": 0.4884
    },
-   "min_y": -0.0,
+   "min_y": 0.0,
    "skinned": true,
    "clips": [
     "attack",
@@ -800,16 +985,16 @@
    "biped": true,
    "tallest_axis": "y",
    "aspect": {
-    "w_h": 0.852,
-    "d_h": 0.259
+    "w_h": 0.838,
+    "d_h": 0.279
    },
    "upright": true,
    "height_ratio": 1.0,
    "mesh": {
-    "tris": 79410,
-    "largest_share": 1.0,
-    "fragments": 1,
-    "degenerate": 0.0,
+    "tris": 78563,
+    "largest_share": 0.6714,
+    "fragments": 2,
+    "degenerate": 0.0004,
     "textures": 1,
     "textures_ok": true
    },
@@ -953,6 +1138,36 @@
    "verdict": "good"
   },
   {
+   "file": "cache__6cc61f49c2ae.glb",
+   "dims_m": {
+    "x": 0.9055,
+    "y": 1.004,
+    "z": 0.1941
+   },
+   "min_y": -0.502,
+   "skinned": false,
+   "clips": [],
+   "bones": 0,
+   "biped": false,
+   "tallest_axis": "y",
+   "aspect": {
+    "w_h": 0.902,
+    "d_h": 0.193
+   },
+   "upright": true,
+   "height_ratio": 1.0,
+   "mesh": {
+    "tris": 489110,
+    "largest_share": 0.3876,
+    "fragments": 5,
+    "degenerate": 0.0,
+    "textures": 2,
+    "textures_ok": true
+   },
+   "quality": 0.84,
+   "verdict": "fair"
+  },
+  {
    "file": "cache__97fbdf62d739.glb",
    "dims_m": {
     "x": 1.6611,
@@ -1073,6 +1288,41 @@
    },
    "quality": 1.0,
    "verdict": "good"
+  },
+  {
+   "file": "captain.glb",
+   "dims_m": {
+    "x": 0.7638,
+    "y": 0.3718,
+    "z": 1.7498
+   },
+   "min_y": 0.0,
+   "skinned": false,
+   "clips": [],
+   "bones": 0,
+   "biped": true,
+   "tallest_axis": "z",
+   "aspect": {
+    "w_h": 2.054,
+    "d_h": 4.706
+   },
+   "upright": false,
+   "height_ratio": 0.212,
+   "mesh": {
+    "tris": 44951,
+    "largest_share": 1.0,
+    "fragments": 1,
+    "degenerate": 0.0,
+    "textures": 3,
+    "textures_ok": true,
+    "nose": "-z",
+    "roof_peak_bin": 8
+   },
+   "quality_reasons": [
+    "lying down"
+   ],
+   "quality": 0.2,
+   "verdict": "poor"
   },
   {
    "file": "car.glb",
@@ -1453,6 +1703,72 @@
    "verdict": "good"
   },
   {
+   "file": "chef.glb",
+   "dims_m": {
+    "x": 1.5555,
+    "y": 1.7502,
+    "z": 0.4365
+   },
+   "min_y": -0.0,
+   "skinned": false,
+   "clips": [],
+   "bones": 0,
+   "biped": true,
+   "tallest_axis": "y",
+   "aspect": {
+    "w_h": 0.889,
+    "d_h": 0.249
+   },
+   "upright": true,
+   "height_ratio": 1.0,
+   "mesh": {
+    "tris": 44594,
+    "largest_share": 1.0,
+    "fragments": 1,
+    "degenerate": 0.0,
+    "textures": 3,
+    "textures_ok": true
+   },
+   "quality": 1.0,
+   "verdict": "good"
+  },
+  {
+   "file": "chef_anim.glb",
+   "dims_m": {
+    "x": 1.5553,
+    "y": 1.75,
+    "z": 0.4365
+   },
+   "min_y": -0.0,
+   "skinned": true,
+   "clips": [
+    "attack",
+    "idle",
+    "run",
+    "sneak",
+    "walk"
+   ],
+   "bones": 21,
+   "biped": true,
+   "tallest_axis": "y",
+   "aspect": {
+    "w_h": 0.889,
+    "d_h": 0.249
+   },
+   "upright": true,
+   "height_ratio": 1.0,
+   "mesh": {
+    "tris": 43828,
+    "largest_share": 1.0,
+    "fragments": 1,
+    "degenerate": 0.0,
+    "textures": 1,
+    "textures_ok": true
+   },
+   "quality": 1.0,
+   "verdict": "good"
+  },
+  {
    "file": "clover.glb",
    "dims_m": {
     "x": 0.1513,
@@ -1745,6 +2061,72 @@
    "verdict": "good"
   },
   {
+   "file": "cowboy.glb",
+   "dims_m": {
+    "x": 1.5271,
+    "y": 1.7498,
+    "z": 0.3796
+   },
+   "min_y": -0.0,
+   "skinned": false,
+   "clips": [],
+   "bones": 0,
+   "biped": true,
+   "tallest_axis": "y",
+   "aspect": {
+    "w_h": 0.873,
+    "d_h": 0.217
+   },
+   "upright": true,
+   "height_ratio": 1.0,
+   "mesh": {
+    "tris": 44901,
+    "largest_share": 1.0,
+    "fragments": 1,
+    "degenerate": 0.0,
+    "textures": 3,
+    "textures_ok": true
+   },
+   "quality": 1.0,
+   "verdict": "good"
+  },
+  {
+   "file": "cowboy_anim.glb",
+   "dims_m": {
+    "x": 1.5272,
+    "y": 1.75,
+    "z": 0.3797
+   },
+   "min_y": -0.0,
+   "skinned": true,
+   "clips": [
+    "attack",
+    "idle",
+    "run",
+    "sneak",
+    "walk"
+   ],
+   "bones": 22,
+   "biped": true,
+   "tallest_axis": "y",
+   "aspect": {
+    "w_h": 0.873,
+    "d_h": 0.217
+   },
+   "upright": true,
+   "height_ratio": 1.0,
+   "mesh": {
+    "tris": 39636,
+    "largest_share": 1.0,
+    "fragments": 1,
+    "degenerate": 0.0,
+    "textures": 1,
+    "textures_ok": true
+   },
+   "quality": 1.0,
+   "verdict": "good"
+  },
+  {
    "file": "crate.glb",
    "dims_m": {
     "x": 0.5303,
@@ -1846,10 +2228,10 @@
    "upright": true,
    "height_ratio": 0.838,
    "mesh": {
-    "tris": 44941,
-    "largest_share": 0.7713,
+    "tris": 66193,
+    "largest_share": 0.6705,
     "fragments": 2,
-    "degenerate": 0.0,
+    "degenerate": 0.0006,
     "textures": 1,
     "textures_ok": true,
     "nose": "-z",
@@ -3290,6 +3672,38 @@
    "verdict": "good"
   },
   {
+   "file": "flag.glb",
+   "dims_m": {
+    "x": 0.2968,
+    "y": 0.832,
+    "z": 1.0
+   },
+   "min_y": -0.0,
+   "skinned": false,
+   "clips": [],
+   "bones": 0,
+   "biped": false,
+   "tallest_axis": "z",
+   "aspect": {
+    "w_h": 0.357,
+    "d_h": 1.202
+   },
+   "upright": true,
+   "height_ratio": 0.832,
+   "mesh": {
+    "tris": 44816,
+    "largest_share": 1.0,
+    "fragments": 1,
+    "degenerate": 0.0,
+    "textures": 3,
+    "textures_ok": true,
+    "nose": "-z",
+    "roof_peak_bin": 5
+   },
+   "quality": 1.0,
+   "verdict": "good"
+  },
+  {
    "file": "food.glb",
    "dims_m": {
     "x": 0.1509,
@@ -3698,6 +4112,138 @@
    "verdict": "good"
   },
   {
+   "file": "girl.glb",
+   "dims_m": {
+    "x": 1.3926,
+    "y": 1.7492,
+    "z": 0.4313
+   },
+   "min_y": 0.0,
+   "skinned": false,
+   "clips": [],
+   "bones": 0,
+   "biped": true,
+   "tallest_axis": "y",
+   "aspect": {
+    "w_h": 0.796,
+    "d_h": 0.247
+   },
+   "upright": true,
+   "height_ratio": 1.0,
+   "mesh": {
+    "tris": 44875,
+    "largest_share": 1.0,
+    "fragments": 1,
+    "degenerate": 0.0,
+    "textures": 3,
+    "textures_ok": true
+   },
+   "quality": 1.0,
+   "verdict": "good"
+  },
+  {
+   "file": "girl_anim.glb",
+   "dims_m": {
+    "x": 1.3932,
+    "y": 1.75,
+    "z": 0.4315
+   },
+   "min_y": 0.0,
+   "skinned": true,
+   "clips": [
+    "attack",
+    "idle",
+    "run",
+    "sneak",
+    "walk"
+   ],
+   "bones": 21,
+   "biped": true,
+   "tallest_axis": "y",
+   "aspect": {
+    "w_h": 0.796,
+    "d_h": 0.247
+   },
+   "upright": true,
+   "height_ratio": 1.0,
+   "mesh": {
+    "tris": 55448,
+    "largest_share": 1.0,
+    "fragments": 1,
+    "degenerate": 0.0009,
+    "textures": 1,
+    "textures_ok": true
+   },
+   "quality": 1.0,
+   "verdict": "good"
+  },
+  {
+   "file": "gladiator.glb",
+   "dims_m": {
+    "x": 0.8461,
+    "y": 0.9999,
+    "z": 0.2092
+   },
+   "min_y": 0.0,
+   "skinned": false,
+   "clips": [],
+   "bones": 0,
+   "biped": true,
+   "tallest_axis": "y",
+   "aspect": {
+    "w_h": 0.846,
+    "d_h": 0.209
+   },
+   "upright": true,
+   "height_ratio": 1.0,
+   "mesh": {
+    "tris": 44779,
+    "largest_share": 1.0,
+    "fragments": 1,
+    "degenerate": 0.0,
+    "textures": 3,
+    "textures_ok": true
+   },
+   "quality": 1.0,
+   "verdict": "good"
+  },
+  {
+   "file": "gladiator_anim.glb",
+   "dims_m": {
+    "x": 0.8461,
+    "y": 1.0,
+    "z": 0.2092
+   },
+   "min_y": -0.0,
+   "skinned": true,
+   "clips": [
+    "attack",
+    "idle",
+    "run",
+    "sneak",
+    "walk"
+   ],
+   "bones": 21,
+   "biped": true,
+   "tallest_axis": "y",
+   "aspect": {
+    "w_h": 0.846,
+    "d_h": 0.209
+   },
+   "upright": true,
+   "height_ratio": 1.0,
+   "mesh": {
+    "tris": 43829,
+    "largest_share": 1.0,
+    "fragments": 1,
+    "degenerate": 0.0,
+    "textures": 1,
+    "textures_ok": true
+   },
+   "quality": 1.0,
+   "verdict": "good"
+  },
+  {
    "file": "glowing_crystal.glb",
    "dims_m": {
     "x": 0.5621,
@@ -3938,6 +4484,104 @@
     "fragments": 1,
     "degenerate": 0.0,
     "textures": 0,
+    "textures_ok": true
+   },
+   "quality": 1.0,
+   "verdict": "good"
+  },
+  {
+   "file": "golden_mask.glb",
+   "dims_m": {
+    "x": 0.5936,
+    "y": 0.8401,
+    "z": 1.0002
+   },
+   "min_y": -0.0,
+   "skinned": false,
+   "clips": [],
+   "bones": 0,
+   "biped": false,
+   "tallest_axis": "z",
+   "aspect": {
+    "w_h": 0.707,
+    "d_h": 1.191
+   },
+   "upright": true,
+   "height_ratio": 0.84,
+   "mesh": {
+    "tris": 44865,
+    "largest_share": 1.0,
+    "fragments": 1,
+    "degenerate": 0.0,
+    "textures": 3,
+    "textures_ok": true,
+    "nose": "+z",
+    "roof_peak_bin": 4
+   },
+   "quality": 1.0,
+   "verdict": "good"
+  },
+  {
+   "file": "gondolier.glb",
+   "dims_m": {
+    "x": 1.584,
+    "y": 1.7501,
+    "z": 0.326
+   },
+   "min_y": -0.0,
+   "skinned": false,
+   "clips": [],
+   "bones": 0,
+   "biped": true,
+   "tallest_axis": "y",
+   "aspect": {
+    "w_h": 0.905,
+    "d_h": 0.186
+   },
+   "upright": true,
+   "height_ratio": 1.0,
+   "mesh": {
+    "tris": 44912,
+    "largest_share": 1.0,
+    "fragments": 1,
+    "degenerate": 0.0,
+    "textures": 3,
+    "textures_ok": true
+   },
+   "quality": 1.0,
+   "verdict": "good"
+  },
+  {
+   "file": "gondolier_anim.glb",
+   "dims_m": {
+    "x": 1.584,
+    "y": 1.75,
+    "z": 0.326
+   },
+   "min_y": 0.0,
+   "skinned": true,
+   "clips": [
+    "attack",
+    "idle",
+    "run",
+    "sneak",
+    "walk"
+   ],
+   "bones": 21,
+   "biped": true,
+   "tallest_axis": "y",
+   "aspect": {
+    "w_h": 0.905,
+    "d_h": 0.186
+   },
+   "upright": true,
+   "height_ratio": 1.0,
+   "mesh": {
+    "tris": 42309,
+    "largest_share": 1.0,
+    "fragments": 1,
+    "degenerate": 0.0,
+    "textures": 1,
     "textures_ok": true
    },
    "quality": 1.0,
@@ -4619,6 +5263,38 @@
    },
    "quality": 1.0,
    "verdict": "good"
+  },
+  {
+   "file": "jade_idol.glb",
+   "dims_m": {
+    "x": 0.5362,
+    "y": 0.5863,
+    "z": 0.7085
+   },
+   "min_y": 0.0052,
+   "skinned": false,
+   "clips": [],
+   "bones": 0,
+   "biped": false,
+   "tallest_axis": "z",
+   "aspect": {
+    "w_h": 0.915,
+    "d_h": 1.208
+   },
+   "upright": true,
+   "height_ratio": 0.828,
+   "mesh": {
+    "tris": 150570,
+    "largest_share": 0.4968,
+    "fragments": 3,
+    "degenerate": 0.0,
+    "textures": 3,
+    "textures_ok": true,
+    "nose": "+z",
+    "roof_peak_bin": 0
+   },
+   "quality": 0.92,
+   "verdict": "fair"
   },
   {
    "file": "jewel.glb",
@@ -5892,48 +6568,45 @@
   {
    "file": "keeper.glb",
    "dims_m": {
-    "x": 1.5784,
-    "y": 1.7498,
-    "z": 0.3383
+    "x": 1.3079,
+    "y": 1.7501,
+    "z": 0.4197
    },
-   "min_y": 0.0,
+   "min_y": -0.0,
    "skinned": false,
    "clips": [],
    "bones": 0,
    "biped": true,
    "tallest_axis": "y",
    "aspect": {
-    "w_h": 0.902,
-    "d_h": 0.193
+    "w_h": 0.747,
+    "d_h": 0.24
    },
    "upright": true,
    "height_ratio": 1.0,
    "mesh": {
-    "tris": 79966,
-    "largest_share": 0.8068,
-    "fragments": 3,
+    "tris": 79920,
+    "largest_share": 1.0,
+    "fragments": 1,
     "degenerate": 0.0,
     "textures": 3,
     "textures_ok": true
    },
    "render": {
-    "looks_like": 0.406,
+    "looks_like": 0.656,
     "looks_like_best": "a clean 3D render of a keeper"
    },
-   "quality_reasons": [
-    "doubtful"
-   ],
-   "quality": 0.5,
-   "verdict": "fair"
+   "quality": 0.79,
+   "verdict": "good"
   },
   {
    "file": "keeper_anim.glb",
    "dims_m": {
-    "x": 1.5785,
+    "x": 1.3079,
     "y": 1.75,
-    "z": 0.3383
+    "z": 0.4196
    },
-   "min_y": 0.0,
+   "min_y": -0.0,
    "skinned": true,
    "clips": [
     "attack",
@@ -5946,15 +6619,15 @@
    "biped": true,
    "tallest_axis": "y",
    "aspect": {
-    "w_h": 0.902,
-    "d_h": 0.193
+    "w_h": 0.747,
+    "d_h": 0.24
    },
    "upright": true,
    "height_ratio": 1.0,
    "mesh": {
-    "tris": 77014,
-    "largest_share": 0.9021,
-    "fragments": 3,
+    "tris": 79782,
+    "largest_share": 1.0,
+    "fragments": 1,
     "degenerate": 0.0,
     "textures": 1,
     "textures_ok": true
@@ -6147,9 +6820,9 @@
   {
    "file": "lantern.glb",
    "dims_m": {
-    "x": 0.1605,
-    "y": 0.1617,
-    "z": 0.3503
+    "x": 0.1604,
+    "y": 0.1613,
+    "z": 0.3281
    },
    "min_y": 0.0,
    "skinned": false,
@@ -6158,15 +6831,15 @@
    "biped": false,
    "tallest_axis": "z",
    "aspect": {
-    "w_h": 0.993,
-    "d_h": 2.166
+    "w_h": 0.994,
+    "d_h": 2.034
    },
    "upright": true,
-   "height_ratio": 0.462,
+   "height_ratio": 0.492,
    "mesh": {
-    "tris": 45000,
-    "largest_share": 0.6012,
-    "fragments": 12,
+    "tris": 37738,
+    "largest_share": 0.8007,
+    "fragments": 4,
     "degenerate": 0.0,
     "textures": 3,
     "textures_ok": true,
@@ -6222,6 +6895,72 @@
    "verdict": "good"
   },
   {
+   "file": "lifeguard.glb",
+   "dims_m": {
+    "x": 1.544,
+    "y": 1.7503,
+    "z": 0.3043
+   },
+   "min_y": 0.0,
+   "skinned": false,
+   "clips": [],
+   "bones": 0,
+   "biped": true,
+   "tallest_axis": "y",
+   "aspect": {
+    "w_h": 0.882,
+    "d_h": 0.174
+   },
+   "upright": true,
+   "height_ratio": 1.0,
+   "mesh": {
+    "tris": 44884,
+    "largest_share": 1.0,
+    "fragments": 1,
+    "degenerate": 0.0,
+    "textures": 3,
+    "textures_ok": true
+   },
+   "quality": 1.0,
+   "verdict": "good"
+  },
+  {
+   "file": "lifeguard_anim.glb",
+   "dims_m": {
+    "x": 1.5437,
+    "y": 1.75,
+    "z": 0.3042
+   },
+   "min_y": -0.0,
+   "skinned": true,
+   "clips": [
+    "attack",
+    "idle",
+    "run",
+    "sneak",
+    "walk"
+   ],
+   "bones": 21,
+   "biped": true,
+   "tallest_axis": "y",
+   "aspect": {
+    "w_h": 0.882,
+    "d_h": 0.174
+   },
+   "upright": true,
+   "height_ratio": 1.0,
+   "mesh": {
+    "tris": 40712,
+    "largest_share": 1.0,
+    "fragments": 1,
+    "degenerate": 0.0,
+    "textures": 1,
+    "textures_ok": true
+   },
+   "quality": 1.0,
+   "verdict": "good"
+  },
+  {
    "file": "log.glb",
    "dims_m": {
     "x": 1.0,
@@ -6265,6 +7004,68 @@
    ],
    "quality": 0.2,
    "verdict": "poor"
+  },
+  {
+   "file": "longship.glb",
+   "dims_m": {
+    "x": 6.001,
+    "y": 2.2041,
+    "z": 2.6903
+   },
+   "min_y": 0.0,
+   "skinned": false,
+   "clips": [],
+   "bones": 0,
+   "biped": false,
+   "tallest_axis": "x",
+   "aspect": {
+    "w_h": 2.723,
+    "d_h": 1.221
+   },
+   "upright": true,
+   "height_ratio": 0.367,
+   "mesh": {
+    "tris": 44134,
+    "largest_share": 1.0,
+    "fragments": 1,
+    "degenerate": 0.0,
+    "textures": 3,
+    "textures_ok": true,
+    "nose": "+x",
+    "roof_peak_bin": 3
+   },
+   "quality": 1.0,
+   "verdict": "good"
+  },
+  {
+   "file": "lost_cub.glb",
+   "dims_m": {
+    "x": 0.7046,
+    "y": 1.0,
+    "z": 0.8815
+   },
+   "min_y": 0.0,
+   "skinned": false,
+   "clips": [],
+   "bones": 0,
+   "biped": false,
+   "tallest_axis": "y",
+   "aspect": {
+    "w_h": 0.705,
+    "d_h": 0.881
+   },
+   "upright": true,
+   "height_ratio": 1.0,
+   "mesh": {
+    "tris": 80000,
+    "largest_share": 0.8272,
+    "fragments": 4,
+    "degenerate": 0.0,
+    "textures": 2,
+    "textures_ok": true
+   },
+   "quality": 1.0,
+   "verdict": "good"
   },
   {
    "file": "lumberjack.glb",
@@ -6331,6 +7132,38 @@
    },
    "quality": 1.0,
    "verdict": "good"
+  },
+  {
+   "file": "lunar_module.glb",
+   "dims_m": {
+    "x": 1.0,
+    "y": 0.8898,
+    "z": 0.9534
+   },
+   "min_y": 0.0,
+   "skinned": false,
+   "clips": [],
+   "bones": 0,
+   "biped": false,
+   "tallest_axis": "x",
+   "aspect": {
+    "w_h": 1.124,
+    "d_h": 1.071
+   },
+   "upright": true,
+   "height_ratio": 0.89,
+   "mesh": {
+    "tris": 43916,
+    "largest_share": 0.1895,
+    "fragments": 13,
+    "degenerate": 0.0,
+    "textures": 3,
+    "textures_ok": true,
+    "nose": "+x",
+    "roof_peak_bin": 1
+   },
+   "quality": 0.69,
+   "verdict": "fair"
   },
   {
    "file": "man.glb",
@@ -6585,41 +7418,77 @@
    "verdict": "good"
   },
   {
+   "file": "mountain_goat.glb",
+   "dims_m": {
+    "x": 0.3587,
+    "y": 0.8417,
+    "z": 0.9505
+   },
+   "min_y": -0.0001,
+   "skinned": false,
+   "clips": [],
+   "bones": 0,
+   "biped": false,
+   "tallest_axis": "z",
+   "aspect": {
+    "w_h": 0.426,
+    "d_h": 1.129
+   },
+   "upright": true,
+   "height_ratio": 0.886,
+   "mesh": {
+    "tris": 44972,
+    "largest_share": 0.8238,
+    "fragments": 2,
+    "degenerate": 0.0,
+    "textures": 3,
+    "textures_ok": true,
+    "nose": "-z",
+    "roof_peak_bin": 7
+   },
+   "quality": 1.0,
+   "verdict": "good"
+  },
+  {
    "file": "mountaineer.glb",
    "dims_m": {
-    "x": 0.8745,
+    "x": 0.8882,
     "y": 1.0,
-    "z": 0.1713
+    "z": 0.3486
    },
-   "min_y": 0.0,
+   "min_y": -0.0,
    "skinned": false,
    "clips": [],
    "bones": 0,
    "biped": true,
    "tallest_axis": "y",
    "aspect": {
-    "w_h": 0.875,
-    "d_h": 0.171
+    "w_h": 0.888,
+    "d_h": 0.349
    },
    "upright": true,
    "height_ratio": 1.0,
    "mesh": {
-    "tris": 44941,
-    "largest_share": 1.0,
-    "fragments": 1,
+    "tris": 79991,
+    "largest_share": 0.9289,
+    "fragments": 2,
     "degenerate": 0.0,
-    "textures": 3,
+    "textures": 2,
     "textures_ok": true
    },
-   "quality": 1.0,
+   "render": {
+    "looks_like": 0.934,
+    "looks_like_best": "a clean 3D render of a mountaineer"
+   },
+   "quality": 0.96,
    "verdict": "good"
   },
   {
    "file": "mountaineer_anim.glb",
    "dims_m": {
-    "x": 0.8745,
+    "x": 0.8882,
     "y": 1.0,
-    "z": 0.1712
+    "z": 0.3486
    },
    "min_y": -0.0,
    "skinned": true,
@@ -6630,17 +7499,17 @@
     "sneak",
     "walk"
    ],
-   "bones": 21,
+   "bones": 22,
    "biped": true,
    "tallest_axis": "y",
    "aspect": {
-    "w_h": 0.875,
-    "d_h": 0.171
+    "w_h": 0.888,
+    "d_h": 0.349
    },
    "upright": true,
    "height_ratio": 1.0,
    "mesh": {
-    "tris": 44941,
+    "tris": 79700,
     "largest_share": 1.0,
     "fragments": 1,
     "degenerate": 0.0,
@@ -6859,6 +7728,66 @@
    "verdict": "good"
   },
   {
+   "file": "opponent.glb",
+   "dims_m": {
+    "x": 0.4632,
+    "y": 1.0003,
+    "z": 0.9863
+   },
+   "min_y": -0.0001,
+   "skinned": false,
+   "clips": [],
+   "bones": 0,
+   "biped": true,
+   "tallest_axis": "y",
+   "aspect": {
+    "w_h": 0.463,
+    "d_h": 0.986
+   },
+   "upright": true,
+   "height_ratio": 1.0,
+   "mesh": {
+    "tris": 44813,
+    "largest_share": 1.0,
+    "fragments": 1,
+    "degenerate": 0.0,
+    "textures": 3,
+    "textures_ok": true
+   },
+   "quality": 1.0,
+   "verdict": "good"
+  },
+  {
+   "file": "outlaw.glb",
+   "dims_m": {
+    "x": 0.3135,
+    "y": 1.0001,
+    "z": 0.9137
+   },
+   "min_y": 0.0,
+   "skinned": false,
+   "clips": [],
+   "bones": 0,
+   "biped": true,
+   "tallest_axis": "y",
+   "aspect": {
+    "w_h": 0.313,
+    "d_h": 0.914
+   },
+   "upright": true,
+   "height_ratio": 1.0,
+   "mesh": {
+    "tris": 44278,
+    "largest_share": 1.0,
+    "fragments": 1,
+    "degenerate": 0.0,
+    "textures": 3,
+    "textures_ok": true
+   },
+   "quality": 1.0,
+   "verdict": "good"
+  },
+  {
    "file": "owl.glb",
    "dims_m": {
     "x": 0.2224,
@@ -7000,29 +7929,31 @@
   {
    "file": "pearl.glb",
    "dims_m": {
-    "x": 0.4074,
-    "y": 1.0,
+    "x": 1.0,
+    "y": 0.4074,
     "z": 1.0
    },
-   "min_y": -0.2961,
+   "min_y": -0.0,
    "skinned": false,
    "clips": [],
    "bones": 0,
    "biped": false,
-   "tallest_axis": "y",
+   "tallest_axis": "x",
    "aspect": {
-    "w_h": 0.407,
-    "d_h": 1.0
+    "w_h": 2.455,
+    "d_h": 2.455
    },
    "upright": true,
-   "height_ratio": 1.0,
+   "height_ratio": 0.407,
    "mesh": {
     "tris": 44054,
     "largest_share": 0.4332,
     "fragments": 3,
     "degenerate": 0.0001,
     "textures": 3,
-    "textures_ok": true
+    "textures_ok": true,
+    "nose": "+x",
+    "roof_peak_bin": 4
    },
    "render": {
     "looks_like": 0.204,
@@ -7115,6 +8046,38 @@
     "degenerate": 0.0,
     "textures": 1,
     "textures_ok": true
+   },
+   "quality": 1.0,
+   "verdict": "good"
+  },
+  {
+   "file": "photograph.glb",
+   "dims_m": {
+    "x": 0.9468,
+    "y": 0.8839,
+    "z": 1.0
+   },
+   "min_y": -0.0,
+   "skinned": false,
+   "clips": [],
+   "bones": 0,
+   "biped": false,
+   "tallest_axis": "z",
+   "aspect": {
+    "w_h": 1.071,
+    "d_h": 1.131
+   },
+   "upright": true,
+   "height_ratio": 0.884,
+   "mesh": {
+    "tris": 44484,
+    "largest_share": 0.8481,
+    "fragments": 4,
+    "degenerate": 0.0,
+    "textures": 3,
+    "textures_ok": true,
+    "nose": "-z",
+    "roof_peak_bin": 5
    },
    "quality": 1.0,
    "verdict": "good"
@@ -7444,9 +8407,9 @@
   {
    "file": "princess.glb",
    "dims_m": {
-    "x": 1.632,
-    "y": 1.7499,
-    "z": 0.4461
+    "x": 1.3164,
+    "y": 1.75,
+    "z": 0.4224
    },
    "min_y": 0.0,
    "skinned": false,
@@ -7455,13 +8418,13 @@
    "biped": true,
    "tallest_axis": "y",
    "aspect": {
-    "w_h": 0.933,
-    "d_h": 0.255
+    "w_h": 0.752,
+    "d_h": 0.241
    },
    "upright": true,
    "height_ratio": 1.0,
    "mesh": {
-    "tris": 79850,
+    "tris": 79955,
     "largest_share": 1.0,
     "fragments": 1,
     "degenerate": 0.0,
@@ -7469,18 +8432,18 @@
     "textures_ok": true
    },
    "render": {
-    "looks_like": 0.946,
+    "looks_like": 0.977,
     "looks_like_best": "a clean 3D render of a princess"
    },
-   "quality": 0.97,
+   "quality": 0.99,
    "verdict": "good"
   },
   {
    "file": "princess_anim.glb",
    "dims_m": {
-    "x": 1.6321,
+    "x": 1.3164,
     "y": 1.75,
-    "z": 0.4462
+    "z": 0.4224
    },
    "min_y": -0.0,
    "skinned": true,
@@ -7495,13 +8458,13 @@
    "biped": true,
    "tallest_axis": "y",
    "aspect": {
-    "w_h": 0.933,
-    "d_h": 0.255
+    "w_h": 0.752,
+    "d_h": 0.241
    },
    "upright": true,
    "height_ratio": 1.0,
    "mesh": {
-    "tris": 79850,
+    "tris": 75388,
     "largest_share": 1.0,
     "fragments": 1,
     "degenerate": 0.0,
@@ -7514,31 +8477,31 @@
   {
    "file": "purple_plant.glb",
    "dims_m": {
-    "x": 0.571,
-    "y": 0.4356,
+    "x": 0.621,
+    "y": 0.8152,
     "z": 1.0
    },
-   "min_y": -0.0,
+   "min_y": 0.0,
    "skinned": false,
    "clips": [],
    "bones": 0,
    "biped": false,
    "tallest_axis": "z",
    "aspect": {
-    "w_h": 1.311,
-    "d_h": 2.296
+    "w_h": 0.762,
+    "d_h": 1.227
    },
    "upright": true,
-   "height_ratio": 0.436,
+   "height_ratio": 0.815,
    "mesh": {
-    "tris": 44952,
+    "tris": 44883,
     "largest_share": 1.0,
     "fragments": 1,
     "degenerate": 0.0,
     "textures": 3,
     "textures_ok": true,
     "nose": "+z",
-    "roof_peak_bin": 2
+    "roof_peak_bin": 1
    },
    "quality": 1.0,
    "verdict": "good"
@@ -7707,31 +8670,29 @@
   {
    "file": "rival.glb",
    "dims_m": {
-    "x": 1.0,
-    "y": 0.2452,
-    "z": 0.9455
+    "x": 0.4291,
+    "y": 1.75,
+    "z": 1.6546
    },
-   "min_y": 0.3719,
+   "min_y": 0.0,
    "skinned": false,
    "clips": [],
    "bones": 0,
    "biped": true,
-   "tallest_axis": "x",
+   "tallest_axis": "y",
    "aspect": {
-    "w_h": 4.078,
-    "d_h": 3.856
+    "w_h": 0.245,
+    "d_h": 0.945
    },
-   "upright": false,
-   "height_ratio": 0.245,
+   "upright": true,
+   "height_ratio": 1.0,
    "mesh": {
-    "tris": 44995,
+    "tris": 43165,
     "largest_share": 1.0,
     "fragments": 1,
-    "degenerate": 0.0001,
+    "degenerate": 0.0,
     "textures": 2,
-    "textures_ok": true,
-    "nose": "+x",
-    "roof_peak_bin": 2
+    "textures_ok": true
    },
    "render": {
     "looks_like": 0.152,
@@ -7744,8 +8705,7 @@
     "coverage": 0.166
    },
    "quality_reasons": [
-    "does not look like it",
-    "lying down"
+    "does not look like it"
    ],
    "quality": 0.2,
    "verdict": "poor"
@@ -7807,6 +8767,72 @@
    "height_ratio": 1.0,
    "mesh": {
     "tris": 44706,
+    "largest_share": 1.0,
+    "fragments": 1,
+    "degenerate": 0.0,
+    "textures": 1,
+    "textures_ok": true
+   },
+   "quality": 1.0,
+   "verdict": "good"
+  },
+  {
+   "file": "robot_goalkeeper.glb",
+   "dims_m": {
+    "x": 1.5293,
+    "y": 1.7503,
+    "z": 0.4164
+   },
+   "min_y": 0.0,
+   "skinned": false,
+   "clips": [],
+   "bones": 0,
+   "biped": true,
+   "tallest_axis": "y",
+   "aspect": {
+    "w_h": 0.874,
+    "d_h": 0.238
+   },
+   "upright": true,
+   "height_ratio": 1.0,
+   "mesh": {
+    "tris": 44234,
+    "largest_share": 0.9658,
+    "fragments": 2,
+    "degenerate": 0.0,
+    "textures": 3,
+    "textures_ok": true
+   },
+   "quality": 1.0,
+   "verdict": "good"
+  },
+  {
+   "file": "robot_goalkeeper_anim.glb",
+   "dims_m": {
+    "x": 1.529,
+    "y": 1.75,
+    "z": 0.4163
+   },
+   "min_y": -0.0,
+   "skinned": true,
+   "clips": [
+    "attack",
+    "idle",
+    "run",
+    "sneak",
+    "walk"
+   ],
+   "bones": 21,
+   "biped": true,
+   "tallest_axis": "y",
+   "aspect": {
+    "w_h": 0.874,
+    "d_h": 0.238
+   },
+   "upright": true,
+   "height_ratio": 1.0,
+   "mesh": {
+    "tris": 42717,
     "largest_share": 1.0,
     "fragments": 1,
     "degenerate": 0.0,
@@ -8014,7 +9040,7 @@
     "y": 1.75,
     "z": 0.5376
    },
-   "min_y": -0.0,
+   "min_y": 0.0,
    "skinned": true,
    "clips": [
     "attack",
@@ -8023,7 +9049,7 @@
     "sneak",
     "walk"
    ],
-   "bones": 21,
+   "bones": 22,
    "biped": true,
    "tallest_axis": "y",
    "aspect": {
@@ -8197,6 +9223,70 @@
    "quality_reasons": [
     "judged by eye 2026-10-09: lab coat, glasses, coherent face; assetview shoots from behind"
    ]
+  },
+  {
+   "file": "scroll.glb",
+   "dims_m": {
+    "x": 0.5658,
+    "y": 0.5219,
+    "z": 0.9968
+   },
+   "min_y": -0.0045,
+   "skinned": false,
+   "clips": [],
+   "bones": 0,
+   "biped": false,
+   "tallest_axis": "z",
+   "aspect": {
+    "w_h": 1.084,
+    "d_h": 1.91
+   },
+   "upright": true,
+   "height_ratio": 0.524,
+   "mesh": {
+    "tris": 48310,
+    "largest_share": 1.0,
+    "fragments": 1,
+    "degenerate": 0.0,
+    "textures": 3,
+    "textures_ok": true,
+    "nose": "+z",
+    "roof_peak_bin": 2
+   },
+   "quality": 1.0,
+   "verdict": "good"
+  },
+  {
+   "file": "seal.glb",
+   "dims_m": {
+    "x": 0.425,
+    "y": 0.3006,
+    "z": 0.8
+   },
+   "min_y": -0.0,
+   "skinned": false,
+   "clips": [],
+   "bones": 0,
+   "biped": false,
+   "tallest_axis": "z",
+   "aspect": {
+    "w_h": 1.414,
+    "d_h": 2.661
+   },
+   "upright": true,
+   "height_ratio": 0.376,
+   "mesh": {
+    "tris": 44938,
+    "largest_share": 1.0,
+    "fragments": 1,
+    "degenerate": 0.0,
+    "textures": 3,
+    "textures_ok": true,
+    "nose": "-z",
+    "roof_peak_bin": 8
+   },
+   "quality": 1.0,
+   "verdict": "good"
   },
   {
    "file": "security_drone.glb",
@@ -8595,6 +9685,104 @@
    "verdict": "good"
   },
   {
+   "file": "skateboard.glb",
+   "dims_m": {
+    "x": 0.9994,
+    "y": 0.3217,
+    "z": 0.4389
+   },
+   "min_y": 0.0,
+   "skinned": false,
+   "clips": [],
+   "bones": 0,
+   "biped": false,
+   "tallest_axis": "x",
+   "aspect": {
+    "w_h": 3.107,
+    "d_h": 1.364
+   },
+   "upright": false,
+   "height_ratio": 0.322,
+   "mesh": {
+    "tris": 42753,
+    "largest_share": 0.9922,
+    "fragments": 2,
+    "degenerate": 0.0,
+    "textures": 3,
+    "textures_ok": true,
+    "nose": "+x",
+    "roof_peak_bin": 3
+   },
+   "quality": 1.0,
+   "verdict": "good"
+  },
+  {
+   "file": "skateboarder.glb",
+   "dims_m": {
+    "x": 1.4153,
+    "y": 1.7499,
+    "z": 0.5022
+   },
+   "min_y": 0.0,
+   "skinned": false,
+   "clips": [],
+   "bones": 0,
+   "biped": true,
+   "tallest_axis": "y",
+   "aspect": {
+    "w_h": 0.809,
+    "d_h": 0.287
+   },
+   "upright": true,
+   "height_ratio": 1.0,
+   "mesh": {
+    "tris": 44701,
+    "largest_share": 1.0,
+    "fragments": 1,
+    "degenerate": 0.0,
+    "textures": 3,
+    "textures_ok": true
+   },
+   "quality": 1.0,
+   "verdict": "good"
+  },
+  {
+   "file": "skateboarder_anim.glb",
+   "dims_m": {
+    "x": 1.4154,
+    "y": 1.75,
+    "z": 0.5022
+   },
+   "min_y": -0.0,
+   "skinned": true,
+   "clips": [
+    "attack",
+    "idle",
+    "run",
+    "sneak",
+    "walk"
+   ],
+   "bones": 21,
+   "biped": true,
+   "tallest_axis": "y",
+   "aspect": {
+    "w_h": 0.809,
+    "d_h": 0.287
+   },
+   "upright": true,
+   "height_ratio": 1.0,
+   "mesh": {
+    "tris": 41394,
+    "largest_share": 1.0,
+    "fragments": 1,
+    "degenerate": 0.0,
+    "textures": 1,
+    "textures_ok": true
+   },
+   "quality": 1.0,
+   "verdict": "good"
+  },
+  {
    "file": "skeleton.glb",
    "dims_m": {
     "x": 0.8744,
@@ -8654,6 +9842,72 @@
     "largest_share": 0.7111,
     "fragments": 2,
     "degenerate": 0.0,
+    "textures": 1,
+    "textures_ok": true
+   },
+   "quality": 1.0,
+   "verdict": "good"
+  },
+  {
+   "file": "skier.glb",
+   "dims_m": {
+    "x": 1.2181,
+    "y": 1.75,
+    "z": 0.7638
+   },
+   "min_y": 0.0,
+   "skinned": false,
+   "clips": [],
+   "bones": 0,
+   "biped": true,
+   "tallest_axis": "y",
+   "aspect": {
+    "w_h": 0.696,
+    "d_h": 0.436
+   },
+   "upright": true,
+   "height_ratio": 1.0,
+   "mesh": {
+    "tris": 44874,
+    "largest_share": 1.0,
+    "fragments": 1,
+    "degenerate": 0.0,
+    "textures": 3,
+    "textures_ok": true
+   },
+   "quality": 1.0,
+   "verdict": "good"
+  },
+  {
+   "file": "skier_anim.glb",
+   "dims_m": {
+    "x": 1.2182,
+    "y": 1.75,
+    "z": 0.7638
+   },
+   "min_y": 0.0,
+   "skinned": true,
+   "clips": [
+    "attack",
+    "idle",
+    "run",
+    "sneak",
+    "walk"
+   ],
+   "bones": 21,
+   "biped": true,
+   "tallest_axis": "y",
+   "aspect": {
+    "w_h": 0.696,
+    "d_h": 0.436
+   },
+   "upright": true,
+   "height_ratio": 1.0,
+   "mesh": {
+    "tris": 58806,
+    "largest_share": 1.0,
+    "fragments": 1,
+    "degenerate": 0.0007,
     "textures": 1,
     "textures_ok": true
    },
@@ -9125,6 +10379,36 @@
    "verdict": "good"
   },
   {
+   "file": "spell_book.glb",
+   "dims_m": {
+    "x": 0.1745,
+    "y": 1.0,
+    "z": 0.7341
+   },
+   "min_y": -0.0,
+   "skinned": false,
+   "clips": [],
+   "bones": 0,
+   "biped": false,
+   "tallest_axis": "y",
+   "aspect": {
+    "w_h": 0.174,
+    "d_h": 0.734
+   },
+   "upright": true,
+   "height_ratio": 1.0,
+   "mesh": {
+    "tris": 43047,
+    "largest_share": 1.0,
+    "fragments": 1,
+    "degenerate": 0.0,
+    "textures": 3,
+    "textures_ok": true
+   },
+   "quality": 1.0,
+   "verdict": "good"
+  },
+  {
    "file": "stolen_painting.glb",
    "dims_m": {
     "x": 0.8956,
@@ -9157,9 +10441,9 @@
   {
    "file": "superhero.glb",
    "dims_m": {
-    "x": 0.8859,
-    "y": 1.0001,
-    "z": 0.211
+    "x": 1.3664,
+    "y": 1.75,
+    "z": 0.3285
    },
    "min_y": 0.0,
    "skinned": false,
@@ -9168,28 +10452,35 @@
    "biped": true,
    "tallest_axis": "y",
    "aspect": {
-    "w_h": 0.886,
-    "d_h": 0.211
+    "w_h": 0.781,
+    "d_h": 0.188
    },
    "upright": true,
    "height_ratio": 1.0,
    "mesh": {
-    "tris": 79904,
-    "largest_share": 0.971,
+    "tris": 79954,
+    "largest_share": 0.6339,
     "fragments": 3,
     "degenerate": 0.0,
     "textures": 3,
     "textures_ok": true
    },
-   "quality": 1.0,
-   "verdict": "good"
+   "render": {
+    "looks_like": 0.596,
+    "looks_like_best": "a clean 3D render of a superhero"
+   },
+   "quality_reasons": [
+    "doubtful"
+   ],
+   "quality": 0.5,
+   "verdict": "fair"
   },
   {
    "file": "superhero_anim.glb",
    "dims_m": {
-    "x": 0.8858,
-    "y": 1.0,
-    "z": 0.211
+    "x": 1.3663,
+    "y": 1.75,
+    "z": 0.3285
    },
    "min_y": -0.0,
    "skinned": true,
@@ -9200,19 +10491,19 @@
     "sneak",
     "walk"
    ],
-   "bones": 21,
+   "bones": 22,
    "biped": true,
    "tallest_axis": "y",
    "aspect": {
-    "w_h": 0.886,
-    "d_h": 0.211
+    "w_h": 0.781,
+    "d_h": 0.188
    },
    "upright": true,
    "height_ratio": 1.0,
    "mesh": {
-    "tris": 75093,
-    "largest_share": 1.0,
-    "fragments": 1,
+    "tris": 79954,
+    "largest_share": 0.6103,
+    "fragments": 3,
     "degenerate": 0.0,
     "textures": 1,
     "textures_ok": true
@@ -9248,6 +10539,72 @@
     "textures_ok": true,
     "nose": "+z",
     "roof_peak_bin": 4
+   },
+   "quality": 1.0,
+   "verdict": "good"
+  },
+  {
+   "file": "swimmer.glb",
+   "dims_m": {
+    "x": 1.5829,
+    "y": 1.75,
+    "z": 0.5129
+   },
+   "min_y": -0.0,
+   "skinned": false,
+   "clips": [],
+   "bones": 0,
+   "biped": true,
+   "tallest_axis": "y",
+   "aspect": {
+    "w_h": 0.905,
+    "d_h": 0.293
+   },
+   "upright": true,
+   "height_ratio": 1.0,
+   "mesh": {
+    "tris": 45000,
+    "largest_share": 0.9334,
+    "fragments": 3,
+    "degenerate": 0.0,
+    "textures": 2,
+    "textures_ok": true
+   },
+   "quality": 1.0,
+   "verdict": "good"
+  },
+  {
+   "file": "swimmer_anim.glb",
+   "dims_m": {
+    "x": 1.5829,
+    "y": 1.75,
+    "z": 0.5129
+   },
+   "min_y": -0.0,
+   "skinned": true,
+   "clips": [
+    "attack",
+    "idle",
+    "run",
+    "sneak",
+    "walk"
+   ],
+   "bones": 21,
+   "biped": true,
+   "tallest_axis": "y",
+   "aspect": {
+    "w_h": 0.905,
+    "d_h": 0.293
+   },
+   "upright": true,
+   "height_ratio": 1.0,
+   "mesh": {
+    "tris": 44983,
+    "largest_share": 0.8399,
+    "fragments": 2,
+    "degenerate": 0.0,
+    "textures": 1,
+    "textures_ok": true
    },
    "quality": 1.0,
    "verdict": "good"
@@ -9771,6 +11128,38 @@
    "verdict": "good"
   },
   {
+   "file": "trick.glb",
+   "dims_m": {
+    "x": 0.3966,
+    "y": 0.3135,
+    "z": 1.0
+   },
+   "min_y": 0.0001,
+   "skinned": false,
+   "clips": [],
+   "bones": 0,
+   "biped": false,
+   "tallest_axis": "z",
+   "aspect": {
+    "w_h": 1.265,
+    "d_h": 3.19
+   },
+   "upright": false,
+   "height_ratio": 0.314,
+   "mesh": {
+    "tris": 44523,
+    "largest_share": 1.0,
+    "fragments": 1,
+    "degenerate": 0.0,
+    "textures": 3,
+    "textures_ok": true,
+    "nose": "+z",
+    "roof_peak_bin": 2
+   },
+   "quality": 1.0,
+   "verdict": "good"
+  },
+  {
    "file": "truck.glb",
    "dims_m": {
     "x": 0.7141,
@@ -9851,6 +11240,36 @@
     "solidity": 1,
     "edges": 0.0074,
     "coverage": 0.634
+   },
+   "quality": 1.0,
+   "verdict": "good"
+  },
+  {
+   "file": "turnip.glb",
+   "dims_m": {
+    "x": 0.7203,
+    "y": 1.0001,
+    "z": 0.6664
+   },
+   "min_y": -0.2801,
+   "skinned": false,
+   "clips": [],
+   "bones": 0,
+   "biped": false,
+   "tallest_axis": "y",
+   "aspect": {
+    "w_h": 0.72,
+    "d_h": 0.666
+   },
+   "upright": true,
+   "height_ratio": 1.0,
+   "mesh": {
+    "tris": 44331,
+    "largest_share": 1.0,
+    "fragments": 1,
+    "degenerate": 0.0,
+    "textures": 3,
+    "textures_ok": true
    },
    "quality": 1.0,
    "verdict": "good"
@@ -10312,26 +11731,26 @@
   {
    "file": "wizard.glb",
    "dims_m": {
-    "x": 1.6227,
+    "x": 1.5921,
     "y": 1.75,
-    "z": 0.3006
+    "z": 0.4368
    },
-   "min_y": -0.0,
+   "min_y": 0.0,
    "skinned": false,
    "clips": [],
    "bones": 0,
    "biped": true,
    "tallest_axis": "y",
    "aspect": {
-    "w_h": 0.927,
-    "d_h": 0.172
+    "w_h": 0.91,
+    "d_h": 0.25
    },
    "upright": true,
    "height_ratio": 1.0,
    "mesh": {
-    "tris": 79892,
-    "largest_share": 0.9442,
-    "fragments": 3,
+    "tris": 78229,
+    "largest_share": 1.0,
+    "fragments": 1,
     "degenerate": 0.0,
     "textures": 3,
     "textures_ok": true
@@ -10346,9 +11765,9 @@
   {
    "file": "wizard_anim.glb",
    "dims_m": {
-    "x": 1.6228,
+    "x": 1.5922,
     "y": 1.75,
-    "z": 0.3006
+    "z": 0.4368
    },
    "min_y": -0.0,
    "skinned": true,
@@ -10363,16 +11782,16 @@
    "biped": true,
    "tallest_axis": "y",
    "aspect": {
-    "w_h": 0.927,
-    "d_h": 0.172
+    "w_h": 0.91,
+    "d_h": 0.25
    },
    "upright": true,
    "height_ratio": 1.0,
    "mesh": {
-    "tris": 57565,
-    "largest_share": 0.9879,
+    "tris": 81009,
+    "largest_share": 0.98,
     "fragments": 2,
-    "degenerate": 0.0,
+    "degenerate": 0.0004,
     "textures": 1,
     "textures_ok": true
    },

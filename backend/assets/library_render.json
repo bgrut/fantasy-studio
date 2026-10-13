@@ -799,15 +799,10 @@
   "looks_like_best": "a clean 3D render of a lake"
  },
  "bandit.glb": {
-  "cull_loss": 0.062,
-  "solidity": 0.752,
-  "edges": 0.0675,
-  "coverage": 0.087,
-  "dark_share": 0.104,
-  "damage_share": 0.025,
-  "shaded_png": "backend/tools/shotgate/renders/bandit_shaded.png",
   "kind": "bandit",
-  "looks_like": 0.92,
+  "shaded_png": "backend/tools/shotgate/renders/bandit_shaded.png",
+  "looks_like": 0.6,
+  "patchy": 0.398,
   "looks_like_best": "a clean 3D render of a bandit"
  },
  "sailboat.glb": {
@@ -1644,8 +1639,8 @@
  "keeper.glb": {
   "kind": "keeper",
   "shaded_png": "backend/tools/shotgate/renders/keeper_shaded.png",
-  "looks_like": 0.406,
-  "patchy": 0.529,
+  "looks_like": 0.656,
+  "patchy": 0.334,
   "looks_like_best": "a clean 3D render of a keeper"
  },
  "archer.glb": {
@@ -1665,8 +1660,8 @@
  "buddhist_monk.glb": {
   "kind": "buddhist monk",
   "shaded_png": "backend/tools/shotgate/renders/buddhist_monk_shaded.png",
-  "looks_like": 0.413,
-  "patchy": 0.57,
+  "looks_like": 0.927,
+  "patchy": 0.073,
   "looks_like_best": "a clean 3D render of a buddhist monk"
  },
  "customer.glb": {
@@ -1679,8 +1674,8 @@
  "princess.glb": {
   "kind": "princess",
   "shaded_png": "backend/tools/shotgate/renders/princess_shaded.png",
-  "looks_like": 0.946,
-  "patchy": 0.039,
+  "looks_like": 0.977,
+  "patchy": 0.019,
   "looks_like_best": "a clean 3D render of a princess"
  },
  "photographer.glb": {
@@ -1738,5 +1733,19 @@
   "looks_like": 0.921,
   "patchy": 0.079,
   "looks_like_best": "a clean 3D render of a firefighter"
+ },
+ "mountaineer.glb": {
+  "kind": "mountaineer",
+  "shaded_png": "backend/tools/shotgate/renders/mountaineer_shaded.png",
+  "looks_like": 0.934,
+  "patchy": 0.066,
+  "looks_like_best": "a clean 3D render of a mountaineer"
+ },
+ "superhero.glb": {
+  "kind": "superhero",
+  "shaded_png": "backend/tools/shotgate/renders/superhero_shaded.png",
+  "looks_like": 0.596,
+  "patchy": 0.393,
+  "looks_like_best": "a clean 3D render of a superhero"
  }
 }
