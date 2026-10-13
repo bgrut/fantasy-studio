@@ -575,7 +575,7 @@ def _build_reference_prompt(slots: Dict[str, Any], style: str) -> tuple[str, str
             # an ORIGINAL hero (commercially safe): no chest emblem, none of the
             # famous red-and-blue suits; the first try came out a known hero's
             # colours with another's bat on the chest
-            "superhero": "original superhero in a sleek teal and silver armoured flight suit with glowing amber seams, a short charcoal cape, silver boots and gauntlets, plain chest with no symbol, fully clothed",
+            "superhero": "original superhero in a teal and silver armoured flight suit of thick padded plates with glowing amber seams, a short charcoal cape, silver boots and gauntlets, plain chest with no symbol, an athletic broad-shouldered build, face showing, fully clothed",
             "barista":   "barista in a dark brown apron over a white shirt with rolled sleeves, jeans, fully clothed",
             "waiter":    "waiter in a black waistcoat over a white shirt, a long black apron, dark trousers, fully clothed",
             "waitress":  "waitress in a black waistcoat over a white shirt, a long black apron, dark trousers, fully clothed",
@@ -588,7 +588,7 @@ def _build_reference_prompt(slots: Dict[str, Any], style: str) -> tuple[str, str
             "cowgirl":   "cowgirl in a fringed suede jacket, a checked shirt, jeans, a cowboy hat, cowboy boots, fully clothed",
             "gunslinger": "gunslinger in a long dark duster coat, a black flat-brimmed hat, a gun belt, boots, fully clothed",
             "outlaw":    "outlaw in a long dusty brown duster coat, a red bandana over the lower face, a battered wide-brimmed hat, boots, fully clothed",
-            "bandit":    "frontier bandit in a long dusty brown duster coat, a red bandana over the lower face, a battered wide-brimmed hat, boots, fully clothed",
+            "bandit":    "frontier bandit in a heavy knee-length dusty brown canvas duster coat worn open over a dark waistcoat and shirt, loose canvas trousers, a red bandana loose at the neck, a battered wide-brimmed hat tipped back so the face shows, boots, fully clothed, a sturdy adult build with normal proportions, loose layered clothing that hangs away from the body",
             "child":     "a cheerful child in a bright striped t-shirt, colourful dungarees and sneakers, fully clothed",
             "kid":       "a cheerful child in a bright striped t-shirt, colourful dungarees and sneakers, fully clothed",
             # (2026-10-09) every one of these came out wrong without an entry: the
@@ -621,7 +621,7 @@ def _build_reference_prompt(slots: Dict[str, Any], style: str) -> tuple[str, str
             "chaser":    "storm chaser in a dark blue rain jacket, cargo trousers, hiking boots, a baseball cap with no logo, fully clothed",
             "shepherd":  "shepherd in a heavy cream wool jumper under a waxed green jacket, a tweed flat cap, sturdy brown walking trousers, leather boots, fully clothed",
             "shepherdess": "shepherdess in a heavy cream wool jumper under a waxed green jacket, a knitted hat, sturdy brown walking trousers, leather boots, fully clothed",
-            "buddhist monk": "man with a shaved head wearing a maroon long-sleeved tunic, loose maroon trousers, a saffron sash at the waist, a maroon shawl over both shoulders, simple sandals, fully clothed",
+            "buddhist monk": "man with a shaved head wearing a full ankle-length maroon robe with long wide sleeves, a heavy maroon shawl wrapped over both shoulders, a saffron sash at the waist, prayer beads, simple sandals, fully clothed, a sturdy adult build with normal proportions, loose layered clothing that hangs away from the body",
             "park ranger": "park ranger in a plain olive green uniform shirt and trousers, a wide-brimmed flat hat, hiking boots, no badges or logos, fully clothed",
             # (2026-10-07) an anime sentence's heroes; generic uniforms, no school crest or logo
             "schoolgirl": "a teenage schoolgirl in a navy blazer over a white shirt with a red ribbon tie, a pleated navy skirt, knee socks and black school shoes, holding nothing, fully clothed",
@@ -629,11 +629,13 @@ def _build_reference_prompt(slots: Dict[str, Any], style: str) -> tuple[str, str
             "student":   "a teenage student in a navy blazer over a white shirt, a pleated navy skirt, knee socks and black school shoes, fully clothed",
             "witch":     "a young witch in a long dark purple robe with a wide pointed hat, a belt with small pouches, boots, fully clothed",
             "mage":      "a young mage in a flowing blue and silver robe with a hood down, a sash belt, soft boots, fully clothed",
-            "mountaineer": "mountaineer in a bright orange insulated down jacket, black climbing trousers, stiff mountaineering boots with gaiters, a climbing helmet, glacier glasses pushed up, a coil of rope over one shoulder, fully clothed",
+            "mountaineer": "mountaineer in a puffy bright orange quilted down jacket, baggy black insulated overtrousers, stiff mountaineering boots with gaiters, a climbing helmet over a knitted hat, glacier glasses pushed up, a coil of rope over one shoulder, face showing, fully clothed, a sturdy adult build with normal proportions, loose layered clothing that hangs away from the body",
             "climber":   "mountaineer in a bright orange insulated down jacket, black climbing trousers, stiff mountaineering boots with gaiters, a climbing helmet, glacier glasses pushed up, a coil of rope over one shoulder, fully clothed",
             # generic humans need CLOTHES spelled out or SDXL renders a shirtless
             # anatomy/muscle-suit figure. Order: woman/person before "man" (which
             # is a substring of "woman") so the right one matches first.
+            # (2026-10-12) a princess with no entry came out in a short tunic with bare legs
+            "princess":  "a young princess in a long floor-length silk gown with a fitted bodice, long sleeves and a full skirt to the ground, a small gold tiara, long braided hair, fully clothed, normal proportions",
             "woman":     "a woman wearing a casual t-shirt and jeans, fully clothed, everyday outfit",
             "girl":      "a girl wearing casual everyday clothes, fully clothed",
             "boy":       "a boy wearing casual everyday clothes, fully clothed",

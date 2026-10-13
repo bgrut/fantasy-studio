@@ -23,7 +23,7 @@ const probe = () => p.evaluate(async () => {
   const faces = { head: document.fonts.check('12px "Bricolage Grotesque"'), ui: document.fonts.check('12px "Instrument Sans"'), mono: document.fonts.check('12px "DM Mono"') };
   const fam = el => el ? getComputedStyle(el).fontFamily : null;
   return { link, faces, mood: document.body.dataset.mood || null,
-           startH1: fam(document.querySelector('.fs-start')), title: fam(document.querySelector('#title b')),
+           startH1: fam(document.querySelector('#fsstart h1') || document.querySelector('.fs-start')), title: fam(document.querySelector('#title b')),
            hudH1: fam(document.querySelector('#hud h1')), winH2: fam(document.querySelector('#win h2')) };
 });
 
@@ -70,6 +70,7 @@ const okF = !fac || (fac.link && fac.faces.head && fac.faces.ui && fac.faces.mon
 // a skinned game sets its cards in its skin's face (2026-10-01): any face the build ships counts, a system fallback does not
 const SHIPPED = /Bricolage|DM Mono|Instrument|Cinzel|IM Fell|Share Tech|Bebas|Bangers|Fredoka|Creepster|Russo One|Lora|Josefin|Special Elite/;
 const okA = !adv || (adv.link && adv.faces.head && adv.faces.ui && adv.faces.mono && !!adv.mood && SHIPPED.test(adv.startH1 || '') && SHIPPED.test(adv.winH2 || '')
-  && adv.reveal && adv.reveal.name && /^\u201c.+\u201d$/.test(adv.reveal.sub) && adv.end && /win/i.test(adv.end.title) && adv.end.buttons.includes('play again') && SHIPPED.test(adv.end.font)
+  // (2026-10-12) the reveal is the story's chapter with its narrator under it; an older build quotes the prompt
+  && adv.reveal && adv.reveal.name && (/^\u201c.+\u201d$/.test(adv.reveal.sub) || String(adv.reveal.sub || '').length > 0) && adv.end && /win/i.test(adv.end.title) && adv.end.buttons.includes('play again') && SHIPPED.test(adv.end.font)
   && adv.guide && adv.guide.started && adv.guide.enter && adv.guide.held && adv.guide.skipped);
 process.exit(okF && okA && (fac || adv) && errs.length === 0 ? 0 : 1);

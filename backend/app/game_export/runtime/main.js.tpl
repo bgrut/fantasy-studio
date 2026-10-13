@@ -2205,16 +2205,12 @@ async function main() {
       }
     }
     ctx.globalAlpha = 1;
-  } else if (LVL && LVL.path && SNOW_GROUND) {  // a trail in snow is packed snow, not dirt
-    const c = LVL.corridor_m || 5.5;
-    drawTrail(LVL.path, c * 1.0, '#c7ced8', 0.35);
-    drawTrail(LVL.path, c * 0.45, '#b4bdc9', 0.45);
-  } else if (LVL && LVL.path) {                // worn trail along the mission route
-    const c = LVL.corridor_m || 5.5;
-    drawTrail(LVL.path, c * 1.15, '#' + dirt.getHexString(), 0.5);
-    drawTrail(LVL.path, c * 0.60, '#7a6140', 0.65);
-    drawTrail(LVL.path, c * 0.22, '#8a7048', 0.75);
   }
+  // NO TRAIL (2026-10-12): a worn dirt line ran from the spawn to the goal in
+  // most games, the route drawn on the ground like a board game ("the trail
+  // shows up in most games too, lets remove that"). The route is open ground
+  // now, grassed and dressed like the rest; the world's own landmarks and
+  // the goal's smoke or light are the way to it.
   const gtex = new THREE.CanvasTexture(cnv);
   // THE WORLD MAP IS NOT A PROP TEXTURE (2026-09-04). Marked so the cartoon
   // flattener leaves it alone: cartoonizeTexture blurs to 256x256 and
@@ -3145,8 +3141,9 @@ async function main() {
         {
           const TL2 = new THREE.TextureLoader(), stT = TL2.load('textures/stone.jpg');
           stT.wrapS = stT.wrapT = THREE.RepeatWrapping; stT.colorSpace = THREE.SRGBColorSpace;
-          const stM = new THREE.MeshStandardMaterial({ map: stT, color: 0xb8b2a6, roughness: 0.92 }); stM.userData.noAutoTex = true;
-          const rfM = new THREE.MeshStandardMaterial({ color: 0x4a5a78, roughness: 0.7 }); rfM.userData.noAutoTex = true;
+          // (2026-10-12) the stone carries its photographed relief, the cones are slate
+          const stM = new THREE.MeshStandardMaterial({ map: stT, normalMap: HDN('stone', 1, 1), normalScale: new THREE.Vector2(1.2, 1.2), color: 0xb8b2a6, roughness: 0.92 }); stM.userData.noAutoTex = true;
+          const rfM = new THREE.MeshStandardMaterial({ map: HDT('roof', 6, 2), normalMap: HDN('roof', 6, 2), color: 0x7a8aa8, roughness: 0.62 }); rfM.userData.noAutoTex = true;
           const slitM = new THREE.MeshStandardMaterial({ color: 0x14100c, roughness: 1 }); slitM.userData.noAutoTex = true;
           const stone = [], roofs = [], slits = [], cols = [];
           const mUV = (g, k) => { const ps = g.attributes.position, nr = g.attributes.normal, uv = g.attributes.uv;
@@ -3159,13 +3156,26 @@ async function main() {
           for (const sx of [-1, 1]) blk(T2, WH2, D2, sx * W2 / 2, WH2 / 2, z0 - D2 / 2, true);
           blk(W2, WH2, T2, 0, WH2 / 2, zb, true);
           // battlements along every wall top
-          const merl = (x0, z0_, x1, z1_) => { const L = Math.hypot(x1 - x0, z1_ - z0_), n = Math.floor(L / 1.7);
-            for (let i = 0; i <= n; i++) { const t = i / n, x = x0 + (x1 - x0) * t, z = z0_ + (z1_ - z0_) * t; blk(0.9, 1.1, 0.9, x, WH2 + 0.55, z, false); } };
+          // the wall-walk projects on corbels (machicolation), and the merlons
+          // stand on it, each a little different in its cut
+          const rM = mulberry32((SPEC.seed || 1) + 4242);
+          const merl = (x0, z0_, x1, z1_) => { const L = Math.hypot(x1 - x0, z1_ - z0_), n = Math.floor(L / 1.7), ux = (x1 - x0) / L, uz = (z1_ - z0_) / L;
+            const nx = -uz, nz = ux, cx = (x0 + x1) / 2, cz = (z0_ + z1_) / 2;
+            // the projecting course along both faces, square to the wall's run
+            const along = Math.abs(ux) > 0.5;
+            for (const sd of [-1, 1]) { blk(along ? L : 0.5, 0.42, along ? 0.5 : L, cx + nx * sd * (T2 / 2 + 0.12), WH2 - 0.2, cz + nz * sd * (T2 / 2 + 0.12), false); }
+            for (let i = 0; i <= Math.floor(L / 0.85); i++) { const t = i / Math.floor(L / 0.85), x = x0 + (x1 - x0) * t, z = z0_ + (z1_ - z0_) * t;
+              for (const sd of [-1, 1]) { const g = new THREE.BoxGeometry(along ? 0.32 : 0.42, 0.62, along ? 0.42 : 0.32); g.translate(x + nx * sd * (T2 / 2 + 0.08), WH2 - 0.72, z + nz * sd * (T2 / 2 + 0.08)); stone.push(mUV(g.toNonIndexed(), 0.28)); } }
+            for (let i = 0; i <= n; i++) { const t = i / n, x = x0 + (x1 - x0) * t, z = z0_ + (z1_ - z0_) * t, hh = 1.05 + rM() * 0.14, ww = 0.86 + rM() * 0.1;
+              blk(along ? ww : 0.9, hh, along ? 0.9 : ww, x, WH2 + hh / 2, z, false); } };
           merl(-W2 / 2, z0, -3.6, z0); merl(3.6, z0, W2 / 2, z0); merl(-W2 / 2, z0, -W2 / 2, zb); merl(W2 / 2, z0, W2 / 2, zb); merl(-W2 / 2, zb, W2 / 2, zb);
           // round corner towers with conical roofs
           for (const [tx, tz] of [[-W2 / 2, z0], [W2 / 2, z0], [-W2 / 2, zb], [W2 / 2, zb]]) {
-            const tg = new THREE.CylinderGeometry(3.0, 3.3, 14, 18); tg.translate(tx, 7, tz); stone.push(mUV(tg.toNonIndexed(), 0.28));
-            const cg = new THREE.ConeGeometry(3.6, 5.5, 18); cg.translate(tx, 14 + 2.75, tz); roofs.push(cg.toNonIndexed());
+            const tg = new THREE.CylinderGeometry(3.0, 3.3, 14, 32); tg.translate(tx, 7, tz); stone.push(mUV(tg.toNonIndexed(), 0.28));
+            // a corbelled ring under the roof, and a plinth batter at the foot
+            const rg = new THREE.CylinderGeometry(3.45, 3.0, 0.9, 32); rg.translate(tx, 13.7, tz); stone.push(mUV(rg.toNonIndexed(), 0.28));
+            const pg = new THREE.CylinderGeometry(3.3, 3.8, 1.6, 32); pg.translate(tx, 0.4, tz); stone.push(mUV(pg.toNonIndexed(), 0.28));
+            const cg = new THREE.ConeGeometry(3.7, 5.5, 32); cg.translate(tx, 14.15 + 2.75, tz); roofs.push(cg.toNonIndexed());
             cols.push([5.6, 14, 5.6, tx, 7, tz]);
             for (const a of [0.6, 2.2, 3.8, 5.4]) { const sg = new THREE.BoxGeometry(0.25, 1.3, 0.1); sg.translate(0, 0, 3.32); sg.rotateY(a); sg.translate(tx, 10, tz); slits.push(sg.toNonIndexed()); }
           }
@@ -3288,24 +3298,151 @@ async function main() {
       const _thing = _heliGoal || _venueGoal || GARDEN || WEST || GRAVE || VILLAGE || ROWS || MONK
         || (typeof ENTERABLES !== 'undefined' && ENTERABLES.some(E => E && E.facade === 'lighthouse'))   // a lighthouse is its own beacon
         || (_reachOb && /\b(hive|beehive|skep|apiary|helipad)\b/.test(String(_reachOb.label || '').toLowerCase()));
-      if (!_thing) {
-        const pil = new THREE.Mesh(
-          new THREE.CylinderGeometry(0.22, 0.55, 26, 16, 1, true),
-          new THREE.MeshBasicMaterial({ color: _acc || 0xffe0a0, transparent: true, opacity: 0.12, blending: THREE.AdditiveBlending,
-                                        side: THREE.DoubleSide, depthWrite: false }));
-        pil.position.set(goalPos.x, goalPos.y + 13, goalPos.z);
-        scene.add(pil);
-        window.__goalBeam = pil;
-      }
-      const ring = new THREE.Mesh(
-        new THREE.TorusGeometry(1.5, 0.09, 10, 40),
-        new THREE.MeshStandardMaterial({ color: _acc || 0xffd08a,
-          emissive: _acc || 0xffb050, emissiveIntensity: 1.6 }));
-      ring.rotation.x = Math.PI / 2;
-      ring.position.set(goalPos.x, goalPos.y + 0.25, goalPos.z);
-      scene.add(ring);
-      goalMesh = ring;
+      // THE GOAL IS A PLACE (2026-10-12): the open-ground goal was a shaft of
+      // accent light over a glowing ring, the same in every game ("that
+      // purple/blue/gold beam is back... replace it with something more
+      // detailed and specific"). The goal is now a thing that would be there:
+      // a lamp post for a lamp, a cairn and a flag for a summit, a fire for a
+      // camp, an altar for a shrine, a well, a stone arch for a gate, a nav
+      // mast on another world. A fire's smoke or a lamp's light is what finds
+      // it from a distance; nothing glows on the ground.
+      if (!_thing) buildGoalMark(goalPos, String((_reachOb && _reachOb.label) || ''));
+      goalMesh = new THREE.Object3D(); goalMesh.position.copy(goalPos); goalMesh.position.y += 1.2; scene.add(goalMesh);
     }
+  }
+  function buildGoalMark(gp, label) {
+    const G = new THREE.Group(); G.position.copy(gp); scene.add(G);
+    const r = mulberry32((SPEC.seed || 1) + 9191), lab = String(label || '').toLowerCase();
+    const W9 = [SPEC.prompt, SPEC.world && SPEC.world.name].filter(Boolean).join(' ').toLowerCase();
+    const offworld = /\b(moon|lunar|mars|martian|space|asteroid|alien planet|exoplanet|orbit)\b/.test(W9) || SPEC.world.sky === 'space';
+    const dry = /\b(desert|dunes?|sahara|egypt\w*|canyon|mesa|savann?ah?)\b/.test(W9), cold = /\b(snow\w*|ice|icy|frozen|arctic|glacier|alps|alpine|tundra|winter|polar)\b/.test(W9);
+    let kind = /\b(lamps?|lanterns?|lights?|beacons?|signal|torch(es)?)\b/.test(lab) ? 'lantern'
+      : /\b(summit|peak|top|ridge|mountain|col|flag|lookout|overlook|cliff)\b/.test(lab) ? 'cairn'
+      : /\b(camp|campfire|fire|hearth|bonfire|base)\b/.test(lab) ? 'fire'
+      : /\b(shrine|altar|idol|statue|monolith|relic|tomb|grave|offering)\b/.test(lab) ? 'altar'
+      : /\b(well|spring|fountain|pool|oasis)\b/.test(lab) ? 'well'
+      : /\b(gate|portal|exit|escape|door|arch|pass|border)\b/.test(lab) ? 'arch'
+      : null;
+    if (offworld) kind = 'mast';
+    // a person to reach is the goal themself: a campfire on a lifeguard's
+    // beach for "reach swimmer 1" was a thing that should not be there
+    if (!kind && /\b(swimmers?|man|woman|men|women|girl|boy|child|children|kids?|princess|prince|king|queen|survivors?|friends?|hikers?|climbers?|people|family|mother|father|brother|sister|captain|crew|villagers?|dog|cat|horse|guide|keeper|master|elder|monk|teacher|stranger|customer|rider|driver|player|team|rival|opponent)\b|\d/.test(lab)) { window.__goalMark = 'none'; return G; }
+    if (!kind) kind = cold ? (r() < 0.5 ? 'cairn' : 'fire') : dry ? (r() < 0.5 ? 'arch' : 'well') : ['lantern', 'fire', 'cairn', 'altar'][Math.floor(r() * 4)];
+    window.__goalMark = kind;
+    const MS = (o) => { const m = new THREE.MeshStandardMaterial(o); m.userData.noAutoTex = true; return m; };
+    const stoneM = MS({ map: HDT(dry ? 'cliff' : 'stone', 1, 1), normalMap: HDN(dry ? 'cliff' : 'stone', 1, 1), normalScale: new THREE.Vector2(1.4, 1.4), color: dry ? 0xd8c4a4 : 0xc8c6c2, roughness: 0.92, flatShading: true });
+    const woodM = MS({ map: HDT('bark', 1, 2), normalMap: HDN('bark', 1, 2), color: 0x8a6a4a, roughness: 0.85 });
+    const ironM = MS({ color: 0x23211f, metalness: 0.7, roughness: 0.45 });
+    const add = (g, m, x, y, z) => { const o = new THREE.Mesh(g, m); o.position.set(x, y, z); o.castShadow = o.receiveShadow = true; G.add(o); return o; };
+    const rock = (rad, seed) => { const g = new THREE.IcosahedronGeometry(rad, 1).toNonIndexed(), ps = g.attributes.position, uv = [];
+      for (let i = 0; i < ps.count; i++) { let x = ps.getX(i), y = ps.getY(i), z = ps.getZ(i); const n = 1 + Math.sin(x / rad * 2.1 + seed) * Math.cos(z / rad * 1.7 - seed) * 0.2 + Math.sin(y / rad * 2.6 + seed) * 0.12;
+        x *= n * 1.15; y *= n * 0.7; z *= n; ps.setXYZ(i, x, y, z); uv.push(x * 0.8 + z * 0.3, y * 0.8); }
+      g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.computeVertexNormals(); return g; };
+    const ticks = [];
+    // a fire: flames as soft additive cards, its light flickering, and smoke that climbs and leans with the wind
+    const flameT = (() => { const c = document.createElement('canvas'); c.width = 64; c.height = 128; const x = c.getContext('2d');
+      const g = x.createRadialGradient(32, 92, 2, 32, 80, 52); g.addColorStop(0, 'rgba(255,240,190,1)'); g.addColorStop(0.3, 'rgba(255,170,60,0.9)'); g.addColorStop(0.7, 'rgba(220,70,20,0.35)'); g.addColorStop(1, 'rgba(120,20,0,0)');
+      x.fillStyle = g; x.beginPath(); x.moveTo(32, 4); x.bezierCurveTo(60, 60, 58, 120, 32, 124); x.bezierCurveTo(6, 120, 4, 60, 32, 4); x.fill(); return new THREE.CanvasTexture(c); })();
+    const smokeT = (() => { const c = document.createElement('canvas'); c.width = c.height = 64; const x = c.getContext('2d');
+      const g = x.createRadialGradient(32, 32, 2, 32, 32, 30); g.addColorStop(0, 'rgba(200,200,200,0.5)'); g.addColorStop(1, 'rgba(200,200,200,0)'); x.fillStyle = g; x.fillRect(0, 0, 64, 64); return new THREE.CanvasTexture(c); })();
+    const fireAt = (x, y, z, sc, smoke) => {
+      const fl = [];
+      for (let i = 0; i < 6; i++) { const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: flameT, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false, color: 0xffd0a0 }));
+        sp.scale.set(0.5 * sc, 0.9 * sc, 1); sp.position.set(x + (r() - 0.5) * 0.2 * sc, y + 0.4 * sc, z + (r() - 0.5) * 0.2 * sc); G.add(sp); fl.push({ sp, ph: r() * 6.28 }); }
+      const L = new THREE.PointLight(0xff8a3a, 6 * sc, 14 * sc, 1.8); L.position.set(x, y + 0.7 * sc, z); G.add(L);
+      const puffs = [];
+      if (smoke) for (let i = 0; i < 26; i++) { const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: smokeT, transparent: true, depthWrite: false, color: 0x8a8580, opacity: 0 }));
+        G.add(sp); puffs.push({ sp, t: i / 26 }); }
+      ticks.push((t, dt) => {
+        for (const f of fl) { const k = 0.85 + 0.3 * Math.sin(t * 11 + f.ph) * Math.sin(t * 7.3 + f.ph * 2); f.sp.scale.set(0.7 * sc * (0.9 + 0.2 * k), 1.35 * sc * k, 1); }
+        L.intensity = 6 * sc * (0.8 + 0.25 * Math.sin(t * 13) * Math.sin(t * 5.1));
+        for (const q of puffs) { q.t += dt / 9; if (q.t > 1) q.t -= 1; const h = q.t * 16;
+          q.sp.position.set(x + h * 0.25 + Math.sin(q.t * 9 + t * 0.4) * 0.3, y + 1.0 + h, z + h * 0.1); q.sp.scale.setScalar(0.8 + q.t * 5);
+          q.sp.material.opacity = Math.min(1, q.t * 6) * (1 - q.t) * 0.55; }
+      });
+    };
+    if (kind === 'fire') {
+      for (let i = 0; i < 11; i++) { const a = i / 11 * 6.28; add(rock(0.22 + r() * 0.06, i * 3.1), stoneM, Math.cos(a) * 0.85, 0.08, Math.sin(a) * 0.85); }
+      for (let i = 0; i < 5; i++) { const lg = add(new THREE.CylinderGeometry(0.07, 0.09, 1.1, 8), woodM, 0, 0.32, 0); lg.rotation.set(1.05, i / 5 * 6.28, 0); lg.position.set(Math.cos(i / 5 * 6.28) * 0.18, 0.3, Math.sin(i / 5 * 6.28) * 0.18); }
+      add(new THREE.CircleGeometry(0.7, 20).rotateX(-Math.PI / 2), MS({ color: 0x1a1512, roughness: 1 }), 0, 0.02, 0);
+      // a log to sit on, and a pot on a tripod
+      const seat = add(new THREE.CylinderGeometry(0.15, 0.17, 1.3, 12), woodM, 1.9, 0.15, 0.4); seat.rotation.z = Math.PI / 2; seat.rotation.y = r();
+      for (let i = 0; i < 3; i++) { const lg = add(new THREE.CylinderGeometry(0.025, 0.03, 1.7, 6), woodM, Math.cos(i * 2.09) * 0.45, 0.78, Math.sin(i * 2.09) * 0.45); lg.rotation.set(Math.sin(i * 2.09) * 0.38, 0, -Math.cos(i * 2.09) * 0.38); }
+      add(new THREE.SphereGeometry(0.17, 16, 12, 0, 6.29, 0.45, 2.3), ironM, 0, 0.62, 0);
+      add(new THREE.CylinderGeometry(0.006, 0.006, 0.9, 4), ironM, 0, 1.1, 0);
+      fireAt(0, 0.05, 0, 1.0, true);
+    } else if (kind === 'lantern') {
+      add(new THREE.CylinderGeometry(0.07, 0.09, 3.1, 10), ironM, 0, 1.55, 0);
+      add(new THREE.CylinderGeometry(0.2, 0.26, 0.25, 12), ironM, 0, 0.12, 0);
+      const arm = add(new THREE.BoxGeometry(0.75, 0.05, 0.05), ironM, 0.33, 2.95, 0);
+      add(new THREE.TorusGeometry(0.08, 0.015, 6, 14, Math.PI), ironM, 0.66, 2.88, 0);
+      const lan = new THREE.Group(); lan.position.set(0.68, 2.58, 0); G.add(lan);
+      const glassM = MS({ color: 0xffe2a8, emissive: 0xffb860, emissiveIntensity: 2.2, roughness: 0.2, transparent: true, opacity: 0.85 });
+      const gl = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.11, 0.34, 6), glassM); lan.add(gl);
+      for (let i = 0; i < 6; i++) { const b = new THREE.Mesh(new THREE.BoxGeometry(0.018, 0.36, 0.018), ironM); const a = i / 6 * 6.28; b.position.set(Math.cos(a) * 0.13, 0, Math.sin(a) * 0.13); lan.add(b); }
+      const cap = new THREE.Mesh(new THREE.ConeGeometry(0.17, 0.16, 6), ironM); cap.position.y = 0.25; lan.add(cap);
+      const L = new THREE.PointLight(0xffc070, 7, 18, 1.6); L.position.set(0.68, 2.55, 0); G.add(L);
+      for (let i = 0; i < 5; i++) { const a = r() * 6.28; add(rock(0.25 + r() * 0.15, i * 7.7), stoneM, Math.cos(a) * 0.6, 0.06, Math.sin(a) * 0.6); }
+      ticks.push((t) => { lan.rotation.z = Math.sin(t * 1.3) * 0.06; L.intensity = 7 * (0.92 + 0.08 * Math.sin(t * 17) * Math.sin(t * 6)); });
+    } else if (kind === 'cairn') {
+      let y = 0;
+      for (const [n, ring, rad, h] of [[7, 0.62, 0.34, 0.2], [5, 0.4, 0.3, 0.55], [3, 0.2, 0.25, 0.85], [1, 0, 0.22, 1.12]]) {
+        for (let i = 0; i < n; i++) { const a = i / n * 6.28 + r(), rr = rad * (0.8 + r() * 0.4);
+          const m = add(rock(rr, n * 10 + i * 3.7), stoneM, Math.cos(a) * ring, h, Math.sin(a) * ring); m.rotation.set((r() - 0.5) * 0.5, r() * 6.28, (r() - 0.5) * 0.5); }
+        y = h + rad * 0.5; }
+      for (let i = 0; i < 9; i++) { const a = r() * 6.28, d = 0.9 + r() * 0.8; add(rock(0.08 + r() * 0.1, 50 + i), stoneM, Math.cos(a) * d, 0.03, Math.sin(a) * d); }
+      add(new THREE.CylinderGeometry(0.03, 0.035, 3.2, 8), woodM, 0, y + 1.0, 0);
+      const cv = document.createElement('canvas'); cv.width = 128; cv.height = 80; const cx = cv.getContext('2d');
+      cx.fillStyle = (window.__ART && window.__ART.acc) || '#b8322a'; cx.fillRect(0, 0, 128, 80);
+      for (let i = 0; i < 1400; i++) { const v = r() < 0.5 ? 0 : 255; cx.fillStyle = `rgba(${v},${v},${v},${0.03 + r() * 0.05})`; cx.fillRect(r() * 128, r() * 80, 2, 1); }
+      cx.globalCompositeOperation = 'destination-out'; for (let i = 0; i < 9; i++) { cx.beginPath(); cx.moveTo(128, i * 9); cx.lineTo(112 + r() * 14, i * 9 + 4); cx.lineTo(128, i * 9 + 9); cx.fill(); }
+      const ft = new THREE.CanvasTexture(cv); ft.colorSpace = THREE.SRGBColorSpace;
+      const fg = new THREE.PlaneGeometry(1.1, 0.68, 12, 4); fg.translate(0.55, 0, 0);
+      const flag = add(fg, MS({ map: ft, side: THREE.DoubleSide, roughness: 0.9, alphaTest: 0.5 }), 0.03, y + 2.3, 0); flag.castShadow = true;
+      const base = fg.attributes.position.array.slice();
+      ticks.push((t) => { const pa = fg.attributes.position; for (let i = 0; i < pa.count; i++) { const x = base[i * 3]; pa.setZ(i, Math.sin(x * 5 - t * 6) * 0.09 * x + Math.sin(x * 9 - t * 9.5) * 0.025 * x); } pa.needsUpdate = true; fg.computeVertexNormals(); });
+    } else if (kind === 'altar') {
+      add(new THREE.BoxGeometry(1.6, 0.16, 0.8), stoneM, 0, 0.92, 0);
+      for (const sx of [-0.55, 0.55]) add(rock(0.38, sx * 9), stoneM, sx, 0.45, 0);
+      for (let i = 0; i < 6; i++) { const x = -0.6 + i * 0.24 + (r() - 0.5) * 0.05, z = (r() - 0.5) * 0.4, h = 0.08 + r() * 0.18;
+        add(new THREE.CylinderGeometry(0.03, 0.032, h, 10), MS({ color: 0xeee4cc, roughness: 0.6 }), x, 1.0 + h / 2, z);
+        const f = new THREE.Sprite(new THREE.SpriteMaterial({ map: flameT, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false })); f.scale.set(0.05, 0.1, 1); f.position.set(x, 1.0 + h + 0.05, z); G.add(f); }
+      const L = new THREE.PointLight(0xffb060, 2.5, 8, 2); L.position.set(0, 1.4, 0); G.add(L);
+      for (let i = 0; i < 4; i++) add(rock(0.12 + r() * 0.06, i), stoneM, (r() - 0.5) * 2.4, 0.04, 0.7 + r() * 0.5);
+      ticks.push((t) => { L.intensity = 2.5 * (0.85 + 0.15 * Math.sin(t * 9) * Math.sin(t * 4.3)); });
+    } else if (kind === 'well') {
+      const prof = []; for (let i = 0; i <= 6; i++) prof.push(new THREE.Vector2(0.95 + (i === 0 || i === 6 ? 0.06 : 0), i * 0.14));
+      const wg = new THREE.LatheGeometry(prof, 28); const wl = add(wg, stoneM, 0, 0, 0); wl.material = stoneM.clone(); wl.material.side = THREE.DoubleSide;
+      add(new THREE.CircleGeometry(0.85, 24).rotateX(-Math.PI / 2), MS({ color: 0x0a0d10, roughness: 0.05, metalness: 0.2 }), 0, 0.35, 0);
+      for (const sx of [-1.05, 1.05]) add(new THREE.BoxGeometry(0.12, 2.0, 0.12), woodM, sx, 1.0, 0);
+      const ax = add(new THREE.CylinderGeometry(0.06, 0.06, 2.3, 10), woodM, 0, 1.75, 0); ax.rotation.z = Math.PI / 2;
+      const roof = add(new THREE.ConeGeometry(1.6, 0.8, 4), MS({ map: HDT('roof', 2, 1), color: 0x7a5a44, roughness: 0.8 }), 0, 2.4, 0); roof.rotation.y = Math.PI / 4;
+      add(new THREE.CylinderGeometry(0.16, 0.13, 0.25, 12, 1, true), woodM, 0.3, 1.1, 0);
+      add(new THREE.CylinderGeometry(0.008, 0.008, 0.6, 4), ironM, 0.3, 1.45, 0);
+    } else if (kind === 'arch') {
+      for (const sx of [-1.4, 1.4]) { const g = new THREE.BoxGeometry(0.7, 3.4, 0.6, 3, 8, 3), ps = g.attributes.position;
+        for (let i = 0; i < ps.count; i++) { const y = ps.getY(i), n = 1 + Math.sin(y * 3 + sx * 5) * 0.06 + Math.sin(ps.getX(i) * 9 + y * 2) * 0.03; ps.setX(i, ps.getX(i) * n); ps.setZ(i, ps.getZ(i) * n); }
+        g.computeVertexNormals(); const m = add(g, stoneM, sx, 1.65, 0); m.rotation.z = sx * -0.02; }
+      const lg = new THREE.BoxGeometry(3.8, 0.6, 0.7, 10, 2, 2), lp = lg.attributes.position;
+      for (let i = 0; i < lp.count; i++) { const x = lp.getX(i); lp.setY(i, lp.getY(i) + Math.sin(x * 2.3) * 0.04); }
+      lg.computeVertexNormals(); add(lg, stoneM, 0, 3.6, 0);
+      for (let i = 0; i < 6; i++) add(rock(0.15 + r() * 0.15, i * 2.3), stoneM, (r() - 0.5) * 4, 0.05, (r() - 0.5) * 2);
+    } else if (kind === 'mast') {
+      for (let i = 0; i < 3; i++) { const a = i * 2.09, lg = add(new THREE.CylinderGeometry(0.035, 0.045, 3.3, 8), MS({ color: 0xc8ccd2, metalness: 0.8, roughness: 0.35 }), Math.cos(a) * 0.55, 1.55, Math.sin(a) * 0.55);
+        lg.rotation.set(Math.sin(a) * -0.17, 0, Math.cos(a) * 0.17); }
+      add(new THREE.CylinderGeometry(0.03, 0.03, 1.6, 8), MS({ color: 0xc8ccd2, metalness: 0.8, roughness: 0.3 }), 0, 3.8, 0);
+      const dish = add(new THREE.SphereGeometry(0.45, 20, 10, 0, 6.29, 0, 1.0), MS({ color: 0xe8eaee, metalness: 0.4, roughness: 0.4, side: THREE.DoubleSide }), 0, 3.3, 0); dish.rotation.x = -1.0;
+      add(new THREE.BoxGeometry(0.5, 0.35, 0.35), MS({ color: 0xb0b4ba, metalness: 0.6, roughness: 0.4 }), 0, 0.55, 0);
+      const bulbM = MS({ color: 0xff3a2a, emissive: 0xff2010, emissiveIntensity: 0 }); const bulb = add(new THREE.SphereGeometry(0.06, 10, 8), bulbM, 0, 4.65, 0);
+      const L = new THREE.PointLight(0xff3020, 0, 20, 1.8); L.position.set(0, 4.65, 0); G.add(L);
+      ticks.push((t) => { const on = (t % 1.6) < 0.18 ? 1 : 0; bulbM.emissiveIntensity = 6 * on; L.intensity = 8 * on; });
+    }
+    G.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+    world.createCollider(RAPIER.ColliderDesc.cylinder(1.2, kind === 'arch' ? 0.35 : 0.5).setTranslation(gp.x + (kind === 'arch' ? 1.4 : 0), gp.y + 1.2, gp.z));
+    if (kind === 'arch') world.createCollider(RAPIER.ColliderDesc.cylinder(1.7, 0.35).setTranslation(gp.x - 1.4, gp.y + 1.7, gp.z));
+    let tPrev = performance.now() / 1000;
+    window.__goalMarkTick = () => { const t = performance.now() / 1000, dt = Math.min(0.05, t - tPrev); tPrev = t; for (const f of ticks) f(t, dt); };
+    return G;
   }
   function makeGoalHalo() {
     const c = document.createElement('canvas');
@@ -9569,8 +9706,7 @@ async function main() {
           let h = 0.45 + 0.55 * (0.5 + 0.5 * n2);         // taller in the hollows of the noise
           let dry = Math.max(0, Math.min(1, 0.25 - n1 * 0.7)) * 0.7;
           const pd = pathDist(x, z);
-          if (pd < CORR * 0.45) { d *= 0.06; h *= 0.4; dry = Math.max(dry, 0.6); }
-          else if (pd < CORR * 0.95) { d *= 0.5; h *= 0.7; }
+          if (pd < CORR * 0.45) { h *= 0.8; }     // (no trodden trail, 2026-10-12: a little shorter where people pass)
           if (inBldg(x, z, 0.6)) d = 0;
           if (GARDEN && GARDEN.inPlot(x, z, 0.2)) { if (GARDEN.bare(x, z)) d = 0; else { h *= 0.35; dry *= 0.3; } }   // a mown garden lawn
           if (PITCH && PITCH.inside(x, z, 0)) d = 0;                                                  // the pitch is its own mown surface
@@ -9663,7 +9799,7 @@ async function main() {
           if (FALLS && Math.hypot(x - FALLS.at[0], z - FALLS.at[1]) < 12) return true;
           const rg = window.__regionAt && window.__regionAt(x, z);
           if (rg && rg.kind === 'water' && rg.w > 0.2) return true;
-          if (kind !== 'pebble' && pathDist(x, z) < CORR * 0.35) return true;   // the walked middle of a trail is swept by feet
+          if (kind !== 'pebble' && kind !== 'flower' && pathDist(x, z) < CORR * 0.2) return true;   // the walked line (no painted trail since 2026-10-12)
           return false;
         };
         const _ckTex = new THREE.TextureLoader().load('textures/cliff.jpg');
@@ -9803,7 +9939,7 @@ async function main() {
           clumpN--; const ca = rngG() * Math.PI * 2, cr = 0.06 + 0.3 * Math.sqrt(rngG());
           x = ccx + Math.cos(ca) * cr; z = ccz + Math.sin(ca) * cr;
         }
-        if (pathDist(x, z) < CORR * 0.5 && rngG() < 0.7) continue;   // trodden path
+        if (pathDist(x, z) < CORR * 0.5 && rngG() < 0.2) continue;   // a little thinner where people pass
         if (inBldg(x, z, 0.5)) continue;                             // not through floors
         if (GARDEN && GARDEN.inPlot(x, z, 0.3)) continue;              // a kept garden: no tufts in the plot
         if (WEST && WEST.inTown(x, z, 0)) continue;
@@ -10215,6 +10351,7 @@ async function main() {
       let skin = 'glass';
       if (st === 'horror' || has(/\b(haunt|ghost|zombie|graveyard|cursed|undead|horror|crypt|demon|vampire)/)) skin = 'horror';
       else if (st === 'cartoon' || st === 'anime' || has(/\b(cartoon|toys?\b|kids|cute|candy|platformer|bouncy|jelly|bunny)/)) skin = 'comic';
+      else if (has(/\b(knight|castle|dragon|wizard|kingdom|medieval|princess|sword|samurai|viking|pharaoh)/) && !has(/\b(detective|murder|heist|noir)/)) skin = 'parchment';   // (2026-10-12: a knight rescuing a princess opened on a case file)
       else if (has(/\b(detective|mystery|heist|noir|murder|crime|stolen|museum|spy\b|spies|thief|burglar)/)) skin = 'noir';
       else if (has(/\b(races?|racing|racer|drift|drifting|rally|kart|karting|soccer|football|arena|stadium|grand prix|speedway)\b/)) skin = 'racing';
       else if (st === 'pixel' || st === 'synthwave' || has(/\b(space|station|robot|cyber|colony|mars|orbit|alien|lab\b|laborator|reactor|hacker|starship|asteroid)/)) skin = 'terminal';
@@ -10226,33 +10363,208 @@ async function main() {
       document.body.dataset.skin = skin;
       window.__skin = skin;
     }
-    const ov = document.createElement('div');
-    ov.id = 'fsstart';
-    ov.style.cssText = 'position:fixed;inset:0;display:flex;align-items:center;'
-      + 'justify-content:center;background:rgba(8,7,14,.62);z-index:40;backdrop-filter:blur(3px);';
-    // narrative layer: the LLM-written quest intro turns "collect 6 fireflies"
-    // into a game with a WORLD — content, not code, so it can't break a build
-    // a card ends on a whole sentence: builds before 2026-10-02 cut the
-    // intro at 280 characters, mid-word ("Lush jungle fringes the b")
+    // ── ART DIRECTION (2026-10-12) ───────────────────────────────────────
+    // The skins were nine fixed frames, and a sentence that matched none of
+    // them (a lighthouse, a bakery, a heist on the moon) fell to the same dark
+    // glass and gold as every other game: "all our games look and feel the
+    // same". Each game draws its own direction from its setting and its seed:
+    // a pair of faces and how the title is set, an accent turned from the
+    // world's own sky (never the stock gold), the shape of a panel, the corner
+    // the HUD keeps and how the opening is laid out. Two knights' quests share
+    // a register, not a look. ?art=<n> reseeds it.
+    const ART = (() => {
+      const W9 = SPEC.world || {};
+      const words = [SPEC.prompt, SPEC.title, W9.name, W9.description, W9.setting].filter(Boolean).join(' ').toLowerCase();
+      const q = new URLSearchParams(location.search).get('art');
+      const r = mulberry32((((SPEC.seed || 1) * 7919) + (q ? (+q || 1) * 104729 : 0) + words.length * 31) >>> 0);
+      const pick = a => a[Math.floor(r() * a.length)];
+      const sk = window.__skin;
+      const reg = sk === 'horror' ? 'gothic' : sk === 'terminal' ? 'tech' : sk === 'comic' ? 'play' : sk === 'racing' ? 'sport' : sk === 'noir' ? 'noir'
+        : /\b(medieval|castles?|knights?|kingdom|vikings?|samurai|temples?|ancient|egypt\w*|roman|gladiators?|pirates?|lighthouses?|victorian|western|cowboys?|wizards?|dragons?|monaster\w*|ruins?|pharaohs?|tombs?|shogun|ninjas?|harbou?rs?|orchards?|smithy|blacksmiths?|library|manor)\b/.test(words) ? 'period'
+        : /\b(space|cyber\w*|robots?|station|neon|hacker|lab|future|drones?|mars|moon|lunar|orbit|alien|reactor)\b/.test(words) ? 'tech'
+        : 'modern';
+      // a face is a family, a weight, a case, a tracking, an italic, a width
+      const F = (h, w, cs, tr, it, wd) => ({ h, w, cs, tr, it: !!it, wd: wd || 100 });
+      const HEAD = {
+        period: [F('"Cinzel"', 600, 'upper', .14), F('"IM Fell English"', 400, 'none', .01, true), F('"Lora"', 600, 'small', .1), F('"IM Fell English"', 400, 'upper', .2), F('"Cinzel"', 800, 'upper', .04), F('"Lora"', 500, 'none', -.01, true)],
+        gothic: [F('"Creepster"', 400, 'upper', .1), F('"IM Fell English"', 400, 'none', .02, true), F('"Cinzel"', 900, 'upper', .22)],
+        tech: [F('"Share Tech Mono"', 400, 'upper', .24), F('"Russo One"', 400, 'upper', .04), F('"DM Mono"', 300, 'upper', .34), F('"Josefin Sans"', 200, 'upper', .42), F('"Bricolage Grotesque"', 800, 'none', -.02, false, 75)],
+        play: [F('"Fredoka"', 700, 'none', 0, false, 112), F('"Bangers"', 400, 'upper', .06), F('"Fredoka"', 600, 'upper', .08, false, 125)],
+        sport: [F('"Russo One"', 400, 'upper', .02, true), F('"Bebas Neue"', 400, 'upper', .08), F('"Bricolage Grotesque"', 800, 'upper', -.01, true, 75)],
+        noir: [F('"Bebas Neue"', 400, 'upper', .12), F('"Special Elite"', 400, 'none', .02), F('"Lora"', 600, 'none', -.01, true)],
+        modern: [F('"Josefin Sans"', 300, 'upper', .32), F('"Bebas Neue"', 400, 'upper', .1), F('"Bricolage Grotesque"', 700, 'none', -.03, false, 90), F('"Lora"', 500, 'none', -.01, true), F('"Instrument Sans"', 600, 'upper', .24), F('"DM Mono"', 400, 'upper', .28), F('"Cinzel"', 500, 'upper', .2)],
+      };
+      const BODY = { period: ['"Lora"', '"IM Fell English"', '"Instrument Sans"'], gothic: ['"Lora"', '"IM Fell English"'], tech: ['"DM Mono"', '"Instrument Sans"', '"Josefin Sans"'],
+        play: ['"Fredoka"', '"Instrument Sans"'], sport: ['"Instrument Sans"', '"Josefin Sans"'], noir: ['"Special Elite"', '"Lora"'], modern: ['"Instrument Sans"', '"Lora"', '"Josefin Sans"', '"DM Mono"'] };
+      const head = pick(HEAD[reg]), body = pick(BODY[reg]);
+      // colour in sRGB, by hand: the sky's hue turned by the seed
+      const hsl = (n) => { const R = (n >> 16 & 255) / 255, G = (n >> 8 & 255) / 255, B = (n & 255) / 255, mx = Math.max(R, G, B), mn = Math.min(R, G, B), l = (mx + mn) / 2;
+        if (mx === mn) return [0, 0, l]; const d = mx - mn, sa = l > 0.5 ? d / (2 - mx - mn) : d / (mx + mn);
+        const hh = mx === R ? (G - B) / d + (G < B ? 6 : 0) : mx === G ? (B - R) / d + 2 : (R - G) / d + 4; return [hh * 60, sa, l]; };
+      const css = (h, sa, l, a) => `hsla(${((h % 360) + 360) % 360},${Math.round(sa * 100)}%,${Math.round(l * 100)}%,${a === undefined ? 1 : a})`;
+      const [sh, ss] = hsl(+pal.sky || 0x203040);
+      let h = sh + pick([150, 180, 205, 30, -30, 120, -120, 0, 90]); h = ((h % 360) + 360) % 360;
+      if (h > 34 && h < 64) h = r() < 0.5 ? h - 32 : h + 130;               // no gold, no mustard
+      const sat = 0.36 + r() * 0.4, lit = 0.6 + r() * 0.12;
+      const paperLight = (reg === 'period' || reg === 'noir') && r() < 0.4;  // a printed page, not a dark panel
+      const A = {
+        reg, head, body, r, pick, paperLight,
+        acc: css(h, sat, lit), accA: a => css(h, sat, lit, a), accD: css(h, sat * 0.9, 0.32),
+        ink: paperLight ? css(sh, 0.25, 0.12) : css(sh, 0.1 + ss * 0.1, 0.93), ink2: paperLight ? css(sh, 0.18, 0.3) : css(sh, 0.12, 0.72),
+        paper: paperLight ? css(sh + 30, 0.3, 0.9, 0.95) : css(sh, 0.2 + r() * 0.2, 0.05 + r() * 0.04, 0.9),
+        shadow: paperLight ? 'rgba(255,255,255,.6)' : 'rgba(0,0,0,.65)',
+        frame: paperLight ? pick(['plate', 'bracket', 'tab', 'ledger']) : pick(['veil', 'rule', 'plate', 'bracket', 'tab', 'ledger']),   // (a light page needs a panel to be printed on)
+        corner: pick(['tl', 'tl', 'tr', 'bl']),
+        open: pick(['left', 'lower', 'center', 'right', 'left', 'lower']),
+        banner: pick(['high', 'low', 'side']),
+        radius: pick([0, 0, 2, 6, 14]),
+        stack: r() < 0.6,
+        go: pick(['Begin', 'Set out', 'Go', 'Start', 'Enter', 'Press on']),
+      };
+      return A;
+    })();
+    window.__ART = ART;
+    window.__art = { reg: ART.reg, head: ART.head.h, body: ART.body, acc: ART.acc, frame: ART.frame, corner: ART.corner, open: ART.open, banner: ART.banner, paperLight: ART.paperLight };
+    {
+      const B = document.body, H = ART.head;
+      B.dataset.art = ART.frame; B.dataset.hud = ART.corner;
+      const v = { '--fs-accent': ART.acc, '--fs-gold': ART.acc, '--tcol': ART.ink, '--tglow': ART.accA(0.32), '--rule': ART.accA(0.75), '--sub': ART.ink2,
+        '--f-head': H.h + ',"Instrument Sans",system-ui,sans-serif', '--f-ui': ART.body + ',"Instrument Sans",system-ui,sans-serif',
+        '--art-paper': ART.paper, '--art-shadow': ART.shadow, '--art-ink': ART.ink, '--art-ink2': ART.ink2, '--art-acc': ART.acc, '--art-accd': ART.accD, '--art-rad': ART.radius + 'px',
+        '--art-hw': String(H.w), '--art-tr': H.tr + 'em', '--art-tt': H.cs === 'upper' ? 'uppercase' : 'none', '--art-fv': H.cs === 'small' ? 'small-caps' : 'normal',
+        '--art-fs': H.it ? 'italic' : 'normal', '--art-wd': H.wd + '%' };
+      if (window.__skin !== 'terminal') for (const k in v) B.style.setProperty(k, v[k]);
+      else for (const k of ['--fs-accent', '--art-acc', '--art-paper', '--art-ink', '--art-ink2', '--art-rad']) B.style.setProperty(k, v[k]);
+      const st = document.createElement('style'); st.id = 'fs-art';
+      st.textContent = `
+        #fps{display:none} body.fs-showfps #fps{display:block}
+        /* the HUD keeps its own corner */
+        body[data-hud="tr"] #hud{left:auto;right:16px;text-align:right}
+        body[data-hud="bl"] #hud{top:auto;bottom:18px}
+        body[data-hud="bl"] #quest{top:auto;bottom:64px}
+        body[data-hud="tr"] #quest{left:auto;right:16px;text-align:right}
+        #hud h1{font-family:var(--f-head) !important;font-weight:var(--art-hw);letter-spacing:var(--art-tr);text-transform:var(--art-tt);font-variant:var(--art-fv);font-style:var(--art-fs);color:var(--art-acc) !important}
+        #quest .qs.active{color:var(--art-acc) !important}
+        /* the guide card becomes the narrator's line, in this game's frame */
+        body[data-art] .fs-card{background:var(--art-paper) !important;border:0 !important;border-radius:var(--art-rad) !important;box-shadow:0 18px 50px rgba(0,0,0,.35) !important;
+          width:min(460px,86vw) !important;padding:16px 20px 14px !important;backdrop-filter:blur(6px)}
+        body[data-art] .fs-card em{color:var(--art-acc) !important;font-family:var(--f-ui) !important;font-size:10.5px !important;letter-spacing:.14em !important;text-transform:uppercase;font-style:normal}
+        body[data-art] .fs-card b{color:var(--art-ink) !important;font-family:var(--f-head) !important;font-weight:var(--art-hw) !important;font-style:var(--art-fs) !important;font-size:19px !important;line-height:1.25 !important;letter-spacing:0 !important;text-transform:none !important}
+        body[data-art] .fs-card small{color:var(--art-ink2) !important;font-family:var(--f-ui) !important;font-size:11.5px !important;letter-spacing:.04em}
+        body[data-art] .fs-card p{color:var(--art-ink2) !important}
+        body[data-art] .fs-card .keys,body[data-art] .fs-card .next{display:none !important}
+        body[data-art] .fs-card .skip{color:var(--art-ink2) !important;opacity:.7;font-family:var(--f-ui) !important;letter-spacing:.08em !important}
+        body[data-art="veil"] .fs-card{background:linear-gradient(90deg,var(--art-paper),transparent) !important;box-shadow:none !important}
+        body[data-art="rule"] .fs-card{background:transparent !important;box-shadow:none !important;border-left:2px solid var(--art-acc) !important;border-radius:0 !important;text-shadow:0 1px 8px rgba(0,0,0,.8)}
+        body[data-art="bracket"] .fs-card{background:linear-gradient(var(--art-acc),var(--art-acc)) top left/14px 1.5px no-repeat,linear-gradient(var(--art-acc),var(--art-acc)) top left/1.5px 14px no-repeat,
+          linear-gradient(var(--art-acc),var(--art-acc)) bottom right/14px 1.5px no-repeat,linear-gradient(var(--art-acc),var(--art-acc)) bottom right/1.5px 14px no-repeat,var(--art-paper) !important}
+        body[data-art="tab"] .fs-card{border-top:3px solid var(--art-acc) !important}
+        body[data-art="ledger"] .fs-card{border-top:1px solid var(--art-acc) !important;border-bottom:1px solid var(--art-acc) !important;border-radius:0 !important}
+        /* where the card sits follows the opening's layout */
+        body[data-hud="tl"] .fs-card,body[data-hud="bl"] .fs-card{left:auto !important;right:18px !important;top:auto !important;bottom:22px !important;transform:none !important}
+        body[data-hud="tr"] .fs-card{left:18px !important;top:auto !important;bottom:22px !important;transform:none !important}
+        /* the objective arrives as the narrator's line */
+        #fsban #fsbantxt{font-family:var(--f-head) !important;font-weight:var(--art-hw) !important;font-style:var(--art-fs) !important;color:var(--art-ink) !important}
+        #fsban #fsbansub{color:var(--art-acc) !important;font-family:var(--f-ui) !important}
+        #fsban.beat #fsbantxt{text-transform:none !important;letter-spacing:0 !important;font-size:24px !important;max-width:34ch;margin:0 auto;line-height:1.3}
+        body[data-banner="low"] #fsban{top:auto !important;bottom:16% !important}
+        body[data-banner="side"] #fsban{text-align:left !important;left:6vw !important;right:auto !important;top:38% !important}
+        body[data-banner="side"] #fsban.beat #fsbantxt{margin:0}
+        /* the opening */
+        body[data-art] #fsstart.fs-open{background:none !important;backdrop-filter:none !important}
+        body[data-art] #fsstart.fs-open-left{justify-content:flex-start !important;background:linear-gradient(90deg,var(--art-paper) 0,var(--art-paper) 40%,transparent 82%) !important}
+        body[data-art] #fsstart.fs-open-right{justify-content:flex-end !important;background:linear-gradient(270deg,var(--art-paper) 0,var(--art-paper) 40%,transparent 82%) !important}
+        body[data-art] #fsstart.fs-open-lower{align-items:flex-end !important;background:linear-gradient(0deg,var(--art-paper) 0,var(--art-paper) 40%,transparent 85%) !important}
+        body[data-art] #fsstart.fs-open-center{background:radial-gradient(ellipse at center,var(--art-paper) 0,var(--art-paper) 30%,transparent 80%) !important}
+        body[data-art] #fsstart .fs-art-open{max-width:min(560px,86vw) !important;padding:0 7vw !important;text-align:left !important;background:none !important;border:0 !important;box-shadow:none !important}
+        body[data-art] #fsstart.fs-open-center .fs-art-open{text-align:center !important}
+        body[data-art] #fsstart.fs-open-lower .fs-art-open{max-width:min(900px,90vw) !important;padding-bottom:7vh !important}
+        body[data-art] #fsstart.fs-open-right .fs-art-open{text-align:right !important}
+        body[data-art] #fsstart .fs-art-kicker{font:500 11px var(--f-ui);letter-spacing:.2em;text-transform:uppercase;color:var(--art-acc);margin-bottom:12px}
+        body[data-art] #fsstart h1.fs-art-title{font-variation-settings:normal !important;font-family:var(--f-head) !important;font-weight:var(--art-hw) !important;font-style:var(--art-fs);font-variant:var(--art-fv);letter-spacing:var(--art-tr) !important;
+          text-transform:var(--art-tt) !important;font-stretch:var(--art-wd);font-size:clamp(38px,5.6vw,78px) !important;line-height:.98 !important;color:var(--art-ink) !important;
+          text-shadow:0 2px 24px rgba(0,0,0,.35) !important;margin:0 0 12px !important}
+        .fs-art-the{display:block;font-size:.34em;letter-spacing:.3em;opacity:.8;margin-bottom:.15em}
+        body[data-art] #fsstart .fs-art-tag{text-shadow:0 1px 10px var(--art-shadow);font:italic 400 16px var(--f-ui);color:var(--art-ink2);margin-bottom:16px}
+        .fs-art-rule{height:1px;width:72px;background:var(--art-acc);margin:0 0 18px}
+        #fsstart.fs-open-center .fs-art-rule{margin:0 auto 18px} #fsstart.fs-open-right .fs-art-rule{margin:0 0 18px auto}
+        body[data-art] #fsstart .fs-art-pro{text-shadow:0 1px 10px var(--art-shadow);font:400 15.5px/1.6 var(--f-ui);color:var(--art-ink);margin:0 0 10px;max-width:52ch}
+        #fsstart.fs-open-center .fs-art-pro{margin-left:auto;margin-right:auto} #fsstart.fs-open-right .fs-art-pro{margin-left:auto}
+        .fs-art-obj{font:500 13px var(--f-ui);color:var(--art-ink2);margin:6px 0 10px}
+        body[data-art] #fsstart .fs-art-keys{font:400 11px var(--f-mono);letter-spacing:.06em;color:var(--art-ink2);opacity:.8;margin:18px 0 18px}
+        .fs-art-keys b{color:var(--art-ink);font-weight:500}
+        body[data-art] #fsstart #startbtn.fs-art-go{font:var(--art-hw) 15px var(--f-head) !important;font-style:var(--art-fs) !important;letter-spacing:.12em !important;text-transform:uppercase !important;
+          color:var(--art-ink) !important;background:none !important;box-shadow:none !important;transform:none !important;
+          border:1px solid var(--art-acc) !important;border-radius:var(--art-rad) !important;padding:11px 30px !important;cursor:pointer;transition:background .2s,color .2s}
+        body[data-art] #fsstart #startbtn.fs-art-go:hover{background:var(--art-acc) !important;color:var(--art-paper) !important}
+        body[data-art] #fsstart .fs-art-open::before,body[data-art] #fsstart .fs-art-open::after{content:none !important;display:none !important}
+        /* the HUD waits behind the opening, and the key line gives way to the narrator's card */
+        body:has(#fsstart) > :not(#fsstart):not(#app):not(canvas):not(style):not(script):not(link){visibility:hidden !important}
+        body:has(.fs-card.on) #hud .hint{opacity:0 !important}
+        #hud .hint{transition:opacity .6s}
+        #fswpn{font:var(--art-hw) 13px var(--f-head);font-style:var(--art-fs);letter-spacing:.14em;text-transform:uppercase;color:var(--art-ink);text-shadow:0 1px 8px rgba(0,0,0,.7);opacity:0}
+        #fswpn::before{content:"";display:inline-block;width:18px;height:1px;background:var(--art-acc);vertical-align:middle;margin-right:8px}
+        body[data-hud="tl"] #fswpn{left:16px;top:96px} body[data-hud="tr"] #fswpn{right:16px;top:96px} body[data-hud="bl"] #fswpn{left:16px;bottom:120px}
+        #hearts{color:var(--art-acc) !important;letter-spacing:4px !important}
+        .fs-title b{font-family:var(--f-head) !important;font-weight:var(--art-hw) !important;font-style:var(--art-fs) !important;text-transform:var(--art-tt) !important;letter-spacing:var(--art-tr) !important;color:var(--art-ink) !important}
+        .fs-title small{color:var(--art-acc) !important;font-family:var(--f-ui) !important}
+      `;
+      document.head.appendChild(st);
+      B.dataset.banner = ART.banner;
+      if (/[?&]fps=1/.test(location.search)) B.classList.add('fs-showfps');
+      // ONE HAND FOR THE CHROME (2026-10-12): two hundred bits of HUD were
+      // set inline in system-ui and a stock violet (#a78bfa), so a game's
+      // weapon chip, loadout, pop-ups and level badge looked like every other
+      // game's whatever its art direction ("Blade ... the style or menu needs
+      // to match everything else"). Each element the runtime adds is brought
+      // into this game's faces and accent as it arrives.
+      const _VIO = /rgba?\(\s*167,\s*139,\s*250/;
+      const _fix = (el) => {
+        const st = el.style; if (!st) return;
+        const ff = st.fontFamily || '';
+        if (/system-ui|ui-sans-serif|-apple-system/.test(ff)) st.fontFamily = /800|900/.test(st.fontWeight) ? 'var(--f-head)' : 'var(--f-ui)';
+        if (/ui-monospace|monospace/.test(ff) && !/DM Mono/.test(ff)) st.fontFamily = 'var(--f-mono)';
+        if (_VIO.test(st.color)) st.color = 'var(--fs-accent)';
+        if (_VIO.test(st.borderColor || '') || _VIO.test(st.border || '')) st.borderColor = ART.accA(0.45);
+        if (_VIO.test(st.background || '') || _VIO.test(st.backgroundColor || '')) st.background = ART.accA(/,\s*1\)|rgb\(/.test(st.backgroundColor) ? 1 : 0.18);
+        if (/rgba\(\s*(8|10|14),\s*(7|9|12),\s*(14|18|24)/.test(st.background || '')) { st.background = 'var(--art-paper)'; st.borderRadius = 'var(--art-rad)'; }
+      };
+      const _walk = (n) => { if (n.nodeType !== 1 || n.id === 'app') return; _fix(n); for (const c of n.children) _walk(c); };
+      new MutationObserver(ms => { for (const m of ms) { for (const n of m.addedNodes) _walk(n); if (m.type === 'attributes') _fix(m.target); } })
+        .observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['style'] });
+      for (const c of document.body.children) _walk(c);
+    }
+    const STORY = (SPEC.story && typeof SPEC.story === 'object') ? SPEC.story : null;
+    window.__story = STORY;
+    const _esc = t => String(t || '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
     const _introT = (() => {
       const t = String(SPEC.intro || '').trim();
       if (!t || /[.!?\u2026"')]$/.test(t)) return t;
       const k = Math.max(t.lastIndexOf('. '), t.lastIndexOf('! '), t.lastIndexOf('? '));
       return k > 40 ? t.slice(0, k + 1) : t.replace(/\s+\S*$/, '') + '\u2026';
     })();
-    const introHtml = _introT
-      ? `<div style="font:400 15px var(--f-ui);color:#b9b4d8;margin-bottom:14px;max-width:44ch;margin-left:auto;margin-right:auto;line-height:1.5;">${_introT}</div>`
-      : '';
-    ov.innerHTML = '<div class="fs-startcard" style="text-align:center;max-width:520px;padding:36px;">'
-      + `<h1 class="fs-start" style="font:700 44px var(--f-head);letter-spacing:.08em;text-transform:uppercase;color:var(--tcol);text-shadow:0 0 34px var(--tglow),0 6px 22px rgba(0,0,0,.85);margin:0 0 12px;">${SPEC.title || 'Your World'}</h1>`
-      + introHtml
-      + `<div style="font:500 15px var(--f-ui);color:#cfcbe6;margin-bottom:6px;">`
-      + objLines.map(l => '• ' + l).join('<br>') + '</div>'
-      + `<div style="font:400 12px var(--f-mono);letter-spacing:.04em;color:#8d89a6;margin-bottom:24px;">${controls} · drag to look</div>`
-      + '<button id="startbtn" style="font:700 18px var(--f-head);letter-spacing:.08em;text-transform:uppercase;color:#0d0b16;background:var(--fs-accent);'
-      + 'border:none;border-radius:14px;padding:14px 46px;cursor:pointer;">START</button>'
-      + '<div style="font:500 10px var(--f-mono);color:var(--fs-accent);opacity:.65;margin-top:20px;letter-spacing:.14em;">'
-      + '⚡ MADE WITH FANTASY STUDIO  ·  one sentence, one playable world</div></div>';
+    // THE OPENING (2026-10-12): the narrator, the title set in this game's
+    // face, its tagline, the prologue, the keys, and a way in. Laid out to one
+    // side, along the bottom, or centred, over the world itself rather than a
+    // dimmed box; no brand line under it.
+    const ov = document.createElement('div');
+    ov.id = 'fsstart';
+    ov.className = 'fs-open fs-open-' + ART.open;
+    ov.style.cssText = 'position:fixed;inset:0;display:flex;align-items:center;justify-content:center;z-index:40;';
+    const _pro = STORY && Array.isArray(STORY.prologue) && STORY.prologue.length ? STORY.prologue : (_introT ? [_introT] : []);
+    const _ttl = String(SPEC.title || 'Untitled');
+    const _mT = _ttl.match(/^(the|a|an)\s+(.+)$/i);
+    const _tHtml = (ART.stack && _mT) ? `<span class="fs-art-the">${_esc(_mT[1])}</span>${_esc(_mT[2])}` : _esc(_ttl);
+    ov.innerHTML = '<div class="fs-art-open">'
+      + (STORY && STORY.narrator ? `<div class="fs-art-kicker">${_esc(STORY.narrator)}</div>` : '')
+      + `<h1 class="fs-art-title">${_tHtml}</h1>`
+      + (STORY && STORY.tagline ? `<div class="fs-art-tag">${_esc(STORY.tagline)}</div>` : '')
+      + '<div class="fs-art-rule"></div>'
+      + _pro.map(l => `<p class="fs-art-pro">${_esc(l)}</p>`).join('')
+      + (STORY ? '' : `<div class="fs-art-obj">${objLines.join(' &middot; ')}</div>`)
+      + `<div class="fs-art-keys">${controls} &middot; drag to look</div>`
+      + `<button id="startbtn" class="fs-art-go">${_esc(ART.go)}</button>`
+      + '</div>';
     document.body.appendChild(ov);
     // personal best on the start screen — "one more run" fuel
     try {
@@ -10265,12 +10577,16 @@ async function main() {
           el, document.getElementById('startbtn'));
       }
     } catch (e) {}
+    { const _go = e => { if (e.code === 'Enter' && document.getElementById('fsstart')) { e.preventDefault(); removeEventListener('keydown', _go); document.getElementById('startbtn').click(); } };
+      addEventListener('keydown', _go); }
     document.getElementById('startbtn').addEventListener('click', () => {
       ov.remove();
       // THE REVEAL (2026-09-15): the kit's title card, as the factory opens.
       // The name in the display face and, under it, the sentence that made
       // the world, in the mood the prompt chose.
-      try { __KitTitle.show(SPEC.title || 'Your World', SPEC.prompt ? '\u201c' + SPEC.prompt + '\u201d' : ((SPEC.world && SPEC.world.name) || ''), { mood: document.body.dataset.mood, secs: 2.8 }); } catch (e) {}
+      // (2026-10-12) the reveal is the chapter; the title was just on screen,
+      // and the user's own sentence in quotes read as a demo, not a game
+      try { if (STORY && STORY.chapter) __KitTitle.show(STORY.chapter, STORY.narrator || '', { mood: document.body.dataset.mood, secs: 2.6 }); } catch (e) {}
       // the guide steps in once the reveal is down, and only on a first run
       if (!__fmGuided && !/[?&]noguide=1/.test(location.search)) setTimeout(() => { try { __fm.start(0); } catch (e) {} }, 3100);
       gameStarted = true;
@@ -11441,7 +11757,7 @@ async function main() {
     const d = document.createElement('div');
     d.textContent = txt;
     d.style.cssText = 'position:fixed;left:50%;top:42%;transform:translateX(-50%);'
-      + `font:800 26px system-ui;color:${color};text-shadow:0 2px 10px rgba(0,0,0,.5);`
+      + `font:var(--art-hw, 800) 26px var(--f-head);font-style:var(--art-fs, normal);text-transform:var(--art-tt, none);letter-spacing:var(--art-tr, 0);color:${color};text-shadow:0 2px 10px rgba(0,0,0,.5);`
       + 'z-index:25;pointer-events:none;transition:all .7s ease-out;opacity:1;';
     document.body.appendChild(d);
     requestAnimationFrame(() => { d.style.top = '34%'; d.style.opacity = '0'; });
@@ -12512,17 +12828,41 @@ async function main() {
     }
     // the lifeguard tower: a hut on four stilts, a ramp, a red flag and a rescue buoy
     if (Bc.tower) { const [x, z] = Bc.tower, y = hAt(x, z), T = new THREE.Group(); T.position.set(x, y, z); T.rotation.y = Math.atan2(-Bc.uz, Bc.ux) + Math.PI; scene.add(T);
-      const wood = MAT({ color: 0xd9c9a8, roughness: 0.8 }), red = MAT({ color: 0xc8261e, roughness: 0.6 }), white = MAT({ color: 0xf2efe8, roughness: 0.6 });
-      for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) { const st = new THREE.Mesh(new THREE.BoxGeometry(0.16, 2.2, 0.16), wood); st.position.set(sx * 1.0, 1.1, sz * 1.0); T.add(st); }
-      const deck = new THREE.Mesh(new THREE.BoxGeometry(2.8, 0.12, 2.8), wood); deck.position.y = 2.2; T.add(deck);
-      const hut = new THREE.Mesh(new THREE.BoxGeometry(2.2, 1.8, 2.0), white); hut.position.set(0, 3.1, -0.2); T.add(hut);
-      const band = new THREE.Mesh(new THREE.BoxGeometry(2.22, 0.35, 2.02), red); band.position.set(0, 3.6, -0.2); T.add(band);
-      const rf = new THREE.Mesh(new THREE.BoxGeometry(2.7, 0.12, 2.6), red); rf.position.set(0, 4.08, -0.2); T.add(rf);
-      const win = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.7, 0.04), MAT({ color: 0x1e2a30, roughness: 0.1 })); win.position.set(0, 3.15, 0.81); T.add(win);
-      const ramp = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.08, 3.4), wood); ramp.position.set(0, 1.1, 2.7); ramp.rotation.x = 0.7; T.add(ramp);
-      const fp = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 2.4, 6), white); fp.position.set(1.2, 5.2, -1.2); T.add(fp);
-      const fl = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.55), MAT({ color: 0xd8201a, side: THREE.DoubleSide })); fl.position.set(1.65, 6.05, -1.2); T.add(fl);
-      const buoy = new THREE.Mesh(new THREE.TorusGeometry(0.3, 0.09, 8, 16), MAT({ color: 0xff6a1a, roughness: 0.5 })); buoy.position.set(-1.05, 2.0, 1.12); T.add(buoy);
+      // A LIFEGUARD TOWER IS TIMBER (2026-10-12): it was eight boxes. It
+      // stands on round posts braced in X, a plank deck with a rail round
+      // it, a clapboard hut with a framed window and a pitched roof, the
+      // ramp with its treads, a flag and a buoy on a hook
+      const wood = MAT({ map: HDT('planks', 1, 1), normalMap: HDN('planks', 1, 1), color: 0xe2d2b0, roughness: 0.82 }), red = MAT({ color: 0xc8261e, roughness: 0.55 }), white = MAT({ color: 0xf2efe8, roughness: 0.6 });
+      const clap = (() => { const cv = document.createElement('canvas'); cv.width = 64; cv.height = 256; const x = cv.getContext('2d'); x.fillStyle = '#f2efe8'; x.fillRect(0, 0, 64, 256);
+        for (let k = 0; k < 16; k++) { const y = k * 16; const gr = x.createLinearGradient(0, y, 0, y + 16); gr.addColorStop(0, 'rgba(0,0,0,0.0)'); gr.addColorStop(0.85, 'rgba(0,0,0,0.08)'); gr.addColorStop(1, 'rgba(0,0,0,0.28)'); x.fillStyle = gr; x.fillRect(0, y, 64, 16); }
+        const t = new THREE.CanvasTexture(cv); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(2, 1.2); t.colorSpace = THREE.SRGBColorSpace; return t; })();
+      const hutM = MAT({ map: clap, roughness: 0.7 });
+      const post = (x0, y0, z0, x1, y1, z1, r) => { const a = new THREE.Vector3(x0, y0, z0), b = new THREE.Vector3(x1, y1, z1), L = a.distanceTo(b);
+        const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r * 1.08, L, 10), wood); m.position.copy(a).add(b).multiplyScalar(0.5);
+        m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), b.clone().sub(a).normalize()); T.add(m); return m; };
+      for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) post(sx * 1.0, -0.3, sz * 1.0, sx * 0.95, 2.2, sz * 0.95, 0.085);
+      for (const sd of [-1, 1]) { post(-1.0, 0.25, sd * 1.0, 0.95, 1.95, sd * 0.97, 0.04); post(1.0, 0.25, sd * 1.0, -0.95, 1.95, sd * 0.97, 0.04);
+        post(sd * 1.0, 0.25, -1.0, sd * 0.97, 1.95, 0.95, 0.04); post(sd * 1.0, 0.25, 1.0, sd * 0.97, 1.95, -0.95, 0.04); }
+      for (let k = 0; k < 11; k++) { const pl = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.06, 2.8), wood); pl.position.set(-1.25 + k * 0.25, 2.23, 0); pl.rotation.y = (k % 3 - 1) * 0.004; T.add(pl); }
+      for (const [x, z, w, d] of [[0, 1.36, 2.8, 0.06], [-1.36, 0.3, 0.06, 2.2], [1.36, 0.3, 0.06, 2.2]]) {
+        const rl = new THREE.Mesh(new THREE.BoxGeometry(w, 0.06, d), wood); rl.position.set(x, 3.15, z); T.add(rl);
+        const n = Math.round(Math.max(w, d) / 0.45); for (let k = 0; k <= n; k++) { const t = k / n - 0.5; post(x + (w > d ? t * w : 0), 2.26, z + (w > d ? 0 : t * d), x + (w > d ? t * w : 0), 3.13, z + (w > d ? 0 : t * d), 0.022); } }
+      const hut = new THREE.Mesh(new THREE.BoxGeometry(2.2, 1.8, 2.0), hutM); hut.position.set(0, 3.15, -0.2); T.add(hut);
+      const band = new THREE.Mesh(new THREE.BoxGeometry(2.24, 0.3, 2.04), red); band.position.set(0, 3.75, -0.2); T.add(band);
+      { const sh = new THREE.Shape(); sh.moveTo(-1.45, 0); sh.lineTo(1.45, 0); sh.lineTo(0, 0.75); sh.closePath();
+        const gab = new THREE.ExtrudeGeometry(sh, { depth: 2.7, bevelEnabled: false }); gab.translate(0, 0, -1.35);
+        const rf = new THREE.Mesh(gab, red); rf.position.set(0, 4.05, -0.2); T.add(rf);
+        const tr = new THREE.Mesh(new THREE.BoxGeometry(2.3, 0.08, 2.1), white); tr.position.set(0, 4.06, -0.2); T.add(tr); }
+      const win = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.66, 0.04), MAT({ color: 0x1e2a30, roughness: 0.08, metalness: 0.3 })); win.position.set(0, 3.2, 0.82); T.add(win);
+      for (const [w2, h2, x, y] of [[1.64, 0.07, 0, 3.56], [1.64, 0.07, 0, 2.84], [0.07, 0.72, -0.79, 3.2], [0.07, 0.72, 0.79, 3.2], [0.05, 0.66, 0, 3.2]]) {
+        const fr = new THREE.Mesh(new THREE.BoxGeometry(w2, h2, 0.07), white); fr.position.set(x, y, 0.83); T.add(fr); }
+      { const rp = new THREE.Group(); rp.position.set(0, 1.12, 2.62); rp.rotation.x = 0.7; T.add(rp);
+        for (const sd of [-0.42, 0.42]) { const st = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.12, 3.4), wood); st.position.x = sd; rp.add(st); }
+        for (let k = 0; k < 10; k++) { const tr = new THREE.Mesh(new THREE.BoxGeometry(0.84, 0.035, 0.12), wood); tr.position.set(0, 0.07, -1.55 + k * 0.34); rp.add(tr); } }
+      const fp = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 2.4, 8), white); fp.position.set(1.2, 5.2, -1.2); T.add(fp);
+      const flG = new THREE.PlaneGeometry(0.9, 0.55, 8, 1); { const pa = flG.attributes.position; for (let i = 0; i < pa.count; i++) pa.setZ(i, Math.sin((pa.getX(i) + 0.45) * 5) * 0.05 * (pa.getX(i) + 0.45)); flG.computeVertexNormals(); }
+      const fl = new THREE.Mesh(flG, MAT({ color: 0xd8201a, side: THREE.DoubleSide })); fl.position.set(1.65, 6.05, -1.2); T.add(fl);
+      const buoy = new THREE.Mesh(new THREE.TorusGeometry(0.3, 0.09, 12, 24), MAT({ color: 0xff6a1a, roughness: 0.5 })); buoy.position.set(-1.05, 2.0, 1.12); T.add(buoy);
       T.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
       world.createCollider(RAPIER.ColliderDesc.cuboid(1.4, 2.2, 1.4).setTranslation(x, y + 2.2, z)); }
   }
@@ -15739,15 +16079,19 @@ async function main() {
         + 'text-shadow:0 3px 18px rgba(0,0,0,.75)"></div>';
       document.body.appendChild(b);
     }
-    document.getElementById('fsbansub').textContent = sub || 'new objective';
-    document.getElementById('fsbantxt').textContent = text;
+    // (2026-10-12) a story's beat for this step is the line; the step's own
+    // label goes small above it, in place of "new objective"
+    const _bt = (!sub && window.__story && Array.isArray(window.__story.beats)) ? window.__story.beats[stepIdx] : null;
+    b.classList.toggle('beat', !!_bt);
+    document.getElementById('fsbansub').textContent = _bt ? text : (sub || 'new objective');
+    document.getElementById('fsbantxt').textContent = _bt || text;
     b.style.opacity = '1'; b.style.letterSpacing = '.06em';
     b.classList.remove('on'); void b.offsetWidth; b.classList.add('on');
     clearTimeout(window.__banT);
     window.__banT = setTimeout(() => {
       b.style.opacity = '0'; b.style.letterSpacing = '.02em';
       b.classList.remove('on');
-    }, 2400);
+    }, b.classList.contains('beat') ? 4600 : 2400);
   }
   window.__fsBanner = banner;
   // what the guide says about the step you are actually on
@@ -15777,7 +16121,7 @@ async function main() {
     if (st.kind === 'collect') return HAS_GUARDS
       ? `Take ${n} ${l}. And mind the patrols. Crouch with C, and if a guard `
         + `is in your way, throw something with Q to pull him off it.`
-      : `Find ${cnt(n, l)} for me. ${n === 1 ? 'It is out there somewhere' : 'They are scattered'}. Look around.`;
+      : `Find ${cnt(n, l)} for me. ${n === 1 ? 'It is out there somewhere' : 'They are scattered'}; keep your eyes on the ground as you go.`;
     if (st.kind === 'defeat' && /\b(captur\w*|catch\w*|traps?|trapping|banish\w*)\b/.test(String(SPEC.prompt || '').toLowerCase())) return `${n} ${l} to catch. Hold F to raise the lantern and let go to flash it at one; a caught one is gone for good.`;
     if (st.kind === 'defeat') return `You will have to fight. Put down ${n} ${l}. ${window.__heroGun === 'pistol' ? 'Hold F to aim and let go to fire.' : window.__heroGun === 'guns' ? 'Hold F to fire your guns.' : 'Press F to strike.'}`;
     if (st.kind === 'escort')
@@ -15899,7 +16243,7 @@ async function main() {
     if (!st) {
       // reward beats narrative beats generic — most specific line wins
       doWin(SPEC.reward ? `You won the ${SPEC.reward}!`
-            : (SPEC.win_text || 'Mission complete!'));
+            : ((SPEC.story && SPEC.story.epilogue) || SPEC.win_text || 'Mission complete!'));
       return;
     }
     // NEW-OBJECTIVE BANNER: every step change announces itself, and any
@@ -16043,6 +16387,8 @@ async function main() {
     + 'font:700 12px system-ui;text-shadow:0 1px 3px #000';
   lvlChip.textContent = 'Lv 1';
   xpBar.appendChild(lvlChip);
+  // (2026-10-12) in the game's own accent and face, not a stock green
+  xpBar.id = 'fsxp'; xpFill.style.background = 'var(--fs-accent)'; lvlChip.style.color = 'var(--fs-accent)'; lvlChip.style.font = '600 11px var(--f-ui)';
   document.body.appendChild(xpBar);
   function addXP(n) {
     xp += n;
@@ -17944,8 +18290,23 @@ async function main() {
     { title: 'Jump', text: 'Space jumps. E uses what you stand by.', why: 'A ledge, a door, a thing on the ground: all of them want one of these.', check: () => __fmJump > 0 },
     { title: 'The objective', text: 'The card at the top says what to do next.', why: 'Everything else is the world.', gotit: true },
   ];
+  // THE STORY LEADS (2026-10-12): every game opened on "Look around . Drag
+  // with the mouse to look", then Walk, Run, Jump, The objective. The story's
+  // first move is the card now, in the narrator's voice, with the keys under
+  // it once; it clears when you set off. A vehicle keeps its handling steps
+  // after it (throttle and steering are worth a card), but not "Look around".
+  const __st = SPEC.story && typeof SPEC.story === 'object' ? SPEC.story : null;
+  if (__st && __st.first_move) {
+    const _leg = __fmMode === 'fly' ? 'Drag to look  \u00b7  WASD glide  \u00b7  Space rise  \u00b7  C dive  \u00b7  Shift boost'
+      : __fmMode === 'swim' ? 'Drag to look  \u00b7  WASD swim  \u00b7  Space surface  \u00b7  C dive  \u00b7  Shift burst'
+      : __fmMode === 'drive' ? 'Drag to look  \u00b7  W go  \u00b7  A D steer  \u00b7  S brake'
+      : 'Drag to look  \u00b7  WASD walk  \u00b7  Shift run  \u00b7  Space jump  \u00b7  E use';
+    const _first = { title: __st.first_move, text: _leg, why: '', check: () => __fmMove > 2.0 };
+    if (__fmMode === 'drive') __fmSteps.splice(0, 1, _first); else __fmSteps.splice(0, __fmSteps.length, _first);
+  }
   const __fm = new __KitForeman(__fmSteps, {
-    name: __fmMode === 'drive' ? 'the crew chief' : 'the guide',
+    counter: !__st, skipLabel: __st ? 'close' : undefined,
+    name: __st && __st.narrator ? __st.narrator : (__fmMode === 'drive' ? 'the crew chief' : 'the guide'),
     save: k => { try { if (k >= __fmSteps.length) localStorage.setItem(__fmKey, '1'); } catch (e) {} },
   });
   const __fmGuided = (() => { try { return localStorage.getItem(__fmKey) === '1'; } catch (e) { return false; } })();
@@ -18222,10 +18583,11 @@ async function main() {
       if (window.__wpnModels) {
         window.__wpnModels.forEach((g4, i) => { g4.visible = (i === slot); });
       }
-      popText(w2.icon + '  ' + w2.name, '#a78bfa');
+      popText(w2.name, 'var(--fs-accent)');
       if (window.__wpnEl) {
-        window.__wpnEl.textContent = w2.icon + ' ' + w2.name;
+        window.__wpnEl.textContent = w2.name;
         window.__wpnEl.style.display = 'block';
+        if (window.__wpnEl._show) window.__wpnEl._show();
       }
       for (const el of lo.querySelectorAll('[data-slot]')) {
         el.style.background = (+el.dataset.slot === slot)
@@ -18235,13 +18597,15 @@ async function main() {
     // a small standing readout, so the current weapon is knowable without
     // opening anything
     if (ATTACK !== 'none') {
+      // (2026-10-12) not a violet pill in the middle of every game: the
+      // weapon's name in the game's own face, by its HUD, shown when it
+      // changes and then let go to a whisper
       const wl = document.createElement('div');
-      wl.style.cssText = 'position:fixed;left:50%;bottom:96px;'
-        + 'transform:translateX(-50%);z-index:23;font:700 13px system-ui;'
-        + 'color:#e8e2ff;background:rgba(10,9,18,.72);'
-        + 'border:1px solid rgba(167,139,250,.35);border-radius:9px;'
-        + 'padding:5px 12px;pointer-events:none;';
-      wl.textContent = WEAPONS[weaponIdx].icon + ' ' + WEAPONS[weaponIdx].name;
+      wl.id = 'fswpn';
+      wl.style.cssText = 'position:fixed;z-index:23;pointer-events:none;transition:opacity .8s;';
+      wl.textContent = WEAPONS[weaponIdx].name;
+      wl._show = () => { wl.style.opacity = '1'; clearTimeout(wl._t); wl._t = setTimeout(() => { wl.style.opacity = '.0'; }, 2600); };
+      wl._show();
       if (NO_ARMS) wl.style.display = 'none';        // a search carries nothing, so the label says nothing
       document.body.appendChild(wl);
       window.__wpnEl = wl;
@@ -22650,6 +23014,7 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
       if (window.__growTick) window.__growTick(dt);
       if (window.__graveMist) window.__graveMist(performance.now() / 1000);
       if (window.__hiveTick) window.__hiveTick(performance.now() / 1000);
+      if (window.__goalMarkTick) window.__goalMarkTick();
       if (window.__stormTick) window.__stormTick(performance.now() / 1000);
       if (window.__smithFire) window.__smithFire(performance.now() / 1000);
       if (window.__harborTick) window.__harborTick(performance.now() / 1000);

@@ -146,12 +146,24 @@ function lean(rs) {
   }
   return n ? +(s / n).toFixed(1) : null;
 }
+// THE WADDLE (2026-10-12): side-to-side travel of the hips and the chest
+// across the line of walking, peak to peak, and the feet's track width. A
+// person's hips swing ~3-5 cm walking; the knight was reported waddling.
+function sway(rs) {
+  if (rs.length < 10) return null;
+  const a = rs[0].P, b = rs[rs.length - 1].P, dl = Math.hypot(b[0] - a[0], b[2] - a[2]) || 1;
+  const px = -(b[2] - a[2]) / dl, pz = (b[0] - a[0]) / dl;
+  const lat = (q, r) => (q[0] - r.P[0]) * px + (q[2] - r.P[2]) * pz;
+  const span = k => { const v = rs.map(r => lat(r[k], r)); return +(Math.max(...v) - Math.min(...v)).toFixed(3); };
+  const tw = rs.map(r => Math.abs(lat(r.L, r) - lat(r.R, r)));
+  return { hips: span('H'), chest: span('C'), track: +(tw.reduce((s, v) => s + v, 0) / tw.length).toFixed(3) };
+}
 function stopDist(rs) {
   if (rs.length < 2) return null;
   return +hyp(rs[rs.length - 1].P, rs[0].P).toFixed(2);
 }
 const res = {
-  walk: { speed: speed(by('walk').slice(20)), slide: slide(by('walk').slice(20)), ride: ride(by('walk').slice(20)), lean: lean(by('walk').slice(20)) },
+  walk: { speed: speed(by('walk').slice(20)), slide: slide(by('walk').slice(20)), ride: ride(by('walk').slice(20)), lean: lean(by('walk').slice(20)), sway: sway(by('walk').slice(20)) },
   run: { speed: speed(by('run').slice(30)), slide: slide(by('run').slice(30)), ride: ride(by('run').slice(30)), lean: lean(by('run').slice(30)) },
   stop: { glide_m: stopDist(by('stop')) },
   idle: { slide: slide(by('settle')) },

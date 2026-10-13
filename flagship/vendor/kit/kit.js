@@ -160,7 +160,8 @@ export class Foreman {
   render() {
     const s = this.step; if (!s) return;
     const c = el('fs-card', 'fs-card', '<em></em><b></b><small></small><p></p><span class="next">next step</span><span class="skip">skip the guide</span><i class="keys"></i>');
-    c.querySelector('em').textContent = this.name + '  ·  ' + (this.k + 1) + ' / ' + this.steps.length;
+    c.querySelector('em').textContent = this.opts.counter === false ? this.name : this.name + '  ·  ' + (this.k + 1) + ' / ' + this.steps.length;
+    if (this.opts.skipLabel) c.querySelector('.skip').textContent = this.opts.skipLabel;
     c.querySelector('b').textContent = s.title;
     c.querySelector('small').textContent = voice.clean(s.text);
     c.querySelector('p').textContent = voice.clean(s.why || '');

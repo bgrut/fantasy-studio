@@ -1802,8 +1802,12 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             k = 0.14 / max(_lum, 1e-3)
             spec.world.ground_color = [min(c * k, 1.0) for c in g]
 
-            # LEVEL VARIETY: every FRESH build gets a new world layout (edits
-            # keep their world). Pass an explicit seed to reproduce a level.
+        # LEVEL VARIETY: every FRESH build gets a new world layout (edits
+        # keep their world). Pass an explicit seed to reproduce a level.
+        # (2026-10-12: since 0508f77 this sat inside the dark-ground floor
+        # above, so only a near-black ground drew a seed; every other game
+        # was built on seed 7, the same trees, rocks and camps every time.)
+        if base_spec is None:
             import random as _random
             spec.seed = req.seed if req.seed is not None else _random.randint(1, 999_999)
         job["seed"] = spec.seed
@@ -2832,6 +2836,24 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                                 ekind = _ef; ent.name = _ef
                                 job.setdefault("notes", []).append(f"the {ent.behavior}s are {_ef}s: they belong to the setting")
                                 break
+                        break
+            # A KNIGHT'S GUIDE IS NOT IN JEANS (2026-10-12): the guards wore the
+            # period, but the guide and the passers-by were still the modern man.
+            # A generic person who is not a foe wears the period too: a civilian
+            # of the setting the library has, picked by the seed.
+            elif ekind == "man" and ent.behavior in ("guide", "wander", "follow", "static", "flee") and not getattr(ent, "spectral", False):
+                _era_s = ((req.prompt or "") + " " + str(getattr(spec.world, "name", "") or "") + " " + (spec.title or "")).lower()
+                for _epat, _efig in ((r"\b(japan\w*|samurai|ninjas?|shogun\w*|feudal|edo|ronin|daimyo|kyoto)\b", ("buddhist_monk", "samurai")),
+                                     (r"\b(vikings?|norse|longships?|fjords?)\b", ("viking",)),
+                                     (r"\b(western|frontier|saloon|cowboys?|outlaws?|high noon|sheriff)\b", ("cowboy", "sheriff")),
+                                     (r"\b(medieval|knights?|castles?|kingdom|crusade\w*|dragons?|princess)\b", ("shepherd", "blacksmith", "wizard"))):
+                    if _fre.search(_epat, _era_s):
+                        _hero_n = (spec.player.name or "").lower().strip()
+                        _pool = [f for f in _efig if f != _hero_n and (BACKEND_ROOT / "assets" / "library" / f"{f}_anim.glb").exists()]
+                        if _pool:
+                            _ef = _pool[(spec.seed or 0) % len(_pool)]
+                            ekind = _ef; ent.name = _ef
+                            job.setdefault("notes", []).append(f"the {ent.behavior} is a {_ef.replace('_', ' ')}: they belong to the setting")
                         break
             # prefer the ANIMATED variant (real gait — no gliding); static fallback
             glb = ensure_playable(ekind, verbose=False) or library.resolve(ekind)
@@ -4011,6 +4033,17 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             else:
                 job.setdefault("notes", []).append(
                     "no footprint suited an enterable door. Street-level heist")
+
+        # THE STORY (2026-10-12): a narrator, a chapter, a prologue and an
+        # in-world line per objective, written for this game (story.py); an
+        # edit keeps the story it had
+        if not getattr(spec, "story", None) and getattr(spec, "genre", "") != "factory":
+            stage("writing the story")
+            try:
+                from app.game_export.story import write_story
+                spec.story = write_story(spec, req.prompt or "", verbose=False)
+            except Exception as _se:
+                job.setdefault("notes", []).append(f"story skipped: {type(_se).__name__}")
 
         stage("building")
         # RESOLVED spec (absolute asset paths) — lets Game Projects re-export

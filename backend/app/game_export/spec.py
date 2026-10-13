@@ -228,6 +228,9 @@ class GameSpec(BaseModel):
     reward: Optional[str] = None          # "winner gets a banana" → shown on the win screen
     intro: Optional[str] = None           # narrative layer: 1-2 line quest intro (START screen)
     win_text: Optional[str] = None        # narrative layer: victory line (win screen)
+    # the story (story.py, 2026-10-12): narrator, chapter, tagline, prologue
+    # lines, first_move, one beat per objective, epilogue
+    story: Optional[dict] = None
     # STYLE PRESET (Phase 44): USER-SELECTED, never LLM-guessed — one global
     # render/post pack applied coherently to the whole game
     # GENRE (2026-09-07): which RUNTIME renders this spec. "adventure" is the
