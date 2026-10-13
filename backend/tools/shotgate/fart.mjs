@@ -38,7 +38,21 @@ const inst = await p.evaluate(async ()=>{
   // the settled cost, not the placement's: a build pulses every seam's heart
   // for a second and a half (31 more draws a frame while it decays)
   await new Promise(r => setTimeout(r, 2600));
-  return { belts: n, calls: window.__game.stats().calls, seams: window.__game.facts().nodes };
+  // and settled from the opening too (2026-10-12): the first ten seconds or
+  // so after load draw ~90 more calls a frame (the opening sequence), and
+  // this read landed inside or after them by how fast the page had loaded,
+  // which is why the same build measured 163 one run and 250 the next. The
+  // opening is steady while it runs too, so the read waits until the page is
+  // sixteen seconds old, then for two readings a second apart to agree.
+  while (performance.now() < 16000) await new Promise(r => setTimeout(r, 250));
+  let calls = window.__game.stats().calls;
+  for (let k = 0; k < 8; k++) {
+    await new Promise(r => setTimeout(r, 1000));
+    const c2 = window.__game.stats().calls;
+    if (Math.abs(c2 - calls) <= 2) { calls = c2; break; }
+    calls = c2;
+  }
+  return { belts: n, calls, seams: window.__game.facts().nodes };
 });
 console.log('instanced :', inst.belts, 'belts ->', inst.calls, 'draw calls total |', inst.seams, 'seams, budget', 111 + 2 * inst.seams);
 const outcrops = await p.evaluate(() => window.__game.facts().outcrops);

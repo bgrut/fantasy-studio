@@ -726,6 +726,10 @@ const KINDS = {
   oak: (r) => ({ grow: growBroadleaf, height: 8 + r() * 4, trunkFrac: 0.38, trunkR: 0.42 + r() * 0.12, depth: 3,
     limbs: 7, twigs: 4, crownStart: 0.35, spread: [0.85, 1.35], lenRatio: 0.78, radRatio: 0.55,
     kink: 0.24, lift: 0.02, droop: 0.06, leafFrom: 2, leaves: true, cardsPer: 5, card: 1.7 }),
+  // an apple tree (2026-10-12): short, a low wide crown on a stout trunk, pruned open
+  apple: (r) => ({ grow: growBroadleaf, height: 4.4 + r() * 1.2, trunkFrac: 0.3, trunkR: 0.17 + r() * 0.04, depth: 3,
+    limbs: 6, twigs: 4, crownStart: 0.3, spread: [0.9, 1.4], lenRatio: 0.8, radRatio: 0.55,
+    kink: 0.22, lift: 0.04, droop: 0.1, leafFrom: 2, leaves: true, cardsPer: 5, card: 0.9 }),
   birch: (r) => ({ grow: growBroadleaf, height: 11 + r() * 5, trunkFrac: 0.7, trunkR: 0.18 + r() * 0.05, depth: 3,
     limbs: 7, twigs: 3, crownStart: 0.45, spread: [0.35, 0.75], lenRatio: 0.45, radRatio: 0.5,
     kink: 0.12, lift: 0.04, droop: 0.12, leafFrom: 2, leaves: true, cardsPer: 5, card: 1.2 }),
@@ -1306,6 +1310,9 @@ export function biomeFor(words, arch, groundHSL) {
   // an oak wood on red earth; the Alps are spruce and larch, grey rock above
   else if (has(/\balps\b|alpine|swiss|switzerland|tyrol\w*|dolomit\w*|bavaria\w*/) && !has(/snow|winter|blizzard|frozen/)) Object.assign(out, { kinds: K(['spruce', 0.9], ['pine', 0.35], ['rock', 0.4], ['boulder', 0.2], ['bush', 0.2]), dens: 0.5,
     rockTint: T(0x8a8782), leaf: { h: 0.29, s: 0.42, l: 0.2 } });
+  // AN ORCHARD (2026-10-12): apple trees, and round it the oaks and hedges of farmland
+  else if (has(/orchards?|apple trees?|apples?|cider/)) Object.assign(out, { kinds: K(['apple', 0.6], ['oak', 0.35], ['bush', 0.6]), dens: 0.35,
+    leaf: { h: 0.27, s: 0.48, l: 0.24 } });
   // A HIGHLAND GLEN IS OPEN MOOR (2026-10-08): "a shepherd ... across a misty
   // scottish highland glen" grew a dense wood. A glen is bare hillside: heather,
   // bracken, grey stone and the odd boulder, hardly a tree

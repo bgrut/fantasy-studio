@@ -3451,9 +3451,11 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         # a crowded summer beach" was a plain of acacias, the water a far line
         # (a harbour, a quay, a fishing port: the coast ends in a stone quay, 2026-10-11)
         _harbor = bool(_fre.search(r"\b(harbou?rs?|quays?|quayside|docks|dockside|wharf|wharves|piers?|fishing port|fishing village|fish market|marina)\b", _pw7))
-        if ((_fre.search(r"\b(beach|beaches|seaside|lifeguards?|swimmers?|sunbathers?|surf|surfing|surfers?)\b", _pw7) or _harbor)
+        if ((_fre.search(r"\b(beach|beaches|seaside|lifeguards?|swimmers?|sunbathers?|surf|surfing|surfers?|lighthouses?|coastline|coastal|sea cliffs?|headland|cove)\b", _pw7) or _harbor)
                 and not _fre.search(r"\b(desert|dune|space|moon|mars|city|street|underwater)\b", _pw7)
-                and not getattr(spec.world, "platforms", False) and _arch in ("plain", "dunes", "basin", "mesa")):
+                and not getattr(spec.world, "platforms", False) and (_arch in ("plain", "dunes", "basin", "mesa")
+                     # a lighthouse stands on a coast, not on a flooded plain of islets (2026-10-12)
+                     or (_arch == "archipelago" and _fre.search(r"\blighthouses?\b", _pw7) and not _fre.search(r"\bisl(and|e)s?\b", _pw7)))):
             _arch = "archipelago"
             spec.world.archetype = "archipelago"
             _coast = not _fjord and not job.get("_naval")
@@ -3882,7 +3884,7 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                 "palace": ("castle", "keep"), "citadel": ("castle", "keep"), "fort": ("castle", "keep"),
                 "temple": ("castle", "chapel"), "church": ("castle", "chapel"), "chapel": ("castle", "chapel"),
                 "cathedral": ("castle", "chapel"), "monastery": ("castle", "chapel"), "abbey": ("castle", "chapel"),
-                "shrine": ("castle", "chapel"), "tower": ("castle", "tower"), "lighthouse": ("castle", "tower"),
+                "shrine": ("castle", "chapel"), "tower": ("castle", "tower"), "lighthouse": ("castle", "lighthouse"),
                 "watchtower": ("castle", "tower"), "observatory": ("castle", "tower"),
                 "warehouse": ("dungeon", "warehouse"), "bunker": ("dungeon", "warehouse"), "vault": ("dungeon", "warehouse"),
                 "dungeon": ("dungeon", "keep"), "mill": ("dungeon", "warehouse"), "station": ("dungeon", "warehouse"),
@@ -3919,6 +3921,15 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                 elif _ek_raw in ("temple", "shrine") and not _re3.search(
                         r"\b(church|chapel|cathedral|christian|priest|parish|gothic|bell ?tower)\b", _pl):
                     _kit = "ancient"
+                # A LIGHTHOUSE STANDS WHERE THE WALK ENDS (2026-10-12): "a keeper
+                # climbs the lighthouse to relight the lamp" put the tower on the
+                # far shore while the walk ended on a spit facing it. Its door is at
+                # the goal, a step short of it along the way the path came in.
+                if _ek_raw == "lighthouse" and spec.world.level.get("goal") and spec.world.level.get("path"):
+                    _g = spec.world.level["goal"]; _pp = spec.world.level["path"][-2] if len(spec.world.level["path"]) > 1 else [0.0, 0.0]
+                    _dl = ((_g[0] - _pp[0]) ** 2 + (_g[1] - _pp[1]) ** 2) ** 0.5 or 1.0
+                    # the door just short of the goal, so the tower stands on the land the path ends on
+                    _door = [round(_g[0] - (_g[0] - _pp[0]) / _dl * 1.5, 2), round(_g[1] - (_g[1] - _pp[1]) / _dl * 1.5, 2)]
                 spec.world.level["enterable"] = {"plan": _eplan, "door": _door, "facade": _kit, "label": "the " + _ek_raw}
                 job.setdefault("notes", []).append(
                     f"the {_ek_raw} stands at its door ({_kit} facade, {_ek} inside): step through the glow to go inside")
