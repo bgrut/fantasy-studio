@@ -1768,5 +1768,12 @@
   "looks_like": 0.795,
   "patchy": 0.198,
   "looks_like_best": "a clean 3D render of a paranormal investigator"
+ },
+ "ninja.glb": {
+  "kind": "ninja",
+  "shaded_png": "backend/tools/shotgate/renders/ninja_shaded.png",
+  "looks_like": 0.464,
+  "patchy": 0.536,
+  "looks_like_best": "a clean 3D render of a ninja"
  }
 }

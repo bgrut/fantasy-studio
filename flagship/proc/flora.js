@@ -587,6 +587,26 @@ function growRock(r, P) {
     pos.setXYZ(i, v.x, v.y + sy * 0.2, v.z);
   }
   g.computeVertexNormals();
+  // STONE, NOT A GEM (2026-10-14): the icosphere comes unwelded, so every
+  // triangle shaded flat and a boulder read as a cut low-poly jewel. Each
+  // corner now takes the mean of the faces meeting there that lie within
+  // fifty degrees of its own, so the weathered surface rounds off and the
+  // cleavage cuts keep their crisp edges.
+  {
+    const nr = g.attributes.normal, faces = new Map(), cos50 = Math.cos(50 * Math.PI / 180);
+    const key = i => Math.round(pos.getX(i) * 1e4) + ',' + Math.round(pos.getY(i) * 1e4) + ',' + Math.round(pos.getZ(i) * 1e4);
+    const keys = new Array(pos.count);
+    for (let i = 0; i < pos.count; i++) { const k = keys[i] = key(i); let l = faces.get(k); if (!l) faces.set(k, l = []); l.push(nr.getX(i), nr.getY(i), nr.getZ(i)); }
+    const out = new Float32Array(pos.count * 3);
+    for (let i = 0; i < pos.count; i++) {
+      const l = faces.get(keys[i]), ox = nr.getX(i), oy = nr.getY(i), oz = nr.getZ(i);
+      let sx2 = 0, sy2 = 0, sz2 = 0;
+      for (let j = 0; j < l.length; j += 3) if (l[j] * ox + l[j + 1] * oy + l[j + 2] * oz > cos50) { sx2 += l[j]; sy2 += l[j + 1]; sz2 += l[j + 2]; }
+      const len = Math.hypot(sx2, sy2, sz2) || 1;
+      out[i * 3] = sx2 / len; out[i * 3 + 1] = sy2 / len; out[i * 3 + 2] = sz2 / len;
+    }
+    nr.array.set(out); nr.needsUpdate = true;
+  }
   const n = pos.count;
   g.setAttribute('sway', new THREE.Float32BufferAttribute(new Float32Array(n), 1));
   const sh = new Float32Array(n);
@@ -726,8 +746,8 @@ const KINDS = {
     limbs: 8, twigs: 4, crownStart: 0.1, spread: [0.3, 0.8], lenRatio: 0.95, radRatio: 0.78,
     kink: 0.2, lift: 0.2, droop: 0, leafFrom: 9, leaves: false, cardsPer: 0, card: 1 }),
   rock: (r) => ({ grow: growRock, size: 0.9 + r() * 0.8, flat: 0.6, facets: 5, detail: 4 }),
-  boulder: (r) => ({ grow: growRock, size: 2.2 + r() * 1.6, flat: 0.55, facets: 6, detail: 4 }),
-  mesa: (r) => ({ grow: growRock, size: 4 + r() * 3, flat: 0.9, facets: 7, detail: 4, strata: 2.5 }),
+  boulder: (r) => ({ grow: growRock, size: 2.2 + r() * 1.6, flat: 0.55, facets: 6, detail: 6 }),
+  mesa: (r) => ({ grow: growRock, size: 4 + r() * 3, flat: 0.9, facets: 7, detail: 6, strata: 2.5 }),
   cactus: (r) => ({ grow: growCactus, height: 4.5 + r() * 3.5, r: 0.3 + r() * 0.08, arms: Math.floor(r() * 4) }),
   crystal: (r) => ({ grow: growCrystal, size: 1.4 + r() * 1.2 }),
   broadleaf: (r) => ({ grow: growBroadleaf, height: 9 + r() * 6, trunkFrac: 0.5, trunkR: 0.28 + r() * 0.1, depth: 3,

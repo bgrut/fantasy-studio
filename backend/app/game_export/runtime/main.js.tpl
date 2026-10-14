@@ -9839,6 +9839,10 @@ async function main() {
         else if (/desert|dune|canyon|mesa|mars|moon|beach|sand|wasteland|savanna/.test(_words) || ['canyon', 'mesa', 'dunes', 'archipelago'].includes(_arch)) dens = { pebble: 1.0, twig: 0.03 };
         else if (/forest|wood|jungle|swamp|grove|autumn|fall\b|orchard|park/.test(_words)) dens = { pebble: 0.5, twig: 0.35, leaf: 1.6 };
         else dens = { pebble: 0.7, twig: 0.08, leaf: green ? 0.35 : 0 };
+        // (2026-10-14) the planter fills a kind the density leaves out with its
+        // own default, so snow, a volcano and a cave each got a twig every ten
+        // square metres: black scratches over a snowfield. A kind not named is none.
+        dens = Object.assign({ pebble: 0, twig: 0, leaf: 0, flower: 0 }, dens);
         // WILDFLOWERS (2026-10-05): a sentence that names flowers gets drifts of
         // them; any other green open land a scattering
         const _flw = /flower|blossom|bloom|garden|spring|poppy|poppies|tulip|lavender|daisy|daisies|bluebell|petal/.test(_words);
@@ -12596,6 +12600,27 @@ async function main() {
     }) : null;
     const boardM = boards ? MAT({ map: boards, normalMap: HDN('planks', 1), roughness: 0.85 }) : null, turfM = turf ? MAT({ map: turf, normalMap: HDN('grass', 1), normalScale: new THREE.Vector2(1.3, 1.3), roughness: 1 }) : null;
     const bargeM = MAT({ color: 0x2a1c12, roughness: 0.75 });
+    // A VILLAGE AT CHRISTMAS (2026-10-14): "a cosy winter village at christmas"
+    // was the same dark cottages as any other night: unlit glass, nothing on
+    // the doors. Under a festive sentence each door wears a wreath, a string
+    // of bulbs hangs under the front eaves (warm white or coloured, by the
+    // seed), the chimneys smoke and a decorated spruce stands on the green.
+    // Any village at night has its windows lit from inside.
+    const _vw = [SPEC.prompt, SPEC.world && SPEC.world.name, SPEC.title].filter(Boolean).join(' ').toLowerCase();
+    const FESTIVE = /\b(christmas|xmas|yule\w*|festive|advent|noel|santa)\b/.test(_vw);
+    // a lit window is a room seen through glass: lamplight brightest low in
+    // the middle, curtains drawn back at the sides, a sill shadow along the foot
+    const litTex = cvT(64, 64, (g, W, H) => { const gr = g.createRadialGradient(W * 0.5, H * 0.62, 2, W * 0.5, H * 0.55, W * 0.62);
+      gr.addColorStop(0, '#fff0c8'); gr.addColorStop(0.45, '#f6b45a'); gr.addColorStop(1, '#8a4a1c'); g.fillStyle = gr; g.fillRect(0, 0, W, H);
+      for (const s of [0, 1]) { const cg = g.createLinearGradient(s ? W : 0, 0, s ? W * 0.72 : W * 0.28, 0); cg.addColorStop(0, 'rgba(120,28,22,0.92)'); cg.addColorStop(1, 'rgba(150,40,30,0)');
+        g.fillStyle = cg; g.beginPath(); g.moveTo(s ? W : 0, 0); g.lineTo(s ? W * 0.7 : W * 0.3, 0); g.quadraticCurveTo(s ? W * 0.86 : W * 0.14, H * 0.5, s ? W * 0.8 : W * 0.2, H); g.lineTo(s ? W : 0, H); g.fill(); }
+      g.fillStyle = 'rgba(40,20,8,0.5)'; g.fillRect(0, H * 0.9, W, H * 0.1); });
+    litTex.wrapS = litTex.wrapT = THREE.ClampToEdgeWrapping;
+    const litM = MAT({ color: 0xffffff, map: litTex, roughness: 0.25, emissive: 0xffffff, emissiveMap: litTex, emissiveIntensity: 1.25 });
+    const winM = (FESTIVE || _isNightSky) ? litM : glassM;
+    const bulbs = [], wires = [], _multi = rV() < 0.5;
+    const BULB = _multi ? [[3.2, 0.5, 0.4], [0.5, 2.6, 0.7], [0.6, 1.0, 3.4], [3.4, 2.4, 0.5]] : [[3.6, 2.5, 1.2]];
+    const wreathM = MAT({ color: 0x24472a, roughness: 0.85 }), bowM = MAT({ color: 0xa8161c, roughness: 0.5 });
     for (const c of V.cot) {
       const y0 = Math.min(...[[-1, -1], [1, -1], [-1, 1], [1, 1]].map(([a, b]) => { const [x, z] = V.loc(c, a * c.w / 2, b * c.d / 2); return hAt(x, z); })) - 0.05;
       const G = new THREE.Group(); G.position.set(c.x, y0, c.z); G.rotation.y = c.ry;
@@ -12648,15 +12673,78 @@ async function main() {
       add(new THREE.BoxGeometry(1.0, 1.95, 0.08), darkM, dx, 0.4 + 0.98, fz);
       add(new THREE.BoxGeometry(1.2, 0.12, 0.12), darkM, dx, 0.4 + 2.0, fz + 0.02);
       for (const wx of [dx - 1.9, dx + 1.9]) { if (Math.abs(wx) > c.w / 2 - 0.6) continue;
-        add(new THREE.BoxGeometry(0.85, 0.85, 0.05), glassM, wx, 0.4 + 1.45, fz);
+        add(new THREE.BoxGeometry(0.85, 0.85, 0.05), winM, wx, 0.4 + 1.45, fz);
         add(new THREE.BoxGeometry(1.0, 0.1, 0.1), frameM, wx, 0.4 + 1.92, fz + 0.03); add(new THREE.BoxGeometry(1.0, 0.1, 0.12), frameM, wx, 0.4 + 0.98, fz + 0.04);
         add(new THREE.BoxGeometry(0.06, 0.85, 0.08), frameM, wx, 0.4 + 1.45, fz + 0.03);
         for (const s of [-1, 1]) add(new THREE.BoxGeometry(0.42, 0.95, 0.05), sh, wx + s * 0.66, 0.4 + 1.45, fz + 0.02);
         add(new THREE.BoxGeometry(0.9, 0.18, 0.22), darkM, wx, 0.4 + 0.88, fz + 0.12); }
+      if (FESTIVE) {
+        // a holly wreath on the door, its bow and berries
+        const wr = add(new THREE.TorusGeometry(0.24, 0.075, 8, 22), wreathM, dx, 0.4 + 1.5, fz + 0.1); wr.scale.z = 0.7;
+        for (let k = 0; k < 9; k++) { const a = k / 9 * Math.PI * 2 + rV() * 0.3;
+          add(new THREE.SphereGeometry(0.028, 6, 5), bowM, dx + Math.cos(a) * (0.24 + (rV() - 0.5) * 0.06), 0.4 + 1.5 + Math.sin(a) * (0.24 + (rV() - 0.5) * 0.06), fz + 0.17); }
+        for (const s of [-1, 1]) add(new THREE.BoxGeometry(0.13, 0.08, 0.03), bowM, dx + s * 0.07, 0.4 + 1.26, fz + 0.16, 0, s * 0.35);
+        // bulbs along the wall plate under the front eaves (higher, the thatch's
+        // overhang swallowed them), sagging between pegs
+        const ey = 0.4 + c.h - 0.42, ez = fz + 0.12, x0 = -c.w / 2 + 0.25, x1 = c.w / 2 - 0.25, spans = Math.max(2, Math.round((x1 - x0) / 1.6));
+        let prev = null;
+        for (let k = 0; k <= spans * 6; k++) {
+          const t = k / (spans * 6), x = x0 + (x1 - x0) * t, u = (t * spans) % 1, y = ey - Math.sin(Math.PI * u) * 0.2;
+          const [wx2, wz2] = V.loc(c, x, ez), p = [wx2, y0 + y, wz2];
+          if (prev) wires.push(...prev, ...p); prev = p;
+          if (k % 2 === 1) bulbs.push([wx2, y0 + y - 0.05, wz2, BULB[(k >> 1) % BULB.length]]);
+        }
+      }
+      if (FESTIVE || SNOW_GROUND) { const [sx, sz] = V.loc(c, chx, -0.4); (window.__lhSmoke = window.__lhSmoke || []).push([sx, y0 + 0.4 + c.h + rise + 1.7, sz]); }
       scene.add(G);
       const col = RAPIER.ColliderDesc.cuboid(c.w / 2, (c.h + 0.6) / 2, c.d / 2).setTranslation(c.x, y0 + (c.h + 0.6) / 2, c.z);
       col.setRotation({ w: Math.cos(c.ry / 2), x: 0, y: Math.sin(c.ry / 2), z: 0 }); world.createCollider(col);
       c.y0 = y0;
+    }
+    if (FESTIVE) {
+      // the spruce on the green, past the well from the lane: tiers of
+      // drooping boughs, snow on their tops under a snowy sky, glass baubles,
+      // a spiral of bulbs and a star
+      const [tx, tz] = [V.GC[0] - V.D[0] * 5.5, V.GC[1] - V.D[1] * 5.5], ty = hAt(tx, tz), TH = 7.2;
+      const bough = MAT({ color: 0x1d3a24, roughness: 0.92 }), snowB = MAT({ color: 0xeef2f6, roughness: 0.8 });
+      const tr = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.26, 1.6, 10), darkM); tr.position.set(tx, ty + 0.8, tz); tr.castShadow = true; scene.add(tr);
+      const tiers = 7;
+      for (let k = 0; k < tiers; k++) {
+        const f = k / tiers, rad = 2.3 * (1 - f) + 0.25, h = 1.9 - f * 0.7, yb = ty + 1.0 + f * (TH - 2.0);
+        const cg = new THREE.ConeGeometry(rad, h, 28, 4, true), pa = cg.attributes.position;
+        for (let i = 0; i < pa.count; i++) { const x = pa.getX(i), y = pa.getY(i), z = pa.getZ(i), rr = Math.hypot(x, z);
+          if (rr < 1e-4) continue;
+          const a = Math.atan2(z, x), tip = 1 + 0.16 * Math.max(0, Math.cos(a * 14 + k)) * (0.5 - y / h);   // bough tips at the hem
+          const droop = (0.5 - y / h) * rr * 0.12;
+          pa.setXYZ(i, x * tip, y - droop, z * tip); }
+        cg.computeVertexNormals();
+        const m = new THREE.Mesh(cg, bough); m.position.set(tx, yb + h / 2, tz); m.rotation.y = k * 0.7; m.castShadow = true; m.receiveShadow = true; scene.add(m);
+        if (SNOW_GROUND) { const sg = cg.clone(); sg.scale(0.97, 0.55, 0.97); const s = new THREE.Mesh(sg, snowB); s.position.set(tx, yb + h * 0.62, tz); s.rotation.y = m.rotation.y; scene.add(s); }
+      }
+      const glassB = [0xb3141e, 0xd6a531, 0x1f4fa8, 0xe8e2d4].map(cc => MAT({ color: cc, roughness: 0.12, metalness: 0.6 }));
+      for (let i = 0; i < 46; i++) { const f = Math.pow(rV(), 0.8) * 0.88, a = rV() * Math.PI * 2, rad = (2.3 * (1 - f) + 0.25) * 0.86;
+        const b = new THREE.Mesh(new THREE.SphereGeometry(0.085 + rV() * 0.05, 10, 8), glassB[i % 4]);
+        b.position.set(tx + Math.cos(a) * rad, ty + 1.05 + f * (TH - 2.0), tz + Math.sin(a) * rad); b.castShadow = true; scene.add(b); }
+      for (let i = 0; i < 140; i++) { const t = i / 140, f = t * 0.9, a = t * Math.PI * 2 * 6.5, rad = (2.3 * (1 - f) + 0.25) * 0.92;
+        bulbs.push([tx + Math.cos(a) * rad, ty + 1.2 + f * (TH - 2.0), tz + Math.sin(a) * rad, BULB[i % BULB.length]]); }
+      const stS = new THREE.Shape();
+      for (let k = 0; k < 10; k++) { const a = Math.PI / 2 + k * Math.PI / 5, rr = k % 2 ? 0.17 : 0.42; k ? stS.lineTo(Math.cos(a) * rr, Math.sin(a) * rr) : stS.moveTo(Math.cos(a) * rr, Math.sin(a) * rr); }
+      const stG = new THREE.ExtrudeGeometry(stS, { depth: 0.08, bevelEnabled: true, bevelThickness: 0.04, bevelSize: 0.03, bevelSegments: 1 }); stG.center();
+      const star = new THREE.Mesh(stG, new THREE.MeshBasicMaterial({ color: new THREE.Color(4.0, 3.1, 1.3) }));
+      star.position.set(tx, ty + TH + 0.45, tz); star.rotation.y = Math.atan2(-V.D[0], -V.D[1]) + Math.PI; scene.add(star);
+      window.__xmasStar = star;
+      world.createCollider(RAPIER.ColliderDesc.cylinder(1.2, 0.7).setTranslation(tx, ty + 1.2, tz));
+      const glow = new THREE.PointLight(0xffb060, 9, 14, 2); glow.position.set(tx, ty + 2.4, tz); scene.add(glow);
+      window.__xmasTree = [tx, tz];
+    }
+    if (bulbs.length) {
+      const bm = new THREE.InstancedMesh(new THREE.SphereGeometry(0.055, 8, 6), new THREE.MeshBasicMaterial({ color: 0xffffff }), bulbs.length);
+      const m4 = new THREE.Matrix4(), cc = new THREE.Color();
+      bulbs.forEach(([x, y, z, col], i) => { m4.makeTranslation(x, y, z); bm.setMatrixAt(i, m4); bm.setColorAt(i, cc.setRGB(col[0], col[1], col[2])); });
+      bm.frustumCulled = false; scene.add(bm);
+      if (wires.length) { const wg = new THREE.BufferGeometry(); wg.setAttribute('position', new THREE.Float32BufferAttribute(wires, 3));
+        scene.add(new THREE.LineSegments(wg, new THREE.LineBasicMaterial({ color: 0x1a1a14 }))); }
+      window.__xmasBulbs = bulbs.length;
     }
     // the well on the green
     { const [x, z] = V.GC, y = hAt(x, z);

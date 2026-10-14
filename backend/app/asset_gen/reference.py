@@ -531,7 +531,10 @@ def _build_reference_prompt(slots: Dict[str, Any], style: str) -> tuple[str, str
             "knight":    "knight in full plate armor, helmet, tabard, medieval",
             "viking":    "viking warrior, fur and leather armor, round shield, braided beard",
             "samurai":   "samurai warrior, layered lamellar armor, kabuto helmet, katana at the hip",
-            "ninja":     "ninja, black hooded outfit, face mask, fantasy",
+            # (2026-10-14) "black hooded outfit, fantasy" came out as grey
+            # tights and boots under a black tabard, a stage burglar; "cotton
+            # cross-front jacket" alone drew a white karate gi, so the colour leads
+            "ninja":     "a shinobi dressed head to toe in deep navy-black, every garment dark and nothing white: a dark wrapped cross-front jacket, dark baggy trousers bound at the shins with dark cloth wrappings, black split-toe tabi boots, a black hood and face cloth showing only the eyes, a dark sash with a short sword on the back, feudal Japan, fully clothed, normal proportions",
             "gladiator": "gladiator, roman segmented armor, helmet, shield",
             "barbarian": "barbarian warrior, fur clothing, leather straps, muscular",
             "pirate":    "pirate, tricorn hat, long coat, sash, fantasy",

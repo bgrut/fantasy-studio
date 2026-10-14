@@ -1839,6 +1839,36 @@
    "verdict": "good"
   },
   {
+   "file": "city_champion.glb",
+   "dims_m": {
+    "x": 0.0042,
+    "y": 1.0,
+    "z": 0.7375
+   },
+   "min_y": -0.0,
+   "skinned": false,
+   "clips": [],
+   "bones": 0,
+   "biped": false,
+   "tallest_axis": "y",
+   "aspect": {
+    "w_h": 0.004,
+    "d_h": 0.738
+   },
+   "upright": true,
+   "height_ratio": 1.0,
+   "mesh": {
+    "tris": 45000,
+    "largest_share": 1.0,
+    "fragments": 1,
+    "degenerate": 0.0,
+    "textures": 3,
+    "textures_ok": true
+   },
+   "quality": 1.0,
+   "verdict": "good"
+  },
+  {
    "file": "clover.glb",
    "dims_m": {
     "x": 0.1513,
@@ -7734,9 +7764,9 @@
   {
    "file": "ninja.glb",
    "dims_m": {
-    "x": 1.6047,
-    "y": 1.7501,
-    "z": 0.3225
+    "x": 1.5542,
+    "y": 1.75,
+    "z": 0.4183
    },
    "min_y": -0.0,
    "skinned": false,
@@ -7745,28 +7775,35 @@
    "biped": true,
    "tallest_axis": "y",
    "aspect": {
-    "w_h": 0.917,
-    "d_h": 0.184
+    "w_h": 0.888,
+    "d_h": 0.239
    },
    "upright": true,
    "height_ratio": 1.0,
    "mesh": {
-    "tris": 44965,
+    "tris": 79457,
     "largest_share": 1.0,
     "fragments": 1,
     "degenerate": 0.0,
     "textures": 3,
     "textures_ok": true
    },
-   "quality": 1.0,
-   "verdict": "good"
+   "render": {
+    "looks_like": 0.464,
+    "looks_like_best": "a clean 3D render of a ninja"
+   },
+   "quality_reasons": [
+    "doubtful"
+   ],
+   "quality": 0.5,
+   "verdict": "fair"
   },
   {
    "file": "ninja_anim.glb",
    "dims_m": {
-    "x": 1.6046,
+    "x": 1.5543,
     "y": 1.75,
-    "z": 0.3224
+    "z": 0.4183
    },
    "min_y": -0.0,
    "skinned": true,
@@ -7781,16 +7818,16 @@
    "biped": true,
    "tallest_axis": "y",
    "aspect": {
-    "w_h": 0.917,
-    "d_h": 0.184
+    "w_h": 0.888,
+    "d_h": 0.239
    },
    "upright": true,
    "height_ratio": 1.0,
    "mesh": {
-    "tris": 34767,
+    "tris": 101943,
     "largest_share": 1.0,
     "fragments": 1,
-    "degenerate": 0.0,
+    "degenerate": 0.0005,
     "textures": 1,
     "textures_ok": true
    },
@@ -10579,6 +10616,79 @@
    "verdict": "good"
   },
   {
+   "file": "street_racer.glb",
+   "dims_m": {
+    "x": 1.5152,
+    "y": 1.75,
+    "z": 0.3573
+   },
+   "min_y": 0.0,
+   "skinned": false,
+   "clips": [],
+   "bones": 0,
+   "biped": true,
+   "tallest_axis": "y",
+   "aspect": {
+    "w_h": 0.866,
+    "d_h": 0.204
+   },
+   "upright": true,
+   "height_ratio": 1.0,
+   "mesh": {
+    "tris": 79869,
+    "largest_share": 0.9548,
+    "fragments": 3,
+    "degenerate": 0.0,
+    "textures": 3,
+    "textures_ok": true
+   },
+   "render": {
+    "looks_like": 0.203,
+    "looks_like_best": "a clean 3D render of a street racer"
+   },
+   "quality_reasons": [
+    "does not look like it"
+   ],
+   "quality": 0.2,
+   "verdict": "good"
+  },
+  {
+   "file": "street_racer_anim.glb",
+   "dims_m": {
+    "x": 1.5151,
+    "y": 1.75,
+    "z": 0.3573
+   },
+   "min_y": -0.0,
+   "skinned": true,
+   "clips": [
+    "attack",
+    "idle",
+    "run",
+    "sneak",
+    "walk"
+   ],
+   "bones": 21,
+   "biped": true,
+   "tallest_axis": "y",
+   "aspect": {
+    "w_h": 0.866,
+    "d_h": 0.204
+   },
+   "upright": true,
+   "height_ratio": 1.0,
+   "mesh": {
+    "tris": 79869,
+    "largest_share": 0.96,
+    "fragments": 2,
+    "degenerate": 0.0,
+    "textures": 1,
+    "textures_ok": true
+   },
+   "quality": 1.0,
+   "verdict": "good"
+  },
+  {
    "file": "superhero.glb",
    "dims_m": {
     "x": 1.3664,
@@ -12156,11 +12266,6 @@
    },
    "quality": 1.0,
    "verdict": "good"
-  },
-  {
-   "file": "street_racer.glb",
-   "verdict": "good",
-   "note": "judged poor by CLIP (no car in frame); rendered and kept 2026-10-13"
   }
  ]
 }
