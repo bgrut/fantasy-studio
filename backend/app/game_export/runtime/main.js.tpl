@@ -11769,6 +11769,74 @@ async function main() {
     g.fillStyle = grad; g.fillRect(0, 0, 64, 64);
     return new THREE.CanvasTexture(c);
   })();
+  // ── TRAPPED (2026-10-13) ────────────────────────────────────────────────
+  // "a lone climber is trapped in a remote desert slot canyon, his arm
+  // pinned under a fallen boulder, and must ration water and find a way out
+  // before the fifth day" walked to an exit. In a slot canyon with a pinning
+  // in its sentence, the game starts with the boulder wedged across the slot
+  // on the hero's arm: hold E to work it free (a long, shaking effort), and
+  // only then can you move. From the first moment the canteen drains, faster
+  // as you move; the sun crosses the strip of sky and the days are counted;
+  // seep pools along the floor refill the canteen. An empty canteen slows you
+  // to a crawl, and when the last day ends the game is lost.
+  const TRAP = (() => {
+    const w = String(SPEC.prompt || '').toLowerCase();
+    if (!(LVL && LVL.slot) || !/\b(pinned|trapped|wedged|stuck|crushed)\b/.test(w)) return null;
+    const dm = w.match(/\b(\d+|two|three|four|five|six|seven)(?:st|nd|rd|th)?\s+(days?|day)\b/) || w.match(/\b(first|second|third|fourth|fifth|sixth|seventh)\s+day\b/);
+    const WN = { two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, second: 2, third: 3, fourth: 4, fifth: 5, sixth: 6, seventh: 7, first: 1 };
+    const days = dm ? (WN[dm[1]] || +dm[1] || 5) : 5;
+    return { days, pinned: true, free: 0, water: 1, day: 1, dayLen: 150, t: 0, pools: [] };
+  })();
+  window.__trap = TRAP;
+  function setupTrap() {
+    if (!TRAP) return;
+    // the boulder: a chockstone fallen into the slot, wedged between the walls, at the hero's side
+    const g = new THREE.IcosahedronGeometry(1.6, 4).toNonIndexed(), ps = g.attributes.position;
+    for (let i = 0; i < ps.count; i++) { const x = ps.getX(i), y = ps.getY(i), z = ps.getZ(i);
+      const n = 1 + Math.sin(x * 2.3 + 1) * Math.cos(z * 1.9) * 0.14 + Math.sin(y * 3.1 + x) * 0.08; ps.setXYZ(i, x * n * 1.25, y * n * 0.95, z * n); }
+    g.computeVertexNormals();
+    const m = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ map: HDT('cliff', 1, 1), normalMap: HDN('cliff', 1, 1), color: 0xc08a64, roughness: 0.9, flatShading: true }));
+    m.material.userData.noAutoTex = true;
+    const hd = (typeof yaw === 'number') ? yaw : 0;
+    const bx = Math.sin(hd) * 1.4, bz = Math.cos(hd) * 1.4;      // just beside and ahead of the start, at shoulder height
+    m.position.set(bx, hAt(bx, bz) + 1.25, bz); m.rotation.set(0.3, 0.8, 0.2); m.castShadow = m.receiveShadow = true; scene.add(m);
+    world.createCollider(RAPIER.ColliderDesc.ball(1.5).setTranslation(bx, hAt(bx, bz) + 1.25, bz));
+    // seep pools on the floor along the route: a thin dark sheet of water and a wet rim
+    const path = LVL.path || [];
+    const pM = new THREE.MeshStandardMaterial({ color: 0x2a3a3c, roughness: 0.05, metalness: 0.3, transparent: true, opacity: 0.85 });
+    for (let k = 1; k <= 4; k++) { const f = k / 5, seg = Math.min(path.length - 2, Math.floor(f * (path.length - 1))), tt = f * (path.length - 1) - seg;
+      if (seg < 0) break;
+      const x = path[seg][0] + (path[seg + 1][0] - path[seg][0]) * tt, z = path[seg][1] + (path[seg + 1][1] - path[seg][1]) * tt;
+      const pool = new THREE.Mesh(new THREE.CircleGeometry(0.75, 20).rotateX(-Math.PI / 2), pM); pool.scale.set(1.3, 1, 0.8); pool.position.set(x, hAt(x, z) + 0.02, z); scene.add(pool);
+      TRAP.pools.push({ x, z, mesh: pool, left: 0.45 }); }
+    // the HUD: a canteen bar and the day, in the game's own type
+    const el = document.createElement('div'); el.id = 'fstrap';
+    el.style.cssText = 'position:fixed;right:22px;top:22px;z-index:6;text-align:right;pointer-events:none;font:500 12px var(--f-ui);color:var(--art-ink, #eee);text-shadow:0 1px 6px rgba(0,0,0,.8)';
+    el.innerHTML = '<div id="fstrapday" style="font:var(--art-hw, 600) 20px var(--f-head);letter-spacing:.12em;text-transform:uppercase"></div>'
+      + '<div style="margin-top:6px;letter-spacing:.14em;text-transform:uppercase;opacity:.8">water</div>'
+      + '<div style="width:170px;height:6px;margin:4px 0 0 auto;background:rgba(255,255,255,.15)"><i id="fstrapw" style="display:block;height:100%;width:100%;background:var(--art-acc, #6ad)"></i></div>'
+      + '<div id="fstraphint" style="margin-top:14px;font:var(--art-hw, 600) 15px var(--f-head);letter-spacing:.06em"></div>';
+    document.body.appendChild(el);
+  }
+  function trapTick(dt, moving, pos) {
+    if (!TRAP || !gameStarted) return;
+    const T = TRAP;
+    T.t += dt;
+    if (T.pinned) {
+      if (keys.KeyE) { T.free += dt; camera.position.x += (Math.random() - 0.5) * 0.02; }
+      const pct = Math.min(1, T.free / 9);
+      document.getElementById('fstraphint').textContent = pct < 1 ? (pct > 0 ? 'Working the arm free  ' + Math.round(pct * 100) + '%' : 'Your arm is pinned. Hold E to work it free.') : '';
+      if (pct >= 1) { T.pinned = false; popText('Free', 'var(--fs-accent)'); sfx('step'); }
+    }
+    T.water = Math.max(0, T.water - dt * (moving ? 1 / 260 : 1 / 520));
+    for (const pl of T.pools) if (pl.left > 0 && Math.hypot(pos.x - pl.x, pos.z - pl.z) < 1.4) {
+      const take = Math.min(pl.left, 1 - T.water); T.water += take; pl.left -= take; pl.mesh.scale.multiplyScalar(0.7);
+      if (take > 0.02) popText('Water', 'var(--fs-accent)'); }
+    T.day = Math.min(T.days, 1 + Math.floor(T.t / T.dayLen));
+    document.getElementById('fstrapday').textContent = 'Day ' + T.day + ' of ' + T.days;
+    document.getElementById('fstrapw').style.width = Math.round(T.water * 100) + '%';
+    if (T.t >= T.dayLen * T.days && !won && !lost) doLose('The ' + ['first', 'second', 'third', 'fourth', 'fifth', 'sixth', 'seventh'][T.days - 1] + ' day ends in the canyon.');
+  }
   function makeGlow(scale) {
     const sp = new THREE.Sprite(new THREE.SpriteMaterial({
       map: glowTex, transparent: true, blending: THREE.AdditiveBlending,
@@ -18361,6 +18429,7 @@ async function main() {
     if (_tgt && !SPEC.world.pano) { const dx = _tgt[0] - 0, dz = _tgt[1] - 0; if (Math.hypot(dx, dz) > 4) yaw = Math.atan2(dx, dz) + Math.PI; }
   }
   let pitch = SPEC.world.pano ? 0.16 : 0.35;
+  try { setupTrap(); } catch (e) { console.warn('[game] trap: ' + e.message); }
   let dragging = false, px = 0, py = 0;
   let camZoom = 1, freeLookT = 0;   // wheel zoom · seconds of free-look after a drag
   // ── THE GUIDE (2026-09-16): the kit's Foreman, in the player's mode. ──────
@@ -22500,7 +22569,7 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
       } else if (d.sp.material.opacity !== 0) d.sp.material.opacity = 0;
     }
     // pre-START or paused: inputs are dead, world idles as the backdrop
-    const mvRaw = (gameStarted && !paused) ? readMove() : { x: 0, z: 0, run: false, mag: 0 };
+    const mvRaw = (gameStarted && !paused && !(window.__trap && window.__trap.pinned)) ? readMove() : { x: 0, z: 0, run: false, mag: 0 };
     // Inspect FREE-FLY: while editing, WASD/arrows pan the EDITOR CAMERA
     // across the world (hero stays put) — scout anywhere, click, place.
     const mv = inspectOn ? { x: 0, z: 0, run: false, mag: 0 } : mvRaw;
@@ -23131,6 +23200,7 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
       if (window.__growTick) window.__growTick(dt);
       if (window.__graveMist) window.__graveMist(performance.now() / 1000);
       if (window.__hiveTick) window.__hiveTick(performance.now() / 1000);
+      if (TRAP) trapTick(dt, !!(mvRaw && mvRaw.mag > 0.1), nt);
       if (window.__goalMarkTick) window.__goalMarkTick();
       if (window.__stormTick) window.__stormTick(performance.now() / 1000);
       if (window.__smithFire) window.__smithFire(performance.now() / 1000);

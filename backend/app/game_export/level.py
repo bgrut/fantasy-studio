@@ -437,7 +437,7 @@ def build_level(seed: int, size_m: float, n_objectives: int = 0,
                 amplitude_m: float = 2.4, grid_n: int = 48,
                 regions: list[dict] | None = None,
                 archetype: str = "plain", terrain_form: str = "natural", sea: bool = False,
-                fjord: bool = False, coast: bool = False, harbor: bool = False) -> dict:
+                fjord: bool = False, coast: bool = False, harbor: bool = False, slot: bool = False) -> dict:
     """Deterministic LevelPlan. Returns a JSON-safe dict for the runtime.
 
     sea (2026-10-06): a sea battle sails, it does not walk. The islands sit
@@ -461,9 +461,13 @@ def build_level(seed: int, size_m: float, n_objectives: int = 0,
         j = rng.uniform(-0.22, 0.22) * goal_r
         if fjord or coast:
             j *= 0.15                                # the shore track runs along the water
+        if slot:
+            j *= 0.6                                 # a slot canyon winds, but within its walls
         path.append([mx + px * j, mz + pz * j])
     path.append(list(goal))
     corridor = 5.5                                   # flattened, prop-free (m)
+    if slot:
+        corridor = 1.6                               # the slot's floor is barely a body wide
 
     # ── terrain: hills, flattened along the corridor + zones ────────────────
     raster = _rasterize_regions(regions or [], grid_n, size_m, seed, path)
@@ -558,8 +562,26 @@ def build_level(seed: int, size_m: float, n_objectives: int = 0,
                     h = h * 0.3 + wall * (13.0 + 6.0 * hgrid[i][j]) + (hgrid[i2][j2] - 0.5) * 1.4 * wall
                 else:
                     h *= 0.35                                      # a rubbly floor, not hills
+            if slot:
+                # A SLOT CANYON (2026-10-13): "a climber trapped in a remote desert
+                # slot canyon" walked an open desert to an exit. A slot is a crack in
+                # the sandstone: a floor two to four metres wide winding along the
+                # route between walls thirty to forty metres high, open to a strip of
+                # sky, widening into a small chamber where the hero starts and into
+                # the open mouth of the canyon at the goal.
+                wid = 1.2 + 0.9 * hgrid[i2][j2]                     # floor half-width, 1.2 to 2.1 m
+                open_d = min(d - wid, math.hypot(x, z) - 4.5, math.hypot(x - goal[0], z - goal[1]) - 16.0)
+                if open_d > 0:
+                    wall = min(1.0, open_d / 2.2)                    # sheer: the wall is up within two metres
+                    wall = wall * wall * (3 - 2 * wall)
+                    lip = 30.0 + 10.0 * hgrid[i][j]
+                    h = wall * lip + (hgrid[i2][j2] - 0.5) * 2.2 * wall + h * 0.15
+                else:
+                    h = h * 0.12 + (hgrid[i2][j2] - 0.5) * 0.25        # a sand and rubble floor
             d = min(d, math.hypot(x, z), math.hypot(x - goal[0], z - goal[1]))
-            if sea:
+            if slot:
+                pass                                 # the slot's own floor is already level and walkable
+            elif sea:
                 if d < corridor * 3.0:               # a deep lane for the hulls
                     h = min(h, -3.5)
             elif d < corridor:
@@ -568,7 +590,7 @@ def build_level(seed: int, size_m: float, n_objectives: int = 0,
                 t = (d - corridor) / (corridor * 1.2)
                 h *= t * t * (3 - 2 * t)
             edge = max(abs(x), abs(z)) / half        # settle flat at the walls
-            if edge > 0.92 and _arch != "cave" and not fjord and not coast:   # a cave is walled to its edge, a fjord cut to it
+            if edge > 0.92 and _arch != "cave" and not fjord and not coast and not slot:   # a cave is walled to its edge, a fjord cut to it
                 h *= max(0.0, (1.0 - edge) / 0.08)
             if lava_segs and not _ch:
                 h = max(h, LAVA_LEVEL + 0.25)   # only a channel lies under the lava
@@ -643,6 +665,11 @@ def build_level(seed: int, size_m: float, n_objectives: int = 0,
         "collect_points": collect_points,
         "landmarks": landmarks,                # [x, z, scale]
     }
+    if slot:
+        # the slot is all rock off the route: no giant tree, no campsite up on the walls
+        out_level["landmarks"] = []
+        out_level["pois"] = []
+        out_level["slot"] = {"floor_half": 1.6, "wall": 35.0}
     if _arch == "cave":
         out_level["cave"] = {"ceiling": 11.0}     # the roof's mean height over the floor (m)
         # no thirty-metre landmark tree and no campsite: off the route is rock

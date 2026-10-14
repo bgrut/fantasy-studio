@@ -1,0 +1,16 @@
+import puppeteer from 'puppeteer-core';
+const b = await puppeteer.launch({ headless:'new', executablePath:'C:/Program Files/Google/Chrome/Application/chrome.exe', args:['--use-angle=d3d11','--enable-unsafe-swiftshader','--window-size=1600,900'] });
+const p = await b.newPage(); await p.setViewport({ width:1600, height:900 }); const errs=[]; p.on('pageerror', e=>errs.push(e.message.slice(0,200))); p.on('console', m=>{ if (/trap|Error/.test(m.text())) errs.push(m.text().slice(0,200)); });
+await p.goto(`http://127.0.0.1:8789/games/${process.env.J}/dist/?noguide=1`, { waitUntil:'domcontentloaded' });
+await new Promise(r=>setTimeout(r,12000)); await p.click('#startbtn').catch(()=>{}); await new Promise(r=>setTimeout(r,4000));
+const pos0 = await p.evaluate(()=>window.__game.pos());
+await p.keyboard.down('KeyW'); await new Promise(r=>setTimeout(r,1500)); await p.keyboard.up('KeyW');
+const pos1 = await p.evaluate(()=>window.__game.pos());
+await p.screenshot({ path: process.env.OUT + '_pinned.jpg', type:'jpeg', quality:85 });
+await p.keyboard.down('KeyE'); await new Promise(r=>setTimeout(r,10000)); await p.keyboard.up('KeyE');
+const st = await p.evaluate(()=>({ pinned: window.__trap && window.__trap.pinned, water: window.__trap && +window.__trap.water.toFixed(3), day: window.__trap && window.__trap.day }));
+await p.keyboard.down('KeyW'); await new Promise(r=>setTimeout(r,1500)); await p.keyboard.up('KeyW');
+const pos2 = await p.evaluate(()=>window.__game.pos());
+await p.screenshot({ path: process.env.OUT + '_free.jpg', type:'jpeg', quality:85 });
+console.log('moved while pinned', Math.hypot(pos1[0]-pos0[0], pos1[2]-pos0[2]).toFixed(2), '| after E', JSON.stringify(st), '| moved after', Math.hypot(pos2[0]-pos1[0], pos2[2]-pos1[2]).toFixed(2), '|', errs.join(' | ') || 'no errors');
+await b.close();
