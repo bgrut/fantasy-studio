@@ -28,13 +28,22 @@ for (const J of jobs) {
       bodies.push({ name, obj, B, biped, hk, pk, last: null, sum: 0, n: 0 }); };
     let pl = null; window.__scene.traverse(o => { if (!pl && o.userData && o.userData.fsTag && o.userData.fsTag.type === 'player') pl = o; });
     if (pl) add(pl, 'hero');
-    for (const n of (window.__game.npcRefs ? window.__game.npcRefs() : [])) if (n && n.obj && !n.dormant) add(n.obj, (n.name || 'npc') + ':' + n.behavior);
-    for (const pd of (window.__peds || []).slice(0, 10)) if (pd && pd.obj) add(pd.obj, 'pedestrian');
+    // (2026-10-14) a body the car knocked down is thrown along the CAR's
+    // heading, often straight back past its own heels; that is a tumble, not
+    // a walk, so the samples while it is down are not counted
+    const tag = (src) => { if (bodies.length && bodies[bodies.length - 1].obj === src.obj) bodies[bodies.length - 1].src = src; };
+    for (const n of (window.__game.npcRefs ? window.__game.npcRefs() : [])) if (n && n.obj && !n.dormant) { add(n.obj, (n.name || 'npc') + ':' + n.behavior); tag(n); }
+    const _hp = pl ? pl.getWorldPosition(new V()) : new V();
+    const _near = (window.__peds || []).filter(pd => pd && pd.obj).sort((a, c) => a.obj.position.distanceToSquared(_hp) - c.obj.position.distanceToSquared(_hp));
+    for (const pd of _near.slice(0, 10)) { add(pd.obj, 'pedestrian'); tag(pd); }
     const a = new V(), k = new V(), f = new V(), w = new V(), mid = new V();
     window.__ffacing = bodies;
     const tick = () => { for (const bd of bodies) { bd.obj.getWorldPosition(w);
         if (bd.last) { const vx = w.x - bd.last.x, vz = w.z - bd.last.z, sp = Math.hypot(vx, vz);
-          if (sp > 0.012) { let fx = 0, fz = 0;
+          // past forty metres a pedestrian's mesh is hidden (the crowd sheet
+          // draws it from its heading) and its mixer stops, so its knees hold
+          // whatever frame they stopped on: only a body on show is measured
+          if (sp > 0.012 && bd.obj.visible !== false && !(bd.src && bd.src.down > 0)) { let fx = 0, fz = 0;
             if (bd.biped) for (const s of ['l', 'r']) { bd.B['upleg_' + s].getWorldPosition(a); bd.B['lowleg_' + s].getWorldPosition(k); bd.B['foot_' + s].getWorldPosition(f);
               mid.copy(a).add(f).multiplyScalar(0.5); fx += k.x - mid.x; fz += k.z - mid.z; }
             else { bd.B[bd.hk].getWorldPosition(k); bd.B[bd.pk].getWorldPosition(a); fx = k.x - a.x; fz = k.z - a.z; }

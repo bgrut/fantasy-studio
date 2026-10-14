@@ -10553,6 +10553,9 @@ async function main() {
         body:has(#fsstart) > :not(#fsstart):not(#app):not(canvas):not(style):not(script):not(link){visibility:hidden !important}
         body:has(.fs-card.on) #hud .hint{opacity:0 !important}
         #hud .hint{transition:opacity .6s}
+        /* a speaker's line and the narrator's card never sit on each other (2026-10-14) */
+        body:has(.fs-card.on) #fsdlg{bottom:150px !important}
+        #fsdlg{transition:bottom .3s}
         #fswpn{font:var(--art-hw) 13px var(--f-head);font-style:var(--art-fs);letter-spacing:.14em;text-transform:uppercase;color:var(--art-ink);text-shadow:0 1px 8px rgba(0,0,0,.7);opacity:0}
         #fswpn::before{content:"";display:inline-block;width:18px;height:1px;background:var(--art-acc);vertical-align:middle;margin-right:8px}
         body[data-hud="tl"] #fswpn{left:16px;top:96px} body[data-hud="tr"] #fswpn{right:16px;top:96px} body[data-hud="bl"] #fswpn{left:16px;bottom:120px}
@@ -14969,14 +14972,40 @@ async function main() {
       cyl('straw', 0.36, 0.36, 0.03, x, y + 2.03, z, 16);
       cyl('straw', 0.14, 0.2, 0.2, x, y + 2.13, z, 12);
       box('patch', 0.14, 0.14, 0.02, x + 0.1, y + 1.3, z - 0.14); }
-    // sunflowers along the back fence, faces to the beds
-    for (let i = 0; i < 9; i++) {
-      const x = -2.0 + i * 0.95 + (rngB() - 0.5) * 0.2, z = G.Z1 - 0.45, y = gy(x, z), h = 1.5 + rngB() * 0.7;
-      cyl('stem', 0.025, 0.035, h, x, y + h / 2, z, 5);
-      for (const ly of [0.45, 0.85]) blob('leaf', 0.13, 1.2, 0.25, 0.8, x + (ly > 0.5 ? 0.12 : -0.12), y + ly * h, z - 0.02, 0);
-      const face = new THREE.CylinderGeometry(0.19, 0.19, 0.04, 18); face.rotateX(Math.PI / 2 - 0.25); face.translate(x, y + h, z - 0.05); put('petals', face);
-      for (let p = 0; p < 12; p++) { const a = p / 12 * Math.PI * 2; const g = new THREE.ConeGeometry(0.06, 0.18, 4); g.translate(0, 0.25, 0); g.rotateZ(a); g.scale(1, 1, 0.3); g.rotateX(-0.25); g.translate(x, y + h, z - 0.05); put('petals', g); }
-      const disc = new THREE.CylinderGeometry(0.12, 0.12, 0.05, 16); disc.rotateX(Math.PI / 2 - 0.25); disc.translate(x, y + h, z - 0.08); put('seed', disc);
+    // sunflowers along the back fence, faces to the beds. A SUNFLOWER IS A
+    // FLOWER (2026-10-14): the head was a cylinder ringed with twelve cones,
+    // a toy's daisy. It is a cupped head of two rings of long petals round a
+    // spiral of seeds, a green back with its bracts, nodding on a hairy stem
+    // with broad heart-shaped leaves.
+    {
+      const tex = (() => { const n = 256, cv = document.createElement('canvas'); cv.width = cv.height = n; const x = cv.getContext('2d'), c = n / 2;
+        for (const [cnt, L0, w0, hue, li] of [[26, 0.47, 0.05, 44, 46], [30, 0.43, 0.045, 47, 54]]) for (let k = 0; k < cnt; k++) {
+          const a = k / cnt * Math.PI * 2 + (li > 50 ? 0.11 : 0), L = n * (L0 + (rngB() - 0.5) * 0.04);
+          x.save(); x.translate(c, c); x.rotate(a); const gr = x.createLinearGradient(n * 0.2, 0, L, 0);
+          gr.addColorStop(0, `hsl(${hue - 6},90%,${li - 12}%)`); gr.addColorStop(1, `hsl(${hue},95%,${li + 4}%)`); x.fillStyle = gr;
+          x.beginPath(); x.moveTo(n * 0.19, 0); x.quadraticCurveTo(L * 0.6, -n * w0, L, 0); x.quadraticCurveTo(L * 0.6, n * w0, n * 0.19, 0); x.fill(); x.restore(); }
+        const g2 = x.createRadialGradient(c, c, 2, c, c, n * 0.21); g2.addColorStop(0, '#2a1a0c'); g2.addColorStop(0.7, '#4a2e14'); g2.addColorStop(0.92, '#6a4a1a'); g2.addColorStop(1, '#3a2410');
+        x.fillStyle = g2; x.beginPath(); x.arc(c, c, n * 0.21, 0, 7); x.fill();
+        for (let i = 0; i < 520; i++) { const a = i * 2.39996, rd = Math.sqrt(i / 520) * n * 0.2; x.fillStyle = i % 3 ? 'rgba(18,10,4,0.65)' : 'rgba(120,90,40,0.5)'; x.beginPath(); x.arc(c + Math.cos(a) * rd, c + Math.sin(a) * rd, 1.4, 0, 7); x.fill(); }
+        const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return t; })();
+      const headM = new THREE.MeshStandardMaterial({ map: tex, alphaTest: 0.45, side: THREE.DoubleSide, roughness: 0.75 }); headM.userData.noAutoTex = true;
+      const backM = new THREE.MeshStandardMaterial({ color: 0x4d6a2a, roughness: 0.8 });
+      const headG = new THREE.CircleGeometry(0.26, 40, 0, Math.PI * 2); { const pa = headG.attributes.position;
+        for (let k = 0; k < pa.count; k++) { const r2 = Math.hypot(pa.getX(k), pa.getY(k)) / 0.26; pa.setZ(k, -0.05 * (1 - r2 * r2) + (r2 > 0.45 ? 0.05 * (r2 - 0.45) : 0)); } headG.computeVertexNormals(); }
+      const backG = new THREE.SphereGeometry(0.12, 18, 8, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2.4); backG.rotateX(-Math.PI / 2);
+      const leafG = new THREE.CircleGeometry(0.15, 16); { const pa = leafG.attributes.position;
+        for (let k = 0; k < pa.count; k++) { const lx = pa.getX(k), ly = pa.getY(k); pa.setX(k, lx * (1 - Math.max(0, ly) * 2.2)); pa.setZ(k, -Math.abs(lx) * 0.25); } leafG.translate(0, 0.15, 0); leafG.computeVertexNormals(); }
+      const leafM = new THREE.MeshStandardMaterial({ color: 0x4f7a2c, roughness: 0.75, side: THREE.DoubleSide });
+      for (let i = 0; i < 9; i++) {
+        const x = -2.0 + i * 0.95 + (rngB() - 0.5) * 0.2, z = G.Z1 - 0.45, y = gy(x, z), h = 1.5 + rngB() * 0.7;
+        const nod = 0.35 + rngB() * 0.35;
+        cyl('stem', 0.022, 0.034, h, x, y + h / 2, z, 7);
+        for (const [ly, sd] of [[0.35, 1], [0.55, -1], [0.75, 1]]) {
+          const lf = new THREE.Mesh(leafG, leafM); lf.position.set(x + sd * 0.03, y + ly * h, z); lf.rotation.set(0.4, sd > 0 ? Math.PI / 2 : -Math.PI / 2, sd * 0.9); lf.castShadow = true; scene.add(lf); }
+        const hd = new THREE.Group(); hd.position.set(x, y + h + 0.02, z - 0.05); hd.rotation.set(nod, Math.PI + (rngB() - 0.5) * 0.4, 0); scene.add(hd);
+        const face = new THREE.Mesh(headG, headM); face.rotation.y = Math.PI; face.castShadow = true; hd.add(face);
+        const back = new THREE.Mesh(backG, backM); back.position.z = 0.05; back.castShadow = true; hd.add(back);
+      }
     }
     // a wheelbarrow at the end of the path
     { const x = 1.9, z = 11.0, y = gy(x, z), ry = 0.5;
