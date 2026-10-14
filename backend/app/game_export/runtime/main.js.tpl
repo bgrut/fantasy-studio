@@ -2459,7 +2459,30 @@ async function main() {
     // island, beach or coast the land past the level now falls away to a
     // shore within a hundred metres or so (the line wanders with noise, so
     // the coast is not the level's square), and the sea runs to the horizon
-    if (FLORA.biome && FLORA.biome.island) {
+    // AN OCEAN IS NOT A LAGOON (2026-10-14): a ship's sea and an archipelago
+    // took the island's ring as well, so a shore ran right round the level
+    // with a palm on every metre of it, one green wall on every horizon. On
+    // the open sea the land past the level goes under within forty metres,
+    // and what stands up out of it is islets, scattered by noise, each with
+    // its own few palms; the sea level is the water the ship sails on.
+    const _openW = SPEC.world.water_level ?? null;
+    const _sailSea = _openW !== null && !(FLORA.biome && FLORA.biome.underwater)
+      && (SPEC.player.mode === 'swim' || SPEC.world.archetype === 'archipelago');
+    if (FLORA.biome && FLORA.biome.island && _sailSea) {
+      SEA_Y = _openW;
+      const land = hOut;
+      hOut = (x, z) => {
+        const cx = Math.max(-H2, Math.min(H2, x)), cz = Math.max(-H2, Math.min(H2, z));
+        const d = Math.hypot(x - cx, z - cz);
+        if (d <= 0) return hAt(x, z);
+        const dd = d + fbm(x / 140 + 5, z / 140 - 3) * 18;
+        const fall = Math.max(0, Math.min(1, (dd + 6) / 40)), sm = fall * fall * (3 - 2 * fall);
+        const e = Math.min(land(x, z), hAt(cx, cz) + 2);
+        const base = e + (SEA_Y - 9 - e) * sm;
+        const il = Math.max(0, Math.min(1, (fbm(x / 95 + 11, z / 95 - 7) - 0.3) / 0.18)), is = il * il * (3 - 2 * il);
+        return Math.max(base, SEA_Y - 9 + (10.5 + 5 * (fbm(x / 28 - 2, z / 28 + 4) + 0.3)) * is * Math.min(1, d / 70));
+      };
+    } else if (FLORA.biome && FLORA.biome.island) {
       const hs = [];
       for (let i = -8; i <= 8; i++) for (let j = -8; j <= 8; j++) hs.push(hAt(i * gsize / 16, j * gsize / 16));
       hs.sort((a, b) => a - b);
@@ -2528,7 +2551,7 @@ async function main() {
     outerLand.receiveShadow = true;
     outerLand.name = 'outerLand';
     scene.add(outerLand);
-    if (SEA_Y !== null) {
+    if (SEA_Y !== null && !_sailSea) {
       // the island's sea: clear over the sand, so the shallows show the
       // shore under them, and deep blue where the bed has fallen away
       const seaG = new THREE.PlaneGeometry(FLORA.R * 2.6, FLORA.R * 2.6);
@@ -10381,7 +10404,7 @@ async function main() {
       : mode === 'fly'
         ? 'WASD glide · Space rise · C dive · Shift boost'
         : mode === 'swim'
-          ? 'WASD swim · Space surface · C dive · Shift burst'
+          ? (SPEC.player.buoyant ? 'WASD sail · Shift for speed' : 'WASD swim · Space surface · C dive · Shift burst')
           : HAS_GUARDS
             // a heist teaches its own verbs: creeping and misdirection
             ? 'WASD move · <b>C sneak</b> · <b>Q throw a distraction</b> · Shift run' + _fk
@@ -13677,9 +13700,35 @@ async function main() {
     }
     hg.setAttribute('color', new THREE.BufferAttribute(cols, 3));
     hg.computeVertexNormals();
-    add(hg, M(0xffffff, 0.72, { vertexColors: true }));
+    // PLANKED, NOT PAINTED (2026-10-14): the hull was one vertex-coloured
+    // skin, a toy's. It is laid in strakes now, each its own shade of wood
+    // with grain along it, caulked seams between, butt joints staggered and
+    // the treenails in rows; the paint bands still come from the vertex colour.
+    const woodTex = (n, vertical, rep) => { const cv = document.createElement('canvas'); cv.width = 512; cv.height = 512; const x = cv.getContext('2d');
+      x.fillStyle = '#f2ebe0'; x.fillRect(0, 0, 512, 512);
+      const ph = 512 / n;
+      for (let r = 0; r < n; r++) { const y0 = r * ph, sh = 0.82 + rS() * 0.3;
+        x.fillStyle = `rgba(${(232 * sh) | 0},${(220 * sh) | 0},${(200 * sh) | 0},0.5)`; x.fillRect(0, y0, 512, ph);
+        for (let k = 0; k < 26; k++) { const gy = y0 + rS() * ph; x.strokeStyle = `rgba(${rS() < 0.5 ? '40,26,14' : '255,240,220'},${0.05 + rS() * 0.1})`; x.lineWidth = 0.6 + rS() * 1.4;
+          x.beginPath(); x.moveTo(0, gy); x.bezierCurveTo(170, gy + (rS() - 0.5) * 4, 340, gy + (rS() - 0.5) * 4, 512, gy + (rS() - 0.5) * 3); x.stroke(); }
+        x.fillStyle = 'rgba(28,18,10,0.85)'; x.fillRect(0, y0 + ph - 2.2, 512, 2.2);
+        x.fillStyle = 'rgba(255,240,215,0.18)'; x.fillRect(0, y0, 512, 1.2);
+        const off = rS() * 512;
+        for (let b = 0; b < 3; b++) { const bx = (off + b * 512 / 3 + (r % 2) * 85) % 512;
+          x.fillStyle = 'rgba(28,18,10,0.7)'; x.fillRect(bx, y0, 2, ph - 2);
+          x.fillStyle = 'rgba(30,20,12,0.6)'; for (const ty of [0.3, 0.7]) { x.beginPath(); x.arc(bx + 7, y0 + ph * ty, 1.6, 0, 7); x.arc(bx - 5, y0 + ph * ty, 1.6, 0, 7); x.fill(); } } }
+      for (let k = 0; k < 40; k++) { x.fillStyle = `rgba(30,24,16,${0.03 + rS() * 0.05})`; x.beginPath(); x.ellipse(rS() * 512, rS() * 512, 10 + rS() * 50, 4 + rS() * 14, 0, 0, 7); x.fill(); }
+      let cvs = cv;
+      if (vertical) { const c2 = document.createElement('canvas'); c2.width = c2.height = 512; const y2 = c2.getContext('2d'); y2.translate(256, 256); y2.rotate(Math.PI / 2); y2.drawImage(cv, -256, -256); cvs = c2; }
+      const t = new THREE.CanvasTexture(cvs); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(rep[0], rep[1]); t.anisotropy = 8; return t; };
+    // OPEN TO THE SKY (2026-10-14): the box's lid lay over the deck at the
+    // rail, a black slab fore and aft wherever the sheer lifted it; the hull
+    // is an open shell now, seen from inside as bulwarks round the deck
+    { const hm = M(0xffffff, 0.72, { vertexColors: true, map: woodTex(12, false, [2.5, 1]), side: THREE.DoubleSide });
+      const lid = new THREE.MeshBasicMaterial({ visible: false });
+      const hull = add(hg, [hm, hm, lid, hm, hm, hm]); hull.name = 'hull'; }
     // the deck, gunports and guns
-    add(new THREE.BoxGeometry(W * 0.86, 0.1, L * 0.78), M(0xa07a50, 0.8), 0, H - 0.15, 0.4);
+    add(new THREE.BoxGeometry(W * 0.86, 0.1, L * 0.78), M(0xc49a68, 0.8, { map: woodTex(16, true, [1, 2.5]) }), 0, H - 0.6, 0.4);
     const portM = M(0x120c08, 0.9), gunM = M(0x1a1a1c, 0.4, { metalness: 0.7 });
     for (const sd of [-1, 1]) for (let k = 0; k < 6; k++) {
       const t = 0.36 + k * 0.085, z = t * L - L / 2, x = sd * (hw(t, 0.55) + 0.02);
@@ -13688,7 +13737,7 @@ async function main() {
     }
     // the stern castle with its lit windows, lanterns at the corners
     const sz = L / 2 - 1.9;
-    add(new THREE.BoxGeometry(W * 0.78, 1.7, 3.2), M(o.hull || 0x6a4428, 0.72), 0, H + 0.95 + 0.9, sz);
+    add(new THREE.BoxGeometry(W * 0.78, 3.3, 3.2), M(o.hull ? o.hull : 0x8a5a36, 0.72, { map: woodTex(10, false, [1, 1]) }), 0, H + 1.05, sz);
     add(new THREE.BoxGeometry(W * 0.84, 0.14, 3.4), M(0x2a1c14, 0.8), 0, H + 1.86 + 0.9, sz);
     const winM = M(0x2a1a08, 0.4, { emissive: 0xffb04a, emissiveIntensity: 1.2 });
     for (let k = -1; k <= 1; k++) add(new THREE.BoxGeometry(0.42, 0.45, 0.05), winM, k * 0.85, H + 1.95, sz + 1.62);
@@ -13696,8 +13745,25 @@ async function main() {
     // the bowsprit and the masts
     const spar = M(0x4a3020, 0.7);
     const bs = add(new THREE.CylinderGeometry(0.1, 0.16, 5.5, 8), spar, 0, H + 1.3, -L / 2 - 1.4); bs.rotation.x = Math.PI / 2 - 0.32;
-    const sailM = M(o.sail || 0xeee4cc, 0.88, { side: THREE.DoubleSide });
+    const clothTex = (() => { const cv = document.createElement('canvas'); cv.width = cv.height = 512; const x = cv.getContext('2d');
+      x.fillStyle = '#f4efe4'; x.fillRect(0, 0, 512, 512);
+      const np = 9, pw = 512 / np;
+      for (let k = 0; k < np; k++) { const sh = 0.93 + rS() * 0.09; x.fillStyle = `rgba(${(244 * sh) | 0},${(236 * sh) | 0},${(220 * sh) | 0},0.7)`; x.fillRect(k * pw, 0, pw, 512);
+        x.fillStyle = 'rgba(120,104,80,0.45)'; x.fillRect(k * pw - 1, 0, 2, 512); x.fillStyle = 'rgba(255,252,244,0.5)'; x.fillRect(k * pw + 2, 0, 1.4, 512); }
+      for (let i = 0; i < 2600; i++) { x.fillStyle = `rgba(${rS() < 0.5 ? '90,80,60' : '255,255,250'},${0.04 + rS() * 0.05})`; x.fillRect(rS() * 512, rS() * 512, 1 + rS() * 3, 1); }
+      const ry = 512 * 0.2; x.fillStyle = 'rgba(110,96,74,0.5)'; x.fillRect(0, ry, 512, 3); x.fillRect(0, ry + 6, 512, 1.5);
+      x.fillStyle = 'rgba(70,58,40,0.75)'; for (let k = 0; k < 18; k++) { const px = 14 + k * (484 / 17); x.fillRect(px - 1, ry - 10, 2, 22); }
+      const gr = x.createLinearGradient(0, 300, 0, 512); gr.addColorStop(0, 'rgba(90,76,52,0)'); gr.addColorStop(1, 'rgba(90,76,52,0.28)'); x.fillStyle = gr; x.fillRect(0, 300, 512, 212);
+      for (let k = 0; k < 6; k++) { x.fillStyle = `rgba(100,84,60,${0.05 + rS() * 0.07})`; x.beginPath(); x.ellipse(rS() * 512, 200 + rS() * 300, 20 + rS() * 50, 12 + rS() * 30, rS(), 0, 7); x.fill(); }
+      { const px = 80 + rS() * 300, py = 260 + rS() * 150; x.fillStyle = 'rgba(214,200,172,0.9)'; x.fillRect(px, py, 46, 38); x.strokeStyle = 'rgba(110,96,74,0.6)'; x.setLineDash([3, 3]); x.strokeRect(px + 2, py + 2, 42, 34); x.setLineDash([]); }
+      x.strokeStyle = 'rgba(96,80,58,0.85)'; x.lineWidth = 7; x.strokeRect(0, 0, 512, 512);
+      const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return t; })();
+    const sailM = M(o.sail || 0xeee4cc, 0.88, { side: THREE.DoubleSide, map: clothTex });
     const masts = [[-3.7, 10.5], [0.5, 12.5], [4.1, 8.8]];
+    const ropeM = M(0x2e241a, 0.9), ratP = [];
+    const rope = (a, b, rad) => { const d = b.clone().sub(a), len = d.length();
+      const r = add(new THREE.CylinderGeometry(rad, rad, len, 4), ropeM, (a.x + b.x) / 2, (a.y + b.y) / 2, (a.z + b.z) / 2);
+      r.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.normalize()); r.castShadow = false; return r; };
     const sail = (w, h, x, y, z) => {
       const sg = new THREE.PlaneGeometry(w, h, 10, 6), sp = sg.attributes.position;
       for (let i = 0; i < sp.count; i++) { const u = sp.getX(i) / w + 0.5, v = sp.getY(i) / h + 0.5;
@@ -13705,7 +13771,7 @@ async function main() {
       sg.computeVertexNormals(); add(sg, sailM, x, y, z);
     };
     for (const [mz, mh] of masts) {
-      add(new THREE.CylinderGeometry(0.13, 0.22, mh, 10), spar, 0, H + mh / 2, mz);
+      add(new THREE.CylinderGeometry(0.13, 0.22, mh + 0.7, 10), spar, 0, H + mh / 2 - 0.35, mz);   // stepped through the deck
       const yw = [mh * 0.5, mh * 0.82];
       for (let k = 0; k < 2; k++) {
         const w = (k ? 3.8 : 5.2) * (mh / 12);
@@ -13713,17 +13779,32 @@ async function main() {
         const top = H + yw[k] - 0.1, bot = H + (k ? yw[0] + 0.5 : mh * 0.16);
         sail(w, top - bot, 0, (top + bot) / 2, mz - 0.25);
       }
-      // shrouds from the masthead down to the rail on each side
+      // shrouds from the masthead down to the rail on each side, three a
+      // side fanned aft, with the ratlines a sailor climbs tied across them
       for (const sd of [-1, 1]) {
-        const a = new THREE.Vector3(0, H + mh * 0.85, mz), b = new THREE.Vector3(sd * (hw((mz + L / 2) / L, 1) + 0.05), H + 0.05, mz + 0.6);
-        const d = b.clone().sub(a), len = d.length();
-        const r = add(new THREE.CylinderGeometry(0.025, 0.025, len, 4), M(0x2e241a, 0.9), (a.x + b.x) / 2, (a.y + b.y) / 2, (a.z + b.z) / 2);
-        r.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.normalize());
+        const a = new THREE.Vector3(0, H + mh * 0.85, mz), feet = [];
+        for (const fz of [0.15, 0.6, 1.05]) {
+          const b = new THREE.Vector3(sd * (hw(Math.min(0.99, (mz + fz + L / 2) / L), 1) + 0.05), H + 0.05, mz + fz); feet.push(b);
+          rope(a, b, 0.022);
+        }
+        const f0 = feet[0], f2 = feet[2];
+        for (let k = 1; k < 14; k++) { const t = k / 15; ratP.push(...a.clone().lerp(f0, t).toArray(), ...a.clone().lerp(f2, t).toArray()); }
       }
+      // the main's fighting top, just above the lower yard and aft of the
+      // topsail, which billows forward
+      if (mh > 12) { add(new THREE.CylinderGeometry(0.58, 0.45, 0.22, 16), spar, 0, H + mh * 0.5 + 0.3, mz + 0.38);
+        add(new THREE.CylinderGeometry(0.6, 0.6, 0.3, 16, 1, true), M(0x2a1c14, 0.8, { side: THREE.DoubleSide }), 0, H + mh * 0.5 + 0.55, mz + 0.38); }
     }
+    // the stays: masthead to masthead, and the fore to the bowsprit's tip
+    for (let k = 0; k < masts.length - 1; k++) rope(new THREE.Vector3(0, H + masts[k][1] * 0.97, masts[k][0]), new THREE.Vector3(0, H + masts[k + 1][1] * 0.8, masts[k + 1][0]), 0.03);
+    rope(new THREE.Vector3(0, H + masts[0][1] * 0.97, masts[0][0]), new THREE.Vector3(0, H + 2.3, -L / 2 - 3.8), 0.035);
+    rope(new THREE.Vector3(0, H + masts[2][1] * 0.95, masts[2][0]), new THREE.Vector3(0, H + 2.9, L / 2 - 0.2), 0.03);
+    { const rg = new THREE.BufferGeometry(); rg.setAttribute('position', new THREE.Float32BufferAttribute(ratP, 3));
+      g.add(new THREE.LineSegments(rg, new THREE.LineBasicMaterial({ color: 0x2e241a, transparent: true, opacity: 0.8 }))); }
     // the jib, from the bowsprit's tip to the foremast
     { const tip = new THREE.Vector3(0, H + 2.2, -L / 2 - 3.9), top = new THREE.Vector3(0, H + masts[0][1] * 0.78, masts[0][0]), foot = new THREE.Vector3(0, H + 1.4, masts[0][0] - 0.6);
       const jg = new THREE.BufferGeometry(); jg.setAttribute('position', new THREE.Float32BufferAttribute([...tip.toArray(), ...top.toArray(), ...foot.toArray()], 3));
+      jg.setAttribute('uv', new THREE.Float32BufferAttribute([1, 0, 0, 1, 0, 0], 2));
       jg.setIndex([0, 1, 2]); jg.computeVertexNormals(); add(jg, sailM); }
     // the flag at the main masthead
     { const fc = document.createElement('canvas'); fc.width = 128; fc.height = 80; const f2 = fc.getContext('2d');
@@ -17504,6 +17585,16 @@ async function main() {
   // a sculpted module's orientation is authored, not inferred — the whole
   // point of the contract is that nothing downstream has to guess
   if (!procRoot && !RAIL) alignLongAxis(pRoot, ['drive', 'swim'].includes(P.mode || 'walk') && !RIDE);
+  // A HULL STANDS ON ITS KEEL (2026-10-14): a swimmer is centred on its body
+  // (a whale hangs in the water round its middle), and the hull's draft above
+  // puts the body's FOOT a little under the line. A ship centred on its foot
+  // sailed with the keel nine metres down and only the masts out of the sea.
+  // A buoyant hero's lowest point is its foot.
+  if ((P.mode || 'walk') === 'swim' && P.buoyant) {
+    holder.updateMatrixWorld(true);
+    const _kb = new THREE.Box3().setFromObject(pRoot);
+    pRoot.position.y -= _kb.min.y - holder.getWorldPosition(new THREE.Vector3()).y;
+  }
   polishVehiclePaint(pRoot, (P.mode || 'walk') === 'drive' && !RIDE && !RAIL);
   if (RIDE) {
     holder.add(makeBoard(RIDE, SPEC.seed || 0));
@@ -18614,6 +18705,7 @@ async function main() {
   const __st = SPEC.story && typeof SPEC.story === 'object' ? SPEC.story : null;
   if (__st && __st.first_move) {
     const _leg = __fmMode === 'fly' ? 'Drag to look  \u00b7  WASD glide  \u00b7  Space rise  \u00b7  C dive  \u00b7  Shift boost'
+      : __fmMode === 'swim' && SPEC.player.buoyant ? 'Drag to look  \u00b7  WASD sail  \u00b7  Shift for speed'
       : __fmMode === 'swim' ? 'Drag to look  \u00b7  WASD swim  \u00b7  Space surface  \u00b7  C dive  \u00b7  Shift burst'
       : __fmMode === 'drive' ? 'Drag to look  \u00b7  W go  \u00b7  A D steer  \u00b7  S brake'
       : 'Drag to look  \u00b7  WASD walk  \u00b7  Shift run  \u00b7  Space jump  \u00b7  E use';

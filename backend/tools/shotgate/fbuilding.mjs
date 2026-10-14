@@ -75,7 +75,10 @@ const feel = await (async () => {
   await new Promise(r => setTimeout(r, 700)); const full = await F2();
   await p.keyboard.down('ShiftLeft'); await new Promise(r => setTimeout(r, 1500)); const run = await F2();
   await p.keyboard.down('Space'); await new Promise(r => setTimeout(r, 120)); await p.keyboard.up('Space');   // held a few frames: the loop reads keys, a press shorter than a frame is missed
-  await new Promise(r => setTimeout(r, 1500)); const landed = await F2();
+  // (2026-10-14) a run down a slope stays up longer than a jump on the flat:
+  // read the landing when it lands (up to three seconds), not at 1.5 s
+  let landed = null;
+  for (let k = 0; k < 15; k++) { await new Promise(r => setTimeout(r, 200)); landed = await F2(); if (k >= 6 && landed.dip > 0) break; }
   await p.keyboard.up('ShiftLeft'); await p.keyboard.up('KeyW'); await new Promise(r => setTimeout(r, 900)); const stopped = await F2();
   // the gait blend and the weight: walking, the walk clip carries the pose at its own stride rate; turning, the body rolls; the head has a bone to turn
   await p.keyboard.down('KeyW'); await new Promise(r => setTimeout(r, 900));
