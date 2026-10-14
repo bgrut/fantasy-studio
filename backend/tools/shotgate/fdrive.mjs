@@ -80,7 +80,11 @@ const ok = fast.drive && fast.drive.speed > 7 && fast.fov > fast.fov_base + 3
   // only the near ones cast; with nobody in view (the crowd walks where it
   // likes, a third of runs) nothing may cast, and 0 < 0 used to fail it
   && slide.drive.peds_casting <= 30
-  && (slide.drive.peds_visible === 0 ? slide.drive.peds_casting === 0 : slide.drive.peds_casting < slide.drive.peds_visible)
+  // (2026-10-14) with a handful in view they may all be near and all cast; the
+  // claim is that a crowd does not: past a few, some must be too far to cast
+  && (slide.drive.peds_visible === 0 ? slide.drive.peds_casting === 0
+      : slide.drive.peds_visible <= 4 ? slide.drive.peds_casting <= slide.drive.peds_visible
+      : slide.drive.peds_casting < slide.drive.peds_visible)
   && cost.fps >= 30 && cost.tris < 6500000                     // the triangles are the honest number (a district differs by sentence; the drift fixture sits near 2 M); the frame rate on a shared card is only a floor
   && errs.length === 0;
 if (!ok) console.log('FAIL: the drive');

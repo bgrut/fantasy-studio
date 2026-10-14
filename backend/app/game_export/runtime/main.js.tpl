@@ -3326,6 +3326,8 @@ async function main() {
       : /\b(oak|tree|yew|willow|elm|ash tree|beech|cedar|baobab|banyan|sequoia|redwood)\b/.test(lab) ? 'tree'
       : null;
     if (offworld) kind = 'mast';
+    // a slot canyon's way out is the open mouth itself, in the sun (2026-10-14)
+    if (LVL && LVL.slot) { window.__goalMark = 'none'; return G; }
     // a person to reach is the goal themself: a campfire on a lifeguard's
     // beach for "reach swimmer 1" was a thing that should not be there
     if (!kind && /\b(swimmers?|man|woman|men|women|girl|boy|child|children|kids?|princess|prince|king|queen|survivors?|friends?|hikers?|climbers?|people|family|mother|father|brother|sister|captain|crew|villagers?|dog|cat|horse|guide|keeper|master|elder|monk|teacher|stranger|customer|rider|driver|player|team|rival|opponent|cubs?|pups?|kits?|kittens?|puppies|puppy|chicks?|ducklings?|foals?|calf|calves|lambs?|fawns?|cygnets?|hatchlings?|eggs?|young|babies|baby|herd|flock|pack|litter)\b|\d/.test(lab)) { window.__goalMark = 'none'; return G; }

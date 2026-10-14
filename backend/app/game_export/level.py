@@ -445,6 +445,10 @@ def build_level(seed: int, size_m: float, n_objectives: int = 0,
     lane, not a strip flattened to the waterline: at sea level the walking
     corridor came out as a beach running through the middle of the sea."""
     rng = random.Random(seed)
+    if slot:
+        # a two-metre crack needs a finer grid than a hillside: at 128 the
+        # walls stood in two-metre facets (2026-10-14)
+        grid_n = max(grid_n, 200)
 
     # ── zones: spawn at origin; goal at a far edge; corridor between ────────
     half = size_m / 2.0
@@ -571,10 +575,14 @@ def build_level(seed: int, size_m: float, n_objectives: int = 0,
                 # the open mouth of the canyon at the goal.
                 wid = 1.2 + 0.9 * hgrid[i2][j2]                     # floor half-width, 1.2 to 2.1 m
                 open_d = min(d - wid, math.hypot(x, z) - 4.5, math.hypot(x - goal[0], z - goal[1]) - 16.0)
+                # the way out: toward the goal the walls fall away over twenty
+                # metres and the slot opens onto open desert in full sun (2026-10-14)
+                _along = (x * goal[0] + z * goal[1]) / max(goal_r, 1e-6)
+                _mouth = min(1.0, max(0.0, (_along - (goal_r - 24.0)) / 20.0))
                 if open_d > 0:
                     wall = min(1.0, open_d / 2.2)                    # sheer: the wall is up within two metres
                     wall = wall * wall * (3 - 2 * wall)
-                    lip = 30.0 + 10.0 * hgrid[i][j]
+                    lip = (30.0 + 10.0 * hgrid[i][j]) * (1.0 - _mouth) ** 1.5 + 1.2 * _mouth
                     h = wall * lip + (hgrid[i2][j2] - 0.5) * 2.2 * wall + h * 0.15
                 else:
                     h = h * 0.12 + (hgrid[i2][j2] - 0.5) * 0.25        # a sand and rubble floor
