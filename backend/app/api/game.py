@@ -2788,6 +2788,19 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         _GHOST_WORDS = ("ghost", "spirit", "spectre", "specter", "phantom", "wraith", "apparition", "shade", "poltergeist")
         _haunting = bool(_re5.search(r"\b(haunt\w*|ghost\w*|spirit\w*|spectr\w*|phantom\w*|wraith\w*|cursed|undead|poltergeist|seance|apparition)\b", (req.prompt or "").lower()))
         _ANIMALS = {"wolf", "wolves", "bear", "bears", "boar", "tiger", "lion", "fox", "dog", "dogs", "hound", "hounds", "rat", "rats", "spider", "spiders", "snake", "snakes", "bat", "bats", "crow", "crows"}
+        # A TEAM OF TWO IS TWO (2026-10-14): "a husband and wife team of
+        # paranormal investigators" was one investigator alone. A sentence that
+        # makes its hero a pair gets the other half beside them, following:
+        # the other spouse, sibling or partner, in the same line of work.
+        _pp = (req.prompt or "").lower()
+        _pair = _re5.search(r"\b(husband and wife|wife and husband|married couple|a couple of|the couple|brother and sister|sister and brother|twins|partners?|duo|two (?:investigators|detectives|explorers|hunters|friends|siblings))\b", _pp)
+        if base_spec is None and _pair and not any(e.behavior == "follow" for e in spec.entities):
+            from app.game_export.spec import EntitySpec as _PES
+            _hn = (spec.player.name or "").lower()
+            _fem = bool(_re5.search(r"\b(woman|wife|girl|lady|sister|mother|she|her)\b", _hn))
+            _mate = "man" if _fem else "woman"
+            spec.entities.append(_PES(name=_mate, behavior="follow", count=1, speed=max(2.2, spec.player.walk_speed or 2.2)))
+            job.setdefault("notes", []).append(f"the hero is one of a pair ('{_pair.group(1)}'): the other ({_mate}) walks beside them")
         _unasked = []
         for ent in spec.entities:
             _en = ent.name.lower().strip()
@@ -2975,7 +2988,7 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                 # PLAYER keeps the full-resolution asset; it is the one
                 # character the camera ever gets close to.
                 _light = BACKEND_ROOT / "assets" / "library" / "walker.glb"
-                if str(glb).endswith("man_anim.glb") and _light.exists():
+                if Path(str(glb)).name == "man_anim.glb" and _light.exists():   # (2026-10-14) "woman_anim.glb" ends with "man_anim.glb" too: every woman became the hoodie walker
                     # DRESSED (2026-09-29): walker.glb is the base body in its
                     # underwear, and it was every guide, guard and villager in
                     # every game. The clothed walkers are the same rig and the

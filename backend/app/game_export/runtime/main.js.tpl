@@ -12024,6 +12024,46 @@ async function main() {
     return g;
   }
 
+  // ── EVIDENCE OF THE UNSEEN (2026-10-14) ─────────────────────────────────
+  // "gathering evidence of the entity" handed out glowing orbs. Evidence in
+  // a haunting is the kit's own findings, each where it was left: a portable
+  // tape recorder still running, a polaroid face down in the grass, a field
+  // meter with its needle pinned and its lamp lit, a toppled candle, an old
+  // doll; each gives off a faint cold light so it can be found at night.
+  function makeEvidenceItem(i) {
+    const k = i % 5, g = new THREE.Group();
+    const M = (o) => { const m = new THREE.MeshStandardMaterial(o); m.userData.noAutoTex = true; return m; };
+    const dark = M({ color: 0x1c1b1a, roughness: 0.45, metalness: 0.3 }), chrome = M({ color: 0xc8c8c8, roughness: 0.25, metalness: 0.9 });
+    if (k === 0) {        // the tape recorder, its reels turning
+      const body = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.07, 0.16), M({ color: 0x5a4a3a, roughness: 0.55 })); body.position.y = 0.035; g.add(body);
+      for (const x of [-0.06, 0.06]) { const reel = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.01, 16), chrome); reel.position.set(x, 0.075, -0.01); g.add(reel); g.userData.reels = (g.userData.reels || []).concat(reel); }
+      const led = new THREE.Mesh(new THREE.SphereGeometry(0.008, 8, 6), M({ color: 0xff2a1a, emissive: 0xff2a1a, emissiveIntensity: 4 })); led.position.set(0.1, 0.072, 0.05); g.add(led);
+    } else if (k === 1) { // a polaroid in the grass
+      const cv = document.createElement('canvas'); cv.width = 64; cv.height = 76; const x = cv.getContext('2d');
+      x.fillStyle = '#efeadf'; x.fillRect(0, 0, 64, 76); const gr = x.createLinearGradient(0, 4, 0, 60); gr.addColorStop(0, '#20262a'); gr.addColorStop(1, '#4a4136');
+      x.fillStyle = gr; x.fillRect(5, 5, 54, 52); x.fillStyle = 'rgba(230,236,240,0.55)'; x.beginPath(); x.ellipse(36, 28, 7, 15, 0.2, 0, 7); x.fill();   // a pale shape that should not be there
+      const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace;
+      const ph = new THREE.Mesh(new THREE.PlaneGeometry(0.09, 0.107), M({ map: t, roughness: 0.6, side: THREE.DoubleSide })); ph.rotation.x = -Math.PI / 2 + 0.06; ph.rotation.z = i; ph.position.y = 0.012; g.add(ph);
+    } else if (k === 2) { // the field meter, needle hard over and its lamp lit
+      const body = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.16, 0.04), M({ color: 0x2b3a2e, roughness: 0.5 })); body.position.y = 0.04; body.rotation.x = -1.3; g.add(body);
+      const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.012, 8, 6), M({ color: 0xff3a2a, emissive: 0xff3a2a, emissiveIntensity: 5 })); lamp.position.set(0, 0.07, -0.04); g.add(lamp);
+      const ant = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.004, 0.14, 6), chrome); ant.position.set(0.02, 0.06, -0.1); ant.rotation.x = -1.3; g.add(ant);
+    } else if (k === 3) { // a candle on its side, its wax pooled
+      const c = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.16, 12), M({ color: 0xeee6d2, roughness: 0.7 })); c.rotation.z = Math.PI / 2; c.position.y = 0.022; c.rotation.y = i; g.add(c);
+      const pool = new THREE.Mesh(new THREE.CircleGeometry(0.06, 14).rotateX(-Math.PI / 2), M({ color: 0xe8dfca, roughness: 0.4 })); pool.position.y = 0.004; pool.position.x = 0.07; g.add(pool);
+    } else {              // an old doll, sat up against nothing
+      const cloth = M({ color: 0x7a2e34, roughness: 0.9 }), skin = M({ color: 0xe8d6c4, roughness: 0.35 });
+      const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.05, 0.1, 10), cloth); torso.position.y = 0.06; g.add(torso);
+      const head = new THREE.Mesh(new THREE.SphereGeometry(0.035, 14, 10), skin); head.position.y = 0.135; head.rotation.z = 0.25; g.add(head);
+      for (const sd of [-1, 1]) { const eye = new THREE.Mesh(new THREE.SphereGeometry(0.006, 6, 4), dark); eye.position.set(sd * 0.012, 0.14, 0.032); g.add(eye);
+        const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.08, 6), cloth); leg.rotation.x = Math.PI / 2; leg.position.set(sd * 0.02, 0.015, 0.04); g.add(leg); }
+    }
+    const L = new THREE.PointLight(0x9ad8ff, 0.9, 3.5, 2); L.position.y = 0.35; g.add(L);
+    g.traverse(o => { if (o.isMesh) o.castShadow = true; });
+    g.scale.setScalar(1.6);
+    return g;
+  }
+
   function spawnCollectibles(step) {
     const pts = LVL && LVL.collect_points;
     const tpl = collectTpl[steps.indexOf(step)];   // generated mesh, if the spec baked one
@@ -12078,6 +12118,9 @@ async function main() {
       const _mush = !tpl && /\b(mushrooms?|toadstools?|fung(?:i|us)|truffles?)\b/.test(String(step.label || '').toLowerCase());
       if (_mush) s = makeMushroom(i);
       // (the library's stand-in "creature" is a dog; a creature named by its kind keeps its own model)
+      const _haunt = !_evidence && !tpl && /\b(evidence|readings?|recordings?|samples?|traces?|signs?|proof)\b/.test(String(step.label || '').toLowerCase())
+        && /\b(haunt\w*|ghost\w*|paranormal|spirit\w*|entity|demon\w*|possess\w*|poltergeist|occult|supernatural)\b/.test(String(SPEC.prompt || '').toLowerCase());
+      if (_haunt) s = makeEvidenceItem(i);
       const _critter = CRITTER_RE.test(String(step.label || '').toLowerCase()) && (!tpl || /\/(creature|monster|beast|spirit)s?\.glb$/.test(String(step.asset || '')));
       if (_critter) s = makeCritter(i);
       // a third coordinate is the ground the pickup stands on (a platform's top)
@@ -12123,10 +12166,11 @@ async function main() {
       s.userData.fsTag = { type: 'collectible', name: step.label || 'item',
                            detail: 'collect it' };
       if (_bloom) { const gl = makeGlow(0.6); gl.position.y = 0.66; s.add(gl); }       // the nectar glows in the flower's heart, not on the ground
-      else if (_critter) { /* a creature carries its own light */ }
+      else if (_critter || _haunt) { /* a creature, or a piece of evidence, carries its own light */ }
       else if (!(planted && GARDEN && GARDEN.grow)) s.add(makeGlow(_evidence || _grown ? 1.1 : 1.7));   // a crop in its bed is found by its bed
       scene.add(s);
-      const _c = { mesh: s, baseY, phase: rngC() * Math.PI * 2, still: _evidence || _grown };
+      const _c = { mesh: s, baseY, phase: rngC() * Math.PI * 2, still: _evidence || _grown || _haunt };
+      if (_haunt) { s.position.y = (cy !== null ? cy : hAt(cx, cz)); s.rotation.y = rngC() * Math.PI * 2; s.userData.fsTag.detail = 'evidence: pick it up'; }
       if (_critter) { _c.still = true; _c.critter = { home: [cx, cz], vx: 0, vz: 0, heading: rngC() * 6.28, gait: 0, wander: 0 };
         s.userData.fsTag.detail = 'catch it: it runs'; s.position.y = hAt(cx, cz); }
       if (planted && GARDEN && GARDEN.grow) {
@@ -16397,7 +16441,10 @@ async function main() {
   }
   // "Collect 1 the woodcutter's stash": a label that carries its own article
   // takes no count when the count is one
-  const cnt = (n, l) => (n === 1 && /^(the|a|an|your|his|her|their)\s/i.test(l || '')) ? l : `${n} ${l}`;
+  // a mass noun is counted in pieces: "5 pieces of evidence", never "5 evidence" (2026-10-14)
+  const _MASS = /^(evidence|information|equipment|gear|ammo|ammunition|furniture|data|proof|research|mail|gold|luggage)$/i;
+  const cnt = (n, l) => (n === 1 && /^(the|a|an|your|his|her|their)\s/i.test(l || '')) ? l
+    : _MASS.test(String(l || '').trim()) ? `${n} ${n === 1 ? 'piece' : 'pieces'} of ${l}` : `${n} ${l}`;
   function stepLabel(st) {
     if (st.kind === 'collect') return `Collect ${cnt(st.count, st.label || 'items')}`;
     if (st.kind === 'defeat') return `${/\b(captur\w*|catch\w*|traps?|trapping|banish\w*)\b/.test(String(SPEC.prompt || '').toLowerCase()) ? 'Capture' : 'Defeat'} ${cnt(st.count, st.label || 'enemies')}`;
