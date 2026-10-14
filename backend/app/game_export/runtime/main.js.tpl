@@ -9843,6 +9843,7 @@ async function main() {
           if (SKATE && SKATE.inPark(x, z, 1)) return true;
           if (SMITHY && SMITHY.near(x, z, 0.5)) return true;
           if (FALLS && Math.hypot(x - FALLS.at[0], z - FALLS.at[1]) < 12) return true;
+          if (LVL && LVL.slot && hAt(x, z) > 0.8) return true;                     // a slot's wall face holds no pebbles (2026-10-14)
           const rg = window.__regionAt && window.__regionAt(x, z);
           if (rg && rg.kind === 'water' && rg.w > 0.2) return true;
           if (kind !== 'pebble' && kind !== 'flower' && pathDist(x, z) < CORR * 0.2) return true;   // the walked line (no painted trail since 2026-10-12)
@@ -9998,6 +9999,7 @@ async function main() {
         if (CANALS && CANALS.inCity(x, z, 1)) continue;
         if (SKATE && SKATE.inPark(x, z, 0.5)) continue;
         if (SMITHY && SMITHY.near(x, z, 0.3)) continue;
+        if (LVL && LVL.slot && hAt(x, z) > 0.8) continue;              // nor tufts
         if (Math.hypot(hAt(x + 0.8, z) - hAt(x - 0.8, z), hAt(x, z + 0.8) - hAt(x, z - 0.8)) > 1.6) continue;   // nothing roots on a face steeper than 45 degrees
         const _rg = window.__regionAt && window.__regionAt(x, z);
         if (_rg && _rg.kind === 'water' && _rg.w > 0.2) continue;    // no grass in the lake
@@ -10134,7 +10136,8 @@ async function main() {
       arcane:   { a: 0xc86bff, b: 0x7fd7ff, orbit: 1, rise: 0.25, size: 0.26, spin: 2.2 },
       wind:     { a: 0xdfe8ee, b: 0xffffff, orbit: 1, rise: 0.15, size: 0.28, spin: 2.6 },
     }[SPEC.player.vfx || ''];
-    if (!EL) return null;
+    // a car does not wear a spell (2026-10-14): "elemental creatures" gave a street racer's car a purple aura
+    if (!EL || SPEC.player.mode === 'drive') return null;
     const tex = (() => {
       const c = document.createElement('canvas'); c.width = c.height = 64;
       const g = c.getContext('2d');
@@ -10677,7 +10680,12 @@ async function main() {
   const DEF_WAVES = _defObj ? Math.max(1, Math.min(12, (_defObj.count | 0) || 5)) : 0;
   const DEF_TOTAL = _defObj ? Math.min(20, 2 * DEF_WAVES + 3) : 0;
   let _defHostileN = 0;
+  // A LONE CLIMBER IS ALONE (2026-10-14): the planner gave the trapped
+  // canyoneer a ranger for a guide, and in a slot she stood on the wall face.
+  // A sentence that puts its hero alone, trapped in a slot, has no company.
+  const _alone = !!(LVL && LVL.slot) && /\b(lone|alone|solo|by himself|by herself|nobody|no one)\b/.test(String(SPEC.prompt || '').toLowerCase());
   for (const ent of SPEC.entities || []) {
+    if (_alone && ent.behavior !== 'hostile') continue;
     try {
       const gltf = await loadGLB(ent.asset);
       const hostile = ent.behavior === 'hostile';
@@ -11791,16 +11799,17 @@ async function main() {
   function setupTrap() {
     if (!TRAP) return;
     // the boulder: a chockstone fallen into the slot, wedged between the walls, at the hero's side
-    const g = new THREE.IcosahedronGeometry(1.6, 4).toNonIndexed(), ps = g.attributes.position;
+    const g = new THREE.IcosahedronGeometry(1.25, 4).toNonIndexed(), ps = g.attributes.position;
     for (let i = 0; i < ps.count; i++) { const x = ps.getX(i), y = ps.getY(i), z = ps.getZ(i);
       const n = 1 + Math.sin(x * 2.3 + 1) * Math.cos(z * 1.9) * 0.14 + Math.sin(y * 3.1 + x) * 0.08; ps.setXYZ(i, x * n * 1.25, y * n * 0.95, z * n); }
     g.computeVertexNormals();
     const m = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ map: HDT('cliff', 1, 1), normalMap: HDN('cliff', 1, 1), color: 0xc08a64, roughness: 0.9, flatShading: true }));
     m.material.userData.noAutoTex = true;
     const hd = (typeof yaw === 'number') ? yaw : 0;
-    const bx = Math.sin(hd) * 1.4, bz = Math.cos(hd) * 1.4;      // just beside and ahead of the start, at shoulder height
-    m.position.set(bx, hAt(bx, bz) + 1.25, bz); m.rotation.set(0.3, 0.8, 0.2); m.castShadow = m.receiveShadow = true; scene.add(m);
-    world.createCollider(RAPIER.ColliderDesc.ball(1.5).setTranslation(bx, hAt(bx, bz) + 1.25, bz));
+    const bx = Math.sin(hd) * 2.05, bz = Math.cos(hd) * 2.05;    // its flank against the hero's arm, not over him
+    m.position.set(bx, hAt(bx, bz) + 1.05, bz); m.rotation.set(0.3, 0.8, 0.2); m.castShadow = m.receiveShadow = true; scene.add(m);
+    TRAP.boulder = m.position;
+    world.createCollider(RAPIER.ColliderDesc.ball(1.2).setTranslation(bx, hAt(bx, bz) + 1.05, bz));
     // seep pools on the floor along the route: a thin dark sheet of water and a wet rim
     const path = LVL.path || [];
     const pM = new THREE.MeshStandardMaterial({ color: 0x2a3a3c, roughness: 0.05, metalness: 0.3, transparent: true, opacity: 0.85 });
@@ -11817,6 +11826,49 @@ async function main() {
       + '<div style="width:170px;height:6px;margin:4px 0 0 auto;background:rgba(255,255,255,.15)"><i id="fstrapw" style="display:block;height:100%;width:100%;background:var(--art-acc, #6ad)"></i></div>'
       + '<div id="fstraphint" style="margin-top:14px;font:var(--art-hw, 600) 15px var(--f-head);letter-spacing:.06em"></div>';
     document.body.appendChild(el);
+  }
+  // ── THE SLOT'S LIGHT (2026-10-13) ───────────────────────────────────────
+  // What a slot canyon is famous for is its light: sun striking the rim
+  // bounces down the walls as a warm orange glow, dust hangs in the shafts,
+  // and old floods leave logs jammed high between the walls. Any slot gets
+  // them, trapped or not.
+  const SLOT_FX = (() => {
+    if (!(LVL && LVL.slot) || INTERIOR) return null;
+    const path = LVL.path || [], fx = { motes: null, t: 0 };
+    // warm bounce: a few broad orange lights down the slot, low, as the walls glow
+    for (let k = 0; k <= 5; k++) { const f = k / 5, seg = Math.min(path.length - 2, Math.floor(f * (path.length - 1))), tt = f * (path.length - 1) - seg;
+      if (seg < 0) break;
+      const x = path[seg][0] + (path[seg + 1][0] - path[seg][0]) * tt, z = path[seg][1] + (path[seg + 1][1] - path[seg][1]) * tt;
+      const L = new THREE.PointLight(0xff9a52, 5.5, 26, 1.6); L.position.set(x, hAt(x, z) + 9, z); scene.add(L); }
+    // flood debris: weathered logs jammed across the slot, high overhead
+    const logM = new THREE.MeshStandardMaterial({ map: HDT('bark', 1, 3), normalMap: HDN('bark', 1, 3), color: 0xb8a48c, roughness: 0.95 });
+    logM.userData.noAutoTex = true;
+    for (let k = 1; k <= 4; k++) { const f = (k - 0.5) / 4, seg = Math.min(path.length - 2, Math.floor(f * (path.length - 1))), tt = f * (path.length - 1) - seg;
+      if (seg < 0) break;
+      const ax = path[seg + 1][0] - path[seg][0], az = path[seg + 1][1] - path[seg][1], al = Math.hypot(ax, az) || 1;
+      const x = path[seg][0] + ax * tt, z = path[seg][1] + az * tt, y = hAt(x, z) + 7 + (k % 3) * 4.5;
+      const log = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.22, 5.6, 9), logM);
+      log.position.set(x, y, z); log.rotation.set(0.15 * (k % 2 ? 1 : -1), Math.atan2(ax, az) + Math.PI / 2, Math.PI / 2 + 0.12 * (k % 2 ? 1 : -1));
+      log.castShadow = true; scene.add(log); }
+    // dust in the air: a cloud of tiny lit motes that drifts round the hero
+    const N = 260, g = new THREE.BufferGeometry(), pos = new Float32Array(N * 3);
+    for (let i = 0; i < N; i++) { pos[i * 3] = (Math.random() - 0.5) * 8; pos[i * 3 + 1] = Math.random() * 7; pos[i * 3 + 2] = (Math.random() - 0.5) * 8; }
+    g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    const mt = (() => { const c = document.createElement('canvas'); c.width = c.height = 32; const x = c.getContext('2d'), gr = x.createRadialGradient(16, 16, 0, 16, 16, 16);
+      gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(1, 'rgba(255,255,255,0)'); x.fillStyle = gr; x.fillRect(0, 0, 32, 32); return new THREE.CanvasTexture(c); })();
+    fx.motes = new THREE.Points(g, new THREE.PointsMaterial({ map: mt, color: 0xffd9a8, size: 0.05, transparent: true, opacity: 0.5, depthWrite: false, blending: THREE.AdditiveBlending }));
+    fx.motes.frustumCulled = false; scene.add(fx.motes);
+    window.__slotFx = { lights: 6, logs: 4, motes: N };
+    return fx;
+  })();
+  function slotTick(dt, pos) {
+    if (!SLOT_FX) return;
+    SLOT_FX.t += dt;
+    const m = SLOT_FX.motes; m.position.set(pos.x, pos.y, pos.z);
+    const a = m.geometry.attributes.position;
+    for (let i = 0; i < a.count; i++) { let y = a.getY(i) + dt * 0.06; if (y > 7) y = 0; a.setY(i, y);
+      a.setX(i, a.getX(i) + Math.sin(SLOT_FX.t * 0.3 + i) * dt * 0.05); }
+    a.needsUpdate = true;
   }
   function trapTick(dt, moving, pos) {
     if (!TRAP || !gameStarted) return;
@@ -18679,7 +18731,7 @@ async function main() {
     Object.assign(WEAPONS[1], { name: 'Revolver', desc: 'hold F to aim, release to fire' });
   window.__heroGun = ROLE_PICK === 'pistol' ? 'pistol'      // the guide tells a gunman to aim, not to strike
     : (SPEC.player && SPEC.player.attack === 'ranged' && _craft) ? 'guns' : null;
-  const NO_ARMS = !ROLE_PICK && !_hostile;
+  const NO_ARMS = (!ROLE_PICK && !_hostile) || !!TRAP;   // (2026-10-13) a trapped climber carries nothing to fight with
   let weaponIdx = (ATTACK !== 'none' && ROLE_PICK === 'pistol') ? 1 : 0, aimT = 0;
   const shells = [], blasts = [];
   // BLAST FX ARE POOLED, NOT CREATED (2026-08-07). Adding a PointLight
@@ -23201,6 +23253,7 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
       if (window.__graveMist) window.__graveMist(performance.now() / 1000);
       if (window.__hiveTick) window.__hiveTick(performance.now() / 1000);
       if (TRAP) trapTick(dt, !!(mvRaw && mvRaw.mag > 0.1), nt);
+      if (SLOT_FX) slotTick(dt, nt);
       if (window.__goalMarkTick) window.__goalMarkTick();
       if (window.__stormTick) window.__stormTick(performance.now() / 1000);
       if (window.__smithFire) window.__smithFire(performance.now() / 1000);
@@ -24058,7 +24111,16 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
     }
     // A PINNED VIEW for shot tools and fixtures: {pos:[x,y,z], look:[x,y,z]}
     // holds the camera where a picture needs it, whatever the game is doing
-    if (window.__camPin) {
+    // PINNED, THE CAMERA WATCHES (2026-10-13): while the arm is under the
+    // stone the chase camera sat inside the boulder's shadow on the back of
+    // the hero's head. It stands off to the side, low, the climber and the
+    // chockstone in one frame, and breathes a little; freed, play resumes.
+    if (TRAP && TRAP.pinned && gameStarted && !window.__camPin && TRAP.boulder) {
+      const hp = playerObj.position, bp = TRAP.boulder, sx = bp.x - hp.x, sz = bp.z - hp.z, sl = Math.hypot(sx, sz) || 1;
+      const nx = -sz / sl, nz = sx / sl, tb = performance.now() / 1000;
+      camera.position.set(hp.x + nx * 1.9 - sx / sl * 3.0, hp.y + 1.7 + Math.sin(tb * 0.6) * 0.04, hp.z + nz * 1.9 - sz / sl * 3.0);   // on the climber's side of the stone
+      camera.lookAt((hp.x + bp.x) / 2, hp.y + 1.05, (hp.z + bp.z) / 2);
+    } else if (window.__camPin) {
       // a pin may be a function, re-read every frame, to follow something moving
       const _cp = typeof window.__camPin === 'function' ? window.__camPin() : window.__camPin;
       camera.position.set(..._cp.pos);

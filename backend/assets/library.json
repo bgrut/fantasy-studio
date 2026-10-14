@@ -261,5 +261,9 @@
   "lost cub": "assets/library/lost_cub.glb",
   "captain": "assets/library/captain.glb",
   "keeper": "assets/library/keeper.glb",
-  "superhero": "assets/library/superhero.glb"
+  "superhero": "assets/library/superhero.glb",
+  "canyoneer": "assets/library/canyoneer.glb",
+  "paranormal investigator": "assets/library/paranormal_investigator.glb",
+  "street racer": "assets/library/street_racer.glb",
+  "city champion": "assets/library/city_champion.glb"
 }

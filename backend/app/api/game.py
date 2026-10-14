@@ -1812,6 +1812,15 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             spec.seed = req.seed if req.seed is not None else _random.randint(1, 999_999)
         job["seed"] = spec.seed
 
+        # A CLIMBER IS DRESSED FOR WHERE HE CLIMBS (2026-10-14): the extractor
+        # names the hero "climber", which the library has no figure for, so the
+        # trapped canyon climber was played by the generic man
+        if base_spec is None and (spec.player.name or "").lower().strip() in ("climber", "rock climber", "hiker", "canyoneer"):
+            _pc = (req.prompt or "").lower()
+            if _fre.search(r"\b(canyons?|slot|desert|sandstone|mesa|gorge|arches|utah)\b", _pc):
+                spec.player.name = "canyoneer"
+            elif _fre.search(r"\b(snow\w*|ice|icy|glacier|summit|peaks?|everest|alpine|mountain\w*|blizzard)\b", _pc):
+                spec.player.name = "mountaineer"
         # A CANYON IS A GORGE (2026-10-03): "a red desert canyon" was read as
         # mesa country, stepped plateaus with no walls to walk between. The
         # word decides it, as with the volcano below.
@@ -2101,6 +2110,11 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                     # a sports sentence is about its sport: "score three goals against a
                     # robot goalkeeper" cast an engineer because of the robot (2026-09-27)
                     (r"\b(soccer|football|goals?|goalkeeper|goalie|pitch|striker|penalty|penalties|kick-?off)", "soccer player"),
+                    # (2026-10-13) a canyon climber, a street racer and a paranormal
+                    # investigator were the generic man, the hoodie and the detective
+                    (r"\b(paranormal|ghost ?hunters?|demonologists?|haunting investigat\w*|investigators? of the (?:occult|supernatural))\b", "paranormal investigator"),
+                    (r"\b(street rac\w*|racers?|drift\w*|tuner|car meet|getaway driver)\b", "street racer"),
+                    (r"\b(canyoneer\w*|slot canyons?|rock climb\w*|lone climber|climber trapped|trapped climber)\b", "canyoneer"),
                     # a heist is played by a thief, not an explorer (2026-10-10)
                     (r"\b(heist|steal|stealing|thief|burglar|burgle|robbery|safecracker|sneak in|break in)", "burglar"),
                     # a cyberpunk runner wears a dark hoodie, not safari khaki (2026-10-11)
@@ -3580,7 +3594,10 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         spec.world.level = build_level(
             spec.seed, spec.world.size_m, n_objectives=n_obj,
             amplitude_m=amp * _am, grid_n=_gn, regions=_regions,
-            archetype=_arch, terrain_form=_tf, sea=bool(job.get("_naval")) and not _fjord, fjord=_fjord, coast=_coast, harbor=_coast and _harbor)
+            archetype=_arch, terrain_form=_tf, sea=bool(job.get("_naval")) and not _fjord, fjord=_fjord, coast=_coast, harbor=_coast and _harbor,
+            # A SLOT CANYON IS A CRACK, NOT A GORGE (2026-10-13)
+            slot=bool(_fre.search(r"\b(slot canyons?|slot|narrows|crevices?|fissures?|trapped in (?:a|the) canyon|pinned|wedged)\b", (req.prompt or "").lower())
+                      and _fre.search(r"\b(canyons?|gorges?|crevices?|fissures?|narrows|ravines?)\b", (req.prompt or "").lower())))
         if _tf != "natural" or _gm != 1.0:
             job.setdefault("notes", []).append(
                 f"terrain form: {_tf} ({_gn}x{_gn}). The ground is shaped by "

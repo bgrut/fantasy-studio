@@ -554,6 +554,10 @@ def _build_reference_prompt(slots: Dict[str, Any], style: str) -> tuple[str, str
             "engineer":  "engineer in an orange hi-vis work jacket, white hard hat, cargo trousers, work boots, tool belt",
             "explorer":  "explorer in a khaki safari shirt and trousers, wide-brimmed hat, leather boots, backpack straps",
             # (2026-10-07) an original Victorian investigator, nothing from any film
+            # (2026-10-13) three heroes the studio had no figure for
+            "paranormal investigator": "a 1970s paranormal investigator in a brown corduroy jacket over a cream turtleneck, flared dark trousers, leather shoes, a shoulder bag strap and a cassette recorder on a strap, neat side-parted hair, calm serious face, fully clothed, normal proportions",
+            "street racer": "a young street racer in a fitted black leather racing jacket with plain red panels and no logos, dark jeans, low black trainers, fingerless driving gloves, short dark hair, face showing, fully clothed, normal proportions",
+            "canyoneer": "a lone canyoneer in a sun-faded red t-shirt under a climbing harness, tan hiking shorts over grey leggings, approach shoes, a small daypack, a cycling-style cap backwards, short stubble, lean wiry build with normal proportions, fully clothed",
             "ghost hunter": "victorian ghost hunter in a long dark wool greatcoat over a buttoned waistcoat and high-collared white shirt, dark trousers, tall leather boots, leather gloves, a brass lantern on a belt hook, short tidy hair, determined face",
             "hunter":    "hunter in a camouflage jacket and trousers, baseball cap, boots",
             "courier":   "bicycle courier in a cycling jersey, cap, messenger bag strap across the chest, trainers",

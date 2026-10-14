@@ -1747,5 +1747,26 @@
   "looks_like": 0.596,
   "patchy": 0.393,
   "looks_like_best": "a clean 3D render of a superhero"
+ },
+ "canyoneer.glb": {
+  "kind": "canyoneer",
+  "shaded_png": "backend/tools/shotgate/renders/canyoneer_shaded.png",
+  "looks_like": 0.782,
+  "patchy": 0.217,
+  "looks_like_best": "a clean 3D render of a canyoneer"
+ },
+ "street_racer.glb": {
+  "kind": "street racer",
+  "shaded_png": "backend/tools/shotgate/renders/street_racer_shaded.png",
+  "looks_like": 0.203,
+  "patchy": 0.773,
+  "looks_like_best": "a clean 3D render of a street racer"
+ },
+ "paranormal_investigator.glb": {
+  "kind": "paranormal investigator",
+  "shaded_png": "backend/tools/shotgate/renders/paranormal_investigator_shaded.png",
+  "looks_like": 0.795,
+  "patchy": 0.198,
+  "looks_like_best": "a clean 3D render of a paranormal investigator"
  }
 }

@@ -38,7 +38,7 @@ _QUADRUPED = ("dog", "cat", "horse", "cow", "wolf", "fox", "deer", "lion",
 # Human roles/professions are ALWAYS biped — never ask the LLM. Ollama once
 # classified 'hunter' as a quadruped (cached!), so the player got a
 # four-legged rig and shipped looking like a dog (2026-07-15).
-_BIPED = ("hunter", "archer", "soldier", "warrior", "ranger", "ninja",
+_BIPED = ("canyoneer", "investigator", "racer", "hunter", "archer", "soldier", "warrior", "ranger", "ninja",
           "pirate", "king", "queen", "prince", "princess", "farmer",
           "cowboy", "cowgirl", "hero", "heroine", "elf", "dwarf", "orc",
           "goblin", "zombie", "skeleton", "vampire", "witch", "astronaut",

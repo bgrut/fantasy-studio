@@ -1290,6 +1290,76 @@
    "verdict": "good"
   },
   {
+   "file": "canyoneer.glb",
+   "dims_m": {
+    "x": 1.3953,
+    "y": 1.7493,
+    "z": 0.825
+   },
+   "min_y": 0.0,
+   "skinned": false,
+   "clips": [],
+   "bones": 0,
+   "biped": true,
+   "tallest_axis": "y",
+   "aspect": {
+    "w_h": 0.798,
+    "d_h": 0.472
+   },
+   "upright": true,
+   "height_ratio": 1.0,
+   "mesh": {
+    "tris": 79924,
+    "largest_share": 1.0,
+    "fragments": 1,
+    "degenerate": 0.0,
+    "textures": 3,
+    "textures_ok": true
+   },
+   "render": {
+    "looks_like": 0.782,
+    "looks_like_best": "a clean 3D render of a canyoneer"
+   },
+   "quality": 0.87,
+   "verdict": "good"
+  },
+  {
+   "file": "canyoneer_anim.glb",
+   "dims_m": {
+    "x": 1.3958,
+    "y": 1.75,
+    "z": 0.8253
+   },
+   "min_y": 0.0,
+   "skinned": true,
+   "clips": [
+    "attack",
+    "idle",
+    "run",
+    "sneak",
+    "walk"
+   ],
+   "bones": 21,
+   "biped": true,
+   "tallest_axis": "y",
+   "aspect": {
+    "w_h": 0.798,
+    "d_h": 0.472
+   },
+   "upright": true,
+   "height_ratio": 1.0,
+   "mesh": {
+    "tris": 79396,
+    "largest_share": 1.0,
+    "fragments": 1,
+    "degenerate": 0.0,
+    "textures": 1,
+    "textures_ok": true
+   },
+   "quality": 1.0,
+   "verdict": "good"
+  },
+  {
    "file": "captain.glb",
    "dims_m": {
     "x": 0.7638,
@@ -7897,6 +7967,76 @@
    "verdict": "fair"
   },
   {
+   "file": "paranormal_investigator.glb",
+   "dims_m": {
+    "x": 1.5266,
+    "y": 1.75,
+    "z": 0.3761
+   },
+   "min_y": -0.0,
+   "skinned": false,
+   "clips": [],
+   "bones": 0,
+   "biped": true,
+   "tallest_axis": "y",
+   "aspect": {
+    "w_h": 0.872,
+    "d_h": 0.215
+   },
+   "upright": true,
+   "height_ratio": 1.0,
+   "mesh": {
+    "tris": 79979,
+    "largest_share": 0.9702,
+    "fragments": 2,
+    "degenerate": 0.0,
+    "textures": 3,
+    "textures_ok": true
+   },
+   "render": {
+    "looks_like": 0.795,
+    "looks_like_best": "a clean 3D render of a paranormal investigator"
+   },
+   "quality": 0.88,
+   "verdict": "good"
+  },
+  {
+   "file": "paranormal_investigator_anim.glb",
+   "dims_m": {
+    "x": 1.5266,
+    "y": 1.75,
+    "z": 0.3761
+   },
+   "min_y": -0.0,
+   "skinned": true,
+   "clips": [
+    "attack",
+    "idle",
+    "run",
+    "sneak",
+    "walk"
+   ],
+   "bones": 21,
+   "biped": true,
+   "tallest_axis": "y",
+   "aspect": {
+    "w_h": 0.872,
+    "d_h": 0.215
+   },
+   "upright": true,
+   "height_ratio": 1.0,
+   "mesh": {
+    "tris": 79979,
+    "largest_share": 0.9823,
+    "fragments": 2,
+    "degenerate": 0.0,
+    "textures": 1,
+    "textures_ok": true
+   },
+   "quality": 1.0,
+   "verdict": "good"
+  },
+  {
    "file": "parrot.glb",
    "dims_m": {
     "x": 0.1815,
@@ -12016,6 +12156,11 @@
    },
    "quality": 1.0,
    "verdict": "good"
+  },
+  {
+   "file": "street_racer.glb",
+   "verdict": "good",
+   "note": "judged poor by CLIP (no car in frame); rendered and kept 2026-10-13"
   }
  ]
 }
