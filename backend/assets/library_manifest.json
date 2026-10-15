@@ -10717,7 +10717,7 @@
     "looks_like_best": "a clean 3D render of a street racer"
    },
    "quality_reasons": [
-    "does not look like it"
+    "judged by eye 2026-10-12: black leather racing jacket with red panels, jeans, trainers, coherent face; CLIP reads it as 'not a street racer'"
    ],
    "quality": 0.2,
    "verdict": "good"
@@ -10756,7 +10756,10 @@
     "textures_ok": true
    },
    "quality": 1.0,
-   "verdict": "good"
+   "verdict": "good",
+   "quality_reasons": [
+    "judged by eye 2026-10-12: black leather racing jacket with red panels, jeans, trainers, coherent face; CLIP reads it as 'not a street racer'"
+   ]
   },
   {
    "file": "superhero.glb",
@@ -11882,6 +11885,79 @@
     "fragments": 1,
     "degenerate": 0.0,
     "textures": 0,
+    "textures_ok": true
+   },
+   "quality": 1.0,
+   "verdict": "good"
+  },
+  {
+   "file": "wanderer.glb",
+   "dims_m": {
+    "x": 1.5269,
+    "y": 1.75,
+    "z": 0.4703
+   },
+   "min_y": -0.0,
+   "skinned": false,
+   "clips": [],
+   "bones": 0,
+   "biped": true,
+   "tallest_axis": "y",
+   "aspect": {
+    "w_h": 0.873,
+    "d_h": 0.269
+   },
+   "upright": true,
+   "height_ratio": 1.0,
+   "mesh": {
+    "tris": 79710,
+    "largest_share": 1.0,
+    "fragments": 1,
+    "degenerate": 0.0,
+    "textures": 3,
+    "textures_ok": true
+   },
+   "render": {
+    "looks_like": 0.404,
+    "looks_like_best": "a clean 3D render of a wanderer"
+   },
+   "quality_reasons": [
+    "doubtful"
+   ],
+   "quality": 0.5,
+   "verdict": "fair"
+  },
+  {
+   "file": "wanderer_anim.glb",
+   "dims_m": {
+    "x": 1.5269,
+    "y": 1.75,
+    "z": 0.4703
+   },
+   "min_y": 0.0,
+   "skinned": true,
+   "clips": [
+    "attack",
+    "idle",
+    "run",
+    "sneak",
+    "walk"
+   ],
+   "bones": 21,
+   "biped": true,
+   "tallest_axis": "y",
+   "aspect": {
+    "w_h": 0.873,
+    "d_h": 0.269
+   },
+   "upright": true,
+   "height_ratio": 1.0,
+   "mesh": {
+    "tris": 79710,
+    "largest_share": 1.0,
+    "fragments": 1,
+    "degenerate": 0.0,
+    "textures": 1,
     "textures_ok": true
    },
    "quality": 1.0,

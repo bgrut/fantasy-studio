@@ -2135,7 +2135,8 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                     # hidden shrine" and "a wanderer crossing a red desert canyon" both
                     # hit "walk"/"wander" below and were the park ranger in a lime shirt
                     (r"\b(pilgrim\w*)\b", "pilgrim"),
-                    (r"(?=.*\b(desert|dunes?|sands?|sahara|canyon|oasis|caravan|wastelands?|badlands)\b).*\b(wander\w*|nomads?|drifters?|travell?ers?)\b", "nomad"),
+                    # (the nomad was never committed: library.json names a file no clone has)
+                    (r"(?=.*\b(desert|dunes?|sands?|sahara|canyon|oasis|caravan|wastelands?|badlands)\b).*\b(wander\w*|nomads?|drifters?|travell?ers?)\b", "wanderer"),
                     (r"\b(forest|wood|moor|wild|ranger|trail|mountain|hike|hunt|deer|elk|track|walk|walker|stroll|wander|gather|firefl)", "ranger"),
                     (r"\b(lab|laboratory|science|scientist|space|station|reactor|research|specimen)", "scientist"),
                     (r"\b(engine|machine|factory|robot|mech|repair|wrench|mine)", "engineer"),

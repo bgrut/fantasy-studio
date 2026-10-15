@@ -1782,5 +1782,12 @@
   "looks_like": 0.873,
   "patchy": 0.127,
   "looks_like_best": "a clean 3D render of a pilgrim"
+ },
+ "wanderer.glb": {
+  "kind": "wanderer",
+  "shaded_png": "backend/tools/shotgate/renders/wanderer_shaded.png",
+  "looks_like": 0.404,
+  "patchy": 0.595,
+  "looks_like_best": "a clean 3D render of a wanderer"
  }
 }

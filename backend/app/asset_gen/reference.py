@@ -622,6 +622,9 @@ def _build_reference_prompt(slots: Dict[str, Any], style: str) -> tuple[str, str
             # a pale hemp robe read as bare skin to the dress check, and a hat
             # worn low drew no face under it: grey-brown cloth, the hat on the back
             "pilgrim":   "a middle-aged pilgrim with a calm weathered bare face and short dark hair, in a long grey-brown wool travelling robe tied at the waist with a rope cord, a woven straw hat hanging on his back by a cord, a dark cloth satchel on a strap across the chest, dark leg wraps and straw sandals, holding nothing, fully clothed, normal proportions",
+            # (2026-10-14) made without a wardrobe, a wanderer was a man in a long
+            # black town coat and a flat cap: the desert's wanderer is dressed for it
+            "wanderer":  "a lone desert wanderer with a weathered sun-tanned bare face and a short beard, a sun-faded sand-coloured hooded cloak thrown back off the head over a loose off-white linen shirt, a long scarf around the neck, brown canvas trousers, worn leather boots, a leather satchel on a strap, holding nothing, fully clothed, normal proportions",
             "hiker":     "hiker in a red waterproof jacket, grey hiking trousers, walking boots, a small backpack, a knitted beanie, fully clothed",
             # (2026-10-07) the originality round's people: a beekeeper was played by the ranger
             "beekeeper": "beekeeper in a loose white full-body bee suit, a round mesh veil hat, long white gauntlet gloves, rubber boots, fully covered",
