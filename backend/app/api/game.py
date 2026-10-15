@@ -2706,6 +2706,8 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                                    # no air out there: whoever explains it wears a suit, the hero's own if need be
                                    (r"\b(moons?|lunar|mars|martian|asteroids?|comet|planet|alien world|outer space|in space|crater)\b", ("astronaut*",)),
                                    (r"\b(space ?station|spaceship|starship|laboratory|lab)\b", ("scientist", "engineer")),
+                                   # (2026-10-14) a desert canyon's guide was the forest ranger in a lime shirt
+                                   (r"\b(deserts?|dunes?|sahara|oasis|caravan|badlands|wastelands?|mesas?)\b", ("wanderer", "explorer")),
                                    (r"\b(forest|woods|woodland|wilderness|jungle|mountains?|canyon|national park)\b", ("ranger", "explorer"))):
                 if _gre.search(_gpat, _gset):
                     for _gr in _groles:

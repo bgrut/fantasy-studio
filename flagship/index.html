@@ -507,6 +507,9 @@
   #hint{font-family:var(--f-mono);position:fixed;left:50%;transform:translateX(-50%);bottom:84px;z-index:5;color:#6d7590;text-align:center;white-space:nowrap}
   #hint{transition:opacity 1.4s}
   #hint.gone{opacity:0}
+  /* (2026-10-15) the title owns the opening and the foreman teaches the keys: the five lines
+     of controls lay over the cube and repeated the card, so they wait until both are done */
+  body:has(#title.on) #hint,body:has(#tutor.on) #hint{opacity:0 !important;transition:opacity .3s}
   /* the crosshair IS the cursor once the pointer is locked */
   #cross{position:fixed;left:50%;top:50%;width:16px;height:16px;margin:-8px 0 0 -8px;
          z-index:4;pointer-events:none;opacity:.85}

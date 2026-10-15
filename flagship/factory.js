@@ -1502,7 +1502,15 @@ function meadowTexture(fp, look, ground, seed) {
   const g = c.getContext('2d');
   let h = seed * 2654435761 >>> 0;
   const rnd = () => { h ^= h << 13; h >>>= 0; h ^= h >> 17; h ^= h << 5; h >>>= 0; return h / 4294967296; };
-  const gc = new THREE.Color(ground || 0x3d5a2a); const hsl = {}; gc.getHSL(hsl);
+  // EACH FACE ITS OWN COUNTRY (2026-10-15): from orbit the six faces were one
+  // green, though each grows a different ore; the climate below only nudged
+  // the hue. A crystal face is a lush blue-green meadow, an ember face a rust
+  // and ochre heath with burnt ground, a salt face a silvery sage salt-marsh
+  // crusted white, the underside dark moss.
+  const gc = new THREE.Color(ground || 0x3d5a2a);
+  const COUNTRY = { crystal: [0x2f5a3a, 0.35], ember: [0x7a5030, 0.7], salt: [0x9aa592, 0.62], under: [0x22301c, 0.5] }[look.key];
+  if (COUNTRY) gc.lerp(new THREE.Color(COUNTRY[0]), COUNTRY[1]);
+  const hsl = {}; gc.getHSL(hsl);
   // the face's own climate: an ember face drier and browner, a salt face paler, the underside dim
   const dry = look.key === 'ember' ? 0.55 : look.key === 'salt' ? 0.25 : 0.12;
   const pale = look.key === 'salt' ? 0.18 : 0, dim = look.key === 'under' ? 0.45 : 0;
@@ -1518,6 +1526,13 @@ function meadowTexture(fp, look, ground, seed) {
   for (let i = 0; i < 55; i++) blob(rnd() * P, rnd() * P, 50 + rnd() * 200, rgb(col(-0.05, -0.12, 0.06)), 0.35 + dry * 0.4);                  // dry, yellowed
   for (let i = 0; i < 24; i++) blob(rnd() * P, rnd() * P, 30 + rnd() * 120, rgb(new THREE.Color(0x5a4630).getHex()), 0.30 + dry * 0.3);     // bare earth
   for (let i = 0; i < 30; i++) blob(rnd() * P, rnd() * P, 80 + rnd() * 260, 'rgb(0,0,0)', 0.10);                                            // hollows
+  if (look.key === 'ember') {                       // scorched ground and ash where the heat comes up
+    for (let i = 0; i < 26; i++) blob(rnd() * P, rnd() * P, 25 + rnd() * 110, 'rgb(38,22,14)', 0.38);
+    for (let i = 0; i < 18; i++) blob(rnd() * P, rnd() * P, 20 + rnd() * 70, 'rgb(128,116,104)', 0.28);
+    for (let i = 0; i < 40; i++) blob(rnd() * P, rnd() * P, 15 + rnd() * 50, 'rgb(150,70,40)', 0.25); }
+  if (look.key === 'salt') {                        // white crusts where the brine dried, in drifts
+    for (let i = 0; i < 60; i++) blob(rnd() * P, rnd() * P, 12 + rnd() * 70, 'rgb(236,234,222)', 0.42);
+    for (let i = 0; i < 20; i++) blob(rnd() * P, rnd() * P, 60 + rnd() * 160, 'rgb(170,180,176)', 0.25); }
   // fine mottling, so it is not airbrushed from above
   for (let i = 0; i < 9000; i++) { const l = rnd(); g.fillStyle = l < 0.5 ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,220,0.05)'; g.fillRect(rnd() * P, rnd() * P, 2 + rnd() * 5, 2 + rnd() * 5); }
   // the survey grid, faint: every fifth tile a thin worn line
@@ -3214,8 +3229,13 @@ function grassMaskFor(f) {
 }
 if (GRASS_ON) {
   // a meadow's greens, not a toy's: deeper at the root, olive to straw at the tips
-  const colA = new THREE.Color(0x3d6428), colB = new THREE.Color(0x7d9a48), colDry = new THREE.Color(0xa99a5c);
+  const colA0 = new THREE.Color(0x3d6428), colB0 = new THREE.Color(0x7d9a48), colDry0 = new THREE.Color(0xa99a5c);
+  // each face's own growth, matching its ground (2026-10-15)
+  const GROWTH = { crystal: [0x2e5e34, 0x6a9c52, 0x9aa060], ember: [0x5a3820, 0x9c6a36, 0xc09a5a],
+                   salt: [0x56664e, 0x9aa88c, 0xcfcfb6], under: [0x22341c, 0x46623a, 0x7a7a50] };
   for (let f = 0; f < 6; f++) {
+    const _gw = GROWTH[faceLookOf(f).key];
+    const colA = _gw ? new THREE.Color(_gw[0]) : colA0, colB = _gw ? new THREE.Color(_gw[1]) : colB0, colDry = _gw ? new THREE.Color(_gw[2]) : colDry0;
     const F_ = FACES[f];
     const frame = new THREE.Group();
     frame.name = 'grassFace' + f;
@@ -6229,7 +6249,7 @@ addEventListener('keydown', e => {
   // mouse is captured and the card cannot be clicked
   if (tutActive() && !photo && (e.code === 'Enter' || e.code === 'NumpadEnter')) { tutAdvance(); return; }
   if (tutActive() && e.code === 'KeyG') { tutIdx = TUT.length; renderTutor(); if (!tool) pickTool('miner'); save();
-    const t = document.getElementById('toast'); if (t) { t.textContent = WORD('The foreman steps back. The goal card leads from here; "the guide" in the panel brings him back.'); t.classList.add('on'); toastAt = 4; } return; }
+    const t = document.getElementById('toast'); if (t) { t.textContent = WORD(FOREMAN_FIRST + ' steps back. The goal card leads from here; "the guide" in the panel brings ' + HOUSE.them + ' back.'); t.classList.add('on'); toastAt = 4; } return; }
   const u = { 'KeyZ': 'tick', 'KeyX': 'yield', 'KeyC': 'smelt' }[e.code];
   if (u && !CITY) buy(u);
 });
@@ -8186,6 +8206,8 @@ function stepHint(dt) {
   const el = document.getElementById('hint');
   if (!el) return;
   if (intro > 0) return;                              // the reveal does not count as reading
+  const _tu = document.getElementById('tutor'), _ti = document.getElementById('title');
+  if ((_tu && _tu.classList.contains('on')) || (_ti && _ti.classList.contains('on'))) return;   // hidden under the card or the title: not read yet
   hintClock += dt;
   if (hintBack > 0) { hintBack -= dt; el.classList.remove('gone'); return; }
   el.classList.toggle('gone', hintClock > 45);
@@ -8586,7 +8608,7 @@ addEventListener('visibilitychange', () => { if (document.hidden) save(); });
     tutStart(0); save();
   });
   if (tu) tu.addEventListener('pointerdown', ev => { ev.stopPropagation(); tutIdx = TUT.length; renderTutor(); if (!tool) pickTool('miner'); save();
-    const t = document.getElementById('toast'); if (t) { t.textContent = WORD('The foreman steps back. The goal card leads from here.'); t.classList.add('on'); toastAt = 4; } });
+    const t = document.getElementById('toast'); if (t) { t.textContent = WORD(FOREMAN_FIRST + ' steps back. The goal card leads from here.'); t.classList.add('on'); toastAt = 4; } });
   const sh = document.getElementById('share');
   if (sh) sh.addEventListener('pointerdown', ev => { ev.stopPropagation(); shareLink(); });
   const w = document.getElementById('wipe');
