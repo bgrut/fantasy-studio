@@ -1,0 +1,21 @@
+import puppeteer from 'puppeteer-core';
+const b = await puppeteer.launch({ headless: 'new', executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', args: ['--use-angle=d3d11', '--window-size=1600,900'] });
+const p = await b.newPage(); await p.setViewport({ width: 1600, height: 900 });
+await p.goto(`http://127.0.0.1:8789/games/${process.env.J}/dist/index.html?noguide=1`, { waitUntil: 'domcontentloaded' });
+const wait = ms => new Promise(r => setTimeout(r, ms));
+await wait(9000); await p.click('#startbtn').catch(() => {}); await wait(3000);
+const r = await p.evaluate(() => {
+  let rail = null; window.__scene.traverse(o => { if (!rail && o.isInstancedMesh && o.material && o.material.color && o.material.color.getHexString() === 'f1ece2' && o.count > 3) rail = o; });
+  if (!rail) return null;
+  const M4 = rail.matrixWorld.constructor, V = window.__scene.position.constructor, m = new M4(); rail.getMatrixAt(2, m);
+  const c = new V().setFromMatrixPosition(m), s = new V().setFromMatrixScale(m), q = m.elements;
+  const alongX = Math.abs(q[0]) > Math.abs(q[2]);
+  const off = alongX ? [0, 0, 2.2] : [2.2, 0, 0];
+  window.__camPin = { pos: [c.x + off[0], 1.3, c.z + off[2]], look: [c.x, 0.6, c.z] };
+  return { c: [c.x, c.y, c.z], s: [s.x, s.y, s.z], post: (window.__composer && window.__composer.passes || []).map(p2 => p2.constructor.name) };
+});
+console.log(JSON.stringify(r));
+await wait(1500); await p.screenshot({ path: process.env.OUT + '_a.jpg', type: 'jpeg', quality: 90 });
+await p.evaluate(() => { window.__camPin = { pos: [window.__camPin.pos[0] * 0.5 + window.__camPin.look[0] * 0.5 + 0.0, 1.0, window.__camPin.pos[2] * 0.5 + window.__camPin.look[2] * 0.5], look: window.__camPin.look }; });
+await wait(1200); await p.screenshot({ path: process.env.OUT + '_b.jpg', type: 'jpeg', quality: 90 });
+await b.close();

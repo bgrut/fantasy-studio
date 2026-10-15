@@ -7944,7 +7944,8 @@ async function main() {
     ceil.rotation.x = Math.PI / 2; ceil.position.set(OX, topY, 0);
     scene.add(ceil);
     // a museum's walls are clean paint, not weathered plaster
-    const wmat = _museum ? new THREE.MeshStandardMaterial({ color: 0xece6da, roughness: 0.92 })
+    // (2026-10-15) a gallery's walls are its own: white cube, oxblood, slate or sage, by the seed
+    const wmat = _museum ? new THREE.MeshStandardMaterial({ color: [0xece6da, 0x6a3434, 0x3e5064, 0x7a8a72][Math.abs((SPEC.seed || 1) | 0) % 4], roughness: 0.92 })
       : new THREE.MeshStandardMaterial({ map: itex(wallFile, 3, 1.2), roughness: 0.95 });
     if (_museum) { wmat.userData.noAutoTex = true; cmatI.map = null; cmatI.color.setHex(0xe8e3da); cmatI.userData.noAutoTex = true; }
     // A JAPANESE CASTLE IS NOT A KEEP (2026-10-11): "a ninja sneaking through a
@@ -8043,6 +8044,7 @@ async function main() {
         const uv = _bg.attributes.uv, S = WH / 1.2;
         for (let f = 0; f < 6; f++) for (let k = 0; k < 4; k++) { const i = f * 4 + k, w = f < 2 ? thick : ln, hh = (f === 2 || f === 3) ? thick : hgt;
           uv.setXY(i, uv.getX(i) * w / S, (y0 + uv.getY(i) * hh) / S); } }
+      if (y0 === 0 && _MOLD) _MOLD.push([cx + OX, cz, ln, rot, thick]);
       const m = new THREE.Mesh(_bg, wmat);
       m.position.set(cx + OX, y0 + hgt / 2, cz);
       m.rotation.y = rot ? Math.PI / 2 : 0;
@@ -8059,6 +8061,12 @@ async function main() {
     // is shut: dark glass double doors in aluminium for a mall, shop, office or
     // station (night outside), studded timber for anything older. A building
     // entered from a street keeps its doorway, which is the way back out.
+    // FINISHED ROOMS HAVE TRIM (2026-10-15): every interior wall met the floor
+    // as a bare box. A finished room has skirting boards; a museum, a gallery
+    // a picture rail under its cornice (a dado rail at 0.95 m stitched into
+    // dashes along every wall, whatever its finish: it is left out). One instanced mesh per moulding, whatever the plan's size.
+    const _trimKind = ['house', 'office', 'shop', 'mall', 'hospital', 'school', 'lab', 'cafe', 'museum', 'library', 'station'].includes(IK);
+    const _MOLD = _trimKind ? [] : null;
     let _bx0 = 1e9, _bx1 = -1e9, _bz0 = 1e9, _bz1 = -1e9;
     for (const [cx, cz, ln, rot] of PLAN.walls) { const hx = rot ? 0 : ln / 2, hz = rot ? ln / 2 : 0;
       _bx0 = Math.min(_bx0, cx - hx); _bx1 = Math.max(_bx1, cx + hx); _bz0 = Math.min(_bz0, cz - hz); _bz1 = Math.max(_bz1, cz + hz); }
@@ -8106,6 +8114,27 @@ async function main() {
       seg(lx, lz, DOOR_W, rot, DOOR_H, WH - DOOR_H, WT);
       const _outer = rot ? (Math.abs(cx - _bx0) < 0.2 || Math.abs(cx - _bx1) < 0.2) : (Math.abs(cz - _bz0) < 0.2 || Math.abs(cz - _bz1) < 0.2);
       if (_closeOuter && _outer) entranceDoors(lx, lz, rot);
+    }
+    if (_MOLD && _MOLD.length) {
+      const warm = _museum || IK === 'house' || IK === 'library' || _cafe;
+      const trimM = new THREE.MeshStandardMaterial({ color: IK === 'library' ? 0x4a3020 : warm ? (wmat.map ? new THREE.Color(0xe9e2d4) : wmat.color.clone()).multiplyScalar(0.7) : 0x7c8086, roughness: 0.92, envMapIntensity: 0.3 });   // matte: a glossy 3 cm edge under ceiling lamps glinted in stitches
+      trimM.userData.noAutoTex = true;
+      const runs = [[0.08, 0.16, 0.03]];                                 // [centre height, height, proud of the face]
+      if (_museum) runs.push([WH - 0.5, 0.09, 0.03]);
+      const box = new THREE.BoxGeometry(1, 1, 1), m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0);
+      // the rails above the skirting are the wall's own colour a shade down:
+      // a bright line that thin breaks into stitches at the far wall (the
+      // post chain carries no multisampling), a near-tone one reads as a seam
+      const railM = new THREE.MeshStandardMaterial({ color: (wmat.map ? new THREE.Color(0xe9e2d4) : wmat.color.clone()).multiplyScalar(0.86), roughness: 0.92, envMapIntensity: 0.3 });
+      railM.userData.noAutoTex = true;
+      for (const [yc, h, pr] of runs) {
+        const im = new THREE.InstancedMesh(box, yc > 0.5 ? railM : trimM, _MOLD.length);
+        _MOLD.forEach(([x, z, ln, rot, th], i) => {
+          q.setFromAxisAngle(up, rot ? Math.PI / 2 : 0);
+          m4.compose(new THREE.Vector3(x, yc, z), q, new THREE.Vector3(ln + 0.001, h, th + pr * 2));
+          im.setMatrixAt(i, m4); });
+        im.castShadow = false; im.receiveShadow = false; scene.add(im);   // a 3 cm ledge under the lamps' shadow maps stitched into dashes
+      }
     }
     // a museum's columns are round, pale stone, with a base and a capital
     const _colM = _museum ? new THREE.MeshStandardMaterial({ map: itex('concrete', 1, 2), color: 0xf4efe6, roughness: 0.4 }) : null;
