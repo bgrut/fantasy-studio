@@ -12797,6 +12797,67 @@ async function main() {
       for (const s of [-1, 1]) { const p = new THREE.Mesh(new THREE.BoxGeometry(0.16, 2.2, 0.16), darkM); p.position.set(x + s * 0.95, y + 1.1, z); p.castShadow = true; scene.add(p); }
       for (const s of [-1, 1]) { const rf = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.12, 1.15), thatchM); rf.position.set(x, y + 2.35, z + s * 0.45); rf.rotation.x = s * 0.55; rf.castShadow = true; scene.add(rf); }
       world.createCollider(RAPIER.ColliderDesc.cylinder(0.5, 1.05).setTranslation(x, y + 0.5, z)); }
+    // A MARKET ON THE GREEN (2026-10-14): "a bustling medieval village market"
+    // had no market in it. When the sentence holds one, stalls stand in a ring
+    // round the well, facing in, the lane left open: a trestle counter on four
+    // posts under a striped canvas awning with a scalloped valance, each stall
+    // selling its own goods (bread, greens, apples, cloth, pots), a crate and a
+    // barrel beside it.
+    {
+      const _mw = [SPEC.prompt, SPEC.title].filter(Boolean).join(' ').toLowerCase();
+      if (!V.norse && /\b(markets?|market ?places?|fairs?|bazaars?|stalls?)\b/.test(_mw)) {
+        const rM = mulberry32((SPEC.seed || 1) + 7171);
+        const STRIPES = [['#efe6d2', '#a8322a'], ['#efe6d2', '#2f6a44'], ['#e9dfc6', '#2d4f86'], ['#d9b45a', '#6e3e22'], ['#efe6d2', '#c9862e']];
+        const canvasM = STRIPES.map(([a, b]) => { const t = cvT(128, 64, (g, W, H) => { for (let x = 0; x < W; x += 16) { g.fillStyle = (x / 16) % 2 ? b : a; g.fillRect(x, 0, 16, H); }
+          for (let i = 0; i < 400; i++) { g.fillStyle = `rgba(${rM() < 0.5 ? '60,40,20' : '255,250,235'},${0.04 + rM() * 0.06})`; g.fillRect(rM() * W, rM() * H, 2, 1 + rM() * 3); }
+          const gr = g.createLinearGradient(0, 0, 0, H); gr.addColorStop(0, 'rgba(0,0,0,0)'); gr.addColorStop(1, 'rgba(40,28,14,0.18)'); g.fillStyle = gr; g.fillRect(0, 0, W, H); });
+          t.wrapS = THREE.RepeatWrapping; t.repeat.set(2, 1); return MAT({ map: t, roughness: 0.9, side: THREE.DoubleSide }); });
+        const valT = STRIPES.map(([a, b]) => { const t = cvT(128, 32, (g, W, H) => { g.clearRect(0, 0, W, H);
+          for (let x = 0; x < W; x += 16) { g.fillStyle = (x / 16) % 2 ? b : a; g.beginPath(); g.moveTo(x, 0); g.lineTo(x + 16, 0); g.lineTo(x + 16, H * 0.45); g.arc(x + 8, H * 0.45, 8, 0, Math.PI); g.closePath(); g.fill(); } });
+          t.wrapS = THREE.RepeatWrapping; t.repeat.set(2, 1); return MAT({ map: t, alphaTest: 0.5, transparent: false, roughness: 0.9, side: THREE.DoubleSide }); });
+        const woodM = MAT({ map: HDT('planks', 1, 1), color: 0x9a6c44, roughness: 0.8 }), postM = MAT({ color: 0x5a3e28, roughness: 0.85 });
+        const goodsM = { bread: MAT({ color: 0xb9813e, roughness: 0.7 }), crust: MAT({ color: 0x8a5426, roughness: 0.6 }), cabbage: MAT({ color: 0x6d9a48, roughness: 0.75 }),
+          apple: MAT({ color: 0xa8241e, roughness: 0.4 }), pot: MAT({ color: 0x9a5a36, roughness: 0.8 }), basket: MAT({ color: 0xa88850, roughness: 0.9 }) };
+        const clothM = [0x7a2a3a, 0x2f4f7a, 0xc9a24a, 0x3f6a46, 0x8a5a9a].map(c => MAT({ color: c, roughness: 0.9 }));
+        const aS = Math.atan2(V.D[1], V.D[0]), N = 7, R = 7.6, KINDS = ['bread', 'greens', 'apples', 'cloth', 'pots'];
+        const festive = !!window.__xmasTree;
+        let stalls = 0;
+        for (let i = 0; i < N; i++) {
+          const a = aS + Math.PI * (0.32 + 1.36 * i / (N - 1));
+          if (festive && Math.abs(Math.atan2(Math.sin(a - aS - Math.PI), Math.cos(a - aS - Math.PI))) < 0.5) continue;   // the spruce stands there
+          const x = V.GC[0] + Math.cos(a) * R, z = V.GC[1] + Math.sin(a) * R, y = hAt(x, z);
+          const S = new THREE.Group(); S.position.set(x, y, z); S.rotation.y = Math.atan2(V.GC[0] - x, V.GC[1] - z);   // its front (+Z) to the well
+          const ad = (geo, m, px, py, pz, rx, ry, rz) => { const o = new THREE.Mesh(geo, m); o.position.set(px, py, pz); o.rotation.set(rx || 0, ry || 0, rz || 0); o.castShadow = true; o.receiveShadow = true; S.add(o); return o; };
+          const si = Math.floor(rM() * STRIPES.length), kind = KINDS[(i + Math.floor(rM() * 5)) % KINDS.length];
+          ad(new THREE.BoxGeometry(2.4, 0.08, 0.9), woodM, 0, 0.9, 0.25);                                  // the counter top
+          ad(new THREE.BoxGeometry(2.3, 0.75, 0.05), woodM, 0, 0.5, 0.68);                                 // its front board
+          for (const [px, pz] of [[-1.15, 0.65], [1.15, 0.65], [-1.15, -0.55], [1.15, -0.55]]) ad(new THREE.CylinderGeometry(0.05, 0.06, pz > 0 ? 2.15 : 2.5, 7), postM, px, (pz > 0 ? 2.15 : 2.5) / 2, pz);
+          // the awning: back high, front low, past the counter; the valance hangs from its front edge
+          const aw = ad(new THREE.PlaneGeometry(2.7, 1.75, 6, 1), canvasM[si], 0, 2.32, 0.15, -Math.PI / 2 + 0.24);
+          { const pa = aw.geometry.attributes.position; for (let k = 0; k < pa.count; k++) pa.setZ(k, -Math.sin((pa.getX(k) / 2.7 + 0.5) * Math.PI * 6) * 0.015 - 0.05 * (1 - Math.abs(pa.getX(k)) / 1.35)); aw.geometry.computeVertexNormals(); }
+          ad(new THREE.PlaneGeometry(2.7, 0.28), valT[si], 0, 2.0, 1.02);
+          // the goods
+          const top = 0.94;
+          if (kind === 'bread') for (let k = 0; k < 9; k++) { const l = ad(new THREE.CapsuleGeometry(0.075, 0.18, 4, 10), goodsM.bread, -0.9 + (k % 5) * 0.42 + (rM() - 0.5) * 0.06, top + 0.07, 0.1 + Math.floor(k / 5) * 0.3, 0, rM() * 0.5, Math.PI / 2);
+            ad(new THREE.BoxGeometry(0.02, 0.01, 0.1), goodsM.crust, l.position.x, top + 0.145, l.position.z); }
+          else if (kind === 'greens') for (let k = 0; k < 10; k++) ad(new THREE.IcosahedronGeometry(0.11, 2), goodsM.cabbage, -0.95 + (k % 5) * 0.45, top + 0.1, 0.05 + Math.floor(k / 5) * 0.32, rM(), rM(), rM());
+          else if (kind === 'apples') for (let b = 0; b < 3; b++) { const bx = -0.75 + b * 0.75;
+            ad(new THREE.CylinderGeometry(0.24, 0.18, 0.16, 14, 1, true), goodsM.basket, bx, top + 0.08, 0.25);
+            for (let k = 0; k < 9; k++) ad(new THREE.SphereGeometry(0.045, 8, 6), goodsM.apple, bx + (rM() - 0.5) * 0.3, top + 0.15 + rM() * 0.04, 0.25 + (rM() - 0.5) * 0.3); }
+          else if (kind === 'cloth') for (let k = 0; k < 6; k++) ad(new THREE.CylinderGeometry(0.09, 0.09, 0.62, 12), clothM[k % clothM.length], -0.9 + k * 0.36, top + 0.09, 0.25, Math.PI / 2, 0, 0);
+          else for (let k = 0; k < 7; k++) { const pts = [[0.0, 0], [0.09, 0.01], [0.13, 0.08], [0.12, 0.16], [0.07, 0.21], [0.08, 0.24]].map(([r, h]) => new THREE.Vector2(r, h));
+            const sc = 0.8 + rM() * 0.6; const pt = ad(new THREE.LatheGeometry(pts, 14), goodsM.pot, -0.95 + k * 0.32, top, 0.1 + (k % 2) * 0.32); pt.scale.setScalar(sc); }
+          // a crate and a barrel beside the stall
+          ad(new THREE.BoxGeometry(0.55, 0.42, 0.45), woodM, 1.55, 0.21, 0.3, 0, rM() * 0.6, 0);
+          ad(new THREE.CylinderGeometry(0.27, 0.3, 0.75, 14), postM, -1.6, 0.375, -0.1);
+          scene.add(S);
+          const col = RAPIER.ColliderDesc.cuboid(1.25, 0.5, 0.5).setTranslation(x, y + 0.5, z);
+          col.setRotation({ w: Math.cos(S.rotation.y / 2), x: 0, y: Math.sin(S.rotation.y / 2), z: 0 }); world.createCollider(col);
+          stalls++;
+        }
+        window.__market = { stalls };
+      }
+    }
     // the lane in from the spawn: packed earth that follows the ground
     { const L = V.LL - 2, g = new THREE.PlaneGeometry(3.2, L, 6, 40); g.rotateX(-Math.PI / 2);
       const pa = g.attributes.position;

@@ -2131,6 +2131,11 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                     (r"\b(wizard\w*|sorcer\w*|apprentice|mage|magic\w*|spell ?books?|spells?|warlock|enchant\w*)\b", "wizard"),
                     (r"\b(haunt|ghost|manor|mansion|murder|mystery|detective|noir|crime|clue|relic|cursed|asylum)", "detective"),
                     (r"\b(vault|museum|jewel|diamond|loot|bank)", "burglar"),
+                    # (2026-10-14) "a pilgrim walks through a misty bamboo forest to a
+                    # hidden shrine" and "a wanderer crossing a red desert canyon" both
+                    # hit "walk"/"wander" below and were the park ranger in a lime shirt
+                    (r"\b(pilgrim\w*)\b", "pilgrim"),
+                    (r"(?=.*\b(desert|dunes?|sands?|sahara|canyon|oasis|caravan|wastelands?|badlands)\b).*\b(wander\w*|nomads?|drifters?|travell?ers?)\b", "nomad"),
                     (r"\b(forest|wood|moor|wild|ranger|trail|mountain|hike|hunt|deer|elk|track|walk|walker|stroll|wander|gather|firefl)", "ranger"),
                     (r"\b(lab|laboratory|science|scientist|space|station|reactor|research|specimen)", "scientist"),
                     (r"\b(engine|machine|factory|robot|mech|repair|wrench|mine)", "engineer"),
@@ -3389,6 +3394,23 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         if _fre.search(r"\b(skate ?parks?|skate ?plaza|half ?pipe|halfpipe|skate bowl)\b", (req.prompt or "").lower()) and not detect_place(req.prompt):
             is_city = False
             spec.world.archetype = "plain"
+        # A MEDIEVAL MARKET IS NOT A DOWNTOWN (2026-10-14): "a baker delivering
+        # bread through a bustling medieval village market" was named "city" by
+        # the planner and built an asphalt grid with taxis and shirtless street
+        # toughs. A village, hamlet or market of another age, with nothing
+        # modern in the sentence, is the runtime's village: cottages round a
+        # green, and stalls on it when the sentence holds a market.
+        _pt0 = (req.prompt or "").lower()
+        if (_fre.search(r"\b(medieval|middle ages|feudal|tudor|elizabethan|renaissance|vikings?|norse|saxon|celtic|"
+                        r"fairy ?tale|storybook|olden|peasants?|knights?|castles?|kingdom)\b", _pt0)
+                and _fre.search(r"\b(villages?|hamlets?|markets?|market ?places?|fairs?|bazaars?|cottages?)\b", _pt0)
+                and not _fre.search(r"\b(cars?|taxis?|neon|modern|cyberpunk|downtown|skyscrapers?|police|subway|highway|"
+                                    r"apartments?|traffic)\b", _pt0)
+                and not detect_place(req.prompt)):
+            is_city = False
+            if any(k in (spec.world.name or "").lower() for k in ("city", "street", "town")):
+                spec.world.name = "medieval village"
+            job.setdefault("notes", []).append("a village of its own age: cottages round a green, no asphalt grid")
         place = detect_place(req.prompt) if is_city else None
         # FLORA OBEYS THE PROMPT (2026-08-25): the silhouette pack rolls a
         # tree archetype from the seed, and its first field test planted dead

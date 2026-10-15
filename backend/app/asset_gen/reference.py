@@ -618,6 +618,8 @@ def _build_reference_prompt(slots: Dict[str, Any], style: str) -> tuple[str, str
             "postwoman": "postwoman in a plain navy blue uniform jacket and trousers, a peaked cap, a brown leather satchel strap across the chest, black shoes, no logos, fully clothed",
             "mail carrier": "mail carrier in a plain navy blue uniform jacket and trousers, a peaked cap, a brown leather satchel strap across the chest, black shoes, no logos, fully clothed",
             "diver":     "scuba diver in a full black wetsuit with blue side panels, a dive mask pushed up on the forehead, an air tank on the back, dive boots, fully covered",
+            # (2026-10-14) a pilgrim was the park ranger in a lime shirt
+            "pilgrim":   "a pilgrim in a long pale undyed hemp travelling robe tied at the waist with a cord, a wide conical woven straw hat, a cloth satchel on a strap across the chest, leg wraps and straw sandals, holding nothing, a calm weathered face showing, fully clothed, normal proportions",
             "hiker":     "hiker in a red waterproof jacket, grey hiking trousers, walking boots, a small backpack, a knitted beanie, fully clothed",
             # (2026-10-07) the originality round's people: a beekeeper was played by the ranger
             "beekeeper": "beekeeper in a loose white full-body bee suit, a round mesh veil hat, long white gauntlet gloves, rubber boots, fully covered",
