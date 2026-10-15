@@ -7958,15 +7958,52 @@ async function main() {
       const tt = new THREE.CanvasTexture(tat); tt.colorSpace = THREE.SRGBColorSpace; tt.wrapS = tt.wrapT = THREE.RepeatWrapping;
       tt.repeat.set(bx / 3.6, bz / 3.6); tt.anisotropy = renderer.capabilities.getMaxAnisotropy();
       fmat.map = tt; fmat.color.setHex(0xffffff); fmat.roughness = 0.85; fmat.userData.noAutoTex = true; fmat.needsUpdate = true;
-      const sh = document.createElement('canvas'); sh.width = 256; sh.height = 256; const s2 = sh.getContext('2d');
-      s2.fillStyle = '#f1ece0'; s2.fillRect(0, 0, 256, 256);                                   // rice paper
-      s2.fillStyle = '#2a1e16';
-      for (let x = 0; x <= 256; x += 42) s2.fillRect(x - 3, 0, 6, 200);                         // the lattice
-      for (let y = 0; y <= 200; y += 33) s2.fillRect(0, y - 3, 256, 6);
-      s2.fillRect(0, 196, 256, 60);                                                            // the wooden base panel
-      s2.fillStyle = 'rgba(255,255,255,0.08)'; for (let k = 0; k < 6; k++) s2.fillRect(0, 200 + k * 9, 256, 2);
-      const st = new THREE.CanvasTexture(sh); st.colorSpace = THREE.SRGBColorSpace; st.wrapS = st.wrapT = THREE.RepeatWrapping; st.repeat.set(3, 1.2);
+      // A SHOJI IS JOINERY (2026-10-14): the wall was a 256 px grid of six-pixel
+      // bars over a flat cream fill, stretched three times along any wall, so a
+      // long wall had metre-wide panes and a short one slivers. It is drawn as
+      // two sliding panels to a 1.8 m tile, laid at true scale along each wall:
+      // fibrous rice paper in a fine kumiko lattice held by heavy stiles and
+      // rails, a grained wooden kick panel, the nagashi beam at head height and
+      // a plastered transom above it with a pierced ranma over each panel.
+      const sh = document.createElement('canvas'); sh.width = 512; sh.height = 1024; const s2 = sh.getContext('2d');
+      const SW = 512, SH = 1024, yBeam = SH * 0.17, yBeamB = SH * 0.22, yPaperT = SH * 0.22, yPaperB = SH * 0.80, yKick = SH * 0.80;
+      const rS = mulberry32((SPEC.seed || 1) + 6116);
+      const grain = (x, y, w, h, base, vertical) => { s2.fillStyle = base; s2.fillRect(x, y, w, h);
+        for (let k = 0; k < (vertical ? w : h) * 0.9; k++) { s2.fillStyle = `rgba(${rS() < 0.5 ? '18,10,6' : '120,90,60'},${0.06 + rS() * 0.1})`;
+          if (vertical) s2.fillRect(x + rS() * w, y, 0.8 + rS(), h); else s2.fillRect(x, y + rS() * h, w, 0.8 + rS()); } };
+      // the plaster transom and the beam under it
+      s2.fillStyle = '#d9cfbc'; s2.fillRect(0, 0, SW, yBeam);
+      for (let k = 0; k < 1400; k++) { s2.fillStyle = `rgba(${rS() < 0.5 ? '150,135,110' : '250,245,235'},${0.05 + rS() * 0.07})`; s2.fillRect(rS() * SW, rS() * yBeam, 2 + rS() * 5, 1 + rS() * 3); }
+      for (let p = 0; p < 2; p++) {                                   // a ranma: a pierced lattice band over each panel
+        const x0 = p * 256 + 40, x1 = p * 256 + 216, ry0 = yBeam * 0.32, ry1 = yBeam * 0.82;
+        s2.fillStyle = '#2a1d14'; s2.fillRect(x0, ry0, x1 - x0, ry1 - ry0);
+        s2.fillStyle = '#e8dcc0'; for (let k = 0; k < 9; k++) { const cx = x0 + 10 + k * ((x1 - x0 - 20) / 8); s2.beginPath(); s2.ellipse(cx, (ry0 + ry1) / 2, 6, (ry1 - ry0) * 0.32, 0, 0, 7); s2.fill(); } }
+      grain(0, yBeam, SW, yBeamB - yBeam, '#3b291c', false);
+      s2.fillStyle = 'rgba(0,0,0,0.35)'; s2.fillRect(0, yBeamB - 4, SW, 4);
+      // the paper, each pane a slightly different sheet, with fibres in it
+      s2.fillStyle = '#e4dac4'; s2.fillRect(0, yPaperT, SW, yPaperB - yPaperT);
+      for (let k = 0; k < 2600; k++) { const x = rS() * SW, y = yPaperT + rS() * (yPaperB - yPaperT), l = 4 + rS() * 16, a = rS() * Math.PI;
+        s2.strokeStyle = `rgba(${rS() < 0.6 ? '255,253,246' : '196,182,150'},${0.12 + rS() * 0.18})`; s2.lineWidth = 0.6; s2.beginPath(); s2.moveTo(x, y); s2.lineTo(x + Math.cos(a) * l, y + Math.sin(a) * l); s2.stroke(); }
+      // the kumiko: three bars across each panel, a bar every eleventh of the height
+      s2.fillStyle = '#2b1e15';
+      const rows = 9;
+      for (let p = 0; p < 2; p++) { const px = p * 256;
+        for (let k = 1; k < 4; k++) s2.fillRect(px + 14 + k * (228 / 4) - 2, yPaperT, 4, yPaperB - yPaperT);
+        for (let k = 1; k < rows; k++) { const py = yPaperT + k * (yPaperB - yPaperT) / rows; s2.fillRect(px, py - 2, 256, 4);
+          s2.fillStyle = `rgba(0,0,0,${0.03 + rS() * 0.04})`; s2.fillRect(px + 14, py + 2, 228, (yPaperB - yPaperT) / rows - 4); s2.fillStyle = '#2b1e15'; } }
+      // stiles and rails: the frame of each sliding panel, and its finger pull
+      for (let p = 0; p < 2; p++) { const px = p * 256;
+        grain(px, yPaperT, 14, SH - yPaperT, '#33241a', true); grain(px + 242, yPaperT, 14, SH - yPaperT, '#33241a', true);
+        grain(px, yPaperT, 256, 12, '#33241a', false); grain(px, yPaperB - 6, 256, 12, '#33241a', false);
+        s2.fillStyle = '#16100b'; s2.beginPath(); s2.ellipse(px + (p ? 26 : 230), yPaperT + (yPaperB - yPaperT) * 0.58, 4, 9, 0, 0, 7); s2.fill(); }
+      // the kick panel: a grained board in each panel's foot
+      for (let p = 0; p < 2; p++) { grain(p * 256 + 14, yKick + 6, 228, SH - yKick - 18, '#5a3e28', false);
+        s2.fillStyle = 'rgba(0,0,0,0.3)'; s2.fillRect(p * 256 + 14, yKick + 6, 228, 3); }
+      grain(0, SH - 14, SW, 14, '#2a1d14', false);                     // the sill track
+      const st = new THREE.CanvasTexture(sh); st.colorSpace = THREE.SRGBColorSpace; st.wrapS = THREE.RepeatWrapping; st.wrapT = THREE.ClampToEdgeWrapping;
+      st.anisotropy = renderer.capabilities.getMaxAnisotropy();
       wmat.map = st; wmat.color.setHex(0xffffff); wmat.roughness = 0.9; wmat.emissive = new THREE.Color(0x3a2a14); wmat.emissiveIntensity = 0.12;   // the paper holds a little light
+      wmat.userData.jpTile = 1.8;
       wmat.userData.noAutoTex = true; wmat.needsUpdate = true;
       cmatI.color.setHex(0x3a2a1c); cmatI.userData.noAutoTex = true;
     }
@@ -7982,7 +8019,13 @@ async function main() {
         const hx = rot ? 0 : ln / 2, hz = rot ? ln / 2 : 0;
         SIGHT.push([cx + OX - hx, cz - hz, cx + OX + hx, cz + hz]);
       }
-      const m = new THREE.Mesh(new THREE.BoxGeometry(ln, hgt, thick), wmat);
+      const _bg = new THREE.BoxGeometry(ln, hgt, thick);
+      if (wmat.userData.jpTile) {                    // a shoji wall: panels at true width, the beam at head height on every wall
+        const uv = _bg.attributes.uv, T = wmat.userData.jpTile;
+        for (let f = 0; f < 6; f++) for (let k = 0; k < 4; k++) { const i = f * 4 + k, w = f < 2 ? thick : ln;
+          const v0 = y0 / WH, v1 = (y0 + hgt) / WH;   // a lintel over a door takes the top of the tile, not a squeezed whole
+          uv.setXY(i, uv.getX(i) * w / T, v0 + uv.getY(i) * (v1 - v0)); } }
+      const m = new THREE.Mesh(_bg, wmat);
       m.position.set(cx + OX, y0 + hgt / 2, cz);
       m.rotation.y = rot ? Math.PI / 2 : 0;
       m.castShadow = m.receiveShadow = true;
