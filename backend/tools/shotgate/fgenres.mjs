@@ -116,8 +116,11 @@ if (PF) {
   if (f.spans.length > 2) {
     const s = f.spans[2], mx = (s[0] + s[1]) / 2;
     await p.evaluate((x, y) => window.__game.tpy(x, y, 0), mx, s[2] + 3);
-    await wait(2500);
-    const y = await p.evaluate(() => window.__game.pos()[1]);
+    // (2026-10-15) polled, not read at 2.5 s: opened after the defence page the
+    // headless card was still compiling and the drop had barely begun (0.2 m in
+    // 2.5 s); the claim is that it lands on the island, not how soon
+    let y = null;
+    for (let k = 0; k < 16; k++) { await wait(500); y = await p.evaluate(() => window.__game.pos()[1]); if (k >= 4 && Math.abs(y - s[2]) < 1.6) break; }
     check(Math.abs(y - s[2]) < 1.6, `a drop onto an island stops on it: feet near ${s[2].toFixed(2)}, body at ${Number(y).toFixed(2)}`);
   }
   check(errs.length === 0, 'no page errors' + (errs.length ? ': ' + errs[0] : ''));

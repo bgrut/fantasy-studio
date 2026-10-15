@@ -2003,6 +2003,15 @@ async function main() {
   // Declared up HERE with the other level constants, not down by the physics
   // body: NPC spawning reads it ~1700 lines earlier, and a `const` in the
   // temporal dead zone takes the whole runtime down.
+  // AN ANGLE EASES THE SHORT WAY ROUND (2026-10-15): every body eased its yaw
+  // toward atan2() as if it were a plain number. With its target straight
+  // behind, or straight ahead past the +-pi seam, the target flipped sign
+  // each frame and the ease ran back through north: a wave of goblins in
+  // line with their keep turned at the last bend and marched away from it.
+  function __dampYaw(a, b, k, dt) {
+    a = a || 0; let d = b - a; d = Math.atan2(Math.sin(d), Math.cos(d));
+    return a + d * (1 - Math.exp(-k * dt));
+  }
   const _sp = { x: 0, z: 0 };
   if (INTERIOR && INTERIOR.rooms && INTERIOR.rooms.length) {
     const h0 = INTERIOR.rooms[0];
@@ -11455,7 +11464,7 @@ async function main() {
               n.obj.userData.fsEscortChip(n.hp || 3, n._maxHp || n.hp || 3, false);
             n._waitSaid = false;
             const dx = wx - n.obj.position.x, dz = wz - n.obj.position.z;
-            n.yaw = THREE.MathUtils.damp(n.yaw, Math.atan2(dx, dz), 5, dt);
+            n.yaw = __dampYaw(n.yaw, Math.atan2(dx, dz), 5, dt);
             n.obj.rotation.y = n.yaw;
             const sp = (n.speed || 1.6) * dt;
             n.obj.position.x += Math.sin(n.yaw) * sp;
@@ -11511,7 +11520,7 @@ async function main() {
             const moving = tx !== null;
             if (moving) {
               const dx = tx - n.obj.position.x, dz = tz - n.obj.position.z;
-              n.yaw = THREE.MathUtils.damp(n.yaw, Math.atan2(dx, dz), 6, dt);
+              n.yaw = __dampYaw(n.yaw, Math.atan2(dx, dz), 6, dt);
               n.obj.rotation.y = n.yaw;
               const sp = n.speed * dt;
               n.obj.position.x += Math.sin(n.yaw) * sp;
@@ -11563,7 +11572,7 @@ async function main() {
             }
             if (tx !== null) {
               const dx4 = tx - n.obj.position.x, dz4 = tz - n.obj.position.z;
-              n.yaw = THREE.MathUtils.damp(n.yaw, Math.atan2(dx4, dz4), 6, dt);
+              n.yaw = __dampYaw(n.yaw, Math.atan2(dx4, dz4), 6, dt);
               n.obj.rotation.y = n.yaw;
               const sp4 = n.speed * dt;
               n.obj.position.x += Math.sin(n.yaw) * sp4;
@@ -11747,7 +11756,7 @@ async function main() {
       } else if (n.behavior === 'suspect') {
         const d = Math.hypot(playerPos.x - n.obj.position.x, playerPos.z - n.obj.position.z);
         if (d < 9) {
-          n.yaw = THREE.MathUtils.damp(
+          n.yaw = __dampYaw(
             n.yaw, Math.atan2(playerPos.x - n.obj.position.x,
                               playerPos.z - n.obj.position.z), 4, dt);
           n.obj.rotation.y = n.yaw;
@@ -11758,7 +11767,7 @@ async function main() {
         // a HUD line the player never reads.
         const d = Math.hypot(playerPos.x - n.obj.position.x, playerPos.z - n.obj.position.z);
         if (d < 14) {
-          n.yaw = THREE.MathUtils.damp(
+          n.yaw = __dampYaw(
             n.yaw, Math.atan2(playerPos.x - n.obj.position.x,
                               playerPos.z - n.obj.position.z), 5, dt);
           n.obj.rotation.y = n.yaw;
@@ -11783,7 +11792,7 @@ async function main() {
         const dx = tx - n.obj.position.x, dz = tz - n.obj.position.z;
         const want = Math.atan2(dx, dz);
         // vehicles steer smoothly (no pivot-in-place), creatures turn quicker
-        n.yaw = THREE.MathUtils.damp(n.yaw, want, n.behavior === 'vehicle' ? 2.2 : 6, dt);
+        n.yaw = __dampYaw(n.yaw, want, n.behavior === 'vehicle' ? 2.2 : 6, dt);
         n.obj.rotation.y = n.yaw;
         // prey bolts; and no body outruns its own legs (its run clip played
         // at twice its natural pace is as fast as those legs go)
@@ -22898,7 +22907,7 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
           return true;
         }
         const dx = w[0] - n.obj.position.x, dz = w[1] - n.obj.position.z;
-        n.yaw = THREE.MathUtils.damp(n.yaw || 0, Math.atan2(dx, dz), 6, dt);
+        n.yaw = __dampYaw(n.yaw || 0, Math.atan2(dx, dz), 6, dt);
         n.obj.rotation.y = n.yaw;
         const sp = n.speed * dt;
         n.obj.position.x += Math.sin(n.yaw) * sp;

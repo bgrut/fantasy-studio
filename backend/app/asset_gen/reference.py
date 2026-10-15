@@ -650,7 +650,10 @@ def _build_reference_prompt(slots: Dict[str, Any], style: str) -> tuple[str, str
             # is a substring of "woman") so the right one matches first.
             # (2026-10-12) a princess with no entry came out in a short tunic with bare legs
             "princess":  "a young princess in a long floor-length silk gown with a fitted bodice, long sleeves and a full skirt to the ground, a small gold tiara, long braided hair, fully clothed, normal proportions",
-            "woman":     "a woman wearing a casual t-shirt and jeans, fully clothed, everyday outfit",
+            # (2026-10-15) "a casual t-shirt" drew a crop top, bare midriff and
+            # flats, and she is the guide in a night graveyard and on a storm-
+            # beaten island: dressed for any weather and any century since 1950
+            "woman":     "a woman in her thirties with her hair tied back, wearing a dark olive waxed cotton field jacket over a cream cable-knit sweater, dark straight-leg jeans and brown leather ankle boots, fully clothed, normal proportions",
             "girl":      "a girl wearing casual everyday clothes, fully clothed",
             "boy":       "a boy wearing casual everyday clothes, fully clothed",
             "person":    "a person wearing a long-sleeved navy blue button-up shirt, dark jeans and brown boots, fully clothed",

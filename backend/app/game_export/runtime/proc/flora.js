@@ -577,13 +577,23 @@ function growRock(r, P) {
   const v = new THREE.Vector3();
   for (let i = 0; i < pos.count; i++) {
     v.fromBufferAttribute(pos, i);
-    let d = 1 + 0.32 * n3(v.x * 1.6 + 7, v.y * 1.6, v.z * 1.6) + 0.12 * n3(v.x * 4.5, v.y * 4.5 + 3, v.z * 4.5)
-              + 0.04 * n3(v.x * 11, v.y * 11, v.z * 11 + 5);
+    // (2026-10-15) the finer two octaves crumpled a fine icosphere into folds
+    // (adjacent faces up to opposite): the photographed normal map carries the
+    // fine relief, the mesh only the form
+    let d = 1 + 0.32 * n3(v.x * 1.6 + 7, v.y * 1.6, v.z * 1.6) + 0.08 * n3(v.x * 4.5, v.y * 4.5 + 3, v.z * 4.5)
+              + 0.015 * n3(v.x * 11, v.y * 11, v.z * 11 + 5);
     if (P.strata) d += 0.05 * Math.sin(v.y * P.strata * 6.0 + n3(v.x * 2, 0, v.z * 2) * 2);
     v.multiplyScalar(d);
-    for (const [nrm, k] of cuts) { const e = v.dot(nrm); if (e > k) v.addScaledVector(nrm, k - e); }
+    // (2026-10-15) a soft cut: clamped hard to the plane, the cut's edge ran
+    // along the triangles in a saw-tooth that a snow cap picked out tooth by
+    // tooth; the last tenth eases into the plane, so the edge is a worn arris
+    for (const [nrm, k] of cuts) { const e = v.dot(nrm), k0 = k - 0.1;
+      if (e > k0) v.addScaledVector(nrm, k0 + 0.1 * Math.tanh((e - k0) / 0.1) - e); }
     v.set(v.x * sx, v.y * sy, v.z * sz);
-    if (v.y < -sy * 0.25) v.y = -sy * 0.25 + (v.y + sy * 0.25) * 0.15;   // seated in the ground
+    // seated in the ground. (2026-10-15) squashed to 15% the base folded over
+    // itself and the folds shaded as dark teeth along every boulder's foot;
+    // what lies under the ground line is hidden anyway, so it is only eased
+    if (v.y < -sy * 0.25) v.y = -sy * 0.25 + (v.y + sy * 0.25) * 0.6;
     pos.setXYZ(i, v.x, v.y + sy * 0.2, v.z);
   }
   g.computeVertexNormals();
@@ -593,7 +603,7 @@ function growRock(r, P) {
   // fifty degrees of its own, so the weathered surface rounds off and the
   // cleavage cuts keep their crisp edges.
   {
-    const nr = g.attributes.normal, faces = new Map(), cos50 = Math.cos(50 * Math.PI / 180);
+    const nr = g.attributes.normal, faces = new Map(), cos50 = Math.cos(65 * Math.PI / 180);
     const key = i => Math.round(pos.getX(i) * 1e4) + ',' + Math.round(pos.getY(i) * 1e4) + ',' + Math.round(pos.getZ(i) * 1e4);
     const keys = new Array(pos.count);
     for (let i = 0; i < pos.count; i++) { const k = keys[i] = key(i); let l = faces.get(k); if (!l) faces.set(k, l = []); l.push(nr.getX(i), nr.getY(i), nr.getZ(i)); }

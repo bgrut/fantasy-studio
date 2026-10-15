@@ -1618,8 +1618,8 @@
  "woman.glb": {
   "kind": "woman",
   "shaded_png": "backend/tools/shotgate/renders/woman_shaded.png",
-  "looks_like": 0.985,
-  "patchy": 0.014,
+  "looks_like": 0.621,
+  "patchy": 0.32,
   "looks_like_best": "a clean 3D render of a woman"
  },
  "owl.glb": {

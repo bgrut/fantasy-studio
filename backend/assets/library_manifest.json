@@ -12276,45 +12276,45 @@
   {
    "file": "woman.glb",
    "dims_m": {
-    "x": 1.5782,
-    "y": 1.7502,
-    "z": 0.3101
+    "x": 1.4185,
+    "y": 1.7501,
+    "z": 0.4248
    },
-   "min_y": -0.0,
+   "min_y": 0.0,
    "skinned": false,
    "clips": [],
    "bones": 0,
    "biped": true,
    "tallest_axis": "y",
    "aspect": {
-    "w_h": 0.902,
-    "d_h": 0.177
+    "w_h": 0.811,
+    "d_h": 0.243
    },
    "upright": true,
    "height_ratio": 1.0,
    "mesh": {
-    "tris": 79935,
-    "largest_share": 0.8985,
-    "fragments": 3,
+    "tris": 79894,
+    "largest_share": 1.0,
+    "fragments": 1,
     "degenerate": 0.0,
     "textures": 3,
     "textures_ok": true
    },
    "render": {
-    "looks_like": 0.985,
+    "looks_like": 0.621,
     "looks_like_best": "a clean 3D render of a woman"
    },
-   "quality": 0.99,
+   "quality": 0.77,
    "verdict": "good"
   },
   {
    "file": "woman_anim.glb",
    "dims_m": {
-    "x": 1.578,
+    "x": 1.4184,
     "y": 1.75,
-    "z": 0.31
+    "z": 0.4248
    },
-   "min_y": 0.0,
+   "min_y": -0.0,
    "skinned": true,
    "clips": [
     "attack",
@@ -12327,15 +12327,15 @@
    "biped": true,
    "tallest_axis": "y",
    "aspect": {
-    "w_h": 0.902,
-    "d_h": 0.177
+    "w_h": 0.811,
+    "d_h": 0.243
    },
    "upright": true,
    "height_ratio": 1.0,
    "mesh": {
-    "tris": 76172,
-    "largest_share": 0.9103,
-    "fragments": 3,
+    "tris": 78638,
+    "largest_share": 1.0,
+    "fragments": 1,
     "degenerate": 0.0,
     "textures": 1,
     "textures_ok": true
