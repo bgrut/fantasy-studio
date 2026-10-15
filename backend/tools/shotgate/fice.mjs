@@ -85,14 +85,20 @@ const shield = await p.evaluate(async () => {
   let onShielded = 0, landed = 0;
   for (let k = 0; k < 30; k++) { const h = F.iceStrike(); if (!h) break; landed++; if (F.iceShielded(h[0], h[1], h[2])) onShielded++; }
   // and ice that heat reaches melts faster: put ice on the shielded seam and time it
+  // (2026-10-14) against a seam out of the heat frozen at the same moment: the
+  // melt runs on the game's frames, and a headless page delivered anywhere from
+  // all to almost none of them in 1.3 s, so the bare number swung 0 to 2.5
   const c = F.cells[0][i][j];
-  c.ice = 3; const t0 = performance.now();
+  let far = null;
+  for (let a = 0; a < F.N && !far; a++) for (let bb = 0; bb < F.N && !far; bb++)
+    if (F.cells[0][a][bb].mesh && !F.iceShielded(0, a, bb) && Math.abs(a - i) + Math.abs(bb - j) > R * 2) far = F.cells[0][a][bb];
+  c.ice = 3; if (far) far.ice = 3;
   await new Promise(r => setTimeout(r, 1300));
-  const near = c.ice;
-  return { inside, landed, onShielded, near: +near.toFixed(2) };
+  const near = c.ice, farIce = far ? far.ice : null;
+  return { inside, landed, onShielded, near: +near.toFixed(2), far: farIce === null ? null : +farIce.toFixed(2) };
 });
 console.log('shield    : seam beside a furnace shielded', shield.inside, '|', shield.landed, 'strikes,', shield.onShielded,
-            'on shielded seams | 3s of ice beside heat after 1.3s:', shield.near, '(would be 1.7 without)');
+            'on shielded seams | 3s of ice beside heat after 1.3s:', shield.near, '| out of the heat:', shield.far);
 
 // 3. the drill: with the capability the ice is gone and strikes stop
 const drill = await p.evaluate(async () => {
@@ -122,7 +128,8 @@ await b.close();
 
 const ok = where.cold >= 0 && where.active && !where.heated && (where.homeIce || !where.homeActive)
   && frozen.hit && frozen.shell && frozen.outFrozen < frozen.outThawed * 0.5 && /ICE/.test(frozen.toast)
-  && shield.inside && shield.onShielded === 0 && shield.near < 1.2
+  && shield.inside && shield.onShielded === 0
+  && (shield.far === null ? shield.near < 1.2 : (shield.near < 1.2 || (3 - shield.near > 0.2 && 3 - shield.near > 1.6 * (3 - shield.far))))   // heat melts it well over half again as fast as the cold, at whatever frame rate
   && drill.heated && !drill.active && drill.frozen === 0 && !drill.shells
   && creative.creative && !creative.active
   && errs.length === 0;

@@ -1775,5 +1775,12 @@
   "looks_like": 0.464,
   "patchy": 0.536,
   "looks_like_best": "a clean 3D render of a ninja"
+ },
+ "pilgrim.glb": {
+  "kind": "pilgrim",
+  "shaded_png": "backend/tools/shotgate/renders/pilgrim_shaded.png",
+  "looks_like": 0.873,
+  "patchy": 0.127,
+  "looks_like_best": "a clean 3D render of a pilgrim"
  }
 }

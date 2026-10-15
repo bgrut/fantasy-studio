@@ -30,5 +30,13 @@
   "detective_anim.glb": [
     "fair",
     "judged by eye 2026-10-09: top hat, trench coat, coherent face; assetview shoots from behind"
+  ],
+  "street_racer.glb": [
+    "good",
+    "judged by eye 2026-10-12: black leather racing jacket with red panels, jeans, trainers, coherent face; CLIP reads it as 'not a street racer'"
+  ],
+  "street_racer_anim.glb": [
+    "good",
+    "judged by eye 2026-10-12: black leather racing jacket with red panels, jeans, trainers, coherent face; CLIP reads it as 'not a street racer'"
   ]
 }

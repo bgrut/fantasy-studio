@@ -24298,7 +24298,16 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
       let cy = fY + Math.sin(pitch) * cd + _lift * 0.55 - landDipA;
       // INTERIOR (2026-07-23): never rise above the ceiling — the camera
       // outside the roof showed a void where the player should be
-      if (INTERIOR) cy = Math.min(cy, (INTERIOR.wall_h || 4.0) * (INTERIOR.floors || 1) - 0.35);
+      // (2026-10-14) and under the doorways' lintels on the floor the hero is
+      // on: at the building's own ceiling the camera sat in the room behind,
+      // and the wall over a door crossed the frame and cut the hero off at the
+      // chest ("reach the escape pods" was played through a lintel)
+      if (INTERIOR) {
+        const _wh = INTERIOR.wall_h || 4.0, _nf = INTERIOR.floors || 1;
+        const _fl = Math.max(0, Math.min(_nf - 1, Math.floor((fY + 0.3) / _wh)));
+        const _dh = INTERIOR.kind === 'mall' ? 3.6 : Math.min(3.0, _wh - 0.6);
+        cy = Math.min(cy, _wh * _nf - 0.35, _fl * _wh + _dh - 0.25);
+      }
       if (window.__doorway && fX > SPEC.world.size_m) {
         cy = Math.min(cy, window.__doorway.wallH - 0.35);
       }
