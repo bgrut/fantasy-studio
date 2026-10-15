@@ -8025,6 +8025,15 @@ async function main() {
         for (let f = 0; f < 6; f++) for (let k = 0; k < 4; k++) { const i = f * 4 + k, w = f < 2 ? thick : ln;
           const v0 = y0 / WH, v1 = (y0 + hgt) / WH;   // a lintel over a door takes the top of the tile, not a squeezed whole
           uv.setXY(i, uv.getX(i) * w / T, v0 + uv.getY(i) * (v1 - v0)); } }
+      else if (wmat.map) {                           // (2026-10-15) any other wall at true scale too
+        // the wall texture was set to three tiles across EVERY face, so a 20 m
+        // mall wall stretched one plaster crack over six metres and a short
+        // return squeezed it to slivers; the tile is now square, sized so the
+        // wall's height still holds its 1.2 repeats, and runs on along each wall
+        if (!wmat.userData.trueScale) { wmat.userData.trueScale = true; wmat.map.repeat.set(1, 1); }
+        const uv = _bg.attributes.uv, S = WH / 1.2;
+        for (let f = 0; f < 6; f++) for (let k = 0; k < 4; k++) { const i = f * 4 + k, w = f < 2 ? thick : ln, hh = (f === 2 || f === 3) ? thick : hgt;
+          uv.setXY(i, uv.getX(i) * w / S, (y0 + uv.getY(i) * hh) / S); } }
       const m = new THREE.Mesh(_bg, wmat);
       m.position.set(cx + OX, y0 + hgt / 2, cz);
       m.rotation.y = rot ? Math.PI / 2 : 0;
@@ -8033,6 +8042,46 @@ async function main() {
       const rr = rot ? [thick / 2, hgt / 2, ln / 2] : [ln / 2, hgt / 2, thick / 2];
       world.createCollider(RAPIER.ColliderDesc.cuboid(...rr)
         .setTranslation(cx + OX, y0 + hgt / 2, cz));
+    }
+    // AN ENTRANCE HAS DOORS (2026-10-15): "zombie survival in an abandoned
+    // shopping mall" opened looking out of a doorway in the outer wall onto a
+    // black void over a strip of grass. On a building that is the whole level,
+    // with its goal inside, a doorway in the outer wall is the way in, and it
+    // is shut: dark glass double doors in aluminium for a mall, shop, office or
+    // station (night outside), studded timber for anything older. A building
+    // entered from a street keeps its doorway, which is the way back out.
+    let _bx0 = 1e9, _bx1 = -1e9, _bz0 = 1e9, _bz1 = -1e9;
+    for (const [cx, cz, ln, rot] of PLAN.walls) { const hx = rot ? 0 : ln / 2, hz = rot ? ln / 2 : 0;
+      _bx0 = Math.min(_bx0, cx - hx); _bx1 = Math.max(_bx1, cx + hx); _bz0 = Math.min(_bz0, cz - hz); _bz1 = Math.max(_bz1, cz + hz); }
+    const _gIn = !LVL || !LVL.goal || (LVL.goal[0] > _bx0 + 1 && LVL.goal[0] < _bx1 - 1 && LVL.goal[1] > _bz0 + 1 && LVL.goal[1] < _bz1 - 1);
+    const _closeOuter = OX === 0 && _gIn;
+    const _glassDoor = ['mall', 'shop', 'office', 'station', 'hospital', 'museum', 'school', 'lab', 'cafe'].includes(IK);
+    const _alu = new THREE.MeshStandardMaterial({ color: 0x9aa1a8, metalness: 0.85, roughness: 0.32 });
+    const _glz = new THREE.MeshStandardMaterial({ color: 0x0c141c, metalness: 0.9, roughness: 0.06, envMapIntensity: 1.3 });
+    const _oak = new THREE.MeshStandardMaterial({ map: itex('planks', 1, 1.6), color: 0x6a4630, roughness: 0.8 });
+    const _iron = new THREE.MeshStandardMaterial({ color: 0x24221f, metalness: 0.6, roughness: 0.5 });
+    for (const m of [_alu, _glz, _oak, _iron]) m.userData.noAutoTex = true;
+    function entranceDoors(x, z, rot) {
+      const G = new THREE.Group(); G.position.set(x + OX, 0, z); G.rotation.y = rot ? Math.PI / 2 : 0;
+      const ad = (geo, m, px, py, pz) => { const o = new THREE.Mesh(geo, m); o.position.set(px, py, pz); o.castShadow = o.receiveShadow = true; G.add(o); return o; };
+      const lw = DOOR_W / 2 - 0.04, h = DOOR_H - 0.02;
+      for (const s of [-1, 1]) {
+        const cxl = s * (lw / 2 + 0.02);
+        if (_glassDoor) {
+          ad(new THREE.BoxGeometry(lw - 0.12, h - 0.34, 0.02), _glz, cxl, h / 2 + 0.02, 0);
+          for (const [w2, h2, px, py] of [[lw, 0.18, 0, 0.09], [lw, 0.14, 0, h - 0.07], [0.07, h, -lw / 2 + 0.035, h / 2], [0.07, h, lw / 2 - 0.035, h / 2]]) ad(new THREE.BoxGeometry(w2, h2, 0.07), _alu, cxl + px, py, 0);
+          for (const fz of [-0.07, 0.07]) { const bar = ad(new THREE.CylinderGeometry(0.02, 0.02, lw * 0.7, 10), _alu, cxl, 1.0, fz); bar.rotation.z = Math.PI / 2; }
+        } else {
+          ad(new THREE.BoxGeometry(lw, h, 0.09), _oak, cxl, h / 2, 0);
+          for (const py of [0.35, h * 0.5, h - 0.35]) ad(new THREE.BoxGeometry(lw * 0.9, 0.07, 0.11), _iron, cxl, py, 0);
+          for (let k = 0; k < 12; k++) ad(new THREE.SphereGeometry(0.022, 6, 4), _iron, cxl + ((k % 4) / 3 - 0.5) * lw * 0.8, [0.35, h * 0.5, h - 0.35][Math.floor(k / 4)], 0.06);
+          const ring = ad(new THREE.TorusGeometry(0.07, 0.012, 6, 14), _iron, cxl - s * lw * 0.32, 1.05, 0.07); ring.rotation.x = 0.2;
+        }
+      }
+      scene.add(G);
+      const half = rot ? [0.15, DOOR_H / 2, DOOR_W / 2] : [DOOR_W / 2, DOOR_H / 2, 0.15];
+      world.createCollider(RAPIER.ColliderDesc.cuboid(...half).setTranslation(x + OX, DOOR_H / 2, z));
+      if (!_glassDoor) { const hx = rot ? 0 : DOOR_W / 2, hz = rot ? DOOR_W / 2 : 0; SIGHT.push([x + OX - hx, z - hz, x + OX + hx, z + hz]); }
     }
     for (const [cx, cz, ln, rot, door] of PLAN.walls) {
       if (door < 0) { seg(cx, cz, ln, rot, 0, WH, WT); continue; }
@@ -8046,6 +8095,8 @@ async function main() {
       seg(o2x, o2z, l2, rot, 0, WH, WT);
       const lx = rot ? cx : cx + dCenter, lz = rot ? cz + dCenter : cz;
       seg(lx, lz, DOOR_W, rot, DOOR_H, WH - DOOR_H, WT);
+      const _outer = rot ? (Math.abs(cx - _bx0) < 0.2 || Math.abs(cx - _bx1) < 0.2) : (Math.abs(cz - _bz0) < 0.2 || Math.abs(cz - _bz1) < 0.2);
+      if (_closeOuter && _outer) entranceDoors(lx, lz, rot);
     }
     // a museum's columns are round, pale stone, with a base and a capital
     const _colM = _museum ? new THREE.MeshStandardMaterial({ map: itex('concrete', 1, 2), color: 0xf4efe6, roughness: 0.4 }) : null;
@@ -10722,7 +10773,12 @@ async function main() {
       // and the user's own sentence in quotes read as a demo, not a game
       try { if (STORY && STORY.chapter) __KitTitle.show(STORY.chapter, STORY.narrator || '', { mood: document.body.dataset.mood, secs: 2.6 }); } catch (e) {}
       // the guide steps in once the reveal is down, and only on a first run
-      if (!__fmGuided && !/[?&]noguide=1/.test(location.search)) setTimeout(() => { try { __fm.start(0); } catch (e) {} }, 3100);
+      // (2026-10-15) a Start clicked before the foreman is declared read a
+      // const in its dead zone and threw, and the rest of this handler (the
+      // run's start among it) never ran; the foreman then picks it up itself
+      const _guided = (() => { try { return __fmGuided; } catch (e) { return null; } })();
+      if (_guided === null) window.__fmStartPending = true;
+      else if (!_guided && !/[?&]noguide=1/.test(location.search)) setTimeout(() => { try { __fm.start(0); } catch (e) {} }, 3100);
       gameStarted = true;
       window.__hostileGrace = performance.now() + 8000;   // eight seconds to look round before anything charges (2026-10-07)
       if (window.__banPend) { const bp = window.__banPend; window.__banPend = null; setTimeout(() => { try { window.__fsBanner(bp[0], bp[1]); } catch (e) {} }, 3200); }
@@ -18839,7 +18895,10 @@ async function main() {
   {
     const _lm = (LVL && LVL.enterable && LVL.enterable.door) || null;
     const _tgt = _lm || (LVL && LVL.goal) || null;
-    if (_tgt && !SPEC.world.pano) { const dx = _tgt[0] - 0, dz = _tgt[1] - 0; if (Math.hypot(dx, dz) > 4) yaw = Math.atan2(dx, dz) + Math.PI; }
+    // (2026-10-15) from where the hero stands, not the origin: in a mall the
+    // run starts thirty metres south at the entrance, and "toward the goal"
+    // from the origin turned the hero round to face out of the doors
+    if (_tgt && !SPEC.world.pano) { const dx = _tgt[0] - _sp.x, dz = _tgt[1] - _sp.z; if (Math.hypot(dx, dz) > 4) yaw = Math.atan2(dx, dz) + Math.PI; }
   }
   let pitch = SPEC.world.pano ? 0.16 : 0.35;
   try { setupTrap(); } catch (e) { console.warn('[game] trap: ' + e.message); }
@@ -18910,6 +18969,8 @@ async function main() {
     save: k => { try { if (k >= __fmSteps.length) localStorage.setItem(__fmKey, '1'); } catch (e) {} },
   });
   const __fmGuided = (() => { try { return localStorage.getItem(__fmKey) === '1'; } catch (e) { return false; } })();
+  if (window.__fmStartPending) { window.__fmStartPending = false;   // Start was clicked before this line ran
+    if (!__fmGuided && !/[?&]noguide=1/.test(location.search)) setTimeout(() => { try { __fm.start(0); } catch (e) {} }, 3100); }
   function __fmTick(dt) {
     if (!gameStarted) return;
     if (__fmYaw0 === null) __fmYaw0 = yaw;
