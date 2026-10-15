@@ -9116,31 +9116,35 @@ const heldRig = new THREE.Group();
     metalness: 0.5, vertexColors: true, envMapIntensity: 0.55,
     map: SKIN, roughnessMap: SKIN_ROUGH, normalMap: SKIN_NORMAL, normalScale: new THREE.Vector2(0.7, 0.7) });
   addRim(dark, 0x8fd8ff, 2.4, 0.5);
+  // THE GAUNTLET UP CLOSE (2026-10-15): every part is under ten centimetres
+  // thick, so _box handed each back as a raw box; half a metre from the eye
+  // for the whole game, its hard edges read first. Every plate is rounded
+  // and the round parts are smooth.
   const parts = [
     // the sleeve under the armour, and the armour over it in two plates
-    { g: _cyl(0.056, 0.05, 0.40, 10), rx: Math.PI / 2, z: 0.12, col: PAINT.dark, tint: 0.9 },
-    { g: _box(0.135, 0.055, 0.13), y: 0.035, z: 0.215 },
-    { g: _box(0.13, 0.055, 0.12), y: 0.038, z: 0.075 },
-    { g: _box(0.026, 0.085, 0.25), x: 0.066, z: 0.14, col: PAINT.chassis },
-    { g: _box(0.026, 0.085, 0.25), x: -0.066, z: 0.14, col: PAINT.chassis },
-    { g: _box(0.11, 0.028, 0.27), y: -0.048, z: 0.13, col: PAINT.chassis, tint: 0.8 },
+    { g: _cyl(0.056, 0.05, 0.40, 28), rx: Math.PI / 2, z: 0.12, col: PAINT.dark, tint: 0.9 },
+    { g: _bevelBox(0.135, 0.055, 0.13), y: 0.035, z: 0.215 },
+    { g: _bevelBox(0.13, 0.055, 0.12), y: 0.038, z: 0.075 },
+    { g: _bevelBox(0.026, 0.085, 0.25), x: 0.066, z: 0.14, col: PAINT.chassis },
+    { g: _bevelBox(0.026, 0.085, 0.25), x: -0.066, z: 0.14, col: PAINT.chassis },
+    { g: _bevelBox(0.11, 0.028, 0.27), y: -0.048, z: 0.13, col: PAINT.chassis, tint: 0.8 },
     // the wrist: a brass ring, then the projector housing
-    { g: _cyl(0.084, 0.084, 0.03, 16), rx: Math.PI / 2, z: -0.012, col: PAINT.trim },
-    { g: _box(0.165, 0.125, 0.14), z: -0.1, col: PAINT.chassis },
-    { g: _box(0.12, 0.02, 0.1), y: 0.064, z: -0.1, tint: 0.95 },
-    { g: _cyl(0.06, 0.068, 0.032, 16), y: 0.084, z: -0.12, col: PAINT.rail },
-    { g: _cyl(0.016, 0.016, 0.1, 8), x: 0.05, y: 0.075, z: -0.125, col: PAINT.steel, tint: 1.1 },
-    { g: _cyl(0.016, 0.016, 0.1, 8), x: -0.05, y: 0.075, z: -0.125, col: PAINT.steel, tint: 1.1 },
-    { g: _cyl(0.016, 0.016, 0.1, 8), y: 0.075, z: -0.17, col: PAINT.steel, tint: 1.1 },
+    { g: _cyl(0.084, 0.084, 0.03, 40), rx: Math.PI / 2, z: -0.012, col: PAINT.trim },
+    { g: _bevelBox(0.165, 0.125, 0.14), z: -0.1, col: PAINT.chassis },
+    { g: _bevelBox(0.12, 0.02, 0.1), y: 0.064, z: -0.1, tint: 0.95 },
+    { g: _cyl(0.06, 0.068, 0.032, 36), y: 0.084, z: -0.12, col: PAINT.rail },
+    { g: _cyl(0.016, 0.016, 0.1, 14), x: 0.05, y: 0.075, z: -0.125, col: PAINT.steel, tint: 1.1 },
+    { g: _cyl(0.016, 0.016, 0.1, 14), x: -0.05, y: 0.075, z: -0.125, col: PAINT.steel, tint: 1.1 },
+    { g: _cyl(0.016, 0.016, 0.1, 14), y: 0.075, z: -0.17, col: PAINT.steel, tint: 1.1 },
     // the fist: palm, four curled fingers with knuckle plates, a thumb
-    { g: _box(0.12, 0.09, 0.075), y: -0.005, z: -0.205, col: PAINT.chassis },
-    { g: _box(0.13, 0.03, 0.06), y: 0.045, z: -0.21, col: PAINT.steel, tint: 0.9 },
-    { g: _box(0.032, 0.036, 0.034), x: 0.07, y: -0.02, z: -0.19, ry: 0.5, col: PAINT.chassis },
+    { g: _bevelBox(0.12, 0.09, 0.075), y: -0.005, z: -0.205, col: PAINT.chassis },
+    { g: _bevelBox(0.13, 0.03, 0.06), y: 0.045, z: -0.21, col: PAINT.steel, tint: 0.9 },
+    { g: _bevelBox(0.032, 0.036, 0.034), x: 0.07, y: -0.02, z: -0.19, ry: 0.5, col: PAINT.chassis },
   ];
   for (let f = 0; f < 4; f++) {
     const fx = -0.045 + f * 0.03;
-    parts.push({ g: new THREE.BoxGeometry(0.026, 0.04, 0.05), x: fx, y: 0.0, z: -0.262, rx: 0.55, col: PAINT.chassis, tint: 0.92 });
-    parts.push({ g: new THREE.BoxGeometry(0.028, 0.016, 0.026), x: fx, y: 0.03, z: -0.255, col: PAINT.steel, tint: 1.05 });
+    parts.push({ g: _bevelBox(0.026, 0.04, 0.05), x: fx, y: 0.0, z: -0.262, rx: 0.55, col: PAINT.chassis, tint: 0.92 });
+    parts.push({ g: _bevelBox(0.028, 0.016, 0.026), x: fx, y: 0.03, z: -0.255, col: PAINT.steel, tint: 1.05 });
   }
   // vents along both side plates
   for (let k = 0; k < 6; k++) for (const sx of [1, -1])
@@ -9148,7 +9152,7 @@ const heldRig = new THREE.Group();
   // a cable from the elbow round into the housing
   const cable = new THREE.TubeGeometry(new THREE.CatmullRomCurve3([
     new THREE.Vector3(0.07, -0.03, 0.3), new THREE.Vector3(0.095, -0.01, 0.15),
-    new THREE.Vector3(0.09, 0.0, 0.02), new THREE.Vector3(0.075, 0.02, -0.06)]), 20, 0.011, 6, false);
+    new THREE.Vector3(0.09, 0.0, 0.02), new THREE.Vector3(0.075, 0.02, -0.06)]), 40, 0.011, 12, false);
   parts.push({ g: cable, col: PAINT.dark, tint: 0.85 });
   const body = new THREE.Mesh(mergeParts(parts, { base: plate, floor: 0.55, reach: 0.25 }), dark);
   heldRig.add(body);
@@ -9164,7 +9168,7 @@ const heldRig = new THREE.Group();
   heldRig.add(leds);
 
   // the emitter's own glow, so the projection has a source
-  const emit3 = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.03, 0.02, 10),
+  const emit3 = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.03, 0.02, 32),
     new THREE.MeshBasicMaterial({ color: ACCENT, transparent: true, opacity: 0.85 }));
   emit3.position.set(0, 0.104, -0.12);
   heldRig.add(emit3);
