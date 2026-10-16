@@ -2163,7 +2163,7 @@ const MAT = {
   // filled every shadow with the machine's own colour and cut it out like
   // paper; a third of that keeps the silhouette for the bloom and gives the
   // key light its shading back.
-  miner: new THREE.MeshStandardMaterial({ color: 0xff5d73, roughness: 0.45,
+  miner: new THREE.MeshStandardMaterial({ color: 0x9c2e18, roughness: 0.45,
     metalness: 0.35, emissive: 0x4a0d1a, emissiveIntensity: 0.35,
     map: SKIN, roughnessMap: SKIN_ROUGH }),
   // ROUND EDGES SHADE ROUND (2026-10-11): the belt frame, the forge and the
@@ -2361,11 +2361,18 @@ const GEO = {
     { g: _box(T * 0.80, 0.07, T * 0.80), y: 0.40, col: PAINT.chassis },  // a band round the deck
     { g: _box(T * 0.78, 0.05, 0.06), y: 1.26, z: T * 0.36, col: PAINT.trim },  // a lip on the head
     { g: _box(T * 0.78, 0.05, 0.06), y: 1.26, z: -T * 0.36, col: PAINT.trim },
-    { g: _cyl(0.10, 0.10, 0.86, 6), y: 0.74, col: PAINT.steel },                   // shaft
-    { g: _cyl(0.19, 0.19, 0.30, 8), y: 1.38, rz: Math.PI / 2, col: PAINT.trim }, // motor
+    // (2026-10-15) round where it turns: the shaft was a hexagon, the motor an
+    // octagon and the bit a six-sided cone; the motor has cooling fins and end caps
+    { g: _cyl(0.10, 0.10, 0.86, 24), y: 0.74, col: PAINT.steel },                   // shaft
+    { g: _cyl(0.19, 0.19, 0.30, 32), y: 1.38, rz: Math.PI / 2, col: PAINT.trim }, // motor
+    ...[-0.1, -0.05, 0, 0.05, 0.1].map(fx => ({ g: _cyl(0.215, 0.215, 0.012, 32), y: 1.38, x: fx, rz: Math.PI / 2, col: PAINT.chassis })),   // its fins
+    { g: _cyl(0.12, 0.15, 0.04, 28), y: 1.38, x: 0.17, rz: Math.PI / 2, col: PAINT.steel },   // end caps
+    { g: _cyl(0.15, 0.12, 0.04, 28), y: 1.38, x: -0.17, rz: Math.PI / 2, col: PAINT.steel },
     { g: _box(0.20, 0.30, 0.24), y: 0.52, x: T * 0.36, col: PAINT.dark }, // control box
-  ], { base: 0xff5d73 }),
-  minerBit: painted(_cyl(0.02, 0.28, 0.5, 6), PAINT.steel),
+  // (2026-10-15) industrial signal red, the house's own second colour: the
+  // rig's hot pink read as salmon on a worn deck
+  ], { base: 0x9c2e18 }),
+  minerBit: painted(_cyl(0.02, 0.28, 0.5, 20), PAINT.steel),
 
   arrow: painted(new THREE.ConeGeometry(0.2, 0.5, 4), PAINT.steel),
 
@@ -3801,7 +3808,7 @@ function poolAt(mesh, k, f, i, j, size, col, strength) {
   _lc.setHex(col).multiplyScalar(strength);
   mesh.setColorAt(k, _lc);
 }
-const OVERHEAD_COL = { [MINER]: 0xff5d73, [SMELTER]: 0x8c6bff, [SPLITTER]: 0x4bb5ff, [FORGE]: 0xd94fb0, [ASSEMBLER]: 0xe0b451,
+const OVERHEAD_COL = { [MINER]: 0xe8553f, [SMELTER]: 0x8c6bff, [SPLITTER]: 0x4bb5ff, [FORGE]: 0xd94fb0, [ASSEMBLER]: 0xe0b451,
                        [FILTER]: 0x2f8f7d, [RIFT]: 0x6a3cff, [HUB]: 0xffd479 };
 function stepLampPools() {
   let k = 0;

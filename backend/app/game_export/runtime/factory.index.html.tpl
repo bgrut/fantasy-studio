@@ -167,7 +167,7 @@
              color:#8fa3cc;font-style:normal;font-size:10px;line-height:15px;
              text-align:center;font-variant-numeric:tabular-nums}
   .tool.on .key{background:#12463f;border-color:#5ce0d0;color:#8ff3dd}
-  .tool[data-tool="miner"] svg{color:#ff5d73}
+  .tool[data-tool="miner"] svg{color:#e8553f}
   .tool[data-tool="belt"] svg{color:#3ad39a}
   .tool[data-tool="smelter"] svg{color:#8c6bff}
   .tool[data-tool="splitter"] svg{color:#4bb5ff}
