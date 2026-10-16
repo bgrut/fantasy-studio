@@ -62,6 +62,10 @@ for (let k = 0; k < 40 && !/Build a rig/.test(s3); k++) {
 // 3. build a rig: press 1, TAB to the overhead, click the ringed seam where it is on screen
 await p.keyboard.press('Digit1'); await wait(150);
 await p.keyboard.press('Tab'); await wait(900);
+// (2026-10-16) look nearly straight down from a little further out, as a
+// player right-drags the overhead: the default fits the face exactly, so its
+// far edge sat at the top of the screen under the foreman's card
+await p.evaluate(() => { const F = window.__factory; F.orbit(0.72, 1.42, F.HALF * 4.0); }); await wait(700);
 const seam = await p.evaluate(() => {
   const F = window.__factory, TY = F.TYPES;
   const m = window.__scene.getObjectByName('tutMark');
@@ -112,7 +116,15 @@ const plan = await p.evaluate(t => {
   if (Math.abs(feed.j - out.j) > 1) pts.push([feed.i, feed.j - dj]);
   return { front, b2, sm, out, feed, pts, clear: [b1, b2, sm, out].every(x => x && F.cells[x.face][x.i][x.j].t === TY.EMPTY) };
 }, seam);
-const A = await screen(plan.front), B = await screen(plan.b2);
+// (2026-10-16) both ends of the drag clear of the card and the panels, as the
+// smelter's click below is: on a seed whose rig front sat under the foreman's
+// card the drag began on the card and no belt was drawn ("rig -> 0 belts")
+let A = await screen(plan.front), B = await screen(plan.b2);
+const onCv = s => p.evaluate(s => { const el = document.elementFromPoint(s[0], s[1]); return !!el && el.tagName === 'CANVAS' && s[0] > 0 && s[1] > 0 && s[0] < 1280 && s[1] < 760; }, s);
+for (let k = 0; k < 8 && !((await onCv(A)) && (await onCv(B))); k++) {
+  await p.mouse.move(640, 380); await p.mouse.wheel({ deltaY: k < 4 ? 120 : -240 }); await wait(250);
+  A = await screen(plan.front); B = await screen(plan.b2);
+}
 await p.mouse.move(A[0], A[1]); await p.mouse.down(); await p.mouse.move(B[0], B[1], { steps: 20 }); await p.mouse.up(); await wait(400);
 await p.keyboard.press('Digit3'); await wait(150);
 // the smelter's tile can sit under the foreman's card in the overhead view: a
@@ -129,8 +141,14 @@ const smDbg = await p.evaluate((t, S) => { const F = window.__factory, c = F.cel
   return { tool: F.tool, at: S.map(Math.round), on: el ? el.tagName + (el.id ? '#' + el.id : '') : null, cell: c.t, overhead: document.body.classList.contains('overhead'), under: (() => { const u = F.cellUnder({ clientX: S[0], clientY: S[1] }); return u ? [u.face, u.i, u.j] : null; })() }; }, plan.sm, S);
 console.log('smelter   :', JSON.stringify({ want: [plan.sm.i, plan.sm.j], ...smDbg }));
 await p.keyboard.press('Digit2'); await wait(150);
-const way = [];
+let way = [];
 for (const [i, j] of plan.pts) way.push(await screen({ face: 0, i, j }));
+for (let k = 0; k < 8; k++) {
+  let ok = true; for (const w of way) if (!(await onCv(w))) { ok = false; break; }
+  if (ok) break;
+  await p.mouse.move(640, 380); await p.mouse.wheel({ deltaY: k < 4 ? 120 : -240 }); await wait(250);
+  way = []; for (const [i, j] of plan.pts) way.push(await screen({ face: 0, i, j }));
+}
 await p.mouse.move(way[0][0], way[0][1]); await p.mouse.down();
 for (const w of way.slice(1)) await p.mouse.move(w[0], w[1], { steps: 30 });
 await p.mouse.up(); await wait(600);
