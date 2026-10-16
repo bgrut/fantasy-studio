@@ -42,7 +42,11 @@ async function walkUpTo(p, i) {
 async function key(p, code) { await p.keyboard.press(code); await wait(350); }
 async function collectAll(p) {
   const left = await p.evaluate(() => window.__game.objectives().left);
-  for (const [x, , z] of left) { await p.evaluate((x, z) => window.__game.tp(x, z), x, z); await wait(700); }
+  // (2026-10-15) polled: a starved headless frame took the teleport and the
+  // pickup a beat later than 700 ms (tp itself was also lost then; fixed)
+  for (const [x, , z] of left) { const before = await p.evaluate(() => window.__game.objectives().left.length);
+    await p.evaluate((x, z) => window.__game.tp(x, z), x, z);
+    for (let t = 0; t < 12; t++) { await wait(250); if (await p.evaluate(() => window.__game.objectives().left.length) < before) break; } }
   return left.length;
 }
 

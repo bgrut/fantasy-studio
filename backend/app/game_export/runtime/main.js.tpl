@@ -20131,8 +20131,12 @@ async function main() {
   window.__game = {
     ...__evHooks,
     pos: () => playerObj.position.toArray(), keys, ready: true,
-    tp: (x, z) => body.setTranslation({ x, y: spawnHeight(x, z), z }, true),
-    tpy: (x, y, z) => body.setTranslation({ x, y, z }, true),     // a drop from a height: does a ledge hold you
+    // (2026-10-15) the body is kinematic: a translation set between frames was
+    // undone by the step when the frame had already queued its next position
+    // (a teleport right after a conversation was lost half the time), so the
+    // queued position is the new one too, as getting in and out of a car does
+    tp: (x, z) => { const t = { x, y: spawnHeight(x, z), z }; body.setTranslation(t, true); body.setNextKinematicTranslation(t); },
+    tpy: (x, y, z) => { body.setTranslation({ x, y, z }, true); body.setNextKinematicTranslation({ x, y, z }); },     // a drop from a height: does a ledge hold you
     npcRefs: () => npcs,                    // the live bodies, for gates that measure how they move
     carryE: () => window.__carryE && window.__carryE(), throwIt: () => doAttack(),
     // a box of a given height, solid, for a gate that needs a ledge where it stands

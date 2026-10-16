@@ -2243,6 +2243,8 @@ function _bevelBox(w, h, d) {
 const _box = (w, h, d) => Math.min(w, h, d) >= 0.1 ? _bevelBox(w, h, d) : new THREE.BoxGeometry(w, h, d);
 // the smelter's fire: tongues of flame over a white-hot bed, drawn once and
 // scrolled upward each frame so every furnace door burns
+const HUB_GLASS = new THREE.MeshStandardMaterial({ color: 0xfff2d0, roughness: 0.05, metalness: 0.0, transparent: true,
+  opacity: 0.22, emissive: 0xffc860, emissiveIntensity: 0.35, depthWrite: false, envMapIntensity: 1.4 });
 const FIRE_TEX = (() => {
   const c = document.createElement('canvas'); c.width = 128; c.height = 256; const x = c.getContext('2d');
   const bg = x.createLinearGradient(0, 256, 0, 0);
@@ -2365,19 +2367,29 @@ const GEO = {
   // going to should look like a destination, not another box
   hub: mergeParts((() => {
     const parts = [
-      { g: _cyl(T * 0.66, T * 0.70, 0.10, 12), y: 0.05, col: PAINT.chassis }, // skirt
-      { g: _cyl(T * 0.54, T * 0.62, 0.26, 12), y: 0.20 },          // pad
-      { g: new THREE.TorusGeometry(T * 0.46, 0.06, 6, 18), y: 0.36, rx: Math.PI / 2, col: PAINT.trim },
-      { g: _cyl(0.09, 0.09, 0.85, 6), y: 0.78, col: PAINT.chassis },                   // mast
-      { g: _cyl(0.16, 0.16, 0.10, 8), y: 1.06, col: PAINT.trim },                   // collar
+      // (2026-10-15) the hub is the centrepiece every line runs to: its round
+      // parts are round (the pad was a twelve-gon, the mast a hexagon)
+      { g: _cyl(T * 0.66, T * 0.70, 0.10, 48), y: 0.05, col: PAINT.chassis }, // skirt
+      { g: _cyl(T * 0.54, T * 0.62, 0.26, 48), y: 0.20 },          // pad
+      { g: new THREE.TorusGeometry(T * 0.46, 0.06, 12, 64), y: 0.36, rx: Math.PI / 2, col: PAINT.trim },
+      { g: _cyl(0.09, 0.09, 0.85, 20), y: 0.78, col: PAINT.chassis },                   // mast
+      { g: _cyl(0.16, 0.16, 0.10, 28), y: 1.06, col: PAINT.trim },                   // collar
+      // THE LANTERN'S CAGE: four brass meridians and an equator round the
+      // glass, a cap and a finial on top, a cup it sits in
+      { g: _cyl(0.12, 0.08, 0.06, 28), y: 1.10, col: PAINT.trim },                   // the cup
+      { g: new THREE.TorusGeometry(0.185, 0.009, 8, 48), y: 1.26, rx: Math.PI / 2, col: PAINT.trim },
+      { g: _cyl(0.06, 0.1, 0.05, 24), y: 1.455, col: PAINT.trim },                   // the cap
+      { g: new THREE.SphereGeometry(0.026, 16, 12), y: 1.5, col: PAINT.trim },        // its finial
     ];
+    for (let k = 0; k < 4; k++)
+      parts.push({ g: new THREE.TorusGeometry(0.185, 0.008, 8, 48, Math.PI), y: 1.26, ry: k * Math.PI / 4, col: PAINT.trim });
     // radiating ribs, so the pad has a direction to it under the landing ring
     for (let k = 0; k < 6; k++) {
       const a = (k / 6) * Math.PI * 2;
       parts.push({ g: _box(T * 0.30, 0.07, 0.10), y: 0.35,
                    x: Math.cos(a) * T * 0.30, z: Math.sin(a) * T * 0.30, ry: -a, col: PAINT.trim });
       // bollards round the skirt, so the pad has an edge you would not walk off
-      parts.push({ g: _cyl(0.06, 0.07, 0.30, 6), y: 0.22,
+      parts.push({ g: _cyl(0.06, 0.07, 0.30, 18), y: 0.22,
                    x: Math.cos(a + Math.PI / 6) * T * 0.66, z: Math.sin(a + Math.PI / 6) * T * 0.66, col: PAINT.chassis });
     }
     return parts;
@@ -2832,9 +2844,14 @@ function place(face, i, j, type, dir) {
   } else if (type === HUB) {
     const b = new THREE.Mesh(GEO.hub, MAT.hub);
     b.castShadow = true; g.add(b);
-    const beacon = new THREE.Mesh(new THREE.SphereGeometry(0.15, 8, 6),
+    // a lantern, not a ball (2026-10-15): the beacon was an eight-sided blob
+    // that bloomed into a yellow disc. A smooth hot core inside a faint glass
+    // globe, in the brass cage that is part of the hub's body
+    const beacon = new THREE.Mesh(new THREE.SphereGeometry(0.1, 32, 24),
       new THREE.MeshBasicMaterial({ color: 0xffd479 }));
-    beacon.position.y = 1.22; beacon.name = 'lamp'; g.add(beacon);
+    beacon.position.y = 1.26; beacon.name = 'lamp'; g.add(beacon);
+    const glass = new THREE.Mesh(new THREE.SphereGeometry(0.178, 40, 28), HUB_GLASS);
+    glass.position.y = 1.26; glass.renderOrder = 2; g.add(glass);
     // THE SWEEP (2026-09-16): a lighthouse's beam from the beacon, a long
     // soft cone of the hub's gold turning once every twelve seconds, so a
     // hub can be found from any face. Additive, no depth write, no light.
@@ -2845,7 +2862,7 @@ function place(face, i, j, type, dir) {
     const sweep = new THREE.Mesh(new THREE.ConeGeometry(0.55, 9.0, 24, 1, true), SWEEP_MAT().clone());   // its own opacity, one program
     sweep.geometry.rotateX(Math.PI / 2);          // the cone lies along +z, apex at the beacon
     sweep.geometry.translate(0, 0, 4.5);
-    sweep.position.y = 1.22; sweep.name = 'sweep'; sweep.frustumCulled = false;
+    sweep.position.y = 1.26; sweep.name = 'sweep'; sweep.frustumCulled = false;
     g.add(sweep);
     // the price board, on the mast, facing the way the hub faces: the thing
     // that pays the prices is the thing that displays them
@@ -8233,11 +8250,11 @@ let hintClock = 0, hintBack = 0;
 function stepHint(dt) {
   const el = document.getElementById('hint');
   if (!el) return;
-  if (intro > 0) return;                              // the reveal does not count as reading
+  // the reveal, the title and the foreman's card do not count as reading:
+  // under them the clock waits, but a clock already past its time still puts
+  // the hints away (returning early there left them up for good, fbeat)
   const _tu = document.getElementById('tutor'), _ti = document.getElementById('title');
-  // hidden under the card or the title: not read yet, so the clock waits
-  // (but a clock already past its time still puts them away)
-  if (!((_tu && _tu.classList.contains('on')) || (_ti && _ti.classList.contains('on')))) hintClock += dt;
+  if (!(intro > 0 || (_tu && _tu.classList.contains('on')) || (_ti && _ti.classList.contains('on')))) hintClock += dt;
   if (hintBack > 0) { hintBack -= dt; el.classList.remove('gone'); return; }
   el.classList.toggle('gone', hintClock > 45);
 }
@@ -8914,7 +8931,7 @@ renderer.setAnimationLoop(() => {
       // at idle the beacon breathes, so a hub with nothing arriving still
       // reads as on; a delivery pulse rides on top of it
       const breathe = 1 + Math.sin(performance.now() * 0.0028) * 0.07;
-      if (beacon) beacon.scale.setScalar(breathe + c.pulse * 1.5);
+      if (beacon) beacon.scale.setScalar(Math.min(1.7, breathe + c.pulse * 0.7));   // the core swells inside its glass, never through it
       const board = c.build.getObjectByName('board');
       if (board) board.rotation.y = Math.PI / 2 + Math.sin(performance.now() * 0.0009) * 0.18;
     } else if (c.t === SPLITTER) {
