@@ -2241,6 +2241,24 @@ function _bevelBox(w, h, d) {
   return g;
 }
 const _box = (w, h, d) => Math.min(w, h, d) >= 0.1 ? _bevelBox(w, h, d) : new THREE.BoxGeometry(w, h, d);
+// the smelter's fire: tongues of flame over a white-hot bed, drawn once and
+// scrolled upward each frame so every furnace door burns
+const FIRE_TEX = (() => {
+  const c = document.createElement('canvas'); c.width = 128; c.height = 256; const x = c.getContext('2d');
+  const bg = x.createLinearGradient(0, 256, 0, 0);
+  bg.addColorStop(0, '#fff2c0'); bg.addColorStop(0.25, '#ffb43a'); bg.addColorStop(0.6, '#d0461a'); bg.addColorStop(1, '#3a0c06');
+  x.fillStyle = bg; x.fillRect(0, 0, 128, 256);
+  let h = 12345; const r = () => { h = (h * 16807) % 2147483647; return h / 2147483647; };
+  for (let k = 0; k < 40; k++) {                        // tongues: tall soft ellipses, repeating top to bottom
+    const cx = r() * 128, cy = r() * 256, w = 6 + r() * 14, hh = 30 + r() * 60;
+    for (const oy of [-256, 0, 256]) { const gr = x.createRadialGradient(cx, cy + oy, 1, cx, cy + oy, hh);
+      gr.addColorStop(0, `rgba(255,${200 + (r() * 50) | 0},120,0.55)`); gr.addColorStop(1, 'rgba(255,120,30,0)');
+      x.fillStyle = gr; x.save(); x.translate(cx, cy + oy); x.scale(w / hh, 1); x.translate(-cx, -(cy + oy)); x.fillRect(cx - hh, cy + oy - hh, hh * 2, hh * 2); x.restore(); }
+  }
+  for (let k = 0; k < 18; k++) { x.fillStyle = `rgba(40,8,4,${0.25 + r() * 0.3})`; x.beginPath(); x.ellipse(r() * 128, 200 + r() * 56, 8 + r() * 14, 4 + r() * 6, 0, 0, 7); x.fill(); }   // coals at the foot
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; return t;
+})();
+
 const _cyl = (rt, rb, h, n) => new THREE.CylinderGeometry(rt, rb, h, n);
 
 // A quarter-turn deck. Ring sectors live in the XY plane, so laying one flat
@@ -2408,8 +2426,16 @@ const GEO = {
     { g: _box(0.10, 1.0, 0.10), y: 0.58, x: T * 0.40, z: -T * 0.40, col: PAINT.chassis },
     { g: _box(0.10, 1.0, 0.10), y: 0.58, x: -T * 0.40, z: -T * 0.40, col: PAINT.chassis },
     { g: _box(T * 0.82, 0.08, T * 0.82), y: 0.92, col: PAINT.chassis },
-    { g: _box(T * 0.42, 0.46, 0.10), y: 0.50, x: T * 0.40, col: PAINT.trim }, // frame
-    { g: _box(T * 0.30, 0.34, 0.07), y: 0.50, x: T * 0.44, col: PAINT.dark }, // door
+    // (2026-10-15) the door's frame and slab were sized along X, so from the
+    // front they stood out as a thin plank across the fire. The firebox is
+    // part of the body: an iron frame and lintel, a grate of round bars, a
+    // rail across them and a brass latch, merged so the door costs no draw
+    // call; only the fire behind it is its own mesh (see SMELTER in place())
+    { g: _bevelBox(0.07, 0.48, T * 0.42), y: 0.50, x: T * 0.47 - 0.015, col: PAINT.dark, tint: 0.55 },
+    { g: _bevelBox(0.1, 0.05, T * 0.5), y: 0.50 + 0.18 + 0.07, x: T * 0.47 + 0.01, col: PAINT.dark, tint: 0.55 },
+    ...[0, 1, 2, 3, 4, 5].map(k => ({ g: _cyl(0.011, 0.011, 0.38, 10), y: 0.50, x: T * 0.47 + 0.045, z: -T * 0.15 + T * 0.3 * (k + 0.5) / 6, col: PAINT.dark, tint: 0.5 })),
+    { g: _bevelBox(0.03, 0.03, T * 0.3 + 0.04), y: 0.50 - 0.36 * 0.12, x: T * 0.47 + 0.045, col: PAINT.dark, tint: 0.5 },
+    { g: _bevelBox(0.05, 0.03, 0.09), y: 0.50 + 0.36 * 0.18, x: T * 0.47 + 0.05, z: T * 0.15 + 0.02, col: PAINT.trim },
     // grilles on the flank and the back, and a brass band under the cap, so a
     // furnace reads as a furnace from the sides you actually see it from
     { g: _box(T * 0.34, 0.26, 0.06), y: 0.56, z: T * 0.40, col: PAINT.dark },     // flank grille
@@ -2910,11 +2936,19 @@ function place(face, i, j, type, dir) {
     // THE DOOR IS THE LAMP. A bulb on the roof told you a smelter was working;
     // a furnace door glowing where the heat is tells you the same thing and
     // looks like a furnace while doing it.
-    const lamp = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.32, T * 0.26),
-      new THREE.MeshBasicMaterial({ color: 0xff7a22 }));   // furnace-hot, not lamp-yellow
-    lamp.position.set(T * 0.47, 0.50, 0);
+    // A FIREBOX, NOT A SLAB (2026-10-15): the door was one flat orange box. It
+    // is a furnace mouth now: a cast-iron frame with a lintel, the fire inside
+    // (a living texture the door's glow multiplies, dark when cold), a grate
+    // of round bars over it and a latch. Still named 'lamp' for the glow, the
+    // embers and the light pool that read it.
+    const fx = T * 0.47, fw = T * 0.3, fh = 0.36;
+    const lamp = new THREE.Mesh(new THREE.PlaneGeometry(fw, fh),
+      new THREE.MeshBasicMaterial({ color: 0x1a0e38, map: FIRE_TEX, toneMapped: false }));   // furnace-hot, not lamp-yellow
+    lamp.rotation.y = Math.PI / 2;
+    lamp.position.set(fx + 0.022, 0.5, 0);
     lamp.name = 'lamp';
     g.add(lamp);
+
   }
   if (!CITY_T.has(type)) weather(g, face);   // soot on the ember faces, rime on the salt, dimmer below
   seat(g, face, i, j, dir, 0);
@@ -8201,8 +8235,9 @@ function stepHint(dt) {
   if (!el) return;
   if (intro > 0) return;                              // the reveal does not count as reading
   const _tu = document.getElementById('tutor'), _ti = document.getElementById('title');
-  if ((_tu && _tu.classList.contains('on')) || (_ti && _ti.classList.contains('on'))) return;   // hidden under the card or the title: not read yet
-  hintClock += dt;
+  // hidden under the card or the title: not read yet, so the clock waits
+  // (but a clock already past its time still puts them away)
+  if (!((_tu && _tu.classList.contains('on')) || (_ti && _ti.classList.contains('on')))) hintClock += dt;
   if (hintBack > 0) { hintBack -= dt; el.classList.remove('gone'); return; }
   el.classList.toggle('gone', hintClock > 45);
 }
@@ -8848,6 +8883,7 @@ renderer.setAnimationLoop(() => {
 
   if (beltsDirty) rebuildBelts();
   if (!melting) stepEmitters(dt);
+  FIRE_TEX.offset.y = (FIRE_TEX.offset.y - dt * 0.22) % 1; FIRE_TEX.offset.x = Math.sin(performance.now() * 0.0013) * 0.04;   // the fire climbs and sways
   stepWeather(dt);
   stepAmbience(dt);
   watchFrames(dt);
