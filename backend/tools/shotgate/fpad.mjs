@@ -71,15 +71,18 @@ const s4 = await st();
 check(s4.f.machines < m1 && s4.pad.tool === 'belt', `LT erases and hands the tool back: ${m1} -> ${s4.f.machines}, tool ${s4.pad.tool}`);
 
 // Y looks from above, B comes back down
-await tap(3);
-const ov = await p.evaluate(() => window.__pad.state().overhead);
-await tap(1);
-const back = await p.evaluate(() => window.__pad.state().overhead);
+// (2026-10-16) held until the game has seen it: the pad is read once a frame,
+// and a 180 ms tap fell between frames when a full gate starved the page
+const holdUntil = async (i, want, key = 'overhead') => { await press(i, true);
+  let v = null; for (let k = 0; k < 15; k++) { await wait(100); v = await p.evaluate(k => window.__pad.state()[k], key); if (v === want) break; }
+  await press(i, false); await wait(200); return v; };
+const ov = await holdUntil(3, true);
+const back = await holdUntil(1, false);
 check(ov && !back, 'Y opens the overhead, B leaves it');
 
 // Start pauses: nothing moves and nothing is earned
 await wait(1500);
-await tap(9);
+await holdUntil(9, true, 'paused');
 const pz = await st();
 await axis(1, -1); await wait(1500); await axis(1, 0);
 const pz2 = await st();
@@ -88,7 +91,7 @@ check(pz.pad.paused && drift < 0.01 && pz2.f.value === pz.f.value, `Start pauses
 const shown = await p.evaluate(() => getComputedStyle(document.getElementById('pause')).display !== 'none');
 check(shown, 'the pause menu is on screen');
 await p.evaluate(() => { const v = document.getElementById('pz-vol'); v.value = '0.3'; v.dispatchEvent(new Event('input', { bubbles: true })); });
-await tap(9);
+await holdUntil(9, false, 'paused');
 const up = await st();
 check(!up.pad.paused, 'Start again resumes');
 await wait(2500);
