@@ -16,12 +16,12 @@
     "judged by eye 2026-10-09: dark roll-neck and trousers, photoreal face; CLIP wants a mask"
   ],
   "explorer.glb": [
-    "fair",
-    "judged by eye 2026-10-09: khaki cap and shirt, coherent coloured face; assetview shoots from behind"
+    "good",
+    "judged by eye 2026-10-16 (regenerated): khaki field shirt, olive trousers, felt hat, satchel straps, lace-up boots, a clear face; char_qa 0.93"
   ],
   "explorer_anim.glb": [
-    "fair",
-    "judged by eye 2026-10-09: khaki cap and shirt, coherent coloured face; assetview shoots from behind"
+    "good",
+    "judged by eye 2026-10-16 (regenerated): khaki field shirt, olive trousers, felt hat, satchel straps, lace-up boots, a clear face; char_qa 0.93"
   ],
   "detective.glb": [
     "fair",
@@ -38,5 +38,21 @@
   "street_racer_anim.glb": [
     "good",
     "judged by eye 2026-10-12: black leather racing jacket with red panels, jeans, trainers, coherent face; CLIP reads it as 'not a street racer'"
+  ],
+  "sheriff.glb": [
+    "good",
+    "judged by eye 2026-10-16 (regenerated): cowboy hat, moustache, red neckerchief, leather vest, holster, duster; the face judge cannot see under a brim"
+  ],
+  "sheriff_anim.glb": [
+    "good",
+    "judged by eye 2026-10-16 (regenerated): cowboy hat, moustache, red neckerchief, leather vest, holster, duster; the face judge cannot see under a brim"
+  ],
+  "wizard.glb": [
+    "good",
+    "judged by eye 2026-10-16 (regenerated): tall pointed hat, white beard, deep blue robe, belt, boots; the face judge cannot see under a brim"
+  ],
+  "wizard_anim.glb": [
+    "good",
+    "judged by eye 2026-10-16 (regenerated): tall pointed hat, white beard, deep blue robe, belt, boots; the face judge cannot see under a brim"
   ]
 }

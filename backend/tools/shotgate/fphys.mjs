@@ -48,10 +48,12 @@ console.log('walked into a wall of smelters -> stopped at tile j', stopped.tileJ
 
 // still able to slide sideways along it
 const beforeA = await p.evaluate(()=>+window.__factory.player.pos.x.toFixed(2));
+// (2026-10-16) held until it has slid, up to 3 s: movement is integrated per
+// frame, and on a starved frame rate 1.2 s of D covered 1.88 m
 await p.keyboard.down('KeyD');
-await new Promise(r=>setTimeout(r,1200));
+let afterA = beforeA;
+for (let k = 0; k < 15; k++) { await new Promise(r=>setTimeout(r,200)); afterA = await p.evaluate(()=>+window.__factory.player.pos.x.toFixed(2)); if (k >= 5 && Math.abs(afterA - beforeA) > 2) break; }
 await p.keyboard.up('KeyD');
-const afterA = await p.evaluate(()=>+window.__factory.player.pos.x.toFixed(2));
 console.log('slides along it :', Math.abs(afterA - beforeA).toFixed(2) + 'm sideways');
 
 // ── 2. a merge must not eat items, and must not starve one input ──────────

@@ -57,8 +57,8 @@
  "wizard.glb": {
   "kind": "wizard",
   "shaded_png": "backend/tools/shotgate/renders/wizard_shaded.png",
-  "looks_like": 0.694,
-  "patchy": 0.172,
+  "looks_like": 0.442,
+  "patchy": 0.558,
   "looks_like_best": "a clean 3D render of a wizard"
  },
  "dragon.glb": {
@@ -844,8 +844,8 @@
  "explorer.glb": {
   "kind": "explorer",
   "shaded_png": "backend/tools/shotgate/renders/explorer_shaded.png",
-  "looks_like": 0.23,
-  "patchy": 0.754,
+  "looks_like": 0.57,
+  "patchy": 0.43,
   "looks_like_best": "a clean 3D render of a explorer"
  },
  "crate.glb": {
@@ -1583,8 +1583,8 @@
  "engineer.glb": {
   "kind": "engineer",
   "shaded_png": "backend/tools/shotgate/renders/engineer_shaded.png",
-  "looks_like": 0.955,
-  "patchy": 0.045,
+  "looks_like": 0.743,
+  "patchy": 0.257,
   "looks_like_best": "a clean 3D render of a engineer"
  },
  "gem.glb": {
@@ -1688,8 +1688,8 @@
  "sheriff.glb": {
   "kind": "sheriff",
   "shaded_png": "backend/tools/shotgate/renders/sheriff_shaded.png",
-  "looks_like": 0.443,
-  "patchy": 0.478,
+  "looks_like": 0.54,
+  "patchy": 0.46,
   "looks_like_best": "a clean 3D render of a sheriff"
  },
  "shepherd.glb": {

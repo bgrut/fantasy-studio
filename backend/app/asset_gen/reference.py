@@ -524,7 +524,9 @@ def _build_reference_prompt(slots: Dict[str, Any], style: str) -> tuple[str, str
             # a robe to the floor fights the arms-out pose and came out as bare
             # legs in tights (2026-10-11); a heavy knee-length robe over
             # trousers and boots keeps the wizard and gives the legs a shape
-            "wizard":    "elderly wizard, heavy deep blue knee-length wool robe with a leather belt, dark trousers, leather boots, tall pointed blue hat, long white beard, fully clothed, fantasy character",
+            # (2026-10-16) the hat and the blue came last and were dropped: a brown
+            # cloak and a fur cap. The pointed hat and the colour lead now
+            "wizard":    "an elderly wizard in a tall pointed wide-brimmed deep blue felt hat and a heavy deep blue knee-length wool robe with silver-stitched cuffs, a leather belt, dark trousers and leather boots, a long white beard, a kind lined face showing, holding nothing, fully clothed, fantasy character",
             "sorcerer":  "sorcerer, ornate robe, arcane staff, fantasy character",
             "witch":     "witch, flowing dress, pointed hat, fantasy character",
             "mage":      "mage, hooded robe, glowing staff, fantasy character",
@@ -554,8 +556,11 @@ def _build_reference_prompt(slots: Dict[str, Any], style: str) -> tuple[str, str
             "scientist": "scientist wearing a white lab coat over a collared shirt and dark trousers, safety glasses, id badge, plain shoes",
             "detective": "detective in a beige trench coat over a shirt and tie, fedora hat, dark trousers, leather shoes",
             "ranger":    "forest ranger in a green field jacket and khaki trousers, wide-brimmed hat, hiking boots",
-            "engineer":  "engineer in an orange hi-vis work jacket, white hard hat, cargo trousers, work boots, tool belt",
-            "explorer":  "explorer in a khaki safari shirt and trousers, wide-brimmed hat, leather boots, backpack straps",
+            # (2026-10-16) both were generated blotchy: the engineer's reflective
+            # strips smeared to grey patches, the explorer to a smeared shirt and
+            # a blob of a hand. Plain solid colours, a face showing
+            "engineer":  "an engineer with a face showing, wearing a plain solid orange work jacket with one thin grey band across the chest, a white hard hat, dark navy cargo trousers, brown leather work boots, a brown leather tool belt, holding nothing, fully clothed, normal proportions",
+            "explorer":  "an explorer with a weathered face showing and short hair, wearing a plain solid khaki cotton field shirt with rolled sleeves, olive canvas trousers, a brown wide-brimmed felt hat, brown leather lace-up boots, a canvas satchel strap across the chest, holding nothing, fully clothed, normal proportions",
             # (2026-10-07) an original Victorian investigator, nothing from any film
             # (2026-10-13) three heroes the studio had no figure for
             "paranormal investigator": "a 1970s paranormal investigator in a brown corduroy jacket over a cream turtleneck, flared dark trousers, leather shoes, a shoulder bag strap and a cassette recorder on a strap, neat side-parted hair, calm serious face, fully clothed, normal proportions",
@@ -588,7 +593,9 @@ def _build_reference_prompt(slots: Dict[str, Any], style: str) -> tuple[str, str
             "waitress":  "waitress in a black waistcoat over a white shirt, a long black apron, dark trousers, fully clothed",
             "bartender": "bartender in a dark waistcoat over a white shirt with rolled sleeves, dark trousers, fully clothed",
             "baker":     "baker in a white baker's jacket and a flour-dusted apron, a white cap, fully clothed",
-            "sheriff":   "frontier sheriff in a brown leather vest over a cream shirt, a tan cowboy hat, denim trousers, a gun belt with a holster, cowboy boots, fully clothed",
+            # (2026-10-16) came out hatless in a smeared shirt; the hat and the
+            # star lead, the shirt is a plain solid colour
+            "sheriff":   "a frontier sheriff in a tan wide-brimmed cowboy hat and a dark brown leather vest with a silver star badge over a plain solid light blue cotton shirt, a red neckerchief, dark brown wool trousers, a leather gun belt with a holster, brown cowboy boots, a weathered moustached face showing, holding nothing, fully clothed, normal proportions",
             "marshal":   "frontier marshal in a long tan duster coat, a dark vest, a black cowboy hat, a gun belt, cowboy boots, fully clothed",
             "deputy":    "frontier deputy in a checked shirt and a leather vest, a brown cowboy hat, jeans, a gun belt, boots, fully clothed",
             "cowboy":    "cowboy in a checked shirt, a brown leather vest, leather chaps over jeans, a wide-brimmed cowboy hat, a neck bandana, cowboy boots, fully clothed",
@@ -1032,6 +1039,12 @@ def generate_reference(
         # the arms still stand out from the body, the pose said in words too
         # (2026-10-09; the person judge below throws out what drifts).
         _cscale = float(_os.environ.get("FS_CONTROLNET_SCALE_BIPED", "0.25"))
+        # TALL HEADWEAR (2026-10-16): the template's head is a dome with the far
+        # background above it, and at 0.25 a wizard's pointed hat came out a flat
+        # cap twice over; where the wardrobe names one, the template steps back
+        import re as _re_hat
+        if _re_hat.search(r"\b(pointed|witch'?s?|top|stovepipe|conical|tall)\b[^,]{0,30}\bhat\b|\bmitre\b|\bhennin\b", positive or "", _re_hat.I):
+            _cscale = min(_cscale, 0.12)
     if base_pattern == "vehicle" and _os.environ.get("FS_VEHICLE_DEPTH", "0") != "1":
         depth_image = None
 

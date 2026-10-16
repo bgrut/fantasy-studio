@@ -3183,45 +3183,45 @@
   {
    "file": "engineer.glb",
    "dims_m": {
-    "x": 1.561,
-    "y": 1.7501,
-    "z": 0.4004
+    "x": 1.529,
+    "y": 1.7499,
+    "z": 0.3736
    },
-   "min_y": 0.0,
+   "min_y": -0.0,
    "skinned": false,
    "clips": [],
    "bones": 0,
    "biped": true,
    "tallest_axis": "y",
    "aspect": {
-    "w_h": 0.892,
-    "d_h": 0.229
+    "w_h": 0.874,
+    "d_h": 0.213
    },
    "upright": true,
    "height_ratio": 1.0,
    "mesh": {
-    "tris": 79683,
-    "largest_share": 0.9899,
+    "tris": 79917,
+    "largest_share": 0.9672,
     "fragments": 2,
     "degenerate": 0.0,
     "textures": 3,
     "textures_ok": true
    },
    "render": {
-    "looks_like": 0.955,
+    "looks_like": 0.743,
     "looks_like_best": "a clean 3D render of a engineer"
    },
-   "quality": 0.97,
+   "quality": 0.85,
    "verdict": "good"
   },
   {
    "file": "engineer_anim.glb",
    "dims_m": {
-    "x": 1.5609,
+    "x": 1.5291,
     "y": 1.75,
-    "z": 0.4003
+    "z": 0.3736
    },
-   "min_y": 0.0,
+   "min_y": -0.0,
    "skinned": true,
    "clips": [
     "attack",
@@ -3230,17 +3230,17 @@
     "sneak",
     "walk"
    ],
-   "bones": 21,
+   "bones": 22,
    "biped": true,
    "tallest_axis": "y",
    "aspect": {
-    "w_h": 0.892,
-    "d_h": 0.229
+    "w_h": 0.874,
+    "d_h": 0.213
    },
    "upright": true,
    "height_ratio": 1.0,
    "mesh": {
-    "tris": 77000,
+    "tris": 79917,
     "largest_share": 1.0,
     "fragments": 1,
     "degenerate": 0.0,
@@ -3253,9 +3253,9 @@
   {
    "file": "explorer.glb",
    "dims_m": {
-    "x": 0.8494,
-    "y": 0.9999,
-    "z": 0.1955
+    "x": 1.5474,
+    "y": 1.7499,
+    "z": 0.422
    },
    "min_y": -0.0,
    "skinned": false,
@@ -3264,35 +3264,35 @@
    "biped": true,
    "tallest_axis": "y",
    "aspect": {
-    "w_h": 0.849,
-    "d_h": 0.196
+    "w_h": 0.884,
+    "d_h": 0.241
    },
    "upright": true,
    "height_ratio": 1.0,
    "mesh": {
-    "tris": 79929,
-    "largest_share": 0.9637,
+    "tris": 79864,
+    "largest_share": 0.9687,
     "fragments": 2,
     "degenerate": 0.0,
     "textures": 3,
     "textures_ok": true
    },
    "render": {
-    "looks_like": 0.23,
+    "looks_like": 0.57,
     "looks_like_best": "a clean 3D render of a explorer"
    },
    "quality_reasons": [
-    "judged by eye 2026-10-09: khaki cap and shirt, coherent coloured face; assetview shoots from behind"
+    "judged by eye 2026-10-16 (regenerated): khaki field shirt, olive trousers, felt hat, satchel straps, lace-up boots, a clear face; char_qa 0.93"
    ],
-   "quality": 0.2,
-   "verdict": "fair"
+   "quality": 0.5,
+   "verdict": "good"
   },
   {
    "file": "explorer_anim.glb",
    "dims_m": {
-    "x": 1.3869,
+    "x": 1.5475,
     "y": 1.75,
-    "z": 0.357
+    "z": 0.422
    },
    "min_y": -0.0,
    "skinned": true,
@@ -3307,23 +3307,23 @@
    "biped": true,
    "tallest_axis": "y",
    "aspect": {
-    "w_h": 0.793,
-    "d_h": 0.204
+    "w_h": 0.884,
+    "d_h": 0.241
    },
    "upright": true,
    "height_ratio": 1.0,
    "mesh": {
-    "tris": 73854,
-    "largest_share": 1.0,
-    "fragments": 1,
-    "degenerate": 0.0,
+    "tris": 97820,
+    "largest_share": 0.9839,
+    "fragments": 2,
+    "degenerate": 0.0003,
     "textures": 1,
     "textures_ok": true
    },
    "quality": 1.0,
-   "verdict": "fair",
+   "verdict": "good",
    "quality_reasons": [
-    "judged by eye 2026-10-09: khaki cap and shirt, coherent coloured face; assetview shoots from behind"
+    "judged by eye 2026-10-16 (regenerated): khaki field shirt, olive trousers, felt hat, satchel straps, lace-up boots, a clear face; char_qa 0.93"
    ]
   },
   {
@@ -9829,48 +9829,48 @@
   {
    "file": "sheriff.glb",
    "dims_m": {
-    "x": 1.5265,
-    "y": 1.75,
-    "z": 0.369
+    "x": 1.4553,
+    "y": 1.7503,
+    "z": 0.4773
    },
-   "min_y": -0.0,
+   "min_y": 0.0,
    "skinned": false,
    "clips": [],
    "bones": 0,
    "biped": true,
    "tallest_axis": "y",
    "aspect": {
-    "w_h": 0.872,
-    "d_h": 0.211
+    "w_h": 0.831,
+    "d_h": 0.273
    },
    "upright": true,
    "height_ratio": 1.0,
    "mesh": {
-    "tris": 79987,
-    "largest_share": 0.9426,
-    "fragments": 2,
+    "tris": 78937,
+    "largest_share": 1.0,
+    "fragments": 1,
     "degenerate": 0.0,
     "textures": 3,
     "textures_ok": true
    },
    "render": {
-    "looks_like": 0.443,
+    "looks_like": 0.54,
     "looks_like_best": "a clean 3D render of a sheriff"
    },
    "quality_reasons": [
-    "doubtful"
+    "judged by eye 2026-10-16 (regenerated): cowboy hat, moustache, red neckerchief, leather vest, holster, duster; the face judge cannot see under a brim"
    ],
    "quality": 0.5,
-   "verdict": "fair"
+   "verdict": "good"
   },
   {
    "file": "sheriff_anim.glb",
    "dims_m": {
-    "x": 1.5265,
+    "x": 1.4551,
     "y": 1.75,
-    "z": 0.369
+    "z": 0.4772
    },
-   "min_y": -0.0,
+   "min_y": 0.0,
    "skinned": true,
    "clips": [
     "attack",
@@ -9879,25 +9879,28 @@
     "sneak",
     "walk"
    ],
-   "bones": 21,
+   "bones": 22,
    "biped": true,
    "tallest_axis": "y",
    "aspect": {
-    "w_h": 0.872,
-    "d_h": 0.211
+    "w_h": 0.831,
+    "d_h": 0.273
    },
    "upright": true,
    "height_ratio": 1.0,
    "mesh": {
-    "tris": 73236,
-    "largest_share": 0.9957,
-    "fragments": 2,
-    "degenerate": 0.0,
+    "tris": 94921,
+    "largest_share": 1.0,
+    "fragments": 1,
+    "degenerate": 0.0003,
     "textures": 1,
     "textures_ok": true
    },
    "quality": 1.0,
-   "verdict": "good"
+   "verdict": "good",
+   "quality_reasons": [
+    "judged by eye 2026-10-16 (regenerated): cowboy hat, moustache, red neckerchief, leather vest, holster, duster; the face judge cannot see under a brim"
+   ]
   },
   {
    "file": "ship.glb",
@@ -12127,9 +12130,9 @@
   {
    "file": "wizard.glb",
    "dims_m": {
-    "x": 1.5921,
+    "x": 1.4078,
     "y": 1.75,
-    "z": 0.4368
+    "z": 0.4524
    },
    "min_y": 0.0,
    "skinned": false,
@@ -12138,13 +12141,13 @@
    "biped": true,
    "tallest_axis": "y",
    "aspect": {
-    "w_h": 0.91,
-    "d_h": 0.25
+    "w_h": 0.804,
+    "d_h": 0.259
    },
    "upright": true,
    "height_ratio": 1.0,
    "mesh": {
-    "tris": 78229,
+    "tris": 79562,
     "largest_share": 1.0,
     "fragments": 1,
     "degenerate": 0.0,
@@ -12152,18 +12155,21 @@
     "textures_ok": true
    },
    "render": {
-    "looks_like": 0.694,
+    "looks_like": 0.442,
     "looks_like_best": "a clean 3D render of a wizard"
    },
-   "quality": 0.82,
+   "quality_reasons": [
+    "judged by eye 2026-10-16 (regenerated): tall pointed hat, white beard, deep blue robe, belt, boots; the face judge cannot see under a brim"
+   ],
+   "quality": 0.5,
    "verdict": "good"
   },
   {
    "file": "wizard_anim.glb",
    "dims_m": {
-    "x": 1.5922,
+    "x": 1.4077,
     "y": 1.75,
-    "z": 0.4368
+    "z": 0.4524
    },
    "min_y": -0.0,
    "skinned": true,
@@ -12174,25 +12180,28 @@
     "sneak",
     "walk"
    ],
-   "bones": 21,
+   "bones": 22,
    "biped": true,
    "tallest_axis": "y",
    "aspect": {
-    "w_h": 0.91,
-    "d_h": 0.25
+    "w_h": 0.804,
+    "d_h": 0.259
    },
    "upright": true,
    "height_ratio": 1.0,
    "mesh": {
-    "tris": 81009,
-    "largest_share": 0.98,
+    "tris": 91498,
+    "largest_share": 0.9932,
     "fragments": 2,
-    "degenerate": 0.0004,
+    "degenerate": 0.0002,
     "textures": 1,
     "textures_ok": true
    },
    "quality": 1.0,
-   "verdict": "good"
+   "verdict": "good",
+   "quality_reasons": [
+    "judged by eye 2026-10-16 (regenerated): tall pointed hat, white beard, deep blue robe, belt, boots; the face judge cannot see under a brim"
+   ]
   },
   {
    "file": "wolf.glb",

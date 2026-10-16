@@ -177,7 +177,11 @@ const act2 = await p.evaluate(async () => {
 console.log('second act: before', JSON.stringify(act2.before.tutorial), '| forge unlocked ->', JSON.stringify(act2.s1), '(act', act2.act + ')',
             JSON.stringify(act2.card), '| ring on a far seam', act2.marker);
 console.log('            rig off home ->', JSON.stringify(act2.s2), '| alloy ->', JSON.stringify(act2.s3), '| filter ->', JSON.stringify(act2.s4));
-await p.keyboard.press('Tab'); await wait(300); await p.keyboard.press('Tab'); await wait(500);
+// (2026-10-16) each toggle waits until the view has changed: at a starved frame
+// rate 300 ms between the two presses closed the overhead before it had opened
+const ovNow = () => p.evaluate(() => document.body.classList.contains('overhead'));
+await p.keyboard.press('Tab'); for (let k = 0; k < 12 && !(await ovNow()); k++) await wait(150); await wait(300);
+await p.keyboard.press('Tab'); for (let k = 0; k < 12 && (await ovNow()); k++) await wait(150); await wait(500);
 const act2b = await p.evaluate(async () => {
   const F = window.__factory, TY = F.TYPES;
   const w = ms => new Promise(r => setTimeout(r, ms));
