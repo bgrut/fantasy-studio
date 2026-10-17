@@ -40,7 +40,7 @@ const CAR_TYPE_KEYS = ['sedan', 'sedan', 'sedan', 'compact', 'compact',
 import * as __FLORA from './proc/flora.js';
 import * as __GRASS from './proc/grass.js';
 import { createVolcano as __createVolcano } from './proc/volcano.js';
-import { waterMaterial as __waterMaterial, waterKind as __waterKind, groundMist as __groundMist } from './proc/water.js';
+import { waterMaterial as __waterMaterial, waterKind as __waterKind, groundMist as __groundMist, shoreDepth as __shoreDepth } from './proc/water.js';
 import { snowTextures as __snowTextures } from './proc/ground.js';
 import { createWaterfall as __createWaterfall } from './proc/waterfall.js';
 import { createCave as __createCave } from './proc/cave.js';
@@ -1386,9 +1386,14 @@ async function main() {
   // SNOW UNDERFOOT (2026-10-03): an arctic or frozen world stands on snow
   // whether or not it is snowing; "a penguin sliding across a frozen lake in
   // the arctic" stood on river pebbles because only the weather asked
+  // (2026-10-17) "frozen" alone is not a season: "an autumn birch forest
+  // beside a frozen lake" stood on a snowfield with the meadow growing
+  // through it. A frozen thing in a world that names another season is that
+  // thing, frozen; the ground stays the season's
+  const _snowW = [SPEC.world.name, SPEC.world.setting, SPEC.prompt].filter(Boolean).join(' ').toLowerCase();
   const SNOW_GROUND = SPEC.world.weather === 'snow'
-    || /arctic|tundra|polar|glacier|frozen|snowy|snowfield|winter|blizzard|antarctic/.test(
-         [SPEC.world.name, SPEC.world.setting, SPEC.prompt].filter(Boolean).join(' ').toLowerCase());
+    || /arctic|tundra|polar|glacier|snowy|snowfield|winter|blizzard|antarctic/.test(_snowW)
+    || (/frozen/.test(_snowW) && !/autumn|\bfall\b|october|summer|spring|blossom|harvest|meadow/.test(_snowW));
   // SIDE-SCROLLER projection: gameplay lives on the z=0 plane — pull the
   // mission targets onto it so everything is actually reachable
   if (VIEW === 'side' && LVL) {
@@ -2377,29 +2382,45 @@ async function main() {
   }
   if (LVL && LVL.heights && LVL.heights.length === LVL.grid_n * LVL.grid_n) {
     const n = LVL.grid_n, hs = LVL.heights;
+    // A ROUNDED GROUND (2026-10-17). The heights are a grid of 1.6 m cells and
+    // the mesh was that grid: every shoreline was a saw-tooth of cell
+    // diagonals where the water cut it, and ridges and path banks were folded
+    // card. Between the samples the ground is now a Catmull-Rom surface,
+    // clamped to its cell's corners so a cliff edge or a carved path bank never
+    // overshoots into a lip, and it is drawn (and collided) at twice the grid
+    // density. hAt reads the same surface, so whatever stands on the ground
+    // still stands on what you see.
+    const _cr = (p0, p1, p2, p3, t) => p1 + 0.5 * t * (p2 - p0 + t * (2 * p0 - 5 * p1 + 4 * p2 - p3 + t * (3 * (p1 - p2) + p3 - p0)));
+    const _H = (i, j) => hs[Math.max(0, Math.min(n - 1, i)) * n + Math.max(0, Math.min(n - 1, j))];
     hAt = (x, z) => {
       const fx = (x / gsize + 0.5) * (n - 1), fz = (z / gsize + 0.5) * (n - 1);
       const j0 = Math.max(0, Math.min(n - 2, Math.floor(fx)));
       const i0 = Math.max(0, Math.min(n - 2, Math.floor(fz)));
       const tx = Math.max(0, Math.min(1, fx - j0)), tz = Math.max(0, Math.min(1, fz - i0));
-      return hs[i0 * n + j0] * (1 - tx) * (1 - tz) + hs[i0 * n + j0 + 1] * tx * (1 - tz)
-           + hs[(i0 + 1) * n + j0] * (1 - tx) * tz + hs[(i0 + 1) * n + j0 + 1] * tx * tz;
+      const r0 = _cr(_H(i0 - 1, j0 - 1), _H(i0 - 1, j0), _H(i0 - 1, j0 + 1), _H(i0 - 1, j0 + 2), tx);
+      const r1 = _cr(_H(i0, j0 - 1), _H(i0, j0), _H(i0, j0 + 1), _H(i0, j0 + 2), tx);
+      const r2 = _cr(_H(i0 + 1, j0 - 1), _H(i0 + 1, j0), _H(i0 + 1, j0 + 1), _H(i0 + 1, j0 + 2), tx);
+      const r3 = _cr(_H(i0 + 2, j0 - 1), _H(i0 + 2, j0), _H(i0 + 2, j0 + 1), _H(i0 + 2, j0 + 2), tx);
+      const a = _H(i0, j0), b = _H(i0, j0 + 1), c = _H(i0 + 1, j0), d = _H(i0 + 1, j0 + 1);
+      return Math.max(Math.min(a, b, c, d), Math.min(Math.max(a, b, c, d), _cr(r0, r1, r2, r3, tz)));
     };
     // world-space grid mesh + EXACT-match trimesh collider (same vertices)
-    const verts = new Float32Array(n * n * 3);
-    const uvs = new Float32Array(n * n * 2);
-    for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
-      const k = i * n + j;
-      verts[k * 3] = (j / (n - 1) - 0.5) * gsize;
-      verts[k * 3 + 1] = hs[k];
-      verts[k * 3 + 2] = (i / (n - 1) - 0.5) * gsize;
+    const m = (n - 1) * 2 + 1;
+    const verts = new Float32Array(m * m * 3);
+    const uvs = new Float32Array(m * m * 2);
+    for (let i = 0; i < m; i++) for (let j = 0; j < m; j++) {
+      const k = i * m + j;
+      const x = (j / (m - 1) - 0.5) * gsize, z = (i / (m - 1) - 0.5) * gsize;
+      verts[k * 3] = x;
+      verts[k * 3 + 1] = hAt(x, z);
+      verts[k * 3 + 2] = z;
       // 1:1 painted map; v inverted (canvas y is top-down, texture v is not)
-      uvs[k * 2] = j / (n - 1); uvs[k * 2 + 1] = 1 - i / (n - 1);
+      uvs[k * 2] = j / (m - 1); uvs[k * 2 + 1] = 1 - i / (m - 1);
     }
-    const idx = new Uint32Array((n - 1) * (n - 1) * 6);
+    const idx = new Uint32Array((m - 1) * (m - 1) * 6);
     let p = 0;
-    for (let i = 0; i < n - 1; i++) for (let j = 0; j < n - 1; j++) {
-      const a = i * n + j, b = a + 1, c = a + n, d = c + 1;
+    for (let i = 0; i < m - 1; i++) for (let j = 0; j < m - 1; j++) {
+      const a = i * m + j, b = a + 1, c = a + m, d = c + 1;
       idx[p++] = a; idx[p++] = c; idx[p++] = b;
       idx[p++] = b; idx[p++] = c; idx[p++] = d;
     }
@@ -2645,10 +2666,21 @@ async function main() {
       if (!_sea && SPEC.player.mode !== 'swim' && !SPEC.player.buoyant) {
         // ice lies where it was put, over the path: it is ground, and the
         // basin clamp above would sink it under the snow
-        waterMesh.position.y = _wk === 'ice' ? WATER : Math.min(waterMesh.position.y, _wk === 'swamp' ? 0.18 : -0.12);
+        // (2026-10-17) but only in a snow world, where the field is white and
+        // the ice is part of it. "An autumn birch forest beside a frozen lake"
+        // laid the ice over the whole low field and the meadow grew through
+        // it: there a frozen lake lies in its basin, as any lake does
+        const _snowWorld = SPEC.world.weather === 'snow' || /arctic|tundra|snow|winter|glacier|polar|penguin|blizzard/.test(_wWords);
+        waterMesh.position.y = _wk === 'ice' && _snowWorld ? WATER : Math.min(waterMesh.position.y, _wk === 'swamp' ? 0.18 : -0.12);
       }
       WATER_Y = waterMesh.position.y;
       WATER_BOB = _sea ? 0.12 : _wk === 'ice' ? 0 : 0.03;
+      // the depth under the surface, so the shores fade, tint and foam (proc/water.js)
+      if (!_sea) {
+        const _k = waterMesh.material.userData.waterKind;
+        waterMesh.material.dispose();
+        waterMesh.material = __waterMaterial(_k, WIND_U, __shoreDepth(hAt, WATER_Y, 0, 0, Math.min(_wS, gsize * 2)));
+      }
     }
     scene.add(waterMesh);
     if (_sea) {

@@ -46,9 +46,12 @@ async function collectAll(p) {
   const left = await p.evaluate(() => window.__game.objectives().left);
   // (2026-10-15) polled: a starved headless frame took the teleport and the
   // pickup a beat later than 700 ms (tp itself was also lost then; fixed)
+  // (2026-10-17) and retried: under load a whole teleport can still be lost
   for (const [x, , z] of left) { const before = await p.evaluate(() => window.__game.objectives().left.length);
-    await p.evaluate((x, z) => window.__game.tp(x, z), x, z);
-    for (let t = 0; t < 12; t++) { await wait(250); if (await p.evaluate(() => window.__game.objectives().left.length) < before) break; } }
+    let got = false;
+    for (let a = 0; a < 3 && !got; a++) {
+      await p.evaluate((x, z) => window.__game.tp(x, z), x, z);
+      for (let t = 0; t < 12 && !got; t++) { await wait(250); got = (await p.evaluate(() => window.__game.objectives().left.length)) < before; } } }
   return left.length;
 }
 
@@ -76,8 +79,13 @@ if (m0) {
   // questioning, and no verdict before the clues
   const inn = m0.suspects.findIndex((_, i) => i !== ci);
   await walkUpTo(p, inn);
-  await key(p, 'KeyE');
-  const said = await p.evaluate(() => { const d = document.getElementById('fsdlgtxt'); return d ? d.textContent : ''; });
+  // (2026-10-17) the case's opening line can still be up when E lands, and E
+  // closes it instead; ask again until the suspect answers
+  let said = '';
+  for (let a = 0; a < 3 && !/You notice:/.test(said); a++) {
+    await key(p, 'KeyE');
+    said = await p.evaluate(() => { const d = document.getElementById('fsdlgtxt'); return d ? d.textContent : ''; });
+  }
   const m1 = await M(p);
   check(m1.questioned.includes(m0.suspects[inn]) && /You notice:/.test(said), `E questions ${m0.suspects[inn]}: "${said.slice(0, 70)}..."`);
   await key(p, 'KeyY');

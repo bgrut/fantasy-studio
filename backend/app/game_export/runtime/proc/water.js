@@ -33,7 +33,28 @@ export function waterKind(words, frozen) {
   return 'lake';
 }
 
-export function waterMaterial(kind = 'lake', clock = { value: 0 }) {
+// ── SHORES (2026-10-17) ─────────────────────────────────────────────────────
+// The surface was a flat sheet cut by a coarse ground, so every shore was the
+// saw-tooth where the two meshes crossed, sharp water against dry sand. Given
+// the depth under it (baked once from the ground: metres of water, 0..2, in a
+// byte texture over the play area), the water thins to nothing as the bed
+// rises, turns the sand's colour in the shallows, and wears a soft broken
+// line of foam a hand's depth out from the edge. Outside the baked square it
+// is simply deep.
+export function shoreDepth(hAt, level, cx, cz, size, res = 384) {
+  const d = new Uint8Array(res * res * 4);
+  for (let j = 0; j < res; j++) for (let i = 0; i < res; i++) {
+    const x = cx + ((i + 0.5) / res - 0.5) * size, z = cz + ((j + 0.5) / res - 0.5) * size;
+    const v = Math.max(0, Math.min(255, Math.round((level - hAt(x, z)) / 2 * 255)));
+    const k = (j * res + i) * 4; d[k] = v; d[k + 3] = 255;
+  }
+  const t = new THREE.DataTexture(d, res, res, THREE.RGBAFormat);
+  t.magFilter = t.minFilter = THREE.LinearFilter; t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping;
+  t.needsUpdate = true;
+  return { tex: t, cx, cz, size };
+}
+
+export function waterMaterial(kind = 'lake', clock = { value: 0 }, shore = null) {
   const L = LOOKS[kind] || LOOKS.lake;
   const m = new THREE.MeshStandardMaterial({
     color: L.col, transparent: true, opacity: L.opacity, roughness: L.rough, metalness: 0,
@@ -43,9 +64,14 @@ export function waterMaterial(kind = 'lake', clock = { value: 0 }) {
   m.userData.waterKind = kind;
   m.onBeforeCompile = (sh) => {
     sh.uniforms.uTime = clock;
+    if (shore) {
+      sh.uniforms.uShore = { value: shore.tex };
+      sh.uniforms.uShoreO = { value: new THREE.Vector2(shore.cx, shore.cz) };
+      sh.uniforms.uShoreS = { value: shore.size };
+    }
     sh.vertexShader = 'varying vec3 vWPos;\n' + sh.vertexShader.replace('#include <worldpos_vertex>',
       '#include <worldpos_vertex>\nvWPos = (modelMatrix * vec4(transformed, 1.0)).xyz;');
-    sh.fragmentShader = `uniform float uTime; varying vec3 vWPos;
+    sh.fragmentShader = `uniform float uTime; varying vec3 vWPos;${shore ? ' uniform sampler2D uShore; uniform vec2 uShoreO; uniform float uShoreS;' : ''}
 float wh(vec2 p){ p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
 float wn(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 * f);
   return mix(mix(wh(i), wh(i + vec2(1.0, 0.0)), u.x), mix(wh(i + vec2(0.0, 1.0)), wh(i + vec2(1.0, 1.0)), u.x), u.y); }
@@ -93,9 +119,27 @@ float wave(vec2 p){
     diffuseColor.rgb = mix(vec3(0.20, 0.33, 0.42), vec3(0.78, 0.86, 0.92), frost * 0.8);
     diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.86, 0.92, 0.97), crack * 0.6);
     roughnessFactor = mix(0.06, 0.55, max(frost, crack));
+  }` : ''}
+  ${shore ? `{
+    vec2 suv = (vWPos.xz - uShoreO) / uShoreS + 0.5;
+    float dep = (suv.x > 0.0 && suv.x < 1.0 && suv.y > 0.0 && suv.y < 1.0) ? texture2D(uShore, suv).r * 2.0 : 2.0;
+    float br = wn(vWPos.xz * 1.7 + vec2(uTime * 0.11, -uTime * 0.07));
+    ${kind === 'ice' ? `
+    // ice thins to a clear rim at its edge, frosted white where it meets the bank
+    diffuseColor.rgb = mix(vec3(0.84, 0.9, 0.95), diffuseColor.rgb, smoothstep(0.0, 0.35, dep));
+    diffuseColor.a *= smoothstep(0.0, 0.08, dep);` : `
+    // the shallows take the bed's colour, the edge goes clear, and foam lies
+    // in a broken line just off the bank, breathing with the ripples
+    diffuseColor.rgb = mix(vec3(0.24, 0.27, 0.2), diffuseColor.rgb, smoothstep(0.0, 1.1, dep));
+    float edgeA = smoothstep(0.0, 0.35, dep);
+    float foam = smoothstep(0.0, 0.05, dep) * (1.0 - smoothstep(0.08, 0.26 + 0.08 * br, dep)) * smoothstep(0.3, 0.7, br * 0.6 + wn(vWPos.xz * 6.0 - uTime * 0.2) * 0.6);
+    diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.82, 0.86, 0.86), foam * 0.75);
+    diffuseColor.a = max(diffuseColor.a * edgeA, foam * 0.7);
+    roughnessFactor = mix(roughnessFactor, 0.7, foam);`}
   }` : ''}`);
   };
-  m.customProgramCacheKey = () => 'water-' + kind;
+  if (shore) m.userData.shore = shore;
+  m.customProgramCacheKey = () => 'water-' + kind + (shore ? '-shore' : '');
   return m;
 }
 
