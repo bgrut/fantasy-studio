@@ -48,7 +48,12 @@ export function createWaterfall({ scene, at, facing, hAt, clock, green = true, h
   };
   {
     const NG = 96, S = EXT * 2, pos = [], col = [], idx = [];
-    const rock = new THREE.Color(0x7a7266), wet = new THREE.Color(0x3a3833), moss = new THREE.Color(0x4f6e2c), turf = new THREE.Color(0x3f6a24);
+    // (2026-10-17) these TINT the rock photo, which is already rock-coloured
+    // (0.15 linear on average). At 0x7a7266 (0.19 linear) the stone came out
+    // near 0.03, the albedo of asphalt, and darkened again as "wet" over every
+    // steep face a wall turned from the sun was black. Near-white tints keep
+    // the photo's own stone; wet only where the spray reaches
+    const rock = new THREE.Color(0xeee6d8), wet = new THREE.Color(0x8e897e), moss = new THREE.Color(0x8aae4a), turf = new THREE.Color(0x7aa850);
     const c = new THREE.Color();
     for (let i = 0; i <= NG; i++) for (let j = 0; j <= NG; j++) {
       const x = (j / NG - 0.5) * S, z = (i / NG - 0.5) * S;
@@ -66,11 +71,17 @@ export function createWaterfall({ scene, at, facing, hAt, clock, green = true, h
     for (let v = 0; v < pa.count; v++) {
       const x = pa.getX(v), y = pa.getY(v), z = pa.getZ(v), up = na.getY(v);
       const nearFall = Math.exp(-((Math.atan2(x, -z) / 0.25) ** 2)) * (Math.hypot(x, z) < R + 3 ? 1 : 0);
-      c.copy(rock).multiplyScalar(0.8 + 0.3 * Math.sin(y * 2.3 + x * 0.4));
-      c.lerp(wet, Math.min(1, nearFall * 0.85 + (1 - up) * 0.25));
+      c.copy(rock).multiplyScalar(0.82 + 0.18 * Math.sin(y * 2.3 + x * 0.4) + 0.1 * Math.sin(x * 0.9 - z * 0.7));   // strata and weathering
+      c.lerp(wet, Math.min(1, nearFall * 0.8 + (1 - up) * 0.08));
       if (green) {
         if (up > 0.8) c.lerp(turf, Math.min(1, (up - 0.8) * 5));                 // turf on the flats
-        else if (up > 0.45 && Math.sin(y * 1.9) > 0.4) c.lerp(moss, 0.5);       // moss on the ledges
+        else if (up > 0.45 && Math.sin(y * 1.9) > 0.4) c.lerp(moss, 0.55);      // moss on the ledges
+        else {
+          // and down the walls in streaks, where water runs off the lip
+          const st = Math.sin(Math.atan2(x, -z) * 23 + Math.sin(y * 0.6) * 1.5) * 0.5 + 0.5;
+          const fromTop = Math.min(1, Math.max(0, (y - H * 0.35) / (H * 0.5)));
+          c.lerp(moss, Math.min(0.6, Math.max(0, st - 0.45) * 1.6 * (0.4 + 0.6 * fromTop)) * (1 - nearFall));
+        }
       }
       col.push(c.r, c.g, c.b);
     }

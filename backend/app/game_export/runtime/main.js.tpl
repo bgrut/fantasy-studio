@@ -12466,6 +12466,9 @@ async function main() {
         P[i * 3 + 1] = ground(P[i * 3], P[i * 3 + 2]) + rL() * 8; A[i * 4] = rL() * 6.28; A[i * 4 + 1] = 0.6 + rL() * 0.8; A[i * 4 + 2] = rL() * 6.28; A[i * 4 + 3] = rL();
         im.setColorAt(i, new THREE.Color(cols[Math.floor(rL() * cols.length)])); }
       scene.add(im);
+      // (2026-10-17) a petal a hand from the lens filled a tenth of the frame,
+      // a pink plate over the scene: inside two metres of the camera they shrink away
+      const C0 = cam();
       ticks.push((dt, t) => {
         for (let i = 0; i < n; i++) { const j = i * 3;
           P[j + 1] -= sink * A[i * 4 + 1] * dt; P[j] += (0.45 + Math.sin(t * 0.7 + A[i * 4]) * flutter) * dt; P[j + 2] += Math.cos(t * 0.9 + A[i * 4 + 2]) * flutter * 0.6 * dt;
@@ -12473,7 +12476,8 @@ async function main() {
           const gy = ground(P[j], P[j + 2]);
           if (P[j + 1] < gy + 0.02) { const c = cam(); P[j] = c.x + (rL() - 0.5) * 2 * RN; P[j + 2] = c.z + (rL() - 0.5) * 2 * RN; P[j + 1] = Math.max(ground(P[j], P[j + 2]) + 4, c.y + 1) + rL() * 4; }
           E4.set(t * 1.7 * A[i * 4 + 1] + A[i * 4], t * 1.1 + A[i * 4 + 2], t * 2.3 * A[i * 4 + 3]); Q4.setFromEuler(E4);
-          M4.compose(V4.set(P[j], P[j + 1], P[j + 2]), Q4, S4.set(1, 1, 1)); im.setMatrixAt(i, M4); }
+          const cd = Math.hypot(P[j] - C0.x, P[j + 1] - C0.y, P[j + 2] - C0.z), cs = Math.min(1, Math.max(0, (cd - 0.9) / 1.2));
+          M4.compose(V4.set(P[j], P[j + 1], P[j + 2]), Q4, S4.set(cs, cs, cs)); im.setMatrixAt(i, M4); }
         im.instanceMatrix.needsUpdate = true;
       });
     };
