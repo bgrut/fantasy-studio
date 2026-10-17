@@ -24,15 +24,10 @@
   "looks_like_best": "a clean 3D render of a man"
  },
  "fox.glb": {
-  "cull_loss": 0.078,
-  "solidity": 0.795,
-  "edges": 0.0388,
-  "coverage": 0.148,
-  "dark_share": 0.311,
-  "damage_share": 0.094,
-  "shaded_png": "backend/tools/shotgate/renders/fox_shaded.png",
   "kind": "fox",
-  "looks_like": 1.0,
+  "shaded_png": "backend/tools/shotgate/renders/fox_shaded.png",
+  "looks_like": 0.812,
+  "patchy": 0.188,
   "looks_like_best": "a clean 3D render of a fox"
  },
  "horse.glb": {

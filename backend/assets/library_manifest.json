@@ -3740,26 +3740,26 @@
   {
    "file": "fox.glb",
    "dims_m": {
-    "x": 0.1869,
-    "y": 0.4838,
-    "z": 0.6
+    "x": 0.1465,
+    "y": 0.3847,
+    "z": 0.45
    },
-   "min_y": -0.0,
+   "min_y": 0.0,
    "skinned": false,
    "clips": [],
    "bones": 0,
    "biped": false,
    "tallest_axis": "z",
    "aspect": {
-    "w_h": 0.386,
-    "d_h": 1.24
+    "w_h": 0.381,
+    "d_h": 1.17
    },
    "upright": true,
-   "height_ratio": 0.806,
+   "height_ratio": 0.855,
    "mesh": {
-    "tris": 44930,
-    "largest_share": 0.1016,
-    "fragments": 15,
+    "tris": 79953,
+    "largest_share": 1.0,
+    "fragments": 1,
     "degenerate": 0.0,
     "textures": 3,
     "textures_ok": true,
@@ -3767,26 +3767,20 @@
     "roof_peak_bin": 8
    },
    "render": {
-    "looks_like": 1.0,
-    "looks_like_best": "a clean 3D render of a fox",
-    "damage_share": 0.094,
-    "dark_share": 0.311,
-    "cull_loss": 0.078,
-    "solidity": 0.795,
-    "edges": 0.0388,
-    "coverage": 0.148
+    "looks_like": 0.812,
+    "looks_like_best": "a clean 3D render of a fox"
    },
-   "quality": 1.0,
+   "quality": 0.89,
    "verdict": "good"
   },
   {
    "file": "fox_anim.glb",
    "dims_m": {
-    "x": 0.3151,
-    "y": 0.8124,
-    "z": 1.0026
+    "x": 0.1465,
+    "y": 0.3847,
+    "z": 0.45
    },
-   "min_y": -0.1654,
+   "min_y": 0.0,
    "skinned": true,
    "clips": [
     "attack",
@@ -3798,16 +3792,16 @@
    "biped": false,
    "tallest_axis": "z",
    "aspect": {
-    "w_h": 0.388,
-    "d_h": 1.234
+    "w_h": 0.381,
+    "d_h": 1.17
    },
    "upright": true,
-   "height_ratio": 0.81,
+   "height_ratio": 0.855,
    "mesh": {
-    "tris": 79878,
-    "largest_share": 0.8251,
-    "fragments": 2,
-    "degenerate": 0.0,
+    "tris": 95678,
+    "largest_share": 1.0,
+    "fragments": 1,
+    "degenerate": 0.0005,
     "textures": 1,
     "textures_ok": true,
     "nose": "-z",
@@ -7713,6 +7707,82 @@
    },
    "quality": 1.0,
    "verdict": "good"
+  },
+  {
+   "file": "outlaw.glb",
+   "dims_m": {
+    "x": 1.5706,
+    "y": 1.75,
+    "z": 0.5878
+   },
+   "min_y": -0.0,
+   "skinned": false,
+   "clips": [],
+   "bones": 0,
+   "biped": true,
+   "tallest_axis": "y",
+   "aspect": {
+    "w_h": 0.897,
+    "d_h": 0.336
+   },
+   "upright": true,
+   "height_ratio": 1.0,
+   "mesh": {
+    "tris": 80000,
+    "largest_share": 0.8924,
+    "fragments": 4,
+    "degenerate": 0.0,
+    "textures": 2,
+    "textures_ok": true
+   },
+   "render": {
+    "looks_like": 0.6,
+    "looks_like_best": "a clean 3D render of a bandit"
+   },
+   "quality": 0.76,
+   "verdict": "good",
+   "quality_reasons": [
+    "the bandit's figure (hat, beard, red bandana, coat, boots), 2026-10-16: three generations of the outlaw came out a headless coat or lying down"
+   ]
+  },
+  {
+   "file": "outlaw_anim.glb",
+   "dims_m": {
+    "x": 1.5706,
+    "y": 1.75,
+    "z": 0.5878
+   },
+   "min_y": -0.0,
+   "skinned": true,
+   "clips": [
+    "attack",
+    "idle",
+    "run",
+    "sneak",
+    "walk"
+   ],
+   "bones": 21,
+   "biped": true,
+   "tallest_axis": "y",
+   "aspect": {
+    "w_h": 0.897,
+    "d_h": 0.336
+   },
+   "upright": true,
+   "height_ratio": 1.0,
+   "mesh": {
+    "tris": 80000,
+    "largest_share": 0.7831,
+    "fragments": 2,
+    "degenerate": 0.0,
+    "textures": 1,
+    "textures_ok": true
+   },
+   "quality": 1.0,
+   "verdict": "good",
+   "quality_reasons": [
+    "the bandit's figure (hat, beard, red bandana, coat, boots), 2026-10-16: three generations of the outlaw came out a headless coat or lying down"
+   ]
   },
   {
    "file": "owl.glb",
@@ -12241,82 +12311,6 @@
    },
    "quality": 1.0,
    "verdict": "good"
-  },
-  {
-   "file": "outlaw.glb",
-   "dims_m": {
-    "x": 1.5706,
-    "y": 1.75,
-    "z": 0.5878
-   },
-   "min_y": -0.0,
-   "skinned": false,
-   "clips": [],
-   "bones": 0,
-   "biped": true,
-   "tallest_axis": "y",
-   "aspect": {
-    "w_h": 0.897,
-    "d_h": 0.336
-   },
-   "upright": true,
-   "height_ratio": 1.0,
-   "mesh": {
-    "tris": 80000,
-    "largest_share": 0.8924,
-    "fragments": 4,
-    "degenerate": 0.0,
-    "textures": 2,
-    "textures_ok": true
-   },
-   "render": {
-    "looks_like": 0.6,
-    "looks_like_best": "a clean 3D render of a bandit"
-   },
-   "quality": 0.76,
-   "verdict": "good",
-   "quality_reasons": [
-    "the bandit's figure (hat, beard, red bandana, coat, boots), 2026-10-16: three generations of the outlaw came out a headless coat or lying down"
-   ]
-  },
-  {
-   "file": "outlaw_anim.glb",
-   "dims_m": {
-    "x": 1.5706,
-    "y": 1.75,
-    "z": 0.5878
-   },
-   "min_y": -0.0,
-   "skinned": true,
-   "clips": [
-    "attack",
-    "idle",
-    "run",
-    "sneak",
-    "walk"
-   ],
-   "bones": 21,
-   "biped": true,
-   "tallest_axis": "y",
-   "aspect": {
-    "w_h": 0.897,
-    "d_h": 0.336
-   },
-   "upright": true,
-   "height_ratio": 1.0,
-   "mesh": {
-    "tris": 80000,
-    "largest_share": 0.7831,
-    "fragments": 2,
-    "degenerate": 0.0,
-    "textures": 1,
-    "textures_ok": true
-   },
-   "quality": 1.0,
-   "verdict": "good",
-   "quality_reasons": [
-    "the bandit's figure (hat, beard, red bandana, coat, boots), 2026-10-16: three generations of the outlaw came out a headless coat or lying down"
-   ]
   }
  ]
 }
