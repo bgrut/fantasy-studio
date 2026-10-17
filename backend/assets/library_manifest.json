@@ -8646,32 +8646,32 @@
   {
    "file": "ranger.glb",
    "dims_m": {
-    "x": 1.5945,
+    "x": 1.5464,
     "y": 1.75,
-    "z": 0.3399
+    "z": 0.3995
    },
-   "min_y": 0.0,
+   "min_y": -0.0,
    "skinned": false,
    "clips": [],
    "bones": 0,
    "biped": true,
    "tallest_axis": "y",
    "aspect": {
-    "w_h": 0.911,
-    "d_h": 0.194
+    "w_h": 0.884,
+    "d_h": 0.228
    },
    "upright": true,
    "height_ratio": 1.0,
    "mesh": {
-    "tris": 79962,
-    "largest_share": 0.5054,
-    "fragments": 4,
+    "tris": 79957,
+    "largest_share": 0.9166,
+    "fragments": 2,
     "degenerate": 0.0,
     "textures": 3,
     "textures_ok": true
    },
    "render": {
-    "looks_like": 0.498,
+    "looks_like": 0.56,
     "looks_like_best": "a clean 3D render of a ranger"
    },
    "quality_reasons": [
@@ -8683,11 +8683,11 @@
   {
    "file": "ranger_anim.glb",
    "dims_m": {
-    "x": 1.5922,
-    "y": 1.7497,
-    "z": 0.3388
+    "x": 1.5464,
+    "y": 1.75,
+    "z": 0.3995
    },
-   "min_y": 0.0001,
+   "min_y": -0.0,
    "skinned": true,
    "clips": [
     "attack",
@@ -8696,20 +8696,20 @@
     "sneak",
     "walk"
    ],
-   "bones": 21,
+   "bones": 22,
    "biped": true,
    "tallest_axis": "y",
    "aspect": {
-    "w_h": 0.91,
-    "d_h": 0.194
+    "w_h": 0.884,
+    "d_h": 0.228
    },
    "upright": true,
    "height_ratio": 1.0,
    "mesh": {
-    "tris": 79981,
-    "largest_share": 0.8916,
-    "fragments": 2,
-    "degenerate": 0.0,
+    "tris": 93039,
+    "largest_share": 1.0,
+    "fragments": 1,
+    "degenerate": 0.0005,
     "textures": 1,
     "textures_ok": true
    },

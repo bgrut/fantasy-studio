@@ -10517,7 +10517,7 @@ async function main() {
   {
     const objLines = (SPEC.objectives || []).map(o => {
       if (o.kind === 'race') return `Beat ${o.count} rivals to the finish`;
-      if (o.kind === 'collect') return `Collect ${o.count} ${o.label}`;
+      if (o.kind === 'collect') return (o.count === 1 && /[^s]s$/i.test(String(o.label || '').trim()) && !/(?:ss|us|is)$/i.test(String(o.label || '').trim())) ? `Collect the ${o.label}` : `Collect ${o.count} ${o.label}`;
       if (o.kind === 'defeat') return `${/\b(captur\w*|catch\w*|traps?|trapping|banish\w*)\b/.test(String(SPEC.prompt || '').toLowerCase()) ? 'Capture' : 'Defeat'} ${o.count} ${o.label}`;   // a ghost hunter catches them (2026-10-07)
       if (o.kind === 'survive') return `Survive ${o.count} seconds of ${o.label || 'the onslaught'}`;
       if (o.kind === 'defend') return `Hold the ${o.label || 'keep'} through ${o.count} waves. T builds a tower`;
@@ -16888,8 +16888,10 @@ async function main() {
   // takes no count when the count is one
   // a mass noun is counted in pieces: "5 pieces of evidence", never "5 evidence" (2026-10-14)
   const _MASS = /^(evidence|information|equipment|gear|ammo|ammunition|furniture|data|proof|research|mail|gold|luggage)$/i;
+  // (2026-10-17) one set of a plural thing is "the repair tools", not "1 repair tools"
   const cnt = (n, l) => (n === 1 && /^(the|a|an|your|his|her|their)\s/i.test(l || '')) ? l
-    : _MASS.test(String(l || '').trim()) ? `${n} ${n === 1 ? 'piece' : 'pieces'} of ${l}` : `${n} ${l}`;
+    : _MASS.test(String(l || '').trim()) ? `${n} ${n === 1 ? 'piece' : 'pieces'} of ${l}`
+    : (n === 1 && /[^s]s$/i.test(String(l || '').trim()) && !/(?:ss|us|is)$/i.test(String(l || '').trim())) ? `the ${l}` : `${n} ${l}`;
   function stepLabel(st) {
     if (st.kind === 'collect') return `Collect ${cnt(st.count, st.label || 'items')}`;
     if (st.kind === 'defeat') return `${/\b(captur\w*|catch\w*|traps?|trapping|banish\w*)\b/.test(String(SPEC.prompt || '').toLowerCase()) ? 'Capture' : 'Defeat'} ${cnt(st.count, st.label || 'enemies')}`;

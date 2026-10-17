@@ -1041,7 +1041,8 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                                   r"chop(?:s|ping)? down|chop(?:s|ping)?|cut(?:s|ting)? down|fells|felling|"
                                   r"find(?:s|ing)?|locate[sd]?|locating|track(?:s|ing)? down|search(?:es|ing)? for|"
                                   r"check(?:s|ing)?(?:\s+on)?|inspect(?:s|ing)?|tend(?:s|ing)?(?:\s+to)?)\s+"
-                                  r"(?:all\s+)?(?:of\s+)?(?:the\s+|every\s+)?(\d+|two|three|four|five|six|seven|eight|nine|ten)?\s*"
+                                  # (2026-10-17) "repairs a broken antenna" took "a" for the noun: "Fix 1 a broken"
+                                  r"(?:all\s+)?(?:of\s+)?(?:the\s+|every\s+|an?\s+|his\s+|her\s+|their\s+|its\s+|my\s+)?(\d+|two|three|four|five|six|seven|eight|nine|ten)?\s*"
                                   r"((?:broken|damaged|dead|faulty|offline|burnt[- ]out|failing|leaking|busted)\s+)?([a-z]+)(?:\s+([a-z]+))?", _rp)
                 if _rm and getattr(spec, "genre", "") != "factory":
                     _STOP = {"in", "on", "at", "before", "across", "around", "of", "to", "and", "so", "while", "for", "with", "the", "inside", "aboard"}
@@ -1073,9 +1074,13 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                         _lab = ((_rm.group(2) or "") + _noun).strip()
                         from app.game_export.spec import ObjectiveSpec as _ROS
                         _stem = _noun.split()[-1].rstrip("s")[:5]
-                        spec.objectives = [_ROS(kind="repair", label=_lab, count=max(1, min(_cnt, 10)))] + [
-                            o for o in spec.objectives
-                            if not (o.kind in ("reach", "collect", "repair") and _stem and _stem in (o.label or "").lower())]
+                        _rest = [o for o in spec.objectives
+                                 if not (o.kind in ("reach", "collect", "repair") and _stem and _stem in (o.label or "").lower())]
+                        # (2026-10-17) the tools and parts a repair needs are gathered first:
+                        # "fix the antenna" came before "collect 3 repair tools"
+                        _kit = [o for o in _rest if o.kind == "collect" and _rre.search(
+                            r"\b(tools?|toolkits?|toolbox|parts?|spares?|kits?|supplies|components?|fuses?|batter(?:y|ies)|wires?|cables?|valves?|gears?)\b", (o.label or "").lower())]
+                        spec.objectives = _kit + [_ROS(kind="repair", label=_lab, count=max(1, min(_cnt, 10)))] + [o for o in _rest if o not in _kit]
                         # a delivery's drop points are its pads: "drops packages on rooftops" also
                         # came back with "reach 5 rooftop", a step no pad could ever finish
                         if _rre.match(r"(drop|deliver)", _rm.group(0)):

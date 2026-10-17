@@ -557,7 +557,9 @@ def _build_reference_prompt(slots: Dict[str, Any], style: str) -> tuple[str, str
             # reader expects, in the same voice as the entries above.
             "scientist": "scientist wearing a white lab coat over a collared shirt and dark trousers, safety glasses, id badge, plain shoes",
             "detective": "detective in a beige trench coat over a shirt and tie, fedora hat, dark trousers, leather shoes",
-            "ranger":    "forest ranger in a green field jacket and khaki trousers, wide-brimmed hat, hiking boots",
+            # (2026-10-17) "a green field jacket" came out a pale lime shirt that
+            # glowed in every forest it guided; dark olive drab, a face showing
+            "ranger":    "a forest ranger with a weathered face showing, wearing a dark olive-drab canvas field jacket with button pockets over a grey wool shirt, tan khaki work trousers, a brown leather belt, a tan wide-brimmed felt ranger hat, brown leather hiking boots, holding nothing, fully clothed, normal proportions",
             # (2026-10-16) both were generated blotchy: the engineer's reflective
             # strips smeared to grey patches, the explorer to a smeared shirt and
             # a blob of a hand. Plain solid colours, a face showing
