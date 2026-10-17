@@ -2300,8 +2300,8 @@ const GEO = {
     { g: _box(T * 0.96, 0.05, T * 0.82), y: 0.03 },
     { g: _box(T * 0.96, 0.14, 0.09), y: 0.15, z: T * 0.37, col: PAINT.rail },
     { g: _box(T * 0.96, 0.14, 0.09), y: 0.15, z: -T * 0.37, col: PAINT.rail },
-    { g: _cyl(0.105, 0.105, T * 0.70, 8), y: 0.13, x: T * 0.41, rx: Math.PI / 2, col: PAINT.roller },
-    { g: _cyl(0.105, 0.105, T * 0.70, 8), y: 0.13, x: -T * 0.41, rx: Math.PI / 2, col: PAINT.roller },
+    { g: _cyl(0.105, 0.105, T * 0.70, 20), y: 0.13, x: T * 0.41, rx: Math.PI / 2, col: PAINT.roller },
+    { g: _cyl(0.105, 0.105, T * 0.70, 20), y: 0.13, x: -T * 0.41, rx: Math.PI / 2, col: PAINT.roller },
     // stanchions at each end of each rail: bolted to the deck, not laid on it
     { g: _box(0.10, 0.24, 0.12), y: 0.12, x: T * 0.42, z: T * 0.37, col: PAINT.rail },
     { g: _box(0.10, 0.24, 0.12), y: 0.12, x: -T * 0.42, z: T * 0.37, col: PAINT.rail },
@@ -2320,8 +2320,8 @@ const GEO = {
     { g: new THREE.RingGeometry(ARC_R - ARC_W - 0.11, ARC_R + ARC_W + 0.11, 14, 1,
                                 Math.PI / 2, Math.PI / 2),
       rx: -Math.PI / 2, x: T / 2, z: T / 2, y: 0.03 },
-    { g: _cyl(0.105, 0.105, T * 0.70, 8), y: 0.13, x: T * 0.41, rx: Math.PI / 2, col: PAINT.roller },
-    { g: _cyl(0.105, 0.105, T * 0.70, 8), y: 0.13, z: T * 0.41,
+    { g: _cyl(0.105, 0.105, T * 0.70, 20), y: 0.13, x: T * 0.41, rx: Math.PI / 2, col: PAINT.roller },
+    { g: _cyl(0.105, 0.105, T * 0.70, 20), y: 0.13, z: T * 0.41,
       rx: Math.PI / 2, ry: Math.PI / 2, col: PAINT.roller },
   ]),
   // A MERGE. Straight run with a ramp on each flank: it does not try to say
@@ -2332,8 +2332,8 @@ const GEO = {
     { g: _box(T * 0.96, 0.05, T * 0.94), y: 0.03 },
     { g: _box(T * 0.96, 0.14, 0.09), y: 0.15, z: T * 0.37, col: PAINT.rail },
     { g: _box(T * 0.96, 0.14, 0.09), y: 0.15, z: -T * 0.37, col: PAINT.rail },
-    { g: _cyl(0.105, 0.105, T * 0.70, 8), y: 0.13, x: T * 0.41, rx: Math.PI / 2, col: PAINT.roller },
-    { g: _cyl(0.105, 0.105, T * 0.70, 8), y: 0.13, x: -T * 0.41, rx: Math.PI / 2, col: PAINT.roller },
+    { g: _cyl(0.105, 0.105, T * 0.70, 20), y: 0.13, x: T * 0.41, rx: Math.PI / 2, col: PAINT.roller },
+    { g: _cyl(0.105, 0.105, T * 0.70, 20), y: 0.13, x: -T * 0.41, rx: Math.PI / 2, col: PAINT.roller },
     { g: _box(T * 0.34, 0.05, T * 0.30), y: 0.13, z: T * 0.44, rx: 0.32, tint: 0.7 },
     { g: _box(T * 0.34, 0.05, T * 0.30), y: 0.13, z: -T * 0.44, rx: -0.32, tint: 0.7 },
   ]),
@@ -2341,8 +2341,8 @@ const GEO = {
     { g: new THREE.RingGeometry(ARC_R - ARC_W - 0.11, ARC_R + ARC_W + 0.11, 14, 1,
                                 Math.PI, Math.PI / 2),
       rx: -Math.PI / 2, x: T / 2, z: -T / 2, y: 0.03 },
-    { g: _cyl(0.105, 0.105, T * 0.70, 8), y: 0.13, x: T * 0.41, rx: Math.PI / 2, col: PAINT.roller },
-    { g: _cyl(0.105, 0.105, T * 0.70, 8), y: 0.13, z: -T * 0.41,
+    { g: _cyl(0.105, 0.105, T * 0.70, 20), y: 0.13, x: T * 0.41, rx: Math.PI / 2, col: PAINT.roller },
+    { g: _cyl(0.105, 0.105, T * 0.70, 20), y: 0.13, z: -T * 0.41,
       rx: Math.PI / 2, ry: Math.PI / 2, col: PAINT.roller },
   ]),
 
@@ -2471,8 +2471,8 @@ const GEO = {
     { g: _box(0.09, 0.09, T * 0.50), y: 0.86, z: -T * 0.40, col: PAINT.chassis }, // vents
     { g: _box(0.09, 0.09, T * 0.50), y: 0.70, z: -T * 0.40, col: PAINT.chassis },
     { g: _box(0.09, 0.09, T * 0.50), y: 0.54, z: -T * 0.40, tint: 0.5 },
-    { g: _cyl(0.13, 0.17, 0.62, 6), y: 1.42, x: T * 0.22, z: -T * 0.22, col: PAINT.chassis },
-    { g: new THREE.TorusGeometry(0.16, 0.035, 5, 10), y: 1.62, x: T * 0.22, z: -T * 0.22, rx: Math.PI / 2, col: PAINT.trim },  // flue lip
+    { g: _cyl(0.13, 0.17, 0.62, 32), y: 1.42, x: T * 0.22, z: -T * 0.22, col: PAINT.chassis },
+    { g: new THREE.TorusGeometry(0.16, 0.035, 10, 40), y: 1.62, x: T * 0.22, z: -T * 0.22, rx: Math.PI / 2, col: PAINT.trim },  // flue lip
   ], { base: 0x6e605a }),
 
   split: mergeParts([
@@ -2657,7 +2657,7 @@ const GEO = {
     { g: _box(T * 0.34, 0.06, 0.05), y: 0.06, z: 0.16, tint: 0.5 },
   ], { floor: 0.55, reach: 0.2 }),
   detailBolts: mergeParts([
-    { g: _cyl(T * 0.13, T * 0.14, 0.05, 8), y: 0.025, tint: 0.72 },
+    { g: _cyl(T * 0.13, T * 0.14, 0.05, 32), y: 0.025, tint: 0.72 },
     { g: _cyl(0.05, 0.05, 0.07, 6), y: 0.06, x: 0.11, tint: 0.95 },
     { g: _cyl(0.05, 0.05, 0.07, 6), y: 0.06, x: -0.06, z: 0.09, tint: 0.95 },
     { g: _cyl(0.05, 0.05, 0.07, 6), y: 0.06, x: -0.06, z: -0.09, tint: 0.95 },
@@ -5020,7 +5020,7 @@ function craftFor(c) {
   for (const [x, z] of [[0.32, 0.32], [-0.32, 0.32], [0.32, -0.32], [-0.32, -0.32]]) {
     const r = new THREE.Mesh(G.rotor, Mt.rotor); r.position.set(x, 0.12, z); g.add(r); rotors.push(r);
   }
-  const light = new THREE.Mesh(new THREE.SphereGeometry(0.035, 6, 4), new THREE.MeshBasicMaterial({ color: 0x7df9ff }));
+  const light = new THREE.Mesh(new THREE.SphereGeometry(0.035, 14, 10), new THREE.MeshBasicMaterial({ color: 0x7df9ff }));
   light.position.set(0, 0.08, 0.22); g.add(light);
   const pod = new THREE.Mesh(G.pod, new THREE.MeshBasicMaterial({ color: 0xffffff }));
   pod.position.y = -0.17; pod.visible = false; g.add(pod);
@@ -5293,7 +5293,7 @@ function launchGeo() {
   const parts = [
     { g: new THREE.CylinderGeometry(T * 0.46, T * 0.48, 0.14, 28), y: 0.07, col: dark, tint: 1 },
     { g: new THREE.CylinderGeometry(T * 0.3, T * 0.3, 0.03, 28), y: 0.155, col: 0x1b1f25, tint: 1 },
-    { g: new THREE.TorusGeometry(T * 0.38, 0.03, 6, 28), y: 0.16, rx: Math.PI / 2, col: hazard, tint: 1 },
+    { g: new THREE.TorusGeometry(T * 0.38, 0.03, 10, 64), y: 0.16, rx: Math.PI / 2, col: hazard, tint: 1 },
     // a gantry on one side: two posts, a crossbeam, an arm reaching in
     { g: new THREE.BoxGeometry(0.08, 1.9, 0.08), x: -T * 0.36, z: 0.18, y: 1.1, col: steel, tint: 1 },
     { g: new THREE.BoxGeometry(0.08, 1.9, 0.08), x: -T * 0.36, z: -0.18, y: 1.1, col: steel, tint: 1 },
@@ -6995,7 +6995,7 @@ const CGEO = {
   shop1: _cb(T * 0.72, 0.62, T * 0.56), awning: _cb(T * 0.76, 0.05, T * 0.2, 0.52),
   shop2: _cb(T * 0.76, 1.05, T * 0.66), shop3: _cb(T * 0.7, 2.0, T * 0.7),
   works: _cb(T * 0.84, 0.72, T * 0.66), worksRoof: _cb(T * 0.88, 0.08, T * 0.7, 0.72),
-  stack: (() => { const g = new THREE.CylinderGeometry(0.09, 0.13, 1.6, 8); g.translate(T * 0.26, 0.8, -T * 0.18); return g; })(),
+  stack: (() => { const g = new THREE.CylinderGeometry(0.09, 0.13, 1.6, 24); g.translate(T * 0.26, 0.8, -T * 0.18); return g; })(),
   park: _cb(T * 0.98, 0.05, T * 0.98), walk: _cb(T * 0.16, 0.012, T * 0.98, 0.05),
   trunk: (() => { const g = new THREE.CylinderGeometry(0.05, 0.07, 0.4, 6); g.translate(0, 0.25, 0); return g; })(),
   crown: (() => { const g = new THREE.ConeGeometry(0.34, 0.85, 7); g.translate(0, 0.85, 0); return g; })(),
