@@ -1294,7 +1294,8 @@ export function plantForest(o) {
 // the leaf colour for a world: its words first, then its ground
 export function leafFor(words, groundHSL) {
   const w = (words || '').toLowerCase();
-  if (/autumn|fall\b|october|harvest|maple/.test(w)) return { h: 0.07, s: 0.72, l: 0.42 };
+  // (2026-10-16) a harvest alone is not autumn: a lavender, honey or grape harvest is summer
+  if (/autumn|fall\b|october|harvest (?:moon|festival)|maple/.test(w)) return { h: 0.07, s: 0.72, l: 0.42 };
   if (/cherry|blossom|sakura/.test(w)) return { h: 0.94, s: 0.55, l: 0.78 };
   if (/haunted|cursed|dead|graveyard|swamp|toxic/.test(w)) return { h: 0.2, s: 0.28, l: 0.24 };
   if (/jungle|rainforest|tropical/.test(w)) return { h: 0.3, s: 0.62, l: 0.3 };
@@ -1351,6 +1352,13 @@ export function biomeFor(words, arch, groundHSL) {
     greyRock: has(/\bmoon\b|lunar|apollo/) && !has(/\bred\b|rust|frozen|\bice\b|icy/) });
   else if (has(/mars|red planet|martian/)) Object.assign(out, { kinds: K(['rock', 1], ['boulder', 0.4], ...(crystal ? [['crystal', 0.12]] : [])), dens: 0.1, rockTint: T(0xa0573a) });
   else if (has(/volcan|lava|magma|ash\b|obsidian/)) Object.assign(out, { kinds: K(['rock', 1], ['boulder', 0.4], ['dead', 0.2]), dens: 0.14, rockTint: T(0x3a3634), crystalTint: T(0xff7a3a) });
+  // CHERRY BLOSSOM IS PINK (2026-10-16): "a samurai defends a mountain temple
+  // ... as the sun sets over the cherry blossoms" fell to the mountain rule,
+  // petals falling from green oaks and white birches. Where the sentence names
+  // them, the trees are cherries in flower: spreading broadleaves in pink,
+  // spaced like an orchard over the grass, a few dark pines among them
+  else if (has(/cherry blossoms?|cherry trees?|sakura|hanami/)) Object.assign(out, { kinds: K(['broadleaf', 1], ['pine', 0.18], ['bush', 0.35], ['rock', 0.18]), dens: 0.42,
+    leaf: { h: 0.94, s: 0.58, l: 0.8 } });
   // a basalt coast grows nothing tall: dark stone, moss, the odd tussock (2026-10-07)
   else if (has(/black sand|basalt|sea stacks?|reynisfjara|volcanic beach|iceland/)) Object.assign(out, { kinds: K(['rock', 1], ['boulder', 0.45], ['bush', 0.12]), dens: 0.07,
     rockTint: T(0x3c3c3e), leaf: { h: 0.24, s: 0.28, l: 0.2 }, island: has(/beach|coast|shore|sea|island|stacks?/) });

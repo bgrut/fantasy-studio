@@ -2702,6 +2702,8 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             _ghero = (spec.player.name or "").lower().strip()
             for _gpat, _groles in ((r"\b(farm\w*|garden\w*|harvest\w*|orchard|allotment|crops?|vegetables?|pumpkins?)\b", ("gardener", "farmer")),
                                    (r"\b(western|frontier|saloon|cowboys?|cowgirls?|outlaws?|ranch)\b", ("sheriff", "ranger")),
+                                   # (2026-10-16) a samurai's temple was explained by the park ranger in a lime shirt
+                                   (r"\b(samurai|shoguns?|ninjas?|feudal|japan\w*|kyoto|edo|ronin|torii|pagodas?|shrines?|cherry blossoms?|sakura|shaolin|kung fu)\b", ("buddhist monk", "pilgrim")),
                                    (r"\b(villages?|hamlet|cottages?|countryside|shire)\b", ("gardener", "farmer")),
                                    # no air out there: whoever explains it wears a suit, the hero's own if need be
                                    (r"\b(moons?|lunar|mars|martian|asteroids?|comet|planet|alien world|outer space|in space|crater)\b", ("astronaut*",)),

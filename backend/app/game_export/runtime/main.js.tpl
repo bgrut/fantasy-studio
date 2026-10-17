@@ -500,7 +500,7 @@ async function main() {
     const W = SPEC.world || {}, L0 = W.level || {};
     // (2026-10-07) the sentence's own place words too: "a himalayan monastery" grew an
     // oak wood because the title, "Monk's Ascent", never said where it was
-    const placeWords = (String(SPEC.prompt || '').toLowerCase().match(/\b(redwoods?|sequoias?|himalaya\w*|tibet\w*|nepal\w*|bhutan\w*|monaster(?:y|ies)|gompa|lavender|vineyards?|provence|tuscan\w*|black sand|basalt|sea stacks?|iceland\w*|kansas|wheat|olive groves?|tea plantations?|bamboo|highlands?|glens?|moors?|heather|alien|xeno\w*|extraterrestrial|exoplanet|purple plants|fjords?|norw\w*|vikings?|norse|nordic|scandinavia\w*|egypt\w*|giza|pyramids?|pharaoh\w*|sphinx|sahara|oasis|alps|alpine|swiss|switzerland|tyrol\w*|dolomit\w*|sea ice|ice floes?|pack ice|polar bears?|icebergs?|orchards?|apples?|cider|tropical|islands?|isle|palms?|lagoon|atoll|pirates?|treasure|castaway|autumn|october|maples?|beach|seaside|lifeguards?|surf\w*|scuba|deep blue|deep ocean|deep sea|humpback)\b/g) || []);   // (alien words, 2026-10-11; fjord, Egypt, Alps, sea ice the same day)
+    const placeWords = (String(SPEC.prompt || '').toLowerCase().match(/\b(redwoods?|sequoias?|himalaya\w*|tibet\w*|nepal\w*|bhutan\w*|monaster(?:y|ies)|gompa|lavender|vineyards?|provence|tuscan\w*|black sand|basalt|sea stacks?|iceland\w*|kansas|wheat|olive groves?|tea plantations?|bamboo|cherry blossoms?|cherry trees?|sakura|hanami|highlands?|glens?|moors?|heather|alien|xeno\w*|extraterrestrial|exoplanet|purple plants|fjords?|norw\w*|vikings?|norse|nordic|scandinavia\w*|egypt\w*|giza|pyramids?|pharaoh\w*|sphinx|sahara|oasis|alps|alpine|swiss|switzerland|tyrol\w*|dolomit\w*|sea ice|ice floes?|pack ice|polar bears?|icebergs?|orchards?|apples?|cider|tropical|islands?|isle|palms?|lagoon|atoll|pirates?|treasure|castaway|autumn|october|maples?|beach|seaside|lifeguards?|surf\w*|scuba|deep blue|deep ocean|deep sea|humpback)\b/g) || []);   // (alien words, 2026-10-11; fjord, Egypt, Alps, sea ice the same day)
     const words = [W.name, W.sky, W.flora, W.weather, W.setting, SPEC.title, SPEC.description, ...placeWords]
       .filter(Boolean).join(' ').toLowerCase();
     if (L0.osm || L0.interior || W.pano || L0.cave) return null;
@@ -9995,7 +9995,7 @@ async function main() {
         const rockCol = _arch === 'volcano' ? new THREE.Color(0x2c2826)
           : (FLORA && FLORA.biome && FLORA.biome.rockTint) ? FLORA.biome.rockTint.clone().lerp(gcol, 0.35).multiplyScalar(0.75)
           : gcol.clone().offsetHSL(0, -0.1, -0.12);       // a stone takes the colour of the ground it came out of
-        const autumn = /autumn|fall\b|october|harvest/.test(_words);
+        const autumn = /autumn|fall\b|october|harvest (?:moon|festival)/.test(_words);
         const leafCols = autumn ? [0xb5642a, 0xc98a2e, 0x8a3c1e, 0xa8792e].map(h => new THREE.Color(h))
                                 : [0x7a5a32, 0x6b6a34, 0x8c6a3c, 0x5c6b2e].map(h => new THREE.Color(h));
         const keepOut = (x, z, kind) => {
@@ -12407,7 +12407,7 @@ async function main() {
       else {
         if (has(/cherry|blossom|sakura/)) kinds.push('petals');
         if (!night && !wet && has(/meadow|garden|flower|farm|field|orchard|spring|\bbees?\b|butterfl|picnic|countryside|pasture|cherry|blossom/)) kinds.push('butterflies');
-        if (!has(/cherry|sakura|blossom/) && has(/autumn|\bfall\b|october|maple|harvest|pumpkin/)) kinds.push('leaves');
+        if (!has(/cherry|sakura|blossom/) && has(/autumn|\bfall\b|october|maple|harvest (?:moon|festival)|pumpkin/)) kinds.push('leaves');
         if (night && !wet && has(/forest|wood|meadow|swamp|marsh|garden|field|firefl|summer|village|farm|grave|bayou|cemeter/)) kinds.push('fireflies');
         if (!night && !wet && has(/beach|coast|\bsea\b|shore|harbou?r|island|lagoon|pier|seaside|lighthouse/)) kinds.push('gulls');
       }
@@ -16745,7 +16745,12 @@ async function main() {
   // speaker's name — the Pokémon convention, because it is the one every
   // player already knows how to read. Also the general popup layer: any
   // system can say something in character through say().
+  // (2026-10-16) who spoke last and when: a guide's greeting on approach must
+  // not stomp what someone else just said (a suspect stood by the inspector,
+  // E questioned them, and the inspector's greeting replaced their answer)
+  let _sayWho = null, _sayAt = 0;
   function say(who, text, tint) {
+    _sayWho = who; _sayAt = performance.now();
     let d = document.getElementById('fsdlg');
     if (!d) {
       d = document.createElement('div');
@@ -16876,6 +16881,7 @@ async function main() {
       : (SPEC.objectives || []).some(o => o.kind === 'race') ? 'Crew Chief'
       : (SPEC.objectives || []).some(o => o.kind === 'hunt') ? 'Tracker'
       : 'Guide';
+    if (_sayWho && _sayWho !== role && performance.now() - _sayAt < 5000) { n._said = false; return; }   // let the other line be read; greet on the next approach tick
     say(role, guideLine(steps[stepIdx]), '#ffd166');
   }
   // "Collect 1 the woodcutter's stash": a label that carries its own article
