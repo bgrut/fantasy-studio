@@ -198,6 +198,13 @@ def regen(kind: str, attempts: int) -> str:
                 print(f"  rigged: {anim.name} ({anim.stat().st_size / 1e6:.1f} MB)", flush=True)
         except Exception as e:  # noqa: BLE001
             print(f"  attempt {attempt + 1}: generation failed ({type(e).__name__}: {str(e)[:120]})", flush=True)
+            # (2026-10-16) the next attempt must make a new mesh: an outlaw that
+            # came out lying down was served from the actor cache twice more
+            # ("actor-cache hit") and failed the same way three times
+            for f in CACHE_DIR.glob(ckey + "*"):
+                if f.is_file():
+                    try: f.unlink()
+                    except OSError: pass
             continue
         _judge(kind)
         v, rec = _verdict(kind)

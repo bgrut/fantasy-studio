@@ -54,5 +54,13 @@
   "wizard_anim.glb": [
     "good",
     "judged by eye 2026-10-16 (regenerated): tall pointed hat, white beard, deep blue robe, belt, boots; the face judge cannot see under a brim"
+  ],
+  "outlaw.glb": [
+    "good",
+    "the bandit's figure (hat, beard, red bandana, coat, boots), 2026-10-16: three generations of the outlaw came out a headless coat or lying down"
+  ],
+  "outlaw_anim.glb": [
+    "good",
+    "the bandit's figure (hat, beard, red bandana, coat, boots), 2026-10-16: three generations of the outlaw came out a headless coat or lying down"
   ]
 }

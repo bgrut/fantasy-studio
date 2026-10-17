@@ -1789,5 +1789,12 @@
   "looks_like": 0.404,
   "patchy": 0.595,
   "looks_like_best": "a clean 3D render of a wanderer"
+ },
+ "outlaw.glb": {
+  "kind": "outlaw",
+  "shaded_png": "backend/tools/shotgate/renders/outlaw_shaded.png",
+  "looks_like": 0.417,
+  "patchy": 0.557,
+  "looks_like_best": "a clean 3D render of a outlaw"
  }
 }

@@ -1882,6 +1882,10 @@ async function main() {
       const da = Math.atan2(Math.sin(a - aS), Math.cos(a - aS));
       if (Math.abs(da) < (norse ? 0.5 : 0.38)) continue;
       const R = norse ? 17 + r() * 3.5 : 14.5 + r() * 4.5, x = GC[0] + Math.cos(a) * R, z = GC[1] + Math.sin(a) * R;
+      // (2026-10-16) the start is on the ring's own radius, so the cottages
+      // either side of the lane stood a few metres from it and the camera
+      // behind the hero opened inside a shutter: they keep ten metres off
+      if (Math.hypot(x, z) < 10) continue;
       cot.push(norse
         ? { x, z, ry: Math.atan2(GC[0] - x, GC[1] - z), w: 9.5 + r() * 3, d: 5.6 + r() * 0.9, h: 1.9 + r() * 0.4, tint: Math.floor(r() * 4), stone: false, norse: true }
         : { x, z, ry: Math.atan2(GC[0] - x, GC[1] - z), w: 6.2 + r() * 2.2, d: 5.0 + r() * 1.4, h: 2.9 + r() * 0.7, tint: Math.floor(r() * 4), stone: r() < 0.3 });
@@ -14648,9 +14652,20 @@ async function main() {
     }
     // tumbleweeds blow down the street
     { const tw = [];
-      const twM = MAT({ color: 0x9a7a4e, roughness: 1, wireframe: true });
-      for (let i = 0; i < 4; i++) { const g = new THREE.IcosahedronGeometry(0.42 + rW() * 0.2, 1); const m = new THREE.Mesh(g, twM);
-        const inner = new THREE.Mesh(new THREE.IcosahedronGeometry(0.3, 1), twM); inner.rotation.set(1, 2, 0.5); m.add(inner);
+      // A TUMBLEWEED IS DEAD STEMS (2026-10-16): it was two wireframe
+      // icosahedra, a cage. It is a tangle of thin dry stems now, each a curve
+      // wandering through a loose ball, thicker toward the core, in two looks
+      const twM = MAT({ color: 0xa88a5a, roughness: 0.95 });
+      const twGeo = [0, 1].map(v => { const parts = [];
+        for (let s = 0; s < 46; s++) { const pts = []; let a = rW() * Math.PI * 2, b = Math.acos(2 * rW() - 1);
+          for (let k = 0; k < 6; k++) { a += (rW() - 0.5) * 1.6; b += (rW() - 0.5) * 1.2; const r = 0.28 + rW() * 0.2;
+            pts.push(new THREE.Vector3(Math.sin(b) * Math.cos(a) * r, Math.cos(b) * r * 0.9, Math.sin(b) * Math.sin(a) * r)); }
+          parts.push(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 10, 0.006 + rW() * 0.006, 4, false)); }
+        for (let s = 0; s < 8; s++) {                       // the stouter stems at its heart
+          const p0 = new THREE.Vector3((rW() - 0.5) * 0.2, (rW() - 0.5) * 0.2, (rW() - 0.5) * 0.2), p1 = new THREE.Vector3((rW() - 0.5) * 0.7, (rW() - 0.5) * 0.6, (rW() - 0.5) * 0.7);
+          parts.push(new THREE.TubeGeometry(new THREE.CatmullRomCurve3([p0, p0.clone().lerp(p1, 0.5).add(new THREE.Vector3((rW() - 0.5) * 0.1, (rW() - 0.5) * 0.1, 0)), p1]), 6, 0.014, 5, false)); }
+        return mergeGeometries(parts, false); });
+      for (let i = 0; i < 4; i++) { const m = new THREE.Mesh(twGeo[i % 2], twM); m.scale.setScalar(0.9 + rW() * 0.45); m.rotation.set(rW() * 6, rW() * 6, 0);
         m.position.set((rW() - 0.5) * 10, 0, Wt.Z0 + rW() * (Wt.Z1 - Wt.Z0)); m.castShadow = true; scene.add(m);
         tw.push({ m, v: 1.6 + rW() * 1.8, ph: rW() * 6, x0: m.position.x }); }
       window.__westTick = (dt) => { const t = performance.now() / 1000;
@@ -16476,6 +16491,18 @@ async function main() {
       g.fillStyle = '#3d7a34'; g.fillRect(0, 0, cv.width, cv.height);
       const nS = 18, sw = PL / nS;                                  // mown stripes across the length
       for (let k = 0; k < nS; k++) { g.fillStyle = k % 2 ? '#3a7431' : '#4a8a3d'; g.fillRect(X(-PL / 2 + k * sw), Y(-PW / 2), sw * sx, PW * sy); }
+      // a pitch that is played on (2026-10-16): soft uneven patches across the
+      // stripes, and the goalmouths and the centre spot scuffed to earth
+      { const rP = mulberry32((SPEC.seed || 1) + 9191);
+        for (let k = 0; k < 160; k++) { const a = (rP() - 0.5) * PL, c = (rP() - 0.5) * PW, r = (2 + rP() * 7) * sx;
+          const gr = g.createRadialGradient(X(a), Y(c), 0, X(a), Y(c), r), lt = rP() < 0.5;
+          gr.addColorStop(0, lt ? 'rgba(120,150,70,0.16)' : 'rgba(20,50,18,0.18)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
+          g.fillStyle = gr; g.fillRect(X(a) - r, Y(c) - r, r * 2, r * 2); }
+        const wear = (a, c, ra, rc, k) => { for (let q = 0; q < 26; q++) { const aa = a + (rP() - 0.5) * ra, cc = c + (rP() - 0.5) * rc, r = (0.6 + rP() * 1.8) * sx;
+          const gr = g.createRadialGradient(X(aa), Y(cc), 0, X(aa), Y(cc), r); gr.addColorStop(0, `rgba(118,96,62,${0.32 * k})`); gr.addColorStop(1, 'rgba(118,96,62,0)');
+          g.fillStyle = gr; g.fillRect(X(aa) - r, Y(cc) - r, r * 2, r * 2); } };
+        for (const sg of [-1, 1]) wear(sg * (PL / 2 - 2.5), 0, 5, 9, 1);
+        wear(0, 0, 3, 3, 0.6); }
       g.strokeStyle = 'rgba(245,245,240,0.95)'; g.lineWidth = 0.12 * sx;
       const rect = (a0, c0, a1, c1) => g.strokeRect(X(a0), Y(c0), (a1 - a0) * sx, (c1 - c0) * sy);
       const arc = (a, c, r, t0, t1) => { g.beginPath(); g.ellipse(X(a), Y(c), r * sx, r * sy, 0, t0, t1); g.stroke(); };
@@ -16502,7 +16529,19 @@ async function main() {
       const pg = new THREE.BufferGeometry();
       pg.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); pg.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
       pg.setIndex(idx); pg.computeVertexNormals();
-      const pm = new THREE.MeshStandardMaterial({ map: tx9, roughness: 0.92, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+      // TURF, NOT A PRINT (2026-10-16): the stripes and lines were painted on a
+      // flat colour, so the pitch read as plastic. The photographed grass rides
+      // under them at its true size (its relief in the normal, its blades in the
+      // colour about its own mean), so the stripes are mown grass
+      const _tr = [2 * EA / 2.8, 2 * EC / 2.8];
+      const pm = new THREE.MeshStandardMaterial({ map: tx9, roughness: 0.95, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
+        normalMap: HDN('grass', _tr[0], _tr[1]), normalScale: new THREE.Vector2(1.6, 1.6) });
+      { const gT = HDT('grass', _tr[0], _tr[1]);
+        pm.onBeforeCompile = (sh) => { sh.uniforms.uTurf = { value: gT }; sh.uniforms.uTurfK = { value: new THREE.Vector2(_tr[0], _tr[1]) };
+          sh.fragmentShader = 'uniform sampler2D uTurf; uniform vec2 uTurfK;\n' + sh.fragmentShader.replace('#include <map_fragment>', `#include <map_fragment>
+  { vec3 tc = texture2D(uTurf, vMapUv * uTurfK).rgb; float l = dot(tc, vec3(0.299, 0.587, 0.114));
+    diffuseColor.rgb *= clamp(0.35 + l * 1.9, 0.5, 1.5); }`); };
+        pm.customProgramCacheKey = () => 'pitch-turf'; }
       pm.userData.noAutoTex = true;
       const pitchMesh = new THREE.Mesh(pg, pm); pitchMesh.receiveShadow = true; pitchMesh.name = 'pitch'; scene.add(pitchMesh);
       // the nets: a fine white mesh behind each mouth; the far goal has its own posts
@@ -20051,12 +20090,17 @@ async function main() {
         // roles: a deterministic mix, so a sentence always plays the same
         const hs = npcs.filter(n => n.behavior === 'hostile' && !n._route && !HAS_BR);
         const cyc = ['grunt', 'brute', 'skirmisher', 'spitter', 'grunt'];   // a pack of three already has three kinds
+        // A PERSON STAYS PERSON-SIZED (2026-10-16): "win the duel against the
+        // outlaw" put a gunfighter twice the height of the shop awnings on the
+        // street, renamed "Alpha outlaw". A beast or a monster may swell into
+        // its pack's leader; a person on two legs is tougher, not taller
+        const _monster = n => n.quad || /(goblin|orc|troll|ogre|giant|golem|demon|beast|monster|skeleton|zombie|undead|ghoul|wolf|bear|spider|dragon|creature|brute|mutant|alien|robot|drone|slime|elemental|wraith|yeti)/i.test(String(n.name || ''));
         hs.forEach((n, i) => {
           let role = cyc[i % cyc.length];
           if (role === 'spitter' && n.quad) role = 'skirmisher';    // a wolf does not spit
           n.role = role;
           n.hp = n.hp || 1;
-          if (role === 'brute') { n._sizeK = 1.3; n.obj.scale.multiplyScalar(1.3); n.hp = Math.max(4, n.hp * 3); n.speed *= 0.75; }
+          if (role === 'brute') { if (_monster(n)) { n._sizeK = 1.3; n.obj.scale.multiplyScalar(1.3); } n.hp = Math.max(4, n.hp * 3); n.speed *= 0.75; }
           if (role === 'skirmisher') { n.hp = Math.max(1, Math.round(n.hp * 0.6)); n.speed *= 1.35; }
         });
         // the boss: where the sentence asks for a fight, the one furthest out
@@ -20066,9 +20110,11 @@ async function main() {
           let b = awake[0], bd = -1;
           for (const n of awake) { const dd = Math.hypot(n.obj.position.x - _sp.x, n.obj.position.z - _sp.z); if (dd > bd) { bd = dd; b = n; } }
           b.role = 'boss';
-          b.obj.scale.multiplyScalar(1.75 / (b._sizeK || 1)); b._sizeK = 1.75;
+          const _bm = _monster(b);
+          if (_bm) { b.obj.scale.multiplyScalar(1.75 / (b._sizeK || 1)); b._sizeK = 1.75; }
           b.hp = Math.max(14, (b.hp || 1) * 8); b._maxHp = b.hp; b.speed = (b.speed || 2) * 0.95;
-          b.name = 'Alpha ' + String(b.name || 'beast').replace(/^an? /i, '');
+          const _bn = String(b.name || 'beast').replace(/^an? /i, '');
+          b.name = _bm ? 'Alpha ' + _bn : 'The ' + _bn;
           CB.boss = b;
           document.getElementById('fsbossname').textContent = b.name;
         }
@@ -24337,10 +24383,17 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
     // third-person follow camera — auto-recenters behind the player while
     // moving so turns stay visible; pauses 3 s after a manual drag-look
     freeLookT = Math.max(0, freeLookT - dt);
-    if (!dragging && freeLookT <= 0 && mv.mag > 0.15) {
+    // (2026-10-16) in proportion to how much of the input is FORWARD: holding
+    // A alone is "walk left of the camera", and a camera that swung in behind
+    // that heading turned "left" with it, so the hero ran in a circle half a
+    // metre across while the world spun round it (the fox, most visibly).
+    // Sideways and back toward the camera now walk straight across the view;
+    // W with A or D still curves the camera round with the turn.
+    const _fwdK = (DRIVE || DRIVING) ? 1 : Math.max(0, -mv.z) / Math.max(mv.mag, 1e-3);
+    if (!dragging && freeLookT <= 0 && mv.mag > 0.15 && _fwdK > 0.05) {
       let dyaw = (modelYaw + Math.PI) - yaw;
       dyaw = Math.atan2(Math.sin(dyaw), Math.cos(dyaw));
-      yaw += dyaw * Math.min(1, ((DRIVE || DRIVING) ? 3.0 : 1.8) * dt);
+      yaw += dyaw * Math.min(1, ((DRIVE || DRIVING) ? 3.0 : 1.8) * _fwdK * dt);
     }
     // inspect free-cam looks at the roaming focus point, slightly pulled back
     const fX = (inspectOn && inspF) ? inspF.x : nt.x;

@@ -37,7 +37,9 @@ async function walkUpTo(p, i) {
     const L = Math.hypot(px - x, pz - z) || 1;
     window.__game.tp(x + (px - x) / L * 1.6, z + (pz - z) / L * 1.6);
   }, i);
-  await wait(700);
+  // (2026-10-16) polled: E pressed before the hero had arrived spoke to the guide
+  for (let k = 0; k < 16; k++) { await wait(200); const d = await p.evaluate(i => { const [x, z] = window.__game.facts().mystery.where[i]; const [px, , pz] = window.__game.pos(); return Math.hypot(px - x, pz - z); }, i); if (d < 2.4 && k >= 2) break; }
+  await wait(300);
 }
 async function key(p, code) { await p.keyboard.press(code); await wait(350); }
 async function collectAll(p) {

@@ -1078,156 +1078,6 @@
    ]
   },
   {
-   "file": "cache__042872a22639.glb",
-   "dims_m": {
-    "x": 0.8477,
-    "y": 0.9901,
-    "z": 0.6951
-   },
-   "min_y": -0.4883,
-   "skinned": false,
-   "clips": [],
-   "bones": 0,
-   "biped": false,
-   "tallest_axis": "y",
-   "aspect": {
-    "w_h": 0.856,
-    "d_h": 0.702
-   },
-   "upright": true,
-   "height_ratio": 1.0,
-   "mesh": {
-    "tris": 480092,
-    "largest_share": 0.8471,
-    "fragments": 9,
-    "degenerate": 0.0002,
-    "textures": 2,
-    "textures_ok": true
-   },
-   "quality": 1.0,
-   "verdict": "good"
-  },
-  {
-   "file": "cache__09e592c4a21a.glb",
-   "dims_m": {
-    "x": 0.8525,
-    "y": 1.0037,
-    "z": 0.1962
-   },
-   "min_y": -0.5019,
-   "skinned": false,
-   "clips": [],
-   "bones": 0,
-   "biped": false,
-   "tallest_axis": "y",
-   "aspect": {
-    "w_h": 0.849,
-    "d_h": 0.195
-   },
-   "upright": true,
-   "height_ratio": 1.0,
-   "mesh": {
-    "tris": 474494,
-    "largest_share": 0.6258,
-    "fragments": 3,
-    "degenerate": 0.0,
-    "textures": 2,
-    "textures_ok": true
-   },
-   "quality": 1.0,
-   "verdict": "good"
-  },
-  {
-   "file": "cache__6cc61f49c2ae.glb",
-   "dims_m": {
-    "x": 0.9055,
-    "y": 1.004,
-    "z": 0.1941
-   },
-   "min_y": -0.502,
-   "skinned": false,
-   "clips": [],
-   "bones": 0,
-   "biped": false,
-   "tallest_axis": "y",
-   "aspect": {
-    "w_h": 0.902,
-    "d_h": 0.193
-   },
-   "upright": true,
-   "height_ratio": 1.0,
-   "mesh": {
-    "tris": 489110,
-    "largest_share": 0.3876,
-    "fragments": 5,
-    "degenerate": 0.0,
-    "textures": 2,
-    "textures_ok": true
-   },
-   "quality": 0.84,
-   "verdict": "fair"
-  },
-  {
-   "file": "cache__97fbdf62d739.glb",
-   "dims_m": {
-    "x": 1.6611,
-    "y": 1.8665,
-    "z": 0.3231
-   },
-   "min_y": -0.9509,
-   "skinned": false,
-   "clips": [],
-   "bones": 0,
-   "biped": false,
-   "tallest_axis": "y",
-   "aspect": {
-    "w_h": 0.89,
-    "d_h": 0.173
-   },
-   "upright": true,
-   "height_ratio": 1.0,
-   "mesh": {
-    "tris": 60000,
-    "largest_share": 0.8872,
-    "fragments": 5,
-    "degenerate": 0.0025,
-    "textures": 0,
-    "textures_ok": true
-   },
-   "quality": 1.0,
-   "verdict": "good"
-  },
-  {
-   "file": "cache__f5e2f3b54382.glb",
-   "dims_m": {
-    "x": 0.8864,
-    "y": 1.0034,
-    "z": 0.1734
-   },
-   "min_y": -0.5016,
-   "skinned": false,
-   "clips": [],
-   "bones": 0,
-   "biped": false,
-   "tallest_axis": "y",
-   "aspect": {
-    "w_h": 0.883,
-    "d_h": 0.173
-   },
-   "upright": true,
-   "height_ratio": 1.0,
-   "mesh": {
-    "tris": 466098,
-    "largest_share": 0.6206,
-    "fragments": 3,
-    "degenerate": 0.0,
-    "textures": 2,
-    "textures_ok": true
-   },
-   "quality": 1.0,
-   "verdict": "good"
-  },
-  {
    "file": "cacti.glb",
    "dims_m": {
     "x": 0.0355,
@@ -7865,36 +7715,6 @@
    "verdict": "good"
   },
   {
-   "file": "outlaw.glb",
-   "dims_m": {
-    "x": 0.3135,
-    "y": 1.0001,
-    "z": 0.9137
-   },
-   "min_y": 0.0,
-   "skinned": false,
-   "clips": [],
-   "bones": 0,
-   "biped": true,
-   "tallest_axis": "y",
-   "aspect": {
-    "w_h": 0.313,
-    "d_h": 0.914
-   },
-   "upright": true,
-   "height_ratio": 1.0,
-   "mesh": {
-    "tris": 44278,
-    "largest_share": 1.0,
-    "fragments": 1,
-    "degenerate": 0.0,
-    "textures": 3,
-    "textures_ok": true
-   },
-   "quality": 1.0,
-   "verdict": "good"
-  },
-  {
    "file": "owl.glb",
    "dims_m": {
     "x": 0.2224,
@@ -12421,6 +12241,82 @@
    },
    "quality": 1.0,
    "verdict": "good"
+  },
+  {
+   "file": "outlaw.glb",
+   "dims_m": {
+    "x": 1.5706,
+    "y": 1.75,
+    "z": 0.5878
+   },
+   "min_y": -0.0,
+   "skinned": false,
+   "clips": [],
+   "bones": 0,
+   "biped": true,
+   "tallest_axis": "y",
+   "aspect": {
+    "w_h": 0.897,
+    "d_h": 0.336
+   },
+   "upright": true,
+   "height_ratio": 1.0,
+   "mesh": {
+    "tris": 80000,
+    "largest_share": 0.8924,
+    "fragments": 4,
+    "degenerate": 0.0,
+    "textures": 2,
+    "textures_ok": true
+   },
+   "render": {
+    "looks_like": 0.6,
+    "looks_like_best": "a clean 3D render of a bandit"
+   },
+   "quality": 0.76,
+   "verdict": "good",
+   "quality_reasons": [
+    "the bandit's figure (hat, beard, red bandana, coat, boots), 2026-10-16: three generations of the outlaw came out a headless coat or lying down"
+   ]
+  },
+  {
+   "file": "outlaw_anim.glb",
+   "dims_m": {
+    "x": 1.5706,
+    "y": 1.75,
+    "z": 0.5878
+   },
+   "min_y": -0.0,
+   "skinned": true,
+   "clips": [
+    "attack",
+    "idle",
+    "run",
+    "sneak",
+    "walk"
+   ],
+   "bones": 21,
+   "biped": true,
+   "tallest_axis": "y",
+   "aspect": {
+    "w_h": 0.897,
+    "d_h": 0.336
+   },
+   "upright": true,
+   "height_ratio": 1.0,
+   "mesh": {
+    "tris": 80000,
+    "largest_share": 0.7831,
+    "fragments": 2,
+    "degenerate": 0.0,
+    "textures": 1,
+    "textures_ok": true
+   },
+   "quality": 1.0,
+   "verdict": "good",
+   "quality_reasons": [
+    "the bandit's figure (hat, beard, red bandana, coat, boots), 2026-10-16: three generations of the outlaw came out a headless coat or lying down"
+   ]
   }
  ]
 }

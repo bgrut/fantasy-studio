@@ -488,7 +488,9 @@ def _build_reference_prompt(slots: Dict[str, Any], style: str) -> tuple[str, str
     species_hints = {
         "cat":    "domestic cat, triangular ears, whiskers",
         "dog":    "domestic dog, prominent snout, floppy ears",
-        "fox":    "red fox, bushy tail, pointed muzzle",
+        # (2026-10-16) "red fox" came out a muddy grey-brown with one orange
+        # patch, and a green-lit meadow turned it green: the coat leads now
+        "fox":    "red fox with a vivid russet-orange coat, a white throat, chest and tail tip, black lower legs and black backs to the ears, a full bushy orange tail, pointed muzzle, amber eyes",
         "rabbit": "rabbit, long ears, fluffy tail",
         "lion":   "majestic lion with mane",
         "horse":  "horse, long elegant legs",
@@ -601,7 +603,9 @@ def _build_reference_prompt(slots: Dict[str, Any], style: str) -> tuple[str, str
             "cowboy":    "cowboy in a checked shirt, a brown leather vest, leather chaps over jeans, a wide-brimmed cowboy hat, a neck bandana, cowboy boots, fully clothed",
             "cowgirl":   "cowgirl in a fringed suede jacket, a checked shirt, jeans, a cowboy hat, cowboy boots, fully clothed",
             "gunslinger": "gunslinger in a long dark duster coat, a black flat-brimmed hat, a gun belt, boots, fully clothed",
-            "outlaw":    "outlaw in a long dusty brown duster coat, a red bandana over the lower face, a battered wide-brimmed hat, boots, fully clothed",
+            # (2026-10-16) the long duster and the masked face made a headless coat
+            # with no legs; a hip-length coat, the bandana at the neck, the face shown
+            "outlaw":    "a rough frontier outlaw with a stubbled scarred face showing under a battered black wide-brimmed hat, a red bandana knotted around the neck, a hip-length dark brown leather jacket over a grey collarless shirt, black trousers, a gun belt with a holster, worn brown boots, holding nothing, fully clothed, normal proportions",
             "bandit":    "frontier bandit in a heavy knee-length dusty brown canvas duster coat worn open over a dark waistcoat and shirt, loose canvas trousers, a red bandana loose at the neck, a battered wide-brimmed hat tipped back so the face shows, boots, fully clothed, a sturdy adult build with normal proportions, loose layered clothing that hangs away from the body",
             "child":     "a cheerful child in a bright striped t-shirt, colourful dungarees and sneakers, fully clothed",
             "kid":       "a cheerful child in a bright striped t-shirt, colourful dungarees and sneakers, fully clothed",
