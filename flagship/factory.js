@@ -2375,6 +2375,7 @@ const GEO = {
   minerBit: painted(_cyl(0.02, 0.28, 0.5, 20), PAINT.steel),
 
   arrow: painted(new THREE.ConeGeometry(0.2, 0.5, 4), PAINT.steel),
+  rejectArrow: painted(new THREE.ConeGeometry(0.075, 0.2, 28), PAINT.trim),   // the filter's reject pointer: small and round, over its chute
 
   // a landing pad with ribs, a collar and a mast: the place everything is
   // going to should look like a destination, not another box
@@ -2582,18 +2583,40 @@ const GEO = {
     return parts;
   })(), { base: 0x6a3cff }),
   riftCore: new THREE.OctahedronGeometry(0.26, 0),
+  // A SORTING STATION (2026-10-17): the filter was a glowing slab beside a
+  // box. The line runs through it now in a railed channel between rollers,
+  // under a gantry arch with a scanner bar; the sorting vanes hang in the
+  // arch (the gate, lit in the colour it passes), a chute drops the rest out
+  // of the side, and a control cabinet stands at the back corner
   filter: mergeParts([
     { g: _box(T * 0.96, 0.10, T * 0.96), y: 0.05, col: PAINT.chassis },    // skirt
     { g: _box(T * 0.88, 0.20, T * 0.88), y: 0.18 },
-    { g: _box(T * 0.16, 0.34, T * 0.66), y: 0.40, x: T * 0.34 }, // sorter housing
-    { g: _box(0.10, 0.26, 0.10), y: 0.36, x: -T * 0.36, z: T * 0.36, col: PAINT.chassis },
-    { g: _box(0.10, 0.26, 0.10), y: 0.36, x: -T * 0.36, z: -T * 0.36, col: PAINT.chassis },
-    // a band round the deck and posts on the housing's corners
-    { g: _box(T * 0.92, 0.05, T * 0.92), y: 0.30, col: PAINT.chassis },
-    { g: _box(0.08, 0.42, 0.08), y: 0.44, x: T * 0.40, z: T * 0.34, col: PAINT.chassis },
-    { g: _box(0.08, 0.42, 0.08), y: 0.44, x: T * 0.40, z: -T * 0.34, col: PAINT.chassis },
+    { g: _box(T * 0.92, 0.05, T * 0.92), y: 0.30, col: PAINT.chassis },    // a band round the deck
+    { g: _box(T * 0.92, 0.03, T * 0.34), y: 0.335, col: PAINT.dark },      // the channel
+    { g: _box(T * 0.92, 0.06, 0.04), y: 0.35, z: T * 0.18, col: PAINT.steel },
+    { g: _box(T * 0.92, 0.06, 0.04), y: 0.35, z: -T * 0.18, col: PAINT.steel },
+    { g: _cyl(0.06, 0.06, T * 0.34, 24), y: 0.37, x: T * 0.43, rx: Math.PI / 2, col: PAINT.roller },
+    { g: _cyl(0.06, 0.06, T * 0.34, 24), y: 0.37, x: -T * 0.43, rx: Math.PI / 2, col: PAINT.roller },
+    // the arch over the line
+    { g: _box(0.1, 0.64, 0.1), y: 0.62, x: 0.1, z: T * 0.26, col: PAINT.chassis },
+    { g: _box(0.1, 0.64, 0.1), y: 0.62, x: 0.1, z: -T * 0.26, col: PAINT.chassis },
+    { g: _bevelBox(0.18, 0.12, T * 0.6), y: 0.98, x: 0.1 },
+    { g: _cyl(0.04, 0.04, T * 0.48, 24), y: 0.89, x: 0.1, rx: Math.PI / 2, col: PAINT.steel },   // scanner bar
+    { g: _box(0.14, 0.05, 0.14), y: 0.32, x: 0.1, z: T * 0.26, col: PAINT.trim },               // post feet
+    { g: _box(0.14, 0.05, 0.14), y: 0.32, x: 0.1, z: -T * 0.26, col: PAINT.trim },
+    // the reject chute, falling away off the side
+    { g: _box(T * 0.28, 0.04, T * 0.24), y: 0.33, z: T * 0.33, rx: 0.22, col: PAINT.dark, tint: 0.8 },
+    { g: _box(T * 0.02 + 0.02, 0.1, T * 0.24), y: 0.37, x: T * 0.15, z: T * 0.33, rx: 0.22, col: PAINT.steel },
+    { g: _box(T * 0.02 + 0.02, 0.1, T * 0.24), y: 0.37, x: -T * 0.15, z: T * 0.33, rx: 0.22, col: PAINT.steel },
+    // the control cabinet
+    { g: _bevelBox(0.26, 0.4, 0.3), y: 0.48, x: -T * 0.3, z: -T * 0.33, col: PAINT.dark, tint: 0.9 },
+    { g: _box(0.28, 0.03, 0.32), y: 0.695, x: -T * 0.3, z: -T * 0.33, col: PAINT.trim },
   ], { base: 0x2f8f7d }),
-  filterGate: new THREE.BoxGeometry(T * 0.16, 0.5, T * 0.62),
+  // the vanes and a lens along the lintel: lit, so the setting reads from orbit
+  filterGate: mergeParts([
+    ...[-2, -1, 0, 1, 2].map(k => ({ g: new THREE.BoxGeometry(0.035, 0.38, 0.17), x: 0.1, y: 0.56, z: k * T * 0.09, ry: 0.6 })),
+    { g: new THREE.BoxGeometry(0.07, 0.03, T * 0.5), x: 0.1, y: 1.05 },
+  ]),
   // an assembler: a low bench with two intake ports on the sides, a gantry
   // over the middle and a press head under it, so it reads as a machine that
   // puts two things together rather than a furnace that melts one
@@ -2985,12 +3008,11 @@ function place(face, i, j, type, dir) {
     const gate = new THREE.Mesh(GEO.filterGate,
       new THREE.MeshStandardMaterial({ color: MIN_COL[c.filt] || 0x7df9ff,
         emissive: MIN_COL[c.filt] || 0x7df9ff, emissiveIntensity: 0.5,
-        roughness: 0.3, flatShading: true }));
-    gate.position.set(0.36, 0.42, 0);
+        roughness: 0.3 }));
     gate.name = 'gate';
     g.add(gate);
-    const r = new THREE.Mesh(GEO.arrow, MAT.filt);   // reject: out the side
-    r.position.set(0, 0.42, 0.74); r.rotation.x = Math.PI / 2; g.add(r);
+    const r = new THREE.Mesh(GEO.rejectArrow, MAT.filt);   // reject: out the side
+    r.position.set(0, 0.46, 0.9); r.rotation.x = Math.PI / 2; g.add(r);
   } else if (type === ASSEMBLER) {
     const b = new THREE.Mesh(GEO.assembler, MAT.assem);
     b.castShadow = true; b.receiveShadow = true; g.add(b);
