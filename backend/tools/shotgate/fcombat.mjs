@@ -24,7 +24,9 @@ const dodge = await p.evaluate(async () => {
   window.__cbt.iframes = 0;
   const ok = window.__cbtDodge();
   const during = window.__cbt.iframes;
-  await new Promise(r => setTimeout(r, 600));
+  // until the window closes, not a fixed 600 ms: a loaded machine can stall
+  // the frame loop that long and the i-frames never tick down
+  for (let t = 0; t < 3000 && window.__cbt.iframes > 0; t += 50) await new Promise(r => setTimeout(r, 50));
   return { ok, during, after: window.__cbt.iframes, cd: window.__cbt.dodgeCd };
 });
 console.log('dodge     :', JSON.stringify(dodge));

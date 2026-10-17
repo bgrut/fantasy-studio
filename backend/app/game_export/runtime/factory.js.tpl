@@ -2410,20 +2410,20 @@ const GEO = {
   // gunmetal skirt and ribs, the panel colour on the shell, brass where a
   // hand would go, near-black in the door.
   habitat: mergeParts([
-    { g: _cyl(0.70, 0.74, 0.14, 12), y: 0.07, col: PAINT.chassis },                      // skirt
-    { g: _cyl(0.60, 0.63, 0.84, 12), y: 0.56 },                                          // drum
-    { g: new THREE.SphereGeometry(0.60, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2), y: 0.98, tint: 1.06 },  // dome
+    { g: _cyl(0.70, 0.74, 0.14, 48), y: 0.07, col: PAINT.chassis },                      // skirt
+    { g: _cyl(0.60, 0.63, 0.84, 48), y: 0.56 },                                          // drum
+    { g: new THREE.SphereGeometry(0.60, 48, 16, 0, Math.PI * 2, 0, Math.PI / 2), y: 0.98, tint: 1.06 },  // dome
     { g: _box(0.09, 0.86, 0.09), y: 0.56, x: 0.58, col: PAINT.chassis },                 // ribs
     { g: _box(0.09, 0.86, 0.09), y: 0.56, x: -0.58, col: PAINT.chassis },
     { g: _box(0.09, 0.86, 0.09), y: 0.56, z: 0.58, col: PAINT.chassis },
     { g: _box(0.36, 0.56, 0.10), y: 0.42, z: -0.58, col: PAINT.dark },                   // the door, recessed dark
     { g: _box(0.44, 0.06, 0.12), y: 0.73, z: -0.59, col: PAINT.trim },                   // its lintel, brass
-    { g: _cyl(0.04, 0.04, 0.34, 6), y: 1.60, x: 0.24, col: PAINT.steel },                // an aerial
-    { g: new THREE.SphereGeometry(0.06, 6, 4), y: 1.79, x: 0.24, col: PAINT.trim },
+    { g: _cyl(0.04, 0.04, 0.34, 16), y: 1.60, x: 0.24, col: PAINT.steel },                // an aerial
+    { g: new THREE.SphereGeometry(0.06, 16, 12), y: 1.79, x: 0.24, col: PAINT.trim },
   ], { floor: 0.72, reach: 0.5 }),
   mast: mergeParts([
-    { g: _cyl(0.16, 0.20, 0.10, 8), y: 0.05, col: PAINT.chassis },                       // foot
-    { g: _cyl(0.045, 0.06, 1.75, 6), y: 0.92, col: PAINT.steel },                        // pole
+    { g: _cyl(0.16, 0.20, 0.10, 32), y: 0.05, col: PAINT.chassis },                       // foot
+    { g: _cyl(0.045, 0.06, 1.75, 20), y: 0.92, col: PAINT.steel },                        // pole
     { g: _box(0.30, 0.10, 0.18), y: 1.80, x: 0.10, col: PAINT.chassis },                 // head
   ], { floor: 0.75, reach: 0.4 }),
   mastLamp: _box(0.22, 0.03, 0.12).translate(0.12, 1.74, 0),                             // the lamp face alone, lit
@@ -2539,14 +2539,43 @@ const GEO = {
     }
     return parts;
   })(), { base: 0xb23f8e }),   // a deep enamel, not the candy pink the map keeps
-  rift: painted(new THREE.TorusGeometry(T * 0.38, 0.16, 6, 12), 0x6a3cff),
-  riftBase: mergeParts([
-    { g: _cyl(T * 0.54, T * 0.56, 0.09, 8), y: 0.045, col: PAINT.chassis }, // skirt
-    { g: _cyl(T * 0.44, T * 0.50, 0.20, 8), y: 0.16 },
-    { g: _box(0.12, 0.62, 0.12), y: 0.50, x: T * 0.30, col: PAINT.chassis },         // supports
-    { g: _box(0.12, 0.62, 0.12), y: 0.50, x: -T * 0.30, col: PAINT.chassis },
-  ], { base: 0x6a3cff }),
-  riftCore: new THREE.OctahedronGeometry(0.34, 0),
+  // A PORTAL, NOT A DONUT (2026-10-17): the rift was a twelve-sided torus
+  // lying flat on an octagon, two posts run through it. It stands up now, a
+  // round ring with a steel inner lip and eight clamps, balanced on a pivot
+  // and turning about the vertical like a gyroscope (the clamps are what show
+  // it turning), the gem hanging at its heart; four emitters ring the deck
+  rift: mergeParts((() => {
+    const parts = [
+      { g: new THREE.TorusGeometry(0.62, 0.085, 16, 96) },
+      { g: new THREE.TorusGeometry(0.53, 0.022, 8, 96), col: PAINT.steel },
+      { g: new THREE.TorusGeometry(0.715, 0.016, 8, 96), col: PAINT.chassis },
+    ];
+    for (let k = 0; k < 8; k++) {
+      const a = k / 8 * Math.PI * 2;
+      // a pair of steel bands round the tube (their axis along the ring)
+      for (const da of [-0.07, 0.07])
+        parts.push({ g: new THREE.TorusGeometry(0.096, 0.02, 10, 32).rotateY(Math.PI / 2),
+                     x: Math.cos(a + da) * 0.62, y: Math.sin(a + da) * 0.62, rz: a + da + Math.PI / 2, col: PAINT.steel });
+    }
+    return parts;
+  })(), { base: 0x6a3cff }),
+  riftBase: mergeParts((() => {
+    const parts = [
+      { g: _cyl(T * 0.54, T * 0.56, 0.09, 48), y: 0.045, col: PAINT.chassis }, // skirt
+      { g: _cyl(T * 0.44, T * 0.50, 0.20, 48), y: 0.16 },
+      { g: new THREE.TorusGeometry(T * 0.445, 0.02, 8, 96), y: 0.26, rx: Math.PI / 2, col: PAINT.steel },
+      { g: _cyl(0.14, 0.2, 0.08, 32), y: 0.30, col: PAINT.chassis },               // the pivot's seat
+      { g: new THREE.SphereGeometry(0.06, 20, 14), y: 0.345, col: PAINT.steel },   // and the pivot
+    ];
+    for (let k = 0; k < 4; k++) {
+      const a = (k + 0.5) / 4 * Math.PI * 2, x = Math.cos(a) * 0.86, z = Math.sin(a) * 0.86;
+      parts.push({ g: _cyl(0.06, 0.09, 0.55, 20), y: 0.53, x, z, col: PAINT.chassis });
+      parts.push({ g: _cyl(0.0, 0.065, 0.14, 20), y: 0.875, x, z, tint: 1.25 });       // emitter tips
+      parts.push({ g: new THREE.TorusGeometry(0.075, 0.012, 6, 24), y: 0.79, x, z, rx: Math.PI / 2, col: PAINT.steel });
+    }
+    return parts;
+  })(), { base: 0x6a3cff }),
+  riftCore: new THREE.OctahedronGeometry(0.26, 0),
   filter: mergeParts([
     { g: _box(T * 0.96, 0.10, T * 0.96), y: 0.05, col: PAINT.chassis },    // skirt
     { g: _box(T * 0.88, 0.20, T * 0.88), y: 0.18 },
@@ -2754,7 +2783,7 @@ function buildToolIcons() {
     filter: () => mk(GEO.filter, MAT.filt),
     rift: () => grp([mk(GEO.riftBase, MAT.rift),
                      (() => { const r = mk(GEO.rift, MAT.rift);
-                              r.position.y = 0.95; r.rotation.x = Math.PI / 2;
+                              r.position.y = 1.05;
                               return r; })()]),
     ...(CITY ? { road: () => cityDress(new THREE.Group(), ROAD, 0), home: () => cityDress(new THREE.Group(), HOMES, 2),
                  shop: () => cityDress(new THREE.Group(), SHOP, 2), works: () => cityDress(new THREE.Group(), WORKS, 1),
@@ -2935,11 +2964,11 @@ function place(face, i, j, type, dir) {
     b.castShadow = true; b.receiveShadow = true; b.name = 'spin'; g.add(b);
   } else if (type === RIFT) {
     const ring = new THREE.Mesh(GEO.rift, MAT.rift);
-    ring.position.y = 0.95; ring.rotation.x = Math.PI / 2;
+    ring.position.y = 1.05;
     ring.castShadow = true; ring.name = 'ring'; g.add(ring);
     const core = new THREE.Mesh(GEO.riftCore,
       new THREE.MeshBasicMaterial({ color: 0x2a2050 }));
-    core.position.y = 0.95; core.name = 'lamp'; g.add(core);
+    core.position.y = 1.05; core.name = 'lamp'; g.add(core);
     const base = new THREE.Mesh(GEO.riftBase, MAT.rift);
     base.receiveShadow = true; g.add(base);
   } else if (type === FILTER) {
@@ -7366,7 +7395,7 @@ function stepRifts(dt) {
     if (lamp) lamp.material.color.setHex(
       c.dbt > 0 ? (MIN_COL[c.dmin] || 0xff5ad9) : 0x2a2050);
     const ring = c.build && c.build.getObjectByName('ring');
-    if (ring) ring.rotation.z += dt * (c.dbt > 0 ? 2.4 : 0.4);
+    if (ring) ring.rotation.y += dt * (c.dbt > 0 ? 2.4 : 0.4);   // it stands, and turns about the vertical
   });
 }
 
