@@ -1187,7 +1187,20 @@ export function plantForest(o) {
       const vr = mulberry((o.seed + ki * 1013 + v * 7919) >>> 0);
       const P = KINDS[K.as || K.kind](vr);
       const geo = P.grow(vr, P);
-      variants.push({ kind: K.kind, ki, bark: geo.bark, leaf: geo.leaf, mats, matsBake, P });
+      // A REEF IS MANY COLOURS (2026-10-16): every coral of a kind shared one
+      // tint, so one seed's reef was a field of the same cyan. Each coral
+      // variant takes its own hue from a reef's palette (its material cloned,
+      // its program shared): pink, orange, violet, gold, red, a little teal
+      let vm = mats, vb = matsBake;
+      if (o.reef && (K.kind === 'coral' || K.kind === 'coral2') && mats && mats.bark) {
+        const REEF = [0xff6f8a, 0xff9a3c, 0xb07cff, 0xf2c94c, 0xe2483e, 0xff8fc0, 0x5ad1c4, 0xffb070];
+        const hc = new THREE.Color(REEF[(ki * 3 + v * 5 + (o.seed >>> 0)) % REEF.length]);
+        const keepPatch = (src, dst) => { dst.onBeforeCompile = src.onBeforeCompile; dst.customProgramCacheKey = src.customProgramCacheKey; dst.userData = src.userData; return dst; };   // clone() drops the shader patch
+        vm = Object.assign({}, mats, { bark: keepPatch(mats.bark, mats.bark.clone()) });
+        vm.bark.color.copy(hc); if (vm.bark.emissive) vm.bark.emissive.copy(hc).multiplyScalar(0.25);
+        if (matsBake && matsBake.bark) { vb = Object.assign({}, matsBake, { bark: keepPatch(matsBake.bark, matsBake.bark.clone()) }); if (vb.bark.color) vb.bark.color.copy(hc); }
+      }
+      variants.push({ kind: K.kind, ki, bark: geo.bark, leaf: geo.leaf, mats: vm, matsBake: vb, P });
     }
   });
   const atlas = bakeImpostors(o.renderer, variants, o.lightRig);

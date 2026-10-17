@@ -2616,7 +2616,9 @@ async function main() {
       // CLEAR WATER OVER A REEF (2026-10-10): at 0.7 deep blue with a metal
       // sheen the surface was a lid; a dolphin swimming just under it was
       // invisible, and the reef with it. Tropical shallows are clear turquoise.
-      _sea ? new THREE.MeshStandardMaterial({ color: 0x2c9db4, transparent: true, opacity: 0.42,
+      // (2026-10-16) thinner and deeper: at 0.42 a pale turquoise film lay
+      // over the whole reef seen from above, and every coral read the same cyan
+      _sea ? new THREE.MeshStandardMaterial({ color: 0x1d7f9c, transparent: true, opacity: 0.26,
                                        roughness: 0.1, metalness: 0.0, side: THREE.DoubleSide,
                                        depthWrite: false, envMapIntensity: 0.6 })
            : __waterMaterial(__waterKind(_wWords, _frozen), WIND_U));
@@ -7557,7 +7559,7 @@ async function main() {
           lightRig: { lights: [sunB, hemiB], environment: scene.environment, environmentIntensity: scene.environmentIntensity },
           windU: WIND_U, near: FLORA.near, nearCap: FLORA.cap, variants: 3,
           rockTex, rockN, rockTint: BIO.rockTint, greyRock: BIO.greyRock, crystalTint: BIO.crystalTint,
-          coralTint: BIO.coralTint, coralTint2: BIO.coralTint2,
+          coralTint: BIO.coralTint, coralTint2: BIO.coralTint2, reef: !!BIO.underwater,   // a reef's corals take a palette; an alien world keeps its own two hues
           snow: BIO.snow || (SPEC.world.weather === 'snow' ? 0.6 : 0),
           sunDir: new THREE.Vector3(...pal.sunPos).normalize(),
           sunCol: new THREE.Color(pal.sunCol || 0xffffff).multiplyScalar(pal.sun * 1.12),
@@ -21346,7 +21348,13 @@ async function main() {
       const _cliffM = STRATA ? 9.0 : 7.0;
       const _tileM = (gname === 'snow' && !_toonGround) ? gsize / Math.max(8, Math.round(gsize / 14))   // drawn snow tiles at 14 m
         : gsize / grep2;                               // metres per tile of the photo
+      // CAUSTICS ON THE SEABED (2026-10-16): under a reef's water the sand was
+      // one flat tint. Sunlight through a moving surface draws a drifting web
+      // of bright lines on the floor, strongest in the shallows
+      const REEF_C = !!(FLORA && FLORA.biome && FLORA.biome.underwater && WATER !== null);
+      if (REEF_C) window.__causT = window.__causT || { value: 0 };
       gmat.onBeforeCompile = (sh) => {
+        if (REEF_C) { sh.uniforms.uCaus = window.__causT; sh.uniforms.uWY = { value: WATER }; }
         sh.uniforms.uWorld = { value: worldTint };
         sh.uniforms.uTileM = { value: _tileM };
         sh.uniforms.uCliff = { value: _cliffTex };
@@ -21360,6 +21368,7 @@ varying vec3 vWPosG; varying vec3 vWNrmG;
   vWPosG = (modelMatrix * vec4(position, 1.0)).xyz;
   vWNrmG = normalize(mat3(modelMatrix) * normal);`);
         sh.fragmentShader = `uniform sampler2D uWorld;
+${REEF_C ? 'uniform float uCaus; uniform float uWY;' : ''}
 uniform float uTileM;
 uniform sampler2D uCliff; uniform float uCliffM;
 varying vec2 vUvRaw;
@@ -21405,6 +21414,16 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
   ${STRATA ? '' : 'wTint = mix(wTint, vec3(1.0), steepG * 0.8);'}
   diffuseColor.rgb *= clamp(wTint, 0.12, 1.45);
   ${GREYWORLD ? '{ float lmG = dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114)); diffuseColor.rgb = mix(diffuseColor.rgb, vec3(lmG), 0.9); }' : ''}
+  ${REEF_C ? `{
+    vec2 cp = vWPosG.xz * 0.55; float ct = uCaus * 0.55;
+    float c1 = abs(sin(cp.x * 1.3 + sin(cp.y * 0.9 + ct) * 1.9 + ct * 0.7));
+    float c2 = abs(sin(cp.y * 1.4 + sin(cp.x * 1.1 - ct * 0.8) * 1.9 - ct * 0.6));
+    float c3 = abs(sin((cp.x + cp.y) * 0.9 + sin(cp.x * 0.7 - cp.y * 0.6 + ct * 0.9) * 2.2 + ct * 0.4));
+    float caus = pow(1.0 - min(min(c1, c2), c3), 6.0) * (0.55 + 0.45 * gn1(vWPosG.xz * 0.08 + uCaus * 0.05));   // softer lines, brighter in drifting patches
+    float dpt = uWY - vWPosG.y;
+    float ck = smoothstep(0.0, 1.2, dpt) * (1.0 - smoothstep(12.0, 30.0, dpt)) * (1.0 - steepG * 0.6);
+    diffuseColor.rgb *= 1.0 + caus * 1.4 * ck;
+  }` : ''}
   ${STRATA ? `{
     float steep = smoothstep(0.35, 0.75, 1.0 - normalize(vWNrmG).y);
     float sy = vWPosG.y + sin(vWPosG.x * 0.05) * 1.5 + sin(vWPosG.z * 0.043 + 1.3) * 1.2;
@@ -23431,6 +23450,7 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
     }
     if (WATER !== null) {     // tide bob + underwater fog when the camera dips
       waterMesh.position.y = WATER_Y + Math.sin(performance.now() / 1400) * WATER_BOB;
+      if (window.__causT) window.__causT.value = performance.now() / 1000;   // the seabed's caustics drift
       const under = camera.position.y < waterMesh.position.y;
       if (under !== underwater) {
         underwater = under;

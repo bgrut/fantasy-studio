@@ -72,7 +72,9 @@ await wait(700);
 const feel = await (async () => {
   const F2 = () => p.evaluate(() => { const f = window.__game.facts(); return { v: f.walk_v, dip: f.land_dip_peak, fov: f.fov, base: f.fov_base, run: f.run_k }; });
   await p.keyboard.down('KeyW'); await new Promise(r => setTimeout(r, 60)); const early = await F2();
-  await new Promise(r => setTimeout(r, 700)); const full = await F2();
+  // (2026-10-16) polled to its plateau (up to 2 s): the ramp runs on game frames,
+  // and a starved page read 760 ms of wall clock as 200 ms of walking
+  let full = await F2(); for (let k = 0; k < 12 && full.v < 1.6; k++) { await new Promise(r => setTimeout(r, 150)); full = await F2(); }
   await p.keyboard.down('ShiftLeft'); await new Promise(r => setTimeout(r, 1500)); const run = await F2();
   await p.keyboard.down('Space'); await new Promise(r => setTimeout(r, 120)); await p.keyboard.up('Space');   // held a few frames: the loop reads keys, a press shorter than a frame is missed
   // (2026-10-14) a run down a slope stays up longer than a jump on the flat:
