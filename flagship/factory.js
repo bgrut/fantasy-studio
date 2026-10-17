@@ -2475,11 +2475,15 @@ const GEO = {
   ], { base: 0x6e605a }),
 
   split: mergeParts([
-    { g: _cyl(T * 0.50, T * 0.50, 0.09, 8), y: 0.045, col: PAINT.chassis }, // skirt
+    // (2026-10-17) round where it turns: the skirt was an octagon, the hub cap too
+    { g: _cyl(T * 0.50, T * 0.50, 0.09, 48), y: 0.045, col: PAINT.chassis }, // skirt
     { g: _cyl(T * 0.42, T * 0.42, 0.26, 4), y: 0.20, ry: Math.PI / 4 },
+    { g: _cyl(T * 0.2, T * 0.22, 0.08, 40), y: 0.37, col: PAINT.chassis },        // the turntable the cross sits on
     { g: _box(T * 0.88, 0.15, 0.20), y: 0.40 },
     { g: _box(T * 0.88, 0.15, 0.20), y: 0.40, ry: Math.PI / 2 },
-    { g: _cyl(0.17, 0.13, 0.14, 8), y: 0.52, col: PAINT.trim },                   // hub cap
+    { g: _cyl(0.17, 0.13, 0.14, 40), y: 0.52, col: PAINT.trim },                  // hub cap
+    { g: _cyl(0.08, 0.1, 0.05, 28), y: 0.615, col: PAINT.steel },                 // its boss
+    ...[0, 1, 2, 3, 4, 5].map(k => ({ g: _cyl(0.016, 0.016, 0.03, 10), y: 0.6, x: Math.cos(k * Math.PI / 3) * 0.13, z: Math.sin(k * Math.PI / 3) * 0.13, col: PAINT.steel })),   // bolts round it
     // corner posts and a lip on each arm, so the cross reads as built
     { g: _box(0.09, 0.34, 0.09), y: 0.17, x: T * 0.30, z: T * 0.30, col: PAINT.chassis },
     { g: _box(0.09, 0.34, 0.09), y: 0.17, x: -T * 0.30, z: T * 0.30, col: PAINT.chassis },
@@ -2491,23 +2495,56 @@ const GEO = {
 
   // taller and eight-sided, so a forge is not mistaken for a smelter
   // from across the worldlet
+  // A CRUCIBLE FURNACE (2026-10-17): the forge was an eight-sided pink drum
+  // with a pink blob on its lid, a cake tin at two metres. It is a round
+  // enamelled crucible now, bound in riveted iron hoops and straps, with a
+  // hopper on each flank for the two ores it takes, a sight glass on the
+  // output side where the melt shows (see FORGE in place()), a shoulder and
+  // a stack. One merged body still; the sight glass and the halo are the
+  // only other meshes, as the lamp and the blob were.
   forge: mergeParts((() => {
+    const R = T * 0.46, ring = (r, t) => new THREE.TorusGeometry(r, t, 10, 64);
     const parts = [
-      { g: _cyl(T * 0.56, T * 0.58, 0.11, 8), y: 0.055, col: PAINT.chassis }, // skirt
-      { g: _cyl(T * 0.42, T * 0.50, 1.22, 8), y: 0.72 },         // drum
-      { g: new THREE.TorusGeometry(T * 0.40, 0.08, 6, 16), y: 1.30, rx: Math.PI / 2, col: PAINT.trim },
-      { g: new THREE.TorusGeometry(T * 0.46, 0.05, 5, 16), y: 0.42, rx: Math.PI / 2, col: PAINT.chassis },
-      { g: _cyl(T * 0.34, T * 0.40, 0.10, 8), y: 1.38, col: PAINT.trim },      // cap plate
-      { g: _cyl(T * 0.52, T * 0.52, 0.10, 8), y: 0.16, col: PAINT.chassis },     // base band
+      { g: _cyl(T * 0.56, T * 0.58, 0.11, 48), y: 0.055, col: PAINT.chassis },          // skirt
+      { g: _cyl(T * 0.50, T * 0.52, 0.12, 48), y: 0.17, col: PAINT.chassis, tint: 0.8 }, // plinth
+      { g: _cyl(R, R, 0.86, 48), y: 0.66 },                                               // the crucible
+      { g: _cyl(T * 0.30, R, 0.18, 48), y: 1.18, tint: 0.9 },                             // its shoulder
+      { g: _cyl(T * 0.31, T * 0.31, 0.05, 48), y: 1.29, col: PAINT.chassis },             // the lid ring
+      // the stack, with a brass band and a cap
+      { g: _cyl(0.16, 0.2, 0.5, 32), y: 1.52, col: PAINT.chassis },
+      { g: ring(0.17, 0.025), y: 1.72, rx: Math.PI / 2, col: PAINT.trim },
+      { g: _cyl(0.23, 0.17, 0.06, 32), y: 1.80, col: PAINT.chassis },
+      // the sight glass's iron frame and brass bezel, on the output side
+      { g: new THREE.TorusGeometry(0.15, 0.032, 10, 40), y: 0.62, x: R + 0.02, ry: Math.PI / 2, col: PAINT.dark },
+      { g: new THREE.TorusGeometry(0.19, 0.014, 8, 40), y: 0.62, x: R + 0.012, ry: Math.PI / 2, col: PAINT.trim },
+      // the pouring lip over it
+      { g: _box(0.24, 0.05, 0.2), y: 1.02, x: R + 0.08, rz: -0.22, col: PAINT.dark, tint: 0.7 },
+      { g: _box(0.2, 0.05, 0.03), y: 1.05, x: R + 0.08, z: 0.1, rz: -0.22, col: PAINT.dark },
+      { g: _box(0.2, 0.05, 0.03), y: 1.05, x: R + 0.08, z: -0.1, rz: -0.22, col: PAINT.dark },
     ];
-    // vertical ribs: an eight-sided drum with nothing on it reads as a barrel
-    for (let k = 0; k < 4; k++) {
-      const a = (k / 4) * Math.PI * 2 + Math.PI / 8;
-      parts.push({ g: _box(0.09, 1.0, 0.13), y: 0.75,
-                   x: Math.cos(a) * T * 0.46, z: Math.sin(a) * T * 0.46, ry: -a, col: PAINT.chassis });
+    // three hoops, riveted
+    for (const y of [0.3, 0.7, 1.05]) {
+      parts.push({ g: ring(R + 0.012, 0.03), y, rx: Math.PI / 2, col: PAINT.chassis });
+      for (let k = 0; k < 14; k++) {
+        const a = (k + (y > 0.6 && y < 0.8 ? 0.5 : 0)) / 14 * Math.PI * 2;
+        if (Math.abs(Math.sin(a)) < 0.2 && Math.cos(a) > 0 && y > 0.6 && y < 0.8) continue;   // the sight glass sits here
+        parts.push({ g: new THREE.SphereGeometry(0.022, 8, 6), y,
+                     x: Math.cos(a) * (R + 0.04), z: Math.sin(a) * (R + 0.04), col: PAINT.steel });
+      }
+    }
+    // straps between the hoops, clear of the glass and the hoppers
+    for (const a of [Math.PI / 4, 3 * Math.PI / 4, 5 * Math.PI / 4, 7 * Math.PI / 4])
+      parts.push({ g: _box(0.05, 0.84, 0.11), y: 0.67, x: Math.cos(a) * (R + 0.02), z: Math.sin(a) * (R + 0.02), ry: -a, col: PAINT.chassis });
+    // the two hoppers: a chute off each flank and a funnel on it, brass at the
+    // rim and dark inside, so "two ores in" is the shape of the thing
+    for (const s of [1, -1]) {
+      parts.push({ g: _cyl(0.075, 0.075, 0.42, 24), y: 1.02, z: s * (R + 0.05), rx: s * 0.6, col: PAINT.chassis });
+      parts.push({ g: _cyl(0.21, 0.08, 0.26, 40), y: 1.26, z: s * (R + 0.17), col: PAINT.steel, tint: 0.85 });
+      parts.push({ g: _cyl(0.185, 0.185, 0.01, 40), y: 1.395, z: s * (R + 0.17), col: PAINT.dark });
+      parts.push({ g: ring(0.21, 0.018), y: 1.39, z: s * (R + 0.17), rx: Math.PI / 2, col: PAINT.trim });
     }
     return parts;
-  })(), { base: 0xd94fb0 }),
+  })(), { base: 0xb23f8e }),   // a deep enamel, not the candy pink the map keeps
   rift: painted(new THREE.TorusGeometry(T * 0.38, 0.16, 6, 12), 0x6a3cff),
   riftBase: mergeParts([
     { g: _cyl(T * 0.54, T * 0.56, 0.09, 8), y: 0.045, col: PAINT.chassis }, // skirt
@@ -2541,8 +2578,20 @@ const GEO = {
     { g: _box(0.10, 0.92, 0.10), y: 0.75, x: T * 0.28, z: T * 0.30, col: PAINT.chassis },
     { g: _box(0.10, 0.92, 0.10), y: 0.75, x: T * 0.28, z: -T * 0.30, col: PAINT.chassis },
     { g: _box(T * 0.72, 0.12, T * 0.76), y: 1.22, col: PAINT.trim },                // gantry
-    { g: _cyl(0.16, 0.16, 0.40, 8), y: 0.96, col: PAINT.steel },                                // press
-    { g: _box(T * 0.30, 0.10, T * 0.30), y: 0.74, col: PAINT.dark },               // the head
+    // (2026-10-17) a hydraulic press, not an octagonal post: a sleeve under
+    // the gantry, a polished ram, two guide rods, the head on them and a die
+    // plate set into the bench under it; brass lips on the intake ports and
+    // knee braces where the posts meet the gantry
+    { g: _cyl(0.17, 0.17, 0.22, 40), y: 1.05, col: PAINT.chassis },                 // sleeve
+    { g: new THREE.TorusGeometry(0.175, 0.016, 8, 40), y: 0.95, rx: Math.PI / 2, col: PAINT.trim },
+    { g: _cyl(0.075, 0.075, 0.2, 28), y: 0.85, col: PAINT.steel },                  // ram
+    { g: _cyl(0.028, 0.028, 0.44, 16), y: 0.98, x: 0.24, col: PAINT.steel },        // guide rods
+    { g: _cyl(0.028, 0.028, 0.44, 16), y: 0.98, x: -0.24, col: PAINT.steel },
+    { g: _bevelBox(T * 0.30, 0.10, T * 0.30), y: 0.74, col: PAINT.dark },           // the head
+    { g: _box(T * 0.34, 0.025, T * 0.34), y: 0.47, col: PAINT.dark, tint: 0.8 },    // the die plate
+    { g: _box(0.18, 0.04, T * 0.34), y: 0.345, z: T * 0.44, col: PAINT.trim },
+    { g: _box(0.18, 0.04, T * 0.34), y: 0.345, z: -T * 0.44, col: PAINT.trim },
+    ...[[1, 1], [1, -1], [-1, 1], [-1, -1]].map(([sx, sz]) => ({ g: _box(0.06, 0.24, 0.06), y: 1.08, x: sx * (T * 0.28 - 0.09), z: sz * T * 0.30, rz: sx * 0.75, col: PAINT.chassis })),
   ], { base: 0xe0b451 }),
 
   // Ground detail. Nothing here is interactive; it exists so the floor has a
@@ -2923,13 +2972,16 @@ function place(face, i, j, type, dir) {
   } else if (type === FORGE) {
     const b = new THREE.Mesh(GEO.forge, MAT.forge);
     b.castShadow = true; g.add(b);
-    const halo = new THREE.Mesh(new THREE.TorusGeometry(T * 0.41, 0.05, 6, 18),
+    // the halo is the stack's mouth glowing while it cooks; the lamp is the
+    // sight glass, the melt seen through it (dark when cold, see the smelter's glow)
+    const halo = new THREE.Mesh(new THREE.TorusGeometry(0.16, 0.022, 10, 40),
       new THREE.MeshBasicMaterial({ color: 0xff5ad9 }));
-    halo.position.y = 1.30; halo.rotation.x = Math.PI / 2;
+    halo.position.y = 1.835; halo.rotation.x = Math.PI / 2;
     halo.name = 'halo'; halo.visible = false; g.add(halo);
-    const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.17, 8, 6),
-      new THREE.MeshBasicMaterial({ color: 0xff5ad9 }));
-    lamp.position.set(0, 1.5, 0);
+    const lamp = new THREE.Mesh(new THREE.CircleGeometry(0.15, 32),
+      new THREE.MeshBasicMaterial({ color: 0x1a0e38, map: FIRE_TEX, toneMapped: false }));
+    lamp.rotation.y = Math.PI / 2;
+    lamp.position.set(T * 0.46 + 0.012, 0.62, 0);
     lamp.name = 'lamp';
     g.add(lamp);
   } else if (type === DRONEPAD) {
@@ -5761,11 +5813,13 @@ function step() {
     }
     // THE HEAT COMES UP. A door that snaps between two colours reads as a
     // status LED; one that swells and falls reads as a fire in there.
-    const lamp = c.t === SMELTER && c.build && c.build.getObjectByName('lamp');
+    const lamp = (c.t === SMELTER || c.t === FORGE) && c.build && c.build.getObjectByName('lamp');
     if (lamp) {
       c.glow = c.glow || 0;
       c.glow += ((c.cook > 0 ? 1 : 0) - c.glow) * 0.25;
-      lamp.material.color.setRGB(0.10 + 0.90 * c.glow,
+      // an alloy melt runs pinker than iron
+      if (c.t === FORGE) lamp.material.color.setRGB(0.10 + 0.90 * c.glow, 0.06 + 0.44 * c.glow, 0.22 + 0.58 * c.glow);
+      else lamp.material.color.setRGB(0.10 + 0.90 * c.glow,
                                  0.06 + 0.63 * c.glow,
                                  0.22 + 0.07 * c.glow);
     }
