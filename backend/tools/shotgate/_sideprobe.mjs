@@ -8,7 +8,7 @@ if (process.env.TX) { await p.evaluate(x => window.__game.tp(+x, 0), process.env
 console.log(JSON.stringify(await p.evaluate(() => {
   const c = window.__camera, s = window.__scene; const w = s.getObjectByName('islandSea') || null;
   let water = null; s.traverse(o => { if (!water && o.isMesh && o.material && o.material.userData && o.material.userData.waterKind) water = o; });
-  return { cam: c.position.toArray().map(v => +v.toFixed(2)), pos: window.__game.pos().map(v => +v.toFixed(2)), water: water ? +water.position.y.toFixed(2) : null, waterKind: window.__waterKind,
+  return { turned: window.__openTurned || false, clear0: window.__openClear0, err: window.__openErr, started: !!(window.__game && window.__game.facts && window.__game.facts().started), cam: c.position.toArray().map(v => +v.toFixed(2)), pos: window.__game.pos().map(v => +v.toFixed(2)), water: water ? +water.position.y.toFixed(2) : null, waterKind: window.__waterKind,
     tops: (window.__platformTops || []).slice(0, 4), spec: { lvl: window.__spec && window.__spec.world.water_level, arch: window.__spec && window.__spec.world.archetype } };
 })));
 await p.screenshot({ path: process.env.OUT || 'side.jpg', type: 'jpeg', quality: 80 });

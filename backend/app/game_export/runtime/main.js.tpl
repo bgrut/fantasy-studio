@@ -19112,6 +19112,7 @@ async function main() {
     if (_tgt && !SPEC.world.pano) { const dx = _tgt[0] - _sp.x, dz = _tgt[1] - _sp.z; if (Math.hypot(dx, dz) > 4) yaw = Math.atan2(dx, dz) + Math.PI; }
   }
   let pitch = SPEC.world.pano ? 0.16 : 0.35;
+  let _openChecked = false;              // the first frame sees the hero (see the camera)
   try { setupTrap(); } catch (e) { console.warn('[game] trap: ' + e.message); }
   let dragging = false, px = 0, py = 0;
   let camZoom = 1, freeLookT = 0;   // wheel zoom · seconds of free-look after a drag
@@ -24601,6 +24602,42 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
       }
       const _spanD = _heroSpan && _heroSpan > SPEC.camera.distance_m * 0.4 ? _heroSpan * 2.2 : 0;
       const cd = Math.max(SPEC.camera.distance_m, _spanD) * camZoom * camDistMul * (inspectOn ? 1.5 : 1);
+      // THE FIRST FRAME SEES THE HERO (2026-10-17). The opening yaw faces the
+      // landmark's door, and the camera stands behind the hero along it; a
+      // tower defence beside an enterable castle opened on a blank stone
+      // wall, the hero behind it, because the camera ray only meets physics
+      // colliders and a venue's dressing has none. Once, as play starts, the
+      // view from the hero's head back to the camera is tested against the
+      // solid meshes, and if the hero would be hidden the opening turns to
+      // the nearest open bearing
+      if (gameStarted && !_openChecked && VIEW === '3d' && !INTERIOR && (P.mode || 'walk') === 'walk') {
+        _openChecked = true;
+        try {
+          const sol = [];
+          scene.traverse(o => { if (!o.isMesh || o.isInstancedMesh || o.isSkinnedMesh || !o.visible || !o.material || o.material.transparent) return;
+            let q = o; while (q) { if (q === holder || /^(clutter|grass|flora|sky|water|islandSea)/i.test(q.name || '')) return; q = q.parent; }
+            if (o.geometry && o.geometry.boundingSphere === null) o.geometry.computeBoundingSphere();
+            if (o.geometry && o.geometry.boundingSphere && o.geometry.boundingSphere.radius > 400) return;   // the ground, the sky dome
+            sol.push(o); });
+          const rc = new THREE.Raycaster(), hd = new THREE.Vector3(fX, fY + SPEC.camera.height_m * 0.55, fZ), dv = new THREE.Vector3();
+          // both faces: from inside a closed wall the ray meets only back faces
+          const sides = sol.map(o => o.material.side); sol.forEach(o => { o.material.side = THREE.DoubleSide; });
+          const clear = (yw) => { dv.set(Math.sin(yw) * Math.cos(pitch), Math.sin(pitch), Math.cos(yw) * Math.cos(pitch)).normalize();
+            rc.set(hd, dv); rc.far = cd; const h = rc.intersectObjects(sol, false); return h.length ? h[0].distance : Infinity; };
+          window.__openClear0 = +Math.min(999, clear(yaw)).toFixed(2);
+          if (clear(yaw) < cd * 0.8) {
+            let best = yaw, bd = clear(yaw);
+            outer: for (let k = 1; k <= 12; k++) for (const s of [1, -1]) {
+              const y2 = yaw + s * k * Math.PI / 12, d = clear(y2);
+              if (d === Infinity) { best = y2; break outer; }
+              if (d > bd) { bd = d; best = y2; }
+            }
+            yaw = best;
+            window.__openTurned = true;
+          }
+          sol.forEach((o, i) => { o.material.side = sides[i]; });
+        } catch (e) { window.__openErr = String(e.message || e); }
+      }
       let cx = fX + Math.sin(yaw) * Math.cos(pitch) * cd;     // camera BEHIND
       let cz = fZ + Math.cos(yaw) * Math.cos(pitch) * cd;     // (W walks away)
       let cy = fY + Math.sin(pitch) * cd + _lift * 0.55 - landDipA;
