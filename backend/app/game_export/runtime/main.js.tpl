@@ -1252,7 +1252,10 @@ async function main() {
   } else {
     const oa = innerWidth / innerHeight;
     const os = VIEW === 'side' ? SIDE_OS : 16;      // world units of half-height on screen
-    camera = new THREE.OrthographicCamera(-os * oa, os * oa, os, -os, 0.1, 1000);
+    // SIDE_NEAR: a platformer's camera stands at z=42 and draws nothing in
+    // front of z=3 (the ground there is a cut face, see the islands)
+    const SIDE_NEAR = VIEW === 'side' && SPEC.world && SPEC.world.platforms ? 42 - 3.2 : 0.1;
+    camera = new THREE.OrthographicCamera(-os * oa, os * oa, os, -os, SIDE_NEAR, 1000);
   }
 
   // r11 LIGHTING POLISH: flat ambience was killing depth — drop the hemi
@@ -2778,6 +2781,8 @@ async function main() {
     if (LVL && LVL.goal) { LVL.goal[0] = dir * laneLen; LVL.goal[1] = 0; }
     const grassM = new THREE.MeshStandardMaterial({ color: new THREE.Color(...(SPEC.world.ground_color || [0.35, 0.52, 0.28])), roughness: 0.9 });
     const rockM = new THREE.MeshStandardMaterial({ color: 0x6d6258, roughness: 0.95 });
+    const soilM = new THREE.MeshStandardMaterial({ color: 0x4a3626, roughness: 1.0 });
+    const bushM = new THREE.MeshStandardMaterial({ color: new THREE.Color(...(SPEC.world.ground_color || [0.35, 0.52, 0.28])).multiplyScalar(0.62), roughness: 0.85, flatShading: true });
     const tops = [], spans = [];
     // a running jump carries the hero run_speed x 1.47 s at the same height;
     // a gap takes a little over half of that, so a jump never needs to be perfect
@@ -2793,14 +2798,60 @@ async function main() {
       const lo = g0 + 1.1, hi = g0 + 6.2;
       let top = tops.length === 0 ? g0 + 1.3 : prevTop + (rp() < 0.62 ? 0.6 + rp() * 1.1 : -(0.6 + rp() * 1.8));
       top = Math.min(Math.max(top, lo), Math.min(hi, (tops.length ? prevTop : g0) + 1.8));
+      // A FLOATING ISLAND, NOT A DRUM ON A CONE (2026-10-17): every island
+      // was the same sixteen-sided slab on a nine-sided cone, so a level read
+      // as a row of identical cake stands. Each is its own now: an uneven
+      // turf outline with a lip that overhangs, a band of soil, a craggy rock
+      // root of its own depth, roots hanging from the soil, and on the wider
+      // ones a bush or a boulder behind the lane (never on it: the collider
+      // and the jump are the ones they were)
       const isl = new THREE.Group();
-      const slab = new THREE.Mesh(new THREE.CylinderGeometry(w / 2, w / 2 * 0.93, 0.55, 16), grassM);
-      slab.scale.z = 2.6 / w; slab.castShadow = true; slab.receiveShadow = true;
+      const sd = rp() * 100;
+      const wob = (a, k) => 1 + 0.07 * Math.sin(a * 3 + sd) + 0.04 * Math.sin(a * 7 + sd * 1.7) * k;
+      const outline = (g, k) => { const p = g.attributes.position;
+        for (let i = 0; i < p.count; i++) { const x0 = p.getX(i), z0 = p.getZ(i), a = Math.atan2(z0, x0), f = wob(a, k);
+          p.setX(i, x0 * f); p.setZ(i, z0 * f); } g.computeVertexNormals(); return g; };
+      const slab = new THREE.Mesh(outline(new THREE.CylinderGeometry(w / 2 * 1.04, w / 2 * 0.98, 0.32, 48, 1), 1), grassM);
+      slab.scale.z = 2.6 / w; slab.position.y = 0.11; slab.castShadow = true; slab.receiveShadow = true;
       isl.add(slab);
-      const under = new THREE.Mesh(new THREE.ConeGeometry(w / 2 * 0.9, 1.3 + w * 0.28, 9), rockM);
+      const soil = new THREE.Mesh(outline(new THREE.CylinderGeometry(w / 2 * 0.98, w / 2 * 0.9, 0.34, 48, 1), 1), soilM);
+      soil.scale.z = 2.6 / w; soil.position.y = -0.2; soil.receiveShadow = true;
+      isl.add(soil);
+      const uh = 1.4 + w * 0.3 + rp() * 1.4;
+      const ug = new THREE.ConeGeometry(w / 2 * 0.9, uh, 28, 7);
+      { const p = ug.attributes.position;
+        for (let i = 0; i < p.count; i++) { const x0 = p.getX(i), y0 = p.getY(i), z0 = p.getZ(i), t = (y0 / uh) + 0.5;   // 1 at the soil, 0 at the tip
+          const a = Math.atan2(z0, x0), cr = 1 + 0.16 * Math.sin(a * 5 + y0 * 2.1 + sd) + 0.1 * Math.sin(a * 11 - y0 * 3.7) ;
+          const f = wob(a, 1) * (t > 0.02 ? cr : 1);
+          p.setX(i, x0 * f + Math.sin(y0 * 1.3 + sd) * 0.12 * (1 - t)); p.setZ(i, z0 * f); }
+        ug.computeVertexNormals(); }
+      const under = new THREE.Mesh(ug, rockM);
       under.rotation.x = Math.PI; under.scale.z = 2.6 / w;
-      under.position.y = -0.27 - (1.3 + w * 0.28) / 2; under.castShadow = true;
+      under.position.y = -0.37 - uh / 2; under.castShadow = true;
       isl.add(under);
+      // roots hanging out of the soil
+      const nr = 2 + Math.floor(rp() * 4);
+      for (let k = 0; k < nr; k++) {
+        const a = rp() * Math.PI * 2, rr = w / 2 * 0.86, L = 0.4 + rp() * 0.9;
+        const root = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.008, L, 6), soilM);
+        root.position.set(Math.cos(a) * rr, -0.37 - L / 2, Math.sin(a) * rr * 2.6 / w);
+        root.rotation.z = (rp() - 0.5) * 0.4;
+        isl.add(root);
+      }
+      if (w > 4.3 && rp() < 0.75) {
+        const bx = (rp() - 0.5) * w * 0.5;
+        if (rp() < 0.55) {
+          for (let k = 0; k < 3; k++) {
+            const b = new THREE.Mesh(new THREE.IcosahedronGeometry(0.42 - k * 0.08, 1), bushM);
+            b.position.set(bx + (k - 1) * 0.38, 0.45 - k * 0.04, -0.85 + (k % 2) * 0.12); b.castShadow = true;
+            isl.add(b);
+          }
+        } else {
+          const bg = new THREE.DodecahedronGeometry(0.5, 1); bg.scale(1.2, 0.75, 1);
+          const b = new THREE.Mesh(bg, rockM); b.position.set(bx, 0.42, -0.9); b.rotation.y = rp() * 3; b.castShadow = true;
+          isl.add(b);
+        }
+      }
       isl.position.set(cx, top - 0.275, 0);
       isl.rotation.y = (rp() - 0.5) * 0.2;
       scene.add(isl);
@@ -2810,6 +2861,43 @@ async function main() {
       spans.push([dir * x, dir * (x + w), top]);
       prevTop = top;
       x += w + Math.min(gapMax, 1.0 + rp() * (gapMax - 0.6));   // a gap you have to jump, never one you cannot
+    }
+    // THE GROUND IS CUT AWAY IN FRONT OF THE LANE (2026-10-17). The side
+    // camera is orthographic and stands 42 m off the lane, so every tuft of
+    // grass, bush and tree between it and the lane was drawn over the lane:
+    // the opening frame of a platformer showed meadow and a strip of water,
+    // and not the fox or one island. The camera's near plane now stops 3 m in
+    // front of the lane (see SIDE_NEAR), and the ground there is drawn as a
+    // cross-section: a face of soil and rock under a turf lip, following the
+    // land's own profile, the way a side-scroller shows the earth it runs on
+    {
+      const ZC = 3.0, X0 = -gsize / 2, X1 = gsize / 2, N = Math.ceil((X1 - X0) / 0.8);
+      const pos = [], col = [], idx = [], uv = [];
+      const soilC = new THREE.Color(0x5a4230), rockC = new THREE.Color(0x6d6258), turfC = new THREE.Color(...(SPEC.world.ground_color || [0.35, 0.52, 0.28]));
+      const rowsY = [0, -0.18, -0.5, -2.2, -6, -14, -26];
+      for (let i = 0; i <= N; i++) {
+        const x = X0 + (X1 - X0) * i / N, top = hAt(x, ZC);
+        rowsY.forEach((dy, r) => {
+          const jag = r >= 3 ? Math.sin(x * 0.7 + r) * 0.35 + Math.sin(x * 2.3 - r) * 0.12 : 0;
+          pos.push(x, top + dy + jag, ZC);
+          uv.push(x / 4, (top + dy) / 4);
+          const c = r < 2 ? turfC.clone().multiplyScalar(r ? 0.75 : 1) : r < 4 ? soilC.clone() : rockC.clone().multiplyScalar(0.9 - r * 0.06);
+          col.push(c.r, c.g, c.b);
+        });
+      }
+      const R = rowsY.length;
+      for (let i = 0; i < N; i++) for (let r = 0; r < R - 1; r++) {
+        const a = i * R + r, b = a + 1, c = a + R, d = c + 1;
+        idx.push(a, b, c, b, d, c);
+      }
+      const cg = new THREE.BufferGeometry();
+      cg.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+      cg.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+      cg.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+      cg.setIndex(idx); cg.computeVertexNormals();
+      const cut = new THREE.Mesh(cg, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, side: THREE.DoubleSide }));
+      cut.name = 'sideCutaway'; cut.receiveShadow = true;
+      scene.add(cut);
     }
     window.__platforms = tops.length;
     window.__platformTops = tops;
