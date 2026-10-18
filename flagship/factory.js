@@ -3039,8 +3039,8 @@ function place(face, i, j, type, dir) {
     const b = new THREE.Mesh(droneGeo().pad, droneMat().pad);
     b.receiveShadow = true; g.add(b);
     // the side it unloads from, so a receiver's output is readable at a glance
-    const a = new THREE.Mesh(GEO.arrow, MAT.filt);
-    a.position.set(T * 0.36, 0.16, 0); a.rotation.z = -Math.PI / 2; g.add(a);
+    const a = new THREE.Mesh(GEO.rejectArrow, MAT.filt);   // a small brass pointer, not a white pyramid (2026-10-17)
+    a.position.set(T * 0.4, 0.2, 0); a.rotation.z = -Math.PI / 2; g.add(a);
     c.pq = c.pq || []; c.inb = 0; c.away = false;
   } else if (type === SILO) {
     const G = siloGeo(), M = siloMat();
@@ -4980,8 +4980,8 @@ var _DRONE_GEO = null;
 function droneGeo() {
   if (_DRONE_GEO) return _DRONE_GEO;
   const pad = mergeParts([
-    { g: new THREE.CylinderGeometry(T * 0.44, T * 0.47, 0.1, 24), y: 0.05, col: 0x2c333d, tint: 1 },
-    { g: new THREE.CylinderGeometry(T * 0.36, T * 0.36, 0.02, 24), y: 0.11, col: 0x3d4654, tint: 1 },
+    { g: new THREE.CylinderGeometry(T * 0.44, T * 0.47, 0.1, 48), y: 0.05, col: 0x2c333d, tint: 1 },
+    { g: new THREE.CylinderGeometry(T * 0.36, T * 0.36, 0.02, 48), y: 0.11, col: 0x3d4654, tint: 1 },
     { g: new THREE.BoxGeometry(T * 0.5, 0.025, 0.07), y: 0.125, col: 0xe8b53a, tint: 1 },
     { g: new THREE.BoxGeometry(0.07, 0.025, T * 0.5), y: 0.125, col: 0xe8b53a, tint: 1 },
   ]);
@@ -4989,22 +4989,32 @@ function droneGeo() {
     { g: new THREE.BoxGeometry(0.42, 0.12, 0.42), y: 0, col: 0x39424f, tint: 1 },
     { g: new THREE.BoxGeometry(0.9, 0.04, 0.06), y: 0.02, ry: Math.PI / 4, col: 0x2a3039, tint: 1 },
     { g: new THREE.BoxGeometry(0.9, 0.04, 0.06), y: 0.02, ry: -Math.PI / 4, col: 0x2a3039, tint: 1 },
-    { g: new THREE.CylinderGeometry(0.05, 0.05, 0.1, 8), x: 0.32, z: 0.32, y: 0.06, col: 0x22272e, tint: 1 },
-    { g: new THREE.CylinderGeometry(0.05, 0.05, 0.1, 8), x: -0.32, z: 0.32, y: 0.06, col: 0x22272e, tint: 1 },
-    { g: new THREE.CylinderGeometry(0.05, 0.05, 0.1, 8), x: 0.32, z: -0.32, y: 0.06, col: 0x22272e, tint: 1 },
-    { g: new THREE.CylinderGeometry(0.05, 0.05, 0.1, 8), x: -0.32, z: -0.32, y: 0.06, col: 0x22272e, tint: 1 },
+    { g: new THREE.CylinderGeometry(0.05, 0.05, 0.1, 20), x: 0.32, z: 0.32, y: 0.06, col: 0x22272e, tint: 1 },
+    { g: new THREE.CylinderGeometry(0.05, 0.05, 0.1, 20), x: -0.32, z: 0.32, y: 0.06, col: 0x22272e, tint: 1 },
+    { g: new THREE.CylinderGeometry(0.05, 0.05, 0.1, 20), x: 0.32, z: -0.32, y: 0.06, col: 0x22272e, tint: 1 },
+    { g: new THREE.CylinderGeometry(0.05, 0.05, 0.1, 20), x: -0.32, z: -0.32, y: 0.06, col: 0x22272e, tint: 1 },
   ]);
-  const rotor = new THREE.CylinderGeometry(0.2, 0.2, 0.012, 16);
+  const rotor = new THREE.CylinderGeometry(0.2, 0.2, 0.012, 40);
   const pod = new THREE.OctahedronGeometry(0.14, 0);
   _DRONE_GEO = { pad, body, rotor, pod };
   return _DRONE_GEO;
 }
 var _DRONE_MAT = null;
+// THE LATE MACHINES WEAR THE SAME SKIN (2026-10-17): the pad, the silo and
+// the launcher came after the panel skin and were plain vertex-coloured
+// plastic beside the machines that had it: no seams, no rivets, no worn
+// rough-and-gloss, no rim. They take the skin, its relief and a rim now.
+function skinned(mat, rim) {
+  mat.map = SKIN; mat.roughnessMap = SKIN_ROUGH; mat.normalMap = SKIN_NORMAL;
+  mat.normalScale = new THREE.Vector2(0.55, 0.55);
+  mat.emissive = new THREE.Color(0x232733); mat.emissiveIntensity = 0.5;
+  return addRim(mat, rim, 2.6, 0.5);
+}
 function droneMat() {
   if (_DRONE_MAT) return _DRONE_MAT;
   _DRONE_MAT = {
-    pad: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.5, metalness: 0.55 }),
-    body: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.38, metalness: 0.6 }),
+    pad: skinned(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.5, metalness: 0.55 }), 0x9fe8ff),
+    body: skinned(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.38, metalness: 0.6 }), 0x9fe8ff),
     rotor: new THREE.MeshBasicMaterial({ color: 0xbfd6e6, transparent: true, opacity: 0.32, depthWrite: false }),
   };
   return _DRONE_MAT;
@@ -5290,29 +5300,61 @@ var _LAUNCH_GEO = null, _LAUNCH_MAT = null;
 function launchGeo() {
   if (_LAUNCH_GEO) return _LAUNCH_GEO;
   const dark = 0x2c333d, steel = 0x8e98a6, hazard = 0xe8b53a;
+  // A LAUNCH TOWER (2026-10-17): the gantry was two bare posts and two
+  // planks on a plain disc. It is a square lattice tower now, four legs
+  // braced in an X on every face and floor, with two service arms reaching
+  // to where the capsule stands and a beacon on its crown; the pad has a
+  // grated flame pit, a striped hazard ring and tie-down bollards
+  const tx = -T * 0.36 - 0.06, tw = 0.17, TH = 2.1;
   const parts = [
-    { g: new THREE.CylinderGeometry(T * 0.46, T * 0.48, 0.14, 28), y: 0.07, col: dark, tint: 1 },
-    { g: new THREE.CylinderGeometry(T * 0.3, T * 0.3, 0.03, 28), y: 0.155, col: 0x1b1f25, tint: 1 },
+    { g: new THREE.CylinderGeometry(T * 0.46, T * 0.48, 0.14, 48), y: 0.07, col: dark, tint: 1 },
+    { g: new THREE.CylinderGeometry(T * 0.3, T * 0.3, 0.03, 48), y: 0.155, col: 0x1b1f25, tint: 1 },
     { g: new THREE.TorusGeometry(T * 0.38, 0.03, 10, 64), y: 0.16, rx: Math.PI / 2, col: hazard, tint: 1 },
-    // a gantry on one side: two posts, a crossbeam, an arm reaching in
-    { g: new THREE.BoxGeometry(0.08, 1.9, 0.08), x: -T * 0.36, z: 0.18, y: 1.1, col: steel, tint: 1 },
-    { g: new THREE.BoxGeometry(0.08, 1.9, 0.08), x: -T * 0.36, z: -0.18, y: 1.1, col: steel, tint: 1 },
-    { g: new THREE.BoxGeometry(0.1, 0.06, 0.48), x: -T * 0.36, y: 2.02, col: steel, tint: 1 },
-    { g: new THREE.BoxGeometry(0.42, 0.05, 0.06), x: -T * 0.18, y: 1.5, col: steel, tint: 1 },
-    { g: new THREE.BoxGeometry(0.42, 0.05, 0.06), x: -T * 0.18, y: 0.9, col: steel, tint: 1 },
+    { g: new THREE.TorusGeometry(T * 0.455, 0.018, 8, 64), y: 0.14, rx: Math.PI / 2, col: steel, tint: 1 },
+    // the flame pit's grate
+    ...[-2, -1, 0, 1, 2].map(k => ({ g: new THREE.BoxGeometry(T * 0.46, 0.025, 0.03), y: 0.17, z: k * 0.1, col: steel, tint: 0.8 })),
   ];
+  for (const [sx, sz] of [[1, 1], [1, -1], [-1, 1], [-1, -1]])
+    parts.push({ g: new THREE.BoxGeometry(0.05, TH, 0.05), x: tx + sx * tw, z: sz * tw, y: 0.14 + TH / 2, col: steel, tint: 1 });
+  // the bracing: an X on each face between floors, and a floor ring of beams
+  const FL = 5, fh = TH / FL, dl = Math.hypot(tw * 2, fh);
+  for (let f = 0; f <= FL; f++) {
+    const y = 0.14 + f * fh;
+    for (const [dx, dz, ry] of [[0, tw, 0], [0, -tw, 0], [tw, 0, Math.PI / 2], [-tw, 0, Math.PI / 2]])
+      parts.push({ g: new THREE.BoxGeometry(tw * 2 + 0.05, 0.03, 0.03), x: tx + dx, z: dz, y, ry, col: steel, tint: 0.9 });
+    if (f === FL) break;
+    const a = Math.atan2(fh, tw * 2);
+    for (const [dx, dz, ry] of [[0, tw, 0], [0, -tw, 0], [tw, 0, Math.PI / 2], [-tw, 0, Math.PI / 2]])
+      for (const s of [1, -1])
+        parts.push({ g: new THREE.BoxGeometry(dl, 0.02, 0.02), x: tx + dx, z: dz, y: y + fh / 2, ry, rz: s * a, col: steel, tint: 0.8 });
+  }
+  // the service arms, each ending in a clamp ring round the capsule's line
+  for (const y of [0.9, 1.5]) {
+    const x0 = tx + tw, x1 = -0.33;                        // from the tower's face to the ring
+    parts.push({ g: new THREE.BoxGeometry(x1 - x0, 0.05, 0.07), x: (x0 + x1) / 2, y, col: dark, tint: 1 });
+    parts.push({ g: new THREE.TorusGeometry(0.33, 0.022, 8, 48), y, rx: Math.PI / 2, col: hazard, tint: 1 });
+  }
+  // the crown: a cap plate and a beacon housing
+  parts.push({ g: new THREE.BoxGeometry(tw * 2 + 0.12, 0.05, tw * 2 + 0.12), x: tx, y: 0.14 + TH + 0.03, col: dark, tint: 1 });
+  parts.push({ g: new THREE.CylinderGeometry(0.05, 0.06, 0.12, 20), x: tx, y: 0.14 + TH + 0.12, col: 0xd04a2a, tint: 1.2 });
+  // tie-down bollards round the pad's rim
+  for (let k = 0; k < 6; k++) {
+    const a = (k + 0.5) / 6 * Math.PI * 2;
+    if (Math.cos(a) < -0.5) continue;                      // the tower's side
+    parts.push({ g: new THREE.CylinderGeometry(0.045, 0.055, 0.12, 20), x: Math.cos(a) * T * 0.42, z: Math.sin(a) * T * 0.42, y: 0.2, col: hazard, tint: 1 });
+  }
   const cap = mergeParts([
-    { g: new THREE.CylinderGeometry(0.26, 0.3, 0.9, 18), y: 0.45, col: 0xe9edf2, tint: 1 },
-    { g: new THREE.ConeGeometry(0.26, 0.55, 18), y: 1.17, col: 0xe9edf2, tint: 1 },
-    { g: new THREE.CylinderGeometry(0.265, 0.265, 0.1, 18), y: 0.62, col: 0xd04a2a, tint: 1 },
-    { g: new THREE.CylinderGeometry(0.32, 0.38, 0.16, 18), y: 0.0, col: 0x3a4048, tint: 1 },
+    { g: new THREE.CylinderGeometry(0.26, 0.3, 0.9, 40), y: 0.45, col: 0xe9edf2, tint: 1 },
+    { g: new THREE.ConeGeometry(0.26, 0.55, 40), y: 1.17, col: 0xe9edf2, tint: 1 },
+    { g: new THREE.CylinderGeometry(0.265, 0.265, 0.1, 40), y: 0.62, col: 0xd04a2a, tint: 1 },
+    { g: new THREE.CylinderGeometry(0.32, 0.38, 0.16, 40), y: 0.0, col: 0x3a4048, tint: 1 },
   ]);
   _LAUNCH_GEO = { base: mergeParts(parts), cap };
   return _LAUNCH_GEO;
 }
 function launchMat() {
   if (_LAUNCH_MAT) return _LAUNCH_MAT;
-  _LAUNCH_MAT = { base: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.45, metalness: 0.55 }),
+  _LAUNCH_MAT = { base: skinned(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.45, metalness: 0.55 }), 0xffd88a),
                   cap: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.35, metalness: 0.3 }) };
   return _LAUNCH_MAT;
 }
@@ -5425,12 +5467,12 @@ function siloGeo() {
   const R = T * 0.34, H = 1.85, steel = 0x8e98a6, band = 0x5b6470, dark = 0x2c333d;
   const parts = [
     { g: new THREE.BoxGeometry(T * 0.9, 0.12, T * 0.9), y: 0.06, col: dark, tint: 1 },
-    { g: new THREE.CylinderGeometry(R, R, H, 28, 1, false), y: 0.12 + H / 2, col: steel, tint: 1 },
+    { g: new THREE.CylinderGeometry(R, R, H, 64, 1, false), y: 0.12 + H / 2, col: steel, tint: 1 },
     // the roof: a low cone with a hatch on it
-    { g: new THREE.CylinderGeometry(R * 0.18, R * 1.04, 0.42, 28), y: 0.12 + H + 0.21, col: band, tint: 1 },
-    { g: new THREE.CylinderGeometry(0.11, 0.11, 0.08, 12), y: 0.12 + H + 0.46, col: dark, tint: 1 },
+    { g: new THREE.CylinderGeometry(R * 0.18, R * 1.04, 0.42, 64), y: 0.12 + H + 0.21, col: band, tint: 1 },
+    { g: new THREE.CylinderGeometry(0.11, 0.11, 0.08, 32), y: 0.12 + H + 0.46, col: dark, tint: 1 },
     // the hoops that hold the staves
-    ...[0.32, 0.78, 1.24, 1.7].map(y => ({ g: new THREE.CylinderGeometry(R * 1.035, R * 1.035, 0.07, 28, 1, true), y: 0.12 + y, col: band, tint: 1 })),
+    ...[0.32, 0.78, 1.24, 1.7].map(y => ({ g: new THREE.CylinderGeometry(R * 1.035, R * 1.035, 0.07, 64, 1, true), y: 0.12 + y, col: band, tint: 1 })),
     // a ladder up the back
     { g: new THREE.BoxGeometry(0.035, H, 0.035), x: -R - 0.07, z: 0.13, y: 0.12 + H / 2, col: dark, tint: 1 },
     { g: new THREE.BoxGeometry(0.035, H, 0.035), x: -R - 0.07, z: -0.13, y: 0.12 + H / 2, col: dark, tint: 1 },
@@ -5439,6 +5481,19 @@ function siloGeo() {
     { g: new THREE.BoxGeometry(0.3, 0.3, 0.34), x: R + 0.04, y: 0.42, col: band, tint: 1 },
     { g: new THREE.BoxGeometry(0.42, 0.06, 0.26), x: R + 0.3, y: 0.24, rz: -0.35, col: dark, tint: 1 },
   ];
+  // (2026-10-17) rivets round each hoop, and a railing round the roof's
+  // walkway where the ladder comes out
+  for (const y of [0.32, 0.78, 1.24, 1.7])
+    for (let k = 0; k < 18; k++) {
+      const a = k / 18 * Math.PI * 2;
+      if (Math.abs(Math.sin(a)) > 0.97) continue;        // the windows
+      parts.push({ g: new THREE.SphereGeometry(0.018, 8, 6), x: Math.cos(a) * R * 1.06, z: Math.sin(a) * R * 1.06, y: 0.12 + y, col: band, tint: 1.1 });
+    }
+  parts.push({ g: new THREE.TorusGeometry(R * 1.02, 0.014, 6, 64), y: 0.12 + H + 0.3, rx: Math.PI / 2, col: dark, tint: 1 });
+  for (let k = 0; k < 10; k++) {
+    const a = k / 10 * Math.PI * 2;
+    parts.push({ g: new THREE.CylinderGeometry(0.012, 0.012, 0.3, 8), x: Math.cos(a) * R * 1.02, z: Math.sin(a) * R * 1.02, y: 0.12 + H + 0.15, col: dark, tint: 1 });
+  }
   // the window's frame on the side that faces you most (-z)
   parts.push({ g: new THREE.BoxGeometry(0.26, H * 0.82, 0.05), z: -R - 0.005, y: 0.12 + H * 0.5, col: dark, tint: 1 });
   parts.push({ g: new THREE.BoxGeometry(0.26, H * 0.82, 0.05), z: R + 0.005, y: 0.12 + H * 0.5, col: dark, tint: 1 });
@@ -5446,7 +5501,7 @@ function siloGeo() {
     body: mergeParts(parts),
     level: new THREE.BoxGeometry(0.16, 1, 0.03).translate(0, 0.5, 0),   // grows up from its foot
     glass: new THREE.BoxGeometry(0.17, H * 0.78, 0.02),
-    lamp: new THREE.SphereGeometry(0.08, 10, 8),
+    lamp: new THREE.SphereGeometry(0.08, 24, 16),
     H, R,
   };
   return _SILO_GEO;
@@ -5454,7 +5509,8 @@ function siloGeo() {
 function siloMat() {
   if (_SILO_MAT) return _SILO_MAT;
   _SILO_MAT = {
-    body: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.42, metalness: 0.62 }),
+    // its drum is one long wrap of the skin, so the rivets come out large: a lighter relief
+    body: (m => { m.normalScale.set(0.2, 0.2); return m; })(skinned(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.42, metalness: 0.62 }), 0xd8e4f0)),
     glass: new THREE.MeshStandardMaterial({ color: 0x0b1218, roughness: 0.08, metalness: 0.2, transparent: true, opacity: 0.55 }),
   };
   return _SILO_MAT;
@@ -9966,7 +10022,7 @@ window.__factory = {
   cells, items, N, T, player, HALF, FACES,
   stepTile, tileWorld, faceOfPoint,
   TYPES: { EMPTY, MINER, BELT, HUB, NODE, SMELTER, SPLITTER, FORGE, FILTER,
-           RIFT, CRYSTAL, EMBER, SALT, INGOT, INGOT_E, INGOT_S, ALLOY, ASSEMBLER, COMPONENT , PROP},
+           RIFT, CRYSTAL, EMBER, SALT, INGOT, INGOT_E, INGOT_S, ALLOY, ASSEMBLER, COMPONENT , PROP, DRONEPAD, SILO, LAUNCHER},
   MINERAL_OF_FACE, get alloys() { return alloys; }, cycleFilter,
   riftOpen, riftStorm, RIFT_COUNT, RIFT_WINDOW,
   save, load, wipe, saveState, SAVE_KEY, CREATIVE, TREAD, beltFrames, beltDecks, POST,
