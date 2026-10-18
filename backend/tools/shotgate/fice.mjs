@@ -104,8 +104,11 @@ console.log('shield    : seam beside a furnace shielded', shield.inside, '|', sh
 const drill = await p.evaluate(async () => {
   const F = window.__factory;
   F.goalIdx = F.GOALS.length;             // hands out the heated drill
-  await new Promise(r => setTimeout(r, 400));
-  const f = window.__game.facts();
+  // (2026-10-17) polled: the seams thaw and the shells go on a later tick,
+  // which a loaded machine reached after the fixed 400 ms
+  let f = null;
+  for (let t = 0; t < 30; t++) { await new Promise(r => setTimeout(r, 100)); f = window.__game.facts();
+    if (t >= 3 && f.ice.frozen === 0 && !window.__scene.getObjectByName('ice')) break; }
   return { heated: f.caps.includes('heated'), active: f.ice.active, frozen: f.ice.frozen, shells: !!window.__scene.getObjectByName('ice') };
 });
 console.log('the drill : heated', drill.heated, '| ice active', drill.active, '| frozen seams', drill.frozen, '| shells left', drill.shells);

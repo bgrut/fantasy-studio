@@ -347,7 +347,7 @@ function growBroadleaf(r, P) {
           const rim = Math.hypot(at.x - crown.x, at.z - crown.z) / Math.max(crown.r, 1);
           at.y = topY - r() * P.flat - rim * rim * P.flat * 0.8;
         }
-        const nrm = P.flat ? new THREE.Vector3((r() - 0.5) * 0.5, 1, (r() - 0.5) * 0.5).normalize()
+        const nrm = P.flat ? new THREE.Vector3((r() - 0.5) * (P.tilt || 0.5), 1, (r() - 0.5) * (P.tilt || 0.5)).normalize()   // tilt: how far the cards lean off the sky
                            : new THREE.Vector3(r() - 0.5, r() * 0.8, r() - 0.5).normalize();
         const ax = randUnitPerp(nrm, r);
         const s = P.card * (0.75 + r() * 0.5);
@@ -803,7 +803,9 @@ const KINDS = {
   // lianas; the floor is ferns, grown as a palm with no stem
   kapok: (r) => ({ grow: growBroadleaf, height: 28 + r() * 10, trunkFrac: 0.72, trunkR: 0.75 + r() * 0.25, depth: 3,
     limbs: 6, twigs: 4, crownStart: 0.78, spread: [0.95, 1.35], lenRatio: 0.85, radRatio: 0.5,
-    kink: 0.14, lift: 0.06, droop: 0.03, leafFrom: 2, leaves: true, cardsPer: 6, card: 2.2, flat: 1.2,
+    // (2026-10-17) a layered dome several metres deep, cards tilted to show from below:
+    // at a 1.2 m slab of sky-facing cards it was a pancake seen edge-on from the floor
+    kink: 0.14, lift: 0.06, droop: 0.03, leafFrom: 2, leaves: true, cardsPer: 9, card: 2.5, flat: 3.0, tilt: 1.5,
     buttress: 5 + Math.floor(r() * 3), lianas: 5 + Math.floor(r() * 4) }),
   canopy: (r) => ({ grow: growBroadleaf, height: 14 + r() * 7, trunkFrac: 0.6, trunkR: 0.34 + r() * 0.1, depth: 3,
     limbs: 6 + Math.floor(r() * 3), twigs: 4, crownStart: 0.55, spread: [0.6, 1.1], lenRatio: 0.7, radRatio: 0.55,
@@ -1000,6 +1002,9 @@ function makeMaterials(kind, leafHSL, barkTex, barkN, seed, U, extra = {}) {
   const barkTint = kind === 'birch' ? new THREE.Color(0xe8e4dc) : kind === 'dead' ? new THREE.Color(0x9c8f84)
     : kind === 'redwood' ? new THREE.Color(0xa87866)
     : kind === 'bamboo' ? new THREE.Color(0x7f9a3e)
+    // (2026-10-17) a rainforest trunk is wet and mossed, grey-green and dark:
+    // the bark photo's own light tan in tropical sun read as a birch wood
+    : (kind === 'kapok' || kind === 'canopy') ? new THREE.Color(0x8f9a7a)
     : kind === 'coral' ? (extra.coralTint || new THREE.Color(0xff7a8a)) : kind === 'coral2' ? (extra.coralTint2 || new THREE.Color(0xffa64a))
     : kind === 'kelp' ? new THREE.Color(0x5a6b2a) : new THREE.Color(0xffffff);
   const bark = new THREE.MeshStandardMaterial({ map: barkTex, normalMap: barkN, color: barkTint, roughness: 0.95 });
