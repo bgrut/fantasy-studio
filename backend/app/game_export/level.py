@@ -431,13 +431,66 @@ def _lava_channels(seed: int, half: float, goal: list[float]) -> list[dict]:
 
 
 LAVA_LEVEL = -0.45     # the lava's surface; a channel's floor lies at -1.4
+RIVER_LEVEL = -0.5     # a river's surface; its bed lies at -1.7
+
+
+def _river_course(seed: int, half: float, path: list[list[float]]) -> dict:
+    """A RIVER RUNS BESIDE THE WAY (2026-10-17). "An explorer canoes down a
+    jungle river" and "a scout follows the river back to camp" stood by a
+    round lake: a river was only ever a water region. It is a channel now,
+    carved the way the lava is, running beside the route a safe distance off
+    its shoulder from one edge of the map to the other: the route's own
+    bends, smoothed, pushed twenty to twenty-four metres to one side, and a slow
+    meander of its own on top. Past the spawn and past the goal it carries
+    on along the route's end directions to the map's edges."""
+    import math as _m
+    r = random.Random(seed * 13 + 7)
+    side = 1 if r.random() < 0.5 else -1
+    off = r.uniform(20.0, 24.0)
+    # the route, densely resampled, and each sample's left normal
+    dense = []
+    for k in range(len(path) - 1):
+        (ax, az), (bx, bz) = path[k], path[k + 1]
+        n = max(2, int(_m.hypot(bx - ax, bz - az) / 4.0))
+        for i in range(n):
+            t = i / n
+            dense.append([ax + (bx - ax) * t, az + (bz - az) * t])
+    dense.append(list(path[-1]))
+    # extend both ends to past the map's edge
+    for end in (0, -1):
+        a, b = (dense[1], dense[0]) if end == 0 else (dense[-2], dense[-1])
+        dx, dz = b[0] - a[0], b[1] - a[1]
+        dl = _m.hypot(dx, dz) or 1.0
+        dx, dz = dx / dl, dz / dl
+        ext = [[b[0] + dx * s, b[1] + dz * s] for s in range(4, int(half * 2.2), 4)]
+        dense = (ext[::-1] + dense) if end == 0 else (dense + ext)
+    # smooth (the route's corners would kink the banks)
+    for _ in range(6):
+        dense = [dense[0]] + [[(dense[i - 1][0] + 2 * dense[i][0] + dense[i + 1][0]) / 4,
+                               (dense[i - 1][1] + 2 * dense[i][1] + dense[i + 1][1]) / 4]
+                              for i in range(1, len(dense) - 1)] + [dense[-1]]
+    fr, ph = r.uniform(0.018, 0.03), r.uniform(0, 6.28)
+    pts, run = [], 0.0
+    for i, p in enumerate(dense):
+        a, b = dense[max(0, i - 1)], dense[min(len(dense) - 1, i + 1)]
+        tx, tz = b[0] - a[0], b[1] - a[1]
+        tl = _m.hypot(tx, tz) or 1.0
+        nx, nz = -tz / tl, tx / tl
+        if i:
+            run += _m.hypot(p[0] - dense[i - 1][0], p[1] - dense[i - 1][1])
+        m = off + _m.sin(run * fr + ph) * 3.0
+        q = [round(p[0] + nx * side * m, 2), round(p[1] + nz * side * m, 2)]
+        if abs(q[0]) < half * 1.15 and abs(q[1]) < half * 1.15:
+            pts.append(q)
+    return {"pts": pts[::2] if len(pts) > 160 else pts, "w": round(r.uniform(4.5, 6.5), 2)}
 
 
 def build_level(seed: int, size_m: float, n_objectives: int = 0,
                 amplitude_m: float = 2.4, grid_n: int = 48,
                 regions: list[dict] | None = None,
                 archetype: str = "plain", terrain_form: str = "natural", sea: bool = False,
-                fjord: bool = False, coast: bool = False, harbor: bool = False, slot: bool = False) -> dict:
+                fjord: bool = False, coast: bool = False, harbor: bool = False, slot: bool = False,
+                river: bool = False) -> dict:
     """Deterministic LevelPlan. Returns a JSON-safe dict for the runtime.
 
     sea (2026-10-06): a sea battle sails, it does not walk. The islands sit
@@ -482,6 +535,8 @@ def build_level(seed: int, size_m: float, n_objectives: int = 0,
     lava = _lava_channels(seed, half, goal) if _arch == "volcano" else []
     lava_segs = [(c["w"], c["pts"][k], c["pts"][k + 1])
                  for c in lava for k in range(len(c["pts"]) - 1)]
+    riv = _river_course(seed, half, path) if (river and not lava and not slot and _arch != "cave") else None
+    riv_segs = [(riv["pts"][k], riv["pts"][k + 1]) for k in range(len(riv["pts"]) - 1)] if riv else []
     heights: list[float] = []
     for i in range(grid_n):
         z = (i / (grid_n - 1) - 0.5) * size_m
@@ -550,6 +605,19 @@ def build_level(seed: int, size_m: float, n_objectives: int = 0,
                 if has_water and h < -0.35 and (
                         _rid < 0 or raster["palette"][_rid]["kind"] != "water"):
                     h = -0.35            # nothing but the lake dips below water
+            # THE RIVER: a bed under the water, banks that slope up to the land
+            # over four metres, and nothing else below its surface
+            if riv_segs:
+                _rd = min(_seg_dist(x, z, _a[0], _a[1], _b[0], _b[1]) for (_a, _b) in riv_segs) - riv["w"] * (0.9 + 0.2 * hgrid[i2][j2])
+                if _rd < 0:
+                    _c = min(1.0, -_rd / riv["w"])           # 0 at the bank .. 1 mid-stream
+                    h = RIVER_LEVEL - 0.25 - 0.95 * (_c * (2 - _c))
+                elif _rd < 4.0:
+                    _s = _rd / 4.0
+                    _s = _s * _s * (3 - 2 * _s)
+                    h = (RIVER_LEVEL - 0.25) + (max(h, RIVER_LEVEL + 0.3) - (RIVER_LEVEL - 0.25)) * _s
+                else:
+                    h = max(h, RIVER_LEVEL + 0.3)
             d = min(_seg_dist(x, z, *path[k], *path[k + 1]) for k in range(len(path) - 1))
             if _arch == "cave":
                 # UNDERGROUND (2026-10-03): the route is a tunnel through rock
@@ -700,6 +768,8 @@ def build_level(seed: int, size_m: float, n_objectives: int = 0,
         out_level["lava"] = {"level": LAVA_LEVEL, "channels": lava,
                              # the cone stands past the goal, beyond the playfield
                              "cone_dir": [round(goal[0] / gl, 3), round(goal[1] / gl, 3)]}
+    if riv:
+        out_level["river"] = {"level": RIVER_LEVEL, "w": riv["w"], "pts": riv["pts"]}
     if raster is not None:
         out_level["regions"] = raster
         out_level["regions_src"] = regions     # edits re-parse from here

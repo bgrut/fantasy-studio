@@ -3566,6 +3566,18 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             _coast = not _fjord and not job.get("_naval")
             if spec.world.water_level is None:
                 spec.world.water_level = 0.0
+        # A RIVER IS A CHANNEL (2026-10-17): "an explorer canoes down a jungle
+        # river past waterfalls" was planned as an archipelago and stood on a
+        # sand spit in a round lake. A river, a stream or a canoe carves a
+        # channel beside the route (build_level river=True); a river world
+        # that never names islands or the sea is land with the river in it
+        _river = bool(_fre.search(r"\b(rivers?|riverbanks?|riverside|streams?|creeks?|brooks?|rapids|canoe\w*|kayak\w*|rafting)\b", _pw7)
+                      and not _fre.search(r"\b(sea|ocean|underwater|islands?|isle|archipelago|atoll|lagoon|space|moon|mars|city|streets?|cave\w*|stream(?:er|ing)|live ?stream\w*)\b", _pw7)
+                      and not _coast and not _fjord and not job.get("_naval")
+                      and spec.player.mode != "swim" and not getattr(spec.world, "platforms", False))
+        if _river and _arch == "archipelago":
+            _arch = "plain"
+            spec.world.archetype = "plain"
         # THE MOON IS GREY (2026-10-11): a lunar landing stood on beige sand
         if _fre.search(r"\b(moon|lunar|apollo)\b", _pw7) and not _fre.search(r"\b(honeymoon|moonlight|moonlit|moonrise|full moon|under the moon|red|rust\w*|frozen|ice|icy)\b", _pw7) and getattr(spec, "genre", "") != "factory":
             spec.world.ground_color = [0.40, 0.39, 0.38]
@@ -3574,6 +3586,15 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         if (_fre.search(r"\b(alps|alpine|swiss|switzerland|tyrol\w*|dolomites?)\b", _pw7)
                 and not _fre.search(r"\b(snow\w*|winter|blizzard|frozen|ski\w*|glacier)\b", _pw7)):
             spec.world.ground_color = [0.33, 0.47, 0.25]
+        # A JUNGLE FLOOR IS GREEN (2026-10-17): "an explorer canoes down a jungle
+        # river" was planned on brown soil, and the runtime grows grass by the
+        # ground's colour, so the rainforest stood on a bare dirt yard. Under
+        # the canopy the floor is a deep wet green of growth; a planner's own
+        # green is kept
+        if _fre.search(r"\b(jungles?|rainforests?|rain forests?|amazon\w*|tropical forests?)\b", _pw7):
+            _gc = list(spec.world.ground_color or [0.3, 0.3, 0.2])
+            if not (_gc[1] > _gc[0] * 1.08 and _gc[1] > _gc[2]):
+                spec.world.ground_color = [0.22, 0.33, 0.14]
         # A CITY ON THE WATER (2026-10-11): Venice stands in its lagoon, so the
         # sea landform makes the water; the runtime cuts the canals (CANALS)
         if (_fre.search(r"\b(venice|venezia|venetian|gondol\w*|grand canal|rialto|city of canals)\b", _pw7)
@@ -3642,7 +3663,13 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             archetype=_arch, terrain_form=_tf, sea=bool(job.get("_naval")) and not _fjord, fjord=_fjord, coast=_coast, harbor=_coast and _harbor,
             # A SLOT CANYON IS A CRACK, NOT A GORGE (2026-10-13)
             slot=bool(_fre.search(r"\b(slot canyons?|slot|narrows|crevices?|fissures?|trapped in (?:a|the) canyon|pinned|wedged)\b", (req.prompt or "").lower())
-                      and _fre.search(r"\b(canyons?|gorges?|crevices?|fissures?|narrows|ravines?)\b", (req.prompt or "").lower())))
+                      and _fre.search(r"\b(canyons?|gorges?|crevices?|fissures?|narrows|ravines?)\b", (req.prompt or "").lower())),
+            river=_river)
+        if (spec.world.level or {}).get("river"):
+            # the water stands in the channel: the lake clamp would set it by
+            # the land's low ground, which the carve keeps above this level
+            spec.world.water_level = spec.world.level["river"]["level"]
+            job.setdefault("notes", []).append("river: a channel carved beside the route, the water standing in it")
         if _tf != "natural" or _gm != 1.0:
             job.setdefault("notes", []).append(
                 f"terrain form: {_tf} ({_gn}x{_gn}). The ground is shaped by "
