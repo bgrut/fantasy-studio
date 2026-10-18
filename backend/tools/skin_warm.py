@@ -130,6 +130,21 @@ def main(argv) -> int:
     files = [a for a in argv if a.endswith('.glb')]
     for f in files:
         print(fix(Path(f), band, dry))
+    # THE RIG STAYS NEWER THAN ITS STATIC (2026-10-17): ensure_playable re-rigs
+    # a kind whose static mesh is newer than its _anim.glb, and the re-rig
+    # rebuilds the texture from the photo, magenta and all. Warming the static
+    # after the rig undid the rig at the next build
+    if not dry:
+        import os, time
+        now = time.time()
+        for f in files:
+            p = Path(f)
+            if p.name.endswith('_anim.glb') or not p.exists():
+                continue
+            anim = p.with_name(p.stem + '_anim.glb')
+            if anim.exists() and anim.stat().st_mtime <= p.stat().st_mtime:
+                os.utime(anim, (now + 1, now + 1))
+                print(f'{anim.name}: touched, so it stays newer than {p.name}')
     return 0
 
 
