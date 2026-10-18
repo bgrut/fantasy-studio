@@ -1052,6 +1052,15 @@ def build_interior(seed: int, kind: str = "castle") -> dict:
         else:
             cz = -hall_d / 2 + (k + 0.5 + rng.uniform(0, 0.3)) * (hall_d / n_side)
         rooms.append([side * (hall_w / 2 + rw / 2), cz, rw, rd])
+    # A DUNGEON ENDS IN A CRYPT (2026-10-17): the corridor ran to a blank
+    # wall. Through a door at its far end is the crypt, wider than the
+    # corridor and deeper than a cell, where a crawl's last fight belongs.
+    # Its own rng stream, so the other kinds' plans are unchanged
+    crypt = None
+    if kind == "dungeon":
+        _cr = _random.Random(seed * 97 + 13)
+        cw, cdp = _cr.uniform(12.0, 15.0), _cr.uniform(10.0, 13.0)
+        crypt = [0.0, hall_d / 2 + cdp / 2, cw, cdp]
     walls = []                                       # [cx, cz, len, rotY(0|90), doorAt(-1 none | 0..1)]
     def _wall(cx, cz, ln, rot, door=-1.0):
         walls.append([round(cx, 2), round(cz, 2), round(ln, 2), rot, round(door, 2)])
@@ -1083,13 +1092,25 @@ def build_interior(seed: int, kind: str = "castle") -> dict:
     for side in (1, -1):
         if not any(w[3] == 90 and abs(w[0] - side * hw) < 0.1 for w in walls):
             _wall(side * hw, 0, hall_d, 90, -1)
-    if kind in ("mall", "hospital", "school", "museum"):
+    # (2026-10-17) and EVERY kind with side rooms: the dedupe above keeps one
+    # hall wall a side, carrying the FIRST room's door only, so a dungeon of
+    # five cells had two you could enter and three sealed, and a castle or
+    # a house lost a room a side the same way
+    if kind in ("mall", "hospital", "school", "museum", "dungeon", "castle", "house", "office", "shop", "lab", "station"):
         # every unit opens on the concourse: the long side walls are laid in
         # pieces, one with an opening at each unit's front and plain wall
         # between units (one door per wall is all a plan wall can carry)
         walls = []
         _wall(0, -hd, hall_w, 0, 0.5)
-        _wall(0, hd, hall_w, 0, -1)
+        _wall(0, hd, hall_w, 0, 0.5 if crypt else -1)
+        if crypt:
+            ccx, ccz, cw, cdp = crypt
+            _wall(ccx - cw / 2, ccz, cdp, 90, -1)
+            _wall(ccx + cw / 2, ccz, cdp, 90, -1)
+            _wall(ccx, ccz + cdp / 2, cw, 0, -1)
+            # the crypt is wider than the corridor: its south wall's shoulders
+            for sx in (1, -1):
+                _wall(sx * (hall_w / 2 + (cw - hall_w) / 4), hd, (cw - hall_w) / 2, 0, -1)
         for side in (1, -1):
             cur = -hd
             for cx, cz, rw, rd in sorted((r for r in rooms[1:] if (r[0] > 0) == (side > 0)), key=lambda r: r[1]):
@@ -1103,6 +1124,8 @@ def build_interior(seed: int, kind: str = "castle") -> dict:
                 cur = z1
             if hd > cur + 0.05:
                 _wall(side * hw, (cur + hd) / 2, hd - cur, 90, -1)
+    if crypt:
+        rooms.append(crypt)
     # furniture: name + position + yaw; runtime resolves to props
     FURN = {
         "castle": ["table", "chair", "chair", "barrel", "crate", "bookshelf"],
@@ -1155,7 +1178,7 @@ def build_interior(seed: int, kind: str = "castle") -> dict:
         "floors": floors,
         "rooms": [[round(v, 2) for v in r] for r in rooms],
         "walls": walls, "furniture": furniture, "torches": torches,
-        "bounds": [round(hall_w + 26, 1), round(hall_d + 8, 1)],
+        "bounds": [round(max(hall_w, crypt[2] if crypt else 0) + 26, 1), round(hall_d + 8 + (2 * crypt[3] if crypt else 0), 1)],
     }
 
 

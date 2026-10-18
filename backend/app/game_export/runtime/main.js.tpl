@@ -1410,6 +1410,7 @@ async function main() {
   window.__isCity = !!OSM;
   if (OSM && LVL && LVL.landmarks) LVL.landmarks = [];   // no 30m trees on sidewalks                          // ambient (module scope) reads this
   const INTERIOR = (LVL && LVL.interior) || null;   // Phase 95: room levels
+  const _inWalls = [];                       // its walls as segments (buildRooms), so NPCs keep to the rooms
   // ── A MATCH IS PLAYED ON A PITCH (2026-10-11) ─────────────────────────
   // "score three goals against a robot goalkeeper on a sunny pitch" put the
   // ball and one goal on a forest path among wildflowers. A football world is
@@ -8226,8 +8227,14 @@ async function main() {
       world.createCollider(RAPIER.ColliderDesc.cuboid(...half).setTranslation(x + OX, DOOR_H / 2, z));
       if (!_glassDoor) { const hx = rot ? 0 : DOOR_W / 2, hz = rot ? DOOR_W / 2 : 0; SIGHT.push([x + OX - hx, z - hz, x + OX + hx, z + hz]); }
     }
+    // the solid runs of an interior level's walls, as segments, so the NPCs
+    // can be kept from walking through them (the door gaps are left open)
+    const _wr = (x, z, l, r) => { if (OX === 0) _inWalls.push(r ? [x, z - l / 2, x, z + l / 2] : [x - l / 2, z, x + l / 2, z]); };
     for (const [cx, cz, ln, rot, door] of PLAN.walls) {
-      if (door < 0) { seg(cx, cz, ln, rot, 0, WH, WT); continue; }
+      if (door < 0) { seg(cx, cz, ln, rot, 0, WH, WT); _wr(cx, cz, ln, rot); continue; }
+      { const dC = -ln / 2 + door * ln, a1 = Math.max(0.1, dC - DOOR_W / 2 + ln / 2), a2 = Math.max(0.1, ln / 2 - dC - DOOR_W / 2);
+        _wr(rot ? cx : cx - ln / 2 + a1 / 2, rot ? cz - ln / 2 + a1 / 2 : cz, a1, rot);
+        _wr(rot ? cx : cx + ln / 2 - a2 / 2, rot ? cz + ln / 2 - a2 / 2 : cz, a2, rot); }
       const dCenter = -ln / 2 + door * ln;
       const l1 = Math.max(0.1, dCenter - DOOR_W / 2 + ln / 2);
       const l2 = Math.max(0.1, ln / 2 - dCenter - DOOR_W / 2);
@@ -11145,6 +11152,20 @@ async function main() {
           holder.position.y = hAt(holder.position.x, holder.position.z);
           startYaw = rngN() * Math.PI * 2;
           sIdx++;
+        } else if (hostile && INTERIOR && INTERIOR.rooms && INTERIOR.rooms.length > 1) {
+          // INDOORS THE ENEMY IS IN THE ROOMS (2026-10-17): "a knight fights
+          // skeletons to find the golden key" put ten skeletons on the grass
+          // OUTSIDE the dungeon by the open-world spread, where no sword could
+          // reach them. They take the rooms past the entry hall, the farthest
+          // first for the boss (a dungeon's crypt), the rest round the cells
+          const rms = INTERIOR.rooms.slice(1).filter(r => Math.hypot(r[0] - _sp.x, r[1] - _sp.z) > 9);
+          const pool = rms.length ? rms : INTERIOR.rooms.slice(1);
+          const far = pool.slice().sort((a, b) => Math.hypot(b[0] - _sp.x, b[1] - _sp.z) - Math.hypot(a[0] - _sp.x, a[1] - _sp.z));
+          const k = (window.__inHostile = (window.__inHostile || 0) + 1) - 1;
+          const home = /boss/i.test(String(ent.role || ent.name || '')) ? far[0] : far[k % far.length];
+          holder.position.set(home[0] + (rngN() - 0.5) * Math.max(0, home[2] - 2.4), 0, home[1] + (rngN() - 0.5) * Math.max(0, home[3] - 2.4));
+          holder.position.y = hAt(holder.position.x, holder.position.z);
+          startYaw = rngN() * Math.PI * 2;
         } else if (ARENA && (ent.behavior === 'hostile' || ent.behavior === 'guard' || ent.behavior === 'wander' || ent.behavior === 'flee')) {
           // the fighters wait on the sand at the far end, facing the gate you came in by
           const [x, z] = ARENA.world(4 + rngN() * (ARENA.A * 0.6), (rngN() - 0.5) * ARENA.B * 1.1);
@@ -11306,7 +11327,7 @@ async function main() {
         // (0, -17.7) put a skeleton 1.3 m from them: "Defeated" five seconds
         // in, before a key was pressed. Whatever placed it, a hostile stands
         // fourteen metres or more from where the player actually starts.
-        if (hostile && _sp && !dormant) {
+        if (hostile && _sp && !dormant && !(INTERIOR && INTERIOR.rooms && INTERIOR.rooms.length > 1)) {   // indoors the rooms already keep them off the doormat
           const dx0 = holder.position.x - _sp.x, dz0 = holder.position.z - _sp.z, d0 = Math.hypot(dx0, dz0);
           if (d0 < 14) {
             const a0 = d0 > 0.5 ? Math.atan2(dx0, dz0) : rngN() * Math.PI * 2;
@@ -11501,6 +11522,7 @@ async function main() {
       // reading one again panicked the physics (RuntimeError: unreachable,
       // the viking raid 2026-10-11)
       if (n.dormant || n.gone) continue;           // wave-pool members sleep until woken
+      n._px = n.obj.position.x; n._pz = n.obj.position.z;   // where it stood, for the indoor walls below
       // STRUCK BY A CAR (2026-08-07 r2). The first cut only knocked down
       // ambient __peds, but guards, the informant and every wandering
       // entity are `npcs` — a different list on a different update path —
@@ -12025,6 +12047,23 @@ async function main() {
         }
         n.anim.mixer.update(dt);
         if (n._flinch) n._flinch.apply(dt);
+      }
+      // INDOORS A WALL STOPS THEM (2026-10-17): NPCs step kinematically and
+      // the room walls' colliders never met them, so a dungeon's skeletons
+      // walked out of their cells, through the corridor walls and onto the
+      // grass outside within twelve seconds. A step across a solid run of
+      // wall (the door gaps are open) is undone, and the walker turns about
+      if (_inWalls && _inWalls.length && n._px !== undefined) {
+        const ax = n._px, az = n._pz, bx = n.obj.position.x, bz = n.obj.position.z;
+        if (ax !== bx || az !== bz) for (const [x0, z0, x1, z1] of _inWalls) {
+          const d1 = (x1 - x0) * (az - z0) - (z1 - z0) * (ax - x0), d2 = (x1 - x0) * (bz - z0) - (z1 - z0) * (bx - x0);
+          if ((d1 > 0) === (d2 > 0)) continue;
+          const e1 = (bx - ax) * (z0 - az) - (bz - az) * (x0 - ax), e2 = (bx - ax) * (z1 - az) - (bz - az) * (x1 - ax);
+          if ((e1 > 0) === (e2 > 0)) continue;
+          n.obj.position.x = ax; n.obj.position.z = az;
+          if (n.yaw !== undefined) n.yaw += Math.PI * (0.6 + Math.random() * 0.8);
+          break;
+        }
       }
       // stay inside the walls — or, for a heist sentry, inside HIS building.
       // (2026-08-05: this world-bounds clamp yanked every venue guard from
