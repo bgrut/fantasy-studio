@@ -410,22 +410,30 @@ function growPine(r, P) {
       }
       // the wood stops inside the foliage: a bare stick past the needles
       // read as a coat-hanger
-      const wood = bp.map((q, s) => ({ p: bp[0].p.clone().lerp(q.p, 0.72), r: q.r }));
+      // (2026-10-17) and it stops well inside: the first quarter of every
+      // branch was bare wood, so each trunk wore rings of sticks
+      const wood = bp.map((q, s) => ({ p: bp[0].p.clone().lerp(q.p, 0.55), r: q.r }));
       tube(bark, wood, 3, 0.2, 0.7);
-      // needle sprays laid along the branch, two crossed planes each
+      // needle sprays laid along the branch from the trunk out, crossed planes each
       // this whorl's own crown: the trunk at its height, as wide as its branches
+      // FULLER CROWNS (2026-10-17): two flat planes per spray read as a fern
+      // frond from below and left the trunk showing from above, a forest of
+      // toothpicks. The sprays start at the trunk, sit closer, are larger
+      // inside, and the inner ones carry a third plane tilted the other way,
+      // so a branch has depth from the side
       const cw = o.clone(); cw.r = L + 0.4;
-      const sprays = Math.max(2, Math.round(L / 0.95));
+      const sprays = Math.max(2, Math.round(L / 0.8));
       for (let s = 0; s < sprays; s++) {
-        const tt = 0.25 + 0.75 * ((s + 0.5) / sprays);
+        const tt = 0.06 + 0.94 * ((s + 0.5) / sprays);
         const at = bp[0].p.clone().lerp(bp[2].p, tt);
         const ax = bp[2].p.clone().sub(bp[0].p).normalize();
-        const w2 = P.card * (1.05 - tt * 0.3) * (0.9 + r() * 0.2);
+        const w2 = P.card * (1.15 - tt * 0.4) * (0.9 + r() * 0.2);
         const nUp = new THREE.Vector3(0, 1, 0).sub(ax.clone().multiplyScalar(ax.y)).normalize();
         card(leaf, at, w2, w2 * 1.15, nUp, ax, Math.floor(r() * 4), cw, 0.7 + tt * 0.3);
-        const nSide = new THREE.Vector3().crossVectors(ax, nUp).normalize()
-          .lerp(nUp, 0.35).normalize();
+        const side = new THREE.Vector3().crossVectors(ax, nUp).normalize();
+        const nSide = side.clone().lerp(nUp, 0.35).normalize();
         card(leaf, at, w2 * 0.85, w2, nSide, ax, Math.floor(r() * 4), cw, 0.7 + tt * 0.3);
+        if (tt < 0.6) card(leaf, at, w2 * 0.8, w2 * 0.95, side.negate().lerp(nUp, 0.35).normalize(), ax, Math.floor(r() * 4), cw, 0.7 + tt * 0.3);
       }
     }
   }
