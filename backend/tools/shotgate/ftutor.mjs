@@ -75,8 +75,8 @@ const s5 = await p.evaluate(async () => {
   F.place(front.face, front.i, front.j, TY.BELT, 0);
   const next = F.stepTile(front.face, front.i, front.j, 0);
   if (next && F.cells[next.face][next.i][next.j].t === TY.EMPTY) F.place(next.face, next.i, next.j, TY.BELT, 0);
-  await new Promise(r => setTimeout(r, 600));
-  const g5 = window.__game.facts();
+  // (2026-10-19) polled: the step advances on a later tick under load
+  let g5 = null; for (let k = 0; k < 25; k++) { await new Promise(r => setTimeout(r, 120)); g5 = window.__game.facts(); if (k >= 4 && g5.tutorial && g5.tutorial.step >= 5) break; }
   return { onSeam, s4, step: g5.tutorial && g5.tutorial.step, title: g5.tutorial && g5.tutorial.title };
 });
 console.log('the rig   : ring was on a seam', s5.onSeam, '| rig built -> step', s5.s4.step, '| belt in hand', s5.s4.tool, '| belt chip pulsing', s5.s4.hint);
@@ -112,7 +112,9 @@ const nudge = await p.evaluate(async () => {
   const mo = new MutationObserver(() => heard.push(toastEl.textContent));
   mo.observe(toastEl, { childList: true, characterData: true, subtree: true });
   F.nudgeClock = 181;
-  await new Promise(r => setTimeout(r, 400));
+  // (2026-10-19) polled: the nudge is checked on a later frame, past 400 ms under load
+  for (let k = 0; k < 20 && !F.edgeNudged; k++) await new Promise(r => setTimeout(r, 120));
+  await new Promise(r => setTimeout(r, 150));
   mo.disconnect();
   return { before, nudged: F.edgeNudged, toast: heard.find(t => /Walk over any edge/.test(t)) || toastEl.textContent };
 });
@@ -182,6 +184,8 @@ console.log('            rig off home ->', JSON.stringify(act2.s2), '| alloy ->'
 const ovNow = () => p.evaluate(() => document.body.classList.contains('overhead'));
 await p.keyboard.press('Tab'); for (let k = 0; k < 12 && !(await ovNow()); k++) await wait(150); await wait(300);
 await p.keyboard.press('Tab'); for (let k = 0; k < 12 && (await ovNow()); k++) await wait(150); await wait(500);
+// (2026-10-19) and until the overhead step has been counted, which a loaded frame takes a beat over
+for (let k = 0; k < 20; k++) { const tt = await p.evaluate(() => { const t = window.__game.facts().tutorial; return t && t.title; }); if (tt !== 'Plan from above') break; await wait(150); }
 const act2b = await p.evaluate(async () => {
   const F = window.__factory, TY = F.TYPES;
   const w = ms => new Promise(r => setTimeout(r, ms));

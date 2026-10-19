@@ -45,8 +45,10 @@ console.log('locked    : forge tool selected?', locked.toolAfter === 'forge' ? '
             '| dimmed', locked.dimmed, '| said:', JSON.stringify(locked.toast));
 
 // 2. tier 1 is a total
-await p.evaluate(() => window.__factory.addValue(60)); await wait(400);
-const t1 = await facts();
+// (2026-10-19) polled: after the locked tool's toast the goal card takes its
+// turn about a second later, past a fixed 400 ms
+await p.evaluate(() => window.__factory.addValue(60));
+let t1 = null; for (let k = 0; k < 20; k++) { await wait(200); t1 = await facts(); if (t1.goal_index >= 1) break; }
 console.log('bank 60   :', at(t1), '| unlocked', t1.unlocked.join(','));
 
 // 3. tier 2 is a RATE, and it is held. Money does not buy it; a rate under the

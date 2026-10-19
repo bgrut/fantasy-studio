@@ -3488,6 +3488,8 @@ async function main() {
     if (offworld) kind = 'mast';
     // a slot canyon's way out is the open mouth itself, in the sun (2026-10-14)
     if (LVL && LVL.slot) { window.__goalMark = 'none'; return G; }
+    // a race ends at its checkered banner: nothing else stands at the finish (2026-10-19)
+    if ((SPEC.objectives || []).some(o => o.kind === 'race')) { window.__goalMark = 'none'; return G; }
     // a person to reach is the goal themself: a campfire on a lifeguard's
     // beach for "reach swimmer 1" was a thing that should not be there
     if (!kind && /\b(swimmers?|man|woman|men|women|girl|boy|child|children|kids?|princess|prince|king|queen|survivors?|friends?|hikers?|climbers?|people|family|mother|father|brother|sister|captain|crew|villagers?|dog|cat|horse|guide|keeper|master|elder|monk|teacher|stranger|customer|rider|driver|player|team|rival|opponent|cubs?|pups?|kits?|kittens?|puppies|puppy|chicks?|ducklings?|foals?|calf|calves|lambs?|fawns?|cygnets?|hatchlings?|eggs?|young|babies|baby|herd|flock|pack|litter)\b|\d/.test(lab)) { window.__goalMark = 'none'; return G; }
@@ -4166,6 +4168,9 @@ async function main() {
   // the terrain. Landmarks = oversized instances of the first prop at the
   // LevelPlan's scenic points.
   const PATH = (LVL && LVL.path) || null;
+  // a ski or snowboard race: a cut piste, slalom flags, no campfire at the finish (2026-10-19)
+  const SLALOM = (SPEC.objectives || []).some(o => o.kind === 'race')
+    && /\b(slalom|ski(?:er|ers|ing|s)?|snowboard\w*|downhill|piste|bobsled|luge)\b/.test([SPEC.prompt, SPEC.player && SPEC.player.name].filter(Boolean).join(' ').toLowerCase());
   const CORR = (LVL && LVL.corridor_m || 5.5) + 1.5;
   function pathDist(x, z) {
     if (!PATH) return Infinity;
@@ -7726,6 +7731,14 @@ async function main() {
       if (VILLAGE) keepClear.push([VILLAGE.GC[0], VILLAGE.GC[1], 26], [0, 3, 6]);
       if (GRAVE) for (let gz = GRAVE.Z0; gz <= GRAVE.Z1; gz += 5) keepClear.push([0, gz, 20]);   // no wood inside the railings
       if (WRECK) { WRECK.settle(); keepClear.push([WRECK.x, WRECK.z, 11]); }   // no kelp through the hull
+      // A PISTE THROUGH THE TREES (2026-10-19): "a snowboarder races down a
+      // mountain slalom through the pines" raced through an unbroken forest,
+      // trees standing in the line. A ski or board race cuts a piste twenty
+      // metres wide down the route; the pines stand along its edges
+      if (SLALOM && PATH && PATH.length > 1) for (let k = 0; k < PATH.length - 1; k++) {
+        const [ax, az] = PATH[k], [bx, bz] = PATH[k + 1], L = Math.hypot(bx - ax, bz - az), n = Math.max(1, Math.ceil(L / 6));
+        for (let i = 0; i <= n; i++) keepClear.push([ax + (bx - ax) * i / n, az + (bz - az) * i / n, 10]);
+      }
       // a building the sentence named stands in its own ground, not in a thicket (2026-10-07);
       // a temple keeps its approach, torii and lanterns clear as well
       for (const E of (typeof ENTERABLES !== 'undefined' ? ENTERABLES : [])) if (E && E.door)
@@ -10542,7 +10555,35 @@ async function main() {
       color: 0xffa227, emissive: 0xff7a00, emissiveIntensity: 1.6, roughness: 0.5 });
     const poleMat = new THREE.MeshStandardMaterial({ color: 0x222228, roughness: 0.6 });
     const step = Math.max(2, Math.floor(PATH.length / 6));
-    for (let k = step; k < PATH.length - 1; k += step) {
+    if (SLALOM) {
+      // SLALOM GATES (2026-10-19): a pair of poles with a nylon panel between
+      // them every fourteen metres down the piste, alternately red and blue and
+      // set to alternate sides, so the line weaves; snow banked at each foot
+      const flagT = (col) => { const c = document.createElement('canvas'); c.width = 64; c.height = 48; const x = c.getContext('2d');
+        x.fillStyle = col; x.fillRect(0, 0, 64, 48); x.fillStyle = 'rgba(255,255,255,0.85)'; x.fillRect(0, 20, 64, 6);
+        const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t; };
+      const panel = [flagT('#d8262c'), flagT('#1f4fd8')].map(t => new THREE.MeshStandardMaterial({ map: t, side: THREE.DoubleSide, roughness: 0.6 }));
+      const poleM = [0xd8262c, 0x1f4fd8].map(c => new THREE.MeshStandardMaterial({ color: c, roughness: 0.4 }));
+      const snowM = new THREE.MeshStandardMaterial({ color: 0xf2f5f8, roughness: 0.9 });
+      const pts = [];                                   // the route resampled every metre
+      for (let k = 0; k < PATH.length - 1; k++) { const [ax, az] = PATH[k], [bx, bz] = PATH[k + 1], L = Math.hypot(bx - ax, bz - az);
+        for (let s = 0; s < L; s += 1) pts.push([ax + (bx - ax) * s / L, az + (bz - az) * s / L]); }
+      let gi = 0;
+      for (let s = 18; s < pts.length - 10; s += 14, gi++) {
+        const [x, z] = pts[s], [x2, z2] = pts[Math.min(pts.length - 1, s + 1)], hd = Math.atan2(x2 - x, z2 - z);
+        const side = gi % 2 ? 1 : -1, off = 2.6 * side, nx = Math.cos(hd), nz = -Math.sin(hd);
+        const G2 = new THREE.Group(); G2.position.set(x + nx * off, hAt(x + nx * off, z + nz * off), z + nz * off); G2.rotation.y = hd + Math.PI / 2;
+        const c = gi % 2;
+        for (const px of [-0.75, 0.75]) {
+          const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.03, 1.9, 12), poleM[c]); pole.position.set(px, 0.95, 0); pole.castShadow = true; G2.add(pole);
+          const mound = new THREE.Mesh(new THREE.SphereGeometry(0.16, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2), snowM); mound.position.set(px, 0, 0); G2.add(mound);
+        }
+        const pn = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 0.95), panel[c]); pn.position.y = 1.35; pn.castShadow = true; G2.add(pn);
+        scene.add(G2);
+      }
+      window.__slalom = gi;
+    }
+    for (let k = step; k < PATH.length - 1 && !SLALOM; k += step) {
       const [x, z] = PATH[k];
       const hd = Math.atan2(PATH[k + 1][0] - PATH[k][0], PATH[k + 1][1] - PATH[k][1]);
       const gate = new THREE.Group();
