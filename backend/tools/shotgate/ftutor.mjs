@@ -187,10 +187,11 @@ const act2b = await p.evaluate(async () => {
   const w = ms => new Promise(r => setTimeout(r, ms));
   const s5 = window.__game.facts().tutorial;
   F.addValue(60); await w(300);
-  const c = F.offerContract(TY.INGOT); for (let k = 0; k < c.need; k++) F.bank(TY.INGOT); await w(400);
-  const s6 = window.__game.facts().tutorial;
-  F.bpStamps = 1; await w(500);
-  const f = window.__game.facts();
+  const c = F.offerContract(TY.INGOT); for (let k = 0; k < c.need; k++) F.bank(TY.INGOT);
+  // (2026-10-18) polled: the step advances on a later tick, past 400 ms on a loaded machine
+  let s6 = null; for (let k = 0; k < 30; k++) { await w(100); s6 = window.__game.facts().tutorial; if (k >= 3 && s6 && s6.title !== 'Keep a promise') break; }
+  F.bpStamps = 1;
+  let f = null; for (let k = 0; k < 30; k++) { await w(100); f = window.__game.facts(); if (k >= 4 && f.act2_done) break; }
   F.save();
   return { s5: s5 && s5.title, s6: s6 && s6.title, after: f.tutorial, act2Done: f.act2_done, toast: document.getElementById('toast').textContent };
 });
@@ -220,4 +221,5 @@ const ok = s1.before.step === 1 && s1.before.on && s1.before.tool === null && !s
   && back2.act2Done && back2.tutorial === null
   && look.none === null && look.creative && /^SMELTER/.test(look.smelter || '') && /SEAM/.test(look.seam || '') && /rich/.test(look.seam || '')
   && errs.length === 0;
+if (!ok && process.env.WHY) console.log(JSON.stringify({ s1, s3, s5, done, back, act2, act2b, back2, look, nudge }).slice(0, 3000));
 process.exit(ok ? 0 : 1);

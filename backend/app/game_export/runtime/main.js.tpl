@@ -1315,7 +1315,8 @@ async function main() {
   // hero on a black moor fell back under the readable line
   // 17, not 14 (2026-10-08): a hero wearing its reference photo (a trench coat's
   // real brown, not the coat's smoothed average) is darker, and fell under the line
-  const heroFill = new THREE.PointLight(0xfff0dc, _isNightSky ? 17.0 : 0.0, 9, 2);
+  // (2026-10-18) and in space, where a dark hull on black was a speck
+  const heroFill = new THREE.PointLight(0xfff0dc, _isNightSky ? 17.0 : SPEC.world.sky === 'space' && SPEC.player.mode === 'fly' ? 22.0 : 0.0, 9, 2);
   heroFill.name = 'heroFill';
   scene.add(heroFill);
   // CASCADED SHADOWS (Arc A round 3, 2026-07-28): big worlds/cities get
@@ -7726,7 +7727,23 @@ async function main() {
       const rockM = new THREE.MeshStandardMaterial({ map: rockT, color: 0x8a8580, roughness: 0.95, metalness: 0.05 });
       rockM.userData.noAutoTex = true;
       const rngA = mulberry32((SPEC.seed || 1) + 6061);
-      const kinds = [0, 1, 2, 3].map(k => FL.sculptStone(7101 + k * 37, { size: 1, flat: 0.15 + k * 0.1, detail: 3 }));
+      // (2026-10-18) an asteroid is a potato, not a shard: the stone sculptor's
+      // facets cut each into broken slabs, so the rocks are rounded lumps
+      // now, pitted with craters (a bowl and a raised rim), each kind its own
+      const _crater = (g, seed) => {
+        const rc = mulberry32(seed), cs = [];
+        for (let k = 0; k < 9; k++) { const v = new THREE.Vector3(rc() - 0.5, rc() - 0.5, rc() - 0.5).normalize(); cs.push([v, 0.18 + rc() * 0.32, 0.08 + rc() * 0.1]); }
+        const p = g.attributes.position, v = new THREE.Vector3();
+        for (let i = 0; i < p.count; i++) {
+          v.fromBufferAttribute(p, i); const L = v.length(), n = v.clone().normalize();
+          let f = 1 + 0.12 * Math.sin(n.x * 4.1 + seed) * Math.sin(n.y * 3.3) + 0.08 * Math.sin(n.z * 7.7 - n.x * 5.1);
+          for (const [c, rad, dep] of cs) { const d = n.distanceTo(c) / rad;
+            if (d < 1) f -= dep * (1 - d * d); else if (d < 1.35) f += dep * 0.35 * Math.sin((d - 1) / 0.35 * Math.PI); }
+          v.setLength(L * f); p.setXYZ(i, v.x, v.y, v.z);
+        }
+        g.computeVertexNormals(); return g;
+      };
+      const kinds = [0, 1, 2, 3].map(k => { const g = mergeVertices(new THREE.IcosahedronGeometry(1, 6).deleteAttribute("uv"), 1e-4); g.scale(1, 0.62 + k * 0.1, 0.8 + (k % 2) * 0.15); _crater(g, 7101 + k * 37); const p = g.attributes.position, uv = new Float32Array(p.count * 2); for (let i = 0; i < p.count; i++) { uv[i * 2] = Math.atan2(p.getZ(i), p.getX(i)) / 6.283 * 2; uv[i * 2 + 1] = p.getY(i) * 0.5; } g.setAttribute("uv", new THREE.BufferAttribute(uv, 2)); return g; });   // welded, so it shades smooth
       const PER = 26, half = gsize * 0.5;
       const field = [];
       kinds.forEach((geo, k) => {
@@ -7753,6 +7770,29 @@ async function main() {
       };
       window.__asteroidTick(0);
       window.__asteroids = { count: field.length };
+      // SPACE HAS A BACKDROP (2026-10-18): past the rocks was flat black. A
+      // banded gas giant with a ring hangs far off, lit from the sun's side,
+      // so the field has a place
+      {
+        const rn = mulberry32((SPEC.seed || 1) + 9091);
+        const hue = rn();
+        // (a painted nebula was tried and taken out: in a near-black frame the
+        // eye adaptation lifts any faint haze into a solid wall of colour)
+        // the giant: bands of its own hue, a soft terminator, a tilted ring
+        const pc = document.createElement('canvas'); pc.width = 512; pc.height = 256; const px = pc.getContext('2d');
+        const ph = (hue + 0.5) % 1;
+        for (let y = 0; y < 256; y++) { const b = Math.sin(y * 0.09 + Math.sin(y * 0.021) * 3) * 0.5 + 0.5;
+          px.fillStyle = `hsl(${ph * 360},${30 + b * 25}%,${38 + b * 22}%)`; px.fillRect(0, y, 512, 1); }
+        const pt = new THREE.CanvasTexture(pc); pt.colorSpace = THREE.SRGBColorSpace;
+        const PR = 160, pd = new THREE.Vector3(-0.6, 0.35, -0.7).normalize().multiplyScalar(720);
+        const planet = new THREE.Mesh(new THREE.SphereGeometry(PR, 64, 40), new THREE.MeshStandardMaterial({ map: pt, roughness: 1, fog: false }));
+        planet.position.copy(pd); planet.rotation.z = 0.35; planet.name = 'gasGiant';
+        const ring = new THREE.Mesh(new THREE.RingGeometry(PR * 1.35, PR * 2.1, 128, 1),
+          new THREE.MeshBasicMaterial({ color: new THREE.Color().setHSL(ph, 0.25, 0.7), transparent: true, opacity: 0.35, side: THREE.DoubleSide, depthWrite: false, fog: false }));
+        ring.rotation.x = Math.PI / 2 - 0.35; ring.rotation.y = 0.2; planet.add(ring);
+        scene.add(planet);
+        window.__spaceBackdrop = true;
+      }
     } catch (e) { console.warn('[game] asteroid field skipped: ' + e.message); }
   }
   if (!FLORA_LIVE && !PURE_SCENE && !OSM && LVL && LVL.regions
@@ -24649,7 +24689,7 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
       // view from the hero's head back to the camera is tested against the
       // solid meshes, and if the hero would be hidden the opening turns to
       // the nearest open bearing
-      if (gameStarted && !_openChecked && VIEW === '3d' && !INTERIOR && (P.mode || 'walk') === 'walk') {
+      if (gameStarted && !_openChecked && VIEW === '3d' && (P.mode || 'walk') === 'walk') {   // indoors too: a mall opened on a wall (2026-10-18)
         _openChecked = true;
         try {
           const sol = [];
