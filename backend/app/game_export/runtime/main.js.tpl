@@ -3490,6 +3490,8 @@ async function main() {
     if (LVL && LVL.slot) { window.__goalMark = 'none'; return G; }
     // a race ends at its checkered banner: nothing else stands at the finish (2026-10-19)
     if ((SPEC.objectives || []).some(o => o.kind === 'race')) { window.__goalMark = 'none'; return G; }
+    // a city street is no place for a campfire or a cairn: the goal there is the street itself (2026-10-19)
+    if (OSM && kind !== 'chest') { window.__goalMark = 'none'; return G; }
     // a person to reach is the goal themself: a campfire on a lifeguard's
     // beach for "reach swimmer 1" was a thing that should not be there
     if (!kind && /\b(swimmers?|man|woman|men|women|girl|boy|child|children|kids?|princess|prince|king|queen|survivors?|friends?|hikers?|climbers?|people|family|mother|father|brother|sister|captain|crew|villagers?|dog|cat|horse|guide|keeper|master|elder|monk|teacher|stranger|customer|rider|driver|player|team|rival|opponent|cubs?|pups?|kits?|kittens?|puppies|puppy|chicks?|ducklings?|foals?|calf|calves|lambs?|fawns?|cygnets?|hatchlings?|eggs?|young|babies|baby|herd|flock|pack|litter)\b|\d/.test(lab)) { window.__goalMark = 'none'; return G; }
@@ -7976,6 +7978,142 @@ async function main() {
         window.__spaceBackdrop = true;
       }
     } catch (e) { console.warn('[game] asteroid field skipped: ' + e.message); }
+  }
+  // ── IN ORBIT (2026-10-19) ─────────────────────────────────────────────────
+  // "an astronaut floats outside the space station above earth to repair a
+  // broken solar panel" walked a grey moon. In orbit there is no ground: the
+  // Earth turns far below, oceans and continents under cloud with a blue rim
+  // of air, and the station hangs in front of you, its modules on a truss,
+  // radiators, and four solar wings, one of them broken, torn and sparking,
+  // where the work is. The tools to fix it are clipped along the truss.
+  const ORBIT = !ASTEROIDS && SPEC.world.sky === 'space' && !INTERIOR && LVL && LVL.goal
+    && /\b(space ?station|orbit\w*|spacewalk\w*|space walk|satellites?|solar (?:panels?|arrays?)|iss|eva|above (?:the )?earth)\b/
+      .test(((SPEC.prompt || '') + ' ' + (SPEC.world.name || '')).toLowerCase());
+  if (ORBIT) {
+    try {
+      gmat.visible = false;
+      scene.traverse(o => { if (o.name === 'groundSkirt' || o.name === 'skyline' || o.name === 'outerLand' || o.name === 'flora') o.visible = false; });
+      if (window.__skylineMat) window.__skylineMat.visible = false;
+      const ALT = 34;                                        // the station's height over the old ground, the hero's too
+      window.__orbit = { alt: ALT };
+      const ro = mulberry32((SPEC.seed || 1) + 4401);
+      // the Earth: value-noise continents, a cloud layer, an atmosphere shell
+      const ec = document.createElement('canvas'); ec.width = 1024; ec.height = 512; const ex = ec.getContext('2d');
+      const img = ex.createImageData(1024, 512), D = img.data;
+      const hsh = (x, y) => { const s = Math.sin(x * 127.1 + y * 311.7 + (SPEC.seed || 1) * 0.37) * 43758.5453; return s - Math.floor(s); };
+      const vn = (x, y) => { const xi = Math.floor(x), yi = Math.floor(y), xf = x - xi, yf = y - yi, u = xf * xf * (3 - 2 * xf), v = yf * yf * (3 - 2 * yf);
+        const a = hsh(xi % 64, yi), b = hsh((xi + 1) % 64, yi), c = hsh(xi % 64, yi + 1), d = hsh((xi + 1) % 64, yi + 1); return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v; };
+      const fb = (x, y) => vn(x, y) * 0.5 + vn(x * 2, y * 2) * 0.25 + vn(x * 4, y * 4) * 0.125 + vn(x * 8, y * 8) * 0.0625;
+      for (let y = 0; y < 512; y++) for (let x = 0; x < 1024; x++) {
+        const lat = Math.abs(y / 512 - 0.5) * 2, n = fb(x / 1024 * 8, y / 512 * 4), cl = fb(x / 1024 * 16 + 9, y / 512 * 8 + 3);
+        let r, g, b;
+        if (lat > 0.86) { r = g = b = 235; }                                                   // the ice caps
+        else if (n > 0.52) { const t = (n - 0.52) * 4; r = 70 + t * 90 + (lat < 0.3 ? 60 : 0); g = 96 + t * 40; b = 50 + t * 20; }   // land, dry nearer the equator
+        else { const t = n / 0.52; r = 8 + t * 20; g = 40 + t * 50; b = 90 + t * 70; }      // the ocean, shallower near the coast
+        if (cl > 0.55) { const k = Math.min(1, (cl - 0.55) * 4); r += (245 - r) * k; g += (248 - g) * k; b += (252 - b) * k; }
+        const i = (y * 1024 + x) * 4; D[i] = r; D[i + 1] = g; D[i + 2] = b; D[i + 3] = 255;
+      }
+      ex.putImageData(img, 0, 0);
+      const et = new THREE.CanvasTexture(ec); et.colorSpace = THREE.SRGBColorSpace;
+      const ER = 640, EY = -ER - 90;
+      const earth = new THREE.Mesh(new THREE.SphereGeometry(ER, 96, 64), new THREE.MeshStandardMaterial({ map: et, roughness: 0.75, metalness: 0, fog: false }));
+      earth.position.set(_sp.x, EY, _sp.z); earth.rotation.set(0.4, ro() * 6, 0.2); earth.name = 'earth'; scene.add(earth);
+      const air = new THREE.Mesh(new THREE.SphereGeometry(ER * 1.025, 96, 64), new THREE.ShaderMaterial({
+        uniforms: { c: { value: new THREE.Color(0x6fb4ff) } }, transparent: true, depthWrite: false, side: THREE.BackSide, blending: THREE.AdditiveBlending,
+        vertexShader: 'varying vec3 vN; varying vec3 vV; void main(){ vec4 mv = modelViewMatrix * vec4(position,1.0); vN = normalize(normalMatrix * normal); vV = normalize(-mv.xyz); gl_Position = projectionMatrix * mv; }',
+        fragmentShader: 'uniform vec3 c; varying vec3 vN; varying vec3 vV; void main(){ float f = pow(1.0 - abs(dot(vN, vV)), 3.0); gl_FragColor = vec4(c * f * 1.4, f); }' }));
+      air.position.copy(earth.position); air.name = 'earthAir'; scene.add(air);
+      window.__earthTick = (dt) => { earth.rotation.y += dt * 0.004; };
+      // the station: its truss along the spawn-to-goal line, the wings at its
+      // ends reaching sideways; it is set so the torn panel hangs at the goal
+      const [gx, gz] = LVL.goal, dx0 = gx - _sp.x, dz0 = gz - _sp.z, dl = Math.hypot(dx0, dz0) || 1, ux = dx0 / dl, uz = dz0 / dl, vx = -uz, vz = ux;
+      const TH = Math.atan2(ux, uz);                                             // rotateY(TH) carries local +z onto u
+      const SY = hAt(_sp.x, _sp.z) + ALT;
+      const C0 = [_sp.x + ux * 34 + vx * 3, _sp.z + uz * 34 + vz * 3];         // the station just ahead of where you start
+      const W3 = (a, c) => [C0[0] + ux * a + vx * c, C0[1] + uz * a + vz * c];
+      const P = [], C = [], cols = [];
+      const put = (g, a, c, y, col) => { g = g.toNonIndexed(); g.rotateY(TH); const [x, z] = W3(a, c); g.translate(x, y, z);
+        const pa = g.attributes.position.array; for (let i = 0; i < pa.length; i += 3) { P.push(pa[i], pa[i + 1], pa[i + 2]); C.push(...col); } };
+      const white = [0.86, 0.87, 0.88], grey = [0.55, 0.57, 0.6], gold = [0.85, 0.66, 0.25], dark = [0.2, 0.21, 0.24];
+      put(new THREE.BoxGeometry(1.2, 1.2, 58), 0, 0, SY, grey);                                     // the truss (local z = u)
+      for (let k = -27; k <= 27; k += 3) { put(new THREE.BoxGeometry(0.12, 1.6, 0.12).rotateX(0.8), k, 0.62, SY, dark); put(new THREE.BoxGeometry(0.12, 1.6, 0.12).rotateX(-0.8), k, -0.62, SY, dark); }
+      for (const [a0, a1, r, col] of [[-22, -12, 2.1, white], [-11, -2, 2.3, white], [-1.5, 1.5, 2.6, grey], [2, 10, 2.1, gold]]) {
+        const g = new THREE.CylinderGeometry(r, r, a1 - a0, 40).rotateX(Math.PI / 2); g.translate(0, 0, (a0 + a1) / 2);
+        put(g, 0, 0, SY - 3.4, col);
+        for (const e of [a0, a1]) { const ring = new THREE.TorusGeometry(r * 1.03, 0.14, 8, 40); ring.translate(0, 0, e); put(ring, 0, 0, SY - 3.4, grey); }
+        cols.push([(a0 + a1) / 2, (a1 - a0) / 2, r]);
+      }
+      for (const a of [-16, 16]) put(new THREE.BoxGeometry(7, 0.08, 3), a, 0, SY + 2.5, white);   // radiators
+      const pc = document.createElement('canvas'); pc.width = 256; pc.height = 128; const px = pc.getContext('2d');
+      px.fillStyle = '#c8a24a'; px.fillRect(0, 0, 256, 128); px.fillStyle = '#10204a';
+      for (let i = 0; i < 16; i++) for (let j = 0; j < 8; j++) px.fillRect(i * 16 + 1.5, j * 16 + 1.5, 13, 13);
+      const pt = new THREE.CanvasTexture(pc); pt.colorSpace = THREE.SRGBColorSpace;
+      const panM = new THREE.MeshStandardMaterial({ map: pt, roughness: 0.25, metalness: 0.6, side: THREE.DoubleSide });
+      const deadM = new THREE.MeshStandardMaterial({ map: pt, color: 0x8a8070, roughness: 0.6, metalness: 0.3, side: THREE.DoubleSide });
+      const mastM = new THREE.MeshStandardMaterial({ color: 0xb0b4b8, metalness: 0.7, roughness: 0.35 });
+      let brokenAt = null;
+      for (const end of [-1, 1]) for (const side of [-1, 1]) {
+        const broken = end === 1 && side === 1;
+        const wing = new THREE.Group(); const [wx, wz] = W3(end * 27, side * 1.5);
+        wing.position.set(wx, SY, wz); wing.rotation.y = TH;                    // local x = -v
+        for (let s = 0; s < 4; s++) {
+          const pane = new THREE.Mesh(new THREE.PlaneGeometry(4.6, 10), broken && s === 2 ? deadM : panM);
+          pane.position.set(-side * (6.5 + s * 10.4), 0, 0); pane.rotation.x = -Math.PI / 2 + 0.2;
+          if (broken && s === 2) { pane.rotation.set(-Math.PI / 2 + 1.0, 0.4, 0.5); pane.position.y -= 1.4; }   // torn loose, hanging off the mast
+          if (broken && s === 3) continue;                                      // the last panel is gone
+          wing.add(pane);
+        }
+        const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 44, 12).rotateZ(Math.PI / 2), mastM); mast.position.x = -side * 22.5; wing.add(mast);
+        scene.add(wing);
+        if (broken) { const [bx, bz] = W3(end * 27, side * (1.5 + 6.5 + 2 * 10.4)); brokenAt = [bx, SY - 1.4, bz]; }
+      }
+      const sg = new THREE.BufferGeometry(); sg.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); sg.setAttribute('color', new THREE.Float32BufferAttribute(C, 3)); sg.computeVertexNormals();
+      const st = new THREE.Mesh(sg, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.45, metalness: 0.4 }));
+      st.material.userData.noAutoTex = true; st.name = 'station'; st.castShadow = st.receiveShadow = true; scene.add(st);
+      // solid: the truss and the modules
+      { const [tx, tz] = W3(0, 0); world.createCollider(RAPIER.ColliderDesc.cuboid(0.6, 0.6, 29).setTranslation(tx, SY, tz).setRotation({ x: 0, y: Math.sin(TH / 2), z: 0, w: Math.cos(TH / 2) })); }
+      for (const [a, hl, r] of cols) { const [mx, mz] = W3(a, 0); world.createCollider(RAPIER.ColliderDesc.capsule(hl, r).setTranslation(mx, SY - 3.4, mz).setRotation(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(ux, 0, uz)))); }
+      // sparks off the torn wing
+      if (brokenAt) {
+        const sp = new THREE.PointLight(0x9fd8ff, 0, 14, 2); sp.position.set(brokenAt[0], brokenAt[1], brokenAt[2]); scene.add(sp);
+        const sm = new THREE.Points(new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(60 * 3), 3)),
+          new THREE.PointsMaterial({ color: 0xcfeeff, size: 0.18, toneMapped: false, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
+        scene.add(sm); const V = [];
+        for (let i = 0; i < 60; i++) V.push({ p: new THREE.Vector3(), v: new THREE.Vector3(), t: 9 });
+        const _et = window.__earthTick;
+        window.__earthTick = (dt) => { _et(dt); const on = Math.sin(performance.now() * 0.009) > 0.6;
+          sp.intensity = on ? 18 * Math.random() : 0;
+          const a = sm.geometry.attributes.position;
+          V.forEach((q, i) => { q.t += dt; if (q.t > 1.2 && on && Math.random() < 0.2) { q.t = 0; q.p.set(brokenAt[0], brokenAt[1], brokenAt[2]); q.v.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).multiplyScalar(5); }
+            q.p.addScaledVector(q.v, dt); a.setXYZ(i, q.p.x, q.t < 1.2 ? q.p.y : -9999, q.p.z); });
+          a.needsUpdate = true; };
+      }
+      // the repair tools, clipped along the truss at the station's height
+      if (LVL.collect_points && LVL.collect_points.length) {
+        LVL.collect_points = LVL.collect_points.map((_, k, arr) => { const a = -22 + (k + 0.5) * 44 / arr.length; const [x, z] = W3(a, 1.4); return [x, z, SY + 1.0]; });
+      }
+      // the work is at the torn wing: the goal moves there, its marker with it
+      if (brokenAt) { LVL.goal = [brokenAt[0], brokenAt[2]];
+        if (typeof goalPos !== 'undefined' && goalPos) goalPos.set(brokenAt[0], brokenAt[1], brokenAt[2]);
+        if (typeof goalMesh !== 'undefined' && goalMesh) goalMesh.position.set(brokenAt[0], brokenAt[1] + 1.2, brokenAt[2]); }
+      window.__orbit = { alt: ALT, station: [C0[0], SY, C0[1]], broken: brokenAt };
+      // nothing of the ground stays up here: the goal's building, the clutter,
+      // the grass. Everything already standing below the station is put away
+      // (the cast is placed later, the earth and the station are kept)
+      // (on the first frame of play, once the clutter and the grass exist)
+      const _keep = new Set(['earth', 'earthAir', 'station']);
+      let _hid = false;
+      const _tick0 = window.__earthTick;
+      window.__earthTick = (dt) => { _tick0(dt);
+        if (_hid) return; _hid = true; let n = 0;
+        for (const o of scene.children.slice()) {
+          if (o.isLight || o.isCamera || _keep.has(o.name) || !o.visible) continue;
+          if (o.isGroup && o.children.some(ch => ch.isMesh && (ch.material === panM || ch.material === deadM))) continue;   // a solar wing
+          const bb = new THREE.Box3().setFromObject(o);
+          if (isFinite(bb.max.y) && bb.max.y < SY - 12 && (bb.max.x - bb.min.x) < 900) { o.visible = false; n++; }
+        }
+        window.__orbitHid = n; };
+    } catch (e) { console.warn('[game] orbit skipped: ' + e.message); window.__orbit = null; }
   }
   if (!FLORA_LIVE && !PURE_SCENE && !OSM && LVL && LVL.regions
       && LVL.regions.palette.some(q => q.kind === 'forest')) {
@@ -19309,7 +19447,7 @@ async function main() {
   function hullY(w) { return w + P.height_m / 2 - Math.min(0.8, 0.12 * P.height_m); }
   function spawnHeight(x, z) {
     const g = hAt(x, z) + P.height_m / 2 + 0.15;
-    if (SPEC.player.mode === 'fly') return g + (window.__asteroids ? 34 : 6);   // in an asteroid field, up among the rocks              // airborne start
+    if (SPEC.player.mode === 'fly') return g + (window.__asteroids || window.__orbit ? 34 : 6);   // in an asteroid field, up among the rocks              // airborne start
     if (SPEC.player.mode === 'swim' && SPEC.world.water_level != null) {
       // a hull sits ON the waterline; a whale hangs somewhere below it
       if (P.buoyant) return hullY(SPEC.world.water_level);
@@ -24220,6 +24358,7 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
       if (window.__surfTick) window.__surfTick(typeof dt === 'number' ? Math.min(0.05, dt) : 0.016);
       if (window.__asteroidTick) window.__asteroidTick(Math.min(0.05, dt));
       if (window.__burnTick) window.__burnTick(performance.now() / 1000, Math.min(0.05, dt));
+      if (window.__earthTick) window.__earthTick(Math.min(0.05, dt));
       if (window.__tornadoTick) window.__tornadoTick(Math.min(0.05, dt));
       if (window.__monkTick) window.__monkTick(performance.now() / 1000, Math.min(0.05, dt));
       if (window.__lifeTick) window.__lifeTick(dt);

@@ -3878,8 +3878,11 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                              r"department store|hospital|asylum|sanatorium|office block|prison|bunker|"
                              r"high school|school(?! of)|classroom|academy|laborator(?:y|ies)|lab|research (?:facility|station|base)|"
                              r"library|libraries|archives?|reading room|scriptorium)\b", _pl)
+        # (2026-10-19) a named city only turns a heist into its block: "a chef
+        # runs a busy sushi restaurant in tokyo" was a street with a campfire on
+        # it, the restaurant nowhere; a chef, a nurse or a clerk works inside
         if _venue and (_re3.search(r"\b(?:outside|car ?park|parking|rooftop|roof of|street(?:s)? (?:of|around))\b", _pl)
-                       or (is_city and place)):
+                       or (is_city and place and _heist)):
             _venue = None
         if ((_im and (_im.group(1) or not _city_heist))
                 or " dungeon" in _pl or (_heist and _bld and not _city_heist) or _venue):

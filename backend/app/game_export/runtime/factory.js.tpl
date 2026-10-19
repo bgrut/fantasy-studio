@@ -2301,6 +2301,15 @@ const GEO = {
     { g: _box(0.10, 0.24, 0.12), y: 0.12, x: -T * 0.42, z: T * 0.37, col: PAINT.rail },
     { g: _box(0.10, 0.24, 0.12), y: 0.12, x: T * 0.42, z: -T * 0.37, col: PAINT.rail },
     { g: _box(0.10, 0.24, 0.12), y: 0.12, x: -T * 0.42, z: -T * 0.37, col: PAINT.rail },
+    // (2026-10-19) a conveyor, not a tray: a bright steel cap along each rail,
+    // a guide lip leaning in over the tread, a row of bolt heads down the outer
+    // faces and caps on the roller axles. Instanced, so detail costs no draws
+    ...[1, -1].flatMap(s => [
+      { g: new THREE.BoxGeometry(T * 0.96, 0.018, 0.1), y: 0.229, z: s * T * 0.37, col: PAINT.steel },
+      { g: new THREE.BoxGeometry(T * 0.9, 0.012, 0.09), y: 0.2, z: s * (T * 0.37 - 0.08), rx: s * 0.55, col: PAINT.steel, tint: 0.85 },
+      ...[-3, -2, -1, 0, 1, 2, 3].map(k => ({ g: new THREE.CylinderGeometry(0.018, 0.018, 0.02, 8), y: 0.15, x: k * T * 0.13, z: s * (T * 0.37 + 0.052), rx: Math.PI / 2, col: PAINT.steel })),
+      ...[1, -1].map(e => ({ g: new THREE.CylinderGeometry(0.05, 0.05, 0.03, 16), y: 0.13, x: e * T * 0.41, z: s * (T * 0.35 + 0.02), rx: Math.PI / 2, col: PAINT.steel })),
+    ]),
   ]),
   beltDeck: _box(T * 0.86, 0.06, T * 0.60),
 
@@ -2691,6 +2700,7 @@ for (const k of ['miner', 'hub', 'smelt', 'forge', 'filt', 'rift', 'assem', 'spl
 // one-colour look back. The lamps carry the glow.
 for (const k of ['miner', 'hub', 'smelt', 'forge', 'filt', 'assem', 'split']) { MAT[k].emissive.setHex(0x232733); MAT[k].emissiveIntensity = 0.5; }   // neutral: a shadowed chassis lifts to grey, not to the accent
 addRim(MAT.miner, 0xff9aa8, 2.6, 0.55);
+MAT.beltFrame.normalMap = SKIN_NORMAL; MAT.beltFrame.normalScale = new THREE.Vector2(0.4, 0.4); MAT.beltFrame.roughnessMap = SKIN_ROUGH;   // the machines' seams and wear on the belt frames too (2026-10-19)
 addRim(MAT.beltFrame, 0x7fffd8, 2.8, 0.40);
 addRim(MAT.hub, 0xffe4a8, 2.4, 0.60);
 addRim(MAT.smelt, 0xc3aaff, 2.5, 0.55);
