@@ -6230,6 +6230,19 @@ const ghostEdge = new THREE.LineSegments(
   new THREE.EdgesGeometry(GHOST_BOX, 28),
   new THREE.LineBasicMaterial({ color: 0x9dffe8, transparent: true, opacity: 0.85 }));
 ghost.add(ghostEdge);
+// THE TILE, NOT A RED MACHINE (2026-10-19): pointing at a tile you cannot
+// build on drew the whole machine as a red wireframe, a pink scaffold filling
+// the middle of the screen every time the player looked at plain ground with a
+// rig in hand. The footprint now says it: a flat plate and an outline on the
+// tile, teal under a legal ghost, red alone where the machine cannot go
+const ghostPad = new THREE.Mesh(new THREE.PlaneGeometry(T * 0.94, T * 0.94).rotateX(-Math.PI / 2),
+  new THREE.MeshBasicMaterial({ color: 0x6cf5d0, transparent: true, opacity: 0.16, depthWrite: false }));
+ghostPad.position.y = 0.035; ghostPad.renderOrder = 2;
+const ghostRim = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(
+  [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([a, b]) => new THREE.Vector3(a * T * 0.47, 0, b * T * 0.47))),
+  new THREE.LineBasicMaterial({ color: 0x9dffe8, transparent: true, opacity: 0.9 }));
+ghostPad.add(ghostRim);
+ghost.add(ghostPad);
 const ghostEdges = new Map();          // geometry -> its edges, built once
 function ghostShape(g) {
   if (ghost.geometry === g) return;
@@ -6269,6 +6282,14 @@ function updateGhost() {
   }
   ghost.material.color.setHex(legal ? 0x6cf5d0 : 0xff6b7d);
   ghostEdge.material.color.setHex(legal ? 0x9dffe8 : 0xffa8b4);
+  // the machine's shape only where it can stand; an illegal tile is the red pad alone
+  const showShape = legal || tool === 'erase' || tool === 'blueprint';
+  ghost.material.visible = showShape; ghostEdge.visible = showShape;
+  ghostPad.visible = !!shape || !legal;
+  ghostPad.position.y = shape ? 0.035 : -0.22;                 // under the lifted erase box, on the ground
+  ghostPad.material.color.setHex(legal ? 0x6cf5d0 : 0xff5a6e);
+  ghostPad.material.opacity = legal ? 0.16 : 0.3;
+  ghostRim.material.color.setHex(legal ? 0x9dffe8 : 0xff8a98);
 }
 
 // WHICH WAY DID THE DRAG GO. On a flat grid this was a subtraction of indices.

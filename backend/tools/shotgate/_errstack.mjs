@@ -4,4 +4,4 @@ const p = await b.newPage();
 p.on('pageerror', e => console.log('PAGEERR', e.message, (e.stack || '').split('\n').slice(0, 4).join(' | ')));
 p.on('console', m => { if (m.type() === 'error') console.log('CONSOLE', m.text().slice(0, 300), JSON.stringify(m.location())); });
 await p.goto((process.env.URL || 'http://127.0.0.1:8790/') + '?fresh=1', { waitUntil: 'domcontentloaded' });
-await new Promise(r => setTimeout(r, 5000)); await b.close();
+await new Promise(r => setTimeout(r, +(process.env.WAIT || 5000))); if (process.env.START) { await p.click("#startbtn").catch(() => {}); await new Promise(r => setTimeout(r, 6000)); } await b.close();

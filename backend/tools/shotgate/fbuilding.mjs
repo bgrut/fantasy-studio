@@ -88,7 +88,10 @@ const feel = await (async () => {
   await p.keyboard.down('KeyA'); await new Promise(r => setTimeout(r, 350));
   const turning = await p.evaluate(() => window.__game.facts().lean);
   await p.keyboard.up('KeyA'); await p.keyboard.up('KeyW'); await new Promise(r => setTimeout(r, 1200));
-  const idleW = await p.evaluate(() => window.__game.facts().gait);
+  // (2026-10-19) polled: the idle blend settles over a few frames, and a
+  // starved frame rate sampled it at 0.72 on its way to 1
+  let idleW = null;
+  for (let k = 0; k < 15; k++) { idleW = await p.evaluate(() => window.__game.facts().gait); if (idleW && idleW.idle > 0.9) break; await new Promise(r => setTimeout(r, 120)); }
   return { early: early.v, full: full.v, runFov: run.fov, base: run.base, runK: run.run, dip: landed.dip, stopped: stopped.v, gaitW, turning, idleW };
 })();
 console.log('the gait  : walking', JSON.stringify(feel.gaitW.gait), '| engine', JSON.stringify(feel.gaitW.engine), '| idle again', JSON.stringify(feel.idleW), '| turning roll', feel.turning.roll, '| head bone', feel.gaitW.lean.head_bone, '| arms from down', JSON.stringify(feel.gaitW.arms), '| hip ride', feel.gaitW.ride, '| shoulders', JSON.stringify(feel.gaitW.shoulders));
@@ -145,4 +148,5 @@ const ok = r.landmark && r.landmark.w > 5 && r.landmark.h > 5 && errs.length ===
   && (feel.gaitW.gait.walk + feel.gaitW.gait.run) > 0.5 && feel.gaitW.gait.idle < 0.5 && __rate >= 0.5 && __rate <= 5.5 && feel.idleW.idle > 0.9 && Math.abs(feel.turning.roll) > 0.01 && !!feel.gaitW.lean.head_bone && feel.gaitW.arms && feel.gaitW.arms.L !== null && feel.gaitW.arms.L < __armMax && feel.gaitW.arms.R < __armMax && feel.gaitW.ride >= 0.015 && feel.gaitW.ride <= __rideMax && feel.gaitW.shoulders && feel.gaitW.shoulders.L !== null && feel.gaitW.shoulders.L < 6 && feel.gaitW.shoulders.R < 6   // no shrug   // the arms hang and swing, no chicken wings; the pelvis rides three to six centimetres   // a detective with a weapon holds the pistol; a build with no hostiles holds nothing && cast.ghosts > 0 && cast.ghosts <= 3 && cast.animals === 0   // a haunting has ghosts, not wolves, and not a crowd
   && faced && faced.off < 1.05 && faced.lamps === 3
   && bodies && bodies.quad + bodies.biped > 0 && npcW.every(x => Number.isFinite(x.ground));   // every body knows its class and the ground under it
+if (!ok && process.env.WHY) { const G = feel.gaitW; console.log(JSON.stringify({ dip: feel.dip, stopped: feel.stopped, early: feel.early, full: feel.full, lum, moon: lightF.moon, rate: __rate, idleW: feel.idleW && feel.idleW.idle, roll: feel.turning && feel.turning.roll, arms: G.arms, armMax: __armMax, ride: G.ride, rideMax: __rideMax, shoulders: G.shoulders, faced, bodies, ghosts: cast.ghosts, animals: cast.animals, standing })); }
 process.exit(ok ? 0 : 1);
