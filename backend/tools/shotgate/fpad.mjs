@@ -82,7 +82,8 @@ check(ov && !back, 'Y opens the overhead, B leaves it');
 
 // Start pauses: nothing moves and nothing is earned
 await wait(1500);
-await holdUntil(9, true, 'paused');
+// (2026-10-20) and pressed again if the first press was lost to a starved frame
+if (!(await holdUntil(9, true, 'paused'))) { await wait(400); await holdUntil(9, true, 'paused'); }
 const pz = await st();
 await axis(1, -1); await wait(1500); await axis(1, 0);
 const pz2 = await st();

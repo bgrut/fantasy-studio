@@ -2756,6 +2756,70 @@ function renderPaint() {
   }
 }
 window.__paint = () => ({ id: paintId, open: PAINTS.filter(q => CREATIVE || q.need()).map(q => q.id) });
+// THE WORKS RATING (2026-10-20): one number for the whole works, so every
+// kind of player climbs the same ladder by their own road. Wealth is what it
+// earns a minute; craft is what each machine earns, so a tight line beats a
+// sprawl; reach is goals, cores and worlds; endurance is the longest standing
+// order held. Logarithmic where the numbers run away, so no one part wins alone.
+function worksRating() {
+  let machines = 0; eachTile(c => { if (c.t !== EMPTY && c.t !== NODE && c.t !== PROP) machines++; });
+  const wealth = Math.max(0, rateNow), craft = wealth / Math.max(1, machines);
+  const reach = goalIdx + 3 * cores + 2 * Math.max(0, visitedWorlds.size - 1);
+  const endure = lifetime.longestHold || 0;
+  const parts = { wealth: Math.round(140 * Math.log10(1 + wealth)), craft: Math.round(120 * Math.log10(1 + craft)),
+                  reach: Math.round(25 * reach), endurance: Math.round(60 * Math.log10(1 + endure / 10)) };
+  return { score: parts.wealth + parts.craft + parts.reach + parts.endurance, parts, machines, rate: Math.round(wealth) };
+}
+const BEST_RATING_KEY = 'fs-factory-best-rating';
+let _wrClock = 0, _wrBest = 0;
+try { _wrBest = +localStorage.getItem(BEST_RATING_KEY) || 0; } catch (e) {}
+function renderRating() {
+  const r = worksRating(), g = (id) => document.getElementById(id);
+  if (!g('wrn')) return r;
+  g('wrn').textContent = r.score.toLocaleString();
+  g('wr1').textContent = r.parts.wealth; g('wr2').textContent = r.parts.craft; g('wr3').textContent = r.parts.reach; g('wr4').textContent = r.parts.endurance;
+  if (!CREATIVE && r.score > _wrBest) { _wrBest = r.score; try { localStorage.setItem(BEST_RATING_KEY, String(_wrBest)); } catch (e) {} }
+  return r;
+}
+window.__rating = () => Object.assign(worksRating(), { best: _wrBest });
+// THE WORKS CARD: a picture of the works with its rating, made to be posted,
+// and the link that opens the works itself copied alongside
+let cardRequest = false;
+function makeWorksCard() {
+  const src = renderer.domElement, W = 1200, H = 630, cv = document.createElement('canvas'); cv.width = W; cv.height = H; const x = cv.getContext('2d');
+  // the frame, cropped to fill
+  const sa = src.width / src.height, ta = W / H; let sw = src.width, sh = src.height, sx = 0, sy = 0;
+  if (sa > ta) { sw = sh * ta; sx = (src.width - sw) / 2; } else { sh = sw / ta; sy = (src.height - sh) / 2; }
+  try { x.drawImage(src, sx, sy, sw, sh, 0, 0, W, H); } catch (e) { x.fillStyle = '#0c1420'; x.fillRect(0, 0, W, H); }
+  const gr = x.createLinearGradient(0, H * 0.35, 0, H); gr.addColorStop(0, 'rgba(6,10,16,0)'); gr.addColorStop(1, 'rgba(6,10,16,0.92)'); x.fillStyle = gr; x.fillRect(0, 0, W, H);
+  const gl = x.createLinearGradient(0, 0, W * 0.55, 0); gl.addColorStop(0, 'rgba(6,10,16,0.55)'); gl.addColorStop(1, 'rgba(6,10,16,0)'); x.fillStyle = gl; x.fillRect(0, 0, W, H);
+  const r = worksRating(), w = WORLDS[worldIdx] || WORLDS[0], P = PAINTS.find(q => q.id === paintId) || PAINTS[0];
+  x.fillStyle = '#c8a45a'; x.font = '600 20px Georgia, serif'; x.fillText('WORKS RATING', 56, 78);
+  x.fillStyle = '#ffd479'; x.font = '700 104px Georgia, serif'; x.fillText(r.score.toLocaleString(), 52, 178);
+  x.fillStyle = '#e8eef8'; x.font = '600 30px Georgia, serif'; x.fillText(String(SPEC.title || 'Crystal Works'), 56, 228);
+  x.fillStyle = '#9fb0c8'; x.font = '18px Georgia, serif'; x.fillText(w.name + '  \u00b7  ' + P.name + ' finish  \u00b7  ' + r.machines + ' machines', 56, 258);
+  const stats = [['WEALTH', r.parts.wealth, r.rate.toLocaleString() + ' a minute'], ['CRAFT', r.parts.craft, (r.rate / Math.max(1, r.machines)).toFixed(1) + ' per machine'],
+                 ['REACH', r.parts.reach, 'goal ' + goalIdx + ' of ' + GOALS.length + ' \u00b7 ' + cores + (cores === 1 ? ' core' : ' cores')], ['ENDURANCE', r.parts.endurance, Math.round((lifetime.longestHold || 0) / 60) + ' min held']];
+  stats.forEach(([k, v, d], i) => { const cx = 56 + i * 280, cy = H - 92;
+    x.fillStyle = 'rgba(255,212,121,0.85)'; x.fillRect(cx, cy - 34, 3, 64);
+    x.fillStyle = '#c8a45a'; x.font = '600 15px Georgia, serif'; x.fillText(k, cx + 16, cy - 16);
+    x.fillStyle = '#f2f5fb'; x.font = '700 36px Georgia, serif'; x.fillText(String(v), cx + 16, cy + 20);
+    x.fillStyle = '#9fb0c8'; x.font = '15px Georgia, serif'; x.fillText(d, cx + 16, cy + 42); });
+  x.fillStyle = 'rgba(232,238,248,0.7)'; x.font = '15px Georgia, serif'; x.textAlign = 'right'; x.fillText('Made with Fantasy Studio', W - 40, 40); x.textAlign = 'left';
+  return { url: cv.toDataURL('image/png'), rating: r };
+}
+function showRatingCard() {
+  const link = shareLink();                      // copies the link and asks for the studio's own thumbnail
+  const { url, rating } = makeWorksCard();
+  let v = document.getElementById('wcardview');
+  if (!v) { v = document.createElement('div'); v.id = 'wcardview'; document.body.appendChild(v);
+    v.addEventListener('pointerdown', e => { if (e.target === v) v.classList.remove('on'); }); }
+  v.innerHTML = '<div class="box"><img alt="Works card"><div class="row"><a download="works-card.png">Save the card</a><button type="button" data-close>Close</button></div><p>The link that opens this works is copied: paste it beside the card.</p></div>';
+  v.querySelector('img').src = url; v.querySelector('a').href = url;
+  v.querySelector('[data-close]').addEventListener('pointerdown', e => { e.stopPropagation(); v.classList.remove('on'); });
+  v.classList.add('on');
+  window.__worksCard = { rating: rating.score, bytes: url.length, link: link.length };
+}
 addRim(MAT.miner, 0xff9aa8, 2.6, 0.55);
 MAT.beltFrame.normalMap = SKIN_NORMAL; MAT.beltFrame.normalScale = new THREE.Vector2(0.4, 0.4); MAT.beltFrame.roughnessMap = SKIN_ROUGH;   // the machines' seams and wear on the belt frames too (2026-10-19)
 addRim(MAT.beltFrame, 0x7fffd8, 2.8, 0.40);
@@ -8935,6 +8999,8 @@ addEventListener('visibilitychange', () => { if (document.hidden) save(); });
     const t = document.getElementById('toast'); if (t) { t.textContent = WORD(FOREMAN_FIRST + ' steps back. The goal card leads from here.'); t.classList.add('on'); toastAt = 4; } });
   const sh = document.getElementById('share');
   if (sh) sh.addEventListener('pointerdown', ev => { ev.stopPropagation(); shareLink(); });
+  const wc = document.getElementById('wcard');
+  if (wc) wc.addEventListener('pointerdown', ev => { ev.stopPropagation(); cardRequest = true; });   // drawn after the next composite, when the canvas holds the frame
   const w = document.getElementById('wipe');
   if (w) w.addEventListener('pointerdown', ev => {
     ev.stopPropagation();
@@ -9156,6 +9222,7 @@ renderer.setAnimationLoop(() => {
   // the buttons light up the moment you can afford them — the whole point of
   // the number climbing is watching it cross a threshold
   if (Math.floor(ore) !== lastOreShown) { lastOreShown = Math.floor(ore); renderUpgrades(); }
+  if ((_wrClock -= dt) <= 0) { _wrClock = 1.5; try { renderRating(); } catch (e) {} }
   // !! IS LOAD-BEARING (2026-09-08). classList.toggle(name, force) TOGGLES when
   // force is undefined, and UNLOCKED.meltdown is undefined until it is earned —
   // so a locked meltdown button flipped on and off every single frame, which
@@ -9392,6 +9459,7 @@ renderer.setAnimationLoop(() => {
   renderFrame();
   if (shotRequest) { shotRequest = false; takeShot(); }
   if (shareRequest) { const r = shareRequest; shareRequest = null; postShare(r); }
+  if (cardRequest) { cardRequest = false; try { showRatingCard(); } catch (e) { console.warn('[factory] works card: ' + e.message); } }
   if (keepRequest) { const r = keepRequest; keepRequest = null; finishKeep(r); }
 });
 

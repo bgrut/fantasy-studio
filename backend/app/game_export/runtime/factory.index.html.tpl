@@ -252,6 +252,20 @@
   #motion:hover{color:#9fd6ff}
   #share{margin-top:4px;text-align:center;font-size:10px;color:#5d6480;cursor:pointer;letter-spacing:.06em}
   #share:hover{color:#5cffc9}
+  #wcard{margin-top:4px;text-align:center;font-size:10px;color:#5d6480;cursor:pointer;letter-spacing:.06em}
+  #wcard:hover{color:#ffd479}
+  #wr{display:flex;gap:12px;align-items:center;margin-top:9px;padding:8px 10px;border:1px solid rgba(255,212,121,.28);border-radius:10px;background:rgba(255,212,121,.05)}
+  #wr small{display:block;font:600 9.5px/1 var(--f-ui);letter-spacing:.12em;color:#c8a45a}
+  #wr b{display:block;font:700 26px/1.05 var(--f-head);color:#ffd479;font-variant-numeric:tabular-nums}
+  #wr ul{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:1fr 1fr;gap:2px 10px;font-size:10px;color:#8e98b6;flex:1}
+  #wr i{font-style:normal;color:#d7deef;font-variant-numeric:tabular-nums}
+  #wcardview{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(4,8,14,.78);z-index:60;pointer-events:auto}
+  #wcardview.on{display:flex}
+  #wcardview .box{display:flex;flex-direction:column;gap:10px;align-items:center;max-width:min(92vw,960px)}
+  #wcardview img{width:100%;border-radius:10px;box-shadow:0 18px 60px rgba(0,0,0,.6)}
+  #wcardview .row{display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
+  #wcardview a,#wcardview button{font:600 12px var(--f-ui);letter-spacing:.06em;padding:8px 14px;border-radius:8px;border:1px solid rgba(255,212,121,.5);background:rgba(255,212,121,.12);color:#ffd479;cursor:pointer;text-decoration:none}
+  #wcardview p{margin:0;color:#aab4cc;font:12px var(--f-ui)}
   #guide{margin-top:4px;text-align:center;font-size:10px;color:#5d6480;cursor:pointer;letter-spacing:.06em}
   #guide:hover{color:#ffd479}
   /* reduced motion: nothing settles, slides or pulses in the chrome either */
@@ -601,6 +615,7 @@
     <div id="rank"><b>UNRANKED</b><span>◇◇◇</span></div>
     <canvas id="spark" width="216" height="38"></canvas>
   </div>
+  <div id="wr" title="One number for the whole works: what it earns, how well it is built, how far it has reached and how long it has held its orders."><div><small>WORKS RATING</small><b id="wrn">0</b></div><ul><li>wealth <i id="wr1">0</i></li><li>craft <i id="wr2">0</i></li><li>reach <i id="wr3">0</i></li><li>endurance <i id="wr4">0</i></li></ul></div>
   <div class="stats">
     <div class="st" data-ico="miner"   title="Rigs standing on seams. Each one pulls ore out of its seam."><i></i><b id="nmine">0</b><small>rigs</small></div>
     <div class="st" data-ico="belt"    title="Belt tiles laid. Belts carry ore between machines."><i></i><b id="nbelt">0</b><small>belts</small></div>
@@ -624,6 +639,7 @@
   <div id="wipe">new world</div>
   <div id="motion">motion: full</div>
   <div id="share">share link</div>
+  <div id="wcard">works card</div>
   <div id="guide">the guide</div>
 </div>
 <div id="tools">
