@@ -198,6 +198,16 @@
   .up.can:hover{background:rgba(92,224,208,.14)}
   .up.maxed{opacity:.42;border-color:rgba(120,200,255,.09)}
   .up.maxed i{color:#5ce0d0}
+  #paint{display:grid;grid-template-columns:repeat(6,1fr);gap:6px;margin-top:6px;pointer-events:auto}
+  .pnt{display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer;padding:5px 2px;border-radius:9px;
+       border:1px solid rgba(120,200,255,.12);background:rgba(0,0,0,.14)}
+  .pnt s{display:block;width:22px;height:22px;border-radius:50%;box-shadow:inset 0 -4px 6px rgba(0,0,0,.35),0 0 0 2px rgba(255,255,255,.12)}
+  .pnt small{font-size:9px;color:#9aa6c4;letter-spacing:.04em;text-align:center;line-height:1.1;font-family:var(--f-ui)}
+  .pnt.on{border-color:rgba(255,212,121,.7);background:rgba(255,212,121,.1)}
+  .pnt.on small{color:#ffd479}
+  .pnt.locked{cursor:not-allowed;opacity:.38}
+  .pnt.locked s{filter:grayscale(1) brightness(.6)}
+  .pnt:not(.locked):not(.on):hover{background:rgba(92,224,208,.12)}
   /* the meltdown is the loudest thing in the panel because it is the loudest
      thing in the game: it destroys the factory you just spent an hour on */
   #melt{margin-top:9px;border:1px solid rgba(255,120,90,.5);border-radius:10px;
@@ -605,6 +615,8 @@
   <div id="tick"></div>
   <div class="sec" title="Bought with credits. Each has a cap, and the chain raises some caps.">UPGRADES <span>bought with credits; click one to buy</span></div>
   <div id="ups"></div>
+  <div class="sec" title="Finishes for every machine, earned as the works grows. Click one to repaint the whole factory.">FINISH <span>earned as the works grows; click to repaint</span></div>
+  <div id="paint"></div>
   <div id="world"></div>
   <div id="rift"></div>
   <div id="melt"><b>MELTDOWN</b><small>throw the whole factory to the sky for a permanent core</small></div>

@@ -449,7 +449,7 @@ function buy(key) {
   return true;
 }
 
-function renderUpgrades() { _renderUpgrades(); themeNode(document.getElementById('ups')); }
+function renderUpgrades() { _renderUpgrades(); themeNode(document.getElementById('ups')); try { renderPaint(); } catch (e) {} }
 function _renderUpgrades() {
   const box = document.getElementById('ups');
   if (!box) return;
@@ -2699,6 +2699,57 @@ for (const k of ['miner', 'hub', 'smelt', 'forge', 'filt', 'rift', 'assem', 'spl
 // emissive at a third tinted the dark chassis with the accent and gave the
 // one-colour look back. The lamps carry the glow.
 for (const k of ['miner', 'hub', 'smelt', 'forge', 'filt', 'assem', 'split']) { MAT[k].emissive.setHex(0x232733); MAT[k].emissiveIntensity = 0.5; }   // neutral: a shadowed chassis lifts to grey, not to the accent
+// FINISHES (2026-10-20): the first thing a factory game is missing once it
+// works is a way to make the works yours. Six finishes for every machine, a
+// tint over the paint and the steel alike, earned as the works grows and kept
+// with the player rather than the save (a finish carries to a new world).
+const PAINTS = [
+  { id: 'foundry',   name: 'Foundry',   mul: 0xffffff, need: () => true,                          how: 'the works as it ships' },
+  { id: 'brass',     name: 'Brass',     mul: 0xffdcae, need: () => goalIdx >= 3,                  how: 'reach goal 3' },
+  { id: 'arctic',    name: 'Arctic',    mul: 0xcfe2ff, need: () => cores >= 1,                    how: 'earn a core' },
+  { id: 'obsidian',  name: 'Obsidian',  mul: 0x7e7f8e, need: () => goalIdx >= 6,                  how: 'reach goal 6' },
+  { id: 'verdigris', name: 'Verdigris', mul: 0xb4f0d4, need: () => contractsFilled >= 5,          how: 'keep five contracts' },
+  { id: 'royal',     name: 'Royal',     mul: 0xe6c8ff, need: () => goalIdx >= GOALS.length,       how: 'finish every goal' },
+];
+let paintId = (() => { try { return localStorage.getItem('fs-factory-paint') || 'foundry'; } catch (e) { return 'foundry'; } })();
+const PAINT_MATS = () => [...['miner', 'hub', 'smelt', 'forge', 'filt', 'rift', 'assem', 'split', 'beltFrame'].map(k => MAT[k]),
+  ...(typeof _DRONE_MAT !== 'undefined' && _DRONE_MAT ? [_DRONE_MAT.pad, _DRONE_MAT.body] : []),
+  ...(typeof _SILO_MAT !== 'undefined' && _SILO_MAT ? [_SILO_MAT.body] : []),
+  ...(typeof _LAUNCH_MAT !== 'undefined' && _LAUNCH_MAT ? [_LAUNCH_MAT.base] : [])].filter(Boolean);
+function applyPaint(id, say) {
+  const P = PAINTS.find(q => q.id === id) || PAINTS[0];
+  if (!P.need() && !CREATIVE) return false;
+  paintId = P.id;
+  const base = { beltFrame: 0x55605c };
+  for (const m of PAINT_MATS()) {
+    const b = m === MAT.beltFrame ? new THREE.Color(base.beltFrame) : new THREE.Color(0xffffff);
+    m.color.copy(b.multiply(new THREE.Color(P.mul)));
+  }
+  try { localStorage.setItem('fs-factory-paint', paintId); } catch (e) {}
+  if (say) { const t = document.getElementById('toast'); if (t) { t.textContent = WORD('REPAINTED. Every machine in the works now wears the ' + P.name + ' finish.'); t.classList.add('on'); toastAt = 4; } }
+  renderPaint();
+  return true;
+}
+let _paintKey = '';
+function renderPaint() {
+  const box = document.getElementById('paint'); if (!box) return;
+  // drawn again only when a finish opens or is chosen: renderUpgrades runs on
+  // every sale, and rebuilding the swatches each time stalled the first sale
+  const key = paintId + '|' + PAINTS.map(q => (CREATIVE || q.need()) ? 1 : 0).join('');
+  if (key === _paintKey && box.childElementCount) return;
+  _paintKey = key;
+  box.innerHTML = '';
+  for (const P of PAINTS) {
+    const ok = CREATIVE || P.need(), el = document.createElement('div');
+    el.className = 'pnt' + (P.id === paintId ? ' on' : '') + (ok ? '' : ' locked');
+    el.title = ok ? P.name + ' finish' : P.name + ': ' + P.how;
+    const c = new THREE.Color(P.mul), hex = '#' + c.getHexString();
+    el.innerHTML = '<s style="background:radial-gradient(circle at 35% 30%,#fff 0,' + hex + ' 38%,' + '#' + c.clone().multiplyScalar(0.45).getHexString() + ' 100%)"></s><small>' + P.name + '</small>';
+    if (ok && P.id !== paintId) el.addEventListener('pointerdown', ev => { ev.stopPropagation(); applyPaint(P.id, true); });
+    box.appendChild(el);
+  }
+}
+window.__paint = () => ({ id: paintId, open: PAINTS.filter(q => CREATIVE || q.need()).map(q => q.id) });
 addRim(MAT.miner, 0xff9aa8, 2.6, 0.55);
 MAT.beltFrame.normalMap = SKIN_NORMAL; MAT.beltFrame.normalScale = new THREE.Vector2(0.4, 0.4); MAT.beltFrame.roughnessMap = SKIN_ROUGH;   // the machines' seams and wear on the belt frames too (2026-10-19)
 addRim(MAT.beltFrame, 0x7fffd8, 2.8, 0.40);
@@ -5021,6 +5072,7 @@ function droneMat() {
     body: skinned(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.38, metalness: 0.6 }), 0x9fe8ff),
     rotor: new THREE.MeshBasicMaterial({ color: 0xbfd6e6, transparent: true, opacity: 0.32, depthWrite: false }),
   };
+  if (typeof paintId !== 'undefined' && paintId !== 'foundry') setTimeout(() => { try { applyPaint(paintId, false); } catch (e) {} }, 0);   // made after the finish was chosen
   return _DRONE_MAT;
 }
 const crafts = new Map();            // pad cell -> its craft
@@ -5360,6 +5412,7 @@ function launchMat() {
   if (_LAUNCH_MAT) return _LAUNCH_MAT;
   _LAUNCH_MAT = { base: skinned(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.45, metalness: 0.55 }), 0xffd88a),
                   cap: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.35, metalness: 0.3 }) };
+  if (typeof paintId !== 'undefined' && paintId !== 'foundry') setTimeout(() => { try { applyPaint(paintId, false); } catch (e) {} }, 0);   // made after the finish was chosen
   return _LAUNCH_MAT;
 }
 const launches = [];
@@ -5517,6 +5570,7 @@ function siloMat() {
     body: (m => { m.normalScale.set(0.2, 0.2); return m; })(skinned(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.42, metalness: 0.62 }), 0xd8e4f0)),
     glass: new THREE.MeshStandardMaterial({ color: 0x0b1218, roughness: 0.08, metalness: 0.2, transparent: true, opacity: 0.55 }),
   };
+  if (typeof paintId !== 'undefined' && paintId !== 'foundry') setTimeout(() => { try { applyPaint(paintId, false); } catch (e) {} }, 0);   // made after the finish was chosen
   return _SILO_MAT;
 }
 const stockName = (t, n) => !t ? 'nothing' : IS_BAR(t) ? contractName(t, n) : (ORE_NAME[t] || 'ore') + ' ore';
@@ -8839,6 +8893,7 @@ function renderRuns() {
 }
 // the starter line is what a NEW world looks like; a save replaces it whole
 const restored = FRESH ? false : (SHARED ? !!loadState(SHARED) : load());
+try { if (!applyPaint(paintId, false)) applyPaint('foundry', false); } catch (e) {}   // the finish the player last chose, if the works has earned it
 if (restored) seedOutpost();               // the save carries no props; the outpost stands by whatever hub the save has
 
 let saveClock = 0;

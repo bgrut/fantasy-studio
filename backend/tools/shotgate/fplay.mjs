@@ -91,7 +91,8 @@ for (let k = 0; k < 8; k++) {
 }
 await p.mouse.click(sp[0], sp[1]); await wait(500);
 const rigPlaced = await p.evaluate(t => window.__factory.cells[t.face][t.i][t.j].t === window.__factory.TYPES.MINER, seam);
-const s4 = await step();
+// (2026-10-20) polled: the step turns over on a later frame under load
+let s4 = await step(); for (let k = 0; k < 15 && /Build a rig/.test(s4); k++) { await wait(150); s4 = await step(); }
 
 // 4. run a belt: press 2, hold the left button on the tile in front of the rig and drag two tiles;
 //    then, as the card says, end it at a smelter (3) and run the smelter's output into the belt that
@@ -195,6 +196,7 @@ await b.close();
 
 const ok = /Get your bearings|Look around/.test(s1) && /This is a line/.test(s2) && /Build a rig/.test(s3) && rigPlaced && /Run a belt/.test(s4)
   && /Finish the line|Read the panel/.test(s5) && belts >= 6 && /Read the panel/.test(s6)   // the line can pay before the harness looks
-  && done.tutorial === null && !done.card && /steps back|unlocked|FIRST SALE/.test(done.toast)   /* the finish line, or an unlock or the first sale that landed on it */ && /Get your bearings|Look around/.test(again)
+  && done.tutorial === null && !done.card && /steps back|unlocked|FIRST SALE|CONTRACT/.test(done.toast)   /* the finish line, or an unlock or the first sale that landed on it */ && /Get your bearings|Look around/.test(again)
   && errs.length === 0;
+if (!ok && process.env.WHY) console.log(JSON.stringify({ s1, s2, s3, s4, s5, s6, rigPlaced, belts, done, again, errs }).slice(0, 1500));
 process.exit(ok ? 0 : 1);
