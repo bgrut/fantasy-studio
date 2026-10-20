@@ -24,12 +24,16 @@ const LOOKS = {
   swamp: { col: 0x1a1d10, opacity: 0.96, rough: 0.14, env: 0.32, ripple: 0.12, scale: 0.4,  weed: 1 },
   sea:   { col: 0x1f6f96, opacity: 0.74, rough: 0.1,  env: 0.8,  ripple: 0.3,  scale: 0.3,  weed: 0 },
   ice:   { col: 0x6f93a8, opacity: 1.0,  rough: 0.1,  env: 0.75, ripple: 0.0,  scale: 0.2,  weed: 0 },
+  // (2026-10-20) a storm sea: slate green, long wind-driven swells running
+  // fast, white crests breaking along them, and a wide surf at the shore
+  storm: { col: 0x1b3236, opacity: 0.94, rough: 0.2,  env: 0.42, ripple: 0.75, scale: 0.16, weed: 0, speed: 2.6, surf: 1.5 },
 };
 
 /** the kind of water a world's words ask for */
 export function waterKind(words, frozen) {
   if (/swamp|marsh|bog|bayou|fen|mire|everglade/.test(words || '')) return 'swamp';
   if (frozen) return 'ice';
+  if (/\b(storm\w*|gales?|tempest\w*|hurricanes?|squalls?|typhoons?)\b/.test(words || '')) return 'storm';
   return 'lake';
 }
 
@@ -77,8 +81,8 @@ float wn(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 *
   return mix(mix(wh(i), wh(i + vec2(1.0, 0.0)), u.x), mix(wh(i + vec2(0.0, 1.0)), wh(i + vec2(1.0, 1.0)), u.x), u.y); }
 float wfbm(vec2 p){ float s = 0.0, a = 0.5; for (int i = 0; i < 4; i++){ s += a * wn(p); p = p * 2.07 + vec2(3.1, 1.7); a *= 0.5; } return s; }
 float wave(vec2 p){
-  return wfbm(p * ${L.scale.toFixed(3)} + vec2(uTime * 0.06, uTime * 0.035))
-       + 0.5 * wfbm(p * ${(L.scale * 3.1).toFixed(3)} - vec2(uTime * 0.09, -uTime * 0.05));
+  return wfbm(p * ${L.scale.toFixed(3)} + vec2(uTime * ${(0.06 * (L.speed || 1)).toFixed(3)}, uTime * ${(0.035 * (L.speed || 1)).toFixed(3)}))
+       + 0.5 * wfbm(p * ${(L.scale * 3.1).toFixed(3)} - vec2(uTime * ${(0.09 * (L.speed || 1)).toFixed(3)}, -uTime * ${(0.05 * (L.speed || 1)).toFixed(3)}));
 }
 ` + sh.fragmentShader
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
@@ -101,6 +105,17 @@ float wave(vec2 p){
     diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.06, 0.09, 0.025) * (0.7 + 0.6 * wn(dp * 4.0)), weed);
     diffuseColor.a = mix(diffuseColor.a, 1.0, weed);
     roughnessFactor = mix(roughnessFactor, 0.85, weed);
+  }` : ''}
+  ${kind === 'storm' ? `{
+    // whitecaps: the swell's crests break white in streaks laid along the
+    // wind, and the spray thins off them
+    vec2 sp = vWPos.xz;
+    float cr = wave(sp);
+    float streak = wn(vec2(sp.x * 0.3 + sp.y * 0.1, sp.y * 1.4 - sp.x * 0.35) + vec2(uTime * 0.35, -uTime * 0.2));
+    float cap = smoothstep(1.08, 1.24, cr + 0.3 * streak) * (0.6 + 0.4 * wn(sp * 3.1 + uTime * 0.6));
+    diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.84, 0.88, 0.88), cap * 0.85);
+    diffuseColor.a = max(diffuseColor.a, cap);
+    roughnessFactor = mix(roughnessFactor, 0.8, cap);
   }` : ''}
   ${kind === 'ice' ? `{
     // ice: dark where it is clear and deep, frosted pale in drifts, and
@@ -132,7 +147,7 @@ float wave(vec2 p){
     // in a broken line just off the bank, breathing with the ripples
     diffuseColor.rgb = mix(vec3(0.24, 0.27, 0.2), diffuseColor.rgb, smoothstep(0.0, 1.1, dep));
     float edgeA = smoothstep(0.0, 0.35, dep);
-    float foam = smoothstep(0.0, 0.05, dep) * (1.0 - smoothstep(0.08, 0.26 + 0.08 * br, dep)) * smoothstep(0.3, 0.7, br * 0.6 + wn(vWPos.xz * 6.0 - uTime * 0.2) * 0.6);
+    float foam = smoothstep(0.0, 0.05, dep) * (1.0 - smoothstep(0.08 * ${(L.surf || 1).toFixed(2)}, (0.26 + 0.08 * br) * ${(L.surf || 1).toFixed(2)}, dep)) * smoothstep(0.3, 0.7, br * 0.6 + wn(vWPos.xz * 6.0 - uTime * 0.2) * 0.6);
     diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.82, 0.86, 0.86), foam * 0.75);
     diffuseColor.a = max(diffuseColor.a * edgeA, foam * 0.7);
     roughnessFactor = mix(roughnessFactor, 0.7, foam);`}

@@ -39,6 +39,7 @@ const CAR_TYPE_KEYS = ['sedan', 'sedan', 'sedan', 'compact', 'compact',
   'sports', 'box'];
 import * as __FLORA from './proc/flora.js';
 import * as __GRASS from './proc/grass.js';
+import * as __PLACES from './proc/places.js';
 import { createVolcano as __createVolcano } from './proc/volcano.js';
 import { waterMaterial as __waterMaterial, waterKind as __waterKind, groundMist as __groundMist, shoreDepth as __shoreDepth } from './proc/water.js';
 import { snowTextures as __snowTextures } from './proc/ground.js';
@@ -496,11 +497,15 @@ async function main() {
   // the machine can draw: near trees are geometry, far ones are pictures of
   // themselves. Decided up here because the fog, the mountain ring and the
   // camera's reach all move outward to make room for it.
+  // A STORM SEA (2026-10-20): "a storm-lashed island" lay on a calm blue lake.
+  // A storm in the weather or in the sentence makes its water rough (proc/water.js 'storm')
+  window.__stormSea = ['storm', 'thunder', 'thunderstorm'].includes(String(SPEC.world.weather || '').toLowerCase())
+    || /\b(storm\w*|gales?|tempest\w*|hurricanes?|squalls?|typhoons?)\b/.test(String(SPEC.prompt || '').toLowerCase());
   const FLORA = (() => {
     const W = SPEC.world || {}, L0 = W.level || {};
     // (2026-10-07) the sentence's own place words too: "a himalayan monastery" grew an
     // oak wood because the title, "Monk's Ascent", never said where it was
-    const placeWords = (String(SPEC.prompt || '').toLowerCase().match(/\b(redwoods?|sequoias?|himalaya\w*|tibet\w*|nepal\w*|bhutan\w*|monaster(?:y|ies)|gompa|lavender|vineyards?|provence|tuscan\w*|black sand|basalt|sea stacks?|iceland\w*|kansas|wheat|olive groves?|tea plantations?|bamboo|cherry blossoms?|cherry trees?|sakura|hanami|highlands?|glens?|moors?|heather|alien|xeno\w*|extraterrestrial|exoplanet|purple plants|fjords?|norw\w*|vikings?|norse|nordic|scandinavia\w*|egypt\w*|giza|pyramids?|pharaoh\w*|sphinx|sahara|oasis|alps|alpine|swiss|switzerland|tyrol\w*|dolomit\w*|sea ice|ice floes?|pack ice|polar bears?|icebergs?|orchards?|apples?|cider|tropical|islands?|isle|palms?|lagoon|atoll|pirates?|treasure|castaway|autumn|october|maples?|beach|seaside|lifeguards?|surf\w*|scuba|deep blue|deep ocean|deep sea|humpback)\b/g) || []);   // (alien words, 2026-10-11; fjord, Egypt, Alps, sea ice the same day)
+    const placeWords = (String(SPEC.prompt || '').toLowerCase().match(/\b(redwoods?|sequoias?|himalaya\w*|tibet\w*|nepal\w*|bhutan\w*|monaster(?:y|ies)|gompa|lavender|vineyards?|provence|tuscan\w*|black sand|basalt|sea stacks?|iceland\w*|kansas|wheat|olive groves?|tea plantations?|bamboo|cherry blossoms?|cherry trees?|sakura|hanami|highlands?|glens?|moors?|heather|lighthouses?|storm\w*|gales?|scottish|scotland|hebrid\w*|orkney|shetland|irish|ireland|cornwall|cornish|welsh|wales|maine|newfoundland|north sea|atlantic|faroe\w*|brittany|breton|cliffs?|headland|alien|xeno\w*|extraterrestrial|exoplanet|purple plants|fjords?|norw\w*|vikings?|norse|nordic|scandinavia\w*|egypt\w*|giza|pyramids?|pharaoh\w*|sphinx|sahara|oasis|alps|alpine|swiss|switzerland|tyrol\w*|dolomit\w*|sea ice|ice floes?|pack ice|polar bears?|icebergs?|orchards?|apples?|cider|tropical|islands?|isle|palms?|lagoon|atoll|pirates?|treasure|castaway|autumn|october|maples?|beach|seaside|lifeguards?|surf\w*|scuba|deep blue|deep ocean|deep sea|humpback)\b/g) || []);   // (alien words, 2026-10-11; fjord, Egypt, Alps, sea ice the same day)
     const words = [W.name, W.sky, W.flora, W.weather, W.setting, SPEC.title, SPEC.description, ...placeWords]
       .filter(Boolean).join(' ').toLowerCase();
     if (L0.osm || L0.interior || W.pano || L0.cave) return null;
@@ -1905,7 +1910,8 @@ async function main() {
   const VILLAGE = (() => {
     if (INTERIOR || OSM || VIEW === 'side' || SPEC.genre === 'factory' || GARDEN || WEST || CANDY || ROWS) return null;
     const w = [SPEC.prompt, SPEC.world && SPEC.world.name].filter(Boolean).join(' ').toLowerCase();
-    if (!/\b(village|villages|hamlet|cottages?|thatched|farmstead|shire)\b/.test(w)) return null;
+    // (2026-10-20) one cottage is a place (proc/places.js), not a village: "from his stone cottage" raised a Tudor green on a Hebridean isle
+    if (!/\b(village|villages|hamlet|cottages|thatched|farmstead|shire)\b/.test(w)) return null;
     if (/\b(city|downtown|skyscrapers?|neon|cyberpunk)\b/.test(w)) return null;
     const r = mulberry32((SPEC.seed || 1) + 8181);
     // A VIKING VILLAGE IS LONGHOUSES AT THE FJORD'S HEAD (2026-10-11): the ring
@@ -2633,7 +2639,7 @@ async function main() {
       // shore under them, and deep blue where the bed has fallen away
       const seaG = new THREE.PlaneGeometry(FLORA.R * 2.6, FLORA.R * 2.6);
       seaG.rotateX(-Math.PI / 2);
-      const sea = new THREE.Mesh(seaG, __waterMaterial('sea', WIND_U));
+      const sea = new THREE.Mesh(seaG, __waterMaterial(window.__stormSea ? 'storm' : 'sea', WIND_U));
       sea.material.userData.noAutoTex = true;
       sea.position.y = SEA_Y;
       sea.name = 'islandSea';
@@ -2673,7 +2679,8 @@ async function main() {
     const _wS = _openSea ? Math.max(gsize * 1.3, ((FLORA && FLORA.R) || gsize) * 2.6) : gsize * 1.3;
     // a lake, a swamp or a frozen pond has its own water (proc/water.js); the
     // reef keeps the clear blue it is lit and fogged for from below
-    const _wWords = ((FLORA && FLORA.words) || [SPEC.world.name, SPEC.world.setting, SPEC.title].filter(Boolean).join(' ')).toLowerCase();
+    const _wWords = ((FLORA && FLORA.words) || [SPEC.world.name, SPEC.world.setting, SPEC.title].filter(Boolean).join(' ')).toLowerCase()
+      + (window.__stormSea ? ' storm' : '');
     const _frozen = SPEC.player.mode !== 'swim' && (SPEC.world.weather === 'snow' || /frozen|\bice\b|icy|arctic|tundra/.test(_wWords));
     waterMesh = new THREE.Mesh(
       new THREE.PlaneGeometry(_wS, _wS),
@@ -2717,12 +2724,12 @@ async function main() {
         waterMesh.position.y = _wk === 'ice' && _snowWorld ? WATER : Math.min(waterMesh.position.y, _wk === 'swamp' ? 0.18 : -0.12);
       }
       WATER_Y = waterMesh.position.y;
-      WATER_BOB = _sea ? 0.12 : _wk === 'ice' ? 0 : 0.03;
+      WATER_BOB = _sea ? 0.12 : _wk === 'ice' ? 0 : _wk === 'storm' ? 0.22 : 0.03;
       // the depth under the surface, so the shores fade, tint and foam (proc/water.js)
       if (!_sea) {
         const _k = waterMesh.material.userData.waterKind;
         waterMesh.material.dispose();
-        waterMesh.material = __waterMaterial(_k, WIND_U, __shoreDepth(hAt, WATER_Y, 0, 0, Math.min(_wS, gsize * 2)));
+        waterMesh.material = __waterMaterial(_k, WIND_U, __shoreDepth(hOut, WATER_Y, 0, 0, Math.min(_wS, gsize * 2)));   // (2026-10-20) hOut: past the level the land falls under the sea, and hAt ran flat there, a pale square of false shallows
       }
     }
     scene.add(waterMesh);
@@ -3801,6 +3808,39 @@ async function main() {
       map: new THREE.CanvasTexture(c), transparent: true, depthTest: false }));
     sp.scale.setScalar(3.2);
     return sp;
+  }
+  // ── THE PLACES THE SENTENCE NAMES (2026-10-20, proc/places.js) ─────────
+  // "lenses scattered among the tide pools, the boathouse and the ruined
+  // chapel" built none of them. Each place a sentence names is built beside
+  // the route in the sentence's order (a place it starts FROM by the spawn),
+  // and when there are as many things to find as places, or more, one lies
+  // at each place.
+  window.__places = null;
+  if (!INTERIOR && !OSM && (SPEC.view || '3d') === '3d' && !SPEC.world.pano && LVL && LVL.path && LVL.path.length > 1
+      && !/\b(city|street|downtown|metropolis|space|orbit|asteroid|underwater|reef)\b/.test(String(SPEC.prompt || '').toLowerCase())) {
+    try {
+      const _goalLab = (SPEC.objectives || []).filter(ob => ob.kind === 'reach').map(ob => ob.label || '').join(' ');
+      const _q = new THREE.Quaternion(), _e = new THREE.Euler();
+      const PL = __PLACES.buildPlaces({ THREE, scene, hAt, waterY: WATER_Y, path: LVL.path, goal: LVL.goal || null, spawn: [_sp.x, _sp.z],
+        prompt: SPEC.prompt, goalLabel: _goalLab, seed: SPEC.seed, night: ['night', 'dusk'].includes(SPEC.world.sky), HDT, HDN, bound: gsize * 0.45,
+        collider: (x, y, z, hx, hy, hz, yaw) => { _q.setFromEuler(_e.set(0, yaw, 0));
+          world.createCollider(RAPIER.ColliderDesc.cuboid(hx, hy, hz).setTranslation(x, y, z).setRotation({ x: _q.x, y: _q.y, z: _q.z, w: _q.w })); } });
+      if (PL && PL.places.length) {
+        (window.__grassHoles = window.__grassHoles || []).push(...PL.holes);
+        window.__placeSpots = PL.spots;
+        // the things to find lie at the places, in the sentence's order
+        const _col = (SPEC.objectives || []).find(ob => ob.kind === 'collect');
+        const _at = PL.places.filter(q => !q.start);
+        if (_col && _at.length >= 2 && (_col.count || 1) >= _at.length && LVL.collect_points) {
+          const cp = LVL.collect_points.slice();
+          _at.forEach((q, k) => { cp[k] = q.item; });
+          LVL.collect_points = cp;
+        }
+        window.__placesTick = PL.tick;
+        window.__places = PL.places.map(q => ({ kind: q.kind, at: [+q.x.toFixed(1), +q.z.toFixed(1)], start: q.start }));
+        console.log('[game] places: ' + PL.places.map(q => q.kind).join(', '));
+      }
+    } catch (e) { console.warn('[game] places skipped', e); }
   }
   // ── SKY LIFE (Phase 48): drifting clouds + a distant bird flock — the sky
   // stops being an empty gradient. Day-family palettes only.
@@ -7842,6 +7882,7 @@ async function main() {
         for (const p of (LVL.collect_points || [])) keepClear.push([p[0], p[1], 4]);
         for (const p of (LVL.landmarks || [])) keepClear.push([p[0], p[1], 9]);
       }
+      for (const p of (window.__placeSpots || [])) keepClear.push(p);   // no tree through a named place
       keepClear.push([_sp.x, _sp.z, 12]);     // the hero starts in a clearing, the camera behind them too
       if (PITCH) for (let a = -PITCH.L / 2 - 8; a <= PITCH.L / 2 + 8; a += 7) for (let c = -PITCH.W / 2 - 8; c <= PITCH.W / 2 + 8; c += 7)
         keepClear.push([a * PITCH.ux - c * PITCH.uz, a * PITCH.uz + c * PITCH.ux, 7]);   // no wood on the pitch or its apron
@@ -13086,7 +13127,9 @@ async function main() {
         if (!night && !wet && has(/meadow|garden|flower|farm|field|orchard|spring|\bbees?\b|butterfl|picnic|countryside|pasture|cherry|blossom/)) kinds.push('butterflies');
         if (!has(/cherry|sakura|blossom/) && has(/autumn|\bfall\b|october|maple|harvest (?:moon|festival)|pumpkin/)) kinds.push('leaves');
         if (night && !wet && has(/forest|wood|meadow|swamp|marsh|garden|field|firefl|summer|village|farm|grave|bayou|cemeter/)) kinds.push('fireflies');
-        if (!night && !wet && has(/beach|coast|\bsea\b|shore|harbou?r|island|lagoon|pier|seaside|lighthouse/)) kinds.push('gulls');
+        // (2026-10-20) gulls the sentence names wheel in any weather: "rain sweeps sideways ... gulls wheel overhead"
+        if ((!night && !wet && has(/beach|coast|\bsea\b|shore|harbou?r|island|lagoon|pier|seaside|lighthouse/))
+            || (SPEC.world.sky !== 'night' && /\b(sea ?)?gulls?|seabirds?|gannets?|terns?\b/.test(String(SPEC.prompt || '').toLowerCase()))) kinds.push('gulls');
       }
     }
     const K = QUALITY === 'performance' ? 0.45 : QUALITY === 'balanced' ? 0.75 : 1;
@@ -24556,6 +24599,7 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
       if (TRAP) trapTick(dt, !!(mvRaw && mvRaw.mag > 0.1), nt);
       if (SLOT_FX) slotTick(dt, nt);
       if (window.__goalMarkTick) window.__goalMarkTick();
+      if (window.__placesTick) window.__placesTick(performance.now() / 1000, typeof dt === "number" ? Math.min(0.05, dt) : 0.016);
       if (window.__stormTick) window.__stormTick(performance.now() / 1000);
       if (window.__smithFire) window.__smithFire(performance.now() / 1000);
       if (window.__harborTick) window.__harborTick(performance.now() / 1000);

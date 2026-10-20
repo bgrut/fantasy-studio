@@ -909,6 +909,18 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             spec = extract_game_spec(req.prompt, verbose=False)
             try: spec.prompt = req.prompt            # the sentence that made it rides with the spec
             except Exception: pass
+            # THE GULLS ARE THE SKY'S (2026-10-20): "gulls wheel overhead" was cast
+            # as six fireflies, the library's nearest flyer. Sea birds that only
+            # set the scene are the runtime's own wheeling flock (ambient 'gulls')
+            try:
+                import re as _bre
+                _birds = [e for e in spec.entities if _bre.fullmatch(r"(sea ?)?gulls?|seabirds?|sea birds?|terns?|gannets?|cormorants?|puffins?|albatross(es)?",
+                                                                     (e.name or "").lower().strip()) and e.behavior != "hostile"]
+                if _birds:
+                    spec.entities = [e for e in spec.entities if e not in _birds]
+                    job.setdefault("notes", []).append("the sea birds wheel overhead as the sky's own flock")
+            except Exception:  # noqa: BLE001
+                pass
             # THE STEPS ARE THE SENTENCE'S (2026-09-29): a collect or defeat step
             # the model made up, with no word of the prompt in it, is dropped
             try:
@@ -3607,6 +3619,17 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             _gc = list(spec.world.ground_color or [0.3, 0.3, 0.2])
             if not (_gc[1] > _gc[0] * 1.08 and _gc[1] > _gc[2]):
                 spec.world.ground_color = [0.22, 0.33, 0.14]
+        # A NORTHERN COAST IS TURF (2026-10-20): "a lighthouse keeper on a stormy
+        # island" and "a storm-lashed scottish island" were brown sand bars under
+        # palms. A lighthouse, a storm, a gale or a north-Atlantic name on an
+        # island or a coast is short wind-bitten grass over grey rock, unless the
+        # sentence is tropical
+        if (_fre.search(r"\b(lighthouses?|storm\w*|gales?|scottish|scotland|hebrid\w*|orkney|shetland|irish|ireland|cornwall|cornish|welsh|wales|maine|newfoundland|north sea|atlantic|faroe\w*|brittany|breton)\b", _pw7)
+                and _fre.search(r"\b(islands?|isles?|islets?|coasts?|shores?|cliffs?|sea|bay|harbou?r|headland)\b", _pw7)
+                and not _fre.search(r"\b(tropical|palms?|lagoon|atoll|caribbean|hawai\w*|polynesia\w*|pirates?|treasure|castaway|desert)\b", _pw7)):
+            _gc = list(spec.world.ground_color or [0.3, 0.3, 0.2])
+            if not (_gc[1] > _gc[0] * 1.08 and _gc[1] > _gc[2]):
+                spec.world.ground_color = [0.27, 0.35, 0.2]
         # A CITY ON THE WATER (2026-10-11): Venice stands in its lagoon, so the
         # sea landform makes the water; the runtime cuts the canals (CANALS)
         if (_fre.search(r"\b(venice|venezia|venetian|gondol\w*|grand canal|rialto|city of canals)\b", _pw7)
