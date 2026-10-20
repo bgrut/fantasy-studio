@@ -1473,6 +1473,44 @@ async function main() {
     return { C, ux, uz, A, B, D, PH, TH, H0, RO, local, world,
              inside: (x, z, m) => ell(x, z, A + (m || 0), B + (m || 0)) < 1, inFoot };
   })();
+  // ── THE LISTS (2026-10-19) ────────────────────────────────────────────────
+  // "a medieval knight competes in a jousting tournament in front of the
+  // king's castle" fought in a clearing in a wood. A joust is run on the
+  // lists: a long level field of beaten earth with the tilt barrier down its
+  // middle, the grandstand along one side under striped awnings with the
+  // royal box at its centre, the champions' pavilions at the ends, banners
+  // all round, and the castle standing over the far end of the field.
+  const JOUST = (() => {
+    if (INTERIOR || !LVL || !LVL.heights || SPEC.genre === 'factory' || VIEW === 'side' || PITCH || ARENA) return null;
+    if (LVL.heights.length !== LVL.grid_n * LVL.grid_n) return null;
+    const w = [SPEC.prompt, SPEC.world && SPEC.world.name, SPEC.title].filter(Boolean).join(' ').toLowerCase();
+    if (!/\b(joust\w*|tilting|tilt yard|the lists|lance tournament)\b/.test(w) && !(/\btournament\b/.test(w) && /\b(knights?|medieval|lances?|squires?)\b/.test(w))) return null;
+    const g = LVL.goal || [0, 60], gl = Math.hypot(g[0], g[1]) || 1, ux = g[0] / gl, uz = g[1] / gl;
+    const C = [ux * 36, uz * 36], L2 = 34, W2 = 24;          // the field's centre, half-length, half-width
+    const local = (x, z) => [(x - C[0]) * ux + (z - C[1]) * uz, -(x - C[0]) * uz + (z - C[1]) * ux];
+    const world = (a, c) => [C[0] + ux * a - uz * c, C[1] + uz * a + ux * c];
+    const n = LVL.grid_n, S = LVL.size_m, hs = LVL.heights;
+    const gi = (x) => Math.max(0, Math.min(n - 1, Math.round((x / S + 0.5) * (n - 1))));
+    const H0 = hs[gi(C[1]) * n + gi(C[0])];
+    for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
+      const x = (j / (n - 1) - 0.5) * S, z = (i / (n - 1) - 0.5) * S;
+      const [p, q] = local(x, z);
+      const e = Math.max(Math.abs(p) / (L2 + 50), Math.abs(q) / (W2 + 16));     // 1 at the field's outer margin (the castle end too)
+      if (e <= 1) hs[i * n + j] = H0;
+      else if (e < 1.3) { const t = (e - 1) / 0.3, s = t * t * (3 - 2 * t); hs[i * n + j] = H0 * (1 - s) + hs[i * n + j] * s; }
+    }
+    LVL.goal = world(L2 - 4, -4);                            // the far end of the run, your side of the tilt
+    LVL.path = [[0, 0], LVL.goal.slice()];
+    if (LVL.collect_points) LVL.collect_points = LVL.collect_points.map((_, k, arr) => world(-L2 + 8 + (k + 1) * (2 * L2 - 16) / (arr.length + 1), -8));
+    const inField = (x, z, m) => { const [p, q] = local(x, z); return Math.abs(p) < L2 + 50 + (m || 0) && Math.abs(q) < W2 + 16 + (m || 0); };
+    if (LVL.pois) LVL.pois = LVL.pois.filter(p => !inField(p.x, p.z, 8));
+    if (LVL.landmarks) LVL.landmarks = LVL.landmarks.filter(l => !inField(l[0], l[1], 10));
+    // the castle is built over the field's far end (below): a second keep with
+    // its door on the run would stand among the pavilions
+    if (LVL.enterable && LVL.enterable.door && inField(LVL.enterable.door[0], LVL.enterable.door[1], 20)) LVL.enterable = null;
+    if (LVL.enterables) LVL.enterables = LVL.enterables.filter(e => !(e && e.door && inField(e.door[0], e.door[1], 20)));
+    return { C, ux, uz, L2, W2, H0, local, world, inField };
+  })();
   // ── A CITY ON CANALS (2026-10-11) ───────────────────────────────────────
   // "a gondolier steers through the canals of venice at dusk delivering four
   // letters" swam a lake among wooded islands. Venice is a city of water: a
@@ -2954,7 +2992,7 @@ async function main() {
       scene.add(H);
       world.createCollider(RAPIER.ColliderDesc.cylinder(1.0, 0.95).setTranslation(goalPos.x, goalPos.y + 1.0, goalPos.z));
     }
-    if (_structHit && !_venueGoal && !(VILLAGE && _structHit[1] === 'village') && !(RAIL && _structHit[1] === 'station')) {   // the railway builds its own station   // a village goal is the village itself, not one more cottage in its lane
+    if (_structHit && !_venueGoal && !JOUST && !(VILLAGE && _structHit[1] === 'village') && !(RAIL && _structHit[1] === 'station')) {   // the railway builds its own station   // a village goal is the village itself, not one more cottage in its lane
       // door faces the approach: back along the mission path, else the spawn
       const _pp = (LVL.path && LVL.path.length > 1) ? LVL.path[LVL.path.length - 2] : [0, 0];
       const doorYaw = Math.atan2(_pp[0] - goalPos.x, _pp[1] - goalPos.z);
@@ -3492,6 +3530,9 @@ async function main() {
     if ((SPEC.objectives || []).some(o => o.kind === 'race')) { window.__goalMark = 'none'; return G; }
     // a city street is no place for a campfire or a cairn: the goal there is the street itself (2026-10-19)
     if (OSM && kind !== 'chest') { window.__goalMark = 'none'; return G; }
+    // a tomb's goal is its sarcophagus (proc/cave.js); nothing else stands in the burial chamber
+    if (window.__cave && window.__cave.tomb) { window.__goalMark = 'none'; return G; }
+    if (JOUST) { window.__goalMark = 'none'; return G; }   // the lists are the place: no altar by the tilt
     // a person to reach is the goal themself: a campfire on a lifeguard's
     // beach for "reach swimmer 1" was a thing that should not be there
     if (!kind && /\b(swimmers?|man|woman|men|women|girl|boy|child|children|kids?|princess|prince|king|queen|survivors?|friends?|hikers?|climbers?|people|family|mother|father|brother|sister|captain|crew|villagers?|dog|cat|horse|guide|keeper|master|elder|monk|teacher|stranger|customer|rider|driver|player|team|rival|opponent|cubs?|pups?|kits?|kittens?|puppies|puppy|chicks?|ducklings?|foals?|calf|calves|lambs?|fawns?|cygnets?|hatchlings?|eggs?|young|babies|baby|herd|flock|pack|litter)\b|\d/.test(lab)) { window.__goalMark = 'none'; return G; }
@@ -7724,6 +7765,7 @@ async function main() {
       if (SKATE) for (let a = SKATE.U0 - 4; a <= SKATE.U1 + 4; a += 7) for (let c = SKATE.S0 - 4; c <= SKATE.S1 + 4; c += 7) { const [x, z] = SKATE.world(a, c); keepClear.push([x, z, 7]); }   // no tree in the park
       if (CANALS) for (let a = CANALS.U0 - 4; a <= CANALS.U1 + 4; a += 8) for (let c = -44; c <= 60; c += 8) { const [x, z] = CANALS.world(a, c); keepClear.push([x, z, 8]); }   // a city of stone and water
       if (RAIL) for (let sA = 0; sA < RAIL.len; sA += 5) { const q = RAIL.at(sA); keepClear.push([q.x, q.z, 6]); }   // no tree on the line
+      if (JOUST) for (let a = -JOUST.L2 - 30; a <= JOUST.L2 + 60; a += 8) for (let c = -JOUST.W2 - 18; c <= JOUST.W2 + 18; c += 8) { const [x, z] = JOUST.world(a, c); keepClear.push([x, z, 8]); }   // no wood on the field, the stands or before the castle
       if (ARENA) { const ea = ARENA.A + ARENA.RO + 6, eb = ARENA.B + ARENA.RO + 6;
         for (let a = -ea; a <= ea; a += 8) for (let c = -eb; c <= eb; c += 8) { const [x, z] = ARENA.world(a, c); if (ARENA.inFoot(x, z, 6)) keepClear.push([x, z, 8]); } }   // no wood through the stands
       if (GARDEN) for (let gz = GARDEN.Z0; gz <= GARDEN.Z1; gz += 4) keepClear.push([0, gz, 11]);   // the plot and a margin round it
@@ -13554,6 +13596,83 @@ async function main() {
     const t = new THREE.TextureLoader().load('textures/' + name + '.jpg');
     t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(rx, ry ?? rx); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = renderer.capabilities.getMaxAnisotropy();
     return (c[key] = t);
+  }
+  // ── THE LISTS, BUILT (see JOUST above) ──────────────────────────────────
+  if (JOUST) {
+    const J = JOUST, rJ = mulberry32((SPEC.seed || 1) + 8181), Y0 = J.H0, yaw = Math.atan2(J.ux, J.uz);
+    const G = new THREE.Group(); G.position.set(J.C[0], Y0, J.C[1]); G.rotation.y = yaw; scene.add(G);   // local z = along the run, x = across it
+    const MAT = (o) => { const m = new THREE.MeshStandardMaterial(o); m.userData.noAutoTex = true; return m; };
+    const stripe = (a, b, n, vert) => { const c = document.createElement('canvas'); c.width = c.height = 64; const x = c.getContext('2d');
+      for (let i = 0; i < n; i++) { x.fillStyle = i % 2 ? b : a; if (vert) x.fillRect(i * 64 / n, 0, 64 / n + 1, 64); else x.fillRect(0, i * 64 / n, 64, 64 / n + 1); }
+      const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; return t; };
+    const wood = MAT({ map: HDT('bark', 1, 3), color: 0x8a6a48, roughness: 0.85 });
+    const plank = MAT({ color: 0x7a5a3a, roughness: 0.9 });
+    const add = (g, m, x, y, z, ry) => { const o = new THREE.Mesh(g, m); o.position.set(x, y, z); if (ry) o.rotation.y = ry; o.castShadow = o.receiveShadow = true; G.add(o); return o; };
+    // the run: beaten earth the length of the field
+    const dirt = MAT({ map: HDT('soil', 10, 3), color: 0xb08a62, roughness: 1 });
+    const run = add(new THREE.PlaneGeometry(J.W2 * 1.4, J.L2 * 2 + 8).rotateX(-Math.PI / 2), dirt, 0, 0.03, 0); run.castShadow = false;
+    // the tilt: a barrier of painted boards between posts, down the middle
+    const tiltT = stripe('#b0202a', '#f0ead8', 2, true); tiltT.repeat.set(J.L2 / 2, 1);
+    add(new THREE.BoxGeometry(0.12, 1.15, J.L2 * 2), MAT({ map: tiltT, roughness: 0.8 }), 0, 0.75, 0);
+    add(new THREE.BoxGeometry(0.22, 0.12, J.L2 * 2 + 0.4), wood, 0, 1.38, 0);
+    for (let z = -J.L2; z <= J.L2 + 0.01; z += 4) add(new THREE.BoxGeometry(0.22, 1.5, 0.22), wood, 0, 0.75, z);
+    // the outer fence round the run
+    for (const sx of [-1, 1]) for (let z = -J.L2 - 4; z <= J.L2 + 4.01; z += 3) add(new THREE.BoxGeometry(0.16, 1.2, 0.16), wood, sx * J.W2 * 0.7, 0.6, z);
+    for (const sx of [-1, 1]) for (const y of [0.55, 1.05]) add(new THREE.BoxGeometry(0.08, 0.1, J.L2 * 2 + 8), wood, sx * J.W2 * 0.7, y, 0);
+    // the grandstand along the far side: four tiers under a striped awning
+    const SX = J.W2 * 0.7 + 7, standL = J.L2 * 1.5;
+    for (let t = 0; t < 4; t++) add(new THREE.BoxGeometry(2.0, 0.55 + t * 0.85, standL), plank, SX + t * 1.9, (0.55 + t * 0.85) / 2, 0);
+    for (let z = -standL / 2; z <= standL / 2 + 0.01; z += 6) for (const dx of [-0.6, 6.2]) add(new THREE.BoxGeometry(0.22, 6.2, 0.22), wood, SX + dx, 3.1, z);
+    const awn = MAT({ map: stripe('#2a4a9a', '#f0ead8', 8, false), side: THREE.DoubleSide, roughness: 0.85 }); awn.map.repeat.set(1, standL / 8);
+    add(new THREE.PlaneGeometry(8, standL).rotateX(-Math.PI / 2).rotateZ(0.2), awn, SX + 2.8, 6.4, 0);
+    // a scalloped valance along the awning's front, blue and gold
+    for (let z = -standL / 2, k = 0; z < standL / 2; z += 1.6, k++) { const v = add(new THREE.CircleGeometry(0.8, 16, Math.PI, Math.PI), MAT({ color: k % 2 ? 0x2a4a9a : 0xe0b84a, side: THREE.DoubleSide }), SX - 1.15, 5.75, z + 0.8, Math.PI / 2); v.castShadow = false; }
+    // the royal box at its centre: a raised floor, gilt posts, a red and gold canopy
+    const royal = MAT({ map: stripe('#9a1a22', '#e0b84a', 6, true), side: THREE.DoubleSide });
+    const gilt = MAT({ color: 0xe0b84a, metalness: 0.7, roughness: 0.4 });
+    add(new THREE.BoxGeometry(5, 0.3, 8), plank, SX + 1.5, 3.4, 0);
+    for (const dz of [-3.8, 3.8]) for (const dx of [-0.8, 3.8]) add(new THREE.CylinderGeometry(0.14, 0.14, 5.6, 12), gilt, SX + dx, 6.2, dz);
+    add(new THREE.ConeGeometry(5.4, 2.6, 4, 1, true), royal, SX + 1.5, 10.3, 0, Math.PI / 4);
+    // pavilions at both ends of the field, each knight's colours
+    const PAV = [['#b0202a', '#f0ead8'], ['#1a3a8a', '#e0b84a'], ['#2a6a3a', '#f0ead8'], ['#5a2a7a', '#e0b84a']];
+    let pk = 0;
+    for (const end of [-1, 1]) for (const sx of [-1.15, -1.75]) {
+      const [a, b] = PAV[pk++ % PAV.length], m = MAT({ map: stripe(a, b, 10, true), side: THREE.DoubleSide, roughness: 0.85 }); m.map.repeat.set(2, 1);
+      const x = sx * J.W2 * 0.7 - 2, z = end * (J.L2 + 10);
+      add(new THREE.CylinderGeometry(3.2, 3.2, 3.2, 28, 1, true), m, x, 1.6, z);
+      add(new THREE.ConeGeometry(3.6, 3.4, 28, 1, true), m, x, 4.9, z);
+      add(new THREE.CylinderGeometry(0.06, 0.06, 2.2, 8), wood, x, 7.5, z);
+      const pf = add(new THREE.PlaneGeometry(1.4, 0.7), MAT({ color: new THREE.Color(a), side: THREE.DoubleSide }), x + 0.7, 8.2, z); pf.castShadow = false;
+    }
+    // banners on tall poles round the field, swaying
+    const flags = [];
+    for (let z = -J.L2; z <= J.L2 + 0.01; z += 11) for (const sx of [-1, 1]) {
+      const x = sx * (J.W2 * 0.7 + 1.2);
+      add(new THREE.CylinderGeometry(0.07, 0.09, 7, 10), wood, x, 3.5, z);
+      const [a] = PAV[Math.floor(rJ() * PAV.length)];
+      const fl = new THREE.Mesh(new THREE.PlaneGeometry(1.1, 2.4), MAT({ color: new THREE.Color(a), side: THREE.DoubleSide, roughness: 0.8 }));
+      fl.position.set(x, 5.6, z + 0.6); fl.rotation.y = Math.PI / 2; G.add(fl); flags.push(fl);
+    }
+    // the castle over the far end: a curtain wall with a gatehouse and four round towers
+    const stM = MAT({ map: HDT('stone', 4, 2), normalMap: HDN('stone', 4, 2), color: 0xb8b2a6, roughness: 0.92 });
+    const slate = MAT({ color: 0x4a5266, roughness: 0.7 });
+    const CZ = J.L2 + 42;
+    add(new THREE.BoxGeometry(60, 12, 3), stM, 0, 6, CZ);
+    for (let x = -29; x <= 29; x += 2.4) add(new THREE.BoxGeometry(1.2, 1.4, 3.2), stM, x, 12.7, CZ);
+    for (const x of [-30, 30, -12, 12]) {
+      add(new THREE.CylinderGeometry(4, 4.4, 20, 28), stM, x, 10, CZ + 2); add(new THREE.ConeGeometry(4.8, 7, 28), slate, x, 23.5, CZ + 2);
+      const bn = add(new THREE.PlaneGeometry(1.6, 3.6), MAT({ color: 0x9a1a22, side: THREE.DoubleSide }), x, 13, CZ - 2.45); bn.castShadow = false; }
+    add(new THREE.BoxGeometry(12, 18, 7), stM, 0, 9, CZ - 1);
+    add(new THREE.BoxGeometry(4.4, 6, 0.6), MAT({ color: 0x1a1410 }), 0, 3, CZ - 4.6);
+    // solid: the tilt, the stands, the castle
+    G.updateMatrixWorld(true);
+    const col = (hw, hh, hd, x, y, z) => { const v = new THREE.Vector3(x, y, z).applyMatrix4(G.matrixWorld);
+      world.createCollider(RAPIER.ColliderDesc.cuboid(hw, hh, hd).setTranslation(v.x, v.y, v.z).setRotation({ x: 0, y: Math.sin(yaw / 2), z: 0, w: Math.cos(yaw / 2) })); };
+    col(0.15, 0.8, J.L2, 0, 0.8, 0);
+    col(4, 2, standL / 2, SX + 3, 2, 0);
+    col(32, 10, 4, 0, 10, CZ);
+    window.__joustTick = (t) => { flags.forEach((f, i) => { f.rotation.y = Math.PI / 2 + Math.sin(t * 2.1 + i) * 0.25; }); };
+    window.__joust = { field: [J.L2 * 2, J.W2 * 2], pavilions: pk, flags: flags.length };
   }
   // ── THE COLOSSEUM, BUILT (see ARENA above) ─────────────────────────────
   if (ARENA) {
@@ -24359,6 +24478,7 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
       if (window.__asteroidTick) window.__asteroidTick(Math.min(0.05, dt));
       if (window.__burnTick) window.__burnTick(performance.now() / 1000, Math.min(0.05, dt));
       if (window.__earthTick) window.__earthTick(Math.min(0.05, dt));
+      if (window.__joustTick) window.__joustTick(performance.now() / 1000);
       if (window.__tornadoTick) window.__tornadoTick(Math.min(0.05, dt));
       if (window.__monkTick) window.__monkTick(performance.now() / 1000, Math.min(0.05, dt));
       if (window.__lifeTick) window.__lifeTick(dt);
