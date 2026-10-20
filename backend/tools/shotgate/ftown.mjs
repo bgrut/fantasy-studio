@@ -102,8 +102,9 @@ if (f0.city) {
   check(grown.byPark[1] === 3 && grown.byPark[0] >= 2, `a park lets homes grow into flats: level ${grown.byPark[0]} of ${grown.byPark[1]}`);
   check(grown.s.income > 0 && grown.s.cash > grown.cash0, `people pay: +${grown.s.income} a second, ${grown.cash0} -> ${grown.s.cash}`);
   check(grown.s.won && grown.s.pop >= 500, `a planned town reaches the goal: ${grown.s.pop} people, ${grown.s.jobs} jobs`);
-  await wait(600);
-  const said = await p.evaluate(() => (document.getElementById('citygoal') || {}).textContent || '');
+  // (2026-10-20) polled: the panel redraws on a later frame, past a fixed 600 ms on a loaded machine
+  let said = '';
+  for (let k = 0; k < 25 && !/IS GROWN/.test(said); k++) { await wait(200); said = await p.evaluate(() => (document.getElementById('citygoal') || {}).textContent || ''); }
   check(/IS GROWN/.test(said), 'the panel says the city is grown');
   const look = await p.evaluate(([hi, hj]) => window.__factory.describeCell(window.__factory.cells[0][hi + 14][hj - 2]), aim);
   check(/^HOMES/.test(look) && /people/.test(look), `the look label reads a home: "${look}"`);

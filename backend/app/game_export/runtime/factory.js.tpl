@@ -8572,6 +8572,7 @@ function saveState() {
   });
   return {
     v: SAVE_V, n: N, ore, ingots, alloys, cores, runValue, components,
+    at: Date.now(), rm: Math.round(rateNow),       // when it was left, and what it was earning a minute
     up: { tick: UPGRADES.tick.lvl, yield: UPGRADES.yield.lvl,
           smelt: UPGRADES.smelt.lvl },
     price: TRADED.map(t => PRICE[t]),
@@ -8655,6 +8656,23 @@ function loadState(d) {
   visitedFaces.add(player.face);
   applyUpgrades(); renderUpgrades(); renderTicker(); refreshCounts(); renderGoal();
   document.getElementById('tok').textContent = cores;
+  // WHILE YOU WERE AWAY (2026-10-20): a factory you leave running keeps
+  // running. It earns at half the rate it was making when you left, for up
+  // to eight hours, and says so when you come back: the reason to come back
+  window.__away = null;
+  if (!CREATIVE && d.at && d.rm > 0) {
+    const mins = Math.min(8 * 60, (Date.now() - d.at) / 60000);
+    if (mins >= 2) {
+      const earned = Math.round(d.rm * mins * 0.5);
+      ore += earned; runValue += earned; lifetime.value += earned;
+      window.__away = { mins: Math.round(mins), earned };
+      const h = Math.floor(mins / 60), mm = Math.round(mins % 60);
+      const span = (h ? h + (h === 1 ? ' hour' : ' hours') + (mm ? ' and ' : '') : '') + (mm || !h ? mm + (mm === 1 ? ' minute' : ' minutes') : '');
+      setTimeout(() => { const t = document.getElementById('toast');
+        if (t) { t.textContent = WORD('WHILE YOU WERE AWAY. The works ran for ' + span + ' at half pace and banked ' + earned.toLocaleString() + ' credits.' + (mins >= 8 * 60 ? ' Eight hours is as long as it runs unattended.' : '')); t.classList.add('on'); toastAt = 8; } }, 1800);
+      refreshCounts();
+    }
+  }
   return true;
 }
 
