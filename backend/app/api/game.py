@@ -1045,7 +1045,10 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                                   r"(?:all\s+)?(?:of\s+)?(?:the\s+|every\s+|an?\s+|his\s+|her\s+|their\s+|its\s+|my\s+)?(\d+|two|three|four|five|six|seven|eight|nine|ten)?\s*"
                                   r"((?:broken|damaged|dead|faulty|offline|burnt[- ]out|failing|leaking|busted)\s+)?([a-z]+)(?:\s+([a-z]+))?", _rp)
                 if _rm and getattr(spec, "genre", "") != "factory":
-                    _STOP = {"in", "on", "at", "before", "across", "around", "of", "to", "and", "so", "while", "for", "with", "the", "inside", "aboard"}
+                    # (2026-10-20) "delivers packages through a rainy city" read "packages through" for the noun
+                    _STOP = {"in", "on", "at", "before", "across", "around", "of", "to", "and", "so", "while", "for", "with", "the", "inside", "aboard",
+                             "through", "throughout", "into", "onto", "along", "past", "over", "under", "between", "from", "by", "toward", "towards",
+                             "within", "near", "during", "until", "after", "up", "down", "out", "via", "beneath", "behind", "beyond", "under"}
                     _n1, _n2 = _rm.group(3), _rm.group(4)
                     _noun = _n1 if (not _n2 or _n2 in _STOP) else (_n1 + " " + _n2)
                     # "restore power", "restore order", "restore peace" are not things to fix
@@ -1085,7 +1088,7 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                         # came back with "reach 5 rooftop", a step no pad could ever finish
                         if _rre.match(r"(drop|deliver)", _rm.group(0)):
                             spec.objectives = [o for o in spec.objectives if not (o.kind == "reach" and _rre.search(
-                                r"roof|house|home|door|building|address|destination|drop|customer", (o.label or "").lower()))]
+                                r"roof|house|home|door|building|address|destination|drop|customer|deliver|point|depot|recipient", (o.label or "").lower()))]
                         # the broken things are the runtime's own fixtures: the planner's
                         # "panel" props were generated as a mesh and stood about besides
                         # (a fire planned as an enemy to defeat was dropped with its whole objective;
@@ -3586,6 +3589,15 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         if (_fre.search(r"\b(alps|alpine|swiss|switzerland|tyrol\w*|dolomites?)\b", _pw7)
                 and not _fre.search(r"\b(snow\w*|winter|blizzard|frozen|ski\w*|glacier)\b", _pw7)):
             spec.world.ground_color = [0.33, 0.47, 0.25]
+        # A VALLEY IS GREEN (2026-10-20): "a hiker explores a misty mountain
+        # valley at sunrise" walked a red-brown dirt ditch. A mountain valley,
+        # a meadow, a glen or a hiking trail is grass under the peaks, unless
+        # the sentence makes it dry, cold, burnt, autumnal or another world
+        if (_fre.search(r"\b(valleys?|meadows?|glens?|dales?|hik(?:e|er|ers|ing)|trails?|foothills?|highlands?|pastures?|mountainside)\b", _pw7)
+                and not _fre.search(r"\b(desert|dunes?|canyon|mesa|badlands?|mars|martian|moon|lunar|snow\w*|winter|frozen|ice|icy|volcan\w*|lava|ash|wasteland|autumn|fall|scorched|drought|savann?ah?|death valley)\b", _pw7)):
+            _gc = list(spec.world.ground_color or [0.3, 0.3, 0.2])
+            if not (_gc[1] > _gc[0] * 1.08 and _gc[1] > _gc[2]):
+                spec.world.ground_color = [0.3, 0.44, 0.22]
         # A JUNGLE FLOOR IS GREEN (2026-10-17): "an explorer canoes down a jungle
         # river" was planned on brown soil, and the runtime grows grass by the
         # ground's colour, so the rainforest stood on a bare dirt yard. Under

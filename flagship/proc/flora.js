@@ -1143,7 +1143,20 @@ function farMaterial(atlas, row, U) {
           float d = distance(vBase.xz, cameraPosition.xz);
           float f = smoothstep(uNear, uNear * 0.82, d);   // the near tree's share
           if (ign(gl_FragCoord.xy) <= f) discard;          // its complement
-        }`);
+        }`)
+      // (2026-10-20) a forest climbing the far ranges takes the ranges' own
+      // aerial perspective (main.js.tpl's skyline): under the full haze each
+      // tier of trees on a slope was a pale ragged band across darker rock
+      .replace('#include <fog_fragment>', `
+        #ifdef USE_FOG
+          #ifdef FOG_EXP2
+            float fogFactor = 1.0 - exp(- fogDensity * fogDensity * vFogDepth * vFogDepth);
+          #else
+            float fogFactor = smoothstep(fogNear, fogFar, vFogDepth);
+          #endif
+          fogFactor *= mix(1.0, 0.62 * (1.0 - 0.4 * smoothstep(15.0, 180.0, vBase.y)), smoothstep(4.0, 24.0, vBase.y));
+          gl_FragColor.rgb = mix(gl_FragColor.rgb, fogColor, fogFactor);
+        #endif`);
   };
   m.customProgramCacheKey = () => 'flora-far-' + row;
   return m;

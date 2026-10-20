@@ -84,6 +84,17 @@ def _names(line, label):
     return not words or any(re.search(r"\b" + re.escape(w.rstrip("s")) + r"(e?s)?\b", low) for w in words)
 
 
+# (2026-10-20) a delivery runs on the repair objective (a pad, hold E), and the
+# HUD calls it "Deliver 4 packages"; the story was told "repair" and wrote
+# "Repair the package labeled 'Fragile'". It is told what the player is told.
+_PARCEL = re.compile(r"package|parcel|deliver|letter|mail|pizza|crate|box|supplies|medicine|food|meal", re.I)
+
+
+def _shown_kind(o):
+    k = getattr(o, "kind", "") or ""
+    return "deliver" if k == "repair" and _PARCEL.search(str(getattr(o, "label", "") or "")) else k
+
+
 def _fallback(spec, prompt):
     rng = random.Random((getattr(spec, "seed", 0) or 0) * 31 + len(prompt or ""))
     who = str(getattr(spec.player, "name", "") or "traveller")
@@ -98,7 +109,7 @@ def _fallback(spec, prompt):
         # "Put down dragon." wants its article
         if n == 1 and not re.match(r"(the|a|an|my|your|his|her|their)\b", lab, re.I) and not lab[:1].isupper():
             lab = "the " + lab
-        beats.append(_clean(f"{verbs.get(getattr(o, 'kind', ''), 'Find')} {str(n) + ' ' if n > 1 else ''}{lab}."))
+        beats.append(_clean(f"{verbs.get(_shown_kind(o), 'Find')} {str(n) + ' ' if n > 1 else ''}{lab}."))
     intro = _clean(getattr(spec, "intro", "") or "")
     pro = [s for s in re.split(r"(?<=[.?])\s+", intro) if s] or [_clean(prompt).capitalize() + "."]
     heads = ["Before First Light", "The Long Way In", "What the Weather Brought", "One Last Errand",
@@ -138,7 +149,7 @@ _NAMES = ["Ines", "Tomasz", "Adaeze", "Ruairi", "Mei", "Kofi", "Sigrun", "Teodor
 
 def write_story(spec, prompt: str, verbose: bool = True) -> dict:
     """The story for a fresh build. Never raises; falls back to a composed one."""
-    obs = [{"kind": getattr(o, "kind", ""), "label": getattr(o, "label", ""), "count": getattr(o, "count", 1)}
+    obs = [{"kind": _shown_kind(o), "label": getattr(o, "label", ""), "count": getattr(o, "count", 1)}
            for o in (getattr(spec, "objectives", []) or [])]
     seed = getattr(spec, "seed", 0) or 0
     user = (f"Game idea: {prompt}\nTitle: {getattr(spec, 'title', '')}\n"

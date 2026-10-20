@@ -93,7 +93,11 @@ const shield = await p.evaluate(async () => {
   for (let a = 0; a < F.N && !far; a++) for (let bb = 0; bb < F.N && !far; bb++)
     if (F.cells[0][a][bb].mesh && !F.iceShielded(0, a, bb) && Math.abs(a - i) + Math.abs(bb - j) > R * 2) far = F.cells[0][a][bb];
   c.ice = 3; if (far) far.ice = 3;
+  // (2026-10-20) and at least sixty frames: with no seam out of the heat to
+  // compare against (a small world) the bare number needs a second of game time
+  let nf = 0; const cnt = () => { nf++; if (nf < 60) requestAnimationFrame(cnt); }; requestAnimationFrame(cnt);
   await new Promise(r => setTimeout(r, 1300));
+  for (let k = 0; k < 40 && nf < 60; k++) await new Promise(r => setTimeout(r, 100));
   const near = c.ice, farIce = far ? far.ice : null;
   return { inside, landed, onShielded, near: +near.toFixed(2), far: farIce === null ? null : +farIce.toFixed(2) };
 });

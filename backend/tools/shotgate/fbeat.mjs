@@ -114,7 +114,9 @@ const idle = await p.evaluate(async () => {
   if (f().tutorial) { dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyG', key: 'g' })); await new Promise(r => setTimeout(r, 300)); }
   const before = f().idleNudges;
   F.idleAt(95);   // (2026-10-16) polled for the same reason as the hints
-  for (let k = 0; k < 12 && f().idleNudges === before; k++) await new Promise(r => setTimeout(r, 250));
+  // (2026-10-20) up to ten seconds: the studio build can stall its frames for 3-5 s
+  // after the sound step (the GPU, not the page: the CPU sits idle meanwhile)
+  for (let k = 0; k < 40 && f().idleNudges === before; k++) await new Promise(r => setTimeout(r, 250));
   await new Promise(r => setTimeout(r, 300));
   const g = document.getElementById('goal');
   return { before, after: f().idleNudges, ring: f().idleRing, nudged: !!g && g.classList.contains('nudge'), said: document.getElementById('toast').textContent };
@@ -127,7 +129,7 @@ const hints = await p.evaluate(async () => {
   // (2026-10-16) polled: the factory's one-off warm-up frame can hold the loop
   // past 400 ms, and the hints are put away on the next frame that runs
   F.ageHints(); let gone = false;
-  for (let k = 0; k < 12 && !gone; k++) { await new Promise(r => setTimeout(r, 250)); gone = f(); }
+  for (let k = 0; k < 40 && !gone; k++) { await new Promise(r => setTimeout(r, 250)); gone = f(); }
   return { before, gone };
 });
 await p.keyboard.press('KeyH'); await new Promise(r => setTimeout(r, 350));

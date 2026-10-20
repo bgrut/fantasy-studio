@@ -2752,7 +2752,8 @@ async function main() {
   // on it, not only distance fog (proc/water.js)
   let MIST = null;
   {
-    const _mw = ((FLORA && FLORA.words) || [SPEC.world.name, SPEC.world.setting, SPEC.title, SPEC.description].filter(Boolean).join(' ')).toLowerCase();
+    // (2026-10-20) and the sentence itself: "a misty mountain valley" had none, its world being named "mountains"
+    const _mw = (((FLORA && FLORA.words) || [SPEC.world.name, SPEC.world.setting, SPEC.title, SPEC.description].filter(Boolean).join(' ')) + ' ' + (SPEC.prompt || '')).toLowerCase();
     if (!INTERIOR && !OSM && !SPEC.world.pano && (SPEC.view || '3d') === '3d' && /swamp|marsh|bog|bayou|mire|misty|mist|foggy/.test(_mw)) {
       try {
         MIST = __groundMist(scene, { hAt, clock: WIND_U, density: /swamp|marsh|bog|bayou|mire/.test(_mw) ? 0.85 : 0.6,
@@ -3514,7 +3515,8 @@ async function main() {
     const W9 = [SPEC.prompt, SPEC.world && SPEC.world.name].filter(Boolean).join(' ').toLowerCase();
     const offworld = /\b(moon|lunar|mars|martian|space|asteroid|alien planet|exoplanet|orbit)\b/.test(W9) || SPEC.world.sky === 'space';
     const dry = /\b(desert|dunes?|sahara|egypt\w*|canyon|mesa|savann?ah?)\b/.test(W9), cold = /\b(snow\w*|ice|icy|frozen|arctic|glacier|alps|alpine|tundra|winter|polar)\b/.test(W9);
-    let kind = /\b(lamps?|lanterns?|lights?|beacons?|signal|torch(es)?)\b/.test(lab) ? 'lantern'
+    let kind = /\bbridges?\b/.test(lab) ? 'bridge'
+      : /\b(lamps?|lanterns?|lights?|beacons?|signal|torch(es)?)\b/.test(lab) ? 'lantern'
       : /\b(summit|peak|top|ridge|mountain|col|flag|lookout|overlook|cliff)\b/.test(lab) ? 'cairn'
       : /\b(camp|campfire|fire|hearth|bonfire|base)\b/.test(lab) ? 'fire'
       : /\b(shrine|altar|idol|statue|monolith|relic|tomb|grave|offering)\b/.test(lab) ? 'altar'
@@ -3576,7 +3578,90 @@ async function main() {
           q.sp.material.opacity = Math.min(1, q.t * 6) * (1 - q.t) * 0.55; }
       });
     };
-    if (kind === 'fire') {
+    if (kind === 'bridge') {
+      // AN OLD STONE BRIDGE (2026-10-20): "reach the old stone bridge" ended at
+      // a campfire. A packhorse bridge: one round arch of dressed voussoirs,
+      // a cobbled deck humped over it, low parapets with coping stones, moss
+      // on the stone, and a stream bed of pebbles running under the arch.
+      // It spans across the line of approach, its deck a step you can climb.
+      const SPAN = 8, RISE = 2.6, W = 2.8, mossM = MS({ color: 0x2c3d1b, roughness: 1 });
+      const pp = (LVL && LVL.path && LVL.path.length > 1) ? LVL.path[LVL.path.length - 2] : [0, 0];
+      G.rotation.y = Math.atan2(pp[0] - gp.x, pp[1] - gp.z) + Math.PI / 2;    // the span runs across the way you come
+      const R0 = (SPAN * SPAN / 4 + RISE * RISE) / (2 * RISE), CY = RISE - R0;   // the arch's circle
+      const archY = (x) => CY + Math.sqrt(Math.max(0, R0 * R0 - x * x));
+      // voussoirs round the arch, a ring of them on each face
+      const NV = 17;
+      for (let k = 0; k < NV; k++) {
+        const a0 = Math.asin(-SPAN / 2 / R0), a1 = -a0, a = a0 + (a1 - a0) * (k + 0.5) / NV;
+        for (const z of [-W / 2 + 0.21, W / 2 - 0.21]) {     // proud of the face by a few centimetres
+          const v = add(new THREE.BoxGeometry(0.62, 0.42, 0.5), stoneM, Math.sin(a) * (R0 + 0.25), CY + Math.cos(a) * (R0 + 0.25), z);
+          v.rotation.z = -a; v.scale.set(0.92 + r() * 0.12, 1, 1);
+        }
+      }
+      // (2026-10-20) the body is one solid: a profile of the humped deck with
+      // the arch cut from below, extruded across the width. Built as 0.8 m
+      // blocks at stepped heights it read as a ruined staircase.
+      const L = SPAN / 2 + 2.6, deckY = (x) => 0.35 + (RISE + 0.45) * Math.pow(Math.max(0, Math.cos(Math.PI * x / (2 * L))), 1.2);
+      const NS = 40, prof = (y0, y1) => { const sh = new THREE.Shape(); sh.moveTo(-L, y0(-L));
+        for (let k = 0; k <= NS; k++) { const x = -L + 2 * L * k / NS; sh.lineTo(x, y1(x)); }
+        for (let k = NS; k >= 0; k--) { const x = -L + 2 * L * k / NS; sh.lineTo(x, y0(x)); } return sh; };
+      const body = new THREE.Shape(); body.moveTo(-L, -0.5);
+      for (let k = 0; k <= NS; k++) { const x = -L + 2 * L * k / NS; body.lineTo(x, deckY(x)); }
+      body.lineTo(L, -0.5); body.lineTo(SPAN / 2, -0.5);
+      for (let k = 0; k <= 24; k++) { const x = SPAN / 2 - SPAN * k / 24; body.lineTo(x, Math.max(0, archY(x))); }
+      body.lineTo(-SPAN / 2, -0.5); body.closePath();
+      const bodyG = new THREE.ExtrudeGeometry(body, { depth: W, bevelEnabled: false, curveSegments: 1 }); bodyG.translate(0, 0, -W / 2);
+      const solids = [bodyG];
+      add(bodyG, stoneM, 0, 0, 0);
+      // the cobbled way along the top, and the parapets with their coping
+      const cobT = HDT('stone', 3, 3), cobN = HDN('stone', 3, 3);
+      const way = new THREE.ExtrudeGeometry(prof(x => deckY(x) - 0.02, x => deckY(x) + 0.05), { depth: W - 0.7, bevelEnabled: false });
+      way.translate(0, 0, -(W - 0.7) / 2);
+      add(way, MS({ map: cobT, normalMap: cobN, normalScale: new THREE.Vector2(1.8, 1.8), color: 0xa49c90, roughness: 0.97 }), 0, 0, 0);
+      for (const z of [-W / 2 + 0.17, W / 2 - 0.17]) {
+        const par = new THREE.ExtrudeGeometry(prof(x => deckY(x), x => deckY(x) + 0.62), { depth: 0.34, bevelEnabled: false }); par.translate(0, 0, z - 0.17);
+        add(par, stoneM, 0, 0, 0); solids.push(par);
+        const cop = new THREE.ExtrudeGeometry(prof(x => deckY(x) + 0.62, x => deckY(x) + 0.74), { depth: 0.46, bevelEnabled: true, bevelSize: 0.03, bevelThickness: 0.03, bevelSegments: 1 });
+        cop.translate(0, 0, z - 0.23); add(cop, stoneM, 0, 0, 0);
+        // moss gathers on the coping where water sits, thickest towards the ends
+        for (let k = 0; k < 16; k++) { const x = (r() - 0.5) * 2 * L * 0.94, w = 0.18 + r() * 0.3;
+          const m = add(new THREE.CylinderGeometry(w, w * 1.1, 0.025, 7), mossM, x, deckY(x) + 0.765, z + (r() - 0.5) * 0.12);
+          m.scale.set(1, 1, 0.45 + r() * 0.4); m.rotation.z = Math.atan2(deckY(x + 0.1) - deckY(x - 0.1), 0.2); m.castShadow = false; }
+      }
+      // a band of dressed string-course stones below the parapet on each face
+      for (const z of [-W / 2 - 0.04, W / 2 + 0.04]) {
+        const sc = new THREE.ExtrudeGeometry(prof(x => deckY(x) - 0.16, x => deckY(x) - 0.02), { depth: 0.1, bevelEnabled: false }); sc.translate(0, 0, z - 0.05);
+        add(sc, stoneM, 0, 0, 0);
+      }
+      // moss and damp stain at the springings, where the stream wets the stone
+      for (const sx of [-1, 1]) for (const z of [-W / 2 - 0.02, W / 2 + 0.02]) {
+        const st = add(new THREE.PlaneGeometry(1.6, 1.1), MS({ color: 0x3f5226, roughness: 1, transparent: true, opacity: 0.55, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 }), sx * (SPAN / 2 + 0.3), 0.45, z);
+        if (z < 0) st.rotation.y = Math.PI;
+      }
+      // the stream bed under the arch, and a few boulders at its banks
+      // (2026-10-20) a stream of some length, its ends fading into the meadow,
+      // over a bed of pebbles, and the grass kept off it and out of the arch
+      const SL = 26, fade = (() => { const cv = document.createElement('canvas'); cv.width = 8; cv.height = 128; const x = cv.getContext('2d');
+        const gr = x.createLinearGradient(0, 0, 0, 128); gr.addColorStop(0, 'rgba(255,255,255,0)'); gr.addColorStop(0.18, '#fff'); gr.addColorStop(0.82, '#fff'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+        x.fillStyle = gr; x.fillRect(0, 0, 8, 128); return new THREE.CanvasTexture(cv); })();
+      const bedM = MS({ map: HDT('rock', 2, 14), color: 0x8a8476, roughness: 1, alphaMap: fade, transparent: true, depthWrite: false });
+      add(new THREE.PlaneGeometry(3.1, SL).rotateX(-Math.PI / 2), bedM, 0, 0.03, 0).receiveShadow = true;
+      const wetM = MS({ color: 0x1f3a40, roughness: 0.04, metalness: 0.0, transparent: true, opacity: 0.78, alphaMap: fade, depthWrite: false });
+      const wet = add(new THREE.PlaneGeometry(2.3, SL).rotateX(-Math.PI / 2), wetM, 0, 0.09, 0); wet.castShadow = false;
+      for (let k = 0; k < 30; k++) { const z = (r() - 0.5) * SL * 0.8, x = (r() < 0.5 ? -1 : 1) * (1.15 + r() * 0.6);
+        add(rock(0.1 + r() * 0.28, k * 2.3), stoneM, x, 0.06, z); }
+      for (let k = 0; k < 6; k++) add(rock(0.14 + r() * 0.12, 90 + k), stoneM, (r() - 0.5) * 1.4, 0.05, (r() - 0.5) * SL * 0.6);   // stones in the water
+      { const c = Math.cos(G.rotation.y), s = Math.sin(G.rotation.y);
+        (window.__grassHoles = window.__grassHoles || []).push({ x: gp.x, z: gp.z, c, s, hx: L + 0.2, hz: W / 2 + 0.15 }, { x: gp.x, z: gp.z, c, s, hx: 1.7, hz: SL * 0.46 }); }
+      // solid: the body itself, so the deck can be walked over the hump and
+      // the arch walked under (two end boxes stopped a player at the foot)
+      G.updateMatrixWorld(true);
+      for (const geo of solids) { const pa = geo.attributes.position, mw = G.matrixWorld, v = new THREE.Vector3();
+        const vv = new Float32Array(pa.count * 3);
+        for (let i = 0; i < pa.count; i++) { v.fromBufferAttribute(pa, i).applyMatrix4(mw); vv[i * 3] = v.x; vv[i * 3 + 1] = v.y; vv[i * 3 + 2] = v.z; }
+        const ix = geo.index ? new Uint32Array(geo.index.array) : Uint32Array.from({ length: pa.count }, (_, i) => i);
+        world.createCollider(RAPIER.ColliderDesc.trimesh(vv, ix)); }
+    } else if (kind === 'fire') {
       for (let i = 0; i < 11; i++) { const a = i / 11 * 6.28; add(rock(0.22 + r() * 0.06, i * 3.1), stoneM, Math.cos(a) * 0.85, 0.08, Math.sin(a) * 0.85); }
       for (let i = 0; i < 5; i++) { const lg = add(new THREE.CylinderGeometry(0.07, 0.09, 1.1, 8), woodM, 0, 0.32, 0); lg.rotation.set(1.05, i / 5 * 6.28, 0); lg.position.set(Math.cos(i / 5 * 6.28) * 0.18, 0.3, Math.sin(i / 5 * 6.28) * 0.18); }
       add(new THREE.CircleGeometry(0.7, 20).rotateX(-Math.PI / 2), MS({ color: 0x1a1512, roughness: 1 }), 0, 0.02, 0);
@@ -10464,6 +10549,9 @@ async function main() {
           if (rg && rg.kind === 'water' && rg.w > 0.2) d = 0;
           if (rg && (rg.kind === 'rock' || rg.kind === 'sand') && rg.w > 0.4) { d *= 0.12; dry = 0.85; }
           if (WATER_Y !== null && hAt(x, z) < WATER_Y + 0.1) d = 0;   // (the planner's WATER can stand over the whole meadow)
+          // footprints a goal mark keeps bare, in its own frame (the stone bridge and its stream)
+          if (window.__grassHoles) for (const q of window.__grassHoles) { const dx = x - q.x, dz = z - q.z;
+            if (Math.abs(dx * q.c - dz * q.s) < q.hx && Math.abs(dx * q.s + dz * q.c) < q.hz) { d = 0; break; } }
           return [d, dry, h];
         };
         GRASS_LIVE = __GRASS.plantGrass({
