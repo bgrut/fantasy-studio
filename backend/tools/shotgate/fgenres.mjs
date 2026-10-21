@@ -61,7 +61,10 @@ if (TD) {
       const live = window.__game.npcs().filter(n => n.behavior === 'hostile' && !n.dead && !n.dormant);
       return { alive: live.length, dist: live.length ? live.reduce((s, n) => s + Math.hypot(n.pos[0] - kx, n.pos[2] - kz), 0) / live.length : null, q };
     });
-    const m1 = await d();
+    // (2026-10-21) polled: the wave is woken on a game frame, and a busy page read the gate
+    // empty at 1.5 s while the attackers were a frame or two away
+    let m1 = await d();
+    for (let k = 0; k < 20 && !(m1.alive > 0 && m1.q.wave === 1); k++) { await wait(250); m1 = await d(); }
     check(m1.alive > 0 && m1.q.wave === 1, `the first wave walked out of the gate: ${m1.alive} attackers`);
     await wait(5000);
     const m2 = await d();

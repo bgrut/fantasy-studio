@@ -3853,7 +3853,7 @@ async function main() {
       const _q = new THREE.Quaternion(), _e = new THREE.Euler();
       const PL = __PLACES.buildPlaces({ THREE, scene, hAt, waterY: WATER_Y, path: LVL.path, goal: LVL.goal || null, spawn: [_sp.x, _sp.z],
         prompt: SPEC.prompt, goalLabel: _goalLab, seed: SPEC.seed, night: ['night', 'dusk'].includes(SPEC.world.sky), HDT, HDN, bound: gsize * 0.45,
-        temple: () => buildFacadeBox('ancient'),
+        facade: (kind) => buildFacadeBox(kind),
         collider: (x, y, z, hx, hy, hz, yaw) => { _q.setFromEuler(_e.set(0, yaw, 0));
           world.createCollider(RAPIER.ColliderDesc.cuboid(hx, hy, hz).setTranslation(x, y, z).setRotation({ x: _q.x, y: _q.y, z: _q.z, w: _q.w })); } });
       if (PL && PL.places.length) {
@@ -12278,6 +12278,51 @@ async function main() {
     n.body.position.y = P.y0 + P.dy;
     n.body.rotation.x = P.x0 + P.dp;
     n.body.rotation.z = P.z0 - P.dr;
+  }
+  // A BROKEN FOOTBRIDGE (2026-10-21): stone abutments either side of a stream, two log
+  // stringers, a plank deck with a gap where planks have gone, two splintered ones hanging
+  // into it and the rest lying in the stream. Mending lays the missing planks back one by
+  // one as E is held. Local x runs along the span.
+  function makeBrokenBridge(seed) {
+    const g = new THREE.Group(), rr = mulberry32((SPEC.seed || 1) * 31 + seed * 977);
+    const M = (o) => { const m = new THREE.MeshStandardMaterial(o); m.userData.noAutoTex = true; return m; };
+    const stone = M({ map: HDT('stone', 0.5, 0.5), normalMap: HDN('stone', 0.5, 0.5), color: 0xb0aa9e, roughness: 0.95 });
+    const wood = M({ map: HDT('planks', 0.8, 0.8), normalMap: HDN('planks', 0.8, 0.8), color: 0x8a6e52, roughness: 0.88 });
+    const log = M({ map: HDT('bark', 1, 2), normalMap: HDN('bark', 1, 2), color: 0x6e5a46, roughness: 0.9 });
+    const add = (geo, m, x, y, z) => { const o = new THREE.Mesh(geo, m); o.position.set(x, y, z); o.castShadow = o.receiveShadow = true; g.add(o); return o; };
+    // the stream bed and its water under the span
+    add(new THREE.PlaneGeometry(2.4, 8).rotateX(-Math.PI / 2).rotateY(Math.PI / 2), M({ color: 0x4a4438, roughness: 1 }), 0, 0.02, 0).receiveShadow = true;
+    const wM = M({ color: 0x1f3a40, roughness: 0.05, transparent: true, opacity: 0.8, depthWrite: false });
+    add(new THREE.PlaneGeometry(1.7, 8).rotateX(-Math.PI / 2).rotateY(Math.PI / 2), wM, 0, 0.06, 0).castShadow = false;
+    for (const sx of [-1, 1]) add(new THREE.BoxGeometry(1.4, 1.0, 2.2), stone, sx * 3.0, 0.4, 0);
+    for (const sz of [-0.62, 0.62]) { const b = add(new THREE.CylinderGeometry(0.11, 0.13, 7.2, 10), log, 0, 0.95, sz); b.rotation.z = Math.PI / 2; }
+    const planks = [], gap = [];
+    const N = 20, gap0 = 7 + Math.floor(rr() * 3), gapN = 5;
+    for (let k = 0; k < N; k++) {
+      const x = -3.2 + (k + 0.5) * 6.4 / N;
+      const pl = add(new THREE.BoxGeometry(0.28, 0.06, 1.7), wood, x, 1.1, (rr() - 0.5) * 0.04);
+      pl.rotation.y = (rr() - 0.5) * 0.05;
+      if (k >= gap0 && k < gap0 + gapN) { pl.visible = false; pl.userData.y = 1.1; gap.push(pl); }
+      planks.push(pl);
+    }
+    // two splintered planks hanging into the gap, and the rest down in the water
+    for (const [k, rz] of [[gap0 - 1, 0.5], [gap0 + gapN, -0.45]]) { const h = add(new THREE.BoxGeometry(0.28, 0.06, 1.2), wood, -3.2 + (k + 0.5) * 6.4 / N + (rz > 0 ? 0.3 : -0.3), 0.8, 0.2); h.rotation.z = rz; h.rotation.x = 0.2; }
+    for (let k = 0; k < 3; k++) { const f = add(new THREE.BoxGeometry(0.28, 0.06, 1.5), wood, (rr() - 0.5) * 1.4, 0.1, (rr() - 0.5) * 3); f.rotation.set((rr() - 0.5) * 0.3, rr() * 3, (rr() - 0.5) * 0.4); }
+    // rope rails on posts
+    const rope = M({ color: 0xb59a6a, roughness: 1 });
+    for (const sz of [-0.85, 0.85]) {
+      for (const px of [-3.0, 0, 3.0]) add(new THREE.CylinderGeometry(0.05, 0.06, 1.0, 8), log, px, 1.55, sz);
+      const r = add(new THREE.CylinderGeometry(0.02, 0.02, 6.0, 6), rope, 0, 1.95, sz); r.rotation.z = Math.PI / 2;
+    }
+    // solid: the abutments always, the deck once it is whole
+    const q0 = new THREE.Quaternion();
+    g.userData.bridge = {
+      tick(p) {
+        const shown = Math.floor(p * gap.length + 1e-6);
+        gap.forEach((pl, i) => { pl.visible = i < shown; pl.position.y = pl.userData.y + (i === shown - 1 && p < 1 ? 0.15 : 0); });
+      },
+    };
+    return g;
   }
   function stepNPCs(dt, playerPos, t) {
     window.__alertPeak = 0;             // recomputed by the guards each frame
@@ -23300,6 +23345,8 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
       // (2026-10-07) letters go in letterboxes at the gates; trees are felled, not repaired
       const POST = DELIVER && /letter|mail|post|card|newspaper/.test(String(_rpS.label || '').toLowerCase()) && SPEC.player.mode !== 'fly' && !INTERIOR;
       const CHOP = !FIRE && !DELIVER && /\b(trees?|pines?|oaks?|birch(es)?|spruces?|logs?|timber)\b/.test(String(_rpS.label || '').toLowerCase()) && !INTERIOR;
+      // (2026-10-21) "repairs three broken bridges" stood three electrical panels in a meadow
+      const BRIDGE = !FIRE && !DELIVER && !CHOP && /\b(bridges?|footbridges?|crossings?)\b/.test(String(_rpS.label || '').toLowerCase()) && !INTERIOR;
       // (2026-10-07) the lost are found by walking up to them: no key to hold
       // (2026-10-07) a beekeeper checks hives: hold E at each, the lid comes up and the bees with it
       const HIVE = !FIRE && !DELIVER && !CHOP && /\b(?:bee)?hives?\b/.test(String(_rpS.label || '').toLowerCase()) && !INTERIOR;
@@ -23390,6 +23437,13 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
           panels.push({ g: g2, pad: g2.userData.pad, hive: true, fixed: false, p: 0, x: x + Math.sin(ry) * 0.95, z: z + Math.cos(ry) * 0.95, ry });
           continue;
         }
+        if (BRIDGE) {
+          const g2 = makeBrokenBridge(i + 1); g2.position.set(x, y, z); g2.rotation.y = ry + Math.PI / 2; scene.add(g2);
+          g2.userData.fsTag = { type: 'objective', name: 'broken bridge', detail: 'hold E to lay the missing planks' };
+          (window.__grassHoles = window.__grassHoles || []).push({ x, z, c: Math.cos(g2.rotation.y), s: Math.sin(g2.rotation.y), hx: 4, hz: 1.4 });
+          panels.push({ g: g2, bridge: g2.userData.bridge, fixed: false, p: 0, x, z, ry });
+          continue;
+        }
         if (CHOP) {
           const t = makeChopTree(i + 1); t.position.set(x, y, z); scene.add(t);
           t.userData.fsTag = { type: 'objective', name: 'marked tree', detail: 'hold E to chop it down' };
@@ -23442,6 +23496,7 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
         scene.add(g);
         panels.push({ g, scr, spark, fixed: false, p: 0, x, z, ry });
       }
+      if (BRIDGE && window.__grassRemask) window.__grassRemask();   // the streams under the bridges were laid after the grass
       const bar = document.createElement('div');
       bar.style.cssText = 'position:fixed;left:50%;bottom:24%;transform:translateX(-50%);width:250px;padding:9px 14px;border-radius:12px;'
         + 'background:rgba(8,12,20,.8);color:#e8f0ff;font:600 13px var(--f-body, system-ui);z-index:30;display:none;text-align:center;letter-spacing:.02em';
@@ -23463,7 +23518,7 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
         for (const q of panels) if (q.pad) q.pad.tick(tt, q.fixed);
         for (const q of panels) if (q.chop) q.chop.tick(dt, false);
         for (const s of spray) s.visible = false;
-        for (const q of panels) if (!q.fixed && !q.fire && !q.pad && !q.chop) {
+        for (const q of panels) if (!q.fixed && !q.fire && !q.pad && !q.chop && q.spark) {
           q.spark.material.opacity = Math.random() < 0.3 ? 0.95 : 0.12; q.spark.scale.setScalar(0.25 + Math.random() * 0.45);
           q.scr.material.emissiveIntensity = Math.random() < 0.08 ? 0.2 : 1.4;
         }
@@ -23477,7 +23532,9 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
         const held = !!keys.KeyE || (near.find && nd < 1.9);      // the lost are found by reaching them
         near.p = held ? Math.min(1, near.p + dt / (near.find ? 0.5 : near.hive ? 1.8 : near.fire ? 2.4 : near.chop ? 2.2 : near.pad ? 1.0 : 1.6)) : Math.max(0, near.p - dt * 0.6);
         if (near.chop) { near.chop.tick(dt, held); if (held && Math.floor(near.p * 6) !== near._k) { near._k = Math.floor(near.p * 6); try { sfx('hit'); } catch (e) {} } }
+        if (near.bridge) { near.bridge.tick(near.p); if (held && Math.floor(near.p * 5) !== near._k) { near._k = Math.floor(near.p * 5); try { sfx('hit'); } catch (e) {} } }
         document.getElementById('fsrpT').textContent = near.find ? (held ? 'Found them\u2026' : 'Get to them')
+          : near.bridge ? (held ? 'Laying planks\u2026' : 'Hold E to mend the bridge')
           : near.chop ? (held ? 'Chopping\u2026' : 'Hold E to chop it down')
           : near.hive ? (held ? 'Checking the hive\u2026' : 'Hold E to check the hive')
           : near.post ? (held ? 'Posting\u2026' : 'Hold E to post the ' + String(_rpS.label || 'letter').replace(/s$/, ''))
@@ -23496,15 +23553,16 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
           if (near.chop) { near.chop.fell(pp.x, pp.z); try { world.removeCollider(near.col, false); } catch (e) {} }
           else if (near.fire) near.fire.douse();
           else if (near.pad) near.pad.done();
+          else if (near.bridge) near.bridge.tick(1);
           else { near.scr.material.emissive.setHex(0x2aff7a); near.scr.material.emissiveIntensity = 1.3; near.spark.visible = false; }
-          popText(near.find ? (fixed >= st.count ? 'Everyone is found!' : 'Found!') : near.chop ? (fixed >= st.count ? 'Every tree is down!' : 'Timber!') : near.hive ? (fixed >= st.count ? 'Every hive checked!' : 'Hive checked!') : near.post ? (fixed >= st.count ? 'Every letter posted!' : 'Posted!') : near.fire ? (fixed >= st.count ? 'Every fire is out!' : 'Fire out!') : near.pad ? (fixed >= st.count ? 'Every delivery made!' : 'Delivered!') : (fixed >= st.count ? 'All fixed!' : 'Fixed!'), '#7fe08a'); sfx('pickup');
+          popText(near.find ? (fixed >= st.count ? 'Everyone is found!' : 'Found!') : near.bridge ? (fixed >= st.count ? 'Every bridge is whole!' : 'The bridge holds!') : near.chop ? (fixed >= st.count ? 'Every tree is down!' : 'Timber!') : near.hive ? (fixed >= st.count ? 'Every hive checked!' : 'Hive checked!') : near.post ? (fixed >= st.count ? 'Every letter posted!' : 'Posted!') : near.fire ? (fixed >= st.count ? 'Every fire is out!' : 'Fire out!') : near.pad ? (fixed >= st.count ? 'Every delivery made!' : 'Delivered!') : (fixed >= st.count ? 'All fixed!' : 'Fixed!'), '#7fe08a'); sfx('pickup');
           try { burst(near.g.position, 0x7fe08a); } catch (e) {}
           renderQuest(); bar.style.display = 'none';
           if (fixed >= st.count) advanceStep();
         }
       };
       const hintR = document.querySelector('#hud .hint');
-      if (hintR && !FIND) hintR.textContent += CHOP ? ' \u00b7 hold E to chop' : HIVE ? ' \u00b7 hold E to check' : POST ? ' \u00b7 hold E to post' : FIRE ? ' \u00b7 hold E to spray' : DELIVER ? ' \u00b7 hold E to drop' : ' \u00b7 hold E to repair';
+      if (hintR && !FIND) hintR.textContent += BRIDGE ? ' \u00b7 hold E to mend' : CHOP ? ' \u00b7 hold E to chop' : HIVE ? ' \u00b7 hold E to check' : POST ? ' \u00b7 hold E to post' : FIRE ? ' \u00b7 hold E to spray' : DELIVER ? ' \u00b7 hold E to drop' : ' \u00b7 hold E to repair';
     }
   }
   {
