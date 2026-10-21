@@ -2,6 +2,7 @@
 
     python backend/tools/assets_pack.py                 # writes dist/assets pack + manifest
     python backend/tools/assets_pack.py --publish TAG   # ...and uploads them as release TAG
+    python backend/tools/assets_pack.py --override a.glb,b.glb --publish TAG   # ...with these working-tree files in place of HEAD's
 
 WHY (2026-10-06): the repository is public and its 3D library (~1 GB of
 .glb models and the motion-matching database) lives in Git LFS. Every clone
@@ -45,9 +46,15 @@ def blob(oid: str) -> Path:
     return REPO / ".git" / "lfs" / "objects" / oid[:2] / oid[2:4] / oid
 
 
-def build() -> tuple[Path, Path]:
+def build(overrides: list[str] | None = None) -> tuple[Path, Path]:
+    """overrides (2026-10-21): working-tree files packed in place of the version HEAD
+    points at. The repository's LFS budget is spent, and GitHub refuses a push whose
+    pointers name objects it does not hold, so a model made since then cannot be
+    committed; it ships here instead, marked override, and fetch_assets.py installs it
+    over the committed one."""
     OUT.mkdir(exist_ok=True)
-    rows = lfs_files()
+    overrides = [o.replace("\\", "/") for o in (overrides or [])]
+    rows = [r for r in lfs_files() if r[1] not in overrides]
     head = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=REPO, capture_output=True,
                           text=True, check=True).stdout.strip()
     manifest = {"commit": head, "files": []}
@@ -62,6 +69,13 @@ def build() -> tuple[Path, Path]:
                 raise SystemExit(f"LFS object for {path} does not match its oid")
             z.writestr(path, data)
             manifest["files"].append({"path": path, "sha256": oid, "size": len(data)})
+        for path in overrides:
+            data = (REPO / path).read_bytes()
+            if data.startswith(b"version https://git-lfs"):
+                raise SystemExit(f"{path} is a pointer file, not a model")
+            z.writestr(path, data)
+            manifest["files"].append({"path": path, "sha256": hashlib.sha256(data).hexdigest(), "size": len(data), "override": True})
+            rows.append(("override", path))
     mpath = OUT / "fantasy-studio-assets.json"
     mpath.write_text(json.dumps(manifest, indent=1), encoding="utf-8")
     total = sum(f["size"] for f in manifest["files"])
@@ -80,6 +94,7 @@ def publish(tag: str, zpath: Path, mpath: Path) -> None:
 
 
 if __name__ == "__main__":
-    z, m = build()
+    ov = sys.argv[sys.argv.index("--override") + 1].split(",") if "--override" in sys.argv else []
+    z, m = build(ov)
     if "--publish" in sys.argv:
         publish(sys.argv[sys.argv.index("--publish") + 1], z, m)

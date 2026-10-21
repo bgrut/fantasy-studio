@@ -52,14 +52,31 @@ def release(tag: str | None) -> dict:
     return sorted(packs, key=lambda rel: rel["published_at"])[-1]
 
 
+def overrides(rel: dict) -> dict[str, str]:
+    """{path: sha256} for the files the pack ships in place of the committed version
+    (2026-10-21: made after the repository's LFS budget was spent; see assets_pack.py)"""
+    js = next((a for a in rel["assets"] if a["name"].endswith(".json")), None)
+    if not js:
+        return {}
+    with urllib.request.urlopen(js["browser_download_url"], timeout=60) as r:
+        man = json.loads(r.read())
+    return {f["path"]: f["sha256"] for f in man.get("files", []) if f.get("override")}
+
+
+def _sha(p: Path) -> str:
+    return hashlib.sha256(p.read_bytes()).hexdigest() if p.exists() else ""
+
+
 def main(argv: list[str]) -> int:
     want = pointers()
-    if not want:
+    rel = release(argv[argv.index("--tag") + 1] if "--tag" in argv else None)
+    over = overrides(rel)
+    stale = {p: s for p, s in over.items() if _sha(REPO / p) != s}
+    if not want and not stale:
         print("every model is already here; nothing to fetch")
         return 0
-    rel = release(argv[argv.index("--tag") + 1] if "--tag" in argv else None)
     asset = next(a for a in rel["assets"] if a["name"].endswith(".zip"))
-    print(f"{len(want)} models to fetch from {rel['tag_name']} ({asset['size'] / 1e9:.2f} GB) ...")
+    print(f"{len(want) + len([p for p in stale if p not in want])} models to fetch from {rel['tag_name']} ({asset['size'] / 1e9:.2f} GB) ...")
     buf = io.BytesIO()
     with urllib.request.urlopen(asset["browser_download_url"], timeout=120) as r:
         while True:
@@ -70,7 +87,21 @@ def main(argv: list[str]) -> int:
     got, missing = 0, []
     with zipfile.ZipFile(buf) as z:
         names = set(z.namelist())
+        # the pack's newer models first: written over the committed version and kept out
+        # of git's way (skip-worktree), so the checkout reads clean
+        newer = []
+        for path, sha in stale.items():
+            if path not in names:
+                continue
+            data = z.read(path)
+            if hashlib.sha256(data).hexdigest() != sha:
+                print(f"  {path}: the pack's copy does not match its manifest; skipped")
+                continue
+            (REPO / path).write_bytes(data)
+            newer.append(path)
         for path, oid in want.items():
+            if path in over:
+                continue                      # an override stands in for this pointer
             if path not in names:
                 missing.append(path)
                 continue
@@ -80,11 +111,14 @@ def main(argv: list[str]) -> int:
                 continue
             (REPO / path).write_bytes(data)
             got += 1
-    print(f"fetched {got} models")
+    print(f"fetched {got} models" + (f", and {len(newer)} newer than the repository's" if newer else ""))
+    import subprocess as _sp
+    for p in newer:
+        _sp.run(["git", "update-index", "--skip-worktree", "--", p], cwd=REPO, capture_output=True)
     # the index still holds the pointer files' stat data, so git lists every
     # fetched model as modified; adding them stores the identical pointer
     # (the LFS clean filter) and the checkout reads clean again
-    done = [p for p in want if p not in missing]
+    done = [p for p in want if p not in missing and p not in over]
     import subprocess
     for i in range(0, len(done), 40):
         subprocess.run(["git", "add", "--", *done[i:i + 40]], cwd=REPO, capture_output=True)
