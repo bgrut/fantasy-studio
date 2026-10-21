@@ -627,6 +627,10 @@ def _build_reference_prompt(slots: Dict[str, Any], style: str) -> tuple[str, str
             "gardener":  "gardener in denim overalls over a checked shirt, a straw sun hat, gardening gloves, rubber boots, fully clothed",
             # (2026-10-07) the fourth wide test's people; original outfits, no logos or insignia
             "lumberjack": "lumberjack in a red and black checked flannel shirt, braces, sturdy brown work trousers, heavy leather boots, a knitted beanie, a full beard, fully clothed",
+            # (2026-10-21) made without a wardrobe the blacksmith was bare-chested, and the
+            # benchmark's judge called him "a generic unclothed figure"
+            "blacksmith": "blacksmith in a long heavy dark brown leather apron over a rough slate-blue linen work shirt with the sleeves rolled to the elbow, dark charcoal wool work trousers, sturdy brown leather boots, thick leather gloves tucked into the apron, a short dark beard, fully clothed, not bare-chested",
+            "smith":     "blacksmith in a long heavy dark brown leather apron over a rough slate-blue linen work shirt with the sleeves rolled to the elbow, dark charcoal wool work trousers, sturdy brown leather boots, thick leather gloves tucked into the apron, a short dark beard, fully clothed, not bare-chested",
             "postman":   "postman in a plain navy blue uniform jacket and trousers, a peaked cap, a brown leather satchel strap across the chest, black shoes, no logos, fully clothed",
             "postwoman": "postwoman in a plain navy blue uniform jacket and trousers, a peaked cap, a brown leather satchel strap across the chest, black shoes, no logos, fully clothed",
             "mail carrier": "mail carrier in a plain navy blue uniform jacket and trousers, a peaked cap, a brown leather satchel strap across the chest, black shoes, no logos, fully clothed",
