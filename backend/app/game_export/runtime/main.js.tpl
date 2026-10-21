@@ -40,6 +40,7 @@ const CAR_TYPE_KEYS = ['sedan', 'sedan', 'sedan', 'compact', 'compact',
 import * as __FLORA from './proc/flora.js';
 import * as __GRASS from './proc/grass.js';
 import * as __PLACES from './proc/places.js';
+import * as __DESIGN from './proc/design.js';
 import { createVolcano as __createVolcano } from './proc/volcano.js';
 import { waterMaterial as __waterMaterial, waterKind as __waterKind, groundMist as __groundMist, shoreDepth as __shoreDepth } from './proc/water.js';
 import { snowTextures as __snowTextures } from './proc/ground.js';
@@ -10602,6 +10603,13 @@ async function main() {
           // footprints a goal mark keeps bare, in its own frame (the stone bridge and its stream)
           if (window.__grassHoles) for (const q of window.__grassHoles) { const dx = x - q.x, dz = z - q.z;
             if (Math.abs(dx * q.c - dz * q.s) < q.hx && Math.abs(dx * q.s + dz * q.c) < q.hz) { d = 0; break; } }
+          // (2026-10-20) a track through the grass (proc/design.js): narrow, trodden short and
+          // thinned where something passed, never bared to dirt
+          if (window.__trailSegs) for (const g of window.__trailSegs) {
+            const ex = g[2] - g[0], ez = g[3] - g[1], L2 = ex * ex + ez * ez || 1, t = Math.max(0, Math.min(1, ((x - g[0]) * ex + (z - g[1]) * ez) / L2));
+            const dd = Math.hypot(x - g[0] - ex * t, z - g[1] - ez * t);
+            // a metre each side: the mask is most of a metre to a texel, and a narrower line vanished between them
+            if (dd < 1.05) { const k = dd / 1.05; h *= 0.02 + 0.98 * k * k; d *= 0.18 + 0.82 * k * k; dry = Math.max(dry, 0.45 * (1 - k)); break; } }
           return [d, dry, h];
         };
         GRASS_LIVE = __GRASS.plantGrass({
@@ -10622,6 +10630,11 @@ async function main() {
           sunCol: new THREE.Color(pal.sunCol || 0xffffff),
         });
         window.__grass = { blades: GRASS_LIVE.blades, coverage: +GRASS_LIVE.coverage.toFixed(3) };
+        // re-read where it grows (a trail laid through it); returns the cost in ms
+        window.__grassRemask = (rect) => { const t0 = performance.now();
+          if (rect) GRASS_LIVE.setMaskRect(maskAt, rect[0], rect[1], rect[2], rect[3]); else GRASS_LIVE.setMask(maskAt);
+          return performance.now() - t0; };
+        window.__grassSample = (x, z) => GRASS_LIVE.sample(x, z);
       } catch (e) { console.warn('[game] grass field skipped: ' + e.message); GRASS_LIVE = null; }
     }
   }
@@ -11355,7 +11368,7 @@ async function main() {
       if (o.kind === 'repair' && /\b(trees?|pines?|oaks?|logs?|timber)\b/.test(String(o.label || ''))) return `Chop down ${o.count} ${o.label}. Hold E at each marked trunk`;
       if (o.kind === 'repair' && /\bhives?\b/.test(String(o.label || ''))) return `Check ${o.count} ${o.label}. Hold E at each one`;
       if (o.kind === 'repair') return /fire|flame|blaze|burn/.test(String(o.label || '')) ? `Put out ${o.count} ${o.label}. Hold E to spray each one`
-        : /package|parcel|deliver|letter|mail|pizza|crate|box|supplies|medicine|food|meal/.test(String(o.label || '')) ? `Deliver ${o.count} ${o.label}. Hold E over each pad to drop one`
+        : /package|parcel|deliver|letter|mail|pizza|crate|box|supplies|medicine|food|meal|bread|loa(?:f|ves)|pies?|cakes?|buns|pastr|cookies|groceries|flowers|bouquets?|milk|newspapers?|papers|presents|gifts|cheese|eggs|soup|cocoa|coffee|potions?|scrolls?/.test(String(o.label || '')) ? `Deliver ${o.count} ${o.label}. Hold E over each pad to drop one`
         : `Fix ${o.count} ${o.label || 'broken panels'}. Hold E at each one`;
       return `Reach the ${o.label || 'beacon'}`;
     });
@@ -17825,15 +17838,17 @@ async function main() {
       return `${n} ${l} to fell. The ones to cut wear a red ribbon; stand at the trunk and hold E until it goes over.`;
     if (st.kind === 'repair' && /letter|mail|post|card/.test(String(l)))
       return `${n} ${l} to deliver. Each goes in a letterbox by a gate, under a gold light; stand at the box and hold E.`;
-    if (st.kind === 'repair' && /package|parcel|deliver|letter|mail|pizza|crate|box|supplies|medicine|food|meal/.test(String(l)))
+    if (st.kind === 'repair' && /package|parcel|deliver|letter|mail|pizza|crate|box|supplies|medicine|food|meal|bread|loa(?:f|ves)|pies?|cakes?|buns|pastr|cookies|groceries|flowers|bouquets?|milk|newspapers?|papers|presents|gifts|cheese|eggs|soup|cocoa|coffee|potions?|scrolls?/.test(String(l)))
       return `${n} ${l} to deliver. Each drop is a pad with a gold beam over it; get over the pad and hold E to drop one.`;
     if (st.kind === 'repair') return /fire|flame|blaze|burn/.test(String(l))
       ? `${n} ${l} are burning. Run to each one, stand close and hold E to spray until it is out.`
       : `${n} ${l} need fixing. Find each one, stand at it and hold E until it comes back green.`;
     if (st.kind === 'serve') return `Customers come to the counter with their order over their head. Make it at the right station behind the counter (E), then hand it over (E) before they run out of patience. ${n} orders and the day is yours.`;
+    // (2026-10-20) "Make for summit." wants its article
+    const lA = /^(the|a|an|his|her|their|my|your|its)\s/i.test(String(l)) || /^[A-Z]/.test(String(l)) ? l : 'the ' + l;
     return HAS_GUARDS
-      ? `You have what you came for. Get to ${l}. That is your way out.`
-      : `Make for ${l}. That is where this ends.`;
+      ? `You have what you came for. Get to ${lA}. That is your way out.`
+      : `Make for ${lA}. That is where this ends.`;
   }
   function sayGuide(n) {
     // a role, not a species: "MAN" as a speaker name reads like placeholder
@@ -17871,7 +17886,7 @@ async function main() {
     if (st.kind === 'repair' && /\bhives?\b/.test(String(st.label || ''))) return `Check ${st.count} ${st.label}`;
     if (st.kind === 'repair' && /\b(hikers?|climbers?|skiers?|campers?|people|children|kids?|survivors?|villagers?|explorers?|walkers?|tourists?|scouts?|lost)\b/.test(String(st.label || ''))) return `Find ${st.count} ${st.label}`;
     if (st.kind === 'repair') return /fire|flame|blaze|burn/.test(String(st.label || '')) ? `Put out ${st.count} ${st.label}`
-      : /package|parcel|deliver|letter|mail|pizza|crate|box|supplies|medicine|food|meal/.test(String(st.label || '')) ? `Deliver ${st.count} ${st.label}`
+      : /package|parcel|deliver|letter|mail|pizza|crate|box|supplies|medicine|food|meal|bread|loa(?:f|ves)|pies?|cakes?|buns|pastr|cookies|groceries|flowers|bouquets?|milk|newspapers?|papers|presents|gifts|cheese|eggs|soup|cocoa|coffee|potions?|scrolls?/.test(String(st.label || '')) ? `Deliver ${st.count} ${st.label}`
       : `Fix ${st.count} ${st.label || 'broken panels'}`;
     return `Reach ${st.label || 'the beacon'}`;
   }
@@ -23208,7 +23223,7 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
       // fires are put out, not repaired (2026-10-07): the same hold-E, a different face
       const FIRE = /fire|flame|blaze|inferno|burn/.test(String(_rpS.label || '').toLowerCase());
       // deliveries are dropped on a pad (2026-10-07): "a delivery drone drops packages on rooftops" was one "reach rooftop"
-      const DELIVER = !FIRE && /package|parcel|deliver|letter|mail|pizza|crate|box|supplies|medicine|food|meal/.test(String(_rpS.label || '').toLowerCase());
+      const DELIVER = !FIRE && /package|parcel|deliver|letter|mail|pizza|crate|box|supplies|medicine|food|meal|bread|loa(?:f|ves)|pies?|cakes?|buns|pastr|cookies|groceries|flowers|bouquets?|milk|newspapers?|papers|presents|gifts|cheese|eggs|soup|cocoa|coffee|potions?|scrolls?/.test(String(_rpS.label || '').toLowerCase());
       // (2026-10-07) letters go in letterboxes at the gates; trees are felled, not repaired
       const POST = DELIVER && /letter|mail|post|card|newspaper/.test(String(_rpS.label || '').toLowerCase()) && SPEC.player.mode !== 'fly' && !INTERIOR;
       const CHOP = !FIRE && !DELIVER && /\b(trees?|pines?|oaks?|birch(es)?|spruces?|logs?|timber)\b/.test(String(_rpS.label || '').toLowerCase()) && !INTERIOR;
@@ -23260,6 +23275,10 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
         // a letter to a door on the quay, spread down the canal
         const ds = CANALS.doors.slice().sort((a, b) => Math.hypot(a[0], a[1]) - Math.hypot(b[0], b[1])).filter(d => Math.hypot(d[0], d[1]) > 12);
         for (let k = 0; k < N && ds.length; k++) { const d = ds[Math.min(ds.length - 1, Math.floor((k + 0.5) / N * ds.length))]; spots.push([d[0], hAt(d[0], d[1]) + 0.02, d[1], d[2], false, null, true]); }
+      } else if (DELIVER && !INTERIOR && LVL && LVL.spokes && LVL.spokes.length) {
+        // (2026-10-20) a round from home: each drop at the end of one of the hub's spokes (design.py)
+        for (let k = 0; k < N; k++) { const e = LVL.spokes[k % LVL.spokes.length], o = Math.floor(k / LVL.spokes.length) * 4;
+          const x = e[0] + o, z = e[1] - o; spots.push([x, hAt(x, z) + 0.02, z, Math.atan2(-x, -z), false, null, true]); }
       } else if (DELIVER && !INTERIOR) {
         for (let k = 0; k < N; k++) { const a = k / N * Math.PI * 2 + rngR() * 0.5, d = 14 + rngR() * gsize * 0.25; const x = Math.cos(a) * d, z = Math.sin(a) * d;
           spots.push([x, hAt(x, z) + 0.02, z, 0, false, null, true]); }
@@ -24086,6 +24105,36 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
     window.__ae = o;
     return o;
   })();
+  // ── THE DESIGNER'S SYSTEMS (2026-10-20, proc/design.js) ─────────────────
+  // The planner's designer (design.py) chose how this world unfolds, the one
+  // mechanic it has and the moment it turns; here they run. What to seek
+  // next is the nearest thing left to find, a pad still to deliver to, or
+  // the goal; progress is the steps done and the part of this one.
+  let DESIGN = null;
+  try {
+    DESIGN = __DESIGN.startDesign({ THREE, scene, camera, hAt, LVL, SPEC, sun, hemi, renderer, home: [_sp.x, _sp.z],
+      words: [SPEC.prompt, SPEC.title].filter(Boolean).join(' '), seed: SPEC.seed, night: ['night', 'dusk'].includes(SPEC.world.sky),
+      pos: () => { const t = body.translation(); return [t.x, t.y, t.z]; },
+      next: () => {
+        const t = body.translation(), st = steps[stepIdx];
+        if (!st) return null;
+        let best = null, bd = Infinity;
+        const consider = (x, z) => { const d = Math.hypot(x - t.x, z - t.z); if (d < bd) { bd = d; best = [x, z]; } };
+        if (st.kind === 'collect') for (const c of collectibles) if (c.mesh.parent && c.mesh.visible !== false) consider(c.mesh.position.x, c.mesh.position.z);
+        if (st.kind === 'repair' && window.__repair) for (const q of window.__repair().panels) if (!q[2]) consider(q[0], q[1]);
+        if (!best && goalPos && (st.kind === 'reach' || st.kind === 'collect')) best = [goalPos.x, goalPos.z];
+        return best;
+      },
+      progress: () => {
+        if (!steps.length) return 0;
+        const st = steps[stepIdx]; if (!st) return 1;
+        const part = st.count ? Math.min(1, (st._got || st._fixed || st._served || 0) / st.count) : 0;
+        return (stepIdx + part) / steps.length;
+      },
+      count: () => steps.reduce((n, st, i) => n + (i < stepIdx ? (st.count || 1) : i === stepIdx ? (st._got || st._fixed || st._served || 0) : 0), 0),
+      toast: (a, b) => { try { banner(a, b); } catch (e) {} } });
+    window.__design = () => (DESIGN ? Object.assign({ on: true }, DESIGN.state()) : { on: false, design: (LVL && LVL.design) || null });
+  } catch (e) { console.warn('[game] designer skipped', e); }
   renderer.setAnimationLoop(() => {
     let dt = Math.min(clock.getDelta(), 0.05);
     const rdt = dt;                       // real dt: camera + juice decay
@@ -24356,6 +24405,11 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
         holder.rotation.x = 0.5 * Math.sin(Math.PI * k);        // the chest goes over the lip
         if (k >= 1) mantle = null;
       }
+    }
+    // the designer's wind and cold (proc/design.js): a gust shoves, the cold slows the step
+    if (DESIGN && !mantle && gameStarted) {
+      const _k = DESIGN.speed(); if (_k !== 1) { desired.x *= _k; desired.z *= _k; }
+      const _p = DESIGN.push(typeof dt === 'number' ? dt : 0.016); if (_p) { desired.x += _p[0]; desired.z += _p[1]; }
     }
     kcc.computeColliderMovement(collider, desired);
     const cm = kcc.computedMovement();
@@ -24762,6 +24816,7 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
       if (TRAP) trapTick(dt, !!(mvRaw && mvRaw.mag > 0.1), nt);
       if (SLOT_FX) slotTick(dt, nt);
       if (window.__goalMarkTick) window.__goalMarkTick();
+      if (DESIGN && gameStarted && !won && !lost) DESIGN.tick(typeof dt === 'number' ? Math.min(0.05, dt) : 0.016, performance.now() / 1000);
       if (window.__placesTick) window.__placesTick(performance.now() / 1000, typeof dt === "number" ? Math.min(0.05, dt) : 0.016);
       if (window.__stormTick) window.__stormTick(performance.now() / 1000);
       if (window.__smithFire) window.__smithFire(performance.now() / 1000);

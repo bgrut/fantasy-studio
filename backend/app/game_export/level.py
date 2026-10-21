@@ -490,7 +490,7 @@ def build_level(seed: int, size_m: float, n_objectives: int = 0,
                 regions: list[dict] | None = None,
                 archetype: str = "plain", terrain_form: str = "natural", sea: bool = False,
                 fjord: bool = False, coast: bool = False, harbor: bool = False, slot: bool = False,
-                river: bool = False) -> dict:
+                river: bool = False, layout: str = "route") -> dict:
     """Deterministic LevelPlan. Returns a JSON-safe dict for the runtime.
 
     sea (2026-10-06): a sea battle sails, it does not walk. The islands sit
@@ -523,6 +523,75 @@ def build_level(seed: int, size_m: float, n_objectives: int = 0,
         path.append([mx + px * j, mz + pz * j])
     path.append(list(goal))
     corridor = 5.5                                   # flattened, prop-free (m)
+    # ── THE LAYOUT (2026-10-20, design.py) ──────────────────────────────────
+    # The shape above was every game's. A designed game unfolds its own way:
+    # a loop that brings you home, a hub with spokes to the places you go,
+    # things scattered to be found, a climb on switchbacks. The route stays
+    # for every shape another system owns (the planner only asks otherwise
+    # for open walking worlds).
+    _cps = None                                      # where the things to find lie, when the layout says
+    _spokes = None                                   # a hub's spoke ends: where the rounds go
+    lift = None                                      # the ascent's rising ground, f(x, z) -> metres
+    if layout == "loop" and not (fjord or coast or slot or sea):
+        R0 = half * rng.uniform(0.5, 0.64)
+        a0 = ang + rng.uniform(0.6, 0.9)
+        n_wp = 6
+        path = [[0.0, 0.0]]
+        for k in range(n_wp):
+            a = a0 + (k + 0.5) / n_wp * 2 * math.pi * 0.86
+            rr = R0 * rng.uniform(0.82, 1.12)
+            path.append([math.cos(a) * rr, math.sin(a) * rr])
+        hr = half * 0.17                              # home: the goal is back where you set out
+        goal = [math.cos(a0 - 0.5) * hr, math.sin(a0 - 0.5) * hr]
+        path.append(list(goal))
+        _cps = [path[1 + int((k + 0.5) * n_wp / max(1, n_objectives))] for k in range(n_objectives)] if n_objectives else []
+    elif layout == "hub" and not (fjord or coast or slot or sea):
+        n_sp = max(3, min(6, n_objectives or 3))
+        b0 = rng.uniform(0, 2 * math.pi)
+        ends = []
+        for k in range(n_sp + 1):                      # one more spoke: where it ends
+            a = b0 + k / (n_sp + 1) * 2 * math.pi + rng.uniform(-0.25, 0.25)
+            rr = half * rng.uniform(0.42, 0.7)
+            ends.append([math.cos(a) * rr, math.sin(a) * rr])
+        goal = ends[-1]
+        path = [[0.0, 0.0]]
+        for e in ends[:-1]:
+            path += [e, [0.0, 0.0]]
+        path.append(list(goal))
+        _cps = [ends[k % n_sp] for k in range(n_objectives)] if n_objectives else []
+        _spokes = [[round(e[0], 2), round(e[1], 2)] for e in ends[:-1]]
+    elif layout == "scatter" and not (fjord or coast or slot or sea):
+        n_pt = max(3, n_objectives or 3)
+        pts = []
+        for _ in range(n_pt):
+            for _try in range(60):
+                a = rng.uniform(0, 2 * math.pi); rr = half * rng.uniform(0.28, 0.78)
+                q = [math.cos(a) * rr, math.sin(a) * rr]
+                if all(math.hypot(q[0] - o[0], q[1] - o[1]) > half * 0.42 for o in pts) and math.hypot(q[0] - goal[0], q[1] - goal[1]) > half * 0.3:
+                    pts.append(q); break
+        # the way between them is the walker's own: a tour, nearest first, with no trodden trail
+        tour, cur, left = [[0.0, 0.0]], [0.0, 0.0], pts[:]
+        while left:
+            nxt = min(left, key=lambda q: math.hypot(q[0] - cur[0], q[1] - cur[1]))
+            tour.append(nxt); left.remove(nxt); cur = nxt
+        path = tour + [list(goal)]
+        corridor = 3.5
+        _cps = [pts[k % len(pts)] for k in range(n_objectives)] if n_objectives else []
+    elif layout == "ascent" and not (fjord or coast or slot or sea):
+        # switchbacks across the fall line, the land rising toward the goal
+        ux, uz = goal[0] / max(goal_r, 1e-6), goal[1] / max(goal_r, 1e-6)
+        px_, pz_ = -uz, ux
+        path = [[0.0, 0.0]]
+        for k, f in enumerate((0.18, 0.34, 0.5, 0.66, 0.82)):
+            sd = (1 if k % 2 == 0 else -1) * goal_r * rng.uniform(0.24, 0.34)
+            path.append([ux * goal_r * f + px_ * sd, uz * goal_r * f + pz_ * sd])
+        path.append(list(goal))
+        climb = 8.0 + amplitude_m * 2.4
+
+        def lift(x, z, _ux=ux, _uz=uz, _gr=goal_r, _c=climb):
+            t = max(0.0, min(1.0, (x * _ux + z * _uz) / _gr))
+            t = max(0.0, (t - 0.1) / 0.9)
+            return _c * t * t * (3 - 2 * t)
     if slot:
         corridor = 1.6                               # the slot's floor is barely a body wide
 
@@ -665,6 +734,8 @@ def build_level(seed: int, size_m: float, n_objectives: int = 0,
             elif d < corridor * 2.2:                 # smooth shoulder
                 t = (d - corridor) / (corridor * 1.2)
                 h *= t * t * (3 - 2 * t)
+            if lift is not None:
+                h += lift(x, z)                      # the mountainside, the path cut into it
             edge = max(abs(x), abs(z)) / half        # settle flat at the walls
             if edge > 0.92 and _arch != "cave" and not fjord and not coast and not slot:   # a cave is walled to its edge, a fjord cut to it
                 h *= max(0.0, (1.0 - edge) / 0.08)
@@ -676,7 +747,7 @@ def build_level(seed: int, size_m: float, n_objectives: int = 0,
 
     # ── objectives along the route (progress-ordered, lateral jitter) ───────
     collect_points = []
-    for k in range(n_objectives):
+    for k in range(0 if _cps is not None else n_objectives):
         f = (k + 1) / (n_objectives + 1)
         # position along the polyline at fraction f
         seg = min(int(f * (len(path) - 1)), len(path) - 2)
@@ -687,6 +758,8 @@ def build_level(seed: int, size_m: float, n_objectives: int = 0,
         m = math.hypot(px, pz) or 1.0
         j = rng.uniform(-corridor * 0.5, corridor * 0.5)
         collect_points.append([round(x + px / m * j, 2), round(z + pz / m * j, 2)])
+    if _cps is not None:
+        collect_points = [[round(q[0], 2), round(q[1], 2)] for q in _cps]
 
     # ── landmarks: 2 scenic giants off the path ─────────────────────────────
     landmarks = []
@@ -732,6 +805,8 @@ def build_level(seed: int, size_m: float, n_objectives: int = 0,
                 pois.insert(0, {"kind": "camp", "x": pal["x"], "z": pal["z"],
                                 "rot": round(rng.uniform(0, 6.28), 2)})
     out_level = {
+        "layout": layout if (lift is not None or _cps is not None or _spokes is not None) else "route",
+        "spokes": _spokes or [],
         "pois": pois,
         "grid_n": grid_n, "size_m": size_m, "amplitude_m": amplitude_m,
         "heights": heights,                    # row-major, z rows then x cols

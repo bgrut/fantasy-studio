@@ -239,5 +239,22 @@ export function plantGrass(o) {
     },
     /** where it grows changed (something was built on it): read the mask again */
     setMask(maskAt) { fillMask(maskAt); mTex.needsUpdate = true; },
+    /** what the mask holds at a world point: [density, dryness, height], 0..255 (for probes) */
+    sample(x, z) { const i = Math.floor((x - (cx - half)) / size * MN), j = Math.floor((z - (cz - half)) / size * MN);
+      if (i < 0 || j < 0 || i >= MN || j >= MN) return null; const k = (j * MN + i) * 4; return [md[k], md[k + 1], md[k + 2]]; },
+    /** (2026-10-20) read it again only in a world rectangle: a trail laid through the
+     *  grass changed a strip, and the whole field cost a hundred milliseconds */
+    setMaskRect(maskAt, x0, z0, x1, z1) {
+      const i0 = Math.max(0, Math.floor((Math.min(x0, x1) - (cx - half)) / size * MN) - 1), i1 = Math.min(MN - 1, Math.ceil((Math.max(x0, x1) - (cx - half)) / size * MN) + 1);
+      const j0 = Math.max(0, Math.floor((Math.min(z0, z1) - (cz - half)) / size * MN) - 1), j1 = Math.min(MN - 1, Math.ceil((Math.max(z0, z1) - (cz - half)) / size * MN) + 1);
+      for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+        const x = cx - half + (i + 0.5) / MN * size, z = cz - half + (j + 0.5) / MN * size;
+        const [d, dry, h] = maskAt(x, z), k = (j * MN + i) * 4;
+        md[k] = Math.round(Math.max(0, Math.min(1, d)) * 255);
+        md[k + 1] = Math.round(Math.max(0, Math.min(1, dry)) * 255);
+        md[k + 2] = Math.round(Math.max(0, Math.min(1, h)) * 255);
+      }
+      mTex.needsUpdate = true;
+    },
   };
 }

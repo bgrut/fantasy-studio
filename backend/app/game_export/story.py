@@ -87,7 +87,7 @@ def _names(line, label):
 # (2026-10-20) a delivery runs on the repair objective (a pad, hold E), and the
 # HUD calls it "Deliver 4 packages"; the story was told "repair" and wrote
 # "Repair the package labeled 'Fragile'". It is told what the player is told.
-_PARCEL = re.compile(r"package|parcel|deliver|letter|mail|pizza|crate|box|supplies|medicine|food|meal", re.I)
+_PARCEL = re.compile(r"package|parcel|deliver|letter|mail|pizza|crate|box|supplies|medicine|food|meal|bread|loa(?:f|ves)|pies?|cakes?|buns|pastr|cookies|groceries|flowers|bouquets?|milk|newspapers?|papers|presents|gifts|cheese|eggs|soup|cocoa|coffee|potions?|scrolls?", re.I)
 
 
 def _shown_kind(o):

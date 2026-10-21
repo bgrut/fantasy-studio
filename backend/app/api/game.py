@@ -1065,7 +1065,7 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                     _noun = _n1 if (not _n2 or _n2 in _STOP) else (_n1 + " " + _n2)
                     # "restore power", "restore order", "restore peace" are not things to fix
                     # a drop or a delivery is only this objective when what is dropped is a parcel of some kind
-                    if _rre.match(r"(drop|deliver)", _rm.group(0)) and not _rre.search(r"package|parcel|letter|mail|pizza|crate|box|supplies|medicine|food|meal", _noun):
+                    if _rre.match(r"(drop|deliver)", _rm.group(0)) and not _rre.search(r"package|parcel|letter|mail|pizza|crate|box|supplies|medicine|food|meal|bread|loa(?:f|ves)|pies?|cakes?|buns|pastr|cookies|groceries|flowers|bouquets?|milk|newspapers?|papers|presents|gifts|cheese|eggs|soup|cocoa|coffee|potions?|scrolls?", _noun):
                         _noun = "it"
                     # (2026-10-07) and felling is this objective only for wood
                     if _rre.match(r"(chop|cut|fell)", _rm.group(0)) and not _rre.search(r"tree|pine|oak|birch|spruce|log|timber", _noun):
@@ -1086,6 +1086,11 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                         _wd = {"two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10}
                         _c = _rm.group(1)
                         _cnt = (int(_c) if _c and _c.isdigit() else _wd.get(_c or "", 0)) or (4 if _noun.endswith("s") else 1)
+                        # (2026-10-20) a delivery with no number is a round: "delivers warm bread
+                        # around a cozy village" was one drop. Bread, milk, flowers go to several doors.
+                        if (not (_c and (_c.isdigit() or _c in _wd)) and _rre.match(r"(drop|deliver)", _rm.group(0))
+                                and _rre.search(r"\b(around|round|rounds|houses|homes|doors|village|town|street|neighbou?rs?|everyone|each|every)\b", _rp)):
+                            _cnt = max(_cnt, 4)
                         _lab = ((_rm.group(2) or "") + _noun).strip()
                         from app.game_export.spec import ObjectiveSpec as _ROS
                         _stem = _noun.split()[-1].rstrip("s")[:5]
@@ -3695,6 +3700,22 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         _tf, _gm, _am = _STYLE_TERRAIN.get(spec.style or "default",
                                            ("natural", 1.0, 1.0))
         _gn = max(40, int(_gn * _gm))
+        # THE DESIGNER (2026-10-20, design.py): how the space unfolds, the one
+        # mechanic this game has, and where it turns. Shapes other systems
+        # own (seas, fjords, coasts, rivers, slots, platformers, side and top
+        # views, factories, cities) keep the route they were built for.
+        _design = None
+        try:
+            from app.game_export.design import design_of
+            _owned = bool(_fjord or _coast or _river or job.get("_naval") or _arch in ("cave", "volcano", "archipelago")
+                          or getattr(spec.world, "platforms", False) or (getattr(spec, "view", None) or "3d") != "3d"
+                          or getattr(spec, "genre", "") in ("factory", "racing", "sports", "towerdefense", "citybuilder"))
+            _design = design_of(req.prompt, spec.seed, owned=_owned, night=spec.world.sky in ("night", "dusk"),
+                                weather=spec.world.weather, objectives=spec.objectives)
+            job.setdefault("notes", []).append(
+                f"design: {_design['layout']} layout, {_design['mechanic']} mechanic, {_design['moment']} moment ({'; '.join(_design['why'])})")
+        except Exception as _de:  # noqa: BLE001 - a game without a designer is the old route
+            job.setdefault("notes", []).append(f"designer skipped: {_de}")
         spec.world.level = build_level(
             spec.seed, spec.world.size_m, n_objectives=n_obj,
             amplitude_m=amp * _am, grid_n=_gn, regions=_regions,
@@ -3702,7 +3723,10 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             # A SLOT CANYON IS A CRACK, NOT A GORGE (2026-10-13)
             slot=bool(_fre.search(r"\b(slot canyons?|slot|narrows|crevices?|fissures?|trapped in (?:a|the) canyon|pinned|wedged)\b", (req.prompt or "").lower())
                       and _fre.search(r"\b(canyons?|gorges?|crevices?|fissures?|narrows|ravines?)\b", (req.prompt or "").lower())),
-            river=_river)
+            river=_river, layout=(_design or {}).get("layout", "route"))
+        if _design and isinstance(spec.world.level, dict):
+            spec.world.level["design"] = {k: _design[k] for k in ("layout", "mechanic", "moment")}
+            spec.world.level["design"]["layout"] = spec.world.level.get("layout", "route")
         if (spec.world.level or {}).get("river"):
             # the water stands in the channel: the lake clamp would set it by
             # the land's low ground, which the carve keeps above this level
