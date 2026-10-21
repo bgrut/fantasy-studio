@@ -49,7 +49,9 @@ const themed = await p.evaluate(async () => {
   const lp = F.tileWorld(0, sm.i, sm.j); const dx = lp[0] - wp[0], dz = lp[2] - wp[2], d = Math.hypot(dx, dz);
   F.player.fwd.set(dx / d, 0, dz / d); F.player.pitch = -Math.atan2(1.5, d); if (F.setHolo) F.setHolo(null);   // the ray meets the ground on the mill's tile
   await w(500);
-  const look = document.getElementById('look').textContent;
+  // (2026-10-20) polled: the look ray runs on a throttled frame, and a starved page left the label empty at 500 ms
+  let look = document.getElementById('look').textContent;
+  for (let k = 0; k < 20 && !look; k++) { await w(200); look = document.getElementById('look').textContent; }
   return { miner: tool('miner'), smelter: tool('smelter'), hub: tool('hub'), belt: tool('belt'), forge: tool('forge'),
            chips: [chip('miner'), chip('belt'), chip('smelter'), chip('ingot'), chip('alloy')], banked: document.querySelector('.hero .big small').textContent,
            goal, tip, contract, toast, look, market: [...document.querySelectorAll('#tick .nm')].map(e => e.textContent),

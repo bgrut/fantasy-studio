@@ -296,6 +296,12 @@ def export_web_game(spec: GameSpec, out_dir: str | Path, verbose: bool = True) -
         "| N8AO ambient occlusion | CC0 |",
         "| Fonts: Bricolage Grotesque, Instrument Sans, DM Mono, Cinzel, IM Fell English, Share Tech Mono, Bebas Neue, Bangers, Fredoka, Creepster, Russo One, Lora, Josefin Sans | SIL Open Font License 1.1 (licence files in vendor/fonts) |",
         "| Font: Special Elite | Apache License 2.0 (vendor/fonts/Apache-SpecialElite.txt) |",
+        "| Fonts: Playfair Display, Fraunces, Space Grotesk, Syne, Unbounded, Abril Fatface, Pirata One, UnifrakturMaguntia, "
+        "Rubik Mono One, Press Start 2P, VT323, Silkscreen, Caveat, Amatic SC, Righteous, Monoton, Cormorant, EB Garamond, "
+        "Libre Baskerville, Archivo Black, Oswald, Anton, Big Shoulders Display, Chakra Petch, Orbitron, Audiowide, Comfortaa, "
+        "Baloo 2, Patrick Hand, Kalam, Rye, Sancreek, Metamorphous, Uncial Antiqua, Almendra, Grenze Gotisch, Nosifer, "
+        "Butcherman, Shrikhand (github.com/google/fonts) | SIL Open Font License 1.1 (licence files in vendor/fonts) |",
+        "| Font: Permanent Marker | Apache License 2.0 (vendor/fonts/Apache-PermanentMarker.txt) |",
         "| PBR textures | Generated locally (Stable Diffusion XL); yours |",
         "| Ground scans: rock (rocky_trail), soil (forest_ground_04), forest floor (forest_leaves_04), sand (sand_01), grass (leafy_grass), cliff (rock_face_03), sandstone (cliff_side), masonry (stone_wall) | Poly Haven, CC0 |",
         "| Characters and 3D assets | Generated locally (SDXL, Microsoft TRELLIS.2 or TripoSR, all permissive); yours |",

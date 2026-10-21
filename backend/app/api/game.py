@@ -3605,7 +3605,10 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         # valley at sunrise" walked a red-brown dirt ditch. A mountain valley,
         # a meadow, a glen or a hiking trail is grass under the peaks, unless
         # the sentence makes it dry, cold, burnt, autumnal or another world
-        if (_fre.search(r"\b(valleys?|meadows?|glens?|dales?|hik(?:e|er|ers|ing)|trails?|foothills?|highlands?|pastures?|mountainside)\b", _pw7)
+        # (2026-10-20) and a village, a hamlet, the cozy countryside: "a cozy seaside village at
+        # dawn" was a dirt yard, and grass grows by the ground's colour
+        if (_fre.search(r"\b(valleys?|meadows?|glens?|dales?|hik(?:e|er|ers|ing)|trails?|foothills?|highlands?|pastures?|mountainside"
+                        r"|villages?|hamlets?|cozy|cosy|countryside|shire|farms?|farmland|orchards?|cottages?)\b", _pw7)
                 and not _fre.search(r"\b(desert|dunes?|canyon|mesa|badlands?|mars|martian|moon|lunar|snow\w*|winter|frozen|ice|icy|volcan\w*|lava|ash|wasteland|autumn|fall|scorched|drought|savann?ah?|death valley)\b", _pw7)):
             _gc = list(spec.world.ground_color or [0.3, 0.3, 0.2])
             if not (_gc[1] > _gc[0] * 1.08 and _gc[1] > _gc[2]):

@@ -663,8 +663,13 @@ async function main() {
   const LOOK = {
     illustrated: { sky: 0xE9A45C, fog: 0xC9663A, near: 0.05, far: 0.50,
                    exp: 0.92, flat: true },   // Firewatch: warm bands, flat fields
-    noir:        { sky: 0x9EA4A8, fog: 0x6E747A, near: 0.02, far: 0.32,
-                   exp: 0.68, flat: true },   // Limbo: silhouettes in haze
+    // Limbo: silhouettes in haze; (2026-10-20) at night a film-noir black, the
+    // street lamps and the wet road the only light ("a rainy 1940s city at night"
+    // came out a flat grey afternoon)
+    noir:        ['night', 'dusk'].includes(String((SPEC.world || {}).sky || ''))
+                 ? { sky: 0x101215, fog: 0x1c2024, near: 0.02, far: 0.4, exp: 0.86, flat: true }
+                 : { sky: 0x9EA4A8, fog: 0x6E747A, near: 0.02, far: 0.32,
+                   exp: 0.68, flat: true },
     dunescape:   { sky: 0xF3CE93, fog: 0xE0A05E, near: 0.08, far: 0.60,
                    exp: 0.95 },               // Journey / Alto: sand and low sun
     watercolor:  { sky: 0xDCE8F2, fog: 0xD2DEEA, near: 0.05, far: 0.55,
@@ -1607,7 +1612,11 @@ async function main() {
     // tower. Only a bathing beach is dressed for bathers; any other coast is
     // a rocky shore, boulders along the waterline and none of the beach kit
     const _bw = [SPEC.prompt, SPEC.world && SPEC.world.name, SPEC.title].filter(Boolean).join(' ').toLowerCase();
-    const resort = /\b(beach|beaches|seaside|lifeguards?|swimmers?|sunbathers?|sunbathing|surf|surfing|surfers?|bathers?|sandcastles?)\b/.test(_bw) && !/\b(storm\w*|lighthouses?|shipwreck\w*)\b/.test(_bw);
+    // (2026-10-20) "a baker delivers bread around a cozy seaside village at dawn" was laid
+    // with parasols: a seaside village is a working shore unless the sentence goes bathing
+    const resort = /\b(beach|beaches|seaside|lifeguards?|swimmers?|sunbathers?|sunbathing|surf|surfing|surfers?|bathers?|sandcastles?)\b/.test(_bw) && !/\b(storm\w*|lighthouses?|shipwreck\w*)\b/.test(_bw)
+      && !(/\b(villages?|towns?|harbou?rs?|fishing|fishermen|fisherman|bakery|bakers?|deliver\w*|market|cottages?|quay|docks?)\b/.test(_bw)
+           && !/\b(beach (?:day|party|holiday|resort)|sunbath\w*|swimm\w*|lifeguards?|surf\w*|sandcastles?|bathers?)\b/.test(_bw));
     if (!harbor && resort) for (let a = -30; a < gl + 20; a += 5.5) for (const c0 of [-9, -4.5, 4.5]) {
       if (r() < 0.3) continue;
       const a1 = a + (r() - 0.5) * 2.5, c = c0 + (r() - 0.5) * 1.6;
@@ -11180,6 +11189,140 @@ async function main() {
                         // already ~7s deep by the time anyone clicks through
                         // the title card (the heist grace window needs this)
   let runT0 = 0;                          // run clock starts at START
+  // ── THE MAKER (2026-10-20) ────────────────────────────────────────────
+  // "Every output should feel like a handmade indie game." A handmade game
+  // has a maker, and a maker has a taste: the faces they set type in, how
+  // they grade a frame, what they put round a line of text, the colours they
+  // reach for. The art direction had one grade for every game and fourteen
+  // faces, so two games in one setting read as one game. Each game now draws
+  // a maker from its seed and its sentence: a temperament (a printmaker, an
+  // arcade kid, a film buff, a cartographer...) whose taste picks from forty
+  // faces within what the setting allows, and whose grade, grain, vignette,
+  // frame and title treatment come with them. ?vibe=<n> redraws the maker.
+  function VIBE_OF() {
+    if (window.__VIBE) return window.__VIBE;
+    const W9 = SPEC.world || {};
+    const words = [SPEC.prompt, SPEC.title, W9.name, W9.description, W9.setting].filter(Boolean).join(' ').toLowerCase();
+    const has = re => re.test(words);
+    const q = new URLSearchParams(location.search).get('vibe');
+    const r = mulberry32((((SPEC.seed || 1) * 48271) + words.length * 131 + (q ? (+q || 1) * 7919 : 0)) >>> 0);
+    const pick = a => a[Math.floor(r() * a.length)];
+    const st = SPEC.style || 'default';
+    // a face: family, weight, case, tracking, italic, width, and what it is
+    const F = (h, w, cs, tr, it, wd, tags) => ({ h: '"' + h + '"', w, cs, tr, it: !!it, wd: wd || 100, tags: tags.split(' ') });
+    const FACES = {
+      cinzel: F('Cinzel', 600, 'upper', .14, 0, 0, 'serif formal'), cinzelB: F('Cinzel', 800, 'upper', .04, 0, 0, 'serif formal loud'),
+      fell: F('IM Fell English', 400, 'none', .01, 1, 0, 'serif period'), fellU: F('IM Fell English', 400, 'upper', .2, 0, 0, 'serif period'),
+      lora: F('Lora', 600, 'small', .1, 0, 0, 'serif'), loraI: F('Lora', 500, 'none', -.01, 1, 0, 'serif'),
+      playfair: F('Playfair Display', 800, 'none', -.01, 0, 0, 'serif display'), playfairI: F('Playfair Display', 500, 'none', 0, 1, 0, 'serif'),
+      fraunces: F('Fraunces', 700, 'none', -.02, 0, 0, 'serif display round'), frauncesL: F('Fraunces', 300, 'none', -.01, 1, 0, 'serif thin'),
+      cormorant: F('Cormorant', 500, 'upper', .24, 0, 0, 'serif thin formal'), garamond: F('EB Garamond', 500, 'small', .08, 0, 0, 'serif'),
+      baskerville: F('Libre Baskerville', 700, 'none', -.01, 0, 0, 'serif'), abril: F('Abril Fatface', 400, 'none', 0, 0, 0, 'display serif loud'),
+      shrikhand: F('Shrikhand', 400, 'none', 0, 1, 0, 'display round loud'), rye: F('Rye', 400, 'upper', .04, 0, 0, 'display western'),
+      sancreek: F('Sancreek', 400, 'upper', .06, 0, 0, 'display western'), pirata: F('Pirata One', 400, 'none', .02, 0, 0, 'blackletter display'),
+      fraktur: F('UnifrakturMaguntia', 400, 'none', .02, 0, 0, 'blackletter'), grenze: F('Grenze Gotisch', 700, 'none', .01, 0, 0, 'blackletter loud'),
+      uncial: F('Uncial Antiqua', 400, 'none', .04, 0, 0, 'display period'), almendra: F('Almendra', 700, 'none', .01, 0, 0, 'hand period serif'),
+      metamorph: F('Metamorphous', 400, 'upper', .06, 0, 0, 'display period'), creepster: F('Creepster', 400, 'upper', .1, 0, 0, 'display horror loud'),
+      nosifer: F('Nosifer', 400, 'upper', .02, 0, 0, 'display horror loud'), butcher: F('Butcherman', 400, 'upper', .06, 0, 0, 'display horror'),
+      bebas: F('Bebas Neue', 400, 'upper', .1, 0, 0, 'condensed'), oswald: F('Oswald', 600, 'upper', .04, 0, 0, 'condensed'),
+      oswaldL: F('Oswald', 300, 'upper', .3, 0, 0, 'condensed thin'), anton: F('Anton', 400, 'upper', .02, 0, 0, 'condensed loud'),
+      shoulders: F('Big Shoulders Display', 800, 'upper', .02, 0, 0, 'condensed loud'), shouldersL: F('Big Shoulders Display', 200, 'upper', .24, 0, 0, 'condensed thin'),
+      amatic: F('Amatic SC', 700, 'none', .06, 0, 0, 'hand condensed'), josefin: F('Josefin Sans', 300, 'upper', .32, 0, 0, 'grotesk thin'),
+      josefinT: F('Josefin Sans', 200, 'upper', .42, 0, 0, 'grotesk thin'), instrument: F('Instrument Sans', 600, 'upper', .24, 0, 0, 'grotesk'),
+      bricolage: F('Bricolage Grotesque', 800, 'none', -.03, 0, 75, 'grotesk loud'), bricolageL: F('Bricolage Grotesque', 300, 'none', -.02, 0, 100, 'grotesk thin'),
+      space: F('Space Grotesk', 700, 'none', -.03, 0, 0, 'grotesk tech'), syne: F('Syne', 800, 'upper', .02, 0, 0, 'grotesk display loud'),
+      unbounded: F('Unbounded', 700, 'upper', -.01, 0, 0, 'grotesk round loud'), archivo: F('Archivo Black', 400, 'upper', .01, 0, 0, 'grotesk loud'),
+      dmmono: F('DM Mono', 300, 'upper', .34, 0, 0, 'mono thin'), techmono: F('Share Tech Mono', 400, 'upper', .24, 0, 0, 'mono tech'),
+      elite: F('Special Elite', 400, 'none', .02, 0, 0, 'mono noir'), rubikmono: F('Rubik Mono One', 400, 'upper', .02, 0, 0, 'mono loud'),
+      vt: F('VT323', 400, 'upper', .08, 0, 0, 'pixel mono'), press: F('Press Start 2P', 400, 'upper', .02, 0, 0, 'pixel loud'),
+      silk: F('Silkscreen', 700, 'upper', .06, 0, 0, 'pixel'), orbitron: F('Orbitron', 800, 'upper', .12, 0, 0, 'tech loud'),
+      chakra: F('Chakra Petch', 700, 'upper', .08, 0, 0, 'tech'), audiowide: F('Audiowide', 400, 'upper', .06, 0, 0, 'tech round'),
+      russo: F('Russo One', 400, 'upper', .04, 0, 0, 'tech loud'), monoton: F('Monoton', 400, 'upper', .04, 0, 0, 'tech display'),
+      righteous: F('Righteous', 400, 'upper', .04, 0, 0, 'round display'), fredoka: F('Fredoka', 700, 'none', 0, 0, 112, 'round loud'),
+      baloo: F('Baloo 2', 800, 'none', -.01, 0, 0, 'round loud'), comfortaa: F('Comfortaa', 700, 'none', .02, 0, 0, 'round thin'),
+      bangers: F('Bangers', 400, 'upper', .06, 0, 0, 'display loud'), caveat: F('Caveat', 700, 'none', 0, 0, 0, 'hand'),
+      kalam: F('Kalam', 700, 'none', 0, 0, 0, 'hand'), marker: F('Permanent Marker', 400, 'none', .01, 0, 0, 'hand loud'),
+      patrick: F('Patrick Hand', 400, 'upper', .08, 0, 0, 'hand'),
+    };
+    // the setting decides which faces belong in the world at all
+    const theme =
+      st === 'pixel' || has(/\b(pixel|retro|arcade|8-?bit|16-?bit|chiptune)\b/) ? 'pixel'
+      : st === 'horror' || has(/\b(haunt\w*|ghosts?|zombies?|graveyards?|cursed|undead|horror|crypts?|demons?|vampires?|witch\w*)\b/) ? 'horror'
+      : has(/\b(cowboys?|western|frontier|saloons?|sheriffs?|outlaws?|wild west|gold rush|rodeo)\b/) ? 'western'
+      : has(/\b(pirates?|buccaneers?|galleons?|treasure|corsairs?|privateers?)\b/) ? 'pirate'
+      : has(/\b(knights?|castles?|dragons?|wizards?|kingdoms?|medieval|princess\w*|swords?|vikings?|norse|dungeons?|sorcer\w*|elves|elven|dwarves|quest)\b/) ? 'myth'
+      : st === 'synthwave' || has(/\b(neon|synthwave|retrowave|80s|cyberpunk|vaporwave|arcade)\b/) ? 'synth'
+      : has(/\b(space|starships?|orbit\w*|asteroids?|planets?|galax\w*|mars|lunar|moon|aliens?|robots?|stations?|cyber\w*|future\w*|reactors?|labs?|hackers?|drones?)\b/) ? 'scifi'
+      : has(/\b(detective|mystery|noir|heist|murder|crime|stolen|museum|spies|spy|thief|burglar|gangsters?)\b/) ? 'noir'
+      : st === 'cartoon' || st === 'anime' || has(/\b(cartoon|toys?|kids|cute|candy|bouncy|jelly|bunny|kittens?|puppies|cats?|platformer)\b/) ? 'play'
+      : has(/\b(races?|racing|racer|drift\w*|rally|karts?|karting|soccer|football|stadium|grand prix|speedway|skate\w*|surf\w*|snowboard\w*)\b/) ? 'sport'
+      : has(/\b(cozy|cosy|garden\w*|bakery|bakers?|farm\w*|meadows?|picnic|orchards?|cottages?|village|tea|flowers?|bees?|honey|seaside|island|lighthouses?)\b/) ? 'cozy'
+      : has(/\b(victorian|egypt\w*|roman|ancient|temples?|samurai|shogun|monaster\w*|ruins?|tombs?|pharaohs?|manor|library|harbou?rs?|smithy)\b/) ? 'period'
+      : 'open';
+    const POOL = {
+      pixel: ['press', 'silk', 'vt', 'rubikmono'],
+      horror: ['creepster', 'nosifer', 'butcher', 'grenze', 'fraktur', 'fell', 'cormorant', 'elite'],
+      western: ['rye', 'sancreek', 'abril', 'bebas', 'elite', 'playfair', 'oswald'],
+      pirate: ['pirata', 'fell', 'almendra', 'abril', 'garamond', 'uncial'],
+      myth: ['uncial', 'fraktur', 'grenze', 'almendra', 'metamorph', 'cinzel', 'cinzelB', 'fell', 'cormorant', 'garamond'],
+      synth: ['monoton', 'audiowide', 'orbitron', 'righteous', 'unbounded', 'syne', 'shouldersL'],
+      scifi: ['orbitron', 'chakra', 'space', 'unbounded', 'syne', 'russo', 'techmono', 'audiowide', 'shoulders', 'josefinT', 'dmmono', 'bricolage'],
+      noir: ['bebas', 'elite', 'playfair', 'playfairI', 'abril', 'oswald', 'anton', 'baskerville', 'oswaldL'],
+      play: ['fredoka', 'baloo', 'shrikhand', 'comfortaa', 'righteous', 'bangers', 'unbounded', 'marker', 'caveat'],
+      sport: ['anton', 'bebas', 'shoulders', 'archivo', 'russo', 'oswald', 'unbounded', 'syne', 'chakra', 'bricolage'],
+      cozy: ['fraunces', 'frauncesL', 'caveat', 'kalam', 'amatic', 'shrikhand', 'comfortaa', 'loraI', 'playfairI', 'patrick', 'baloo', 'garamond'],
+      period: ['cinzel', 'fell', 'fellU', 'playfair', 'cormorant', 'garamond', 'baskerville', 'lora', 'abril', 'fraunces'],
+      open: ['josefin', 'bebas', 'bricolage', 'bricolageL', 'loraI', 'instrument', 'dmmono', 'cinzel', 'space', 'syne', 'fraunces', 'playfair', 'archivo',
+             'oswaldL', 'cormorant', 'unbounded', 'shouldersL', 'caveat', 'amatic', 'righteous', 'abril', 'frauncesL'],
+    };
+    // reading faces: what the text is set in, by setting
+    const B = (h, tags) => ({ h: '"' + h + '"', tags: tags.split(' ') });
+    const BODIES = {
+      pixel: [B('VT323', 'pixel'), B('DM Mono', 'mono'), B('Space Grotesk', 'grotesk')],
+      horror: [B('IM Fell English', 'serif'), B('Lora', 'serif'), B('EB Garamond', 'serif'), B('Special Elite', 'mono')],
+      western: [B('Special Elite', 'mono'), B('Lora', 'serif'), B('Libre Baskerville', 'serif'), B('Oswald', 'condensed')],
+      pirate: [B('IM Fell English', 'serif'), B('EB Garamond', 'serif'), B('Lora', 'serif')],
+      myth: [B('EB Garamond', 'serif'), B('Lora', 'serif'), B('IM Fell English', 'serif'), B('Cormorant', 'serif thin')],
+      synth: [B('Space Grotesk', 'grotesk'), B('Chakra Petch', 'tech'), B('DM Mono', 'mono'), B('Syne', 'grotesk')],
+      scifi: [B('Space Grotesk', 'grotesk'), B('DM Mono', 'mono'), B('Chakra Petch', 'tech'), B('Instrument Sans', 'grotesk'), B('Josefin Sans', 'thin')],
+      noir: [B('Special Elite', 'mono'), B('Lora', 'serif'), B('Libre Baskerville', 'serif'), B('Oswald', 'condensed')],
+      play: [B('Fredoka', 'round'), B('Baloo 2', 'round'), B('Comfortaa', 'round'), B('Patrick Hand', 'hand'), B('Instrument Sans', 'grotesk')],
+      sport: [B('Instrument Sans', 'grotesk'), B('Space Grotesk', 'grotesk'), B('Oswald', 'condensed'), B('Chakra Petch', 'tech')],
+      cozy: [B('Lora', 'serif'), B('Fraunces', 'serif round'), B('Kalam', 'hand'), B('Patrick Hand', 'hand'), B('Comfortaa', 'round'), B('EB Garamond', 'serif')],
+      period: [B('Lora', 'serif'), B('EB Garamond', 'serif'), B('Libre Baskerville', 'serif'), B('IM Fell English', 'serif')],
+      open: [B('Instrument Sans', 'grotesk'), B('Space Grotesk', 'grotesk'), B('Lora', 'serif'), B('Fraunces', 'serif'), B('DM Mono', 'mono'), B('Josefin Sans', 'thin'), B('EB Garamond', 'serif')],
+    };
+    // the makers: their taste in faces, how they grade a frame, what they
+    // put round a line of text, how they set a title, and how they colour
+    const G = (sat, con, sh, hi, tint, vig, grain) => ({ sat, con, sh, hi, tint, vig, grain });
+    const MAKERS = [
+      { id: 'printmaker', fits: 'period cozy noir open myth pirate western', taste: 'serif display', grade: G(0.92, 1.05, [0.96, 0.99, 1.05], [1.06, 1.0, 0.92], 0.18, 0.5, 0.018), frames: ['plate', 'ledger', 'stamp'], titles: ['offset', 'plain'], scheme: 'duotone' },
+      { id: 'arcade', fits: 'pixel play sport synth scifi open', taste: 'loud pixel round', grade: G(1.22, 1.1, [0.95, 0.98, 1.08], [1.04, 1.0, 0.96], 0.2, 0.32, 0.008), frames: ['pixel', 'tab', 'bracket'], titles: ['shadow', 'plain'], scheme: 'neon' },
+      { id: 'filmmaker', fits: 'noir horror western scifi open period sport', taste: 'serif condensed thin', grade: G(1.0, 1.1, [0.9, 1.0, 1.1], [1.08, 1.0, 0.9], 0.22, 0.62, 0.016), frames: ['veil', 'rule'], titles: ['spaced', 'plain'], scheme: 'complement', bars: true },
+      { id: 'cartographer', fits: 'period myth pirate cozy open', taste: 'serif hand period', grade: G(0.95, 1.04, [1.02, 1.0, 0.94], [1.05, 1.01, 0.92], 0.2, 0.45, 0.014), frames: ['ledger', 'plate', 'tape'], titles: ['rule', 'plain'], scheme: 'analog' },
+      { id: 'brutalist', fits: 'scifi noir sport open synth', taste: 'mono grotesk loud', grade: G(0.86, 1.13, [1.0, 1.0, 1.0], [1.0, 1.0, 1.0], 0.1, 0.38, 0.012), frames: ['bracket', 'rule', 'tab'], titles: ['plain', 'outline'], scheme: 'mono' },
+      { id: 'watercolourist', fits: 'cozy play open period myth', taste: 'serif hand round thin', grade: G(0.96, 0.98, [1.0, 1.02, 1.04], [1.04, 1.02, 0.97], 0.16, 0.3, 0.006), frames: ['veil', 'tape', 'card'], titles: ['plain'], scheme: 'analog' },
+      { id: 'pulp', fits: 'noir horror pirate western scifi myth open', taste: 'display condensed loud', grade: G(1.12, 1.09, [0.93, 0.97, 1.08], [1.08, 1.0, 0.9], 0.24, 0.5, 0.02), frames: ['stamp', 'tab', 'plate'], titles: ['offset', 'shadow'], scheme: 'complement' },
+      { id: 'synth', fits: 'synth scifi sport open', taste: 'tech loud display', grade: G(1.18, 1.08, [1.02, 0.94, 1.1], [1.04, 0.98, 1.06], 0.24, 0.46, 0.01), frames: ['bracket', 'rule'], titles: ['glow', 'outline'], scheme: 'neon' },
+      { id: 'naturalist', fits: 'cozy open period myth', taste: 'serif hand thin', grade: G(1.04, 1.03, [0.97, 1.02, 1.0], [1.03, 1.02, 0.96], 0.16, 0.36, 0.01), frames: ['card', 'tape', 'ledger'], titles: ['plain', 'rule'], scheme: 'analog' },
+      { id: 'folk', fits: 'cozy play myth pirate western open', taste: 'hand display round', grade: G(1.06, 1.03, [1.0, 0.98, 0.96], [1.06, 1.01, 0.92], 0.2, 0.42, 0.014), frames: ['stamp', 'plate', 'tape'], titles: ['plain', 'offset'], scheme: 'triad' },
+      { id: 'minimalist', fits: 'open scifi sport cozy noir', taste: 'grotesk thin', grade: G(0.96, 1.05, [0.99, 1.0, 1.01], [1.01, 1.0, 0.99], 0.12, 0.25, 0.004), frames: ['rule', 'veil'], titles: ['spaced', 'plain'], scheme: 'mono' },
+      { id: 'zine', fits: 'horror play synth sport open noir', taste: 'hand loud mono', grade: G(1.1, 1.12, [0.96, 0.96, 1.04], [1.06, 1.0, 0.94], 0.2, 0.5, 0.024), frames: ['tape', 'stamp', 'pixel'], titles: ['offset', 'outline'], scheme: 'complement' },
+    ];
+    const fit = MAKERS.filter(m => m.fits.split(' ').includes(theme));
+    const M = (st === 'pixel' && MAKERS[1]) || pick(fit.length ? fit : MAKERS);
+    const likes = (tags) => tags.some(t => M.taste.split(' ').includes(t));
+    const heads = POOL[theme].map(k => FACES[k]);
+    const liked = heads.filter(f => likes(f.tags));
+    const head = pick(liked.length && r() < 0.75 ? liked : heads);
+    const bodies = BODIES[theme].filter(b => b.h !== head.h);
+    const likedB = bodies.filter(b => likes(b.tags));
+    const body = (likedB.length && r() < 0.65 ? pick(likedB) : pick(bodies)).h;
+    const V = { id: M.id, theme, head, body, grade: M.grade, scheme: M.scheme, frames: M.frames, title: pick(M.titles), bars: !!M.bars, r, pick };
+    window.__VIBE = V;
+    window.__vibe = { maker: V.id, theme, head: head.h.replace(/"/g, ''), body: body.replace(/"/g, ''), scheme: V.scheme, title: V.title };
+    return V;
+  }
   const bestKey = 'fs_best_' + (SPEC.title || 'game');
   const fmtT = s => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
 
@@ -11285,37 +11428,30 @@ async function main() {
         : /\b(medieval|castles?|knights?|kingdom|vikings?|samurai|temples?|ancient|egypt\w*|roman|gladiators?|pirates?|lighthouses?|victorian|western|cowboys?|wizards?|dragons?|monaster\w*|ruins?|pharaohs?|tombs?|shogun|ninjas?|harbou?rs?|orchards?|smithy|blacksmiths?|library|manor)\b/.test(words) ? 'period'
         : /\b(space|cyber\w*|robots?|station|neon|hacker|lab|future|drones?|mars|moon|lunar|orbit|alien|reactor)\b/.test(words) ? 'tech'
         : 'modern';
-      // a face is a family, a weight, a case, a tracking, an italic, a width
-      const F = (h, w, cs, tr, it, wd) => ({ h, w, cs, tr, it: !!it, wd: wd || 100 });
-      const HEAD = {
-        period: [F('"Cinzel"', 600, 'upper', .14), F('"IM Fell English"', 400, 'none', .01, true), F('"Lora"', 600, 'small', .1), F('"IM Fell English"', 400, 'upper', .2), F('"Cinzel"', 800, 'upper', .04), F('"Lora"', 500, 'none', -.01, true)],
-        gothic: [F('"Creepster"', 400, 'upper', .1), F('"IM Fell English"', 400, 'none', .02, true), F('"Cinzel"', 900, 'upper', .22)],
-        tech: [F('"Share Tech Mono"', 400, 'upper', .24), F('"Russo One"', 400, 'upper', .04), F('"DM Mono"', 300, 'upper', .34), F('"Josefin Sans"', 200, 'upper', .42), F('"Bricolage Grotesque"', 800, 'none', -.02, false, 75)],
-        play: [F('"Fredoka"', 700, 'none', 0, false, 112), F('"Bangers"', 400, 'upper', .06), F('"Fredoka"', 600, 'upper', .08, false, 125)],
-        sport: [F('"Russo One"', 400, 'upper', .02, true), F('"Bebas Neue"', 400, 'upper', .08), F('"Bricolage Grotesque"', 800, 'upper', -.01, true, 75)],
-        noir: [F('"Bebas Neue"', 400, 'upper', .12), F('"Special Elite"', 400, 'none', .02), F('"Lora"', 600, 'none', -.01, true)],
-        modern: [F('"Josefin Sans"', 300, 'upper', .32), F('"Bebas Neue"', 400, 'upper', .1), F('"Bricolage Grotesque"', 700, 'none', -.03, false, 90), F('"Lora"', 500, 'none', -.01, true), F('"Instrument Sans"', 600, 'upper', .24), F('"DM Mono"', 400, 'upper', .28), F('"Cinzel"', 500, 'upper', .2)],
-      };
-      const BODY = { period: ['"Lora"', '"IM Fell English"', '"Instrument Sans"'], gothic: ['"Lora"', '"IM Fell English"'], tech: ['"DM Mono"', '"Instrument Sans"', '"Josefin Sans"'],
-        play: ['"Fredoka"', '"Instrument Sans"'], sport: ['"Instrument Sans"', '"Josefin Sans"'], noir: ['"Special Elite"', '"Lora"'], modern: ['"Instrument Sans"', '"Lora"', '"Josefin Sans"', '"DM Mono"'] };
-      const head = pick(HEAD[reg]), body = pick(BODY[reg]);
+      // the faces are the maker's (VIBE_OF, 2026-10-20): forty families, chosen by taste within the setting
+      const V = VIBE_OF(), head = V.head, body = V.body;
       // colour in sRGB, by hand: the sky's hue turned by the seed
       const hsl = (n) => { const R = (n >> 16 & 255) / 255, G = (n >> 8 & 255) / 255, B = (n & 255) / 255, mx = Math.max(R, G, B), mn = Math.min(R, G, B), l = (mx + mn) / 2;
         if (mx === mn) return [0, 0, l]; const d = mx - mn, sa = l > 0.5 ? d / (2 - mx - mn) : d / (mx + mn);
         const hh = mx === R ? (G - B) / d + (G < B ? 6 : 0) : mx === G ? (B - R) / d + 2 : (R - G) / d + 4; return [hh * 60, sa, l]; };
       const css = (h, sa, l, a) => `hsla(${((h % 360) + 360) % 360},${Math.round(sa * 100)}%,${Math.round(l * 100)}%,${a === undefined ? 1 : a})`;
       const [sh, ss] = hsl(+pal.sky || 0x203040);
-      let h = sh + pick([150, 180, 205, 30, -30, 120, -120, 0, 90]); h = ((h % 360) + 360) % 360;
+      // the maker's way with colour: a complement, a neighbour, a triad, one
+      // ink on a tinted page, neon, or near-monochrome with the accent held back
+      const turn = { complement: [160, 180, 200], analog: [-38, -24, 24, 38], triad: [120, -120], duotone: [150, 180, 210], neon: [180, 150, -150, 90], mono: [180, 0] }[V.scheme]
+        || [150, 180, 205, 30, -30, 120, -120, 0, 90];
+      let h = sh + pick(turn); h = ((h % 360) + 360) % 360;
       if (h > 34 && h < 64) h = r() < 0.5 ? h - 32 : h + 130;               // no gold, no mustard
-      const sat = 0.36 + r() * 0.4, lit = 0.6 + r() * 0.12;
+      const sat = V.scheme === 'neon' ? 0.8 + r() * 0.15 : V.scheme === 'mono' ? 0.1 + r() * 0.1 : V.scheme === 'duotone' ? 0.42 + r() * 0.25 : 0.36 + r() * 0.4;
+      const lit = V.scheme === 'neon' ? 0.62 : V.scheme === 'mono' ? 0.82 : 0.6 + r() * 0.12;
       const paperLight = (reg === 'period' || reg === 'noir') && r() < 0.4;  // a printed page, not a dark panel
       const A = {
         reg, head, body, r, pick, paperLight,
         acc: css(h, sat, lit), accA: a => css(h, sat, lit, a), accD: css(h, sat * 0.9, 0.32),
         ink: paperLight ? css(sh, 0.25, 0.12) : css(sh, 0.1 + ss * 0.1, 0.93), ink2: paperLight ? css(sh, 0.18, 0.3) : css(sh, 0.12, 0.72),
-        paper: paperLight ? css(sh + 30, 0.3, 0.9, 0.95) : css(sh, 0.2 + r() * 0.2, 0.05 + r() * 0.04, 0.9),
+        paper: paperLight ? css((V.scheme === 'duotone' ? h : sh) + 30, 0.3, 0.9, 0.95) : css(V.scheme === 'duotone' ? h : sh, 0.2 + r() * 0.2, 0.05 + r() * 0.04, 0.9),
         shadow: paperLight ? 'rgba(255,255,255,.6)' : 'rgba(0,0,0,.65)',
-        frame: paperLight ? pick(['plate', 'bracket', 'tab', 'ledger']) : pick(['veil', 'rule', 'plate', 'bracket', 'tab', 'ledger']),   // (a light page needs a panel to be printed on)
+        frame: (() => { const f = pick(V.frames); return paperLight && (f === 'veil' || f === 'rule') ? 'plate' : f; })(),   // the maker's frame (a light page needs a panel to be printed on)
         corner: pick(['tl', 'tl', 'tr', 'bl']),
         open: pick(['left', 'lower', 'center', 'right', 'left', 'lower']),
         banner: pick(['high', 'low', 'side']),
@@ -11326,7 +11462,8 @@ async function main() {
       return A;
     })();
     window.__ART = ART;
-    window.__art = { reg: ART.reg, head: ART.head.h, body: ART.body, acc: ART.acc, frame: ART.frame, corner: ART.corner, open: ART.open, banner: ART.banner, paperLight: ART.paperLight };
+    window.__art = { reg: ART.reg, head: ART.head.h, body: ART.body, acc: ART.acc, frame: ART.frame, corner: ART.corner, open: ART.open, banner: ART.banner, paperLight: ART.paperLight,
+                     maker: VIBE_OF().id, title: VIBE_OF().title };
     {
       const B = document.body, H = ART.head;
       B.dataset.art = ART.frame; B.dataset.hud = ART.corner;
@@ -11336,7 +11473,9 @@ async function main() {
         '--art-hw': String(H.w), '--art-tr': H.tr + 'em', '--art-tt': H.cs === 'upper' ? 'uppercase' : 'none', '--art-fv': H.cs === 'small' ? 'small-caps' : 'normal',
         '--art-fs': H.it ? 'italic' : 'normal', '--art-wd': H.wd + '%' };
       if (window.__skin !== 'terminal') for (const k in v) B.style.setProperty(k, v[k]);
-      else for (const k of ['--fs-accent', '--art-acc', '--art-paper', '--art-ink', '--art-ink2', '--art-rad']) B.style.setProperty(k, v[k]);
+      else for (const k of ['--fs-accent', '--art-acc', '--art-paper', '--art-ink', '--art-ink2', '--art-rad',
+                            // (2026-10-20) the maker's display face carries over; the terminal keeps its mono for reading
+                            '--f-head', '--art-hw', '--art-tr', '--art-tt', '--art-fv', '--art-fs', '--art-wd']) B.style.setProperty(k, v[k]);
       const st = document.createElement('style'); st.id = 'fs-art';
       st.textContent = `
         #fps{display:none} body.fs-showfps #fps{display:block}
@@ -11362,6 +11501,13 @@ async function main() {
           linear-gradient(var(--art-acc),var(--art-acc)) bottom right/14px 1.5px no-repeat,linear-gradient(var(--art-acc),var(--art-acc)) bottom right/1.5px 14px no-repeat,var(--art-paper) !important}
         body[data-art="tab"] .fs-card{border-top:3px solid var(--art-acc) !important}
         body[data-art="ledger"] .fs-card{border-top:1px solid var(--art-acc) !important;border-bottom:1px solid var(--art-acc) !important;border-radius:0 !important}
+        /* the makers' own frames (2026-10-20) */
+        body[data-art="stamp"] .fs-card{border:2px double var(--art-acc) !important;border-radius:3px !important;transform:rotate(-0.8deg) !important}
+        body[data-art="tape"] .fs-card{border-radius:1px !important;background:linear-gradient(-8deg,transparent 46%,rgba(240,232,205,.38) 46%,rgba(240,232,205,.38) 54%,transparent 54%) -6px -8px/64px 30px no-repeat,
+          linear-gradient(10deg,transparent 46%,rgba(240,232,205,.38) 46%,rgba(240,232,205,.38) 54%,transparent 54%) calc(100% + 6px) -8px/64px 30px no-repeat,var(--art-paper) !important;transform:rotate(0.6deg) !important}
+        body[data-art="pixel"] .fs-card{border-radius:0 !important;box-shadow:0 -4px 0 0 var(--art-acc),0 4px 0 0 var(--art-acc),-4px 0 0 0 var(--art-acc),4px 0 0 0 var(--art-acc),8px 8px 0 0 rgba(0,0,0,.4) !important}
+        body[data-art="card"] .fs-card{background:#f2eee5 !important;border-radius:2px !important;padding-bottom:20px !important;box-shadow:0 14px 34px rgba(0,0,0,.45) !important;transform:rotate(-0.5deg) !important}
+        body[data-art="card"] .fs-card b{color:#1f1c18 !important} body[data-art="card"] .fs-card small,body[data-art="card"] .fs-card p{color:#4a443b !important}
         /* where the card sits follows the opening's layout */
         body[data-hud="tl"] .fs-card,body[data-hud="bl"] .fs-card{left:auto !important;right:18px !important;top:auto !important;bottom:22px !important;transform:none !important}
         body[data-hud="tr"] .fs-card{left:18px !important;top:auto !important;bottom:22px !important;transform:none !important}
@@ -11387,6 +11533,16 @@ async function main() {
           text-transform:var(--art-tt) !important;font-stretch:var(--art-wd);font-size:clamp(38px,5.6vw,78px) !important;line-height:.98 !important;color:var(--art-ink) !important;
           text-shadow:0 2px 24px rgba(0,0,0,.35) !important;margin:0 0 12px !important}
         .fs-art-the{display:block;font-size:.34em;letter-spacing:.3em;opacity:.8;margin-bottom:.15em}
+        /* how the maker sets a title */
+        body[data-title="offset"] #fsstart h1.fs-art-title{text-shadow:.06em .06em 0 var(--art-acc) !important}
+        body[data-title="shadow"] #fsstart h1.fs-art-title{text-shadow:0 .07em 0 var(--art-accd),0 .14em 26px rgba(0,0,0,.55) !important}
+        body[data-title="outline"] #fsstart h1.fs-art-title{color:transparent !important;-webkit-text-stroke:1.6px var(--art-ink);text-shadow:none !important}
+        body[data-title="glow"] #fsstart h1.fs-art-title{text-shadow:0 0 14px var(--art-acc),0 0 42px var(--art-acc) !important}
+        body[data-title="spaced"] #fsstart h1.fs-art-title{letter-spacing:.32em !important;font-size:clamp(28px,3.8vw,54px) !important}
+        body[data-title="rule"] #fsstart h1.fs-art-title{padding-bottom:.12em;border-bottom:2px solid var(--art-acc);display:inline-block}
+        /* a film maker opens in scope */
+        body[data-bars] #fsstart::before,body[data-bars] #fsstart::after{content:"";position:fixed;left:0;right:0;height:7vh;background:#000;z-index:2;pointer-events:none}
+        body[data-bars] #fsstart::before{top:0} body[data-bars] #fsstart::after{bottom:0}
         body[data-art] #fsstart .fs-art-tag{text-shadow:0 1px 10px var(--art-shadow);font:italic 400 16px var(--f-ui);color:var(--art-ink2);margin-bottom:16px}
         .fs-art-rule{height:1px;width:72px;background:var(--art-acc);margin:0 0 18px}
         #fsstart.fs-open-center .fs-art-rule{margin:0 auto 18px} #fsstart.fs-open-right .fs-art-rule{margin:0 0 18px auto}
@@ -11426,6 +11582,8 @@ async function main() {
       `;
       document.head.appendChild(st);
       B.dataset.banner = ART.banner;
+      B.dataset.title = VIBE_OF().title; B.dataset.maker = VIBE_OF().id;
+      if (VIBE_OF().bars) B.dataset.bars = '1';
       if (/[?&]fps=1/.test(location.search)) B.classList.add('fs-showfps');
       // ONE HAND FOR THE CHROME (2026-10-12): two hundred bits of HUD were
       // set inline in system-ui and a stock violet (#a78bfa), so a game's
@@ -22402,7 +22560,7 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
   if (godray) composer.addPass(godray);
   const _grV1 = new THREE.Vector3(), _grV2 = new THREE.Vector3();
   const vignette = new ShaderPass({
-    uniforms: { tDiffuse: { value: null }, strength: { value: 0.42 } },
+    uniforms: { tDiffuse: { value: null }, strength: { value: VIBE_OF().grade.vig } },   // the maker's vignette (was 0.42 for all)
     vertexShader: `varying vec2 vUv;
       void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
     fragmentShader: `uniform sampler2D tDiffuse; uniform float strength; varying vec2 vUv;
@@ -22427,15 +22585,19 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
   }
   const grade = new ShaderPass({
     uniforms: { tDiffuse: { value: null }, uT: { value: 0 },
-                tint: { value: new THREE.Vector3(gradeTint.r, gradeTint.g, gradeTint.b) } },
+                tint: { value: new THREE.Vector3(gradeTint.r, gradeTint.g, gradeTint.b) },
+                // (2026-10-20) the maker's grade: saturation, contrast, split tone, tint (VIBE_OF)
+                uSat: { value: VIBE_OF().grade.sat }, uCon: { value: VIBE_OF().grade.con },
+                uSh: { value: new THREE.Vector3(...VIBE_OF().grade.sh) }, uHi: { value: new THREE.Vector3(...VIBE_OF().grade.hi) },
+                uTintK: { value: VIBE_OF().grade.tint } },
     vertexShader: `varying vec2 vUv;
       void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
     fragmentShader: `uniform sampler2D tDiffuse; uniform vec3 tint;
-      uniform float uT; varying vec2 vUv;
+      uniform float uT; uniform float uSat, uCon, uTintK; uniform vec3 uSh, uHi; varying vec2 vUv;
       void main(){
         vec4 c = texture2D(tDiffuse, vUv);
         float l = dot(c.rgb, vec3(0.299, 0.587, 0.114));
-        c.rgb = mix(c.rgb, c.rgb * tint, 0.22);          // mood tint
+        c.rgb = mix(c.rgb, c.rgb * tint, uTintK);        // mood tint
         // FILM PUNCH (Arc A): AgX is deliberately flat — this restores bite
         // the graded way: gentle S-contrast around mid-gray, saturation lift,
         // and a subtle teal-shadow / warm-highlight split tone (the classic
@@ -22449,12 +22611,12 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
         // off. The contrast is now a power curve about linear mid-grey (0.18),
         // which keeps black above black and leaves the highlights for the
         // tone map; the split tone keys off a tone-mapped luminance.
-        c.rgb = max(mix(vec3(l), c.rgb, 1.12), 0.0);     // saturation
-        c.rgb = 0.18 * pow(max(c.rgb, 0.0) / 0.18, vec3(1.07));   // contrast about mid-grey
+        c.rgb = max(mix(vec3(l), c.rgb, uSat), 0.0);     // saturation
+        c.rgb = 0.18 * pow(max(c.rgb, 0.0) / 0.18, vec3(uCon));   // contrast about mid-grey
         float lu = dot(c.rgb, vec3(0.299, 0.587, 0.114));
         lu = lu / (lu + 0.18);                           // 0.5 at mid-grey, like a display value
-        vec3 shadowTone = vec3(0.94, 1.0, 1.06);         // teal shadows
-        vec3 highTone   = vec3(1.05, 1.0, 0.95);         // warm highlights
+        vec3 shadowTone = uSh;                           // the maker's split tone (was teal shadows,
+        vec3 highTone   = uHi;                           // warm highlights, for every game)
         c.rgb *= mix(shadowTone, highTone, smoothstep(0.3, 0.8, lu));
         // FILM GRAIN MOVED AFTER THE SHARPEN (2026-09-04). It used to be
         // added here, and the CAS sharpen that runs next amplified it: that
@@ -22478,11 +22640,11 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
     uniforms: { tDiffuse: { value: null },
                 uRes: { value: new THREE.Vector2(innerWidth, innerHeight) },
                 uT: { value: 0 },
-                uAmt: { value: 0.22 } },
+                uAmt: { value: 0.22 }, uGrain: { value: VIBE_OF().grade.grain } },
     vertexShader: `varying vec2 vUv;
       void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
     fragmentShader: `uniform sampler2D tDiffuse; uniform vec2 uRes; uniform float uAmt;
-      uniform float uT;
+      uniform float uT; uniform float uGrain;
       varying vec2 vUv;
       void main(){
         vec2 px = 1.0 / uRes;
@@ -22506,7 +22668,8 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
         // grain LAST, so nothing downstream multiplies it (see the grade pass)
         float gr = fract(sin(dot(vUv * 917.0 + vec2(uT * 0.31, uT * 0.17),
                                  vec2(12.9898, 78.233))) * 43758.5453);
-        sharp += (gr - 0.5) * 0.012;
+        // the maker's grain, held back in the shadows (linear light: a dark pixel's speckle is magnified by the tone map)
+        sharp += (gr - 0.5) * uGrain * clamp(sqrt(dot(c, vec3(0.299, 0.587, 0.114))) * 2.0, 0.25, 1.0);
         gl_FragColor = vec4(clamp(sharp, 0.0, 4.0), 1.0);
       }`,
   });

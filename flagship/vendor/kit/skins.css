@@ -31,6 +31,55 @@
 @font-face{font-family:"Lora";font-style:normal;font-weight:400 700;font-display:swap;src:url(../fonts/Lora-Variable.ttf) format("truetype")}
 @font-face{font-family:"Lora";font-style:italic;font-weight:400 700;font-display:swap;src:url(../fonts/Lora-Italic-Variable.ttf) format("truetype")}
 @font-face{font-family:"Josefin Sans";font-weight:100 700;font-display:swap;src:url(../fonts/JosefinSans-Variable.ttf) format("truetype")}
+/* THE PERSONAS' FACES (2026-10-20, github.com/google/fonts; SIL OFL 1.1 except
+   Permanent Marker, Apache 2.0; licence files beside each). A browser fetches
+   only the faces a page uses, so forty families cost a game nothing it does
+   not show. */
+@font-face{font-family:"Playfair Display";font-weight:400 900;font-display:swap;src:url(../fonts/PlayfairDisplay-Variable.ttf) format("truetype")}
+@font-face{font-family:"Fraunces";font-weight:100 900;font-display:swap;src:url(../fonts/Fraunces-Variable.ttf) format("truetype")}
+@font-face{font-family:"Space Grotesk";font-weight:300 700;font-display:swap;src:url(../fonts/SpaceGrotesk-Variable.ttf) format("truetype")}
+@font-face{font-family:"Syne";font-weight:400 800;font-display:swap;src:url(../fonts/Syne-Variable.ttf) format("truetype")}
+@font-face{font-family:"Unbounded";font-weight:200 900;font-display:swap;src:url(../fonts/Unbounded-Variable.ttf) format("truetype")}
+@font-face{font-family:"Abril Fatface";font-display:swap;src:url(../fonts/AbrilFatface-Regular.ttf) format("truetype")}
+@font-face{font-family:"Pirata One";font-display:swap;src:url(../fonts/PirataOne-Regular.ttf) format("truetype")}
+@font-face{font-family:"UnifrakturMaguntia";font-display:swap;src:url(../fonts/UnifrakturMaguntia-Book.ttf) format("truetype")}
+@font-face{font-family:"Rubik Mono One";font-display:swap;src:url(../fonts/RubikMonoOne-Regular.ttf) format("truetype")}
+@font-face{font-family:"Press Start 2P";font-display:swap;src:url(../fonts/PressStart2P-Regular.ttf) format("truetype")}
+@font-face{font-family:"VT323";font-display:swap;src:url(../fonts/VT323-Regular.ttf) format("truetype")}
+@font-face{font-family:"Silkscreen";font-weight:400;font-display:swap;src:url(../fonts/Silkscreen-Regular.ttf) format("truetype")}
+@font-face{font-family:"Silkscreen";font-weight:700;font-display:swap;src:url(../fonts/Silkscreen-Bold.ttf) format("truetype")}
+@font-face{font-family:"Caveat";font-weight:400 700;font-display:swap;src:url(../fonts/Caveat-Variable.ttf) format("truetype")}
+@font-face{font-family:"Permanent Marker";font-display:swap;src:url(../fonts/PermanentMarker-Regular.ttf) format("truetype")}
+@font-face{font-family:"Amatic SC";font-weight:400;font-display:swap;src:url(../fonts/AmaticSC-Regular.ttf) format("truetype")}
+@font-face{font-family:"Amatic SC";font-weight:700;font-display:swap;src:url(../fonts/AmaticSC-Bold.ttf) format("truetype")}
+@font-face{font-family:"Righteous";font-display:swap;src:url(../fonts/Righteous-Regular.ttf) format("truetype")}
+@font-face{font-family:"Monoton";font-display:swap;src:url(../fonts/Monoton-Regular.ttf) format("truetype")}
+@font-face{font-family:"Cormorant";font-weight:300 700;font-display:swap;src:url(../fonts/Cormorant-Variable.ttf) format("truetype")}
+@font-face{font-family:"EB Garamond";font-weight:400 800;font-display:swap;src:url(../fonts/EBGaramond-Variable.ttf) format("truetype")}
+@font-face{font-family:"Libre Baskerville";font-weight:400 700;font-display:swap;src:url(../fonts/LibreBaskerville-Variable.ttf) format("truetype")}
+@font-face{font-family:"Archivo Black";font-display:swap;src:url(../fonts/ArchivoBlack-Regular.ttf) format("truetype")}
+@font-face{font-family:"Oswald";font-weight:200 700;font-display:swap;src:url(../fonts/Oswald-Variable.ttf) format("truetype")}
+@font-face{font-family:"Anton";font-display:swap;src:url(../fonts/Anton-Regular.ttf) format("truetype")}
+@font-face{font-family:"Big Shoulders Display";font-weight:100 900;font-display:swap;src:url(../fonts/BigShouldersDisplay-Variable.ttf) format("truetype")}
+@font-face{font-family:"Chakra Petch";font-weight:400;font-display:swap;src:url(../fonts/ChakraPetch-Regular.ttf) format("truetype")}
+@font-face{font-family:"Chakra Petch";font-weight:700;font-display:swap;src:url(../fonts/ChakraPetch-Bold.ttf) format("truetype")}
+@font-face{font-family:"Orbitron";font-weight:400 900;font-display:swap;src:url(../fonts/Orbitron-Variable.ttf) format("truetype")}
+@font-face{font-family:"Audiowide";font-display:swap;src:url(../fonts/Audiowide-Regular.ttf) format("truetype")}
+@font-face{font-family:"Comfortaa";font-weight:300 700;font-display:swap;src:url(../fonts/Comfortaa-Variable.ttf) format("truetype")}
+@font-face{font-family:"Baloo 2";font-weight:400 800;font-display:swap;src:url(../fonts/Baloo2-Variable.ttf) format("truetype")}
+@font-face{font-family:"Patrick Hand";font-display:swap;src:url(../fonts/PatrickHand-Regular.ttf) format("truetype")}
+@font-face{font-family:"Kalam";font-weight:400;font-display:swap;src:url(../fonts/Kalam-Regular.ttf) format("truetype")}
+@font-face{font-family:"Kalam";font-weight:700;font-display:swap;src:url(../fonts/Kalam-Bold.ttf) format("truetype")}
+@font-face{font-family:"Rye";font-display:swap;src:url(../fonts/Rye-Regular.ttf) format("truetype")}
+@font-face{font-family:"Sancreek";font-display:swap;src:url(../fonts/Sancreek-Regular.ttf) format("truetype")}
+@font-face{font-family:"Metamorphous";font-display:swap;src:url(../fonts/Metamorphous-Regular.ttf) format("truetype")}
+@font-face{font-family:"Uncial Antiqua";font-display:swap;src:url(../fonts/UncialAntiqua-Regular.ttf) format("truetype")}
+@font-face{font-family:"Almendra";font-weight:400;font-display:swap;src:url(../fonts/Almendra-Regular.ttf) format("truetype")}
+@font-face{font-family:"Almendra";font-weight:700;font-display:swap;src:url(../fonts/Almendra-Bold.ttf) format("truetype")}
+@font-face{font-family:"Grenze Gotisch";font-weight:100 900;font-display:swap;src:url(../fonts/GrenzeGotisch-Variable.ttf) format("truetype")}
+@font-face{font-family:"Nosifer";font-display:swap;src:url(../fonts/Nosifer-Regular.ttf) format("truetype")}
+@font-face{font-family:"Butcherman";font-display:swap;src:url(../fonts/Butcherman-Regular.ttf) format("truetype")}
+@font-face{font-family:"Shrikhand";font-display:swap;src:url(../fonts/Shrikhand-Regular.ttf) format("truetype")}
 
 .fs-startcard{position:relative}
 #fsdlg{position:fixed}
