@@ -9108,13 +9108,139 @@ try { refreshFarWorlds(); } catch (e) { /* the frame loop tries again */ }
   } catch (e) { warmed = false; }
 })();
 landingOn = true;                           // from here on a placed machine lands
-renderer.setAnimationLoop(() => {
+// ── THE CHROME'S FIRST PAINTS (2026-10-20). The studio build froze for 3 to
+// 10 s at its first sale, its first toast, the first time an upgrade became
+// affordable, and once while the title card was up. Not the game, and not
+// three.js: the page's own HUD. Chrome draws the HTML with Skia on the same
+// GPU thread that runs WebGL, and the first time a HUD state is painted
+// (a toast up, a can-buy upgrade, the first-sale tag, the ledger open, the
+// title in another world's mood) Skia builds a shader for it, which on the
+// d3d11 backend is an ANGLE link that sometimes waits seconds in the driver
+// (the trace shows the GPU process idle meanwhile, at zero CPU). Every
+// command queued behind it waits, the canvas included. So, before the loop
+// starts and before window.__game says the page is ready, every state the
+// chrome will ever show is painted for a few frames with the page at one
+// percent opacity, on the black of the load: the shaders are built here,
+// where a wait costs nothing, and never in play or under the reveal.
+let warming = false;                          // the frame loop draws, but no time passes
+async function warmChrome(startLoop) {
+  if (document.hidden) { startLoop(); return; }   // no frames are drawn for a hidden tab
+  const deadline = performance.now() + 5000;  // and a page that cannot draw must still boot
+  // n frames AND ms of time: a browser drawing without a frame cap gets through
+  // fifteen frames before a transition has moved, and it is the states in
+  // flight that need painting
+  const frames = (n, ms) => new Promise(res => {
+    let k = 0, done = false; const t0 = performance.now();
+    const end = () => { if (!done) { done = true; res(); } };
+    const f = () => { if (++k >= n && performance.now() - t0 >= (ms || 0)) end(); else requestAnimationFrame(f); };
+    requestAnimationFrame(f);
+    setTimeout(end, Math.max(0, deadline - performance.now()));
+  });
+  const undo = [];
+  const byId = id => document.getElementById(id);
+  const add = (el, cls) => { if (el && !el.classList.contains(cls)) { el.classList.add(cls); undo.push(() => el.classList.remove(cls)); } };
+  const drop = (el, cls) => { if (el && el.classList.contains(cls)) { el.classList.remove(cls); undo.push(() => el.classList.add(cls)); } };
+  const text = (el, s) => { if (el && !el.textContent) { el.textContent = s; undo.push(() => { el.textContent = ''; }); } };
+  const temp = (host, cls, s, x, y) => {
+    if (!host) return;
+    const e = document.createElement('b'); e.className = cls; e.textContent = s;
+    e.style.transform = 'translate(' + x + 'px,' + y + 'px)'; e.style.opacity = '0.55';
+    host.appendChild(e); undo.push(() => e.remove());
+  };
+  // the states run their transitions and animations for a quarter second,
+  // because a fade or a pulse in flight is painted with programs of its own
+  // (the HUD coming back up at the handoff, the title's entrance, the goal's
+  // nudge); they LEAVE at once, so nothing fades out over the reveal
+  const still = document.createElement('style');
+  still.textContent = '*,*::before,*::after{transition:none!important;animation:none!important}';
+  const body = document.body, fade = body.style.opacity;
+  body.style.opacity = '0.01';
+  const title = byId('title'), titleOn = !!(title && title.classList.contains('on'));
+  const mood = title ? title.dataset.mood : undefined;
+  try {
+    // 1. the title card in every family's voice: travel shows the next one
+    if (title) {
+      title.classList.add('on');
+      for (const m of ['void', 'cold', 'green', 'warm']) {
+        title.dataset.mood = m;
+        await frames(m === 'void' ? 15 : 6, m === 'void' ? 250 : 100);
+      }
+      title.classList.remove('on');
+    }
+    // 2. play's chrome, every state at once, with the card down and the ledger open
+    for (const id of ['toast', 'tutor', 'contract', 'standing', 'rival', 'rift', 'melt', 'plan', 'look', 'facecap']) add(byId(id), 'on');
+    text(byId('toast'), 'FIRST SALE.'); text(byId('facecap'), 'PHOTO');
+    add(byId('standing'), 'short'); add(byId('goal'), 'nudge'); add(byId('ledgerTab'), 'ping');
+    add(byId('tok'), 'won'); add(byId('hint'), 'gone');
+    const chips = [...document.querySelectorAll('#tools .tool')];
+    if (chips[1]) add(chips[1], 'on'); if (chips[2]) add(chips[2], 'hint'); if (chips[3]) add(chips[3], 'deny');
+    if (chips[4]) add(chips[4], 'locked');
+    document.querySelectorAll('#ups .up').forEach((u, k) => {
+      add(u, k % 3 === 2 ? 'maxed' : 'can');
+      add(u.querySelector('.pips s'), 'on');
+    });
+    document.querySelectorAll('#paint .pnt').forEach((p, k) => add(p, k % 2 ? 'locked' : 'on'));
+    document.querySelectorAll('#world .wr').forEach((w, k) => { if (k % 2 === 0) add(w, 'can'); });
+    const tags = byId('tags');
+    temp(tags, 'tag', '+12', innerWidth * 0.4 + 0.37, innerHeight * 0.4 + 0.61);
+    temp(tags, 'tag first', '+48', innerWidth * 0.5 + 0.29, innerHeight * 0.45 + 0.53);
+    temp(tags, 'rate', '12', innerWidth * 0.6 + 0.41, innerHeight * 0.4 + 0.27);
+    const bars = [...document.querySelectorAll('#brief .bar i')];
+    for (const b of bars) { const w = b.style.width; undo.push(() => { b.style.width = w; }); }
+    const pause = byId('pause'), pauseShown = pause && pause.style.display;
+    if (pause) { pause.style.display = 'flex'; undo.push(() => { pause.style.display = pauseShown; }); }
+    // the HUD's own canvases draw their first real figures too: the sparkline
+    // is a flat line until something sells, then a gradient-filled curve, and
+    // that path is a program of its own (the last hitch at the first sale).
+    // One pixel read back makes the canvas draw now, not when it is next shown
+    const flush = cv => { try { cv.getContext('2d').getImageData(0, 0, 1, 1); } catch (e) {} };
+    const hist = sparkHist.splice(0);
+    for (let k = 0; k < 40; k++) sparkHist.push((k * 7) % 11 + (k % 3));
+    drawSpark(); flush(byId('spark') || document.createElement('canvas'));
+    undo.push(() => { sparkHist.length = 0; sparkHist.push(...hist); drawSpark(); });
+    add(body, 'ledger');
+    await frames(15, 450);
+    // 3. the same with the ledger shut (the brief and the readout show; the
+    // ledger hides them), and the bars filling. The goal's bar wears a glow,
+    // and growing out of nothing it is a sliver narrower than its own blur,
+    // drawn another way (the first progress after the first sale was the last
+    // stall to go); then part full, its edge off the pixel grid
+    body.classList.remove('ledger');
+    // the wrist display draws the goal's bar from the same width
+    for (const b of bars) b.style.width = '2.4%';
+    drawWrist(1); flush(wristCv);
+    await frames(10, 350);
+    for (const b of bars) b.style.width = '37.3%';
+    drawWrist(1); flush(wristCv);
+    await frames(10, 350);
+  } finally {
+    document.head.appendChild(still);
+    for (let k = undo.length - 1; k >= 0; k--) undo[k]();
+    if (title) {
+      title.classList.remove('on');
+      if (mood === undefined) delete title.dataset.mood; else title.dataset.mood = mood;
+    }
+    void body.offsetWidth;                    // settle the styles before transitions are allowed back
+    still.remove();
+    body.style.opacity = fade;
+    // the card comes in as it always has: its entrance runs from here
+    if (title && titleOn) { void title.offsetWidth; title.classList.add('on'); }
+  }
+  // 4. the opening frame itself, drawn by the loop with no time passing: the
+  // post chain's full-size targets and passes cost the GPU their own build.
+  // The loop writes the chrome every frame, so it starts only now, and the
+  // page stays dim until those frames are through.
+  body.style.opacity = '0.01';
+  startLoop();
+  try { await frames(8, 120); } finally { body.style.opacity = fade; }
+}
+const frame = () => {
   const now = performance.now();
   const _rdt = Math.min(0.1, (now - last) / 1000);
   try { pollPad(_rdt); } catch (e) { /* a pad that reports nonsense must not stop the game */ }
   // PAUSED: the frame still draws, but no time passes in it, so every system
   // (belts, market, rifts, contracts, the walk) holds exactly where it was
-  const dt = PAUSED ? 0 : _rdt;
+  const dt = PAUSED || warming ? 0 : _rdt;
   last = now;
   if (skyDome) skyDome.material.uniforms.uTime.value = now * 0.001;   // the nebula drifts, the aurora ripples
   if (AUDIO.bed) AUDIO.bed.step(dt);
@@ -9461,7 +9587,7 @@ renderer.setAnimationLoop(() => {
   if (shareRequest) { const r = shareRequest; shareRequest = null; postShare(r); }
   if (cardRequest) { cardRequest = false; try { showRatingCard(); } catch (e) { console.warn('[factory] works card: ' + e.message); } }
   if (keepRequest) { const r = keepRequest; keepRequest = null; finishKeep(r); }
-});
+};
 
 // ── THE TIER, LIVE ─────────────────────────────────────────────────────────
 // Steps down once on its own if the frames are not keeping up, and says so.
@@ -10062,6 +10188,16 @@ function setInspectOn(on) {
   });
   addEventListener('pointerup', () => { drag = null; });
 }
+
+// the chrome's shaders are built before the first frame of play (warmChrome,
+// above); every binding of the module exists by here, so a key pressed while
+// it waits finds nothing half-declared. The reveal's clock starts after it.
+let looping = false;
+const startLoop = () => { if (looping) return; looping = true; last = performance.now(); renderer.setAnimationLoop(frame); };
+warming = true;
+try { await warmChrome(startLoop); } catch (e) { /* the game boots without it */ }
+startLoop();
+warming = false;
 
 // The shot gate, the scene audit and the brief check all talk to window.__game.
 // A second genre that invented its own interface would need a second gate, and
