@@ -58,7 +58,8 @@ def _clean(s, limit=260):
     s = str(s or "").strip().strip('"').strip()
     # the model writes U+FFFD where an apostrophe belongs, and curly quotes
     s = s.replace("�", "'").replace("’", "'").replace("‘", "'").replace("“", '"').replace("”", '"')
-    s = s.replace("—", ", ").replace("–", "-").replace(" -- ", ", ")
+    # (2026-10-21) and a spaced hyphen, which reads as the dash it stands in for
+    s = s.replace("—", ", ").replace("–", "-").replace(" -- ", ", ").replace(" - ", ", ")
     s = re.sub(r"\s+", " ", s)
     s = re.sub(r",\s*,", ",", s)
     if len(s) <= limit:
@@ -152,12 +153,21 @@ def write_story(spec, prompt: str, verbose: bool = True) -> dict:
     obs = [{"kind": _shown_kind(o), "label": getattr(o, "label", ""), "count": getattr(o, "count", 1)}
            for o in (getattr(spec, "objectives", []) or [])]
     seed = getattr(spec, "seed", 0) or 0
+    # (2026-10-21) the story is set in the world that was built: "a blacksmith delivers
+    # medicine around a rainy city" was told as "The Ledger of Deliveries, 1888" over glass
+    # towers and taxis. A built city that is not a cosy town is the present day
+    _lvl = getattr(spec.world, "level", None) or {}
+    _osm = _lvl.get("osm") if isinstance(_lvl, dict) else None
+    modern = bool(_osm) and not (isinstance(_osm, dict) and _osm.get("town"))
+    era = ("Era: the present day. The world is a modern city of glass and concrete towers, cars and traffic "
+           "lights; set the story now, with no year from the past and nothing a modern city would not have.\n") if modern else ""
     user = (f"Game idea: {prompt}\nTitle: {getattr(spec, 'title', '')}\n"
             f"The player is: {getattr(spec.player, 'name', '')}\n"
             f"Objectives in order: {json.dumps(obs)}\n"
             f"Setting notes: sky {getattr(spec.world, 'sky', '')}, weather {getattr(spec.world, 'weather', '')}, "
             f"world {getattr(spec.world, 'name', '')}\n"
-            f"Tell it as {random.Random(seed).choice(_FORMS_OLD if _OLD.search(prompt or '') else _FORMS)}; the first person named in it is "
+            f"{era}"
+            f"Tell it as {random.Random(seed).choice(_FORMS_OLD if _OLD.search(prompt or '') and not modern else _FORMS)}; the first person named in it is "
             f"{random.Random(seed * 7 + 1).choice(_NAMES)} (other names for anyone else).\n"
             "Each beat must be about ITS objective exactly, the same verb and the same thing named, in-world. "
             "first_move must point toward the first objective. Never invent a task, an item to collect or a step "
