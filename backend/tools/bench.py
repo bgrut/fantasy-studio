@@ -101,7 +101,19 @@ def build(prompt: str) -> tuple[int | None, str, float]:
     return jid, st, time.time() - t0
 
 
+def free_gpu():
+    """every resident model out of video memory: the game is measured, not the judge"""
+    try:
+        for m in json.loads(urllib.request.urlopen(OLLAMA + "/api/ps", timeout=5).read()).get("models", []):
+            req = urllib.request.Request(OLLAMA + "/api/generate", data=json.dumps({"model": m["name"], "keep_alive": 0}).encode(),
+                                         headers={"Content-Type": "application/json"})
+            urllib.request.urlopen(req, timeout=30).read()
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def probe(jid: int, out_prefix: str) -> dict:
+    free_gpu()
     r = subprocess.run(["node", "_benchprobe.mjs"], cwd=os.path.join(BK, "tools", "shotgate"), capture_output=True, text=True,
                        encoding="utf-8", errors="replace", timeout=300, env=dict(os.environ, J=f"job_{jid}", OUT=out_prefix))
     for line in reversed((r.stdout or "").splitlines()):
@@ -114,19 +126,37 @@ def judge(prompt: str, shots: list[str]) -> dict:
     imgs = [base64.b64encode(open(s, "rb").read()).decode() for s in shots if os.path.exists(s)]
     if not imgs:
         return {"match": 0, "quality": 0, "defects": ["no screenshots"]}
-    q = ("These are screenshots of a video game made from this sentence: \"" + prompt + "\".\n"
-         "Judge strictly, like a games art director. Reply with JSON only: "
-         '{"match": 1-5 (does the world show what the sentence describes: place, time, weather, hero, things), '
-         '"quality": 1-5 (would this pass as a polished indie game: lighting, detail, composition, no glitches), '
-         '"defects": ["short concrete problems you can see"]}')
+    q = ("These are two screenshots of a video game (the hero's view, and the same place from above) made from this sentence: \"" + prompt + "\".\n"
+         "Score like a games art director, with this scale for both scores: 1 = broken or empty, 2 = placeholder or wrong, "
+         "3 = a coherent, competent indie game, 4 = polished, with a clear art direction, 5 = standout, award-worthy.\n"
+         "match: does the world show what the sentence asks for: the place, the time of day, the weather, the hero, the named things.\n"
+         "quality: lighting, detail, composition, believable materials, no visual glitches.\n"
+         "defects: only problems you can actually see in THESE images, each naming the thing and where (not generic advice).\n"
+         'Reply with JSON only: {"match": n, "quality": n, "defects": ["..."]}')
     body = {"model": JUDGE, "prompt": q, "images": imgs, "stream": False, "format": "json", "options": {"temperature": 0.1}}
+    err = None
+    for _attempt in range(2):                  # Ollama answers 500 now and then under load
+        try:
+            req = urllib.request.Request(OLLAMA + "/api/generate", data=json.dumps(body).encode(), headers={"Content-Type": "application/json"})
+            res = json.loads(urllib.request.urlopen(req, timeout=300).read())
+            v = json.loads(res.get("response") or "{}")
+            return {"match": int(v.get("match", 0)), "quality": int(v.get("quality", 0)), "defects": [str(x)[:120] for x in (v.get("defects") or [])][:6]}
+        except Exception as e:  # noqa: BLE001
+            err = e; time.sleep(5)
+    return {"match": 0, "quality": 0, "defects": [f"judge failed: {err}"[:120]]}
+
+
+def shot_light(path: str) -> dict | None:
+    """the frame's light, read from the screenshot (a WebGL canvas reads back blank
+    once its frame is presented, so the page cannot measure itself)"""
     try:
-        req = urllib.request.Request(OLLAMA + "/api/generate", data=json.dumps(body).encode(), headers={"Content-Type": "application/json"})
-        res = json.loads(urllib.request.urlopen(req, timeout=300).read())
-        v = json.loads(res.get("response") or "{}")
-        return {"match": int(v.get("match", 0)), "quality": int(v.get("quality", 0)), "defects": [str(x)[:120] for x in (v.get("defects") or [])][:6]}
-    except Exception as e:  # noqa: BLE001
-        return {"match": 0, "quality": 0, "defects": [f"judge failed: {e}"[:120]]}
+        from PIL import Image
+        im = Image.open(path).convert("L").resize((96, 54))
+        px = [v / 255 for v in im.getdata()]
+        m = sum(px) / len(px)
+        return {"mean": round(m, 3), "sd": round((sum((v - m) ** 2 for v in px) / len(px)) ** 0.5, 3)}
+    except Exception:  # noqa: BLE001
+        return None
 
 
 def unload():
@@ -138,44 +168,22 @@ def unload():
         pass
 
 
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--n", type=int, default=30)
-    ap.add_argument("--seed", type=int, default=int(dt.date.today().strftime("%Y%m%d")))
-    ap.add_argument("--keep", action="store_true")
-    ap.add_argument("--no-judge", action="store_true")
-    a = ap.parse_args()
-    day = dt.date.today().isoformat()
-    OUT = os.path.join(BK, "renders", "bench", day)
-    os.makedirs(OUT, exist_ok=True)
-    rows = []
-    for k, pr in enumerate(prompts(a.n, a.seed)):
-        jid, st, secs = build(pr)
-        row = {"k": k, "prompt": pr, "job": jid, "status": st, "build_s": round(secs)}
-        if st == "complete":
-            pre = os.path.join(OUT, f"g{k:03d}")
-            row.update(probe(jid, pre))
-            row["shots"] = [os.path.basename(pre + s) for s in ("_open.jpg", "_eye.jpg", "_high.jpg")]
-            if not a.no_judge:
-                row["judge"] = judge(pr, [pre + "_eye.jpg", pre + "_high.jpg"])
-        L = row.get("light") or {}
-        J = row.get("judge") or {}
-        checks = {
-            "built": st == "complete",
-            "no_errors": not row.get("errors") and not row.get("crash"),
-            "moves": (row.get("moved") or 0) > 1.0 or row.get("mode") in ("drive", "fly", "swim", "sail"),
-            "light": bool(L) and 0.06 < L.get("mean", 0) < 0.86 and L.get("sd", 0) > 0.05,
-            "fps": (row.get("fps") or 0) >= 30,
-            "judged": a.no_judge or (J.get("match", 0) >= 3 and J.get("quality", 0) >= 3),
-        }
-        row["checks"] = checks
-        row["pass"] = all(checks.values())
-        rows.append(row)
-        print(f"[{k + 1}/{a.n}] {'PASS' if row['pass'] else 'FAIL'} job {jid} {pr[:70]} | "
-              + " ".join(c for c, v in checks.items() if not v), flush=True)
-        if not a.keep and jid:
-            shutil.rmtree(os.path.join(BK, "renders", "game_jobs", f"job_{jid}"), ignore_errors=True)
-    unload()
+def check(row: dict, judged: bool) -> dict:
+    L = row.get("light") or {}
+    J = row.get("judge") or {}
+    return {
+        "built": row.get("status") == "complete",
+        "no_errors": not row.get("errors") and not row.get("crash"),
+        "moves": (row.get("moved") or 0) > 1.0 or row.get("mode") in ("drive", "fly", "swim", "sail"),
+        # not black, not blown out, and not one flat tone; a moonlit frame is dark and
+        # low in spread, so the spread is judged against its own brightness
+        "light": bool(L) and 0.04 < L.get("mean", 0) < 0.86 and (L.get("sd", 0) > 0.035 or L.get("sd", 0) / max(0.01, L.get("mean", 0)) > 0.3),
+        "fps": (row.get("fps") or 0) >= 30,
+        "judged": (not judged) or (J.get("match", 0) >= 3 and J.get("quality", 0) >= 3),
+    }
+
+
+def finish(OUT: str, rows: list, day: str, seed: int, n: int, history: bool = True):
     # variety: how many different things the batch chose
     def share(key):
         vals = [key(r) for r in rows if r.get("status") == "complete"]
@@ -192,14 +200,14 @@ def main():
     }
     done = [r for r in rows if r.get("status") == "complete"]
     J = [r["judge"] for r in done if r.get("judge")]
-    summary = {"date": day, "seed": a.seed, "n": a.n, "pass_rate": round(sum(r["pass"] for r in rows) / max(1, len(rows)), 3),
+    summary = {"date": day, "seed": seed, "n": n, "pass_rate": round(sum(r["pass"] for r in rows) / max(1, len(rows)), 3),
                "built": len(done), "match_avg": round(sum(j["match"] for j in J) / max(1, len(J)), 2),
                "quality_avg": round(sum(j["quality"] for j in J) / max(1, len(J)), 2),
                "fails_by_check": dict(collections.Counter(c for r in rows for c, v in r["checks"].items() if not v)), "variety": variety}
     json.dump({"summary": summary, "rows": rows}, open(os.path.join(OUT, "report.json"), "w", encoding="utf-8"), indent=1)
-    with open(os.path.join(BK, "renders", "bench", "history.jsonl"), "a", encoding="utf-8") as h:
-        h.write(json.dumps(summary) + "\n")
-    # a page to look at
+    if history:
+        with open(os.path.join(BK, "renders", "bench", "history.jsonl"), "a", encoding="utf-8") as h:
+            h.write(json.dumps(summary) + "\n")
     cards = []
     for r in rows:
         j = r.get("judge") or {}
@@ -215,6 +223,51 @@ def main():
             f'<h1>Benchmark {day}</h1><pre>{html.escape(json.dumps(summary, indent=1))}</pre><div class="g">{"".join(cards)}</div>')
     open(os.path.join(OUT, "report.html"), "w", encoding="utf-8").write(page)
     print("SUMMARY", json.dumps(summary))
+    return summary
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--n", type=int, default=30)
+    ap.add_argument("--seed", type=int, default=int(dt.date.today().strftime("%Y%m%d")))
+    ap.add_argument("--keep", action="store_true")
+    ap.add_argument("--no-judge", action="store_true")
+    ap.add_argument("--rescore", help="a past run's date: re-read its screenshots and re-apply the checks, building nothing")
+    a = ap.parse_args()
+    if a.rescore:
+        OUT = os.path.join(BK, "renders", "bench", a.rescore)
+        rep = json.load(open(os.path.join(OUT, "report.json"), encoding="utf-8"))
+        rows = rep["rows"]
+        for r in rows:
+            if r.get("status") == "complete":
+                r["light"] = shot_light(os.path.join(OUT, f"g{r['k']:03d}_eye.jpg")) or r.get("light")
+            r["checks"] = check(r, judged=any(x.get("judge") for x in rows))
+            r["pass"] = all(r["checks"].values())
+        finish(OUT, rows, rep["summary"]["date"], rep["summary"]["seed"], rep["summary"]["n"], history=True)
+        return
+    day = dt.date.today().isoformat()
+    OUT = os.path.join(BK, "renders", "bench", day)
+    os.makedirs(OUT, exist_ok=True)
+    rows = []
+    for k, pr in enumerate(prompts(a.n, a.seed)):
+        jid, st, secs = build(pr)
+        row = {"k": k, "prompt": pr, "job": jid, "status": st, "build_s": round(secs)}
+        if st == "complete":
+            pre = os.path.join(OUT, f"g{k:03d}")
+            row.update(probe(jid, pre))
+            row["shots"] = [os.path.basename(pre + s) for s in ("_open.jpg", "_eye.jpg", "_high.jpg")]
+            row["light"] = shot_light(pre + "_eye.jpg") or row.get("light")
+            if not a.no_judge:
+                row["judge"] = judge(pr, [pre + "_eye.jpg", pre + "_high.jpg"])
+        row["checks"] = check(row, judged=not a.no_judge)
+        row["pass"] = all(row["checks"].values())
+        rows.append(row)
+        print(f"[{k + 1}/{a.n}] {'PASS' if row['pass'] else 'FAIL'} job {jid} {pr[:70]} | "
+              + " ".join(c for c, v in row["checks"].items() if not v), flush=True)
+        if not a.keep and jid:
+            shutil.rmtree(os.path.join(BK, "renders", "game_jobs", f"job_{jid}"), ignore_errors=True)
+    unload()
+    finish(OUT, rows, day, a.seed, a.n)
 
 
 if __name__ == "__main__":

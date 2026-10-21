@@ -428,6 +428,22 @@ def classify_hot_edit(prompt: str) -> dict | None:
 _GEN_POOL = None
 
 
+def _free_vram_for_play(job: dict | None = None) -> None:
+    """THE GAME GETS THE GPU (2026-10-20). The planner and the build's own vision
+    checks leave a model parked in video memory for minutes after a build (gemma3,
+    8 GB of a 16 GB card), and the game opened right after it starved: the
+    benchmark measured worlds at 1-2 fps that run at 60. Once the game is built,
+    every resident model is evicted; the next prompt reloads one in seconds."""
+    try:
+        import requests as _rq
+        for _m in _rq.get("http://localhost:11434/api/ps", timeout=3).json().get("models", []):
+            _rq.post("http://localhost:11434/api/generate", json={"model": _m["name"], "keep_alive": 0}, timeout=5)
+            if job is not None:
+                job.setdefault("notes", []).append(f"freed the GPU for play: unloaded {_m['name']}")
+    except Exception:  # noqa: BLE001 - no Ollama, nothing to free
+        pass
+
+
 def _gen_eta() -> str:
     """How long a first-time generation takes on this machine, for the stage
     line. Three of the four stage lines said "slow without a GPU" whatever the
@@ -4271,6 +4287,7 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             export_godot_game(spec, out_dir, verbose=False)
             job["godot_path"] = str(out_dir / "godot")
 
+        _free_vram_for_play(job)             # the shot gate, the audit and the player all need the GPU now
         job["status"] = "complete"
         job["play_url"] = f"/games/job_{job_id}/dist/"
         job["genre"] = getattr(spec, "genre", "adventure")   # the studio offers creative mode to a factory

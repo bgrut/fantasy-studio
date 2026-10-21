@@ -11665,6 +11665,32 @@ async function main() {
     } catch (e) {}
     { const _go = e => { if (e.code === 'Enter' && document.getElementById('fsstart')) { e.preventDefault(); removeEventListener('keydown', _go); document.getElementById('startbtn').click(); } };
       addEventListener('keydown', _go); }
+    // THE WARM-UP (2026-10-21): the benchmark caught a five-second freeze the
+    // moment a game began (0.5 fps over the first two seconds, sixty after).
+    // On the d3d11 backend a shader is built at its first draw, per program
+    // and per vertex layout, and play began with every one of them at once.
+    // While the opening card is read, the whole scene is drawn once into an
+    // eight-pixel target with everything shown, unculled and counted (the
+    // flagship's warm-up, factory.js.tpl). The lights are left as they are:
+    // a program is built for the lights it will actually see.
+    {
+      const _warm = () => { try {
+        const shown = [], unculled = [], counted = [];
+        scene.traverse(o => {
+          if (o.isLight) return;
+          if (!o.visible) { o.visible = true; shown.push(o); }
+          if (o.frustumCulled) { o.frustumCulled = false; unculled.push(o); }
+          if (o.isInstancedMesh && o.count === 0) { o.count = 1; counted.push(o); }
+        });
+        const rt = new THREE.WebGLRenderTarget(8, 8, { depthBuffer: true }), prev = renderer.getRenderTarget(), t0 = performance.now();
+        renderer.setRenderTarget(rt); renderer.render(scene, camera); renderer.setRenderTarget(prev); rt.dispose();
+        for (const o of shown) o.visible = false;
+        for (const o of unculled) o.frustumCulled = true;
+        for (const o of counted) o.count = 0;
+        (window.__warmMs = window.__warmMs || []).push(Math.round(performance.now() - t0));
+      } catch (e) { console.warn('[game] warm-up', e); } };
+      setTimeout(_warm, 400); setTimeout(_warm, 2600);     // and again once the late models have landed
+    }
     document.getElementById('startbtn').addEventListener('click', () => {
       ov.remove();
       // THE REVEAL (2026-09-15): the kit's title card, as the factory opens.
@@ -24133,7 +24159,7 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
       },
       count: () => steps.reduce((n, st, i) => n + (i < stepIdx ? (st.count || 1) : i === stepIdx ? (st._got || st._fixed || st._served || 0) : 0), 0),
       toast: (a, b) => { try { banner(a, b); } catch (e) {} } });
-    window.__design = () => (DESIGN ? Object.assign({ on: true }, DESIGN.state()) : { on: false, design: (LVL && LVL.design) || null });
+    window.__design = () => (DESIGN ? Object.assign({ on: true }, DESIGN.state()) : Object.assign({ on: false }, (LVL && LVL.design) || {}));
   } catch (e) { console.warn('[game] designer skipped', e); }
   renderer.setAnimationLoop(() => {
     let dt = Math.min(clock.getDelta(), 0.05);

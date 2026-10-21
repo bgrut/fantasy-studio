@@ -23,8 +23,14 @@ try {
   }));
   // frame rate over two seconds
   out.fps = await p.evaluate(() => new Promise(res => { let n = 0; const t0 = performance.now(); const f = () => { n++; if (performance.now() - t0 < 2000) requestAnimationFrame(f); else res(+(n / ((performance.now() - t0) / 1000)).toFixed(1)); }; requestAnimationFrame(f); }));
-  // the hero's view, and the frame's light (mean and spread of luminance)
+  // the hero's view, and the frame's light (mean and spread of luminance); the judged
+  // shots are the world alone: every overlay hidden, so the HUD is not what is marked
+  const bare = (on) => p.evaluate((on) => { let st = document.getElementById('bench-bare');
+    if (on && !st) { st = document.createElement('style'); st.id = 'bench-bare'; st.textContent = 'body > *:not(canvas):not(#app):not(script):not(style){visibility:hidden !important} #app > *:not(canvas){visibility:hidden !important}'; document.head.appendChild(st); }
+    if (!on && st) st.remove(); }, on);
+  await bare(true); await wait(300);
   await p.screenshot({ path: `${O}_eye.jpg`, type: 'jpeg', quality: 80 });
+  await bare(false);
   out.light = await p.evaluate(() => { const c = document.querySelector('canvas'); const g = document.createElement('canvas'); g.width = 64; g.height = 36;
     const x = g.getContext('2d'); try { x.drawImage(c, 0, 0, 64, 36); } catch (e) { return null; }
     const d = x.getImageData(0, 0, 64, 36).data; let s = 0, s2 = 0, n = 0;
@@ -39,7 +45,7 @@ try {
   await p.evaluate(() => { const L = window.__spec.world.level || {}, q = window.__game.pos(), g = L.goal || [q[0] + 40, q[2]];
     const dx = g[0] - q[0], dz = g[1] - q[2], dl = Math.hypot(dx, dz) || 1;
     window.__camPin = { pos: [q[0] - dx / dl * 18, q[1] + 34, q[2] - dz / dl * 18], look: [q[0] + dx * 0.5, q[1], q[2] + dz * 0.5] }; });
-  await wait(1800);
+  await wait(1800); await bare(true); await wait(200);
   await p.screenshot({ path: `${O}_high.jpg`, type: 'jpeg', quality: 80 });
 } catch (e) { out.crash = String(e.message || e).slice(0, 200); }
 out.errors = errs;
