@@ -11521,7 +11521,7 @@ async function main() {
                      maker: VIBE_OF().id, title: VIBE_OF().title };
     {
       const B = document.body, H = ART.head;
-      B.dataset.art = ART.frame; B.dataset.hud = ART.corner;
+      B.dataset.art = ART.frame; B.dataset.hud = ART.corner; B.dataset.paper = ART.paperLight ? 'light' : 'dark';
       const v = { '--fs-accent': ART.acc, '--fs-gold': ART.acc, '--tcol': ART.ink, '--tglow': ART.accA(0.32), '--rule': ART.accA(0.75), '--sub': ART.ink2,
         '--f-head': H.h + ',"Instrument Sans",system-ui,sans-serif', '--f-ui': ART.body + ',"Instrument Sans",system-ui,sans-serif',
         '--art-paper': ART.paper, '--art-shadow': ART.shadow, '--art-ink': ART.ink, '--art-ink2': ART.ink2, '--art-acc': ART.acc, '--art-accd': ART.accD, '--art-rad': ART.radius + 'px',
@@ -11573,6 +11573,11 @@ async function main() {
         body[data-banner="low"] #fsban{top:auto !important;bottom:16% !important}
         body[data-banner="side"] #fsban{text-align:left !important;left:6vw !important;right:auto !important;top:38% !important}
         body[data-banner="side"] #fsban.beat #fsbantxt{margin:0}
+        /* (2026-10-21) a light page's ink is dark, and over a forest at dusk the banner could not be read:
+           on a light page the banner is printed on a strip of that paper */
+        body[data-paper="light"]:not([data-skin="storybook"]):not([data-skin="terminal"]) #fsban{background:var(--art-paper);padding:12px 26px 15px;border-radius:var(--art-rad);box-shadow:0 8px 28px rgba(0,0,0,.38)}
+        body[data-paper="light"]:not([data-skin="storybook"]):not([data-skin="terminal"]):not([data-banner="side"]) #fsban{left:50% !important;right:auto !important;transform:translateX(-50%);max-width:min(720px,86vw)}
+        body[data-paper="light"]:not([data-skin="storybook"]):not([data-skin="terminal"]) #fsban #fsbantxt{text-shadow:none !important}
         /* the opening */
         body[data-art] #fsstart.fs-open{background:none !important;backdrop-filter:none !important}
         body[data-art] #fsstart.fs-open-left{justify-content:flex-start !important;background:linear-gradient(90deg,var(--art-paper) 0,var(--art-paper) 40%,transparent 82%) !important}
@@ -17491,6 +17496,48 @@ async function main() {
       }
       const pm = new THREE.Mesh(mergeGeometries(par.map(q => q.toNonIndexed()), false), wallM);
       pm.castShadow = true; g.add(pm);
+      // A KEEP HAS TOWERS (2026-10-21): "an old castle" was a stone box with a toothed
+      // edge, and the judge called it blocky. Round towers stand at its corners and rise
+      // above the wall walk: a corbelled ring, merlons round the top, slits for windows,
+      // and on some keeps a slate cone over each one
+      if (ROOF[0] === 'battle') {
+        const rk = mulberry32((SPEC.seed || 1) * 53 + Math.round(F.w * 10));
+        const tr = Math.max(1.5, Math.min(F.w, F.d) * 0.15), tH = H + 3.4 + rk() * 1.4, cones = rk() < 0.5;
+        const tw = [], slitG = [], coneG = [];
+        const mUVc = (geo, r, h) => { const uv = geo.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * Math.PI * 2 * r, uv.getY(i) * h); return geo; };
+        for (const [cx, cz] of [[F.w / 2, F.d / 2], [-F.w / 2, F.d / 2], [F.w / 2, -F.d / 2], [-F.w / 2, -F.d / 2]]) {
+          const c = mUVc(new THREE.CylinderGeometry(tr, tr * 1.1, tH, 24, 1), tr, tH); c.translate(cx, tH / 2, cz); tw.push(c.toNonIndexed());
+          const batter = mUVc(new THREE.CylinderGeometry(tr * 1.1, tr * 1.3, 1.6, 24, 1), tr * 1.2, 1.6); batter.translate(cx, 0.8, cz); tw.push(batter.toNonIndexed());
+          const ring = mUVc(new THREE.CylinderGeometry(tr + 0.4, tr, 0.7, 24, 1), tr + 0.2, 0.7); ring.translate(cx, tH + 0.35, cz); tw.push(ring.toNonIndexed());
+          if (cones) {
+            const cg = new THREE.ConeGeometry(tr + 0.55, tr * 2.4, 24, 1); cg.translate(cx, tH + 0.7 + tr * 1.2, cz); coneG.push(cg.toNonIndexed());
+          } else {
+            const nM = 10;
+            for (let k = 0; k < nM; k++) { const a = k / nM * Math.PI * 2, mg = new THREE.BoxGeometry(0.62, 0.85, 0.42);
+              mg.rotateY(-a + Math.PI / 2); mg.translate(cx + Math.cos(a) * (tr + 0.2), tH + 1.12, cz + Math.sin(a) * (tr + 0.2)); tw.push(mg.toNonIndexed()); }
+          }
+          // slits up the tower, looking out from the corner
+          const out = Math.atan2(cz, cx);
+          for (const [da, y] of [[-0.5, H * 0.35], [0.45, H * 0.62], [0, H + 1.6]]) {
+            const a = out + da, sg = new THREE.BoxGeometry(0.22, 1.25, 0.12);
+            sg.rotateY(-a + Math.PI / 2); sg.translate(cx + Math.cos(a) * (tr * 1.05 + 0.02), y, cz + Math.sin(a) * (tr * 1.05 + 0.02)); slitG.push(sg.toNonIndexed());
+          }
+        }
+        const tm = new THREE.Mesh(mergeGeometries(tw, false), wallM); tm.castShadow = tm.receiveShadow = true; g.add(tm);
+        const slitM = new THREE.MeshStandardMaterial({ color: 0x120e0b, roughness: 1 }); slitM.userData.noAutoTex = true;
+        g.add(new THREE.Mesh(mergeGeometries(slitG, false), slitM));
+        if (coneG.length) { const cm = new THREE.Mesh(mergeGeometries(coneG, false), roofM); cm.castShadow = true; g.add(cm); }
+        // a banner from one tower, in colours of its own
+        const bc = document.createElement('canvas'); bc.width = 64; bc.height = 128; const bx = bc.getContext('2d');
+        const pairs = [['#7a1c20', '#e2c15a'], ['#1d3557', '#e8e2d0'], ['#2d4a2b', '#d9b44a'], ['#3a2a4a', '#cfc6b4'], ['#8a5a14', '#2a1e14']];
+        const [b0, b1] = pairs[Math.floor(rk() * pairs.length)];
+        bx.fillStyle = b0; bx.fillRect(0, 0, 64, 128); bx.fillStyle = b1;
+        if (rk() < 0.5) { bx.beginPath(); bx.moveTo(32, 30); bx.lineTo(48, 62); bx.lineTo(32, 94); bx.lineTo(16, 62); bx.fill(); } else { bx.fillRect(26, 0, 12, 128); bx.fillRect(0, 50, 64, 12); }
+        bx.beginPath(); bx.moveTo(0, 128); bx.lineTo(32, 108); bx.lineTo(64, 128); bx.fillStyle = 'rgba(0,0,0,1)'; bx.globalCompositeOperation = 'destination-out'; bx.fill();
+        const bt = new THREE.CanvasTexture(bc); bt.colorSpace = THREE.SRGBColorSpace;
+        const bM = new THREE.MeshStandardMaterial({ map: bt, side: THREE.DoubleSide, roughness: 0.9, transparent: true, alphaTest: 0.5 }); bM.userData.noAutoTex = true;
+        const bn = new THREE.Mesh(new THREE.PlaneGeometry(1.3, 2.9), bM); bn.position.set(F.w / 2 + tr * 0.1, H - 1.2, F.d / 2 + tr * 1.12); g.add(bn);
+      }
     }
     return { g, h: H };
   }
@@ -18183,6 +18230,8 @@ async function main() {
         : INTERIOR ? `${n} ${l} to deliver, one to each room. It goes on the mat by the lantern; stand at it and hold E to leave one.`
         : window.__dropsAtDoors ? `${n} ${l} to deliver. Each one goes to a door with a lantern burning by it; stand on the step and hold E to leave one.`
         : `${n} ${l} to deliver. Each one is left on a bench under a lit lantern; stand at it and hold E to leave one.`;
+    if (st.kind === 'repair' && /\b(bridges?|footbridges?|crossings?)\b/.test(String(l)))
+      return `${n} ${l} to mend. Each has a gap where planks have gone into the stream; stand at it and hold E to lay them back.`;
     if (st.kind === 'repair') return /fire|flame|blaze|burn/.test(String(l))
       ? `${n} ${l} are burning. Run to each one, stand close and hold E to spray until it is out.`
       : `${n} ${l} need fixing. Find each one, stand at it and hold E until it comes back green.`;

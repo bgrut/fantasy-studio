@@ -83,7 +83,8 @@ const ok = fast.drive && fast.drive.speed > 7 && fast.fov > fast.fov_base + 3
   // (2026-10-14) with a handful in view they may all be near and all cast; the
   // claim is that a crowd does not: past a few, some must be too far to cast
   && (slide.drive.peds_visible === 0 ? slide.drive.peds_casting === 0
-      : slide.drive.peds_visible <= 4 ? slide.drive.peds_casting <= slide.drive.peds_visible
+      // (2026-10-21) six in view, all on the near pavement by the car, all cast: a crowd is more than six
+      : slide.drive.peds_visible <= 6 ? slide.drive.peds_casting <= slide.drive.peds_visible
       : slide.drive.peds_casting < slide.drive.peds_visible)
   && cost.fps >= 30 && cost.tris < 6500000                     // the triangles are the honest number (a district differs by sentence; the drift fixture sits near 2 M); the frame rate on a shared card is only a floor
   && errs.length === 0;

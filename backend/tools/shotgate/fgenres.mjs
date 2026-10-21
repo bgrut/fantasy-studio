@@ -64,7 +64,8 @@ if (TD) {
     // (2026-10-21) polled: the wave is woken on a game frame, and a busy page read the gate
     // empty at 1.5 s while the attackers were a frame or two away
     let m1 = await d();
-    for (let k = 0; k < 20 && !(m1.alive > 0 && m1.q.wave === 1); k++) { await wait(250); m1 = await d(); }
+    // (2026-10-21) and for longer: in a full gate the page drew a frame or two a second
+    for (let k = 0; k < 48 && !(m1.alive > 0 && m1.q.wave === 1); k++) { await wait(250); m1 = await d(); }
     check(m1.alive > 0 && m1.q.wave === 1, `the first wave walked out of the gate: ${m1.alive} attackers`);
     await wait(5000);
     const m2 = await d();
