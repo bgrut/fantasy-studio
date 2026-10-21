@@ -21,8 +21,13 @@ try {
     return { mode: f.mode, vibe: window.__vibe || null, design: window.__design ? window.__design() : null,
              places: (window.__places || []).map(q => q.kind), objectives: (window.__spec.objectives || []).map(o => o.kind + ':' + o.label) };
   }));
-  // frame rate over two seconds
-  out.fps = await p.evaluate(() => new Promise(res => { let n = 0; const t0 = performance.now(); const f = () => { n++; if (performance.now() - t0 < 2000) requestAnimationFrame(f); else res(+(n / ((performance.now() - t0) / 1000)).toFixed(1)); }; requestAnimationFrame(f); }));
+  // frame rate over two seconds, and the worst frame: once just after the start (the
+  // cold-start hitch, reported) and once settled (the frame rate that is judged)
+  const fpsWin = () => p.evaluate(() => new Promise(res => { let n = 0, worst = 0, last = performance.now(); const t0 = last;
+    const f = () => { const t = performance.now(); worst = Math.max(worst, t - last); last = t; n++; if (t - t0 < 2000) requestAnimationFrame(f); else res([+(n / ((t - t0) / 1000)).toFixed(1), Math.round(worst)]); }; requestAnimationFrame(f); }));
+  const [f0, w0] = await fpsWin(); out.fps_start = f0; out.hitch_ms = w0;
+  await wait(6000);
+  const [f1, w1] = await fpsWin(); out.fps = f1; out.worst_ms = w1;
   // the hero's view, and the frame's light (mean and spread of luminance); the judged
   // shots are the world alone: every overlay hidden, so the HUD is not what is marked
   const bare = (on) => p.evaluate((on) => { let st = document.getElementById('bench-bare');

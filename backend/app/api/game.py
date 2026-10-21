@@ -2598,6 +2598,24 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                 if _hre.search(r"\b(misty|mist|foggy|fog|hazy|haze)\b", _hp) and (spec.world.fog_density or 0) < 0.7:
                     spec.world.fog_density = 0.7
                     spec.world.fog = True
+                # (2026-10-21) fog is not haze: "in the fog" at 0.7 was clear for the first
+                # 35 m; fog, foggy and a thick mist close the world in (the runtime reads 0.9+)
+                if _hre.search(r"\b(fog|foggy|fogbound|thick mist|pea soup|whiteout)\b", _hp) and not _hre.search(r"\bfog(?:horn|lights?)\b", _hp):
+                    spec.world.fog_density = max(spec.world.fog_density or 0, 0.9)
+                    spec.world.fog = True
+                # (2026-10-21) and the weather it names: "in the rain", "in a storm",
+                # "under falling snow" were left to the model, and the benchmark's judge
+                # found the jungle temple dry and the castle storm absent
+                _wx = ("snow" if _hre.search(r"\b(snow\w*|blizzard\w*|snowfall|falling snow|sleet)\b", _hp) and not _hre.search(r"\bsnow (?:leopard|owl|globe)s?\b", _hp)
+                       else "rain" if _hre.search(r"\b(rain\w*|storm\w*|downpour|drizzl\w*|thunder\w*|monsoon|showers?)\b", _hp)
+                       else None)
+                if _wx and spec.world.weather != _wx and spec.world.sky not in ("space", "mars"):
+                    job.setdefault("notes", []).append(f"weather {spec.world.weather} -> {_wx} (the sentence says so)")
+                    spec.world.weather = _wx
+                if _hre.search(r"\b(storm\w*|gales?|thunder\w*|tempest\w*|hurricanes?|blizzard\w*)\b", _hp):
+                    spec.world.wind = max(float(getattr(spec.world, "wind", 0.5) or 0.5), 0.95)
+                    if spec.world.sky == "day":
+                        spec.world.sky = "overcast"           # a storm is not under a clear noon sky
                     job.setdefault("notes", []).append("the air is misty: the sentence says so")
         except Exception as _hwe:
             job.setdefault("notes", []).append(f"hour and air skipped: {_hwe}")

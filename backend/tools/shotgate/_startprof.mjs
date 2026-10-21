@@ -1,0 +1,21 @@
+// What runs in the first seconds of play: J=job_N node _startprof.mjs
+import puppeteer from 'puppeteer-core';
+const b = await puppeteer.launch({ headless: 'new', executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', args: ['--use-angle=d3d11', '--enable-unsafe-swiftshader', '--window-size=1280,720'] });
+const p = await b.newPage(); await p.setViewport({ width: 1280, height: 720 });
+await p.goto(`http://127.0.0.1:8789/games/${process.env.J}/dist/index.html`, { waitUntil: 'domcontentloaded' });
+const w = ms => new Promise(r => setTimeout(r, ms));
+await w(9000);
+const s = await p.target().createCDPSession();
+await s.send('Profiler.enable'); await s.send('Profiler.setSamplingInterval', { interval: 1000 }); await s.send('Profiler.start');
+await p.click('#startbtn').catch(() => {});
+await w(+(process.env.MS || 8000));
+const { profile } = await s.send('Profiler.stop');
+const byId = new Map(profile.nodes.map(n => [n.id, n])), self = new Map(), tot = new Map();
+const parent = new Map(); for (const n of profile.nodes) for (const c of (n.children || [])) parent.set(c, n.id);
+profile.samples.forEach((id, k) => { const dt = profile.timeDeltas[k] || 0; const n = byId.get(id);
+  const key = (x) => (x.callFrame.functionName || '(anon)') + ' ' + (x.callFrame.url || '').split('/').pop() + ':' + x.callFrame.lineNumber;
+  self.set(key(n), (self.get(key(n)) || 0) + dt);
+  const seen = new Set(); let cur = id; while (cur) { const nn = byId.get(cur), kk = key(nn); if (!seen.has(kk)) { tot.set(kk, (tot.get(kk) || 0) + dt); seen.add(kk); } cur = parent.get(cur); } });
+console.log('SELF'); [...self.entries()].sort((a, b) => b[1] - a[1]).slice(0, 14).forEach(([k, v]) => console.log((v / 1000).toFixed(0).padStart(7) + ' ms  ' + k));
+console.log('TOTAL'); [...tot.entries()].sort((a, b) => b[1] - a[1]).slice(0, 22).forEach(([k, v]) => console.log((v / 1000).toFixed(0).padStart(7) + ' ms  ' + k));
+await b.close();

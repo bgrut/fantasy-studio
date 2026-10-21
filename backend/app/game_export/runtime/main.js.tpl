@@ -41,6 +41,7 @@ import * as __FLORA from './proc/flora.js';
 import * as __GRASS from './proc/grass.js';
 import * as __PLACES from './proc/places.js';
 import * as __DESIGN from './proc/design.js';
+import * as __WEATHER from './proc/weather.js';
 import { createVolcano as __createVolcano } from './proc/volcano.js';
 import { waterMaterial as __waterMaterial, waterKind as __waterKind, groundMist as __groundMist, shoreDepth as __shoreDepth } from './proc/water.js';
 import { snowTextures as __snowTextures } from './proc/ground.js';
@@ -715,12 +716,17 @@ async function main() {
     // DEFAULT) milked out everything past ~22 m — battle royale foxes at 40 m
     // were 60% fog. Default air is now CRISP (near 0.55 of world, full fog
     // well past the far edge); prompted "thick fog" still closes right in.
-    const near = SPEC.world.size_m * (0.80 - fd * 0.72);   // 0.80..0.08 of world
+    let near = SPEC.world.size_m * (0.80 - fd * 0.72);     // 0.80..0.08 of world
     let far  = SPEC.world.size_m * (2.20 - fd * 1.55);   // 2.20..0.65 of world
     // a forest to the horizon needs air to see it through: ordinary and
     // clear air carry the eye out to the land's far edge, with the haze
     // deepening on the way (aerial perspective); thick fog stays thick
     if (FLORA && FLORA.outer && fd <= 0.6) far = Math.max(far, FLORA.R * 0.95);
+    // (2026-10-21) FOG IS NOT HAZE: "in the fog" at 0.7 stood clear for thirty-five
+    // metres and the judge found no fog at all. At 0.9 and over (the planner's fog,
+    // foggy, thick mist) it closes in from a few metres and swallows the world by
+    // forty to eighty: things loom out of it as you walk
+    if (fd >= 0.88) { near = 3; far = Math.max(40, Math.min(85, SPEC.world.size_m * 0.42)); }
     scene.fog = new THREE.Fog(pal.fog, Math.max(near, 2), Math.max(far, near + 20));
   } else if (FLORA && FLORA.outer) {
     // no fog asked for: still a far haze, or the forest would stop at a line
@@ -2771,7 +2777,7 @@ async function main() {
   {
     // (2026-10-20) and the sentence itself: "a misty mountain valley" had none, its world being named "mountains"
     const _mw = (((FLORA && FLORA.words) || [SPEC.world.name, SPEC.world.setting, SPEC.title, SPEC.description].filter(Boolean).join(' ')) + ' ' + (SPEC.prompt || '')).toLowerCase();
-    if (!INTERIOR && !OSM && !SPEC.world.pano && (SPEC.view || '3d') === '3d' && /swamp|marsh|bog|bayou|mire|misty|mist|foggy/.test(_mw)) {
+    if (!INTERIOR && !OSM && !SPEC.world.pano && (SPEC.view || '3d') === '3d' && /swamp|marsh|bog|bayou|mire|misty|mist|foggy|\bfog\b/.test(_mw)) {   // (2026-10-21) "in the fog" too
       try {
         MIST = __groundMist(scene, { hAt, clock: WIND_U, density: /swamp|marsh|bog|bayou|mire/.test(_mw) ? 0.85 : 0.6,
                                      color: new THREE.Color(pal.fog).lerp(new THREE.Color(0xffffff), 0.25) });
@@ -10955,7 +10961,20 @@ async function main() {
   const WEATHER = SPEC.world.weather || 'none';
   const WIND = SPEC.world.wind ?? 0.5;
   let precip = null, precipVel = 0, precipBox = 46;
-  if (WEATHER === 'rain' || WEATHER === 'snow') {
+  // RAIN YOU CAN SEE (2026-10-21, proc/weather.js): streaks on the GPU round the
+  // camera, slanted by the wind, thicker in a storm, and a storm's lightning.
+  // Snow keeps its soft drifting flakes below.
+  let RAIN = null, STORM_FX = null;
+  const _stormy = window.__stormSea || WIND >= 0.9 || /\b(storm\w*|thunder\w*|tempest\w*|hurricanes?|monsoon)\b/.test(String(SPEC.prompt || '').toLowerCase());
+  if (WEATHER === 'rain' && !INTERIOR) {
+    try {
+      const _wa = (SPEC.seed || 1) * 0.37;
+      RAIN = __WEATHER.rainField(THREE, scene, { intensity: _stormy ? 1 : 0.55, wind: _stormy ? Math.max(WIND, 0.8) : WIND, windDir: [Math.cos(_wa), Math.sin(_wa)], clock: { value: 0 } });
+      if (_stormy) STORM_FX = __WEATHER.lightning(THREE, scene, { rng: mulberry32((SPEC.seed || 1) + 4441) });
+      window.__rain = { drops: RAIN.count, storm: !!STORM_FX, flashes: () => (STORM_FX ? STORM_FX.flashes : 0) };
+    } catch (e) { console.warn('[game] rain field skipped', e); RAIN = null; }
+  }
+  if ((WEATHER === 'rain' && !RAIN) || WEATHER === 'snow') {
     const N = WEATHER === 'rain' ? 2200 : 1400;
     precipVel = WEATHER === 'rain' ? 20 : 1.6;
     const pos = new Float32Array(N * 3);
@@ -11168,6 +11187,8 @@ async function main() {
   })();
 
   function stepDynamics(dt, playerPos, t) {
+    if (RAIN) { RAIN.mesh.material.uniforms.uTime.value = t; RAIN.update(camera); }
+    if (STORM_FX) STORM_FX.step(dt);
     if (precip) {
       const a = precip.geometry.attributes.position, arr = a.array, N = arr.length / 3;
       const drift = WIND * (WEATHER === 'snow' ? 1.6 : 0.7);
@@ -11684,6 +11705,12 @@ async function main() {
         });
         const rt = new THREE.WebGLRenderTarget(8, 8, { depthBuffer: true }), prev = renderer.getRenderTarget(), t0 = performance.now();
         renderer.setRenderTarget(rt); renderer.render(scene, camera); renderer.setRenderTarget(prev); rt.dispose();
+        // and through the whole post chain: the ambient-occlusion pass draws the scene again
+        // with its own override materials, a second set of programs, and the first frame of
+        // play spent fourteen seconds building them. Kept off the screen (the last pass
+        // renders to its buffer), so the forced-visible frame is never seen
+        const C = window.__composer;
+        if (C) { const was = C.renderToScreen; C.renderToScreen = false; try { C.render(0.016); } finally { C.renderToScreen = was; } }
         for (const o of shown) o.visible = false;
         for (const o of unculled) o.frustumCulled = true;
         for (const o of counted) o.count = 0;
