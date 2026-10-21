@@ -1370,7 +1370,7 @@ async function main() {
       sun.castShadow = false;
       sun.intensity = 0;                 // cascades carry the sun now
       const _csmSeen = new WeakSet();
-      window.__csmPatch = () => scene.traverse((o) => {
+      window.__csmPatch = () => { let n = 0; scene.traverse((o) => {
         if (!o.material) return;
         const ms = Array.isArray(o.material) ? o.material : [o.material];
         for (const m of ms) {
@@ -1392,10 +1392,10 @@ async function main() {
             // new defines mean nothing to a material already compiled: it
             // has to be built again, or it keeps lighting with three suns
             m.needsUpdate = true;
-            _csmSeen.add(m);
+            _csmSeen.add(m); n++;
           }
         }
-      });
+      }); return n; };
     } catch (e) { console.warn('[game] CSM unavailable: ' + e.message); csm = null; }
   }
 
@@ -11713,13 +11713,18 @@ async function main() {
     // flagship's warm-up, factory.js.tpl). The lights are left as they are:
     // a program is built for the lights it will actually see.
     {
+      const _drawn = new WeakSet();
       const _warm = () => { try {
+        // the cascades patch a material only in the play loop, so whatever landed during the
+        // card was built without them and built again at the first frame of play
+        if (window.__csmPatch) window.__csmPatch();
         const shown = [], unculled = [], counted = [];
         scene.traverse(o => {
           if (o.isLight) return;
           if (!o.visible) { o.visible = true; shown.push(o); }
           if (o.frustumCulled) { o.frustumCulled = false; unculled.push(o); }
           if (o.isInstancedMesh && o.count === 0) { o.count = 1; counted.push(o); }
+          _drawn.add(o);
         });
         const rt = new THREE.WebGLRenderTarget(8, 8, { depthBuffer: true }), prev = renderer.getRenderTarget(), t0 = performance.now();
         renderer.setRenderTarget(rt); renderer.render(scene, camera); renderer.setRenderTarget(prev); rt.dispose();
@@ -11735,6 +11740,20 @@ async function main() {
         (window.__warmMs = window.__warmMs || []).push(Math.round(performance.now() - t0));
       } catch (e) { console.warn('[game] warm-up', e); } };
       setTimeout(_warm, 400); setTimeout(_warm, 2600);     // and again once the late models have landed
+      // LATE ARRIVALS ARE DRAWN TOO (2026-10-21). Models land for seconds after the
+      // warm-ups (the cast, props, ferns, a named temple) and stand outside the opening's
+      // view, so nothing had drawn them, and play stalled on their first draw. Built
+      // without drawing (renderer.compile) was not enough: on d3d11 the driver finishes a
+      // program for each vertex layout at its first real draw, and the first read-back of
+      // play waited seconds on it. So while the card is up, anything the warm-up has not
+      // yet drawn brings the whole warm-up back; with everything else already built that
+      // costs some thirty milliseconds.
+      const _late = setInterval(() => {
+        if (!document.getElementById('fsstart')) { clearInterval(_late); return; }   // play has begun
+        let fresh = false;
+        scene.traverse(o => { if (!fresh && !o.isLight && !_drawn.has(o) && (o.isMesh || o.isPoints || o.isLine || o.isSprite)) fresh = true; });
+        if (fresh) { _warm(); window.__rewarms = (window.__rewarms || 0) + 1; }
+      }, 900);
     }
     document.getElementById('startbtn').addEventListener('click', () => {
       ov.remove();
@@ -24917,23 +24936,27 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
 
     // Inspect mode is a SOFT FREEZE: NPCs, damage and timers hold still so
     // you can edit in peace, but the camera, player and rendering stay live
+    // ── LIGHT BUDGET (2026-08-05): WebGL2 compiles a FIXED number of light
+    // slots into every shader. Ten lit torches plus sun and hemi already
+    // sat at the ceiling — adding anything (spotlight cookies) made
+    // MeshStandardMaterial fail to LINK, which renders a black room rather
+    // than logging a warning. Rooms you cannot see do not need to be lit,
+    // so only the nearest few torches stay on. This is both the fix and
+    // the headroom that lighting work needs.
+    // (2026-10-21) Kept from the first frame, the opening card included: it ran only once
+    // play began, so the card was drawn with every torch lit and the first frame of play
+    // with four. The count of lights is part of every lit shader, so that one frame rebuilt
+    // all of them, thirty cascaded-shadow programs and an eight-second freeze at Start.
+    if (window.__torches && window.__torches.length > 4 && (window.__ltT || 0) < performance.now()) {
+      window.__ltT = performance.now() + 250;   // 4Hz is plenty; lights are cheap to toggle
+      const at = playerObj ? playerObj.position : camera.position, px2 = at.x, pz2 = at.z;
+      const ranked = window.__torches
+        .map(L => [L, (L.position.x - px2) ** 2 + (L.position.z - pz2) ** 2])
+        .sort((a, b) => a[1] - b[1]);
+      ranked.forEach(([L], i) => { L.visible = i < 4; });
+    }
     if (gameStarted && !paused && !inspectOn) {
       playT += dt;
-      // ── LIGHT BUDGET (2026-08-05): WebGL2 compiles a FIXED number of light
-      // slots into every shader. Ten lit torches plus sun and hemi already
-      // sat at the ceiling — adding anything (spotlight cookies) made
-      // MeshStandardMaterial fail to LINK, which renders a black room rather
-      // than logging a warning. Rooms you cannot see do not need to be lit,
-      // so only the nearest few torches stay on. This is both the fix and
-      // the headroom that lighting work needs.
-      if (window.__torches && window.__torches.length > 4 && (window.__ltT || 0) < playT) {
-        window.__ltT = playT + 0.25;          // 4Hz is plenty; lights are cheap to toggle
-        const px2 = playerObj.position.x, pz2 = playerObj.position.z;
-        const ranked = window.__torches
-          .map(L => [L, (L.position.x - px2) ** 2 + (L.position.z - pz2) ** 2])
-          .sort((a, b) => a[1] - b[1]);
-        ranked.forEach(([L], i) => { L.visible = i < 4; });
-      }
       if (window.__flights && window.__flights.length) {
         window.__flights = window.__flights.filter(f => !f.step());
       }

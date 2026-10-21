@@ -41,7 +41,13 @@ async function walkUpTo(p, i) {
   for (let k = 0; k < 16; k++) { await wait(200); const d = await p.evaluate(i => { const [x, z] = window.__game.facts().mystery.where[i]; const [px, , pz] = window.__game.pos(); return Math.hypot(px - x, pz - z); }, i); if (d < 2.4 && k >= 2) break; }
   await wait(300);
 }
-async function key(p, code) { await p.keyboard.press(code); await wait(350); }
+// (2026-10-21) held across two drawn frames: the game reads keys once a frame, and in a
+// full gate a starved page took a quick press and release between two frames and never saw E
+async function key(p, code) {
+  await p.keyboard.down(code);
+  await p.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))));
+  await p.keyboard.up(code); await wait(350);
+}
 async function collectAll(p) {
   const left = await p.evaluate(() => window.__game.objectives().left);
   // (2026-10-15) polled: a starved headless frame took the teleport and the
@@ -104,7 +110,8 @@ if (m0) {
   // the wrong name loses, and says who it was
   await walkUpTo(p, inn);
   await key(p, 'KeyE'); await key(p, 'KeyY');
-  const m3 = await M(p);
+  let m3 = await M(p);
+  for (let t = 0; t < 12 && m3.over !== 'lost'; t++) { await wait(250); m3 = await M(p); }
   check(m3.over === 'lost' && (m3.verdict || '').includes(m0.culprit), `naming an innocent loses: "${(m3.verdict || '').slice(0, 90)}"`);
   check(errs.length === 0, 'no page errors' + (errs.length ? ': ' + errs[0] : ''));
   await p.close();
