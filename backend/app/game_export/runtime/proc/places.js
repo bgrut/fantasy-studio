@@ -23,7 +23,11 @@ const KINDS = [
   ['tidepools', /\b(tide ?pools?|rock ?pools?|rockpools?)\b/],
   ['stones', /\b(standing stones?|stone circles?|menhirs?|dolmens?)\b/],
   ['well', /\b(wishing wells?|old wells?|stone wells?|village wells?)\b/],
+  // (2026-10-20) a jungle, lost or ancient temple: the stepped monument (main.js.tpl's
+  // buildAncientTemple); an East Asian temple is a pagoda and is left to its own builder
+  ['temple', /\b(?:jungle |lost |ancient |ruined |forgotten |stone |overgrown |maya\w* |aztec |inca |khmer )?(temples?|ziggurats?)\b/],
 ];
+const EAST_ASIA = /japan|chinese|china|asian|zen|torii|pagoda|cherry|sakura|kyoto|shinto|buddhis|tibet|himalaya|monaster|korea|bamboo/;
 
 function rng(seed) {
   let a = (seed >>> 0) || 1;
@@ -38,6 +42,7 @@ export function namedPlaces(prompt, goalLabel) {
     const m = re.exec(p);
     if (!m) continue;
     if (gl && m[1] && gl.includes(m[1].replace(/s$/, ''))) continue;          // the goal builds its own
+    if (kind === 'temple' && EAST_ASIA.test(p)) continue;
     const before = p.slice(Math.max(0, m.index - 24), m.index);
     out.push({ kind, at: m.index, start: /\bfrom (?:his|her|their|the|a|an|its|my|your)\s+(?:\w+\s+)?$/.test(before) });
   }
@@ -267,6 +272,15 @@ export function buildPlaces(o) {
       }
       return [0, 0];
     },
+    temple(G) {
+      // the monument is built later, once the facade kit exists (main.js.tpl runs the queue);
+      // here its ground is cleared, its base is solid, and its place is kept
+      footing(G, 17, 17);
+      solid(G, 0, 1.8, 0, 8, 1.8, 8);
+      (window.__placesDeferred = window.__placesDeferred || []).push(() => { if (o.temple) { const t = o.temple(); if (t) G.add(t); } });
+      hole(G, 9.5, 9.5);
+      return [0, 9.5];                                                             // at the foot of the stair
+    },
     well(G) {
       footing(G, 2.2, 2.2);
       const ring = new THREE.LatheGeometry([[0.8, 0], [1.05, 0], [1.05, 0.85], [0.8, 0.85]].map(p => new THREE.Vector2(p[0], p[1])), 24);
@@ -302,7 +316,7 @@ export function buildPlaces(o) {
       for (let j = 0; j < 12; j++) { const b = j / 12 * 6.28; if (hAt(x + Math.cos(b) * 6, z + Math.sin(b) * 6) < WY - 0.2) { best = { x, z, wx: Math.cos(b), wz: Math.sin(b) }; break; } }
       if (best && !ok(best.x, best.z, 4, true)) best = null; }
     return best; };
-  const rads = { cottage: 5, boathouse: 6, chapel: 7, tidepools: 5, stones: 8, well: 2 };
+  const rads = { cottage: 5, boathouse: 6, chapel: 7, tidepools: 5, stones: 8, well: 2, temple: 11 };
   const middle = named.filter(n => !n.start), N = middle.length;
   let mi = 0;
   for (const n of named) {
@@ -329,7 +343,7 @@ export function buildPlaces(o) {
     try { item = KIT[n.kind](G); } catch (e) { console.warn('[places] ' + n.kind + ': ' + e.message); scene.remove(G); continue; }
     const [ix, iz] = frame(G)(item[0], item[1]);
     places.push({ kind: n.kind, start: n.start, x: spot.x, z: spot.z, yaw: spot.yaw, item: item.length > 2 ? [ix, iz, item[2]] : [ix, iz] });
-    spots.push([spot.x, spot.z, rad + 2]);
+    spots.push([spot.x, spot.z, rad + (n.kind === 'temple' ? 12 : 2)]);   // a temple stands in a glade: a jungle's canopies spread ten metres
   }
   return { places, holes, spots, tick: (t, dt) => { for (const f of ticks) f(t, dt); } };
 }

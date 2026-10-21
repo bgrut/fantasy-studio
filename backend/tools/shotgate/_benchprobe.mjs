@@ -49,7 +49,7 @@ try {
   // from above, toward the goal
   await p.evaluate(() => { const L = window.__spec.world.level || {}, q = window.__game.pos(), g = L.goal || [q[0] + 40, q[2]];
     const dx = g[0] - q[0], dz = g[1] - q[2], dl = Math.hypot(dx, dz) || 1;
-    window.__camPin = { pos: [q[0] - dx / dl * 18, q[1] + 34, q[2] - dz / dl * 18], look: [q[0] + dx * 0.5, q[1], q[2] + dz * 0.5] }; });
+    window.__camPin = { pos: [q[0] - dx / dl * 26, q[1] + 52, q[2] - dz / dl * 26], look: [q[0] + dx * 0.5, q[1], q[2] + dz * 0.5] }; });   // (52 m: a jungle's kapoks reach past 35)
   await wait(1800); await bare(true); await wait(200);
   await p.screenshot({ path: `${O}_high.jpg`, type: 'jpeg', quality: 80 });
 } catch (e) { out.crash = String(e.message || e).slice(0, 200); }
