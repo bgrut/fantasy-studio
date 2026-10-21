@@ -7,7 +7,8 @@ import puppeteer from 'puppeteer-core';
 import fs from 'fs';
 const b = await puppeteer.launch({ headless: 'new', executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', args: ['--use-angle=d3d11', '--window-size=1280,720'] });
 const p = await b.newPage(); await p.setViewport({ width: 1280, height: 720 });
-await p.evaluateOnNewDocument(() => {
+await p.evaluateOnNewDocument((NOHW) => {
+  if (NOHW) window.__noHudWarm = true;
   const T = window.__sk = { frames: [], dom: [] };
   let last = 0; const f = (t) => { if (last && t - last > 150) T.frames.push([Math.round(last), Math.round(t - last)]); last = t; requestAnimationFrame(f); }; requestAnimationFrame(f);
   const desc = n => n ? (n.id ? '#' + n.id : (n.tagName || '?').toLowerCase() + (typeof n.className === 'string' && n.className ? '.' + n.className.split(' ').join('.') : '')) : '?';
@@ -15,18 +16,20 @@ await p.evaluateOnNewDocument(() => {
     const n = m.type === 'characterData' ? m.target.parentElement : m.target;
     T.dom.push([Math.round(performance.now()), desc(n) + (m.type === 'attributes' ? ' @' + m.attributeName : ' ' + m.type) + (m.addedNodes && m.addedNodes.length ? ' +' + desc(m.addedNodes[0]) : '')]);
     if (T.dom.length > 4000) T.dom.splice(0, 1000); } }).observe(document.body, { subtree: true, attributes: true, childList: true, characterData: true }));
-});
+}, !!process.env.NOHW);
 await p.goto(`http://127.0.0.1:8789/games/${process.env.J}/dist/index.html`, { waitUntil: 'domcontentloaded' });
 const w = ms => new Promise(r => setTimeout(r, ms));
 for (let i = 0; i < 80; i++) { if (await p.evaluate(() => !!(window.__renderer && document.getElementById('startbtn')))) break; await w(250); }
-await w(+(process.env.CLICK || 9000));
 const TRACE = (process.env.TEMP || '.') + '/skiastall_trace.json';
-await p.tracing.start({ path: TRACE, categories: ['devtools.timeline', 'toplevel', 'gpu', 'skia', 'disabled-by-default-skia.shaders'] });
+const CATS = ['devtools.timeline', 'toplevel', 'gpu', 'skia', 'disabled-by-default-skia.shaders'];
+if (process.env.FROMREADY) await p.tracing.start({ path: TRACE, categories: CATS });
+await w(+(process.env.CLICK || 9000));
+if (!process.env.FROMREADY) await p.tracing.start({ path: TRACE, categories: CATS });
 const tClick = await p.evaluate(() => Math.round(performance.now()));
 await p.click('#startbtn').catch(() => {});
 await w(+(process.env.SPAN || 16000));
 await p.tracing.stop();
-const T = await p.evaluate(() => window.__sk);
+const T = await p.evaluate(() => Object.assign(window.__sk, { hudWarmMs: window.__hudWarmMs }));
 await b.close();
 const tr = JSON.parse(fs.readFileSync(TRACE, 'utf8')); fs.unlinkSync(TRACE);
 const ev = tr.traceEvents || tr;
@@ -36,10 +39,15 @@ const slow = ev.filter(e => e.ph === 'X' && e.dur > 200000 && /shader|compile|li
 // map trace time to page time with the click marker: the first EventDispatch click
 const click = ev.find(e => e.name === 'EventDispatch' && e.args && e.args.data && e.args.data.type === 'click');
 const off = click ? click.ts / 1000 - tClick : null;
-console.log('click at', tClick, 'long frames after click', JSON.stringify(T.frames.filter(f => f[0] + f[1] > tClick)));
+
+if (off != null) { let pre = 0, post = 0; for (const e of ev) if (e.ph === 'X' && e.name === 'shader_compile') { const t = e.ts / 1000 - off; if (t < tClick) pre += e.dur / 1000; else post += e.dur / 1000; }
+  console.log('skia shader_compile total: before the click ' + Math.round(pre) + ' ms, after ' + Math.round(post) + ' ms'); }
+console.log('hud warm ms', T.hudWarmMs, 'click at', tClick, 'long frames after click', JSON.stringify(T.frames.filter(f => f[0] + f[1] > tClick)));
 for (const s of slow.sort((a, c) => a.ts - c.ts)) {
   const pt = off == null ? null : Math.round(s.ts / 1000 - off);
   const before = pt == null ? [] : T.dom.filter(d => d[0] <= pt && d[0] > pt - 400).map(d => d[1]);
   console.log(String(s.ms).padStart(6) + ' ms  at ' + pt + '  ' + s.name + '  [' + s.thread + ']  dom: ' + [...new Set(before)].slice(-6).join(' | '));
 }
 if (!slow.length) console.log('no shader build over 200 ms in the trace');
+if (process.env.DOMLIST) { const seen = new Map(); for (const [t, d] of T.dom) if (t > tClick && t < tClick + +(process.env.SPAN || 16000)) { const k = d.replace(/ \+\?$/, ''); if (!seen.has(k)) seen.set(k, t - tClick); }
+  console.log('first DOM changes after the click (ms):'); for (const [k, t] of seen) console.log('  ' + String(t).padStart(6) + '  ' + k); }

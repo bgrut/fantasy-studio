@@ -15553,29 +15553,143 @@ async function main() {
     };
     return g;
   }
-  // a delivery pad (2026-10-07): a marked disc on a roof or the ground, a
-  // ring that pulses, a tall beam to find it by; a parcel left on it once done
-  function makePad(indoor) {
-    const g = new THREE.Group();
-    const c = document.createElement('canvas'); c.width = c.height = 256; const x = c.getContext('2d');
-    x.fillStyle = '#2a2e34'; x.fillRect(0, 0, 256, 256); x.strokeStyle = '#ffcf3a'; x.lineWidth = 16; x.beginPath(); x.arc(128, 128, 108, 0, 7); x.stroke();
-    x.fillStyle = '#f2f2ee'; x.fillRect(84, 92, 88, 70); x.fillStyle = '#c8a26a'; x.fillRect(84, 92, 88, 16); x.fillStyle = '#2a2e34'; x.fillRect(122, 92, 12, 70);
-    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
-    const top = new THREE.MeshStandardMaterial({ map: t, roughness: 0.6 }), side = new THREE.MeshStandardMaterial({ color: 0x2a2e34, roughness: 0.7 });
-    top.userData.noAutoTex = true; side.userData.noAutoTex = true;
-    const disc = new THREE.Mesh(new THREE.CylinderGeometry(2.2, 2.2, 0.1, 32), [side, top, side]); disc.position.y = 0.05; disc.receiveShadow = true; g.add(disc);
-    const ringM = new THREE.MeshBasicMaterial({ color: 0xffcf3a, transparent: true, opacity: 0.8, depthWrite: false });
-    const ring = new THREE.Mesh(new THREE.TorusGeometry(2.4, 0.07, 8, 40), ringM); ring.rotation.x = Math.PI / 2; ring.position.y = 0.15; g.add(ring);
-    const beamM = new THREE.MeshBasicMaterial({ color: 0xffd860, transparent: true, opacity: 0.22, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
-    const bh = indoor ? 2.4 : 30;                       // indoors a short glow, not a shaft through the ceiling
-    const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.6, bh, 16, 1, true), beamM); beam.position.y = bh / 2; g.add(beam);
+  // A DROP IS A PLACE (2026-10-21). A delivery was a dark disc with a gold ring and a
+  // thirty-metre gold beam over it, a game's marker rather than anywhere a parcel is left,
+  // and the eye read it so. Against a building it is now a doorstep: a worn stone step, a
+  // woven mat, an iron post with a lit lantern and a painted house number, the lantern's
+  // pool of light on the ground; out in the open a bench under the same lantern, a
+  // waystation; indoors a mat and a lantern on the floor. The lantern is found by its glow
+  // through rain and fog, and once the parcel is left on the step it burns low. A drone's
+  // roof drop keeps its landing pad, with blinking corner lamps for the beam.
+  const _padGlow = (() => { const c = document.createElement('canvas'); c.width = c.height = 64; const g = c.getContext('2d');
+    const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32); gr.addColorStop(0, 'rgba(255,236,200,1)'); gr.addColorStop(0.2, 'rgba(255,190,110,.55)'); gr.addColorStop(1, 'rgba(255,150,60,0)');
+    g.fillStyle = gr; g.fillRect(0, 0, 64, 64); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t; })();
+  function makePad(indoor, roof, seed, wall) {
+    const g = new THREE.Group(), rr = mulberry32((SPEC.seed || 1) * 131 + (seed || 1) * 977);
+    const M = (o) => { const m = new THREE.MeshStandardMaterial(o); m.userData.noAutoTex = true; return m; };
+    const add = (geo, m, x, y, z, shadow = true) => { const o = new THREE.Mesh(geo, m); o.position.set(x, y, z); o.castShadow = shadow; o.receiveShadow = true; g.add(o); return o; };
     const parcel = new THREE.Group();
-    const bm = new THREE.MeshStandardMaterial({ color: 0xc8a26a, roughness: 0.8 }), tape = new THREE.MeshStandardMaterial({ color: 0x8a6a40, roughness: 0.6 });
-    parcel.add(new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.55, 0.6), bm)); const tp = new THREE.Mesh(new THREE.BoxGeometry(0.82, 0.57, 0.12), tape); parcel.add(tp);
-    parcel.position.y = 0.38; parcel.visible = false; parcel.traverse(o => { if (o.isMesh) o.castShadow = true; }); g.add(parcel);
+    const bm = M({ color: 0xc8a26a, roughness: 0.8 }), tape = M({ color: 0x8a6a40, roughness: 0.6 });
+    parcel.add(new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.42, 0.46), bm)); parcel.add(new THREE.Mesh(new THREE.BoxGeometry(0.64, 0.44, 0.1), tape));
+    const twine = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.445, 0.48), tape); parcel.add(twine);
+    parcel.visible = false; parcel.rotation.y = (rr() - 0.5) * 0.6; parcel.traverse(o => { if (o.isMesh) o.castShadow = true; }); g.add(parcel);
+    if (roof) {
+      const c = document.createElement('canvas'); c.width = c.height = 256; const x = c.getContext('2d');
+      x.fillStyle = '#2a2e34'; x.fillRect(0, 0, 256, 256); x.strokeStyle = '#ffcf3a'; x.lineWidth = 16; x.beginPath(); x.arc(128, 128, 108, 0, 7); x.stroke();
+      x.fillStyle = '#f2f2ee'; x.fillRect(84, 92, 88, 70); x.fillStyle = '#c8a26a'; x.fillRect(84, 92, 88, 16); x.fillStyle = '#2a2e34'; x.fillRect(122, 92, 12, 70);
+      const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+      const top = M({ map: t, roughness: 0.6 }), side = M({ color: 0x2a2e34, roughness: 0.7 });
+      const disc = new THREE.Mesh(new THREE.CylinderGeometry(2.2, 2.2, 0.1, 32), [side, top, side]); disc.position.y = 0.05; disc.receiveShadow = true; g.add(disc);
+      const ringM = new THREE.MeshBasicMaterial({ color: 0xffcf3a, transparent: true, opacity: 0.8, depthWrite: false });
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(2.4, 0.07, 8, 40), ringM); ring.rotation.x = Math.PI / 2; ring.position.y = 0.15; g.add(ring);
+      const lamps = [];
+      for (let k = 0; k < 4; k++) { const a = Math.PI / 4 + k * Math.PI / 2;
+        const lm = new THREE.MeshBasicMaterial({ color: 0xffb030 });
+        add(new THREE.CylinderGeometry(0.07, 0.09, 0.18, 10), M({ color: 0x30343a, roughness: 0.5, metalness: 0.5 }), Math.cos(a) * 2.6, 0.09, Math.sin(a) * 2.6);
+        const bulb = add(new THREE.SphereGeometry(0.075, 12, 8), lm, Math.cos(a) * 2.6, 0.22, Math.sin(a) * 2.6, false);
+        const h = new THREE.Sprite(new THREE.SpriteMaterial({ map: _padGlow, color: 0xffb030, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false }));
+        h.scale.setScalar(0.55); h.position.copy(bulb.position); h.position.y += 0.05; g.add(h); lamps.push([lm, h]); }
+      parcel.position.y = 0.32;
+      g.userData.pad = {
+        tick: (tt, done) => { ring.scale.setScalar(1 + (done ? 0 : Math.sin(tt * 3) * 0.06));
+          const on = done ? 1 : (Math.sin(tt * 4.2) > 0.2 ? 1 : 0.15);
+          for (const [lm, h] of lamps) { lm.color.setHex(done ? 0x5fe08a : 0xffb030); lm.color.multiplyScalar(on); h.material.color.copy(lm.color); h.material.opacity = done ? 0.35 : 0.9 * on; } },
+        done: () => { ringM.color.setHex(0x5fe08a); parcel.visible = true; },
+      };
+      return g;
+    }
+    // the lantern: glass that glows, a hood and frame of dark iron, a halo seen through weather
+    const iron = M({ color: 0x23211f, roughness: 0.55, metalness: 0.6 });
+    const glassM = M({ color: 0x3a2a18, emissive: 0xffb25a, emissiveIntensity: 2.2, roughness: 0.2 });
+    const lantern = (lx, ly, lz) => {
+      add(new THREE.BoxGeometry(0.15, 0.2, 0.15), glassM, lx, ly, lz, false);
+      for (const [px, pz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) add(new THREE.BoxGeometry(0.018, 0.24, 0.018), iron, lx + px * 0.08, ly, lz + pz * 0.08);
+      const hood = add(new THREE.ConeGeometry(0.15, 0.12, 4), iron, lx, ly + 0.17, lz); hood.rotation.y = Math.PI / 4;
+      add(new THREE.BoxGeometry(0.19, 0.025, 0.19), iron, lx, ly - 0.115, lz);
+      const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: _padGlow, color: 0xffb25a, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false, opacity: 0.75 }));
+      halo.scale.setScalar(0.8); halo.position.set(lx, ly, lz); g.add(halo);
+      return halo;
+    };
+    // the light it throws on the ground
+    const poolM = new THREE.MeshBasicMaterial({ map: _padGlow, color: 0xffa040, transparent: true, opacity: 0.32, depthWrite: false, blending: THREE.AdditiveBlending, polygonOffset: true, polygonOffsetFactor: -2 });
+    let halo, lanternGlass = glassM;
+    if (indoor) {
+      // a mat inside the door and a lantern standing on the floor beside it
+      halo = lantern(0.75, 0.13, 0.1);
+      parcel.position.set(-0.15, 0.23, 0.1);
+    } else {
+      // the post: a plinth, a fluted shaft, an arm over the step, the lantern hung from it
+      const px = wall ? 1.05 : 0.95, pz = wall ? 0.15 : -0.35;
+      add(new THREE.CylinderGeometry(0.1, 0.12, 0.22, 10), iron, px, 0.11, pz);
+      add(new THREE.CylinderGeometry(0.035, 0.05, 2.45, 10), iron, px, 1.3, pz);
+      add(new THREE.SphereGeometry(0.055, 10, 8), iron, px, 2.55, pz);
+      const arm = add(new THREE.BoxGeometry(0.5, 0.03, 0.03), iron, px - 0.25, 2.43, pz);
+      const brace = add(new THREE.BoxGeometry(0.28, 0.02, 0.02), iron, px - 0.11, 2.33, pz); brace.rotation.z = 0.62;
+      add(new THREE.CylinderGeometry(0.006, 0.006, 0.12, 4), iron, px - 0.46, 2.36, pz, false);
+      halo = lantern(px - 0.46, 2.19, pz);
+      // a painted number on a little board under the arm: whose door this is
+      const sc = document.createElement('canvas'); sc.width = 128; sc.height = 80; const sx = sc.getContext('2d');
+      const boards = ['#22382c', '#2b2f45', '#4a2224', '#3b3326', '#1f3640'][Math.floor(rr() * 5)];
+      sx.fillStyle = boards; sx.fillRect(0, 0, 128, 80); sx.strokeStyle = 'rgba(236,224,196,.85)'; sx.lineWidth = 4; sx.strokeRect(7, 7, 114, 66);
+      sx.fillStyle = '#ece0c4'; sx.font = '600 44px Georgia, serif'; sx.textAlign = 'center'; sx.textBaseline = 'middle'; sx.fillText(String(2 + Math.floor(rr() * 97)), 64, 44);
+      const st = new THREE.CanvasTexture(sc); st.colorSpace = THREE.SRGBColorSpace;
+      const signM = M({ map: st, roughness: 0.8 }), edge = M({ color: 0x2a2018, roughness: 0.9 });
+      const sign = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.19, 0.022), [edge, edge, edge, edge, signM, signM]);
+      sign.position.set(px - 0.14, 2.24, pz); sign.rotation.y = (rr() - 0.5) * 0.1; sign.castShadow = true; g.add(sign);
+      const pool = new THREE.Mesh(new THREE.PlaneGeometry(3.6, 3.6).rotateX(-Math.PI / 2), poolM); pool.position.set(px - 0.46, 0.03, pz + (wall ? 0.6 : 0)); g.add(pool);
+      if (wall) {
+        // the step against the wall, its front edge worn, and the mat before it
+        const stone = M({ map: HDT('stone', 0.6, 0.4), normalMap: HDN('stone', 0.6, 0.4), color: 0xb3ada3, roughness: 0.93 });
+        add(new THREE.BoxGeometry(1.8, 0.16, 0.95), stone, 0, 0.08, -0.05);
+        add(new THREE.BoxGeometry(1.7, 0.03, 0.06), stone, 0, 0.15, 0.42).rotation.x = 0.35;
+        parcel.position.set(-0.35, 0.37, -0.12);
+        // and the door it is left at: painted boards in four panels, a fanlight, a brass
+        // knob, in a stone surround set on the wall behind the step
+        const dc = document.createElement('canvas'); dc.width = 128; dc.height = 256; const dx = dc.getContext('2d');
+        const paint = ['#1f3a2e', '#24304a', '#5a1f22', '#2f2a26', '#3d4f5c', '#6b5a2a'][Math.floor(rr() * 6)];
+        dx.fillStyle = paint; dx.fillRect(0, 0, 128, 256);
+        for (let y = 0; y < 256; y += 2) { dx.fillStyle = 'rgba(255,255,255,' + (rr() * 0.025).toFixed(3) + ')'; dx.fillRect(0, y, 128, 1); }
+        const panel = (x, y, w, h) => { dx.fillStyle = 'rgba(0,0,0,.28)'; dx.fillRect(x, y, w, h); dx.fillStyle = paint; dx.fillRect(x + 4, y + 4, w - 8, h - 8);
+          dx.fillStyle = 'rgba(255,255,255,.07)'; dx.fillRect(x, y, w, 3); dx.fillRect(x, y, 3, h); };
+        panel(14, 64, 44, 78); panel(70, 64, 44, 78); panel(14, 156, 44, 86); panel(70, 156, 44, 86);
+        dx.fillStyle = 'rgba(255,214,150,.75)'; dx.beginPath(); dx.arc(64, 52, 46, Math.PI, 0); dx.fill();
+        dx.strokeStyle = 'rgba(30,24,18,.9)'; dx.lineWidth = 3; for (let k = 1; k < 5; k++) { const a = Math.PI + k * Math.PI / 5; dx.beginPath(); dx.moveTo(64, 52); dx.lineTo(64 + Math.cos(a) * 46, 52 + Math.sin(a) * 46); dx.stroke(); }
+        dx.fillStyle = '#c9a34a'; dx.beginPath(); dx.arc(100, 150, 5, 0, 7); dx.fill();
+        const dt2 = new THREE.CanvasTexture(dc); dt2.colorSpace = THREE.SRGBColorSpace;
+        const doorM = M({ map: dt2, roughness: 0.55, emissive: 0x2a1a08, emissiveMap: dt2, emissiveIntensity: 0.0 });
+        const doorEdge = M({ color: new THREE.Color(paint), roughness: 0.6 });
+        const door = new THREE.Mesh(new THREE.BoxGeometry(1.0, 2.15, 0.06), [doorEdge, doorEdge, doorEdge, doorEdge, doorM, doorEdge]);
+        door.position.set(0, 0.16 + 1.075, -0.5); door.castShadow = door.receiveShadow = true; g.add(door);
+        const surround = M({ map: HDT('stone', 0.4, 0.8), normalMap: HDN('stone', 0.4, 0.8), color: 0xc2bcb0, roughness: 0.9 });
+        for (const sxx of [-0.62, 0.62]) add(new THREE.BoxGeometry(0.22, 2.42, 0.12), surround, sxx, 0.16 + 1.21, -0.5);
+        add(new THREE.BoxGeometry(1.46, 0.2, 0.16), surround, 0, 0.16 + 2.4, -0.5);
+        add(new THREE.BoxGeometry(1.6, 0.06, 0.22), surround, 0, 0.16 + 2.53, -0.48);
+      } else {
+        // a bench of weathered boards to leave things on
+        const wood = M({ map: HDT('planks', 0.6, 0.6), normalMap: HDN('planks', 0.6, 0.6), color: 0x8f7356, roughness: 0.9 });
+        for (const bz of [-0.13, 0.0, 0.13]) add(new THREE.BoxGeometry(1.3, 0.04, 0.12), wood, -0.1, 0.47, bz - 0.35);
+        for (const lx of [-0.65, 0.45]) add(new THREE.BoxGeometry(0.07, 0.45, 0.36), wood, lx, 0.225, -0.35);
+        parcel.position.set(-0.25, 0.71, -0.35);
+      }
+    }
+    // the mat: coir, a border, the weave in rows; three colours of mat in the world
+    const mc = document.createElement('canvas'); mc.width = 128; mc.height = 80; const mx = mc.getContext('2d');
+    const base = ['#8a6a44', '#6e3f30', '#4c5a3c'][Math.floor(rr() * 3)];
+    mx.fillStyle = base; mx.fillRect(0, 0, 128, 80);
+    for (let y = 0; y < 80; y += 3) { mx.fillStyle = 'rgba(0,0,0,' + (0.06 + rr() * 0.1).toFixed(2) + ')'; mx.fillRect(0, y, 128, 1); }
+    mx.strokeStyle = 'rgba(30,20,12,.55)'; mx.lineWidth = 7; mx.strokeRect(5, 5, 118, 70);
+    const mt = new THREE.CanvasTexture(mc); mt.colorSpace = THREE.SRGBColorSpace;
+    const mat = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.018, 0.6), M({ map: mt, roughness: 1 }));
+    mat.position.set(indoor ? -0.15 : wall ? -0.05 : -0.1, indoor ? 0.012 : wall ? 0.17 : 0.012, indoor ? 0.1 : wall ? 0.05 : 0.45);
+    if (!wall && !indoor) mat.visible = false;            // a bench has no mat
+    mat.receiveShadow = true; g.add(mat);
+    const ph = rr() * 6.28;
     g.userData.pad = {
-      tick: (t, done) => { ring.scale.setScalar(1 + (done ? 0 : Math.sin(t * 3) * 0.06)); beam.visible = !done; },
-      done: () => { ringM.color.setHex(0x5fe08a); parcel.visible = true; },
+      tick: (tt, done) => {
+        const f = done ? 0.35 : 0.88 + Math.sin(tt * 11 + ph) * 0.06 + Math.sin(tt * 3.7 + ph) * 0.06;
+        lanternGlass.emissiveIntensity = 2.4 * f; halo.material.opacity = (done ? 0.25 : 0.8) * f; poolM.opacity = 0.34 * f;
+      },
+      done: () => { parcel.visible = true; },
     };
     return g;
   }
@@ -17976,7 +18090,11 @@ async function main() {
     if (st.kind === 'repair' && /letter|mail|post|card/.test(String(l)))
       return `${n} ${l} to deliver. Each goes in a letterbox by a gate, under a gold light; stand at the box and hold E.`;
     if (st.kind === 'repair' && /package|parcel|deliver|letter|mail|pizza|crate|box|supplies|medicine|food|meal|bread|loa(?:f|ves)|pies?|cakes?|buns|pastr|cookies|groceries|flowers|bouquets?|milk|newspapers?|papers|presents|gifts|cheese|eggs|soup|cocoa|coffee|potions?|scrolls?/.test(String(l)))
-      return `${n} ${l} to deliver. Each drop is a pad with a gold beam over it; get over the pad and hold E to drop one.`;
+      return SPEC.player.mode === 'fly'
+        ? `${n} ${l} to deliver. Each drop is a landing pad on a roof, lit at its corners; set down on it and hold E to drop one.`
+        : INTERIOR ? `${n} ${l} to deliver, one to each room. It goes on the mat by the lantern; stand at it and hold E to leave one.`
+        : window.__dropsAtDoors ? `${n} ${l} to deliver. Each one goes to a door with a lantern burning by it; stand on the step and hold E to leave one.`
+        : `${n} ${l} to deliver. Each one is left on a bench under a lit lantern; stand at it and hold E to leave one.`;
     if (st.kind === 'repair') return /fire|flame|blaze|burn/.test(String(l))
       ? `${n} ${l} are burning. Run to each one, stand close and hold E to spray until it is out.`
       : `${n} ${l} need fixing. Find each one, stand at it and hold E until it comes back green.`;
@@ -23439,6 +23557,25 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
         for (let k = 0; k < N; k++) { const a = rngR() * Math.PI * 2, d = 9 + rngR() * gsize * 0.28; const x = Math.cos(a) * d, z = Math.sin(a) * d;
           spots.push([x, hAt(x, z) + 1.15, z, Math.atan2(-x, -z), true]); }
       }
+      // (2026-10-21) a drop in a city street is at a door: each one walks to the nearest
+      // building's face, half a metre out, facing the street, and is built as a doorstep
+      if (DELIVER && !INTERIOR && SPEC.player.mode !== 'fly' && typeof bldBoxes !== 'undefined' && bldBoxes.length) {
+        const taken = [];
+        for (const sp of spots) {
+          if (!sp[6]) continue;
+          let best = null, bd = 30;
+          for (const [x0, z0, x1, z1] of bldBoxes) {
+            if (x1 - x0 < 5 || z1 - z0 < 5) continue;
+            for (const [fx, fz, nx, nz, len] of [[(x0 + x1) / 2, z0, 0, -1, x1 - x0], [(x0 + x1) / 2, z1, 0, 1, x1 - x0], [x0, (z0 + z1) / 2, -1, 0, z1 - z0], [x1, (z0 + z1) / 2, 1, 0, z1 - z0]]) {
+              const half = len / 2 - 1.6, tx = nz !== 0 ? Math.max(-half, Math.min(half, sp[0] - fx)) : 0, tz = nx !== 0 ? Math.max(-half, Math.min(half, sp[2] - fz)) : 0;
+              const qx = fx + tx + nx * 0.55, qz = fz + tz + nz * 0.55, d = Math.hypot(qx - sp[0], qz - sp[2]);
+              if (d < bd && !taken.some(([ax, az]) => Math.hypot(ax - qx, az - qz) < 12)
+                  && !bldBoxes.some(([a0, b0, a1, b1]) => qx > a0 - 0.3 && qx < a1 + 0.3 && qz > b0 - 0.3 && qz < b1 + 0.3)) { bd = d; best = [qx, qz, Math.atan2(nx, nz)]; }
+            }
+          }
+          if (best) { sp[0] = best[0]; sp[2] = best[1]; sp[1] = hAt(best[0], best[1]) + 0.02; sp[3] = best[2]; sp[7] = true; taken.push(best); window.__dropsAtDoors = true; }
+        }
+      }
       const first = INTERIOR ? spots.slice(0, Math.max(0, INTERIOR.rooms.length - 1)) : spots;
       for (let i = first.length - 1; i > 0; i--) { const j = Math.floor(rngR() * (i + 1)); [first[i], first[j]] = [first[j], first[i]]; }
       const order = first.concat(spots.slice(first.length));
@@ -23448,7 +23585,7 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
       const plateM = new THREE.MeshStandardMaterial({ color: 0x4a5058, roughness: 0.45, metalness: 0.6 });
       const panels = [];
       for (let i = 0; i < N && i < order.length; i++) {
-        const [x, y, z, ry, standing, cot, pad] = order[i];
+        const [x, y, z, ry, standing, cot, pad, atWall] = order[i];
         if (HIVE) {
           const g2 = makeHiveBox(i + 1); g2.position.set(x, y, z); g2.rotation.y = ry; scene.add(g2);
           g2.userData.fsTag = { type: 'objective', name: 'beehive', detail: 'hold E to check it' };
@@ -23484,8 +23621,9 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
           continue;
         }
         if (pad || DELIVER) {
-          const g2 = makePad(!!INTERIOR); g2.position.set(x, y, z); scene.add(g2);
-          g2.userData.fsTag = { type: 'objective', name: 'delivery pad', detail: 'hold E over it to drop the ' + (_rpS.label || 'package') };
+          const _roof = SPEC.player.mode === 'fly' && y - hAt(x, z) > 4;
+          const g2 = makePad(!!INTERIOR, _roof, i + 1, !!atWall); g2.position.set(x, y, z); if (!_roof) g2.rotation.y = ry || 0; scene.add(g2);
+          g2.userData.fsTag = { type: 'objective', name: _roof ? 'landing pad' : atWall ? 'doorstep' : 'drop', detail: 'hold E by it to leave the ' + String(_rpS.label || 'package').replace(/s$/, '') };
           panels.push({ g: g2, pad: g2.userData.pad, fixed: false, p: 0, x, z, ry: 0, roofY: y });
           continue;
         }

@@ -29,11 +29,14 @@ export function rainField(THREE, scene, o = {}) {
     uTime: o.clock || { value: 0 }, uCam: { value: new THREE.Vector3() },
     uWind: { value: new THREE.Vector2(wd[0] / wl, wd[1] / wl).multiplyScalar(2 + 9 * (o.wind ?? 0.5)) },
     uFall: { value: 15 + 6 * k }, uBox: { value: BOX }, uH: { value: H },
-    // (linear light: the post chain tone-maps after this, and at 0.6 the streaks were a few levels over the night)
-    uCol: { value: new THREE.Color(o.color ?? 0xd2deea).multiplyScalar(2.4) }, uA: { value: 0.45 + 0.3 * k },
+    // (2026-10-21) the 2.4 boost and the heavier alpha were tuned while no drop was drawn at
+    // all (see side below); drawn, they were white bars. Rain in a still frame is fine and faint
+    uCol: { value: new THREE.Color(o.color ?? 0xd2deea).multiplyScalar(1.1) }, uA: { value: 0.22 + 0.22 * k },
   };
   const m = new THREE.ShaderMaterial({
-    uniforms: U, transparent: true, depthWrite: false, fog: false, blending: THREE.AdditiveBlending,   // rain catches the light: it shows against the dark, as at night
+    // DoubleSide (2026-10-21): the quad is built along cross(dir, toCam), which winds it away
+    // from the camera, and one-sided every drop was culled: rain had never been drawn
+    uniforms: U, transparent: true, depthWrite: false, fog: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,   // rain catches the light: it shows against the dark, as at night
     vertexShader: `
       attribute vec4 aSeed; uniform float uTime, uFall, uBox, uH; uniform vec3 uCam; uniform vec2 uWind;
       varying float vA; varying vec2 vUv;
@@ -51,10 +54,10 @@ export function rainField(THREE, scene, o = {}) {
         // a thin quad along the fall, turned to face the camera about its own axis
         vec3 c = vec3(xz.x, y, xz.y);
         vec3 toCam = normalize(uCam - c);
-        vec3 side = normalize(cross(dir, toCam)) * 0.035 * (0.6 + 0.8 * aSeed.x);   // a drop's motion blur, not the drop: a 1 cm streak was under a pixel at five metres
+        vec3 side = normalize(cross(dir, toCam)) * 0.018 * (0.6 + 0.8 * aSeed.x);   // a drop's motion blur, not the drop: a 1 cm streak was under a pixel at five metres
         vec3 p = c + side * position.x - dir * position.y * len;
         float d = length(uCam - c);
-        vA = smoothstep(0.6, 2.0, d) * (1.0 - smoothstep(10.0, uBox * 0.5, d));   // not in your eye, gone at the edge
+        vA = smoothstep(1.8, 5.0, d) * (1.0 - smoothstep(11.0, uBox * 0.5, d));   // not in your eye (a drop at a metre is a bar across the frame), gone at the edge
         gl_Position = projectionMatrix * viewMatrix * vec4(p, 1.0);
       }`,
     fragmentShader: `

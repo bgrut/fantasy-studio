@@ -85,8 +85,11 @@ console.log('the belt  : run from the rig -> step', s5.step, JSON.stringify(s5.t
 // 4. the rate rising clears the line step; got it ends the guide; a reload keeps it ended
 const done = await p.evaluate(async () => {
   const F = window.__factory;
-  F.rateNow = 500; await new Promise(r => setTimeout(r, 700)); F.rateNow = null;
-  const g6 = window.__game.facts();
+  // (2026-10-21) polled: under a full gate the line step had not yet given way at 700 ms,
+  // and the button read the line step's "over and out"
+  F.rateNow = 500; let g6 = null;
+  for (let k = 0; k < 30; k++) { await new Promise(r => setTimeout(r, 120)); g6 = window.__game.facts(); if (k >= 5 && g6.tutorial && g6.tutorial.step >= 6) break; }
+  F.rateNow = null;
   const gotit = document.querySelector('#tutor .skip').textContent;
   document.querySelector('#tutor .skip').dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
   await new Promise(r => setTimeout(r, 300));
