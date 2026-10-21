@@ -10982,13 +10982,15 @@ async function main() {
   // RAIN YOU CAN SEE (2026-10-21, proc/weather.js): streaks on the GPU round the
   // camera, slanted by the wind, thicker in a storm, and a storm's lightning.
   // Snow keeps its soft drifting flakes below.
-  let RAIN = null, STORM_FX = null;
+  let RAIN = null, STORM_FX = null, RAIN_SPL = null;
   const _stormy = window.__stormSea || WIND >= 0.9 || /\b(storm\w*|thunder\w*|tempest\w*|hurricanes?|monsoon)\b/.test(String(SPEC.prompt || '').toLowerCase());
   if (WEATHER === 'rain' && !INTERIOR) {
     try {
       const _wa = (SPEC.seed || 1) * 0.37;
       RAIN = __WEATHER.rainField(THREE, scene, { intensity: _stormy ? 1 : 0.55, wind: _stormy ? Math.max(WIND, 0.8) : WIND, windDir: [Math.cos(_wa), Math.sin(_wa)], clock: { value: 0 } });
       if (_stormy) STORM_FX = __WEATHER.lightning(THREE, scene, { rng: mulberry32((SPEC.seed || 1) + 4441) });
+      // rings where it lands, on a street or bare ground: rain on grass makes no ring
+      if (!SPEC.world.grass || (LVL && LVL.osm)) try { RAIN_SPL = __WEATHER.rainSplashes(THREE, scene, { intensity: _stormy ? 1 : 0.55, clock: RAIN.mesh.material.uniforms.uTime }); } catch (e) { RAIN_SPL = null; }
       window.__rain = { drops: RAIN.count, storm: !!STORM_FX, flashes: () => (STORM_FX ? STORM_FX.flashes : 0) };
     } catch (e) { console.warn('[game] rain field skipped', e); RAIN = null; }
   }
@@ -11206,6 +11208,7 @@ async function main() {
 
   function stepDynamics(dt, playerPos, t) {
     if (RAIN) { RAIN.mesh.material.uniforms.uTime.value = t; RAIN.update(camera); }
+    if (RAIN_SPL) { try { const q = playerObj.position; RAIN_SPL.update(q.x, hAt(q.x, q.z), q.z); } catch (e) {} }
     if (STORM_FX) STORM_FX.step(dt);
     if (precip) {
       const a = precip.geometry.attributes.position, arr = a.array, N = arr.length / 3;
@@ -16979,11 +16982,44 @@ async function main() {
     const mossy = /jungle|rainforest|rain forest|amazon|tropical|overgrown|vine|moss|lost/.test(words);
     const flat = (SPEC.style || 'default') !== 'default' && SPEC.style !== 'realistic';
     const M = (o) => { const m = new THREE.MeshStandardMaterial(o); m.userData.noAutoTex = true; return m; };
+    // (2026-10-21) the judge: "very blocky and unrefined", and in the rain the jungle's
+    // olive-tinted sandstone read as stacked timber. A jungle temple is grey limestone
+    // with moss on every ledge and running down the faces in streaks, carved panels along
+    // each tier, vines hanging from the cornices and fallen blocks at its foot
     const stone = flat ? M({ color: mossy ? 0x8f9a78 : 0xc49a6c, roughness: 0.92, flatShading: true })
-      : M({ map: tx('sandstone'), normalMap: tx('sandstone', true), color: mossy ? 0xa9b897 : 0xfff0d8, roughness: 0.94 });
+      : mossy ? M({ map: tx('stone'), normalMap: tx('stone', true), color: 0xc9c5b6, roughness: 0.9 })
+      : M({ map: tx('sandstone'), normalMap: tx('sandstone', true), color: 0xfff0d8, roughness: 0.94 });
     // the sandstone photo is dark: a desert temple's stone is lifted past white to read as sand
     if (!flat && !mossy) stone.color.setRGB(1.55, 1.36, 1.1);
     const cornice = stone.clone(); cornice.color.multiplyScalar(0.78); cornice.userData.noAutoTex = true;
+    const carve = stone.clone(); carve.color.multiplyScalar(0.62); carve.userData.noAutoTex = true;
+    // moss by the shader: on what faces up, in patches, and in streaks down the walls
+    const mossify = (m, k) => {
+      m.onBeforeCompile = (sh) => {
+        sh.uniforms.uMoss = { value: k };
+        sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vMW; varying vec3 vMN;')
+          .replace('#include <begin_vertex>', '#include <begin_vertex>\nvMW = (modelMatrix * vec4(transformed, 1.0)).xyz; vMN = normalize(mat3(modelMatrix) * objectNormal);');
+        sh.fragmentShader = sh.fragmentShader.replace('#include <common>', `#include <common>
+          varying vec3 vMW; varying vec3 vMN; uniform float uMoss;
+          float mh(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+          float mn(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+            return mix(mix(mh(i), mh(i + vec2(1.0, 0.0)), f.x), mix(mh(i + vec2(0.0, 1.0)), mh(i + vec2(1.0, 1.0)), f.x), f.y); }`)
+          .replace('#include <map_fragment>', `#include <map_fragment>
+          {
+            float up = normalize(vMN).y, n1 = mn(vMW.xz * 0.9 + vMW.y * 0.3) * 0.6 + mn(vMW.xz * 3.1 - vMW.y) * 0.4;
+            float streak = mn(vec2((vMW.x + vMW.z) * 2.3, vMW.y * 0.35));
+            float moss = smoothstep(0.35, 0.85, up) * smoothstep(0.3, 0.62, n1 * 0.7 + mn(vMW.xz * 6.0) * 0.3)
+                       + (1.0 - abs(up)) * smoothstep(0.6, 0.9, streak) * 0.6 * smoothstep(0.3, 0.7, n1);
+            moss = clamp(moss * uMoss, 0.0, 1.0);
+            // the stone's own grain shows through it: moss is darker where the stone is
+            float lum = dot(diffuseColor.rgb, vec3(0.3, 0.59, 0.11));
+            vec3 mc = mix(vec3(0.045, 0.085, 0.02), vec3(0.14, 0.19, 0.05), n1) * (0.55 + 1.1 * lum);
+            diffuseColor.rgb = mix(diffuseColor.rgb, mc, moss);
+          }`);
+      };
+      m.customProgramCacheKey = () => 'moss' + k;
+    };
+    if (mossy && !flat) { mossify(stone, 1.0); mossify(cornice, 1.0); mossify(carve, 0.6); }
     const dark = M({ color: 0x0c0907, roughness: 1 });
     const metric = (geo, k) => {
       const ps = geo.attributes.position, nr = geo.attributes.normal, uv = geo.attributes.uv;
@@ -17037,6 +17073,58 @@ async function main() {
       const bowl = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.35, 0.4, 16), cornice); bowl.position.set(bx, 1.3, hs + 1.6); g.add(bowl);
       const fl = new THREE.Mesh(new THREE.ConeGeometry(0.26, 0.7, 10), M({ color: 0xffb347, emissive: 0xff9a3d, emissiveIntensity: 2 }));
       fl.position.set(bx, 1.82, hs + 1.6); g.add(fl);
+    }
+    // carved panels along every tier: a frame of the darker stone, a relief set in it
+    const rrT = mulberry32((SPEC.seed || 1) * 71 + 5);
+    for (let k = 0; k < N; k++) {
+      const sz = F.w - (k + 1) * 3.0, yc = BASE + k * TIER + TIER * 0.48, n = Math.max(2, Math.floor(sz / 2.3));
+      for (let side = 0; side < 4; side++) {
+        const nx = [0, 1, 0, -1][side], nz = [1, 0, -1, 0][side];
+        for (let i = 0; i < n; i++) {
+          const u = -sz / 2 + (i + 0.5) * sz / n;
+          if (side === 0 && Math.abs(u) < 2.6) continue;                // the stair runs up the middle of the front
+          const px = nz !== 0 ? u : nx * (sz / 2 + 0.05), pz = nz !== 0 ? nz * (sz / 2 + 0.05) : u;
+          const w = sz / n * 0.62, rot = nz !== 0 ? 0 : Math.PI / 2;
+          const fr = blk(w, TIER * 0.6, 0.12, 0, 0, 0, carve); fr.position.set(px, yc, pz); fr.rotation.y = rot;
+          const rel = blk(w * 0.62, TIER * 0.34, 0.1, 0, 0, 0, cornice); rel.position.set(px + nx * 0.05, yc, pz + nz * 0.05); rel.rotation.y = rot;
+        }
+      }
+    }
+    if (mossy) {
+      // vines down from the ledges: a slack cord and leaves along it
+      const vineM = M({ color: 0x2c4a1c, roughness: 0.85, side: THREE.DoubleSide });
+      const cordM = M({ color: 0x3a3424, roughness: 0.9 });
+      const leafGeos = [], cordGeos = [];
+      const ledges = [[F.w / 2, BASE]].concat([...Array(N)].map((_, k) => [(F.w - (k + 1) * 3.0) / 2, BASE + (k + 1) * TIER]));
+      for (const [hsz, ly] of ledges) {
+        for (let v = 0; v < 11; v++) {
+          const side = Math.floor(rrT() * 4), u = (rrT() - 0.5) * 2 * hsz * 0.9;
+          const nx = [0, 1, 0, -1][side], nz = [1, 0, -1, 0][side];
+          if (side === 0 && Math.abs(u) < 2.8) continue;
+          const x0 = nz !== 0 ? u : nx * (hsz + 0.12), z0 = nz !== 0 ? nz * (hsz + 0.12) : u;
+          const L = Math.min(ly - 0.2, 0.8 + rrT() * 2.6), pts = [];
+          for (let t = 0; t <= 6; t++) { const f = t / 6; pts.push(new THREE.Vector3(x0 + nx * 0.06 * Math.sin(f * 3) + (rrT() - 0.5) * 0.05, ly - f * L, z0 + nz * 0.06 * Math.sin(f * 3) + (rrT() - 0.5) * 0.05)); }
+          cordGeos.push(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 10, 0.022, 4, false));
+          for (let q = 0; q < Math.round(L * 7); q++) {
+            const f = rrT(), c = pts[Math.min(6, Math.floor(f * 6))];
+            const lf = new THREE.PlaneGeometry(0.2 + rrT() * 0.12, 0.13 + rrT() * 0.08);
+            lf.rotateY(rrT() * Math.PI); lf.rotateX((rrT() - 0.5) * 1.2);
+            lf.translate(c.x + nx * 0.05 + (rrT() - 0.5) * 0.14, c.y - (rrT() - 0.5) * 0.3, c.z + nz * 0.05 + (rrT() - 0.5) * 0.14);
+            leafGeos.push(lf);
+          }
+        }
+      }
+      if (cordGeos.length) { const cm = new THREE.Mesh(mergeGeometries(cordGeos), cordM); cm.castShadow = true; g.add(cm); }
+      if (leafGeos.length) { const lm = new THREE.Mesh(mergeGeometries(leafGeos), vineM); lm.castShadow = true; lm.receiveShadow = true; g.add(lm); }
+      // and blocks that have come down, half in the ground
+      for (let b = 0; b < 6; b++) {
+        const a = rrT() * Math.PI * 2, d = F.w / 2 + 1.2 + rrT() * 3.2;
+        const bx = Math.cos(a) * d, bz = Math.sin(a) * d;
+        if (bz > F.w / 2 && Math.abs(bx) < 5.5) continue;                 // the way in stays clear
+        const sx = 0.8 + rrT() * 0.9, sy = 0.5 + rrT() * 0.4, sz = 0.6 + rrT() * 0.7;
+        const fb = blk(sx, sy, sz, 0, 0, 0, rrT() < 0.5 ? stone : cornice);
+        fb.position.set(bx, sy * 0.28, bz); fb.rotation.set((rrT() - 0.5) * 0.5, rrT() * 3, (rrT() - 0.5) * 0.4);
+      }
     }
     window.__temple = { tiers: N + 1, steps: nSt, mossy, height: +(topY + 6).toFixed(1) };
     return g;
@@ -19717,7 +19805,10 @@ async function main() {
   // NIGHT READABILITY: dark palettes get a soft moonlit fill parented to the
   // CAMERA — it always lights the side of the hero the player is looking at,
   // for any orbit angle. The atmosphere stays; the character never vanishes.
-  if (pal.sun < 1.0) {
+  // (2026-10-21) not on a rainy day: the rain look dims the sun below the line, and the
+  // wet road mirrored the lens-mounted lamp as a white spotlight at the hero's feet. A
+  // rainy night or dusk still has it
+  if (pal.sun < 1.0 && !(SPEC.world.weather === 'rain' && !_isNightSky && !window.__gloom)) {
     scene.add(camera);                       // camera needs to be in the graph
     // (a failing building keeps only a little of it, or every wall near the lens goes white)
     // A THIRD OF WHAT IT WAS (2026-10-05): at 120 the lens-mounted fill burnt

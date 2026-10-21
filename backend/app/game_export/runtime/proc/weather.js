@@ -39,9 +39,12 @@ export function rainField(THREE, scene, o = {}) {
     uniforms: U, transparent: true, depthWrite: false, fog: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,   // rain catches the light: it shows against the dark, as at night
     vertexShader: `
       attribute vec4 aSeed; uniform float uTime, uFall, uBox, uH; uniform vec3 uCam; uniform vec2 uWind;
-      varying float vA; varying vec2 vUv;
+      varying float vA; varying vec2 vUv; varying float vB;
       void main() {
         vUv = uv;
+        // (2026-10-21) the judge: "basic and repetitive". Every streak was the same length
+        // and brightness; each drop now has its own, most short, a few long and bright
+        vB = 0.35 + 0.65 * fract(aSeed.x * 7.31 + aSeed.w * 3.17);
         // each drop's column, wrapped round the camera so the field travels with it
         vec2 base = (aSeed.xy - 0.5) * uBox;
         vec2 xz = uCam.xz + mod(base - uCam.xz + 0.5 * uBox, uBox) - 0.5 * uBox;
@@ -50,7 +53,7 @@ export function rainField(THREE, scene, o = {}) {
         float fallen = mod(uTime * speed + aSeed.w * uH, uH);
         xz += uWind * fallen / speed;                     // slanted by the wind as it falls
         vec3 dir = normalize(vec3(uWind.x, -speed, uWind.y));
-        float len = 0.9 + 0.6 * aSeed.z;
+        float len = 0.28 + 0.9 * aSeed.z * aSeed.z;
         // a thin quad along the fall, turned to face the camera about its own axis
         vec3 c = vec3(xz.x, y, xz.y);
         vec3 toCam = normalize(uCam - c);
@@ -61,9 +64,10 @@ export function rainField(THREE, scene, o = {}) {
         gl_Position = projectionMatrix * viewMatrix * vec4(p, 1.0);
       }`,
     fragmentShader: `
-      uniform vec3 uCol; uniform float uA; varying float vA; varying vec2 vUv;
+      uniform vec3 uCol; uniform float uA; uniform float uTime; varying float vA; varying vec2 vUv; varying float vB;
       void main() {
-        float a = uA * vA * (1.0 - abs(vUv.x - 0.5) * 2.0) * smoothstep(0.0, 0.3, vUv.y) * (1.0 - smoothstep(0.6, 1.0, vUv.y));   // (edges in order: reversed, D3D returned nothing)
+        float swell = 0.78 + 0.22 * sin(uTime * 0.23) * sin(uTime * 0.071 + 1.3);   // it comes in waves
+        float a = uA * vA * vB * swell * (1.0 - abs(vUv.x - 0.5) * 2.0) * smoothstep(0.0, 0.3, vUv.y) * (1.0 - smoothstep(0.6, 1.0, vUv.y));   // (edges in order: reversed, D3D returned nothing)
         if (a < 0.004) discard;
         gl_FragColor = vec4(uCol, a);
       }`,
@@ -72,6 +76,56 @@ export function rainField(THREE, scene, o = {}) {
   mesh.frustumCulled = false; mesh.renderOrder = 5; mesh.name = 'rainField';
   scene.add(mesh);
   return { mesh, update(camera) { U.uCam.value.copy(camera.position); }, count: N };
+}
+
+// RAIN LANDS (2026-10-21): a ring opens and fades where each drop hits, round the
+// hero, each one somewhere new every time it comes round. The ground under the hero
+// stands in for the ground under each ring (they are within a few metres).
+// rainSplashes(THREE, scene, { intensity, clock }) -> { update(x, groundY, z), mesh }
+export function rainSplashes(THREE, scene, o = {}) {
+  const k = Math.max(0.2, Math.min(1, o.intensity ?? 0.6));
+  const N = Math.round(160 + 260 * k), R = 7.5;
+  const quad = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2);
+  const g = new THREE.InstancedBufferGeometry();
+  g.index = quad.index; g.setAttribute('position', quad.getAttribute('position')); g.setAttribute('uv', quad.getAttribute('uv'));
+  const seed = new Float32Array(N * 3);
+  let s = 7654321;
+  const rnd = () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
+  for (let i = 0; i < N; i++) { seed[i * 3] = rnd(); seed[i * 3 + 1] = rnd(); seed[i * 3 + 2] = rnd(); }
+  g.setAttribute('aSeed', new THREE.InstancedBufferAttribute(seed, 3));
+  g.instanceCount = N;
+  const U = { uTime: o.clock || { value: 0 }, uC: { value: new THREE.Vector3() }, uR: { value: R },
+              uCol: { value: new THREE.Color(0xdfe8f0).multiplyScalar(0.9) }, uA: { value: 0.35 + 0.25 * k } };
+  const m = new THREE.ShaderMaterial({
+    uniforms: U, transparent: true, depthWrite: false, fog: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
+    vertexShader: `
+      attribute vec3 aSeed; uniform float uTime, uR; uniform vec3 uC;
+      varying vec2 vUv; varying float vPh;
+      float h(float n) { return fract(sin(n) * 43758.5453); }
+      void main() {
+        vUv = uv;
+        float rate = 1.6 + 1.2 * aSeed.z, c = uTime * rate + aSeed.x * 7.0, cyc = floor(c);
+        vPh = fract(c);
+        // a new place each time round, scattered in a disc about the hero
+        float a = 6.2831 * h(cyc * 12.9898 + aSeed.y * 78.233), r = uR * sqrt(h(cyc * 4.1414 + aSeed.x * 17.17));
+        vec3 p = vec3(uC.x + cos(a) * r, uC.y + 0.1, uC.z + sin(a) * r);   // a road or a path stands a little above the terrain
+        float size = 0.10 + 0.22 * vPh * (0.6 + 0.8 * aSeed.y);
+        gl_Position = projectionMatrix * viewMatrix * vec4(p + position * size, 1.0);
+      }`,
+    fragmentShader: `
+      uniform vec3 uCol; uniform float uA; varying vec2 vUv; varying float vPh;
+      void main() {
+        float r = length(vUv - 0.5) * 2.0;
+        float ring = 1.0 - smoothstep(0.0, 0.16, abs(r - 0.82));
+        float a = uA * ring * (1.0 - vPh) * (1.0 - vPh);
+        if (a < 0.004) discard;
+        gl_FragColor = vec4(uCol, a);
+      }`,
+  });
+  const mesh = new THREE.Mesh(g, m);
+  mesh.frustumCulled = false; mesh.renderOrder = 4; mesh.name = 'rainSplashes';
+  scene.add(mesh);
+  return { mesh, update(x, y, z) { U.uC.value.set(x, y, z); }, count: N };
 }
 
 export function lightning(THREE, scene, o = {}) {
