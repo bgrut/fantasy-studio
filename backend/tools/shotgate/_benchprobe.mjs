@@ -52,6 +52,17 @@ try {
     window.__camPin = { pos: [q[0] - dx / dl * 26, q[1] + 52, q[2] - dz / dl * 26], look: [q[0] + dx * 0.5, q[1], q[2] + dz * 0.5] }; });   // (52 m: a jungle's kapoks reach past 35)
   await wait(1800); await bare(true); await wait(200);
   await p.screenshot({ path: `${O}_high.jpg`, type: 'jpeg', quality: 80 });
+  // and what the sentence is about: the first place it named, or else the goal, from
+  // twenty metres off and a little above (the two views above never showed a temple
+  // half a map away)
+  await p.evaluate(() => { const L = window.__spec.world.level || {}, q = window.__game.pos();
+    const pl = (window.__places || []).find(x => !x.start);
+    const t = pl ? pl.at : (L.goal || [q[0] + 30, q[2]]);
+    const y = window.__hAt ? window.__hAt(t[0], t[1]) : 0;
+    const dx = t[0] - q[0], dz = t[1] - q[2], dl = Math.hypot(dx, dz) || 1;
+    window.__camPin = { pos: [t[0] - dx / dl * 22, y + 9, t[1] - dz / dl * 22], look: [t[0], y + 3, t[1]] }; });
+  await wait(1600);
+  await p.screenshot({ path: `${O}_goal.jpg`, type: 'jpeg', quality: 80 });
 } catch (e) { out.crash = String(e.message || e).slice(0, 200); }
 out.errors = errs;
 console.log(JSON.stringify(out));

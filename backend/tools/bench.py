@@ -89,7 +89,10 @@ def get(path):
 
 def build(prompt: str) -> tuple[int | None, str, float]:
     t0 = time.time()
-    r = post("/api/game/export", {"prompt": prompt})
+    # the same sentence builds the same world on every run (its seed is its own text), so
+    # two runs differ by what changed in the studio, not by the dice (run 3 -> 4 swung 15% -> 5%)
+    import zlib
+    r = post("/api/game/export", {"prompt": prompt, "seed": zlib.crc32(prompt.encode()) % 999_983 + 1})
     jid = r.get("job_id") or r.get("id")
     st = "?"
     while time.time() - t0 < 1500:
@@ -126,14 +129,14 @@ def judge(prompt: str, shots: list[str]) -> dict:
     imgs = [base64.b64encode(open(s, "rb").read()).decode() for s in shots if os.path.exists(s)]
     if not imgs:
         return {"match": 0, "quality": 0, "defects": ["no screenshots"]}
-    q = ("These are two screenshots of a video game (the hero's view, and the same place from above) made from this sentence: \"" + prompt + "\".\n"
+    q = ("These are screenshots of one video game (the hero's view, the same place from above, and the place the sentence is about) made from this sentence: \"" + prompt + "\".\n"
          "Score like a games art director, with this scale for both scores: 1 = broken or empty, 2 = placeholder or wrong, "
          "3 = a coherent, competent indie game, 4 = polished, with a clear art direction, 5 = standout, award-worthy.\n"
          "match: does the world show what the sentence asks for: the place, the time of day, the weather, the hero, the named things.\n"
          "quality: lighting, detail, composition, believable materials, no visual glitches.\n"
          "defects: only problems you can actually see in THESE images, each naming the thing and where (not generic advice).\n"
          'Reply with JSON only: {"match": n, "quality": n, "defects": ["..."]}')
-    body = {"model": JUDGE, "prompt": q, "images": imgs, "stream": False, "format": "json", "options": {"temperature": 0.1}}
+    body = {"model": JUDGE, "prompt": q, "images": imgs, "stream": False, "format": "json", "options": {"temperature": 0, "seed": 7}}   # the same pictures, the same verdict
     err = None
     for _attempt in range(2):                  # Ollama answers 500 now and then under load
         try:
@@ -255,10 +258,10 @@ def main():
         if st == "complete":
             pre = os.path.join(OUT, f"g{k:03d}")
             row.update(probe(jid, pre))
-            row["shots"] = [os.path.basename(pre + s) for s in ("_open.jpg", "_eye.jpg", "_high.jpg")]
+            row["shots"] = [os.path.basename(pre + s) for s in ("_open.jpg", "_eye.jpg", "_high.jpg", "_goal.jpg")]
             row["light"] = shot_light(pre + "_eye.jpg") or row.get("light")
             if not a.no_judge:
-                row["judge"] = judge(pr, [pre + "_eye.jpg", pre + "_high.jpg"])
+                row["judge"] = judge(pr, [pre + "_eye.jpg", pre + "_high.jpg", pre + "_goal.jpg"])
         row["checks"] = check(row, judged=not a.no_judge)
         row["pass"] = all(row["checks"].values())
         rows.append(row)
