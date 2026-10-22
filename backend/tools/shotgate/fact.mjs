@@ -200,8 +200,10 @@ await p.evaluate(()=>window.__factory.meltdown());
 await new Promise(r=>setTimeout(r,350));
 const mid = await p.evaluate(()=>window.__game.facts());
 await p.screenshot({ path: (process.env.OUT || 'factory.png').replace(/\.png$/, '_melt.png') });
-await new Promise(r=>setTimeout(r,3200));
-const post = await p.evaluate(()=>window.__game.facts());
+// (2026-10-21) polled: the starter line is laid back over frames, and in a full gate it had
+// not been yet at 3.2 s ("rebuilt 0", then 7 alone)
+let post = null;
+for (let k = 0; k < 40; k++) { await new Promise(r=>setTimeout(r,250)); post = await p.evaluate(()=>window.__game.facts()); if (k >= 12 && post.debris === 0 && post.machines >= 5) break; }
 const val = await p.evaluate(()=>window.__factory.TYPES && window.__SPEC ? null : null);
 console.log('meltdown  : machines', preMachines, '-> debris', mid.debris,
             '-> rebuilt', post.machines, '| cores', post.cores,

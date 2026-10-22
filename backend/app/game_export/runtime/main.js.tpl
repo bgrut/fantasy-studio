@@ -10618,6 +10618,8 @@ async function main() {
           if (MONK && (MONK.onStair(x, z, 0.2) || MONK.onTop(x, z, 0))) d = 0;
           if (ROWS && (ROWS.inField(x, z, 0.3) || ROWS.track(x, z) || ROWS.inYard(x, z, 0))) { if (ROWS.soil || ROWS.track(x, z) || ROWS.inYard(x, z, 0)) d = 0; else { h *= 0.4; dry *= 0.4; } }
           if (VILLAGE && (VILLAGE.inCottage(x, z, 0.4) || VILLAGE.lane(x, z))) d = 0;
+          // (2026-10-21) no grass up through a harbour's cobbles (the quayside, in its own frame)
+          if (BEACH && BEACH.harbor) { const [qa, qc] = BEACH.local(x, z); if (qa > -61 && qa < BEACH.gl + 51 && qc > -35 && qc < 7) d = 0; }
           if (GRAVE && (GRAVE.aisle(x, z) || GRAVE.onStone(x, z, 0.05))) d = 0;
           else if (GRAVE && GRAVE.inYard(x, z, 0)) { h *= 0.7; dry = Math.max(dry, 0.35); }     // rank, half-dead churchyard grass
           const rg = window.__regionAt && window.__regionAt(x, z);
@@ -10713,6 +10715,7 @@ async function main() {
           if (CANALS && CANALS.inCity(x, z, 2)) return true;
           if (SKATE && SKATE.inPark(x, z, 1)) return true;
           if (SMITHY && SMITHY.near(x, z, 0.5)) return true;
+          if (BEACH && BEACH.harbor) { const [qa, qc] = BEACH.local(x, z); if (qa > -61 && qa < BEACH.gl + 51 && qc > -35 && qc < 7) return true; }   // nothing grows from a harbour's cobbles
           if (FALLS && Math.hypot(x - FALLS.at[0], z - FALLS.at[1]) < 12) return true;
           if (LVL && LVL.slot && hAt(x, z) > 0.8) return true;                     // a slot's wall face holds no pebbles (2026-10-14)
           const rg = window.__regionAt && window.__regionAt(x, z);
@@ -15008,13 +15011,34 @@ async function main() {
     const QY = 1.1, EDGE = 6.0, U0 = -60, U1 = Hb.gl + 50;
     const stoneM = MAT({ map: HDT('stone', 4, 1), normalMap: HDN('stone', 4, 1), color: 0xb8b0a2, roughness: 0.9 });
     const copeM = MAT({ map: HDT('stone', 8, 1), normalMap: HDN('stone', 8, 1), color: 0xd8d2c4, roughness: 0.8 });
-    const cobT = (() => { const c = document.createElement('canvas'); c.width = c.height = 256; const g = c.getContext('2d');
-      g.fillStyle = '#4a4640'; g.fillRect(0, 0, 256, 256);
-      for (let r = 0; r < 16; r++) for (let k = 0; k < 11; k++) { const l = 80 + Math.floor(rH() * 50); g.fillStyle = `rgb(${l + 6},${l},${l - 8})`;
-        g.beginPath(); g.ellipse(k * 24 + (r % 2) * 12 + 12, r * 16 + 8, 10.5, 6.6, 0, 0, 7); g.fill(); }
+    // (2026-10-21) setts laid by hand, not stamped: rows of stones each its own width, tilt and
+    // shade, worn light on top, in dark joints with a little moss; at 512 so the repeat is long
+    const cobT = (() => { const c = document.createElement('canvas'); c.width = c.height = 512; const g = c.getContext('2d');
+      g.fillStyle = '#2e2c27'; g.fillRect(0, 0, 512, 512);
+      for (let k = 0; k < 900; k++) { g.fillStyle = `rgba(70,84,44,${(rH() * 0.18).toFixed(2)})`; g.fillRect(rH() * 512, rH() * 512, 2 + rH() * 5, 1 + rH() * 3); }
+      const rowH = 32;
+      for (let r = 0; r < 512 / rowH; r++) {
+        let x = -rH() * 30;
+        while (x < 512) {
+          const w = 34 + rH() * 26, h = rowH - 5 - rH() * 3, cx = x + w / 2, cy = r * rowH + rowH / 2 + (rH() - 0.5) * 2;
+          const l = 92 + Math.floor(rH() * 46), warm = rH() < 0.18 ? 14 : rH() < 0.1 ? -10 : 0;
+          for (const ox of [-512, 0, 512]) {                       // tiled across the seam
+            g.save(); g.translate(cx + ox, cy); g.rotate((rH() - 0.5) * 0.06);
+            const gr = g.createLinearGradient(0, -h / 2, 0, h / 2);
+            gr.addColorStop(0, `rgb(${l + 22 + warm},${l + 18},${l + 10 - warm})`); gr.addColorStop(1, `rgb(${l - 18 + warm},${l - 20},${l - 26 - warm})`);
+            g.fillStyle = gr; g.beginPath(); const rr = 7;
+            g.moveTo(-w / 2 + rr, -h / 2); g.arcTo(w / 2, -h / 2, w / 2, h / 2, rr); g.arcTo(w / 2, h / 2, -w / 2, h / 2, rr);
+            g.arcTo(-w / 2, h / 2, -w / 2, -h / 2, rr); g.arcTo(-w / 2, -h / 2, w / 2, -h / 2, rr); g.closePath(); g.fill();
+            for (let q = 0; q < 6; q++) { g.fillStyle = `rgba(0,0,0,${(rH() * 0.1).toFixed(2)})`; g.beginPath(); g.arc((rH() - 0.5) * w * 0.8, (rH() - 0.5) * h * 0.7, 1 + rH() * 3, 0, 7); g.fill(); }
+            g.restore();
+          }
+          x += w + 3 + rH() * 2;
+        }
+      }
       const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = renderer.capabilities.getMaxAnisotropy(); return t; })();
-    cobT.repeat.set(36 / 1.4, (U1 - U0) / 1.4);   // setts a hand and a half across
-    const cobM = MAT({ map: cobT, normalMap: HDN('stone', 36 / 1.4, (U1 - U0) / 1.4), normalScale: new THREE.Vector2(0.6, 0.6), roughness: 0.75 });
+    cobT.repeat.set(40 / 4.2, (U1 - U0) / 4.2);   // a sheet of setts every four metres, each a hand and a half across
+    const cobM = MAT({ map: cobT, normalMap: HDN('stone', 36 / 1.4, (U1 - U0) / 1.4), normalScale: new THREE.Vector2(0.6, 0.6), roughness: 0.75,
+                       polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 });   // over the levelled ground it lies on, never through it
     const woodM = MAT({ map: HDT('planks', 1, 4), normalMap: HDN('planks', 1, 4), color: 0x8a6a4a, roughness: 0.85 });
     const darkWood = MAT({ map: HDT('planks', 1, 2), color: 0x4a3626, roughness: 0.8 });
     const ironM = MAT({ color: 0x1e2022, roughness: 0.5, metalness: 0.7 });
@@ -15023,7 +15047,7 @@ async function main() {
     { const len = U1 - U0, mid = (U0 + U1) / 2;
       let [x, z] = L(mid, EDGE - 0.5); put(new THREE.BoxGeometry(1.0, 0.28, len).translate(x, QY + 0.06, z), copeM);
       [x, z] = L(mid, EDGE - 0.3); put(new THREE.BoxGeometry(0.6, QY + 4.0, len).translate(x, QY - (QY + 4.0) / 2, z), stoneM);
-      [x, z] = L(mid, -14); put(new THREE.PlaneGeometry(40, len).rotateX(-Math.PI / 2).translate(x, QY + 0.02, z), cobM);
+      [x, z] = L(mid, -14); put(new THREE.PlaneGeometry(40, len).rotateX(-Math.PI / 2).translate(x, QY + 0.04, z), cobM);
       const [wx, wz] = Hb.world(mid, EDGE + 0.3);
       world.createCollider(RAPIER.ColliderDesc.cuboid(0.3, 1.2, len / 2).setTranslation(wx, QY + 1.2, wz).setRotation({ x: 0, y: Math.sin(yaw / 2), z: 0, w: Math.cos(yaw / 2) })); }
     // iron bollards along the edge, every six metres

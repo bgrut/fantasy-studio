@@ -729,6 +729,16 @@ def build_level(seed: int, size_m: float, n_objectives: int = 0,
             elif sea:
                 if d < corridor * 3.0:               # a deep lane for the hulls
                     h = min(h, -3.5)
+            elif coast and harbor:
+                # (2026-10-21) a harbour's path is laid at the quay's own height: flattened to
+                # zero it cut a lane a metre under the cobbles, and the postwoman and the town
+                # walked waist-deep through the quayside
+                _qh = _coast_height(x, z, h0, goal, goal_r, seed, True)
+                if d < corridor:
+                    h = _qh
+                elif d < corridor * 2.2:
+                    t = (d - corridor) / (corridor * 1.2)
+                    h = _qh + (h - _qh) * t * t * (3 - 2 * t)
             elif d < corridor:
                 h = 0.0
             elif d < corridor * 2.2:                 # smooth shoulder
