@@ -95,7 +95,7 @@ export function rainSplashes(THREE, scene, o = {}) {
   g.setAttribute('aSeed', new THREE.InstancedBufferAttribute(seed, 3));
   g.instanceCount = N;
   const U = { uTime: o.clock || { value: 0 }, uC: { value: new THREE.Vector3() }, uR: { value: R },
-              uCol: { value: new THREE.Color(0xdfe8f0).multiplyScalar(0.9) }, uA: { value: 0.35 + 0.25 * k } };
+              uCol: { value: new THREE.Color(0xdfe8f0).multiplyScalar(0.8) }, uA: { value: 0.2 + 0.18 * k } };   // (2026-10-21) at the lens they were crisp rings painted on the road
   const m = new THREE.ShaderMaterial({
     uniforms: U, transparent: true, depthWrite: false, fog: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
     vertexShader: `
@@ -109,15 +109,15 @@ export function rainSplashes(THREE, scene, o = {}) {
         // a new place each time round, scattered in a disc about the hero
         float a = 6.2831 * h(cyc * 12.9898 + aSeed.y * 78.233), r = uR * sqrt(h(cyc * 4.1414 + aSeed.x * 17.17));
         vec3 p = vec3(uC.x + cos(a) * r, uC.y + 0.1, uC.z + sin(a) * r);   // a road or a path stands a little above the terrain
-        float size = 0.10 + 0.22 * vPh * (0.6 + 0.8 * aSeed.y);
+        float size = 0.05 + 0.15 * vPh * (0.6 + 0.8 * aSeed.y);
         gl_Position = projectionMatrix * viewMatrix * vec4(p + position * size, 1.0);
       }`,
     fragmentShader: `
       uniform vec3 uCol; uniform float uA; varying vec2 vUv; varying float vPh;
       void main() {
         float r = length(vUv - 0.5) * 2.0;
-        float ring = 1.0 - smoothstep(0.0, 0.16, abs(r - 0.82));
-        float a = uA * ring * (1.0 - vPh) * (1.0 - vPh);
+        float ring = 1.0 - smoothstep(0.0, 0.11, abs(r - 0.82));
+        float a = uA * ring * (1.0 - vPh) * (1.0 - vPh) * (1.0 - vPh);
         if (a < 0.004) discard;
         gl_FragColor = vec4(uCol, a);
       }`,
