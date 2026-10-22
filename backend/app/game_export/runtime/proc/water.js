@@ -27,10 +27,14 @@ const LOOKS = {
   // (2026-10-20) a storm sea: slate green, long wind-driven swells running
   // fast, white crests breaking along them, and a wide surf at the shore
   storm: { col: 0x1b3236, opacity: 0.94, rough: 0.2,  env: 0.42, ripple: 0.75, scale: 0.16, weed: 0, speed: 2.6, surf: 1.5 },
+  // (2026-10-22) a drowned city's flood: a hand deep over the old paving, clear and dark,
+  // the sky in it; every metre of it was "shallows", and the shallows' foam turned it milk
+  flood: { col: 0x163c3c, opacity: 0.58, rough: 0.04, env: 0.95, ripple: 0.14, scale: 0.5, weed: 0, speed: 0.6 },
 };
 
 /** the kind of water a world's words ask for */
 export function waterKind(words, frozen) {
+  if (/\b(sunken|drowned|flooded|submerged|half-sunk) (?:city|town|ruins?|kingdom|empire|capital)\b|\batlant(?:is|ean)\b/.test(words || '')) return 'flood';
   if (/swamp|marsh|bog|bayou|fen|mire|everglade/.test(words || '')) return 'swamp';
   if (frozen) return 'ice';
   if (/\b(storm\w*|gales?|tempest\w*|hurricanes?|squalls?|typhoons?)\b/.test(words || '')) return 'storm';
@@ -139,7 +143,10 @@ float wave(vec2 p){
     vec2 suv = (vWPos.xz - uShoreO) / uShoreS + 0.5;
     float dep = (suv.x > 0.0 && suv.x < 1.0 && suv.y > 0.0 && suv.y < 1.0) ? texture2D(uShore, suv).r * 2.0 : 2.0;
     float br = wn(vWPos.xz * 1.7 + vec2(uTime * 0.11, -uTime * 0.07));
-    ${kind === 'ice' ? `
+    ${kind === 'flood' ? `
+    // a flood is one clear depth: tinted, darker where it deepens, no foam
+    diffuseColor.rgb *= mix(1.15, 0.8, smoothstep(0.0, 1.2, dep));
+    diffuseColor.a *= smoothstep(0.0, 0.12, dep);` : kind === 'ice' ? `
     // ice thins to a clear rim at its edge, frosted white where it meets the bank
     diffuseColor.rgb = mix(vec3(0.84, 0.9, 0.95), diffuseColor.rgb, smoothstep(0.0, 0.35, dep));
     diffuseColor.a *= smoothstep(0.0, 0.08, dep);` : `

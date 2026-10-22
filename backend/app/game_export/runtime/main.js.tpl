@@ -1813,6 +1813,10 @@ async function main() {
     // (2026-10-07) a farm's crops are planted too: "a farmer plants seeds, waters them and harvests ten pumpkins" was an autumn wood of orbs
     if (!/\b(gardens?|gardener|gardening|allotments?|veg(?:etable|gie)? (?:patch|plot)|raised beds?|farms?|farmer|farming|farmyard|harvest\w*|homestead|pumpkin patch|crop fields?)\b/.test(w)) return null;
     if (/\b(zen|rock|beer|sky|underwater|coral|japanese|palace|botanical) gardens?\b|\bgardens? of\b/.test(w)) return null;
+    // (2026-10-22) "a florist explores a jungle temple to find a hidden garden" stood a fenced
+    // vegetable plot in a cave: a hidden, secret, lost or temple garden is a place to find, not
+    // an allotment, and a jungle's garden is no kitchen garden
+    if (/\b(hidden|secret|lost|sacred|temple|walled|forgotten|overgrown|enchanted|ancient|mystic\w*) gardens?\b/.test(w) || (/\b(jungle|rainforest|temple|ruins?)\b/.test(w) && !/\b(vegetables?|veg|allotment|farm\w*|crops?|harvest\w*|carrots?|pumpkins?|tomato\w*)\b/.test(w))) return null;
     const VEG = /carrot|potato|radish|beet|turnip|onion|parsnip|lettuce|cabbage|tomato|pumpkin|veg|cucumber|pepper|leek|garlic|strawberr|bean|squash|zucchini|courgette|melon|produce|crop|harvest/;
     const X0 = -7.6, X1 = 7.6, Z0 = -2.6, Z1 = 13.6;
     const beds = [];
@@ -2717,7 +2721,10 @@ async function main() {
     // archipelago were put through the lake clamp below, which lowers the
     // surface to the 12th-percentile ground, and the planner's sea at 0 m
     // sank under its own islands: the galleon sat in a pond in a jungle
-    const _openSea = _sea || SPEC.player.mode === 'swim' || SPEC.world.archetype === 'archipelago';
+    // (2026-10-22) a sunken city stands in its flood: the water lies over the old streets,
+    // ankle-deep, and out to the horizon, not in a basin below the path
+    const _sunkenW = /\b(sunken|drowned|flooded|submerged|sunk|half-sunk) (?:city|town|ruins?|kingdom|empire|capital)\b|\batlant(?:is|ean)\b/.test(String(SPEC.prompt || '').toLowerCase());
+    const _openSea = _sea || _sunkenW || SPEC.player.mode === 'swim' || SPEC.world.archetype === 'archipelago';
     const _wS = _openSea ? Math.max(gsize * 1.3, ((FLORA && FLORA.R) || gsize) * 2.6) : gsize * 1.3;
     // a lake, a swamp or a frozen pond has its own water (proc/water.js); the
     // reef keeps the clear blue it is lit and fogged for from below
@@ -2755,7 +2762,7 @@ async function main() {
       // ankle-deep over it, ice just over it; a swimmer or a boat keeps the
       // water it was given.
       const _wk = waterMesh.material.userData.waterKind;
-      if (!_sea && SPEC.player.mode !== 'swim' && !SPEC.player.buoyant) {
+      if (!_sea && !_sunkenW && SPEC.player.mode !== 'swim' && !SPEC.player.buoyant) {
         // ice lies where it was put, over the path: it is ground, and the
         // basin clamp above would sink it under the snow
         // (2026-10-17) but only in a snow world, where the field is white and
@@ -15031,6 +15038,138 @@ async function main() {
   // it with their masts and wheelhouses, crates and barrels and nets on the
   // cobbles, the fish market's stalls under striped awnings at the far end,
   // and warehouses of brick and stone standing behind.
+  // ── A SUNKEN CITY (2026-10-22) ──────────────────────────────────────────
+  // "a young witch repairs three broken bridges in a sunken city" stood in a modern street
+  // grid. A sunken city is an old one the water took: the planner levels the ground a hand
+  // under the flood, and here its ruins rise out of it. Colonnades with their architraves
+  // half gone, roofless halls with arched doorways, a broken dome, stairs going down into
+  // the water, toppled columns lying in it; dark with algae up to a tidemark, pale above.
+  // Never on the walked line, the goal or the start.
+  const SUNKEN = (() => {
+    const w = String(SPEC.prompt || '').toLowerCase();
+    if (WATER_Y === null || !/\b(sunken|drowned|flooded|submerged|sunk|half-sunk) (?:city|town|ruins?|kingdom|empire|capital)\b|\batlant(?:is|ean)\b/.test(w)) return null;
+    const rS = mulberry32((SPEC.seed || 1) * 613 + 29), G = new THREE.Group(); G.name = 'sunkenCity'; scene.add(G);
+    const WL = WATER_Y;
+    // stone that is algae-dark below the tidemark and weathered pale above it
+    const stoneM = new THREE.MeshStandardMaterial({ map: HDT('stone', 1, 1), normalMap: HDN('stone', 1, 1), color: 0xd8d2c2, roughness: 0.9 });
+    stoneM.userData.noAutoTex = true;
+    stoneM.onBeforeCompile = (sh) => {
+      sh.uniforms.uTide = { value: WL + 0.55 };
+      sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vSW;')
+        .replace('#include <begin_vertex>', '#include <begin_vertex>\nvSW = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+      sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec3 vSW; uniform float uTide;')
+        .replace('#include <map_fragment>', `#include <map_fragment>
+          { float wet = 1.0 - smoothstep(uTide - 0.15, uTide + 0.35, vSW.y + 0.25 * sin(vSW.x * 1.7) * cos(vSW.z * 1.3));
+            float streak = smoothstep(0.55, 0.95, fract(vSW.x * 2.3 + vSW.z * 1.9)) * smoothstep(uTide + 2.5, uTide, vSW.y);
+            diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.32, 0.42, 0.3), wet * 0.85);
+            diffuseColor.rgb *= 1.0 - streak * 0.18; }`);
+    };
+    stoneM.customProgramCacheKey = () => 'sunkenStone';
+    const geos = [];
+    const put = (g) => geos.push(g.index ? g.toNonIndexed() : g);
+    const cols = [];
+    const clear = (x, z, r) => {
+      if (pathDist(x, z) < CORR * 0.9 + r) return false;
+      if (Math.hypot(x - _sp.x, z - _sp.z) < 12 + r) return false;
+      if (LVL && LVL.goal && Math.hypot(x - LVL.goal[0], z - LVL.goal[1]) < 9 + r) return false;
+      for (const p of (LVL && LVL.collect_points) || []) if (Math.hypot(x - p[0], z - p[1]) < 4 + r) return false;
+      return true;
+    };
+    const fluted = (r, h) => new THREE.CylinderGeometry(r * 0.92, r, h, 16, 1);
+    const column = (x, z, h, broken, rot) => {
+      const g0 = hAt(x, z) - 0.6, r = 0.42;
+      const shaft = fluted(r, h).translate(0, h / 2, 0);
+      if (broken) { const pa = shaft.attributes.position; for (let i = 0; i < pa.count; i++) if (pa.getY(i) > h * 0.9) pa.setY(i, h * 0.9 + (rS() - 0.5) * 0.5); shaft.computeVertexNormals(); }
+      put(shaft.rotateY(rot || 0).translate(x, g0, z));
+      put(new THREE.BoxGeometry(1.15, 0.3, 1.15).translate(x, g0 + 0.15, z));
+      if (!broken) put(new THREE.BoxGeometry(1.2, 0.28, 1.2).translate(x, g0 + h + 0.14, z));
+      cols.push([x, z, 0.5, h]);
+    };
+    const tries = (n, f) => { for (let k = 0, made = 0; k < n * 20 && made < n; k++) { if (f()) made++; } };
+    const R = SPEC.world.size_m * 0.34;
+    // colonnades: a row of columns, some broken, a lintel on the whole ones
+    tries(16, () => {
+      const cx = (rS() - 0.5) * 2 * R, cz = (rS() - 0.5) * 2 * R, a = rS() * Math.PI, n = 4 + Math.floor(rS() * 5), sp = 3.2, h = 5.5 + rS() * 2;
+      const ux = Math.cos(a), uz = Math.sin(a);
+      for (let i = 0; i < n; i++) if (!clear(cx + ux * sp * i, cz + uz * sp * i, 1.5)) return false;
+      let prevWhole = false;
+      for (let i = 0; i < n; i++) {
+        const x = cx + ux * sp * i, z = cz + uz * sp * i, broken = rS() < 0.35;
+        column(x, z, broken ? h * (0.35 + rS() * 0.4) : h, broken, rS() * 3);
+        if (!broken && prevWhole) put(new THREE.BoxGeometry(sp + 0.6, 0.55, 0.9).rotateY(-a).translate(x - ux * sp / 2, hAt(x, z) - 0.6 + h + 0.55, z - uz * sp / 2));
+        prevWhole = !broken;
+      }
+      return true;
+    });
+    // roofless halls: four walls with an arched door in front, broken along their tops
+    const archWall = (W, H, T, door) => {
+      const sh = new THREE.Shape(); sh.moveTo(-W / 2, 0); sh.lineTo(W / 2, 0);
+      const steps = 9; for (let i = 0; i <= steps; i++) sh.lineTo(W / 2 - i * W / steps, H - (i % 2 ? rS() * 1.4 : rS() * 0.4));
+      sh.lineTo(-W / 2, 0);
+      if (door) { const d = new THREE.Path(), dw = 1.6, dh = 3.0; d.moveTo(-dw / 2, 0.01); d.lineTo(dw / 2, 0.01); d.lineTo(dw / 2, dh - dw / 2); d.absarc(0, dh - dw / 2, dw / 2, 0, Math.PI, false); d.lineTo(-dw / 2, 0.01); sh.holes.push(d); }
+      const g = new THREE.ExtrudeGeometry(sh, { depth: T, bevelEnabled: false, curveSegments: 10 }); g.translate(0, 0, -T / 2);
+      const uv = g.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * 0.3, uv.getY(i) * 0.3);
+      return g;
+    };
+    tries(16, () => {
+      const cx = (rS() - 0.5) * 2 * R, cz = (rS() - 0.5) * 2 * R, a = rS() * Math.PI * 2, W = 7 + rS() * 5, D = 6 + rS() * 4, H = 4 + rS() * 3;
+      if (!clear(cx, cz, Math.max(W, D) * 0.75)) return false;
+      const g0 = hAt(cx, cz) - 0.6;
+      const walls = [[0, D / 2, W, true], [0, -D / 2, W, false], [W / 2, 0, D, false], [-W / 2, 0, D, rS() < 0.4]];
+      for (const [ox, oz, len, door] of walls) {
+        if (rS() < 0.18 && !door) continue;                 // a wall that has gone
+        const g = archWall(len, H * (0.6 + rS() * 0.4), 0.6, door);
+        if (ox !== 0) g.rotateY(Math.PI / 2);
+        const c = Math.cos(a), sn = Math.sin(a);
+        put(g.rotateY(a).translate(cx + ox * c + oz * sn, g0, cz - ox * sn + oz * c));
+      }
+      cols.push([cx, cz, Math.max(W, D) / 2, H, a, W, D]);
+      return true;
+    });
+    // a broken dome on a drum, the city's great building
+    tries(2, () => {
+      const cx = (rS() - 0.5) * 1.6 * R, cz = (rS() - 0.5) * 1.6 * R;
+      if (!clear(cx, cz, 9)) return false;
+      const g0 = hAt(cx, cz) - 0.6;
+      const uvK = (g, ku, kv) => { const uv = g.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * ku, uv.getY(i) * kv); return g; };
+      put(uvK(new THREE.CylinderGeometry(7, 7.3, 6, 32, 1, true), 16, 2.2).translate(cx, g0 + 3, cz));
+      const dome = uvK(new THREE.SphereGeometry(7.2, 32, 16, 0, Math.PI * 1.45, 0, Math.PI / 2), 12, 4);
+      put(dome.translate(cx, g0 + 6, cz));
+      for (let i = 0; i < 8; i++) { const an = i / 8 * Math.PI * 2; column(cx + Math.cos(an) * 8.2, cz + Math.sin(an) * 8.2, 6, rS() < 0.3, an); }
+      cols.push([cx, cz, 7.3, 12]);
+      return true;
+    });
+    // stairs into the water, and fallen columns lying in it
+    tries(14, () => {
+      const x = (rS() - 0.5) * 2 * R, z = (rS() - 0.5) * 2 * R, a = rS() * Math.PI * 2;
+      if (!clear(x, z, 3)) return false;
+      const g0 = hAt(x, z) - 0.6;
+      for (let i = 0; i < 6; i++) put(new THREE.BoxGeometry(4, 0.3, 0.7).translate(0, g0 + 0.15 + i * 0.3, -i * 0.65).rotateY(a).translate(x, 0, z));
+      return true;
+    });
+    tries(30, () => {
+      const x = (rS() - 0.5) * 2 * R, z = (rS() - 0.5) * 2 * R;
+      if (!clear(x, z, 3)) return false;
+      const L = 3 + rS() * 3, g = fluted(0.42, L).rotateZ(Math.PI / 2).rotateY(rS() * Math.PI).translate(x, hAt(x, z) - 0.1, z);
+      put(g); return true;
+    });
+    if (!geos.length) return null;
+    const mesh = new THREE.Mesh(mergeGeometries(geos, false), stoneM);
+    mesh.castShadow = true; mesh.receiveShadow = true; G.add(mesh);
+    // solid where it stands
+    for (const c of cols) {
+      if (c.length > 4) {                                   // a hall: its four walls
+        const [cx, cz, , H, a, W, D] = c, q = { x: 0, y: Math.sin(a / 2), z: 0, w: Math.cos(a / 2) };
+        for (const [ox, oz, hx, hz] of [[0, D / 2, W / 2, 0.3], [0, -D / 2, W / 2, 0.3], [W / 2, 0, 0.3, D / 2], [-W / 2, 0, 0.3, D / 2]]) {
+          const ca = Math.cos(a), sa = Math.sin(a);
+          if (oz > 0) continue;                               // the door side stays open
+          world.createCollider(RAPIER.ColliderDesc.cuboid(hx, H / 2, hz).setTranslation(cx + ox * ca + oz * sa, hAt(cx, cz) + H / 2, cz - ox * sa + oz * ca).setRotation(q));
+        }
+      } else world.createCollider(RAPIER.ColliderDesc.cylinder(c[3] / 2, c[2]).setTranslation(c[0], hAt(c[0], c[1]) + c[3] / 2, c[1]));
+    }
+    window.__sunken = { pieces: geos.length, solid: cols.length };
+    return { G };
+  })();
   if (BEACH && BEACH.harbor && WATER_Y !== null) {
     const Hb = BEACH, rH = mulberry32((SPEC.seed || 1) + 2727), yaw = Math.atan2(Hb.ux, Hb.uz);
     const MAT = (o) => { const m = new THREE.MeshStandardMaterial(o); m.userData.noAutoTex = true; return m; };

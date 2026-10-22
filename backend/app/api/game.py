@@ -1916,6 +1916,13 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             job.setdefault("notes", []).append(
                 "volcano: lava runs in channels across your route, the cone smokes "
                 "past the goal" + (f" (drawn by the world, not generated: {', '.join(_gone)})" if _gone else ""))
+        # A CAVE THE SENTENCE NEVER NAMED IS NOT ONE (2026-10-22): "a florist explores a jungle
+        # temple to find a hidden garden" came back with the planner's own archetype "cave", and
+        # the jungle was a stone hall of crystals with the temple standing outside it
+        if (getattr(spec.world, "archetype", "plain") == "cave"
+                and not _fre.search(r"\b(caves?|caverns?|grottos?|grottoes|underground|subterranean|catacombs?|mines?|tunnels?|crypts?|lairs?|dens?)\b", _ptl)):
+            spec.world.archetype = "plain"
+            job.setdefault("notes", []).append("not a cave: the sentence names none")
         # A CAVE IS UNDERGROUND (2026-10-03). "Explore a glowing crystal cave
         # deep underground" built an open field at night under the stars. A
         # cave is its own landform: a tunnel through rock opening into
@@ -3468,6 +3475,23 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         is_city = any(k in (spec.world.name or "").lower() for k in ("city", "street", "town")) or bool(
             _fre.search(r"\b(city|cities|streets?|town|downtown|urban|metropolis|neon|boulevard|avenue|"
                         r"skyline|cyberpunk|skyscrapers?|blocks?|alleys?|highway)\b", (req.prompt or "").lower()))
+        # A SUNKEN CITY IS A DROWNED RUIN (2026-10-22). "a young witch repairs three broken bridges
+        # in a sunken city" built glass towers and taxis: "city" laid a modern street grid. A sunken,
+        # drowned, flooded or submerged city (or Atlantis) is an old city standing in the water: the
+        # ground near-level and ankle-deep under it, the runtime's SUNKEN builder raising the ruins
+        _sunken = bool(_fre.search(r"\b(sunken|drowned|flooded|submerged|sunk|half-sunk) (?:city|town|ruins?|kingdom|empire|capital)\b|\batlant(?:is|ean)\b",
+                                   (req.prompt or "").lower()))
+        if _sunken:
+            is_city = False
+            spec.world.name = "sunken city"
+            spec.world.archetype = "plain"
+            spec.world.water_level = 0.28
+            spec.world.grass = False
+            spec.world.scatter = []
+            spec.world.ground_color = [0.36, 0.38, 0.33]
+            job.setdefault("notes", []).append("a sunken city: an old city standing in the floodwater, not a street grid")
+            # nothing that needs deep water to swim in
+            spec.entities = [e for e in spec.entities if not _fre.search(r"\b(fish\w*|sharks?|dolphins?|whales?|eels?|jellyfish|octop\w*|squids?|turtles?|corals?|seaweed|kelp|anemones?)\b", (e.name or "").lower())]
         # A CITY WITH NO MAP (2026-09-11): a city prompt without a known place, or
         # one whose map fetch fails, still gets streets and blocks: the procedural
         # district below, in the same shape the real map arrives in.
@@ -3542,6 +3566,8 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         amp = next((v for k, v in _TERRAIN_AMP.items() if k in _wname), 2.4)
         if is_city:
             amp = 0.35                              # cities are near-flat
+        if _sunken:
+            amp = 0.25                              # the flood lies level over the old streets
         if _frontier:
             amp = 0.9                               # a town is built where the ground is level
         if spec.player.mode == "fly":
