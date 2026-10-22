@@ -2899,6 +2899,7 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         spec.entities = [e for e in spec.entities if e not in _unasked]
         kept = []
         _dress_i = 0
+        _toon_made = 0               # drawn people made in this build (one; the rest are queued)
         for ent in spec.entities:
             if ent.name.lower().strip() in _AMBIENT:
                 job.setdefault("notes", []).append(
@@ -2959,6 +2960,36 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                             ekind = _ef; ent.name = _ef
                             job.setdefault("notes", []).append(f"the {ent.behavior} is a {_ef.replace('_', ' ')}: they belong to the setting")
                         break
+            # A DRAWN WORLD'S PEOPLE ARE DRAWN (2026-10-21). The hero of a cartoon game was made
+            # in its look (2026-10-06) but the people round him were not: a photographed ranger
+            # stood in a cartoon fox's forest, a man and a gardener among the candy cupcakes. A
+            # person in a drawn world is played by the drawn version of their role: from the
+            # library when it has one; otherwise the first is made now (once, then free) and
+            # any others are queued and cast from the next build. The user approved the cost.
+            _NLOOK = {"cartoon": "toon", "kawaii": "toon", "comic": "toon", "storybook": "toon",
+                      "watercolor": "toon", "anime": "anime", "claymation": "clay"}.get(spec.style or "")
+            if (_NLOOK and not getattr(ent, "spectral", False) and getattr(spec, "genre", "adventure") != "factory"
+                    and not ekind.startswith(_NLOOK + " ") and guess_pattern(ekind) == "biped"):
+                _tk = f"{_NLOOK} {ekind}"
+                _tfile = BACKEND_ROOT / "assets" / "library" / f"{_tk.replace(' ', '_')}_anim.glb"
+                if _tfile.exists():
+                    ekind = _tk
+                elif _toon_made < 1:
+                    _toon_made += 1
+                    try:
+                        stage(f"drawing the {ent.name} in the game's look (first time only; {_gen_eta()})")
+                        _ensure_asset_limited(_tk, 12 * 60, verbose=False)
+                        if ensure_playable(_tk, verbose=False):
+                            ekind = _tk
+                            job.setdefault("notes", []).append(f"the {ent.name} is drawn in the game's look: '{_tk}' (made once, then free)")
+                    except Exception as _te:
+                        job.setdefault("notes", []).append(f"drawn {ent.name} skipped ({type(_te).__name__})")
+                else:
+                    try:
+                        _ensure_asset_limited(_tk, 0.5, verbose=False)
+                        job.setdefault("notes", []).append(f"the {ent.name} is being drawn in the game's look in the background; the next build casts it")
+                    except Exception:
+                        pass
             # prefer the ANIMATED variant (real gait — no gliding); static fallback
             glb = ensure_playable(ekind, verbose=False) or library.resolve(ekind)
             # A CREATURE TAKES ITS KIN (2026-09-21). A crocodile the library
