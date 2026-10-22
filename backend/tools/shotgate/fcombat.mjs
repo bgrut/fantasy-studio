@@ -21,6 +21,9 @@ const s0 = await p.evaluate(() => ({ roles: window.__cbt.roles, boss: window.__c
 console.log('kinds     :', JSON.stringify(s0));
 // the dodge: untouchable while it runs
 const dodge = await p.evaluate(async () => {
+  // (2026-10-21) nobody charges while it is measured: a skeleton that reached the hero hit
+  // him as the window closed, and the hit's own moment read as the dodge's (0.24 left)
+  window.__hostileGrace = performance.now() + 15000;
   window.__cbt.iframes = 0;
   const ok = window.__cbtDodge();
   const during = window.__cbt.iframes;

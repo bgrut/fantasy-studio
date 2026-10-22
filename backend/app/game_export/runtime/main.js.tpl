@@ -719,6 +719,18 @@ async function main() {
     SPEC.world.fog = true;
     if ((SPEC.world.fog_density ?? 0.5) < 0.66) SPEC.world.fog_density = 0.66;
   }
+  // A SNOWSTORM IS A WHITEOUT (2026-10-21): "a misty pine forest in a storm" fell soft flakes
+  // under a bright sky and the judge saw no storm. Driven snow whitens the air: a grey-white
+  // sky, a pale wall close in, the sun a weak disc behind it (the streaks are made below)
+  const _snowstorm = String(SPEC.world.weather || '').toLowerCase() === 'snow' && !LOOK
+    && (SPEC.world.wind >= 0.9 || /\b(storm\w*|blizzard\w*|whiteout|gale)\b/.test(String(SPEC.prompt || '').toLowerCase()));
+  if (_snowstorm) {
+    if (SPEC.world.sky !== 'night') pal.sky = new THREE.Color(pal.sky).lerp(new THREE.Color(0xb4bcc4), 0.65).getHex();
+    pal.fog = new THREE.Color(pal.fog).lerp(new THREE.Color(SPEC.world.sky === 'night' ? 0x2a3038 : 0xc8ced4), 0.7).getHex();
+    pal.sun = (pal.sun || 1) * 0.55;
+    SPEC.world.fog = true;
+    if ((SPEC.world.fog_density ?? 0.5) < 0.88) SPEC.world.fog_density = 0.88;   // 0.88 and up is the close fog (near 3 m)
+  }
   scene.background = new THREE.Color(pal.sky);
   if (SPEC.world.fog) {
     // fog_density 0..1: 0.5 = default atmosphere, higher pulls the fog wall
@@ -7957,6 +7969,14 @@ async function main() {
       const occ = new Set();
       const cellOf = (x, z) => Math.floor(x / 2.2) + ',' + Math.floor(z / 2.2);
       const colliders = [];
+      // A FOREST HAS AGES AND GROVES (2026-10-21): the judge, every pine world: "very
+      // repetitive, no variation in size and shape". Every tree was 0.75 to 1.3 of its kind
+      // on an even grid. Now a fifth are young, most are grown and a few are old giants,
+      // and they stand thick in groves with thin ground and gaps between
+      const _fh = (i, j) => { const q = Math.sin(i * 127.1 + j * 311.7 + (SPEC.seed || 1) * 0.013) * 43758.5453; return q - Math.floor(q); };
+      const _fvn = (x, y) => { const xi = Math.floor(x), yi = Math.floor(y), fx = x - xi, fy = y - yi, ux = fx * fx * (3 - 2 * fx), uy = fy * fy * (3 - 2 * fy);
+        return (_fh(xi, yi) * (1 - ux) + _fh(xi + 1, yi) * ux) * (1 - uy) + (_fh(xi, yi + 1) * (1 - ux) + _fh(xi + 1, yi + 1) * ux) * uy; };
+      const _age = () => { const a = rT(); return a < 0.2 ? 0.38 + rT() * 0.27 : a < 0.85 ? 0.72 + rT() * 0.45 : 1.2 + rT() * 0.42; };
       for (let t = 0; t < FLORA.inner * 14 && _floraInner < FLORA.inner; t++) {
         const x = (rT() - 0.5) * gsize * 0.97, z = (rT() - 0.5) * gsize * 0.97;
         const reg = (LVL && LVL.regions) ? regionAt(x, z) : null;
@@ -7968,7 +7988,7 @@ async function main() {
         if (rk === 'forest') p = 0.25 + reg.w * 0.75;
         else if (rk === 'rock' || rk === 'sand') p = kinds.some(k => STONEK.has(k.kind) || k.kind === 'cactus') ? 0.1 : 0.015;   // stony ground grows stone
         else p = 0.07;
-        p *= FLORA.dens;
+        p *= FLORA.dens * (0.3 + 1.4 * _fvn(x * 0.035, z * 0.035));      // groves and gaps
         if (rT() > p) {
           if (bushK >= 0 && rT() < p * 1.6 + 0.04) isBush = true; else continue;
         }
@@ -7981,7 +8001,7 @@ async function main() {
           for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) occ.add((cx + a) + ',' + (cz + b));
         }
         const ki = isBush ? bushK : pickTree();
-        let s = isBush ? 0.8 + rT() * 0.7 : 0.75 + rT() * 0.55;
+        let s = isBush ? 0.8 + rT() * 0.7 : _age();
         const y = hAt(x, z);
         // NOT IN THE LAKE (2026-10-05): the regions said where water was
         // planned, but a lake fills whatever ground lies under its level, and
@@ -10996,6 +11016,16 @@ async function main() {
       if (!SPEC.world.grass || (LVL && LVL.osm)) try { RAIN_SPL = __WEATHER.rainSplashes(THREE, scene, { intensity: _stormy ? 1 : 0.55, clock: RAIN.mesh.material.uniforms.uTime }); } catch (e) { RAIN_SPL = null; }
       window.__rain = { drops: RAIN.count, storm: !!STORM_FX, flashes: () => (STORM_FX ? STORM_FX.flashes : 0) };
     } catch (e) { console.warn('[game] rain field skipped', e); RAIN = null; }
+  }
+  // A SNOWSTORM BLOWS (2026-10-21): the judge found "a storm" in a snowy pine forest
+  // absent; drifting flakes are a snowfall. A storm or a blizzard drives streaks of snow
+  // sideways round you (the rain's field, made of snow), and the flakes still fall among them
+  if (WEATHER === 'snow' && !INTERIOR && (_stormy || /\b(blizzard\w*|snow ?storm\w*|whiteout|gale)\b/.test(String(SPEC.prompt || '').toLowerCase()))) {
+    try {
+      const _wa = (SPEC.seed || 1) * 0.37;
+      RAIN = __WEATHER.rainField(THREE, scene, { snow: true, intensity: 1, wind: Math.max(WIND, 0.9), windDir: [Math.cos(_wa), Math.sin(_wa)], clock: { value: 0 } });
+      window.__blizzard = { drops: RAIN.count };
+    } catch (e) { console.warn('[game] blizzard skipped', e); RAIN = null; }
   }
   if ((WEATHER === 'rain' && !RAIN) || WEATHER === 'snow') {
     const N = WEATHER === 'rain' ? 2200 : 1400;
@@ -22885,8 +22915,8 @@ async function main() {
       if (gname === 'snow' && !_toonGround) {
         const _sn = __snowTextures(Math.max(8, Math.round(gsize / 14)), renderer.capabilities.getMaxAnisotropy());
         gmat.map = _sn.map; gmat.normalMap = _sn.normalMap;
-        gmat.normalScale.set(1, 1);
-        gmat.roughness = 0.82;
+        gmat.normalScale.set(1.15, 1.15);
+        if (_sn.roughnessMap) { gmat.roughnessMap = _sn.roughnessMap; gmat.roughness = 1.0; } else gmat.roughness = 0.82;   // the crystals glint
       }
       // AND IT IS TINTED BY THE WORLD'S OWN COLOUR (2026-09-03). The tiled
       // photo below is a neutral grey rock / grey sand / green grass; the

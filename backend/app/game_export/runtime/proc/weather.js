@@ -14,7 +14,7 @@
 
 export function rainField(THREE, scene, o = {}) {
   const k = Math.max(0.2, Math.min(1, o.intensity ?? 0.6));
-  const N = Math.round(4000 + 9000 * k), BOX = 34, H = 22;
+  const N = Math.round((o.snow ? 6000 : 4000) + 9000 * k), BOX = 34, H = o.snow ? 16 : 22;
   const quad = new THREE.PlaneGeometry(1, 1).translate(0, -0.5, 0);
   const g = new THREE.InstancedBufferGeometry();
   g.index = quad.index; g.setAttribute('position', quad.getAttribute('position')); g.setAttribute('uv', quad.getAttribute('uv'));
@@ -28,17 +28,19 @@ export function rainField(THREE, scene, o = {}) {
   const U = {
     uTime: o.clock || { value: 0 }, uCam: { value: new THREE.Vector3() },
     uWind: { value: new THREE.Vector2(wd[0] / wl, wd[1] / wl).multiplyScalar(2 + 9 * (o.wind ?? 0.5)) },
-    uFall: { value: 15 + 6 * k }, uBox: { value: BOX }, uH: { value: H },
+    uFall: { value: o.snow ? 3.2 + 2.4 * k : 15 + 6 * k }, uBox: { value: BOX }, uH: { value: H },
+    // (2026-10-21) a blizzard is this field too: short, wide, white, slow to fall, driven sideways
+    uLen0: { value: o.snow ? 0.07 : 0.28 }, uLen1: { value: o.snow ? 0.26 : 0.9 }, uWid: { value: o.snow ? 0.05 : 0.018 },
     // (2026-10-21) the 2.4 boost and the heavier alpha were tuned while no drop was drawn at
     // all (see side below); drawn, they were white bars. Rain in a still frame is fine and faint
-    uCol: { value: new THREE.Color(o.color ?? 0xd2deea).multiplyScalar(1.1) }, uA: { value: 0.22 + 0.22 * k },
+    uCol: { value: new THREE.Color(o.color ?? (o.snow ? 0xffffff : 0xd2deea)).multiplyScalar(o.snow ? 1.25 : 1.1) }, uA: { value: o.snow ? 0.62 + 0.3 * k : 0.22 + 0.22 * k },
   };
   const m = new THREE.ShaderMaterial({
     // DoubleSide (2026-10-21): the quad is built along cross(dir, toCam), which winds it away
     // from the camera, and one-sided every drop was culled: rain had never been drawn
     uniforms: U, transparent: true, depthWrite: false, fog: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,   // rain catches the light: it shows against the dark, as at night
     vertexShader: `
-      attribute vec4 aSeed; uniform float uTime, uFall, uBox, uH; uniform vec3 uCam; uniform vec2 uWind;
+      attribute vec4 aSeed; uniform float uTime, uFall, uBox, uH, uLen0, uLen1, uWid; uniform vec3 uCam; uniform vec2 uWind;
       varying float vA; varying vec2 vUv; varying float vB;
       void main() {
         vUv = uv;
@@ -53,11 +55,11 @@ export function rainField(THREE, scene, o = {}) {
         float fallen = mod(uTime * speed + aSeed.w * uH, uH);
         xz += uWind * fallen / speed;                     // slanted by the wind as it falls
         vec3 dir = normalize(vec3(uWind.x, -speed, uWind.y));
-        float len = 0.28 + 0.9 * aSeed.z * aSeed.z;
+        float len = uLen0 + uLen1 * aSeed.z * aSeed.z;
         // a thin quad along the fall, turned to face the camera about its own axis
         vec3 c = vec3(xz.x, y, xz.y);
         vec3 toCam = normalize(uCam - c);
-        vec3 side = normalize(cross(dir, toCam)) * 0.018 * (0.6 + 0.8 * aSeed.x);   // a drop's motion blur, not the drop: a 1 cm streak was under a pixel at five metres
+        vec3 side = normalize(cross(dir, toCam)) * uWid * (0.6 + 0.8 * aSeed.x);   // a drop's motion blur, not the drop: a 1 cm streak was under a pixel at five metres
         vec3 p = c + side * position.x - dir * position.y * len;
         float d = length(uCam - c);
         vA = smoothstep(1.8, 5.0, d) * (1.0 - smoothstep(11.0, uBox * 0.5, d));   // not in your eye (a drop at a metre is a bar across the frame), gone at the edge
