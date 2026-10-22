@@ -6363,8 +6363,22 @@ ghost.add(ghostEdge);
 // the middle of the screen every time the player looked at plain ground with a
 // rig in hand. The footprint now says it: a flat plate and an outline on the
 // tile, teal under a legal ghost, red alone where the machine cannot go
-const ghostPad = new THREE.Mesh(new THREE.PlaneGeometry(T * 0.94, T * 0.94).rotateX(-Math.PI / 2),
-  new THREE.MeshBasicMaterial({ color: 0x6cf5d0, transparent: true, opacity: 0.16, depthWrite: false }));
+// (2026-10-21) and drawn like a surveyor's mark, not a sheet of tinted glass: the flat plate
+// read as a debug overlay lying on the grass. Corner brackets, a dashed edge and a fine hatch,
+// in the plate's colour, breathing a little
+const GHOST_TEX = (() => {
+  const c = document.createElement('canvas'); c.width = c.height = 256; const g = c.getContext('2d');
+  g.strokeStyle = '#fff'; g.lineCap = 'square';
+  g.globalAlpha = 0.28; g.lineWidth = 3;
+  for (let k = -256; k < 256; k += 22) { g.beginPath(); g.moveTo(k, 256); g.lineTo(k + 256, 0); g.stroke(); }
+  g.globalAlpha = 0.6; g.lineWidth = 4; g.setLineDash([14, 12]); g.strokeRect(14, 14, 228, 228); g.setLineDash([]);
+  g.globalAlpha = 1; g.lineWidth = 12;
+  for (const [x, y, sx, sy] of [[8, 8, 1, 1], [248, 8, -1, 1], [8, 248, 1, -1], [248, 248, -1, -1]]) {
+    g.beginPath(); g.moveTo(x, y + sy * 62); g.lineTo(x, y); g.lineTo(x + sx * 62, y); g.stroke(); }
+  const t = new THREE.CanvasTexture(c); t.anisotropy = 8; return t;
+})();
+const ghostPad = new THREE.Mesh(new THREE.PlaneGeometry(T * 0.98, T * 0.98).rotateX(-Math.PI / 2),
+  new THREE.MeshBasicMaterial({ color: 0x6cf5d0, map: GHOST_TEX, transparent: true, opacity: 0.9, depthWrite: false }));
 ghostPad.position.y = 0.035; ghostPad.renderOrder = 2;
 const ghostRim = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(
   [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([a, b]) => new THREE.Vector3(a * T * 0.47, 0, b * T * 0.47))),
@@ -6416,8 +6430,8 @@ function updateGhost() {
   ghostPad.visible = !!shape || !legal;
   ghostPad.position.y = shape ? 0.035 : -0.22;                 // under the lifted erase box, on the ground
   ghostPad.material.color.setHex(legal ? 0x6cf5d0 : 0xff5a6e);
-  ghostPad.material.opacity = legal ? 0.16 : 0.3;
-  ghostRim.material.color.setHex(legal ? 0x9dffe8 : 0xff8a98);
+  ghostPad.material.opacity = (legal ? 0.8 : 0.95) * (0.82 + 0.18 * Math.sin(performance.now() / 260));
+  ghostRim.visible = false;                                     // the mark draws its own edge
 }
 
 // WHICH WAY DID THE DRAG GO. On a flat grid this was a subtraction of indices.

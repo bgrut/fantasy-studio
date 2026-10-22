@@ -6794,7 +6794,7 @@ async function main() {
               windU: WIND_U, near: QUALITY === 'performance' ? 28 : 46, nearCap: 300, variants: 4,
               sunDir: new THREE.Vector3(...pal.sunPos).normalize(),
               sunCol: new THREE.Color(pal.sunCol || 0xffffff).multiplyScalar(pal.sun * 1.12),
-              trees: new Float32Array(trees), shadows: true,
+              trees: new Float32Array(trees), shadows: true, drawn: ['cartoon', 'kawaii', 'comic', 'storybook', 'watercolor', 'illustrated', 'papercraft', 'lowpoly'].includes(SPEC.style),
             });
             for (const [tx3, tz3, sc] of spots) {
               const gy3 = hAt(tx3, tz3);
@@ -8071,7 +8071,7 @@ async function main() {
           snow: BIO.snow || (SPEC.world.weather === 'snow' ? 0.6 : 0),
           sunDir: new THREE.Vector3(...pal.sunPos).normalize(),
           sunCol: new THREE.Color(pal.sunCol || 0xffffff).multiplyScalar(pal.sun * 1.12),
-          trees: new Float32Array(T), shadows: true,
+          trees: new Float32Array(T), shadows: true, drawn: ['cartoon', 'kawaii', 'comic', 'storybook', 'watercolor', 'illustrated', 'papercraft', 'lowpoly'].includes(SPEC.style),
         });
         // each kind is as solid as it is big: [half height, radius] per scale
         const SOLID = { rock: [0.5, 0.8], boulder: [1.4, 2.2], mesa: [3.2, 4.5], cactus: [2.4, 0.35], crystal: [1.0, 0.7], redwood: [8, 1.5], bamboo: [4, 0.6], kapok: [6, 1.2], canopy: [3, 0.42] };
@@ -11674,6 +11674,8 @@ async function main() {
         body[data-art] #fsstart.fs-open-center .fs-art-open{text-align:center !important}
         body[data-art] #fsstart.fs-open-lower .fs-art-open{max-width:min(900px,90vw) !important;padding-bottom:7vh !important}
         body[data-art] #fsstart.fs-open-right .fs-art-open{text-align:right !important}
+        body[data-art] #fsstart .fs-art-mark{display:block;width:64px;height:64px;margin:0 0 16px}
+        #fsstart.fs-open-center .fs-art-mark{margin:0 auto 16px} #fsstart.fs-open-right .fs-art-mark{margin:0 0 16px auto}
         body[data-art] #fsstart .fs-art-kicker{font:500 11px var(--f-ui);letter-spacing:.2em;text-transform:uppercase;color:var(--art-acc);margin-bottom:12px}
         body[data-art] #fsstart h1.fs-art-title{font-variation-settings:normal !important;font-family:var(--f-head) !important;font-weight:var(--art-hw) !important;font-style:var(--art-fs);font-variant:var(--art-fv);letter-spacing:var(--art-tr) !important;
           text-transform:var(--art-tt) !important;font-stretch:var(--art-wd);font-size:clamp(38px,5.6vw,78px) !important;line-height:.98 !important;color:var(--art-ink) !important;
@@ -11775,6 +11777,7 @@ async function main() {
     const _mT = _ttl.match(/^(the|a|an)\s+(.+)$/i);
     const _tHtml = (ART.stack && _mT) ? `<span class="fs-art-the">${_esc(_mT[1])}</span>${_esc(_mT[2])}` : _esc(_ttl);
     ov.innerHTML = '<div class="fs-art-open">'
+      + '<canvas class="fs-art-mark" width="144" height="144"></canvas>'
       + (STORY && STORY.narrator ? `<div class="fs-art-kicker">${_esc(STORY.narrator)}</div>` : '')
       + `<h1 class="fs-art-title">${_tHtml}</h1>`
       + (STORY && STORY.tagline ? `<div class="fs-art-tag">${_esc(STORY.tagline)}</div>` : '')
@@ -11785,6 +11788,85 @@ async function main() {
       + `<button id="startbtn" class="fs-art-go">${_esc(ART.go)}</button>`
       + '</div>';
     document.body.appendChild(ov);
+    // THE MAKER'S MARK (2026-10-21). The user: "keep improving on indie/custom things ... fonts,
+    // artwork". An indie game carries its maker's mark, and every opening here was type alone.
+    // Each maker draws one in their own hand, from the game's title and seed: a woodcut
+    // roundel with the initial, a compass rose, a pixel sprite, a pulp starburst with its issue
+    // number, a rubber stamp, a brutalist code plate, a striped sunset, a watercolour wash, a
+    // sprig, a folk diamond, a single ring, a clapperboard.
+    try {
+      const cvM = ov.querySelector('.fs-art-mark'), g = cvM.getContext('2d'), V = VIBE_OF(), rM = mulberry32((SPEC.seed || 1) * 389 + 7);
+      const acc = ART.acc, ink = ART.ink, paper = ART.paper, head = ART.head.h;
+      const init = (String(SPEC.title || 'X').replace(/^(the|a|an)\s+/i, '').trim()[0] || 'X').toUpperCase();
+      const num = 2 + Math.floor(rM() * 97);
+      const draw = () => {
+        g.clearRect(0, 0, 144, 144); g.save(); g.translate(72, 72);
+        const text = (t, size, col, w = 700, it = '') => { g.fillStyle = col; g.font = `${it} ${w} ${size}px ${head}`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(t, 0, 2); };
+        const ring = (r, col, lw) => { g.strokeStyle = col; g.lineWidth = lw; g.beginPath(); g.arc(0, 0, r, 0, Math.PI * 2); g.stroke(); };
+        const k = V.id;
+        if (k === 'printmaker') {
+          g.fillStyle = ink; g.beginPath(); g.arc(0, 0, 66, 0, 7); g.fill();
+          g.fillStyle = acc; g.beginPath(); g.arc(0, 0, 54, 0, 7); g.fill();
+          g.strokeStyle = ink; g.lineWidth = 2;
+          for (let i = 0; i < 48; i++) { const a = i / 48 * Math.PI * 2; g.beginPath(); g.moveTo(Math.cos(a) * 40, Math.sin(a) * 40); g.lineTo(Math.cos(a) * (50 + rM() * 4), Math.sin(a) * (50 + rM() * 4)); g.stroke(); }
+          text(init, 58, ink, 800);
+        } else if (k === 'cartographer') {
+          ring(60, ink, 2.5); ring(52, ink, 1);
+          for (let i = 0; i < 8; i++) { const a = i / 8 * Math.PI * 2 - Math.PI / 2, L = i % 2 ? 30 : 56;
+            g.fillStyle = i % 2 ? ink : (i === 0 ? acc : ink); g.beginPath(); g.moveTo(Math.cos(a) * L, Math.sin(a) * L);
+            g.lineTo(Math.cos(a + 0.42) * 10, Math.sin(a + 0.42) * 10); g.lineTo(0, 0); g.lineTo(Math.cos(a - 0.42) * 10, Math.sin(a - 0.42) * 10); g.closePath(); g.fill(); }
+          g.fillStyle = paper; g.beginPath(); g.arc(0, 0, 5, 0, 7); g.fill();
+        } else if (k === 'arcade') {
+          const N = 8, px = 14; g.translate(-N * px / 2, -N * px / 2);
+          const cols = [acc, ink, acc];
+          for (let y = 0; y < N; y++) for (let x = 0; x < N / 2; x++) { if (rM() < 0.52) { g.fillStyle = cols[(y + x) % 3 === 0 ? 1 : 0];
+            g.fillRect(x * px, y * px, px, px); g.fillRect((N - 1 - x) * px, y * px, px, px); } }
+        } else if (k === 'pulp') {
+          g.fillStyle = acc; g.beginPath();
+          for (let i = 0; i < 32; i++) { const a = i / 32 * Math.PI * 2, r = i % 2 ? 50 : 68; i ? g.lineTo(Math.cos(a) * r, Math.sin(a) * r) : g.moveTo(Math.cos(a) * r, Math.sin(a) * r); }
+          g.closePath(); g.fill(); g.rotate(-0.18); text('No.', 18, ink, 700); g.translate(0, 22); text(String(num), 34, ink, 900); g.translate(0, -22);
+        } else if (k === 'zine') {
+          g.rotate(-0.12); g.strokeStyle = acc; g.lineWidth = 5; g.strokeRect(-62, -40, 124, 80); g.lineWidth = 2; g.strokeRect(-54, -32, 108, 64);
+          g.translate(0, -8); text('VOL.', 20, acc, 800); g.translate(0, 26); text(String(num), 30, acc, 900);
+          g.globalCompositeOperation = 'destination-out';
+          for (let i = 0; i < 260; i++) { g.fillStyle = 'rgba(0,0,0,' + (0.4 + rM() * 0.6).toFixed(2) + ')'; g.fillRect(-70 + rM() * 140, -60 + rM() * 100, 1 + rM() * 3, 1 + rM() * 3); }
+          g.globalCompositeOperation = 'source-over';
+        } else if (k === 'brutalist') {
+          g.fillStyle = ink; g.fillRect(-62, -62, 124, 124); g.fillStyle = paper; g.fillRect(-54, -54, 108, 108);
+          g.fillStyle = acc; g.fillRect(-54, 20, 108, 34);
+          g.fillStyle = ink; g.font = `700 22px "DM Mono", monospace`; g.textAlign = 'left'; g.textBaseline = 'top';
+          g.fillText('FS/' + String(1000 + Math.floor(rM() * 8999)), -46, -44); g.fillText(init + '.' + String(num).padStart(2, '0'), -46, -14);
+        } else if (k === 'synth') {
+          const gr = g.createLinearGradient(0, -60, 0, 60); gr.addColorStop(0, acc); gr.addColorStop(1, '#ff3d9a');
+          g.fillStyle = gr; g.beginPath(); g.arc(0, 0, 60, 0, 7); g.fill();
+          g.globalCompositeOperation = 'destination-out';
+          for (let i = 0; i < 6; i++) { const y = 8 + i * 9, h = 2 + i * 1.3; g.fillRect(-70, y, 140, h); }
+          g.globalCompositeOperation = 'source-over';
+        } else if (k === 'watercolourist') {
+          for (let i = 0; i < 9; i++) { g.globalAlpha = 0.16 + rM() * 0.12; g.fillStyle = i % 3 ? acc : ink;
+            g.beginPath(); g.ellipse((rM() - 0.5) * 30, (rM() - 0.5) * 30, 36 + rM() * 24, 30 + rM() * 22, rM() * 3, 0, 7); g.fill(); }
+          g.globalAlpha = 1; text(init, 64, ink, 500, 'italic');
+        } else if (k === 'naturalist') {
+          ring(62, ink, 1.5); g.strokeStyle = ink; g.lineWidth = 3; g.beginPath(); g.moveTo(-6, 52); g.quadraticCurveTo(10, 0, -4, -50); g.stroke();
+          for (let i = 0; i < 6; i++) { const t = 0.15 + i * 0.14, y = 52 - t * 102, x = -6 + Math.sin(t * Math.PI) * 9, sd = i % 2 ? 1 : -1;
+            g.save(); g.translate(x, y); g.rotate(sd * 0.9 - 0.2); g.fillStyle = i % 2 ? acc : ink; g.beginPath(); g.ellipse(sd * 14, 0, 15, 6, 0, 0, 7); g.fill(); g.restore(); }
+        } else if (k === 'folk') {
+          g.rotate(Math.PI / 4);
+          for (let i = 0; i < 4; i++) { const s2 = 88 - i * 22; g.fillStyle = i % 2 ? paper : (i ? ink : acc); g.fillRect(-s2 / 2, -s2 / 2, s2, s2); }
+          g.fillStyle = acc; for (const [x, y] of [[-48, 0], [48, 0], [0, -48], [0, 48]]) { g.beginPath(); g.arc(x, y, 5, 0, 7); g.fill(); }
+        } else if (k === 'minimalist') {
+          ring(56, ink, 1.5); g.fillStyle = acc; g.beginPath(); g.arc(18 + (rM() - 0.5) * 20, -18 + (rM() - 0.5) * 20, 9, 0, 7); g.fill();
+        } else {                                       // filmmaker: a clapperboard
+          g.fillStyle = ink; g.fillRect(-60, -24, 120, 76); g.fillStyle = paper; g.fillRect(-54, -14, 108, 60);
+          g.save(); g.translate(-60, -30); g.rotate(-0.16); g.fillStyle = ink; g.fillRect(0, -16, 124, 18);
+          g.fillStyle = paper; for (let i = 0; i < 6; i++) { g.beginPath(); g.moveTo(8 + i * 21, -16); g.lineTo(18 + i * 21, -16); g.lineTo(10 + i * 21, 2); g.lineTo(0 + i * 21, 2); g.closePath(); g.fill(); } g.restore();
+          g.translate(0, 16); text('TAKE ' + (1 + num % 9), 22, ink, 800);
+        }
+        g.restore();
+      };
+      draw();
+      document.fonts.load(`700 60px ${head}`).then(draw, () => {});
+    } catch (e) { console.warn('[game] maker mark', e); }
     // personal best on the start screen — "one more run" fuel
     try {
       const pb = parseFloat(localStorage.getItem(bestKey));

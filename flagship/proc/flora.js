@@ -1011,6 +1011,14 @@ function makeMaterials(kind, leafHSL, barkTex, barkN, seed, U, extra = {}) {
   if (kind === 'birch' || kind === 'coral' || kind === 'coral2' || kind === 'kelp') { bark.map = null; bark.roughness = 0.75; }
   if (kind === 'bamboo') { bark.map = null; bark.normalMap = null; bark.roughness = 0.42; }   // a glossy culm, no bark
   if (kind === 'coral' || kind === 'coral2') { bark.emissive = barkTint.clone().multiplyScalar(0.25); bark.normalMap = null; }
+  // A DRAWN WORLD'S TREES ARE DRAWN (2026-10-21): a cartoon knight walked under trunks of
+  // photographed bark, the one thing that read as a photo in the picture. In a drawn look a
+  // trunk is painted: one warm colour of its own kind, no photo, no relief
+  if (extra.drawn && bark.map) {
+    bark.map = null; bark.normalMap = null; bark.roughness = 0.88;
+    bark.color.set(kind === 'redwood' ? 0xa0583c : kind === 'dead' ? 0x8a7a6c : (kind === 'kapok' || kind === 'canopy') ? 0x7a7a52
+      : kind === 'pine' || kind === 'spruce' ? 0x8a5a3c : 0x93623e);
+  }
   bark.userData.noAutoTex = true;
   patchTree(bark, U, { live: true });
   let leaf = null;
