@@ -11128,81 +11128,141 @@ async function main() {
   // roads + building footprints pre-rendered once, live player wedge +
   // objective dot composited per frame. The reference frame has one; a
   // minimap is a shockingly large perceived-quality cue.
+  // THE MAP IS THE MAKER'S (2026-10-21): the user: "that mini map looks the same in other
+  // games". Every city game had the same dark radar disc in the same corner. The map is
+  // now drawn in the hand of the game's maker: a radar, a paper chart with a compass rose,
+  // a blueprint, an ink sketch, a neon trace, a pixel map, a scrap taped to the screen, a
+  // watercolour wash. Each maker has two it reaches for; the seed picks. Some turn with
+  // you. It is drawn on the first frame of play, once the maker is known, at twice its
+  // size on screen so it is sharp.
   const MINIMAP = (() => {
     if (!OSM || !OSM.roads || !OSM.roads.length) return null;
-    const base = document.createElement('canvas');
-    base.width = base.height = 160;
-    const bx = base.getContext('2d');
-    const half2 = SPEC.world.size_m / 2;
-    const w2m = (v) => 80 + (v / half2) * 74;
-    bx.fillStyle = 'rgba(10,12,18,0.85)';
-    bx.beginPath(); bx.arc(80, 80, 78, 0, Math.PI * 2); bx.fill();
-    bx.save();
-    bx.beginPath(); bx.arc(80, 80, 76, 0, Math.PI * 2); bx.clip();
-    bx.fillStyle = 'rgba(96,102,118,0.4)';
-    // the minimap has to agree with the world: drawing culled footprints put
-    // solid blocks on the map where the player can see open plaza
-    for (const b of (window.__builtFootprints || OSM.buildings || [])) {
-      bx.beginPath();
-      b.pts.forEach((p, i) => i ? bx.lineTo(w2m(p[0]), w2m(p[1]))
-                                : bx.moveTo(w2m(p[0]), w2m(p[1])));
-      bx.closePath(); bx.fill();
-    }
-    bx.strokeStyle = 'rgba(215,220,230,0.85)';
-    bx.lineCap = 'round';
-    for (const r of OSM.roads) {
-      bx.lineWidth = Math.max(1.6, ((r.w || 7) / half2) * 74);
-      bx.beginPath();
-      r.pts.forEach((p, i) => i ? bx.lineTo(w2m(p[0]), w2m(p[1]))
-                                : bx.moveTo(w2m(p[0]), w2m(p[1])));
-      bx.stroke();
-    }
-    bx.restore();
-    const cv = document.createElement('canvas');
-    cv.width = cv.height = 160;
-    cv.style.cssText = 'position:fixed;left:14px;bottom:14px;width:150px;'
-      + 'height:150px;border-radius:50%;border:2px solid rgba(255,255,255,0.22);'
-      + 'z-index:12;box-shadow:0 4px 18px rgba(0,0,0,0.5);pointer-events:none;';
-    document.body.appendChild(cv);
-    const mx = cv.getContext('2d');
-    const dirV = new THREE.Vector3();
-    const goal = LVL && LVL.goal;
-    return { step(pp) {
-      mx.clearRect(0, 0, 160, 160);
-      mx.drawImage(base, 0, 0);
-      if (goal) {
-        mx.fillStyle = '#ffd166';
-        mx.beginPath();
-        mx.arc(w2m(goal[0]), w2m(goal[1]), 4.2, 0, Math.PI * 2);
-        mx.fill();
+    const half2 = SPEC.world.size_m / 2, goal = LVL && LVL.goal, dirV = new THREE.Vector3();
+    let cv = null, mx = null, base = null, St = null, R = 0, w2m = null;
+    const STYLES = {
+      printmaker: ['ink', 'paper'], arcade: ['neon', 'pixel'], filmmaker: ['radar', 'mono'], cartographer: ['paper', 'chart'],
+      brutalist: ['blueprint', 'mono'], watercolourist: ['wash', 'paper'], pulp: ['tape', 'ink'], synth: ['neon', 'blueprint'],
+      naturalist: ['chart', 'wash'], folk: ['tape', 'wash'], minimalist: ['mono', 'radar'], zine: ['tape', 'pixel'],
+    };
+    const setup = () => {
+      const A = window.__ART || {}, V = (() => { try { return VIBE_OF(); } catch (e) { return { id: 'filmmaker' }; } })();
+      const rr = mulberry32((SPEC.seed || 1) * 97 + 13);
+      const pickQ = new URLSearchParams(location.search).get('map');
+      const kind = pickQ || (STYLES[V.id] || ['radar', 'paper'])[rr() < 0.5 ? 0 : 1];
+      const acc = A.acc || '#5cffc9', ink = A.ink || '#e9e6dc';
+      const T = {
+        radar:     { shape: 'circle', bg: 'rgba(10,12,18,0.86)', bld: 'rgba(96,102,118,0.42)', road: 'rgba(215,220,230,0.85)', me: acc, mark: 'dot', border: '2px solid rgba(255,255,255,0.22)', spin: false },
+        mono:      { shape: 'circle', bg: 'rgba(0,0,0,0)', bldLine: 'rgba(255,255,255,0.35)', road: 'rgba(255,255,255,0.9)', me: '#ffffff', mark: 'ring', border: '1px solid rgba(255,255,255,0.55)', spin: true, thin: true },
+        paper:     { shape: 'square', bg: '#e8dcc0', bld: 'rgba(120,96,66,0.35)', road: 'rgba(62,44,28,0.85)', me: '#b23a2a', mark: 'x', border: '1px solid rgba(60,40,20,0.6)', compass: true, inkEdge: true },
+        chart:     { shape: 'square', bg: '#dfe4d6', bld: 'rgba(90,110,96,0.32)', road: 'rgba(40,52,60,0.82)', me: '#1f5f8a', mark: 'x', border: '2px solid rgba(40,52,60,0.55)', compass: true, grid: 'rgba(40,52,60,0.12)' },
+        ink:       { shape: 'circle', bg: '#efe8d8', bldLine: 'rgba(30,26,22,0.55)', road: 'rgba(30,26,22,0.9)', me: '#c23b22', mark: 'star', border: '2px solid rgba(30,26,22,0.75)', hatch: true },
+        blueprint: { shape: 'square', bg: '#1d3f73', bldLine: 'rgba(220,235,255,0.55)', road: 'rgba(235,244,255,0.92)', me: '#ffd34d', mark: 'ring', border: '2px solid rgba(220,235,255,0.65)', grid: 'rgba(220,235,255,0.13)', compass: true, thin: true },
+        neon:      { shape: 'circle', bg: 'rgba(6,4,14,0.9)', bld: 'rgba(60,40,90,0.45)', road: acc, glow: acc, me: '#ffffff', mark: 'dot', border: '1px solid ' + acc, spin: true },
+        pixel:     { shape: 'square', bg: '#20242c', bld: '#3c4352', road: '#c9d1dc', me: acc, mark: 'dot', border: '3px solid #0c0e12', pixel: 4 },
+        tape:      { shape: 'rect', bg: '#f1ead8', bld: 'rgba(110,100,90,0.28)', road: 'rgba(40,36,32,0.85)', me: '#c8402a', mark: 'star', border: 'none', tape: true, tilt: (rr() - 0.5) * 6 },
+        wash:      { shape: 'circle', bg: '#f3eee3', bld: 'rgba(120,150,170,0.22)', road: 'rgba(70,80,96,0.75)', me: '#c0563a', mark: 'pin', border: 'none', wash: true },
+      };
+      St = T[kind] || T.radar; St.kind = kind;
+      // what is marked on it, in colours that read on its sheet: a light page takes ink
+      St.light = /^#[c-f]/i.test(St.bg);
+      St.goal = { paper: '#1f4f8a', chart: '#b03a2a', ink: '#1f4f8a', tape: '#1f4f8a', wash: '#2a5a8a', blueprint: '#ffd34d', neon: '#ffe066' }[kind] || '#ffd166';
+      St.car = St.light ? 'rgba(50,80,110,0.7)' : 'rgba(127,212,255,0.7)';
+      const css = St.shape === 'rect' ? [196, 146] : [140 + Math.floor(rr() * 34), 0];
+      if (!css[1]) css[1] = css[0];
+      R = 2;                                      // canvas pixels per css pixel
+      const W = css[0] * R, H = css[1] * R, pad = 8 * R;
+      w2m = (v, axis) => (axis ? H : W) / 2 + (v / half2) * (Math.min(W, H) / 2 - pad);
+      base = document.createElement('canvas'); base.width = W; base.height = H;
+      const bx = base.getContext('2d');
+      const clip = (g) => { g.beginPath(); if (St.shape === 'circle') g.arc(W / 2, H / 2, W / 2 - R, 0, Math.PI * 2); else g.rect(0, 0, W, H); };
+      // the ground of the map
+      bx.save(); clip(bx); bx.fillStyle = St.bg; bx.fill(); bx.clip();
+      if (St.wash) for (let k = 0; k < 14; k++) { const gx = rr() * W, gy = rr() * H, gr = (0.15 + rr() * 0.3) * W;
+        const g = bx.createRadialGradient(gx, gy, 0, gx, gy, gr); g.addColorStop(0, `rgba(${120 + rr() * 60 | 0},${150 + rr() * 50 | 0},${170 + rr() * 40 | 0},0.16)`); g.addColorStop(1, 'rgba(0,0,0,0)');
+        bx.fillStyle = g; bx.fillRect(0, 0, W, H); }
+      if (St.inkEdge || St.tape) for (let k = 0; k < 900; k++) { bx.fillStyle = `rgba(90,70,40,${(rr() * 0.06).toFixed(3)})`; bx.fillRect(rr() * W, rr() * H, R * (1 + rr() * 2), R * (1 + rr() * 2)); }
+      if (St.grid) { bx.strokeStyle = St.grid; bx.lineWidth = R * 0.6; const step = W / 8;
+        for (let x = step; x < W; x += step) { bx.beginPath(); bx.moveTo(x, 0); bx.lineTo(x, H); bx.stroke(); }
+        for (let y = step; y < H; y += step) { bx.beginPath(); bx.moveTo(0, y); bx.lineTo(W, y); bx.stroke(); } }
+      // the blocks
+      const blds = window.__builtFootprints || OSM.buildings || [];
+      const path = (pts) => { bx.beginPath(); pts.forEach((q, i) => i ? bx.lineTo(w2m(q[0], 0), w2m(q[1], 1)) : bx.moveTo(w2m(q[0], 0), w2m(q[1], 1))); bx.closePath(); };
+      for (const bd of blds) {
+        path(bd.pts);
+        if (St.bld) { bx.fillStyle = St.bld; bx.fill(); }
+        if (St.wash) { bx.save(); bx.translate(R * (rr() - 0.5) * 3, R * (rr() - 0.5) * 3); path(bd.pts); bx.fill(); bx.restore(); }
+        if (St.bldLine) { bx.strokeStyle = St.bldLine; bx.lineWidth = R * 0.8; bx.stroke(); }
+        if (St.hatch) { bx.save(); path(bd.pts); bx.clip(); bx.strokeStyle = 'rgba(30,26,22,0.28)'; bx.lineWidth = R * 0.6;
+          const xs = bd.pts.map(q => w2m(q[0], 0)), ys = bd.pts.map(q => w2m(q[1], 1)), x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
+          for (let x = x0 - (y1 - y0); x < x1; x += R * 3) { bx.beginPath(); bx.moveTo(x, y1); bx.lineTo(x + (y1 - y0), y0); bx.stroke(); }
+          bx.restore(); }
       }
+      // the streets
+      bx.lineCap = 'round'; bx.lineJoin = 'round';
+      if (St.glow) { bx.shadowColor = St.glow; bx.shadowBlur = 6 * R; }
+      for (const r of OSM.roads) {
+        bx.strokeStyle = St.road;
+        bx.lineWidth = Math.max(St.thin ? 0.9 * R : 1.6 * R, ((r.w || 7) / half2) * (Math.min(W, H) / 2 - pad) * (St.thin ? 0.55 : 1));
+        bx.beginPath(); r.pts.forEach((q, i) => i ? bx.lineTo(w2m(q[0], 0), w2m(q[1], 1)) : bx.moveTo(w2m(q[0], 0), w2m(q[1], 1))); bx.stroke();
+      }
+      bx.shadowBlur = 0;
+      bx.restore();
+      if (St.pixel) {                                 // drawn small and blown up, square pixels
+        const sm = document.createElement('canvas'); sm.width = Math.round(W / St.pixel / R * 2); sm.height = Math.round(H / St.pixel / R * 2);
+        const sx = sm.getContext('2d'); sx.imageSmoothingEnabled = false; sx.drawImage(base, 0, 0, sm.width, sm.height);
+        bx.clearRect(0, 0, W, H); bx.imageSmoothingEnabled = false; bx.drawImage(sm, 0, 0, W, H);
+      }
+      cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+      const corner = A.corner === 'bl' ? 'right:16px;bottom:52px' : 'left:14px;bottom:14px';
+      cv.style.cssText = `position:fixed;${corner};width:${css[0]}px;height:${css[1]}px;z-index:12;pointer-events:none;`
+        + (St.shape === 'circle' ? 'border-radius:50%;' : St.kind === 'pixel' ? 'image-rendering:pixelated;' : 'border-radius:3px;')
+        + `border:${St.border};` + (St.kind === 'mono' ? '' : 'box-shadow:0 4px 18px rgba(0,0,0,0.45);')
+        + (St.tilt ? `transform:rotate(${St.tilt.toFixed(1)}deg);` : '');
+      document.body.appendChild(cv);
+      mx = cv.getContext('2d');
+      window.__minimap = { kind, size: css, spin: !!St.spin, corner };
+    };
+    const mark = (x, y, style, col, sz) => {
+      mx.fillStyle = col; mx.strokeStyle = col; mx.lineWidth = 2 * R;
+      if (style === 'x') { mx.beginPath(); mx.moveTo(x - sz, y - sz); mx.lineTo(x + sz, y + sz); mx.moveTo(x + sz, y - sz); mx.lineTo(x - sz, y + sz); mx.stroke(); }
+      else if (style === 'ring') { mx.beginPath(); mx.arc(x, y, sz, 0, Math.PI * 2); mx.stroke(); mx.beginPath(); mx.arc(x, y, sz * 0.35, 0, Math.PI * 2); mx.fill(); }
+      else if (style === 'star') { mx.beginPath(); for (let k = 0; k < 10; k++) { const a = -Math.PI / 2 + k * Math.PI / 5, rr2 = k % 2 ? sz * 0.45 : sz * 1.1; k ? mx.lineTo(x + Math.cos(a) * rr2, y + Math.sin(a) * rr2) : mx.moveTo(x + Math.cos(a) * rr2, y + Math.sin(a) * rr2); } mx.closePath(); mx.fill(); }
+      else if (style === 'pin') { mx.beginPath(); mx.arc(x, y - sz * 1.3, sz * 0.8, Math.PI, 0); mx.lineTo(x, y); mx.closePath(); mx.fill(); }
+      else { mx.beginPath(); mx.arc(x, y, sz, 0, Math.PI * 2); mx.fill(); }
+    };
+    return { step(pp) {
+      if (!cv) setup();
+      const W = cv.width, H = cv.height;
+      mx.clearRect(0, 0, W, H);
+      camera.getWorldDirection(dirV);
+      const yaw = Math.PI - Math.atan2(dirV.x, dirV.z), px = w2m(pp.x, 0), pz = w2m(pp.z, 1);
+      mx.save();
+      if (St.shape === 'circle') { mx.beginPath(); mx.arc(W / 2, H / 2, W / 2 - R, 0, Math.PI * 2); mx.clip(); }
+      if (St.spin) { mx.translate(W / 2, H / 2); mx.rotate(-yaw); mx.translate(-px, -pz); }
+      mx.drawImage(base, 0, 0);
+      const pos = (x, z) => [w2m(x, 0), w2m(z, 1)];
+      const upright = (x, y, f) => { mx.save(); mx.translate(x, y); if (St.spin) mx.rotate(yaw); f(); mx.restore(); };
+      if (goal) { const [gx, gy] = pos(goal[0], goal[1]); upright(gx, gy, () => mark(0, 0, St.mark, St.goal, 4.4 * R)); }
       // heist venues: without these the player has no way to know WHICH of
       // three hundred blocks has a door in it
-      for (const E of ENTERABLES) {
-        mx.fillStyle = '#ff9f45';
-        mx.beginPath();
-        mx.arc(w2m(E.door[0]), w2m(E.door[1]), 3.4, 0, Math.PI * 2);
-        mx.fill();
-      }
+      for (const E of ENTERABLES) { const [ex, ey] = pos(E.door[0], E.door[1]); upright(ex, ey, () => mark(0, 0, 'dot', '#ff9f45', 3.4 * R)); }
       // parked cars: the same "where do I even go" problem the venue dots
       // solve — a getaway car you cannot find is not a getaway car
-      for (const c of window.__cars || []) {
-        if (c === window.__inCar) continue;          // that one is the arrow
-        mx.fillStyle = '#7fd4ff';
-        mx.beginPath();
-        mx.arc(w2m(c.x), w2m(c.z), 3.0, 0, Math.PI * 2);
-        mx.fill();
-      }
-      camera.getWorldDirection(dirV);
-      mx.save();
-      mx.translate(w2m(pp.x), w2m(pp.z));
-      mx.rotate(Math.PI - Math.atan2(dirV.x, dirV.z));
-      mx.fillStyle = '#5cffc9';
-      mx.strokeStyle = 'rgba(0,0,0,0.55)'; mx.lineWidth = 1.4;
-      mx.beginPath();
-      mx.moveTo(0, -6.5); mx.lineTo(4.4, 4.6); mx.lineTo(-4.4, 4.6);
-      mx.closePath(); mx.fill(); mx.stroke();
+      // (2026-10-21) only the ones near you: a whole street of parked cars buried the map in dots
+      for (const c of window.__cars || []) { if (c === window.__inCar || Math.hypot(c.x - pp.x, c.z - pp.z) > 45) continue; const [cx2, cy2] = pos(c.x, c.z); upright(cx2, cy2, () => mark(0, 0, 'dot', St.car, 1.9 * R)); }
       mx.restore();
+      // you: an arrow along your view (fixed pointing up on a map that turns with you)
+      mx.save();
+      if (St.spin) mx.translate(W / 2, H / 2); else { mx.translate(px, pz); mx.rotate(yaw); }
+      mx.fillStyle = St.me; mx.strokeStyle = St.bg.startsWith('rgba(0,0,0,0)') ? 'rgba(0,0,0,0.6)' : 'rgba(0,0,0,0.55)'; mx.lineWidth = 1.4 * R;
+      mx.beginPath(); mx.moveTo(0, -6.5 * R); mx.lineTo(4.4 * R, 4.6 * R); mx.lineTo(0, 2.4 * R); mx.lineTo(-4.4 * R, 4.6 * R); mx.closePath(); mx.fill(); mx.stroke();
+      mx.restore();
+      // the furniture of the sheet: a compass rose, tape at the corners
+      if (St.compass) { const cx = W - 16 * R, cy = 16 * R, rot = St.spin ? -yaw : 0; mx.save(); mx.translate(cx, cy); mx.rotate(rot);
+        mx.fillStyle = St.road; mx.beginPath(); mx.moveTo(0, -9 * R); mx.lineTo(3 * R, 0); mx.lineTo(0, 2 * R); mx.lineTo(-3 * R, 0); mx.closePath(); mx.fill();
+        mx.font = `600 ${8 * R}px ${getComputedStyle(document.body).getPropertyValue('--f-head') || 'serif'}`; mx.textAlign = 'center'; mx.fillText('N', 0, -11 * R); mx.restore(); }
+      if (St.tape) for (const [tx, ty, ta] of [[14 * R, 8 * R, -0.5], [W - 14 * R, H - 8 * R, -0.5]]) { mx.save(); mx.translate(tx, ty); mx.rotate(ta);
+        mx.fillStyle = 'rgba(232,220,170,0.72)'; mx.fillRect(-16 * R, -6 * R, 32 * R, 12 * R); mx.restore(); }
     } };
   })();
 
@@ -11298,6 +11358,30 @@ async function main() {
       bangers: F('Bangers', 400, 'upper', .06, 0, 0, 'display loud'), caveat: F('Caveat', 700, 'none', 0, 0, 0, 'hand'),
       kalam: F('Kalam', 700, 'none', 0, 0, 0, 'hand'), marker: F('Permanent Marker', 400, 'none', .01, 0, 0, 'hand loud'),
       patrick: F('Patrick Hand', 400, 'upper', .08, 0, 0, 'hand'),
+      // (2026-10-21) the user: "our fonts and vibes cannot be nearly similar", "more fonts"
+      crimson: F('Crimson Pro', 600, 'none', -.01, 0, 0, 'serif'), crimsonU: F('Crimson Pro', 300, 'upper', .22, 0, 0, 'serif thin'),
+      youngserif: F('Young Serif', 400, 'none', -.01, 0, 0, 'serif display round'), dmserif: F('DM Serif Display', 400, 'none', -.01, 0, 0, 'serif display'),
+      bodoni: F('Bodoni Moda', 800, 'none', -.02, 0, 0, 'serif display formal'), bodoniU: F('Bodoni Moda', 500, 'upper', .18, 0, 0, 'serif formal thin'),
+      yeseva: F('Yeseva One', 400, 'none', 0, 0, 0, 'serif display loud'), gloock: F('Gloock', 400, 'none', -.01, 0, 0, 'serif display'),
+      spectral: F('Spectral', 600, 'small', .06, 0, 0, 'serif period'), limelight: F('Limelight', 400, 'upper', .04, 0, 0, 'display period noir'),
+      federant: F('Federant', 400, 'upper', .06, 0, 0, 'display period'), macondo: F('Macondo', 400, 'none', .01, 0, 0, 'display hand period'),
+      medsharp: F('MedievalSharp', 400, 'none', .02, 0, 0, 'display period blackletter'), eaglelake: F('Eagle Lake', 400, 'none', 0, 0, 0, 'hand period serif'),
+      cinzeldeco: F('Cinzel Decorative', 700, 'none', .06, 0, 0, 'serif formal display'), eater: F('Eater', 400, 'upper', .04, 0, 0, 'display horror loud'),
+      jolly: F('Jolly Lodger', 400, 'upper', .08, 0, 0, 'display horror pirate'), griffy: F('Griffy', 400, 'none', .02, 0, 0, 'display horror hand'),
+      gochi: F('Gochi Hand', 400, 'none', .01, 0, 0, 'hand'), reenie: F('Reenie Beanie', 400, 'none', .02, 0, 0, 'hand thin'),
+      gloria: F('Gloria Hallelujah', 400, 'none', 0, 0, 0, 'hand round'), shadows: F('Shadows Into Light', 400, 'none', .04, 0, 0, 'hand thin'),
+      covered: F('Covered By Your Grace', 400, 'none', .02, 0, 0, 'hand loud'), indie: F('Indie Flower', 400, 'none', .01, 0, 0, 'hand round'),
+      sniglet: F('Sniglet', 400, 'none', 0, 0, 0, 'round'), bubblegum: F('Bubblegum Sans', 400, 'upper', .04, 0, 0, 'round loud display'),
+      grandstander: F('Grandstander', 800, 'none', -.01, 0, 0, 'round loud'), exo: F('Exo 2', 800, 'upper', .06, 0, 0, 'tech loud'),
+      exoL: F('Exo 2', 200, 'upper', .3, 0, 0, 'tech thin'), michroma: F('Michroma', 400, 'upper', .12, 0, 0, 'tech display'),
+      oxanium: F('Oxanium', 700, 'upper', .08, 0, 0, 'tech'), turret: F('Turret Road', 700, 'upper', .1, 0, 0, 'tech round'),
+      quantico: F('Quantico', 700, 'upper', .06, 0, 0, 'tech condensed'), teko: F('Teko', 600, 'upper', .04, 0, 0, 'condensed loud'),
+      tekoL: F('Teko', 300, 'upper', .2, 0, 0, 'condensed thin'), saira: F('Saira', 800, 'upper', .02, 0, 0, 'grotesk loud'),
+      barlowc: F('Barlow Condensed', 800, 'upper', .02, 0, 0, 'condensed loud'), league: F('League Gothic', 400, 'upper', .04, 0, 0, 'condensed loud'),
+      familjen: F('Familjen Grotesk', 700, 'none', -.02, 0, 0, 'grotesk'), hanken: F('Hanken Grotesk', 800, 'none', -.03, 0, 0, 'grotesk loud'),
+      hankenL: F('Hanken Grotesk', 200, 'upper', .32, 0, 0, 'grotesk thin'), darker: F('Darker Grotesque', 800, 'none', -.01, 0, 0, 'grotesk display'),
+      plexmono: F('IBM Plex Mono', 500, 'upper', .16, 0, 0, 'mono tech'), courier: F('Courier Prime', 700, 'none', 0, 0, 0, 'mono noir'),
+      majormono: F('Major Mono Display', 400, 'none', .04, 0, 0, 'mono display tech'), pixelify: F('Pixelify Sans', 700, 'upper', .04, 0, 0, 'pixel'),
     };
     // the setting decides which faces belong in the world at all
     const theme =
@@ -11315,20 +11399,21 @@ async function main() {
       : has(/\b(victorian|egypt\w*|roman|ancient|temples?|samurai|shogun|monaster\w*|ruins?|tombs?|pharaohs?|manor|library|harbou?rs?|smithy)\b/) ? 'period'
       : 'open';
     const POOL = {
-      pixel: ['press', 'silk', 'vt', 'rubikmono'],
-      horror: ['creepster', 'nosifer', 'butcher', 'grenze', 'fraktur', 'fell', 'cormorant', 'elite'],
-      western: ['rye', 'sancreek', 'abril', 'bebas', 'elite', 'playfair', 'oswald'],
-      pirate: ['pirata', 'fell', 'almendra', 'abril', 'garamond', 'uncial'],
-      myth: ['uncial', 'fraktur', 'grenze', 'almendra', 'metamorph', 'cinzel', 'cinzelB', 'fell', 'cormorant', 'garamond'],
-      synth: ['monoton', 'audiowide', 'orbitron', 'righteous', 'unbounded', 'syne', 'shouldersL'],
-      scifi: ['orbitron', 'chakra', 'space', 'unbounded', 'syne', 'russo', 'techmono', 'audiowide', 'shoulders', 'josefinT', 'dmmono', 'bricolage'],
-      noir: ['bebas', 'elite', 'playfair', 'playfairI', 'abril', 'oswald', 'anton', 'baskerville', 'oswaldL'],
-      play: ['fredoka', 'baloo', 'shrikhand', 'comfortaa', 'righteous', 'bangers', 'unbounded', 'marker', 'caveat'],
-      sport: ['anton', 'bebas', 'shoulders', 'archivo', 'russo', 'oswald', 'unbounded', 'syne', 'chakra', 'bricolage'],
-      cozy: ['fraunces', 'frauncesL', 'caveat', 'kalam', 'amatic', 'shrikhand', 'comfortaa', 'loraI', 'playfairI', 'patrick', 'baloo', 'garamond'],
-      period: ['cinzel', 'fell', 'fellU', 'playfair', 'cormorant', 'garamond', 'baskerville', 'lora', 'abril', 'fraunces'],
+      pixel: ['press', 'silk', 'vt', 'rubikmono', 'pixelify', 'majormono'],
+      horror: ['creepster', 'nosifer', 'butcher', 'grenze', 'fraktur', 'fell', 'cormorant', 'elite', 'eater', 'jolly', 'griffy', 'crimsonU'],
+      western: ['rye', 'sancreek', 'abril', 'bebas', 'elite', 'playfair', 'oswald', 'courier', 'limelight', 'bodoni', 'yeseva', 'league'],
+      pirate: ['pirata', 'fell', 'almendra', 'abril', 'garamond', 'uncial', 'jolly', 'macondo', 'eaglelake', 'cinzeldeco'],
+      myth: ['uncial', 'fraktur', 'grenze', 'almendra', 'metamorph', 'cinzel', 'cinzelB', 'fell', 'cormorant', 'garamond', 'medsharp', 'cinzeldeco', 'macondo', 'eaglelake', 'federant', 'spectral'],
+      synth: ['monoton', 'audiowide', 'orbitron', 'righteous', 'unbounded', 'syne', 'shouldersL', 'michroma', 'exo', 'turret', 'oxanium', 'majormono'],
+      scifi: ['orbitron', 'chakra', 'space', 'unbounded', 'syne', 'russo', 'techmono', 'audiowide', 'shoulders', 'josefinT', 'dmmono', 'bricolage', 'exo', 'exoL', 'michroma', 'oxanium', 'quantico', 'plexmono', 'hankenL'],
+      noir: ['bebas', 'elite', 'playfair', 'playfairI', 'abril', 'oswald', 'anton', 'baskerville', 'oswaldL', 'limelight', 'courier', 'bodoni', 'dmserif', 'gloock', 'league'],
+      play: ['fredoka', 'baloo', 'shrikhand', 'comfortaa', 'righteous', 'bangers', 'unbounded', 'marker', 'caveat', 'sniglet', 'bubblegum', 'grandstander', 'gochi', 'indie', 'gloria'],
+      sport: ['anton', 'bebas', 'shoulders', 'archivo', 'russo', 'oswald', 'unbounded', 'syne', 'chakra', 'bricolage', 'teko', 'barlowc', 'league', 'saira', 'quantico', 'hanken'],
+      cozy: ['fraunces', 'frauncesL', 'caveat', 'kalam', 'amatic', 'shrikhand', 'comfortaa', 'loraI', 'playfairI', 'patrick', 'baloo', 'garamond', 'youngserif', 'gochi', 'indie', 'shadows', 'reenie', 'covered', 'crimson', 'sniglet'],
+      period: ['cinzel', 'fell', 'fellU', 'playfair', 'cormorant', 'garamond', 'baskerville', 'lora', 'abril', 'fraunces', 'crimson', 'spectral', 'bodoniU', 'dmserif', 'gloock', 'yeseva', 'federant', 'cinzeldeco'],
       open: ['josefin', 'bebas', 'bricolage', 'bricolageL', 'loraI', 'instrument', 'dmmono', 'cinzel', 'space', 'syne', 'fraunces', 'playfair', 'archivo',
-             'oswaldL', 'cormorant', 'unbounded', 'shouldersL', 'caveat', 'amatic', 'righteous', 'abril', 'frauncesL'],
+             'oswaldL', 'cormorant', 'unbounded', 'shouldersL', 'caveat', 'amatic', 'righteous', 'abril', 'frauncesL',
+             'hanken', 'hankenL', 'familjen', 'darker', 'gloock', 'dmserif', 'teko', 'crimson', 'youngserif', 'exoL', 'tekoL'],
     };
     // reading faces: what the text is set in, by setting
     const B = (h, tags) => ({ h: '"' + h + '"', tags: tags.split(' ') });
@@ -11339,13 +11424,14 @@ async function main() {
       pirate: [B('IM Fell English', 'serif'), B('EB Garamond', 'serif'), B('Lora', 'serif')],
       myth: [B('EB Garamond', 'serif'), B('Lora', 'serif'), B('IM Fell English', 'serif'), B('Cormorant', 'serif thin')],
       synth: [B('Space Grotesk', 'grotesk'), B('Chakra Petch', 'tech'), B('DM Mono', 'mono'), B('Syne', 'grotesk')],
-      scifi: [B('Space Grotesk', 'grotesk'), B('DM Mono', 'mono'), B('Chakra Petch', 'tech'), B('Instrument Sans', 'grotesk'), B('Josefin Sans', 'thin')],
-      noir: [B('Special Elite', 'mono'), B('Lora', 'serif'), B('Libre Baskerville', 'serif'), B('Oswald', 'condensed')],
-      play: [B('Fredoka', 'round'), B('Baloo 2', 'round'), B('Comfortaa', 'round'), B('Patrick Hand', 'hand'), B('Instrument Sans', 'grotesk')],
+      scifi: [B('Space Grotesk', 'grotesk'), B('DM Mono', 'mono'), B('Chakra Petch', 'tech'), B('Instrument Sans', 'grotesk'), B('Josefin Sans', 'thin'), B('IBM Plex Mono', 'mono'), B('Hanken Grotesk', 'grotesk'), B('Exo 2', 'tech')],
+      noir: [B('Special Elite', 'mono'), B('Lora', 'serif'), B('Libre Baskerville', 'serif'), B('Oswald', 'condensed'), B('Courier Prime', 'mono'), B('Crimson Pro', 'serif')],
+      play: [B('Fredoka', 'round'), B('Baloo 2', 'round'), B('Comfortaa', 'round'), B('Patrick Hand', 'hand'), B('Instrument Sans', 'grotesk'), B('Sniglet', 'round'), B('Grandstander', 'round')],
       sport: [B('Instrument Sans', 'grotesk'), B('Space Grotesk', 'grotesk'), B('Oswald', 'condensed'), B('Chakra Petch', 'tech')],
-      cozy: [B('Lora', 'serif'), B('Fraunces', 'serif round'), B('Kalam', 'hand'), B('Patrick Hand', 'hand'), B('Comfortaa', 'round'), B('EB Garamond', 'serif')],
-      period: [B('Lora', 'serif'), B('EB Garamond', 'serif'), B('Libre Baskerville', 'serif'), B('IM Fell English', 'serif')],
-      open: [B('Instrument Sans', 'grotesk'), B('Space Grotesk', 'grotesk'), B('Lora', 'serif'), B('Fraunces', 'serif'), B('DM Mono', 'mono'), B('Josefin Sans', 'thin'), B('EB Garamond', 'serif')],
+      cozy: [B('Lora', 'serif'), B('Fraunces', 'serif round'), B('Kalam', 'hand'), B('Patrick Hand', 'hand'), B('Comfortaa', 'round'), B('EB Garamond', 'serif'), B('Crimson Pro', 'serif'), B('Gochi Hand', 'hand')],
+      period: [B('Lora', 'serif'), B('EB Garamond', 'serif'), B('Libre Baskerville', 'serif'), B('IM Fell English', 'serif'), B('Crimson Pro', 'serif'), B('Spectral', 'serif')],
+      open: [B('Instrument Sans', 'grotesk'), B('Space Grotesk', 'grotesk'), B('Lora', 'serif'), B('Fraunces', 'serif'), B('DM Mono', 'mono'), B('Josefin Sans', 'thin'), B('EB Garamond', 'serif'),
+             B('Hanken Grotesk', 'grotesk'), B('Crimson Pro', 'serif'), B('Familjen Grotesk', 'grotesk'), B('IBM Plex Mono', 'mono')],
     };
     // the makers: their taste in faces, how they grade a frame, what they
     // put round a line of text, how they set a title, and how they colour
@@ -11864,7 +11950,11 @@ async function main() {
               if (ent.spectral) { m.userData.noAutoTex = true; o.castShadow = false; }
               if (Array.isArray(o.material)) o.material[mi] = m; else o.material = m;
               m.side = THREE.DoubleSide;    // no hollow heads on NPCs either
-              if (m.map) { if (_flatStyle) cartoonizeTexture(m); else despeckleTexture(m); }
+              // (2026-10-21) not on a sharpened character (its coat's _mr is still on the
+              // mesh): the de-speckle pulls any pixel far darker than its neighbours back to
+              // them, and on a face those are the pupils, the brows and the lips. The user:
+              // "some characters' faces are blurry"
+              if (m.map) { if (_flatStyle) cartoonizeTexture(m); else if (!(o.geometry && o.geometry.attributes._mr)) despeckleTexture(m); else { m.map.anisotropy = renderer.capabilities.getMaxAnisotropy(); m.map.needsUpdate = true; } }
               if (m.emissive !== undefined) {
                 if (dark && m.map) m.emissiveMap = m.map;
                 if (hostile) m.emissive.setRGB(dark ? 0.30 : 0.10, dark ? 0.16 : 0.02, dark ? 0.16 : 0.02);
@@ -19789,7 +19879,7 @@ async function main() {
   pRoot.traverse(o => {
     if (!o.isMesh) return;
     for (const m of Array.isArray(o.material) ? o.material : [o.material]) {
-      if (m && m.map) { if (_flatStyle) cartoonizeTexture(m); else despeckleTexture(m); }
+      if (m && m.map) { if (_flatStyle) cartoonizeTexture(m); else if (!(o.geometry && o.geometry.attributes._mr)) despeckleTexture(m); else { m.map.anisotropy = renderer.capabilities.getMaxAnisotropy(); m.map.needsUpdate = true; } }   // a sharpened face keeps its eyes
     }
   });
   // THE LIBRARY CAR WEARS THE SENTENCE'S PAINT (2026-09-24): a generated

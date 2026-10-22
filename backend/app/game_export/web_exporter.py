@@ -301,6 +301,12 @@ def export_web_game(spec: GameSpec, out_dir: str | Path, verbose: bool = True) -
         "Libre Baskerville, Archivo Black, Oswald, Anton, Big Shoulders Display, Chakra Petch, Orbitron, Audiowide, Comfortaa, "
         "Baloo 2, Patrick Hand, Kalam, Rye, Sancreek, Metamorphous, Uncial Antiqua, Almendra, Grenze Gotisch, Nosifer, "
         "Butcherman, Shrikhand (github.com/google/fonts) | SIL Open Font License 1.1 (licence files in vendor/fonts) |",
+        "| Fonts: Crimson Pro, Young Serif, DM Serif Display, Bodoni Moda, Yeseva One, Gloock, Spectral, Limelight, Federant, "
+        "Macondo, MedievalSharp, Eagle Lake, Cinzel Decorative, Eater, Jolly Lodger, Griffy, Gochi Hand, Reenie Beanie, "
+        "Gloria Hallelujah, Shadows Into Light, Covered By Your Grace, Indie Flower, Sniglet, Bubblegum Sans, Grandstander, "
+        "Exo 2, Michroma, Oxanium, Turret Road, Quantico, Teko, Saira, Barlow Condensed, League Gothic, Familjen Grotesk, "
+        "Hanken Grotesk, Darker Grotesque, IBM Plex Mono, Courier Prime, Major Mono Display, Pixelify Sans "
+        "(github.com/google/fonts) | SIL Open Font License 1.1 (licence files in vendor/fonts) |",
         "| Font: Permanent Marker | Apache License 2.0 (vendor/fonts/Apache-PermanentMarker.txt) |",
         "| PBR textures | Generated locally (Stable Diffusion XL); yours |",
         "| Ground scans: rock (rocky_trail), soil (forest_ground_04), forest floor (forest_leaves_04), sand (sand_01), grass (leafy_grass), cliff (rock_face_03), sandstone (cliff_side), masonry (stone_wall) | Poly Haven, CC0 |",
