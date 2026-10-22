@@ -57,8 +57,10 @@ def main(argv: list[str]) -> int:
         return 1
 
     # the engine is packed from HEAD: an uncommitted backend change would silently be left out
-    dirty = subprocess.run(["git", "status", "--porcelain", "--", "backend/app", "backend/tools", "backend/scripts", "backend/requirements.txt"],
-                           cwd=REPO, capture_output=True, text=True).stdout.strip()
+    # (tracked code that ships: the app, its scripts and tools, the requirements; not test fixtures)
+    dirty = "\n".join(l for l in subprocess.run(
+        ["git", "diff", "--name-only", "HEAD", "--", "backend/app", "backend/scripts", "backend/tools", "backend/requirements.txt"],
+        cwd=REPO, capture_output=True, text=True).stdout.splitlines() if "/shotgate/" not in l and l.endswith((".py", ".txt", ".js", ".tpl", ".json", ".ps1")))
     if dirty and "--allow-dirty" not in argv:
         print("uncommitted backend changes would be left out of the engine; commit them first:\n" + dirty)
         return 1
