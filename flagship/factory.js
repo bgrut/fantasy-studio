@@ -1667,6 +1667,59 @@ scene.add(cube);
   cubeEdges.name = 'worldEdge';
   scene.add(cubeEdges);
 
+  // A WORLDLET, NOT A BOX (2026-10-22). From a little way off Crystal Works read as a
+  // textured cube on a black card: dead-straight faces, a lit wire along its edges, the
+  // survey grid glowing like graph paper. A small world has air: a thin halo the colour of
+  // its edge, brighter where you look across it, fading into space. And it has company:
+  // shards of the same rock adrift round it, slowly turning, lit by its sun.
+  {
+    const R = HALF * 2.15;
+    const haloM = new THREE.ShaderMaterial({
+      uniforms: { uCol: { value: new THREE.Color(0x7fd8ff) } },
+      transparent: true, depthWrite: false, side: THREE.BackSide, blending: THREE.AdditiveBlending, fog: false,
+      vertexShader: `varying vec3 vN; varying vec3 vV;
+        void main() { vec4 mv = modelViewMatrix * vec4(position, 1.0); vN = normalize(normalMatrix * normal); vV = normalize(-mv.xyz); gl_Position = projectionMatrix * mv; }`,
+      fragmentShader: `uniform vec3 uCol; varying vec3 vN; varying vec3 vV;
+        void main() { float r = 1.0 - abs(dot(normalize(vN), normalize(vV))); float a = pow(r, 1.8) * pow(1.0 - r, 1.1) * 0.75;   // rises toward the rim and dies before it: air, not a bubble
+          gl_FragColor = vec4(uCol * a, a); }`,
+    });
+    const halo = new THREE.Mesh(new THREE.SphereGeometry(R, 64, 40), haloM);
+    halo.name = 'worldHalo'; halo.renderOrder = -1; halo.frustumCulled = false;
+    scene.add(halo);
+    // the shards: rocks of the plating's own stone, a few large and many small
+    const rr = (() => { let q = 77123; return () => ((q = (q * 1664525 + 1013904223) >>> 0) / 4294967296); })();
+    const rockG = new THREE.IcosahedronGeometry(1, 1);
+    { const pa = rockG.attributes.position; for (let i = 0; i < pa.count; i++) { const k = 0.72 + rr() * 0.5; pa.setXYZ(i, pa.getX(i) * k, pa.getY(i) * k * 0.8, pa.getZ(i) * k); } rockG.computeVertexNormals(); }
+    const rockM = new THREE.MeshStandardMaterial({ color: 0x6a6258, roughness: 0.92, metalness: 0.05, flatShading: true });
+    rockM.userData.noAutoTex = true;
+    const NR = 46, shards = new THREE.InstancedMesh(rockG, rockM, NR);
+    shards.name = 'worldShards'; shards.castShadow = false; shards.receiveShadow = false; shards.frustumCulled = false;
+    const orb = [];
+    for (let k = 0; k < NR; k++) {
+      // a loose belt, tilted, well clear of the faces you walk
+      const a = rr() * Math.PI * 2, r = HALF * (2.25 + rr() * 1.7), y = (rr() - 0.5) * HALF * 0.9;
+      const size = k < 6 ? 2.2 + rr() * 2.6 : 0.35 + rr() * 1.2;
+      orb.push({ a, r, y, size, w: (0.004 + rr() * 0.01) * (rr() < 0.5 ? 1 : -1), spin: new THREE.Vector3(rr(), rr(), rr()).normalize(), s: rr() * 6 });
+    }
+    scene.add(shards);
+    const tilt = new THREE.Quaternion().setFromEuler(new THREE.Euler(0.38, 0, 0.21));
+    const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _p = new THREE.Vector3(), _sc = new THREE.Vector3();
+    window.__worldletTick = (t, camDist) => {
+      for (let k = 0; k < NR; k++) {
+        const o = orb[k], a = o.a + t * o.w;
+        _p.set(Math.cos(a) * o.r, o.y, Math.sin(a) * o.r).applyQuaternion(tilt);
+        _q.setFromAxisAngle(o.spin, o.s + t * 0.05);
+        _m.compose(_p, _q, _sc.setScalar(o.size)); shards.setMatrixAt(k, _m);
+      }
+      shards.instanceMatrix.needsUpdate = true;
+      if (cubeEdges) haloM.uniforms.uCol.value.copy(cubeEdges.material.color);
+      // the halo and the shards are for the view from off the surface
+      const far = Math.max(0, Math.min(1, (camDist - HALF - 6) / (HALF * 0.8)));
+      haloM.visible = far > 0.01; halo.visible = far > 0.01;
+      haloM.uniforms.uCol.value.multiplyScalar(far);
+    };
+  }
+
   // and something for the key light to be coming FROM. Placed down the sun's
   // own direction so the lighting and the sky agree with each other.
   const d = sun.position.clone().normalize().multiplyScalar(370);
@@ -7878,7 +7931,9 @@ function applyWorld(k) {
   // the lit lanes fade to a third on a grown world (2026-10-11)
   { const _grown = w.fam === 'green' && !SPEC.city;
     gridLines.material.opacity = _grown ? 0.06 : 0.14;
-    if (lanes && lanes.material) lanes.material.opacity = _grown ? 0.12 : 0.32; }
+    if (lanes && lanes.material) lanes.material.opacity = _grown ? 0.12 : 0.32;
+    gridLines.userData.base = gridLines.material.opacity;
+    if (lanes && lanes.material) lanes.userData.base = lanes.material.opacity; }
   // and the belts: rust on the cinder, steel-blue on the ice, brass in the
   // green. The tread texture is shared and scrolls the same under every tint.
   const bt = w.belt || WORLDS[0].belt;
@@ -9275,6 +9330,16 @@ const frame = () => {
   const dt = PAUSED || warming ? 0 : _rdt;
   last = now;
   if (skyDome) skyDome.material.uniforms.uTime.value = now * 0.001;   // the nebula drifts, the aurora ripples
+  {
+    // (2026-10-22) seen from off the surface the worldlet is a world, not graph paper: the
+    // grid, the lanes and the edge wire fade with distance (the overhead keeps them to plan by)
+    const cd = camera.position.length();
+    if (window.__worldletTick) window.__worldletTick(now * 0.001, cd);
+    const k = overhead ? 1 : Math.max(0.12, 1 - Math.max(0, (cd - HALF - 8) / (HALF * 0.9)));
+    if (gridLines && gridLines.userData.base !== undefined) gridLines.material.opacity = gridLines.userData.base * k;
+    if (lanes && lanes.userData.base !== undefined) lanes.material.opacity = lanes.userData.base * k;
+    if (cubeEdges) cubeEdges.material.opacity = 0.75 * Math.max(0.35, k);
+  }
   if (AUDIO.bed) AUDIO.bed.step(dt);
   stepLightPool(dt);
 
