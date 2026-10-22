@@ -8,17 +8,11 @@
 
 **Type a sentence. Get a playable 3D game or a cinematic video — no code, running entirely on your own machine. Then reshape it in real time by pointing at the world.**
 
-### ⬇️ Get it — one command, installs everything
+<a href="https://github.com/bgrut/fantasy-studio/releases/latest"><img src="https://img.shields.io/badge/Download%20for%20Windows-FantasyStudio--Setup.exe-8b5cf6?style=for-the-badge&logo=windows&logoColor=white" alt="Download Fantasy Studio for Windows"/></a>
 
-</div>
+*Windows 10/11 · Run the installer, open Fantasy Studio, pick **Game mode** · No graphics card needed · Nothing to install first*
 
-```powershell
-irm https://raw.githubusercontent.com/bgrut/fantasy-studio/main/bootstrap.ps1 | iex
-```
-
-<div align="center">
-
-*Then `.\desktop\launch.ps1` opens the app. 🕹️ **Game mode needs no GPU** · prereqs auto-checked ([details](INSTALL.md))*
+<sub>Every download is checked against published SHA-256 checksums · installs for your user only, no admin prompt · [Is it safe?](https://github.com/bgrut/fantasy-studio/releases/latest#is-it-safe) · Developers: [install from source](#install-from-source)</sub>
 
 <br/>
 
@@ -122,10 +116,20 @@ The same prompt that makes a game can make a film. Video mode renders **real Ble
 
 ## Get started
 
-```powershell
-# One command — installs everything (Blender, Ollama, Python venv, npm, env files)
-irm https://raw.githubusercontent.com/bgrut/fantasy-studio/main/bootstrap.ps1 | iex
+1. **[Download the installer](https://github.com/bgrut/fantasy-studio/releases/latest)** (`FantasyStudio-Setup-<version>.exe`, about 2 MB) and run it.
+2. Open **Fantasy Studio** from the Start menu and pick **Game mode** (no graphics card needed) or **Full studio** (adds image and 3D generation on an NVIDIA card).
+3. The first start sets everything up with a progress bar: its own Python, the engine, the 3D library and Ollama with its local model (about 10 GB in Game mode). After that it opens straight into the studio.
 
+**Is it safe?** The installer and everything it downloads are built from this repository at the release's tag, and each file carries a published SHA-256 checksum that the setup verifies before using it (and Ollama's installer runs only if its digital signature is valid). Check the installer yourself with `Get-FileHash .\FantasyStudio-Setup-1.3.0.exe` against the release's `SHA256SUMS.txt`. Until code signing is in place, Windows may show "Windows protected your PC": choose **More info → Run anyway**.
+
+### Install from source
+
+For developers, or to run from a clone (needs Git, Python 3.11+, Node 20+ and Ollama):
+
+```powershell
+git clone https://github.com/bgrut/fantasy-studio
+cd fantasy-studio
+.\bootstrap.ps1             # read it first: it sets up the venv, npm packages, models and skies
 .\desktop\launch.ps1        # opens the native Fantasy Studio desktop app
 ```
 

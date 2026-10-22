@@ -2,6 +2,12 @@
 
 This guide gets Fantasy Studio running on **Windows 10/11** end-to-end. macOS and Linux are untested for V1; community contributions welcome — see [CONTRIBUTING.md](CONTRIBUTING.md).
 
+> **Just want to use it?** Download **FantasyStudio-Setup.exe** from the
+> [latest release](https://github.com/bgrut/fantasy-studio/releases/latest), run it,
+> and open Fantasy Studio: its first start installs everything (its own Python,
+> the engine, the 3D library and Ollama) with a progress bar. Nothing below is needed.
+> This guide is for running from source.
+
 > **TL;DR — desktop app in 3 steps:** install the [prerequisites](#prerequisites)
 > (Python, Node, Ollama; Blender + GPU only needed for video), clone, then run
 > `desktop\launch.ps1` — it starts the backend, the UI, and opens the native
