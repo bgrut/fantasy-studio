@@ -795,6 +795,11 @@ n8ao.configuration.intensity = 3.0;
 n8ao.configuration.halfRes = true;
 n8ao.configuration.transparencyAware = false;   // 2026-09-22: the seam cores and sweeps are transparent; redrawing them three times for the occlusion pass was 13% of the frame
 n8ao.configuration.gammaCorrection = false;     // the composite owns the grade
+// (2026-10-21) the scene is antialiased where it is drawn: N8AO draws it into its own beauty
+// target and the scene target holds it with the occlusion off, and neither was multisampled,
+// so every machine's edge stair-stepped and the grass's alpha-to-coverage fell to stipple
+{ const _ms = (/[?&]msaa=0/.test(location.search) || tierName === 'performance') ? 0 : 4;
+  if (_ms) { if (n8ao.beautyRenderTarget) n8ao.beautyRenderTarget.samples = _ms; rtScene.samples = _ms; } }
 for (const rt of [rtScene, rtA, rtB]) {
   rt.texture.minFilter = THREE.LinearFilter;
   rt.texture.magFilter = THREE.LinearFilter;

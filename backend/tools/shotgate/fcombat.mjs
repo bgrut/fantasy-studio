@@ -13,9 +13,12 @@ p.on('pageerror', e => errs.push(e.message));
 p.on('console', m => { if (m.type() === 'error' && !/Failed to load resource/.test(m.text())) errs.push(m.text()); });
 const wait = ms => new Promise(r => setTimeout(r, ms));
 await p.goto(`http://127.0.0.1:8789/games/job_${J}/dist/index.html?noguide=1&flora=0`, { waitUntil: 'domcontentloaded', timeout: 90000 });
-await wait(8000);
-await p.click('#startbtn').catch(() => {});
-await wait(3500);
+// (2026-10-22) the button, then the click until the card is gone: a click before the card
+// existed was lost and the fight never began (the dodge never ticked)
+for (let i = 0; i < 60; i++) { if (await p.evaluate(() => !!(window.__cbt && document.getElementById('startbtn')))) break; await wait(500); }
+await wait(3000);
+for (let a = 0; a < 5; a++) { await p.click('#startbtn').catch(() => {}); await wait(600); if (!(await p.evaluate(() => !!document.getElementById('fsstart')))) break; }
+await wait(3000);
 const s0 = await p.evaluate(() => ({ roles: window.__cbt.roles, boss: window.__cbt.boss ? window.__cbt.boss.name : null,
   bossHp: window.__cbt.boss ? window.__cbt.boss.hp : 0, chests: window.__cbt.chests }));
 console.log('kinds     :', JSON.stringify(s0));
@@ -29,7 +32,8 @@ const dodge = await p.evaluate(async () => {
   const during = window.__cbt.iframes;
   // until the window closes, not a fixed 600 ms: a loaded machine can stall
   // the frame loop that long and the i-frames never tick down
-  for (let t = 0; t < 3000 && window.__cbt.iframes > 0; t += 50) await new Promise(r => setTimeout(r, 50));
+  // (2026-10-22) and for longer: a page starved by the gate drew two frames in three seconds
+  for (let t = 0; t < 12000 && window.__cbt.iframes > 0; t += 50) await new Promise(r => setTimeout(r, 50));
   return { ok, during, after: window.__cbt.iframes, cd: window.__cbt.dodgeCd };
 });
 console.log('dodge     :', JSON.stringify(dodge));

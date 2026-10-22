@@ -6806,7 +6806,7 @@ async function main() {
               windU: WIND_U, near: QUALITY === 'performance' ? 28 : 46, nearCap: 300, variants: 4,
               sunDir: new THREE.Vector3(...pal.sunPos).normalize(),
               sunCol: new THREE.Color(pal.sunCol || 0xffffff).multiplyScalar(pal.sun * 1.12),
-              trees: new Float32Array(trees), shadows: true, drawn: ['cartoon', 'kawaii', 'comic', 'storybook', 'watercolor', 'illustrated', 'papercraft', 'lowpoly'].includes(SPEC.style),
+              trees: new Float32Array(trees), shadows: true, drawn: ['cartoon', 'kawaii', 'comic', 'storybook', 'watercolor', 'illustrated', 'papercraft', 'lowpoly'].includes(SPEC.style), a2c: QCFG.msaa > 0,
             });
             for (const [tx3, tz3, sc] of spots) {
               const gy3 = hAt(tx3, tz3);
@@ -8091,7 +8091,7 @@ async function main() {
           snow: BIO.snow || (SPEC.world.weather === 'snow' ? 0.6 : 0),
           sunDir: new THREE.Vector3(...pal.sunPos).normalize(),
           sunCol: new THREE.Color(pal.sunCol || 0xffffff).multiplyScalar(pal.sun * 1.12),
-          trees: new Float32Array(T), shadows: true, drawn: ['cartoon', 'kawaii', 'comic', 'storybook', 'watercolor', 'illustrated', 'papercraft', 'lowpoly'].includes(SPEC.style),
+          trees: new Float32Array(T), shadows: true, drawn: ['cartoon', 'kawaii', 'comic', 'storybook', 'watercolor', 'illustrated', 'papercraft', 'lowpoly'].includes(SPEC.style), a2c: QCFG.msaa > 0,
         });
         // each kind is as solid as it is big: [half height, radius] per scale
         const SOLID = { rock: [0.5, 0.8], boulder: [1.4, 2.2], mesa: [3.2, 4.5], cactus: [2.4, 0.35], crystal: [1.0, 0.7], redwood: [8, 1.5], bamboo: [4, 0.6], kapok: [6, 1.2], canopy: [3, 0.42] };
@@ -23095,6 +23095,13 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
   // and a dungeon read as noise. Pixel art is shaded flat; its blocks carry it.
   // (the pass also draws the scene, so it stays on with no occlusion in it)
   if ((SPEC.style || 'default') === 'pixel') { n8ao.configuration.halfRes = false; n8ao.configuration.intensity = 1.2; n8ao.configuration.denoiseRadius = 24; }
+  // THE SCENE IS ANTIALIASED WHERE IT IS DRAWN (2026-10-21). The user: "still some work to do
+  // with pixelation". N8AO draws the scene itself, into its own beauty target, and that
+  // target had no multisampling: the composer's 4x MSAA target only ever held full-screen
+  // passes, so every edge in every game stair-stepped and the foliage's alpha-to-coverage
+  // fell back to on/off pixels, the stipple over every tree. The beauty target takes the
+  // quality's samples; three resolves its colour and depth before the occlusion reads them.
+  if (QCFG.msaa && n8ao.beautyRenderTarget) { n8ao.beautyRenderTarget.samples = QCFG.msaa; window.__beautyMSAA = QCFG.msaa; }
   composer.addPass(n8ao);
   const _legacySSAO = false;   // homemade SSAO retired; block kept for reference
   const _dMat = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking });

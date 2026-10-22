@@ -823,8 +823,16 @@ const KINDS = {
 // ── materials ──────────────────────────────────────────────────────────────
 // opts.live: wind and the near/far dissolve (the trees in the world);
 // opts.foliage: one normal for both faces of a card, and light through it
+// CROSS-FADE BY COVERAGE (2026-10-21). The user: "still some work to do with pixelation". The
+// near trees and their far cards changed over through a screen-door dither, a checkerboard of
+// discarded pixels; with nothing temporal to smooth it, a whole band of every forest was a
+// stippled mesh. When the scene is multisampled (o.a2c) the hand-over is written as alpha
+// and alpha-to-coverage spreads it over each pixel's samples, which the resolve turns into
+// a smooth fade. Without multisampling the dither stays, as before.
+let _A2C = false;
 function patchTree(mat, U, opts) {
   const live = !!opts.live, fol = !!opts.foliage, tri = !!opts.triplanar;
+  if (live && _A2C) { mat.alphaToCoverage = true; mat.defines = Object.assign({}, mat.defines, { FS_A2C: '' }); }
   const triN = tri && mat.userData.triN ? mat.userData.triN : null;
   mat.onBeforeCompile = (sh) => {
     if (triN) sh.uniforms.uTriN = { value: triN };
@@ -877,7 +885,8 @@ function patchTree(mat, U, opts) {
         varying vec3 vObjN;
         varying float vShade;
         ${triN ? 'uniform sampler2D uTriN;' : ''}
-        float ign(vec2 p) { return fract(52.9829189 * fract(dot(p, vec2(0.06711056, 0.00583715)))); }`)
+        float ign(vec2 p) { return fract(52.9829189 * fract(dot(p, vec2(0.06711056, 0.00583715)))); }
+        float _fsFade = 1.0;`)
       .replace('#include <map_fragment>', (tri ? `
         #ifdef USE_MAP
         {
@@ -908,8 +917,15 @@ function patchTree(mat, U, opts) {
           // (stone is solid: a rock dissolving into a screen door beside you
           // reads as a fault, and a camera does not film the inside of one)
           ${tri ? '' : 'f *= smoothstep(1.6, 3.6, distance(vWPos, cameraPosition));'}
-          if (ign(gl_FragCoord.xy) > f) discard;
-        }`);
+          #ifdef FS_A2C
+            _fsFade = f; if (f < 0.02) discard;
+          #else
+            if (ign(gl_FragCoord.xy) > f) discard;
+          #endif
+        }`).replace('#include <alphatest_fragment>', `#include <alphatest_fragment>
+        #ifdef FS_A2C
+          diffuseColor.a *= _fsFade;
+        #endif`);
     }
     if (fol) {
       fs = fs
@@ -1101,6 +1117,7 @@ function bakeImpostors(renderer, variants, lightRig) {
 function farMaterial(atlas, row, U) {
   const m = new THREE.MeshBasicMaterial({ map: atlas.tex, alphaTest: 0.5, side: THREE.DoubleSide, fog: true });
   m.alphaToCoverage = true;
+  if (_A2C) m.defines = Object.assign({}, m.defines, { FS_A2C: '' });
   m.userData.noAutoTex = true;
   const fr = atlas.frames[row];
   m.onBeforeCompile = (sh) => {
@@ -1145,13 +1162,22 @@ function farMaterial(atlas, row, U) {
       .replace('#include <common>', `#include <common>
         uniform float uNear;
         varying vec3 vBase;
-        float ign(vec2 p) { return fract(52.9829189 * fract(dot(p, vec2(0.06711056, 0.00583715)))); }`)
+        float ign(vec2 p) { return fract(52.9829189 * fract(dot(p, vec2(0.06711056, 0.00583715)))); }
+        float _fsFade = 1.0;`)
       .replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>
         {
           float d = distance(vBase.xz, cameraPosition.xz);
           float f = smoothstep(uNear, uNear * 0.82, d);   // the near tree's share
-          if (ign(gl_FragCoord.xy) <= f) discard;          // its complement
+          #ifdef FS_A2C
+            _fsFade = 1.0 - f; if (_fsFade < 0.02) discard;
+          #else
+            if (ign(gl_FragCoord.xy) <= f) discard;          // its complement
+          #endif
         }`)
+      .replace('#include <alphatest_fragment>', `#include <alphatest_fragment>
+        #ifdef FS_A2C
+          diffuseColor.a *= _fsFade;
+        #endif`)
       // (2026-10-20) a forest climbing the far ranges takes the ranges' own
       // aerial perspective (main.js.tpl's skyline): under the full haze each
       // tier of trees on a slope was a pale ragged band across darker rock
@@ -1200,6 +1226,7 @@ function farGeometry(list) {
 //   shadows: bool
 // returns { update(camera), count, kindsOf, dispose }
 export function plantForest(o) {
+  _A2C = !!o.a2c;
   const U = { wind: o.windU || { value: 0 }, near: { value: o.near || 50 },
               sunDir: { value: (o.sunDir || new THREE.Vector3(0.4, 0.8, 0.3)).clone().normalize() },
               sunCol: { value: o.sunCol || new THREE.Color(1, 0.95, 0.85) },

@@ -14,7 +14,9 @@ let bad = 0, measured = 0;
 for (const J of jobs) {
   const p = await b.newPage(); await p.setViewport({ width: 960, height: 540 });
   await p.goto(`http://127.0.0.1:8789/games/job_${J}/dist/index.html?noguide=1`, { waitUntil: 'domcontentloaded', timeout: 120000 });
-  await new Promise(r => setTimeout(r, 10000)); await p.click('#startbtn').catch(() => {}); await new Promise(r => setTimeout(r, 2500)); await p.keyboard.press('g').catch(() => {});
+  // (2026-10-22) a starved gate page had no scene yet at ten seconds: wait for it
+  for (let i = 0; i < 60; i++) { if (await p.evaluate(() => !!(window.__scene && window.__game && document.getElementById('startbtn')))) break; await new Promise(r => setTimeout(r, 500)); }
+  await new Promise(r => setTimeout(r, 4000)); await p.click('#startbtn').catch(() => {}); await new Promise(r => setTimeout(r, 2500)); await p.keyboard.press('g').catch(() => {});
   await p.evaluate(() => {
     const V = window.__scene.position.constructor, bodies = [];
     const add = (obj, name) => { let sk = null; obj.traverse(o => { if (!sk && o.isSkinnedMesh && o.skeleton) sk = o.skeleton; }); if (!sk) return;
