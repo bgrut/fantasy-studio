@@ -3468,6 +3468,12 @@ const GRASS_ON = !/[?&]grass=0/.test(location.search);
 const grassFaces = [];
 const grassClock = { value: 0 };
 let grassDirty = new Set(), grassWait = 0;
+// smooth value noise 0..1 for the grass's tufts and bare ground
+function _gvn(x, y) {
+  const h = (i, j) => { const s = Math.sin(i * 127.1 + j * 311.7) * 43758.5453; return s - Math.floor(s); };
+  const xi = Math.floor(x), yi = Math.floor(y), fx = x - xi, fy = y - yi, ux = fx * fx * (3 - 2 * fx), uy = fy * fy * (3 - 2 * fy);
+  return (h(xi, yi) * (1 - ux) + h(xi + 1, yi) * ux) * (1 - uy) + (h(xi, yi + 1) * (1 - ux) + h(xi + 1, yi + 1) * ux) * uy;
+}
 function grassMaskFor(f) {
   const m = MINERAL_OF_FACE[f];
   const dry = f === 1 ? 0.25 : m === EMBER ? 0.75 : m === SALT ? 0.45 : 0.05;
@@ -3510,7 +3516,14 @@ function grassMaskFor(f) {
       const d = Math.hypot(a / T + N / 2 - (i + di + 0.5), b / T + N / 2 - (j + dj + 0.5));
       burn = Math.min(burn, Math.max(0, Math.min(1, (d - 0.95) / 0.5)));
     }
-    return [base * (0.4 + 0.6 * nz) * margin * burn, burn < 1 ? 1 : Math.max(dry, (1 - trod) * 0.55), (0.5 + 0.5 * nz) * (0.4 + 0.6 * burn) * (0.45 + 0.55 * trod)];
+    // TUFTS AND BARE GROUND (2026-10-21): the waves above are tens of metres across, and at
+    // your feet the field read as one even carpet of identical blades. Clumps a metre across
+    // stand taller and thicker, and here and there the soil shows through, dry at its rim
+    const cl = _gvn(a * 0.95 + f * 13.1, b * 0.95 - f * 7.7), bp = _gvn(a * 0.22 + 31 + f * 3.3, b * 0.22 - 17);
+    const bare = Math.max(0, Math.min(1, (bp - 0.12) / 0.1));
+    return [base * (0.4 + 0.6 * nz) * margin * burn * (0.62 + 0.5 * cl) * bare,
+            burn < 1 ? 1 : Math.max(dry, (1 - trod) * 0.55, (1 - bare) * 0.6),
+            (0.5 + 0.5 * nz) * (0.4 + 0.6 * burn) * (0.45 + 0.55 * trod) * (0.55 + 0.75 * cl)];
   };
 }
 if (GRASS_ON) {
