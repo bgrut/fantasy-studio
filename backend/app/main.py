@@ -440,3 +440,33 @@ def retry_render_job(job_id: int):
 
     return {"ok": True, "job": row_to_dict(row)}
 
+
+
+# ── THE INSTALLED APP SERVES ITS OWN UI (2026-10-22) ────────────────────────
+# The desktop installer ships the built frontend beside the backend and sets
+# FS_UI_DIR; the app window then opens http://127.0.0.1:8789/ and every
+# relative /api, /games and /outputs call is same-origin. In development the
+# variable is unset and Vite (port 3000) serves the UI as before. Mounted last,
+# so every API route above wins over the catch-all.
+def _mount_ui() -> None:
+    import os as _os
+    from pathlib import Path as _P
+    from fastapi.responses import FileResponse as _FR
+    ui = _os.environ.get("FS_UI_DIR")
+    if not ui or not (_P(ui) / "index.html").exists():
+        return
+    _root = _P(ui).resolve()
+
+    @app.get("/{path:path}", include_in_schema=False)
+    def _ui(path: str):
+        # a real file (a script, an image) is served as itself; any other path is the
+        # single-page app, which routes on the client
+        if path.startswith(("api/", "games/", "outputs/")):
+            raise HTTPException(status_code=404, detail="Not found")
+        f = (_root / path).resolve()
+        if path and f.is_file() and _root in f.parents:
+            return _FR(str(f))
+        return _FR(str(_root / "index.html"))
+
+
+_mount_ui()

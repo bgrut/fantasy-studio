@@ -113,15 +113,23 @@ def main(argv: list[str]) -> int:
             got += 1
     print(f"fetched {got} models" + (f", and {len(newer)} newer than the repository's" if newer else ""))
     import subprocess as _sp
-    for p in newer:
-        _sp.run(["git", "update-index", "--skip-worktree", "--", p], cwd=REPO, capture_output=True)
+    # (2026-10-22) an installed engine is not a git checkout and may have no git at all
+    _git = (REPO / ".git").exists()
+    for p in (newer if _git else []):
+        try:
+            _sp.run(["git", "update-index", "--skip-worktree", "--", p], cwd=REPO, capture_output=True)
+        except OSError:
+            break
     # the index still holds the pointer files' stat data, so git lists every
     # fetched model as modified; adding them stores the identical pointer
     # (the LFS clean filter) and the checkout reads clean again
     done = [p for p in want if p not in missing and p not in over]
     import subprocess
-    for i in range(0, len(done), 40):
-        subprocess.run(["git", "add", "--", *done[i:i + 40]], cwd=REPO, capture_output=True)
+    for i in range(0, len(done) if _git else 0, 40):
+        try:
+            subprocess.run(["git", "add", "--", *done[i:i + 40]], cwd=REPO, capture_output=True)
+        except OSError:
+            break
     if missing:
         print(f"{len(missing)} not in this pack (newer than it); fetch just those from LFS with:")
         print('  git lfs pull --include="' + ",".join(missing) + '"')

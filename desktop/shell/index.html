@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fantasy Studio</title>
+<style>
+  :root { --bg: #0b0b10; --panel: #13131b; --line: #26263a; --ink: #ecebf5; --ink2: #9b99b3; --a: #b07cff; --b: #ff6fa0; --ok: #5cffc9; --bad: #ff8a8a; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink); font: 15px/1.5 "Segoe UI", system-ui, sans-serif; }
+  body { display: grid; place-items: center; }
+  .card { width: min(620px, 92vw); background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 34px 38px; box-shadow: 0 30px 80px rgba(0,0,0,.5); }
+  h1 { margin: 0 0 4px; font-size: 30px; font-weight: 700; letter-spacing: -.01em;
+       background: linear-gradient(90deg, var(--a), var(--b)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .sub { color: var(--ink2); margin: 0 0 24px; }
+  .opt { display: flex; gap: 12px; align-items: flex-start; padding: 14px 16px; border: 1px solid var(--line); border-radius: 12px; margin-bottom: 10px; cursor: pointer; }
+  .opt:has(input:checked) { border-color: var(--a); background: rgba(176,124,255,.07); }
+  .opt input { margin-top: 4px; accent-color: var(--a); }
+  .opt b { display: block; }
+  .opt span { color: var(--ink2); font-size: 13.5px; }
+  .row { display: flex; align-items: center; gap: 8px; color: var(--ink2); font-size: 13.5px; margin: 14px 0 22px; }
+  .row input { accent-color: var(--a); }
+  button { font: inherit; font-weight: 600; border: 0; border-radius: 10px; padding: 12px 26px; cursor: pointer; color: #fff;
+           background: linear-gradient(90deg, var(--a), var(--b)); }
+  button:disabled { opacity: .5; cursor: default; }
+  .bar { height: 8px; border-radius: 4px; background: #1f1f2e; overflow: hidden; margin: 22px 0 10px; }
+  .bar i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--a), var(--b)); transition: width .4s; }
+  .msg { color: var(--ink2); font-size: 13.5px; min-height: 21px; }
+  .err { color: var(--bad); font-size: 13.5px; margin-top: 10px; white-space: pre-wrap; }
+  .fine { color: #6f6d86; font-size: 12px; margin-top: 22px; line-height: 1.6; }
+  .fine a { color: var(--ink2); }
+  .hide { display: none; }
+  .spin { width: 34px; height: 34px; border-radius: 50%; border: 3px solid #2a2a3d; border-top-color: var(--a); animation: s 1s linear infinite; margin: 10px 0 18px; }
+  @keyframes s { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>Fantasy Studio</h1>
+  <p class="sub" id="sub">Type a sentence, get a game you can play and edit. Everything runs on this computer.</p>
+
+  <div id="choose" class="hide">
+    <label class="opt"><input type="radio" name="mode" value="game" checked>
+      <div><b>Game mode (recommended)</b><span>Make and play games from a sentence. Works without a graphics card. About 10 GB, most of it the local AI model.</span></div></label>
+    <label class="opt"><input type="radio" name="mode" value="full">
+      <div><b>Full studio</b><span>Adds image and 3D character generation for brand-new heroes and props. Needs an NVIDIA graphics card. About 25 GB.</span></div></label>
+    <label class="row"><input type="checkbox" id="ollama" checked> Install Ollama, the free local AI that reads your sentence (skip if you already have it)</label>
+    <button id="go">Set up Fantasy Studio</button>
+    <p class="fine">Everything is downloaded from Fantasy Studio's own GitHub release and from the tools' official sources, and checked against published checksums before it is used. Nothing you make leaves this computer.
+      Installed into <span id="where"></span>.</p>
+  </div>
+
+  <div id="working" class="hide">
+    <div class="bar"><i id="fill"></i></div>
+    <div class="msg" id="msg">Starting...</div>
+    <div class="err hide" id="err"></div>
+    <button id="retry" class="hide" style="margin-top:16px">Try again</button>
+  </div>
+
+  <div id="starting" class="hide">
+    <div class="spin"></div>
+    <div class="msg" id="smsg">Starting the studio...</div>
+    <div class="err hide" id="serr"></div>
+  </div>
+</div>
+<script>
+  const T = window.__TAURI__, invoke = T.core.invoke;
+  const $ = id => document.getElementById(id);
+  const show = id => { for (const k of ['choose', 'working', 'starting']) $(k).classList.toggle('hide', k !== id); };
+
+  async function start() {
+    show('starting');
+    try { const url = await invoke('start_engine'); $('smsg').textContent = 'Opening...'; location.replace(url); }
+    catch (e) { $('serr').textContent = String(e); $('serr').classList.remove('hide'); }
+  }
+
+  async function setup() {
+    show('working'); $('err').classList.add('hide'); $('retry').classList.add('hide');
+    const mode = document.querySelector('input[name=mode]:checked').value;
+    try {
+      await invoke('run_setup', { mode, skipOllama: !$('ollama').checked });
+      $('fill').style.width = '100%'; $('msg').textContent = 'Ready';
+      setTimeout(start, 600);
+    } catch (e) {
+      $('err').textContent = 'Setup stopped: ' + e + '\nYour progress is kept; trying again picks up where it left off.';
+      $('err').classList.remove('hide'); $('retry').classList.remove('hide');
+    }
+  }
+
+  T.event.listen('setup-progress', ev => {
+    const m = /^@@ (\d+) (.*)$/.exec(ev.payload);
+    if (m) { $('fill').style.width = m[1] + '%'; $('msg').textContent = m[2]; }
+  });
+  $('go').onclick = setup;
+  $('retry').onclick = setup;
+
+  (async () => {
+    const s = await invoke('engine_status');
+    $('where').textContent = s.engine_dir;
+    if (s.installed || s.running) return start();
+    if (s.installed_version) $('sub').textContent = `Updating to Fantasy Studio ${s.version}. Your games and settings are kept.`;
+    show('choose');
+  })();
+</script>
+</body>
+</html>

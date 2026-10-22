@@ -1,6 +1,6 @@
 [package]
 name = "fantasy-studio-desktop"
-version = "0.1.0"
+version = "1.3.0"
 description = "Fantasy Studio — local text-to-video and text-to-game studio"
 edition = "2021"
 

@@ -2,11 +2,11 @@
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Fantasy Studio",
   "mainBinaryName": "FantasyStudio",
-  "version": "0.1.0",
+  "version": "1.3.0",
   "identifier": "ai.fantasylab.studio",
   "build": {
     "devUrl": "http://127.0.0.1:3000",
-    "frontendDist": "../../frontend/dist"
+    "frontendDist": "../shell"
   },
   "app": {
     "withGlobalTauri": true,
@@ -26,11 +26,23 @@
     }
   },
   "bundle": {
-    "active": false,
-    "targets": [
-      "msi",
-      "nsis"
-    ],
-    "icon": []
+    "active": true,
+    "targets": ["nsis"],
+    "publisher": "FantasyLab",
+    "copyright": "FantasyLab. Business Source License 1.1.",
+    "category": "Productivity",
+    "shortDescription": "Type a sentence, get a game you can play and edit.",
+    "longDescription": "Fantasy Studio turns a sentence into a playable 3D game you can edit by pointing at it, running entirely on your own computer.",
+    "homepage": "https://github.com/bgrut/fantasy-studio",
+    "icon": ["icons/icon.ico", "icons/icon.png"],
+    "resources": {
+      "../installer/engine-setup.ps1": "installer/engine-setup.ps1"
+    },
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser",
+        "displayLanguageSelector": false
+      }
+    }
   }
 }
