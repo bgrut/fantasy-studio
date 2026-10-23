@@ -1409,6 +1409,13 @@ export function biomeFor(words, arch, groundHSL) {
       coralTint: T(0xa04dff), coralTint2: T(0x2fe0c8), crystalTint: T(0x7affd4), rockTint: T(0x4a3f5c), leaf: { h: 0.78, s: 0.5, l: 0.3 } });
     return out;
   }
+  // CAPPADOCIA (2026-10-22): pale tuff valleys, scrub and a few poplars and orchards in
+  // their floors; not a desert of cactus (the runtime raises the fairy chimneys)
+  if (has(/cappadocia|kapadokya|g[oö]reme|fairy chimneys?/)) {
+    Object.assign(out, { kinds: K(['bush', 0.7], ['broadleaf', 0.3], ['birch', 0.15], ['rock', 0.25]), dens: 0.16,
+      rockTint: T(0xcbb8a0), leaf: { h: 0.2, s: 0.35, l: 0.32 } });
+    return out;
+  }
   if (has(/\bmoon\b|lunar|asteroid|space|orbit|comet/)) Object.assign(out, { kinds: K(['rock', 1], ['boulder', 0.35], ...(crystal ? [['crystal', 0.15]] : [])), dens: 0.1, rockTint: T(0x8d8c8a),
     greyRock: has(/\bmoon\b|lunar|apollo/) && !has(/\bred\b|rust|frozen|\bice\b|icy/) });
   else if (has(/mars|red planet|martian/)) Object.assign(out, { kinds: K(['rock', 1], ['boulder', 0.4], ...(crystal ? [['crystal', 0.12]] : [])), dens: 0.1, rockTint: T(0xa0573a) });

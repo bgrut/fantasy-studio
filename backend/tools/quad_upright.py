@@ -20,6 +20,7 @@ import json
 import math
 import os
 import subprocess
+import re
 import sys
 import tempfile
 from pathlib import Path
@@ -53,6 +54,7 @@ w = bpy.data.worlds.new("w"); w.color = (0.75, 0.75, 0.76); scn.world = w
 scn.render.resolution_x = scn.render.resolution_y = 384
 cam = bpy.data.objects.new("cam", bpy.data.cameras.new("cam")); scn.collection.objects.link(cam); scn.camera = cam
 cam.data.type = "ORTHO"
+DIMS = {}
 for name, e in rots.items():
     piv.rotation_euler = Euler([math.radians(a) for a in e])
     bpy.context.view_layer.update()
@@ -60,11 +62,17 @@ for name, e in rots.items():
     mn = Vector((min(p.x for p in pts), min(p.y for p in pts), min(p.z for p in pts)))
     mx = Vector((max(p.x for p in pts), max(p.y for p in pts), max(p.z for p in pts)))
     c = (mn + mx) / 2; size = max(mx - mn) * 1.15
+    # the spread of the mesh along each axis (standard deviation): splayed legs and
+    # antennae widen a bounding box without moving the body's own long axis
+    _n = max(len(pts), 1); _m = sum(pts, Vector((0, 0, 0))) / _n
+    DIMS[name] = [math.sqrt(sum((p.x - _m.x) ** 2 for p in pts) / _n), math.sqrt(sum((p.y - _m.y) ** 2 for p in pts) / _n), math.sqrt(sum((p.z - _m.z) ** 2 for p in pts) / _n),
+                  (_m.z - mn.z) / max(mx.z - mn.z, 1e-6)]          # where the mass sits: high over the feet when standing on legs
     cam.data.ortho_scale = size
     for side, d in (("a", Vector((1, 0, 0))), ("b", Vector((0, 1, 0)))):
         cam.location = c + d * 10; cam.rotation_euler = (-d).to_track_quat("-Z", "Y").to_euler()
         bpy.context.view_layer.update()
         scn.render.filepath = f"{out}_{name}_{side}.png"; bpy.ops.render.render(write_still=True)
+open(f"{out}_dims.json", "w").write(json.dumps(DIMS))
 '''
 
 _ROTATE = r'''
@@ -149,6 +157,35 @@ def judge(glb: Path, kind: str, biped: bool = False) -> dict:
             inp = proc(text=texts, images=ims, return_tensors="pt", padding=True).to(dev)
             p = model(**inp).logits_per_image.softmax(-1).mean(0)
         scores[name] = round(float(p[0]), 3)
+    # AN ANIMAL ON ITS LEGS IS LONGER THAN IT IS TALL (2026-10-22): CLIP judged a
+    # generated ant standing on its tail "upright", and it was rigged and played that
+    # way. Where the shape says a pose stands far taller than it is long, its score is
+    # cut (the long-necked and the ones that do stand up are exempt)
+    try:
+        dims = json.loads((tmp / "v_dims.json").read_text())
+    except Exception:
+        dims = {}
+    # A thing with six or eight legs is flat: its least spread is its height, and on its
+    # legs its body rides above the leg tips (the mass high in the box). CLIP could not
+    # tell an ant on its tail from an ant on its legs at all.
+    _flat = bool(re.search(r"\b(ants?|beetles?|ladybugs?|ladybirds?|spiders?|tarantulas?|scorpions?|cockroach\w*|roach\w*|crabs?|lobsters?|crickets?|grasshoppers?|locusts?|mantis\w*|termites?|pillbugs?|woodlouse|woodlice|ticks?|mites?|centipedes?|millipedes?|weevils?|bugs?|insects?)\b", kind.lower()))
+    # (the body's long axis lies level, and on its legs the mass rides high over the
+    # leg tips: of the level poses, the one with the highest-riding mass stands; a pose
+    # on its side has its legs out level and its mass in the middle of the box)
+    if not biped and dims and _flat and all(len(d) >= 4 for d in dims.values()):
+        ok = {n: d[2] < max(d[0], d[1]) for n, d in dims.items()}
+        for name in scores:
+            d = dims.get(name)
+            if d:
+                scores[name] = round(d[3] * (1.0 if ok[name] else 0.3) + 0.01 * scores[name], 3)
+        return {"scores": scores, "tmp": str(tmp), "tall": {n: not v for n, v in ok.items()}}
+    if not biped and dims and not re.search(r"\b(giraffes?|kangaroos?|meerkats?|penguins?|seahorses?|bears? standing|ostrich\w*|emus?|flamingos?|t-?rex|dinosaurs?|raptors?|owls?|parrots?)\b", kind.lower()):
+        for name, d in dims.items():
+            dx, dy, dz = d[:3]
+            if name in scores and dz > 1.2 * max(dx, dy):
+                scores[name] = round(scores[name] * 0.3, 3)
+        j_tall = {n: d[2] > 1.2 * max(d[0], d[1]) for n, d in dims.items()}
+        return {"scores": scores, "tmp": str(tmp), "tall": j_tall}
     return {"scores": scores, "tmp": str(tmp)}
 
 
@@ -177,6 +214,14 @@ def _fix(glb: Path, kind: str, margin: float = 0.15, apply: bool = False, biped:
         margin = max(margin, 0.30)                                   # a person turned over is plain to CLIP
     if os.environ.get("QU_FORCE_FACE") == "1" and apply and best == "as_is" and not biped:
         best = "as_is"; sc[best] = 9.0                               # face-only pass on an upright model
+    # stood on its tail as it is, and some turn lays it out on its legs: that turn wins
+    # whatever CLIP's margin (the shape is surer than the picture here)
+    _tall = j.get("tall") or {}
+    if _tall.get("as_is") and not biped:
+        _flat = [n for n in sc if not _tall.get(n)]
+        if _flat:
+            best = max(_flat, key=sc.get); margin = -1.0
+            msg += " (as-is stands taller than long: laid on its legs)"
     if (best != "as_is" and sc[best] - sc.get("as_is", 0) > margin) or (os.environ.get("QU_FORCE_FACE") == "1" and apply and not biped):
         if apply:
             from app.game_export.generate import BLENDER_EXE

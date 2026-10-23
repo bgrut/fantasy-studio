@@ -607,6 +607,8 @@ def extract_game_spec(text: str, model: str | None = None, verbose: bool = True)
                         llm_out = cand
                         break
                 except Exception as e:
+                    if verbose:
+                        print(f"[game] extractor: answer {attempt} rejected ({str(e)[:300]})")
                     if attempt == 1:
                         msgs.append({"role": "assistant", "content": raw[:2000]})
                         msgs.append({"role": "user",

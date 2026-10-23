@@ -8,6 +8,7 @@ weak extraction degrades to a working default game, not a broken one.
 """
 from __future__ import annotations
 
+import math
 from typing import List, Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator
@@ -369,7 +370,61 @@ def spec_from_dict(data: dict) -> GameSpec:
             data["view"] = _VIEW_ALIASES[vw]
     except Exception:
         pass
-    try:
-        return GameSpec.model_validate(data)
-    except Exception as e:  # pydantic.ValidationError
-        raise ValueError(f"invalid GameSpec: {e}") from e
+    # ONE BAD NUMBER LOST THE WHOLE GAME (2026-10-22). "a tiny ant explores a
+    # giant kitchen" came back from the model with the ant, the kitchen, the
+    # sugar cube and a spider, and a hero 0.05 m tall; the schema wants more
+    # than 0.2, the extractor discarded the entire answer and the keyword
+    # fallback built a man in a park. A value out of range is now clamped to
+    # the nearest legal one and a value of the wrong kind falls back to its
+    # field's default; only what cannot be repaired that way still raises.
+    last = None
+    for _ in range(12):
+        try:
+            return GameSpec.model_validate(data)
+        except Exception as e:  # pydantic.ValidationError
+            last = e
+            if not _repair(data, e):
+                break
+    raise ValueError(f"invalid GameSpec: {last}") from last
+
+
+def _repair(data: dict, err) -> bool:
+    """Mend the fields a ValidationError names in place; False when none could be."""
+    fixed = False
+    for d in (getattr(err, "errors", lambda: [])() or []):
+        loc, typ, ctx = list(d.get("loc") or ()), d.get("type", ""), d.get("ctx") or {}
+        if not loc:
+            continue
+        parent, ok = data, True
+        for k in loc[:-1]:
+            try:
+                parent = parent[k]
+            except (KeyError, IndexError, TypeError):
+                ok = False
+                break
+        if not ok or not isinstance(parent, (dict, list)):
+            continue
+        key = loc[-1]
+        try:
+            val = parent[key]
+        except (KeyError, IndexError, TypeError):
+            continue
+        num = isinstance(val, (int, float)) and not isinstance(val, bool)
+        if num and typ in ("greater_than", "greater_than_equal", "less_than", "less_than_equal"):
+            b = float(next(iter(ctx.values())))
+            if isinstance(val, int):
+                nv = {"greater_than": math.floor(b) + 1, "greater_than_equal": math.ceil(b),
+                      "less_than": math.ceil(b) - 1, "less_than_equal": math.floor(b)}[typ]
+            else:
+                eps = max(abs(b) * 1e-3, 1e-3)
+                nv = {"greater_than": b + eps, "greater_than_equal": b,
+                      "less_than": b - eps, "less_than_equal": b}[typ]
+            parent[key] = nv
+            fixed = True
+        elif isinstance(parent, dict):
+            parent.pop(key, None)          # the field's default stands in
+            fixed = True
+        elif isinstance(parent, list) and isinstance(key, int) and len(loc) >= 2:
+            parent.pop(key)                # a list item that cannot be read at all
+            return True                    # (later indices in this error list have shifted)
+    return fixed

@@ -243,8 +243,11 @@ def _style_asked(style: str, prompt: str) -> bool:
 # named as where the walk ends ("to the windmill", "reach the old bakery")
 # is a destination, and only counts when some other factory word is there.
 _DESTINATION = _fre.compile(
-    r"\b(to|reach|toward|towards|find|into|past|at|near|by|from|explore|visit|enter|inside)\s+"
-    r"(?:the |an? |old |abandoned |ruined |haunted |\w+'s )*"
+    # (2026-10-22) "a hedgehog rolls through a candy factory" was a production-line sim:
+    # moving through, across or round a factory is being in a place, and the place may
+    # carry its own word (candy, toy, chocolate)
+    r"\b(to|reach|toward|towards|find|into|past|at|near|by|from|explore|explores|exploring|visit|enter|inside|through|across|around|round|in|within|throughout)\s+"
+    r"(?:the |an? |old |abandoned |ruined |haunted |\w+'s )*(?:[a-z-]+ ){0,2}?"
     r"(bakery|brewery|distillery|sawmill|cannery|shipyard|windmill|watermill|factory|foundry|refinery)\b", _fre.I)
 
 
@@ -1199,6 +1202,30 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                     job.setdefault("notes", []).append("hero: a buddhist monk, in the robes of the place")
             except Exception:
                 pass
+            # A RIDER IS CARRIED (2026-10-22): "a dragon rider flies between floating islands"
+            # was a knight walking. Whoever rides a dragon, a griffin or a horse is seen as
+            # the mount from the saddle's camera: the hero is the mount, and it flies if a
+            # mount of that kind flies
+            try:
+                import re as _mre2
+                _mp2 = (req.prompt or "").lower()
+                _MOUNTS = r"(dragons?|wyverns?|griffins?|gryphons?|pegas(?:us|i)|phoenix(?:es)?|eagles?|horses?|ponies|pony|stallions?|mares?|unicorns?|camels?|elephants?|wolf|wolves|bears?|tigers?|dire ?wolf|stags?|elk|moose)"
+                _mm2 = (_mre2.search(r"\b" + _MOUNTS + r"[- ]riders?\b", _mp2)
+                        or _mre2.search(r"\b(?:rides?|riding|rode|mounted on|astride|saddles? up)\s+(?:on\s+)?(?:a|an|the|his|her|their|my)?\s*(?:[a-z-]+\s+){0,2}?" + _MOUNTS + r"\b", _mp2))
+                if _mm2 and not getattr(spec.world, "platforms", False) and getattr(spec, "genre", "") != "factory":
+                    _mount = _mm2.group(1).rstrip("s") if not _mm2.group(1).endswith(("ss", "us")) else _mm2.group(1)
+                    _mount = {"ponie": "pony", "wolve": "wolf", "pegasi": "pegasus", "phoenixe": "phoenix", "dire wolf": "wolf", "direwolf": "wolf"}.get(_mount, _mount)
+                    _flyer = _mre2.match(r"(dragon|wyvern|griffin|gryphon|pegasus|phoenix|eagle)", _mount)
+                    if (spec.player.name or "").lower() != _mount:
+                        spec.player.name = _mount
+                        spec.player.asset = ""
+                        spec.player.mode = "fly" if _flyer else "walk"
+                        if _flyer:
+                            spec.player.walk_speed, spec.player.run_speed = max(spec.player.walk_speed, 9.0), max(spec.player.run_speed, 18.0)
+                        spec.entities = [e for e in spec.entities if _mount not in (e.name or "").lower() or e.behavior == "hostile"]
+                        job.setdefault("notes", []).append(f"a rider is carried: you ride the {_mount}" + (" through the air" if _flyer else ""))
+            except Exception as _mte:
+                job.setdefault("notes", []).append(f"mount rule skipped: {_mte}")
             # A SEA BATTLE IS FOUGHT IN SHIPS (2026-10-06): "a pirate captain sails
             # across a stormy sea and sinks three enemy ships" was a lighthouse
             # keeper with a sword in a dark wood, no water, no ships. The hero
@@ -1210,6 +1237,10 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                 if (_nre.search(r"\b(sails?|sailing|naval|sea battle|ship battle|broadside|cannons?|sinks?|sinking|galleons?|frigates?|warships?|fleet|armada)\b", _np)
                         and _nre.search(r"\b(ships?|galleons?|frigates?|fleet|warships?|boats?|vessels?|navy|armada)\b", _np)
                         and not _nre.search(r"\b(space|star|air|sky)\s?ships?\b", _np)
+                        # (2026-10-22) "a paper boat sails down a rain gutter" was given three enemy
+                        # ships to sink: sailing is not fighting; a battle says so
+                        and _nre.search(r"\b(battles?|cannons?|sinks?|sinking|enem(?:y|ies)|fleet|armada|broadside|warships?|navy|naval|fights?|fighting|attacks?|raids?|plunder\w*|duel)\b", _np)
+                        and not _nre.search(r"\b(paper|toy|model|origami|bath ?tub|rubber duck)\s+(?:boats?|ships?|sailboats?)\b", _np)
                         and getattr(spec, "genre", "") != "factory"):
                     from app.game_export.spec import ObjectiveSpec as _NOS, EntitySpec as _NES
                     spec.player.name = "pirate ship"
@@ -1315,6 +1346,55 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                         job.setdefault("notes", []).append("objectives read from the sentence's verbs: " + ", ".join(f"{o.kind} {o.label}" for o in spec.objectives))
             except Exception as _oe:
                 job.setdefault("notes", []).append(f"verb objectives skipped: {_oe}")
+            # YOU ARE THE GHOST (2026-10-22): "a ghost haunts a victorian mansion scaring the
+            # guests at midnight" was played by a detective collecting clues. A sentence whose
+            # subject is the ghost makes you the ghost: the guests are there to be scared off
+            # (they flee you, a touch frightens them away), and nobody is a mystery to solve
+            try:
+                import re as _hre2
+                _hp2 = (req.prompt or "").lower()
+                _hm2 = _hre2.match(r"\s*(?:a|an|the|you are an?|play as an?)\s+(?:[a-z-]+\s+){0,2}?(ghosts?|spirits?|phantoms?|poltergeists?|spectres?|specters?|wraiths?|banshees?|apparitions?)\s+"
+                                   r"(?:who\s+)?(haunts?|scares?|frightens?|spooks?|terrifies|terrorizes?|terrorises?|roams?|wanders?|drifts?|floats?|glides?|lurks?|rattles?|moans?)\b", _hp2)
+                if _hm2 and getattr(spec, "genre", "") != "factory":
+                    from app.game_export.spec import ObjectiveSpec as _HO2, EntitySpec as _HE2
+                    _who = _hre2.search(r"\b(guests?|visitors?|tourists?|residents?|family|families|children|kids|villagers?|campers?|teenagers?|people|townsfolk|staff|servants?|investigators?|hunters?)\b", _hp2)
+                    _who_n = (_who.group(1) if _who else "guests")
+                    _who_n = {"family": "family members", "families": "family members", "children": "children", "kids": "kids", "people": "people", "staff": "staff", "townsfolk": "townsfolk"}.get(_who_n, _who_n if _who_n.endswith("s") else _who_n + "s")
+                    _nm2 = _hre2.search(r"\b(\d+|two|three|four|five|six|seven|eight|ten)\s+" + _hre2.escape(_who_n.split()[0].rstrip("s")), _hp2)
+                    _n2 = int(_nm2.group(1)) if _nm2 and _nm2.group(1).isdigit() else {"two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8, "ten": 10}.get(_nm2.group(1), 6) if _nm2 else 6
+                    spec.player.name = "ghost"
+                    spec.player.asset = ""
+                    spec.player.attack = "melee"
+                    _body = "woman" if _hre2.search(r"\b(she|her|lady|woman|girl|bride|maid|queen|nun|widow)\b", _hp2) else "man"
+                    spec.entities = [e for e in spec.entities if not _hre2.search(r"\b(ghosts?|spirits?|phantoms?|detectives?|clues?)\b", (e.name or "").lower())
+                                     and e.behavior not in ("hostile", "guard", "suspect")]
+                    spec.entities.append(_HE2(name=_body, behavior="flee", count=_n2, speed=2.2, hp=1, height_m=1.75))
+                    spec.objectives = [_HO2(kind="defeat", label=_who_n, count=_n2)]
+                    job["_haunter"] = True
+                    job.setdefault("notes", []).append(f"you are the ghost: {_n2} {_who_n} to frighten away (they flee you; a touch sends them running)")
+            except Exception as _hge:
+                job.setdefault("notes", []).append(f"haunter rule skipped: {_hge}")
+            # A SNOWBALL FIGHT IS THROWN (2026-10-22): "two kids have a snowball fight in a
+            # snowy backyard" was a football goal and one giant snowball to score with. In a
+            # snowball fight the hero throws (the runtime's ranged shot is a snowball), the
+            # other side throws back, and a hit is the point
+            try:
+                import re as _sre2
+                _sp2 = (req.prompt or "").lower()
+                if (_sre2.search(r"\bsnow ?balls? (?:fights?|battles?|wars?)\b|\bthrow(?:s|ing)? snow ?balls?\b|\bsnow ?ball(?:s|ing)? (?:the|at)\b", _sp2)
+                        and getattr(spec, "genre", "") != "factory"):
+                    from app.game_export.spec import ObjectiveSpec as _SO2, EntitySpec as _SE2
+                    _foe = _sre2.search(r"\b(kids?|children|friends?|siblings?|brothers?|sisters?|neighbou?rs?|elves|elf|penguins?|yetis?|snowmen|snowman|teams?)\b", _sp2)
+                    _fname = {"children": "kid", "kids": "kid", "friends": "kid", "friend": "kid", "siblings": "kid", "teams": "kid", "team": "kid",
+                              "brothers": "kid", "sisters": "kid", "neighbours": "kid", "neighbors": "kid", "elves": "elf", "snowmen": "snowman"}.get(_foe.group(1), _foe.group(1).rstrip("s")) if _foe else "kid"
+                    _nf = 4
+                    spec.player.attack = "ranged"
+                    spec.entities = [e for e in spec.entities if e.behavior in ("guide",) or not _sre2.search(r"\b(kids?|child\w*|snowballs?|elf|elves)\b", (e.name or "").lower())]
+                    spec.entities.append(_SE2(name=_fname, behavior="hostile", count=_nf, speed=2.0, hp=1, height_m=1.0))
+                    spec.objectives = [_SO2(kind="defeat", label="snowball hits", count=_nf)]
+                    job.setdefault("notes", []).append(f"a snowball fight: you throw (F), {_nf} on the other side throw back; hit each of them")
+            except Exception as _sne:
+                job.setdefault("notes", []).append(f"snowball rule skipped: {_sne}")
             # A GHOST IS CAUGHT, NOT PICKED UP (2026-10-07): "a ghost hunter
             # captures five ghosts in a foggy graveyard with a lantern" made the
             # ghosts glowing orbs to collect while three pale figures wandered.
@@ -1494,7 +1574,7 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                 from app.game_export.bake import ensure_playable as _myep
                 from app.game_export.spec import EntitySpec, ObjectiveSpec
                 _mp = (req.prompt or "").lower()
-                if _myre.search(MYSTERY_WORDS, _mp) and getattr(spec, "genre", "") != "factory":
+                if _myre.search(MYSTERY_WORDS, _mp) and getattr(spec, "genre", "") != "factory" and not job.get("_haunter"):
                     _NUM = {"two": 2, "three": 3, "four": 4, "five": 5, "six": 6}
                     _ms = _myre.search(r"\b(\d+|two|three|four|five|six)\s+suspects\b", _mp)
                     _nsus = max(3, min(5, int(_NUM.get(_ms.group(1), _ms.group(1))) if _ms else 4))
@@ -1919,6 +1999,31 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         # A CAVE THE SENTENCE NEVER NAMED IS NOT ONE (2026-10-22): "a florist explores a jungle
         # temple to find a hidden garden" came back with the planner's own archetype "cave", and
         # the jungle was a stone hall of crystals with the temple standing outside it
+        # UNDER THE SEA IS UNDER THE SEA (2026-10-22). "A glowing jellyfish drifts
+        # through an underwater cave" was planned as an archipelago named "cave":
+        # a grass spit between two seas with lamp posts, the jellyfish nowhere,
+        # because nothing downstream reads "underwater" out of the sentence unless
+        # the world is named for it. A sentence set beneath the water, or about an
+        # animal that only lives there, is the sea floor: the world is named
+        # underwater (the water plane, the reef biome and the fog all key on it),
+        # the landform a seabed, the hero swims.
+        _undersea = bool(_fre.search(
+            r"\b(underwater|undersea|under ?the ?(?:sea|ocean|waves)|beneath the (?:sea|ocean|waves|surface)|ocean floor|sea ?floor|sea ?bed"
+            r"|coral reefs?|deep[- ]sea|kelp forests?|scuba|abyss\w*|sunlit shallows)\b", _ptl)
+            or (_fre.search(r"\b(jellyfish|octop(?:us|i|uses)|squids?|seahorses?|sea horses?|stingrays?|manta rays?|clownfish|anglerfish|sea turtles?|narwhals?)\b", _ptl)
+                and not _fre.search(r"\b(beach|shore|boat|ship|aquarium|island|on the surface)\b", _ptl)))
+        if (base_spec is None and _undersea and not getattr(spec.world, "platforms", False)
+                # (the planner's own sky is no guide: it called the jellyfish's sea "space")
+                and not _fre.search(r"\b(submarine base|space|planet|moon|mars)\b", _ptl)):
+            if "underwater" not in (spec.world.name or "").lower():
+                spec.world.name = ("underwater " + (spec.world.name or "reef")).strip()[:60]
+            if getattr(spec.world, "archetype", "plain") in ("archipelago", "cave", "peaks", "volcano", "mesa"):
+                spec.world.archetype = "basin"
+            if spec.player.mode not in ("drive", "fly") or _fre.search(r"\b(submarine|sub)\b", _ptl):
+                spec.player.mode = "swim"
+            if spec.world.sky in ("night", "space", "mars") and not _fre.search(r"\b(night|midnight|moonlit|dark|abyss\w*|deep[- ]sea)\b", _ptl):
+                spec.world.sky = "day"
+            job.setdefault("notes", []).append("under the sea: a seabed under the water, the hero swims")
         if (getattr(spec.world, "archetype", "plain") == "cave"
                 and not _fre.search(r"\b(caves?|caverns?|grottos?|grottoes|underground|subterranean|catacombs?|mines?|tunnels?|crypts?|lairs?|dens?)\b", _ptl)):
             spec.world.archetype = "plain"
@@ -1929,7 +2034,7 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         # chambers, under a roof, lit by its crystals and the hero's lamp
         # (level.py carves it, proc/cave.js roofs and lights it).
         if (base_spec is None and getattr(spec.world, "archetype", "plain") not in ("volcano", "archipelago")
-                and spec.world.sky != "space"
+                and spec.world.sky != "space" and "underwater" not in (spec.world.name or "").lower()
                 and _fre.search(r"\b(caves?|caverns?|grottos?|grottoes|underground|subterranean|catacombs?)\b", _ptl)):
             spec.world.archetype = "cave"
             spec.world.sky = "night"
@@ -1947,6 +2052,20 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                              if not (e.behavior == "static" and _rockish.search(e.name or ""))]
             job.setdefault("notes", []).append(
                 "cave: a tunnel through rock opening into chambers, under a roof, lit by its crystals")
+        # THE LAND IS NOT A CAST MEMBER (2026-10-22): "a mars rover drives across red dunes"
+        # spent minutes of image-to-3D on a 'dune' because the planner listed it as an
+        # entity and the sentence names dunes. Landforms, weather and buildings are drawn
+        # by the world itself; as entities they are dropped before anything is made
+        try:
+            import re as _lre
+            _LAND = r"(dunes?|hills?|mountains?|peaks?|rivers?|lakes?|seas?|oceans?|waves?|clouds?|sky|skies|valleys?|canyons?|cliffs?|ridges?|buildings?|streets?|roads?|floors?|walls?|ground|islands?|forests?|woods|snow|ice|water|sand|rain|storms?|fog|mist|puddles?|debris|terrain|landscape|horizon|sun|moon|stars?|grass|meadows?|fields?|caves?|tunnels?)"
+            _drop = [e.name for e in spec.entities if _lre.fullmatch(r"(?:\w+\s+)?" + _LAND, (e.name or "").lower().strip())
+                     and e.behavior not in ("hostile", "guard", "vehicle", "suspect", "customer")]
+            if _drop and "entities" not in (spec.locked or []):
+                spec.entities = [e for e in spec.entities if e.name not in _drop]
+                job.setdefault("notes", []).append("the land draws itself: " + ", ".join(sorted(set(_drop))) + " left to the world, not made as props")
+        except Exception as _le:
+            job.setdefault("notes", []).append(f"land rule skipped: {_le}")
         stage("resolving assets")
         # SUBJECT IS THE HERO (2026-07-08): the prompt's own words outrank
         # the LLM's cast — "a wolf roaming the mountains" once played as a
@@ -2343,6 +2462,22 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                 job.setdefault("notes", []).append(f"'{spec.player.name}' rides a {spec.player.ride}")
         except Exception as _rde:
             job.setdefault("notes", []).append(f"ride rule skipped: {_rde}")
+        # A BALLOON PILOT FLIES A BALLOON (2026-10-22): "a hot air balloon pilot floats over
+        # cappadocia at sunrise" walked a desert on foot beside a generated balloon. The
+        # runtime builds the craft (buildBalloon) and flies it: burner to climb, vent to
+        # sink, a slow drift on the wind; the planner's balloon entity is the craft itself
+        try:
+            import re as _blre
+            if (_blre.search(r"\b(hot[- ]air balloons?|balloon (?:pilot|ride|flight|race|trip)|balloonists?|ballooning)\b", (req.prompt or "").lower())
+                    and player_glb and pattern == "biped" and getattr(spec, "genre", "adventure") != "factory"):
+                spec.player.ride = "balloon"
+                spec.player.mode = "fly"
+                spec.player.car_params = None
+                spec.player.walk_speed, spec.player.run_speed = 3.5, 6.0
+                spec.entities = [e for e in spec.entities if not _blre.search(r"\bballoons?\b", (e.name or "").lower())]
+                job.setdefault("notes", []).append(f"'{spec.player.name}' flies a hot air balloon: the burner climbs, the vent sinks, the wind carries it")
+        except Exception as _ble:
+            job.setdefault("notes", []).append(f"balloon rule skipped: {_ble}")
         _race_seated = False
         # (2026-10-07) only a person takes a driver's seat: "a claymation snail
         # races three other snails" put the snail in a sedan. An animal races
@@ -2350,6 +2485,9 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         if (any(o.kind == "race" for o in spec.objectives)
                 and pattern == "biped"
                 and pattern != "vehicle"
+                # (2026-10-22) a penguin walks on two legs and was seated in a sedan:
+                # nothing under a metre tall takes a driver's seat
+                and library.default_height(spec.player.name or "man") >= 1.0
                 and (spec.player.mode or "walk") == "walk"
                 and player_glb):
             pattern = "vehicle"
@@ -2432,6 +2570,14 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                            "paint": _cp.get("paint", 0xd83a2a)}
                     spec.entities = [e for e in spec.entities
                                      if not (_kre.search(r"kart", (e.name or "").lower()) and e.behavior != "vehicle")]
+                # A ROVER IS A ROVER (2026-10-22): "a mars rover drives across red dunes" drove a
+                # generated green saloon lying on its side. The runtime builds a six-wheeled
+                # rover on a rocker-bogie, with its mast, dish and power unit (makeRover)
+                if _kre.search(r"\b(rovers?|moon ?buggy|lunar roving vehicle|lunar buggy|curiosity|perseverance|sojourner|lunokhod)\b", (req.prompt or "").lower()) \
+                        and (_cp is not None or _kre.search(r"\b(rover|buggy)\b", (spec.player.name or "").lower())):
+                    _cp = {"_class": "planetary rover", "type": "rover", "length": 3.3, "width": 2.5, "bodyH": 0.5, "bodyY": 0.75,
+                           "cabinLen": 0.3, "cabinH": 0.82, "cabinX": 0.0, "wheelR": 0.32, "wheelBase": 1.9, "paint": 0xe8e4da}
+                    spec.player.walk_speed, spec.player.run_speed = min(max(spec.player.walk_speed, 4.0), 6.0), min(max(spec.player.run_speed, 8.0), 11.0)
                 if _cp:
                     _cls = _cp.pop("_class", "sedan")
                     spec.player.car_params = _cp
@@ -2566,6 +2712,14 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             # wolf" at 1.5x reads as intended); only physically absurd
             # values — past 1.8x or under 0.55x the species — snap back.
             _sp_h = library.default_height(cast)
+            # (2026-10-22) "a giant robot stomps through tokyo" was cut from 10 m to 1 m:
+            # a hero the sentence calls giant is as big as it was asked to be
+            import re as _gre9
+            _last9 = ((cast or "").lower().split() or [""])[-1]
+            if _last9 and _gre9.search(r"\b(giant|gigantic|huge|colossal|towering|enormous|massive|titanic|kaiju|skyscraper-sized|mountain-sized|fifty-foot|100-foot)\s+(?:\w+\s+)?"
+                                        + _gre9.escape(_last9) + r"s?\b", (req.prompt or "").lower()):
+                _sp_h = max(_sp_h, min(10.0, max(spec.player.height_m, _sp_h * 5.0)))
+                spec.player.height_m = _sp_h
             if _sp_h > 0 and not (_sp_h * 0.55 <= spec.player.height_m <= _sp_h * 1.8):
                 job.setdefault("notes", []).append(
                     f"{cast} height {spec.player.height_m:.2f}m → {_sp_h:.2f}m "
@@ -2585,6 +2739,10 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         if h < 0.35:
             spec.camera.distance_m = min(spec.camera.distance_m, 0.45 + 2.5 * h)
             spec.camera.height_m = min(spec.camera.height_m, 0.15 + 1.0 * h)
+        # a balloon is sixteen metres of envelope over the pilot: the camera stands
+        # back far enough to see the whole craft and the land it drifts over
+        if (spec.player.ride or "") == "balloon":
+            spec.camera.distance_m, spec.camera.height_m = 17.0, 7.0
         # THE SENTENCE'S HOUR AND AIR (2026-10-07): "a fox hunts in a misty
         # autumn forest at dawn" was built under a plain midday sky with no
         # mist. A time of day the sentence names sets the sky; misty, foggy
@@ -2755,7 +2913,9 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                 and (spec.player.mode or "walk") == "walk"
                 and "entities" not in (spec.locked or [])
                 and not any(e.behavior == "guide" for e in spec.entities)
-                and len(spec.entities) < 8):
+                and len(spec.entities) < 8
+                # (2026-10-22) an ant in a giant kitchen was greeted by a woman forty times its height
+                and library.default_height(spec.player.name or "man") >= 0.4):
             from app.game_export.spec import EntitySpec as _GES
             _gname = ("man" if any(e.behavior == "guard" for e in spec.entities)
                       else "woman")
@@ -2831,6 +2991,10 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             first, then by movement pattern (a hostile gets the fiercer kin)."""
             k = (kind or "").lower().strip().replace("_", " ")
             import re as _kre
+            # (2026-10-22) a spider in a giant kitchen was played by a wolf: nothing
+            # with fur stands in for a thing with six or eight legs
+            if _kre.search(r"\b(spiders?|tarantulas?|scorpions?|beetles?|cockroach\w*|roach\w*|centipedes?|millipedes?|ticks?|mites?|crickets?|grasshoppers?|locusts?|mantis\w*|ladybirds?|ladybugs?|pillbugs?|woodlice|woodlouse|earwigs?|termites?|ants?|crabs?|lobsters?)\b", k):
+                return None
             for word, kin in _KIN.items():
                 # whole words: "combat drone" is a drone, not a bat
                 if _kre.search(r"\b" + _kre.escape(word) + r"\b", k) and (ensure_playable(kin, verbose=False) or library.resolve(kin)):
@@ -3051,7 +3215,11 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                 # cached, but an uninvited noun must never cost 35 CPU-minutes
                 # of generation. Skip with a note; prompt-named nouns still
                 # generate like always.
-                sub, glb = _understudy(ent.behavior)
+                # (2026-10-22) a person stands in for a person, never for a creature: the
+                # giant kitchen's invented spider was played by a man in a leather jacket
+                _beast = (guess_pattern(ekind) != "biped" or library.default_height(ekind) < 0.6
+                          or bool(_fre.search(r"\b(spiders?|scorpions?|beetles?|ants?|insects?|bugs?|roach\w*|cockroach\w*|centipedes?|worms?|snakes?|rats?|mice|mouse|bats?|crabs?|flies|fly|wasps?|bees?)\b", ekind.lower())))
+                sub, glb = (None, None) if _beast else _understudy(ent.behavior)
                 if not glb:
                     job.setdefault("notes", []).append(
                         f"the AI imagined '{ekind}' for this world. It's not in "
@@ -3492,6 +3660,54 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             job.setdefault("notes", []).append("a sunken city: an old city standing in the floodwater, not a street grid")
             # nothing that needs deep water to swim in
             spec.entities = [e for e in spec.entities if not _fre.search(r"\b(fish\w*|sharks?|dolphins?|whales?|eels?|jellyfish|octop\w*|squids?|turtles?|corals?|seaweed|kelp|anemones?)\b", (e.name or "").lower())]
+        # A TINY HERO IN A GIANT ROOM (2026-10-22). "a tiny ant explores a giant kitchen
+        # to carry a sugar cube home" was a dirt yard with a cottage on it: nothing
+        # could build a room seen from the floor. A sentence that makes its hero small
+        # (an insect, a mouse, a toy, or simply "tiny") inside a room of a house is
+        # that room, built by the runtime (GIANTROOM) at the hero's scale: the floor
+        # is the world, the furniture its cliffs and towers, a crumb a boulder.
+        _gr_room = _fre.search(r"\b(kitchen|bedroom|living ?room|lounge|bathroom|pantry|play ?room|toy ?room|nursery|kid'?s room|dining room|study|garage|attic)\b", _ptl)
+        _gr_small = _fre.search(r"\b(tiny|miniature|minuscule|shrunk(?:en)?|shrinks?|ant|ants|beetles?|ladybugs?|ladybirds?|mouse|mice|hamsters?|cockroach\w*|spiders?|bugs?|insects?|toy (?:soldiers?|cars?|robots?|knights?|figures?)|action figures?|tin soldiers?|borrowers?|thumb-sized|pocket-sized)\b", _ptl)
+        _giantroom = bool(_gr_room and (_gr_small or _fre.search(r"\b(giant|huge|enormous|massive|towering) (?:kitchen|bedroom|living ?room|bathroom|house|room)\b", _ptl))
+                          and not is_city and spec.player.mode not in ("drive",) and base_spec is None)
+        if _giantroom:
+            _grk = _gr_room.group(1).replace(" ", "")
+            _grk = {"lounge": "livingroom", "playroom": "bedroom", "toyroom": "bedroom", "nursery": "bedroom", "kidsroom": "bedroom",
+                    "kid'sroom": "bedroom", "study": "livingroom", "pantry": "kitchen", "diningroom": "kitchen",
+                    "garage": "livingroom", "attic": "bedroom"}.get(_grk, _grk)
+            spec.world.name = f"giant {_grk}"
+            spec.world.archetype = "plain"
+            spec.world.water_level = None
+            spec.world.grass = False
+            spec.world.scatter = []
+            spec.world.flora = None
+            spec.world.weather = "none"
+            spec.world.fog_density = 0.12
+            spec.world.size_m = 160.0
+            if spec.world.sky not in ("night", "dusk", "sunset"):
+                spec.world.sky = "day"
+            spec.world.ground_color = {"kitchen": [0.72, 0.68, 0.6], "bathroom": [0.8, 0.82, 0.82]}.get(_grk, [0.52, 0.36, 0.22])
+            spec.world.level = dict(spec.world.level or {}, giantroom=_grk)
+            if spec.player.mode in ("fly", "swim"):
+                spec.player.mode = "walk" if not _fre.search(r"\b(fl(?:y|ies|ying)|bee|wasp|moth|butterfl\w*|drone)\b", _ptl) else "fly"
+            # nothing that belongs outdoors
+            spec.entities = [e for e in spec.entities if not _fre.search(r"\b(trees?|bush\w*|rocks?|boulders?|deer|wolf|wolves|bears?|birds?|clouds?|grass)\b", (e.name or "").lower())]
+            job.setdefault("notes", []).append(f"a giant {_grk.replace('livingroom', 'living room')} seen from the floor: the hero is small, the furniture towers")
+        # ISLANDS IN THE SKY (2026-10-22): the runtime hangs them over a sea of cloud
+        # (SKYISLES); the ground under it lies flat and bare, nothing grows on it
+        _skyisles = bool(_fre.search(r"\b(floating (?:islands?|isles?|rocks?|mountains?|lands?)|sky ?islands?|islands? (?:in|of) the (?:sky|clouds)|above the clouds|cloud (?:kingdom|islands?|sea|city)|sea of clouds|sky kingdom|sky realm)\b", _ptl)
+                         and not getattr(spec.world, "platforms", False) and (spec.view or "3d") == "3d" and not _giantroom and base_spec is None)
+        if _skyisles:
+            is_city = False
+            spec.world.archetype = "plain"
+            spec.world.water_level = None
+            spec.world.grass = False
+            spec.world.scatter = []
+            spec.world.size_m = max(float(spec.world.size_m or 0), 420.0)
+            if spec.world.sky in ("space", "mars"):
+                spec.world.sky = "day"
+            spec.world.fog_density = min(spec.world.fog_density if spec.world.fog_density is not None else 0.3, 0.3)
+            job.setdefault("notes", []).append("islands in the sky: rock and turf hanging over a sea of cloud, a chain of them leading on")
         # A CITY WITH NO MAP (2026-09-11): a city prompt without a known place, or
         # one whose map fetch fails, still gets streets and blocks: the procedural
         # district below, in the same shape the real map arrives in.
@@ -3568,6 +3784,10 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             amp = 0.35                              # cities are near-flat
         if _sunken:
             amp = 0.25                              # the flood lies level over the old streets
+        if _giantroom:
+            amp = 0.0                               # a floor is level
+        if _skyisles:
+            amp = 0.0                               # the ground lies flat under the cloud
         if _frontier:
             amp = 0.9                               # a town is built where the ground is level
         if spec.player.mode == "fly":
@@ -3617,6 +3837,17 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             job.setdefault("notes", []).append(
                 f"sky {spec.world.sky} -> day: a sea under it needs the sentence to name another world")
             spec.world.sky = "day"
+        # NOT EVERY HIGH PLACE IS SPACE (2026-10-22): "a dragon rider flies between floating
+        # islands above the clouds" was given a space sky, and the islands were a grey moon
+        # under black and stars. A space sky needs space in the sentence, a Mars sky Mars;
+        # anything else is an earthly sky at the hour it names
+        if (spec.world.sky == "space" and base_spec is None
+                and not _fre.search(r"\b(space|outer space|orbit\w*|asteroids?|planets?|moons?|lunar|galax\w*|stars?hip|spaceships?|astronauts?|cosmo\w*|nebula\w*|comets?|alien world|mars|martian|zero[- ]g)\b", (req.prompt or "").lower())):
+            job.setdefault("notes", []).append("sky space -> day: the sentence names nowhere off the earth")
+            spec.world.sky = "day"
+        if (spec.world.sky == "mars" and base_spec is None
+                and not _fre.search(r"\b(mars|martian|red planet|olympus mons)\b", (req.prompt or "").lower())):
+            spec.world.sky = "day"
         # ARCHETYPE (2026-08-30): the landform the prompt asked for. Applied
         # before regions and before the corridor, so it changes the SHAPE of
         # the world rather than its dressing — and the corridor still flattens
@@ -3645,6 +3876,15 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         if _fjord:
             _arch = "archipelago"
             spec.world.archetype = "archipelago"
+        # CAPPADOCIA IS TUFF (2026-10-22): pale volcanic ground worn into valleys; the
+        # runtime raises the fairy chimneys in them and fills the sky with balloons
+        if _fre.search(r"\b(cappadocia\w*|kapadokya|g[oö]reme|fairy chimneys?)\b", (req.prompt or "").lower()):
+            if _arch in ("plain", "mesa", "peaks", "dunes", "basin"):
+                _arch = "canyon"
+                spec.world.archetype = "canyon"
+            spec.world.ground_color = [0.8, 0.7, 0.58]
+            spec.world.size_m = max(spec.world.size_m, 360.0)
+            spec.world.scatter = []                  # (the planner's desert boulders and cacti)
         # THE PYRAMIDS STAND IN SAND (2026-10-11): "the pyramids of giza at
         # sunrise" was planned as a mesa of brown soil under mountains. Egypt
         # and the Sahara are sand: low dunes, the ground the colour of it.
@@ -3815,6 +4055,8 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             slot=bool(_fre.search(r"\b(slot canyons?|slot|narrows|crevices?|fissures?|trapped in (?:a|the) canyon|pinned|wedged)\b", (req.prompt or "").lower())
                       and _fre.search(r"\b(canyons?|gorges?|crevices?|fissures?|narrows|ravines?)\b", (req.prompt or "").lower())),
             river=_river, layout=(_design or {}).get("layout", "route"))
+        if _giantroom and isinstance(spec.world.level, dict):
+            spec.world.level["giantroom"] = _grk
         if _design and isinstance(spec.world.level, dict):
             spec.world.level["design"] = {k: _design[k] for k in ("layout", "mechanic", "moment")}
             spec.world.level["design"]["layout"] = spec.world.level.get("layout", "route")
@@ -4155,7 +4397,7 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         # ENTERABLE BUILDING (moon plan 2.2): an EXTERIOR world that mentions
         # a structure gets a real door — outside stays the level, the door
         # teleports into a generated interior past the map edge and back.
-        if "interior" not in spec.world.level and not is_city:
+        if "interior" not in spec.world.level and not is_city and not _giantroom:
             # BUILDINGS FOR BUILDING PROMPTS (2026-09-16). Ten words used to
             # earn a door; "a haunted manor" earned nothing and stood on a
             # bare moor. Every structure a prompt is likely to name maps to

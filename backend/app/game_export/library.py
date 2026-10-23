@@ -216,6 +216,11 @@ _TRUE_HEIGHT = (
     (("crocodile", "alligator", "caiman"), 3.5), (("snake", "serpent", "cobra", "python", "viper"), 1.8),
     (("chicken", "hen", "rooster", "duck"), 0.45), (("goose", "swan", "turkey"), 0.8), (("penguin",), 0.8),
     (("firefly", "fireflie", "bee", "wasp", "fly", "moth"), 0.12), (("butterfly", "dragonfly"), 0.18),
+    # (2026-10-22) the small walkers a "tiny hero in a giant room" sentence names: an ant
+    # was sized as a 1 m nothing-in-particular
+    (("ant", "beetle", "ladybug", "ladybird", "cricket", "grasshopper", "cockroach", "roach", "pillbug", "woodlouse",
+      "spider", "snail", "slug", "caterpillar", "worm"), 0.14),
+    (("hedgehog", "crab", "tortoise", "seahorse"), 0.25), (("jellyfish",), 0.6), (("octopus", "squid"), 0.9),
     (("sparrow", "songbird", "swallow", "finch", "robin"), 0.3), (("bat", "parrot", "pigeon", "dove"), 0.5),
     (("crow", "raven", "owl", "gull", "seagull"), 1.0), (("eagle", "hawk", "falcon", "vulture", "condor"), 2.0),
     (("dragon", "wyvern", "griffin", "gryphon", "pegasus", "phoenix"), 3.2),
