@@ -188,7 +188,7 @@ class ObjectiveSpec(BaseModel):
     the clues of the collect step before it."""
     kind: Literal["collect", "defeat", "reach", "race", "survive",
                   "eliminate", "score", "hunt", "capture", "escort",
-                  "defend", "accuse", "serve", "repair"] = "collect"
+                  "defend", "accuse", "serve", "repair", "ride"] = "collect"   # ride (2026-10-22): catch N waves on a board
     # repair (2026-10-06): `count` broken things (`label`: "broken panels",
     # "generators") stand about the level; hold E at one until it comes back.
     # serve (2026-10-06): a service game. `count` orders filled for the

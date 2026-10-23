@@ -38,6 +38,8 @@ export function waterKind(words, frozen) {
   if (/swamp|marsh|bog|bayou|fen|mire|everglade/.test(words || '')) return 'swamp';
   if (frozen) return 'ice';
   if (/\b(storm\w*|gales?|tempest\w*|hurricanes?|squalls?|typhoons?)\b/.test(words || '')) return 'storm';
+  // (2026-10-22) a surfing beach and the tropics are clear blue sea, not the dark of a lake
+  if (/\b(surf\w*|tropical|hawai\w*|caribbean|lagoons?|atolls?|bahamas|maldives|tahiti|fiji|polynesia\w*|bali)\b/.test(words || '')) return 'sea';
   return 'lake';
 }
 

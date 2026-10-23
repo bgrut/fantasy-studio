@@ -1392,6 +1392,7 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                     spec.entities = [e for e in spec.entities if e.behavior in ("guide",) or not _sre2.search(r"\b(kids?|child\w*|snowballs?|elf|elves)\b", (e.name or "").lower())]
                     spec.entities.append(_SE2(name=_fname, behavior="hostile", count=_nf, speed=2.0, hp=1, height_m=1.0))
                     spec.objectives = [_SO2(kind="defeat", label="snowball hits", count=_nf)]
+                    job["_snowfight"] = True
                     job.setdefault("notes", []).append(f"a snowball fight: you throw (F), {_nf} on the other side throw back; hit each of them")
             except Exception as _sne:
                 job.setdefault("notes", []).append(f"snowball rule skipped: {_sne}")
@@ -2158,7 +2159,8 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         # the hero is a survivor: an ordinary person.
         try:
             _hostile = {(e.name or "").strip().lower() for e in spec.entities if e.behavior in ("hostile", "guard")}
-            if not req.player and want in _hostile:
+            # (2026-10-22) a snowball fight is kids against kids: the other side is your own kind
+            if not req.player and want in _hostile and not job.get("_snowfight"):
                 import re as _re5
                 _p5 = (req.prompt or "").lower()
                 if not _re5.search(r"\b(play|playing) as an? " + _re5.escape(want) + r"|\byou are an? " + _re5.escape(want)
@@ -2460,6 +2462,13 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                         _o.count = min(_o.count, 5)
                         _o.label = "rivals"
                 job.setdefault("notes", []).append(f"'{spec.player.name}' rides a {spec.player.ride}")
+                # (2026-10-22) a surfer on a surfing beach rides the waves the runtime rolls in (SURF):
+                # the point is catching them, not racing a 'wave' to a flag
+                if spec.player.ride == "surfboard" and _rdre.search(r"\b(waves?|surf|surfing|swells?|breaks?|beach|pipeline|reef break)\b", (req.prompt or "").lower()):
+                    from app.game_export.spec import ObjectiveSpec as _RO
+                    spec.objectives = [_RO(kind="ride", label="waves", count=5)]
+                    spec.entities = [e for e in spec.entities if e.behavior != "vehicle" and not _rdre.search(r"\bwaves?\b", (e.name or "").lower())]
+                    job.setdefault("notes", []).append("surfing: swells roll in from the deep and break on the shallows; paddle out and ride five in")
         except Exception as _rde:
             job.setdefault("notes", []).append(f"ride rule skipped: {_rde}")
         # A BALLOON PILOT FLIES A BALLOON (2026-10-22): "a hot air balloon pilot floats over
@@ -3666,7 +3675,7 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         # (an insect, a mouse, a toy, or simply "tiny") inside a room of a house is
         # that room, built by the runtime (GIANTROOM) at the hero's scale: the floor
         # is the world, the furniture its cliffs and towers, a crumb a boulder.
-        _gr_room = _fre.search(r"\b(kitchen|bedroom|living ?room|lounge|bathroom|pantry|play ?room|toy ?room|nursery|kid'?s room|dining room|study|garage|attic)\b", _ptl)
+        _gr_room = _fre.search(r"\b(kitchen|bedroom|living ?room|lounge|bathroom|pantry|play ?room|toy ?room|nursery|kid'?s room|dining room|study|garage|attic|library|office|classroom|cellar|basement)\b", _ptl)
         _gr_small = _fre.search(r"\b(tiny|miniature|minuscule|shrunk(?:en)?|shrinks?|ant|ants|beetles?|ladybugs?|ladybirds?|mouse|mice|hamsters?|cockroach\w*|spiders?|bugs?|insects?|toy (?:soldiers?|cars?|robots?|knights?|figures?)|action figures?|tin soldiers?|borrowers?|thumb-sized|pocket-sized)\b", _ptl)
         _giantroom = bool(_gr_room and (_gr_small or _fre.search(r"\b(giant|huge|enormous|massive|towering) (?:kitchen|bedroom|living ?room|bathroom|house|room)\b", _ptl))
                           and not is_city and spec.player.mode not in ("drive",) and base_spec is None)
@@ -3674,7 +3683,7 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             _grk = _gr_room.group(1).replace(" ", "")
             _grk = {"lounge": "livingroom", "playroom": "bedroom", "toyroom": "bedroom", "nursery": "bedroom", "kidsroom": "bedroom",
                     "kid'sroom": "bedroom", "study": "livingroom", "pantry": "kitchen", "diningroom": "kitchen",
-                    "garage": "livingroom", "attic": "bedroom"}.get(_grk, _grk)
+                    "garage": "livingroom", "attic": "bedroom", "library": "livingroom", "office": "livingroom", "classroom": "livingroom", "cellar": "kitchen", "basement": "livingroom"}.get(_grk, _grk)
             spec.world.name = f"giant {_grk}"
             spec.world.archetype = "plain"
             spec.world.water_level = None
@@ -3693,6 +3702,18 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             # nothing that belongs outdoors
             spec.entities = [e for e in spec.entities if not _fre.search(r"\b(trees?|bush\w*|rocks?|boulders?|deer|wolf|wolves|bears?|birds?|clouds?|grass)\b", (e.name or "").lower())]
             job.setdefault("notes", []).append(f"a giant {_grk.replace('livingroom', 'living room')} seen from the floor: the hero is small, the furniture towers")
+        # A BACKYARD (2026-10-22): the runtime builds the back of a house and the fenced yard
+        # behind it (YARD); the world round it is big enough to hold it, the ground gentle,
+        # and the planner's town kit (carts, fountains, banners) is not a family's garden
+        _backyard = bool(_fre.search(r"\b(back ?yards?|back gardens?|front yards?|front gardens?|suburban (?:yard|garden|house|home))\b", _ptl)
+                         and not _giantroom and base_spec is None)
+        if _backyard:
+            is_city = False
+            spec.world.archetype = "plain"
+            spec.world.size_m = max(float(spec.world.size_m or 0), 140.0)
+            spec.world.scatter = [s for s in (spec.world.scatter or [])
+                                  if not _fre.search(r"(cart|fountain|banner|stall|tent|well|barrel|crate|wagon|statue)", str(getattr(s, "asset", "") or "").lower())]
+            job.setdefault("notes", []).append("a backyard: the back of the house, a deck, a fenced lawn with a shed, a swing set and a tree")
         # ISLANDS IN THE SKY (2026-10-22): the runtime hangs them over a sea of cloud
         # (SKYISLES); the ground under it lies flat and bare, nothing grows on it
         _skyisles = bool(_fre.search(r"\b(floating (?:islands?|isles?|rocks?|mountains?|lands?)|sky ?islands?|islands? (?:in|of) the (?:sky|clouds)|above the clouds|cloud (?:kingdom|islands?|sea|city)|sea of clouds|sky kingdom|sky realm)\b", _ptl)
@@ -3788,6 +3809,8 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             amp = 0.0                               # a floor is level
         if _skyisles:
             amp = 0.0                               # the ground lies flat under the cloud
+        if _backyard:
+            amp = min(amp, 0.6)                     # a suburb is built on gentle ground
         if _frontier:
             amp = 0.9                               # a town is built where the ground is level
         if spec.player.mode == "fly":
@@ -3911,7 +3934,11 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                 and not _fre.search(r"\b(desert|dune|space|moon|mars|city|street|underwater)\b", _pw7)
                 and not getattr(spec.world, "platforms", False) and (_arch in ("plain", "dunes", "basin", "mesa")
                      # a lighthouse stands on a coast, not on a flooded plain of islets (2026-10-12)
-                     or (_arch == "archipelago" and _fre.search(r"\blighthouses?\b", _pw7) and not _fre.search(r"\bisl(and|e)s?\b", _pw7)))):
+                     or (_arch == "archipelago" and _fre.search(r"\blighthouses?\b", _pw7) and not _fre.search(r"\bisl(and|e)s?\b", _pw7))
+                     # (2026-10-22) "a surfer rides huge waves off a hawaiian beach" was planned as islands and
+                     # surfed a sand spit: a beach the sentence names is a coastline unless it asks for islands
+                     or (_arch == "archipelago" and _fre.search(r"\b(beach|beaches|surf\w*|lifeguards?|swimmers?|seaside|coastline)\b", _pw7)
+                         and not _fre.search(r"\b(isl(?:and|e)s?|islets?|archipelago|atolls?|lagoon)\b", _pw7)))):
             _arch = "archipelago"
             spec.world.archetype = "archipelago"
             _coast = not _fjord and not job.get("_naval")
