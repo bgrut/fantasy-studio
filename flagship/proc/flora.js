@@ -985,7 +985,9 @@ function makeMaterials(kind, leafHSL, barkTex, barkN, seed, U, extra = {}) {
       m = new THREE.MeshStandardMaterial({ map: extra.rockTex || null, color: _tint, roughness: 0.92 });
       // the relief rides the same three-way projection as the colour (an
       // icosphere's own UVs would scatter it), read in patchTree
-      if (extra.rockN) m.userData.triN = extra.rockN;
+      // (2026-10-22) not enumerable: a texture in userData was JSON-serialised (its whole image) by every
+      // clone(), seconds of boot in every world with stone, and the copy got a JSON imitation, not a texture
+      if (extra.rockN) Object.defineProperty(m.userData, 'triN', { value: extra.rockN, enumerable: false, writable: true, configurable: true });
       if (extra.greyRock) m.userData.desat = 0.88;          // the moon's stone is grey
     } else if (kind === 'cactus') {
       // the skin: each of the twelve ribs lighter at its crest than in its
@@ -1242,6 +1244,7 @@ export function plantForest(o) {
       bark: mats.bark.clone(),
       leaf: mats.leaf ? new THREE.MeshStandardMaterial({ map: mats.leaf.map, alphaTest: 0.42, side: THREE.DoubleSide, roughness: 1.0, envMapIntensity: 0.45 }) : null,
     };
+    if (mats.bark.userData.triN) Object.defineProperty(matsBake.bark.userData, 'triN', { value: mats.bark.userData.triN, enumerable: false, writable: true, configurable: true });
     patchTree(matsBake.bark, U, { triplanar: STONE.has(K.kind) });
     if (matsBake.leaf) patchTree(matsBake.leaf, U, { foliage: true });
     for (let v = 0; v < varPer; v++) {
@@ -1407,6 +1410,12 @@ export function biomeFor(words, arch, groundHSL) {
   if (has(/\balien|xeno\w*|extraterrestrial|exoplanet|strange planet|other ?world|purple plants/)) {
     Object.assign(out, { kinds: K(['coral', 0.7], ['coral2', 0.55], ['crystal', 0.35], ['rock', 0.45], ['boulder', 0.15]), dens: 0.32,
       coralTint: T(0xa04dff), coralTint2: T(0x2fe0c8), crystalTint: T(0x7affd4), rockTint: T(0x4a3f5c), leaf: { h: 0.78, s: 0.5, l: 0.3 } });
+    return out;
+  }
+  // A PARK IS PLANTED, NOT GROWN WILD (2026-10-22): a dog's sunny park stood in a pine forest.
+  // A town park has broadleaf trees standing apart on mown lawns, a few bushes
+  if (has(/\b(?:city |public |dog )?parks?\b|playgrounds?|picnic/) && !has(/\b(?:national|state|wildlife|safari|theme|amusement|skate|water) parks?\b/)) {
+    Object.assign(out, { kinds: K(['oak', 0.7], ['broadleaf', 0.6], ['birch', 0.3], ['bush', 0.45]), dens: 0.2 });
     return out;
   }
   // CAPPADOCIA (2026-10-22): pale tuff valleys, scrub and a few poplars and orchards in

@@ -72,7 +72,7 @@ _BIPED = ("canyoneer", "investigator", "racer", "hunter", "archer", "soldier", "
           "sheriff", "marshal", "deputy", "gunslinger", "superhero", "barista", "gardener",
           "waiter", "waitress", "bartender", "cosmonaut", "spaceman", "racer", "athlete",
           "firefighter", "fireman", "firewoman")
-_VEHICLE = ("car", "truck", "bus", "van", "jeep", "tank", "motorcycle")
+_VEHICLE = ("car", "truck", "bus", "van", "jeep", "tank", "motorcycle", "train", "locomotive", "tram", "rover", "buggy", "tractor")   # (2026-10-22) trains were classified bipeds
 _FLYING = ("dragon", "bird", "eagle", "hawk", "owl", "phoenix", "griffin",
            "pegasus", "bat", "butterfly", "bee", "plane", "airplane", "jet",
            "helicopter", "spaceship", "rocket", "drone", "ufo")

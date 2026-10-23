@@ -68,6 +68,13 @@ _PROC_MODULES = {
     "classic car": "proc:roadster",
     "vintage car": "proc:roadster",
     "white roadster": "proc:roadster",
+    # (2026-10-22) a train is built in code by the runtime (buildLoco), never generated
+    "locomotive": "proc:locomotive",
+    "steam locomotive": "proc:locomotive",
+    "steam train": "proc:locomotive",
+    "train": "proc:locomotive",
+    "steam engine": "proc:locomotive",
+    "express train": "proc:locomotive",
 }
 
 
@@ -221,6 +228,7 @@ _TRUE_HEIGHT = (
     (("ant", "beetle", "ladybug", "ladybird", "cricket", "grasshopper", "cockroach", "roach", "pillbug", "woodlouse",
       "spider", "snail", "slug", "caterpillar", "worm"), 0.14),
     (("hedgehog", "crab", "tortoise", "seahorse"), 0.25), (("jellyfish",), 0.6), (("octopus", "squid"), 0.9),
+    (("train", "locomotive"), 4.4), (("rover", "buggy"), 2.0),
     (("sparrow", "songbird", "swallow", "finch", "robin"), 0.3), (("bat", "parrot", "pigeon", "dove"), 0.5),
     (("crow", "raven", "owl", "gull", "seagull"), 1.0), (("eagle", "hawk", "falcon", "vulture", "condor"), 2.0),
     (("dragon", "wyvern", "griffin", "gryphon", "pegasus", "phoenix"), 3.2),

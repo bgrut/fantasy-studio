@@ -1202,6 +1202,23 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                     job.setdefault("notes", []).append("hero: a buddhist monk, in the robes of the place")
             except Exception:
                 pass
+            # THE DRIVER DRIVES THE TRAIN (2026-10-22): "a train driver takes a steam train through
+            # snowy mountain passes" walked through the snow on foot, no line, no engine. Whoever
+            # drives, takes or runs a train is seen as the locomotive on its line (RAIL, buildLoco)
+            try:
+                import re as _tre
+                _tp = (req.prompt or "").lower()
+                if ((_tre.search(r"\b(?:drives?|driving|takes?|taking|runs?|running|operates?|pilots?|conducts?|steers?|crews?)\s+(?:a|an|the|his|her|their|an old|the old)?\s*(?:[a-z-]+\s+){0,2}?(?:train|locomotive|steam engine|express)\b", _tp)
+                     or _tre.match(r"\s*(?:a|an|the)\s+(?:[a-z-]+\s+){0,2}?(?:steam\s+)?(?:train|locomotive|steam engine|express train)\s+(?:chugs?|runs?|climbs?|crosses|races?|steams?|travels?|carries|winds?|rolls?|thunders?)\b", _tp))
+                        and not getattr(spec.world, "platforms", False) and getattr(spec, "genre", "") != "factory"):
+                    spec.player.name = "steam locomotive"
+                    spec.player.asset = ""
+                    spec.player.mode = "drive"
+                    spec.player.walk_speed, spec.player.run_speed = max(spec.player.walk_speed, 9.0), max(spec.player.run_speed, 16.0)
+                    spec.entities = [e for e in spec.entities if not _tre.search(r"\b(trains?|locomotives?|carriages?|wagons?)\b", (e.name or "").lower())]
+                    job.setdefault("notes", []).append("you drive the train: the locomotive on its line, the regulator open")
+            except Exception as _tre_e:
+                job.setdefault("notes", []).append(f"train rule skipped: {_tre_e}")
             # A RIDER IS CARRIED (2026-10-22): "a dragon rider flies between floating islands"
             # was a knight walking. Whoever rides a dragon, a griffin or a horse is seen as
             # the mount from the saddle's camera: the hero is the mount, and it flies if a
@@ -1277,8 +1294,12 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             try:
                 import re as _zre
                 _zp = (req.prompt or "").lower()
-                if _zre.search(STATION_RE, _zp) and _zre.search(r"\b(zero[- ]?g(?:ravity)?|weightless\w*|floats?|floating|drifts?|drifting|microgravity)\b", _zp) \
-                        and getattr(spec, "genre", "") != "factory":
+                # (2026-10-22) "an astronaut repairs a broken satellite in orbit above the earth" stood
+                # walking on nothing at the origin: outside in orbit is a spacewalk, and a spacewalk floats
+                _eva = (_zre.search(r"\b(in orbit|orbit(?:ing|s)? (?:the |above the )?(?:earth|planet|moon)|space ?walks?|spacewalking|eva|satellites?|outside the (?:station|ship|spacecraft))\b", _zp)
+                        and _zre.search(r"\b(astronauts?|cosmonauts?|spacem[ae]n|spacewom[ae]n|engineers?|technicians?|robots?|you)\b", _zp))
+                if ((_zre.search(STATION_RE, _zp) and _zre.search(r"\b(zero[- ]?g(?:ravity)?|weightless\w*|floats?|floating|drifts?|drifting|microgravity)\b", _zp)) or _eva) \
+                        and getattr(spec, "genre", "") != "factory" and (spec.player.mode or "walk") == "walk":
                     spec.player.mode = "fly"
                     spec.player.walk_speed = 2.4
                     spec.player.run_speed = 4.8
@@ -2388,7 +2409,7 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             # sculpted module: authored in metres with named drive pivots.
             # The roadster is 1.135m tall; the camera band derives from this.
             spec.player.asset = player_glb
-            spec.player.height_m = 1.15
+            spec.player.height_m = 4.4 if player_glb == "proc:locomotive" else 1.15   # a locomotive to its chimney top
             spec.player.mode = spec.player.mode or "drive"
             job.setdefault("notes", []).append(
                 f"hero is a sculpted proc module ({player_glb}). Wheels steer "
@@ -2462,6 +2483,16 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                         _o.count = min(_o.count, 5)
                         _o.label = "rivals"
                 job.setdefault("notes", []).append(f"'{spec.player.name}' rides a {spec.player.ride}")
+                # (2026-10-22) "a skier races down a steep black run through the trees" skied a summer
+                # meadow of flowers: a board or skis on snow is a snow slope, pines on it, no grass
+                if spec.player.ride in ("snowboard", "skis", "sled") and not _rdre.search(r"\b(sand ?board\w*|dune|desert|grass ?ski\w*)\b", (req.prompt or "").lower()):
+                    spec.world.ground_color = [0.9, 0.92, 0.95]
+                    spec.world.grass = False
+                    if getattr(spec.world, "archetype", "plain") in ("plain", "basin", "mesa", "dunes"):
+                        spec.world.archetype = "peaks"
+                    if spec.world.sky in ("space", "mars"):
+                        spec.world.sky = "day"
+                    job.setdefault("notes", []).append("a snow slope: white ground, pines, nothing green poking through")
                 # (2026-10-22) a surfer on a surfing beach rides the waves the runtime rolls in (SURF):
                 # the point is catching them, not racing a 'wave' to a flag
                 if spec.player.ride == "surfboard" and _rdre.search(r"\b(waves?|surf|surfing|swells?|breaks?|beach|pipeline|reef break)\b", (req.prompt or "").lower()):
@@ -2497,6 +2528,9 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                 # (2026-10-22) a penguin walks on two legs and was seated in a sedan:
                 # nothing under a metre tall takes a driver's seat
                 and library.default_height(spec.player.name or "man") >= 1.0
+                # (2026-10-22) "a viking longship raids a foggy coast" was planned as a race and the viking
+                # was put in a sedan: a seat needs the sentence to race
+                and _fre.search(r"\b(race[sd]?|racing|racers?|rally|grand prix|derby|time trial|laps?|speedway|circuit|drag strip)\b", (req.prompt or "").lower())
                 and (spec.player.mode or "walk") == "walk"
                 and player_glb):
             pattern = "vehicle"
@@ -2781,7 +2815,8 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                 # "under falling snow" were left to the model, and the benchmark's judge
                 # found the jungle temple dry and the castle storm absent
                 _wx = ("snow" if _hre.search(r"\b(snow\w*|blizzard\w*|snowfall|falling snow|sleet)\b", _hp) and not _hre.search(r"\bsnow (?:leopard|owl|globe)s?\b", _hp)
-                       else "rain" if _hre.search(r"\b(rain\w*|storm\w*|downpour|drizzl\w*|thunder\w*|monsoon|showers?)\b", _hp)
+                       # (2026-10-22) "keeps the light burning through a hurricane" stood in sunshine
+                       else "rain" if _hre.search(r"\b(rain\w*|storm\w*|downpour|drizzl\w*|thunder\w*|monsoon|showers?|hurricanes?|typhoons?|cyclones?|tempest\w*|gales?|squalls?)\b", _hp)
                        else None)
                 if _wx and spec.world.weather != _wx and spec.world.sky not in ("space", "mars"):
                     job.setdefault("notes", []).append(f"weather {spec.world.weather} -> {_wx} (the sentence says so)")
@@ -3107,7 +3142,8 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             if ekind == "man" and ent.behavior in ("guard", "hostile") and not getattr(ent, "spectral", False):
                 _era_s = ((req.prompt or "") + " " + str(getattr(spec.world, "name", "") or "") + " " + (spec.title or "")).lower()
                 for _epat, _efig in ((r"\b(japan\w*|samurai|ninjas?|shogun\w*|feudal|edo|ronin|daimyo|kyoto)\b", ("samurai", "ninja")),
-                                     (r"\b(vikings?|norse|longships?|fjords?)\b", ("viking",)),
+                                     # (2026-10-22) a viking hero's foes were men in hoodies: the raided coast's defenders
+                                     (r"\b(vikings?|norse|longships?|fjords?)\b", ("viking", "knight")),
                                      # an arena's opponents are gladiators, the hero's own figure if need be
                                      (r"\b(roman|rome|colosseum|coliseum|gladiators?|legion\w*|centurions?)\b", ("gladiator", "gladiator*")),
                                      (r"\b(western|frontier|saloon|cowboys?|outlaws?|high noon|sheriff)\b", ("bandit", "cowboy")),
@@ -3129,7 +3165,7 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             elif ekind == "man" and ent.behavior in ("guide", "wander", "follow", "static", "flee") and not getattr(ent, "spectral", False):
                 _era_s = ((req.prompt or "") + " " + str(getattr(spec.world, "name", "") or "") + " " + (spec.title or "")).lower()
                 for _epat, _efig in ((r"\b(japan\w*|samurai|ninjas?|shogun\w*|feudal|edo|ronin|daimyo|kyoto)\b", ("buddhist_monk", "samurai")),
-                                     (r"\b(vikings?|norse|longships?|fjords?)\b", ("viking",)),
+                                     (r"\b(vikings?|norse|longships?|fjords?)\b", ("viking", "fisherman", "shepherd", "blacksmith")),
                                      (r"\b(western|frontier|saloon|cowboys?|outlaws?|high noon|sheriff)\b", ("cowboy", "sheriff")),
                                      (r"\b(medieval|knights?|castles?|kingdom|crusade\w*|dragons?|princess)\b", ("shepherd", "blacksmith", "wizard"))):
                     if _fre.search(_epat, _era_s):
@@ -3930,13 +3966,15 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         # a crowded summer beach" was a plain of acacias, the water a far line
         # (a harbour, a quay, a fishing port: the coast ends in a stone quay, 2026-10-11)
         _harbor = bool(_fre.search(r"\b(harbou?rs?|quays?|quayside|docks|dockside|wharf|wharves|piers?|fishing port|fishing village|fish market|marina)\b", _pw7))
-        if ((_fre.search(r"\b(beach|beaches|seaside|lifeguards?|swimmers?|sunbathers?|surf|surfing|surfers?|lighthouses?|coastline|coastal|sea cliffs?|headland|cove)\b", _pw7) or _harbor)
+        if ((_fre.search(r"\b(beach|beaches|seaside|lifeguards?|swimmers?|sunbathers?|surf|surfing|surfers?|lighthouses?|coastline|coastal|sea cliffs?|headland|cove|(?:above|over|overlooking|by|beside|facing) the (?:sea|ocean)|sea views?)\b", _pw7) or _harbor)
                 and not _fre.search(r"\b(desert|dune|space|moon|mars|city|street|underwater)\b", _pw7)
                 and not getattr(spec.world, "platforms", False) and (_arch in ("plain", "dunes", "basin", "mesa")
                      # a lighthouse stands on a coast, not on a flooded plain of islets (2026-10-12)
                      or (_arch == "archipelago" and _fre.search(r"\blighthouses?\b", _pw7) and not _fre.search(r"\bisl(and|e)s?\b", _pw7))
                      # (2026-10-22) "a surfer rides huge waves off a hawaiian beach" was planned as islands and
                      # surfed a sand spit: a beach the sentence names is a coastline unless it asks for islands
+                     # (2026-10-22) "a kid flies a red kite on a windy hill above the sea" stood in a forest
+                     or _fre.search(r"\b(?:above|over|overlooking|by|beside|facing) the (?:sea|ocean)\b|\bsea views?\b", _pw7)
                      or (_arch == "archipelago" and _fre.search(r"\b(beach|beaches|surf\w*|lifeguards?|swimmers?|seaside|coastline)\b", _pw7)
                          and not _fre.search(r"\b(isl(?:and|e)s?|islets?|archipelago|atolls?|lagoon)\b", _pw7)))):
             _arch = "archipelago"

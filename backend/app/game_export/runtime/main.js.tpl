@@ -1443,6 +1443,8 @@ async function main() {
   const _snowW = [SPEC.world.name, SPEC.world.setting, SPEC.prompt].filter(Boolean).join(' ').toLowerCase();
   const SNOW_GROUND = SPEC.world.weather === 'snow'
     || /arctic|tundra|polar|glacier|snowy|snowfield|winter|blizzard|antarctic/.test(_snowW)
+    // (2026-10-22) "a skier races down a steep black run" skied a meadow of flowers: a ski run is snow
+    || (/\b(ski(?:s|er|ers|ing)?|snowboard\w*|slalom|piste|black run|red run|blue run|ski (?:slope|resort|lift|run)|chairlift|toboggan\w*|sledg\w*|sled(?:s|ding|der)?)\b/.test(_snowW) && !/\bwater[- ]?ski\w*|jet[- ]?ski\w*\b/.test(_snowW))
     || (/frozen/.test(_snowW) && !/autumn|\bfall\b|october|summer|spring|blossom|harvest|meadow/.test(_snowW));
   // SIDE-SCROLLER projection: gameplay lives on the z=0 plane — pull the
   // mission targets onto it so everything is actually reachable
@@ -2145,6 +2147,51 @@ async function main() {
     return { X0, X1, Z0, Z1, kit, snow, inYard, blocked,
       inFoot: (x, z, m) => x > X0 - (m || 0) && x < X1 + (m || 0) && z > Z0 - (m || 0) && z < Z1 + 10 + (m || 0),
       spot: (rf) => { for (let t = 0; t < 60; t++) { const x = X0 + 2 + rf() * (X1 - X0 - 4), z = Z0 + 2 + rf() * (Z1 - Z0 - 8); if (!blocked(x, z, 1) && Math.hypot(x, z) > 4) return [x, z]; } return [6, 0]; } };
+  })();
+
+  // ── A PARK (2026-10-22) ─────────────────────────────────────────────────
+  // "a dog fetches a frisbee in a sunny park" ran through a forest meadow. A
+  // park is laid out: gravel paths in a loop with spokes in, a fountain in its
+  // plaza, benches and lamp posts along the walks, a playground, a duck pond,
+  // picnic tables on mown lawns. The pond is dug here (numbers only); the
+  // build is further down.
+  const PARK = (() => {
+    if (INTERIOR || OSM || !LVL || VIEW !== '3d' || SPEC.genre === 'factory' || GIANTROOM || GARDEN || YARD) return null;
+    const w = [SPEC.prompt, SPEC.world && SPEC.world.name].filter(Boolean).join(' ').toLowerCase();
+    if (!/\b(parks?|city park|public park|picnic\w*|playgrounds?|dog park)\b/.test(w)) return null;
+    if (/\b(national|theme|amusement|skate|car|water|trailer|jurassic|safari|business|industrial|ball|wildlife|state) parks?\b|\bparking\b|\bpark(?:s|ed|ing)? (?:the|a|his|her|their) (?:car|truck|bike)\b/.test(w)) return null;
+    const r = mulberry32((SPEC.seed || 1) + 3737);
+    const C = [0, 30], RING = 24, POND = [24, 52, 9], PLAY = [-27, 47], PIC = [[-13, 13], [-5, 7], [13, 11]];
+    if (Array.isArray(LVL.heights) && LVL.grid_n) {
+      const n = LVL.grid_n, gs = LVL.size_m || SPEC.world.size_m;
+      let s = 0, k = 0;
+      for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) { const x = (j / (n - 1) - 0.5) * gs, z = (i / (n - 1) - 0.5) * gs; if (Math.hypot(x - C[0], z - C[1]) < RING + 20) { s += LVL.heights[i * n + j]; k++; } }
+      const m = k ? s / k : 0;
+      for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) { const x = (j / (n - 1) - 0.5) * gs, z = (i / (n - 1) - 0.5) * gs;
+        const d = Math.hypot(x - C[0], z - C[1]), t = Math.min(1, Math.max(0, (d - RING - 18) / 22)), e = t * t * (3 - 2 * t);
+        let h = m + (LVL.heights[i * n + j] - m) * (0.25 + 0.75 * e);                      // gentle, mown ground
+        const pd = Math.hypot(x - POND[0], z - POND[1]); if (pd < POND[2] + 3) h -= 1.6 * Math.max(0, Math.min(1, (POND[2] + 3 - pd) / 4));   // the pond
+        LVL.heights[i * n + j] = h; }
+    }
+    // the walks: a loop round the plaza, a spoke in from the start, spokes to the playground and the pond
+    const loop = []; for (let k = 0; k <= 48; k++) { const a = k / 48 * Math.PI * 2; loop.push([C[0] + Math.cos(a) * RING, C[1] + Math.sin(a) * RING * 0.92]); }
+    const spokes = [[[0, -12], [0, C[1] - RING * 0.92]], [[C[0] - RING * 0.8, C[1] + 9], [PLAY[0] + 5, PLAY[1] - 3]], [[C[0] + RING * 0.85, C[1] + 10], [POND[0] - 8, POND[1] - 5]], [[0, C[1] - 6.5], [0, C[1] - RING * 0.92]], [[0, C[1] + 6.5], [0, C[1] + RING * 0.92]]];
+    const segs = []; for (let k = 0; k < loop.length - 1; k++) segs.push([loop[k], loop[k + 1]]); for (const s of spokes) segs.push(s);
+    const segD = (x, z, a, b) => { const ex = b[0] - a[0], ez = b[1] - a[1], L2 = ex * ex + ez * ez || 1, t = Math.max(0, Math.min(1, ((x - a[0]) * ex + (z - a[1]) * ez) / L2)); return Math.hypot(x - a[0] - ex * t, z - a[1] - ez * t); };
+    const pathD = (x, z) => { let d = 1e9; for (const s of segs) d = Math.min(d, segD(x, z, s[0], s[1])); return d; };
+    const onPath = (x, z, m) => pathD(x, z) < 1.3 + (m || 0) || Math.hypot(x - C[0], z - C[1]) < 7 + (m || 0);
+    const inPond = (x, z, m) => Math.hypot(x - POND[0], z - POND[1]) < POND[2] + (m || 0);
+    const inPlay = (x, z, m) => Math.hypot(x - PLAY[0], z - PLAY[1]) < 8 + (m || 0);
+    const benches = []; for (let k = 0; k < 10; k++) { const a = k / 10 * Math.PI * 2 + 0.31; benches.push([C[0] + Math.cos(a) * (RING + 2.2), C[1] + Math.sin(a) * (RING * 0.92 + 2.2), a]); }
+    const lamps = []; for (let k = 0; k < 12; k++) { const a = k / 12 * Math.PI * 2; lamps.push([C[0] + Math.cos(a) * (RING - 1.9), C[1] + Math.sin(a) * (RING * 0.92 - 1.9)]); }
+    const solid = (x, z, m) => Math.hypot(x - C[0], z - C[1]) < 3.6 + (m || 0) || benches.some(b => Math.hypot(x - b[0], z - b[1]) < 1.2 + (m || 0))
+      || PIC.some(p => Math.hypot(x - p[0], z - p[1]) < 1.6 + (m || 0)) || inPond(x, z, m) || inPlay(x, z, (m || 0) - 2);
+    // pickups on the lawns, never in the pond
+    LVL.collect_points = (LVL.collect_points || []).map(p => { for (let t = 0; t < 60; t++) { const x = (r() - 0.5) * 80, z = C[1] + (r() - 0.5) * 80;
+      if (!solid(x, z, 1) && !inPond(x, z, 2) && Math.hypot(x, z) > 4) return [x, z]; } return p; });
+    LVL.landmarks = []; LVL.pois = [];
+    return { C, RING, POND, PLAY, PIC, segs, benches, lamps, onPath, inPond, inPlay, solid, pathD,
+      inFoot: (x, z, m) => Math.hypot(x - C[0], z - C[1]) < RING + 14 + (m || 0) || inPond(x, z, 4 + (m || 0)) || inPlay(x, z, 3 + (m || 0)) };
   })();
 
   // ── A VILLAGE (2026-10-07) ──────────────────────────────────────────────
@@ -8227,6 +8274,8 @@ async function main() {
       if (JOUST) for (let a = -JOUST.L2 - 30; a <= JOUST.L2 + 60; a += 8) for (let c = -JOUST.W2 - 18; c <= JOUST.W2 + 18; c += 8) { const [x, z] = JOUST.world(a, c); keepClear.push([x, z, 8]); }   // no wood on the field, the stands or before the castle
       if (ARENA) { const ea = ARENA.A + ARENA.RO + 6, eb = ARENA.B + ARENA.RO + 6;
         for (let a = -ea; a <= ea; a += 8) for (let c = -eb; c <= eb; c += 8) { const [x, z] = ARENA.world(a, c); if (ARENA.inFoot(x, z, 6)) keepClear.push([x, z, 8]); } }   // no wood through the stands
+      if (PARK) { for (const [a, b] of PARK.segs) for (let t = 0; t <= 1.001; t += 0.25) keepClear.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, 4]);
+        keepClear.push([PARK.C[0], PARK.C[1], 12], [PARK.POND[0], PARK.POND[1], PARK.POND[2] + 4], [PARK.PLAY[0], PARK.PLAY[1], 10]); for (const q of PARK.PIC) keepClear.push([q[0], q[1], 5]); }
       if (YARD) for (let gz = YARD.Z0; gz <= YARD.Z1 + 10; gz += 5) for (let gx = YARD.X0; gx <= YARD.X1; gx += 6) keepClear.push([gx, gz, 6.5]);   // no wood inside the fence
       if (GARDEN) for (let gz = GARDEN.Z0; gz <= GARDEN.Z1; gz += 4) keepClear.push([0, gz, 11]);   // the plot and a margin round it
       if (MONK) { for (let gz = MONK.Z0 - 6; gz <= MONK.Z1; gz += 3) keepClear.push([0, gz, 4.5]); for (let gz = MONK.Z1 - 4; gz <= MONK.Z1 + MONK.PL + 2; gz += 5) for (let gx = -15; gx <= 15; gx += 6) keepClear.push([gx, gz, 5]); }
@@ -8411,7 +8460,11 @@ async function main() {
   // rocks, big and small, each solid, in the starfield the space sky draws.
   const ASTEROIDS = SPEC.world.sky === 'space' && SPEC.player.mode === 'fly' && !INTERIOR
     && /\b(asteroids?|space (?:battle|shooter|dogfight|fight)|starfighter|deep space|in space|nebula|orbit|outer space|meteors?)\b/
-      .test(((SPEC.prompt || '') + ' ' + (SPEC.world.name || '')).toLowerCase());
+      .test(((SPEC.prompt || '') + ' ' + (SPEC.world.name || '')).toLowerCase())
+    // (2026-10-22) "an astronaut repairs a broken satellite in orbit above the earth" floated in an
+    // asteroid field: a satellite, a station or a spacewalk is the orbit above the planet (ORBIT)
+    && !(/\b(satellites?|space ?station|spacewalk\w*|space walk|iss|eva|above (?:the )?earth|solar (?:panels?|arrays?))\b/.test(String(SPEC.prompt || '').toLowerCase())
+         && !/\b(asteroids?|meteors?|space (?:battle|dogfight|shooter))\b/.test(String(SPEC.prompt || '').toLowerCase()));
   if (ASTEROIDS) {
     try {
       gmat.visible = false;                                   // the ground and the terrain wear it
@@ -8802,6 +8855,7 @@ async function main() {
         } while ((Math.hypot(x, z) < sct.min_dist_m || pathDist(x, z) < _corr
                   || inBldg(x, z) || (GARDEN && GARDEN.inPlot(x, z, 1.6)) || (WEST && WEST.inTown(x, z, 1))
                   || (YARD && YARD.inFoot(x, z, 3))
+                  || (PARK && (PARK.onPath(x, z, 1.5) || PARK.inPond(x, z, 2) || PARK.inPlay(x, z, 1) || PARK.solid(x, z, 1)))
                   || (ROWS && (ROWS.inField(x, z, 1.5) || ROWS.inYard(x, z, 2) || ROWS.track(x, z)))
                   || (MONK && (MONK.onStair(x, z, 1.5) || MONK.onTop(x, z, 2)))
                   || (VILLAGE && (VILLAGE.inCottage(x, z, 1.5) || VILLAGE.lane(x, z) || Math.hypot(x - VILLAGE.GC[0], z - VILLAGE.GC[1]) < 5))
@@ -8817,7 +8871,8 @@ async function main() {
                   || _regReject(x, z, sct)
                   || (clusterN(x, z) < 0.45 && !_regForce(x, z, sct)
                       && tries < 22)) && tries < 30);
-        if (YARD && YARD.inFoot(x, z, 2)) continue;   // (2026-10-22) out of tries in a small world: never inside the fence
+        if (YARD && YARD.inFoot(x, z, 2)) continue;
+        if (PARK && (PARK.onPath(x, z, 1) || PARK.inPond(x, z, 1.5) || PARK.solid(x, z, 1))) continue;   // (2026-10-22) out of tries in a small world: never inside the fence
         // a cart, a fence or a tree does not stand on the seabed: in a world
         // with a sea, a land prop that could only be placed under it is left
         // out; coral, kelp, shells and rock belong there
@@ -10890,7 +10945,7 @@ async function main() {
     const _gw0 = [SPEC.world.name, SPEC.world.setting, SPEC.title, SPEC.prompt].filter(Boolean).join(' ').toLowerCase();
     const _golden0 = /\b(savann?ah?|prairie|steppe|grassland|veld|pampas|plains)\b/.test(_gw0)
       && !/\b(desert|dune|canyon|snow|ice|volcan|lava|mars|moon|city)\b/.test(_gw0);
-    if (!PURE_SCENE && !INTERIOR && !ASTEROIDS && (_green0 || _golden0) && _photo0 && SPEC.world.grass !== false
+    if (!PURE_SCENE && !INTERIOR && !ASTEROIDS && (_green0 || _golden0) && _photo0 && SPEC.world.grass !== false && !SNOW_GROUND
         && (SPEC.world.scatter || []).length && new URLSearchParams(location.search).get('grass') !== 'tufts') {
       try {
         const A0 = _golden0 ? new THREE.Color(0xa88f52)
@@ -10919,6 +10974,8 @@ async function main() {
           const pd = pathDist(x, z);
           if (pd < CORR * 0.45) { h *= 0.8; }     // (no trodden trail, 2026-10-12: a little shorter where people pass)
           if (inBldg(x, z, 0.6)) d = 0;
+          if (PARK && (PARK.onPath(x, z, 0.2) || PARK.inPond(x, z, 0.6) || PARK.inPlay(x, z, 0.3) || PARK.solid(x, z, 0.2))) d = 0;   // the walks, the pond, the playground
+          else if (PARK && PARK.inFoot(x, z, 0)) { h *= 0.4; dry *= 0.4; }   // mown lawns
           if (YARD && (YARD.blocked(x, z, 0.3) || (Math.abs(x) < 6.6 && z > YARD.Z1 - 5.8 && z < YARD.Z1 + 9.5))) d = 0;   // no grass up through the house, the deck, the shed
           if (GARDEN && GARDEN.inPlot(x, z, 0.2)) { if (GARDEN.bare(x, z)) d = 0; else { h *= 0.35; dry *= 0.3; } }   // a mown garden lawn
           if (PITCH && PITCH.inside(x, z, 0)) d = 0;                                                  // the pitch is its own mown surface
@@ -11024,6 +11081,8 @@ async function main() {
           if (WATER_Y !== null && hAt(x, z) < WATER_Y + 0.05) return true;
           if (VOLC && VOLC.edgeDist(x, z) < 0.8) return true;
           if (PITCH && PITCH.inside(x, z, 3)) return true;                       // nothing lies on a pitch
+          if (PARK && (PARK.onPath(x, z, 0.4) || PARK.inPond(x, z, 0.8) || PARK.inPlay(x, z, 0.3) || PARK.solid(x, z, 0.3))) return true;   // (2026-10-22) not on the walks
+          if (YARD && (YARD.blocked(x, z, 0.3) || (Math.abs(x) < 6.6 && YARD.Z1 - 5.8 < z && z < YARD.Z1 + 9.5))) return true;
           if (ARENA && ARENA.inFoot(x, z, 2)) return true;                       // nor on the sand or in the stands
           if (RAIL && RAIL.near(x, z, 0.5)) return true;
           if (CANALS && CANALS.inCity(x, z, 2)) return true;
@@ -11177,7 +11236,8 @@ async function main() {
         if (pathDist(x, z) < CORR * 0.5 && rngG() < 0.2) continue;   // a little thinner where people pass
         if (inBldg(x, z, 0.5)) continue;                             // not through floors
         if (GARDEN && GARDEN.inPlot(x, z, 0.3)) continue;              // a kept garden: no tufts in the plot
-        if (YARD && (YARD.blocked(x, z, 0.3) || (Math.abs(x) < 6.6 && z > YARD.Z1 - 5.8 && z < YARD.Z1 + 9.5))) continue;   // a kept lawn round the house
+        if (YARD && (YARD.blocked(x, z, 0.3) || (Math.abs(x) < 6.6 && z > YARD.Z1 - 5.8 && z < YARD.Z1 + 9.5))) continue;
+        if (PARK && (PARK.onPath(x, z, 0.3) || PARK.inPond(x, z, 0.5) || PARK.inPlay(x, z, 0) || PARK.solid(x, z, 0.2))) continue;   // a kept lawn round the house
         if (WEST && WEST.inTown(x, z, 0)) continue;
         if (ROWS && (ROWS.inField(x, z, 0.3) || ROWS.track(x, z) || ROWS.inYard(x, z, 0))) continue;
         if (MONK && (MONK.onStair(x, z, 0.3) || MONK.onTop(x, z, 0))) continue;
@@ -12642,6 +12702,8 @@ async function main() {
         if (SKYISLES && SKYISLES.top(holder.position.x, holder.position.z) === null && ent.behavior !== 'vehicle') { const q = SKYISLES.spot(rngN); holder.position.set(q[0], hAt(q[0], q[1]), q[1]); }
         // a backyard: everyone inside the fence, never in the shed (2026-10-22)
         if (YARD && (!YARD.inYard(holder.position.x, holder.position.z, 0.5) || YARD.blocked(holder.position.x, holder.position.z, 0.6))) { const q = YARD.spot(rngN); holder.position.set(q[0], hAt(q[0], q[1]), q[1]); }
+        // a park: nobody in the pond or the fountain (2026-10-22)
+        if (PARK && (PARK.inPond(holder.position.x, holder.position.z, 1) || PARK.solid(holder.position.x, holder.position.z, 0.6))) { holder.position.x += 12; holder.position.y = hAt(holder.position.x, holder.position.z); }
         // a ship is put to sea: open water, a fair way off (2026-10-06)
         if (/\b(ship|boat|galleon|frigate|schooner|sloop|warship|brig|yacht|canoe|raft|sailboat)s?\b/i.test(ent.name || '') && WATER_Y !== null) {
           for (let k = 0; k < 60; k++) { const a = rngN() * Math.PI * 2, d = 18 + rngN() * gsize * 0.32, x = Math.cos(a) * d, z = Math.sin(a) * d;
@@ -16087,6 +16149,148 @@ async function main() {
       if (!geo) continue; const m = new THREE.Mesh(geo, mat); m.castShadow = shadow; m.receiveShadow = true; scene.add(m); }
     window.__yard = { snow: Y.snow };
   }
+  // ── A KITE ON THE WIND (2026-10-22) ──────────────────────────────────────
+  // "a kid flies a red kite on a windy hill above the sea" walked a dirt hill
+  // with nothing in the sky. A flown kite hangs downwind of whoever holds it,
+  // forty to sixty degrees up, on a string that sags; it ducks and climbs with
+  // the gusts, swings in slow figures of eight, and its tail streams behind.
+  {
+    const _kp = String(SPEC.prompt || '').toLowerCase();
+    if (/\b(fl(?:y|ies|ying|ew)|holds?|holding|launch\w*)\s+(?:a|an|the|his|her|their|my)?\s*(?:[a-z-]+\s+){0,2}?kites?\b|\bkite[- ]fl\w*/.test(_kp) && !INTERIOR && VIEW === '3d') {
+      const COLS = { red: 0xd62828, blue: 0x1d5fbf, green: 0x2a9d4f, yellow: 0xf2c230, orange: 0xf77f00, purple: 0x7b3fa0, pink: 0xf06ba8, black: 0x222222, white: 0xf2f2f2, rainbow: 0xd62828 };
+      const cw = (_kp.match(/\b(red|blue|green|yellow|orange|purple|pink|black|white|rainbow)\s+kites?\b/) || [])[1];
+      const c1 = new THREE.Color(cw ? COLS[cw] : [0xd62828, 0x1d5fbf, 0xf2c230, 0x2a9d4f][(SPEC.seed || 1) % 4]), c2 = cw === 'rainbow' ? new THREE.Color(0x1d5fbf) : new THREE.Color(0xf6f1e4);
+      const kite = new THREE.Group();
+      const MATK = (c) => { const m = new THREE.MeshStandardMaterial({ color: c, roughness: 0.7, side: THREE.DoubleSide }); m.userData.noAutoTex = true; return m; };
+      // a diamond in four panels, two colours, crossed spars
+      const W = 0.9, Hh = 1.25, top = 0.45;
+      const tri = (a, b, c, col) => { const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute([...a, ...b, ...c], 3)); g.computeVertexNormals(); const m = new THREE.Mesh(g, MATK(col)); m.castShadow = true; kite.add(m); };
+      const T = [0, Hh * top, 0], Bt = [0, -Hh * (1 - top), 0], L = [-W / 2, 0, 0.02], R = [W / 2, 0, 0.02], C = [0, 0, 0.06];
+      tri(T, L, C, c1); tri(T, C, R, c2); tri(L, Bt, C, c2); tri(C, Bt, R, c1);
+      const spar = MATK(0x6b4f35);
+      const s1 = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, Hh, 5), spar); s1.position.set(0, Hh * (top - 0.5), 0.07); kite.add(s1);
+      const s2 = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, W, 5), spar); s2.rotation.z = Math.PI / 2; s2.position.z = 0.07; kite.add(s2);
+      // the tail: a cord with bows, laid out each frame behind the kite
+      const NT = 14, tailPts = Array.from({ length: NT }, () => new THREE.Vector3());
+      const tailGeo = new THREE.BufferGeometry().setFromPoints(tailPts);
+      const tail = new THREE.Line(tailGeo, new THREE.LineBasicMaterial({ color: 0x3a3a3a }));
+      const bows = []; for (let i = 2; i < NT; i += 3) { const b = new THREE.Mesh(new THREE.ConeGeometry(0.13, 0.3, 3), MATK(i % 2 ? c1 : c2)); b.rotation.z = Math.PI / 2; scene.add(b); bows.push([i, b]); }
+      // the string, sagging between the hand and the bridle
+      const NS = 24, strPts = Array.from({ length: NS }, () => new THREE.Vector3());
+      const strGeo = new THREE.BufferGeometry().setFromPoints(strPts);
+      const str = new THREE.Line(strGeo, new THREE.LineBasicMaterial({ color: 0xe8e2d0, transparent: true, opacity: 0.8 }));
+      kite.scale.setScalar(1.6);                                                     // a kite seen twenty metres off has to be kite-sized
+      for (const o of [kite, tail, str]) { o.frustumCulled = false; scene.add(o); }
+      const wa = mulberry32((SPEC.seed || 1) + 999)() * Math.PI * 2, wd = new THREE.Vector3(Math.cos(wa), 0, Math.sin(wa));
+      const kpos = new THREE.Vector3(), kvel = new THREE.Vector3(), hand = new THREE.Vector3(), tmp = new THREE.Vector3();
+      let t = 0, ready = false;
+      window.__kiteTick = (dt) => {
+        if (!window.__game || !window.__game.pos) return;
+        const p = window.__game.pos(), hh = (SPEC.player && SPEC.player.height_m) || 1.2;
+        hand.set(p[0], p[1] + hh * 0.35, p[2]);
+        t += dt;
+        const gust = 0.5 + 0.5 * Math.sin(t * 0.37) * Math.sin(t * 0.13 + 1.1);
+        const Ls = 22, elev = (0.72 + 0.18 * gust) + 0.08 * Math.sin(t * 0.9);       // forty to sixty-odd degrees up
+        const side = 0.22 * Math.sin(t * 0.45);                                           // a slow figure of eight
+        tmp.copy(wd).multiplyScalar(Math.cos(elev) * Ls).add(new THREE.Vector3(-wd.z, 0, wd.x).multiplyScalar(side * Ls * 0.5));
+        tmp.y = Math.sin(elev) * Ls + 0.18 * Ls * Math.sin(t * 0.9) * Math.cos(t * 0.45);
+        tmp.add(hand);
+        if (!ready) { kpos.copy(tmp); ready = true; }
+        kvel.multiplyScalar(Math.exp(-dt * 2.2)).add(tmp.clone().sub(kpos).multiplyScalar(dt * 3.0));
+        kpos.addScaledVector(kvel, dt * 3.0);
+        kite.position.copy(kpos);
+        // the face to the wind, nose up, banking on the turn
+        kite.lookAt(hand); kite.rotateZ(side * 1.6 + kvel.x * 0.02);
+        for (let i = 0; i < NS; i++) { const u = i / (NS - 1); strPts[i].lerpVectors(hand, kpos, u); strPts[i].y -= Math.sin(u * Math.PI) * Ls * 0.06; }
+        strGeo.setFromPoints(strPts);
+        const back = tmp.copy(kpos).sub(hand).normalize();
+        for (let i = 0; i < NT; i++) { const u = i / (NT - 1); tailPts[i].copy(kpos).addScaledVector(back, u * 4.5).add(new THREE.Vector3(0, -u * 3.6 + Math.sin(t * 6 - i * 0.9) * 0.25 * u, Math.cos(t * 5 - i * 0.8) * 0.2 * u)); }
+        tailGeo.setFromPoints(tailPts);
+        for (const [i, b] of bows) b.position.copy(tailPts[i]);
+      };
+      window.__kite = true;
+    }
+  }
+  // ── THE PARK, BUILT (see PARK above) ─────────────────────────────────────
+  if (PARK) {
+    const K = PARK, rP = mulberry32((SPEC.seed || 1) + 3738);
+    const MAT = (o) => { const m = new THREE.MeshStandardMaterial(o); m.userData.noAutoTex = true; return m; };
+    const cvT = (wd, ht, draw) => { const cv = document.createElement('canvas'); cv.width = wd; cv.height = ht; draw(cv.getContext('2d'), wd, ht);
+      const t = new THREE.CanvasTexture(cv); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = renderer.capabilities.getMaxAnisotropy(); return t; };
+    const bins = new Map();
+    const put = (geo, mat, shadow = true) => { if (!bins.has(mat.uuid)) bins.set(mat.uuid, { mat, shadow, list: [] }); bins.get(mat.uuid).list.push(geo.index ? geo.toNonIndexed() : geo); return geo; };
+    const at = (x, z) => hAt(x, z);
+    const cyl = (x, z, r, y0, y1, mat, seg, r1) => { const g = new THREE.CylinderGeometry(r1 === undefined ? r : r1, r, y1 - y0, seg || 10); g.translate(x, at(x, z) + (y0 + y1) / 2, z); return put(g, mat); };
+    const boxR = (x, z, yaw, w, h, d, y, mat) => { const g = new THREE.BoxGeometry(w, h, d); g.rotateY(yaw); g.translate(x, at(x, z) + y, z); return put(g, mat); };
+    const gravel = cvT(256, 256, (g, W, H) => { g.fillStyle = '#b9ab92'; g.fillRect(0, 0, W, H); for (let i = 0; i < 9000; i++) { const l = 140 + Math.floor(Math.random() * 90); g.fillStyle = `rgba(${l},${l - 8},${l - 22},0.8)`; g.beginPath(); g.arc(Math.random() * W, Math.random() * H, 0.6 + Math.random() * 1.6, 0, 6.283); g.fill(); } });
+    const gravelM = MAT({ map: gravel, roughness: 0.95, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+    const paveM = MAT({ map: HDT('stone', 3, 3), normalMap: HDN('stone', 3, 3), color: 0xc9c2b4, roughness: 0.85, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 });
+    const woodM = MAT({ map: HDT('planks', 1, 1), normalMap: HDN('planks', 1, 1), color: 0xa9774c, roughness: 0.8 });
+    const ironM = MAT({ color: 0x23282c, roughness: 0.5, metalness: 0.7 }), stoneM = MAT({ map: HDT('stone', 1, 1), normalMap: HDN('stone', 1, 1), color: 0xbdb5a8, roughness: 0.9 });
+    // the walks: ribbons of gravel laid on the ground
+    for (const [a, b] of K.segs) {
+      const L = Math.hypot(b[0] - a[0], b[1] - a[1]), n = Math.max(2, Math.ceil(L / 1.5)), ux = (b[0] - a[0]) / L, uz = (b[1] - a[1]) / L, nx = -uz * 1.25, nz = ux * 1.25;
+      const pos = [], uv = [], idx = [];
+      for (let k = 0; k <= n; k++) { const t = k / n, x = a[0] + (b[0] - a[0]) * t, z = a[1] + (b[1] - a[1]) * t;
+        for (const s of [-1, 1]) { const px = x + nx * s, pz = z + nz * s; pos.push(px, at(px, pz) + 0.04, pz); uv.push(px * 0.25, pz * 0.25); } }
+      for (let k = 0; k < n; k++) { const i0 = k * 2; idx.push(i0, i0 + 1, i0 + 2, i0 + 1, i0 + 3, i0 + 2); }   // wound to face the sky
+      const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.setIndex(idx); g.computeVertexNormals(); put(g, gravelM, false);
+    }
+    // the plaza and its fountain
+    { const [cx, cz] = K.C; const pg = new THREE.CircleGeometry(7, 40); pg.rotateX(-Math.PI / 2); const pp = pg.attributes.position; for (let i = 0; i < pp.count; i++) pp.setY(i, at(cx + pp.getX(i), cz + pp.getZ(i)) + 0.06); pg.translate(cx, 0, cz); put(pg, paveM, false);
+      const ring = new THREE.TorusGeometry(3.2, 0.32, 10, 40); ring.rotateX(Math.PI / 2); ring.translate(cx, at(cx, cz) + 0.55, cz); put(ring, stoneM);
+      cyl(cx, cz, 3.2, 0, 0.5, stoneM, 40); cyl(cx, cz, 0.35, 0, 2.2, stoneM, 16, 0.25); cyl(cx, cz, 1.1, 2.0, 2.3, stoneM, 24, 1.3);
+      const wd = new THREE.Mesh(new THREE.CircleGeometry(3.0, 40), __waterMaterial('lake', WIND_U)); wd.rotation.x = -Math.PI / 2; wd.position.set(cx, at(cx, cz) + 0.62, cz); scene.add(wd);
+      const jet = new THREE.Mesh(new THREE.ConeGeometry(0.5, 1.4, 16, 1, true), new THREE.MeshBasicMaterial({ color: new THREE.Color(1.6, 1.8, 2.0), transparent: true, opacity: 0.35, depthWrite: false, side: THREE.DoubleSide }));
+      jet.rotation.x = Math.PI; jet.position.set(cx, at(cx, cz) + 2.9, cz); scene.add(jet); window.__parkJet = jet;
+      world.createCollider(RAPIER.ColliderDesc.cylinder(0.45, 3.4).setTranslation(cx, at(cx, cz) + 0.45, cz)); }
+    // benches facing the plaza, lamp posts along the loop
+    for (const [bx, bz, a] of K.benches) { const yaw = -a + Math.PI / 2;
+      for (let s = 0; s < 4; s++) boxR(bx + Math.cos(a) * (s * 0.11 - 0.17), bz + Math.sin(a) * (s * 0.11 - 0.17), yaw, 1.8, 0.04, 0.09, 0.46, woodM);
+      for (let s = 0; s < 3; s++) boxR(bx + Math.cos(a) * 0.27, bz + Math.sin(a) * 0.27, yaw, 1.8, 0.09, 0.03, 0.62 + s * 0.13, woodM);
+      for (const e of [-0.8, 0.8]) boxR(bx - Math.sin(a) * e, bz + Math.cos(a) * e, yaw, 0.05, 0.46, 0.5, 0.23, ironM);
+      world.createCollider(RAPIER.ColliderDesc.cuboid(0.9, 0.25, 0.3).setTranslation(bx, at(bx, bz) + 0.25, bz).setRotation({ x: 0, y: Math.sin(yaw / 2), z: 0, w: Math.cos(yaw / 2) })); }
+    const glowM = MAT({ color: 0xfff1cf, emissive: 0xffd28a, emissiveIntensity: _isNightSky ? 2.4 : 0.15, roughness: 0.4 });
+    for (const [lx, lz] of K.lamps) { cyl(lx, lz, 0.07, 0, 3.4, ironM, 8, 0.05); const lg = new THREE.SphereGeometry(0.22, 12, 8); lg.translate(lx, at(lx, lz) + 3.55, lz); put(lg, glowM); cyl(lx, lz, 0.12, 3.75, 3.85, ironM, 8, 0.28);
+      world.createCollider(RAPIER.ColliderDesc.cylinder(1.7, 0.1).setTranslation(lx, at(lx, lz) + 1.7, lz)); }
+    // the pond: water in its hollow, reeds round the edge, a few ducks
+    { const [px, pz, pr] = K.POND, wy = at(px + pr + 2, pz) - 0.32;
+      const pw = new THREE.Mesh(new THREE.CircleGeometry(pr + 2.4, 48), __waterMaterial('lake', WIND_U)); pw.rotation.x = -Math.PI / 2; pw.position.set(px, wy, pz); scene.add(pw);
+      const reedM = MAT({ color: 0x6b7a3a, roughness: 0.9, side: THREE.DoubleSide });
+      for (let k = 0; k < 90; k++) { const a = rP() * 6.28, d = pr + 0.4 + rP() * 1.8, x = px + Math.cos(a) * d, z = pz + Math.sin(a) * d, hh = 0.6 + rP() * 0.9;
+        const g = new THREE.ConeGeometry(0.03, hh, 3); g.translate(x, Math.max(at(x, z), wy) + hh / 2, z); put(g, reedM); }
+      const duckM = MAT({ color: 0xf2efe6, roughness: 0.7 }), billM = MAT({ color: 0xf08a24, roughness: 0.5 });
+      for (let k = 0; k < 4; k++) { const a = rP() * 6.28, d = rP() * pr * 0.6, x = px + Math.cos(a) * d, z = pz + Math.sin(a) * d, yaw = rP() * 6.28;
+        const b = new THREE.SphereGeometry(0.2, 12, 8); b.scale(1.4, 0.8, 1); b.rotateY(yaw); b.translate(x, wy + 0.1, z); put(b, duckM);
+        const h = new THREE.SphereGeometry(0.11, 10, 8); h.translate(x + Math.cos(yaw) * 0.24, wy + 0.32, z - Math.sin(yaw) * 0.24); put(h, duckM);
+        const bl = new THREE.ConeGeometry(0.04, 0.12, 6); bl.rotateZ(-Math.PI / 2); bl.rotateY(yaw); bl.translate(x + Math.cos(yaw) * 0.36, wy + 0.31, z - Math.sin(yaw) * 0.36); put(bl, billM); }
+      world.createCollider(RAPIER.ColliderDesc.cylinder(1.5, pr).setTranslation(px, wy - 0.8, pz)); }
+    // the playground: bark chips, a slide, a pair of swings, a seesaw
+    { const [qx, qz] = K.PLAY, chipM = MAT({ color: 0x8a6a48, roughness: 1, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+      const cg = new THREE.CircleGeometry(7.5, 36); cg.rotateX(-Math.PI / 2); const cp = cg.attributes.position; for (let i = 0; i < cp.count; i++) cp.setY(i, at(qx + cp.getX(i), qz + cp.getZ(i)) + 0.05); cg.translate(qx, 0, qz); put(cg, chipM, false);
+      const red = MAT({ color: 0xd62828, roughness: 0.45 }), blue = MAT({ color: 0x2a6fb8, roughness: 0.45 }), yel = MAT({ color: 0xf2c230, roughness: 0.45 });
+      for (const sx of [-0.55, 0.55]) for (const sz of [-0.55, 0.55]) cyl(qx - 3 + sx, qz + sz, 0.06, 0, 2.6, blue, 8);
+      boxR(qx - 3, qz, 0, 1.3, 0.08, 1.3, 1.9, yel);
+      { const g = new THREE.BoxGeometry(0.8, 0.05, 3.2); g.rotateX(-0.6); g.translate(qx - 3, at(qx - 3, qz) + 1.05, qz + 2.1); put(g, red); }
+      for (let k = 0; k < 6; k++) boxR(qx - 3, qz - 0.95, 0, 0.6, 0.04, 0.08, 0.3 + k * 0.3, blue);
+      for (const sx of [-1.4, 1.4]) { for (const sz of [-0.8, 0.8]) { const g = new THREE.CylinderGeometry(0.05, 0.05, 2.6, 7); g.rotateX(sz > 0 ? -0.3 : 0.3); g.translate(qx + 3 + sx, at(qx + 3, qz) + 1.25, qz + sz * 0.6); put(g, red); } }
+      { const g = new THREE.CylinderGeometry(0.05, 0.05, 3.0, 7); g.rotateZ(Math.PI / 2); g.translate(qx + 3, at(qx + 3, qz) + 2.45, qz); put(g, red); }
+      for (const sx of [-0.6, 0.6]) boxR(qx + 3 + sx, qz, 0, 0.5, 0.04, 0.22, 0.55, MAT({ color: 0x222222, roughness: 0.8 }));
+      boxR(qx, qz + 4.5, 0.4, 3.4, 0.08, 0.3, 0.45, yel); cyl(qx, qz + 4.5, 0.12, 0, 0.42, blue, 8);
+      world.createCollider(RAPIER.ColliderDesc.cuboid(0.7, 1.3, 0.7).setTranslation(qx - 3, at(qx - 3, qz) + 1.3, qz)); }
+    // picnic tables on the lawn, a bin by each
+    for (const [tx, tz] of K.PIC) { const yaw = rP() * 3.14;
+      boxR(tx, tz, yaw, 1.9, 0.06, 0.8, 0.76, woodM);
+      for (const s of [-0.7, 0.7]) boxR(tx + Math.sin(yaw) * s, tz + Math.cos(yaw) * s, yaw, 1.9, 0.05, 0.28, 0.45, woodM);
+      for (const e of [-0.75, 0.75]) boxR(tx + Math.cos(yaw) * e, tz - Math.sin(yaw) * e, yaw, 0.08, 0.75, 1.5, 0.38, woodM);
+      cyl(tx + 2.2, tz, 0.28, 0, 0.9, MAT({ color: 0x2f4a3a, roughness: 0.6 }), 14);
+      world.createCollider(RAPIER.ColliderDesc.cuboid(1.0, 0.4, 0.8).setTranslation(tx, at(tx, tz) + 0.4, tz).setRotation({ x: 0, y: Math.sin(yaw / 2), z: 0, w: Math.cos(yaw / 2) })); }
+    for (const { mat, shadow, list } of bins.values()) { const geo = mergeGeometries(list.map(g => { for (const k of Object.keys(g.attributes)) if (!['position', 'normal', 'uv'].includes(k)) g.deleteAttribute(k);
+        if (!g.attributes.uv) g.setAttribute('uv', new THREE.Float32BufferAttribute(new Float32Array(g.attributes.position.count * 2), 2)); return g; }));
+      if (!geo) continue; const m = new THREE.Mesh(geo, mat); m.castShadow = shadow; m.receiveShadow = true; scene.add(m); }
+    window.__parkTick = (dt) => { if (window.__parkJet) window.__parkJet.scale.y = 1 + 0.06 * Math.sin(performance.now() / 160); };
+    window.__park = { benches: K.benches.length, lamps: K.lamps.length };
+  }
   // ── THE CANDY LAND, BUILT (see CANDY above) ────────────────────────────
   if (CANDY) {
     const Cd = CANDY, rC = mulberry32((SPEC.seed || 1) + 6162);
@@ -17895,7 +18099,7 @@ async function main() {
       scene.add(m);
     }
   }
-  if (!INTERIOR && !OSM && !GARDEN && !WEST && !CANDY && !VILLAGE && !GRAVE && !ROWS && !MONK && !GIANTROOM && !YARD && LVL && LVL.pois && LVL.pois.length) {
+  if (!INTERIOR && !OSM && !GARDEN && !WEST && !CANDY && !VILLAGE && !GRAVE && !ROWS && !MONK && !GIANTROOM && !YARD && !PARK && LVL && LVL.pois && LVL.pois.length) {
     const stoneT = new THREE.TextureLoader().load('textures/stone.jpg');
     stoneT.wrapS = stoneT.wrapT = THREE.RepeatWrapping;
     stoneT.colorSpace = THREE.SRGBColorSpace;
@@ -20531,7 +20735,8 @@ async function main() {
   // mesh file. It arrives with named steer/spin pivots and a drive API —
   // the articulation contract the img2threejs lane exists to provide.
   let procRoot = null;
-  if (P.asset && P.asset.startsWith('proc:')) {
+  const LOCO_HERO = P.asset === 'proc:locomotive';   // (2026-10-22) a train hero is built in code (buildLoco), not imported
+  if (P.asset && P.asset.startsWith('proc:') && !LOCO_HERO) {
     const mod = await import('./proc/' + P.asset.slice(5) + '.js');
     procRoot = (mod.createRoadster || mod.default)();
     // proc modules author +Z-forward. The knight taught us facing bugs are
@@ -20555,8 +20760,8 @@ async function main() {
   const RIDE = ((P.mode || 'walk') === 'drive' && P.ride) ? String(P.ride).toLowerCase() : null;
   const SHIP_HERO = (P.mode || 'walk') === 'swim' && /\b(pirate ship|ship|galleon|frigate|warship|man-o-war|brig)\b/i.test(String(P.name || ''));
   if (SHIP_HERO) P.height_m = Math.max(P.height_m || 0, 18);   // a swimmer is sized by its length: a galleon, not a 6 m dinghy
-  if (RAIL) P.height_m = 4.4;                     // a locomotive, to the top of its chimney
-  const pg = RAIL ? { scene: buildLoco(), animations: [] }
+  if (RAIL || LOCO_HERO) P.height_m = 4.4;        // a locomotive, to the top of its chimney
+  const pg = (RAIL || LOCO_HERO) ? { scene: buildLoco(), animations: [] }
     : procRoot
     ? { scene: procRoot, animations: [] }
     : SHIP_HERO ? { scene: buildShip({ seed: SPEC.seed || 1, flag: /navy|royal|warship/i.test(String(SPEC.prompt || '')) ? 'navy' : 'pirate' }), animations: [] }
@@ -20574,7 +20779,7 @@ async function main() {
   //   Flyers keep their wingspan lateral — no rotation at all.
   // a sculpted module's orientation is authored, not inferred — the whole
   // point of the contract is that nothing downstream has to guess
-  if (!procRoot && !RAIL) alignLongAxis(pRoot, ['drive', 'swim'].includes(P.mode || 'walk') && !RIDE);
+  if (!procRoot && !RAIL && !LOCO_HERO) alignLongAxis(pRoot, ['drive', 'swim'].includes(P.mode || 'walk') && !RIDE);
   // A HULL STANDS ON ITS KEEL (2026-10-14): a swimmer is centred on its body
   // (a whale hangs in the water round its middle), and the hull's draft above
   // puts the body's FOOT a little under the line. A ship centred on its foot
@@ -26589,6 +26794,8 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
       if (window.__balloonsTick) window.__balloonsTick(dt);
       if (window.__skyTick) window.__skyTick(dt);
       if (window.__swellTick) window.__swellTick(dt);
+      if (window.__kiteTick) window.__kiteTick(dt);
+      if (window.__parkTick) window.__parkTick(dt);
       if (window.__repairStep) window.__repairStep(dt);
       if (window.__growTick) window.__growTick(dt);
       if (window.__graveMist) window.__graveMist(performance.now() / 1000);
