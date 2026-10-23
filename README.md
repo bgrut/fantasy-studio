@@ -1,116 +1,110 @@
 <div align="center">
 
-<img src=".github/assets/logo.png" alt="Fantasy Studio" width="180"/>
+<img src=".github/assets/logo.png" alt="Fantasy Studio" width="160"/>
 
 # Fantasy Studio
 
-### *What do you imagine?*
+### The AI game engine that runs on your own computer.
 
-**Type a sentence. Get a playable 3D game or a cinematic video — no code, running entirely on your own machine. Then reshape it in real time by pointing at the world.**
+**Type a sentence. Play the game it describes, in about a minute. Then keep shaping it by pointing at the world.**
 
 <a href="https://github.com/bgrut/fantasy-studio/releases/latest"><img src="https://img.shields.io/badge/Download%20for%20Windows-FantasyStudio--Setup.exe-8b5cf6?style=for-the-badge&logo=windows&logoColor=white" alt="Download Fantasy Studio for Windows"/></a>
 
 *Windows 10/11 · Run the installer, open Fantasy Studio, pick **Game mode** · No graphics card needed · Nothing to install first*
 
-<sub>Every download is checked against published SHA-256 checksums · installs for your user only, no admin prompt · [Is it safe?](https://github.com/bgrut/fantasy-studio/releases/latest#is-it-safe) · Developers: [install from source](#install-from-source)</sub>
+<sub>Every download is checked against published SHA-256 checksums · installs for your user only, no admin prompt · [Is it safe?](#is-it-safe) · Developers: [install from source](#install-from-source)</sub>
 
 <br/>
 
 [![License: BSL 1.1](https://img.shields.io/badge/License-BSL%201.1-blue.svg)](LICENSE)
-[![Discord — coming soon](https://img.shields.io/badge/Discord-coming%20soon-5865F2?logo=discord&logoColor=white)](#)
+[![Latest release](https://img.shields.io/github/v/release/bgrut/fantasy-studio?label=release)](https://github.com/bgrut/fantasy-studio/releases/latest)
 [![TikTok](https://img.shields.io/badge/TikTok-%40Fantasylab.ai-000000?logo=tiktok&logoColor=white)](https://www.tiktok.com/@fantasylab.ai)
 [![YouTube](https://img.shields.io/badge/YouTube-%40Fantasy__lab__ai-FF0000?logo=youtube&logoColor=white)](https://youtube.com/@Fantasy_lab_ai)
 [![GitHub stars](https://img.shields.io/github/stars/bgrut/fantasy-studio?style=social)](https://github.com/bgrut/fantasy-studio)
 
-[Watch demo](https://youtube.com/@Fantasy_lab_ai) · [Install](INSTALL.md) · [Roadmap](ROADMAP.md) · [Waitlist](https://fantasylab.ai)
+[What it makes](#what-it-makes-real-builds-unedited) · [The engine](#whats-inside-the-engine) · [Get started](#get-started) · [Install guide](INSTALL.md) · [Roadmap](ROADMAP.md) · [Changelog](CHANGELOG.md)
 
 </div>
 
 ---
 
 <div align="center">
-<img src=".github/assets/games/fox-snowy-night.png" alt="A fox on a snowy night quest — built from one sentence" width="780"/>
+<img src=".github/assets/games/v13/hero-collage.jpg" alt="Six games made by Fantasy Studio from one sentence each" width="900"/>
 
-*"A fox on a snowy night quest: collect 6 fireflies, avoid the hostile wolves, reach the beacon" — a real build, captured in-game.*
-
-*One sentence → a playable game or a cinematic video, in minutes. Rendered locally. No cloud. No subscription. No code.*
+<sub>Six games, six sentences: a tiny ant in a giant kitchen · surf breaking on a Hawaiian beach · a dragon rider's islands above the clouds · a steam train through snowy passes · a dog in a sunny park · a snowball fight in a snowy backyard. In-game captures of real builds, HUD hidden.</sub>
 </div>
 
 ---
 
 ## What is Fantasy Studio?
 
-**Fantasy Studio is a local-first desktop app that turns a plain-language sentence into two things: a playable 3D game, or a directed cinematic video — with no coding, no cloud, and no per-render fee.** Everything runs on your own hardware.
+Fantasy Studio is a desktop app that turns a plain sentence into a **playable 3D game**: the world the sentence names, the hero it is about, the things to do in it, the weather and the hour, built and running locally in about a minute. No code, no cloud, no account, no per-game fee.
 
-- 🕹️ **Game mode** — *"a fox with 9 lives on a dangerous mountain trek: collect 6 food, avoid the hostile wolves, then reach the shelter"* → a playable third-person game in about a minute, **with no GPU**. Then **Inspect** the running game: hover to identify anything, click a spot, and type — *"place a campfire here," "place a sign that says stay near the fire," "fence off this pass."* It generates and drops it in seconds, and the rules are real (a sign that says the wolves fear the light means they actually won't enter the glow).
-- 🎬 **Video mode** — *"a polar bear walking through the arctic at sunset"* → a cinematic MP4 in ~90 seconds, plus the underlying `.blend` file you can re-light and re-render in Blender forever. Every frame is **rendered, not hallucinated** — no video diffusion anywhere in the pipeline.
+*"a tiny ant explores a giant kitchen to carry a sugar cube home"* builds a kitchen seen from the floor, with table legs like towers and a tipped sugar bowl. *"a surfer rides huge waves off a hawaiian beach at sunset"* rolls swells in that break white in the shallows and carry your board to the sand. *"a train driver takes a steam train through snowy mountain passes"* puts you on the footplate of a locomotive on its line. Every game is its own: its own maker's typefaces, minimap and title card, so a thousand games do not look like one.
 
-Both modes share the same brain: a **local LLM** (Gemma 3 via Ollama) reads your prompt and directs the scene, and local image-AI (SDXL → Microsoft TRELLIS.2, MIT) builds the cast — an identity-faithful 3D character generated once and cached in your library forever. No API keys. No accounts. No telemetry. Nothing you make leaves your machine unless you choose to publish it.
+A local AI (Gemma 3 via Ollama) reads the sentence and plans the game; the engine builds what it plans, and when a character the library has never had is needed, local image-to-3D (SDXL → Microsoft TRELLIS.2) makes it once, rigs it, and keeps it for every game after. Nothing you make leaves your machine unless you publish it.
 
-> The bet: **AI directs real tools instead of replacing them.** Where diffusion tools generate pixels and ask you to accept whatever comes out, Fantasy Studio generates *a game you can edit* and *a Blender scene you can re-render* — deterministic, editable, and yours to own.
+The same studio still renders **cinematic video** in Blender (see [Video mode](#video-mode)), but the game engine is the heart of it now.
 
 ---
 
-## 🕹️ The game engine — build a game by describing it, then edit it live
+## What it makes (real builds, unedited)
 
-This is what makes Fantasy Studio different from every other "AI game" tool: **you don't just generate a game, you keep shaping it — visually, in real time, with no code.**
-
-- **One sentence → a playable game.** Third-person controls (WASD / gamepad / touch), real motion-capture walk/run, physics, an objective grammar you can freely combine: **collect · defeat · reach · survive · race · hunt · escort · capture · score · eliminate · defend**, health & lives, win/lose, and a narrative intro.
-- **Genres named by their verb.** A sentence that says what kind of game it is gets that game, not a walk with a timer. *"Goblins march down a road and I build archer towers"* is a tower defence: waves walk the road to your keep, kills pay gold, and T raises towers that choose their own targets. *"A 2D platformer where a fox jumps between floating islands"* plays side-on across islands spaced inside the hero's jump, with the pickups on top of them. *"Sail a pirate ship to the treasure island"* makes you the ship, riding the waterline of a real sea. *"A bakery where grain is milled into flour"* is a factory you build. *"A murder mystery in a manor: find the clues and name the killer"* casts suspects you question, clues that each say one thing about the killer, and a casebook; name the one who fits every clue and you win, name an innocent and the killer walks. *"A city builder where I zone houses and grow the population to 500"* builds a town on the same worldlet the factory uses: roads out from a town hall, homes that grow when there is work, shops, works that keep the homes beside them small, parks that let them grow into flats, and a population goal read from the sentence.
-- **Inspect mode — point at the world and change it.** Hover any object and a live chip identifies it (`wolf · hostile · speed 3`). Click a spot to select it, then type a plain-language edit. Two placement tools: **📍 Point** (one spot) and **📏 Line** (drag a run — a fence tiles between two clicks). Placed items include instant procedural props (book, sign, chest, building, rock, beacon, campfire, fence) or any noun from your library.
-- **Rules that are actually honored.** Toggle rule chips on any placed object — 🔥 safe zone (hostiles fear it), 🚧 blocks enemies, ⚡ hurts on touch — and the runtime enforces them. Books and signs are **readable** (walk up, press E). A campfire is a real safe zone, not decoration.
-- **📜 The Truth Table.** One panel lists every rule your game actually enforces — hero stats, mission steps, enemy behavior, placed-item rules, rewards — derived from the live spec. Your game's contract, on screen.
-- **Style presets you pick, never guessed.** 🎬 Photoreal · 🖍️ Cartoon (cel + ink outlines) · 🌸 Anime · 🕯️ Horror · 👾 Pixel · 📐 Low-poly. One global look applied coherently to the whole world.
-- **View presets.** 🧊 3D third-person · 🗺️ Top-down 2D (Zelda-style) · 🎞️ Side-scroller. Same world, a different genre from one chip.
-- **Walk-in destinations & interiors.** "Reach the shelter / cabin / lighthouse / castle" builds a real structure — open door, warm windows, a lit hearth — that you win by stepping inside. Indoor prompts ("inside a torchlit castle great hall") generate full multi-room, multi-floor interiors with stairs.
-- **Real cities.** Name a city — *New York, Tokyo, London* — and the level is built from its actual OpenStreetMap street grid: real blocks, night-lit facades, rooftop water towers, crosswalks, traffic lights, parked cars, ambient drivers, neon and distant sirens.
-- **🎥 Cinematic mode.** Press V (or the 🎥 chip) for a persistent low chase camera — FPV drone-style banking behind cars, motion blur, film grade — the "how is this real" look, until you toggle it off. Cars get clearcoat paint and working night headlights.
-- **Progression built in.** Kills and pickups earn XP; level-ups offer 3-choice upgrades (heart / swift / power) that persist between runs. A game's steps are the ones the sentence asked for: nothing is added that it did not say.
-- **Console-grade image.** 4× MSAA, 4K shadows, image-based lighting, adaptive sharpening — with ultra/balanced/performance presets, one click.
-- **🧪 Splat worlds (experimental).** Attach a Gaussian-splat scene (.ply/.splat) as your world's scenery — upload one, pick a bundled sample, train one from your own walkthrough video, or ✨ imagine one from your prompt.
-- **Levels & projects.** Stack levels into one game via clickable level tiles (click to play, inspect, and edit any level, then save it back), and export the whole thing as a hub-menu game.
+Every picture below is an unedited in-game capture of a build made from the sentence under it, on one machine, with the HUD hidden.
 
 <div align="center">
 
 | | |
 |---|---|
-| <img src=".github/assets/games/nyc-night-race.png" width="390"/><br/><sub>*"A red sports car races 5 rivals through New York City at night"* — real OSM street grid, night facades, working headlights</sub> | <img src=".github/assets/games/castle-brawl.png" width="390"/><br/><sub>*"A knight fights 6 hostile goblins inside a torchlit castle great hall"* — generated interior, torchlight, live combat</sub> |
-| <img src=".github/assets/games/cartoon-wizard.png" width="390"/><br/><sub>*"A wizard defends a windswept meadow from 8 hostile wolves"* — same world, one click to full cel-shaded cartoon</sub> | <img src=".github/assets/games/fox-snowy-night.png" width="390"/><br/><sub>*"A fox on a snowy night quest"* — photoreal terrain, falling snow, XP and level-ups</sub> |
+| <img src=".github/assets/games/v13/ant-kitchen.jpg" width="430"/><br/><sub>*"a tiny ant explores a giant kitchen to carry a sugar cube home"*<br/>The room is built at the hero's scale: chair legs tower, crumbs are boulders, the sugar cube sits by a tipped bowl.</sub> | <img src=".github/assets/games/v13/surf.jpg" width="430"/><br/><sub>*"a surfer rides huge waves off a hawaiian beach at sunset"*<br/>Swells roll in, steepen and break; a board on the water rides them in. Goal: ride five waves.</sub> |
+| <img src=".github/assets/games/v13/sky-islands.jpg" width="430"/><br/><sub>*"a dragon rider flies between floating islands above the clouds"*<br/>You fly the dragon; a chain of turf-and-rock islands hangs over a sea of cloud, waterfalls spilling off them.</sub> | <img src=".github/assets/games/v13/steam-train.jpg" width="430"/><br/><sub>*"a train driver takes a steam train through snowy mountain passes"*<br/>The locomotive and its carriages on their line; the line does the steering.</sub> |
+| <img src=".github/assets/games/v13/balloon.jpg" width="430"/><br/><sub>*"a hot air balloon pilot floats over cappadocia at sunrise"*<br/>Burner to climb, vent to sink, the wind carries you over fairy chimneys, the sky full of other balloons.</sub> | <img src=".github/assets/games/v13/sea-floor.jpg" width="430"/><br/><sub>*"a glowing jellyfish drifts through an underwater cave collecting pearls"*<br/>The sea floor under caustic light: corals, kelp, pearls to gather.</sub> |
+| <img src=".github/assets/games/v13/backyard-snow.jpg" width="430"/><br/><sub>*"two kids have a snowball fight in a snowy backyard"*<br/>The back of the house, the deck, a fenced yard with a shed, a swing set and a snowman; you throw snowballs.</sub> | <img src=".github/assets/games/v13/park.jpg" width="430"/><br/><sub>*"a dog fetches a frisbee in a sunny park"*<br/>Gravel walks round a fountain, benches and lamps, a playground and a duck pond on mown lawns.</sub> |
+| <img src=".github/assets/games/v13/lighthouse-hurricane.jpg" width="430"/><br/><sub>*"a lighthouse keeper keeps the light burning through a hurricane"*<br/>Driving rain, a storm sea breaking on the rocks, the light lit at the end of the path.</sub> | <img src=".github/assets/games/v13/spacewalk.jpg" width="430"/><br/><sub>*"an astronaut repairs a broken satellite in orbit above the earth"*<br/>A spacewalk: you float beside the station, the planet below.</sub> |
+| <img src=".github/assets/games/v13/giant-robot.jpg" width="430"/><br/><sub>*"a giant robot stomps through tokyo at night fighting a sea monster"*<br/>A ten-metre hero in a neon street grid; the cars at its feet.</sub> | <img src=".github/assets/games/v13/mars-rover.jpg" width="430"/><br/><sub>*"a mars rover drives across red dunes looking for signs of water"*<br/>A six-wheeled rover on a rocker-bogie, built in code and driven nose first.</sub> |
 
-<sub>All four are unedited in-game captures of real builds from the prompts shown.</sub>
+</div>
+
+And the studio's flagship, **Crystal Works**, a factory-building game made in Fantasy Studio and developed alongside it ([`flagship/`](flagship/)):
+
+<div align="center">
+<img src=".github/assets/games/v13/crystal-works.jpg" width="640"/>
 </div>
 
 ---
 
-## 🌐 Share it — a link anyone can play
+## What's inside the engine
 
-Every game you build is a **self-contained web build** (vendored three.js MIT + Rapier Apache-2.0, zero CDN, runs offline). Three ways to ship:
+**Worlds built to the sentence.** A general open world (terrain, forests that grow by biome, rivers, lakes and seas with real shorelines, caves, volcanoes, fjords) plus purpose-built places for the things people actually ask for:
+giant rooms seen by a tiny hero · the sea floor · islands in the sky · surfing beaches · backyards · parks · harbours and fishing villages · frontier towns · villages · monasteries on their mountains · graveyards · castles with curtain walls · jungle temples · sunken cities · Venice's canals · a Colosseum · jousting lists · football pitches · skateparks · railway lines · candy lands · Cappadocia · space stations in orbit, the Moon and Mars · and real cities from OpenStreetMap (name New York, Tokyo or London and you drive its actual streets).
+Interiors are generated as real rooms you walk into: manors, malls, hospitals, prisons, libraries, restaurants, castle halls.
 
-- **Community Marketplace (in-app).** Publish a full game or a generated character to your own free Cloudflare worker and it lands on a public feed — anyone gets a link they can open in Chrome, Firefox, or on their phone and play instantly. Browse the community, and install others' characters straight into your library to cast in your own prompts. Local-first: nothing uploads until you press Publish, and shared work is CC-BY-4.0. ([privacy & sharing policy](PRIVACY.md))
-- **Zip it.** Drop the `dist/` folder on itch.io or any static host.
-- **Export to Godot 4** (free, MIT). Get a real Godot project — press F5 and it plays, with your missions, rules, placed items, readable signs, styles and views carried over. From there you own it completely and can take it toward a Steam release. Every export ships a `STEAM_GUIDE.md` walking the path.
+**Heroes and casts.** The sentence's subject is the hero. People and animals are generated once (SDXL reference → TRELLIS.2 mesh), auto-rigged, and moved by motion matching over real motion capture (CMU and 100STYLE); four-legged animals get measured walk, trot and gallop gaits; insects stand on six legs. Vehicles are built in code with real proportions: cars, go-karts, a planetary rover, a steam locomotive, sailing ships, hot-air balloons, boards (snowboard, skis, surfboard, skateboard, sled). Riders ride their mounts; flyers fly; swimmers swim; boats float. Supporting characters wear the period and the place (Vikings' villagers are fishermen and shepherds, not men in hoodies), and drawn styles get drawn characters.
 
----
+**Games, not just walks.** Objectives combine freely: collect · defeat · reach · race · survive · hunt · capture · escort · defend · eliminate · score · serve · repair · deliver · ride · accuse. A sentence that names a genre gets that genre: tower defence, side-scrolling platformer, murder mystery with suspects and a casebook, sea battles, snowball fights, ghost hunts (or playing the ghost), city builder, and a full factory game on a living worldlet.
 
-## 🎬 The video engine — direct a cinematic shot, own every frame
+**Weather, light and physics.** Rain that splashes, snowstorms, fog that swallows the distance, hurricanes, mist in the hollows; any hour from dawn to night; real-time shadows, ambient occlusion and 4× multisampling; 2K photo-scanned ground and building materials (Poly Haven, CC0). Rapier physics: collisions, climbing, swimming, buoyancy, ragdolls.
 
-The same prompt that makes a game can make a film. Video mode renders **real Blender frames** — no diffusion, no random re-rolls.
+**Every game has its own maker.** Each build is given a maker's voice: one of 95 open-licence typeface families for its title and text, its own colour scheme and frame, its own minimap style (radar, paper map, chart, blueprint, neon, pixel and more), a maker's mark on its title card, and an opening written for that game by the narrator. Two games from similar sentences still look and read differently.
 
-- **AI cinematographer** — the local LLM picks cast, camera, lighting, and mood from your prompt; a deterministic fallback keeps renders working if the LLM is unavailable.
-- **Real 3D characters** — SDXL paints an identity-faithful reference, TRELLIS.2 turns it into a textured mesh, and Blender auto-rigs, animates (real CMU motion capture), lights, and renders it.
-- **Story Director** — one prompt → a multi-scene film, with scenes assembled into a single MP4. Edit any scene later ("make it a snowy night") and re-render just that scene.
-- **Render tiers** — Quick Preview (Eevee, ~30s) → Final Cinematic (Cycles, 4K). The same scene produces all four.
-- **Real exports** — MP4, GIF, PNG sequence, **and the `.blend` source file**, so the scene is yours to re-edit forever.
+**Styles and views you pick.** Photoreal, cartoon, anime, horror, noir, watercolour, storybook, pixel, low-poly and more; third-person 3D, top-down, or side-on.
 
 ---
 
-## Who this is for
+## Shape it after it's built
 
-- **Anyone with a game or video idea and no engine skills** — describe it, play it, tweak it, ship a link.
-- **Indie devs & hobbyists** — prototype a playable level in a minute, then graduate it to Godot for a real build.
-- **Filmmakers, marketers & YouTubers** — cinematic B-roll and hero shots without a 3D team, editable forever.
-- **Creators on TikTok/Shorts** — vertical 3D content at the cadence the algorithm rewards.
-- **Educators & tinkerers** — a no-code sandbox where "what if I add a rule here?" is one click away.
+- **Inspect mode: point at the world and change it.** Hover anything to identify it (`wolf · hostile · speed 3`), click a spot, type: *"place a campfire here," "put a sign that says stay near the fire," "fence off this pass."* It appears in seconds, and the rules are real: a campfire marked safe is a place hostiles will not enter.
+- **Edit in words.** *"Make it night," "make it harder," "add two wolves."* The same seed keeps the same world; only what you asked for changes.
+- **The Truth Table.** One panel lists every rule the game actually enforces, read from the live game.
+- **Levels and projects.** Stack levels into one game and export it with a hub menu.
+
+## Share it
+
+Every game is a self-contained web build (three.js and Rapier vendored, no CDN, runs offline):
+
+- **Community Marketplace (in-app):** publish to your own free Cloudflare worker and anyone can play from a link, on a phone too. Shared work is CC-BY-4.0 ([privacy & sharing](PRIVACY.md)).
+- **Zip it** for itch.io or any static host.
+- **Export to Godot 4:** a real Godot project that plays on F5, with a `STEAM_GUIDE.md` for the road to a store release.
 
 ---
 
@@ -118,9 +112,19 @@ The same prompt that makes a game can make a film. Video mode renders **real Ble
 
 1. **[Download the installer](https://github.com/bgrut/fantasy-studio/releases/latest)** (`FantasyStudio-Setup-<version>.exe`, about 2 MB) and run it.
 2. Open **Fantasy Studio** from the Start menu and pick **Game mode** (no graphics card needed) or **Full studio** (adds image and 3D generation on an NVIDIA card).
-3. The first start sets everything up with a progress bar: its own Python, the engine, the 3D library and Ollama with its local model (about 10 GB in Game mode). After that it opens straight into the studio.
+3. The first start sets everything up with a progress bar: its own Python, the engine, the 3D model library and Ollama with its local model (about 10 GB in Game mode). After that it opens straight into the studio.
 
-**Is it safe?** The installer and everything it downloads are built from this repository at the release's tag, and each file carries a published SHA-256 checksum that the setup verifies before using it (and Ollama's installer runs only if its digital signature is valid). Check the installer yourself with `Get-FileHash .\FantasyStudio-Setup-1.3.0.exe` against the release's `SHA256SUMS.txt`. Until code signing is in place, Windows may show "Windows protected your PC": choose **More info → Run anyway**.
+Then type a sentence. Some to try:
+
+- *a tiny mouse sneaks through an old library at night to steal a piece of cheese*
+- *a kid flies a red kite on a windy hill above the sea*
+- *a ghost haunts a victorian mansion scaring the guests at midnight*
+- *a skier races down a steep black run through the trees*
+- *a knight explores a redwood forest to find a hidden shrine at night*
+
+### Is it safe?
+
+The installer and everything it downloads are built from this repository at the release's tag, and every file carries a published SHA-256 checksum that the setup verifies before using it (Ollama's installer runs only if its digital signature is valid). Check the installer yourself with `Get-FileHash .\FantasyStudio-Setup-1.3.0.exe` against the release's `SHA256SUMS.txt`. Until code signing is in place, Windows may show "Windows protected your PC": choose **More info → Run anyway**.
 
 ### Install from source
 
@@ -133,11 +137,11 @@ cd fantasy-studio
 .\desktop\launch.ps1        # opens the native Fantasy Studio desktop app
 ```
 
-Full prerequisites and troubleshooting: **[INSTALL.md](INSTALL.md)**. Key facts:
+A clone does not download the 3D model library from Git LFS; `bootstrap.ps1` (or `python backend/tools/fetch_assets.py`) fills it in from the newest `assets-*` release. Full prerequisites and troubleshooting: **[INSTALL.md](INSTALL.md)**.
 
-- 🕹️ **Game mode needs no GPU** — build and play from prompts on any laptop.
-- 🎬 **Video mode** wants an NVIDIA GPU (8 GB+) for Cycles renders and first-time character generation. (Characters are generated once, then cached and reused instantly forever — including across game levels, so the same fox stays the same fox.)
-- Every fresh game build is a **new world** (seed shown in-app; reuse a seed to reproduce a favorite).
+- 🕹️ **Game mode needs no GPU.** Building and playing work on any recent laptop; a graphics card makes worlds smoother.
+- 🧬 **New characters need an NVIDIA GPU** (8 GB+) the first time a noun appears; after that they are cached in your library and cost nothing.
+- 🎲 **Every build is a new world.** The seed is shown in the app; reuse it to rebuild a favourite.
 
 ---
 
@@ -145,97 +149,83 @@ Full prerequisites and troubleshooting: **[INSTALL.md](INSTALL.md)**. Key facts:
 
 ```mermaid
 flowchart TB
-    A["Prompt<br/>(natural language)"] --> B["Local LLM Director<br/>Gemma 3 via Ollama"]
-    B -->|fallback| C["Deterministic Director<br/>(rule-based, always plays)"]
-    B --> S{"Game or Video?"}
-    C --> S
-    S -->|🕹️ Game| G["GameSpec<br/>casting · objectives · rules · style · view"]
-    G --> GR["three.js + Rapier runtime<br/>Inspector · placed items · Truth Table"]
-    GR --> GX["Play in-app · share link · export Godot 4"]
-    S -->|🎬 Video| V["Scene plan<br/>cast · camera · lighting · mood"]
-    V --> VA["SDXL → TRELLIS.2 → Blender<br/>rig · animate · light · render"]
-    VA --> VX["MP4 + .blend + GIF + PNG"]
+    A["Your sentence"] --> B["Local planner<br/>Gemma 3 via Ollama"]
+    B --> D["Design + spec<br/>hero · world · places · objectives · weather · maker"]
+    D --> R["Readers that hold it to the sentence<br/>(the subject is the hero, a beach has a sea, a ski run is snow…)"]
+    R --> C{"Cast"}
+    C -->|in the library| L["Cached model"]
+    C -->|new noun| G["SDXL → TRELLIS.2 → rig<br/>(once, then cached)"]
+    L --> E["three.js + Rapier runtime<br/>world builders · motion matching · weather · post"]
+    G --> E
+    E --> P["Play · Inspect & edit · share link · Godot export"]
 ```
 
-**Local, deterministic, ownable.** The LLM is the director; three.js and Blender are the engines. Same prompt → same world (games are seeded; videos are real scene files). Cost per render is electricity. Characters you generate are cached in a local library and reused instantly — the ~6-minute image-to-3D generation (on GPU) only ever happens the first time a brand-new noun appears.
+The planner proposes; the engine decides. A sentence's own words outrank the AI's guesses (a snowboarder's run is snow, a hurricane rains, a train driver drives the train), and every world type that the generic open world cannot express has a builder of its own. Same sentence and seed, same world.
 
-Deep dives: **[docs/PIPELINE_V2.md](docs/PIPELINE_V2.md)** (video pipeline) · **[docs/USER_GUIDE.md](docs/USER_GUIDE.md)** (full walkthrough) · **[CHANGELOG.md](CHANGELOG.md)** (everything that shipped).
+Deep dives: [docs/USER_GUIDE.md](docs/USER_GUIDE.md) · [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · [backend/LOCOMOTION.md](backend/LOCOMOTION.md) (the biomechanics the characters are held to) · [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
-The way characters and creatures move is held to measured biomechanics, not taste: [backend/LOCOMOTION.md](backend/LOCOMOTION.md) collects the numbers (gait phases, cadence, arm swing and elbow flexion, pelvic rotation, quadruped footfall orders, gallop suspension, and the rest) with sources, and the gates read against them.
+## Video mode
 
-A generated character also arrives with faults that have nothing to do with how it moves, and every one of them reads as bad skin: vertex normals that disagree with the mesh's own triangles, a material that says the body is see-through, an atlas with bare black between its islands, and inner layers modelled under the clothes that cross the outer surface. The bake repairs all four on the way out and prints what it found; `python backend/tools/meshaudit.py --all` reports the same numbers for anything already on disk, and `python backend/tools/texpad.py --opaque --normals --shrink <glb>` applies the repairs to it.
-
-## How Fantasy Studio compares
-
-| | Fantasy Studio | Diffusion video (Sora/Runway/Pika) | AI game tools (cloud) |
-|---|---|---|---|
-| Makes games | ✅ Playable, editable in real time | ❌ | ✅ (varies) |
-| Makes videos | ✅ Real Blender, `.blend` included | ✅ Pixels only | ❌ |
-| Runs locally | ✅ Fully | ❌ Cloud | ⚠️ Mostly cloud |
-| Edit after generating | ✅ Point at the world, type | ❌ New roll | ⚠️ Limited |
-| Deterministic | ✅ Same prompt → same world | ❌ Random | ⚠️ Partly |
-| You own the output | ✅ Forever | ⚠️ Per ToS | ⚠️ Per ToS |
-| Export to a real engine | ✅ Godot 4 project | ❌ | ⚠️ Varies |
-| Monthly cost | $0 after install | $10–$95/mo | Credits/subscription |
+The same studio renders **cinematic video** in Blender: real frames, no diffusion. The local planner picks cast, camera, light and mood; characters come from the same library; you get an MP4 plus the `.blend` file to re-light and re-render forever, from a 30-second Eevee preview up to a 4K Cycles final. Story Director turns one prompt into a multi-scene film. Video mode wants an NVIDIA GPU. See [docs/PIPELINE_V2.md](docs/PIPELINE_V2.md) and the [render gallery](docs/GALLERY.md).
 
 ---
 
 ## Honest state of things
 
-Fantasy Studio is built and used solo, in public, warts-and-all. Characters now generate on-GPU through TRELLIS.2 with 4K textures and a bake-time orientation gate; the honest edges that remain:
+Fantasy Studio is built in public, solo, and measured rather than hoped about.
 
-- **Motion** can warp slightly on some rigs; true foot-lock IK is on the roadmap.
-- **Video mode** is best at single-subject cinematic shots today; multi-subject composition is on the roadmap.
-- **Splat worlds** are experimental: imagined splats are set-piece scale (a shrine, not a city) — world-scale splats come from training on your own walkthrough video, which is early.
+- **How close is the first build?** A benchmark builds 24 everyday sentences, plays each, and has a local vision model judge it against its sentence (strictly). Recent runs average about **3 of 5 for matching the sentence** and **2.2 of 5 for looks**, with 12 to 30 percent of games passing every check. Familiar settings land close; a sentence that asks for a kind of place, vehicle or scale the engine has no builder for yet comes out plausible but wrong, and each of those becomes a builder (the giant kitchen, the surf and the sky islands above were all fixed that way this month).
+- **Characters** generated for the first time vary in quality; a character check scores each one and retries poor ones, but faces and hands can still be soft.
+- **Performance:** the first seconds of a new world can stutter while the graphics driver compiles shaders.
+- **Code signing** for the installer is being set up.
 
-Full detail lives in **[ROADMAP.md](ROADMAP.md)** and **[CHANGELOG.md](CHANGELOG.md)**.
+Detail: **[ROADMAP.md](ROADMAP.md)** and **[CHANGELOG.md](CHANGELOG.md)**.
 
----
+## How it compares
 
-## Project status
-
-**Public early access — active daily development.** The app installs and works today (games, videos, editing, sharing, Godot export are all live). Expect rough edges and rapid iteration. Star the repo to follow along, and join the waitlist at **[fantasylab.ai](https://fantasylab.ai)** for launch-day access and curated assets.
+| | Fantasy Studio | Cloud AI game makers | Diffusion video (Sora, Runway…) |
+|---|---|---|---|
+| Playable 3D games | ✅ from a sentence, editable live | ✅ (varies) | ❌ |
+| Runs locally | ✅ fully, no account | ⚠️ mostly cloud | ❌ cloud |
+| Edit after generating | ✅ point at the world, type | ⚠️ limited | ❌ new roll |
+| Same prompt, same result | ✅ seeded | ⚠️ partly | ❌ |
+| Export to a real engine | ✅ Godot 4 project | ⚠️ varies | ❌ |
+| You own the output | ✅ | ⚠️ per terms | ⚠️ per terms |
+| Cost | $0 after install | credits or subscription | $10–$95 a month |
 
 ---
 
 ## FAQ
 
-**Do I need to know how to code?** No. You describe games and videos in plain English and edit them by pointing and typing. If you *do* code, the game exports as a Godot project and videos export as `.blend` files — both fully yours to extend.
+**Do I need to know how to code?** No. You describe the game and edit it by pointing and typing. If you do code, export to Godot and take it anywhere.
 
-**Do I need a GPU?** Game mode: no — it builds and plays on any laptop. Video mode and first-time character generation: an NVIDIA GPU (8 GB+) is strongly recommended (once generated, characters are cached and reused with no GPU).
+**Do I need a graphics card?** Not for Game mode. A new character (a noun the library has never had) needs an NVIDIA GPU the first time it is generated; after that it is cached.
 
-**Do I have to generate a new character every time?** No. Each character (a cat, a wolf, a dragon…) is generated once and cached in your library forever, then cast instantly in any future prompt or game — including across all the levels of a game.
+**Can I sell what I make?** Every model and tool the pipeline calls is listed in [backend/PIPELINE_LICENSES.md](backend/PIPELINE_LICENSES.md), and every one in use allows it. The app itself is BSL 1.1 (below).
 
-**Can I share the games I make?** Yes — publish to the in-app Community Marketplace for a public browser link (anyone can play, no install), zip the build for itch.io, or export a Godot project. Shared community content is CC-BY-4.0.
+**Is it really local?** Yes. No API keys, no cloud, no telemetry. Nothing leaves your machine unless you press Publish.
 
-**Is it really free / local?** Yes. Free for personal and non-commercial use under BSL 1.1 (auto-converts to Apache 2.0 after 4 years). Runs entirely on your machine — no API keys, no cloud, no telemetry, no per-render fee.
-
-**How is this different from Sora / Runway / a cloud game maker?** Different bet: those generate pixels or run in the cloud and hand you something you can't really direct. Fantasy Studio generates *a game you keep editing* and *a Blender scene you keep rendering*, locally, deterministically, and you own the output. See the comparison table above.
-
-**When is launch?** Public early access is live now for creators, engineers, and waitlist signups; a full public launch campaign follows. There's no gate on trying it today.
+**Mac or Linux?** Windows 10/11 is the only supported platform today.
 
 ---
 
 ## License
 
-**Business Source License 1.1** — free for personal and non-commercial use, source visible, attribution required, auto-converts to Apache 2.0 four years after first commit. Commercial licensing available from FantasyLab AI. Full terms in **[LICENSE](LICENSE)**.
-
-Every model and tool the generation pipeline calls, and what each allows, is listed in [backend/PIPELINE_LICENSES.md](backend/PIPELINE_LICENSES.md): the answer for every part in use is that a game made with it can be sold.
+**Business Source License 1.1**: free for personal and non-commercial use, source visible, converts to Apache 2.0 four years after first commit. Commercial licensing from FantasyLab AI. Full terms in **[LICENSE](LICENSE)**.
 
 ## Acknowledgments
 
-Fantasy Studio stands on a giant pile of generous open work:
-
-- [**three.js**](https://threejs.org) (MIT) + [**Rapier**](https://rapier.rs) (Apache-2.0) — the game runtime
-- [**Blender**](https://blender.org) — the video renderer and the foundation
-- [**Godot**](https://godotengine.org) (MIT) — the game export target
-- [**Ollama**](https://ollama.com) + [**Google Gemma**](https://ai.google.dev/gemma) — the local director
-- [**Microsoft TRELLIS**](https://github.com/microsoft/TRELLIS) (MIT) — image-to-3D character generation. Built with DINOv3 (Meta, DINOv3 License), the image encoder inside TRELLIS.2
-- [**CMU Motion Capture Database**](http://mocap.cs.cmu.edu) — real character motion
-- [**OpenStreetMap**](https://www.openstreetmap.org) contributors — real-world city data
-- The broader open-source 3D + AI community
+- [**three.js**](https://threejs.org) (MIT) and [**Rapier**](https://rapier.rs) (Apache-2.0): the game runtime
+- [**Ollama**](https://ollama.com) and [**Google Gemma**](https://ai.google.dev/gemma): the local planner
+- [**Microsoft TRELLIS.2**](https://github.com/microsoft/TRELLIS) (MIT) and SDXL: image-to-3D characters (DINOv3 inside TRELLIS.2 under its own licence)
+- [**CMU Motion Capture Database**](http://mocap.cs.cmu.edu) and [**100STYLE**](https://www.ianxmason.com/100style/): real motion
+- [**Poly Haven**](https://polyhaven.com) (CC0): ground, building and sky scans
+- [**Kenney**](https://kenney.nl) (CC0): stylised asset kits
+- The open-licence type designers behind the 95 font families (SIL OFL)
+- [**OpenStreetMap**](https://www.openstreetmap.org) contributors: real cities
+- [**Godot**](https://godotengine.org) (MIT): the export target · [**Blender**](https://blender.org): video mode
 
 ---
 

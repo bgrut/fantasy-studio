@@ -1,8 +1,45 @@
-# Render Gallery
+# Gallery
 
-Real renders from Fantasy Studio. Every shot below was generated locally from a one-line prompt — no diffusion, no cloud, no per-frame fee. Each entry shows the prompt and the recipe the dispatcher chose.
+Games and renders from Fantasy Studio, each made locally from a one-line prompt: no diffusion, no cloud, no per-game fee. The games come first; the video renders follow, each with the recipe the dispatcher chose.
 
 Want to contribute a render? Open a PR — see [CONTRIBUTING.md](../CONTRIBUTING.md).
+
+---
+
+## Games (October 2026)
+
+Unedited in-game captures of games built from the sentence under each, HUD hidden.
+
+<table>
+<tr>
+<td width="50%"><img src="../.github/assets/games/v13/ant-kitchen.jpg" width="100%"/><br/><em>"a tiny ant explores a giant kitchen to carry a sugar cube home"</em></td>
+<td width="50%"><img src="../.github/assets/games/v13/surf.jpg" width="100%"/><br/><em>"a surfer rides huge waves off a hawaiian beach at sunset"</em></td>
+</tr>
+<tr>
+<td><img src="../.github/assets/games/v13/sky-islands.jpg" width="100%"/><br/><em>"a dragon rider flies between floating islands above the clouds"</em></td>
+<td><img src="../.github/assets/games/v13/balloon.jpg" width="100%"/><br/><em>"a hot air balloon pilot floats over cappadocia at sunrise"</em></td>
+</tr>
+<tr>
+<td><img src="../.github/assets/games/v13/steam-train.jpg" width="100%"/><br/><em>"a train driver takes a steam train through snowy mountain passes"</em></td>
+<td><img src="../.github/assets/games/v13/skier.jpg" width="100%"/><br/><em>"a skier races down a steep black run through the trees"</em></td>
+</tr>
+<tr>
+<td><img src="../.github/assets/games/v13/park-wide.jpg" width="100%"/><br/><em>"a dog fetches a frisbee in a sunny park"</em></td>
+<td><img src="../.github/assets/games/v13/backyard-snow.jpg" width="100%"/><br/><em>"two kids have a snowball fight in a snowy backyard"</em></td>
+</tr>
+<tr>
+<td><img src="../.github/assets/games/v13/sea-floor.jpg" width="100%"/><br/><em>"a glowing jellyfish drifts through an underwater cave collecting pearls"</em></td>
+<td><img src="../.github/assets/games/v13/lighthouse-hurricane.jpg" width="100%"/><br/><em>"a lighthouse keeper keeps the light burning through a hurricane"</em></td>
+</tr>
+<tr>
+<td><img src="../.github/assets/games/v13/spacewalk.jpg" width="100%"/><br/><em>"an astronaut repairs a broken satellite in orbit above the earth"</em></td>
+<td><img src="../.github/assets/games/v13/giant-robot.jpg" width="100%"/><br/><em>"a giant robot stomps through tokyo at night fighting a sea monster"</em></td>
+</tr>
+<tr>
+<td><img src="../.github/assets/games/v13/mars-rover.jpg" width="100%"/><br/><em>"a mars rover drives across red dunes looking for signs of water"</em></td>
+<td><img src="../.github/assets/games/v13/kite.jpg" width="100%"/><br/><em>"a kid flies a red kite on a windy hill above the sea"</em></td>
+</tr>
+</table>
 
 ---
 

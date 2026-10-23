@@ -1,12 +1,27 @@
 # User Guide
 
-Everything you need to go from "just installed" to "shipping cinematic shots regularly".
+Everything you need to go from "just installed" to making games (and, in video mode, cinematic shots).
 
-> If you haven't installed yet, start with [INSTALL.md](../INSTALL.md).
+> If you haven't installed yet, start with [INSTALL.md](../INSTALL.md) or the [Windows installer](https://github.com/bgrut/fantasy-studio/releases/latest).
 
 ---
 
-## Getting started
+## Your first game
+
+1. Open **Fantasy Studio** and go to the game studio.
+2. In **Describe your game**, write one sentence: who the hero is, where they are, what they do, and when. For example: **`a dog fetches a frisbee in a sunny park`** or **`a train driver takes a steam train through snowy mountain passes`**.
+3. Press **Build Game** (or Enter). A first build of a sentence with a familiar cast takes about a minute; a character the library has never had is generated once (a few minutes on an NVIDIA GPU) and is free from then on.
+4. Press **Play**. WASD or the arrow keys move, Shift runs, Space jumps (or climbs, in a balloon), F acts or attacks, E interacts, drag to look; the game's own card at the start says what its controls are when they differ (driving, flying, sailing, surfing).
+
+**Writing sentences that land.** The sentence's subject becomes the hero and its place becomes the world, so name both: *"a lighthouse keeper keeps the light burning through a hurricane"* gets the lighthouse, the storm sea and the rain; *"a kid flies a red kite on a windy hill above the sea"* gets the coast and the kite. Times of day (*at dawn, at night*), weather (*in the fog, through a blizzard*), a style (*cartoon, noir, watercolour*) and counts (*three broken bridges*) are all read. If a build misses something, say it again more plainly or fix it in place (below).
+
+**Changing it.** Press **Inspect** in the running game: hover to identify anything, click a spot, type an edit (*"place a campfire here," "make it night," "add two wolves"*) and **Apply edit**. The seed stays the same, so the world you liked stays.
+
+**Sharing it.** **Export game** gives you a folder that runs in any browser (put it on itch.io or any static host), a Godot 4 project, or a public link through the in-app marketplace.
+
+---
+
+## Video mode
 
 ### Your first render
 

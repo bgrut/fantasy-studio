@@ -8,7 +8,41 @@ Pre-1.0 versions are internal milestones during the constraint sprint leading to
 
 ---
 
+> **Version numbers.** App releases are the GitHub tags (`v1.1.0` … `v1.3.0`). The `1.3.x`–`1.4.x` headings further down are internal pipeline milestones from the spring of 2026, before the app had its own release numbering.
+
 ## [Unreleased]
+
+### Added — sentences the studio had never seen (2026-10-22/23)
+Three rounds of stress tests built dozens of unusual sentences and gave each kind of place, vehicle and play that came out wrong a builder of its own:
+- **Giant rooms**: a tiny hero (an ant, a mouse, a toy) in a kitchen, bedroom, living room, bathroom, library or cellar sees it from the floor, laid out in real metres at the hero's scale.
+- **The sea floor** for any sentence set under the water; **islands in the sky** over a sea of cloud, bridged for heroes who cannot fly.
+- **Surfing**: swells that roll in and break, a board that rides them, and a new objective, *ride N waves*.
+- **Backyards** (house, deck, fence, shed, swing set, tyre swing; snow and a snowman in winter) and **parks** (gravel walks, fountain, benches, lamps, playground, duck pond, picnic tables).
+- **Vehicles built in code**: a hot-air balloon you fly (burner and vent) over Cappadocia's fairy chimneys, a six-wheeled planetary rover, a steam locomotive on its line.
+- **Kites** that fly downwind on a sagging string; **spacewalks** that float beside the station above the Earth; **skiing** on snow; **hurricanes** that rain.
+- **Casting**: the rider rides the mount, the ghost can be the hero, a snowball fight is kids throwing snowballs, a giant robot stays giant, period settings dress their crowds, a creature is never played by a person.
+
+### Fixed
+- **Whole plans thrown away**: one out-of-range number in the planner's answer (a 5 cm ant, a 30 m robot) discarded the entire spec; the spec now repairs itself.
+- **Insects rigged standing on their tails**: the upright check reads where the body's mass sits.
+- **Seconds of boot in every world with stone**: a texture stored in a material's `userData` was JSON-serialised, image and all, on every clone.
+- Keyword rules that misfired on unusual sentences: sailing is not a sea battle, a raid is not a car race, a factory you roll through is a place, "orbit" is not an asteroid field, a snowboarder on a salt marsh keeps the marsh.
+
+## [1.3.0] - 2026-10-22
+
+### Added
+- **A real Windows installer** (`FantasyStudio-Setup-1.3.0.exe`, about 2 MB) and a first-run setup window that installs its own Python, the engine, the model library and Ollama, every download checked against published SHA-256 checksums. Replaces the PowerShell one-liner.
+- **Weather you can see**: rain that lands and splashes, snowstorms that blow, mist that lies in the hollows.
+- **Places the sentence names are built**: drowned cities, jungle temples with hidden gardens, castles with towers, harbours, doorsteps for deliveries.
+- **A maker per game**: its own minimap style, emblem and typefaces (41 more open-licence families, 95 in all).
+- **Drawn worlds get drawn people**; sharper faces; 2K photo-scanned ground and building materials.
+- **Crystal Works** (the flagship) reads as a small world from orbit, with a new build mark and grass.
+
+### Fixed
+- The scene is antialiased where it is drawn (the ambient-occlusion pass rendered the scene without multisampling), and forest level-of-detail changes no longer stipple.
+- A multi-second freeze at Start in many worlds (a light budget that changed the shader count on the first frame).
+
+## [Development log] - July 2026
 
 ### Added — Phase 60+61: 1:1 reference texturing + new game genres (2026-07-11)
 - **Texture v2 (`texture_v2.py`, FS_TEX_V2 default on)** — kills the
