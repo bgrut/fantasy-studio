@@ -32,6 +32,12 @@
 <img src=".github/assets/games/v13/hero-collage.jpg" alt="Six games made by Fantasy Studio from one sentence each" width="900"/>
 
 <sub>Six games, six sentences: a tiny ant in a giant kitchen · surf breaking on a Hawaiian beach · a dragon rider's islands above the clouds · a steam train through snowy passes · a dog in a sunny park · a snowball fight in a snowy backyard. In-game captures of real builds, HUD hidden.</sub>
+
+<br/>
+
+<img src=".github/assets/games/classics/classics-collage.jpg" alt="Twelve more games made by Fantasy Studio, one sentence each" width="900"/>
+
+<sub>Twelve more: neon Tokyo street racing · a samurai's shrine under cherry blossom · a gladiator in the Colosseum · the pyramids of Giza at sunrise · a Himalayan monastery · a frontier town at high noon · a kawaii candy land · a smoking volcano · a glowing crystal cave · Venice's canals by gondola · a Scottish lighthouse in a storm · a medieval joust. [See them all with their sentences.](#more-games)</sub>
 </div>
 
 ---
@@ -62,6 +68,21 @@ Every picture below is an unedited in-game capture of a build made from the sent
 | <img src=".github/assets/games/v13/backyard-snow.jpg" width="430"/><br/><sub>*"two kids have a snowball fight in a snowy backyard"*<br/>The back of the house, the deck, a fenced yard with a shed, a swing set and a snowman; you throw snowballs.</sub> | <img src=".github/assets/games/v13/park.jpg" width="430"/><br/><sub>*"a dog fetches a frisbee in a sunny park"*<br/>Gravel walks round a fountain, benches and lamps, a playground and a duck pond on mown lawns.</sub> |
 | <img src=".github/assets/games/v13/lighthouse-hurricane.jpg" width="430"/><br/><sub>*"a lighthouse keeper keeps the light burning through a hurricane"*<br/>Driving rain, a storm sea breaking on the rocks, the light lit at the end of the path.</sub> | <img src=".github/assets/games/v13/spacewalk.jpg" width="430"/><br/><sub>*"an astronaut repairs a broken satellite in orbit above the earth"*<br/>A spacewalk: you float beside the station, the planet below.</sub> |
 | <img src=".github/assets/games/v13/giant-robot.jpg" width="430"/><br/><sub>*"a giant robot stomps through tokyo at night fighting a sea monster"*<br/>A ten-metre hero in a neon street grid; the cars at its feet.</sub> | <img src=".github/assets/games/v13/mars-rover.jpg" width="430"/><br/><sub>*"a mars rover drives across red dunes looking for signs of water"*<br/>A six-wheeled rover on a rocker-bogie, built in code and driven nose first.</sub> |
+
+</div>
+
+### More games
+
+Earlier builds, rebuilt on today's engine and captured the same way.
+
+<div align="center">
+
+| | | |
+|---|---|---|
+| <img src=".github/assets/games/classics/tokyo-drift.jpg" width="290"/><br/><sub>*"a tokyo drift racing game through neon streets at night"*<br/>Wet asphalt, neon fronts and a pack of rivals; the car slides when you throw it.</sub> | <img src=".github/assets/games/classics/samurai-shrine.jpg" width="290"/><br/><sub>*"a samurai walks through a bamboo forest to a mountain shrine as the sun sets over the cherry blossoms"*<br/>Blossom over the path, wildflowers in the grass, a torii gate at the climb.</sub> | <img src=".github/assets/games/classics/colosseum.jpg" width="290"/><br/><sub>*"a gladiator fights three opponents in the colosseum"*<br/>The arena floor inside tiers of a packed crowd; three opponents to beat.</sub> |
+| <img src=".github/assets/games/classics/giza.jpg" width="290"/><br/><sub>*"an explorer reaches the pyramids of giza at sunrise"*<br/>Limestone pyramids course by course over the dunes, the goal at their feet.</sub> | <img src=".github/assets/games/classics/monastery.jpg" width="290"/><br/><sub>*"a monk climbs a himalayan monastery at dawn"*<br/>Chortens, prayer flags and stone stairs up a red mountain ridge.</sub> | <img src=".github/assets/games/classics/frontier-town.jpg" width="290"/><br/><sub>*"a sheriff hunts three outlaws in a wild west frontier town at high noon"*<br/>A boardwalk main street, false fronts and a telegraph office in the desert.</sub> |
+| <img src=".github/assets/games/classics/candy-land.jpg" width="290"/><br/><sub>*"a kawaii candy land: hop across giant cupcakes and collect 20 sweets"*<br/>Frosting ground, sprinkles, donuts and lollipops, cupcakes to hop across.</sub> | <img src=".github/assets/games/classics/volcano.jpg" width="290"/><br/><sub>*"climb a smoking volcano and escape the lava flows"*<br/>Lava channels glow across the route to a smoking cone.</sub> | <img src=".github/assets/games/classics/crystal-cave.jpg" width="290"/><br/><sub>*"explore a glowing crystal cave deep underground"*<br/>Crystal clusters light a cavern far underground.</sub> |
+| <img src=".github/assets/games/classics/venice.jpg" width="290"/><br/><sub>*"a gondolier delivers letters through the canals of venice"*<br/>Canals between palazzi, gondolas at their moorings, letters to deliver.</sub> | <img src=".github/assets/games/classics/scottish-lighthouse.jpg" width="290"/><br/><sub>*"a lighthouse keeper crosses a stormy scottish island at dusk"*<br/>Heather, rain and a storm sea on the rocks; the light at the end of the island.</sub> | <img src=".github/assets/games/classics/joust.jpg" width="290"/><br/><sub>*"a knight jousts at a medieval tournament in front of the castle"*<br/>The lists, striped pavilions and pennants before the castle.</sub> |
 
 </div>
 

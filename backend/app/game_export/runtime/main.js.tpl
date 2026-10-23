@@ -1444,7 +1444,8 @@ async function main() {
   const SNOW_GROUND = SPEC.world.weather === 'snow'
     || /arctic|tundra|polar|glacier|snowy|snowfield|winter|blizzard|antarctic/.test(_snowW)
     // (2026-10-22) "a skier races down a steep black run" skied a meadow of flowers: a ski run is snow
-    || (/\b(ski(?:s|er|ers|ing)?|snowboard\w*|slalom|piste|black run|red run|blue run|ski (?:slope|resort|lift|run)|chairlift|toboggan\w*|sledg\w*|sled(?:s|ding|der)?)\b/.test(_snowW) && !/\bwater[- ]?ski\w*|jet[- ]?ski\w*\b/.test(_snowW))
+    || (/\b(ski(?:s|er|ers|ing)?|snowboard\w*|slalom|piste|black run|red run|blue run|ski (?:slope|resort|lift|run)|chairlift|toboggan\w*|sledg\w*|sled(?:s|ding|der)?)\b/.test(_snowW) && !/\bwater[- ]?ski\w*|jet[- ]?ski\w*\b/.test(_snowW)
+        && !/\b(marsh\w*|swamps?|bogs?|beach\w*|sand|dunes?|desert|jungle|savann?ah?|reef|meadow|prairie|canyon)\b/.test(String(SPEC.prompt || '').toLowerCase()))
     || (/frozen/.test(_snowW) && !/autumn|\bfall\b|october|summer|spring|blossom|harvest|meadow/.test(_snowW));
   // SIDE-SCROLLER projection: gameplay lives on the z=0 plane — pull the
   // mission targets onto it so everything is actually reachable
@@ -3336,9 +3337,9 @@ async function main() {
   const _defOb = (SPEC.objectives || []).find(o => o.kind === 'defend');
   const _reachOb = _defOb || (SPEC.objectives || []).find(o => o.kind === 'reach');
   const _structHit = _defOb ? (((_defOb.label || '').toLowerCase().match(
-    /\b(shelter|cabin|house|home|hut|shrine|castle|tower|barn|cottage|inn|temple|church|fort|lodge|den|village|camp|outpost|lighthouse|station|pyramid|ruins?)\b/))
+    /\b(shelter|cabin|house|home|hut|shrine|castle|tower|barn|cottage|inn|temple|church|fort|lodge|den|village|camp|outpost|lighthouse|station|pyramids?|ruins?)\b/))
     || ['castle', 'castle']) : _reachOb && (_reachOb.label || '').toLowerCase().match(
-    /\b(shelter|cabin|house|home|hut|shrine|castle|tower|barn|cottage|inn|temple|church|fort|lodge|den|village|camp|outpost|lighthouse|station|pyramid|ruins?)\b/);
+    /\b(shelter|cabin|house|home|hut|shrine|castle|tower|barn|cottage|inn|temple|church|fort|lodge|den|village|camp|outpost|lighthouse|station|pyramids?|ruins?)\b/);
   // THE GOAL IS THE BUILDING THAT IS ALREADY THERE (2026-10-07): "reach the
   // temple entrance" put up a cottage at the goal while the temple itself, a
   // pagoda, stood at its own door elsewhere. When the goal names a building
@@ -3389,7 +3390,7 @@ async function main() {
       // structure FLAVOR by noun (Phase 48): castles are stone keeps with
       // corner towers, lighthouses carry a light column — not every goal
       // is a cottage
-      const _kindWord = _structHit[1];
+      const _kindWord = _structHit[1] === 'pyramids' ? 'pyramid' : _structHit[1];   // "the pyramids of giza" built no pyramid (2026-10-23)
       const isCastle = ['castle', 'fort', 'tower'].includes(_kindWord);
       const isLighthouse = _kindWord === 'lighthouse';   // (a 'station' goal was a lighthouse: a research station on a moor, 2026-10-12)
       // an East Asian temple or shrine is a pagoda (buildPagoda); any other is the ancient one
@@ -12397,6 +12398,7 @@ async function main() {
         const inst = _kartNpc ? makeKart(null, npcs.length + 1)
                    : _carNpc ? buildCar({ type: ['sports', 'coupe', 'sedan', 'sports', 'compact', 'coupe'][_carK % 6],
                                           paint: [0x1d4fd8, 0xf2c230, 0x1e1e22, 0xe8e8ea, 0x2fae5a, 0xe86a1a][_carK % 6] })
+                   : (_shipNpc && /\b(longships?|drakkars?|vikings?)\b/i.test(String(SPEC.prompt || ''))) ? buildLongship({ seed: (SPEC.seed || 1) + npcs.length * 13 + 5, sail: [[0x2e4a7a, 0xe9e2cf], [0x1e1e1e, 0xd8b030], [0x3d6b3a, 0xe9e2cf]][npcs.length % 3] })
                    : _shipNpc ? buildShip({ seed: (SPEC.seed || 1) + npcs.length * 13 + 5, flag: /pirate/i.test(String(SPEC.player && SPEC.player.name || '')) ? 'navy' : 'pirate',
                                             hull: [0x4a3a30, 0x5a2e1e, 0x3e3a36][npcs.length % 3], band: [0x2a4a8a, 0x1e1e1e, 0xd8b030][npcs.length % 3] })
                                 : skClone(gltf.scene);
@@ -16448,6 +16450,87 @@ async function main() {
   // gunports and guns, a deck, a stern castle with lit windows, a bowsprit,
   // three masts with yards and billowed square sails, a jib, shrouds and a
   // flag. Bow on local -Z, keel at y = 0.
+  // ── A VIKING LONGSHIP (2026-10-23) ───────────────────────────────────────
+  // "a viking longship raids a foggy coast at dawn" stood a viking on a sand
+  // spit. A longship is long, low and double-ended: clinker strakes that sweep
+  // up at both ends into tall posts, a carved dragon on the prow, painted round
+  // shields along the gunwale, oars out on both sides, one mast and a square
+  // sail in broad stripes. Built along Z, the bow on -Z like buildShip.
+  function buildLongship(o) {
+    o = o || {};
+    const g = new THREE.Group(), rL = mulberry32(((o.seed || 1) * 6151) | 0);
+    const M = (c, r, extra) => { const m = new THREE.MeshStandardMaterial(Object.assign({ color: c, roughness: r === undefined ? 0.75 : r }, extra || {})); m.userData.noAutoTex = true; return m; };
+    const add = (geo, mat, x, y, z) => { const m = new THREE.Mesh(geo, mat); m.position.set(x || 0, y || 0, z || 0); m.castShadow = true; m.receiveShadow = true; g.add(m); return m; };
+    const L = 18, W = 4.2, H = 1.5;
+    // the hull: a box lofted to a double-ended shell, its sheer rising hard at both ends
+    const hw = (t, yn) => (W / 2) * Math.max(0.02, Math.pow(Math.sin(Math.PI * Math.min(1, Math.max(0, t))), 0.55) * (0.25 + 0.75 * Math.pow(yn, 0.7)));
+    const hg = new THREE.BoxGeometry(W, H, L, 8, 22, 40);
+    const pa = hg.attributes.position, cols = new Float32Array(pa.count * 3);
+    const strakeC = [0x6e4a2c, 0x5d3e25, 0x7a5434, 0x664429].map(c => new THREE.Color(c));
+    for (let i = 0; i < pa.count; i++) {
+      const x = pa.getX(i), y = pa.getY(i), z = pa.getZ(i), t = (z + L / 2) / L, yn = (y + H / 2) / H;
+      const e = Math.abs(t - 0.5) * 2, sheer = Math.pow(e, 3.2) * 2.6 * yn + Math.pow(e, 2) * 0.35;
+      pa.setXYZ(i, (x / (W / 2)) * hw(t, yn), y + H / 2 + sheer, z);
+      // clinker: each strake its own board, the lower edge of each lapped over the one below in a dark seam
+      const row = Math.round(yn * 22), c = strakeC[Math.floor(row / 2) % 4].clone().multiplyScalar(row % 2 === 0 ? 0.45 : 1.08).multiplyScalar(yn < 0.1 ? 0.6 : 1);
+      cols[i * 3] = c.r; cols[i * 3 + 1] = c.g; cols[i * 3 + 2] = c.b;
+    }
+    hg.setAttribute('color', new THREE.BufferAttribute(cols, 3)); hg.computeVertexNormals();
+    const hullM = M(0xffffff, 0.8, { vertexColors: true, flatShading: true, side: THREE.DoubleSide });
+    add(hg, hullM, 0, 0, 0);
+    // the deck boards inside, the keel line
+    add(new THREE.BoxGeometry(W * 0.78, 0.06, L * 0.78), M(0x8a6a48, 0.85), 0, H * 0.45, 0);
+    add(new THREE.BoxGeometry(0.16, 0.18, L * 0.96), M(0x3a2a1c, 0.8), 0, 0.02, 0);
+    // stem and stern posts curling up, the dragon on the bow
+    const postM = M(0x4a3220, 0.7);
+    for (const s of [-1, 1]) {
+      const curve = new THREE.CatmullRomCurve3([new THREE.Vector3(0, H + 1.6, s * (L / 2 - 0.4)), new THREE.Vector3(0, H + 2.6, s * (L / 2 + 0.2)), new THREE.Vector3(0, H + 3.5, s * (L / 2 + 0.1)), new THREE.Vector3(0, H + 3.9, s * (L / 2 - 0.5))]);
+      add(new THREE.TubeGeometry(curve, 16, 0.16, 8), postM, 0, 0, 0);
+    }
+    { const head = new THREE.Group(), dM = M(0x2f2418, 0.6), eyeM = M(0xd8b04a, 0.3, { metalness: 0.6 });
+      const sk = new THREE.Mesh(new THREE.ConeGeometry(0.28, 1.1, 8), dM); sk.rotation.x = -Math.PI / 2 - 0.3; sk.position.set(0, 0, -0.45); head.add(sk);
+      const jaw = new THREE.Mesh(new THREE.ConeGeometry(0.16, 0.8, 6), dM); jaw.rotation.x = -Math.PI / 2 + 0.25; jaw.position.set(0, -0.22, -0.35); head.add(jaw);
+      for (const sx of [-0.15, 0.15]) { const e = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 6), eyeM); e.position.set(sx, 0.1, -0.25); head.add(e);
+        const horn = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.45, 5), dM); horn.position.set(sx, 0.3, 0.05); horn.rotation.x = 0.6; head.add(horn); }
+      head.position.set(0, H + 3.9, -(L / 2 - 0.6)); head.traverse(m => { if (m.isMesh) m.castShadow = true; }); g.add(head); }
+    // shields along both gunwales, overlapping, each painted in two colours
+    const shieldCols = [[0xb8312f, 0xe9d8a6], [0x2e4a7a, 0xe9e2cf], [0xd4a62a, 0x2b2b2b], [0xe9e2cf, 0x7a1f1f], [0x3d6b3a, 0xe0c27a]];
+    const nS = 14;
+    for (const s of [-1, 1]) for (let k = 0; k < nS; k++) {
+      const t = 0.2 + 0.6 * k / (nS - 1), z = (t - 0.5) * L, x = s * (hw(t, 1) + 0.05), [c1, c2] = shieldCols[Math.floor(rL() * shieldCols.length)];
+      const sh = add(new THREE.CylinderGeometry(0.42, 0.42, 0.06, 20), M(c1, 0.6), x, H * 0.92 + Math.pow(Math.abs(t - 0.5) * 2, 3.2) * 2.6, z); sh.rotation.z = Math.PI / 2;
+      const boss = add(new THREE.SphereGeometry(0.1, 10, 8), M(0x9a9a9a, 0.35, { metalness: 0.8 }), x + s * 0.05, sh.position.y, z);
+      const band = add(new THREE.BoxGeometry(0.07, 0.8, 0.12), M(c2, 0.6), x + s * 0.01, sh.position.y, z); boss.scale.x = 0.6;
+    }
+    // oars out on both sides, angled to the water
+    const oarM = M(0x9a7a52, 0.8);
+    for (const s of [-1, 1]) for (let k = 0; k < 9; k++) {
+      const t = 0.24 + 0.52 * k / 8, z = (t - 0.5) * L, x = s * hw(t, 0.8);
+      const oar = add(new THREE.CylinderGeometry(0.035, 0.035, 4.2, 6), oarM, x + s * 1.6, H * 0.55, z);
+      oar.rotation.z = s * (Math.PI / 2 - 0.42);
+      const blade = add(new THREE.BoxGeometry(0.06, 0.55, 0.22), oarM, x + s * 3.4, 0.12, z); blade.rotation.z = s * 0.4;   // no lower than the keel: the waterline is set by the lowest point, and blades below it floated the hull
+    }
+    // the mast, its yard, and the square sail in broad stripes, bellied by the wind
+    const mastH = 9.5;
+    add(new THREE.CylinderGeometry(0.13, 0.17, mastH, 10), postM, 0, H * 0.45 + mastH / 2, 0.6);
+    add(new THREE.CylinderGeometry(0.08, 0.08, 6.8, 8), postM, 0, H * 0.45 + mastH - 0.6, 0.45).rotation.z = Math.PI / 2;
+    { const sc = o.sail || [0xb02a28, 0xefe6d2];
+      const cv = document.createElement('canvas'); cv.width = 256; cv.height = 256; const x = cv.getContext('2d');
+      for (let i = 0; i < 8; i++) { x.fillStyle = '#' + new THREE.Color(sc[i % 2]).getHexString(); x.fillRect(i * 32, 0, 32, 256); }
+      for (let i = 0; i < 2600; i++) { x.fillStyle = `rgba(0,0,0,${Math.random() * 0.05})`; x.fillRect(Math.random() * 256, Math.random() * 256, 2, 1); }
+      const tx = new THREE.CanvasTexture(cv); tx.colorSpace = THREE.SRGBColorSpace;
+      const sg = new THREE.PlaneGeometry(6.4, 5.2, 12, 10), sp = sg.attributes.position;
+      for (let i = 0; i < sp.count; i++) { const u = sp.getX(i) / 3.2, v = sp.getY(i) / 2.6; sp.setZ(i, (1 - u * u) * (1 - v * v * 0.6) * 0.9); }
+      sg.computeVertexNormals();
+      add(sg, M(0xffffff, 0.9, { map: tx, side: THREE.DoubleSide }), 0, H * 0.45 + mastH - 3.3, 0.5);
+      const rope = M(0xc8b48a, 1);
+      for (const [a, b] of [[[0, H * 0.45 + mastH, 0.6], [0, H + 2.5, -(L / 2 - 1)]], [[0, H * 0.45 + mastH, 0.6], [0, H + 2.2, L / 2 - 1.2]], [[0, H * 0.45 + mastH - 1, 0.6], [W / 2, H * 0.9, 0.6]], [[0, H * 0.45 + mastH - 1, 0.6], [-W / 2, H * 0.9, 0.6]]]) {
+        const A = new THREE.Vector3(...a), B = new THREE.Vector3(...b), d = new THREE.Vector3().subVectors(B, A);
+        const r = add(new THREE.CylinderGeometry(0.02, 0.02, d.length(), 4), rope, (A.x + B.x) / 2, (A.y + B.y) / 2, (A.z + B.z) / 2);
+        r.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.normalize()); } }
+    g.userData.longship = true;
+    return g;
+  }
   function buildShip(o) {
     o = o || {};
     const g = new THREE.Group(), rS = mulberry32(((o.seed || 1) * 7919) | 0);
@@ -18645,7 +18728,7 @@ async function main() {
     const beamSM = new THREE.ShaderMaterial({ transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: false,
       uniforms: { uCol: { value: new THREE.Color(1.0, 0.9, 0.68) }, uK: { value: 0.55 } },
       vertexShader: 'varying vec3 vN; varying vec3 vV; varying float vA; void main(){ vec4 mv = modelViewMatrix * vec4(position, 1.0); vN = normalize(normalMatrix * normal); vV = normalize(-mv.xyz); vA = 1.0 - uv.y; gl_Position = projectionMatrix * mv; }',
-      fragmentShader: 'uniform vec3 uCol; uniform float uK; varying vec3 vN; varying vec3 vV; varying float vA; void main(){ float f = abs(dot(normalize(vN), normalize(vV))); float a = pow(f, 2.2) * pow(1.0 - vA, 1.6) * smoothstep(0.0, 0.04, vA + 0.02) * uK; gl_FragColor = vec4(uCol * a, a); }' });
+      fragmentShader: 'uniform vec3 uCol; uniform float uK; varying vec3 vN; varying vec3 vV; varying float vA; void main(){ float f = abs(dot(normalize(vN + vec3(0.0, 1e-5, 0.0)), normalize(vV))); float a = pow(clamp(f, 0.0, 1.0), 2.2) * pow(clamp(1.0 - vA, 0.0, 1.0), 1.6) * smoothstep(0.0, 0.04, vA + 0.02) * uK; gl_FragColor = vec4(uCol * a, a); }' });
     void beamT;
     for (const sd of [0, Math.PI]) {
       const bm = new THREE.Mesh(new THREE.ConeGeometry(3.2, 60, 32, 1, true), beamSM);
@@ -20758,13 +20841,14 @@ async function main() {
   // a rider on a board (snowboard, skis, skateboard, surfboard, sled): drive
   // physics, but an upright person on a board, not a car (2026-10-06)
   const RIDE = ((P.mode || 'walk') === 'drive' && P.ride) ? String(P.ride).toLowerCase() : null;
-  const SHIP_HERO = (P.mode || 'walk') === 'swim' && /\b(pirate ship|ship|galleon|frigate|warship|man-o-war|brig)\b/i.test(String(P.name || ''));
+  const SHIP_HERO = (P.mode || 'walk') === 'swim' && /\b(pirate ship|ship|galleon|frigate|warship|man-o-war|brig|longship|drakkar)\b/i.test(String(P.name || ''));
+  const LONGSHIP = SHIP_HERO && /\b(longship|drakkar|viking)\b/i.test(String(P.name || '') + ' ' + String(SPEC.prompt || ''));   // (2026-10-23)
   if (SHIP_HERO) P.height_m = Math.max(P.height_m || 0, 18);   // a swimmer is sized by its length: a galleon, not a 6 m dinghy
   if (RAIL || LOCO_HERO) P.height_m = 4.4;        // a locomotive, to the top of its chimney
   const pg = (RAIL || LOCO_HERO) ? { scene: buildLoco(), animations: [] }
     : procRoot
     ? { scene: procRoot, animations: [] }
-    : SHIP_HERO ? { scene: buildShip({ seed: SPEC.seed || 1, flag: /navy|royal|warship/i.test(String(SPEC.prompt || '')) ? 'navy' : 'pirate' }), animations: [] }
+    : SHIP_HERO ? { scene: LONGSHIP ? buildLongship({ seed: SPEC.seed || 1 }) : buildShip({ seed: SPEC.seed || 1, flag: /navy|royal|warship/i.test(String(SPEC.prompt || '')) ? 'navy' : 'pirate' }), animations: [] }
     : (P.car_params && !P.car_params.library)
     ? { scene: buildCar(P.car_params), animations: [] }
     : await loadGLB(P.asset);            // hard fail = visible error
@@ -22101,7 +22185,10 @@ async function main() {
   // "Blade" because the first slot was only ever named for a sword. When the
   // hero shoots and his role is not a gunman, that slot is named for a bow.
   const _craft = SPEC.player && ['fly', 'drive', 'swim'].includes(SPEC.player.mode) && !/^(dragon|eagle|hawk|owl|bird|phoenix|griffin|bat|dolphin|shark|orca|whale|fish)s?$/.test(HERO_ROLE);
-  if (SPEC.player && SPEC.player.attack === 'ranged' && _craft) {
+  if (typeof LONGSHIP !== 'undefined' && LONGSHIP) {
+    // a longship has no cannon: its crew throws spears (2026-10-23)
+    Object.assign(WEAPONS[0], { name: 'Spears', icon: '🔱', desc: 'hold F to throw' });
+  } else if (SPEC.player && SPEC.player.attack === 'ranged' && _craft) {
     // a fighter, a gunship or a warship fires guns, not arrows
     Object.assign(WEAPONS[0], { name: 'Guns', icon: '💥', desc: 'hold F to fire' });
   } else if (SPEC.player && SPEC.player.attack === 'ranged' && ROLE_PICK !== 'pistol') {
@@ -24433,6 +24520,16 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
   }
   const bloom = new UnrealBloomPass(
     new THREE.Vector2(innerWidth, innerHeight), 0.25, 0.65, 0.85);
+  // ONE BAD PIXEL IS NOT A BLACK BOX (2026-10-23): a NaN from any shader went
+  // through the bloom's blur chain and came out as a hard black rectangle over
+  // half the frame (the hebridean lighthouse beam). Bloom now skips a pixel
+  // that is not a number, so one shader's slip stays one pixel
+  if (bloom.materialHighPassFilter) {
+    const hp = bloom.materialHighPassFilter;
+    hp.fragmentShader = hp.fragmentShader.replace('vec4 texel = texture2D( tDiffuse, vUv );',
+      'vec4 texel = texture2D( tDiffuse, vUv ); if (any(isnan(texel)) || any(isinf(texel)) || !(texel.r < 65000.0 && texel.g < 65000.0 && texel.b < 65000.0)) texel = vec4(0.0);');
+    hp.needsUpdate = true;
+  }
   composer.addPass(bloom);
   // r15 GODRAYS: screen-space light shafts from the sun — the single
   // biggest 'photograph' mood cue for scenic worlds (dawn forest, sunset

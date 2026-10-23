@@ -21,8 +21,13 @@ Three rounds of stress tests built dozens of unusual sentences and gave each kin
 - **Vehicles built in code**: a hot-air balloon you fly (burner and vent) over Cappadocia's fairy chimneys, a six-wheeled planetary rover, a steam locomotive on its line.
 - **Kites** that fly downwind on a sagging string; **spacewalks** that float beside the station above the Earth; **skiing** on snow; **hurricanes** that rain.
 - **Casting**: the rider rides the mount, the ghost can be the hero, a snowball fight is kids throwing snowballs, a giant robot stays giant, period settings dress their crowds, a creature is never played by a person.
+- **Viking longships**: "a viking longship raids a foggy coast" sails a clinker-built longship with a dragon prow, shields along the gunwales, oars out and a striped square sail, against longships of its own kind under other colours, on a spruce-and-birch northern coast. Its crew throws spears.
 
 ### Fixed
+- **A black box over half the frame**: one NaN pixel (the lighthouse beam's shader) went through the bloom blur and came out as a hard black rectangle. The beam is clamped, and bloom now skips any pixel that is not a number.
+- **"The pyramids of Giza" built no pyramid**: the goal was plural and only "pyramid" was read.
+- Fog is still air: a sentence that names fog or mist and no weather is no longer rained on.
+- Markdown on title cards: a ship's name came through as "\*Sea Serpent\*".
 - **Whole plans thrown away**: one out-of-range number in the planner's answer (a 5 cm ant, a 30 m robot) discarded the entire spec; the spec now repairs itself.
 - **Insects rigged standing on their tails**: the upright check reads where the body's mass sits.
 - **Seconds of boot in every world with stone**: a texture stored in a material's `userData` was JSON-serialised, image and all, on every clone.

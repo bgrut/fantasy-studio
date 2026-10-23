@@ -60,6 +60,8 @@ def _clean(s, limit=260):
     s = s.replace("�", "'").replace("’", "'").replace("‘", "'").replace("“", '"').replace("”", '"')
     # (2026-10-21) and a spaced hyphen, which reads as the dash it stands in for
     s = s.replace("—", ", ").replace("–", "-").replace(" -- ", ", ").replace(" - ", ", ")
+    # (2026-10-23) and markdown: a ship's name came to the card as "*Sea Serpent*"
+    s = re.sub(r"(?<!\w)(\*\*|__|\*|_)(\S(?:.*?\S)?)\1(?!\w)", r"\2", s).replace("*", "")
     s = re.sub(r"\s+", " ", s)
     s = re.sub(r",\s*,", ",", s)
     if len(s) <= limit:

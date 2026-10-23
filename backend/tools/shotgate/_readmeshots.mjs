@@ -21,7 +21,7 @@ for (const s of list) {
     await wait(s.wait || 5000);
     if (s.pin) await p.evaluate((src) => { window.__camPin = eval(src); }, s.pin);
     // the world alone: every overlay hidden
-    await p.evaluate(() => { const st = document.createElement('style'); st.textContent = 'body > *:not(canvas):not(#app):not(script):not(style){visibility:hidden !important} #app > *:not(canvas){visibility:hidden !important}'; document.head.appendChild(st); });
+    await p.evaluate(() => { const st = document.createElement('style'); st.textContent = 'body > *:not(canvas):not(#app):not(script):not(style){visibility:hidden !important} #app > *:not(canvas){visibility:hidden !important}'; document.head.appendChild(st); for (const c of document.querySelectorAll('canvas')) if (c.clientWidth < 900) c.style.visibility = 'hidden'; });   // the minimap is a canvas too
     await wait(s.pin ? 2500 : 900);
     await p.screenshot({ path: `${process.env.OUT}/${s.name}.jpg`, type: 'jpeg', quality: 90 });
     console.log('shot', s.name, errs.length ? 'ERR ' + errs[0] : '');

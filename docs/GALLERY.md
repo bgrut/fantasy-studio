@@ -41,6 +41,37 @@ Unedited in-game captures of games built from the sentence under each, HUD hidde
 </tr>
 </table>
 
+### More games
+
+Earlier builds, rebuilt on the October engine and captured the same way.
+
+<table>
+<tr>
+<td width="50%"><img src="../.github/assets/games/classics/tokyo-drift.jpg" width="100%"/><br/><em>"a tokyo drift racing game through neon streets at night"</em></td>
+<td width="50%"><img src="../.github/assets/games/classics/samurai-shrine.jpg" width="100%"/><br/><em>"a samurai walks through a bamboo forest to a mountain shrine as the sun sets over the cherry blossoms"</em></td>
+</tr>
+<tr>
+<td width="50%"><img src="../.github/assets/games/classics/colosseum.jpg" width="100%"/><br/><em>"a gladiator fights three opponents in the colosseum"</em></td>
+<td width="50%"><img src="../.github/assets/games/classics/giza.jpg" width="100%"/><br/><em>"an explorer reaches the pyramids of giza at sunrise"</em></td>
+</tr>
+<tr>
+<td width="50%"><img src="../.github/assets/games/classics/monastery.jpg" width="100%"/><br/><em>"a monk climbs a himalayan monastery at dawn"</em></td>
+<td width="50%"><img src="../.github/assets/games/classics/frontier-town.jpg" width="100%"/><br/><em>"a sheriff hunts three outlaws in a wild west frontier town at high noon"</em></td>
+</tr>
+<tr>
+<td width="50%"><img src="../.github/assets/games/classics/candy-land.jpg" width="100%"/><br/><em>"a kawaii candy land: hop across giant cupcakes and collect 20 sweets"</em></td>
+<td width="50%"><img src="../.github/assets/games/classics/volcano.jpg" width="100%"/><br/><em>"climb a smoking volcano and escape the lava flows"</em></td>
+</tr>
+<tr>
+<td width="50%"><img src="../.github/assets/games/classics/crystal-cave.jpg" width="100%"/><br/><em>"explore a glowing crystal cave deep underground"</em></td>
+<td width="50%"><img src="../.github/assets/games/classics/venice.jpg" width="100%"/><br/><em>"a gondolier delivers letters through the canals of venice"</em></td>
+</tr>
+<tr>
+<td width="50%"><img src="../.github/assets/games/classics/scottish-lighthouse.jpg" width="100%"/><br/><em>"a lighthouse keeper crosses a stormy scottish island at dusk"</em></td>
+<td width="50%"><img src="../.github/assets/games/classics/joust.jpg" width="100%"/><br/><em>"a knight jousts at a medieval tournament in front of the castle"</em></td>
+</tr>
+</table>
+
 ---
 
 ## Cinematic Wildlife

@@ -1251,8 +1251,11 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             try:
                 import re as _nre
                 _np = (req.prompt or "").lower()
-                if (_nre.search(r"\b(sails?|sailing|naval|sea battle|ship battle|broadside|cannons?|sinks?|sinking|galleons?|frigates?|warships?|fleet|armada)\b", _np)
-                        and _nre.search(r"\b(ships?|galleons?|frigates?|fleet|warships?|boats?|vessels?|navy|armada)\b", _np)
+                # (2026-10-23) "a viking longship raids a foggy coast" stood a viking on a sand spit:
+                # a longship is a ship, and a raid by one is sailed
+                _longship = bool(_nre.search(r"\b(longships?|drakkars?|viking (?:ships?|boats?|fleet))\b", _np))
+                if ((_nre.search(r"\b(sails?|sailing|naval|sea battle|ship battle|broadside|cannons?|sinks?|sinking|galleons?|frigates?|warships?|fleet|armada)\b", _np) or _longship)
+                        and (_nre.search(r"\b(ships?|galleons?|frigates?|fleet|warships?|boats?|vessels?|navy|armada)\b", _np) or _longship)
                         and not _nre.search(r"\b(space|star|air|sky)\s?ships?\b", _np)
                         # (2026-10-22) "a paper boat sails down a rain gutter" was given three enemy
                         # ships to sink: sailing is not fighting; a battle says so
@@ -1260,7 +1263,7 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                         and not _nre.search(r"\b(paper|toy|model|origami|bath ?tub|rubber duck)\s+(?:boats?|ships?|sailboats?)\b", _np)
                         and getattr(spec, "genre", "") != "factory"):
                     from app.game_export.spec import ObjectiveSpec as _NOS, EntitySpec as _NES
-                    spec.player.name = "pirate ship"
+                    spec.player.name = "longship" if _longship else "pirate ship"
                     spec.player.asset = ""
                     spec.player.mode = "swim"
                     spec.player.buoyant = True
@@ -1277,6 +1280,8 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                     # palm islands in a sea that runs to the horizon (the flora's island
                     # biome ends the land at a shore), not a jungle round a pond
                     spec.world.flora = "palm island"
+                    if _longship:   # (2026-10-23) a viking raid is on a northern coast: spruce and birch, not palms
+                        spec.world.flora = "norse coast"
                     _wd = {"two": 2, "three": 3, "four": 4, "five": 5, "six": 6}
                     _nm = _nre.search(r"\b(\d+|two|three|four|five|six)\s+(?:enemy\s+|rival\s+|navy\s+|merchant\s+)?(?:ships?|galleons?|frigates?|boats?|vessels?)", _np)
                     _n = (int(_nm.group(1)) if _nm.group(1).isdigit() else _wd[_nm.group(1)]) if _nm else 3
@@ -2485,7 +2490,8 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                 job.setdefault("notes", []).append(f"'{spec.player.name}' rides a {spec.player.ride}")
                 # (2026-10-22) "a skier races down a steep black run through the trees" skied a summer
                 # meadow of flowers: a board or skis on snow is a snow slope, pines on it, no grass
-                if spec.player.ride in ("snowboard", "skis", "sled") and not _rdre.search(r"\b(sand ?board\w*|dune|desert|grass ?ski\w*)\b", (req.prompt or "").lower()):
+                # (2026-10-23) not where the sentence names other ground: "a snowboarder patrols a salt marsh" got snow
+                if spec.player.ride in ("snowboard", "skis", "sled") and not _rdre.search(r"\b(sand ?board\w*|dunes?|desert|grass ?ski\w*|marsh\w*|swamps?|bogs?|beach\w*|sand|jungle|savann?ah?|reef|city|streets?|meadow|prairie|canyon)\b", (req.prompt or "").lower()):
                     spec.world.ground_color = [0.9, 0.92, 0.95]
                     spec.world.grass = False
                     if getattr(spec.world, "archetype", "plain") in ("plain", "basin", "mesa", "dunes"):
@@ -2821,6 +2827,13 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                 if _wx and spec.world.weather != _wx and spec.world.sky not in ("space", "mars"):
                     job.setdefault("notes", []).append(f"weather {spec.world.weather} -> {_wx} (the sentence says so)")
                     spec.world.weather = _wx
+                # (2026-10-23) "a viking longship raids a foggy coast at dawn" came out in a downpour:
+                # fog is still air. A sentence that names fog or mist and no weather gets none
+                elif (not _wx and spec.world.weather in ("rain", "snow")
+                        and _hre.search(r"\b(fog\w*|mist\w*|haze|hazy)\b", _hp)
+                        and not _hre.search(r"\b(wet|winter\w*|frozen|icy|arctic|snowy)\b", _hp)):
+                    job.setdefault("notes", []).append(f"weather {spec.world.weather} -> none (fog, not rain)")
+                    spec.world.weather = "none"
                 if _hre.search(r"\b(storm\w*|gales?|thunder\w*|tempest\w*|hurricanes?|blizzard\w*)\b", _hp):
                     spec.world.wind = max(float(getattr(spec.world, "wind", 0.5) or 0.5), 0.95)
                     if spec.world.sky == "day":

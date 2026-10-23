@@ -91,7 +91,7 @@ _CRAFT = ("jet", "plane", "airplane", "spaceship", "starship", "spacecraft",
           "biplane", "airship", "ufo", "shuttle", "drone", "zeppelin")
 _AQUATIC = ("whale", "shark", "fish", "dolphin", "orca", "mermaid", "octopus",
             "squid", "turtle", "seal", "stingray", "eel", "submarine", "boat",
-            "ship", "kayak")
+            "ship", "kayak", "longship", "drakkar")   # (2026-10-23) one word, no 'ship' at a word edge: the LLM called a longship a car
 
 # headless Blender for the vehicle orientation normalize (5.1 preferred;
 # config default may point at an older install)
