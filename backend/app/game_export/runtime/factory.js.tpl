@@ -1803,10 +1803,41 @@ scene.add(cube);
         isl.push({ g, a: rI() * 6.283, r: HALF * (2.5 + rI() * 1.2), y: (rI() - 0.4) * HALF * 0.8, size: HALF * (0.10 + rI() * 0.09),
                    w: (0.003 + rI() * 0.006) * (rI() < 0.5 ? 1 : -1), yaw: rI() * 6.283, bob: rI() * 6.283, tilt: (rI() - 0.5) * 0.16 });
       }
-      // the whole ring is two draw calls: the islets batched, the falls instanced (each fall rides its islet)
-      const nV = baked.reduce((n, q) => n + q.attributes.position.count, 0);
-      const batch = new THREE.BatchedMesh(baked.length, nV, 0, isleM);
+      // PAPER CRANES BETWEEN THE ISLETS (2026-10-24): two skeins of orizuru, folded in washi cream,
+      // faded vermilion and indigo, drift round the world among the islets in loose V formations,
+      // beating their wings slowly: broad triangle wings, a body like a tent, the neck and the tail
+      // rising to points and the head folded down. Flat shading puts the creases in. Each paper's
+      // three wing poses are geometries of the islets' own batch, swapped per bird each frame
+      // (setGeometryIdAt), so the flock costs no draw call. (Drawn first as pale realistic birds:
+      // thin blades that bloomed into stars under the key light.)
+      const craneFold = (paperHex, tipY) => {
+        const P = [], C = [], paper = new THREE.Color(paperHex), fold = paper.clone().multiplyScalar(0.72);
+        const tri = (a, b, c, col) => { P.push(...a, ...b, ...c); for (let k = 0; k < 3; k++) C.push(col.r, col.g, col.b); };
+        const front = [0, 0.0, 0.18], back = [0, 0.0, -0.18], top = [0, 0.12, 0], under = [0, -0.07, 0];
+        for (const s of [1, -1]) {
+          const side = [s * 0.07, 0.02, 0];
+          tri(front, top, side, paper); tri(back, side, top, paper); tri(front, side, under, fold); tri(back, under, side, fold);
+          tri([s * 0.02, 0.07, 0.15], [s * 0.02, 0.07, -0.15], [s * 0.56, tipY, -0.02], paper);       // the wing, one broad fold
+          tri([s * 0.02, 0.07, 0.15], [s * 0.3, (0.07 + tipY) / 2 - 0.02, 0.05], [s * 0.02, 0.07, -0.15], fold);   // its crease, shaded under
+        }
+        tri([0, -0.02, 0.1], [0, 0.07, 0.15], [0, 0.36, 0.42], paper);                               // the neck rising
+        tri([0, 0.36, 0.42], [0, 0.31, 0.41], [0, 0.27, 0.53], fold);                                // the head folded down
+        tri([0, -0.02, -0.1], [0, 0.07, -0.15], [0, 0.38, -0.45], paper);                            // the tail
+        const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(C, 3));
+        g.computeVertexNormals(); g.computeBoundingSphere(); return g; };
+      const PAPERS = [0xb9ad94, 0x963c30, 0x34446c];
+      const folds = PAPERS.map(h => [craneFold(h, 0.26), craneFold(h, 0.07), craneFold(h, -0.12)]);
+      const skeins = [{ n: 13, r: 3.05, y: 0.18, w: 0.022, ph: 0 }, { n: 9, r: 2.7, y: -0.12, w: -0.017, ph: 2.6 }];
+      const birds = [];
+      skeins.forEach((S, si) => { for (let j = 0; j < S.n; j++) { const rank = Math.ceil(j / 2), side = j === 0 ? 0 : (j % 2 ? 1 : -1);
+        birds.push({ si, back: rank, side: side * rank, flap: rI() * 6.283, rate: 1.6 + rI() * 0.5, jit: rI() * 6.283, paper: rI() < 0.55 ? 0 : rI() < 0.5 ? 1 : 2 }); } });
+      // the whole ring is two draw calls: the islets and the cranes batched, the falls instanced (each fall rides its islet)
+      const nV = baked.reduce((n, q) => n + q.attributes.position.count, 0) + folds.flat().reduce((n, q) => n + q.attributes.position.count, 0);
+      const batch = new THREE.BatchedMesh(baked.length + birds.length, nV, 0, isleM);
       baked.forEach(q => batch.addInstance(batch.addGeometry(q)));
+      const poseIds = folds.map(set => set.map(q => batch.addGeometry(q)));
+      birds.forEach(b => { b.id = batch.addInstance(poseIds[b.paper][1]); });
+      islets.userData.flock = { birds, skeins, poseIds };
       const fg = new THREE.PlaneGeometry(0.34, 3.6, 1, 8); fg.translate(0, -1.6, 0);
       const fallMesh = new THREE.InstancedMesh(fg, fallM, Math.max(1, falls.length)); fallMesh.renderOrder = 2;
       for (const m of [batch, fallMesh]) { m.frustumCulled = false; m.castShadow = false; m.receiveShadow = false; islets.add(m); }
@@ -1815,6 +1846,8 @@ scene.add(cube);
     }
     const tilt = new THREE.Quaternion().setFromEuler(new THREE.Euler(0.38, 0, 0.21));
     const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _p = new THREE.Vector3(), _sc = new THREE.Vector3();
+    const _bT = new THREE.Vector3(), _bR = new THREE.Vector3(), _bU = new THREE.Vector3(0, 1, 0), _bP = new THREE.Vector3();
+    const FLAP = [0, 1, 2, 1];
     window.__worldletTick = (t, camDist) => {
       const _grownNow = !SPEC.city && WORLDS[worldIdx] && WORLDS[worldIdx].fam === 'green';
       for (let k = 0; k < NR; k++) {
@@ -1836,6 +1869,23 @@ scene.add(cube);
           o.g.scale.setScalar(o.size); o.g.updateMatrix(); U.batch.setMatrixAt(k, o.g.matrix);
         });
         U.falls.forEach((f, j) => U.fallMesh.setMatrixAt(j, _m.multiplyMatrices(isl[f.k].g.matrix, f.m)));
+        // the cranes: each skein's leader rides a slow ring round the world, rising and falling; the rest
+        // keep their places down the two arms of the V, each on its own wingbeat
+        const F = U.flock;
+        if (F) {
+          const sp = HALF * 0.028;
+          for (const b of F.birds) {
+            const S = F.skeins[b.si], a0 = S.ph + t * S.w, dir = Math.sign(S.w);
+            _bT.set(-Math.sin(a0) * dir, 0, Math.cos(a0) * dir);
+            _bR.crossVectors(_bU, _bT);
+            _bP.set(Math.cos(a0) * S.r * HALF, (S.y + Math.sin(t * 0.05 + b.si * 2.1) * 0.12) * HALF, Math.sin(a0) * S.r * HALF)
+              .addScaledVector(_bT, -b.back * sp * 1.15).addScaledVector(_bR, b.side * sp * 0.95);
+            _bP.y += Math.sin(t * 0.8 + b.jit) * sp * 0.18;
+            _m.makeBasis(_bR, _bU, _bT).scale(_sc.setScalar(sp)).setPosition(_bP);
+            U.batch.setMatrixAt(b.id, _m);
+            U.batch.setGeometryIdAt(b.id, F.poseIds[b.paper][FLAP[Math.floor(t * b.rate + b.flap) & 3]]);
+          }
+        }
         U.fallMesh.instanceMatrix.needsUpdate = true;
       }
       if (cubeEdges) haloM.uniforms.uCol.value.copy(cubeEdges.material.color);

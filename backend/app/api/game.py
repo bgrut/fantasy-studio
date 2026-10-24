@@ -1076,7 +1076,9 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                                   r"put(?:s|ting)? out|extinguish(?:es|ing)?|douse[sd]?|dousing|"
                                   r"drop(?:s|ping)? off|drop(?:s|ping)?|deliver(?:s|ing)?|"
                                   r"chop(?:s|ping)? down|chop(?:s|ping)?|cut(?:s|ting)? down|fells|felling|"
-                                  r"find(?:s|ing)?|locate[sd]?|locating|track(?:s|ing)? down|search(?:es|ing)? for|"
+                                  # (2026-10-24) "searches a snowy slope for three lost hikers": the place
+                                  # can come between the search and the ones searched for
+                                  r"find(?:s|ing)?|locate[sd]?|locating|track(?:s|ing)? down|search(?:es|ing)?(?:\s+[a-z]+){0,4}?\s+for|look(?:s|ing)? for|"
                                   r"check(?:s|ing)?(?:\s+on)?|inspect(?:s|ing)?|tend(?:s|ing)?(?:\s+to)?)\s+"
                                   # (2026-10-17) "repairs a broken antenna" took "a" for the noun: "Fix 1 a broken"
                                   r"(?:all\s+)?(?:of\s+)?(?:the\s+|every\s+|an?\s+|his\s+|her\s+|their\s+|its\s+|my\s+)?(\d+|two|three|four|five|six|seven|eight|nine|ten)?\s*"
@@ -1097,7 +1099,7 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                         _noun = "it"
                     # finding is this objective only for people who are lost (2026-10-07):
                     # "finds three lost hikers"; "find the three lanterns" stays a collect
-                    if _rre.match(r"(find|locat|track|search)", _rm.group(0)):
+                    if _rre.match(r"(find|locat|track|search|look)", _rm.group(0)):
                         if _rre.search(r"\b(hikers?|climbers?|skiers?|campers?|people|children|kids|survivors?|villagers?|explorers?|walkers?|tourists?|scouts?)\b", _noun):
                             _noun = ("lost " + _noun) if not _noun.startswith(("lost", "missing", "stranded")) else _noun
                         else:
