@@ -179,7 +179,9 @@ _STYLE_ASKED = {
     "storybook": r"\b(storybook|picture ?book|gothic|tim burton|bedtime)\b",
     "kawaii": r"\b(kawaii|cute|adorable|candy ?land|candyland|gumdrops?|lollipops?|sugar ?land)\b",
     "comic": r"\b(comic\w*|graphic novel)\b",
-    "papercraft": r"\b(paper\w*|origami|cardboard)\b",
+    # (2026-10-24) a paper lantern, a paperboy and a paper round are things in a world, not its look:
+    # "a paper lantern festival ... at night" was cut out of card under a daylight grade
+    "papercraft": r"\b(paper(?!\s*(?:lanterns?|boys?|girls?|routes?|rounds?|mills?)\b)\w*|origami|cardboard)\b",
     "synthwave": r"\b(synthwave|retrowave|vaporwave|outrun|80s)\b",
 }
 
@@ -2524,6 +2526,24 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                 job.setdefault("notes", []).append(f"'{spec.player.name}' flies a hot air balloon: the burner climbs, the vent sinks, the wind carries it")
         except Exception as _ble:
             job.setdefault("notes", []).append(f"balloon rule skipped: {_ble}")
+        # A PILOT FLIES THE PLANE (2026-10-24): "a mail plane pilot flying over the snowy
+        # peaks of the andes" walked a snowfield on foot. The runtime builds a biplane round
+        # the pilot (buildPlane) and flies it on its wings: it cruises where the nose points,
+        # banks to turn, climbs and dives; the planner's plane entity is the craft itself
+        try:
+            import re as _plre
+            _plw = (req.prompt or "").lower()
+            if (_plre.search(r"\b(mail ?planes?|bi-?planes?|bush ?planes?|sea ?planes?|float ?planes?|crop[- ]?dust(?:er|ers|ing)|barnstorm\w*|aviators?|aviatrix|(?:air)?plane pilots?|pilots? (?:flies|flying|fly)|fl(?:y|ies|ying|ew) (?:an? |the |his |her |their )?(?:old |little |small |red |yellow |vintage |rickety )?(?:air)?planes?)\b", _plw)
+                    and player_glb and pattern == "biped" and getattr(spec, "genre", "adventure") != "factory"
+                    and (spec.player.ride or "") != "balloon"):
+                spec.player.ride = "plane"
+                spec.player.mode = "fly"
+                spec.player.car_params = None
+                spec.player.walk_speed, spec.player.run_speed = 18.0, 34.0
+                spec.entities = [e for e in spec.entities if not _plre.search(r"\b(?:air)?planes?\b|\baircraft\b|\bbiplanes?\b", (e.name or "").lower())]
+                job.setdefault("notes", []).append(f"'{spec.player.name}' flies a biplane: it cruises where the nose points, banks to turn, climbs and dives")
+        except Exception as _ple:
+            job.setdefault("notes", []).append(f"plane rule skipped: {_ple}")
         _race_seated = False
         # (2026-10-07) only a person takes a driver's seat: "a claymation snail
         # races three other snails" put the snail in a sedan. An animal races
@@ -2792,6 +2812,8 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         # back far enough to see the whole craft and the land it drifts over
         if (spec.player.ride or "") == "balloon":
             spec.camera.distance_m, spec.camera.height_m = 17.0, 7.0
+        if (spec.player.ride or "") == "plane":
+            spec.camera.distance_m, spec.camera.height_m = 13.0, 3.6   # behind the tail, the wings in frame
         # THE SENTENCE'S HOUR AND AIR (2026-10-07): "a fox hunts in a misty
         # autumn forest at dawn" was built under a plain midday sky with no
         # mist. A time of day the sentence names sets the sky; misty, foggy
@@ -3707,6 +3729,16 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         # ground near-level and ankle-deep under it, the runtime's SUNKEN builder raising the ruins
         _sunken = bool(_fre.search(r"\b(sunken|drowned|flooded|submerged|sunk|half-sunk) (?:city|town|ruins?|kingdom|empire|capital)\b|\batlant(?:is|ean)\b",
                                    (req.prompt or "").lower()))
+        # A WATER TOWN IS ITS CANAL (2026-10-24). "a paper lantern festival on a river in an
+        # old chinese town at night" laid a procedural English town of red brick round a
+        # flooded street. A Chinese town on a river or canal is the runtime's water town (the
+        # CANALS plan dressed the Jiangnan way): lagoon water, no street grid
+        _watertown = bool(_fre.search(r"\b(chinese|china|jiangnan|suzhou|wuzhen|zhouzhuang|tongli|xitang|hangzhou|lijiang|zhujiajiao|water ?town)\b", (req.prompt or "").lower())
+                          and _fre.search(r"\b(rivers?|canals?|waterways?|water ?town|lantern festival|boats?)\b", (req.prompt or "").lower())
+                          and not detect_place(req.prompt))
+        if _watertown:
+            is_city = False
+            spec.world.scatter = [sc for sc in spec.world.scatter if "building" not in Path(sc.asset).name]
         if _sunken:
             is_city = False
             spec.world.name = "sunken city"
@@ -3864,6 +3896,10 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             amp = 0.9                               # a town is built where the ground is level
         if spec.player.mode == "fly":
             amp = max(amp, 8.0)                     # flyers deserve relief to soar over
+        if (spec.player.ride or "") == "plane":
+            # a plane crosses 200 m in eight seconds: it needs country, and hills worth clearing
+            spec.world.size_m = max(float(spec.world.size_m or 0), 900.0)
+            amp = max(amp, 18.0)
         # WATER WORLDS: rolling seabed + a water plane the runtime renders;
         # swimmers stay beneath it, everything gets underwater fog below it
         # ── SEMANTIC LAYOUT (2026-08-25, phase 2): spatial language becomes
@@ -4049,7 +4085,7 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                 spec.world.ground_color = [0.27, 0.35, 0.2]
         # A CITY ON THE WATER (2026-10-11): Venice stands in its lagoon, so the
         # sea landform makes the water; the runtime cuts the canals (CANALS)
-        if (_fre.search(r"\b(venice|venezia|venetian|gondol\w*|grand canal|rialto|city of canals)\b", _pw7)
+        if ((_fre.search(r"\b(venice|venezia|venetian|gondol\w*|grand canal|rialto|city of canals)\b", _pw7) or _watertown)
                 and not getattr(spec.world, "platforms", False)):
             _arch = "archipelago"
             spec.world.archetype = "archipelago"

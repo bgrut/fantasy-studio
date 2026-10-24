@@ -1463,6 +1463,10 @@ export function biomeFor(words, arch, groundHSL) {
   // bracken, grey stone and the odd boulder, hardly a tree
   else if (has(/highlands?|\bglens?\b|\bmoors?\b|moorland|heather|scottish/) && !has(/forest|woods?\b/)) Object.assign(out, { kinds: K(['bush', 0.7], ['rock', 0.6], ['boulder', 0.3], ['birch', 0.05]), dens: 0.06,
     rockTint: T(0x7c7a74), leaf: { h: 0.88, s: 0.22, l: 0.27 } });
+  // THE YANGTZE DELTA (2026-10-24): an old chinese water town stood in a pine forest. Round it
+  // are camphor and plane trees, clumps of bamboo and low shrubs, a soft broadleaf green
+  else if (has(/jiangnan|suzhou|wuzhen|zhouzhuang|tongli|xitang|hangzhou|zhujiajiao|water ?town|chinese|china/)) Object.assign(out, { kinds: K(['broadleaf', 0.8], ['bamboo', 0.4], ['bush', 0.55], ['oak', 0.2]), dens: 0.45,
+    leaf: { h: 0.27, s: 0.42, l: 0.24 } });
   else if (has(/bamboo/)) Object.assign(out, { kinds: K(['bamboo', 1], ['bush', 0.25], ['broadleaf', 0.12]), dens: 1.35, leaf: { h: 0.25, s: 0.5, l: 0.3 } });
   else if (has(/redwood|sequoia/)) Object.assign(out, { kinds: K(['redwood', 1], ['spruce', 0.18], ['bush', 0.9], ['rock', 0.06]), dens: 0.55,
     leaf: { h: 0.31, s: 0.42, l: 0.16 } });
