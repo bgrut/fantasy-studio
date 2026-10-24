@@ -509,7 +509,7 @@ async function main() {
     const W = SPEC.world || {}, L0 = W.level || {};
     // (2026-10-07) the sentence's own place words too: "a himalayan monastery" grew an
     // oak wood because the title, "Monk's Ascent", never said where it was
-    const placeWords = (String(SPEC.prompt || '').toLowerCase().match(/\b(redwoods?|sequoias?|himalaya\w*|tibet\w*|nepal\w*|bhutan\w*|monaster(?:y|ies)|gompa|lavender|vineyards?|provence|tuscan\w*|black sand|basalt|sea stacks?|iceland\w*|kansas|wheat|olive groves?|tea plantations?|bamboo|cherry blossoms?|cherry trees?|sakura|hanami|highlands?|glens?|moors?|heather|lighthouses?|storm\w*|gales?|scottish|scotland|hebrid\w*|orkney|shetland|irish|ireland|cornwall|cornish|welsh|wales|maine|newfoundland|north sea|atlantic|faroe\w*|brittany|breton|cliffs?|headland|alien|xeno\w*|extraterrestrial|exoplanet|purple plants|fjords?|norw\w*|vikings?|norse|nordic|scandinavia\w*|egypt\w*|giza|pyramids?|pharaoh\w*|sphinx|sahara|oasis|alps|alpine|swiss|switzerland|tyrol\w*|dolomit\w*|sea ice|ice floes?|pack ice|polar bears?|icebergs?|orchards?|apples?|cider|tropical|islands?|isle|palms?|lagoon|atoll|pirates?|treasure|castaway|autumn|october|maples?|beach|seaside|lifeguards?|surf\w*|scuba|deep blue|deep ocean|deep sea|humpback|underwater|undersea|seabed|sea ?floor|ocean floor|coral|reefs?|kelp|cappadocia\w*|kapadokya|g[oö]reme|fairy chimneys?|chinese|china|jiangnan|suzhou|wuzhen|zhouzhuang|tongli|xitang|hangzhou|zhujiajiao|water ?town)\b/g) || []);   // (alien words, 2026-10-11; fjord, Egypt, Alps, sea ice the same day)
+    const placeWords = (String(SPEC.prompt || '').toLowerCase().match(/\b(redwoods?|sequoias?|himalaya\w*|tibet\w*|nepal\w*|bhutan\w*|monaster(?:y|ies)|gompa|lavender|vineyards?|provence|tuscan\w*|black sand|basalt|sea stacks?|iceland\w*|kansas|wheat|olive groves?|tea plantations?|bamboo|cherry blossoms?|cherry trees?|sakura|hanami|highlands?|glens?|moors?|heather|lighthouses?|storm\w*|gales?|scottish|scotland|hebrid\w*|orkney|shetland|irish|ireland|cornwall|cornish|welsh|wales|maine|newfoundland|north sea|atlantic|faroe\w*|brittany|breton|cliffs?|headland|alien|xeno\w*|extraterrestrial|exoplanet|purple plants|fjords?|norw\w*|vikings?|norse|nordic|scandinavia\w*|egypt\w*|giza|pyramids?|pharaoh\w*|sphinx|sahara|oasis|alps|alpine|swiss|switzerland|tyrol\w*|dolomit\w*|sea ice|ice floes?|pack ice|polar bears?|icebergs?|orchards?|apples?|cider|tropical|islands?|isle|palms?|lagoon|atoll|pirates?|treasure|castaway|autumn|october|maples?|beach|seaside|lifeguards?|surf\w*|scuba|deep blue|deep ocean|deep sea|humpback|underwater|undersea|seabed|sea ?floor|ocean floor|coral|reefs?|kelp|cappadocia\w*|kapadokya|g[oö]reme|fairy chimneys?|chinese|china|jiangnan|suzhou|wuzhen|zhouzhuang|tongli|xitang|hangzhou|zhujiajiao|water ?town|canad\w*|quebec|ontario|yukon|alaska\w*|boreal|taiga|siberia\w*|lumberjacks?|log ?driv\w*|logging|sawmill)\b/g) || []);   // (alien words, 2026-10-11; fjord, Egypt, Alps, sea ice the same day)
     const words = [W.name, W.sky, W.flora, W.weather, W.setting, SPEC.title, SPEC.description, ...placeWords]
       .filter(Boolean).join(' ').toLowerCase();
     if (L0.osm || L0.interior || W.pano || L0.cave || L0.giantroom) return null;
@@ -1755,6 +1755,35 @@ async function main() {
     if (LVL.landmarks) LVL.landmarks = [];
     window.__venice = { gl, style: JN ? 'jiangnan' : 'venice' };
     return { style: JN ? 'jiangnan' : 'venice', ux, uz, gl, U0, U1, CW0, CW1, SIDE, SW, QY, CY, WL, local, world, sideAt, inCity, isCanal, doors: [] };
+  })();
+  // ── A LOG DRIVE (2026-10-24) ───────────────────────────────────────────
+  // "a log driver riding timber down a wild canadian river" drove an SUV through a
+  // pine wood. The driver rides a log in the river's own channel (the level's river,
+  // carved beside the route), from abreast of the spawn down to the mill on the bank
+  // a few hundred metres on. The plan: the river as a line with its arc length, and
+  // the goal moved onto its bank downstream.
+  const LOGRIDE = (() => {
+    const pl = SPEC.player || {};
+    if ((pl.mode || 'walk') !== 'drive' || String(pl.ride || '').toLowerCase() !== 'log') return null;
+    if (!LVL || !LVL.river || !LVL.river.pts || LVL.river.pts.length < 6 || SPEC.world.water_level == null) return null;
+    const P0 = LVL.river.pts, S = [0];
+    for (let i = 1; i < P0.length; i++) S.push(S[i - 1] + Math.hypot(P0[i][0] - P0[i - 1][0], P0[i][1] - P0[i - 1][1]));
+    const near = (x, z) => { let bi = 0, bd = 1e18; P0.forEach((p, i) => { const d = (p[0] - x) ** 2 + (p[1] - z) ** 2; if (d < bd) { bd = d; bi = i; } }); return bi; };
+    const at = (s) => { s = Math.max(0, Math.min(S[S.length - 1], s)); let i = 1; while (i < S.length - 1 && S[i] < s) i++;
+      const a = P0[i - 1], b = P0[i], f = (s - S[i - 1]) / Math.max(1e-6, S[i] - S[i - 1]), l = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+      return { x: a[0] + (b[0] - a[0]) * f, z: a[1] + (b[1] - a[1]) * f, tx: (b[0] - a[0]) / l, tz: (b[1] - a[1]) / l }; };
+    const sp = (LVL.path && LVL.path[0]) || [0, 0], s0 = Math.max(12, S[near(sp[0], sp[1])]);
+    const gIdx = LVL.goal ? near(LVL.goal[0], LVL.goal[1]) : P0.length - 1;
+    // the river's line runs on past the map's edge, beyond the carve: the mill stands well inside it
+    const half = (LVL.size_m || SPEC.world.size_m || 200) / 2;
+    let sMax = S[S.length - 1] - 30;
+    for (let i = P0.length - 1; i > 0; i--) { if (Math.abs(P0[i][0]) < half * 0.8 && Math.abs(P0[i][1]) < half * 0.8) { sMax = Math.min(sMax, S[i]); break; } }
+    const s1 = Math.max(s0 + 60, Math.min(sMax, Math.max(S[gIdx], s0 + 260)));
+    const w = LVL.river.w || 5.5, q = at(s1), side = 1;
+    // the mill on the bank: the goal is where it stands, a step up from the water
+    LVL.goal = [q.x - q.tz * side * (w / 2 + 5), q.z + q.tx * side * (w / 2 + 5)];
+    window.__logDrive = { s0: +s0.toFixed(1), s1: +s1.toFixed(1), w };
+    return { at, S, s0, s1, w, WL: SPEC.world.water_level, cur: 2.6, side };
   })();
   // ── A TRAIN RUNS ON RAILS (2026-10-11) ─────────────────────────────────
   // "a train driver takes a steam locomotive through the swiss alps to the
@@ -14866,6 +14895,91 @@ async function main() {
         .setRotation({ x: 0, y: Math.sin(ang / 2), z: 0, w: Math.cos(ang / 2) }));
     }
   }
+  // ── THE LOG DRIVE, BUILT (see LOGRIDE above) ───────────────────────────
+  // The river is the drive: rocks breaking the surface with white water torn off
+  // them, always a passage left between; the rest of the timber afloat around the
+  // driver, turning slowly in the current; and at the end the sawmill on the bank,
+  // its wheel turning in the river, logs stacked against its wall.
+  if (LOGRIDE) {
+    const R = LOGRIDE, rG = mulberry32((SPEC.seed || 1) + 7373), WL = R.WL;
+    const M = (o) => { const m = new THREE.MeshStandardMaterial(o); m.userData.noAutoTex = true; return m; };
+    const cv = (w, h, draw, rep) => { const c = document.createElement('canvas'); c.width = w; c.height = h; draw(c.getContext('2d'), w, h);
+      const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; if (rep) t.repeat.set(rep[0], rep[1]); return t; };
+    const barkT = cv(256, 256, (x, W, H) => barkPaint(x, W, H, rG), [2, 3]);
+    const barkM = M({ map: barkT, roughness: 0.85 });
+    R.hazards = [];
+    // the rocks and the white water off them
+    const rockGeos = [], foamGeos = [];
+    for (let s = R.s0 + 34; s < R.s1 - 14; s += 17 + rG() * 15) {
+      const q = R.at(s), gap = (rG() - 0.5) * (R.w - 2.6), n = 1 + Math.floor(rG() * 2);
+      for (let k = 0; k < n; k++) {
+        let off = (rG() - 0.5) * (R.w - 1.0); if (Math.abs(off - gap) < 1.4) off = gap + (off >= gap ? 1.5 : -1.5);
+        off = Math.max(-R.w / 2 + 0.3, Math.min(R.w / 2 - 0.3, off));
+        const r = 0.45 + rG() * 0.45, x = q.x - q.tz * off, z = q.z + q.tx * off, yaw = Math.atan2(q.tx, q.tz);
+        const g = new THREE.DodecahedronGeometry(r, 1), gp = g.attributes.position;
+        const sd = rG() * 50;   // noise of the position: the faces' shared corners move together and the stone stays closed
+        for (let i = 0; i < gp.count; i++) { const hx = gp.getX(i), hy = gp.getY(i), hz = gp.getZ(i), hv = Math.sin(hx * 41.3 + hy * 77.1 + hz * 19.7 + sd) * 43758.5, n2 = 0.84 + (hv - Math.floor(hv)) * 0.28; gp.setXYZ(i, hx * n2, hy * n2, hz * n2); }
+        g.scale(1.15, 0.75, 1.3); g.rotateY(rG() * 3); g.translate(x, WL - r * 0.3, z); rockGeos.push(g);
+        const so = s, oo = off; R.hazards.push({ s: () => so, off: () => oo, len: r + 0.5, half: r * 0.85 });
+        const f = new THREE.PlaneGeometry(r * 2.2, 3.4 + r * 2); f.rotateX(-Math.PI / 2); f.rotateY(yaw); f.translate(x + q.tx * 1.7, WL + 0.035, z + q.tz * 1.7); foamGeos.push(f);
+        const f2 = new THREE.RingGeometry(r * 0.95, r * 1.35, 14); f2.rotateX(-Math.PI / 2); f2.translate(x, WL + 0.03, z); foamGeos.push(f2);
+      }
+    }
+    if (rockGeos.length) { const m = new THREE.Mesh(mergeGeometries(rockGeos.map(g => { g.deleteAttribute('uv'); return g; }), false), M({ color: 0x55534d, roughness: 0.42, metalness: 0.05, flatShading: true })); m.castShadow = m.receiveShadow = true; scene.add(m); }
+    const foamT = cv(64, 256, (x, W, H) => { x.clearRect(0, 0, W, H);
+      for (let i = 0; i < 70; i++) { const px = W * (0.15 + rG() * 0.7), py = rG() * H, a = 0.25 + rG() * 0.6; x.fillStyle = `rgba(255,255,255,${a})`; x.fillRect(px, py, 2 + rG() * 4, 14 + rG() * 40); }
+      const gr = x.createLinearGradient(0, 0, W, 0); gr.addColorStop(0, 'rgba(0,0,0,1)'); gr.addColorStop(0.25, 'rgba(0,0,0,0)'); gr.addColorStop(0.75, 'rgba(0,0,0,0)'); gr.addColorStop(1, 'rgba(0,0,0,1)');
+      x.globalCompositeOperation = 'destination-out'; x.fillStyle = gr; x.fillRect(0, 0, W, H); });
+    const foamM = new THREE.MeshBasicMaterial({ map: foamT, transparent: true, depthWrite: false, opacity: 0.85, color: 0xe8f2f4 });
+    if (foamGeos.length) { const fm = new THREE.Mesh(mergeGeometries(foamGeos.map(g => { if (!g.attributes.uv) g.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(g.attributes.position.count * 2), 2)); return g.index ? g.toNonIndexed() : g; }), false), foamM); fm.renderOrder = 3; scene.add(fm); }
+    // the rest of the drive afloat
+    const NL = 34, logG = new THREE.CylinderGeometry(0.27, 0.31, 4.4, 12); logG.rotateX(Math.PI / 2);
+    const LI = new THREE.InstancedMesh(logG, barkM, NL); LI.castShadow = true; LI.receiveShadow = true; LI.frustumCulled = false; scene.add(LI);
+    const logs = [];
+    for (let k = 0; k < NL; k++) { let s = R.s0 - 20 + rG() * (R.s1 - R.s0 + 30), off = (rG() - 0.5) * (R.w - 1.2);
+      if (Math.abs(s - R.s0) < 9 && Math.abs(off) < 1.6) s += 14;
+      const o = { s, off, v: R.cur * (0.75 + rG() * 0.35), yaw: (rG() - 0.5) * 0.9, spin: (rG() - 0.5) * 0.15, roll: rG() * 6, ph: rG() * 6 };
+      logs.push(o); R.hazards.push({ s: () => o.s, off: () => o.off, len: 2.5, half: 0.5 }); }
+    // the sawmill on the bank, facing the water
+    let wheel = null;
+    if (LVL.goal) {
+      const q = R.at(R.s1), gx = LVL.goal[0], gz = LVL.goal[1], gy = hAt(gx, gz);
+      const G = new THREE.Group(); G.position.set(gx, gy, gz); G.rotation.y = Math.atan2(q.x - gx, q.z - gz); scene.add(G);
+      const plankT = cv(256, 256, (x, W, H) => { x.fillStyle = '#6a5038'; x.fillRect(0, 0, W, H);
+        for (let y = 0; y < H; y += 32) { const l = 70 + rG() * 40; x.fillStyle = `rgb(${l + 30},${l + 12},${l - 8})`; x.fillRect(0, y + 1, W, 29); x.fillStyle = 'rgba(20,12,6,0.5)'; x.fillRect(0, y + 30, W, 2);
+          for (let k = 0; k < 10; k++) { x.fillStyle = 'rgba(30,18,8,0.25)'; x.fillRect(rG() * W, y + 4 + rG() * 22, 30 + rG() * 90, 1); } } }, [2, 1.4]);
+      const plankM = M({ map: plankT, roughness: 0.85 }), roofM = M({ color: 0x3a3632, roughness: 0.7 }), darkM = M({ color: 0x1a140e, roughness: 1 });
+      const add = (geo, mat, x, y, z, ry) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); if (ry) m.rotation.y = ry; m.castShadow = m.receiveShadow = true; G.add(m); return m; };
+      add(new THREE.BoxGeometry(9, 4.2, 6), plankM, 0, 2.1, -4.5);
+      for (const e of [-1, 1]) { const r = add(new THREE.BoxGeometry(9.8, 0.18, 3.7), roofM, 0, 5.15, -4.5 + e * 1.62); r.rotation.x = e * 0.55; }
+      add(new THREE.BoxGeometry(3, 2.6, 0.1), darkM, 1.6, 1.3, -1.46);                       // the open saw bay
+      const blade = add(new THREE.CylinderGeometry(0.7, 0.7, 0.03, 32), M({ color: 0xb8bcc0, metalness: 0.9, roughness: 0.3 }), 1.6, 1.4, -1.6); blade.rotation.x = Math.PI / 2;
+      // the wheel, half in the river, on an axle out of the wall
+      // its axle comes out of the mill wall toward the water (local +z), so the wheel turns in
+      // the line of the current, half under it, at the bank's edge
+      wheel = new THREE.Group(); wheel.position.set(-3.6, 1.0, 5.7); G.add(wheel);
+      for (const e of [-0.55, 0.55]) { const rim = new THREE.Mesh(new THREE.TorusGeometry(2.6, 0.09, 8, 32), plankM); rim.position.z = e; rim.castShadow = true; wheel.add(rim); }
+      for (let k = 0; k < 14; k++) { const a = k / 14 * Math.PI * 2, c = Math.cos(a), sn = Math.sin(a);
+        const pd = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.8, 1.2), plankM); pd.position.set(c * 2.45, sn * 2.45, 0); pd.rotation.z = a - Math.PI / 2; pd.castShadow = true; wheel.add(pd);
+        for (const e of [-0.55, 0.55]) { const sp = new THREE.Mesh(new THREE.BoxGeometry(0.08, 2.5, 0.1), plankM); sp.position.set(c * 1.25, sn * 1.25, e); sp.rotation.z = a - Math.PI / 2; wheel.add(sp); } }
+      add(new THREE.CylinderGeometry(0.14, 0.14, 7.4, 10), darkM, -3.6, 1.0, 2.0).rotation.x = Math.PI / 2;
+      // the timber stacked against the wall, three courses
+      for (let c = 0; c < 3; c++) for (let k = 0; k < 4 - c; k++) { const l = new THREE.Mesh(logG, barkM); l.position.set(5.6 + (k + c * 0.5) * 0.6 - 0.9, 0.3 + c * 0.52, -4.2); l.castShadow = true; G.add(l); }
+      world.createCollider(RAPIER.ColliderDesc.cuboid(4.5, 2.1, 3).setTranslation(gx + Math.sin(G.rotation.y) * -4.5, gy + 2.1, gz + Math.cos(G.rotation.y) * -4.5).setRotation({ x: 0, y: Math.sin(G.rotation.y / 2), z: 0, w: Math.cos(G.rotation.y / 2) }));
+    }
+    const m4 = new THREE.Matrix4(), qq = new THREE.Quaternion(), e3 = new THREE.Euler(0, 0, 0, 'YXZ'), p3 = new THREE.Vector3(), s3 = new THREE.Vector3(1, 1, 1);
+    let tt = 0;
+    window.__logDriveTick = (dt) => { tt += dt;
+      foamM.map.offset.y -= dt * 0.9;
+      if (wheel) wheel.rotation.z -= dt * 0.7;
+      logs.forEach((o, k) => { o.s += o.v * dt; if (o.s > R.s1 + 34) { o.s = R.s0 - 24; }
+        o.off = Math.max(-R.w / 2 + 0.6, Math.min(R.w / 2 - 0.6, o.off + Math.sin(tt * 0.3 + o.ph) * 0.15 * dt)); o.yaw += o.spin * dt; o.roll += dt * 0.25;
+        const q = R.at(o.s); e3.set(0, Math.atan2(q.tx, q.tz) + o.yaw, 0); qq.setFromEuler(e3);
+        qq.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), o.roll));
+        m4.compose(p3.set(q.x - q.tz * o.off, WL - 0.06 + Math.sin(tt * 1.4 + o.ph) * 0.03, q.z + q.tx * o.off), qq, s3); LI.setMatrixAt(k, m4); });
+      LI.instanceMatrix.needsUpdate = true; };
+    window.__logDriveTick(0);
+  }
   // ── THE WATER TOWN, BUILT (see CANALS above) ───────────────────────────
   // A town of the Yangtze delta on its canal: whitewashed houses shoulder to
   // shoulder with their feet in the water, dark tile roofs that sag between the
@@ -17089,6 +17203,18 @@ async function main() {
     g.userData.flame = flame; g.userData.glow = glow;
     return g;
   }
+  // spruce bark for a river log (2026-10-24): fine ridged streaks running the length, darker in
+  // the furrows, a few soft oval patches where the drive has scraped it to the pale wood, knots
+  function barkPaint(x, W, H, rnd) {
+    x.fillStyle = '#3e3024'; x.fillRect(0, 0, W, H);
+    for (let i = 0; i < 520; i++) { const l = 34 + rnd() * 46; x.fillStyle = `rgba(${l + 20},${l + 9},${l},0.8)`; x.fillRect(rnd() * W, rnd() * H, 1 + rnd() * 3, 18 + rnd() * 60); }
+    for (let i = 0; i < 120; i++) { x.fillStyle = 'rgba(14,9,5,0.45)'; x.fillRect(rnd() * W, rnd() * H, 1, 24 + rnd() * 70); }
+    for (let i = 0; i < 4; i++) { const cx = rnd() * W, cy = rnd() * H, rx = 6 + rnd() * 12, ry = 18 + rnd() * 34;
+      const gr = x.createRadialGradient(cx, cy, 1, cx, cy, ry); gr.addColorStop(0, 'rgba(196,160,112,0.95)'); gr.addColorStop(0.7, 'rgba(170,134,90,0.7)'); gr.addColorStop(1, 'rgba(170,134,90,0)');
+      x.fillStyle = gr; x.beginPath(); x.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2); x.fill(); }
+    for (let i = 0; i < 6; i++) { const cx = rnd() * W, cy = rnd() * H; x.fillStyle = 'rgba(20,12,6,0.85)'; x.beginPath(); x.ellipse(cx, cy, 2.5 + rnd() * 3, 4 + rnd() * 4, 0, 0, Math.PI * 2); x.fill();
+      x.strokeStyle = 'rgba(90,64,40,0.6)'; x.lineWidth = 1.5; x.beginPath(); x.ellipse(cx, cy, 6 + rnd() * 3, 9 + rnd() * 5, 0, 0, Math.PI * 2); x.stroke(); }
+  }
   function makeBoard(kind, seed) {
     const g = new THREE.Group(), k = String(kind || 'snowboard');
     const PAL = [0xe8402a, 0x2a8ae8, 0xf2c230, 0x30c08a, 0x9a4ae8, 0x222428];
@@ -17105,6 +17231,24 @@ async function main() {
     } else if (k === 'surfboard') {
       const b = add(new THREE.SphereGeometry(0.5, 20, 10), M(col, 0.2), 0, 0.03, 0); b.scale.set(0.55, 0.06, 2.2);
       add(new THREE.BoxGeometry(0.03, 0.012, 2.0), M(0xffffff, 0.3), 0, 0.062, 0);
+    } else if (k === 'log') {
+      // (2026-10-24) a peeled-in-places spruce log, half in the water, the driver on top
+      // of it with a pike pole: ash shaft, an iron spike and hook at the business end
+      const lg = new THREE.CylinderGeometry(0.3, 0.34, 4.6, 16, 6), lp = lg.attributes.position;
+      for (let i = 0; i < lp.count; i++) { const x = lp.getX(i), z = lp.getZ(i), y = lp.getY(i), n = 1 + Math.sin(y * 3.1 + Math.atan2(z, x) * 5) * 0.025 + Math.sin(y * 7.7) * 0.015; lp.setX(i, x * n); lp.setZ(i, z * n); }
+      lg.computeVertexNormals(); lg.rotateX(Math.PI / 2);
+      const barkT = (() => { const c = document.createElement('canvas'); c.width = 256; c.height = 256; const x = c.getContext('2d');
+        barkPaint(x, 256, 256, Math.random);
+        const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(2, 3); return t; })();
+      const bm = new THREE.MeshStandardMaterial({ map: barkT, roughness: 0.85 }); bm.userData.noAutoTex = true;
+      add(lg, bm, 0, 0, 0);
+      for (const e of [-1, 1]) { const end = add(new THREE.CircleGeometry(0.31, 16), M(0xc8a878, 0.8), 0, 0, e * 2.3); end.rotation.y = e > 0 ? 0 : Math.PI;
+        for (let r2 = 0.08; r2 < 0.3; r2 += 0.07) { const ring = add(new THREE.RingGeometry(r2, r2 + 0.012, 16), M(0x8a6a48, 0.8), 0, 0, e * 2.301); ring.rotation.y = end.rotation.y; } }
+      const pole = new THREE.Group(); pole.position.set(-0.32, 1.05, 0); pole.rotation.set(0.95, 0, 0.12); g.add(pole);
+      const sh = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.022, 4.2, 8), M(0xc8b088, 0.55)); sh.castShadow = true; pole.add(sh);
+      const sp2 = new THREE.Mesh(new THREE.ConeGeometry(0.03, 0.22, 8), M(0x3a3a3e, 0.4, 0.7)); sp2.position.y = -2.2; sp2.rotation.x = Math.PI; pole.add(sp2);
+      const hk = new THREE.Mesh(new THREE.TorusGeometry(0.07, 0.012, 6, 12, Math.PI * 1.2), M(0x3a3a3e, 0.4, 0.7)); hk.position.set(0.05, -1.98, 0); pole.add(hk);
+      g.userData.pole = pole;
     } else if (k === 'sled') {
       add(new THREE.BoxGeometry(0.5, 0.05, 1.2), M(0x9a6a3e, 0.7), 0, 0.2, 0);
       for (const sx of [-0.22, 0.22]) add(new THREE.BoxGeometry(0.04, 0.04, 1.4), M(0x3a3a3e, 0.4, 0.6), sx, 0.03, 0);
@@ -21240,8 +21384,8 @@ async function main() {
   }
   polishVehiclePaint(pRoot, (P.mode || 'walk') === 'drive' && !RIDE && !RAIL);
   if (RIDE) {
-    holder.add(makeBoard(RIDE, SPEC.seed || 0));
-    pRoot.position.y += 0.07;
+    const _bd = makeBoard(RIDE, SPEC.seed || 0); holder.add(_bd); window.__board = _bd;
+    pRoot.position.y += RIDE === 'log' ? 0.33 : 0.07;   // a log driver stands on top of a log a hand under half out of the water
     if (RIDE !== 'skis' && RIDE !== 'sled') pRoot.rotation.y += Math.PI / 2;   // a boarder stands side-on
   }
   // a balloon pilot flies in the basket (2026-10-22): the flyer is centred on its body,
@@ -25394,7 +25538,7 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
   if (DRIVE) {                                   // driving instructions in the HUD
     const hint = document.querySelector('#hud .hint');
     if (hint) {
-      hint.textContent = RAIL ? 'W open the regulator · S brake · the line does the steering' : 'W throttle · S brake/reverse · A/D steer · Shift boost'
+      hint.textContent = RAIL ? 'W open the regulator · S brake · the line does the steering' : LOGRIDE ? 'W pole on · S check the log · A/D work across the river · Shift drive hard' : 'W throttle · S brake/reverse · A/D steer · Shift boost'
         + ((SPEC.objectives || []).some(o => o.kind === 'race')
            ? ': follow the orange gates to the checkered finish' : '');
     }
@@ -26874,6 +27018,34 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
       const _p = DESIGN.push(typeof dt === 'number' ? dt : 0.016); if (_p) { desired.x += _p[0]; desired.z += _p[1]; }
     }
     // (2026-10-22) a board on the sea rides the surf (SURF): it floats on the swell, a face carries it in
+    // (2026-10-24) a log driver rides the drive (LOGRIDE): the current carries the log down
+    // the channel, W poles it on and S drags the pole to check it, A and D work it across;
+    // a rock or another log in the way knocks it back and sets it rolling under the feet
+    if (LOGRIDE && RIDE === 'log') {
+      const R = LOGRIDE, p0 = body.translation(), tN = performance.now() / 1000;
+      if (R.s === undefined) { R.s = R.s0; R.v = R.cur; R.off = 0; R.wob = 0; R.knock = 0; }
+      const pole = gameStarted ? (-mv.z > 0.3 ? 1 : (-mv.z < -0.3 ? -1 : 0)) : 0;
+      R.v = Math.max(0.5, THREE.MathUtils.damp(R.v, R.cur + pole * 2.2 + (mv.run && pole > 0 ? 1.4 : 0), 0.9, dt));
+      R.s = Math.min(R.s1 + 40, R.s + R.v * dt);
+      R.off = THREE.MathUtils.clamp(R.off + (gameStarted ? mv.x : 0) * 1.9 * dt, -R.w / 2 + 0.7, R.w / 2 - 0.7);
+      for (const h of (R.hazards || [])) { const ds = h.s() - R.s, dO = h.off() - R.off;
+        if (ds > 0 && ds < h.len && Math.abs(dO) < h.half + 0.45) { R.v = Math.min(R.v, 0.6); R.s = h.s() - h.len - 0.05; R.off -= Math.sign(dO || 1) * 0.6 * dt * 20;
+          if (R.knock <= 0) { R.knock = 0.9; R.wob = (Math.random() < 0.5 ? -1 : 1) * 0.45; sfx('hit'); } } }
+      R.knock = Math.max(0, R.knock - dt); R.wob = THREE.MathUtils.damp(R.wob, 0, 2.2, dt);
+      // the log floats on the water drawn (WATER_Y, clamped below the banks), and the holder the log
+      // hangs from rides under the body by the controller's half height: measured, not assumed
+      R._v = R._v || new THREE.Vector3(); const _hOff = p0.y - holder.getWorldPosition(R._v).y;
+      const q = R.at(R.s), tx0 = q.x - q.tz * R.off, tz0 = q.z + q.tx * R.off, wy = (WATER_Y !== null ? WATER_Y : R.WL) - 0.04 + Math.sin(tN * 1.7) * 0.035 + _hOff;
+      if (!R.init) { body.setTranslation({ x: tx0, y: wy, z: tz0 }, true); R.init = true; desired = { x: 0, y: 0, z: 0 }; modelYaw = Math.atan2(q.tx, q.tz); }
+      else desired = { x: tx0 - p0.x, y: wy - p0.y, z: tz0 - p0.z };
+      R._tgt = { x: tx0, y: wy, z: tz0 };
+      vy = 0; speed = 0; vSpeed = R.v; carVX = q.tx * R.v; carVZ = q.tz * R.v;
+      modelYaw = dampAngle(modelYaw, Math.atan2(q.tx, q.tz) + R.wob * 0.5, 3, dt);
+      R.roll = Math.sin(tN * 1.25) * 0.045 + R.wob * 0.5;                      // the log rolls; the driver rides it (set below, after the rider's lean)
+      const bp = window.__board && window.__board.userData.pole;
+      if (bp) bp.rotation.x = 0.95 + (pole > 0 ? Math.max(0, Math.sin(tN * 3.2)) * 0.35 : 0);   // poling: the spike reaches and pushes
+      window.__logState = { s: +R.s.toFixed(1), v: +R.v.toFixed(2), off: +R.off.toFixed(2), knock: R.knock > 0 };
+    }
     if (SURF && RIDE === 'surfboard' && WATER_Y !== null) {
       const p0 = body.translation(), [sa, sc] = SURF.local(p0.x, p0.z);
       if (hAt(p0.x, p0.z) < WATER_Y - 0.2) {
@@ -26896,6 +27068,9 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
     if (kcc.computedGrounded()) vy = 0;
     const t = body.translation();
     body.setNextKinematicTranslation({ x: t.x + cm.x, y: t.y + cm.y, z: t.z + cm.z });
+    // the log is placed by the river, not the controller: drive mode snaps to the ground, and a
+    // log in a river 1.2 m deep was snapped down onto its bed every frame
+    if (LOGRIDE && LOGRIDE._tgt) body.setNextKinematicTranslation(LOGRIDE._tgt);
     // LAVA BURNS (2026-10-03): a step into a channel costs a heart and puts
     // the hero back on the last solid ground they stood on, well clear of it
     if (VOLC && gameStarted && !won && !lost) {
@@ -26981,7 +27156,10 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
       leanR = THREE.MathUtils.damp(leanR,
         THREE.MathUtils.clamp(mv.x * Math.min(Math.abs(vSpeed) / 8, 1) * 0.07, -0.08, 0.08), 6, dt);
       holder.rotation.x = leanP; holder.rotation.z = leanR;
-      if (RIDE) {
+      if (RIDE === 'log' && LOGRIDE) {
+        holder.rotation.z = LOGRIDE.roll || 0; holder.rotation.x = 0;       // a log does not carve: it rolls
+        if (mixer) setAnim(actions.__idle);
+      } else if (RIDE) {
         // a rider carves: crouched, leaning hard into the turn, upright to glide
         leanR = THREE.MathUtils.damp(leanR, THREE.MathUtils.clamp(mv.x * Math.min(Math.abs(vSpeed) / 6, 1) * 0.42, -0.42, 0.42), 5, dt);
         holder.rotation.z = leanR; holder.rotation.x = leanP * 2.5;
@@ -27294,6 +27472,7 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
       if (window.__swellTick) window.__swellTick(dt);
       if (window.__kiteTick) window.__kiteTick(dt);
       if (window.__waterTownTick) window.__waterTownTick(dt);
+      if (window.__logDriveTick) window.__logDriveTick(dt);
       if (window.__parkTick) window.__parkTick(dt);
       if (window.__repairStep) window.__repairStep(dt);
       if (window.__growTick) window.__growTick(dt);
@@ -27404,7 +27583,7 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
       if (goalMesh) goalMesh.rotation.z += dt * 0.8;
       const st = steps[stepIdx];
       const gd = Math.hypot(goalPos.x - nt.x, goalPos.z - nt.z);
-      if (st && st.kind === 'reach' && gd < (PLANE ? 18 : 2.2)) advanceStep();   // a plane passes over at speed
+      if (st && st.kind === 'reach' && gd < (PLANE ? 18 : LOGRIDE ? LOGRIDE.w / 2 + 7 : 2.2)) advanceStep();   // a plane passes over at speed; a log reaches the mill from the water
       if (st && st.kind === 'escort'
           && npcs.some(nn => nn.behavior === 'escort' && !nn.dead && nn._arrived)) {
         advanceStep();

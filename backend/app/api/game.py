@@ -186,6 +186,10 @@ _STYLE_ASKED = {
 }
 
 
+# a sentence about riding the log drive (2026-10-24): the hero casting and the log rule both read it
+_LOG_RIDE_RE = _fre.compile(r"\b(log ?drivers?|log ?driving|log ?drives?|log ?roll(?:ing|ers?)|logrolling|river ?drivers?|river ?pigs?|log ?jams?|rid(?:e|es|ing) (?:a |the |down )?(?:logs?|timber)|(?:timber|logs?) (?:down|on|along) (?:a |the )?(?:wild |fast |rushing )?rivers?)\b")
+
+
 # what a sentence NAMES as its look, for deciding against a chip: the style
 # words themselves, never the incidental ones (a game "for kids" is not a
 # request to overrule the chip). "default" is photoreal.
@@ -2362,6 +2366,16 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                     spec.player.name = _role
         except Exception:  # noqa: BLE001
             pass
+        # A LOG DRIVER IS A RIVERMAN (2026-10-24): "driver" in "a log driver riding timber down
+        # a wild canadian river" was cast as a car and driven through the woods. The one who
+        # rides the drive is a lumberjack on foot; the log rule below puts them on the log
+        if _LOG_RIDE_RE.search((req.prompt or "").lower()) and library.resolve("lumberjack"):
+            if want != "lumberjack":
+                job.setdefault("notes", []).append(f"hero cast: '{want}' is played by the lumberjack: a log driver rides the logs, not a car")
+            want = "lumberjack"
+            spec.player.name = "lumberjack"
+            spec.player.mode = "walk"
+            spec.player.car_params = None
         cast = want
         pattern = guess_pattern(want)
         # A DOLPHIN IS A DOLPHIN'S LENGTH (2026-10-10): the planner sized the
@@ -2544,6 +2558,28 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                 job.setdefault("notes", []).append(f"'{spec.player.name}' flies a biplane: it cruises where the nose points, banks to turn, climbs and dives")
         except Exception as _ple:
             job.setdefault("notes", []).append(f"plane rule skipped: {_ple}")
+        # A LOG DRIVER RIDES THE DRIVE (2026-10-24): "a log driver riding timber down a wild
+        # canadian river" drove an SUV through a pine wood. A log driver stands on a log in
+        # the current with a pike pole, among the rest of the drive, down the river to the
+        # mill: the runtime puts the hero on a log in the river's channel (LOGRIDE)
+        try:
+            import re as _lgre
+            _lgw = (req.prompt or "").lower()
+            if (_LOG_RIDE_RE.search(_lgw)
+                    and player_glb and pattern == "biped" and getattr(spec, "genre", "adventure") != "factory"):
+                spec.player.ride = "log"
+                spec.player.mode = "drive"
+                spec.player.car_params = None
+                spec.player.walk_speed, spec.player.run_speed = 3.0, 6.0
+                spec.entities = [e for e in spec.entities if not _lgre.search(r"\b(logs?|timber|rapids?|trucks?|cars?)\b", (e.name or "").lower())]
+                # the woods' animals watch from the banks: two hostile bears waded down the
+                # river after the log, and nothing on a log can fight
+                for e in spec.entities:
+                    if e.behavior in ("hostile", "follow"):
+                        e.behavior = "wander"
+                job.setdefault("notes", []).append(f"'{spec.player.name}' rides a log down the river with a pike pole: the current carries it, W poles on, A and D work across the channel")
+        except Exception as _lge:
+            job.setdefault("notes", []).append(f"log rule skipped: {_lge}")
         _race_seated = False
         # (2026-10-07) only a person takes a driver's seat: "a claymation snail
         # races three other snails" put the snail in a sedan. An animal races
@@ -2814,6 +2850,8 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             spec.camera.distance_m, spec.camera.height_m = 17.0, 7.0
         if (spec.player.ride or "") == "plane":
             spec.camera.distance_m, spec.camera.height_m = 13.0, 3.6   # behind the tail, the wings in frame
+        if (spec.player.ride or "") == "log":
+            spec.camera.distance_m, spec.camera.height_m = 7.5, 3.0    # the log and the water ahead of it
         # THE SENTENCE'S HOUR AND AIR (2026-10-07): "a fox hunts in a misty
         # autumn forest at dawn" was built under a plain midday sky with no
         # mist. A time of day the sentence names sets the sky; misty, foggy
@@ -2855,6 +2893,12 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                         and _hre.search(r"\b(fog\w*|mist\w*|haze|hazy)\b", _hp)
                         and not _hre.search(r"\b(wet|winter\w*|frozen|icy|arctic|snowy)\b", _hp)):
                     job.setdefault("notes", []).append(f"weather {spec.world.weather} -> none (fog, not rain)")
+                    spec.world.weather = "none"
+                # (2026-10-24) "an archaeologist digging up dinosaur bones in the badlands" was rained
+                # on: dry country is dry unless the sentence brings the weather
+                elif (not _wx and spec.world.weather in ("rain", "snow")
+                        and _hre.search(r"\b(badlands?|deserts?|dunes?|sahara|gobi|mojave|outback|mesas?|buttes?|canyons?|savann?ah?s?|arid|drought|dust ?bowl|wasteland|oasis|scrubland)\b", _hp)):
+                    job.setdefault("notes", []).append(f"weather {spec.world.weather} -> none (dry country)")
                     spec.world.weather = "none"
                 if _hre.search(r"\b(storm\w*|gales?|thunder\w*|tempest\w*|hurricanes?|blizzard\w*)\b", _hp):
                     spec.world.wind = max(float(getattr(spec.world, "wind", 0.5) or 0.5), 0.95)
@@ -4040,6 +4084,8 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                       and not _fre.search(r"\b(sea|ocean|underwater|islands?|isle|archipelago|atoll|lagoon|space|moon|mars|city|streets?|cave\w*|stream(?:er|ing)|live ?stream\w*)\b", _pw7)
                       and not _coast and not _fjord and not job.get("_naval")
                       and spec.player.mode != "swim" and not getattr(spec.world, "platforms", False))
+        if (spec.player.ride or "") == "log" and not _coast and not _fjord:
+            _river = True                           # a log drive is a river, whatever else the sentence says
         if _river and _arch == "archipelago":
             _arch = "plain"
             spec.world.archetype = "plain"

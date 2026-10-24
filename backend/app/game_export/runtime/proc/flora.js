@@ -1379,7 +1379,11 @@ export function kindsFor(arch, words) {
   if (/oak|orchard|meadow|farm|village/.test(w)) return [{ kind: 'oak', weight: 0.7 }, { kind: 'broadleaf', weight: 0.5 }, { kind: 'bush', weight: 0.7 }];
   if (arch === 'pine') return [{ kind: 'pine', weight: 0.7 }, { kind: 'spruce', weight: 0.5 }, { kind: 'bush', weight: 0.25 }];
   if (arch === 'dead') return [{ kind: 'dead', weight: 1 }, { kind: 'bush', weight: 0.15 }];
-  if (arch === 'cypress') return [{ kind: 'spruce', weight: 0.5 }, { kind: 'palm', weight: 0.3 }, { kind: 'bush', weight: 0.5 }];
+  // (2026-10-24) a palm among the spruces only where it is warm: the cypress draw is one in six of
+  // every unnamed place, and "a wild canadian river" grew palms between its pines
+  if (arch === 'cypress') return /swamp|bayou|marsh|tropic|desert|canyon|mars|volcan|mediterr|coast|beach|savann|jungle/.test(w)
+    ? [{ kind: 'spruce', weight: 0.5 }, { kind: 'palm', weight: 0.3 }, { kind: 'bush', weight: 0.5 }]
+    : [{ kind: 'spruce', weight: 0.5 }, { kind: 'broadleaf', weight: 0.35 }, { kind: 'bush', weight: 0.5 }];
   return [{ kind: 'broadleaf', weight: 0.7 }, { kind: 'oak', weight: 0.35 }, { kind: 'birch', weight: 0.2 }, { kind: 'bush', weight: 0.7 }];
 }
 
@@ -1463,6 +1467,10 @@ export function biomeFor(words, arch, groundHSL) {
   // bracken, grey stone and the odd boulder, hardly a tree
   else if (has(/highlands?|\bglens?\b|\bmoors?\b|moorland|heather|scottish/) && !has(/forest|woods?\b/)) Object.assign(out, { kinds: K(['bush', 0.7], ['rock', 0.6], ['boulder', 0.3], ['birch', 0.05]), dens: 0.06,
     rockTint: T(0x7c7a74), leaf: { h: 0.88, s: 0.22, l: 0.27 } });
+  // THE NORTH WOODS (2026-10-24): a log drive on a canadian river grew palms and oaks. Canada,
+  // Alaska, the taiga and the logging camps are spruce and pine with birch along the water
+  else if (has(/canad\w*|quebec|ontario|yukon|alaska\w*|boreal|taiga|siberia\w*|lumberjacks?|log ?driv\w*|logging|sawmill/)) Object.assign(out, { kinds: K(['spruce', 0.85], ['pine', 0.5], ['birch', 0.3], ['bush', 0.45], ['rock', 0.15]), dens: 0.75,
+    leaf: { h: 0.3, s: 0.36, l: 0.17 } });
   // THE YANGTZE DELTA (2026-10-24): an old chinese water town stood in a pine forest. Round it
   // are camphor and plane trees, clumps of bamboo and low shrubs, a soft broadleaf green
   else if (has(/jiangnan|suzhou|wuzhen|zhouzhuang|tongli|xitang|hangzhou|zhujiajiao|water ?town|chinese|china/)) Object.assign(out, { kinds: K(['broadleaf', 0.8], ['bamboo', 0.4], ['bush', 0.55], ['oak', 0.2]), dens: 0.45,

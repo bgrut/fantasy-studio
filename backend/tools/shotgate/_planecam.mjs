@@ -14,7 +14,7 @@ for (let i = 0; i < views.length; i++) {
   await p.evaluate(v => {
     cancelAnimationFrame(window.__pcLoop || 0);
     const step = () => {
-      const pl = window.__plane || window.__balloon; if (!pl) return;
+      const pl = window.__plane || window.__balloon || window.__board; if (!pl) return;
       pl.updateMatrixWorld(true);
       const e = pl.matrixWorld.elements, o = [e[12], e[13], e[14]];
       // the craft's own axes: x right (local +X), y up, z back (local +Z, the nose is -Z)
