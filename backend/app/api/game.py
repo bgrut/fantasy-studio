@@ -3413,6 +3413,19 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                     ent.height_m = library.default_height(ekind)
                     if ent.height_m == 1.0 and guess_pattern(ekind) == "static":
                         ent.height_m = 0.5   # unknown props default small, not person-sized
+                else:
+                    # A CAT IS A CAT'S HEIGHT (2026-10-24): "a firefighter rescuing a cat"
+                    # was planned with a 1.7 m cat, a lynx on the window sill as tall as
+                    # the firefighter. A small animal the planner sized more than twice
+                    # its kind is sized by its kind, unless the sentence made it giant
+                    try:
+                        _th = library._true_height(ekind.lower())
+                        if (_th is not None and _th < 1.0 and ent.height_m > _th * 2.2
+                                and not _fre.search(r"\b(giant|huge|enormous|colossal|gigantic|kaiju|titan\w*|mega)\b", (req.prompt or "").lower())):
+                            job.setdefault("notes", []).append(f"{ekind}: planned at {ent.height_m} m, sized to its kind ({_th} m)")
+                            ent.height_m = _th
+                    except Exception:  # noqa: BLE001 - a size check never loses an entity
+                        pass
                 kept.append(ent)
             else:
                 sub, glb2 = _understudy(ent.behavior)
@@ -4214,7 +4227,10 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             # A SLOT CANYON IS A CRACK, NOT A GORGE (2026-10-13)
             slot=bool(_fre.search(r"\b(slot canyons?|slot|narrows|crevices?|fissures?|trapped in (?:a|the) canyon|pinned|wedged)\b", (req.prompt or "").lower())
                       and _fre.search(r"\b(canyons?|gorges?|crevices?|fissures?|narrows|ravines?)\b", (req.prompt or "").lower())),
-            river=_river, layout=(_design or {}).get("layout", "route"))
+            river=_river, layout=(_design or {}).get("layout", "route"),
+            aloft=(spec.player.ride or "") == "plane" and not (_fjord or _coast or job.get("_naval")),
+            # (2026-10-24) a crop duster over Kansas flew 37 m hills: farm and prairie country is flat
+            aloft_relief="plains" if _fre.search(r"\b(kansas|nebraska|iowa|dakotas?|oklahoma|prairies?|plains|wheat|corn|cornfields?|farm\w*|fields?|crops?|crop ?dust\w*|harvest|barley|steppes?|pampas)\b", (req.prompt or "").lower()) else "hills")
         if _giantroom and isinstance(spec.world.level, dict):
             spec.world.level["giantroom"] = _grk
         if _design and isinstance(spec.world.level, dict):

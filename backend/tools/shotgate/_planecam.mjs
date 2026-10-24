@@ -9,6 +9,8 @@ await p.goto(`http://127.0.0.1:8789/games/${process.env.J}/dist/index.html?nogui
 const wait = ms => new Promise(r => setTimeout(r, ms));
 await wait(9000); await p.click('#startbtn').catch(() => {}); await wait(4000);
 await p.evaluate(() => { const st = document.createElement('style'); st.textContent = 'body > *:not(canvas):not(#app):not(script):not(style){visibility:hidden !important} #app > *:not(canvas){visibility:hidden !important}'; document.head.appendChild(st); for (const c of document.querySelectorAll('canvas')) if (c.clientWidth < 900) c.style.visibility = 'hidden'; });
+// PRE='...' runs in the page before the shots (a bisect: the composer bypassed, a pass off)
+if (process.env.PRE) console.log('pre', JSON.stringify(await p.evaluate(src => { try { return eval(src); } catch (e) { return 'PRE ' + e.message; } }, process.env.PRE)));
 const views = JSON.parse(process.env.VIEWS || '[[4.5,1.4,-6],[-7,2.2,3],[0,3.2,11],[9,-1.5,-2]]');
 for (let i = 0; i < views.length; i++) {
   await p.evaluate(v => {

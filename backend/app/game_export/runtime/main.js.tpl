@@ -535,6 +535,10 @@ async function main() {
     window.__flora = { on: true, outer, R: q.R, planned: q.n };
     return out;
   })();
+  // (2026-10-24) a plane over farm country flies over fields (FIELDS in the ground shader),
+  // with a lone tree here and there rather than a scattered wood
+  window.__aloftFields = !!(SPEC.player && SPEC.player.ride === 'plane'
+    && /\b(kansas|nebraska|iowa|dakotas?|oklahoma|prairies?|plains|wheat|corn|cornfields?|farm\w*|fields?|crops?|crop ?dust\w*|harvest|barley|pampas)\b/.test(String(SPEC.prompt || '').toLowerCase()));
   // the planted forest and how many of its trees stand in the playfield;
   // declared up here, before the render loop that reads them can start
   let FLORA_LIVE = null, _floraInner = 0;
@@ -1076,7 +1080,7 @@ async function main() {
         mmat.customProgramCacheKey = () => 'ranges-rock';
       } catch (e) { /* the ranges keep their colour */ }
       const ring = new THREE.Group();
-      const NPK = 11;
+      const NPK = window.__aloftFields ? 0 : 11;   // (2026-10-24) the plains run to the horizon under a crop duster: no ranges
       // SCULPTED RANGES (2026-10-02): behind a forest to the horizon a cone
       // with jittered sides read as a party hat. A range is a heightfield:
       // ridged noise (sharp crests, soft gullies) over a dome that falls to
@@ -2915,7 +2919,7 @@ async function main() {
       };
     }
     // where the forest stands, outside the playfield: big stands and glades
-    forestAt = (x, z) => Math.max(0, Math.min(1, (fbm(x / 210 + 17, z / 210 - 9) + 0.12) * 2.4));
+    forestAt = (x, z) => Math.max(0, Math.min(1, (fbm(x / 210 + 17, z / 210 - 9) + 0.12) * 2.4)) * (window.__aloftFields ? 0.12 : 1);   // farm country: shelterbelts, not forest
     const SEG = QUALITY === 'performance' ? 128 : 256, ROWS = QUALITY === 'performance' ? 32 : 56;
     const pos = new Float32Array((SEG + 1) * (ROWS + 1) * 3);
     const col = new Float32Array((SEG + 1) * (ROWS + 1) * 3);
@@ -5395,7 +5399,7 @@ async function main() {
           metricWallUV(geo, b.pts, gy, h, _bkt);
           splitGroups(geo, _bkt);
         }
-        feCand.push([b.pts, cx, cz, gy, h, _bkt, tint, _prog, _sh, _shop]);
+        feCand.push([b.pts, cx, cz, gy, h, _bkt, tint, _prog, _sh, _shop, _fac]);
         if (_TOWN && (b.pts.length === 4 || b.pts.length === 5) && b.enter === undefined) townRoofs.push([b.pts, gy + h, tint]);
         if (_PARIS) parisRoofs.push([b.pts, cx, cz, gy + h]);
         let _capPts = b.pts, _capTop = gy + h;
@@ -6677,33 +6681,89 @@ async function main() {
           let best = null, bd = 1e9;
           // measured to its nearest wall, so it is the block the goal stands in front of
           const _wd = (pts) => { let m = 1e9; for (let k = 0; k < pts.length; k++) { const a = pts[k], b = pts[(k + 1) % pts.length]; m = Math.min(m, _segD(gx, gz, a[0], a[1], b[0], b[1])); } return m; };
-          for (const e of feCand) { const d = _wd(e[0]); if (d < bd && e[4] > 6) { bd = d; best = e; } }
+          // (2026-10-24) a fire with someone to rescue burns in brick or stone, not a glass tower
+          // (facade buckets 1 and 4 are curtain wall, whose skin stands proud of the footprint)
+          const _resc = /\b(rescu\w*|trapped|stranded|apartments?|flats?|tenements?|homes?|houses?)\b/.test(_bw);
+          for (const e of feCand) { const d = _wd(e[0]) + (_resc && (e[5] === 1 || e[5] === 4) ? 40 : 0); if (d < bd && e[4] > 6) { bd = d; best = e; } }
+          if (best) bd = _wd(best[0]);
           if (best && bd < 60) {
             const [pts, cx, cz, gy, h] = best;
             const FG = new THREE.Group(); FG.name = 'burningBuilding'; scene.add(FG);
+            // (2026-10-24) a flame is ragged tongues, red at the edges and yellow at the root:
+            // one smooth teardrop per window read as a row of glowing eggs
             const ftex = (() => { const c = document.createElement('canvas'); c.width = 64; c.height = 128; const x = c.getContext('2d');
-              const g = x.createRadialGradient(32, 92, 2, 32, 80, 52); g.addColorStop(0, 'rgba(255,240,190,1)'); g.addColorStop(0.3, 'rgba(255,160,50,0.9)'); g.addColorStop(0.7, 'rgba(220,60,15,0.35)'); g.addColorStop(1, 'rgba(120,20,0,0)');
-              x.fillStyle = g; x.beginPath(); x.moveTo(32, 4); x.bezierCurveTo(60, 60, 58, 120, 32, 124); x.bezierCurveTo(6, 120, 4, 60, 32, 4); x.fill(); return new THREE.CanvasTexture(c); })();
+              x.globalCompositeOperation = 'lighter';
+              const tongue = (cx, w, h, col, blur) => { x.shadowColor = col; x.shadowBlur = blur; x.fillStyle = col; x.beginPath(); x.moveTo(cx - w, 126);
+                x.bezierCurveTo(cx - w * 1.15, 126 - h * 0.5, cx - w * 0.25, 126 - h * 0.72, cx + w * 0.1, 126 - h);
+                x.bezierCurveTo(cx + w * 0.45, 126 - h * 0.62, cx + w * 1.1, 126 - h * 0.42, cx + w, 126); x.fill(); };
+              for (const [cx, w, h] of [[20, 11, 66], [33, 14, 112], [45, 11, 84], [27, 8, 92], [40, 8, 100]]) tongue(cx, w, h, 'rgba(190,34,6,0.5)', 8);
+              for (const [cx, w, h] of [[25, 9, 50], [34, 10, 82], [42, 8, 62]]) tongue(cx, w, h, 'rgba(255,104,18,0.62)', 5);
+              for (const [cx, w, h] of [[30, 7, 34], [37, 7, 46]]) tongue(cx, w, h, 'rgba(255,206,100,0.8)', 3);
+              return new THREE.CanvasTexture(c); })();
+            const sootG = new THREE.PlaneGeometry(2.0, 3.0);
+            const sootM = new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false, side: THREE.DoubleSide, map: (() => { const c = document.createElement('canvas'); c.width = 32; c.height = 64; const x = c.getContext('2d');
+              const g = x.createLinearGradient(0, 64, 0, 0); g.addColorStop(0, 'rgba(14,12,10,0.8)'); g.addColorStop(1, 'rgba(14,12,10,0)'); x.fillStyle = g;
+              x.beginPath(); x.moveTo(3, 64); x.quadraticCurveTo(0, 30, 10, 0); x.lineTo(22, 0); x.quadraticCurveTo(32, 30, 29, 64); x.fill(); return new THREE.CanvasTexture(c); })() });
             const stex = (() => { const c = document.createElement('canvas'); c.width = c.height = 64; const x = c.getContext('2d');
-              const g = x.createRadialGradient(32, 32, 2, 32, 32, 30); g.addColorStop(0, 'rgba(70,66,62,0.75)'); g.addColorStop(1, 'rgba(70,66,62,0)'); x.fillStyle = g; x.fillRect(0, 0, 64, 64); return new THREE.CanvasTexture(c); })();
+              const g = x.createRadialGradient(32, 32, 2, 32, 32, 30); g.addColorStop(0, 'rgba(34,30,28,0.92)'); g.addColorStop(0.55, 'rgba(40,36,33,0.6)'); g.addColorStop(1, 'rgba(46,42,38,0)'); x.fillStyle = g; x.fillRect(0, 0, 64, 64); return new THREE.CanvasTexture(c); })();
             const rf = mulberry32((SPEC.seed || 1) + 3131), flames = [], lights = [], smokeFrom = [];
-            const paneM = new THREE.MeshBasicMaterial({ color: 0xff7a2a, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false, side: THREE.DoubleSide });
-            const flame = (x, y, z, s) => { const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: ftex, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false, color: 0xffc890 }));
-              sp.position.set(x, y, z); sp.scale.set(s * 0.8, s * 1.5, 1); FG.add(sp); flames.push({ sp, s, ph: rf() * 6.28 }); };
+            // THE RESCUE WINDOW (2026-10-24): "a firefighter rescuing a cat from a burning
+            // apartment building" found the cat sitting on the pavement. Someone to be
+            // rescued waits at a window on the face toward the goal, on the floor a
+            // tower ladder reaches; the fire engine stands in the street below it
+            // THE WINDOWS WHERE THE FACADE PUT THEM (2026-10-24): a punched facade (buildPunched) lays
+            // a whole number of bays along each edge and a spandrel at the foot of every storey; the
+            // flames and the rescue window use the same grid, so they stand in real openings
+            const F0 = best[10];
+            const winGrid = (L) => {
+              if (F0 && L >= F0.bay * 1.25) {
+                const nb = Math.max(1, Math.round(L / F0.bay)), nSt = Math.max(1, Math.round(h / F0.st)), sp = Math.min(F0.spand, F0.st * 0.6);
+                return { cols: nb, rows: nSt, sill: (r) => gy + r * F0.st + (r === 0 ? Math.min(0.42, sp) : sp), wy: (r) => gy + r * F0.st + ((r === 0 ? Math.min(0.42, sp) : sp) + F0.st) / 2 };
+              }
+              return { cols: Math.max(1, Math.floor(L / 4.5)), rows: Math.max(1, Math.floor(h / 3.4)), sill: (r) => gy + 1.35 + r * 3.4, wy: (r) => gy + 2.2 + r * 3.4 };
+            };
+            let RW = null;
+            if (/\b(rescu\w*|saves?|saving|trapped|stranded|cats?|kittens?|dogs?|pupp(?:y|ies)|child(?:ren)?|kids?|baby|family|residents?|tenants?|grand(?:ma|pa|mother|father))\b/.test(_bw)) {
+              let bk = -1, bdk = 1e9;
+              for (let k = 0; k < pts.length; k++) { const a = pts[k], b = pts[(k + 1) % pts.length];
+                if (Math.hypot(b[0] - a[0], b[1] - a[1]) < 6) continue;
+                const d = _segD(gx, gz, a[0], a[1], b[0], b[1]); if (d < bdk) { bdk = d; bk = k; } }
+              const rows0 = Math.max(1, Math.floor(h / 3.4));
+              if (bk >= 0 && rows0 >= 2) {
+                const a = pts[bk], b = pts[(bk + 1) % pts.length], L = Math.hypot(b[0] - a[0], b[1] - a[1]);
+                let nx = -(b[1] - a[1]) / L, nz = (b[0] - a[0]) / L;
+                const mx = (a[0] + b[0]) / 2, mz = (a[1] + b[1]) / 2; if ((mx - cx) * nx + (mz - cz) * nz < 0) { nx = -nx; nz = -nz; }
+                const g0 = winGrid(L);
+                const tg = THREE.MathUtils.clamp(((gx - a[0]) * (b[0] - a[0]) + (gz - a[1]) * (b[1] - a[1])) / (L * L), 0.15, 0.85);
+                const c = THREE.MathUtils.clamp(Math.floor(tg * g0.cols), g0.cols > 2 ? 1 : 0, Math.max(0, g0.cols - 2)), rr = Math.min(g0.rows - 1, 3);
+                const t = (c + 0.5) / g0.cols, wx = a[0] + (b[0] - a[0]) * t, wz = a[1] + (b[1] - a[1]) * t;
+                RW = { k: bk, c, rr, win: [wx, g0.wy(rr), wz], sill: g0.sill(rr), n: [nx, nz], gy, out: THREE.MathUtils.clamp(bdk, 7.2, 10) };
+              }
+            }
+            // (2026-10-24) the room behind a window burns as a soft glow: a hard orange pane never lined
+            // up with the windows painted in the facade and tinted the brick around them peach
+            const glowT = (() => { const c = document.createElement('canvas'); c.width = c.height = 64; const x = c.getContext('2d');
+              const g = x.createRadialGradient(32, 38, 2, 32, 34, 31); g.addColorStop(0, 'rgba(255,170,60,1)'); g.addColorStop(0.45, 'rgba(240,80,16,0.7)'); g.addColorStop(1, 'rgba(160,24,0,0)');
+              x.fillStyle = g; x.fillRect(0, 0, 64, 64); return new THREE.CanvasTexture(c); })();
+            const paneM = new THREE.MeshBasicMaterial({ map: glowT, color: 0xff8a40, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false, side: THREE.DoubleSide });
+            const flame = (x, y, z, s) => { const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: ftex, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false, color: 0xffb070 }));
+              sp.position.set(x, y + s * 0.5, z); sp.scale.set(s * 0.8, s * 1.2, 1); FG.add(sp); flames.push({ sp, s, ph: rf() * 6.28 }); };
             // along each footprint edge facing the street, flames at window rows
             for (let k = 0; k < pts.length; k++) {
               const a = pts[k], b = pts[(k + 1) % pts.length], L = Math.hypot(b[0] - a[0], b[1] - a[1]);
               if (L < 4) continue;
               let nx = -(b[1] - a[1]) / L, nz = (b[0] - a[0]) / L;            // outward: away from the centre
               const mx = (a[0] + b[0]) / 2, mz = (a[1] + b[1]) / 2; if ((mx - cx) * nx + (mz - cz) * nz < 0) { nx = -nx; nz = -nz; }
-              const cols = Math.max(1, Math.floor(L / 4.5)), rows = Math.max(1, Math.floor(h / 3.4));
+              const g1 = winGrid(L), cols = g1.cols, rows = g1.rows;
               for (let c = 0; c < cols; c++) for (let rr = 0; rr < rows; rr++) {
                 if (rf() > 0.34 + 0.4 * (rr / rows)) continue;                    // the upper floors burn worst
-                const t = (c + 0.5) / cols, wx = a[0] + (b[0] - a[0]) * t, wz = a[1] + (b[1] - a[1]) * t, wy = gy + 2.2 + rr * 3.4;
+                if (RW && k === RW.k && c === RW.c && rr === RW.rr) continue;     // the one waiting there is not in the flames
+                const t = (c + 0.5) / cols, wx = a[0] + (b[0] - a[0]) * t, wz = a[1] + (b[1] - a[1]) * t, wy = g1.wy(rr);
                 // the window itself burns: a glowing pane on the facade, the flames licking out of it
-                const pane = new THREE.Mesh(new THREE.PlaneGeometry(2.2, 1.7), paneM); pane.position.set(wx + nx * 0.12, wy, wz + nz * 0.12);
+                const pane = new THREE.Mesh(new THREE.PlaneGeometry(3.0, 2.6), paneM); pane.position.set(wx + nx * 0.12, wy, wz + nz * 0.12);
                 pane.lookAt(wx + nx * 5, wy, wz + nz * 5); FG.add(pane);
-                flame(wx + nx * 0.9, wy + 1.1, wz + nz * 0.9, 2.6 + rf() * 1.8);
+                flame(wx + nx * 0.7, wy - 0.8, wz + nz * 0.7, 2.1 + rf() * 1.3);
+                const so = new THREE.Mesh(sootG, sootM); so.position.set(wx + nx * 0.08, wy + 2.3, wz + nz * 0.08); so.lookAt(wx + nx * 5, wy + 2.3, wz + nz * 5); FG.add(so);   // soot climbs the wall above it
                 if (rr > rows * 0.45 && rf() < 0.35) smokeFrom.push([wx + nx * 1.2, wy + 1.5, wz + nz * 1.2]);
               }
             }
@@ -6711,15 +6771,20 @@ async function main() {
             for (const [dy, inten] of [[h * 0.4, 60], [h + 2, 90]]) { const L = new THREE.PointLight(0xff7a2a, inten, 60, 1.6); L.position.set(cx, gy + dy, cz); FG.add(L); lights.push([L, inten]); }
             const puffs = [];
             const srcs = [[cx, gy + h + 3, cz], ...smokeFrom.slice(0, 6)];
-            for (let i = 0; i < 70; i++) { const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: stex, transparent: true, depthWrite: false, opacity: 0 })); FG.add(sp); puffs.push({ sp, t: (i * 0.618) % 1, o: srcs[i % srcs.length], big: i % srcs.length === 0 }); }
+            // (2026-10-24) the plume is what a burning block is seen by in daylight: pale grey
+            // puffs eight metres across read as a cloud from the end of the street. Thick,
+            // near-black smoke now, half of it in the main column, swelling as it climbs
+            for (let i = 0; i < 110; i++) { const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: stex, transparent: true, depthWrite: false, opacity: 0, rotation: rf() * 6.28 })); FG.add(sp); puffs.push({ sp, t: (i * 0.618) % 1, o: srcs[i % 2 ? 0 : (1 + (i >> 1)) % srcs.length], big: i % 2 === 1 }); }
             window.__burnTick = (t, dt) => {
-              for (const f of flames) { const k = 0.8 + 0.35 * Math.sin(t * 9 + f.ph) * Math.sin(t * 6.1 + f.ph * 2); f.sp.scale.set(f.s * 0.8 * (0.9 + 0.2 * k), f.s * 1.5 * k, 1); }
+              for (const f of flames) { const k = 0.8 + 0.35 * Math.sin(t * 9 + f.ph) * Math.sin(t * 6.1 + f.ph * 2); f.sp.scale.set(f.s * 0.8 * (0.9 + 0.2 * k) * (Math.floor(t * 7 + f.ph) % 2 ? -1 : 1), f.s * 1.2 * k, 1); }
               for (const [L, i0] of lights) L.intensity = i0 * (0.8 + 0.25 * Math.sin(t * 11) * Math.sin(t * 4.3));
-              for (const q of puffs) { q.t += dt / (q.big ? 14 : 8); if (q.t > 1) q.t -= 1; const hh = q.t * (q.big ? 70 : 26);
-                q.sp.position.set(q.o[0] + hh * 0.35 + Math.sin(q.t * 7 + t * 0.3) * 2, q.o[1] + hh, q.o[2] + hh * 0.12); q.sp.scale.setScalar((q.big ? 4 : 2) + q.t * (q.big ? 22 : 10));
-                q.sp.material.opacity = Math.min(1, q.t * 5) * (1 - q.t) * 0.85; }
+              for (const q of puffs) { q.t += dt / (q.big ? 16 : 8); if (q.t > 1) q.t -= 1; const hh = q.t * (q.big ? 110 : 26);
+                q.sp.position.set(q.o[0] + hh * 0.4 + Math.sin(q.t * 7 + t * 0.3) * 2.5, q.o[1] + hh, q.o[2] + hh * 0.14); q.sp.scale.setScalar((q.big ? 7 : 2.5) + q.t * (q.big ? 44 : 12));
+                q.sp.material.opacity = Math.min(1, q.t * 6) * (1 - q.t * 0.8) * 0.9; }
+              if (window.__ladderTick) window.__ladderTick(t, dt);
             };
             window.__burning = { flames: flames.length, at: [+cx.toFixed(1), +cz.toFixed(1)], h: +h.toFixed(1), goalDist: +bd.toFixed(1) };
+            if (RW) try { buildTowerLadder(RW, FG, paneM); } catch (e) { console.warn('[game] tower ladder skipped: ' + e.message); }
           }
         }
       } catch (e) { console.warn('[game] burning building skipped: ' + e.message); }
@@ -8352,6 +8417,7 @@ async function main() {
       const _fvn = (x, y) => { const xi = Math.floor(x), yi = Math.floor(y), fx = x - xi, fy = y - yi, ux = fx * fx * (3 - 2 * fx), uy = fy * fy * (3 - 2 * fy);
         return (_fh(xi, yi) * (1 - ux) + _fh(xi + 1, yi) * ux) * (1 - uy) + (_fh(xi, yi + 1) * (1 - ux) + _fh(xi + 1, yi + 1) * ux) * uy; };
       const _age = () => { const a = rT(); return a < 0.2 ? 0.38 + rT() * 0.27 : a < 0.85 ? 0.72 + rT() * 0.45 : 1.2 + rT() * 0.42; };
+      const _treeLine = (SPEC.player && SPEC.player.ride === 'plane' && SPEC.world.archetype === 'peaks') ? 36 : 1e9;
       for (let t = 0; t < FLORA.inner * 14 && _floraInner < FLORA.inner; t++) {
         const x = (rT() - 0.5) * gsize * 0.97, z = (rT() - 0.5) * gsize * 0.97;
         const reg = (LVL && LVL.regions) ? regionAt(x, z) : null;
@@ -8382,6 +8448,14 @@ async function main() {
         // planned, but a lake fills whatever ground lies under its level, and
         // a forest grew out of it; nothing but kelp roots below the water
         if (!BIO.underwater && WATER_Y !== null && y < WATER_Y + 0.35) continue;   // the surface as drawn, not the planner's level
+        // A TREELINE (2026-10-24): over a plane's Andes the pines climbed to the 140 m
+        // summits and stood on their faces; they stop where the cold does, and
+        // nothing roots on a slope steeper than about forty degrees
+        if (window.__aloftFields && rT() > 0.1) continue;   // farmland: a lone tree, not a wood
+        if (_treeLine < 1e9) {
+          if (y > _treeLine + (_fvn(x * 0.02, z * 0.02) - 0.5) * 14) continue;
+          if (Math.hypot(hAt(x + 2, z) - y, hAt(x, z + 2) - y) / 2 > 0.85) continue;
+        }
         // kelp stands in the water, not through it: the tallest stalk is
         // ten metres, so in shallows it is grown shorter, and skipped where
         // there is not depth enough for a stalk at all
@@ -11921,6 +11995,7 @@ async function main() {
       if (o.kind === 'repair') return /fire|flame|blaze|burn/.test(String(o.label || '')) ? `Put out ${o.count} ${o.label}. Hold E to spray each one`
         : /package|parcel|deliver|letter|mail|pizza|crate|box|supplies|medicine|food|meal|bread|loa(?:f|ves)|pies?|cakes?|buns|pastr|cookies|groceries|flowers|bouquets?|milk|newspapers?|papers|presents|gifts|cheese|eggs|soup|cocoa|coffee|potions?|scrolls?/.test(String(o.label || '')) ? `Deliver ${o.count} ${o.label}. Hold E over each pad to drop one`
         : `Fix ${o.count} ${o.label || 'broken panels'}. Hold E at each one`;
+      if (window.__ladder) return `Bring ${o.label || 'them'} down from the burning window. Stand in the ladder's basket and press E`;
       return `Reach the ${o.label || 'beacon'}`;
     });
     if (!objLines.length) objLines.push('Reach the glowing beacon');
@@ -12612,6 +12687,12 @@ async function main() {
           holder.position.set(LVL.goal[0] - PITCH.ux * 1.2, 0, LVL.goal[1] - PITCH.uz * 1.2);
           holder.position.y = hAt(holder.position.x, holder.position.z);
           startYaw = Math.atan2(-PITCH.ux, -PITCH.uz);
+        } else if (window.__ladder && !window.__ladder.cat && ent.behavior === 'static' && (SPEC.objectives || []).some(o => o.kind === 'reach'
+                   && new RegExp('\\b' + String(ent.name || '').toLowerCase() + '\\b').test(String(o.label || '').toLowerCase()))) {
+          // the one to be rescued waits on the sill of the burning window, looking down at the street (2026-10-24)
+          holder.position.copy(window.__ladder.catAt);
+          startYaw = Math.atan2(window.__ladder.n[0], window.__ladder.n[1]);
+          window.__ladder.cat = holder;
         } else if (ent.behavior === 'static' && LVL && LVL.goal && (SPEC.objectives || []).some(o => o.kind === 'reach'
                    && new RegExp('\\b' + String(ent.name || '').toLowerCase() + '\\b').test(String(o.label || '').toLowerCase()))) {
           // the one to be rescued waits at the end of the climb, facing the way you come (2026-10-07)
@@ -17015,6 +17096,120 @@ async function main() {
   }
   // a board under a rider: snowboard, skis, skateboard, surfboard or sled,
   // its long axis along the direction of travel (local Z)
+  // ── A TOWER LADDER UNDER THE BURNING WINDOW (2026-10-24) ─────────────────
+  // A red fire engine stands in the street below the rescue window (RW, chosen by the
+  // burning building): cab with its light bar going, roll-up lockers, outriggers down on
+  // their pads, and on the turntable a three-section aluminium ladder with a basket on
+  // its tip resting on the pavement by the wall. Stand in the basket and press E: the
+  // boom lifts you to the window, the one waiting there comes over the sill into the
+  // basket and the boom brings you both down (the loop drives window.__ladder).
+  function buildTowerLadder(RW, FG, paneM) {
+    const [nx, nz] = RW.n, fx = -nz, fz = nx, gy = RW.gy;
+    const wy = RW.win[1], sill = RW.sill !== undefined ? RW.sill : wy - 0.85;
+    const foot = [RW.win[0] + nx * RW.out, RW.win[2] + nz * RW.out];
+    const th = Math.atan2(-fz, fx);
+    const M = (p) => { const m = new THREE.MeshStandardMaterial(p); m.userData.noAutoTex = true; return m; };
+    const redM = M({ color: 0xa8101a, roughness: 0.32, metalness: 0.25 }), chromeM = M({ color: 0xd8dce0, roughness: 0.18, metalness: 0.9 });
+    const blackM = M({ color: 0x141416, roughness: 0.8 }), glassM = M({ color: 0x16202a, roughness: 0.08, metalness: 0.4 }), whiteM = M({ color: 0xe9e9e6, roughness: 0.45 });
+    const aluM = M({ color: 0xc4c8cc, roughness: 0.32, metalness: 0.75 }), plateM = M({ color: 0x8a8e92, roughness: 0.4, metalness: 0.8 });
+    // the body's flank: roll-up locker doors of ribbed aluminium under a reflective stripe
+    const side = (() => { const c = document.createElement('canvas'); c.width = 1024; c.height = 256; const x = c.getContext('2d');
+      x.fillStyle = '#a8101a'; x.fillRect(0, 0, 1024, 256);
+      x.fillStyle = '#f2efe6'; x.fillRect(0, 18, 1024, 22); x.fillStyle = '#d8a428'; x.fillRect(0, 42, 1024, 6);
+      for (let d = 0; d < 4; d++) { const x0 = 18 + d * 250, w = 226;
+        x.fillStyle = '#b9bdc2'; x.fillRect(x0, 62, w, 178);
+        for (let r = 66; r < 238; r += 7) { x.fillStyle = 'rgba(255,255,255,.35)'; x.fillRect(x0, r, w, 2); x.fillStyle = 'rgba(0,0,0,.22)'; x.fillRect(x0, r + 3, w, 2); }
+        x.fillStyle = '#2a2a2e'; x.fillRect(x0 + w / 2 - 22, 224, 44, 7); }
+      const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; return t; })();
+    const sideM = M({ map: side, roughness: 0.38, metalness: 0.2 });
+    const G = new THREE.Group(); G.position.set(foot[0], gy, foot[1]); G.rotation.y = th; FG.add(G);
+    const add = (geo, m, x, y, z, par) => { const o = new THREE.Mesh(geo, m); o.position.set(x, y, z); o.castShadow = true; o.receiveShadow = true; (par || G).add(o); return o; };
+    add(new THREE.BoxGeometry(10.6, 0.42, 2.0), blackM, 3.0, 0.82, 0);                                   // the frame
+    add(new THREE.BoxGeometry(8.2, 1.78, 2.46), [redM, redM, redM, redM, sideM, sideM], 1.7, 1.95, 0);    // the body
+    add(new THREE.BoxGeometry(8.2, 0.08, 2.46), plateM, 1.7, 2.88, 0);                                    // diamond-plate deck
+    add(new THREE.BoxGeometry(2.6, 2.1, 2.5), redM, 7.15, 2.06, 0);                                       // the cab
+    add(new THREE.BoxGeometry(2.64, 0.12, 2.54), whiteM, 7.15, 3.14, 0);
+    const ws = add(new THREE.PlaneGeometry(2.2, 0.95), glassM, 8.46, 2.52, 0); ws.rotation.y = Math.PI / 2;
+    for (const sz of [1, -1]) { const sw = add(new THREE.PlaneGeometry(1.5, 0.8), glassM, 7.35, 2.52, sz * 1.256); sw.rotation.y = sz > 0 ? 0 : Math.PI; }
+    add(new THREE.BoxGeometry(0.28, 0.32, 2.56), chromeM, 8.6, 0.82, 0);                                  // bumper
+    add(new THREE.BoxGeometry(0.05, 0.7, 1.3), chromeM, 8.47, 1.45, 0);                                   // grille
+    for (const sz of [0.92, -0.92]) add(new THREE.CylinderGeometry(0.15, 0.15, 0.05, 16).rotateZ(Math.PI / 2), M({ color: 0xffffff, emissive: 0xfff2d0, emissiveIntensity: 1.6 }), 8.48, 1.3, sz);
+    const bar = [];
+    for (let i = 0; i < 4; i++) { const red = i % 2 === 0;
+      const m = M({ color: red ? 0xff2020 : 0xffffff, emissive: red ? 0xff1010 : 0xfff4e0, emissiveIntensity: 0.2, roughness: 0.3 });
+      add(new THREE.BoxGeometry(0.34, 0.16, 0.42), m, 7.4, 3.28, -0.66 + i * 0.44); bar.push(m); }
+    const wheel = new THREE.CylinderGeometry(0.56, 0.56, 0.42, 22).rotateX(Math.PI / 2), hub = new THREE.CylinderGeometry(0.3, 0.3, 0.06, 16).rotateX(Math.PI / 2);
+    for (const wx of [7.1, 0.7, -0.75]) for (const sz of [1, -1]) { add(wheel, blackM, wx, 0.56, sz * 1.05); add(hub, chromeM, wx, 0.56, sz * 1.28); }
+    // outriggers down on their pads
+    for (const ox of [-1.7, 5.3]) for (const sz of [1, -1]) {
+      add(new THREE.BoxGeometry(0.24, 0.24, 1.0), redM, ox, 1.05, sz * 1.7);
+      add(new THREE.BoxGeometry(0.18, 1.0, 0.18), chromeM, ox, 0.55, sz * 2.2);
+      add(new THREE.BoxGeometry(0.62, 0.06, 0.62), blackM, ox, 0.03, sz * 2.2); }
+    add(new THREE.CylinderGeometry(1.0, 1.05, 0.32, 24), plateM, 0, 3.06, 0);                            // the turntable
+    add(new THREE.BoxGeometry(1.1, 0.75, 0.95), redM, 0, 3.55, 0);
+    world.createCollider(RAPIER.ColliderDesc.cuboid(5.4, 1.6, 1.3).setTranslation(foot[0] + fx * 3.0, gy + 1.6, foot[1] + fz * 3.0)
+      .setRotation({ x: 0, y: Math.sin(th / 2), z: 0, w: Math.cos(th / 2) }));
+    // the ladder: three nested sections, rails and rungs, each 6.2 m
+    const T = new THREE.Vector3(foot[0], gy + 3.8, foot[1]);
+    const boom = new THREE.Group(); boom.position.copy(T); FG.add(boom);
+    const SEC = 6.2, secs = [];
+    for (let i = 0; i < 3; i++) {
+      const w = 0.98 - i * 0.14, parts = [];
+      for (const sx of [-1, 1]) parts.push(new THREE.BoxGeometry(0.08, 0.24 - i * 0.03, SEC).translate(sx * w / 2, 0, SEC / 2));
+      for (let r = 0.3; r < SEC; r += 0.36) parts.push(new THREE.CylinderGeometry(0.028, 0.028, w, 6).rotateZ(Math.PI / 2).translate(0, -0.04, r));
+      const sm = new THREE.Mesh(mergeGeometries(parts.map(q => q.index ? q.toNonIndexed() : q), false), i === 0 ? redM : aluM);
+      sm.position.y = i * 0.07; sm.castShadow = true; boom.add(sm); secs.push(sm);
+    }
+    // the basket: a floor, kick plates, rails, a monitor nozzle on the front rail
+    const K = new THREE.Group(); K.rotation.y = Math.atan2(-nx, -nz); FG.add(K);
+    add(new THREE.BoxGeometry(1.7, 0.1, 1.2), plateM, 0, 0.05, 0, K);
+    for (const [x, z, w, d] of [[0, 0.6, 1.7, 0.04], [0, -0.6, 1.7, 0.04], [0.85, 0, 0.04, 1.2], [-0.85, 0, 0.04, 1.2]]) {
+      add(new THREE.BoxGeometry(w, 0.3, d), redM, x, 0.25, z, K);
+      add(new THREE.BoxGeometry(w + 0.04, 0.05, d + 0.04), aluM, x, 1.1, z, K);
+      add(new THREE.BoxGeometry(w, 0.035, d), aluM, x, 0.68, z, K); }
+    for (const x of [-0.85, 0.85]) for (const z of [-0.6, 0.6]) add(new THREE.BoxGeometry(0.06, 1.1, 0.06), aluM, x, 0.55, z, K);
+    add(new THREE.CylinderGeometry(0.05, 0.09, 0.5, 10).rotateX(Math.PI / 2.4), chromeM, 0, 1.2, 0.75, K);
+    // the room behind the window burns: a lit pane frames the one waiting on the sill
+    const pane = new THREE.Mesh(new THREE.PlaneGeometry(3.0, 2.6), paneM); pane.position.set(RW.win[0] + nx * 0.12, wy, RW.win[2] + nz * 0.12);
+    pane.lookAt(RW.win[0] + nx * 5, wy, RW.win[2] + nz * 5); FG.add(pane);
+    const sillM = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.12, 0.5), M({ color: 0x8a847a, roughness: 0.8 }));
+    sillM.position.set(RW.win[0] + nx * 0.25, sill - 0.06, RW.win[2] + nz * 0.25); sillM.rotation.y = Math.atan2(nx, nz); FG.add(sillM);
+    const rest = new THREE.Vector3(foot[0] - nx * 5.6, 0, foot[1] - nz * 5.6); rest.y = hAt(rest.x, rest.z) + 0.02;
+    // the basket stops a step to the side of the window, so the one on the sill is not behind the hero
+    const top = new THREE.Vector3(RW.win[0] + nx * 1.0 + fx * 0.95, sill - 0.25, RW.win[2] + nz * 1.0 + fz * 0.95);
+    const LD = { u: 0, cu: 0, phase: 'rest', basket: rest.clone(), rest, top, faceYaw: Math.atan2(-nx, -nz),
+                 catAt: new THREE.Vector3(RW.win[0] + nx * 0.4, sill, RW.win[2] + nz * 0.4), cat: null, n: [nx, nz] };
+    window.__ladder = LD;
+    // the walk ends at the basket, not inside the engine
+    if (LVL) LVL.goal = [rest.x, rest.z];
+    if (goalPos) goalPos.set(rest.x, rest.y, rest.z);
+    if (goalMesh && goalMesh.position) goalMesh.position.set(rest.x, rest.y + 1.2, rest.z);
+    const _att = new THREE.Vector3(), _c0 = new THREE.Vector3(), _c1 = new THREE.Vector3();
+    const ease = (k) => { k = Math.max(0, Math.min(1, k)); return k * k * (3 - 2 * k); };
+    window.__ladderTick = (t) => {
+      const fl = Math.floor(t * 6) % 2;
+      bar.forEach((m, i) => { m.emissiveIntensity = (i % 2 === fl) ? 3.2 : 0.15; });
+      // up first, then in toward the wall: the basket never sweeps through the facade
+      const kv = ease(LD.u * 1.25), kh = ease((LD.u - 0.2) / 0.8);
+      LD.basket.set(rest.x + (top.x - rest.x) * kh, rest.y + (top.y - rest.y) * kv, rest.z + (top.z - rest.z) * kh);
+      K.position.copy(LD.basket);
+      _att.set(LD.basket.x + nx * 0.75, LD.basket.y + 0.45, LD.basket.z + nz * 0.75);
+      boom.lookAt(_att);
+      const L = _att.distanceTo(T);
+      secs[1].position.z = Math.max(0, L - SEC) / 2; secs[2].position.z = Math.max(0, L - SEC);
+      const C = LD.cat;
+      if (C) {
+        if (LD.phase === 'cat') {           // over the sill and into the basket, in one hop
+          const k = ease(LD.cu);
+          _c0.copy(LD.catAt).lerp(_c1.set(LD.basket.x + fx * 0.45, LD.basket.y + 0.1, LD.basket.z + fz * 0.45), k);
+          _c0.y += Math.sin(Math.PI * k) * 0.6;
+          C.position.copy(_c0);
+        } else if (LD.phase === 'down' || LD.phase === 'done') C.position.set(LD.basket.x + fx * 0.45, LD.basket.y + 0.1, LD.basket.z + fz * 0.45);
+        else C.position.copy(LD.catAt);
+      }
+    };
+    window.__fireRescue = { win: RW.win, n: RW.n, foot, rest: [+rest.x.toFixed(1), +rest.z.toFixed(1)], top: [+top.x.toFixed(1), +top.y.toFixed(1), +top.z.toFixed(1)] };
+  }
   // ── A BIPLANE (2026-10-24) ──────────────────────────────────────────────
   // "a mail plane pilot flying over the snowy peaks of the andes" walked a snowfield.
   // A two-seat biplane of doped fabric over a wooden frame: a tall oval fuselage with
@@ -20050,6 +20245,8 @@ async function main() {
       if (reading) { setReading(false); return; }
       // a chest within reach opens; a shrine sells an upgrade (combat block)
       if (gameStarted && window.__cbtE && window.__cbtE()) return;
+      // the tower ladder's basket takes E before a car parked beside it does (2026-10-24)
+      if (gameStarted && window.__ladderE && window.__ladderE()) return;
       // a car beats a readable note on the same key: you are standing at a
       // door handle, not a signpost. Hooked through `window` on purpose —
       // this listener is built ~1300 lines before the car system exists.
@@ -20308,6 +20505,7 @@ async function main() {
     if (st.kind === 'repair') return /fire|flame|blaze|burn/.test(String(st.label || '')) ? `Put out ${st.count} ${st.label}`
       : /package|parcel|deliver|letter|mail|pizza|crate|box|supplies|medicine|food|meal|bread|loa(?:f|ves)|pies?|cakes?|buns|pastr|cookies|groceries|flowers|bouquets?|milk|newspapers?|papers|presents|gifts|cheese|eggs|soup|cocoa|coffee|potions?|scrolls?/.test(String(st.label || '')) ? `Deliver ${st.count} ${st.label}`
       : `Fix ${st.count} ${st.label || 'broken panels'}`;
+    if (window.__ladder) return `Bring ${st.label || 'them'} down from the burning window`;   // the tower ladder's rescue (2026-10-24)
     return `Reach ${st.label || 'the beacon'}`;
   }
   function stepProgress(st) {
@@ -24146,6 +24344,7 @@ async function main() {
         if (d < btd) { btd = d; bt = tv; }
       }
     }
+    if (window.__ladder && (window.__ladder._tgt || window.__ladder.nearNow)) { best = null; bt = null; }   // in the tower ladder's basket, or about to be
     nearCar = best;
     window.__nearTraffic = bt;
     carPrompt.style.display = (best || bt) ? 'block' : 'none';
@@ -24822,6 +25021,16 @@ async function main() {
       // thin rust seams, the beds warped a little as real strata are, and
       // the flats keep the ground's own colour.
       const STRATA = (_arch2 === 'canyon' || _arch2 === 'mesa');
+      // HIGH COUNTRY FROM THE AIR (2026-10-24): a plane's Andes rise to 150 m and were
+      // one smooth white blanket from floor to summit. Snow lies above a ragged line
+      // and on what is gentle enough to hold it; below it scree and bare rock, and in
+      // the valley floors the tawny tussock of the high plains
+      const ALPINE = SPEC.player && SPEC.player.ride === 'plane' && _arch2 === 'peaks' && gname === 'snow' && !_toonGround;
+      // FARMLAND FROM THE AIR (2026-10-24): "a crop duster flying low over the wheat fields of
+      // Kansas" flew over one green lawn. Seen from a cockpit, farm country is a surveyed
+      // patchwork: ripe wheat, green crop, ploughed earth and pasture, each field drilled in
+      // rows its own way, hedges and verges between them
+      const FIELDS = !!(window.__aloftFields) && !SNOW_GROUND && !_toonGround && gname !== 'snow';
       // THE MOON IS GREY (2026-10-11): its rock photo is a brown mountain's,
       // and a lunar landing stood on tan ground under a black sky
       const _gw = [SPEC.prompt, SPEC.world.name, SPEC.title].filter(Boolean).join(' ').toLowerCase();
@@ -24869,6 +25078,9 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
   return mix(mix(gh1(i), gh1(i + vec2(1.0, 0.0)), u.x), mix(gh1(i + vec2(0.0, 1.0)), gh1(i + vec2(1.0, 1.0)), u.x), u.y); }
 `
           + sh.fragmentShader.replace(
+            '#include <roughnessmap_fragment>',
+            // crops are matte: from a cockpit the glancing sky reflection turned the fields pastel
+            FIELDS ? '#include <roughnessmap_fragment>\n  roughnessFactor = 1.0;' : '#include <roughnessmap_fragment>').replace(
             '#include <normal_fragment_maps>',
             `vec3 _gN0 = normal;
 #include <normal_fragment_maps>
@@ -24904,6 +25116,38 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
   vec3 wTint = texture2D(uWorld, vUvRaw).rgb * 2.0;
   ${STRATA ? '' : 'wTint = mix(wTint, vec3(1.0), steepG * 0.8);'}
   diffuseColor.rgb *= clamp(wTint, 0.12, 1.45);
+  ${ALPINE ? `{
+    float yv = vWPosG.y + (gn1(vWPosG.xz * 0.018) - 0.5) * 24.0 + (gn1(vWPosG.xz * 0.09) - 0.5) * 7.0;
+    float upA = normalize(vWNrmG).y;
+    float snowT = max(smoothstep(30.0, 44.0, yv) * smoothstep(0.5, 0.72, upA), smoothstep(82.0, 110.0, yv) * 0.9);   // the summits stay white
+    vec3 rkA = texture2D(uCliff, vWPosG.xz / (uCliffM * 1.7)).rgb;
+    rkA = mix(vec3(dot(rkA, vec3(0.299, 0.587, 0.114))), rkA, 0.35);   // the photo's rock is brown: andesite is grey
+    vec3 scree = rkA * vec3(0.70, 0.68, 0.66) * 1.25;
+    float vale = (1.0 - smoothstep(8.0, 30.0, yv)) * smoothstep(0.75, 0.92, upA);
+    scree = mix(scree, rkA * vec3(0.80, 0.70, 0.42) * 1.3, vale * 0.8);
+    vec3 snowA = mix(diffuseColor.rgb, vec3(0.86, 0.88, 0.92), steepG);   // the cliff photo is brown under the snow
+    diffuseColor.rgb = mix(scree, snowA, snowT);
+  }` : ''}
+  ${FIELDS ? `{
+    vec2 q = vWPosG.xz;
+    vec2 qw = q + vec2(gn1(q * 0.004) - 0.5, gn1(q * 0.004 + 9.0) - 0.5) * 40.0;   // surveyed, not ruled
+    vec2 FS = vec2(74.0, 56.0);
+    vec2 cell = floor(qw / FS), fr = fract(qw / FS);
+    float hsh = gh1(cell + 3.7), hs2 = gh1(cell + 11.1);
+    float edge = min(min(fr.x, 1.0 - fr.x) * FS.x, min(fr.y, 1.0 - fr.y) * FS.y);   // metres to the field's edge
+    float lum = dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114));
+    vec2 rd = hs2 > 0.5 ? vec2(1.0, 0.0) : vec2(0.0, 1.0);
+    float rows = 0.5 + 0.5 * sin(dot(q, rd) * 2.4);                                 // drill rows a few metres apart
+    vec3 fc = diffuseColor.rgb;                                                      // pasture keeps its grass
+    if (hsh < 0.42) fc = mix(vec3(0.26, 0.165, 0.045), vec3(0.34, 0.23, 0.065), rows * 0.7 + gn1(q * 0.08) * 0.3);   // ripe wheat (albedo near the grass's: AgX turns a bright field white)
+    else if (hsh < 0.60) fc = mix(vec3(0.045, 0.095, 0.018), vec3(0.07, 0.14, 0.026), rows);                       // a green crop
+    else if (hsh < 0.76) fc = mix(vec3(0.075, 0.042, 0.022), vec3(0.115, 0.07, 0.038), rows);                      // ploughed
+    else if (hsh < 0.84) fc = mix(vec3(0.19, 0.145, 0.06), vec3(0.23, 0.18, 0.075), rows);                        // stubble
+    if (hsh < 0.84) fc *= 0.75 + 0.5 * clamp(lum / 0.25, 0.0, 1.4);                 // the photo's light and dark survive
+    float hedge = 1.0 - smoothstep(1.2, 3.2, edge);
+    fc = mix(fc, vec3(0.025, 0.05, 0.012), hedge * 0.85);                             // hedgerows and verges
+    diffuseColor.rgb = mix(diffuseColor.rgb, fc, 1.0 - steepG);
+  }` : ''}
   ${GREYWORLD ? '{ float lmG = dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114)); diffuseColor.rgb = mix(diffuseColor.rgb, vec3(lmG), 0.9); }' : ''}
   ${REEF_C ? `{
     vec2 cp = vWPosG.xz * 0.55; float ct = uCaus * 0.55;
@@ -27046,6 +27290,35 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
       if (bp) bp.rotation.x = 0.95 + (pole > 0 ? Math.max(0, Math.sin(tN * 3.2)) * 0.35 : 0);   // poling: the spike reaches and pushes
       window.__logState = { s: +R.s.toFixed(1), v: +R.v.toFixed(2), off: +R.off.toFixed(2), knock: R.knock > 0 };
     }
+    // (2026-10-24) THE TOWER LADDER (buildTowerLadder): stand in the basket and press E, the
+    // boom carries you up to the burning window; the cat comes over the sill into the basket
+    // and the boom brings you both down, which is the rescue
+    if (window.__ladder && gameStarted && !won && !lost) {
+      const LD = window.__ladder, p0 = body.translation();
+      LD._v = LD._v || new THREE.Vector3();
+      const hp = holder.getWorldPosition(LD._v), _hOff = p0.y - hp.y;
+      const st = steps[stepIdx], live = !!(st && st.kind === 'reach');
+      const near = Math.hypot(hp.x - LD.basket.x, hp.z - LD.basket.z) < 1.5 && Math.abs(hp.y - LD.basket.y) < 1.2;
+      LD.nearNow = live && near;
+      if (!window.__ladderE) window.__ladderE = () => {      // the keydown: start the boom, and swallow E while it moves
+        if (LD.phase === 'rest' && LD.nearNow) { LD.phase = 'up'; try { sfx('beep'); } catch (e) {} return true; }
+        return LD.phase === 'up' || LD.phase === 'cat' || LD.phase === 'down';
+      };
+      if (LD.phase === 'up') LD.u = Math.min(1, LD.u + dt / 7);
+      if (LD.phase === 'up' && LD.u >= 1) { LD.phase = 'cat'; LD.cu = 0; }
+      if (LD.phase === 'cat') { LD.cu = Math.min(1, LD.cu + dt / 1.1); if (LD.cu >= 1) { LD.phase = 'down'; popText('Got you!', '#ffd27a'); try { sfx('pickup'); } catch (e) {} } }
+      if (LD.phase === 'down') { LD.u = Math.max(0, LD.u - dt / 6); if (LD.u <= 0) { LD.phase = 'done'; if (live) advanceStep(); } }
+      const riding = LD.phase === 'up' || LD.phase === 'cat' || LD.phase === 'down';
+      if (!LD.hintEl) { LD.hintEl = document.createElement('div'); LD.hintEl.style.cssText = 'position:fixed;left:50%;bottom:21%;transform:translateX(-50%);padding:6px 14px;border-radius:6px;background:rgba(14,10,8,.62);color:#ffe6c8;font:600 15px var(--f-ui, system-ui);pointer-events:none;display:none;z-index:30'; document.body.appendChild(LD.hintEl); }
+      const hint = LD.phase === 'rest' ? (live && near ? 'Press E to raise the ladder' : '') : LD.phase === 'up' ? 'Raising the ladder' : '';
+      LD.hintEl.style.display = hint ? 'block' : 'none'; if (hint) LD.hintEl.textContent = hint;
+      if (riding) {
+        desired.x = 0; desired.y = 0; desired.z = 0; vy = 0;
+        modelYaw = dampAngle(modelYaw, LD.faceYaw, 8, dt);
+        LD._tgt = { x: LD.basket.x, y: LD.basket.y + 0.1 + _hOff, z: LD.basket.z };
+      } else LD._tgt = null;
+      window.__ladderState = { phase: LD.phase, u: +LD.u.toFixed(2) };
+    }
     if (SURF && RIDE === 'surfboard' && WATER_Y !== null) {
       const p0 = body.translation(), [sa, sc] = SURF.local(p0.x, p0.z);
       if (hAt(p0.x, p0.z) < WATER_Y - 0.2) {
@@ -27071,6 +27344,7 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
     // the log is placed by the river, not the controller: drive mode snaps to the ground, and a
     // log in a river 1.2 m deep was snapped down onto its bed every frame
     if (LOGRIDE && LOGRIDE._tgt) body.setNextKinematicTranslation(LOGRIDE._tgt);
+    if (window.__ladder && window.__ladder._tgt) body.setNextKinematicTranslation(window.__ladder._tgt);   // the basket carries the hero
     // LAVA BURNS (2026-10-03): a step into a channel costs a heart and puts
     // the hero back on the last solid ground they stood on, well clear of it
     if (VOLC && gameStarted && !won && !lost) {
@@ -27583,7 +27857,7 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
       if (goalMesh) goalMesh.rotation.z += dt * 0.8;
       const st = steps[stepIdx];
       const gd = Math.hypot(goalPos.x - nt.x, goalPos.z - nt.z);
-      if (st && st.kind === 'reach' && gd < (PLANE ? 18 : LOGRIDE ? LOGRIDE.w / 2 + 7 : 2.2)) advanceStep();   // a plane passes over at speed; a log reaches the mill from the water
+      if (st && st.kind === 'reach' && !window.__ladder && gd < (PLANE ? 18 : LOGRIDE ? LOGRIDE.w / 2 + 7 : 2.2)) advanceStep();   // a tower ladder's rescue ends when the basket is down   // a plane passes over at speed; a log reaches the mill from the water
       if (st && st.kind === 'escort'
           && npcs.some(nn => nn.behavior === 'escort' && !nn.dead && nn._arrived)) {
         advanceStep();
@@ -28120,9 +28394,11 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
     // metre across while the world spun round it (the fox, most visibly).
     // Sideways and back toward the camera now walk straight across the view;
     // W with A or D still curves the camera round with the turn.
-    const _fwdK = (DRIVE || DRIVING || PLANE) ? 1 : Math.max(0, -mv.z) / Math.max(mv.mag, 1e-3);
-    // a plane is always going somewhere: the camera rides behind it with no key held
-    if (!dragging && freeLookT <= 0 && (PLANE || (mv.mag > 0.15 && _fwdK > 0.05))) {
+    const _inBasket = !!(window.__ladder && window.__ladder._tgt);
+    const _fwdK = (DRIVE || DRIVING || PLANE || _inBasket) ? 1 : Math.max(0, -mv.z) / Math.max(mv.mag, 1e-3);
+    // a plane is always going somewhere: the camera rides behind it with no key held;
+    // so does a tower ladder's basket, the hero facing the window it rises to (2026-10-24)
+    if (!dragging && freeLookT <= 0 && (PLANE || _inBasket || (mv.mag > 0.15 && _fwdK > 0.05))) {
       let dyaw = (modelYaw + Math.PI) - yaw;
       dyaw = Math.atan2(Math.sin(dyaw), Math.cos(dyaw));
       yaw += dyaw * Math.min(1, ((DRIVE || DRIVING || PLANE) ? 3.0 : 1.8) * _fwdK * dt);

@@ -269,6 +269,50 @@ def _archetype_height(kind: str, x: float, z: float, base: float,
     return base
 
 
+def _aloft_noise(seed: int):
+    """Smooth value noise on a seeded lattice, -1..1, for landforms seen from the air."""
+    import math as _m
+    r = random.Random(seed * 7919 + 17)
+    P = list(range(256))
+    r.shuffle(P)
+    P += P
+
+    def n(x: float, z: float) -> float:
+        xi, zi = _m.floor(x), _m.floor(z)
+        xf, zf = x - xi, z - zi
+        xi, zi = int(xi) & 255, int(zi) & 255
+
+        def h(a: int, b: int) -> float:
+            return P[(P[a & 255] + b) & 511] / 127.5 - 1.0
+        u, v = xf * xf * (3 - 2 * xf), zf * zf * (3 - 2 * zf)
+        A, B, C, D = h(xi, zi), h(xi + 1, zi), h(xi, zi + 1), h(xi + 1, zi + 1)
+        return A + (B - A) * u + (C - A) * v + (A - B - C + D) * u * v
+    return n
+
+
+def _aloft_height(noise, x: float, z: float, relief: str) -> float:
+    """COUNTRY SEEN FROM A COCKPIT (2026-10-24). "a mail plane pilot flying over
+    the snowy peaks of the andes" flew a 900 m world whose ground rose ten metres:
+    a forest floor with the ranges standing only at the rim, so the plane flew
+    over nothing it had to clear. From the air a mountain range is ridged noise at
+    the kilometre scale: sharp crests, gullies between, cols to fly through. Alpine
+    country stands to about 150 m; other country rolls in hills of 30 to 40, and
+    a prairie under a crop duster lies almost flat, a few metres of swell."""
+    s, a, f = 0.0, 1.0, 1.0 / 210.0
+    for o in range(5):
+        k = 1.0 - abs(noise(x * f + o * 17.3, z * f - o * 9.1))
+        s += k * k * a
+        a *= 0.48
+        f *= 2.1
+    s /= 1.9                                          # ~0 in the gullies .. ~1 on a crest
+    if relief == "alpine":
+        lift = 0.55 + 0.45 * noise(x / 520.0 + 4.1, z / 520.0 - 2.7)   # some massifs stand taller than others
+        return (s ** 1.6) * 260.0 * lift + 4.0
+    if relief == "plains":
+        return (s ** 1.3) * 6.0 + noise(x / 140.0, z / 140.0) * 1.5
+    return (s ** 1.3) * 38.0 + noise(x / 90.0, z / 90.0) * 4.0
+
+
 def _fjord_height(x: float, z: float, base: float, goal: list[float],
                   goal_r: float, seed: int) -> float:
     """A FJORD IS SEA BETWEEN WALLS (2026-10-11). "a viking rows a longship up
@@ -490,7 +534,7 @@ def build_level(seed: int, size_m: float, n_objectives: int = 0,
                 regions: list[dict] | None = None,
                 archetype: str = "plain", terrain_form: str = "natural", sea: bool = False,
                 fjord: bool = False, coast: bool = False, harbor: bool = False, slot: bool = False,
-                river: bool = False, layout: str = "route") -> dict:
+                river: bool = False, layout: str = "route", aloft: bool = False, aloft_relief: str = "hills") -> dict:
     """Deterministic LevelPlan. Returns a JSON-safe dict for the runtime.
 
     sea (2026-10-06): a sea battle sails, it does not walk. The islands sit
@@ -502,6 +546,8 @@ def build_level(seed: int, size_m: float, n_objectives: int = 0,
         # a two-metre crack needs a finer grid than a hillside: at 128 the
         # walls stood in two-metre facets (2026-10-14)
         grid_n = max(grid_n, 200)
+    if aloft:
+        grid_n = max(grid_n, 176)                    # a crest seen from the air is sharp, not a 7 m facet
 
     # ── zones: spawn at origin; goal at a far edge; corridor between ────────
     half = size_m / 2.0
@@ -607,6 +653,7 @@ def build_level(seed: int, size_m: float, n_objectives: int = 0,
     riv = _river_course(seed, half, path) if (river and not lava and not slot and _arch != "cave") else None
     riv_segs = [(riv["pts"][k], riv["pts"][k + 1]) for k in range(len(riv["pts"]) - 1)] if riv else []
     heights: list[float] = []
+    _anoise = _aloft_noise(seed) if aloft else None
     for i in range(grid_n):
         z = (i / (grid_n - 1) - 0.5) * size_m
         for j in range(grid_n):
@@ -620,6 +667,8 @@ def build_level(seed: int, size_m: float, n_objectives: int = 0,
                 h = _coast_height(x, z, h0, goal, goal_r, seed, harbor)
             if sea:
                 h -= amplitude_m * 1.1                # fewer, smaller islands
+            if aloft:
+                h = _aloft_height(_anoise, x, z, "alpine" if _arch == "peaks" else aloft_relief)
             # MICRO-RELIEF (Phase 93): a second, higher-frequency octave —
             # real ground undulates at the metre scale, not only in big
             # hills. Mesh + collider share these heights, so feet/wheels
@@ -739,6 +788,18 @@ def build_level(seed: int, size_m: float, n_objectives: int = 0,
                 elif d < corridor * 2.2:
                     t = (d - corridor) / (corridor * 1.2)
                     h = _qh + (h - _qh) * t * t * (3 - 2 * t)
+            elif aloft:
+                # the route is a valley the plane follows, its floor a fifth of the
+                # crests; the strip at the spawn and the field at the goal lie level
+                dr = min(_seg_dist(x, z, *path[k], *path[k + 1]) for k in range(len(path) - 1))
+                v = max(0.0, min(1.0, (dr - 20.0) / 80.0))
+                h *= 0.3 + 0.7 * v * v * (3 - 2 * v)
+                dp = min(math.hypot(x, z), math.hypot(x - goal[0], z - goal[1]))
+                if dp < 32.0:
+                    h = 0.0
+                elif dp < 80.0:
+                    t = (dp - 32.0) / 48.0
+                    h *= t * t * (3 - 2 * t)
             elif d < corridor:
                 h = 0.0
             elif d < corridor * 2.2:                 # smooth shoulder
@@ -747,7 +808,11 @@ def build_level(seed: int, size_m: float, n_objectives: int = 0,
             if lift is not None:
                 h += lift(x, z)                      # the mountainside, the path cut into it
             edge = max(abs(x), abs(z)) / half        # settle flat at the walls
-            if edge > 0.92 and _arch != "cave" and not fjord and not coast and not slot:   # a cave is walled to its edge, a fjord cut to it
+            if aloft:
+                if edge > 0.86:                      # a range falls away over sixty metres, not a cliff at the wall
+                    _e = (1.0 - edge) / 0.14
+                    h *= _e * _e * (3 - 2 * _e)
+            elif edge > 0.92 and _arch != "cave" and not fjord and not coast and not slot:   # a cave is walled to its edge, a fjord cut to it
                 h *= max(0.0, (1.0 - edge) / 0.08)
             if lava_segs and not _ch:
                 h = max(h, LAVA_LEVEL + 0.25)   # only a channel lies under the lava
