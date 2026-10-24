@@ -69,11 +69,16 @@ const MOOD_LOOK = {
   // top made every frame one hue. The sky goes deep teal with the aurora
   // quieter, the sun warm white, the grade nearly neutral: the moss and the
   // crystals are the green now, and they read against something.
-  green: { nebula: { a: 0x0b2a2a, b: 0x2c5a4c, amt: 0.5, aurora: 0.38, auroraA: 0x8fe6a0, auroraB: 0xe6d48f },
-           sky: 0x08170f, fog: 0x0f2418, accent: 0x8fe6a0, ground: 0x3f6b4a, grid: 0x63a072, spores: true,
-           planet: { col: 0x5f9a6a, size: 0.13, bands: 0.8 }, ambience: 'fireflies',
-           grade: { lift: [0.0, 0.006, 0.006], gamma: [1.0, 1.01, 0.99], gain: [1.0, 1.02, 0.98], sat: 1.0 },
-           star: 0xd6ffe0, edge: 0x8fe6a0, sun: 0xfff2dc,
+  // A GREEN WORLD IN A VIOLET NIGHT (2026-10-24): even teal, the void round a
+  // green worldlet was a green haze, and a picture in one hue has nothing for
+  // its subject to stand against. A painter sets green on its complement: the
+  // night goes violet and rose, the companion a warm amber giant, the shadows
+  // cool and the lights warm (a split tone), and the moss is the only green.
+  green: { nebula: { a: 0x2a1a4c, b: 0xb85a7c, amt: 0.62, aurora: 0.20, auroraA: 0x5fd2c8, auroraB: 0x9a7ae0 },
+           sky: 0x0d0a1a, fog: 0x17122a, accent: 0x8fe6a0, ground: 0x3f6b4a, grid: 0x63a072, spores: true,
+           planet: { col: 0xe0a06a, size: 0.13, bands: 0.7 }, ambience: 'fireflies',
+           grade: { lift: [0.006, 0.0, 0.016], gamma: [1.0, 1.0, 1.0], gain: [1.03, 1.0, 0.96], sat: 1.04 },
+           star: 0xfff0e2, edge: 0x8fe6a0, sun: 0xffeccc,
            plate: { base: '#7c8a78', tint: '#5f6e5a', seam: 'rgba(50,64,48,0.75)', rivet: 'rgba(170,190,160,0.5)', overlay: 'moss' },
            belt: { frame: 0x6a7a3a, glow: 0x16220a, deck: 0xd0f0c0 },
            weather: { col: [0.55, 0.95, 0.60], rate: 9, size: 0.046, fall: -0.30, drift: 0.45, life: 0.10 } },
@@ -145,7 +150,7 @@ function agreesWithMood(hex) {
   const c = new THREE.Color(hex);
   if (MOOD === 'warm') return c.r >= c.b;
   if (MOOD === 'cold') return c.b >= c.r;
-  if (MOOD === 'green') return c.g >= c.r && c.g >= c.b;
+  if (MOOD === 'green') return c.b >= c.g;   // a green world's night is its complement: a green sky made every frame one hue (2026-10-24)
   return true;
 }
 const _paletteSky = _hex(_pal.sky, null), _paletteFog = _hex(_pal.fog, null);
@@ -1696,19 +1701,148 @@ scene.add(cube);
       orb.push({ a, r, y, size, w: (0.004 + rr() * 0.01) * (rr() < 0.5 ? 1 : -1), spin: new THREE.Vector3(rr(), rr(), rr()).normalize(), s: rr() * 6 });
     }
     scene.add(shards);
+    // ISLETS ADRIFT (2026-10-24). On a grown world the six big shards are not
+    // bare rock: they are crumbs of the same land broken off and floating, each
+    // a cap of turf over a rough cone of stone that narrows to a point, a tree
+    // or two on top, roots hanging out of the underside, and on some a thread of
+    // water spilling off the rim and thinning into the dark. Upright and slowly
+    // turning, so from the surface they hang in the sky like the pictures in old
+    // atlases of places no one has been.
+    const islets = new THREE.Group(); islets.name = 'worldIslets'; islets.visible = false;
+    const isl = [], baked = [], falls = [];
+    {
+      const rI = (() => { let q = 99173; return () => ((q = (q * 1664525 + 1013904223) >>> 0) / 4294967296); })();
+      // noise of the POSITION, so the seam's twin vertices move together and the shell stays closed
+      const hn = (x, y, z) => { const v = Math.sin(x * 127.1 + y * 311.7 + z * 74.7) * 43758.5453; return v - Math.floor(v); };
+      const paint = (geo, f) => { const pa = geo.attributes.position, c = new Float32Array(pa.count * 3), col = new THREE.Color();
+        for (let i = 0; i < pa.count; i++) { f(pa.getX(i), pa.getY(i), pa.getZ(i), col); c[i * 3] = col.r; c[i * 3 + 1] = col.g; c[i * 3 + 2] = col.b; }
+        geo.setAttribute('color', new THREE.BufferAttribute(c, 3)); return geo; };
+      const vM = (r) => { const m = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: r, flatShading: true }); m.userData.noAutoTex = true; return m; };
+      // one material and, per islet, ONE geometry: stone, turf, trees and roots are baked into a single
+      // vertex-coloured mesh (flat shading takes its normals from the faces, so only position and colour
+      // are kept). Built as separate meshes they were ~15 draw calls an islet, a hundred for the ring
+      const isleM = vM(0.92); isleM.side = THREE.DoubleSide;   // the sod lathe winds inward; flat normals come from the screen, so both faces light true
+      const barkC = new THREE.Color(0x5a4234), rootC = new THREE.Color(0x3b2c24);
+      const tint = (geo, col) => paint(geo, (x, y, z, c) => c.copy(col));
+      const bake = (parts) => { let n = 0; const flat = parts.map(([geo, m]) => { const q = (geo.index ? geo.toNonIndexed() : geo); if (m) q.applyMatrix4(m); n += q.attributes.position.count; return q; });
+        const P = new Float32Array(n * 3), C = new Float32Array(n * 3); let o = 0;
+        for (const q of flat) { P.set(q.attributes.position.array, o * 3); C.set(q.attributes.color.array, o * 3); o += q.attributes.position.count; q.dispose(); }
+        const out = new THREE.BufferGeometry(); out.setAttribute('position', new THREE.BufferAttribute(P, 3)); out.setAttribute('color', new THREE.BufferAttribute(C, 3));
+        out.computeVertexNormals(); out.computeBoundingSphere(); return out; };
+      const _o = new THREE.Object3D(), at = (px, py, pz, rx, ry, rz) => { _o.position.set(px, py, pz); _o.rotation.set(rx, ry, rz); _o.updateMatrix(); return _o.matrix.clone(); };
+      const fallM = new THREE.ShaderMaterial({ transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: false,
+        uniforms: { uTime: { value: 0 } },
+        vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * instanceMatrix * vec4(position, 1.0); }',
+        fragmentShader: 'uniform float uTime; varying vec2 vUv; float h(float x){ return fract(sin(x * 91.7) * 43758.5); }' +
+          ' void main(){ float x = vUv.x, y = 1.0 - vUv.y; float col = floor(x * 7.0); float streak = 0.55 + 0.45 * sin((y * 9.0 - uTime * 2.6 + h(col) * 6.0) * 3.0);' +
+          ' float edge = smoothstep(0.0, 0.25, x) * smoothstep(1.0, 0.75, x); float fade = smoothstep(0.0, 0.06, y) * pow(clamp(1.0 - y, 0.0, 1.0), 1.6);' +
+          ' float a = clamp(streak * edge * fade * 0.95, 0.0, 1.0); gl_FragColor = vec4(vec3(0.85, 0.94, 1.0) * a * 1.4, a); }' });
+      const soil = new THREE.Color(0x4a3426), rockD = new THREE.Color(0x2e2836);
+      // the stone in beds, like a cut bank: ochre, umber, slate and a pale band, each its own thickness
+      const strata = [0x5e4230, 0x3e3028, 0x4c4856, 0x6e5e44, 0x342e3a, 0x55402e].map(c => new THREE.Color(c));
+      const turfA = new THREE.Color(0x203c1e), turfB = new THREE.Color(0x355026), turfC = new THREE.Color(0x5e6230);
+      const tuft = [0x1a3418, 0x2c4a1e, 0x4a5a26].map(c => new THREE.Color(c)), bloom = [0xe8dcc0, 0xc890b8, 0xd8b85a].map(c => new THREE.Color(c));
+      const leafs = [0x22442a, 0x34552c, 0x45602c, 0x1f3c2a, 0x5a6230].map(c => new THREE.Color(c));   // under the key light these read a third brighter
+      for (let k = 0; k < 7; k++) {
+        const g = new THREE.Object3D(), depth = 1.3 + rI() * 1.1, parts = [];
+        // the stone underneath: a lathe narrowing to a point, roughened below the rim
+        const prof = [];
+        for (let j = 0; j <= 9; j++) { const t = j / 9; prof.push(new THREE.Vector2(Math.max(0.03, Math.pow(1 - t, 0.75) * (t === 0 ? 1 : 0.92)), -t * depth)); }
+        const body = new THREE.LatheGeometry(prof, 16), bp = body.attributes.position;
+        for (let i = 0; i < bp.count; i++) {
+          const x = bp.getX(i), y = bp.getY(i), z = bp.getZ(i);
+          if (y > -0.02) continue;
+          const n = hn(x * 3.1 + k, y * 2.3, z * 3.1), s = 1 + (n - 0.5) * 0.42;
+          bp.setXYZ(i, x * s, y + (hn(z, x, y + k) - 0.5) * 0.12, z * s);
+        }
+        body.computeVertexNormals();
+        paint(body, (x, y, z, c) => { const t = Math.min(1, -y / depth);
+          const bed = strata[Math.floor((-y * 5.5 + Math.sin(Math.atan2(z, x) * 3 + k) * 0.35) + k) % strata.length];
+          c.copy(t < 0.08 ? soil : bed).lerp(rockD, Math.max(0, t - 0.35) * 0.9).multiplyScalar(0.8 + hn(x, y, z) * 0.3); });
+        parts.push([body]);
+        // the turf: a sod lid just proud of the rim, green on top and earth at the edge
+        // (2026-10-24) a cylinder's lid is one fan, centre to rim, so it took a single flat green; the sod
+        // is a lathe in rings instead, domed a little and lumpy, so the greens can lie in patches
+        const sod = [new THREE.Vector2(0.001, 0.2)];
+        for (let j = 1; j <= 5; j++) { const t = j / 5; sod.push(new THREE.Vector2(1.04 * t, 0.2 - t * t * 0.06)); }
+        sod.push(new THREE.Vector2(1.03, 0.08), new THREE.Vector2(0.99, -0.02));
+        const cap = new THREE.LatheGeometry(sod, 18), cp = cap.attributes.position;
+        for (let i = 0; i < cp.count; i++) { const y = cp.getY(i); if (y > 0.1) cp.setY(i, y + (hn(cp.getX(i), 1, cp.getZ(i)) - 0.5) * 0.07); }
+        paint(cap, (x, y, z, c) => { if (y > 0.11) { const n = hn(x * 3, 2 + k, z * 3); c.copy(turfA).lerp(turfB, n).lerp(turfC, Math.max(0, n - 0.7) * 2.2).multiplyScalar(0.85 + hn(x, 5, z) * 0.25); }
+                                     else c.copy(soil).multiplyScalar(0.75 + hn(x, y, z) * 0.3); });
+        parts.push([cap]);
+        // tufts of long grass and a few small flowers, the way a painter dots a meadow in
+        for (let q = 0; q < 16; q++) {
+          const a = hn(k, q, 1) * 6.283, r = Math.sqrt(hn(q, k, 2)) * 0.95, tx = Math.cos(a) * r, tz = Math.sin(a) * r, ty = 0.2 - r * r * 0.06;
+          if (q < 12) parts.push([tint(new THREE.ConeGeometry(0.035, 0.1 + hn(q, 3, k) * 0.08, 4), tuft[q % tuft.length]), at(tx, ty + 0.05, tz, (hn(q, 4, k) - 0.5) * 0.4, 0, (hn(q, 5, k) - 0.5) * 0.4)]);
+          else parts.push([tint(new THREE.IcosahedronGeometry(0.022, 0), bloom[(q + k) % bloom.length]), at(tx, ty + 0.03, tz, 0, 0, 0)]);
+        }
+        // a tree or two, low-poly and leaning a little, in the greens the moss is
+        const nT = 1 + Math.floor(rI() * 3);
+        for (let q = 0; q < nT; q++) {
+          const a = rI() * 6.283, r = 0.15 + rI() * 0.5, tx = Math.cos(a) * r, tz = Math.sin(a) * r, th = 0.35 + rI() * 0.35;
+          parts.push([tint(new THREE.CylinderGeometry(0.025, 0.045, th, 6), barkC), at(tx, 0.19 + th / 2, tz, 0, 0, (rI() - 0.5) * 0.25)]);
+          for (let b = 0; b < 3; b++) {
+            const lg = new THREE.IcosahedronGeometry(0.16 + rI() * 0.12, 0), lc = leafs[Math.floor(rI() * leafs.length)];
+            paint(lg, (x, y, z, c) => c.copy(lc).multiplyScalar(0.8 + (y > 0 ? 0.35 : 0) + hn(x, y, z) * 0.15));
+            parts.push([lg, at(tx + (rI() - 0.5) * 0.18, 0.19 + th + (rI() - 0.2) * 0.16, tz + (rI() - 0.5) * 0.18, rI() * 3, rI() * 3, 0)]);
+          }
+        }
+        // roots out of the underside, hanging and curling
+        for (let q = 0; q < 5; q++) {
+          const a = rI() * 6.283, r0 = 0.25 + rI() * 0.35, y0 = -depth * (0.25 + rI() * 0.3), len = 0.5 + rI() * 0.9;
+          const pts = []; for (let j = 0; j <= 4; j++) { const t = j / 4; pts.push(new THREE.Vector3(Math.cos(a) * (r0 + t * 0.15) + Math.sin(t * 5 + q) * 0.05, y0 - t * len, Math.sin(a) * (r0 + t * 0.15))); }
+          parts.push([tint(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 8, 0.018 * (1 - 0.3 * rI()), 4), rootC)]);
+        }
+        baked.push(bake(parts));
+        // and on some, water over the edge
+        if (k % 3 === 0) {
+          const a = rI() * 6.283;
+          falls.push({ k, m: at(Math.cos(a) * 1.05, 0.1, Math.sin(a) * 1.05, 0, -a + Math.PI / 2, 0) });
+        }
+        isl.push({ g, a: rI() * 6.283, r: HALF * (2.5 + rI() * 1.2), y: (rI() - 0.4) * HALF * 0.8, size: HALF * (0.10 + rI() * 0.09),
+                   w: (0.003 + rI() * 0.006) * (rI() < 0.5 ? 1 : -1), yaw: rI() * 6.283, bob: rI() * 6.283, tilt: (rI() - 0.5) * 0.16 });
+      }
+      // the whole ring is two draw calls: the islets batched, the falls instanced (each fall rides its islet)
+      const nV = baked.reduce((n, q) => n + q.attributes.position.count, 0);
+      const batch = new THREE.BatchedMesh(baked.length, nV, 0, isleM);
+      baked.forEach(q => batch.addInstance(batch.addGeometry(q)));
+      const fg = new THREE.PlaneGeometry(0.34, 3.6, 1, 8); fg.translate(0, -1.6, 0);
+      const fallMesh = new THREE.InstancedMesh(fg, fallM, Math.max(1, falls.length)); fallMesh.renderOrder = 2;
+      for (const m of [batch, fallMesh]) { m.frustumCulled = false; m.castShadow = false; m.receiveShadow = false; islets.add(m); }
+      scene.add(islets);
+      Object.assign(islets.userData, { fallM, batch, fallMesh, falls, isl });
+    }
     const tilt = new THREE.Quaternion().setFromEuler(new THREE.Euler(0.38, 0, 0.21));
     const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _p = new THREE.Vector3(), _sc = new THREE.Vector3();
     window.__worldletTick = (t, camDist) => {
+      const _grownNow = !SPEC.city && WORLDS[worldIdx] && WORLDS[worldIdx].fam === 'green';
       for (let k = 0; k < NR; k++) {
         const o = orb[k], a = o.a + t * o.w;
         _p.set(Math.cos(a) * o.r, o.y, Math.sin(a) * o.r).applyQuaternion(tilt);
         _q.setFromAxisAngle(o.spin, o.s + t * 0.05);
-        _m.compose(_p, _q, _sc.setScalar(o.size)); shards.setMatrixAt(k, _m);
+        // on a grown world the islets stand where the six big shards were
+        _m.compose(_p, _q, _sc.setScalar(_grownNow && k < 6 ? 0.0001 : o.size)); shards.setMatrixAt(k, _m);
       }
       shards.instanceMatrix.needsUpdate = true;
+      islets.visible = _grownNow;
+      if (_grownNow) {
+        islets.userData.fallM.uniforms.uTime.value = t;
+        const U = islets.userData;
+        isl.forEach((o, k) => {
+          const a = o.a + t * o.w;
+          o.g.position.set(Math.cos(a) * o.r, o.y + Math.sin(t * 0.35 + o.bob) * 0.6, Math.sin(a) * o.r);
+          o.g.rotation.set(o.tilt, o.yaw + t * 0.02, o.tilt * 0.6);
+          o.g.scale.setScalar(o.size); o.g.updateMatrix(); U.batch.setMatrixAt(k, o.g.matrix);
+        });
+        U.falls.forEach((f, j) => U.fallMesh.setMatrixAt(j, _m.multiplyMatrices(isl[f.k].g.matrix, f.m)));
+        U.fallMesh.instanceMatrix.needsUpdate = true;
+      }
       if (cubeEdges) haloM.uniforms.uCol.value.copy(cubeEdges.material.color);
       // the halo and the shards are for the view from off the surface
-      const far = Math.max(0, Math.min(1, (camDist - HALF - 6) / (HALF * 0.8)));
+      // (2026-10-24) from inside its own sphere the halo washed the whole sky mint: every low view of a
+      // green world sat under a green haze. It is air seen from outside, so it shows only beyond its radius
+      const far = Math.max(0, Math.min(1, (camDist - R * 1.02) / (HALF * 0.7)));
       haloM.visible = far > 0.01; halo.visible = far > 0.01;
       haloM.uniforms.uCol.value.multiplyScalar(far);
     };
@@ -5342,10 +5476,56 @@ function farLabel(text, sub, col) {
   sp.scale.set(168, 26, 1);
   return sp;
 }
+// A FAR WORLD IS PAINTED, NOT PLATED (2026-10-24). The neighbours in the sky were
+// boxes in one flat colour with a lit wire round them: Ember Reach read as a peach
+// crate. Each face is now drawn, by hand as it were, in its family's character:
+// basalt split by lava that glows, ice crazed with blue fractures under drifts,
+// the void's dark plating pricked with lit windows, moss crossed by worn paths and
+// fireflies. The glowing part is the emissive map, so they shine across the sky.
+const _farTexCache = {};
+function farFaceTex(fam, seed) {
+  const key = fam + ':' + seed;
+  if (_farTexCache[key]) return _farTexCache[key];
+  let q = (seed * 2654435761) >>> 0;
+  const r = () => ((q = (q * 1664525 + 1013904223) >>> 0) / 4294967296);
+  const S = 256, mk = () => { const c = document.createElement('canvas'); c.width = c.height = S; return c; };
+  const cm = mk(), ce = mk(), x = cm.getContext('2d'), e = ce.getContext('2d');
+  const P = { warm: ['#2a1a16', '#3a221c', '#ff7a2a'], cold: ['#7f98b2', '#647e9a', '#9fe0ff'], void: ['#262c48', '#1c2138', '#ffd27a'], green: ['#3a5e36', '#4c7240', '#d8ff9a'] }[fam] || ['#555', '#444', '#fff'];
+  x.fillStyle = P[0]; x.fillRect(0, 0, S, S); e.fillStyle = '#000'; e.fillRect(0, 0, S, S);
+  // the ground: soft blotches, like a wash laid down and lifted with a dry brush
+  for (let i = 0; i < 90; i++) { x.globalAlpha = 0.08 + r() * 0.12; x.fillStyle = r() < 0.5 ? P[1] : (fam === 'cold' ? '#eef6ff' : '#000');
+    x.beginPath(); x.ellipse(r() * S, r() * S, 6 + r() * 28, 4 + r() * 18, r() * 3, 0, 6.283); x.fill(); }
+  x.globalAlpha = 1;
+  const walk = (ctx, x0, y0, n, step, wdt, col) => { ctx.strokeStyle = col; ctx.lineWidth = wdt; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(x0, y0);
+    let a = r() * 6.283, px = x0, py = y0; for (let i = 0; i < n; i++) { a += (r() - 0.5) * 1.1; px += Math.cos(a) * step; py += Math.sin(a) * step; ctx.lineTo(px, py); } ctx.stroke(); };
+  if (fam === 'warm') {
+    for (let i = 0; i < 9; i++) { const x0 = r() * S, y0 = r() * S, n = 8 + r() * 14;
+      const st = q; walk(x, x0, y0, n, 9, 3.5, '#120a08'); q = st; walk(e, x0, y0, n, 9, 1.6 + r() * 1.4, P[2]); }
+    for (let i = 0; i < 5; i++) { const cx = r() * S, cy = r() * S, rr = 4 + r() * 9, g = e.createRadialGradient(cx, cy, 0, cx, cy, rr);
+      g.addColorStop(0, '#ffd27a'); g.addColorStop(0.5, '#ff6a1a'); g.addColorStop(1, 'rgba(0,0,0,0)'); e.fillStyle = g; e.fillRect(cx - rr, cy - rr, rr * 2, rr * 2); }
+  } else if (fam === 'cold') {
+    for (let i = 0; i < 14; i++) { const x0 = r() * S, y0 = r() * S, n = 5 + r() * 10; const st = q;
+      walk(x, x0, y0, n, 10, 1.2, '#5f7fa0'); q = st; walk(e, x0, y0, n, 10, 0.8, 'rgba(120,200,255,0.5)'); }
+    for (let i = 0; i < 26; i++) { x.globalAlpha = 0.35 + r() * 0.35; x.fillStyle = '#d6e4f0'; x.beginPath(); x.ellipse(r() * S, r() * S, 16 + r() * 40, 1.5 + r() * 3.5, (r() - 0.5) * 0.4, 0, 6.283); x.fill(); }
+    x.globalAlpha = 1;
+  } else if (fam === 'void') {
+    x.strokeStyle = 'rgba(120,140,200,0.25)'; x.lineWidth = 1;
+    for (let i = 0; i <= 8; i++) { x.beginPath(); x.moveTo(i * 32, 0); x.lineTo(i * 32, S); x.moveTo(0, i * 32); x.lineTo(S, i * 32); x.stroke(); }
+    for (let i = 0; i < 70; i++) { e.fillStyle = r() < 0.75 ? P[2] : '#9fe0ff'; const lx = Math.floor(r() * 64) * 4, ly = Math.floor(r() * 64) * 4; e.fillRect(lx, ly, 2 + (r() < 0.2 ? 2 : 0), 2); }
+  } else {
+    for (let i = 0; i < 4; i++) walk(x, r() * S, r() * S, 14, 10, 4, '#6a5a3a');
+    for (let i = 0; i < 40; i++) { x.fillStyle = r() < 0.5 ? '#2a4a2a' : '#5a8a4a'; x.beginPath(); x.arc(r() * S, r() * S, 2 + r() * 5, 0, 6.283); x.fill(); }
+    for (let i = 0; i < 28; i++) { e.fillStyle = P[2]; e.globalAlpha = 0.5 + r() * 0.5; e.beginPath(); e.arc(r() * S, r() * S, 1 + r() * 1.2, 0, 6.283); e.fill(); }
+    e.globalAlpha = 1;
+  }
+  const tm = new THREE.CanvasTexture(cm), te = new THREE.CanvasTexture(ce);
+  tm.colorSpace = THREE.SRGBColorSpace; te.colorSpace = THREE.SRGBColorSpace; tm.anisotropy = te.anisotropy = 4;
+  return (_farTexCache[key] = { map: tm, emissiveMap: te });
+}
 function buildFarWorlds() {
   for (const o of [...farWorlds.children]) {
     farWorlds.remove(o);
-    o.traverse(m => { if (m.geometry) m.geometry.dispose(); if (m.material) { if (m.material.map) m.material.map.dispose(); m.material.dispose(); } });
+    o.traverse(m => { if (m.geometry) m.geometry.dispose(); if (m.material) { if (m.material.map && !m.material.userData.noAutoTex) m.material.map.dispose(); m.material.dispose(); } });   // the painted faces are cached across rebuilds
   }
   let n = 0;
   WORLDS.forEach((w, k) => {
@@ -5358,9 +5538,11 @@ function buildFarWorlds() {
     const g = new THREE.Group();
     g.position.copy(dir.multiplyScalar(560));
     const edgeCol = new THREE.Color(w.edge || w.grid);
+    const _ft = farFaceTex(w.fam, 17 + k * 31);
     const body = new THREE.Mesh(new THREE.BoxGeometry(40, 40, 40),
-      new THREE.MeshStandardMaterial({ color: new THREE.Color((w.plate && w.plate.base) || '#7f8aa8'), roughness: 0.6, metalness: 0.4,
-        emissive: edgeCol, emissiveIntensity: open ? 0.16 : 0.03, fog: false }));
+      new THREE.MeshStandardMaterial({ map: _ft.map, emissiveMap: _ft.emissiveMap, color: 0xffffff, roughness: 0.85, metalness: 0.05,
+        emissive: 0xffffff, emissiveIntensity: open ? 1.25 : 0.45, fog: false }));
+    body.material.userData.noAutoTex = true;
     body.name = 'body';
     const edges = new THREE.LineSegments(new THREE.EdgesGeometry(body.geometry),
       new THREE.LineBasicMaterial({ color: edgeCol, transparent: true, opacity: open ? 0.95 : 0.25, fog: false }));
@@ -7941,9 +8123,12 @@ function applyWorld(k) {
   // (three lerps colours in LINEAR light: 16% of a bright mint lifted a
   // near-black void to 0x3d6645, a green haze over every frame; 4% linear is
   // the lift the 16% was meant to be, 2026-10-03)
-  buildSky(new THREE.Color(w.sky).lerp(new THREE.Color(w.edge || w.grid), 0.04).getHex(),
+  // a green world's mint edge lifted its sky top and drew its galactic band in mint: the sky
+  // of a grown world takes lavender there instead, the complement of its moss (2026-10-24)
+  const _skyEdge = (w.fam === 'green' && !SPEC.city) ? 0x8a7ab8 : (w.edge || w.grid);
+  buildSky(new THREE.Color(w.sky).lerp(new THREE.Color(_skyEdge), 0.04).getHex(),
            new THREE.Color(w.sky).lerp(new THREE.Color(0x000000), 0.55).getHex(),
-           w.edge || w.grid, w.planet, w.nebula || (MOOD_LOOK[w.fam] || MOOD_LOOK.void).nebula);
+           _skyEdge, w.planet, w.nebula || (MOOD_LOOK[w.fam] || MOOD_LOOK.void).nebula);
   matComposite.uniforms.uTint.value.setHex(w.fog);
   const gr = w.grade || { lift: [0, 0, 0], gamma: [1, 1, 1], gain: [1, 1, 1], sat: 1 };
   matComposite.uniforms.uLift.value.fromArray(gr.lift);

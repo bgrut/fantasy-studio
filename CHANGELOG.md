@@ -21,6 +21,7 @@ Three rounds of stress tests built dozens of unusual sentences and gave each kin
 - **Vehicles built in code**: a hot-air balloon you fly (burner and vent) over Cappadocia's fairy chimneys, a six-wheeled planetary rover, a steam locomotive on its line.
 - **Kites** that fly downwind on a sagging string; **spacewalks** that float beside the station above the Earth; **skiing** on snow; **hurricanes** that rain.
 - **Casting**: the rider rides the mount, the ghost can be the hero, a snowball fight is kids throwing snowballs, a giant robot stays giant, period settings dress their crowds, a creature is never played by a person.
+- **Crystal Works, a painted sky** (flagship): a green worldlet now floats in its complement, a violet night with a rose nebula and a warm amber giant over the horizon, cool shadows and warm lights, instead of a green haze. Islets adrift round it: a domed meadow dotted with tufts and small flowers over layered rock narrowing to a point, low trees on top, roots hanging below, water spilling off a rim into the dark, the whole ring drawn in two calls. The neighbouring worlds are hand-painted: Ember Reach's basalt split by glowing lava, Frostline's ice crazed and drifted, The Long Drift's dark plating pricked with lit windows.
 - **Viking longships**: "a viking longship raids a foggy coast" sails a clinker-built longship with a dragon prow, shields along the gunwales, oars out and a striped square sail, against longships of its own kind under other colours, on a spruce-and-birch northern coast. Its crew throws spears.
 
 ### Fixed

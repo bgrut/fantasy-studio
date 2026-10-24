@@ -47,7 +47,8 @@ const rule = await p.evaluate(() => {
            sky: '#' + F.SKY_COL.toString(16).padStart(6, '0') };
 });
 const expect = { warm: { red: true, violet: false, ice: false }, cold: { red: false, ice: true, violet: true },
-                 green: { green: true, red: false }, void: { red: true, violet: true, ice: true, green: true } }[rule.mood] || {};
+                 // a green world's night is its complement (2026-10-24): violet holds, a green sky does not
+                 green: { green: false, violet: true, red: false }, void: { red: true, violet: true, ice: true, green: true } }[rule.mood] || {};
 const ruleOk = !rule.none && Object.keys(expect).every(k => rule[k] === expect[k]);
 console.log('palette   : mood', rule.mood, '| red', rule.red, '| violet', rule.violet, '| ice', rule.ice,
             '| green', rule.green, '| none', rule.none, '| sky in use', rule.sky, '|', ruleOk ? 'rule holds' : 'RULE BROKEN');
