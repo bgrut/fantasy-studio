@@ -2174,6 +2174,20 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                         if _kc_subj(w):
                             cand = w
                             break
+                # A PERSON THE SENTENCE NAMES IS MADE TOO (2026-10-24): "a jazz saxophonist playing on a
+                # rainy new orleans street" was played by the explorer: no saxophonist in the library yet,
+                # so the hero fell to "man". A word for a person by what they do is generated (once)
+                if cand is None:
+                    import re as _pre2
+                    for wd in _ptext.replace(",", " ").replace(".", " ").split():
+                        w = wd[:-1] if wd.endswith("s") and not wd.endswith(("ss", "ists")) else wd
+                        w = w[:-1] if w.endswith("ists") else w
+                        if w in _skip or len(w) < 5 or not _pre2.match(r"^[a-z-]+$", w):
+                            continue
+                        if (_pre2.search(r"(?:ist|ian|man|woman|keeper|maker|smith|monger|player|singer|dancer|drummer|fiddler|piper|busker|trumpeter|bugler|conductor|sailor|painter|chef|baker|tailor|cobbler|potter|weaver)$", w)
+                                and _gp_subj(w) == "biped" and w not in ("christian", "guardian", "human", "woman", "man", "gentleman")):
+                            cand = w
+                            break
                 if cand is None and _prop_hero:
                     cand = "explorer" if ("explor" in _ptext and library.resolve("explorer")) else "man"
                 if cand and cand != _pl:
@@ -2302,7 +2316,10 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                                 "firefighter", "fireman", "firewoman",
                                 "sailor", "fisherman", "miner", "mechanic", "astronaut", "pirate", "ninja",
                                 # (2026-10-11) a blacksmith was the postman, a lifeguard the explorer
-                                "blacksmith", "smith", "lifeguard", "gondolier", "gladiator", "conductor")
+                                "blacksmith", "smith", "lifeguard", "gondolier", "gladiator", "conductor",
+                                # (2026-10-24) "a jazz saxophonist" was the explorer in safari khaki: a musician is made
+                                "saxophonist", "trumpeter", "violinist", "guitarist", "drummer", "pianist", "busker",
+                                "musician", "singer", "fiddler", "cellist", "bagpiper", "accordionist", "harpist")
             try:                       # and any role the reference generator has an outfit for (2026-10-07)
                 from app.asset_gen.reference import has_wardrobe as _hw
                 _dressable = _dressable or (_hw(_w) and _w not in ("man", "woman", "person", "human", "guy", "boy", "girl", "walker"))
@@ -4093,7 +4110,9 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         # A BEACH HAS A SEA (2026-10-11): "a lifeguard rescues three swimmers at
         # a crowded summer beach" was a plain of acacias, the water a far line
         # (a harbour, a quay, a fishing port: the coast ends in a stone quay, 2026-10-11)
-        _harbor = bool(_fre.search(r"\b(harbou?rs?|quays?|quayside|docks|dockside|wharf|wharves|piers?|fishing port|fishing village|fish market|marina)\b", _pw7))
+        # (2026-10-24) a fish market alone is a hall (the runtime's FISHMARKET), not a quay of brick
+        # warehouses: "a sushi chef buying fish at a busy tokyo fish market" stood on a european dock
+        _harbor = bool(_fre.search(r"\b(harbou?rs?|quays?|quayside|docks|dockside|wharf|wharves|piers?|fishing port|fishing village|marina)\b", _pw7))
         # (2026-10-24) "a penguin sliding down an icy slope to reach the sea" had no sea: a goal of the sea is a coast
         if ((_fre.search(r"\b(beach|beaches|seaside|lifeguards?|swimmers?|sunbathers?|surf|surfing|surfers?|lighthouses?|coastline|coastal|sea cliffs?|headland|cove|(?:above|over|overlooking|by|beside|facing) the (?:sea|ocean)|sea views?|(?:reach(?:es|ing)?|to|toward|towards|into|down to|back to) the (?:sea|ocean|shore)|(?:across|over|on|into|round|around) (?:a |the )?(?:[a-z]+ )?bay)\b", _pw7) or _harbor)
                 and not _fre.search(r"\b(desert|dune|space|moon|mars|city|street|underwater)\b", _pw7)

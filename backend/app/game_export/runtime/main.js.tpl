@@ -2300,6 +2300,42 @@ async function main() {
     return { C, R, doorA, atGoal, beds, racks, inside, solid, ang };
   })();
 
+  // ── A FISH MARKET HALL (2026-10-24) ─────────────────────────────────────
+  // "a sushi chef buying fish at a busy tokyo fish market at dawn" walked a quay of
+  // brick warehouses. A fish market is a hall: a long open-sided shed under a low
+  // curved roof on steel columns, wet concrete underfoot, and aisle after aisle of
+  // stalls, each a counter of white foam boxes of fish on crushed ice under a bare
+  // bulb, whole tuna laid out on some, noren hung at the stall fronts, turret trucks
+  // parked in the aisles. It stands just ahead of the start; the plan is numbers only.
+  const FISHMARKET = (() => {
+    if (INTERIOR || OSM || !LVL || VIEW !== '3d' || GIANTROOM || SPEC.genre === 'factory') return null;
+    const w = String(SPEC.prompt || '').toLowerCase();
+    if (!/\b(fish ?markets?|tsukiji|toyosu|fish auctions?|fishmongers?|seafood markets?)\b/.test(w)) return null;
+    const g = LVL.goal || [0, 40], gl = Math.hypot(g[0], g[1]) || 1, ux = g[0] / gl, uz = g[1] / gl;
+    const C = [ux * 26, uz * 26], LEN = 44, WID = 26, A = Math.atan2(uz, ux);    // the hall's long axis runs toward the goal
+    if (Array.isArray(LVL.heights) && LVL.grid_n) {
+      const n = LVL.grid_n, gs = LVL.size_m || SPEC.world.size_m;
+      let s = 0, k = 0;
+      const inR = (x, z, m) => { const dx = x - C[0], dz = z - C[1], a = dx * ux + dz * uz, c = -dx * uz + dz * ux; return Math.abs(a) < LEN / 2 + m && Math.abs(c) < WID / 2 + m; };
+      for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) { const x = (j / (n - 1) - 0.5) * gs, z = (i / (n - 1) - 0.5) * gs; if (inR(x, z, 2)) { s += LVL.heights[i * n + j]; k++; } }
+      const m = k ? s / k : 0;
+      for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) { const x = (j / (n - 1) - 0.5) * gs, z = (i / (n - 1) - 0.5) * gs;
+        if (inR(x, z, 3)) LVL.heights[i * n + j] = m; else if (inR(x, z, 14)) LVL.heights[i * n + j] = m + (LVL.heights[i * n + j] - m) * 0.4; }
+    }
+    const local = (x, z) => { const dx = x - C[0], dz = z - C[1]; return [dx * ux + dz * uz, -dx * uz + dz * ux]; };
+    const world = (a, c) => [C[0] + ux * a - uz * c, C[1] + uz * a + ux * c];
+    const inside = (x, z, m) => { const [a, c] = local(x, z); return Math.abs(a) < LEN / 2 + (m || 0) && Math.abs(c) < WID / 2 + (m || 0); };
+    // stalls in three double rows across the hall, aisles between them
+    const stalls = [];
+    for (const [c, f] of [[-8.5, -1], [-6.9, 1], [-0.8, -1], [0.8, 1], [6.9, -1], [8.5, 1]]) for (let a = -LEN / 2 + 4; a <= LEN / 2 - 4; a += 3.2) stalls.push([a, c, f]);   // f: the side the counter faces (its aisle)
+    const solid = (x, z, m) => { const [a, c] = local(x, z); return stalls.some(s => Math.abs(a - s[0]) < 1.5 + (m || 0) && Math.abs(c - s[1]) < 0.75 + (m || 0)); };
+    // the fish to buy lie on the counters' ends along the aisles
+    LVL.collect_points = (LVL.collect_points || []).map((p, i) => { const a = -LEN / 2 + 6 + ((i * 7.3) % (LEN - 12)), c = [-3.9, 3.9, -11.2, 11.2][i % 4]; return world(a, c); });
+    LVL.landmarks = (LVL.landmarks || []).filter(q => !inside(q[0], q[1], 14));
+    LVL.pois = (LVL.pois || []).filter(q => !inside(q.x, q.z, 16));
+    return { C, LEN, WID, A, ux, uz, local, world, inside, solid, stalls };
+  })();
+
   // ── A VILLAGE (2026-10-07) ──────────────────────────────────────────────
   // "a firefighter puts out six fires in a burning village" was an empty oak
   // wood with a beacon in it. A village is a ring of cottages round a green,
@@ -5150,6 +5186,7 @@ async function main() {
       // brick's own hue has to survive, or every wall goes the same grey
       const tv = 0.78 + rngQ() * 0.34, tw2 = (rngQ() - 0.5) * 0.14;
       const tone = new THREE.Color(tv + tw2, tv, tv - tw2 * 0.7);
+      if (_NOLA && tint) tone.copy(tint).multiplyScalar(0.95 + rngQ() * 0.2);   // (2026-10-24) the Quarter's walls wear their pastel
       // Some buildings are mostly awake at 2am and some are mostly asleep.
       // A single global lit fraction gave every tower the same even sprinkle,
       // which is a texture, not a city.
@@ -5284,6 +5321,12 @@ async function main() {
     // landscape of slate and chimney pots
     const _PARIS = /\b(paris\w*|parisian|montmartre|haussmann\w*|seine|eiffel|champs[- ]elys\w*|le marais|left bank)\b/.test(String(SPEC.prompt || '').toLowerCase());
     const parisRoofs = [];
+    // THE FRENCH QUARTER IS NOT MIDTOWN (2026-10-24): "a jazz saxophonist playing on a rainy new
+    // orleans street at night" walked between glass towers. The Vieux Carre is two and three storeys
+    // of pastel stucco and old brick, shutters, and cast-iron galleries with lace railings standing
+    // out over the banquette on slender posts (built after the blocks, see NOLA GALLERIES)
+    const _NOLA = !_PARIS && /\b(new orleans|nola|french quarter|bourbon street|royal street|frenchmen street|jackson square|vieux carr\w*|crescent city|big easy|mardi gras|creole)\b/.test(String(SPEC.prompt || '').toLowerCase());
+    const nolaBlocks = [];
     function programFor(h, rnd) {
       if (h > 42) return rnd < 0.82 ? 'office' : 'hotel';
       if (h > 24) return rnd < 0.42 ? 'office' : rnd < 0.62 ? 'hotel' : 'apartment';
@@ -5367,11 +5410,13 @@ async function main() {
         // (a town keeps the heights it was planned with: two or three storeys,
         // no core to swell toward and no four-storey floor; 2026-10-06)
         const _h0 = _PARIS ? 18 + ((Math.abs(Math.sin(cx * 0.37 + cz * 0.11)) * 4) | 0) * 1.2   // one cornice line, give or take a storey
+                  : _NOLA ? 8.5 + ((Math.abs(Math.sin(cx * 0.41 + cz * 0.13)) * 3) | 0) * 3.3   // two, three and four storeys
                   : _TOWN ? Math.min(Math.max(b.h || 8, 5.5), 20)
                           : Math.min(Math.max((b.h || 12) * (1 + 2.9 * _core * _core), 13.5), 78);
         const gy = hAt(cx, cz);
         const tint = tintA.clone().lerp(tintB, rngB()).offsetHSL(0, 0, (rngB() - 0.5) * 0.12);
         if (_PARIS) tint.lerp(new THREE.Color(0xe6d8bc), 0.75);          // Lutetian limestone, cream
+        if (_NOLA) tint.lerp(new THREE.Color([0xd98c7a, 0xe6c86e, 0x8fb8a8, 0x9fb6d6, 0xe9b4b8, 0xc9a0c8, 0xf0e2c0, 0xd6a35c][Math.floor(Math.abs(Math.sin(cx * 3.1 + cz * 1.7)) * 8) % 8]), 0.8);   // the Quarter's pastels
         // photo facades ONLY by day (2026-07-28: the procedural grid reads
         // as placeholder in daylight); at night it keeps a 25% share for
         // the lit-window checkerboard until photo facades learn to glow
@@ -5396,7 +5441,7 @@ async function main() {
         const _comm = /office|commercial|hotel|retail|shop|supermarket|mall|bank/.test(_use);
         const _pal = districtPal(cx, cz);
         const _r = rngB(), _r2 = rngB();
-        const _bkt = _PARIS ? (_r < 0.7 ? 7 : 3) : _h0 > 26
+        const _bkt = _PARIS ? (_r < 0.7 ? 7 : 3) : _NOLA ? (_r < 0.72 ? 0 : 2) : _h0 > 26
           ? (_comm ? (_r < 0.6 ? 1 : 4) : _resid ? 6 : _pal.tall[_r < 0.62 ? 0 : 1])
           : (_night && _r2 < 0.16 ? 0
              : _resid ? (_r < 0.55 ? 2 : 5)
@@ -6855,6 +6900,73 @@ async function main() {
           }
         }
       } catch (e) { console.warn('[game] burning building skipped: ' + e.message); }
+      // NOLA GALLERIES (2026-10-24): on every street face of the Quarter, cast-iron balconies at
+      // each upper floor with lace railings, and on most a full gallery standing on slender posts
+      // out over the banquette. All of it is three draw calls: the decks merged, the lace merged,
+      // the posts instanced. Ferns hang from some.
+      if (_NOLA) try {
+        const rN = mulberry32((SPEC.seed || 1) + 6161);
+        const decks = [], laces = [], posts = [], ferns = [];
+        const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _e = new THREE.Euler(), _s = new THREE.Vector3(), _p = new THREE.Vector3();
+        for (const e of feCand) {
+          const [pts, cx, cz, gy, h] = e, F = e[10];
+          const st = (F && F.st) || 3.3, nSt = Math.max(1, Math.round(h / st));
+          if (nSt < 2) continue;
+          const full = rN() < 0.62;
+          for (let k = 0; k < pts.length; k++) {
+            const a = pts[k], b = pts[(k + 1) % pts.length], L = Math.hypot(b[0] - a[0], b[1] - a[1]);
+            if (L < 6) continue;
+            const ux = (b[0] - a[0]) / L, uz = (b[1] - a[1]) / L;
+            let nx = -uz, nz = ux; const mx = (a[0] + b[0]) / 2, mz = (a[1] + b[1]) / 2;
+            if ((mx - cx) * nx + (mz - cz) * nz < 0) { nx = -nx; nz = -nz; }
+            if (!_onRoad(mx + nx * 6, mz + nz * 6, 0) && !_onRoad(mx + nx * 9, mz + nz * 9, 0)) continue;   // street faces only
+            const yaw = Math.atan2(-uz, ux), len = L - 0.8, D = full ? 2.3 : 1.2;
+            _q.setFromEuler(_e.set(0, yaw, 0));
+            for (let s2 = 1; s2 < Math.min(nSt, 3); s2++) {
+              const y = gy + s2 * st;
+              // the deck, out from the wall
+              _p.set(mx + nx * D / 2, y, mz + nz * D / 2); _m.compose(_p, _q, _s.set(len, 0.16, D)); decks.push(_m.clone());
+              // the lace, along the front and round the two ends
+              _p.set(mx + nx * (D - 0.05), y + 0.55, mz + nz * (D - 0.05)); _m.compose(_p, _q, _s.set(len, 1.0, 1)); laces.push(_m.clone());
+              for (const sd of [-1, 1]) { const ex = mx + ux * sd * len / 2 + nx * D / 2, ez = mz + uz * sd * len / 2 + nz * D / 2;
+                _q.setFromEuler(_e.set(0, yaw + Math.PI / 2, 0)); _m.compose(_p.set(ex, y + 0.55, ez), _q, _s.set(D, 1.0, 1)); laces.push(_m.clone()); _q.setFromEuler(_e.set(0, yaw, 0)); }
+              if (rN() < 0.35) ferns.push([mx + ux * (rN() - 0.5) * len * 0.8 + nx * (D - 0.3), y - 0.55, mz + uz * (rN() - 0.5) * len * 0.8 + nz * (D - 0.3)]);
+            }
+            if (full) {                                                    // the posts, from the banquette to the top gallery
+              const top = gy + Math.min(nSt - 1, 2) * st, nP = Math.max(2, Math.round(len / 2.8) + 1);
+              for (let i = 0; i < nP; i++) { const t = -len / 2 + len * i / (nP - 1);
+                _m.compose(_p.set(mx + ux * t + nx * (D - 0.12), gy + (top - gy) / 2, mz + uz * t + nz * (D - 0.12)), _q, _s.set(1, top - gy, 1)); posts.push(_m.clone()); }
+            }
+          }
+        }
+        if (decks.length) {
+          const ironM = new THREE.MeshStandardMaterial({ color: 0x1c241f, roughness: 0.5, metalness: 0.55 }); ironM.userData.noAutoTex = true;
+          const deckM = new THREE.MeshStandardMaterial({ color: 0x4e4036, roughness: 0.85 }); deckM.userData.noAutoTex = true;
+          const deckG = mergeGeometries(decks.map(m => new THREE.BoxGeometry(1, 1, 1).toNonIndexed().applyMatrix4(m)), false);
+          const dk = new THREE.Mesh(deckG, deckM); dk.castShadow = true; dk.receiveShadow = true; scene.add(dk);
+          // cast-iron lace: rails, balusters, and between them the curling panels the Quarter is known by
+          const lc = document.createElement('canvas'); lc.width = 256; lc.height = 128; const lx = lc.getContext('2d');
+          lx.strokeStyle = '#fff'; lx.lineCap = 'round';
+          lx.lineWidth = 7; lx.beginPath(); lx.moveTo(0, 6); lx.lineTo(256, 6); lx.moveTo(0, 122); lx.lineTo(256, 122); lx.stroke();
+          lx.lineWidth = 4; for (let x = 0; x <= 256; x += 32) { lx.beginPath(); lx.moveTo(x, 6); lx.lineTo(x, 122); lx.stroke(); }
+          lx.lineWidth = 2.5;
+          for (let x = 0; x < 256; x += 32) { const cxl = x + 16;
+            lx.beginPath(); lx.arc(cxl, 40, 10, 0, Math.PI * 2); lx.stroke();
+            lx.beginPath(); lx.ellipse(cxl, 80, 7, 16, 0, 0, Math.PI * 2); lx.stroke();
+            lx.beginPath(); lx.moveTo(cxl - 14, 112); lx.quadraticCurveTo(cxl, 92, cxl + 14, 112); lx.stroke();
+            lx.beginPath(); lx.moveTo(cxl - 14, 14); lx.quadraticCurveTo(cxl, 30, cxl + 14, 14); lx.stroke(); }
+          const lt = new THREE.CanvasTexture(lc); lt.wrapS = THREE.RepeatWrapping;
+          const laceG = mergeGeometries(laces.map(m => { const g = new THREE.PlaneGeometry(1, 1).toNonIndexed(); const sx = new THREE.Vector3().setFromMatrixColumn(m, 0).length();
+            const uv = g.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setX(i, uv.getX(i) * sx / 1.6); return g.applyMatrix4(m); }), false);
+          const laceM = new THREE.MeshStandardMaterial({ color: 0x1c241f, alphaMap: lt, alphaTest: 0.5, transparent: false, side: THREE.DoubleSide, roughness: 0.5, metalness: 0.5 });
+          laceM.userData.noAutoTex = true;
+          scene.add(new THREE.Mesh(laceG, laceM));
+          if (posts.length) { const pm = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.07, 0.09, 1, 8), ironM, posts.length); posts.forEach((m, i) => pm.setMatrixAt(i, m)); pm.castShadow = true; scene.add(pm); }
+          if (ferns.length) { const fm = new THREE.MeshStandardMaterial({ color: 0x3f7a32, roughness: 0.8, flatShading: true }); fm.userData.noAutoTex = true;
+            const fi = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(0.42, 0), fm, ferns.length); ferns.forEach(([x, y, z], i) => { _m.compose(_p.set(x, y, z), _q.identity(), _s.set(1, 0.7, 1)); fi.setMatrixAt(i, _m); }); scene.add(fi); }
+          window.__nola = { decks: decks.length, laces: laces.length, posts: posts.length, ferns: ferns.length };
+        }
+      } catch (e) { console.warn('[game] french quarter galleries skipped: ' + e.message); }
       // r8 AWNINGS: tilted storefront canopies on road-facing building
       // bases — with plinths + these, ground floors read as SHOPS instead
       // of texture meeting pavement. Instanced, per-instance color.
@@ -8442,6 +8554,7 @@ async function main() {
       if (ARENA) { const ea = ARENA.A + ARENA.RO + 6, eb = ARENA.B + ARENA.RO + 6;
         for (let a = -ea; a <= ea; a += 8) for (let c = -eb; c <= eb; c += 8) { const [x, z] = ARENA.world(a, c); if (ARENA.inFoot(x, z, 6)) keepClear.push([x, z, 8]); } }   // no wood through the stands
       if (DOME) keepClear.push([DOME.C[0], DOME.C[1], DOME.R + 6]);   // the greenhouse dome's pad
+      if (FISHMARKET) keepClear.push([FISHMARKET.C[0], FISHMARKET.C[1], FISHMARKET.LEN / 2 + 10]);   // the market hall and its yard
       if (PARK) { for (const [a, b] of PARK.segs) for (let t = 0; t <= 1.001; t += 0.25) keepClear.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, 4]);
         keepClear.push([PARK.C[0], PARK.C[1], 12], [PARK.POND[0], PARK.POND[1], PARK.POND[2] + 4], [PARK.PLAY[0], PARK.PLAY[1], 10]); for (const q of PARK.PIC) keepClear.push([q[0], q[1], 5]); }
       if (YARD) for (let gz = YARD.Z0; gz <= YARD.Z1 + 10; gz += 5) for (let gx = YARD.X0; gx <= YARD.X1; gx += 6) keepClear.push([gx, gz, 6.5]);   // no wood inside the fence
@@ -9034,6 +9147,7 @@ async function main() {
                   || (YARD && YARD.inFoot(x, z, 3))
                   || (PARK && (PARK.onPath(x, z, 1.5) || PARK.inPond(x, z, 2) || PARK.inPlay(x, z, 1) || PARK.solid(x, z, 1)))
                   || (DOME && DOME.inside(x, z, 3))
+                  || (FISHMARKET && FISHMARKET.inside(x, z, 4))
                   || (ROWS && (ROWS.inField(x, z, 1.5) || ROWS.inYard(x, z, 2) || ROWS.track(x, z)))
                   || (MONK && (MONK.onStair(x, z, 1.5) || MONK.onTop(x, z, 2)))
                   || (VILLAGE && (VILLAGE.inCottage(x, z, 1.5) || VILLAGE.lane(x, z) || Math.hypot(x - VILLAGE.GC[0], z - VILLAGE.GC[1]) < 5))
@@ -9050,8 +9164,9 @@ async function main() {
                   || (clusterN(x, z) < 0.45 && !_regForce(x, z, sct)
                       && tries < 22)) && tries < 30);
         if (YARD && YARD.inFoot(x, z, 2)) continue;
-        if (PARK && (PARK.onPath(x, z, 1) || PARK.inPond(x, z, 1.5) || PARK.solid(x, z, 1))) continue;
-        if (DOME && DOME.inside(x, z, 3)) continue;   // (2026-10-22) out of tries in a small world: never inside the fence
+        if (PARK && (PARK.onPath(x, z, 1) || PARK.inPond(x, z, 1.5) || PARK.solid(x, z, 1))) continue;   // (2026-10-22) out of tries in a small world: never inside the fence
+        if (DOME && DOME.inside(x, z, 3)) continue;
+        if (FISHMARKET && FISHMARKET.inside(x, z, 4)) continue;
         // a cart, a fence or a tree does not stand on the seabed: in a world
         // with a sea, a land prop that could only be placed under it is left
         // out; coral, kelp, shells and rock belong there
@@ -11153,8 +11268,9 @@ async function main() {
           const pd = pathDist(x, z);
           if (pd < CORR * 0.45) { h *= 0.8; }     // (no trodden trail, 2026-10-12: a little shorter where people pass)
           if (inBldg(x, z, 0.6)) d = 0;
-          if (PARK && (PARK.onPath(x, z, 0.2) || PARK.inPond(x, z, 0.6) || PARK.inPlay(x, z, 0.3) || PARK.solid(x, z, 0.2))) d = 0;
-          if (DOME && DOME.inside(x, z, 0.8)) d = 0;   // the walks, the pond, the playground
+          if (PARK && (PARK.onPath(x, z, 0.2) || PARK.inPond(x, z, 0.6) || PARK.inPlay(x, z, 0.3) || PARK.solid(x, z, 0.2))) d = 0;   // the walks, the pond, the playground
+          if (DOME && DOME.inside(x, z, 0.8)) d = 0;   // the greenhouse floor
+          if (FISHMARKET && FISHMARKET.inside(x, z, 1)) d = 0;   // the market hall's floor
           else if (PARK && PARK.inFoot(x, z, 0)) { h *= 0.4; dry *= 0.4; }   // mown lawns
           if (YARD && (YARD.blocked(x, z, 0.3) || (Math.abs(x) < 6.6 && z > YARD.Z1 - 5.8 && z < YARD.Z1 + 9.5))) d = 0;   // no grass up through the house, the deck, the shed
           if (GARDEN && GARDEN.inPlot(x, z, 0.2)) { if (GARDEN.bare(x, z)) d = 0; else { h *= 0.35; dry *= 0.3; } }   // a mown garden lawn
@@ -11261,8 +11377,9 @@ async function main() {
           if (WATER_Y !== null && hAt(x, z) < WATER_Y + 0.05) return true;
           if (VOLC && VOLC.edgeDist(x, z) < 0.8) return true;
           if (PITCH && PITCH.inside(x, z, 3)) return true;                       // nothing lies on a pitch
-          if (PARK && (PARK.onPath(x, z, 0.4) || PARK.inPond(x, z, 0.8) || PARK.inPlay(x, z, 0.3) || PARK.solid(x, z, 0.3))) return true;
-          if (DOME && DOME.inside(x, z, 1.5)) return true;                       // a greenhouse floor is swept   // (2026-10-22) not on the walks
+          if (PARK && (PARK.onPath(x, z, 0.4) || PARK.inPond(x, z, 0.8) || PARK.inPlay(x, z, 0.3) || PARK.solid(x, z, 0.3))) return true;   // (2026-10-22) not on the walks
+          if (DOME && DOME.inside(x, z, 1.5)) return true;   // a greenhouse floor is swept
+          if (FISHMARKET && FISHMARKET.inside(x, z, 2)) return true;                 // so is a market hall's
           if (YARD && (YARD.blocked(x, z, 0.3) || (Math.abs(x) < 6.6 && YARD.Z1 - 5.8 < z && z < YARD.Z1 + 9.5))) return true;
           if (ARENA && ARENA.inFoot(x, z, 2)) return true;                       // nor on the sand or in the stands
           if (RAIL && RAIL.near(x, z, 0.5)) return true;
@@ -14704,7 +14821,7 @@ async function main() {
     // barrel beside it.
     {
       const _mw = [SPEC.prompt, SPEC.title].filter(Boolean).join(' ').toLowerCase();
-      if (!V.norse && /\b(markets?|market ?places?|fairs?|bazaars?|stalls?)\b/.test(_mw)) {
+      if (!V.norse && !FISHMARKET && /\b(markets?|market ?places?|fairs?|bazaars?|stalls?)\b/.test(_mw)) {   // a fish market has its hall
         const rM = mulberry32((SPEC.seed || 1) + 7171);
         const STRIPES = [['#efe6d2', '#a8322a'], ['#efe6d2', '#2f6a44'], ['#e9dfc6', '#2d4f86'], ['#d9b45a', '#6e3e22'], ['#efe6d2', '#c9862e']];
         const canvasM = STRIPES.map(([a, b]) => { const t = cvT(128, 64, (g, W, H) => { for (let x = 0; x < W; x += 16) { g.fillStyle = (x / 16) % 2 ? b : a; g.fillRect(x, 0, 16, H); }
@@ -16804,6 +16921,98 @@ async function main() {
         world.createCollider(RAPIER.ColliderDesc.cuboid(0.25, 2.2, 1.2).setTranslation(wx, gy + 2.2, wz).setRotation({ x: 0, y: Math.sin(yaw / 2), z: 0, w: Math.cos(yaw / 2) })); }
       window.__dome = { at: [+K.C[0].toFixed(1), +K.C[1].toFixed(1)], R: K.R, atGoal: K.atGoal, beds: K.beds.length, panes: keep.length / 9, struts: edges.size };
     } catch (e) { console.warn('[game] greenhouse dome skipped: ' + e.message); }
+  }
+  // ── THE FISH MARKET HALL, BUILT (see FISHMARKET above) ──────────────────
+  if (FISHMARKET) {
+    try {
+      const K = FISHMARKET, rF = mulberry32((SPEC.seed || 1) + 5252), G = new THREE.Group(); G.name = 'fishMarket';
+      const gy = hAt(K.C[0], K.C[1]); G.position.set(K.C[0], gy, K.C[1]); G.rotation.y = -K.A; scene.add(G);
+      const M = (p) => { const m = new THREE.MeshStandardMaterial(p); m.userData.noAutoTex = true; return m; };
+      const cv = (w, h, f) => { const c = document.createElement('canvas'); c.width = w; c.height = h; f(c.getContext('2d'), w, h); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t; };
+      const L = K.LEN, W = K.WID, H = 6.2;
+      const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _e = new THREE.Euler(), _p = new THREE.Vector3(), _s = new THREE.Vector3();
+      const inst = (geo, mat, list, cast) => { const im = new THREE.InstancedMesh(geo, mat, list.length); list.forEach((t, i) => { _q.setFromEuler(_e.set(t[3] || 0, t[4] || 0, t[5] || 0)); _m.compose(_p.set(t[0], t[1], t[2]), _q, _s.set(t[6] || 1, t[7] || 1, t[8] || 1)); im.setMatrixAt(i, _m); if (t[9] !== undefined) im.setColorAt(i, new THREE.Color(t[9])); });
+        im.castShadow = !!cast; im.receiveShadow = true; G.add(im); return im; };
+      // wet concrete: grey, darker where the hoses have run, puddles that hold the light
+      const floorT = cv(512, 512, (x, w, h) => { x.fillStyle = '#6c6e70'; x.fillRect(0, 0, w, h);
+        for (let i = 0; i < 90; i++) { const g = x.createRadialGradient(0, 0, 0, 0, 0, 1); g.addColorStop(0, 'rgba(30,34,38,0.55)'); g.addColorStop(1, 'rgba(30,34,38,0)');
+          x.save(); x.translate(rF() * w, rF() * h); x.scale(20 + rF() * 70, 8 + rF() * 30); x.fillStyle = g; x.beginPath(); x.arc(0, 0, 1, 0, 7); x.fill(); x.restore(); }
+        x.strokeStyle = 'rgba(30,30,30,.4)'; x.lineWidth = 2; for (let i = 0; i < w; i += 64) { x.beginPath(); x.moveTo(i, 0); x.lineTo(i, h); x.moveTo(0, i); x.lineTo(w, i); x.stroke(); } });
+      floorT.wrapS = floorT.wrapT = THREE.RepeatWrapping; floorT.repeat.set(4, 2.4);
+      const floor = new THREE.Mesh(new THREE.PlaneGeometry(L + 4, W + 4), M({ map: floorT, roughness: 0.22, metalness: 0.15 })); floor.rotation.x = -Math.PI / 2; floor.position.y = 0.04; floor.receiveShadow = true; G.add(floor);
+      // the shed: columns down both sides and the spine, a low arched roof of corrugated sheet, tie beams across
+      const steelM = M({ color: 0x5f7a72, roughness: 0.5, metalness: 0.6 });
+      const cols = [];
+      for (let a = -L / 2; a <= L / 2 + 0.01; a += 5.5) for (const c of [-W / 2, 0, W / 2]) cols.push([a, H / 2, c]);
+      inst(new THREE.CylinderGeometry(0.16, 0.18, H, 8), steelM, cols, true);
+      for (const t of cols) { const [wx, wz] = K.world(t[0], t[2]); world.createCollider(RAPIER.ColliderDesc.cylinder(H / 2, 0.2).setTranslation(wx, gy + H / 2, wz)); }
+      const roofG = new THREE.PlaneGeometry(L + 2, W + 3, 1, 16); roofG.rotateX(-Math.PI / 2);
+      { const rp = roofG.attributes.position; for (let i = 0; i < rp.count; i++) { const c = rp.getZ(i) / ((W + 3) / 2); rp.setY(i, H + 1.6 * (1 - c * c)); } roofG.computeVertexNormals(); }
+      const corrT = cv(64, 256, (x, w, h) => { for (let y = 0; y < h; y += 8) { const g = x.createLinearGradient(0, y, 0, y + 8); g.addColorStop(0, '#9aa49e'); g.addColorStop(0.5, '#c8d0ca'); g.addColorStop(1, '#7c8680'); x.fillStyle = g; x.fillRect(0, y, w, 8); }
+        for (let i = 0; i < 300; i++) { x.fillStyle = `rgba(90,60,40,${0.04 + rF() * 0.08})`; x.fillRect(rF() * w, rF() * h, 1 + rF() * 4, 2 + rF() * 12); } });
+      corrT.wrapS = corrT.wrapT = THREE.RepeatWrapping; corrT.repeat.set(8, 6);
+      const roof = new THREE.Mesh(roofG, M({ map: corrT, roughness: 0.55, metalness: 0.4, side: THREE.DoubleSide })); roof.castShadow = true; G.add(roof);
+      const beams = []; for (let a = -L / 2; a <= L / 2 + 0.01; a += 5.5) beams.push([a, H - 0.1, 0, 0, 0, 0, 0.22, 0.3, W + 1]);
+      inst(new THREE.BoxGeometry(1, 1, 1), steelM, beams, false);
+      // the stalls: a wet counter facing its aisle, foam boxes on it full of crushed ice and fish, a bulb over it, a noren in front
+      const counterM = M({ color: 0x3e4a52, roughness: 0.35, metalness: 0.3 }), foamM = M({ color: 0xf2f2ee, roughness: 0.9 }), iceM = M({ color: 0xdfeaf0, roughness: 0.15, metalness: 0.05 });
+      const fishM = M({ color: 0xffffff, roughness: 0.25, metalness: 0.55 }), tunaM = M({ color: 0xffffff, roughness: 0.3, metalness: 0.5 }), bulbM = M({ color: 0xfff2d0, emissive: 0xffd89a, emissiveIntensity: 2.2 });
+      // noren: indigo cloth split into panels hanging from a rod, a white fish dyed across them (a crest
+      // drawn as a circle and a bar read as the Greek phi on every stall)
+      const norenT = cv(192, 96, (x, w, h) => { x.clearRect(0, 0, w, h);
+        for (let i = 0; i < 3; i++) { x.fillStyle = '#20305a'; x.fillRect(i * 64 + 2, 6, 60, h - 6 - (i % 2) * 4); }
+        x.fillStyle = '#5a4a3a'; x.fillRect(0, 0, w, 6);
+        x.fillStyle = '#ece6d6'; x.beginPath(); x.ellipse(w / 2 - 8, h * 0.55, 46, 16, 0, 0, Math.PI * 2); x.fill();
+        x.beginPath(); x.moveTo(w / 2 + 30, h * 0.55); x.lineTo(w / 2 + 58, h * 0.55 - 18); x.lineTo(w / 2 + 52, h * 0.55); x.lineTo(w / 2 + 58, h * 0.55 + 18); x.closePath(); x.fill();
+        x.fillStyle = '#20305a'; x.beginPath(); x.arc(w / 2 - 38, h * 0.52, 4, 0, 7); x.fill();
+        for (let i = 1; i < 3; i++) x.clearRect(i * 64 - 1, 6, 3, h); });
+      const norenM = M({ map: norenT, alphaTest: 0.5, roughness: 0.9, side: THREE.DoubleSide });
+      const counters = [], foams = [], ices = [], fish = [], tunas = [], bulbs = [], norens = [];
+      const FISHC = [0xa8b8c8, 0x8fa2b4, 0xc8c0b0, 0xd06048, 0x9cb0a0, 0xb8a8c8];
+      for (const [a, c, f] of K.stalls) {
+        counters.push([a, 0.43, c, 0, 0, 0, 2.8, 0.86, 1.2]);
+        const [wx, wz] = K.world(a, c); world.createCollider(RAPIER.ColliderDesc.cuboid(1.4, 0.45, 0.6).setTranslation(wx, gy + 0.45, wz).setRotation({ x: 0, y: Math.sin(-K.A / 2), z: 0, w: Math.cos(-K.A / 2) }));
+        const tuna = rF() < 0.18;
+        if (tuna) { tunas.push([a, 1.12, c, 0, rF() * 0.3, 0, 1.0, 0.4, 0.4, 0x3a4a62]); }
+        else for (let b = -1; b <= 1; b++) {
+          const bx = a + b * 0.88, bc = c + f * 0.05;
+          foams.push([bx, 0.98, bc, 0, 0, 0, 0.78, 0.22, 0.52]); ices.push([bx, 1.08, bc, 0, 0, 0, 0.7, 0.03, 0.44]);
+          const fc = FISHC[Math.floor(rF() * FISHC.length)];
+          for (let k = 0; k < 4; k++) fish.push([bx - 0.24 + k * 0.16, 1.12, bc + (rF() - 0.5) * 0.12, 0, Math.PI / 2 + (rF() - 0.5) * 0.3, 0, 1, 1, 1, fc]);
+        }
+        bulbs.push([a, 2.9, c + f * 0.3, 0, 0, 0, 1, 1, 1]);
+        if (rF() < 0.5) norens.push([a, 2.2, c + f * 0.62, 0, 0, 0, 1.5, 0.75, 1]);
+      }
+      inst(new THREE.BoxGeometry(1, 1, 1), counterM, counters, true);
+      inst(new THREE.BoxGeometry(1, 1, 1), foamM, foams, true);
+      inst(new THREE.BoxGeometry(1, 1, 1), iceM, ices, false);
+      const fishG = (() => { const b = new THREE.SphereGeometry(0.15, 10, 6); b.scale(1, 0.3, 0.42); const t = new THREE.ConeGeometry(0.06, 0.1, 3); t.rotateZ(Math.PI / 2); t.scale(1, 0.4, 1); t.translate(-0.19, 0, 0);
+        return mergeGeometries([b.toNonIndexed(), t.toNonIndexed()].map(g => { g.deleteAttribute('uv'); return g; }), false); })();
+      inst(fishG, fishM, fish, false);
+      const tunaG = (() => { const b = new THREE.SphereGeometry(0.5, 16, 10); b.scale(1.35, 0.85, 0.85); const t = new THREE.ConeGeometry(0.28, 0.4, 4); t.rotateZ(Math.PI / 2); t.scale(1, 1.4, 0.2); t.translate(-0.82, 0, 0);
+        const fin = new THREE.ConeGeometry(0.12, 0.3, 3); fin.scale(1, 1, 0.2); fin.translate(0.05, 0.48, 0);
+        return mergeGeometries([b, t, fin].map(g => { g = g.toNonIndexed(); g.deleteAttribute('uv'); return g; }), false); })();
+      if (tunas.length) inst(tunaG, tunaM, tunas, true);
+      inst(new THREE.SphereGeometry(0.07, 8, 6), bulbM, bulbs, false);
+      if (norens.length) inst(new THREE.PlaneGeometry(1, 1), norenM, norens, false);
+      for (let i = 0; i < 6; i++) { const pl = new THREE.PointLight(0xffd8a0, 14, 14, 1.6); pl.position.set(-L / 2 + 4 + i * (L - 8) / 5, 3.2, (i % 2 ? 4 : -4)); G.add(pl); }
+      // turret trucks parked in the aisles: a flat bed, a round engine turret with the driver's rail
+      const trk = [];
+      const tpart = (geo, col, x, y, z) => { const g2 = geo.toNonIndexed(); g2.translate(x, y, z); const n = g2.attributes.position.count, cc = new Float32Array(n * 3), co = new THREE.Color(col);
+        for (let i = 0; i < n; i++) { cc[i * 3] = co.r; cc[i * 3 + 1] = co.g; cc[i * 3 + 2] = co.b; } g2.setAttribute('color', new THREE.BufferAttribute(cc, 3)); g2.deleteAttribute('uv'); return g2; };
+      const truckG = mergeGeometries([tpart(new THREE.BoxGeometry(2.2, 0.18, 1.1), 0x2f6aa0, 0.3, 0.45, 0), tpart(new THREE.CylinderGeometry(0.42, 0.46, 0.9, 12), 0x2f6aa0, -0.95, 0.85, 0),
+        tpart(new THREE.CylinderGeometry(0.46, 0.46, 0.08, 12), 0xe8e4da, -0.95, 1.32, 0), tpart(new THREE.CylinderGeometry(0.2, 0.2, 0.16, 10).rotateX(Math.PI / 2), 0x1a1a1a, -0.95, 0.2, 0),
+        tpart(new THREE.CylinderGeometry(0.17, 0.17, 0.14, 10).rotateX(Math.PI / 2), 0x1a1a1a, 1.1, 0.18, 0.45), tpart(new THREE.CylinderGeometry(0.17, 0.17, 0.14, 10).rotateX(Math.PI / 2), 0x1a1a1a, 1.1, 0.18, -0.45),
+        tpart(new THREE.CylinderGeometry(0.03, 0.03, 0.9, 6), 0xc8ccd0, -0.95, 1.75, 0)], false);
+      for (let i = 0; i < 6; i++) { const a = -L / 2 + 5 + rF() * (L - 10), c = [-3.9, 3.9, -11.2, 11.2][i % 4]; trk.push([a, 0, c, 0, rF() * 0.6 - 0.3, 0, 1, 1, 1]);
+        const [wx, wz] = K.world(a, c); world.createCollider(RAPIER.ColliderDesc.cuboid(1.2, 0.7, 0.6).setTranslation(wx, gy + 0.7, wz).setRotation({ x: 0, y: Math.sin(-K.A / 2), z: 0, w: Math.cos(-K.A / 2) })); }
+      inst(truckG, M({ vertexColors: true, roughness: 0.45, metalness: 0.3 }), trk, true);
+      // red paper lanterns along the eaves at both ends of the hall
+      const lanM = M({ color: 0xc8301e, emissive: 0xc8301e, emissiveIntensity: 0.8, roughness: 0.7 }), lans = [];
+      for (const a of [-L / 2 - 0.4, L / 2 + 0.4]) for (let c = -W / 2 + 2; c <= W / 2 - 2; c += 3.4) lans.push([a, H - 0.6, c, 0, 0, 0, 0.36, 0.5, 0.36]);
+      inst(new THREE.SphereGeometry(1, 12, 8), lanM, lans, false);
+      window.__fishMarket = { at: [+K.C[0].toFixed(1), +K.C[1].toFixed(1)], stalls: K.stalls.length, fish: fish.length, tuna: tunas.length, trucks: trk.length };
+    } catch (e) { console.warn('[game] fish market skipped: ' + e.message); }
   }
   // ── THE PARK, BUILT (see PARK above) ─────────────────────────────────────
   if (PARK) {

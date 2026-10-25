@@ -1325,6 +1325,18 @@ def _is_bust(glb: str | Path) -> bool:
         return False
 
 
+def _is_lying(glb: str | Path) -> bool:
+    """True when the mesh is far longer along one horizontal axis than it is
+    tall and than it is wide: a whole body laid flat, not a head and shoulders."""
+    try:
+        import trimesh
+        e = [float(v) for v in trimesh.load(str(glb), force="scene").extents]
+        lng, wid = max(e[0], e[2]), min(e[0], e[2])
+        return lng / max(e[1], 1e-6) > 1.8 and lng / max(wid, 1e-6) > 1.8
+    except Exception:
+        return False
+
+
 def _retire(p: Path, why: str) -> None:
     import time
     dst = p.parent / "_retired"
@@ -1390,6 +1402,22 @@ def ensure_playable(kind: str, verbose: bool = True) -> str | None:
         pass
     pattern = guess_pattern(kind)
     h = library.default_height(kind)
+    # A BODY LYING DOWN IS NOT A BUST (2026-10-24): "saxophonist" was made three times as a whole
+    # person lying on their back (1.75 m along Z, 0.67 m tall) and each was retired as a bust,
+    # so the hero fell to the explorer. A mesh far longer along one horizontal axis than it is
+    # tall or wide is weighed in all six turns (tools/quad_upright.py) and stood up before the
+    # bust check measures it.
+    if pattern == "biped" and _is_lying(static) and os.environ.get("FS_QUAD_UPRIGHT", "1") != "0":
+        try:
+            import importlib.util as _ilu
+            _sp = _ilu.spec_from_file_location("quad_upright", str(Path(__file__).resolve().parents[2] / "tools" / "quad_upright.py"))
+            _qu = _ilu.module_from_spec(_sp); _sp.loader.exec_module(_qu)
+            _r = _qu.fix(Path(static), kind, apply=True, biped=False)
+            if verbose:
+                print(f"[bake] {Path(static).name} lies down: {_r}")
+        except Exception as _le:
+            if verbose:
+                print(f"[bake] lying check skipped ({type(_le).__name__}: {_le})")
     if pattern == "biped" and _is_bust(static):
         # A BUST IS NOT A BODY (2026-10-02). "castaway" was generated while the
         # classifier still called it an object, so the picture was a portrait

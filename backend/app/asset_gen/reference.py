@@ -585,6 +585,16 @@ def _build_reference_prompt(slots: Dict[str, Any], style: str) -> tuple[str, str
             "miner":     "miner in a helmet with a headlamp, dusty overalls, heavy boots",
             "pilot":     "pilot in a leather flight jacket, aviator cap, goggles on the forehead, trousers and boots",
             "chef":      "chef in a white double-breasted jacket, tall toque, checked trousers",
+            # (2026-10-24) a saxophonist was painted playing, the horn at his mouth, in a gold sequin suit:
+            # the mesh came out with a melted head. An instrument is held low at the side, the face clear,
+            # and the clothes are matte cloth (sequins and lamé read as noise to the 3D model)
+            "saxophonist": "a jazz saxophonist in a matte charcoal wool suit, a white shirt and a dark tie, a felt fedora, polished brown shoes, holding a brass saxophone low at his side by its neck, the face fully visible and not playing, fully clothed",
+            "trumpeter":   "a jazz trumpeter in a matte navy wool suit, a white shirt, a narrow tie, a flat cap, brown shoes, holding a brass trumpet low at his side, the face fully visible and not playing, fully clothed",
+            "violinist":   "a violinist in a matte black concert suit and white shirt, black shoes, holding a violin and bow low at the side, the face fully visible, fully clothed",
+            "guitarist":   "a street guitarist in a matte denim jacket, a plain shirt, dark jeans and boots, an acoustic guitar slung on the back by its strap, the face fully visible, fully clothed",
+            "drummer":     "a drummer in a matte dark t-shirt, an open flannel shirt, dark jeans and sneakers, a pair of drumsticks in one hand at the side, the face fully visible, fully clothed",
+            "busker":      "a street busker in a matte corduroy jacket, a knitted scarf, dark trousers and worn boots, a small accordion held low at the side, the face fully visible, fully clothed",
+            "musician":    "a jazz musician in a matte charcoal suit, a white shirt and dark tie, a felt fedora, brown shoes, holding a brass instrument low at the side, the face fully visible, fully clothed",
             "nurse":     "nurse in blue scrubs, comfortable shoes, a stethoscope",
             "mechanic":  "mechanic in stained grey coveralls, a rag in the pocket, work boots",
             # NEW KINDS OF GAME (2026-10-06): a superhero, a barista, a gardener
