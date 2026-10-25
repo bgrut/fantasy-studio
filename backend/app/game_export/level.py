@@ -562,7 +562,8 @@ def build_level(seed: int, size_m: float, n_objectives: int = 0,
                 regions: list[dict] | None = None,
                 archetype: str = "plain", terrain_form: str = "natural", sea: bool = False,
                 fjord: bool = False, coast: bool = False, harbor: bool = False, slot: bool = False,
-                river: bool = False, layout: str = "route", aloft: bool = False, aloft_relief: str = "hills", ledges: bool = False) -> dict:
+                river: bool = False, layout: str = "route", aloft: bool = False, aloft_relief: str = "hills", ledges: bool = False,
+                headland: bool = False) -> dict:
     """Deterministic LevelPlan. Returns a JSON-safe dict for the runtime.
 
     sea (2026-10-06): a sea battle sails, it does not walk. The islands sit
@@ -608,6 +609,20 @@ def build_level(seed: int, size_m: float, n_objectives: int = 0,
     _cps = None                                      # where the things to find lie, when the layout says
     _spokes = None                                   # a hub's spoke ends: where the rounds go
     lift = None                                      # the ascent's rising ground, f(x, z) -> metres
+    if headland and coast and not harbor:
+        # (2026-10-25) A HILL ABOVE THE TOWN: "a child flying a kite on a windy hill above a
+        # seaside town" stood in a street grid on the flat. The journey's end is a grassy hill,
+        # its crown stood back from the shore so the seaward side is a slope, not a bank; the
+        # town on the low ground at its foot, the beach below. A lift, so the path climbs it
+        _hR = max(34.0, goal_r * 0.95)
+        _hux, _huz = goal[0] / max(goal_r, 1e-6), goal[1] / max(goal_r, 1e-6)
+        _hcx, _hcz = goal[0] + _huz * _hR * 0.12, goal[1] - _hux * _hR * 0.12
+
+        def lift(x: float, z: float) -> float:
+            t = max(0.0, 1.0 - math.hypot(x - _hcx, z - _hcz) / _hR)
+            sq = -x * _huz + z * _hux
+            land = max(0.0, min(1.0, (13.0 - sq) / 16.0))
+            return 14.0 * (t * t * (3 - 2 * t)) * (land * land * (3 - 2 * land))
     if layout == "loop" and not (fjord or coast or slot or sea or ledges):
         R0 = half * rng.uniform(0.5, 0.64)
         a0 = ang + rng.uniform(0.6, 0.9)

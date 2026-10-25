@@ -1081,6 +1081,8 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                                   # (2026-10-24) "searches a snowy slope for three lost hikers": the place
                                   # can come between the search and the ones searched for
                                   r"find(?:s|ing)?|locate[sd]?|locating|track(?:s|ing)? down|search(?:es|ing)?(?:\s+[a-z]+){0,4}?\s+for|look(?:s|ing)? for|"
+                                  # (2026-10-25) "collecting honey from the hives" collected ten glowing "honeys" off the path
+                                  r"(?:collect|harvest|gather|take|rob)(?:s|ing|bing)?\s+(?:the\s+|some\s+|their\s+)?honey(?:comb)?\s+(?:from|out of)|"
                                   r"check(?:s|ing)?(?:\s+on)?|inspect(?:s|ing)?|tend(?:s|ing)?(?:\s+to)?|water(?:s|ing)?)\s+"
                                   # (2026-10-17) "repairs a broken antenna" took "a" for the noun: "Fix 1 a broken"
                                   r"(?:all\s+)?(?:of\s+)?(?:the\s+|every\s+|an?\s+|his\s+|her\s+|their\s+|its\s+|my\s+)?(\d+|two|three|four|five|six|seven|eight|nine|ten)?\s*"
@@ -1116,7 +1118,7 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                             _noun = "thirsty " + _noun if not _noun.startswith(("thirsty", "wilting", "dry")) else _noun
                         else:
                             _noun = "it"
-                    if _rre.match(r"(check|inspect|tend)", _rm.group(0)) and not _rre.search(r"\b(?:bee)?hives?\b", _noun):
+                    if _rre.match(r"(check|inspect|tend|collect|harvest|gather|take|rob)", _rm.group(0)) and not _rre.search(r"\b(?:bee)?hives?\b", _noun):
                         _noun = "it"
                     if _noun not in _STOP and _noun.split()[0] not in ("it", "them", "everything", "things", "power", "order",
                                                                        "peace", "balance", "hope", "faith", "harmony", "life", "magic",
@@ -1144,6 +1146,10 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                         if _rre.match(r"(drop|deliver)", _rm.group(0)):
                             spec.objectives = [o for o in spec.objectives if not (o.kind == "reach" and _rre.search(
                                 r"roof|house|home|door|building|address|destination|drop|customer|deliver|point|depot|recipient", (o.label or "").lower()))]
+                        # (2026-10-25) the honey comes out of the hives: no glowing "honeys" lying about besides
+                        _honeyV = bool(_rre.match(r"(collect|harvest|gather|take|rob)", _rm.group(0)))
+                        if _honeyV:
+                            spec.objectives = [o for o in spec.objectives if not (o.kind == "collect" and _rre.search(r"hone|comb|jar", (o.label or "").lower()))]
                         # the broken things are the runtime's own fixtures: the planner's
                         # "panel" props were generated as a mesh and stood about besides
                         # (a fire planned as an enemy to defeat was dropped with its whole objective;
@@ -1152,7 +1158,9 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                         spec.entities = [e for e in spec.entities
                                          if not (_rre.search(r"\b" + _rre.escape(_last) + r"s?\b", (e.name or "").lower())
                                                  and e.behavior in ("static", "wander", "hostile", "flee"))]
-                        job.setdefault("notes", []).append(f"repair: {_cnt} {_lab} to fix (hold E at each)")
+                        job.setdefault("notes", []).append(f"delivery: {_cnt} {_lab} to hand over (hold E at each door)" if _rre.match(r"(drop|deliver)", _rm.group(0))
+                                                             else f"honey: {_cnt} {_lab} to open (hold E at each)" if _honeyV
+                                                             else f"repair: {_cnt} {_lab} to fix (hold E at each)")
             except Exception as _re_e:
                 job.setdefault("notes", []).append(f"repair rule skipped: {_re_e}")
             # A STREET VENDOR SERVES THE STREET (2026-10-25): "a hot dog vendor serving customers on a
@@ -2088,6 +2096,14 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                 spec.world.archetype = "basin"
             if spec.player.mode not in ("drive", "fly") or _fre.search(r"\b(submarine|sub)\b", _ptl):
                 spec.player.mode = "swim"
+            # (2026-10-25) a diver who WALKS the bottom walks it: "a deep sea diver walking on the ocean
+            # floor" swam laps over the sand. Weighted boots, the floor under him, slow heavy steps
+            if (_fre.search(r"\b(walk\w*|stroll\w*|trudg\w*|plod\w*|wad\w*|stomp\w*|step\w*)\b(?:\s+\w+){0,3}\s+(?:on|along|across|over)\s+the\s+(?:ocean|sea)[- ]?(?:floor|bed|bottom)|\b(?:sea|ocean)[- ]?(?:floor|bed|bottom)\b.{0,20}\bon foot\b|\b(diving helmet|brass helmet|hard[- ]hat diver|lead boots|weighted boots)\b", _ptl)
+                    and spec.player.mode == "swim" and not _fre.search(r"\b(submarine|sub)\b", _ptl)):
+                spec.player.mode = "walk"
+                spec.player.walk_speed, spec.player.run_speed = 1.1, 1.7
+                job["_seawalk"] = True
+                job.setdefault("notes", []).append("on the sea floor: the diver walks the bottom in weighted boots, not swimming")
             if spec.world.sky in ("night", "space", "mars") and not _fre.search(r"\b(night|midnight|moonlit|dark|abyss\w*|deep[- ]sea)\b", _ptl):
                 spec.world.sky = "day"
             # (2026-10-25) the creatures a sentence goes to see are there: one build of "a cave of glowing
@@ -2597,7 +2613,7 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                     if _o.kind == "race" and _rdre.search(r"\b(gates?|flags?|checkpoints?|rings?|laps?|poles?)\b", (_o.label or "").lower()):
                         _o.count = min(_o.count, 5)
                         _o.label = "rivals"
-                job.setdefault("notes", []).append(f"'{spec.player.name}' rides a {spec.player.ride}")
+                job.setdefault("notes", []).append(f"'{spec.player.name}' " + ("goes on " if (spec.player.ride or "").endswith("s") else "rides a ") + f"{spec.player.ride}")
                 # (2026-10-22) "a skier races down a steep black run through the trees" skied a summer
                 # meadow of flowers: a board or skis on snow is a snow slope, pines on it, no grass
                 # (2026-10-23) not where the sentence names other ground: "a snowboarder patrols a salt marsh" got snow
@@ -2880,7 +2896,7 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                 spec.player.walk_speed = 6.0                 # glide
             if spec.player.run_speed < 11.0:
                 spec.player.run_speed = 15.0                 # dive/boost
-        if player_glb and pattern == "aquatic":
+        if player_glb and pattern == "aquatic" and not job.get("_seawalk"):   # a diver walking the bottom keeps walking
             spec.player.mode = "swim"
             if spec.player.walk_speed < 4.5:                 # floor, see 'drive'
                 spec.player.walk_speed = 6.0                 # cruise (whales MOVE)
@@ -3928,6 +3944,20 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         _watertown = bool(_fre.search(r"\b(chinese|china|jiangnan|suzhou|wuzhen|zhouzhuang|tongli|xitang|hangzhou|lijiang|zhujiajiao|water ?town)\b", (req.prompt or "").lower())
                           and _fre.search(r"\b(rivers?|canals?|waterways?|water ?town|lantern festival|boats?)\b", (req.prompt or "").lower())
                           and not detect_place(req.prompt))
+        # A HILL ABOVE A TOWN (2026-10-25). "a child flying a kite on a windy hill above a seaside town"
+        # was dropped into a street grid of brick houses with grass through the roads. The hero is on the
+        # hill and the town lies at its foot: a village of cottages on the low ground, the hill rising to
+        # the goal (build_level headland=True), the sea beyond when the town is by it
+        _hilltown = bool(_fre.search(r"\b(?:hills?|hillsides?|hilltops?|clifftops?|cliff ?tops?|headlands?|bluffs?|ridges?|slopes?|downs|meadows?)\b[^.]{0,30}?\b(?:above|over|overlooking|looking down on)\s+(?:a|an|the)\s+(?:[a-z-]+\s+){0,2}(?:towns?|villages?|harbou?rs?|ports?)\b",
+                                     (req.prompt or "").lower())
+                         and not _fre.search(r"\b(city|downtown|skyscrapers?|neon|cyberpunk|metropolis)\b", (req.prompt or "").lower())
+                         and not detect_place(req.prompt) and base_spec is None)
+        if _hilltown:
+            is_city = False
+            spec.world.scatter = [sc for sc in spec.world.scatter if "building" not in Path(sc.asset).name]
+            _seaT = _fre.search(r"\b(seaside|coastal|fishing|harbou?r|port|sea|ocean|bay|beach)\b", (req.prompt or "").lower())
+            spec.world.name = "hill above a seaside village" if _seaT else "hill above a village"
+            job.setdefault("notes", []).append("a hill above the town: the town is a village of cottages at its foot, the hill rises to the goal" + (", the sea beyond" if _seaT else ""))
         if _watertown:
             is_city = False
             spec.world.scatter = [sc for sc in spec.world.scatter if "building" not in Path(sc.asset).name]
@@ -4159,9 +4189,13 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         # "thing that floats" is small and closed, and a wrong guess puts the
         # player underwater with no way to tell why.
         if spec.player.mode == "swim":
+            # (2026-10-25) the world's name and the title only speak for a hero with no name of its own:
+            # "a deep sea diver ... past a sunken galleon" was titled "Sunken Galleon" and the diver
+            # bobbed on the surface like a boat
+            _pn = (spec.player.name or "").lower().strip()
             _hay = " ".join(str(x).lower() for x in (
-                spec.player.asset, getattr(spec.player, "species", "") or "",
-                spec.world.name or "", spec.title or ""))
+                spec.player.asset, getattr(spec.player, "species", "") or "", _pn,
+                *(() if _pn and _pn not in ("player", "hero", "you") else (spec.world.name or "", spec.title or ""))))
             if any(w in _hay for w in ("boat", "ship", "sail", "raft", "canoe",
                                        "kayak", "yacht", "ferry", "schooner",
                                        "galleon", "dinghy", "trawler", "cutter")):
@@ -4368,7 +4402,7 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             # A SLOT CANYON IS A CRACK, NOT A GORGE (2026-10-13)
             slot=bool(_fre.search(r"\b(slot canyons?|slot|narrows|crevices?|fissures?|trapped in (?:a|the) canyon|pinned|wedged)\b", (req.prompt or "").lower())
                       and _fre.search(r"\b(canyons?|gorges?|crevices?|fissures?|narrows|ravines?)\b", (req.prompt or "").lower())),
-            river=_river, layout=(_design or {}).get("layout", "route"),
+            river=_river, layout=(_design or {}).get("layout", "route"), headland=bool(_coast and _hilltown),
             aloft=(spec.player.ride or "") == "plane" and not (_fjord or _coast or job.get("_naval")),
             # (2026-10-24) a crop duster over Kansas flew 37 m hills: farm and prairie country is flat
             # (2026-10-25) cliff ledges to leap between: a goat, an ibex, a climber among crags

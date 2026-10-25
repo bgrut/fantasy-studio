@@ -1641,6 +1641,29 @@ async function main() {
       spot: (rf) => { const q = isl[1 + Math.floor(rf() * (isl.length - 1))], a2 = rf() * 6.28, d2 = rf() * q.R * 0.5; return [q.x + Math.cos(a2) * d2, q.z + Math.sin(a2) * d2]; } };
   })();
   window.__skyisles = SKYISLES ? { islands: SKYISLES.isl.length } : null;
+  // ── A MOSSY LOG (2026-10-25) ───────────────────────────────────────────
+  // "a snail racing a beetle across a mossy log" raced across a lawn. A log a
+  // small hero goes along, across or over is the course: a fallen trunk lies
+  // from the start to the finish, and its top is the ground (hAt answers it
+  // once the terrain exists, as for the islands in the sky), so the racers,
+  // the spawn and the finish all stand on the moss.
+  const MOSSLOG = (() => {
+    if (INTERIOR || OSM || VIEW !== '3d' || !LVL || !LVL.goal || SKYISLES || GIANTROOM) return null;
+    if ((SPEC.player.ride || '') === 'log' || (SPEC.player.height_m || 1.7) > 0.6) return null;
+    const w = String(SPEC.prompt || '').toLowerCase();
+    if (!/\b(?:across|along|over|on|onto|atop|down|up|the length of)\s+(?:a|an|the)\s+(?:[a-z-]+\s+){0,2}(?:logs?|tree trunks?|fallen trees?)\b/.test(w)) return null;
+    const G = LVL.goal, gl = Math.hypot(G[0], G[1]) || 1, ux = G[0] / gl, uz = G[1] / gl;
+    const R = Math.max(0.3, (SPEC.player.height_m || 0.2) * 2.2), U0 = -2.4, U1 = gl + 2.4;
+    // the route runs straight down the log's spine
+    LVL.path = [0, 0.33, 0.66, 1].map(f => [G[0] * f, G[1] * f]);
+    const L = { R, ux, uz, U0, U1, gl, on: (x, z, m) => { const u = x * ux + z * uz, v = -x * uz + z * ux; return u > U0 - (m || 0) && u < U1 + (m || 0) && Math.abs(v) < R + (m || 0); }, mossy: /\b(moss\w*|mossy|green)\b/.test(w), base: null };
+    // the log's top at (x, z), or null off it; the trunk lies a little sunk in the leaf litter
+    L.top = (x, z, h0) => { const u = x * ux + z * uz, v = -x * uz + z * ux;
+      if (u < U0 || u > U1 || Math.abs(v) > R * 0.92) return null;
+      return (L.base !== null ? L.base : h0(ux * u, uz * u)) + R * 0.82 + Math.sqrt(R * R - v * v); };
+    return L;
+  })();
+  window.__mosslog = MOSSLOG ? { R: MOSSLOG.R, len: MOSSLOG.U1 - MOSSLOG.U0 } : null;
   window.__giantroom = GIANTROOM ? { kind: GIANTROOM.kind, G: +GIANTROOM.G.toFixed(2), boxes: GIANTROOM.B.length, litter: GIANTROOM.litter.length } : null;
   const _inWalls = [];                       // its walls as segments (buildRooms), so NPCs keep to the rooms
   // ── A MATCH IS PLAYED ON A PITCH (2026-10-11) ─────────────────────────
@@ -2488,11 +2511,19 @@ async function main() {
     if (!/\b(ship ?wrecks?|wrecks?|sunken (?:ship|galleon|boat|vessel)|sunk(?:en)? pirate ship)\b/.test(w)) return null;
     const r = mulberry32((SPEC.seed || 1) + 6161);
     const pth = LVL && LVL.path && LVL.path.length > 2 ? LVL.path[Math.floor(LVL.path.length / 2)] : [0, 28];
-    const x = pth[0] + (r() - 0.5) * 6, z = pth[1] + (r() - 0.5) * 6, yaw = r() * Math.PI * 2;
+    let x = pth[0] + (r() - 0.5) * 6, z = pth[1] + (r() - 0.5) * 6, yaw = r() * Math.PI * 2;
+    // (2026-10-25) THE GALLEON IS THE GOAL: "a diver walking on the ocean floor past a sunken galleon"
+    // sent him to an empty patch of sand while the wreck lay halfway along the way. When the journey's
+    // end is the ship, she lies just past it, broadside on, and the goal is at her side
+    const _shipGoal = LVL && LVL.goal && (SPEC.objectives || []).some(o => o.kind === 'reach'
+      && /\b(galleons?|ships?|wrecks?|shipwrecks?|hulks?|vessels?|boats?|frigates?|schooners?)\b/.test(String(o.label || o.target || '').toLowerCase()));
+    if (_shipGoal) { const G = LVL.goal, P = LVL.path && LVL.path.length > 1 ? LVL.path[LVL.path.length - 2] : [0, 0];
+      let dx = G[0] - P[0], dz = G[1] - P[1]; const dl = Math.hypot(dx, dz) || 1; dx /= dl; dz /= dl;
+      x = G[0] + dx * 5.5; z = G[1] + dz * 5.5; yaw = Math.atan2(dx, dz) + Math.PI / 2; }
     let k = 0;
     // x and z are settled by the build, on the deepest seabed near here (the
     // heights do not exist yet): an archipelago put the first wreck on an island
-    const W = { x, z, yaw, roll: 0.34 + r() * 0.12,
+    const W = { x, z, yaw, roll: 0.34 + r() * 0.12, isGoal: !!_shipGoal,
       // round the wreck, never inside it: the hull runs 7 m either way along its yaw
       spot: () => { const a = (k++ / 5) * Math.PI * 2 + r() * 0.8, d = 6 + r() * 4, f = Math.abs(Math.cos(a - W.yaw)) < 0.5 ? 1 : 1.4;
         return [W.x + Math.cos(a) * d * f, W.z + Math.sin(a) * d * f]; },
@@ -2500,7 +2531,7 @@ async function main() {
         const lx = dx * c - dz * s2, lz = dx * s2 + dz * c; return Math.abs(lx) < 3 + (m || 0) && Math.abs(lz) < 9 + (m || 0); },
     };
     // called once the ground exists (the keep-clear list and the build both ask)
-    W.settle = () => { if (W._settled) return; W._settled = true;
+    W.settle = () => { if (W._settled) return; W._settled = true; if (W.isGoal) return;   // the goal's ship stays at the goal
       let best = [W.x, W.z], bh = hAt(W.x, W.z); const rS = mulberry32((SPEC.seed || 1) + 6163);
       for (let i = 0; i < 90; i++) { const a = rS() * Math.PI * 2, d = 8 + rS() * 40, x = W.x + Math.cos(a) * d, z = W.z + Math.sin(a) * d;
         if (Math.hypot(x, z) < 14 || Math.abs(x) > gsize * 0.42 || Math.abs(z) > gsize * 0.42) continue;
@@ -3011,6 +3042,10 @@ async function main() {
 
   // the islands are the ground: over one, the ground is its turf (SKYISLES above)
   if (SKYISLES) { const _h0 = hAt; hAt = (x, z) => { const t = SKYISLES.top(x, z); return t === null ? _h0(x, z) : t; }; }
+  // the log is the ground along its length (MOSSLOG above): it lies level, at the lowest ground under it
+  if (MOSSLOG) { const _h0 = hAt; let lo = Infinity;
+    for (let u = MOSSLOG.U0; u <= MOSSLOG.U1; u += 0.25) lo = Math.min(lo, _h0(MOSSLOG.ux * u, MOSSLOG.uz * u));
+    MOSSLOG.base = lo; hAt = (x, z) => { const t = MOSSLOG.top(x, z, _h0); return t === null ? _h0(x, z) : t; }; }
 
   // THE LAND BEYOND (2026-10-01): past the playfield the world goes on, as
   // far as the forest does. A polar sheet starts exactly on the level's
@@ -3168,7 +3203,10 @@ async function main() {
     const hs = [];
     for (let i = -8; i <= 8; i++) for (let j = -8; j <= 8; j++) hs.push(hAt(i * gsize / 16, j * gsize / 16));
     hs.sort((a, b) => a - b);
-    return Math.max(w, hs[Math.floor(hs.length * 0.5)] + 4.5);
+    // (2026-10-25) NOTHING BREAKS THE SURFACE: "a deep sea diver walking on the ocean floor" had a
+    // basin whose rim stood out of the water as a dark shore under the stars; on the sea floor the
+    // whole floor is under the sea, its highest shoulder still two metres down
+    return Math.max(w, hs[Math.floor(hs.length * 0.5)] + 4.5, hs[hs.length - 1] + 2);
   })();
   let waterMesh = null, underwater = false, WATER_Y = null, WATER_BOB = 0.12;
   const origFog = scene.fog;
@@ -4095,6 +4133,7 @@ async function main() {
       const _acc = window.__accent;
       const _thing = _heliGoal || _venueGoal || GARDEN || WEST || GRAVE || VILLAGE || ROWS || MONK
         || (typeof CENOTE !== 'undefined' && CENOTE)   // (2026-10-25) a sinkhole's pool is its own goal: no lamp post stood in the water
+        || (WRECK && WRECK.isGoal)                     // the galleon on the bottom is what you came to see
         || (typeof ENTERABLES !== 'undefined' && ENTERABLES.some(E => E && E.facade === 'lighthouse'))   // a lighthouse is its own beacon
         || (_reachOb && /\b(hive|beehive|skep|apiary|helipad)\b/.test(String(_reachOb.label || '').toLowerCase()));
       // THE GOAL IS A PLACE (2026-10-12): the open-ground goal was a shaft of
@@ -8829,6 +8868,7 @@ async function main() {
       if (VILLAGE) keepClear.push([VILLAGE.GC[0], VILLAGE.GC[1], 26], [0, 3, 6]);
       if (GRAVE) for (let gz = GRAVE.Z0; gz <= GRAVE.Z1; gz += 5) keepClear.push([0, gz, 20]);   // no wood inside the railings
       if (WRECK) { WRECK.settle(); keepClear.push([WRECK.x, WRECK.z, 11]); }   // no kelp through the hull
+      if (MOSSLOG) for (let u = MOSSLOG.U0; u <= MOSSLOG.U1; u += 0.8) keepClear.push([MOSSLOG.ux * u, MOSSLOG.uz * u, MOSSLOG.R + 0.6]);   // nothing grows through the log
       // A PISTE THROUGH THE TREES (2026-10-19): "a snowboarder races down a
       // mountain slalom through the pines" raced through an unbroken forest,
       // trees standing in the line. A ski or board race cuts a piste twenty
@@ -11591,6 +11631,7 @@ async function main() {
           if (VILLAGE && (VILLAGE.inCottage(x, z, 0.4) || VILLAGE.lane(x, z))) d = 0;
           // (2026-10-21) no grass up through a harbour's cobbles (the quayside, in its own frame)
           if (BEACH && BEACH.harbor) { const [qa, qc] = BEACH.local(x, z); if (qa > -61 && qa < BEACH.gl + 51 && qc > -35 && qc < 7) d = 0; }
+          if (MOSSLOG && MOSSLOG.on(x, z, 0.25)) d = 0;                          // (2026-10-25) no grass up through the log
           if (GRAVE && (GRAVE.aisle(x, z) || GRAVE.onStone(x, z, 0.05))) d = 0;
           else if (GRAVE && GRAVE.inYard(x, z, 0)) { h *= 0.7; dry = Math.max(dry, 0.35); }     // rank, half-dead churchyard grass
           const rg = window.__regionAt && window.__regionAt(x, z);
@@ -11692,6 +11733,7 @@ async function main() {
           if (SKATE && SKATE.inPark(x, z, 1)) return true;
           if (SMITHY && SMITHY.near(x, z, 0.5)) return true;
           if (BEACH && BEACH.harbor) { const [qa, qc] = BEACH.local(x, z); if (qa > -61 && qa < BEACH.gl + 51 && qc > -35 && qc < 7) return true; }   // nothing grows from a harbour's cobbles
+          if (MOSSLOG && MOSSLOG.on(x, z, 0.4)) return true;                     // nor stones on the log, nor in its lee
           if (FALLS && Math.hypot(x - FALLS.at[0], z - FALLS.at[1]) < 12) return true;
           if (LVL && LVL.slot && hAt(x, z) > 0.8) return true;                     // a slot's wall face holds no pebbles (2026-10-14)
           const rg = window.__regionAt && window.__regionAt(x, z);
@@ -11920,7 +11962,10 @@ async function main() {
       }
       window.__slalom = gi;
     }
-    for (let k = step; k < PATH.length - 1 && !SLALOM; k += step) {
+    // (2026-10-25) a course is built to its racers: "a snail racing a beetle across a mossy log" ran
+    // under a glowing orange hoop seven metres high. Small racers get no hoops, and a finish line their size
+    const _cs = Math.min(1, Math.max(0.05, (SPEC.player.height_m || 1.7) / 1.7));
+    for (let k = step; k < PATH.length - 1 && !SLALOM && _cs > 0.5; k += step) {
       const [x, z] = PATH[k];
       const hd = Math.atan2(PATH[k + 1][0] - PATH[k][0], PATH[k + 1][1] - PATH[k][1]);
       const gate = new THREE.Group();
@@ -11952,6 +11997,7 @@ async function main() {
       fin.add(pole);
     }
     fin.position.set(goalPos.x, goalPos.y, goalPos.z);
+    if (_cs < 0.5) fin.scale.setScalar(MOSSLOG ? MOSSLOG.R * 0.8 / 4.75 : _cs * 1.4);   // on a log, the poles stand on its back
     fin.rotation.y = Math.atan2(goalPos.x - PATH[PATH.length - 2][0],
                                 goalPos.z - PATH[PATH.length - 2][1]);
     scene.add(fin);
@@ -12486,7 +12532,7 @@ async function main() {
       if (o.kind === 'accuse') return `Name ${o.label || 'the killer'}. E questions a suspect, Y accuses them`;
       if (o.kind === 'serve') return `Serve ${o.count} ${o.label || 'orders'}. E makes a drink at a station and hands it over`;
       if (o.kind === 'repair' && /\b(trees?|pines?|oaks?|logs?|timber)\b/.test(String(o.label || ''))) return `Chop down ${o.count} ${o.label}. Hold E at each marked trunk`;
-      if (o.kind === 'repair' && /\bhives?\b/.test(String(o.label || ''))) return `Check ${o.count} ${o.label}. Hold E at each one`;
+      if (o.kind === 'repair' && /\bhives?\b/.test(String(o.label || ''))) return /\bhoney/.test(String(SPEC.prompt || '').toLowerCase()) ? `Take the honey from ${o.count} ${o.label}. Hold E at each one` : `Check ${o.count} ${o.label}. Hold E at each one`;
       if (o.kind === 'repair' && /\b(thirsty|wilting|dry)\b/.test(String(o.label || ''))) return `Water ${o.count} ${o.label}. Hold E at each tray`;
       if (o.kind === 'repair') return /fire|flame|blaze|burn/.test(String(o.label || '')) ? `Put out ${o.count} ${o.label}. Hold E to spray each one`
         : /package|parcel|deliver|letter|mail|pizza|crate|box|supplies|medicine|food|meal|bread|loa(?:f|ves)|pies?|cakes?|buns|hot ?dogs?|hotdogs?|sandwich\w*|burgers?|tacos?|noodles?|dumplings?|kebabs?|pretzels?|pastr|cookies|groceries|flowers|bouquets?|milk|newspapers?|papers|presents|gifts|cheese|eggs|soup|cocoa|coffee|potions?|scrolls?/.test(String(o.label || '')) ? `Deliver ${o.count} ${o.label}. Hold E over each pad to drop one`
@@ -15207,8 +15253,13 @@ async function main() {
         const x = V.GC[0] + V.D[0] * t + V.P[0] * lx, z = V.GC[1] + V.D[1] * t + V.P[1] * lx;
         pa.setX(i, x); pa.setZ(i, z); pa.setY(i, hAt(x, z) + 0.03); }
       g.computeVertexNormals();
-      const lt = cvT(128, 256, (gg, W, H) => { gg.fillStyle = '#7a6046'; gg.fillRect(0, 0, W, H);
-        for (let i = 0; i < 600; i++) { gg.fillStyle = `rgba(${rV() < 0.5 ? '60,44,30' : '150,128,100'},${0.15 + rV() * 0.2})`; gg.fillRect(rV() * W, rV() * H, 2 + rV() * 4, 2 + rV() * 4); }
+      // (2026-10-25) in winter the lane is packed snow, not earth: "a mail carrier on skis delivering
+      // letters to a mountain village" skied down a brown plank laid on the white. Trodden snow goes
+      // a little grey-blue, with the runners of sledges and the twin grooves of skis down it
+      const _snowLane = SNOW_GROUND;
+      const lt = cvT(128, 256, (gg, W, H) => { gg.fillStyle = _snowLane ? '#d6dce5' : '#7a6046'; gg.fillRect(0, 0, W, H);
+        for (let i = 0; i < 600; i++) { gg.fillStyle = _snowLane ? `rgba(${rV() < 0.5 ? '150,160,176' : '236,240,246'},${0.15 + rV() * 0.25})` : `rgba(${rV() < 0.5 ? '60,44,30' : '150,128,100'},${0.15 + rV() * 0.2})`; gg.fillRect(rV() * W, rV() * H, 2 + rV() * 4, 2 + rV() * 4); }
+        if (_snowLane) for (const [cx, w2] of [[0.36, 3], [0.42, 3], [0.6, 2], [0.645, 2]]) { gg.fillStyle = 'rgba(128,140,160,0.3)'; gg.fillRect(cx * W - w2 / 2 + (rV() - 0.5) * 2, 0, w2, H); }
         gg.globalCompositeOperation = 'destination-in'; const gr = gg.createLinearGradient(0, 0, W, 0); gr.addColorStop(0, 'rgba(0,0,0,0)'); gr.addColorStop(0.2, 'rgba(0,0,0,1)'); gr.addColorStop(0.8, 'rgba(0,0,0,1)'); gr.addColorStop(1, 'rgba(0,0,0,0)'); gg.fillStyle = gr; gg.fillRect(0, 0, W, H); });
       lt.repeat.set(1, L / 6);
       const m = new THREE.Mesh(g, MAT({ map: lt, transparent: true, roughness: 1 })); m.receiveShadow = true; scene.add(m); }
@@ -16876,6 +16927,77 @@ async function main() {
         for (const q of list) { q.b.position.x += q.vx * dt; q.b.position.z += q.vz * dt; q.b.position.y = q.y0 + Math.sin(t * 0.11 + q.ph) * 5; q.b.rotation.y += dt * 0.02; } };
       window.__skyBalloons = list.length;
     }
+  }
+  // ── THE MOSSY LOG, BUILT (see MOSSLOG above) ────────────────────────────
+  // a fallen trunk: furrowed bark gone grey-brown, a pelt of moss over its
+  // top and down its shoulders, the sawn or broken ends showing their rings,
+  // tufts of moss and a few small toadstools on it, leaf litter round its foot
+  if (MOSSLOG) {
+    const ML = MOSSLOG, rL = mulberry32((SPEC.seed || 1) + 5151), R = ML.R, LEN = ML.U1 - ML.U0;
+    const cy = ML.base + R * 0.82, mid = (ML.U0 + ML.U1) / 2;
+    const yaw = Math.atan2(ML.ux, ML.uz);
+    const grp = new THREE.Group(); grp.position.set(ML.ux * mid, cy, ML.uz * mid); grp.rotation.y = yaw; scene.add(grp);
+    // the trunk: a cylinder along local z, its bark furrowed in the geometry and mossed by its own normals
+    const g = new THREE.CylinderGeometry(R, R, LEN, 48, Math.max(24, Math.round(LEN * 6)), true); g.rotateX(Math.PI / 2);
+    const pa = g.attributes.position, col = new Float32Array(pa.count * 3);
+    const bark = new THREE.Color(0x3e3226), bark2 = new THREE.Color(0x5e5040), moss = new THREE.Color(0x2f4a18), moss2 = new THREE.Color(0x5c7424), moss3 = new THREE.Color(0x7a7a2e), cc = new THREE.Color();
+    const nz = (a, b) => Math.sin(a * 1.7 + b * 0.9) * 0.5 + Math.sin(a * 3.1 - b * 2.3) * 0.3 + Math.sin(a * 7.3 + b * 5.1) * 0.2;
+    for (let i = 0; i < pa.count; i++) {
+      const x = pa.getX(i), y = pa.getY(i), z = pa.getZ(i), a = Math.atan2(y, x);
+      // furrows run along the trunk; the ends taper a little where the bark has gone
+      const fur = Math.abs(Math.sin(a * 22 + nz(z * 0.8, a) * 1.6)) ** 3, endT = Math.min(1, (LEN / 2 - Math.abs(z)) / (R * 0.8));
+      const rr = R * (1 - 0.035 * fur + 0.02 * nz(a * 3, z * 2)) * (0.93 + 0.07 * endT);
+      pa.setX(i, Math.cos(a) * rr); pa.setY(i, Math.sin(a) * rr);
+      // moss on the upper shoulders, patchy, thinning down the sides
+      const up = Math.sin(a), patch = nz(z * 1.3, a * 2) * 0.35 + nz(z * 4.1, a * 5) * 0.15;
+      // (2026-10-25) the first pelt was one even lime from end to end: a pipe. Moss grows in cushions
+      // with the bark between them, darker in the furrows, yellowing where it dries on the crown
+      const m = ML.mossy ? Math.max(0, Math.min(1, (up - 0.05 + patch * 1.6) * 2.4)) : Math.max(0, Math.min(1, (up - 0.55 + patch) * 2));
+      cc.copy(bark).lerp(bark2, 0.5 + 0.5 * nz(z * 2, a * 4)).multiplyScalar(0.75 + 0.25 * (1 - fur));
+      const mc = moss.clone().lerp(moss2, 0.5 + 0.5 * nz(z * 3, a * 3)).lerp(moss3, Math.max(0, up - 0.85) * 2.5 * (0.5 + 0.5 * nz(z * 5, a)));
+      mc.multiplyScalar(0.7 + 0.3 * (1 - fur) + 0.15 * nz(z * 9, a * 11));
+      cc.lerp(mc, m);
+      col[i * 3] = cc.r; col[i * 3 + 1] = cc.g; col[i * 3 + 2] = cc.b;
+    }
+    g.setAttribute('color', new THREE.BufferAttribute(col, 3)); g.computeVertexNormals();
+    // a fine grain over it all: moss is a pile of tiny leaves, bark a crust of flakes
+    const grainT = (() => { const c = document.createElement('canvas'); c.width = c.height = 256; const x = c.getContext('2d'); x.fillStyle = '#c8c8c8'; x.fillRect(0, 0, 256, 256);
+      for (let k = 0; k < 9000; k++) { const v = 130 + rL() * 125 | 0; x.fillStyle = `rgb(${v},${v},${v})`; x.fillRect(rL() * 256, rL() * 256, 1 + rL() * 2.5, 1 + rL() * 2.5); }
+      const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(10, Math.max(4, LEN / (R * 0.9))); t.colorSpace = THREE.SRGBColorSpace; return t; })();
+    const trunkM = new THREE.MeshStandardMaterial({ vertexColors: true, map: grainT, roughness: 0.97 }); trunkM.userData.noAutoTex = true;
+    const trunk = new THREE.Mesh(g, trunkM); trunk.castShadow = trunk.receiveShadow = true; grp.add(trunk);
+    // the ends: rings of the wood, a darker heart where it has started to rot
+    const ringT = (() => { const c = document.createElement('canvas'); c.width = c.height = 256; const x = c.getContext('2d');
+      x.fillStyle = '#8a6c4c'; x.fillRect(0, 0, 256, 256);
+      for (let k = 30; k > 0; k--) { x.beginPath(); x.arc(128 + (rL() - 0.5) * 4, 128 + (rL() - 0.5) * 4, k * 4.1, 0, Math.PI * 2);
+        x.strokeStyle = `rgba(${70 + rL() * 30},${50 + rL() * 20},${32 + rL() * 15},${0.35 + rL() * 0.3})`; x.lineWidth = 1 + rL() * 1.6; x.stroke(); }
+      const gr = x.createRadialGradient(128, 128, 4, 128, 128, 46); gr.addColorStop(0, 'rgba(40,28,18,0.85)'); gr.addColorStop(1, 'rgba(40,28,18,0)'); x.fillStyle = gr; x.fillRect(0, 0, 256, 256);
+      for (let k = 0; k < 9; k++) { const a = rL() * Math.PI * 2; x.strokeStyle = 'rgba(30,20,12,0.6)'; x.lineWidth = 1.5; x.beginPath(); x.moveTo(128, 128); x.lineTo(128 + Math.cos(a) * (60 + rL() * 60), 128 + Math.sin(a) * (60 + rL() * 60)); x.stroke(); }
+      const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t; })();
+    const endM = new THREE.MeshStandardMaterial({ map: ringT, roughness: 0.9 }); endM.userData.noAutoTex = true;
+    for (const sz of [-1, 1]) { const e = new THREE.Mesh(new THREE.CircleGeometry(R * 0.93, 40), endM); e.position.z = sz * LEN / 2; e.rotation.y = sz > 0 ? 0 : Math.PI; grp.add(e); }
+    // moss tufts and a few toadstools along the top, at the racers' scale
+    const tuftG = new THREE.IcosahedronGeometry(1, 1); tuftG.scale(1, 0.55, 1);
+    const tuftM = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1 }); tuftM.userData.noAutoTex = true;
+    const NT = Math.round(LEN * 60), tufts = new THREE.InstancedMesh(tuftG, tuftM, NT), d = new THREE.Object3D(), tc = new THREE.Color();
+    for (let k = 0; k < NT; k++) { const z = (rL() - 0.5) * (LEN - R * 0.6), a = Math.PI / 2 + (rL() - 0.5) * (ML.mossy ? 2.6 : 1.2);
+      // off the spine where the racers run: the middle stays a smooth runway of moss
+      if (Math.abs(a - Math.PI / 2) < 0.28 && rL() < 0.85) { k--; continue; }
+      const s = R * (0.012 + rL() * 0.03);
+      d.position.set(Math.cos(a) * R * 0.99, Math.sin(a) * R * 0.99, z); d.rotation.set(0, 0, a - Math.PI / 2); d.scale.set(s * (1 + rL()), s, s * (1 + rL())); d.updateMatrix();
+      tufts.setMatrixAt(k, d.matrix); tufts.setColorAt(k, tc.setHSL(0.2 + rL() * 0.08, 0.45 + rL() * 0.2, 0.12 + rL() * 0.12)); }
+    tufts.castShadow = true; grp.add(tufts);
+    const capM = new THREE.MeshStandardMaterial({ color: 0xc9572e, roughness: 0.7 }), stemM = new THREE.MeshStandardMaterial({ color: 0xe8dcc0, roughness: 0.8 });
+    capM.userData.noAutoTex = stemM.userData.noAutoTex = true;
+    for (let k = 0; k < 7; k++) { const z = (rL() - 0.5) * (LEN - 1), a = Math.PI / 2 + (rL() < 0.5 ? 1 : -1) * (0.7 + rL() * 0.6), hs = R * (0.12 + rL() * 0.1);
+      const tg = new THREE.Group(); tg.position.set(Math.cos(a) * R * 0.97, Math.sin(a) * R * 0.97, z); tg.rotation.z = a - Math.PI / 2;
+      const st = new THREE.Mesh(new THREE.CylinderGeometry(hs * 0.12, hs * 0.16, hs, 8), stemM); st.position.y = hs / 2; tg.add(st);
+      const cp = new THREE.Mesh(new THREE.SphereGeometry(hs * 0.5, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2), capM); cp.position.y = hs * 0.95; tg.add(cp);
+      grp.add(tg); }
+    // solid: a capsule along the trunk (its top is what hAt answers)
+    const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(ML.ux, 0, ML.uz));
+    world.createCollider(RAPIER.ColliderDesc.capsule(Math.max(0.05, LEN / 2 - R), R).setTranslation(ML.ux * mid, cy, ML.uz * mid).setRotation({ x: q.x, y: q.y, z: q.z, w: q.w }));
+    window.__mosslog = { R, len: LEN, at: [ML.ux * mid, cy, ML.uz * mid], tufts: NT };
   }
   // ── THE ISLANDS IN THE SKY, BUILT (see SKYISLES above) ──────────────────
   if (SKYISLES) {
@@ -21382,7 +21504,9 @@ async function main() {
     if (st.kind === 'repair' && /\b(hikers?|climbers?|skiers?|campers?|people|children|kids?|survivors?|villagers?|explorers?|walkers?|tourists?|scouts?|lost)\b/.test(String(l)))
       return `${n} ${l} out there somewhere. Each has lit a red flare; follow the red light up the slope and get to them.`;
     if (st.kind === 'repair' && /\bhives?\b/.test(String(l)))
-      return `${n} ${l} to check. Look for the cloud of bees and the ribboned cane beside each one; stand at it and hold E while the lid comes up and the bees settle.`;
+      return /\bhoney/.test(String(SPEC.prompt || '').toLowerCase())
+        ? `${n} ${l} heavy with honey. Find each by its cloud of bees and the ribboned cane beside it; stand at it and hold E while the lid comes up and you lift out a frame of comb.`
+        : `${n} ${l} to check. Look for the cloud of bees and the ribboned cane beside each one; stand at it and hold E while the lid comes up and the bees settle.`;
     if (st.kind === 'repair' && /\b(trees?|pines?|oaks?|logs?|timber)\b/.test(String(l)))
       return `${n} ${l} to fell. The ones to cut wear a red ribbon; stand at the trunk and hold E until it goes over.`;
     if (st.kind === 'repair' && /letter|mail|post|card/.test(String(l)))
@@ -21441,7 +21565,7 @@ async function main() {
     if (st.kind === 'serve') return `Serve ${st.count} ${st.label || 'orders'}`;
     if (st.kind === 'ride') return `Ride ${st.count} ${st.label || 'waves'}`;
     if (st.kind === 'repair' && /\b(trees?|pines?|oaks?|logs?|timber)\b/.test(String(st.label || ''))) return `Chop down ${st.count} ${st.label}`;
-    if (st.kind === 'repair' && /\bhives?\b/.test(String(st.label || ''))) return `Check ${st.count} ${st.label}`;
+    if (st.kind === 'repair' && /\bhives?\b/.test(String(st.label || ''))) return (/\bhoney/.test(String(SPEC.prompt || '').toLowerCase()) ? 'Honey from ' : 'Check ') + `${st.count} ${st.label}`;
     if (st.kind === 'repair' && /\b(thirsty|wilting|dry)\b/.test(String(st.label || ''))) return `Water ${st.count} ${st.label}`;
     if (st.kind === 'repair' && /\b(hikers?|climbers?|skiers?|campers?|people|children|kids?|survivors?|villagers?|explorers?|walkers?|tourists?|scouts?|lost)\b/.test(String(st.label || ''))) return `Find ${st.count} ${st.label}`;
     if (st.kind === 'repair') return /fire|flame|blaze|burn/.test(String(st.label || '')) ? `Put out ${st.count} ${st.label}`
@@ -22563,6 +22687,17 @@ async function main() {
   const FRONT_IS_MINUS_Z = _quadHero ? 0 : Math.PI;
   holder.rotation.y = FRONT_IS_MINUS_Z + THREE.MathUtils.degToRad(P.yaw_offset_deg || 0);
 
+  // (2026-10-25) A DIVER'S HELMET LAMP: "a deep sea diver walking on the ocean floor" walked into
+  // blue-black fog, the floor underfoot unseen. On the bottom of a dark sea the diver carries
+  // the light: a lamp at the helmet throws a cone over the sand ahead (made at load, as the headlights are)
+  if ((P.mode || 'walk') === 'walk' && FLORA && FLORA.biome && FLORA.biome.underwater && ['night', 'dusk'].includes(SPEC.world.sky)) {
+    const _hh = P.height_m || 1.75;
+    const dl = new THREE.SpotLight(0xd8f0ff, 42, 22, 0.55, 0.6, 1.5); dl.castShadow = false;
+    dl.position.set(0, _hh * 0.95, 0); holder.add(dl);
+    const tg = new THREE.Object3D(); tg.position.set(0, 0, -7); holder.add(tg); dl.target = tg;
+    const glow = new THREE.PointLight(0x9fd8ff, 3.5, 7, 1.8); glow.position.set(0, _hh * 0.9, -0.4); holder.add(glow);
+    window.__diverLamp = true;
+  }
   // NIGHT HEADLIGHTS (Phase 134/D): driving after dark gets two real
   // spotlights + additive volumetric cones — the Maybach-frame look.
   // Created at LOAD (light count never changes -> no shader recompiles).
@@ -27181,7 +27316,7 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
           : near.thirst ? (held ? 'Watering\u2026' : 'Hold E to water them')
           : near.bridge ? (held ? 'Laying planks\u2026' : 'Hold E to mend the bridge')
           : near.chop ? (held ? 'Chopping\u2026' : 'Hold E to chop it down')
-          : near.hive ? (held ? 'Checking the hive\u2026' : 'Hold E to check the hive')
+          : near.hive ? (/\bhoney/.test(String(SPEC.prompt || '').toLowerCase()) ? (held ? 'Lifting out the comb\u2026' : 'Hold E to take the honey') : (held ? 'Checking the hive\u2026' : 'Hold E to check the hive'))
           : near.post ? (held ? 'Posting\u2026' : 'Hold E to post the ' + String(_rpS.label || 'letter').replace(/s$/, ''))
           : near.fire ? (held ? 'Spraying\u2026' : 'Hold E to put it out')
           : near.pad ? (held ? 'Dropping\u2026' : 'Hold E to drop the ' + String(_rpS.label || 'package').replace(/s$/, ''))
@@ -27201,7 +27336,7 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
           else if (near.bridge) near.bridge.tick(1);
           else if (near.thirst) near.thirst.tick(1);
           else { near.scr.material.emissive.setHex(0x2aff7a); near.scr.material.emissiveIntensity = 1.3; near.spark.visible = false; }
-          popText(near.thirst ? (fixed >= st.count ? 'Every plant is watered!' : 'Watered!') : near.find ? (fixed >= st.count ? 'Everyone is found!' : 'Found!') : near.bridge ? (fixed >= st.count ? 'Every bridge is whole!' : 'The bridge holds!') : near.chop ? (fixed >= st.count ? 'Every tree is down!' : 'Timber!') : near.hive ? (fixed >= st.count ? 'Every hive checked!' : 'Hive checked!') : near.post ? (fixed >= st.count ? 'Every letter posted!' : 'Posted!') : near.fire ? (fixed >= st.count ? 'Every fire is out!' : 'Fire out!') : near.pad ? (fixed >= st.count ? 'Every delivery made!' : 'Delivered!') : (fixed >= st.count ? 'All fixed!' : 'Fixed!'), '#7fe08a'); sfx('pickup');
+          popText(near.thirst ? (fixed >= st.count ? 'Every plant is watered!' : 'Watered!') : near.find ? (fixed >= st.count ? 'Everyone is found!' : 'Found!') : near.bridge ? (fixed >= st.count ? 'Every bridge is whole!' : 'The bridge holds!') : near.chop ? (fixed >= st.count ? 'Every tree is down!' : 'Timber!') : near.hive ? (/\bhoney/.test(String(SPEC.prompt || '').toLowerCase()) ? (fixed >= st.count ? 'Every jar is full!' : 'A frame of honey!') : (fixed >= st.count ? 'Every hive checked!' : 'Hive checked!')) : near.post ? (fixed >= st.count ? 'Every letter posted!' : 'Posted!') : near.fire ? (fixed >= st.count ? 'Every fire is out!' : 'Fire out!') : near.pad ? (fixed >= st.count ? 'Every delivery made!' : 'Delivered!') : (fixed >= st.count ? 'All fixed!' : 'Fixed!'), '#7fe08a'); sfx('pickup');
           try { burst(near.g.position, 0x7fe08a); } catch (e) {}
           renderQuest(); bar.style.display = 'none';
           if (fixed >= st.count) advanceStep();
@@ -28863,6 +28998,7 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
       if (window.__burnTick) window.__burnTick(performance.now() / 1000, Math.min(0.05, dt));
       if (window.__cenoteTick) window.__cenoteTick(performance.now() / 1000);
       if (window.__marketTick) window.__marketTick(typeof dt === 'number' ? Math.min(0.05, dt) : 0.016);
+      if (window.__swarmTick) window.__swarmTick(typeof dt === 'number' ? Math.min(0.05, dt) : 0.016);
       if (window.__glowers) { const _gt = performance.now() / 1000; for (const g of window.__glowers) { const k = Math.sin(_gt * g.rate + g.ph);
         if (g.blink) { const on = Math.max(0, Math.sin(_gt * 0.9 + g.ph * 3)) ** 6; for (const m of g.mats) m.emissiveIntensity = 0.2 + 3.6 * on; continue; }   // a firefly's slow flash
         g.body.scale.set(g.s0.x * (1 - 0.07 * k), g.s0.y * (1 + 0.1 * k), g.s0.z * (1 - 0.07 * k)); } }   // a bell's slow pulse
@@ -29452,6 +29588,24 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
             addXP(6);
             sfx('pickup');
             burst(c.mesh.position, 0xffd54a);
+            // (2026-10-25) A FIREFLY GATHERS ITS SWARM: "a firefly lighting up a summer meadow at dusk" picked
+            // up glowing balls that vanished. Each firefly found wakes, lights and follows: the cloud of
+            // lights round the hero grows until the meadow is lit by it
+            if (/\b(fire ?fl(?:y|ies)|glow ?worms?|lightning bugs?)\b/.test(String(st.label || '').toLowerCase())) {
+              const SW = window.__swarm || (window.__swarm = []);
+              const gT = window.__swarmTex || (window.__swarmTex = (() => { const cv = document.createElement('canvas'); cv.width = cv.height = 64; const x = cv.getContext('2d');
+                const gr = x.createRadialGradient(32, 32, 1, 32, 32, 31); gr.addColorStop(0, 'rgba(255,255,220,1)'); gr.addColorStop(0.18, 'rgba(220,255,120,0.9)'); gr.addColorStop(0.5, 'rgba(160,230,60,0.25)'); gr.addColorStop(1, 'rgba(120,200,40,0)');
+                x.fillStyle = gr; x.fillRect(0, 0, 64, 64); return new THREE.CanvasTexture(cv); })());
+              for (let k = 0; k < 3; k++) {                // a sleeping firefly wakes the two beside it
+                const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: gT, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+                const s0 = (P.height_m || 0.4) * (0.7 + Math.random() * 0.5); sp.scale.setScalar(s0); sp.position.copy(c.mesh.position); scene.add(sp);
+                SW.push({ sp, s0, ph: Math.random() * 6.28, r: (P.height_m || 0.4) * (2 + Math.random() * 5), h: (P.height_m || 0.4) * (0.5 + Math.random() * 3), w: 0.5 + Math.random() * 0.9 });
+              }
+              if (!window.__swarmTick) window.__swarmTick = (dt) => { const p = window.__game && window.__game.pos(); if (!p) return; const t = performance.now() / 1000;
+                for (const f of window.__swarm) { const a = t * f.w + f.ph, tx = p[0] + Math.cos(a) * f.r, tz = p[2] + Math.sin(a * 1.3) * f.r, ty = p[1] + f.h + Math.sin(a * 2.1) * f.h * 0.4;
+                  const k = Math.min(1, dt * 1.6); f.sp.position.x += (tx - f.sp.position.x) * k; f.sp.position.y += (ty - f.sp.position.y) * k; f.sp.position.z += (tz - f.sp.position.z) * k;
+                  const on = 0.25 + 0.75 * Math.max(0, Math.sin(t * 1.1 + f.ph * 3)) ** 4; f.sp.material.opacity = on; f.sp.scale.setScalar(f.s0 * (0.7 + 0.5 * on)); } };
+            }
             if (window.__mystery) window.__mystery.clue(st);
             juicePunch = FEEL.punch;
             juiceSlow = Math.max(juiceSlow, 0.09 * FEEL.slow);
