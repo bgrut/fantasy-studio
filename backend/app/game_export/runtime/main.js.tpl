@@ -3352,8 +3352,11 @@ async function main() {
     const _mw = (((FLORA && FLORA.words) || [SPEC.world.name, SPEC.world.setting, SPEC.title, SPEC.description].filter(Boolean).join(' ')) + ' ' + (SPEC.prompt || '')).toLowerCase();
     if (!INTERIOR && !OSM && !SPEC.world.pano && (SPEC.view || '3d') === '3d' && /swamp|marsh|bog|bayou|mire|misty|mist|foggy|\bfog\b/.test(_mw)) {   // (2026-10-21) "in the fog" too
       try {
-        MIST = __groundMist(scene, { hAt, clock: WIND_U, density: /swamp|marsh|bog|bayou|mire/.test(_mw) ? 0.85 : 0.6,
-                                     color: new THREE.Color(pal.fog).lerp(new THREE.Color(0xffffff), 0.25) });
+        // (2026-10-25) at night the mist is dark air, not white: lifted toward white over a night bayou
+        // it lay like snow across the water and the bank
+        const _nightMist = ['night', 'dusk'].includes(SPEC.world.sky);
+        MIST = __groundMist(scene, { hAt, clock: WIND_U, density: /swamp|marsh|bog|bayou|mire/.test(_mw) ? (_nightMist ? 0.5 : 0.85) : 0.6,
+                                     color: _nightMist ? new THREE.Color(pal.fog).multiplyScalar(0.75) : new THREE.Color(pal.fog).lerp(new THREE.Color(0xffffff), 0.25) });
         window.__mist = MIST.sheets;
       } catch (e) { console.warn('[game] mist skipped', e); }
     }
@@ -6969,6 +6972,77 @@ async function main() {
           }
         }
       } catch (e) { console.warn('[game] burning building skipped: ' + e.message); }
+      // A NIGHT MARKET (2026-10-25): "a lantern-lit night market in taipei with steaming food stalls"
+      // walked an empty neon downtown. The street the hero starts on is the market: two rows of stalls
+      // down it for seventy metres facing a crowded aisle, each a counter under a striped canopy with a
+      // string of warm bulbs, a hanging signboard, food on the counter and steam rising off the woks,
+      // and red paper lanterns strung across overhead. About ten draw calls for the whole street.
+      try {
+        const _nw = String(SPEC.prompt || '').toLowerCase();
+        if (/\b(night ?markets?|street ?markets?|food ?markets?|food stalls?|hawker (?:centre|center|stalls?)|yatai|street food)\b/.test(_nw) && OSM.roads && OSM.roads.length) {
+          const rS = mulberry32((SPEC.seed || 1) + 6464);
+          // the road through the start, and which way along it the market runs (toward the goal)
+          let best = null, bd = 1e9;
+          for (const r of OSM.roads) for (let i = 0; i < r.pts.length - 1; i++) { const d = _segD(0, 0, r.pts[i][0], r.pts[i][1], r.pts[i + 1][0], r.pts[i + 1][1]); if (d < bd) { bd = d; best = [r, i]; } }
+          const [rd, ri] = best, a = rd.pts[ri], b = rd.pts[ri + 1], L0 = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+          let ux = (b[0] - a[0]) / L0, uz = (b[1] - a[1]) / L0;
+          if (LVL && LVL.goal && ux * LVL.goal[0] + uz * LVL.goal[1] < 0) { ux = -ux; uz = -uz; }
+          const nx = -uz, nz = ux, LEN = 72, AISLE = 4.2, gy = hAt(0, 0);
+          const W = (s, o) => [ux * s + nx * o, uz * s + nz * o];
+          const M = (p) => { const m = new THREE.MeshStandardMaterial(p); m.userData.noAutoTex = true; return m; };
+          const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _e = new THREE.Euler(), _p = new THREE.Vector3(), _s = new THREE.Vector3();
+          const inst = (geo, mat, list) => { const im = new THREE.InstancedMesh(geo, mat, list.length); list.forEach((t, i) => { _q.setFromEuler(_e.set(t[3] || 0, t[4] || 0, t[5] || 0)); _m.compose(_p.set(t[0], t[1], t[2]), _q, _s.set(t[6] || 1, t[7] || 1, t[8] || 1)); im.setMatrixAt(i, _m); if (t[9] !== undefined) im.setColorAt(i, new THREE.Color(t[9])); }); im.castShadow = true; im.receiveShadow = true; scene.add(im); return im; };
+          const yaw = Math.atan2(ux, uz);
+          const counters = [], posts = [], canopies = [], bulbs = [], signs = [], goods = [], woks = [], steamFrom = [];
+          const CAN = [0xb8322a, 0x2a5a9a, 0xd8a028, 0x2e7a4a, 0xa83a7a, 0xc85a1e];
+          for (const side of [-1, 1]) for (let s = 2; s < LEN; s += 3.3) {
+            if (rS() < 0.08) continue;                                    // a gap between stalls now and then
+            const o = side * (AISLE / 2 + 0.7), [cx, cz] = W(s, o), y = hAt(cx, cz);
+            counters.push([cx, y + 0.5, cz, 0, yaw, 0, 2.6, 1.0, 1.1, rS() < 0.5 ? 0xb8b4ac : 0x8a6a48]);
+            for (const [ds, dd] of [[-1.35, -0.6], [1.35, -0.6], [-1.35, 0.9], [1.35, 0.9]]) { const [px, pz] = W(s + ds, o + side * dd); posts.push([px, y + 1.25, pz, 0, 0, 0, 1, 2.5, 1]); }
+            const [kx, kz] = W(s, o + side * 0.15);
+            canopies.push([kx, y + 2.55, kz, side * 0.22, yaw, 0, 3.0, 0.06, 2.0, CAN[Math.floor(rS() * CAN.length)]]);
+            for (let k = 0; k < 6; k++) { const [bx, bz] = W(s - 1.3 + k * 0.52, o - side * 0.9); bulbs.push([bx, y + 2.28 + (k % 2) * 0.05, bz]); }
+            const [sx, sz] = W(s, o - side * 1.0); signs.push([sx, y + 3.15, sz, side, Math.floor(rS() * 8)]);
+            for (let k = 0; k < 5; k++) { const [gx, gz] = W(s - 1 + k * 0.5, o - side * 0.2); goods.push([gx, y + 1.06, gz, 0, rS() * 3, 0, 0.36, 0.1, 0.3, [0xd8a040, 0xb8502a, 0xe8d8b0, 0x6a8a3a, 0xc83a2a][Math.floor(rS() * 5)]]); }
+            if (rS() < 0.5) { const [wx, wz] = W(s + 0.7, o - side * 0.05); woks.push([wx, y + 1.08, wz]); steamFrom.push([wx, y + 1.2, wz]); }
+            world.createCollider(RAPIER.ColliderDesc.cuboid(1.3, 0.5, 0.55).setTranslation(cx, y + 0.5, cz).setRotation({ x: 0, y: Math.sin(yaw / 2), z: 0, w: Math.cos(yaw / 2) }));
+          }
+          inst(new THREE.BoxGeometry(1, 1, 1), M({ roughness: 0.6, metalness: 0.2 }), counters);
+          inst(new THREE.CylinderGeometry(0.04, 0.04, 1, 6), M({ color: 0x8a8e92, roughness: 0.4, metalness: 0.7 }), posts);
+          const stripe = (() => { const c = document.createElement('canvas'); c.width = 64; c.height = 64; const x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, 64, 64); x.fillStyle = 'rgba(255,255,255,0.0)'; for (let i = 0; i < 64; i += 16) { x.fillStyle = '#c8c8c8'; x.fillRect(i, 0, 8, 64); } return new THREE.CanvasTexture(c); })();
+          inst(new THREE.BoxGeometry(1, 1, 1), M({ map: stripe, roughness: 0.85, emissive: 0x2a1408, emissiveIntensity: 0.4 }), canopies);
+          inst(new THREE.SphereGeometry(0.05, 6, 4), M({ color: 0xffe2a0, emissive: 0xffc870, emissiveIntensity: 3.2 }), bulbs.map(b => [b[0], b[1], b[2]]));
+          inst(new THREE.BoxGeometry(1, 1, 1), M({ roughness: 0.5 }), goods);
+          inst(new THREE.SphereGeometry(0.28, 12, 6, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2), M({ color: 0x2a2a2c, roughness: 0.4, metalness: 0.7, side: THREE.DoubleSide }), woks.map(w => [w[0], w[1] + 0.22, w[2]]));
+          // signboards: a vertical sign of a few characters on a coloured ground, a little lit
+          const KAN = [['臭豆腐', '#d83a2a', '#fff4d8'], ['小籠包', '#f2efe6', '#b8241c'], ['珍珠奶茶', '#2a6a5a', '#f6f0e2'], ['雞排', '#e8b830', '#2a1a10'], ['夜市', '#b8241c', '#f6e2a0'], ['蚵仔煎', '#1d4e8a', '#f6f0e2'], ['滷肉飯', '#3a2a22', '#f2e6c8'], ['芒果冰', '#f2a020', '#fff8e8']];
+          const kanT = (() => { const c = document.createElement('canvas'); c.width = 512; c.height = 256; const x = c.getContext('2d');
+            KAN.forEach(([t, bg, fg], i) => { const x0 = i * 64; x.fillStyle = bg; x.fillRect(x0 + 3, 0, 58, 256); x.strokeStyle = fg; x.lineWidth = 3; x.strokeRect(x0 + 7, 5, 50, 246);
+              x.fillStyle = fg; x.font = 'bold 44px "Microsoft JhengHei", "Yu Gothic", "Noto Sans TC", "Noto Sans JP", sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle';
+              [...t].forEach((ch, k) => x.fillText(ch, x0 + 32, 128 + (k - (t.length - 1) / 2) * 54)); }); return new THREE.CanvasTexture(c); })();
+          kanT.colorSpace = THREE.SRGBColorSpace;
+          const sg = [];
+          for (const [x, y, z, side, k] of signs) { const g = new THREE.PlaneGeometry(0.75, 1.9).toNonIndexed(), uv = g.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setX(i, (k + uv.getX(i)) / 8);
+            g.rotateY(yaw + Math.PI / 2 * side); g.translate(x, y, z); sg.push(g); }
+          scene.add(new THREE.Mesh(mergeGeometries(sg, false), M({ map: kanT, emissive: 0xffffff, emissiveMap: kanT, emissiveIntensity: 0.55, side: THREE.DoubleSide, roughness: 0.6 })));
+          // red lanterns strung across the aisle, every five metres
+          const lan = []; for (let s = 3; s < LEN; s += 5) for (const o of [-1.4, 0, 1.4]) { const [lx, lz] = W(s, o); lan.push([lx, hAt(lx, lz) + 4.3 + (o === 0 ? -0.25 : 0), lz, 0, 0, 0, 0.32, 0.42, 0.32]); }
+          // deep red and only a little lit: a bright emissive red tone maps to salmon pink
+          const lanG = new THREE.SphereGeometry(1, 16, 12); { const lp = lanG.attributes.position; for (let i = 0; i < lp.count; i++) { const y = lp.getY(i), a = Math.atan2(lp.getZ(i), lp.getX(i)), k = 1 - 0.05 * Math.abs(Math.sin(a * 6)); lp.setXYZ(i, lp.getX(i) * k, y, lp.getZ(i) * k); } lanG.computeVertexNormals(); }   // ribbed paper
+          inst(lanG, M({ color: 0x7a100a, emissive: 0xa0180c, emissiveIntensity: 0.32, roughness: 0.75 }), lan);
+          const wire = []; for (let s = 3; s < LEN; s += 5) { const [x0, z0] = W(s, -AISLE / 2 - 1.5), [x1, z1] = W(s, AISLE / 2 + 1.5), y = hAt(x0, z0) + 4.75; wire.push(x0, y, z0, x1, y, z1); }
+          const wg = new THREE.BufferGeometry(); wg.setAttribute('position', new THREE.Float32BufferAttribute(wire, 3)); scene.add(new THREE.LineSegments(wg, new THREE.LineBasicMaterial({ color: 0x1a1a1a })));
+          for (let k = 0; k < 7; k++) { const [x, z] = W(6 + k * 10, 0); const L = new THREE.PointLight(0xffb070, 16, 14, 1.5); L.position.set(x, hAt(x, z) + 3.6, z); scene.add(L); }
+          // steam off the woks: soft puffs rising and swelling
+          const stT = (() => { const c = document.createElement('canvas'); c.width = c.height = 64; const x = c.getContext('2d'); const g = x.createRadialGradient(32, 32, 2, 32, 32, 30); g.addColorStop(0, 'rgba(255,255,255,0.55)'); g.addColorStop(1, 'rgba(255,255,255,0)'); x.fillStyle = g; x.fillRect(0, 0, 64, 64); return new THREE.CanvasTexture(c); })();
+          const puffs = [];
+          for (let i = 0; i < Math.min(60, steamFrom.length * 4); i++) { const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: stT, transparent: true, depthWrite: false, opacity: 0 })); scene.add(sp); puffs.push({ sp, t: (i * 0.618) % 1, o: steamFrom[i % steamFrom.length] }); }
+          window.__marketTick = (dt) => { for (const q of puffs) { q.t += dt / 3.2; if (q.t > 1) q.t -= 1; const hh = q.t * 2.6;
+            q.sp.position.set(q.o[0] + Math.sin(q.t * 6 + q.o[0]) * 0.15, q.o[1] + hh, q.o[2]); q.sp.scale.setScalar(0.25 + q.t * 1.1); q.sp.material.opacity = Math.min(1, q.t * 5) * (1 - q.t) * 0.7; } };
+          window.__nightMarket = { stalls: counters.length, lanterns: lan.length, woks: woks.length, signs: signs.length };
+        }
+      } catch (e) { console.warn('[game] night market skipped: ' + e.message); }
       // THE HIGH WIRE (2026-10-25): "a tightrope walker crossing between two skyscrapers high above the
       // city at night" walked the street. Two towers rise from the block where you start, sixty-odd
       // metres, and a steel cable is strung between their roofs, sagging a little at the middle, on
@@ -8767,6 +8841,7 @@ async function main() {
         // summits and stood on their faces; they stop where the cold does, and
         // nothing roots on a slope steeper than about forty degrees
         if (window.__aloftFields && rT() > 0.1) continue;   // farmland: a lone tree, not a wood
+        if (LVL && LVL.ledges && (y < LVL.ledges.glacier + 8 || rT() > 0.35)) continue;   // (2026-10-25) nothing grows on the glacier, and the crags are sparse
         if (_treeLine < 1e9) {
           if (y > _treeLine + (_fvn(x * 0.02, z * 0.02) - 0.5) * 14) continue;
           if (Math.hypot(hAt(x + 2, z) - y, hAt(x, z + 2) - y) / 2 > 0.85) continue;
@@ -11497,7 +11572,7 @@ async function main() {
           dens.flower = _flw ? 3.2 : 0.5;
         const flowerCols = /poppy|poppies/.test(_words) ? [0xd8322a, 0xe04a2c, 0xc42a24, 0xf4f1ea]
           : /lavender/.test(_words) ? [0x8e6ad0, 0x9c7ce0, 0x7a58bc, 0xb79be6]
-          : /sunflower|buttercup|dandelion/.test(_words) ? [0xf2c230, 0xf5d24a, 0xe8b020, 0xf4f1ea]
+          : /sunflower|buttercup|dandelion/.test(_words) ? [0xf2c230, 0xf5d24a, 0xe8b020, 0xd89a18]   // all gold: no white daisies in a sunflower field
           : /bluebell/.test(_words) ? [0x5b6fd8, 0x6a7ee6, 0x4c5cc4, 0xf4f1ea]
           : /tulip/.test(_words) ? [0xe0384a, 0xf2c94c, 0xe86aa0, 0xf08a2c]
           : [0xf4f1ea, 0xf2c94c, 0xb07cd8, 0xe0607e, 0x6f8fe0, 0xf4f1ea];
@@ -13218,12 +13293,14 @@ async function main() {
         // had grey jellyfish in sunlit water. A jellyfish in the deep or in a sentence that says it
         // glows is bioluminescent: its bell lit from within in its own colour, translucent, pulsing as
         // it swims, and one in three casting that light on what is round it
-        if (/jelly|medusa|siphonophore|comb ?jell|ctenophore/i.test(ent.name || '') || (/\b(glow\w*|biolumin\w*|luminous|luminescent)\b/i.test(String(SPEC.prompt || '')) && /fish|squid|jelly|plankton|worm|mushroom|moth|beetle/i.test(ent.name || ''))) {
-          const _jc = new THREE.Color().setHSL([0.52, 0.78, 0.9, 0.58, 0.84][npcs.length % 5], 0.85, 0.62);
+        const _isFly = /firefl|lightning bug|glow ?worm/i.test(ent.name || '');   // (2026-10-25) a firefly's light: pale moths with an orb round them
+        if (_isFly || /jelly|medusa|siphonophore|comb ?jell|ctenophore/i.test(ent.name || '') || (/\b(glow\w*|biolumin\w*|luminous|luminescent)\b/i.test(String(SPEC.prompt || '')) && /fish|squid|jelly|plankton|worm|mushroom|moth|beetle/i.test(ent.name || ''))) {
+          const _jc = _isFly ? new THREE.Color().setHSL(0.17 + (npcs.length % 3) * 0.02, 0.95, 0.55) : new THREE.Color().setHSL([0.52, 0.78, 0.9, 0.58, 0.84][npcs.length % 5], 0.85, 0.62);
           inst.traverse(m => { if (!m.isMesh) return; m.material = (Array.isArray(m.material) ? m.material[0] : m.material).clone();
             m.material.emissive = _jc.clone(); m.material.emissiveIntensity = 1.4; m.material.transparent = true; m.material.opacity = 0.82; m.material.depthWrite = false; m.material.userData.noAutoTex = true; });
           if (npcs.length % 3 === 0 && (window.__glowLights = (window.__glowLights || 0) + 1) <= 6) { const gl = new THREE.PointLight(_jc, 4, 10, 1.6); gl.position.y = (ent.height_m || 0.6) * 0.5; holder.add(gl); }
-          (window.__glowers = window.__glowers || []).push({ body: inst, s0: inst.scale.clone(), ph: rngN() * 6.28, rate: 1.4 + rngN() * 0.8 });
+          const _gm = []; inst.traverse(m => { if (m.isMesh) _gm.push(m.material); });
+          (window.__glowers = window.__glowers || []).push({ body: inst, s0: inst.scale.clone(), ph: rngN() * 6.28, rate: 1.4 + rngN() * 0.8, blink: _isFly, mats: _gm });
           // in a grotto the swarm is gathered inside it, drifting in the chamber
           if (GROTTO_PLAN) { const G2 = GROTTO_PLAN.CC, a = rngN() * 6.28, r = rngN() * 6;   // (the plan: the stones are built after the cast is placed)
             holder.position.set(G2[0] + Math.cos(a) * r, GROTTO_PLAN.y0, G2[1] + Math.sin(a) * r); npcs[npcs.length - 1].home = [G2[0], G2[1], 6]; }
@@ -19295,7 +19372,7 @@ async function main() {
     } else if (R.crop === 'sunflower') {
       const headT = canvasTex(256, (x, n) => { x.clearRect(0, 0, n, n); const c = n / 2;
         for (let k = 0; k < 34; k++) { const a = k / 34 * Math.PI * 2 + (k % 2) * 0.09, L = n * (0.44 + (k % 2) * 0.03);
-          x.save(); x.translate(c, c); x.rotate(a); x.fillStyle = `hsl(${44 + (k % 3) * 3},92%,${50 + (k % 2) * 6}%)`;
+          x.save(); x.translate(c, c); x.rotate(a); x.fillStyle = `hsl(${42 + (k % 3) * 3},96%,${45 + (k % 2) * 4}%)`;   // (2026-10-25) gold: at 50% the sun tone-mapped the petals white, at 36% they went olive
           x.beginPath(); x.ellipse(L * 0.62, 0, L * 0.38, n * 0.035, 0, 0, 7); x.fill(); x.restore(); }
         const gr = x.createRadialGradient(c, c, 2, c, c, n * 0.22); gr.addColorStop(0, '#3a2412'); gr.addColorStop(0.75, '#5a3a18'); gr.addColorStop(1, '#2a1a0c');
         x.fillStyle = gr; x.beginPath(); x.arc(c, c, n * 0.22, 0, 7); x.fill();
@@ -19304,9 +19381,11 @@ async function main() {
       const sg = new THREE.CylinderGeometry(0.012, 0.02, 1.55, 5); sg.translate(0, 0.77, 0); stem.push(ni(sg));
       for (const [h, a] of [[0.55, 0], [0.85, 2.4], [1.15, 4.4]]) { const l = new THREE.IcosahedronGeometry(0.11, 0); l.scale(1.5, 0.12, 1); l.translate(0.13, 0, 0); l.rotateY(a); l.translate(0, h, 0); stem.push(ni(l)); }
       const head = new THREE.PlaneGeometry(0.46, 0.46); head.rotateX(0.35); head.translate(0, 1.58, 0.06);
-      const items = plant.map(([x, y, z]) => ({ x, y, z, ry: Math.PI + (rr() - 0.5) * 0.5, sx: 0.85 + rr() * 0.3 }));
+      // (2026-10-25) a sunflower turns its face to the sun: turned away, every head was backlit olive
+      const _sunYaw = Math.atan2((pal.sunPos || [40, 80, 30])[0], (pal.sunPos || [40, 80, 30])[2]);
+      const items = plant.map(([x, y, z]) => ({ x, y, z, ry: _sunYaw + (rr() - 0.5) * 0.5, sx: 0.85 + rr() * 0.3 }));
       inst(mergeGeometries(stem), M({ color: 0x5c7a32, roughness: 0.85 }), items, true);
-      inst(head, M({ map: headT, alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.8 }), items, true);
+      inst(head, M({ map: headT, alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.9, envMapIntensity: 0.4 }), items, true);
     } else if (R.crop === 'wheat') {
       const wT = canvasTex(256, (x, n) => { x.clearRect(0, 0, n, n);
         for (let i = 0; i < 70; i++) { const bx = 6 + rr() * (n - 12), lean = (rr() - 0.5) * 18, top = n * (0.06 + rr() * 0.2), l = 52 + rr() * 18;
@@ -28102,6 +28181,15 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
         o.piv.rotation.y = o.sx * Math.sin(ph) * 0.5; o.piv.rotation.z = -o.sx * (0.22 + (Math.cos(ph) > 0 ? 0 : -0.16)); }   // the stroke in the water, the blade lifted on the recovery
       window.__rowState = { x: +p0.x.toFixed(1), z: +p0.z.toFixed(1), aground: !!R.aground, water: +wl.toFixed(2), moved: R.moved || null };
     }
+    // (2026-10-25) CLIFF LEDGES (level.py _ledge_height): the last ledge stood on is remembered; a fall
+    // from the band down toward the glacier puts the climber back on it, a little shaken
+    if (LVL && LVL.ledges && gameStarted && !won && !lost) {
+      const LG = LVL.ledges, p0 = body.translation();
+      LG._safe = LG._safe || { x: p0.x, y: p0.y, z: p0.z };
+      if (kcc.computedGrounded() && p0.y > LG.glacier + 10) LG._safe = { x: p0.x, y: p0.y, z: p0.z };
+      if (p0.y < LG._safe.y - 7) { body.setTranslation({ x: LG._safe.x, y: LG._safe.y + 0.3, z: LG._safe.z }, true); vy = 0;
+        popText('Back on the ledge', '#cfe6ff'); try { sfx('hit'); } catch (e) {} }
+    }
     // (2026-10-25) THE HIGH WIRE (see the city build): the walker is held on the line from the
     // first roof to the second; on the cable the wind leans the body and the lean grows unless A
     // and D lean back against it; past the point of no return the walker falls and is set back
@@ -28591,7 +28679,10 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
       if (window.__asteroidTick) window.__asteroidTick(Math.min(0.05, dt));
       if (window.__burnTick) window.__burnTick(performance.now() / 1000, Math.min(0.05, dt));
       if (window.__cenoteTick) window.__cenoteTick(performance.now() / 1000);
-      if (window.__glowers) { const _gt = performance.now() / 1000; for (const g of window.__glowers) { const k = Math.sin(_gt * g.rate + g.ph); g.body.scale.set(g.s0.x * (1 - 0.07 * k), g.s0.y * (1 + 0.1 * k), g.s0.z * (1 - 0.07 * k)); } }   // a bell's slow pulse
+      if (window.__marketTick) window.__marketTick(typeof dt === 'number' ? Math.min(0.05, dt) : 0.016);
+      if (window.__glowers) { const _gt = performance.now() / 1000; for (const g of window.__glowers) { const k = Math.sin(_gt * g.rate + g.ph);
+        if (g.blink) { const on = Math.max(0, Math.sin(_gt * 0.9 + g.ph * 3)) ** 6; for (const m of g.mats) m.emissiveIntensity = 0.2 + 3.6 * on; continue; }   // a firefly's slow flash
+        g.body.scale.set(g.s0.x * (1 - 0.07 * k), g.s0.y * (1 + 0.1 * k), g.s0.z * (1 - 0.07 * k)); } }   // a bell's slow pulse
       if (window.__earthTick) window.__earthTick(Math.min(0.05, dt));
       if (window.__joustTick) window.__joustTick(performance.now() / 1000);
       if (window.__tornadoTick) window.__tornadoTick(Math.min(0.05, dt));

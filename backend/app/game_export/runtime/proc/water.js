@@ -151,7 +151,11 @@ float wave(vec2 p){
     diffuseColor.a *= smoothstep(0.0, 0.12, dep);` : kind === 'ice' ? `
     // ice thins to a clear rim at its edge, frosted white where it meets the bank
     diffuseColor.rgb = mix(vec3(0.84, 0.9, 0.95), diffuseColor.rgb, smoothstep(0.0, 0.35, dep));
-    diffuseColor.a *= smoothstep(0.0, 0.08, dep);` : `
+    diffuseColor.a *= smoothstep(0.0, 0.08, dep);` : kind === 'swamp' ? `
+    // (2026-10-25) still black water: no surf breaks on a bayou's bank. The shallows go to mud and
+    // duckweed, the edge darkens into the bank, and there is no foam to read as a beach
+    diffuseColor.rgb = mix(vec3(0.07, 0.08, 0.04), diffuseColor.rgb, smoothstep(0.0, 0.8, dep));
+    diffuseColor.a *= smoothstep(0.0, 0.2, dep);` : `
     // the shallows take the bed's colour, the edge goes clear, and foam lies
     // in a broken line just off the bank, breathing with the ripples
     diffuseColor.rgb = mix(vec3(0.24, 0.27, 0.2), diffuseColor.rgb, smoothstep(0.0, 1.1, dep));

@@ -313,6 +313,34 @@ def _aloft_height(noise, x: float, z: float, relief: str) -> float:
     return (s ** 1.3) * 38.0 + noise(x / 90.0, z / 90.0) * 4.0
 
 
+LEDGE_STEP, LEDGE_LEN, LEDGE_HALF, GLACIER_Y = 1.6, 8.0, 6.0, -22.0   # a step under the climb's reach (1.7 m), jump or no jump
+
+
+def _ledge_height(x: float, z: float, goal: list[float], goal_r: float, noise) -> float:
+    """CLIFF LEDGES OVER A GLACIER (2026-10-25). "a mountain goat leaping between cliff
+    ledges above a glacier" walked a sandy wood: the peaks landform is a few metres of
+    relief. Here the route is a band of rock shelves climbing toward the goal, each a
+    leap and a scramble above the last; on the uphill side the cliff stands sheer, on
+    the other the band breaks off and drops twenty metres to the ice. u runs along the
+    route, s across it (the glacier lies on +s)."""
+    import math as _m
+    ux, uz = goal[0] / max(goal_r, 1e-6), goal[1] / max(goal_r, 1e-6)
+    u = x * ux + z * uz
+    s = -x * uz + z * ux
+    k = max(0, min(int(_m.floor(max(u, 0.0) / LEDGE_LEN)), int(goal_r / LEDGE_LEN)))
+    base = k * LEDGE_STEP + noise(u * 0.4, s * 0.4) * 0.12
+    wob = noise(u / 23.0 + 3.1, 0.7) * 2.2                     # the cliff line wanders
+    if s < -LEDGE_HALF + wob:                                   # the wall above
+        up = -s - LEDGE_HALF + wob
+        return base + min(16.0, up * 3.2) + noise(u / 6.0, s / 6.0) * 1.6 * min(1.0, up / 3.0)
+    if s > LEDGE_HALF + wob * 0.5:                              # the edge, then the drop to the ice
+        t = min(1.0, (s - LEDGE_HALF - wob * 0.5) / 4.5)
+        t = t * t * (3 - 2 * t)
+        ice = GLACIER_Y + noise(x / 30.0, z / 30.0) * 1.2
+        return base + (ice - base) * t
+    return base
+
+
 def _fjord_height(x: float, z: float, base: float, goal: list[float],
                   goal_r: float, seed: int) -> float:
     """A FJORD IS SEA BETWEEN WALLS (2026-10-11). "a viking rows a longship up
@@ -534,7 +562,7 @@ def build_level(seed: int, size_m: float, n_objectives: int = 0,
                 regions: list[dict] | None = None,
                 archetype: str = "plain", terrain_form: str = "natural", sea: bool = False,
                 fjord: bool = False, coast: bool = False, harbor: bool = False, slot: bool = False,
-                river: bool = False, layout: str = "route", aloft: bool = False, aloft_relief: str = "hills") -> dict:
+                river: bool = False, layout: str = "route", aloft: bool = False, aloft_relief: str = "hills", ledges: bool = False) -> dict:
     """Deterministic LevelPlan. Returns a JSON-safe dict for the runtime.
 
     sea (2026-10-06): a sea battle sails, it does not walk. The islands sit
@@ -548,6 +576,8 @@ def build_level(seed: int, size_m: float, n_objectives: int = 0,
         grid_n = max(grid_n, 200)
     if aloft:
         grid_n = max(grid_n, 176)                    # a crest seen from the air is sharp, not a 7 m facet
+    if ledges:
+        grid_n = max(grid_n, int(size_m / 0.9))      # a ledge's riser is a step, not a ramp
 
     # ── zones: spawn at origin; goal at a far edge; corridor between ────────
     half = size_m / 2.0
@@ -578,7 +608,7 @@ def build_level(seed: int, size_m: float, n_objectives: int = 0,
     _cps = None                                      # where the things to find lie, when the layout says
     _spokes = None                                   # a hub's spoke ends: where the rounds go
     lift = None                                      # the ascent's rising ground, f(x, z) -> metres
-    if layout == "loop" and not (fjord or coast or slot or sea):
+    if layout == "loop" and not (fjord or coast or slot or sea or ledges):
         R0 = half * rng.uniform(0.5, 0.64)
         a0 = ang + rng.uniform(0.6, 0.9)
         n_wp = 6
@@ -591,7 +621,7 @@ def build_level(seed: int, size_m: float, n_objectives: int = 0,
         goal = [math.cos(a0 - 0.5) * hr, math.sin(a0 - 0.5) * hr]
         path.append(list(goal))
         _cps = [path[1 + int((k + 0.5) * n_wp / max(1, n_objectives))] for k in range(n_objectives)] if n_objectives else []
-    elif layout == "hub" and not (fjord or coast or slot or sea):
+    elif layout == "hub" and not (fjord or coast or slot or sea or ledges):
         n_sp = max(3, min(6, n_objectives or 3))
         b0 = rng.uniform(0, 2 * math.pi)
         ends = []
@@ -606,7 +636,7 @@ def build_level(seed: int, size_m: float, n_objectives: int = 0,
         path.append(list(goal))
         _cps = [ends[k % n_sp] for k in range(n_objectives)] if n_objectives else []
         _spokes = [[round(e[0], 2), round(e[1], 2)] for e in ends[:-1]]
-    elif layout == "scatter" and not (fjord or coast or slot or sea):
+    elif layout == "scatter" and not (fjord or coast or slot or sea or ledges):
         n_pt = max(3, n_objectives or 3)
         pts = []
         for _ in range(n_pt):
@@ -623,7 +653,7 @@ def build_level(seed: int, size_m: float, n_objectives: int = 0,
         path = tour + [list(goal)]
         corridor = 3.5
         _cps = [pts[k % len(pts)] for k in range(n_objectives)] if n_objectives else []
-    elif layout == "ascent" and not (fjord or coast or slot or sea):
+    elif layout == "ascent" and not (fjord or coast or slot or sea or ledges):
         # switchbacks across the fall line, the land rising toward the goal
         ux, uz = goal[0] / max(goal_r, 1e-6), goal[1] / max(goal_r, 1e-6)
         px_, pz_ = -uz, ux
@@ -640,6 +670,10 @@ def build_level(seed: int, size_m: float, n_objectives: int = 0,
             return _c * t * t * (3 - 2 * t)
     if slot:
         corridor = 1.6                               # the slot's floor is barely a body wide
+    if ledges:
+        path = [[0.0, 0.0], list(goal)]              # the ledges climb straight to the top
+        _cps = None
+        corridor = 3.0
 
     # ── terrain: hills, flattened along the corridor + zones ────────────────
     raster = _rasterize_regions(regions or [], grid_n, size_m, seed, path)
@@ -653,7 +687,7 @@ def build_level(seed: int, size_m: float, n_objectives: int = 0,
     riv = _river_course(seed, half, path) if (river and not lava and not slot and _arch != "cave") else None
     riv_segs = [(riv["pts"][k], riv["pts"][k + 1]) for k in range(len(riv["pts"]) - 1)] if riv else []
     heights: list[float] = []
-    _anoise = _aloft_noise(seed) if aloft else None
+    _anoise = _aloft_noise(seed) if (aloft or ledges) else None
     for i in range(grid_n):
         z = (i / (grid_n - 1) - 0.5) * size_m
         for j in range(grid_n):
@@ -669,6 +703,8 @@ def build_level(seed: int, size_m: float, n_objectives: int = 0,
                 h -= amplitude_m * 1.1                # fewer, smaller islands
             if aloft:
                 h = _aloft_height(_anoise, x, z, "alpine" if _arch == "peaks" else aloft_relief)
+            if ledges:
+                h = _ledge_height(x, z, goal, goal_r, _anoise)
             # MICRO-RELIEF (Phase 93): a second, higher-frequency octave —
             # real ground undulates at the metre scale, not only in big
             # hills. Mesh + collider share these heights, so feet/wheels
@@ -773,8 +809,8 @@ def build_level(seed: int, size_m: float, n_objectives: int = 0,
                 else:
                     h = h * 0.12 + (hgrid[i2][j2] - 0.5) * 0.25        # a sand and rubble floor
             d = min(d, math.hypot(x, z), math.hypot(x - goal[0], z - goal[1]))
-            if slot:
-                pass                                 # the slot's own floor is already level and walkable
+            if slot or ledges:
+                pass                                 # the slot's own floor and the ledges are their own walkable ground
             elif sea:
                 if d < corridor * 3.0:               # a deep lane for the hulls
                     h = min(h, -3.5)
@@ -812,7 +848,7 @@ def build_level(seed: int, size_m: float, n_objectives: int = 0,
                 if edge > 0.86:                      # a range falls away over sixty metres, not a cliff at the wall
                     _e = (1.0 - edge) / 0.14
                     h *= _e * _e * (3 - 2 * _e)
-            elif edge > 0.92 and _arch != "cave" and not fjord and not coast and not slot:   # a cave is walled to its edge, a fjord cut to it
+            elif edge > 0.92 and _arch != "cave" and not fjord and not coast and not slot:   # (ledges settle too: the glacier rises to meet the land at the margin)   # a cave is walled to its edge, a fjord cut to it
                 h *= max(0.0, (1.0 - edge) / 0.08)
             if lava_segs and not _ch:
                 h = max(h, LAVA_LEVEL + 0.25)   # only a channel lies under the lava
@@ -887,6 +923,7 @@ def build_level(seed: int, size_m: float, n_objectives: int = 0,
         "heights": heights,                    # row-major, z rows then x cols
         "path": [[round(a, 2), round(b, 2)] for a, b in path],
         "corridor_m": corridor,
+        **({"ledges": {"step": LEDGE_STEP, "len": LEDGE_LEN, "half": LEDGE_HALF, "glacier": GLACIER_Y}} if ledges else {}),
         "goal": [round(goal[0], 2), round(goal[1], 2)],
         "collect_points": collect_points,
         "landmarks": landmarks,                # [x, z, scale]

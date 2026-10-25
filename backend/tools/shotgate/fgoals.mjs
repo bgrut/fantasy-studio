@@ -21,6 +21,8 @@ const URL = process.env.URL ||
 await p.goto(URL + (URL.includes('?') ? '&' : '?') + 'fresh=1',
   { waitUntil:'domcontentloaded', timeout:90000 });
 await new Promise(r=>setTimeout(r,5000));
+// (2026-10-25) and until it has booted: a fixed five seconds read the game before it existed on a busy machine
+for (let i = 0; i < 60 && !(await p.evaluate(() => !!(window.__game && window.__game.facts))); i++) await new Promise(r => setTimeout(r, 500));
 
 const wait = ms => new Promise(r => setTimeout(r, ms));
 const facts = () => p.evaluate(() => window.__game.facts());

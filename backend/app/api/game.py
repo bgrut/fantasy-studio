@@ -4339,7 +4339,14 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             river=_river, layout=(_design or {}).get("layout", "route"),
             aloft=(spec.player.ride or "") == "plane" and not (_fjord or _coast or job.get("_naval")),
             # (2026-10-24) a crop duster over Kansas flew 37 m hills: farm and prairie country is flat
+            # (2026-10-25) cliff ledges to leap between: a goat, an ibex, a climber among crags
+            ledges=bool(_fre.search(r"\b(ledges?|crags?|craggy|rock shelves|cliff ?faces?)\b", (req.prompt or "").lower())
+                        and _fre.search(r"\b(goats?|ibex(?:es)?|chamois|bighorns?|leap\w*|jump\w*|climb\w*|scrambl\w*|hop\w*)\b", (req.prompt or "").lower())
+                        and not (_fjord or _coast or _river or job.get("_naval"))),
             aloft_relief="plains" if _fre.search(r"\b(kansas|nebraska|iowa|dakotas?|oklahoma|prairies?|plains|wheat|corn|cornfields?|farm\w*|fields?|crops?|crop ?dust\w*|harvest|barley|steppes?|pampas)\b", (req.prompt or "").lower()) else "hills")
+        if isinstance(spec.world.level, dict) and spec.world.level.get("ledges"):
+            spec.player.jump = True                   # a goat on the ledges leaps
+            job.setdefault("notes", []).append("ledges: a band of rock shelves climbing to the top, a sheer wall above and the glacier below")
         if _giantroom and isinstance(spec.world.level, dict):
             spec.world.level["giantroom"] = _grk
         if _design and isinstance(spec.world.level, dict):
