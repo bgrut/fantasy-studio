@@ -85,7 +85,8 @@ function mulberry32(a) {
 // (snow, sand) under the old flat 0.75 read as a washed-out white void.
 const SKY = {
   day:      { sky: 0x87b5e0, fog: 0xa8c4dd, sun: 3.2, amb: 0.55, sunPos: [40, 80, 30], exp: 0.66 },
-  sunset:   { sky: 0xe8996a, fog: 0xd9a07a, sun: 2.2, amb: 0.40, sunPos: [80, 25, 10], exp: 0.72 },
+  // (2026-10-24) a sunset's sun is amber: with no sunCol it lit "golden hour" lavender in noon white
+  sunset:   { sky: 0xe8996a, fog: 0xd9a07a, sun: 2.2, amb: 0.40, sunCol: 0xffb26a, sunPos: [80, 25, 10], exp: 0.72 },
   // night done RIGHT (pass 2): full moonlit-blue treatment — strong cool sun,
   // generous ambient, fog clearly brighter than the sky. Unmistakably night,
   // but every shape reads on a laptop screen at recording brightness.
@@ -861,12 +862,12 @@ async function main() {
     const su = sky.material.uniforms;
     const cfg = {
       day:      { turbidity: 6,  rayleigh: 1.2, elev: 35 },
-      sunset:   { turbidity: 8,  rayleigh: 2.6, elev: 6 },
+      sunset:   { turbidity: 10, rayleigh: 3.4, elev: 4, mie: 0.0026 },   // (2026-10-24) deeper scatter, a lower sun: the old one blew out white
       overcast: { turbidity: 20, rayleigh: 0.6, elev: 25 },
     }[SPEC.world.sky] || { turbidity: 6, rayleigh: 1.2, elev: 35 };
     su.turbidity.value = cfg.turbidity;
     su.rayleigh.value = cfg.rayleigh;
-    su.mieCoefficient.value = 0.004;
+    su.mieCoefficient.value = cfg.mie || 0.004;
     su.mieDirectionalG.value = 0.85;
     const phi = THREE.MathUtils.degToRad(90 - cfg.elev);
     const theta = THREE.MathUtils.degToRad(38);
@@ -923,6 +924,20 @@ async function main() {
           for (let i = 0; i < hd.length; i += 4) {
             const m = Math.max(hd[i], hd[i + 1], hd[i + 2]);
             if (m > CAP) { const k = CAP / m; hd[i] *= k; hd[i + 1] *= k; hd[i + 2] *= k; }
+          }
+          // GOLDEN HOUR IN THE CAPTURE (2026-10-24): the sunset capture is a pale late-afternoon
+          // sky, and "lavender fields at golden hour" stood under noon blue with a white glare
+          // where the sun was. A low sun's light comes through the most air: amber along the
+          // horizon, warm into the glow, a deeper blue overhead. Graded by elevation, so the
+          // light it casts (the IBL) warms with it
+          if (SPEC.world.sky === 'sunset' && tex.image.width) {
+            const W = tex.image.width, H = tex.image.height;
+            for (let y = 0; y < H; y++) {
+              const el = (0.5 - (y + 0.5) / H) * Math.PI;                       // elevation, + up
+              const k = el <= 0 ? 1 : Math.exp(-el / 0.28);                     // 1 at the horizon .. 0 overhead
+              const r = 0.86 + 0.8 * k, g = 0.9 + 0.06 * k, b = 1.1 - 0.72 * k;
+              for (let x = 0, i = y * W * 4; x < W; x++, i += 4) { hd[i] *= r; hd[i + 1] *= g; hd[i + 2] *= b; }
+            }
           }
           tex.needsUpdate = true;
           tex.mapping = THREE.EquirectangularReflectionMapping;
@@ -18505,8 +18520,20 @@ async function main() {
     if (R.crop === 'lavender') {
       // a lavender bush: a grey-green mound, and out of it a fan of stalks each
       // carrying a purple spike of flowers
-      const green = [], purple = [], rb = mulberry32(991);
-      const mound = new THREE.IcosahedronGeometry(0.36, 1); mound.scale(1, 0.78, 0.92); mound.translate(0, 0.16, 0); green.push(ni(mound));
+      const green = [], purple = [], leaves = [], rb = mulberry32(991);
+      // (2026-10-24) the mound was a smooth teal dome, a stone at golden hour's low angle. Lavender
+      // foliage is a dense cushion of short silvery needles: a lumpy dark core under a fur of them
+      const mound = new THREE.IcosahedronGeometry(0.3, 2); mound.scale(1, 0.72, 0.92);
+      { const mp = mound.attributes.position;
+        for (let i = 0; i < mp.count; i++) { const x = mp.getX(i), y = mp.getY(i), z = mp.getZ(i), k = 1 + (Math.sin(x * 23.1 + z * 17.3) * Math.cos(y * 19.7 - x * 7.1)) * 0.13; mp.setXYZ(i, x * k, y * k, z * k); } }
+      mound.translate(0, 0.15, 0); green.push(ni(mound));
+      for (let k = 0; k < 90; k++) {
+        const th = rb() * Math.PI * 2, ph = rb() * 1.25, L = 0.1 + rb() * 0.09;
+        const dx = Math.sin(ph) * Math.cos(th), dy = Math.cos(ph), dz = Math.sin(ph) * Math.sin(th);
+        const nd = new THREE.ConeGeometry(0.012, L, 3); nd.translate(0, L / 2, 0);
+        nd.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(dx, dy * 0.85, dz).normalize()));
+        nd.translate(dx * 0.27, 0.15 + dy * 0.19, dz * 0.25); leaves.push(ni(nd));
+      }
       for (let k = 0; k < 84; k++) {
         const a = rb() * Math.PI * 2, tilt = 0.05 + rb() * 0.55, L = 0.3 + rb() * 0.18, o = rb() * 0.2;
         const st = new THREE.CylinderGeometry(0.004, 0.006, L, 3); st.translate(0, L / 2, 0); st.rotateX(tilt); st.rotateY(a); st.translate(Math.sin(a) * o, 0.14, Math.cos(a) * o); green.push(ni(st));
@@ -18514,7 +18541,8 @@ async function main() {
       }
       const gG = mergeGeometries(green), pG = mergeGeometries(purple);
       const items = plant.map(([x, y, z]) => { const s2 = 0.85 + rr() * 0.35; return { x, y: y - 0.02, z, ry: rr() * 6.28, sx: s2 * 1.1, sy: s2, sz: s2 * 1.1, c: 0xffffff }; });
-      inst(gG, M({ color: 0x5f6d52, roughness: 0.92 }), items, true);
+      inst(gG, M({ color: 0x56634c, roughness: 0.95 }), items, true);
+      inst(mergeGeometries(leaves), M({ color: 0x7e8c74, roughness: 0.8 }), items.map(q => Object.assign({}, q, { c: new THREE.Color(0xffffff).multiplyScalar(0.85 + rr() * 0.25).getHex() })), false);
       const pi2 = items.map(q => Object.assign({}, q, { c: new THREE.Color(0xffffff).multiplyScalar(0.82 + rr() * 0.3).getHex() }));
       inst(pG, M({ color: 0x9470b0, roughness: 0.75 }), pi2, false);
     } else if (R.crop === 'vine') {
@@ -20443,11 +20471,11 @@ async function main() {
     if (st.kind === 'repair' && /\b(hikers?|climbers?|skiers?|campers?|people|children|kids?|survivors?|villagers?|explorers?|walkers?|tourists?|scouts?|lost)\b/.test(String(l)))
       return `${n} ${l} out there somewhere. Each has lit a red flare; follow the red light up the slope and get to them.`;
     if (st.kind === 'repair' && /\bhives?\b/.test(String(l)))
-      return `${n} ${l} to check. Each stands under a gold light; stand at it and hold E while the lid comes up and the bees settle.`;
+      return `${n} ${l} to check. Look for the cloud of bees and the ribboned cane beside each one; stand at it and hold E while the lid comes up and the bees settle.`;
     if (st.kind === 'repair' && /\b(trees?|pines?|oaks?|logs?|timber)\b/.test(String(l)))
       return `${n} ${l} to fell. The ones to cut wear a red ribbon; stand at the trunk and hold E until it goes over.`;
     if (st.kind === 'repair' && /letter|mail|post|card/.test(String(l)))
-      return `${n} ${l} to deliver. Each goes in a letterbox by a gate, under a gold light; stand at the box and hold E.`;
+      return `${n} ${l} to deliver. Each goes in a letterbox by a gate, the lamp on its bracket lit; stand at the box and hold E.`;
     if (st.kind === 'repair' && /package|parcel|deliver|letter|mail|pizza|crate|box|supplies|medicine|food|meal|bread|loa(?:f|ves)|pies?|cakes?|buns|pastr|cookies|groceries|flowers|bouquets?|milk|newspapers?|papers|presents|gifts|cheese|eggs|soup|cocoa|coffee|potions?|scrolls?/.test(String(l)))
       return SPEC.player.mode === 'fly'
         ? `${n} ${l} to deliver. Each drop is a landing pad on a roof, lit at its corners; set down on it and hold E to drop one.`
@@ -25303,11 +25331,14 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
     uniforms: { tDiffuse: { value: null },
                 uSun: { value: new THREE.Vector2(0.5, 0.8) },
                 uStr: { value: 0 },
+                // (2026-10-24) shafts are the sun's own colour: the capped sky they gather is near white,
+                // and a golden-hour sun washed the view toward it in white haze
+                uTint: { value: new THREE.Color(pal.sunCol || 0xffffff).lerp(new THREE.Color(0xffffff), 0.25) },
                 res: { value: new THREE.Vector2(innerWidth, innerHeight) } },
     vertexShader: `varying vec2 vUv;
       void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
     fragmentShader: `uniform sampler2D tDiffuse; uniform vec2 uSun;
-      uniform float uStr; uniform vec2 res; varying vec2 vUv;
+      uniform float uStr; uniform vec3 uTint; uniform vec2 res; varying vec2 vUv;
       void main(){
         vec4 c = texture2D(tDiffuse, vUv);
         if (uStr <= 0.001) { gl_FragColor = c; return; }
@@ -25334,7 +25365,7 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
         // every pixel's march ends at the sun, so without this falloff the
         // whole frame received the same glow: shafts fade with distance
         vec2 dp = (vUv - uSun) * vec2(asp, 1.0);
-        c.rgb += acc / 22.0 * uStr * exp(-dot(dp, dp) * 2.2);
+        c.rgb += acc / 22.0 * uTint * uStr * exp(-dot(dp, dp) * 2.2);
         gl_FragColor = c;
       }`,
   }) : null;
@@ -27826,7 +27857,7 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
       const on2 = _grV2.z < 1 && _grV2.z > -1
         && Math.abs(_grV2.x) < 1.5 && Math.abs(_grV2.y) < 1.5;
       godray.uniforms.uSun.value.set((_grV2.x + 1) / 2, (_grV2.y + 1) / 2);
-      const gb = { day: 0.3, sunset: 0.58, dusk: 0.46, overcast: 0.14 }[SPEC.world.sky] || 0.25;
+      const gb = { day: 0.3, sunset: 0.4, dusk: 0.46, overcast: 0.14 }[SPEC.world.sky] || 0.25;
       godray.uniforms.uStr.value +=
         ((on2 ? gb : 0) - godray.uniforms.uStr.value) * Math.min(1, dt * 3);
     }

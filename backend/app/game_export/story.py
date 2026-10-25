@@ -95,7 +95,22 @@ _PARCEL = re.compile(r"package|parcel|deliver|letter|mail|pizza|crate|box|suppli
 
 def _shown_kind(o):
     k = getattr(o, "kind", "") or ""
-    return "deliver" if k == "repair" and _PARCEL.search(str(getattr(o, "label", "") or "")) else k
+    if k != "repair":
+        return k
+    lab = str(getattr(o, "label", "") or "")
+    # (2026-10-24) the same for the other jobs the repair objective runs: a beekeeper's
+    # "Check 4 hives" was told "repair" and the story wrote "Repair the northwest hive"
+    if _PARCEL.search(lab):
+        return "deliver"
+    if re.search(r"\b(?:bee)?hives?\b", lab, re.I):
+        return "check"
+    if re.search(r"\b(trees?|pines?|oaks?|birch(?:es)?|spruces?|logs?|timber)\b", lab, re.I):
+        return "fell"
+    if re.search(r"\b(lost|missing|stranded|hikers?|climbers?|skiers?|campers?|survivors?)\b", lab, re.I):
+        return "find"
+    if re.search(r"fire|flame|blaze|burn", lab, re.I):
+        return "put out"
+    return k
 
 
 def _fallback(spec, prompt):
@@ -104,7 +119,8 @@ def _fallback(spec, prompt):
     obs = list(getattr(spec, "objectives", []) or [])
     verbs = {"collect": "Gather", "reach": "Get to", "defeat": "Put down", "race": "Beat",
              "survive": "Hold out against", "eliminate": "Clear out", "score": "Score",
-             "deliver": "Carry", "serve": "Serve", "repair": "Mend", "photograph": "Photograph"}
+             "deliver": "Carry", "serve": "Serve", "repair": "Mend", "photograph": "Photograph",
+             "check": "Check", "fell": "Fell", "find": "Find", "put out": "Put out"}
     beats = []
     for o in obs:
         lab = str(getattr(o, "label", "") or "it")
