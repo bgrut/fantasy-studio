@@ -7,6 +7,7 @@ await p.goto(`http://127.0.0.1:8789/games/${process.env.J}/dist/index.html?nogui
 const wait = ms => new Promise(r => setTimeout(r, ms));
 for (let i = 0; i < 60; i++) { if (await p.evaluate(() => !!(window.__game && window.__game.facts))) break; await wait(500); }
 await p.click('#startbtn').catch(() => {}); await wait(3000);
+if (process.env.PRE) console.log('pre', JSON.stringify(await p.evaluate(src => { try { return eval(src); } catch (e) { return 'PRE ' + e.message; } }, process.env.PRE)));
 const keys = (process.env.KEYS || 'KeyW,ShiftLeft').split(',');
 const p0 = await p.evaluate(() => window.__game.pos());
 for (const k of keys) await p.keyboard.down(k);

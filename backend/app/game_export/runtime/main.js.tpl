@@ -518,6 +518,9 @@ async function main() {
     if (new URLSearchParams(location.search).get('flora') === '0') return null;   // A/B and debugging
     // (2026-10-01) the moon, Mars and every barren place grow stone now, not nothing
     if (/station|cyber|neon|metropolis|downtown|city street/.test(words)) return null;   // (the sea grows kelp and coral now)
+    // (2026-10-25) a city's fish market stands in its neighbourhood, not in a forest (FISHMARKET's streets)
+    if (/\b(fish ?markets?|tsukiji|toyosu|fish auctions?|seafood markets?)\b/.test(String(SPEC.prompt || '').toLowerCase())
+        && /\b(tokyo|osaka|yokohama|kobe|fukuoka|sapporo|nagoya|japan\w*|seoul|busan|taipei|hong kong|shanghai|city)\b/.test(String(SPEC.prompt || '').toLowerCase())) { window.__marketCity = true; return null; }
     if (['pixel', 'lowpoly', 'papercraft', 'synthwave'].includes(SPEC.style)) return null;
     if (/\b(candy ?land|candyland|sugar ?land|gumdrops?|lollipops?|cupcakes?|gingerbread|cotton candy)\b/.test(String(SPEC.prompt || '').toLowerCase())) return null;   // a candy land grows sweets (CANDY)
     const q = {
@@ -1095,7 +1098,7 @@ async function main() {
         mmat.customProgramCacheKey = () => 'ranges-rock';
       } catch (e) { /* the ranges keep their colour */ }
       const ring = new THREE.Group();
-      const NPK = window.__aloftFields ? 0 : 11;   // (2026-10-24) the plains run to the horizon under a crop duster: no ranges
+      const NPK = (window.__aloftFields || window.__marketCity) ? 0 : 11;   // (2026-10-24) the plains run to the horizon under a crop duster: no ranges; (10-25) nor round a city's fish market, its towers are the horizon
       // SCULPTED RANGES (2026-10-02): behind a forest to the horizon a cone
       // with jittered sides read as a party hat. A range is a heightfield:
       // ridged noise (sharp crests, soft gullies) over a dome that falls to
@@ -2320,7 +2323,7 @@ async function main() {
       for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) { const x = (j / (n - 1) - 0.5) * gs, z = (i / (n - 1) - 0.5) * gs; if (inR(x, z, 2)) { s += LVL.heights[i * n + j]; k++; } }
       const m = k ? s / k : 0;
       for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) { const x = (j / (n - 1) - 0.5) * gs, z = (i / (n - 1) - 0.5) * gs;
-        if (inR(x, z, 3)) LVL.heights[i * n + j] = m; else if (inR(x, z, 14)) LVL.heights[i * n + j] = m + (LVL.heights[i * n + j] - m) * 0.4; }
+        if (inR(x, z, 24)) LVL.heights[i * n + j] = m; else if (inR(x, z, 44)) { const t = 0.4 + 0.6 * Math.min(1, Math.max(0, (Math.max(Math.abs(((x - C[0]) * ux + (z - C[1]) * uz)) - LEN / 2, Math.abs((-(x - C[0]) * uz + (z - C[1]) * ux)) - WID / 2) - 24) / 20)); LVL.heights[i * n + j] = m + (LVL.heights[i * n + j] - m) * t; } }   // the hall, its streets and the shop-houses round them stand level
     }
     const local = (x, z) => { const dx = x - C[0], dz = z - C[1]; return [dx * ux + dz * uz, -dx * uz + dz * ux]; };
     const world = (a, c) => [C[0] + ux * a - uz * c, C[1] + uz * a + ux * c];
@@ -2333,7 +2336,9 @@ async function main() {
     LVL.collect_points = (LVL.collect_points || []).map((p, i) => { const a = -LEN / 2 + 6 + ((i * 7.3) % (LEN - 12)), c = [-3.9, 3.9, -11.2, 11.2][i % 4]; return world(a, c); });
     LVL.landmarks = (LVL.landmarks || []).filter(q => !inside(q[0], q[1], 14));
     LVL.pois = (LVL.pois || []).filter(q => !inside(q.x, q.z, 16));
-    return { C, LEN, WID, A, ux, uz, local, world, inside, solid, stalls };
+    const urban = /\b(tokyo|osaka|yokohama|kobe|fukuoka|sapporo|nagoya|japan\w*|seoul|busan|taipei|hong kong|shanghai|city)\b/.test(w);
+    const yard = (x, z) => inside(x, z, urban ? 24 : 4);
+    return { C, LEN, WID, A, ux, uz, local, world, inside, solid, stalls, urban, yard };
   })();
 
   // ── A VILLAGE (2026-10-07) ──────────────────────────────────────────────
@@ -2917,6 +2922,22 @@ async function main() {
     const terrain = new THREE.Mesh(geo, gmat);
     terrain.receiveShadow = true;
     scene.add(terrain);
+    // (2026-10-25) A SIDE VIEW'S NEAR RIDGE: the side camera is orthographic, so the bottom rows of the
+    // picture start below the ground in front of the lane and run level beneath the whole terrain
+    // without meeting it: "a camel caravan crossing the sahara dunes" had a grey void across its lower
+    // third. A cut face stands just in front of the lane, its crest following the dunes, shaded like
+    // the dark near ridge in the foreground of a side-scrolling landscape painting
+    if (VIEW === 'side' && !(SPEC.world && SPEC.world.platforms)) {
+      const ZC = 9, step = 2, H2 = gsize / 2, P = [], C = [], top = new THREE.Color(...SPEC.world.ground_color).multiplyScalar(0.38), foot = top.clone().multiplyScalar(0.3);
+      for (let x = -H2; x < H2; x += step) {
+        const y0 = hAt(x, ZC) - 0.08, y1 = hAt(x + step, ZC) - 0.08, lo = -60;
+        P.push(x, y0, ZC, x, lo, ZC, x + step, y1, ZC, x + step, y1, ZC, x, lo, ZC, x + step, lo, ZC);
+        for (const c of [top, foot, top, top, foot, foot]) C.push(c.r, c.g, c.b);
+      }
+      const cg = new THREE.BufferGeometry(); cg.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); cg.setAttribute('color', new THREE.Float32BufferAttribute(C, 3));
+      const cm = new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide, fog: false }); cm.userData.noAutoTex = true;
+      const cut = new THREE.Mesh(cg, cm); cut.name = 'sideCutFace'; scene.add(cut);
+    }
     world.createCollider(RAPIER.ColliderDesc.trimesh(verts, idx));
   } else {
     const ground = new THREE.Mesh(new THREE.PlaneGeometry(gsize, gsize), gmat);
@@ -9147,7 +9168,7 @@ async function main() {
                   || (YARD && YARD.inFoot(x, z, 3))
                   || (PARK && (PARK.onPath(x, z, 1.5) || PARK.inPond(x, z, 2) || PARK.inPlay(x, z, 1) || PARK.solid(x, z, 1)))
                   || (DOME && DOME.inside(x, z, 3))
-                  || (FISHMARKET && FISHMARKET.inside(x, z, 4))
+                  || (FISHMARKET && FISHMARKET.yard(x, z))
                   || (ROWS && (ROWS.inField(x, z, 1.5) || ROWS.inYard(x, z, 2) || ROWS.track(x, z)))
                   || (MONK && (MONK.onStair(x, z, 1.5) || MONK.onTop(x, z, 2)))
                   || (VILLAGE && (VILLAGE.inCottage(x, z, 1.5) || VILLAGE.lane(x, z) || Math.hypot(x - VILLAGE.GC[0], z - VILLAGE.GC[1]) < 5))
@@ -9166,7 +9187,7 @@ async function main() {
         if (YARD && YARD.inFoot(x, z, 2)) continue;
         if (PARK && (PARK.onPath(x, z, 1) || PARK.inPond(x, z, 1.5) || PARK.solid(x, z, 1))) continue;   // (2026-10-22) out of tries in a small world: never inside the fence
         if (DOME && DOME.inside(x, z, 3)) continue;
-        if (FISHMARKET && FISHMARKET.inside(x, z, 4)) continue;
+        if (FISHMARKET && FISHMARKET.yard(x, z)) continue;
         // a cart, a fence or a tree does not stand on the seabed: in a world
         // with a sea, a land prop that could only be placed under it is left
         // out; coral, kelp, shells and rock belong there
@@ -11270,7 +11291,7 @@ async function main() {
           if (inBldg(x, z, 0.6)) d = 0;
           if (PARK && (PARK.onPath(x, z, 0.2) || PARK.inPond(x, z, 0.6) || PARK.inPlay(x, z, 0.3) || PARK.solid(x, z, 0.2))) d = 0;   // the walks, the pond, the playground
           if (DOME && DOME.inside(x, z, 0.8)) d = 0;   // the greenhouse floor
-          if (FISHMARKET && FISHMARKET.inside(x, z, 1)) d = 0;   // the market hall's floor
+          if (FISHMARKET && FISHMARKET.yard(x, z)) d = 0;   // the market hall's floor
           else if (PARK && PARK.inFoot(x, z, 0)) { h *= 0.4; dry *= 0.4; }   // mown lawns
           if (YARD && (YARD.blocked(x, z, 0.3) || (Math.abs(x) < 6.6 && z > YARD.Z1 - 5.8 && z < YARD.Z1 + 9.5))) d = 0;   // no grass up through the house, the deck, the shed
           if (GARDEN && GARDEN.inPlot(x, z, 0.2)) { if (GARDEN.bare(x, z)) d = 0; else { h *= 0.35; dry *= 0.3; } }   // a mown garden lawn
@@ -11379,7 +11400,7 @@ async function main() {
           if (PITCH && PITCH.inside(x, z, 3)) return true;                       // nothing lies on a pitch
           if (PARK && (PARK.onPath(x, z, 0.4) || PARK.inPond(x, z, 0.8) || PARK.inPlay(x, z, 0.3) || PARK.solid(x, z, 0.3))) return true;   // (2026-10-22) not on the walks
           if (DOME && DOME.inside(x, z, 1.5)) return true;   // a greenhouse floor is swept
-          if (FISHMARKET && FISHMARKET.inside(x, z, 2)) return true;                 // so is a market hall's
+          if (FISHMARKET && FISHMARKET.yard(x, z)) return true;                 // so is a market hall's
           if (YARD && (YARD.blocked(x, z, 0.3) || (Math.abs(x) < 6.6 && YARD.Z1 - 5.8 < z && z < YARD.Z1 + 9.5))) return true;
           if (ARENA && ARENA.inFoot(x, z, 2)) return true;                       // nor on the sand or in the stands
           if (RAIL && RAIL.near(x, z, 0.5)) return true;
@@ -11536,6 +11557,7 @@ async function main() {
         if (GARDEN && GARDEN.inPlot(x, z, 0.3)) continue;              // a kept garden: no tufts in the plot
         if (YARD && (YARD.blocked(x, z, 0.3) || (Math.abs(x) < 6.6 && z > YARD.Z1 - 5.8 && z < YARD.Z1 + 9.5))) continue;
         if (PARK && (PARK.onPath(x, z, 0.3) || PARK.inPond(x, z, 0.5) || PARK.inPlay(x, z, 0) || PARK.solid(x, z, 0.2))) continue;   // a kept lawn round the house
+        if (FISHMARKET && FISHMARKET.yard(x, z)) continue;               // nothing grows through the market's asphalt
         if (WEST && WEST.inTown(x, z, 0)) continue;
         if (ROWS && (ROWS.inField(x, z, 0.3) || ROWS.track(x, z) || ROWS.inYard(x, z, 0))) continue;
         if (MONK && (MONK.onStair(x, z, 0.3) || MONK.onTop(x, z, 0))) continue;
@@ -17012,6 +17034,84 @@ async function main() {
       for (const a of [-L / 2 - 0.4, L / 2 + 0.4]) for (let c = -W / 2 + 2; c <= W / 2 - 2; c += 3.4) lans.push([a, H - 0.6, c, 0, 0, 0, 0.36, 0.5, 0.36]);
       inst(new THREE.SphereGeometry(1, 12, 8), lanM, lans, false);
       window.__fishMarket = { at: [+K.C[0].toFixed(1), +K.C[1].toFixed(1)], stalls: K.stalls.length, fish: fish.length, tuna: tunas.length, trucks: trk.length };
+      // THE MARKET'S STREETS (2026-10-25): in a city the hall stood alone in a forest. Round its yard
+      // an asphalt street, and across it two and three storeys of shop-houses: tiled and rendered
+      // fronts, aluminium windows, roll shutters at street level, vertical signboards, water tanks on
+      // the roofs, utility poles with their wires sagging between them; beyond, a haze of towers.
+      // Seven draw calls in all.
+      if (K.urban) {
+        const asphT = cv(256, 256, (x, w, h) => { x.fillStyle = '#3a3c3f'; x.fillRect(0, 0, w, h);
+          for (let i = 0; i < 2200; i++) { const l = 40 + rF() * 40; x.fillStyle = `rgba(${l},${l},${l + 4},${0.25 + rF() * 0.3})`; x.fillRect(rF() * w, rF() * h, 1 + rF() * 2, 1 + rF() * 2); } });
+        asphT.wrapS = asphT.wrapT = THREE.RepeatWrapping; asphT.repeat.set((L + 48) / 6, (W + 48) / 6);
+        const asph = new THREE.Mesh(new THREE.PlaneGeometry(L + 48, W + 48), M({ map: asphT, color: 0x9a948c, roughness: 0.88, metalness: 0.0, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 }));
+        asph.rotation.x = -Math.PI / 2; asph.position.y = 0.025; asph.receiveShadow = true; G.add(asph);
+        // the fronts: one facade sheet, tinted per building by vertex colour
+        const facT = cv(256, 256, (x, w, h) => { x.fillStyle = '#d8d4cc'; x.fillRect(0, 0, w, h);
+          for (let r = 0; r < 4; r++) for (let c = 0; c < 4; c++) { const fx = 14 + c * 62, fy = 12 + r * 64;
+            if (r === 3) { x.fillStyle = '#8c9094'; x.fillRect(fx - 6, fy, 56, 50); x.fillStyle = 'rgba(0,0,0,.25)'; for (let k = 0; k < 50; k += 4) x.fillRect(fx - 6, fy + k, 56, 1); continue; }   // roll shutters
+            x.fillStyle = '#b8bcc0'; x.fillRect(fx - 2, fy - 2, 40, 40); x.fillStyle = rF() < 0.4 ? '#f0c878' : '#2c3a48'; x.fillRect(fx, fy, 36, 36);
+            x.fillStyle = '#b8bcc0'; x.fillRect(fx + 17, fy, 2, 36); x.fillStyle = 'rgba(255,255,255,.25)'; x.fillRect(fx, fy + 30, 36, 4); }
+          x.fillStyle = 'rgba(0,0,0,.18)'; for (let r = 1; r < 4; r++) x.fillRect(0, r * 64 - 2, w, 3); });
+        facT.wrapS = facT.wrapT = THREE.RepeatWrapping;
+        const PAL = [0xe8e2d6, 0xc9c6bf, 0xd9cbb4, 0xb9c4c8, 0xe0d8c4, 0xa8aaa6, 0xcfc0a8, 0xd6dbd2];
+        const bGeos = [], rGeos = [], tanks = [], signs = [], poleL = [];
+        const addBox = (a, c, w2, d2, h2, col) => {
+          const g = new THREE.BoxGeometry(w2, h2 + 2, d2).toNonIndexed(), uv = g.attributes.uv, n = g.attributes.normal;
+          const du = Math.floor(rF() * 4) * 0.25, dv = Math.floor(rF() * 4) * 0.25;   // each front starts on its own bay and floor of the sheet
+          for (let i = 0; i < uv.count; i++) { const side = Math.abs(n.getX(i)) > 0.5 ? d2 : w2; uv.setXY(i, du + uv.getX(i) * side / 6, dv + uv.getY(i) * (h2 + 2) / 8); }
+          const cc = new Float32Array(uv.count * 3), co = new THREE.Color(col); for (let i = 0; i < uv.count; i++) { cc[i * 3] = co.r; cc[i * 3 + 1] = co.g; cc[i * 3 + 2] = co.b; }
+          g.setAttribute('color', new THREE.BufferAttribute(cc, 3)); g.translate(a, h2 / 2 - 1, c); bGeos.push(g);
+          const rf = new THREE.BoxGeometry(w2 + 0.3, 0.35, d2 + 0.3).toNonIndexed(); rf.translate(a, h2 + 0.17, c); rf.deleteAttribute('uv'); rGeos.push(rf);
+          const [wx, wz] = K.world(a, c);
+          world.createCollider(RAPIER.ColliderDesc.cuboid(w2 / 2, h2 / 2 + 1, d2 / 2).setTranslation(wx, gy + h2 / 2, wz).setRotation({ x: 0, y: Math.sin(-K.A / 2), z: 0, w: Math.cos(-K.A / 2) }));
+          if (rF() < 0.55) tanks.push([a + (rF() - 0.5) * w2 * 0.5, h2 + 1.0, c + (rF() - 0.5) * d2 * 0.4]);
+        };
+        // rows along both long sides, across the far end, and behind the start, each with a gap where a street runs through
+        const rowAlong = (c0, face) => { let a = -L / 2 - 16;
+          while (a < L / 2 + 16) { const w2 = 5 + rF() * 5, d2 = 7 + rF() * 3, h2 = 6.5 + Math.floor(rF() * 3) * 3.2 + rF() * 0.6;
+            if (Math.abs(a + w2 / 2) > 4.5) { addBox(a + w2 / 2, c0 + face * d2 / 2, w2, d2, h2, PAL[Math.floor(rF() * PAL.length)]);
+              if (rF() < 0.7) signs.push([a + w2 / 2 + (rF() - 0.5) * w2 * 0.6, 3.6 + rF() * (h2 - 6), c0 - face * 0.35, face, Math.floor(rF() * 8)]); }
+            a += w2 + 0.2 + (rF() < 0.15 ? 2.5 : 0); } };
+        const rowAcross = (a0, face) => { let c = -W / 2 - 16;
+          while (c < W / 2 + 16) { const w2 = 5 + rF() * 5, d2 = 7 + rF() * 3, h2 = 6.5 + Math.floor(rF() * 3) * 3.2;
+            if (Math.abs(c + w2 / 2) > 5.5) { addBox(a0 + face * d2 / 2, c + w2 / 2, d2, w2, h2, PAL[Math.floor(rF() * PAL.length)]);
+              if (rF() < 0.7) signs.push([a0 - face * 0.35, 3.6 + rF() * (h2 - 6), c + w2 / 2, face, Math.floor(rF() * 8), true]); }
+            c += w2 + 0.2; } };
+        rowAlong(W / 2 + 9, 1); rowAlong(-W / 2 - 9, -1); rowAcross(L / 2 + 12, 1); rowAcross(-L / 2 - 14, -1);
+        const bld = new THREE.Mesh(mergeGeometries(bGeos, false), M({ map: facT, vertexColors: true, roughness: 0.8 })); bld.castShadow = true; bld.receiveShadow = true; G.add(bld);
+        G.add(new THREE.Mesh(mergeGeometries(rGeos, false), M({ color: 0x4a4c50, roughness: 0.9 })));
+        inst(new THREE.CylinderGeometry(0.7, 0.7, 1.6, 12), M({ color: 0xd8dcd8, roughness: 0.5, metalness: 0.3 }), tanks.map(t => [t[0], t[1], t[2]]), true);
+        // kanban: vertical signboards, a column of characters on a coloured ground, a little lit
+        const KAN = [['魚', '#f2efe6', '#1c2b55'], ['寿司', '#b8241c', '#f6f0e2'], ['鮮魚', '#1d4e8a', '#f6f0e2'], ['市場', '#f2efe6', '#2a2a2a'], ['食堂', '#e8b830', '#2a1a10'], ['丼', '#2a6a3a', '#f6f0e2'], ['酒', '#3a2a22', '#f2e6c8'], ['茶', '#f2efe6', '#2d5a2a']];
+        const kanT = cv(512, 256, (x, w, h) => { KAN.forEach(([t, bg, fg], i) => { const x0 = i * 64; x.fillStyle = bg; x.fillRect(x0 + 2, 0, 60, h); x.strokeStyle = fg; x.lineWidth = 3; x.strokeRect(x0 + 6, 4, 52, h - 8);
+          x.fillStyle = fg; x.font = 'bold 50px "Yu Gothic", "Meiryo", "MS Gothic", "Noto Sans JP", sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle';
+          [...t].forEach((ch, k) => x.fillText(ch, x0 + 32, h / 2 + (k - (t.length - 1) / 2) * 62)); }); });
+        const sg = [];
+        for (const [a, y, c, face, k, across] of signs) { const g = new THREE.PlaneGeometry(0.9, 2.6).toNonIndexed(), uv = g.attributes.uv;
+          for (let i = 0; i < uv.count; i++) uv.setX(i, (k + uv.getX(i)) / 8);
+          if (across) g.rotateY(face > 0 ? -Math.PI / 2 : Math.PI / 2); else if (face > 0) g.rotateY(Math.PI);
+          g.translate(a, y, c); sg.push(g); }
+        if (sg.length) G.add(new THREE.Mesh(mergeGeometries(sg, false), M({ map: kanT, emissive: 0xffffff, emissiveMap: kanT, emissiveIntensity: 0.35, roughness: 0.6, side: THREE.DoubleSide })));
+        // utility poles at the kerbs on both long streets, and their wires
+        const poles = [], wire = [];
+        for (const c0 of [W / 2 + 7.6, -W / 2 - 7.6]) { let prev = null;
+          for (let a = -L / 2 - 14; a <= L / 2 + 14; a += 11) { poles.push([a, 4.5, c0]); poles.push([a, 8.2, c0, 0, 0, Math.PI / 2, 1, 1.8, 1]);
+            if (prev !== null) for (const dc of [-0.7, 0, 0.7]) for (let k = 0; k < 8; k++) { const t0 = k / 8, t1 = (k + 1) / 8, sag = (t) => -0.9 * 4 * t * (1 - t);
+              wire.push(prev + (a - prev) * t0, 8.15 + sag(t0), c0 + dc, prev + (a - prev) * t1, 8.15 + sag(t1), c0 + dc); }
+            prev = a; } }
+        inst(new THREE.CylinderGeometry(0.13, 0.17, 1, 8), M({ color: 0x8a8a84, roughness: 0.8 }), poles.map(p => p.length > 4 ? [p[0], p[1], p[2], p[3], p[4], p[5], 1, 1.8, 1] : [p[0], p[1], p[2], 0, 0, 0, 1, 9, 1]), true);
+        const wg = new THREE.BufferGeometry(); wg.setAttribute('position', new THREE.Float32BufferAttribute(wire, 3));
+        G.add(new THREE.LineSegments(wg, new THREE.LineBasicMaterial({ color: 0x1a1a1c })));
+        // the city beyond: towers in the haze, out past the play field
+        const tw = [];
+        for (let i = 0; i < 70; i++) { const ang = rF() * Math.PI * 2, r = 120 + rF() * 260, hh = 22 + rF() * rF() * 120, ww = 12 + rF() * 18;
+          if (Math.cos(ang) > 0.96 && r < 160) continue;
+          tw.push([Math.cos(ang) * r, (hh - 60) / 2, Math.sin(ang) * r, 0, rF() * Math.PI, 0, ww, hh + 60, ww * (0.6 + rF() * 0.6)]); }   // footed 60 m down: the land out there falls away
+        const twT = cv(64, 128, (x, w, h) => { x.fillStyle = '#6a7480'; x.fillRect(0, 0, w, h); for (let r = 4; r < h; r += 8) for (let c = 3; c < w; c += 8) { x.fillStyle = rF() < 0.25 ? '#e8d6a8' : '#3c4652'; x.fillRect(c, r, 5, 5); } });
+        twT.wrapS = twT.wrapT = THREE.RepeatWrapping; twT.repeat.set(3, 8);
+        inst(new THREE.BoxGeometry(1, 1, 1), M({ map: twT, roughness: 0.6, metalness: 0.2 }), tw, false);
+        window.__fishMarket.street = { houses: bGeos.length, signs: sg.length, poles: poles.length / 2, towers: tw.length };
+      }
     } catch (e) { console.warn('[game] fish market skipped: ' + e.message); }
   }
   // ── THE PARK, BUILT (see PARK above) ─────────────────────────────────────
@@ -28891,7 +28991,14 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
       camera.updateProjectionMatrix();
     } else if (VIEW === 'side') {
       // side-scroller camera: fixed on the z axis, tracks the runner
-      camera.position.lerp(new THREE.Vector3(fX, fY + 2.4, 42), 1 - Math.exp(-8 * dt));
+      // (2026-10-25) and over the land between: the sight line from the camera to the runner keeps a
+      // metre and a half over every crest it crosses (the picture's lower band, which an orthographic
+      // camera starts below the ground, is the terrain's dark underside: see the terrain build)
+      let _sideY = fY + 2.4;
+      for (let k = 1; k <= 10; k++) { const zz = 42 * k / 10, t = k / 10;
+        const need = hAt(fX, zz) + 1.5, onLine = (fY + 1.1) + (_sideY - (fY + 1.1)) * t;
+        if (need > onLine) _sideY = Math.max(_sideY, (fY + 1.1) + (need - (fY + 1.1)) / t); }
+      camera.position.lerp(new THREE.Vector3(fX, Math.min(_sideY, fY + 30), 42), 1 - Math.exp(-8 * dt));
       camera.lookAt(fX, fY + 1.1, 0);
       camera.zoom = THREE.MathUtils.damp(camera.zoom || 1, 1.0 / camZoom, 6, dt);
       camera.updateProjectionMatrix();
