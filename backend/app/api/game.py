@@ -4779,7 +4779,7 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                 "palace": ("castle", "keep"), "citadel": ("castle", "keep"), "fort": ("castle", "keep"),
                 "temple": ("castle", "chapel"), "church": ("castle", "chapel"), "chapel": ("castle", "chapel"),
                 "cathedral": ("castle", "chapel"), "monastery": ("castle", "chapel"), "abbey": ("castle", "chapel"),
-                "shrine": ("castle", "chapel"), "tower": ("castle", "tower"), "lighthouse": ("castle", "lighthouse"),
+                "shrine": ("castle", "chapel"), "tower": ("castle", "tower"), "lighthouse": ("lighthouse", "lighthouse"),
                 "watchtower": ("castle", "tower"), "observatory": ("castle", "tower"),
                 "warehouse": ("dungeon", "warehouse"), "bunker": ("dungeon", "warehouse"), "vault": ("dungeon", "warehouse"),
                 "dungeon": ("dungeon", "keep"), "mill": ("dungeon", "warehouse"), "station": ("dungeon", "warehouse"),

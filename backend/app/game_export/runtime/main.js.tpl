@@ -9557,8 +9557,103 @@ async function main() {
   // ── ROOM BUILDER (Phase 95/99): builds a room-plan at any x-offset —
   // used by full INTERIOR levels (offset 0) and by ENTERABLE buildings in
   // exterior worlds (offset far past the map edge; a door teleports you in).
+  // ── A LIGHTHOUSE'S INSIDE (2026-10-25) ─────────────────────────────────
+  // "a lighthouse keeper climbing the stairs in a storm to relight the lamp"
+  // stepped through the door into a castle's great hall forty metres long. A
+  // lighthouse is one round room of whitewashed stone, a stair of stone treads
+  // winding up its wall round a thick newel, small deep windows on the storm,
+  // a few oil lamps on brackets, and at the top a landing under the lantern
+  // where the great lens stands dark until the keeper lights it.
+  function buildTowerInside(PLAN, OX) {
+    const T = PLAN.tower || {}, R = T.r || 2.9, NR = T.newel || 0.85, RISE = T.rise || 0.24, DA = T.turn || 0.27;
+    const H = PLAN.wall_h || 22, rT = mulberry32((SPEC.seed || 1) + 4848);
+    const texL = new THREE.TextureLoader();
+    const itex = (n, rx, ry) => { const t = texL.load('textures/' + n + '.jpg'); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(rx, ry);
+      t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = renderer.capabilities.getMaxAnisotropy(); return t; };
+    const M = (o) => { const m = new THREE.MeshStandardMaterial(o); m.userData.noAutoTex = true; return m; };
+    const lime = M({ map: itex('plaster', 5, 7), color: 0xe9e3d6, roughness: 0.95, side: THREE.DoubleSide });
+    const stone = M({ map: itex('stone', 1, 1), color: 0xb4ada2, roughness: 0.9 });
+    const flags = M({ map: itex('stone', 2.5, 2.5), color: 0x8f877c, roughness: 0.92 });
+    const iron = M({ color: 0x202224, roughness: 0.5, metalness: 0.8 });
+    const brass = M({ color: 0xb08a3e, roughness: 0.35, metalness: 0.9 });
+    const g = new THREE.Group(); g.position.set(OX, 0, 0); scene.add(g);
+    const add = (geo, m, x, y, z) => { const o = new THREE.Mesh(geo, m); o.position.set(x || 0, y || 0, z || 0); o.castShadow = o.receiveShadow = true; g.add(o); return o; };
+    // the floor, the wall, the newel
+    add(new THREE.CircleGeometry(R, 48), flags, 0, 0.02, 0).rotation.x = -Math.PI / 2;
+    world.createCollider(RAPIER.ColliderDesc.cuboid(R + 0.5, 0.1, R + 0.5).setTranslation(OX, -0.08, 0));
+    add(new THREE.CylinderGeometry(R, R, H + 4, 48, 1, true), lime, 0, (H + 4) / 2, 0);   // both faces: from a camera outside the wall the storm must not show through
+    for (let k = 0; k < 24; k++) { const a = k / 24 * Math.PI * 2, w = 2 * Math.PI * (R + 0.15) / 24 * 1.15;
+      world.createCollider(RAPIER.ColliderDesc.cuboid(w / 2, (H + 4) / 2, 0.15).setTranslation(OX + Math.cos(a) * (R + 0.15), (H + 4) / 2, Math.sin(a) * (R + 0.15))
+        .setRotation({ x: 0, y: Math.sin((-a + Math.PI / 2) / 2), z: 0, w: Math.cos((-a + Math.PI / 2) / 2) })); }
+    // the stair: a tread every DA radians, RISE up, from beside the door (the spawn stands at +z) round and up
+    const A0 = Math.PI / 2 + 0.5, N = Math.floor((H - 0.4) / RISE), mid = (NR + R) / 2, len = R - NR - 0.04, dep = DA * mid * 1.08;
+    const treadG = new THREE.BoxGeometry(len, 0.09, dep), riserG = new THREE.BoxGeometry(len, RISE, 0.05);
+    const treads = new THREE.InstancedMesh(treadG, stone, N), risers = new THREE.InstancedMesh(riserG, stone, N), d = new THREE.Object3D();
+    for (let k = 0; k < N; k++) {
+      const a = A0 + k * DA, y = (k + 1) * RISE, cx = Math.cos(a) * mid, cz = Math.sin(a) * mid, yaw = -a;
+      d.position.set(cx, y - 0.045, cz); d.rotation.set(0, yaw, 0); d.scale.set(1, 1, 1); d.updateMatrix(); treads.setMatrixAt(k, d.matrix);
+      const ra = a - DA / 2; d.position.set(Math.cos(ra) * mid, y - RISE / 2, Math.sin(ra) * mid); d.rotation.set(0, -ra, 0); d.updateMatrix(); risers.setMatrixAt(k, d.matrix);
+      // each tread is solid from its top down a riser's height: a stair, not a ramp of slats
+      world.createCollider(RAPIER.ColliderDesc.cuboid(len / 2, RISE / 2, dep / 2).setTranslation(OX + cx, y - RISE / 2, cz)
+        .setRotation({ x: 0, y: Math.sin(yaw / 2), z: 0, w: Math.cos(yaw / 2) }));
+    }
+    treads.castShadow = treads.receiveShadow = risers.receiveShadow = true; g.add(treads); g.add(risers);
+    const TOP = N * RISE, AN = A0 + (N - 1) * DA;
+    add(new THREE.CylinderGeometry(NR, NR, TOP, 28), lime.clone(), 0, TOP / 2, 0).material.side = THREE.FrontSide;
+    world.createCollider(RAPIER.ColliderDesc.cylinder(TOP / 2, NR).setTranslation(OX, TOP / 2, 0));
+    // an iron handrail up the newel's side of the stair
+    { const pts = []; for (let k = 0; k <= N; k += 1) { const a = A0 + k * DA; pts.push(new THREE.Vector3(Math.cos(a) * (NR + 0.12), (k + 1) * RISE + 0.9, Math.sin(a) * (NR + 0.12))); }
+      add(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), N * 2, 0.03, 6, false), brass); }
+    // the landing at the top, open over the last turn of the stair so the keeper comes up through it
+    const OPEN = 2.6, LA0 = AN + DA * 0.5, LSPAN = Math.PI * 2 - OPEN;
+    const land = add(new THREE.RingGeometry(0.0, R, 48, 1, LA0, LSPAN), flags, 0, TOP + 0.02, 0); land.rotation.x = -Math.PI / 2; land.scale.y = -1;
+    land.material = flags.clone(); land.material.side = THREE.DoubleSide;
+    for (let k = 0; k < 9; k++) { const a = LA0 + (k + 0.5) / 9 * LSPAN, w = LSPAN / 9 * R * 0.62;
+      world.createCollider(RAPIER.ColliderDesc.cuboid(R * 0.5, 0.1, w).setTranslation(OX + Math.cos(a) * R * 0.5, TOP - 0.08, Math.sin(a) * R * 0.5)
+        .setRotation({ x: 0, y: Math.sin(-a / 2), z: 0, w: Math.cos(-a / 2) })); }
+    // small deep windows on the storm as the stair climbs, and oil lamps on brackets between them
+    const night = M({ color: 0x0c1420, emissive: 0x1a2a44, emissiveIntensity: 0.5, roughness: 0.1 });
+    for (let k = 0; k < 6; k++) { const a = A0 + 1.2 + k * 2.4, y = 2.4 + k * 3.3; if (y > TOP - 1) break;
+      // set deep in the wall: a stone reveal round it, the glass at the back, a glazing bar across it
+      const wg = new THREE.Group(); wg.position.set(Math.cos(a) * (R - 0.01), y, Math.sin(a) * (R - 0.01)); wg.rotation.y = -a + Math.PI / 2; g.add(wg);
+      const gl2 = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.9), night); gl2.position.z = -0.08; gl2.rotation.y = Math.PI; wg.add(gl2);
+      for (const [w2, h2, x2, y2] of [[0.74, 0.12, 0, 0.51], [0.74, 0.16, 0, -0.53], [0.12, 1.2, 0.31, 0], [0.12, 1.2, -0.31, 0]]) {
+        const st2 = new THREE.Mesh(new THREE.BoxGeometry(w2, h2, 0.32), stone); st2.position.set(x2, y2, -0.14); st2.castShadow = st2.receiveShadow = true; wg.add(st2); }
+      for (const [w2, h2] of [[0.5, 0.03], [0.03, 0.9]]) { const bar = new THREE.Mesh(new THREE.BoxGeometry(w2, h2, 0.03), iron); bar.position.z = 0.0; wg.add(bar); } }
+    const lamps = [];
+    for (let k = 0; k < 3; k++) { const a = A0 + 0.4 + k * 5.6, y = 2.2 + k * 6.5;
+      const lx = Math.cos(a) * (R - 0.25), lz = Math.sin(a) * (R - 0.25);
+      const gl = add(new THREE.SphereGeometry(0.09, 12, 8), M({ color: 0xffd9a0, emissive: 0xffb860, emissiveIntensity: 2.4 }), lx, y, lz);
+      add(new THREE.BoxGeometry(0.06, 0.06, 0.3), iron, Math.cos(a) * (R - 0.12), y - 0.12, Math.sin(a) * (R - 0.12)).rotation.y = -a + Math.PI / 2;
+      const pl = new THREE.PointLight(0xffb868, 5, 9, 1.8); pl.position.set(OX + lx, y, lz); scene.add(pl); lamps.push(pl);
+      (window.__torches = window.__torches || []).push(pl); void gl; }
+    // the lantern room over the landing: the great lens on its pedestal, dark until lit
+    add(new THREE.CylinderGeometry(0.45, 0.6, 1.0, 24), iron, 0, TOP + 0.5, 0);
+    // the lens: a beehive of thin glass prisms, green-grey and clear, in brass bands
+    const lensM = M({ color: 0xa9cfc4, emissive: 0xffe6b0, emissiveIntensity: 0.0, roughness: 0.02, metalness: 0.35, transparent: true, opacity: 0.42, depthWrite: false });
+    for (let k = 0; k < 13; k++) { const t = (k - 6) / 6, ry = TOP + 1.15 + k * 0.105, rr = 0.66 * Math.sqrt(Math.max(0.12, 1 - t * t * 0.85));
+      const ring = add(new THREE.TorusGeometry(rr, 0.034, 6, 40), lensM, 0, ry, 0); ring.rotation.x = Math.PI / 2; ring.castShadow = false; }
+    for (const by of [TOP + 1.08, TOP + 1.8, TOP + 2.45]) { const band = add(new THREE.TorusGeometry(by === TOP + 1.8 ? 0.68 : 0.4, 0.022, 6, 40), brass, 0, by, 0); band.rotation.x = Math.PI / 2; }
+    for (let k = 0; k < 6; k++) { const a = k / 6 * Math.PI * 2; add(new THREE.BoxGeometry(0.025, 1.4, 0.025), brass, Math.cos(a) * 0.69, TOP + 1.8, Math.sin(a) * 0.69); }
+    const flame = add(new THREE.SphereGeometry(0.16, 14, 10), new THREE.MeshBasicMaterial({ color: 0x3a3a3a }), 0, TOP + 1.75, 0);
+    const lensL = new THREE.PointLight(0xffe2a0, 0, 16, 1.4); lensL.position.set(OX, TOP + 1.75, 0); scene.add(lensL);
+    // the glazing all round the lantern room, the storm black beyond it, and the roof
+    add(new THREE.CylinderGeometry(R - 0.05, R - 0.05, 2.6, 32, 1, true), M({ color: 0x0a1220, emissive: 0x16243a, emissiveIntensity: 0.6, roughness: 0.05, side: THREE.BackSide }), 0, TOP + 2.0, 0);
+    for (let k = 0; k < 12; k++) { const a = k / 12 * Math.PI * 2; add(new THREE.BoxGeometry(0.08, 2.6, 0.08), iron, Math.cos(a) * (R - 0.1), TOP + 2.0, Math.sin(a) * (R - 0.1)); }
+    add(new THREE.CircleGeometry(R, 32), M({ color: 0x2a2c2e, roughness: 0.7, side: THREE.DoubleSide }), 0, TOP + 3.4, 0).rotation.x = Math.PI / 2;
+    // the reach of the climb: the lamp lit at the top is the end of the walk, if the walk is to the lamp
+    const _rch = (SPEC.objectives || []).find(o => o.kind === 'reach');
+    const gate = !!(_rch && /\b(lamps?|lights?|lanterns?|beacons?|tops?|lens|flame)\b/.test(String(_rch.label || '').toLowerCase()))
+      || /\b(re-?light\w*|light(?:s|ing)? the (?:lamp|light|lantern)|climb\w*)\b/.test(String(SPEC.prompt || '').toLowerCase());
+    window.__lhClimb = { x: OX, z: 0, y: TOP, gate, lit: false, steps: N, top: +TOP.toFixed(2),
+      light: () => { const L = window.__lhClimb; if (L.lit) return; L.lit = true; lensM.emissiveIntensity = 2.2; flame.material.color.setHex(0xfff0c0); lensL.intensity = 22;
+        const o = window.__lhOut; if (o) { o.lamp.material.color.setHex(0xfff4d0); o.pl.intensity = 18; o.beams.visible = true; if (o.glass) o.glass.material.emissiveIntensity = 0.9; } } };
+    return { WH: TOP + 3.4, entryZ: 0.95 };
+  }
+
   function buildRooms(PLAN, OX) {
     const IK = PLAN.kind || 'castle';
+    if (IK === 'lighthouse') return buildTowerInside(PLAN, OX);
     const WH = PLAN.wall_h || 4.0, WT = PLAN.wall_t || 0.5;
     const texL = new THREE.TextureLoader();
     const itex = (n, rx, ry) => {
@@ -20480,11 +20575,15 @@ async function main() {
     // the lamp and its two beams, turning
     const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.45, 16, 12), new THREE.MeshBasicMaterial({ color: 0xfff4d0, toneMapped: false })); lamp.position.y = LY + 2.0; g.add(lamp);
     const pl = new THREE.PointLight(0xffe2a0, 18, 60, 1.6); pl.position.y = LY + 2.0; g.add(pl);
+    // (2026-10-25) a lamp to relight is dark until the keeper has climbed to it (the light keeps its slot, at nothing)
+    const _dark = window.__lhClimb && window.__lhClimb.gate && !window.__lhClimb.lit;
+    if (_dark) { lamp.material.color.setHex(0x2a2a2a); pl.intensity = 0; glass.material.emissiveIntensity = 0.05; }
     const beamT = (() => { const c = document.createElement('canvas'); c.width = 64; c.height = 256; const x = c.getContext('2d'); const gr = x.createLinearGradient(0, 0, 0, 256);
       gr.addColorStop(0, 'rgba(255,240,200,0.55)'); gr.addColorStop(1, 'rgba(255,240,200,0)'); x.fillStyle = gr; x.fillRect(0, 0, 64, 256);
       const h = x.createLinearGradient(0, 0, 64, 0); h.addColorStop(0, 'rgba(0,0,0,1)'); h.addColorStop(0.5, 'rgba(0,0,0,0)'); h.addColorStop(1, 'rgba(0,0,0,1)');
       x.globalCompositeOperation = 'destination-out'; x.fillStyle = h; x.fillRect(0, 0, 64, 256); return new THREE.CanvasTexture(c); })();
     const beams = new THREE.Group(); beams.position.y = LY + 2.0; g.add(beams);
+    window.__lhOut = { lamp, pl, beams, glass }; if (_dark) beams.visible = false;
     // A BEAM IS LIGHT IN THE AIR (2026-10-12): the cone wore its gradient
     // round its circumference, so one side of it was a hard white tube. The
     // beam is now brightest down its own axis, soft where the eye grazes its
@@ -24952,6 +25051,8 @@ async function main() {
     // (a teleport right after a conversation was lost half the time), so the
     // queued position is the new one too, as getting in and out of a car does
     tp: (x, z) => { const t = { x, y: spawnHeight(x, z), z }; body.setTranslation(t, true); body.setNextKinematicTranslation(t); },
+    bpos: () => { const t = body.translation(); return [t.x, t.y, t.z]; },   // the body itself, not the drawn hero (a probe reads it)
+    tp3: (x, y, z) => { const t = { x, y, z }; body.setTranslation(t, true); body.setNextKinematicTranslation(t); },   // a probe stands on a floor the ground does not know (a landing)
     tpy: (x, y, z) => { body.setTranslation({ x, y, z }, true); body.setNextKinematicTranslation({ x, y, z }); },     // a drop from a height: does a ledge hold you
     npcRefs: () => npcs,                    // the live bodies, for gates that measure how they move
     carryE: () => window.__carryE && window.__carryE(), throwIt: () => doAttack(),
@@ -29093,7 +29194,11 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
       if (goalMesh) goalMesh.rotation.z += dt * 0.8;
       const st = steps[stepIdx];
       const gd = Math.hypot(goalPos.x - nt.x, goalPos.z - nt.z);
-      if (st && st.kind === 'reach' && !window.__ladder && gd < (PLANE ? 18 : LOGRIDE ? LOGRIDE.w / 2 + 7 : RIDE === 'rowboat' ? 22 : 2.2)) advanceStep();   // a tower ladder's rescue ends when the basket is down   // a plane passes over at speed; a log reaches the mill from the water
+      // (2026-10-25) the lighthouse keeper's walk ends at the top of the stair, when the lamp is lit
+      if (window.__lhClimb && window.__lhClimb.gate && !window.__lhClimb.lit) { const L = window.__lhClimb;
+        if (Math.hypot(nt.x - L.x, nt.z - L.z) < 1.9 && nt.y > L.y - 0.6) { L.light(); sfx('pickup'); popText('The lamp is lit. The sea can see again.', '#ffd27a');
+          if (st && st.kind === 'reach') advanceStep(); } }
+      if (st && st.kind === 'reach' && !window.__ladder && !(window.__lhClimb && window.__lhClimb.gate && !window.__lhClimb.lit) && gd < (PLANE ? 18 : LOGRIDE ? LOGRIDE.w / 2 + 7 : RIDE === 'rowboat' ? 22 : 2.2)) advanceStep();   // a tower ladder's rescue ends when the basket is down   // a plane passes over at speed; a log reaches the mill from the water
       if (st && st.kind === 'escort'
           && npcs.some(nn => nn.behavior === 'escort' && !nn.dead && nn._arrived)) {
         advanceStep();
@@ -29227,10 +29332,12 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
           body.setNextKinematicTranslation({ x: dw.inSpawn[0], y: 1.2, z: dw.inSpawn[1] });
           dw.cool = 1.2; sfx('step');
           window.__doorway = dw;             // the camera ceiling follows you in
+          // (2026-10-25) indoors there is no sea under the floor and no rain falling: the lighthouse's flagstones showed the waves through them
+          if (waterMesh) waterMesh.visible = false; if (precip) precip.visible = false;
           popText('Inside ' + dw.label + '…', '#ffc46b');
           break;
         }
-        if (inside && dw.exit
+        if (inside && dw.exit && pp.y < 2.6    // (2026-10-25) on the floor by the door, not on a stair passing over it
             && Math.hypot(pp.x - dw.exit[0], pp.z - dw.exit[1]) < 1.2) {
           const ox3 = dw.out[0], oz3 = dw.out[1] + 2.4;   // land CLEAR of the pad
           const oy2 = hAt(ox3, oz3) + 1.2;
@@ -29238,6 +29345,7 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
           body.setNextKinematicTranslation({ x: ox3, y: oy2, z: oz3 });
           dw.cool = 1.2; sfx('step');
           window.__doorway = null;
+          if (waterMesh) waterMesh.visible = true; if (precip) precip.visible = true;
           // THE DOOR IS THE ESCAPE (2026-08-05): a guard left in `chase`
           // steers at the player's world position, and the player is now a
           // city block and eight hundred metres away — the whole patrol
@@ -29771,6 +29879,9 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
       }
       if (window.__doorway && fX > SPEC.world.size_m) {
         cy = Math.min(cy, window.__doorway.wallH - 0.35);
+        // (2026-10-25) in a round tower the camera keeps inside its wall: past it was the storm
+        if (window.__lhClimb && Math.abs(fX - window.__lhClimb.x) < 8) { const L = window.__lhClimb, dx = cx - L.x, dz = cz - L.z, dl = Math.hypot(dx, dz);
+          if (dl > 2.45) { cx = L.x + dx / dl * 2.45; cz = L.z + dz / dl * 2.45; } }
       }
       // CAMERA COLLISION (moon plan 1.1): spherecast pull-in — a ray from the
       // player's head toward the desired camera spot; any wall in between

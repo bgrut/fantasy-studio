@@ -1140,6 +1140,14 @@ def build_interior(seed: int, kind: str = "castle") -> dict:
     """
     import random as _random
     rng = _random.Random(seed * 31 + 7)
+    # A LIGHTHOUSE IS A STAIR (2026-10-25): "a lighthouse keeper climbing the stairs in a storm to
+    # relight the lamp" stepped through the door into a castle's great hall forty metres long, in a
+    # tower six across. Inside a lighthouse is one round room and a stair winding up its wall to
+    # the lamp; the runtime builds the tower from these numbers
+    if kind == "lighthouse":
+        return {"kind": "lighthouse", "wall_h": 22.0, "wall_t": 0.3, "pillars": [], "floors": 1,
+                "rooms": [[0.0, 0.0, 5.8, 5.8]], "walls": [], "furniture": [], "torches": [],
+                "tower": {"r": 2.9, "newel": 0.85, "rise": 0.24, "turn": 0.27}, "bounds": [12.0, 12.0]}
     # A LIBRARY (2026-10-11) is planned as a museum is, a tall hall with
     # galleries off it; the runtime lines it with books instead of pictures
     _lib = kind == "library"
