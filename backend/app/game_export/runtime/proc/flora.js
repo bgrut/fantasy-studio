@@ -1505,7 +1505,7 @@ export function biomeFor(words, arch, groundHSL) {
   // A JUNGLE IS LAYERED (2026-10-10): emergent kapoks on buttresses over a
   // canopy hung with lianas, palms in the gaps, and a floor of ferns (the
   // understory slot grows as fern), all in a deep wet green
-  else if (has(/jungle|rainforest|rain forest|amazon\w*|tropical forest/)) Object.assign(out, {
+  else if (has(/jungle|rainforest|rain forest|amazon\w*|tropical forest|maya\w*|cenotes?|yucat\w*|aztec\w*|guatemal\w*|belize/)) Object.assign(out, {   // (2026-10-25) the Maya lands too
     kinds: K(['kapok', 0.18], ['canopy', 1], ['palm', 0.5], ['broadleaf', 0.25], ['bush', 1.5, 'fern'], ['rock', 0.06]), dens: 1.35,
     leaf: { h: 0.3, s: 0.52, l: 0.25 } });
   // A NORTHERN COAST (2026-10-20): "a lighthouse keeper on a stormy island"

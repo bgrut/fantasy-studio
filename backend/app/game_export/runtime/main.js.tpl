@@ -510,7 +510,7 @@ async function main() {
     const W = SPEC.world || {}, L0 = W.level || {};
     // (2026-10-07) the sentence's own place words too: "a himalayan monastery" grew an
     // oak wood because the title, "Monk's Ascent", never said where it was
-    const placeWords = (String(SPEC.prompt || '').toLowerCase().match(/\b(redwoods?|sequoias?|himalaya\w*|tibet\w*|nepal\w*|bhutan\w*|monaster(?:y|ies)|gompa|lavender|vineyards?|provence|tuscan\w*|black sand|basalt|sea stacks?|iceland\w*|kansas|wheat|olive groves?|tea plantations?|bamboo|cherry blossoms?|cherry trees?|sakura|hanami|highlands?|glens?|moors?|heather|lighthouses?|storm\w*|gales?|scottish|scotland|hebrid\w*|orkney|shetland|irish|ireland|cornwall|cornish|welsh|wales|maine|newfoundland|north sea|atlantic|faroe\w*|brittany|breton|cliffs?|headland|alien|xeno\w*|extraterrestrial|exoplanet|purple plants|fjords?|norw\w*|vikings?|norse|nordic|scandinavia\w*|egypt\w*|giza|pyramids?|pharaoh\w*|sphinx|sahara|oasis|alps|alpine|swiss|switzerland|tyrol\w*|dolomit\w*|sea ice|ice floes?|pack ice|polar bears?|icebergs?|orchards?|apples?|cider|tropical|islands?|isle|palms?|lagoon|atoll|pirates?|treasure|castaway|autumn|october|maples?|beach|seaside|lifeguards?|surf\w*|scuba|deep blue|deep ocean|deep sea|humpback|underwater|undersea|seabed|sea ?floor|ocean floor|coral|reefs?|kelp|cappadocia\w*|kapadokya|g[oö]reme|fairy chimneys?|chinese|china|jiangnan|suzhou|wuzhen|zhouzhuang|tongli|xitang|hangzhou|zhujiajiao|water ?town|canad\w*|quebec|ontario|yukon|alaska\w*|boreal|taiga|siberia\w*|lumberjacks?|log ?driv\w*|logging|sawmill|antarctic\w*|south pole|penguins?|ice shelf|camels?|caravans?|bedouin|tuareg|berber|gobi|kalahari|namib\w*|arabia\w*|morocc\w*)\b/g) || []);   // (alien words, 2026-10-11; fjord, Egypt, Alps, sea ice the same day)
+    const placeWords = (String(SPEC.prompt || '').toLowerCase().match(/\b(redwoods?|sequoias?|himalaya\w*|tibet\w*|nepal\w*|bhutan\w*|monaster(?:y|ies)|gompa|lavender|vineyards?|provence|tuscan\w*|black sand|basalt|sea stacks?|iceland\w*|kansas|wheat|olive groves?|tea plantations?|bamboo|cherry blossoms?|cherry trees?|sakura|hanami|highlands?|glens?|moors?|heather|lighthouses?|storm\w*|gales?|scottish|scotland|hebrid\w*|orkney|shetland|irish|ireland|cornwall|cornish|welsh|wales|maine|newfoundland|north sea|atlantic|faroe\w*|brittany|breton|cliffs?|headland|alien|xeno\w*|extraterrestrial|exoplanet|purple plants|fjords?|norw\w*|vikings?|norse|nordic|scandinavia\w*|egypt\w*|giza|pyramids?|pharaoh\w*|sphinx|sahara|oasis|alps|alpine|swiss|switzerland|tyrol\w*|dolomit\w*|sea ice|ice floes?|pack ice|polar bears?|icebergs?|orchards?|apples?|cider|tropical|islands?|isle|palms?|lagoon|atoll|pirates?|treasure|castaway|autumn|october|maples?|beach|seaside|lifeguards?|surf\w*|scuba|deep blue|deep ocean|deep sea|humpback|underwater|undersea|seabed|sea ?floor|ocean floor|coral|reefs?|kelp|cappadocia\w*|kapadokya|g[oö]reme|fairy chimneys?|chinese|china|jiangnan|suzhou|wuzhen|zhouzhuang|tongli|xitang|hangzhou|zhujiajiao|water ?town|canad\w*|quebec|ontario|yukon|alaska\w*|boreal|taiga|siberia\w*|lumberjacks?|log ?driv\w*|logging|sawmill|antarctic\w*|south pole|penguins?|ice shelf|maya\w*|cenotes?|yucat\w*|aztec\w*|camels?|caravans?|bedouin|tuareg|berber|gobi|kalahari|namib\w*|arabia\w*|morocc\w*)\b/g) || []);   // (alien words, 2026-10-11; fjord, Egypt, Alps, sea ice the same day)
     const words = [W.name, W.sky, W.flora, W.weather, W.setting, SPEC.title, SPEC.description, ...placeWords]
       .filter(Boolean).join(' ').toLowerCase();
     if (L0.osm || L0.interior || W.pano || L0.cave || L0.giantroom) return null;
@@ -2303,6 +2303,53 @@ async function main() {
     return { C, R, doorA, atGoal, beds, racks, inside, solid, ang };
   })();
 
+  // ── A CENOTE (2026-10-25) ─────────────────────────────────────────────────
+  // "an archaeologist exploring a flooded mayan cenote by torchlight" walked a dark English wood.
+  // A cenote is a sinkhole in the limestone: a round pit open to the sky, its walls sheer, a
+  // pool of clear water in the bottom. A ledge cut into the wall spirals down from the rim to
+  // the water, torches set along it; vines and roots hang down the walls. The pit is carved
+  // here (heights only), its ledge starting on the side you come from; the dressing is built
+  // further down (THE CENOTE, BUILT)
+  const CENOTE = (() => {
+    if (INTERIOR || OSM || !LVL || !Array.isArray(LVL.heights) || !LVL.grid_n || VIEW !== '3d') return null;
+    if (!/\b(cenotes?|sinkholes?|sink holes?)\b/.test(String(SPEC.prompt || '').toLowerCase())) return null;
+    const g = LVL.goal || [0, 40], gl = Math.hypot(g[0], g[1]) || 1;
+    const P = gl > 40 ? [g[0] * 40 / gl, g[1] * 40 / gl] : [g[0], g[1]];        // close enough to find
+    const R = 15, LW = 3.6, DEPTH = 15, FLOOR = -DEPTH, WATER = -DEPTH + 1.1;
+    const a0 = Math.atan2(-P[1], -P[0]);                                         // the ledge starts on the side of the start
+    const n = LVL.grid_n, gs = LVL.size_m || SPEC.world.size_m;
+    let rim = 0, k0 = 0;
+    for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) { const x = (j / (n - 1) - 0.5) * gs, z = (i / (n - 1) - 0.5) * gs, d = Math.hypot(x - P[0], z - P[1]);
+      if (d > R + LW && d < R + LW + 10) { rim += LVL.heights[i * n + j]; k0++; } }
+    rim = k0 ? rim / k0 : 0;
+    // the ledge's height falls with the angle walked round the wall, one full turn from rim to water
+    const ledgeY = (a) => { let t = (a - a0) / (Math.PI * 2); t -= Math.floor(t); return rim - 0.3 - t * (rim - 0.3 - (WATER + 0.25)); };
+    for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) { const x = (j / (n - 1) - 0.5) * gs, z = (i / (n - 1) - 0.5) * gs, d = Math.hypot(x - P[0], z - P[1]);
+      const k = i * n + j;
+      if (d < R) LVL.heights[k] = FLOOR + (d / R) * 1.4;                         // the pool's bed, shelving up to the wall
+      else if (d < R + LW) LVL.heights[k] = ledgeY(Math.atan2(z - P[1], x - P[0]));
+      else if (d < R + LW + 8) { const t = (d - R - LW) / 8; LVL.heights[k] = rim + (LVL.heights[k] - rim) * t * t; } }   // the rim lies level round the mouth
+    LVL.landmarks = (LVL.landmarks || []).filter(q => Math.hypot(q[0] - P[0], q[1] - P[1]) > R + 20);
+    LVL.pois = (LVL.pois || []).filter(q => Math.hypot(q.x - P[0], q.z - P[1]) > R + 22);
+    LVL.collect_points = (LVL.collect_points || []).map((q, i) => { const a = a0 + 0.9 + i * 1.2, r = R + LW / 2; return [P[0] + Math.cos(a) * r, P[1] + Math.sin(a) * r]; });   // finds along the ledge
+    LVL.goal = [P[0], P[1]];                                                     // the chamber is the pool
+    const inside = (x, z, m) => Math.hypot(x - P[0], z - P[1]) < R + LW + (m || 0);
+    return { P, R, LW, rim, FLOOR, WATER, a0, ledgeY, inside };
+  })();
+  // the grotto's ground (see A GROTTO ON THE SEA FLOOR): its chamber and arch stand on a levelled
+  // floor, or the basin's walls ran through them and the camera looked out from inside the sand
+  const GROTTO_PLAN = (() => {
+    if (!/underwater/i.test(String(SPEC.world.name || '')) || !LVL || !LVL.goal || !Array.isArray(LVL.heights) || !LVL.grid_n) return null;
+    if (!/\b(caves?|caverns?|grottos?|grottoes|lairs?|dens?)\b/.test(String(SPEC.prompt || '').toLowerCase())) return null;
+    const C = LVL.goal, d0 = Math.hypot(C[0], C[1]) || 1, tx = -C[0] / d0, tz = -C[1] / d0, CC = [C[0] - tx * 9, C[1] - tz * 9];
+    const n = LVL.grid_n, gs = LVL.size_m || SPEC.world.size_m;
+    const ij = (x, z) => [Math.round((z / gs + 0.5) * (n - 1)), Math.round((x / gs + 0.5) * (n - 1))];
+    const [gi, gj] = ij(C[0], C[1]), y0 = LVL.heights[Math.max(0, Math.min(n - 1, gi)) * n + Math.max(0, Math.min(n - 1, gj))];
+    for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) { const x = (j / (n - 1) - 0.5) * gs, z = (i / (n - 1) - 0.5) * gs;
+      const d = Math.min(Math.hypot(x - CC[0], z - CC[1]), Math.hypot(x - C[0], z - C[1]) + 2), t = Math.min(1, Math.max(0, (d - 15) / 14)), e = t * t * (3 - 2 * t);
+      LVL.heights[i * n + j] = y0 + (LVL.heights[i * n + j] - y0) * e; }
+    return { C, CC, tx, tz, y0 };
+  })();
   // ── A FISH MARKET HALL (2026-10-24) ─────────────────────────────────────
   // "a sushi chef buying fish at a busy tokyo fish market at dawn" walked a quay of
   // brick warehouses. A fish market is a hall: a long open-sided shed under a low
@@ -4044,6 +4091,7 @@ async function main() {
       // a distance and fades away as you come up to it; the ground ring stays.
       const _acc = window.__accent;
       const _thing = _heliGoal || _venueGoal || GARDEN || WEST || GRAVE || VILLAGE || ROWS || MONK
+        || (typeof CENOTE !== 'undefined' && CENOTE)   // (2026-10-25) a sinkhole's pool is its own goal: no lamp post stood in the water
         || (typeof ENTERABLES !== 'undefined' && ENTERABLES.some(E => E && E.facade === 'lighthouse'))   // a lighthouse is its own beacon
         || (_reachOb && /\b(hive|beehive|skep|apiary|helipad)\b/.test(String(_reachOb.label || '').toLowerCase()));
       // THE GOAL IS A PLACE (2026-10-12): the open-ground goal was a shaft of
@@ -6921,6 +6969,70 @@ async function main() {
           }
         }
       } catch (e) { console.warn('[game] burning building skipped: ' + e.message); }
+      // THE HIGH WIRE (2026-10-25): "a tightrope walker crossing between two skyscrapers high above the
+      // city at night" walked the street. Two towers rise from the block where you start, sixty-odd
+      // metres, and a steel cable is strung between their roofs, sagging a little at the middle, on
+      // posts at each parapet. The walker starts on the first roof with a long balancing pole; W walks
+      // the wire, the wind leans the body and A and D lean back against it; lean too far and the
+      // walker falls, and is set back on the first roof (the loop drives window.__tightrope)
+      try {
+        const _tw = String(SPEC.prompt || '').toLowerCase();
+        if (/\b(tightropes?|high[- ]?wires?|funambul\w*|wire ?walk\w*|slacklin\w*|rope ?walk\w*)\b/.test(_tw) && !INTERIOR) {
+          // high above the city: clear of every roof round them by twenty metres
+          let _roofMax = 0; for (const e of feCand) if (Math.hypot(e[1], e[2]) < 160) _roofMax = Math.max(_roofMax, e[3] + e[4]);
+          const H = Math.max(64, _roofMax + 20 - hAt(0, 0)), TW = 13, GAP = 46;
+          const g0 = LVL && LVL.goal ? Math.atan2(LVL.goal[1], LVL.goal[0]) : 0;
+          let ang = g0;
+          for (let k = 0; k < 16; k++) {
+            const a = g0 + (k % 2 ? 1 : -1) * Math.ceil(k / 2) * Math.PI / 8, bx = Math.cos(a) * GAP, bz = Math.sin(a) * GAP;
+            let ok = true;
+            for (const [px, pz] of [[0, 0], [bx, bz]]) for (const [ox, oz] of [[0, 0], [TW / 2, TW / 2], [-TW / 2, TW / 2], [TW / 2, -TW / 2], [-TW / 2, -TW / 2]]) if (inBldg(px + ox, pz + oz, 0.5)) ok = false;
+            if (ok) { ang = a; break; }
+          }
+          const ux = Math.cos(ang), uz = Math.sin(ang), A = [0, 0], B = [ux * GAP, uz * GAP];
+          const topA = hAt(A[0], A[1]) + H, topB = hAt(B[0], B[1]) + H;
+          const twC = document.createElement('canvas'); twC.width = 128; twC.height = 256; const tx = twC.getContext('2d');
+          tx.fillStyle = '#20262e'; tx.fillRect(0, 0, 128, 256);
+          const twE = document.createElement('canvas'); twE.width = 128; twE.height = 256; const te = twE.getContext('2d'); te.fillStyle = '#000'; te.fillRect(0, 0, 128, 256);
+          const rW = mulberry32((SPEC.seed || 1) + 8181);
+          for (let r = 4; r < 256; r += 10) for (let c = 4; c < 128; c += 12) { const lit = rW() < 0.32;
+            tx.fillStyle = lit ? '#f2d49a' : '#3a4656'; tx.fillRect(c, r, 8, 6); if (lit) { te.fillStyle = rW() < 0.7 ? '#ffd890' : '#cfe6ff'; te.fillRect(c, r, 8, 6); } }
+          const twT = new THREE.CanvasTexture(twC), twEm = new THREE.CanvasTexture(twE);
+          for (const t of [twT, twEm]) { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(TW / 6, H / 12); t.colorSpace = THREE.SRGBColorSpace; }
+          const towM = new THREE.MeshStandardMaterial({ map: twT, emissive: 0xffffff, emissiveMap: twEm, emissiveIntensity: 0.9, roughness: 0.35, metalness: 0.4 }); towM.userData.noAutoTex = true;
+          const roofM = new THREE.MeshStandardMaterial({ color: 0x4a4e54, roughness: 0.85 }); roofM.userData.noAutoTex = true;
+          const steelM = new THREE.MeshStandardMaterial({ color: 0x8a9096, roughness: 0.4, metalness: 0.8 }); steelM.userData.noAutoTex = true;
+          const yaw = -ang;
+          for (const [P, top] of [[A, topA], [B, topB]]) {
+            const gy0 = top - H;
+            const t = new THREE.Mesh(new THREE.BoxGeometry(TW, H + 4, TW), [towM, towM, roofM, roofM, towM, towM]); t.position.set(P[0], gy0 + (H - 4) / 2, P[1]); t.rotation.y = yaw; t.castShadow = true; scene.add(t);
+            world.createCollider(RAPIER.ColliderDesc.cuboid(TW / 2, (H + 4) / 2, TW / 2).setTranslation(P[0], gy0 + (H - 4) / 2, P[1]).setRotation({ x: 0, y: Math.sin(yaw / 2), z: 0, w: Math.cos(yaw / 2) }));
+            // a parapet, a stair hut, a water tank and a mast with a red light on every roof
+            for (const [w2, d2, ox, oz] of [[TW, 0.3, 0, TW / 2 - 0.15], [TW, 0.3, 0, -TW / 2 + 0.15], [0.3, TW, TW / 2 - 0.15, 0], [0.3, TW, -TW / 2 + 0.15, 0]]) {
+              const pp = new THREE.Mesh(new THREE.BoxGeometry(w2, 0.9, d2), roofM); pp.position.set(ox, 0.45, oz); const grp = new THREE.Group(); grp.position.set(P[0], top, P[1]); grp.rotation.y = yaw; grp.add(pp); scene.add(grp); }
+            const R = new THREE.Group(); R.position.set(P[0], top, P[1]); R.rotation.y = yaw; scene.add(R);
+            const hut = new THREE.Mesh(new THREE.BoxGeometry(3, 2.6, 3), roofM); hut.position.set(-3.5, 1.3, 3.5); R.add(hut);
+            const tank = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.1, 2.2, 14), steelM); tank.position.set(3.5, 2.2, 3.5); R.add(tank);
+            for (const lx of [-0.8, 0.8]) { const leg = new THREE.Mesh(new THREE.BoxGeometry(0.12, 1.1, 0.12), steelM); leg.position.set(3.5 + lx, 0.55, 3.5); R.add(leg); }
+            const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.1, 9, 6), steelM); mast.position.set(-3.5, 7, -3.5); R.add(mast);
+            const blink = new THREE.Mesh(new THREE.SphereGeometry(0.22, 10, 8), new THREE.MeshBasicMaterial({ color: 0xff2020, toneMapped: false })); blink.position.set(-3.5, 11.6, -3.5); R.add(blink);
+            (window.__twBlink = window.__twBlink || []).push(blink);
+          }
+          // the cable, edge to edge, on a post at each parapet, with its sag
+          const c0 = TW / 2, c1 = GAP - TW / 2, SAG = 0.7, wireY = (s) => { const t = (s - c0) / (c1 - c0); return topA + (topB - topA) * t + 1.05 - SAG * 4 * t * (1 - t); };
+          const pts = []; for (let k = 0; k <= 30; k++) { const s = c0 + (c1 - c0) * k / 30; pts.push(new THREE.Vector3(ux * s, wireY(s), uz * s)); }
+          const cable = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 60, 0.035, 6), steelM); scene.add(cable);
+          for (const [s, top] of [[c0, topA], [c1, topB]]) { const post = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.1, 1.1, 8), steelM); post.position.set(ux * s, top + 0.55, uz * s); scene.add(post); }
+          // where you stand at either end: the middle of each roof
+          const s0 = 0, s1 = GAP, roofY = (s) => s <= c0 ? topA : s >= c1 ? topB : wireY(s);
+          const T = { A, B, ux, uz, s0, s1, c0, c1, roofY, wireY, topA, topB, wind: /\b(wind\w*|storm\w*|gale|gust\w*)\b/.test(_tw) ? 1.25 : 0.8, yaw: Math.atan2(ux, uz) };
+          window.__tightrope = T;
+          if (LVL) LVL.goal = [B[0], B[1]];
+          if (goalPos) goalPos.set(B[0], topB, B[1]);
+          if (goalMesh && goalMesh.position) goalMesh.position.set(B[0], topB + 1.2, B[1]);
+          window.__tightropeFacts = { ang: +ang.toFixed(2), topA: +topA.toFixed(1), topB: +topB.toFixed(1), length: +(c1 - c0).toFixed(1) };
+        }
+      } catch (e) { console.warn('[game] high wire skipped: ' + e.message); }
       // NOLA GALLERIES (2026-10-24): on every street face of the Quarter, cast-iron balconies at
       // each upper floor with lace railings, and on most a full gallery standing on slender posts
       // out over the banquette. All of it is three draw calls: the decks merged, the lace merged,
@@ -8575,6 +8687,7 @@ async function main() {
       if (ARENA) { const ea = ARENA.A + ARENA.RO + 6, eb = ARENA.B + ARENA.RO + 6;
         for (let a = -ea; a <= ea; a += 8) for (let c = -eb; c <= eb; c += 8) { const [x, z] = ARENA.world(a, c); if (ARENA.inFoot(x, z, 6)) keepClear.push([x, z, 8]); } }   // no wood through the stands
       if (DOME) keepClear.push([DOME.C[0], DOME.C[1], DOME.R + 6]);   // the greenhouse dome's pad
+      if (CENOTE) keepClear.push([CENOTE.P[0], CENOTE.P[1], CENOTE.R + CENOTE.LW + 2]);   // nothing grows out of the sinkhole's walls
       if (FISHMARKET) keepClear.push([FISHMARKET.C[0], FISHMARKET.C[1], FISHMARKET.LEN / 2 + 10]);   // the market hall and its yard
       if (PARK) { for (const [a, b] of PARK.segs) for (let t = 0; t <= 1.001; t += 0.25) keepClear.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, 4]);
         keepClear.push([PARK.C[0], PARK.C[1], 12], [PARK.POND[0], PARK.POND[1], PARK.POND[2] + 4], [PARK.PLAY[0], PARK.PLAY[1], 10]); for (const q of PARK.PIC) keepClear.push([q[0], q[1], 5]); }
@@ -9187,6 +9300,7 @@ async function main() {
         if (YARD && YARD.inFoot(x, z, 2)) continue;
         if (PARK && (PARK.onPath(x, z, 1) || PARK.inPond(x, z, 1.5) || PARK.solid(x, z, 1))) continue;   // (2026-10-22) out of tries in a small world: never inside the fence
         if (DOME && DOME.inside(x, z, 3)) continue;
+        if (CENOTE && CENOTE.inside(x, z, 1)) continue;
         if (FISHMARKET && FISHMARKET.yard(x, z)) continue;
         // a cart, a fence or a tree does not stand on the seabed: in a world
         // with a sea, a land prop that could only be placed under it is left
@@ -11291,6 +11405,7 @@ async function main() {
           if (inBldg(x, z, 0.6)) d = 0;
           if (PARK && (PARK.onPath(x, z, 0.2) || PARK.inPond(x, z, 0.6) || PARK.inPlay(x, z, 0.3) || PARK.solid(x, z, 0.2))) d = 0;   // the walks, the pond, the playground
           if (DOME && DOME.inside(x, z, 0.8)) d = 0;   // the greenhouse floor
+          if (CENOTE && CENOTE.inside(x, z, 0)) d = 0;
           if (FISHMARKET && FISHMARKET.yard(x, z)) d = 0;   // the market hall's floor
           else if (PARK && PARK.inFoot(x, z, 0)) { h *= 0.4; dry *= 0.4; }   // mown lawns
           if (YARD && (YARD.blocked(x, z, 0.3) || (Math.abs(x) < 6.6 && z > YARD.Z1 - 5.8 && z < YARD.Z1 + 9.5))) d = 0;   // no grass up through the house, the deck, the shed
@@ -11400,6 +11515,7 @@ async function main() {
           if (PITCH && PITCH.inside(x, z, 3)) return true;                       // nothing lies on a pitch
           if (PARK && (PARK.onPath(x, z, 0.4) || PARK.inPond(x, z, 0.8) || PARK.inPlay(x, z, 0.3) || PARK.solid(x, z, 0.3))) return true;   // (2026-10-22) not on the walks
           if (DOME && DOME.inside(x, z, 1.5)) return true;   // a greenhouse floor is swept
+          if (CENOTE && CENOTE.inside(x, z, 0)) return true;
           if (FISHMARKET && FISHMARKET.yard(x, z)) return true;                 // so is a market hall's
           if (YARD && (YARD.blocked(x, z, 0.3) || (Math.abs(x) < 6.6 && YARD.Z1 - 5.8 < z && z < YARD.Z1 + 9.5))) return true;
           if (ARENA && ARENA.inFoot(x, z, 2)) return true;                       // nor on the sand or in the stands
@@ -12204,7 +12320,7 @@ async function main() {
       if (o.kind === 'repair' && /\b(trees?|pines?|oaks?|logs?|timber)\b/.test(String(o.label || ''))) return `Chop down ${o.count} ${o.label}. Hold E at each marked trunk`;
       if (o.kind === 'repair' && /\bhives?\b/.test(String(o.label || ''))) return `Check ${o.count} ${o.label}. Hold E at each one`;
       if (o.kind === 'repair') return /fire|flame|blaze|burn/.test(String(o.label || '')) ? `Put out ${o.count} ${o.label}. Hold E to spray each one`
-        : /package|parcel|deliver|letter|mail|pizza|crate|box|supplies|medicine|food|meal|bread|loa(?:f|ves)|pies?|cakes?|buns|pastr|cookies|groceries|flowers|bouquets?|milk|newspapers?|papers|presents|gifts|cheese|eggs|soup|cocoa|coffee|potions?|scrolls?/.test(String(o.label || '')) ? `Deliver ${o.count} ${o.label}. Hold E over each pad to drop one`
+        : /package|parcel|deliver|letter|mail|pizza|crate|box|supplies|medicine|food|meal|bread|loa(?:f|ves)|pies?|cakes?|buns|hot ?dogs?|hotdogs?|sandwich\w*|burgers?|tacos?|noodles?|dumplings?|kebabs?|pretzels?|pastr|cookies|groceries|flowers|bouquets?|milk|newspapers?|papers|presents|gifts|cheese|eggs|soup|cocoa|coffee|potions?|scrolls?/.test(String(o.label || '')) ? `Deliver ${o.count} ${o.label}. Hold E over each pad to drop one`
         : `Fix ${o.count} ${o.label || 'broken panels'}. Hold E at each one`;
       if (window.__ladder) return `Bring ${o.label || 'them'} down from the burning window. Stand in the ladder's basket and press E`;
       return `Reach the ${o.label || 'beacon'}`;
@@ -13098,6 +13214,20 @@ async function main() {
                     pen: holder.userData.fsPen || null,     // venue he never leaves
                     hp: ent.hp || 3, cd: 0, dead: false, dieT: 0, mats, anim, dormant, spectral: !!ent.spectral,
                     vessel: _vessel ? { draft: (ent.height_m || 6) * 0.12 } : null });
+        // GLOWING CREATURES GLOW (2026-10-25): "a deep sea diver discovering a cave of glowing jellyfish"
+        // had grey jellyfish in sunlit water. A jellyfish in the deep or in a sentence that says it
+        // glows is bioluminescent: its bell lit from within in its own colour, translucent, pulsing as
+        // it swims, and one in three casting that light on what is round it
+        if (/jelly|medusa|siphonophore|comb ?jell|ctenophore/i.test(ent.name || '') || (/\b(glow\w*|biolumin\w*|luminous|luminescent)\b/i.test(String(SPEC.prompt || '')) && /fish|squid|jelly|plankton|worm|mushroom|moth|beetle/i.test(ent.name || ''))) {
+          const _jc = new THREE.Color().setHSL([0.52, 0.78, 0.9, 0.58, 0.84][npcs.length % 5], 0.85, 0.62);
+          inst.traverse(m => { if (!m.isMesh) return; m.material = (Array.isArray(m.material) ? m.material[0] : m.material).clone();
+            m.material.emissive = _jc.clone(); m.material.emissiveIntensity = 1.4; m.material.transparent = true; m.material.opacity = 0.82; m.material.depthWrite = false; m.material.userData.noAutoTex = true; });
+          if (npcs.length % 3 === 0 && (window.__glowLights = (window.__glowLights || 0) + 1) <= 6) { const gl = new THREE.PointLight(_jc, 4, 10, 1.6); gl.position.y = (ent.height_m || 0.6) * 0.5; holder.add(gl); }
+          (window.__glowers = window.__glowers || []).push({ body: inst, s0: inst.scale.clone(), ph: rngN() * 6.28, rate: 1.4 + rngN() * 0.8 });
+          // in a grotto the swarm is gathered inside it, drifting in the chamber
+          if (GROTTO_PLAN) { const G2 = GROTTO_PLAN.CC, a = rngN() * 6.28, r = rngN() * 6;   // (the plan: the stones are built after the cast is placed)
+            holder.position.set(G2[0] + Math.cos(a) * r, GROTTO_PLAN.y0, G2[1] + Math.sin(a) * r); npcs[npcs.length - 1].home = [G2[0], G2[1], 6]; }
+        }
       }
     } catch (e) { fail(e.message); }
   }
@@ -13106,6 +13236,7 @@ async function main() {
   function flyKind(name) {
     const _FLY = [
       [/firefl|lightning bug|glowworm|wisp|spark/i, { alt: [0.8, 2.6], bob: 0.35, bank: 1.5 }],
+      [/jelly|medusa|siphonophore|ctenophore/i, { alt: [1.6, 6.5], bob: 0.7, bank: 0.2 }],   // (2026-10-25) jellyfish drift in the water column, not along the bed
       [/butterfl|moth|bee\b|bees|wasp|dragonfl/i, { alt: [0.6, 2.2], bob: 0.25, bank: 2.0 }],
       [/dragon|wyvern|griffin|gryphon|phoenix/i, { alt: [9, 18], bob: 0.6, bank: 3.0 }],
       [/eagle|hawk|falcon|vulture|condor|raven|crow|gull|seagull|albatross/i, { alt: [7, 16], bob: 0.3, bank: 3.2 }],
@@ -13730,7 +13861,8 @@ async function main() {
           if (Math.hypot(tx - n.obj.position.x, tz - n.obj.position.z) < 0.25) { tx = null; tz = null; } }
       } else if (n.behavior === 'wander') {
         if (!n.target || Math.hypot(n.target[0] - n.obj.position.x, n.target[1] - n.obj.position.z) < 0.6) {
-          n.target = [(rngN() - 0.5) * gsize * 0.6, (rngN() - 0.5) * gsize * 0.6];
+          n.target = n.home ? [n.home[0] + (rngN() - 0.5) * n.home[2] * 2, n.home[1] + (rngN() - 0.5) * n.home[2] * 2]   // one that keeps to its place
+                            : [(rngN() - 0.5) * gsize * 0.6, (rngN() - 0.5) * gsize * 0.6];
         }
         tx = n.target[0]; tz = n.target[1];
       }
@@ -16943,6 +17075,83 @@ async function main() {
         world.createCollider(RAPIER.ColliderDesc.cuboid(0.25, 2.2, 1.2).setTranslation(wx, gy + 2.2, wz).setRotation({ x: 0, y: Math.sin(yaw / 2), z: 0, w: Math.cos(yaw / 2) })); }
       window.__dome = { at: [+K.C[0].toFixed(1), +K.C[1].toFixed(1)], R: K.R, atGoal: K.atGoal, beds: K.beds.length, panes: keep.length / 9, struts: edges.size };
     } catch (e) { console.warn('[game] greenhouse dome skipped: ' + e.message); }
+  }
+  // ── THE CENOTE, BUILT (see CENOTE above) ─────────────────────────────────
+  if (CENOTE) {
+    try {
+      const K = CENOTE, rC = mulberry32((SPEC.seed || 1) + 7474), G = new THREE.Group(); G.name = 'cenote'; scene.add(G);
+      const M = (p) => { const m = new THREE.MeshStandardMaterial(p); m.userData.noAutoTex = true; return m; };
+      // the pool: clear water, turquoise over the pale limestone bed, dark at its middle
+      const pc = document.createElement('canvas'); pc.width = pc.height = 256; const px = pc.getContext('2d');
+      const gr = px.createRadialGradient(128, 128, 8, 128, 128, 128); gr.addColorStop(0, '#0b4a5a'); gr.addColorStop(0.6, '#1d8a96'); gr.addColorStop(1, '#58c8c0');
+      px.fillStyle = gr; px.fillRect(0, 0, 256, 256);
+      const poolT = new THREE.CanvasTexture(pc); poolT.colorSpace = THREE.SRGBColorSpace;
+      const pool = new THREE.Mesh(new THREE.CircleGeometry(K.R + 0.4, 64), new THREE.MeshPhysicalMaterial({ map: poolT, transparent: true, opacity: 0.86, roughness: 0.05, metalness: 0, clearcoat: 1, clearcoatRoughness: 0.05 }));
+      pool.material.userData.noAutoTex = true; pool.rotation.x = -Math.PI / 2; pool.position.set(K.P[0], K.WATER, K.P[1]); G.add(pool);
+      // torches along the ledge: a post, a bowl of flame, and their light (six lights at most)
+      const postM = M({ color: 0x4a3626, roughness: 0.9 }), bowlM = M({ color: 0x5a5048, roughness: 0.8 });
+      const ftex = (() => { const c = document.createElement('canvas'); c.width = 64; c.height = 128; const x = c.getContext('2d'); x.globalCompositeOperation = 'lighter';
+        for (const [cx, w, h, col] of [[32, 14, 110, 'rgba(200,60,10,0.55)'], [32, 10, 80, 'rgba(255,130,30,0.7)'], [32, 6, 48, 'rgba(255,220,130,0.9)']]) {
+          x.fillStyle = col; x.beginPath(); x.moveTo(cx - w, 126); x.quadraticCurveTo(cx - w * 1.1, 126 - h * 0.6, cx, 126 - h); x.quadraticCurveTo(cx + w * 1.1, 126 - h * 0.6, cx + w, 126); x.fill(); }
+        return new THREE.CanvasTexture(c); })();
+      const torches = [];
+      for (let k = 0; k < 9; k++) { const a = K.a0 + 0.35 + k * (Math.PI * 2 - 0.7) / 8, r = K.R + K.LW - 0.5, x = K.P[0] + Math.cos(a) * r, z = K.P[1] + Math.sin(a) * r, y = K.ledgeY(a);
+        const post = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.08, 1.4, 6), postM); post.position.set(x, y + 0.7, z); G.add(post);
+        const bowl = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.1, 0.18, 10), bowlM); bowl.position.set(x, y + 1.45, z); G.add(bowl);
+        const fl = new THREE.Sprite(new THREE.SpriteMaterial({ map: ftex, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false })); fl.scale.set(0.5, 0.9, 1); fl.position.set(x, y + 1.9, z); G.add(fl);
+        torches.push(fl);
+        if (k % 2 === 0) { const L = new THREE.PointLight(0xff9a40, 9, 12, 1.6); L.position.set(x, y + 2.0, z); G.add(L); torches.push(L); } }
+      // vines and roots down the walls from the rim, swaying a little
+      const vineM = M({ color: 0x2e4a22, roughness: 0.8 }), vines = [];
+      for (let k = 0; k < 70; k++) { const a = rC() * Math.PI * 2, len = 4 + rC() * 9, r = K.R + K.LW + 0.2;
+        const x = K.P[0] + Math.cos(a) * r, z = K.P[1] + Math.sin(a) * r, pts = [];
+        for (let s = 0; s <= 6; s++) { const t = s / 6; pts.push(new THREE.Vector3(x - Math.cos(a) * (0.3 + t * 0.6), K.rim + 0.1 - t * len, z - Math.sin(a) * (0.3 + t * 0.6))); }
+        vines.push(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 8, 0.03 + rC() * 0.03, 4).toNonIndexed()); }
+      G.add(new THREE.Mesh(mergeGeometries(vines.map(v => { v.deleteAttribute('uv'); return v; }), false), vineM));
+      // moonlight down the shaft: a pale cone from the mouth to the water
+      const shaft = new THREE.Mesh(new THREE.CylinderGeometry(K.R * 0.55, K.R * 0.95, -K.FLOOR + K.rim + 6, 32, 1, true),
+        new THREE.MeshBasicMaterial({ color: 0x9ec8e8, transparent: true, opacity: 0.028, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.BackSide, fog: false }));   // seen from inside the pit only
+      shaft.position.set(K.P[0], (K.rim + 6 + K.FLOOR) / 2, K.P[1]); G.add(shaft);
+      // a carved stela of the old makers by the water at the foot of the ledge
+      const stM = M({ color: 0xb8ae98, roughness: 0.9 }), sa = K.a0 - 0.25, sx = K.P[0] + Math.cos(sa) * (K.R - 2), sz = K.P[1] + Math.sin(sa) * (K.R - 2);
+      const stela = new THREE.Mesh(new THREE.BoxGeometry(1.2, 2.6, 0.45), stM); stela.position.set(sx, K.WATER + 1.1, sz); stela.rotation.y = -sa; G.add(stela);
+      world.createCollider(RAPIER.ColliderDesc.cuboid(0.6, 1.3, 0.23).setTranslation(sx, K.WATER + 1.1, sz));
+      window.__cenoteTick = (t) => { for (const f of torches) if (f.isSprite) { const k = 0.85 + 0.25 * Math.sin(t * 9 + f.position.x) * Math.sin(t * 5.3 + f.position.z); f.scale.set(0.5 * (0.9 + 0.2 * k), 0.9 * k, 1); } };
+      window.__cenote = { at: K.P.map(v => +v.toFixed(1)), rim: +K.rim.toFixed(1), water: +K.WATER.toFixed(1), torches: 9, vines: vines.length };
+    } catch (e) { console.warn('[game] cenote skipped: ' + e.message); }
+  }
+  // ── A GROTTO ON THE SEA FLOOR (2026-10-25) ───────────────────────────────
+  // "a deep sea diver discovering a cave of glowing jellyfish" swam to a beacon on open sand.
+  // Under the sea a cave the sentence names is a grotto at the goal: an arch of boulders
+  // facing the way you come, opening into a chamber walled and roofed with rock, where the
+  // glowing creatures gather (their spawn is drawn in to it below) and light it themselves
+  window.__grotto = null;
+  if (GROTTO_PLAN) {
+    try {
+      const rG = mulberry32((SPEC.seed || 1) + 9393), C = GROTTO_PLAN.C;
+      const tx = GROTTO_PLAN.tx, tz = GROTTO_PLAN.tz, sx = -tz, sz = tx;       // toward the spawn, and across
+      const gy = hAt(C[0], C[1]), parts = [];
+      const put = (x, y, z, s, k) => { const g = __FLORA.sculptStone((SPEC.seed || 1) * 31 + k, { size: s, flat: 0.75, facets: 6 }).toNonIndexed();
+        g.rotateY(rG() * 6.28); g.rotateX((rG() - 0.5) * 0.6); g.translate(x, y, z); parts.push(g);
+        world.createCollider(RAPIER.ColliderDesc.ball(s * 0.8).setTranslation(x, y, z)); };
+      // the arch: two legs and a lintel of stones, ten metres across and seven high
+      for (let k = 0; k <= 14; k++) { const th = Math.PI * k / 14, ax = Math.cos(th) * 6, ay = Math.sin(th) * 6.4;
+        put(C[0] + sx * ax, gy + ay + 0.6, C[1] + sz * ax, 1.8 + rG() * 1.1, k); }
+      // the chamber behind it: walls round a ring and a roof of stones closing over
+      // the chamber: a ring of wall stones twelve metres across, a ring corbelled in above them, and
+      // a few at the crown, leaving the middle open for the swarm and for the diver
+      const CC = GROTTO_PLAN.CC;
+      for (let k = 0; k < 22; k++) { const a = Math.atan2(tz, tx) + Math.PI * 0.16 + (Math.PI * 1.68) * k / 21, r = 11 + rG() * 1.0;
+        const cx = CC[0] + Math.cos(a) * r, cz = CC[1] + Math.sin(a) * r;
+        put(cx, gy + 1.4 + rG() * 1.2, cz, 2.4 + rG() * 1.0, 40 + k);
+        if (k % 2 === 0) put(CC[0] + Math.cos(a) * r * 0.78, gy + 6.4 + rG() * 1.0, CC[1] + Math.sin(a) * r * 0.78, 2.2 + rG() * 0.8, 80 + k); }
+      for (let k = 0; k < 6; k++) { const a = k / 6 * 6.28; put(CC[0] + Math.cos(a) * 4.6, gy + 9.4 + rG() * 0.6, CC[1] + Math.sin(a) * 4.6, 2.6, 120 + k); }
+      const rockM = new THREE.MeshStandardMaterial({ color: 0x3e4a4c, roughness: 0.95, flatShading: true }); rockM.userData.noAutoTex = true;
+      const merged = mergeGeometries(parts.map(g => { for (const k of Object.keys(g.attributes)) if (!['position', 'normal'].includes(k)) g.deleteAttribute(k); return g; }), false);
+      merged.computeVertexNormals();
+      const grotto = new THREE.Mesh(merged, rockM); grotto.castShadow = true; grotto.receiveShadow = true; grotto.name = 'grotto'; scene.add(grotto);
+      window.__grotto = { C: CC, y: gy, stones: parts.length };
+    } catch (e) { console.warn('[game] grotto skipped: ' + e.message); }
   }
   // ── THE FISH MARKET HALL, BUILT (see FISHMARKET above) ──────────────────
   if (FISHMARKET) {
@@ -20977,7 +21186,7 @@ async function main() {
       return `${n} ${l} to fell. The ones to cut wear a red ribbon; stand at the trunk and hold E until it goes over.`;
     if (st.kind === 'repair' && /letter|mail|post|card/.test(String(l)))
       return `${n} ${l} to deliver. Each goes in a letterbox by a gate, the lamp on its bracket lit; stand at the box and hold E.`;
-    if (st.kind === 'repair' && /package|parcel|deliver|letter|mail|pizza|crate|box|supplies|medicine|food|meal|bread|loa(?:f|ves)|pies?|cakes?|buns|pastr|cookies|groceries|flowers|bouquets?|milk|newspapers?|papers|presents|gifts|cheese|eggs|soup|cocoa|coffee|potions?|scrolls?/.test(String(l)))
+    if (st.kind === 'repair' && /package|parcel|deliver|letter|mail|pizza|crate|box|supplies|medicine|food|meal|bread|loa(?:f|ves)|pies?|cakes?|buns|hot ?dogs?|hotdogs?|sandwich\w*|burgers?|tacos?|noodles?|dumplings?|kebabs?|pretzels?|pastr|cookies|groceries|flowers|bouquets?|milk|newspapers?|papers|presents|gifts|cheese|eggs|soup|cocoa|coffee|potions?|scrolls?/.test(String(l)))
       return SPEC.player.mode === 'fly'
         ? `${n} ${l} to deliver. Each drop is a landing pad on a roof, lit at its corners; set down on it and hold E to drop one.`
         : INTERIOR ? `${n} ${l} to deliver, one to each room. It goes on the mat by the lantern; stand at it and hold E to leave one.`
@@ -21032,7 +21241,7 @@ async function main() {
     if (st.kind === 'repair' && /\bhives?\b/.test(String(st.label || ''))) return `Check ${st.count} ${st.label}`;
     if (st.kind === 'repair' && /\b(hikers?|climbers?|skiers?|campers?|people|children|kids?|survivors?|villagers?|explorers?|walkers?|tourists?|scouts?|lost)\b/.test(String(st.label || ''))) return `Find ${st.count} ${st.label}`;
     if (st.kind === 'repair') return /fire|flame|blaze|burn/.test(String(st.label || '')) ? `Put out ${st.count} ${st.label}`
-      : /package|parcel|deliver|letter|mail|pizza|crate|box|supplies|medicine|food|meal|bread|loa(?:f|ves)|pies?|cakes?|buns|pastr|cookies|groceries|flowers|bouquets?|milk|newspapers?|papers|presents|gifts|cheese|eggs|soup|cocoa|coffee|potions?|scrolls?/.test(String(st.label || '')) ? `Deliver ${st.count} ${st.label}`
+      : /package|parcel|deliver|letter|mail|pizza|crate|box|supplies|medicine|food|meal|bread|loa(?:f|ves)|pies?|cakes?|buns|hot ?dogs?|hotdogs?|sandwich\w*|burgers?|tacos?|noodles?|dumplings?|kebabs?|pretzels?|pastr|cookies|groceries|flowers|bouquets?|milk|newspapers?|papers|presents|gifts|cheese|eggs|soup|cocoa|coffee|potions?|scrolls?/.test(String(st.label || '')) ? `Deliver ${st.count} ${st.label}`
       : `Fix ${st.count} ${st.label || 'broken panels'}`;
     if (window.__ladder) return `Bring ${st.label || 'them'} down from the burning window`;   // the tower ladder's rescue (2026-10-24)
     return `Reach ${st.label || 'the beacon'}`;
@@ -24875,6 +25084,7 @@ async function main() {
       }
     }
     if (window.__ladder && (window.__ladder._tgt || window.__ladder.nearNow)) { best = null; bt = null; }   // in the tower ladder's basket, or about to be
+    if (window.__tightrope) { best = null; bt = null; }   // (2026-10-25) a hundred metres above the street, no car is in reach
     nearCar = best;
     window.__nearTraffic = bt;
     carPrompt.style.display = (best || bt) ? 'block' : 'none';
@@ -26524,7 +26734,7 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
       // fires are put out, not repaired (2026-10-07): the same hold-E, a different face
       const FIRE = /fire|flame|blaze|inferno|burn/.test(String(_rpS.label || '').toLowerCase());
       // deliveries are dropped on a pad (2026-10-07): "a delivery drone drops packages on rooftops" was one "reach rooftop"
-      const DELIVER = !FIRE && /package|parcel|deliver|letter|mail|pizza|crate|box|supplies|medicine|food|meal|bread|loa(?:f|ves)|pies?|cakes?|buns|pastr|cookies|groceries|flowers|bouquets?|milk|newspapers?|papers|presents|gifts|cheese|eggs|soup|cocoa|coffee|potions?|scrolls?/.test(String(_rpS.label || '').toLowerCase());
+      const DELIVER = !FIRE && /package|parcel|deliver|letter|mail|pizza|crate|box|supplies|medicine|food|meal|bread|loa(?:f|ves)|pies?|cakes?|buns|hot ?dogs?|hotdogs?|sandwich\w*|burgers?|tacos?|noodles?|dumplings?|kebabs?|pretzels?|pastr|cookies|groceries|flowers|bouquets?|milk|newspapers?|papers|presents|gifts|cheese|eggs|soup|cocoa|coffee|potions?|scrolls?/.test(String(_rpS.label || '').toLowerCase());
       // (2026-10-07) letters go in letterboxes at the gates; trees are felled, not repaired
       const POST = DELIVER && /letter|mail|post|card|newspaper/.test(String(_rpS.label || '').toLowerCase()) && SPEC.player.mode !== 'fly' && !INTERIOR;
       const CHOP = !FIRE && !DELIVER && /\b(trees?|pines?|oaks?|birch(es)?|spruces?|logs?|timber)\b/.test(String(_rpS.label || '').toLowerCase()) && !INTERIOR;
@@ -27447,6 +27657,7 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
   let DESIGN = null;
   try {
     DESIGN = __DESIGN.startDesign({ THREE, scene, camera, hAt, LVL, SPEC, sun, hemi, renderer, home: [_sp.x, _sp.z],
+      blocked: (x, z) => !!((CENOTE && CENOTE.inside(x, z, 1)) || (DOME && DOME.inside(x, z, 1)) || (FISHMARKET && FISHMARKET.inside(x, z, 2))),
       words: [SPEC.prompt, SPEC.title].filter(Boolean).join(' '), seed: SPEC.seed, night: ['night', 'dusk'].includes(SPEC.world.sky),
       pos: () => { const t = body.translation(); return [t.x, t.y, t.z]; },
       next: () => {
@@ -27891,6 +28102,35 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
         o.piv.rotation.y = o.sx * Math.sin(ph) * 0.5; o.piv.rotation.z = -o.sx * (0.22 + (Math.cos(ph) > 0 ? 0 : -0.16)); }   // the stroke in the water, the blade lifted on the recovery
       window.__rowState = { x: +p0.x.toFixed(1), z: +p0.z.toFixed(1), aground: !!R.aground, water: +wl.toFixed(2), moved: R.moved || null };
     }
+    // (2026-10-25) THE HIGH WIRE (see the city build): the walker is held on the line from the
+    // first roof to the second; on the cable the wind leans the body and the lean grows unless A
+    // and D lean back against it; past the point of no return the walker falls and is set back
+    if (window.__tightrope && gameStarted && !won && !lost) {
+      const T = window.__tightrope, tN = performance.now() / 1000, p0 = body.translation();
+      T._v = T._v || new THREE.Vector3(); const _hOff = p0.y - holder.getWorldPosition(T._v).y;
+      if (T.s === undefined) { T.s = T.s0 + 1; T.b = 0; T.fall = 0; T.falls = 0;
+        const _h = document.querySelector('#hud .hint'); if (_h) _h.textContent = 'W walk the wire · A / D lean against the wind · S step back · drag to look'; }
+      let y;
+      if (T.fall > 0) {
+        T.fall -= dt; T.fv += 9.8 * dt; T.fy -= T.fv * dt; y = T.fy;
+        if (T.fall <= 0) { T.s = T.s0 + 1; T.b = 0; T.falls++; popText('Back to the start of the wire', '#ffd27a'); }
+      } else {
+        const onWire = T.s > T.c0 - 0.2 && T.s < T.c1 + 0.2;
+        T.s = Math.min(T.s1, Math.max(T.s0, T.s + (-mv.z) * (onWire ? 1.15 : 2.4) * dt));
+        if (onWire) {
+          const gust = Math.sin(tN * 0.71) * 0.55 + Math.sin(tN * 1.93 + 1.3) * 0.32 + Math.sin(tN * 3.7 + 0.4) * 0.13;
+          T.b += (gust * T.wind * 0.55 + T.b * 0.85 + mv.x * 1.7) * dt;     // the lean feeds on itself; A and D pull it back
+          if (Math.abs(T.b) > 1) { T.fall = 1.7; T.fv = 0; T.fy = T.roofY(T.s); try { sfx('hit'); } catch (e) {} }
+        } else T.b = THREE.MathUtils.damp(T.b, 0, 4, dt);
+        y = T.roofY(T.s);
+      }
+      T._tgt = { x: T.ux * T.s + (T.fall > 0 ? -T.uz * T.b * 0.6 * (1.7 - T.fall) : 0), y: y + 0.02 + _hOff, z: T.uz * T.s + (T.fall > 0 ? T.ux * T.b * 0.6 * (1.7 - T.fall) : 0) };
+      desired.x = 0; desired.y = 0; desired.z = 0; vy = 0;
+      modelYaw = dampAngle(modelYaw, T.yaw, 8, dt);
+      T.lean = T.b;
+      if (window.__twBlink) for (const bl of window.__twBlink) bl.visible = (tN % 1.6) < 0.8;
+      window.__tightropeState = { s: +T.s.toFixed(1), b: +T.b.toFixed(2), fall: T.fall > 0, falls: T.falls };
+    }
     if (SURF && RIDE === 'surfboard' && WATER_Y !== null) {
       const p0 = body.translation(), [sa, sc] = SURF.local(p0.x, p0.z);
       if (hAt(p0.x, p0.z) < WATER_Y - 0.2) {
@@ -27918,6 +28158,7 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
     if (LOGRIDE && LOGRIDE._tgt) body.setNextKinematicTranslation(LOGRIDE._tgt);
     if (RIDE === 'rowboat' && window.__row && window.__row.y !== undefined) body.setNextKinematicTranslation({ x: t.x + cm.x, y: window.__row.y, z: t.z + cm.z });   // afloat, not on the bed
     if (window.__ladder && window.__ladder._tgt) body.setNextKinematicTranslation(window.__ladder._tgt);   // the basket carries the hero
+    if (window.__tightrope && window.__tightrope._tgt) body.setNextKinematicTranslation(window.__tightrope._tgt);   // the wire holds the walker
     // LAVA BURNS (2026-10-03): a step into a channel costs a heart and puts
     // the hero back on the last solid ground they stood on, well clear of it
     if (VOLC && gameStarted && !won && !lost) {
@@ -28100,7 +28341,14 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
         _prevWalkV = walkV;
       }
       holder.rotation.x = leanP + accelP + (BELLY ? BELLY.k * 1.3 : 0);   // on its belly
-      holder.rotation.z = turnRoll;
+      holder.rotation.z = turnRoll + (window.__tightrope ? -(window.__tightrope.lean || 0) * 0.32 : 0);   // on the wire, the body leans with the balance
+      if (window.__tightrope && !window.__tightrope.pole) {   // a long balancing pole across the hands, its ends weighted
+        const pm = new THREE.MeshStandardMaterial({ color: 0x6a4a2c, roughness: 0.6 }); pm.userData.noAutoTex = true;
+        const pole = new THREE.Group(), bar = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 6.2, 8), pm); bar.rotation.z = Math.PI / 2; pole.add(bar);
+        for (const sx of [-3.1, 3.1]) { const w = new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 6), pm); w.position.x = sx; pole.add(w); }
+        pole.position.set(0, (P.height_m || 1.75) * 0.55, 0.28); holder.add(pole);
+        window.__tightrope.pole = pole;
+      }
     }
 
     // animation state machine
@@ -28342,6 +28590,8 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
       if (window.__surfTick) window.__surfTick(typeof dt === 'number' ? Math.min(0.05, dt) : 0.016);
       if (window.__asteroidTick) window.__asteroidTick(Math.min(0.05, dt));
       if (window.__burnTick) window.__burnTick(performance.now() / 1000, Math.min(0.05, dt));
+      if (window.__cenoteTick) window.__cenoteTick(performance.now() / 1000);
+      if (window.__glowers) { const _gt = performance.now() / 1000; for (const g of window.__glowers) { const k = Math.sin(_gt * g.rate + g.ph); g.body.scale.set(g.s0.x * (1 - 0.07 * k), g.s0.y * (1 + 0.1 * k), g.s0.z * (1 - 0.07 * k)); } }   // a bell's slow pulse
       if (window.__earthTick) window.__earthTick(Math.min(0.05, dt));
       if (window.__joustTick) window.__joustTick(performance.now() / 1000);
       if (window.__tornadoTick) window.__tornadoTick(Math.min(0.05, dt));

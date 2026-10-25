@@ -1094,7 +1094,7 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                     _noun = _n1 if (not _n2 or _n2 in _STOP) else (_n1 + " " + _n2)
                     # "restore power", "restore order", "restore peace" are not things to fix
                     # a drop or a delivery is only this objective when what is dropped is a parcel of some kind
-                    if _rre.match(r"(drop|deliver)", _rm.group(0)) and not _rre.search(r"package|parcel|letter|mail|pizza|crate|box|supplies|medicine|food|meal|bread|loa(?:f|ves)|pies?|cakes?|buns|pastr|cookies|groceries|flowers|bouquets?|milk|newspapers?|papers|presents|gifts|cheese|eggs|soup|cocoa|coffee|potions?|scrolls?", _noun):
+                    if _rre.match(r"(drop|deliver)", _rm.group(0)) and not _rre.search(r"package|parcel|letter|mail|pizza|crate|box|supplies|medicine|food|meal|bread|loa(?:f|ves)|pies?|cakes?|buns|hot ?dogs?|hotdogs?|sandwich\w*|burgers?|tacos?|noodles?|dumplings?|kebabs?|pretzels?|pastr|cookies|groceries|flowers|bouquets?|milk|newspapers?|papers|presents|gifts|cheese|eggs|soup|cocoa|coffee|potions?|scrolls?", _noun):
                         _noun = "it"
                     # (2026-10-07) and felling is this objective only for wood
                     if _rre.match(r"(chop|cut|fell)", _rm.group(0)) and not _rre.search(r"tree|pine|oak|birch|spruce|log|timber", _noun):
@@ -1146,6 +1146,27 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                         job.setdefault("notes", []).append(f"repair: {_cnt} {_lab} to fix (hold E at each)")
             except Exception as _re_e:
                 job.setdefault("notes", []).append(f"repair rule skipped: {_re_e}")
+            # A STREET VENDOR SERVES THE STREET (2026-10-25): "a hot dog vendor serving customers on a
+            # snowy chicago street corner" was planned as "score customers", a goal no runtime system
+            # keeps. Outdoors (the cafe's counter game is indoors), a vendor's round is carrying the
+            # food to the customers waiting along the street: the delivery game, in the food's name
+            try:
+                _vp = (req.prompt or "").lower()
+                _vf = _fre.search(r"\b(hot ?dogs?|hotdogs?|tacos?|pretzels?|kebabs?|noodles?|dumplings?|burgers?|sandwich(?:es)?|ice creams?|crepes?|churros?|roasted chestnuts|chestnuts|coffee|tea|lemonade|pizza)\b", _vp)
+                if (_vf and _fre.search(r"\b(vendors?|sellers?|hawkers?|stands?|carts?|stalls?|kiosks?|trucks?|serv(?:e|es|ing)|sell(?:s|ing)?)\b", _vp)
+                        and not any(o.kind in ("repair", "serve") for o in spec.objectives)
+                        and getattr(spec, "genre", "adventure") not in ("factory", "racing", "sports")):
+                    from app.game_export.spec import ObjectiveSpec as _VOS
+                    _food = _vf.group(1).replace("hotdog", "hot dog")
+                    _food = _food if _food.endswith(("s", "ea", "ee", "ade", "ts")) else _food + "s"
+                    _vn = _fre.search(r"\b(\d+|three|four|five|six|seven|eight|ten)\s+(?:customers|people|orders)\b", _vp)
+                    _vc = {"three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8, "ten": 10}.get(_vn.group(1), 0) if _vn and not _vn.group(1).isdigit() else (int(_vn.group(1)) if _vn else 5)
+                    spec.objectives = [_VOS(kind="repair", label=_food, count=max(3, min(_vc or 5, 10)))] + [
+                        o for o in spec.objectives if o.kind not in ("score", "collect") or not _fre.search(r"customer|order|people|sale", (o.label or "").lower())]
+                    spec.entities = [e for e in spec.entities if not _fre.search(r"\b(hot ?dogs?|dogs?|customers?)\b", (e.name or "").lower()) or e.behavior == "guide"]
+                    job.setdefault("notes", []).append(f"vendor: {_food} carried to the customers along the street (hold E at each)")
+            except Exception as _ve:
+                job.setdefault("notes", []).append(f"vendor rule skipped: {_ve}")
             # WEATHER IS NOT A CREATURE (2026-10-07): "reach the farmhouse before the
             # tornado" cast the tornado as a half-metre hostile, a mesh was made of
             # it and the storm chaser was handed a blade to fight it. A tornado, a
@@ -2060,6 +2081,28 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                 spec.player.mode = "swim"
             if spec.world.sky in ("night", "space", "mars") and not _fre.search(r"\b(night|midnight|moonlit|dark|abyss\w*|deep[- ]sea)\b", _ptl):
                 spec.world.sky = "day"
+            # (2026-10-25) the creatures a sentence goes to see are there: one build of "a cave of glowing
+            # jellyfish" came back from the planner with fifteen jellyfish, the next with none at all
+            try:
+                _seen = _fre.search(r"\b(jellyfish|octop(?:us|i|uses)|squids?|seahorses?|sea horses?|stingrays?|manta rays?|clownfish|anglerfish|sea turtles?|turtles?|dolphins?|whales?|sharks?|seals?|eels?)\b", _ptl)
+                if _seen and not any(_fre.search(_seen.group(1).rstrip("s")[:6], (e.name or "").lower()) for e in spec.entities):
+                    from app.game_export.spec import EntitySpec as _UES
+                    _sk = _seen.group(1).lower()
+                    _sk = {"octopi": "octopus", "octopuses": "octopus", "sea horses": "seahorse", "manta rays": "manta ray"}.get(_sk, _sk)
+                    _sk = _sk if _sk.endswith("fish") or _sk in ("octopus",) else _sk.rstrip("s")
+                    _many = _sk in ("jellyfish", "clownfish", "seahorse", "squid", "eel", "anglerfish")
+                    spec.entities.append(_UES(name=_sk, behavior="wander", count=12 if _many else 3, speed=0.6 if _many else 1.4,
+                                              height_m=library.default_height(_sk)))
+                    job.setdefault("notes", []).append(f"the {_sk} the sentence came to see are in the water ({12 if _many else 3})")
+            except Exception as _see:
+                job.setdefault("notes", []).append(f"sea-creature rule skipped: {_see}")
+            # (2026-10-25) the deep is dark: "a deep sea diver discovering a cave of glowing jellyfish" swam a
+            # sunlit reef. Where the sentence goes deep, into the abyss, or to things that glow, the sunlight
+            # is gone and what is seen is lit by the creatures themselves
+            if _fre.search(r"\b(deep[- ]sea|deep ocean|abyss\w*|trench|midnight zone|twilight zone|biolumin\w*|glow\w*|luminous|luminescent|anglerfish)\b", _ptl):
+                spec.world.sky = "night"
+                spec.world.weather = "none"
+                job.setdefault("notes", []).append("the deep: no sunlight comes down here; the creatures light it")
             job.setdefault("notes", []).append("under the sea: a seabed under the water, the hero swims")
         if (getattr(spec.world, "archetype", "plain") == "cave"
                 and not _fre.search(r"\b(caves?|caverns?|grottos?|grottoes|underground|subterranean|catacombs?|mines?|tunnels?|crypts?|lairs?|dens?)\b", _ptl)):
@@ -2111,7 +2154,9 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         # in the library (and drop its duplicate non-hostile entity).
         if base_spec is None and req.player is None and spec.player.name:
             _pl = spec.player.name.lower()
-            _ptext = req.prompt.lower()
+            # (2026-10-25) a food is not a creature: "a hot dog vendor" was played by a dog
+            _ptext = _fre.sub(r"\b(hot|corn|chili) ?dogs?\b", "hotdogs", req.prompt.lower())
+            _ptext = _fre.sub(r"\b(gummy|jelly) ?(bears?|worms?)\b", "sweets", _ptext)
             # A PROP IS NOT A HERO EITHER (2026-10-03): "explore a glowing
             # crystal cave" came back with the crystal as the player, a word
             # the prompt does contain, so the check above let it through and
@@ -2122,10 +2167,15 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             # (2026-10-07) a hero whose head noun is in the sentence is its subject:
             # "buddhist monk" for "a monk climbs a himalayan monastery" was recast to "monk"
             _head_in = bool(_pl.split()) and _pl.split()[-1] in _ptext.replace(",", " ").replace(".", " ").split()
-            if (_pl not in _ptext and not _head_in) or _prop_hero:
+            # (2026-10-25) the served are not the hero: "a hot dog vendor serving customers" was played by
+            # a customer. When the sentence's people include someone who serves them, they are the subject
+            _served = _pl.split()[-1].rstrip("s") in ("customer", "client", "patron", "shopper", "diner", "passenger", "guest") \
+                and bool(_fre.search(r"\b(vendors?|sellers?|hawkers?|waiters?|waitress\w*|bartenders?|barista\w*|chefs?|cooks?|drivers?|clerks?|cashiers?|shopkeepers?|servers?|serv(?:e|es|ing))\b", _ptext))
+            if (_pl not in _ptext and not _head_in) or _prop_hero or _served:
                 _skip = {"firefly", "fireflies", "snowflake", "snowflakes",
                          "beacon", "beacons", "star", "stars",
-                         "planet", "planets", "moon", "moons", "sun", "sky"}
+                         "planet", "planets", "moon", "moons", "sun", "sky",
+                         "customer", "client", "patron", "shopper", "diner", "passenger", "guest"}
                 # WHAT YOU ESCAPE IS NOT YOU (2026-10-06): "escape a hungry t-rex
                 # through a prehistoric jungle" promoted the t-rex, the prompt's
                 # first body, to hero. The thing escaped, fled, outrun, hidden
@@ -2184,8 +2234,10 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                         w = w[:-1] if w.endswith("ists") else w
                         if w in _skip or len(w) < 5 or not _pre2.match(r"^[a-z-]+$", w):
                             continue
-                        if (_pre2.search(r"(?:ist|ian|man|woman|keeper|maker|smith|monger|player|singer|dancer|drummer|fiddler|piper|busker|trumpeter|bugler|conductor|sailor|painter|chef|baker|tailor|cobbler|potter|weaver)$", w)
-                                and _gp_subj(w) == "biped" and w not in ("christian", "guardian", "human", "woman", "man", "gentleman")):
+                        if (_pre2.search(r"(?:ist|ian|man|woman|keeper|maker|smith|monger|player|singer|dancer|drummer|fiddler|piper|busker|trumpeter|bugler|conductor|sailor|painter|chef|baker|tailor|cobbler|potter|weaver|vendor|seller|hawker|peddler|merchant|acrobat|juggler|clown)$", w)
+                                # (a trade word is a person whatever the pattern guess: "vendor" read as a vending machine)
+                                and (_gp_subj(w) == "biped" or _pre2.search(r"(?:vendor|seller|hawker|peddler|merchant|acrobat|juggler|clown|busker|monger)$", w))
+                                and w not in ("christian", "guardian", "human", "woman", "man", "gentleman")):
                             cand = w
                             break
                 if cand is None and _prop_hero:
@@ -2210,7 +2262,10 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         try:
             _hostile = {(e.name or "").strip().lower() for e in spec.entities if e.behavior in ("hostile", "guard")}
             # (2026-10-22) a snowball fight is kids against kids: the other side is your own kind
-            if not req.player and want in _hostile and not job.get("_snowfight"):
+            # (2026-10-25) and a duel, a joust or a showdown is between two of a kind: "a samurai duel in a
+            # bamboo forest" made the samurai the enemy and the ranger the hero
+            _duel = bool(_fre.search(r"\b(duels?|duell?ing|showdowns?|jousts?|jousting|rivals?|rivalry|sparring|spars?|one[- ]on[- ]one|face[- ]off|versus|vs\.?)\b", (req.prompt or "").lower()))
+            if not req.player and want in _hostile and not job.get("_snowfight") and not _duel:
                 import re as _re5
                 _p5 = (req.prompt or "").lower()
                 if not _re5.search(r"\b(play|playing) as an? " + _re5.escape(want) + r"|\byou are an? " + _re5.escape(want)
@@ -2297,6 +2352,13 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             # human role the library cannot resolve is recast like a generic
             # one; generation stays for what it is for, a new creature.
             _w = (want or "").strip().lower()
+            # (2026-10-25) the sentence's own words for its hero: "a tightrope walker" came back from the
+            # planner as "walker" and was played by the ranger. A compound role the sentence names with
+            # the planner's word as its head is that role
+            _cm = _fre.search(r"\b((?:tightrope|high[- ]wire|street|hot dog|food|fruit|flower|ice cream|newspaper|market|fish|rope|wire|sword|fire)\s+" + _fre.escape(_w) + r")\b", (req.prompt or "").lower()) if _w and " " not in _w else None
+            if _cm and not req.player and not library.resolve(_w):   # a "vendor" already made plays the hot dog vendor
+                _w = _cm.group(1); want = _w; spec.player.name = _w
+                job.setdefault("notes", []).append(f"hero: '{_w}', as the sentence names them")
             # (2026-09-30) "a samurai crossing a bamboo forest" was played by
             # the ranger: the samurai's static model is marked poor, so the
             # samurai counted as unknown, and "forest" matched before
@@ -2319,7 +2381,9 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                                 "blacksmith", "smith", "lifeguard", "gondolier", "gladiator", "conductor",
                                 # (2026-10-24) "a jazz saxophonist" was the explorer in safari khaki: a musician is made
                                 "saxophonist", "trumpeter", "violinist", "guitarist", "drummer", "pianist", "busker",
-                                "musician", "singer", "fiddler", "cellist", "bagpiper", "accordionist", "harpist")
+                                "musician", "singer", "fiddler", "cellist", "bagpiper", "accordionist", "harpist",
+                                # (2026-10-25) a street vendor and a tightrope walker were the explorer and the ranger
+                                "vendor", "street vendor", "hot dog vendor", "hawker", "acrobat", "tightrope walker", "funambulist", "juggler")
             try:                       # and any role the reference generator has an outfit for (2026-10-07)
                 from app.asset_gen.reference import has_wardrobe as _hw
                 _dressable = _dressable or (_hw(_w) and _w not in ("man", "woman", "person", "human", "guy", "boy", "girl", "walker"))

@@ -169,6 +169,7 @@ export function startDesign(o) {
     const glassOff = new THREE.MeshStandardMaterial({ color: 0x2a2620, roughness: 0.3 });
     for (let i = 1; i < P.length - 1; i++) {
       const [a, b] = [P[i - 1], P[i]], x = (a[0] + b[0]) / 2 + 1.8, z = (a[1] + b[1]) / 2 + 1.2, y = o.hAt(x, z);
+      if (o.blocked && o.blocked(x, z)) continue;   // (2026-10-25) never in a sinkhole's pool or through a built site
       const G = new THREE.Group(); G.position.set(x, y, z); scene.add(G);
       const post = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.07, 2.2, 8), iron); post.position.y = 1.1; G.add(post);
       const head = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.12, 0.32, 6), glassOff.clone()); head.position.y = 2.32; G.add(head);
