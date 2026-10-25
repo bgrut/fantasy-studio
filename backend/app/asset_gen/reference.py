@@ -588,7 +588,7 @@ def _build_reference_prompt(slots: Dict[str, Any], style: str) -> tuple[str, str
             # (2026-10-24) a saxophonist was painted playing, the horn at his mouth, in a gold sequin suit:
             # the mesh came out with a melted head. An instrument is held low at the side, the face clear,
             # and the clothes are matte cloth (sequins and lamé read as noise to the 3D model)
-            "saxophonist": "a jazz saxophonist in a matte charcoal wool suit, a white shirt and a dark tie, a felt fedora, polished brown shoes, holding a brass saxophone low at his side by its neck, the face fully visible and not playing, fully clothed",
+            "saxophonist": "a jazz musician in a matte charcoal wool suit jacket, a white shirt and a dark tie, a felt fedora, polished brown shoes, a small brass saxophone hanging from a neck strap down at his hip, both hands empty, mouth closed and smiling, nothing near the face, fully clothed",
             "trumpeter":   "a jazz trumpeter in a matte navy wool suit, a white shirt, a narrow tie, a flat cap, brown shoes, holding a brass trumpet low at his side, the face fully visible and not playing, fully clothed",
             "violinist":   "a violinist in a matte black concert suit and white shirt, black shoes, holding a violin and bow low at the side, the face fully visible, fully clothed",
             "guitarist":   "a street guitarist in a matte denim jacket, a plain shirt, dark jeans and boots, an acoustic guitar slung on the back by its strap, the face fully visible, fully clothed",
