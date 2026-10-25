@@ -187,6 +187,8 @@ _STYLE_ASKED = {
 
 
 # a sentence about riding the log drive (2026-10-24): the hero casting and the log rule both read it
+# (2026-10-24) rowing a boat: "rows", "rowing", a rowboat or a dinghy; not "rows of lavender"
+_ROW_RE = _fre.compile(r"\b(row(?:s|ing|ed)?(?! of\b)(?= (?:a |the |his |her |their |out |across |over |to |back |hard |supplies|home|ashore)|$)|rowboats?|row ?boats?|rowing boats?|dinghy|dinghies|dory|dories|skiff|oars(?:man|men)?)\b")
 _LOG_RIDE_RE = _fre.compile(r"\b(log ?drivers?|log ?driving|log ?drives?|log ?roll(?:ing|ers?)|logrolling|river ?drivers?|river ?pigs?|log ?jams?|rid(?:e|es|ing) (?:a |the |down )?(?:logs?|timber)|(?:timber|logs?) (?:down|on|along) (?:a |the )?(?:wild |fast |rushing )?rivers?)\b")
 
 
@@ -2582,6 +2584,22 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                 job.setdefault("notes", []).append(f"'{spec.player.name}' rides a log down the river with a pike pole: the current carries it, W poles on, A and D work across the channel")
         except Exception as _lge:
             job.setdefault("notes", []).append(f"log rule skipped: {_lge}")
+        # A ROWER ROWS (2026-10-24): "a lighthouse keeper rowing supplies across a stormy bay at
+        # night" walked along the shore. Rowing is a boat on the water: the runtime puts the hero
+        # standing at the oars of a clinker dory laden with crates (RIDE 'rowboat'), afloat on the
+        # bay, the river or the lake, grounding where the water gives out
+        try:
+            _rww = (req.prompt or "").lower()
+            if (_ROW_RE.search(_rww) and _fre.search(r"\b(bay|sea|ocean|lake|loch|river|harbou?r|across|island|isle|fjord|pond|cove|lagoon|strait|channel|waters?)\b", _rww)
+                    and player_glb and pattern == "biped" and (spec.player.ride or "") == "" and getattr(spec, "genre", "adventure") != "factory"):
+                spec.player.ride = "rowboat"
+                spec.player.mode = "drive"
+                spec.player.car_params = None
+                spec.player.walk_speed, spec.player.run_speed = 2.6, 4.0
+                spec.entities = [e for e in spec.entities if not _fre.search(r"\b(boats?|rowboats?|dinghy|oars?|ships?|cars?|trucks?)\b", (e.name or "").lower())]
+                job.setdefault("notes", []).append(f"'{spec.player.name}' rows a dory: W pulls, S backs water, A and D turn her")
+        except Exception as _rwe:
+            job.setdefault("notes", []).append(f"row rule skipped: {_rwe}")
         _race_seated = False
         # (2026-10-07) only a person takes a driver's seat: "a claymation snail
         # races three other snails" put the snail in a sedan. An animal races
@@ -2854,6 +2872,8 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             spec.camera.distance_m, spec.camera.height_m = 13.0, 3.6   # behind the tail, the wings in frame
         if (spec.player.ride or "") == "log":
             spec.camera.distance_m, spec.camera.height_m = 7.5, 3.0    # the log and the water ahead of it
+        if (spec.player.ride or "") == "rowboat":
+            spec.camera.distance_m, spec.camera.height_m = 8.5, 3.4    # the boat, its oars and the water ahead
         # THE SENTENCE'S HOUR AND AIR (2026-10-07): "a fox hunts in a misty
         # autumn forest at dawn" was built under a plain midday sky with no
         # mist. A time of day the sentence names sets the sky; misty, foggy
@@ -4074,7 +4094,8 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         # a crowded summer beach" was a plain of acacias, the water a far line
         # (a harbour, a quay, a fishing port: the coast ends in a stone quay, 2026-10-11)
         _harbor = bool(_fre.search(r"\b(harbou?rs?|quays?|quayside|docks|dockside|wharf|wharves|piers?|fishing port|fishing village|fish market|marina)\b", _pw7))
-        if ((_fre.search(r"\b(beach|beaches|seaside|lifeguards?|swimmers?|sunbathers?|surf|surfing|surfers?|lighthouses?|coastline|coastal|sea cliffs?|headland|cove|(?:above|over|overlooking|by|beside|facing) the (?:sea|ocean)|sea views?)\b", _pw7) or _harbor)
+        # (2026-10-24) "a penguin sliding down an icy slope to reach the sea" had no sea: a goal of the sea is a coast
+        if ((_fre.search(r"\b(beach|beaches|seaside|lifeguards?|swimmers?|sunbathers?|surf|surfing|surfers?|lighthouses?|coastline|coastal|sea cliffs?|headland|cove|(?:above|over|overlooking|by|beside|facing) the (?:sea|ocean)|sea views?|(?:reach(?:es|ing)?|to|toward|towards|into|down to|back to) the (?:sea|ocean|shore)|(?:across|over|on|into|round|around) (?:a |the )?(?:[a-z]+ )?bay)\b", _pw7) or _harbor)
                 and not _fre.search(r"\b(desert|dune|space|moon|mars|city|street|underwater)\b", _pw7)
                 and not getattr(spec.world, "platforms", False) and (_arch in ("plain", "dunes", "basin", "mesa")
                      # a lighthouse stands on a coast, not on a flooded plain of islets (2026-10-12)
@@ -4083,6 +4104,9 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                      # surfed a sand spit: a beach the sentence names is a coastline unless it asks for islands
                      # (2026-10-22) "a kid flies a red kite on a windy hill above the sea" stood in a forest
                      or _fre.search(r"\b(?:above|over|overlooking|by|beside|facing) the (?:sea|ocean)\b|\bsea views?\b", _pw7)
+                     or _fre.search(r"\b(?:reach(?:es|ing)?|to|toward|towards|into|down to|back to) the (?:sea|ocean|shore)\b", _pw7)
+                     # (2026-10-24) a rower on the sea or a bay rows off a coast
+                     or ((spec.player.ride or "") == "rowboat" and not _fre.search(r"\b(rivers?|lakes?|loch|ponds?|canals?|streams?)\b", _pw7))
                      or (_arch == "archipelago" and _fre.search(r"\b(beach|beaches|surf\w*|lifeguards?|swimmers?|seaside|coastline)\b", _pw7)
                          and not _fre.search(r"\b(isl(?:and|e)s?|islets?|archipelago|atolls?|lagoon)\b", _pw7)))):
             _arch = "archipelago"
@@ -4418,6 +4442,10 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             r"\b(?:inside|interior of|indoors?|within the walls of)\s+"
             r"(?:a\s+|an\s+|the\s+)?(castle|house|mansion|dungeon|temple|"
             r"tavern|cottage|fortress|palace|room|home)?", _pl)
+        # (2026-10-24) "a greenhouse garden inside a dome on Mars" built a stone dungeon: a dome or a
+        # greenhouse is a glass shell standing in the open (the runtime's DOME), not a building's rooms
+        if _im and not _im.group(1) and _re3.search(r"\b(green ?houses?|glass ?houses?|bio ?domes?|geodesic|domes?|hydroponic\w*|terrarium|glasshouses?)\b", _pl):
+            _im = None
         # THE GENRE IMPLIES THE WORLD SHAPE (2026-08-05): a burglar game is
         # ALWAYS indoors — you cannot infiltrate a meadow. "A cat burglar
         # infiltrates a moonlit mansion" built an open grass field because

@@ -1485,11 +1485,15 @@ export function biomeFor(words, arch, groundHSL) {
     kinds: K(['rock', 1], ['boulder', 0.35], ...(has(/oasis|\bnile\b|river/) ? [['palm', 0.6]] : [])), dens: has(/oasis|\bnile\b/) ? 0.12 : 0.04,
     rockTint: T(0xb89a6e), leaf: { h: 0.2, s: 0.4, l: 0.28 } });
   else if (has(/canyon|mesa|badlands|butte/)) Object.assign(out, { kinds: K(['mesa', 0.25], ['rock', 0.8], ['boulder', 0.4], ['cactus', 0.15]), dens: 0.12, rockTint: T(0xb5643c) });
+  // THE OLD WORLD'S DESERTS GROW NO CACTUS (2026-10-24): "a camel caravan crossing the Sahara" walked
+  // past a saguaro. Cacti are American; the Sahara, Arabia and the Gobi are bare rock, dead scrub and sand
+  else if (has(/sahara|arabia\w*|bedouin|camels?|caravans?|gobi|kalahari|namib\w*|tuareg|berber|morocc\w*/) && !has(/cactus|cacti|saguaro|arizona|mexic\w*|cowboy|western/)) Object.assign(out, { kinds: K(['rock', 0.8], ['boulder', 0.25], ['dead', 0.3], ['bush', 0.15]), dens: 0.08, rockTint: T(0xb8916a), leaf: { h: 0.14, s: 0.3, l: 0.3 } });
   else if (has(/desert|dune|sahara|wasteland|arid/)) Object.assign(out, { kinds: K(['cactus', 0.5], ['rock', 0.8], ['boulder', 0.2], ['dead', 0.25], ['bush', 0.2]), dens: 0.14, rockTint: T(0xb08a5e), leaf: { h: 0.16, s: 0.32, l: 0.3 } });
   // SEA ICE GROWS NOTHING (2026-10-11): a polar bear hunting seals on
   // drifting sea ice walked past a pine forest. The pack is ice and snow, a
   // hummock of pressure ice here and there, and not one tree.
-  else if (has(/sea ice|ice floes?|pack ice|polar bears?|arctic ocean|north pole|icebergs?|seals? on/)) Object.assign(out, { kinds: K(['boulder', 0.5], ['rock', 0.3]), dens: 0.03, snow: 0.95,
+  // (2026-10-24) Antarctica too: "a penguin sliding down an icy slope in Antarctica" stood in a pine wood
+  else if (has(/sea ice|ice floes?|pack ice|polar bears?|arctic ocean|north pole|south pole|antarctic\w*|penguins?|icebergs?|ice shelf|seals? on/)) Object.assign(out, { kinds: K(['boulder', 0.5], ['rock', 0.3]), dens: 0.03, snow: 0.95,
     rockTint: T(0xcfdbe6) });
   else if (has(/glacier|tundra|ice field|polar/)) Object.assign(out, { kinds: K(['boulder', 0.6], ['rock', 1], ['spruce', 0.15]), dens: 0.16, snow: 0.85, rockTint: T(0x7d8794) });
   else if (has(/snow|arctic|frozen|winter|blizzard|frost/)) Object.assign(out, { kinds: K(['spruce', 0.6], ['pine', 0.5], ['rock', 0.35], ['boulder', 0.15]), dens: 0.75, snow: 0.75, rockTint: T(0x7d8794) });
