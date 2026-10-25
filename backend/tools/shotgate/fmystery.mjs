@@ -121,9 +121,12 @@ if (m0) {
   const n0 = await M(p2);
   check(n0 && n0.culprit === m0.culprit, 'the same game is the same case');
   await collectAll(p2);
+  for (let t = 0; t < 16 && !(await M(p2)).accusing; t++) await wait(250);   // the last clue turns the step a beat after the pickup
   await walkUpTo(p2, ci);
-  await key(p2, 'KeyE'); await key(p2, 'KeyY');
-  const n1 = await M(p2);
+  await key(p2, 'KeyE'); await wait(500); await key(p2, 'KeyY');   // Y on the heels of E was taken before the question had been put
+  // (2026-10-25) polled like the loss above: read at once, the verdict was not yet in on a busy frame
+  let n1 = await M(p2);
+  for (let t = 0; t < 12 && n1.over !== 'won'; t++) { await wait(250); n1 = await M(p2); }
   check(n1.over === 'won', `naming the one who fits wins: "${(n1.verdict || '').slice(0, 90)}"`);
   check(errs2.length === 0, 'no page errors on the second page' + (errs2.length ? ': ' + errs2[0] : ''));
 }

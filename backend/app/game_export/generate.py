@@ -39,6 +39,8 @@ _QUADRUPED = ("dog", "cat", "horse", "cow", "wolf", "fox", "deer", "lion",
 # classified 'hunter' as a quadruped (cached!), so the player got a
 # four-legged rig and shipped looking like a dog (2026-07-15).
 _BIPED = ("canyoneer", "investigator", "racer", "hunter", "archer", "soldier", "warrior", "ranger", "ninja",
+          # (2026-10-25) trade words for a person: "vendor" was classed a vending machine and never rigged
+          "vendor", "hawker", "peddler", "seller", "merchant", "acrobat", "juggler", "busker", "clown", "funambulist",
           "pirate", "king", "queen", "prince", "princess", "farmer",
           "cowboy", "cowgirl", "hero", "heroine", "elf", "dwarf", "orc",
           "goblin", "zombie", "skeleton", "vampire", "witch", "astronaut",

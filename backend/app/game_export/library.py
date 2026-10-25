@@ -264,6 +264,14 @@ def default_height(kind: str) -> float:
     # "fish" inside "fisherman" played a 0.8 m fisherman
     if len(_last) > 4 and re.search(r"(?:man|woman|men|keeper|chaser|grapher|vintner|rider|walker|runner|seeker|worker|maker|monk|smith|herd|ist|ian)$", _last):
         return 1.75
+    # (2026-10-25) the head noun decides before any word inside the phrase does: "hot dog vendor"
+    # was sized as a dog (0.6 m). A person-word last is a person's height
+    try:
+        from app.game_export.generate import _BIPED
+        if _last in _BIPED:
+            return 1.75
+    except Exception:
+        pass
     for words, h in ((("dog", "cat", "fox", "rabbit"), 0.6),
                      (("horse", "cow", "deer"), 1.7),
                      (("car", "truck", "vehicle"), 1.4),

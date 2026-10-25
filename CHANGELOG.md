@@ -55,6 +55,7 @@ Three rounds of stress tests built dozens of unusual sentences and gave each kin
 - The Sahara, Arabia and the Gobi grow no cactus; a goal of the sea, or rowing across a bay, lays a coast.
 - A person the sentence names by what they do (a saxophonist, a violinist) is made for the game, not swapped for the generic man or dressed up as the explorer; and a character generated lying on its back is stood up rather than thrown away as a bust (the saxophonist was made three times and retired three times).
 - Side-on games (the dune look) no longer show a grey void across the bottom of the screen: the orthographic camera's lower rows ran beneath the ground; a dark near ridge stands in front of the lane now, its crest following the dunes.
+- A trade word is a person: "vendor" was classed as a vending machine (never rigged, the generic man played the hot dog vendor) and a "hot dog vendor" was sized as a dog; the head noun decides both.
 - A cat is a cat's size: a small animal the planner made person-sized (a 1.7 m cat) is sized by its kind, unless the sentence makes it giant.
 - Markdown on title cards: a ship's name came through as "\*Sea Serpent\*".
 - **Whole plans thrown away**: one out-of-range number in the planner's answer (a 5 cm ant, a 30 m robot) discarded the entire spec; the spec now repairs itself.
