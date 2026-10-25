@@ -12,7 +12,10 @@ const URL = process.env.URL ||
   ('http://127.0.0.1:8789/games/job_' + process.env.J + '/dist/');
 // debug=1 makes the framebuffer readable so a pixel can be asserted on
 await p.goto(URL + '?fresh=1&debug=1', { waitUntil:'domcontentloaded', timeout:90000 });
-await new Promise(r=>setTimeout(r,6000));
+// wait for the factory itself: shader links alone took 6 to 12 s on a loaded machine (2026-10-25)
+for (let i = 0; i < 120 && !(await p.evaluate(() => !!(window.__factory && window.__game)).catch(() => false)); i++)
+  await new Promise(r=>setTimeout(r,500));
+await new Promise(r=>setTimeout(r,2000));
 
 // 1. every tool in the bar carries an icon, and a locked one is dimmed
 const icons = await p.evaluate(()=>{

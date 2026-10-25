@@ -23,7 +23,10 @@ const URL = process.env.URL ||
 // ?fresh=1: this run must not grade the previous run's factory
 await p.goto(URL + (URL.includes('?') ? '&' : '?') + 'fresh=1',
   { waitUntil:'domcontentloaded', timeout:90000 });
-await new Promise(r=>setTimeout(r,6000));
+// wait for the factory itself: shader links alone took 6 to 12 s on a loaded machine (2026-10-25)
+for (let i = 0; i < 120 && !(await p.evaluate(() => !!(window.__factory && window.__game)).catch(() => false)); i++)
+  await new Promise(r=>setTimeout(r,500));
+await new Promise(r=>setTimeout(r,2000));
 
 const t0 = await p.evaluate(()=> window.__game ? window.__game.facts() : null);
 if (!t0) { console.log('FAIL: no window.__game'); console.log(errs.join('\n')); await b.close(); process.exit(1); }

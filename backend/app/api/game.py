@@ -1081,7 +1081,7 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                                   # (2026-10-24) "searches a snowy slope for three lost hikers": the place
                                   # can come between the search and the ones searched for
                                   r"find(?:s|ing)?|locate[sd]?|locating|track(?:s|ing)? down|search(?:es|ing)?(?:\s+[a-z]+){0,4}?\s+for|look(?:s|ing)? for|"
-                                  r"check(?:s|ing)?(?:\s+on)?|inspect(?:s|ing)?|tend(?:s|ing)?(?:\s+to)?)\s+"
+                                  r"check(?:s|ing)?(?:\s+on)?|inspect(?:s|ing)?|tend(?:s|ing)?(?:\s+to)?|water(?:s|ing)?)\s+"
                                   # (2026-10-17) "repairs a broken antenna" took "a" for the noun: "Fix 1 a broken"
                                   r"(?:all\s+)?(?:of\s+)?(?:the\s+|every\s+|an?\s+|his\s+|her\s+|their\s+|its\s+|my\s+)?(\d+|two|three|four|five|six|seven|eight|nine|ten)?\s*"
                                   r"((?:broken|damaged|dead|faulty|offline|burnt[- ]out|failing|leaking|busted)\s+)?([a-z]+)(?:\s+([a-z]+))?", _rp)
@@ -1107,6 +1107,15 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                         else:
                             _noun = "it"
                     # (2026-10-07) a beekeeper checks hives: checking is this objective only for hives
+                    # (2026-10-25) watering is this objective only for growing things, and only off the garden
+                    # (a garden waters its own sprouts): "a robot gardener watering plants on a space station"
+                    # was "collect 10 waters"
+                    if _rre.match(r"water", _rm.group(0)):
+                        if _rre.search(r"\b(plants?|seedlings?|crops?|flowers?|herbs?|vegetables|greens|trees?|saplings?|lettuces?|tomatoes|beds?)\b", _noun) \
+                                and _rre.search(r"\b(stations?|space|ships?|domes?|labs?|greenhouses?|hydroponic\w*|orbit\w*|mars|moon|colony)\b", _rp):
+                            _noun = "thirsty " + _noun if not _noun.startswith(("thirsty", "wilting", "dry")) else _noun
+                        else:
+                            _noun = "it"
                     if _rre.match(r"(check|inspect|tend)", _rm.group(0)) and not _rre.search(r"\b(?:bee)?hives?\b", _noun):
                         _noun = "it"
                     if _noun not in _STOP and _noun.split()[0] not in ("it", "them", "everything", "things", "power", "order",
@@ -2681,6 +2690,24 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                 job.setdefault("notes", []).append(f"'{spec.player.name}' rows a dory: W pulls, S backs water, A and D turn her")
         except Exception as _rwe:
             job.setdefault("notes", []).append(f"row rule skipped: {_rwe}")
+        # A PAPER BOAT IN THE GUTTER (2026-10-25): "a paper boat sailing down a rainy gutter in paris"
+        # was a six-metre rowing boat stranded on the asphalt. A paper boat is the hero itself, a hand
+        # long, carried by the rainwater running along the kerb (the runtime's RIDE 'paperboat')
+        try:
+            _pbw = (req.prompt or "").lower()
+            if (_fre.search(r"\b(paper|origami|toy|newspaper) (?:boats?|ships?|sailboats?)\b", _pbw)
+                    and _fre.search(r"\b(gutters?|kerbs?|curbs?|drains?|puddles?|rain\w*|streets?|storm ?drains?)\b", _pbw)):
+                spec.player.name = "paper boat"
+                spec.player.mode = "drive"
+                spec.player.ride = "paperboat"
+                spec.player.buoyant = False
+                spec.player.car_params = None
+                spec.player.height_m = 0.22
+                spec.player.walk_speed, spec.player.run_speed = 1.4, 2.4
+                spec.entities = [e for e in spec.entities if not _fre.search(r"\b(boats?|ships?|paper)\b", (e.name or "").lower())]
+                job.setdefault("notes", []).append("a paper boat in the gutter: the rainwater along the kerb carries it, A and D steer it past what floats there, the storm drain at the end")
+        except Exception as _pbe:
+            job.setdefault("notes", []).append(f"paper boat rule skipped: {_pbe}")
         _race_seated = False
         # (2026-10-07) only a person takes a driver's seat: "a claymation snail
         # races three other snails" put the snail in a sedan. An animal races
@@ -2955,6 +2982,11 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             spec.camera.distance_m, spec.camera.height_m = 7.5, 3.0    # the log and the water ahead of it
         if (spec.player.ride or "") == "rowboat":
             spec.camera.distance_m, spec.camera.height_m = 8.5, 3.4    # the boat, its oars and the water ahead
+        if (spec.player.ride or "") == "paperboat":
+            # the casting after the rule made it a six-metre swimming "boat" again: a paper boat is held here
+            spec.player.name, spec.player.mode, spec.player.buoyant, spec.player.height_m = "paper boat", "drive", False, 0.22
+            spec.player.walk_speed, spec.player.run_speed = 1.4, 2.4
+            spec.camera.distance_m, spec.camera.height_m = 1.5, 0.55   # down at the kerb, the street towering over it
         # THE SENTENCE'S HOUR AND AIR (2026-10-07): "a fox hunts in a misty
         # autumn forest at dawn" was built under a plain midday sky with no
         # mist. A time of day the sentence names sets the sky; misty, foggy

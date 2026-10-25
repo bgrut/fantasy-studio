@@ -104,6 +104,8 @@ def _shown_kind(o):
         return "deliver"
     if re.search(r"\b(?:bee)?hives?\b", lab, re.I):
         return "check"
+    if re.search(r"\b(thirsty|wilting|dry)\b", lab, re.I):
+        return "water"
     if re.search(r"\b(trees?|pines?|oaks?|birch(?:es)?|spruces?|logs?|timber)\b", lab, re.I):
         return "fell"
     if re.search(r"\b(lost|missing|stranded|hikers?|climbers?|skiers?|campers?|survivors?)\b", lab, re.I):
@@ -120,7 +122,7 @@ def _fallback(spec, prompt):
     verbs = {"collect": "Gather", "reach": "Get to", "defeat": "Put down", "race": "Beat",
              "survive": "Hold out against", "eliminate": "Clear out", "score": "Score",
              "deliver": "Carry", "serve": "Serve", "repair": "Mend", "photograph": "Photograph",
-             "check": "Check", "fell": "Fell", "find": "Find", "put out": "Put out"}
+             "check": "Check", "fell": "Fell", "find": "Find", "put out": "Put out", "water": "Water"}
     beats = []
     for o in obs:
         lab = str(getattr(o, "label", "") or "it")

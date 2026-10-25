@@ -19,7 +19,10 @@ await p.goto(URL + (URL.includes('?') ? '&' : '?') + 'fresh=1',
   { waitUntil:'domcontentloaded', timeout:90000 });
 await p.evaluate(()=>{ try { localStorage.clear(); } catch (e) {} });
 await p.reload({ waitUntil:'domcontentloaded' });
-await new Promise(r=>setTimeout(r,6000));
+// wait for the factory itself: shader links alone took 6 to 12 s on a loaded machine (2026-10-25)
+for (let i = 0; i < 120 && !(await p.evaluate(() => !!(window.__factory && window.__game)).catch(() => false)); i++)
+  await new Promise(r=>setTimeout(r,500));
+await new Promise(r=>setTimeout(r,2000));
 
 const firstBoot = await p.evaluate(()=>window.__game.facts().restored);
 console.log('first boot :', 'restored =', firstBoot, '(should be false)');
@@ -47,7 +50,10 @@ console.log('built      :', 'forge at', built.spot, '| filter set to salt |',
 
 // a REAL reload with NO fresh flag — the path a returning player takes
 await p.goto(URL, { waitUntil:'domcontentloaded' });
-await new Promise(r=>setTimeout(r,6000));
+// wait for the factory itself: shader links alone took 6 to 12 s on a loaded machine (2026-10-25)
+for (let i = 0; i < 120 && !(await p.evaluate(() => !!(window.__factory && window.__game)).catch(() => false)); i++)
+  await new Promise(r=>setTimeout(r,500));
+await new Promise(r=>setTimeout(r,2000));
 const back = await p.evaluate((b2) => {
   const F = window.__factory, TY = F.TYPES;
   const f = window.__game.facts();

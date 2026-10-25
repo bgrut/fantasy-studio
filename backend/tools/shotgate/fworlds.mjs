@@ -27,6 +27,8 @@ const checks = {};
 if (URL) {
   await p.goto(URL + '?fresh=1', { waitUntil:'domcontentloaded', timeout:90000 });
   await wait(1800);
+  // the card rises once the world is built; shader links alone ran 6 to 12 s on a loaded machine (2026-10-25)
+  for (let i = 0; i < 60 && !(await card()).up; i++) await wait(500);
   await p.screenshot({ path: process.env.OUT || 'worlds.png' });   // the card, up, with nothing beside it
   const home = await card();
   console.log('demo card  :', JSON.stringify(home.name), '|', JSON.stringify(home.sub).slice(0, 70), '| picks', home.picks, '| row', home.row);
