@@ -1437,6 +1437,19 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                     spec.objectives = _merged
             except Exception as _me:
                 job.setdefault("notes", []).append(f"pickup merge skipped: {_me}")
+            # A PHOTOGRAPH IS OF SOMETHING (2026-10-25): "a scuba diver photographing sea turtles on a coral
+            # reef" collected six glowing orbs called "photos". The step is the creatures themselves: each
+            # one found is a picture taken (the runtime flashes and counts the shot)
+            try:
+                _ph = _fre.search(r"\b(?:photograph(?:s|ing|ed)?|snap(?:s|ping)?|film(?:s|ing)?|tak(?:es|ing) (?:photos|pictures|snapshots) of|shoot(?:s|ing) (?:photos|pictures) of)\s+"
+                                  r"(?:the\s+|some\s+|wild\s+|rare\s+)?((?:sea |wild |snow |polar |giant |great |humpback |grey |gray |red |blue |manta )?[a-z]+s)\b", (req.prompt or "").lower())
+                if _ph:
+                    for o in spec.objectives:
+                        if o.kind == "collect" and _fre.fullmatch(r"(?:photos?|pictures?|photographs?|snapshots?|shots?|images?)(?: of .*)?", (o.label or "").strip().lower()):
+                            o.label = _ph.group(1)
+                            job.setdefault("notes", []).append(f"pictures to take: {o.count} {o.label}, each one found is a photograph")
+            except Exception as _phe:
+                job.setdefault("notes", []).append(f"photo rule skipped: {_phe}")
             # NOTHING TO PICK UP IN A FEELING (2026-10-25): "a monk ringing the great bell at the top of a
             # mountain monastery" was asked to "collect peace" as glowing orbs on the path. A collect step
             # whose thing is a feeling or an idea is not a thing to pick up; it goes

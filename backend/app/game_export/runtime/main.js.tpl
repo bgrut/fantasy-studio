@@ -14550,6 +14550,8 @@ async function main() {
   // generated mesh for any collect step that shipped one ("fire flames",
   // "pearls", "moon rocks") — orbs are only the fallback
   const collectTpl = {};
+  // (2026-10-25) a creature to photograph is an animal in its world, not a glowing token: no glow, life size
+  const _photoP = /\b(photograph\w*|snapshots?|tak\w* (?:photos|pictures))\b/.test(String(SPEC.prompt || '').toLowerCase());
   for (let ci = 0; ci < steps.length; ci++) {
     const st = steps[ci];
     if (st.kind !== 'collect' || !st.asset) continue;
@@ -14568,7 +14570,7 @@ async function main() {
           if (!m) continue;
           if (m.metalness > 0.5 && !m.metalnessMap && m.roughness > 0.8) { m.metalness = 0; m.needsUpdate = true; }
           if (_crop) m.userData.noAutoTex = true;      // its own orange, not a scan laid over it
-          if (m.emissive !== undefined && !_crop) {     // pickups glow, even at night
+          if (m.emissive !== undefined && !_crop && !_photoP) {     // pickups glow, even at night
             if (m.map) { m.emissiveMap = m.map; m.emissive.setScalar(0.6); }
             else m.emissive.copy(m.color || new THREE.Color(1, 1, 1)).multiplyScalar(0.45);
             m.needsUpdate = true;
@@ -14774,10 +14776,19 @@ async function main() {
       }
       s.position.set(cx, baseY, cz);
       if (_evidence || _grown) s.rotation.y = rngC() * Math.PI * 2;
+      const _subject = _photoP && tpl;
+      if (_subject) {
+        // the size the animal is: the cast's own height for it, else about a metre
+        const lab = String(step.label || '').toLowerCase().replace(/s$/, ''), ent = (SPEC.entities || []).find(e => lab.includes(String(e.name || '').toLowerCase().replace(/s$/, '')) || String(e.name || '').toLowerCase().includes(lab));
+        const want = (ent && ent.height_m) ? Math.max(0.3, Math.min(3, ent.height_m * 1.6)) : 1.0;
+        const b0 = new THREE.Box3().setFromObject(s), sz = b0.getSize(new THREE.Vector3()), md = Math.max(sz.x, sz.y, sz.z);
+        if (md > 0) s.scale.multiplyScalar(want / md);
+        s.rotation.y = rngC() * Math.PI * 2;
+      }
       s.userData.fsTag = { type: 'collectible', name: step.label || 'item',
                            detail: 'collect it' };
       if (_bloom) { const gl = makeGlow(0.6); gl.position.y = 0.66; s.add(gl); }       // the nectar glows in the flower's heart, not on the ground
-      else if (_critter || _haunt) { /* a creature, or a piece of evidence, carries its own light */ }
+      else if (_critter || _haunt || _subject) { /* a creature, or a piece of evidence, carries its own light */ }
       else if (!(planted && GARDEN && GARDEN.grow)) s.add(makeGlow(_evidence || _grown ? 1.1 : 1.7));   // a crop in its bed is found by its bed
       scene.add(s);
       const _c = { mesh: s, baseY, phase: rngC() * Math.PI * 2, still: _evidence || _grown || _haunt };
@@ -29910,6 +29921,18 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
                   const on = 0.25 + 0.75 * Math.max(0, Math.sin(t * 1.1 + f.ph * 3)) ** 4; f.sp.material.opacity = on; f.sp.scale.setScalar(f.s0 * (0.7 + 0.5 * on)); } };
             }
             if (window.__mystery) window.__mystery.clue(st);
+            // (2026-10-25) A PICTURE TAKEN: "a scuba diver photographing sea turtles" picked them up like coins.
+            // Where the sentence takes photographs, finding one is a shot: a flash, the shutter, a frame kept
+            const _photo = /\b(photograph\w*|snapshots?|tak\w* (?:photos|pictures))\b/.test(String(SPEC.prompt || '').toLowerCase());
+            if (_photo) {
+              const fl = window.__photoFlash || (window.__photoFlash = (() => { const d = document.createElement('div');
+                d.style.cssText = 'position:fixed;inset:0;background:#fff;opacity:0;pointer-events:none;transition:opacity 0.45s ease-out;z-index:40'; document.body.appendChild(d); return d; })());
+              fl.style.transition = 'none'; fl.style.opacity = '0.85'; requestAnimationFrame(() => { fl.style.transition = 'opacity 0.45s ease-out'; fl.style.opacity = '0'; });
+              try { const ac = window.__photoAC || (window.__photoAC = new (window.AudioContext || window.webkitAudioContext)()); const t0 = ac.currentTime;
+                for (const [dt2, f] of [[0, 2400], [0.06, 1800]]) { const o = ac.createOscillator(), g2 = ac.createGain(); o.type = 'square'; o.frequency.value = f;
+                  g2.gain.setValueAtTime(0.0001, t0 + dt2); g2.gain.exponentialRampToValueAtTime(0.08, t0 + dt2 + 0.005); g2.gain.exponentialRampToValueAtTime(0.0001, t0 + dt2 + 0.05);
+                  o.connect(g2).connect(ac.destination); o.start(t0 + dt2); o.stop(t0 + dt2 + 0.06); } } catch (e) { /* no audio */ }
+            }
             juicePunch = FEEL.punch;
             juiceSlow = Math.max(juiceSlow, 0.09 * FEEL.slow);
             if (HAS_GUARDS) {
@@ -29932,6 +29955,8 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
                   break;
                 }
               }
+            } else if (/\b(photograph\w*|snapshots?|tak\w* (?:photos|pictures))\b/.test(String(SPEC.prompt || '').toLowerCase())) {
+              popText(`Snap!  ${st._got}/${st.count} ${st.label || ''} photographed`, '#ffffff');
             } else {
               popText(`+1 ${st.label || ''}  ·  ${st._got}/${st.count}`, '#ffd54a');
             }
