@@ -188,7 +188,7 @@ _STYLE_ASKED = {
 
 # a sentence about riding the log drive (2026-10-24): the hero casting and the log rule both read it
 # (2026-10-24) rowing a boat: "rows", "rowing", a rowboat or a dinghy; not "rows of lavender"
-_ROW_RE = _fre.compile(r"\b(row(?:s|ing|ed)?(?! of\b)(?= (?:a |the |his |her |their |out |across |over |to |back |hard |supplies|home|ashore)|$)|rowboats?|row ?boats?|rowing boats?|dinghy|dinghies|dory|dories|skiff|oars(?:man|men)?)\b")
+_ROW_RE = _fre.compile(r"\b(row(?:s|ing|ed)?(?! of\b)(?= (?:a |the |his |her |their |out |across |over |to |back |hard |supplies|home|ashore|passengers|people|tourists|travell?ers|pilgrims|visitors|villagers|cargo|goods|fishermen|monks)|$)|rowboats?|row ?boats?|rowing boats?|dinghy|dinghies|dory|dories|skiff|oars(?:man|men)?)\b")
 _LOG_RIDE_RE = _fre.compile(r"\b(log ?drivers?|log ?driving|log ?drives?|log ?roll(?:ing|ers?)|logrolling|river ?drivers?|river ?pigs?|log ?jams?|rid(?:e|es|ing) (?:a |the |down )?(?:logs?|timber)|(?:timber|logs?) (?:down|on|along) (?:a |the )?(?:wild |fast |rushing )?rivers?)\b")
 
 
@@ -398,6 +398,11 @@ def _sentence_goals(p: str) -> list:
     if not any(k == "reach" for k, _, _ in out) and _fre.search(r"\b(train|carriages?|wagons?|coaches|locomotive|railway|railroad)\b", p) \
             and _fre.search(r"\b(walk(?:s|ing)?|mov(?:es|ing)|mak(?:es|ing) (?:his|her|their) way|mak(?:es|ing) rounds?|checks?|checking)\b", p):
         out.append(("reach", "the locomotive", 1))
+    # a street musician plays for the passers-by (the runtime's BUSK pitches round the square)
+    if not out and _fre.search(r"\b(busk\w*|street (?:musician|performer|violinist|guitarist|singer)s?|(?:playing|plays|play) (?:the |a |an |his |her |their )?"
+                               r"(?:violin|fiddle|guitar|accordion|saxophone|sax|cello|flute|harp|trumpet|banjo|harmonica|bagpipes|ukulele|clarinet)\b)", p) \
+            and _fre.search(r"\b(squares?|streets?|plazas?|piazzas?|markets?|stations?|bridges?|corners?|parks?|alleys?|sidewalks?|pavements?|town|city|old town)\b", p):
+        out.append(("repair", "crowds", 3))
     # ringing, lighting, opening, reaching: the thing is the place the walk ends
     m = _fre.search(r"\b(?:ring(?:s|ing)?|light(?:s|ing)?|open(?:s|ing)?|reach(?:es|ing)?|climb(?:s|ing)?(?:\s+to)?)\s+(?:the\s+|a\s+)(?:great\s+|old\s+|top\s+of\s+the\s+)?([a-z]+)\b", p)
     if m and not any(k == "reach" for k, _, _ in out) and m.group(1) not in ("way", "end", "day", "night"):
@@ -2448,6 +2453,13 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             # human role the library cannot resolve is recast like a generic
             # one; generation stays for what it is for, a new creature.
             _w = (want or "").strip().lower()
+            # (2026-10-25) a monarch, an admiral or a painted lady named with its butterfly is the insect, not a
+            # king: "a monarch butterfly migrating across a field of milkweed" was played by the explorer
+            _bf = _fre.search(r"\b(monarch|swallowtail|red admiral|admiral|painted lady|morpho|cabbage white|peacock|emperor)\s+(butterfl(?:y|ies)|moths?)\b", (req.prompt or "").lower())
+            if _bf and (_w in (_bf.group(1), _bf.group(0), "explorer", "man", "person") or "butterfl" in _w or "moth" in _w):
+                _w = "butterfly" if "butterfl" in _bf.group(2) else "moth"; want = _w; spec.player.name = _w
+                spec.player.mode = "fly"
+                job.setdefault("notes", []).append(f"hero: the {_bf.group(0)} is the insect, not a {_bf.group(1)}: a {_w}, flying")
             # (2026-10-25) the sentence's own words for its hero: "a tightrope walker" came back from the
             # planner as "walker" and was played by the ranger. A compound role the sentence names with
             # the planner's word as its head is that role
@@ -4021,7 +4033,7 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                 job.setdefault("notes", []).append(f"sentence goals skipped: {_sge}")
         n_obj = sum(o.count for o in spec.objectives if o.kind == "collect")
         is_city = any(k in (spec.world.name or "").lower() for k in ("city", "street", "town")) or bool(
-            _fre.search(r"\b(city|cities|streets?|town|downtown|urban|metropolis|neon|boulevard|avenue|"
+            _fre.search(r"\b(city|cities|streets?|town|downtown|urban|metropolis|neon|boulevard|avenue|suburbs?|suburban|cul-de-sac|"
                         r"skyline|cyberpunk|skyscrapers?|blocks?|alleys?|highway)\b", (req.prompt or "").lower()))
         # A SUNKEN CITY IS A DROWNED RUIN (2026-10-22). "a young witch repairs three broken bridges
         # in a sunken city" built glass towers and taxis: "city" laid a modern street grid. A sunken,
@@ -4960,10 +4972,20 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             stage("laying out the district")
             # a cozy town, a village, a quaint harbour town: low and narrow
             _pt = (req.prompt or "").lower()
+            # (2026-10-25) an old European city is its old town, not a downtown: "a street musician playing violin
+            # in a snowy Prague square at night" stood between glass offices on a four-lane road
             _town = bool(_fre.search(r"\b(cozy|cosy|quaint|village|hamlet|cottages?|small town|little town|market town|"
-                                     r"seaside town|old town|storybook|cute)\b", _pt)) \
+                                     r"seaside town|old town|old quarter|medieval town|storybook|cute|suburbs?|suburban|cul-de-sac|"
+                                     r"prague|praha|vienna|wien|krak[oó]w|cracow|bruges|brugge|ghent|tallinn|riga|vilnius|salzburg|innsbruck|"
+                                     r"lisbon|porto|seville|toledo|granada|edinburgh|york|bath|rothenburg|heidelberg|nuremberg|n[uü]rnberg|"
+                                     r"strasbourg|colmar|ljubljana|dubrovnik|budapest|bratislava|bern|lucerne|zurich|florence|siena|verona|"
+                                     r"bologna|copenhagen|stockholm|gamla stan|bergen|amsterdam|delft|antwerp|quebec|old montreal)\b", _pt)) \
                 or (bool(_fre.search(r"\btowns?\b", _pt)) and not _fre.search(r"\b(city|cities|downtown|metropolis|skyscrapers?|neon|cyberpunk|urban)\b", _pt))
-            osm = build_proc_city(int(spec.seed or 0), spec.world.size_m, place or (spec.world.name or "city"), town=_town)
+            _oldtown = bool(_fre.search(r"\b(old town|old quarter|medieval town|prague|praha|vienna|wien|krak[oó]w|cracow|bruges|brugge|ghent|tallinn|riga|vilnius|"
+                                        r"salzburg|innsbruck|lisbon|porto|seville|toledo|granada|edinburgh|rothenburg|heidelberg|nuremberg|n[uü]rnberg|"
+                                        r"strasbourg|colmar|ljubljana|dubrovnik|budapest|bratislava|bern|lucerne|florence|siena|verona|bologna|"
+                                        r"copenhagen|gamla stan|bergen|amsterdam|delft|antwerp|quebec|old montreal)\b", _pt))
+            osm = build_proc_city(int(spec.seed or 0), spec.world.size_m, place or (spec.world.name or "city"), town=_town, old=_oldtown)
             if osm:
                 _use_city(osm, "procedural town (no map needed): lanes, houses and shops of two or three storeys" if _town
                           else "procedural district (no map needed): avenues, streets, a tall core")

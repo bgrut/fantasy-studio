@@ -2555,6 +2555,38 @@ async function main() {
     void nests;
     return C;
   })();
+  // ── A CAT UP A TREE (2026-10-25) ────────────────────────────────────────
+  // "a firefighter rescuing a cat from a tall oak tree in a quiet suburb" was
+  // a dirt clearing with a cat on the ground at the end. The cat is up the
+  // tree: a big oak off the street, the cat on a limb five metres up, a ladder
+  // leaned against the trunk; reaching the foot of the ladder brings it down.
+  const CATTREE = (() => {
+    if (INTERIOR || VIEW === 'side' || !LVL || !LVL.goal) return null;
+    const w = String(SPEC.prompt || '').toLowerCase();
+    if (!/\b(cats?|kittens?|kitty)\b/.test(w) || !/\b(trees?|oaks?|elms?|maples?|branch(?:es)?|limbs?)\b/.test(w)) return null;
+    if (!/\b(rescu\w*|stuck|saves?|saving|gets? down|getting down|up a|up in|climb\w*)\b/.test(w)) return null;
+    const G = LVL.goal, P = LVL.path && LVL.path.length > 1 ? LVL.path[LVL.path.length - 2] : [0, 0];
+    let dx = G[0] - P[0], dz = G[1] - P[1]; const dl = Math.hypot(dx, dz) || 1; dx /= dl; dz /= dl;
+    // off the street onto the verge or the lawn, the goal at the ladder's foot between
+    let off = 3.5, tx = G[0] - dz * off, tz = G[1] + dx * off;
+    if (OSM && OSM.roads) {
+      // in a town: a front yard, clear of every road and every house, as near a house as can be had
+      const segD = (x, z, a, b) => { const vx = b[0] - a[0], vz = b[1] - a[1], L2 = vx * vx + vz * vz || 1, t = Math.max(0, Math.min(1, ((x - a[0]) * vx + (z - a[1]) * vz) / L2)); return Math.hypot(x - a[0] - vx * t, z - a[1] - vz * t); };
+      const roadClear = (x, z) => OSM.roads.every(r => { for (let i = 0; i < r.pts.length - 1; i++) if (segD(x, z, r.pts[i], r.pts[i + 1]) < (r.w || 7) / 2 + 3.2) return false; return true; });
+      const inPoly = (x, z, pts) => { let c = false; for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) { const a = pts[i], b = pts[j]; if (((a[1] > z) !== (b[1] > z)) && (x < (b[0] - a[0]) * (z - a[1]) / (b[1] - a[1] || 1e-9) + a[0])) c = !c; } return c; };
+      const bl = OSM.buildings || []; let best = null, bs = 1e9;
+      for (let k = 0; k < 400; k++) { const a = k * 2.399, d = 4 + (k / 400) * 34, x = G[0] + Math.cos(a) * d, z = G[1] + Math.sin(a) * d;
+        if (!roadClear(x, z)) continue;
+        let nb = 1e9, inside = false;
+        for (const b of bl) { if (inPoly(x, z, b.pts)) { inside = true; break; } for (let i = 0; i < b.pts.length; i++) nb = Math.min(nb, segD(x, z, b.pts[i], b.pts[(i + 1) % b.pts.length])); }
+        if (inside || nb < 3.2) continue;
+        const sc = d * 0.6 + Math.abs(nb - 4.5) * 2; if (sc < bs) { bs = sc; best = [x, z]; } }
+      if (best) { tx = best[0]; tz = best[1]; }
+    }
+    let nx = G[0] - tx, nz = G[1] - tz; { const l = Math.hypot(nx, nz) || 1; nx /= l; nz /= l; if (l < 0.5) { nx = dz; nz = -dx; } }   // from the trunk toward the way in
+    LVL.goal = [tx + nx * 2.4, tz + nz * 2.4];
+    return { x: tx, z: tz, nx, nz, cat: null, down: 0, catAt: () => new THREE.Vector3(tx - nz * 1.9 + nx * 0.6, hAt(tx, tz) + 4.9, tz + nx * 1.9 + nz * 0.6) };
+  })();
   // ── A WRECK (2026-10-07) ────────────────────────────────────────────────
   // "a deep sea diver explores a sunken pirate shipwreck and recovers four
   // gold chests" was open seabed with chests on it. The wreck is the ship the
@@ -4190,6 +4222,7 @@ async function main() {
         || (typeof CENOTE !== 'undefined' && CENOTE)   // (2026-10-25) a sinkhole's pool is its own goal: no lamp post stood in the water
         || (WRECK && WRECK.isGoal)                     // the galleon on the bottom is what you came to see
         || (RAIL && RAIL.walk && RAIL.train)            // (2026-10-25) the engine at the head of the train is the goal
+        || CATTREE                                       // the oak with the cat in it
         || (typeof ENTERABLES !== 'undefined' && ENTERABLES.some(E => E && E.facade === 'lighthouse'))   // a lighthouse is its own beacon
         || (_reachOb && /\b(hive|beehive|skep|apiary|helipad)\b/.test(String(_reachOb.label || '').toLowerCase()));
       // THE GOAL IS A PLACE (2026-10-12): the open-ground goal was a shaft of
@@ -5353,7 +5386,7 @@ async function main() {
       // brick's own hue has to survive, or every wall goes the same grey
       const tv = 0.78 + rngQ() * 0.34, tw2 = (rngQ() - 0.5) * 0.14;
       const tone = new THREE.Color(tv + tw2, tv, tv - tw2 * 0.7);
-      if (_NOLA && tint) tone.copy(tint).multiplyScalar(0.95 + rngQ() * 0.2);   // (2026-10-24) the Quarter's walls wear their pastel
+      if ((_NOLA || _OLDEU) && tint) tone.copy(tint).multiplyScalar(0.95 + rngQ() * 0.2);   // (2026-10-24) the Quarter's walls wear their pastel (and an old town's its stucco)
       // Some buildings are mostly awake at 2am and some are mostly asleep.
       // A single global lit fraction gave every tower the same even sprinkle,
       // which is a texture, not a city.
@@ -5494,6 +5527,11 @@ async function main() {
     // out over the banquette on slender posts (built after the blocks, see NOLA GALLERIES)
     const _NOLA = !_PARIS && /\b(new orleans|nola|french quarter|bourbon street|royal street|frenchmen street|jackson square|vieux carr\w*|crescent city|big easy|mardi gras|creole)\b/.test(String(SPEC.prompt || '').toLowerCase());
     const nolaBlocks = [];
+    // AN OLD TOWN IS STUCCO AND TILE (2026-10-25): "a street musician playing violin in a snowy Prague square
+    // at night" walked between glass offices. The planner lays an old quarter wall to wall round a square
+    // (osm.old); its houses are rendered stucco in ochre, cream, salmon, sage and rose under steep red-tile
+    // roofs, a church tower here and there, and its streets are granite setts, not asphalt with a centre line
+    const _OLDEU = !_PARIS && !_NOLA && !!(SPEC.world && SPEC.world.level && SPEC.world.level.osm && SPEC.world.level.osm.old);
     function programFor(h, rnd) {
       if (h > 42) return rnd < 0.82 ? 'office' : 'hotel';
       if (h > 24) return rnd < 0.42 ? 'office' : rnd < 0.62 ? 'hotel' : 'apartment';
@@ -5578,12 +5616,13 @@ async function main() {
         // no core to swell toward and no four-storey floor; 2026-10-06)
         const _h0 = _PARIS ? 18 + ((Math.abs(Math.sin(cx * 0.37 + cz * 0.11)) * 4) | 0) * 1.2   // one cornice line, give or take a storey
                   : _NOLA ? 8.5 + ((Math.abs(Math.sin(cx * 0.41 + cz * 0.13)) * 3) | 0) * 3.3   // two, three and four storeys
-                  : _TOWN ? Math.min(Math.max(b.h || 8, 5.5), 20)
+                  : _TOWN ? Math.min(Math.max(b.h || 8, 5.5), _OLDEU ? 36 : 20)
                           : Math.min(Math.max((b.h || 12) * (1 + 2.9 * _core * _core), 13.5), 78);
         const gy = hAt(cx, cz);
         const tint = tintA.clone().lerp(tintB, rngB()).offsetHSL(0, 0, (rngB() - 0.5) * 0.12);
         if (_PARIS) tint.lerp(new THREE.Color(0xe6d8bc), 0.75);          // Lutetian limestone, cream
         if (_NOLA) tint.lerp(new THREE.Color([0xd98c7a, 0xe6c86e, 0x8fb8a8, 0x9fb6d6, 0xe9b4b8, 0xc9a0c8, 0xf0e2c0, 0xd6a35c][Math.floor(Math.abs(Math.sin(cx * 3.1 + cz * 1.7)) * 8) % 8]), 0.8);   // the Quarter's pastels
+        if (_OLDEU) tint.lerp(new THREE.Color([0xdcb46a, 0xeadcc0, 0xd99a7e, 0xb9c8a2, 0xa9bccb, 0xd8aca4, 0xf0e8d8, 0xc9a25c, 0xe2c88c][Math.floor(Math.abs(Math.sin(cx * 2.3 + cz * 1.9)) * 9) % 9]), 0.85);   // an old town's stucco
         // photo facades ONLY by day (2026-07-28: the procedural grid reads
         // as placeholder in daylight); at night it keeps a 25% share for
         // the lit-window checkerboard until photo facades learn to glow
@@ -5608,7 +5647,7 @@ async function main() {
         const _comm = /office|commercial|hotel|retail|shop|supermarket|mall|bank/.test(_use);
         const _pal = districtPal(cx, cz);
         const _r = rngB(), _r2 = rngB();
-        const _bkt = _PARIS ? (_r < 0.7 ? 7 : 3) : _NOLA ? (_r < 0.72 ? 0 : 2) : _h0 > 26
+        const _bkt = _PARIS ? (_r < 0.7 ? 7 : 3) : (_NOLA || _OLDEU) ? (_r < (_OLDEU ? 0.82 : 0.72) ? 0 : 2) : _h0 > 26
           ? (_comm ? (_r < 0.6 ? 1 : 4) : _resid ? 6 : _pal.tall[_r < 0.62 ? 0 : 1])
           : (_night && _r2 < 0.16 ? 0
              : _resid ? (_r < 0.55 ? 2 : 5)
@@ -6314,7 +6353,7 @@ async function main() {
         }
         const tileT = new THREE.CanvasTexture(cv); tileT.wrapS = tileT.wrapT = THREE.RepeatWrapping; tileT.colorSpace = THREE.SRGBColorSpace;
         tileT.anisotropy = renderer.capabilities.getMaxAnisotropy();
-        const RCOL = [0xb4553a, 0xa64a34, 0x8f4a36, 0x5a626c, 0x6a5246, 0xc06a44];
+        const RCOL = _OLDEU ? [0xb4553a, 0xa64a34, 0xc0603e, 0x9c4430, 0xb85c3a] : [0xb4553a, 0xa64a34, 0x8f4a36, 0x5a626c, 0x6a5246, 0xc06a44];   // an old town is all tile
         const pos = [], uv = [], col = [], gpos = [], gcol = [];
         const tri = (P, U, c, a, b, d) => { for (const v of [a, b, d]) { P.push(v[0], v[1], v[2]); if (U) U.push(v[3], v[4]); c.push(...v.slice(U ? 5 : 3)); } };
         for (const [pts0, top, tint] of townRoofs) {
@@ -6325,7 +6364,7 @@ async function main() {
           if (LB > LA) { [ax, az, bx2, bz2] = [bx2, bz2, -ax, -az]; [LA, LB] = [LB, LA]; o0 = p1; }
           if (LA < 2 || LB < 2) continue;
           ax /= LA; az /= LA; bx2 /= LB; bz2 /= LB;
-          const rh = Math.min(4.6, Math.max(1.4, LB * 0.42)), o = 0.4, slope = rh / (LB / 2);
+          const rh = _OLDEU ? Math.min(7.5, Math.max(2.2, LB * 0.62)) : Math.min(4.6, Math.max(1.4, LB * 0.42)), o = 0.4, slope = rh / (LB / 2);   // steep, as central European roofs are
           const at = (a, b, y) => [o0[0] + ax * a + bx2 * b, y, o0[1] + az * a + bz2 * b];
           const rc = new THREE.Color(RCOL[Math.floor(rT() * RCOL.length)]).offsetHSL(0, 0, (rT() - 0.5) * 0.06);
           const C3 = [rc.r, rc.g, rc.b];
@@ -6955,7 +6994,7 @@ async function main() {
       // roof, a pulsing orange glow and a column of smoke leaning off it
       try {
         const _bw = String(SPEC.prompt || '').toLowerCase();
-        if (/\b(burning|on fire|ablaze|in flames|blazing|inferno|fire ?fighters?|firem[ae]n)\b/.test(_bw) && LVL && LVL.goal && feCand.length) {
+        if (!CATTREE && /\b(burning|on fire|ablaze|in flames|blazing|inferno|fire ?fighters?|firem[ae]n)\b/.test(_bw) && LVL && LVL.goal && feCand.length) {   // (2026-10-25) a cat up a tree sets nothing alight
           const [gx, gz] = LVL.goal;
           let best = null, bd = 1e9;
           // measured to its nearest wall, so it is the block the goal stands in front of
@@ -8157,9 +8196,10 @@ async function main() {
             // r14: flat curb strips REMOVED — they z-fought and showed their
             // floating gap as streaky bands at grazing angles (playtest
             // screenshots). Real instanced curb boxes are built below.
-            // center dashes: 1.8m on / 4m off along the segment
+            // center dashes: 1.8m on / 4m off along the segment (an old town's lanes have none)
             const segL = Math.hypot(x2 - x1, z2 - z1);
-            for (let d = 1; d + 1.8 < segL; d += 5.8) {
+            const _oldRd = !!(SPEC.world.level && SPEC.world.level.osm && SPEC.world.level.osm.old);
+            for (let d = 1; d + 1.8 < segL && !_oldRd; d += 5.8) {
               const t0 = d / segL, t1 = (d + 1.8) / segL;
               const dg = strip(
                 x1 + (x2 - x1) * t0, z1 + (z2 - z1) * t0,
@@ -8178,6 +8218,19 @@ async function main() {
             const S = 1024, cv = document.createElement('canvas'); cv.width = cv.height = S;
             const x = cv.getContext('2d'), ra = mulberry32(SPEC.seed + 4040);
             x.fillStyle = '#7d7f84'; x.fillRect(0, 0, S, S);
+            if (SPEC.world.level && SPEC.world.level.osm && SPEC.world.level.osm.old) {
+              // granite setts in rows, each stone a little domed and its own grey, sand in the joints
+              x.fillStyle = '#4e4a44'; x.fillRect(0, 0, S, S);
+              const rowH = 22;
+              for (let ry = 0; ry < S; ry += rowH) { let rx = -((ry / rowH) % 2) * 14;
+                while (rx < S) { const w = 22 + ra() * 14, l = 92 + ra() * 60, t = ra() * 14;
+                  const gr = x.createRadialGradient(rx + w / 2, ry + rowH / 2 - 3, 2, rx + w / 2, ry + rowH / 2, w * 0.7);
+                  gr.addColorStop(0, `rgb(${l + 18 + t},${l + 14 + t},${l + 8})`); gr.addColorStop(1, `rgb(${l - 18},${l - 20},${l - 22})`);
+                  x.fillStyle = gr; const r2 = 5;
+                  x.beginPath(); x.moveTo(rx + 2 + r2, ry + 2); x.arcTo(rx + w - 2, ry + 2, rx + w - 2, ry + rowH - 2, r2); x.arcTo(rx + w - 2, ry + rowH - 2, rx + 2, ry + rowH - 2, r2);
+                  x.arcTo(rx + 2, ry + rowH - 2, rx + 2, ry + 2, r2); x.arcTo(rx + 2, ry + 2, rx + w - 2, ry + 2, r2); x.fill();
+                  rx += w; } }
+            }
             for (let i = 0; i < 9; i++) {            // repairs and wear, soft and wide
               const cx = ra() * S, cy = ra() * S, r = 60 + ra() * 180;
               const gr = x.createRadialGradient(cx, cy, 0, cx, cy, r);
@@ -8309,9 +8362,41 @@ async function main() {
             if (rngZ() < 2) { /* deterministic hook */ }
             console.log('[game] crosswalk bars: ' + nz2);
           }
+          if (dashGeos.length) {   // (2026-10-25) an old town's lanes have no paint at all: an empty merge took the whole build down
           const dash = new THREE.Mesh(mergeGeometries(dashGeos, false),
             new THREE.MeshBasicMaterial({ color: 0xd8d8d2, side: THREE.DoubleSide }));
-          scene.add(dash);
+          scene.add(dash); }
+          // THE SQUARE (2026-10-25): an old town's heart is one paved square, not four empty lots with the
+          // crossroads running through them. Setts laid in fans over the whole of it, a step up from the lanes,
+          // and a baroque column with its saint off to one side, where the town gathers
+          if (SPEC.world.level && SPEC.world.level.osm && SPEC.world.level.osm.old) {
+            const SX = 36, SZ = 30, sy = hAt(0, 0) + 0.18;
+            const fc = document.createElement('canvas'); fc.width = fc.height = 512; const fg = fc.getContext('2d'), rs = mulberry32((SPEC.seed || 1) + 5252);
+            fg.fillStyle = '#4a4640'; fg.fillRect(0, 0, 512, 512);
+            // segmental arcs of setts, the way squares are laid
+            for (let row = -2; row < 22; row++) for (let c = -1; c < 5; c++) { const cx = c * 128 + (row % 2) * 64, cy = row * 26;
+              for (let k = 0; k < 9; k++) { const a = -0.9 + k * 0.225, r = 64, x = cx + Math.sin(a) * r, y = cy + 64 - Math.cos(a) * r, l = 100 + rs() * 60;
+                fg.fillStyle = `rgb(${l + 10},${l + 6},${l})`; fg.save(); fg.translate(x, y); fg.rotate(a); fg.fillRect(-6.5, -6, 13, 12); fg.restore(); } }
+            const ft = new THREE.CanvasTexture(fc); ft.wrapS = ft.wrapT = THREE.RepeatWrapping; ft.colorSpace = THREE.SRGBColorSpace; ft.repeat.set(SX * 2 / 3, SZ * 2 / 3);
+            ft.anisotropy = renderer.capabilities.getMaxAnisotropy();
+            const pz = new THREE.Mesh(new THREE.BoxGeometry(SX * 2, 0.2, SZ * 2), new THREE.MeshStandardMaterial({ map: ft, roughness: SPEC.world.weather === 'snow' ? 0.8 : 0.6 }));
+            pz.material.userData.noAutoTex = true; pz.position.set(0, sy - 0.1, 0); pz.receiveShadow = true; scene.add(pz);
+            world.createCollider(RAPIER.ColliderDesc.cuboid(SX, 0.1, SZ).setTranslation(0, sy - 0.1, 0));
+            // the column: a stepped plinth, a fluted shaft, a gilded saint against the sky
+            const stoneC = new THREE.MeshStandardMaterial({ color: 0xc8bea8, roughness: 0.85 }), gold = new THREE.MeshStandardMaterial({ color: 0xd8a83a, metalness: 0.9, roughness: 0.3 });
+            stoneC.userData.noAutoTex = true; gold.userData.noAutoTex = true;
+            const CX = 13, CZ = -9, Cg = new THREE.Group(); Cg.position.set(CX, sy, CZ); scene.add(Cg);
+            for (let k = 0; k < 3; k++) { const st = new THREE.Mesh(new THREE.BoxGeometry(5 - k * 1.2, 0.4, 5 - k * 1.2), stoneC); st.position.y = 0.2 + k * 0.4; st.castShadow = st.receiveShadow = true; Cg.add(st); }
+            const pl = new THREE.Mesh(new THREE.BoxGeometry(1.8, 2.2, 1.8), stoneC); pl.position.y = 2.3; pl.castShadow = true; Cg.add(pl);
+            const sh = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.55, 9, 20), stoneC); sh.position.y = 7.9; sh.castShadow = true; Cg.add(sh);
+            const cap = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.5, 1.3), stoneC); cap.position.y = 12.6; Cg.add(cap);
+            const fig = new THREE.Mesh(new THREE.CapsuleGeometry(0.32, 1.2, 6, 12), gold); fig.position.y = 13.7; fig.castShadow = true; Cg.add(fig);
+            const halo = new THREE.Mesh(new THREE.TorusGeometry(0.34, 0.04, 8, 24), gold); halo.position.y = 14.55; Cg.add(halo);
+            for (const [ex, ez] of [[1.9, 1.9], [-1.9, 1.9], [1.9, -1.9], [-1.9, -1.9]]) { const s2 = new THREE.Mesh(new THREE.CapsuleGeometry(0.22, 0.8, 4, 8), stoneC); s2.position.set(ex, 1.75, ez); s2.castShadow = true; Cg.add(s2); }
+            world.createCollider(RAPIER.ColliderDesc.cuboid(2.5, 1.0, 2.5).setTranslation(CX, sy + 1.0, CZ));
+            world.createCollider(RAPIER.ColliderDesc.cylinder(5.5, 0.9).setTranslation(CX, sy + 6, CZ));
+            window.__oldSquare = { half: [SX, SZ], column: [CX, CZ] };
+          }
           // r14 REAL CURBS: solid instanced boxes (top + side faces) per
           // road-segment side — an actual 6-inch step, nothing to z-fight
           {
@@ -10203,6 +10288,11 @@ async function main() {
       // pans hung over the pass, white tile and a quarry-tiled floor.
       const _kit = /\b(kitchens?|chefs?|cooks?|cooking|restaurant|bistro|brasserie|trattoria|grill|line cook|sous)\b/
         .test([SPEC.prompt, SPEC.title, SPEC.world && SPEC.world.name].filter(Boolean).join(' ').toLowerCase());
+      // A RAMEN SHOP (2026-10-25): "a chef cooking ramen in a tiny Tokyo restaurant late at night" cooked in a
+      // western bistro of round tables and potted palms. A ramen-ya is pale hinoki and dark slatted wood, the
+      // broth pots steaming on the back line beside the noodle boiler and the bowls, red lanterns, a noren
+      // split over the door and the menu hung on wooden plaques
+      const _ramen = /\b(ramen|noodle (?:bar|shop|stall|house)|udon|soba|izakaya|yatai)\b/.test([SPEC.prompt, SPEC.title, SPEC.world && SPEC.world.name].filter(Boolean).join(' ').toLowerCase());
       const merged = {};
       const put = (key, g) => (merged[key] = merged[key] || []).push(g);
       const box = (key, w, h, d, x, y, z, ry) => { const g = new THREE.BoxGeometry(w, h, d); if (ry) g.rotateY(ry); g.translate(x + OX, y, z); put(key, g); return g; };
@@ -10220,7 +10310,11 @@ async function main() {
       const bz = hdC - 0.65;
       box('wood', hwC * 1.9, 0.92, 0.6, 0, 0.46, bz); box('top', hwC * 1.9 + 0.05, 0.05, 0.65, 0, 0.945, bz);
       solid(hwC * 1.9, 0.95, 0.6, 0, 0.47, bz);
-      const ST = _kit ? [
+      const ST = _ramen ? [
+        { name: 'stock pots', drinks: ['tonkotsu ramen', 'shoyu ramen'], x: -hwC * 0.45, col: 0xc0c6cc },
+        { name: 'noodle boiler', drinks: ['shoyu ramen', 'miso ramen'], x: 0, col: 0xc0c6cc },
+        { name: 'bowl station', drinks: ['miso ramen', 'tonkotsu ramen'], x: hwC * 0.45, col: 0x6a3a2a },
+      ] : _kit ? [
         { name: 'range', drinks: ['pasta', 'soup', 'burger'], x: -hwC * 0.45, col: 0xc0c6cc },
         { name: 'grill', drinks: ['steak', 'burger'], x: 0, col: 0x2a2a2a },
         { name: 'prep station', drinks: ['salad', 'burger'], x: hwC * 0.45, col: 0x9a6a3a },
@@ -10229,7 +10323,26 @@ async function main() {
         { name: 'milk steamer', drinks: ['latte', 'cappuccino'], x: 0, col: 0xd8dde2 },
         { name: 'kettle', drinks: ['tea'], x: hwC * 0.45, col: 0x9a6a3a },
       ];
-      if (_kit) {
+      if (_ramen) {
+        // the stock pots: two tall steel pots of cloudy broth over burners, a ladle hung in one
+        for (const [dx, r0] of [[-0.35, 0.26], [0.32, 0.22]]) { cyl('steel', r0, r0, 0.62, ST[0].x + dx, 1.26, bz, 28); cyl('broth', r0 - 0.02, r0 - 0.02, 0.01, ST[0].x + dx, 1.57, bz, 28);
+          cyl('dark', r0 + 0.04, r0 + 0.04, 0.04, ST[0].x + dx, 0.97, bz, 24); }
+        cyl('steel', 0.012, 0.012, 0.6, ST[0].x - 0.42, 1.55, bz - 0.05); cyl('steel', 0.06, 0.06, 0.05, ST[0].x - 0.42, 1.27, bz - 0.05);
+        // the noodle boiler: a steel tank, its water rolling, four baskets on their long handles
+        box('steel', 1.0, 0.36, 0.55, ST[1].x, 1.13, bz); box('water', 0.9, 0.01, 0.46, ST[1].x, 1.31, bz);
+        for (let q = 0; q < 4; q++) { const x = ST[1].x - 0.33 + q * 0.22; cyl('steel', 0.075, 0.07, 0.2, x, 1.28, bz - 0.04, 14); box('steel', 0.015, 0.015, 0.42, x, 1.42, bz - 0.3, 0); }
+        // the bowl station: stacked bowls, and trays of what goes on top
+        for (let q = 0; q < 3; q++) for (let k = 0; k < 4; k++) { const g = new THREE.CylinderGeometry(0.11, 0.07, 0.07, 18, 1, true); g.translate(ST[2].x + OX - 0.55 + q * 0.26, 1.0 + k * 0.05, bz + 0.12); put('bowl', g); }
+        box('steel', 0.9, 0.05, 0.32, ST[2].x + 0.2, 0.99, bz - 0.12);
+        for (let q = 0; q < 5; q++) { const x = ST[2].x + 0.2 - 0.36 + q * 0.18, z = bz - 0.12;
+          if (q < 2) for (let k = 0; k < 3; k++) { const g = new THREE.CylinderGeometry(0.045, 0.045, 0.012, 14); g.translate(x + OX - 0.03 + k * 0.03, 1.03 + k * 0.004, z); put('chashu', g); }
+          else if (q === 2) for (let k = 0; k < 3; k++) { const g = new THREE.SphereGeometry(0.03, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2); g.scale(1, 0.8, 1.3); g.translate(x + OX - 0.04 + k * 0.04, 1.02, z); put('egg', g); }
+          else if (q === 3) for (let k = 0; k < 14; k++) { const g = new THREE.CylinderGeometry(0.006, 0.006, 0.01, 6); g.translate(x + OX + (rngC() - 0.5) * 0.12, 1.025, z + (rngC() - 0.5) * 0.18); put('scallion', g); }
+          else for (let k = 0; k < 4; k++) box('nori', 0.1, 0.004, 0.14, x, 1.025 + k * 0.005, z); }
+        // the extraction hood over the pots, its steel catching the light
+        box('steel', 2.2, 0.5, 0.9, ST[0].x + 0.3, WH - 0.5, bz - 0.15);
+        window.__ramenSteam = [[ST[0].x - 0.35 + OX, 1.6, bz], [ST[0].x + 0.32 + OX, 1.6, bz], [ST[1].x + OX, 1.35, bz]];
+      } else if (_kit) {
         // the range: six burners, blue flames, a pan on three and a stock pot
         for (let q = 0; q < 6; q++) { const x = ST[0].x - 0.6 + (q % 3) * 0.6, z = bz - 0.15 + Math.floor(q / 3) * 0.3 - 0.15;
           cyl('dark', 0.13, 0.13, 0.03, x, 0.985, z, 20);
@@ -10276,8 +10389,12 @@ async function main() {
       // two columns of tables either side of a clear aisle from the door to the counter
       for (const a of [-1, 1]) for (let b = 0; b < 2; b++) {
         const tx = a * hwC * 0.6, tz = -hdC * 0.55 + b * hdC * 0.6;
-        cyl('wood', 0.42, 0.42, 0.04, tx, 0.74, tz, 24); cyl('dark', 0.035, 0.035, 0.72, tx, 0.37, tz, 8); cyl('dark', 0.22, 0.22, 0.02, tx, 0.01, tz, 16);
+        if (_ramen) { box('wood', 0.8, 0.05, 0.7, tx, 0.74, tz); box('dark', 0.06, 0.72, 0.06, tx, 0.37, tz); box('dark', 0.5, 0.03, 0.5, tx, 0.015, tz); }
+        else { cyl('wood', 0.42, 0.42, 0.04, tx, 0.74, tz, 24); cyl('dark', 0.035, 0.035, 0.72, tx, 0.37, tz, 8); cyl('dark', 0.22, 0.22, 0.02, tx, 0.01, tz, 16); }
         solid(0.84, 0.76, 0.84, tx, 0.38, tz);
+        if (_ramen) { for (const sx of [0.62, -0.62]) { cyl('chair', 0.17, 0.17, 0.05, tx + sx, 0.5, tz, 18); cyl('dark', 0.025, 0.03, 0.48, tx + sx, 0.24, tz, 8); }
+          if (rngC() < 0.7) { const g = new THREE.CylinderGeometry(0.11, 0.07, 0.07, 18); g.translate(tx + OX + 0.1, 0.8, tz - 0.05); put('bowl', g); }
+          tables.push([tx, tz]); continue; }
         for (const [cx2, cz2] of [[0.65, 0], [-0.65, 0]]) {
           box('chair', 0.4, 0.04, 0.4, tx + cx2, 0.46, tz + cz2); box('chair', 0.04, 0.42, 0.4, tx + cx2 * 1.27, 0.68, tz + cz2);
           for (const [lx, lz] of [[-0.17, -0.17], [0.17, -0.17], [-0.17, 0.17], [0.17, 0.17]]) box('dark', 0.03, 0.44, 0.03, tx + cx2 + lx, 0.22, tz + cz2 + lz);
@@ -10289,10 +10406,12 @@ async function main() {
       for (let q = 0; q < 4; q++) {
         const lx = (q - 1.5) * hwC * 0.45, lz = q % 2 ? -hdC * 0.25 : cz - 1.2;
         cyl('dark', 0.006, 0.006, 1.0, lx, WH - 0.5, lz, 4);
-        const sh = new THREE.ConeGeometry(0.22, 0.22, 18, 1, true); sh.translate(lx + OX, WH - 1.1, lz); put('shade', sh);
-        const bulb = new THREE.SphereGeometry(0.06, 10, 8); bulb.translate(lx + OX, WH - 1.18, lz); put('bulb', bulb);
+        if (_ramen) { const ln = new THREE.SphereGeometry(0.2, 18, 12); ln.scale(1, 1.25, 1); ln.translate(lx + OX, WH - 0.85, lz); put('lantern', ln);
+          for (const dy of [0.25, -0.25]) { const rim = new THREE.CylinderGeometry(0.1, 0.1, 0.04, 14); rim.translate(lx + OX, WH - 0.85 + dy, lz); put('dark', rim); } }
+        else { const sh = new THREE.ConeGeometry(0.22, 0.22, 18, 1, true); sh.translate(lx + OX, WH - 1.1, lz); put('shade', sh);
+        const bulb = new THREE.SphereGeometry(0.06, 10, 8); bulb.translate(lx + OX, WH - 1.18, lz); put('bulb', bulb); }
       }
-      for (const [px, pz] of [[-hwC + 0.6, -hdC + 0.8], [hwC - 0.6, -hdC + 0.8], [hwC - 0.6, 0]]) {
+      for (const [px, pz] of (_ramen ? [] : [[-hwC + 0.6, -hdC + 0.8], [hwC - 0.6, -hdC + 0.8], [hwC - 0.6, 0]])) {
         cyl('pot', 0.25, 0.2, 0.45, px, 0.23, pz);
         for (let q = 0; q < 28; q++) {
           const g = new THREE.SphereGeometry(1, 5, 3).scale(0.12, 0.02, 0.05);
@@ -10308,6 +10427,14 @@ async function main() {
       mx.font = '48px "Comic Sans MS", cursive'; mx.textAlign = 'left';
       (_kit ? [['Pasta', '14'], ['Steak', '24'], ['Burger', '16'], ['Salad', '11'], ['Soup', '9']] : [['Espresso', '2.50'], ['Latte', '3.40'], ['Cappuccino', '3.20'], ['Tea', '2.20']]).forEach(([n, pr], k) => {
         mx.fillText(n, 120, (_kit ? 175 : 190) + k * (_kit ? 66 : 78)); mx.textAlign = 'right'; mx.fillText(pr, 900, (_kit ? 175 : 190) + k * (_kit ? 66 : 78)); mx.textAlign = 'left'; });
+      if (_ramen) {
+        mx.fillStyle = '#3a2618'; mx.fillRect(0, 0, 1024, 512);
+        [['SHOYU', '880'], ['MISO', '950'], ['TONKOTSU', '980'], ['SHIO', '850'], ['GYOZA', '450'], ['BEER', '600']].forEach(([n, pr], k) => {
+          const x0 = 40 + k * 160; mx.fillStyle = '#e9dcc0'; mx.fillRect(x0, 40, 130, 430); mx.strokeStyle = '#2a1a10'; mx.lineWidth = 4; mx.strokeRect(x0, 40, 130, 430);
+          mx.fillStyle = '#1e140c'; mx.font = 'bold 44px Georgia, serif'; mx.textAlign = 'center';
+          n.split('').forEach((ch, j) => mx.fillText(ch, x0 + 65, 100 + j * (330 / Math.max(5, n.length))));
+          mx.fillStyle = '#a8281a'; mx.font = 'bold 34px Georgia, serif'; mx.fillText('\u00a5' + pr, x0 + 65, 455); });
+      }
       const mt = new THREE.CanvasTexture(mc); mt.colorSpace = THREE.SRGBColorSpace;
       const menu = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 1.2), new THREE.MeshStandardMaterial({ map: mt, roughness: 0.9 }));
       menu.material.userData.noAutoTex = true;
@@ -10329,9 +10456,14 @@ async function main() {
         pan: S({ color: 0x3a3c40, roughness: 0.35, metalness: 0.8 }), sauce: S({ color: 0xa8281a, roughness: 0.4 }), pasta: S({ color: 0xe8c56a, roughness: 0.6 }),
         soup: S({ color: 0xc87a2a, roughness: 0.2 }), meat: S({ color: 0x6a2a18, roughness: 0.7 }), tomato: S({ color: 0xc8261e, roughness: 0.35 }),
         board: S({ map: itex('planks', 1, 1), color: 0xc89a6a, roughness: 0.7 }),
+        broth: S({ color: 0xd8c49a, roughness: 0.15 }), water: S({ color: 0xc8d4d4, roughness: 0.05, metalness: 0.1, transparent: true, opacity: 0.8 }),
+        bowl: S({ color: 0x2a1a14, roughness: 0.25, side: THREE.DoubleSide }), chashu: S({ color: 0xc89078, roughness: 0.6 }), egg: S({ color: 0xe8a63a, roughness: 0.4 }),
+        scallion: S({ color: 0x5aa83a, roughness: 0.6 }), nori: S({ color: 0x1a2418, roughness: 0.7 }),
+        lantern: S({ color: 0xc8301e, emissive: 0xff5a2a, emissiveIntensity: 1.1, roughness: 0.8 }),
       };
       for (const k of ['flame', 'ember', 'heat']) MATS[k].userData.noAutoTex = true;
-      if (_kit) { MATS.wood = MATS.steel; MATS.top = S({ color: 0xd8dde2, roughness: 0.2, metalness: 0.85 }); }   // a kitchen's benches are stainless
+      if (_ramen) { MATS.wood = S({ map: itex('planks', 2, 1), color: 0xd8b888, roughness: 0.55 }); MATS.top = S({ map: itex('planks', 3, 1), color: 0xe8d0a8, roughness: 0.45 }); }   // pale hinoki, scrubbed
+      else if (_kit) { MATS.wood = MATS.steel; MATS.top = S({ color: 0xd8dde2, roughness: 0.2, metalness: 0.85 }); }   // a kitchen's benches are stainless
       MATS.bulb.userData.noAutoTex = true;
       for (const k in merged) {
         const m = new THREE.Mesh(mergeGeometries(merged[k], false), MATS[k]);
@@ -10382,7 +10514,31 @@ async function main() {
         scene.add(sp);
       }
       fmat.map = itex('planks', bx / 2.5, bz / 2.5); fmat.color.setHex(0xb07a50); fmat.roughness = 0.55; fmat.needsUpdate = true;
-      if (_kit) {
+      if (_ramen) {
+        const sc = document.createElement('canvas'); sc.width = 256; sc.height = 256; const sg = sc.getContext('2d'); const rr = mulberry32(7404);
+        sg.fillStyle = '#2a1a10'; sg.fillRect(0, 0, 256, 256);
+        for (let k = 0; k < 16; k++) { const l = 70 + Math.floor(rr() * 30); sg.fillStyle = `rgb(${l + 26},${l},${l - 22})`; sg.fillRect(k * 16 + 2, 0, 12, 256);
+          for (let j = 0; j < 30; j++) { sg.fillStyle = `rgba(30,18,10,${0.1 + rr() * 0.15})`; sg.fillRect(k * 16 + 2 + rr() * 12, rr() * 256, 1, 10 + rr() * 40); } }
+        const st2 = new THREE.CanvasTexture(sc); st2.wrapS = st2.wrapT = THREE.RepeatWrapping; st2.colorSpace = THREE.SRGBColorSpace; st2.repeat.set(8, 1.5);
+        wmat.map = st2; wmat.color.setHex(0xffffff); wmat.roughness = 0.7; wmat.needsUpdate = true;
+        const cb = st2.clone(); cb.repeat.set(bx / 2, 1); cb.needsUpdate = true;
+        cmatI.map = cb; cmatI.color.setHex(0x8a7a6a); cmatI.userData.noAutoTex = true; cmatI.needsUpdate = true;   // dark boards overhead (left bare, the auto-texturer laid rock on it)
+        { const fc = document.createElement('canvas'); fc.width = fc.height = 256; const fg = fc.getContext('2d'), rf = mulberry32(7505);
+          fg.fillStyle = '#1c1c1c'; fg.fillRect(0, 0, 256, 256);
+          for (let r = 0; r < 4; r++) for (let c = 0; c < 4; c++) { const l = 52 + Math.floor(rf() * 18); fg.fillStyle = `rgb(${l},${l},${l + 4})`; fg.fillRect(c * 64 + 2, r * 64 + 2, 60, 60);
+            for (let k = 0; k < 40; k++) { fg.fillStyle = `rgba(${rf() < 0.5 ? '0,0,0' : '255,255,255'},0.05)`; fg.fillRect(c * 64 + 2 + rf() * 58, r * 64 + 2 + rf() * 58, 3, 3); } }
+          const ft = new THREE.CanvasTexture(fc); ft.wrapS = ft.wrapT = THREE.RepeatWrapping; ft.colorSpace = THREE.SRGBColorSpace; ft.repeat.set(bx / 1.2, bz / 1.2);
+          fmat.map = ft; fmat.color.setHex(0xffffff); fmat.roughness = 0.35; fmat.userData.noAutoTex = true; fmat.needsUpdate = true; }   // dark slate tiles, wiped glossy
+        // the noren: indigo cloth split in three over the door, a white mark on it
+        const nc = document.createElement('canvas'); nc.width = 512; nc.height = 256; const ng = nc.getContext('2d');
+        ng.fillStyle = '#1e2a4a'; ng.fillRect(0, 0, 512, 256); ng.fillStyle = '#f2ece0'; ng.beginPath(); ng.arc(256, 128, 70, 0, Math.PI * 2); ng.lineWidth = 16; ng.strokeStyle = '#f2ece0'; ng.stroke();
+        ng.font = 'bold 72px Georgia, serif'; ng.textAlign = 'center'; ng.textBaseline = 'middle'; ng.fillText('\u9eba', 256, 132);
+        const nt = new THREE.CanvasTexture(nc); nt.colorSpace = THREE.SRGBColorSpace;
+        for (let q = 0; q < 3; q++) { const pg = new THREE.PlaneGeometry(0.62, 0.9); const uvA = pg.attributes.uv; for (let i = 0; i < uvA.count; i++) uvA.setX(i, (q + uvA.getX(i)) / 3);
+          const pn = new THREE.Mesh(pg, new THREE.MeshStandardMaterial({ map: nt, roughness: 0.95, side: THREE.DoubleSide })); pn.material.userData.noAutoTex = true;
+          pn.position.set(OX - 0.64 + q * 0.64, 2.2, -hdC + WT / 2 + 0.25); pn.rotation.x = 0.05 * (q - 1); scene.add(pn); }
+        const warmL = new THREE.PointLight(0xffa860, 5, 9, 1.6); warmL.position.set(OX + ST[0].x, 1.8, bz - 0.6); scene.add(warmL);
+      } else if (_kit) {
         // white tile to the ceiling, a quarry-tiled floor, and the line lit hot
         const tc = document.createElement('canvas'); tc.width = tc.height = 256; const tg = tc.getContext('2d');
         tg.fillStyle = '#bdb8ae'; tg.fillRect(0, 0, 256, 256);
@@ -12686,9 +12842,11 @@ async function main() {
       if (o.kind === 'repair' && /\b(trees?|pines?|oaks?|logs?|timber)\b/.test(String(o.label || ''))) return `Chop down ${o.count} ${o.label}. Hold E at each marked trunk`;
       if (o.kind === 'repair' && /\bhives?\b/.test(String(o.label || ''))) return /\bhoney/.test(String(SPEC.prompt || '').toLowerCase()) ? `Take the honey from ${o.count} ${o.label}. Hold E at each one` : `Check ${o.count} ${o.label}. Hold E at each one`;
       if (o.kind === 'repair' && /\b(thirsty|wilting|dry)\b/.test(String(o.label || ''))) return `Water ${o.count} ${o.label}. Hold E at each tray`;
+      if (o.kind === 'repair' && /\b(crowds?|audiences?|listeners?|passers-?by)\b/.test(String(o.label || ''))) return `Play for ${o.count} ${o.label}. Hold E at each pitch`;
       if (o.kind === 'repair') return /fire|flame|blaze|burn/.test(String(o.label || '')) ? `Put out ${o.count} ${o.label}. Hold E to spray each one`
         : /package|parcel|deliver|letter|mail|pizza|crate|box|supplies|medicine|food|meal|bread|loa(?:f|ves)|pies?|cakes?|buns|hot ?dogs?|hotdogs?|sandwich\w*|burgers?|tacos?|noodles?|dumplings?|kebabs?|pretzels?|pastr|cookies|groceries|flowers|bouquets?|milk|newspapers?|papers|presents|gifts|cheese|eggs|soup|cocoa|coffee|potions?|scrolls?/.test(String(o.label || '')) ? `Deliver ${o.count} ${o.label}. Hold E over each pad to drop one`
         : `Fix ${o.count} ${o.label || 'broken panels'}. Hold E at each one`;
+      if (CATTREE) return `Bring ${o.label || 'the cat'} down from the oak. Get to the foot of the ladder`;
       if (window.__ladder) return `Bring ${o.label || 'them'} down from the burning window. Stand in the ladder's basket and press E`;
       return `Reach the ${o.label || 'beacon'}`;
     });
@@ -13180,6 +13338,11 @@ async function main() {
     if (_alone && ent.behavior !== 'hostile') continue;
     try {
       const gltf = await loadGLB(ent.asset);
+      // (2026-10-25) A CARD IS NOT A PLANT: "a monarch butterfly migrating across a field of milkweed" scattered
+      // black slabs with a flower photo on them through the meadow, a generated "milkweed" that came out as a
+      // flat picture. A model a thirtieth as thick as it is wide is a failed generation, not a thing to place
+      { const bb0 = new THREE.Box3().setFromObject(gltf.scene), sz0 = bb0.getSize(new THREE.Vector3()), mx = Math.max(sz0.x, sz0.y, sz0.z), mn = Math.min(sz0.x, sz0.y, sz0.z);
+        if (mx > 0 && mn / mx < 0.035 && !gltf.animations.length && !/\b(signs?|posters?|paintings?|pictures?|rugs?|carpets?|mats?|flags?|banners?|maps?|letters?|notes?|cards?|papers?|mirrors?|windows?|doors?|screens?|boards?|tapestr\w*|curtains?|sheets?|tiles?)\b/i.test(ent.name || '')) { console.warn('[game] flat card left out:', ent.name); (window.__flatCards = window.__flatCards || []).push(ent.name); continue; } }
       const hostile = ent.behavior === 'hostile';
       const hasAnims = !!(gltf.animations && gltf.animations.length);
       const baseN = ent.count || 1;
@@ -13383,6 +13546,11 @@ async function main() {
           holder.position.set(LVL.goal[0] - PITCH.ux * 1.2, 0, LVL.goal[1] - PITCH.uz * 1.2);
           holder.position.y = hAt(holder.position.x, holder.position.z);
           startYaw = Math.atan2(-PITCH.ux, -PITCH.uz);
+        } else if (CATTREE && !CATTREE.cat && /\b(cats?|kittens?|kitty)\b/i.test(ent.name || '')) {
+          // up the oak, on its limb, looking down at whoever comes with the ladder
+          holder.position.copy(CATTREE.catAt());
+          startYaw = Math.atan2(CATTREE.nx, CATTREE.nz);
+          CATTREE.cat = holder;
         } else if (window.__ladder && !window.__ladder.cat && ent.behavior === 'static' && (SPEC.objectives || []).some(o => o.kind === 'reach'
                    && new RegExp('\\b' + String(ent.name || '').toLowerCase() + '\\b').test(String(o.label || '').toLowerCase()))) {
           // the one to be rescued waits on the sill of the burning window, looking down at the street (2026-10-24)
@@ -14966,6 +15134,45 @@ async function main() {
     }
     if (ticks.length) window.__lifeTick = (dt) => { const t = performance.now() / 1000; for (const f of ticks) f(Math.min(dt, 0.05), t); };
     window.__life = kinds;
+  }
+  // ── THE OAK WITH THE CAT IN IT, BUILT (see CATTREE above) ───────────────
+  if (CATTREE) {
+    const C = CATTREE, MAT = (o) => { const m = new THREE.MeshStandardMaterial(o); m.userData.noAutoTex = true; return m; }, rT = mulberry32((SPEC.seed || 1) + 4646);
+    const gy = hAt(C.x, C.z), G = new THREE.Group(); G.position.set(C.x, gy, C.z); scene.add(G);
+    // the bark: a furrowed grey-brown, by vertex
+    const barkG = (r0, r1, h, seg) => { const g = new THREE.CylinderGeometry(r1, r0, h, seg || 14, 8, false); g.translate(0, h / 2, 0);
+      const pa = g.attributes.position, col = new Float32Array(pa.count * 3);
+      for (let i = 0; i < pa.count; i++) { const x = pa.getX(i), y = pa.getY(i), z = pa.getZ(i), a = Math.atan2(z, x), f = Math.abs(Math.sin(a * 9 + y * 1.3)) ** 2;
+        const k = 1 - 0.06 * f; pa.setX(i, x * k); pa.setZ(i, z * k); const l = 0.16 + 0.06 * (1 - f) + rT() * 0.02; col[i * 3] = l * 1.05; col[i * 3 + 1] = l; col[i * 3 + 2] = l * 0.86; }
+      g.setAttribute('color', new THREE.BufferAttribute(col, 3)); g.computeVertexNormals(); return g; };
+    const barkM = MAT({ vertexColors: true, roughness: 0.95 });
+    const add = (g, m, x, y, z, rx, ry, rz) => { const o = new THREE.Mesh(g, m); o.position.set(x, y, z); o.rotation.set(rx || 0, ry || 0, rz || 0); o.castShadow = o.receiveShadow = true; G.add(o); return o; };
+    const catP = C.catAt();
+    try {
+      const w9 = [SPEC.prompt, SPEC.world && SPEC.world.name].filter(Boolean).join(' ');
+      const gv = __FLORA.growVariants({ kinds: ['broadleaf'], leaf: __FLORA.leafFor(w9), seed: ((SPEC.seed || 1) * 37 + 11) >>> 0, perKind: 1 });
+      const v = gv.variants[0], tr = new THREE.Group(); tr.scale.setScalar(1.4); tr.rotation.y = rT() * 6.28; G.add(tr);   // grown tall, the crown over the cat's limb so the cat is seen
+      const bm = new THREE.Mesh(v.bark, v.mats.bark); bm.castShadow = bm.receiveShadow = true; tr.add(bm);
+      if (v.leaf && v.mats.leaf) { const lm = new THREE.Mesh(v.leaf, v.mats.leaf); lm.castShadow = true; tr.add(lm); }
+      // the cat's limb, in the oak's own bark, reaching out over the lawn
+      const toCat = new THREE.Vector3(catP.x - C.x, catP.y - gy - 3.4, catP.z - C.z), Lc = toCat.length();
+      const lg = barkG(0.22, 0.1, Lc + 0.9, 10);
+      const limb = new THREE.Mesh(lg, barkM); limb.position.set(0, 3.4, 0); limb.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), toCat.clone().normalize()); limb.castShadow = true; G.add(limb);
+    } catch (e) { console.warn('[game] cat tree: ' + e.message); add(barkG(0.62, 0.42, 6, 18), barkM, 0, 0, 0); }
+    // the ladder: aluminium, leaned from the lawn against the trunk under the cat's limb
+    { const foot = new THREE.Vector3(C.nx * 2.2 - C.nz * 0.9, 0, C.nz * 2.2 + C.nx * 0.9), top = new THREE.Vector3(catP.x - C.x - C.nx * 0.3, 4.6, catP.z - C.z - C.nz * 0.3);
+      const dir = top.clone().sub(foot), L = dir.length(), q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.clone().normalize());
+      const side = new THREE.Vector3(-dir.z, 0, dir.x).normalize().multiplyScalar(0.22), alu = MAT({ color: 0xc8ccd0, roughness: 0.3, metalness: 0.85 });
+      for (const sg of [1, -1]) { const r = new THREE.Mesh(new THREE.BoxGeometry(0.05, L, 0.07), alu); r.position.copy(foot).addScaledVector(dir, 0.5).addScaledVector(side, sg); r.quaternion.copy(q); r.castShadow = true; G.add(r); }
+      for (let k = 1; k < Math.floor(L / 0.3); k++) { const r = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.44, 8), alu); r.position.copy(foot).addScaledVector(dir, k * 0.3 / L);
+        r.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), side.clone().normalize()); G.add(r); } }
+    world.createCollider(RAPIER.ColliderDesc.cylinder(2.3, 0.55).setTranslation(C.x, gy + 2.3, C.z));
+    window.__catTree = { at: [C.x, C.z], catAt: [catP.x, catP.y, catP.z] };
+    // when the firefighter is at the ladder's foot, the cat comes down the ladder into their arms
+    window.__catTreeTick = (dt) => { if (!C.cat) return; const pp = playerObj.position, d = Math.hypot(pp.x - LVL.goal[0], pp.z - LVL.goal[1]);
+      if (d < 2.6 || C.down > 0) { C.down = Math.min(1, C.down + dt / 1.6); const k = C.down * C.down * (3 - 2 * C.down);
+        const dst = new THREE.Vector3(pp.x, pp.y + 1.1, pp.z); C.cat.position.lerpVectors(catP, dst, k); }
+      else C.cat.position.copy(catP); };   // it keeps to its limb till someone comes (the NPC step would put it on the ground)
   }
   // ── THE HENHOUSE, BUILT (see COOP above) ────────────────────────────────
   if (COOP) {
@@ -21822,6 +22029,8 @@ async function main() {
         : `${n} ${l} to deliver. Each one is left on a bench under a lit lantern; stand at it and hold E to leave one.`;
     if (st.kind === 'repair' && /\b(bridges?|footbridges?|crossings?)\b/.test(String(l)))
       return `${n} ${l} to mend. Each has a gap where planks have gone into the stream; stand at it and hold E to lay them back.`;
+    if (st.kind === 'repair' && /\b(crowds?|audiences?|listeners?|passers-?by)\b/.test(String(l)))
+      return `${n} pitches round the square, each with its open case. Stand at one and hold E to play until the passers-by stop to listen.`;
     if (st.kind === 'repair' && /\b(thirsty|wilting|dry)\b/.test(String(l)))
       return `${n} trays of ${String(l).replace(/^(thirsty|wilting|dry)\s+/, '')} are wilting. Find each one, stand at it and hold E to water it until the leaves stand up green.`;
     if (st.kind === 'repair') return /fire|flame|blaze|burn/.test(String(l))
@@ -21870,10 +22079,12 @@ async function main() {
     if (st.kind === 'repair' && /\b(trees?|pines?|oaks?|logs?|timber)\b/.test(String(st.label || ''))) return `Chop down ${st.count} ${st.label}`;
     if (st.kind === 'repair' && /\bhives?\b/.test(String(st.label || ''))) return (/\bhoney/.test(String(SPEC.prompt || '').toLowerCase()) ? 'Honey from ' : 'Check ') + `${st.count} ${st.label}`;
     if (st.kind === 'repair' && /\b(thirsty|wilting|dry)\b/.test(String(st.label || ''))) return `Water ${st.count} ${st.label}`;
+    if (st.kind === 'repair' && /\b(crowds?|audiences?|listeners?|passers-?by)\b/.test(String(st.label || ''))) return `Play for ${st.count} ${st.label}`;
     if (st.kind === 'repair' && /\b(hikers?|climbers?|skiers?|campers?|people|children|kids?|survivors?|villagers?|explorers?|walkers?|tourists?|scouts?|lost)\b/.test(String(st.label || ''))) return `Find ${st.count} ${st.label}`;
     if (st.kind === 'repair') return /fire|flame|blaze|burn/.test(String(st.label || '')) ? `Put out ${st.count} ${st.label}`
       : /package|parcel|deliver|letter|mail|pizza|crate|box|supplies|medicine|food|meal|bread|loa(?:f|ves)|pies?|cakes?|buns|hot ?dogs?|hotdogs?|sandwich\w*|burgers?|tacos?|noodles?|dumplings?|kebabs?|pretzels?|pastr|cookies|groceries|flowers|bouquets?|milk|newspapers?|papers|presents|gifts|cheese|eggs|soup|cocoa|coffee|potions?|scrolls?/.test(String(st.label || '')) ? `Deliver ${st.count} ${st.label}`
       : `Fix ${st.count} ${st.label || 'broken panels'}`;
+    if (CATTREE) return `Bring ${st.label || 'the cat'} down from the oak`;   // (2026-10-25) the cat up the tree
     if (window.__ladder) return `Bring ${st.label || 'them'} down from the burning window`;   // the tower ladder's rescue (2026-10-24)
     return `Reach ${st.label || 'the beacon'}`;
   }
@@ -25730,6 +25941,9 @@ async function main() {
     }
     if (window.__ladder && (window.__ladder._tgt || window.__ladder.nearNow)) { best = null; bt = null; }   // in the tower ladder's basket, or about to be
     if (window.__tightrope) { best = null; bt = null; }   // (2026-10-25) a hundred metres above the street, no car is in reach
+    // (2026-10-25) a car is stolen only in a story of crime or a chase: a violinist in a Prague square, a firefighter,
+    // a baker were offered "E: steal car" over their own job's E
+    if (bt && !/\b(steal\w*|thie(?:f|ves)|heists?|gangs?\w*|cops?|police|getaway|carjack\w*|crime|criminals?|robbers?|robber(?:y|ies)|outlaws?|chases?|escap\w*|fugitives?|drive|driving|driver|cars?)\b/.test(String(SPEC.prompt || '').toLowerCase())) bt = null;
     nearCar = best;
     window.__nearTraffic = bt;
     carPrompt.style.display = (best || bt) ? 'block' : 'none';
@@ -27390,12 +27604,18 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
       const HIVE = !FIRE && !DELIVER && !CHOP && /\b(?:bee)?hives?\b/.test(String(_rpS.label || '').toLowerCase()) && !INTERIOR;
       // (2026-10-25) a robot gardener waters thirsty plants: a tray of wilting seedlings that stand up green as you water them
       const THIRST = !FIRE && !DELIVER && /\b(thirsty|wilting|dry)\b/.test(String(_rpS.label || '').toLowerCase());
-      const FIND = !FIRE && !DELIVER && !CHOP && !HIVE && !THIRST && /\b(hikers?|climbers?|skiers?|campers?|people|persons?|children|kids?|survivors?|villagers?|explorers?|walkers?|travell?ers?|tourists?|scouts?|lost)\b/.test(String(_rpS.label || '').toLowerCase());
+      // (2026-10-25) a street musician plays for the passers-by: an open case at each pitch, coins landing in it as you play
+      const BUSK = !FIRE && !DELIVER && /\b(crowds?|audiences?|listeners?|passers-?by|tips)\b/.test(String(_rpS.label || '').toLowerCase());
+      const FIND = !FIRE && !DELIVER && !CHOP && !HIVE && !THIRST && !BUSK && /\b(hikers?|climbers?|skiers?|campers?|people|persons?|children|kids?|survivors?|villagers?|explorers?|walkers?|travell?ers?|tourists?|scouts?|lost)\b/.test(String(_rpS.label || '').toLowerCase());
       if (POST && VILLAGE) {
         // a letterbox by each cottage's gate, out at the lane side of its front
         const cs = VILLAGE.cot.slice().sort((a, b) => Math.hypot(a.x, a.z) - Math.hypot(b.x, b.z));
         for (let k = 0; k < N && k < cs.length; k++) { const c = cs[Math.floor(k * cs.length / N)], [x, z] = VILLAGE.loc(c, c.w * 0.32, c.d / 2 + 2.2);
           spots.push([x, hAt(x, z), z, c.ry, false, c, true]); }
+      } else if (BUSK && !INTERIOR) {
+        // the pitches: round the square at the heart of the town, a little apart, each facing in
+        for (let k = 0; k < N; k++) { const a = k / N * Math.PI * 2 + 0.6 + rngR() * 0.4, d = 9 + rngR() * 6, x = Math.cos(a) * d, z = Math.sin(a) * d;
+          spots.push([x, hAt(x, z), z, Math.atan2(-x, -z), false, null, true]); }
       } else if (FIND && !INTERIOR) {
         // spread up the slopes, away from the start and from each other
         for (let k = 0; k < N; k++) { let x = 0, z = 0;
@@ -27494,6 +27714,28 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
           g2.userData.fsTag = { type: 'objective', name: 'beehive', detail: 'hold E to check it' };
           world.createCollider(RAPIER.ColliderDesc.cuboid(0.3, 0.45, 0.33).setTranslation(x, y + 0.45, z));
           panels.push({ g: g2, pad: g2.userData.pad, hive: true, fixed: false, p: 0, x: x + Math.sin(ry) * 0.95, z: z + Math.cos(ry) * 0.95, ry });
+          continue;
+        }
+        if (BUSK) {
+          // a pitch: the open case on the cobbles, its red velvet lining, a hat beside it; coins land as you play
+          const g2 = new THREE.Group(); g2.position.set(x, y, z); g2.rotation.y = ry; scene.add(g2);
+          const M2 = (o) => { const m = new THREE.MeshStandardMaterial(o); m.userData.noAutoTex = true; return m; };
+          const caseM = M2({ color: 0x2a1c14, roughness: 0.5 }), velvet = M2({ color: 0x7a1422, roughness: 0.95 }), brass = M2({ color: 0xc9a24a, metalness: 0.9, roughness: 0.3 });
+          const base = new THREE.Mesh(new THREE.BoxGeometry(0.78, 0.09, 0.3), caseM); base.position.set(0, 0.045, 0.55); g2.add(base);
+          const lin = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.02, 0.24), velvet); lin.position.set(0, 0.09, 0.55); g2.add(lin);
+          const lid = new THREE.Mesh(new THREE.BoxGeometry(0.78, 0.3, 0.05), caseM); lid.position.set(0, 0.2, 0.7); lid.rotation.x = -0.3; g2.add(lid);
+          const hat = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.14, 0.1, 18, 1, true), M2({ color: 0x1c1c22, roughness: 0.8, side: THREE.DoubleSide })); hat.position.set(0.6, 0.06, 0.45); g2.add(hat);
+          const brim = new THREE.Mesh(new THREE.RingGeometry(0.13, 0.22, 24), M2({ color: 0x1c1c22, roughness: 0.8, side: THREE.DoubleSide })); brim.rotation.x = -Math.PI / 2; brim.position.set(0.6, 0.012, 0.45); g2.add(brim);
+          const coins = []; for (let k = 0; k < 10; k++) { const c2 = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.006, 12), brass); c2.position.set(-0.28 + Math.random() * 0.56, 0.104, 0.47 + Math.random() * 0.16); c2.rotation.z = (Math.random() - 0.5) * 0.4; c2.visible = false; g2.add(c2); coins.push(c2); }
+          const noteT = window.__noteTex || (window.__noteTex = (() => { const c = document.createElement('canvas'); c.width = c.height = 64; const x2 = c.getContext('2d');
+            x2.fillStyle = '#fff6dc'; x2.font = 'bold 50px serif'; x2.textAlign = 'center'; x2.textBaseline = 'middle'; x2.fillText('\u266A', 32, 34); return new THREE.CanvasTexture(c); })());
+          const notes = []; for (let k = 0; k < 5; k++) { const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: noteT, transparent: true, depthWrite: false, opacity: 0 })); sp.scale.setScalar(0.32); scene.add(sp); notes.push({ sp, t: k / 5 }); }
+          const busk = { tick: (p, held, dt2) => { const n = Math.floor(Math.min(1, p) * coins.length); coins.forEach((c3, k) => { c3.visible = k < n; });
+            for (const nt of notes) { if (!held) { nt.sp.material.opacity = Math.max(0, nt.sp.material.opacity - (dt2 || 0.016) * 2); continue; }
+              nt.t = (nt.t + (dt2 || 0.016) * 0.45) % 1; const pp2 = playerObj.position;
+              nt.sp.position.set(pp2.x + Math.sin(nt.t * 9 + nt.sp.id) * 0.35, pp2.y + 1.6 + nt.t * 1.6, pp2.z + Math.cos(nt.t * 7 + nt.sp.id) * 0.35); nt.sp.material.opacity = Math.sin(nt.t * Math.PI) * 0.9; } } };
+          g2.userData.fsTag = { type: 'objective', name: 'a pitch to play', detail: 'hold E to play for the passers-by' };
+          panels.push({ g: g2, busk, fixed: false, p: 0, x: x + Math.sin(ry) * 0.2, z: z + Math.cos(ry) * 0.2, ry });
           continue;
         }
         if (THIRST) {
@@ -27616,9 +27858,11 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
         near.p = held ? Math.min(1, near.p + dt / (near.find ? 0.5 : near.hive ? 1.8 : near.fire ? 2.4 : near.chop ? 2.2 : near.pad ? 1.0 : 1.6)) : Math.max(0, near.p - dt * 0.6);
         if (near.chop) { near.chop.tick(dt, held); if (held && Math.floor(near.p * 6) !== near._k) { near._k = Math.floor(near.p * 6); try { sfx('hit'); } catch (e) {} } }
         if (near.thirst) near.thirst.tick(near.p);
+        for (const q of panels) if (q.busk) q.busk.tick(q.p, q === near && held, dt);
         if (near.bridge) { near.bridge.tick(near.p); if (held && Math.floor(near.p * 5) !== near._k) { near._k = Math.floor(near.p * 5); try { sfx('hit'); } catch (e) {} } }
         document.getElementById('fsrpT').textContent = near.find ? (held ? 'Found them\u2026' : 'Get to them')
           : near.thirst ? (held ? 'Watering\u2026' : 'Hold E to water them')
+          : near.busk ? (held ? 'Playing\u2026 a crowd is gathering' : 'Hold E to play')
           : near.bridge ? (held ? 'Laying planks\u2026' : 'Hold E to mend the bridge')
           : near.chop ? (held ? 'Chopping\u2026' : 'Hold E to chop it down')
           : near.hive ? (/\bhoney/.test(String(SPEC.prompt || '').toLowerCase()) ? (held ? 'Lifting out the comb\u2026' : 'Hold E to take the honey') : (held ? 'Checking the hive\u2026' : 'Hold E to check the hive'))
@@ -27640,15 +27884,16 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
           else if (near.pad) near.pad.done();
           else if (near.bridge) near.bridge.tick(1);
           else if (near.thirst) near.thirst.tick(1);
+          else if (near.busk) near.busk.tick(1, false, 0);
           else { near.scr.material.emissive.setHex(0x2aff7a); near.scr.material.emissiveIntensity = 1.3; near.spark.visible = false; }
-          popText(near.thirst ? (fixed >= st.count ? 'Every plant is watered!' : 'Watered!') : near.find ? (fixed >= st.count ? 'Everyone is found!' : 'Found!') : near.bridge ? (fixed >= st.count ? 'Every bridge is whole!' : 'The bridge holds!') : near.chop ? (fixed >= st.count ? 'Every tree is down!' : 'Timber!') : near.hive ? (/\bhoney/.test(String(SPEC.prompt || '').toLowerCase()) ? (fixed >= st.count ? 'Every jar is full!' : 'A frame of honey!') : (fixed >= st.count ? 'Every hive checked!' : 'Hive checked!')) : near.post ? (fixed >= st.count ? 'Every letter posted!' : 'Posted!') : near.fire ? (fixed >= st.count ? 'Every fire is out!' : 'Fire out!') : near.pad ? (fixed >= st.count ? 'Every delivery made!' : 'Delivered!') : (fixed >= st.count ? 'All fixed!' : 'Fixed!'), '#7fe08a'); sfx('pickup');
+          popText(near.busk ? (fixed >= st.count ? 'Every corner of the town has heard you play!' : 'They clap, and the coins ring in the case!') : near.thirst ? (fixed >= st.count ? 'Every plant is watered!' : 'Watered!') : near.find ? (fixed >= st.count ? 'Everyone is found!' : 'Found!') : near.bridge ? (fixed >= st.count ? 'Every bridge is whole!' : 'The bridge holds!') : near.chop ? (fixed >= st.count ? 'Every tree is down!' : 'Timber!') : near.hive ? (/\bhoney/.test(String(SPEC.prompt || '').toLowerCase()) ? (fixed >= st.count ? 'Every jar is full!' : 'A frame of honey!') : (fixed >= st.count ? 'Every hive checked!' : 'Hive checked!')) : near.post ? (fixed >= st.count ? 'Every letter posted!' : 'Posted!') : near.fire ? (fixed >= st.count ? 'Every fire is out!' : 'Fire out!') : near.pad ? (fixed >= st.count ? 'Every delivery made!' : 'Delivered!') : (fixed >= st.count ? 'All fixed!' : 'Fixed!'), '#7fe08a'); sfx('pickup');
           try { burst(near.g.position, 0x7fe08a); } catch (e) {}
           renderQuest(); bar.style.display = 'none';
           if (fixed >= st.count) advanceStep();
         }
       };
       const hintR = document.querySelector('#hud .hint');
-      if (hintR && !FIND) hintR.textContent += BRIDGE ? ' \u00b7 hold E to mend' : CHOP ? ' \u00b7 hold E to chop' : HIVE ? ' \u00b7 hold E to check' : THIRST ? ' \u00b7 hold E to water' : POST ? ' \u00b7 hold E to post' : FIRE ? ' \u00b7 hold E to spray' : DELIVER ? ' \u00b7 hold E to drop' : ' \u00b7 hold E to repair';
+      if (hintR && !FIND) hintR.textContent += BRIDGE ? ' \u00b7 hold E to mend' : CHOP ? ' \u00b7 hold E to chop' : HIVE ? ' \u00b7 hold E to check' : THIRST ? ' \u00b7 hold E to water' : BUSK ? ' \u00b7 hold E to play' : POST ? ' \u00b7 hold E to post' : FIRE ? ' \u00b7 hold E to spray' : DELIVER ? ' \u00b7 hold E to drop' : ' \u00b7 hold E to repair';
     }
   }
   {
@@ -29305,6 +29550,17 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
       if (window.__cenoteTick) window.__cenoteTick(performance.now() / 1000);
       if (window.__marketTick) window.__marketTick(typeof dt === 'number' ? Math.min(0.05, dt) : 0.016);
       if (RAIL && RAIL.idle) RAIL.idle(typeof dt === 'number' ? Math.min(0.05, dt) : 0.016);
+      if (window.__ramenSteam) {   // (2026-10-25) steam curling up off the broth and the noodle water
+        const R2 = window.__ramenSteamFx || (window.__ramenSteamFx = (() => { const c = document.createElement('canvas'); c.width = c.height = 64; const x = c.getContext('2d'), gr = x.createRadialGradient(32, 32, 2, 32, 32, 30);
+          gr.addColorStop(0, 'rgba(245,242,236,0.6)'); gr.addColorStop(1, 'rgba(245,242,236,0)'); x.fillStyle = gr; x.fillRect(0, 0, 64, 64); const t = new THREE.CanvasTexture(c);
+          const ps = []; for (const src of window.__ramenSteam) for (let k = 0; k < 6; k++) { const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, transparent: true, depthWrite: false, opacity: 0 })); scene.add(sp); ps.push({ sp, src, t: k / 6 }); }
+          return ps; })());
+        const dtS = typeof dt === 'number' ? Math.min(0.05, dt) : 0.016;
+        for (const q of R2) { q.t += dtS * 0.35; if (q.t > 1) q.t -= 1; const u = q.t;
+          q.sp.position.set(q.src[0] + Math.sin(u * 7 + q.sp.id) * 0.08 * u, q.src[1] + u * 1.1, q.src[2] + Math.cos(u * 5 + q.sp.id) * 0.06 * u);
+          q.sp.scale.setScalar(0.25 + u * 0.6); q.sp.material.opacity = Math.sin(u * Math.PI) * 0.45; }
+      }
+      if (window.__catTreeTick) window.__catTreeTick(typeof dt === 'number' ? Math.min(0.05, dt) : 0.016);
       if (window.__swarmTick) window.__swarmTick(typeof dt === 'number' ? Math.min(0.05, dt) : 0.016);
       if (window.__glowers) { const _gt = performance.now() / 1000; for (const g of window.__glowers) { const k = Math.sin(_gt * g.rate + g.ph);
         if (g.blink) { const on = Math.max(0, Math.sin(_gt * 0.9 + g.ph * 3)) ** 6; for (const m of g.mats) m.emissiveIntensity = 0.2 + 3.6 * on; continue; }   // a firefly's slow flash

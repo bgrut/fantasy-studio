@@ -1640,7 +1640,7 @@ def _finish_city(place: str, blds: list[dict], roads: list[dict], half: float,
 
 
 def build_proc_city(seed: int, size_m: float, place: str = "city",
-                    max_buildings: int = 500, town: bool = False) -> dict | None:
+                    max_buildings: int = 500, town: bool = False, old: bool = False) -> dict | None:
     """A district with no network, in build_osm_city's shape. A jittered grid
     of avenues (12 m) and streets (8 m); every block cut into lots along its
     long side; heights fall from a tall core to low edges; one lot in eight is
@@ -1683,6 +1683,14 @@ def build_proc_city(seed: int, size_m: float, place: str = "city",
         for j in range(len(zs) - 1):
             x0, x1 = xs[i] + 5.0 + 3.0, xs[i + 1] - 5.0 - 3.0
             z0, z1 = zs[j] + 4.5 + 2.5, zs[j + 1] - 4.5 - 2.5
+            if old:
+                # (2026-10-25) AN OLD TOWN IS BUILT WALL TO WALL: "a street musician playing violin in a snowy
+                # Prague square" stood among offices. The houses of an old quarter stand shoulder to shoulder to
+                # the pavement's edge, three to five storeys, round a square at the heart of it
+                x0, x1 = xs[i] + 3.2 + 1.8, xs[i + 1] - 3.2 - 1.8
+                z0, z1 = zs[j] + 3.0 + 1.8, zs[j + 1] - 3.0 - 1.8
+                if max(abs(xs[i]), abs(xs[i + 1])) < 40 and max(abs(zs[j]), abs(zs[j + 1])) < 34 and abs((xs[i] + xs[i + 1]) / 2) < 22 and abs((zs[j] + zs[j + 1]) / 2) < 20:
+                    continue                                # the square
             bw, bd = x1 - x0, z1 - z0
             if bw < 9 or bd < 9:
                 continue
@@ -1695,23 +1703,27 @@ def build_proc_city(seed: int, size_m: float, place: str = "city",
             depth = bd if along_x else bw
             rows = 2 if depth >= 26 else 1
             n = max(1, min(9 if town else 7, int(round(length / (rnd.uniform(6.5, 9.5) if town else rnd.uniform(11.0, 17.0))))))
-            gap = 2.0
+            gap = 0.0 if old else 2.0
             lot = (length - gap * (n - 1)) / n
             row_d = (depth - 4.0) / 2 if rows == 2 else depth
             for row in range(rows):
               for k in range(n):
-                if rnd.random() < 0.12:
+                if rnd.random() < (0.0 if old else 0.12):
                     continue                        # a plaza, a car park, a gap in the wall
                 a0 = k * (lot + gap)
                 a1 = a0 + lot
-                inset = rnd.uniform(0.0, 2.5)        # a setback, so facades do not all align
+                inset = rnd.uniform(0.0, 0.35) if old else rnd.uniform(0.0, 2.5)        # a setback, so facades do not all align
                 d0 = row * (row_d + 4.0)             # this row's near edge across the block
                 d1 = d0 + row_d
                 if along_x:
                     px0, px1, pz0, pz1 = x0 + a0, x0 + a1, z0 + d0 + inset, z0 + d1 - inset
                 else:
                     px0, px1, pz0, pz1 = x0 + d0 + inset, x0 + d1 - inset, z0 + a0, z0 + a1
-                if town:
+                if old:
+                    h = rnd.uniform(10.5, 17.0)             # three to five storeys
+                    if rnd.random() < 0.03:
+                        h = rnd.uniform(24.0, 34.0)          # a church tower over the roofs
+                elif town:
                     h = rnd.uniform(6.5, 11.0)              # two or three storeys
                     if rnd.random() < 0.04:
                         h = rnd.uniform(14.0, 18.0)          # the church, the town hall
@@ -1748,4 +1760,4 @@ def build_proc_city(seed: int, size_m: float, place: str = "city",
             dense.append([round(ax + (bx - ax) * k / n, 1), round(az + (bz - az) * k / n, 1)])
     dense.append([round(route[-1][0], 1), round(route[-1][1], 1)])
     return {"place": place or "city", "buildings": blds[:max_buildings], "roads": roads,
-            "route": dense, "procedural": True, "town": bool(town)}
+            "route": dense, "procedural": True, "town": bool(town), "old": bool(old)}
