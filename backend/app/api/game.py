@@ -3881,6 +3881,15 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                             # an "evidence" mesh and timed the whole build out
                             "evidence", "reading", "sample", "proof", "sign", "trace",
                             "recording", "memory", "secret", "rumour", "rumor", "lead", "data"}
+        # (2026-10-26) a grain is too small to pick up one at a time: "a miller grinding flour" collected
+        # glowing orbs for "grains". Bulk goods come in sacks and sheaves
+        _BULK = {"grain": "grain sack", "grains": "grain sacks", "flour": "flour sack", "wheat": "wheat sheaf", "rice": "rice sack",
+                 "corn": "corn sack", "barley": "barley sheaf", "oats": "oat sheaf", "sugar": "sugar sack", "coffee": "coffee sack",
+                 "salt": "salt sack", "seeds": "seed sack", "seed": "seed sack", "hay": "hay bale"}
+        for ob in spec.objectives:
+            if ob.kind == "collect" and not ob.asset and (ob.label or "").strip().lower() in _BULK:
+                _b = _BULK[(ob.label or "").strip().lower()]
+                ob.label = _b if (ob.count or 1) == 1 or _b.endswith("s") else _b + "s"
         for ob in spec.objectives:
             if ob.kind != "collect" or ob.asset:
                 continue
@@ -4455,6 +4464,31 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         if _river and _arch == "archipelago":
             _arch = "plain"
             spec.world.archetype = "plain"
+        # A POND IS NOT A SEA (2026-10-26): "a girl skating across a frozen pond in a Dutch village at
+        # dusk" was planned as an archipelago: one cottage on a strip in a sheet of ice to the horizon.
+        # A pond, a rink or a duck pond lies in a village's land
+        if (_arch == "archipelago" and _fre.search(r"\b(ponds?|rinks?|duck ?ponds?|millponds?|village ?greens?)\b", _pw7)
+                and not _fre.search(r"\b(sea|ocean|underwater|islands?|isle|archipelago|atoll|lagoon|venice|venetian|gondol\w*|fjords?|coast\w*|beach\w*|harbou?rs?)\b", _pw7)
+                and not _coast and not _fjord and not job.get("_naval") and spec.player.mode != "swim"):
+            _arch = "plain"
+            spec.world.archetype = "plain"
+            job.setdefault("notes", []).append("a pond lies in the land: no sea round it")
+        # A POLDER (2026-10-26): "a miller grinding flour in a windmill on a sunny Dutch polder" walked a
+        # pine wood on red earth. Holland is level land won from the water: green, flat, drained by
+        # ditches (the runtime's POLDER cuts them), the water a hand below the fields
+        if (_fre.search(r"\b(polders?|dutch|holland|netherlands|frisian|friesland)\b", _pw7)
+                and not _fre.search(r"\b(city|amsterdam|rotterdam|streets?|space|moon|underwater|sea|ocean|islands?|cave\w*)\b", _pw7)
+                and not _coast and not _fjord and not job.get("_naval") and spec.player.mode != "swim"
+                and not getattr(spec.world, "platforms", False) and getattr(spec, "genre", "") != "factory"):
+            _arch = "plain"
+            spec.world.archetype = "plain"
+            if spec.world.water_level is None:
+                spec.world.water_level = 0.0
+            if not _fre.search(r"\b(snow\w*|winter|frozen|ice|icy|skat\w*|frost\w*)\b", _pw7):
+                spec.world.ground_color = [0.30, 0.46, 0.21]
+            else:
+                spec.world.ground_color = [0.84, 0.86, 0.88]          # a winter polder lies under snow, level and white
+            job.setdefault("notes", []).append("a polder: level green land, drained by ditches")
         # THE MOON IS GREY (2026-10-11): a lunar landing stood on beige sand
         if _fre.search(r"\b(moon|lunar|apollo)\b", _pw7) and not _fre.search(r"\b(honeymoon|moonlight|moonlit|moonrise|full moon|under the moon|red|rust\w*|frozen|ice|icy)\b", _pw7) and getattr(spec, "genre", "") != "factory":
             spec.world.ground_color = [0.40, 0.39, 0.38]

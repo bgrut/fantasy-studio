@@ -1422,6 +1422,13 @@ export function biomeFor(words, arch, groundHSL) {
     Object.assign(out, { kinds: K(['oak', 0.7], ['broadleaf', 0.6], ['birch', 0.3], ['bush', 0.45]), dens: 0.2 });
     return out;
   }
+  // A POLDER IS OPEN LAND (2026-10-26): "a miller ... on a sunny Dutch polder" stood ringed by a
+  // pine forest. Holland is level pasture to the horizon: a few broadleaves round a farm, a hedge
+  // of bushes, poplars far off; the willows along the ditches are the runtime's own (POLDER)
+  if (has(/\b(polders?|dutch|holland|netherlands|frisian|friesland)\b/) && !has(/\b(city|amsterdam|rotterdam|streets?)\b/)) {
+    Object.assign(out, { kinds: K(['broadleaf', 0.6], ['birch', 0.3], ['bush', 0.3]), dens: 0.008 });
+    return out;
+  }
   // CAPPADOCIA (2026-10-22): pale tuff valleys, scrub and a few poplars and orchards in
   // their floors; not a desert of cactus (the runtime raises the fairy chimneys)
   if (has(/cappadocia|kapadokya|g[oö]reme|fairy chimneys?/)) {

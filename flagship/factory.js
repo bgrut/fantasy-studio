@@ -1518,12 +1518,12 @@ function meadowTexture(fp, look, ground, seed) {
   // and ochre heath with burnt ground, a salt face a silvery sage salt-marsh
   // crusted white, the underside dark moss.
   const gc = new THREE.Color(ground || 0x3d5a2a);
-  const COUNTRY = { crystal: [0x2f5a3a, 0.35], ember: [0x7a5030, 0.7], salt: [0x9aa592, 0.62], under: [0x22301c, 0.5] }[look.key];
+  const COUNTRY = { crystal: [0x2f5a3a, 0.35], ember: [0x7a5030, 0.7], salt: [0x6e7c5e, 0.66], under: [0x22301c, 0.5] }[look.key];
   if (COUNTRY) gc.lerp(new THREE.Color(COUNTRY[0]), COUNTRY[1]);
   const hsl = {}; gc.getHSL(hsl);
   // the face's own climate: an ember face drier and browner, a salt face paler, the underside dim
   const dry = look.key === 'ember' ? 0.55 : look.key === 'salt' ? 0.25 : 0.12;
-  const pale = look.key === 'salt' ? 0.18 : 0, dim = look.key === 'under' ? 0.45 : 0;
+  const pale = look.key === 'salt' ? 0.04 : 0, dim = look.key === 'under' ? 0.45 : 0;
   const col = (dh, ds, dl) => { const c2 = new THREE.Color().setHSL(Math.max(0, hsl.h + dh - dry * 0.07), Math.max(0, Math.min(1, hsl.s + ds - dry * 0.15)), Math.max(0.02, Math.min(0.95, hsl.l + dl + pale - dim * hsl.l)));
     return '#' + c2.getHexString(); };
   g.fillStyle = col(0, 0, 0); g.fillRect(0, 0, P, P);
@@ -1539,10 +1539,52 @@ function meadowTexture(fp, look, ground, seed) {
   if (look.key === 'ember') {                       // scorched ground and ash where the heat comes up
     for (let i = 0; i < 26; i++) blob(rnd() * P, rnd() * P, 25 + rnd() * 110, 'rgb(38,22,14)', 0.38);
     for (let i = 0; i < 18; i++) blob(rnd() * P, rnd() * P, 20 + rnd() * 70, 'rgb(128,116,104)', 0.28);
-    for (let i = 0; i < 40; i++) blob(rnd() * P, rnd() * P, 15 + rnd() * 50, 'rgb(150,70,40)', 0.25); }
-  if (look.key === 'salt') {                        // white crusts where the brine dried, in drifts
-    for (let i = 0; i < 60; i++) blob(rnd() * P, rnd() * P, 12 + rnd() * 70, 'rgb(236,234,222)', 0.42);
-    for (let i = 0; i < 20; i++) blob(rnd() * P, rnd() * P, 60 + rnd() * 160, 'rgb(170,180,176)', 0.25); }
+    for (let i = 0; i < 40; i++) blob(rnd() * P, rnd() * P, 15 + rnd() * 50, 'rgb(150,70,40)', 0.25);
+    // (2026-10-26) A HEATH OVER HOT GROUND: the ember face read as dull purple-brown with olive grass. The heat
+    // shows: rust and burnt-orange drifts of heather, and the ground split by fissures, charred black with
+    // their lips lit orange from the heat below
+    for (let i = 0; i < 50; i++) blob(rnd() * P, rnd() * P, 30 + rnd() * 120, 'rgb(150,62,30)', 0.22);
+    for (let i = 0; i < 30; i++) blob(rnd() * P, rnd() * P, 20 + rnd() * 80, 'rgb(196,128,58)', 0.2);
+    const wrapDraw = (fn) => { for (const ox of [-P, 0, P]) for (const oy of [-P, 0, P]) { g.save(); g.translate(ox, oy); fn(); g.restore(); } };
+    for (let i = 0; i < 22; i++) {
+      let x = rnd() * P, y = rnd() * P, a = rnd() * 6.28; const pts = [[x, y]], n = 8 + Math.floor(rnd() * 14);
+      for (let k = 0; k < n; k++) { a += (rnd() - 0.5) * 1.3; x += Math.cos(a) * (8 + rnd() * 12); y += Math.sin(a) * (8 + rnd() * 12); pts.push([x, y]);
+        if (rnd() < 0.18) { let bx = x, by = y, ba = a + (rnd() < 0.5 ? 1 : -1) * (0.8 + rnd() * 0.6); const br = [[bx, by]];       // a branch crack
+          for (let j = 0; j < 4; j++) { ba += (rnd() - 0.5) * 0.9; bx += Math.cos(ba) * 9; by += Math.sin(ba) * 9; br.push([bx, by]); }
+          wrapDraw(() => { g.lineCap = 'round'; g.strokeStyle = 'rgba(232,108,36,0.55)'; g.lineWidth = 2.6; g.beginPath(); br.forEach(([px, py], q) => q ? g.lineTo(px, py) : g.moveTo(px, py)); g.stroke();
+            g.strokeStyle = 'rgba(20,10,6,0.85)'; g.lineWidth = 1.2; g.stroke(); }); } }
+      wrapDraw(() => { g.lineCap = 'round'; g.lineJoin = 'round';
+        g.strokeStyle = 'rgba(60,24,10,0.45)'; g.lineWidth = 9; g.beginPath(); pts.forEach(([px, py], q) => q ? g.lineTo(px, py) : g.moveTo(px, py)); g.stroke();   // scorched margin
+        g.strokeStyle = 'rgba(255,130,40,0.75)'; g.lineWidth = 4; g.stroke();                                                                                         // the lit lip
+        g.strokeStyle = 'rgba(16,8,4,0.95)'; g.lineWidth = 1.8; g.stroke(); });                                                                                     // the black crack
+    }
+  }
+  if (look.key === 'salt') {
+    // A SALT MARSH, NOT A MILKY MEADOW (2026-10-25): the crust was soft white airbrush over a pale sage,
+    // and the whole face read as haze. Salt dries in plates: crisp-edged pans of white crust cracked into
+    // polygons with raised rims, dark brine creeping along winding channels between the sage and samphire
+    const wrapDraw = (fn) => { for (const ox of [-P, 0, P]) for (const oy of [-P, 0, P]) { g.save(); g.translate(ox, oy); fn(); g.restore(); } };
+    for (let i = 0; i < 14; i++) {                                   // brine channels, meandering
+      let x = rnd() * P, y = rnd() * P, a = rnd() * 6.28; const w = 3 + rnd() * 7, pts = [[x, y]];
+      for (let k = 0; k < 40; k++) { a += (rnd() - 0.5) * 0.7; x += Math.cos(a) * 14; y += Math.sin(a) * 14; pts.push([x, y]); }
+      wrapDraw(() => { g.strokeStyle = 'rgba(48,62,64,0.55)'; g.lineWidth = w; g.lineCap = 'round'; g.lineJoin = 'round'; g.beginPath(); pts.forEach(([px, py], k) => k ? g.lineTo(px, py) : g.moveTo(px, py)); g.stroke();
+        g.strokeStyle = 'rgba(210,222,224,0.22)'; g.lineWidth = Math.max(1, w * 0.25); g.stroke(); });
+    }
+    for (let i = 0; i < 34; i++) {                                   // salt pans: a soft crust, then its cracked plates
+      const cx = rnd() * P, cy = rnd() * P, R = 22 + rnd() * 60;
+      blob(cx, cy, R * 1.25, 'rgb(214,216,204)', 0.32);
+      for (let k = 0; k < 70; k++) {
+        const a0 = rnd() * 6.28, d0 = Math.sqrt(rnd()) * R, px = cx + Math.cos(a0) * d0, py = cy + Math.sin(a0) * d0, r = 2.5 + rnd() * 4.5, sides = 5 + Math.floor(rnd() * 3), rot = rnd() * 6.28;
+        const poly = []; for (let q = 0; q < sides; q++) { const aa = rot + q / sides * 6.28, rr = r * (0.75 + rnd() * 0.4); poly.push([px + Math.cos(aa) * rr, py + Math.sin(aa) * rr]); }
+        const v = 226 + Math.floor(rnd() * 22);
+        wrapDraw(() => { g.beginPath(); poly.forEach(([qx, qy], q) => q ? g.lineTo(qx, qy) : g.moveTo(qx, qy)); g.closePath();
+          g.fillStyle = `rgba(${v},${v - 2},${v - 10},${0.55 + rnd() * 0.35})`; g.fill();
+          g.strokeStyle = 'rgba(96,104,94,0.45)'; g.lineWidth = 0.9; g.stroke();                       // the crack round each plate
+          g.strokeStyle = 'rgba(255,255,250,0.5)'; g.lineWidth = 0.8; g.beginPath(); g.moveTo(poly[0][0], poly[0][1] - 1); g.lineTo(poly[1][0], poly[1][1] - 1); g.stroke(); });   // its lit rim
+      }
+    }
+    for (let i = 0; i < 90; i++) blob(rnd() * P, rnd() * P, 6 + rnd() * 18, 'rgb(142,58,44)', 0.30);    // samphire going red
+  }
   // fine mottling, so it is not airbrushed from above
   for (let i = 0; i < 9000; i++) { const l = rnd(); g.fillStyle = l < 0.5 ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,220,0.05)'; g.fillRect(rnd() * P, rnd() * P, 2 + rnd() * 5, 2 + rnd() * 5); }
   // the survey grid, faint: every fifth tile a thin worn line
@@ -3772,8 +3814,8 @@ if (GRASS_ON) {
   // a meadow's greens, not a toy's: deeper at the root, olive to straw at the tips
   const colA0 = new THREE.Color(0x3d6428), colB0 = new THREE.Color(0x7d9a48), colDry0 = new THREE.Color(0xa99a5c);
   // each face's own growth, matching its ground (2026-10-15)
-  const GROWTH = { crystal: [0x2e5e34, 0x6a9c52, 0x9aa060], ember: [0x5a3820, 0x9c6a36, 0xc09a5a],
-                   salt: [0x56664e, 0x9aa88c, 0xcfcfb6], under: [0x22341c, 0x46623a, 0x7a7a50] };
+  const GROWTH = { crystal: [0x2e5e34, 0x6a9c52, 0x9aa060], ember: [0x5a2418, 0xa04a26, 0xc8843e],   // (2026-10-26) heather, rust to burnt orange
+                   salt: [0x3e5236, 0x7c8e5a, 0x9c7a54], under: [0x22341c, 0x46623a, 0x7a7a50] };   // (2026-10-25) samphire and sea-purslane, not pale straw
   for (let f = 0; f < 6; f++) {
     const _gw = GROWTH[faceLookOf(f).key];
     const colA = _gw ? new THREE.Color(_gw[0]) : colA0, colB = _gw ? new THREE.Color(_gw[1]) : colB0, colDry = _gw ? new THREE.Color(_gw[2]) : colDry0;
