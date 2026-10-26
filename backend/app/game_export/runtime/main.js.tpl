@@ -1793,17 +1793,30 @@ async function main() {
     const isCanal = (a, c, m) => (c > CW0 + (m || 0) && c < CW1 - (m || 0) && a > U0 - 30 && a < U1 + 30)
       || (sideAt(a) !== null && Math.abs(a - sideAt(a)) < SW / 2 - (m || 0) && c > -42 && c < CW0 + 1);
     const n = LVL.grid_n, S = LVL.size_m, hs = LVL.heights, cell = S / (n - 1);
+    // (2026-10-26) Venice stands in its lagoon: round the city the land goes under, shallow water with
+    // a few mud banks showing, instead of the brown wooded hills the level was before it was a city
+    const LAG = !JN, rngL = mulberry32((SPEC.seed || 1) * 77 + 5);
+    const banks = LAG ? Array.from({ length: 5 }, () => [(rngL() - 0.5) * S * 0.9, (rngL() - 0.5) * S * 0.9, 6 + rngL() * 10]) : [];
     for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
       const x = (j / (n - 1) - 0.5) * S, z = (i / (n - 1) - 0.5) * S, [a, c] = local(x, z);
-      if (!inCity(x, z, 0)) continue;
+      if (!inCity(x, z, 0)) {
+        if (LAG && !inCity(x, z, 6)) { let h = WL - 1.4; for (const [bx, bz, br] of banks) { const d = Math.hypot(x - bx, z - bz); if (d < br && !inCity(bx, bz, 20)) h = Math.max(h, WL + 0.25 - d / br * 1.6); } hs[i * n + j] = h; }
+        else if (LAG) hs[i * n + j] = WL - 1.4;
+        continue;
+      }
       hs[i * n + j] = isCanal(a, c, cell * 0.5) ? CY : QY;
     }
-    LVL.goal = world(gl, -0.6);
+    if (LAG) window.__lagoon = true;
+    // a gondola is rowed down the canal, so its journey ends in the water at the far end
+    const _gondRide = String((SPEC.player || {}).ride || '').toLowerCase() === 'rowboat';
+    LVL.goal = _gondRide ? world(gl, (CW0 + CW1) / 2) : world(gl, -0.6);
     LVL.path = [[0, 0], LVL.goal.slice()];
     if (LVL.pois) LVL.pois = [];
     if (LVL.landmarks) LVL.landmarks = [];
     window.__venice = { gl, style: JN ? 'jiangnan' : 'venice' };
-    return { style: JN ? 'jiangnan' : 'venice', ux, uz, gl, U0, U1, CW0, CW1, SIDE, SW, QY, CY, WL, local, world, sideAt, inCity, isCanal, doors: [] };
+    // bare: nothing grows in the city, nor out in the lagoon's water
+    const bare = (x, z, m) => inCity(x, z, m) || (LAG && hAt(x, z) < WL + 0.3);
+    return { style: JN ? 'jiangnan' : 'venice', ux, uz, gl, U0, U1, CW0, CW1, SIDE, SW, QY, CY, WL, local, world, sideAt, inCity, isCanal, bare, doors: [] };
   })();
   // ── A LOG DRIVE (2026-10-24) ───────────────────────────────────────────
   // "a log driver riding timber down a wild canadian river" drove an SUV through a
@@ -3359,6 +3372,12 @@ async function main() {
         waterMesh.position.y = _wk === 'ice' && _snowWorld ? WATER : Math.min(waterMesh.position.y, _wk === 'swamp' ? 0.18 : -0.12);
       }
       WATER_Y = waterMesh.position.y;
+      // (2026-10-26) a skater skates on the ice: "a girl skating across a frozen pond" kept to the snow
+      // strip down the middle because the ice was only a surface; for skates it bears weight
+      if (_wk === 'ice' && String(SPEC.player.ride || '').toLowerCase() === 'iceskates') {
+        world.createCollider(RAPIER.ColliderDesc.cuboid(Math.min(_wS, gsize) / 2, 0.1, Math.min(_wS, gsize) / 2).setTranslation(0, WATER_Y - 0.1, 0).setFriction(0.02));
+        window.__iceFloor = WATER_Y;
+      }
       WATER_BOB = _sea ? 0.12 : _wk === 'ice' ? 0 : _wk === 'storm' ? 0.22 : 0.03;
       // the depth under the surface, so the shores fade, tint and foam (proc/water.js)
       if (!_sea) {
@@ -9628,7 +9647,7 @@ async function main() {
                   || (PITCH && PITCH.inside(x, z, 6))
                   || (ARENA && ARENA.inFoot(x, z, 6))
                   || (RAIL && RAIL.near(x, z, 4))
-                  || (CANALS && CANALS.inCity(x, z, 6))
+                  || (CANALS && CANALS.bare(x, z, 6))
                   || (BEACH && BEACH.onKit(x, z, 1.5))
                   || (SKATE && SKATE.inPark(x, z, 4))
                   || (SMITHY && SMITHY.near(x, z, 2)) || (GLASSWORKS && GLASSWORKS.near(x, z, 2))
@@ -11955,7 +11974,7 @@ async function main() {
           if (PITCH && PITCH.inside(x, z, 0)) d = 0;                                                  // the pitch is its own mown surface
           if (ARENA && ARENA.inFoot(x, z, 1)) d = 0;                                                  // sand and stone, no grass
           if (RAIL && RAIL.near(x, z, 0)) d = 0;
-          if (CANALS && CANALS.inCity(x, z, 1)) d = 0;
+          if (CANALS && CANALS.bare(x, z, 1)) d = 0;
           if (SKATE && SKATE.inPark(x, z, 0.5)) d = 0;
           if ((SMITHY && SMITHY.near(x, z, 0.3)) || (GLASSWORKS && GLASSWORKS.near(x, z, 0.3))) d = 0;
           else if (PITCH && PITCH.inside(x, z, 4)) { h *= 0.3; d *= 0.6; dry = 0; }
@@ -12063,7 +12082,7 @@ async function main() {
           if (YARD && (YARD.blocked(x, z, 0.3) || (Math.abs(x) < 6.6 && YARD.Z1 - 5.8 < z && z < YARD.Z1 + 9.5))) return true;
           if (ARENA && ARENA.inFoot(x, z, 2)) return true;                       // nor on the sand or in the stands
           if (RAIL && RAIL.near(x, z, 0.5)) return true;
-          if (CANALS && CANALS.inCity(x, z, 2)) return true;
+          if (CANALS && CANALS.bare(x, z, 2)) return true;
           if (SKATE && SKATE.inPark(x, z, 1)) return true;
           if ((SMITHY && SMITHY.near(x, z, 0.5)) || (GLASSWORKS && GLASSWORKS.near(x, z, 0.5))) return true;
           if (BEACH && BEACH.harbor) { const [qa, qc] = BEACH.local(x, z); if (qa > -61 && qa < BEACH.gl + 51 && qc > -35 && qc < 7) return true; }   // nothing grows from a harbour's cobbles
@@ -12225,7 +12244,7 @@ async function main() {
         if (GRAVE && (GRAVE.aisle(x, z) || GRAVE.onStone(x, z, 0.1))) continue;
         if (ARENA && ARENA.inFoot(x, z, 1)) continue;                  // raked sand and stone seats
         if (RAIL && RAIL.near(x, z, 0)) continue;
-        if (CANALS && CANALS.inCity(x, z, 1)) continue;
+        if (CANALS && CANALS.bare(x, z, 1)) continue;
         if (SKATE && SKATE.inPark(x, z, 0.5)) continue;
         if ((SMITHY && SMITHY.near(x, z, 0.3)) || (GLASSWORKS && GLASSWORKS.near(x, z, 0.3))) continue;
         if (LVL && LVL.slot && hAt(x, z) > 0.8) continue;              // nor tufts
@@ -12859,6 +12878,7 @@ async function main() {
   {
     const objLines = (SPEC.objectives || []).map(o => {
       if (o.kind === 'race') return `Beat ${o.count} rivals to the finish`;
+      if (o.kind === 'herd') return `Herd ${o.count} ${o.label || 'sheep'} into the pen. They shy from you: walk them on`;
       if (o.kind === 'collect') return (o.count === 1 && /[^s]s$/i.test(String(o.label || '').trim()) && !/(?:ss|us|is)$/i.test(String(o.label || '').trim())) ? `Collect the ${o.label}` : `Collect ${o.count} ${o.label}`;
       if (o.kind === 'defeat') return `${/\b(captur\w*|catch\w*|traps?|trapping|banish\w*)\b/.test(String(SPEC.prompt || '').toLowerCase()) ? 'Capture' : 'Defeat'} ${o.count} ${o.label}`;   // a ghost hunter catches them (2026-10-07)
       if (o.kind === 'survive') return `Survive ${o.count} seconds of ${o.label || 'the onslaught'}`;
@@ -12869,6 +12889,7 @@ async function main() {
       if (o.kind === 'repair' && /\bhives?\b/.test(String(o.label || ''))) return /\bhoney/.test(String(SPEC.prompt || '').toLowerCase()) ? `Take the honey from ${o.count} ${o.label}. Hold E at each one` : `Check ${o.count} ${o.label}. Hold E at each one`;
       if (o.kind === 'repair' && /\b(thirsty|wilting|dry)\b/.test(String(o.label || ''))) return `Water ${o.count} ${o.label}. Hold E at each tray`;
       if (o.kind === 'repair' && /\b(crowds?|audiences?|listeners?|passers-?by)\b/.test(String(o.label || ''))) return `Play for ${o.count} ${o.label}. Hold E at each pitch`;
+      if (o.kind === 'repair' && /\bburied\b/.test(String(o.label || ''))) return `Uncover the ${o.label}. Hold E at each mound of sand over it`;
       if (o.kind === 'repair') return /fire|flame|blaze|burn/.test(String(o.label || '')) ? `Put out ${o.count} ${o.label}. Hold E to spray each one`
         : /package|parcel|deliver|letter|mail|pizza|crate|box|supplies|medicine|food|meal|bread|loa(?:f|ves)|pies?|cakes?|buns|hot ?dogs?|hotdogs?|sandwich\w*|burgers?|tacos?|noodles?|dumplings?|kebabs?|pretzels?|pastr|cookies|groceries|flowers|bouquets?|milk|newspapers?|papers|presents|gifts|cheese|eggs|soup|cocoa|coffee|potions?|scrolls?/.test(String(o.label || '')) ? `Deliver ${o.count} ${o.label}. Hold E over each pad to drop one`
         : `Fix ${o.count} ${o.label || 'broken panels'}. Hold E at each one`;
@@ -14396,6 +14417,30 @@ async function main() {
           }
           tx = n.target[0]; tz = n.target[1];
         }
+      } else if (n.behavior === 'herd') {
+        // A FLOCK SHIES FROM YOU (2026-10-26): grazing where it stands until you come close, then it
+        // moves off from you, keeping with the others; once through the gate it stays in the pen
+        const H = window.__herd, px = n.obj.position.x, pz = n.obj.position.z;
+        if (n.penned && H) {
+          if (!n.target || Math.hypot(n.target[0] - px, n.target[1] - pz) < 0.7) n.target = [H.x + (rngN() - 0.5) * H.w * 0.6, H.z + (rngN() - 0.5) * H.d * 0.6];
+          tx = n.target[0]; tz = n.target[1]; n.vjit = 0.3;
+        } else {
+          const d = Math.hypot(playerPos.x - px, playerPos.z - pz);
+          if (d < 8.5) {
+            let cx = 0, cz = 0, k = 0; for (const o of npcs) if (o.behavior === 'herd' && !o.penned && o !== n) { const dd = Math.hypot(o.obj.position.x - px, o.obj.position.z - pz); if (dd < 10) { cx += o.obj.position.x; cz += o.obj.position.z; k++; } }
+            let ax = px - playerPos.x, az = pz - playerPos.z; const al = Math.hypot(ax, az) || 1; ax /= al; az /= al;
+            if (k) { const fx = cx / k - px, fz = cz / k - pz, fl = Math.hypot(fx, fz) || 1; ax += fx / fl * 0.35; az += fz / fl * 0.35; }
+            tx = px + ax * 6; tz = pz + az * 6; n.vjit = d < 4 ? 1.25 : 0.85; n._fleeing = true;
+          } else {
+            n._fleeing = false;
+            if (!n.target || Math.hypot(n.target[0] - px, n.target[1] - pz) < 0.6 || Math.random() < 0.002) n.target = [px + (rngN() - 0.5) * 5, pz + (rngN() - 0.5) * 5];
+            tx = n.target[0]; tz = n.target[1]; n.vjit = 0.2;
+          }
+          if (H && H.inside(px, pz)) { n.penned = true; H.count++;
+            const st9 = steps[stepIdx];
+            popText(H.count >= (st9 && st9.kind === 'herd' ? st9.count : 99) ? `Every one of them is penned!` : `${H.count} in the pen`, '#e8f0c8');
+            renderQuest(); if (st9 && st9.kind === 'herd' && H.count >= st9.count) advanceStep(); }
+        }
       } else if (n.behavior === 'suspect') {
         const d = Math.hypot(playerPos.x - n.obj.position.x, playerPos.z - n.obj.position.z);
         if (d < 9) {
@@ -15200,6 +15245,59 @@ async function main() {
       if (d < 2.6 || C.down > 0) { C.down = Math.min(1, C.down + dt / 1.6); const k = C.down * C.down * (3 - 2 * C.down);
         const dst = new THREE.Vector3(pp.x, pp.y + 1.1, pp.z); C.cat.position.lerpVectors(catP, dst, k); }
       else C.cat.position.copy(catP); };   // it keeps to its limb till someone comes (the NPC step would put it on the ground)
+  }
+  // ── THE PEN (2026-10-26) ────────────────────────────────────────────────
+  // a herd is driven into a fold: dry-stone in a glen, post and rail elsewhere,
+  // its gate standing open toward the way the flock comes
+  if ((SPEC.objectives || []).some(o => o.kind === 'herd') && LVL && LVL.goal) {
+    const MAT = (o) => { const m = new THREE.MeshStandardMaterial(o); m.userData.noAutoTex = true; return m; };
+    const [gx, gz] = LVL.goal, W = 12, D = 10, gy = hAt(gx, gz);
+    let ux = -gx, uz = -gz; { const l = Math.hypot(ux, uz) || 1; ux /= l; uz /= l; }        // the gate faces the start
+    const yaw = Math.atan2(ux, uz), G = new THREE.Group(); G.position.set(gx, gy, gz); G.rotation.y = yaw; scene.add(G);
+    const stoneW = /\b(glen|highlands?|scot\w*|dales?|moors?|fells?|wales|welsh|ireland|irish|cotswold\w*|dry ?stone)\b/.test(String(SPEC.prompt || '').toLowerCase());
+    const post = MAT({ map: HDT('planks', 0.3, 1), color: 0x7a6248, roughness: 0.9 }), rail = MAT({ map: HDT('planks', 2, 0.2), color: 0x9a8064, roughness: 0.85 });
+    const stoneM = MAT({ map: HDT('stone', 2, 0.6), color: 0x8a8678, roughness: 0.95 });
+    const segs = [[-W / 2, -D / 2, W / 2, -D / 2], [W / 2, -D / 2, W / 2, D / 2], [-W / 2, -D / 2, -W / 2, D / 2], [-W / 2, D / 2, -1.6, D / 2], [1.6, D / 2, W / 2, D / 2]];
+    const DSW = [], rngN01 = mulberry32((SPEC.seed || 1) * 31 + 77);   // the dry-stone wall's stones: [x, y, z, ry, len, h, w, tilt]
+    for (const [x0, z0, x1, z1] of segs) {
+      const L = Math.hypot(x1 - x0, z1 - z0), mx = (x0 + x1) / 2, mz = (z0 + z1) / 2, ry = -Math.atan2(z1 - z0, x1 - x0);
+      if (stoneW) {
+        // (2026-10-26) laid stone by stone: courses of flat stones on a battered wall, narrowing
+        // as it rises, the coping a row of slabs set on edge, each stone its own grey; it follows the ground
+        const ux = (x1 - x0) / L, uz = (z1 - z0) / L, cy = Math.cos(yaw), sy = Math.sin(yaw);
+        const gAt = (lx, lz) => hAt(gx + lx * cy + lz * sy, gz - lx * sy + lz * cy) - gy;
+        let y = 0;
+        for (let course = 0; course < 5; course++) {
+          const h = 0.17 + rngN01() * 0.05, wd = 0.62 - course * 0.05;
+          for (let s = -rngN01() * 0.2; s < L;) { const l = 0.24 + rngN01() * 0.26, sc = Math.min(L, s + l) - Math.max(0, s); if (sc > 0.06) {
+              const t = Math.max(0, s) + sc / 2, lx = x0 + ux * t, lz = z0 + uz * t;
+              DSW.push([lx, gAt(lx, lz) + y + h / 2 - 0.04, lz, ry + (rngN01() - 0.5) * 0.08, sc * 0.96, h * 0.92, wd + (rngN01() - 0.5) * 0.06, (rngN01() - 0.5) * 0.07]); }
+            s += l; }
+          y += h;
+        }
+        for (let s = 0.07; s < L; s += 0.13 + rngN01() * 0.04) { const lx = x0 + ux * s, lz = z0 + uz * s;
+          DSW.push([lx, gAt(lx, lz) + y + 0.1, lz, ry + (rngN01() - 0.5) * 0.15, 0.08 + rngN01() * 0.05, 0.2 + rngN01() * 0.08, 0.4, 0.14 + (rngN01() - 0.5) * 0.12]); }
+      }
+      else { for (let k = 0; k <= Math.round(L / 2); k++) { const t = k / Math.round(L / 2), pp = new THREE.Mesh(new THREE.BoxGeometry(0.14, 1.3, 0.14), post); pp.position.set(x0 + (x1 - x0) * t, 0.65, z0 + (z1 - z0) * t); pp.castShadow = true; G.add(pp); }
+        for (const y of [0.45, 0.95]) { const r = new THREE.Mesh(new THREE.BoxGeometry(L, 0.1, 0.06), rail); r.position.set(mx, y, mz); r.rotation.y = ry; r.castShadow = true; G.add(r); } }
+      const wc = new THREE.Vector3(mx, 0, mz).applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw), wy = yaw + ry;
+      world.createCollider(RAPIER.ColliderDesc.cuboid(L / 2, 0.7, 0.2).setTranslation(gx + wc.x, gy + 0.7, gz + wc.z).setRotation({ x: 0, y: Math.sin(wy / 2), z: 0, w: Math.cos(wy / 2) }));
+    }
+    if (DSW.length) {
+      const sg = new THREE.BoxGeometry(1, 1, 1, 2, 1, 2); { const p = sg.attributes.position; for (let i = 0; i < p.count; i++) { const k = 1 + Math.sin(p.getX(i) * 13 + p.getZ(i) * 7 + p.getY(i) * 5) * 0.06; p.setX(i, p.getX(i) * k); p.setZ(i, p.getZ(i) * (2 - k)); } sg.computeVertexNormals(); }
+      const fsM = MAT({ color: 0xffffff, roughness: 0.93 }), im = new THREE.InstancedMesh(sg, fsM, DSW.length), m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), c = new THREE.Color();
+      DSW.forEach(([x, y, z, ry, l, h, w, tl], i) => { q.setFromEuler(e.set(tl * 0.3, ry, tl)); m4.compose(new THREE.Vector3(x, y, z), q, new THREE.Vector3(l, h, w)); im.setMatrixAt(i, m4);
+        const v = 0.16 + rngN01() * 0.16, lich = rngN01() < 0.2, warm = rngN01() < 0.3; c.setRGB(v * (lich ? 0.98 : warm ? 1.08 : 0.96), v * (lich ? 1.06 : 1), v * (lich ? 0.72 : warm ? 0.88 : 1.02)); im.setColorAt(i, c); });
+      im.castShadow = im.receiveShadow = true; G.add(im);
+    }
+    // the gate, swung open
+    { const gt = new THREE.Group(); gt.position.set(1.6, 0, D / 2); gt.rotation.y = -1.9; G.add(gt);
+      for (const y of [0.3, 0.65, 1.0]) { const r = new THREE.Mesh(new THREE.BoxGeometry(3.0, 0.09, 0.06), rail); r.position.set(-1.5, y, 0); gt.add(r); }
+      const br = new THREE.Mesh(new THREE.BoxGeometry(3.3, 0.08, 0.05), rail); br.position.set(-1.5, 0.65, 0); br.rotation.z = 0.3; gt.add(br); }
+    // a hay rack inside for them to come to
+    { const hm = MAT({ color: 0xc8a85a, roughness: 1 }); const hay = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.6, 0.8), hm); hay.position.set(-W / 2 + 1.4, 0.3, -D / 2 + 1.0); hay.castShadow = true; G.add(hay); }
+    window.__herd = { x: gx, z: gz, w: W, d: D, count: 0, yaw,
+      inside: (x, z) => { const dx = x - gx, dz = z - gz, c = Math.cos(yaw), s2 = Math.sin(yaw), lx = dx * c - dz * s2, lz = dx * s2 + dz * c; return Math.abs(lx) < W / 2 - 0.6 && Math.abs(lz) < D / 2 - 0.6; } };
   }
   // ── THE HENHOUSE, BUILT (see COOP above) ────────────────────────────────
   if (COOP) {
@@ -18958,7 +19056,12 @@ async function main() {
     const col = PAL[Math.abs(seed | 0) % PAL.length];
     const M = (c, r, m) => { const mm = new THREE.MeshStandardMaterial({ color: c, roughness: r === undefined ? 0.35 : r, metalness: m || 0 }); mm.userData.noAutoTex = true; return mm; };
     const add = (geo, mat, x, y, z) => { const m = new THREE.Mesh(geo, mat); m.position.set(x || 0, y || 0, z || 0); m.castShadow = true; g.add(m); return m; };
-    if (k === 'skis') {
+    if (k === 'iceskates') {
+      // (2026-10-26) skates on a frozen pond: a boot's steel blade under each foot, curled up at the toe
+      for (const sx of [-0.11, 0.11]) { add(new THREE.BoxGeometry(0.012, 0.06, 0.34), M(0xd8dde2, 0.2), sx, 0.03, 0.02);
+        const toe = add(new THREE.TorusGeometry(0.05, 0.006, 6, 12, Math.PI), M(0xd8dde2, 0.2), sx, 0.06, -0.15); toe.rotation.y = Math.PI / 2;
+        add(new THREE.BoxGeometry(0.1, 0.1, 0.28), M(0xf0ece4, 0.6), sx, 0.11, 0.02); }
+    } else if (k === 'skis') {
       for (const sx of [-0.13, 0.13]) { add(new THREE.BoxGeometry(0.09, 0.025, 1.65), M(col), sx, 0.02, 0);
         const tip = add(new THREE.BoxGeometry(0.09, 0.025, 0.22), M(col), sx, 0.07, -0.88); tip.rotation.x = 0.5;
         add(new THREE.BoxGeometry(0.1, 0.07, 0.28), M(0x1a1a1a, 0.5), sx, 0.06, 0.05); }
@@ -18968,6 +19071,27 @@ async function main() {
     } else if (k === 'surfboard') {
       const b = add(new THREE.SphereGeometry(0.5, 20, 10), M(col, 0.2), 0, 0.03, 0); b.scale.set(0.55, 0.06, 2.2);
       add(new THREE.BoxGeometry(0.03, 0.012, 2.0), M(0xffffff, 0.3), 0, 0.062, 0);
+    } else if (k === 'rowboat' && /\bgondol(?:a|as|ier|iers)\b/.test(String(SPEC.prompt || '').toLowerCase())) {
+      // A GONDOLA (2026-10-26): "a gondolier singing on a Venice canal at sunset" walked the quay past the
+      // boats. Eleven metres of black lacquer rising at both ends, the steel ferro on the bow, a red-cushioned
+      // seat amidships, and the gondolier standing aft on the little deck with the long oar in its forcola
+      const lacq = M(0x0c0c0e, 0.25), steel = M(0xd8dad8, 0.25), redS = M(0x7a1420, 0.85), wood = M(0x5a3e28, 0.6), brass = M(0xc9a24a, 0.3);
+      const hg = new THREE.SphereGeometry(1, 28, 12); hg.scale(0.72, 0.4, 5.4);
+      { const ps = hg.attributes.position; for (let i = 0; i < ps.count; i++) { const z = ps.getZ(i), y = ps.getY(i); if (Math.abs(z) > 3.2) ps.setY(i, y + (Math.abs(z) - 3.2) ** 1.6 * 0.32); if (y > 0.12) ps.setY(i, ps.getY(i) - (y - 0.12) * 0.8); } hg.computeVertexNormals(); }
+      add(hg, lacq, 0, 0.12, -3.6);
+      add(new THREE.BoxGeometry(0.9, 0.05, 1.3), wood, 0, 0.42, 0.2);                       // the little stern deck he stands on
+      add(new THREE.BoxGeometry(0.06, 0.62, 0.42), steel, 0, 0.62, -9.0);                     // the ferro, its comb of six teeth
+      for (let t = 0; t < 6; t++) add(new THREE.BoxGeometry(0.05, 0.05, 0.22), steel, 0, 0.42 + t * 0.075, -8.82);
+      add(new THREE.BoxGeometry(0.9, 0.3, 1.2), redS, 0, 0.28, -3.8);                        // the cushioned seat
+      add(new THREE.BoxGeometry(0.95, 0.5, 0.08), redS, 0, 0.42, -3.2);
+      for (const z of [-4.6, -3.1]) for (const sx of [-0.45, 0.45]) add(new THREE.SphereGeometry(0.06, 10, 8), brass, sx, 0.5, z);
+      const forc = add(new THREE.BoxGeometry(0.08, 0.6, 0.14), wood, 0.42, 0.7, -0.4);  forc.rotation.z = -0.15;   // the forcola
+      // the oar rests in the forcola and reaches aft and down into the canal; the stroke sweeps it
+      const piv = new THREE.Group(); piv.position.set(0.46, 1.0, -0.4); g.add(piv);
+      const dir = new THREE.Vector3(1.0, -1.05, 1.6).normalize();
+      const oar = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.03, 4.6, 8), wood); oar.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir); oar.position.copy(dir.clone().multiplyScalar(1.6)); oar.castShadow = true; piv.add(oar);
+      const bl = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.02, 0.55), wood); bl.quaternion.copy(oar.quaternion); bl.position.copy(dir.clone().multiplyScalar(3.7)); piv.add(bl);
+      g.userData.oars = [{ piv, sx: 0.5 }]; g.userData.stand = 0.44;
     } else if (k === 'rowboat') {
       // A CLINKER DORY (2026-10-24): a double-ended boat of overlapping strakes, painted
       // outside, bare wood within, a white sheer strake, two thwarts, oars in their locks
@@ -22037,6 +22161,7 @@ async function main() {
     if (st.kind === 'hunt') return `Track ${n} ${l}. Move slow: they bolt if they hear you.`;
     if (st.kind === 'eliminate') return `Last one standing. ${n} rivals, one winner.`;
     if (st.kind === 'score') return `Put ${n} away and it is yours.`;
+    if (st.kind === 'herd') return `The ${st.label || 'sheep'} shy from you. Come at them from the far side and walk them on, through the gate of the pen at the end of the way: ${n} of them, penned.`;
     if (st.kind === 'capture') return `Hold ${n} ground. Eight seconds each, and do not step off.`;
     if (st.kind === 'repair' && /\b(hikers?|climbers?|skiers?|campers?|people|children|kids?|survivors?|villagers?|explorers?|walkers?|tourists?|scouts?|lost)\b/.test(String(l)))
       return `${n} ${l} out there somewhere. Each has lit a red flare; follow the red light up the slope and get to them.`;
@@ -22056,6 +22181,8 @@ async function main() {
         : `${n} ${l} to deliver. Each one is left on a bench under a lit lantern; stand at it and hold E to leave one.`;
     if (st.kind === 'repair' && /\b(bridges?|footbridges?|crossings?)\b/.test(String(l)))
       return `${n} ${l} to mend. Each has a gap where planks have gone into the stream; stand at it and hold E to lay them back.`;
+    if (st.kind === 'repair' && /\bburied\b/.test(String(l)))
+      return `The ${l} lies in the dig under ${n} mounds of sand. Kneel at each one and hold E to brush it away, gently, down to the stone.`;
     if (st.kind === 'repair' && /\b(crowds?|audiences?|listeners?|passers-?by)\b/.test(String(l)))
       return `${n} pitches round the square, each with its open case. Stand at one and hold E to play until the passers-by stop to listen.`;
     if (st.kind === 'repair' && /\b(thirsty|wilting|dry)\b/.test(String(l)))
@@ -22099,6 +22226,7 @@ async function main() {
     if (st.kind === 'eliminate') return `Last one standing. Eliminate ${st.count} ${st.label || 'rivals'}`;
     if (st.kind === 'hunt') return `Hunt ${st.count} ${st.label || 'prey'} (approach quietly)`;
     if (st.kind === 'score') return `Score ${st.count} ${st.label || 'goals'}`;
+    if (st.kind === 'herd') return `Herd ${st.count} ${st.label || 'sheep'} into the pen`;
     if (st.kind === 'capture') return `Capture ${st.count} zone${st.count > 1 ? 's' : ''} (hold 8s each)`;
     if (st.kind === 'escort') return `Escort ${st.label || 'your charge'} to the beacon. Keep them alive`;
     if (st.kind === 'serve') return `Serve ${st.count} ${st.label || 'orders'}`;
@@ -22107,6 +22235,7 @@ async function main() {
     if (st.kind === 'repair' && /\bhives?\b/.test(String(st.label || ''))) return (/\bhoney/.test(String(SPEC.prompt || '').toLowerCase()) ? 'Honey from ' : 'Check ') + `${st.count} ${st.label}`;
     if (st.kind === 'repair' && /\b(thirsty|wilting|dry)\b/.test(String(st.label || ''))) return `Water ${st.count} ${st.label}`;
     if (st.kind === 'repair' && /\b(crowds?|audiences?|listeners?|passers-?by)\b/.test(String(st.label || ''))) return `Play for ${st.count} ${st.label}`;
+    if (st.kind === 'repair' && /\bburied\b/.test(String(st.label || ''))) return `Uncover the ${st.label}`;
     if (st.kind === 'repair' && /\b(hikers?|climbers?|skiers?|campers?|people|children|kids?|survivors?|villagers?|explorers?|walkers?|tourists?|scouts?|lost)\b/.test(String(st.label || ''))) return `Find ${st.count} ${st.label}`;
     if (st.kind === 'repair') return /fire|flame|blaze|burn/.test(String(st.label || '')) ? `Put out ${st.count} ${st.label}`
       : /package|parcel|deliver|letter|mail|pizza|crate|box|supplies|medicine|food|meal|bread|loa(?:f|ves)|pies?|cakes?|buns|hot ?dogs?|hotdogs?|sandwich\w*|burgers?|tacos?|noodles?|dumplings?|kebabs?|pretzels?|pastr|cookies|groceries|flowers|bouquets?|milk|newspapers?|papers|presents|gifts|cheese|eggs|soup|cocoa|coffee|potions?|scrolls?/.test(String(st.label || '')) ? `Deliver ${st.count} ${st.label}`
@@ -22130,6 +22259,7 @@ async function main() {
       const d0 = st._d0 || dNow || 1;
       return Math.max(0, Math.min(99, Math.round((1 - dNow / d0) * 100))) + '%';
     }
+    if (st.kind === 'herd') return `${(window.__herd && window.__herd.count) || 0}/${st.count}`;
     if (st.kind === 'capture') {
       const pct = st._hold ? ` · ${Math.min(99, Math.round(st._hold / 8 * 100))}%` : '';
       return `${st._zi || 0}/${st.count}${pct}`;
@@ -23191,8 +23321,8 @@ async function main() {
   polishVehiclePaint(pRoot, (P.mode || 'walk') === 'drive' && !RIDE && !(RAIL && !RAIL.walk));
   if (RIDE && RIDE !== 'paperboat') {
     const _bd = makeBoard(RIDE, SPEC.seed || 0); holder.add(_bd); window.__board = _bd;
-    pRoot.position.y += RIDE === 'log' ? 0.33 : RIDE === 'rowboat' ? 0.12 : 0.07;   // a log driver stands on top of a log a hand under half out of the water
-    if (RIDE !== 'skis' && RIDE !== 'sled' && RIDE !== 'rowboat') pRoot.rotation.y += Math.PI / 2;   // a rower faces the bow
+    pRoot.position.y += _bd.userData.stand || (RIDE === 'log' ? 0.33 : RIDE === 'rowboat' ? 0.12 : 0.07);   // a log driver stands on top of a log a hand under half out of the water
+    if (RIDE !== 'skis' && RIDE !== 'iceskates' && RIDE !== 'sled' && RIDE !== 'rowboat') pRoot.rotation.y += Math.PI / 2;   // a rower faces the bow
     if (RIDE === 'rowboat') { const _h = document.querySelector('#hud .hint'); if (_h) _h.textContent = 'W pull · S back water · A / D turn her · drag to look'; }   // a boarder stands side-on
   }
   // a balloon pilot flies in the basket (2026-10-22): the flyer is centred on its body,
@@ -27633,12 +27763,26 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
       const THIRST = !FIRE && !DELIVER && /\b(thirsty|wilting|dry)\b/.test(String(_rpS.label || '').toLowerCase());
       // (2026-10-25) a street musician plays for the passers-by: an open case at each pitch, coins landing in it as you play
       const BUSK = !FIRE && !DELIVER && /\b(crowds?|audiences?|listeners?|passers-?by|tips)\b/.test(String(_rpS.label || '').toLowerCase());
-      const FIND = !FIRE && !DELIVER && !CHOP && !HIVE && !THIRST && !BUSK && /\b(hikers?|climbers?|skiers?|campers?|people|persons?|children|kids?|survivors?|villagers?|explorers?|walkers?|travell?ers?|tourists?|scouts?|lost)\b/.test(String(_rpS.label || '').toLowerCase());
+      // (2026-10-26) an archaeologist brushes the sand off something buried: one find lying in the dig, a mound over each part of it
+      const DIG = !FIRE && !DELIVER && /\bburied\b/.test(String(_rpS.label || '').toLowerCase()) && !INTERIOR;
+      const FIND = !FIRE && !DELIVER && !CHOP && !HIVE && !THIRST && !BUSK && !DIG && /\b(hikers?|climbers?|skiers?|campers?|people|persons?|children|kids?|survivors?|villagers?|explorers?|walkers?|travell?ers?|tourists?|scouts?|lost)\b/.test(String(_rpS.label || '').toLowerCase());
       if (POST && VILLAGE) {
         // a letterbox by each cottage's gate, out at the lane side of its front
         const cs = VILLAGE.cot.slice().sort((a, b) => Math.hypot(a.x, a.z) - Math.hypot(b.x, b.z));
         for (let k = 0; k < N && k < cs.length; k++) { const c = cs[Math.floor(k * cs.length / N)], [x, z] = VILLAGE.loc(c, c.w * 0.32, c.d / 2 + 2.2);
           spots.push([x, hAt(x, z), z, c.ry, false, c, true]); }
+      } else if (DIG) {
+        // the dig lies out ahead on open ground; the brusher kneels beside each part of the find in turn
+        let sx = 0, sz = -18;
+        let bsl = 1e9;
+        for (let t = 0; t < 90; t++) { const a = rngR() * 6.28, d = 14 + rngR() * 16, x = Math.cos(a) * d, z = Math.sin(a) * d;
+          const h0 = hAt(x, z); let sl = 0; for (const [ox, oz] of [[3, 0], [-3, 0], [0, 3], [0, -3], [2, 2], [-2, -2]]) sl = Math.max(sl, Math.abs(hAt(x + ox, z + oz) - h0));
+          if (sl < bsl && !(window.__waterAt && window.__waterAt(x, z))) { bsl = sl; sx = x; sz = z; if (sl < 0.12) break; } }
+        const ay = Math.atan2(-sx, -sz) + Math.PI / 2, ca = Math.cos(ay), sa = Math.sin(ay);   // the find lies across the way you come
+        window.__digSite = { x: sx, z: sz, ry: ay };
+        const parts = [-1.35, -0.55, 0.45, 1.35].slice(0, Math.max(1, N));
+        for (const pz of parts) { const x = sx + sa * pz * 1.15 - ca * 1.25, z = sz + ca * pz * 1.15 + sa * 1.25;   // a step to the near side of it
+          spots.push([x, hAt(x, z), z, ay, false, null, true, false, pz]); }
       } else if (BUSK && !INTERIOR) {
         // the pitches: round the square at the heart of the town, a little apart, each facing in
         for (let k = 0; k < N; k++) { const a = k / N * Math.PI * 2 + 0.6 + rngR() * 0.4, d = 9 + rngR() * 6, x = Math.cos(a) * d, z = Math.sin(a) * d;
@@ -27741,6 +27885,127 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
           g2.userData.fsTag = { type: 'objective', name: 'beehive', detail: 'hold E to check it' };
           world.createCollider(RAPIER.ColliderDesc.cuboid(0.3, 0.45, 0.33).setTranslation(x, y + 0.45, z));
           panels.push({ g: g2, pad: g2.userData.pad, hive: true, fixed: false, p: 0, x: x + Math.sin(ry) * 0.95, z: z + Math.cos(ry) * 0.95, ry });
+          continue;
+        }
+        if (DIG) {
+          // THE DIG (2026-10-26): "an archaeologist brushing sand off a buried statue in the desert" picked up
+          // one "sand". The find lies half sunk in a trench roped off on pegs, a canvas shade over it, a sieve and
+          // buckets at the edge; a mound of sand lies over each part, and brushing wears it down to the stone
+          const DS = window.__digSite, M2 = (o) => { const m = new THREE.MeshStandardMaterial(o); m.userData.noAutoTex = true; return m; };
+          const pr = String(SPEC.prompt || '').toLowerCase() + ' ' + String(_rpS.label || '').toLowerCase();
+          const FOSS = /\b(fossils?|bones?|skeletons?|dinosaurs?|mammoths?|t-?rex)\b/.test(pr), EGY = /\b(desert|egypt\w*|pharaohs?|sphinx|nile|sahara|luxor|giza)\b/.test(pr);
+          if (!window.__digG) {
+            const G = new THREE.Group(), gy = hAt(DS.x, DS.z); G.position.set(DS.x, gy, DS.z); G.rotation.y = DS.ry; scene.add(G); window.__digG = G;
+            const sandC = new THREE.Color(EGY ? 0xfff2d6 : 0xe8dcc4);
+            const sandM = M2({ map: HDT('sand', 1.5, 1.5), color: sandC, roughness: 1 }), pitM = M2({ map: HDT('sand', 3, 2), color: sandC.clone().multiplyScalar(0.86), roughness: 1 });
+            // the trench floor, a little below the ground, and its spoil heaped along the far side
+            const pit = new THREE.Mesh(new THREE.BoxGeometry(2.3, 0.1, 4.2), pitM); pit.position.y = -0.065; pit.receiveShadow = true; G.add(pit);
+            const spoil = new THREE.Mesh(new THREE.SphereGeometry(1, 18, 8, 0, Math.PI * 2, 0, Math.PI / 2), sandM); spoil.scale.set(0.9, 0.55, 2.4); spoil.position.set(2.2, -0.05, 0); spoil.receiveShadow = spoil.castShadow = true; G.add(spoil);
+            const S = new THREE.Group(); S.position.y = -0.1; S.scale.setScalar(1.15); G.add(S);   // the find, lying along local z, head at -z
+            if (FOSS) {
+              const bone = M2({ color: 0xd8ccb0, roughness: 0.75 });
+              const add2 = (geo, x, y, z, rx, ry2, rz) => { const m = new THREE.Mesh(geo, bone); m.position.set(x, y, z); m.rotation.set(rx || 0, ry2 || 0, rz || 0); m.castShadow = true; S.add(m); return m; };
+              const sk = add2(new THREE.SphereGeometry(0.26, 16, 10), 0, 0.12, -1.45); sk.scale.set(0.8, 0.6, 1.4);
+              add2(new THREE.BoxGeometry(0.3, 0.1, 0.42), 0, 0.05, -1.8);                                       // the jaw
+              for (let k = 0; k < 7; k++) add2(new THREE.ConeGeometry(0.025, 0.09, 5), (k % 2 ? 0.1 : -0.1), 0.0, -1.95 + k * 0.05, Math.PI);
+              add2(new THREE.CylinderGeometry(0.06, 0.05, 2.9, 8), 0, 0.12, 0.2, Math.PI / 2);                   // the spine
+              for (let k = 0; k < 18; k++) add2(new THREE.SphereGeometry(0.07, 8, 6), 0, 0.16, -1.1 + k * 0.17);
+              for (let k = 0; k < 9; k++) for (const s of [-1, 1]) { const rr = 0.34 - Math.abs(k - 3) * 0.03, rib = add2(new THREE.TorusGeometry(rr, 0.022, 5, 12, Math.PI * 0.75), 0, 0.12 - rr, -0.85 + k * 0.13, 0, 0, s > 0 ? -Math.PI * 0.25 : Math.PI * 0.5); rib.scale.z = 0.6; }
+              for (const [lz, s] of [[-0.7, 1], [-0.7, -1], [0.75, 1], [0.75, -1]]) add2(new THREE.CylinderGeometry(0.05, 0.04, 0.8, 8), s * 0.45, 0.06, lz, 0, 0, s * 1.2);
+            } else {
+              // an Osiride figure (EGY) or a draped marble one, lying on its back: one turned body, wrapped legs
+              // together, broad at the shoulders; weathered stone, the face carved, the nemes still painted
+              const wc = document.createElement('canvas'); wc.width = wc.height = 256; const wx = wc.getContext('2d');
+              wx.fillStyle = EGY ? '#c4a676' : '#dcd6ca'; wx.fillRect(0, 0, 256, 256);
+              for (let k = 0; k < 2600; k++) { const l = 150 + Math.random() * 60 | 0; wx.fillStyle = `rgba(${l},${l - 16},${l - 44},0.35)`; wx.fillRect(Math.random() * 256, Math.random() * 256, 1 + Math.random() * 3, 1 + Math.random() * 3); }
+              for (let k = 0; k < 90; k++) { wx.fillStyle = 'rgba(90,72,50,0.35)'; wx.beginPath(); wx.arc(Math.random() * 256, Math.random() * 256, 0.6 + Math.random() * 1.8, 0, 6.29); wx.fill(); }   // pitting
+              for (let k = 0; k < 14; k++) { wx.strokeStyle = 'rgba(80,64,44,0.25)'; wx.lineWidth = 0.8; wx.beginPath(); let px = Math.random() * 256, py = Math.random() * 256; wx.moveTo(px, py);
+                for (let j = 0; j < 6; j++) { px += (Math.random() - 0.5) * 30; py += Math.random() * 18; wx.lineTo(px, py); } wx.stroke(); }   // hairline cracks
+              const wT = new THREE.CanvasTexture(wc); wT.wrapS = wT.wrapT = THREE.RepeatWrapping; wT.repeat.set(2, 3); wT.colorSpace = THREE.SRGBColorSpace;
+              const st = M2({ map: wT, color: 0xffffff, roughness: 0.86 }), gold = M2({ color: 0xc9a24a, metalness: 0.7, roughness: 0.35 });
+              const add2 = (geo, m, x, y, z, rx, ry2, rz) => { const mm = new THREE.Mesh(geo, m); mm.position.set(x, y, z); mm.rotation.set(rx || 0, ry2 || 0, rz || 0); mm.castShadow = mm.receiveShadow = true; S.add(mm); return mm; };
+              const PROF = [[0, 0], [0.17, 0.02], [0.2, 0.14], [0.17, 0.32], [0.21, 0.6], [0.25, 0.95], [0.27, 1.3], [0.31, 1.65], [0.34, 1.95], [0.35, 2.15], [0.41, 2.38], [0.43, 2.46], [0.36, 2.55], [0.13, 2.6],
+                [0.12, 2.66], [0.19, 2.74], [0.22, 2.86], [0.2, 2.98], [0.13, 3.06], [0, 3.1]];
+              const bodyG = new THREE.LatheGeometry(PROF.map(([r, h]) => new THREE.Vector2(r, h)), 28);
+              bodyG.rotateX(-Math.PI / 2); bodyG.scale(1, 0.55, 1); bodyG.translate(0, 0.17, 1.55);   // feet at +z, head at -z, face to the sky
+              add2(bodyG, st, 0, 0, 0);
+              const HZ = 1.55 - 2.86, HY = 0.17;                                                         // the head's centre
+              add2(new THREE.BoxGeometry(0.06, 0.05, 0.13), st, 0, HY + 0.13, HZ + 0.07, -0.25);          // the nose
+              for (const s2 of [-1, 1]) { add2(new THREE.BoxGeometry(0.08, 0.018, 0.025), st, s2 * 0.075, HY + 0.12, HZ - 0.02);   // the brows
+                const eye = add2(new THREE.SphereGeometry(0.026, 10, 6), M2({ color: 0x3a2e24, roughness: 0.6 }), s2 * 0.075, HY + 0.112, HZ + 0.02); eye.scale.set(1.5, 0.45, 0.8); }
+              add2(new THREE.BoxGeometry(0.1, 0.02, 0.03), st, 0, HY + 0.11, HZ + 0.15);                 // the lips
+              if (EGY) {
+                const stc = document.createElement('canvas'); stc.width = 64; stc.height = 256; const sx2 = stc.getContext('2d');
+                for (let k = 0; k < 16; k++) { sx2.fillStyle = k % 2 ? '#c9a24a' : '#24407a'; sx2.fillRect(0, k * 16, 64, 16); }
+                sx2.fillStyle = 'rgba(200,180,140,0.55)'; for (let k = 0; k < 260; k++) sx2.fillRect(Math.random() * 64, Math.random() * 256, 2 + Math.random() * 6, 1 + Math.random() * 4);   // the paint flaked off to the stone
+                const stT = new THREE.CanvasTexture(stc); stT.colorSpace = THREE.SRGBColorSpace;
+                const nemM = M2({ map: stT, roughness: 0.7 });
+                const stc2 = document.createElement('canvas'); stc2.width = 512; stc2.height = 32; const sx3 = stc2.getContext('2d');
+                for (let k = 0; k < 36; k++) { sx3.fillStyle = k % 2 ? '#c9a24a' : '#24407a'; sx3.fillRect(k * 512 / 36, 0, 512 / 36 + 1, 32); }
+                sx3.fillStyle = 'rgba(200,180,140,0.55)'; for (let k = 0; k < 200; k++) sx3.fillRect(Math.random() * 512, Math.random() * 32, 2 + Math.random() * 6, 1 + Math.random() * 3);
+                const stT2 = new THREE.CanvasTexture(stc2); stT2.colorSpace = THREE.SRGBColorSpace;
+                const capM = M2({ map: stT2, roughness: 0.7 });
+                const cap = add2(new THREE.SphereGeometry(0.25, 36, 10, 0, Math.PI * 2, 0, Math.PI / 2), capM, 0, HY, HZ - 0.02, -Math.PI / 2); cap.scale.set(1.06, 1.1, 0.62);   // the nemes over the crown
+                for (const s2 of [-1, 1]) { const lp = add2(new THREE.BoxGeometry(0.1, 0.05, 0.4), nemM, s2 * 0.21, HY + 0.07, HZ + 0.3, 0, -s2 * 0.12); lp.scale.x = 1; }   // its lappets falling to the chest
+                add2(new THREE.TorusGeometry(0.235, 0.016, 6, 24, Math.PI), gold, 0, HY, HZ - 0.06).scale.set(1, 0.62, 1);   // the band at the brow
+                const ur = add2(new THREE.CapsuleGeometry(0.018, 0.08, 4, 8), gold, 0, HY + 0.13, HZ - 0.17, 0.5); void ur;           // the uraeus
+                add2(new THREE.CylinderGeometry(0.03, 0.045, 0.24, 10), st, 0, HY + 0.1, HZ + 0.32, Math.PI / 2 - 0.25);        // the plaited beard
+                // the arms crossed on the chest, fists holding the crook and the flail
+                for (const s2 of [-1, 1]) {
+                  const a0 = new THREE.Vector3(s2 * 0.34, 0.31, -0.92), a1 = new THREE.Vector3(-s2 * 0.1, s2 > 0 ? 0.38 : 0.41, -0.6 - (s2 > 0 ? 0 : 0.08)), mid = a0.clone().add(a1).multiplyScalar(0.5), dv = a1.clone().sub(a0);
+                  const arm = add2(new THREE.CapsuleGeometry(0.066, dv.length(), 4, 12), st, mid.x, mid.y, mid.z); arm.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dv.normalize());
+                  add2(new THREE.SphereGeometry(0.068, 12, 8), st, a1.x, a1.y - 0.01, a1.z).scale.set(1, 0.8, 1.2);
+                  const rod = add2(new THREE.CylinderGeometry(0.016, 0.016, 0.55, 8), gold, a1.x + s2 * 0.05, a1.y + 0.07, a1.z - 0.22, Math.PI / 2 + 0.15, 0, s2 * 0.35);
+                  if (s2 > 0) add2(new THREE.TorusGeometry(0.05, 0.014, 6, 14, Math.PI * 1.2), gold, a1.x + 0.12, a1.y + 0.11, a1.z - 0.48, Math.PI / 2, 0, 0);   // the crook's hook
+                  else for (let k = 0; k < 3; k++) add2(new THREE.CylinderGeometry(0.01, 0.01, 0.2, 6), gold, a1.x - 0.12 + k * 0.03, a1.y + 0.1, a1.z - 0.52, Math.PI / 2, 0, 0.3);   // the flail's strands
+                  void rod;
+                }
+              } else {
+                const hair = add2(new THREE.SphereGeometry(0.235, 18, 10, 0, Math.PI * 2, 0, Math.PI / 2), st, 0, HY, HZ - 0.03, -Math.PI / 2); hair.scale.set(1.04, 0.62, 1.0);
+                for (let k = 0; k < 9; k++) add2(new THREE.SphereGeometry(0.045, 8, 6), st, Math.cos(k / 8 * Math.PI) * 0.2, HY + 0.04, HZ - 0.12 - Math.sin(k / 8 * Math.PI) * 0.1);   // the curls
+                for (const s2 of [-1, 1]) { const arm = add2(new THREE.CapsuleGeometry(0.07, 0.8, 4, 12), st, s2 * 0.45, 0.16, -0.55, Math.PI / 2); arm.rotation.z = s2 * 0.06; }
+                for (let k = 0; k < 6; k++) add2(new THREE.TorusGeometry(0.3 - k * 0.014, 0.012, 5, 22, Math.PI), st, 0, 0.17, 0.1 + k * 0.18).scale.set(1, 0.56, 1);   // the folds of the drapery
+              }
+              const plinth = add2(new THREE.BoxGeometry(0.62, 0.34, 0.3), st, 0, 0.1, 1.72); plinth.rotation.x = 0.12; // its broken base
+            }
+            // the strings on pegs round the trench
+            const pegM = M2({ color: 0x8a6a44, roughness: 0.9 }), strM = M2({ color: 0xe8e2d0, roughness: 0.8 });
+            const cn = [[-1.25, -2.2], [1.25, -2.2], [1.25, 2.2], [-1.25, 2.2]];
+            for (let k = 0; k < 4; k++) { const [ax, az] = cn[k], [bx, bz] = cn[(k + 1) % 4];
+              const peg = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.02, 0.5, 6), pegM); peg.position.set(ax, 0.2, az); G.add(peg);
+              const L = Math.hypot(bx - ax, bz - az), s2 = new THREE.Mesh(new THREE.BoxGeometry(0.008, 0.008, L), strM); s2.position.set((ax + bx) / 2, 0.38, (az + bz) / 2); s2.rotation.y = Math.atan2(bx - ax, bz - az); G.add(s2); }
+            // the canvas shade on four poles, sagging a little, the far side lower
+            const canv = new THREE.PlaneGeometry(3.4, 5.0, 8, 10); { const p3 = canv.attributes.position; for (let k = 0; k < p3.count; k++) { const u = p3.getX(k) / 1.7, v = p3.getY(k) / 2.5; p3.setZ(k, -(1 - u * u) * (1 - v * v) * 0.18 - u * 0.25); } canv.computeVertexNormals(); }
+            const cm = new THREE.Mesh(canv, M2({ color: 0xe0d2b0, roughness: 0.95, side: THREE.DoubleSide })); cm.rotation.x = -Math.PI / 2; cm.position.y = 2.2; cm.castShadow = true; G.add(cm);
+            for (const [px2, pz2] of [[-1.7, -2.5], [1.7, -2.5], [1.7, 2.5], [-1.7, 2.5]]) { const ph = px2 > 0 ? 1.95 : 2.45, pl = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, ph, 8), pegM); pl.position.set(px2, ph / 2, pz2); pl.castShadow = true; G.add(pl); }
+            // the sieve on its trestle, two buckets, a trowel and a brush laid by
+            const sv = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.08, 0.5), pegM); sv.position.set(-2.1, 0.62, 1.2); sv.rotation.z = 0.15; G.add(sv);
+            for (const [lx, lz] of [[-2.35, 1.0], [-1.85, 1.0], [-2.35, 1.4], [-1.85, 1.4]]) { const l = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.6, 0.04), pegM); l.position.set(lx, 0.3, lz); G.add(l); }
+            const bkM = M2({ color: 0x3a3a38, roughness: 0.6 });
+            for (const [bx, bz] of [[-2.0, -0.6], [-2.3, -0.2]]) { const b = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.13, 0.3, 14, 1, true), bkM); b.material.side = THREE.DoubleSide; b.position.set(bx, 0.15, bz); b.castShadow = true; G.add(b); }
+            const tr = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.01, 0.16), M2({ color: 0x8a8e92, metalness: 0.8, roughness: 0.4 })); tr.position.set(-1.6, 0.02, -1.5); tr.rotation.y = 0.5; G.add(tr);
+            world.createCollider(RAPIER.ColliderDesc.cuboid(0.9, 0.35, 2.0).setTranslation(DS.x, gy + 0.2, DS.z).setRotation({ x: 0, y: Math.sin(DS.ry / 2), z: 0, w: Math.cos(DS.ry / 2) }));
+            window.__digSand = sandM;
+            window.__digHeap = (() => { const hg = new THREE.SphereGeometry(1, 26, 10, 0, Math.PI * 2, 0, Math.PI / 2), hp = hg.attributes.position;
+              for (let k = 0; k < hp.count; k++) { const x = hp.getX(k), y = hp.getY(k), z = hp.getZ(k), n = 1 + Math.sin(x * 5.1 + z * 3.3) * 0.07 + Math.sin(z * 8.7 - x * 2.1) * 0.05;
+                hp.setXYZ(k, x * n, y * (0.8 + 0.2 * n) * (1 - 0.25 * Math.pow(1 - y, 3)), z * n); }
+              hg.computeVertexNormals(); return hg; })();
+            (window.__grassHoles = window.__grassHoles || []).push({ x: DS.x, z: DS.z, c: Math.cos(DS.ry), s: Math.sin(DS.ry), hx: 2.6, hz: 3.0 });
+          }
+          // the mound over this part of the find
+          const G = window.__digG, pz = order[i][8] || 0;
+          const mound = new THREE.Mesh(window.__digHeap, window.__digSand); mound.scale.set(0.8, 0.62, 0.64); mound.rotation.y = i * 1.7; mound.position.set(0, -0.1, pz * 1.15); mound.castShadow = mound.receiveShadow = true; G.add(mound);
+          const dustT = window.__dustTex || (window.__dustTex = (() => { const c = document.createElement('canvas'); c.width = c.height = 64; const x2 = c.getContext('2d');
+            const gr = x2.createRadialGradient(32, 32, 0, 32, 32, 32); gr.addColorStop(0, 'rgba(232,212,170,0.9)'); gr.addColorStop(1, 'rgba(232,212,170,0)'); x2.fillStyle = gr; x2.fillRect(0, 0, 64, 64); return new THREE.CanvasTexture(c); })());
+          const puffs = []; for (let k = 0; k < 6; k++) { const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: dustT, transparent: true, depthWrite: false, opacity: 0 })); scene.add(sp); puffs.push({ sp, t: k / 6 }); }
+          const wp = new THREE.Vector3(0, 0.3, pz * 1.15); G.localToWorld(wp);
+          const dig = { tick: (p, held, dt2) => { const k = 1 - Math.min(1, p); mound.scale.set(0.8 * (0.4 + 0.6 * k), Math.max(0.001, 0.62 * k), 0.64 * (0.5 + 0.5 * k)); mound.visible = k > 0.02;
+            for (const pf of puffs) { if (!held) { pf.sp.material.opacity = Math.max(0, pf.sp.material.opacity - (dt2 || 0.016) * 1.5); continue; }
+              pf.t = (pf.t + (dt2 || 0.016) * 0.8) % 1; pf.sp.position.set(wp.x + Math.sin(pf.t * 11 + pf.sp.id) * 0.4, wp.y + pf.t * 0.7, wp.z + Math.cos(pf.t * 9 + pf.sp.id) * 0.4);
+              pf.sp.scale.setScalar(0.25 + pf.t * 0.6); pf.sp.material.opacity = Math.sin(pf.t * Math.PI) * 0.55; } } };
+          mound.userData.fsTag = { type: 'objective', name: 'sand over the find', detail: 'hold E to brush it away' };
+          const anchor = new THREE.Object3D(); anchor.position.copy(wp); scene.add(anchor);
+          panels.push({ g: anchor, dig, fixed: false, p: 0, x, z, ry });
           continue;
         }
         if (BUSK) {
@@ -27882,14 +28147,16 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
         if (!near) { bar.style.display = 'none'; return; }
         bar.style.display = 'block';
         const held = !!keys.KeyE || (near.find && nd < 1.9);      // the lost are found by reaching them
-        near.p = held ? Math.min(1, near.p + dt / (near.find ? 0.5 : near.hive ? 1.8 : near.fire ? 2.4 : near.chop ? 2.2 : near.pad ? 1.0 : 1.6)) : Math.max(0, near.p - dt * 0.6);
+        near.p = held ? Math.min(1, near.p + dt / (near.find ? 0.5 : near.dig ? 2.6 : near.hive ? 1.8 : near.fire ? 2.4 : near.chop ? 2.2 : near.pad ? 1.0 : 1.6)) : Math.max(0, near.p - dt * 0.6);
         if (near.chop) { near.chop.tick(dt, held); if (held && Math.floor(near.p * 6) !== near._k) { near._k = Math.floor(near.p * 6); try { sfx('hit'); } catch (e) {} } }
         if (near.thirst) near.thirst.tick(near.p);
         for (const q of panels) if (q.busk) q.busk.tick(q.p, q === near && held, dt);
+        for (const q of panels) if (q.dig && !q.fixed) q.dig.tick(q.p, q === near && held, dt);
         if (near.bridge) { near.bridge.tick(near.p); if (held && Math.floor(near.p * 5) !== near._k) { near._k = Math.floor(near.p * 5); try { sfx('hit'); } catch (e) {} } }
         document.getElementById('fsrpT').textContent = near.find ? (held ? 'Found them\u2026' : 'Get to them')
           : near.thirst ? (held ? 'Watering\u2026' : 'Hold E to water them')
           : near.busk ? (held ? 'Playing\u2026 a crowd is gathering' : 'Hold E to play')
+          : near.dig ? (held ? 'Brushing the sand away\u2026' : 'Hold E to brush')
           : near.bridge ? (held ? 'Laying planks\u2026' : 'Hold E to mend the bridge')
           : near.chop ? (held ? 'Chopping\u2026' : 'Hold E to chop it down')
           : near.hive ? (/\bhoney/.test(String(SPEC.prompt || '').toLowerCase()) ? (held ? 'Lifting out the comb\u2026' : 'Hold E to take the honey') : (held ? 'Checking the hive\u2026' : 'Hold E to check the hive'))
@@ -27912,15 +28179,16 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
           else if (near.bridge) near.bridge.tick(1);
           else if (near.thirst) near.thirst.tick(1);
           else if (near.busk) near.busk.tick(1, false, 0);
+          else if (near.dig) near.dig.tick(1, false, 0.5);
           else { near.scr.material.emissive.setHex(0x2aff7a); near.scr.material.emissiveIntensity = 1.3; near.spark.visible = false; }
-          popText(near.busk ? (fixed >= st.count ? 'Every corner of the town has heard you play!' : 'They clap, and the coins ring in the case!') : near.thirst ? (fixed >= st.count ? 'Every plant is watered!' : 'Watered!') : near.find ? (fixed >= st.count ? 'Everyone is found!' : 'Found!') : near.bridge ? (fixed >= st.count ? 'Every bridge is whole!' : 'The bridge holds!') : near.chop ? (fixed >= st.count ? 'Every tree is down!' : 'Timber!') : near.hive ? (/\bhoney/.test(String(SPEC.prompt || '').toLowerCase()) ? (fixed >= st.count ? 'Every jar is full!' : 'A frame of honey!') : (fixed >= st.count ? 'Every hive checked!' : 'Hive checked!')) : near.post ? (fixed >= st.count ? 'Every letter posted!' : 'Posted!') : near.fire ? (fixed >= st.count ? 'Every fire is out!' : 'Fire out!') : near.pad ? (fixed >= st.count ? 'Every delivery made!' : 'Delivered!') : (fixed >= st.count ? 'All fixed!' : 'Fixed!'), '#7fe08a'); sfx('pickup');
+          popText(near.dig ? (fixed >= st.count ? 'There it lies, clean to the stone!' : 'The sand comes away!') : near.busk ? (fixed >= st.count ? 'Every corner of the town has heard you play!' : 'They clap, and the coins ring in the case!') : near.thirst ? (fixed >= st.count ? 'Every plant is watered!' : 'Watered!') : near.find ? (fixed >= st.count ? 'Everyone is found!' : 'Found!') : near.bridge ? (fixed >= st.count ? 'Every bridge is whole!' : 'The bridge holds!') : near.chop ? (fixed >= st.count ? 'Every tree is down!' : 'Timber!') : near.hive ? (/\bhoney/.test(String(SPEC.prompt || '').toLowerCase()) ? (fixed >= st.count ? 'Every jar is full!' : 'A frame of honey!') : (fixed >= st.count ? 'Every hive checked!' : 'Hive checked!')) : near.post ? (fixed >= st.count ? 'Every letter posted!' : 'Posted!') : near.fire ? (fixed >= st.count ? 'Every fire is out!' : 'Fire out!') : near.pad ? (fixed >= st.count ? 'Every delivery made!' : 'Delivered!') : (fixed >= st.count ? 'All fixed!' : 'Fixed!'), '#7fe08a'); sfx('pickup');
           try { burst(near.g.position, 0x7fe08a); } catch (e) {}
           renderQuest(); bar.style.display = 'none';
           if (fixed >= st.count) advanceStep();
         }
       };
       const hintR = document.querySelector('#hud .hint');
-      if (hintR && !FIND) hintR.textContent += BRIDGE ? ' \u00b7 hold E to mend' : CHOP ? ' \u00b7 hold E to chop' : HIVE ? ' \u00b7 hold E to check' : THIRST ? ' \u00b7 hold E to water' : BUSK ? ' \u00b7 hold E to play' : POST ? ' \u00b7 hold E to post' : FIRE ? ' \u00b7 hold E to spray' : DELIVER ? ' \u00b7 hold E to drop' : ' \u00b7 hold E to repair';
+      if (hintR && !FIND) hintR.textContent += BRIDGE ? ' \u00b7 hold E to mend' : CHOP ? ' \u00b7 hold E to chop' : HIVE ? ' \u00b7 hold E to check' : THIRST ? ' \u00b7 hold E to water' : DIG ? ' \u00b7 hold E to brush' : BUSK ? ' \u00b7 hold E to play' : POST ? ' \u00b7 hold E to post' : FIRE ? ' \u00b7 hold E to spray' : DELIVER ? ' \u00b7 hold E to drop' : ' \u00b7 hold E to repair';
     }
   }
   {
@@ -29050,7 +29318,9 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
       const _hOff = p0.y - holder.getWorldPosition(R._v).y;
       if (!R.started) {
         R.started = true;
-        if (hAt(p0.x, p0.z) > wl - 0.8) {
+        if (CANALS) {   // (2026-10-26) a gondola casts off mid-canal, not against the quay wall
+          const cw = CANALS.world(3, (CANALS.CW0 + CANALS.CW1) / 2); body.setTranslation({ x: cw[0], y: wl - 0.22 + _hOff, z: cw[1] }, true); R.moved = cw;
+        } else if (hAt(p0.x, p0.z) > wl - 0.8) {
           let best = null, bd2 = 1e9;
           for (let r = 4; r < 180 && !best; r += 4) for (let a = 0; a < 6.283; a += 0.15) { const x = p0.x + Math.cos(a) * r, z = p0.z + Math.sin(a) * r;
             if (Math.abs(x) > gsize / 2 - 8 || Math.abs(z) > gsize / 2 - 8 || hAt(x, z) > wl - 1.0) continue;

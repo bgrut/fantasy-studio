@@ -174,7 +174,9 @@ _STYLE_ASKED = {
     "illustrated": r"\b(illustrat\w*|poster|painted|painterly|firewatch)\b",
     "dunescape": r"\b(dunes?|pilgrim\w*|journey)\b",
     "watercolor": r"\b(watercolou?r\w*|pastel|fairy ?tales?|gentle)\b",
-    "claymation": r"\b(clay\w*|plasticine|stop[- ]?motion|toys?)\b",
+    # (2026-10-26) a clay bowl on a potter's wheel is a thing in the world, not the world's look:
+    # "a potter throwing a clay bowl on a wheel in a sunny Greek village" was built in plasticine
+    "claymation": r"\b(clay(?!\s+(?:bowls?|pots?|jars?|vases?|cups?|plates?|tiles?|bricks?|pits?|soil|courts?|ovens?|kilns?|pipes?|tablets?|roofs?|pottery|figurines?|lamps?|jugs?|urns?|amphora\w*))\w*|plasticine|stop[- ]?motion|toys?)\b",
     "noir": r"\b(noir|black[- ]and[- ]white|monochrome|limbo|1940s|silhouettes?)\b",
     "storybook": r"\b(storybook|picture ?book|gothic|tim burton|bedtime)\b",
     "kawaii": r"\b(kawaii|cute|adorable|candy ?land|candyland|gumdrops?|lollipops?|sugar ?land)\b",
@@ -394,6 +396,12 @@ def _sentence_goals(p: str) -> list:
                     r"(?:a|an|the)\s+(?:[a-z]+\s+){0,3}?(rivers?|streams?|creeks?|canals?|lakes?|bays?|lagoons?|estuar(?:y|ies))\b", p)
     if m and not any(k == "reach" for k, _, _ in out):
         out.append(("reach", "the end of the " + _singular(m.group(1)), 1))
+    # (2026-10-26) a gondolier rows the canal to its end; a skater crosses the ice to the far bank
+    if not any(k == "reach" for k, _, _ in out) and _fre.search(r"\bgondol(?:a|as|ier|iers)\b", p):
+        out.append(("reach", "the end of the canal", 1))
+    m = _fre.search(r"\b(?:skat(?:es|ing)?|glid(?:es|ing))\s+(?:across|over|along|down|on)\s+(?:a|an|the)\s+(?:[a-z]+\s+){0,2}?(ponds?|lakes?|rinks?|canals?|rivers?|ice)\b", p)
+    if m and not any(k == "reach" for k, _, _ in out):
+        out.append(("reach", "the far side of the " + _singular(m.group(1)), 1))
     # along a train: to the engine at its head
     if not any(k == "reach" for k, _, _ in out) and _fre.search(r"\b(train|carriages?|wagons?|coaches|locomotive|railway|railroad)\b", p) \
             and _fre.search(r"\b(walk(?:s|ing)?|mov(?:es|ing)|mak(?:es|ing) (?:his|her|their) way|mak(?:es|ing) rounds?|checks?|checking)\b", p):
@@ -1459,6 +1467,51 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                             job.setdefault("notes", []).append(f"pictures to take: {o.count} {o.label}, each one found is a photograph")
             except Exception as _phe:
                 job.setdefault("notes", []).append(f"photo rule skipped: {_phe}")
+            # A FLOCK IS HERDED (2026-10-26): "a shepherd herding sheep down a Scottish glen in the rain" stood
+            # among sheep with nothing to do but reach a village. Herding is its own job: the flock shies from
+            # you, and you drive it into the pen; the animals are the herd, not wanderers
+            try:
+                _hm = _fre.search(r"\b(?:herd(?:s|ing|ed)?|drov(?:e|ing)|driv(?:es|ing)|round(?:s|ing)? up|pen(?:s|ning)?|gather(?:s|ing)?)\s+(?:the\s+|a\s+|some\s+|his\s+|her\s+|their\s+)?(?:flock of\s+|herd of\s+)?(?:(\d+|two|three|four|five|six|seven|eight|nine|ten|twelve)\s+)?"
+                                  r"(sheep|cattle|cows?|goats?|geese|ducks?|horses?|llamas?|alpacas?|reindeer|pigs?|chickens?|hens?|turkeys?|camels?|yaks?)\b", (req.prompt or "").lower()) \
+                    or (_fre.search(r"\b(shepherds?|shepherdess|goatherds?|cowboys?|cowherds?|drovers?|gooseherds?|swineherds?)\b", (req.prompt or "").lower())
+                        and _fre.search(r"\b(sheep|cattle|cows?|goats?|geese|pigs?|herds?|flocks?)\b", (req.prompt or "").lower()) and None)
+                if _hm is None and _fre.search(r"\b(shepherds?|shepherdess)\b", (req.prompt or "").lower()) and _fre.search(r"\bsheep\b", (req.prompt or "").lower()):
+                    _hm = _fre.search(r"(?:())(sheep)", "sheep")
+                if _hm and getattr(spec, "genre", "") != "factory":
+                    from app.game_export.spec import ObjectiveSpec as _HOS, EntitySpec as _HES
+                    _an = _hm.group(2)
+                    _an = {"cow": "cows", "cattle": "cows", "goat": "goats", "duck": "ducks", "horse": "horses", "llama": "llamas", "alpaca": "alpacas", "pig": "pigs",
+                           "chicken": "chickens", "hen": "hens", "turkey": "turkeys", "camel": "camels", "yak": "yaks"}.get(_an, _an)
+                    _wn = {"two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10, "twelve": 12}
+                    _nc = _hm.group(1)
+                    _n = (int(_nc) if _nc and _nc.isdigit() else _wn.get(_nc or "", 0)) or 6
+                    _one = {"sheep": "sheep", "geese": "goose", "reindeer": "reindeer"}.get(_an, _an.rstrip("s"))
+                    spec.objectives = [o for o in spec.objectives if o.kind not in ("collect", "reach") or not _fre.search(_one[:4], (o.label or "").lower())]
+                    spec.objectives = [_HOS(kind="herd", label=_an, count=max(2, min(_n, 12)))] + [o for o in spec.objectives if o.kind not in ("reach",)]
+                    _have = [e for e in spec.entities if _fre.search(r"\b" + _one[:4], (e.name or "").lower())]
+                    for e in _have:
+                        e.behavior = "herd"; e.count = max(e.count or 1, _n + 2)
+                    if not _have:
+                        spec.entities.append(_HES(name=_one, behavior="herd", count=_n + 2, speed=1.6, height_m=library.default_height(_one)))
+                    job.setdefault("notes", []).append(f"herding: drive {_n} {_an} into the pen; they shy from you")
+            except Exception as _hre:
+                job.setdefault("notes", []).append(f"herd rule skipped: {_hre}")
+            # A FIND IS UNCOVERED (2026-10-26): "an archaeologist brushing sand off a buried statue in the
+            # desert" was asked to "collect sand". The sand is what comes away; the job is the find. The
+            # runtime's DIG lays it half sunk in a trench with a mound of sand over each part to brush off
+            try:
+                _dg = _fre.search(r"\b(?:brush(?:es|ing)?\s+(?:the\s+)?(?:sand|dust|dirt|earth|soil)\s+(?:off|from)|dig(?:s|ging)?(?:\s+up|\s+out)?|excavat\w+|unearth\w*|uncover\w*)\s+"
+                                  r"(?:a|an|the|some)?\s*(?:(?:buried|ancient|old|stone|giant|great|lost|golden|huge|marble|fallen|dinosaur|mammoth)\s+){0,3}"
+                                  r"(statue|fossils?|bones|skeleton|dinosaur|mummy|sarcophagus|mosaic|idol|pharaoh|relic|warrior|bust|colossus|sphinx)\b", (req.prompt or "").lower())
+                if _dg and getattr(spec, "genre", "") != "factory":
+                    from app.game_export.spec import ObjectiveSpec as _DOS
+                    _fn = {"fossils": "fossil", "bones": "skeleton", "dinosaur": "dinosaur skeleton"}.get(_dg.group(1), _dg.group(1))
+                    spec.objectives = [o for o in spec.objectives if not (o.kind == "collect" and _fre.search(r"\b(sand|dust|dirt|earth|soil|statues?|fossils?|bones?|relics?)\b", (o.label or "").lower()))]
+                    spec.objectives = [_DOS(kind="repair", label="buried " + _fn, count=4)] + [o for o in spec.objectives if o.kind != "repair"]
+                    spec.entities = [e for e in spec.entities if not _fre.search(r"\b(sand|dust|statues?|fossils?|skeletons?)\b", (e.name or "").lower())]
+                    job.setdefault("notes", []).append(f"dig: uncover the buried {_fn}, four mounds of sand to brush off")
+            except Exception as _dge:
+                job.setdefault("notes", []).append(f"dig rule skipped: {_dge}")
             # NOTHING TO PICK UP IN A FEELING (2026-10-25): "a monk ringing the great bell at the top of a
             # mountain monastery" was asked to "collect peace" as glowing orbs on the path. A collect step
             # whose thing is a feeling or an idea is not a thing to pick up; it goes
@@ -2692,6 +2745,12 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                 _w0 = _rdm.group(1)
                 spec.player.ride = ("snowboard" if _w0.startswith("snowboard") else "skis" if _w0.startswith("ski") and not _w0.startswith("skat")
                                     else "skateboard" if _w0.startswith("skat") else "surfboard" if _w0.startswith("surf") else "sled")
+                # (2026-10-26) skating on ice is skates, not a board: "a girl skating across a frozen pond in a Dutch village"
+                if spec.player.ride == "skateboard" and _rdre.search(r"\b(ice|frozen|pond|rink|canal|lake|winter|snow\w*|figure skat\w*|ice skat\w*)\b", (req.prompt or "").lower())                         and not _rdre.search(r"\bskate ?(?:board|park)\w*\b", (req.prompt or "").lower()):
+                    spec.player.ride = "iceskates"
+                    spec.player.walk_speed, spec.player.run_speed = 6.0, 10.0
+                    if spec.world.weather == "none" and _rdre.search(r"\b(snow\w*|winter|frozen)\b", (req.prompt or "").lower()):
+                        spec.world.weather = "snow"
                 spec.player.mode = "drive"
                 spec.player.car_params = None
                 spec.player.walk_speed = max(spec.player.walk_speed, 9.0)
@@ -2783,14 +2842,17 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         # bay, the river or the lake, grounding where the water gives out
         try:
             _rww = (req.prompt or "").lower()
-            if (_ROW_RE.search(_rww) and _fre.search(r"\b(bay|sea|ocean|lake|loch|river|harbou?r|across|island|isle|fjord|pond|cove|lagoon|strait|channel|waters?)\b", _rww)
+            # (2026-10-26) a gondolier is a rower who stands: "a gondolier singing on a Venice canal at sunset"
+            # walked the quay past moored gondolas. The runtime draws the boat as a gondola from the sentence
+            _gond = bool(_fre.search(r"\bgondol(?:a|as|ier|iers)\b", _rww))
+            if ((_ROW_RE.search(_rww) or _gond) and _fre.search(r"\b(bay|sea|ocean|lake|loch|river|harbou?r|across|island|isle|fjord|pond|cove|lagoon|strait|channel|waters?|canals?|venice|venetian)\b", _rww)
                     and player_glb and pattern == "biped" and (spec.player.ride or "") == "" and getattr(spec, "genre", "adventure") != "factory"):
                 spec.player.ride = "rowboat"
                 spec.player.mode = "drive"
                 spec.player.car_params = None
                 spec.player.walk_speed, spec.player.run_speed = 2.6, 4.0
-                spec.entities = [e for e in spec.entities if not _fre.search(r"\b(boats?|rowboats?|dinghy|oars?|ships?|cars?|trucks?)\b", (e.name or "").lower())]
-                job.setdefault("notes", []).append(f"'{spec.player.name}' rows a dory: W pulls, S backs water, A and D turn her")
+                spec.entities = [e for e in spec.entities if not _fre.search(r"\b(boats?|rowboats?|dinghy|oars?|ships?|cars?|trucks?|gondol(?:a|as))\b", (e.name or "").lower())]
+                job.setdefault("notes", []).append(f"'{spec.player.name}' rows a {'gondola' if _gond else 'dory'}: W pulls, S backs water, A and D turn her")
         except Exception as _rwe:
             job.setdefault("notes", []).append(f"row rule skipped: {_rwe}")
         # A PAPER BOAT IN THE GUTTER (2026-10-25): "a paper boat sailing down a rainy gutter in paris"
@@ -3997,7 +4059,9 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                   "goose": "geese", "tooth": "teeth", "foot": "feet", "wolf": "wolves", "thief": "thieves",
                   "knife": "knives", "leaf": "leaves", "elf": "elves", "dwarf": "dwarves", "loaf": "loaves", "shelf": "shelves"}
         for ob in spec.objectives:
-            if ob.kind in ("defeat", "hunt", "capture", "collect", "eliminate", "repair", "escort") and (ob.count or 0) > 1 and (ob.label or "").strip():
+            # (2026-10-26) a dig is one find under several mounds: "the buried statue" stays one statue
+            if ob.kind in ("defeat", "hunt", "capture", "collect", "eliminate", "repair", "escort") and (ob.count or 0) > 1 and (ob.label or "").strip() \
+                    and not (ob.kind == "repair" and (ob.label or "").startswith("buried ")):
                 _ws = ob.label.strip().split(" ")
                 _w = _ws[-1]; _lw = _w.lower()
                 if _lw.isalpha() and not _lw.endswith("s") and _lw not in _INVAR:

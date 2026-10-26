@@ -159,7 +159,7 @@ class EntitySpec(BaseModel):
     # waits when the player falls behind, and can be killed — the most common
     # mission shape in open-world games: protect someone who moves.
     behavior: Literal["static", "wander", "follow", "hostile", "vehicle",
-                      "flee", "guard", "guide", "escort", "suspect", "customer"] = "wander"
+                      "flee", "guard", "guide", "escort", "suspect", "customer", "herd"] = "wander"
     # customer (2026-10-06): a service game's patron. Walks in, queues at the
     # counter with an order over their head, waits as long as their patience
     # lasts, and leaves happy (to a table) or not (out of the door).
@@ -188,7 +188,7 @@ class ObjectiveSpec(BaseModel):
     the clues of the collect step before it."""
     kind: Literal["collect", "defeat", "reach", "race", "survive",
                   "eliminate", "score", "hunt", "capture", "escort",
-                  "defend", "accuse", "serve", "repair", "ride"] = "collect"   # ride (2026-10-22): catch N waves on a board
+                  "defend", "accuse", "serve", "repair", "ride", "herd"] = "collect"   # herd (2026-10-26): drive N animals into the pen   # ride (2026-10-22): catch N waves on a board
     # repair (2026-10-06): `count` broken things (`label`: "broken panels",
     # "generators") stand about the level; hold E at one until it comes back.
     # serve (2026-10-06): a service game. `count` orders filled for the

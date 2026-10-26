@@ -102,6 +102,8 @@ def _shown_kind(o):
     # "Check 4 hives" was told "repair" and the story wrote "Repair the northwest hive"
     if _PARCEL.search(lab):
         return "deliver"
+    if lab.lower().startswith("buried "):        # (2026-10-26) an archaeologist's dig: one find, its sand brushed off
+        return "uncover"
     if re.search(r"\b(?:bee)?hives?\b", lab, re.I):
         return "check"
     if re.search(r"\b(thirsty|wilting|dry)\b", lab, re.I):
@@ -124,11 +126,13 @@ def _fallback(spec, prompt):
     verbs = {"collect": "Gather", "reach": "Get to", "defeat": "Put down", "race": "Beat",
              "survive": "Hold out against", "eliminate": "Clear out", "score": "Score",
              "deliver": "Carry", "serve": "Serve", "repair": "Mend", "photograph": "Photograph",
-             "check": "Check", "fell": "Fell", "find": "Find", "put out": "Put out", "water": "Water", "play for": "Play for"}
+             "check": "Check", "fell": "Fell", "find": "Find", "put out": "Put out", "water": "Water", "play for": "Play for", "uncover": "Uncover"}
     beats = []
     for o in obs:
         lab = str(getattr(o, "label", "") or "it")
         n = int(getattr(o, "count", 1) or 1)
+        if _shown_kind(o) == "uncover":
+            n = 1                                         # four mounds, one statue
         # "Put down dragon." wants its article
         if n == 1 and not re.match(r"(the|a|an|my|your|his|her|their)\b", lab, re.I) and not lab[:1].isupper():
             lab = "the " + lab
