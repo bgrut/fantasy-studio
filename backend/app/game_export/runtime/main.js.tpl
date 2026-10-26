@@ -1842,9 +1842,14 @@ async function main() {
   // ballast with sleepers and two rails, and the driver has a throttle and a
   // brake, not a wheel. Tender and coaches follow on the same rails.
   const RAIL = (() => {
-    if (INTERIOR || OSM || !LVL || !LVL.path || LVL.path.length < 2 || !LVL.heights || (SPEC.player || {}).mode !== 'drive') return null;
+    if (INTERIOR || OSM || !LVL || !LVL.path || LVL.path.length < 2 || !LVL.heights) return null;
     const w = [SPEC.prompt, SPEC.world && SPEC.world.name, SPEC.title, (SPEC.player || {}).name].filter(Boolean).join(' ').toLowerCase();
     if (!/\b(trains?|locomotives?|railways?|railroads?|steam engines?|rail journey|railway line|tram|express train)\b/.test(w)) return null;
+    // (2026-10-25) A TRAIN STANDS ON ITS LINE: "a night train conductor walking along the carriages through a
+    // snowy forest" walked a clearing past an overturned van. Someone on foot beside a train walks the same
+    // railway, the train standing on it: an engine at the head of its coaches, lit from within
+    const WALK = (SPEC.player || {}).mode !== 'drive';
+    if (WALK && !/\b(conductors?|guards?|porters?|ticket inspectors?|stationmasters?|passengers?|carriages?|coaches|wagons?|platforms?|sleeper cars?|dining cars?|walk\w*)\b/.test(w)) return null;
     const n = LVL.grid_n, S = LVL.size_m, hs = LVL.heights;
     const gridH = (x, z) => { const fx = (x / S + 0.5) * (n - 1), fz = (z / S + 0.5) * (n - 1);
       const j = Math.max(0, Math.min(n - 2, Math.floor(fx))), i = Math.max(0, Math.min(n - 2, Math.floor(fz))), a = Math.min(1, Math.max(0, fx - j)), b = Math.min(1, Math.max(0, fz - i));
@@ -1872,7 +1877,12 @@ async function main() {
     const at = (sA) => { const u = Math.max(0, Math.min(1, sA / len)), v = curve.getPointAt(u), tg = curve.getTangentAt(u), k = Math.min(pts.length - 1, Math.round(u * N));
       const k2 = Math.min(pts.length - 1, k + 1), f = u * N - k; return { x: v.x, z: v.z, y: pts[k].y + (pts[k2].y - pts[k].y) * Math.max(0, f), tx: tg.x, tz: tg.z }; };
     const s0 = 34;                                    // the spawn stands 34 m along the line
-    return { curve, len, pts, at, s0, near: (x, z, m) => nearest(x, z)[1] < 2.8 + (m || 0), sNear: (x, z) => nearest(x, z)[0] / N * len };
+    // on foot, the train stands ahead along the line, its last coach a few steps on, its engine where the walk ends
+    let train = null;
+    if (WALK) { const nC = Math.max(3, Math.min(6, Math.floor((len - s0 - 40) / 12.5))), back = s0 + 8, front = back + nC * 12.2 + 12;
+      train = { nC, back, front: Math.min(front, len - 12) };
+      const q = at(train.front - 3), nx = -q.tz, nz = q.tx; LVL.goal = [q.x + nx * 2.8, q.z + nz * 2.8]; }
+    return { curve, len, pts, at, s0, walk: WALK, train, near: (x, z, m) => nearest(x, z)[1] < 2.8 + (m || 0), sNear: (x, z) => nearest(x, z)[0] / N * len };
   })();
   // ── A BEACH (2026-10-11) ───────────────────────────────────────────────
   // a coast level (build_level coast=True): sand down to the sea on +s. The
@@ -1950,6 +1960,19 @@ async function main() {
     if (!/\b(blacksmiths?|smithy|smithies|anvil|swordsmith|forges? an?\b|forging)/.test(w)) return null;
     const at = [-8.5, -4.5], ry = Math.PI / 2;            // beside the spawn, its open front to the track
     return { at, ry, near: (x, z, m) => Math.hypot(x - at[0], z - at[1]) < 4.6 + (m || 0) };
+  })();
+  // ── A GLASSWORKS (2026-10-25) ───────────────────────────────────────────
+  // "a glassblower shaping a vase in a glowing workshop" was an explorer by a
+  // campfire in a pine wood. A glassblower works in a hot shop: an open-fronted
+  // brick shed, the furnace's glory hole white-hot at its back, the bench with
+  // its long arms, the marver, the pipes in their rack, the annealer, and the
+  // shelves of finished glass catching the fire.
+  const GLASSWORKS = (() => {
+    if (INTERIOR || OSM || !LVL || SPEC.genre === 'factory' || VIEW === 'side' || SMITHY) return null;
+    const w = [SPEC.prompt, SPEC.world && SPEC.world.name, SPEC.title, (SPEC.player || {}).name].filter(Boolean).join(' ').toLowerCase();
+    if (!/\b(glass ?blow\w*|glass ?makers?|glassworks|glass ?studio|glass ?furnace|hot ?shop|blown glass|glory ?hole)\b/.test(w)) return null;
+    const at = [-8.5, -4.5], ry = Math.PI / 2;
+    return { at, ry, near: (x, z, m) => Math.hypot(x - at[0], z - at[1]) < 5.4 + (m || 0) };
   })();
   // ── A MONASTERY ON THE MOUNTAIN (2026-10-07) ────────────────────────────
   // "a monk climbs the stone steps of a cliffside himalayan monastery above
@@ -2420,7 +2443,9 @@ async function main() {
     if (INTERIOR || OSM || VIEW === 'side' || SPEC.genre === 'factory' || GARDEN || WEST || CANDY || ROWS) return null;
     const w = [SPEC.prompt, SPEC.world && SPEC.world.name].filter(Boolean).join(' ').toLowerCase();
     // (2026-10-20) one cottage is a place (proc/places.js), not a village: "from his stone cottage" raised a Tudor green on a Hebridean isle
-    if (!/\b(village|villages|hamlet|cottages|thatched|farmstead|shire)\b/.test(w)) return null;
+    // (2026-10-25) a farmers market is held on a village green: "a baker carrying a wedding cake across a crowded
+    // farmers market" walked a pine wood with no stall in it
+    if (!/\b(village|villages|hamlet|cottages|thatched|farmstead|shire|farmers'? markets?|market (?:squares?|towns?|days?))\b/.test(w)) return null;
     if (/\b(city|downtown|skyscrapers?|neon|cyberpunk)\b/.test(w)) return null;
     const r = mulberry32((SPEC.seed || 1) + 8181);
     // A VIKING VILLAGE IS LONGHOUSES AT THE FJORD'S HEAD (2026-10-11): the ring
@@ -2499,6 +2524,36 @@ async function main() {
       onStone: (x, z, m) => stones.some(t => Math.abs(x - t.x) < 0.45 + (m || 0) && Math.abs(z - t.z) < 0.3 + (m || 0))
         || (Math.abs(x - MAUS[0]) < 3.4 + (m || 0) && Math.abs(z - MAUS[1]) < 4.4 + (m || 0)),
     };
+  })();
+  // ── A HENHOUSE (2026-10-25) ─────────────────────────────────────────────
+  // "a fox stealing eggs from a henhouse on a moonlit farm" was a vegetable
+  // plot with nothing to steal. Where the sentence keeps hens, a coop stands
+  // beside the way: a little house on legs with a ramp to its pop hole and
+  // nest boxes along its side, inside a run of chicken wire, the eggs in the
+  // nest boxes and laid about the straw.
+  const COOP = (() => {
+    if (INTERIOR || OSM || VIEW === 'side' || SPEC.genre === 'factory' || !LVL) return null;
+    const w = [SPEC.prompt, SPEC.world && SPEC.world.name].filter(Boolean).join(' ').toLowerCase();
+    if (!/\b(hen ?houses?|hen ?coops?|chicken ?coops?|chicken ?houses?|coops?|hens?|chickens?|poultry|eggs?)\b/.test(w)) return null;
+    if (!/\b(farms?|farmyard|barn\w*|hen ?houses?|coops?|hens?|chickens?|poultry|homestead|countryside|village)\b/.test(w)) return null;
+    const r = mulberry32((SPEC.seed || 1) + 3434);
+    const pth = LVL.path && LVL.path.length > 2 ? LVL.path[Math.floor(LVL.path.length / 2)] : [0, 20];
+    const nx = LVL.path && LVL.path.length > 2 ? LVL.path[Math.floor(LVL.path.length / 2) + 1] : [0, 30];
+    let dx = nx[0] - pth[0], dz = nx[1] - pth[1]; const dl = Math.hypot(dx, dz) || 1; dx /= dl; dz /= dl;
+    // off the way, and clear of a vegetable plot's fence (the first one ran through its wire)
+    let off = 8;
+    if (GARDEN) for (; off < 40; off += 3) { const x = pth[0] - dz * off, z = pth[1] + dx * off;
+      if (!(x > -7.6 - 6 && x < 7.6 + 6 && z > -2.6 - 5 && z < 13.6 + 5)) break; }
+    const C = { x: pth[0] - dz * off, z: pth[1] + dx * off, yaw: Math.atan2(dz, -dx), W: 7, D: 5 };
+    // a spot inside the run: in a nest box first, then in the straw
+    let k = 0; const nests = [];
+    C.spot = () => { const i = k++; const c = Math.cos(C.yaw), s2 = Math.sin(C.yaw);
+      const loc = i < 4 ? [-0.85 + i * 0.4, -0.38] : [(r() - 0.5) * (C.W - 1.6), (r() - 0.5) * (C.D - 1.6) + 0.6];
+      return [C.x + loc[0] * c + loc[1] * s2, C.z - loc[0] * s2 + loc[1] * c, i < 4]; };
+    C.inside = (x, z, m) => { const c = Math.cos(C.yaw), s2 = Math.sin(C.yaw), lx = (x - C.x) * c - (z - C.z) * s2, lz = (x - C.x) * s2 + (z - C.z) * c;
+      return Math.abs(lx) < C.W / 2 + (m || 0) && Math.abs(lz) < C.D / 2 + (m || 0); };
+    void nests;
+    return C;
   })();
   // ── A WRECK (2026-10-07) ────────────────────────────────────────────────
   // "a deep sea diver explores a sunken pirate shipwreck and recovers four
@@ -3199,7 +3254,7 @@ async function main() {
   // more, and the swimmer dives (C) for what lies on the bottom.
   const WATER = (() => {
     const w = SPEC.world.water_level ?? null;
-    if (w === null || !(FLORA && FLORA.biome && FLORA.biome.underwater)) return w;
+    if (w === null || !((FLORA && FLORA.biome && FLORA.biome.underwater) || /underwater/i.test(String(SPEC.world.name || '')))) return w;   // (2026-10-25) the world's name says so too
     const hs = [];
     for (let i = -8; i <= 8; i++) for (let j = -8; j <= 8; j++) hs.push(hAt(i * gsize / 16, j * gsize / 16));
     hs.sort((a, b) => a - b);
@@ -4134,6 +4189,7 @@ async function main() {
       const _thing = _heliGoal || _venueGoal || GARDEN || WEST || GRAVE || VILLAGE || ROWS || MONK
         || (typeof CENOTE !== 'undefined' && CENOTE)   // (2026-10-25) a sinkhole's pool is its own goal: no lamp post stood in the water
         || (WRECK && WRECK.isGoal)                     // the galleon on the bottom is what you came to see
+        || (RAIL && RAIL.walk && RAIL.train)            // (2026-10-25) the engine at the head of the train is the goal
         || (typeof ENTERABLES !== 'undefined' && ENTERABLES.some(E => E && E.facade === 'lighthouse'))   // a lighthouse is its own beacon
         || (_reachOb && /\b(hive|beehive|skep|apiary|helipad)\b/.test(String(_reachOb.label || '').toLowerCase()));
       // THE GOAL IS A PLACE (2026-10-12): the open-ground goal was a shaft of
@@ -8868,6 +8924,7 @@ async function main() {
       if (VILLAGE) keepClear.push([VILLAGE.GC[0], VILLAGE.GC[1], 26], [0, 3, 6]);
       if (GRAVE) for (let gz = GRAVE.Z0; gz <= GRAVE.Z1; gz += 5) keepClear.push([0, gz, 20]);   // no wood inside the railings
       if (WRECK) { WRECK.settle(); keepClear.push([WRECK.x, WRECK.z, 11]); }   // no kelp through the hull
+      if (COOP) keepClear.push([COOP.x, COOP.z, 7]);                            // nor a tree through the henhouse
       if (MOSSLOG) for (let u = MOSSLOG.U0; u <= MOSSLOG.U1; u += 0.8) keepClear.push([MOSSLOG.ux * u, MOSSLOG.uz * u, MOSSLOG.R + 0.6]);   // nothing grows through the log
       // A PISTE THROUGH THE TREES (2026-10-19): "a snowboarder races down a
       // mountain slalom through the pines" raced through an unbroken forest,
@@ -9463,7 +9520,7 @@ async function main() {
                   || (CANALS && CANALS.inCity(x, z, 6))
                   || (BEACH && BEACH.onKit(x, z, 1.5))
                   || (SKATE && SKATE.inPark(x, z, 4))
-                  || (SMITHY && SMITHY.near(x, z, 2))
+                  || (SMITHY && SMITHY.near(x, z, 2)) || (GLASSWORKS && GLASSWORKS.near(x, z, 2))
                   || roadDist(x, z) < 7.5
                   || _regReject(x, z, sct)
                   || (clusterN(x, z) < 0.45 && !_regForce(x, z, sct)
@@ -11718,7 +11775,7 @@ async function main() {
           if (RAIL && RAIL.near(x, z, 0)) d = 0;
           if (CANALS && CANALS.inCity(x, z, 1)) d = 0;
           if (SKATE && SKATE.inPark(x, z, 0.5)) d = 0;
-          if (SMITHY && SMITHY.near(x, z, 0.3)) d = 0;
+          if ((SMITHY && SMITHY.near(x, z, 0.3)) || (GLASSWORKS && GLASSWORKS.near(x, z, 0.3))) d = 0;
           else if (PITCH && PITCH.inside(x, z, 4)) { h *= 0.3; d *= 0.6; dry = 0; }
           if (WEST && WEST.inTown(x, z, 0)) d = 0;
           if (MONK && (MONK.onStair(x, z, 0.2) || MONK.onTop(x, z, 0))) d = 0;
@@ -11826,7 +11883,7 @@ async function main() {
           if (RAIL && RAIL.near(x, z, 0.5)) return true;
           if (CANALS && CANALS.inCity(x, z, 2)) return true;
           if (SKATE && SKATE.inPark(x, z, 1)) return true;
-          if (SMITHY && SMITHY.near(x, z, 0.5)) return true;
+          if ((SMITHY && SMITHY.near(x, z, 0.5)) || (GLASSWORKS && GLASSWORKS.near(x, z, 0.5))) return true;
           if (BEACH && BEACH.harbor) { const [qa, qc] = BEACH.local(x, z); if (qa > -61 && qa < BEACH.gl + 51 && qc > -35 && qc < 7) return true; }   // nothing grows from a harbour's cobbles
           if (MOSSLOG && MOSSLOG.on(x, z, 0.4)) return true;                     // nor stones on the log, nor in its lee
           if (FALLS && Math.hypot(x - FALLS.at[0], z - FALLS.at[1]) < 12) return true;
@@ -11988,7 +12045,7 @@ async function main() {
         if (RAIL && RAIL.near(x, z, 0)) continue;
         if (CANALS && CANALS.inCity(x, z, 1)) continue;
         if (SKATE && SKATE.inPark(x, z, 0.5)) continue;
-        if (SMITHY && SMITHY.near(x, z, 0.3)) continue;
+        if ((SMITHY && SMITHY.near(x, z, 0.3)) || (GLASSWORKS && GLASSWORKS.near(x, z, 0.3))) continue;
         if (LVL && LVL.slot && hAt(x, z) > 0.8) continue;              // nor tufts
         if (Math.hypot(hAt(x + 0.8, z) - hAt(x - 0.8, z), hAt(x, z + 0.8) - hAt(x, z - 0.8)) > 1.6) continue;   // nothing roots on a face steeper than 45 degrees
         const _rg = window.__regionAt && window.__regionAt(x, z);
@@ -14664,6 +14721,9 @@ async function main() {
       if (_litter) s = makeLitter(i);
       else if (_chest) s = makeChest(i);
       else if (_coin && !tpl) s = makeCoin(i);
+      const _egg = /\beggs?\b/.test(String(step.label || '').toLowerCase());
+      if (_egg && !tpl) { const eg = new THREE.SphereGeometry(0.05, 16, 12); eg.scale(1, 1.3, 1);
+        s = new THREE.Mesh(eg, new THREE.MeshStandardMaterial({ color: i % 3 ? 0xd9a878 : 0xf2ece0, roughness: 0.6 })); s.material.userData.noAutoTex = true; }
       const _mush = !tpl && /\b(mushrooms?|toadstools?|fung(?:i|us)|truffles?)\b/.test(String(step.label || '').toLowerCase());
       if (_mush) s = makeMushroom(i);
       // (the library's stand-in "creature" is a dog; a creature named by its kind keeps its own model)
@@ -14673,7 +14733,9 @@ async function main() {
       const _critter = CRITTER_RE.test(String(step.label || '').toLowerCase()) && (!tpl || /\/(creature|monster|beast|spirit)s?\.glb$/.test(String(step.asset || '')));
       if (_critter) s = makeCritter(i);
       // a third coordinate is the ground the pickup stands on (a platform's top)
-      if (_chest && WRECK) {
+      if (_egg && COOP) {
+        const sp = COOP.spot(); cx = sp[0]; cz = sp[1]; cy = hAt(cx, cz) + (sp[2] ? 0.62 : 0.06);   // in a nest box, or in the straw
+      } else if (_chest && WRECK) {
         [cx, cz] = WRECK.spot();                       // what was in its hold, scattered round it
       } else if (_rslot) {
         cx = _rslot.x; cz = _rslot.z; cy = hAt(cx, cz) + 0.6;
@@ -14893,6 +14955,51 @@ async function main() {
     }
     if (ticks.length) window.__lifeTick = (dt) => { const t = performance.now() / 1000; for (const f of ticks) f(Math.min(dt, 0.05), t); };
     window.__life = kinds;
+  }
+  // ── THE HENHOUSE, BUILT (see COOP above) ────────────────────────────────
+  if (COOP) {
+    const C = COOP, MAT = (o) => { const m = new THREE.MeshStandardMaterial(o); m.userData.noAutoTex = true; return m; }, rC = mulberry32((SPEC.seed || 1) + 3535);
+    const G = new THREE.Group(); G.position.set(C.x, hAt(C.x, C.z), C.z); G.rotation.y = C.yaw; scene.add(G);
+    const board = MAT({ map: HDT('planks', 1, 1), color: 0xb08a62, roughness: 0.85 }), redP = MAT({ map: HDT('planks', 1, 1), color: 0x8e3a2a, roughness: 0.8 }),
+          shingle = MAT({ color: 0x4a3e36, roughness: 0.9 }), post = MAT({ color: 0x5a4632, roughness: 0.9 });
+    const add = (geo, m, x, y, z, ry) => { const o = new THREE.Mesh(geo, m); o.position.set(x, y, z); if (ry) o.rotation.y = ry; o.castShadow = o.receiveShadow = true; G.add(o); return o; };
+    // the house on its legs at the back of the run, painted barn red, a pitched roof of shingles
+    for (const [x, z] of [[-1.0, -1.9], [1.0, -1.9], [-1.0, -0.7], [1.0, -0.7]]) add(new THREE.BoxGeometry(0.1, 0.6, 0.1), post, x, 0.3, z);
+    add(new THREE.BoxGeometry(2.2, 1.2, 1.4), redP, 0, 1.2, -1.3);
+    for (const sd of [-1, 1]) { const rf = add(new THREE.BoxGeometry(2.5, 0.06, 0.95), shingle, 0, 2.0, -1.3 + sd * 0.38); rf.rotation.x = sd * 0.62; }
+    add(new THREE.BoxGeometry(0.06, 0.06, 0.2), post, 0, 2.28, -1.3);
+    add(new THREE.BoxGeometry(0.34, 0.42, 0.02), MAT({ color: 0x140e0a }), 0.4, 0.86, -0.59);                                // the pop hole
+    const ramp = add(new THREE.BoxGeometry(0.34, 0.03, 1.1), board, 0.4, 0.32, -0.1); ramp.rotation.x = 0.55;
+    for (let k = 0; k < 5; k++) add(new THREE.BoxGeometry(0.34, 0.02, 0.02), post, 0.4, 0.14 + k * 0.1, 0.32 - k * 0.19);
+    // the nest boxes along its front, a lid hinged up, straw in each
+    add(new THREE.BoxGeometry(1.7, 0.4, 0.45), board, -0.25, 0.75, -0.38);
+    for (let k = 0; k < 4; k++) add(new THREE.BoxGeometry(0.36, 0.06, 0.38), MAT({ color: 0xd8b860, roughness: 1 }), -0.85 + k * 0.4, 0.58, -0.38);
+    const lid = add(new THREE.BoxGeometry(1.75, 0.04, 0.5), shingle, -0.25, 1.05, -0.62); lid.rotation.x = -0.9;
+    // the run: posts and chicken wire round it, a gate on the near side, straw underfoot
+    const wireT = (() => { const c = document.createElement('canvas'); c.width = c.height = 64; const x = c.getContext('2d'); x.clearRect(0, 0, 64, 64);
+      x.strokeStyle = 'rgba(190,196,200,0.95)'; x.lineWidth = 1.4;
+      for (let i = -64; i < 128; i += 16) { x.beginPath(); x.moveTo(i, 0); x.lineTo(i + 32, 64); x.stroke(); x.beginPath(); x.moveTo(i + 32, 0); x.lineTo(i, 64); x.stroke(); }
+      const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; return t; })();
+    const W = C.W, D = C.D, H = 1.5;
+    for (const [x0, z0, x1, z1] of [[-W / 2, -D / 2, W / 2, -D / 2], [W / 2, -D / 2, W / 2, D / 2], [W / 2, D / 2, 0.6, D / 2], [-0.6, D / 2, -W / 2, D / 2], [-W / 2, D / 2, -W / 2, -D / 2]]) {
+      const L = Math.hypot(x1 - x0, z1 - z0), t = wireT.clone(); t.needsUpdate = true; t.repeat.set(L / 0.3, H / 0.3);
+      const pn = add(new THREE.PlaneGeometry(L, H), MAT({ map: t, transparent: true, alphaTest: 0.3, side: THREE.DoubleSide, metalness: 0.6, roughness: 0.5 }), (x0 + x1) / 2, H / 2, (z0 + z1) / 2, -Math.atan2(z1 - z0, x1 - x0));
+      pn.castShadow = false;
+      for (const [px, pz] of [[x0, z0], [x1, z1]]) add(new THREE.BoxGeometry(0.09, H + 0.15, 0.09), post, px, (H + 0.15) / 2, pz);
+      const v = new THREE.Vector3((x0 + x1) / 2, 0, (z0 + z1) / 2).applyAxisAngle(new THREE.Vector3(0, 1, 0), C.yaw), yaw2 = C.yaw - Math.atan2(z1 - z0, x1 - x0);
+      world.createCollider(RAPIER.ColliderDesc.cuboid(L / 2, H / 2, 0.06).setTranslation(C.x + v.x, G.position.y + H / 2, C.z + v.z).setRotation({ x: 0, y: Math.sin(yaw2 / 2), z: 0, w: Math.cos(yaw2 / 2) }));
+    }
+    const gate = add(new THREE.PlaneGeometry(1.2, 1.2), MAT({ map: wireT, transparent: true, alphaTest: 0.3, side: THREE.DoubleSide }), -0.2, 0.62, D / 2 + 0.55, -1.1); gate.castShadow = false;   // standing open
+    const straw = add(new THREE.PlaneGeometry(W - 0.2, D - 0.2), MAT({ color: 0xc9a85a, roughness: 1 }), 0, 0.03, 0); straw.rotation.x = -Math.PI / 2; straw.castShadow = false;
+    { const ss = new THREE.InstancedMesh(new THREE.BoxGeometry(0.22, 0.006, 0.012), MAT({ color: 0xe0c070, roughness: 1 }), 500), d = new THREE.Object3D();
+      for (let k = 0; k < 500; k++) { d.position.set((rC() - 0.5) * (W - 0.4), 0.045, (rC() - 0.5) * (D - 0.4)); d.rotation.set(0, rC() * 6.28, (rC() - 0.5) * 0.3); d.updateMatrix(); ss.setMatrixAt(k, d.matrix); }
+      G.add(ss); }
+    // a feeder and a water dish
+    add(new THREE.CylinderGeometry(0.18, 0.28, 0.5, 14), MAT({ color: 0x9aa0a4, roughness: 0.4, metalness: 0.7 }), 2.2, 0.25, 0.8);
+    add(new THREE.CylinderGeometry(0.3, 0.28, 0.08, 18), MAT({ color: 0xb8bcc0, roughness: 0.3, metalness: 0.8 }), -2.4, 0.04, 1.2);
+    { const v = new THREE.Vector3(0, 0, -1.3).applyAxisAngle(new THREE.Vector3(0, 1, 0), C.yaw);
+      world.createCollider(RAPIER.ColliderDesc.cuboid(1.1, 1.0, 0.7).setTranslation(C.x + v.x, G.position.y + 1.0, C.z + v.z).setRotation({ x: 0, y: Math.sin(C.yaw / 2), z: 0, w: Math.cos(C.yaw / 2) })); }
+    window.__coop = { at: [C.x, C.z], yaw: C.yaw };
   }
   // ── THE WRECK, BUILT (see WRECK above) ──────────────────────────────────
   if (WRECK) {
@@ -16111,13 +16218,17 @@ async function main() {
       const rg = new THREE.BufferGeometry(); rg.setAttribute('position', new THREE.Float32BufferAttribute(rp, 3)); rg.setIndex(ri); rg.computeVertexNormals();
       const rail = new THREE.Mesh(rg, railM); rail.material.side = THREE.DoubleSide; scene.add(rail); }
     // the coaches: two, varnished teak-red with cream windows, behind the tender
+    // (a walker's train has as many as the line holds, standing, their windows lit at night)
+    const _nightT = ['night', 'dusk'].includes(SPEC.world.sky);
     const coachM = MAT({ color: 0x7a1e1a, roughness: 0.45, metalness: 0.1 }), creamM = MAT({ color: 0xe9dfc4, roughness: 0.6 }), glassM = MAT({ color: 0x1b2328, roughness: 0.1, metalness: 0.4 }), blackM = MAT({ color: 0x141414, roughness: 0.6, metalness: 0.3 });
     const coaches = [];
-    for (let k = 0; k < 2; k++) { const C = new THREE.Group();
+    const _nCoach = RAIL.walk && RAIL.train ? RAIL.train.nC : 2;
+    if (RAIL.walk && _nightT) { glassM.color.setHex(0x3a2a14); glassM.emissive = new THREE.Color(0xffc878); glassM.emissiveIntensity = 1.3; }
+    for (let k = 0; k < _nCoach; k++) { const C = new THREE.Group();
       const bd = new THREE.Mesh(new THREE.BoxGeometry(2.7, 2.5, 11), coachM); bd.position.y = 2.15; C.add(bd);
       const bandM = new THREE.Mesh(new THREE.BoxGeometry(2.72, 0.9, 10.6), creamM); bandM.position.y = 2.55; C.add(bandM);
       for (let wi = -4; wi <= 4; wi++) for (const sd of [-1, 1]) { const wn = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.7, 0.85), glassM); wn.position.set(sd * 1.37, 2.6, wi * 1.15); C.add(wn); }
-      const rf = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 1.5, 11.1, 16, 1, false, -0.75, 1.5).rotateX(Math.PI / 2).rotateZ(Math.PI / 2), MAT({ color: 0x3a3a3a, roughness: 0.7 })); rf.position.y = 2.75; C.add(rf);
+      const rf = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 1.5, 11.1, 16, 1, false, -0.75, 1.5).rotateX(-Math.PI / 2), MAT({ color: 0x3a3a3a, roughness: 0.7, side: THREE.DoubleSide })); rf.position.y = 2.3;   // (2026-10-25) the arc up, not on its side C.add(rf);
       for (const bz of [-3.6, 3.6]) for (const wz of [-0.7, 0.7]) for (const sd of [-0.72, 0.72]) { const wh = new THREE.Mesh(new THREE.CylinderGeometry(0.46, 0.46, 0.14, 16).rotateZ(Math.PI / 2), blackM); wh.position.set(sd, 0.78, bz + wz); C.add(wh); }
       C.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } }); scene.add(C); coaches.push(C); }
     // steam: puffs from the chimney, more when the regulator is open
@@ -16134,8 +16245,24 @@ async function main() {
         const sc = 0.8 + P2.t * 1.6; P2.sp.scale.set(sc, sc, 1); P2.sp.material.opacity = 0.55 * (1 - P2.t / 4); }
       if (loco && loco.userData.wheels) for (const wh of loco.userData.wheels) wh.rotation.x += v * dt / wh.userData.r;
     };
+    if (RAIL.walk && RAIL.train) {
+      // standing on the line: the engine at the head, steam idling from its chimney, the coaches coupled behind
+      const T = RAIL.train, loco = buildLoco(); scene.add(loco);
+      const place = (o, sC, half) => { const a = RAIL.at(sC), b = RAIL.at(sC - 4); o.position.set(a.x, a.y + 0.25, a.z); o.lookAt(a.x + (a.x - b.x), a.y + 0.25 + (a.y - b.y), a.z + (a.z - b.z));
+        const yawC = Math.atan2(a.x - b.x, a.z - b.z);
+        world.createCollider(RAPIER.ColliderDesc.cuboid(1.4, 2.0, half).setTranslation(a.x, a.y + 2.2, a.z).setRotation({ x: 0, y: Math.sin(yawC / 2), z: 0, w: Math.cos(yawC / 2) })); };
+      place(loco, T.front - 5, 6.4); loco.rotation.y += Math.PI;               // the engine's own forward is its -Z
+      coaches.forEach((C, k) => place(C, T.front - 16 - k * 12.2, 5.6));
+      // its lamp lit, its windows glowing on the snow, steam drifting off it while it waits
+      const _lp = RAIL.at(T.front + 1), _lpl = new THREE.PointLight(0xffd8a0, 8, 22, 1.6); _lpl.position.set(_lp.x, _lp.y + 3, _lp.z); scene.add(_lpl);
+      if (_nightT) for (let k = 0; k < coaches.length; k += 2) { const a = RAIL.at(T.front - 16 - k * 12.2), L2 = new THREE.PointLight(0xffc070, 5, 9, 1.8); L2.position.set(a.x, a.y + 2.4, a.z); scene.add(L2); }
+      window.__trainStand = { coaches: coaches.length, front: +T.front.toFixed(1), goal: LVL.goal };
+      let pk = 0; RAIL.idle = (dt) => { pk += dt; if (pk > 0.7) { pk = 0; const P2 = puffs[pi++ % puffs.length]; const c = loco.userData.chimney; if (c) { c.getWorldPosition(P2.sp.position); P2.t = 0; } }
+        for (const P2 of puffs) { if (P2.t > 4) { P2.sp.material.opacity = 0; continue; } P2.t += dt; P2.sp.position.y += dt * 1.1; P2.sp.position.x += dt * 0.5;
+          const sc = 0.8 + P2.t * 1.4; P2.sp.scale.set(sc, sc, 1); P2.sp.material.opacity = 0.45 * (1 - P2.t / 4); } };
+    }
     // the mountain station: a chalet of stone and timber beside a platform at the end of the line
-    { const q = RAIL.at(RAIL.len - 30), nx = -q.tz, nz = q.tx, yawS = Math.atan2(q.tx, q.tz), St = new THREE.Group();
+    if (!RAIL.walk) { const q = RAIL.at(RAIL.len - 30), nx = -q.tz, nz = q.tx, yawS = Math.atan2(q.tx, q.tz), St = new THREE.Group();
       St.position.set(q.x + nx * 7.5, q.y, q.z + nz * 7.5); St.rotation.y = yawS; scene.add(St);
       const stoneS = MAT({ color: 0x9a948a, roughness: 0.95 }), woodS = MAT({ color: 0x6e4a2e, roughness: 0.8 }), roofS = MAT({ color: 0x4a4440, roughness: 0.8 });
       const add = (geo, m, x, y, z) => { const o = new THREE.Mesh(geo, m); o.position.set(x, y, z); o.castShadow = o.receiveShadow = true; St.add(o); return o; };
@@ -16342,6 +16469,72 @@ async function main() {
         m4.compose(new THREE.Vector3(Math.cos(ang) * d, Y + h / 2 - 2, Math.sin(ang) * d), q4.setFromAxisAngle(new THREE.Vector3(0, 1, 0), rK() * 3), new THREE.Vector3(wd, h, wd * (0.6 + rK() * 0.8))); im.setMatrixAt(i, m4); }
       im.castShadow = false; scene.add(im); }
     window.__skate = { features: 5 };
+  }
+  // ── THE GLASSWORKS, BUILT (see GLASSWORKS above) ───────────────────────
+  if (GLASSWORKS) {
+    const Gw = GLASSWORKS, MAT = (o) => { const m = new THREE.MeshStandardMaterial(o); m.userData.noAutoTex = true; return m; };
+    const G = new THREE.Group(); G.position.set(Gw.at[0], hAt(Gw.at[0], Gw.at[1]), Gw.at[1]); G.rotation.y = Gw.ry; scene.add(G);
+    const rG = mulberry32((SPEC.seed || 1) + 2727);
+    // in G's frame the open front faces +z; the shop is 8.4 wide (x) and 6.4 deep (z)
+    const brickT = (() => { const c = document.createElement('canvas'); c.width = 256; c.height = 256; const g = c.getContext('2d'); g.fillStyle = '#5a3a2c'; g.fillRect(0, 0, 256, 256);
+      for (let r = 0; r < 16; r++) for (let k = 0; k < 9; k++) { const x = k * 32 - (r % 2) * 16, y = r * 16, v = 0.75 + rG() * 0.4;
+        g.fillStyle = `rgb(${158 * v | 0},${78 * v | 0},${54 * v | 0})`; g.fillRect(x + 1, y + 1, 30, 14); }
+      const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace; return t; })();
+    const bm = (rx, ry) => { const t = brickT.clone(); t.needsUpdate = true; t.repeat.set(rx, ry); return MAT({ map: t, roughness: 0.92 }); };
+    const conc = MAT({ color: 0x6e6a64, roughness: 0.95 }), steel = MAT({ color: 0xb8bcc0, roughness: 0.25, metalness: 0.95 }), dark = MAT({ color: 0x232426, roughness: 0.5, metalness: 0.7 }),
+          wood = MAT({ color: 0x6a4a30, roughness: 0.8 }), roofM = MAT({ color: 0x3e4044, roughness: 0.6, metalness: 0.5, side: THREE.DoubleSide });
+    const hot = MAT({ color: 0xffd28a, emissive: 0xffb050, emissiveIntensity: 3.2, roughness: 0.6 });
+    const add = (geo, m, x, y, z) => { const o = new THREE.Mesh(geo, m); o.position.set(x, y, z); o.castShadow = o.receiveShadow = true; G.add(o); return o; };
+    add(new THREE.BoxGeometry(8.6, 0.16, 6.6), conc, 0, 0.08, 0);                                        // a concrete floor
+    add(new THREE.BoxGeometry(8.4, 3.4, 0.3), bm(4, 2), 0, 1.7, -3.15);                                     // the back wall and the sides, brick
+    for (const sd of [-1, 1]) add(new THREE.BoxGeometry(0.3, 3.4, 6.3), bm(3, 2), sd * 4.05, 1.7, 0);
+    const rf = add(new THREE.BoxGeometry(9.2, 0.12, 7.4), roofM, 0, 3.55, 0.2); rf.rotation.x = 0.08;      // a corrugated lean-to roof
+    for (const x of [-4.2, 0, 4.2]) add(new THREE.BoxGeometry(0.22, 3.3, 0.22), dark, x, 1.65, 3.1);
+    // the furnace: a brick dome on a plinth against the back wall, its glory hole white-hot, a steel door hung open beside it
+    add(new THREE.BoxGeometry(2.4, 0.9, 1.9), bm(1.4, 0.6), -2.2, 0.45, -2.0);
+    const dome = add(new THREE.SphereGeometry(1.15, 24, 14, 0, Math.PI * 2, 0, Math.PI / 2), bm(2, 1), -2.2, 0.9, -2.0); dome.scale.set(1, 1.15, 0.85);
+    const mouth = add(new THREE.CircleGeometry(0.32, 24), hot, -2.2, 1.45, -1.06); mouth.castShadow = false;
+    add(new THREE.BoxGeometry(0.7, 0.7, 0.06), dark, -1.55, 1.45, -1.0).rotation.y = -0.5;
+    add(new THREE.CylinderGeometry(0.24, 0.3, 1.4, 12), bm(0.6, 0.6), -2.6, 2.5, -2.4);                         // the flue
+    // the glory hole: a steel drum on its side, its mouth glowing
+    const gh = add(new THREE.CylinderGeometry(0.62, 0.62, 1.1, 24).rotateX(Math.PI / 2), steel, 1.1, 1.05, -2.1);
+    add(new THREE.CircleGeometry(0.4, 24), hot, 1.1, 1.05, -1.53).castShadow = false; void gh;
+    add(new THREE.BoxGeometry(1.0, 0.75, 0.9), dark, 1.1, 0.38, -2.1);
+    const fire = new THREE.PointLight(0xffa040, 14, 12, 1.6); fire.position.set(-2.0, 1.5, -0.6); G.add(fire);
+    const fire2 = new THREE.PointLight(0xff9a3a, 6, 7, 1.8); fire2.position.set(1.1, 1.1, -1.2); G.add(fire2);
+    // the marver: a polished steel slab on legs
+    add(new THREE.BoxGeometry(1.2, 0.08, 0.7), steel, -0.4, 0.9, -0.6);
+    for (const [x, z] of [[-0.9, -0.85], [0.1, -0.85], [-0.9, -0.35], [0.1, -0.35]]) add(new THREE.BoxGeometry(0.06, 0.86, 0.06), dark, x, 0.43, z);
+    // the bench: a seat between two long arms, a pipe across them with a gather of molten glass on its end
+    add(new THREE.BoxGeometry(0.5, 0.06, 1.8), wood, 1.6, 0.62, 0.6);
+    for (const sd of [-1, 1]) add(new THREE.BoxGeometry(0.08, 0.08, 1.9), dark, 1.6 + sd * 0.38, 0.86, 0.6);
+    for (const [x, z] of [[1.4, -0.2], [1.8, -0.2], [1.4, 1.4], [1.8, 1.4]]) add(new THREE.BoxGeometry(0.06, 0.6, 0.06), dark, x, 0.3, z);
+    add(new THREE.CylinderGeometry(0.022, 0.022, 1.6, 8).rotateZ(Math.PI / 2), steel, 1.6, 0.92, 0.3);
+    const gather = add(new THREE.SphereGeometry(0.15, 18, 12), hot, 0.75, 0.92, 0.3); gather.scale.set(1.3, 1, 1);
+    // pipes and punties in their rack, the annealer, a bucket of water
+    add(new THREE.BoxGeometry(0.1, 0.1, 1.6), dark, 3.6, 1.5, -1.5); add(new THREE.BoxGeometry(0.1, 0.1, 1.6), dark, 3.6, 0.6, -1.5);
+    for (let k = 0; k < 7; k++) { const p2 = add(new THREE.CylinderGeometry(0.018, 0.018, 1.6, 6), steel, 3.55, 1.05, -2.2 + k * 0.22); p2.rotation.z = 0.12; }
+    add(new THREE.BoxGeometry(1.3, 1.1, 0.9), dark, 3.2, 0.55, 0.6); add(new THREE.BoxGeometry(1.32, 0.08, 0.92), steel, 3.2, 1.14, 0.6);
+    // the shelves of finished glass along the left wall, every piece its own colour and form
+    const GLC = [0x2a8ad8, 0xd83a5a, 0x3ac08a, 0xf2a83a, 0x8a4ad8, 0x2ac8c8, 0xe8e0d0, 0xd85a2a];
+    for (const y of [0.9, 1.6, 2.3]) add(new THREE.BoxGeometry(0.4, 0.05, 5.6), wood, -3.65, y, 0.2);
+    for (const y of [0.9, 1.6, 2.3]) for (let k = 0; k < 7; k++) {
+      const h = 0.22 + rG() * 0.28, r0 = 0.06 + rG() * 0.05, wv = rG(), pts = [];
+      // a vase, a bottle or a bowl: a foot, a belly, a waist at the neck, a flared lip
+      const kind = wv < 0.45 ? 'vase' : wv < 0.75 ? 'bottle' : 'bowl', hh = kind === 'bowl' ? h * 0.45 : h;
+      const prof = kind === 'vase' ? [[0, 0.5], [0.06, 0.62], [0.35, 1.0], [0.62, 0.8], [0.8, 0.42], [0.92, 0.46], [1, 0.62]]
+        : kind === 'bottle' ? [[0, 0.75], [0.05, 0.9], [0.45, 1.0], [0.6, 0.7], [0.7, 0.28], [0.95, 0.24], [1, 0.32]]
+        : [[0, 0.45], [0.12, 0.55], [0.5, 0.95], [0.85, 1.15], [1, 1.22]];
+      for (const [t, rr] of prof) pts.push(new THREE.Vector2(Math.max(0.008, r0 * rr * 1.1), t * hh));
+      pts.unshift(new THREE.Vector2(0.001, 0));
+      const gm = MAT({ color: GLC[(k + Math.round(y * 3)) % GLC.length], roughness: 0.05, metalness: 0.1, transparent: true, opacity: 0.62, emissive: 0x200800, emissiveIntensity: 0.2, side: THREE.DoubleSide, depthWrite: false });
+      const v = add(new THREE.LatheGeometry(pts, 20), gm, -3.62, y + 0.03, -2.3 + k * 0.72 + rG() * 0.2); v.castShadow = false; }
+    window.__glassFire = (t) => { fire.intensity = 13 + Math.sin(t * 9) * 1.6 + Math.sin(t * 21.3) * 1.0; hot.emissiveIntensity = 3.0 + Math.sin(t * 6.1) * 0.35; };
+    window.__glassworks = { at: Gw.at.slice(), vases: 21 };
+    { G.updateMatrixWorld(true); const v = new THREE.Vector3();
+      for (const [x, z, hx, hz] of [[0, -3.15, 4.2, 0.2], [-4.05, 0, 0.2, 3.2], [4.05, 0, 0.2, 3.2], [-2.2, -2.0, 1.2, 1.0], [1.1, -2.1, 0.6, 0.6], [3.2, 0.6, 0.65, 0.45]]) {
+        v.set(x, 0, z).applyMatrix4(G.matrixWorld);
+        world.createCollider(RAPIER.ColliderDesc.cuboid(hx, 1.6, hz).setTranslation(v.x, G.position.y + 1.6, v.z).setRotation({ x: 0, y: Math.sin(Gw.ry / 2), z: 0, w: Math.cos(Gw.ry / 2) })); } }
   }
   // ── THE SMITHY, BUILT (see SMITHY above) ───────────────────────────────
   if (SMITHY) {
@@ -22715,8 +22908,8 @@ async function main() {
   const SHIP_HERO = (P.mode || 'walk') === 'swim' && /\b(pirate ship|ship|galleon|frigate|warship|man-o-war|brig|longship|drakkar)\b/i.test(String(P.name || ''));
   const LONGSHIP = SHIP_HERO && /\b(longship|drakkar|viking)\b/i.test(String(P.name || '') + ' ' + String(SPEC.prompt || ''));   // (2026-10-23)
   if (SHIP_HERO) P.height_m = Math.max(P.height_m || 0, 18);   // a swimmer is sized by its length: a galleon, not a 6 m dinghy
-  if (RAIL || LOCO_HERO) P.height_m = 4.4;        // a locomotive, to the top of its chimney
-  const pg = (RAIL || LOCO_HERO) ? { scene: buildLoco(), animations: [] }
+  if ((RAIL && !RAIL.walk) || LOCO_HERO) P.height_m = 4.4;        // a locomotive, to the top of its chimney
+  const pg = ((RAIL && !RAIL.walk) || LOCO_HERO) ? { scene: buildLoco(), animations: [] }
     : procRoot
     ? { scene: procRoot, animations: [] }
     : RIDE === 'paperboat' ? { scene: buildPaperBoat(), animations: [] }
@@ -22735,7 +22928,7 @@ async function main() {
   //   Flyers keep their wingspan lateral — no rotation at all.
   // a sculpted module's orientation is authored, not inferred — the whole
   // point of the contract is that nothing downstream has to guess
-  if (!procRoot && !RAIL && !LOCO_HERO) alignLongAxis(pRoot, ['drive', 'swim'].includes(P.mode || 'walk') && !RIDE);
+  if (!procRoot && !(RAIL && !RAIL.walk) && !LOCO_HERO) alignLongAxis(pRoot, ['drive', 'swim'].includes(P.mode || 'walk') && !RIDE);
   // A HULL STANDS ON ITS KEEL (2026-10-14): a swimmer is centred on its body
   // (a whale hangs in the water round its middle), and the hull's draft above
   // puts the body's FOOT a little under the line. A ship centred on its foot
@@ -22746,7 +22939,7 @@ async function main() {
     const _kb = new THREE.Box3().setFromObject(pRoot);
     pRoot.position.y -= _kb.min.y - holder.getWorldPosition(new THREE.Vector3()).y;
   }
-  polishVehiclePaint(pRoot, (P.mode || 'walk') === 'drive' && !RIDE && !RAIL);
+  polishVehiclePaint(pRoot, (P.mode || 'walk') === 'drive' && !RIDE && !(RAIL && !RAIL.walk));
   if (RIDE && RIDE !== 'paperboat') {
     const _bd = makeBoard(RIDE, SPEC.seed || 0); holder.add(_bd); window.__board = _bd;
     pRoot.position.y += RIDE === 'log' ? 0.33 : RIDE === 'rowboat' ? 0.12 : 0.07;   // a log driver stands on top of a log a hand under half out of the water
@@ -29090,6 +29283,7 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
       if (window.__placesTick) window.__placesTick(performance.now() / 1000, typeof dt === "number" ? Math.min(0.05, dt) : 0.016);
       if (window.__stormTick) window.__stormTick(performance.now() / 1000);
       if (window.__smithFire) window.__smithFire(performance.now() / 1000);
+      if (window.__glassFire) window.__glassFire(performance.now() / 1000);
       if (window.__harborTick) window.__harborTick(performance.now() / 1000);
       if (window.__lhBeams) for (const b of window.__lhBeams) b.rotation.y = performance.now() / 1000 * 0.6;
       if (window.__lhSmokeTick) window.__lhSmokeTick(typeof dt === 'number' ? Math.min(0.05, dt) : 0.016);
@@ -29099,6 +29293,7 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
       if (window.__burnTick) window.__burnTick(performance.now() / 1000, Math.min(0.05, dt));
       if (window.__cenoteTick) window.__cenoteTick(performance.now() / 1000);
       if (window.__marketTick) window.__marketTick(typeof dt === 'number' ? Math.min(0.05, dt) : 0.016);
+      if (RAIL && RAIL.idle) RAIL.idle(typeof dt === 'number' ? Math.min(0.05, dt) : 0.016);
       if (window.__swarmTick) window.__swarmTick(typeof dt === 'number' ? Math.min(0.05, dt) : 0.016);
       if (window.__glowers) { const _gt = performance.now() / 1000; for (const g of window.__glowers) { const k = Math.sin(_gt * g.rate + g.ph);
         if (g.blink) { const on = Math.max(0, Math.sin(_gt * 0.9 + g.ph * 3)) ** 6; for (const m of g.mats) m.emissiveIntensity = 0.2 + 3.6 * on; continue; }   // a firefly's slow flash

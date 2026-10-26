@@ -364,6 +364,47 @@ def _singular(w: str) -> str:
     return w
 
 
+def _sentence_goals(p: str) -> list:
+    """(2026-10-25) What a sentence asks the hero to do, when the planner wrote no step at all.
+    Round 11 came back with four games of nothing to do: "a fox stealing eggs from a henhouse",
+    "a hot air balloon pilot landing in a field of poppies", "an otter family floating down a
+    kelp forest river", "a night train conductor walking along the carriages". The verbs say it.
+    Returns [(kind, label, count)]."""
+    p = (p or "").lower()
+    out = []
+    _wn = {"two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10, "twenty": 20}
+    # taking things: steal, raid, pinch, snatch, loot, harvest, photograph
+    m = _fre.search(r"\b(?:steal(?:s|ing)?|stole|raid(?:s|ing)?|pinch(?:es|ing)?|snatch(?:es|ing)?|loot(?:s|ing)?|nab(?:s|bing)?|swip(?:es|ing)|"
+                    r"harvest(?:s|ing)?|pick(?:s|ing)?|catch(?:es|ing)?|photograph(?:s|ing)?|snap(?:s|ping)?|film(?:s|ing)?)\s+"
+                    r"(?:(\d+|two|three|four|five|six|seven|eight|nine|ten|twenty)\s+)?(?:the\s+|some\s+|all\s+the\s+|a\s+few\s+)?((?:sea |wild |golden |fresh )?[a-z]+s)\b", p)
+    if m and m.group(2) not in ("things", "lots", "pictures", "photos", "shots"):
+        n = m.group(1)
+        c = (int(n) if n and n.isdigit() else _wn.get(n or "", 0)) or 6
+        out.append(("collect", m.group(2), max(1, min(c, 20))))
+    # arriving: landing in or on, docking at, floating or drifting down to the end of something
+    m = _fre.search(r"\b(?:land(?:s|ing)?|touch(?:es|ing)? down|set(?:s|ting)? down|dock(?:s|ing)?|moor(?:s|ing)?|arriv(?:es|ing))\s+(?:in|on|at|into|onto|beside)\s+"
+                    r"(?:a|an|the)\s+([a-z]+\s+of\s+[a-z]+|(?:(?:tall|big|small|old|wide|green|open|grassy|quiet|little|great|high|far|lone|frozen|sandy|wild)\s+)?[a-z]+)", p)
+    if m:
+        lab = m.group(1)
+        mo = _fre.match(r"([a-z]+) of ([a-z]+)", lab)
+        if mo:                                            # "field of poppies" -> "the poppy field"
+            lab = _singular(mo.group(2)) + " " + mo.group(1)
+        out.append(("reach", "the " + lab, 1))
+    m = _fre.search(r"\b(?:float(?:s|ing)?|drift(?:s|ing)?|paddl(?:es|ing)|sail(?:s|ing)?|row(?:s|ing)?|swim(?:s|ming)?|rafting|raft(?:s|ing)?)\s+(?:down|along|across)\s+"
+                    r"(?:a|an|the)\s+(?:[a-z]+\s+){0,3}?(rivers?|streams?|creeks?|canals?|lakes?|bays?|lagoons?|estuar(?:y|ies))\b", p)
+    if m and not any(k == "reach" for k, _, _ in out):
+        out.append(("reach", "the end of the " + _singular(m.group(1)), 1))
+    # along a train: to the engine at its head
+    if not any(k == "reach" for k, _, _ in out) and _fre.search(r"\b(train|carriages?|wagons?|coaches|locomotive|railway|railroad)\b", p) \
+            and _fre.search(r"\b(walk(?:s|ing)?|mov(?:es|ing)|mak(?:es|ing) (?:his|her|their) way|mak(?:es|ing) rounds?|checks?|checking)\b", p):
+        out.append(("reach", "the locomotive", 1))
+    # ringing, lighting, opening, reaching: the thing is the place the walk ends
+    m = _fre.search(r"\b(?:ring(?:s|ing)?|light(?:s|ing)?|open(?:s|ing)?|reach(?:es|ing)?|climb(?:s|ing)?(?:\s+to)?)\s+(?:the\s+|a\s+)(?:great\s+|old\s+|top\s+of\s+the\s+)?([a-z]+)\b", p)
+    if m and not any(k == "reach" for k, _, _ in out) and m.group(1) not in ("way", "end", "day", "night"):
+        out.append(("reach", "the " + m.group(1), 1))
+    return out
+
+
 def classify_hot_edit(prompt: str) -> dict | None:
     """HOT EDITS (2026-08-05, the studio unlock): an edit that only moves
     runtime dials should never rebuild the world. Rebuilding two minutes to
@@ -1396,6 +1437,20 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                     spec.objectives = _merged
             except Exception as _me:
                 job.setdefault("notes", []).append(f"pickup merge skipped: {_me}")
+            # NOTHING TO PICK UP IN A FEELING (2026-10-25): "a monk ringing the great bell at the top of a
+            # mountain monastery" was asked to "collect peace" as glowing orbs on the path. A collect step
+            # whose thing is a feeling or an idea is not a thing to pick up; it goes
+            try:
+                _abs = [o for o in spec.objectives if o.kind == "collect" and _fre.fullmatch(
+                    r"(?:inner |true |the )?(peace|harmony|serenity|calm|calmness|tranquil+ity|wisdom|enlightenment|courage|hope|love|joy|happiness|"
+                    r"faith|balance|knowledge|memor(?:y|ies)|dreams?|inspiration|focus|clarity|mindfulness|kindness|gratitude|strength|spirit|energy|karma|blessings?|"
+                    r"resonance|echo(?:es)?|vibrations?|silence|stillness|devotion|prayers?|meditation|chants?|sounds?|tones?)",
+                    (o.label or "").strip().lower())]
+                if _abs and len(_abs) < len(spec.objectives):
+                    spec.objectives = [o for o in spec.objectives if o not in _abs]
+                    job.setdefault("notes", []).append("not a thing to pick up: " + ", ".join(o.label for o in _abs))
+            except Exception as _abe:
+                job.setdefault("notes", []).append(f"abstract pickups skipped: {_abe}")
             # THE SENTENCE'S OWN GOALS (2026-10-07): "a little bee collects nectar
             # from flowers ... and brings it back to the hive" came back with no
             # objectives at all and played as an empty meadow. When the planner
@@ -1416,6 +1471,9 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                     _back = _ore.search(r"\b(?:brings?|bringing|carr(?:y|ies|ying)|takes?|taking|returns?|returning|flies|fly|gets?|heads?)\s+(?:it\s+|them\s+)?(?:back\s+)?(?:home\s+)?(?:to|into)\s+(?:the\s+|its\s+|his\s+|her\s+|their\s+)?([a-z]+)", _op)
                     if _back and _back.group(1) not in ("the", "a"):
                         spec.objectives.append(_OBO(kind="reach", label="the " + _back.group(1), count=1))
+                    if not spec.objectives:
+                        for _k, _l, _c in _sentence_goals(_op):
+                            spec.objectives.append(_OBO(kind=_k, label=_l, count=_c))
                     if spec.objectives:
                         job.setdefault("notes", []).append("objectives read from the sentence's verbs: " + ", ".join(f"{o.kind} {o.label}" for o in spec.objectives))
             except Exception as _oe:
@@ -3698,10 +3756,13 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         def _words(s: str) -> set:
             return {w.rstrip("s") for w in (s or "").lower().split() if w}
         def _singular(s: str) -> str:
-            out = []
-            for w in (s or "").lower().split():
-                out.append(w[:-3] + "y" if w.endswith("ies") else w.rstrip("s"))
-            return " ".join(out)
+            # (2026-10-25) only the head noun is plural, and "glass" is not: "glass shards" was made as "gla shard"
+            ws = (s or "").lower().split()
+            if not ws:
+                return ""
+            w = ws[-1]
+            ws[-1] = w[:-3] + "y" if w.endswith("ies") else w if w.endswith("ss") else w[:-1] if w.endswith("s") and len(w) > 3 else w
+            return " ".join(ws)
         for ob in spec.objectives:
             if ob.kind != "collect":
                 continue
@@ -3927,6 +3988,24 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
 
         stage("designing level")
         from app.game_export.level import build_level, build_osm_city, detect_place
+        # (2026-10-25) a train beside a walker is the runtime's own (RAIL, standing): the planner's generated
+        # "carriage" came out as an overturned van in the snow
+        if (spec.player.mode != "drive" and _fre.search(r"\b(trains?|locomotives?|railways?|railroads?|steam engines?)\b", (req.prompt or "").lower())):
+            _tr = [e for e in spec.entities if _fre.search(r"\b(carriages?|coach(?:es)?|wagons?|trains?|locomotives?|railcars?|engines?|cars?)\b", (e.name or "").lower())]
+            if _tr:
+                spec.entities = [e for e in spec.entities if e not in _tr]
+                job.setdefault("notes", []).append("the train is built on its line: " + ", ".join(e.name for e in _tr) + " left out as props")
+        # (2026-10-25) a game is never left with nothing to do: rules after the planner can drop every
+        # step it wrote (a fox at a henhouse lost its eggs and played as an empty garden)
+        if not spec.objectives and getattr(spec, "genre", "") not in ("factory", "racing", "sports", "towerdefense", "citybuilder"):
+            try:
+                from app.game_export.spec import ObjectiveSpec as _OBF
+                for _k, _l, _c in _sentence_goals(req.prompt or ""):
+                    spec.objectives.append(_OBF(kind=_k, label=_l, count=_c))
+                if spec.objectives:
+                    job.setdefault("notes", []).append("the sentence's own goals, read from its verbs: " + ", ".join(f"{o.kind} {o.count} {o.label}" if o.kind == "collect" else f"{o.kind} {o.label}" for o in spec.objectives))
+            except Exception as _sge:
+                job.setdefault("notes", []).append(f"sentence goals skipped: {_sge}")
         n_obj = sum(o.count for o in spec.objectives if o.kind == "collect")
         is_city = any(k in (spec.world.name or "").lower() for k in ("city", "street", "town")) or bool(
             _fre.search(r"\b(city|cities|streets?|town|downtown|urban|metropolis|neon|boulevard|avenue|"
@@ -4203,6 +4282,12 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                 job.setdefault("notes", []).append(
                     "surface vessel: rides the waterline (boats float, they "
                     "don't dive)")
+            # (2026-10-25) an otter floating down a kelp forest swam the seabed: a creature that floats,
+            # drifts or bobs on the water lies on its surface (otters, ducks, swans, seals at rest)
+            elif _fre.search(r"\b(float\w*|drift\w*|bob\w*|lounging|lazing|resting on the (?:water|surface)|on (?:its|their) backs?)\b", (req.prompt or "").lower()) \
+                    and _fre.search(r"\b(otters?|ducks?|ducklings?|swans?|geese|goose|seals?|beavers?|loons?|pelicans?|gulls?|flamingos?)\b", _pn + " " + (req.prompt or "").lower()):
+                spec.player.buoyant = True
+                job.setdefault("notes", []).append("a floater: lies on the water's surface, not down on the bed")
         _arch = getattr(spec.world, "archetype", "plain") or "plain"
         # A FJORD (2026-10-11): sea between sheer walls, built by build_level;
         # it is the sea landform's world, so the water plane exists
