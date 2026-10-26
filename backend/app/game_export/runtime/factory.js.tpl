@@ -1533,7 +1533,26 @@ function meadowTexture(fp, look, ground, seed) {
   if (look.key === 'ember') {                       // scorched ground and ash where the heat comes up
     for (let i = 0; i < 26; i++) blob(rnd() * P, rnd() * P, 25 + rnd() * 110, 'rgb(38,22,14)', 0.38);
     for (let i = 0; i < 18; i++) blob(rnd() * P, rnd() * P, 20 + rnd() * 70, 'rgb(128,116,104)', 0.28);
-    for (let i = 0; i < 40; i++) blob(rnd() * P, rnd() * P, 15 + rnd() * 50, 'rgb(150,70,40)', 0.25); }
+    for (let i = 0; i < 40; i++) blob(rnd() * P, rnd() * P, 15 + rnd() * 50, 'rgb(150,70,40)', 0.25);
+    // (2026-10-26) A HEATH OVER HOT GROUND: the ember face read as dull purple-brown with olive grass. The heat
+    // shows: rust and burnt-orange drifts of heather, and the ground split by fissures, charred black with
+    // their lips lit orange from the heat below
+    for (let i = 0; i < 50; i++) blob(rnd() * P, rnd() * P, 30 + rnd() * 120, 'rgb(150,62,30)', 0.22);
+    for (let i = 0; i < 30; i++) blob(rnd() * P, rnd() * P, 20 + rnd() * 80, 'rgb(196,128,58)', 0.2);
+    const wrapDraw = (fn) => { for (const ox of [-P, 0, P]) for (const oy of [-P, 0, P]) { g.save(); g.translate(ox, oy); fn(); g.restore(); } };
+    for (let i = 0; i < 22; i++) {
+      let x = rnd() * P, y = rnd() * P, a = rnd() * 6.28; const pts = [[x, y]], n = 8 + Math.floor(rnd() * 14);
+      for (let k = 0; k < n; k++) { a += (rnd() - 0.5) * 1.3; x += Math.cos(a) * (8 + rnd() * 12); y += Math.sin(a) * (8 + rnd() * 12); pts.push([x, y]);
+        if (rnd() < 0.18) { let bx = x, by = y, ba = a + (rnd() < 0.5 ? 1 : -1) * (0.8 + rnd() * 0.6); const br = [[bx, by]];       // a branch crack
+          for (let j = 0; j < 4; j++) { ba += (rnd() - 0.5) * 0.9; bx += Math.cos(ba) * 9; by += Math.sin(ba) * 9; br.push([bx, by]); }
+          wrapDraw(() => { g.lineCap = 'round'; g.strokeStyle = 'rgba(232,108,36,0.55)'; g.lineWidth = 2.6; g.beginPath(); br.forEach(([px, py], q) => q ? g.lineTo(px, py) : g.moveTo(px, py)); g.stroke();
+            g.strokeStyle = 'rgba(20,10,6,0.85)'; g.lineWidth = 1.2; g.stroke(); }); } }
+      wrapDraw(() => { g.lineCap = 'round'; g.lineJoin = 'round';
+        g.strokeStyle = 'rgba(60,24,10,0.45)'; g.lineWidth = 9; g.beginPath(); pts.forEach(([px, py], q) => q ? g.lineTo(px, py) : g.moveTo(px, py)); g.stroke();   // scorched margin
+        g.strokeStyle = 'rgba(255,130,40,0.75)'; g.lineWidth = 4; g.stroke();                                                                                         // the lit lip
+        g.strokeStyle = 'rgba(16,8,4,0.95)'; g.lineWidth = 1.8; g.stroke(); });                                                                                     // the black crack
+    }
+  }
   if (look.key === 'salt') {
     // A SALT MARSH, NOT A MILKY MEADOW (2026-10-25): the crust was soft white airbrush over a pale sage,
     // and the whole face read as haze. Salt dries in plates: crisp-edged pans of white crust cracked into
@@ -3789,7 +3808,7 @@ if (GRASS_ON) {
   // a meadow's greens, not a toy's: deeper at the root, olive to straw at the tips
   const colA0 = new THREE.Color(0x3d6428), colB0 = new THREE.Color(0x7d9a48), colDry0 = new THREE.Color(0xa99a5c);
   // each face's own growth, matching its ground (2026-10-15)
-  const GROWTH = { crystal: [0x2e5e34, 0x6a9c52, 0x9aa060], ember: [0x5a3820, 0x9c6a36, 0xc09a5a],
+  const GROWTH = { crystal: [0x2e5e34, 0x6a9c52, 0x9aa060], ember: [0x5a2418, 0xa04a26, 0xc8843e],   // (2026-10-26) heather, rust to burnt orange
                    salt: [0x3e5236, 0x7c8e5a, 0x9c7a54], under: [0x22341c, 0x46623a, 0x7a7a50] };   // (2026-10-25) samphire and sea-purslane, not pale straw
   for (let f = 0; f < 6; f++) {
     const _gw = GROWTH[faceLookOf(f).key];

@@ -26,6 +26,8 @@ async function open(j) {
   for (let i = 0; i < 60; i++) { if (await p.evaluate(() => !!(window.__game && window.__game.facts))) break; await wait(1000); }
   const btn = await p.$('#startbtn'); if (btn) await btn.click();
   await wait(1500);
+  // (2026-10-26) past the story's opening: a wave called while the intro still ran was never woken
+  for (let i = 0; i < 60; i++) { const busy = await p.evaluate(() => { const f = window.__game.facts(); return !!(f.intro || f.paused); }).catch(() => false); if (!busy) break; await wait(500); }
   return { p, errs };
 }
 

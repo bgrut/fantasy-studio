@@ -1395,7 +1395,11 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                 _zp = (req.prompt or "").lower()
                 # (2026-10-22) "an astronaut repairs a broken satellite in orbit above the earth" stood
                 # walking on nothing at the origin: outside in orbit is a spacewalk, and a spacewalk floats
-                _eva = (_zre.search(r"\b(in orbit|orbit(?:ing|s)? (?:the |above the )?(?:earth|planet|moon)|space ?walks?|spacewalking|eva|satellites?|outside the (?:station|ship|spacecraft))\b", _zp)
+                # (2026-10-26) "fixing a broken solar panel on the outside of a space station" walked 34 m under
+                # the station with the camera in the astronaut's helmet: the outside of a station is a spacewalk
+                _eva = (_zre.search(r"\b(in orbit|orbit(?:ing|s)? (?:the |above the )?(?:earth|planet|moon)|space ?walks?|spacewalking|eva|satellites?|"
+                                    r"(?:on the )?outside (?:of )?(?:the |a |an )?(?:space ?station|station|ship|spacecraft|iss|hull)|"
+                                    r"solar (?:panels?|arrays?|wings?) (?:on|of|outside) (?:the |a )?(?:space ?station|station|iss|satellite))\b", _zp)
                         and _zre.search(r"\b(astronauts?|cosmonauts?|spacem[ae]n|spacewom[ae]n|engineers?|technicians?|robots?|you)\b", _zp))
                 if ((_zre.search(STATION_RE, _zp) and _zre.search(r"\b(zero[- ]?g(?:ravity)?|weightless\w*|floats?|floating|drifts?|drifting|microgravity)\b", _zp)) or _eva) \
                         and getattr(spec, "genre", "") != "factory" and (spec.player.mode or "walk") == "walk":
@@ -4900,6 +4904,9 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             # a railway's station is the platform at the end of the line, which
             # the runtime builds (RAIL); a warehouse door in the woods is not it
             if _sm and _sm.group(1) == "station" and _re3.search(r"\b(trains?|locomotives?|railways?|railroads?|steam engines?|tram)\b", _pl):
+                _sm = None
+            # (2026-10-26) a space station is the runtime's own (ORBIT outside, the station interior inside), not a warehouse door
+            if _sm and _sm.group(1) == "station" and _re3.search(r"\b(space ?stations?|orbit\w*|iss|astronauts?|cosmonauts?|spacewalk\w*|zero[- ]?g\w*)\b", _pl):
                 _sm = None
             if _sm:
                 from app.game_export.level import build_interior

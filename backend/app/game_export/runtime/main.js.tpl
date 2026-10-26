@@ -9338,11 +9338,34 @@ async function main() {
       const put = (g, a, c, y, col) => { g = g.toNonIndexed(); g.rotateY(TH); const [x, z] = W3(a, c); g.translate(x, y, z);
         const pa = g.attributes.position.array; for (let i = 0; i < pa.length; i += 3) { P.push(pa[i], pa[i + 1], pa[i + 2]); C.push(...col); } };
       const white = [0.86, 0.87, 0.88], grey = [0.55, 0.57, 0.6], gold = [0.85, 0.66, 0.25], dark = [0.2, 0.21, 0.24];
-      put(new THREE.BoxGeometry(1.2, 1.2, 58), 0, 0, SY, grey);                                     // the truss (local z = u)
-      for (let k = -27; k <= 27; k += 3) { put(new THREE.BoxGeometry(0.12, 1.6, 0.12).rotateX(0.8), k, 0.62, SY, dark); put(new THREE.BoxGeometry(0.12, 1.6, 0.12).rotateX(-0.8), k, -0.62, SY, dark); }
+      // (2026-10-26) THE TRUSS IS A LATTICE: a solid grey bar read as a beam of plastic. Four longerons, a
+      // square frame every three metres, cross-bracing on every face, and the yellow handrails an EVA uses
+      for (const [cy2, cz2] of [[0.6, 0.6], [0.6, -0.6], [-0.6, 0.6], [-0.6, -0.6]]) { const g = new THREE.BoxGeometry(0.11, 0.11, 58); g.translate(cz2, 0, 0); put(g, 0, 0, SY + cy2, grey); }
+      for (let k = -27; k <= 27; k += 3) {
+        for (const [w2, h2, ox, oy] of [[1.3, 0.09, 0, 0.6], [1.3, 0.09, 0, -0.6], [0.09, 1.3, 0.6, 0], [0.09, 1.3, -0.6, 0]]) { const g = new THREE.BoxGeometry(w2, h2, 0.09); g.translate(ox, 0, k); put(g, 0, 0, SY + oy, grey); }
+        if (k < 27) for (const [ox, oy, rot, ax] of [[0.6, 0, 1, 'x'], [-0.6, 0, -1, 'x'], [0, 0.6, 1, 'y'], [0, -0.6, -1, 'y']]) {
+          const g = new THREE.BoxGeometry(0.06, 0.06, Math.hypot(3, 1.2)); if (ax === 'x') g.rotateX(rot * Math.atan2(1.2, 3)); else g.rotateY(rot * Math.atan2(1.2, 3));
+          g.translate(ox, 0, k + 1.5); put(g, 0, 0, SY + oy, dark); } }
+      { const g = new THREE.BoxGeometry(0.05, 0.05, 54); g.translate(0.78, 0, 0); put(g, 0, 0, SY + 0.35, [0.9, 0.72, 0.1]); }
+      for (let k = -26; k <= 26; k += 2) { const g = new THREE.BoxGeometry(0.05, 0.05, 0.25); g.rotateY(Math.PI / 2); g.translate(0.7, 0, k); put(g, 0, 0, SY + 0.35, [0.9, 0.72, 0.1]); }
+      // MODULES WEAR THEIR BLANKETS (2026-10-26): flat white tubes read as plastic. A station's modules are wrapped
+      // in quilted thermal blankets, panel by panel, stitched, handrails bolted along them (gold: kapton foil)
+      const mli = (base) => { const c = document.createElement('canvas'); c.width = 512; c.height = 256; const g = c.getContext('2d'), rr = mulberry32(4471 + base.length);
+        g.fillStyle = base; g.fillRect(0, 0, 512, 256);
+        for (let px = 0; px < 512; px += 64) for (let py = 0; py < 256; py += 64) {
+          const gr = g.createRadialGradient(px + 32, py + 32, 4, px + 32, py + 32, 46); gr.addColorStop(0, 'rgba(255,255,255,0.18)'); gr.addColorStop(1, 'rgba(0,0,0,0.12)'); g.fillStyle = gr; g.fillRect(px, py, 64, 64);
+          g.strokeStyle = 'rgba(60,60,60,0.35)'; g.lineWidth = 2; g.strokeRect(px + 1, py + 1, 62, 62);
+          g.setLineDash([3, 3]); g.strokeStyle = 'rgba(40,40,40,0.25)'; g.lineWidth = 1; g.strokeRect(px + 6, py + 6, 52, 52); g.setLineDash([]);
+          for (let k = 0; k < 3; k++) { g.fillStyle = `rgba(0,0,0,${0.04 + rr() * 0.05})`; g.fillRect(px + rr() * 60, py + rr() * 60, 8 + rr() * 20, 2); } }
+        const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace; return t; };
+      const modG = { white: [], gold: [] };
       for (const [a0, a1, r, col] of [[-22, -12, 2.1, white], [-11, -2, 2.3, white], [-1.5, 1.5, 2.6, grey], [2, 10, 2.1, gold]]) {
-        const g = new THREE.CylinderGeometry(r, r, a1 - a0, 40).rotateX(Math.PI / 2); g.translate(0, 0, (a0 + a1) / 2);
-        put(g, 0, 0, SY - 3.4, col);
+        const g = new THREE.CylinderGeometry(r, r, a1 - a0, 48, 1, true).rotateX(Math.PI / 2); g.translate(0, 0, (a0 + a1) / 2);
+        const uvA = g.attributes.uv; for (let i = 0; i < uvA.count; i++) uvA.setXY(i, uvA.getX(i) * Math.round(2 * Math.PI * r / 2), uvA.getY(i) * Math.round((a1 - a0) / 2));
+        g.rotateY(TH); { const [mx2, mz2] = W3(0, 0); g.translate(mx2, SY - 3.4, mz2); }
+        (col === gold ? modG.gold : modG.white).push(g);
+        for (const e of [a0, a1]) { const cap = new THREE.CircleGeometry(r, 40); cap.rotateY(e === a0 ? Math.PI : 0); cap.translate(0, 0, e); put(cap, 0, 0, SY - 3.4, col); }
+        for (let hr = 0; hr < 2; hr++) { const ang = 0.6 + hr * 1.9, hg = new THREE.BoxGeometry(0.06, 0.06, (a1 - a0) * 0.85); hg.translate(Math.cos(ang) * (r + 0.12), Math.sin(ang) * (r + 0.12), (a0 + a1) / 2); put(hg, 0, 0, SY - 3.4, [0.9, 0.72, 0.1]); }
         for (const e of [a0, a1]) { const ring = new THREE.TorusGeometry(r * 1.03, 0.14, 8, 40); ring.translate(0, 0, e); put(ring, 0, 0, SY - 3.4, grey); }
         cols.push([(a0 + a1) / 2, (a1 - a0) / 2, r]);
       }
@@ -9370,6 +9393,9 @@ async function main() {
         scene.add(wing);
         if (broken) { const [bx, bz] = W3(end * 27, side * (1.5 + 6.5 + 2 * 10.4)); brokenAt = [bx, SY - 1.4, bz]; }
       }
+      for (const [k2, base] of [['white', '#e4e6e8'], ['gold', '#c9a24a']]) { if (!modG[k2].length) continue;
+        const mm = new THREE.Mesh(mergeGeometries(modG[k2], false), new THREE.MeshStandardMaterial({ map: mli(base), roughness: k2 === 'gold' ? 0.3 : 0.7, metalness: k2 === 'gold' ? 0.6 : 0.05, side: THREE.DoubleSide }));
+        mm.material.userData.noAutoTex = true; mm.castShadow = mm.receiveShadow = true; scene.add(mm); }
       const sg = new THREE.BufferGeometry(); sg.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); sg.setAttribute('color', new THREE.Float32BufferAttribute(C, 3)); sg.computeVertexNormals();
       const st = new THREE.Mesh(sg, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.45, metalness: 0.4 }));
       st.material.userData.noAutoTex = true; st.name = 'station'; st.castShadow = st.receiveShadow = true; scene.add(st);
@@ -13336,6 +13362,7 @@ async function main() {
   const _alone = !!(LVL && LVL.slot) && /\b(lone|alone|solo|by himself|by herself|nobody|no one)\b/.test(String(SPEC.prompt || '').toLowerCase());
   for (const ent of SPEC.entities || []) {
     if (_alone && ent.behavior !== 'hostile') continue;
+    if (ORBIT && /\b(space ?stations?|iss|stations?)\b/i.test(ent.name || '')) continue;   // (2026-10-26) the station in orbit is built; a generated one hung beside it
     try {
       const gltf = await loadGLB(ent.asset);
       // (2026-10-25) A CARD IS NOT A PLANT: "a monarch butterfly migrating across a field of milkweed" scattered
