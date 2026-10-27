@@ -1148,6 +1148,12 @@ def build_interior(seed: int, kind: str = "castle") -> dict:
         return {"kind": "lighthouse", "wall_h": 22.0, "wall_t": 0.3, "pillars": [], "floors": 1,
                 "rooms": [[0.0, 0.0, 5.8, 5.8]], "walls": [], "furniture": [], "torches": [],
                 "tower": {"r": 2.9, "newel": 0.85, "rise": 0.24, "turn": 0.27}, "bounds": [12.0, 12.0]}
+    # AN ATTIC (2026-10-26): "a bookbinder searching a cluttered attic for a lost page" searched a
+    # wood. One long room under the roof; the runtime builds its rafters, gables and clutter
+    if kind == "attic":
+        aw, ad = round(rng.uniform(7.4, 8.4), 2), round(rng.uniform(16, 19), 2)
+        return {"kind": "attic", "wall_h": 4.4, "wall_t": 0.2, "knee": 1.3, "pillars": [], "floors": 1,
+                "rooms": [[0.0, 0.0, aw, ad]], "walls": [], "furniture": [], "torches": [], "bounds": [aw + 4, ad + 4]}
     # A LIBRARY (2026-10-11) is planned as a museum is, a tall hall with
     # galleries off it; the runtime lines it with books instead of pictures
     _lib = kind == "library"

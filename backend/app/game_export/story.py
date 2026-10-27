@@ -104,6 +104,8 @@ def _shown_kind(o):
         return "deliver"
     if lab.lower().startswith("buried "):        # (2026-10-26) an archaeologist's dig: one find, its sand brushed off
         return "uncover"
+    if lab.lower().endswith(" on the wheel"):    # (2026-10-26) a potter's job: a pot thrown on each wheel
+        return "throw"
     if re.search(r"\b(?:bee)?hives?\b", lab, re.I):
         return "check"
     if re.search(r"\b(thirsty|wilting|dry)\b", lab, re.I):
@@ -126,7 +128,7 @@ def _fallback(spec, prompt):
     verbs = {"collect": "Gather", "reach": "Get to", "defeat": "Put down", "race": "Beat",
              "survive": "Hold out against", "eliminate": "Clear out", "score": "Score",
              "deliver": "Carry", "serve": "Serve", "repair": "Mend", "photograph": "Photograph",
-             "check": "Check", "fell": "Fell", "find": "Find", "put out": "Put out", "water": "Water", "play for": "Play for", "uncover": "Uncover"}
+             "check": "Check", "fell": "Fell", "find": "Find", "put out": "Put out", "water": "Water", "play for": "Play for", "uncover": "Uncover", "throw": "Throw"}
     beats = []
     for o in obs:
         lab = str(getattr(o, "label", "") or "it")

@@ -1519,11 +1519,12 @@ export function biomeFor(words, arch, groundHSL) {
   // grew palms. Under a lighthouse, a storm or a north-Atlantic name the
   // island is wind-cut turf: heather and gorse, grey rock breaking through,
   // a boulder field, hardly a tree, and the sea all round
-  else if (has(/lighthouses?|storm\w*|gales?|scottish|scotland|hebrid\w*|orkney|shetland|irish|ireland|cornwall|cornish|welsh|wales|maine|newfoundland|north sea|atlantic|faroe\w*|brittany|breton/) && has(/island|\bisles?\b|islet|coast|shore|cliff|\bsea\b|\bbay\b|harbou?r|headland/)
+  // (2026-10-26) and a seal pup on a stormy beach: seals, puffins and gannets live on cold shores
+  else if (has(/lighthouses?|storm\w*|gales?|scottish|scotland|hebrid\w*|orkney|shetland|irish|ireland|cornwall|cornish|welsh|wales|maine|newfoundland|north sea|atlantic|faroe\w*|brittany|breton|seals?|seal pups?|sea lions?|puffins?|gannets?|walrus\w*|selkies?/) && has(/island|\bisles?\b|islet|coast|shore|cliff|\bsea\b|\bbay\b|harbou?r|headland|beach\w*/)
            && !has(/tropical|palms?|lagoon|atoll|caribbean|hawai|polynesia|pirate|treasure|castaway/)) Object.assign(out, {
     kinds: K(['bush', 0.75], ['rock', 0.7], ['boulder', 0.35], ['birch', 0.03]), dens: 0.07,
-    rockTint: T(0x77766f), leaf: { h: 0.86, s: 0.2, l: 0.26 },
-    island: has(/island|\bisles?\b|islet|archipelago|coast|shore|cliff|headland/) });
+    rockTint: T(0x77766f), leaf: has(/beach/) && !has(/island|cliff|headland|lighthouse|moor|heath/) ? { h: 0.2, s: 0.22, l: 0.34 } : { h: 0.86, s: 0.2, l: 0.26 },   // (2026-10-26) a beach grows dune grass, grey-green, not heather
+    island: has(/island|\bisles?\b|islet|archipelago|coast|shore|cliff|headland|beach/) });
   else if (has(/beach|tropical|island|palm|lagoon|coast/)) Object.assign(out, { kinds: K(['palm', 0.8], ['bush', 0.5], ['rock', 0.3]), dens: 0.35, rockTint: T(0x9a8f80),
     // an island, a beach, a coast: the land ends at a shore and the sea runs on
     island: has(/island|\bisle\b|islet|atoll|lagoon|archipelago|castaway|shipwreck|beach|coast|shore/) });

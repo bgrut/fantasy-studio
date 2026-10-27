@@ -1512,6 +1512,26 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                     job.setdefault("notes", []).append(f"dig: uncover the buried {_fn}, four mounds of sand to brush off")
             except Exception as _dge:
                 job.setdefault("notes", []).append(f"dig rule skipped: {_dge}")
+            # A POTTER THROWS AT THE WHEEL (2026-10-26): "a potter throwing clay bowls on a wheel in a
+            # hillside workshop" was asked to "collect clays" in a birch wood. The runtime's POTTERY stands
+            # the shop beside the spawn with kick wheels in a row; the job is a pot thrown at each wheel
+            try:
+                _pl = (req.prompt or "").lower()
+                _pt = _fre.search(r"\b(potters?|pottery|potteries|ceramicists?|potter'?s wheel|kick ?wheels?|throw(?:s|ing)?\s+(?:\w+\s+){0,3}(?:bowls?|pots?|vases?|jugs?|mugs?|cups?|jars?|urns?|pitchers?|plates?))\b", _pl)
+                if _pt and getattr(spec, "genre", "") != "factory":
+                    from app.game_export.spec import ObjectiveSpec as _POS
+                    _ob = _fre.search(r"\b(bowls?|pots?|vases?|jugs?|mugs?|cups?|jars?|urns?|pitchers?|plates?)\b", _pl)
+                    _th = _ob.group(1) if _ob else "pot"
+                    _th = _th[:-1] if _th.endswith("s") else _th
+                    _nm = _fre.search(r"\b(two|three|four|five|[2-5])\s+(?:\w+\s+){0,2}" + _th, _pl)
+                    _n = ({"two": 2, "three": 3, "four": 4, "five": 5}.get(_nm.group(1)) or int(_nm.group(1))) if _nm else 3
+                    _potw = r"\b(clays?|bowls?|pots?|vases?|jugs?|mugs?|cups?|jars?|urns?|pitchers?|plates?|wheels?|kilns?|workshops?|pottery|glaze\w*)\b"
+                    spec.objectives = [o for o in spec.objectives if not (o.kind in ("collect", "reach", "repair") and _fre.search(_potw, (o.label or "").lower()))]
+                    spec.objectives = [_POS(kind="repair", label=f"{_th}s on the wheel", count=_n)] + [o for o in spec.objectives if o.kind != "repair"]
+                    spec.entities = [e for e in spec.entities if not _fre.search(_potw, (e.name or "").lower())]
+                    job.setdefault("notes", []).append(f"pottery: the shop stands by the spawn; throw {_n} {_th}s, one on each kick wheel")
+            except Exception as _pte:
+                job.setdefault("notes", []).append(f"pottery rule skipped: {_pte}")
             # NOTHING TO PICK UP IN A FEELING (2026-10-25): "a monk ringing the great bell at the top of a
             # mountain monastery" was asked to "collect peace" as glowing orbs on the path. A collect step
             # whose thing is a feeling or an idea is not a thing to pick up; it goes
@@ -1872,6 +1892,12 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                 _craft = " ".join(_fm.group(1).split()) if _fm else ""
                 # a bare "ship" or "craft" flies only in space; on Earth it sails
                 if _craft in ("ship", "craft") and not _space:
+                    _fm = None
+                # (2026-10-26) "a pilot flying the mail plane over snowy mountains" made the player the plane
+                # and hovered it through a pine wood: a pilot named in the sentence flies it from the cockpit
+                # (A PILOT FLIES THE PLANE, below, builds the biplane round them)
+                if _fm and not _space and _fre2.search(r"plane|duster", _craft) and _fre2.search(
+                        r"\b(pilots?|aviators?|aviatrix|airm[ae]n|postm[ae]n|mail ?carriers?|barnstormers?|flyers?|flying (?:doctor|vet)s?)\b", (req.prompt or "").lower()):
                     _fm = None
                 if _fm and getattr(spec, "genre", "") != "factory":
                     if _craft == "fighter":                  # a bare word: say which kind
@@ -2561,6 +2587,9 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                     # a sports sentence is about its sport: "score three goals against a
                     # robot goalkeeper" cast an engineer because of the robot (2026-09-27)
                     (r"\b(soccer|football|goals?|goalkeeper|goalie|pitch|striker|penalty|penalties|kick-?off)", "soccer player"),
+                    # (2026-10-26) a craftsman at the bench is in their own clothes: a potter was the explorer in a
+                    # safari hat, a bookbinder the lighthouse keeper in oilskins
+                    (r"\b(potters?|pottery|ceramicists?|bookbinders?|bookbinding|printers?|weavers?|cobblers?|clockmakers?|watchmakers?|luthiers?|woodcarvers?|carpenters?|cabinetmakers?)\b", "man"),
                     # (2026-10-13) a canyon climber, a street racer and a paranormal
                     # investigator were the generic man, the hoodie and the detective
                     (r"\b(paranormal|ghost ?hunters?|demonologists?|haunting investigat\w*|investigators? of the (?:occult|supernatural))\b", "paranormal investigator"),
@@ -2803,7 +2832,7 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         try:
             import re as _plre
             _plw = (req.prompt or "").lower()
-            if (_plre.search(r"\b(mail ?planes?|bi-?planes?|bush ?planes?|sea ?planes?|float ?planes?|crop[- ]?dust(?:er|ers|ing)|barnstorm\w*|aviators?|aviatrix|(?:air)?plane pilots?|pilots? (?:flies|flying|fly)|fl(?:y|ies|ying|ew) (?:an? |the |his |her |their )?(?:old |little |small |red |yellow |vintage |rickety )?(?:air)?planes?)\b", _plw)
+            if (_plre.search(r"\b(mail ?planes?|bi-?planes?|bush ?planes?|sea ?planes?|float ?planes?|crop[- ]?dust(?:er|ers|ing)|barnstorm\w*|aviators?|aviatrix|(?:air)?plane pilots?|pilots? (?:flies|flying|fly)|pilot(?:s|ing)? (?:an? |the |his |her |their )(?:\w+ )?(?:air)?planes?|fl(?:y|ies|ying|ew) (?:an? |the |his |her |their )?(?:old |little |small |red |yellow |vintage |rickety )?(?:air)?planes?)\b", _plw)
                     and player_glb and pattern == "biped" and getattr(spec, "genre", "adventure") != "factory"
                     and (spec.player.ride or "") != "balloon"):
                 spec.player.ride = "plane"
@@ -2812,6 +2841,12 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                 spec.player.walk_speed, spec.player.run_speed = 18.0, 34.0
                 spec.entities = [e for e in spec.entities if not _plre.search(r"\b(?:air)?planes?\b|\baircraft\b|\bbiplanes?\b", (e.name or "").lower())]
                 job.setdefault("notes", []).append(f"'{spec.player.name}' flies a biplane: it cruises where the nose points, banks to turn, climbs and dives")
+                # (2026-10-26) a mail plane's round: the sacks dropped on the villages' fields from the air
+                # (the runtime's AIRSTRIP lays the villages out along the route), then home to the strip
+                if _plre.search(r"\b(mail|post|letters?|parcels?|deliver\w*)\b", _plw):
+                    from app.game_export.spec import ObjectiveSpec as _MOS
+                    spec.objectives = [_MOS(kind="repair", label="mail sacks", count=3), _MOS(kind="reach", label="the airstrip", count=1)]
+                    job.setdefault("notes", []).append("mail run: drop a sack on each of three villages' fields, then land back at the strip")
         except Exception as _ple:
             job.setdefault("notes", []).append(f"plane rule skipped: {_ple}")
         # A LOG DRIVER RIDES THE DRIVE (2026-10-24): "a log driver riding timber down a wild
@@ -4070,7 +4105,7 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         for ob in spec.objectives:
             # (2026-10-26) a dig is one find under several mounds: "the buried statue" stays one statue
             if ob.kind in ("defeat", "hunt", "capture", "collect", "eliminate", "repair", "escort") and (ob.count or 0) > 1 and (ob.label or "").strip() \
-                    and not (ob.kind == "repair" and (ob.label or "").startswith("buried ")):
+                    and not (ob.kind == "repair" and ((ob.label or "").startswith("buried ") or (ob.label or "").endswith(" on the wheel"))):
                 _ws = ob.label.strip().split(" ")
                 _w = _ws[-1]; _lw = _w.lower()
                 if _lw.isalpha() and not _lw.endswith("s") and _lw not in _INVAR:
@@ -4523,8 +4558,8 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         # palms. A lighthouse, a storm, a gale or a north-Atlantic name on an
         # island or a coast is short wind-bitten grass over grey rock, unless the
         # sentence is tropical
-        if (_fre.search(r"\b(lighthouses?|storm\w*|gales?|scottish|scotland|hebrid\w*|orkney|shetland|irish|ireland|cornwall|cornish|welsh|wales|maine|newfoundland|north sea|atlantic|faroe\w*|brittany|breton)\b", _pw7)
-                and _fre.search(r"\b(islands?|isles?|islets?|coasts?|shores?|cliffs?|sea|bay|harbou?r|headland)\b", _pw7)
+        if (_fre.search(r"\b(lighthouses?|storm\w*|gales?|scottish|scotland|hebrid\w*|orkney|shetland|irish|ireland|cornwall|cornish|welsh|wales|maine|newfoundland|north sea|atlantic|faroe\w*|brittany|breton|seals?|seal pups?|sea lions?|puffins?|gannets?|walrus\w*|selkies?)\b", _pw7)
+                and _fre.search(r"\b(islands?|isles?|islets?|coasts?|shores?|cliffs?|sea|bay|harbou?r|headland|beach\w*)\b", _pw7)
                 and not _fre.search(r"\b(tropical|palms?|lagoon|atoll|caribbean|hawai\w*|polynesia\w*|pirates?|treasure|castaway|desert)\b", _pw7)):
             _gc = list(spec.world.ground_color or [0.3, 0.3, 0.2])
             if not (_gc[1] > _gc[0] * 1.08 and _gc[1] > _gc[2]):
@@ -4846,7 +4881,7 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         _venue = _cafe or _station or _re3.search(r"\b(shopping (?:mall|cent(?:re|er)|arcade)|mall|supermarket|"
                              r"department store|hospital|asylum|sanatorium|office block|prison|bunker|"
                              r"high school|school(?! of)|classroom|academy|laborator(?:y|ies)|lab|research (?:facility|station|base)|"
-                             r"library|libraries|archives?|reading room|scriptorium)\b", _pl)
+                             r"library|libraries|archives?|reading room|scriptorium|attics?|garrets?)\b", _pl)
         # (2026-10-19) a named city only turns a heist into its block: "a chef
         # runs a busy sushi restaurant in tokyo" was a street with a campfire on
         # it, the restaurant nowhere; a chef, a nurse or a clerk works inside
@@ -4862,7 +4897,8 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                      "asylum": "hospital", "sanatorium": "hospital", "office block": "office", "prison": "dungeon",
                      "bunker": "dungeon", "high school": "school", "school": "school", "classroom": "school",
                      "academy": "school", "library": "library", "libraries": "library", "archive": "library",
-                     "archives": "library", "reading room": "library", "scriptorium": "library"}.get(_venue.group(1),
+                     "archives": "library", "reading room": "library", "scriptorium": "library",
+                     "attic": "attic", "attics": "attic", "garret": "attic", "garrets": "attic"}.get(_venue.group(1),
                      "lab" if _venue.group(1).startswith(("lab", "research")) else "mall")) if _venue else None) \
                 or "dungeon"
             _ik = {"mansion": "house", "cottage": "house", "home": "house",
@@ -4902,6 +4938,19 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                 [0.0, round(-_hall[3] / 2 + 2.0, 2)], [0.0, 0.0],
                 [_far[0], _far[1]]]
             spec.world.level["landmarks"] = []
+            if _ik == "attic":
+                # (2026-10-26) the attic is entered by the hatch at its +z end and runs to the round window
+                # (the runtime turns it so); what is lost lies out among the clutter, and the walk ends at
+                # the bench under the window, not at a beacon in the middle of the boards
+                _aw, _ad = _hall[2], _hall[3]
+                spec.world.level["collect_points"] = [[round(_rr.uniform(-_aw / 2 + 1.4, _aw / 2 - 1.4), 2), round(_rr.uniform(-_ad / 2 + 2.5, _ad / 2 - 7.0), 2)]
+                                                      for _ in range(max(n_obj, 1))]
+                spec.world.level["goal"] = [1.9, round(-_ad / 2 + 2.6, 2)]
+                spec.world.level["path"] = [[0.0, round(_ad / 2 - 5.4, 2)], [0.0, 0.0], spec.world.level["goal"]]
+                _bench = "the bench" if _re3.search(r"\b(bookbind\w*|binder|printer|scribe|writer|author|poet|clockmaker|tailor|seamstress|painter|artist)\b", _pl) else "the round window"
+                for _o in spec.objectives:
+                    if _o.kind == "reach":
+                        _o.label = _bench
             job.setdefault("notes", []).append(
                 f"interior level: {_ik}. Rooms, doorways, torchlight")
             # a mystery or a heist that happens in a cafe keeps its own story;
