@@ -1532,6 +1532,21 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                     job.setdefault("notes", []).append(f"pottery: the shop stands by the spawn; throw {_n} {_th}s, one on each kick wheel")
             except Exception as _pte:
                 job.setdefault("notes", []).append(f"pottery rule skipped: {_pte}")
+            # A WEATHER BALLOON IS LAUNCHED (2026-10-27): "a scientist launching a weather balloon" was asked to
+            # collect "balloon components" and then to "reach balloon launch altitude" on foot. The sonde's parts
+            # are gathered from round the base, then the balloon is filled at the launch shed and let go
+            try:
+                _pl = (req.prompt or "").lower()
+                if _fre.search(r"\b(weather balloons?|radiosondes?|sounding balloons?|met balloons?)\b", _pl) and getattr(spec, "genre", "") != "factory":
+                    from app.game_export.spec import ObjectiveSpec as _BOS
+                    _balw = r"\b(balloons?|radiosondes?|sondes?|helium|launch\w*|altitude|instruments?|components?|parts?|weather|equipment|gear|supplies)\b"
+                    spec.objectives = [o for o in spec.objectives if not _fre.search(_balw, (o.label or "").lower())]
+                    spec.objectives = [_BOS(kind="collect", label="instrument parts", count=3), _BOS(kind="repair", label="weather balloon", count=1)] + \
+                        [o for o in spec.objectives if o.kind not in ("collect", "repair")]
+                    spec.objectives = [o for o in spec.objectives if not (o.kind == "reach" and _fre.search(r"\b(launch|site|altitude|sky)\b", (o.label or "").lower()))]
+                    job.setdefault("notes", []).append("weather balloon: gather the sonde's parts round the base, then fill the balloon at the launch shed and let it go")
+            except Exception as _wbe:
+                job.setdefault("notes", []).append(f"weather balloon rule skipped: {_wbe}")
             # NOTHING TO PICK UP IN A FEELING (2026-10-25): "a monk ringing the great bell at the top of a
             # mountain monastery" was asked to "collect peace" as glowing orbs on the path. A collect step
             # whose thing is a feeling or an idea is not a thing to pick up; it goes
@@ -4888,10 +4903,21 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         if _venue and (_re3.search(r"\b(?:outside|car ?park|parking|rooftop|roof of|street(?:s)? (?:of|around))\b", _pl)
                        or (is_city and place and _heist)):
             _venue = None
+        # (2026-10-27) a polar station is huts on the ice: "a scientist launching a weather balloon from an
+        # Antarctic research station" stood among lab benches under a ceiling. Out on the ice the runtime
+        # builds the base (POLARBASE); only "inside" the station takes the player indoors
+        if _venue and _re3.search(r"\b(antarctic\w*|arctic|polar|south pole|north pole|ice shelf|penguins?|mcmurdo|svalbard|greenland|halley|weather balloons?)\b", _pl) \
+                and not _re3.search(r"\b(inside|indoors?|interior)\b", _pl):
+            _venue = None
+        # A CLOCK TOWER IS CLIMBED FROM INSIDE (2026-10-27): "a clockmaker climbing inside a great clock
+        # tower to mend the gears before midnight" walked a torchlit dungeon. A clock tower that is climbed,
+        # wound or mended is its own shaft of stairs round a pendulum, the clock room at the top
+        _clockt = _re3.search(r"\b(clock ?towers?|clocktowers?|belfr(?:y|ies)|bell ?towers?|big ben|campaniles?)\b", _pl) and _re3.search(
+            r"\b(inside|within|climb\w*|gears?|cogs?|pendulums?|mechanism|clockwork|stairs?|staircase|wind(?:s|ing)? (?:the|up)|mend\w*|fix\w*|repair\w*)\b", _pl)
         if ((_im and (_im.group(1) or not _city_heist))
-                or " dungeon" in _pl or (_heist and _bld and not _city_heist) or _venue):
+                or " dungeon" in _pl or (_heist and _bld and not _city_heist) or _venue or _clockt):
             from app.game_export.level import build_interior
-            _ik_raw = (_im.group(1) if _im else None) \
+            _ik_raw = ("clocktower" if _clockt else None) or (_im.group(1) if _im else None) \
                 or (_bld.group(1) if (_heist and _bld) else None) \
                 or (("station" if _station else "cafe" if _cafe else {"supermarket": "shop", "department store": "mall", "hospital": "hospital",
                      "asylum": "hospital", "sanatorium": "hospital", "office block": "office", "prison": "dungeon",
@@ -4951,8 +4977,16 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                 for _o in spec.objectives:
                     if _o.kind == "reach":
                         _o.label = _bench
+            if _ik == "clocktower":
+                # (2026-10-27) in at the foot of the stair; what is mended waits on the landings (the runtime puts
+                # each wheel at its height), and the walk ends in the clock room at the top, at the movement
+                spec.world.level["goal"] = [-0.6, -0.75]
+                spec.world.level["path"] = [[1.3, -1.6], [3.3, 3.3], [-3.3, 3.3], [-3.3, -3.3], [-0.6, -0.75]]
+                for _o in spec.objectives:
+                    if _o.kind == "reach":
+                        _o.label = "the clock room"
             job.setdefault("notes", []).append(
-                f"interior level: {_ik}. Rooms, doorways, torchlight")
+                f"interior level: {_ik}. " + ("A stair round the well, the clock room at the top" if _ik == "clocktower" else "Rooms, doorways, torchlight"))
             # a mystery or a heist that happens in a cafe keeps its own story;
             # only a sentence about the work itself becomes a service game
             from app.game_export.extractor import MYSTERY_WORDS as _MYW2
@@ -5054,6 +5088,9 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                 _sm = None
             # (2026-10-26) a space station is the runtime's own (ORBIT outside, the station interior inside), not a warehouse door
             if _sm and _sm.group(1) == "station" and _re3.search(r"\b(space ?stations?|orbit\w*|iss|astronauts?|cosmonauts?|spacewalk\w*|zero[- ]?g\w*)\b", _pl):
+                _sm = None
+            # (2026-10-27) and a polar station is the runtime's base on the ice (POLARBASE), not a warehouse door
+            if _sm and _sm.group(1) in ("station", "lab", "laboratory", "bunker") and _re3.search(r"\b(antarctic\w*|arctic|polar|south pole|north pole|ice shelf|penguins?|mcmurdo|svalbard|greenland|halley)\b", _pl):
                 _sm = None
             if _sm:
                 from app.game_export.level import build_interior

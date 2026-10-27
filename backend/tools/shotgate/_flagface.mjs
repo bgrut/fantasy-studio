@@ -8,9 +8,13 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
 for (let i = 0; i < 120 && !(await p.evaluate(() => !!(window.__factory && window.__game)).catch(() => false)); i++) await wait(500);
 await wait(2500); await p.keyboard.press('Space'); await wait(2500);
 const F = +(process.env.FACE || 2);
-await p.evaluate((F) => { const f = window.__factory, P = f.player, fc = f.FACES[F], H = f.HALF, o = +(window.__offU || 0.25);
+// the camera's up lags the player's; straight from the top to the underside it is asked to turn
+// exactly half round and never starts, so the underside is reached by way of a side face
+const put = (F) => p.evaluate((F) => { const f = window.__factory, P = f.player, fc = f.FACES[F], H = f.HALF, o = +(window.__offU || 0.25);
   P.pos.set ? P.pos.set(fc.n[0] * (H + 1.0) - fc.u[0] * H * o, fc.n[1] * (H + 1.0) - fc.u[1] * H * o, fc.n[2] * (H + 1.0) - fc.u[2] * H * o) : (P.pos = [fc.n[0] * (H + 1), fc.n[1] * (H + 1), fc.n[2] * (H + 1)]);
   P.face = F; if (P.up && P.up.set) P.up.set(...fc.n); if (P.fwd && P.fwd.set) P.fwd.set(...fc.u); P.vy = 0; }, F);
+if (F === 1) { await put(2); await wait(2500); }
+await put(F);
 await wait(3500);
 await p.screenshot({ path: `${process.env.OUT}_f${F}.jpg`, type: 'jpeg', quality: 85 });
 console.log(errs.length ? 'ERR ' + errs.join(' | ') : 'ok');

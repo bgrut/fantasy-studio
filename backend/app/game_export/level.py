@@ -1148,6 +1148,12 @@ def build_interior(seed: int, kind: str = "castle") -> dict:
         return {"kind": "lighthouse", "wall_h": 22.0, "wall_t": 0.3, "pillars": [], "floors": 1,
                 "rooms": [[0.0, 0.0, 5.8, 5.8]], "walls": [], "furniture": [], "torches": [],
                 "tower": {"r": 2.9, "newel": 0.85, "rise": 0.24, "turn": 0.27}, "bounds": [12.0, 12.0]}
+    # A CLOCK TOWER (2026-10-27): a square shaft 7.6 m across, a stair of four flights round its walls
+    # to the clock room 17.6 m up; the runtime builds the stair, the movement, the dials and the bell
+    if kind == "clocktower":
+        return {"kind": "clocktower", "wall_h": 22.6, "wall_t": 0.3, "pillars": [], "floors": 1,
+                "rooms": [[0.0, 0.0, 7.6, 7.6]], "walls": [], "furniture": [], "torches": [],
+                "clock": {"w": 7.6, "band": 1.0, "rise": 0.22, "go": 0.28}, "bounds": [12.0, 12.0]}
     # AN ATTIC (2026-10-26): "a bookbinder searching a cluttered attic for a lost page" searched a
     # wood. One long room under the roof; the runtime builds its rafters, gables and clutter
     if kind == "attic":

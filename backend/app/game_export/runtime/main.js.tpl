@@ -510,7 +510,7 @@ async function main() {
     const W = SPEC.world || {}, L0 = W.level || {};
     // (2026-10-07) the sentence's own place words too: "a himalayan monastery" grew an
     // oak wood because the title, "Monk's Ascent", never said where it was
-    const placeWords = (String(SPEC.prompt || '').toLowerCase().match(/\b(polders?|dutch|holland|netherlands|frisian|friesland|redwoods?|sequoias?|himalaya\w*|tibet\w*|nepal\w*|bhutan\w*|monaster(?:y|ies)|gompa|lavender|vineyards?|provence|tuscan\w*|black sand|basalt|sea stacks?|iceland\w*|kansas|wheat|olive groves?|tea plantations?|bamboo|cherry blossoms?|cherry trees?|sakura|hanami|highlands?|glens?|moors?|heather|lighthouses?|storm\w*|gales?|scottish|scotland|hebrid\w*|orkney|shetland|irish|ireland|cornwall|cornish|welsh|wales|maine|newfoundland|north sea|atlantic|faroe\w*|brittany|breton|cliffs?|headland|alien|xeno\w*|extraterrestrial|exoplanet|purple plants|fjords?|norw\w*|vikings?|norse|nordic|scandinavia\w*|egypt\w*|giza|pyramids?|pharaoh\w*|sphinx|sahara|oasis|alps|alpine|swiss|switzerland|tyrol\w*|dolomit\w*|sea ice|ice floes?|pack ice|polar bears?|icebergs?|orchards?|apples?|cider|tropical|islands?|isle|palms?|lagoon|atoll|pirates?|treasure|castaway|autumn|october|maples?|beach|seaside|lifeguards?|surf\w*|scuba|deep blue|deep ocean|deep sea|humpback|underwater|undersea|seabed|sea ?floor|ocean floor|coral|reefs?|kelp|cappadocia\w*|kapadokya|g[oö]reme|fairy chimneys?|chinese|china|jiangnan|suzhou|wuzhen|zhouzhuang|tongli|xitang|hangzhou|zhujiajiao|water ?town|canad\w*|quebec|ontario|yukon|alaska\w*|boreal|taiga|siberia\w*|lumberjacks?|log ?driv\w*|logging|sawmill|antarctic\w*|south pole|penguins?|ice shelf|maya\w*|cenotes?|yucat\w*|aztec\w*|camels?|caravans?|bedouin|tuareg|berber|gobi|kalahari|namib\w*|arabia\w*|morocc\w*)\b/g) || []);   // (alien words, 2026-10-11; fjord, Egypt, Alps, sea ice the same day)
+    const placeWords = (String(SPEC.prompt || '').toLowerCase().match(/\b(polders?|dutch|holland|netherlands|frisian|friesland|redwoods?|sequoias?|himalaya\w*|tibet\w*|nepal\w*|bhutan\w*|monaster(?:y|ies)|gompa|lavender|vineyards?|provence|tuscan\w*|black sand|basalt|sea stacks?|iceland\w*|kansas|wheat|olive groves?|tea plantations?|bamboo|cherry blossoms?|cherry trees?|sakura|hanami|highlands?|glens?|moors?|heather|lighthouses?|storm\w*|gales?|scottish|scotland|hebrid\w*|orkney|shetland|irish|ireland|cornwall|cornish|welsh|wales|maine|newfoundland|north sea|atlantic|faroe\w*|brittany|breton|cliffs?|headland|alien|xeno\w*|extraterrestrial|exoplanet|purple plants|fjords?|norw\w*|vikings?|norse|nordic|scandinavia\w*|egypt\w*|giza|pyramids?|pharaoh\w*|sphinx|sahara|oasis|alps|alpine|swiss|switzerland|tyrol\w*|dolomit\w*|sea ice|ice floes?|pack ice|polar bears?|icebergs?|orchards?|apples?|cider|tropical|islands?|isle|palms?|lagoon|atoll|pirates?|treasure|castaway|autumn|october|maples?|beach|seaside|lifeguards?|surf\w*|scuba|deep blue|deep ocean|deep sea|humpback|underwater|undersea|seabed|sea ?floor|ocean floor|coral|reefs?|kelp|cappadocia\w*|kapadokya|g[oö]reme|fairy chimneys?|chinese|china|jiangnan|suzhou|wuzhen|zhouzhuang|tongli|xitang|hangzhou|zhujiajiao|water ?town|canad\w*|quebec|ontario|yukon|alaska\w*|boreal|taiga|siberia\w*|lumberjacks?|log ?driv\w*|logging|sawmill|antarctic\w*|south pole|penguins?|ice shelf|maya\w*|cenotes?|yucat\w*|aztec\w*|camels?|caravans?|bedouin|tuareg|berber|gobi|kalahari|namib\w*|arabia\w*|morocc\w*|jungles?|rainforests?|rain forests?|amazon\w*|tropical forests?|borneo|congo)\b/g) || []);   // (jungle words 2026-10-27: "a rainforest canopy" grew oaks) (alien words, 2026-10-11; fjord, Egypt, Alps, sea ice the same day)
     const words = [W.name, W.sky, W.flora, W.weather, W.setting, SPEC.title, SPEC.description, ...placeWords]
       .filter(Boolean).join(' ').toLowerCase();
     if (L0.osm || L0.interior || W.pano || L0.cave || L0.giantroom) return null;
@@ -1130,11 +1130,16 @@ async function main() {
       const _west9 = /cactus|frontier|western|wild west|saloon|sheriff|mesa|badlands|outlaw|cowboy/.test(_words9 + ' ' + String(SPEC.prompt || '').toLowerCase());
       const _dry = _west9 || /desert|dune|canyon|mars|moon|lunar|volcan|wasteland|arid/.test(_words9);
       const _green = FLORA && !FLORA.barren && !_west9;
+      // ROLLING COUNTRY (2026-10-27): "a Tuscan vineyard at golden hour" stood under snowy alpine peaks. Wine
+      // country, Tuscany, the Cotswolds are low round hills to the horizon, a patchwork of stubble and green
+      const _rolling = /\b(tuscan\w*|tuscany|toscana|chianti|val d'orcia|umbria\w*|montepulciano|siena|cotswolds?|rolling hills|countryside|the shire|provence|proven\u00e7al|bordeaux|burgundy|napa|sonoma|vineyards?|olive groves?|wine country|winery)\b/.test(String(SPEC.prompt || '').toLowerCase())
+        && !/\b(alps|alpine|swiss|mountains?|peaks?|snow\w*|himalaya\w*|rockies|andes)\b/.test(String(SPEC.prompt || '').toLowerCase());
       // one height function for the mesh and for the trees that climb it
       const ridgeH = (x, z, rad, hgt, seedK) => {
         const d = Math.hypot(x, z) / rad;
         const fall = Math.max(0, 1 - d * d);
         if (fall <= 0) return -hgt * 0.06;
+        if (_rolling) return hgt * 0.3 * Math.pow(fall, 1.6) * (0.7 + 0.5 * _rv(x / rad * 1.1 + seedK * 3.7, z / rad * 1.1 + seedK * 5.3));
         return hgt * Math.pow(fall, 1.25) * (0.45 + 0.75 * _ridged(x / rad * 1.4 + seedK * 3.7, z / rad * 1.4 + seedK * 5.3));
       };
       const ridgeGeo = (rad, hgt, seedK) => {
@@ -1155,7 +1160,9 @@ async function main() {
           const gul = _ridged(pa.getX(v) / rad * 1.4 + seedK * 3.7, pa.getZ(v) / rad * 1.4 + seedK * 5.3);
           let c = rockC.clone().offsetHSL(0, 0, (y - 0.4) * 0.08 + jit - Math.max(0, 0.35 - gul) * 0.25);
           if (_green && y < 0.42 + jit && up > 0.55) c.lerp(greenC, Math.min(1, (0.42 - y) * 4) * 0.85);
-          if (y > snowLine + jit && up > 0.45) c.lerp(snowC, Math.min(1, (y - snowLine) * 6) * Math.min(1, (up - 0.45) * 4));
+          if (y > snowLine + jit && up > 0.45 && !_rolling) c.lerp(snowC, Math.min(1, (y - snowLine) * 6) * Math.min(1, (up - 0.45) * 4));
+          if (_rolling) { const fx = Math.floor(pa.getX(v) / 34 + _rv(pa.getZ(v) * 0.01, 3) * 2), fz = Math.floor(pa.getZ(v) / 26 + _rv(pa.getX(v) * 0.01, 7) * 2), k = Math.abs(Math.sin(fx * 12.9898 + fz * 78.233 + seedK) * 43758.5453) % 1;
+            c.set(k < 0.35 ? 0xb8a060 : k < 0.6 ? 0x8a9450 : k < 0.8 ? 0x6a7a3c : 0xa88a58).offsetHSL(0, -0.05, (gul - 0.5) * 0.06); }   // stubble, meadow, vines, ploughland
           col[v * 3] = c.r; col[v * 3 + 1] = c.g; col[v * 3 + 2] = c.b;
         }
         g.setAttribute('color', new THREE.BufferAttribute(col, 3));
@@ -2142,6 +2149,165 @@ async function main() {
       onTop: (x, z, m) => Math.abs(x) < 15 + (m || 0) && z > Z1 - 3 - (m || 0) && z < Z1 + PL + (m || 0) };
   })();
 
+  // ── A TEA ESTATE ON ITS HILL (2026-10-27) ────────────────────────────────
+  // "a tea picker on misty terraced hills in Darjeeling at dawn" walked a conifer meadow in fog. A tea
+  // garden is a hillside: the bushes clipped into rounded hedges that run along the contours, row on
+  // row down into the mist, picker's paths cut straight up through them, tall silver oaks standing
+  // thin among them for shade, a red earth road winding up to the factory on the crest. The plan
+  // raises the hill and lays the road and the rows; the build plants them
+  const TEAHILL = (() => {
+    if (INTERIOR || OSM || !LVL || !LVL.heights || VIEW === 'side' || SPEC.genre === 'factory' || CANALS || POLDER) return null;
+    if (LVL.heights.length !== LVL.grid_n * LVL.grid_n) return null;
+    const w = [SPEC.prompt, SPEC.world && SPEC.world.name].filter(Boolean).join(' ').toLowerCase();
+    if (!/\btea\b/.test(w) || /\b(tea ?(?:rooms?|shops?|house|party|parties|ceremony|cups?|pots?|cakes?)|teapots?|teacups?|high tea|cafe|caf\u00e9)\b/.test(w)) return null;
+    if (!/\b(pick\w*|pluck\w*|leaf|leaves|terrace\w*|hills?|hillsides?|slopes?|plantations?|estates?|gardens?|bushes|darjeeling|assam|munnar|nilgiris?|ceylon|sri lanka|kandy|nuwara eliya|cameron highlands|himalaya\w*|uji|shizuoka)\b/.test(w)) return null;
+    const n = LVL.grid_n, S = LVL.size_m, hs = LVL.heights, half = S / 2;
+    const g0 = LVL.goal || [0, 50], gl = Math.hypot(g0[0], g0[1]) || 50, ux = g0[0] / gl, uz = g0[1] / gl;
+    const RS = Math.min(30, half * 0.42), HC = [ux * RS, uz * RS], R0 = Math.min(48, half * 0.66), RP = 11, HT = 20, GAP = 2.1, ROW0 = 14.2;
+    const hill = (r) => r < RP ? HT : r > R0 ? 0 : HT * Math.pow(Math.cos(Math.PI / 2 * (r - RP) / (R0 - RP)), 1.4);
+    // A RIDGE, NOT A DOME: the hill swells along its long axis and lobes out into spurs; every radius in
+    // the plan is measured in that stretched space, so the contours, and the rows on them, wave round it
+    const rS = mulberry32((SPEC.seed || 1) + 9191), ph3 = rS() * 6.28, ph5 = rS() * 6.28;
+    let thL = 0;
+    const sOf = (th) => 1 + 0.17 * Math.cos(2 * (th - thL)) + 0.07 * Math.cos(3 * th + ph3) + 0.035 * Math.cos(5 * th + ph5);
+    // the base the hill rises from: the ground there already, sampled at its centre
+    const ci = Math.round((HC[1] / S + 0.5) * (n - 1)), cj = Math.round((HC[0] / S + 0.5) * (n - 1)), B = hs[Math.max(0, Math.min(n - 1, ci)) * n + Math.max(0, Math.min(n - 1, cj))] || 0;
+    // THE ROAD: a spiral up the hill from where the picker starts, a little under a turn, to the crest
+    const th0 = Math.atan2(-HC[1], -HC[0]), RB = RP + 2.2, SPAN = Math.PI * 1.55, DIR = 1;
+    thL = th0 + DIR * SPAN + Math.PI / 2;   // the ridge runs across the road's arrival, so the factory's long wall faces the shed
+    const RA = RS / sOf(th0);   // the picker starts where they stand: the road's first radius in the hill's own space
+    const roadR = (th) => { let d = (th - th0) * DIR; d = ((d % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2); return d <= SPAN ? RA + (RB - RA) * d / SPAN : null; };
+    const pol = (x, z) => { const th = Math.atan2(z - HC[1], x - HC[0]); return [Math.hypot(x - HC[0], z - HC[1]) / sOf(th), th]; };
+    const at = (rho, th) => [HC[0] + Math.cos(th) * rho * sOf(th), HC[1] + Math.sin(th) * rho * sOf(th)];
+    const roadD = (x, z) => { const [r, th] = pol(x, z), rr = roadR(th); let d = rr === null ? 1e9 : Math.abs(r - rr);
+      if (r < RB + 0.5 && rr === null) d = Math.min(d, RB - r + 99);
+      return Math.min(d, Math.hypot(x, z) < 3 ? 0 : 1e9); };
+    const path = []; for (let k = 0; k <= 40; k++) { const t = k / 40, th = th0 + DIR * SPAN * t, r = RA + (RB - RA) * t, q = at(r, th); path.push([+q[0].toFixed(2), +q[1].toFixed(2)]); }
+    for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
+      const x = (j / (n - 1) - 0.5) * S, z = (i / (n - 1) - 0.5) * S, [r] = pol(x, z), t = Math.min(1, Math.max(0, (R0 + 12 - r) / 12));
+      let h = B + hill(r) + Math.sin(x * 0.11 + z * 0.07) * 0.25 * (r > RP ? 1 : 0);
+      // the road's bed is levelled across the slope: the hill's height at the road's own radius
+      const [, th] = pol(x, z), rr = roadR(th);
+      if (rr !== null && Math.abs(r - rr) < 3.2) { const k2 = Math.min(1, Math.max(0, (3.2 - Math.abs(r - rr)) / 1.4)); h += (B + hill(rr) - h) * k2; }
+      hs[i * n + j] = hs[i * n + j] + (h - hs[i * n + j]) * t * t * (3 - 2 * t);
+    }
+    // the factory on the crest, the weighing shed before it where the road comes up: the walk ends there
+    const thE = th0 + DIR * SPAN, SHED = at(RP - 2.6, thE);
+    LVL.goal = [+SHED[0].toFixed(2), +SHED[1].toFixed(2)]; LVL.path = path.concat([LVL.goal]);
+    if (LVL) { LVL.enterable = null; LVL.enterables = []; }
+    const rows = []; for (let r = ROW0; r < R0 - 1.5; r += GAP) rows.push(+r.toFixed(2));
+    const inMap = (x, z, m) => Math.abs(x) < half - (m || 0) && Math.abs(z) < half - (m || 0);
+    const cut = (th) => { const a = ((th % (Math.PI / 6)) + Math.PI / 6) % (Math.PI / 6); return a < 0.032 * 30 / 30 && true; };   // picker's paths every thirty degrees
+    const pathAt = (x, z) => { const [r, th] = pol(x, z), a = ((th + 0.2) % (Math.PI / 6) + Math.PI / 6) % (Math.PI / 6); return a * r * sOf(th) < 0.8; };
+    const rowAt = (x, z) => { const [r] = pol(x, z); if (r < ROW0 - 0.6 || r > rows[rows.length - 1] + 0.6) return false; const k = Math.round((r - ROW0) / GAP); return Math.abs(r - (ROW0 + k * GAP)) < 0.6; };
+    const picks = []; const rP = mulberry32((SPEC.seed || 1) + 8383);
+    for (let k = 0; k < 60; k++) { const t = 0.03 + k / 60 * 0.95, th = th0 + DIR * SPAN * t, rr = RA + (RB - RA) * t;
+      // a bush on the row beside the road, above it or below, at the hedge's near edge
+      const ri = rows.reduce((b, r) => Math.abs(r - rr) < Math.abs(b - rr) ? r : b, rows[0]), side = rr > ri ? 1 : -1, r2 = ri + side * 0.42, th2 = th + (rP() - 0.5) * 0.12;
+      const [x, z] = at(r2, th2); if (!inMap(x, z, 4) || pathAt(x, z)) continue; picks.push({ x, z }); }
+    let pi = 0; void cut;
+    return { HC, R0, RP, HT, B, GAP, ROW0, rows, th0, SPAN, DIR, RA, RB, SHED, thL, hill, pol, at, sOf, roadR, roadD, pathAt, rowAt, inMap,
+      inEstate: (x, z, m) => pol(x, z)[0] < R0 + (m || 0),
+      bare: (x, z) => roadD(x, z) < 1.7 || (rowAt(x, z) && !pathAt(x, z)),
+      take: () => (pi < picks.length ? picks[pi++] : null) };
+  })();
+
+  // ── A BIG TOP (2026-10-27) ──────────────────────────────────────────────
+  // "a ringmaster opening the show under a striped circus big top" walked a pine clearing with a lamp
+  // post in it. A circus is its tent on a fairground: red and cream canvas striped from the peak down,
+  // king poles, a sawdust ring inside a painted curb, tiers of benches full of people round it, the
+  // trapeze high up, bulbs strung under the canvas; wagons and a lit entrance outside. The plan levels
+  // the ground for it and puts the walk's end at the ring's centre
+  const BIGTOP = (() => {
+    if (INTERIOR || OSM || !LVL || !LVL.heights || VIEW === 'side' || SPEC.genre === 'factory' || CANALS || POLDER || TEAHILL) return null;
+    if (LVL.heights.length !== LVL.grid_n * LVL.grid_n) return null;
+    const w = [SPEC.prompt, SPEC.world && SPEC.world.name].filter(Boolean).join(' ').toLowerCase();
+    if (!/\b(circus\w*|big ?tops?|ringmasters?|trapeze\w*|acrobats?|clowns?|lion tamers?|tightrope walkers?|jugglers?|ring ?masters?)\b/.test(w)) return null;
+    if (/\b(flea circus|media circus|piccadilly|oxford circus|space|moon|underwater|skyscrapers?)\b/.test(w)) return null;
+    const n = LVL.grid_n, S = LVL.size_m, hs = LVL.heights, half = S / 2, R = 19, RING = 6.5;
+    const g0 = LVL.goal || [0, 36], gl = Math.hypot(g0[0], g0[1]) || 36, D = Math.max(30, Math.min(gl, half - R - 8));
+    const C = [g0[0] / gl * D, g0[1] / gl * D], thIn = Math.atan2(-C[1], -C[0]);
+    const ci = Math.round((C[1] / S + 0.5) * (n - 1)), cj = Math.round((C[0] / S + 0.5) * (n - 1)), base = hs[Math.max(0, Math.min(n - 1, ci)) * n + Math.max(0, Math.min(n - 1, cj))] || 0;
+    // the fairground: level round the tent and out to where the walk begins
+    for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
+      const x = (j / (n - 1) - 0.5) * S, z = (i / (n - 1) - 0.5) * S, d = Math.min(Math.hypot(x - C[0], z - C[1]) - (R + 10), Math.hypot(x, z) - 10);
+      const t = Math.min(1, Math.max(0, 1 - d / 16)), k = t * t * (3 - 2 * t);
+      hs[i * n + j] = hs[i * n + j] + (base + Math.sin(x * 0.05) * 0.04 - hs[i * n + j]) * k;
+    }
+    LVL.goal = [+C[0].toFixed(2), +C[1].toFixed(2)];
+    LVL.path = [[0, 0], [+(C[0] + Math.cos(thIn) * (R + 3)).toFixed(2), +(C[1] + Math.sin(thIn) * (R + 3)).toFixed(2)], LVL.goal];
+    if (LVL) { LVL.enterable = null; LVL.enterables = []; }
+    const segD = (x, z) => { const ex = C[0] + Math.cos(thIn) * R, ez = C[1] + Math.sin(thIn) * R, L2 = ex * ex + ez * ez, t = Math.max(0, Math.min(1, (x * ex + z * ez) / L2)); return Math.hypot(x - ex * t, z - ez * t); };
+    return { C, R, RING, thIn, base,
+      inside: (x, z, m) => Math.hypot(x - C[0], z - C[1]) < R + (m || 0),
+      near: (x, z, m) => Math.hypot(x - C[0], z - C[1]) < R + 12 + (m || 0) || segD(x, z) < 7 + (m || 0) };
+  })();
+
+  // ── TREEHOUSES IN THE CANOPY (2026-10-27) ───────────────────────────────
+  // "a girl crossing rope bridges between treehouses in a rainforest canopy" walked a lakeside meadow
+  // of oaks. The village is up in the giants: a deck round each kapok's trunk a dozen metres up, a
+  // thatched roof over it, rope bridges sagging from deck to deck, a stair winding up round the first
+  // tree, the last house walled in at the end. The plan lays the trees along the way and keeps land
+  // under them; the build raises the village
+  const CANOPY = (() => {
+    if (INTERIOR || OSM || !LVL || !LVL.heights || VIEW === 'side' || SPEC.genre === 'factory' || CANALS || POLDER || TEAHILL || BIGTOP) return null;
+    if (LVL.heights.length !== LVL.grid_n * LVL.grid_n) return null;
+    const w = [SPEC.prompt, SPEC.world && SPEC.world.name].filter(Boolean).join(' ').toLowerCase();
+    if (!/\b(tree ?houses?|treetops?|tree-tops?|canopy walk\w*|rope bridges?|tree ?top village|swinging bridges?)\b/.test(w)) return null;
+    if (!/\b(tree ?houses?|treetop village|canopy|jungle|rainforest|rain forest|forest|woods?|trees)\b/.test(w)) return null;
+    const n = LVL.grid_n, S = LVL.size_m, hs = LVL.heights, half = S / 2, WL = SPEC.world.water_level;
+    const g0 = LVL.goal || [0, 80], gl = Math.hypot(g0[0], g0[1]) || 80, ux = g0[0] / gl, uz = g0[1] / gl, vx = -uz, vz = ux;
+    const NH = 6, SP = 17, rC = mulberry32((SPEC.seed || 1) + 6464), houses = [];
+    for (let k = 0; k < NH; k++) { const a = 15 + k * SP, side = k === 0 ? 0 : (k % 2 ? 1 : -1) * (5 + rC() * 4);
+      houses.push({ x: ux * a + vx * side, z: uz * a + vz * side, H: 11.5 + k * 0.7 + rC() * 0.6, k }); }
+    const segD = (x, z, A, B) => { const dx = B.x - A.x, dz = B.z - A.z, L2 = dx * dx + dz * dz, t = Math.max(0, Math.min(1, ((x - A.x) * dx + (z - A.z) * dz) / L2)); return Math.hypot(x - A.x - dx * t, z - A.z - dz * t); };
+    const lineD = (x, z) => { let d = Math.min(Math.hypot(x, z), Math.hypot(x - houses[0].x, z - houses[0].z)); for (let k = 0; k + 1 < NH; k++) d = Math.min(d, segD(x, z, houses[k], houses[k + 1])); return d; };
+    // land under the village: lifted clear of any water, gently, out to twenty metres
+    if (WL !== null && WL !== undefined) for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
+      const x = (j / (n - 1) - 0.5) * S, z = (i / (n - 1) - 0.5) * S, d = Math.min(lineD(x, z), segD(x, z, { x: 0, z: 0 }, houses[0]));
+      const t = Math.min(1, Math.max(0, (28 - d) / 14)), k = t * t * (3 - 2 * t), want = Math.max(hs[i * n + j], WL + 1.4 + Math.sin(x * 0.07 + z * 0.05) * 0.4);
+      hs[i * n + j] = hs[i * n + j] + (want - hs[i * n + j]) * k; }
+    const last = houses[NH - 1], prev = houses[NH - 2], dl = Math.hypot(last.x - prev.x, last.z - prev.z);
+    LVL.goal = [+(last.x - (last.x - prev.x) / dl * 2.2).toFixed(2), +(last.z - (last.z - prev.z) / dl * 2.2).toFixed(2)];
+    LVL.path = [[0, 0]].concat(houses.map(h => [+h.x.toFixed(2), +h.z.toFixed(2)]));
+    if (LVL) { LVL.enterable = null; LVL.enterables = []; }
+    return { houses, NH, lineD,
+      near: (x, z, m) => { for (const h of houses) if (Math.hypot(x - h.x, z - h.z) < 6.5 + (m || 0)) return true;
+        for (let k = 0; k + 1 < NH; k++) if (segD(x, z, houses[k], houses[k + 1]) < 3.5 + (m || 0)) return true; return false; } };
+  })();
+
+  // ── A BASE ON THE ICE (2026-10-27) ──────────────────────────────────────
+  // "a scientist launching a weather balloon from an Antarctic research station" stood among lab
+  // benches indoors. A polar station is out on the ice shelf: modules raised on legs above the drift,
+  // the balloon shed with its tall door and the helium racks, a met mast, a radome, flag lines between
+  // the buildings so nobody is lost in a whiteout, drums, a snowcat. The plan levels the shelf
+  const POLARBASE = (() => {
+    if (INTERIOR || OSM || !LVL || !LVL.heights || VIEW === 'side' || SPEC.genre === 'factory' || CANALS || POLDER || TEAHILL || BIGTOP || CANOPY) return null;
+    if (LVL.heights.length !== LVL.grid_n * LVL.grid_n) return null;
+    const w = [SPEC.prompt, SPEC.world && SPEC.world.name].filter(Boolean).join(' ').toLowerCase();
+    if (!/\b(antarctic\w*|arctic|polar|south pole|north pole|ice shelf|mcmurdo|svalbard|greenland|halley)\b/.test(w)) return null;
+    if (!/\b(stations?|bases?|research|outposts?|camps?|weather balloons?|scientists?|meteorolog\w*|labs?)\b/.test(w)) return null;
+    const n = LVL.grid_n, S = LVL.size_m, hs = LVL.heights, half = S / 2;
+    const g0 = LVL.goal || [0, 30], gl = Math.hypot(g0[0], g0[1]) || 30, ux = g0[0] / gl, uz = g0[1] / gl;
+    const D = Math.min(26, half * 0.3), C = [ux * D, uz * D], yaw = Math.atan2(uz, ux);
+    const ci = Math.round((C[1] / S + 0.5) * (n - 1)), cj = Math.round((C[0] / S + 0.5) * (n - 1)), base = hs[Math.max(0, Math.min(n - 1, ci)) * n + Math.max(0, Math.min(n - 1, cj))] || 0;
+    for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
+      const x = (j / (n - 1) - 0.5) * S, z = (i / (n - 1) - 0.5) * S, d = Math.min(Math.hypot(x - C[0], z - C[1]) - 40, Math.hypot(x, z) - 12);
+      const t = Math.min(1, Math.max(0, 1 - d / 24)), k = t * t * (3 - 2 * t);
+      // the shelf: flat to the eye, wind-cut into low sastrugi ridges all lying one way
+      const sas = Math.sin((x * 0.8 + z * 0.35) * 0.9 + Math.sin(z * 0.21) * 2) * 0.09 + Math.sin(x * 0.13 - z * 0.07) * 0.12;
+      hs[i * n + j] = hs[i * n + j] + (base + sas - hs[i * n + j]) * k; }
+    // in the base's own frame: a along the way in, c across it
+    const W = (a, c) => [C[0] + Math.cos(yaw) * a - Math.sin(yaw) * c, C[1] + Math.sin(yaw) * a + Math.cos(yaw) * c];
+    const LAUNCH = W(14, -15), SHED = W(14, -20);
+    LVL.goal = [+LAUNCH[0].toFixed(2), +LAUNCH[1].toFixed(2)];
+    const parts = [W(-6, 9.5), W(10, 10.5), W(-12, -9)];   // at the foot of a stair tower, by the radome, by the drums
+    LVL.collect_points = parts.map(q => [+q[0].toFixed(2), +q[1].toFixed(2)]);
+    LVL.path = [[0, 0], [+C[0].toFixed(2), +C[1].toFixed(2)], LVL.goal];
+    if (LVL) { LVL.enterable = null; LVL.enterables = []; }
+    return { C, yaw, W, base, LAUNCH, SHED, parts, near: (x, z, m) => Math.hypot(x - C[0], z - C[1]) < 40 + (m || 0) };
+  })();
+
   // ── PLANTED ROWS (2026-10-07) ───────────────────────────────────────────
   // "a beekeeper walks through rows of purple lavender in provence" was a
   // dark wood with dead grass, and "a vintner harvests grapes in a tuscan
@@ -2153,7 +2319,7 @@ async function main() {
   // along the track. The plan is numbers only, read by the scatter, the
   // flora, the grass and the pickups long before the build further down.
   const ROWS = (() => {
-    if (INTERIOR || OSM || VIEW === 'side' || SPEC.genre === 'factory' || MONK) return null;
+    if (INTERIOR || OSM || VIEW === 'side' || SPEC.genre === 'factory' || MONK || TEAHILL || BIGTOP) return null;
     const w = [SPEC.prompt, SPEC.world && SPEC.world.name].filter(Boolean).join(' ').toLowerCase();
     const crop = /\blavender\b/.test(w) ? 'lavender'
       : /\b(vineyards?|vines?|grapevines?|vintners?|winemakers?|winery|wineries|grape harvest|wine estate)\b/.test(w) ? 'vine'
@@ -2810,7 +2976,8 @@ async function main() {
     _sp.x = h0[0];
     _sp.z = h0[1] - h0[3] / 2 + 3.0;   // clear of the wall: at 1.8 m the
                                        // capsule was embedded and immovable
-    if (INTERIOR.kind === 'attic') _sp.z = h0[1] + h0[3] / 2 - 5.4;   // (2026-10-26) up by the hatch, room for the camera behind, the window ahead
+    if (INTERIOR.kind === 'attic') _sp.z = h0[1] + h0[3] / 2 - 5.4;
+    if (INTERIOR.kind === 'clocktower') { _sp.x = 1.3; _sp.z = -1.6; }   // (2026-10-27) at the foot of the stair, the well open above   // (2026-10-26) up by the hatch, room for the camera behind, the window ahead
   }
   // wall segments [x1,z1,x2,z2] that block a guard's line of sight
   const SIGHT = [];
@@ -2827,6 +2994,8 @@ async function main() {
     return true;
   }
   const gcol = new THREE.Color(...SPEC.world.ground_color);
+  // (2026-10-27) Tuscan ground is ochre and straw, not the dark red clay "a Tuscan vineyard" came out on
+  if (/\b(tuscan\w*|tuscany|toscana|chianti|val d'orcia|umbria\w*|montepulciano|siena)\b/.test(String(SPEC.prompt || '').toLowerCase())) { const _h = {}; gcol.getHSL(_h); if (_h.h < 0.08 || _h.h > 0.95) gcol.lerp(new THREE.Color(0x8c7650), 0.65); }
   // A SEABED IS SAND (2026-10-10): a reef's floor took the planner's meadow
   // green and the dolphin swam over a lawn among the coral. Under the sea the
   // floor is pale sand, which also gives it the sand photograph for detail.
@@ -4412,7 +4581,7 @@ async function main() {
     // a tomb's goal is its sarcophagus (proc/cave.js); nothing else stands in the burial chamber
     if (window.__cave && window.__cave.tomb) { window.__goalMark = 'none'; return G; }
     if (JOUST) { window.__goalMark = 'none'; return G; }   // the lists are the place: no altar by the tilt
-    if (INTERIOR && INTERIOR.kind === 'attic') { window.__goalMark = 'none'; return G; }   // (2026-10-26) the bench under the window is the place: no campfire on the boards
+    if ((INTERIOR && (INTERIOR.kind === 'attic' || INTERIOR.kind === 'clocktower')) || TEAHILL || BIGTOP || CANOPY || POLARBASE) { window.__goalMark = 'none'; return G; }   // the weighing shed is the place   // (2026-10-26) the bench under the window is the place: no campfire on the boards
     // a person to reach is the goal themself: a campfire on a lifeguard's
     // beach for "reach swimmer 1" was a thing that should not be there
     if (!kind && /\b(swimmers?|man|woman|men|women|girl|boy|child|children|kids?|princess|prince|king|queen|survivors?|friends?|hikers?|climbers?|people|family|mother|father|brother|sister|captain|crew|villagers?|dog|cat|horse|guide|keeper|master|elder|monk|teacher|stranger|customer|rider|driver|player|team|rival|opponent|cubs?|pups?|kits?|kittens?|puppies|puppy|chicks?|ducklings?|foals?|calf|calves|lambs?|fawns?|cygnets?|hatchlings?|eggs?|young|babies|baby|herd|flock|pack|litter)\b|\d/.test(lab)) { window.__goalMark = 'none'; return G; }
@@ -9233,6 +9402,10 @@ async function main() {
         // nothing roots on a slope steeper than about forty degrees
         if (window.__aloftFields && rT() > 0.1) continue;   // farmland: a lone tree, not a wood
         if (POLDER && POLDER.bare(x, z, 1.5)) continue;   // (2026-10-26) a polder is open land: the willows along the ditches are its trees
+        if (TEAHILL && TEAHILL.inEstate(x, z, 6)) continue;   // (2026-10-27) the estate's trees are its silver oaks
+        if (BIGTOP && BIGTOP.near(x, z, 4)) continue;           // (2026-10-27) the fairground is open grass
+        if (CANOPY && CANOPY.near(x, z, 2)) continue;           // (2026-10-27) no crown grows through a deck or a bridge
+        if (POLARBASE && POLARBASE.near(x, z, 6)) continue;     // (2026-10-27) the base stands on bare ice
         if (LVL && LVL.ledges && (y < LVL.ledges.glacier + 8 || rT() > 0.35)) continue;   // (2026-10-25) nothing grows on the glacier, and the crags are sparse
         if (_treeLine < 1e9) {
           if (y > _treeLine + (_fvn(x * 0.02, z * 0.02) - 0.5) * 14) continue;
@@ -9720,7 +9893,8 @@ async function main() {
     // languages side by side read as a mistake, and the kit's are blocky
     if (FLORA_LIVE && _floraInner > 40 && _isTreeAsset(sct.asset)) continue;
     if (GRAVE && /gy_(gravestone|cross|iron-fence|grave|coffin|crypt)/.test(String(sct.asset))) continue;   // the graveyard has its own, in rows
-    if (POLDER && (_isTreeAsset(sct.asset) || _isRockAsset(sct.asset))) continue;   // (2026-10-26) a polder is open pasture: its trees are the willows
+    if (POLDER && (_isTreeAsset(sct.asset) || _isRockAsset(sct.asset))) continue;
+    if (TEAHILL && (_isTreeAsset(sct.asset) || _isRockAsset(sct.asset))) continue;   // (2026-10-27) planted hillside: no wild trees, no boulders   // (2026-10-26) a polder is open pasture: its trees are the willows
     try {
       const gltf = await loadGLB(sct.asset);
       if (!landmarkAsset) landmarkAsset = gltf;
@@ -9785,6 +9959,10 @@ async function main() {
                   || (RAIL && RAIL.near(x, z, 4))
                   || (CANALS && CANALS.bare(x, z, 6))
                   || (POLDER && POLDER.bare(x, z, 2))
+                  || (TEAHILL && TEAHILL.inEstate(x, z, 2))
+                  || (BIGTOP && BIGTOP.near(x, z, 2))
+                  || (CANOPY && CANOPY.near(x, z, 1))
+                  || (POLARBASE && POLARBASE.near(x, z, 2))
                   || (BEACH && BEACH.onKit(x, z, 1.5))
                   || (SKATE && SKATE.inPark(x, z, 4))
                   || (SMITHY && SMITHY.near(x, z, 2)) || (GLASSWORKS && GLASSWORKS.near(x, z, 2)) || (POTTERY && POTTERY.near(x, z, 2)) || (AIRSTRIP && AIRSTRIP.near(x, z, 2))
@@ -9794,6 +9972,8 @@ async function main() {
                       && tries < 22)) && tries < 30);
         if (YARD && YARD.inFoot(x, z, 2)) continue;
         if (POLDER && POLDER.bare(x, z, 2)) continue;
+        if (TEAHILL && TEAHILL.inEstate(x, z, 2)) continue;
+        if (BIGTOP && BIGTOP.near(x, z, 2)) continue;
         if (PARK && (PARK.onPath(x, z, 1) || PARK.inPond(x, z, 1.5) || PARK.solid(x, z, 1))) continue;   // (2026-10-22) out of tries in a small world: never inside the fence
         if (DOME && DOME.inside(x, z, 3)) continue;
         if (CENOTE && CENOTE.inside(x, z, 1)) continue;
@@ -9974,6 +10154,293 @@ async function main() {
       light: () => { const L = window.__lhClimb; if (L.lit) return; L.lit = true; lensM.emissiveIntensity = 2.2; flame.material.color.setHex(0xfff0c0); lensL.intensity = 22;
         const o = window.__lhOut; if (o) { o.lamp.material.color.setHex(0xfff4d0); o.pl.intensity = 18; o.beams.visible = true; if (o.glass) o.glass.material.emissiveIntensity = 0.9; } } };
     return { WH: TOP + 3.4, entryZ: 0.95 };
+  }
+
+  // A CLOCK TOWER (2026-10-27): "a clockmaker climbing inside a great clock tower to mend the gears
+  // before midnight" walked a torchlit dungeon. Inside a clock tower is a square stone shaft: a timber
+  // stair climbing round its walls flight on flight, the pendulum swinging down the well, the weights
+  // on their cables, and at the top the clock room, the movement in its iron frame driving rods out to
+  // four great dials lit from behind by the night, the bell hanging in the dark above. A broken wheel
+  // waits on the wall at each landing, and the last in the movement itself
+  function buildClockInside(PLAN, OX) {
+    const C = PLAN.clock || {}, HW = (C.w || 7.6) / 2, SW = C.band || 1.0, RISE = C.rise || 0.22, GO = C.go || 0.28;
+    const NT = 19, FH = (NT + 1) * RISE, TOP = FH * 4, IN = HW - SW, LB = HW - SW / 2, CEIL = TOP + 5.0;
+    const rC = mulberry32((SPEC.seed || 1) + 7171);
+    const night = SPEC.world.sky === 'night' || /\b(midnight|night|moon\w*|dark)\b/.test(String(SPEC.prompt || '').toLowerCase());
+    const texL = new THREE.TextureLoader();
+    const itex = (n, rx, ry) => { const t = texL.load('textures/' + n + '.jpg'); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(rx, ry);
+      t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = renderer.capabilities.getMaxAnisotropy(); return t; };
+    const M = (o) => { const m = new THREE.MeshStandardMaterial(o); m.userData.noAutoTex = true; return m; };
+    const cvT = (wd, ht, draw, rx, ry) => { const cv = document.createElement('canvas'); cv.width = wd; cv.height = ht; draw(cv.getContext('2d'), wd, ht);
+      const t = new THREE.CanvasTexture(cv); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace; t.repeat.set(rx || 1, ry || 1);
+      t.anisotropy = renderer.capabilities.getMaxAnisotropy(); return t; };
+    // oak gone dark with a century of hands and lamp smoke, the grain running along the board
+    const oakT = cvT(256, 256, (g2, W, H) => { g2.fillStyle = '#5e4024'; g2.fillRect(0, 0, W, H);
+      for (let k = 0; k < 70; k++) { g2.strokeStyle = `rgba(${28 + rC() * 30 | 0},${16 + rC() * 14 | 0},8,${0.2 + rC() * 0.3})`; g2.lineWidth = 0.6 + rC() * 1.6;
+        const y = rC() * H; g2.beginPath(); g2.moveTo(0, y); g2.bezierCurveTo(W * 0.3, y + (rC() - 0.5) * 12, W * 0.65, y + (rC() - 0.5) * 12, W, y + (rC() - 0.5) * 6); g2.stroke(); }
+      for (let k = 0; k < 900; k++) { g2.fillStyle = rC() < 0.5 ? 'rgba(20,12,6,0.07)' : 'rgba(160,120,76,0.06)'; g2.fillRect(rC() * W, rC() * H, 2 + rC() * 7, 1 + rC() * 2); } });
+    const wallM = M({ map: itex('stone', HW * 2 / 2.2, (CEIL + 6) / 2.2), color: 0xb0a490, roughness: 0.93, side: THREE.DoubleSide });
+    const flagM = M({ map: itex('stone', 3, 3), color: 0x8a8274, roughness: 0.92 });
+    const oakM = M({ map: oakT, roughness: 0.72 }), darkM = M({ color: 0x3a2616, roughness: 0.8 }), treadM = M({ map: oakT, color: 0xd8c8b0, roughness: 0.6 });
+    const ironM = M({ color: 0x2c4a3a, roughness: 0.5, metalness: 0.45 }), blackM = M({ color: 0x1c1c1e, roughness: 0.45, metalness: 0.8 });
+    const brassM = M({ color: 0xc09848, roughness: 0.28, metalness: 0.92 }), oldBrassM = M({ color: 0x7a6236, roughness: 0.62, metalness: 0.7 });
+    const g = new THREE.Group(); g.position.set(OX, 0, 0); scene.add(g);
+    const add = (geo, m, x, y, z, rx, ry, rz) => { const o = new THREE.Mesh(geo, m); o.position.set(x || 0, y || 0, z || 0); o.rotation.set(rx || 0, ry || 0, rz || 0); o.castShadow = o.receiveShadow = true; g.add(o); return o; };
+    const col = (hx, hy, hz, x, y, z) => world.createCollider(RAPIER.ColliderDesc.cuboid(hx, hy, hz).setTranslation(OX + x, y, z));
+    const bucket = new Map(); const put = (geo, m) => { if (!bucket.has(m)) bucket.set(m, []); bucket.get(m).push(geo.index ? geo.toNonIndexed() : geo); };
+    // the floor, the four walls, the string courses where each floor of the old tower was
+    add(new THREE.PlaneGeometry(HW * 2, HW * 2), flagM, 0, 0.01, 0, -Math.PI / 2); col(HW + 0.5, 0.1, HW + 0.5, 0, -0.1, 0);
+    const WALLH = CEIL + 6;
+    for (const [nx, nz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const w = new THREE.PlaneGeometry(HW * 2, WALLH); w.rotateY(nx ? -nx * Math.PI / 2 : nz > 0 ? Math.PI : 0); w.translate(nx * HW, WALLH / 2, nz * HW); put(w, wallM);
+      col(nx ? 0.3 : HW + 0.6, WALLH / 2, nz ? 0.3 : HW + 0.6, nx * (HW + 0.3), WALLH / 2, nz * (HW + 0.3));
+      for (const y of [FH * 1.5, FH * 2.5, TOP - 0.5]) put(new THREE.BoxGeometry(nx ? 0.12 : HW * 2, 0.16, nz ? 0.12 : HW * 2).translate(nx * (HW - 0.05), y, nz * (HW - 0.05)), wallM);
+    }
+    // THE STAIR: four flights, one along each wall, a landing in each corner; each tread solid a riser deep
+    const FL = [{ a: [0, 1], s: [LB, -IN], w: [-1, 0] }, { a: [-1, 0], s: [IN, LB], w: [0, -1] },
+                { a: [0, -1], s: [-LB, IN], w: [1, 0] }, { a: [1, 0], s: [-IN, -LB], w: [0, 1] }];
+    const OFF = 2 * IN - NT * GO, slope = Math.atan2(RISE, GO), runL = NT * GO, strL = Math.hypot(runL, NT * RISE);
+    FL.forEach((F, fi) => { const base = fi * FH, ax = F.a[0], az = F.a[1], wx = F.w[0], wz = F.w[1], alongX = !!ax;
+      for (let k = 0; k < NT; k++) {
+        const d = OFF + GO * (k + 0.5), cx = F.s[0] + ax * d, cz = F.s[1] + az * d, top = base + (k + 1) * RISE;
+        put(new THREE.BoxGeometry(alongX ? GO + 0.03 : SW - 0.02, 0.055, alongX ? SW - 0.02 : GO + 0.03).translate(cx, top - 0.028, cz), treadM);
+        put(new THREE.BoxGeometry(alongX ? 0.025 : SW - 0.04, RISE, alongX ? SW - 0.04 : 0.025).translate(cx - ax * GO / 2, top - RISE / 2 - 0.02, cz - az * GO / 2), darkM);   // the riser
+        col(alongX ? GO / 2 : SW / 2, RISE / 2, alongX ? SW / 2 : GO / 2, cx, top - RISE / 2, cz);
+        // the balustrade on the well side: a turned baluster each tread, a rail along their heads, a rail in the collider
+        const bx = cx + wx * (SW / 2 - 0.06), bz = cz + wz * (SW / 2 - 0.06);
+        put(new THREE.CylinderGeometry(0.02, 0.026, 0.9, 7).translate(bx, top + 0.45, bz), darkM);
+        put(new THREE.SphereGeometry(0.032, 7, 5).translate(bx, top + 0.3, bz), darkM);
+        col(alongX ? GO / 2 + 0.02 : 0.05, 0.6, alongX ? 0.05 : GO / 2 + 0.02, cx + wx * (SW / 2 + 0.02), top + 0.6, cz + wz * (SW / 2 + 0.02));
+      }
+      // the strings either side and the handrail, inclined with the flight
+      const yaw = Math.atan2(-az, ax), mid = OFF + runL / 2, mx = F.s[0] + ax * mid, mz = F.s[1] + az * mid, my = base + NT * RISE / 2;
+      for (const [off, h, dy, m] of [[SW / 2 - 0.04, 0.3, -0.16, oakM], [-SW / 2 + 0.03, 0.26, -0.12, oakM], [SW / 2 - 0.06, 0.07, 0.94, darkM]]) {
+        const geo = new THREE.BoxGeometry(strL, h, off === SW / 2 - 0.06 ? 0.08 : 0.05); geo.rotateZ(slope); geo.rotateY(yaw);
+        geo.translate(mx + wx * off, my + dy, mz + wz * off); put(geo, m); }
+      // the soffit under the flight: boards seen from below as you climb past them
+      const sof = new THREE.BoxGeometry(strL, 0.03, SW - 0.08); sof.rotateZ(slope); sof.rotateY(yaw); sof.translate(mx, my - 0.3, mz); put(sof, darkM);
+    });
+    // the landings, each on two joists into the wall; the last is the clock room's floor
+    const LAND = [[LB, LB], [-LB, LB], [-LB, -LB]];
+    LAND.forEach(([lx, lz], i) => { const y = (i + 1) * FH;
+      put(new THREE.BoxGeometry(SW, 0.12, SW).translate(lx, y - 0.06, lz), treadM); col(SW / 2, 0.15, SW / 2, lx, y - 0.15, lz);
+      for (const o of [-0.3, 0.3]) put(new THREE.BoxGeometry(SW, 0.2, 0.12).translate(lx, y - 0.22, lz + o), darkM); });
+    // THE CLOCK ROOM FLOOR over the whole well but the stairwell of the last flight
+    { const T2 = TOP, boards = (w, d, x, z) => { put(new THREE.BoxGeometry(w, 0.1, d).translate(x, T2 - 0.05, z), treadM); col(w / 2, 0.15, d / 2, x, T2 - 0.15, z); };
+      boards(HW * 2, HW + IN, 0, (HW - IN) / 2); boards(SW, SW, LB, -LB); boards(SW, SW, -LB, -LB);
+      for (let x = -HW + 0.45; x < HW; x += 0.9) put(new THREE.BoxGeometry(0.14, 0.26, HW + IN).translate(x, T2 - 0.23, (HW - IN) / 2), darkM);   // its joists, seen from below
+      // a rail along the stairwell's edge, and round the corner over the last landing
+      for (let x = -IN + 0.15; x < IN; x += 0.3) put(new THREE.CylinderGeometry(0.02, 0.026, 0.9, 7).translate(x, T2 + 0.45, -IN + 0.04), darkM);
+      put(new THREE.BoxGeometry(IN * 2, 0.07, 0.08).translate(0, T2 + 0.94, -IN + 0.04), darkM);
+      col(IN, 0.6, 0.05, 0, T2 + 0.6, -IN + 0.02); col(0.05, 0.6, SW / 2, -IN + 0.02, T2 + 0.6, -LB);
+      put(new THREE.BoxGeometry(0.08, 0.07, SW).translate(-IN + 0.04, T2 + 0.94, -LB), darkM); }
+    // windows on the night up the shaft: lancets deep in the wall, a glazing bar across
+    const winGlass = M({ color: 0x0c1420, emissive: night ? 0x22355a : 0x8aa6c8, emissiveIntensity: night ? 0.6 : 1.1, roughness: 0.1 });
+    for (const [nx, nz, y] of [[1, 0, 9.4], [0, 1, 12.6], [-1, 0, 4.2], [0, -1, 7.6]]) {
+      const wg = new THREE.Group(); wg.position.set(nx * (HW - 0.01), y, nz * (HW - 0.01)); wg.rotation.y = Math.atan2(-nx, -nz); g.add(wg);
+      const gl = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 1.3), winGlass); gl.position.z = -0.2; wg.add(gl);
+      const arch = new THREE.Mesh(new THREE.CircleGeometry(0.25, 16, 0, Math.PI), winGlass); arch.position.set(0, 0.65, -0.2); wg.add(arch);
+      for (const [w2, h2, x2, y2] of [[0.8, 0.14, 0, 1.0], [0.8, 0.16, 0, -0.73], [0.16, 1.9, 0.33, 0.1], [0.16, 1.9, -0.33, 0.1]]) {
+        const st2 = new THREE.Mesh(new THREE.BoxGeometry(w2, h2, 0.42), wallM); st2.position.set(x2, y2, -0.2); st2.receiveShadow = true; wg.add(st2); }
+      const bar = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.03, 0.03), blackM); bar.position.z = -0.17; wg.add(bar); }
+    // A WHEEL: a cast spur gear, its teeth cut round the rim, lightened by windows between the spokes
+    const gearGeo = (r, n, th, S, miss) => { const sh = new THREE.Shape(), td = Math.min(0.07, r * 0.13), da = Math.PI * 2 / n;
+      for (let k = 0; k < n; k++) { const a0 = k * da, gone = miss && k >= miss[0] && k < miss[0] + miss[1];
+        const P = (rr, a) => [Math.cos(a) * rr, Math.sin(a) * rr];
+        const pts = gone ? [P(r - td, a0), P(r - td, a0 + da * 0.5)] : [P(r - td, a0), P(r, a0 + da * 0.16), P(r, a0 + da * 0.44), P(r - td, a0 + da * 0.6)];
+        pts.forEach(([x, y], q) => (k === 0 && q === 0) ? sh.moveTo(x, y) : sh.lineTo(x, y)); }
+      sh.closePath();
+      if (S) { const ro = (r - td) * 0.8, ri = r * 0.24 + 0.02, sp = 0.32 / S * Math.PI * 2;
+        for (let k = 0; k < S; k++) { const a1 = k / S * Math.PI * 2 + sp / 2 / ri * 0.06 + 0.12, a2 = (k + 1) / S * Math.PI * 2 - 0.12;
+          const h = new THREE.Path(); h.absarc(0, 0, ro, a1, a2, false); h.absarc(0, 0, ri, a2, a1, true); h.closePath(); sh.holes.push(h); } }
+      const ge = new THREE.ExtrudeGeometry(sh, { depth: th, bevelEnabled: true, bevelThickness: th * 0.18, bevelSize: Math.min(0.012, th * 0.15), bevelSegments: 1, curveSegments: 12 });
+      ge.translate(0, 0, -th / 2); return ge; };
+    const wheels = [];   // [mesh, rate] turning while the clock goes
+    const gears = [];
+    // a broken wheel on the wall at a landing: the bracket, the wheel with its teeth sheared, the pinion it drives, the shaft up
+    const wallGear = (lx, lz, y, nx, nz) => {
+      const G = new THREE.Group(); G.position.set(lx + nx * (SW / 2 - 0.16), y + 1.45, lz + nz * (SW / 2 - 0.16)); G.rotation.y = Math.atan2(-nx, -nz); g.add(G);
+      // the bracket: an arch-headed plate of cast iron, its edge moulded, bolted to the stone
+      const psh = new THREE.Shape(); psh.moveTo(-0.62, -0.8); psh.lineTo(0.62, -0.8); psh.lineTo(0.62, 0.15); psh.absarc(0, 0.15, 0.62, 0, Math.PI, false); psh.closePath();
+      const plate = new THREE.Mesh(new THREE.ExtrudeGeometry(psh, { depth: 0.04, bevelEnabled: true, bevelThickness: 0.02, bevelSize: 0.03, bevelSegments: 2, curveSegments: 20 }), ironM); plate.position.set(0, 0, -0.14); G.add(plate);
+      const boss = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.2, 0.08, 20), ironM); boss.rotation.x = Math.PI / 2; boss.position.set(-0.1, 0.1, -0.07); G.add(boss);
+      for (const [bx, by] of [[0, 0.68], [-0.5, -0.7], [0.5, -0.7], [-0.52, 0.2], [0.52, 0.2]]) { const b = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.05, 8), blackM); b.rotation.x = Math.PI / 2; b.position.set(bx, by, -0.05); G.add(b); }
+      const whole = new THREE.Mesh(gearGeo(0.5, 48, 0.07, 6), brassM), broke = new THREE.Mesh(gearGeo(0.5, 48, 0.07, 6, [8, 7]), oldBrassM);
+      const W = new THREE.Group(); W.position.set(-0.1, 0.1, 0.0); W.add(whole, broke); whole.visible = false; W.rotation.z = 0.2; W.rotation.x = 0.13; G.add(W);
+      const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.075, 0.16, 16), blackM); hub.rotation.x = Math.PI / 2; W.add(hub);
+      const pin = new THREE.Mesh(gearGeo(0.15, 12, 0.11, 0), brassM); pin.position.set(0.53, -0.32, 0.0); G.add(pin);
+      const arb = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.3, 10), blackM); arb.rotation.x = Math.PI / 2; arb.position.copy(pin.position); G.add(arb);
+      // the shards of the sheared teeth on the landing, and a spark of the light caught on the break
+      for (let k = 0; k < 5; k++) { const sh2 = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.015, 0.06), oldBrassM); sh2.position.set((rC() - 0.5) * 0.6, -1.44, 0.25 + rC() * 0.3); sh2.rotation.y = rC() * 6; G.add(sh2); }
+      G.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+      const gr = { x: lx, z: lz, y, ry: G.rotation.y, g: G, fixed: false,
+        tick: (p, held, dt) => { if (gr.fixed) return; W.rotation.z = 0.2 + (held ? Math.sin(performance.now() / 70) * 0.02 * p : 0); W.rotation.x = 0.13 * (1 - p); },
+        fix: () => { gr.fixed = true; whole.visible = true; broke.visible = false; W.rotation.x = 0; wheels.push([W, 0.35 + gears.length * 0.1], [pin, -(0.35 + gears.length * 0.1) * 0.5 / 0.15]); } };
+      gears.push(gr); };
+    wallGear(LB, LB, FH, 0, 1); wallGear(-LB, LB, FH * 2, -1, 0); wallGear(-LB, -LB, FH * 3, 0, -1);
+    // THE MOVEMENT: a flatbed frame of green-painted iron on four legs, the going train and the striking
+    // train across it, every arbor in brass bushes; the great wheel of the going train is the last to mend
+    const MZ = 0.6, MY = TOP;
+    { const fm = (w, h, d, x, y, z, m) => put(new THREE.BoxGeometry(w, h, d).translate(x, MY + y, MZ + z), m || ironM);
+      for (const sz of [-0.42, 0.42]) { fm(2.6, 0.1, 0.1, 0, 0.72, sz); fm(2.6, 0.06, 0.08, 0, 0.18, sz); }
+      for (const sx of [-1.25, 1.25]) for (const sz of [-0.42, 0.42]) fm(0.1, 0.72, 0.1, sx, 0.36, sz);
+      for (const sx of [-0.9, -0.3, 0.3, 0.9]) for (const sz of [-0.42, 0.42]) fm(0.06, 0.62, 0.05, sx, 1.08, sz);   // the A-frames that carry the arbors
+      for (const sx of [-0.9, -0.3, 0.3, 0.9]) fm(0.06, 0.06, 0.9, sx, 1.4, 0);
+      col(1.35, 0.7, 0.55, 0, MY + 0.7, MZ); }
+    const train = [[-0.95, 1.05, 0.34, 60, 5, 0.12], [-0.42, 1.12, 0.2, 40, 5, -0.4], [0.05, 1.2, 0.16, 30, 4, 0.9], [0.95, 1.08, 0.3, 54, 5, -0.18]];
+    for (const [x, y, r, n, S, rate] of train) { const w = add(gearGeo(r, n, 0.035, S), brassM, x, MY + y, MZ - 0.2); wheels.push([w, rate * 0.4]);
+      const a = add(new THREE.CylinderGeometry(0.018, 0.018, 0.9, 8), blackM, x, MY + y, MZ, Math.PI / 2); void a; }
+    // the escape wheel and the anchor rocking over it, the crutch down to the pendulum
+    const esc = add(gearGeo(0.13, 30, 0.02, 0), brassM, 0.42, MY + 1.36, MZ + 0.25); wheels.push([esc, 0]);
+    const anchor = new THREE.Group(); anchor.position.set(0.42, MY + 1.58, MZ + 0.28); g.add(anchor);
+    { const an = new THREE.Mesh(new THREE.TorusGeometry(0.12, 0.016, 6, 16, Math.PI * 0.8), blackM); an.rotation.z = Math.PI * 1.1; anchor.add(an); }
+    // the great wheel, broken: the hero stands in front of the frame to mend it
+    { const G = new THREE.Group(); G.position.set(-0.95, MY + 1.05, MZ - 0.32); g.add(G);
+      const whole = new THREE.Mesh(gearGeo(0.42, 72, 0.05, 6), brassM), broke = new THREE.Mesh(gearGeo(0.42, 72, 0.05, 6, [20, 9]), oldBrassM); whole.visible = false; G.add(whole, broke);
+      broke.rotation.z = 0.4; whole.rotation.z = 0.4;
+      G.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+      const gr = { x: -0.6, z: MZ - 1.35, y: TOP, ry: Math.PI, g: G, fixed: false,
+        tick: (p, held) => { if (gr.fixed) return; G.rotation.x = held ? Math.sin(performance.now() / 60) * 0.015 : 0; },
+        fix: () => { gr.fixed = true; whole.visible = true; broke.visible = false; G.rotation.x = 0; wheels.push([G, 0.05]); } };
+      gears.push(gr); }
+    // THE LEADING-OFF WORK: a rod up from the movement to a bevel box, four rods out to the four dials
+    const DY = TOP + 2.75, DR = 1.55, HUB = TOP + 2.55;
+    put(new THREE.CylinderGeometry(0.025, 0.025, HUB - MY - 1.4, 8).translate(0.95, MY + 1.4 + (HUB - MY - 1.4) / 2, MZ), blackM);
+    put(new THREE.BoxGeometry(0.22, 0.22, 0.22).translate(0.95, HUB, MZ), brassM);
+    const rods = [];
+    for (const [nx, nz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const ex = nx ? nx * (HW - 0.32) : 0, ez = nz ? nz * (HW - 0.32) : 0;
+      const len = Math.hypot(ex - 0.95, ez - MZ), rod = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, len, 8), blackM);
+      rod.position.set((ex + 0.95) / 2, HUB, (ez + MZ) / 2); rod.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(ex - 0.95, 0, ez - MZ).normalize()); g.add(rod); rods.push(rod);
+      // the motion work behind each dial: a brass box, the hand arbor through the glass, its rod up from the hub
+      put(new THREE.BoxGeometry(nx ? 0.18 : 0.42, 0.42, nz ? 0.18 : 0.42).translate(ex, HUB, ez), brassM);
+      put(new THREE.CylinderGeometry(0.02, 0.02, DY - HUB, 8).translate(ex, (DY + HUB) / 2, ez), blackM); }
+    // THE DIALS from inside: opal glass in an iron frame, the numerals read backwards, the hands dark against it
+    const dialT = cvT(512, 512, (g2, W, H) => { const gr = g2.createRadialGradient(W / 2, H / 2, 20, W / 2, H / 2, W / 2); gr.addColorStop(0, night ? '#eef3ff' : '#fff8e8'); gr.addColorStop(1, night ? '#a8b8d8' : '#e8d8b8');
+      g2.fillStyle = gr; g2.fillRect(0, 0, W, H); g2.save(); g2.translate(W, 0); g2.scale(-1, 1);   // seen through the glass: mirrored
+      g2.fillStyle = 'rgba(30,30,36,0.9)'; g2.font = 'bold 44px Georgia, serif'; g2.textAlign = 'center'; g2.textBaseline = 'middle';
+      const R = ['XII', 'I', 'II', 'III', 'IIII', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI'];
+      R.forEach((t, k) => { const a = k / 12 * Math.PI * 2; g2.save(); g2.translate(W / 2 + Math.sin(a) * 196, H / 2 - Math.cos(a) * 196); g2.rotate(a); g2.fillText(t, 0, 0); g2.restore(); });
+      g2.restore();
+      g2.strokeStyle = 'rgba(28,28,32,0.95)'; g2.lineWidth = 7; for (const rr of [250, 158, 70]) { g2.beginPath(); g2.arc(W / 2, H / 2, rr, 0, 7); g2.stroke(); }
+      g2.lineWidth = 6; for (let k = 0; k < 12; k++) { const a = k / 12 * Math.PI * 2 + Math.PI / 12; g2.beginPath(); g2.moveTo(W / 2 + Math.cos(a) * 70, H / 2 + Math.sin(a) * 70); g2.lineTo(W / 2 + Math.cos(a) * 250, H / 2 + Math.sin(a) * 250); g2.stroke(); }
+      g2.lineWidth = 3; for (let k = 0; k < 60; k++) { const a = k / 60 * Math.PI * 2; g2.beginPath(); g2.moveTo(W / 2 + Math.cos(a) * 232, H / 2 + Math.sin(a) * 232); g2.lineTo(W / 2 + Math.cos(a) * 246, H / 2 + Math.sin(a) * 246); g2.stroke(); }
+      for (let k = 0; k < 2200; k++) { g2.fillStyle = `rgba(${rC() < 0.5 ? '60,60,70' : '255,255,255'},0.05)`; g2.fillRect(rC() * W, rC() * H, 2 + rC() * 4, 2 + rC() * 4); } });
+    const dialM = M({ map: dialT, emissive: 0xffffff, emissiveMap: dialT, emissiveIntensity: night ? 0.75 : 1.2, roughness: 0.35 });
+    const hands = [];
+    for (const [nx, nz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const D = new THREE.Group(); D.position.set(nx * (HW - 0.02), DY, nz * (HW - 0.02)); D.rotation.y = Math.atan2(-nx, -nz); g.add(D);
+      const disc = new THREE.Mesh(new THREE.CircleGeometry(DR, 48), dialM); disc.position.z = 0.0; D.add(disc);
+      const fr = new THREE.Mesh(new THREE.TorusGeometry(DR + 0.04, 0.07, 8, 56), blackM); fr.position.z = 0.03; D.add(fr);
+      const rv = new THREE.Mesh(new THREE.TorusGeometry(DR + 0.22, 0.14, 6, 48), wallM); rv.position.z = 0.03; D.add(rv);   // the stone ring round it
+      const hm = new THREE.MeshBasicMaterial({ color: 0x15151a });
+      const hr = new THREE.Group(), mi = new THREE.Group(); hr.position.z = 0.012; mi.position.z = 0.016; D.add(hr, mi);
+      const hh = new THREE.Mesh(new THREE.PlaneGeometry(0.12, DR * 0.55), hm); hh.position.y = DR * 0.25; hr.add(hh);
+      const hht = new THREE.Mesh(new THREE.CircleGeometry(0.12, 3), hm); hht.position.y = DR * 0.55; hht.rotation.z = Math.PI / 2; hr.add(hht);
+      const mh = new THREE.Mesh(new THREE.PlaneGeometry(0.08, DR * 0.85), hm); mh.position.y = DR * 0.38; mi.add(mh);
+      const ct = new THREE.Mesh(new THREE.CircleGeometry(0.1, 16), hm); ct.position.z = 0.02; D.add(ct);
+      hands.push([hr, mi]); }
+    // the night through the dials: a cold light down onto the clock room floor and on into the well
+    const dl = new THREE.SpotLight(night ? 0xc4d0ea : 0xffe2b0, night ? 30 : 50, 26, 0.7, 0.8, 1.2); dl.position.set(OX + HW - 0.5, DY, 0); dl.target.position.set(OX - 1, TOP - 6, 0.5);
+    dl.castShadow = true; dl.shadow.mapSize.set(1024, 1024); scene.add(dl); scene.add(dl.target);
+    const dl2 = new THREE.SpotLight(night ? 0xc4d0ea : 0xffe2b0, night ? 18 : 30, 22, 0.7, 0.8, 1.2); dl2.position.set(OX, DY, HW - 0.5); dl2.target.position.set(OX, TOP, -1); scene.add(dl2); scene.add(dl2.target);
+    // THE PENDULUM from the back cock of the movement down through the floor, the length of the well
+    const PX = 0.42, PZ = MZ + 0.36, PY = MY + 1.62, BOB = 7.2, PL = PY - BOB;
+    const pend = new THREE.Group(); pend.position.set(PX, PY, PZ); g.add(pend);
+    { const rod = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, PL, 8), M({ color: 0x8a7a5a, roughness: 0.5, metalness: 0.3 })); rod.position.y = -PL / 2; pend.add(rod);
+      const bob = new THREE.Mesh(new THREE.SphereGeometry(0.42, 28, 18), brassM); bob.scale.set(1, 1, 0.26); bob.position.y = -PL; bob.castShadow = true; pend.add(bob);
+      const nut = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.1, 10), brassM); nut.position.y = -PL - 0.48; pend.add(nut); }
+    put(new THREE.BoxGeometry(0.34, 0.012, 0.16).translate(PX, TOP + 0.006, PZ), M({ color: 0x050505 }));   // the slot it hangs through
+    // THE WEIGHTS on their cables down the well, the going weight lower than the striking
+    const weights = [];
+    for (const [wx, wz, wy] of [[-1.5, 1.4, 6.2], [1.6, 1.6, 10.8]]) {
+      const wt = add(new THREE.CylinderGeometry(0.3, 0.3, 1.1, 20), blackM, wx, wy, wz); add(new THREE.CylinderGeometry(0.08, 0.08, 0.14, 10), blackM, wx, wy + 0.62, wz);
+      for (const o of [-0.06, 0.06]) put(new THREE.CylinderGeometry(0.008, 0.008, TOP - wy - 0.7, 4).translate(wx + o, (TOP + wy + 0.7) / 2, wz), M({ color: 0x5a5448, roughness: 0.6, metalness: 0.6 }));
+      add(new THREE.CylinderGeometry(0.16, 0.16, 0.05, 16), oldBrassM, wx, TOP - 0.3, wz, Math.PI / 2); weights.push(wt); }
+    // THE CEILING of joists with the bell hatch open in it, and the bell in its oak frame above
+    for (let z = -HW + 0.4; z < HW; z += 0.8) { if (Math.abs(z) < 1.2) continue; put(new THREE.BoxGeometry(HW * 2, 0.26, 0.16).translate(0, CEIL, z), darkM); }
+    put(new THREE.BoxGeometry(HW * 2, 0.04, HW - 1.2).translate(0, CEIL + 0.15, (HW + 1.2) / 2), oakM); put(new THREE.BoxGeometry(HW * 2, 0.04, HW - 1.2).translate(0, CEIL + 0.15, -(HW + 1.2) / 2), oakM);
+    for (const sx of [-1.25, 1.25]) put(new THREE.BoxGeometry(0.2, 0.3, 2.6).translate(sx, CEIL, 0), darkM);
+    const BELLY = CEIL + 2.4, bell = new THREE.Group(); bell.position.set(0, CEIL + 3.6, 0); g.add(bell);
+    { const prof = [[0.0, 0.0], [0.34, 0.02], [0.42, -0.12], [0.46, -0.45], [0.55, -0.8], [0.74, -1.08], [0.8, -1.16], [0.74, -1.18], [0.0, -1.1]].map(([r, h]) => new THREE.Vector2(r, h));
+      const b = new THREE.Mesh(new THREE.LatheGeometry(prof, 36), M({ color: 0x6a5a38, roughness: 0.42, metalness: 0.85, side: THREE.DoubleSide })); b.position.y = -0.2; bell.add(b);
+      const stock = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.28, 0.32), darkM); bell.add(stock);
+      const clap = new THREE.Mesh(new THREE.SphereGeometry(0.11, 12, 8), blackM); clap.position.y = -1.2; bell.add(clap); }
+    for (const sx of [-1.0, 1.0]) for (const sz of [-0.8, 0.8]) { const leg = new THREE.BoxGeometry(0.16, 3.8, 0.16); leg.rotateX(sz > 0 ? -0.18 : 0.18); leg.translate(sx, CEIL + 1.9, sz * 0.75); put(leg, darkM); }
+    for (const sx of [-1.0, 1.0]) put(new THREE.BoxGeometry(0.24, 0.24, 0.6).translate(sx, CEIL + 3.6, 0), darkM);
+    put(new THREE.BoxGeometry(HW * 2, 0.06, HW * 2).translate(0, CEIL + 6.5, 0), darkM);   // the floor of the spire, far up in the dark
+    // the louvres of the belfry, the night between their slats
+    for (const [nx, nz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const L = new THREE.Group(); L.position.set(nx * (HW - 0.05), CEIL + 3.2, nz * (HW - 0.05)); L.rotation.y = Math.atan2(-nx, -nz); g.add(L);
+      const sky = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 3.0), winGlass); sky.position.z = -0.2; L.add(sky);
+      for (let k = 0; k < 10; k++) { const sl = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.04, 0.3), darkM); sl.position.set(0, -1.35 + k * 0.3, -0.1); sl.rotation.x = 0.6; L.add(sl); } }
+    // the lanterns on the landings, and the clockmaker's work lamp on the bench below
+    const lampM = M({ color: 0xffe2a8, emissive: 0xffb860, emissiveIntensity: 2.2 });
+    for (const [lx, lz, y] of [[LB, LB, FH], [-LB, LB, FH * 2], [-LB, -LB, FH * 3], [LB - 0.3, LB - 0.3, TOP]]) {
+      const ex = lx + Math.sign(lx) * 0.36, ez = lz - Math.sign(lz) * 0.02;
+      add(new THREE.SphereGeometry(0.09, 12, 8), lampM, ex, y + 2.3, ez).castShadow = false;
+      put(new THREE.CylinderGeometry(0.1, 0.12, 0.05, 10).translate(ex, y + 2.42, ez), blackM); put(new THREE.CylinderGeometry(0.11, 0.09, 0.05, 10).translate(ex, y + 2.17, ez), blackM);
+      for (let k = 0; k < 4; k++) { const a = k / 4 * 6.28; put(new THREE.BoxGeometry(0.012, 0.25, 0.012).translate(ex + Math.cos(a) * 0.1, y + 2.3, ez + Math.sin(a) * 0.1), blackM); }
+      const pl = new THREE.PointLight(0xffb868, 5, 9, 1.8); pl.position.set(OX + ex, y + 2.25, ez); scene.add(pl); (window.__torches = window.__torches || []).push(pl); }
+    // THE GROUND FLOOR: the door you came in by, the clockmaker's bench under the stair, spare wheels, a long-case clock
+    { const dz = -HW + 0.06; put(new THREE.BoxGeometry(1.3, 2.3, 0.08).translate(-0.6, 1.15, dz), oakM);
+      for (const y of [0.4, 1.15, 1.9]) put(new THREE.BoxGeometry(1.2, 0.07, 0.03).translate(-0.6, y, dz + 0.05), blackM);
+      put(new THREE.CylinderGeometry(0.65, 0.65, 0.08, 20, 1, false, 0, Math.PI).rotateX(Math.PI / 2).rotateZ(-Math.PI / 2).translate(-0.6, 2.3, dz), oakM); }
+    const BX = -HW + 0.5, BZ = 0.6;
+    put(new THREE.BoxGeometry(0.75, 0.08, 2.6).translate(BX, 0.92, BZ), oakM); col(0.4, 0.46, 1.3, BX, 0.46, BZ);
+    for (const [ox, oz] of [[-0.3, -1.2], [0.3, -1.2], [-0.3, 1.2], [0.3, 1.2]]) put(new THREE.BoxGeometry(0.08, 0.88, 0.08).translate(BX + ox, 0.44, BZ + oz), darkM);
+    put(new THREE.BoxGeometry(0.7, 0.04, 2.5).translate(BX, 0.25, BZ), darkM);
+    put(new THREE.BoxGeometry(0.16, 0.14, 0.24).translate(BX + 0.2, 1.03, BZ - 0.9), blackM); put(new THREE.CylinderGeometry(0.012, 0.012, 0.3, 6).rotateX(Math.PI / 2).translate(BX + 0.2, 1.1, BZ - 0.9), blackM);   // the vice
+    for (let k = 0; k < 4; k++) put(gearGeo(0.08 + k * 0.03, 16 + k * 6, 0.015, 0).rotateX(-Math.PI / 2).translate(BX + 0.05 + (rC() - 0.5) * 0.2, 0.97 + k * 0.005, BZ - 0.3 + k * 0.28), brassM);
+    for (let k = 0; k < 6; k++) put(new THREE.BoxGeometry(0.012, 0.012, 0.22).rotateY((rC() - 0.5) * 0.4).translate(BX + 0.15, 0.97, BZ + 0.5 + k * 0.06), blackM);   // files laid in a row
+    add(new THREE.SphereGeometry(0.08, 12, 8), lampM, BX + 0.1, 1.12, BZ + 1.05).castShadow = false; put(new THREE.CylinderGeometry(0.06, 0.08, 0.06, 12).translate(BX + 0.1, 0.99, BZ + 1.05), brassM);
+    { const pl = new THREE.PointLight(0xffb060, 3, 6, 1.8); pl.position.set(OX + BX + 0.2, 1.3, BZ + 1.05); scene.add(pl); }
+    for (const [x, z, r] of [[-HW + 0.18, -1.5, 0.55], [-HW + 0.22, -2.3, 0.4]]) put(gearGeo(r, 40, 0.05, 6).rotateY(Math.PI / 2).rotateZ(0.0).translate(x, r + 0.02, z), oldBrassM);   // spare wheels against the wall
+    // a long-case clock of the clockmaker's own against the wall: plinth, trunk with its door, a hood with
+    // an arched top and a painted dial, a brass pendulum seen through the trunk's lenticle
+    { const cx = 1.2, cz = HW - 0.25, cf = cz - 0.17;
+      put(new THREE.BoxGeometry(0.62, 0.42, 0.36).translate(cx, 0.21, cz), darkM); put(new THREE.BoxGeometry(0.66, 0.05, 0.4).translate(cx, 0.44, cz), oakM);
+      put(new THREE.BoxGeometry(0.48, 1.3, 0.28).translate(cx, 1.11, cz), oakM); put(new THREE.BoxGeometry(0.34, 1.0, 0.02).translate(cx, 1.12, cf + 0.03), darkM);
+      put(new THREE.BoxGeometry(0.6, 0.05, 0.34).translate(cx, 1.78, cz), oakM); put(new THREE.BoxGeometry(0.56, 0.52, 0.32).translate(cx, 2.07, cz), oakM);
+      put(new THREE.CylinderGeometry(0.28, 0.28, 0.32, 20, 1, false, -Math.PI / 2, Math.PI).rotateX(Math.PI / 2).translate(cx, 2.33, cz), oakM);
+      for (const ox of [-0.25, 0.25]) put(new THREE.CylinderGeometry(0.022, 0.022, 0.5, 8).translate(cx + ox, 2.07, cf - 0.01), brassM);   // the hood's columns
+      for (const ox of [-0.18, 0, 0.18]) put(new THREE.SphereGeometry(0.035, 8, 6).translate(cx + ox, 2.62 - Math.abs(ox) * 0.6, cz), brassM);   // its finials
+      const ldT = cvT(256, 256, (g2, W, H) => { g2.fillStyle = '#efe6cc'; g2.fillRect(0, 0, W, H); g2.fillStyle = 'rgba(160,120,60,0.35)'; for (const [x, y] of [[0, 0], [W, 0], [0, H], [W, H]]) { g2.beginPath(); g2.arc(x, y, 60, 0, 7); g2.fill(); }
+        g2.strokeStyle = '#2a2420'; g2.lineWidth = 2; g2.beginPath(); g2.arc(W / 2, H / 2, 110, 0, 7); g2.stroke(); g2.beginPath(); g2.arc(W / 2, H / 2, 86, 0, 7); g2.stroke();
+        g2.fillStyle = '#2a2420'; g2.font = 'bold 22px Georgia, serif'; g2.textAlign = 'center'; g2.textBaseline = 'middle';
+        ['XII', 'I', 'II', 'III', 'IIII', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI'].forEach((t, k) => { const a = k / 12 * Math.PI * 2; g2.fillText(t, W / 2 + Math.sin(a) * 98, H / 2 - Math.cos(a) * 98); });
+        g2.lineCap = 'round'; g2.lineWidth = 5; g2.beginPath(); g2.moveTo(W / 2, H / 2); g2.lineTo(W / 2 - 34, H / 2 - 44); g2.stroke();
+        g2.lineWidth = 3; g2.beginPath(); g2.moveTo(W / 2, H / 2); g2.lineTo(W / 2 - 24, H / 2 - 76); g2.stroke(); });
+      add(new THREE.PlaneGeometry(0.42, 0.42), M({ map: ldT, roughness: 0.5 }), cx, 2.07, cf - 0.002, 0, Math.PI, 0).castShadow = false;
+      add(new THREE.CircleGeometry(0.06, 18), brassM, cx, 1.25, cf + 0.02, 0, Math.PI, 0).castShadow = false;   // the bob behind the lenticle
+      col(0.32, 1.35, 0.2, cx, 1.35, cz); }
+    // the clockmaker's rack over the bench: a board of pegs, the tools hung on it in their places
+    { const rx = -HW + 0.04, rz = BZ;
+      put(new THREE.BoxGeometry(0.03, 0.7, 2.2).translate(rx, 1.75, rz), oakM);
+      for (let k = 0; k < 11; k++) { const z = rz - 0.95 + k * 0.19, kind = k % 4, y0 = 1.95;
+        put(new THREE.CylinderGeometry(0.008, 0.008, 0.06, 5).rotateZ(Math.PI / 2).translate(rx + 0.04, y0, z), brassM);
+        if (kind === 0) { put(new THREE.BoxGeometry(0.02, 0.26, 0.03).translate(rx + 0.06, y0 - 0.15, z), blackM); put(new THREE.BoxGeometry(0.03, 0.08, 0.035).translate(rx + 0.06, y0 - 0.02, z), oakM); }   // a file
+        else if (kind === 1) { put(new THREE.TorusGeometry(0.035, 0.007, 5, 12).rotateY(Math.PI / 2).translate(rx + 0.06, y0 - 0.04, z), blackM); put(new THREE.BoxGeometry(0.015, 0.2, 0.012).translate(rx + 0.06, y0 - 0.17, z - 0.01), blackM); }   // tweezers, pliers
+        else if (kind === 2) { put(new THREE.CylinderGeometry(0.018, 0.018, 0.12, 8).translate(rx + 0.06, y0 - 0.08, z), oakM); put(new THREE.CylinderGeometry(0.004, 0.004, 0.12, 5).translate(rx + 0.06, y0 - 0.2, z), blackM); }   // a screwdriver
+        else { put(new THREE.BoxGeometry(0.04, 0.04, 0.12).translate(rx + 0.07, y0 - 0.12, z), blackM); put(new THREE.CylinderGeometry(0.01, 0.01, 0.22, 6).translate(rx + 0.07, y0 - 0.03, z), oakM); } }   // a hammer
+      // and a row of clock wheels and a skeleton movement standing on the bench, waiting
+      const sk = new THREE.Group(); sk.position.set(BX + 0.05, 0.96, BZ + 0.4); g.add(sk);
+      for (const sx of [-0.12, 0.12]) { const pl2 = new THREE.Mesh(new THREE.TorusGeometry(0.14, 0.012, 6, 24), brassM); pl2.rotation.y = Math.PI / 2; pl2.position.set(0, 0.17, sx); sk.add(pl2); }
+      for (const [y2, r2] of [[0.2, 0.08], [0.12, 0.05], [0.26, 0.04]]) { const w2 = new THREE.Mesh(gearGeo(r2, 20 + Math.round(r2 * 200), 0.008, r2 > 0.06 ? 4 : 0), brassM); w2.rotation.y = Math.PI / 2; w2.position.set(0, y2, (r2 - 0.06) * 2); sk.add(w2); wheels.push([w2, 0.6 - r2 * 4]); }
+      const bs = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.1, 0.02, 20), darkM); sk.add(bs); }
+    for (const [m, list] of bucket) { const o = new THREE.Mesh(mergeGeometries(list, false), m); o.castShadow = o.receiveShadow = true; g.add(o); for (const q of list) q.dispose(); }
+    // THE CLOCK GOES as the wheels are mended: the pendulum swings wider, the hands creep to midnight, and when
+    // the last wheel bites the minute hand reaches XII and the bell swings
+    let mins = 55 * 60 - 20, strike = -1;
+    const setHands = () => { const m = mins / 60, h = 11 + m / 60; for (const [hr, mi] of hands) { hr.rotation.z = h / 12 * Math.PI * 2; mi.rotation.z = m / 60 * Math.PI * 2; } };
+    setHands();
+    window.__clockTower = { w: HW * 2, top: TOP, ceil: CEIL, flight: FH, gears, x: OX,
+      strike: () => { strike = 0; }, striking: () => strike >= 0 && strike < 5.5,
+      tick: (t, dt) => { const done = gears.filter(q => q.fixed).length, amp = 0.012 + done / gears.length * 0.05, w2 = Math.sqrt(9.81 / PL);
+        pend.rotation.z = amp * Math.sin(t * w2); anchor.rotation.z = -pend.rotation.z * 3;
+        for (const [m, r] of wheels) m.rotation.z += r * dt * (done === gears.length ? 1 : 0.35);
+        if (done === gears.length) esc.rotation.z -= dt * 0.9;
+        if (strike < 0) { if (done) mins = Math.min(60 * 60 - 30, mins + dt * done * 2.2); }
+        else { strike += dt; mins = Math.min(60 * 60, mins + dt * 60); bell.rotation.x = Math.sin(strike * 2.6) * 0.5 * Math.max(0, 1 - strike / 12); }
+        setHands(); weights[1].position.y = 10.8 - (mins - 3280) * 0.002; } };
+    return { WH: CEIL, entryZ: -HW + 2.2 };
   }
 
   // AN ATTIC (2026-10-26): "a bookbinder searching a cluttered attic for a lost page" searched a
@@ -10173,6 +10640,7 @@ async function main() {
     const IK = PLAN.kind || 'castle';
     if (IK === 'lighthouse') return buildTowerInside(PLAN, OX);
     if (IK === 'attic') return buildAtticInside(PLAN, OX);
+    if (IK === 'clocktower') return buildClockInside(PLAN, OX);
     const WH = PLAN.wall_h || 4.0, WT = PLAN.wall_t || 0.5;
     const texL = new THREE.TextureLoader();
     const itex = (n, rx, ry) => {
@@ -12308,6 +12776,8 @@ async function main() {
           if (RAIL && RAIL.near(x, z, 0)) d = 0;
           if (CANALS && CANALS.bare(x, z, 1)) d = 0;
           if (POLDER && POLDER.bare(x, z, 0.4)) d = 0;
+          if (TEAHILL && TEAHILL.inEstate(x, z, 0)) { if (TEAHILL.bare(x, z)) d = 0; else { h *= 0.4; dry *= 0.3; } }   // short grass between the rows
+          if (BIGTOP && BIGTOP.inside(x, z, 0.6)) d = 0; else if (BIGTOP && BIGTOP.near(x, z, 0)) { h *= 0.45; dry *= 0.6; }   // sawdust under canvas, trampled grass round it
           if (SKATE && SKATE.inPark(x, z, 0.5)) d = 0;
           if ((SMITHY && SMITHY.near(x, z, 0.3)) || (GLASSWORKS && GLASSWORKS.near(x, z, 0.3)) || (POTTERY && POTTERY.near(x, z, 0.3))) d = 0;
           else if (PITCH && PITCH.inside(x, z, 4)) { h *= 0.3; d *= 0.6; dry = 0; }
@@ -12417,6 +12887,10 @@ async function main() {
           if (RAIL && RAIL.near(x, z, 0.5)) return true;
           if (CANALS && CANALS.bare(x, z, 2)) return true;
           if (POLDER) return true;                                                // no boulders on reclaimed land
+          if (TEAHILL && TEAHILL.inEstate(x, z, 2)) return true;
+          if (BIGTOP && BIGTOP.near(x, z, 2)) return true;
+          if (CANOPY && CANOPY.near(x, z, 0)) return true;
+          if (POLARBASE && POLARBASE.near(x, z, 4)) return true;
           if (SKATE && SKATE.inPark(x, z, 1)) return true;
           if ((SMITHY && SMITHY.near(x, z, 0.5)) || (GLASSWORKS && GLASSWORKS.near(x, z, 0.5)) || (POTTERY && POTTERY.near(x, z, 0.5)) || (AIRSTRIP && AIRSTRIP.near(x, z, -12))) return true;
           if (BEACH && BEACH.harbor) { const [qa, qc] = BEACH.local(x, z); if (qa > -61 && qa < BEACH.gl + 51 && qc > -35 && qc < 7) return true; }   // nothing grows from a harbour's cobbles
@@ -12580,6 +13054,8 @@ async function main() {
         if (RAIL && RAIL.near(x, z, 0)) continue;
         if (CANALS && CANALS.bare(x, z, 1)) continue;
         if (POLDER && POLDER.bare(x, z, 0.3)) continue;
+        if (TEAHILL && TEAHILL.inEstate(x, z, 0)) continue;
+        if (BIGTOP && BIGTOP.near(x, z, 0)) continue;
         if (SKATE && SKATE.inPark(x, z, 0.5)) continue;
         if ((SMITHY && SMITHY.near(x, z, 0.3)) || (GLASSWORKS && GLASSWORKS.near(x, z, 0.3)) || (POTTERY && POTTERY.near(x, z, 0.3)) || (AIRSTRIP && AIRSTRIP.near(x, z, 0))) continue;
         if (LVL && LVL.slot && hAt(x, z) > 0.8) continue;              // nor tufts
@@ -13226,6 +13702,8 @@ async function main() {
       if (o.kind === 'repair' && /\b(crowds?|audiences?|listeners?|passers-?by)\b/.test(String(o.label || ''))) return `Play for ${o.count} ${o.label}. Hold E at each pitch`;
       if (o.kind === 'repair' && /\bburied\b/.test(String(o.label || ''))) return `Uncover the ${o.label}. Hold E at each mound of sand over it`;
       if (o.kind === 'repair' && /\bon the wheels?\b/.test(String(o.label || ''))) return `Throw ${o.count} ${o.label}. Hold E at each wheel`;
+      if (o.kind === 'repair' && (INTERIOR && INTERIOR.kind === 'clocktower')) return `Mend ${o.count} broken wheels on the way up the tower. Hold E at each one`;
+      if (o.kind === 'repair' && /\bballoons?\b/.test(String(o.label || ''))) return `Launch the ${o.label}: fill it at the shed and let it go. Hold E at the balloon`;
       if (o.kind === 'repair') return /fire|flame|blaze|burn/.test(String(o.label || '')) ? `Put out ${o.count} ${o.label}. Hold E to spray each one`
         : /package|parcel|deliver|letter|mail|pizza|crate|box|supplies|medicine|food|meal|bread|loa(?:f|ves)|pies?|cakes?|buns|hot ?dogs?|hotdogs?|sandwich\w*|burgers?|tacos?|noodles?|dumplings?|kebabs?|pretzels?|pastr|cookies|groceries|flowers|bouquets?|milk|newspapers?|papers|presents|gifts|cheese|eggs|soup|cocoa|coffee|potions?|scrolls?/.test(String(o.label || '')) ? `Deliver ${o.count} ${o.label}. Hold E over each pad to drop one`
         : `Fix ${o.count} ${o.label || 'broken panels'}. Hold E at each one`;
@@ -14939,7 +15417,7 @@ async function main() {
   // (and a shift at the counter ends when the last order is served)
   else if (goalPos && steps.length && !['reach', 'defend', 'accuse', 'serve', 'repair'].includes(steps[steps.length - 1].kind)
            && !(SPEC.player.mode === 'swim' && SPEC.player.buoyant && steps[steps.length - 1].kind === 'defeat'))
-    steps.push({ kind: 'reach', label: GARDEN ? 'the shed' : ROWS ? (ROWS.crop === 'vine' ? 'the winery' : 'the farmhouse') : WEST ? "the sheriff's office" : GRAVE ? 'the mausoleum' : 'the beacon', count: 1 });
+    steps.push({ kind: 'reach', label: GARDEN ? 'the shed' : TEAHILL ? 'the weighing shed' : CANOPY ? 'the last treehouse' : ROWS ? (ROWS.crop === 'vine' ? 'the winery' : 'the farmhouse') : WEST ? "the sheriff's office" : GRAVE ? 'the mausoleum' : 'the beacon', count: 1 });
   let stepIdx = -1, kills = 0, won = false, lost = false, raceFinishers = 0;
   const collectibles = [];
   const rngC = mulberry32(SPEC.seed + 77);
@@ -15319,6 +15797,12 @@ async function main() {
       // (2026-10-07) grapes are picked off the vines, at the height they hang
       const _rslot = !_gslot && !_cslot && ROWS && ROWS.crop === 'vine' && /\b(grapes?|bunch(?:es)?)\b/.test(String(step.label || '').toLowerCase()) ? ROWS.take() : null;
       if (_rslot && !tpl) s = makeGrapes(i);
+      // (2026-10-27) tea is plucked from the top of the bush: two leaves and a bud
+      const _tslot = !_gslot && !_cslot && !_rslot && TEAHILL && /\b(tea|leaves|leaf|buds?|shoots?|tips?|flush)\b/.test(String(step.label || '').toLowerCase()) ? TEAHILL.take() : null;
+      if (_tslot) s = makeTeaSprig(i);
+      // (2026-10-27) the parts of a radiosonde: the sonde in its foam box, the parachute, the unwinder's reel
+      const _sonde = /\b(instrument parts?|radiosondes?|sondes?|balloon parts?|balloon components?)\b/.test(String(step.label || '').toLowerCase());
+      if (_sonde) s = makeSondePart(i);
       if (CANDY && CANDY.SWEET.test(String(step.label || '').toLowerCase())) { s = makeSweet(i); }
       if (_gslot && !tpl) s = makeVeg(step.label);
       const _bloom = /\b(nectar|pollen|honey ?dew)\b/.test(String(step.label || '').toLowerCase());
@@ -15352,6 +15836,8 @@ async function main() {
         [cx, cz] = WRECK.spot();                       // what was in its hold, scattered round it
       } else if (_rslot) {
         cx = _rslot.x; cz = _rslot.z; cy = hAt(cx, cz) + 0.6;
+      } else if (_tslot) {
+        cx = _tslot.x; cz = _tslot.z; cy = hAt(cx, cz) + 0.98;
       } else if (_cslot) {
         cx = _cslot.x; cz = _cslot.z; cy = _cslot.top ? _cslot.top.top - 0.6 : null;   // on a cupcake: just above the frosting
       } else if (_gslot) {
@@ -15374,13 +15860,13 @@ async function main() {
       if (VIEW === 'side') cz = 0;        // side-scroller: pickups on the lane
       // grown things sit where they grow: a carrot half in the soil, a clover
       // in the grass, not a metre up in the air (2026-10-06)
-      const _grown = planted || onLawn || _bloom || _litter || _chest || _mush || _paper || !!_rslot;     // a flower stands in the grass, litter lies on it
+      const _grown = planted || onLawn || _bloom || _litter || _chest || _mush || _paper || !!_rslot || !!_tslot || _sonde;     // a flower stands in the grass, litter lies on it
       let baseY = (cy !== null ? cy : hAt(cx, cz)) + (_evidence || _grown ? 0.0 : 1.0 + rngC() * 0.6);
       if (_grown) {
         // a carrot the size of a carrot, not of the bed it grows in
         { const b0 = new THREE.Box3().setFromObject(s), sz = b0.getSize(new THREE.Vector3());
           const big = /pumpkin|squash|gourd|melon|cabbage/.test(String(step.label || '').toLowerCase());
-          const md = Math.max(sz.x, sz.y, sz.z); if (md > 0) s.scale.multiplyScalar((planted ? (big ? 0.55 : 0.3) : _rslot ? 0.26 : _bloom ? 0.72 : _chest ? 0.85 : _litter ? 0.24 : _mush ? 0.34 : _paper ? 0.31 : 0.26) / md); }
+          const md = Math.max(sz.x, sz.y, sz.z); if (md > 0) s.scale.multiplyScalar((planted ? (big ? 0.55 : 0.3) : _rslot ? 0.26 : _bloom ? 0.72 : _chest ? 0.85 : _litter ? 0.24 : _mush ? 0.34 : _paper ? 0.31 : _tslot ? 0.2 : _sonde ? 0.42 : 0.26) / md); }
         const bb = new THREE.Box3().setFromObject(s), hh = bb.max.y - bb.min.y;
         const _sits = /pumpkin|squash|gourd|melon|cabbage/.test(String(step.label || '').toLowerCase());
         baseY += -bb.min.y - (planted ? hh * (_sits ? 0.04 : 0.3) : 0) + (onLawn ? 0.02 : 0);
@@ -15934,6 +16420,541 @@ async function main() {
     window.__windmill = [mx, mz];
     return W2;
   }
+  // ── THE BASE ON THE ICE, BUILT (see POLARBASE above) ────────────────────
+  if (POLARBASE) {
+    const PB = POLARBASE, rI = mulberry32((SPEC.seed || 1) * 83 + 13), Y0 = hAt(PB.C[0], PB.C[1]);
+    const _mc = new Map(), M2 = (o) => { const key = JSON.stringify(o, (k, v) => (v && v.isTexture ? v.uuid : v)); if (_mc.has(key)) return _mc.get(key); const m = new THREE.MeshStandardMaterial(o); m.userData.noAutoTex = true; _mc.set(key, m); return m; };
+    const cvT = (wd, ht, draw) => { const cv = document.createElement('canvas'); cv.width = wd; cv.height = ht; draw(cv.getContext('2d'), wd, ht);
+      const t = new THREE.CanvasTexture(cv); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = renderer.capabilities.getMaxAnisotropy(); return t; };
+    const bucket = new Map(), put = (geo, m) => { if (!bucket.has(m)) bucket.set(m, []); bucket.get(m).push(geo.index ? geo.toNonIndexed() : geo); };
+    const night = ['night', 'dusk'].includes(SPEC.world.sky);
+    const frame = (a, c, y, ry) => { const [x, z] = PB.W(a, c); return new THREE.Matrix4().makeRotationY(-PB.yaw + (ry || 0)).setPosition(x, (y || 0) + hAt(x, z), z); };
+    const colB = (hx, hy, hz, a, c, y, ry) => { const [x, z] = PB.W(a, c), q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), -PB.yaw + (ry || 0));
+      world.createCollider(RAPIER.ColliderDesc.cuboid(hx, hy, hz).setTranslation(x, hAt(x, z) + hy + (y || 0), z).setRotation({ x: q.x, y: q.y, z: q.z, w: q.w })); };
+    const steelM = M2({ color: 0x8a9098, metalness: 0.7, roughness: 0.4 }), darkM = M2({ color: 0x2a2e34, roughness: 0.6 }), snowM = M2({ color: 0xf4f8ff, roughness: 0.95 });
+    const winT = (base, n2) => cvT(512, 128, (g2, W, H) => { g2.fillStyle = base; g2.fillRect(0, 0, W, H);
+      for (let k = 0; k < 900; k++) { g2.fillStyle = `rgba(255,255,255,${0.02 + rI() * 0.04})`; g2.fillRect(rI() * W, rI() * H, 2 + rI() * 8, 1 + rI() * 2); }
+      g2.fillStyle = 'rgba(0,0,0,0.25)'; for (let x = 0; x < W; x += W / 12) g2.fillRect(x, 0, 2, H);   // the panel joints
+      for (let k = 0; k < n2; k++) { const x = 20 + k * (W - 40) / n2, lit = night && rI() < 0.7; g2.fillStyle = lit ? '#ffd890' : '#1a2430'; g2.fillRect(x, H * 0.38, (W - 40) / n2 - 14, H * 0.24);
+        g2.strokeStyle = '#d8dce0'; g2.lineWidth = 3; g2.strokeRect(x, H * 0.38, (W - 40) / n2 - 14, H * 0.24); } });
+    // THE MODULES: long rounded pods on hydraulic legs, each leg on a ski; blue, red for the hub, blue
+    const pod = (a, c, L, hue, n2, tower) => { const T = frame(a, c, 0, Math.PI / 2), P = (geo, m) => put(geo.applyMatrix4(T), m), H = 4.0, Wd = 6.2, LEG = 3.2;
+      const sh = new THREE.Shape(), r2 = 1.2; sh.moveTo(-Wd / 2 + r2, 0); sh.lineTo(Wd / 2 - r2, 0); sh.quadraticCurveTo(Wd / 2, 0, Wd / 2, r2); sh.lineTo(Wd / 2, H - r2); sh.quadraticCurveTo(Wd / 2, H, Wd / 2 - r2, H);
+      sh.lineTo(-Wd / 2 + r2, H); sh.quadraticCurveTo(-Wd / 2, H, -Wd / 2, H - r2); sh.lineTo(-Wd / 2, r2); sh.quadraticCurveTo(-Wd / 2, 0, -Wd / 2 + r2, 0);
+      const body = new THREE.ExtrudeGeometry(sh, { depth: L, bevelEnabled: false, curveSegments: 6 }); body.translate(0, 0, -L / 2); body.rotateY(Math.PI / 2); body.translate(0, LEG, 0);
+      { const uv = body.attributes.uv, pa = body.attributes.position; for (let q = 0; q < uv.count; q++) uv.setXY(q, (pa.getX(q) + L / 2) / L, (pa.getY(q) - LEG) / H); }
+      const m = M2({ map: winT(hue, n2), roughness: 0.45, metalness: 0.2 }); P(body, m);
+      for (const sx of [-L / 2 + 1.5, L / 2 - 1.5]) for (const sz of [-Wd / 2 + 0.9, Wd / 2 - 0.9]) {
+        P(new THREE.CylinderGeometry(0.22, 0.26, LEG + 0.4, 10).translate(sx, LEG / 2, sz), steelM);
+        P(new THREE.CylinderGeometry(0.12, 0.12, 1.4, 8).rotateZ(-0.6).translate(sx + 0.35, LEG * 0.55, sz), steelM);   // the strut
+        P(new THREE.BoxGeometry(2.2, 0.12, 0.5).translate(sx, 0.08, sz), darkM); P(new THREE.CylinderGeometry(0.25, 0.25, 0.5, 10, 1, false, 0, Math.PI).rotateX(Math.PI / 2).rotateZ(Math.PI / 2).translate(sx + 1.1, 0.25, sz).scale(1, 1, 1), darkM); }   // the ski
+      // snow drifted under it and against the legs
+      P(new THREE.SphereGeometry(1, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2).scale(L * 0.55, 0.7, Wd * 0.75).translate(0, -0.05, Wd * 0.2), snowM);
+      // a stair tower at one end, its door at the top, the handrail's posts
+      const sx2 = -L / 2 - 1.2;
+      if (tower) { P(new THREE.BoxGeometry(2.2, LEG + 3, 2.2).translate(sx2, (LEG + 3) / 2, 0), M2({ color: 0xd8dce0, roughness: 0.6 }));
+        P(new THREE.BoxGeometry(0.05, 2.0, 1.0).translate(sx2 - 1.11, 0.95, 0), darkM); colB(1.1, (LEG + 3) / 2, 1.1, a, c + sx2, 0, 0); }
+      colB(L / 2 + 0.2, (LEG + H) / 2, Wd / 2, a, c, 0, Math.PI / 2); };
+    // the train of modules runs across the way in, so the walk up from the spawn meets its long side
+    pod(0, -14, 16, '#2a5a9a', 9, true); pod(0, 3, 14, '#c43a2a', 7, false); pod(0, 19, 12, '#2a5a9a', 6, false);
+    // the enclosed bridges between them
+    for (const c of [-5, 11.5]) { const T = frame(0, c, 0, Math.PI / 2); put(new THREE.BoxGeometry(3.0, 2.4, 2.2).translate(0, 3.2 + 1.6, 0).applyMatrix4(T), M2({ color: 0xd8dce0, roughness: 0.6 })); }
+    // THE BALLOON SHED: a tall box with a roller door half up, the gas cylinders racked outside
+    { const T = frame(14, -20, 0, 0), P = (geo, m) => put(geo.applyMatrix4(T), m), redW = M2({ color: 0xd84a2a, roughness: 0.55 });
+      P(new THREE.BoxGeometry(7, 7.5, 6).translate(0, 3.75, -1), redW); P(new THREE.BoxGeometry(7.4, 0.3, 6.4).translate(0, 7.6, -1), darkM);
+      P(new THREE.BoxGeometry(4.6, 2.2, 0.1).translate(0, 6.2, 2.02), M2({ color: 0xc8ccd0, metalness: 0.4, roughness: 0.4 }));   // the door, rolled up into its drum
+      P(new THREE.BoxGeometry(4.6, 5.0, 0.12).translate(0, 2.5, 1.96), M2({ color: 0x0c1014, roughness: 0.9 }));                     // the dark inside
+      P(new THREE.CylinderGeometry(0.3, 0.3, 4.8, 12).rotateZ(Math.PI / 2).translate(0, 7.3, 2.1), steelM);
+      for (let k = 0; k < 8; k++) { const x = -3.2 + (k % 4) * 0.42, zz = 2.8 + Math.floor(k / 4) * 0.42; P(new THREE.CylinderGeometry(0.17, 0.17, 1.6, 12).translate(x - 1.0, 0.8, zz), M2({ color: k % 3 ? 0x9a9aa0 : 0x5a5a60, metalness: 0.6, roughness: 0.4 }));
+        P(new THREE.SphereGeometry(0.17, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2).translate(x - 1.0, 1.6, zz), M2({ color: 0x5a5a60, metalness: 0.6 })); }
+      P(new THREE.BoxGeometry(1.8, 1.7, 0.1).translate(-3.1, 0.85, 3.4), steelM);
+      const [sx, sz] = PB.W(14, -21); world.createCollider(RAPIER.ColliderDesc.cuboid(3.5, 3.75, 3).setTranslation(sx, hAt(sx, sz) + 3.75, sz).setRotation((() => { const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), -PB.yaw); return { x: q.x, y: q.y, z: q.z, w: q.w }; })())); }
+    // THE MET MAST: a lattice tower, cups turning on top, the vane; the white louvred screen by it
+    const cups = new THREE.Group();
+    { const T = frame(-11, -14, 0, 0), P = (geo, m) => put(geo.applyMatrix4(T), m), HM = 12;
+      for (const [x, z] of [[-0.3, -0.3], [0.3, -0.3], [-0.3, 0.3], [0.3, 0.3]]) P(new THREE.CylinderGeometry(0.03, 0.03, HM, 5).translate(x, HM / 2, z), steelM);
+      for (let y = 0.6; y < HM; y += 1.2) for (const [x1, z1, x2, z2] of [[-0.3, -0.3, 0.3, -0.3], [0.3, -0.3, 0.3, 0.3], [0.3, 0.3, -0.3, 0.3], [-0.3, 0.3, -0.3, -0.3]]) {
+        const a = new THREE.Vector3(x1, y, z1), b = new THREE.Vector3(x2, y + 1.2, z2), L = a.distanceTo(b), g = new THREE.CylinderGeometry(0.012, 0.012, L, 4);
+        g.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), b.clone().sub(a).normalize())); g.translate((x1 + x2) / 2, y + 0.6, (z1 + z2) / 2); P(g, steelM); }
+      const p2 = new THREE.Vector3().setFromMatrixPosition(T); cups.position.set(p2.x, p2.y + HM + 0.4, p2.z); scene.add(cups);
+      for (let k = 0; k < 3; k++) { const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.01, 0.01, 0.35, 4), steelM); arm.rotation.z = Math.PI / 2; arm.position.x = 0.17; const ag = new THREE.Group(); ag.rotation.y = k / 3 * Math.PI * 2; ag.add(arm);
+        const cup = new THREE.Mesh(new THREE.SphereGeometry(0.06, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2), M2({ color: 0x2a2a2e, side: THREE.DoubleSide })); cup.rotation.z = Math.PI / 2; cup.position.x = 0.35; ag.add(cup); cups.add(ag); }
+      P(new THREE.BoxGeometry(1.0, 0.9, 0.8).translate(3, 1.6, 0), M2({ color: 0xf2f2ee, roughness: 0.7 }));
+      for (const [x, z] of [[2.6, -0.3], [3.4, -0.3], [2.6, 0.3], [3.4, 0.3]]) P(new THREE.CylinderGeometry(0.03, 0.03, 1.2, 5).translate(x, 0.6, z), M2({ color: 0xf2f2ee }));
+      for (let k = 0; k < 7; k++) P(new THREE.BoxGeometry(1.02, 0.03, 0.06).translate(3, 1.25 + k * 0.11, 0.42), M2({ color: 0xc8c8c4 })); }
+    // THE RADOME: a white ball of panels on a short tower
+    { const T = frame(10, 13, 0, 0), P = (geo, m) => put(geo.applyMatrix4(T), m);
+      P(new THREE.CylinderGeometry(1.2, 1.4, 3.2, 10).translate(0, 1.6, 0), M2({ color: 0xd8dce0, roughness: 0.6 }));
+      P(new THREE.IcosahedronGeometry(2.6, 2).translate(0, 5.4, 0), M2({ color: 0xf6f6f2, roughness: 0.5, flatShading: true })); colB(1.4, 2.0, 1.4, 10, 13, 0, 0); }
+    // DRUMS and a sledge by the stores, a snowcat, skidoos
+    { for (let k = 0; k < 14; k++) { const T = frame(-14 + (k % 5) * 0.75, -10 + Math.floor(k / 5) * 0.75, 0, rI()), P = (geo, m) => put(geo.applyMatrix4(T), m);
+        P(new THREE.CylinderGeometry(0.29, 0.29, 0.88, 14).translate(0, 0.44, 0), M2({ color: k % 4 ? 0x2a4a8a : 0xc8a020, roughness: 0.5, metalness: 0.3 })); P(new THREE.CylinderGeometry(0.29, 0.29, 0.1, 14).translate(0, 0.9, 0), snowM); }
+      colB(1.9, 0.45, 1.3, -11, -9.2, 0, 0);
+      const T = frame(-10, 16, 0, 0.4), P = (geo, m) => put(geo.applyMatrix4(T), m), redC = M2({ color: 0xd8301e, roughness: 0.5 });
+      P(new THREE.BoxGeometry(3.6, 1.6, 2.2).translate(0, 1.6, 0), redC); P(new THREE.BoxGeometry(1.8, 1.0, 2.0).translate(0.5, 2.9, 0), redC);
+      P(new THREE.BoxGeometry(1.7, 0.6, 2.05).translate(0.5, 2.9, 0), M2({ color: 0x1a2430, roughness: 0.2 }));
+      for (const sz of [-1.25, 1.25]) { P(new THREE.BoxGeometry(4.2, 0.8, 0.6).translate(0, 0.45, sz), darkM); for (let q = 0; q < 5; q++) P(new THREE.CylinderGeometry(0.28, 0.28, 0.62, 10).rotateX(Math.PI / 2).translate(-1.6 + q * 0.8, 0.4, sz), steelM); }
+      colB(2.1, 1.4, 1.6, -10, 16, 0, 0.4);
+      for (const [a2, c2] of [[8, 21], [10, 22]]) { const T2 = frame(a2, c2, 0, 0.2), P2 = (geo, m) => put(geo.applyMatrix4(T2), m);
+        P2(new THREE.BoxGeometry(2.2, 0.6, 0.9).translate(0, 0.6, 0), M2({ color: 0xe8b81a, roughness: 0.4 })); P2(new THREE.BoxGeometry(0.8, 0.4, 0.7).translate(-0.3, 1.05, 0), darkM);
+        P2(new THREE.BoxGeometry(2.6, 0.06, 0.25).translate(0.2, 0.08, -0.4), darkM); P2(new THREE.BoxGeometry(2.6, 0.06, 0.25).translate(0.2, 0.08, 0.4), darkM); } }
+    // FLAG LINES: bamboo canes with little black flags, a line between every pair of doors
+    { const lines = [[[-22, 0], [-7, -3]], [[-7, -3], [-11, -12]], [[-7, -3], [-6, 9.5]], [[-11, -12], [14, -15]], [[-6, 9.5], [10, 13]], [[-3, -24], [-11, -12]]];
+      const flags = []; for (const [[a1, c1], [a2, c2]] of lines) { const L = Math.hypot(a2 - a1, c2 - c1); for (let t = 0; t <= L; t += 6) { const f = t / L; flags.push([a1 + (a2 - a1) * f, c1 + (c2 - c1) * f]); } }
+      for (const [a2, c2] of flags) { const T = frame(a2, c2, 0, rI() * 6), P = (geo, m) => put(geo.applyMatrix4(T), m);
+        P(new THREE.CylinderGeometry(0.015, 0.02, 1.9, 5).translate(0, 0.95, 0), M2({ color: 0xa8945a, roughness: 0.8 }));
+        const fl = new THREE.BufferGeometry(); fl.setAttribute('position', new THREE.Float32BufferAttribute([0, 1.9, 0, 0, 1.6, 0, 0.36, 1.78, 0.04], 3)); fl.computeVertexNormals(); P(fl, M2({ color: 0x14161a, side: THREE.DoubleSide })); } }
+    // THE BALLOON on the apron: a slack white skin on the snow, the helium hose to the racks; held E fills
+    // it, round and tall, and let go it rises with the parachute and the sonde swinging under it
+    { const [lx, lz] = PB.LAUNCH, ly = hAt(lx, lz), anchor = new THREE.Object3D(); anchor.position.set(lx, ly + 0.5, lz); scene.add(anchor);
+      const skinM = new THREE.MeshStandardMaterial({ color: 0xf6f2ea, roughness: 0.35, transparent: true, opacity: 0.93 }); skinM.userData.noAutoTex = true;
+      const ball = new THREE.Mesh(new THREE.SphereGeometry(1, 32, 22), skinM); ball.castShadow = true; scene.add(ball);
+      const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.08, 0.4, 10), skinM); scene.add(neck);
+      const lineM = new THREE.LineBasicMaterial({ color: 0x9a9a9a }), lineG = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3(0, -1, 0)]), line = new THREE.Line(lineG, lineM); scene.add(line);
+      const chute = makeSondePart(1), sonde = makeSondePart(0); chute.scale.setScalar(1.6); sonde.scale.setScalar(1.4); scene.add(chute, sonde); chute.visible = sonde.visible = false;
+      const hoseG = new THREE.TubeGeometry(new THREE.CatmullRomCurve3([new THREE.Vector3(lx, ly + 0.05, lz), ...(() => { const [hx, hz] = PB.W(11.6, -17.2); return [new THREE.Vector3((lx + hx) / 2, ly + 0.05, (lz + hz) / 2), new THREE.Vector3(hx, hAt(hx, hz) + 0.9, hz)]; })()]), 16, 0.025, 5, false);
+      const hose = new THREE.Mesh(hoseG, M2({ color: 0x2a2a2a, roughness: 0.6 })); scene.add(hose);
+      let fillK = 0.12, up = -1, t0 = 0;
+      const place = (bx, by, bz, k) => { const r = 0.25 + k * 0.95; ball.scale.set(r, r * (1 + k * 0.12), r); ball.position.set(bx, by + r * (k > 0.3 ? 1.05 : 0.35), bz); if (k < 0.3) ball.scale.y = r * 0.35;
+        neck.position.set(bx, ball.position.y - ball.scale.y - 0.15, bz); };
+      place(lx, ly, lz, fillK);
+      window.__balloonLaunch = { x: lx, y: ly, z: lz, anchor,
+        fill: (p, held) => { fillK = Math.max(fillK, 0.12 + p * 0.88); place(lx, ly, lz, fillK); if (held) ball.rotation.z = Math.sin(performance.now() / 200) * 0.03; },
+        release: () => { up = 0; t0 = performance.now() / 1000; chute.visible = sonde.visible = true; hose.visible = false;
+          // the camera watches it go: from behind the scientist, tilting up after the balloon as it climbs
+          const pp = playerObj.position, dx = pp.x - lx, dz = pp.z - lz, dl = Math.hypot(dx, dz) || 1, cx = pp.x + dx / dl * 14, cz = pp.z + dz / dl * 14, cy = pp.y + 2.4;   // well back: straight up, the sky pinches to its pole
+          window.__camPin = () => ({ pos: [cx, cy, cz], look: [ball.position.x, ball.position.y, ball.position.z] });
+          setTimeout(() => { window.__camPin = null; }, 5800); } };
+      window.__balloonTick = (t, dt) => { if (up < 0) return; const e = t - t0; up = Math.min(400, up + dt * Math.min(5.5, 1 + e * 1.6));
+        const sway = Math.sin(e * 0.9) * Math.min(6, e * 0.8), bx = lx + sway, bz = lz + e * 1.6, by = ly + 1.6 + up;
+        place(bx, by, bz, 1); const ny = by - 0.4, sx2 = lx + sway * 0.6, sz2 = lz + e * 1.6 - Math.sin(e * 0.7) * 0.6, chY = Math.max(ly + 0.2, ny - 6), soY = Math.max(ly + 0.1, ny - 14);
+        chute.position.set(sx2, chY, sz2); sonde.position.set(sx2 + Math.sin(e * 1.3) * 0.5, soY, sz2); sonde.rotation.y = e * 0.6;
+        lineG.setFromPoints([new THREE.Vector3(bx, ny, bz), new THREE.Vector3(sx2, chY + 0.2, sz2), new THREE.Vector3(sonde.position.x, soY + 0.4, sonde.position.z)]); }; }
+    // AN AURORA over a polar night: green curtains folding slowly across the south
+    if (night) { const curtM = new THREE.ShaderMaterial({ uniforms: { t: { value: 0 } }, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: false,
+        vertexShader: 'varying vec2 vU; uniform float t; void main(){ vU = uv; vec3 p = position; p.z += sin(uv.x * 9.0 + t * 0.15) * 30.0 + sin(uv.x * 23.0 - t * 0.21) * 9.0; gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0); }',
+        fragmentShader: 'varying vec2 vU; uniform float t; void main(){ float rays = 0.55 + 0.45 * sin(vU.x * 140.0 + sin(vU.x * 13.0 + t * 0.3) * 4.0); float fall = pow(1.0 - vU.y, 2.2) * smoothstep(0.0, 0.08, vU.y); float edge = smoothstep(0.0, 0.12, vU.x) * smoothstep(1.0, 0.88, vU.x);'
+          + ' vec3 c = mix(vec3(0.2, 1.0, 0.55), vec3(0.75, 0.3, 0.9), smoothstep(0.45, 1.0, vU.y)); gl_FragColor = vec4(c * fall * rays * edge * 0.55, 1.0); }' });
+      const auroras = [];
+      for (let k = 0; k < 3; k++) { const m = new THREE.Mesh(new THREE.PlaneGeometry(900, 160, 120, 1), curtM); m.geometry.translate(0, 80, 0); const a = PB.yaw + 0.6 + k * 0.5;
+        m.position.set(PB.C[0] + Math.cos(a) * (520 + k * 60), Y0 + 110 + k * 25, PB.C[1] + Math.sin(a) * (520 + k * 60)); m.lookAt(PB.C[0], m.position.y, PB.C[1]); m.renderOrder = -1; m.frustumCulled = false; scene.add(m); auroras.push(m); }
+      window.__auroraTick = (t) => { curtM.uniforms.t.value = t; }; }
+    window.__polarTick = (t, dt) => { cups.rotation.y += dt * 7; if (window.__balloonTick) window.__balloonTick(t, dt); if (window.__auroraTick) window.__auroraTick(t); };
+    for (const [m, list] of bucket) { const o = new THREE.Mesh(mergeGeometries(list, false), m); o.castShadow = o.receiveShadow = true; scene.add(o); for (const q of list) q.dispose(); }
+    window.__polarBase = { c: PB.C.map(v => +v.toFixed(1)), launch: PB.LAUNCH.map(v => +v.toFixed(1)), night };
+  }
+
+  // ── THE TREEHOUSE VILLAGE, BUILT (see CANOPY above) ─────────────────────
+  if (CANOPY) {
+    const CP = CANOPY, rV = mulberry32((SPEC.seed || 1) * 71 + 5), HS = CP.houses;
+    const _mc = new Map(), M2 = (o) => { const key = JSON.stringify(o, (k, v) => (v && v.isTexture ? v.uuid : v)); if (_mc.has(key)) return _mc.get(key); const m = new THREE.MeshStandardMaterial(o); m.userData.noAutoTex = true; _mc.set(key, m); return m; };
+    const cvT = (wd, ht, draw) => { const cv = document.createElement('canvas'); cv.width = wd; cv.height = ht; draw(cv.getContext('2d'), wd, ht);
+      const t = new THREE.CanvasTexture(cv); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = renderer.capabilities.getMaxAnisotropy(); return t; };
+    const bucket = new Map(), put = (geo, m) => { if (!bucket.has(m)) bucket.set(m, []); bucket.get(m).push(geo.index ? geo.toNonIndexed() : geo); };
+    const plankT = cvT(128, 512, (g2, W, H) => { g2.fillStyle = '#6a5038'; g2.fillRect(0, 0, W, H);
+      for (let y = 0; y < H; y += 32) { const v = 0.75 + rV() * 0.4; g2.fillStyle = `rgb(${120 * v | 0},${92 * v | 0},${62 * v | 0})`; g2.fillRect(0, y + 2, W, 28);
+        for (let q = 0; q < 6; q++) { g2.strokeStyle = 'rgba(50,34,20,0.3)'; g2.beginPath(); const yy = y + 4 + rV() * 24; g2.moveTo(0, yy); g2.lineTo(W, yy + (rV() - 0.5) * 4); g2.stroke(); }
+        g2.fillStyle = 'rgba(70,90,50,0.25)'; g2.fillRect(rV() * W, y + 2, 20 + rV() * 40, 28); } });   // moss on the wet boards
+    const thatchT = cvT(256, 256, (g2, W, H) => { g2.fillStyle = '#7a6438'; g2.fillRect(0, 0, W, H);
+      for (let k = 0; k < 2200; k++) { const x = rV() * W, y = rV() * H, l = 8 + rV() * 22, v = rV(); g2.strokeStyle = `rgba(${150 + v * 60 | 0},${120 + v * 50 | 0},${60 + v * 30 | 0},0.6)`; g2.lineWidth = 1 + rV(); g2.beginPath(); g2.moveTo(x, y); g2.lineTo(x + (rV() - 0.5) * 3, y + l); g2.stroke(); }
+      for (let y = 0; y < H; y += 32) { g2.fillStyle = 'rgba(40,30,14,0.35)'; g2.fillRect(0, y, W, 4); } });
+    const bambooT = cvT(256, 128, (g2, W, H) => { for (let x = 0; x < W; x += 10) { const v = 0.75 + rV() * 0.35; const gr = g2.createLinearGradient(x, 0, x + 10, 0); gr.addColorStop(0, `rgb(${110 * v | 0},${96 * v | 0},${52 * v | 0})`); gr.addColorStop(0.5, `rgb(${178 * v | 0},${160 * v | 0},${96 * v | 0})`); gr.addColorStop(1, `rgb(${100 * v | 0},${86 * v | 0},${46 * v | 0})`); g2.fillStyle = gr; g2.fillRect(x, 0, 10, H);
+        for (let y = rV() * 40; y < H; y += 40 + rV() * 20) { g2.fillStyle = 'rgba(60,48,20,0.6)'; g2.fillRect(x, y, 10, 3); } } });
+    const deckM = M2({ map: plankT, roughness: 0.85 }), ropeM = M2({ color: 0x8a7450, roughness: 0.9 }), postM = M2({ color: 0x5a4430, roughness: 0.85 });
+    const thatchM = M2({ map: thatchT, roughness: 0.95, side: THREE.DoubleSide }), bambooM = M2({ map: bambooT, roughness: 0.8, side: THREE.DoubleSide });
+    const R_IN = 1.1, R_OUT = 3.6;
+    const qOf = (yaw, pitch) => new THREE.Quaternion().setFromEuler(new THREE.Euler(pitch, yaw, 0, 'YXZ'));
+    const box = (hx, hy, hz, x, y, z, q) => world.createCollider(RAPIER.ColliderDesc.cuboid(hx, hy, hz).setTranslation(x, y, z).setRotation({ x: q.x, y: q.y, z: q.z, w: q.w }));
+    for (const h of HS) { h.gy = hAt(h.x, h.z); h.y = h.gy + h.H; h.gaps = []; }
+    // which way each bridge leaves a deck
+    for (let k = 0; k + 1 < HS.length; k++) { const A = HS[k], B = HS[k + 1], a = Math.atan2(B.z - A.z, B.x - A.x); A.gaps.push(a); B.gaps.push(a + Math.PI); A.out = a; B.inn = a + Math.PI; }
+    HS[0].stairA = (HS[0].out || 0) - 0.42 + 0.115 * 0.6;   // where the stair comes up onto the first deck (see THE STAIR)
+    // THE GIANTS: a kapok at every house, its trunk the post the deck is built round
+    try { const gv = __FLORA.growVariants({ kinds: ['kapok'], leaf: { h: 0.3, s: 0.5, l: 0.24 }, seed: ((SPEC.seed || 1) * 43 + 9) >>> 0, perKind: 3 });
+      gv.variants.forEach((v, vi) => { const mine = HS.filter(h => h.k % gv.variants.length === vi); if (!mine.length) return;
+        const bk = new THREE.InstancedMesh(v.bark, v.mats.bark, mine.length), lf = v.leaf && v.mats.leaf ? new THREE.InstancedMesh(v.leaf, v.mats.leaf, mine.length) : null, d = new THREE.Object3D();
+        mine.forEach((h, k) => { const sc = Math.max(1.0, (h.H + 14) / ((v.height || 32) * 0.78)); d.position.set(h.x, h.gy - 0.2, h.z); d.rotation.set(0, rV() * 6.28, 0); d.scale.set(sc * 1.1, sc, sc * 1.1); d.updateMatrix(); bk.setMatrixAt(k, d.matrix); if (lf) lf.setMatrixAt(k, d.matrix); });
+        bk.castShadow = bk.receiveShadow = true; scene.add(bk); if (lf) { lf.castShadow = true; scene.add(lf); } });
+    } catch (e) { console.warn('[game] canopy giants: ' + e.message); for (const h of HS) put(new THREE.CylinderGeometry(0.9, 1.3, h.H + 18, 16).translate(h.x, h.gy + (h.H + 18) / 2, h.z), postM); }
+    for (const h of HS) world.createCollider(RAPIER.ColliderDesc.cylinder((h.H + 6) / 2, R_IN - 0.05).setTranslation(h.x, h.gy + (h.H + 6) / 2, h.z));
+    const inGap = (h, a, w) => h.gaps.some(g => Math.abs(Math.atan2(Math.sin(a - g), Math.cos(a - g))) < w);
+    // THE DECKS: boards in a ring round the trunk, braces under them, a rope rail round the edge
+    for (const h of HS) {
+      const ring = new THREE.RingGeometry(R_IN, R_OUT, 40, 2); ring.rotateX(-Math.PI / 2); ring.translate(h.x, h.y, h.z); { const uv = ring.attributes.uv, pa = ring.attributes.position; for (let q = 0; q < uv.count; q++) uv.setXY(q, (pa.getX(q) - h.x) / 2, (pa.getZ(q) - h.z) / 2); } put(ring, deckM);
+      put(new THREE.CylinderGeometry(R_OUT, R_OUT, 0.22, 40, 1, true).translate(h.x, h.y - 0.11, h.z), postM);
+      const und = new THREE.RingGeometry(R_IN, R_OUT, 40, 1); und.rotateX(Math.PI / 2); und.translate(h.x, h.y - 0.22, h.z); put(und, postM);
+      for (let k = 0; k < 6; k++) { const a = k / 6 * Math.PI * 2 + 0.3, x0 = h.x + Math.cos(a) * R_IN, z0 = h.z + Math.sin(a) * R_IN, x1 = h.x + Math.cos(a) * (R_OUT - 0.3), z1 = h.z + Math.sin(a) * (R_OUT - 0.3);
+        const from = new THREE.Vector3(x0, h.y - 2.6, z0), to = new THREE.Vector3(x1, h.y - 0.2, z1), L = from.distanceTo(to), br = new THREE.CylinderGeometry(0.07, 0.08, L, 6);
+        br.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), to.clone().sub(from).normalize())); br.translate((x0 + x1) / 2, (from.y + to.y) / 2, (z0 + z1) / 2); put(br, postM); }
+      for (let k = 0; k < 12; k++) { const a = (k + 0.5) / 12 * Math.PI * 2, rm = (R_IN + R_OUT) / 2; box((R_OUT - R_IN) / 2, 0.12, Math.PI * R_OUT / 12 + 0.12, h.x + Math.cos(a) * rm, h.y - 0.12, h.z + Math.sin(a) * rm, qOf(-a, 0)); }
+      const railPts = [];
+      for (let k = 0; k < 28; k++) { const a = k / 28 * Math.PI * 2; if (inGap(h, a, 0.32) || (h.k === 0 && h.stairA !== undefined && Math.abs(Math.atan2(Math.sin(a - h.stairA), Math.cos(a - h.stairA))) < 0.3)) continue;
+        const x = h.x + Math.cos(a) * (R_OUT - 0.08), z = h.z + Math.sin(a) * (R_OUT - 0.08); put(new THREE.CylinderGeometry(0.045, 0.05, 1.05, 6).translate(x, h.y + 0.52, z), postM); railPts.push(a);
+        box(0.06, 0.6, Math.PI * R_OUT / 28 + 0.1, x, h.y + 0.6, z, qOf(-a, 0)); }
+      // the rope rail between the posts, each run sagging a little
+      for (const a of railPts) { const b = a + Math.PI * 2 / 28; if (!railPts.some(q => Math.abs(q - b) < 1e-6) && !(Math.abs(b - Math.PI * 2) < 1e-6 && railPts.includes(0))) continue;
+        const pts = []; for (let q = 0; q <= 4; q++) { const t = q / 4, aa = a + (b - a) * t; pts.push(new THREE.Vector3(h.x + Math.cos(aa) * (R_OUT - 0.08), h.y + 1.0 - Math.sin(t * Math.PI) * 0.08, h.z + Math.sin(aa) * (R_OUT - 0.08))); }
+        put(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 4, 0.025, 4, false), ropeM); }
+      // THE ROOF: a cone of palm thatch on posts, the trunk rising through it; walls of split bamboo on some
+      const RY = h.y + 2.7, cone = new THREE.ConeGeometry(R_OUT + 0.6, 2.0, 28, 2, true); cone.translate(h.x, RY + 1.0, h.z); put(cone, thatchM);
+      for (let k = 0; k < 7; k++) { const a = k / 7 * Math.PI * 2 + 0.2; if (inGap(h, a, 0.4)) continue; const x = h.x + Math.cos(a) * (R_OUT - 0.25), z = h.z + Math.sin(a) * (R_OUT - 0.25); put(new THREE.CylinderGeometry(0.07, 0.08, 2.8, 6).translate(x, h.y + 1.4, z), postM); }
+      const walled = h.k === HS.length - 1 ? 1 : h.k % 2 === 0 && h.k > 0 ? 0.45 : 0;
+      if (walled) for (let k = 0; k < 24; k++) { const a = (k + 0.5) / 24 * Math.PI * 2; if (inGap(h, a, 0.42) || (walled < 1 && Math.cos(a - (h.out || 0) - Math.PI / 2) < 0.1)) continue;
+        const x = h.x + Math.cos(a) * (R_OUT - 0.35), z = h.z + Math.sin(a) * (R_OUT - 0.35), wg = new THREE.PlaneGeometry(Math.PI * 2 * (R_OUT - 0.35) / 24 + 0.04, 2.3);
+        wg.rotateY(Math.PI / 2 - a); wg.translate(x, h.y + 1.15, z); put(wg, bambooM); box(0.05, 1.1, Math.PI * (R_OUT - 0.35) / 24 + 0.05, x, h.y + 1.15, z, qOf(-a, 0)); }
+      // lanterns under the eaves, and a few things of daily life on the boards
+      for (let k = 0; k < 3; k++) { const a = k * 2.1 + 0.9, x = h.x + Math.cos(a) * (R_OUT - 0.4), z = h.z + Math.sin(a) * (R_OUT - 0.4);
+        put(new THREE.SphereGeometry(0.1, 10, 8).translate(x, h.y + 2.2, z), M2({ color: 0xffe2a8, emissive: 0xffa848, emissiveIntensity: 1.8 })); put(new THREE.CylinderGeometry(0.004, 0.004, 0.5, 4).translate(x, h.y + 2.55, z), ropeM); }
+      for (let k = 0; k < 3; k++) { const a = rV() * 6.28, rr = R_IN + 0.5 + rV() * 1.0, x = h.x + Math.cos(a) * rr, z = h.z + Math.sin(a) * rr; if (inGap(h, a, 0.5)) continue;
+        put(new THREE.CylinderGeometry(0.22, 0.17, 0.3, 12, 1, true).translate(x, h.y + 0.15, z), M2({ map: thatchT, roughness: 0.9, side: THREE.DoubleSide })); }
+    }
+    { const L = HS[HS.length - 1], pl = new THREE.PointLight(0xffb868, 8, 10, 1.6); pl.position.set(L.x, L.y + 2.0, L.z); scene.add(pl); }
+    // THE BRIDGES: planks on two foot ropes sagging deck to deck, hand ropes either side, a rope from each
+    // hand rope down to the foot every pace, a net in between, a collider over every pace and each side
+    for (let k = 0; k + 1 < HS.length; k++) {
+      const A = HS[k], B = HS[k + 1], a = A.out, ux = Math.cos(a), uz = Math.sin(a), nx = -uz, nz = ux;
+      const ax = A.x + ux * (R_OUT - 0.1), az = A.z + uz * (R_OUT - 0.1), bx = B.x - ux * (R_OUT - 0.1), bz = B.z - uz * (R_OUT - 0.1), L = Math.hypot(bx - ax, bz - az), sag = Math.min(1.4, L * 0.07);
+      const at = (t) => [ax + (bx - ax) * t, A.y + (B.y - A.y) * t - sag * 4 * t * (1 - t), az + (bz - az) * t];
+      const yaw = Math.atan2(ux, uz), W = 0.62;
+      const NP = Math.ceil(L / 0.3);
+      for (let q = 0; q < NP; q++) { const t = (q + 0.5) / NP, [x, y, z] = at(t), [x2, y2, z2] = at(Math.min(1, t + 0.01)), [x1, y1, z1] = at(Math.max(0, t - 0.01));
+        const slope = (y2 - y1) / (Math.hypot(x2 - x1, z2 - z1) || 1e-3), pq = qOf(yaw, -Math.atan(slope)), m4 = new THREE.Matrix4().compose(new THREE.Vector3(x, y - 0.03, z), pq, new THREE.Vector3(1, 1, 1));
+        put(new THREE.BoxGeometry(W * 2 - 0.08 + (rV() - 0.5) * 0.08, 0.045, 0.24).applyMatrix4(m4), deckM); }
+      const NC = Math.ceil(L / 1.0);
+      for (let q = 0; q < NC; q++) { const t = (q + 0.5) / NC, [x, y, z] = at(t), [x2, y2, z2] = at(Math.min(1, t + 0.02)), [x1, y1, z1] = at(Math.max(0, t - 0.02));
+        const slope = (y2 - y1) / (Math.hypot(x2 - x1, z2 - z1) || 1e-3), pq = qOf(yaw, -Math.atan(slope)), seg = L / NC / Math.cos(Math.atan(slope)) / 2 + 0.06;
+        box(W, 0.07, seg, x, y - 0.1, z, pq);
+        for (const sd of [-1, 1]) box(0.05, 0.65, seg, x + nx * sd * (W + 0.05), y + 0.6, z + nz * sd * (W + 0.05), pq); }
+      for (const sd of [-1, 1]) for (const [dy, rad] of [[0, 0.03], [1.05, 0.032]]) { const pts = []; for (let q = 0; q <= 16; q++) { const [x, y, z] = at(q / 16); pts.push(new THREE.Vector3(x + nx * sd * W, y + dy - 0.04, z + nz * sd * W)); }
+        put(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 24, rad, 5, false), ropeM); }
+      for (let q = 1; q < Math.floor(L / 0.7); q++) { const t = q * 0.7 / L, [x, y, z] = at(t); for (const sd of [-1, 1]) put(new THREE.CylinderGeometry(0.012, 0.012, 1.05, 4).translate(x + nx * sd * W, y + 0.5, z + nz * sd * W), ropeM);
+        for (const sd of [-1, 1]) { const from = new THREE.Vector3(x + nx * sd * W, y + 1.0, z + nz * sd * W), [x3, y3, z3] = at(Math.min(1, t + 0.7 / L)), to = new THREE.Vector3(x3 + nx * sd * W, y3 + 0.02, z3 + nz * sd * W), Ld = from.distanceTo(to);
+          const dg = new THREE.CylinderGeometry(0.008, 0.008, Ld, 3); dg.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), to.clone().sub(from).normalize())); dg.translate((from.x + to.x) / 2, (from.y + to.y) / 2, (from.z + to.z) / 2); put(dg, ropeM); } }
+    }
+    // THE STAIR up the first tree: treads on posts winding once round the outside of the deck, from the
+    // forest floor to a gap in the rail, the last turn ending just short of the bridge so no head meets it
+    { const h = HS[0], RISE = 0.21, NT = Math.floor((h.H - 0.05) / RISE), RM = R_OUT + 0.65, TW = 1.05, DA = 0.115;
+      const aEnd = (h.out !== undefined ? h.out : 0) - 0.42, a0 = aEnd - (NT - 1) * DA; h.stairA = aEnd + DA * 0.6;
+      for (let k = 0; k < NT; k++) { const a = a0 + k * DA, top = h.gy + (k + 1) * RISE + (hAt(h.x + Math.cos(a) * RM, h.z + Math.sin(a) * RM) - h.gy) * 0 , x = h.x + Math.cos(a) * RM, z = h.z + Math.sin(a) * RM;
+        const m4 = new THREE.Matrix4().compose(new THREE.Vector3(x, top - 0.03, z), qOf(-a + Math.PI / 2, 0), new THREE.Vector3(1, 1, 1));
+        put(new THREE.BoxGeometry(DA * RM + 0.06, 0.06, TW).applyMatrix4(m4), deckM);
+        world.createCollider(RAPIER.ColliderDesc.cuboid(DA * RM / 2 + 0.02, RISE / 2, TW / 2).setTranslation(x, top - RISE / 2, z).setRotation((() => { const q = qOf(-a + Math.PI / 2, 0); return { x: q.x, y: q.y, z: q.z, w: q.w }; })()));
+        const ox = h.x + Math.cos(a) * (RM + TW / 2 - 0.05), oz = h.z + Math.sin(a) * (RM + TW / 2 - 0.05), ix = h.x + Math.cos(a) * (RM - TW / 2 + 0.05), iz = h.z + Math.sin(a) * (RM - TW / 2 + 0.05);
+        box(0.06, 0.6, DA * RM / 2 + 0.05, ox, top + 0.6, oz, qOf(-a, 0)); if (k < NT - 5) box(0.06, 0.6, DA * RM / 2 + 0.05, ix, top + 0.6, iz, qOf(-a, 0));   // open on the deck side at the top
+        if (k % 7 === 3) { const gy2 = hAt(ox, oz); put(new THREE.CylinderGeometry(0.09, 0.11, top - gy2, 7).translate(ox, (top + gy2) / 2, oz), postM); }   // a post every seventh tread: every fourth, both sides, was a cage
+        put(new THREE.CylinderGeometry(0.03, 0.03, 0.95, 5).translate(ox, top + 0.47, oz), postM); }
+      for (const off of [TW / 2 - 0.05, -TW / 2 + 0.05]) { const pts = []; for (let k = 0; k < NT; k += 2) { const a = a0 + k * DA; pts.push(new THREE.Vector3(h.x + Math.cos(a) * (RM + off), h.gy + (k + 1) * RISE + 0.95, h.z + Math.sin(a) * (RM + off))); }
+        if (pts.length > 2) put(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), NT, 0.03, 5, false), ropeM); }
+      // the landing that carries the top of the stair onto the deck's edge
+      const la = aEnd + DA * 0.6, lx = h.x + Math.cos(la) * (R_OUT + 0.4), lz = h.z + Math.sin(la) * (R_OUT + 0.4);
+      put(new THREE.BoxGeometry(1.4, 0.08, 1.2).applyMatrix4(new THREE.Matrix4().compose(new THREE.Vector3(lx, h.y - 0.04, lz), qOf(-la, 0), new THREE.Vector3(1, 1, 1))), deckM);
+      box(0.7, 0.1, 0.6, lx, h.y - 0.1, lz, qOf(-la, 0)); }
+    for (const [m, list] of bucket) { const o = new THREE.Mesh(mergeGeometries(list, false), m); o.castShadow = o.receiveShadow = true; scene.add(o); for (const q of list) q.dispose(); }
+    window.__canopy = { houses: HS.map(h => [+h.x.toFixed(1), +h.y.toFixed(1), +h.z.toFixed(1)]), finalY: HS[HS.length - 1].y, stair: HS[0].stairA };
+  }
+
+  // ── THE BIG TOP, BUILT (see BIGTOP above) ───────────────────────────────
+  if (BIGTOP) {
+    const B = BIGTOP, C = B.C, R = B.R, Y = hAt(C[0], C[1]), rB = mulberry32((SPEC.seed || 1) * 53 + 29);
+    const _mc = new Map(), M2 = (o) => { const key = JSON.stringify(o, (k, v) => (v && v.isTexture ? v.uuid : v)); if (_mc.has(key)) return _mc.get(key); const m = new THREE.MeshStandardMaterial(o); m.userData.noAutoTex = true; _mc.set(key, m); return m; };   // one material per look: a fresh one per piece was a draw call per piece
+    const cvT = (wd, ht, draw) => { const cv = document.createElement('canvas'); cv.width = wd; cv.height = ht; draw(cv.getContext('2d'), wd, ht);
+      const t = new THREE.CanvasTexture(cv); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = renderer.capabilities.getMaxAnisotropy(); return t; };
+    const G = new THREE.Group(); G.position.set(C[0], Y, C[1]); scene.add(G);
+    const bucket = new Map(), put = (geo, m) => { if (!bucket.has(m)) bucket.set(m, []); bucket.get(m).push(geo.index ? geo.toNonIndexed() : geo); };
+    const col = (hx, hy, hz, x, y, z, ry) => world.createCollider(RAPIER.ColliderDesc.cuboid(hx, hy, hz).setTranslation(C[0] + x, Y + y, C[1] + z).setRotation({ x: 0, y: Math.sin((ry || 0) / 2), z: 0, w: Math.cos((ry || 0) / 2) }));
+    const P = (r, th) => [Math.cos(th) * r, Math.sin(th) * r];   // local polar, th as atan2(z, x)
+    const yawOf = (th) => -th;                                    // a box's local x laid along the radius at th
+    const EAVE = 6.2, PEAK = 17.5, roofAt = (r) => EAVE + (PEAK - EAVE) * Math.pow(Math.max(0, 1 - (r - 0.8) / (R - 0.2)), 1.7);
+    // THE CANVAS: red and cream stripes, weathered, darker toward the hem where the mud splashes
+    const canvasT = cvT(512, 256, (g2, W, H) => { const N = 16; for (let k = 0; k < N; k++) { g2.fillStyle = k % 2 ? '#efe4c8' : '#b3202a'; g2.fillRect(k * W / N, 0, W / N + 1, H); }
+      for (let k = 0; k < 2600; k++) { g2.fillStyle = `rgba(${rB() < 0.5 ? '40,20,10' : '255,250,235'},${0.03 + rB() * 0.04})`; g2.fillRect(rB() * W, rB() * H, 1 + rB() * 3, 3 + rB() * 10); }
+      for (let k = 0; k < N; k++) { g2.fillStyle = 'rgba(60,30,20,0.25)'; g2.fillRect(k * W / N - 1, 0, 2, H); }   // the seams
+      const gr = g2.createLinearGradient(0, 0, 0, H); gr.addColorStop(0, 'rgba(0,0,0,0)'); gr.addColorStop(0.75, 'rgba(60,40,20,0)'); gr.addColorStop(1, 'rgba(60,40,20,0.35)'); g2.fillStyle = gr; g2.fillRect(0, 0, W, H); });
+    canvasT.repeat.set(2, 1);
+    const canvasM = M2({ map: canvasT, roughness: 0.9, side: THREE.DoubleSide });
+    { const pts = []; for (let k = 0; k <= 26; k++) { const r = 0.8 + k / 26 * (R + 0.6 - 0.8); pts.push(new THREE.Vector2(r, roofAt(Math.min(r, R)) - (r > R ? 0.3 : 0))); }
+      const roof = new THREE.Mesh(new THREE.LatheGeometry(pts, 72), canvasM); roof.castShadow = roof.receiveShadow = true; G.add(roof); }
+    const wallG = new THREE.CylinderGeometry(R, R, EAVE, 72, 1, true, Math.PI / 2 - B.thIn + 0.12 + 0.0, Math.PI * 2 - 0.24); wallG.translate(0, EAVE / 2, 0);
+    const wallT = canvasT.clone(); wallT.needsUpdate = true; wallT.repeat.set(4, 1);
+    { const wl = new THREE.Mesh(wallG, M2({ map: wallT, roughness: 0.9, side: THREE.DoubleSide })); wl.castShadow = wl.receiveShadow = true; G.add(wl); }
+    for (let k = 0; k < 60; k++) { const th = k / 60 * Math.PI * 2, dd = Math.atan2(Math.sin(th - B.thIn), Math.cos(th - B.thIn)); if (Math.abs(dd) < 0.15) continue; const [x, z] = P(R + 0.15, th); col(0.2, EAVE / 2, R * Math.PI / 60 + 0.1, x, EAVE / 2, z, yawOf(th)); }
+    // the scalloped valance round the eave, red and gold flaps
+    { const fl = new THREE.CircleGeometry(0.62, 12, Math.PI, Math.PI), n2 = 96, red = new THREE.InstancedMesh(fl, M2({ color: 0xa81c24, roughness: 0.8, side: THREE.DoubleSide }), n2 / 2), gold = new THREE.InstancedMesh(fl, M2({ color: 0xd8a83a, roughness: 0.6, side: THREE.DoubleSide }), n2 / 2), d = new THREE.Object3D();
+      for (let k = 0; k < n2; k++) { const th = k / n2 * Math.PI * 2, [x, z] = P(R + 0.62, th); d.position.set(C[0] + x, Y + EAVE + 0.08, C[1] + z); d.rotation.set(0, Math.PI / 2 - th, 0); d.updateMatrix(); (k % 2 ? gold : red).setMatrixAt(k >> 1, d.matrix); }
+      scene.add(red, gold); }
+    // the cupola and its pennant
+    put(new THREE.CylinderGeometry(0.9, 1.0, 1.0, 20).translate(0, PEAK + 0.3, 0), M2({ color: 0xd8a83a, metalness: 0.6, roughness: 0.4 }));
+    put(new THREE.ConeGeometry(1.0, 1.4, 20).translate(0, PEAK + 1.5, 0), M2({ color: 0xa81c24, roughness: 0.7 }));
+    put(new THREE.CylinderGeometry(0.04, 0.04, 3, 6).translate(0, PEAK + 3, 0), M2({ color: 0x333333 }));
+    const pennant = new THREE.Mesh(new THREE.PlaneGeometry(2.2, 0.7, 8, 1), M2({ color: 0xd8a83a, roughness: 0.7, side: THREE.DoubleSide })); pennant.geometry.translate(1.1, 0, 0); pennant.position.set(0, PEAK + 4.1, 0); G.add(pennant);
+    // KING POLES just outside the ring, quarter poles behind the stands
+    const poleM = M2({ color: 0xe8dcc0, roughness: 0.6 }), goldM = M2({ color: 0xd8a83a, metalness: 0.7, roughness: 0.35 });
+    const KR = 8.3, kings = [];
+    for (let k = 0; k < 4; k++) { const th = B.thIn + Math.PI / 4 + k * Math.PI / 2, [x, z] = P(KR, th), h = roofAt(KR) + 0.6; kings.push([x, z, th]);
+      put(new THREE.CylinderGeometry(0.2, 0.26, h, 14).translate(x, h / 2, z), poleM);
+      for (let q = 1; q < 6; q++) put(new THREE.TorusGeometry(0.24, 0.03, 6, 16).rotateX(Math.PI / 2).translate(x, q * h / 6, z), goldM);
+      world.createCollider(RAPIER.ColliderDesc.cylinder(h / 2, 0.28).setTranslation(C[0] + x, Y + h / 2, C[1] + z)); }
+    for (let k = 0; k < 18; k++) { const th = k / 18 * Math.PI * 2 + 0.17, [x, z] = P(15.3, th), h = roofAt(15.3); put(new THREE.CylinderGeometry(0.1, 0.12, h, 8).translate(x, h / 2, z), poleM); }
+    // THE GROUND under the canvas: sawdust over trodden earth, the ring raked into circles
+    const dustT = cvT(512, 512, (g2, W, H) => { g2.fillStyle = '#b08850'; g2.fillRect(0, 0, W, H);
+      for (let k = 0; k < 9000; k++) { const v = rB(); g2.fillStyle = v < 0.5 ? `rgba(90,60,30,${0.1 + rB() * 0.2})` : `rgba(230,200,140,${0.1 + rB() * 0.2})`; g2.fillRect(rB() * W, rB() * H, 1 + rB() * 3, 1 + rB() * 2); }
+      g2.strokeStyle = 'rgba(80,52,26,0.22)'; g2.lineWidth = 2; for (let r = 8; r < W / 2; r += 7 + rB() * 3) { g2.beginPath(); g2.arc(W / 2, H / 2, r, 0, 7); g2.stroke(); } });
+    { const fl = new THREE.Mesh(new THREE.CircleGeometry(R + 0.4, 72), M2({ map: dustT, color: 0x8a7a68, roughness: 0.95 })); fl.rotation.x = -Math.PI / 2; fl.position.y = 0.04; fl.receiveShadow = true; G.add(fl);
+      const rg = new THREE.Mesh(new THREE.CircleGeometry(B.RING, 64), M2({ map: dustT, roughness: 0.95 })); rg.rotation.x = -Math.PI / 2; rg.position.y = 0.06; rg.receiveShadow = true; G.add(rg);
+      // the star in the centre where the ringmaster stands
+      const starT = cvT(256, 256, (g2, W, H) => { g2.clearRect(0, 0, W, H); g2.fillStyle = 'rgba(176,24,30,0.85)'; g2.beginPath(); g2.arc(W / 2, H / 2, 120, 0, 7); g2.fill();
+        g2.fillStyle = '#e8b840'; g2.beginPath(); for (let k = 0; k < 10; k++) { const a = -Math.PI / 2 + k * Math.PI / 5, rr = k % 2 ? 42 : 104; g2.lineTo(W / 2 + Math.cos(a) * rr, H / 2 + Math.sin(a) * rr); } g2.closePath(); g2.fill();
+        g2.strokeStyle = '#e8b840'; g2.lineWidth = 5; g2.beginPath(); g2.arc(W / 2, H / 2, 114, 0, 7); g2.stroke(); });
+      const st = new THREE.Mesh(new THREE.CircleGeometry(1.5, 48), M2({ map: starT, transparent: true, roughness: 0.8, polygonOffset: true, polygonOffsetFactor: -3 })); st.rotation.x = -Math.PI / 2; st.position.y = 0.075; G.add(st); }
+    // THE RING CURB: red with a white top and a gold band, open where the ringmaster comes in
+    { const redM = M2({ color: 0xb01c24, roughness: 0.55 }), whiteM = M2({ color: 0xf2ece0, roughness: 0.5 }), RR = B.RING, gap = 0.2;
+      const th0 = Math.PI / 2 - B.thIn + gap, tl = Math.PI * 2 - gap * 2;
+      put(new THREE.CylinderGeometry(RR + 0.36, RR + 0.36, 0.42, 72, 1, true, th0, tl).translate(0, 0.21, 0), redM);
+      put(new THREE.CylinderGeometry(RR, RR, 0.42, 72, 1, true, th0, tl).translate(0, 0.21, 0), redM);
+      const top = new THREE.RingGeometry(RR, RR + 0.36, 72, 1, 0, Math.PI * 2); top.rotateX(-Math.PI / 2); top.translate(0, 0.42, 0);
+      { const pa = top.attributes.position, keep = []; const ix = top.index.array; for (let q = 0; q < ix.length; q += 3) { let ok = true; for (let e = 0; e < 3; e++) { const a = Math.atan2(pa.getZ(ix[q + e]), pa.getX(ix[q + e])), dd = Math.atan2(Math.sin(a - B.thIn), Math.cos(a - B.thIn)); if (Math.abs(dd) < gap) ok = false; } if (ok) keep.push(ix[q], ix[q + 1], ix[q + 2]); } top.setIndex(keep); }
+      put(top, whiteM);
+      put(new THREE.CylinderGeometry(RR + 0.37, RR + 0.37, 0.06, 72, 1, true, th0, tl).translate(0, 0.3, 0), goldM);
+      for (let k = 0; k < 40; k++) { const th = k / 40 * Math.PI * 2, dd = Math.atan2(Math.sin(th - B.thIn), Math.cos(th - B.thIn)); if (Math.abs(dd) < gap + 0.05) continue; const [x, z] = P(RR + 0.18, th); col(0.2, 0.25, RR * Math.PI / 40 + 0.06, x, 0.25, z, yawOf(th)); } }
+    // THE STANDS: six tiers of benches round the ring, an aisle at the entrance and at the performers' way in
+    const seatM = M2({ color: 0x6a4a30, roughness: 0.75 }), riserM = M2({ color: 0x1e3a6a, roughness: 0.6 }), railM = M2({ color: 0xd8a83a, metalness: 0.5, roughness: 0.4 });
+    const T0 = 9.6, TD = 0.78, TH = 0.45, NT = 6, seats = [];
+    const aisle = (th) => { const a = Math.abs(Math.atan2(Math.sin(th - B.thIn), Math.cos(th - B.thIn))), b = Math.abs(Math.atan2(Math.sin(th - B.thIn - Math.PI), Math.cos(th - B.thIn - Math.PI))); return a < 0.19 || b < 0.14; };
+    for (let t = 0; t < NT; t++) { const r = T0 + t * TD + TD / 2, h = (t + 1) * TH, dA = 0.06;
+      for (let th = 0; th < Math.PI * 2; th += dA) { if (aisle(th + dA / 2)) continue; const [x, z] = P(r, th + dA / 2), w = r * dA + 0.02;
+        put(new THREE.BoxGeometry(TD, 0.06, w).rotateY(yawOf(th + dA / 2)).translate(x, h - 0.03, z), seatM);
+        const [fx, fz] = P(r - TD / 2 + 0.02, th + dA / 2); put(new THREE.BoxGeometry(0.04, h - 0.06, w).rotateY(yawOf(th + dA / 2)).translate(fx, (h - 0.06) / 2, fz), riserM);
+        for (let q = 0; q < 2; q++) { const a = th + dA * (0.25 + q * 0.5); if (rB() < 0.86) seats.push([...P(r - 0.05, a), h, a]); } } }
+    for (let k = 0; k < 32; k++) { const th = k / 32 * Math.PI * 2 + 0.1; if (aisle(th)) continue; const rr = T0 + NT * TD / 2;
+      for (let t = 0; t < NT; t++) { const [x, z] = P(T0 + t * TD + TD / 2, th); col(TD / 2, (t + 1) * TH / 2, (T0 + t * TD) * Math.PI / 32 + 0.08, x, (t + 1) * TH / 2, z, yawOf(th)); } void rr; }
+    // the front barrier, a gilt rail on red boards
+    for (let th = 0; th < Math.PI * 2; th += 0.06) { if (aisle(th + 0.03)) continue; const [x, z] = P(T0 - 0.05, th + 0.03), w = T0 * 0.06 + 0.02;
+      put(new THREE.BoxGeometry(0.06, 0.95, w).rotateY(yawOf(th + 0.03)).translate(x, 0.47, z), M2({ color: 0x8a1820, roughness: 0.6 }));
+      put(new THREE.BoxGeometry(0.1, 0.06, w).rotateY(yawOf(th + 0.03)).translate(x, 0.97, z), railM); }
+    // THE AUDIENCE: a body and a head on every bench, coats of every colour, faces lit by the ring
+    const bodyG = (() => { const t = new THREE.CylinderGeometry(0.16, 0.2, 0.56, 10); t.translate(0, 0.28, 0); const sh = new THREE.SphereGeometry(0.2, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2); sh.scale(1, 0.4, 0.8); sh.translate(0, 0.54, 0);
+      const lg = new THREE.BoxGeometry(0.34, 0.14, 0.4); lg.translate(-0.12, 0.02, 0); return mergeGeometries([t.toNonIndexed(), sh.toNonIndexed(), lg.toNonIndexed()], false); })();
+    const headG = new THREE.SphereGeometry(0.11, 12, 8); headG.scale(0.9, 1.1, 0.95); headG.translate(0, 0.72, 0);
+    const hairG = new THREE.SphereGeometry(0.118, 12, 8, 0, Math.PI * 2, 0, Math.PI * 0.55); hairG.scale(0.95, 1.05, 1.0); hairG.rotateX(-0.25); hairG.translate(0.012, 0.735, 0);
+    const bodies = new THREE.InstancedMesh(bodyG, M2({ roughness: 0.8 }), seats.length), heads = new THREE.InstancedMesh(headG, M2({ roughness: 0.6 }), seats.length), hair = new THREE.InstancedMesh(hairG, M2({ roughness: 0.85 }), seats.length);
+    const HAIR = [0x1a1410, 0x2a1c12, 0x4a3020, 0x6a4a2a, 0x8a6a3a, 0xb8a888, 0x3a2a24, 0x101010, 0x5a2a1a];
+    const COATS = [0x2a3a5a, 0x5a2a2a, 0x3a4a2a, 0x6a5a3a, 0x2a2a2a, 0x7a6a5a, 0x4a3a5a, 0x8a3a2a, 0x2a5a5a, 0xa88a5a, 0x3a3a4a];
+    const SKIN = [0xe0b090, 0xc89070, 0x9a6a48, 0x6a4a34, 0xf0c8a8, 0xb07a58];
+    const crowd = seats.map(([x, z, h, a]) => ({ x, z, h, a, ph: rB() * 6.28, cheer: 0.6 + rB() * 0.8 }));
+    const dd = new THREE.Object3D(), cc = new THREE.Color();
+    const poseCrowd = (t, k2) => { crowd.forEach((c, i) => { const hop = k2 > 0 ? Math.max(0, Math.sin(t * 9 * c.cheer + c.ph)) * 0.16 * k2 : Math.sin(t * 0.7 + c.ph) * 0.008;
+        dd.position.set(C[0] + c.x, Y + c.h + hop, C[1] + c.z); dd.rotation.set(0, Math.PI - c.a + Math.PI / 2 * 0 , k2 > 0 ? Math.sin(t * 4 + c.ph) * 0.08 * k2 : 0); dd.rotation.y = -c.a + Math.PI; dd.updateMatrix(); bodies.setMatrixAt(i, dd.matrix); heads.setMatrixAt(i, dd.matrix); hair.setMatrixAt(i, dd.matrix); });
+      bodies.instanceMatrix.needsUpdate = heads.instanceMatrix.needsUpdate = hair.instanceMatrix.needsUpdate = true; };
+    crowd.forEach((c, i) => { bodies.setColorAt(i, cc.setHex(COATS[Math.floor(rB() * COATS.length)])); heads.setColorAt(i, cc.setHex(SKIN[Math.floor(rB() * SKIN.length)])); hair.setColorAt(i, cc.setHex(HAIR[Math.floor(rB() * HAIR.length)])); });
+    poseCrowd(0, 0); bodies.castShadow = true; scene.add(bodies, heads, hair);
+    // THE TRAPEZE: platforms on two king poles, a bar hung between them, the net below
+    { const [ax, az] = kings[0], [bx, bz] = kings[2], hp = 8.6;
+      for (const [x, z] of [[ax, az], [bx, bz]]) { const u = Math.hypot(x, z), ix = -x / u, iz = -z / u;
+        put(new THREE.CylinderGeometry(0.7, 0.7, 0.08, 16).translate(x + ix * 0.6, hp, z + iz * 0.6), M2({ color: 0x2a2a2a, metalness: 0.5, roughness: 0.5 }));
+        for (let q = 0; q < 8; q++) { const a = q / 8 * 6.28; put(new THREE.CylinderGeometry(0.012, 0.012, 0.9, 4).translate(x + ix * 0.6 + Math.cos(a) * 0.68, hp + 0.45, z + iz * 0.6 + Math.sin(a) * 0.68), goldM); }
+        put(new THREE.TorusGeometry(0.68, 0.02, 4, 24).rotateX(Math.PI / 2).translate(x + ix * 0.6, hp + 0.9, z + iz * 0.6), goldM);
+        for (let q = 0; q < 2; q++) put(new THREE.CylinderGeometry(0.01, 0.01, hp, 4).translate(x + ix * 0.3 + (q - 0.5) * 0.3 * iz, hp / 2, z + iz * 0.3 - (q - 0.5) * 0.3 * ix), M2({ color: 0xe8dcc0 })); }
+      const bar = new THREE.Group(); bar.position.set((ax + bx) / 2, roofAt(0) - 4.2, (az + bz) / 2); G.add(bar);
+      for (const sg of [-0.5, 0.5]) { const rope = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 3.6, 4), M2({ color: 0xe8dcc0 })); rope.position.set(sg, -1.8, 0); bar.add(rope); }
+      const tb = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 1.1, 8), goldM); tb.rotation.z = Math.PI / 2; tb.position.y = -3.6; bar.add(tb);
+      bar.rotation.y = Math.atan2(-(bz - az), bx - ax); window.__trapeze = bar;
+    }
+    // BULBS strung from the cupola to the eave, and the lamps that light the ring
+    { const pts = []; for (let k = 0; k < 24; k++) { const th = k / 24 * Math.PI * 2; for (let r = 2; r < R - 0.6; r += 1.15) { const [x, z] = P(r, th); pts.push([x, roofAt(r) - 0.35, z]); } }
+      const bulbs = new THREE.InstancedMesh(new THREE.SphereGeometry(0.06, 8, 6), new THREE.MeshStandardMaterial({ color: 0xfff0c0, emissive: 0xffc860, emissiveIntensity: 2.6 }), pts.length), d = new THREE.Object3D();
+      pts.forEach(([x, y, z], k) => { d.position.set(C[0] + x, Y + y, C[1] + z); d.updateMatrix(); bulbs.setMatrixAt(k, d.matrix); }); scene.add(bulbs); }
+    for (const [x, z] of kings) { const pl = new THREE.PointLight(0xffc890, 26, 26, 1.4); pl.position.set(C[0] + x * 0.8, Y + roofAt(KR) - 1.2, C[1] + z * 0.8); scene.add(pl); }
+    const follow = new THREE.SpotLight(0xfff4e0, 0, 30, 0.16, 0.5, 1.0); follow.position.set(C[0] - Math.cos(B.thIn) * 9, Y + 13, C[1] - Math.sin(B.thIn) * 9); follow.target.position.set(C[0], Y, C[1]); scene.add(follow, follow.target);
+    const wash = new THREE.SpotLight(0xffd8a0, 60, 30, 0.55, 0.6, 1.2); wash.position.set(C[0], Y + PEAK - 1, C[1]); wash.target.position.set(C[0], Y, C[1]); scene.add(wash, wash.target);
+    // THE PERFORMERS' WAY IN opposite the entrance: a gilt arch and a red velvet curtain
+    { const th = B.thIn + Math.PI, [x, z] = P(R - 0.25, th), A = new THREE.Group(); A.position.set(x, 0, z); A.rotation.y = Math.PI / 2 - th; G.add(A);
+      const velT = cvT(64, 256, (g2, W, H) => { for (let x2 = 0; x2 < W; x2++) { const v = 0.6 + 0.4 * Math.sin(x2 / W * Math.PI * 8); g2.fillStyle = `rgb(${130 * v | 0},${14 * v | 0},${24 * v | 0})`; g2.fillRect(x2, 0, 1, H); } });
+      for (const sd of [-1, 1]) { const cu = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 4.6), M2({ map: velT, roughness: 0.7, side: THREE.DoubleSide })); cu.position.set(sd * 0.9, 2.3, 0.05); cu.rotation.z = sd * 0.04; A.add(cu); }
+      const arch = new THREE.Mesh(new THREE.TorusGeometry(1.9, 0.12, 8, 24, Math.PI), goldM); arch.position.y = 4.4; A.add(arch);
+      for (const sd of [-1, 1]) { const pi2 = new THREE.Mesh(new THREE.BoxGeometry(0.24, 4.4, 0.24), goldM); pi2.position.set(sd * 1.9, 2.2, 0); A.add(pi2); } }
+    // OUTSIDE: the entrance with its marquee, flags along the eave, bulbs strung down the way in, wagons
+    { const th = B.thIn, [x, z] = P(R, th), E = new THREE.Group(); E.position.set(x, 0, z); E.rotation.y = Math.PI / 2 - th; G.add(E);
+      const signT = cvT(512, 128, (g2, W, H) => { g2.fillStyle = '#8a1820'; g2.fillRect(0, 0, W, H); g2.strokeStyle = '#e8b840'; g2.lineWidth = 8; g2.strokeRect(6, 6, W - 12, H - 12);
+        g2.fillStyle = '#f4d070'; g2.font = 'bold 74px Georgia, serif'; g2.textAlign = 'center'; g2.textBaseline = 'middle'; g2.fillText('CIRCUS', W / 2, H / 2 + 4);
+        for (let k = 0; k < 22; k++) { g2.fillStyle = '#fff2c0'; g2.beginPath(); g2.arc(14 + k * (W - 28) / 21, 14, 5, 0, 7); g2.fill(); g2.beginPath(); g2.arc(14 + k * (W - 28) / 21, H - 14, 5, 0, 7); g2.fill(); } });
+      const sign = new THREE.Mesh(new THREE.PlaneGeometry(5.2, 1.3), M2({ map: signT, emissive: 0xffffff, emissiveMap: signT, emissiveIntensity: 0.55, roughness: 0.6, side: THREE.DoubleSide })); sign.position.set(0, 6.0, 1.2); E.add(sign);
+      for (const sd of [-1, 1]) { const po = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.15, 6.6, 10), goldM); po.position.set(sd * 2.4, 3.3, 1.1); E.add(po);
+        const fl = new THREE.Mesh(new THREE.PlaneGeometry(2.2, 5.6), M2({ map: wallT, roughness: 0.9, side: THREE.DoubleSide })); fl.position.set(sd * 3.5, 2.8, 0.6); fl.rotation.y = sd * 0.9; E.add(fl); }   // the door flaps tied back
+      // bulbs on posts down the way in
+      const posts = [], bul = [];
+      const ux = Math.cos(th), uz = Math.sin(th), nx = -uz, nz = ux;
+      for (let s2 = 3; s2 < 16; s2 += 4.2) for (const sd of [-1, 1]) { const px = x + ux * s2 + nx * sd * 3.4, pz = z + uz * s2 + nz * sd * 3.4; posts.push([px, pz]);
+        put(new THREE.CylinderGeometry(0.06, 0.08, 3.4, 8).translate(px, 1.7, pz), M2({ color: 0x3a2a1c, roughness: 0.8 })); }
+      for (let i = 0; i + 2 < posts.length; i++) { const a = posts[i], b = posts[i + 2]; for (let q = 0; q <= 8; q++) { const t = q / 8; bul.push([a[0] + (b[0] - a[0]) * t, 3.3 - Math.sin(t * Math.PI) * 0.45, a[1] + (b[1] - a[1]) * t]); } }
+      const bm = new THREE.InstancedMesh(new THREE.SphereGeometry(0.07, 8, 6), new THREE.MeshStandardMaterial({ color: 0xfff0c0, emissive: 0xffb060, emissiveIntensity: 3 }), bul.length), d = new THREE.Object3D();
+      bul.forEach(([bx, by, bz], k) => { d.position.set(C[0] + bx, Y + by, C[1] + bz); d.updateMatrix(); bm.setMatrixAt(k, d.matrix); }); scene.add(bm); }
+    // pennants on short poles round the eave
+    for (let k = 0; k < 12; k++) { const th = k / 12 * Math.PI * 2 + 0.26, [x, z] = P(R + 0.2, th);
+      put(new THREE.CylinderGeometry(0.04, 0.05, 2.4, 6).translate(x, EAVE + 1.0, z), poleM);
+      const pf = new THREE.BufferGeometry(); pf.setAttribute('position', new THREE.Float32BufferAttribute([0, 0, 0, 0, -0.5, 0, 1.2, -0.25, 0], 3)); pf.computeVertexNormals(); pf.rotateY(rB() * 6.28); pf.translate(x, EAVE + 2.15, z); put(pf, M2({ color: k % 3 === 0 ? 0xd8a83a : k % 3 === 1 ? 0x1e3a6a : 0xb01c24, side: THREE.DoubleSide })); }
+    // the wagons: painted boxes on sunburst wheels, gold scrollwork, one with bars for the lions
+    const wagon = (x, z, ry, hue, cage) => {   // merged into the tent's batches: a mesh per spoke was two hundred draw calls
+      const gy = hAt(C[0] + x, C[1] + z) - Y, T = new THREE.Matrix4().makeRotationY(ry).setPosition(x, gy, z), Pt = (geo, m) => put(geo.applyMatrix4(T), m);
+      const bodyM = M2({ color: hue, roughness: 0.55 }), creamM = M2({ color: 0xe8dcc0, roughness: 0.7 }), rimM = M2({ color: 0xe8b840, metalness: 0.4, roughness: 0.4 }), redM = M2({ color: 0xb01c24 });
+      Pt(new THREE.BoxGeometry(4.2, 2.1, 2.0).translate(0, 1.75, 0), bodyM);
+      Pt(new THREE.CylinderGeometry(1.1, 1.1, 4.4, 16, 1, false, -Math.PI / 2, Math.PI).rotateZ(Math.PI / 2).scale(1, 0.45, 1).translate(0, 2.8, 0), creamM);
+      for (const sd of [-1, 1]) for (const y of [2.72, 0.78]) Pt(new THREE.BoxGeometry(4.3, 0.12, 0.04).translate(0, y, sd * 1.01), goldM);
+      if (cage) for (let k = 0; k < 13; k++) Pt(new THREE.CylinderGeometry(0.025, 0.025, 1.8, 6).translate(-1.9 + k * 0.32, 1.75, 1.03), goldM);
+      for (const [wx, wz] of [[-1.4, -1.05], [1.4, -1.05], [-1.4, 1.05], [1.4, 1.05]]) {
+        Pt(new THREE.TorusGeometry(0.58, 0.05, 6, 24).translate(wx, 0.62, wz), rimM);
+        for (let q = 0; q < 12; q++) Pt(new THREE.BoxGeometry(0.04, 1.1, 0.03).rotateZ(q / 12 * Math.PI).translate(wx, 0.62, wz), q % 2 ? redM : rimM); }
+      world.createCollider(RAPIER.ColliderDesc.cuboid(2.2, 1.6, 1.1).setTranslation(C[0] + x, Y + gy + 1.6, C[1] + z).setRotation({ x: 0, y: Math.sin(ry / 2), z: 0, w: Math.cos(ry / 2) })); };
+    for (const [k, off, hue, cage] of [[0, 0.9, 0x1e3a6a, false], [1, 1.25, 0xb01c24, true], [2, -0.95, 0x2a5a3a, false], [3, -1.3, 0x6a2a6a, false]]) {
+      const th = B.thIn + off, [x, z] = P(R + 7 + (k % 2) * 2, th); wagon(x, z, Math.PI / 2 - th + (rB() - 0.5) * 0.4, hue, cage); }
+    for (const [m, list] of bucket) { const o = new THREE.Mesh(mergeGeometries(list, false), m); o.castShadow = o.receiveShadow = true; G.add(o); for (const q of list) q.dispose(); }
+    // THE SHOW OPENS when the ringmaster takes the star: the follow spot finds them, the crowd rises,
+    // confetti comes down from the dark, a fanfare; the night is won a few beats later
+    let opened = -1;
+    const confM = [0xff4a4a, 0xffd04a, 0x4ab0ff, 0x7aff7a, 0xff7ad8, 0xffffff].map(c => new THREE.MeshBasicMaterial({ color: c, side: THREE.DoubleSide }));
+    const conf = [];
+    const fanfare = () => { try { const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return; const ac = window.__circusAC || (window.__circusAC = new AC()); const t0 = ac.currentTime;
+        [[523.25, 0], [659.25, 0.16], [783.99, 0.32], [1046.5, 0.5], [783.99, 0.78], [1046.5, 0.92]].forEach(([f, at], k) => { for (const det of [1, 1.005]) { const o = ac.createOscillator(), g2 = ac.createGain(); o.type = 'sawtooth'; o.frequency.value = f * det;
+          g2.gain.setValueAtTime(0.0001, t0 + at); g2.gain.exponentialRampToValueAtTime(0.06, t0 + at + 0.03); g2.gain.exponentialRampToValueAtTime(0.0008, t0 + at + (k === 5 ? 1.2 : 0.3)); o.connect(g2); g2.connect(ac.destination); o.start(t0 + at); o.stop(t0 + at + 1.3); } }); } catch (e) { /* no audio */ } };
+    const _kl = []; scene.traverse(o => { if (o.isPointLight && Math.hypot(o.position.x - C[0], o.position.z - C[1]) < R) _kl.push(o); });
+    window.__bigtop = { x: C[0], z: C[1], y: Y, R, roofAt, seats: seats.length, dbg: { bodies, heads, hair, G, lights: _kl, follow, wash },
+      holding: () => opened < 0 || performance.now() / 1000 - opened < 4.5,
+      tick: (t, dt) => { const pp = playerObj.position, hr = Math.hypot(pp.x - C[0], pp.z - C[1]);
+        pennant.rotation.y = Math.sin(t * 0.8) * 0.4; if (window.__trapeze) window.__trapeze.rotation.x = Math.sin(t * 1.1) * 0.35;
+        const k2 = opened < 0 ? 0 : Math.max(0, 1 - Math.max(0, t - opened - 6) / 4);
+        if (hr < R + 6) poseCrowd(t, k2);
+        if (opened < 0 && hr < 2.0) { opened = t; fanfare(); for (let k = 0; k < 260; k++) { const m = new THREE.Mesh(new THREE.PlaneGeometry(0.09, 0.05), confM[k % confM.length]);
+            m.position.set(C[0] + (rB() - 0.5) * 12, Y + 9 + rB() * 6, C[1] + (rB() - 0.5) * 12); m.userData.v = [(rB() - 0.5) * 0.6, -0.9 - rB() * 0.8, (rB() - 0.5) * 0.6, rB() * 6]; scene.add(m); conf.push(m); } }
+        follow.intensity = opened < 0 ? 0 : Math.min(400, (t - opened) * 300);
+        if (opened >= 0) follow.target.position.set(pp.x, pp.y, pp.z);
+        for (const m of conf) { const v = m.userData.v; if (m.position.y < Y + 0.08) continue; m.position.x += v[0] * dt; m.position.y += v[1] * dt; m.position.z += v[2] * dt; v[3] += dt * 5; m.rotation.set(v[3], v[3] * 0.7, 0); } } };
+  }
+
+  // ── THE TEA ESTATE, BUILT (see TEAHILL above) ───────────────────────────
+  // the hedges along every contour, clipped round and flushed pale green on top; the picker's paths
+  // up through them; silver oaks; the red road; the factory and its weighing shed on the crest; the
+  // mist lying in the valley below
+  if (TEAHILL) {
+    const TH = TEAHILL, rT = mulberry32((SPEC.seed || 1) * 61 + 17), M2 = (o) => { const m = new THREE.MeshStandardMaterial(o); m.userData.noAutoTex = true; return m; };
+    const cvT = (wd, ht, draw) => { const cv = document.createElement('canvas'); cv.width = wd; cv.height = ht; draw(cv.getContext('2d'), wd, ht);
+      const t = new THREE.CanvasTexture(cv); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = renderer.capabilities.getMaxAnisotropy(); return t; };
+    // a hedge's skin: small glossy leaves crowded together, the light catching their faces
+    const leafT = cvT(256, 256, (g2, W, H) => { g2.fillStyle = '#24401a'; g2.fillRect(0, 0, W, H);
+      for (let k = 0; k < 1500; k++) { const x = rT() * W, y = rT() * H, l = 3 + rT() * 6, a = rT() * 6.28, v = rT();
+        g2.fillStyle = v < 0.5 ? `rgba(${40 + v * 60 | 0},${78 + v * 70 | 0},${26 + v * 30 | 0},0.9)` : `rgba(${70 + v * 50 | 0},${110 + v * 60 | 0},${40 + v * 20 | 0},0.85)`;
+        g2.save(); g2.translate(x, y); g2.rotate(a); g2.beginPath(); g2.ellipse(0, 0, l, l * 0.42, 0, 0, 6.28); g2.fill();
+        g2.fillStyle = 'rgba(220,240,200,0.18)'; g2.beginPath(); g2.ellipse(-l * 0.25, -l * 0.1, l * 0.45, l * 0.12, 0, 0, 6.28); g2.fill(); g2.restore(); } });
+    leafT.repeat.set(7, 4);
+    const bushG = new THREE.SphereGeometry(0.5, 12, 8); { const ps = bushG.attributes.position, cl = [];
+      for (let k = 0; k < ps.count; k++) { const x = ps.getX(k), y = ps.getY(k), z = ps.getZ(k), nn = 1 + Math.sin(x * 13 + z * 7) * 0.05 + Math.cos(y * 11 + x * 5) * 0.05;
+        const yy = y > 0.22 ? 0.22 + (y - 0.22) * 0.3 : Math.max(-0.2, y);   // the plucking table: clipped flat
+        ps.setXYZ(k, x * 1.9 * nn, yy * 1.65 * nn + 0.32, z * 1.28 * nn);
+        const up = Math.max(0, y / 0.5), c = new THREE.Color().setRGB(0.55 + up * 0.5, 0.62 + up * 0.55, 0.42 + up * 0.18); cl.push(c.r, c.g, c.b); }
+      bushG.setAttribute('color', new THREE.Float32BufferAttribute(cl, 3)); bushG.computeVertexNormals(); }
+    const bushM = M2({ map: leafT, bumpMap: leafT, bumpScale: 3, vertexColors: true, roughness: 0.5 });
+    const segs = [], STEPA = 0.9;
+    for (const r of TH.rows) { const dA = STEPA / (r * 1.25);
+      let run = [];
+      const flush = () => { if (run.length > 1) { for (let q = 0; q + 1 < run.length; q += 3) { const a0 = run[q], a1 = run[Math.min(run.length - 1, q + 3)];
+          const am = (a0 + a1) / 2, len = Math.max(0.9, (a1 - a0) * r * TH.sOf(am) + 0.6), [cx, cz] = TH.at(r, am);
+          const [ex, ez] = TH.at(r, am + 0.01), tg = Math.atan2(ez - cz, ex - cx);
+          world.createCollider(RAPIER.ColliderDesc.cuboid(len / 2, 0.5, 0.5).setTranslation(cx, hAt(cx, cz) + 0.45, cz).setRotation({ x: 0, y: Math.sin(-tg / 2), z: 0, w: Math.cos(-tg / 2) })); } }
+        run = []; };
+      for (let a = 0; a < Math.PI * 2; a += dA * 1.25 / TH.sOf(a)) { const [x, z] = TH.at(r, a);
+        if (!TH.inMap(x, z, 3) || TH.roadD(x, z) < 2.0 || TH.pathAt(x, z) || Math.hypot(x, z) < 3.5) { flush(); continue; }
+        const [x2, z2] = TH.at(r, a + 0.01), tang = Math.atan2(z2 - z, x2 - x);
+        segs.push([x, hAt(x, z), z, tang - Math.PI / 2, 0.88 + rT() * 0.24]); run.push(a); }
+      flush(); }
+    const bushes = new THREE.InstancedMesh(bushG, bushM, segs.length), d = new THREE.Object3D();
+    segs.forEach(([x, y, z, a, sc], k) => { d.position.set(x, y - 0.06, z); d.rotation.set(0, -a + Math.PI / 2 + (rT() - 0.5) * 0.08, 0); d.scale.set(sc, 0.92 + rT() * 0.16, 0.94 + rT() * 0.12); d.updateMatrix(); bushes.setMatrixAt(k, d.matrix); });
+    bushes.castShadow = bushes.receiveShadow = true; scene.add(bushes);
+    // the silver oaks: straight grey trunks, sparse feathery crowns high over the bushes
+    const oaks = []; for (let k = 0; k < 90 && oaks.length < 46; k++) { const r = TH.rows[Math.floor(rT() * TH.rows.length)] + TH.GAP / 2, a = rT() * 6.28, [x, z] = TH.at(r, a);
+      if (!TH.inMap(x, z, 4) || TH.roadD(x, z) < 3 || oaks.some(o => Math.hypot(o[0] - x, o[2] - z) < 9)) continue; oaks.push([x, hAt(x, z), z, 12 + rT() * 6]); }
+    try {
+      const gv = __FLORA.growVariants({ kinds: ['canopy'], leaf: { h: 0.24, s: 0.3, l: 0.3 }, seed: ((SPEC.seed || 1) * 41 + 3) >>> 0, perKind: 3 });
+      gv.variants.forEach((v, vi) => { const mine = oaks.filter((o, k) => k % gv.variants.length === vi); if (!mine.length) return;
+        const bk = new THREE.InstancedMesh(v.bark, v.mats.bark, mine.length), lf = v.leaf && v.mats.leaf ? new THREE.InstancedMesh(v.leaf, v.mats.leaf, mine.length) : null;
+        mine.forEach(([x, y, z, h], k) => { const sc = h / (v.height || 16); d.position.set(x, y - 0.1, z); d.rotation.set(0, rT() * 6.28, 0); d.scale.set(sc * 0.55, sc, sc * 0.55); d.updateMatrix(); bk.setMatrixAt(k, d.matrix); if (lf) lf.setMatrixAt(k, d.matrix); });
+        bk.castShadow = bk.receiveShadow = true; scene.add(bk); if (lf) { lf.castShadow = true; scene.add(lf); } });
+    } catch (e) { console.warn('[game] silver oaks: ' + e.message); }
+    oaks.forEach(([x, y, z]) => world.createCollider(RAPIER.ColliderDesc.cylinder(2, 0.22).setTranslation(x, y + 2, z)));
+    // the road: red earth, rutted, the width of a lorry, spiralling to the crest
+    { const pts = [], N = 160; for (let k = 0; k <= N; k++) { const t = k / N, th = TH.th0 + TH.DIR * TH.SPAN * t, r = TH.RA + (TH.RB - TH.RA) * t; pts.push(TH.at(r, th)); }
+      const pos = [], uv = [], idx = [], W = 1.55; let s0 = 0;
+      for (let k = 0; k <= N; k++) { const a = pts[Math.max(0, k - 1)], b = pts[Math.min(N, k + 1)], tx = b[0] - a[0], tz = b[1] - a[1], tl = Math.hypot(tx, tz) || 1, nx = -tz / tl, nz = tx / tl;
+        if (k) s0 += Math.hypot(pts[k][0] - pts[k - 1][0], pts[k][1] - pts[k - 1][1]);
+        for (const sd of [-1, 1]) { const x = pts[k][0] + nx * W * sd, z = pts[k][1] + nz * W * sd; pos.push(x, hAt(x, z) + 0.05, z); uv.push(sd > 0 ? 1 : 0, s0 / 3); }
+        if (k) { const o = (k - 1) * 2; idx.push(o, o + 2, o + 1, o + 1, o + 2, o + 3); } }
+      const ge = new THREE.BufferGeometry(); ge.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); ge.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); ge.setIndex(idx); ge.computeVertexNormals();
+      const roadT = cvT(128, 256, (g2, W2, H2) => { g2.fillStyle = '#8a4a2c'; g2.fillRect(0, 0, W2, H2);
+        for (let k = 0; k < 1400; k++) { const v = rT(); g2.fillStyle = v < 0.5 ? 'rgba(60,30,18,0.18)' : 'rgba(176,110,70,0.16)'; g2.fillRect(rT() * W2, rT() * H2, 2 + rT() * 5, 2 + rT() * 5); }
+        for (const x of [W2 * 0.3, W2 * 0.7]) { g2.fillStyle = 'rgba(50,24,14,0.35)'; g2.fillRect(x - 6, 0, 12, H2); }   // the ruts
+        const gr = g2.createLinearGradient(0, 0, W2, 0); gr.addColorStop(0, 'rgba(60,90,40,0.7)'); gr.addColorStop(0.12, 'rgba(60,90,40,0)'); gr.addColorStop(0.88, 'rgba(60,90,40,0)'); gr.addColorStop(1, 'rgba(60,90,40,0.7)'); g2.fillStyle = gr; g2.fillRect(0, 0, W2, H2); });
+      const road = new THREE.Mesh(ge, M2({ map: roadT, roughness: 0.95, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2 })); road.receiveShadow = true; scene.add(road); }
+    // THE FACTORY on the crest: two storeys of whitewashed walls and rows of small-paned windows, a long
+    // roof of green-painted corrugated iron, its louvred ridge where the withering lofts breathe; the
+    // weighing shed in front where the baskets come in
+    { const fx = TH.HC[0], fz = TH.HC[1], fy = TH.B + TH.HT, ang = TH.thL + Math.PI / 2, L = 20, D = 7.5, H = 7.2;
+      const F = new THREE.Group(); F.position.set(fx - Math.cos(ang) * 1.0, fy, fz - Math.sin(ang) * 1.0); F.rotation.y = -TH.thL; scene.add(F);
+      const wallT = cvT(512, 256, (g2, W2, H2) => { g2.fillStyle = '#e8e4d8'; g2.fillRect(0, 0, W2, H2);
+        for (let k = 0; k < 600; k++) { g2.fillStyle = `rgba(${120 + rT() * 40 | 0},${110 + rT() * 30 | 0},90,${0.04 + rT() * 0.06})`; g2.fillRect(rT() * W2, rT() * H2, 3 + rT() * 12, 2 + rT() * 30); }
+        for (let row = 0; row < 2; row++) for (let k = 0; k < 10; k++) { const x = 14 + k * 50, y = 24 + row * 126, w2 = 32, h2 = 70;
+          g2.fillStyle = '#2a2e2c'; g2.fillRect(x, y, w2, h2); g2.strokeStyle = '#4e6a4a'; g2.lineWidth = 3; g2.strokeRect(x, y, w2, h2);
+          for (let q = 1; q < 3; q++) { g2.beginPath(); g2.moveTo(x + q * w2 / 3, y); g2.lineTo(x + q * w2 / 3, y + h2); g2.stroke(); }
+          for (let q = 1; q < 4; q++) { g2.beginPath(); g2.moveTo(x, y + q * h2 / 4); g2.lineTo(x + w2, y + q * h2 / 4); g2.stroke(); }
+          g2.fillStyle = 'rgba(255,214,150,0.22)'; g2.fillRect(x + 2, y + 2, w2 / 3 - 3, h2 / 4 - 3);
+          g2.fillStyle = 'rgba(90,70,50,0.25)'; g2.fillRect(x - 2, y + h2, w2 + 4, 14); } });
+      const ironT = cvT(64, 256, (g2, W2, H2) => { for (let x = 0; x < W2; x++) { const v = 0.75 + 0.25 * Math.sin(x / W2 * Math.PI * 8); g2.fillStyle = `rgb(${46 * v | 0},${92 * v | 0},${62 * v | 0})`; g2.fillRect(x, 0, 1, H2); }
+        for (let k = 0; k < 160; k++) { g2.fillStyle = `rgba(${130 + rT() * 40 | 0},${70 + rT() * 30 | 0},40,${0.1 + rT() * 0.2})`; g2.fillRect(rT() * W2, rT() * H2, 2 + rT() * 4, 4 + rT() * 22); } });
+      const wallM = M2({ map: wallT, roughness: 0.9 }), roofM = M2({ map: ironT, roughness: 0.55, metalness: 0.35, side: THREE.DoubleSide });
+      const fb = (geo, m, x, y, z) => { const o = new THREE.Mesh(geo, m); o.position.set(x, y, z); o.castShadow = o.receiveShadow = true; F.add(o); return o; };
+      for (const sd of [-1, 1]) { const wl = fb(new THREE.PlaneGeometry(L, H), wallM, 0, H / 2, sd * D / 2); wl.rotation.y = sd > 0 ? 0 : Math.PI; }
+      const endM = M2({ color: 0xe2ddd0, roughness: 0.9 });
+      const gabT = cvT(256, 320, (g2, W2, H2) => { g2.drawImage(wallT.image, 0, 0, 120, 120, 0, 0, W2, H2);
+        const yb = H2 * (1 - 2.6 / (H + 2.2)), dw = W2 * 0.26; g2.fillStyle = '#3e5a3e'; g2.fillRect(W2 / 2 - dw / 2, yb, dw, H2 - yb);   // the double doors, green
+        g2.strokeStyle = '#24321f'; g2.lineWidth = 3; g2.strokeRect(W2 / 2 - dw / 2, yb, dw, H2 - yb); g2.beginPath(); g2.moveTo(W2 / 2, yb); g2.lineTo(W2 / 2, H2); g2.stroke();
+        for (const [fx2, fy2] of [[0.22, 0.4], [0.78, 0.4], [0.5, 0.14]]) { const x = W2 * fx2 - 16, y = H2 * fy2; g2.fillStyle = '#2a2e2c'; g2.fillRect(x, y, 32, 44); g2.strokeStyle = '#4e6a4a'; g2.strokeRect(x, y, 32, 44);
+          g2.beginPath(); g2.moveTo(x + 16, y); g2.lineTo(x + 16, y + 44); g2.moveTo(x, y + 22); g2.lineTo(x + 32, y + 22); g2.stroke(); } });
+      const gabM = M2({ map: gabT, roughness: 0.9 });
+      for (const sd of [-1, 1]) { const sh = new THREE.Shape(); sh.moveTo(-D / 2, 0); sh.lineTo(D / 2, 0); sh.lineTo(D / 2, H); sh.lineTo(0, H + 2.2); sh.lineTo(-D / 2, H); sh.closePath();
+        const ge = new THREE.ShapeGeometry(sh), uvA = ge.attributes.uv, pA = ge.attributes.position; for (let q = 0; q < uvA.count; q++) uvA.setXY(q, (pA.getX(q) + D / 2) / D, pA.getY(q) / (H + 2.2));
+        const e = fb(ge, gabM, sd * L / 2, 0, 0); e.rotation.y = sd * Math.PI / 2; }
+      ironT.repeat.set(L / 1.2, 1);
+      const sl = Math.hypot(D / 2 + 0.5, 2.2);
+      const pitch = Math.atan2(2.2, D / 2 + 0.5);
+      for (const sd of [-1, 1]) { const rg = new THREE.PlaneGeometry(L + 1, sl); rg.rotateX(-Math.PI / 2); rg.rotateX(sd * pitch); rg.translate(0, H + 1.1 - 0.05, sd * (D / 4 + 0.25)); fb(rg, roofM, 0, 0, 0); }
+      fb(new THREE.BoxGeometry(L * 0.8, 0.7, 1.4), roofM, 0, H + 2.5, 0);   // the louvred ridge
+      for (let k = 0; k < 12; k++) fb(new THREE.BoxGeometry(0.06, 0.5, 1.5), M2({ color: 0x2a3a2a }), -L * 0.38 + k * L * 0.07, H + 2.45, 0);
+      const brickT = cvT(128, 256, (g2, W2, H2) => { g2.fillStyle = '#6a3a2a'; g2.fillRect(0, 0, W2, H2); for (let y = 0; y < H2; y += 8) for (let x = -(y / 8 % 2) * 8; x < W2; x += 16) { const v = 0.8 + rT() * 0.3; g2.fillStyle = `rgb(${150 * v | 0},${74 * v | 0},${52 * v | 0})`; g2.fillRect(x + 1, y + 1, 14, 6); } });
+      brickT.repeat.set(2, 5);
+      const ch = fb(new THREE.CylinderGeometry(0.36, 0.5, 9.5, 14), M2({ map: brickT, roughness: 0.9 }), L / 2 + 1.4, 4.75, -D / 2 + 1.2);   // the drier's brick chimney
+      void ch;
+      world.createCollider(RAPIER.ColliderDesc.cuboid(L / 2, H / 2, D / 2).setTranslation(F.position.x, fy + H / 2, F.position.z).setRotation({ x: 0, y: Math.sin(F.rotation.y / 2), z: 0, w: Math.cos(F.rotation.y / 2) }));
+      // the weighing shed: a tin roof on posts, a beam scale, baskets waiting
+      const W = new THREE.Group(); W.position.set(TH.SHED[0], fy, TH.SHED[1]); W.rotation.y = -Math.atan2(TH.SHED[1] - fz, TH.SHED[0] - fx) + Math.PI / 2; scene.add(W);
+      const wood = M2({ color: 0x5a3e28, roughness: 0.8 });
+      for (const [px, pz] of [[-2.6, -1.6], [2.6, -1.6], [-2.6, 1.6], [2.6, 1.6]]) { const p2 = new THREE.Mesh(new THREE.BoxGeometry(0.16, 2.8, 0.16), wood); p2.position.set(px, 1.4, pz); p2.castShadow = true; W.add(p2); }
+      const tin = new THREE.Mesh(new THREE.BoxGeometry(6, 0.06, 4), roofM); tin.position.y = 2.85; tin.rotation.x = 0.08; tin.castShadow = true; W.add(tin);
+      const beam = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.06, 0.06), M2({ color: 0x2a2a2a, metalness: 0.7, roughness: 0.4 })); beam.position.set(0, 2.2, 0); W.add(beam);
+      for (const sx of [-0.6, 0.6]) { const pan = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.3, 0.06, 18), M2({ color: 0x9a7a3a, metalness: 0.8, roughness: 0.35 })); pan.position.set(sx, 1.2, 0); W.add(pan);
+        const ch2 = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 1.0, 4), M2({ color: 0x333333 })); ch2.position.set(sx, 1.7, 0); W.add(ch2); }
+      const weaveT = cvT(128, 128, (g2, W2, H2) => { g2.fillStyle = '#7a5a34'; g2.fillRect(0, 0, W2, H2);
+        for (let y = 0; y < H2; y += 8) for (let x = 0; x < W2; x += 8) { const o = ((x + y) / 8) % 2; g2.fillStyle = o ? '#c8a46a' : '#a8844e'; g2.fillRect(x + 1, y + (o ? 1 : 3), 7, o ? 5 : 3); } });
+      weaveT.repeat.set(5, 3);
+      const basketM = M2({ map: weaveT, roughness: 0.85 });
+      for (let k = 0; k < 6; k++) { const b2 = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.12, 0.78, 16, 1, true), basketM); b2.position.set(-2 + k * 0.7, 0.31, 1.2 + (k % 2) * 0.3); b2.material.side = THREE.DoubleSide; W.add(b2);
+        b2.position.y = 0.39; const lf = new THREE.Mesh(new THREE.SphereGeometry(0.3, 12, 6, 0, 6.28, 0, Math.PI / 2), M2({ map: leafT, color: 0xb8d878, roughness: 0.55 })); lf.scale.y = 0.45; lf.position.set(-2 + k * 0.7, 0.74, 1.2 + (k % 2) * 0.3); W.add(lf); }
+    }
+    // MIST IN THE VALLEY: soft sheets lying below the lowest rows, drifting
+    { const mt = cvT(256, 256, (g2, W2, H2) => { for (let k = 0; k < 22; k++) { const x = rT() * W2, y = rT() * H2, r = 18 + rT() * 40, gr = g2.createRadialGradient(x, y, 0, x, y, r);
+          gr.addColorStop(0, 'rgba(255,255,255,0.3)'); gr.addColorStop(1, 'rgba(255,255,255,0)'); g2.fillStyle = gr; for (const ox of [-W2, 0, W2]) for (const oy of [-H2, 0, H2]) g2.fillRect(x - r + ox, y - r + oy, r * 2, r * 2); } });
+      const sheets = [];
+      for (let k = 0; k < 2; k++) { const m = new THREE.Mesh(new THREE.PlaneGeometry(LVL.size_m * 1.4, LVL.size_m * 1.4), new THREE.MeshBasicMaterial({ map: mt, transparent: true, opacity: 0.38, depthWrite: false, fog: true, color: 0xfff4ea }));
+        m.material.map = mt.clone(); m.material.map.needsUpdate = true; m.material.map.repeat.set(1.6 + k * 0.7, 1.6 + k * 0.7); m.rotation.x = -Math.PI / 2; m.position.set(0, TH.B + 0.6 + k * 0.9, 0); m.renderOrder = 2; scene.add(m); sheets.push(m); }
+      window.__teaTick = (t) => { sheets.forEach((m, k) => { m.material.map.offset.set(t * 0.004 * (k + 1), t * 0.002 * (k % 2 ? 1 : -1)); }); }; }
+    window.__teaHill = { rows: TH.rows.length, bushes: segs.length, oaks: oaks.length, hc: TH.HC.map(v => +v.toFixed(1)), top: +(TH.B + TH.HT).toFixed(1) };
+  }
+
   // ── THE POLDER, BUILT (see POLDER above) ────────────────────────────────
   // pollard willows along the ditch banks, their knuckled heads bristling with shoots; and the mill
   // at the end of the dyke road when the sentence has one
@@ -20213,6 +21234,32 @@ async function main() {
   }
   // a bunch of grapes to pick: dark (or green, if the sentence says white)
   // berries in a hanging cone on a short woody stalk
+  // THE SONDE'S PARTS (2026-10-27): the instrument in its white foam box with its wire aerial, the folded
+  // orange parachute, the reel of line that pays out under the balloon
+  function makeSondePart(i) {
+    const gr = new THREE.Group(), M2 = (o) => { const m = new THREE.MeshStandardMaterial(o); m.userData.noAutoTex = true; return m; }, k = i % 3;
+    if (k === 0) { gr.add(new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.26, 0.12).translate(0, 0.13, 0), M2({ color: 0xf2f2ee, roughness: 0.9 })));
+      gr.add(new THREE.Mesh(new THREE.CylinderGeometry(0.003, 0.003, 0.3, 4).translate(0, 0.41, 0), M2({ color: 0x888888, metalness: 0.8 })));
+      gr.add(new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.05, 0.005).translate(0, 0.18, 0.062), M2({ color: 0x2a6ad8, roughness: 0.5 }))); }
+    else if (k === 1) { const p = new THREE.SphereGeometry(0.13, 14, 10); p.scale(1, 0.7, 1); gr.add(new THREE.Mesh(p.translate(0, 0.09, 0), M2({ color: 0xff6a1a, roughness: 0.7 })));
+      for (let q = 0; q < 4; q++) gr.add(new THREE.Mesh(new THREE.TorusGeometry(0.1, 0.004, 4, 16).rotateX(Math.PI / 2).translate(0, 0.04 + q * 0.03, 0), M2({ color: 0xffffff }))); }
+    else { gr.add(new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.11, 0.08, 18).rotateX(Math.PI / 2).translate(0, 0.11, 0), M2({ color: 0x2a2a2e, roughness: 0.5 })));
+      gr.add(new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.085, 18).rotateX(Math.PI / 2).translate(0, 0.11, 0), M2({ color: 0xe8e0c8, roughness: 0.8 }))); }
+    return gr;
+  }
+  // TWO LEAVES AND A BUD (2026-10-27): the plucking standard, the tender top of a tea shoot
+  function makeTeaSprig(i) {
+    const gr = new THREE.Group(), M2 = (o) => { const m = new THREE.MeshStandardMaterial(o); m.userData.noAutoTex = true; return m; };
+    const leafM = M2({ color: 0x86b83a, roughness: 0.38, side: THREE.DoubleSide }), budM = M2({ color: 0xc4d8a0, roughness: 0.6 }), stemM = M2({ color: 0x6a8a2a, roughness: 0.7 });
+    gr.add(new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.006, 0.14, 6).translate(0, 0.07, 0), stemM));
+    const leaf = (len, wd) => { const sh = new THREE.Shape(); sh.moveTo(0, 0);
+      for (let k = 1; k <= 8; k++) { const t = k / 8; sh.lineTo(Math.sin(t * Math.PI) * wd * (k % 2 ? 1 : 0.9), t * len); }
+      for (let k = 7; k >= 0; k--) { const t = k / 8; sh.lineTo(-Math.sin(t * Math.PI) * wd * (k % 2 ? 1 : 0.9), t * len); }
+      const ge = new THREE.ShapeGeometry(sh); const ps = ge.attributes.position; for (let q = 0; q < ps.count; q++) ps.setZ(q, Math.abs(ps.getX(q)) * 0.35); ge.computeVertexNormals(); return ge; };
+    for (const [y, a, len] of [[0.07, 0.9, 0.075], [0.105, -0.8, 0.06]]) { const l = new THREE.Mesh(leaf(len, len * 0.32), leafM); l.position.y = y; l.rotation.set(0.15, a * 2, a); gr.add(l); }
+    const bud = new THREE.Mesh(new THREE.SphereGeometry(0.012, 8, 6).scale(1, 2.6, 1).translate(0, 0.165, 0), budM); gr.add(bud);
+    gr.rotation.z = (i % 3 - 1) * 0.2; return gr;
+  }
   function makeGrapes(i) {
     const g = new THREE.Group(), r = mulberry32(i * 29 + 11);
     const M = (o) => { const m = new THREE.MeshStandardMaterial(o); m.userData.noAutoTex = true; return m; };
@@ -21287,6 +22334,30 @@ async function main() {
         const gl = new THREE.Mesh(new THREE.BoxGeometry(0.85, 1.15, 0.06), glassM); gl.position.set(bx + wx, y0 + wy, fz); scene.add(gl);
         for (const sd of [-1, 1]) { const sh = new THREE.Mesh(new THREE.BoxGeometry(0.46, 1.2, 0.05), shutM); sh.position.set(bx + wx + sd * 0.68, y0 + wy, fz - 0.03); scene.add(sh); } }
       world.createCollider(RAPIER.ColliderDesc.cuboid(W / 2, Hh / 2, D / 2).setTranslation(bx, y0 + Hh / 2, bz));
+      if (!R.clap) {
+        // THE DOVECOTE TOWER (2026-10-27): the Tuscan farmhouse was a plain box under its roof. A casale keeps
+        // its colombaia, a square tower a storey above the roof at one end under a low pyramid of tiles, the
+        // pigeons' holes in a row under the eave; a pergola of vines shades the door
+        const TW = 3.6, TH2 = Hh + 3.4, tx = bx + W / 2 - TW / 2 + 0.2, tz = bz - D / 2 + TW / 2 - 0.2;
+        const tStone = stoneT.clone(); tStone.needsUpdate = true; tStone.repeat.set(1.1, 1.9);
+        const tw = new THREE.Mesh(new THREE.BoxGeometry(TW, TH2, TW), M({ map: tStone, roughness: 0.9 })); tw.position.set(tx, y0 + TH2 / 2, tz); tw.castShadow = tw.receiveShadow = true; scene.add(tw);
+        const cap = new THREE.Mesh(new THREE.BoxGeometry(TW + 0.4, 0.22, TW + 0.4), M({ color: 0xb8a684, roughness: 0.9 })); cap.position.set(tx, y0 + TH2, tz); scene.add(cap);
+        const pyr = new THREE.Mesh(new THREE.ConeGeometry((TW + 0.7) * 0.72, 1.3, 4), roofM); pyr.rotation.y = Math.PI / 4; pyr.position.set(tx, y0 + TH2 + 0.75, tz); pyr.castShadow = true; scene.add(pyr);
+        for (const [fx, fz2, ry] of [[0, -1, 0], [1, 0, Math.PI / 2], [0, 1, 0], [-1, 0, Math.PI / 2]]) for (let k = 0; k < 5; k++) {
+          const h2 = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.16, 0.05), M({ color: 0x1a140e, roughness: 1 })); const off = -0.9 + k * 0.45;
+          h2.position.set(tx + fx * (TW / 2 + 0.01) + (fx ? 0 : off), y0 + TH2 - 0.55, tz + fz2 * (TW / 2 + 0.01) + (fz2 ? 0 : off)); h2.rotation.y = ry; scene.add(h2); }
+        const tWin = new THREE.Mesh(new THREE.BoxGeometry(0.7, 1.0, 0.06), glassM); tWin.position.set(tx, y0 + Hh + 1.6, tz - TW / 2 - 0.01); scene.add(tWin);
+        for (const sd of [-1, 1]) { const sh = new THREE.Mesh(new THREE.BoxGeometry(0.38, 1.05, 0.05), shutM); sh.position.set(tx + sd * 0.56, y0 + Hh + 1.6, tz - TW / 2 - 0.04); scene.add(sh); }
+        world.createCollider(RAPIER.ColliderDesc.cuboid(TW / 2, TH2 / 2, TW / 2).setTranslation(tx, y0 + TH2 / 2, tz));
+        // the pergola: chestnut posts, poles across, a vine grown over them, bunches hanging under
+        const pz = fz - 1.6, pM = M({ color: 0x5a4430, roughness: 0.85 });
+        for (const px of [-2.2, 2.2]) for (const dz of [0, -1.5]) { const po = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.08, 2.6, 7), pM); po.position.set(bx + px, y0 + 1.3 + 0.25, pz + dz + 0.75); po.castShadow = true; scene.add(po); }
+        for (let k = 0; k < 6; k++) { const pl2 = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 1.9, 6), pM); pl2.rotation.x = Math.PI / 2; pl2.position.set(bx - 2.2 + k * 0.88, y0 + 2.85, pz); scene.add(pl2); }
+        const lv = []; for (let k = 0; k < 46; k++) lv.push({ x: bx + (rr() - 0.5) * 4.8, y: y0 + 2.95 + rr() * 0.25, z: pz + (rr() - 0.5) * 1.9, ry: rr() * 6, sx: 0.5 + rr() * 0.4, sy: 0.22, sz: 0.5 + rr() * 0.4 });
+        inst(new THREE.IcosahedronGeometry(0.5, 1), M({ color: 0x4a6a2a, roughness: 0.8 }), lv, true);
+        const gb = []; for (let k = 0; k < 12; k++) gb.push({ x: bx + (rr() - 0.5) * 4.2, y: y0 + 2.62, z: pz + (rr() - 0.5) * 1.4, sx: 0.12, sy: 0.2, sz: 0.12 });
+        inst(new THREE.SphereGeometry(1, 10, 8), M({ color: 0x3a1a3a, roughness: 0.4 }), gb, true);
+      }
       if (R.crop === 'vine') {
         const bg = new THREE.CylinderGeometry(0.34, 0.34, 0.95, 16); bg.rotateZ(Math.PI / 2);
         const bl = []; for (let k = 0; k < 7; k++) { const x = bx - 5.6 + (k % 4) * 0.8 + (k > 3 ? 0.4 : 0), z = fz - 1.2; bl.push({ x, y: gy(x, z) + 0.34 + (k > 3 ? 0.6 : 0), z, ry: Math.PI / 2 }); }
@@ -23081,6 +24152,10 @@ async function main() {
       return `${n} pitches round the square, each with its open case. Stand at one and hold E to play until the passers-by stop to listen.`;
     if (st.kind === 'repair' && /\b(thirsty|wilting|dry)\b/.test(String(l)))
       return `${n} trays of ${String(l).replace(/^(thirsty|wilting|dry)\s+/, '')} are wilting. Find each one, stand at it and hold E to water it until the leaves stand up green.`;
+    if (st.kind === 'repair' && /\bballoons?\b/.test(String(l)))
+      return `The balloon lies on the apron by the shed, the helium line ready. Stand at it and hold E to fill it, then let it go.`;
+    if (st.kind === 'repair' && (INTERIOR && INTERIOR.kind === 'clocktower'))
+      return `${n} wheels of the clock have stripped their teeth: one on the wall at each landing up the stair, the last in the movement at the top. Stand at each and hold E to fit it whole.`;
     if (st.kind === 'repair') return /fire|flame|blaze|burn/.test(String(l))
       ? `${n} ${l} are burning. Run to each one, stand close and hold E to spray until it is out.`
       : `${n} ${l} need fixing. Find each one, stand at it and hold E until it comes back green.`;
@@ -23131,6 +24206,8 @@ async function main() {
     if (st.kind === 'repair' && /\b(crowds?|audiences?|listeners?|passers-?by)\b/.test(String(st.label || ''))) return `Play for ${st.count} ${st.label}`;
     if (st.kind === 'repair' && /\bburied\b/.test(String(st.label || ''))) return `Uncover the ${st.label}`;
     if (st.kind === 'repair' && /\bon the wheels?\b/.test(String(st.label || ''))) return `Throw ${st.count} ${st.label}`;
+    if (st.kind === 'repair' && (INTERIOR && INTERIOR.kind === 'clocktower')) return `Mend ${st.count} broken wheels`;
+    if (st.kind === 'repair' && /\bballoons?\b/.test(String(st.label || ''))) return `Launch the ${st.label}`;
     if (st.kind === 'repair' && /\b(hikers?|climbers?|skiers?|campers?|people|children|kids?|survivors?|villagers?|explorers?|walkers?|tourists?|scouts?|lost)\b/.test(String(st.label || ''))) return `Find ${st.count} ${st.label}`;
     if (st.kind === 'repair') return /fire|flame|blaze|burn/.test(String(st.label || '')) ? `Put out ${st.count} ${st.label}`
       : /package|parcel|deliver|letter|mail|pizza|crate|box|supplies|medicine|food|meal|bread|loa(?:f|ves)|pies?|cakes?|buns|hot ?dogs?|hotdogs?|sandwich\w*|burgers?|tacos?|noodles?|dumplings?|kebabs?|pretzels?|pastr|cookies|groceries|flowers|bouquets?|milk|newspapers?|papers|presents|gifts|cheese|eggs|soup|cocoa|coffee|potions?|scrolls?/.test(String(st.label || '')) ? `Deliver ${st.count} ${st.label}`
@@ -28663,6 +29740,8 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
       // (2026-10-26) a potter throws a pot at each wheel in the shop (POTTERY): the clay rises into a bowl as you hold E
       // (2026-10-26) a mail plane drops the sacks on the villages' fields (AIRSTRIP): fly over the target and hold E
       const AIRDROP = DELIVER && !!(AIRSTRIP && AIRSTRIP.drops && AIRSTRIP.drops.length);
+      const CLOCK = !FIRE && !DELIVER && !!(window.__clockTower && window.__clockTower.gears.length);
+      const LAUNCH = !FIRE && !DELIVER && /\b(weather )?balloons?\b/.test(String(_rpS.label || '').toLowerCase()) && !!window.__balloonLaunch;
       const THROW = !FIRE && !DELIVER && /\bon the wheels?\b/.test(String(_rpS.label || '').toLowerCase()) && !!(window.__pottery && window.__pottery.wheels.length);
       const FIND = !FIRE && !DELIVER && !CHOP && !HIVE && !THIRST && !BUSK && !DIG && /\b(hikers?|climbers?|skiers?|campers?|people|persons?|children|kids?|survivors?|villagers?|explorers?|walkers?|travell?ers?|tourists?|scouts?|lost)\b/.test(String(_rpS.label || '').toLowerCase());
       if (POST && VILLAGE) {
@@ -28672,6 +29751,11 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
           spots.push([x, hAt(x, z), z, c.ry, false, c, true]); }
       } else if (AIRDROP) {
         for (let k = 0; k < N; k++) { const D = AIRSTRIP.drops[k % AIRSTRIP.drops.length]; spots.push([D.x, D.y, D.z, 0, false, null, true, false, k % AIRSTRIP.drops.length]); }
+      } else if (LAUNCH) {
+        for (let k = 0; k < N; k++) { const L = window.__balloonLaunch; spots.push([L.x, L.y, L.z, 0, false, null, true, false, k]); }
+      } else if (CLOCK) {
+        const gs = window.__clockTower.gears;
+        for (let k = 0; k < N; k++) { const q = gs[Math.min(k, gs.length - 1)]; spots.push([q.x, q.y, q.z, q.ry, false, null, true, false, k]); }
       } else if (THROW) {
         const ws = window.__pottery.wheels;
         for (let k = 0; k < N; k++) { const w = ws[k % ws.length]; spots.push([w.x, hAt(w.x, w.z), w.z, w.ry, false, null, true, false, k]); }
@@ -28795,6 +29879,17 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
           const D = AIRSTRIP.drops[order[i][8] || 0], anchor = new THREE.Object3D(); anchor.position.set(D.x, D.y + 1, D.z); scene.add(anchor);
           anchor.userData.fsTag = { type: 'objective', name: 'the drop field', detail: 'fly over it and hold E' };
           panels.push({ g: anchor, air: { i: order[i][8] || 0 }, fixed: false, p: 0, x: D.x, z: D.z, ry: 0 });
+          continue;
+        }
+        if (LAUNCH) {
+          const L = window.__balloonLaunch; L.anchor.userData.fsTag = { type: 'objective', name: 'the weather balloon', detail: 'hold E to fill it and let it go' };
+          panels.push({ g: L.anchor, launch: L, fixed: false, p: 0, x: L.x, z: L.z, ry: 0 });
+          continue;
+        }
+        if (CLOCK) {
+          const q = window.__clockTower.gears[Math.min(i, window.__clockTower.gears.length - 1)];
+          q.g.userData.fsTag = { type: 'objective', name: 'a broken wheel', detail: 'hold E to mend it' };
+          panels.push({ g: q.g, gear: q, fixed: false, p: 0, x: q.x, z: q.z, gy: q.y, ry: q.ry });
           continue;
         }
         if (THROW) {
@@ -29060,22 +30155,27 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
         for (const q of panels) { if (q.fixed) continue;
           if (q.pad && q.roofY !== undefined && Math.abs(pp.y - q.roofY) > 8) continue;     // fly down to the roof
           if (q.air && pp.y - hAt(q.x, q.z) > 90) continue;                                // low enough to see the field
+          if (q.gear && Math.abs(pp.y - q.gy) > 1.6) continue;                              // on its own landing, not under it
           const d = Math.hypot(q.x - pp.x, q.z - pp.z) - (q.air ? 15 : q.pad && !q.post && !q.find && !q.hive ? 1.4 : 0); if (d < nd) { nd = d; near = q; } }
         if (!near) { bar.style.display = 'none'; return; }
         bar.style.display = 'block';
         const held = !!keys.KeyE || (near.find && nd < 1.9);      // the lost are found by reaching them
-        near.p = held ? Math.min(1, near.p + dt / (near.find ? 0.5 : near.air ? 0.35 : near.thr ? 3.2 : near.dig ? 2.6 : near.hive ? 1.8 : near.fire ? 2.4 : near.chop ? 2.2 : near.pad ? 1.0 : 1.6)) : Math.max(0, near.p - dt * 0.6);
+        near.p = held ? Math.min(1, near.p + dt / (near.find ? 0.5 : near.air ? 0.35 : near.thr ? 3.2 : near.gear ? 2.2 : near.launch ? 3.0 : near.dig ? 2.6 : near.hive ? 1.8 : near.fire ? 2.4 : near.chop ? 2.2 : near.pad ? 1.0 : 1.6)) : Math.max(0, near.p - dt * 0.6);
         if (near.chop) { near.chop.tick(dt, held); if (held && Math.floor(near.p * 6) !== near._k) { near._k = Math.floor(near.p * 6); try { sfx('hit'); } catch (e) {} } }
         if (near.thirst) near.thirst.tick(near.p);
         for (const q of panels) if (q.busk) q.busk.tick(q.p, q === near && held, dt);
         for (const q of panels) if (q.dig && !q.fixed) q.dig.tick(q.p, q === near && held, dt);
         for (const q of panels) if (q.thr && !q.fixed) { q.thr._live = true; q.thr._p = q.p; q.thr.tick(q.p, q === near && held, dt); }
+        for (const q of panels) if (q.gear && !q.fixed) q.gear.tick(q.p, q === near && held, dt);
+        for (const q of panels) if (q.launch && !q.fixed) q.launch.fill(q.p, q === near && held);
         if (near.bridge) { near.bridge.tick(near.p); if (held && Math.floor(near.p * 5) !== near._k) { near._k = Math.floor(near.p * 5); try { sfx('hit'); } catch (e) {} } }
         document.getElementById('fsrpT').textContent = near.find ? (held ? 'Found them\u2026' : 'Get to them')
           : near.thirst ? (held ? 'Watering\u2026' : 'Hold E to water them')
           : near.busk ? (held ? 'Playing\u2026 a crowd is gathering' : 'Hold E to play')
           : near.dig ? (held ? 'Brushing the sand away\u2026' : 'Hold E to brush')
           : near.air ? (held ? 'Away it goes\u2026' : 'Over the field! Hold E to drop the mail')
+          : near.launch ? (held ? (near.p < 0.85 ? 'Filling it from the helium line\u2026' : 'Tying off the neck\u2026') : 'Hold E to fill the balloon')
+          : near.gear ? (held ? (near.p < 0.5 ? 'Drawing the broken wheel off its arbor\u2026' : 'Setting the new teeth in mesh\u2026') : 'Hold E to mend the wheel')
           : near.thr ? (held ? (near.p < 0.3 ? 'Centring the clay\u2026' : 'Opening it up, pulling the walls\u2026') : 'Hold E to throw a ' + String(_rpS.label || 'pot').replace(/s? on the wheels?$/, ''))
           : near.bridge ? (held ? 'Laying planks\u2026' : 'Hold E to mend the bridge')
           : near.chop ? (held ? 'Chopping\u2026' : 'Hold E to chop it down')
@@ -29101,17 +30201,19 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
           else if (near.busk) near.busk.tick(1, false, 0);
           else if (near.dig) near.dig.tick(1, false, 0.5);
           else if (near.air) AIRSTRIP.drop(near.air.i, new THREE.Vector3(pp.x, pp.y - 1.2, pp.z));
+          else if (near.launch) near.launch.release();
+          else if (near.gear) { near.gear.fix(); if (fixed >= st.count) window.__clockTower.strike(); }
           else if (near.thr) { near.thr._live = false; near.thr._p = 1; near.thr.tick(1, false, 0.016); }
           else { near.scr.material.emissive.setHex(0x2aff7a); near.scr.material.emissiveIntensity = 1.3; near.spark.visible = false; }
           const _thing = String(_rpS.label || 'pot').replace(/s? on the wheels?$/, '');
-          popText(near.air ? (fixed >= st.count ? 'The last of the mail is down! Home to the strip.' : 'Mail down! They wave from the field.') : near.thr ? (fixed >= st.count ? 'A ' + _thing + ' on every wheel, ready to dry!' : 'A ' + _thing + ', true on the wheel!') : near.dig ? (fixed >= st.count ? 'There it lies, clean to the stone!' : 'The sand comes away!') : near.busk ? (fixed >= st.count ? 'Every corner of the town has heard you play!' : 'They clap, and the coins ring in the case!') : near.thirst ? (fixed >= st.count ? 'Every plant is watered!' : 'Watered!') : near.find ? (fixed >= st.count ? 'Everyone is found!' : 'Found!') : near.bridge ? (fixed >= st.count ? 'Every bridge is whole!' : 'The bridge holds!') : near.chop ? (fixed >= st.count ? 'Every tree is down!' : 'Timber!') : near.hive ? (/\bhoney/.test(String(SPEC.prompt || '').toLowerCase()) ? (fixed >= st.count ? 'Every jar is full!' : 'A frame of honey!') : (fixed >= st.count ? 'Every hive checked!' : 'Hive checked!')) : near.post ? (fixed >= st.count ? 'Every letter posted!' : 'Posted!') : near.fire ? (fixed >= st.count ? 'Every fire is out!' : 'Fire out!') : near.pad ? (fixed >= st.count ? 'Every delivery made!' : 'Delivered!') : (fixed >= st.count ? 'All fixed!' : 'Fixed!'), '#7fe08a'); sfx('pickup');
+          popText(near.launch ? 'Away it goes! The sonde is sending already.' : near.gear ? (fixed >= st.count ? 'The last wheel bites! The hands come up to midnight and the bell swings.' : 'The wheel bites and turns. The clock gathers pace.') : near.air ? (fixed >= st.count ? 'The last of the mail is down! Home to the strip.' : 'Mail down! They wave from the field.') : near.thr ? (fixed >= st.count ? 'A ' + _thing + ' on every wheel, ready to dry!' : 'A ' + _thing + ', true on the wheel!') : near.dig ? (fixed >= st.count ? 'There it lies, clean to the stone!' : 'The sand comes away!') : near.busk ? (fixed >= st.count ? 'Every corner of the town has heard you play!' : 'They clap, and the coins ring in the case!') : near.thirst ? (fixed >= st.count ? 'Every plant is watered!' : 'Watered!') : near.find ? (fixed >= st.count ? 'Everyone is found!' : 'Found!') : near.bridge ? (fixed >= st.count ? 'Every bridge is whole!' : 'The bridge holds!') : near.chop ? (fixed >= st.count ? 'Every tree is down!' : 'Timber!') : near.hive ? (/\bhoney/.test(String(SPEC.prompt || '').toLowerCase()) ? (fixed >= st.count ? 'Every jar is full!' : 'A frame of honey!') : (fixed >= st.count ? 'Every hive checked!' : 'Hive checked!')) : near.post ? (fixed >= st.count ? 'Every letter posted!' : 'Posted!') : near.fire ? (fixed >= st.count ? 'Every fire is out!' : 'Fire out!') : near.pad ? (fixed >= st.count ? 'Every delivery made!' : 'Delivered!') : (fixed >= st.count ? 'All fixed!' : 'Fixed!'), '#7fe08a'); sfx('pickup');
           try { burst(near.g.position, 0x7fe08a); } catch (e) {}
           renderQuest(); bar.style.display = 'none';
-          if (fixed >= st.count) advanceStep();
+          if (fixed >= st.count) { if (near.launch) setTimeout(() => advanceStep(), 6000); else advanceStep(); }   // a launch is watched up into the sky before the night is won
         }
       };
       const hintR = document.querySelector('#hud .hint');
-      if (hintR && !FIND) hintR.textContent += BRIDGE ? ' \u00b7 hold E to mend' : CHOP ? ' \u00b7 hold E to chop' : HIVE ? ' \u00b7 hold E to check' : THIRST ? ' \u00b7 hold E to water' : DIG ? ' \u00b7 hold E to brush' : THROW ? ' \u00b7 hold E to throw' : BUSK ? ' \u00b7 hold E to play' : POST ? ' \u00b7 hold E to post' : FIRE ? ' \u00b7 hold E to spray' : DELIVER ? ' \u00b7 hold E to drop' : ' \u00b7 hold E to repair';
+      if (hintR && !FIND) hintR.textContent += BRIDGE ? ' \u00b7 hold E to mend' : CHOP ? ' \u00b7 hold E to chop' : HIVE ? ' \u00b7 hold E to check' : THIRST ? ' \u00b7 hold E to water' : DIG ? ' \u00b7 hold E to brush' : CLOCK ? ' \u00b7 hold E to mend' : LAUNCH ? ' \u00b7 hold E to launch' : THROW ? ' \u00b7 hold E to throw' : BUSK ? ' \u00b7 hold E to play' : POST ? ' \u00b7 hold E to post' : FIRE ? ' \u00b7 hold E to spray' : DELIVER ? ' \u00b7 hold E to drop' : ' \u00b7 hold E to repair';
     }
   }
   {
@@ -30769,6 +31871,10 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
       if (window.__glassFire) window.__glassFire(performance.now() / 1000);
       if (window.__potTick) window.__potTick(Math.min(0.05, dt || 0.016));
       if (window.__atticTick) window.__atticTick(performance.now() / 1000);
+      if (window.__teaTick) window.__teaTick(performance.now() / 1000);
+      if (window.__polarTick) window.__polarTick(performance.now() / 1000, Math.min(0.05, dt || 0.016));
+      if (window.__bigtop) window.__bigtop.tick(performance.now() / 1000, Math.min(0.05, dt || 0.016));
+      if (window.__clockTower) window.__clockTower.tick(performance.now() / 1000, Math.min(0.05, dt || 0.016));
       if (window.__airTick) window.__airTick(Math.min(0.05, dt || 0.016));
       if (window.__harborTick) window.__harborTick(performance.now() / 1000);
       if (window.__lhBeams) for (const b of window.__lhBeams) b.rotation.y = performance.now() / 1000 * 0.6;
@@ -30891,7 +31997,7 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
       if (window.__lhClimb && window.__lhClimb.gate && !window.__lhClimb.lit) { const L = window.__lhClimb;
         if (Math.hypot(nt.x - L.x, nt.z - L.z) < 1.9 && nt.y > L.y - 0.6) { L.light(); sfx('pickup'); popText('The lamp is lit. The sea can see again.', '#ffd27a');
           if (st && st.kind === 'reach') advanceStep(); } }
-      if (st && st.kind === 'reach' && !window.__ladder && !(window.__lhClimb && window.__lhClimb.gate && !window.__lhClimb.lit) && gd < (PLANE ? 18 : LOGRIDE ? LOGRIDE.w / 2 + 7 : RIDE === 'rowboat' ? 22 : 2.2)) advanceStep();   // a tower ladder's rescue ends when the basket is down   // a plane passes over at speed; a log reaches the mill from the water
+      if (st && st.kind === 'reach' && !window.__ladder && !(window.__clockTower && (playerObj.position.y < window.__clockTower.top - 1 || window.__clockTower.striking())) && !(window.__bigtop && window.__bigtop.holding()) && !(window.__canopy && playerObj.position.y < window.__canopy.finalY - 1.6) && !(window.__lhClimb && window.__lhClimb.gate && !window.__lhClimb.lit) && gd < (PLANE ? 18 : LOGRIDE ? LOGRIDE.w / 2 + 7 : RIDE === 'rowboat' ? 22 : 2.2)) advanceStep();   // a tower ladder's rescue ends when the basket is down   // a plane passes over at speed; a log reaches the mill from the water
       if (st && st.kind === 'escort'
           && npcs.some(nn => nn.behavior === 'escort' && !nn.dead && nn._arrived)) {
         advanceStep();
@@ -31582,7 +32688,12 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
         const _wh = INTERIOR.wall_h || 4.0, _nf = INTERIOR.floors || 1;
         const _fl = Math.max(0, Math.min(_nf - 1, Math.floor((fY + 0.3) / _wh)));
         const _dh = INTERIOR.kind === 'mall' ? 3.6 : Math.min(3.0, _wh - 0.6);
-        cy = Math.min(cy, _wh * _nf - 0.35, _fl * _wh + _dh - 0.25);
+        if (INTERIOR.kind === 'clocktower' && window.__clockTower) {
+          // (2026-10-27) a tower is one room twenty metres high: the camera climbs with the clockmaker,
+          // stays under the clock room's joists and inside the walls of the shaft
+          const CT = window.__clockTower, hw = CT.w / 2 - 0.3;
+          cy = Math.min(cy, fY + 3.2, CT.ceil - 0.45); cx = Math.max(-hw, Math.min(hw, cx)); cz = Math.max(-hw, Math.min(hw, cz));
+        } else cy = Math.min(cy, _wh * _nf - 0.35, _fl * _wh + _dh - 0.25);
       }
       if (window.__doorway && fX > SPEC.world.size_m) {
         cy = Math.min(cy, window.__doorway.wallH - 0.35);
@@ -31590,6 +32701,10 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
         if (window.__lhClimb && Math.abs(fX - window.__lhClimb.x) < 8) { const L = window.__lhClimb, dx = cx - L.x, dz = cz - L.z, dl = Math.hypot(dx, dz);
           if (dl > 2.45) { cx = L.x + dx / dl * 2.45; cz = L.z + dz / dl * 2.45; } }
       }
+      if (window.__bigtop) { const B = window.__bigtop, hr = Math.hypot(fX - B.x, fZ - B.z);
+        if (hr < B.R - 0.3) { const dx = cx - B.x, dz = cz - B.z, dl = Math.hypot(dx, dz), lim = B.R - 1.2;   // (2026-10-27) under the big top, the camera stays in it
+          if (dl > lim) { cx = B.x + dx / dl * lim; cz = B.z + dz / dl * lim; }
+          cy = Math.min(cy, B.y + B.roofAt(Math.min(lim, dl)) - 0.8); } }
       // CAMERA COLLISION (moon plan 1.1): spherecast pull-in — a ray from the
       // player's head toward the desired camera spot; any wall in between
       // pulls the camera in front of it instead of letting it clip through

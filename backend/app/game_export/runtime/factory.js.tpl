@@ -592,6 +592,7 @@ fill.position.set(-HALF * 2.2, -HALF * 2.8, -HALF * 1.7);
 scene.add(fill);
 
 let starField = null, gridLines = null, cubeEdges = null, sunDisc = null, lanes = null;
+const SURVEY_FADE = { fade: { value: 0 }, far: { value: 60 } };   // see THE SURVEY FADES INTO THE FIELD
 let glowPools = null;             // built with the decals; the seams index into it
 // DECLARED UP HERE ON PURPOSE. The scatter is CHOSEN next to the ore seams,
 // which is hundreds of lines before the meshes that draw it get built — and a
@@ -1579,6 +1580,46 @@ function meadowTexture(fp, look, ground, seed) {
     }
     for (let i = 0; i < 90; i++) blob(rnd() * P, rnd() * P, 6 + rnd() * 18, 'rgb(142,58,44)', 0.30);    // samphire going red
   }
+  if (look.key === 'under') {
+    // THE SHADE SIDE (2026-10-27): the underside was the top's meadow turned down to near black, a dark
+    // carpet with nothing in it. It is the floor of a wood that never sees noon: cushions of moss lit at
+    // their crowns, last year's leaves in drifts, ferns opened flat, and pale toadstools stood in rings
+    const wrapDraw = (fn) => { for (const ox of [-P, 0, P]) for (const oy of [-P, 0, P]) { g.save(); g.translate(ox, oy); fn(); g.restore(); } };
+    for (let i = 0; i < 160; i++) {                                  // moss cushions: a dark foot, a lit crown
+      const x = rnd() * P, y = rnd() * P, r = 5 + rnd() * 16;
+      blob(x + r * 0.2, y + r * 0.25, r * 1.2, 'rgb(14,20,10)', 0.45);
+      blob(x, y, r, rgb(col(0.01, 0.06, 0.035 + rnd() * 0.03)), 0.6);   // in the face's own green: a brighter one glowed
+      blob(x - r * 0.25, y - r * 0.3, r * 0.45, rgb(col(0.03, 0.1, 0.08)), 0.35);
+    }
+    for (let i = 0; i < 26; i++) {                                   // leaf litter in drifts, each leaf a small turned ellipse
+      const cx = rnd() * P, cy = rnd() * P, R = 20 + rnd() * 50;
+      for (let k = 0; k < 60; k++) {
+        const a0 = rnd() * 6.28, d0 = Math.sqrt(rnd()) * R, px = cx + Math.cos(a0) * d0, py = cy + Math.sin(a0) * d0, rot = rnd() * 3.14;
+        const hue = [[92, 58, 30], [112, 76, 36], [72, 48, 28], [124, 92, 48]][Math.floor(rnd() * 4)];
+        wrapDraw(() => { g.save(); g.translate(px, py); g.rotate(rot); g.fillStyle = `rgba(${hue[0]},${hue[1]},${hue[2]},${0.4 + rnd() * 0.3})`;
+          g.beginPath(); g.ellipse(0, 0, 3.4 + rnd() * 2.4, 1.6 + rnd(), 0, 0, 6.28); g.fill();
+          g.strokeStyle = 'rgba(40,24,12,0.5)'; g.lineWidth = 0.5; g.beginPath(); g.moveTo(-3, 0); g.lineTo(3, 0); g.stroke(); g.restore(); });
+      }
+    }
+    for (let i = 0; i < 46; i++) {                                   // ferns opened flat: fronds from a crown, pinnae down each
+      const cx = rnd() * P, cy = rnd() * P, n = 5 + Math.floor(rnd() * 4), L = 14 + rnd() * 16, a0 = rnd() * 6.28;
+      const stem = rgb(col(0.0, 0.04, 0.03)), pin = rgb(col(0.02, 0.08, 0.07));   // the face's green: a stock green glowed in drifts
+      wrapDraw(() => { g.lineCap = 'round';
+        for (let k = 0; k < n; k++) { const a = a0 + k / n * 6.28 + (rnd() - 0.5) * 0.4, ca = Math.cos(a), sa = Math.sin(a);
+          g.strokeStyle = stem; g.lineWidth = 1.2; g.beginPath(); g.moveTo(cx, cy); g.lineTo(cx + ca * L, cy + sa * L); g.stroke();
+          g.strokeStyle = pin; g.lineWidth = 1.1;
+          for (let q = 2; q < 9; q++) { const t = q / 9, px = cx + ca * L * t, py = cy + sa * L * t, w = (1 - t) * 5 + 1.2;
+            g.beginPath(); g.moveTo(px - sa * w, py + ca * w); g.lineTo(px + sa * w, py - ca * w); g.stroke(); } } });
+    }
+    for (let i = 0; i < 9; i++) {                                    // fairy rings: pale caps round a greener ring of grass
+      const cx = rnd() * P, cy = rnd() * P, R = 14 + rnd() * 22;
+      wrapDraw(() => { g.strokeStyle = rgb(col(0.02, 0.08, 0.05)).replace(')', ',0.4)').replace('rgb', 'rgba'); g.lineWidth = 6; g.beginPath(); g.arc(cx, cy, R, 0, 6.28); g.stroke();
+        for (let k = 0; k < 14 + R * 0.5; k++) { const a = rnd() * 6.28, rr = R + (rnd() - 0.5) * 4, px = cx + Math.cos(a) * rr, py = cy + Math.sin(a) * rr, cr = 1.6 + rnd() * 1.6;
+          g.fillStyle = 'rgba(30,22,14,0.5)'; g.beginPath(); g.arc(px + 0.8, py + 0.9, cr, 0, 6.28); g.fill();
+          g.fillStyle = 'rgba(232,222,196,0.95)'; g.beginPath(); g.arc(px, py, cr, 0, 6.28); g.fill();
+          g.fillStyle = 'rgba(176,132,92,0.6)'; g.beginPath(); g.arc(px, py, cr * 0.4, 0, 6.28); g.fill(); } });
+    }
+  }
   // fine mottling, so it is not airbrushed from above
   for (let i = 0; i < 9000; i++) { const l = rnd(); g.fillStyle = l < 0.5 ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,220,0.05)'; g.fillRect(rnd() * P, rnd() * P, 2 + rnd() * 5, 2 + rnd() * 5); }
   // the survey grid, faint: every fifth tile a thin worn line
@@ -1694,6 +1735,15 @@ scene.add(cube);
   lanes.instanceMatrix.needsUpdate = true;
   lanes.name = 'lanes';
   scene.add(lanes);
+  // THE SURVEY FADES INTO THE FIELD (2026-10-27): standing in a meadow, the lit lanes ran on to the
+  // horizon as glowing rules across the grass, and the face read as a board. On foot the cell lines
+  // and the lanes are drawn where you would build, and thin out to nothing a few tiles off
+  for (const mat of [gridLines.material, laneMat]) mat.onBeforeCompile = (sh) => {
+    sh.uniforms.uSurvFade = SURVEY_FADE.fade; sh.uniforms.uSurvFar = SURVEY_FADE.far;
+    sh.vertexShader = 'varying float vSurvD;\n' + sh.vertexShader.replace('#include <project_vertex>', '#include <project_vertex>\n  vSurvD = length(mvPosition.xyz);');
+    sh.fragmentShader = 'varying float vSurvD;\nuniform float uSurvFade, uSurvFar;\n' + sh.fragmentShader.replace('#include <color_fragment>',
+      '#include <color_fragment>\n  diffuseColor.a *= mix(1.0, 1.0 - smoothstep(uSurvFar * 0.3, uSurvFar, vSurvD), uSurvFade);');
+  };
 }
 
 {
@@ -8199,6 +8249,7 @@ function applyWorld(k) {
   // the lit lanes fade to a third on a grown world (2026-10-11)
   { const _grown = w.fam === 'green' && !SPEC.city;
     gridLines.material.opacity = _grown ? 0.06 : 0.14;
+    SURVEY_FADE.far.value = _grown ? 34 : 70;
     if (lanes && lanes.material) lanes.material.opacity = _grown ? 0.12 : 0.32;
     gridLines.userData.base = gridLines.material.opacity;
     if (lanes && lanes.material) lanes.userData.base = lanes.material.opacity; }
@@ -9610,6 +9661,7 @@ const frame = () => {
     if (gridLines && gridLines.userData.base !== undefined) gridLines.material.opacity = gridLines.userData.base * k;
     if (lanes && lanes.userData.base !== undefined) lanes.material.opacity = lanes.userData.base * k;
     if (cubeEdges) cubeEdges.material.opacity = 0.75 * Math.max(0.35, k);
+    SURVEY_FADE.fade.value = overhead ? 0 : Math.max(0, Math.min(1, (k - 0.5) * 2));
   }
   if (AUDIO.bed) AUDIO.bed.step(dt);
   stepLightPool(dt);
