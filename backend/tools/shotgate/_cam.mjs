@@ -1,7 +1,7 @@
 // Shoot a job from pinned cameras: PINS is a JS expression evaluated in the
 // page returning [{pos:[x,y,z], look:[x,y,z]}, ...]. J=job_N OUT=prefix PINS='...' node _cam.mjs
 import puppeteer from 'puppeteer-core';
-const b = await puppeteer.launch({ headless: 'new', executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', args: ['--use-angle=d3d11', '--window-size=1600,900'] });
+const b = await puppeteer.launch({ headless: 'new', executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', args: ['--use-angle=d3d11', '--window-size=1600,900', '--disable-renderer-backgrounding', '--disable-background-timer-throttling', '--disable-backgrounding-occluded-windows'] });
 const p = await b.newPage(); await p.setViewport({ width: 1600, height: 900 });
 const errs = []; p.on('pageerror', e => errs.push(e.message.slice(0, 200)));
 await p.goto(`http://127.0.0.1:8789/games/${process.env.J}/dist/index.html?noguide=1`, { waitUntil: 'domcontentloaded' });

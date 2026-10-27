@@ -506,7 +506,7 @@ LAVA_LEVEL = -0.45     # the lava's surface; a channel's floor lies at -1.4
 RIVER_LEVEL = -0.5     # a river's surface; its bed lies at -1.7
 
 
-def _river_course(seed: int, half: float, path: list[list[float]]) -> dict:
+def _river_course(seed: int, half: float, path: list[list[float]], creek: bool = False) -> dict:
     """A RIVER RUNS BESIDE THE WAY (2026-10-17). "An explorer canoes down a
     jungle river" and "a scout follows the river back to camp" stood by a
     round lake: a river was only ever a water region. It is a channel now,
@@ -514,7 +514,12 @@ def _river_course(seed: int, half: float, path: list[list[float]]) -> dict:
     its shoulder from one edge of the map to the other: the route's own
     bends, smoothed, pushed twenty to twenty-four metres to one side, and a slow
     meander of its own on top. Past the spawn and past the goal it carries
-    on along the route's end directions to the map's edges."""
+    on along the route's end directions to the map's edges.
+
+    A CREEK CROSSES THE WAY (2026-10-27). "a kid splashes through a shallow
+    creek catching frogs" stood beside a river six metres wide twenty metres
+    off. A creek is narrow and shallow and it wanders: it meanders back and
+    forth across the route, so the walk splashes through it again and again."""
     import math as _m
     r = random.Random(seed * 13 + 7)
     side = 1 if r.random() < 0.5 else -1
@@ -542,6 +547,13 @@ def _river_course(seed: int, half: float, path: list[list[float]]) -> dict:
                                (dense[i - 1][1] + 2 * dense[i][1] + dense[i + 1][1]) / 4]
                               for i in range(1, len(dense) - 1)] + [dense[-1]]
     fr, ph = r.uniform(0.018, 0.03), r.uniform(0, 6.28)
+    if creek:
+        # crossings where the walk will meet them: a third of the way along the route and near its end
+        _ext0 = len(range(4, int(half * 2.2), 4))
+        _run0 = sum(_m.hypot(dense[i][0] - dense[i - 1][0], dense[i][1] - dense[i - 1][1]) for i in range(1, min(len(dense), _ext0 + 1)))
+        _lr = max(30.0, sum(_m.hypot(path[k + 1][0] - path[k][0], path[k + 1][1] - path[k][1]) for k in range(len(path) - 1)))
+        fr = _m.pi / max(24.0, _lr * 0.5)
+        ph = -fr * (_run0 + _lr * 0.3)
     pts, run = [], 0.0
     for i, p in enumerate(dense):
         a, b = dense[max(0, i - 1)], dense[min(len(dense) - 1, i + 1)]
@@ -550,11 +562,11 @@ def _river_course(seed: int, half: float, path: list[list[float]]) -> dict:
         nx, nz = -tz / tl, tx / tl
         if i:
             run += _m.hypot(p[0] - dense[i - 1][0], p[1] - dense[i - 1][1])
-        m = off + _m.sin(run * fr + ph) * 3.0
+        m = (_m.sin(run * fr + ph) * 8.0 + _m.sin(run * fr * 2.7 + 1.3) * 1.2) if creek else off + _m.sin(run * fr + ph) * 3.0
         q = [round(p[0] + nx * side * m, 2), round(p[1] + nz * side * m, 2)]
         if abs(q[0]) < half * 1.15 and abs(q[1]) < half * 1.15:
             pts.append(q)
-    return {"pts": pts[::2] if len(pts) > 160 else pts, "w": round(r.uniform(4.5, 6.5), 2)}
+    return {"pts": pts[::2] if len(pts) > 160 else pts, "w": round(r.uniform(1.7, 2.4) if creek else r.uniform(4.5, 6.5), 2), "creek": creek}
 
 
 def build_level(seed: int, size_m: float, n_objectives: int = 0,
@@ -562,7 +574,7 @@ def build_level(seed: int, size_m: float, n_objectives: int = 0,
                 regions: list[dict] | None = None,
                 archetype: str = "plain", terrain_form: str = "natural", sea: bool = False,
                 fjord: bool = False, coast: bool = False, harbor: bool = False, slot: bool = False,
-                river: bool = False, layout: str = "route", aloft: bool = False, aloft_relief: str = "hills", ledges: bool = False,
+                river: bool = False, creek: bool = False, layout: str = "route", aloft: bool = False, aloft_relief: str = "hills", ledges: bool = False,
                 headland: bool = False) -> dict:
     """Deterministic LevelPlan. Returns a JSON-safe dict for the runtime.
 
@@ -699,7 +711,7 @@ def build_level(seed: int, size_m: float, n_objectives: int = 0,
     lava = _lava_channels(seed, half, goal) if _arch == "volcano" else []
     lava_segs = [(c["w"], c["pts"][k], c["pts"][k + 1])
                  for c in lava for k in range(len(c["pts"]) - 1)]
-    riv = _river_course(seed, half, path) if (river and not lava and not slot and _arch != "cave") else None
+    riv = _river_course(seed, half, path, creek=creek) if (river and not lava and not slot and _arch != "cave") else None
     riv_segs = [(riv["pts"][k], riv["pts"][k + 1]) for k in range(len(riv["pts"]) - 1)] if riv else []
     heights: list[float] = []
     _anoise = _aloft_noise(seed) if (aloft or ledges) else None
@@ -776,7 +788,22 @@ def build_level(seed: int, size_m: float, n_objectives: int = 0,
                     h = -0.35            # nothing but the lake dips below water
             # THE RIVER: a bed under the water, banks that slope up to the land
             # over four metres, and nothing else below its surface
-            if riv_segs:
+            _cv = None                                   # a creek's carve, kept where the route crosses it
+            if riv_segs and riv.get("creek"):
+                # a creek: a shallow bed, knee deep at most, on gravel, its banks a step down over two metres
+                _rd = min(_seg_dist(x, z, _a[0], _a[1], _b[0], _b[1]) for (_a, _b) in riv_segs) - riv["w"] * (0.85 + 0.3 * hgrid[i2][j2])
+                if _rd < 0:
+                    _c = min(1.0, -_rd / riv["w"])
+                    h = RIVER_LEVEL - 0.06 - 0.42 * (_c * (2 - _c))
+                    _cv = h
+                elif _rd < 2.2:
+                    _s = _rd / 2.2
+                    _s = _s * _s * (3 - 2 * _s)
+                    h = (RIVER_LEVEL - 0.06) + (max(h, RIVER_LEVEL + 0.35) - (RIVER_LEVEL - 0.06)) * _s
+                    _cv = h
+                else:
+                    h = max(h, RIVER_LEVEL + 0.35)
+            elif riv_segs:
                 _rd = min(_seg_dist(x, z, _a[0], _a[1], _b[0], _b[1]) for (_a, _b) in riv_segs) - riv["w"] * (0.9 + 0.2 * hgrid[i2][j2])
                 if _rd < 0:
                     _c = min(1.0, -_rd / riv["w"])           # 0 at the bank .. 1 mid-stream
@@ -852,10 +879,12 @@ def build_level(seed: int, size_m: float, n_objectives: int = 0,
                     t = (dp - 32.0) / 48.0
                     h *= t * t * (3 - 2 * t)
             elif d < corridor:
-                h = 0.0
+                h = 0.0 if _cv is None else min(0.0, _cv)   # the creek runs on across the path
             elif d < corridor * 2.2:                 # smooth shoulder
                 t = (d - corridor) / (corridor * 1.2)
                 h *= t * t * (3 - 2 * t)
+                if _cv is not None:
+                    h = min(h, _cv)
             if lift is not None:
                 h += lift(x, z)                      # the mountainside, the path cut into it
             edge = max(abs(x), abs(z)) / half        # settle flat at the walls
@@ -971,7 +1000,7 @@ def build_level(seed: int, size_m: float, n_objectives: int = 0,
                              # the cone stands past the goal, beyond the playfield
                              "cone_dir": [round(goal[0] / gl, 3), round(goal[1] / gl, 3)]}
     if riv:
-        out_level["river"] = {"level": RIVER_LEVEL, "w": riv["w"], "pts": riv["pts"]}
+        out_level["river"] = {"level": RIVER_LEVEL, "w": riv["w"], "pts": riv["pts"], "creek": bool(riv.get("creek"))}
     if raster is not None:
         out_level["regions"] = raster
         out_level["regions_src"] = regions     # edits re-parse from here

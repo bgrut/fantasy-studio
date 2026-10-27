@@ -625,6 +625,11 @@ def _build_reference_prompt(slots: Dict[str, Any], style: str) -> tuple[str, str
             # with no legs; a hip-length coat, the bandana at the neck, the face shown
             "outlaw":    "a rough frontier outlaw with a stubbled scarred face showing under a battered black wide-brimmed hat, a red bandana knotted around the neck, a hip-length dark brown leather jacket over a grey collarless shirt, black trousers, a gun belt with a holster, worn brown boots, holding nothing, fully clothed, normal proportions",
             "bandit":    "frontier bandit in a heavy knee-length dusty brown canvas duster coat worn open over a dark waistcoat and shirt, loose canvas trousers, a red bandana loose at the neck, a battered wide-brimmed hat tipped back so the face shows, boots, fully clothed, a sturdy adult build with normal proportions, loose layered clothing that hangs away from the body",
+            # (2026-10-27) a sumo wrestler in the ring wears a mawashi and little else, and every draw of one
+            # failed the undressed check eight times over. Outside the ring a rikishi wears a cotton yukata,
+            # and that is how he is drawn: the great build, the topknot, the robe and the belt under it
+            "sumo wrestler": "a heavy-set Japanese sumo wrestler with a very large round build, black hair oiled into a chonmage topknot, wearing a long patterned indigo cotton yukata robe tied with a wide sash, white tabi socks and wooden geta sandals, fully clothed, face showing",
+            "rikishi":   "a heavy-set Japanese sumo wrestler with a very large round build, black hair oiled into a chonmage topknot, wearing a long patterned indigo cotton yukata robe tied with a wide sash, white tabi socks and wooden geta sandals, fully clothed, face showing",
             "child":     "a cheerful child in a bright striped t-shirt, colourful dungarees and sneakers, fully clothed",
             "kid":       "a cheerful child in a bright striped t-shirt, colourful dungarees and sneakers, fully clothed",
             # (2026-10-09) every one of these came out wrong without an entry: the

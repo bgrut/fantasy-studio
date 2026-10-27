@@ -2345,6 +2345,22 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                 job.setdefault("notes", []).append("the land draws itself: " + ", ".join(sorted(set(_drop))) + " left to the world, not made as props")
         except Exception as _le:
             job.setdefault("notes", []).append(f"land rule skipped: {_le}")
+        # A SUMO WRESTLER IS A SUMO WRESTLER (2026-10-27): "a sumo wrestler pushes rivals out of the ring at
+        # a tokyo tournament" was played by the explorer against five men in street clothes. The hero and
+        # the rivals are rikishi, made once and shared; the runtime builds the ring (SUMO) and the bouts
+        try:
+            if _fre.search(r"\b(sumo|rikishi|yokozuna|dohyo)\b", (req.prompt or "").lower()) and base_spec is None and req.player is None:
+                spec.player.name = "sumo wrestler"
+                _hs = [e for e in spec.entities if e.behavior == "hostile"]
+                for e in _hs:
+                    e.name = "sumo wrestler"
+                    e.count = max(1, min(int(e.count or 4), 5))
+                if not _hs:
+                    from app.game_export.spec import EntitySpec as _SES
+                    spec.entities.append(_SES(name="sumo wrestler", behavior="hostile", count=4))
+                job.setdefault("notes", []).append("sumo: the hero and the rivals are rikishi; bouts in a ring under its roof")
+        except Exception as _sue:
+            job.setdefault("notes", []).append(f"sumo rule skipped: {_sue}")
         stage("resolving assets")
         # SUBJECT IS THE HERO (2026-07-08): the prompt's own words outrank
         # the LLM's cast — "a wolf roaming the mountains" once played as a
@@ -2433,7 +2449,7 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                         w = w[:-1] if w.endswith("ists") else w
                         if w in _skip or len(w) < 5 or not _pre2.match(r"^[a-z-]+$", w):
                             continue
-                        if (_pre2.search(r"(?:ist|ian|man|woman|keeper|maker|smith|monger|player|singer|dancer|drummer|fiddler|piper|busker|trumpeter|bugler|conductor|sailor|painter|chef|baker|tailor|cobbler|potter|weaver|vendor|seller|hawker|peddler|merchant|acrobat|juggler|clown)$", w)
+                        if (_pre2.search(r"(?:ist|ian|man|woman|keeper|maker|smith|monger|player|singer|dancer|drummer|fiddler|piper|busker|trumpeter|bugler|conductor|sailor|painter|chef|baker|tailor|cobbler|potter|weaver|vendor|seller|hawker|peddler|merchant|acrobat|juggler|clown|wrestler|boxer|fencer|gymnast|jockey|sprinter|skater|surfer|skier|runner|archer|golfer|matador|lifter)$", w)
                                 # (a trade word is a person whatever the pattern guess: "vendor" read as a vending machine)
                                 and (_gp_subj(w) == "biped" or _pre2.search(r"(?:vendor|seller|hawker|peddler|merchant|acrobat|juggler|clown|busker|monger)$", w))
                                 and w not in ("christian", "guardian", "human", "woman", "man", "gentleman")):
@@ -4511,6 +4527,9 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                       and spec.player.mode != "swim" and not getattr(spec.world, "platforms", False))
         if (spec.player.ride or "") == "log" and not _coast and not _fjord:
             _river = True                           # a log drive is a river, whatever else the sentence says
+        # (2026-10-27) a creek, a brook, a stream to splash through: narrow and shallow, wandering across the way
+        _creek = _river and bool(_fre.search(r"\b(creeks?|brooks?|streams?|becks?|burns?|rills?|rivulets?|shallows)\b", _pw7)) \
+            and not _fre.search(r"\b(rivers?|rapids|canoe\w*|kayak\w*|rafting|waterfalls?|log drive|logs? down)\b", _pw7) and (spec.player.ride or "") != "log"
         if _river and _arch == "archipelago":
             _arch = "plain"
             spec.world.archetype = "plain"
@@ -4664,7 +4683,7 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             # A SLOT CANYON IS A CRACK, NOT A GORGE (2026-10-13)
             slot=bool(_fre.search(r"\b(slot canyons?|slot|narrows|crevices?|fissures?|trapped in (?:a|the) canyon|pinned|wedged)\b", (req.prompt or "").lower())
                       and _fre.search(r"\b(canyons?|gorges?|crevices?|fissures?|narrows|ravines?)\b", (req.prompt or "").lower())),
-            river=_river, layout=(_design or {}).get("layout", "route"), headland=bool(_coast and _hilltown),
+            river=_river, creek=_creek, layout=(_design or {}).get("layout", "route"), headland=bool(_coast and _hilltown),
             aloft=(spec.player.ride or "") == "plane" and not (_fjord or _coast or job.get("_naval")),
             # (2026-10-24) a crop duster over Kansas flew 37 m hills: farm and prairie country is flat
             # (2026-10-25) cliff ledges to leap between: a goat, an ibex, a climber among crags
