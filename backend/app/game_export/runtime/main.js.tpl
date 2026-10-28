@@ -29239,7 +29239,8 @@ async function main() {
     bpos: () => { const t = body.translation(); return [t.x, t.y, t.z]; },   // the body itself, not the drawn hero (a probe reads it)
     tp3: (x, y, z) => { const t = { x, y, z }; body.setTranslation(t, true); body.setNextKinematicTranslation(t); },   // a probe stands on a floor the ground does not know (a landing)
     face: (x, z) => { modelYaw = Math.atan2(x - playerObj.position.x, z - playerObj.position.z); },   // (2026-10-27) a probe turns the hero to a thing
-    setYaw: (a) => { yaw = a; },                                                                     // and points the camera, which decides what W means
+    setYaw: (a) => { yaw = a; },
+    goal: () => (LVL && LVL.goal) ? LVL.goal.slice() : null,                                          // (2026-10-28) where the way leads, for framing shots                                                                     // and points the camera, which decides what W means
     tpy: (x, y, z) => { body.setTranslation({ x, y, z }, true); body.setNextKinematicTranslation({ x, y, z }); },     // a drop from a height: does a ledge hold you
     npcRefs: () => npcs,                    // the live bodies, for gates that measure how they move
     carryE: () => window.__carryE && window.__carryE(), throwIt: () => doAttack(),

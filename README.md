@@ -29,9 +29,15 @@
 ---
 
 <div align="center">
-<img src=".github/assets/games/v13/hero-collage.jpg" alt="Six games made by Fantasy Studio from one sentence each" width="900"/>
+<img src=".github/assets/games/v17/hero-collage.jpg" alt="Six games made by Fantasy Studio from one sentence each" width="900"/>
 
-<sub>Six games, six sentences: a tiny ant in a giant kitchen · surf breaking on a Hawaiian beach · a dragon rider's islands above the clouds · a steam train through snowy passes · a dog in a sunny park · a snowball fight in a snowy backyard. In-game captures of real builds, HUD hidden.</sub>
+<sub>Six games, six sentences: a knight in a red cape in a castle courtyard · a ringmaster under the big top · a monk at a rope bridge over a misty gorge · a sumo tournament at a Tokyo shrine · a weather balloon launch from an Antarctic station · a tea picker on Darjeeling's hills. In-game captures of real builds, HUD hidden.</sub>
+
+<br/>
+
+<img src=".github/assets/games/v13/hero-collage.jpg" alt="Six more games made by Fantasy Studio from one sentence each" width="900"/>
+
+<sub>Six more: a tiny ant in a giant kitchen · surf breaking on a Hawaiian beach · a dragon rider's islands above the clouds · a steam train through snowy passes · a dog in a sunny park · a snowball fight in a snowy backyard.</sub>
 
 <br/>
 
@@ -57,6 +63,25 @@ The same studio still renders **cinematic video** in Blender (see [Video mode](#
 ## What it makes (real builds, unedited)
 
 Every picture below is an unedited in-game capture of a build made from the sentence under it, on one machine, with the HUD hidden.
+
+### Newest builds
+
+Characters with cloth that moves, water you wade through, things that break, bridges that sag under you, and a place built for each sentence.
+
+<div align="center">
+
+| | |
+|---|---|
+| <img src=".github/assets/games/v17/knight-cape.jpg" width="430"/><br/><sub>*"a knight in a red cape smashes barrels in a castle courtyard looking for the hidden key"*<br/>The cape is cloth: it streams behind a run and swings round a turn. Barrels and crates break into real pieces, and one of them holds the key.</sub> | <img src=".github/assets/games/v17/castle-courtyard.jpg" width="430"/><br/><sub>Same game, the courtyard: curtain walls with a wall-walk, round towers, the keep and its steps, stables, a smithy, a well, banners moving in the wind.</sub> |
+| <img src=".github/assets/games/v17/rope-bridge.jpg" width="430"/><br/><sub>*"a monk crosses a swaying rope bridge over a misty gorge to reach a cliff temple"*<br/>The bridge hangs like rope: it sags where you stand, bounces with each step and sways in the wind. Mist lies in the gorge below.</sub> | <img src=".github/assets/games/v17/creek-wading.jpg" width="430"/><br/><sub>*"a kid splashes through a shallow creek catching frogs on a summer afternoon"*<br/>The water slows the walk and rings round your legs; stepping stones, reeds, lily pads, and frogs that hop away if you rush them.</sub> |
+| <img src=".github/assets/games/v17/sumo.jpg" width="430"/><br/><sub>*"a sumo wrestler pushes rivals out of the ring at a tokyo tournament"*<br/>A shrine tournament: the clay ring under its hanging roof, a packed crowd, banners. A bout is a real pushing match; whoever leaves the straw loses.</sub> | <img src=".github/assets/games/v17/can-alley.jpg" width="430"/><br/><sub>*"a kid knocks down tin cans at a fairground stall to win a giant teddy bear"*<br/>Throw real balls at pyramids of real cans. Clear three stands and the giant bear is yours to carry.</sub> |
+| <img src=".github/assets/games/v17/big-top.jpg" width="430"/><br/><sub>*"a ringmaster opening the show under a striped circus big top"*<br/>Sawdust ring, packed stands, trapeze and fairy lights; take the star and the spotlight finds you.</sub> | <img src=".github/assets/games/v17/clock-tower.jpg" width="430"/><br/><sub>*"a clockmaker climbing inside a great clock tower to mend the gears before midnight"*<br/>A stair up the inside of the tower past the swinging pendulum to the gears and the backlit dials.</sub> |
+| <img src=".github/assets/games/v17/treehouses.jpg" width="430"/><br/><sub>*"a girl crossing rope bridges between treehouses in a rainforest canopy"*<br/>Thatched decks round kapok giants a dozen metres up, rope bridges between them.</sub> | <img src=".github/assets/games/v17/polar-station.jpg" width="430"/><br/><sub>*"a scientist launching a weather balloon from an Antarctic research station"*<br/>A base on the ice under the aurora; fill the balloon and watch it climb away.</sub> |
+| <img src=".github/assets/games/v17/tea-estate.jpg" width="430"/><br/><sub>*"a tea picker on misty terraced hills in Darjeeling at dawn"*<br/>Clipped tea hedges on every contour, a red road up to the factory on the crest.</sub> | <img src=".github/assets/games/v17/sawmill.jpg" width="430"/><br/><sub>*"a lumberjack fells pine trees in a snowy forest and hauls the logs to the sawmill"*<br/>Trees fall as trees fall and land in the snow; the logs ride a sled to the mill with its saw and steam engine.</sub> |
+
+</div>
+
+### Earlier this season
 
 <div align="center">
 
@@ -89,7 +114,9 @@ Earlier builds, rebuilt on today's engine and captured the same way.
 And the studio's flagship, **Crystal Works**, a factory-building game made in Fantasy Studio and developed alongside it ([`flagship/`](flagship/)):
 
 <div align="center">
-<img src=".github/assets/games/v13/crystal-works.jpg" width="640"/>
+<img src=".github/assets/games/v17/cw-orbit.jpg" width="430"/> <img src=".github/assets/games/v17/cw-low.jpg" width="430"/>
+
+<sub>A worldlet you can walk all the way round, each face its own country with its own ore: a blue-green meadow with brooks and wildflowers, a heath split by glowing fissures, a salt marsh crusted white, a mossy shade side. Build lines of rigs, belts, smelters and hubs across it, under a violet nebula.</sub>
 </div>
 
 ---
@@ -97,14 +124,21 @@ And the studio's flagship, **Crystal Works**, a factory-building game made in Fa
 ## What's inside the engine
 
 **Worlds built to the sentence.** A general open world (terrain, forests that grow by biome, rivers, lakes and seas with real shorelines, caves, volcanoes, fjords) plus purpose-built places for the things people actually ask for:
-giant rooms seen by a tiny hero · the sea floor · islands in the sky · surfing beaches · backyards · parks · harbours and fishing villages · frontier towns · villages · monasteries on their mountains · graveyards · castles with curtain walls · jungle temples · sunken cities · Venice's canals · a Colosseum · jousting lists · football pitches · skateparks · railway lines · candy lands · Cappadocia · space stations in orbit, the Moon and Mars · and real cities from OpenStreetMap (name New York, Tokyo or London and you drive its actual streets).
-Interiors are generated as real rooms you walk into: manors, malls, hospitals, prisons, libraries, restaurants, castle halls.
+giant rooms seen by a tiny hero · the sea floor · islands in the sky · surfing beaches · backyards · parks · harbours and fishing villages · frontier towns · villages · monasteries on their mountains · gorges with rope bridges · creeks with stepping stones · graveyards · castles with curtain walls, and their courtyards · jungle temples · sunken cities · Venice's canals · a Colosseum · jousting lists · sumo rings · circus big tops · fairground stalls · treehouse villages in the canopy · tea estates · vineyards · polar research stations · sawmills · football pitches · skateparks · railway lines · candy lands · Cappadocia · space stations in orbit, the Moon and Mars · and real cities from OpenStreetMap (name New York, Tokyo or London and you drive its actual streets).
+Interiors are generated as real rooms you walk into: manors, malls, hospitals, prisons, libraries, restaurants, castle halls, attics, the inside of a clock tower.
 
 **Heroes and casts.** The sentence's subject is the hero. People and animals are generated once (SDXL reference → TRELLIS.2 mesh), auto-rigged, and moved by motion matching over real motion capture (CMU and 100STYLE); four-legged animals get measured walk, trot and gallop gaits; insects stand on six legs. Vehicles are built in code with real proportions: cars, go-karts, a planetary rover, a steam locomotive, sailing ships, hot-air balloons, boards (snowboard, skis, surfboard, skateboard, sled). Riders ride their mounts; flyers fly; swimmers swim; boats float. Supporting characters wear the period and the place (Vikings' villagers are fishermen and shepherds, not men in hoodies), and drawn styles get drawn characters.
 
 **Games, not just walks.** Objectives combine freely: collect · defeat · reach · race · survive · hunt · capture · escort · defend · eliminate · score · serve · repair · deliver · ride · accuse. A sentence that names a genre gets that genre: tower defence, side-scrolling platformer, murder mystery with suspects and a casebook, sea battles, snowball fights, ghost hunts (or playing the ghost), city builder, and a full factory game on a living worldlet.
 
-**Weather, light and physics.** Rain that splashes, snowstorms, fog that swallows the distance, hurricanes, mist in the hollows; any hour from dawn to night; real-time shadows, ambient occlusion and 4× multisampling; 2K photo-scanned ground and building materials (Poly Haven, CC0). Rapier physics: collisions, climbing, swimming, buoyancy, ragdolls.
+**Weather, light and physics.** Rain that splashes, snowstorms, fog that swallows the distance, hurricanes, mist in the hollows; any hour from dawn to night; real-time shadows, ambient occlusion and 4× multisampling; 2K photo-scanned ground and building materials (Poly Haven, CC0). Rapier physics: collisions, climbing, swimming, buoyancy, ragdolls, and more that you can feel:
+- capes, cloaks, banners and flags are cloth that hangs, swings and catches the wind;
+- water slows you as you wade, rings round your legs and splashes at every step;
+- barrels, crates and pots smash into real pieces;
+- rope bridges sag under you and sway;
+- felled trees topple and crash;
+- thrown balls knock real cans off their stands;
+- a sumo bout is an actual pushing match.
 
 **Every game has its own maker.** Each build is given a maker's voice: one of 95 open-licence typeface families for its title and text, its own colour scheme and frame, its own minimap style (radar, paper map, chart, blueprint, neon, pixel and more), a maker's mark on its title card, and an opening written for that game by the narrator. Two games from similar sentences still look and read differently.
 
@@ -199,7 +233,7 @@ Fantasy Studio is built in public, solo, and measured rather than hoped about.
 
 - **How close is the first build?** A benchmark builds 24 everyday sentences, plays each, and has a local vision model judge it against its sentence (strictly). Recent runs average about **3 of 5 for matching the sentence** and **2.2 of 5 for looks**, with 12 to 30 percent of games passing every check. Familiar settings land close; a sentence that asks for a kind of place, vehicle or scale the engine has no builder for yet comes out plausible but wrong, and each of those becomes a builder (the giant kitchen, the surf and the sky islands above were all fixed that way this month).
 - **Characters** generated for the first time vary in quality; a character check scores each one and retries poor ones, but faces and hands can still be soft.
-- **Performance:** the first seconds of a new world can stutter while the graphics driver compiles shaders.
+- **Performance:** the first time a new world loads it can freeze for several seconds, occasionally much longer, while the graphics driver compiles its shaders. After that it holds 60 fps on the development machine (an RTX 5070 Ti).
 - **Code signing** for the installer is being set up.
 
 Detail: **[ROADMAP.md](ROADMAP.md)** and **[CHANGELOG.md](CHANGELOG.md)**.

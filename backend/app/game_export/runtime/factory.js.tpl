@@ -1471,6 +1471,9 @@ function plateRoughness(pl) {
 // salt faces paler with rime along their seams, the underside darker and
 // more worn, the top the world's plate as authored. Four variants, cached,
 // on a box with six material groups: five more draw calls for the world.
+// (2026-10-28) ?clean=1: a clean picture of the world, for the README and the store page, the held tool put away.
+// Declared up here: the frame loop reads it before the rig is built
+const _cleanShot = /[?&]clean=1\b/.test(location.search);
 const _hx = h => { const n = parseInt(String(h).replace('#', ''), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
 const _mixHex = (h, to, k) => { const a = _hx(h), b = _hx(to);
   return '#' + a.map((v, i) => Math.round(v + (b[i] - v) * k).toString(16).padStart(2, '0')).join(''); };
@@ -1559,17 +1562,27 @@ function meadowTexture(fp, look, ground, seed) {
     // and the whole face read as haze. Salt dries in plates: crisp-edged pans of white crust cracked into
     // polygons with raised rims, dark brine creeping along winding channels between the sage and samphire
     const wrapDraw = (fn) => { for (const ox of [-P, 0, P]) for (const oy of [-P, 0, P]) { g.save(); g.translate(ox, oy); fn(); g.restore(); } };
+    const chan = [];                                                 // (2026-10-28) the channels' courses, for the pans to lie along
     for (let i = 0; i < 14; i++) {                                   // brine channels, meandering
       let x = rnd() * P, y = rnd() * P, a = rnd() * 6.28; const w = 3 + rnd() * 7, pts = [[x, y]];
       for (let k = 0; k < 40; k++) { a += (rnd() - 0.5) * 0.7; x += Math.cos(a) * 14; y += Math.sin(a) * 14; pts.push([x, y]); }
+      chan.push(pts);
       wrapDraw(() => { g.strokeStyle = 'rgba(48,62,64,0.55)'; g.lineWidth = w; g.lineCap = 'round'; g.lineJoin = 'round'; g.beginPath(); pts.forEach(([px, py], k) => k ? g.lineTo(px, py) : g.moveTo(px, py)); g.stroke();
         g.strokeStyle = 'rgba(210,222,224,0.22)'; g.lineWidth = Math.max(1, w * 0.25); g.stroke(); });
     }
-    for (let i = 0; i < 34; i++) {                                   // salt pans: a soft crust, then its cracked plates
-      const cx = rnd() * P, cy = rnd() * P, R = 22 + rnd() * 60;
-      blob(cx, cy, R * 1.25, 'rgb(214,216,204)', 0.32);
-      for (let k = 0; k < 70; k++) {
-        const a0 = rnd() * 6.28, d0 = Math.sqrt(rnd()) * R, px = cx + Math.cos(a0) * d0, py = cy + Math.sin(a0) * d0, r = 2.5 + rnd() * 4.5, sides = 5 + Math.floor(rnd() * 3), rot = rnd() * 6.28;
+    // SALT PANS LIE ALONG THE BRINE (2026-10-28): from orbit the pans were thirty-odd round spots of one
+    // size, polka dots on the face. A pan is where brine stood and dried: long, ragged crusts laid along the
+    // channels, small ones and a few great flats, each a scatter of cracked plates thinning to its edge
+    for (let i = 0; i < 46; i++) {                                   // salt pans: a soft crust, then its cracked plates
+      const big = i < 4, cp = chan[i % chan.length], at = cp[Math.floor(rnd() * cp.length)], nx = cp[Math.min(cp.length - 1, cp.indexOf(at) + 2)];
+      const along = Math.atan2(nx[1] - at[1], nx[0] - at[0]) + (rnd() - 0.5) * 0.5;
+      const cx = big ? rnd() * P : at[0] + (rnd() - 0.5) * 30, cy = big ? rnd() * P : at[1] + (rnd() - 0.5) * 30;
+      const R = big ? 110 + rnd() * 70 : 10 + Math.pow(rnd(), 2) * 70, el = big ? 1.6 : 1.8 + rnd() * 2.2, ca = Math.cos(along), sa = Math.sin(along);
+      for (let q = 0; q < 4; q++) { const t = (q / 3 - 0.5) * R * el * 0.9; blob(cx + ca * t + (rnd() - 0.5) * R * 0.3, cy + sa * t + (rnd() - 0.5) * R * 0.3, R * (0.55 + rnd() * 0.35), 'rgb(214,216,204)', big ? 0.22 : 0.26); }
+      for (let k = 0; k < (big ? 520 : 30 + R * 1.6); k++) {
+        const u = (rnd() * 2 - 1) * R * el, vv = (rnd() * 2 - 1) * R * (0.55 + 0.45 * Math.sqrt(Math.max(0, 1 - Math.abs(u) / (R * el)))) * Math.sqrt(rnd());
+        if (rnd() < Math.abs(u) / (R * el) * 0.8) continue;             // thinner toward its ends
+        const a0 = 0, d0 = 0, px = cx + ca * u - sa * vv, py = cy + sa * u + ca * vv, r = 2.5 + rnd() * 4.5, sides = 5 + Math.floor(rnd() * 3), rot = rnd() * 6.28;
         const poly = []; for (let q = 0; q < sides; q++) { const aa = rot + q / sides * 6.28, rr = r * (0.75 + rnd() * 0.4); poly.push([px + Math.cos(aa) * rr, py + Math.sin(aa) * rr]); }
         const v = 226 + Math.floor(rnd() * 22);
         wrapDraw(() => { g.beginPath(); poly.forEach(([qx, qy], q) => q ? g.lineTo(qx, qy) : g.moveTo(qx, qy)); g.closePath();
@@ -1579,6 +1592,38 @@ function meadowTexture(fp, look, ground, seed) {
       }
     }
     for (let i = 0; i < 90; i++) blob(rnd() * P, rnd() * P, 6 + rnd() * 18, 'rgb(142,58,44)', 0.30);    // samphire going red
+  }
+  if (look.key === 'crystal') {
+    // A MEADOW WITH THINGS IN IT (2026-10-28): from orbit and from the air the crystal face was one even
+    // blue-green. Brooks wind across it under their banks of brighter growth, grey stones break through the
+    // turf with their lit tops and moss, and wildflowers come in drifts, white, gold, blue and pink
+    const wrapDraw = (fn) => { for (const ox of [-P, 0, P]) for (const oy of [-P, 0, P]) { g.save(); g.translate(ox, oy); fn(); g.restore(); } };
+    for (let i = 0; i < 5; i++) {                                    // brooks
+      let x = rnd() * P, y = rnd() * P, a = rnd() * 6.28; const pts = [[x, y]], n = 50 + Math.floor(rnd() * 40);
+      for (let k = 0; k < n; k++) { a += (rnd() - 0.5) * 0.55; x += Math.cos(a) * 9; y += Math.sin(a) * 9; pts.push([x, y]); }
+      const w = 3.5 + rnd() * 3;
+      wrapDraw(() => { g.lineCap = 'round'; g.lineJoin = 'round'; const path = () => { g.beginPath(); pts.forEach(([px, py], k) => k ? g.lineTo(px, py) : g.moveTo(px, py)); };
+        g.strokeStyle = rgb(col(0.02, 0.12, 0.07)).replace('rgb', 'rgba').replace(')', ',0.5)'); g.lineWidth = w * 4.2; path(); g.stroke();   // the lush banks
+        g.strokeStyle = 'rgba(52,44,30,0.55)'; g.lineWidth = w * 1.7; path(); g.stroke();                                                 // the muddy edge
+        g.strokeStyle = 'rgba(24,48,56,0.9)'; g.lineWidth = w; path(); g.stroke();                                                       // the water
+        g.strokeStyle = 'rgba(120,160,170,0.22)'; g.lineWidth = Math.max(1, w * 0.25); path(); g.stroke(); });                              // the sky in it
+    }
+    for (let i = 0; i < 20; i++) {                                   // outcrops: grey stone through the turf, lit on top, moss in the cracks
+      const cx = rnd() * P, cy = rnd() * P, n = 2 + Math.floor(rnd() * 5);
+      for (let k = 0; k < n; k++) { const x = cx + (rnd() - 0.5) * 30, y = cy + (rnd() - 0.5) * 22, rx = 4 + rnd() * 8, ry = rx * (0.5 + rnd() * 0.4), rot = rnd() * 3.14;
+        wrapDraw(() => { g.save(); g.translate(x, y); g.rotate(rot);
+          g.fillStyle = 'rgba(14,18,12,0.5)'; g.beginPath(); g.ellipse(2, 2.5, rx * 1.08, ry * 1.1, 0, 0, 6.28); g.fill();            // its shadow
+          g.fillStyle = `rgba(${84 + Math.floor(rnd() * 26)},${88 + Math.floor(rnd() * 22)},${82 + Math.floor(rnd() * 18)},0.92)`; g.beginPath(); g.ellipse(0, 0, rx, ry, 0, 0, 6.28); g.fill();
+          g.fillStyle = 'rgba(170,176,166,0.3)'; g.beginPath(); g.ellipse(-rx * 0.25, -ry * 0.3, rx * 0.5, ry * 0.36, 0, 0, 6.28); g.fill();   // the lit top
+          g.strokeStyle = 'rgba(60,96,44,0.6)'; g.lineWidth = 1.2; g.beginPath(); g.moveTo(-rx * 0.6, ry * 0.2); g.lineTo(rx * 0.4, -ry * 0.1); g.stroke(); g.restore(); });   // moss in a crack
+      }
+    }
+    const FLOW = [[244, 242, 232], [242, 206, 70], [120, 150, 226], [232, 140, 176], [250, 236, 160]];
+    for (let i = 0; i < 24; i++) {                                   // wildflower drifts
+      const cx = rnd() * P, cy = rnd() * P, R = 14 + rnd() * 44, fc = FLOW[Math.floor(rnd() * FLOW.length)], n = Math.floor(R * 1.3);
+      wrapDraw(() => { for (let k = 0; k < n; k++) { const a0 = rnd() * 6.28, d0 = Math.pow(rnd(), 0.7) * R, px = cx + Math.cos(a0) * d0 * 1.4, py = cy + Math.sin(a0) * d0;
+        g.fillStyle = `rgba(${fc[0]},${fc[1]},${fc[2]},${0.3 + rnd() * 0.35})`; g.fillRect(px, py, 1.2 + rnd() * 1.1, 1.2 + rnd() * 1.1); } });
+    }
   }
   if (look.key === 'under') {
     // THE SHADE SIDE (2026-10-27): the underside was the top's meadow turned down to near black, a dark
@@ -9971,7 +10016,7 @@ const frame = () => {
     camera.position.addScaledVector(_bx, Math.sin(bobPhase) * 0.035 * bobAmt);
     // the rig rides the camera, so it only needs a little sway of its own —
     // a held object that is perfectly rigid to the view reads as painted on
-    heldRig.visible = true;
+    heldRig.visible = !_cleanShot;
     heldRig.position.set(0.36 + Math.sin(bobPhase) * 0.012 * bobAmt,
                          -0.25 + Math.sin(bobPhase * 2) * 0.009 * bobAmt,
                          -0.55);
@@ -10120,6 +10165,7 @@ const heldRig = new THREE.Group();
   heldRig.rotation.set(-0.12, 0.34, 0.06);
   heldRig.renderOrder = 2;
   camera.add(heldRig);
+  if (_cleanShot) heldRig.visible = false;
   scene.add(camera);          // a camera only renders children once it is IN the scene
 }
 
