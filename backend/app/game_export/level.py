@@ -695,6 +695,27 @@ def build_level(seed: int, size_m: float, n_objectives: int = 0,
             t = max(0.0, min(1.0, (x * _ux + z * _uz) / _gr))
             t = max(0.0, (t - 0.1) / 0.9)
             return _c * t * t * (3 - 2 * t)
+    elif layout == "descent" and not (fjord or coast or slot or sea or ledges):
+        # (2026-10-29) A RUN DOWN A HILL: the start on the brow, the finish at the foot, the
+        # course bending gently across the fall line the way a lane does. The fall is steepest
+        # in the middle and eases out at both ends, so the start line is a level ledge to push
+        # off from and the finish runs out on the flat
+        ux, uz = goal[0] / max(goal_r, 1e-6), goal[1] / max(goal_r, 1e-6)
+        px_, pz_ = -uz, ux
+        # the whole fall of the land: the finish as far down as the map allows
+        goal_r = half * 0.86
+        goal = [ux * goal_r, uz * goal_r]
+        path = [[0.0, 0.0]]
+        for k, f in enumerate((0.25, 0.5, 0.75)):
+            sd = (1 if k % 2 == 0 else -1) * goal_r * rng.uniform(0.06, 0.1)
+            path.append([ux * goal_r * f + px_ * sd, uz * goal_r * f + pz_ * sd])
+        path.append(list(goal))
+        # a fall of one in four on average, one in three at its steepest: a steep village hill
+        drop = 0.2 * goal_r + amplitude_m * 0.5
+
+        def lift(x, z, _ux=ux, _uz=uz, _gr=goal_r, _d=drop):
+            t = max(0.0, min(1.0, ((x * _ux + z * _uz) / _gr - 0.06) / 0.86))
+            return _d * (1.0 - t * t * (3 - 2 * t))
     if slot:
         corridor = 1.6                               # the slot's floor is barely a body wide
     if ledges:

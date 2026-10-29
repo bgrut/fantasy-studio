@@ -44,7 +44,7 @@ import * as __DESIGN from './proc/design.js';
 import * as __WEATHER from './proc/weather.js';
 import { createVolcano as __createVolcano } from './proc/volcano.js';
 import { waterMaterial as __waterMaterial, waterKind as __waterKind, groundMist as __groundMist, shoreDepth as __shoreDepth } from './proc/water.js';
-import { snowTextures as __snowTextures } from './proc/ground.js';
+import { snowTextures as __snowTextures, duneSandTextures as __duneSandTextures } from './proc/ground.js';
 import { createWaterfall as __createWaterfall } from './proc/waterfall.js';
 import { makeCape as __makeCape, makeBanner as __makeBanner } from './proc/cloth.js';
 import { createCave as __createCave } from './proc/cave.js';
@@ -1502,6 +1502,43 @@ async function main() {
     if (LVL.landmarks) for (const p of LVL.landmarks) p[1] = 0;
   }
   const OSM = (LVL && LVL.osm) || null;
+  // ── A NIGHT MARKET'S STREET, PLANNED (2026-10-29) ───────────────────────
+  // "a night market in Taipei, squeeze down the crowded alley of food stalls to find the stinky
+  // tofu stand" laid the stalls along whichever road was nearest the start: a cross street, so
+  // the market ran off sideways while the goal lay up a six-lane avenue between office towers.
+  // The market is the way: the road through the start that runs straightest toward the goal,
+  // as far as it runs straight, and the goal is the last stall at its far end (built below)
+  const MKTPLAN = (() => {
+    if (!OSM || !OSM.roads || !OSM.roads.length || !LVL) return null;
+    const w = String(SPEC.prompt || '').toLowerCase();
+    if (!/\b(night ?markets?|street ?markets?|food ?markets?|food stalls?|hawker (?:centre|center|stalls?)|yatai|street food)\b/.test(w)) return null;
+    const g0 = LVL.goal || [0, 60], gl = Math.hypot(g0[0], g0[1]) || 1;
+    let best = null;
+    for (const r of OSM.roads) for (let i = 0; i < r.pts.length - 1; i++) {
+      const a = r.pts[i], b = r.pts[i + 1], dx = b[0] - a[0], dz = b[1] - a[1], L = Math.hypot(dx, dz) || 1;
+      const t = Math.max(0, Math.min(1, (-a[0] * dx - a[1] * dz) / (L * L))), d = Math.hypot(a[0] + dx * t, a[1] + dz * t);
+      if (d > 26) continue;
+      let ux = dx / L, uz = dz / L; const al = (ux * g0[0] + uz * g0[1]) / gl;
+      if (al < 0) { ux = -ux; uz = -uz; }
+      // how far it runs straight from the start, that way along the road
+      let run = 0, k = i, dir = al < 0 ? -1 : 1, px = a[0] + dx * t, pz = a[1] + dz * t;
+      for (let n = 0; n < 40; n++) { const q = r.pts[dir > 0 ? k + 1 : k]; if (!q) break;
+        const ex = q[0] - px, ez = q[1] - pz, el = Math.hypot(ex, ez); if (el > 0.1 && (ex * ux + ez * uz) / el < 0.985) break;
+        run += el; px = q[0]; pz = q[1]; k += dir; if (k < 0 || k >= r.pts.length - 1) break; }
+      const score = Math.abs(al) * 40 + Math.min(run, 80) * 0.6 - d * 1.2 + Math.min(r.w || 7, 14) * -0.4;
+      if (!best || score > best.score) best = { score, ux, uz, ox: a[0] + dx * t, oz: a[1] + dz * t, run, w: r.w || 7, road: r };
+    }
+    if (!best) return null;
+    const LEN = Math.max(34, Math.min(72, best.run - 4));
+    const goal = [best.ox + best.ux * (LEN - 2.5), best.oz + best.uz * (LEN - 2.5)];
+    LVL.goal = goal; LVL.path = [[0, 0], [best.ox, best.oz], goal];
+    return { ux: best.ux, uz: best.uz, ox: best.ox, oz: best.oz, LEN, roadW: best.w, road: best.road,
+      near: (x, z, m) => { const ax = x - best.ox, az = z - best.oz, s = ax * best.ux + az * best.uz, c = Math.abs(-ax * best.uz + az * best.ux);
+        return s > -8 - (m || 0) && s < LEN + 8 + (m || 0) && c < 7 + (m || 0); } };
+  })();
+  // a night market's street is closed to traffic, and so is any road that runs through it
+  const _mktRoad = (r) => !!MKTPLAN && r.pts.some((q, i) => i < r.pts.length - 1 && [0, 0.25, 0.5, 0.75, 1].some(f =>
+    MKTPLAN.near(q[0] + (r.pts[i + 1][0] - q[0]) * f, q[1] + (r.pts[i + 1][1] - q[1]) * f, 6)));
   window.__isCity = !!OSM;
   if (OSM && LVL && LVL.landmarks) LVL.landmarks = [];   // no 30m trees on sidewalks                          // ambient (module scope) reads this
   const INTERIOR = (LVL && LVL.interior) || null;   // Phase 95: room levels
@@ -2923,10 +2960,34 @@ async function main() {
       GC = [g[0] + ux * 13 + uz * 13, g[1] + uz * 13 - ux * 13];
       const dl = Math.hypot(g[0] - GC[0], g[1] - GC[1]) || 1; D = [(g[0] - GC[0]) / dl, (g[1] - GC[1]) / dl];
     }
-    const P = [-D[1], D[0]], LL = 23;
-    const along = (x, z) => (x - GC[0]) * D[0] + (z - GC[1]) * D[1], across = (x, z) => Math.abs((x - GC[0]) * P[0] + (z - GC[1]) * P[1]);
+    // A VILLAGE ON A HILL IS A STREET DOWN IT (2026-10-29): "kids race soapbox carts down a steep
+    // village hill" set the ring of cottages round a green on the slope, beside the course. On a
+    // descent the cottages line both sides of the course, fronts to it, all the way down, and the
+    // green with its well lies at the foot of the hill beside the finish
+    const DESC = !norse && !dutch && LVL && LVL.layout === 'descent' && LVL.path && LVL.path.length > 1 && LVL.goal;
+    let LL = 23, segDf = null;
     const cot = [];
-    const n = norse ? 7 + Math.floor(r() * 2) : 11 + Math.floor(r() * 3);
+    if (DESC) {
+      const pp = LVL.path, g = LVL.goal, pl = Math.hypot(g[0], g[1]) || 1;
+      const segD = segDf = (x, z) => { let best = 1e9; for (let i = 0; i < pp.length - 1; i++) { const [ax, az] = pp[i], [bx, bz] = pp[i + 1], dx = bx - ax, dz = bz - az, L2 = dx * dx + dz * dz || 1;
+        const t = Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / L2)); best = Math.min(best, Math.hypot(x - ax - dx * t, z - az - dz * t)); } return best; };
+      GC = [g[0] * 0.93 - g[1] / pl * 17, g[1] * 0.93 + g[0] / pl * 17];
+      const dl = Math.hypot(g[0] - GC[0], g[1] - GC[1]) || 1; D = [(g[0] - GC[0]) / dl, (g[1] - GC[1]) / dl]; LL = 4;
+      for (let i = 0; i < pp.length - 1; i++) {
+        const [ax, az] = pp[i], [bx, bz] = pp[i + 1], L = Math.hypot(bx - ax, bz - az) || 1, tx = (bx - ax) / L, tz = (bz - az) / L;
+        for (let sA = (i === 0 ? 13 : 3); sA < L - 2; sA += 10.5 + r() * 2.5) for (const side of [-1, 1]) {
+          if (r() < 0.18) continue;
+          const off = 8.6 + r() * 1.8, x = ax + tx * sA - tz * side * off, z = az + tz * sA + tx * side * off;
+          if (segD(x, z) < 7.4 || Math.hypot(x, z) < 10 || Math.hypot(x - GC[0], z - GC[1]) < 15) continue;
+          if (cot.some(c => Math.hypot(c.x - x, c.z - z) < 8.2)) continue;
+          const lx = ax + tx * sA, lz = az + tz * sA;
+          cot.push({ x, z, ry: Math.atan2(lx - x, lz - z), w: 6.0 + r() * 2.0, d: 5.0 + r() * 1.2, h: 2.9 + r() * 0.7, tint: Math.floor(r() * 4), stone: r() < 0.35 });
+        }
+      }
+    }
+    const P = [-D[1], D[0]];
+    const along = (x, z) => (x - GC[0]) * D[0] + (z - GC[1]) * D[1], across = (x, z) => Math.abs((x - GC[0]) * P[0] + (z - GC[1]) * P[1]);
+    const n = DESC ? 0 : norse ? 7 + Math.floor(r() * 2) : 11 + Math.floor(r() * 3);
     const aS = Math.atan2(D[1], D[0]);
     for (let i = 0; i < n; i++) {
       const a = (i / n) * Math.PI * 2 + (r() - 0.5) * 0.18;
@@ -2949,11 +3010,11 @@ async function main() {
       for (let k = cot.length - 1; k >= 0; k--) if (Math.hypot(cot[k].x - c.x, cot[k].z - c.z) < 4.6 + Math.max(cot[k].w, cot[k].d) * 0.6) cot.splice(k, 1); }
     const loc = (c, lx, lz) => [c.x + lx * Math.cos(c.ry) + lz * Math.sin(c.ry), c.z - lx * Math.sin(c.ry) + lz * Math.cos(c.ry)];
     let fi = 0;
-    return { GC, D, P, LL, cot, loc, norse, dutch,
+    return { GC, D, P, LL, cot, loc, norse, dutch, desc: !!DESC, pathD: segDf,
       inVillage: (x, z, m) => Math.hypot(x - GC[0], z - GC[1]) < 26 + (m || 0) || (across(x, z) < 3 + (m || 0) && along(x, z) > 0 && along(x, z) < LL - 1),
       inCottage: (x, z, m) => cot.some(c => { const dx = x - c.x, dz = z - c.z, cs = Math.cos(c.ry), sn = Math.sin(c.ry);
         const lx = dx * cs - dz * sn, lz = dx * sn + dz * cs; return Math.abs(lx) < c.w / 2 + (m || 0) && Math.abs(lz) < c.d / 2 + (m || 0); }),
-      lane: (x, z) => across(x, z) < 1.6 && along(x, z) > 3 && along(x, z) < LL,
+      lane: DESC ? (x, z) => segDf(x, z) < 2.8 : (x, z) => across(x, z) < 1.6 && along(x, z) > 3 && along(x, z) < LL,
       // a fire on a cottage: on the front of the thatch, over the door side
       fireSpot: () => { const c = cot[(fi * 5) % cot.length]; fi++; const off = (fi % 2 ? -1 : 1) * c.w * 0.18;
         const [x, z] = loc(c, off, c.d * 0.28); return [x, c.h + 0.9 + c.d * 0.12, z, c.ry, c]; },
@@ -7596,6 +7657,128 @@ async function main() {
           }
         }
       } catch (e) { console.warn('[game] burning building skipped: ' + e.message); }
+      // A NIGHT MARKET'S ALLEY (2026-10-29): the stalls stood in the middle of a six-lane avenue with
+      // office towers a block back on either side, and nothing about it was an alley. Down both sides
+      // now, behind a walkway of arcade, a run of narrow shophouses three to five storeys high: a lit
+      // shop and its signboard on the ground floor under an awning, tiled storeys over it with caged
+      // windows (a few lit), air conditioners hung under the sills, vertical neon signs standing out
+      // over the aisle so the street reads down its length, and a tangle of cables strung across
+      // overhead. About ten draw calls for both sides.
+      function buildMarketAlley(W, LEN, AISLE, yaw, M, inst, rS) {
+        const F = AISLE / 2 + 3.3, ux = Math.sin(yaw), uz = Math.cos(yaw), nx = -uz, nz = ux;
+        const cv = (w, h) => { const c = document.createElement('canvas'); c.width = w; c.height = h; return [c, c.getContext('2d')]; };
+        const tex = (c, srgb, rep) => { const t = new THREE.CanvasTexture(c); if (srgb) t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8;
+          t.wrapS = THREE.ClampToEdgeWrapping; t.wrapT = rep ? THREE.RepeatWrapping : THREE.ClampToEdgeWrapping; return t; };
+        const FONT = '"Microsoft JhengHei", "Yu Gothic", "Noto Sans TC", "Noto Sans JP", sans-serif';
+        // the upper storeys: four claddings, one storey to a tile, repeated up the building
+        const [uc, ug] = cv(1024, 256), [ue, uge] = cv(1024, 256);
+        uge.fillStyle = '#000'; uge.fillRect(0, 0, 1024, 256);
+        const TILE = ['#d6cfbf', '#c2d0c8', '#dcc8bc', '#b4aea4'];
+        for (let v = 0; v < 4; v++) {
+          const x0 = v * 256, ts = v === 1 ? 8 : 12;
+          ug.fillStyle = TILE[v]; ug.fillRect(x0, 0, 256, 256);
+          for (let y = 0; y < 256; y += ts) for (let x = 0; x < 256; x += ts) { ug.fillStyle = `rgba(${rS() < 0.5 ? '0,0,0' : '255,255,255'},${0.03 + rS() * 0.06})`; ug.fillRect(x0 + x + 1, y + 1, ts - 2, ts - 2); }
+          for (let k = 0; k < 7; k++) { const sx = x0 + 10 + rS() * 236, gr = ug.createLinearGradient(0, 160, 0, 256);
+            gr.addColorStop(0, 'rgba(60,48,36,0.3)'); gr.addColorStop(1, 'rgba(60,48,36,0)'); ug.fillStyle = gr; ug.fillRect(sx, 160, 3 + rS() * 9, 96); }   // stains from the sills
+          for (const wx of [26, 140]) {
+            const ww = 90, wy = 46, wh = 112, lit = rS() < 0.42;
+            ug.fillStyle = lit ? '#e8b46a' : '#1a2026'; ug.fillRect(x0 + wx, wy, ww, wh);
+            if (lit) { uge.fillStyle = '#d0904a'; uge.fillRect(x0 + wx, wy, ww, wh);
+              for (const g2 of [ug, uge]) { g2.fillStyle = g2 === ug ? 'rgba(160,60,40,0.75)' : '#401a10'; g2.fillRect(x0 + wx, wy, 18 + rS() * 14, wh); } }
+            else { ug.fillStyle = 'rgba(120,140,160,0.25)'; ug.fillRect(x0 + wx + 6, wy + 6, ww * 0.4, wh * 0.5); }
+            // the grille cage over it, iron, a little rusted on the warm claddings
+            for (const g2 of [ug, uge]) { g2.strokeStyle = g2 === uge ? '#000' : (v === 2 ? '#5a4634' : '#2a2c2e'); g2.lineWidth = 4; g2.strokeRect(x0 + wx - 7, wy - 7, ww + 14, wh + 14);
+              g2.lineWidth = 2.2; g2.beginPath(); for (let b = 1; b < 9; b++) { g2.moveTo(x0 + wx + b * ww / 9, wy - 7); g2.lineTo(x0 + wx + b * ww / 9, wy + wh + 7); }
+              for (const hy of [0.33, 0.66]) { g2.moveTo(x0 + wx - 7, wy + wh * hy); g2.lineTo(x0 + wx + ww + 7, wy + wh * hy); } g2.stroke(); }
+            ug.fillStyle = '#8a847a'; ug.fillRect(x0 + wx - 10, wy + wh + 8, ww + 20, 7);
+          }
+          ug.fillStyle = 'rgba(70,62,54,0.55)'; ug.fillRect(x0, 0, 256, 9);                    // the floor slab
+        }
+        const upT = tex(uc, true, true), upE = tex(ue, true, true);
+        // the ground floors: a signboard over a lit shop front, tiled piers either side
+        const [gc, gg] = cv(1024, 256), [ge, gge] = cv(1024, 256);
+        gge.fillStyle = '#000'; gge.fillRect(0, 0, 1024, 256);
+        const SHOP = [['藥局', '#1d6a4a'], ['茶行', '#7a2a1a'], ['手機', '#1d4e9a'], ['麵店', '#c8401e'], ['書局', '#2a3a6a'], ['冰店', '#1a8aa0'], ['服飾', '#8a2a6a'], ['鞋店', '#3a3a3a']];
+        for (let v = 0; v < 4; v++) {
+          const x0 = v * 256, [nm, bg] = SHOP[(v * 2 + Math.floor(rS() * 2)) % SHOP.length];
+          gg.fillStyle = TILE[(v + 1) % 4]; gg.fillRect(x0, 0, 256, 256);
+          // the shop: a warm room of shelves seen through the open front
+          const sh = gg.createLinearGradient(0, 70, 0, 256); sh.addColorStop(0, '#f2d6a0'); sh.addColorStop(1, '#a87a48'); gg.fillStyle = sh; gg.fillRect(x0 + 22, 70, 212, 186);
+          gge.fillStyle = '#b07a3c'; gge.fillRect(x0 + 22, 70, 212, 186);
+          for (let r = 0; r < 4; r++) for (let k = 0; k < 9; k++) { const c = ['#c8402a', '#2a6ab0', '#e8c040', '#3a8a4a', '#f2f0e8', '#8a4ab0'][Math.floor(rS() * 6)];
+            gg.fillStyle = c; gg.fillRect(x0 + 30 + k * 22, 96 + r * 38, 16, 24); gge.fillStyle = 'rgba(0,0,0,0.35)'; gge.fillRect(x0 + 30 + k * 22, 96 + r * 38, 16, 24); }
+          gg.fillStyle = '#6a5a48'; for (let r = 0; r < 4; r++) gg.fillRect(x0 + 24, 120 + r * 38, 208, 4);
+          // the shutter, rolled up into its box over the opening
+          gg.fillStyle = '#8c9094'; gg.fillRect(x0 + 18, 58, 220, 16); gge.fillStyle = '#000'; gge.fillRect(x0 + 18, 58, 220, 16);
+          gg.fillStyle = 'rgba(40,40,40,0.6)'; for (let y = 60; y < 74; y += 3) gg.fillRect(x0 + 18, y, 220, 1);
+          // the signboard: lit, two or three characters, a white rule round it
+          for (const g2 of [gg, gge]) { g2.fillStyle = bg; g2.fillRect(x0 + 6, 4, 244, 50); g2.strokeStyle = '#f4efe2'; g2.lineWidth = 3; g2.strokeRect(x0 + 10, 8, 236, 42);
+            g2.fillStyle = '#fbf6e8'; g2.font = `bold 34px ${FONT}`; g2.textAlign = 'center'; g2.textBaseline = 'middle'; g2.fillText(nm, x0 + 128, 30); }
+          gg.fillStyle = 'rgba(0,0,0,0.25)'; gg.fillRect(x0, 54, 256, 4);
+        }
+        const gT = tex(gc, true, false), gE = tex(ge, true, false);
+        // the neon: eight vertical signs, characters stacked in tube colours on black
+        const [nc, ng] = cv(512, 256);
+        const NEON = [['按摩', '#ff4a8a'], ['旅社', '#4ae0ff'], ['當舖', '#ffd23a'], ['電玩', '#7aff6a'], ['牙科', '#ff7a2a'], ['銀樓', '#ffe9a0'], ['KTV', '#c86aff'], ['美食', '#ff3a3a']];
+        ng.fillStyle = '#05060a'; ng.fillRect(0, 0, 512, 256);
+        NEON.forEach(([t, col], i) => { const x0 = i * 64, ch = [...t];
+          ng.strokeStyle = col; ng.lineWidth = 3; ng.shadowColor = col; ng.shadowBlur = 8; ng.strokeRect(x0 + 6, 6, 52, 244);
+          ng.fillStyle = col; ng.font = `bold ${ch.length > 2 ? 38 : 44}px ${FONT}`; ng.textAlign = 'center'; ng.textBaseline = 'middle';
+          ch.forEach((c, k) => ng.fillText(c, x0 + 32, 128 + (k - (ch.length - 1) / 2) * (ch.length > 2 ? 62 : 80))); ng.shadowBlur = 0; });
+        const nT = tex(nc, true, false);
+        // lay the buildings out down both sides
+        const gnd = [], ups = [], neon = [], mass = [], para = [], awn = [], ac = [], signBody = [];
+        const plane = (w, h, u0, u1, v1, cx, cy, cz, ry) => { const p = new THREE.PlaneGeometry(w, h).toNonIndexed(), uv = p.attributes.uv;
+          for (let i = 0; i < uv.count; i++) uv.setXY(i, u0 + (u1 - u0) * uv.getX(i), uv.getY(i) * v1); p.rotateY(ry); p.translate(cx, cy, cz); return p; };
+        for (const side of [-1, 1]) {
+          const ry = Math.atan2(-side * nx, -side * nz);                      // the front faces the aisle
+          for (let s = -8; s < LEN + 6;) {
+            const bw = 4.2 + rS() * 2.4, sc = s + bw / 2, fl = 3 + Math.floor(rS() * 3), H = 3.6 + fl * 3.0, [cx, cz] = W(sc, side * F), y = hAt(cx, cz);
+            const vg = Math.floor(rS() * 4), vu = Math.floor(rS() * 4);
+            gnd.push(plane(bw, 3.6, vg / 4, (vg + 1) / 4, 1, cx, y + 1.8, cz, ry));
+            ups.push(plane(bw, fl * 3.0, vu / 4, (vu + 1) / 4, fl, cx, y + 3.6 + fl * 1.5, cz, ry));
+            const [mx, mz] = W(sc, side * (F + 4.53));
+            mass.push([mx, y + H / 2, mz, 0, yaw, 0, 9, H, bw, [0x9a948a, 0x8a8680, 0xa8a094, 0x7c7a76][vu]]);
+            const [px, pz] = W(sc, side * (F - 0.08)); para.push([px, y + H + 0.3, pz, 0, yaw, 0, 0.3, 0.6, bw + 0.04, [0xb8b2a6, 0x9aa6a0, 0xc0aca0, 0x96928a][vu]]);
+            const [ax, az] = W(sc, side * (F - 0.55)); awn.push([ax, y + 3.62, az, 0, yaw, 0, 1.1, 0.1, bw - 0.1, [0x2e6a5a, 0x8a2a22, 0x3a4a6a, 0x6a6a64, 0xa86a2a][Math.floor(rS() * 5)]]);
+            for (let f = 0; f < fl; f++) if (rS() < 0.55) { const [qx, qz] = W(s + 0.9 + rS() * (bw - 1.8), side * (F - 0.24));
+              ac.push([qx, y + 3.6 + f * 3 + 0.45, qz, 0, yaw, 0, 0.42, 0.52, 0.78, rS() < 0.8 ? 0xe4e2dc : 0xb8b4aa]); }
+            if (rS() < 0.8) {                                                     // a vertical sign standing out over the aisle
+              const k = Math.floor(rS() * 8), hs = 2.4 + rS() * 1.8, [sx, sz] = W(s + 0.4 + rS() * (bw - 0.8), side * (F - 0.48)), sy = y + 4.3 + hs / 2 + rS() * 1.2;
+              for (const f2 of [0, Math.PI]) { const p = new THREE.PlaneGeometry(0.72, hs).toNonIndexed(), uv = p.attributes.uv;
+                for (let i = 0; i < uv.count; i++) uv.setX(i, (k + 0.06 + uv.getX(i) * 0.88) / 8);
+                p.rotateY(yaw + f2); p.translate(sx + Math.sin(yaw + f2) * 0.05, sy, sz + Math.cos(yaw + f2) * 0.05); neon.push(p); }
+              signBody.push([sx, sy, sz, 0, yaw, 0, 0.8, hs + 0.08, 0.08, 0x1a1a1e]);
+            }
+            s += bw;
+          }
+          // the frontage is a wall: nobody squeezes behind it
+          const [wx, wz] = W(LEN / 2 - 1, side * (F + 0.3)), q = Math.atan2(-uz, ux);
+          world.createCollider(RAPIER.ColliderDesc.cuboid(LEN / 2 + 7, 8, 0.3).setTranslation(wx, hAt(wx, wz) + 8, wz).setRotation({ x: 0, y: Math.sin(q / 2), z: 0, w: Math.cos(q / 2) }));
+        }
+        const add = (geos, mat) => { const m = new THREE.Mesh(mergeGeometries(geos, false), mat); m.castShadow = false; m.receiveShadow = true; scene.add(m); return m; };
+        add(gnd, M({ map: gT, emissive: 0xffffff, emissiveMap: gE, emissiveIntensity: 0.9, roughness: 0.75 }));
+        add(ups, M({ map: upT, emissive: 0xffffff, emissiveMap: upE, emissiveIntensity: 0.8, roughness: 0.6 }));
+        add(neon, M({ map: nT, emissive: 0xffffff, emissiveMap: nT, emissiveIntensity: 1.7, roughness: 0.4 }));
+        const box = new THREE.BoxGeometry(1, 1, 1);
+        inst(box, M({ roughness: 0.9 }), mass);
+        inst(box, M({ roughness: 0.8 }), para);
+        inst(box, M({ roughness: 0.7 }), awn);
+        inst(box, M({ roughness: 0.5, metalness: 0.2 }), ac);
+        inst(box, M({ roughness: 0.4, metalness: 0.5 }), signBody);
+        // the cables: slack, black, criss-crossing the aisle at the second and third floors
+        const wire = [];
+        for (let k = 0; k < 30; k++) {
+          const s0 = -4 + rS() * (LEN + 8), s1 = s0 + (rS() - 0.5) * 9, [x0, z0] = W(s0, -F + 0.2), [x1, z1] = W(s1, F - 0.2);
+          const y0 = hAt(x0, z0) + 5.4 + rS() * 3.2, y1 = y0 + (rS() - 0.5) * 1.6, sag = 0.4 + rS() * 0.9;
+          let px = x0, py = y0, pz = z0;
+          for (let q = 1; q <= 8; q++) { const t = q / 8, x = x0 + (x1 - x0) * t, z = z0 + (z1 - z0) * t, yy = y0 + (y1 - y0) * t - sag * 4 * t * (1 - t);
+            wire.push(px, py, pz, x, yy, z); px = x; py = yy; pz = z; }
+        }
+        const wg = new THREE.BufferGeometry(); wg.setAttribute('position', new THREE.Float32BufferAttribute(wire, 3));
+        scene.add(new THREE.LineSegments(wg, new THREE.LineBasicMaterial({ color: 0x0c0c0e })));
+        window.__marketAlley = { buildings: mass.length, signs: signBody.length, ac: ac.length };
+      }
       // A NIGHT MARKET (2026-10-25): "a lantern-lit night market in taipei with steaming food stalls"
       // walked an empty neon downtown. The street the hero starts on is the market: two rows of stalls
       // down it for seventy metres facing a crowded aisle, each a counter under a striped canopy with a
@@ -7611,8 +7794,10 @@ async function main() {
           const [rd, ri] = best, a = rd.pts[ri], b = rd.pts[ri + 1], L0 = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
           let ux = (b[0] - a[0]) / L0, uz = (b[1] - a[1]) / L0;
           if (LVL && LVL.goal && ux * LVL.goal[0] + uz * LVL.goal[1] < 0) { ux = -ux; uz = -uz; }
-          const nx = -uz, nz = ux, LEN = 72, AISLE = 4.2, gy = hAt(0, 0);
-          const W = (s, o) => [ux * s + nx * o, uz * s + nz * o];
+          let OX = 0, OZ = 0, LEN = 72;
+          if (MKTPLAN) { ux = MKTPLAN.ux; uz = MKTPLAN.uz; OX = MKTPLAN.ox; OZ = MKTPLAN.oz; LEN = MKTPLAN.LEN; }   // the street planned above
+          const nx = -uz, nz = ux, AISLE = 4.2, gy = hAt(OX, OZ);
+          const W = (s, o) => [OX + ux * s + nx * o, OZ + uz * s + nz * o];
           const M = (p) => { const m = new THREE.MeshStandardMaterial(p); m.userData.noAutoTex = true; return m; };
           const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _e = new THREE.Euler(), _p = new THREE.Vector3(), _s = new THREE.Vector3();
           const inst = (geo, mat, list) => { const im = new THREE.InstancedMesh(geo, mat, list.length); list.forEach((t, i) => { _q.setFromEuler(_e.set(t[3] || 0, t[4] || 0, t[5] || 0)); _m.compose(_p.set(t[0], t[1], t[2]), _q, _s.set(t[6] || 1, t[7] || 1, t[8] || 1)); im.setMatrixAt(i, _m); if (t[9] !== undefined) im.setColorAt(i, new THREE.Color(t[9])); }); im.castShadow = true; im.receiveShadow = true; scene.add(im); return im; };
@@ -7622,15 +7807,17 @@ async function main() {
           for (const side of [-1, 1]) for (let s = 2; s < LEN; s += 3.3) {
             if (rS() < 0.08) continue;                                    // a gap between stalls now and then
             const o = side * (AISLE / 2 + 0.7), [cx, cz] = W(s, o), y = hAt(cx, cz);
-            counters.push([cx, y + 0.5, cz, 0, yaw, 0, 2.6, 1.0, 1.1, rS() < 0.5 ? 0xb8b4ac : 0x8a6a48]);
+            counters.push([cx, y + 0.5, cz, 0, yaw, 0, 1.1, 1.0, 2.6, rS() < 0.5 ? 0xb8b4ac : 0x8a6a48]);
             for (const [ds, dd] of [[-1.35, -0.6], [1.35, -0.6], [-1.35, 0.9], [1.35, 0.9]]) { const [px, pz] = W(s + ds, o + side * dd); posts.push([px, y + 1.25, pz, 0, 0, 0, 1, 2.5, 1]); }
             const [kx, kz] = W(s, o + side * 0.15);
-            canopies.push([kx, y + 2.55, kz, side * 0.22, yaw, 0, 3.0, 0.06, 2.0, CAN[Math.floor(rS() * CAN.length)]]);
+            canopies.push([kx, y + 2.55, kz, 0, yaw, -side * 0.22, 2.0, 0.06, 3.0, CAN[Math.floor(rS() * CAN.length)]]);
             for (let k = 0; k < 6; k++) { const [bx, bz] = W(s - 1.3 + k * 0.52, o - side * 0.9); bulbs.push([bx, y + 2.28 + (k % 2) * 0.05, bz]); }
-            const [sx, sz] = W(s, o - side * 1.0); signs.push([sx, y + 3.15, sz, side, Math.floor(rS() * 8)]);
+            // the stinky tofu stand is the last on the left, its sign the one you are looking for; no other stall sells it
+            const _last = s + 3.3 >= LEN, _kan = (_last && side < 0) ? 0 : 1 + Math.floor(rS() * 7);
+            const [sx, sz] = W(s, o - side * 1.0); signs.push([sx, y + 3.15, sz, side, _kan]);
             for (let k = 0; k < 5; k++) { const [gx, gz] = W(s - 1 + k * 0.5, o - side * 0.2); goods.push([gx, y + 1.06, gz, 0, rS() * 3, 0, 0.36, 0.1, 0.3, [0xd8a040, 0xb8502a, 0xe8d8b0, 0x6a8a3a, 0xc83a2a][Math.floor(rS() * 5)]]); }
             if (rS() < 0.5) { const [wx, wz] = W(s + 0.7, o - side * 0.05); woks.push([wx, y + 1.08, wz]); steamFrom.push([wx, y + 1.2, wz]); }
-            world.createCollider(RAPIER.ColliderDesc.cuboid(1.3, 0.5, 0.55).setTranslation(cx, y + 0.5, cz).setRotation({ x: 0, y: Math.sin(yaw / 2), z: 0, w: Math.cos(yaw / 2) }));
+            world.createCollider(RAPIER.ColliderDesc.cuboid(0.55, 0.5, 1.3).setTranslation(cx, y + 0.5, cz).setRotation({ x: 0, y: Math.sin(yaw / 2), z: 0, w: Math.cos(yaw / 2) }));
           }
           inst(new THREE.BoxGeometry(1, 1, 1), M({ roughness: 0.6, metalness: 0.2 }), counters);
           inst(new THREE.CylinderGeometry(0.04, 0.04, 1, 6), M({ color: 0x8a8e92, roughness: 0.4, metalness: 0.7 }), posts);
@@ -7652,6 +7839,7 @@ async function main() {
           scene.add(new THREE.Mesh(mergeGeometries(sg, false), M({ map: kanT, emissive: 0xffffff, emissiveMap: kanT, emissiveIntensity: 0.55, side: THREE.DoubleSide, roughness: 0.6 })));
           // red lanterns strung across the aisle, every five metres
           const lan = []; for (let s = 3; s < LEN; s += 5) for (const o of [-1.4, 0, 1.4]) { const [lx, lz] = W(s, o); lan.push([lx, hAt(lx, lz) + 4.3 + (o === 0 ? -0.25 : 0), lz, 0, 0, 0, 0.32, 0.42, 0.32]); }
+          if (MKTPLAN) try { buildMarketAlley(W, LEN, AISLE, yaw, M, inst, rS); } catch (e) { console.warn('[game] market alley skipped: ' + e.message); }
           // deep red and only a little lit: a bright emissive red tone maps to salmon pink
           const lanG = new THREE.SphereGeometry(1, 16, 12); { const lp = lanG.attributes.position; for (let i = 0; i < lp.count; i++) { const y = lp.getY(i), a = Math.atan2(lp.getZ(i), lp.getX(i)), k = 1 - 0.05 * Math.abs(Math.sin(a * 6)); lp.setXYZ(i, lp.getX(i) * k, y, lp.getZ(i) * k); } lanG.computeVertexNormals(); }   // ribbed paper
           inst(lanG, M({ color: 0x7a100a, emissive: 0xa0180c, emissiveIntensity: 0.32, roughness: 0.75 }), lan);
@@ -9491,6 +9679,7 @@ async function main() {
         for (let a = -ea; a <= ea; a += 8) for (let c = -eb; c <= eb; c += 8) { const [x, z] = ARENA.world(a, c); if (ARENA.inFoot(x, z, 6)) keepClear.push([x, z, 8]); } }   // no wood through the stands
       if (DOME) keepClear.push([DOME.C[0], DOME.C[1], DOME.R + 6]);   // the greenhouse dome's pad
       if (OASIS) keepClear.push([OASIS.C[0], OASIS.C[1], OASIS.R + 22]);   // the pool, its turf and its own palms
+      if (SPEC.player && SPEC.player.car_params && SPEC.player.car_params.type === 'soapbox' && LVL && LVL.goal) keepClear.push([LVL.goal[0], LVL.goal[1], 10], [0, 0, 7]);   // the run-out's bales and the start line
       if (CARAVAN && LVL && LVL.goal) { const gx = LVL.goal[0] - _sp.x, gz = LVL.goal[1] - _sp.z, gl = Math.hypot(gx, gz) || 1;   // the camels stand in file back from the start: no boulder in the last of them
         for (let b = 0; b <= 34; b += 4) keepClear.push([_sp.x - gx / gl * b, _sp.z - gz / gl * b, 4.5]); }
       if (CENOTE) keepClear.push([CENOTE.P[0], CENOTE.P[1], CENOTE.R + CENOTE.LW + 2]);   // nothing grows out of the sinkhole's walls
@@ -13040,6 +13229,9 @@ async function main() {
         if (SNOW_GROUND) dens = { pebble: 0.12 };
         else if (_caveLvl) dens = { pebble: 1.3 };
         else if (_arch === 'volcano') dens = { pebble: 1.8 };
+        // (2026-10-29) a sand sea is sand: the stony desert's pebbles lay on the caravan's dunes as
+        // brown coins, with black twigs between them, where the wind leaves nothing but its ripples
+        else if (_arch === 'dunes') dens = { pebble: 0.04 };
         else if (/desert|dune|canyon|mesa|mars|moon|beach|sand|wasteland|savanna/.test(_words) || ['canyon', 'mesa', 'dunes', 'archipelago'].includes(_arch)) dens = { pebble: 1.0, twig: 0.03 };
         else if (/forest|wood|jungle|swamp|grove|autumn|fall\b|orchard|park/.test(_words)) dens = { pebble: 0.5, twig: 0.35, leaf: 1.6 };
         else dens = { pebble: 0.7, twig: 0.08, leaf: green ? 0.35 : 0 };
@@ -14418,7 +14610,7 @@ async function main() {
         const dormant = i >= baseN || (hostile && !!_defObj);   // wave-pool member: hidden until woken
         // SkeletonUtils.clone — plain clone() breaks skinned meshes (gliding)
         const _shipNpc = /(^|\s)(pirate ship|ship|galleon|frigate|warship|man-o-war|brig)s?$/i.test(String(ent.name || '').trim());
-        const _kartNpc = ent.behavior === 'vehicle' && SPEC.player && SPEC.player.car_params && SPEC.player.car_params.type === 'kart';
+        const _kartNpc = ent.behavior === 'vehicle' && SPEC.player && SPEC.player.car_params && (SPEC.player.car_params.type === 'kart' || SPEC.player.car_params.type === 'soapbox');
         // RIVAL CARS ARE BUILT LIKE YOURS (2026-10-07): a field of plain "cars"
         // loaded the generated car.glb, a melted silver shell with a smeared
         // seat for a windscreen and pink lamps, parked beside the player's
@@ -14427,7 +14619,7 @@ async function main() {
         const _carNpc = ent.behavior === 'vehicle' && !_kartNpc && !(SPEC.player && SPEC.player.ride) && SPEC.player && SPEC.player.car_params
           && /^(?:(?:rival|race|racing|sports|street|muscle|police)\s+)?(?:car|racer|rival|racecar)s?$/i.test(String(ent.name || '').trim());
         const _carK = npcs.length;
-        const inst = _kartNpc ? makeKart(null, npcs.length + 1)
+        const inst = _kartNpc ? (SPEC.player.car_params.type === 'soapbox' ? makeSoapbox(null, npcs.length + 1) : makeKart(null, npcs.length + 1))
                    : _carNpc ? buildCar({ type: ['sports', 'coupe', 'sedan', 'sports', 'compact', 'coupe'][_carK % 6],
                                           paint: [0x1d4fd8, 0xf2c230, 0x1e1e22, 0xe8e8ea, 0x2fae5a, 0xe86a1a][_carK % 6] })
                    : (_shipNpc && /\b(longships?|drakkars?|vikings?)\b/i.test(String(SPEC.prompt || ''))) ? buildLongship({ seed: (SPEC.seed || 1) + npcs.length * 13 + 5, sail: [[0x2e4a7a, 0xe9e2cf], [0x1e1e1e, 0xd8b030], [0x3d6b3a, 0xe9e2cf]][npcs.length % 3] })
@@ -14551,8 +14743,11 @@ async function main() {
           // 2026-07-27 'duplicate car': 2.4m lanes + 5m rows packed rivals
           // into the player's car (cars are ~2m wide, ~4.5m long). Real grid:
           // 3.4m lanes, 8m rows, and the whole grid starts BEHIND the player.
-          const lane = (vehIdx % 2 ? 1 : -1) * (3.4 + Math.floor(vehIdx / 2) * 0.001);
-          const back = 8 + Math.floor(vehIdx / 2) * 8;
+          // (2026-10-29) a kart or a soapbox is a metre wide: on the car grid its rivals stood eight
+          // metres back out of the picture. Small carts line up abreast of you, a second row behind
+          const _small = !!(SPEC.player.car_params && (SPEC.player.car_params.type === 'kart' || SPEC.player.car_params.type === 'soapbox'));
+          const lane = _small ? [1.7, -1.7, 0, 3.4, -3.4][vehIdx % 5] : (vehIdx % 2 ? 1 : -1) * (3.4 + Math.floor(vehIdx / 2) * 0.001);
+          const back = _small ? (vehIdx < 2 ? 0.3 : 3.0) : 8 + Math.floor(vehIdx / 2) * 8;
           holder.position.set(
             PATH[0][0] + rx * lane - Math.sin(hd) * back, 0,
             PATH[0][1] + rz * lane - Math.cos(hd) * back);
@@ -18244,6 +18439,76 @@ async function main() {
       ropes.count = r; ropes.instanceMatrix.needsUpdate = true;
     };
   }
+  // ── A SOAPBOX COURSE, DRESSED (2026-10-29) ──────────────────────────────
+  // "first to the hay bales at the bottom wins": square bales of straw, twine-bound, stacked two
+  // high across the run-out past the finish to stop the carts; bales on the outside of every bend
+  // and here and there along the verge; a painted START banner on poles over the ledge at the top,
+  // a chequered FINISH banner over the line at the foot, each strung with bunting. Two draw calls
+  // for the straw, the bales solid
+  if (SPEC.player && SPEC.player.car_params && SPEC.player.car_params.type === 'soapbox' && LVL && LVL.path && LVL.path.length > 1 && LVL.goal) {
+    try {
+      const pp = LVL.path, g = LVL.goal, rH = mulberry32((SPEC.seed || 1) * 31 + 7);
+      const MAT = (o) => { const m = new THREE.MeshStandardMaterial(o); m.userData.noAutoTex = true; return m; };
+      const hay = (() => { const c = document.createElement('canvas'); c.width = 256; c.height = 128; const x = c.getContext('2d');
+        x.fillStyle = '#c9a659'; x.fillRect(0, 0, 256, 128);
+        for (let i = 0; i < 2600; i++) { const l = 4 + rH() * 18, a = (rH() - 0.5) * 0.9, px = rH() * 256, py = rH() * 128, v = rH();
+          x.strokeStyle = v < 0.3 ? 'rgba(140,104,48,0.55)' : v < 0.8 ? 'rgba(222,190,110,0.6)' : 'rgba(246,224,160,0.7)'; x.lineWidth = 0.8 + rH() * 1.1;
+          x.beginPath(); x.moveTo(px, py); x.lineTo(px + Math.cos(a) * l, py + Math.sin(a) * l); x.stroke(); }
+        x.fillStyle = 'rgba(96,70,36,0.85)'; for (const tx of [70, 186]) x.fillRect(tx, 0, 5, 128);              // the twine
+        const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return t; })();
+      const bales = [];
+      const put = (x, z, ry, lift) => { const y = hAt(x, z); bales.push([x, y + 0.23 + (lift || 0), z, ry]); };
+      const segAt = (i) => { const [ax, az] = pp[i], [bx, bz] = pp[i + 1], L = Math.hypot(bx - ax, bz - az) || 1; return [ax, az, (bx - ax) / L, (bz - az) / L, L]; };
+      // the verge: a bale or two every few metres, either side
+      for (let i = 0; i < pp.length - 1; i++) { const [ax, az, tx, tz, L] = segAt(i);
+        for (let s = (i === 0 ? 9 : 2); s < L; s += 7 + rH() * 5) { const side = rH() < 0.5 ? -1 : 1, off = 3.5 + rH() * 0.4;
+          const x = ax + tx * s - tz * side * off, z = az + tz * s + tx * side * off, ry = Math.atan2(tx, tz) + (rH() - 0.5) * 0.25;
+          put(x, z, ry); if (rH() < 0.4) put(x + tx * 1.05, z + tz * 1.05, ry); } }
+      // the outside of every bend: a wall of five
+      for (let i = 1; i < pp.length - 1; i++) {
+        const [, , t0x, t0z] = segAt(i - 1), [, , t1x, t1z] = segAt(i), turn = t0x * t1z - t0z * t1x, side = turn > 0 ? 1 : -1;
+        const bx = (t0x + t1x) / 2, bz = (t0z + t1z) / 2, bl = Math.hypot(bx, bz) || 1, ux = bx / bl, uz = bz / bl;
+        for (let k = -2; k <= 2; k++) put(pp[i][0] + ux * k * 1.05 - uz * side * 3.6, pp[i][1] + uz * k * 1.05 + ux * side * 3.6, Math.atan2(ux, uz));
+      }
+      // the run-out: two courses across the way, a third on top in the middle, curving round
+      const [lx, lz, fx, fz] = segAt(pp.length - 2), nx = -fz, nz = fx;
+      for (let row = 0; row < 3; row++) { const n = row < 2 ? 11 : 5, half = (n - 1) / 2;
+        for (let k = 0; k < n; k++) { const o = (k - half) * 1.04 + (row === 1 ? 0.5 : 0), bend = o * o * 0.035;
+          const x = g[0] + fx * (5.5 - bend) + nx * o, z = g[1] + fz * (5.5 - bend) + nz * o;
+          put(x, z, Math.atan2(nx, nz), row * 0.46); } }
+      const bm = new THREE.InstancedMesh(new THREE.BoxGeometry(1.0, 0.46, 0.5), MAT({ map: hay, roughness: 0.95 }), bales.length);
+      const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _p = new THREE.Vector3(), _s = new THREE.Vector3(1, 1, 1), _y = new THREE.Vector3(0, 1, 0);
+      bales.forEach(([x, y, z, ry], i) => { _q.setFromAxisAngle(_y, ry + Math.PI / 2); bm.setMatrixAt(i, _m.compose(_p.set(x, y, z), _q, _s));
+        const col = RAPIER.ColliderDesc.cuboid(0.5, 0.23, 0.25).setTranslation(x, y, z); col.setRotation({ x: 0, y: Math.sin((ry + Math.PI / 2) / 2), z: 0, w: Math.cos((ry + Math.PI / 2) / 2) }); world.createCollider(col); });
+      bm.castShadow = bm.receiveShadow = true; scene.add(bm);
+      // the banners, on poles either side, with bunting under them
+      const flagCols = [0xc8302a, 0xf2f0e8, 0x2a5aa8, 0xe8b830, 0x3a8a4a];
+      const banner = (cx, cz, tx, tz, draw, y0) => {
+        const c = document.createElement('canvas'); c.width = 512; c.height = 96; draw(c.getContext('2d'), 512, 96);
+        const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8;
+        const px = -tz, pz = tx, W = 7.2, y = hAt(cx, cz) + (y0 || 2.9), yaw = Math.atan2(tx, tz);
+        for (const sd of [-1, 1]) { const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.07, y - hAt(cx + px * sd * W / 2, cz + pz * sd * W / 2) + 0.7, 8), MAT({ color: 0x6a4a2e, roughness: 0.8 }));
+          const gy = hAt(cx + px * sd * W / 2, cz + pz * sd * W / 2); pole.position.set(cx + px * sd * W / 2, (gy + y + 0.7) / 2, cz + pz * sd * W / 2); pole.castShadow = true; scene.add(pole); }
+        const cl = new THREE.Mesh(new THREE.PlaneGeometry(W - 0.3, 0.95), MAT({ map: t, side: THREE.DoubleSide, roughness: 0.9 }));
+        cl.position.set(cx, y, cz); cl.rotation.y = yaw + Math.PI; cl.castShadow = true; scene.add(cl);   // its face to the carts coming down
+        // bunting: a sagging string of pennants just under the cloth
+        const fl = new THREE.InstancedMesh((() => { const gg = new THREE.BufferGeometry(); gg.setAttribute('position', new THREE.Float32BufferAttribute([-0.16, 0, 0, 0.16, 0, 0, 0, -0.32, 0], 3)); gg.computeVertexNormals(); return gg; })(),
+          MAT({ side: THREE.DoubleSide, roughness: 0.85 }), 18);
+        for (let k = 0; k < 18; k++) { const u = (k + 0.5) / 18 - 0.5, sag = 0.35 * (1 - 4 * u * u);
+          fl.setMatrixAt(k, _m.compose(_p.set(cx + px * u * (W - 0.4), y - 0.62 - sag, cz + pz * u * (W - 0.4)), _q.setFromAxisAngle(_y, yaw), _s));
+          fl.setColorAt(k, new THREE.Color(flagCols[k % flagCols.length])); }
+        scene.add(fl);
+      };
+      const [s0x, s0z] = [pp[1][0] - pp[0][0], pp[1][1] - pp[0][1]], s0l = Math.hypot(s0x, s0z) || 1;
+      banner(pp[0][0] + s0x / s0l * 3.0, pp[0][1] + s0z / s0l * 3.0, s0x / s0l, s0z / s0l, (x, W, H) => {
+        x.fillStyle = '#f2ead6'; x.fillRect(0, 0, W, H); x.strokeStyle = '#a8241c'; x.lineWidth = 8; x.strokeRect(6, 6, W - 12, H - 12);
+        x.fillStyle = '#a8241c'; x.font = 'bold 60px Georgia, serif'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText('START', W / 2, H / 2 + 3); });
+      banner(g[0], g[1], fx, fz, (x, W, H) => {
+        for (let i = 0; i < W / 24; i++) for (let j = 0; j < 4; j++) { x.fillStyle = (i + j) % 2 ? '#141414' : '#f4f2ec'; x.fillRect(i * 24, j * 24, 24, 24); }
+        x.fillStyle = '#f4f2ec'; x.fillRect(W / 2 - 120, 18, 240, 60); x.fillStyle = '#141414'; x.font = 'bold 46px Georgia, serif'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText('FINISH', W / 2, H / 2 + 2); });
+      window.__soapCourse = { bales: bales.length };
+    } catch (e) { console.warn('[game] soapbox course skipped: ' + e.message); }
+  }
   // ── THE BIG TOP, BUILT (see BIGTOP above) ───────────────────────────────
   if (BIGTOP) {
     const B = BIGTOP, C = B.C, R = B.R, Y = hAt(C[0], C[1]), rB = mulberry32((SPEC.seed || 1) * 53 + 29);
@@ -18660,7 +18925,13 @@ async function main() {
     const BULB = _multi ? [[3.2, 0.5, 0.4], [0.5, 2.6, 0.7], [0.6, 1.0, 3.4], [3.4, 2.4, 0.5]] : [[3.6, 2.5, 1.2]];
     const wreathM = MAT({ color: 0x24472a, roughness: 0.85 }), bowM = MAT({ color: 0xa8161c, roughness: 0.5 });
     for (const c of V.cot) {
-      const y0 = Math.min(...[[-1, -1], [1, -1], [-1, 1], [1, 1]].map(([a, b]) => { const [x, z] = V.loc(c, a * c.w / 2, b * c.d / 2); return hAt(x, z); })) - 0.05;
+      // A COTTAGE ON A SLOPE STANDS ON ITS PLINTH (2026-10-29): seated at its lowest corner, a
+      // cottage on a hillside was buried to the sills on its uphill side. It stands at its highest
+      // corner now, and on the low side its stone plinth runs down to the ground
+      const _cy = [[-1, -1], [1, -1], [-1, 1], [1, 1], [0, 0]].map(([a, b]) => { const [x, z] = V.loc(c, a * c.w / 2, b * c.d / 2); return hAt(x, z); });
+      const _cyMin = Math.min(..._cy), _cyMax = Math.max(..._cy);
+      const fall = (!c.dutch && !c.norse && _cyMax - _cyMin > 0.3) ? Math.min(2.6, _cyMax - _cyMin) : 0;
+      const y0 = (fall ? _cyMax - 0.12 : _cyMin) - 0.05;
       const G = new THREE.Group(); G.position.set(c.x, y0, c.z); G.rotation.y = c.ry;
       const add = (geo, m, x, y, z, rx, rz) => { const o = new THREE.Mesh(geo, m); o.position.set(x, y, z); if (rx) o.rotation.x = rx; if (rz) o.rotation.z = rz; o.castShadow = true; o.receiveShadow = true; G.add(o); return o; };
       if (c.dutch) {
@@ -18739,7 +19010,7 @@ async function main() {
         c.y0 = y0;
         continue;
       }
-      add(uvBox(c.w + 0.2, 0.55, c.d + 0.2, 2.4), stoneM, 0, 0.12, 0);
+      add(uvBox(c.w + 0.2, 0.55 + fall, c.d + 0.2, 2.4), stoneM, 0, 0.12 - fall / 2, 0);
       add(uvBox(c.w, c.h, c.d, 2.6), c.stone ? stoneM : wallMs[c.tint], 0, 0.4 + c.h / 2, 0);
       // the thatch: two thick slopes, ridge along the cottage, eaves well past the walls
       const rise = c.d * 0.52, slope = Math.hypot(c.d / 2 + 0.7, rise + 0.35), ang = Math.atan2(rise, c.d / 2);
@@ -18755,6 +19026,10 @@ async function main() {
       add(uvBox(0.8, rise + 2.2, 0.8, 1.6), stoneM, chx, 0.4 + c.h + (rise + 2.2) / 2 - 0.6, -0.4);
       // the front: a door and two windows with shutters, facing the green
       const fz = c.d / 2 + 0.03, dx = (rV() - 0.5) * c.w * 0.3, sh = shutterMs[Math.floor(rV() * shutterMs.length)];
+      // and where the ground falls away below the door, stone steps up to it
+      { const [sx, sz] = V.loc(c, dx, fz + 0.7), drop = y0 + 0.4 - hAt(sx, sz);
+        if (drop > 0.3) { const n = Math.min(10, Math.ceil(drop / 0.22)), rh = drop / n;
+          for (let k = 0; k < n; k++) add(uvBox(1.4, rh * (k + 1), 0.34, 1.6), stoneM, dx, 0.4 - drop + rh * (k + 1) / 2, fz + 0.1 + (n - k) * 0.32 - 0.16); } }
       add(new THREE.BoxGeometry(1.0, 1.95, 0.08), darkM, dx, 0.4 + 0.98, fz);
       add(new THREE.BoxGeometry(1.2, 0.12, 0.12), darkM, dx, 0.4 + 2.0, fz + 0.02);
       for (const wx of [dx - 1.9, dx + 1.9]) { if (Math.abs(wx) > c.w / 2 - 0.6) continue;
@@ -18905,6 +19180,35 @@ async function main() {
         window.__market = { stalls };
       }
     }
+    // A HILL STREET IS COBBLED (2026-10-29): on a descent the lane is the course, top to bottom:
+    // granite setts in arcs, worn smooth and pale down the middle where the wheels run, the
+    // joints dark, grass edging in at the kerbs
+    if (V.desc) {
+      const pp = LVL.path, HW = 2.7, NX = 9, pts = [];
+      for (let i = 0; i < pp.length - 1; i++) { const [ax, az] = pp[i], [bx, bz] = pp[i + 1], L = Math.hypot(bx - ax, bz - az) || 1;
+        for (let sA = 0; sA < L; sA += 0.8) pts.push([ax + (bx - ax) * sA / L, az + (bz - az) * sA / L]); }
+      pts.push(pp[pp.length - 1].slice()); const g2 = LVL.goal, gx = pp[pp.length - 1][0] - pp[pp.length - 2][0], gz = pp[pp.length - 1][1] - pp[pp.length - 2][1], gl = Math.hypot(gx, gz) || 1;
+      for (let k = 1; k <= 12; k++) pts.push([g2[0] + gx / gl * k * 0.8, g2[1] + gz / gl * k * 0.8]);     // on into the run-out
+      const pos = [], uv = [], idx = []; let acc = 0;
+      pts.forEach((q, i) => { const a = pts[Math.max(0, i - 1)], b = pts[Math.min(pts.length - 1, i + 1)], dx = b[0] - a[0], dz = b[1] - a[1], dl = Math.hypot(dx, dz) || 1;
+        if (i) acc += Math.hypot(q[0] - pts[i - 1][0], q[1] - pts[i - 1][1]);
+        for (let k = 0; k < NX; k++) { const o = -HW + 2 * HW * k / (NX - 1), x = q[0] - dz / dl * o, z = q[1] + dx / dl * o;
+          pos.push(x, hAt(x, z) + 0.09, z); uv.push(k / (NX - 1), acc / 2.6); } });
+      for (let i = 0; i < pts.length - 1; i++) for (let k = 0; k < NX - 1; k++) { const a = i * NX + k, b = a + NX; idx.push(a, a + 1, b, a + 1, b + 1, b); }   // wound to face up
+      const gR = new THREE.BufferGeometry(); gR.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); gR.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); gR.setIndex(idx); gR.computeVertexNormals();
+      const cob = cvT(256, 256, (gg, W, H) => { gg.fillStyle = '#3a342e'; gg.fillRect(0, 0, W, H);
+        for (let row = 0; row < 12; row++) { const y0 = row * H / 12, off = (row % 2) * 10;
+          for (let x = -20 + off; x < W + 20; x += 18 + rV() * 6) { const w2 = 15 + rV() * 5, h2 = H / 12 - 3, mid = 1 - Math.abs((x + w2 / 2) / W - 0.5) * 2;
+            const l = 108 + rV() * 40 + mid * 34, tint = rV() < 0.25 ? [12, 4, -6] : rV() < 0.3 ? [-8, -2, 6] : [0, 0, 0];
+            gg.fillStyle = `rgb(${l + tint[0] | 0},${l * 0.95 + tint[1] | 0},${l * 0.88 + tint[2] | 0})`;
+            gg.beginPath(); gg.roundRect ? gg.roundRect(x + 1.5, y0 + 1.5, w2, h2, 4) : gg.rect(x + 1.5, y0 + 1.5, w2, h2); gg.fill();
+            gg.fillStyle = 'rgba(255,255,255,0.12)'; gg.fillRect(x + 3, y0 + 3, w2 - 5, 3); } }
+        // moss and grass in the joints toward the kerbs
+        for (let i = 0; i < 500; i++) { const x = rV() < 0.5 ? rV() * W * 0.16 : W - rV() * W * 0.16; gg.fillStyle = `rgba(${70 + rV() * 30 | 0},${100 + rV() * 40 | 0},50,${0.3 + rV() * 0.4})`; gg.fillRect(x, rV() * H, 2 + rV() * 3, 2 + rV() * 3); }
+        gg.globalCompositeOperation = 'destination-in'; const gr = gg.createLinearGradient(0, 0, W, 0); gr.addColorStop(0, 'rgba(0,0,0,0)'); gr.addColorStop(0.07, 'rgba(0,0,0,1)'); gr.addColorStop(0.93, 'rgba(0,0,0,1)'); gr.addColorStop(1, 'rgba(0,0,0,0)'); gg.fillStyle = gr; gg.fillRect(0, 0, W, H); });
+      const _cm = MAT({ map: cob, transparent: true, alphaTest: 0.05, roughness: 0.82, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+      const m = new THREE.Mesh(gR, _cm); m.receiveShadow = true; m.renderOrder = 1; scene.add(m); window.__cobbles = pts.length;
+    } else
     // the lane in from the spawn: packed earth that follows the ground
     { const L = V.LL - 2, g = new THREE.PlaneGeometry(3.2, L, 6, 40); g.rotateX(-Math.PI / 2);
       const pa = g.attributes.position;
@@ -26480,9 +26784,11 @@ async function main() {
   // wider), side pods and a nose cone in the paint, a bucket seat, a steering
   // wheel, a number board, a roll of bumper all round, and its driver sitting
   // low in a helmet. Nose on +Z, as the finished car is; metres.
-  const KART_PAINTS = [0xd83a2a, 0x2a6ad8, 0xf2c230, 0x2fae5a, 0xe86a1a, 0x8a3ad8, 0xf2f2f2, 0x1a1a1e];
+  // (2026-10-29) a function, not a const: the rival karts are spawned before this line runs, and a
+  // const read then is in its dead zone (the rivals threw and never stood on the grid)
+  function KART_PAINTS_() { return [0xd83a2a, 0x2a6ad8, 0xf2c230, 0x2fae5a, 0xe86a1a, 0x8a3ad8, 0xf2f2f2, 0x1a1a1e]; }
   function makeKart(cp, idx) {
-    const g = new THREE.Group(), k = idx || 0;
+    const g = new THREE.Group(), k = idx || 0, KART_PAINTS = KART_PAINTS_();
     const M = (o) => { const m = new THREE.MeshStandardMaterial(o); m.userData.noAutoTex = true; return m; };
     const paint = M({ color: cp && cp.paint !== undefined ? cp.paint : KART_PAINTS[k % KART_PAINTS.length], roughness: 0.32, metalness: 0.15 });
     const tube = M({ color: 0x2a2c30, roughness: 0.4, metalness: 0.8 }), rub = M({ color: 0x141414, roughness: 0.88 }), rim = M({ color: 0xc8ccd2, roughness: 0.3, metalness: 0.9 });
@@ -26517,6 +26823,113 @@ async function main() {
     g.userData.kart = true;
     return g;
   }
+  // A SOAPBOX (2026-10-29): a plank on two axles, a painted crate for a cowl with its race number
+  // in a white roundel, four spoked pram wheels, a rope to steer the front axle by, and the kid in
+  // a leather helmet and goggles sitting with their feet on the axle. No engine. Nose on +Z.
+  // (the same dead zone: the rivals' carts are built before these lines run, so they live on window)
+  function makeSoapbox(cp, idx) {
+    const g = new THREE.Group(), k = idx || 0;
+    const M = (o) => { const m = new THREE.MeshStandardMaterial(o); m.userData.noAutoTex = true; return m; };
+    const SOAP_PAINTS = [0xc8402a, 0x2f6fb8, 0xe8b830, 0x3a8f4a, 0xe07a2a, 0x7a4ab0, 0xe8e2d0, 0x26304a];
+    let _sbWood = window.__sbWood || null;
+    if (!_sbWood) {
+      // planed pine: boards a hand wide, the grain running along them, a knot here and there
+      const c = document.createElement('canvas'); c.width = 256; c.height = 256; const x = c.getContext('2d');
+      x.fillStyle = '#b98a58'; x.fillRect(0, 0, 256, 256);
+      let s = 9137; const r = () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296);
+      for (let b = 0; b < 4; b++) {
+        x.fillStyle = `rgba(${150 + r() * 40 | 0},${105 + r() * 30 | 0},${62 + r() * 20 | 0},0.55)`; x.fillRect(b * 64, 0, 64, 256);
+        for (let i = 0; i < 26; i++) { x.strokeStyle = `rgba(90,58,30,${0.12 + r() * 0.25})`; x.lineWidth = 0.6 + r() * 1.4; x.beginPath();
+          const x0 = b * 64 + r() * 64; x.moveTo(x0, 0); for (let y = 0; y <= 256; y += 32) x.lineTo(x0 + Math.sin(y * 0.03 + i) * 2.5, y); x.stroke(); }
+        if (r() < 0.8) { const kx = b * 64 + 12 + r() * 40, ky = r() * 256; x.fillStyle = 'rgba(80,46,22,0.75)'; x.beginPath(); x.ellipse(kx, ky, 3.5, 6, 0, 0, 7); x.fill(); }
+        x.fillStyle = 'rgba(50,30,16,0.8)'; x.fillRect(b * 64, 0, 1.5, 256);              // the gap between boards
+      }
+      _sbWood = window.__sbWood = new THREE.CanvasTexture(c); _sbWood.colorSpace = THREE.SRGBColorSpace; _sbWood.wrapS = _sbWood.wrapT = THREE.RepeatWrapping; _sbWood.anisotropy = 8;
+    }
+    const paintHex = cp && cp.paint !== undefined ? cp.paint : SOAP_PAINTS[k % SOAP_PAINTS.length];
+    // the cowl's paint, brushed on by hand: the wood shows through at the edges, and the number
+    const cowlTex = (() => {
+      const c = document.createElement('canvas'); c.width = 256; c.height = 128; const x = c.getContext('2d');
+      x.drawImage(_sbWood.image, 0, 0, 256, 128);
+      const pc = new THREE.Color(paintHex);
+      x.fillStyle = `rgba(${pc.r * 255 | 0},${pc.g * 255 | 0},${pc.b * 255 | 0},0.93)`; x.fillRect(5, 5, 246, 118);
+      x.fillStyle = '#f4efe2'; x.beginPath(); x.arc(128, 64, 40, 0, 7); x.fill();
+      x.fillStyle = '#1c1a18'; x.font = 'bold 54px Georgia, serif'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText(String(k === 0 ? 7 : k + 1), 128, 68);
+      x.strokeStyle = 'rgba(255,255,255,0.85)'; x.lineWidth = 5; x.beginPath(); x.moveTo(0, 14); x.lineTo(256, 14); x.moveTo(0, 114); x.lineTo(256, 114); x.stroke();
+      const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return t; })();
+    const wood = M({ map: _sbWood, roughness: 0.82 }), cowl = M({ map: cowlTex, roughness: 0.55 }), paint = M({ color: paintHex, roughness: 0.55 });
+    const iron = M({ color: 0x2e2c2a, roughness: 0.5, metalness: 0.7 }), rub = M({ color: 0x1a1a1a, roughness: 0.9 }), spokeM = M({ color: 0xd8d4cc, roughness: 0.35, metalness: 0.8 });
+    const rope = M({ color: 0xc8b48a, roughness: 0.95 }), skin = M({ color: [0xe8b896, 0xc68a64, 0x8d5a3c, 0xf0c8a8][k % 4], roughness: 0.62 });
+    const jumper = M({ color: [0x2a4f8a, 0xb83a2e, 0x3f7a3a, 0xe0b040, 0x6a3a8a][k % 5], roughness: 0.9 }), shorts = M({ color: [0x3a3632, 0x54483a, 0x2a2e3a][k % 3], roughness: 0.9 });
+    const leather = M({ color: 0x6a3e22, roughness: 0.55 }), glass = M({ color: 0x9fc4d8, roughness: 0.05, metalness: 0.5 }), sock = M({ color: 0xf2efe6, roughness: 0.9 });
+    const add = (geo, mat, x, y, z, p) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.castShadow = true; m.receiveShadow = true; (p || g).add(m); return m; };
+    // the chassis: a long board, a cross-plank under each axle, the cowl at the front, a seat back
+    const plank = add(new THREE.BoxGeometry(0.5, 0.035, 1.8), wood, 0, 0.27, 0);
+    plank.geometry.attributes.uv.array.forEach((v, i, a) => { a[i] = v * (i % 2 ? 3 : 1); });
+    const cw = add(new THREE.BoxGeometry(0.56, 0.3, 0.72), [paint, paint, paint, paint, cowl, paint], 0, 0.44, 0.48);
+    for (const sx of [-1, 1]) { const sd = add(new THREE.PlaneGeometry(0.72, 0.3), cowl, sx * 0.282, 0.44, 0.48); sd.rotation.y = sx * Math.PI / 2; }
+    add(new THREE.BoxGeometry(0.58, 0.03, 0.76), wood, 0, 0.605, 0.48);                    // the crate's lid
+    const back = add(new THREE.BoxGeometry(0.5, 0.36, 0.035), wood, 0, 0.45, -0.62); back.rotation.x = -0.18;
+    add(new THREE.BoxGeometry(0.46, 0.03, 0.4), wood, 0, 0.3, -0.38);                        // the seat
+    // the axles: the front one turns on its kingpin bolt (named: the steer swings it)
+    const fAx = new THREE.Group(); fAx.name = 'sb-front'; fAx.position.set(0, 0.21, 0.72); g.add(fAx);
+    add(new THREE.BoxGeometry(0.98, 0.07, 0.09), wood, 0, 0, 0, fAx);
+    add(new THREE.CylinderGeometry(0.018, 0.018, 0.12, 8), iron, 0, 0.05, 0, fAx);
+    add(new THREE.BoxGeometry(0.98, 0.07, 0.09), wood, 0, 0.21, -0.68);
+    const spin = [];
+    const wheel = (parent, x, y, z, r) => {
+      const w = new THREE.Group(); w.position.set(x, y, z); parent.add(w);
+      const tyre = add(new THREE.TorusGeometry(r - 0.02, 0.024, 8, 28), rub, 0, 0, 0, w); tyre.rotation.y = Math.PI / 2;
+      const rimR = add(new THREE.TorusGeometry(r - 0.045, 0.008, 6, 28), spokeM, 0, 0, 0, w); rimR.rotation.y = Math.PI / 2;
+      const hub = add(new THREE.CylinderGeometry(0.03, 0.03, 0.07, 10), iron, 0, 0, 0, w); hub.rotation.z = Math.PI / 2;
+      for (let q = 0; q < 10; q++) { const sp = add(new THREE.CylinderGeometry(0.004, 0.004, r - 0.05, 4), spokeM, 0, 0, 0, w);
+        sp.rotation.x = q / 10 * Math.PI * 2; sp.position.set(0, Math.cos(q / 10 * Math.PI * 2) * (r - 0.05) / 2, Math.sin(q / 10 * Math.PI * 2) * (r - 0.05) / 2); }
+      spin.push({ w, r }); return w;
+    };
+    for (const sx of [-1, 1]) { wheel(fAx, sx * 0.53, 0, 0, 0.21); wheel(g, sx * 0.53, 0.23, -0.68, 0.23); }
+    // the kid: sitting on the board, knees up, feet braced on the front axle, the rope in both hands
+    const kid = new THREE.Group(); kid.position.set(0, 0.3, -0.36); g.add(kid);
+    const torso = add(new THREE.CapsuleGeometry(0.13, 0.22, 4, 12), jumper, 0, 0.27, 0.02, kid); torso.rotation.x = 0.12;
+    for (const sx of [-1, 1]) {
+      const thigh = add(new THREE.CapsuleGeometry(0.06, 0.26, 4, 8), shorts, sx * 0.09, 0.1, 0.22, kid); thigh.rotation.x = Math.PI / 2 - 0.45;
+      const shin = add(new THREE.CapsuleGeometry(0.048, 0.3, 4, 8), skin, sx * 0.1, 0.07, 0.55, kid); shin.rotation.x = Math.PI / 2 + 0.55;
+      add(new THREE.CylinderGeometry(0.05, 0.05, 0.08, 8), sock, sx * 0.1, 0.0, 0.7, kid);
+      const shoe = add(new THREE.BoxGeometry(0.09, 0.07, 0.15), leather, sx * 0.1, -0.06, 0.8, kid); shoe.rotation.x = -0.4;
+      const upper = add(new THREE.CapsuleGeometry(0.045, 0.2, 4, 8), jumper, sx * 0.17, 0.36, 0.1, kid); upper.rotation.x = 1.05; upper.rotation.z = -sx * 0.18;
+      const fore = add(new THREE.CapsuleGeometry(0.04, 0.18, 4, 8), skin, sx * 0.15, 0.3, 0.3, kid); fore.rotation.x = 1.45;
+      add(new THREE.SphereGeometry(0.045, 10, 8), skin, sx * 0.14, 0.29, 0.42, kid);
+    }
+    add(new THREE.CylinderGeometry(0.05, 0.055, 0.07, 10), skin, 0, 0.47, 0.03, kid);                 // neck
+    add(new THREE.SphereGeometry(0.115, 20, 16), skin, 0, 0.6, 0.04, kid);                            // head
+    const helm = add(new THREE.SphereGeometry(0.125, 20, 12, 0, Math.PI * 2, 0, 1.45), leather, 0, 0.62, 0.02, kid); helm.rotation.x = -0.15;
+    for (const sx of [-1, 1]) { const flap = add(new THREE.BoxGeometry(0.02, 0.1, 0.07), leather, sx * 0.118, 0.55, 0.03, kid); flap.rotation.z = sx * 0.08;
+      const gg = add(new THREE.TorusGeometry(0.032, 0.01, 6, 14), iron, sx * 0.045, 0.66, 0.135, kid); gg.rotation.x = 0.1;
+      add(new THREE.CircleGeometry(0.03, 14), glass, sx * 0.045, 0.66, 0.142, kid); }
+    const strap = add(new THREE.TorusGeometry(0.122, 0.008, 6, 30, Math.PI), leather, 0, 0.66, 0.02, kid); strap.rotation.x = Math.PI / 2;
+    // the rope: from one end of the front axle, through the hands, to the other
+    const ropeAt = (sx) => [new THREE.Vector3(sx * 0.4, 0.27, 0.72), new THREE.Vector3(sx * 0.24, 0.5, 0.35), new THREE.Vector3(sx * 0.14, 0.59, 0.06)];
+    for (const sx of [-1, 1]) add(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(ropeAt(sx)), 10, 0.009, 5), rope, 0, 0, 0);
+    add(new THREE.TubeGeometry(new THREE.CatmullRomCurve3([new THREE.Vector3(-0.14, 0.59, 0.06), new THREE.Vector3(0, 0.56, 0.08), new THREE.Vector3(0.14, 0.59, 0.06)]), 6, 0.009, 5), rope, 0, 0, 0);
+    g.userData.kart = true; g.userData.soapbox = { front: fAx, spin, last: null };
+    (window.__soapboxes = window.__soapboxes || []).push(g);
+    return g;
+  }
+  // the carts' wheels turn with the ground they cover, and the front axle with the way they turn
+  window.__soapTick = (dt) => {
+    for (const g of window.__soapboxes || []) {
+      const sb = g.userData.soapbox; g.updateWorldMatrix(true, false);
+      const p = new THREE.Vector3().setFromMatrixPosition(g.matrixWorld), q = new THREE.Quaternion().setFromRotationMatrix(g.matrixWorld);
+      const yaw = new THREE.Euler().setFromQuaternion(q, 'YXZ').y;
+      if (sb.last) {
+        const d = p.distanceTo(sb.last.p), fz = Math.cos(yaw), fx = Math.sin(yaw);
+        const sgn = Math.sign((p.x - sb.last.p.x) * fx + (p.z - sb.last.p.z) * fz) || 1;
+        for (const w of sb.spin) w.w.rotation.x += sgn * d / w.r;
+        const dy = Math.atan2(Math.sin(yaw - sb.last.yaw), Math.cos(yaw - sb.last.yaw));
+        sb.front.rotation.y = THREE.MathUtils.damp(sb.front.rotation.y, THREE.MathUtils.clamp(dy / Math.max(dt, 1e-3) * 0.35, -0.45, 0.45), 8, dt);
+      }
+      sb.last = { p, yaw };
+    }
+  };
   // A PLANETARY ROVER (2026-10-22): six aluminium wheels on a rocker-bogie, a
   // white-and-gold body under a solar deck, the mast with its camera head, the
   // dish, the finned power unit at the back. Nose on +Z, like the kart.
@@ -26569,6 +26982,7 @@ async function main() {
   }
   function buildCar(cp) {
     if (cp && cp.type === 'kart') return makeKart(cp, 0);
+    if (cp && cp.type === 'soapbox') return makeSoapbox(cp, 0);
     if (cp && cp.type === 'rover') return makeRover(cp);
     // LOFTED CARS (2026-10-01): proc/car.js builds the body as one skin with
     // flush glass, turned wheels and real lamps; this extruded build stays as
@@ -27120,7 +27534,7 @@ async function main() {
         const side = rngT() < 0.5 ? 1 : -1;
         const cx2 = px2 + Math.cos(hd3) * side * ((r.w || 7) / 2 - 0.4);
         const cz2 = pz2 - Math.sin(hd3) * side * ((r.w || 7) / 2 - 0.4);
-        if (Math.hypot(cx2, cz2) < 14 || inBldg(cx2, cz2, 0.5)) continue;
+        if (Math.hypot(cx2, cz2) < 14 || inBldg(cx2, cz2, 0.5) || (MKTPLAN && MKTPLAN.near(cx2, cz2, 4))) continue;
         const pc = mkCar(carTints[Math.floor(rngT() * carTints.length)]);
         pc.position.set(cx2, hAt(cx2, cz2), cz2);
         pc.rotation.y = hd3 + (side > 0 ? 0 : Math.PI);
@@ -27130,7 +27544,7 @@ async function main() {
     }
     for (let ti = 0; ti < 9; ti++) {                 // ambient drivers
       const r = OSM.roads[Math.floor(rngT() * OSM.roads.length)];
-      if (!r || r.pts.length < 2) continue;
+      if (!r || r.pts.length < 2 || _mktRoad(r)) continue;
       const tc = mkCar(carTints[Math.floor(rngT() * carTints.length)]);
       scene.add(tc);
       window.__traffic.push({ obj: tc, pts: r.pts, seg: 0, t: rngT(),
@@ -27157,7 +27571,7 @@ async function main() {
                     0x1f5f52, 0x6d2f6d];
     // longest streets first: a car on a 12m stub spends its life turning round
     const lanes = (OSM.roads || [])
-      .filter(r => r.pts && r.pts.length >= 2)
+      .filter(r => r.pts && r.pts.length >= 2 && !_mktRoad(r))
       .map(r => {
         let L = 0;
         for (let i = 0; i < r.pts.length - 1; i++)
@@ -27194,7 +27608,7 @@ async function main() {
             const off = (r.w || 7) / 2 - 1.05;
             const cxP = x1 + ux * d0 - uz * off * side;
             const czP = z1 + uz * d0 + ux * off * side;
-            if (Math.hypot(cxP, czP) < 15 || inBldg(cxP, czP, 0.6)) continue;
+            if (Math.hypot(cxP, czP) < 15 || inBldg(cxP, czP, 0.6) || (MKTPLAN && MKTPLAN.near(cxP, czP, 4))) continue;
             if (window.__cars.some(k => Math.hypot(k.x - cxP, k.z - czP) < 7)) continue;
             const tyP = CAR_TYPE_KEYS[Math.floor(rngPk() * CAR_TYPE_KEYS.length)];
             const shP = buildCar({ type: tyP,
@@ -27455,7 +27869,11 @@ async function main() {
           // short stubs won the roll and the rest of the city read as empty.
           // Choosing by cumulative LENGTH makes density per metre of
           // pavement even, which is what "scattered everywhere" means.
-          const r = _pickRoadByLength(rngP());
+          // A NIGHT MARKET IS CROWDED (2026-10-29): a third of the city's walkers are in its aisle,
+          // up and down between the stalls, shoulder to shoulder, rather than spread over the district
+          const _inMkt = !!(MKTPLAN && i < 64);
+          const r = _inMkt ? { pts: [[MKTPLAN.ox - MKTPLAN.ux * 2, MKTPLAN.oz - MKTPLAN.uz * 2], [MKTPLAN.ox + MKTPLAN.ux * (MKTPLAN.LEN + 1), MKTPLAN.oz + MKTPLAN.uz * (MKTPLAN.LEN + 1)]], w: 0 }
+                           : _pickRoadByLength(rngP());
           if (!r || r.pts.length < 2) continue;
           // pick the body FIRST — clothing and build come with the model,
           // and the tint below is now only within-variant variation
@@ -27504,7 +27922,7 @@ async function main() {
             // half the crowd walked head-on into the other half on the
             // same slab. Tying it to dir gives each pavement one dominant
             // flow, with a tenth going against it so it is not a parade.
-            side: ((r.w || 7) / 2 + 1.6 + rngP() * 1.6)
+            side: _inMkt ? (rngP() - 0.5) * 2.8 : ((r.w || 7) / 2 + 1.6 + rngP() * 1.6)
                   * (rngP() < 0.9 ? _pdir : -_pdir) });
         }
         console.log('[game] pedestrians: ' + window.__peds.length);
@@ -30559,6 +30977,10 @@ async function main() {
       // photo floor was assigned and overwrote it with tiled sand/grass —
       // the user stood on our procedural ground while their image floated
       // as a wall. Image worlds keep the reprojected photo, full stop.
+      // dry sand: dunes, or a desert by name that is not a beach, a coast or stony country
+      const DUNE_SAND = gname === 'sand' && !_toonGround && !panoGroundTex && (_arch2 === 'dunes'
+        || (/\b(desert|dunes?|sahara|erg|sand sea|caravan|camels?|bedouin|oasis)\b/.test(wn + ' ' + String(SPEC.prompt || '').toLowerCase())
+            && !/\b(beach|coast|shore|sea|ocean|island|lagoon|bay|harbou?r|surf)\b/.test(wn + ' ' + String(SPEC.prompt || '').toLowerCase())));
       if (!panoGroundTex) {
       gmat.map = pbr(gname, grep2, true);
       gmat.normalMap = pbr(gname + '_n', grep2, false);
@@ -30579,6 +31001,13 @@ async function main() {
         gmat.map = _sn.map; gmat.normalMap = _sn.normalMap;
         gmat.normalScale.set(1.15, 1.15);
         if (_sn.roughnessMap) { gmat.roughnessMap = _sn.roughnessMap; gmat.roughness = 1.0; } else gmat.roughness = 0.82;   // the crystals glint
+      }
+      // DUNE SAND IS DRAWN (2026-10-29): the sand photo is a damp beach's, mottled and stony;
+      // over a caravan's dunes it read as packed dirt. Dry sand is wind ripples (proc/ground.js)
+      if (DUNE_SAND) {
+        const _ds = __duneSandTextures(Math.max(8, Math.round(gsize / 6)), renderer.capabilities.getMaxAnisotropy(), 1024, gsize / Math.max(8, Math.round(gsize / 6)));
+        gmat.map = _ds.map; gmat.normalMap = _ds.normalMap; gmat.roughnessMap = _ds.roughnessMap;
+        gmat.roughness = 1.0; gmat.normalScale.set(1.0, 1.0);
       }
       // AND IT IS TINTED BY THE WORLD'S OWN COLOUR (2026-09-03). The tiled
       // photo below is a neutral grey rock / grey sand / green grass; the
@@ -30626,6 +31055,7 @@ async function main() {
       const _cliffTex = _toonGround ? gmat.map : pbr(STRATA ? 'sandstone' : 'cliff', 1, true);
       const _cliffM = STRATA ? 9.0 : 7.0;
       const _tileM = (gname === 'snow' && !_toonGround) ? gsize / Math.max(8, Math.round(gsize / 14))   // drawn snow tiles at 14 m
+        : DUNE_SAND ? gsize / Math.max(8, Math.round(gsize / 6))                                     // drawn sand at 6 m
         : gsize / grep2;                               // metres per tile of the photo
       // CAUSTICS ON THE SEABED (2026-10-16): under a reef's water the sand was
       // one flat tint. Sunlight through a moving surface draws a drifting web
@@ -31357,6 +31787,7 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
     return cur + d * (1 - Math.exp(-lambda * dt));
   }
   const DRIVE = SPEC.player.mode === 'drive';    // arcade car physics
+  const SOAPBOX = DRIVE && !!(SPEC.player.car_params && SPEC.player.car_params.type === 'soapbox');   // the hill is its engine
   let carVX = 0, carVZ = 0;      // world velocity — lateral part is the drift
   if (DRIVE && PATH && PATH.length > 1) {        // face down the street at spawn
     modelYaw = Math.atan2(PATH[1][0] - PATH[0][0], PATH[1][1] - PATH[0][1]);
@@ -32851,8 +33282,22 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
       // a STOLEN car does not inherit the pedestrian's top speed — a detective
       // who runs at 7 m/s would otherwise "drive" at jogging pace.
       const maxV = DRIVING ? (mv.run ? 30 : 19)
+                           : SOAPBOX ? P.run_speed
                            : (mv.run ? P.run_speed : P.walk_speed);
-      if (throttle > 0.05) vSpeed += 11 * throttle * dt;
+      if (SOAPBOX) {
+        // A SOAPBOX ROLLS (2026-10-29): no engine, so W is the push off the line and no more; the
+        // fall of the ground under the nose pulls it on, the bearings and the air hold it back,
+        // and S drags a shoe on the road. Before the off it stands on the level ledge of the start
+        if (raceGo) {
+          const _sp0 = body.translation(), _fx = Math.sin(modelYaw), _fz = Math.cos(modelYaw);
+          const _fall = (hAt(_sp0.x - _fx * 1.5, _sp0.z - _fz * 1.5) - hAt(_sp0.x + _fx * 1.5, _sp0.z + _fz * 1.5)) / 3;
+          vSpeed += 9.81 * THREE.MathUtils.clamp(_fall, -0.6, 0.6) * 0.92 * dt;
+          if (throttle > 0.05 && vSpeed < 3.5) vSpeed += 3.2 * throttle * dt;                // the push
+          if (throttle < -0.05) vSpeed -= Math.sign(vSpeed) * Math.min(Math.abs(vSpeed), 6 * -throttle * dt);   // the brake shoe
+          vSpeed -= Math.sign(vSpeed) * Math.min(Math.abs(vSpeed), (0.35 + 0.011 * vSpeed * vSpeed) * dt);
+        } else vSpeed = 0;
+      }
+      else if (throttle > 0.05) vSpeed += 11 * throttle * dt;
       else if (throttle < -0.05) vSpeed -= 14 * -throttle * dt;   // brake/reverse
       else vSpeed *= Math.max(0, 1 - 1.6 * dt);                   // coast friction
       vSpeed = THREE.MathUtils.clamp(vSpeed, -maxV * 0.35, maxV);
@@ -33778,6 +34223,7 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
       if (window.__sumoTick) window.__sumoTick(performance.now() / 1000, Math.min(0.05, dt || 0.016));
       if (window.__forgeTick) window.__forgeTick(performance.now() / 1000, Math.min(0.05, dt || 0.016));
       if (window.__caravanTick) window.__caravanTick(performance.now() / 1000, Math.min(0.05, dt || 0.016));
+      if (window.__soapTick) window.__soapTick(Math.min(0.05, dt || 0.016));
       if (window.__canTick) window.__canTick(performance.now() / 1000, Math.min(0.05, dt || 0.016));
       if (window.__sledTick) window.__sledTick(Math.min(0.05, dt || 0.016));
       if (window.__clockTower) window.__clockTower.tick(performance.now() / 1000, Math.min(0.05, dt || 0.016));

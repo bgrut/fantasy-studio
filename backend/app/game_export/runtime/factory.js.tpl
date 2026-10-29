@@ -4210,11 +4210,16 @@ let groveSpots = null;
 const GROVE_ON = GRASS_ON && !SPEC.city;
 function groveKindOf(f) {
   const m = MINERAL_OF_FACE[f];
-  return m === EMBER ? ['dead', 'bush'] : m === SALT ? ['bush', 'bush'] : ['oak', 'birch', 'bush'];
+  // (2026-10-29) only charred snags on the cinders: the meadow's green bush there read as bright
+  // green blobs from orbit, and a per-instance rust tint for it was a shader the warm-up never
+  // built (a 1 to 3 s freeze at the first sale in the hitch gate)
+  return m === EMBER ? ['dead'] : m === SALT ? ['bush', 'bush'] : ['oak', 'birch', 'bush'];
 }
 if (GROVE_ON) {
   const kinds = ['oak', 'birch', 'dead', 'bush'];
-  const grown = growVariants({ kinds, perKind: { oak: 2, birch: 1, dead: 1, bush: 1 }, seed: 9901, leaf: { h: 0.27, s: 0.48, l: 0.3 },
+  // one oak, not two (2026-10-29): with the trunks standing again every variant is two to four
+  // draws, and the 250-machine budget gate went 169 -> 178; the spin and the scale vary it enough
+  const grown = growVariants({ kinds, perKind: { oak: 1, birch: 1, dead: 1, bush: 1 }, seed: 9901, leaf: { h: 0.27, s: 0.48, l: 0.3 },
     wind: grassClock, sunDir: sun.position.clone().normalize(), sunCol: sun.color.clone() });
   // the spots: the world's own stream is not touched
   let st = 60223;
@@ -4251,8 +4256,18 @@ if (GROVE_ON) {
     const meshes = grown.variants.map((v, k) => {
       const n = groveSpots.filter(sp => sp.v === k).length;
       if (!n) return null;
+      // the dead trees stand only in the ember faces' cinders: charred, not the grey of driftwood
+      // (a grey trunk under the worldlet's blue sky light read teal: a little sky, and the warmth of the coals)
+  if (v.kind === 'dead' && v.mats.bark && !v.mats.bark.map) { v.mats.bark.color.set(0x3a2a22); v.mats.bark.envMapIntensity = 0.2; v.mats.bark.emissive.set(0x1c0a04); }
       const bark = new THREE.InstancedMesh(v.bark, v.mats.bark, n);
-      bark.castShadow = v.kind !== 'bush';     // a bush's shadow is a draw call nobody sees bark.receiveShadow = true; bark.frustumCulled = false; grp.add(bark);
+      // (2026-10-29) TRUNKS AGAIN: the rest of this line sat inside the comment after it from
+      // the day the grove was planted, so no trunk was ever added and the ember faces' dead
+      // trees never stood at all; the oaks were canopies floating over the ground
+      // a trunk's shadow is a thread under the canopy's (a draw call nobody sees), and a bush's
+      // stems are inside its 46 leaf cards: no shadow for either, and no stems at all
+      bark.castShadow = false;
+      bark.receiveShadow = true; bark.frustumCulled = false;
+      if (v.kind !== 'bush') grp.add(bark);
       let leaf = null;
       if (v.leaf && v.mats.leaf) {
         leaf = new THREE.InstancedMesh(v.leaf, v.mats.leaf, n);

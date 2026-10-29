@@ -3063,6 +3063,26 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                            "paint": _cp.get("paint", 0xd83a2a)}
                     spec.entities = [e for e in spec.entities
                                      if not (_kre.search(r"kart", (e.name or "").lower()) and e.behavior != "vehicle")]
+                # A SOAPBOX IS A SOAPBOX (2026-10-29): "kids race soapbox carts down a steep village
+                # hill" put the kid in a red roadster, and three hay wagons wandered the green as the
+                # "soapbox carts". A soapbox is a plank and a crate on four pram wheels, steered by a
+                # rope, with no engine: the runtime builds it for the hero and every rival, and the
+                # hill drives it (a descent, design.py)
+                if _cp is not None and _kre.search(r"\b(soap ?box\w*|gravity racers?|billy ?carts?|box ?carts?|go-?carts?)\b", (req.prompt or "").lower()):
+                    _cp = {"_class": "soapbox", "type": "soapbox", "length": 1.9, "width": 0.95, "bodyH": 0.32, "bodyY": 0.22,
+                           "cabinLen": 0.3, "cabinH": 0.62, "cabinX": 0.0, "wheelR": 0.2, "wheelBase": 1.3,
+                           "paint": _cp.get("paint", 0xc8402a)}
+                    spec.entities = [e for e in spec.entities
+                                     if not (_kre.search(r"\b(soap ?box\w*|carts?|racers?)\b", (e.name or "").lower()) and e.behavior != "vehicle")]
+                    # the field: three other carts on the line
+                    _riv = [e for e in spec.entities if e.behavior == "vehicle"]
+                    if _riv:
+                        _riv[0].count = max(3, _riv[0].count or 1)
+                    elif "entities" not in (spec.locked or []):
+                        from app.game_export.spec import EntitySpec as _SBE
+                        spec.entities.append(_SBE(name="kid", behavior="vehicle", count=3, speed=8.0,
+                                                  height_m=library.default_height("kid"), hp=3))
+                    spec.player.walk_speed, spec.player.run_speed = 9.0, 13.0
                 # A ROVER IS A ROVER (2026-10-22): "a mars rover drives across red dunes" drove a
                 # generated green saloon lying on its side. The runtime builds a six-wheeled
                 # rover on a rocker-bogie, with its mast, dish and power unit (makeRover)
@@ -4699,8 +4719,13 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             _owned = bool(_fjord or _coast or _river or job.get("_naval") or _arch in ("cave", "volcano", "archipelago")
                           or getattr(spec.world, "platforms", False) or (getattr(spec, "view", None) or "3d") != "3d"
                           or getattr(spec, "genre", "") in ("factory", "racing", "sports", "towerdefense", "citybuilder"))
+            # a descent tilts the land: never under a sea, a coast, a river, a cave or a side view
+            _downhill_ok = not bool(_fjord or _coast or _river or job.get("_naval") or _arch in ("cave", "volcano", "archipelago")
+                                    or getattr(spec.world, "platforms", False) or (getattr(spec, "view", None) or "3d") != "3d"
+                                    or getattr(spec, "genre", "") in ("factory", "towerdefense", "citybuilder")
+                                    or (spec.player.ride or "") == "plane")
             _design = design_of(req.prompt, spec.seed, owned=_owned, night=spec.world.sky in ("night", "dusk"),
-                                weather=spec.world.weather, objectives=spec.objectives)
+                                weather=spec.world.weather, objectives=spec.objectives, downhill_ok=_downhill_ok)
             job.setdefault("notes", []).append(
                 f"design: {_design['layout']} layout, {_design['mechanic']} mechanic, {_design['moment']} moment ({'; '.join(_design['why'])})")
         except Exception as _de:  # noqa: BLE001 - a game without a designer is the old route

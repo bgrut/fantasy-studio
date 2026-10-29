@@ -48,7 +48,7 @@ _OWNED = re.compile(
 
 
 def design_of(prompt: str, seed: int, *, owned: bool = False, night: bool = False,
-              weather: str | None = None, objectives: list | None = None) -> dict:
+              weather: str | None = None, objectives: list | None = None, downhill_ok: bool = False) -> dict:
     p = (prompt or "").lower()
     r = random.Random((seed or 1) * 2654435761 % (2 ** 32))
     has = lambda pat: bool(re.search(pat, p))
@@ -56,7 +56,13 @@ def design_of(prompt: str, seed: int, *, owned: bool = False, night: bool = Fals
     why = []
 
     # ── the layout ───────────────────────────────────────────────────────────
-    if owned or _OWNED.search(p):
+    # (2026-10-29) A RACE DOWN A HILL IS A DESCENT: "kids race soapbox carts down a steep village
+    # hill" raced on the flat, because a race owns its shape. Its shape is the hill: the land falls
+    # from the start line to the finish (a gravity cart has no engine), whoever else owns the rest
+    if downhill_ok and has(r"\b(soap ?box\w*|gravity racers?|billy ?carts?|box ?carts?|downhill|toboggan\w*|luge|"
+                           r"down (?:a|the) (?:\w+ ){0,2}(?:hill|hillside|slope|lane|mountainside))\b"):
+        layout = "descent"; why.append("the sentence runs downhill")
+    elif owned or _OWNED.search(p):
         layout = "route"; why.append("the shape belongs to another system")
     elif has(r"\b(climb\w*|summit|ascend\w*|ascent|peak|top of|scal(e|es|ing) the|mountaintop|clifftop|up the mountain)\b"):
         layout = "ascent"; why.append("the sentence climbs")

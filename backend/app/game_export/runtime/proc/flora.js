@@ -1489,7 +1489,9 @@ export function biomeFor(words, arch, groundHSL) {
   // have) in brown scrub under dead trees, and a Sahara grew cactus, which is
   // American. Sand and limestone, the odd boulder; date palms only by water.
   else if (has(/egypt\w*|giza|pyramids?|pharaoh\w*|sphinx|sahara|arabia\w*|bedouin|oasis/) && !has(/jungle|rainforest|maya\w*|aztec|inca|mexic\w*/)) Object.assign(out, {
-    kinds: K(['rock', 1], ['boulder', 0.35], ...(has(/oasis|\bnile\b|river/) ? [['palm', 0.6]] : [])), dens: has(/oasis|\bnile\b/) ? 0.12 : 0.04,
+    // (2026-10-29) an oasis is the one place a palm grows: the runtime's OASIS site plants them round
+    // its pool, and the open dunes stay sand and stone (palms stood on every crest of the caravan's route)
+    kinds: K(['rock', 1], ['boulder', 0.35], ...(has(/\bnile\b|river/) ? [['palm', 0.6]] : [])), dens: has(/\bnile\b/) ? 0.12 : has(/oasis/) ? 0.05 : 0.04,
     rockTint: T(0xb89a6e), leaf: { h: 0.2, s: 0.4, l: 0.28 } });
   else if (has(/canyon|mesa|badlands|butte/)) Object.assign(out, { kinds: K(['mesa', 0.25], ['rock', 0.8], ['boulder', 0.4], ['cactus', 0.15]), dens: 0.12, rockTint: T(0xb5643c) });
   // THE OLD WORLD'S DESERTS GROW NO CACTUS (2026-10-24): "a camel caravan crossing the Sahara" walked
