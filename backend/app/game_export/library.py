@@ -262,7 +262,7 @@ def default_height(kind: str) -> float:
     _last = (re.findall(r"[a-z]+", k) or [""])[-1]
     # (2026-10-07) a word for a person by what they do is a person's height:
     # "fish" inside "fisherman" played a 0.8 m fisherman
-    if len(_last) > 4 and re.search(r"(?:man|woman|men|keeper|chaser|grapher|vintner|rider|walker|runner|seeker|worker|maker|monk|smith|herd|ist|ian|wrestler|boxer|fencer|gymnast|jockey|sprinter|skater|surfer|skier|archer|golfer|matador|lifter|rikishi|yokozuna)$", _last):   # (2026-10-27) a sumo wrestler was sized at 1.0 m
+    if len(_last) > 4 and re.search(r"(?:man|woman|men|keeper|chaser|grapher|vintner|rider|walker|runner|seeker|worker|maker|monk|smith|herd|ist|ian|wrestler|boxer|fencer|gymnast|jockey|sprinter|skater|surfer|skier|archer|golfer|matador|lifter|rikishi|yokozuna|leader)$", _last):   # (2026-10-27) a sumo wrestler was sized at 1.0 m
         return 1.75
     # (2026-10-25) the head noun decides before any word inside the phrase does: "hot dog vendor"
     # was sized as a dog (0.6 m). A person-word last is a person's height

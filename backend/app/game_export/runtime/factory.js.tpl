@@ -1532,21 +1532,52 @@ function meadowTexture(fp, look, ground, seed) {
   const rgb = hex => { const c3 = new THREE.Color(hex); return `rgb(${Math.round(c3.r * 255)},${Math.round(c3.g * 255)},${Math.round(c3.b * 255)})`; };
   for (let i = 0; i < 70; i++) blob(rnd() * P, rnd() * P, 60 + rnd() * 220, rgb(col(0.02 * (rnd() - 0.5), 0.08, 0.05 + rnd() * 0.06)), 0.45);     // lusher
   for (let i = 0; i < 55; i++) blob(rnd() * P, rnd() * P, 50 + rnd() * 200, rgb(col(-0.05, -0.12, 0.06)), 0.35 + dry * 0.4);                  // dry, yellowed
-  for (let i = 0; i < 24; i++) blob(rnd() * P, rnd() * P, 30 + rnd() * 120, rgb(new THREE.Color(0x5a4630).getHex()), 0.30 + dry * 0.3);     // bare earth
+  for (let i = 0; i < 24; i++) blob(rnd() * P, rnd() * P, 30 + rnd() * 120, rgb(new THREE.Color(0x5a4630).getHex()), look.key === 'ember' ? 0.2 : 0.30 + dry * 0.3);     // bare earth
   for (let i = 0; i < 30; i++) blob(rnd() * P, rnd() * P, 80 + rnd() * 260, 'rgb(0,0,0)', 0.10);                                            // hollows
   if (look.key === 'ember') {                       // scorched ground and ash where the heat comes up
-    for (let i = 0; i < 26; i++) blob(rnd() * P, rnd() * P, 25 + rnd() * 110, 'rgb(38,22,14)', 0.38);
-    for (let i = 0; i < 18; i++) blob(rnd() * P, rnd() * P, 20 + rnd() * 70, 'rgb(128,116,104)', 0.28);
-    for (let i = 0; i < 40; i++) blob(rnd() * P, rnd() * P, 15 + rnd() * 50, 'rgb(150,70,40)', 0.25);
-    // (2026-10-26) A HEATH OVER HOT GROUND: the ember face read as dull purple-brown with olive grass. The heat
-    // shows: rust and burnt-orange drifts of heather, and the ground split by fissures, charred black with
-    // their lips lit orange from the heat below
-    for (let i = 0; i < 50; i++) blob(rnd() * P, rnd() * P, 30 + rnd() * 120, 'rgb(150,62,30)', 0.22);
-    for (let i = 0; i < 30; i++) blob(rnd() * P, rnd() * P, 20 + rnd() * 80, 'rgb(196,128,58)', 0.2);
     const wrapDraw = (fn) => { for (const ox of [-P, 0, P]) for (const oy of [-P, 0, P]) { g.save(); g.translate(ox, oy); fn(); g.restore(); } };
+    // (2026-10-28) GROUND WITH EDGES: from orbit the ember face was a hundred and sixty soft airbrushed
+    // spots, red on brown, and read as a blurred photograph. Hot ground has edges: old lava lies in dark
+    // lobes with crisp margins and ropy skins, basalt breaks into plates, heather and ash come as grain
+    // (thousands of specks, not a haze), and sulfur crusts yellow round the vents
+    const stip = (cx, cy, R, cols, n, sz) => wrapDraw(() => { for (let k = 0; k < n; k++) {
+      const a0 = rnd() * 6.28, d0 = Math.pow(rnd(), 0.75) * R, c4 = cols[Math.floor(rnd() * cols.length)];
+      g.fillStyle = `rgba(${c4[0]},${c4[1]},${c4[2]},${0.45 + rnd() * 0.5})`; g.fillRect(cx + Math.cos(a0) * d0 * 1.3, cy + Math.sin(a0) * d0, sz + rnd() * sz, sz + rnd() * sz); } });
+    for (let i = 0; i < 9; i++) {                                    // old flows: dark lobes, crisp, with ropy skins
+      let x = rnd() * P, y = rnd() * P, a = rnd() * 6.28; const n = 6 + Math.floor(rnd() * 6), w0 = 22 + rnd() * 30, L = [], Rr = [];
+      for (let k = 0; k <= n; k++) { const w = w0 * (1 - 0.35 * k / n + (k === n ? 0.25 : 0)) * (0.75 + rnd() * 0.5), nx = -Math.sin(a), ny = Math.cos(a);
+        L.push([x + nx * w, y + ny * w]); Rr.push([x - nx * w, y - ny * w]); a += (rnd() - 0.5) * 0.6; x += Math.cos(a) * 26; y += Math.sin(a) * 26; }
+      const poly = L.concat(Rr.reverse());
+      wrapDraw(() => { g.lineJoin = 'round';
+        g.beginPath(); poly.forEach(([px, py], q) => q ? g.lineTo(px, py) : g.moveTo(px, py)); g.closePath();
+        g.fillStyle = 'rgba(30,22,20,0.9)'; g.fill(); g.strokeStyle = 'rgba(14,8,6,0.9)'; g.lineWidth = 3; g.stroke();
+        const toe = L[n], heel = poly[L.length]; g.beginPath(); g.ellipse((toe[0] + heel[0]) / 2, (toe[1] + heel[1]) / 2, Math.hypot(toe[0] - heel[0], toe[1] - heel[1]) * 0.55, Math.hypot(toe[0] - heel[0], toe[1] - heel[1]) * 0.42, Math.atan2(heel[1] - toe[1], heel[0] - toe[0]), 0, 6.28);
+        g.fillStyle = 'rgba(30,22,20,0.9)'; g.fill(); g.stroke(); g.beginPath(); poly.forEach(([px, py], q) => q ? g.lineTo(px, py) : g.moveTo(px, py)); g.closePath();   // its lobed toe
+        g.save(); g.clip(); g.strokeStyle = 'rgba(92,76,70,0.22)'; g.lineWidth = 0.9;                               // the ropes, bowed downflow
+        for (let k = 0; k < n * 4; k++) { const t = k / (n * 4), q = Math.floor(t * n), f = t * n - q, A = L[q], B = L[Math.min(q + 1, n)], C = poly[poly.length - 1 - q], D = poly[poly.length - 1 - Math.min(q + 1, n)];
+          const ax = A[0] + (B[0] - A[0]) * f, ay = A[1] + (B[1] - A[1]) * f, bx = C[0] + (D[0] - C[0]) * f, by = C[1] + (D[1] - C[1]) * f;
+          g.beginPath(); g.moveTo(ax, ay); g.quadraticCurveTo((ax + bx) / 2 + (B[0] - A[0]) * 0.5, (ay + by) / 2 + (B[1] - A[1]) * 0.5, bx, by); g.stroke(); }
+        g.restore(); });
+    }
+    for (let i = 0; i < 14; i++) {                                   // basalt broken into plates, lit edges
+      const cx = rnd() * P, cy = rnd() * P, R = 18 + rnd() * 40;
+      for (let k = 0; k < R * 0.9; k++) { const a0 = rnd() * 6.28, d0 = Math.sqrt(rnd()) * R, px = cx + Math.cos(a0) * d0, py = cy + Math.sin(a0) * d0, r = 3 + rnd() * 3.5, rot = rnd() * 6.28, l = 34 + Math.floor(rnd() * 22);
+        wrapDraw(() => { g.beginPath(); for (let q = 0; q < 6; q++) { const aa = rot + q * 1.047, rr = r * (0.8 + rnd() * 0.3); q ? g.lineTo(px + Math.cos(aa) * rr, py + Math.sin(aa) * rr) : g.moveTo(px + Math.cos(aa) * rr, py + Math.sin(aa) * rr); }
+          g.closePath(); g.fillStyle = `rgb(${l},${l - 6},${l - 8})`; g.fill(); g.strokeStyle = 'rgba(120,96,84,0.55)'; g.lineWidth = 0.8; g.stroke(); }); }
+    }
+    for (let i = 0; i < 46; i++) stip(rnd() * P, rnd() * P, 20 + rnd() * 70, [[150, 62, 30], [176, 84, 40], [120, 52, 70], [196, 128, 58]], 260, 1.3);   // heather, as grain
+    for (let i = 0; i < 20; i++) stip(rnd() * P, rnd() * P, 25 + rnd() * 60, [[150, 140, 130], [118, 110, 104], [184, 176, 166]], 360, 1.0);          // ash fallen in drifts
+    for (let i = 0; i < 7; i++) {                                    // vents: a black throat, sulfur crusted round it
+      const cx = rnd() * P, cy = rnd() * P, r = 3 + rnd() * 4;
+      stip(cx + r, cy, r * 3.6, [[196, 176, 70], [214, 196, 100], [150, 128, 50], [120, 104, 80]], 90, 1.0);
+      wrapDraw(() => { g.fillStyle = 'rgba(12,8,6,0.95)'; g.beginPath(); g.ellipse(cx, cy, r, r * 0.8, 0, 0, 6.28); g.fill();
+        g.strokeStyle = 'rgba(255,140,50,0.7)'; g.lineWidth = 1.2; g.stroke(); });
+    }
+    // (2026-10-26) A HEATH OVER HOT GROUND: the ground split by fissures, charred black with
+    // their lips lit orange from the heat below
     for (let i = 0; i < 22; i++) {
       let x = rnd() * P, y = rnd() * P, a = rnd() * 6.28; const pts = [[x, y]], n = 8 + Math.floor(rnd() * 14);
-      for (let k = 0; k < n; k++) { a += (rnd() - 0.5) * 1.3; x += Math.cos(a) * (8 + rnd() * 12); y += Math.sin(a) * (8 + rnd() * 12); pts.push([x, y]);
+      for (let k = 0; k < n; k++) { a += (rnd() - 0.5) * 0.75; x += Math.cos(a) * (8 + rnd() * 12); y += Math.sin(a) * (8 + rnd() * 12); pts.push([x, y]);
         if (rnd() < 0.18) { let bx = x, by = y, ba = a + (rnd() < 0.5 ? 1 : -1) * (0.8 + rnd() * 0.6); const br = [[bx, by]];       // a branch crack
           for (let j = 0; j < 4; j++) { ba += (rnd() - 0.5) * 0.9; bx += Math.cos(ba) * 9; by += Math.sin(ba) * 9; br.push([bx, by]); }
           wrapDraw(() => { g.lineCap = 'round'; g.strokeStyle = 'rgba(232,108,36,0.55)'; g.lineWidth = 2.6; g.beginPath(); br.forEach(([px, py], q) => q ? g.lineTo(px, py) : g.moveTo(px, py)); g.stroke();
@@ -1595,8 +1626,8 @@ function meadowTexture(fp, look, ground, seed) {
   }
   if (look.key === 'crystal') {
     // A MEADOW WITH THINGS IN IT (2026-10-28): from orbit and from the air the crystal face was one even
-    // blue-green. Brooks wind across it under their banks of brighter growth, grey stones break through the
-    // turf with their lit tops and moss, and wildflowers come in drifts, white, gold, blue and pink
+    // blue-green. Brooks wind across it under their banks of brighter growth, and wildflowers come in
+    // drifts, white, gold, blue and pink (the stones stand in the turf as real ones: see scatterSpots)
     const wrapDraw = (fn) => { for (const ox of [-P, 0, P]) for (const oy of [-P, 0, P]) { g.save(); g.translate(ox, oy); fn(); g.restore(); } };
     for (let i = 0; i < 5; i++) {                                    // brooks
       let x = rnd() * P, y = rnd() * P, a = rnd() * 6.28; const pts = [[x, y]], n = 50 + Math.floor(rnd() * 40);
@@ -1607,16 +1638,6 @@ function meadowTexture(fp, look, ground, seed) {
         g.strokeStyle = 'rgba(52,44,30,0.55)'; g.lineWidth = w * 1.7; path(); g.stroke();                                                 // the muddy edge
         g.strokeStyle = 'rgba(24,48,56,0.9)'; g.lineWidth = w; path(); g.stroke();                                                       // the water
         g.strokeStyle = 'rgba(120,160,170,0.22)'; g.lineWidth = Math.max(1, w * 0.25); path(); g.stroke(); });                              // the sky in it
-    }
-    for (let i = 0; i < 20; i++) {                                   // outcrops: grey stone through the turf, lit on top, moss in the cracks
-      const cx = rnd() * P, cy = rnd() * P, n = 2 + Math.floor(rnd() * 5);
-      for (let k = 0; k < n; k++) { const x = cx + (rnd() - 0.5) * 30, y = cy + (rnd() - 0.5) * 22, rx = 4 + rnd() * 8, ry = rx * (0.5 + rnd() * 0.4), rot = rnd() * 3.14;
-        wrapDraw(() => { g.save(); g.translate(x, y); g.rotate(rot);
-          g.fillStyle = 'rgba(14,18,12,0.5)'; g.beginPath(); g.ellipse(2, 2.5, rx * 1.08, ry * 1.1, 0, 0, 6.28); g.fill();            // its shadow
-          g.fillStyle = `rgba(${84 + Math.floor(rnd() * 26)},${88 + Math.floor(rnd() * 22)},${82 + Math.floor(rnd() * 18)},0.92)`; g.beginPath(); g.ellipse(0, 0, rx, ry, 0, 0, 6.28); g.fill();
-          g.fillStyle = 'rgba(170,176,166,0.3)'; g.beginPath(); g.ellipse(-rx * 0.25, -ry * 0.3, rx * 0.5, ry * 0.36, 0, 0, 6.28); g.fill();   // the lit top
-          g.strokeStyle = 'rgba(60,96,44,0.6)'; g.lineWidth = 1.2; g.beginPath(); g.moveTo(-rx * 0.6, ry * 0.2); g.lineTo(rx * 0.4, -ry * 0.1); g.stroke(); g.restore(); });   // moss in a crack
-      }
     }
     const FLOW = [[244, 242, 232], [242, 206, 70], [120, 150, 226], [232, 140, 176], [250, 236, 160]];
     for (let i = 0; i < 24; i++) {                                   // wildflower drifts
@@ -2493,6 +2514,18 @@ for (let k = 0; k < 320; k++) {
     const j = 1 + Math.floor(r2() * (N - 2));
     if (cells[f][i][j].t !== EMPTY) continue;
     scatterSpots.push({ f, i, j, kind: r2() < 0.45 ? 0 : 1, d: Math.floor(r2() * 4), s: 0.75 + r2() * 0.6 });
+  }
+  // STONES STANDING IN THE TURF (2026-10-28): the outcrops were painted into the meadow, and at eye level a
+  // painted stone is a flat grey disc. They are real stones now, in the stones' own batch (no new draw call):
+  // a few big ones bedded low with smaller ones round them, set off the tile centres so they read as found
+  for (let k = 0; k < 34; k++) {
+    const f = Math.floor(r2() * 6), ci = 2 + Math.floor(r2() * (N - 4)), cj = 2 + Math.floor(r2() * (N - 4)), n = 2 + Math.floor(r2() * 5);
+    for (let q = 0; q < n; q++) {
+      const i = Math.max(1, Math.min(N - 2, ci + Math.round((r2() - 0.5) * 2.2))), j = Math.max(1, Math.min(N - 2, cj + Math.round((r2() - 0.5) * 2.2)));
+      if (cells[f][i][j].t !== EMPTY) continue;
+      scatterSpots.push({ f, i, j, kind: 0, d: Math.floor(r2() * 4), s: q === 0 ? 1.7 + r2() * 0.9 : 0.9 + r2() * 0.8, tall: q === 0 ? 2.1 + r2() * 0.8 : 1.4 + r2() * 0.6,
+                          ox: (r2() - 0.5) * 0.7, oz: (r2() - 0.5) * 0.7, sink: q === 0 ? 0.08 : 0.03 });
+    }
   }
 }
 
@@ -3660,6 +3693,7 @@ function beltShape(f, i, j, c) {
   return turn === 3 ? 1 : turn === 1 ? 2 : 0;       // 1 = A, 2 = B, 0 = straight
 }
 
+const _soff = new THREE.Matrix4();
 function rebuildBelts() {
   // one counter per belt shape — straight, two turns, junction. Sized by
   // hand once too often: a fourth shape with a three-slot counter set its
@@ -3699,9 +3733,11 @@ function rebuildBelts() {
     const c = cells[sp.f][sp.i][sp.j];
     if (c.t !== EMPTY) continue;
     seatMatrix(sp.f, sp.i, sp.j, sp.d, 0.02, _dm);
+    if (sp.ox !== undefined) _dm.multiply(_soff.makeTranslation(sp.ox * T, -sp.sink, sp.oz * T));   // off the tile centre, bedded in
     _dpos.setFromMatrixPosition(_dm);
     _dq.setFromRotationMatrix(_dm);
     _dscale.setScalar(sp.s);
+    if (sp.tall) _dscale.y *= sp.tall;                 // a boulder stands up out of the turf; a scatter stone lies flat in it
     _dm.compose(_dpos, _dq, _dscale);
     if (stony) {
       if (sp.kind === 0) { if (st < MAX_SCATTER) scatterStone.setMatrixAt(st++, _dm); }

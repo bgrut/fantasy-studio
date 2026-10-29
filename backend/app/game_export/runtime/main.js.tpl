@@ -2417,6 +2417,33 @@ async function main() {
     return { C, fy, haul, near: (x, z, m) => Math.hypot(x - C[0], z - C[1]) < 15 + (m || 0) };
   })();
 
+  // ── AN OASIS (2026-10-28) ───────────────────────────────────────────────
+  // "a desert caravan leads camels across the dunes to an oasis at sunset" ended at a little roofed well
+  // on bare sand. An oasis is water: a spring-fed pool lying in a hollow between the dunes, its margin
+  // dark and wet, green turf and reeds round it, date palms standing over it, and a camp in their shade.
+  // The hollow is cut here; the pool, the palms and the camp are built with the rest (OASIS build)
+  const OASIS = (() => {
+    if (INTERIOR || OSM || !LVL || !LVL.heights || VIEW === 'side' || SPEC.genre === 'factory') return null;
+    if (LVL.heights.length !== LVL.grid_n * LVL.grid_n) return null;
+    const w = [SPEC.prompt, SPEC.world && SPEC.world.name].filter(Boolean).join(' ').toLowerCase();
+    if (!/\boas[ie]s\b/.test(w) || /\b(space|moon|mars|martian|underwater|skyscrapers?|city|cities)\b/.test(w)) return null;
+    const n = LVL.grid_n, S = LVL.size_m, hs = LVL.heights, half = S / 2, R = 10;
+    const g0 = LVL.goal || [0, 70], gl = Math.hypot(g0[0], g0[1]) || 70, D = Math.max(46, Math.min(gl, half - 44));
+    const C = [g0[0] / gl * D, g0[1] / gl * D];
+    const ci = Math.round((C[1] / S + 0.5) * (n - 1)), cj = Math.round((C[0] / S + 0.5) * (n - 1));
+    const base = (hs[Math.max(0, Math.min(n - 1, ci)) * n + Math.max(0, Math.min(n - 1, cj))] || 0) - 1.2;   // a hollow: the water lies low
+    const sm = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+    for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
+      const x = (j / (n - 1) - 0.5) * S, z = (i / (n - 1) - 0.5) * S, d = Math.hypot(x - C[0], z - C[1]);
+      const k = 1 - sm(R + 16, R + 40, d);                                       // the palm ground, eased into the dunes
+      const pool = 1 - sm(R - 4, R + 0.6, d);                                     // the pool's bed, shelving
+      hs[i * n + j] += (base + Math.sin(x * 0.11) * Math.cos(z * 0.09) * 0.12 - pool * 1.05 - hs[i * n + j]) * k;
+    }
+    LVL.goal = [+(C[0] - C[0] / D * (R + 3)).toFixed(2), +(C[1] - C[1] / D * (R + 3)).toFixed(2)];   // the near shore
+    return { C, R, base, WY: base - 0.32, inPool: (x, z, m) => Math.hypot(x - C[0], z - C[1]) < R + (m || 0) };
+  })();
+  // ── A CARAVAN (2026-10-28): the camels follow the one ahead on a lead rope (CARAVAN tick) ──
+  const CARAVAN = !INTERIOR && VIEW !== 'side' && /\b(caravans?|camel trains?)\b/.test([SPEC.prompt, SPEC.world && SPEC.world.name].filter(Boolean).join(' ').toLowerCase());
   // ── A SUMO RING (2026-10-27) ────────────────────────────────────────────
   // "a sumo wrestler pushes rivals out of the ring at a tokyo tournament" stood on a stone plaza in a wood,
   // fighting men in street clothes with a sword. A tournament at a Tokyo shrine is the place: the clay
@@ -2918,7 +2945,8 @@ async function main() {
     }
     // a village smithy is one of the village's own houses: the one nearest the start
     if (SMITHY && cot.length) { let bi = 0; cot.forEach((c, i) => { if (Math.hypot(c.x, c.z) < Math.hypot(cot[bi].x, cot[bi].z)) bi = i; });
-      const c = cot.splice(bi, 1)[0]; SMITHY.at[0] = c.x; SMITHY.at[1] = c.z; SMITHY.ry = c.ry; }
+      const c = cot.splice(bi, 1)[0]; SMITHY.at[0] = c.x; SMITHY.at[1] = c.z; SMITHY.ry = c.ry;
+      for (let k = cot.length - 1; k >= 0; k--) if (Math.hypot(cot[k].x - c.x, cot[k].z - c.z) < 4.6 + Math.max(cot[k].w, cot[k].d) * 0.6) cot.splice(k, 1); }
     const loc = (c, lx, lz) => [c.x + lx * Math.cos(c.ry) + lz * Math.sin(c.ry), c.z - lx * Math.sin(c.ry) + lz * Math.cos(c.ry)];
     let fi = 0;
     return { GC, D, P, LL, cot, loc, norse, dutch,
@@ -4723,6 +4751,7 @@ async function main() {
     // a tomb's goal is its sarcophagus (proc/cave.js); nothing else stands in the burial chamber
     if (window.__cave && window.__cave.tomb) { window.__goalMark = 'none'; return G; }
     if (JOUST) { window.__goalMark = 'none'; return G; }   // the lists are the place: no altar by the tilt
+    if (OASIS) { window.__goalMark = 'none'; return G; }   // the water is what you came for: no well beside it
     if ((INTERIOR && (INTERIOR.kind === 'attic' || INTERIOR.kind === 'clocktower')) || TEAHILL || BIGTOP || CANOPY || POLARBASE || COURTYARD || SUMO || CANALLEY_AT) { window.__goalMark = 'none'; return G; }   // the weighing shed is the place   // (2026-10-26) the bench under the window is the place: no campfire on the boards
     // a person to reach is the goal themself: a campfire on a lifeguard's
     // beach for "reach swimmer 1" was a thing that should not be there
@@ -9461,6 +9490,9 @@ async function main() {
       if (ARENA) { const ea = ARENA.A + ARENA.RO + 6, eb = ARENA.B + ARENA.RO + 6;
         for (let a = -ea; a <= ea; a += 8) for (let c = -eb; c <= eb; c += 8) { const [x, z] = ARENA.world(a, c); if (ARENA.inFoot(x, z, 6)) keepClear.push([x, z, 8]); } }   // no wood through the stands
       if (DOME) keepClear.push([DOME.C[0], DOME.C[1], DOME.R + 6]);   // the greenhouse dome's pad
+      if (OASIS) keepClear.push([OASIS.C[0], OASIS.C[1], OASIS.R + 22]);   // the pool, its turf and its own palms
+      if (CARAVAN && LVL && LVL.goal) { const gx = LVL.goal[0] - _sp.x, gz = LVL.goal[1] - _sp.z, gl = Math.hypot(gx, gz) || 1;   // the camels stand in file back from the start: no boulder in the last of them
+        for (let b = 0; b <= 34; b += 4) keepClear.push([_sp.x - gx / gl * b, _sp.z - gz / gl * b, 4.5]); }
       if (CENOTE) keepClear.push([CENOTE.P[0], CENOTE.P[1], CENOTE.R + CENOTE.LW + 2]);   // nothing grows out of the sinkhole's walls
       if (FISHMARKET) keepClear.push([FISHMARKET.C[0], FISHMARKET.C[1], FISHMARKET.LEN / 2 + 10]);   // the market hall and its yard
       if (PARK) { for (const [a, b] of PARK.segs) for (let t = 0; t <= 1.001; t += 0.25) keepClear.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, 4]);
@@ -15448,8 +15480,10 @@ async function main() {
         if (d < 6.5 && !n._said) { n._said = true; sayGuide(n); }
         if (d > 11) n._said = false;      // re-greets after you wander off
       } else if (n.behavior === 'follow') {
-        const d = Math.hypot(playerPos.x - n.obj.position.x, playerPos.z - n.obj.position.z);
-        if (d > 2.6) { tx = playerPos.x; tz = playerPos.z; }
+        const L = n._lead ? n._lead.obj.position : playerPos, gap = n._gap || 2.6;   // (2026-10-28) a caravan's camel follows the one ahead
+        const d = Math.hypot(L.x - n.obj.position.x, L.z - n.obj.position.z);
+        if (d > gap) { tx = L.x; tz = L.z; }
+        if (n._base) n.speed = n._base * Math.min(2.6, Math.max(0.5, (d - gap * 0.5) / (gap * 0.55)));
       } else if (n.behavior === 'customer') {
         // where the service system sends them; nowhere when they are away
         if (n._go && !n._away) { tx = n._go[0]; tz = n._go[1];
@@ -18087,6 +18121,129 @@ async function main() {
     window.__sumo = () => ({ bout, phase, cur: cur ? cur.obj.position.toArray().map(v => +v.toFixed(2)) : null, left: npcs.filter(n => n._sumo && !n.dead).length, crowd: Q.crowd });
   }
 
+  // ── THE OASIS, BUILT (see OASIS above) ──────────────────────────────────
+  if (OASIS) {
+    const O = OASIS, C = O.C, R = O.R, rO = mulberry32((SPEC.seed || 1) * 61 + 5);
+    const _mc = new Map(), M2 = (o) => { const key = JSON.stringify(o, (k, v) => (v && v.isTexture ? v.uuid : v)); if (_mc.has(key)) return _mc.get(key); const m = new THREE.MeshStandardMaterial(o); m.userData.noAutoTex = true; _mc.set(key, m); return m; };
+    const cvT = (wd, ht, draw) => { const cv = document.createElement('canvas'); cv.width = wd; cv.height = ht; draw(cv.getContext('2d'), wd, ht);
+      const t = new THREE.CanvasTexture(cv); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = renderer.capabilities.getMaxAnisotropy(); return t; };
+    const bucket = new Map(), put = (geo, m) => { if (!bucket.has(m)) bucket.set(m, []); bucket.get(m).push(geo.index ? geo.toNonIndexed() : geo); };
+    const drape = (g, lift) => { const pp = g.attributes.position; for (let i = 0; i < pp.count; i++) pp.setY(i, hAt(pp.getX(i), pp.getZ(i)) + lift); g.computeVertexNormals(); return g; };
+    // the water, and the wet dark margin round it
+    const water = new THREE.Mesh(new THREE.CircleGeometry(R + 1.6, 72), __waterMaterial('lake', WIND_U)); water.rotation.x = -Math.PI / 2; water.position.set(C[0], O.WY, C[1]); scene.add(water);
+    window.__oasisWater = { x: C[0], z: C[1], r: R + 1.2, y: O.WY };
+    // REEDS AND RUSHES at the margin, and tufts of grass on the green: blades, in two batches
+    { const reedM = M2({ color: 0x7c8a3e, roughness: 0.85, side: THREE.DoubleSide }), tuftM = M2({ color: 0x8a9a46, roughness: 0.9, side: THREE.DoubleSide });
+      for (let k = 0; k < 260; k++) { const a = rO() * 6.28, d = R - 0.6 + rO() * 2.4, x = C[0] + Math.cos(a) * d, z = C[1] + Math.sin(a) * d, hh = 0.9 + rO() * 1.3, lean = (rO() - 0.5) * 0.3;
+        const gb = new THREE.ConeGeometry(0.035, hh, 3); gb.rotateZ(lean); gb.translate(x, Math.max(hAt(x, z), O.WY) + hh / 2 - 0.05, z); put(gb, reedM); }
+      // THE GREEN round the water: tufts thick at the margin, thinning out into the sand with a ragged edge
+      const tuft2M = M2({ color: 0x6f8a34, roughness: 0.9, side: THREE.DoubleSide });
+      for (let k = 0; k < 1500; k++) { const a = rO() * 6.28, edge = 7 + 4 * Math.sin(a * 5 + 1.3) * Math.sin(a * 3 + 0.4), d = R + 1.2 + Math.pow(rO(), 1.7) * edge, x = C[0] + Math.cos(a) * d, z = C[1] + Math.sin(a) * d;
+        for (let q = 0; q < 5; q++) { const hh = 0.22 + rO() * 0.4, gb = new THREE.ConeGeometry(0.035, hh, 3); gb.rotateZ((rO() - 0.5) * 0.8); gb.rotateY(rO() * 3); gb.translate(x + (rO() - 0.5) * 0.35, hAt(x, z) + hh / 2 - 0.03, z + (rO() - 0.5) * 0.35); put(gb, q % 2 ? tuftM : tuft2M); } } }
+    // DATE PALMS round the water, leaning over it, in two rings, the tallest near the pool
+    try { const gv = __FLORA.growVariants({ kinds: ['palm'], leaf: { h: 0.24, s: 0.42, l: 0.26 }, seed: ((SPEC.seed || 1) * 67 + 13) >>> 0, perKind: 3 });
+      const spots = [];
+      for (let k = 0; k < 22; k++) { const a = k / 22 * 6.28 + (rO() - 0.5) * 0.25, d = R + 2 + rO() * (k % 3 === 0 ? 11 : 4); spots.push([C[0] + Math.cos(a) * d, C[1] + Math.sin(a) * d, a, d]); }
+      gv.variants.forEach((v, vi) => { const mine = spots.filter((_, k) => k % gv.variants.length === vi);
+        const bk = new THREE.InstancedMesh(v.bark, v.mats.bark, mine.length), lf = v.leaf && v.mats.leaf ? new THREE.InstancedMesh(v.leaf, v.mats.leaf, mine.length) : null, d3 = new THREE.Object3D();
+        mine.forEach(([x, z, a, d], k) => { d3.position.set(x, hAt(x, z) - 0.2, z); d3.rotation.set(0, rO() * 6.28, 0);
+          const lean = (d < R + 5 ? 0.1 : 0.03) + rO() * 0.04; d3.rotateOnWorldAxis(new THREE.Vector3(Math.sin(a), 0, -Math.cos(a)), -lean);   // leaning out over the water
+          d3.scale.setScalar(0.85 + rO() * 0.4 + (d < R + 5 ? 0.2 : 0)); d3.updateMatrix(); bk.setMatrixAt(k, d3.matrix); if (lf) lf.setMatrixAt(k, d3.matrix);
+          world.createCollider(RAPIER.ColliderDesc.cylinder(2.5, 0.3).setTranslation(x, hAt(x, z) + 2.5, z)); });
+        bk.castShadow = bk.receiveShadow = true; scene.add(bk); if (lf) { lf.castShadow = true; scene.add(lf); } });
+    } catch (e) { console.warn('[game] oasis palms: ' + e.message); }
+    // THE CAMP in the palms' shade, on the far side of the water: a black goat-hair tent, low and wide on its
+    // poles with its front open, rugs before it, a hearth ring of stones with its embers, brass pots
+    { const far = Math.atan2(C[1], C[0]), tx = C[0] + Math.cos(far) * (R + 9), tz = C[1] + Math.sin(far) * (R + 9), ty = hAt(tx, tz), yaw = -far - Math.PI / 2;
+      const G = new THREE.Group(); G.position.set(tx, ty, tz); G.rotation.y = yaw; scene.add(G);
+      const tentT = cvT(256, 128, (g2, W, H) => { g2.fillStyle = '#2a2420'; g2.fillRect(0, 0, W, H); for (let k = 0; k < 14; k++) { g2.fillStyle = k % 2 ? 'rgba(70,58,48,0.5)' : 'rgba(18,14,12,0.4)'; g2.fillRect(0, k * H / 14, W, H / 28); }
+        for (let k = 0; k < 1600; k++) { g2.fillStyle = `rgba(${rO() < 0.5 ? '90,78,66' : '10,8,6'},0.08)`; g2.fillRect(rO() * W, rO() * H, 1 + rO() * 4, 1); } });
+      const tentM = M2({ map: tentT, roughness: 0.95, side: THREE.DoubleSide }), poleM = M2({ color: 0x6b4a2e, roughness: 0.8 });
+      { const g = new THREE.PlaneGeometry(7, 4.4, 14, 8), pp = g.attributes.position;
+        for (let i = 0; i < pp.count; i++) { const x = pp.getX(i), y = pp.getY(i), ridge = Math.abs(y) / 2.2, sag = Math.cos(x / 3.5 * Math.PI * 2.0) * 0.12;   // the roof sags between its poles
+          pp.setXYZ(i, x, 2.0 - ridge * 1.0 - (Math.abs(x) % 2.33 > 0.2 ? 0.16 : 0) + sag * (1 - ridge), y); }
+        g.computeVertexNormals(); const roof = new THREE.Mesh(g, tentM); roof.castShadow = roof.receiveShadow = true; G.add(roof); }
+      { const g = new THREE.PlaneGeometry(7, 1.0, 14, 2); g.translate(0, 0.5, -2.2); const back = new THREE.Mesh(g, tentM); back.castShadow = true; G.add(back); }   // the back wall
+      for (const x of [-3.4, -1.17, 1.17, 3.4]) for (const z of [-2.1, 0, 2.1]) { if (z === 2.1 && Math.abs(x) < 2) continue; const h = z === 0 ? 2.05 : 1.05; const pg = new THREE.CylinderGeometry(0.045, 0.05, h, 6); pg.translate(x, h / 2, z); const pm = new THREE.Mesh(pg, poleM); pm.castShadow = true; G.add(pm); }
+      // guy ropes to stakes in the sand
+      for (const x of [-3.4, 0, 3.4]) for (const sg of [-1, 1]) { const a0 = new THREE.Vector3(x, 1.05, 2.1 * sg), b0 = new THREE.Vector3(x * 1.05, 0.02, 3.6 * sg), dv = b0.clone().sub(a0), L = dv.length();
+        const rg = new THREE.CylinderGeometry(0.012, 0.012, L, 4); const rm = new THREE.Mesh(rg, M2({ color: 0xb8a684, roughness: 0.9 })); rm.position.copy(a0).addScaledVector(dv, 0.5); rm.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dv.normalize()); G.add(rm); }
+      const rugT = cvT(256, 128, (g2, W, H) => { g2.fillStyle = '#8a1e1e'; g2.fillRect(0, 0, W, H); g2.strokeStyle = '#d8a84a'; g2.lineWidth = 6; g2.strokeRect(10, 10, W - 20, H - 20);
+        g2.fillStyle = '#1e2a5a'; for (let k = 0; k < 5; k++) { const x = 40 + k * 44; g2.beginPath(); g2.moveTo(x, H / 2 - 26); g2.lineTo(x + 18, H / 2); g2.lineTo(x, H / 2 + 26); g2.lineTo(x - 18, H / 2); g2.closePath(); g2.fill(); }
+        g2.fillStyle = '#e8dcc0'; for (let k = 0; k < 5; k++) { const x = 40 + k * 44; g2.fillRect(x - 4, H / 2 - 4, 8, 8); } });
+      for (const [x, z, r] of [[-1.2, 1.2, 0.1], [1.4, 1.6, -0.25], [0.2, 3.4, 0.4]]) { const g = new THREE.PlaneGeometry(2.4, 1.3); g.rotateX(-Math.PI / 2); g.rotateY(r); g.translate(x, 0.04, z); const m = new THREE.Mesh(g, M2({ map: rugT, roughness: 0.95, polygonOffset: true, polygonOffsetFactor: -3 })); m.receiveShadow = true; G.add(m); }
+      { const st = M2({ color: 0x7a6a58, roughness: 0.95 }); for (let k = 0; k < 9; k++) { const a = k / 9 * 6.28, s0 = new THREE.DodecahedronGeometry(0.16, 0); s0.scale(1, 0.7, 1); s0.translate(Math.cos(a) * 0.5, 0.08, 4.6 + Math.sin(a) * 0.5); const m = new THREE.Mesh(s0, st); m.castShadow = true; G.add(m); }
+        const em = new THREE.Mesh(new THREE.CircleGeometry(0.4, 16).rotateX(-Math.PI / 2).translate(0, 0.05, 4.6), M2({ color: 0x2a1a10, emissive: 0xff6a20, emissiveIntensity: 1.6, roughness: 1 })); G.add(em);
+        const brass = M2({ color: 0xc89a48, metalness: 0.85, roughness: 0.32 });
+        for (const [x, z, sc] of [[0.85, 4.2, 1], [-0.9, 4.0, 0.8], [-2.6, 0.6, 1.3]]) { const pts = []; for (let k = 0; k <= 10; k++) { const t = k / 10; pts.push(new THREE.Vector2(0.12 * sc * (0.6 + Math.sin(t * Math.PI) * 0.7), t * 0.34 * sc)); } pts.push(new THREE.Vector2(0.03 * sc, 0.4 * sc));
+          const pm = new THREE.Mesh(new THREE.LatheGeometry(pts, 16), brass); pm.position.set(x, 0, z); pm.castShadow = true; G.add(pm); } }
+      world.createCollider(RAPIER.ColliderDesc.cuboid(3.5, 1.0, 2.2).setTranslation(tx, ty + 1.0, tz).setRotation({ x: 0, y: Math.sin(yaw / 2), z: 0, w: Math.cos(yaw / 2) })); }
+    for (const [m, list] of bucket) { const o = new THREE.Mesh(mergeGeometries(list, false), m); o.castShadow = true; o.receiveShadow = true; scene.add(o); for (const q of list) q.dispose(); }
+  }
+  // ── THE CARAVAN'S STRING (see CARAVAN above) ────────────────────────────
+  // The camels walk in file behind you, each one's head-rope tied to the saddle of the one in front
+  // (the first to your hand); the ropes hang slack when they close up and pull straight when one lags,
+  // and the one that lags quickens. Every camel carries its load: a striped saddle blanket over the
+  // hump, rolled rugs and sacks slung on its flanks, a water skin
+  if (CARAVAN) {
+    const rC = mulberry32((SPEC.seed || 1) * 71 + 3), SEG = 10;
+    const cvT = (wd, ht, draw) => { const cv = document.createElement('canvas'); cv.width = wd; cv.height = ht; draw(cv.getContext('2d'), wd, ht);
+      const t = new THREE.CanvasTexture(cv); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace; return t; };
+    const stripeT = cvT(128, 128, (g2, W, H) => { const C9 = ['#8a1e22', '#e2c27a', '#1c2a5e', '#e2c27a', '#b84a1e', '#2a1a12']; let y = 0, k = 0; while (y < H) { const h = 6 + (k % 3) * 5; g2.fillStyle = C9[k % C9.length]; g2.fillRect(0, y, W, h); y += h; k++; }
+      for (let q = 0; q < 900; q++) { g2.fillStyle = `rgba(0,0,0,${0.05 + rC() * 0.06})`; g2.fillRect(rC() * W, rC() * H, 1, 2 + rC() * 4); } });
+    const blanketM = new THREE.MeshStandardMaterial({ map: stripeT, roughness: 0.95, side: THREE.DoubleSide }), canvasM = new THREE.MeshStandardMaterial({ color: 0xcdb890, roughness: 0.95 }),
+          sackM = new THREE.MeshStandardMaterial({ color: 0x9a7e56, roughness: 1 }), skinM = new THREE.MeshStandardMaterial({ color: 0x4a2e1c, roughness: 0.6 }), ropeM = new THREE.MeshStandardMaterial({ color: 0xa88e62, roughness: 0.9 });
+    const ropes = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.022, 0.022, 1, 5).translate(0, 0.5, 0), ropeM, 8 * SEG); ropes.count = 0; ropes.frustumCulled = false; ropes.castShadow = true; scene.add(ropes);
+    let string = null, inited = false;
+    const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _p = new THREE.Vector3(), _q = new THREE.Vector3(), _up = new THREE.Vector3(0, 1, 0), _d3 = new THREE.Object3D();
+    const load = (c) => {   // c: { len, wid, top } in world metres; built in the camel's own frame
+      const L = new THREE.Group(), s = c.obj.scale.x || 1; L.scale.setScalar(1 / s); L.position.set(c.cx / s, 0, c.cz / s); if (c.alongX) L.rotation.y = Math.PI / 2;   // over the body's middle, whatever the mesh's origin
+      // the blanket: a slab bent down over the hump and the flanks
+      const bg = new THREE.BoxGeometry(c.wid * 1.3, 0.04, c.len * 0.34, 14, 1, 4), bp = bg.attributes.position;
+      for (let i = 0; i < bp.count; i++) { const u = bp.getX(i) / (c.wid * 0.65); bp.setY(i, bp.getY(i) - u * u * c.wid * 0.62); bp.setX(i, bp.getX(i) * (1 - 0.18 * u * u)); }
+      bg.computeVertexNormals(); const blanket = new THREE.Mesh(bg, blanketM); blanket.position.set(0, c.top - 0.1, -c.len * 0.04); blanket.castShadow = true; L.add(blanket);
+      for (const sg of [-1, 1]) {
+        const roll = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, c.len * 0.26, 12), rC() < 0.5 ? blanketM : canvasM); roll.rotation.x = Math.PI / 2; roll.position.set(sg * (c.wid * 0.5 + 0.08), c.top - 0.5, -c.len * 0.04); roll.castShadow = true; L.add(roll);
+        const sack = new THREE.Mesh(new THREE.SphereGeometry(0.24, 12, 10).scale(0.8, 1.15, 1), sackM); sack.position.set(sg * (c.wid * 0.5 + 0.06), c.top - 0.86, c.len * 0.04 * sg); sack.castShadow = true; L.add(sack);
+      }
+      if (rC() < 0.7) { const sk = new THREE.Mesh(new THREE.SphereGeometry(0.18, 10, 8).scale(1, 1.3, 0.7), skinM); sk.position.set(-(c.wid * 0.5 + 0.04), c.top - 0.62, -c.len * 0.2); L.add(sk); }
+      c.obj.add(L);
+    };
+    // measured from the body's middle (the mesh's origin can sit at its tail)
+    const nose = (c, out) => { const y = c.obj.rotation.y, f = c.cz + c.len * 0.47; return out.set(c.obj.position.x + Math.sin(y) * f, c.obj.position.y + c.top * 0.78, c.obj.position.z + Math.cos(y) * f); };
+    const tail = (c, out) => { const y = c.obj.rotation.y, f = c.cz - c.len * 0.2; return out.set(c.obj.position.x + Math.sin(y) * f, c.obj.position.y + c.top - 0.3, c.obj.position.z + Math.cos(y) * f); };   // tied to the saddle behind the hump
+    window.__caravanTick = (t, dt) => {
+      if (!inited) {
+        const cs = npcs.filter(n => n.behavior === 'follow' && !n.dead && /camel|dromedar/i.test(n.name || (n.spec && n.spec.name) || ''));
+        if (!cs.length || !playerObj) return;
+        inited = true;
+        // they stand in file back down the way you came (away from the goal), not up a dune behind you
+        const g9 = LVL && LVL.goal ? LVL.goal : [0, 1], gl9 = Math.hypot(g9[0] - playerObj.position.x, g9[1] - playerObj.position.z) || 1;
+        const fx = (g9[0] - playerObj.position.x) / gl9, fz = (g9[1] - playerObj.position.z) / gl9, fy = Math.atan2(fx, fz);
+        string = cs.map((n, k) => { const ry0 = n.obj.rotation.y; n.obj.rotation.y = 0; n.obj.updateMatrixWorld(true);   // measured square to its own axes
+          const bb = new THREE.Box3().setFromObject(n.obj), sz = bb.getSize(new THREE.Vector3()), ctr = bb.getCenter(new THREE.Vector3()).sub(n.obj.position); n.obj.rotation.y = ry0;
+          const alongX = sz.x > sz.z * 1.15;
+          const c = { n, obj: n.obj, len: Math.max(sz.x, sz.z), wid: Math.max(0.45, Math.min(sz.x, sz.z) * 0.62), top: (bb.max.y - n.obj.position.y) * 0.84, cx: ctr.x, cz: ctr.z, alongX };   // (the box's top is the head, held above the hump)
+          n._lead = k ? cs[k - 1] : null; n._gap = c.len * 1.35 + (k ? 0 : 0.6); n._base = Math.max(1.6, n.speed || 2.2); n.dormant = false; n.obj.visible = true;
+          const back = 2.4 + k * n._gap; n.obj.position.x = playerObj.position.x - fx * back; n.obj.position.z = playerObj.position.z - fz * back; n.obj.rotation.y = n.yaw = fy;
+          load(c); return c; });
+        window.__caravan = () => string.map(c => [+c.obj.position.x.toFixed(2), +c.obj.position.z.toFixed(2)]);
+        window.__caravanDims = string.map(c => ({ len: +c.len.toFixed(2), wid: +c.wid.toFixed(2), top: +c.top.toFixed(2), cx: +c.cx.toFixed(2), cz: +c.cz.toFixed(2), alongX: c.alongX, s: +(c.obj.scale.x).toFixed(3) }));
+      }
+      let r = 0;
+      string.forEach((c, k) => {
+        if (k) tail(string[k - 1], _a); else _a.set(playerObj.position.x + Math.sin(playerObj.rotation.y + 1.2) * 0.35, playerObj.position.y + 0.95, playerObj.position.z + Math.cos(playerObj.rotation.y + 1.2) * 0.35);
+        // a lead rope droops between saddle and nose; twice the gap long, it dived into the sand at rest and
+        // stood out of it like a row of sticks, so it is a little longer than the gap and lies on the ground at most
+        nose(c, _b); const D = _a.distanceTo(_b), Lr = c.n._gap * 0.62 + 0.3, sag = D < Lr ? Math.sqrt(0.375 * Lr * (Lr - D)) : 0.02;
+        for (let q = 0; q < SEG && r < ropes.instanceMatrix.count; q++) {
+          const t0 = q / SEG, t1 = (q + 1) / SEG;
+          _p.lerpVectors(_a, _b, t0); _p.y = Math.max(_p.y - sag * 4 * t0 * (1 - t0), hAt(_p.x, _p.z) + 0.04); _q.lerpVectors(_a, _b, t1); _q.y = Math.max(_q.y - sag * 4 * t1 * (1 - t1), hAt(_q.x, _q.z) + 0.04);
+          const dv = _q.clone().sub(_p), l = dv.length(); _d3.position.copy(_p); _d3.quaternion.setFromUnitVectors(_up, dv.normalize()); _d3.scale.set(1, l, 1); _d3.updateMatrix(); ropes.setMatrixAt(r++, _d3.matrix); }
+      });
+      ropes.count = r; ropes.instanceMatrix.needsUpdate = true;
+    };
+  }
   // ── THE BIG TOP, BUILT (see BIGTOP above) ───────────────────────────────
   if (BIGTOP) {
     const B = BIGTOP, C = B.C, R = B.R, Y = hAt(C[0], C[1]), rB = mulberry32((SPEC.seed || 1) * 53 + 29);
@@ -20256,14 +20413,15 @@ async function main() {
     const fire = new THREE.PointLight(0xff7a2a, 9, 9, 1.8); fire.position.set(-1.6, 1.5, -1.3); G.add(fire);
     window.__smithFire = (t) => { fire.intensity = 8 + Math.sin(t * 11) * 1.2 + Math.sin(t * 23.7) * 0.8; coal.emissiveIntensity = 2.5 + Math.sin(t * 7.3) * 0.4; };
     // the bellows beside it
-    { const b = add(new THREE.CylinderGeometry(0.42, 0.42, 0.18, 3).rotateZ(Math.PI / 2), leather, -3.0, 1.0, -1.7); b.scale.set(1, 1, 1.8);
-      add(new THREE.CylinderGeometry(0.04, 0.04, 0.9, 6).rotateZ(Math.PI / 2), timber, -2.5, 1.0, -1.7); }
+    const bellows = add(new THREE.CylinderGeometry(0.42, 0.42, 0.18, 3).rotateZ(Math.PI / 2), leather, -3.0, 1.0, -1.7); bellows.scale.set(1, 1, 1.8);
+    add(new THREE.CylinderGeometry(0.04, 0.04, 0.9, 6).rotateZ(Math.PI / 2), timber, -2.5, 1.0, -1.7);
     // the anvil on its stump, a blade across it, the hammer
     add(new THREE.CylinderGeometry(0.38, 0.42, 0.65, 14), timber, 0.6, 0.52, 0.2);
     add(new THREE.BoxGeometry(0.34, 0.24, 0.62), iron, 0.6, 0.97, 0.2); add(new THREE.BoxGeometry(0.22, 0.12, 0.42), iron, 0.6, 0.8, 0.2);
     add(new THREE.BoxGeometry(0.42, 0.14, 0.86), iron, 0.6, 1.16, 0.2);
     const horn = add(new THREE.ConeGeometry(0.1, 0.42, 10).rotateX(Math.PI / 2), iron, 0.6, 1.16, 0.83); horn.rotation.x = Math.PI / 2;
-    add(new THREE.BoxGeometry(0.05, 0.012, 0.95), MAT({ color: 0xff8a3a, emissive: 0xff4a10, emissiveIntensity: 1.6, metalness: 0.8, roughness: 0.3 }), 0.6, 1.24, 0.15);   // the blade, still hot
+    const blade = add(new THREE.BoxGeometry(0.05, 0.012, 0.95), MAT({ color: 0xff8a3a, emissive: 0xff4a10, emissiveIntensity: 1.6, metalness: 0.8, roughness: 0.3 }), 0.6, 1.24, 0.15);   // the blade, still hot
+    blade.castShadow = false;
     add(new THREE.BoxGeometry(0.06, 0.06, 0.32), iron, 0.82, 1.27, 0.5); add(new THREE.CylinderGeometry(0.02, 0.025, 0.42, 6).rotateX(Math.PI / 2), timber, 0.82, 1.25, 0.25);
     // the quench barrel, the tool rack, a grindstone, finished swords
     add(new THREE.CylinderGeometry(0.4, 0.36, 0.85, 14), plank, 1.7, 0.53, -1.2);
@@ -20272,10 +20430,59 @@ async function main() {
     for (let k = 0; k < 6; k++) { const x = 0.95 + k * 0.34; add(new THREE.BoxGeometry(0.04, 0.55, 0.04), iron, x, 1.6, -2.56); add(new THREE.BoxGeometry(0.12, 0.08, 0.06), iron, x, 1.33, -2.56); }
     add(new THREE.CylinderGeometry(0.42, 0.42, 0.12, 20).rotateZ(Math.PI / 2), stone, 2.9, 0.75, 0.9); add(new THREE.BoxGeometry(0.5, 0.5, 0.3), timber, 2.9, 0.35, 0.9);
     for (let k = 0; k < 3; k++) { add(new THREE.BoxGeometry(0.05, 0.95, 0.012), steel, -3.35, 1.25, -0.6 + k * 0.35); add(new THREE.BoxGeometry(0.06, 0.04, 0.2), iron, -3.35, 1.74, -0.6 + k * 0.35); }
+    // (2026-10-28) the walls hung with the work: hammers and tongs on pegs over the bench, horseshoes on a
+    // board by the door, the coal heaped by the hearth, a bench with its vice and a hilt waiting for its blade
+    for (let k = 0; k < 4; k++) { const x = -0.6 + k * 0.32; add(new THREE.CylinderGeometry(0.018, 0.022, 0.42, 6), timber, x, 1.75, -2.56);
+      add(new THREE.BoxGeometry(k % 2 ? 0.13 : 0.1, 0.06, 0.06), iron, x, 1.97, -2.56); }
+    for (let k = 0; k < 2; k++) { const x = 0.45 + k * 0.22; for (const sd of [-1, 1]) { const tg = add(new THREE.BoxGeometry(0.016, 0.6, 0.02), iron, x + sd * 0.02, 1.62, -2.56); tg.rotation.z = sd * 0.05; } }
+    for (let k = 0; k < 6; k++) { const hs = add(new THREE.TorusGeometry(0.075, 0.014, 6, 14, Math.PI * 1.45), iron, 3.47, 1.3 + Math.floor(k / 3) * 0.24, 1.0 + (k % 3) * 0.22); hs.rotation.set(0, Math.PI / 2, -Math.PI * 0.27); }
+    add(new THREE.BoxGeometry(0.04, 0.6, 0.8), plank, 3.48, 1.42, 1.22);
+    { const heap = add(new THREE.ConeGeometry(0.6, 0.45, 9), MAT({ color: 0x141414, roughness: 0.95 }), -3.0, 0.42, -0.6); heap.scale.set(1, 1, 0.8); }
+    add(new THREE.BoxGeometry(1.4, 0.08, 0.6), timber, 2.6, 0.92, -2.25); for (const sx of [-0.6, 0.6]) add(new THREE.BoxGeometry(0.08, 0.86, 0.5), timber, 2.6 + sx, 0.46, -2.25);
+    add(new THREE.BoxGeometry(0.16, 0.14, 0.1), iron, 2.15, 1.03, -2.1); add(new THREE.BoxGeometry(0.03, 0.03, 0.28), iron, 2.15, 1.05, -1.98);
+    add(new THREE.CylinderGeometry(0.022, 0.022, 0.16, 8).rotateZ(Math.PI / 2), leather, 2.85, 1.0, -2.2); add(new THREE.BoxGeometry(0.03, 0.03, 0.2), MAT({ color: 0xb08a40, metalness: 0.8, roughness: 0.35 }), 2.96, 1.0, -2.2);
     world.createCollider(RAPIER.ColliderDesc.cuboid(1.1, 0.5, 0.75).setTranslation(G.position.x + 1.85, G.position.y + 0.5, G.position.z + 1.6));
     { const v = new THREE.Vector3(); G.updateMatrixWorld(true);
       for (const [hx, hz, x, z] of [[3.6, 0.1, 0, -2.7], [0.1, 2.7, -3.55, 0], [0.1, 2.7, 3.55, 0]]) { v.set(x, 1.5, z).applyMatrix4(G.matrixWorld);
         world.createCollider(RAPIER.ColliderDesc.cuboid(hx, 1.5, hz).setTranslation(v.x, v.y, v.z).setRotation({ x: 0, y: Math.sin(Sm.ry / 2), z: 0, w: Math.cos(Sm.ry / 2) })); } }
+    // THE WORK (2026-10-28): a sword is forged in heats ('heats at the anvil'). The blade comes out of the
+    // coals near white; each blow throws sparks off the hammer face, fewer and redder as it cools, until it
+    // dulls to grey and goes back in the fire while the bellows breathe on it. After the last heat it is
+    // quenched in the barrel in a burst of steam, and lies on the anvil bright steel
+    { const toW = (x, y, z) => new THREE.Vector3(x, y, z).applyMatrix4(G.matrixWorld);
+      const av = toW(0.6, 1.25, 0.2), bar = toW(1.7, 0.95, -1.2), anchor = new THREE.Object3D(); anchor.position.copy(av); scene.add(anchor);
+      const bm = blade.material, cold = new THREE.Color(0x3a3532), hot = new THREE.Color(0xffc068);
+      const NS = 260, sp = new Float32Array(NS * 3).fill(-999), sv = new Float32Array(NS * 3), sl = new Float32Array(NS);
+      const sg = new THREE.BufferGeometry(); sg.setAttribute('position', new THREE.BufferAttribute(sp, 3));
+      const sparks = new THREE.Points(sg, new THREE.PointsMaterial({ color: 0xffb050, size: 0.045, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
+      sparks.frustumCulled = false; scene.add(sparks);
+      let si = 0, heatV = 1, want = 1, quench = -1, bellowsT = 0;
+      const burst = (n, hv) => { for (let k = 0; k < n; k++) { const i = si++ % NS, a = Math.random() * 6.28, u = 0.5 + Math.random() * 2.8;
+        sp[i * 3] = av.x; sp[i * 3 + 1] = av.y + 0.03; sp[i * 3 + 2] = av.z; sv[i * 3] = Math.cos(a) * u; sv[i * 3 + 1] = 0.8 + Math.random() * 2.8; sv[i * 3 + 2] = Math.sin(a) * u; sl[i] = (0.35 + Math.random() * 0.6) * (0.5 + hv); } };
+      const flash = new THREE.PointLight(0xffa040, 0, 6, 2); flash.position.copy(av).add(new THREE.Vector3(0, 0.35, 0)); scene.add(flash);
+      const puffT = (() => { const cv = document.createElement('canvas'); cv.width = cv.height = 64; const g2 = cv.getContext('2d'), gr = g2.createRadialGradient(32, 32, 0, 32, 32, 32);
+        gr.addColorStop(0, 'rgba(255,255,255,0.85)'); gr.addColorStop(1, 'rgba(255,255,255,0)'); g2.fillStyle = gr; g2.fillRect(0, 0, 64, 64); return new THREE.CanvasTexture(cv); })();
+      const puffs = []; for (let k = 0; k < 14; k++) { const m = new THREE.Sprite(new THREE.SpriteMaterial({ map: puffT, transparent: true, opacity: 0, depthWrite: false })); m.visible = false; scene.add(m); puffs.push(m); }
+      window.__forge = { x: av.x, y: av.y, z: av.z, anchor,
+        heat: (p) => { want = Math.max(0.06, 1 - p * 0.94); },
+        strike: () => { burst(Math.round(10 + 34 * heatV), heatV); flash.intensity = 1 + 7 * heatV; try { sfx('hit'); } catch (e) {} },
+        done: (last) => { if (last) { quench = 0; want = 0; heatV = 0; puffs.forEach((m, k) => { m.visible = true; m.position.copy(bar).add(new THREE.Vector3((Math.random() - 0.5) * 0.4, k * 0.05, (Math.random() - 0.5) * 0.4)); m.userData.v = 0.5 + Math.random() * 0.7; m.userData.d = k * 0.06; });
+                                    bm.color.setHex(0xd4d8dc); bm.emissiveIntensity = 0; bm.metalness = 0.95; bm.roughness = 0.18; try { sfx('go'); } catch (e) {} }
+                          else { want = 1; bellowsT = 2.6; } } };
+      window.__forgeTick = (t, dt) => {
+        if (quench < 0) { heatV += (want - heatV) * Math.min(1, dt * (want > heatV ? 1.6 : 6));
+          bm.color.copy(cold).lerp(hot, Math.pow(heatV, 0.7)); bm.emissive.setRGB(1, 0.18 + 0.6 * heatV, 0.04 + 0.3 * heatV * heatV); bm.emissiveIntensity = 2.6 * Math.pow(heatV, 1.4); }
+        else { quench += dt; for (const m of puffs) { const a = quench - m.userData.d; if (a < 0) continue; m.position.y += m.userData.v * dt; const sc = 0.3 + a * 0.9; m.scale.set(sc, sc, sc);
+          m.material.opacity = Math.max(0, 0.7 * (1 - a / 2.6)); if (a > 2.6) m.visible = false; } }
+        flash.intensity = Math.max(0, flash.intensity - dt * 30);
+        bellowsT = Math.max(0, bellowsT - dt); bellows.scale.y = 1 + (bellowsT > 0 ? Math.sin(t * 7) * 0.35 : 0);   // pumped while the blade reheats
+        for (let i = 0; i < NS; i++) { if (sl[i] <= 0) continue; sl[i] -= dt; sv[i * 3 + 1] -= 9.8 * dt;
+          sp[i * 3] += sv[i * 3] * dt; sp[i * 3 + 1] += sv[i * 3 + 1] * dt; sp[i * 3 + 2] += sv[i * 3 + 2] * dt;
+          if (sp[i * 3 + 1] < G.position.y + 0.2) { sp[i * 3 + 1] = G.position.y + 0.2; sv[i * 3 + 1] *= -0.3; sv[i * 3] *= 0.5; sv[i * 3 + 2] *= 0.5; }
+          if (sl[i] <= 0) sp[i * 3 + 1] = -999; }
+        sg.attributes.position.needsUpdate = true;
+      };
+    }
   }
   // ── A FJORD'S WALLS RUN WITH WATER (2026-10-11) ────────────────────────
   // the falls of a Norwegian fjord: thin cascades from the snowmelt above,
@@ -31387,6 +31594,7 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
       const CLOCK = !FIRE && !DELIVER && !!(window.__clockTower && window.__clockTower.gears.length);
       const LAUNCH = !FIRE && !DELIVER && /\b(weather )?balloons?\b/.test(String(_rpS.label || '').toLowerCase()) && !!window.__balloonLaunch;
       const THROW = !FIRE && !DELIVER && /\bon the wheels?\b/.test(String(_rpS.label || '').toLowerCase()) && !!(window.__pottery && window.__pottery.wheels.length);
+      const FORGE = !FIRE && !DELIVER && /\bat the anvil\b/.test(String(_rpS.label || '').toLowerCase()) && !!window.__forge;   // (2026-10-28) heats hammered on the smithy's anvil
       const FIND = !FIRE && !DELIVER && !CHOP && !HIVE && !THIRST && !BUSK && !DIG && /\b(hikers?|climbers?|skiers?|campers?|people|persons?|children|kids?|survivors?|villagers?|explorers?|walkers?|travell?ers?|tourists?|scouts?|lost)\b/.test(String(_rpS.label || '').toLowerCase());
       if (POST && VILLAGE) {
         // a letterbox by each cottage's gate, out at the lane side of its front
@@ -31400,6 +31608,8 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
       } else if (CLOCK) {
         const gs = window.__clockTower.gears;
         for (let k = 0; k < N; k++) { const q = gs[Math.min(k, gs.length - 1)]; spots.push([q.x, q.y, q.z, q.ry, false, null, true, false, k]); }
+      } else if (FORGE) {
+        for (let k = 0; k < N; k++) { const F = window.__forge; spots.push([F.x, F.y, F.z, 0, false, null, true, false, k]); }
       } else if (THROW) {
         const ws = window.__pottery.wheels;
         for (let k = 0; k < N; k++) { const w = ws[k % ws.length]; spots.push([w.x, hAt(w.x, w.z), w.z, w.ry, false, null, true, false, k]); }
@@ -31534,6 +31744,11 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
           const q = window.__clockTower.gears[Math.min(i, window.__clockTower.gears.length - 1)];
           q.g.userData.fsTag = { type: 'objective', name: 'a broken wheel', detail: 'hold E to mend it' };
           panels.push({ g: q.g, gear: q, fixed: false, p: 0, x: q.x, z: q.z, gy: q.y, ry: q.ry });
+          continue;
+        }
+        if (FORGE) {
+          const F = window.__forge; F.anchor.userData.fsTag = { type: 'objective', name: 'the blade on the anvil', detail: 'hold E to hammer it' };
+          panels.push({ g: F.anchor, forge: F, fixed: false, p: 0, x: F.x, z: F.z, ry: 0 });
           continue;
         }
         if (THROW) {
@@ -31805,11 +32020,14 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
         if (!near) { bar.style.display = 'none'; return; }
         bar.style.display = 'block';
         const held = !!keys.KeyE || (near.find && nd < 1.9);      // the lost are found by reaching them
-        near.p = held ? Math.min(1, near.p + dt / (near.find ? 0.5 : near.air ? 0.35 : near.thr ? 3.2 : near.gear ? 2.2 : near.launch ? 3.0 : near.dig ? 2.6 : near.hive ? 1.8 : near.fire ? 2.4 : near.chop ? 2.2 : near.pad ? 1.0 : 1.6)) : Math.max(0, near.p - dt * 0.6);
+        near.p = held ? Math.min(1, near.p + dt / (near.find ? 0.5 : near.air ? 0.35 : near.thr ? 3.2 : near.forge ? 4.2 : near.gear ? 2.2 : near.launch ? 3.0 : near.dig ? 2.6 : near.hive ? 1.8 : near.fire ? 2.4 : near.chop ? 2.2 : near.pad ? 1.0 : 1.6)) : Math.max(0, near.p - dt * 0.6);
         if (near.chop) { near.chop.tick(dt, held);
           if (held) { modelYaw = Math.atan2(near.x - pp.x, near.z - pp.z); near._sw = (near._sw || 0) - dt;
             if (near._sw <= 0) { near._sw = 0.62; const q = near; try { playAttackAnim(); } catch (e) {}
               setTimeout(() => { try { sfx('hit'); q.chop.strike(playerObj.position.x, playerObj.position.z); } catch (e) {} }, 190); } } }
+        if (near.forge) { near.forge.heat(near.p);
+          if (held) { modelYaw = Math.atan2(near.x - pp.x, near.z - pp.z); near._sw = (near._sw || 0) - dt;
+            if (near._sw <= 0) { near._sw = 0.55; try { playAttackAnim(); } catch (e) {} setTimeout(() => { try { window.__forge.strike(); } catch (e) {} }, 170); } } }
         if (near.thirst) near.thirst.tick(near.p);
         for (const q of panels) if (q.busk) q.busk.tick(q.p, q === near && held, dt);
         for (const q of panels) if (q.dig && !q.fixed) q.dig.tick(q.p, q === near && held, dt);
@@ -31823,6 +32041,7 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
           : near.dig ? (held ? 'Brushing the sand away\u2026' : 'Hold E to brush')
           : near.air ? (held ? 'Away it goes\u2026' : 'Over the field! Hold E to drop the mail')
           : near.launch ? (held ? (near.p < 0.85 ? 'Filling it from the helium line\u2026' : 'Tying off the neck\u2026') : 'Hold E to fill the balloon')
+          : near.forge ? (held ? (near.p < 0.5 ? 'Drawing it out under the hammer\u2026' : 'Setting the edge as it dulls\u2026') : 'Hold E to hammer the blade')
           : near.gear ? (held ? (near.p < 0.5 ? 'Drawing the broken wheel off its arbor\u2026' : 'Setting the new teeth in mesh\u2026') : 'Hold E to mend the wheel')
           : near.thr ? (held ? (near.p < 0.3 ? 'Centring the clay\u2026' : 'Opening it up, pulling the walls\u2026') : 'Hold E to throw a ' + String(_rpS.label || 'pot').replace(/s? on the wheels?$/, ''))
           : near.bridge ? (held ? 'Laying planks\u2026' : 'Hold E to mend the bridge')
@@ -31839,6 +32058,7 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
             s.scale.setScalar(0.18 + u * 0.55); s.material.opacity = 0.85 - u * 0.4; }
         }
         document.getElementById('fsrpB').style.width = Math.round(near.p * 100) + '%';
+        window.__rpP = { p: +near.p.toFixed(2), fixed, held, n: panels.length };   // (2026-10-28) for the probes
         if (near.p >= 1) {
           near.fixed = true; fixed++; st._fixed = fixed;
           if (near.chop) { near.chop.fell(pp.x, pp.z); try { world.removeCollider(near.col, false); } catch (e) {}
@@ -31851,18 +32071,19 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
           else if (near.dig) near.dig.tick(1, false, 0.5);
           else if (near.air) AIRSTRIP.drop(near.air.i, new THREE.Vector3(pp.x, pp.y - 1.2, pp.z));
           else if (near.launch) near.launch.release();
+          else if (near.forge) near.forge.done(fixed >= st.count);
           else if (near.gear) { near.gear.fix(); if (fixed >= st.count) window.__clockTower.strike(); }
           else if (near.thr) { near.thr._live = false; near.thr._p = 1; near.thr.tick(1, false, 0.016); }
           else { near.scr.material.emissive.setHex(0x2aff7a); near.scr.material.emissiveIntensity = 1.3; near.spark.visible = false; }
           const _thing = String(_rpS.label || 'pot').replace(/s? on the wheels?$/, '');
-          popText(near.launch ? 'Away it goes! The sonde is sending already.' : near.gear ? (fixed >= st.count ? 'The last wheel bites! The hands come up to midnight and the bell swings.' : 'The wheel bites and turns. The clock gathers pace.') : near.air ? (fixed >= st.count ? 'The last of the mail is down! Home to the strip.' : 'Mail down! They wave from the field.') : near.thr ? (fixed >= st.count ? 'A ' + _thing + ' on every wheel, ready to dry!' : 'A ' + _thing + ', true on the wheel!') : near.dig ? (fixed >= st.count ? 'There it lies, clean to the stone!' : 'The sand comes away!') : near.busk ? (fixed >= st.count ? 'Every corner of the town has heard you play!' : 'They clap, and the coins ring in the case!') : near.thirst ? (fixed >= st.count ? 'Every plant is watered!' : 'Watered!') : near.find ? (fixed >= st.count ? 'Everyone is found!' : 'Found!') : near.bridge ? (fixed >= st.count ? 'Every bridge is whole!' : 'The bridge holds!') : near.chop ? (fixed >= st.count ? 'Every tree is down!' : 'Timber!') : near.hive ? (/\bhoney/.test(String(SPEC.prompt || '').toLowerCase()) ? (fixed >= st.count ? 'Every jar is full!' : 'A frame of honey!') : (fixed >= st.count ? 'Every hive checked!' : 'Hive checked!')) : near.post ? (fixed >= st.count ? 'Every letter posted!' : 'Posted!') : near.fire ? (fixed >= st.count ? 'Every fire is out!' : 'Fire out!') : near.pad ? (fixed >= st.count ? 'Every delivery made!' : 'Delivered!') : (fixed >= st.count ? 'All fixed!' : 'Fixed!'), '#7fe08a'); sfx('pickup');
+          popText(near.forge ? (fixed >= st.count ? 'Into the barrel with a hiss of steam: it is a sword.' : 'It has gone grey. Back into the coals for another heat.') : near.launch ? 'Away it goes! The sonde is sending already.' : near.gear ? (fixed >= st.count ? 'The last wheel bites! The hands come up to midnight and the bell swings.' : 'The wheel bites and turns. The clock gathers pace.') : near.air ? (fixed >= st.count ? 'The last of the mail is down! Home to the strip.' : 'Mail down! They wave from the field.') : near.thr ? (fixed >= st.count ? 'A ' + _thing + ' on every wheel, ready to dry!' : 'A ' + _thing + ', true on the wheel!') : near.dig ? (fixed >= st.count ? 'There it lies, clean to the stone!' : 'The sand comes away!') : near.busk ? (fixed >= st.count ? 'Every corner of the town has heard you play!' : 'They clap, and the coins ring in the case!') : near.thirst ? (fixed >= st.count ? 'Every plant is watered!' : 'Watered!') : near.find ? (fixed >= st.count ? 'Everyone is found!' : 'Found!') : near.bridge ? (fixed >= st.count ? 'Every bridge is whole!' : 'The bridge holds!') : near.chop ? (fixed >= st.count ? 'Every tree is down!' : 'Timber!') : near.hive ? (/\bhoney/.test(String(SPEC.prompt || '').toLowerCase()) ? (fixed >= st.count ? 'Every jar is full!' : 'A frame of honey!') : (fixed >= st.count ? 'Every hive checked!' : 'Hive checked!')) : near.post ? (fixed >= st.count ? 'Every letter posted!' : 'Posted!') : near.fire ? (fixed >= st.count ? 'Every fire is out!' : 'Fire out!') : near.pad ? (fixed >= st.count ? 'Every delivery made!' : 'Delivered!') : (fixed >= st.count ? 'All fixed!' : 'Fixed!'), '#7fe08a'); sfx('pickup');
           try { burst(near.g.position, 0x7fe08a); } catch (e) {}
           renderQuest(); bar.style.display = 'none';
           if (fixed >= st.count) { if (near.launch) setTimeout(() => advanceStep(), 6000); else advanceStep(); }   // a launch is watched up into the sky before the night is won
         }
       };
       const hintR = document.querySelector('#hud .hint');
-      if (hintR && !FIND) hintR.textContent += BRIDGE ? ' \u00b7 hold E to mend' : CHOP ? ' \u00b7 hold E to chop' : HIVE ? ' \u00b7 hold E to check' : THIRST ? ' \u00b7 hold E to water' : DIG ? ' \u00b7 hold E to brush' : CLOCK ? ' \u00b7 hold E to mend' : LAUNCH ? ' \u00b7 hold E to launch' : THROW ? ' \u00b7 hold E to throw' : BUSK ? ' \u00b7 hold E to play' : POST ? ' \u00b7 hold E to post' : FIRE ? ' \u00b7 hold E to spray' : DELIVER ? ' \u00b7 hold E to drop' : ' \u00b7 hold E to repair';
+      if (hintR && !FIND) hintR.textContent += BRIDGE ? ' \u00b7 hold E to mend' : CHOP ? ' \u00b7 hold E to chop' : HIVE ? ' \u00b7 hold E to check' : THIRST ? ' \u00b7 hold E to water' : DIG ? ' \u00b7 hold E to brush' : CLOCK ? ' \u00b7 hold E to mend' : LAUNCH ? ' \u00b7 hold E to launch' : THROW ? ' \u00b7 hold E to throw' : FORGE ? ' \u00b7 hold E to hammer' : BUSK ? ' \u00b7 hold E to play' : POST ? ' \u00b7 hold E to post' : FIRE ? ' \u00b7 hold E to spray' : DELIVER ? ' \u00b7 hold E to drop' : ' \u00b7 hold E to repair';
     }
   }
   {
@@ -33555,6 +33776,8 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
       if (window.__gorgeTick) window.__gorgeTick(performance.now() / 1000, Math.min(0.05, dt || 0.016));
       if (window.__sawTick) window.__sawTick(performance.now() / 1000, Math.min(0.05, dt || 0.016));
       if (window.__sumoTick) window.__sumoTick(performance.now() / 1000, Math.min(0.05, dt || 0.016));
+      if (window.__forgeTick) window.__forgeTick(performance.now() / 1000, Math.min(0.05, dt || 0.016));
+      if (window.__caravanTick) window.__caravanTick(performance.now() / 1000, Math.min(0.05, dt || 0.016));
       if (window.__canTick) window.__canTick(performance.now() / 1000, Math.min(0.05, dt || 0.016));
       if (window.__sledTick) window.__sledTick(Math.min(0.05, dt || 0.016));
       if (window.__clockTower) window.__clockTower.tick(performance.now() / 1000, Math.min(0.05, dt || 0.016));

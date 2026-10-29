@@ -878,6 +878,17 @@ def build_level(seed: int, size_m: float, n_objectives: int = 0,
                 elif dp < 80.0:
                     t = (dp - 32.0) / 48.0
                     h *= t * t * (3 - 2 * t)
+            elif _arch == "dunes" and _cv is None:
+                # (2026-10-28) A ROUTE OVER THE DUNES: flattened to zero, the path cut a trench
+                # through every ridge with sand walls at fifty degrees, and "a desert caravan
+                # leads camels across the dunes" walked a slot with its camels on the walls. A
+                # caravan crosses the dunes: the path keeps a third of their swell and eases back
+                # into them over a broad shoulder
+                if d < corridor:
+                    h *= 0.3
+                elif d < corridor * 5.0:
+                    t = (d - corridor) / (corridor * 4.0)
+                    h *= 0.3 + 0.7 * t * t * (3 - 2 * t)
             elif d < corridor:
                 h = 0.0 if _cv is None else min(0.0, _cv)   # the creek runs on across the path
             elif d < corridor * 2.2:                 # smooth shoulder

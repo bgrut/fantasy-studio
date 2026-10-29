@@ -630,6 +630,8 @@ def _build_reference_prompt(slots: Dict[str, Any], style: str) -> tuple[str, str
             # and that is how he is drawn: the great build, the topknot, the robe and the belt under it
             "sumo wrestler": "a heavy-set Japanese sumo wrestler with a very large round build, black hair oiled into a chonmage topknot, wearing a long patterned indigo cotton yukata robe tied with a wide sash, white tabi socks and wooden geta sandals, fully clothed, face showing",
             "rikishi":   "a heavy-set Japanese sumo wrestler with a very large round build, black hair oiled into a chonmage topknot, wearing a long patterned indigo cotton yukata robe tied with a wide sash, white tabi socks and wooden geta sandals, fully clothed, face showing",
+            # (2026-10-28) the man who leads a desert caravan on foot: robes and a head cloth against the sun
+            "caravan leader": "a weathered desert caravan leader in a long loose indigo-blue cotton robe over light trousers, a wide cloth sash at the waist, an indigo head cloth wrapped as a turban with the tail loose over one shoulder and the face uncovered and showing, leather sandals, a wooden staff held at the side, fully clothed, normal proportions",
             "child":     "a cheerful child in a bright striped t-shirt, colourful dungarees and sneakers, fully clothed",
             "kid":       "a cheerful child in a bright striped t-shirt, colourful dungarees and sneakers, fully clothed",
             # (2026-10-09) every one of these came out wrong without an entry: the

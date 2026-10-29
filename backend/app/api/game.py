@@ -1532,6 +1532,21 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                     job.setdefault("notes", []).append(f"pottery: the shop stands by the spawn; throw {_n} {_th}s, one on each kick wheel")
             except Exception as _pte:
                 job.setdefault("notes", []).append(f"pottery rule skipped: {_pte}")
+            # A SMITH FORGES AT HIS OWN ANVIL (2026-10-28): "a blacksmith forges a sword at the anvil in a
+            # mountain village smithy" stood the smithy by the spawn and sent him 70 m off to "reach anvil" in
+            # a wood. The work is at the forge: three heats, the blade drawn glowing from the coals and hammered
+            # on the anvil till it dulls, then quenched in the barrel (runtime FORGE)
+            try:
+                _pl = (req.prompt or "").lower()
+                if _fre.search(r"\b(blacksmiths?|smithy|smithies|swordsmiths?|forg(?:e|es|ing)\s+(?:an?\s+|the\s+)?(?:\w+\s+){0,2}(?:swords?|blades?|horseshoes?|axes?|daggers?|knives|knife))\b", _pl) \
+                        and getattr(spec, "genre", "") != "factory" and not any(o.kind == "repair" for o in spec.objectives):
+                    from app.game_export.spec import ObjectiveSpec as _FOS
+                    _fw = r"\b(anvils?|forges?|smithy|swords?|blades?|bellows|hammers?|hearths?|coals?|iron|steel)\b"
+                    spec.objectives = [_FOS(kind="repair", label="heats at the anvil", count=3)] + \
+                        [o for o in spec.objectives if not (o.kind in ("collect", "reach") and _fre.search(_fw, (o.label or "").lower()))]
+                    job.setdefault("notes", []).append("forge: the smithy by the spawn; three heats hammered on the anvil, then the quench")
+            except Exception as _fge:
+                job.setdefault("notes", []).append(f"forge rule skipped: {_fge}")
             # A WEATHER BALLOON IS LAUNCHED (2026-10-27): "a scientist launching a weather balloon" was asked to
             # collect "balloon components" and then to "reach balloon launch altitude" on foot. The sonde's parts
             # are gathered from round the base, then the balloon is filled at the launch shed and let go
@@ -2103,8 +2118,9 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         # island" asked for overcast and rain and got paper daylight over an
         # orange desert; the weather the sentence asked for outranks a look
         # the extractor chose on its own.
-        if not req.style and spec.style in _PAPER and (_sky in ("night", "dusk", "overcast") or _wx in ("rain", "storm", "snow")):
-            _why = _sky if _sky in ("night", "dusk", "overcast") else _wx
+        # (2026-10-28) and a sunset: "a caravan ... to an oasis at sunset" was played in paper noon haze
+        if not req.style and spec.style in _PAPER and (_sky in ("night", "dusk", "overcast", "sunset", "dawn", "sunrise") or _wx in ("rain", "storm", "snow")):
+            _why = _sky if _sky in ("night", "dusk", "overcast", "sunset", "dawn", "sunrise") else _wx
             job.setdefault("notes", []).append(
                 f"art direction: {spec.style} would paint daylight over {_why}; kept the weather with 'default' "
                 "(pick a style in the studio to override)")
@@ -2465,6 +2481,19 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                     spec.entities = [e for e in spec.entities
                                      if not (e.name.lower() == cand
                                              and e.behavior in ("wander", "follow"))]
+        # A CARAVAN IS LED (2026-10-28): "a desert caravan leads camels across the dunes to an oasis" was
+        # played by one camel walking alone. A caravan is a man in desert robes on foot with a string of
+        # laden camels roped head to tail behind him; the runtime ties the string (CARAVAN)
+        try:
+            if base_spec is None and req.player is None and _fre.search(r"\b(caravans?|camel trains?)\b", (req.prompt or "").lower()) \
+                    and _fre.search(r"\b(camels?|dromedar\w+)\b", (req.prompt or "").lower()):
+                spec.player.name = "caravan leader"
+                spec.entities = [e for e in spec.entities if (e.name or "").lower().rstrip("s") != "camel"]
+                from app.game_export.spec import EntitySpec as _CES
+                spec.entities.append(_CES(name="camel", behavior="follow", count=5))
+                job.setdefault("notes", []).append("caravan: a robed leader on foot, five laden camels roped behind")
+        except Exception as _cve:
+            job.setdefault("notes", []).append(f"caravan rule skipped: {_cve}")
         # PLAYER CASTING (accuracy-first, like the video hero): explicit
         # override > the prompt's extracted subject > man. Falls through the
         # ladder with a visible note whenever the cast changes.
@@ -4136,7 +4165,7 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         for ob in spec.objectives:
             # (2026-10-26) a dig is one find under several mounds: "the buried statue" stays one statue
             if ob.kind in ("defeat", "hunt", "capture", "collect", "eliminate", "repair", "escort") and (ob.count or 0) > 1 and (ob.label or "").strip() \
-                    and not (ob.kind == "repair" and ((ob.label or "").startswith("buried ") or (ob.label or "").endswith(" on the wheel"))):
+                    and not (ob.kind == "repair" and ((ob.label or "").startswith("buried ") or (ob.label or "").endswith(" on the wheel") or (ob.label or "").endswith(" at the anvil"))):
                 _ws = ob.label.strip().split(" ")
                 _w = _ws[-1]; _lw = _w.lower()
                 if _lw.isalpha() and not _lw.endswith("s") and _lw not in _INVAR:
