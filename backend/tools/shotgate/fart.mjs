@@ -160,11 +160,17 @@ const jam = await p.evaluate(async ()=>{
   F.cells[0][i + 1][j].item = TY.CRYSTAL;
   await new Promise(r => setTimeout(r, 1200));
   // find the second belt's instance and read its colour
-  const dk = F.beltDecks[F.beltShape(0, i + 1, j, F.cells[0][i + 1][j])];
-  const idx = F.beltIndexOf ? F.beltIndexOf(0, i + 1, j) : null;
+  // read again for a moment if the slot is not in that deck yet: one run in
+  // five (2026-10-30) the index and the deck came from different frames
   let col = null;
-  if (idx != null) col = [dk.instanceColor.getX(idx), dk.instanceColor.getY(idx),
-                          dk.instanceColor.getZ(idx)].map(v => +v.toFixed(2));
+  for (let t = 0; t < 10 && !col; t++) {
+    const dk = F.beltDecks[F.beltShape(0, i + 1, j, F.cells[0][i + 1][j])];
+    const idx = F.beltIndexOf ? F.beltIndexOf(0, i + 1, j) : null;
+    if (idx == null) break;
+    const v = [dk.instanceColor.getX(idx), dk.instanceColor.getY(idx), dk.instanceColor.getZ(idx)];
+    if (v.every(Number.isFinite)) col = v.map(x => +x.toFixed(2));
+    else await new Promise(r => setTimeout(r, 200));
+  }
   return { col, stuck: !!F.cells[0][i + 1][j].item };
 });
 console.log('jam       :', jam.stuck ? 'belt is holding' : 'belt drained (?)',

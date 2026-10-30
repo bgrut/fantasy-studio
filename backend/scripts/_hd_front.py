@@ -174,7 +174,7 @@ for ti, tob in enumerate(targets):
     bpy.ops.object.mode_set(mode="EDIT")
     bpy.ops.mesh.select_all(action="SELECT")
     if not _keep:
-        bpy.ops.uv.smart_project(angle_limit=math.radians(60), island_margin=0.0025, area_weight=0.0, scale_to_bounds=True)
+        bpy.ops.uv.smart_project(angle_limit=math.radians(60), island_margin=0.001, area_weight=0.0, scale_to_bounds=True)
     bpy.ops.object.mode_set(mode="OBJECT")
     # THE FACE GETS THE TEXELS (2026-10-08): smart UV gives every square
     # centimetre the same share, so a face was about two hundred texels across
@@ -206,30 +206,86 @@ for ti, tob in enumerate(targets):
                     a_, b_ = _fd(f0.index), _fd(f1.index)
                     if a_ != b_:
                         _par[a_] = b_
+            # THE FACE IS ONE PIECE, AND THE SPECKS GIVE WAY (2026-10-30, the user: "blurry
+            # character faces"). A generated mesh is noisy, and smart UV cut it into ~7000
+            # islands, most a triangle or two, each with its own margin: the sheet was 15%
+            # used and the face about a hundred texels across. Now the head band's
+            # front-facing faces are laid out as the front camera sees them (one island,
+            # no cuts across the cheeks), and before an exact-shape pack every island is
+            # sized to its true area times its worth: the face 4.5x, the rest of the head
+            # 2.5x, a speck of noise half. Face texels per metre 663 -> 2148 on the
+            # explorer, the whole body 374 -> 619, in the same 2048 sheet.
+            from mathutils import Vector as _V
+            _head = _zt - 0.135 * _Hh
+            _nm = _mw.to_3x3()
+            _W = {v.index: _mw @ v.co for v in _b.verts}
+            _hx = [p.x for p in _W.values() if p.z > _head]
+            _cx = (max(_hx) + min(_hx)) / 2; _hw = (max(_hx) - min(_hx)) / 2
+            _face = set()
+            for f in _b.faces:
+                c = _mw @ f.calc_center_median(); n = (_nm @ f.normal).normalized()
+                if c.z > _head - 0.02 * _Hh and n.y > 0.3 and abs(c.x - _cx) < _hw * 0.95:
+                    _face.add(f.index)
+            for f in _b.faces:
+                if f.index in _face:
+                    for l in f.loops:
+                        p = _W[l.vert.index]
+                        l[_uvl].uv = _V(((p.x - _cx) / _Hh * 0.1 + 0.5, (p.z - _head) / _Hh * 0.1 + 0.5))
+            # the islands again: the face now has seams of its own
+            _par[:] = range(len(_b.faces))
+            for _e in _b.edges:
+                lf = _e.link_faces
+                if len(lf) != 2:
+                    continue
+                f0, f1 = lf
+                l0 = {l.vert.index: l[_uvl].uv.copy() for l in f0.loops}
+                l1 = {l.vert.index: l[_uvl].uv.copy() for l in f1.loops}
+                if all((l0[v.index] - l1[v.index]).length < 1e-6 for v in _e.verts):
+                    a_, b_ = _fd(f0.index), _fd(f1.index)
+                    if a_ != b_:
+                        _par[a_] = b_
             _isl = {}
             for f in _b.faces:
                 _isl.setdefault(_fd(f.index), []).append(f)
-            _head = _zt - 0.135 * _Hh
+            _speck = (0.012 * _Hh) ** 2 * 3
             _n = 0
             for fs in _isl.values():
-                hz = sum(1 for f in fs if (_mw @ f.calc_center_median()).z > _head)
-                if hz * 2 < len(fs):
+                a3 = sum(f.calc_area() for f in fs)
+                a2 = 0.0
+                for f in fs:
+                    uv = [l[_uvl].uv for l in f.loops]
+                    for i in range(1, len(uv) - 1):
+                        a2 += abs((uv[i].x - uv[0].x) * (uv[i + 1].y - uv[0].y) - (uv[i + 1].x - uv[0].x) * (uv[i].y - uv[0].y)) / 2
+                if a2 < 1e-12:
                     continue
+                is_face = fs[0].index in _face
+                hz = sum(1 for f in fs if (_mw @ f.calc_center_median()).z > _head)
+                k = 4.5 if is_face else 2.5 if hz * 2 >= len(fs) else 1.0
+                if not is_face and a3 < _speck:
+                    k *= 0.5
+                s = k * math.sqrt(a3 / a2)
                 us = [l[_uvl].uv for f in fs for l in f.loops]
                 cu = sum((u.x for u in us)) / len(us); cv = sum((u.y for u in us)) / len(us)
                 for f in fs:
                     for l in f.loops:
                         uvv = l[_uvl].uv
-                        uvv.x = cu + (uvv.x - cu) * 2.0; uvv.y = cv + (uvv.y - cv) * 2.0
+                        uvv.x = cu + (uvv.x - cu) * s; uvv.y = cv + (uvv.y - cv) * s
                 _n += 1
             _b.to_mesh(me); _b.free(); me.update()
-            if _n:
-                bpy.ops.object.mode_set(mode="EDIT")
-                bpy.ops.mesh.select_all(action="SELECT")
-                bpy.ops.uv.select_all(action="SELECT")
-                bpy.ops.uv.pack_islands(rotate=True, margin=0.0025)
-                bpy.ops.object.mode_set(mode="OBJECT")
-                print("HDTEXELS head islands doubled: %d" % _n)
+            bpy.ops.object.mode_set(mode="EDIT")
+            bpy.ops.mesh.select_all(action="SELECT")
+            bpy.ops.uv.select_all(action="SELECT")
+            bpy.ops.uv.pack_islands(rotate=True, rotate_method="ANY", margin=0.001, shape_method="CONCAVE", margin_method="FRACTION")
+            bpy.ops.object.mode_set(mode="OBJECT")
+            print("HDTEXELS face %d faces, %d islands sized and packed" % (len(_face), _n))
+        elif not _keep:
+            # not standing up (an animal): still packed by shape, tighter
+            bpy.ops.object.mode_set(mode="EDIT")
+            bpy.ops.mesh.select_all(action="SELECT")
+            bpy.ops.uv.select_all(action="SELECT")
+            bpy.ops.uv.pack_islands(rotate=True, rotate_method="ANY", margin=0.001, shape_method="CONCAVE", margin_method="FRACTION")
+            bpy.ops.object.mode_set(mode="OBJECT")
+            print("HDTEXELS packed by shape")
     except Exception as _tx:
         if bpy.context.object and bpy.context.object.mode != "OBJECT":
             bpy.ops.object.mode_set(mode="OBJECT")

@@ -87,12 +87,12 @@ export function plantGrass(o) {
     covered = 0;
     for (let j = 0; j < MN; j++) for (let i = 0; i < MN; i++) {
       const x = cx - half + (i + 0.5) / MN * size, z = cz - half + (j + 0.5) / MN * size;
-      const [d, dry, h] = maskAt(x, z);
+      const [d, dry, h, fl] = maskAt(x, z);
       const k = (j * MN + i) * 4;
       md[k] = Math.round(Math.max(0, Math.min(1, d)) * 255);
       md[k + 1] = Math.round(Math.max(0, Math.min(1, dry)) * 255);
       md[k + 2] = Math.round(Math.max(0, Math.min(1, h)) * 255);
-      md[k + 3] = 255;
+      md[k + 3] = Math.round(Math.max(0, Math.min(1, fl || 0)) * 255);      // flowers (2026-10-30)
       covered += d;
     }
   }
@@ -139,6 +139,12 @@ export function plantGrass(o) {
       uDead: { value: o.dead ?? 0.05 }, uFold: { value: o.fold ?? 0.5 },
       uSunDir: { value: (o.sunDir || new THREE.Vector3(0.4, 0.8, 0.3)).clone().normalize() },
       uSunCol: { value: (o.sunCol || new THREE.Color(1, 1, 1)).clone() },
+      // FLOWERS IN THE SWARD (2026-10-30): wildflowers painted into a ground sheet as specks
+      // blurred into pale and blue smudges under the blades. Where the mask's fourth channel
+      // says so, a blade is a flower instead: a thin stem standing a little proud of the grass
+      // and a head in one of the field's flower colours, drift by drift. Same draw, same program
+      uFlow: { value: Array.from({ length: 5 }, (_, k) => (o.flowers && o.flowers[k % o.flowers.length]) ? o.flowers[k % o.flowers.length].clone() : new THREE.Color(1, 1, 1)) },
+      uFlowN: { value: o.flowers ? Math.min(5, o.flowers.length) : 0 },
     };
     mat.onBeforeCompile = (sh) => {
       Object.assign(sh.uniforms, U);
@@ -147,6 +153,7 @@ export function plantGrass(o) {
         uniform float uTime; uniform float uWindK; uniform float uH; uniform float uW;
         uniform sampler2D uHgt; uniform sampler2D uMask; uniform vec4 uMap;
         uniform vec3 uColA; uniform vec3 uColB; uniform vec3 uColDry; uniform float uDead; uniform float uFold;
+        uniform vec3 uFlow[5]; uniform float uFlowN;
         varying vec3 vGW; varying float vGT;
         ` + sh.vertexShader
         .replace('#include <color_vertex>', `#include <color_vertex>
@@ -176,11 +183,20 @@ export function plantGrass(o) {
           float gH = uH * (0.55 + 0.9 * aOff.w) * (0.35 + 0.65 * gK.b) * gKeep;
           float gWid = uW * (0.75 + 0.5 * gR2) * (1.0 + gFar * 0.8);
           float gT = position.y;
+          // a flower: up to a third of the blades in a dense drift, a stem then a head
+          float gFl = step(0.5, uFlowN) * step(fract(aOff.w * 41.31), gK.a * 0.5);
+          gH = mix(gH, uH * (1.05 + 0.35 * gR2) * gKeep, gFl);
+          gLean *= 1.0 - 0.6 * gFl;
+          gWid *= mix(1.0, gT < 0.7 ? 0.16 : 4.0, gFl);
+          // the stem takes four fifths of the height, the head the last fifth
+          float gTy = gFl > 0.5 ? (gT <= 0.5 ? gT * 1.6 : 0.8 + (gT - 0.5) * 0.4) : gT;
           vec3 gSide = vec3(-gDir.y, 0.0, gDir.x);
           vec3 gP = vec3(gW.x, gY - 0.02, gW.y) + gSide * position.x * gWid * (1.0 - 0.85 * gT);
           float gLL = min(length(gLean), 1.1);
-          gP.xz += gLean * gH * gT * gT;
-          gP.y += gH * gT * (1.0 - 0.38 * gLL * gT);
+          gP.xz += gLean * gH * gTy * gTy;
+          gP.y += gH * gTy * (1.0 - 0.38 * gLL * gTy);
+          // and the head turns its face up: its tip leans out, so from above it is a petal, not a line
+          if (gFl > 0.5 && gT > 0.9) { gP.xz += gDir * gH * 0.16; gP.y -= gH * 0.08; }
           vec3 gTan = normalize(vec3(gLean.x * gH * 2.0 * gT, gH * (1.0 - 0.76 * gLL * gT) + 1e-4, gLean.y * gH * 2.0 * gT));
           vec3 gN = normalize(cross(gSide, gTan));
           if (gN.y < 0.0) gN = -gN;
@@ -196,6 +212,15 @@ export function plantGrass(o) {
           // are browning at the tip
           gTint = mix(gTint, uColDry * 0.92, step(fract(aOff.w * 29.17), uDead));
           gTint = mix(gTint, uColDry, smoothstep(0.62, 1.0, gT) * step(0.55, fract(aOff.w * 17.3)) * 0.55);
+          if (gFl > 0.5) {
+            // the drift's colour: one per patch of a few metres, so a drift is white or gold, not confetti
+            vec2 gCe = floor(gW * 0.3);
+            float gHc = fract(sin(dot(gCe, vec2(12.9898, 78.233))) * 43758.5453);
+            int gI = int(min(gHc * uFlowN, uFlowN - 1.0));
+            vec3 gFc = uFlow[0];
+            if (gI == 1) gFc = uFlow[1]; else if (gI == 2) gFc = uFlow[2]; else if (gI == 3) gFc = uFlow[3]; else if (gI == 4) gFc = uFlow[4];
+            gTint = mix(uColA * 0.9, gFc * (0.85 + 0.3 * gR2), step(0.7, gT));
+          }
           #ifdef USE_COLOR
             vColor *= gTint;
           #endif
@@ -249,10 +274,11 @@ export function plantGrass(o) {
       const j0 = Math.max(0, Math.floor((Math.min(z0, z1) - (cz - half)) / size * MN) - 1), j1 = Math.min(MN - 1, Math.ceil((Math.max(z0, z1) - (cz - half)) / size * MN) + 1);
       for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
         const x = cx - half + (i + 0.5) / MN * size, z = cz - half + (j + 0.5) / MN * size;
-        const [d, dry, h] = maskAt(x, z), k = (j * MN + i) * 4;
+        const [d, dry, h, fl] = maskAt(x, z), k = (j * MN + i) * 4;
         md[k] = Math.round(Math.max(0, Math.min(1, d)) * 255);
         md[k + 1] = Math.round(Math.max(0, Math.min(1, dry)) * 255);
         md[k + 2] = Math.round(Math.max(0, Math.min(1, h)) * 255);
+        md[k + 3] = Math.round(Math.max(0, Math.min(1, fl || 0)) * 255);
       }
       mTex.needsUpdate = true;
     },

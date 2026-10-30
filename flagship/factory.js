@@ -1610,20 +1610,22 @@ function meadowTexture(fp, look, ground, seed) {
     // SALT PANS LIE ALONG THE BRINE (2026-10-28): from orbit the pans were thirty-odd round spots of one
     // size, polka dots on the face. A pan is where brine stood and dried: long, ragged crusts laid along the
     // channels, small ones and a few great flats, each a scatter of cracked plates thinning to its edge
-    for (let i = 0; i < 46; i++) {                                   // salt pans: a soft crust, then its cracked plates
+    for (let i = 0; i < 24; i++) {                                   // salt pans: a crust, then its cracked plates ((2026-10-30) 24, not 46: the face was polka-dotted)
       const big = i < 4, cp = chan[i % chan.length], at = cp[Math.floor(rnd() * cp.length)], nx = cp[Math.min(cp.length - 1, cp.indexOf(at) + 2)];
       const along = Math.atan2(nx[1] - at[1], nx[0] - at[0]) + (rnd() - 0.5) * 0.5;
       const cx = big ? rnd() * P : at[0] + (rnd() - 0.5) * 30, cy = big ? rnd() * P : at[1] + (rnd() - 0.5) * 30;
       const R = big ? 110 + rnd() * 70 : 10 + Math.pow(rnd(), 2) * 70, el = big ? 1.6 : 1.8 + rnd() * 2.2, ca = Math.cos(along), sa = Math.sin(along);
-      for (let q = 0; q < 4; q++) { const t = (q / 3 - 0.5) * R * el * 0.9; blob(cx + ca * t + (rnd() - 0.5) * R * 0.3, cy + sa * t + (rnd() - 0.5) * R * 0.3, R * (0.55 + rnd() * 0.35), 'rgb(214,216,204)', big ? 0.22 : 0.26); }
-      for (let k = 0; k < (big ? 520 : 30 + R * 1.6); k++) {
+      // (2026-10-30) A PAN IS ITS PLATES: the crust was four airbrushed discs under its plates, a soft
+      // pale smudge along every channel from the air (an outlined fill read as a plastic sheet). The
+      // pan is the plates alone now, smaller and more of them, so its edge is where they thin out
+      for (let k = 0; k < (big ? 1300 : 75 + R * 4); k++) {
         const u = (rnd() * 2 - 1) * R * el, vv = (rnd() * 2 - 1) * R * (0.55 + 0.45 * Math.sqrt(Math.max(0, 1 - Math.abs(u) / (R * el)))) * Math.sqrt(rnd());
         if (rnd() < Math.abs(u) / (R * el) * 0.8) continue;             // thinner toward its ends
-        const a0 = 0, d0 = 0, px = cx + ca * u - sa * vv, py = cy + sa * u + ca * vv, r = 2.5 + rnd() * 4.5, sides = 5 + Math.floor(rnd() * 3), rot = rnd() * 6.28;
+        const a0 = 0, d0 = 0, px = cx + ca * u - sa * vv, py = cy + sa * u + ca * vv, r = 1.4 + rnd() * 2.6, sides = 5 + Math.floor(rnd() * 3), rot = rnd() * 6.28;
         const poly = []; for (let q = 0; q < sides; q++) { const aa = rot + q / sides * 6.28, rr = r * (0.75 + rnd() * 0.4); poly.push([px + Math.cos(aa) * rr, py + Math.sin(aa) * rr]); }
-        const v = 226 + Math.floor(rnd() * 22);
+        const v = 200 + Math.floor(rnd() * 24);           // (2026-10-30) crust, not glare: near-white plates under the sun read as blown-out blobs from the air
         wrapDraw(() => { g.beginPath(); poly.forEach(([qx, qy], q) => q ? g.lineTo(qx, qy) : g.moveTo(qx, qy)); g.closePath();
-          g.fillStyle = `rgba(${v},${v - 2},${v - 10},${0.55 + rnd() * 0.35})`; g.fill();
+          g.fillStyle = `rgba(${v},${v - 2},${v - 10},${0.34 + rnd() * 0.28})`; g.fill();
           g.strokeStyle = 'rgba(96,104,94,0.45)'; g.lineWidth = 0.9; g.stroke();                       // the crack round each plate
           g.strokeStyle = 'rgba(255,255,250,0.5)'; g.lineWidth = 0.8; g.beginPath(); g.moveTo(poly[0][0], poly[0][1] - 1); g.lineTo(poly[1][0], poly[1][1] - 1); g.stroke(); });   // its lit rim
       }
@@ -1649,7 +1651,7 @@ function meadowTexture(fp, look, ground, seed) {
     for (let i = 0; i < 24; i++) {                                   // wildflower drifts
       const cx = rnd() * P, cy = rnd() * P, R = 14 + rnd() * 44, fc = FLOW[Math.floor(rnd() * FLOW.length)], n = Math.floor(R * 1.3);
       wrapDraw(() => { for (let k = 0; k < n; k++) { const a0 = rnd() * 6.28, d0 = Math.pow(rnd(), 0.7) * R, px = cx + Math.cos(a0) * d0 * 1.4, py = cy + Math.sin(a0) * d0;
-        g.fillStyle = `rgba(${fc[0]},${fc[1]},${fc[2]},${0.3 + rnd() * 0.35})`; g.fillRect(px, py, 1.2 + rnd() * 1.1, 1.2 + rnd() * 1.1); } });
+        g.fillStyle = `rgba(${fc[0]},${fc[1]},${fc[2]},${0.1 + rnd() * 0.12})`; g.fillRect(px, py, 1.2 + rnd() * 1.1, 1.2 + rnd() * 1.1); } });   // (2026-10-30) faint: blurred, they were pale smudges under the blades; the grass grows real ones
     }
   }
   if (look.key === 'under') {
@@ -3895,6 +3897,9 @@ function grassMaskFor(f) {
   // a first-person floor, not a hay meadow: thick on the crystal faces, a
   // scrub on the salt ones, a few dry tufts in the ember's cinders
   const base = SPEC.city ? 0.75 : f === 1 ? 0.35 : m === EMBER ? 0.22 : m === SALT ? 0.4 : 0.85;
+  // FLOWERS IN DRIFTS (2026-10-30): a meadow face grows wildflowers and a salt face sea lavender,
+  // in drifts a couple of metres across (the grass draws them: proc/grass.js uFlow)
+  const _fk = SPEC.city ? '' : faceLookOf(f).key, flowers = _fk === 'crystal' ? 1 : _fk === 'salt' ? 0.7 : _fk === 'ember' ? 0.45 : 0;   // fireweed is what comes up after a fire
   return (x, z) => {
     const a = x, b = -z;                       // the field's x is u, its z is -v
     const i = Math.floor(a / T + N / 2), j = Math.floor(b / T + N / 2);
@@ -3935,10 +3940,13 @@ function grassMaskFor(f) {
     // your feet the field read as one even carpet of identical blades. Clumps a metre across
     // stand taller and thicker, and here and there the soil shows through, dry at its rim
     const cl = _gvn(a * 0.95 + f * 13.1, b * 0.95 - f * 7.7), bp = _gvn(a * 0.22 + 31 + f * 3.3, b * 0.22 - 17);
-    const bare = Math.max(0, Math.min(1, (bp - 0.12) / 0.1));
+    // (2026-10-30) not on a salt face: its ground is pale crust, and the holes read from the air as
+    // white polka dots through the dark sward (the sheet paints its own pans)
+    const bare = _fk === 'salt' ? 1 : Math.max(0, Math.min(1, (bp - 0.12) / 0.1));
+    const fl = flowers ? flowers * Math.max(0, Math.min(1, (_gvn(a * 0.5 + f * 5.1 + 71, b * 0.5 - f * 2.3 - 9) - 0.64) / 0.14)) * trod * burn : 0;
     return [base * (0.4 + 0.6 * nz) * margin * burn * (0.62 + 0.5 * cl) * bare,
             burn < 1 ? 1 : Math.max(dry, (1 - trod) * 0.55, (1 - bare) * 0.6),
-            (0.5 + 0.5 * nz) * (0.4 + 0.6 * burn) * (0.45 + 0.55 * trod) * (0.55 + 0.75 * cl)];
+            (0.5 + 0.5 * nz) * (0.4 + 0.6 * burn) * (0.45 + 0.55 * trod) * (0.55 + 0.75 * cl), fl];
   };
 }
 if (GRASS_ON) {
@@ -3960,6 +3968,10 @@ if (GRASS_ON) {
     const g = __GRASS.plantGrass({
       scene: frame, seed: 4100 + f * 17, hAt: () => 0, maskAt: grassMaskFor(f), maskRes: 128,
       center: [0, 0], size: N * T, colA, colB, colDry, height: 0.17, windK: 0.3,
+      // white oxeye and clover, buttercup gold, harebell blue, red campion pink; on the salt, sea lavender
+      flowers: faceLookOf(f).key === 'crystal' ? [0xf2efe4, 0xf0c63a, 0x6f86d8, 0xe07aa6, 0xf6f0d8].map(h => new THREE.Color(h))
+             : faceLookOf(f).key === 'salt' ? [0x9a7ad0, 0xb496e0, 0xece6f0].map(h => new THREE.Color(h))
+             : faceLookOf(f).key === 'ember' ? [0xc8407e, 0xd85a98, 0xb83a6a].map(h => new THREE.Color(h)) : null,
       // FINE GRASS AT YOUR FEET (2026-10-04): first person looks straight down
       // into the nearest few metres, where a hundred blades a square metre
       // read as a handful of fat spikes; a third field, fine and dense, fills
@@ -5727,8 +5739,8 @@ function farLabel(text, sub, col) {
 // the void's dark plating pricked with lit windows, moss crossed by worn paths and
 // fireflies. The glowing part is the emissive map, so they shine across the sky.
 const _farTexCache = {};
-function farFaceTex(fam, seed) {
-  const key = fam + ':' + seed;
+function farFaceTex(fam, seed, edge) {
+  const key = fam + ':' + seed + ':' + (edge || '');
   if (_farTexCache[key]) return _farTexCache[key];
   let q = (seed * 2654435761) >>> 0;
   const r = () => ((q = (q * 1664525 + 1013904223) >>> 0) / 4294967296);
@@ -5762,6 +5774,10 @@ function farFaceTex(fam, seed) {
     for (let i = 0; i < 28; i++) { e.fillStyle = P[2]; e.globalAlpha = 0.5 + r() * 0.5; e.beginPath(); e.arc(r() * S, r() * S, 1 + r() * 1.2, 0, 6.283); e.fill(); }
     e.globalAlpha = 1;
   }
+  // the lit wire along its edges, painted into the face (2026-10-30): it was a
+  // LineSegments of its own, a draw call for every far world in view
+  if (edge) { e.globalAlpha = 1; e.strokeStyle = edge; e.lineWidth = 7; e.strokeRect(0, 0, S, S);
+             x.strokeStyle = edge; x.lineWidth = 7; x.strokeRect(0, 0, S, S); }
   const tm = new THREE.CanvasTexture(cm), te = new THREE.CanvasTexture(ce);
   tm.colorSpace = THREE.SRGBColorSpace; te.colorSpace = THREE.SRGBColorSpace; tm.anisotropy = te.anisotropy = 4;
   return (_farTexCache[key] = { map: tm, emissiveMap: te });
@@ -5782,15 +5798,12 @@ function buildFarWorlds() {
     const g = new THREE.Group();
     g.position.copy(dir.multiplyScalar(560));
     const edgeCol = new THREE.Color(w.edge || w.grid);
-    const _ft = farFaceTex(w.fam, 17 + k * 31);
+    const _ft = farFaceTex(w.fam, 17 + k * 31, '#' + edgeCol.getHexString());
     const body = new THREE.Mesh(new THREE.BoxGeometry(40, 40, 40),
       new THREE.MeshStandardMaterial({ map: _ft.map, emissiveMap: _ft.emissiveMap, color: 0xffffff, roughness: 0.85, metalness: 0.05,
         emissive: 0xffffff, emissiveIntensity: open ? 1.25 : 0.45, fog: false }));
     body.material.userData.noAutoTex = true;
     body.name = 'body';
-    const edges = new THREE.LineSegments(new THREE.EdgesGeometry(body.geometry),
-      new THREE.LineBasicMaterial({ color: edgeCol, transparent: true, opacity: open ? 0.95 : 0.25, fog: false }));
-    body.add(edges);
     body.rotation.set(0.5 + k, 0.7 * k, 0.3);
     g.add(body);
     // EACH ONE LOOKS LIKE ITSELF (2026-10-05): a cinder world sheds glowing

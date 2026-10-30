@@ -3812,9 +3812,13 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                     # (2026-10-11) the courier walker is a white cycling suit that reads
                     # as a figure undressed, and stood as the guide in a candlelit
                     # library; background people are the hoodie and the shirt-and-boots
-                    _dressed = [w for w in ("walker_thug.glb", "walker_detective.glb")
-                                if (_wl / w).exists()
-                                and w[len("walker_"):-4] != (spec.player.name or "").lower().strip()]
+                    # (2026-10-30) the everyday walkers first (baked from the HD people); the
+                    # hoodie with its bat only when nothing else was baked
+                    _pn = (spec.player.name or "").lower().strip()
+                    _dressed = ([w for w in ("walker_man.glb", "walker_woman.glb", "walker_detective.glb", "walker_photographer.glb")
+                                 if (_wl / w).exists() and w[len("walker_"):-4] != _pn]
+                                or [w for w in ("walker_thug.glb", "walker_detective.glb")
+                                    if (_wl / w).exists() and w[len("walker_"):-4] != _pn])
                     if _dressed:
                         glb = str(_wl / _dressed[_dress_i % len(_dressed)])
                         _dress_i += 1

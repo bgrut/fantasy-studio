@@ -27,15 +27,18 @@ for o in bpy.data.objects:
     bpy.context.view_layer.objects.active = o
     bpy.ops.object.modifier_apply(modifier="dec")
 
-# 512px textures + drop normal maps (ambient walkers are never inspected)
+# 1024px textures + drop normal maps. (2026-10-30) 512 was for walkers no one looks at, but a
+# night market puts them at arm's length: the people now carry a face-first atlas
+# (scripts/_hd_front.py), and at 1024 a walker's face keeps ~200 texels across
+WMAX = int(argv[argv.index("--tex") + 1]) if "--tex" in argv else 1024
 for img in list(bpy.data.images):
     n = (img.name or "").lower()
     if "normal" in n:
         img.user_clear()
         continue
-    if img.size[0] > 512:
-        img.scale(512, 512)
+    if img.size[0] > WMAX:
+        img.scale(WMAX, WMAX)
 
 bpy.ops.export_scene.gltf(filepath=dst, export_yup=True,
-                          export_image_format="JPEG", export_jpeg_quality=70)
+                          export_image_format="JPEG", export_jpeg_quality=85)   # (2026-10-30) 70 blocked the faces
 print("WALKER-BAKED", dst)

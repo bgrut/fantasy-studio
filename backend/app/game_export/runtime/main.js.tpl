@@ -5285,8 +5285,17 @@ async function main() {
     root.traverse(o => { if (!o.isMesh) return;
       for (const m of [].concat(o.material)) { if (!m || !m.color || seen.has(m)) continue; seen.add(m); m.color.convertSRGBToLinear(); } });
   };
+  // a model's own sheets are read at an angle too (2026-10-30): the loader leaves them at
+  // anisotropy 1, so a cheek or a sleeve turned from the camera fell to a blurred mip
+  const _glbAniso = (root) => {
+    const a = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+    root.traverse(o => { if (!o.isMesh || !o.material) return;
+      for (const m of Array.isArray(o.material) ? o.material : [o.material])
+        for (const k of ['map', 'normalMap', 'roughnessMap', 'metalnessMap', 'emissiveMap'])
+          if (m && m[k] && m[k].anisotropy < a) { m[k].anisotropy = a; m[k].needsUpdate = true; } });
+  };
   const loadGLB = url => new Promise((res, rej) =>
-    loader.load(url, g => { try { _kitSRGB(url, g.scene); vertexPBR(g.scene); } catch (e) { /* the model still loads */ } res(g); },
+    loader.load(url, g => { try { _kitSRGB(url, g.scene); vertexPBR(g.scene); _glbAniso(g.scene); } catch (e) { /* the model still loads */ } res(g); },
                 undefined, () => rej(new Error('failed to load ' + url))));
 
   // belt-and-suspenders vs "string" strips: any alpha-aware material gets a
@@ -8879,6 +8888,8 @@ async function main() {
             const _oldRd = !!(SPEC.world.level && SPEC.world.level.osm && SPEC.world.level.osm.old);
             for (let d = 1; d + 1.8 < segL && !_oldRd; d += 5.8) {
               const t0 = d / segL, t1 = (d + 1.8) / segL;
+              // (2026-10-30) a night market's street is closed and full of stalls: no traffic paint down its aisle
+              if (MKTPLAN && MKTPLAN.near(x1 + (x2 - x1) * (t0 + t1) / 2, z1 + (z2 - z1) * (t0 + t1) / 2, 3)) continue;
               const dg = strip(
                 x1 + (x2 - x1) * t0, z1 + (z2 - z1) * t0,
                 x1 + (x2 - x1) * t1, z1 + (z2 - z1) * t1,
@@ -14626,6 +14637,7 @@ async function main() {
                    : _shipNpc ? buildShip({ seed: (SPEC.seed || 1) + npcs.length * 13 + 5, flag: /pirate/i.test(String(SPEC.player && SPEC.player.name || '')) ? 'navy' : 'pirate',
                                             hull: [0x4a3a30, 0x5a2e1e, 0x3e3a36][npcs.length % 3], band: [0x2a4a8a, 0x1e1e1e, 0xd8b030][npcs.length % 3] })
                                 : skClone(gltf.scene);
+        if (_kartNpc && SPEC.player.car_params.type === 'soapbox') try { seatSoapDriver(inst, gltf.scene); } catch (e) { /* the doll stays */ }
         hardenAlpha(inst);
         const mats = [];
         inst.traverse(o => {
@@ -14975,7 +14987,9 @@ async function main() {
         scene.add(holder);
         // per-instance animation: idle/walk/run clips crossfade with movement
         let anim = null;
-        if (hasAnims) {
+        // (2026-10-30) not on a built kart or car: the clips are the rider's, and on a soapbox they found
+        // the seated driver's bones by name and walked it in its seat
+        if (hasAnims && !_kartNpc && !_carNpc) {
           const mixer = new THREE.AnimationMixer(inst);
           const acts = {};
           for (const c of gltf.animations) acts[c.name] = mixer.clipAction(c);
@@ -26910,9 +26924,53 @@ async function main() {
     const ropeAt = (sx) => [new THREE.Vector3(sx * 0.4, 0.27, 0.72), new THREE.Vector3(sx * 0.24, 0.5, 0.35), new THREE.Vector3(sx * 0.14, 0.59, 0.06)];
     for (const sx of [-1, 1]) add(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(ropeAt(sx)), 10, 0.009, 5), rope, 0, 0, 0);
     add(new THREE.TubeGeometry(new THREE.CatmullRomCurve3([new THREE.Vector3(-0.14, 0.59, 0.06), new THREE.Vector3(0, 0.56, 0.08), new THREE.Vector3(0.14, 0.59, 0.06)]), 6, 0.009, 5), rope, 0, 0, 0);
-    g.userData.kart = true; g.userData.soapbox = { front: fAx, spin, last: null };
+    g.userData.kart = true; g.userData.soapbox = { front: fAx, spin, last: null, kid };
     (window.__soapboxes = window.__soapboxes || []).push(g);
     return g;
+  }
+  // A REAL CHILD AT THE ROPE (2026-10-30): the driver was a doll of capsules and a ball head, in a
+  // game whose other people are the generated characters. When the game's own child is loaded, a
+  // copy of it sits in each cart instead: each limb aimed in the cart's frame (the rig's own bone
+  // axes are not assumed), knees up, feet to the front, hands forward on the rope; the doll hides
+  function seatSoapDriver(cart, src) {
+    const sb = cart && cart.userData.soapbox;
+    if (!sb || sb.driver || !src) return false;
+    const d = skClone(src), root = new THREE.Group();
+    root.add(d);
+    d.rotation.y = Math.PI;                                   // bipeds are built facing -Z; the cart's nose is +Z
+    root.updateMatrixWorld(true);
+    const bb = new THREE.Box3().setFromObject(d), H = bb.max.y - bb.min.y;
+    if (!(H > 0.05)) return false;
+    d.scale.multiplyScalar(1.22 / H);                         // a child of eight or nine
+    const B = {};
+    d.traverse(o => { if (o.isBone) B[o.name] = o; if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; o.frustumCulled = false; } });
+    if (!B.hips || !B.upleg_L || !B.lowleg_L) return false;
+    const V = (x, y, z) => new THREE.Vector3(x, y, z).normalize();
+    const aim = (bn, cn, dir) => {
+      const b = B[bn], c = B[cn];
+      if (!b || !c || !b.parent) return;
+      root.updateMatrixWorld(true);
+      const cur = c.getWorldPosition(new THREE.Vector3()).sub(b.getWorldPosition(new THREE.Vector3())).normalize();
+      const qd = new THREE.Quaternion().setFromUnitVectors(cur, dir);
+      const wq = b.getWorldQuaternion(new THREE.Quaternion()), pq = b.parent.getWorldQuaternion(new THREE.Quaternion());
+      b.quaternion.copy(pq.invert().multiply(qd.multiply(wq)));
+    };
+    for (const s of ['L', 'R']) {
+      const sx = s === 'L' ? 1 : -1;                          // facing +Z, the left hand is on +X
+      aim('upleg_' + s, 'lowleg_' + s, V(sx * 0.08, 0.32, 1));
+      aim('lowleg_' + s, 'foot_' + s, V(0, -0.72, 0.68));
+      aim('uparm_' + s, 'lowarm_' + s, V(sx * 0.22, -0.6, 0.78));
+      aim('lowarm_' + s, 'hand_' + s, V(-sx * 0.18, 0.08, 1));
+    }
+    if (B.spine && B.chest) aim('spine', 'chest', V(0, 1, -0.12));      // sat back a little against the board
+    root.updateMatrixWorld(true);
+    // on the seat: the hips just above the board, over the seat plank
+    const hp = B.hips.getWorldPosition(new THREE.Vector3());
+    d.position.x += -hp.x; d.position.y += 0.39 - hp.y; d.position.z += -0.4 - hp.z;
+    cart.add(root);
+    if (sb.kid) sb.kid.visible = false;
+    sb.driver = root;
+    return true;
   }
   // the carts' wheels turn with the ground they cover, and the front axle with the way they turn
   window.__soapTick = (dt) => {
@@ -27396,6 +27454,9 @@ async function main() {
     : (P.car_params && !P.car_params.library)
     ? { scene: buildCar(P.car_params), animations: [] }
     : await loadGLB(P.asset);            // hard fail = visible error
+  // the soapbox's own driver is the game's child (seatSoapDriver), loaded beside the cart
+  if (P.car_params && P.car_params.type === 'soapbox' && P.asset && /\.glb$/i.test(String(P.asset)))
+    loadGLB(P.asset).then(g => { try { seatSoapDriver(pg.scene, g.scene); } catch (e) { /* the doll stays */ } }).catch(() => {});
   const { holder, root: pRoot, radius } =
     prepModel(pg, P.height_m, ['fly', 'swim'].includes(P.mode || 'walk'));
   // ORIENTATION (2026-07-06 rewrite — heuristics OUT, baked truth IN):

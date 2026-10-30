@@ -66,12 +66,14 @@ Every picture below is an unedited in-game capture of a build made from the sent
 
 ### Newest builds
 
-Soapbox carts that roll down a cobbled village hill with no engine, a Taipei night market packed into its alley, wind-rippled dunes, camel trains on their ropes, a forge you work heat by heat, and a place built for each sentence.
+Faces with three times the detail, crowds of real people, children at the rope of their soapbox carts, a Taipei night market packed into its alley, wildflowers in the grass, and a place built for each sentence.
 
 <div align="center">
 
 | | |
 |---|---|
+| <img src=".github/assets/games/v20/faces-before-after.jpg" width="430"/><br/><sub>Every generated person, before and after. The face used to get about a hundred pixels of its texture; the sheet is now laid out face first, packed by shape, and a face gets three times the detail in the same file.</sub> | <img src=".github/assets/games/v20/hero-face.jpg" width="430"/><br/><sub>The same explorer in the Taipei night market, close enough to see the stubble, with the market crowd around him.</sub> |
+| <img src=".github/assets/games/v20/taipei-crowd.jpg" width="430"/><br/><sub>*"a night market in Taipei, squeeze down the crowded alley of food stalls to find the stinky tofu stand"*<br/>The crowd is everyday people now, each with a real texture: a detective in a trench coat, a photographer, a man and a woman.</sub> | <img src=".github/assets/games/v20/soapbox-drivers.jpg" width="430"/><br/><sub>*"kids race soapbox carts down a steep village hill"*<br/>Each cart is driven by the game's own generated child, seated with knees up and hands on the rope.</sub> |
 | <img src=".github/assets/games/v19/soapbox-grid.jpg" width="430"/><br/><sub>*"kids race soapbox carts down a steep village hill, first to the hay bales at the bottom wins"*<br/>Four carts on the line under the START banner: plank and crate, pram wheels, a number on the cowl, a kid in a leather helmet holding the steering rope.</sub> | <img src=".github/assets/games/v19/soapbox-street.jpg" width="430"/><br/><sub>Same game, on the way down: no engine, the hill does the work. A cobbled street winds between cottages on stone plinths to the hay bales and the chequered finish.</sub> |
 | <img src=".github/assets/games/v19/taipei-alley.jpg" width="430"/><br/><sub>*"a night market in Taipei, squeeze down the crowded alley of food stalls to find the stinky tofu stand"*<br/>Shophouses either side, neon signs standing out over the aisle, red lanterns, and a crowd between the stalls.</sub> | <img src=".github/assets/games/v19/taipei-stalls.jpg" width="430"/><br/><sub>Same game, looking back up the market: woks steaming on the counters, shop signboards lit under the awnings, cables strung across overhead.</sub> |
 | <img src=".github/assets/games/v18/caravan.jpg" width="430"/><br/><sub>*"a desert caravan leads camels across the dunes to an oasis at sunset"*<br/>You lead a string of laden camels, roped nose to tail, which slow and close up behind you. Blankets, rolls, sacks and water skins ride on the humps.</sub> | <img src=".github/assets/games/v18/oasis.jpg" width="430"/><br/><sub>Same game, the end of the road: a pool in a hollow of the dunes catching the low sun, date palms, a green fringe and a goat-hair tent with its hearth.</sub> |
@@ -118,10 +120,10 @@ Earlier builds, rebuilt on today's engine and captured the same way.
 And the studio's flagship, **Crystal Works**, a factory-building game made in Fantasy Studio and developed alongside it ([`flagship/`](flagship/)):
 
 <div align="center">
-<img src=".github/assets/games/v17/cw-orbit.jpg" width="430"/> <img src=".github/assets/games/v17/cw-low.jpg" width="430"/>
+<img src=".github/assets/games/v17/cw-orbit.jpg" width="430"/> <img src=".github/assets/games/v20/cw-meadow.jpg" width="430"/>
 <img src=".github/assets/games/v18/cw-ember.jpg" width="430"/> <img src=".github/assets/games/v18/cw-stones.jpg" width="430"/>
 
-<sub>A worldlet you can walk all the way round, each face its own country with its own ore: a blue-green meadow with brooks, wildflowers and boulders, an ember heath of cooled lava lobes, basalt plates and sulfur vents split by glowing fissures, a salt marsh crusted white, a mossy shade side. Build lines of rigs, belts, smelters and hubs across it, under a violet nebula.</sub>
+<sub>A worldlet you can walk all the way round, each face its own country with its own ore: a blue-green meadow with brooks, boulders and drifts of wildflowers standing in the grass, an ember heath of cooled lava lobes, basalt plates and sulfur vents split by glowing fissures, a salt marsh with sea lavender and salt crusting along its brine, a mossy shade side. Build lines of rigs, belts, smelters and hubs across it, under a violet nebula.</sub>
 </div>
 
 ---

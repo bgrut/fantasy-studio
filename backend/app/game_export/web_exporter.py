@@ -234,6 +234,12 @@ def export_web_game(spec: GameSpec, out_dir: str | Path, verbose: bool = True) -
             # ships as the fallback, but a crowd draws from the dressed ones
             if len(_wnames) > 1 and "walker.glb" in _wnames:
                 _wnames.remove("walker.glb")
+            # (2026-10-30) a crowd is passers-by: the courier's white cycling suit read as a
+            # figure undressed, and the thug carries a bat through a night market. They ship
+            # (a game may still use them), but the crowd draws from the everyday people
+            _everyday = [w for w in _wnames if w not in ("walker_courier.glb", "walker_thug.glb")]
+            if len(_everyday) >= 3:
+                _wnames = _everyday
             if _wnames:
                 (dist / "assets" / "walkers.json").write_text(
                     json.dumps(_wnames), encoding="utf-8")
