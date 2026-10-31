@@ -154,7 +154,7 @@ export function plantGrass(o) {
         uniform sampler2D uHgt; uniform sampler2D uMask; uniform vec4 uMap;
         uniform vec3 uColA; uniform vec3 uColB; uniform vec3 uColDry; uniform float uDead; uniform float uFold;
         uniform vec3 uFlow[5]; uniform float uFlowN;
-        varying vec3 vGW; varying float vGT;
+        varying vec3 vGW; varying float vGT; varying float vGF; varying float vGX;
         ` + sh.vertexShader
         .replace('#include <color_vertex>', `#include <color_vertex>
           // the copy of this blade's spot nearest the camera
@@ -206,6 +206,11 @@ export function plantGrass(o) {
           gP += gN * (1.0 - abs(gSx)) * gWid * 0.22 * uFold * (1.0 - gT);
           gN = normalize(gN + gSide * gSx * 0.9 * uFold);
           gN = normalize(mix(gN, vec3(0.0, 1.0, 0.0), 0.4));
+          // NOTHING WHERE NOTHING GROWS (2026-10-31): a blade kept off (past a worldlet face's edge,
+          // a bare patch, thinned out) had no height but kept its width and the midrib's fold, a
+          // sliver; past the cube's edge they hung in space as a field of coloured dashes
+          if (gH < 1e-4) gP = vec3(gW.x, gY - 0.02, gW.y);
+          vGF = gFl; vGX = position.x;
           vec3 gTint = mix(uColA, uColB, fract(aOff.w * 5.71));
           gTint = mix(gTint, uColDry, gK.g * (0.35 + 0.65 * fract(aOff.w * 3.31)));
           // a few blades are last year's, straw from root to tip; many more
@@ -227,9 +232,31 @@ export function plantGrass(o) {
           vGW = (modelMatrix * vec4(gP, 1.0)).xyz; vGT = gT;`)
         .replace('#include <beginnormal_vertex>', 'vec3 objectNormal = gN;')
         .replace('#include <begin_vertex>', 'vec3 transformed = gP;');
-      sh.fragmentShader = `uniform vec3 uSunDir; uniform vec3 uSunCol;
-        varying vec3 vGW; varying float vGT;
+      sh.fragmentShader = `uniform vec3 uSunDir; uniform vec3 uSunCol; uniform vec3 uColA;
+        varying vec3 vGW; varying float vGT; varying float vGF; varying float vGX;
         ` + sh.fragmentShader
+        .replace('#include <color_fragment>', `#include <color_fragment>
+          // A FLOWER, NOT A SCRAP (2026-10-31): the head was one flat triangle of colour and the
+          // drifts read as torn blue paper. Five petals round a gold eye, the gaps between them the
+          // sward's own green; the pattern fades to the head's mean colour once it is under a pixel
+          if (vGF > 0.5 && vGT > 0.72) {
+            float fa = (vGT - 0.75) / 0.25;
+            vec2 fq = vec2(vGX * 2.2, (fa - 0.36) * 2.4);
+            // atan(0, 0) is undefined: one NaN pixel at a head's centre grew through the bloom into a black box
+            float fr = length(fq), fth = atan(fq.y, abs(fq.x) < 1e-5 ? 1e-5 : fq.x);
+            float fw = max(fwidth(fr), 1e-3);
+            float fpet = 0.62 + 0.38 * cos(fth * 5.0 + vGW.x * 7.0);
+            float fin = smoothstep(fpet + fw, fpet - fw, fr);
+            float feye = smoothstep(0.22 + fw, 0.22 - fw, fr);
+            vec3 fpc = diffuseColor.rgb * (0.82 + 0.3 * fr);
+            vec3 fc = mix(uColA * 0.75, fpc, fin);
+            fc = mix(fc, vec3(0.62, 0.42, 0.06), feye * step(diffuseColor.r - diffuseColor.b, 0.35));
+            fc = mix(fc, vec3(0.30, 0.20, 0.05), feye * step(0.35, diffuseColor.r - diffuseColor.b));
+            diffuseColor.rgb = mix(fc, mix(uColA * 0.75, diffuseColor.rgb, 0.7), smoothstep(0.35, 0.9, fw));
+            // (2026-10-31) and close to, the gaps are gaps: painted green they read as a green
+            // triangle with a flower printed on it. Cut only where a petal is bigger than a pixel
+            if (fw < 0.3 && fin < 0.5) discard;
+          }`)
         .replace('#include <normal_fragment_begin>', `#include <normal_fragment_begin>
           normal = normalize(vNormal);          // both faces of a blade face the sky
           nonPerturbedNormal = normal;`)

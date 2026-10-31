@@ -163,8 +163,17 @@ for ti, tob in enumerate(targets):
                 print("HDSUB head subdivided: %d -> %d head verts" % (_nh, sum(1 for z in _zz if z > _cut)))
         except Exception as _se:
             print("HDSUB skipped (%s: %s)" % (type(_se).__name__, str(_se)[:120]))
+    _oldtex = None
     if _keep:
         me.uv_layers.active = me.uv_layers[0]
+    elif "--fromtex" in argv and len(me.uv_layers) > 0:
+        # THE BODY AS IT IS, A NEW FACE (2026-10-31): the coat is the character's own texture,
+        # read through its own layout (the render map) while the new layout is laid out and baked
+        # into (the active map); the old map goes once the bakes are done. A head-only repaint
+        _oldtex = me.uv_layers[0].name
+        me.uv_layers[0].active_render = True
+        uv = me.uv_layers.new(name="HD")
+        me.uv_layers.active = uv
     else:
         for uvl in list(me.uv_layers):
             me.uv_layers.remove(uvl)
@@ -226,6 +235,25 @@ for ti, tob in enumerate(targets):
                 c = _mw @ f.calc_center_median(); n = (_nm @ f.normal).normalized()
                 if c.z > _head - 0.02 * _Hh and n.y > 0.3 and abs(c.x - _cx) < _hw * 0.95:
                     _face.add(f.index)
+            # ONLY THE SURFACE THE FRONT SEES (2026-10-31): a generated head is often two skins a
+            # centimetre apart, or folded, and every front-facing layer went into the one planar
+            # island: 3,638 head faces shared texels with the face in front of them (412 before),
+            # and the sheriff's face came back a shattered mask in his hat's colours at every
+            # seed. A face behind the frontmost surface at its spot keeps an island of its own
+            _cell = 0.004 * _Hh; _front = {}
+            for fi in _face:
+                f = _b.faces[fi]
+                for p in [_mw @ f.calc_center_median()] + [_W[v.index] for v in f.verts]:
+                    key = (int(p.x // _cell), int(p.z // _cell))
+                    if p.y > _front.get(key, -1e9):
+                        _front[key] = p.y
+            _behind = set()
+            for fi in _face:
+                c = _mw @ _b.faces[fi].calc_center_median()
+                if c.y < _front.get((int(c.x // _cell), int(c.z // _cell)), c.y) - 0.006 * _Hh:
+                    _behind.add(fi)
+            _face -= _behind
+            print("HDTEXELS %d faces behind the front surface left out of the face island" % len(_behind))
             for f in _b.faces:
                 if f.index in _face:
                     for l in f.loops:
@@ -346,6 +374,9 @@ for ti, tob in enumerate(targets):
             for l in list(_mi.links):
                 mat.node_tree.links.remove(l)
             _mi.default_value = 0.0
+    if _oldtex is not None:          # the old map reads the texture, the new one is baked into
+        me.uv_layers[_oldtex].active_render = True
+        me.uv_layers.active = me.uv_layers["HD"]
     C = bake_into("coat", "coat")
     if "--matte" not in argv:
         for _nt, _mi, _dv, _src in _metal:
@@ -354,6 +385,10 @@ for ti, tob in enumerate(targets):
                 _nt.links.new(_s, _mi)
     P = bake_into("pos", "pos")
     N = bake_into("nrm", "nrm")
+    if _oldtex is not None:
+        me.uv_layers.remove(me.uv_layers[_oldtex])
+        me.uv_layers["HD"].active_render = True
+        me.uv_layers.active = me.uv_layers["HD"]
     bakes.append((tob, nodes, C, P, N))
 
 if not bakes:
@@ -699,7 +734,7 @@ for i_a, a_ in enumerate(argv):
         vv = meta["views"][vname]
         cam_e = {"img": A, "low": None, "dir": np.array(vv["dir"]), "right": np.array(vv["right"]), "up": np.array(vv["up"]),
                  "centre": np.array(vv.get("centre", meta["centre"])), "ortho": float(vv.get("ortho", meta["ortho"])), "W": VW, "H": VH,
-                 "head": vname.startswith("head")}
+                 "head": vname.startswith("head"), "name": vname}
         # its broad colour: a box blur a few percent of the frame wide
         rr_ = max(2, VW // 96)
         def _box(img, r):
@@ -849,6 +884,24 @@ for tob, nodes, C, P, N in bakes:
             hacc += paint * wg[:, None]; hsum += wg
         cov = np.where(hsum > 1e-6, hcov, 0.0) * (1 - w)
         out_m = out_m * (1 - cov[:, None]) + (hacc / np.maximum(hsum, 1e-6)[:, None]) * cov[:, None]
+        # SLIVERS ON THE FACE (2026-10-31): a generated head is full of slivers turned
+        # edge-on or inward, and the face-first layout gives each its own texels, at its
+        # own dark coat colour: the sheriff's face came back a black shattered mask under
+        # a clean portrait, at every seed. No view faces them squarely, so none painted
+        # them. One lying on the front surface the front portrait sees is painted from
+        # it whichever way it points; the later steps still take what they see better
+        fe = next((e for e in hv if e.get("name") == "head_front"), None)
+        if fe is not None:
+            # and the shell under it: a generated head is often two skins a centimetre apart, the
+            # outer one torn, and the inner one shows through the tears at its own dark colour.
+            # The front view's depth test called it hidden; it is taken here to ~2% of the height
+            px0_, py0_, d0_ = project_extra(Pt, fe)
+            _zb0 = fe["zb"][np.clip((py0_ / 2).astype(int), 0, fe["zb"].shape[0] - 1), np.clip((px0_ / 2).astype(int), 0, fe["zb"].shape[1] - 1)]
+            ok0 = (d0_ >= _zb0 - 0.02 * size) & (px0_ > 1) & (px0_ < fe["W"] - 2) & (py0_ > 1) & (py0_ < fe["H"] - 2)
+            facing0 = Nt @ fe["dir"]
+            fill = ok0 * band * (1 - w) * np.clip((0.6 - cov) / 0.6, 0, 1) * ((facing0 < 0.45) | (d0_ < _zb0 - 0.004 * size))
+            out_m = out_m * (1 - fill[:, None]) + sample(fe["img"], px0_, py0_) * fill[:, None]
+            print("HDSLIVER %.3f of the head band filled from the front" % (float((fill > 0.5).sum()) / max(1.0, float((band > 0.5).sum()))))
     out = cs.copy(); out[mc] = out_m
     out = dilate(np.clip(out, 0, 1), mc, 16)
     rgba = np.concatenate([out, np.ones(out.shape[:2] + (1,), np.float32)], axis=2)

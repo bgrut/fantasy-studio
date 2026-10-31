@@ -14,6 +14,9 @@ const PIN = { top: { pos: [0.3, H * 2.2, 0.4], look: [0, 0, 0] },
   px: { pos: [H * 2.1, H * 0.3, H * 0.2], look: [0, 0, 0] }, nx: { pos: [-H * 2.1, H * 0.3, -H * 0.2], look: [0, 0, 0] },
   pz: { pos: [H * 0.2, H * 0.3, H * 2.1], look: [0, 0, 0] }, nz: { pos: [-H * 0.2, H * 0.3, -H * 2.1], look: [0, 0, 0] },
   bot: { pos: [0.3, -H * 2.2, 0.4], look: [0, 0, 0] },
+  // knee height on each side face, looking across it (2026-10-31)
+  eyepx: { pos: [H + 0.9, 4, 8], look: [H, 2, 2] }, eyenx: { pos: [-H - 0.9, 4, 8], look: [-H, 2, 2] },
+  eyepz: { pos: [4, 8, H + 0.9], look: [2, 2, H] }, eyenz: { pos: [4, 8, -H - 0.9], look: [2, 2, -H] }, eyeny: { pos: [4, -H - 0.9, 8], look: [2, -H, 2] },
   lowpx: { pos: [H + 2.2, H * 0.4, H * 0.5], look: [H, -H * 0.3, -H * 0.4] }, lownz: { pos: [-H * 0.5, H * 0.4, -H - 2.2], look: [H * 0.4, -H * 0.3, -H] } };
 for (const n of S) { if (!n.startsWith('keep')) await p.evaluate(pn => { window.__camPin = pn; }, PIN[n] || null); await w(2200);   // 'play': the game's own camera; 'keep*': the pin PRE set
   await p.screenshot({ path: `${process.env.OUT}/${n}.jpg`, type: 'jpeg', quality: 85 }); }

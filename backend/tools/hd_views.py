@@ -43,6 +43,10 @@ _offline_if_cached()
 # judge (tools/char_qa.py) sends a blotchy result back through this pass;
 # FS_HDV_SEED moves every painting seed so the retry is a different painting
 SEED_OFF = int(os.environ.get("FS_HDV_SEED", "0") or 0) * 1009
+# HEAD ONLY (2026-10-31): the body pass washed some clothes grey (a bandit's duster, a woman's
+# sleeves) while the face came out right. FS_HDV_HEADONLY=1 keeps the character's own texture
+# (carried into the face-first layout through its old map) and repaints the head alone
+HEADONLY = os.environ.get("FS_HDV_HEADONLY") == "1"
 
 BK = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BK))
@@ -488,14 +492,19 @@ def upgrade(anim: Path, strength=0.62, verbose=True) -> str:
     anime = kind.split()[0] == "anime"
     if kind.split()[0] in ("toon", "clay", "blocky"):
         return "stylised, left as it is"
+    # NO SKIN TO PAINT (2026-10-31): the skeleton was asked for "a real skeleton ... blonde hair,
+    # natural skin texture, pores" and came back with a smeared face on its skull; and an
+    # astronaut's closed visor came back with a web of lines painted across the glass
+    if re.search(r"\b(skeleton|skull|robot|android|astronaut|spaceman|diver)\b", kind):
+        return "no face to paint, left as it is"
     from app.game_export.generate import guess_pattern
     animal = guess_pattern(kind) == "quadruped"
     # the coated original, unless the character was made again since (a stale backup is another body)
     static = LIB / (anim.stem[:-len("_anim")] + ".glb")
     bk = BACKUP / anim.name
     fresh = bk.exists() and not (static.exists() and static.stat().st_mtime > bk.stat().st_mtime)
-    coated = bk if fresh else anim
-    if not fresh and bk.exists():
+    coated = anim if HEADONLY else (bk if fresh else anim)
+    if not fresh and bk.exists() and not HEADONLY:
         bk.unlink()
     tmp = Path(tempfile.mkdtemp(prefix="hdv_"))
     try:
@@ -536,13 +545,13 @@ def upgrade(anim: Path, strength=0.62, verbose=True) -> str:
                         "deformed face, asymmetric eyes, extra eyes, two noses, double face, blank face")
         # 1. the body: the photo on the front (a person's), repaints on every side,
         #    and nothing of the photo on the head, which is painted next
-        if not render(coated, "v", list(VIEWS)):
+        if not HEADONLY and not render(coated, "v", list(VIEWS)):
             return "render failed"
         extras = []
         # AN ANIME BODY IS DRAWN SHARP (2026-10-10): left as it was made, the
         # schoolgirl's sailor tie was a pink glow on a blurred blouse. The body
         # is repainted too, as an anime illustration, lighter, so the design holds.
-        for v, phrase in VIEWS.items():
+        for v, phrase in ({} if HEADONLY else VIEWS).items():
             if anime:
                 prompt = (f"anime style full body character illustration of {outfit}, {phrase}, standing with arms out, "
                           f"clean cel shading, crisp line art, sharp clothing details, high quality anime illustration, plain grey backdrop")
@@ -572,7 +581,7 @@ def upgrade(anim: Path, strength=0.62, verbose=True) -> str:
             extras += ["--extra", f"{tmp / f'r_{v}.png'}|{tmp / 'v.json'}|{v}"]
         stage = tmp / "s0.glb"
         _trust = ["--trustviews"] if (not animal and not anime and not noref and _mask.exists()) else []
-        line = project(coated, stage, extras + _trust + (["--nophoto"] if (animal or noref or anime) else ["--nohead"])
+        line = project(coated, stage, ["--nophoto", "--nohead", "--fromtex"]) if HEADONLY else project(coated, stage, extras + _trust + (["--nophoto"] if (animal or noref or anime) else ["--nohead"])
                        + (["--bodyreplace"] if anime else []))
         if not line.startswith("HDF "):
             return line
@@ -584,6 +593,12 @@ def upgrade(anim: Path, strength=0.62, verbose=True) -> str:
         #    show this face and only their cheeks are new; the profiles last.
         #    Rendered flat, so no light is painted in once per step.
         steps = [(["head_front"], HEAD_STRENGTH), (["head_left34", "head_right34"], 0.36), (["head_left", "head_right"], 0.36)]
+        # THE HAIR IS ASKED FOR ON EVERY SIDE, AND NEVER UNDER A HAT (2026-10-31). The eye review
+        # of the library repaint: the colour read off the photo's crown is the hat's on a hat-wearer
+        # (the sheriff, the wizard, the outlaw all "black hair"), and the brim came back painted as
+        # hair; and the side views never named the hair, so the archer's came back bald
+        _hat_on = bool(re.search(r"\b(hat|cap|helmet|hood|turban|bandana|beanie|visor|beret|bonnet)s?\b", outfit.lower()))
+        hair = "" if (animal or noref or anime or _hat_on) else photo_hair(ref)
         for si, (views, st) in enumerate(steps):
             pre = f"h{si}"
             if not render(stage, pre, views + ([v + "_depth" for v in views] if si == 0 else []), flat=(si > 0)):
@@ -600,7 +615,6 @@ def upgrade(anim: Path, strength=0.62, verbose=True) -> str:
                     _m, _ = _figure_mask(_a / 255.0)       # the backdrop is vignetted, not one grey
                     cref = (_a[_m].mean(0), _a[_m].std(0)) if _m.sum() > 1000 else None
                 else:
-                    hair = "" if (noref or anime) else photo_hair(ref)
                     prompt = (f"close-up portrait photograph of a real {outfit}, eyes open looking straight at the camera, {hair + ', ' if hair else ''}natural skin texture, pores, "
                               f"clear detailed eyes, sharp focus, 85mm, soft even studio light, plain grey backdrop")
                     if anime:
@@ -647,7 +661,7 @@ def upgrade(anim: Path, strength=0.62, verbose=True) -> str:
                     prompt = (f"anime style character portrait of {outfit}, {phrase}, expressive detailed eyes, clean cel shading, "
                               f"crisp line art, high quality anime illustration, plain grey backdrop")
                 else:
-                    prompt = (f"close-up portrait photograph of a real {outfit}, {phrase}, natural skin texture, pores, "
+                    prompt = (f"close-up portrait photograph of a real {outfit}, {phrase}, {hair + ', ' if hair else ''}natural skin texture, pores, "
                               f"clear detailed eyes, sharp focus, 85mm, soft even studio light, plain grey backdrop")
                 repaint(tmp / f"{pre}_{v}.png", tmp / f"r_{v}.png", prompt, st, neg=neg_head)
                 ex += ["--extra", f"{tmp / f'r_{v}.png'}|{tmp / (pre + '.json')}|{v}"]

@@ -66,12 +66,13 @@ Every picture below is an unedited in-game capture of a build made from the sent
 
 ### Newest builds
 
-Faces with three times the detail, crowds of real people, children at the rope of their soapbox carts, a Taipei night market packed into its alley, wildflowers in the grass, and a place built for each sentence.
+Faces with three times the detail and no more shattered ones, flowers and crystal close up in Crystal Works, crowds of real people, children at the rope of their soapbox carts, a Taipei night market packed into its alley, wildflowers in the grass, and a place built for each sentence.
 
 <div align="center">
 
 | | |
 |---|---|
+| <img src=".github/assets/games/v21/faces-fixed.jpg" width="430"/><br/><sub>Faces repainted again after a fix. A generated head is often two skins a centimetre apart, and the face-first layout had given the hidden one the face's pixels, so some faces came back shattered (the sheriff's, top left, never shipped). Now only the surface you see is painted as the face, and clothes keep their own texture.</sub> | <img src=".github/assets/games/v21/cw-closeup.jpg" width="430"/><br/><sub>Crystal Works up close: wildflowers in the grass with five petals round a gold eye, and ore growing out of the rock as six-sided crystal points.</sub> |
 | <img src=".github/assets/games/v20/faces-before-after.jpg" width="430"/><br/><sub>Every generated person, before and after. The face used to get about a hundred pixels of its texture; the sheet is now laid out face first, packed by shape, and a face gets three times the detail in the same file.</sub> | <img src=".github/assets/games/v20/hero-face.jpg" width="430"/><br/><sub>The same explorer in the Taipei night market, close enough to see the stubble, with the market crowd around him.</sub> |
 | <img src=".github/assets/games/v20/taipei-crowd.jpg" width="430"/><br/><sub>*"a night market in Taipei, squeeze down the crowded alley of food stalls to find the stinky tofu stand"*<br/>The crowd is everyday people now, each with a real texture: a detective in a trench coat, a photographer, a man and a woman.</sub> | <img src=".github/assets/games/v20/soapbox-drivers.jpg" width="430"/><br/><sub>*"kids race soapbox carts down a steep village hill"*<br/>Each cart is driven by the game's own generated child, seated with knees up and hands on the rope.</sub> |
 | <img src=".github/assets/games/v19/soapbox-grid.jpg" width="430"/><br/><sub>*"kids race soapbox carts down a steep village hill, first to the hay bales at the bottom wins"*<br/>Four carts on the line under the START banner: plank and crate, pram wheels, a number on the cowl, a kid in a leather helmet holding the steering rope.</sub> | <img src=".github/assets/games/v19/soapbox-street.jpg" width="430"/><br/><sub>Same game, on the way down: no engine, the hill does the work. A cobbled street winds between cottages on stone plinths to the hay bales and the chequered finish.</sub> |

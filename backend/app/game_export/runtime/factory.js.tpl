@@ -2396,6 +2396,7 @@ const seamRockMat = new THREE.MeshStandardMaterial({ color: 0xffffff, vertexColo
   }`);
   };
   seamRockMat.customProgramCacheKey = () => 'seam-rock-scan';
+  seamRockMat.userData.rockTex = [_sm, _sn];       // the outcrops' rock wears it too (2026-10-31)
 }
 const nodeGeo = nodeGeos[0];      // the shape a thumbnail or a fallback uses
 let rngState = +((location.search.match(/[?&]seed=(\d+)/) || [])[1]) || 1337;   // ?seed= is a debug override
@@ -3849,15 +3850,53 @@ for (const m of MINERALS) {
   // the rock is sculpted (proc/flora.js): noise and cut facets, not a
   // flattened dodecahedron, the blockiest thing left on the ground
   const parts = [{ g: sculptStone(911 + MINERALS.indexOf(m) * 37, { size: 0.55, flat: 0.5, detail: 2 }).scale(1.2, 1, 1), y: -0.1, ry: 0.6, col: 0x5a5e6a, tint: 0.55 }];
-  if (m === CRYSTAL) parts.push({ g: new THREE.OctahedronGeometry(0.34, 0).scale(0.7, 1.4, 0.7), y: 0.16, rz: 0.25, col },
-                                { g: new THREE.OctahedronGeometry(0.2, 0).scale(0.7, 1.3, 0.7), x: 0.3, y: 0.02, z: 0.14, rz: -0.6, col, tint: 0.85 });
-  else if (m === EMBER) parts.push({ g: new THREE.BoxGeometry(0.42, 0.44, 0.42), y: 0.1, ry: 0.5, rz: 0.2, col },
+  // (2026-10-31) a little druse of six-sided points with pyramid tips, the seams' own quartz, not
+  // two octahedra: at your feet those read as a cyan paper boat on a cyan slab
+  if (m === CRYSTAL) {
+    const r = _sr(9101);
+    parts.push({ g: quartzPoint(0.09, 0.34, 0.16), y: 0.06, x: 0.04, rx: 0.12, rz: 0.22, col });
+    for (let k = 0; k < 4; k++) {
+      const a = k * 1.7 + r() * 0.6, lean = 0.35 + r() * 0.4, s = 0.5 + r() * 0.5;
+      parts.push({ g: quartzPoint(0.045 + 0.04 * s, 0.12 + 0.2 * s, 0.07 + 0.06 * s), x: 0.04 + Math.cos(a) * 0.12, z: Math.sin(a) * 0.12, y: 0.08,
+                   rx: Math.sin(a) * lean, rz: -Math.cos(a) * lean, col, tint: 0.78 + r() * 0.25 });
+    }
+  } else if (m === EMBER) parts.push({ g: new THREE.BoxGeometry(0.42, 0.44, 0.42), y: 0.1, ry: 0.5, rz: 0.2, col },
                                    { g: new THREE.BoxGeometry(0.24, 0.3, 0.24), x: 0.3, y: 0.0, z: -0.2, ry: 0.9, col, tint: 0.8 });
   else parts.push({ g: new THREE.CylinderGeometry(0.36, 0.4, 0.14, 6), y: 0.06, col },
                   { g: new THREE.CylinderGeometry(0.2, 0.24, 0.12, 6), x: 0.26, y: 0.2, z: 0.1, ry: 0.4, col, tint: 0.85 });
-  const om = new THREE.InstancedMesh(mergeParts(parts),
-    new THREE.MeshStandardMaterial({ color: 0xffffff, vertexColors: true, emissive: col, emissiveIntensity: 0.34,
-                                     roughness: 0.55, metalness: 0.05, flatShading: true }), MAX_OUTCROP);
+  // THE ROCK DOES NOT GLOW (2026-10-31): the ore's emissive lit the whole outcrop, and the dark
+  // rock it grows from read as a pale cyan slab. Only the ore's vertices carry the glow now
+  const og = mergeParts(parts);
+  const nRock = parts[0].g.index ? parts[0].g.index.count : parts[0].g.attributes.position.count;
+  const glow = new Float32Array(og.attributes.position.count);
+  glow.fill(1, nRock);
+  og.setAttribute('aGlow', new THREE.BufferAttribute(glow, 1));
+  const omat = new THREE.MeshStandardMaterial({ color: 0xffffff, vertexColors: true, emissive: col, emissiveIntensity: 0.5,
+                                               roughness: 0.55, metalness: 0.05, flatShading: true });
+  // and the rock is the seams' photographed rock face, from all three axes, not a smooth grey pillow
+  const _rt = seamRockMat.userData.rockTex;
+  omat.userData.noAutoTex = true;
+  omat.onBeforeCompile = (sh) => {
+    sh.uniforms.uRock = { value: _rt ? _rt[0] : null };
+    sh.vertexShader = 'attribute float aGlow; varying float vGlow; varying vec3 vRkP; varying vec3 vRkN;\n' + sh.vertexShader
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvGlow = aGlow;')
+      .replace('#include <worldpos_vertex>', `#include <worldpos_vertex>
+        { mat4 rkM = modelMatrix;
+          #ifdef USE_INSTANCING
+            rkM = modelMatrix * instanceMatrix;
+          #endif
+          vRkP = (rkM * vec4(transformed, 1.0)).xyz; vRkN = normalize(mat3(rkM) * objectNormal); }`);
+    sh.fragmentShader = 'uniform sampler2D uRock; varying float vGlow; varying vec3 vRkP; varying vec3 vRkN;\n' + sh.fragmentShader
+      .replace('vec3 totalEmissiveRadiance = emissive;', 'vec3 totalEmissiveRadiance = emissive * vGlow;')
+      .replace('#include <color_fragment>', _rt ? `#include <color_fragment>
+        if (vGlow < 0.5) {
+          vec3 bw = pow(abs(normalize(vRkN)), vec3(4.0)); bw /= (bw.x + bw.y + bw.z);
+          vec3 rk = texture2D(uRock, vRkP.yz * 1.6).rgb * bw.x + texture2D(uRock, vRkP.xz * 1.6).rgb * bw.y + texture2D(uRock, vRkP.xy * 1.6).rgb * bw.z;
+          diffuseColor.rgb *= rk * 2.4;
+        }` : '#include <color_fragment>');
+  };
+  omat.customProgramCacheKey = () => 'outcrop-glow';
+  const om = new THREE.InstancedMesh(og, omat, MAX_OUTCROP);
   om.instanceMatrix.setUsage(THREE.DynamicDrawUsage); om.frustumCulled = false;
   om.castShadow = true; om.receiveShadow = true; om.count = 0; om.name = 'outcrops';
   scene.add(om); outcropMesh[m] = om;
