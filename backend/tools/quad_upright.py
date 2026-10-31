@@ -132,7 +132,7 @@ def clip():
     return _CLIP
 
 
-def judge(glb: Path, kind: str, biped: bool = False) -> dict:
+def judge(glb: Path, kind: str, biped: bool = False, stand: bool = False) -> dict:
     from app.game_export.generate import BLENDER_EXE
     import torch
     from PIL import Image
@@ -144,7 +144,7 @@ def judge(glb: Path, kind: str, biped: bool = False) -> dict:
     model, proc, dev = clip()
     texts = [f"a photo of a {kind} standing upright on its legs", f"a photo of a {kind} lying on its side",
              f"a photo of a {kind} upside down", f"a photo of a {kind} standing on its hind legs"]
-    if biped:
+    if biped or stand:
         texts = [f"a photo of a {kind} standing upright, head at the top and feet on the ground",
                  f"a photo of a {kind} upside down, standing on their head",
                  f"a photo of a {kind} lying down on their side"]
@@ -165,6 +165,8 @@ def judge(glb: Path, kind: str, biped: bool = False) -> dict:
         dims = json.loads((tmp / "v_dims.json").read_text())
     except Exception:
         dims = {}
+    if stand:                                          # a person laid flat: which turns stand them up
+        return {"scores": scores, "tmp": str(tmp), "tall": {n: d[2] > max(d[0], d[1]) for n, d in dims.items()}}
     # A thing with six or eight legs is flat: its least spread is its height, and on its
     # legs its body rides above the leg tips (the mass high in the box). CLIP could not
     # tell an ant on its tail from an ant on its legs at all.
@@ -192,32 +194,77 @@ def judge(glb: Path, kind: str, biped: bool = False) -> dict:
 _TMPS: list[str] = []
 
 
-def fix(glb: Path, kind: str, margin: float = 0.15, apply: bool = False, biped: bool = False) -> str:
+def fix(glb: Path, kind: str, margin: float = 0.15, apply: bool = False, biped: bool = False, stand: bool = False) -> str:
     """The upright check, and its renders cleared after (2026-10-10: every
     bake left a folder of them in %TEMP%, 195 by the end of a day)."""
     import shutil
     try:
-        return _fix(glb, kind, margin, apply, biped)
+        return _fix(glb, kind, margin, apply, biped, stand)
     finally:
         while _TMPS:
             shutil.rmtree(_TMPS.pop(), ignore_errors=True)
 
 
-def _fix(glb: Path, kind: str, margin: float = 0.15, apply: bool = False, biped: bool = False) -> str:
-    j = judge(glb, kind, biped)
+def _heading(glb: Path, kind: str, base) -> list:
+    """Which quarter turn about the vertical, after the turn that stands a person up,
+    shows their face to a camera at +Y (Blender; glTF -Z, the way every rig faces).
+    Standing a body up leaves its heading wherever the lying pose had it."""
+    from app.game_export.generate import BLENDER_EXE
+    import torch
+    from PIL import Image
+    tmp = Path(tempfile.mkdtemp(prefix="upr_"))
+    _TMPS.append(str(tmp))
+    rs = tmp / "r.py"; rs.write_text(_RENDER, encoding="utf-8")
+    rots = {f"h{z}": [base[0], base[1], z] for z in (0, 90, 180, 270)}
+    subprocess.run([str(BLENDER_EXE), "--background", "--python", str(rs), "--", str(glb), str(tmp / "v"), json.dumps(rots)],
+                   capture_output=True, timeout=600)
+    model, proc, dev = clip()
+    texts = [f"a photo of the front of a {kind}, face toward the camera", f"a photo of the back of a {kind}",
+             f"a photo of a {kind} seen from the side, in profile"]
+    best, bs = [base[0], base[1], 0], -1.0
+    for name, r in rots.items():
+        f = tmp / f"v_{name}_b.png"                     # side b: the camera at +Y
+        if not f.exists():
+            continue
+        with torch.no_grad():
+            inp = proc(text=texts, images=[Image.open(f).convert("RGB")], return_tensors="pt", padding=True).to(dev)
+            p = float(model(**inp).logits_per_image.softmax(-1)[0][0])
+        if p > bs:
+            best, bs = r, p
+    return best
+
+
+def _fix(glb: Path, kind: str, margin: float = 0.15, apply: bool = False, biped: bool = False, stand: bool = False) -> str:
+    j = judge(glb, kind, biped, stand)
     sc = j["scores"]
     if not sc:
         return "render failed"
     best = max(sc, key=sc.get)
     msg = "%s %s" % (best, " ".join("%s:%.2f" % (k, v) for k, v in sorted(sc.items(), key=lambda t: -t[1])))
-    if biped:
+    # A PERSON LAID FLAT IS STOOD UP (2026-10-30): a witch's flared cloak led the
+    # silhouette orienter to lay her along Z three times, and the animal-mode check
+    # kept her flat (lying long is right for an animal) until she was retired as a
+    # bust. Only the turns that leave the body taller than wide are weighed, by the
+    # person wording, and the best of them is applied whatever the margin.
+    if stand:
+        _up = [n for n in sc if (j.get("tall") or {}).get(n)]
+        if not _up:
+            return "no turn stands it " + msg
+        best = max(_up, key=sc.get)
+        msg = "stood %s %s" % (best, msg)
+        if best == "as_is":
+            return msg
+        margin = -1.0                   # applied whatever the margin, rotated as a person
+        _stood = _heading(glb, kind, ROTS[best])          # and turned to face +Y (glTF -Z), like every rig
+        msg += " facing z%+d" % _stood[2]
+    if biped and not stand:
         margin = max(margin, 0.30)                                   # a person turned over is plain to CLIP
     if os.environ.get("QU_FORCE_FACE") == "1" and apply and best == "as_is" and not biped:
         best = "as_is"; sc[best] = 9.0                               # face-only pass on an upright model
     # stood on its tail as it is, and some turn lays it out on its legs: that turn wins
     # whatever CLIP's margin (the shape is surer than the picture here)
     _tall = j.get("tall") or {}
-    if _tall.get("as_is") and not biped:
+    if _tall.get("as_is") and not biped and not stand:
         _flat = [n for n in sc if not _tall.get(n)]
         if _flat:
             best = max(_flat, key=sc.get); margin = -1.0
@@ -228,7 +275,7 @@ def _fix(glb: Path, kind: str, margin: float = 0.15, apply: bool = False, biped:
             rs = Path(j["tmp"]) / "rot.py"; rs.write_text(_ROTATE, encoding="utf-8")
             out = glb.with_name(glb.stem + "_uprtmp.glb")
             r = subprocess.run([str(BLENDER_EXE), "--background", "--python", str(rs), "--", str(glb), str(out),
-                                json.dumps((BIPED_ROTS if biped else ROTS)[best])] + (["biped"] if biped else []), capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=600)
+                                json.dumps(_stood if stand else (BIPED_ROTS if biped else ROTS)[best])] + (["biped"] if (biped or stand) else []), capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=600)
             if out.exists() and "ROTATED" in (r.stdout or ""):
                 out.replace(glb)
                 return "ROTATED " + msg

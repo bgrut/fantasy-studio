@@ -1412,7 +1412,7 @@ def ensure_playable(kind: str, verbose: bool = True) -> str | None:
             import importlib.util as _ilu
             _sp = _ilu.spec_from_file_location("quad_upright", str(Path(__file__).resolve().parents[2] / "tools" / "quad_upright.py"))
             _qu = _ilu.module_from_spec(_sp); _sp.loader.exec_module(_qu)
-            _r = _qu.fix(Path(static), kind, apply=True, biped=False)
+            _r = _qu.fix(Path(static), kind, apply=True, stand=True)   # (2026-10-30) biped=False weighed it as an animal, which lies long
             if verbose:
                 print(f"[bake] {Path(static).name} lies down: {_r}")
         except Exception as _le:
