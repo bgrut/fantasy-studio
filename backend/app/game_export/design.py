@@ -21,6 +21,11 @@ and returns that decision:
             lantern    your light is what you have; lamps you light stay lit
             gusts      the wind shoves you; shelter is behind things
             cold       warmth drains away from a fire
+            breath     a climb takes your breath; cairns on the way give it back
+            load       what you gather weighs; home empties the basket
+            resonance  what is hidden hums, faster the nearer you are
+            watch      lights sweep the way out; caught, you go back a light
+            trouble    on a patrol, smoke goes up somewhere on the round: get there in time
             none
   moment    where the game turns, at about half way
             storm      the weather breaks
@@ -48,7 +53,8 @@ _OWNED = re.compile(
 
 
 def design_of(prompt: str, seed: int, *, owned: bool = False, night: bool = False,
-              weather: str | None = None, objectives: list | None = None, downhill_ok: bool = False) -> dict:
+              weather: str | None = None, objectives: list | None = None, downhill_ok: bool = False,
+              plays: bool | None = None) -> dict:
     p = (prompt or "").lower()
     r = random.Random((seed or 1) * 2654435761 % (2 ** 32))
     has = lambda pat: bool(re.search(pat, p))
@@ -72,7 +78,7 @@ def design_of(prompt: str, seed: int, *, owned: bool = False, night: bool = Fals
         layout = "scatter"; why.append("finding is looking")
     elif has(r"\b(patrol\w*|circuit|tour|loop|walk the bounds|round the|survey\w*|check(?:s|ing)? (?:the|on))\b"):
         layout = "loop"; why.append("a round that comes home")
-    elif has(r"\b(journey|travel\w*|cross\w*|to reach|reach the|rides?|riding|march\w*|quest|lair|to slay|to rescue|to save|to defeat|to stop|"
+    elif has(r"\b(escap\w* (?:from|out of)|break\w* out of|follow\w* the (?:river|stream|road|coast|canal|valley)|journey|travel\w*|cross\w*|to reach|reach the|rides?|riding|march\w*|quest|lair|to slay|to rescue|to save|to defeat|to stop|"
              r"head\w* to|make (?:his|her|their|the|a) way|escape\w* to|flee\w*|return\w* to|pilgrim\w*|voyage)\b"):
         layout = "route"; why.append("a journey out")
     else:
@@ -83,16 +89,33 @@ def design_of(prompt: str, seed: int, *, owned: bool = False, night: bool = Fals
     mech = "none"
     if has(r"\b(deliver\w*|bread|pizza|pies?|soup|meals?|hot|warm|fresh|baker\w*|cocoa|coffee|tea|medicine)\b") and has(r"\b(deliver\w*|bring\w*|carr(y|ies|ying)|take\w*|rounds?)\b"):
         mech = "freshness"
-    elif has(r"\b(track\w*|trail\w*|footprints?|follow\w* the|hunt\w*|lost (cubs?|dog|cat|sheep|lamb|child|kitten|puppy|fox|horse|calf)|missing|find (?:her|his|their) (?:lost|missing)?\s*\w+|cubs?|kits|pups?)\b") \
+    elif has(r"\b(track\w*|trail\w*|footprints?|follow\w* the (?:tracks?|trail|prints|footprints|scent|spoor)|hunt\w*|lost (cubs?|dog|cat|sheep|lamb|child|kitten|puppy|fox|horse|calf)|missing|find (?:her|his|their) (?:lost|missing)?\s*\w+|cubs?|kits|pups?)\b") \
             and not has(r"\b(city|street|downtown)\b"):
         mech = "tracks"
     elif (night or has(r"\b(night|midnight|dark\w*|cave\w*|catacomb\w*|mine\b|mines\b|tunnels?|crypt\w*|lantern\w*|lamps?|torch\w*|candle\w*)\b")) \
             and has(r"\b(lantern\w*|lamps?|torch\w*|light\w*|dark\w*|candle\w*|beacon\w*|relight\w*|caves?|catacomb\w*|mines?|tunnels?)\b"):
         mech = "lantern"
-    elif has(r"\b(snow\w*|blizzard\w*|winter|frozen|freez\w*|arctic|tundra|glacier\w*|cold|frost\w*|icy)\b") and not has(r"\b(cozy|cosy|christmas|holiday|festive)\b"):
+    elif has(r"\b(snow(?!board)\w*|blizzard\w*|winter|frozen|freez\w*|arctic|tundra|glacier\w*|cold|frost\w*|icy)\b") and not has(r"\b(cozy|cosy|christmas|holiday|festive)\b"):
         mech = "cold"
     elif (weather in ("storm", "thunder", "wind")) or has(r"\b(storm\w*|gales?|windswept|wind\w*|hurricanes?|blustery|squalls?|tempest\w*)\b"):
         mech = "gusts"
+    # (2026-11-04) the plain verbs had no system of their own: a climb, a gathering
+    # and a search played as walk, collect, reach
+    # (a landform owns the shape of the ground, not how the walk plays: "plays" is False only for a
+    # view or a genre with rules of its own, so a mountaineer on a volcanic ridge still runs short of breath)
+    if mech == "none" and (plays if plays is not None else not owned) and not _OWNED.search(p):
+        if has(r"\b(escap\w* (?:from|out of)|break\w* out of|sneak\w*|slip\w* past|steal\w* past|evad\w*|unseen|undetected|stealth\w*|jailbreak|"
+               r"avoid\w* the (?:guards?|lights?|searchlights?|watch\w*))\b"):
+            mech = "watch"
+        elif layout == "ascent" or has(r"\b(climb\w*|summit|ascend\w*|ascent|top of|scal(?:e|es|ing) the|mountaineer\w*)\b"):
+            mech = "breath"
+        elif has(r"\b(patrol\w*|on (?:his|her|their) rounds?|keeps? watch|watch\w* over|guard\w* (?:the|a)|warden|ranger|night ?watch\w*|sheriff|constable)\b") \
+                and not has(r"\b(defend\w*|protect\w*|waves?|siege)\b"):
+            mech = "trouble"
+        elif has(r"\b(gather\w*|forag\w*|collect\w*|harvest\w*|pick\w* (?:up )?(?:\w+ )?(?:mushrooms|berries|apples|flowers|shells|herbs)|fill (?:his|her|their|a|the) (?:basket|sack|bag))\b"):
+            mech = "load"
+        elif layout == "scatter" and has(r"\b(search\w*|explor\w*|hidden|lost|find|discover\w*|look(?:s|ing)? for|hunt for|seek\w*|secret)\b"):
+            mech = "resonance"
     if mech != "none":
         why.append("mechanic: " + mech)
 

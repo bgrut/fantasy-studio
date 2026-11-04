@@ -1436,6 +1436,8 @@ export function biomeFor(words, arch, groundHSL) {
       rockTint: T(0xcbb8a0), leaf: { h: 0.2, s: 0.35, l: 0.32 } });
     return out;
   }
+  // a salt marsh grows nothing taller than your knee, a bush on the higher ground far off (2026-11-04)
+  if (has(/\b(salt ?marsh\w*|tidal marsh\w*|saltings|estuar\w*)\b/)) { Object.assign(out, { kinds: K(['bush', 0.5], ['rock', 0.06]), dens: 0.012, leaf: { h: 0.17, s: 0.26, l: 0.26 }, rockTint: T(0x6a665c) }); return out; }
   if (has(/\bmoon\b|lunar|asteroid|space|orbit|comet/)) Object.assign(out, { kinds: K(['rock', 1], ['boulder', 0.35], ...(crystal ? [['crystal', 0.15]] : [])), dens: 0.1, rockTint: T(0x8d8c8a),
     greyRock: has(/\bmoon\b|lunar|apollo/) && !has(/\bred\b|rust|frozen|\bice\b|icy/) });
   else if (has(/mars|red planet|martian/)) Object.assign(out, { kinds: K(['rock', 1], ['boulder', 0.4], ...(crystal ? [['crystal', 0.12]] : [])), dens: 0.1, rockTint: T(0xa0573a) });

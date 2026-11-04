@@ -46,6 +46,7 @@ export function namedPlaces(prompt, goalLabel) {
     if (gl && m[1] && gl.includes(m[1].replace(/s$/, ''))) continue;          // the goal builds its own
     if (kind === 'temple' && EAST_ASIA.test(p)) continue;
     if (kind === 'castle' && /\b(joust\w*|tournament|siege|storm(?:s|ing)? the castle|inside the castle|castle walls|courtyard)\b/.test(p)) continue;   // the castle sites build their own
+    if (kind === 'castle' && /\b(samurai|ninjas?|shogun\w*|daimyo|ronin|kyoto|edo|osaka|himeji|japan\w*)\b/.test(p)) continue;   // (2026-11-04) a Japanese castle is the tiered pagoda at its door, not a Scottish keep beside it
     const before = p.slice(Math.max(0, m.index - 24), m.index);
     out.push({ kind, at: m.index, start: /\bfrom (?:his|her|their|the|a|an|its|my|your)\s+(?:\w+\s+)?$/.test(before) });
   }

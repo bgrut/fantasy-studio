@@ -353,6 +353,9 @@ def game_scatter(setting: str | None, archetype: str | None = None,
             r"\b(swamps?|marsh(?:es)?|marshland|bogs?|bayous?|mires?|fens?|wetlands?)\b", (setting or "").lower()):
         rec = [e for e in [(_PH_DEAD, 14, 2, 5.0), (_PH_UNDER, 18, 2, 1.4), (_PH_LITTER, 10, 2, 1.6), (_PH_ROCK, 6, 1, 1.8)]
                if any((PROPS_DIR / f"{n}.glb").exists() for n in e[0])] or rec
+        # (2026-11-04) a salt marsh is open: driftwood, no dead forest standing in it
+        if re.search(r"\b(salt ?marsh\w*|tidal marsh\w*|saltings)\b", (setting or "").lower()):
+            rec = [e for e in rec if e[0] is not _PH_DEAD and e[0] is not _PH_ROCK] or rec
     # the style's own furniture, on top of whatever the landform grows
     rec = list(rec) + list(_SIG_GARDEN if _garden else _SIG_GRAVE if _grave else _STYLE_SIGNATURE.get((style or "").lower(), []))
     out = []

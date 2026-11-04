@@ -12,6 +12,23 @@ Pre-1.0 versions are internal milestones during the constraint sprint leading to
 
 ## [Unreleased]
 
+### Changed: five new things a game can make you do; levels that match their sentence (2026-11-04)
+- **Most games had no system of their own**: the benchmark put 50% of games at "no mechanic", because the only ones were tracks, freshness, lantern, gusts and cold. Five more, each chosen from what the sentence says, each checked by playing it:
+  - **Breath** on a climb: every metre gained and every stride run costs breath, spent you can only trudge, and stone cairns at the turns of the way give it back.
+  - **Load** on a gathering: each thing taken makes the basket heavier and your step slower, and home empties it, so going back is a decision.
+  - **Resonance** on a search: there is no marker, what you seek hums, quicker and higher the nearer you are.
+  - **Watch** on an escape: lights sweep across the way out (searchlights on masts, watchmen's lanterns at a castle, cold wisps on a moor, drones indoors); stand in one too long and you are sent back to the last light you slipped past.
+  - **Trouble** on a patrol: smoke, a flare or a signal lamp goes up somewhere along the round, and there is a limited time to get there.
+- **A landform no longer takes the mechanic away**: a game whose ground belongs to a volcano or a coast was never given one; the ground's shape is owned, how the walk plays is not. "A mountaineer climbs a volcanic ridge" now runs short of breath.
+- **A seaside village stands on land**: "a postwoman delivers letters around a fishing village" set its ring of cottages round a green that lay out in the harbour, a dozen thatched roofs standing in the sea. The green is inland of the shore now, behind the warehouses.
+- **A shrine is small**: "a hidden shrine in a redwood forest" was a four-tier Maya pyramid, what every shrine outside East Asia became. Away from a jungle or a desert it is a mossy stone wayside chapel on two worn steps, a robed figure with its face worn away in the niche, candles on the ledge, flagstones up to it and old stones standing about, with no beacon over it: it is hidden.
+- **A sea stack you can climb**: "climbs to the top of a sea stack" walked a flat sandbar to a flag while the stacks stood far off. It is now a pillar of rock in the sea, joined to the shore by a spit, with a ledge winding twice round it up to the top, cairns on the way.
+- **An escape leaves the place**: "a knight escapes from an old castle" started in the woods and walked to the castle gate. The castle now stands behind you at the start, and the way out is ahead, through the lights.
+- **A salt marsh is a marsh**: it was bare red earth and boulders. It is a knee-high sward in sea-green and samphire russet, with tidal pools and driftwood, and no dead forest standing in it.
+- **Who the hero is no longer changes the world**: a snowboarder brought snow to a marsh, a snow leopard stopped a snowy peak from snowing, a retired astronaut stood on an airless plain with the storm dropped, and a cat burglar was played by a half-metre house cat. "Follows the river" no longer lays animal tracks.
+- **Smaller accuracy fixes**: a samurai's castle is a tiered Japanese one, not a Scottish keep with a torii beside it; autumn villages have olive and straw grass instead of bare dirt; the sparkles round a witch no longer loop into shapes that read as letters, and the ones round a ghost are no longer a solid purple column.
+- **Fixed a freeze in the lantern mechanic**: lighting each lamp added a new light, which made every shader in the world recompile mid-game. One light, there from the start, now moves to the nearest lit lamp.
+
 ### Changed — flowers with petals, crystal that grows from rock, no grass in space; hats kept as hats (2026-10-31)
 - **Crystal Works, no grass hanging in space** (flagship): standing near an edge of the worldlet, a field of short coloured dashes hung in the dark beyond it. The grass is drawn in a patch that travels with you and reaches past a face's edge, and a blade with nothing to grow on was flattened but kept its width and its fold, a thin sliver. Those blades now collapse to a point and draw nothing.
 - **Crystal Works, flowers you can tell are flowers** (flagship): each wildflower's head was one flat triangle of colour, and the drifts looked like scraps of blue paper in the grass. A head is now five petals round a gold eye, cut out close to so the grass shows between them, shaded in the grass's own green a little further off, and blended to the flower's colour where it is smaller than a pixel. No extra draw call, the same blades; the draw-budget and frame gates still pass.

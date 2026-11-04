@@ -163,6 +163,9 @@ export function startDesign(o) {
     const m = meter('lantern oil', '✹');
     let oil = 1;
     const light = new THREE.PointLight(0xffb866, 0, 16, 1.6); light.castShadow = false; scene.add(light);
+    // (2026-11-04) one lamp-light, there from the start, on the nearest lit lamp: a new light at each
+    // lamp changed the point-light count in every program's key and froze the game while the world recompiled
+    const lampL = new THREE.PointLight(0xffb15c, 0, 14, 1.7); lampL.castShadow = false; scene.add(lampL);
     // lamps along the way, dark until you reach them
     const lamps = [], P = (o.LVL && o.LVL.path) || [];
     const iron = new THREE.MeshStandardMaterial({ color: 0x24221f, roughness: 0.55, metalness: 0.6 });
@@ -184,10 +187,10 @@ export function startDesign(o) {
       for (const l of lamps) if (!l.lit && near([p[0], p[2]], [l.x, l.z], 2.6)) {
         l.lit = true; oil = 1; m.flash();
         l.head.material.color.setHex(0xffe0a8); l.head.material.emissive = new THREE.Color(0xffa040); l.head.material.emissiveIntensity = 2.4;
-        const L = new THREE.PointLight(0xffb15c, 6, 14, 1.7); L.position.y = 2.3; l.G.add(L); l.L = L;
         o.toast(lamps.filter(q => q.lit).length === lamps.length ? 'Every lamp on the way is burning.' : 'The lamp takes. Your lantern is full.', '');
       }
-      for (const l of lamps) if (l.L) l.L.intensity = 6 * (0.9 + 0.1 * Math.sin(t * 9 + l.x));
+      let nl = null, nd = Infinity; for (const l of lamps) if (l.lit) { const d = Math.hypot(p[0] - l.x, p[2] - l.z); if (d < nd) { nd = d; nl = l; } }
+      if (nl) { lampL.position.set(nl.x, nl.G.position.y + 2.3, nl.z); lampL.intensity = 6 * (0.9 + 0.1 * Math.sin(t * 9 + nl.x)); }
       light.position.set(p[0] + 0.3, p[1] + 1.5, p[2] + 0.2);
       light.intensity = (o.night ? 5.5 : 2.2) * (0.15 + 0.85 * Math.sqrt(oil)) * (0.94 + 0.06 * Math.sin(t * 11));
       m.set(oil);
@@ -223,6 +226,280 @@ export function startDesign(o) {
       m.set(warmth); frost.style.opacity = String(Math.max(0, (0.45 - warmth) / 0.45));
     });
     speedFn = () => 0.62 + 0.38 * Math.min(1, warmth / 0.3);
+  }
+
+  // ── BREATH (2026-11-04) ──────────────────────────────────────────────────
+  // A climb takes it out of you: every metre gained and every stride run
+  // costs breath, and spent you can only trudge. Stone cairns stand at the
+  // turns of the way up; stop by one and it comes back. The climb becomes a
+  // rhythm, cairn to cairn, and running the whole slope is a choice.
+  if (mech === 'breath') {
+    const m = meter('breath', '≋');
+    let breath = 1, lastY = null, told = 0;
+    const cairns = [], P = (o.LVL && o.LVL.path) || [];
+    // a cairn every ~22 m of the way, at the turn nearest that mark, the first well clear of home
+    let acc = 0, want = 26;
+    for (let i = 1; i < P.length - 1; i++) {
+      acc += Math.hypot(P[i][0] - P[i - 1][0], P[i][1] - P[i - 1][1]);
+      if (acc < want) continue;
+      acc = 0; want = 22;
+      const a = P[i - 1], b = P[i], L = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+      const x = b[0] - (b[1] - a[1]) / L * 2.2, z = b[1] + (b[0] - a[0]) / L * 2.2;   // beside the way, not on it
+      if (o.blocked && o.blocked(x, z)) continue;
+      cairns.push({ x, z, y: o.hAt(x, z) });
+    }
+    if (cairns.length) {
+      // one mesh for every stone of every cairn: flattened rounded stones stacked smaller upward
+      const stone = new THREE.DodecahedronGeometry(1, 1), pa = stone.attributes.position;
+      for (let i = 0; i < pa.count; i++) { const n = 0.86 + 0.14 * Math.sin(pa.getX(i) * 7.1 + pa.getZ(i) * 5.3); pa.setXYZ(i, pa.getX(i) * n, pa.getY(i) * n, pa.getZ(i) * n); }
+      stone.computeVertexNormals();
+      const sm = new THREE.MeshStandardMaterial({ color: 0x8b8578, roughness: 0.93 });
+      const per = 6, im = new THREE.InstancedMesh(stone, sm, cairns.length * per); im.name = 'designCairns';
+      im.castShadow = im.receiveShadow = true;
+      const M4 = new THREE.Matrix4(), Q = new THREE.Quaternion(), V = new THREE.Vector3(), SC = new THREE.Vector3(), C = new THREE.Color();
+      let k = 0;
+      for (const c of cairns) {
+        let y = c.y - 0.05;
+        for (let j = 0; j < per; j++) {
+          const w = 0.42 * (1 - j * 0.13) * (0.9 + r() * 0.2), h = w * (0.42 + r() * 0.12);
+          y += h * (j ? 0.95 : 0.6);
+          V.set(c.x + (r() - 0.5) * 0.06 * j, y, c.z + (r() - 0.5) * 0.06 * j);
+          Q.setFromEuler(new THREE.Euler((r() - 0.5) * 0.16, r() * 6.28, (r() - 0.5) * 0.16));
+          SC.set(w, h, w * (0.85 + r() * 0.2)); M4.compose(V, Q, SC); im.setMatrixAt(k, M4);
+          C.setHSL(0.09 + r() * 0.04, 0.06 + r() * 0.06, 0.36 + r() * 0.16); im.setColorAt(k, C);
+          k++; y += h * 0.95;
+        }
+        c.top = y;
+      }
+      scene.add(im);
+    }
+    S.breath = () => ({ breath: +breath.toFixed(2), cairns: cairns.length });
+    ticks.push((dt) => {
+      const p = o.pos(), climb = lastY === null ? 0 : Math.max(0, p[1] - lastY) / Math.max(dt, 1e-3);
+      lastY = p[1];
+      const atCairn = cairns.some(c => near([p[0], p[2]], [c.x, c.z], 2.8)) || near([p[0], p[2]], o.home, 5);
+      const run = (window.__pSpeed || 0) > 4.2;
+      if (atCairn && (window.__pSpeed || 0) < 2.5) {
+        if (breath < 0.97 && breath + dt / 2.2 >= 0.97 && told < 2 && cairns.length) { told++; o.toast('Breath back.', 'on to the next cairn'); m.flash(); }
+        breath = Math.min(1, breath + dt / 2.2);
+      } else breath = Math.max(0, breath - dt * (0.004 + Math.min(climb, 3) * 0.022 + (run ? 0.018 : 0)));
+      if (breath <= 0.02 && told === 0) { told = 1; o.toast('Winded.', 'rest by a cairn to catch your breath'); }
+      m.set(breath);
+    });
+    // spent, a trudge; the last of it makes your stride heavy before then
+    speedFn = () => 0.5 + 0.5 * Math.min(1, breath / 0.25);
+  }
+
+  // ── LOAD (2026-11-04) ────────────────────────────────────────────────────
+  // What you gather is carried: each one makes the basket heavier and your
+  // step slower, and home empties it. Going back is a choice the map asks of
+  // you (one more on the way, or lighten the load first).
+  if (mech === 'load') {
+    const noun = (words.match(/\b(seeds?|eggs?|fossils?|crystals?|mushrooms?|shells?|berries|apples?|flowers?|herbs?|stones?|logs?|firewood|wood|honey|fish|crabs?|fruit|pumpkins?|potatoes|carrots|wool)\b/) || [, 'things'])[1];
+    const heavy = /fossil|crystal|stone|log|wood|pumpkin|potato|fish/.test(noun) ? 0.13 : /egg|apple|shell|honey|fruit|carrot|crab/.test(noun) ? 0.09 : 0.06;
+    const m = meter('basket', '◒');
+    let load = 0, last = o.count(), emptied = 0;
+    S.load = () => ({ load, emptied, heavy });
+    ticks.push(() => {
+      const c = o.count(), p = o.pos();
+      if (c > last) {
+        load += c - last; last = c; m.flash();
+        if (load === 2) o.toast('The basket is getting heavy.', 'home will empty it');
+      }
+      if (load && near([p[0], p[2]], o.home, 6)) { emptied += load; load = 0; m.flash(); o.toast('Basket emptied.', 'light on your feet again'); }
+      m.set(Math.min(1, load * heavy / 0.45));
+    });
+    speedFn = () => Math.max(0.55, 1 - load * heavy);
+  }
+
+  // ── RESONANCE (2026-11-04) ───────────────────────────────────────────────
+  // There is no marker: what you are looking for hums, a soft pulse that
+  // quickens and rises the nearer you are to it. Warmer, colder, found.
+  if (mech === 'resonance') {
+    const el = document.createElement('div'); el.className = 'fs-reson';
+    el.innerHTML = '<i></i><i></i><span></span>';
+    const st = document.createElement('style');
+    st.textContent = `.fs-reson{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);width:120px;height:46px;pointer-events:none;z-index:25;
+      font:600 11px var(--f-ui,system-ui);letter-spacing:.16em;text-transform:uppercase;color:var(--art-ink,#eee);text-shadow:0 1px 6px rgba(0,0,0,.7)}
+      .fs-reson i{position:absolute;left:50%;top:13px;width:18px;height:18px;margin:-9px 0 0 -9px;border-radius:50%;border:2px solid var(--art-acc,#ffd479);opacity:0}
+      .fs-reson i:first-child{opacity:.9;transform:scale(.45);background:var(--art-acc,#ffd479)}
+      .fs-reson.p i:nth-child(2){animation:fsrp .9s ease-out}
+      .fs-reson span{position:absolute;left:0;right:0;bottom:0;text-align:center}
+      @keyframes fsrp{0%{opacity:.95;transform:scale(.5)}100%{opacity:0;transform:scale(2.6)}}`;
+    document.head.appendChild(st); document.body.appendChild(el);
+    const ring = el.children[1], word = el.children[2];
+    let wait = 1.2, d0 = null, told = false;
+    S.resonance = () => ({ d: d0 === null ? null : +d0.toFixed(1) });
+    ticks.push((dt) => {
+      const p = o.pos(), t = o.next();
+      if (!t) { el.style.opacity = '0'; return; }
+      el.style.opacity = '1';
+      const d = Math.hypot(t[0] - p[0], t[1] - p[2]); d0 = d;
+      const k = Math.max(0, Math.min(1, 1 - (d - 3) / 70));                 // 0 far .. 1 at hand
+      word.textContent = k > 0.86 ? 'here' : k > 0.62 ? 'warm' : k > 0.35 ? 'cooler' : 'cold';
+      if ((wait -= dt) > 0) return;
+      wait = 2.6 - 2.25 * k * k;
+      el.classList.remove('p'); void el.offsetWidth; el.classList.add('p');
+      ring.style.animationDuration = (Math.min(0.9, wait * 0.9)).toFixed(2) + 's';
+      if (o.chime) o.chime(330 * Math.pow(2, k * 1.25), 0.025 + 0.045 * k);
+      if (!told && k > 0.62) { told = true; o.toast('Warmer.', 'the hum quickens as you near it'); }
+    });
+  }
+
+  // ── WATCH (2026-11-04) ───────────────────────────────────────────────────
+  // An escape had nothing to escape: you walked out. Now the way out is
+  // watched. Lights sweep across it (searchlights on masts at a base or a
+  // yard, watchmen's lanterns at a castle, cold wisps on a moor or in old
+  // ruins); stand in one too long and you are seen, and sent back to the
+  // last light you slipped past. Timing, not speed.
+  if (mech === 'watch') {
+    const P = (o.LVL && o.LVL.path) || [];
+    const indoor = !!(o.LVL && o.LVL.interior);
+    const kind = indoor ? 'drone' : /\b(castle|keep|fort\w*|citadel|manor|palace|village|monastery|abbey)\b/.test(words) ? 'lantern'
+      : /\b(moor\w*|marsh\w*|swamp\w*|bog|temple|ruin\w*|tomb\w*|crypt\w*|forest|woods?|jungle|sunken|haunted|grave\w*)\b/.test(words) ? 'wisp' : 'search';
+    const col = kind === 'lantern' ? 0xffb35a : kind === 'wisp' ? 0x8fe8d0 : 0xe8f2ff;
+    const L = [], R = 3.0;
+    if (P.length > 2) {
+      let tot = 0; const cum = [0]; for (let i = 1; i < P.length; i++) cum.push(tot += Math.hypot(P[i][0] - P[i - 1][0], P[i][1] - P[i - 1][1]));
+      const n = Math.max(2, Math.min(5, Math.round(tot / 26)));
+      const at = (s) => { let i = 1; while (i < P.length - 1 && cum[i] < s) i++; const a = P[i - 1], b = P[i], f = (s - cum[i - 1]) / Math.max(1e-3, cum[i] - cum[i - 1]);
+        const l = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1; return { x: a[0] + (b[0] - a[0]) * f, z: a[1] + (b[1] - a[1]) * f, ux: (b[0] - a[0]) / l, uz: (b[1] - a[1]) / l, s }; };
+      // a soft round pool of light, brightest in the middle
+      const cv = document.createElement('canvas'); cv.width = cv.height = 128; const g = cv.getContext('2d');
+      const gr = g.createRadialGradient(64, 64, 4, 64, 64, 63); gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.55, 'rgba(255,255,255,.55)'); gr.addColorStop(0.85, 'rgba(255,255,255,.18)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+      g.fillStyle = gr; g.fillRect(0, 0, 128, 128);
+      const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace;
+      const poolMat = new THREE.MeshBasicMaterial({ map: tex, color: col, transparent: true, opacity: o.night ? 0.85 : 0.6, blending: THREE.AdditiveBlending, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -6 });
+      const bc = document.createElement('canvas'); bc.width = 4; bc.height = 64; { const bg = bc.getContext('2d'), gb = bg.createLinearGradient(0, 0, 0, 64); gb.addColorStop(0, '#fff'); gb.addColorStop(0.7, '#555'); gb.addColorStop(1, '#111'); bg.fillStyle = gb; bg.fillRect(0, 0, 4, 64); }
+      const beamMat = new THREE.MeshBasicMaterial({ color: col, alphaMap: new THREE.CanvasTexture(bc), transparent: true, opacity: o.night ? 0.05 : 0.025, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+      const iron = new THREE.MeshStandardMaterial({ color: kind === 'lantern' ? 0x3a2c20 : 0x3b4046, roughness: 0.6, metalness: kind === 'search' ? 0.7 : 0.2 });
+      const glow = new THREE.MeshBasicMaterial({ color: col });
+      for (const m of [poolMat, beamMat, iron, glow]) m.userData.noAutoTex = true;
+
+      for (let k = 0; k < n; k++) {
+        const c = at(tot * (0.22 + 0.62 * (n === 1 ? 0.5 : k / (n - 1))));
+        const px = -c.uz, pz = c.ux, side = (k % 2 ? 1 : -1);
+        const G = new THREE.Group(); scene.add(G);
+        const pool = new THREE.Mesh(new THREE.CircleGeometry(R, 40).rotateX(-Math.PI / 2), poolMat); pool.renderOrder = 3; G.add(pool);
+        const w = { c, px, pz, pool, sweep: indoor ? 1.8 + r() * 0.8 : 5.5 + r() * 1.5, per: indoor ? 5 + r() * 2 : 9 + r() * 4, ph: r() * 6.28, mast: null, head: null };
+        if (kind === 'search') {
+          const mx = c.x + px * side * 8.5, mz = c.z + pz * side * 8.5, my = o.hAt(mx, mz), H = 7.5;
+          if (!(o.blocked && o.blocked(mx, mz))) {
+            const mast = new THREE.Group(); mast.position.set(mx, my, mz); G.add(mast);
+            const post = new THREE.Mesh(kind === 'search' ? new THREE.CylinderGeometry(0.12, 0.18, H, 8) : new THREE.CylinderGeometry(0.09, 0.12, H, 6), iron); post.position.y = H / 2; mast.add(post);
+            if (kind === 'search') { for (const q of [-1, 1]) { const st2 = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, H * 0.6, 5), iron); st2.position.set(q * 0.55, H * 0.28, 0); st2.rotation.z = q * 0.2; mast.add(st2); }
+              const plat = new THREE.Mesh(new THREE.CylinderGeometry(0.75, 0.75, 0.1, 10), iron); plat.position.y = H; mast.add(plat); }
+            const head = new THREE.Mesh(kind === 'search' ? new THREE.CylinderGeometry(0.34, 0.26, 0.6, 12) : new THREE.CylinderGeometry(0.18, 0.13, 0.36, 6), iron); head.position.y = H + 0.42; mast.add(head);
+            // the searchlight's glass is its +Y end (the head is aimed with lookAt + a quarter turn); a lantern glows all round
+            const lens = kind === 'search' ? new THREE.Mesh(new THREE.CircleGeometry(0.3, 16), glow) : new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.11, 0.26, 6), glow);
+            if (kind === 'search') { lens.position.y = 0.31; lens.rotation.x = -Math.PI / 2; }
+            head.add(lens);
+            for (const s of [post, head]) s.castShadow = true;
+            w.mast = mast; w.top = new THREE.Vector3(mx, my + H + 0.42, mz); w.head = head;
+          }
+        } else {
+          const orb = new THREE.Mesh(new THREE.SphereGeometry(0.22, 14, 10), glow); G.add(orb); w.orb = orb;
+          const halo = new THREE.Mesh(new THREE.SphereGeometry(0.55, 14, 10), beamMat); orb.add(halo);
+        }
+        if (w.top) { const beam = new THREE.Mesh(new THREE.ConeGeometry(R * 0.82, 1, 24, 1, true), beamMat); beam.renderOrder = 3; G.add(beam); w.beam = beam; }
+        L.push(w);
+      }
+    }
+    let seen = 0, grace = 0, passed = -1, caught = 0, told = false;
+    const eye = meter(kind === 'wisp' ? 'noticed' : 'seen', '◉'); eye.el.style.opacity = '0';
+    const UP = new THREE.Vector3(0, 1, 0), D = new THREE.Vector3(), Q = new THREE.Quaternion();
+    S.watch = () => ({ kind, lights: L.length, seen: +seen.toFixed(2), passed, caught });
+    ticks.push((dt, t) => {
+      const p = o.pos();
+      let inside = false;
+      for (let i = 0; i < L.length; i++) {
+        const w = L[i], sw = Math.sin(t * 6.283 / w.per + w.ph) * w.sweep;
+        const x = w.c.x + w.px * sw, z = w.c.z + w.pz * sw, y = o.hAt(x, z);
+        w.pool.position.set(x, y + 0.06, z); w.x = x; w.z = z;
+        if (w.orb) w.orb.position.set(x, y + 1.6 + Math.sin(t * 2 + i) * 0.25, z);
+        if (w.beam) {   // a cone from the lamp to the pool
+          D.set(x - w.top.x, y - w.top.y, z - w.top.z); const len = D.length();
+          w.beam.scale.set(1, len, 1); Q.setFromUnitVectors(UP, D.clone().normalize().negate()); w.beam.quaternion.copy(Q);
+          w.beam.position.set((x + w.top.x) / 2, (y + w.top.y) / 2, (z + w.top.z) / 2);
+          if (w.head && kind === 'search') { w.head.lookAt(x, y, z); w.head.rotateX(Math.PI / 2); }
+        }
+        if (Math.hypot(p[0] - x, p[2] - z) < R * 0.8 && Math.abs(p[1] - y) < 3) inside = true;
+        // past a light along the way: it becomes where you are sent back to
+        const ahead = (p[0] - w.c.x) * w.c.ux + (p[2] - w.c.z) * w.c.uz;
+        if (ahead > 4 && i > passed && Math.hypot(p[0] - w.c.x, p[2] - w.c.z) < 16) passed = i;
+      }
+      if (grace > 0) { grace -= dt; inside = false; }
+      seen = inside ? Math.min(1, seen + dt / 0.85) : Math.max(0, seen - dt / 1.6);
+      eye.el.style.opacity = seen > 0.02 ? '1' : '0'; eye.set(seen);
+      if (inside && !told) { told = true; o.toast(kind === 'wisp' ? 'Keep out of the lights.' : 'Stay out of the light.', 'wait for it to sweep past'); }
+      if (seen >= 1) {
+        caught++; seen = 0; grace = 2.2;
+        const back = passed >= 0 ? L[passed].c : null;
+        const bx = back ? back.x + back.ux * 4.5 : o.home[0], bz = back ? back.z + back.uz * 4.5 : o.home[1];
+        if (o.tp) o.tp(bx, bz);
+        o.toast(kind === 'wisp' ? 'They found you.' : 'Spotted.', passed >= 0 ? 'back past the last light' : 'back to the start');
+      }
+    });
+  }
+
+  // ── TROUBLE (2026-11-04) ─────────────────────────────────────────────────
+  // A patrol is a round where something happens. Now and then smoke goes up
+  // somewhere along the way (a fire left burning in the woods, a flare on a
+  // marsh or a shore, a lamp-signal in a town) and there is a minute to get
+  // there and see to it. Missing one costs nothing but the tally; the round
+  // has a rhythm of quiet and hurry.
+  if (mech === 'trouble') {
+    const P = (o.LVL && o.LVL.path) || [];
+    const town = /\b(city|town|street\w*|harbou?r|docks?|port|neon|market|village)\b/.test(words);
+    const wet = /\b(marsh\w*|swamp\w*|bog|lake|shore|coast|beach|wetland\w*|estuar\w*|river)\b/.test(words);
+    const what = town ? ['A signal lamp is flashing.', 'someone needs you'] : wet ? ['A flare goes up.', 'someone is in trouble out there'] : ['Smoke over the trees.', 'a fire left burning'];
+    const cv = document.createElement('canvas'); cv.width = cv.height = 64; const g = cv.getContext('2d');
+    const gr = g.createRadialGradient(32, 32, 2, 32, 32, 31); gr.addColorStop(0, 'rgba(255,255,255,.9)'); gr.addColorStop(0.6, 'rgba(255,255,255,.35)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
+    const puffT = new THREE.CanvasTexture(cv);
+    const G = new THREE.Group(); G.visible = false; G.name = 'designTrouble'; scene.add(G);
+    const puffs = [];
+    for (let i = 0; i < 14; i++) {
+      const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: puffT, color: town ? 0xffd27a : wet ? 0xff6a4a : 0x8a8580, transparent: true, depthWrite: false, opacity: 0 }));
+      sp.material.userData.noAutoTex = true; G.add(sp); puffs.push({ sp, t: i / 14 });
+    }
+    const ember = new THREE.Mesh(new THREE.SphereGeometry(0.35, 12, 8), new THREE.MeshBasicMaterial({ color: town ? 0xffe9a0 : wet ? 0xff5a3a : 0xff8a3a }));
+    ember.material.userData.noAutoTex = true; G.add(ember);
+    const m = meter('get there', '!'); m.el.style.opacity = '0';
+    let wait = 24 + r() * 10, live = null, seen = 0, missed = 0;
+    const ahead = (p) => {   // a point on the way 35-70 m on from the nearest point to you
+      if (P.length < 2) return null;
+      let bi = 0, bd = 1e9; for (let i = 0; i < P.length; i++) { const d = Math.hypot(P[i][0] - p[0], P[i][1] - p[2]); if (d < bd) { bd = d; bi = i; } }
+      let s = 0, want = 35 + r() * 35, i = bi;
+      for (let k = 0; k < P.length * 2; k++) { const j = (i + 1) % P.length; const l = Math.hypot(P[j][0] - P[i][0], P[j][1] - P[i][1]);
+        if (s + l >= want) { const f = (want - s) / (l || 1); return [P[i][0] + (P[j][0] - P[i][0]) * f + (r() - 0.5) * 8, P[i][1] + (P[j][1] - P[i][1]) * f + (r() - 0.5) * 8]; }
+        s += l; i = j; }
+      return null;
+    };
+    S.trouble = () => ({ live: live ? { at: live.at.map(v => +v.toFixed(1)), left: +live.left.toFixed(1) } : null, seen, missed });
+    ticks.push((dt, t) => {
+      const p = o.pos();
+      if (!live) {
+        if ((wait -= dt) > 0) return;
+        const at = ahead(p);
+        if (!at || (o.blocked && o.blocked(at[0], at[1]))) { wait = 5; return; }
+        const d = Math.hypot(at[0] - p[0], at[1] - p[2]);
+        live = { at, left: Math.max(35, d / 3.2 + 18), full: 0 }; live.full = live.left;
+        G.position.set(at[0], o.hAt(at[0], at[1]), at[1]); G.visible = true; m.el.style.opacity = '1';
+        o.toast(what[0], what[1]); return;
+      }
+      live.left -= dt; m.set(live.left / live.full);
+      for (const q of puffs) { q.t = (q.t + dt / (town ? 2.2 : 6)) % 1;
+        const k = q.t; q.sp.position.set(Math.sin(k * 5 + q.t * 40) * 0.4 * k + k * 1.6, 0.6 + k * (town ? 3 : 11), Math.cos(k * 4) * 0.3 * k);
+        q.sp.scale.setScalar(town ? 0.6 + k * 0.6 : 0.8 + k * 4.5); q.sp.material.opacity = (town ? 0.9 * (1 - k) * (Math.sin(t * 8) > 0 ? 1 : 0.2) : 0.5 * Math.min(1, k * 6) * (1 - k)); }
+      ember.scale.setScalar(0.8 + 0.3 * Math.sin(t * 13));   // (no light of its own: the point-light count is in every program's key, a new one mid-game recompiles the world)
+      if (Math.hypot(live.at[0] - p[0], live.at[1] - p[2]) < 3.6) {
+        seen++; o.toast(town ? 'Seen to.' : wet ? 'Help arrives.' : 'Fire out.', seen === 1 ? 'one less thing on the round' : seen + ' seen to this round'); m.flash();
+        live = null; G.visible = false; m.el.style.opacity = '0'; wait = 35 + r() * 20;
+      } else if (live.left <= 0) {
+        missed++; o.toast('Too late for that one.', 'keep to your round'); live = null; G.visible = false; m.el.style.opacity = '0'; wait = 30 + r() * 20;
+      }
+    });
   }
 
   // ── THE MOMENT ───────────────────────────────────────────────────────────

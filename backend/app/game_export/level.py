@@ -569,13 +569,64 @@ def _river_course(seed: int, half: float, path: list[list[float]], creek: bool =
     return {"pts": pts[::2] if len(pts) > 160 else pts, "w": round(r.uniform(1.7, 2.4) if creek else r.uniform(4.5, 6.5), 2), "creek": creek}
 
 
+def _stack_plan(seed: int, half: float, ang: float) -> dict:
+    """A SEA STACK YOU CLIMB (2026-11-04). "a botanist climbs to the top of a sea stack in the fog"
+    walked a flat sandbar to a flag on a beach, the stacks standing far off. A stack is a pillar of
+    rock standing in the sea, joined to the shore by a spit the tide uncovers, and the only way up
+    is a ledge winding round it, two turns from the rocks at its foot to the turf on top. The whole
+    of it is one heightfield: each turn of the ledge is a bench cut into the rock, a sheer riser up
+    to the next turn, and a rocky apron round the foot to land on if you come off."""
+    R = min(24.0, half * 0.26)
+    H = R * 1.1
+    dist = half * 0.62
+    cx, cz = math.cos(ang) * dist, math.sin(ang) * dist
+    th0 = math.atan2(-cz, -cx)                       # the ledge starts on the side facing the shore
+    spin = 1.0 if (seed % 2) else -1.0
+    s = (seed % 97) * 0.13
+    wob = lambda th: math.sin(3 * th + s) * R * 0.04 + math.sin(5 * th + 2 * s) * R * 0.025
+    bench = 0.31 * R                                 # a turn of the ledge, wall to edge
+    edge = lambda t: R * (1.0 - 0.62 * t)
+    climb = lambda t: 1.2 + (H - 1.2) * t
+
+    def height(x: float, z: float, rough: float) -> float | None:
+        dx, dz = x - cx, z - cz
+        r = math.hypot(dx, dz)
+        if r > R + 12.0:
+            return None
+        th = math.atan2(dz, dx)
+        rp = r + wob(th)
+        a = ((th - th0) * spin) % (2 * math.pi)
+        t0 = a / (4 * math.pi)                       # the first turn at this bearing
+        t1 = t0 + 0.5                                # the second
+        # each riser eased over a metre and a half: a hard step sampled on the grid came out a
+        # staircase of square notches all round the rim
+        ease = lambda e: (lambda u: u * u * (3 - 2 * u))(max(0.0, min(1.0, (e - rp) / 1.5 + 0.5)))
+        d = rp - edge(t0)                            # the apron of fallen rock at the foot
+        h = max(-3.0, min(climb(t0), 3.0 - max(d, 0.0))) + rough * 3.0
+        h += (climb(t0) + rough - h) * ease(edge(t0))
+        h += (climb(t1) + rough - h) * ease(edge(t1))
+        h += (H + rough * 2.0 - h) * ease(edge(t1 + 0.5))   # the top: turf, not a table; the ledge runs out onto it
+        return h
+
+    # the way: from the start across the spit, round the ledge to the middle of the top
+    path = [[0.0, 0.0]]
+    t = 0.0
+    while t < 1.0:
+        th = th0 + spin * t * 4 * math.pi
+        rc = edge(t) - bench * 0.5 - wob(th)
+        path.append([round(cx + math.cos(th) * rc, 2), round(cz + math.sin(th) * rc, 2)])
+        t += 1.0 / 28
+    path.append([round(cx, 2), round(cz, 2)])
+    return {"c": [cx, cz], "R": R, "H": H, "height": height, "path": path, "foot": path[1]}
+
+
 def build_level(seed: int, size_m: float, n_objectives: int = 0,
                 amplitude_m: float = 2.4, grid_n: int = 48,
                 regions: list[dict] | None = None,
                 archetype: str = "plain", terrain_form: str = "natural", sea: bool = False,
                 fjord: bool = False, coast: bool = False, harbor: bool = False, slot: bool = False,
                 river: bool = False, creek: bool = False, layout: str = "route", aloft: bool = False, aloft_relief: str = "hills", ledges: bool = False,
-                headland: bool = False) -> dict:
+                headland: bool = False, stack: bool = False) -> dict:
     """Deterministic LevelPlan. Returns a JSON-safe dict for the runtime.
 
     sea (2026-10-06): a sea battle sails, it does not walk. The islands sit
@@ -591,6 +642,8 @@ def build_level(seed: int, size_m: float, n_objectives: int = 0,
         grid_n = max(grid_n, 176)                    # a crest seen from the air is sharp, not a 7 m facet
     if ledges:
         grid_n = max(grid_n, int(size_m / 0.9))      # a ledge's riser is a step, not a ramp
+    if stack:
+        grid_n = max(grid_n, int(size_m / 0.9))      # a riser round a sea stack, the same
 
     # ── zones: spawn at origin; goal at a far edge; corridor between ────────
     half = size_m / 2.0
@@ -612,6 +665,14 @@ def build_level(seed: int, size_m: float, n_objectives: int = 0,
         path.append([mx + px * j, mz + pz * j])
     path.append(list(goal))
     corridor = 5.5                                   # flattened, prop-free (m)
+    _stk = None
+    if stack:
+        _stk = _stack_plan(seed, half, ang)
+        goal = list(_stk["c"])
+        goal_r = math.hypot(goal[0], goal[1])
+        path = _stk["path"]
+        corridor = 2.2
+        layout = "route"                             # the ledge is the shape
     # ── THE LAYOUT (2026-10-20, design.py) ──────────────────────────────────
     # The shape above was every game's. A designed game unfolds its own way:
     # a loop that brings you home, a hub with spokes to the places you go,
@@ -928,6 +989,19 @@ def build_level(seed: int, size_m: float, n_objectives: int = 0,
                 h *= max(0.0, (1.0 - edge) / 0.08)
             if lava_segs and not _ch:
                 h = max(h, LAVA_LEVEL + 0.25)   # only a channel lies under the lava
+            if _stk is not None:
+                # the sea all round; the shore you start on; the spit out to the foot of the ledge
+                _rgh = (hgrid[i2][j2] - 0.5) * 0.3
+                _r0 = math.hypot(x, z)
+                _ts = max(0.0, min(1.0, (30.0 - _r0) / 14.0))
+                h = -3.0 + (4.1 + _rgh * 2.0 + 0.5 * (hgrid[i][j] - 0.45)) * _ts * _ts * (3 - 2 * _ts)
+                _dc = _seg_dist(x, z, 0.0, 0.0, _stk["foot"][0], _stk["foot"][1])
+                if _dc < 8.5:
+                    _tc = max(0.0, min(1.0, (8.5 - _dc) / 5.5))
+                    h = max(h, -3.0 + (3.95 + _rgh) * _tc * _tc * (3 - 2 * _tc))
+                _sh = _stk["height"](x, z, _rgh)
+                if _sh is not None:
+                    h = max(h, _sh)
             heights.append(round(h, 3))
 
     heights = _apply_terrain_form(heights, grid_n, terrain_form, amplitude_m)
@@ -1004,6 +1078,10 @@ def build_level(seed: int, size_m: float, n_objectives: int = 0,
         "collect_points": collect_points,
         "landmarks": landmarks,                # [x, z, scale]
     }
+    if _stk is not None:
+        out_level["landmarks"] = []
+        out_level["pois"] = []
+        out_level["stack"] = {"c": [round(_stk["c"][0], 2), round(_stk["c"][1], 2)], "r": round(_stk["R"], 2), "h": round(_stk["H"], 2)}
     if slot:
         # the slot is all rock off the route: no giant tree, no campsite up on the walls
         out_level["landmarks"] = []

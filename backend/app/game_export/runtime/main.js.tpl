@@ -2959,6 +2959,14 @@ async function main() {
       const [ux, uz] = LVL.fjord.axis, g = LVL.goal;
       GC = [g[0] + ux * 13 + uz * 13, g[1] + uz * 13 - ux * 13];
       const dl = Math.hypot(g[0] - GC[0], g[1] - GC[1]) || 1; D = [(g[0] - GC[0]) / dl, (g[1] - GC[1]) / dl];
+    } else if (BEACH) {
+      // A SEASIDE VILLAGE STANDS ON THE LAND (2026-11-04): "a postwoman delivers letters around a
+      // fishing village at night" set its ring of cottages round a green at [0, 17], which on a coast
+      // is out in the harbour: a dozen thatched roofs standing in the sea. The green is inland of the
+      // shore (behind the warehouses of a quay), half way along, the lane coming down toward the start
+      const S2 = (SPEC.world && SPEC.world.size_m) || 200;
+      GC = BEACH.world(Math.min(BEACH.gl * 0.45, S2 * 0.2), BEACH.harbor ? -Math.min(58, S2 * 0.3) : -Math.min(36, S2 * 0.2));
+      const dl = Math.hypot(GC[0], GC[1]) || 1; D = [-GC[0] / dl, -GC[1] / dl];
     }
     // A VILLAGE ON A HILL IS A STREET DOWN IT (2026-10-29): "kids race soapbox carts down a steep
     // village hill" set the ring of cottages round a green on the slope, beside the course. On a
@@ -4281,7 +4289,9 @@ async function main() {
       const isLighthouse = _kindWord === 'lighthouse';   // (a 'station' goal was a lighthouse: a research station on a moor, 2026-10-12)
       // an East Asian temple or shrine is a pagoda (buildPagoda); any other is the ancient one
       const _tw = ((SPEC.prompt || '') + ' ' + (SPEC.world.name || '')).toLowerCase();
-      const isTemple = ((_kindWord === 'temple' || _kindWord === 'shrine')
+      const _asianT = /japan|chinese|china|asian|zen|torii|pagoda|cherry|sakura|kyoto|shinto|buddhis|tibet|himalaya|monaster|korea|bamboo/.test(_tw);
+      const _wayside = _kindWord === 'shrine' && !_asianT && !/jungle|rainforest|rain forest|amazon|tropical|maya\w*|aztec|inca|mexic\w*|egypt\w*|pharaoh\w*|pyramid|desert|canyon|sunken/.test(_tw);
+      const isTemple = !_wayside && ((_kindWord === 'temple' || _kindWord === 'shrine')
         && !/japan|chinese|china|asian|zen|torii|pagoda|cherry|sakura|kyoto|shinto|buddhis|tibet|himalaya|monaster|korea|bamboo/.test(_tw))
         || _kindWord === 'pyramid' || _kindWord === 'ruin' || _kindWord === 'ruins';   // a ruin is its temple
       // an Egyptian goal is a pyramid of limestone courses, not a stepped temple
@@ -4310,7 +4320,7 @@ async function main() {
       // inside, a plank door standing ajar and a porch. The footprint, the
       // doorway and the colliders below are the ones they always were.
       const _isLog = /^(cabin|hut|lodge|shelter|den|camp|outpost)$/.test(_kindWord);
-      const _builtHouse = !isCastle && !isLighthouse && !isTemple;
+      const _builtHouse = !isCastle && !isLighthouse && !isTemple && !_wayside;
       // AN ANCIENT TEMPLE IS A MONUMENT (2026-10-10): "reach an ancient temple"
       // across a red canyon ended at a cottage, the same house every goal got.
       // A temple is a stepped platform of dressed sandstone, four tiers with a
@@ -4437,6 +4447,81 @@ async function main() {
         const inner = new THREE.PointLight(0xffb060, 3, 8, 1.8); inner.position.set(0, sy + 1.4, sz + 1.2); S.add(inner);
         window.__temple = { tiers: N, steps: nSt, mossy, height: +(topY + 5.6).toFixed(1) };
         templeCols = cols;
+      }
+
+      // A SHRINE IS SMALL (2026-11-04): "a knight explores a redwood forest to find a hidden shrine"
+      // walked to a four-tier Maya pyramid among the redwoods, the temple every non-Asian shrine got.
+      // Outside a jungle a shrine is what someone built beside a path: a stone chapel you could touch
+      // the roof of, on two worn steps, a robed figure with its face gone in the niche, candles on the
+      // ledge, moss on all of it, a few flagstones up to it and old stones standing about
+      if (_wayside) {
+        const flatW = (SPEC.style || 'default') !== 'default' && SPEC.style !== 'realistic';
+        const rW = mulberry32((SPEC.seed || 1) + 7717);
+        const mossW = (m) => { m.onBeforeCompile = (sh) => {
+          sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vWsW; varying vec3 vWsN;')
+            .replace('#include <begin_vertex>', '#include <begin_vertex>\nvWsW = (modelMatrix * vec4(transformed, 1.0)).xyz; vWsN = normalize(mat3(modelMatrix) * objectNormal);');
+          sh.fragmentShader = sh.fragmentShader.replace('#include <common>', `#include <common>
+            varying vec3 vWsW; varying vec3 vWsN;
+            float wsH(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+            float wsN(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+              return mix(mix(wsH(i), wsH(i + vec2(1.0, 0.0)), f.x), mix(wsH(i + vec2(0.0, 1.0)), wsH(i + vec2(1.0, 1.0)), f.x), f.y); }`)
+            .replace('#include <map_fragment>', `#include <map_fragment>
+            { float n1 = wsN(vWsW.xz * 2.1 + vWsW.y * 0.7) * 0.6 + wsN(vWsW.xz * 7.3 - vWsW.y * 2.0) * 0.4;
+              float up = vWsN.y, low = 1.0 - smoothstep(0.1, 1.6, vWsW.y - float(${goalPos.y.toFixed(2)}));
+              float moss = smoothstep(0.1, 0.8, up) * smoothstep(0.34, 0.6, n1) + (1.0 - abs(up)) * low * smoothstep(0.45, 0.72, n1) * 0.85;
+              float lum = dot(diffuseColor.rgb, vec3(0.3, 0.59, 0.11));
+              diffuseColor.rgb = mix(diffuseColor.rgb, mix(vec3(0.05, 0.1, 0.025), vec3(0.17, 0.23, 0.06), n1) * (0.6 + lum), clamp(moss, 0.0, 1.0)); }`);
+        }; m.customProgramCacheKey = () => 'waysideMoss'; m.userData.noAutoTex = true; return m; };
+        const stoneW = mossW(flatW ? new THREE.MeshStandardMaterial({ color: 0x8c897c, roughness: 0.95, flatShading: true })
+          : new THREE.MeshStandardMaterial({ map: HDT('stone', 0.7, 0.7), normalMap: HDN('stone', 0.7, 0.7), color: 0xc8c4b4, roughness: 0.95 }));
+        const slateW = mossW(flatW ? new THREE.MeshStandardMaterial({ color: 0x57595a, roughness: 0.9, flatShading: true })
+          : new THREE.MeshStandardMaterial({ map: HDT('roof', 1, 1), normalMap: HDN('roof', 1, 1), color: 0x9a9c9c, roughness: 0.88 }));
+        const figW = mossW(new THREE.MeshStandardMaterial({ color: 0xb3ad9b, roughness: 0.98 }));
+        const shW = (o) => { o.castShadow = true; o.receiveShadow = true; S.add(o); return o; };
+        const bx = (w, h, d, x, y, z, m) => { const b = shW(new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m || stoneW)); b.position.set(x, y, z); return b; };
+        const Z0 = -2.5, Y1 = 0.58, cols = [];
+        // the two worn steps, a little out of true
+        bx(4.1, 0.28, 3.5, 0, 0.14, Z0).rotation.y = 0.012;
+        bx(3.1, 0.3, 2.7, 0, 0.43, Z0 - 0.1).rotation.y = -0.018;
+        cols.push([4.1, Y1, 3.5, 0, Y1 / 2, Z0]);
+        // the front: a gable with an arched opening, cut from one outline
+        const fr = new THREE.Shape(); fr.moveTo(-1.12, 0); fr.lineTo(-1.12, 2.3); fr.lineTo(0, 3.15); fr.lineTo(1.12, 2.3); fr.lineTo(1.12, 0); fr.lineTo(0.58, 0); fr.lineTo(0.58, 1.3); fr.absarc(0, 1.3, 0.58, 0, Math.PI, false); fr.lineTo(-0.58, 0); fr.closePath();
+        const frG = new THREE.ExtrudeGeometry(fr, { depth: 0.28, bevelEnabled: true, bevelSize: 0.02, bevelThickness: 0.02, bevelSegments: 1, curveSegments: 14 });
+        const fm = shW(new THREE.Mesh(frG, stoneW)); fm.position.set(0, Y1, Z0 + 0.5);
+        const bk = new THREE.Shape(); bk.moveTo(-1.12, 0); bk.lineTo(-1.12, 2.3); bk.lineTo(0, 3.15); bk.lineTo(1.12, 2.3); bk.lineTo(1.12, 0); bk.closePath();
+        const bm = shW(new THREE.Mesh(new THREE.ExtrudeGeometry(bk, { depth: 0.28, bevelEnabled: false }), stoneW)); bm.position.set(0, Y1, Z0 - 1.05);
+        for (const sx of [-1, 1]) bx(0.3, 2.3, 1.3, sx * 0.97, Y1 + 1.15, Z0 - 0.12);
+        cols.push([2.3, 3.0, 0.3, 0, Y1 + 1.5, Z0 - 0.95], [0.3, 3.0, 1.9, -0.97, Y1 + 1.5, Z0 - 0.2], [0.3, 3.0, 1.9, 0.97, Y1 + 1.5, Z0 - 0.2]);
+        // the roof: two slates pitched over the gables, overhanging, a stone ball at the front of the ridge
+        const slope = Math.atan2(0.85, 1.12);
+        for (const sx of [-1, 1]) { const r0 = shW(new THREE.Mesh(new THREE.BoxGeometry(1.74, 0.13, 2.55), slateW)); r0.position.set(sx * 0.66, Y1 + 2.8, Z0 - 0.26); r0.rotation.z = -sx * slope; }
+        const ball = shW(new THREE.Mesh(new THREE.IcosahedronGeometry(0.13, 1), stoneW)); ball.position.set(0, Y1 + 3.4, Z0 + 0.9);
+        // the figure in the niche: a robe turned on a lathe, its head worn to a knob
+        const prof = [[0.24, 0], [0.27, 0.08], [0.2, 0.5], [0.16, 0.85], [0.19, 1.02], [0.09, 1.14], [0.001, 1.15]].map(p => new THREE.Vector2(p[0], p[1]));
+        const fig = shW(new THREE.Mesh(new THREE.LatheGeometry(prof, 14), figW)); fig.position.set(0, Y1 + 0.5, Z0 - 0.62); fig.scale.set(1, 1, 0.8);
+        const head = shW(new THREE.Mesh(new THREE.IcosahedronGeometry(0.12, 1), figW)); head.position.set(0, Y1 + 1.73, Z0 - 0.6); head.scale.set(0.9, 1.1, 0.9);
+        bx(0.8, 0.5, 0.6, 0, Y1 + 0.25, Z0 - 0.62);                       // what it stands on
+        bx(1.5, 0.08, 0.3, 0, Y1 + 0.46, Z0 - 0.2);                       // the ledge for candles
+        for (const sx of [-1, 1]) bx(0.09, 0.46, 0.2, sx * 0.62, Y1 + 0.23, Z0 - 0.2);
+        // the candles, each its own height, some burnt low
+        const waxW = new THREE.MeshStandardMaterial({ color: 0xe8dfc4, roughness: 0.6 }), flmW = new THREE.MeshBasicMaterial({ color: 0xffc06a, toneMapped: false });
+        waxW.userData.noAutoTex = flmW.userData.noAutoTex = true;
+        for (let i = 0; i < 7; i++) {
+          const h = 0.05 + rW() * 0.16, x = -0.62 + i * 0.205 + (rW() - 0.5) * 0.05, z = Z0 - 0.2 + (rW() - 0.5) * 0.14;
+          const c = new THREE.Mesh(new THREE.CylinderGeometry(0.024, 0.028, h, 8), waxW); c.position.set(x, Y1 + 0.5 + h / 2, z); S.add(c);
+          const f = new THREE.Mesh(new THREE.ConeGeometry(0.018, 0.06, 6), flmW); f.position.set(x, Y1 + 0.5 + h + 0.03, z); S.add(f);
+        }
+        const glowW = new THREE.PointLight(0xffb468, 4.5, 7, 1.8); glowW.position.set(0, Y1 + 1.05, Z0 + 0.05); S.add(glowW);
+        // flagstones up to the step, and old stones standing about in a loose ring
+        const rock = new THREE.DodecahedronGeometry(1, 1);
+        for (let i = 0; i < 5; i++) { const f = new THREE.Mesh(rock, stoneW); f.receiveShadow = true; f.position.set((rW() - 0.5) * 0.6, 0.02, 2.2 - i * 0.62); f.scale.set(0.32 + rW() * 0.14, 0.05, 0.22 + rW() * 0.08); f.rotation.y = rW() * 6.28; S.add(f); }
+        for (let i = 0; i < 6; i++) {
+          const a = -2.6 + i * 1.04 + (rW() - 0.5) * 0.3, R0 = 4.6 + rW() * 1.2, h = 0.5 + rW() * 0.9;
+          const x = Math.sin(a) * R0, z = Z0 - 0.3 + Math.cos(a) * R0; if (z > -0.4 && Math.abs(x) < 2.4) continue;
+          const st = shW(new THREE.Mesh(rock, stoneW)); st.position.set(x, h * 0.42, z); st.scale.set(0.24 + rW() * 0.12, h * 0.6, 0.2 + rW() * 0.08); st.rotation.set((rW() - 0.5) * 0.25, rW() * 3, (rW() - 0.5) * 0.25);
+        }
+        templeCols = cols;
+        window.__wayside = { height: +(Y1 + 3.5).toFixed(2) };
       }
 
       if (_builtHouse) {
@@ -4582,9 +4667,9 @@ async function main() {
           const pr = put(new THREE.BoxGeometry(3.9, 0.08, 1.9), shingleM, 0, 2.75, hd + 0.85);
           pr.rotation.x = 0.28;
         }
-      } else if (!isTemple && !isLighthouse)
+      } else if (!isTemple && !isLighthouse && !_wayside)
       addBox(6.4, 0.16, 5.4, 0, 0.08, 0, roofMat);            // floor slab
-      if (!_builtHouse && !isTemple && !isLighthouse) {
+      if (!_builtHouse && !isTemple && !isLighthouse && !_wayside) {
       addBox(6.4, 3.1, 0.28, 0, 1.63, -2.55);                 // back wall
       addBox(0.28, 3.1, 5.4, -3.06, 1.63, 0);                 // side walls
       addBox(0.28, 3.1, 5.4, 3.06, 1.63, 0);
@@ -4716,7 +4801,7 @@ async function main() {
         beam.position.y = 10.2;
         S.add(beam);
       }
-      for (const wx of ((_builtHouse || isTemple || isLighthouse) ? [] : [-2.05, 2.05])) {   // warm windows
+      for (const wx of ((_builtHouse || isTemple || isLighthouse || _wayside) ? [] : [-2.05, 2.05])) {   // warm windows
         const w = new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.85, 0.1), warmMat);
         w.position.set(wx, 1.8, 2.62);
         S.add(w);
@@ -4727,6 +4812,7 @@ async function main() {
       const halo = makeGoalHalo();                            // findable from afar
       if (isTemple && _egy) halo.position.set(0, 7.5, -1.5); else if (isTemple) halo.position.set(0, 14.5, -10.6); else
       halo.position.y = 6.2;
+      if (_wayside) halo.visible = false;                     // it is hidden: no pale moon hung over it (2026-11-04)
       S.add(halo);
       const _accM = window.__accent || 0xffd08a;                // the world's own accent (2026-10-07), not one purple everywhere
       const mat2 = new THREE.Mesh(                            // welcome mat = win spot
@@ -4734,8 +4820,9 @@ async function main() {
         new THREE.MeshStandardMaterial({ color: _accM, emissive: _accM,
                                          emissiveIntensity: 0.8 }));
       mat2.rotation.x = -Math.PI / 2;
-      mat2.position.set(0, _builtHouse ? 0.37 : isTemple ? 0.06 : 0.18, isTemple ? 1.1 : 0.4);   // on the floorboards where there are any; a temple's at its stair foot
+      mat2.position.set(0, _builtHouse ? 0.37 : (isTemple || _wayside) ? 0.06 : 0.18, isTemple ? 1.1 : 0.4);   // on the floorboards where there are any; a temple's at its stair foot
       S.add(mat2);
+      if (_wayside) mat2.visible = false;                     // the flagstones lead to it
       scene.add(S);
       S.updateMatrixWorld(true);
       // colliders per wall segment — the DOORWAY stays open, you walk in
@@ -13124,13 +13211,19 @@ async function main() {
     const _gw0 = [SPEC.world.name, SPEC.world.setting, SPEC.title, SPEC.prompt].filter(Boolean).join(' ').toLowerCase();
     const _golden0 = /\b(savann?ah?|prairie|steppe|grassland|veld|pampas|plains)\b/.test(_gw0)
       && !/\b(desert|dune|canyon|snow|ice|volcan|lava|mars|moon|city)\b/.test(_gw0);
-    if (!PURE_SCENE && !INTERIOR && !ASTEROIDS && (_green0 || _golden0) && _photo0 && SPEC.world.grass !== false && !SNOW_GROUND
+    // A SALT MARSH IS LOW AND OPEN (2026-11-04): "patrols a salt marsh at dusk" was bare red earth and
+    // boulders. It is a knee-high sward to the horizon, sea-green cord grass going russet with samphire
+    const _saltm0 = /\b(salt ?marsh\w*|tidal marsh\w*|saltings|estuar\w*)\b/.test(_gw0);
+    // (2026-11-04) nor is an autumn village bare earth: "a florist delivers flowers around an autumn village"
+    // walked brown dirt, its ground colour too brown to count as green. Grass in autumn is olive going straw
+    const _autumn0 = /\b(autumn\w*|fall foliage|october|harvest)\b/.test(_gw0) && !_green0 && !_golden0;
+    if (!PURE_SCENE && !INTERIOR && !ASTEROIDS && (_green0 || _golden0 || _saltm0 || _autumn0) && _photo0 && SPEC.world.grass !== false && !SNOW_GROUND
         && (SPEC.world.scatter || []).length && new URLSearchParams(location.search).get('grass') !== 'tufts') {
       try {
-        const A0 = _golden0 ? new THREE.Color(0xa88f52)
+        const A0 = _autumn0 ? new THREE.Color(0x6f7238) : _saltm0 ? new THREE.Color(0x66764c) : _golden0 ? new THREE.Color(0xa88f52)
           : new THREE.Color(...SPEC.world.ground_color).lerp(new THREE.Color(0x46752c), 0.6).offsetHSL(0, 0.1, -0.03);
-        const B0 = _golden0 ? new THREE.Color(0x7d7a45) : A0.clone().offsetHSL(0.03, 0.04, -0.08);
-        const D0 = _golden0 ? new THREE.Color(0xcbb47a) : A0.clone().lerp(new THREE.Color(0xb3a46c), 0.7);
+        const B0 = _autumn0 ? new THREE.Color(0x8d7436) : _saltm0 ? new THREE.Color(0x85563a) : _golden0 ? new THREE.Color(0x7d7a45) : A0.clone().offsetHSL(0.03, 0.04, -0.08);
+        const D0 = _autumn0 ? new THREE.Color(0xb39a58) : _saltm0 ? new THREE.Color(0xa8986a) : _golden0 ? new THREE.Color(0xcbb47a) : A0.clone().lerp(new THREE.Color(0xb3a46c), 0.7);
         // a small value noise for clumps and patches
         const _gp = new Uint8Array(512);
         { const r0 = mulberry32(SPEC.seed + 777); for (let i = 0; i < 256; i++) _gp[i] = i;
@@ -13652,7 +13745,7 @@ async function main() {
       fire:     { a: 0xff7a1a, b: 0xffd75e, orbit: 0, rise: 1.4,  size: 0.30, spin: 0.8 },
       frost:    { a: 0x9fd8ff, b: 0xffffff, orbit: 1, rise: -0.5, size: 0.22, spin: 0.7 },
       electric: { a: 0xb388ff, b: 0xf3ecff, orbit: 1, rise: 0.0,  size: 0.20, spin: 3.2 },
-      shadow:   { a: 0x5e3d8f, b: 0x9f7fe8, orbit: 0, rise: 0.5,  size: 0.42, spin: 0.5 },
+      shadow:   { a: 0x5e3d8f, b: 0x9f7fe8, orbit: 0, rise: 0.5,  size: 0.17, spin: 0.5 },   // (2026-11-04: at 0.42 eighty of them were a solid purple column round a ghost)
       nature:   { a: 0x59c94f, b: 0xd8f77a, orbit: 1, rise: 0.35, size: 0.24, spin: 0.9 },
       arcane:   { a: 0xc86bff, b: 0x7fd7ff, orbit: 1, rise: 0.25, size: 0.26, spin: 2.2 },
       wind:     { a: 0xdfe8ee, b: 0xffffff, orbit: 1, rise: 0.15, size: 0.28, spin: 2.6 },
@@ -13681,7 +13774,7 @@ async function main() {
       return p;
     };
     const AN = 80, TN = 110;
-    const aura = mk(AN, EL.size, EL.a);
+    const aura = mk(AN, EL.size * (EL.orbit ? 0.42 : 1), EL.a);
     const trail = mk(TN, EL.size * 0.8, EL.b);
     const tp = new Float32Array(TN * 3), tl = new Float32Array(TN);
     let ti = 0, prev = null, phase = Math.random() * 9;
@@ -13695,10 +13788,15 @@ async function main() {
         if (EL.orbit) {
           // orbiting ribbon (water/frost/arcane…): hugs the TORSO (anchor
           // tuned 2026-07-29 — it floated over the head and read detached)
-          const rad = 0.5 + 0.2 * Math.sin(f * 19.0 + phase * 0.9);
-          ap[i * 3]     = pp.x + Math.cos(a) * rad;
-          ap[i * 3 + 1] = pp.y + hh * 0.42 + Math.sin(a * 2.0 + f * 9.0) * hh * 0.3;
-          ap[i * 3 + 2] = pp.z + Math.sin(a) * rad;
+          // (2026-11-04) each mote on its own orbit and height: one ribbon of 80 drew a looping line
+          // round the hero that read as letters ("N0" round a witch), and a stacked column round a ghost
+          const s1 = (f * 37.31) % 1, s2 = (f * 71.73) % 1, s3 = (f * 113.17) % 1;
+          const am = phase * (0.5 + s1 * 0.7) * (s3 < 0.5 ? 1 : -1) + s2 * 6.283;
+          const rad = 0.3 + 0.42 * s1 + 0.06 * Math.sin(phase * 0.7 + s3 * 6.283);
+          const up = (s2 + phase * 0.05 * (0.4 + s3)) % 1;
+          ap[i * 3]     = pp.x + Math.cos(am) * rad;
+          ap[i * 3 + 1] = pp.y + 0.1 + up * hh * 1.02;
+          ap[i * 3 + 2] = pp.z + Math.sin(am) * rad;
         } else {
           // rising wisps (fire/shadow): respawn at feet, drift upward
           const cyc = (phase * (0.35 + f * 0.8) + f * 7.0) % 1.0;
@@ -23829,7 +23927,8 @@ async function main() {
     // a few fallen-off columns round its foot
     const monos = [];
     for (let k = 0; k < 4; k++) {
-      const off = (k - 1.5) * 13 + (rB() - 0.5) * 5, out = 16 + k % 2 * 9 + rB() * 6;
+      // (2026-11-04) when the goal is the top of a stack you climb, these stand further out, its neighbours
+      const off = (k - 1.5) * (LVL.stack ? 26 : 13) + (rB() - 0.5) * 5, out = (LVL.stack ? LVL.stack.r + 16 : 16) + k % 2 * 9 + rB() * 6;
       const cx = gx + dx * out + lx * off, cz = gz + dz * out + lz * off, base = hAt(cx, cz) - 3;
       const H = 20 + rB() * 30, R0 = 3.4 + rB() * 2.6;
       // a rough column: wider at the foot, ragged in plan, its top broken off, not a point
@@ -23838,7 +23937,7 @@ async function main() {
       const lean = (rB() - 0.5) * 0.1;
       for (let i = 0; i < pa.count; i++) { const x = pa.getX(i), y = pa.getY(i), z = pa.getZ(i), t = (y + H / 2) / H, ang = Math.atan2(z, x);
         const f = 1 + 0.22 * (hs(Math.round(ang * 4), Math.round(t * 16), 1) - 0.5) + 0.12 * Math.sin(ang * 3 + t * 7 + k) + 0.08 * Math.sin(ang * 7 - t * 13);
-        const top = t > 0.98 ? (hs(Math.round(x * 2), Math.round(z * 2), 2) - 0.5) * H * 0.12 : 0;
+        const top = t > 0.98 ? (hs(Math.round(x * 2), Math.round(z * 2), 2) - 0.5) * H * 0.03 : 0;   // (a rough top: at 0.12 each stack wore a crown of spikes)
         pa.setXYZ(i, x * f + lean * t * H, y + H / 2 + top, z * f); }
       g.computeVertexNormals(); g.translate(cx, base, cz); monos.push(g);
       for (let i = 0; i < 7; i++) { const a = rB() * 6.28, d = R0 * (0.9 + rB() * 0.5); prism(cx + Math.cos(a) * d, cz + Math.sin(a) * d, 0.6 + rB() * 0.4, 2 + rB() * 5, base, (rB() - 0.5) * 0.3); }
@@ -23848,13 +23947,13 @@ async function main() {
       const sm2 = new THREE.Mesh(mergeGeometries(monos.map(g => g.index ? g.toNonIndexed() : g)), stoneM); sm2.castShadow = true; sm2.receiveShadow = true; scene.add(sm2); }
     // the organ: a stepped bank of columns on the land side of the goal, the tallest at the back
     const ox = gx - dx * 4 + lx * 16, oz = gz - dz * 4 + lz * 16;
-    for (let i = 0; i < 90; i++) {
+    if (!LVL.stack) for (let i = 0; i < 90; i++) {
       const u = (rB() - 0.5) * 22, v = rB() * 10;
       const x = ox + lx * u - dx * v, z = oz + lz * u - dz * v, y = hAt(x, z) - 0.4;
       const h = 0.35 + v * 0.22 + rB() * 0.7 - Math.abs(u) * 0.04;   // the basalt steps people stand on, knee to head high: a tall bank read as a skyline
       if (h > 0.8) prism(x, z, 0.55 + rB() * 0.2, h, y, 0);
     }
-    world.createCollider(RAPIER.ColliderDesc.cuboid(11, 6, 5).setTranslation(ox - dx * 5, hAt(ox, oz) + 4, oz - dz * 5)
+    if (!LVL.stack) world.createCollider(RAPIER.ColliderDesc.cuboid(11, 6, 5).setTranslation(ox - dx * 5, hAt(ox, oz) + 4, oz - dz * 5)
       .setRotation({ w: Math.cos(Math.atan2(lx, lz) / 2), x: 0, y: Math.sin(Math.atan2(lx, lz) / 2), z: 0 }));
     const mesh = new THREE.Mesh(mergeGeometries(cols.map(g => g.index ? g.toNonIndexed() : g)), basM);
     mesh.castShadow = true; mesh.receiveShadow = true; scene.add(mesh);
@@ -33277,7 +33376,13 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
         return (stepIdx + part) / steps.length;
       },
       count: () => steps.reduce((n, st, i) => n + (i < stepIdx ? (st.count || 1) : i === stepIdx ? (st._got || st._fixed || st._served || 0) : 0), 0),
-      toast: (a, b) => { try { banner(a, b); } catch (e) {} } });
+      toast: (a, b) => { try { banner(a, b); } catch (e) {} },
+      tp: (x, z) => { const t = { x, y: spawnHeight(x, z), z }; body.setTranslation(t, true); body.setNextKinematicTranslation(t); },
+      // a soft bell for the designer's systems (resonance), on the game's own audio and its mute
+      chime: (f, v) => { try { if (sfxMuted || !actx) return; const t0 = actx.currentTime;
+        for (const [mul, g0] of [[1, v], [2.76, v * 0.35]]) { const os = actx.createOscillator(), g = actx.createGain();
+          os.type = 'sine'; os.frequency.value = f * mul; g.gain.setValueAtTime(0, t0); g.gain.linearRampToValueAtTime(g0, t0 + 0.012);
+          g.gain.exponentialRampToValueAtTime(0.0005, t0 + 0.9); os.connect(g); g.connect(actx.destination); os.start(t0); os.stop(t0 + 0.95); } } catch (e) {} } });
     window.__design = () => (DESIGN ? Object.assign({ on: true }, DESIGN.state()) : Object.assign({ on: false }, (LVL && LVL.design) || {}));
   } catch (e) { console.warn('[game] designer skipped', e); }
   renderer.setAnimationLoop(() => {

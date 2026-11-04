@@ -2498,6 +2498,12 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         # override > the prompt's extracted subject > man. Falls through the
         # ladder with a visible note whenever the cast changes.
         want = (req.player or spec.player.name or "man").strip().lower()
+        # (2026-11-04) a cat burglar is a thief: "a cat burglar escapes from a moon base" was played by a
+        # half-metre house cat, and the bench's judge rightly found no burglar in it
+        if not req.player and _fre.search(r"\bcat[- ]burglars?\b", (req.prompt or "").lower()):
+            want = "burglar"
+            spec.player.name = "burglar"
+            spec.player.height_m = 1.75
         # THE HERO IS NOT THE MONSTER (2026-10-10): "zombie survival in an
         # abandoned shopping mall" made the player a zombie among the zombies
         # it was meant to hold out against. When the hero is the same kind as
@@ -3295,7 +3301,10 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                 # (2026-10-21) and the weather it names: "in the rain", "in a storm",
                 # "under falling snow" were left to the model, and the benchmark's judge
                 # found the jungle temple dry and the castle storm absent
-                _wx = ("snow" if _hre.search(r"\b(snow\w*|blizzard\w*|snowfall|falling snow|sleet)\b", _hp) and not _hre.search(r"\bsnow (?:leopard|owl|globe)s?\b", _hp)
+                # (2026-11-04) a snowboarder is who, not the weather: "a snowboarder patrols a salt marsh" snowed;
+                # "a snow leopard through a snowy peak" did not, because the leopard vetoed the whole sentence
+                _hpw = _hre.sub(r"\bsnow[ -]?(?:board\w*|mobiles?|plou?ghs?|plows?|m[ae]n|shoes?|leopards?|owls?|globes?|white|drops?|cones?)\b", " ", _hp)
+                _wx = ("snow" if _hre.search(r"\b(snow\w*|blizzard\w*|snowfall|falling snow|sleet)\b", _hpw)
                        # (2026-10-22) "keeps the light burning through a hurricane" stood in sunshine
                        else "rain" if _hre.search(r"\b(rain\w*|storm\w*|downpour|drizzl\w*|thunder\w*|monsoon|showers?|hurricanes?|typhoons?|cyclones?|tempest\w*|gales?|squalls?)\b", _hp)
                        else None)
@@ -4475,6 +4484,20 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                 and not _fre.search(r"\b(space|outer space|orbit\w*|asteroids?|planets?|moons?|lunar|galax\w*|stars?hip|spaceships?|astronauts?|cosmo\w*|nebula\w*|comets?|alien world|mars|martian|zero[- ]g)\b", (req.prompt or "").lower())):
             job.setdefault("notes", []).append("sky space -> day: the sentence names nowhere off the earth")
             spec.world.sky = "day"
+        # (2026-11-04) an astronaut is who, not where: "a retired astronaut defends the station from goblins
+        # in a storm" stood on a black airless plain, the storm dropped. Weather or a retired one means the earth
+        _pl_sp = (req.prompt or "").lower()
+        if (spec.world.sky == "space" and base_spec is None
+                and _fre.search(r"\b(?:retired|former|old|elderly|ex-?)\s+(?:\w+\s+)?(?:astronauts?|cosmonauts?)\b|\b(?:rain\w*|storm\w*|snow\w*|fog\w*|mist\w*|thunder\w*|gales?|wind\w*)\b", _pl_sp)
+                and not _fre.search(r"\b(outer space|space ?stations?|orbit\w*|asteroids?|planets?|moons?|lunar|galax\w*|stars?hip|spaceships?|comets?|alien world|mars|martian|zero[- ]g)\b", _pl_sp)):
+            job.setdefault("notes", []).append("sky space -> overcast: weather and a retired astronaut are on the earth")
+            spec.world.sky = "overcast" if _fre.search(r"\b(rain\w*|storm\w*|thunder\w*)\b", _pl_sp) else "day"
+            if _fre.search(r"\b(rain\w*|storm\w*|thunder\w*|gales?)\b", _pl_sp):
+                spec.world.weather = "rain"
+                spec.world.wind = max(float(getattr(spec.world, "wind", 0.5) or 0.5), 0.95)
+            elif _fre.search(r"\bsnow(?!board)\w*\b", _pl_sp):
+                spec.world.weather = "snow"
+            spec.world.ground_color = [0.3, 0.33, 0.2]
         if (spec.world.sky == "mars" and base_spec is None
                 and not _fre.search(r"\b(mars|martian|red planet|olympus mons)\b", (req.prompt or "").lower())):
             spec.world.sky = "day"
@@ -4728,12 +4751,26 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                                     or getattr(spec.world, "platforms", False) or (getattr(spec, "view", None) or "3d") != "3d"
                                     or getattr(spec, "genre", "") in ("factory", "towerdefense", "citybuilder")
                                     or (spec.player.ride or "") == "plane")
+            _plays = not (getattr(spec.world, "platforms", False) or (getattr(spec, "view", None) or "3d") != "3d"
+                          or getattr(spec, "genre", "") in ("factory", "towerdefense", "citybuilder")
+                          or (spec.player.ride or "") != "" or job.get("_naval"))
             _design = design_of(req.prompt, spec.seed, owned=_owned, night=spec.world.sky in ("night", "dusk"),
-                                weather=spec.world.weather, objectives=spec.objectives, downhill_ok=_downhill_ok)
+                                weather=spec.world.weather, objectives=spec.objectives, downhill_ok=_downhill_ok, plays=_plays)
             job.setdefault("notes", []).append(
                 f"design: {_design['layout']} layout, {_design['mechanic']} mechanic, {_design['moment']} moment ({'; '.join(_design['why'])})")
         except Exception as _de:  # noqa: BLE001 - a game without a designer is the old route
             job.setdefault("notes", []).append(f"designer skipped: {_de}")
+        # (2026-11-04) climbing a sea stack is climbing: a pillar in the sea and a ledge round it (level.py)
+        _stack = bool(base_spec is None and _fre.search(r"\b(sea ?stacks?|sea pillars?|sea pinnacles?)\b", (req.prompt or "").lower())
+                      and _fre.search(r"\b(climb\w*|scal(?:e|es|ing)|ascend\w*|top of|summit\w*|up)\b", (req.prompt or "").lower()))
+        if _stack:
+            _arch = "archipelago"; spec.world.archetype = "archipelago"; spec.world.water_level = 0.0
+            _coast = _fjord = _river = False
+            spec.world.grass = False
+            spec.world.ground_color = [0.2, 0.2, 0.2]   # sea rock, not the tan a beach is planned in
+            if _design is not None and _design.get("mechanic") == "none":
+                _design["mechanic"] = "breath"
+            job.setdefault("notes", []).append("a sea stack to climb: a spit from the shore, a ledge winding twice round it")
         spec.world.level = build_level(
             spec.seed, spec.world.size_m, n_objectives=n_obj,
             amplitude_m=amp * _am, grid_n=_gn, regions=_regions,
@@ -4741,7 +4778,7 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             # A SLOT CANYON IS A CRACK, NOT A GORGE (2026-10-13)
             slot=bool(_fre.search(r"\b(slot canyons?|slot|narrows|crevices?|fissures?|trapped in (?:a|the) canyon|pinned|wedged)\b", (req.prompt or "").lower())
                       and _fre.search(r"\b(canyons?|gorges?|crevices?|fissures?|narrows|ravines?)\b", (req.prompt or "").lower())),
-            river=_river, creek=_creek, layout=(_design or {}).get("layout", "route"), headland=bool(_coast and _hilltown),
+            river=_river, creek=_creek, layout=(_design or {}).get("layout", "route"), headland=bool(_coast and _hilltown), stack=_stack,
             aloft=(spec.player.ride or "") == "plane" and not (_fjord or _coast or job.get("_naval")),
             # (2026-10-24) a crop duster over Kansas flew 37 m hills: farm and prairie country is flat
             # (2026-10-25) cliff ledges to leap between: a goat, an ibex, a climber among crags
@@ -4859,6 +4896,10 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         # player's feet, the first thing in frame. A swimmer belongs in water:
         # with none, it goes, and the note says so rather than leaving a
         # player to wonder. Decided after the water level is final.
+        # (2026-11-04) a salt marsh is a sward on mud (runtime _saltm0), whatever the planner called the ground
+        if base_spec is None and _fre.search(r"\b(salt ?marsh\w*|tidal marsh\w*|saltings)\b", (req.prompt or "").lower()):
+            spec.world.grass = True
+            spec.world.ground_color = [0.2, 0.21, 0.13]
         # A SWAMP IS STANDING WATER (2026-09-30). "A toxic swamp full of
         # crocodiles" was dry ground, so the crocodiles (and their stand-in)
         # had nowhere to be and were dropped. A wetland floods its low ground:
@@ -5169,6 +5210,13 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             # (2026-10-27) and a polar station is the runtime's base on the ice (POLARBASE), not a warehouse door
             if _sm and _sm.group(1) in ("station", "lab", "laboratory", "bunker") and _re3.search(r"\b(antarctic\w*|arctic|polar|south pole|north pole|ice shelf|penguins?|mcmurdo|svalbard|greenland|halley)\b", _pl):
                 _sm = None
+            # (2026-11-04) outside a jungle or the East a shrine is small, what someone built beside a path
+            # (the runtime's wayside chapel at the goal), not a monument you walk into
+            if _sm and _sm.group(1) == "shrine" and not _re3.search(
+                    r"\b(samurai|ninjas?|shinto|zen|pagodas?|kyoto|edo|shogun\w*|dojo|cherry blossoms?|sakura|japan\w*|chin(?:a|ese)|asian|kung fu|shaolin|"
+                    r"monks?|bamboo|torii|koi|geisha|ronin|korea\w*|tibet\w*|himalaya\w*|monaster\w*|buddhis\w*|"
+                    r"jungle|rain ?forest|amazon|tropical|maya\w*|aztec|inca|mexic\w*|egypt\w*|pharaoh\w*|pyramids?|desert|canyons?|sunken)\b", _pl):
+                _sm = None
             if _sm:
                 from app.game_export.level import build_interior
                 _ek_raw = _sm.group(1)
@@ -5183,7 +5231,11 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                     _half2 = spec.world.size_m / 2
                     _door = [round(_half2 * 0.5, 2), round(_half2 * _er.uniform(-0.3, 0.3), 2)]
                 # a temple in Japan or China is a pagoda, not a chapel (2026-10-07)
-                if _ek_raw in ("temple", "shrine", "monastery", "pagoda", "dojo") and _re3.search(
+                # (2026-11-04) "a samurai repairs three broken bridges in an old castle" stood before a Scottish keep
+                if _ek_raw in ("castle", "fortress", "keep", "palace", "fort", "citadel") and _re3.search(
+                        r"\b(samurai|ninjas?|shogun\w*|daimyo|ronin|kyoto|edo|osaka|himeji|japan\w*)\b", _pl):
+                    _kit = "pagoda"
+                elif _ek_raw in ("temple", "shrine", "monastery", "pagoda", "dojo") and _re3.search(
                         r"\b(samurai|ninjas?|shinto|zen|pagodas?|kyoto|edo|shogun\w*|dojo|cherry blossoms?|sakura|japan\w*|"
                         r"chin(a|ese)|kung fu|shaolin|monks?|bamboo|torii|koi|geisha|ronin)\b", _pl):
                     _kit = "pagoda"
@@ -5198,6 +5250,16 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                 # climbs the lighthouse to relight the lamp" put the tower on the
                 # far shore while the walk ended on a spit facing it. Its door is at
                 # the goal, a step short of it along the way the path came in.
+                # (2026-11-04) AN ESCAPE LEAVES THE PLACE: "a knight escapes from an old castle" started in the
+                # woods and walked to the castle gate. The place stands behind you at the start; the way out
+                # is the far end of the walk, marked as the border, not the building
+                if _re3.search(r"\b(?:escap\w*|break\w*|flee\w*|runs?|running) (?:out )?(?:of |from )(?:\w+ ){0,4}" + _ek_raw + r"s?\b", _pl) and spec.world.level.get("goal"):
+                    _g = spec.world.level["goal"]; _gl = (_g[0] ** 2 + _g[1] ** 2) ** 0.5 or 1.0
+                    _door = [round(-_g[0] / _gl * 15.0, 2), round(-_g[1] / _gl * 15.0, 2)]
+                    for _o in spec.objectives:
+                        if _o.kind == "reach" and _ek_raw in (_o.label or "").lower():
+                            _o.label = "the border"
+                    job.setdefault("notes", []).append(f"an escape: the {_ek_raw} behind you at the start, the way out ahead")
                 if _ek_raw == "lighthouse" and spec.world.level.get("goal") and spec.world.level.get("path"):
                     _g = spec.world.level["goal"]; _pp = spec.world.level["path"][-2] if len(spec.world.level["path"]) > 1 else [0.0, 0.0]
                     _dl = ((_g[0] - _pp[0]) ** 2 + (_g[1] - _pp[1]) ** 2) ** 0.5 or 1.0
