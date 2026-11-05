@@ -14,7 +14,7 @@ import puppeteer from 'puppeteer-core';
 const MY = process.env.MY;
 if (!MY) { console.log('fmystery: MY=<job> needed; FAIL'); process.exit(1); }
 const b = await puppeteer.launch({ headless: 'new', executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe',
-  args: ['--use-angle=d3d11', '--enable-unsafe-swiftshader', '--window-size=1280,760'] });
+  args: ['--use-angle=d3d11', '--disable-gpu-sandbox', '--enable-unsafe-swiftshader', '--window-size=1280,760'] });
 const wait = ms => new Promise(r => setTimeout(r, ms));
 const url = 'http://127.0.0.1:8789/games/job_' + MY + '/dist/?noguide=1';
 const fails = [];

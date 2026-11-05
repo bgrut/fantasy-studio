@@ -6,7 +6,7 @@
 //   resonance  walk to the thing sought: the distance falls and the pulse quickens
 //   trouble    wait for the smoke; stand at it: seen to
 import puppeteer from 'puppeteer-core';
-const b = await puppeteer.launch({ headless: 'new', executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', args: ['--use-angle=d3d11', '--window-size=1280,720'] });
+const b = await puppeteer.launch({ headless: 'new', executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', args: ['--use-angle=d3d11', '--disable-gpu-sandbox', '--window-size=1280,720'] });
 const p = await b.newPage(); await p.setViewport({ width: 1280, height: 720 });
 const errs = []; p.on('pageerror', e => errs.push(e.message.slice(0, 200)));
 await p.goto(`http://127.0.0.1:8789/games/${process.env.J}/dist/index.html`, { waitUntil: 'domcontentloaded' });

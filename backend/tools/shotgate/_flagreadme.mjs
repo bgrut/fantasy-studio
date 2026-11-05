@@ -2,7 +2,7 @@
 // pinned cameras round the worldlet. OUT=dir [URL=] node _flagreadme.mjs
 import puppeteer from 'puppeteer-core';
 const URL = process.env.URL || 'http://127.0.0.1:8790/';
-const b = await puppeteer.launch({ headless: 'new', executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', args: ['--use-angle=d3d11', '--window-size=1600,900', '--disable-renderer-backgrounding', '--disable-background-timer-throttling', '--disable-backgrounding-occluded-windows'] });
+const b = await puppeteer.launch({ headless: 'new', executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', args: ['--use-angle=d3d11', '--disable-gpu-sandbox', '--window-size=1600,900', '--disable-renderer-backgrounding', '--disable-background-timer-throttling', '--disable-backgrounding-occluded-windows'] });
 const p = await b.newPage(); await p.setViewport({ width: 1600, height: 900 });
 await p.goto(URL + '?fresh=1&noguide=1&clean=1', { waitUntil: 'domcontentloaded', timeout: 90000 });
 const w = ms => new Promise(r => setTimeout(r, ms));

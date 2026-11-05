@@ -5,7 +5,7 @@
 import puppeteer from 'puppeteer-core';
 const b = await puppeteer.launch({ headless:'new',
   executablePath:'C:/Program Files/Google/Chrome/Application/chrome.exe',
-  args:['--use-angle=d3d11','--enable-unsafe-swiftshader','--window-size=1280,760'] });
+  args:['--use-angle=d3d11', '--disable-gpu-sandbox','--enable-unsafe-swiftshader','--window-size=1280,760'] });
 const p = await b.newPage();
 await p.setViewport({ width:1280, height:760 });
 const errs = [];
@@ -77,7 +77,9 @@ const flip = await p.evaluate(async () => {
   if (cr) cr.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
   return { offered };
 });
-await wait(5500);
+await wait(1500);
+// (2026-11-05) picking a mode reloads the page: a fixed 5.5 s lost the race with a heavier boot under a full gate
+for (let k = 0; k < 120; k++) { if (await p.evaluate(() => !!(window.__game && window.__game.facts)).catch(() => false)) break; await wait(500); }
 const flipped = await p.evaluate(() => ({ creative: window.__game.facts().creative, url: location.search }));
 console.log('new world : offers', flip.offered.join('/'), '| picked creative ->', flipped.creative, flipped.url);
 console.log('errors    :', errs.length ? errs.join(' | ') : 'none');

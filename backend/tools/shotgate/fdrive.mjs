@@ -7,7 +7,7 @@ const A = process.env.A;
 if (!A) { console.log('skipped   : needs --adv (the drift race)'); process.exit(0); }
 const b = await puppeteer.launch({ headless:'new',
   executablePath:'C:/Program Files/Google/Chrome/Application/chrome.exe',
-  args:['--use-angle=d3d11','--ignore-gpu-blocklist','--disable-frame-rate-limit','--disable-gpu-vsync','--window-size=1280,760'] });
+  args:['--use-angle=d3d11', '--disable-gpu-sandbox','--ignore-gpu-blocklist','--disable-frame-rate-limit','--disable-gpu-vsync','--window-size=1280,760'] });
 const p = await b.newPage();
 await p.setViewport({ width:1280, height:760, deviceScaleFactor: 1 });
 const errs = [];

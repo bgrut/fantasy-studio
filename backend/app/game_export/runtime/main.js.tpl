@@ -3921,7 +3921,11 @@ async function main() {
       if (!_sea) {
         const _k = waterMesh.material.userData.waterKind;
         waterMesh.material.dispose();
-        waterMesh.material = __waterMaterial(_k, WIND_U, __shoreDepth(hOut, WATER_Y, 0, 0, Math.min(_wS, gsize * 2)));   // (2026-10-20) hOut: past the level the land falls under the sea, and hAt ran flat there, a pale square of false shallows
+        // (2026-11-05) the sky in the water is the sky you can see: the environment map stays bright under a storm
+        // or a night, and a creek in a black storm shone white, the brightest thing in the picture
+        const _wDim = Math.max(0.1, Math.min(1, (pal.sun || 1) / 1.7));
+        waterMesh.material = __waterMaterial(_k, WIND_U, __shoreDepth(hOut, WATER_Y, 0, 0, Math.min(_wS, gsize * 2)));
+        waterMesh.material.envMapIntensity *= _wDim;   // (2026-10-20) hOut: past the level the land falls under the sea, and hAt ran flat there, a pale square of false shallows
       }
     }
     scene.add(waterMesh);
@@ -12955,6 +12959,7 @@ async function main() {
       scene.add(g);
       if (hy > 0.2) world.createCollider(RAPIER.ColliderDesc.cuboid(hx, hy / 2, hz).setTranslation(fx + OX, hy / 2, fz).setRotation({ x: 0, y: Math.sin(fyaw / 2), z: 0, w: Math.cos(fyaw / 2) }));
     }
+    const _sciRoom = /\b(moon|lunar|mars|martian|space ?(?:ship|station|craft)?|starships?|orbital|sci-?fi|cyberpunk|futuris\w*|reactors?|research (?:station|lab\w*)|androids?|robots?)\b/.test(String((SPEC.prompt || '') + ' ' + (SPEC.title || '')).toLowerCase());
     (async () => {
       const cache = {};
       for (const [name, fx, fz, fyaw] of PLAN.furniture || []) {
@@ -12965,6 +12970,11 @@ async function main() {
           inst.position.set(fx + OX, 0, fz);
           inst.rotation.y = fyaw;
           inst.traverse(o => { if (o.isMesh) { o.castShadow = true; } });
+          // (2026-11-05) nothing aboard a moon base grew on a tree: a bark chair and a mossy stump stood in its corridor.
+          // The same shapes in moulded polymer and brushed steel
+          if (_sciRoom) { const sm = window.__sciProp = window.__sciProp || { soft: new THREE.MeshStandardMaterial({ color: 0x323a44, roughness: 0.55, metalness: 0.25 }), steel: new THREE.MeshStandardMaterial({ color: 0x828c96, roughness: 0.36, metalness: 0.85 }) };
+            sm.soft.userData.noAutoTex = sm.steel.userData.noAutoTex = true;
+            inst.traverse(o => { if (o.isMesh) o.material = (name === 'chair' || name === 'table') ? sm.soft : sm.steel; }); }
           scene.add(inst);
           const bb = new THREE.Box3().setFromObject(inst);
           const sz = bb.getSize(new THREE.Vector3());
@@ -15247,7 +15257,7 @@ async function main() {
   // stringers, a plank deck with a gap where planks have gone, two splintered ones hanging
   // into it and the rest lying in the stream. Mending lays the missing planks back one by
   // one as E is held. Local x runs along the span.
-  function makeBrokenBridge(seed) {
+  function makeBrokenBridge(seed, onCreek) {
     const g = new THREE.Group(), rr = mulberry32((SPEC.seed || 1) * 31 + seed * 977);
     const M = (o) => { const m = new THREE.MeshStandardMaterial(o); m.userData.noAutoTex = true; return m; };
     const stone = M({ map: HDT('stone', 0.5, 0.5), normalMap: HDN('stone', 0.5, 0.5), color: 0xb0aa9e, roughness: 0.95 });
@@ -15255,9 +15265,13 @@ async function main() {
     const log = M({ map: HDT('bark', 1, 2), normalMap: HDN('bark', 1, 2), color: 0x6e5a46, roughness: 0.9 });
     const add = (geo, m, x, y, z) => { const o = new THREE.Mesh(geo, m); o.position.set(x, y, z); o.castShadow = o.receiveShadow = true; g.add(o); return o; };
     // the stream bed and its water under the span
-    add(new THREE.PlaneGeometry(2.4, 8).rotateX(-Math.PI / 2).rotateY(Math.PI / 2), M({ color: 0x4a4438, roughness: 1 }), 0, 0.02, 0).receiveShadow = true;
+    if (!onCreek) add(new THREE.PlaneGeometry(2.4, 8).rotateX(-Math.PI / 2).rotateY(Math.PI / 2), M({ color: 0x4a4438, roughness: 1 }), 0, 0.02, 0).receiveShadow = true;
     const wM = M({ color: 0x1f3a40, roughness: 0.05, transparent: true, opacity: 0.8, depthWrite: false });
-    add(new THREE.PlaneGeometry(1.7, 8).rotateX(-Math.PI / 2).rotateY(Math.PI / 2), wM, 0, 0.06, 0).castShadow = false;
+    if (!onCreek) add(new THREE.PlaneGeometry(1.7, 8).rotateX(-Math.PI / 2).rotateY(Math.PI / 2), wM, 0, 0.06, 0).castShadow = false;
+    // (2026-11-05) A BRIDGE YOU CAN WALK: nothing was solid; you stood in the air inside it and walked through.
+    // A plank ramp comes down to each bank, and the deck carries you to the gap (see BRIDGE where it is placed)
+    { const L = Math.hypot(2.4, 1.1), A = Math.atan2(1.1, 2.4);
+      for (const sx of [-1, 1]) { const rp = add(new THREE.BoxGeometry(L, 0.09, 1.7), wood, sx * 4.4, 0.55, 0); rp.rotation.z = -sx * A; } }
     for (const sx of [-1, 1]) add(new THREE.BoxGeometry(1.4, 1.0, 2.2), stone, sx * 3.0, 0.4, 0);
     for (const sz of [-0.62, 0.62]) { const b = add(new THREE.CylinderGeometry(0.11, 0.13, 7.2, 10), log, 0, 0.95, sz); b.rotation.z = Math.PI / 2; }
     const planks = [], gap = [];
@@ -15271,7 +15285,7 @@ async function main() {
     }
     // two splintered planks hanging into the gap, and the rest down in the water
     for (const [k, rz] of [[gap0 - 1, 0.5], [gap0 + gapN, -0.45]]) { const h = add(new THREE.BoxGeometry(0.28, 0.06, 1.2), wood, -3.2 + (k + 0.5) * 6.4 / N + (rz > 0 ? 0.3 : -0.3), 0.8, 0.2); h.rotation.z = rz; h.rotation.x = 0.2; }
-    for (let k = 0; k < 3; k++) { const f = add(new THREE.BoxGeometry(0.28, 0.06, 1.5), wood, (rr() - 0.5) * 1.4, 0.1, (rr() - 0.5) * 3); f.rotation.set((rr() - 0.5) * 0.3, rr() * 3, (rr() - 0.5) * 0.4); }
+    for (let k = 0; k < 3; k++) { const f = add(new THREE.BoxGeometry(0.28, 0.06, 1.5), wood, (rr() - 0.5) * 1.4, onCreek ? onCreek.dy : 0.1, (rr() - 0.5) * 3); f.rotation.set((rr() - 0.5) * 0.3, rr() * 3, (rr() - 0.5) * 0.4); }
     // rope rails on posts
     const rope = M({ color: 0xb59a6a, roughness: 1 });
     for (const sz of [-0.85, 0.85]) {
@@ -15281,7 +15295,9 @@ async function main() {
     // solid: the abutments always, the deck once it is whole
     const q0 = new THREE.Quaternion();
     g.userData.bridge = {
+      gapX0: -3.2 + gap0 * 6.4 / N, gapX1: -3.2 + (gap0 + gapN) * 6.4 / N, onWhole: null,
       tick(p) {
+        if (p >= 0.999 && this.onWhole) { const f = this.onWhole; this.onWhole = null; f(); }
         const shown = Math.floor(p * gap.length + 1e-6);
         gap.forEach((pl, i) => { pl.visible = i < shown; pl.position.y = pl.userData.y + (i === shown - 1 && p < 1 ? 0.15 : 0); });
       },
@@ -16188,7 +16204,20 @@ async function main() {
       peb.count = c; peb.receiveShadow = true; scene.add(peb); }
     // STEPPING STONES where the path crosses, each a little higher than the water, solid underfoot
     const stoneM = M2({ color: 0x8a867a, roughness: 0.8 }), mossM = M2({ color: 0x5a6a3a, roughness: 0.9 });
-    for (const c of cross.slice(0, 4)) { if (!inside(c.x, c.z)) continue;
+    // (2026-11-05) where bridges are to be mended there is no ford: the bridge stands at the crossing
+    const _brWant = (SPEC.objectives || []).some(o => o.kind === 'repair' && /\b(bridges?|footbridges?|crossings?)\b/i.test(o.label || ''));
+    const _brS = [];
+    const bridgeSpot = (i) => {
+      if (!_brS.length) {
+        const nearL = (x, z) => { let b = line[0], bd = 1e9; for (const q of line) { const d = Math.hypot(q.x - x, q.z - z); if (d < bd) { bd = d; b = q; } } return b; };
+        const tryAdd = (q) => { if (Math.hypot(q.x, q.z) < 9 || _brS.some(o => Math.hypot(o.x - q.x, o.z - q.z) < 16)) return; _brS.push(q); };
+        for (const c of cross) if (inside(c.x, c.z)) tryAdd(nearL(c.x, c.z));
+        for (const f of [0.5, 0.25, 0.75, 0.12, 0.88, 0.38, 0.62]) tryAdd(line[Math.floor(f * (line.length - 1))]);
+        if (!_brS.length) _brS.push(line[Math.floor(line.length / 2)]);
+      }
+      return _brS[i % _brS.length];
+    };
+    for (const c of cross.slice(0, _brWant ? 0 : 4)) { if (!inside(c.x, c.z)) continue;
       const nS = Math.ceil((w * 2.2) / 0.62);
       for (let k = 0; k <= nS; k++) { const o = -w * 1.1 + k * (w * 2.2 / nS) + (rC() - 0.5) * 0.12, side = (rC() - 0.5) * 0.35, x = c.x + c.ux * o - c.uz * side, z = c.z + c.uz * o + c.ux * side;
         const gy = hAt(x, z), top = Math.max(WY + 0.09, gy + 0.1), r2 = 0.3 + rC() * 0.1;
@@ -16249,7 +16278,7 @@ async function main() {
     };
     const nearWater = (x, z, r) => { let b = null, bd = r; for (const q of line) { const d = Math.hypot(q.x - x, q.z - z); if (d < bd) { bd = d; b = [q.x, q.z]; } } return b; };
     window.__creek = () => ({ w, crossings: cross.map(c => [+c.x.toFixed(1), +c.z.toFixed(1)]), pads: pads.length, line: line.length });
-    return { cross, frogSpot, nearWater, w };
+    return { cross, frogSpot, nearWater, w, bridgeSpot };
   })();
 
   // ── A CAN ALLEY AT THE FAIR (2026-10-27) ────────────────────────────────
@@ -32515,10 +32544,28 @@ float gn1(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
           continue;
         }
         if (BRIDGE) {
-          const g2 = makeBrokenBridge(i + 1); g2.position.set(x, y, z); g2.rotation.y = ry + Math.PI / 2; scene.add(g2);
+          // (2026-11-05) on the creek when the world has one: where the way crosses it, then spaced along it, square to the flow
+          const _bs = CREEK && CREEK.bridgeSpot ? CREEK.bridgeSpot(i) : null;
+          const bx = _bs ? _bs.x : x, bz = _bs ? _bs.z : z, byaw = _bs ? Math.atan2(-_bs.tx, -_bs.tz) : ry + Math.PI / 2;
+          const nx = Math.cos(byaw), nz = -Math.sin(byaw);
+          const by = _bs ? Math.max(hAt(bx + nx * 3.4, bz + nz * 3.4), hAt(bx - nx * 3.4, bz - nz * 3.4), (WATER_Y ?? -1e9) + 0.15) : y;
+          const g2 = makeBrokenBridge(i + 1, _bs ? { dy: (WATER_Y ?? by) - by + 0.03 } : null); g2.position.set(bx, by, bz); g2.rotation.y = byaw; scene.add(g2);
           g2.userData.fsTag = { type: 'objective', name: 'broken bridge', detail: 'hold E to lay the missing planks' };
-          (window.__grassHoles = window.__grassHoles || []).push({ x, z, c: Math.cos(g2.rotation.y), s: Math.sin(g2.rotation.y), hx: 4, hz: 1.4 });
-          panels.push({ g: g2, bridge: g2.userData.bridge, fixed: false, p: 0, x, z, ry });
+          (window.__grassHoles = window.__grassHoles || []).push({ x: bx, z: bz, c: Math.cos(byaw), s: Math.sin(byaw), hx: 6, hz: 1.4 });
+          // the deck is ground the way the rope bridge's is: the movement code asks __deckAt where to stand you
+          // (thin colliders let the walker sink through them), up a ramp, along the planks, down through the gap until it is mended
+          { const B = g2.userData.bridge; B.onWhole = () => { B.whole = true; };
+            (window.__brDecks = window.__brDecks || []).push({ x: bx, z: bz, y: by, nx, nz, B });
+            if (!window.__brDeckOn) { window.__brDeckOn = true; const _prevDk = window.__deckAt;
+              window.__deckAt = (px, pz, feet) => {
+                const r = _prevDk ? _prevDk(px, pz, feet) : null; if (r !== null) return r;
+                for (const d of window.__brDecks) { const dx = px - d.x, dz = pz - d.z, al = dx * d.nx + dz * d.nz, ac = -dx * d.nz + dz * d.nx;
+                  if (Math.abs(ac) > 0.82 || Math.abs(al) > 5.6) continue;
+                  if (!d.B.whole && al > d.B.gapX0 + 0.12 && al < d.B.gapX1 - 0.12) continue;
+                  const y = d.y + (Math.abs(al) <= 3.2 ? 1.14 : 1.14 * (5.6 - Math.abs(al)) / 2.4);
+                  if (feet > y - 0.7 && feet < y + 0.45) return y; }
+                return null; }; } }
+          panels.push({ g: g2, bridge: g2.userData.bridge, fixed: false, p: 0, x: bx, z: bz, ry });
           continue;
         }
         if (CHOP) {

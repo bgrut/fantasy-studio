@@ -3,7 +3,7 @@
 // face at the machines, and a far face; for judging the flagship as a whole picture
 import puppeteer from 'puppeteer-core';
 const URL = process.env.URL || 'http://127.0.0.1:8790/';
-const b = await puppeteer.launch({ headless: 'new', executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', args: ['--use-angle=d3d11', '--window-size=1600,900'] });
+const b = await puppeteer.launch({ headless: 'new', executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', args: ['--use-angle=d3d11', '--disable-gpu-sandbox', '--window-size=1600,900'] });
 const p = await b.newPage(); await p.setViewport({ width: 1600, height: 900 });
 const errs = []; p.on('pageerror', e => errs.push(e.message.slice(0, 160)));
 await p.goto(URL + '?fresh=1&noguide=1', { waitUntil: 'domcontentloaded', timeout: 90000 });

@@ -824,6 +824,9 @@ const matBright = new THREE.ShaderMaterial({
     uniform sampler2D tDiffuse; uniform float uThresh; uniform float uKnee;
     void main() {
       vec3 c = texture2D(tDiffuse, vUv).rgb;
+      // ONE BAD PIXEL IS NOT A BLACK BOX (2026-11-05): a NaN from any shader went through the blur and
+      // came out a hard black square over the hub; the adventure's bloom has had this guard since 10-23
+      if (any(isnan(c)) || any(isinf(c)) || !(c.r < 65000.0 && c.g < 65000.0 && c.b < 65000.0)) c = vec3(0.0);
       float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
       // a soft knee, so a surface that drifts past the threshold brightens
       // gradually instead of popping into bloom as the camera moves
@@ -891,6 +894,7 @@ const matComposite = new THREE.ShaderMaterial({
       // bloom is added in LINEAR light, which is the only place adding light
       // means anything
       vec3 c = texture2D(tDiffuse, vUv).rgb;
+      if (any(isnan(c)) || any(isinf(c)) || !(c.r < 65000.0 && c.g < 65000.0 && c.b < 65000.0)) c = vec3(0.0);
       c += texture2D(tBloom, vUv).rgb * uStrength;
       c = aces(c);
       // then graded in display space, where "shadows" is a thing you can point
@@ -1511,9 +1515,88 @@ const GROUP_FACE = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0,
 // shader, its relief in the normal map, and the survey seams kept faint
 // so a builder still reads the grid. Still four looks and four maps.
 let _soilTex = null, _soilN = null;
+// BROOKS THAT GO SOMEWHERE (2026-11-05): five painted squiggles started and stopped in mid-meadow, crossed
+// each other and had grass growing through them. One stream runs right across the face and off both its
+// edges; the others rise in the meadow and run down into it, widening as they go. The plan is pure, so the
+// painting, the water mask, the grass and the stones in the bed all read the same course.
+const _brookPlans = {};
+function brookPlan(key) {
+  if (_brookPlans[key]) return _brookPlans[key];
+  const P = 1024;
+  let h = (key === 'crystal' ? 90211 : 40517) >>> 0;
+  const rnd = () => { h ^= h << 13; h >>>= 0; h ^= h >> 17; h ^= h << 5; h >>>= 0; return h / 4294967296; };
+  const out = [];
+  // the stream: enters on one side at a height, wanders across, leaves at the same height (the map wraps)
+  const y0 = 180 + rnd() * 660, n0 = 118, main = [];
+  let y = y0, a = 0;
+  for (let k = 0; k <= n0; k++) {
+    const t = k / n0, x = t * P;
+    a += (rnd() - 0.5) * 0.42; a *= 0.93;
+    y += Math.sin(a) * 15 + Math.sin(t * 6.283 * 2.0 + y0) * 2.2;
+    y += (y0 - y) * Math.max(0, (t - 0.72) / 0.28) * 0.22;      // comes back to meet itself at the far edge
+    main.push([x, y, 8 + 2.6 * Math.sin(t * 9.0 + y0) * Math.sin(t * 3.14)]);
+  }
+  out.push(main);
+  const near = (x, y) => { let bd = 1e9, bq = null; for (const q of main) { const d = Math.hypot(q[0] - x, q[1] - y); if (d < bd) { bd = d; bq = q; } } return [bd, bq]; };
+  for (let i = 0; i < 4; i++) {            // the tributaries: from a spring down to the stream
+    let x = 90 + rnd() * 840, yy = (y0 + (i % 2 ? 1 : -1) * (220 + rnd() * 240) + P) % P;
+    if (Math.abs(yy - y0) < 150) yy = (yy + 300) % P;
+    const pts = []; let b = rnd() * 6.283;
+    for (let k = 0; k < 90; k++) {
+      const [d, q] = near(x, yy);
+      const want = Math.atan2(q[1] - yy, q[0] - x);
+      let dA = want - b; while (dA > Math.PI) dA -= 6.283; while (dA < -Math.PI) dA += 6.283;
+      b += dA * 0.13 + (rnd() - 0.5) * 0.7;
+      pts.push([x, yy, Math.min(6.2, 1.4 + k * 0.13)]);
+      x += Math.cos(b) * 10; yy += Math.sin(b) * 10;
+      if (d < 6) break;
+    }
+    out.push(pts);
+  }
+  return (_brookPlans[key] = out);
+}
+// a ribbon whose width follows the course (a stroked path has one width, and round caps stack alpha)
+function _ribbon(g, pts, wk) {
+  const L = [], R = [];
+  for (let k = 0; k < pts.length; k++) {
+    const A = pts[Math.max(0, k - 1)], B = pts[Math.min(pts.length - 1, k + 1)];
+    const dx = B[0] - A[0], dy = B[1] - A[1], l = Math.hypot(dx, dy) || 1, w = pts[k][2] * wk * 0.5;
+    L.push([pts[k][0] - dy / l * w, pts[k][1] + dx / l * w]); R.push([pts[k][0] + dy / l * w, pts[k][1] - dx / l * w]);
+  }
+  g.beginPath(); L.forEach(([x, y], k) => k ? g.lineTo(x, y) : g.moveTo(x, y));
+  for (let k = R.length - 1; k >= 0; k--) g.lineTo(R[k][0], R[k][1]);
+  g.closePath(); g.fill();
+}
+// a face's (a, b) and its painted map's (u, v), through the box's own uvs: faces lie at all angles on it
+const _faceUVs = [];
+function faceUV(f) {
+  if (_faceUVs[f]) return _faceUVs[f];
+  const G = cube.geometry, gr = G.groups[GROUP_FACE.indexOf(f)], pos = G.attributes.position, uv = G.attributes.uv, ix = G.index.array, F_ = FACES[f];
+  const vs = [...new Set(Array.from(ix.slice(gr.start, gr.start + gr.count)))].map(k => ({
+    a: pos.getX(k) * F_.u[0] + pos.getY(k) * F_.u[1] + pos.getZ(k) * F_.u[2],
+    b: pos.getX(k) * F_.v[0] + pos.getY(k) * F_.v[1] + pos.getZ(k) * F_.v[2], u: uv.getX(k), v: uv.getY(k) }));
+  const O = vs.find(q => q.u === 0 && q.v === 0), U = vs.find(q => q.u === 1 && q.v === 0), V = vs.find(q => q.u === 0 && q.v === 1);
+  const m = { oa: O.a, ob: O.b, ua: U.a - O.a, ub: U.b - O.b, va: V.a - O.a, vb: V.b - O.b };
+  m.det = m.ua * m.vb - m.va * m.ub;
+  return (_faceUVs[f] = m);
+}
+/** the water mask under a face's (a, b): [water, banks, 0] 0..1; none on a world with no land */
+function waterAt(f, a, b) {
+  const mats = cube.material, mt = Array.isArray(mats) ? mats[GROUP_FACE.indexOf(f)] : null, wd = mt && mt.userData.wd;
+  if (!wd) return null;
+  const m = faceUV(f), da = a - m.oa, db = b - m.ob;
+  const u = (da * m.vb - db * m.va) / m.det, v = (db * m.ua - da * m.ub) / m.det;
+  const x = Math.max(0, Math.min(wd.P - 1, Math.floor(u * wd.P))), y = Math.max(0, Math.min(wd.P - 1, Math.floor((1 - v) * wd.P))), k = (y * wd.P + x) * 4;
+  return [wd.d[k] / 255, wd.d[k + 2] / 255];
+}
 function meadowTexture(fp, look, ground, seed) {
-  const P = 1024, c = document.createElement('canvas'); c.width = c.height = P;
-  const g = c.getContext('2d');
+  // (2026-11-05) painted at twice the pixels: everything below still works in its 1024
+  const P = 1024, c = document.createElement('canvas'), _sz = tierName === 'performance' ? 1024 : 2048; c.width = c.height = _sz;
+  const g = c.getContext('2d'); g.scale(_sz / P, _sz / P);
+  // WHAT THE SHADER KNOWS OF THE GROUND: red is water, green is heat, blue is the banks' wet margin
+  const wc = document.createElement('canvas'); wc.width = wc.height = P;
+  const wg = wc.getContext('2d', { willReadFrequently: true }); wg.fillStyle = '#000'; wg.fillRect(0, 0, P, P); wg.globalCompositeOperation = 'lighter';
+  const wWrap = (fn) => { for (const ox of [-P, 0, P]) for (const oy of [-P, 0, P]) { wg.save(); wg.translate(ox, oy); fn(); wg.restore(); } };
   let h = seed * 2654435761 >>> 0;
   const rnd = () => { h ^= h << 13; h >>>= 0; h ^= h >> 17; h ^= h << 5; h >>>= 0; return h / 4294967296; };
   // EACH FACE ITS OWN COUNTRY (2026-10-15): from orbit the six faces were one
@@ -1590,8 +1673,9 @@ function meadowTexture(fp, look, ground, seed) {
             g.strokeStyle = 'rgba(20,10,6,0.85)'; g.lineWidth = 1.2; g.stroke(); }); } }
       wrapDraw(() => { g.lineCap = 'round'; g.lineJoin = 'round';
         g.strokeStyle = 'rgba(60,24,10,0.45)'; g.lineWidth = 9; g.beginPath(); pts.forEach(([px, py], q) => q ? g.lineTo(px, py) : g.moveTo(px, py)); g.stroke();   // scorched margin
-        g.strokeStyle = 'rgba(255,130,40,0.75)'; g.lineWidth = 4; g.stroke();                                                                                         // the lit lip
+        g.strokeStyle = 'rgba(214,92,30,0.62)'; g.lineWidth = 3; g.stroke();                                                                                         // the lit lip
         g.strokeStyle = 'rgba(16,8,4,0.95)'; g.lineWidth = 1.8; g.stroke(); });                                                                                     // the black crack
+      wWrap(() => { wg.lineCap = 'round'; wg.lineJoin = 'round'; wg.strokeStyle = 'rgb(0,255,0)'; wg.lineWidth = 1.5; wg.beginPath(); pts.forEach(([px, py], q) => q ? wg.lineTo(px, py) : wg.moveTo(px, py)); wg.stroke(); });   // (2026-11-05) and they are hot: the shader lights them
     }
   }
   if (look.key === 'salt') {
@@ -1600,52 +1684,65 @@ function meadowTexture(fp, look, ground, seed) {
     // polygons with raised rims, dark brine creeping along winding channels between the sage and samphire
     const wrapDraw = (fn) => { for (const ox of [-P, 0, P]) for (const oy of [-P, 0, P]) { g.save(); g.translate(ox, oy); fn(); g.restore(); } };
     const chan = [];                                                 // (2026-10-28) the channels' courses, for the pans to lie along
-    for (let i = 0; i < 14; i++) {                                   // brine channels, meandering
+    for (let i = 0; i < 9; i++) {                                    // brine channels, meandering ((2026-11-05) 9, not 14: with real water in them the face was a net)
       let x = rnd() * P, y = rnd() * P, a = rnd() * 6.28; const w = 3 + rnd() * 7, pts = [[x, y]];
       for (let k = 0; k < 40; k++) { a += (rnd() - 0.5) * 0.7; x += Math.cos(a) * 14; y += Math.sin(a) * 14; pts.push([x, y]); }
       chan.push(pts);
+      wWrap(() => { wg.lineCap = 'round'; wg.lineJoin = 'round'; wg.beginPath(); pts.forEach(([px, py], k) => k ? wg.lineTo(px, py) : wg.moveTo(px, py));
+        wg.strokeStyle = 'rgba(0,0,255,0.45)'; wg.lineWidth = w * 2.2; wg.stroke(); wg.strokeStyle = 'rgb(255,0,0)'; wg.lineWidth = w * 0.42; wg.stroke(); });   // (2026-11-05) brine that holds the sky
       wrapDraw(() => { g.strokeStyle = 'rgba(48,62,64,0.55)'; g.lineWidth = w; g.lineCap = 'round'; g.lineJoin = 'round'; g.beginPath(); pts.forEach(([px, py], k) => k ? g.lineTo(px, py) : g.moveTo(px, py)); g.stroke();
         g.strokeStyle = 'rgba(210,222,224,0.22)'; g.lineWidth = Math.max(1, w * 0.25); g.stroke(); });
     }
     // SALT PANS LIE ALONG THE BRINE (2026-10-28): from orbit the pans were thirty-odd round spots of one
     // size, polka dots on the face. A pan is where brine stood and dried: long, ragged crusts laid along the
     // channels, small ones and a few great flats, each a scatter of cracked plates thinning to its edge
-    for (let i = 0; i < 24; i++) {                                   // salt pans: a crust, then its cracked plates ((2026-10-30) 24, not 46: the face was polka-dotted)
-      const big = i < 4, cp = chan[i % chan.length], at = cp[Math.floor(rnd() * cp.length)], nx = cp[Math.min(cp.length - 1, cp.indexOf(at) + 2)];
+    for (let i = 0; i < 18; i++) {                                   // salt pans: a crust, then its cracked plates ((2026-10-30) 24, not 46: the face was polka-dotted; (2026-11-05) 18, now they are whole sheets)
+      const big = i < 3, cp = chan[i % chan.length], at = cp[Math.floor(rnd() * cp.length)], nx = cp[Math.min(cp.length - 1, cp.indexOf(at) + 2)];
       const along = Math.atan2(nx[1] - at[1], nx[0] - at[0]) + (rnd() - 0.5) * 0.5;
       const cx = big ? rnd() * P : at[0] + (rnd() - 0.5) * 30, cy = big ? rnd() * P : at[1] + (rnd() - 0.5) * 30;
-      const R = big ? 110 + rnd() * 70 : 10 + Math.pow(rnd(), 2) * 70, el = big ? 1.6 : 1.8 + rnd() * 2.2, ca = Math.cos(along), sa = Math.sin(along);
-      // (2026-10-30) A PAN IS ITS PLATES: the crust was four airbrushed discs under its plates, a soft
-      // pale smudge along every channel from the air (an outlined fill read as a plastic sheet). The
-      // pan is the plates alone now, smaller and more of them, so its edge is where they thin out
-      for (let k = 0; k < (big ? 1300 : 75 + R * 4); k++) {
-        const u = (rnd() * 2 - 1) * R * el, vv = (rnd() * 2 - 1) * R * (0.55 + 0.45 * Math.sqrt(Math.max(0, 1 - Math.abs(u) / (R * el)))) * Math.sqrt(rnd());
-        if (rnd() < Math.abs(u) / (R * el) * 0.8) continue;             // thinner toward its ends
-        const a0 = 0, d0 = 0, px = cx + ca * u - sa * vv, py = cy + sa * u + ca * vv, r = 1.4 + rnd() * 2.6, sides = 5 + Math.floor(rnd() * 3), rot = rnd() * 6.28;
-        const poly = []; for (let q = 0; q < sides; q++) { const aa = rot + q / sides * 6.28, rr = r * (0.75 + rnd() * 0.4); poly.push([px + Math.cos(aa) * rr, py + Math.sin(aa) * rr]); }
-        const v = 200 + Math.floor(rnd() * 24);           // (2026-10-30) crust, not glare: near-white plates under the sun read as blown-out blobs from the air
-        wrapDraw(() => { g.beginPath(); poly.forEach(([qx, qy], q) => q ? g.lineTo(qx, qy) : g.moveTo(qx, qy)); g.closePath();
-          g.fillStyle = `rgba(${v},${v - 2},${v - 10},${0.34 + rnd() * 0.28})`; g.fill();
-          g.strokeStyle = 'rgba(96,104,94,0.45)'; g.lineWidth = 0.9; g.stroke();                       // the crack round each plate
-          g.strokeStyle = 'rgba(255,255,250,0.5)'; g.lineWidth = 0.8; g.beginPath(); g.moveTo(poly[0][0], poly[0][1] - 1); g.lineTo(poly[1][0], poly[1][1] - 1); g.stroke(); });   // its lit rim
+      const R = big ? 70 + rnd() * 50 : 10 + Math.pow(rnd(), 2) * 70, el = big ? 1.6 : 1.8 + rnd() * 2.2, ca = Math.cos(along), sa = Math.sin(along);
+      // (2026-11-05) A PAN IS A CRUST: the plates were separate white dots half a metre across, which from
+      // eye level were pale blurred blobs in rows and from orbit a rash. Salt dries as one sheet that cracks:
+      // a jittered lattice of plates that touch, with a hair of dark between them, thinning out at the pan's
+      // edge where the sward takes over. Each plate is lit along one edge, so the sheet has relief
+      const cell = big ? 5.6 : 4.4, Ux = R * el, Uy = R, lim = Math.ceil(Ux / cell) + 1, lim2 = Math.ceil(Uy / cell) + 1;
+      const seedA = rnd() * 6.28, seedB = rnd() * 6.28;
+      for (let iu = -lim; iu <= lim; iu++) for (let iv = -lim2; iv <= lim2; iv++) {
+        const u = (iu + (iv & 1) * 0.5 + (rnd() - 0.5) * 0.55) * cell, vv = (iv + (rnd() - 0.5) * 0.55) * cell;
+        const rim = 0.72 + 0.18 * Math.sin(Math.atan2(vv, u) * 3 + seedA) + 0.1 * Math.sin(Math.atan2(vv, u) * 7 + seedB);
+        const dn = Math.hypot(u / Ux, vv / Uy) / rim;
+        if (dn > 1 || rnd() < Math.pow(dn, 3.5) * 0.85) continue;
+        const px = cx + ca * u - sa * vv, py = cy + sa * u + ca * vv, r = cell * (0.58 + rnd() * 0.12) * (1 - 0.25 * dn), sides = 5 + Math.floor(rnd() * 3), rot = rnd() * 6.28;
+        const poly = []; for (let q = 0; q < sides; q++) { const aa = rot + q / sides * 6.28, rr = r * (0.82 + rnd() * 0.3); poly.push([px + Math.cos(aa) * rr, py + Math.sin(aa) * rr]); }
+        const v = 150 + Math.floor(rnd() * 34), al = 0.5 + rnd() * 0.32;
+        const draw = (ox, oy) => { g.beginPath(); poly.forEach(([qx, qy], q) => q ? g.lineTo(qx + ox, qy + oy) : g.moveTo(qx + ox, qy + oy)); g.closePath();
+          g.fillStyle = `rgba(${v},${v + 3},${v - 7},${al})`; g.fill();
+          g.strokeStyle = 'rgba(70,78,68,0.42)'; g.lineWidth = 0.5; g.stroke();                       // the crack round it
+          g.strokeStyle = 'rgba(236,238,226,0.42)'; g.lineWidth = 0.55; g.beginPath(); g.moveTo(poly[0][0] + ox, poly[0][1] - 0.5 + oy); g.lineTo(poly[1][0] + ox, poly[1][1] - 0.5 + oy); g.stroke(); };   // its lit lip
+        draw(0, 0);
+        if (px < 14) draw(P, 0); else if (px > P - 14) draw(-P, 0);
+        if (py < 14) draw(0, P); else if (py > P - 14) draw(0, -P);
       }
     }
-    for (let i = 0; i < 90; i++) blob(rnd() * P, rnd() * P, 6 + rnd() * 18, 'rgb(142,58,44)', 0.30);    // samphire going red
+    // (2026-11-05) samphire going red grows in beds of little stems, not airbrushed polka dots
+    for (let i = 0; i < 64; i++) { const cx = rnd() * P, cy = rnd() * P, R = 8 + rnd() * 26, tones = ['rgb(142,58,44)', 'rgb(116,50,44)', 'rgb(168,84,52)', 'rgb(96,84,50)'];
+      for (let k = 0; k < R * 4.5; k++) { const a0 = rnd() * 6.28, d0 = Math.pow(rnd(), 0.8) * R, l = 0.8 + rnd() * 1.8, ang = rnd() * 6.28; g.globalAlpha = 0.34 + rnd() * 0.42; g.strokeStyle = tones[k & 3]; g.lineWidth = 0.8; g.beginPath(); const x = cx + Math.cos(a0) * d0 * 1.4, y = cy + Math.sin(a0) * d0; g.moveTo(x, y); g.lineTo(x + Math.cos(ang) * l, y + Math.sin(ang) * l); g.stroke(); } }
+    g.globalAlpha = 1;    // samphire going red
   }
   if (look.key === 'crystal') {
     // A MEADOW WITH THINGS IN IT (2026-10-28): from orbit and from the air the crystal face was one even
     // blue-green. Brooks wind across it under their banks of brighter growth, and wildflowers come in
     // drifts, white, gold, blue and pink (the stones stand in the turf as real ones: see scatterSpots)
     const wrapDraw = (fn) => { for (const ox of [-P, 0, P]) for (const oy of [-P, 0, P]) { g.save(); g.translate(ox, oy); fn(); g.restore(); } };
-    for (let i = 0; i < 5; i++) {                                    // brooks
-      let x = rnd() * P, y = rnd() * P, a = rnd() * 6.28; const pts = [[x, y]], n = 50 + Math.floor(rnd() * 40);
-      for (let k = 0; k < n; k++) { a += (rnd() - 0.5) * 0.55; x += Math.cos(a) * 9; y += Math.sin(a) * 9; pts.push([x, y]); }
-      const w = 3.5 + rnd() * 3;
-      wrapDraw(() => { g.lineCap = 'round'; g.lineJoin = 'round'; const path = () => { g.beginPath(); pts.forEach(([px, py], k) => k ? g.lineTo(px, py) : g.moveTo(px, py)); };
-        g.strokeStyle = rgb(col(0.02, 0.12, 0.07)).replace('rgb', 'rgba').replace(')', ',0.5)'); g.lineWidth = w * 4.2; path(); g.stroke();   // the lush banks
-        g.strokeStyle = 'rgba(52,44,30,0.55)'; g.lineWidth = w * 1.7; path(); g.stroke();                                                 // the muddy edge
-        g.strokeStyle = 'rgba(24,48,56,0.9)'; g.lineWidth = w; path(); g.stroke();                                                       // the water
-        g.strokeStyle = 'rgba(120,160,170,0.22)'; g.lineWidth = Math.max(1, w * 0.25); path(); g.stroke(); });                              // the sky in it
+    for (const pts of brookPlan('crystal')) {                        // brooks (the water itself is the shader's: see uWater)
+      wrapDraw(() => {
+        g.fillStyle = rgb(col(0.02, 0.14, 0.08)).replace('rgb', 'rgba').replace(')', ',0.32)'); _ribbon(g, pts, 5.5);   // the lush banks
+        g.fillStyle = rgb(col(0.02, 0.12, 0.05)).replace('rgb', 'rgba').replace(')', ',0.4)'); _ribbon(g, pts, 3.2);
+        g.fillStyle = 'rgba(58,46,30,0.72)'; _ribbon(g, pts, 1.75);     // the muddy edge
+        g.fillStyle = 'rgba(92,84,70,0.5)'; for (let k = 0; k < pts.length; k += 1) { const q = pts[k], w0 = q[2] * 0.72, s0 = rnd() < 0.5 ? 1 : -1; g.beginPath(); g.ellipse(q[0] + (rnd() - 0.5) * 8, q[1] + s0 * w0 * (0.8 + rnd() * 0.5), 0.9 + rnd() * 1.8, 0.7 + rnd() * 1.1, rnd() * 3, 0, 6.28); g.fill(); }   // gravel along it
+        g.fillStyle = 'rgba(20,32,36,0.95)'; _ribbon(g, pts, 1.0);       // the bed
+      });
+      wWrap(() => { wg.fillStyle = 'rgba(0,0,255,0.35)'; _ribbon(wg, pts, 4.4); wg.fillStyle = 'rgba(0,0,255,0.5)'; _ribbon(wg, pts, 2.2); wg.fillStyle = 'rgb(255,0,0)'; _ribbon(wg, pts, 1.0); });
     }
     const FLOW = [[244, 242, 232], [242, 206, 70], [120, 150, 226], [232, 140, 176], [250, 236, 160]];
     for (let i = 0; i < 24; i++) {                                   // wildflower drifts
@@ -1688,19 +1785,28 @@ function meadowTexture(fp, look, ground, seed) {
     for (let i = 0; i < 9; i++) {                                    // fairy rings: pale caps round a greener ring of grass
       const cx = rnd() * P, cy = rnd() * P, R = 14 + rnd() * 22;
       wrapDraw(() => { g.strokeStyle = rgb(col(0.02, 0.08, 0.05)).replace(')', ',0.4)').replace('rgb', 'rgba'); g.lineWidth = 6; g.beginPath(); g.arc(cx, cy, R, 0, 6.28); g.stroke();
-        for (let k = 0; k < 14 + R * 0.5; k++) { const a = rnd() * 6.28, rr = R + (rnd() - 0.5) * 4, px = cx + Math.cos(a) * rr, py = cy + Math.sin(a) * rr, cr = 1.6 + rnd() * 1.6;
+        for (let k = 0; k < 14 + R * 0.5; k++) { const a = rnd() * 6.28, rr = R + (rnd() - 0.5) * 4, px = cx + Math.cos(a) * rr, py = cy + Math.sin(a) * rr, cr = 0.9 + rnd() * 1.1;
           g.fillStyle = 'rgba(30,22,14,0.5)'; g.beginPath(); g.arc(px + 0.8, py + 0.9, cr, 0, 6.28); g.fill();
-          g.fillStyle = 'rgba(232,222,196,0.95)'; g.beginPath(); g.arc(px, py, cr, 0, 6.28); g.fill();
+          g.fillStyle = 'rgba(186,170,138,0.8)'; g.beginPath(); g.arc(px, py, cr, 0, 6.28); g.fill();
           g.fillStyle = 'rgba(176,132,92,0.6)'; g.beginPath(); g.arc(px, py, cr * 0.4, 0, 6.28); g.fill(); } });
     }
   }
-  // fine mottling, so it is not airbrushed from above
-  for (let i = 0; i < 9000; i++) { const l = rnd(); g.fillStyle = l < 0.5 ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,220,0.05)'; g.fillRect(rnd() * P, rnd() * P, 2 + rnd() * 5, 2 + rnd() * 5); }
+  // fine mottling, so it is not airbrushed from above. (2026-11-05) NOT SQUARES: nine thousand pale
+  // rectangles read from the air as a chequer of tiles laid under the meadow. Irregular flecks, and over
+  // them the sward's own grain: short strokes in the ground's greens, every way, too small to see one
+  for (let i = 0; i < 7000; i++) { const l = rnd(); g.fillStyle = l < 0.5 ? 'rgba(0,0,0,0.05)' : 'rgba(255,255,220,0.035)'; g.beginPath(); g.ellipse(rnd() * P, rnd() * P, 1.2 + rnd() * 5, 0.8 + rnd() * 3, rnd() * 3.14, 0, 6.28); g.fill(); }
+  if (look.key !== 'ember') { g.lineWidth = 0.55; g.lineCap = 'round';
+    const tones = [col(0.01, 0.1, 0.07), col(-0.02, 0.02, 0.1), col(0.02, 0.08, -0.05), col(-0.04, -0.08, 0.05)];
+    for (let i = 0; i < 26000; i++) { const x = rnd() * P, y = rnd() * P, a = rnd() * 6.28, l = 1.2 + rnd() * 2.6; g.strokeStyle = tones[i & 3]; g.globalAlpha = 0.2 + rnd() * 0.3; g.beginPath(); g.moveTo(x, y); g.lineTo(x + Math.cos(a) * l, y + Math.sin(a) * l); g.stroke(); }
+    g.globalAlpha = 1; }
   // the survey grid, faint: every fifth tile a thin worn line
   g.strokeStyle = 'rgba(30,26,18,0.16)'; g.lineWidth = 2;
   for (let k = 0; k <= N; k += 5) { const q = k / N * P; g.beginPath(); g.moveTo(q, 0); g.lineTo(q, P); g.moveTo(0, q); g.lineTo(P, q); g.stroke(); }
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 16;
+  const wt = new THREE.CanvasTexture(wc); wt.anisotropy = 8; wt.wrapS = wt.wrapT = THREE.ClampToEdgeWrapping;
+  t.userData.water = wt;
+  t.userData.wd = { P, d: wg.getImageData(0, 0, P, P).data };   // the grass reads the banks from here
   return t;
 }
 function buildPlating(pl, ground, grown) {
@@ -1720,14 +1826,51 @@ function buildPlating(pl, ground, grown) {
       const m = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.97, metalness: 0,
         map: meadowTexture(fp, look, ground, 17 + Object.keys(byKey).length * 31),
         normalMap: _soilN, normalScale: new THREE.Vector2(0.8, 0.8), envMapIntensity: 0.25 });
+      m.userData.wd = m.map.userData.wd;
       m.onBeforeCompile = (sh) => {
         sh.uniforms.uSoil = { value: _soilTex }; sh.uniforms.uSoilK = { value: N * T / 2.4 };
-        sh.fragmentShader = 'uniform sampler2D uSoil; uniform float uSoilK;\n' + sh.fragmentShader.replace('#include <map_fragment>', `#include <map_fragment>
+        sh.uniforms.uWater = { value: m.map.userData.water }; sh.uniforms.uWT = grassClock; sh.uniforms.uRip = { value: _soilN }; sh.uniforms.uRipK = { value: N * T / 0.85 };
+        sh.fragmentShader = 'uniform sampler2D uSoil; uniform float uSoilK; uniform sampler2D uWater; uniform float uWT; uniform sampler2D uRip; uniform float uRipK;\n' + sh.fragmentShader.replace('#include <map_fragment>', `#include <map_fragment>
   {
     // the photographed earth's grain about its own mean, at its own size
     vec3 sp = texture2D(uSoil, vMapUv * uSoilK).rgb;
     diffuseColor.rgb *= clamp(sp / vec3(0.1526, 0.1091, 0.0642), 0.4, 2.2) * 0.55 + 0.45;
-  }`);
+  }
+  // (2026-11-05) WATER THAT IS WATER: dark over its bed, wet at its margin, rippled and flowing, holding the sky
+  float wRp = 0.0;
+  vec4 wMk = texture2D(uWater, vMapUv);
+  float wWat = smoothstep(0.42, 0.62, wMk.r);
+  diffuseColor.rgb *= 1.0 - 0.5 * smoothstep(0.35, 0.85, wMk.b) * (1.0 - wWat);
+  diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.010, 0.026, 0.034), wWat);`)
+        .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
+  roughnessFactor = mix(roughnessFactor, 0.07, wWat);
+  roughnessFactor = mix(roughnessFactor, 0.62, smoothstep(0.5, 0.9, wMk.b) * (1.0 - wWat));`)
+        .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
+  if (wWat > 0.004) {
+    vec3 wR1 = texture2D(uRip, vMapUv * uRipK + vec2(uWT * 0.11, uWT * 0.07)).xyz * 2.0 - 1.0;
+    vec3 wR2 = texture2D(uRip, vMapUv.yx * uRipK * 1.7 - vec2(uWT * 0.09, -uWT * 0.14)).xyz * 2.0 - 1.0;
+    normal = normalize(mix(normal, normalize(tbn * normalize(vec3((wR1.xy + wR2.xy) * 0.2, 1.0))), wWat));
+    wRp = wR1.x + wR2.y;
+  }`)
+        .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+  {
+    float wF = pow(1.0 - max(dot(normal, normalize(vViewPosition)), 0.0), 3.0);
+    // a fissure breathes: the ground's own heat, under the crust
+    totalEmissiveRadiance += vec3(1.0, 0.2, 0.025) * wMk.g * (0.5 + 0.34 * sin(uWT * 1.1 + vMapUv.x * 37.0 + vMapUv.y * 23.0) + 0.16 * sin(uWT * 2.7 + vMapUv.x * 91.0)) * 0.42;
+  }`)
+        .replace('#include <opaque_fragment>', `
+  if (wWat > 0.004) {
+    // the night over it: dark looking down into the bed, the violet sky at a slant, and the planet's
+    // light caught and broken on the ripples. (The environment map's flat blue read as paint.)
+    float wF2 = pow(1.0 - max(dot(normal, normalize(vViewPosition)), 0.0), 2.5);
+    vec3 wSky = mix(vec3(0.02, 0.058, 0.066), mix(vec3(0.05, 0.05, 0.15), vec3(0.03, 0.12, 0.13), 0.5 + 0.5 * sin(vMapUv.x * 60.0 + vMapUv.y * 41.0)), wF2);
+    float wGl = smoothstep(0.02, 0.5, wRp + wF2 * 0.22);
+    vec3 wC = wSky * (0.45 + 1.5 * wGl) + vec3(0.5, 0.3, 0.17) * wGl * wGl * wGl * (0.1 + 0.55 * wF2) + reflectedLight.directSpecular * 0.6;
+    // and a pale line where it meets the bank, the meniscus that says the surface is wet
+    wC += vec3(0.05, 0.065, 0.07) * smoothstep(0.42, 0.5, wMk.r) * (1.0 - smoothstep(0.5, 0.74, wMk.r));
+    outgoingLight = mix(outgoingLight, wC, wWat);
+  }
+  #include <opaque_fragment>`);
       };
       m.customProgramCacheKey = () => 'meadow';
       m.userData.plating = look.key; m.userData.grown = true;
@@ -1746,7 +1889,7 @@ function buildPlating(pl, ground, grown) {
   });
 }
 function disposePlating(mats) {
-  for (const m of new Set(mats)) { if (m.map) m.map.dispose(); if (m.roughnessMap) m.roughnessMap.dispose(); if (m.normalMap && m.normalMap !== _soilN) m.normalMap.dispose(); m.dispose(); }
+  for (const m of new Set(mats)) { if (m.map && m.map.userData.water) m.map.userData.water.dispose(); if (m.map) m.map.dispose(); if (m.roughnessMap) m.roughnessMap.dispose(); if (m.normalMap && m.normalMap !== _soilN) m.normalMap.dispose(); m.dispose(); }
 }
 const cube = new THREE.Mesh(new THREE.BoxGeometry(N * T, N * T, N * T), buildPlating(PLATE_DEFAULT, 0x36406a));
 cube.name = 'cube';
@@ -2381,17 +2524,41 @@ const seamRockMat = new THREE.MeshStandardMaterial({ color: 0xffffff, vertexColo
   _sm.colorSpace = THREE.SRGBColorSpace;
   for (const t of [_sm, _sn]) { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 8; }
   seamRockMat.userData.noAutoTex = true;
+  seamRockMat.userData.uMossF = { value: [0, 0, 0, 0, 0, 0] };
   seamRockMat.onBeforeCompile = (sh) => {
     sh.uniforms.uRock = { value: _sm }; sh.uniforms.uRockN = { value: _sn };
-    sh.vertexShader = 'varying vec3 vRkP; varying vec3 vRkN;\n' + sh.vertexShader.replace('#include <worldpos_vertex>',
-      '#include <worldpos_vertex>\nvRkP = (modelMatrix * vec4(transformed, 1.0)).xyz; vRkN = normalize(mat3(modelMatrix) * objectNormal);');
-    sh.fragmentShader = 'uniform sampler2D uRock; uniform sampler2D uRockN; varying vec3 vRkP; varying vec3 vRkN;\n' + sh.fragmentShader
+    sh.uniforms.uMossF = seamRockMat.userData.uMossF;
+    sh.vertexShader = 'uniform float uMossF[6]; varying vec3 vRkP; varying vec3 vRkN; varying float vRkU; varying float vRkM;\n' + sh.vertexShader.replace('#include <worldpos_vertex>',
+      `#include <worldpos_vertex>
+vRkP = (modelMatrix * vec4(transformed, 1.0)).xyz; vRkN = normalize(mat3(modelMatrix) * objectNormal); vRkU = normalize(objectNormal).y;
+{ // which of the six faces this stone stands on: moss is for the green ones
+  vec3 rkW = position;
+  #ifdef USE_INSTANCING
+    rkW = (instanceMatrix * vec4(position, 1.0)).xyz;
+  #endif
+  rkW = (modelMatrix * vec4(rkW, 1.0)).xyz; vec3 rkA = abs(rkW);
+  int rkI = rkA.x > rkA.y && rkA.x > rkA.z ? (rkW.x > 0.0 ? 0 : 1) : rkA.y > rkA.z ? (rkW.y > 0.0 ? 2 : 3) : (rkW.z > 0.0 ? 4 : 5);
+  vRkM = uMossF[rkI];
+}`);
+    sh.fragmentShader = 'uniform sampler2D uRock; uniform sampler2D uRockN; varying vec3 vRkP; varying vec3 vRkN; varying float vRkU; varying float vRkM;\n' + sh.fragmentShader
       .replace('#include <color_fragment>', `#include <color_fragment>
   {
     vec3 bw = pow(abs(normalize(vRkN)), vec3(4.0)); bw /= (bw.x + bw.y + bw.z);
     float S = 0.9;
     vec3 rk = texture2D(uRock, vRkP.yz * S).rgb * bw.x + texture2D(uRock, vRkP.xz * S).rgb * bw.y + texture2D(uRock, vRkP.xy * S).rgb * bw.z;
-    diffuseColor.rgb *= rk * 2.4;          // the stone's grey sets the value, the photo the grain and colour
+    // (2026-11-05) A STONE IS GREY, AND THINGS GROW ON IT: the warm photo under a warm key made every
+    // boulder a terracotta loaf. The rock keeps a third of its colour; lichen in pale coins, and moss
+    // over its crown where it faces the sky, broken by the rock's own grain
+    float rkL = dot(rk, vec3(0.3, 0.59, 0.11));
+    vec3 rkC = mix(vec3(rkL) * vec3(0.95, 0.98, 1.04), rk, mix(1.0, 0.34, step(0.001, vRkM)));
+    diffuseColor.rgb *= rkC * 2.4;          // the stone's grey sets the value, the photo the grain and colour
+    if (vRkM > 0.001) {
+      float rkN = texture2D(uRock, vRkP.xz * 0.31 + vRkP.y * 0.17).g, rkN2 = texture2D(uRock, vRkP.zy * 1.9).r;
+      float rkLi = smoothstep(0.235, 0.27, rkN2) * smoothstep(0.1, 0.5, rkN) * 0.5 * vRkM;
+      diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.42, 0.42, 0.31), rkLi);
+      float rkMs = smoothstep(0.62, 0.86, vRkU + (rkN - 0.16) * 3.2) * vRkM * 0.85;
+      diffuseColor.rgb = mix(diffuseColor.rgb, mix(vec3(0.012, 0.028, 0.008), vec3(0.04, 0.066, 0.016), smoothstep(0.1, 0.3, rkN2)), rkMs);
+    }
   }`)
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
   {
@@ -2538,6 +2705,27 @@ for (let k = 0; k < 320; k++) {
   }
 }
 
+// STONES IN THE BED (2026-11-05): a stream runs over stones and piles them on its bends. Same batch, no new draw
+{
+  let sd = 7717 + (SPEC.seed | 0);
+  const r3 = () => (sd = (sd * 1664525 + 1013904223) % 4294967296) / 4294967296;
+  for (let f = 0; f < 6; f++) {
+    if (f === 1 || MINERAL_OF_FACE[f] !== CRYSTAL) continue;
+    const m = faceUV(f);
+    for (const pts of brookPlan('crystal')) for (let k = 1; k < pts.length; k++) {
+      if (r3() > 0.5) continue;
+      const q = pts[k], side = r3() < 0.5 ? -1 : 1, off = (r3() < 0.45 ? (r3() - 0.5) * 0.7 : side * (0.62 + r3() * 0.5)) * q[2];
+      const A = pts[k - 1], dx = q[0] - A[0], dy = q[1] - A[1], l = Math.hypot(dx, dy) || 1;
+      const px = ((q[0] - dy / l * off) % 1024 + 1024) % 1024, py = ((q[1] + dx / l * off) % 1024 + 1024) % 1024, u = px / 1024, v = 1 - py / 1024;
+      const a = m.oa + m.ua * u + m.va * v, b = m.ob + m.ub * u + m.vb * v;
+      const i = Math.floor(a / T + N / 2), j = Math.floor(b / T + N / 2);
+      if (i < 1 || j < 1 || i >= N - 1 || j >= N - 1 || cells[f][i][j].t !== EMPTY) continue;
+      const big = r3() < 0.16;
+      scatterSpots.push({ f, i, j, kind: big ? 0 : 1, d: 0, s: big ? 0.5 + r3() * 0.55 : 0.8 + r3() * 0.7, tall: big ? 1.1 + r3() * 0.5 : undefined,
+                          ox: a / T + N / 2 - i - 0.5, oz: -(b / T + N / 2 - j - 0.5), sink: big ? 0.05 : 0.0 });
+    }
+  }
+}
 if (typeof SPEC !== 'undefined' && SPEC.city) scatterSpots.length = 0;   // a town's ground is its own: no vents or bolts
 
 // OUTCROPS (2026-09-26). Past the starter line a face was a bare plane with
@@ -3935,7 +4123,7 @@ function grassMaskFor(f) {
   const dry = f === 1 ? 0.25 : m === EMBER ? 0.75 : m === SALT ? 0.45 : 0.05;
   // a first-person floor, not a hay meadow: thick on the crystal faces, a
   // scrub on the salt ones, a few dry tufts in the ember's cinders
-  const base = SPEC.city ? 0.75 : f === 1 ? 0.35 : m === EMBER ? 0.22 : m === SALT ? 0.4 : 0.85;
+  const base = SPEC.city ? 0.75 : f === 1 ? 0.5 : m === EMBER ? 0.22 : m === SALT ? 0.5 : 0.95;
   // FLOWERS IN DRIFTS (2026-10-30): a meadow face grows wildflowers and a salt face sea lavender,
   // in drifts a couple of metres across (the grass draws them: proc/grass.js uFlow)
   const _fk = SPEC.city ? '' : faceLookOf(f).key, flowers = _fk === 'crystal' ? 1 : _fk === 'salt' ? 0.7 : _fk === 'ember' ? 0.45 : 0;   // fireweed is what comes up after a fire
@@ -3944,6 +4132,9 @@ function grassMaskFor(f) {
     const i = Math.floor(a / T + N / 2), j = Math.floor(b / T + N / 2);
     if (i < 0 || j < 0 || i >= N || j >= N) return [0, 0, 0];
     if (cells[f][i][j].t !== EMPTY) return [0, dry, 0];
+    // (2026-11-05) nothing grows in the water; along it the grass stands tall and green
+    const _wa = waterAt(f, a, b), _wet = _wa ? Math.max(0, Math.min(1, (_wa[0] - 0.04) / 0.2)) : 0, _bank = _wa ? _wa[1] : 0;
+    if (_wet >= 1) return [0, 0, 0];
     // clumps and bare patches: two slow waves crossed
     const nz = 0.5 + 0.5 * Math.sin(a * 0.37 + Math.sin(b * 0.23) * 2.1) * Math.cos(b * 0.31 - a * 0.11);
     // and a little thinner right at a tile's edge, so built tiles have a margin
@@ -3982,10 +4173,12 @@ function grassMaskFor(f) {
     // (2026-10-30) not on a salt face: its ground is pale crust, and the holes read from the air as
     // white polka dots through the dark sward (the sheet paints its own pans)
     const bare = _fk === 'salt' ? 1 : Math.max(0, Math.min(1, (bp - 0.12) / 0.1));
-    const fl = flowers ? flowers * Math.max(0, Math.min(1, (_gvn(a * 0.5 + f * 5.1 + 71, b * 0.5 - f * 2.3 - 9) - 0.64) / 0.14)) * trod * burn : 0;
-    return [base * (0.4 + 0.6 * nz) * margin * burn * (0.62 + 0.5 * cl) * bare,
-            burn < 1 ? 1 : Math.max(dry, (1 - trod) * 0.55, (1 - bare) * 0.6),
-            (0.5 + 0.5 * nz) * (0.4 + 0.6 * burn) * (0.45 + 0.55 * trod) * (0.55 + 0.75 * cl), fl];
+    const fl = flowers ? flowers * Math.max(0, Math.min(1, (_gvn(a * 0.5 + f * 5.1 + 71, b * 0.5 - f * 2.3 - 9) - 0.7) / 0.16)) * trod * burn : 0;
+    // (2026-11-05) long grass in drifts: a sward of one height is a carpet, whatever its blades are like
+    const _drift = _gvn(a * 0.16 + f * 9.7 + 41, b * 0.16 - f * 4.3 + 13), _long = Math.max(0, Math.min(1, (_drift - 0.52) / 0.16));
+    return [Math.min(1, base * (0.4 + 0.6 * nz) * margin * burn * (0.62 + 0.5 * cl) * bare * (1 - _wet) * (1 + 0.5 * _bank)),
+            burn < 1 ? 1 : Math.max(0, Math.max(dry, (1 - trod) * 0.55, (1 - bare) * 0.6) + _long * 0.22 - _bank * 0.3),
+            Math.min(1, (0.5 + 0.5 * nz) * (0.4 + 0.6 * burn) * (0.45 + 0.55 * trod) * (0.55 + 0.75 * cl) * (0.72 + 0.75 * _long) + _bank * 0.4 * trod), fl * (1 - _wet)];
   };
 }
 if (GRASS_ON) {
@@ -4005,8 +4198,8 @@ if (GRASS_ON) {
     frame.position.set(F_.n[0] * (HALF + 0.01), F_.n[1] * (HALF + 0.01), F_.n[2] * (HALF + 0.01));
     scene.add(frame);
     const g = __GRASS.plantGrass({
-      scene: frame, seed: 4100 + f * 17, hAt: () => 0, maskAt: grassMaskFor(f), maskRes: 128,
-      center: [0, 0], size: N * T, colA, colB, colDry, height: 0.17, windK: 0.3,
+      scene: frame, seed: 4100 + f * 17, hAt: () => 0, maskAt: grassMaskFor(f), maskRes: 192,
+      center: [0, 0], size: N * T, colA, colB, colDry, height: { ember: 0.12, salt: 0.17, under: 0.2 }[faceLookOf(f).key] || 0.27, windK: 0.3,   // heath is short: at a meadow's height it read as hair
       // white oxeye and clover, buttercup gold, harebell blue, red campion pink; on the salt, sea lavender
       flowers: faceLookOf(f).key === 'crystal' ? [0xf2efe4, 0xf0c63a, 0x6f86d8, 0xe07aa6, 0xf6f0d8].map(h => new THREE.Color(h))
              : faceLookOf(f).key === 'salt' ? [0x9a7ad0, 0xb496e0, 0xece6f0].map(h => new THREE.Color(h))
@@ -4015,8 +4208,12 @@ if (GRASS_ON) {
       // into the nearest few metres, where a hundred blades a square metre
       // read as a handful of fat spikes; a third field, fine and dense, fills
       // the ground around the camera the way a real lawn does
-      layers: [{ L: 9, R: 4.5, n: 36000, w: 0.022, thin: 0.2 }, { L: 24, R: 13, n: 60000, w: 0.03, thin: 0.4 },
-               { L: 80, R: 40, n: 70000, w: 0.06, thin: 0.55 }],
+      // (2026-11-05) TWICE THE BLADES, THE SAME VERTICES: every blade was four segments wherever it stood, and
+      // a blade thirty metres off is a pixel with thirteen vertices. Fine and curved close to, plain far off
+      layers: tierName === 'performance'
+        ? [{ L: 9, R: 4.5, n: 36000, w: 0.016, thin: 0.2 }, { L: 24, R: 13, n: 60000, w: 0.024, thin: 0.4, seg: 2 }, { L: 80, R: 40, n: 70000, w: 0.05, thin: 0.55, seg: 1 }]
+        : [{ L: 9, R: 4.5, n: 70000, w: 0.0125, thin: 0.25, flk: 0.14 }, { L: 24, R: 13, n: 110000, w: 0.0175, thin: 0.4, seg: 2, flk: 0.2 },
+           { L: 80, R: 40, n: 140000, w: 0.042, thin: 0.55, seg: 1, flk: 0.2 }],
       wind: grassClock, sunDir: sun.position.clone().normalize(), sunCol: sun.color.clone(),
     });
     g.group.traverse(o => { if (o.isMesh) o.userData.noAutoTex = true; });
@@ -4296,12 +4493,16 @@ if (GROVE_ON) {
       const ring = Math.max(Math.abs(i + 0.5 - N / 2), Math.abs(j + 0.5 - N / 2)) / (N / 2);
       if (f === 0 && ring < 0.62) continue;
       const kind = ks[Math.floor(gr() * ks.length)];
-      const p = kind === 'bush' ? 0.05 : 0.024;
+      // COPSES (2026-11-05): one tree every forty tiles, evenly, is an orchard laid out by a die, and the
+      // face read as a lawn with a few things on it. Trees stand together: thick in the heart of a wood,
+      // bushes round its rim, and only now and then one alone
+      const _cw = _gvn(i * 0.17 + f * 7.3 + 3.1, j * 0.17 - f * 3.7 + 9.4), _heart = Math.max(0, Math.min(1, (_cw - 0.56) / 0.1)), _rim = Math.max(0, Math.min(1, (_cw - 0.47) / 0.08)) * (1 - _heart);
+      const p = kind === 'bush' ? 0.012 + 0.2 * _rim + 0.05 * _heart : 0.004 + 0.3 * _heart;
       if (r > p || busy(f, i, j)) continue;
       const vs = grown.variants.map((v, k) => v.kind === kind ? k : -1).filter(k => k >= 0);
       groveSpots.push({ f, i, j, kind, v: vs[Math.floor(gr() * vs.length)], ry: gr() * Math.PI * 2,
                         ox: (gr() - 0.5) * T * 0.5, oz: (gr() - 0.5) * T * 0.5,
-                        s: kind === 'bush' ? 0.7 + gr() * 0.35 : (0.3 + gr() * 0.12) * (kind === 'birch' ? 0.85 : 1) });
+                        s: kind === 'bush' ? 0.7 + gr() * 0.35 : (0.26 + gr() * gr() * 0.3) * (kind === 'birch' ? 0.85 : 1) });
     }
   }
   // ONE MESH PER VARIANT FOR THE WHOLE WORLDLET: the instance matrices are
@@ -4366,18 +4567,20 @@ function stepGrove(show) {
   for (const gf of groveFaces) gf.grp.visible = show;
 }
 /** a tree's trunk on this tile stands in the player's way (face-local a, b) */
-function groveBlocks(face, a, b) {
-  if (!groveSolid.size) return false;
+const _trunk = { a: 0, b: 0 };
+function groveTrunkAt(face, a, b) {
+  if (!groveSolid.size) return null;
   const ci = Math.floor(a / T + N / 2), cj = Math.floor(b / T + N / 2);
   for (const sp of groveSpots) {
     if (sp.f !== face || sp.kind === 'bush' || Math.abs(sp.i - ci) > 1 || Math.abs(sp.j - cj) > 1) continue;
     if (!groveSolid.has(sp.f * 1e6 + sp.i * 1e3 + sp.j)) continue;
     // the seat's axes are u and -v, so the trunk sits at (+ox, -oz) in (a, b)
     const cx = (sp.i + 0.5 - N / 2) * T + sp.ox, cz = (sp.j + 0.5 - N / 2) * T - sp.oz;
-    if (Math.hypot(a - cx, b - cz) < PLAYER_R + 0.3) return true;
+    if (Math.hypot(a - cx, b - cz) < PLAYER_R + 0.3) { _trunk.a = cx; _trunk.b = cz; return _trunk; }
   }
-  return false;
+  return null;
 }
+function groveBlocks(face, a, b) { return !!groveTrunkAt(face, a, b); }
 
 // MOSS ON A GREEN WORLD (2026-10-02). The owner wants the forest's detail in
 // every world; a plated worldlet takes no forest, but a green one has moss
@@ -4476,8 +4679,8 @@ function glowTexture() {
   const c = document.createElement('canvas'); c.width = c.height = 64;
   const g = c.getContext('2d');
   const gr = g.createRadialGradient(32, 32, 2, 32, 32, 32);
-  gr.addColorStop(0, 'rgba(255,255,255,0.55)');
-  gr.addColorStop(0.35, 'rgba(255,255,255,0.22)');
+  gr.addColorStop(0, 'rgba(255,255,255,0.34)');   // (2026-11-05) less: from the air each seam was a cyan disc pasted on the meadow
+  gr.addColorStop(0.3, 'rgba(255,255,255,0.11)');
   gr.addColorStop(1, 'rgba(255,255,255,0)');
   g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
@@ -7628,8 +7831,21 @@ function movePlayer(dt) {
   // wall is a shrug.
   const stuck = solidAt(player.face, pa, pb);
   if (!stuck) {
-    if (!solidAt(player.face, pa + da, pb)) pa += da;
-    if (!solidAt(player.face, pa, pb + db)) pb += db;
+    // (2026-11-05) A trunk is round: you walk round it. Trees stand in copses now, and sliding one axis at a time
+    // stopped a straight walk dead against the first trunk it met. Step along the trunk's tangent, on the side the
+    // walk is already leaning; a machine or a second trunk in the way falls through to the axis slide.
+    const tr = (da || db) ? groveTrunkAt(player.face, pa + da, pb + db) : null;
+    let rounded = false;
+    if (tr) {
+      let na = pa - tr.a, nb = pb - tr.b; const nl = Math.hypot(na, nb) || 1; na /= nl; nb /= nl;
+      const side = (-nb * da + na * db) >= 0 ? 1 : -1, st = Math.hypot(da, db);
+      const ta = pa - nb * side * st, tb = pb + na * side * st;
+      if (!solidAt(player.face, ta, tb)) { pa = ta; pb = tb; rounded = true; }
+    }
+    if (!rounded) {
+      if (!solidAt(player.face, pa + da, pb)) pa += da;
+      if (!solidAt(player.face, pa, pb + db)) pb += db;
+    }
   } else { pa += da; pb += db; }
   const ph = HALF + EYE + player.h;
   player.pos.set(fc.n[0] * ph + fc.u[0] * pa + fc.v[0] * pb,
@@ -8399,6 +8615,9 @@ function applyWorld(k) {
   // soot are things drawn ON it, and a tint cannot draw
   disposePlating(cube.material);
   cube.material = buildPlating(w.plate, w.ground, w.fam === 'green' && !SPEC.city);
+  // moss on the stones of a grown face: a meadow's and a wood's stones, a little on the marsh, none in the cinders
+  for (let _f = 0; _f < 6; _f++) grassDirty.add(_f);   // the grass reads this world's banks
+  seamRockMat.userData.uMossF.value = GROUP_FACE.map(f => (w.fam === 'green' && !SPEC.city) ? ({ crystal: 1, under: 1, salt: 0.3, ember: 0 }[faceLookOf(f).key] || 0) : 0);
   // on land the survey grid is a quiet aid, not graph paper: the cell lines and
   // the lit lanes fade to a third on a grown world (2026-10-11)
   { const _grown = w.fam === 'green' && !SPEC.city;

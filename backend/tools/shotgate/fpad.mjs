@@ -6,7 +6,7 @@
 import puppeteer from 'puppeteer-core';
 const URL = process.env.J ? 'http://127.0.0.1:8789/games/job_' + process.env.J + '/dist/' : (process.env.URL || 'http://127.0.0.1:8790/');
 const b = await puppeteer.launch({ headless: 'new', executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe',
-  args: ['--use-angle=d3d11', '--enable-unsafe-swiftshader', '--window-size=1280,760'] });
+  args: ['--use-angle=d3d11', '--disable-gpu-sandbox', '--enable-unsafe-swiftshader', '--window-size=1280,760'] });
 const p = await b.newPage(); await p.setViewport({ width: 1280, height: 760 });
 const errs = []; p.on('pageerror', e => errs.push(e.message.slice(0, 160)));
 await p.evaluateOnNewDocument(() => {

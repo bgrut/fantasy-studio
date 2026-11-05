@@ -12,6 +12,22 @@ Pre-1.0 versions are internal milestones during the constraint sprint leading to
 
 ## [Unreleased]
 
+### Changed: Crystal Works' ground, real water, bridges you can walk, and where the freezes came from (2026-11-05)
+- **The meadow at eye level**: grass was fat cones standing on green felt. Blades now spring narrow, swell a third of the way up and draw out to a long point, in every game. Crystal Works draws twice the blades for the same vertices (fine and curved close to, plain far off), in long-grass drifts, taller and lusher along the water.
+- **Water that is water** on the crystal and salt faces: brooks were painted lines with grass growing through them. A stream now runs right across the face and tributaries run down into it, widening as they go; the shader darkens the bed, wets the margin, flows and ripples, and holds the night sky. Stones lie in the bed and along the banks.
+- **Stones are stone**: terracotta loaves are now grey rock with lichen, and moss over their crowns on the green faces.
+- **Copses, not an orchard**: trees stand together, thick at the heart of a wood with bushes round its rim, instead of evenly scattered singles.
+- **Ember's cracks breathe**: the fissures glow and pulse from below. Its heath is short now; at a meadow's height it read as hair.
+- **A salt pan is a crust**: white dots half a metre wide were blurred blobs at eye level and a rash from orbit. Pans are one cracked sheet thinning at the edge, samphire grows in beds of little stems instead of airbrushed circles, and the brine holds the sky.
+- **No squares on the ground**: nine thousand pale rectangles read from the air as tiles under the meadow. Irregular flecks now, and over them the sward's own grain, on a map painted at twice the pixels.
+- **Fixed a black box in Crystal Works**: one bad pixel from any shader went through the bloom and came out a hard black square over the hub.
+- **A bridge crosses something**: "repairs three broken bridges" laid each one on dry grass over a strip of painted stream. Mending bridges now brings a creek through the land, with each bridge square to the flow where the way crosses it. You walk up a plank ramp, along the deck to the gap, and over it once it is mended; nothing was solid before.
+- **Nothing in a moon base grew on a tree**: bark-textured chairs and a mossy stump in its corridor are moulded polymer and brushed steel.
+- **Water under a storm**: the sky in it follows the light you can see, so a creek in a dark storm is no longer the brightest thing in the picture. It still reads pale grey under heavy overcast, more like wet concrete than water, and that is not done.
+- **Where the opening freezes came from**: with `_linktime.mjs`, a trivial shader in an empty page takes about 1.7 s to link in Chrome on the development machine, with its GPU sandbox on, and about 7 ms in Edge, which is the engine the desktop apps run on. The same world froze for 56 s in total after Start in Chrome and not at all in Edge. So these were not game code, and the shipped apps' flags are unchanged. The gates and probes now run without that sandbox; the hitch gate keeps it, so a warm-up that stops covering something still shows as a stall.
+- **You walk round a tree**: with trees standing in copses, a straight walk stopped dead against the first trunk it met, on 2 of 16 headings from the start. You now step round a trunk on the side you were already leaning.
+- **A platformer is a level long**: a 120 m world capped the lane at 50 m, and on some seeds that was five islands. A platformer's world is at least 170 m now, which is the 70 m lane the game asks for.
+
 ### Changed: five new things a game can make you do; levels that match their sentence (2026-11-04)
 - **Most games had no system of their own**: the benchmark put 50% of games at "no mechanic", because the only ones were tracks, freshness, lantern, gusts and cold. Five more, each chosen from what the sentence says, each checked by playing it:
   - **Breath** on a climb: every metre gained and every stride run costs breath, spent you can only trudge, and stone cairns at the turns of the way give it back.

@@ -9,7 +9,7 @@
 import puppeteer from 'puppeteer-core';
 const jobs = [process.env.B, process.env.A].filter(Boolean);
 if (!jobs.length) { console.log('ffacing: needs B=<job> and/or A=<job>; FAIL'); process.exit(1); }
-const b = await puppeteer.launch({ headless: 'new', executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', args: ['--use-angle=d3d11'] });
+const b = await puppeteer.launch({ headless: 'new', executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', args: ['--use-angle=d3d11', '--disable-gpu-sandbox'] });
 let bad = 0, measured = 0;
 for (const J of jobs) {
   const p = await b.newPage(); await p.setViewport({ width: 960, height: 540 });

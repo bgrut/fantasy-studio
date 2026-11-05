@@ -4,7 +4,7 @@
 // (opening card, the hero's view, from above) for the judge.
 import puppeteer from 'puppeteer-core';
 const b = await puppeteer.launch({ headless: 'new', executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe',
-  args: ['--use-angle=d3d11', '--enable-unsafe-swiftshader', '--window-size=1280,720'] });
+  args: ['--use-angle=d3d11', '--disable-gpu-sandbox', '--enable-unsafe-swiftshader', '--window-size=1280,720'] });
 const p = await b.newPage(); await p.setViewport({ width: 1280, height: 720 });
 const errs = []; p.on('pageerror', e => errs.push(e.message.slice(0, 160)));
 const O = process.env.OUT;

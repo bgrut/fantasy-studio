@@ -6,7 +6,7 @@ import puppeteer from 'puppeteer-core';
 const J = process.env.J, OUT = process.env.OUT || '.';
 const b = await puppeteer.launch({ headless: 'new',
   executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe',
-  args: ['--use-angle=d3d11', '--enable-unsafe-swiftshader', '--window-size=1600,900'] });
+  args: ['--use-angle=d3d11', '--disable-gpu-sandbox', '--enable-unsafe-swiftshader', '--window-size=1600,900'] });
 const p = await b.newPage();
 await p.setViewport({ width: 1600, height: 900 });
 const errs = [];

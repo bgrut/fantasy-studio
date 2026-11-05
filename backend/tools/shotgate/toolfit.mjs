@@ -5,7 +5,7 @@
 import puppeteer from 'puppeteer-core';
 // the studio build when a job is given, the standalone demo otherwise
 const URL = process.env.J ? 'http://127.0.0.1:8789/games/job_' + process.env.J + '/dist/' : (process.env.URL || 'http://127.0.0.1:8790/');
-const b = await puppeteer.launch({ headless: 'new', executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', args: ['--use-angle=d3d11'] });
+const b = await puppeteer.launch({ headless: 'new', executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', args: ['--use-angle=d3d11', '--disable-gpu-sandbox'] });
 let bad = 0;
 for (const [w, h] of [[1920, 1080], [1440, 900], [1366, 768], [1280, 720], [1024, 700]]) {
   const p = await b.newPage(); await p.setViewport({ width: w, height: h });

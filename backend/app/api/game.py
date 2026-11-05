@@ -2140,6 +2140,9 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             from app.game_export.extractor import PLATFORMER_WORDS
             if _pfre.search(PLATFORMER_WORDS, (req.prompt or "").lower()):
                 spec.world.platforms = True
+                # (2026-11-05) the lane is capped at 0.42 of the world: a 120 m world gave 50 m, and on some seeds
+                # five islands and a level over in moments. 170 m is the 70 m lane the runtime asks for.
+                spec.world.size_m = max(float(spec.world.size_m or 0), 170.0)
                 if not req.view:
                     spec.view = "side"
                 job.setdefault("notes", []).append(
@@ -4606,6 +4609,14 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         # (2026-10-27) a creek, a brook, a stream to splash through: narrow and shallow, wandering across the way
         _creek = _river and bool(_fre.search(r"\b(creeks?|brooks?|streams?|becks?|burns?|rills?|rivulets?|shallows)\b", _pw7)) \
             and not _fre.search(r"\b(rivers?|rapids|canoe\w*|kayak\w*|rafting|waterfalls?|log drive|logs? down)\b", _pw7) and (spec.player.ride or "") != "log"
+        # (2026-11-05) A BRIDGE CROSSES SOMETHING: "a samurai repairs three broken bridges" laid each one on dry
+        # grass with a strip of painted stream under it. Mending bridges means a creek through the land
+        if (not _river and not _coast and not _fjord and not job.get("_naval") and spec.player.mode != "swim"
+                and not getattr(spec.world, "platforms", False)
+                and any(o.kind == "repair" and _fre.search(r"\b(?:foot)?bridges?\b", (o.label or "").lower()) for o in spec.objectives)
+                and not _fre.search(r"\b(sea|ocean|underwater|islands?|isle|archipelago|atoll|lagoon|space|moon|mars|city|sunken|streets?|cave\w*)\b", _pw7)):
+            _river = _creek = True
+            job.setdefault("notes", []).append("a creek through the land: the bridges have something to cross")
         if _river and _arch == "archipelago":
             _arch = "plain"
             spec.world.archetype = "plain"

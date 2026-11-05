@@ -112,12 +112,13 @@ export function plantGrass(o) {
   const heroU = { value: new THREE.Vector3(1e6, -1e6, 1e6) };
   const group = new THREE.Group();
   group.name = 'grassField';
-  const geo = bladeGeometry(4);
+  // (2026-11-05) a layer may draw its blades with fewer segments: far off a curve is a waste of vertices
+  const _geos = {}, geoOf = (s) => (_geos[s] || (_geos[s] = bladeGeometry(s)));
   const rnd = mulberry((o.seed || 1) >>> 0);
   let blades = 0;
   for (const ly of layers) {
     if (!ly.n) continue;
-    const g = geo.clone();
+    const g = geoOf(ly.seg || 4).clone();
     const off = new Float32Array(ly.n * 4);
     for (let i = 0; i < ly.n; i++) {
       off[i * 4] = rnd(); off[i * 4 + 1] = rnd(); off[i * 4 + 2] = rnd(); off[i * 4 + 3] = rnd();
@@ -132,7 +133,7 @@ export function plantGrass(o) {
     const U = {
       uCamG: camU, uHero: heroU, uL: { value: ly.L }, uR: { value: ly.R }, uThin: { value: ly.thin },
       uTime: o.wind || { value: 0 }, uWindK: { value: o.windK ?? 0.35 },
-      uH: { value: o.height || 0.42 }, uW: { value: ly.w },
+      uH: { value: o.height || 0.42 }, uW: { value: ly.w }, uSeg: { value: ly.seg || 4 }, uFlK: { value: ly.flk ?? 0.5 },
       uHgt: { value: hTex }, uMask: { value: mTex },
       uMap: { value: new THREE.Vector4(cx - half, cz - half, size, 0) },
       uColA: { value: o.colA.clone() }, uColB: { value: o.colB.clone() }, uColDry: { value: o.colDry.clone() },
@@ -150,11 +151,11 @@ export function plantGrass(o) {
       Object.assign(sh.uniforms, U);
       sh.vertexShader = `attribute vec4 aOff;
         uniform vec3 uCamG; uniform vec3 uHero; uniform float uL; uniform float uR; uniform float uThin;
-        uniform float uTime; uniform float uWindK; uniform float uH; uniform float uW;
+        uniform float uTime; uniform float uWindK; uniform float uH; uniform float uW; uniform float uSeg; uniform float uFlK;
         uniform sampler2D uHgt; uniform sampler2D uMask; uniform vec4 uMap;
         uniform vec3 uColA; uniform vec3 uColB; uniform vec3 uColDry; uniform float uDead; uniform float uFold;
         uniform vec3 uFlow[5]; uniform float uFlowN;
-        varying vec3 vGW; varying float vGT; varying float vGF; varying float vGX;
+        varying vec3 vGW; varying float vGT; varying float vGF; varying float vGX; varying float vGS;
         ` + sh.vertexShader
         .replace('#include <color_vertex>', `#include <color_vertex>
           // the copy of this blade's spot nearest the camera
@@ -184,14 +185,28 @@ export function plantGrass(o) {
           float gWid = uW * (0.75 + 0.5 * gR2) * (1.0 + gFar * 0.8);
           float gT = position.y;
           // a flower: up to a third of the blades in a dense drift, a stem then a head
-          float gFl = step(0.5, uFlowN) * step(fract(aOff.w * 41.31), gK.a * 0.5);
+          float gFl = step(0.5, uFlowN) * step(fract(aOff.w * 41.31), gK.a * uFlK);
+          // (2026-11-05) a plain far blade has no joints for a stem and a head: it is a fleck of the colour
+          float gSpeck = gFl * step(uSeg, 3.5);
           gH = mix(gH, uH * (1.05 + 0.35 * gR2) * gKeep, gFl);
           gLean *= 1.0 - 0.6 * gFl;
           gWid *= mix(1.0, gT < 0.7 ? 0.16 : 4.0, gFl);
           // the stem takes four fifths of the height, the head the last fifth
           float gTy = gFl > 0.5 ? (gT <= 0.5 ? gT * 1.6 : 0.8 + (gT - 0.5) * 0.4) : gT;
           vec3 gSide = vec3(-gDir.y, 0.0, gDir.x);
-          vec3 gP = vec3(gW.x, gY - 0.02, gW.y) + gSide * position.x * gWid * (1.0 - 0.85 * gT);
+          // A BLADE IS NOT A CONE (2026-11-05): it was widest at the root and straight to the tip, so a field
+          // of them read as green spikes. It springs narrow from the ground, swells a third of the way up, and
+          // draws out to a long point. (A plain far blade keeps the old wedge: it is all the shape it has.)
+          float gProf = uSeg > 3.5 ? (0.5 + 1.25 * min(gT * 2.6, 1.0)) * pow(max(1.0 - gT, 0.0), 0.72) * 0.72 : (1.0 - 0.85 * gT);
+          if (gFl > 0.5) gProf = 1.0 - 0.85 * gT;
+          // so a plain blade's flower is a small kite (two joints), or further off a fleck held up at the sward's top
+          if (gSpeck > 0.5) {
+            gProf = 1.0;
+            // (no thread after all: from a root to a head in one joint is a quill) a head alone, in the sward's top
+            if (uSeg > 1.5) { gWid = gT < 0.25 ? 0.0 : gT < 0.75 ? 0.085 + 0.03 * gR2 : 0.0; gTy = gT < 0.25 ? 0.76 : gT < 0.75 ? 0.86 : 0.98; }
+            else { gWid = 0.085 * (1.0 + gFar * 0.8); gTy = 0.86 + 0.14 * gT; }
+          }
+          vec3 gP = vec3(gW.x, gY - 0.02, gW.y) + gSide * position.x * gWid * gProf;
           float gLL = min(length(gLean), 1.1);
           gP.xz += gLean * gH * gTy * gTy;
           gP.y += gH * gTy * (1.0 - 0.38 * gLL * gTy);
@@ -210,7 +225,7 @@ export function plantGrass(o) {
           // a bare patch, thinned out) had no height but kept its width and the midrib's fold, a
           // sliver; past the cube's edge they hung in space as a field of coloured dashes
           if (gH < 1e-4) gP = vec3(gW.x, gY - 0.02, gW.y);
-          vGF = gFl; vGX = position.x;
+          vGF = gFl * (1.0 - gSpeck); vGX = position.x; vGS = gSpeck * step(1.5, uSeg);
           vec3 gTint = mix(uColA, uColB, fract(aOff.w * 5.71));
           gTint = mix(gTint, uColDry, gK.g * (0.35 + 0.65 * fract(aOff.w * 3.31)));
           // a few blades are last year's, straw from root to tip; many more
@@ -224,7 +239,7 @@ export function plantGrass(o) {
             int gI = int(min(gHc * uFlowN, uFlowN - 1.0));
             vec3 gFc = uFlow[0];
             if (gI == 1) gFc = uFlow[1]; else if (gI == 2) gFc = uFlow[2]; else if (gI == 3) gFc = uFlow[3]; else if (gI == 4) gFc = uFlow[4];
-            gTint = mix(uColA * 0.9, gFc * (0.85 + 0.3 * gR2), step(0.7, gT));
+            gTint = mix(uColA * 0.9, gFc * (0.85 + 0.3 * gR2), gSpeck > 0.5 ? 1.0 : step(0.7, gT));
           }
           #ifdef USE_COLOR
             vColor *= gTint;
@@ -233,12 +248,21 @@ export function plantGrass(o) {
         .replace('#include <beginnormal_vertex>', 'vec3 objectNormal = gN;')
         .replace('#include <begin_vertex>', 'vec3 transformed = gP;');
       sh.fragmentShader = `uniform vec3 uSunDir; uniform vec3 uSunCol; uniform vec3 uColA;
-        varying vec3 vGW; varying float vGT; varying float vGF; varying float vGX;
+        varying vec3 vGW; varying float vGT; varying float vGF; varying float vGX; varying float vGS;
         ` + sh.fragmentShader
         .replace('#include <color_fragment>', `#include <color_fragment>
           // A FLOWER, NOT A SCRAP (2026-10-31): the head was one flat triangle of colour and the
           // drifts read as torn blue paper. Five petals round a gold eye, the gaps between them the
           // sward's own green; the pattern fades to the head's mean colour once it is under a pixel
+          // (2026-11-05) a head with no joints is still a flower: a rosette cut from its kite, not a scrap of confetti
+          if (vGS > 0.5) {
+            vec2 fq2 = vec2(vGX * 2.0, vGT * 2.0 - 1.0);
+            float fr2 = length(fq2), fth2 = atan(fq2.y, abs(fq2.x) < 1e-5 ? 1e-5 : fq2.x), fw2 = max(fwidth(fr2), 1e-3);
+            float fp2 = 0.48 + 0.2 * cos(fth2 * 5.0 + vGW.x * 7.0);
+            if (fw2 < 0.45 && fr2 > fp2) discard;
+            float fe2 = smoothstep(0.15 + fw2, 0.15 - fw2, fr2);
+            diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.5, 0.33, 0.05), fe2 * step(diffuseColor.r - diffuseColor.b, 0.35));
+          }
           if (vGF > 0.5 && vGT > 0.72) {
             float fa = (vGT - 0.75) / 0.25;
             vec2 fq = vec2(vGX * 2.2, (fa - 0.36) * 2.4);
