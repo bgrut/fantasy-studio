@@ -562,7 +562,10 @@ def _river_course(seed: int, half: float, path: list[list[float]], creek: bool =
         nx, nz = -tz / tl, tx / tl
         if i:
             run += _m.hypot(p[0] - dense[i - 1][0], p[1] - dense[i - 1][1])
-        m = (_m.sin(run * fr + ph) * 8.0 + _m.sin(run * fr * 2.7 + 1.3) * 1.2) if creek else off + _m.sin(run * fr + ph) * 3.0
+        # (2026-11-09) and a creek wanders on a small scale too: bends every twenty metres or so, a metre and a
+        # half each way, so its banks are not a canal's between the long sweeps that bring it across the way
+        m = (_m.sin(run * fr + ph) * 8.0 + _m.sin(run * fr * 2.7 + 1.3) * 1.2
+             + _m.sin(run * 0.29 + ph * 1.7 + 0.6) * 1.5 + _m.sin(run * 0.47 + ph * 0.6 + 2.1) * 0.7) if creek else off + _m.sin(run * fr + ph) * 3.0
         q = [round(p[0] + nx * side * m, 2), round(p[1] + nz * side * m, 2)]
         if abs(q[0]) < half * 1.15 and abs(q[1]) < half * 1.15:
             pts.append(q)

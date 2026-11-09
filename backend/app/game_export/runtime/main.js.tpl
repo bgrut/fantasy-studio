@@ -3919,7 +3919,8 @@ async function main() {
       WATER_BOB = _sea ? 0.12 : _wk === 'ice' ? 0 : _wk === 'storm' ? 0.22 : 0.03;
       // the depth under the surface, so the shores fade, tint and foam (proc/water.js)
       if (!_sea) {
-        const _k = waterMesh.material.userData.waterKind;
+        let _k = waterMesh.material.userData.waterKind;
+        if (_k === 'lake' && LVL && LVL.river && LVL.river.creek) _k = 'creek';   // (2026-11-09) clear and running, not a lake's sky
         waterMesh.material.dispose();
         // (2026-11-05) the sky in the water is the sky you can see: the environment map stays bright under a storm
         // or a night, and a creek in a black storm shone white, the brightest thing in the picture
@@ -16217,14 +16218,25 @@ async function main() {
       }
       return _brS[i % _brS.length];
     };
+    // (2026-11-09) STONES, NOT JARS: ten equal drums in a ruled line, each with a green lid, read as a row of
+    // pots. Each stone is its own now: wider than it is tall, a lumpy outline, a flattish worn top just clear of
+    // the water, laid where a foot would land (staggered, the gaps a stride apart), moss on some, on one shoulder
     for (const c of cross.slice(0, _brWant ? 0 : 4)) { if (!inside(c.x, c.z)) continue;
-      const nS = Math.ceil((w * 2.2) / 0.62);
-      for (let k = 0; k <= nS; k++) { const o = -w * 1.1 + k * (w * 2.2 / nS) + (rC() - 0.5) * 0.12, side = (rC() - 0.5) * 0.35, x = c.x + c.ux * o - c.uz * side, z = c.z + c.uz * o + c.ux * side;
-        const gy = hAt(x, z), top = Math.max(WY + 0.09, gy + 0.1), r2 = 0.3 + rC() * 0.1;
-        const g = new THREE.DodecahedronGeometry(1, 1); g.scale(r2, Math.max(0.12, top - gy + 0.1) / 2, r2 * (0.85 + rC() * 0.3));
-        const st = new THREE.Mesh(g, stoneM); st.position.set(x, (top + gy - 0.1) / 2, z); st.rotation.y = rC() * 6; st.castShadow = st.receiveShadow = true; scene.add(st);
-        const ms = new THREE.Mesh(new THREE.CircleGeometry(r2 * 0.55, 10), mossM); ms.rotation.x = -Math.PI / 2; ms.position.set(x + (rC() - 0.5) * 0.1, top + 0.003, z); scene.add(ms);
-        world.createCollider(RAPIER.ColliderDesc.cylinder((top - gy + 0.1) / 2, r2 * 0.92).setTranslation(x, (top + gy - 0.1) / 2, z)); } }
+      const span = w * 2.3; let o = -span / 2;
+      while (o < span / 2) {
+        const r2 = 0.3 + rC() * 0.2, side = (rC() - 0.5) * 0.7, x = c.x + c.ux * (o + r2) - c.uz * side, z = c.z + c.uz * (o + r2) + c.ux * side;
+        const gy = hAt(x, z), top = Math.max(WY + 0.04 + rC() * 0.07, gy + 0.08), hh = Math.max(0.14, top - gy + 0.12);
+        const g = new THREE.DodecahedronGeometry(1, 1), gp = g.attributes.position, sd = rC() * 10;
+        for (let i = 0; i < gp.count; i++) { let px = gp.getX(i), py = gp.getY(i), pz = gp.getZ(i);
+          const k = 1 + 0.16 * Math.sin(px * 4.1 + pz * 2.7 + sd) + 0.09 * Math.sin(py * 5.3 - px * 3.1 + sd * 1.7);   // the same for a corner's copies, so no cracks
+          px *= k; pz *= k; if (py > 0.35) py = 0.35 + (py - 0.35) * 0.3;
+          gp.setXYZ(i, px, py, pz); }
+        g.computeVertexNormals(); g.scale(r2, hh / 1.35, r2 * (0.75 + rC() * 0.35));
+        const st = new THREE.Mesh(g, stoneM); st.position.set(x, top - 0.55 * hh / 1.35, z); st.rotation.set((rC() - 0.5) * 0.12, rC() * 6.28, (rC() - 0.5) * 0.12); st.castShadow = st.receiveShadow = true; scene.add(st);
+        if (rC() < 0.35) { const a = rC() * 6.28, ms = new THREE.Mesh(new THREE.SphereGeometry(r2 * (0.26 + rC() * 0.12), 9, 5, 0, Math.PI * 2, 0, Math.PI / 2.6), mossM);
+          ms.scale.set(1, 0.3, 0.7); ms.position.set(x + Math.cos(a) * r2 * 0.62, top - 0.06, z + Math.sin(a) * r2 * 0.62); ms.rotation.y = a; scene.add(ms); }   // on the shoulder, not a lid
+        world.createCollider(RAPIER.ColliderDesc.cylinder((top - gy + 0.1) / 2, r2 * 0.85).setTranslation(x, (top + gy - 0.1) / 2, z));
+        o += r2 * 2 + 0.06 + rC() * 0.24; } }
     // REEDS AND CATTAILS along the banks, thick in clumps, thin where the path comes down to the water
     { const blade = new THREE.PlaneGeometry(0.035, 1, 1, 4); blade.translate(0, 0.5, 0);
       { const p = blade.attributes.position; for (let i = 0; i < p.count; i++) { const y = p.getY(i); p.setX(i, p.getX(i) * (1 - y * 0.85)); p.setZ(i, y * y * 0.12); } blade.computeVertexNormals(); }

@@ -4497,12 +4497,15 @@ if (GROVE_ON) {
       // face read as a lawn with a few things on it. Trees stand together: thick in the heart of a wood,
       // bushes round its rim, and only now and then one alone
       const _cw = _gvn(i * 0.17 + f * 7.3 + 3.1, j * 0.17 - f * 3.7 + 9.4), _heart = Math.max(0, Math.min(1, (_cw - 0.56) / 0.1)), _rim = Math.max(0, Math.min(1, (_cw - 0.47) / 0.08)) * (1 - _heart);
-      const p = kind === 'bush' ? 0.012 + 0.2 * _rim + 0.05 * _heart : 0.004 + 0.3 * _heart;
+      // (2026-11-09) a salt flat grows saltbush, low and scattered: the meadow's full bushes in copses there
+      // read from orbit as bright green blobs on white (a tint of their own would be a shader the warm-up lacks)
+      const _saltF = MINERAL_OF_FACE[f] === SALT;
+      const p = (kind === 'bush' ? 0.012 + 0.2 * _rim + 0.05 * _heart : 0.004 + 0.3 * _heart) * (_saltF ? 0.4 : 1);
       if (r > p || busy(f, i, j)) continue;
       const vs = grown.variants.map((v, k) => v.kind === kind ? k : -1).filter(k => k >= 0);
       groveSpots.push({ f, i, j, kind, v: vs[Math.floor(gr() * vs.length)], ry: gr() * Math.PI * 2,
                         ox: (gr() - 0.5) * T * 0.5, oz: (gr() - 0.5) * T * 0.5,
-                        s: kind === 'bush' ? 0.7 + gr() * 0.35 : (0.26 + gr() * gr() * 0.3) * (kind === 'birch' ? 0.85 : 1) });
+                        s: kind === 'bush' ? (_saltF ? 0.42 + gr() * 0.22 : 0.7 + gr() * 0.35) : (0.26 + gr() * gr() * 0.3) * (kind === 'birch' ? 0.85 : 1) });
     }
   }
   // ONE MESH PER VARIANT FOR THE WHOLE WORLDLET: the instance matrices are

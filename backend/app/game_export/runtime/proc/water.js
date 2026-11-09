@@ -30,6 +30,9 @@ const LOOKS = {
   // (2026-10-22) a drowned city's flood: a hand deep over the old paving, clear and dark,
   // the sky in it; every metre of it was "shallows", and the shallows' foam turned it milk
   flood: { col: 0x163c3c, opacity: 0.58, rough: 0.04, env: 0.95, ripple: 0.14, scale: 0.5, weed: 0, speed: 0.6 },
+  // (2026-11-09) a creek is a hand to a knee deep and clear: you see its pebbles through it, the colour is the
+  // bed's and a little peat, and it runs. As a lake it held the whole overcast sky and read as wet concrete
+  creek: { col: 0x262a18, opacity: 0.55, rough: 0.22, env: 0.2, ripple: 0.3, scale: 1.0, weed: 0, speed: 2.4, creek: 1 },
 };
 
 /** the kind of water a world's words ask for */
@@ -155,7 +158,14 @@ float wave(vec2 p){
     // (2026-10-25) still black water: no surf breaks on a bayou's bank. The shallows go to mud and
     // duckweed, the edge darkens into the bank, and there is no foam to read as a beach
     diffuseColor.rgb = mix(vec3(0.07, 0.08, 0.04), diffuseColor.rgb, smoothstep(0.0, 0.8, dep));
-    diffuseColor.a *= smoothstep(0.0, 0.2, dep);` : `
+    diffuseColor.a *= smoothstep(0.0, 0.2, dep);` : L.creek ? `
+    // (2026-11-09) a creek: clear over its gravel at the edge, peat-dark in the run, and the run's riffles catch
+    // the light in short broken glints, not a band of surf along a beach
+    float rif = smoothstep(0.62, 0.9, wn(vWPos.xz * vec2(2.3, 0.9) + vec2(uTime * 0.9, uTime * 0.25)) * 0.7 + br * 0.45);
+    diffuseColor.rgb = mix(vec3(0.30, 0.29, 0.22), diffuseColor.rgb, smoothstep(0.0, 0.45, dep));
+    diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.55, 0.58, 0.54), rif * smoothstep(0.08, 0.3, dep) * 0.22);
+    diffuseColor.a *= mix(0.35, 1.0, smoothstep(0.0, 0.5, dep)) * smoothstep(0.0, 0.06, dep);
+    roughnessFactor = mix(roughnessFactor, 0.12, rif * 0.5);` : `
     // the shallows take the bed's colour, the edge goes clear, and foam lies
     // in a broken line just off the bank, breathing with the ripples
     diffuseColor.rgb = mix(vec3(0.24, 0.27, 0.2), diffuseColor.rgb, smoothstep(0.0, 1.1, dep));

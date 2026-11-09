@@ -12,6 +12,13 @@ Pre-1.0 versions are internal milestones during the constraint sprint leading to
 
 ## [Unreleased]
 
+### Changed: a creek is water you can see into, stepping stones are stones, saltbush on the salt (2026-11-09)
+- **A creek is clear and running**: it was drawn as a lake, so a knee-deep creek held the whole overcast sky and read as wet concrete. Its water now shows the pebbles on its bed, takes the bed's colour at the edges and a peat darkness in the run, and its riffles catch the light in short glints.
+- **A creek bends**: between the long sweeps that bring it across the way, it now wanders a metre and a half each way every twenty metres or so, so its banks are not a canal's.
+- **Stepping stones, not a row of pots**: ten equal drums in a ruled line, each with a green lid. Each stone is its own now: lumpy, wider than tall, a worn top just clear of the water, staggered where a foot would land, moss on a shoulder of some.
+- **Saltbush on Crystal Works' salt faces**: the meadow's full bushes stood there in copses and read from orbit as bright green blobs on white. The salt grows fewer, lower bushes.
+- **The test runner**: the gate's scratch copy had vanished; the repo copy (`tools/shotgate/_gateall.py`) now finds its build script beside it.
+
 ### Changed: Crystal Works' ground, real water, bridges you can walk, and where the freezes came from (2026-11-05)
 - **The meadow at eye level**: grass was fat cones standing on green felt. Blades now spring narrow, swell a third of the way up and draw out to a long point, in every game. Crystal Works draws twice the blades for the same vertices (fine and curved close to, plain far off), in long-grass drifts, taller and lusher along the water.
 - **Water that is water** on the crystal and salt faces: brooks were painted lines with grass growing through them. A stream now runs right across the face and tributaries run down into it, widening as they go; the shader darkens the bed, wets the margin, flows and ripples, and holds the night sky. Stones lie in the bed and along the banks.
