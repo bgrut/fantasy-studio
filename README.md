@@ -22,22 +22,22 @@
 [![YouTube](https://img.shields.io/badge/YouTube-%40Fantasy__lab__ai-FF0000?logo=youtube&logoColor=white)](https://youtube.com/@Fantasy_lab_ai)
 [![GitHub stars](https://img.shields.io/github/stars/bgrut/fantasy-studio?style=social)](https://github.com/bgrut/fantasy-studio)
 
-[What it makes](#what-it-makes-real-builds-unedited) · [The engine](#whats-inside-the-engine) · [Get started](#get-started) · [Install guide](INSTALL.md) · [Roadmap](ROADMAP.md) · [Changelog](CHANGELOG.md)
+[What it makes](#what-it-makes-real-builds-unedited) · [Crystal Works](#crystal-works-the-flagship) · [The engine](#whats-inside-the-engine) · [Get started](#get-started) · [Install guide](INSTALL.md) · [Roadmap](ROADMAP.md) · [Changelog](CHANGELOG.md)
 
 </div>
 
 ---
 
 <div align="center">
-<img src=".github/assets/games/v17/hero-collage.jpg" alt="Six games made by Fantasy Studio from one sentence each" width="900"/>
+<img src=".github/assets/games/v25/hero-collage.jpg" alt="Six recent games made by Fantasy Studio from one sentence each" width="900"/>
 
-<sub>Six games, six sentences: a knight in a red cape in a castle courtyard · a ringmaster under the big top · a monk at a rope bridge over a misty gorge · a sumo tournament at a Tokyo shrine · a weather balloon launch from an Antarctic station · a tea picker on Darjeeling's hills. In-game captures of real builds, HUD hidden.</sub>
+<sub>The newest: a blacksmith at the anvil in a mountain smithy · a camel caravan crossing the dunes at sunset · a Taipei night-market alley · kids on the line for a soapbox race down a village hill · wildflowers and crystal in Crystal Works' meadow · Crystal Works at dusk under its nebula. In-game captures of real builds.</sub>
 
 <br/>
 
-<img src=".github/assets/games/v13/hero-collage.jpg" alt="Six more games made by Fantasy Studio from one sentence each" width="900"/>
+<img src=".github/assets/games/v17/hero-collage.jpg" alt="Six games made by Fantasy Studio from one sentence each" width="900"/>
 
-<sub>Six more: a tiny ant in a giant kitchen · surf breaking on a Hawaiian beach · a dragon rider's islands above the clouds · a steam train through snowy passes · a dog in a sunny park · a snowball fight in a snowy backyard.</sub>
+<sub>Six more: a knight in a red cape in a castle courtyard · a ringmaster under the big top · a monk at a rope bridge over a misty gorge · a sumo tournament at a Tokyo shrine · a weather balloon launch from an Antarctic station · a tea picker on Darjeeling's hills.</sub>
 
 <br/>
 
@@ -66,7 +66,7 @@ Every picture below is an unedited in-game capture of a build made from the sent
 
 ### Newest builds
 
-Faces with three times the detail and no more shattered ones, flowers and crystal close up in Crystal Works, crowds of real people, children at the rope of their soapbox carts, a Taipei night market packed into its alley, wildflowers in the grass, and a place built for each sentence.
+November: creeks you can see into, with stepping stones a foot can find; broken bridges you walk up to, mend and cross; levels that hold to their sentence (a sea stack you climb, a village on land); five new things a game can make you do; faces with three times the detail; and Crystal Works' ground rebuilt grass blade by grass blade.
 
 <div align="center">
 
@@ -76,6 +76,17 @@ Faces with three times the detail and no more shattered ones, flowers and crysta
 | <img src=".github/assets/games/v23/bridge.jpg" width="430"/><br/><sub>A bridge crosses something now. "A samurai repairs three broken bridges" brings a creek through the land, with cattails and lily pads. You walk up the ramp to the gap, hold E to lay the planks, and cross.</sub> | <img src=".github/assets/games/v23/cw-meadow-fixed.jpg" width="430"/><br/><sub>Crystal Works at eye level, before and after: grass with the shape of grass and twice the blades for the same cost, a brook that holds the night sky, mossed stones.</sub> |
 | <img src=".github/assets/games/v22/levels-fixed.jpg" width="430"/><br/><sub>Levels that match their sentence. The fishing village's cottages stood in the sea; a hidden shrine in the redwoods was a Maya pyramid; "climbs to the top of a sea stack" walked a flat sandbar and now winds up a ledge round the rock; a salt marsh was bare ground (the marsh's before is a snowboarder, whose name also made it snow; the after is a warden).</sub> | <img src=".github/assets/games/v22/escape.jpg" width="430"/><br/><sub>Games that play differently. Five new mechanics chosen from the sentence: run short of breath on a climb, carry a heavy basket when gathering, follow a hum to what is hidden, slip past sweeping lights on an escape, and answer smoke on a patrol. Here a knight leaves the castle behind them, past the watchmen's lanterns.</sub> |
 | <img src=".github/assets/games/v21/faces-fixed.jpg" width="430"/><br/><sub>Faces repainted again after a fix. A generated head is often two skins a centimetre apart, and the face-first layout had given the hidden one the face's pixels, so some faces came back shattered (the sheriff's, top left, never shipped). Now only the surface you see is painted as the face, and clothes keep their own texture.</sub> | <img src=".github/assets/games/v21/cw-closeup.jpg" width="430"/><br/><sub>Crystal Works up close: wildflowers in the grass with five petals round a gold eye, and ore growing out of the rock as six-sided crystal points.</sub> |
+
+</div>
+
+### Earlier this season
+
+Crowds of real people, children at the rope of their soapbox carts, a night market packed into its alley, a camel caravan, a working forge, and physics you can feel: cloth capes, smashing barrels, rope bridges that sway.
+
+<div align="center">
+
+| | |
+|---|---|
 | <img src=".github/assets/games/v20/faces-before-after.jpg" width="430"/><br/><sub>Every generated person, before and after. The face used to get about a hundred pixels of its texture; the sheet is now laid out face first, packed by shape, and a face gets three times the detail in the same file.</sub> | <img src=".github/assets/games/v20/hero-face.jpg" width="430"/><br/><sub>The same explorer in the Taipei night market, close enough to see the stubble, with the market crowd around him.</sub> |
 | <img src=".github/assets/games/v20/taipei-crowd.jpg" width="430"/><br/><sub>*"a night market in Taipei, squeeze down the crowded alley of food stalls to find the stinky tofu stand"*<br/>The crowd is everyday people now, each with a real texture: a detective in a trench coat, a photographer, a man and a woman.</sub> | <img src=".github/assets/games/v20/soapbox-drivers.jpg" width="430"/><br/><sub>*"kids race soapbox carts down a steep village hill"*<br/>Each cart is driven by the game's own generated child, seated with knees up and hands on the rope.</sub> |
 | <img src=".github/assets/games/v19/soapbox-grid.jpg" width="430"/><br/><sub>*"kids race soapbox carts down a steep village hill, first to the hay bales at the bottom wins"*<br/>Four carts on the line under the START banner: plank and crate, pram wheels, a number on the cowl, a kid in a leather helmet holding the steering rope.</sub> | <img src=".github/assets/games/v19/soapbox-street.jpg" width="430"/><br/><sub>Same game, on the way down: no engine, the hill does the work. A cobbled street winds between cottages on stone plinths to the hay bales and the chequered finish.</sub> |
@@ -91,7 +102,7 @@ Faces with three times the detail and no more shattered ones, flowers and crysta
 
 </div>
 
-### Earlier this season
+### Places built for the sentence
 
 <div align="center">
 
@@ -121,13 +132,15 @@ Earlier builds, rebuilt on today's engine and captured the same way.
 
 </div>
 
-And the studio's flagship, **Crystal Works**, a factory-building game made in Fantasy Studio and developed alongside it ([`flagship/`](flagship/)):
+### Crystal Works, the flagship
+
+A factory-building game made in Fantasy Studio and developed alongside it ([`flagship/`](flagship/)), to show how far one game from the engine can be taken.
 
 <div align="center">
 <img src=".github/assets/games/v23/cw-orbit.jpg" width="430"/> <img src=".github/assets/games/v23/cw-low.jpg" width="430"/>
 <img src=".github/assets/games/v18/cw-ember.jpg" width="430"/> <img src=".github/assets/games/v18/cw-stones.jpg" width="430"/>
 
-<sub>A worldlet you can walk all the way round, each face its own country with its own ore: a blue-green meadow with brooks, boulders and drifts of wildflowers standing in the grass, an ember heath of cooled lava lobes, basalt plates and sulfur vents split by glowing fissures, a salt marsh with sea lavender and salt crusting along its brine, a mossy shade side. Build lines of rigs, belts, smelters and hubs across it, under a violet nebula.</sub>
+<sub>A worldlet you can walk all the way round, each face its own country with its own ore: a meadow of tapering grass with copses of oak and birch, brooks that run and hold the night sky, mossed stones and wildflowers; an ember heath split by fissures that glow and pulse; a salt flat of cracked crust, brine and low saltbush; a mossy shade side. Build lines of rigs, belts, smelters and hubs across it, sell to the market, take contracts, and walk over an edge onto the next face, under a violet nebula.</sub>
 </div>
 
 ---
@@ -242,9 +255,9 @@ The same studio renders **cinematic video** in Blender: real frames, no diffusio
 
 Fantasy Studio is built in public, solo, and measured rather than hoped about.
 
-- **How close is the first build?** A benchmark builds 24 everyday sentences, plays each, and has a local vision model judge it against its sentence (strictly). Recent runs average about **3 of 5 for matching the sentence** and **2.2 of 5 for looks**, with 12 to 30 percent of games passing every check. Familiar settings land close; a sentence that asks for a kind of place, vehicle or scale the engine has no builder for yet comes out plausible but wrong, and each of those becomes a builder (the giant kitchen, the surf and the sky islands above were all fixed that way this month).
+- **How close is the first build?** A benchmark builds 24 everyday sentences, plays each, and has a local vision model judge it against its sentence (strictly). October's runs averaged about **3 of 5 for matching the sentence** and **2.2 of 5 for looks**, with 12 to 30 percent of games passing every check. (A run on 4 November broke down when the development machine's disk filled and is not counted; the next clean run will be posted here.) Familiar settings land close; a sentence that asks for a kind of place, vehicle or scale the engine has no builder for yet comes out plausible but wrong, and each of those becomes a builder (the giant kitchen, the surf and the sky islands above were all fixed that way this month).
 - **Characters** generated for the first time vary in quality; a character check scores each one and retries poor ones, but faces and hands can still be soft.
-- **Performance:** the first time a new world loads it can freeze for several seconds, occasionally much longer, while the graphics driver compiles its shaders. After that it holds 60 fps on the development machine (an RTX 5070 Ti).
+- **Performance:** the first seconds of a new world can stutter while its shaders compile. The long freezes seen in testing were traced in November to Chrome's sandboxed GPU process on the development machine, which took about 1.7 s per shader where Edge, the engine the desktop app runs on, took about 7 ms. Shared games played in Chrome on an affected machine can still freeze at the start. After loading, worlds hold 60 fps on the development machine (an RTX 5070 Ti).
 - **Code signing** for the installer is being set up.
 
 Detail: **[ROADMAP.md](ROADMAP.md)** and **[CHANGELOG.md](CHANGELOG.md)**.

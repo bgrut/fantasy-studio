@@ -10,7 +10,7 @@ Timelines are aspirational; treat the order as the plan, not the dates.
 
 ---
 
-## Now (1.3, October 2026)
+## Now (1.3, November 2026)
 
 What works today:
 
@@ -19,6 +19,7 @@ What works today:
 - **Heroes** generated once and cached (SDXL → TRELLIS.2), auto-rigged and moved by motion matching; animals with measured gaits; vehicles built in code (cars, karts, rover, locomotive, ships, balloons, boards); mounts, flyers, swimmers
 - **Genres from the sentence:** adventure, tower defence, platformer, murder mystery, sea battle, racing, surfing, snowball fights, ghost hunts, city builder, and the factory game (the flagship, *Crystal Works*)
 - **Weather and light:** rain, snowstorms, fog, hurricanes, every hour of the day; shadows, ambient occlusion, multisampling, photo-scanned materials
+- **Things to do beyond reaching and collecting:** mend bridges and walk over them, wade creeks, run short of breath on a climb, carry a heavy load, follow a hum, slip past lanterns on an escape, answer smoke on a patrol, forge at an anvil, lead a camel string
 - **A maker per game:** typefaces (95 families), colour scheme, frame, minimap style, mark and narrator, chosen per build
 - **Inspect & edit** by pointing and typing; **share** by link, zip, or Godot 4 export
 - **One-click Windows installer** with checksummed downloads
@@ -30,7 +31,8 @@ What works today:
 
 - **Closer on the first build.** Keep finding sentences the engine reads wrong (the stress tests run a dozen new kinds at a time) and give each missing kind of place, vehicle or play its own builder. Open now: a Viking longship you sail, herding (cattle, sheep), skate and BMX tricks, horse riding with a rider in the saddle
 - **Character fidelity:** sharper faces and hands on generated people, cleaner first generations, more drawn characters for drawn styles
-- **Start-up smoothness:** fewer shader-compile stutters in the first seconds of a new world
+- **Start-up smoothness:** the long freezes were traced to Chrome's GPU sandbox on some machines (the desktop app's engine is not affected); next, keep shared games in Chrome from freezing on those machines, and remove the shorter compile stutters
+- **Crystal Works:** new play to go with its new look; it is the flagship, and the first game to get mobile and multiplayer
 - **Code-signed installer** (Azure Trusted Signing), and the model library moved to its own asset repository so downloads stay fast
 - **Benchmark:** raise the share of games the judge passes, prompt by prompt
 
@@ -59,7 +61,7 @@ What works today:
 
 ## How priorities get set
 
-1. **Regressions** in the gates (98 automated checks run before every change ships)
+1. **Regressions** in the gates (about 100 automated checks run before every change ships)
 2. **What sentences people try and how far off the first build is**
 3. **The benchmark's most common judged defect**
 4. **What makes games feel handmade and different from each other**
